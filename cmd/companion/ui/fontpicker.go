@@ -5,8 +5,8 @@ package ui
 import (
 	"strconv"
 
-	"github.com/user/goui/internal/types"
-	"github.com/user/goui/internal/widget"
+	"github.com/user/goui/pkg/types"
+	"github.com/user/goui/pkg/widget"
 )
 
 // FontPickerOpts 字体选择器配置（全配置化：候选字体与回调都由调用方提供，ui 不碰平台字体枚举）。

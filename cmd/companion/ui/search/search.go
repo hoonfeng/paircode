@@ -17,8 +17,8 @@ import (
 	"github.com/user/gou-ide/cmd/companion/core"
 	"github.com/user/gou-ide/cmd/companion/ui/editor"
 	"github.com/user/gou-ide/cmd/companion/ui"
-	"github.com/user/goui/internal/types"
-	"github.com/user/goui/internal/widget"
+	"github.com/user/goui/pkg/types"
+	"github.com/user/goui/pkg/widget"
 )
 
 var searchHL = types.ColorFromRGB(87, 64, 0) // 命中高亮底（暗金）

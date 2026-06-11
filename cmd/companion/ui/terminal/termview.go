@@ -10,10 +10,10 @@ import (
 	"github.com/user/gou-ide/cmd/companion/core"
 	"github.com/user/gou-ide/cmd/companion/ui"
 	"github.com/user/gou-ide/cmd/companion/vterm"
-	"github.com/user/goui/internal/canvas"
-	"github.com/user/goui/internal/event"
-	"github.com/user/goui/internal/paint"
-	"github.com/user/goui/internal/types"
+	"github.com/user/goui/pkg/canvas"
+	"github.com/user/goui/pkg/event"
+	"github.com/user/goui/pkg/paint"
+	"github.com/user/goui/pkg/types"
 )
 
 // keyToVT 把按键事件转成写进 PTY 的 VT 字节：KeyChar→可打印字符；

@@ -13,7 +13,7 @@ import (
 	"github.com/user/gou-ide/cmd/companion/ui/logo"
 	"github.com/user/gou-ide/cmd/companion/ui/state"
 	"github.com/user/gou-ide/cmd/companion/ui/terminal"
-	"github.com/user/goui/internal/widget"
+	"github.com/user/goui/pkg/widget"
 	"github.com/user/gou-ide/cmd/companion/core"
 	"github.com/user/gou-ide/cmd/companion/ui/chat"
 	"github.com/user/gou-ide/cmd/companion/bridge"

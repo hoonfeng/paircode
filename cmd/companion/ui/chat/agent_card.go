@@ -12,8 +12,8 @@ import (
 	"github.com/user/gou-ide/cmd/companion/ui/mdview"
 	"github.com/user/gou-ide/cmd/companion/ui/state"
 	"github.com/user/gou-ide/cmd/companion/ui"
-	"github.com/user/goui/internal/types"
-	"github.com/user/goui/internal/widget"
+	"github.com/user/goui/pkg/types"
+	"github.com/user/goui/pkg/widget"
 )
 
 // ─── Agent 消息卡富渲染（头 + 思考 + 工具活动 + 正文）──────────

@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/user/gou-ide/cmd/companion/ui"
-	"github.com/user/goui/internal/types"
+	"github.com/user/goui/pkg/types"
 )
 
 func colEq(c types.Color, r, g, b uint8) bool { return c.R == r && c.G == g && c.B == b }

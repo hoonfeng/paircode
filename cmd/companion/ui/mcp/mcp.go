@@ -15,7 +15,7 @@ import (
 	"github.com/user/gou-ide/cmd/companion/agent"
 	"github.com/user/gou-ide/cmd/companion/core"
 	"github.com/user/gou-ide/cmd/companion/ui"
-	"github.com/user/goui/internal/widget"
+	"github.com/user/goui/pkg/widget"
 )
 
 // Entry 一个 MCP 服务器配置。

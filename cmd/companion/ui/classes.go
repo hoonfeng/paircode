@@ -3,8 +3,8 @@
 package ui
 
 import (
-	"github.com/user/goui/internal/types"
-	"github.com/user/goui/internal/widget"
+	"github.com/user/goui/pkg/types"
+	"github.com/user/goui/pkg/widget"
 )
 
 // CSS 样式类名（companion 用 widget.Div(ui.Class(...)) 引用；常量避免裸字符串拼错）。

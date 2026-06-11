@@ -16,9 +16,9 @@ import (
 	"github.com/user/gou-ide/cmd/companion/ui/mcp"
 	"github.com/user/gou-ide/cmd/companion/ui/skills"
 	"github.com/user/gou-ide/cmd/companion/ui"
-	"github.com/user/goui/internal/animation"
-	"github.com/user/goui/internal/types"
-	"github.com/user/goui/internal/widget"
+	"github.com/user/goui/pkg/animation"
+	"github.com/user/goui/pkg/types"
+	"github.com/user/goui/pkg/widget"
 )
 
 // 扩展市场（复刻参考 MarketplacePanel）：模态对话框内 三 Tab(MCP/技能/已安装) + 搜索 + 作用域(项目/全局) + 卡片。

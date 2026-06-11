@@ -15,8 +15,8 @@ import (
 	"github.com/user/gou-ide/cmd/companion/core"
 	"github.com/user/gou-ide/cmd/companion/langsrv"
 	"github.com/user/gou-ide/cmd/companion/ui"
-	"github.com/user/goui/internal/types"
-	"github.com/user/goui/internal/widget"
+	"github.com/user/goui/pkg/types"
+	"github.com/user/goui/pkg/widget"
 )
 
 // Editor 编辑器状态（包级单例，StatefulWidget State，跨 relayout 存活）。

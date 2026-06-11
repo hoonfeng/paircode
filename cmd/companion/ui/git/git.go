@@ -19,9 +19,9 @@ import (
 	"github.com/user/gou-ide/cmd/companion/core"
 	"github.com/user/gou-ide/cmd/companion/ui/editor"
 	"github.com/user/gou-ide/cmd/companion/ui"
-	"github.com/user/goui/internal/animation"
-	"github.com/user/goui/internal/types"
-	"github.com/user/goui/internal/widget"
+	"github.com/user/goui/pkg/animation"
+	"github.com/user/goui/pkg/types"
+	"github.com/user/goui/pkg/widget"
 )
 
 // Badge 文件树用的 git 状态徽标（符号 + 颜色）。

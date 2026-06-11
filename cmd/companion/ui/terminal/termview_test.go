@@ -5,7 +5,7 @@ package termpanel
 import (
 	"testing"
 
-	"github.com/user/goui/internal/event"
+	"github.com/user/goui/pkg/event"
 )
 
 func TestKeyToVT(t *testing.T) {

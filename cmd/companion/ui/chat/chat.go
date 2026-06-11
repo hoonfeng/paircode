@@ -16,8 +16,8 @@ import (
 	"github.com/user/gou-ide/cmd/companion/core"
 	"github.com/user/gou-ide/cmd/companion/ui/state"
 	"github.com/user/gou-ide/cmd/companion/ui"
-	"github.com/user/goui/internal/types"
-	"github.com/user/goui/internal/widget"
+	"github.com/user/goui/pkg/types"
+	"github.com/user/goui/pkg/widget"
 )
 
 // 颜色令牌统一在 ui 包（ui.Bg/*ui.Fg/ui.AccentStrong/ui.White…）；本文件改读 ui，不再本地声明 gh*。

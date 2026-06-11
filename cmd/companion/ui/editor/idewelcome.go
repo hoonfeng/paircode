@@ -14,8 +14,8 @@ import (
 	"github.com/user/gou-ide/cmd/companion/core"
 	"github.com/user/gou-ide/cmd/companion/ui"
 	"github.com/user/gou-ide/cmd/companion/ui/logo"
-	"github.com/user/goui/internal/types"
-	"github.com/user/goui/internal/widget"
+	"github.com/user/goui/pkg/types"
+	"github.com/user/goui/pkg/widget"
 )
 
 // buildIdeWelcome 构建 IDE 欢迎页。直接读取 ui 主题令牌，跟随主题切换。

@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/user/goui/internal/types"
+	"github.com/user/goui/pkg/types"
 )
 
 // 文件类型图标色（语义固定色，不随主题；文件树行悬停/选中色另用 FtHover/FtSelected）。

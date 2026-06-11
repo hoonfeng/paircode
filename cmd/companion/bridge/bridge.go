@@ -28,7 +28,7 @@ import (
 	"github.com/user/gou-ide/cmd/companion/ui/editor"
 	"github.com/user/gou-ide/cmd/companion/ui/filetree"
 	"github.com/user/gou-ide/cmd/companion/ui/state"
-	"github.com/user/goui/internal/animation"
+	"github.com/user/goui/pkg/animation"
 )
 
 // agentBridge 持有 Agent 引擎与一次流式回复的运行态。挂在 chat.ChatState 上（懒建）。

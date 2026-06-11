@@ -23,9 +23,9 @@ import (
 	"github.com/user/gou-ide/cmd/companion/ui/filetree"
 	"github.com/user/gou-ide/cmd/companion/ui/terminal"
 	"github.com/user/gou-ide/cmd/companion/ui"
-	"github.com/user/goui/internal/types"
-	"github.com/user/goui/internal/widget"
-	"github.com/user/goui/internal/window"
+	"github.com/user/goui/pkg/types"
+	"github.com/user/goui/pkg/widget"
+	"github.com/user/goui/pkg/window"
 )
 
 var Application *struct{ Window interface{ NativeHandle() uintptr } }

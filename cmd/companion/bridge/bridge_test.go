@@ -17,10 +17,10 @@ import (
 	"github.com/user/gou-ide/cmd/companion/ui/editor"
 	"github.com/user/gou-ide/cmd/companion/ui/filetree"
 	"github.com/user/gou-ide/cmd/companion/ui/state"
-	"github.com/user/goui/internal/animation"
-	"github.com/user/goui/internal/canvas"
-	"github.com/user/goui/internal/render"
-	"github.com/user/goui/internal/widget"
+	"github.com/user/goui/pkg/animation"
+	"github.com/user/goui/pkg/canvas"
+	"github.com/user/goui/pkg/render"
+	"github.com/user/goui/pkg/widget"
 )
 
 // TestAutonomousParams 自主模式：追加计划提示 + 放宽迭代上限；非自主：原样 + 默认上限。

@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/user/gou-ide/cmd/companion/ui/state"
-	"github.com/user/goui/internal/widget"
+	"github.com/user/goui/pkg/widget"
 )
 
 type AgentBridge interface {

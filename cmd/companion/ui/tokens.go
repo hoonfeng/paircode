@@ -11,7 +11,7 @@
 
 package ui
 
-import "github.com/user/goui/internal/types"
+import "github.com/user/goui/pkg/types"
 
 // Tokens 是 Apply 的输入 DTO：一套主题的全部语义色（值）。companion theme.go 据 appTheme 构造它。
 type Tokens struct {

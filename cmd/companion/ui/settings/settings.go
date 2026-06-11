@@ -23,8 +23,8 @@ import (
 	"github.com/user/gou-ide/cmd/companion/ui/terminal"
 	"github.com/user/gou-ide/cmd/companion/ui/theme"
 	"github.com/user/gou-ide/cmd/companion/ui"
-	"github.com/user/goui/internal/types"
-	"github.com/user/goui/internal/widget"
+	"github.com/user/goui/pkg/types"
+	"github.com/user/goui/pkg/widget"
 )
 
 // ─── apply — 保存/启动时调用的应用逻辑（碰面板/ui）──

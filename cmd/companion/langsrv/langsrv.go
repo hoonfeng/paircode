@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/user/goui/internal/widget"
+	"github.com/user/goui/pkg/widget"
 )
 
 // lspServerDef 一种语言的语言服务器配置。

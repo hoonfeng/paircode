@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 
 	"github.com/user/gou-ide/cmd/companion/ui"
-	"github.com/user/goui/internal/types"
-	"github.com/user/goui/internal/widget"
+	"github.com/user/goui/pkg/types"
+	"github.com/user/goui/pkg/widget"
 )
 
 // ─── 注入回调（UI 面板操作，由 main 注入）──

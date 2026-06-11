@@ -11,9 +11,9 @@ import (
 	"strings"
 
 	"github.com/user/gou-ide/cmd/companion/ui"
-	"github.com/user/goui/internal/canvas"
-	"github.com/user/goui/internal/types"
-	"github.com/user/goui/internal/widget"
+	"github.com/user/goui/pkg/canvas"
+	"github.com/user/goui/pkg/types"
+	"github.com/user/goui/pkg/widget"
 )
 
 var (
