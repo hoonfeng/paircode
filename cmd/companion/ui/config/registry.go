@@ -13,7 +13,7 @@ package config
 import (
 	"encoding/json"
 
-	"github.com/user/goui/pkg/widget"
+	"github.com/hoonfeng/goui/pkg/widget"
 )
 
 // handlers 累积所有已注册的事件处理器(配置里 events 字段按名引用;代码挂事件的唯一入口)。

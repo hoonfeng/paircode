@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/user/gou-ide/cmd/companion/core"
+	"github.com/hoonfeng/paircode/cmd/companion/core"
 )
 
 // TestEditorSessionPersistRestore 验证打开文件按工作区持久化 + 恢复读磁盘当前内容 + 跳过已删文件。

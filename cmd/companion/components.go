@@ -6,20 +6,20 @@
 package main
 
 import (
-	"github.com/user/gou-ide/cmd/companion/ui/config"
-	"github.com/user/gou-ide/cmd/companion/ui/editor"
-	"github.com/user/gou-ide/cmd/companion/ui/filetree"
-	"github.com/user/gou-ide/cmd/companion/ui/git"
-	"github.com/user/gou-ide/cmd/companion/ui/logo"
-	"github.com/user/gou-ide/cmd/companion/ui/state"
-	"github.com/user/gou-ide/cmd/companion/ui/terminal"
-	"github.com/user/goui/pkg/widget"
-	"github.com/user/gou-ide/cmd/companion/core"
-	"github.com/user/gou-ide/cmd/companion/ui/chat"
-	"github.com/user/gou-ide/cmd/companion/bridge"
-	"github.com/user/gou-ide/cmd/companion/ui/ctxmenu"
-	"github.com/user/gou-ide/cmd/companion/ui/menu"
-	"github.com/user/gou-ide/cmd/companion/ui/settings"
+	"github.com/hoonfeng/paircode/cmd/companion/ui/config"
+	"github.com/hoonfeng/paircode/cmd/companion/ui/editor"
+	"github.com/hoonfeng/paircode/cmd/companion/ui/filetree"
+	"github.com/hoonfeng/paircode/cmd/companion/ui/git"
+	"github.com/hoonfeng/paircode/cmd/companion/ui/logo"
+	"github.com/hoonfeng/paircode/cmd/companion/ui/state"
+	"github.com/hoonfeng/paircode/cmd/companion/ui/terminal"
+	"github.com/hoonfeng/goui/pkg/widget"
+	"github.com/hoonfeng/paircode/cmd/companion/core"
+	"github.com/hoonfeng/paircode/cmd/companion/ui/chat"
+	"github.com/hoonfeng/paircode/cmd/companion/bridge"
+	"github.com/hoonfeng/paircode/cmd/companion/ui/ctxmenu"
+	"github.com/hoonfeng/paircode/cmd/companion/ui/menu"
+	"github.com/hoonfeng/paircode/cmd/companion/ui/settings"
 )
 
 func init() {

@@ -10,8 +10,8 @@
 package editorpanel
 
 import (
-	"github.com/user/gou-ide/cmd/companion/core"
-	"github.com/user/goui/pkg/widget"
+	"github.com/hoonfeng/paircode/cmd/companion/core"
+	"github.com/hoonfeng/goui/pkg/widget"
 )
 
 // 注入回调/配置(菜单耦合 ctxmenu/chat、欢迎页按钮由 main 注入，故注入而非本包持有)。

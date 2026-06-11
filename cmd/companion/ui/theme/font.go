@@ -3,8 +3,8 @@
 package theme
 
 import (
-	"github.com/user/gou-ide/cmd/companion/core"
-	"github.com/user/goui/pkg/canvas"
+	"github.com/hoonfeng/paircode/cmd/companion/core"
+	"github.com/hoonfeng/goui/pkg/canvas"
 )
 
 // applyUIFont 把「界面字体」设置（字体族 + 粗/斜/下划线）应用到界面文字；空族=保持各处默认字号字体。

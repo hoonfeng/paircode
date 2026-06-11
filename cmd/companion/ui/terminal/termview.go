@@ -7,13 +7,13 @@
 package termpanel
 
 import (
-	"github.com/user/gou-ide/cmd/companion/core"
-	"github.com/user/gou-ide/cmd/companion/ui"
-	"github.com/user/gou-ide/cmd/companion/vterm"
-	"github.com/user/goui/pkg/canvas"
-	"github.com/user/goui/pkg/event"
-	"github.com/user/goui/pkg/paint"
-	"github.com/user/goui/pkg/types"
+	"github.com/hoonfeng/paircode/cmd/companion/core"
+	"github.com/hoonfeng/paircode/cmd/companion/ui"
+	"github.com/hoonfeng/paircode/cmd/companion/vterm"
+	"github.com/hoonfeng/goui/pkg/canvas"
+	"github.com/hoonfeng/goui/pkg/event"
+	"github.com/hoonfeng/goui/pkg/paint"
+	"github.com/hoonfeng/goui/pkg/types"
 )
 
 // keyToVT 把按键事件转成写进 PTY 的 VT 字节：KeyChar→可打印字符；

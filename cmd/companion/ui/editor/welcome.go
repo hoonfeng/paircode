@@ -11,9 +11,9 @@
 package editorpanel
 
 import (
-	"github.com/user/gou-ide/cmd/companion/ui"
-	"github.com/user/goui/pkg/types"
-	"github.com/user/goui/pkg/widget"
+	"github.com/hoonfeng/paircode/cmd/companion/ui"
+	"github.com/hoonfeng/goui/pkg/types"
+	"github.com/hoonfeng/goui/pkg/widget"
 )
 
 // buildWelcome 构建代码欢迎页（编辑器空状态），直接读取 ui 主题令牌，跟随主题切换。

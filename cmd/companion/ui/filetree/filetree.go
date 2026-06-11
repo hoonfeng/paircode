@@ -11,12 +11,12 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/user/gou-ide/cmd/companion/core"
-	"github.com/user/gou-ide/cmd/companion/ui"
-	"github.com/user/gou-ide/cmd/companion/ui/editor"
-	"github.com/user/gou-ide/cmd/companion/ui/git"
-	"github.com/user/goui/pkg/types"
-	"github.com/user/goui/pkg/widget"
+	"github.com/hoonfeng/paircode/cmd/companion/core"
+	"github.com/hoonfeng/paircode/cmd/companion/ui"
+	"github.com/hoonfeng/paircode/cmd/companion/ui/editor"
+	"github.com/hoonfeng/paircode/cmd/companion/ui/git"
+	"github.com/hoonfeng/goui/pkg/types"
+	"github.com/hoonfeng/goui/pkg/widget"
 )
 
 // 文件类型图标(iconForFile→ui.FileIcon)+ 扩展名色已下沉到 ui 包(供文件树行 + 编辑器标签共用)。

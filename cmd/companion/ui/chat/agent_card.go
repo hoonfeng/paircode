@@ -9,11 +9,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/user/gou-ide/cmd/companion/ui/mdview"
-	"github.com/user/gou-ide/cmd/companion/ui/state"
-	"github.com/user/gou-ide/cmd/companion/ui"
-	"github.com/user/goui/pkg/types"
-	"github.com/user/goui/pkg/widget"
+	"github.com/hoonfeng/paircode/cmd/companion/ui/mdview"
+	"github.com/hoonfeng/paircode/cmd/companion/ui/state"
+	"github.com/hoonfeng/paircode/cmd/companion/ui"
+	"github.com/hoonfeng/goui/pkg/types"
+	"github.com/hoonfeng/goui/pkg/widget"
 )
 
 // ─── Agent 消息卡富渲染（头 + 思考 + 工具活动 + 正文）──────────

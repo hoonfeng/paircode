@@ -10,10 +10,10 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/user/gou-ide/cmd/companion/ui"
-	"github.com/user/goui/pkg/canvas"
-	"github.com/user/goui/pkg/types"
-	"github.com/user/goui/pkg/widget"
+	"github.com/hoonfeng/paircode/cmd/companion/ui"
+	"github.com/hoonfeng/goui/pkg/canvas"
+	"github.com/hoonfeng/goui/pkg/types"
+	"github.com/hoonfeng/goui/pkg/widget"
 )
 
 var (

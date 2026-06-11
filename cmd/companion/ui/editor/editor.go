@@ -12,11 +12,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/user/gou-ide/cmd/companion/core"
-	"github.com/user/gou-ide/cmd/companion/langsrv"
-	"github.com/user/gou-ide/cmd/companion/ui"
-	"github.com/user/goui/pkg/types"
-	"github.com/user/goui/pkg/widget"
+	"github.com/hoonfeng/paircode/cmd/companion/core"
+	"github.com/hoonfeng/paircode/cmd/companion/langsrv"
+	"github.com/hoonfeng/paircode/cmd/companion/ui"
+	"github.com/hoonfeng/goui/pkg/types"
+	"github.com/hoonfeng/goui/pkg/widget"
 )
 
 // Editor 编辑器状态（包级单例，StatefulWidget State，跨 relayout 存活）。

@@ -5,8 +5,8 @@ package ui
 import (
 	"testing"
 
-	"github.com/user/goui/pkg/types"
-	"github.com/user/goui/pkg/widget"
+	"github.com/hoonfeng/goui/pkg/types"
+	"github.com/hoonfeng/goui/pkg/widget"
 )
 
 // TestApplySwitchesTokens Apply 就地改令牌指针；样式类持稳定指针、绘制即见新色（换肤总入口）。

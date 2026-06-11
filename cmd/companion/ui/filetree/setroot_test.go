@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/user/gou-ide/cmd/companion/core"
+	"github.com/hoonfeng/paircode/cmd/companion/core"
 )
 
 // TestWorkspaceBuildRoots 单/多文件夹工作区都正确构建各根并加载内容（VS Code 多根模型）。

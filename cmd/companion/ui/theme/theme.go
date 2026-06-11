@@ -10,9 +10,9 @@
 package theme
 
 import (
-	"github.com/user/gou-ide/cmd/companion/ui"
-	"github.com/user/goui/pkg/types"
-	"github.com/user/goui/pkg/widget"
+	"github.com/hoonfeng/paircode/cmd/companion/ui"
+	"github.com/hoonfeng/goui/pkg/types"
+	"github.com/hoonfeng/goui/pkg/widget"
 )
 
 // uiTokens 把一套 appTheme 映射成 ui 设计令牌（ui 包是唯一调色板）。内容 + VS Code 外壳 + 文件树行全覆盖。

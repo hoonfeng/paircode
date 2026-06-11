@@ -12,10 +12,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/user/gou-ide/cmd/companion/agent"
-	"github.com/user/gou-ide/cmd/companion/core"
-	"github.com/user/gou-ide/cmd/companion/ui"
-	"github.com/user/goui/pkg/widget"
+	"github.com/hoonfeng/paircode/cmd/companion/agent"
+	"github.com/hoonfeng/paircode/cmd/companion/core"
+	"github.com/hoonfeng/paircode/cmd/companion/ui"
+	"github.com/hoonfeng/goui/pkg/widget"
 )
 
 // Entry 一个 MCP 服务器配置。

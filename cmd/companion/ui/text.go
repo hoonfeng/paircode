@@ -3,9 +3,9 @@
 package ui
 
 import (
-	"github.com/user/goui/pkg/canvas"
-	"github.com/user/goui/pkg/types"
-	"github.com/user/goui/pkg/widget"
+	"github.com/hoonfeng/goui/pkg/canvas"
+	"github.com/hoonfeng/goui/pkg/types"
+	"github.com/hoonfeng/goui/pkg/widget"
 )
 
 // 排版 helper —— 语义化字号 / 颜色，读 T 令牌。替代 companion 的 label(s, color, size)：

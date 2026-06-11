@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/user/gou-ide/cmd/companion/vterm"
+	"github.com/hoonfeng/paircode/cmd/companion/vterm"
 )
 
 // TestShellLabel shell 短标签。

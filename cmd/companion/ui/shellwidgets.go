@@ -3,8 +3,8 @@
 package ui
 
 import (
-	"github.com/user/goui/pkg/types"
-	"github.com/user/goui/pkg/widget"
+	"github.com/hoonfeng/goui/pkg/types"
+	"github.com/hoonfeng/goui/pkg/widget"
 )
 
 // 跨面板共用的小部件 —— 原散在 filetree/git/search 里的泛用 UI helper，下沉到 ui 供各面板共用。

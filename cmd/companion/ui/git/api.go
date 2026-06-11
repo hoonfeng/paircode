@@ -5,7 +5,7 @@
 
 package gitpanel
 
-import "github.com/user/goui/pkg/types"
+import "github.com/hoonfeng/goui/pkg/types"
 
 // OnTreeRefresh git 动作(丢弃/暂存等)改动文件后刷新文件树的回调，由 main 注入
 // （破 git↔filetree 循环：git 不再直接引用文件树单例）。

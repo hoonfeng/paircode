@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/user/goui/pkg/widget"
+	"github.com/hoonfeng/goui/pkg/widget"
 )
 
 // AppSettings 持久化设置 —— 字段对齐参考 settings.ts（扁平存储；分组注释）。API Key 敏感，存安装目录 config/，不入库。

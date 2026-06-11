@@ -12,9 +12,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/user/gou-ide/cmd/companion/agent"
-	"github.com/user/gou-ide/cmd/companion/core"
-	"github.com/user/gou-ide/cmd/companion/ui/settings"
+	"github.com/hoonfeng/paircode/cmd/companion/agent"
+	"github.com/hoonfeng/paircode/cmd/companion/core"
+	"github.com/hoonfeng/paircode/cmd/companion/ui/settings"
 )
 
 // ensureRolePrompts 启动时把内置默认角色提示落地到 config/roles/*.md（仅缺失时写），

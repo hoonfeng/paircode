@@ -3,8 +3,8 @@
 package ui
 
 import (
-	"github.com/user/goui/pkg/types"
-	"github.com/user/goui/pkg/widget"
+	"github.com/hoonfeng/goui/pkg/types"
+	"github.com/hoonfeng/goui/pkg/widget"
 )
 
 // 按钮 —— 语义变体（主 / 次 / 幽灵 / 危险），读令牌着色。

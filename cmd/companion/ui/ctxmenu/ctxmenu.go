@@ -17,15 +17,15 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/user/gou-ide/cmd/companion/ui/chat"
-	"github.com/user/gou-ide/cmd/companion/core"
-	"github.com/user/gou-ide/cmd/companion/ui/editor"
-	"github.com/user/gou-ide/cmd/companion/ui/filetree"
-	"github.com/user/gou-ide/cmd/companion/ui/terminal"
-	"github.com/user/gou-ide/cmd/companion/ui"
-	"github.com/user/goui/pkg/types"
-	"github.com/user/goui/pkg/widget"
-	"github.com/user/goui/pkg/window"
+	"github.com/hoonfeng/paircode/cmd/companion/ui/chat"
+	"github.com/hoonfeng/paircode/cmd/companion/core"
+	"github.com/hoonfeng/paircode/cmd/companion/ui/editor"
+	"github.com/hoonfeng/paircode/cmd/companion/ui/filetree"
+	"github.com/hoonfeng/paircode/cmd/companion/ui/terminal"
+	"github.com/hoonfeng/paircode/cmd/companion/ui"
+	"github.com/hoonfeng/goui/pkg/types"
+	"github.com/hoonfeng/goui/pkg/widget"
+	"github.com/hoonfeng/goui/pkg/window"
 )
 
 var Application *struct{ Window interface{ NativeHandle() uintptr } }

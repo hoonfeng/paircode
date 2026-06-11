@@ -7,7 +7,7 @@
 
 package ui
 
-import "github.com/user/goui/pkg/widget"
+import "github.com/hoonfeng/goui/pkg/widget"
 
 func init() { registerComponents() }
 

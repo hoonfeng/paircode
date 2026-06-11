@@ -16,12 +16,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/user/gou-ide/cmd/companion/core"
-	"github.com/user/gou-ide/cmd/companion/ui/editor"
-	"github.com/user/gou-ide/cmd/companion/ui"
-	"github.com/user/goui/pkg/animation"
-	"github.com/user/goui/pkg/types"
-	"github.com/user/goui/pkg/widget"
+	"github.com/hoonfeng/paircode/cmd/companion/core"
+	"github.com/hoonfeng/paircode/cmd/companion/ui/editor"
+	"github.com/hoonfeng/paircode/cmd/companion/ui"
+	"github.com/hoonfeng/goui/pkg/animation"
+	"github.com/hoonfeng/goui/pkg/types"
+	"github.com/hoonfeng/goui/pkg/widget"
 )
 
 // Badge 文件树用的 git 状态徽标（符号 + 颜色）。

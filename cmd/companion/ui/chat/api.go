@@ -8,8 +8,8 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/user/gou-ide/cmd/companion/ui/state"
-	"github.com/user/goui/pkg/widget"
+	"github.com/hoonfeng/paircode/cmd/companion/ui/state"
+	"github.com/hoonfeng/goui/pkg/widget"
 )
 
 type AgentBridge interface {

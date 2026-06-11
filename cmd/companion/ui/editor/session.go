@@ -12,7 +12,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/user/gou-ide/cmd/companion/core"
+	"github.com/hoonfeng/paircode/cmd/companion/core"
 )
 
 type editorSession struct {

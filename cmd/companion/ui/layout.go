@@ -3,8 +3,8 @@
 package ui
 
 import (
-	"github.com/user/goui/pkg/types"
-	"github.com/user/goui/pkg/widget"
+	"github.com/hoonfeng/goui/pkg/types"
+	"github.com/hoonfeng/goui/pkg/widget"
 )
 
 // 布局原语 —— 类 CSS flexbox。语义化替代到处手写的 Div(Style{FlexDirection:...})

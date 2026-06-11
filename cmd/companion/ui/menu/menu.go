@@ -12,13 +12,13 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/user/gou-ide/cmd/companion/ui/chat"
-	"github.com/user/gou-ide/cmd/companion/ui/marketplace"
-		"github.com/user/gou-ide/cmd/companion/core"
-	"github.com/user/gou-ide/cmd/companion/ui/editor"
-	"github.com/user/gou-ide/cmd/companion/ui"
-	"github.com/user/goui/pkg/types"
-	"github.com/user/goui/pkg/widget"
+	"github.com/hoonfeng/paircode/cmd/companion/ui/chat"
+	"github.com/hoonfeng/paircode/cmd/companion/ui/marketplace"
+		"github.com/hoonfeng/paircode/cmd/companion/core"
+	"github.com/hoonfeng/paircode/cmd/companion/ui/editor"
+	"github.com/hoonfeng/paircode/cmd/companion/ui"
+	"github.com/hoonfeng/goui/pkg/types"
+	"github.com/hoonfeng/goui/pkg/widget"
 )
 
 // relayout 触发整树重排（字号/minimap 等改尺寸的设置即时生效）。

@@ -3,8 +3,8 @@
 package ui
 
 import (
-	"github.com/user/goui/pkg/types"
-	"github.com/user/goui/pkg/widget"
+	"github.com/hoonfeng/goui/pkg/types"
+	"github.com/hoonfeng/goui/pkg/widget"
 )
 
 // 表单控件 —— 主题化的 Field / Toggle / Pill / Input / Select / Slider。

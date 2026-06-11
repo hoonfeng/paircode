@@ -5,7 +5,7 @@ package termpanel
 import (
 	"testing"
 
-	"github.com/user/gou-ide/cmd/companion/core"
+	"github.com/hoonfeng/paircode/cmd/companion/core"
 	"golang.org/x/text/encoding/simplifiedchinese"
 )
 

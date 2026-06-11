@@ -5,7 +5,7 @@ package termpanel
 import (
 	"testing"
 
-	"github.com/user/gou-ide/cmd/companion/vterm"
+	"github.com/hoonfeng/paircode/cmd/companion/vterm"
 )
 
 // TestTermCopySelection 拖选文本提取：首行从 colA、末行到 colB、中间整行，去行尾空格、行间换行。

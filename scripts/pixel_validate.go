@@ -23,10 +23,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/user/goui/pkg/canvas"
-	"github.com/user/goui/pkg/types"
-	"github.com/user/goui/pkg/validate/visual"
-	"github.com/user/goui/pkg/widget"
+	"github.com/hoonfeng/goui/pkg/canvas"
+	"github.com/hoonfeng/goui/pkg/types"
+	"github.com/hoonfeng/goui/pkg/validate/visual"
+	"github.com/hoonfeng/goui/pkg/widget"
 )
 
 const (

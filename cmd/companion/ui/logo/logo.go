@@ -10,10 +10,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/user/goui/pkg/canvas"
-	"github.com/user/goui/pkg/paint"
-	"github.com/user/goui/pkg/types"
-	"github.com/user/goui/pkg/widget"
+	"github.com/hoonfeng/goui/pkg/canvas"
+	"github.com/hoonfeng/goui/pkg/paint"
+	"github.com/hoonfeng/goui/pkg/types"
+	"github.com/hoonfeng/goui/pkg/widget"
 )
 
 // 图标＝运行时**加载** assets/icon.svg（不 embed/硬编码），与 fonts/、libSkiaSharp.dll 一样属外部资源，

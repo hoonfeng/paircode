@@ -11,16 +11,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/user/gou-ide/cmd/companion/agent"
-	"github.com/user/gou-ide/cmd/companion/ui/chat"
-	"github.com/user/gou-ide/cmd/companion/core"
-	"github.com/user/gou-ide/cmd/companion/ui/editor"
-	"github.com/user/gou-ide/cmd/companion/ui/filetree"
-	"github.com/user/gou-ide/cmd/companion/ui/state"
-	"github.com/user/goui/pkg/animation"
-	"github.com/user/goui/pkg/canvas"
-	"github.com/user/goui/pkg/render"
-	"github.com/user/goui/pkg/widget"
+	"github.com/hoonfeng/paircode/cmd/companion/agent"
+	"github.com/hoonfeng/paircode/cmd/companion/ui/chat"
+	"github.com/hoonfeng/paircode/cmd/companion/core"
+	"github.com/hoonfeng/paircode/cmd/companion/ui/editor"
+	"github.com/hoonfeng/paircode/cmd/companion/ui/filetree"
+	"github.com/hoonfeng/paircode/cmd/companion/ui/state"
+	"github.com/hoonfeng/goui/pkg/animation"
+	"github.com/hoonfeng/goui/pkg/canvas"
+	"github.com/hoonfeng/goui/pkg/render"
+	"github.com/hoonfeng/goui/pkg/widget"
 )
 
 // TestAutonomousParams 自主模式：追加计划提示 + 放宽迭代上限；非自主：原样 + 默认上限。
