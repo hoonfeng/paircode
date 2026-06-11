@@ -10,4 +10,12 @@ require (
 	golang.org/x/image v0.21.0
 )
 
+require github.com/hoonfeng/svg v0.0.0
+
+require github.com/hoonfeng/goskia v0.0.0-20260601173004-92e3d53ae4b5
+
 replace github.com/user/goui => ../goui
+
+replace github.com/hoonfeng/svg => ../goui/svg
+
+replace github.com/hoonfeng/goskia => F:\syproject\goskia
