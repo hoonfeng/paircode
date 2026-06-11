@@ -1,0 +1,14 @@
+*.exe
+*.exe~
+*.dll
+*.test
+*.test.exe
+*.log
+logs/
+screenshots/
+.DS_Store
+Thumbs.db
+.vs/
+*.user
+*.suo
+go.work
