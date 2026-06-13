@@ -215,12 +215,10 @@ func (s *ChatState) layoutToolbar() widget.Widget {
 
 // ─── 对话侧栏 ─────────────────────────────────────────────
 
-// sidebarContent 侧栏内容（180px）：头部（标题 + 切换/导出/新建）+ 会话列表。
+// sidebarContent 侧栏内容（180px）：头部（标题 + 切换/导出/新建）+ 会话列表（VirtualList 虚加载）。
 func (s *ChatState) sidebarContent() widget.Widget {
-	rows := []widget.Widget{}
-	for _, t := range s.Store.Threads {
-		rows = append(rows, s.threadItem(t))
-	}
+	threads := s.Store.Threads
+	itemH := 36.0
 	return widget.Div(
 		widget.Style{Width: 180, BackgroundColor: ui.BgSubtle, BorderColor: ui.Border, BorderWidth: 1,
 			FlexDirection: "column", AlignItems: "stretch"},
@@ -232,7 +230,14 @@ func (s *ChatState) sidebarContent() widget.Widget {
 			toolBtn("download", false, s.ExportActive),
 			toolBtn("plus", false, func() { s.Store.NewThread(); s.saveHistory(); s.SetState() }),
 		),
-		ui.Expand(widget.NewScrollView(ui.FlexCol(rows...))),
+		ui.Expand(&widget.VirtualList{
+			ItemCount:  len(threads),
+			ItemHeight: itemH,
+			Overscan:   5,
+			RenderItem: func(i int) widget.Widget {
+				return s.threadItem(threads[i])
+			},
+		}),
 	)
 }
 
