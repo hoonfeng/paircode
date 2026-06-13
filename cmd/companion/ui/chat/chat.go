@@ -103,7 +103,16 @@ func (s *ChatState) Build(ctx widget.BuildContext) widget.Widget {
 	if len(s.Plan) > 0 {
 		mainKids = append(mainKids, s.planCard())
 	}
-	mainKids = append(mainKids, ui.Expand(s.scrollMessages()))
+	// 消息列表 + token 统计面板：消息区撑满剩余空间，token 面板固定 140px 固定在底部
+	mainKids = append(mainKids, &widget.Expanded{
+		Flex: 1,
+		SingleChildWidget: widget.SingleChildWidget{Child: widget.Div(
+			widget.Style{FlexDirection: "column", AlignItems: "stretch"},
+			&widget.Expanded{Flex: 2, SingleChildWidget: widget.SingleChildWidget{Child: s.scrollMessages()}},
+			ui.Divider(),
+			&widget.Expanded{Flex: 1, SingleChildWidget: widget.SingleChildWidget{Child: s.tokenStatsPanel()}},
+		)},
+	})
 	if s.Ask != nil { // agent 提问中：问答卡置于输入区上方
 		mainKids = append(mainKids, s.askCard())
 	}
@@ -835,6 +844,63 @@ func (s *ChatState) SearchMatchCount() int {
 		}
 	}
 	return n
+}
+
+// ─── Token 使用统计面板 ──────────────────────────────────
+
+// tokenStatsPanel 当前会话的 token 使用统计面板（图标展示），固定在消息区下方。
+// 从 Thread.TokenUsage 读取（Save 时自动预计算），无需额外持久化逻辑。
+// 布局：标题行 + 三行数据（prompt/completion/total），每行用 Lucide 图标 + 标签 + 数值。
+func (s *ChatState) tokenStatsPanel() widget.Widget {
+	t := s.Store.Active()
+	usage := state.TokenUsage{} // 空兜底
+	if t != nil {
+		usage = t.TokenUsage
+		// 若 TokenUsage 尚未计算（如新建会话后尚未 Save），实时计算一次
+		if usage.TotalTokens == 0 && len(t.Messages) > 0 {
+			usage = t.CalculateTokenUsage()
+		}
+	}
+
+	title := widget.Div(
+		widget.Style{FlexDirection: "row", AlignItems: "center", Padding: types.EdgeInsetsLTRB(12, 8, 12, 4)},
+		widget.Lucide("sigma", widget.IconSize(13), widget.IconColor(*ui.Accent)),
+		widget.Div(widget.Style{Width: 6}),
+		ui.TextC("Token 使用统计", *ui.Fg, 12),
+	)
+
+	row := func(icon, label string, value int, color *types.Color) widget.Widget {
+		return widget.Div(
+			widget.Style{
+				FlexDirection: "row", AlignItems: "center",
+				Padding: types.EdgeInsetsLTRB(26, 0, 12, 2),
+				Height:  24,
+			},
+			widget.Lucide(icon, widget.IconSize(12), widget.IconColor(*color)),
+			widget.Div(widget.Style{Width: 8}),
+			ui.TextC(label, *ui.FgMuted, 11),
+			widget.Div(widget.Style{Width: 4}),
+			ui.Expand(widget.Div(widget.Style{})),
+			ui.TextC(fmt.Sprintf("%d", value), *ui.Fg, 11),
+		)
+	}
+
+	data := widget.Div(
+		widget.Style{FlexDirection: "column", AlignItems: "stretch"},
+		row("upload", "输入 (Prompt)", usage.PromptTokens, ui.Accent),
+		row("download", "输出 (Completion)", usage.CompletionTokens, ui.Success),
+		row("equal", "总计 (Total)", usage.TotalTokens, ui.Fg),
+	)
+
+	return widget.Div(
+		widget.Style{
+			BackgroundColor: ui.BgSubtle,
+			FlexDirection:   "column",
+			AlignItems:      "stretch",
+		},
+		title,
+		data,
+	)
 }
 
 // ─── 小部件 ───────────────────────────────────────────────

@@ -2,6 +2,7 @@ package state
 
 import (
 	"encoding/json"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -105,11 +106,81 @@ type Activity struct {
 	Expanded         bool   // 展开看全量结果（默认折叠只显首行预览）
 }
 
+// TokenUsage 记录对话的 token 使用统计（按消息内容启发式估算）。
+// 提供图标展示所需的 Prompt/Completion/Total 三组数据。
+type TokenUsage struct {
+	PromptTokens     int `json:"prompt_tokens"`     // 输入 token（用户消息）
+	CompletionTokens int `json:"completion_tokens"` // 输出 token（助手回复）
+	TotalTokens      int `json:"total_tokens"`      // 总计
+}
+
 // Thread 一个对话会话。
 type Thread struct {
-	ID       string
-	Title    string
-	Messages []Message
+	ID         string
+	Title      string
+	Messages   []Message
+	TokenUsage TokenUsage `json:"TokenUsage,omitempty"` // 该会话 token 统计，持久化
+}
+
+// textTokens 文本 token 估算：CJK 字 ×1.5、其余 ×0.25（与 agent/compress.go 保持一致的启发式算法）。
+func textTokens(s string) float64 {
+	cjk, other := 0, 0
+	for _, r := range s {
+		if isCJK(r) {
+			cjk++
+		} else {
+			other++
+		}
+	}
+	return float64(cjk)*1.5 + float64(other)*0.25
+}
+
+// isCJK 是否中日韩表意字（与 agent/compress.go 保持一致的 Unicode 区间判断）。
+func isCJK(r rune) bool {
+	switch {
+	case r >= 0x4E00 && r <= 0x9FFF: // CJK 统一表意
+		return true
+	case r >= 0x3400 && r <= 0x4DBF: // 扩展 A
+		return true
+	case r >= 0xF900 && r <= 0xFAFF: // 兼容表意
+		return true
+	}
+	return false
+}
+
+// CalculateTokenUsage 遍历会话的所有消息，按角色和内容启发式估算 token 消耗。
+// 用户消息算作 PromptTokens，助手消息（含思考链、工具活动、正文）算作 CompletionTokens。
+// 每次访问时实时计算，确保数据始终与消息内容一致。
+func (t *Thread) CalculateTokenUsage() TokenUsage {
+	var prompt, completion float64
+	for _, m := range t.Messages {
+		if m.Role == User {
+			prompt += 4                               // 消息开销
+			prompt += textTokens(m.Text)               // 正文
+		} else {
+			completion += 4                            // 消息开销
+			completion += textTokens(m.Text)           // 正文
+			completion += textTokens(m.Thinking)       // 思考链
+			for _, a := range m.Activities {
+				completion += textTokens(a.Tool)       // 工具名
+				completion += float64(len([]rune(a.Args))) * 0.25 // 工具参数
+				completion += textTokens(a.Result)     // 工具结果
+			}
+			for _, entry := range m.Timeline {
+				if entry.Kind == "tool" {
+					completion += textTokens(entry.Tool)
+					completion += float64(len([]rune(entry.Args))) * 0.25
+				}
+			}
+		}
+	}
+	pt := int(math.Ceil(prompt))
+	ct := int(math.Ceil(completion))
+	return TokenUsage{
+		PromptTokens:     pt,
+		CompletionTokens: ct,
+		TotalTokens:      pt + ct,
+	}
 }
 
 // ChatStore 多会话聊天状态：会话列表 + 当前会话 + 输入草稿。是对话面板的唯一真相来源。
@@ -204,8 +275,12 @@ func (s *ChatStore) Send(text string) bool {
 }
 
 // Save 把聊天状态持久化到 .pair/conversations/history.json。
+// 保存前自动更新每个会话的 TokenUsage 统计，确保持久化数据包含最新 token 用量。
 // 格式为 historyFile（含 version/seq/threads），与项目已有的对话历史格式兼容。
 func (s *ChatStore) Save(root string) {
+	for _, t := range s.Threads {
+		t.TokenUsage = t.CalculateTokenUsage()
+	}
 	hf := historyFile{
 		Version: 1,
 		Seq:     s.seq,
