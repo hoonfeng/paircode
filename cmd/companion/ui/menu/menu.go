@@ -292,15 +292,13 @@ func EditorReferences(refs []widget.CodeLoc) {
 		return
 	}
 	var id int
-	rows := make([]widget.Widget, 0, len(refs))
-	for _, r := range refs {
-		ref := r
-		rows = append(rows, jumpRow(relPathLabel(ref.File)+":"+strconv.Itoa(ref.Line), func() {
-			editorpanel.Editor.OpenAt(ref.File, ref.Line)
+	id = showJumpDialog(fmt.Sprintf("引用（%d 处）", len(refs)), len(refs), func(i int) widget.Widget {
+		r := refs[i]
+		return jumpRow(relPathLabel(r.File)+":"+strconv.Itoa(r.Line), func() {
+			editorpanel.Editor.OpenAt(r.File, r.Line)
 			widget.HideOverlay(id)
-		}))
-	}
-	id = showJumpDialog(fmt.Sprintf("引用（%d 处）", len(refs)), rows)
+		})
+	})
 }
 
 // editorSymbols 文档符号大纲 → 弹「符号」对话框（按层级缩进），点击跳到当前文件该行。
@@ -314,18 +312,16 @@ func EditorSymbols(syms []widget.CodeSym) {
 		file = t.Path()
 	}
 	var id int
-	rows := make([]widget.Widget, 0, len(syms))
-	for _, s := range syms {
-		sym := s
+	id = showJumpDialog(fmt.Sprintf("符号大纲（%d）", len(syms)), len(syms), func(i int) widget.Widget {
+		sym := syms[i]
 		txt := strings.Repeat("    ", sym.Depth) + symKindLabel(sym.Kind) + " " + sym.Name
-		rows = append(rows, jumpRow(txt, func() {
+		return jumpRow(txt, func() {
 			if file != "" {
 				editorpanel.Editor.OpenAt(file, sym.Line)
 			}
 			widget.HideOverlay(id)
-		}))
-	}
-	id = showJumpDialog(fmt.Sprintf("符号大纲（%d）", len(syms)), rows)
+		})
+	})
 }
 
 // jumpRow 一个可点击的跳转行（左对齐，悬停高亮）。
@@ -341,9 +337,19 @@ func jumpRow(text string, onClick func()) widget.Widget {
 }
 
 // showJumpDialog 通用「可点击列表」对话框（引用/符号共用），返回 overlay id。
-func showJumpDialog(title string, rows []widget.Widget) int {
+// 使用 VirtualList 虚加载，只渲染可见行，支撑数百行不卡顿。
+func showJumpDialog(title string, count int, render func(i int) widget.Widget) int {
+	vh := 28.0
+	if count < 1 {
+		count = 1
+	}
 	body := widget.Div(widget.Style{Width: 520, Height: 440, FlexDirection: "column", AlignItems: "stretch"},
-		ui.Expand(widget.NewScrollView(widget.Div(widget.Style{FlexDirection: "column", AlignItems: "stretch", Gap: 1}, rows))),
+		ui.Expand(&widget.VirtualList{
+			ItemCount:  count,
+			ItemHeight: vh,
+			Overscan:   5,
+			RenderItem: render,
+		}),
 	)
 	var id int
 	dlg := widget.NewDialog(title, body).WithWidth(556).WithTransition("fade").WithFooter(
