@@ -22,7 +22,11 @@ import (
 func orStr(s, def string) string { if s == "" { return def }; return s }
 
 func toolObj(props map[string]any, required ...string) map[string]any {
-	return map[string]any{"type": "object", "properties": props, "required": required}
+	req := required
+	if req == nil {
+		req = []string{} // 必须用空数组而非 nil，否则 JSON 序列化为 null 违反 OpenAI schema 约束
+	}
+	return map[string]any{"type": "object", "properties": props, "required": req}
 }
 func strParam(desc string) map[string]any {
 	return map[string]any{"type": "string", "description": desc}
