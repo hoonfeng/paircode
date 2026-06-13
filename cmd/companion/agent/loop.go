@@ -2,11 +2,18 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 )
+
+// ErrConsecToolError 连续多轮工具执行失败，由 Loop.Run 返回，桥接层应据此终止本轮后续阶段。
+var ErrConsecToolError = errors.New("连续 3 轮工具执行失败，已停止")
+
+// ErrMaxIterations 已达最大迭代数仍未 [FINAL]，由 Loop.Run 返回。
+var ErrMaxIterations = errors.New("已达最大迭代数，停止")
 
 // EventType 循环对外广播的事件类型（供 UI 流式展示）。
 type EventType string
@@ -157,17 +164,18 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) ([]Messa
 		}
 
 		// 连续 3 轮工具全有错 → 止损停（复刻参考源 3-consecutive-error）。
+		// 返回 sentinel 错误供桥接层判断，避免误以为正常完成而继续验证/评测阶段。
 		if iterErr {
 			if consecErr++; consecErr >= 3 {
-				l.emit(Event{Type: EventError, Content: "连续 3 轮工具执行失败，已停止"})
-				return msgs, nil
+				l.emit(Event{Type: EventError, Content: ErrConsecToolError.Error()})
+				return msgs, ErrConsecToolError
 			}
 		} else {
 			consecErr = 0
 		}
 	}
-	l.emit(Event{Type: EventError, Content: "已达最大迭代数，停止"})
-	return msgs, nil
+	l.emit(Event{Type: EventError, Content: ErrMaxIterations.Error()})
+	return msgs, ErrMaxIterations
 }
 
 func hasSystem(msgs []Message) bool {

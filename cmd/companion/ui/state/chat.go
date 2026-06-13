@@ -200,9 +200,12 @@ func (s *ChatStore) Load(root string) bool {
 	for _, t := range s.Threads {
 		totalMsgs += len(t.Messages)
 		for i := range t.Messages {
-			if !t.Messages[i].Streaming {
-				t.Messages[i].Collapsed = true
+			// 安全兜底：持久化的消息不可能还在流式（保存时已标记完成），
+			// 防止旧数据/异常中断导致 Streaming=true 让 UI 误显"思考中/运行中"。
+			if t.Messages[i].Streaming {
+				t.Messages[i].Streaming = false
 			}
+			t.Messages[i].Collapsed = true
 		}
 	}
 	if len(s.Threads) > 0 {

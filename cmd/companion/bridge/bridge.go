@@ -10,6 +10,7 @@ package bridge
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -84,6 +85,7 @@ func (b *AgentBridge) Stop() {
 	if cancel != nil {
 		cancel()
 	}
+	b.Cs.saveHistory() // 停止时保存对话历史，防止消息丢失
 }
 
 // resetForNewRoot 项目根切换后清掉已建 loop，下条消息用新根重建（运行中则不动，避免打断）。
@@ -223,13 +225,19 @@ func (b *AgentBridge) Start(task string) {
 				runTask += "\n\n（探索 Agent 的发现，供参考）：\n" + found
 			}
 		}
-		finalMsgs, _ := loop.Run(ctx, runTask, hist)
-		if autonomous && ctx.Err() == nil { // 验证阶段：只读 Verifier 确认改动生效（编排子 Agent）
+		finalMsgs, loopErr := loop.Run(ctx, runTask, hist)
+		// 连续错误或达最大迭代：标记 stopped 以跳过后续验证/评测阶段，由 drain 处理收尾。
+		if loopErr != nil && (errors.Is(loopErr, agent.ErrConsecToolError) || errors.Is(loopErr, agent.ErrMaxIterations)) {
+			b.mu.Lock()
+			b.stopped = true
+			b.mu.Unlock()
+		}
+		if autonomous && ctx.Err() == nil && !b.stopped { // 验证阶段：只读 Verifier 确认改动生效（编排子 Agent）
 			b.pushNote("验证阶段：验证 Agent 只读确认改动是否生效…")
 			b.runRolePhase(ctx, "verifier", roleprompts.DefaultVerifierPrompt, "（只读验证，勿改文件）确认上述任务是否真正完成、改动是否生效，列出遗留问题：\n"+task, stripSystemMsgs(finalMsgs))
 		}
 		// 评测阶段：任务完成 → 评测模型打分 → 评分卡（复刻参考 bench）。
-		if ev := b.evaluateRun(ctx, runTask, finalMsgs); ev != nil && autoIter {
+		if ev := b.evaluateRun(ctx, runTask, finalMsgs); ev != nil && autoIter && !b.stopped {
 			// 自动迭代改进（调试角色）：据评测不足重跑 + 重评，分数不再改善即收敛停。
 			b.autoIterate(ctx, loop, *ev, finalMsgs, reviewRetries)
 		}
@@ -439,6 +447,7 @@ func (b *AgentBridge) drain() {
 			}
 		}
 		b.Cs.ClearAsk() // 本轮结束：清掉残留问答卡（如被停止）
+		b.Cs.saveHistory() // Agent 完成/停止后立即保存对话历史，确保下次加载可见完整消息
 		b.stopPump()
 		if len(evs) == 0 || b.stopped {
 			b.Cs.SetState()
