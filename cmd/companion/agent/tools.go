@@ -13,6 +13,10 @@ import (
 	"time"
 )
 
+// WorkspaceRoots 工作区所有根目录（多根工作区支持）。
+// 由 bridge.go 在初始化 agent 时设置。resolvePath 会检查路径是否在任一根目录内。
+var WorkspaceRoots []string
+
 // ToolHandler 工具执行体：收到已解析的 JSON 参数，返回结果文本或 error。
 type ToolHandler func(ctx context.Context, args map[string]any) (string, error)
 
@@ -443,6 +447,7 @@ func argStrSlice(args map[string]any, key string) []string {
 }
 
 // resolvePath 把相对/绝对路径解析为工作区内的绝对路径，越界则报错（安全底线）。
+// 先检查路径是否在 primary root 下；若不在，再查是否在 WorkspaceRoots（工作区其他根目录）下。
 func resolvePath(root, p string) (string, error) {
 	if strings.TrimSpace(p) == "" {
 		return "", fmt.Errorf("path 不能为空")
@@ -452,11 +457,22 @@ func resolvePath(root, p string) (string, error) {
 		full = filepath.Join(root, full)
 	}
 	full = filepath.Clean(full)
+	// 先查 primary root
 	rel, err := filepath.Rel(root, full)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("路径越界（不允许访问工作区外）: %s", p)
+	if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return full, nil
 	}
-	return full, nil
+	// 再查其他工作区根目录（多根工作区支持）
+	for _, wr := range WorkspaceRoots {
+		if wr == root {
+			continue
+		}
+		rel, err := filepath.Rel(wr, full)
+		if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return full, nil
+		}
+	}
+	return "", fmt.Errorf("路径越界（不允许访问工作区外）: %s", p)
 }
 
 // capOutput 截断过长输出（保头 3/4 + 尾 1/4），防工具结果撑爆上下文。

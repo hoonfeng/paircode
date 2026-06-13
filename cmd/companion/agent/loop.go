@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -183,9 +184,17 @@ func stripFinal(s string) string {
 }
 
 // DefaultSystemPrompt 复刻参考源核心铁律的系统提示词（中文 lock / 改前 read / 工作区限定 / [FINAL]）。
-func DefaultSystemPrompt(workspaceRoot string) string {
+// roots 为工作区所有根目录（支持多根工作区）；roots[0] 为主根。
+func DefaultSystemPrompt(roots []string) string {
+	rootInfo := "根目录: " + roots[0]
+	if len(roots) > 1 {
+		rootInfo += "\n工作区包含以下所有项目目录（均可访问）："
+		for i, r := range roots {
+			rootInfo += fmt.Sprintf("\n  %d. %s", i+1, r)
+		}
+	}
 	return "你是「伴随式 CodeAgent」，一个在用户项目里结对编程的 AI 编码助手。\n\n" +
-		"# 工作区\n根目录: " + workspaceRoot + "\n\n" +
+		"# 工作区\n" + rootInfo + "\n\n" +
 		"# 核心铁律（不可违背）\n" +
 		"- 所有思考与回答均使用中文。\n" +
 		"- 文件操作只用工作区内路径；修改文件前必须先 read_file 确认当前内容。\n" +

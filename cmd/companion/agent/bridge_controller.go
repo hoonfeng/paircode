@@ -329,6 +329,7 @@ func (bc *BridgeController) ExecCommand(ctx context.Context, command, cwd string
 }
 
 // resolvePath 解析路径（工作区内安全约束）。
+// 先检查路径是否在 bc.root 下；若不在，再查是否在 WorkspaceRoots（工作区其他根目录）下。
 func (bc *BridgeController) resolvePath(p string) (string, error) {
 	full := p
 	if !filepath.IsAbs(full) {
@@ -336,10 +337,20 @@ func (bc *BridgeController) resolvePath(p string) (string, error) {
 	}
 	full = filepath.Clean(full)
 	rel, err := filepath.Rel(bc.root, full)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("路径越界（不允许访问工作区外）: %s", p)
+	if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return full, nil
 	}
-	return full, nil
+	// 再查其他工作区根目录（多根工作区支持）
+	for _, wr := range WorkspaceRoots {
+		if wr == bc.root {
+			continue
+		}
+		rel, err := filepath.Rel(wr, full)
+		if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return full, nil
+		}
+	}
+	return "", fmt.Errorf("路径越界（不允许访问工作区外）: %s", p)
 }
 
 // ─── 审计 ────────────────────────────────────────────────────

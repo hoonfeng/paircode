@@ -37,7 +37,7 @@ func TestLiveDeepSeek(t *testing.T) {
 	loop := &Loop{
 		Provider:      prov,
 		Registry:      reg,
-		System:        DefaultSystemPrompt(root),
+		System:        DefaultSystemPrompt([]string{root}),
 		MaxIterations: 12,
 		OnEvent: func(e Event) {
 			if e.Tool != "" {
@@ -77,7 +77,7 @@ func TestLiveMemoryKB(t *testing.T) {
 	prov := &OpenAIProvider{BaseURL: "https://api.deepseek.com/v1", APIKey: key, Model: "deepseek-chat", Temperature: 0}
 	var ev []string
 	loop := &Loop{
-		Provider: prov, Registry: reg, System: DefaultSystemPrompt(root), MaxIterations: 16,
+		Provider: prov, Registry: reg, System: DefaultSystemPrompt([]string{root}), MaxIterations: 16,
 		OnEvent: func(e Event) {
 			if e.Tool != "" {
 				ev = append(ev, e.Tool)

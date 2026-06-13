@@ -130,13 +130,14 @@ func (b *AgentBridge) Start(task string) {
 		b.root = root
 		ApplyIgnoreDirs(root) // 全局设置 + 项目级 .pair/ignore → 注入搜索/探索的忽略目录
 		reg := agent.NewRegistry()
+		agent.WorkspaceRoots = core.Folders
 		agent.RegisterDefaultTools(reg, root)
 		b.registerAskTool(reg)                       // ask_user：handler 闭包持有 bridge（需 UI 交互），故在此注册而非默认集
 		agenttools.RegisterManagementTools(reg)                 // Agent 自管理 Skills/MCP + 市场 + 技能渐进式披露(skill_read)
 		if cfgs := mcppanel.LoadConfigs(); len(cfgs) > 0 { // 外部 MCP 服务器（mcp.json；失败跳过、不阻断；首条消息时一次性连接）
 			agent.RegisterMCPServers(reg, cfgs)
 		}
-		sys := agent.DefaultSystemPrompt(root)
+		sys := agent.DefaultSystemPrompt(core.Folders)
 		if si := strings.TrimSpace(core.Settings.SystemInstructions); si != "" { // 设置里的系统级指令
 			sys += "\n\n# 系统级指令（务必遵守）\n" + si
 		}
