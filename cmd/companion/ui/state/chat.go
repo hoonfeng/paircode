@@ -26,6 +26,23 @@ const (
 	Assistant
 )
 
+// TimelineEntry 按 LLM 输出顺序记录的一条事件（思考/正文/工具调用）。
+// 保留独立字段而非与 Thinking/Text/Activities 合并，使得 agent_card 渲染时
+// 能按真实事件流顺序展示（而非固定分三块），还原 LLM 输出的自然节奏。
+type TimelineEntry struct {
+	Kind    string // "thinking" / "content" / "tool"
+	Content string // thinking/content 的文本内容
+
+	// tool 专用字段（同 Activity）
+	Tool             string
+	Args             string
+	CallID           string
+	Result           string
+	Done             bool
+	Expanded         bool
+	AwaitingApproval bool
+}
+
 // Message 一条聊天消息。Assistant 消息可携带 Agent 流式结构（思考链 + 工具活动）。
 type Message struct {
 	Role Role
@@ -42,9 +59,31 @@ type Message struct {
 	Eval       *Eval      // 任务评测评分（完成后由评测模型打分；nil=未评测）
 	Streaming  bool       // 仍在流式生成中（显示「思考中…」/进行态）
 
+	// Timeline 按 LLM 输出事件流顺序记录的条目列表。与 Thinking/Text/Activities
+	// 保持同步（EventThinking→Thinking 追加 + Timeline thinking 条目，
+	// EventContent→Text 追加 + Timeline content 条目，
+	// EventToolCall→Activities 追加 + Timeline tool 条目）。
+	// 渲染时优先使用 Timeline（若存在）还原真实输出顺序；无 Timeline
+	// 时回退到旧版三块独立渲染（向后兼容已存储的旧对话）。
+	Timeline []TimelineEntry `json:"Timeline,omitempty"`
+
 	// ── 折叠视图状态（UI 持久，跨 relayout 存活于 store）──
 	Collapsed        bool // 整卡折叠（完成后可收起，autoCollapse 开则完成即收）
 	ThinkingExpanded bool // 思考块展开（默认折叠；流式时强制展开看实时）
+}
+
+// TimelineEntryAsActivity 将 tool 类型的 TimelineEntry 转为 Activity
+// （供 activityInline 复用现有工具活动展示组件）。
+func (e TimelineEntry) TimelineEntryAsActivity() Activity {
+	return Activity{
+		CallID:           e.CallID,
+		Tool:             e.Tool,
+		Args:             e.Args,
+		Result:           e.Result,
+		Done:             e.Done,
+		Expanded:         e.Expanded,
+		AwaitingApproval: e.AwaitingApproval,
+	}
 }
 
 // Eval 任务评测评分（评测模型 LLM-as-Judge 打分；复刻参考 bench/evaluator 的 4 维度 + 总分 + 优缺点 + 反馈）。

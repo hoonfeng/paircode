@@ -18,23 +18,23 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hoonfeng/goui/pkg/animation"
 	"github.com/hoonfeng/paircode/cmd/companion/agent"
 	"github.com/hoonfeng/paircode/cmd/companion/agenttools"
-	"github.com/hoonfeng/paircode/cmd/companion/roleprompts"
 	"github.com/hoonfeng/paircode/cmd/companion/core"
-	"github.com/hoonfeng/paircode/cmd/companion/ui/mcp"
-	"github.com/hoonfeng/paircode/cmd/companion/ui/skills"
+	"github.com/hoonfeng/paircode/cmd/companion/roleprompts"
 	chat "github.com/hoonfeng/paircode/cmd/companion/ui/chat"
-	"github.com/hoonfeng/paircode/cmd/companion/ui/settings"
 	"github.com/hoonfeng/paircode/cmd/companion/ui/editor"
 	"github.com/hoonfeng/paircode/cmd/companion/ui/filetree"
+	"github.com/hoonfeng/paircode/cmd/companion/ui/mcp"
+	"github.com/hoonfeng/paircode/cmd/companion/ui/settings"
+	"github.com/hoonfeng/paircode/cmd/companion/ui/skills"
 	"github.com/hoonfeng/paircode/cmd/companion/ui/state"
-	"github.com/hoonfeng/goui/pkg/animation"
 )
 
 // agentBridge 持有 Agent 引擎与一次流式回复的运行态。挂在 chat.ChatState 上（懒建）。
 type AgentBridge struct {
-	Cs *chat.ChatState
+	Cs           *chat.ChatState
 	loop         *agent.Loop      // 懒建（provider 来自环境变量）；测试可预置 mock
 	planner      *agent.Planner   // 规划 Agent（自主模式下先列计划；nil=不规划）。每次发送按设置重建
 	reviewer     *agent.Reviewer  // 审核 Agent（AI 审核模式下把关写操作；nil=不审）。每次发送按设置重建
@@ -134,8 +134,8 @@ func (b *AgentBridge) Start(task string) {
 		reg := agent.NewRegistry()
 		agent.WorkspaceRoots = core.Folders
 		agent.RegisterDefaultTools(reg, root)
-		b.registerAskTool(reg)                       // ask_user：handler 闭包持有 bridge（需 UI 交互），故在此注册而非默认集
-		agenttools.RegisterManagementTools(reg)                 // Agent 自管理 Skills/MCP + 市场 + 技能渐进式披露(skill_read)
+		b.registerAskTool(reg)                             // ask_user：handler 闭包持有 bridge（需 UI 交互），故在此注册而非默认集
+		agenttools.RegisterManagementTools(reg)            // Agent 自管理 Skills/MCP + 市场 + 技能渐进式披露(skill_read)
 		if cfgs := mcppanel.LoadConfigs(); len(cfgs) > 0 { // 外部 MCP 服务器（mcp.json；失败跳过、不阻断；首条消息时一次性连接）
 			agent.RegisterMCPServers(reg, cfgs)
 		}
@@ -144,7 +144,7 @@ func (b *AgentBridge) Start(task string) {
 			sys += "\n\n# 系统级指令（务必遵守）\n" + si
 		}
 		sys += settingspanel.PhilosophyPrompt() // 思想 tab：指导思想（启用时）
-		sys += skillspanel.Prompt()     // Skills tab：可用技能（.pair/skills，渐进式披露）
+		sys += skillspanel.Prompt()             // Skills tab：可用技能（.pair/skills，渐进式披露）
 		sys += "\n\n# 自管理与扩展\n你可自我扩展：skill_list / skill_read（按需读技能全文）/ skill_write / skill_delete 管理技能；" +
 			"mcp_list / mcp_add / mcp_remove 管理 MCP 服务器；marketplace_search / marketplace_install 从市场检索并安装 MCP 或技能。把可复用的工作方式沉淀成技能。"
 		if core.Settings.LuaTools { // 告知 Agent 可自建/优化 Lua 工具（沙箱）
@@ -403,7 +403,6 @@ func (b *AgentBridge) registerAskTool(r *agent.Registry) {
 	})
 }
 
-
 // resolveAsk UI 线程（用户点选项/输入回答）：把回答送给阻塞中的 loop 协程，清问答卡。
 func (b *AgentBridge) ResolveAsk(answer string) {
 	b.mu.Lock()
@@ -447,7 +446,7 @@ func (b *AgentBridge) drain() {
 				msg.Collapsed = true
 			}
 		}
-		b.Cs.ClearAsk() // 本轮结束：清掉残留问答卡（如被停止）
+		b.Cs.ClearAsk()    // 本轮结束：清掉残留问答卡（如被停止）
 		b.Cs.saveHistory() // Agent 完成/停止后立即保存对话历史，确保下次加载可见完整消息
 		b.stopPump()
 		if len(evs) == 0 || b.stopped {
@@ -477,8 +476,20 @@ func (b *AgentBridge) applyEvent(e agent.Event) {
 	switch e.Type {
 	case agent.EventThinking:
 		m.Thinking += e.Content
+		// Timeline：合并连续 thinking 条目，保留输出顺序
+		if n := len(m.Timeline); n > 0 && m.Timeline[n-1].Kind == "thinking" {
+			m.Timeline[n-1].Content += e.Content
+		} else {
+			m.Timeline = append(m.Timeline, state.TimelineEntry{Kind: "thinking", Content: e.Content})
+		}
 	case agent.EventContent:
 		m.Text += e.Content
+		// Timeline：合并连续 content 条目，保留输出顺序
+		if n := len(m.Timeline); n > 0 && m.Timeline[n-1].Kind == "content" {
+			m.Timeline[n-1].Content += e.Content
+		} else {
+			m.Timeline = append(m.Timeline, state.TimelineEntry{Kind: "content", Content: e.Content})
+		}
 	case agent.EventToolCall:
 		switch e.Tool {
 		case "update_plan": // 计划单独渲染为置顶清单卡，不作通用工具活动行
@@ -487,6 +498,9 @@ func (b *AgentBridge) applyEvent(e agent.Event) {
 			b.Cs.ApplyAsk(e.Args)
 		default:
 			m.Activities = append(m.Activities, state.Activity{CallID: e.CallID, Tool: e.Tool, Args: e.Args})
+			m.Timeline = append(m.Timeline, state.TimelineEntry{
+				Kind: "tool", Tool: e.Tool, Args: e.Args, CallID: e.CallID,
+			})
 		}
 	case agent.EventApproval:
 		// 标记对应活动为「待批准」（tool_call 已建活动，按 CallID 找；兜底补建）。
@@ -501,12 +515,28 @@ func (b *AgentBridge) applyEvent(e agent.Event) {
 		if !found {
 			m.Activities = append(m.Activities, state.Activity{CallID: e.CallID, Tool: e.Tool, Args: e.Args, AwaitingApproval: true})
 		}
+		// Timeline 同步标记
+		for i := range m.Timeline {
+			if m.Timeline[i].Kind == "tool" && m.Timeline[i].CallID == e.CallID {
+				m.Timeline[i].AwaitingApproval = true
+				break
+			}
+		}
 	case agent.EventToolResult:
 		for i := len(m.Activities) - 1; i >= 0; i-- {
 			if m.Activities[i].CallID == e.CallID || (m.Activities[i].Tool == e.Tool && !m.Activities[i].Done) {
 				m.Activities[i].Result = e.Content
 				m.Activities[i].Done = true
 				m.Activities[i].AwaitingApproval = false
+				break
+			}
+		}
+		// Timeline 同步更新结果（反向搜索以匹配最新）
+		for i := len(m.Timeline) - 1; i >= 0; i-- {
+			if m.Timeline[i].Kind == "tool" && (m.Timeline[i].CallID == e.CallID || (m.Timeline[i].Tool == e.Tool && !m.Timeline[i].Done)) {
+				m.Timeline[i].Result = e.Content
+				m.Timeline[i].Done = true
+				m.Timeline[i].AwaitingApproval = false
 				break
 			}
 		}
@@ -691,8 +721,8 @@ func (b *AgentBridge) reloadLuaTools() {
 		return
 	}
 	for _, n := range b.luaToolNames {
-// 		b.loop.Registry.Unregister(n)
-		_ = n  // Unregister not available
+		// 		b.loop.Registry.Unregister(n)
+		_ = n // Unregister not available
 	}
 	b.luaToolNames = nil
 	if !core.Settings.LuaTools {
@@ -894,4 +924,3 @@ func planStepsText(plan agent.Plan) string {
 	}
 	return sb.String()
 }
-

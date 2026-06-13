@@ -12,13 +12,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/hoonfeng/paircode/cmd/companion/agent"
-	"github.com/hoonfeng/paircode/cmd/companion/core"
-	"github.com/hoonfeng/paircode/cmd/companion/ui/state"
-	"github.com/hoonfeng/paircode/cmd/companion/ui"
 	"github.com/hoonfeng/goui/pkg/paint"
 	"github.com/hoonfeng/goui/pkg/types"
 	"github.com/hoonfeng/goui/pkg/widget"
+	"github.com/hoonfeng/paircode/cmd/companion/agent"
+	"github.com/hoonfeng/paircode/cmd/companion/core"
+	"github.com/hoonfeng/paircode/cmd/companion/ui"
+	"github.com/hoonfeng/paircode/cmd/companion/ui/state"
 )
 
 // 颜色令牌统一在 ui 包（ui.Bg/*ui.Fg/ui.AccentStrong/ui.White…）；本文件改读 ui，不再本地声明 gh*。
@@ -42,18 +42,18 @@ type pendingAsk struct {
 type ChatState struct {
 	widget.BaseState
 	Store        *state.ChatStore
-	ShowThreads  bool         // 对话侧栏展开
-	ThreadLeft   bool         // 对话侧栏靠左（默认右），由换边按钮切换
-	AutoReview   bool         // 自动/手动审核
-	Autonomous   bool         // 全自主模式
-	AutoCollapse bool         // 最后一条自动收缩
-	SendSeq      int          // 递增 → 输入框清空 + 滚到底
-	InputAreaH   float64      // 输入区固定高（由 main.go 设为终端面板高 BottomH，使两者等高对齐）
-	Bridge       AgentBridge  // Agent 引擎接入（懒建，见 agent_bridge.go）
-	Plan         []planStep   // 当前 Agent 任务计划清单（update_plan 工具更新；置顶可视）
-	Ask          *pendingAsk  // 当前 agent 的提问（ask_user）；非空时显问答卡、对话阻塞等回答
-	Attachments  []string     // 待发送的附件文件路径（回形针添加，发送时随任务作上下文给 agent）
-	PerfTest     int          // 性能测试令牌（递增→填充 1000 条测试消息，验证 VirtualList 虚加载性能）
+	ShowThreads  bool        // 对话侧栏展开
+	ThreadLeft   bool        // 对话侧栏靠左（默认右），由换边按钮切换
+	AutoReview   bool        // 自动/手动审核
+	Autonomous   bool        // 全自主模式
+	AutoCollapse bool        // 最后一条自动收缩
+	SendSeq      int         // 递增 → 输入框清空 + 滚到底
+	InputAreaH   float64     // 输入区固定高（由 main.go 设为终端面板高 BottomH，使两者等高对齐）
+	Bridge       AgentBridge // Agent 引擎接入（懒建，见 agent_bridge.go）
+	Plan         []planStep  // 当前 Agent 任务计划清单（update_plan 工具更新；置顶可视）
+	Ask          *pendingAsk // 当前 agent 的提问（ask_user）；非空时显问答卡、对话阻塞等回答
+	Attachments  []string    // 待发送的附件文件路径（回形针添加，发送时随任务作上下文给 agent）
+	PerfTest     int         // 性能测试令牌（递增→填充 1000 条测试消息，验证 VirtualList 虚加载性能）
 
 	HoveredMsg  int    // 当前 hover 的消息索引（-1=无）→ 揭示该消息的操作按钮
 	ShowSearch  bool   // Ctrl+F 搜索栏开
@@ -79,18 +79,18 @@ func (s *ChatState) loadTestData() {
 			Text: fmt.Sprintf("这是第 %d 轮用户消息，用于性能压测。请帮我分析这段数据并给出建议。", i+1),
 		})
 		t.Messages = append(t.Messages, state.Message{
-			Role:      state.Assistant,
-			Text:      fmt.Sprintf("## 第 %d 轮分析报告\n\n已完成分析。以下是结果：\n\n1. **数据概况**：共处理 %d 条记录\n2. **关键发现**：\n   - 性能正常\n   - 无异常错误\n3. **建议**：继续监控\n\n```go\nfmt.Println(\"Hello, 性能测试!\")\n```\n\n| 指标 | 值 |\n|------|----|\n| 延迟 | 5ms |\n| 吞吐 | 1000/s |", i+1, i*100),
+			Role:     state.Assistant,
+			Text:     fmt.Sprintf("## 第 %d 轮分析报告\n\n已完成分析。以下是结果：\n\n1. **数据概况**：共处理 %d 条记录\n2. **关键发现**：\n   - 性能正常\n   - 无异常错误\n3. **建议**：继续监控\n\n```go\nfmt.Println(\"Hello, 性能测试!\")\n```\n\n| 指标 | 值 |\n|------|----|\n| 延迟 | 5ms |\n| 吞吐 | 1000/s |", i+1, i*100),
 			Thinking: "让我分析这些数据...\n1. 系统状态正常\n2. 性能指标在预期范围内\n3. 建议继续观察",
 			Activities: []state.Activity{
 				{Tool: "read_file", Args: `{"path":"data.csv"}`, Result: "已读取 1000 条记录", Done: true},
 				{Tool: "analyze", Args: `{"metric":"latency"}`, Result: "平均延迟 5ms", Done: true},
 			},
-			Notes: []string{"上下文已压缩（保留最近分析）"},
+			Notes:     []string{"上下文已压缩（保留最近分析）"},
 			Collapsed: i < N-3, // 仅最后 3 条展开，其余折叠减少首次渲染压力
 		})
 	}
-	s.SendSeq++   // 滚到底部
+	s.SendSeq++           // 滚到底部
 	s.cachedHeights = nil // 清空高度缓存，让新消息重新估算
 	s.SetState()
 }
@@ -183,23 +183,50 @@ func estimateMessageHeight(m state.Message) float64 {
 		return 56 // 折叠态：header + padding + gap
 	}
 	h := 56.0 // 展开态基础：header + padding
-	if strings.TrimSpace(m.Thinking) != "" {
-		if m.ThinkingExpanded || m.Streaming {
-			h += 200 // 展开思考块
-		} else {
-			h += 36 // 折叠思考块（首行预览）
+
+	if len(m.Timeline) > 0 {
+		// Timeline 渲染：按事件流顺序逐条估算
+		for _, entry := range m.Timeline {
+			switch entry.Kind {
+			case "thinking":
+				if m.ThinkingExpanded || m.Streaming {
+					h += 200
+				} else {
+					h += 36
+				}
+			case "content":
+				if t := strings.TrimSpace(entry.Content); t != "" {
+					lines := strings.Count(t, "\n") + 1
+					h += float64(lines)*19.0 + 4
+				}
+			case "tool":
+				ah := 28.0
+				if entry.Expanded {
+					ah = 80
+				}
+				h += ah + 4
+			}
 		}
-	}
-	for _, a := range m.Activities {
-		ah := 28.0
-		if a.Expanded {
-			ah = 80 // 展开活动含结果
+	} else {
+		// 向后兼容：无 Timeline 时使用旧版估算
+		if strings.TrimSpace(m.Thinking) != "" {
+			if m.ThinkingExpanded || m.Streaming {
+				h += 200
+			} else {
+				h += 36
+			}
 		}
-		h += ah
-	}
-	if txt := strings.TrimSpace(m.Text); txt != "" {
-		lines := strings.Count(txt, "\n") + 1
-		h += float64(lines) * 19.0
+		for _, a := range m.Activities {
+			ah := 28.0
+			if a.Expanded {
+				ah = 80
+			}
+			h += ah
+		}
+		if txt := strings.TrimSpace(m.Text); txt != "" {
+			lines := strings.Count(txt, "\n") + 1
+			h += float64(lines) * 19.0
+		}
 	}
 	if m.Eval != nil {
 		h += 80
@@ -230,7 +257,7 @@ func (s *ChatState) planCard() widget.Widget {
 		rows = append(rows, planRow(p))
 	}
 	planCardStyle := widget.Style{
-		Padding:        types.EdgeInsets(8),
+		Padding:         types.EdgeInsets(8),
 		BackgroundColor: ui.BgSubtle,
 		BorderRadius:    6,
 		Shadow:          &paint.Shadow{Offset: types.Point{X: 0, Y: 2}, Blur: 8, Color: types.ColorFromRGBA(0, 0, 0, 25)},
@@ -290,7 +317,7 @@ func (s *ChatState) askCard() widget.Widget {
 	ui.StyleInput(in)
 	rows = append(rows, widget.Div(widget.Style{Height: 8}), in)
 	askCardStyle := widget.Style{
-		Padding:        types.EdgeInsets(10),
+		Padding:         types.EdgeInsets(10),
 		BackgroundColor: ui.BgSubtle,
 		BorderColor:     ui.Accent,
 		BorderWidth:     1,
@@ -467,9 +494,21 @@ func (s *ChatState) renderMessage(t *state.Thread, i int) widget.Widget {
 		card = agentMessageCard(m,
 			func() { t.Messages[i].Collapsed = !t.Messages[i].Collapsed; s.SetState() },
 			func() { t.Messages[i].ThinkingExpanded = !t.Messages[i].ThinkingExpanded; s.SetState() },
-			func(ai int) {
-				if ai >= 0 && ai < len(t.Messages[i].Activities) {
-					t.Messages[i].Activities[ai].Expanded = !t.Messages[i].Activities[ai].Expanded
+			func(ti int) {
+				if ti >= 0 && ti < len(t.Messages[i].Timeline) && t.Messages[i].Timeline[ti].Kind == "tool" {
+					t.Messages[i].Timeline[ti].Expanded = !t.Messages[i].Timeline[ti].Expanded
+					// 同步 Activities 的展开状态（向后兼容）
+					cid := t.Messages[i].Timeline[ti].CallID
+					for ai := range t.Messages[i].Activities {
+						if t.Messages[i].Activities[ai].CallID == cid {
+							t.Messages[i].Activities[ai].Expanded = t.Messages[i].Timeline[ti].Expanded
+							break
+						}
+					}
+					s.SetState()
+				} else if ti >= 0 && ti < len(t.Messages[i].Activities) {
+					// 无 Timeline 时回退到 Activities 索引
+					t.Messages[i].Activities[ti].Expanded = !t.Messages[i].Activities[ti].Expanded
 					s.SetState()
 				}
 			},
@@ -956,7 +995,9 @@ func (s *ChatState) ExploreKnowledgeBase() { s.sendTask(agent.ExploreKnowledgeTa
 
 // ApplyPlan 从 update_plan 工具参数解析并设置计划清单。
 func (s *ChatState) ApplyPlan(argsJSON string) {
-	var p struct{ Plan []planStep `json:"plan"` }
+	var p struct {
+		Plan []planStep `json:"plan"`
+	}
 	if err := json.Unmarshal([]byte(argsJSON), &p); err == nil {
 		s.Plan = p.Plan
 	}

@@ -9,12 +9,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/hoonfeng/paircode/cmd/companion/ui/mdview"
-	"github.com/hoonfeng/paircode/cmd/companion/ui/state"
-	"github.com/hoonfeng/paircode/cmd/companion/ui"
 	"github.com/hoonfeng/goui/pkg/paint"
 	"github.com/hoonfeng/goui/pkg/types"
 	"github.com/hoonfeng/goui/pkg/widget"
+	"github.com/hoonfeng/paircode/cmd/companion/ui"
+	"github.com/hoonfeng/paircode/cmd/companion/ui/mdview"
+	"github.com/hoonfeng/paircode/cmd/companion/ui/state"
 )
 
 // statusShadow 根据 Agent 消息状态返回带状态色的阴影（代替左边 3px 竖条）。
@@ -53,25 +53,47 @@ func cardStyle(bg *types.Color, radius float64, m state.Message) widget.Style {
 // 三者保持事件流的独立性——LLM 输出时 thinking/content/tool_call
 // 是分别独立发送的事件，展示时也保持这种独立性。
 
-func agentMessageCard(m state.Message, onToggleCollapse, onToggleThinking func(), onToggleActivity func(int)) widget.Widget {
+func agentMessageCard(m state.Message, onToggleCollapse, onToggleThinking func(), onToggleTool func(int)) widget.Widget {
 	collapsed := !m.Streaming && m.Collapsed
 	kids := []widget.Widget{agentHeaderCollapsible(m, onToggleCollapse)}
 	if !collapsed {
 		hasContent := false
-		// 1) 思考链——独立展示（按事件流顺序，与工具/正文不合并）
-		if t := strings.TrimSpace(m.Thinking); t != "" {
-			kids = append(kids, vgap(6), thinkingInline(m, onToggleThinking))
-			hasContent = true
-		}
-		// 2) 工具活动——各自独立展示（每个活动独立渲染，不合并到Markdown文本）
-		for i, a := range m.Activities {
-			kids = append(kids, vgap(4), activityInline(a, func() { onToggleActivity(i) }))
-			hasContent = true
-		}
-		// 3) 正文——独立 Markdown 渲染（保持完整 Markdown 支持）
-		if t := strings.TrimSpace(m.Text); t != "" {
-			kids = append(kids, vgap(6), mdview.Render(t))
-			hasContent = true
+
+		if len(m.Timeline) > 0 {
+			// Timeline 渲染：按 LLM 输出事件流顺序展示思考/正文/工具（保留自然节奏）。
+			// 不固定分三块，而是按收到顺序依次输出。
+			for i, entry := range m.Timeline {
+				switch entry.Kind {
+				case "thinking":
+					kids = append(kids, vgap(4), thinkingInlineFromEntry(entry, m.Streaming, m.ThinkingExpanded, onToggleThinking))
+					hasContent = true
+				case "content":
+					if t := strings.TrimSpace(entry.Content); t != "" {
+						kids = append(kids, vgap(4), mdview.Render(t))
+						hasContent = true
+					}
+				case "tool":
+					idx := i // 捕获循环变量
+					kids = append(kids, vgap(4), activityInline(entry.TimelineEntryAsActivity(), func() {
+						onToggleTool(idx)
+					}))
+					hasContent = true
+				}
+			}
+		} else {
+			// 向后兼容：无 Timeline 时回退到旧版三块独立渲染（已存储的旧对话）
+			if t := strings.TrimSpace(m.Thinking); t != "" {
+				kids = append(kids, vgap(6), thinkingInline(m, onToggleThinking))
+				hasContent = true
+			}
+			for i, a := range m.Activities {
+				kids = append(kids, vgap(4), activityInline(a, func() { onToggleTool(i) }))
+				hasContent = true
+			}
+			if t := strings.TrimSpace(m.Text); t != "" {
+				kids = append(kids, vgap(6), mdview.Render(t))
+				hasContent = true
+			}
 		}
 		if !hasContent && m.Streaming {
 			kids = append(kids, vgap(4), ui.TextC("思考中…", *ui.FgMuted, 12))
@@ -223,6 +245,29 @@ func thinkingInline(m state.Message, onToggle func()) widget.Widget {
 		})
 	}
 	return widget.Div(widget.Style{FlexDirection: "column", AlignItems: "stretch"}, kids)
+}
+
+// thinkingInlineFromEntry 从 TimelineEntry 渲染一条思考内容（与 thinkingInline 语义一致，
+// 但使用 entry.Content 而非 m.Thinking，支持 Timeline 多段独立展示）。
+func thinkingInlineFromEntry(entry state.TimelineEntry, streaming, expanded bool, onToggle func()) widget.Widget {
+	t := strings.TrimSpace(entry.Content)
+	if t == "" {
+		return widget.Div(widget.Style{})
+	}
+	col := *ui.FgSubtle
+	if streaming || expanded {
+		return ui.TextC(t, col, 11)
+	}
+	// 折叠时：首行 + chevron
+	head := widget.Div(widget.Style{FlexDirection: "row", AlignItems: "center"},
+		widget.Lucide("chevron-right", widget.IconSize(11), widget.IconColor(*ui.FgMuted)),
+		hgap(4),
+		ui.TextC(truncRunes(firstLine(t), 48), *ui.FgMuted, 10.5),
+	)
+	return &widget.Clickable{
+		SingleChildWidget: widget.SingleChildWidget{Child: head},
+		OnClick:           onToggle,
+	}
 }
 
 // activityInline 一次工具调用——以自然文本行输出，无图标/无边框/无背景色，
