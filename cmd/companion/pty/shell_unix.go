@@ -6,12 +6,26 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
+)
+
+var (
+	detectShellsOnce sync.Once
+	detectedShells   []Shell
 )
 
 // DetectShells 探测 Unix（Linux/macOS）可用解释器。
 // 有些系统没有 bash（如精简容器/Alpine 默认 ash、部分发行版），故不能写死 bash——
 // 逐个探测：$SHELL（用户默认）优先，再扫常见解释器的常见路径，再走 PATH，取真实存在的。
+// 结果缓存，仅首次调用时探测（shell 列表运行时不会变化）。
 func DetectShells() []Shell {
+	detectShellsOnce.Do(func() {
+		detectedShells = detectShellsUncached()
+	})
+	return detectedShells
+}
+
+func detectShellsUncached() []Shell {
 	var out []Shell
 	seen := map[string]bool{}
 	add := func(name, path string, args ...string) {
