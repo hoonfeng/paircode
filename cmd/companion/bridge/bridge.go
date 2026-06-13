@@ -551,10 +551,23 @@ func (b *AgentBridge) applyEvent(e agent.Event) {
 		m.Notes = append(m.Notes, e.Content) // 系统提示（压缩/绕圈）：素色一行显示在卡内
 	case agent.EventEvaluation:
 		var ev agent.Evaluation
-		if json.Unmarshal([]byte(e.Args), &ev) == nil {
-			m.Eval = &state.Eval{Total: ev.Total, Completion: ev.Scores.Completion, Correctness: ev.Scores.Correctness,
-				Depth: ev.Scores.Depth, Efficiency: ev.Scores.Efficiency,
-				Strengths: ev.Strengths, Weaknesses: ev.Weaknesses, Feedback: ev.Feedback}
+		if json.Unmarshal([]byte(e.Args), &ev) == nil && b.runThread != nil {
+			// 评分改为放在LLM对话结束后独立展示——创建一条新消息作为评分卡，
+			// 不再嵌入到当前 Agent 消息中（避免评分与 Agent 正文混在一起）。
+			b.runThread.Messages = append(b.runThread.Messages, state.Message{
+				Role: state.Assistant,
+				Eval: &state.Eval{
+					Total:       ev.Total,
+					Completion:  ev.Scores.Completion,
+					Correctness: ev.Scores.Correctness,
+					Depth:       ev.Scores.Depth,
+					Efficiency:  ev.Scores.Efficiency,
+					Strengths:   ev.Strengths,
+					Weaknesses:  ev.Weaknesses,
+					Feedback:    ev.Feedback,
+				},
+			})
+			b.Cs.saveHistory()
 		}
 	case agent.EventFinal:
 		if strings.TrimSpace(e.Content) != "" {
@@ -864,6 +877,7 @@ func (b *AgentBridge) autoIterate(ctx context.Context, loop *agent.Loop, ev agen
 }
 
 // buildImproveTask 据评测不足拼出改进任务（让执行 Agent 实际修改而非只给建议，复刻参考改进 prompt）。
+// 另含 Lua 自定义工具创建指导：评分不足且缺能力时，Agent 可创建/优化 .lua 工具来「长手脚」。
 func buildImproveTask(ev agent.Evaluation) string {
 	var sb strings.Builder
 	sb.WriteString("上一轮任务评分 " + strconv.Itoa(ev.Total) + "/100，存在以下不足，请针对性改进")
@@ -874,6 +888,15 @@ func buildImproveTask(ev agent.Evaluation) string {
 	if strings.TrimSpace(ev.Feedback) != "" {
 		sb.WriteString("\n总评：" + ev.Feedback)
 	}
+	// ♻ Lua 自定义工具：「长手脚」——评分不足往往是因为缺少某种能力（如不会解析特定格式/缺计算工具）。
+	// Agent 可在 .pair/tools/ 下创建 .lua 脚本来自我扩展：把重复性操作封成工具、补缺失的计算/转换能力。
+	// 写完后下次发送即热加载可用；优化现有工具也能提升效率。
+	sb.WriteString("\n\n# 自定义工具扩展（长手脚）\n" +
+		"如果评分低是因为你缺少某种能力（如不会解析特定格式、缺少计算工具、重复操作过多），" +
+		"可以在 .pair/tools/ 目录下创建 .lua 脚本自定义工具来扩展自己。\n" +
+		"脚本格式：return {name=, description=, parameters={...}, run=function(args) end}\n" +
+		"写完后 hot-reload 即时生效——下次发送即可调用新工具。\n" +
+		"也可以优化已有的 .lua 工具来提升效率。")
 	if dbg := roleprompts.RoleSpecificPhilosophy("debugger"); dbg != "" { // 自动迭代＝调试角色，注入其哲学指导
 		sb.WriteString(dbg)
 	}
