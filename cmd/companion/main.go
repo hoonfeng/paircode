@@ -393,6 +393,7 @@ func (s *shellState) titleMenus() []widget.Widget {
 		menuBarBtn("Agent", []widget.DropdownItem{
 			{Label: "Agent 监控面板", Shortcut: "Ctrl+Shift+M", Command: "agent.monitor"},
 			{Label: "性能监控", Command: "agent.perf", Divided: true},
+			{Label: "性能测试", Command: "agent.perfdemo", Divided: true},
 			{Label: "进化图（EvoMap）", Disabled: true},
 			{Label: "探索项目知识库", Command: "agent.explore", Divided: true},
 		}, s.onAgentMenu),
@@ -512,6 +513,8 @@ func (s *shellState) onAgentMenu(cmd string) {
 		menuactions.ShowAgentMonitor()
 	case "agent.perf":
 		menuactions.ShowPerfMonitor()
+	case "agent.perfdemo":
+		menuactions.ShowPerfDemo()
 	case "agent.explore":
 		chatpanel.TheState.ExploreKnowledgeBase()
 	}

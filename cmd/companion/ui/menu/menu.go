@@ -116,6 +116,177 @@ func ShowPerfMonitor() {
 	))
 }
 
+// ShowPerfDemo 性能测试：模拟IDE环境加载大量数据，排查渲染性能瓶颈。
+// 通过生成大量模拟数据（文件节点、代码行、列表项），观察帧率变化。
+func ShowPerfDemo() {
+	ShowContentDialog("性能测试", 520, dialogColumn(480,
+		kvRow("诊断引擎", "Pipeline 帧率诊断（5秒周期）"),
+		widget.Div(widget.Style{Height: 8}),
+		ui.TextC("点击下方按钮执行压力测试，观察 stderr 日志中的 [perf] 输出。", *ui.FgMuted, 11),
+		widget.Div(widget.Style{Height: 12}),
+
+		// 测试1：大量文本行
+		&widget.Button{Text: "① 10000行文本压力测试", OnClick: func() { PerfTestMassiveText() },
+			Color: *ui.Bg, TextColor: *ui.Fg, FontSize: 12, MinWidth: 460, MinHeight: 28},
+		widget.Div(widget.Style{Height: 6}),
+
+		// 测试2：大量按钮/控件
+		&widget.Button{Text: "② 1000个控件渲染测试", OnClick: func() { PerfTestManyWidgets() },
+			Color: *ui.Bg, TextColor: *ui.Fg, FontSize: 12, MinWidth: 460, MinHeight: 28},
+		widget.Div(widget.Style{Height: 6}),
+
+		// 测试3：大文件编辑器
+		&widget.Button{Text: "③ 打开5000行大文件", OnClick: func() { PerfTestLargeFile() },
+			Color: *ui.Bg, TextColor: *ui.Fg, FontSize: 12, MinWidth: 460, MinHeight: 28},
+		widget.Div(widget.Style{Height: 6}),
+
+		// 测试4：复杂嵌套布局
+		&widget.Button{Text: "④ 复杂嵌套布局测试", OnClick: func() { PerfTestNestedLayout() },
+			Color: *ui.Bg, TextColor: *ui.Fg, FontSize: 12, MinWidth: 460, MinHeight: 28},
+		widget.Div(widget.Style{Height: 6}),
+
+		// 测试5：全压力测试（组合所有场景）
+		&widget.Button{Text: "⑤ 全压力测试（组合所有场景）", OnClick: func() { PerfTestFullStress() },
+			Color: *ui.Accent, TextColor: *ui.White, FontSize: 12, MinWidth: 460, MinHeight: 28},
+		widget.Div(widget.Style{Height: 8}),
+
+		ui.TextC("测试结果将输出到 stderr，格式：[perf] fps | frames | build/layout/paint/flush", *ui.FgMuted, 10),
+	))
+}
+
+// ── 性能测试场景实现 ──
+
+// PerfTestMassiveText 大量文本行测试：生成包含10000行文本的页面。
+func PerfTestMassiveText() {
+	var id int
+	lines := make([]widget.Widget, 10000)
+	for i := 0; i < 10000; i++ {
+		lines[i] = ui.TextC(fmt.Sprintf("第 %d 行 - 性能测试文本行，用于测试渲染引擎对大量文本的绘制性能。", i+1), *ui.Fg, 12)
+	}
+	content := widget.NewScrollView(ui.VBox(lines...))
+	dlg := widget.NewDialog("10000行文本压力测试", content).WithWidth(700).WithHeight(600).WithTransition("fade").WithFooter(
+		&widget.Button{Text: "关闭", OnClick: func() { widget.HideOverlay(id) },
+			Color: *ui.BgMuted, TextColor: *ui.Fg, FontSize: 12, MinWidth: 50, MinHeight: 24},
+	)
+	id = widget.ShowDialog(dlg)
+}
+
+// PerfTestManyWidgets 大量控件测试：生成包含1000个按钮/控件的页面。
+func PerfTestManyWidgets() {
+	var id int
+	kids := make([]widget.Widget, 0, 1000)
+	for i := 0; i < 200; i++ {
+		rowKids := make([]widget.Widget, 0, 5)
+		for j := 0; j < 5; j++ {
+			idx := i*5 + j + 1
+			rowKids = append(rowKids, &widget.Button{
+				Text: fmt.Sprintf("Btn%d", idx), FontSize: 10,
+				Color: *ui.Bg, TextColor: *ui.Fg, MinWidth: 60, MinHeight: 22,
+				Padding: types.EdgeInsetsLTRB(4, 1, 4, 1),
+			})
+		}
+		kids = append(kids, widget.Div(widget.Style{FlexDirection: "row", Gap: 4, Padding: types.EdgeInsetsLTRB(0, 2, 0, 2)}, rowKids...))
+	}
+	content := widget.NewScrollView(ui.VBox(kids...))
+	dlg := widget.NewDialog("1000个控件渲染测试", content).WithWidth(700).WithHeight(600).WithTransition("fade").WithFooter(
+		&widget.Button{Text: "关闭", OnClick: func() { widget.HideOverlay(id) },
+			Color: *ui.BgMuted, TextColor: *ui.Fg, FontSize: 12, MinWidth: 50, MinHeight: 24},
+	)
+	id = widget.ShowDialog(dlg)
+}
+
+// PerfTestLargeFile 大文件编辑器测试：在当前工作区生成一个5000行的大文件并打开。
+func PerfTestLargeFile() {
+	// 获取当前工作区目录
+	if len(core.Folders) == 0 {
+		widget.MessageWarning("请先打开一个工作区")
+		return
+	}
+	root := core.Folders[0]
+	fpath := filepath.Join(root, ".perf_test_large.go")
+
+	// 生成5000行Go代码
+	var buf strings.Builder
+	buf.WriteString("package perf_test\n\n")
+	buf.WriteString("// 性能测试大文件 - 自动生成\n")
+	buf.WriteString("var (\n")
+	for i := 0; i < 5000; i++ {
+		buf.WriteString(fmt.Sprintf("\tperfVar%d = %d // 第%d行性能测试变量\n", i, i*100, i+1))
+	}
+	buf.WriteString(")\n")
+
+	if err := os.WriteFile(fpath, []byte(buf.String()), 0644); err != nil {
+		widget.MessageWarning("写入测试文件失败: " + err.Error())
+		return
+	}
+	editorpanel.Editor.Open(fpath)
+	widget.MessageInfo("已打开5000行大文件，请观察帧率变化")
+}
+
+// PerfTestNestedLayout 复杂嵌套布局测试。
+func PerfTestNestedLayout() {
+	var id int
+	buildNested := func(depth, width int) widget.Widget {
+		if depth <= 0 || width <= 0 {
+			return widget.Div(widget.Style{Width: 10, Height: 10, BackgroundColor: *ui.Border})
+		}
+		kids := make([]widget.Widget, 0, width)
+		for i := 0; i < width; i++ {
+			kids = append(kids, buildNested(depth-1, width-1))
+		}
+		return widget.Div(
+			widget.Style{FlexDirection: "row", Gap: 2, Padding: types.EdgeInsets(2),
+				BackgroundColor: *ui.BgMuted, BorderColor: *ui.Border, BorderWidth: 1},
+			kids...,
+		)
+	}
+	content := widget.NewScrollView(
+		ui.VBox(
+			ui.TextC("复杂嵌套布局（深度4，宽度4）：共 1+4+12+24 = 41 个容器", *ui.FgMuted, 11),
+			widget.Div(widget.Style{Height: 8}),
+			buildNested(4, 4),
+		),
+	)
+	dlg := widget.NewDialog("复杂嵌套布局测试", content).WithWidth(600).WithHeight(500).WithTransition("fade").WithFooter(
+		&widget.Button{Text: "关闭", OnClick: func() { widget.HideOverlay(id) },
+			Color: *ui.BgMuted, TextColor: *ui.Fg, FontSize: 12, MinWidth: 50, MinHeight: 24},
+	)
+	id = widget.ShowDialog(dlg)
+}
+
+// PerfTestFullStress 全压力测试：组合所有场景，最大化渲染压力。
+func PerfTestFullStress() {
+	// 先打开大文件
+	if len(core.Folders) > 0 {
+		root := core.Folders[0]
+		fpath := filepath.Join(root, ".perf_test_stress.go")
+		var buf strings.Builder
+		buf.WriteString("package perf_test\n\n")
+		buf.WriteString("// 全压力测试文件\n")
+		buf.WriteString("func PerfStressTest() {\n")
+		for i := 0; i < 3000; i++ {
+			buf.WriteString(fmt.Sprintf("\t_ = %d + %d // line %d\n", i, i*2, i+1))
+		}
+		buf.WriteString("}\n")
+		os.WriteFile(fpath, []byte(buf.String()), 0644)
+		editorpanel.Editor.Open(fpath)
+	}
+
+	// 再弹大量文本对话框
+	var id int
+	lines := make([]widget.Widget, 5000)
+	for i := 0; i < 5000; i++ {
+		lines[i] = ui.TextC(fmt.Sprintf("Stress %d: 全压力测试文本行 - 渲染引擎性能极限测试", i+1), *ui.Fg, 12)
+	}
+	content := widget.NewScrollView(ui.VBox(lines...))
+	dlg := widget.NewDialog("全压力测试", content).WithWidth(800).WithHeight(700).WithTransition("fade").WithFooter(
+		&widget.Button{Text: "关闭", OnClick: func() { widget.HideOverlay(id) },
+			Color: *ui.BgMuted, TextColor: *ui.Fg, FontSize: 12, MinWidth: 50, MinHeight: 24},
+	)
+	id = widget.ShowDialog(dlg)
+	widget.MessageInfo("全压力测试已启动，请观察stderr日志中的[perf]帧率数据")
+}
+
 // showMarketplace 扩展市场：模态对话框，三 Tab(MCP/技能/已安装) + 搜索 + 作用域 + 卡片（见 marketplace.go）。
 func ShowMarketplace() {
 	marketplacepanel.OpenDialog()
