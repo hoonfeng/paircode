@@ -85,7 +85,7 @@ func (b *AgentBridge) Stop() {
 	if cancel != nil {
 		cancel()
 	}
-	b.Cs.saveHistory() // 停止时保存对话历史，防止消息丢失
+	b.Cs.SaveHistory() // 停止时保存对话历史，防止消息丢失
 }
 
 // resetForNewRoot 项目根切换后清掉已建 loop，下条消息用新根重建（运行中则不动，避免打断）。
@@ -438,7 +438,7 @@ func (b *AgentBridge) drain() {
 		b.syncWorkspaceEdits(evs) // Agent 成功写/改文件 → 刷新文件树 + 重载已打开文件（IDE 闭环）
 		b.Cs.SendSeq++            // 滚到底
 		b.Cs.SetState()
-		b.Cs.saveHistory() // 每次事件处理完后实时保存，防止异常关闭丢失流式记录
+		b.Cs.SaveHistory() // 每次事件处理完后实时保存，防止异常关闭丢失流式记录
 	}
 	if done {
 		if msg := b.streamingMsg(); msg != nil {
@@ -454,7 +454,7 @@ func (b *AgentBridge) drain() {
 			}
 		}
 		b.Cs.ClearAsk()    // 本轮结束：清掉残留问答卡（如被停止）
-		b.Cs.saveHistory() // Agent 完成/停止后立即保存对话历史，确保下次加载可见完整消息
+		b.Cs.SaveHistory() // Agent 完成/停止后立即保存对话历史，确保下次加载可见完整消息
 		b.stopPump()
 		if len(evs) == 0 || b.stopped {
 			b.Cs.SetState()
@@ -567,7 +567,7 @@ func (b *AgentBridge) applyEvent(e agent.Event) {
 					Feedback:    ev.Feedback,
 				},
 			})
-			b.Cs.saveHistory()
+			b.Cs.SaveHistory()
 		}
 	case agent.EventFinal:
 		if strings.TrimSpace(e.Content) != "" {

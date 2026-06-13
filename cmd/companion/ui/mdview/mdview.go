@@ -145,7 +145,7 @@ func inlineRow(spans []span, fontSize ...float64) widget.Widget {
 		t.Font = fnt
 		kids[i] = t
 	}
-	return widget.Div(widget.Style{FlexDirection: "row", FlexWrap: "wrap"}, kids)
+	return widget.Div(widget.Style{FlexDirection: "row"}, kids)
 }
 
 // span 一个行内文本片段（带颜色和字体）。
@@ -350,13 +350,8 @@ func mdTable(rows []string) widget.Widget {
 			cells = append(cells, "")
 		}
 		var rowKids []widget.Widget
-		for ci, cell := range cells {
+		for _, cell := range cells {
 			cellText := strings.TrimSpace(cell)
-			fg := *ui.Fg
-			bg := types.Color{} // 透明
-			if ri == 0 {
-				fg = *ui.Fg    // 表头用主色
-			}
 			cellStyle := widget.Style{
 				Padding:  types.EdgeInsetsLTRB(6, 3, 6, 3),
 			}

@@ -375,6 +375,7 @@ func (s *ChatState) sidebarContent() widget.Widget {
 		widget.Div(
 			widget.Style{Padding: types.EdgeInsetsLTRB(10, 8, 8, 8), BorderColor: ui.Border, BorderWidth: 1,
 				FlexDirection: "row", AlignItems: "center"},
+			widget.Lucide("grip-vertical", widget.IconSize(13), widget.IconColor(*ui.FgMuted)),
 			ui.Expand(ui.TextC("对话", *ui.FgSubtle, 12)),
 			toolBtn("arrow-left-right", s.ThreadLeft, func() { s.ThreadLeft = !s.ThreadLeft; s.SetState() }),
 			toolBtn("download", false, s.ExportActive),
