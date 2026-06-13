@@ -5,8 +5,6 @@
 package chatpanel
 
 import (
-	"log"
-
 	"github.com/hoonfeng/paircode/cmd/companion/core"
 )
 
