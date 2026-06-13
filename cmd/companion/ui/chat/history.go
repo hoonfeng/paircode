@@ -29,9 +29,7 @@ func (s *ChatState) LoadHistory() bool {
 	ok := s.Store.Load(core.Root())
 	if ok {
 		historyLoaded = true
-		if s.StateManager != nil { // 仅框架就绪时触发刷新
-			s.SetState()
-		}
+		s.SetState()
 	}
 	return ok
 }

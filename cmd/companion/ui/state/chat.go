@@ -8,6 +8,16 @@ import (
 	"strings"
 )
 
+// ── history.json 文件格式 ─────────────────────────────────────
+//
+// historyFile 映射 .pair/conversations/history.json 的文件结构。
+// 这是项目已有的对话历史格式，不要擅自改变。
+type historyFile struct {
+	Version int       `json:"version"`
+	Seq     int       `json:"seq"`
+	Threads []*Thread `json:"threads"`
+}
+
 // Role 消息角色。
 type Role int
 
@@ -20,6 +30,10 @@ const (
 type Message struct {
 	Role Role
 	Text string
+
+	// Rounds 保留 Agent 执行轮次记录（与 .pair/conversations/history.json 兼容）。
+	// 仅用于持久化兼容，业务逻辑不使用此字段。
+	Rounds json.RawMessage `json:"Rounds,omitempty"`
 
 	// ── Agent 流式（仅 Assistant，可选）──
 	Thinking   string     // 思考链（DeepSeek reasoning，dim 折叠显示）
@@ -150,25 +164,40 @@ func (s *ChatStore) Send(text string) bool {
 	return true
 }
 
-// Save 把聊天状态持久化到根目录下的 .companion/chat_history.json。
+// Save 把聊天状态持久化到 .pair/conversations/history.json。
+// 格式为 historyFile（含 version/seq/threads），与项目已有的对话历史格式兼容。
 func (s *ChatStore) Save(root string) {
-	data, err := json.Marshal(s)
+	hf := historyFile{
+		Version: 1,
+		Seq:     s.seq,
+		Threads: s.Threads,
+	}
+	data, err := json.Marshal(hf)
 	if err != nil {
 		return
 	}
-	dir := filepath.Join(root, ".companion")
+	dir := filepath.Join(root, ".pair", "conversations")
 	_ = os.MkdirAll(dir, 0755)
-	_ = os.WriteFile(filepath.Join(dir, "chat_history.json"), data, 0644)
+	_ = os.WriteFile(filepath.Join(dir, "history.json"), data, 0644)
 }
 
-// Load 从根目录下的 .companion/chat_history.json 加载聊天状态。成功返回 true。
+// Load 从 .pair/conversations/history.json 加载聊天状态。成功返回 true。
 func (s *ChatStore) Load(root string) bool {
-	data, err := os.ReadFile(filepath.Join(root, ".companion", "chat_history.json"))
+	data, err := os.ReadFile(filepath.Join(root, ".pair", "conversations", "history.json"))
 	if err != nil {
 		return false
 	}
-	if err := json.Unmarshal(data, s); err != nil {
+	var hf historyFile
+	if err := json.Unmarshal(data, &hf); err != nil {
 		return false
 	}
+	s.Threads = hf.Threads
+	s.seq = hf.Seq
+	if len(s.Threads) > 0 {
+		s.ActiveID = s.Threads[0].ID
+	} else {
+		s.NewThread()
+	}
+	s.Draft = ""
 	return true
 }
