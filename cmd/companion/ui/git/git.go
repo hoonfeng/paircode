@@ -83,6 +83,23 @@ type gitCommit struct {
 	hash, short, author, date, msg string
 }
 
+// gitFlatItem 扁平化的可见项，供 VirtualList 按需渲染（取代 ScrollView 全量创建 Widget）
+type gitFlatItem struct {
+	kind      byte       // 0=sectionHeader, 1=fileRow, 2=commitsHeader, 3=commitRow, 4=cleanHint
+	key       string     // section key（header 折叠用）
+	title     string     // section 标题
+	accent    types.Color
+	count     int        // 项目数（header 显示）
+	// fileRow (kind=1)
+	path      string
+	sym       string
+	col       types.Color
+	stagedSec bool
+	x, y      byte       // git 状态字符（判断动作按钮：未跟踪仅显「暂存」，其余显「暂存+丢弃」）
+	// commitRow (kind=3)
+	hash, short, author, date, msg string
+}
+
 // ─── Git 面板（有状态，包级单例）──────────────────────────────
 
 var theGit = &gitState{collapsed: map[string]bool{}}
@@ -121,6 +138,8 @@ type gitState struct {
 	snap    *gitData // goroutine 算好的快照，待 UI 线程应用
 	actErr  string   // 待提示的动作错误（drain 里 ShowAlert）
 	pump    *animation.Controller
+
+	flatItems []gitFlatItem // 扁平化可见项（Build 时重建，供 VirtualList 用）
 }
 
 func (g *gitState) ensure() {
@@ -381,26 +400,168 @@ func (g *gitState) Build(ctx widget.BuildContext) widget.Widget {
 	if g.changeCount() == 0 && len(g.commits) == 0 {
 		body = append(body, ui.Expand(ui.EmptyState("circle-check", "工作区干净", "没有未提交的变更")))
 	} else {
-		secs := []widget.Widget{}
-		if g.changeCount() == 0 {
-			secs = append(secs, widget.Div( // 干净但有历史：一行轻提示
-				widget.Style{Height: 24, Padding: types.EdgeInsetsLTRB(8, 0, 8, 0), FlexDirection: "row", AlignItems: "center"},
-				widget.Lucide("circle-check", widget.IconSize(13), widget.IconColor(*ui.Success)),
-				widget.Div(widget.Style{Width: 6}), ui.TextC("工作区干净", *ui.ShellTextDim, 11),
-			))
+		g.flatItems = g.buildFlatItems()
+		if len(g.flatItems) == 0 {
+			body = append(body, ui.Expand(ui.EmptyState("circle-check", "工作区干净", "没有未提交的变更")))
 		} else {
-			g.section(&secs, "已暂存", "staged", g.staged, *ui.Success, true)
-			g.section(&secs, "冲突", "conflict", g.conflict, *ui.Danger, false)
-			g.section(&secs, "已修改", "modified", g.modified, *ui.Warning, false)
-			g.section(&secs, "未跟踪", "untracked", g.untracked, *ui.FgMuted, false)
+			body = append(body, ui.Expand(&widget.VirtualList{
+				ItemCount:  len(g.flatItems),
+				ItemHeight: 24,
+				RenderItem: g.renderFlatItem,
+			}))
 		}
-		g.commitHistory(&secs)
-		body = append(body, ui.Expand(widget.NewScrollView(ui.FlexCol(secs...))))
 	}
 	return widget.Div(
 		widget.Style{BackgroundColor: ui.ShellSide, FlexDirection: "column", AlignItems: "stretch"},
 		body,
 	)
+}
+
+// buildFlatItems 据当前 gitData 和折叠态构建扁平可见项列表，供 VirtualList 按 index 渲染。
+func (g *gitState) buildFlatItems() []gitFlatItem {
+	var out []gitFlatItem
+	if g.changeCount() > 0 {
+		g.sectionFlat(&out, "已暂存", "staged", g.staged, *ui.Success, true)
+		g.sectionFlat(&out, "冲突", "conflict", g.conflict, *ui.Danger, false)
+		g.sectionFlat(&out, "已修改", "modified", g.modified, *ui.Warning, false)
+		g.sectionFlat(&out, "未跟踪", "untracked", g.untracked, *ui.FgMuted, false)
+	} else if len(g.commits) > 0 {
+		out = append(out, gitFlatItem{kind: 4}) // cleanHint：工作区干净但有提交历史
+	}
+	// 提交历史段
+	if len(g.commits) > 0 {
+		key := "history"
+		out = append(out, gitFlatItem{kind: 2, key: key, title: "提交历史", accent: *ui.Accent, count: len(g.commits)})
+		if !g.collapsed[key] {
+			for _, c := range g.commits {
+				out = append(out, gitFlatItem{
+					kind: 3, hash: c.hash, short: c.short,
+					author: c.author, date: c.date, msg: c.msg,
+				})
+			}
+		}
+	}
+	return out
+}
+
+// sectionFlat 把一个变更段追加到扁平可见项列表（取代 section 直接造 Widget）。
+func (g *gitState) sectionFlat(out *[]gitFlatItem, title, key string, items []gitEntry, accent types.Color, stagedSec bool) {
+	if len(items) == 0 {
+		return
+	}
+	*out = append(*out, gitFlatItem{kind: 0, key: key, title: title, accent: accent, count: len(items)})
+	if g.collapsed[key] {
+		return
+	}
+	for _, e := range items {
+		st := e.y
+		if stagedSec {
+			st = e.x
+		}
+		sym, col := badge(st, stagedSec)
+		*out = append(*out, gitFlatItem{kind: 1, path: e.path, sym: sym, col: col, stagedSec: stagedSec, x: e.x, y: e.y})
+	}
+}
+
+// renderFlatItem VirtualList 回调：按 index 渲染一个扁平项。
+func (g *gitState) renderFlatItem(i int) widget.Widget {
+	if i < 0 || i >= len(g.flatItems) {
+		return nil
+	}
+	fi := g.flatItems[i]
+	switch fi.kind {
+	case 0: // sectionHeader
+		chev := "chevron-down"
+		key := fi.key
+		if g.collapsed[key] {
+			chev = "chevron-right"
+		}
+		return &widget.Clickable{
+			SingleChildWidget: widget.SingleChildWidget{Child: widget.Div(
+				widget.Style{Height: 24, Padding: types.EdgeInsetsLTRB(6, 0, 8, 0), FlexDirection: "row", AlignItems: "center"},
+				widget.Lucide(chev, widget.IconSize(13), widget.IconColor(fi.accent)),
+				widget.Div(widget.Style{Width: 4}),
+				ui.TextC(fmt.Sprintf("%s (%d)", fi.title, fi.count), fi.accent, 11),
+			)},
+			OnClick:    func() { g.toggleSection(key) },
+			HoverColor: *ui.FtHover,
+		}
+	case 1: // fileRow
+		return g.flatFileRow(fi)
+	case 2: // commitsHeader
+		chev := "chevron-down"
+		if g.collapsed["history"] {
+			chev = "chevron-right"
+		}
+		return &widget.Clickable{
+			SingleChildWidget: widget.SingleChildWidget{Child: widget.Div(
+				widget.Style{Height: 24, Padding: types.EdgeInsetsLTRB(6, 0, 8, 0), FlexDirection: "row", AlignItems: "center"},
+				widget.Lucide(chev, widget.IconSize(13), widget.IconColor(fi.accent)),
+				widget.Div(widget.Style{Width: 4}),
+				ui.TextC(fmt.Sprintf("提交历史 (%d)", fi.count), fi.accent, 11),
+			)},
+			OnClick:    func() { g.toggleSection("history") },
+			HoverColor: *ui.FtHover,
+		}
+	case 3: // commitRow
+		short, msg, date, full := fi.short, fi.msg, fi.date, fi.hash
+		return &widget.Clickable{
+			SingleChildWidget: widget.SingleChildWidget{Child: widget.Div(
+				widget.Style{Height: 22, Padding: types.EdgeInsetsLTRB(16, 0, 6, 0), FlexDirection: "row", AlignItems: "center"},
+				widget.Div(widget.Style{Width: 48, FlexDirection: "row", AlignItems: "center"}, ui.TextC(short, *ui.Accent, 10)),
+				ui.Expand(ui.TextLine(msg, *ui.ShellText, 11)),
+				widget.Div(widget.Style{Width: 6}),
+				ui.TextC(date, *ui.ShellTextDim, 10),
+			)},
+			OnClick: func() {
+				if widget.ClipboardWrite != nil {
+					widget.ClipboardWrite(full)
+				}
+			},
+			HoverColor: *ui.FtHover,
+		}
+	case 4: // cleanHint
+		return widget.Div(
+			widget.Style{Height: 24, Padding: types.EdgeInsetsLTRB(8, 0, 8, 0), FlexDirection: "row", AlignItems: "center"},
+			widget.Lucide("circle-check", widget.IconSize(13), widget.IconColor(*ui.Success)),
+			widget.Div(widget.Style{Width: 6}), ui.TextC("工作区干净", *ui.ShellTextDim, 11),
+		)
+	}
+	return nil
+}
+
+// flatFileRow 从 gitFlatItem 渲染 git 文件行（取代 fileRow，但用 flatItem 的数据）。
+func (g *gitState) flatFileRow(fi gitFlatItem) widget.Widget {
+	p := fi.path
+	var actions []widget.Widget
+	switch {
+	case fi.stagedSec:
+		actions = []widget.Widget{gitRowBtn("minus", "取消暂存", func() { g.unstageFile(p) })}
+	case fi.x == '?' && fi.y == '?':
+		actions = []widget.Widget{gitRowBtn("plus", "暂存", func() { g.stageFile(p) })}
+	default:
+		actions = []widget.Widget{
+			gitRowBtn("plus", "暂存", func() { g.stageFile(p) }),
+			gitRowBtn("trash-2", "丢弃", func() { g.discardFile(p) }),
+		}
+	}
+	trailW := float64(len(actions)) * 22
+	trailing := widget.Div(widget.Style{Width: trailW, FlexDirection: "row", AlignItems: "center", JustifyContent: "flex-end"})
+	if g.hoveredPath == p {
+		trailing = widget.Div(widget.Style{Width: trailW, FlexDirection: "row", AlignItems: "center", JustifyContent: "flex-end"}, actions)
+	}
+	return &widget.Clickable{
+		SingleChildWidget: widget.SingleChildWidget{Child: widget.Div(
+			widget.Style{Height: 24, Padding: types.EdgeInsetsLTRB(16, 0, 6, 0), FlexDirection: "row", AlignItems: "center"},
+			widget.Div(widget.Style{Width: 14, FlexDirection: "row", AlignItems: "center"}, ui.TextC(fi.sym, fi.col, 12)),
+			widget.Div(widget.Style{Width: 4}),
+			ui.Expand(ui.TextC(shortGitPath(p), *ui.ShellText, 12)),
+			trailing,
+		)},
+		OnClick:       func() { showGitDiff(p, fi.stagedSec) },
+		OnHoverChange: func(h bool) { g.setHovered(p, h) },
+		HoverColor:    *ui.FtHover,
+	}
 }
 
 // repoBar 顶部：分支名 + 领先/落后 + 刷新。
