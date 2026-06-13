@@ -53,11 +53,46 @@ type ChatState struct {
 	Plan         []planStep   // 当前 Agent 任务计划清单（update_plan 工具更新；置顶可视）
 	Ask          *pendingAsk  // 当前 agent 的提问（ask_user）；非空时显问答卡、对话阻塞等回答
 	Attachments  []string     // 待发送的附件文件路径（回形针添加，发送时随任务作上下文给 agent）
+	PerfTest     int          // 性能测试令牌（递增→填充 1000 条测试消息，验证 VirtualList 虚加载性能）
 
 	HoveredMsg  int    // 当前 hover 的消息索引（-1=无）→ 揭示该消息的操作按钮
 	ShowSearch  bool   // Ctrl+F 搜索栏开
 	SearchQuery string // 搜索词（实时过滤消息）
 	searchSeq   int    // 搜索框受控清空令牌
+
+	// VirtualList 高度缓存：避免每次 Build 重算 ItemHeights 覆盖 Layout 自动回写的实际高度
+	cachedHeights []float64 // 缓存的消息高度数组（len=消息数，nil 时重建）
+	cacheMsgLen   int       // 缓存时的消息总数（用于检测消息变动后重建）
+}
+
+// loadTestData 性能测试：填充 1000 条测试消息（含用户+Agent 对话对），验证 VirtualList 虚加载性能。
+// Agent 消息包含思考链、工具活动、Markdown 正文，模拟真实对话负载。
+func (s *ChatState) loadTestData() {
+	t := s.Store.Active()
+	if t == nil {
+		return
+	}
+	const N = 500 // 500 轮用户+Agent = 1000 条消息
+	for i := 0; i < N; i++ {
+		t.Messages = append(t.Messages, state.Message{
+			Role: state.User,
+			Text: fmt.Sprintf("这是第 %d 轮用户消息，用于性能压测。请帮我分析这段数据并给出建议。", i+1),
+		})
+		t.Messages = append(t.Messages, state.Message{
+			Role:      state.Assistant,
+			Text:      fmt.Sprintf("## 第 %d 轮分析报告\n\n已完成分析。以下是结果：\n\n1. **数据概况**：共处理 %d 条记录\n2. **关键发现**：\n   - 性能正常\n   - 无异常错误\n3. **建议**：继续监控\n\n```go\nfmt.Println(\"Hello, 性能测试!\")\n```\n\n| 指标 | 值 |\n|------|----|\n| 延迟 | 5ms |\n| 吞吐 | 1000/s |", i+1, i*100),
+			Thinking: "让我分析这些数据...\n1. 系统状态正常\n2. 性能指标在预期范围内\n3. 建议继续观察",
+			Activities: []state.Activity{
+				{Tool: "read_file", Args: `{"path":"data.csv"}`, Result: "已读取 1000 条记录", Done: true},
+				{Tool: "analyze", Args: `{"metric":"latency"}`, Result: "平均延迟 5ms", Done: true},
+			},
+			Notes: []string{"上下文已压缩（保留最近分析）"},
+			Collapsed: i < N-3, // 仅最后 3 条展开，其余折叠减少首次渲染压力
+		})
+	}
+	s.SendSeq++   // 滚到底部
+	s.cachedHeights = nil // 清空高度缓存，让新消息重新估算
+	s.SetState()
 }
 
 func (s *ChatState) Build(ctx widget.BuildContext) widget.Widget {
@@ -89,9 +124,88 @@ func (s *ChatState) Build(ctx widget.BuildContext) widget.Widget {
 }
 
 func (s *ChatState) scrollMessages() widget.Widget {
-	sv := widget.NewScrollView(s.messageList())
-	sv.ScrollEndToken = s.SendSeq
-	return sv
+	t := s.Store.Active()
+	if t == nil {
+		return widget.Div(widget.Style{})
+	}
+	q := strings.ToLower(strings.TrimSpace(s.SearchQuery))
+
+	// 建立过滤后的消息索引（Ctrl+F 搜索过滤）
+	filteredIndices := make([]int, 0, len(t.Messages))
+	for i := range t.Messages {
+		if q != "" && !msgMatches(t.Messages[i], q) {
+			continue
+		}
+		filteredIndices = append(filteredIndices, i)
+	}
+
+	if q != "" && len(filteredIndices) == 0 {
+		return widget.Div(
+			widget.Style{Padding: types.EdgeInsets(10)},
+			ui.TextC("无匹配消息", *ui.FgMuted, 12),
+		)
+	}
+
+	// 使用缓存的 ItemHeights（避免每次 Build 重设覆盖 Layout 自动回写的实际高度）
+	itemHeights := s.cachedHeights
+	msgLen := len(t.Messages)
+	if itemHeights == nil || len(itemHeights) != len(filteredIndices) || msgLen != s.cacheMsgLen || s.cacheMsgLen == 0 {
+		// 缓存失效（消息增删/搜索过滤变化）：重新估算初始高度
+		itemHeights = make([]float64, len(filteredIndices))
+		for i, msgIdx := range filteredIndices {
+			itemHeights[i] = estimateMessageHeight(t.Messages[msgIdx])
+		}
+		s.cachedHeights = itemHeights
+		s.cacheMsgLen = msgLen
+	}
+
+	// 使用 VirtualList 虚加载：只渲染可视区内的消息，支撑大量消息流畅滚动
+	return &widget.VirtualList{
+		ItemCount:           len(filteredIndices),
+		ItemHeight:          80,
+		ItemHeights:         itemHeights,
+		ScrollToBottomToken: s.SendSeq, // 新消息 → 自动滚到底
+		Overscan:            5,
+		RenderItem: func(i int) widget.Widget {
+			return widget.Div(
+				widget.Style{Padding: types.EdgeInsetsLTRB(10, 0, 10, 0), FlexDirection: "column"},
+				s.renderMessage(t, filteredIndices[i]),
+				widget.Div(widget.Style{Height: 8}), // 消息间间距
+			)
+		},
+	}
+}
+
+// estimateMessageHeight 估算单条消息的初始渲染高度（VirtualList ItemHeights 初值，支持可变高度）。
+// 折叠态≈56px；展开态按思考/活动/正文行数累加估算；Layout 后会通过 VirtualList 自动回写实际高度修正。
+func estimateMessageHeight(m state.Message) float64 {
+	if m.Collapsed && !m.Streaming {
+		return 56 // 折叠态：header + padding + gap
+	}
+	h := 56.0 // 展开态基础：header + padding
+	if strings.TrimSpace(m.Thinking) != "" {
+		if m.ThinkingExpanded || m.Streaming {
+			h += 200 // 展开思考块
+		} else {
+			h += 36 // 折叠思考块（首行预览）
+		}
+	}
+	for _, a := range m.Activities {
+		ah := 28.0
+		if a.Expanded {
+			ah = 80 // 展开活动含结果
+		}
+		h += ah
+	}
+	if txt := strings.TrimSpace(m.Text); txt != "" {
+		lines := strings.Count(txt, "\n") + 1
+		h += float64(lines) * 19.0
+	}
+	if m.Eval != nil {
+		h += 80
+	}
+	h += float64(len(m.Notes)) * 24
+	return h
 }
 
 // planCard 置顶任务计划清单（update_plan 工具更新）：标题 + 进度 + 每步状态图标。
@@ -343,25 +457,6 @@ func statusDot(c *types.Color) widget.Widget {
 
 // ─── 消息列表 ─────────────────────────────────────────────
 
-func (s *ChatState) messageList() widget.Widget {
-	t := s.Store.Active()
-	if t == nil {
-		return widget.Div(widget.Style{})
-	}
-	q := strings.ToLower(strings.TrimSpace(s.SearchQuery))
-	kids := []widget.Widget{}
-	for i := range t.Messages {
-		if q != "" && !msgMatches(t.Messages[i], q) { // Ctrl+F 过滤
-			continue
-		}
-		kids = append(kids, s.renderMessage(t, i), widget.Div(widget.Style{Height: 8}))
-	}
-	if q != "" && len(kids) == 0 {
-		kids = append(kids, ui.TextC("无匹配消息", *ui.FgMuted, 12))
-	}
-	return widget.Div(widget.Style{Padding: types.EdgeInsets(10)}, ui.FlexCol(kids...))
-}
-
 // renderMessage 渲染单条消息：用户黄卡 / Agent 卡（折叠回调按索引改 store）；hover 揭示操作按钮（绝对定位叠加）。
 func (s *ChatState) renderMessage(t *state.Thread, i int) widget.Widget {
 	m := t.Messages[i]
@@ -529,6 +624,8 @@ func (s *ChatState) inputArea() widget.Widget {
 			widget.Style{Padding: types.EdgeInsetsLTRB(8, 4, 8, 8), FlexDirection: "row", AlignItems: "center"},
 			iconGhost("paperclip", s.addAttachment),
 			ui.Expand(widget.Div(widget.Style{})),
+			iconGhost("zap", func() { s.loadTestData() }), // ⚡性能测试：填充1000条消息验证虚加载
+			widget.Div(widget.Style{Width: 5}),
 			s.reviewToggle(),
 			widget.Div(widget.Style{Width: 5}),
 			toggleBtn("refresh-cw", "自主", s.Autonomous, ui.Blue, func() { s.Autonomous = !s.Autonomous; s.persistAgentToggles(); s.SetState() }),
