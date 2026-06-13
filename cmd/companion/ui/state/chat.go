@@ -2,7 +2,6 @@ package state
 
 import (
 	"encoding/json"
-	"log"
 	"os"
 	"path/filepath"
 	"strconv"
