@@ -432,6 +432,7 @@ func (b *AgentBridge) drain() {
 		b.syncWorkspaceEdits(evs) // Agent 成功写/改文件 → 刷新文件树 + 重载已打开文件（IDE 闭环）
 		b.Cs.SendSeq++            // 滚到底
 		b.Cs.SetState()
+		b.Cs.saveHistory() // 每次事件处理完后实时保存，防止异常关闭丢失流式记录
 	}
 	if done {
 		if msg := b.streamingMsg(); msg != nil {

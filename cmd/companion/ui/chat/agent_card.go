@@ -45,21 +45,35 @@ func cardStyle(bg *types.Color, radius float64, m state.Message) widget.Style {
 	}
 }
 
-// ─── Agent 消息卡——按时间顺序统一流动输出 ─────────────────────
+// ─── Agent 消息卡——按事件流顺序独立展示 ─────────────────────
 //
-// 思考/工具/正文不再分区块展示，而是合并为一段连续 Markdown 文本，
-// 像普通 LLM 回复一样自然流动。思考内容以 `> *…*`（引用+斜体）呈现，
-// 工具活动以 `工具名(参数)` 内联代码行呈现，正文正常 Markdown 渲染。
+// 思考/工具/正文按收到事件的顺序分别独立展示，不再合并为一段 Markdown。
+// 思考链用 thinkingInline（可折叠文本），工具活动用 activityInline
+//（带结果展开/折叠），正文用 mdview.Render（完整 Markdown 渲染）。
+// 三者保持事件流的独立性——LLM 输出时 thinking/content/tool_call
+// 是分别独立发送的事件，展示时也保持这种独立性。
 
 func agentMessageCard(m state.Message, onToggleCollapse, onToggleThinking func(), onToggleActivity func(int)) widget.Widget {
 	collapsed := !m.Streaming && m.Collapsed
 	kids := []widget.Widget{agentHeaderCollapsible(m, onToggleCollapse)}
 	if !collapsed {
-		// 把所有内容合并为一段连续 Markdown 文本，统一渲染
-		combined := buildCombinedContent(m)
-		if combined != "" {
-			kids = append(kids, vgap(6), mdview.Render(combined))
-		} else if m.Streaming {
+		hasContent := false
+		// 1) 思考链——独立展示（按事件流顺序，与工具/正文不合并）
+		if t := strings.TrimSpace(m.Thinking); t != "" {
+			kids = append(kids, vgap(6), thinkingInline(m, onToggleThinking))
+			hasContent = true
+		}
+		// 2) 工具活动——各自独立展示（每个活动独立渲染，不合并到Markdown文本）
+		for i, a := range m.Activities {
+			kids = append(kids, vgap(4), activityInline(a, func() { onToggleActivity(i) }))
+			hasContent = true
+		}
+		// 3) 正文——独立 Markdown 渲染（保持完整 Markdown 支持）
+		if t := strings.TrimSpace(m.Text); t != "" {
+			kids = append(kids, vgap(6), mdview.Render(t))
+			hasContent = true
+		}
+		if !hasContent && m.Streaming {
 			kids = append(kids, vgap(4), ui.TextC("思考中…", *ui.FgMuted, 12))
 		}
 		// 系统提示（保持简洁文本行，不属于 LLM 正文）
@@ -74,43 +88,6 @@ func agentMessageCard(m state.Message, onToggleCollapse, onToggleThinking func()
 	style := cardStyle(ui.BgMuted, 6, m)
 	style.Padding = types.EdgeInsetsLTRB(14, 10, 14, 10)
 	return widget.Div(style, kids)
-}
-
-// buildCombinedContent 将思考链、工具活动和正文合并为一段连续 Markdown 文本。
-// 所有内容以自然 LLM 输出方式呈现：思考链直接文本，工具活动以简洁内联代码呈现，正文正常渲染。
-// 各部分之间用空行分隔（Markdown 段落分隔），不做区块区分。
-func buildCombinedContent(m state.Message) string {
-	var parts []string
-
-	// 1) 思考链——直接以普通文本呈现（不另加标记/引用）
-	if t := strings.TrimSpace(m.Thinking); t != "" {
-		// 如果正文为空且正在流式输出中，保留原始思考文本
-		// 如果正文非空且在流式中，思考已包含在正文里不再重复
-		if strings.TrimSpace(m.Text) == "" || !m.Streaming {
-			parts = append(parts, t)
-		}
-	}
-
-	// 2) 工具活动——以 `ToolName(args)` 内联代码文本行呈现
-	for _, a := range m.Activities {
-		argText := ArgPreview(a.Args)
-		line := "`" + a.Tool + "(" + argText + ")`"
-		if a.Done {
-			line += " ✅"
-		} else if a.AwaitingApproval {
-			line += " ⏳"
-		} else {
-			line += " …"
-		}
-		parts = append(parts, line)
-	}
-
-	// 3) 正文（Markdown 渲染）
-	if t := strings.TrimSpace(m.Text); t != "" {
-		parts = append(parts, t)
-	}
-
-	return strings.Join(parts, "\n\n")
 }
 
 // evalCard 任务评分卡：星标 + 总分(配色) + 4 维度 + 一句话总评。
