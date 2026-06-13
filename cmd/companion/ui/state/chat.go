@@ -193,6 +193,16 @@ func (s *ChatStore) Load(root string) bool {
 	}
 	s.Threads = hf.Threads
 	s.seq = hf.Seq
+	// 折叠所有已完成的历史消息，大幅减少首次渲染的 widget 树复杂度
+	//（折叠态每条消息约 5 个 widget vs 展开态 100+ widget），
+	// 避免大量历史消息同步 Build 阻塞 UI 主线程导致窗口白屏无响应。
+	for _, t := range s.Threads {
+		for i := range t.Messages {
+			if !t.Messages[i].Streaming {
+				t.Messages[i].Collapsed = true
+			}
+		}
+	}
 	if len(s.Threads) > 0 {
 		s.ActiveID = s.Threads[0].ID
 	} else {
