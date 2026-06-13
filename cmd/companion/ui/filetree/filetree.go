@@ -74,9 +74,19 @@ type fileTreeState struct {
 	dragPath         string  // 正在拖的根路径（""=未拖）
 	dragLastY        float64 // 上次光标 Y（累积位移判定换位）
 	dragStartPrimary string  // 拖拽开始时的主文件夹（结束时判主是否变→是否重建 agent）
+	// 虚拟列表：扁平化的可见节点序列（Build 时重建）
+	flatNodes []flatNode
 }
 
-const rootRowH = 26.0 // 根文件夹行高（拖拽换位步长）
+// flatNode VirtualList 中的扁平节点
+type flatNode struct {
+	node  *FileNode
+	depth int
+	root  *FileNode // 非 nil 表示是根行（多根模式下）
+	rIdx  int       // 根索引（root 非 nil 时有效）
+}
+
+const rootRowH = 24.0 // 根文件夹行高（与 VirtualList ItemHeight 对齐）
 
 func (s *fileTreeState) ensure() {
 	if len(s.roots) == 0 {
@@ -113,21 +123,39 @@ func (s *fileTreeState) Build(ctx widget.BuildContext) widget.Widget {
 	}
 	gitpanel.Ensure()                  // 触发 git 状态异步加载（完成后 git drain 会 refresh 文件树→徽标显现）
 	s.gitStatus = gitpanel.StatusMap() // 据当前 git 状态标记改动文件（未加载则 nil）
-	rows := []widget.Widget{}
+	// 重建扁平节点列表（只存指针，不创建 Widget）
+	s.flatNodes = s.flatNodes[:0]
 	if len(s.roots) == 1 {
-		s.flatten(s.roots[0].children, 0, &rows) // 单文件夹：直接显示内容（名字在头部）
+		s.flattenFlat(s.roots[0].children, 0) // 单文件夹：直接显示内容
 	} else {
-		for idx, r := range s.roots { // 多根：每个文件夹作可折叠根节（VS Code 风格；首个带主文件夹星标）
-			rows = append(rows, s.rootRow(r, idx))
+		for idx, r := range s.roots { // 多根：每个文件夹作可折叠根节
+			s.flatNodes = append(s.flatNodes, flatNode{node: r, depth: 0, root: r, rIdx: idx})
 			if r.expanded {
-				s.flatten(r.children, 1, &rows)
+				s.flattenFlat(r.children, 1)
 			}
 		}
+	}
+	itemCount := len(s.flatNodes)
+	itemH := 24.0
+	// 使用 VirtualList 只构建可见行
+	virtualList := &widget.VirtualList{
+		ItemCount:  itemCount,
+		ItemHeight: itemH,
+		RenderItem: func(i int) widget.Widget {
+			if i < 0 || i >= len(s.flatNodes) {
+				return nil
+			}
+			fn := s.flatNodes[i]
+			if fn.root != nil {
+				return s.rootRow(fn.root, fn.rIdx)
+			}
+			return s.row(fn.node, fn.depth)
+		},
 	}
 	panel := widget.Div(
 		widget.Style{BackgroundColor: ui.ShellSide, FlexDirection: "column", AlignItems: "stretch"},
 		s.toolbar(),
-		ui.Expand(widget.NewScrollView(ui.FlexCol(rows...))),
+		ui.Expand(virtualList),
 	)
 	return &widget.ContextArea{ // 右键空白处：根目录菜单（行的右键已 StopPropagation，不会冒到这）
 		SingleChildWidget: widget.SingleChildWidget{Child: panel},
@@ -136,6 +164,16 @@ func (s *fileTreeState) Build(ctx widget.BuildContext) widget.Widget {
 				OnEmptyMenu(x, y)
 			}
 		},
+	}
+}
+
+// flattenFlat 递归将可见节点加入 flatNodes（不创建 Widget）
+func (s *fileTreeState) flattenFlat(nodes []*FileNode, depth int) {
+	for _, n := range nodes {
+		s.flatNodes = append(s.flatNodes, flatNode{node: n, depth: depth})
+		if n.isDir && n.expanded {
+			s.flattenFlat(n.children, depth+1)
+		}
 	}
 }
 
@@ -179,14 +217,6 @@ func (s *fileTreeState) toolbar() widget.Widget {
 	)
 }
 
-func (s *fileTreeState) flatten(nodes []*FileNode, depth int, out *[]widget.Widget) {
-	for _, n := range nodes {
-		*out = append(*out, s.row(n, depth))
-		if n.isDir && n.expanded {
-			s.flatten(n.children, depth+1, out)
-		}
-	}
-}
 
 // row 单行：整行可点（Clickable，铺满宽 + 选中/悬停高亮）+ 缩进 + 图标 + 文件名。
 func (s *fileTreeState) row(n *FileNode, depth int) widget.Widget {
