@@ -219,7 +219,7 @@ func (s *ChatState) sidebarContent() widget.Widget {
 			ui.Expand(ui.TextC("对话", *ui.FgSubtle, 12)),
 			toolBtn("arrow-left-right", s.ThreadLeft, func() { s.ThreadLeft = !s.ThreadLeft; s.SetState() }),
 			toolBtn("download", false, s.ExportActive),
-			toolBtn("plus", false, func() { s.Store.NewThread(); s.SetState() }),
+			toolBtn("plus", false, func() { s.Store.NewThread(); s.saveHistory(); s.SetState() }),
 		),
 		ui.Expand(widget.NewScrollView(ui.FlexCol(rows...))),
 	)
@@ -272,7 +272,7 @@ func (s *ChatState) threadCloseBtn(t *state.Thread) widget.Widget {
 			widget.Style{Padding: types.EdgeInsets(4)},
 			widget.Lucide("x", widget.IconSize(13), widget.IconColor(*ui.FgMuted)),
 		)},
-		OnClick:         func() { s.Store.Delete(t.ID); s.SetState() },
+		OnClick:         func() { s.Store.Delete(t.ID); s.saveHistory(); s.SetState() },
 		StopPropagation: true,
 		HoverColor:      *ui.BgHover,
 	}
@@ -435,6 +435,7 @@ func (s *ChatState) DeleteMessage(t *state.Thread, i int) {
 	}
 	t.Messages = append(t.Messages[:i], t.Messages[i+1:]...)
 	s.HoveredMsg = -1
+	s.saveHistory()
 	s.SetState()
 }
 
@@ -458,6 +459,7 @@ func (s *ChatState) Regenerate(t *state.Thread, i int) {
 	}
 	s.HoveredMsg = -1
 	s.SendSeq++
+	s.saveHistory()
 	s.Bridge.Start(user.Text)
 	s.SetState()
 }
@@ -792,6 +794,7 @@ func (s *ChatState) sendTask(task string) {
 		return
 	}
 	s.Bridge.Start(task)
+	s.saveHistory()
 	s.SetState()
 }
 
@@ -823,6 +826,7 @@ func (s *ChatState) Send() {
 		return
 	}
 	s.Bridge.Start(draft + attachmentContext(atts)) // agent 任务含附件内容（内容只给 LLM、不污染显示）
+	s.saveHistory()
 	s.SetState()
 }
 

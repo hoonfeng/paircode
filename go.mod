@@ -14,7 +14,11 @@ require github.com/hoonfeng/svg v0.0.0-20250710111230-fb2a09902dca // indirect
 
 require github.com/hoonfeng/goskia v0.0.0-20260605075657-bdf27a30942e // indirect
 
-require github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
+require (
+	github.com/go-rod/rod v0.116.2 // indirect
+	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
+	github.com/ysmood/gson v0.7.3 // indirect
+)
 
 replace github.com/hoonfeng/goui => F:\syproject\goui
 

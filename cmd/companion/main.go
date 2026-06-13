@@ -125,6 +125,9 @@ func main() {
 		// 标题栏命中区：顶部 titleBarH 高、右侧 6 个按钮（3 面板开关 + 3 窗口）宽除外 → 系统接管拖动/双击最大化。
 		application.SetTitleBar(titleBarH, 3*toggleW+3*winBtnW)
 		application.EnableWindowEffects() // DWM 阴影 + Win11 圆角
+
+		// 窗口就绪后加载对话历史（此时 framework 已就绪，SetState 安全）
+		chatpanel.TheState.LoadHistory()
 	}
 
 	cfg := app.Config{Title: "伴随式 CodeAgent", Width: 1200, Height: 760, Resizable: true, Borderless: true}

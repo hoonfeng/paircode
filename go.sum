@@ -1,9 +1,13 @@
+github.com/go-rod/rod v0.116.2 h1:A5t2Ky2A+5eD/ZJQr1EfsQSe5rms5Xof/qj296e+ZqA=
+github.com/go-rod/rod v0.116.2/go.mod h1:H+CMO9SCNc2TJ2WfrG+pKhITz57uGNYU43qYHh438Mg=
 github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 h1:DACJavvAHhabrF08vX0COfcOBJRhZ8lUbR+ZWIs0Y5g=
 github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0/go.mod h1:E/TSTwGwJL78qG/PmXZO1EjYhfJinVAhrmmHX6Z8B9k=
 github.com/hoonfeng/goskia v0.0.0-20260605075657-bdf27a30942e h1:Z7DdMeANcq1KPC9ZlUJ3L0in37OAnTbg/ulk5y7AYVU=
 github.com/hoonfeng/goskia v0.0.0-20260605075657-bdf27a30942e/go.mod h1:LWohuKCOU8WPB8rFOijMJA0t4gk2e4IZigpvHEiLTvM=
 github.com/hoonfeng/svg v0.0.0-20250710111230-fb2a09902dca h1:ukIk//hMukhLTIK+FqTAwfrersLd0Pa6BAMl70IyFTo=
 github.com/hoonfeng/svg v0.0.0-20250710111230-fb2a09902dca/go.mod h1:NroZwQ6VOa4G38q4yQGfR4cgVn03EzvdcIBbfeuLnKI=
+github.com/ysmood/gson v0.7.3 h1:QFkWbTH8MxyUTKPkVWAENJhxqdBa4lYTQWqZCiLG6kE=
+github.com/ysmood/gson v0.7.3/go.mod h1:3Kzs5zDl21g5F/BlLTNcuAGAYLKt2lV5G8D1zF3RNmg=
 github.com/yuin/gopher-lua v1.1.1 h1:kYKnWBjvbNP4XLT3+bPEwAXJx262OhaHDWDVOPjL46M=
 github.com/yuin/gopher-lua v1.1.1/go.mod h1:GBR0iDaNXjAgGg9zfCvksxSRnQx76gclCIb7kdAd1Pw=
 golang.org/x/image v0.21.0 h1:c5qV36ajHpdj4Qi0GnE0jUc/yuo33OLFaa0d+crTD5s=

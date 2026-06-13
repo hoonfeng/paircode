@@ -106,6 +106,20 @@ func ConfigDir() string {
 	return filepath.Join(wd, "config")
 }
 
+// InstallDir 返回 exe 所在安装目录（全局资产、配置等的根目录）。
+// 与 ConfigDir 的区别：ConfigDir 返回 InstallDir/config/，InstallDir 返回安装目录本身。
+func InstallDir() string {
+	if exe, err := os.Executable(); err == nil {
+		dir := filepath.Dir(exe)
+		low := strings.ToLower(dir)
+		if !strings.Contains(low, "go-build") && !strings.Contains(low, `\temp\`) && !strings.Contains(low, "/tmp/") {
+			return dir
+		}
+	}
+	wd, _ := os.Getwd()
+	return wd
+}
+
 // SettingsPath settings.json 路径。
 func SettingsPath() string { return filepath.Join(ConfigDir(), "settings.json") }
 

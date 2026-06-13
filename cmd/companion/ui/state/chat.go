@@ -1,6 +1,9 @@
 package state
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -144,5 +147,28 @@ func (s *ChatStore) Send(text string) bool {
 		t.Title = title
 	}
 	s.Draft = ""
+	return true
+}
+
+// Save 把聊天状态持久化到根目录下的 .companion/chat_history.json。
+func (s *ChatStore) Save(root string) {
+	data, err := json.Marshal(s)
+	if err != nil {
+		return
+	}
+	dir := filepath.Join(root, ".companion")
+	_ = os.MkdirAll(dir, 0755)
+	_ = os.WriteFile(filepath.Join(dir, "chat_history.json"), data, 0644)
+}
+
+// Load 从根目录下的 .companion/chat_history.json 加载聊天状态。成功返回 true。
+func (s *ChatStore) Load(root string) bool {
+	data, err := os.ReadFile(filepath.Join(root, ".companion", "chat_history.json"))
+	if err != nil {
+		return false
+	}
+	if err := json.Unmarshal(data, s); err != nil {
+		return false
+	}
 	return true
 }
