@@ -38,6 +38,13 @@ type searchFile struct {
 	matches []searchMatch
 }
 
+// searchFlatItem 扁平化的可见项，供 VirtualList 按需渲染（取代 ScrollView 全量创建 Widget）。
+type searchFlatItem struct {
+	kind     byte // 0=fileHeader, 1=matchRow
+	fileIdx  int  // index in s.files
+	matchIdx int  // index in s.files[fileIdx].matches（仅 kind=1）
+}
+
 var theSearch = &searchState{collapsed: map[string]bool{}}
 
 // SearchPanel 搜索面板组件。
@@ -58,6 +65,8 @@ type searchState struct {
 	errMsg                          string
 	collapsed                       map[string]bool
 	previewRe                       *regexp.Regexp // 替换预览用（Build 时按 replaceText 编译；nil=不预览）
+
+	flatItems []searchFlatItem // 扁平化可见项（Build 时重建，供 VirtualList 用）
 }
 
 // compile 据查询 + 选项构造正则。
@@ -250,16 +259,99 @@ func (s *searchState) Build(ctx widget.BuildContext) widget.Widget {
 		rows = append(rows, ui.Expand(ui.EmptyState("search", "无结果", "没有匹配的内容")))
 	case s.searched:
 		rows = append(rows, s.stats())
-		res := []widget.Widget{}
-		for _, f := range s.files {
-			s.fileBlock(&res, f)
+		s.flatItems = s.buildFlatItems()
+		if len(s.flatItems) == 0 {
+			rows = append(rows, ui.Expand(ui.EmptyState("search", "无结果", "没有匹配的内容")))
+		} else {
+			rows = append(rows, ui.Expand(&widget.VirtualList{
+				ItemCount:  len(s.flatItems),
+				ItemHeight: 24,
+				RenderItem: s.renderFlatItem,
+			}))
 		}
-		rows = append(rows, ui.Expand(widget.NewScrollView(ui.FlexCol(res...))))
 	}
 	return widget.Div(
 		widget.Style{BackgroundColor: ui.ShellSide, FlexDirection: "column", AlignItems: "stretch"},
 		rows,
 	)
+}
+
+// buildFlatItems 据搜索结果和折叠态构建扁平可见项列表。
+func (s *searchState) buildFlatItems() []searchFlatItem {
+	var out []searchFlatItem
+	for fi, f := range s.files {
+		out = append(out, searchFlatItem{kind: 0, fileIdx: fi})
+		if s.collapsed[f.rel] {
+			continue
+		}
+		for mi := range f.matches {
+			out = append(out, searchFlatItem{kind: 1, fileIdx: fi, matchIdx: mi})
+		}
+	}
+	return out
+}
+
+// renderFlatItem VirtualList 回调：按 index 渲染一个扁平项。
+func (s *searchState) renderFlatItem(i int) widget.Widget {
+	if i < 0 || i >= len(s.flatItems) {
+		return nil
+	}
+	fi := s.flatItems[i]
+	switch fi.kind {
+	case 0: // fileHeader
+		f := s.files[fi.fileIdx]
+		return s.flatFileHeader(f.rel, len(f.matches), f.abspath)
+	case 1: // matchRow
+		f := s.files[fi.fileIdx]
+		return s.matchRow(f.abspath, f.matches[fi.matchIdx])
+	}
+	return nil
+}
+
+// flatFileHeader 从扁平项渲染搜索文件头（可折叠，含替换按钮）。
+func (s *searchState) flatFileHeader(rel string, count int, abspath string) widget.Widget {
+	chev := "chevron-down"
+	if s.collapsed[rel] {
+		chev = "chevron-right"
+	}
+	header := &widget.Clickable{
+		SingleChildWidget: widget.SingleChildWidget{Child: widget.Div(
+			widget.Style{Height: 24, Padding: types.EdgeInsetsLTRB(6, 0, 8, 0), FlexDirection: "row", AlignItems: "center"},
+			widget.Lucide(chev, widget.IconSize(13), widget.IconColor(*ui.ShellTextDim)),
+			widget.Div(widget.Style{Width: 3}),
+			widget.Lucide("file-text", widget.IconSize(13), widget.IconColor(*ui.ShellTextDim)),
+			widget.Div(widget.Style{Width: 5}),
+			ui.Expand(ui.TextC(rel, *ui.ShellText, 12)),
+			ui.TextC(ui.Itoa(count), *ui.ShellTextDim, 10),
+		)},
+		OnClick:    func() { s.toggleFile(rel) },
+		HoverColor: *ui.FtHover,
+	}
+	// 替换模式：文件头右侧加「替换此文件」
+	if s.previewRe != nil {
+		r := rel // capture
+		return widget.Div(
+			widget.Style{FlexDirection: "row", AlignItems: "center", BackgroundColor: ui.ShellSide},
+			ui.Expand(header),
+			&widget.Button{
+				SingleChildWidget: widget.SingleChildWidget{Child: ui.TextC("替换", *ui.White, 10)},
+				OnClick:           func() { s.replaceOneFile(r) },
+				Color:             *ui.Warning, MinHeight: 20, Padding: types.EdgeInsetsLTRB(7, 0, 7, 0),
+			},
+			widget.Div(widget.Style{Width: 6}),
+		)
+	}
+	return header
+}
+
+// replaceOneFile 替换单个文件（按 rel 路径在 s.files 中查找并替换）。
+func (s *searchState) replaceOneFile(rel string) {
+	for _, f := range s.files {
+		if f.rel == rel {
+			s.replaceFile(f)
+			return
+		}
+	}
 }
 
 func (s *searchState) searchBar() widget.Widget {
