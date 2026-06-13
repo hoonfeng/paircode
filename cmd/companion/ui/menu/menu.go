@@ -7,6 +7,7 @@ package menuactions
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -163,32 +164,28 @@ func PerfTestMassiveText() {
 	for i := 0; i < 10000; i++ {
 		lines[i] = ui.TextC(fmt.Sprintf("第 %d 行 - 性能测试文本行，用于测试渲染引擎对大量文本的绘制性能。", i+1), *ui.Fg, 12)
 	}
-	content := widget.NewScrollView(ui.VBox(lines...))
-	dlg := widget.NewDialog("10000行文本压力测试", content).WithWidth(700).WithHeight(600).WithTransition("fade").WithFooter(
+	content := widget.NewScrollView(widget.VBox(lines...))
+	dlg := widget.NewDialog("10000行文本压力测试", content).WithWidth(700).WithTransition("fade").WithFooter(
 		&widget.Button{Text: "关闭", OnClick: func() { widget.HideOverlay(id) },
 			Color: *ui.BgMuted, TextColor: *ui.Fg, FontSize: 12, MinWidth: 50, MinHeight: 24},
 	)
 	id = widget.ShowDialog(dlg)
 }
 
-// PerfTestManyWidgets 大量控件测试：生成包含1000个按钮/控件的页面。
+// PerfTestManyWidgets 大量控件测试：简单渲染500个按钮（不使用行容器展开，避免[]Widget转[]interface{}问题）。
 func PerfTestManyWidgets() {
 	var id int
-	kids := make([]widget.Widget, 0, 1000)
-	for i := 0; i < 200; i++ {
-		rowKids := make([]widget.Widget, 0, 5)
-		for j := 0; j < 5; j++ {
-			idx := i*5 + j + 1
-			rowKids = append(rowKids, &widget.Button{
-				Text: fmt.Sprintf("Btn%d", idx), FontSize: 10,
-				Color: *ui.Bg, TextColor: *ui.Fg, MinWidth: 60, MinHeight: 22,
-				Padding: types.EdgeInsetsLTRB(4, 1, 4, 1),
-			})
-		}
-		kids = append(kids, widget.Div(widget.Style{FlexDirection: "row", Gap: 4, Padding: types.EdgeInsetsLTRB(0, 2, 0, 2)}, rowKids...))
+	// 直接展开为[]interface{}传给Div
+	var divArgs []interface{}
+	for i := 0; i < 500; i++ {
+		divArgs = append(divArgs, &widget.Button{
+			Text: fmt.Sprintf("Btn%d", i+1), FontSize: 10,
+			Color: *ui.Bg, TextColor: *ui.Fg, MinWidth: 60, MinHeight: 22,
+			Padding: types.EdgeInsetsLTRB(4, 1, 4, 1),
+		}, widget.Div(widget.Style{Height: 4}))
 	}
-	content := widget.NewScrollView(ui.VBox(kids...))
-	dlg := widget.NewDialog("1000个控件渲染测试", content).WithWidth(700).WithHeight(600).WithTransition("fade").WithFooter(
+	content := widget.NewScrollView(widget.Div(divArgs...))
+	dlg := widget.NewDialog("500个控件渲染测试", content).WithWidth(700).WithTransition("fade").WithFooter(
 		&widget.Button{Text: "关闭", OnClick: func() { widget.HideOverlay(id) },
 			Color: *ui.BgMuted, TextColor: *ui.Fg, FontSize: 12, MinWidth: 50, MinHeight: 24},
 	)
@@ -197,15 +194,12 @@ func PerfTestManyWidgets() {
 
 // PerfTestLargeFile 大文件编辑器测试：在当前工作区生成一个5000行的大文件并打开。
 func PerfTestLargeFile() {
-	// 获取当前工作区目录
 	if len(core.Folders) == 0 {
 		widget.MessageWarning("请先打开一个工作区")
 		return
 	}
 	root := core.Folders[0]
 	fpath := filepath.Join(root, ".perf_test_large.go")
-
-	// 生成5000行Go代码
 	var buf strings.Builder
 	buf.WriteString("package perf_test\n\n")
 	buf.WriteString("// 性能测试大文件 - 自动生成\n")
@@ -214,7 +208,6 @@ func PerfTestLargeFile() {
 		buf.WriteString(fmt.Sprintf("\tperfVar%d = %d // 第%d行性能测试变量\n", i, i*100, i+1))
 	}
 	buf.WriteString(")\n")
-
 	if err := os.WriteFile(fpath, []byte(buf.String()), 0644); err != nil {
 		widget.MessageWarning("写入测试文件失败: " + err.Error())
 		return
@@ -226,28 +219,29 @@ func PerfTestLargeFile() {
 // PerfTestNestedLayout 复杂嵌套布局测试。
 func PerfTestNestedLayout() {
 	var id int
-	buildNested := func(depth, width int) widget.Widget {
-		if depth <= 0 || width <= 0 {
-			return widget.Div(widget.Style{Width: 10, Height: 10, BackgroundColor: *ui.Border})
+	// 简单嵌套：5层，每层3个子元素
+	var buildNested func(depth int) widget.Widget
+	buildNested = func(depth int) widget.Widget {
+		if depth <= 0 {
+			return widget.Div(widget.Style{Width: 20, Height: 20, BackgroundColor: ui.Border})
 		}
-		kids := make([]widget.Widget, 0, width)
-		for i := 0; i < width; i++ {
-			kids = append(kids, buildNested(depth-1, width-1))
-		}
-		return widget.Div(
+		args := []interface{}{
 			widget.Style{FlexDirection: "row", Gap: 2, Padding: types.EdgeInsets(2),
-				BackgroundColor: *ui.BgMuted, BorderColor: *ui.Border, BorderWidth: 1},
-			kids...,
-		)
+				BackgroundColor: ui.BgMuted, BorderColor: ui.Border, BorderWidth: 1},
+		}
+		for i := 0; i < 3; i++ {
+			args = append(args, buildNested(depth-1))
+		}
+		return widget.Div(args...)
 	}
 	content := widget.NewScrollView(
-		ui.VBox(
-			ui.TextC("复杂嵌套布局（深度4，宽度4）：共 1+4+12+24 = 41 个容器", *ui.FgMuted, 11),
+		widget.VBox(
+			ui.TextC("复杂嵌套布局（深度5，宽度3）：共 1+3+9+27+81 = 121 个容器", *ui.FgMuted, 11),
 			widget.Div(widget.Style{Height: 8}),
-			buildNested(4, 4),
+			buildNested(5),
 		),
 	)
-	dlg := widget.NewDialog("复杂嵌套布局测试", content).WithWidth(600).WithHeight(500).WithTransition("fade").WithFooter(
+	dlg := widget.NewDialog("复杂嵌套布局测试", content).WithWidth(600).WithTransition("fade").WithFooter(
 		&widget.Button{Text: "关闭", OnClick: func() { widget.HideOverlay(id) },
 			Color: *ui.BgMuted, TextColor: *ui.Fg, FontSize: 12, MinWidth: 50, MinHeight: 24},
 	)
@@ -271,15 +265,14 @@ func PerfTestFullStress() {
 		os.WriteFile(fpath, []byte(buf.String()), 0644)
 		editorpanel.Editor.Open(fpath)
 	}
-
 	// 再弹大量文本对话框
 	var id int
-	lines := make([]widget.Widget, 5000)
-	for i := 0; i < 5000; i++ {
-		lines[i] = ui.TextC(fmt.Sprintf("Stress %d: 全压力测试文本行 - 渲染引擎性能极限测试", i+1), *ui.Fg, 12)
+	stressLines := make([]widget.Widget, 3000)
+	for i := 0; i < 3000; i++ {
+		stressLines[i] = ui.TextC(fmt.Sprintf("Stress %d: 全压力测试文本行", i+1), *ui.Fg, 12)
 	}
-	content := widget.NewScrollView(ui.VBox(lines...))
-	dlg := widget.NewDialog("全压力测试", content).WithWidth(800).WithHeight(700).WithTransition("fade").WithFooter(
+	content := widget.NewScrollView(widget.VBox(stressLines...))
+	dlg := widget.NewDialog("全压力测试", content).WithWidth(800).WithTransition("fade").WithFooter(
 		&widget.Button{Text: "关闭", OnClick: func() { widget.HideOverlay(id) },
 			Color: *ui.BgMuted, TextColor: *ui.Fg, FontSize: 12, MinWidth: 50, MinHeight: 24},
 	)

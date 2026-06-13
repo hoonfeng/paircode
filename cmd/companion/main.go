@@ -7,7 +7,10 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"math"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"path/filepath"
 
@@ -69,6 +72,14 @@ func main() {
 		renderShot()
 		return
 	}
+	// ── pprof 性能分析 HTTP 服务 ──
+	go func() {
+		log.Println("pprof: starting on :6060")
+		if err := http.ListenAndServe(":6060", nil); err != nil {
+			log.Printf("pprof: %v", err)
+		}
+	}()
+
 	settingspanel.Load()          // 读安装目录 config/ 的全局设置（LLM 服务商/Key/模型 + 上次项目），供 buildProvider 用
 	core.LoadLastProject()       // 恢复上次打开的项目根（文件树/终端/agent 统一用它）
 	editorpanel.Editor.RestoreSession() // 恢复上次工作区里打开的文件标签（首帧即带上，读各文件磁盘当前内容）
