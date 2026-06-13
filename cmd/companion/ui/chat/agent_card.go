@@ -17,59 +17,72 @@ import (
 	"github.com/hoonfeng/goui/pkg/widget"
 )
 
-// 卡片阴影风格：与伴随式 codeagent box-shadow 一致，柔和不突兀
-var cardShadow = &paint.Shadow{
-	Offset: types.Point{X: 0, Y: 2},
-	Blur:   8,
-	Color:  types.ColorFromRGBA(0, 0, 0, 25),
+// statusShadow 根据 Agent 消息状态返回带状态色的阴影（代替左边 3px 竖条）。
+// 运行中=黄色晕、出错=红色晕、完成=默认暗晕。
+func statusShadow(m state.Message) *paint.Shadow {
+	col := types.ColorFromRGBA(0, 0, 0, 25) // 默认
+	switch {
+	case m.Streaming:
+		col = types.ColorFromRGBA(234, 179, 8, 30) // 运行中→暖黄晕
+	case strings.Contains(m.Text, "[错误]"):
+		col = types.ColorFromRGBA(239, 68, 68, 35) // 出错→红晕
+	}
+	return &paint.Shadow{
+		Offset: types.Point{X: 0, Y: 3},
+		Blur:   10,
+		Color:  col,
+	}
 }
 
-// cardStyle 卡片基础样式（带阴影），复用避免重复
-func cardStyle(bg *types.Color, radius float64) widget.Style {
+// cardStyle 卡片基础样式（带状态阴影），复用避免重复
+func cardStyle(bg *types.Color, radius float64, m state.Message) widget.Style {
 	return widget.Style{
 		BackgroundColor: bg,
 		BorderRadius:    radius,
-		Shadow:          cardShadow,
+		Shadow:          statusShadow(m),
 		FlexDirection:   "column",
 		AlignItems:      "stretch",
 	}
 }
 
-// ─── Agent 消息卡富渲染（头 + 思考 + 工具活动 + 正文）──────────
+// ─── Agent 消息卡富渲染（头 + 思考 + 工具活动 + 正文，按时间顺序混排）──────────
+//
+// 不再分为三个固定区域（思考块 / 工具活动 / 正文），而是按 Agent 执行的时间顺序
+// 流畅展示：header → 思考 → 工具活动 → 正文。思考块不再带独立竖线和灰底背景，
+// 工具活动行不再带独立阴影，所有内容在统一卡片内用图标标签区分类型。
 
 func agentMessageCard(m state.Message, onToggleCollapse, onToggleThinking func(), onToggleActivity func(int)) widget.Widget {
 	collapsed := !m.Streaming && m.Collapsed
 	kids := []widget.Widget{agentHeaderCollapsible(m, onToggleCollapse)}
 	if !collapsed {
+		// 1) 思考链（按时间顺序最先）
 		if strings.TrimSpace(m.Thinking) != "" {
 			kids = append(kids, vgap(6), thinkingBlock(m, onToggleThinking))
 		}
-		for _, n := range m.Notes { // 系统提示（上下文压缩 / 自动迭代等），素色一行
+		// 2) 系统提示（如上下文压缩等）
+		for _, n := range m.Notes {
 			kids = append(kids, vgap(5), systemNote(n))
 		}
+		// 3) 工具活动（按调用顺序）
 		for i, a := range m.Activities {
 			ai := i
 			kids = append(kids, vgap(6), activityRow(a, func() { onToggleActivity(ai) }))
 		}
+		// 4) 正文（最终输出，时间上最后）
 		if txt := strings.TrimSpace(m.Text); txt != "" {
-			kids = append(kids, vgap(8), mdview.Render(m.Text)) // 正文走 Markdown 渲染（代码块/标题/列表）
+			kids = append(kids, vgap(8), mdview.Render(m.Text))
 		} else if m.Streaming && len(m.Activities) == 0 && strings.TrimSpace(m.Thinking) == "" {
 			kids = append(kids, vgap(6), ui.TextC("思考中…", *ui.FgMuted, 12))
 		}
-		if m.Eval != nil { // 任务评测评分卡（完成后）
+		// 5) 任务评分（完成后）
+		if m.Eval != nil {
 			kids = append(kids, vgap(8), evalCard(m.Eval))
 		}
 	}
-	style := cardStyle(ui.BgMuted, 6)
+	style := cardStyle(ui.BgMuted, 6, m)
 	style.Padding = types.EdgeInsetsLTRB(14, 10, 14, 10)
-	card := widget.Div(style, kids)
-	// 复刻参考 border-left:3px 状态色（运行中黄 / 出错红 / 完成绿）：3px 竖条 + 卡片并排撑同高。
-	return widget.Div(
-		widget.Style{FlexDirection: "row", AlignItems: "stretch"},
-		widget.Div(widget.Style{Width: 3, BackgroundColor: agentStatusColor(m), BorderRadius: 1.5}),
-		widget.Div(widget.Style{Width: 6}),
-		ui.Expand(card),
-	)
+	// 状态通过阴影颜色表达（statusShadow），不再使用左边 3px 竖条
+	return widget.Div(style, kids)
 }
 
 // evalCard 任务评分卡：星标 + 总分(配色) + 4 维度 + 一句话总评。
@@ -99,8 +112,13 @@ func evalCard(e *state.Eval) widget.Widget {
 	if strings.TrimSpace(e.Feedback) != "" {
 		kids = append(kids, vgap(5), ui.TextC(e.Feedback, *ui.FgSubtle, 11))
 	}
-	style := cardStyle(ui.Bg, 5)
-	style.Padding = types.EdgeInsetsLTRB(10, 8, 10, 8)
+	style := widget.Style{
+		BackgroundColor: ui.Bg,
+		BorderRadius:    5,
+		FlexDirection:   "column",
+		AlignItems:      "stretch",
+		Padding:         types.EdgeInsetsLTRB(10, 8, 10, 8),
+	}
 	return widget.Div(style, kids)
 }
 
@@ -132,7 +150,7 @@ func systemNote(text string) widget.Widget {
 	)
 }
 
-// agentStatusColor Agent 卡左条状态色：运行中黄 / 出错红 / 完成绿。
+// agentStatusColor Agent 卡状态色（阴影用）：运行中黄 / 出错红 / 完成绿。
 func agentStatusColor(m state.Message) *types.Color {
 	switch {
 	case m.Streaming:
@@ -192,7 +210,8 @@ func firstLine(s string) string {
 	return s
 }
 
-// thinkingBlock 思考块：可折叠头（chevron + 思考）；展开看全文、折叠看首行；流式时强制展开看实时。
+// thinkingBlock 思考块：可折叠头（思考图标 + "思考"标签）；展开看全文、折叠看首行。
+// 不再使用左竖线和灰底背景，改为行内标签标记，与工具活动、正文统一风格按时间顺序展示。
 func thinkingBlock(m state.Message, onToggle func()) widget.Widget {
 	expanded := m.Streaming || m.ThinkingExpanded
 	ic := "chevron-right"
@@ -204,31 +223,28 @@ func thinkingBlock(m state.Message, onToggle func()) widget.Widget {
 			widget.Style{FlexDirection: "row", AlignItems: "center"},
 			widget.Lucide(ic, widget.IconSize(11), widget.IconColor(*ui.FgMuted)),
 			hgap(4),
+			widget.Lucide("brain", widget.IconSize(12), widget.IconColor(*ui.FgMuted)),
+			hgap(4),
 			ui.TextC("思考", *ui.FgMuted, 10),
 		)},
 		OnClick: onToggle,
 	}
 	kids := []widget.Widget{header}
 	if expanded {
-		kids = append(kids, vgap(3), ui.TextC(strings.TrimSpace(m.Thinking), *ui.FgSubtle, 11))
+		kids = append(kids, vgap(4), ui.TextC(strings.TrimSpace(m.Thinking), *ui.FgSubtle, 11))
 	} else {
-		kids = append(kids, vgap(2), ui.TextC(truncRunes(firstLine(m.Thinking), 48), *ui.FgMuted, 10))
+		kids = append(kids, vgap(3), ui.TextC(truncRunes(firstLine(m.Thinking), 48), *ui.FgMuted, 10.5))
 	}
-	// 思考块用左竖线+轻微背景区分，类似参考 cc-agent 左 border-left 3px 风格
 	return widget.Div(
-		widget.Style{FlexDirection: "row", AlignItems: "stretch"},
-		widget.Div(widget.Style{Width: 2, BackgroundColor: ui.Border, BorderRadius: 1, Margin: types.EdgeInsetsLTRB(0, 0, 0, 0)}),
-		widget.Div(widget.Style{Width: 8}),
-		widget.Div(
-			widget.Style{BackgroundColor: ui.BgSubtle, BorderRadius: 4,
-				Padding: types.EdgeInsetsLTRB(10, 6, 10, 6), FlexDirection: "column", AlignItems: "stretch"},
-			kids,
-		),
+		widget.Style{Padding: types.EdgeInsetsLTRB(8, 4, 0, 4),
+			FlexDirection: "column", AlignItems: "stretch"},
+		kids,
 	)
 }
 
 // activityRow 一次工具调用：[chevron] 工具图标(进行蓝/完成绿/待批准黄) + 名 + 参数预览；
 // 待批准时附「允许/拒绝」按钮条；有结果时头可点折叠——折叠看首行预览、展开看全量(等宽)。
+// 不再使用独立阴影，统一由外层 Agent 卡片的阴影表达状态。
 func activityRow(a state.Activity, onToggle func()) widget.Widget {
 	iconCol := *ui.Accent
 	switch {
@@ -274,15 +290,15 @@ func activityRow(a state.Activity, onToggle func()) widget.Widget {
 	if a.AwaitingApproval {
 		border = ui.Warning
 	}
-	// 工具活动行使用浅阴影 + 边框，与参考 cc-tool 一致
-	style := cardStyle(ui.Bg, 4)
-	style.BorderColor = border
-	style.BorderWidth = 1
-	style.Padding = types.EdgeInsetsLTRB(8, 6, 8, 6)
-	style.Shadow = &paint.Shadow{
-		Offset: types.Point{X: 0, Y: 1},
-		Blur:   4,
-		Color:  types.ColorFromRGBA(0, 0, 0, 15),
+	// 工具活动行使用边框 + 浅底（无独立阴影，状态由外层卡片阴影传达）
+	style := widget.Style{
+		BackgroundColor: ui.Bg,
+		BorderColor:     border,
+		BorderWidth:     1,
+		BorderRadius:    4,
+		Padding:         types.EdgeInsetsLTRB(8, 6, 8, 6),
+		FlexDirection:   "column",
+		AlignItems:      "stretch",
 	}
 	return widget.Div(style, kids)
 }
