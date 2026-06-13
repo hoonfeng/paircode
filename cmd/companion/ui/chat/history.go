@@ -28,18 +28,13 @@ func (s *ChatState) LoadHistory() bool {
 	if historyLoaded {
 		return true
 	}
-	log.Println("goui: LoadHistory: 读取 Store.Load...")
 	ok := s.Store.Load(core.Root())
-	log.Println("goui: LoadHistory: Store.Load 返回 =", ok)
 	if ok {
 		active := s.Store.Active()
 		if active != nil {
-			log.Println("goui: LoadHistory: 当前会话消息数 =", len(active.Messages))
 		}
 		historyLoaded = true
-		log.Println("goui: LoadHistory: 调用 SetState 触发重建...")
-		s.SetState()
-		log.Println("goui: LoadHistory: SetState 调用完成")
-	}
+			s.SetState()
+		}
 	return ok
 }

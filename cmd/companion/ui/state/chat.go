@@ -184,20 +184,14 @@ func (s *ChatStore) Save(root string) {
 
 // Load 从 .pair/conversations/history.json 加载聊天状态。成功返回 true。
 func (s *ChatStore) Load(root string) bool {
-	log.Println("goui: Store.Load: 开始读取文件")
 	data, err := os.ReadFile(filepath.Join(root, ".pair", "conversations", "history.json"))
 	if err != nil {
-		log.Println("goui: Store.Load: 文件不存在或读取失败:", err)
 		return false
 	}
-	log.Println("goui: Store.Load: 文件大小 =", len(data), "字节")
-	log.Println("goui: Store.Load: 开始 JSON 解析")
 	var hf historyFile
 	if err := json.Unmarshal(data, &hf); err != nil {
-		log.Println("goui: Store.Load: JSON 解析失败:", err)
 		return false
 	}
-	log.Println("goui: Store.Load: JSON 解析完成, threads =", len(hf.Threads))
 	s.Threads = hf.Threads
 	s.seq = hf.Seq
 	// 折叠所有已完成的历史消息，大幅减少首次渲染的 widget 树复杂度
@@ -212,13 +206,11 @@ func (s *ChatStore) Load(root string) bool {
 			}
 		}
 	}
-	log.Println("goui: Store.Load: 总会话数 =", len(hf.Threads), "总消息数 =", totalMsgs)
 	if len(s.Threads) > 0 {
 		s.ActiveID = s.Threads[0].ID
 	} else {
 		s.NewThread()
 	}
 	s.Draft = ""
-	log.Println("goui: Store.Load: 完成")
 	return true
 }
