@@ -7,7 +7,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"math"
 	"os"
 	"path/filepath"
