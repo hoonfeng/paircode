@@ -250,6 +250,7 @@ func (b *AgentBridge) Start(task string) {
 }
 
 // history 把当前会话的既往消息（不含末尾刚加的 user task）转成 LLM 上下文。
+
 func (b *AgentBridge) history(th *state.Thread) []agent.Message {
 	var h []agent.Message
 	msgs := th.Messages
@@ -264,8 +265,16 @@ func (b *AgentBridge) history(th *state.Thread) []agent.Message {
 				content += s
 			}
 		}
-		if m.Streaming || content == "" {
-			continue
+		if m.Streaming {
+			continue // 仍在流式生成中，跳过
+		}
+		// 空消息保护：跳过完全空的用户消息；对空助手消息用占位文本维持对话结构，
+		// 防止连续两条用户消息被 LLM 误认为合并（常见于异常中断后持久化的空 streaming 消息）。
+		if content == "" {
+			if m.Role == state.User {
+				continue
+			}
+			content = "（前一轮回复未完成）"
 		}
 		role := agent.RoleAssistant
 		if m.Role == state.User {
@@ -275,8 +284,6 @@ func (b *AgentBridge) history(th *state.Thread) []agent.Message {
 	}
 	return h
 }
-
-// activitySummary 把一条助手消息的工具活动压成一行摘要，供跨轮上下文连续性（Agent 知道上轮做过什么、免重复）。
 func activitySummary(acts []state.Activity) string {
 	if len(acts) == 0 {
 		return ""
@@ -924,3 +931,4 @@ func planStepsText(plan agent.Plan) string {
 	}
 	return sb.String()
 }
+

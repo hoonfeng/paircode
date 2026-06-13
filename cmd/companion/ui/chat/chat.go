@@ -953,8 +953,8 @@ func (s *ChatState) sendTask(task string) {
 	if s.Bridge == nil {
 		return
 	}
-	s.Bridge.Start(task)
 	s.saveHistory()
+	s.Bridge.Start(task)
 	s.SetState()
 }
 
@@ -985,8 +985,8 @@ func (s *ChatState) Send() {
 	if s.Bridge == nil {
 		return
 	}
+	s.saveHistory()                                 // 先保存用户消息，再启动 Agent——防止空 streaming 消息被持久化
 	s.Bridge.Start(draft + attachmentContext(atts)) // agent 任务含附件内容（内容只给 LLM、不污染显示）
-	s.saveHistory()
 	s.SetState()
 }
 
@@ -1013,3 +1013,4 @@ func (s *ChatState) ApplyAsk(argsJSON string) {
 
 // ClearAsk 清空当前提问。
 func (s *ChatState) ClearAsk() { s.Ask = nil }
+
