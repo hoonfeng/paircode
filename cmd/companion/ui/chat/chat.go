@@ -16,6 +16,7 @@ import (
 	"github.com/hoonfeng/paircode/cmd/companion/core"
 	"github.com/hoonfeng/paircode/cmd/companion/ui/state"
 	"github.com/hoonfeng/paircode/cmd/companion/ui"
+	"github.com/hoonfeng/goui/pkg/paint"
 	"github.com/hoonfeng/goui/pkg/types"
 	"github.com/hoonfeng/goui/pkg/widget"
 )
@@ -114,13 +115,17 @@ func (s *ChatState) planCard() widget.Widget {
 	for _, p := range s.Plan {
 		rows = append(rows, planRow(p))
 	}
+	planCardStyle := widget.Style{
+		Padding:        types.EdgeInsets(8),
+		BackgroundColor: ui.BgSubtle,
+		BorderRadius:    6,
+		Shadow:          &paint.Shadow{Offset: types.Point{X: 0, Y: 2}, Blur: 8, Color: types.ColorFromRGBA(0, 0, 0, 25)},
+		FlexDirection:   "column",
+		AlignItems:      "stretch",
+	}
 	return widget.Div(
 		widget.Style{Padding: types.EdgeInsetsLTRB(8, 6, 8, 6)},
-		widget.Div(
-			widget.Style{Padding: types.EdgeInsets(8), BackgroundColor: ui.BgSubtle, BorderColor: ui.Border,
-				BorderWidth: 1, BorderRadius: 6, FlexDirection: "column", AlignItems: "stretch"},
-			rows,
-		),
+		widget.Div(planCardStyle, rows),
 	)
 }
 
@@ -170,13 +175,19 @@ func (s *ChatState) askCard() widget.Widget {
 		})
 	ui.StyleInput(in)
 	rows = append(rows, widget.Div(widget.Style{Height: 8}), in)
+	askCardStyle := widget.Style{
+		Padding:        types.EdgeInsets(10),
+		BackgroundColor: ui.BgSubtle,
+		BorderColor:     ui.Accent,
+		BorderWidth:     1,
+		BorderRadius:    6,
+		Shadow:          &paint.Shadow{Offset: types.Point{X: 0, Y: 2}, Blur: 8, Color: types.ColorFromRGBA(0, 0, 0, 25)},
+		FlexDirection:   "column",
+		AlignItems:      "stretch",
+	}
 	return widget.Div(
 		widget.Style{Padding: types.EdgeInsetsLTRB(8, 6, 8, 6)},
-		widget.Div(
-			widget.Style{Padding: types.EdgeInsets(10), BackgroundColor: ui.BgSubtle, BorderColor: ui.Accent,
-				BorderWidth: 1, BorderRadius: 6, FlexDirection: "column", AlignItems: "stretch"},
-			rows,
-		),
+		widget.Div(askCardStyle, rows),
 	)
 }
 
@@ -301,7 +312,7 @@ func (s *ChatState) ExportActive() {
 			fmt.Fprintf(&b, "> 思考：%s\n\n", t)
 		}
 		for _, a := range m.Activities {
-			fmt.Fprintf(&b, "- `%s` %s\n", a.Tool, argPreview(a.Args))
+			fmt.Fprintf(&b, "- `%s` %s\n", a.Tool, ArgPreview(a.Args))
 		}
 		if len(m.Activities) > 0 {
 			b.WriteString("\n")
@@ -467,8 +478,16 @@ func (s *ChatState) Regenerate(t *state.Thread, i int) {
 // userCard 用户消息：黄底卡片、pre-wrap 文本（复刻 .cc-user）。
 func userCard(m state.Message) widget.Widget {
 	return widget.Div(
-		widget.Style{BackgroundColor: ui.UserBg, BorderColor: ui.UserBorder, BorderWidth: 1, BorderRadius: 6,
-			Padding: types.EdgeInsetsLTRB(12, 8, 12, 8), FlexDirection: "column", AlignItems: "stretch"},
+		widget.Style{
+			BackgroundColor: ui.UserBg,
+			BorderColor:     ui.UserBorder,
+			BorderWidth:     1,
+			BorderRadius:    6,
+			Padding:         types.EdgeInsetsLTRB(12, 8, 12, 8),
+			Shadow:          &paint.Shadow{Offset: types.Point{X: 0, Y: 2}, Blur: 8, Color: types.ColorFromRGBA(0, 0, 0, 25)},
+			FlexDirection:   "column",
+			AlignItems:      "stretch",
+		},
 		ui.TextC(m.Text, *ui.Fg, 13),
 	)
 }

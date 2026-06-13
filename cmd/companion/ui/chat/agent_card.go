@@ -12,9 +12,28 @@ import (
 	"github.com/hoonfeng/paircode/cmd/companion/ui/mdview"
 	"github.com/hoonfeng/paircode/cmd/companion/ui/state"
 	"github.com/hoonfeng/paircode/cmd/companion/ui"
+	"github.com/hoonfeng/goui/pkg/paint"
 	"github.com/hoonfeng/goui/pkg/types"
 	"github.com/hoonfeng/goui/pkg/widget"
 )
+
+// 卡片阴影风格：与伴随式 codeagent box-shadow 一致，柔和不突兀
+var cardShadow = &paint.Shadow{
+	Offset: types.Point{X: 0, Y: 2},
+	Blur:   8,
+	Color:  types.ColorFromRGBA(0, 0, 0, 25),
+}
+
+// cardStyle 卡片基础样式（带阴影），复用避免重复
+func cardStyle(bg *types.Color, radius float64) widget.Style {
+	return widget.Style{
+		BackgroundColor: bg,
+		BorderRadius:    radius,
+		Shadow:          cardShadow,
+		FlexDirection:   "column",
+		AlignItems:      "stretch",
+	}
+}
 
 // ─── Agent 消息卡富渲染（头 + 思考 + 工具活动 + 正文）──────────
 
@@ -41,11 +60,9 @@ func agentMessageCard(m state.Message, onToggleCollapse, onToggleThinking func()
 			kids = append(kids, vgap(8), evalCard(m.Eval))
 		}
 	}
-	card := widget.Div(
-		widget.Style{BackgroundColor: ui.BgMuted, BorderColor: ui.Border, BorderWidth: 1, BorderRadius: 6,
-			Padding: types.EdgeInsetsLTRB(14, 10, 14, 10), FlexDirection: "column", AlignItems: "stretch"},
-		kids,
-	)
+	style := cardStyle(ui.BgMuted, 6)
+	style.Padding = types.EdgeInsetsLTRB(14, 10, 14, 10)
+	card := widget.Div(style, kids)
 	// 复刻参考 border-left:3px 状态色（运行中黄 / 出错红 / 完成绿）：3px 竖条 + 卡片并排撑同高。
 	return widget.Div(
 		widget.Style{FlexDirection: "row", AlignItems: "stretch"},
@@ -82,11 +99,9 @@ func evalCard(e *state.Eval) widget.Widget {
 	if strings.TrimSpace(e.Feedback) != "" {
 		kids = append(kids, vgap(5), ui.TextC(e.Feedback, *ui.FgSubtle, 11))
 	}
-	return widget.Div(
-		widget.Style{BackgroundColor: ui.Bg, BorderColor: ui.Border, BorderWidth: 1, BorderRadius: 5,
-			Padding: types.EdgeInsetsLTRB(10, 8, 10, 8), FlexDirection: "column", AlignItems: "stretch"},
-		kids,
-	)
+	style := cardStyle(ui.Bg, 5)
+	style.Padding = types.EdgeInsetsLTRB(10, 8, 10, 8)
+	return widget.Div(style, kids)
 }
 
 // dimLabel 评分维度小标：「名 得/满」。
@@ -199,10 +214,16 @@ func thinkingBlock(m state.Message, onToggle func()) widget.Widget {
 	} else {
 		kids = append(kids, vgap(2), ui.TextC(truncRunes(firstLine(m.Thinking), 48), *ui.FgMuted, 10))
 	}
+	// 思考块用左竖线+轻微背景区分，类似参考 cc-agent 左 border-left 3px 风格
 	return widget.Div(
-		widget.Style{BackgroundColor: ui.Bg, BorderRadius: 4, Padding: types.EdgeInsetsLTRB(8, 6, 8, 6),
-			FlexDirection: "column", AlignItems: "stretch"},
-		kids,
+		widget.Style{FlexDirection: "row", AlignItems: "stretch"},
+		widget.Div(widget.Style{Width: 2, BackgroundColor: ui.Border, BorderRadius: 1, Margin: types.EdgeInsetsLTRB(0, 0, 0, 0)}),
+		widget.Div(widget.Style{Width: 8}),
+		widget.Div(
+			widget.Style{BackgroundColor: ui.BgSubtle, BorderRadius: 4,
+				Padding: types.EdgeInsetsLTRB(10, 6, 10, 6), FlexDirection: "column", AlignItems: "stretch"},
+			kids,
+		),
 	)
 }
 
@@ -253,11 +274,17 @@ func activityRow(a state.Activity, onToggle func()) widget.Widget {
 	if a.AwaitingApproval {
 		border = ui.Warning
 	}
-	return widget.Div(
-		widget.Style{BackgroundColor: ui.Bg, BorderColor: border, BorderWidth: 1, BorderRadius: 4,
-			Padding: types.EdgeInsetsLTRB(8, 6, 8, 6), FlexDirection: "column", AlignItems: "stretch"},
-		kids,
-	)
+	// 工具活动行使用浅阴影 + 边框，与参考 cc-tool 一致
+	style := cardStyle(ui.Bg, 4)
+	style.BorderColor = border
+	style.BorderWidth = 1
+	style.Padding = types.EdgeInsetsLTRB(8, 6, 8, 6)
+	style.Shadow = &paint.Shadow{
+		Offset: types.Point{X: 0, Y: 1},
+		Blur:   4,
+		Color:  types.ColorFromRGBA(0, 0, 0, 15),
+	}
+	return widget.Div(style, kids)
 }
 
 // activityResultBody 展开态工具结果：等宽多行（tab→空格、截断 4000 防撑爆）。
