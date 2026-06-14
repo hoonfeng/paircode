@@ -863,7 +863,7 @@ func label1(s string, c types.Color, size float64) widget.Widget {
 // rightColW 右栏宽度：展开对话列表时额外加宽（列表在对话右侧腾出，对话主区不变）。
 func rightColW(base float64) float64 {
 	if chatpanel.TheState.ShowThreads {
-		return base + 190
+		return base + 280
 	}
 	return base
 }

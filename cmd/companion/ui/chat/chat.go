@@ -103,15 +103,10 @@ func (s *ChatState) Build(ctx widget.BuildContext) widget.Widget {
 	if len(s.Plan) > 0 {
 		mainKids = append(mainKids, s.planCard())
 	}
-	// 消息列表 + token 统计面板：消息区撑满剩余空间，token 面板固定 140px 固定在底部
+	// 消息列表撑满剩余空间（token 统计已移至对话列表侧栏底部）
 	mainKids = append(mainKids, &widget.Expanded{
 		Flex: 1,
-		SingleChildWidget: widget.SingleChildWidget{Child: widget.Div(
-			widget.Style{FlexDirection: "column", AlignItems: "stretch"},
-			&widget.Expanded{Flex: 2, SingleChildWidget: widget.SingleChildWidget{Child: s.scrollMessages()}},
-			ui.Divider(),
-			&widget.Expanded{Flex: 1, SingleChildWidget: widget.SingleChildWidget{Child: s.tokenStatsPanel()}},
-		)},
+		SingleChildWidget: widget.SingleChildWidget{Child: s.scrollMessages()},
 	})
 	if s.Ask != nil { // agent 提问中：问答卡置于输入区上方
 		mainKids = append(mainKids, s.askCard())
@@ -365,12 +360,12 @@ func (s *ChatState) layoutToolbar() widget.Widget {
 
 // ─── 对话侧栏 ─────────────────────────────────────────────
 
-// sidebarContent 侧栏内容（180px）：头部（标题 + 切换/导出/新建）+ 会话列表（VirtualList 虚加载）。
+// sidebarContent 侧栏内容（270px）：头部（标题 + 切换/导出/新建）+ 会话列表（VirtualList 虚加载）+ Token 统计。
 func (s *ChatState) sidebarContent() widget.Widget {
 	threads := s.Store.Threads
 	itemH := 36.0
 	return widget.Div(
-		widget.Style{Width: 180, BackgroundColor: ui.BgSubtle, BorderColor: ui.Border, BorderWidth: 1,
+		widget.Style{Width: 270, BackgroundColor: ui.BgSubtle, BorderColor: ui.Border, BorderWidth: 1,
 			FlexDirection: "column", AlignItems: "stretch"},
 		widget.Div(
 			widget.Style{Padding: types.EdgeInsetsLTRB(10, 8, 8, 8), BorderColor: ui.Border, BorderWidth: 1,
@@ -389,6 +384,8 @@ func (s *ChatState) sidebarContent() widget.Widget {
 				return s.threadItem(threads[i])
 			},
 		}),
+		ui.Divider(),
+		s.tokenStatsPanel(),
 	)
 }
 
@@ -849,7 +846,7 @@ func (s *ChatState) SearchMatchCount() int {
 
 // ─── Token 使用统计面板 ──────────────────────────────────
 
-// tokenStatsPanel 当前会话的 token 使用统计面板（图标展示），固定在消息区下方。
+// tokenStatsPanel 当前会话的 token 使用统计面板（图标展示），固定在对话列表侧栏底部。
 // 从 Thread.TokenUsage 读取（Save 时自动预计算），无需额外持久化逻辑。
 // 布局：标题行 + 三行数据（prompt/completion/total），每行用 Lucide 图标 + 标签 + 数值。
 func (s *ChatState) tokenStatsPanel() widget.Widget {
