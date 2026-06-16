@@ -85,7 +85,7 @@ func (b *AgentBridge) Stop() {
 	if cancel != nil {
 		cancel()
 	}
-	b.Cs.SaveHistory() // 停止时保存对话历史，防止消息丢失
+	b.Cs.saveHistory() // 停止时保存对话历史，防止消息丢失
 }
 
 // resetForNewRoot 项目根切换后清掉已建 loop，下条消息用新根重建（运行中则不动，避免打断）。
@@ -250,7 +250,6 @@ func (b *AgentBridge) Start(task string) {
 }
 
 // history 把当前会话的既往消息（不含末尾刚加的 user task）转成 LLM 上下文。
-
 func (b *AgentBridge) history(th *state.Thread) []agent.Message {
 	var h []agent.Message
 	msgs := th.Messages
@@ -265,16 +264,8 @@ func (b *AgentBridge) history(th *state.Thread) []agent.Message {
 				content += s
 			}
 		}
-		if m.Streaming {
-			continue // 仍在流式生成中，跳过
-		}
-		// 空消息保护：跳过完全空的用户消息；对空助手消息用占位文本维持对话结构，
-		// 防止连续两条用户消息被 LLM 误认为合并（常见于异常中断后持久化的空 streaming 消息）。
-		if content == "" {
-			if m.Role == state.User {
-				continue
-			}
-			content = "（前一轮回复未完成）"
+		if m.Streaming || content == "" {
+			continue
 		}
 		role := agent.RoleAssistant
 		if m.Role == state.User {
@@ -284,6 +275,8 @@ func (b *AgentBridge) history(th *state.Thread) []agent.Message {
 	}
 	return h
 }
+
+// activitySummary 把一条助手消息的工具活动压成一行摘要，供跨轮上下文连续性（Agent 知道上轮做过什么、免重复）。
 func activitySummary(acts []state.Activity) string {
 	if len(acts) == 0 {
 		return ""
@@ -438,7 +431,7 @@ func (b *AgentBridge) drain() {
 		b.syncWorkspaceEdits(evs) // Agent 成功写/改文件 → 刷新文件树 + 重载已打开文件（IDE 闭环）
 		b.Cs.SendSeq++            // 滚到底
 		b.Cs.SetState()
-		b.Cs.SaveHistory() // 每次事件处理完后实时保存，防止异常关闭丢失流式记录
+		b.Cs.saveHistory() // 每次事件处理完后实时保存，防止异常关闭丢失流式记录
 	}
 	if done {
 		if msg := b.streamingMsg(); msg != nil {
@@ -454,7 +447,7 @@ func (b *AgentBridge) drain() {
 			}
 		}
 		b.Cs.ClearAsk()    // 本轮结束：清掉残留问答卡（如被停止）
-		b.Cs.SaveHistory() // Agent 完成/停止后立即保存对话历史，确保下次加载可见完整消息
+		b.Cs.saveHistory() // Agent 完成/停止后立即保存对话历史，确保下次加载可见完整消息
 		b.stopPump()
 		if len(evs) == 0 || b.stopped {
 			b.Cs.SetState()
@@ -551,23 +544,10 @@ func (b *AgentBridge) applyEvent(e agent.Event) {
 		m.Notes = append(m.Notes, e.Content) // 系统提示（压缩/绕圈）：素色一行显示在卡内
 	case agent.EventEvaluation:
 		var ev agent.Evaluation
-		if json.Unmarshal([]byte(e.Args), &ev) == nil && b.runThread != nil {
-			// 评分改为放在LLM对话结束后独立展示——创建一条新消息作为评分卡，
-			// 不再嵌入到当前 Agent 消息中（避免评分与 Agent 正文混在一起）。
-			b.runThread.Messages = append(b.runThread.Messages, state.Message{
-				Role: state.Assistant,
-				Eval: &state.Eval{
-					Total:       ev.Total,
-					Completion:  ev.Scores.Completion,
-					Correctness: ev.Scores.Correctness,
-					Depth:       ev.Scores.Depth,
-					Efficiency:  ev.Scores.Efficiency,
-					Strengths:   ev.Strengths,
-					Weaknesses:  ev.Weaknesses,
-					Feedback:    ev.Feedback,
-				},
-			})
-			b.Cs.SaveHistory()
+		if json.Unmarshal([]byte(e.Args), &ev) == nil {
+			m.Eval = &state.Eval{Total: ev.Total, Completion: ev.Scores.Completion, Correctness: ev.Scores.Correctness,
+				Depth: ev.Scores.Depth, Efficiency: ev.Scores.Efficiency,
+				Strengths: ev.Strengths, Weaknesses: ev.Weaknesses, Feedback: ev.Feedback}
 		}
 	case agent.EventFinal:
 		if strings.TrimSpace(e.Content) != "" {
@@ -877,7 +857,6 @@ func (b *AgentBridge) autoIterate(ctx context.Context, loop *agent.Loop, ev agen
 }
 
 // buildImproveTask 据评测不足拼出改进任务（让执行 Agent 实际修改而非只给建议，复刻参考改进 prompt）。
-// 另含 Lua 自定义工具创建指导：评分不足且缺能力时，Agent 可创建/优化 .lua 工具来「长手脚」。
 func buildImproveTask(ev agent.Evaluation) string {
 	var sb strings.Builder
 	sb.WriteString("上一轮任务评分 " + strconv.Itoa(ev.Total) + "/100，存在以下不足，请针对性改进")
@@ -888,15 +867,6 @@ func buildImproveTask(ev agent.Evaluation) string {
 	if strings.TrimSpace(ev.Feedback) != "" {
 		sb.WriteString("\n总评：" + ev.Feedback)
 	}
-	// ♻ Lua 自定义工具：「长手脚」——评分不足往往是因为缺少某种能力（如不会解析特定格式/缺计算工具）。
-	// Agent 可在 .pair/tools/ 下创建 .lua 脚本来自我扩展：把重复性操作封成工具、补缺失的计算/转换能力。
-	// 写完后下次发送即热加载可用；优化现有工具也能提升效率。
-	sb.WriteString("\n\n# 自定义工具扩展（长手脚）\n" +
-		"如果评分低是因为你缺少某种能力（如不会解析特定格式、缺少计算工具、重复操作过多），" +
-		"可以在 .pair/tools/ 目录下创建 .lua 脚本自定义工具来扩展自己。\n" +
-		"脚本格式：return {name=, description=, parameters={...}, run=function(args) end}\n" +
-		"写完后 hot-reload 即时生效——下次发送即可调用新工具。\n" +
-		"也可以优化已有的 .lua 工具来提升效率。")
 	if dbg := roleprompts.RoleSpecificPhilosophy("debugger"); dbg != "" { // 自动迭代＝调试角色，注入其哲学指导
 		sb.WriteString(dbg)
 	}
@@ -954,4 +924,3 @@ func planStepsText(plan agent.Plan) string {
 	}
 	return sb.String()
 }
-

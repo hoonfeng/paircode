@@ -11,6 +11,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	"github.com/hoonfeng/goui/pkg/paint"
 	"github.com/hoonfeng/goui/pkg/types"
@@ -63,6 +65,17 @@ type ChatState struct {
 	// VirtualList 高度缓存：避免每次 Build 重算 ItemHeights 覆盖 Layout 自动回写的实际高度
 	cachedHeights []float64 // 缓存的消息高度数组（len=消息数，nil 时重建）
 	cacheMsgLen   int       // 缓存时的消息总数（用于检测消息变动后重建）
+
+	// 节流保存：记录上次 SaveHistory 的时间，避免每帧完整序列化对话历史
+	lastSaveTime time.Time
+
+	// 【轮询模式】数据版本号，用于 UI 线程检测数据变化。
+	// Agent goroutine 通过 drain 写入 state 后递增此版本号（不调 SetState），
+	// UI 线程每帧通过 app.OnDataChange 检测版本号变化后自动触发重建。
+	DataVersion atomic.Int64
+
+	// _taskPS 任务进度面板交互状态（懒初始化）。
+	_taskPS *taskProgressState
 }
 
 // loadTestData 性能测试：填充 1000 条测试消息（含用户+Agent 对话对），验证 VirtualList 虚加载性能。
@@ -100,14 +113,8 @@ func (s *ChatState) Build(ctx widget.BuildContext) widget.Widget {
 	if s.ShowSearch {
 		mainKids = append(mainKids, s.searchBar())
 	}
-	if len(s.Plan) > 0 {
-		mainKids = append(mainKids, s.planCard())
-	}
-	// 消息列表撑满剩余空间（token 统计已移至对话列表侧栏底部）
-	mainKids = append(mainKids, &widget.Expanded{
-		Flex: 1,
-		SingleChildWidget: widget.SingleChildWidget{Child: s.scrollMessages()},
-	})
+	mainKids = append(mainKids, s.taskProgressPanel())
+	mainKids = append(mainKids, ui.Expand(s.scrollMessages()))
 	if s.Ask != nil { // agent 提问中：问答卡置于输入区上方
 		mainKids = append(mainKids, s.askCard())
 	}
@@ -239,60 +246,8 @@ func estimateMessageHeight(m state.Message) float64 {
 	return h
 }
 
-// planCard 置顶任务计划清单（update_plan 工具更新）：标题 + 进度 + 每步状态图标。
-func (s *ChatState) planCard() widget.Widget {
-	done := 0
-	for _, p := range s.Plan {
-		if p.Status == "done" {
-			done++
-		}
-	}
-	rows := []widget.Widget{
-		widget.Div(
-			widget.Style{FlexDirection: "row", AlignItems: "center", Padding: types.EdgeInsetsLTRB(0, 0, 0, 5)},
-			widget.Lucide("list-checks", widget.IconSize(13), widget.IconColor(*ui.Accent)),
-			widget.Div(widget.Style{Width: 6}),
-			ui.TextC("计划", *ui.Fg, 12),
-			widget.Div(widget.Style{Width: 6}),
-			ui.TextC(fmt.Sprintf("%d/%d", done, len(s.Plan)), *ui.FgMuted, 10),
-		),
-	}
-	for _, p := range s.Plan {
-		rows = append(rows, planRow(p))
-	}
-	planCardStyle := widget.Style{
-		Padding:         types.EdgeInsets(8),
-		BackgroundColor: ui.BgSubtle,
-		BorderRadius:    6,
-		Shadow:          &paint.Shadow{Offset: types.Point{X: 0, Y: 2}, Blur: 8, Color: types.ColorFromRGBA(0, 0, 0, 25)},
-		FlexDirection:   "column",
-		AlignItems:      "stretch",
-	}
-	return widget.Div(
-		widget.Style{Padding: types.EdgeInsetsLTRB(8, 6, 8, 6)},
-		widget.Div(planCardStyle, rows),
-	)
-}
-
-func planRow(p planStep) widget.Widget {
-	icon, col := "circle", *ui.FgMuted // pending
-	switch p.Status {
-	case "done":
-		icon, col = "circle-check", *ui.Success
-	case "in_progress":
-		icon, col = "loader-circle", *ui.Accent
-	}
-	txtCol := *ui.Fg
-	if p.Status == "done" {
-		txtCol = *ui.FgMuted
-	}
-	return widget.Div(
-		widget.Style{Height: 20, FlexDirection: "row", AlignItems: "center"},
-		widget.Lucide(icon, widget.IconSize(13), widget.IconColor(col)),
-		widget.Div(widget.Style{Width: 6}),
-		ui.Expand(ui.TextC(p.Step, txtCol, 11.5)),
-	)
-}
+// planCard 保留旧接口别名（TaskProgressPanel 已替换它）。
+func (s *ChatState) planCard() widget.Widget { return s.taskProgressPanel() }
 
 // askCard agent 提问卡（ask_user）：问题 + 选项按钮 + 自由输入；回答前对话阻塞等待。
 func (s *ChatState) askCard() widget.Widget {
@@ -360,17 +315,16 @@ func (s *ChatState) layoutToolbar() widget.Widget {
 
 // ─── 对话侧栏 ─────────────────────────────────────────────
 
-// sidebarContent 侧栏内容（270px）：头部（标题 + 切换/导出/新建）+ 会话列表（VirtualList 虚加载）+ Token 统计。
+// sidebarContent 侧栏内容（180px）：头部（标题 + 切换/导出/新建）+ 会话列表（VirtualList 虚加载）。
 func (s *ChatState) sidebarContent() widget.Widget {
 	threads := s.Store.Threads
 	itemH := 36.0
 	return widget.Div(
-		widget.Style{Width: 270, BackgroundColor: ui.BgSubtle, BorderColor: ui.Border, BorderWidth: 1,
+		widget.Style{Width: 180, BackgroundColor: ui.BgSubtle, BorderColor: ui.Border, BorderWidth: 1,
 			FlexDirection: "column", AlignItems: "stretch"},
 		widget.Div(
 			widget.Style{Padding: types.EdgeInsetsLTRB(10, 8, 8, 8), BorderColor: ui.Border, BorderWidth: 1,
 				FlexDirection: "row", AlignItems: "center"},
-			widget.Lucide("grip-vertical", widget.IconSize(13), widget.IconColor(*ui.FgMuted)),
 			ui.Expand(ui.TextC("对话", *ui.FgSubtle, 12)),
 			toolBtn("arrow-left-right", s.ThreadLeft, func() { s.ThreadLeft = !s.ThreadLeft; s.SetState() }),
 			toolBtn("download", false, s.ExportActive),
@@ -384,8 +338,6 @@ func (s *ChatState) sidebarContent() widget.Widget {
 				return s.threadItem(threads[i])
 			},
 		}),
-		ui.Divider(),
-		s.tokenStatsPanel(),
 	)
 }
 
@@ -844,63 +796,6 @@ func (s *ChatState) SearchMatchCount() int {
 	return n
 }
 
-// ─── Token 使用统计面板 ──────────────────────────────────
-
-// tokenStatsPanel 当前会话的 token 使用统计面板（图标展示），固定在对话列表侧栏底部。
-// 从 Thread.TokenUsage 读取（Save 时自动预计算），无需额外持久化逻辑。
-// 布局：标题行 + 三行数据（prompt/completion/total），每行用 Lucide 图标 + 标签 + 数值。
-func (s *ChatState) tokenStatsPanel() widget.Widget {
-	t := s.Store.Active()
-	usage := state.TokenUsage{} // 空兜底
-	if t != nil {
-		usage = t.TokenUsage
-		// 若 TokenUsage 尚未计算（如新建会话后尚未 Save），实时计算一次
-		if usage.TotalTokens == 0 && len(t.Messages) > 0 {
-			usage = t.CalculateTokenUsage()
-		}
-	}
-
-	title := widget.Div(
-		widget.Style{FlexDirection: "row", AlignItems: "center", Padding: types.EdgeInsetsLTRB(12, 8, 12, 4)},
-		widget.Lucide("sigma", widget.IconSize(13), widget.IconColor(*ui.Accent)),
-		widget.Div(widget.Style{Width: 6}),
-		ui.TextC("Token 使用统计", *ui.Fg, 12),
-	)
-
-	row := func(icon, label string, value int, color *types.Color) widget.Widget {
-		return widget.Div(
-			widget.Style{
-				FlexDirection: "row", AlignItems: "center",
-				Padding: types.EdgeInsetsLTRB(26, 0, 12, 2),
-				Height:  24,
-			},
-			widget.Lucide(icon, widget.IconSize(12), widget.IconColor(*color)),
-			widget.Div(widget.Style{Width: 8}),
-			ui.TextC(label, *ui.FgMuted, 11),
-			widget.Div(widget.Style{Width: 4}),
-			ui.Expand(widget.Div(widget.Style{})),
-			ui.TextC(fmt.Sprintf("%d", value), *ui.Fg, 11),
-		)
-	}
-
-	data := widget.Div(
-		widget.Style{FlexDirection: "column", AlignItems: "stretch"},
-		row("upload", "输入 (Prompt)", usage.PromptTokens, ui.Accent),
-		row("download", "输出 (Completion)", usage.CompletionTokens, ui.Success),
-		row("equal", "总计 (Total)", usage.TotalTokens, ui.Fg),
-	)
-
-	return widget.Div(
-		widget.Style{
-			BackgroundColor: ui.BgSubtle,
-			FlexDirection:   "column",
-			AlignItems:      "stretch",
-		},
-		title,
-		data,
-	)
-}
-
 // ─── 小部件 ───────────────────────────────────────────────
 
 // toolBtn 工具栏图标按钮（26×26，active 高亮）。用 Button 原生 Icon。
@@ -1017,8 +912,8 @@ func (s *ChatState) sendTask(task string) {
 	if s.Bridge == nil {
 		return
 	}
-	s.saveHistory()
 	s.Bridge.Start(task)
+	s.saveHistory()
 	s.SetState()
 }
 
@@ -1049,8 +944,8 @@ func (s *ChatState) Send() {
 	if s.Bridge == nil {
 		return
 	}
-	s.saveHistory()                                 // 先保存用户消息，再启动 Agent——防止空 streaming 消息被持久化
 	s.Bridge.Start(draft + attachmentContext(atts)) // agent 任务含附件内容（内容只给 LLM、不污染显示）
+	s.saveHistory()
 	s.SetState()
 }
 
@@ -1077,4 +972,3 @@ func (s *ChatState) ApplyAsk(argsJSON string) {
 
 // ClearAsk 清空当前提问。
 func (s *ChatState) ClearAsk() { s.Ask = nil }
-
