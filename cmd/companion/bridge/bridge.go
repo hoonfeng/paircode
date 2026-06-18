@@ -58,6 +58,8 @@ type AgentBridge struct {
 
 	// ask_user：loop 协程在 askUser() 里登记回答通道并阻塞，UI 线程选项/输入经 resolveAsk 送回（同一时刻仅一个）。
 	askCh chan string
+
+	lastDrainTime time.Time
 }
 
 func (b *AgentBridge) IsRunning() bool {
@@ -85,7 +87,7 @@ func (b *AgentBridge) Stop() {
 	if cancel != nil {
 		cancel()
 	}
-	b.Cs.saveHistory() // 停止时保存对话历史，防止消息丢失
+	b.Cs.SaveHistory() // 停止时保存对话历史，防止消息丢失
 }
 
 // resetForNewRoot 项目根切换后清掉已建 loop，下条消息用新根重建（运行中则不动，避免打断）。
@@ -428,10 +430,18 @@ func (b *AgentBridge) drain() {
 		for _, e := range evs {
 			b.applyEvent(e)
 		}
-		b.syncWorkspaceEdits(evs) // Agent 成功写/改文件 → 刷新文件树 + 重载已打开文件（IDE 闭环）
-		b.Cs.SendSeq++            // 滚到底
+		b.syncWorkspaceEdits(evs)
+		b.Cs.SendSeq++
+	}
+
+	// 节流：每秒最多 4 次 SetState + SaveHistory（流式输出时不需要每帧刷新 UI）
+	now := time.Now()
+	throttled := !done && now.Sub(b.lastDrainTime) < 250*time.Millisecond
+
+	if len(evs) > 0 && !throttled {
+		b.lastDrainTime = now
 		b.Cs.SetState()
-		b.Cs.saveHistory() // 每次事件处理完后实时保存，防止异常关闭丢失流式记录
+		b.Cs.SaveHistory()
 	}
 	if done {
 		if msg := b.streamingMsg(); msg != nil {
@@ -442,14 +452,14 @@ func (b *AgentBridge) drain() {
 				}
 				msg.Text += "[已停止]"
 			}
-			if b.Cs.AutoCollapse { // 收缩开关：完成即折叠本轮
+			if b.Cs.AutoCollapse {
 				msg.Collapsed = true
 			}
 		}
-		b.Cs.ClearAsk()    // 本轮结束：清掉残留问答卡（如被停止）
-		b.Cs.saveHistory() // Agent 完成/停止后立即保存对话历史，确保下次加载可见完整消息
+		b.Cs.ClearAsk()
+		b.Cs.SaveHistory()
 		b.stopPump()
-		if len(evs) == 0 || b.stopped {
+		if len(evs) == 0 || b.stopped || !throttled {
 			b.Cs.SetState()
 		}
 	}
@@ -542,6 +552,15 @@ func (b *AgentBridge) applyEvent(e agent.Event) {
 		}
 	case agent.EventCompacted, agent.EventCircling:
 		m.Notes = append(m.Notes, e.Content) // 系统提示（压缩/绕圈）：素色一行显示在卡内
+	case agent.EventUsage:
+		if e.Usage != nil && b.runThread != nil {
+			b.runThread.AccumulateAPIUsage(
+				e.Usage.PromptTokens,
+				e.Usage.CompletionTokens,
+				e.Usage.PromptCacheHitTokens,
+				e.Usage.PromptCacheMissTokens,
+			)
+		}
 	case agent.EventEvaluation:
 		var ev agent.Evaluation
 		if json.Unmarshal([]byte(e.Args), &ev) == nil {
@@ -573,7 +592,7 @@ func (b *AgentBridge) syncWorkspaceEdits(evs []agent.Event) {
 	if root == "" {
 		root = core.Root()
 	}
-	changed := false
+	refreshed := false
 	for _, e := range evs {
 		if e.Type != agent.EventToolResult || (e.Tool != "write_file" && e.Tool != "edit_file") {
 			continue
@@ -582,12 +601,14 @@ func (b *AgentBridge) syncWorkspaceEdits(evs []agent.Event) {
 		if strings.HasPrefix(r, "Error:") || strings.Contains(r, "拒绝") {
 			continue // 失败或被拒，磁盘未变
 		}
-		changed = true
 		if p := b.toolPath(root, e.CallID); p != "" {
+			filetreepanel.FileTree.RefreshPath(p)
 			editorpanel.Editor.ReloadIfOpen(p)
+			refreshed = true
 		}
 	}
-	if changed {
+	if !refreshed {
+		// 所有事件都无有效路径时 fallback 到全量刷新
 		filetreepanel.FileTree.Refresh()
 	}
 }

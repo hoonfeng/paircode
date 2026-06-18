@@ -39,7 +39,7 @@ func buildIdeWelcome() widget.Widget {
 		ui.VGap(28),
 		// 操作按钮行
 		ui.RowG(12,
-			ideActionBtn("打开文件夹", OnOpenFolder, "folder-open"),
+			ideActionBtn("打开文件夹", OnOpenFolder, "folder"),
 			ideActionBtn("新建项目", OnNewProject, "sparkles"),
 		),
 		ui.VGap(32),

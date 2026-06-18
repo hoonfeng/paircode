@@ -79,7 +79,7 @@ func WorkspaceRootMenu(x, y float64, path string) {
 		mi("folder-plus", "新建文件夹", func() { NewEntryIn(path, true) }),
 		sep(),
 		mi("terminal", "在终端打开", func() { termpanel.Active().OpenDir(path) }),
-		mi("folder-open", "在资源管理器中显示", func() { RevealInExplorer(path, true) }),
+		mi("folder", "在资源管理器中显示", func() { RevealInExplorer(path, true) }),
 	}
 	if i > 0 { // 非首位 → 可一键设为首选（拖拽手柄也能排序）
 		items = append(items, sep(), mi("star", "设为首选项目（Agent 主文件夹）", func() { core.SetPrimaryFolder(path) }))
@@ -102,8 +102,14 @@ func miD(icon, label string, onClick func()) widget.MenuItem {
 func sep() widget.MenuItem { return widget.MenuItem{Separator: true} }
 
 // showMenu 用 GitHub 深色配色弹出右键菜单（统一各处外观，匹配参考源深色上下文菜单）。
+var currentMenuID int // 当前显示的右键菜单 overlay id，关闭旧菜单防叠加
+
 func ShowMenu(x, y float64, items []widget.MenuItem) {
-	widget.ShowContextMenuStyled(x, y, items, *ui.BgMuted, *ui.Fg, *ui.AccentStrong, *ui.Border)
+	// 关闭上一次的右键菜单（防止多个菜单叠加）
+	if currentMenuID > 0 {
+		widget.HideOverlay(currentMenuID)
+	}
+	currentMenuID = widget.ShowContextMenuStyled(x, y, items, *ui.BgMuted, *ui.Fg, *ui.AccentStrong, *ui.Border)
 }
 
 // copyToClipboard 写剪贴板（无实现则忽略）。
@@ -113,15 +119,9 @@ func CopyToClipboard(s string) {
 	}
 }
 
-// addToChat 把文本追加进对话输入框草稿并刷新（「添加到对话」动作）。
+// addToChat 把引用文本加入 DraftRefs 列表，以 chip 组件展示在输入框上方（不再塞入输入框草稿）。
 func AddToChat(text string) {
-	d := strings.TrimSpace(chatpanel.TheState.Store.Draft)
-	if d != "" {
-		d += "\n"
-	}
-	chatpanel.TheState.Store.Draft = d + text
-	chatpanel.TheState.SendSeq++ // 受控刷新输入框显示新草稿
-	chatpanel.TheState.SetState()
+	chatpanel.TheState.AddRef(text)
 }
 
 // revealInExplorer 在资源管理器中定位文件 / 打开目录（Windows）。explorer 退出码常非 0，忽略。
@@ -212,7 +212,7 @@ func FileNodeMenuItems(n *filetreepanel.FileNode) []widget.MenuItem {
 			AddToChat(pfx + relForFileTree(n.Path()))
 		}),
 		mi("terminal", "在终端打开", func() { termpanel.Active().OpenDir(dirOf(n)) }),
-		mi("folder-open", "在资源管理器中打开", func() { RevealInExplorer(n.Path(), n.IsDir()) }),
+		mi("folder", "在资源管理器中打开", func() { RevealInExplorer(n.Path(), n.IsDir()) }),
 		mi("refresh-cw", "刷新", func() { filetreepanel.FileTree.Refresh() }),
 	)
 }
@@ -227,7 +227,7 @@ func fileTreeEmptyItems() []widget.MenuItem {
 		mi("folder-plus", "新建文件夹", func() { NewEntryIn(root, true) }),
 		sep(),
 		mi("refresh-cw", "刷新", func() { filetreepanel.FileTree.Refresh() }),
-		mi("folder-open", "在资源管理器中打开", func() { RevealInExplorer(root, true) }),
+		mi("folder", "在资源管理器中打开", func() { RevealInExplorer(root, true) }),
 		mi("terminal", "在终端打开", func() { termpanel.Active().OpenDir(root) }),
 	}
 }
@@ -249,7 +249,7 @@ func NewEntryIn(dir string, isDir bool) {
 			err = os.WriteFile(p, nil, 0o644)
 		}
 		if err != nil {
-			widget.ShowAlert("出错", err.Error(), widget.MsgWarning, nil)
+			widget.ShowAlert("出错", err.Error(), widget.MsgError, nil)
 			return
 		}
 		filetreepanel.FileTree.Refresh()
@@ -264,7 +264,7 @@ func renameEntry(n *filetreepanel.FileNode) {
 	ShowPrompt("重命名", n.Name(), func(name string) {
 		np := filepath.Join(filepath.Dir(n.Path()), name)
 		if err := os.Rename(n.Path(), np); err != nil {
-			widget.ShowAlert("出错", err.Error(), widget.MsgWarning, nil)
+			widget.ShowAlert("出错", err.Error(), widget.MsgError, nil)
 			return
 		}
 		filetreepanel.FileTree.Refresh()
@@ -277,10 +277,10 @@ func deleteEntry(n *filetreepanel.FileNode) {
 	if n.IsDir() {
 		kind = "文件夹"
 	}
-	widget.ShowConfirm("删除"+kind, "确定删除"+kind+"「"+n.Name()+"」？此操作不可撤销。", widget.MsgWarning,
+	widget.ShowConfirm("删除"+kind, "确定删除"+kind+"「"+n.Name()+"」？此操作不可撤销。", widget.MsgError,
 		func() {
 			if err := os.RemoveAll(n.Path()); err != nil {
-				widget.ShowAlert("出错", err.Error(), widget.MsgWarning, nil)
+				widget.ShowAlert("出错", err.Error(), widget.MsgError, nil)
 				return
 			}
 			filetreepanel.FileTree.Refresh()
@@ -381,7 +381,7 @@ func EditorContentItems() []widget.MenuItem {
 	// 文件操作（对照参考补齐：在资源管理器中显示 / 复制路径 / 复制文件名）
 	if t := editorpanel.Editor.ActiveTab(); t != nil {
 		items = append(items, sep(),
-			mi("folder-open", "在资源管理器中显示", func() { RevealInExplorer(t.Path(), false) }),
+			mi("folder", "在资源管理器中显示", func() { RevealInExplorer(t.Path(), false) }),
 			mi("copy", "复制路径", func() { CopyToClipboard(t.Path()) }),
 			mi("file", "复制文件名", func() { CopyToClipboard(filepath.Base(t.Path())) }),
 		)

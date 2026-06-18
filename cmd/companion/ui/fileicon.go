@@ -43,9 +43,7 @@ func extColor(ext string) types.Color {
 // （收原始字段而非 *fileNode，避免反依赖文件树类型；编辑器标签传 isDir=false）。
 func FileIcon(name string, isDir, expanded bool) (string, types.Color) {
 	if isDir {
-		if expanded {
-			return "folder-open", ftFolder
-		}
+		// 注：goui Lucide 图标集没有 "folder-open"，展开/折叠统一用 "folder"
 		return "folder", ftFolder
 	}
 	switch strings.ToLower(filepath.Ext(name)) {

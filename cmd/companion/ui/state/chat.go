@@ -71,6 +71,10 @@ type Message struct {
 	// ── 折叠视图状态（UI 持久，跨 relayout 存活于 store）──
 	Collapsed        bool // 整卡折叠（完成后可收起，autoCollapse 开则完成即收）
 	ThinkingExpanded bool // 思考块展开（默认折叠；流式时强制展开看实时）
+
+	// LongTextFile 长文本临时文件路径。当用户输入超长（>2000 字符）时，
+	// 原文写入临时文件，chat 只显示文件引用（避免 VirtualList 因大量文本跳动）。
+	LongTextFile string
 }
 
 // TimelineEntryAsActivity 将 tool 类型的 TimelineEntry 转为 Activity
@@ -108,10 +112,23 @@ type Activity struct {
 
 // TokenUsage 记录对话的 token 使用统计（按消息内容启发式估算）。
 // 提供图标展示所需的 Prompt/Completion/Total 三组数据。
+// CacheHit/MissTokens 由 Agent 运行时 API 返回的真实值填充（非启发式）。
 type TokenUsage struct {
-	PromptTokens     int `json:"prompt_tokens"`     // 输入 token（用户消息）
-	CompletionTokens int `json:"completion_tokens"` // 输出 token（助手回复）
-	TotalTokens      int `json:"total_tokens"`      // 总计
+	PromptTokens          int `json:"prompt_tokens"`                     // 输入 token（用户消息）
+	CompletionTokens      int `json:"completion_tokens"`                 // 输出 token（助手回复）
+	TotalTokens           int `json:"total_tokens"`                      // 总计
+	PromptCacheHitTokens   int `json:"prompt_cache_hit_tokens,omitempty"`  // API 返回的缓存命中 tokens
+	PromptCacheMissTokens  int `json:"prompt_cache_miss_tokens,omitempty"` // API 返回的缓存未命中 tokens
+}
+
+// AccumulateAPIUsage 累加 API 返回的真实 token 用量到本会话的统计中。
+// 每轮 LLM 调用后调用一次，累计 prompt/completion 总用量和缓存命中/未命中。
+func (t *Thread) AccumulateAPIUsage(promptTokens, completionTokens, cacheHit, cacheMiss int) {
+	t.TokenUsage.PromptTokens += promptTokens
+	t.TokenUsage.CompletionTokens += completionTokens
+	t.TokenUsage.TotalTokens += promptTokens + completionTokens
+	t.TokenUsage.PromptCacheHitTokens += cacheHit
+	t.TokenUsage.PromptCacheMissTokens += cacheMiss
 }
 
 // Thread 一个对话会话。
@@ -198,15 +215,13 @@ func NewChatStore() *ChatStore {
 	return s
 }
 
-const welcome = "你好！我是伴随式 CodeAgent。告诉我你想做什么——写代码、改 bug、跑命令，我来陪你一起。"
-
 // NewThread 新建会话并置为当前（置顶）。
 func (s *ChatStore) NewThread() *Thread {
 	s.seq++
 	t := &Thread{
 		ID:       "t" + strconv.Itoa(s.seq),
 		Title:    "新对话",
-		Messages: []Message{{Role: Assistant, Text: welcome}},
+		Messages: []Message{},
 	}
 	s.Threads = append([]*Thread{t}, s.Threads...) // 新会话置顶
 	s.ActiveID = t.ID

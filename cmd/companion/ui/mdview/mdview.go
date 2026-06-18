@@ -70,6 +70,7 @@ func Render(text string) widget.Widget {
 		}
 
 		if t == "" {
+			blocks = append(blocks, widget.Div(widget.Style{Height: 8}))
 			continue
 		}
 
@@ -78,13 +79,19 @@ func Render(text string) widget.Widget {
 			blocks = append(blocks, widget.Div(widget.Style{Height: 1, BackgroundColor: ui.Border}))
 
 		case strings.HasPrefix(t, "### "):
-			blocks = append(blocks, inlineRow(mdRenderInline(t[4:]), 13.5))
+			blocks = append(blocks, widget.Div(widget.Style{FlexDirection: "column", AlignItems: "stretch", Padding: types.EdgeInsetsLTRB(0, 6, 0, 4)},
+				mdHeadingBlock(mdRenderInline(t[4:]), 13.5),
+			))
 
 		case strings.HasPrefix(t, "## "):
-			blocks = append(blocks, inlineRow(mdRenderInline(t[3:]), 15))
+			blocks = append(blocks, widget.Div(widget.Style{FlexDirection: "column", AlignItems: "stretch", Padding: types.EdgeInsetsLTRB(0, 8, 0, 4)},
+				mdHeadingBlock(mdRenderInline(t[3:]), 15),
+			))
 
 		case strings.HasPrefix(t, "# "):
-			blocks = append(blocks, inlineRow(mdRenderInline(t[2:]), 17))
+			blocks = append(blocks, widget.Div(widget.Style{FlexDirection: "column", AlignItems: "stretch", Padding: types.EdgeInsetsLTRB(0, 12, 0, 4)},
+				mdHeadingBlock(mdRenderInline(t[2:]), 17),
+			))
 
 		case strings.HasPrefix(t, "> "):
 			blocks = append(blocks, mdQuote(mdRenderInline(t[2:])))
@@ -286,6 +293,22 @@ func mdQuote(spans []span) widget.Widget {
 	)
 }
 
+// mdHeadingBlock 渲染标题块（粗体 + 块级间距）。
+func mdHeadingBlock(spans []span, fontSize float64) widget.Widget {
+	kids := make([]widget.Widget, len(spans))
+	for i, s := range spans {
+		fnt := s.Font
+		if fnt.Size == 0 {
+			fnt.Size = fontSize
+		}
+		fnt.Weight = canvas.FontWeightBold
+		t := widget.NewText(s.Text, s.Color)
+		t.Font = fnt
+		kids[i] = t
+	}
+	return widget.Div(widget.Style{FlexDirection: "row", AlignItems: "stretch"}, kids)
+}
+
 // mdTaskItem 任务列表项：- [x] 完成 / - [ ] 待办，用 checkbox 图标。
 func mdTaskItem(line string) widget.Widget {
 	done := mdTaskDone.FindStringSubmatch(line)
@@ -343,44 +366,74 @@ func mdTable(rows []string) widget.Widget {
 		return widget.Div(widget.Style{})
 	}
 
+	// 补齐所有行到 maxCols
+	for ri := range parsed {
+		for len(parsed[ri]) < maxCols {
+			parsed[ri] = append(parsed[ri], "")
+		}
+	}
+
+	// 计算每列最大文本长度（用于列宽对齐）
+	colMaxLen := make([]int, maxCols)
+	for _, cells := range parsed {
+		for ci, cell := range cells {
+			l := len(strings.TrimSpace(cell))
+			if l > colMaxLen[ci] {
+				colMaxLen[ci] = l
+			}
+		}
+	}
+	// 列宽：每字符约 7.5px（12.5px字号），加 12px padding
+	colWidths := make([]float64, maxCols)
+	for ci := range colWidths {
+		w := float64(colMaxLen[ci])*7.5 + 12
+		if w < 30 {
+			w = 30
+		}
+		colWidths[ci] = w
+	}
+
 	var body []widget.Widget
 	for ri, cells := range parsed {
-		// 补齐到 maxCols
-		for len(cells) < maxCols {
-			cells = append(cells, "")
-		}
 		var rowKids []widget.Widget
-		for _, cell := range cells {
+		for ci, cell := range cells {
 			cellText := strings.TrimSpace(cell)
-			cellStyle := widget.Style{
-				Padding:  types.EdgeInsetsLTRB(6, 3, 6, 3),
+			// 竖分割线（第一列不画）
+			if ci > 0 {
+				rowKids = append(rowKids, widget.Div(widget.Style{Width: 1, BackgroundColor: ui.Border}))
 			}
-			rowKids = append(rowKids,
-				widget.Div(cellStyle,
-					inlineRow(mdRenderInline(cellText)),
-				),
-			)
+			// 每列宽度根据最大内容宽度统一设定
+			cellStyle := widget.Style{
+				MinWidth:      colWidths[ci],
+				Padding:       types.EdgeInsetsLTRB(6, 3, 6, 3),
+				FlexDirection: "column",
+				AlignItems:    "stretch",
+			}
+			// 单元格文本（支持自动换行）
+			txt := widget.NewText(cellText, *ui.Fg)
+			txt.Font = canvas.Font{Family: "", Size: 12.5}
+			cellWrap := widget.Div(cellStyle, txt)
+			rowKids = append(rowKids, cellWrap)
 		}
-		// 用 FlexRow 的 Gap 模拟列间距；给 border-bottom 区分行
+		// 行分割线
 		rowStyle := widget.Style{
 			FlexDirection: "row",
-			AlignItems:    "center",
+			AlignItems:    "stretch",
 			BorderColor:   ui.Border,
 			BorderWidth:   1,
 		}
+		rowDiv := widget.Div(rowStyle, rowKids)
 		if ri == 0 {
-			// 表头加底部强调线
-			rowStyle.BorderWidth = 0
+			// 表头：背景色 + 底部强调线
 			body = append(body, widget.Div(widget.Style{
 				FlexDirection: "column", AlignItems: "stretch",
-				BorderColor: ui.Border, BorderWidth: 1, BorderRadius: 4,
 				BackgroundColor: ui.BgSubtle,
 			},
-				widget.Div(rowStyle, rowKids),
+				rowDiv,
 				widget.Div(widget.Style{Height: 1, BackgroundColor: ui.Border}),
 			))
 		} else {
-			body = append(body, widget.Div(rowStyle, rowKids))
+			body = append(body, rowDiv)
 		}
 	}
 

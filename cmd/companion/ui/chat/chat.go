@@ -11,9 +11,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"math"
 	"sync/atomic"
 	"time"
 
+	"github.com/hoonfeng/goui/pkg/canvas"
 	"github.com/hoonfeng/goui/pkg/paint"
 	"github.com/hoonfeng/goui/pkg/types"
 	"github.com/hoonfeng/goui/pkg/widget"
@@ -50,11 +52,13 @@ type ChatState struct {
 	Autonomous   bool        // 全自主模式
 	AutoCollapse bool        // 最后一条自动收缩
 	SendSeq      int         // 递增 → 输入框清空 + 滚到底
+	DraftVersion int         // 递增 → 外部设置草稿时刷新输入框（右键添加到对话等）
 	InputAreaH   float64     // 输入区固定高（由 main.go 设为终端面板高 BottomH，使两者等高对齐）
 	Bridge       AgentBridge // Agent 引擎接入（懒建，见 agent_bridge.go）
 	Plan         []planStep  // 当前 Agent 任务计划清单（update_plan 工具更新；置顶可视）
 	Ask          *pendingAsk // 当前 agent 的提问（ask_user）；非空时显问答卡、对话阻塞等回答
 	Attachments  []string    // 待发送的附件文件路径（回形针添加，发送时随任务作上下文给 agent）
+	DraftRefs    []string    // 右键菜单「添加到对话」的引用文本（以 chips 展示在输入框上方，发送时拼入上下文）
 	PerfTest     int         // 性能测试令牌（递增→填充 1000 条测试消息，验证 VirtualList 虚加载性能）
 
 	HoveredMsg  int    // 当前 hover 的消息索引（-1=无）→ 揭示该消息的操作按钮
@@ -63,8 +67,9 @@ type ChatState struct {
 	searchSeq   int    // 搜索框受控清空令牌
 
 	// VirtualList 高度缓存：避免每次 Build 重算 ItemHeights 覆盖 Layout 自动回写的实际高度
-	cachedHeights []float64 // 缓存的消息高度数组（len=消息数，nil 时重建）
-	cacheMsgLen   int       // 缓存时的消息总数（用于检测消息变动后重建）
+	cachedHeights      []float64 // 缓存的消息高度数组（len=消息数，nil 时重建）
+	cacheMsgLen        int       // 缓存时的消息总数（用于检测消息变动后重建）
+	cachedScrollOffset float64   // 缓存滚动偏移（OnScroll 保存→下次 Build 回传 VirtualList.ScrollOffset，防止鼠标移动/点击后跳回顶部）
 
 	// 节流保存：记录上次 SaveHistory 的时间，避免每帧完整序列化对话历史
 	lastSaveTime time.Time
@@ -113,11 +118,11 @@ func (s *ChatState) Build(ctx widget.BuildContext) widget.Widget {
 	if s.ShowSearch {
 		mainKids = append(mainKids, s.searchBar())
 	}
-	mainKids = append(mainKids, s.taskProgressPanel())
 	mainKids = append(mainKids, ui.Expand(s.scrollMessages()))
 	if s.Ask != nil { // agent 提问中：问答卡置于输入区上方
 		mainKids = append(mainKids, s.askCard())
 	}
+	mainKids = append(mainKids, s.taskProgressPanel())
 	mainKids = append(mainKids, s.inputArea())
 	main := widget.Div(
 		widget.Style{BackgroundColor: ui.Bg, FlexDirection: "column", AlignItems: "stretch"},
@@ -170,12 +175,18 @@ func (s *ChatState) scrollMessages() widget.Widget {
 		s.cacheMsgLen = msgLen
 	}
 
+
+	// 使用 VirtualList 虚加载：只渲染可视区内的消息，支撑大量消息流畅滚动
 	// 使用 VirtualList 虚加载：只渲染可视区内的消息，支撑大量消息流畅滚动
 	return &widget.VirtualList{
 		ItemCount:           len(filteredIndices),
 		ItemHeight:          80,
 		ItemHeights:         itemHeights,
 		ScrollToBottomToken: s.SendSeq, // 新消息 → 自动滚到底
+		ScrollOffset:        s.cachedScrollOffset,
+		OnScroll: func(so float64) {
+			s.cachedScrollOffset = so
+		},
 		Overscan:            5,
 		RenderItem: func(i int) widget.Widget {
 			return widget.Div(
@@ -315,13 +326,16 @@ func (s *ChatState) layoutToolbar() widget.Widget {
 
 // ─── 对话侧栏 ─────────────────────────────────────────────
 
-// sidebarContent 侧栏内容（180px）：头部（标题 + 切换/导出/新建）+ 会话列表（VirtualList 虚加载）。
+// sidebarContent 侧栏内容（270px）：上部分对话列表 50% + 下部分均分给环图区和 Token 统计（各 25%）
 func (s *ChatState) sidebarContent() widget.Widget {
 	threads := s.Store.Threads
 	itemH := 36.0
+	// 计算整个项目的 Token 用量和分类占比（遍历所有会话）
+	ctxUsed, ctxMax, cats, tokenStats := s.projectTokenStats()
 	return widget.Div(
-		widget.Style{Width: 180, BackgroundColor: ui.BgSubtle, BorderColor: ui.Border, BorderWidth: 1,
+		widget.Style{Width: 270, BackgroundColor: ui.BgSubtle, BorderColor: ui.Border, BorderWidth: 1,
 			FlexDirection: "column", AlignItems: "stretch"},
+		// 头部（对话列表在上方，方便拖拽）
 		widget.Div(
 			widget.Style{Padding: types.EdgeInsetsLTRB(10, 8, 8, 8), BorderColor: ui.Border, BorderWidth: 1,
 				FlexDirection: "row", AlignItems: "center"},
@@ -330,15 +344,388 @@ func (s *ChatState) sidebarContent() widget.Widget {
 			toolBtn("download", false, s.ExportActive),
 			toolBtn("plus", false, func() { s.Store.NewThread(); s.saveHistory(); s.SetState() }),
 		),
-		ui.Expand(&widget.VirtualList{
-			ItemCount:  len(threads),
-			ItemHeight: itemH,
-			Overscan:   5,
-			RenderItem: func(i int) widget.Widget {
-				return s.threadItem(threads[i])
+		// 对话列表：撑满上半部分 50%（Expanded Flex=1，另一半分给底部区域）
+		&widget.Expanded{
+			SingleChildWidget: widget.SingleChildWidget{
+				Child: &widget.VirtualList{
+					ItemCount:  len(threads),
+					ItemHeight: itemH,
+					Overscan:   5,
+					RenderItem: func(i int) widget.Widget {
+						return s.threadItem(threads[i])
+					},
+				},
 			},
-		}),
+			Flex: 1,
+		},
+		// 明显的水平分割线（2px 粗，与对话列表明确分隔）
+		widget.Div(widget.Style{Height: 3, BackgroundColor: ui.Border}),
+		// 下半部分：环图卡片 + Token 统计卡片，用 Padding 包裹
+		&widget.Expanded{
+			SingleChildWidget: widget.SingleChildWidget{
+				Child: widget.Div(
+					widget.Style{FlexDirection: "column", AlignItems: "stretch",
+						Padding: types.EdgeInsetsLTRB(8, 8, 8, 8)},
+					// 卡片1：环图区（占一半）
+					&widget.Expanded{
+						SingleChildWidget: widget.SingleChildWidget{
+							Child: widget.Div(
+								widget.Style{
+									BackgroundColor: ui.Bg,
+									BorderRadius:    6,
+									BorderColor:     ui.Border,
+									BorderWidth:     1,
+									FlexDirection:   "column",
+									AlignItems:      "stretch",
+								},
+								s.donutChartSection(ctxUsed, ctxMax, cats),
+							),
+						},
+						Flex: 1,
+					},
+					widget.Div(widget.Style{Height: 8}), // 卡片间距
+					// 卡片2：Token 统计（占一半）
+					&widget.Expanded{
+						SingleChildWidget: widget.SingleChildWidget{
+							Child: widget.Div(
+								widget.Style{
+									BackgroundColor: ui.Bg,
+									BorderRadius:    6,
+									BorderColor:     ui.Border,
+									BorderWidth:     1,
+									FlexDirection:   "column",
+									AlignItems:      "stretch",
+								},
+								s.tokenStatsSection(tokenStats),
+							),
+						},
+						Flex: 1,
+					},
+				),
+			},
+			Flex: 1,
+		},
 	)
+}
+
+// ─── 环形图 + Token 统计（侧栏上半部分） ──────────────────────
+
+// donutCat 环形图分类项。
+type donutCat struct {
+	Label string       // 分类名
+	Value int          // 数值
+	Color *types.Color // 弧段颜色
+}
+
+// projectTokenStats 计算整个项目的 Token 统计（遍历所有会话）：
+//   - contextUsed：所有会话的 prompt tokens 总和（用于进度环）
+//   - contextMax：上下文上限 1M（1,048,576）
+//   - cats：按消息内容拆分为上下文/工具/提示词/其他四类
+//   - tokenStats：总/缓存命中/未命中/输出
+func (s *ChatState) projectTokenStats() (contextUsed, contextMax int, cats []donutCat, tokenStats struct{ Total, CacheHit, CacheMiss, Output int }) {
+	contextMax = 1048576 // 1M
+	totalPrompt := 0
+	totalCompletion := 0
+	toolTokens := 0
+	skillsTokens := 0
+	mcpTokens := 0
+	promptTokens := 0
+	otherTokens := 0
+	cacheHitTotal := 0   // 所有会话的 API 返回缓存命中 tokens 总和
+	cacheMissTotal := 0  // 所有会话的 API 返回缓存未命中 tokens 总和
+
+	for _, t := range s.Store.Threads {
+		usage := t.CalculateTokenUsage()
+		totalPrompt += usage.PromptTokens
+		totalCompletion += usage.CompletionTokens
+
+		// 累加 API 返回的真实缓存命中/未命中数据
+		cacheHitTotal += t.TokenUsage.PromptCacheHitTokens
+		cacheMissTotal += t.TokenUsage.PromptCacheMissTokens
+
+		// 按消息内容分类 completion tokens
+		for _, m := range t.Messages {
+			if m.Role == state.Assistant {
+				for _, a := range m.Activities {
+					tn := a.Tool
+					ch := len([]rune(tn)) + len([]rune(a.Args)) + len([]rune(a.Result))
+					if strings.HasPrefix(tn, "skill_") || strings.HasPrefix(tn, "skills_") {
+						skillsTokens += ch
+					} else if strings.HasPrefix(tn, "mcp_") {
+						mcpTokens += ch
+					} else {
+						toolTokens += ch
+					}
+				}
+				for _, e := range m.Timeline {
+					if e.Kind == "tool" {
+						tn := e.Tool
+						ch := len([]rune(tn)) + len([]rune(e.Args))
+						if strings.HasPrefix(tn, "skill_") || strings.HasPrefix(tn, "skills_") {
+							skillsTokens += ch
+						} else if strings.HasPrefix(tn, "mcp_") {
+							mcpTokens += ch
+						} else {
+							toolTokens += ch
+						}
+					}
+				}
+				promptTokens += len([]rune(m.Text)) + len([]rune(m.Thinking))
+			}
+		}
+	}
+
+	// 无数据时给默认占位
+	// 无数据时给默认占位（不包含"上下文"——由进度环单独表示）
+	if totalPrompt+totalCompletion == 0 {
+		cats = []donutCat{
+			{Label: "工具", Value: 0, Color: ui.Success},
+			{Label: "Skills", Value: 0, Color: ui.Blue},
+			{Label: "MCP", Value: 0, Color: ui.Purple},
+			{Label: "提示词", Value: 0, Color: ui.Warning},
+			{Label: "其他", Value: 0, Color: ui.FgMuted},
+		}
+		return
+	}
+
+	// 归一化分类值到 completionTokens 范围内
+	allTokens := toolTokens + skillsTokens + mcpTokens + promptTokens + otherTokens
+	if totalCompletion > 0 && allTokens > 0 {
+		sum := float64(allTokens)
+		toolTokens = int(float64(toolTokens) / sum * float64(totalCompletion))
+		skillsTokens = int(float64(skillsTokens) / sum * float64(totalCompletion))
+		mcpTokens = int(float64(mcpTokens) / sum * float64(totalCompletion))
+		promptTokens = int(float64(promptTokens) / sum * float64(totalCompletion))
+		otherTokens = totalCompletion - toolTokens - skillsTokens - mcpTokens - promptTokens
+		if otherTokens < 0 {
+			otherTokens = 0
+		}
+	}
+	if toolTokens < 1 && totalCompletion > 0 && allTokens == 0 {
+		toolTokens = 1
+	}
+
+	contextUsed = totalPrompt
+	if contextUsed > contextMax {
+		contextUsed = contextMax
+	}
+
+	// 分类明细不包含"上下文"——由进度环单独表示
+	cats = []donutCat{
+		{Label: "工具", Value: toolTokens, Color: ui.Success},
+		{Label: "Skills", Value: skillsTokens, Color: ui.Blue},
+		{Label: "MCP", Value: mcpTokens, Color: ui.Purple},
+		{Label: "提示词", Value: promptTokens, Color: ui.Warning},
+		{Label: "其他", Value: otherTokens, Color: ui.FgMuted},
+	}
+
+	total := totalPrompt + totalCompletion
+	tokenStats.Total = total
+	tokenStats.Output = totalCompletion
+	if cacheHitTotal > 0 || cacheMissTotal > 0 {
+		// 有 API 返回的真实缓存数据
+		tokenStats.CacheHit = cacheHitTotal
+		tokenStats.CacheMiss = cacheMissTotal
+	} else {
+		// 无真实数据时回退启发式估算（缓存命中约 60%）
+		tokenStats.CacheHit = int(float64(totalPrompt) * 0.6)
+		tokenStats.CacheMiss = totalPrompt - tokenStats.CacheHit
+		if tokenStats.CacheMiss < 0 {
+			tokenStats.CacheMiss = 0
+		}
+	}
+	return
+}
+
+// donutChartSection 上下文进度环 + 分类明细（上下结构：环在上、文字在下）。
+// 侧栏中间部分，已不包含 Token 统计（tokenStatsSection 独立展示）。
+func (s *ChatState) donutChartSection(contextUsed, contextMax int, cats []donutCat) widget.Widget {
+	ringSize := 90.0
+	pct := 0.0
+	if contextMax > 0 {
+		pct = float64(contextUsed) * 100.0 / float64(contextMax)
+	}
+	centerText := fmt.Sprintf("%.0f%%", pct)
+
+	// 分类明细——各分类值占总上下文的百分比
+	ctxBase := float64(contextUsed)
+	if ctxBase <= 0 {
+		ctxBase = 1
+	}
+	// 将5个分类按2个一组放入行，用 Expanded 平分空间
+	var detailRows []widget.Widget
+	for i := 0; i < len(cats); i += 2 {
+		rowKids := []widget.Widget{}
+		for j := i; j < i+2 && j < len(cats); j++ {
+			cc := cats[j]
+			pct2 := float64(cc.Value) * 100.0 / ctxBase
+			item := widget.Div(
+				widget.Style{FlexDirection: "row", AlignItems: "center", Padding: types.EdgeInsetsLTRB(2, 1, 2, 1)},
+				widget.Div(widget.Style{Width: 8, Height: 8, BackgroundColor: cc.Color, BorderRadius: 4}),
+				widget.Div(widget.Style{Width: 3}),
+				ui.TextC(cc.Label, *ui.FgSubtle, 11),
+				ui.Expand(widget.Div(widget.Style{})),
+				ui.TextC(fmt.Sprintf("%.0f%%", pct2), *ui.Fg, 11),
+			)
+			rowKids = append(rowKids, &widget.Expanded{
+				SingleChildWidget: widget.SingleChildWidget{Child: item},
+				Flex: 1,
+			})
+		}
+		detailRows = append(detailRows,
+			widget.Div(
+				widget.Style{FlexDirection: "row", AlignItems: "center"},
+				rowKids,
+			),
+		)
+	}
+
+	// 上下结构：环在上，分类明细在下
+	return widget.Div(
+		widget.Style{FlexDirection: "column", AlignItems: "center", Padding: types.EdgeInsetsLTRB(6, 6, 8, 6)},
+		// 环居中（PaintLayer自绘环+百分比文字，MeasureText精确居中）
+		widget.Div(
+			widget.Style{Width: ringSize, Height: ringSize},
+			&widget.PaintLayer{
+				OnPaint: func(cvs2 canvas.Canvas, ox, oy, w, h float64) {
+					// 先画环形
+					paintProgressRing(cvs2, ox, oy, w, h, contextUsed, contextMax)
+					// 再画中心百分比文字（精确居中）
+					font := canvas.Font{Size: 13, Weight: canvas.FontWeightBold}
+					tm := cvs2.MeasureText(centerText, font)
+					inkH := tm.InkBottom - tm.InkTop
+					if inkH <= 0 {
+						inkH = font.Size * 1.2
+					}
+					tx := ox + (w-tm.Width)/2
+					ty := oy + (h+inkH)/2 - tm.InkBottom
+					tp := paint.DefaultPaint()
+					tp.Color = *ui.Fg
+					cvs2.DrawText(centerText, tx, ty, font, tp)
+				},
+			},
+		),
+		// 分类明细：3行2列网格，每项只显示白色百分比
+		widget.Div(
+			widget.Style{FlexDirection: "column", AlignItems: "stretch", Width: 240},
+			detailRows,
+		),
+	)
+}
+
+// tokenStatsSection Token 统计
+// tokenStatsSection Token 统计：四行分别显示总/缓存命中/未命中/输出，每行标签+值左对齐。
+func (s *ChatState) tokenStatsSection(ts struct{ Total, CacheHit, CacheMiss, Output int }) widget.Widget {
+	statRow := func(label string, value string, valColor types.Color) widget.Widget {
+		return widget.Div(
+			widget.Style{FlexDirection: "row", AlignItems: "center", Padding: types.EdgeInsetsLTRB(0, 0, 0, 6)},
+			ui.TextC(label, *ui.FgSubtle, 13),
+			ui.Expand(widget.Div(widget.Style{})),
+			ui.TextC(value, valColor, 14),
+		)
+	}
+	return widget.Div(
+		widget.Style{FlexDirection: "column", AlignItems: "stretch", Padding: types.EdgeInsetsLTRB(6, 6, 8, 6)},
+		statRow("总", shortToken(ts.Total), *ui.Fg),
+		statRow("缓存命中", shortToken(ts.CacheHit), *ui.Success),
+		statRow("未命中", shortToken(ts.CacheMiss), *ui.Warning),
+		statRow("输出", shortToken(ts.Output), *ui.Accent),
+	)
+}
+
+// shortToken 把 token 数格式化为可读短字符串，如 1200→"1.2k"、1050000→"1.0M"。
+func shortToken(n int) string {
+	switch {
+	case n >= 1000000:
+		return fmt.Sprintf("%.1fM", float64(n)/1000000)
+	case n >= 1000:
+		return fmt.Sprintf("%.1fk", float64(n)/1000)
+	default:
+		return fmt.Sprintf("%d", n)
+	}
+}
+
+// paintProgressRing 绘制圆形进度环（单弧段）：灰色背景环 + 强调色进度弧（从12点顺时针），
+// 低用量绿、中用量黄、高用量红。
+func paintProgressRing(cvs canvas.Canvas, ox, oy, w, h float64, contextUsed, contextMax int) {
+	cx := ox + w/2
+	cy := oy + h/2
+	outerR := w * 0.38
+	innerR := outerR * 0.55
+	degToRad := func(d float64) float64 { return d * math.Pi / 180.0 }
+
+	// 计算进度比例
+	progress := 0.0
+	if contextMax > 0 {
+		progress = float64(contextUsed) / float64(contextMax)
+	}
+	if progress > 1.0 {
+		progress = 1.0
+	}
+
+	// ---- 1. 画灰色背景环（不填充中心镂空——留给调用方画文字） ----
+	bgPath := &canvas.Path{}
+	bgPath.MoveTo(cx, cy)
+	bgPath.LineTo(cx+outerR, cy)
+	bgPath.Arc(cx, cy, outerR, 0, 360, false)
+	bgPath.LineTo(cx, cy)
+	bgPath.Close()
+
+	cvs.Save()
+	cvs.Clip(bgPath)
+	bgFill := paint.DefaultPaint()
+	bgFill.Color = *ui.BgMuted
+	bgFill.AntiAlias = true
+	cvs.DrawCircle(cx, cy, outerR, bgFill)
+	cvs.Restore()
+
+	// 镂空中心（用BgSubtle圆形覆盖）
+	holeFill := paint.DefaultPaint()
+	holeFill.Color = *ui.BgSubtle
+	holeFill.AntiAlias = true
+	cvs.DrawCircle(cx, cy, innerR, holeFill)
+
+	// ---- 2. 画进度弧段 ----
+	if progress > 0.005 {
+		span := 360.0 * progress
+		if span < 1.0 {
+			span = 1.0
+		}
+		startAngle := -90.0
+		sRad := degToRad(startAngle)
+		sx := cx + outerR*math.Cos(sRad)
+		sy := cy + outerR*math.Sin(sRad)
+
+		arcPath := &canvas.Path{}
+		arcPath.MoveTo(cx, cy)
+		arcPath.LineTo(sx, sy)
+		arcPath.Arc(cx, cy, outerR, startAngle, startAngle+span, false)
+		arcPath.LineTo(cx, cy)
+		arcPath.Close()
+
+		// 进度颜色：低绿、中黄、高红
+		arcColor := *ui.Success
+		if progress > 0.7 {
+			arcColor = *ui.Warning
+		}
+		if progress > 0.9 {
+			arcColor = *ui.Danger
+		}
+
+		cvs.Save()
+		cvs.Clip(arcPath)
+		arcFill := paint.DefaultPaint()
+		arcFill.Color = arcColor
+		arcFill.AntiAlias = true
+		cvs.DrawCircle(cx, cy, outerR, arcFill)
+		cvs.Restore()
+	}
+
+	// ---- 3. 外圈描边 ----
+	sp := paint.DefaultStrokePaint()
+	sp.Color = *ui.Border
+	sp.StrokeWidth = 0.5
+	cvs.DrawCircle(cx, cy, outerR, sp)
 }
 
 // threadItem 会话项：左强调条(当前) + 状态灯(运行黄/就绪绿) + 标题 + 关闭×。整行可点、悬停高亮。
@@ -533,7 +920,6 @@ func (s *ChatState) agentBusy() bool { return s.Bridge != nil && s.Bridge.IsRunn
 func (s *ChatState) persistAgentToggles() {
 	core.Settings.RequireApproval = !s.AutoReview // 自动审核 ↔ 破坏性操作需人工确认
 	core.Settings.Autonomous = s.Autonomous
-	core.Settings.AutoCollapse = s.AutoCollapse
 	core.Save()
 }
 
@@ -568,8 +954,15 @@ func (s *ChatState) Regenerate(t *state.Thread, i int) {
 	}
 	s.HoveredMsg = -1
 	s.SendSeq++
+	// å¦æ user æ¶æ¯æé¿ææ¬æä»¶ï¼ä»æä»¶æ¢å¤åæï¼Text æ­¤æ¶ä»ä¸ºæä»¶å¼ç¨ï¼
+	userText := user.Text
+	if user.LongTextFile != "" {
+		if data, err := os.ReadFile(user.LongTextFile); err == nil {
+			userText = string(data)
+		}
+	}
 	s.saveHistory()
-	s.Bridge.Start(user.Text)
+	s.Bridge.Start(userText)
 	s.SetState()
 }
 
@@ -598,9 +991,11 @@ func (s *ChatState) inputArea() widget.Widget {
 		placeholder = "Agent 运行中…（点停止后再发）"
 	}
 	ta := widget.NewTextarea(placeholder, 3, func(t string) { s.Store.Draft = t })
+	ta.SubmitOnEnter = true // Enter 发送 / Shift+Enter 换行
+	ta.OnSubmit = func(string) { s.Send() }
 	ta.Wrap = true          // 长输入按宽折行，不横向滚动（用户：输入框要自动换行）
 	ta.Text = s.Store.Draft // 重建时回填草稿（发送后随 SendSeq 复位为空）
-	ta.ResetToken = s.SendSeq
+	ta.ResetToken = s.SendSeq + s.DraftVersion
 	ta.BGColor = types.Color{} // 透明：让外层圆角包裹盒的背景+圆角透出（否则 textarea 方角盖住上圆角）
 	ta.Color = *ui.Fg
 	ta.CursorColor = *ui.Fg // 亮光标，深背景可见
@@ -613,6 +1008,9 @@ func (s *ChatState) inputArea() widget.Widget {
 
 	// 输入框包裹盒：圆角 8、1px 边框，含 [附件 chips] + textarea（撑满剩余高）+ 底部工具按钮栏。
 	boxKids := []widget.Widget{}
+	if len(s.DraftRefs) > 0 {
+		boxKids = append(boxKids, s.refChips())
+	}
 	if len(s.Attachments) > 0 {
 		boxKids = append(boxKids, s.attachmentChips())
 	}
@@ -621,14 +1019,15 @@ func (s *ChatState) inputArea() widget.Widget {
 		widget.Div(
 			widget.Style{Padding: types.EdgeInsetsLTRB(8, 4, 8, 8), FlexDirection: "row", AlignItems: "center"},
 			iconGhost("paperclip", s.addAttachment),
+			widget.Div(widget.Style{Width: 4}),
+			iconGhost("folder", s.addAttachmentDir),
 			ui.Expand(widget.Div(widget.Style{})),
 			iconGhost("zap", func() { s.loadTestData() }), // ⚡性能测试：填充1000条消息验证虚加载
 			widget.Div(widget.Style{Width: 5}),
 			s.reviewToggle(),
 			widget.Div(widget.Style{Width: 5}),
 			toggleBtn("refresh-cw", "自主", s.Autonomous, ui.Blue, func() { s.Autonomous = !s.Autonomous; s.persistAgentToggles(); s.SetState() }),
-			widget.Div(widget.Style{Width: 5}),
-			toggleBtn("chevron-down", "收缩", s.AutoCollapse, ui.Accent, func() { s.AutoCollapse = !s.AutoCollapse; s.persistAgentToggles(); s.SetState() }),
+
 			widget.Div(widget.Style{Width: 8}),
 			s.sendOrStop(),
 		),
@@ -661,6 +1060,17 @@ func (s *ChatState) addAttachment() {
 	}
 }
 
+// addAttachmentDir 目录附件：选择项目文件夹，递归添加到附件列表。
+func (s *ChatState) addAttachmentDir() {
+	if widget.OpenFolderDialog == nil {
+		return
+	}
+	if p := widget.OpenFolderDialog("添加项目文件夹到附件"); p != "" {
+		s.Attachments = append(s.Attachments, p)
+		s.SetState()
+	}
+}
+
 func (s *ChatState) removeAttachment(i int) {
 	if i >= 0 && i < len(s.Attachments) {
 		s.Attachments = append(s.Attachments[:i], s.Attachments[i+1:]...)
@@ -677,7 +1087,14 @@ func (s *ChatState) attachmentChips() widget.Widget {
 			widget.Div(
 				widget.Style{FlexDirection: "row", AlignItems: "center", BackgroundColor: ui.BgMuted,
 					BorderRadius: 4, Padding: types.EdgeInsetsLTRB(6, 3, 4, 3)},
-				widget.Lucide("file-text", widget.IconSize(11), widget.IconColor(*ui.FgMuted)),
+				// 目录显示 folder 图标，文件显示 file-text 图标
+				func() widget.Widget {
+					iconName := "file-text"
+					if info, err := os.Stat(p); err == nil && info.IsDir() {
+						iconName = "folder"
+					}
+					return widget.Lucide(iconName, widget.IconSize(11), widget.IconColor(*ui.FgMuted))
+				}(),
 				widget.Div(widget.Style{Width: 4}),
 				ui.TextC(filepath.Base(p), *ui.Fg, 11),
 				widget.Div(widget.Style{Width: 3}),
@@ -702,18 +1119,145 @@ func attachmentContext(atts []string) string {
 	}
 	var b strings.Builder
 	b.WriteString("\n\n# 用户附件")
+	totalLimit := 50000 // 所有附件总内容上限
 	for _, p := range atts {
-		data, err := os.ReadFile(p)
+		if totalLimit <= 0 {
+			b.WriteString("\n…（附件内容已达上限，剩余已忽略）")
+			break
+		}
+		info, err := os.Stat(p)
 		if err != nil {
 			continue
 		}
-		content := string(data)
-		if len(content) > 20000 {
-			content = content[:20000] + "\n…（已截断）"
+		if info.IsDir() {
+			// 目录：递归遍历，收集文件内容
+			dirSize := 0
+			filepath.WalkDir(p, func(path string, d os.DirEntry, err error) error {
+				if err != nil || d.IsDir() {
+					return nil // skip dirs
+				}
+				// 跳过常见噪音目录
+				rel, _ := filepath.Rel(p, path)
+				if rel != "" {
+					parts := strings.Split(rel, string(filepath.Separator))
+					for _, seg := range parts {
+						switch seg {
+						case "node_modules", ".git", ".svn", "__pycache__", ".next",
+							"target", "bin", "obj", "dist", "build", "vendor":
+							return filepath.SkipDir
+						}
+					}
+				}
+				data, rerr := os.ReadFile(path)
+				if rerr != nil {
+					return nil
+				}
+				c := string(data)
+				if len(c) > 20000 {
+					c = c[:20000] + "\n…（已截断）"
+				}
+				if len(c)+dirSize > totalLimit {
+					c = c[:totalLimit-dirSize]
+					fmt.Fprintf(&b, "\n\n## %s\n%s\n…（目录内容已达上限）", path, c)
+					totalLimit = 0
+					return nil
+				}
+				dirSize += len(c)
+				fmt.Fprintf(&b, "\n\n## %s\n%s", path, c)
+				return nil
+			})
+			totalLimit -= dirSize
+		} else {
+			data, err := os.ReadFile(p)
+			if err != nil {
+				continue
+			}
+			content := string(data)
+			if len(content) > 20000 {
+				content = content[:20000] + "\n…（已截断）"
+			}
+			if len(content) > totalLimit {
+				content = content[:totalLimit] + "\n…（已达附件总上限）"
+			}
+			fmt.Fprintf(&b, "\n\n## %s\n%s", p, content)
+			totalLimit -= len(content)
 		}
-		fmt.Fprintf(&b, "\n\n## %s\n%s", p, content)
 	}
 	return b.String()
+}
+
+// addRef 右键菜单「添加到对话」：把引用文本加入 DraftRefs 列表，以 chip 组件展示。
+func (s *ChatState) AddRef(text string) {
+	s.DraftRefs = append(s.DraftRefs, text)
+	s.SetState()
+}
+
+// removeRef 移除指定索引的引用 chip。
+func (s *ChatState) removeRef(i int) {
+	if i >= 0 && i < len(s.DraftRefs) {
+		s.DraftRefs = append(s.DraftRefs[:i], s.DraftRefs[i+1:]...)
+		s.SetState()
+	}
+}
+
+// refLabel 从引用文本中提取简短 chip 标签（用于展示）。
+func refLabel(text string) string {
+	if strings.HasPrefix(text, "参考文件：") {
+		return strings.TrimPrefix(text, "参考文件：")
+	}
+	if strings.HasPrefix(text, "参考目录：") {
+		return strings.TrimPrefix(text, "参考目录：")
+	}
+	if strings.HasPrefix(text, "\x60\x60\x60\\n") {
+		lines := strings.SplitN(text, "\\n", 3)
+		if len(lines) > 1 && len(lines[0]) > 3 {
+			return lines[0][3:] + " 代码片段"
+		}
+		return "代码片段"
+	}
+	if len(text) > 30 {
+		return text[:30] + "\u2026"
+	}
+	return text
+}
+
+// refChips 待发送引用 chips（标签 + 移除按钮），类似 attachmentChips 风格。
+func (s *ChatState) refChips() widget.Widget {
+	var chips []widget.Widget
+	for i, ref := range s.DraftRefs {
+		idx := i
+		label := refLabel(ref)
+		chips = append(chips,
+			widget.Div(
+				widget.Style{FlexDirection: "row", AlignItems: "center", BackgroundColor: ui.BgMuted,
+					BorderRadius: 4, Padding: types.EdgeInsetsLTRB(6, 3, 4, 3)},
+				// 根据引用类型选择图标
+				func() widget.Widget {
+					iconName := "message-square"
+					if strings.HasPrefix(ref, "参考文件：") {
+						iconName = "file-text"
+					} else if strings.HasPrefix(ref, "参考目录：") {
+						iconName = "folder"
+					} else if strings.HasPrefix(ref, "\x60\x60\x60") {
+						iconName = "braces"
+					}
+					return widget.Lucide(iconName, widget.IconSize(11), widget.IconColor(*ui.FgMuted))
+				}(),
+				widget.Div(widget.Style{Width: 4}),
+				ui.TextC(label, *ui.Fg, 11),
+				widget.Div(widget.Style{Width: 3}),
+				&widget.Clickable{
+					SingleChildWidget: widget.SingleChildWidget{Child: widget.Lucide("x", widget.IconSize(11), widget.IconColor(*ui.FgMuted))},
+					OnClick:           func() { s.removeRef(idx) },
+				},
+			),
+			widget.Div(widget.Style{Width: 6}),
+		)
+	}
+	return widget.Div(
+		widget.Style{FlexDirection: "row", AlignItems: "center", Padding: types.EdgeInsetsLTRB(8, 8, 8, 0)},
+		chips,
+	)
 }
 
 // attachmentNames 附件文件名（逗号分隔，用于显示）。
@@ -818,6 +1362,7 @@ func iconGhost(icon string, onClick func()) widget.Widget {
 	return &widget.Button{
 		Icon: icon, IconSize: 14, TextColor: *ui.FgMuted,
 		OnClick: onClick, Color: *ui.Bg,
+		BorderColor: ui.Border, BorderWidth: 1, BorderRadius: 4,
 		MinWidth: 24, MinHeight: 24,
 	}
 }
@@ -903,6 +1448,7 @@ func (s *ChatState) sendTask(task string) {
 	}
 	s.SendSeq++
 	s.Plan = nil
+	s.DraftRefs = nil
 	s.Attachments = nil
 	if s.Bridge == nil {
 		if NewBridge != nil {
@@ -924,6 +1470,21 @@ func (s *ChatState) Send() {
 	draft := s.Store.Draft
 	atts := s.Attachments
 	display := draft // 显示给用户的消息：正文 + 附件名（不含内容）
+
+	// 长文本检测：超过 2000 字节 → 写入临时文件，chat 只显引用
+	// 避免 VirtualList 中大量文本导致滚动跳动、查看不便。
+	const longMsgThreshold = 2000
+	var longTextFile string
+	if len(draft) > longMsgThreshold {
+		longDir := filepath.Join(".pair", "chat-long")
+		_ = os.MkdirAll(longDir, 0755)
+		fname := fmt.Sprintf("long-msg-%d.txt", time.Now().UnixNano())
+		longPath := filepath.Join(longDir, fname)
+		_ = os.WriteFile(longPath, []byte(draft), 0644)
+		longTextFile = longPath
+		display = fmt.Sprintf("[长消息 · 已保存至 %s，内容不在此展示以免滚动跳动]", longPath)
+	}
+
 	if len(atts) > 0 {
 		if display != "" {
 			display += "\n"
@@ -932,6 +1493,13 @@ func (s *ChatState) Send() {
 	}
 	if !s.Store.Send(display) { // 只加 user 消息（Send 内部 trim+空判）
 		return
+	}
+	// 如果有长文本临时文件路径，回写到最后一条消息记录（供 Regenerate 恢复原文）
+	if longTextFile != "" {
+		t := s.Store.Active()
+		if t != nil && len(t.Messages) > 0 {
+			t.Messages[len(t.Messages)-1].LongTextFile = longTextFile
+		}
 	}
 	s.SendSeq++  // 清输入框 + 滚到底
 	s.Plan = nil // 新任务 → 清旧计划清单（Agent 会用 update_plan 重列）
@@ -944,7 +1512,11 @@ func (s *ChatState) Send() {
 	if s.Bridge == nil {
 		return
 	}
-	s.Bridge.Start(draft + attachmentContext(atts)) // agent 任务含附件内容（内容只给 LLM、不污染显示）
+	refsText := ""
+	if len(s.DraftRefs) > 0 {
+		refsText = "\n\n# 用户引用\n" + strings.Join(s.DraftRefs, "\n\n")
+	}
+	s.Bridge.Start(draft + refsText + attachmentContext(atts)) // agent 任务含附件内容（内容只给 LLM、不污染显示）
 	s.saveHistory()
 	s.SetState()
 }

@@ -12,3 +12,11 @@ Thumbs.db
 *.user
 *.suo
 go.work
+go.work.sum
+
+# Pair CodeAgent working directory (conversations, session)
+.pair/
+
+# Debug / temp files
+_*.txt
+_*.go

@@ -20,7 +20,7 @@ func uiTokens(t appTheme) ui.Tokens {
 	return ui.Tokens{
 		Bg: t.bgPrimary, BgSubtle: t.bgSecondary, BgMuted: t.bgTertiary,
 		BgHover: t.bgHover, BgActive: t.bgActive, Border: t.border,
-		Accent: t.accent, AccentStrong: t.accentEmph, Blue: types.ColorFromRGB(59, 130, 246), OnAccent: types.ColorFromRGB(255, 255, 255),
+		Accent: t.accent, AccentStrong: t.accentEmph, Blue: types.ColorFromRGB(59, 130, 246), Purple: types.ColorFromRGB(168, 130, 255), OnAccent: types.ColorFromRGB(255, 255, 255),
 		Text: t.text, TextSubtle: t.textSec, TextMuted: t.textMuted,
 		Success: t.success, Warning: t.warning, Danger: t.danger,
 		UserBg: t.userBg, UserBorder: t.userBorder,

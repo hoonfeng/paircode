@@ -26,7 +26,7 @@ type AgentBridge interface {
 var NewBridge func(cs *ChatState) AgentBridge
 
 // TheState 是对话面板的持久状态（包级单例，跨 relayout 存活）。
-var TheState = &ChatState{Store: state.NewChatStore(), AutoReview: true, HoveredMsg: -1, ShowThreads: true}
+var TheState = &ChatState{Store: state.NewChatStore(), AutoReview: true, HoveredMsg: -1, ShowThreads: true, cachedScrollOffset: -1}
 
 // ChatPanel 对话面板。
 type ChatPanel struct{ widget.StatefulWidget }
@@ -38,7 +38,7 @@ func Area() widget.Widget { return &ChatPanel{} }
 
 // Reset 复位对话面板单例（测试用）。
 func Reset() {
-	TheState = &ChatState{Store: state.NewChatStore(), AutoReview: true, HoveredMsg: -1, ShowThreads: true}
+	TheState = &ChatState{Store: state.NewChatStore(), AutoReview: true, HoveredMsg: -1, ShowThreads: true, cachedScrollOffset: -1}
 }
 
 // AttachmentContext 把附件内容拼成给 agent 的上下文段（chat_test.go 用）。

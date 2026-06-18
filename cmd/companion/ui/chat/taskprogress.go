@@ -40,6 +40,7 @@ type taskProgressState struct {
 	tasks    []taskItem // 当前任务列表（含本地覆盖）
 	editIdx  int        // 正在编辑的任务索引（-1=无）
 	editText string     // 编辑框文本
+	_prevAllDone bool      // 上次是否全部完成（检测过渡态用）
 }
 
 // ─── ChatState 接口（挂载点）───────────────────────────────
@@ -47,7 +48,7 @@ type taskProgressState struct {
 // taskPS 返回任务进度交互状态（懒初始化）。
 func (s *ChatState) taskPS() *taskProgressState {
 	if s._taskPS == nil {
-		s._taskPS = &taskProgressState{expanded: true, editIdx: -1}
+		s._taskPS = &taskProgressState{expanded: false, editIdx: -1}
 	}
 	return s._taskPS
 }
@@ -70,7 +71,12 @@ func (s *ChatState) taskProgressPanel() widget.Widget {
 	s.syncTasksFromPlan()
 
 	stats := calcStats(tps.tasks)
-	tps.expanded = s.AutoCollapse && !s.agentBusy() && stats.completed == stats.total && stats.total > 0
+// 过渡态自动折叠：只在刚完成时触发一次，不覆盖用户手动切换
+allDone := !s.agentBusy() && stats.completed == stats.total && stats.total > 0
+if s.AutoCollapse && allDone && !tps._prevAllDone && tps.expanded {
+	tps.expanded = false
+}
+tps._prevAllDone = allDone
 
 	kids := []widget.Widget{
 		s.taskHeader(tps, stats),
@@ -220,7 +226,7 @@ func (s *ChatState) taskHeader(tps *taskProgressState, stats progressStats) widg
 			Margin:          types.EdgeInsetsLTRB(0, 4, 0, 0),
 		},
 		widget.Div(widget.Style{
-			Width:           pct / 100 * 100 + "%",
+			Width:           pct,
 			BackgroundColor: ui.Accent,
 			BorderRadius:    1.5,
 		}),
@@ -289,14 +295,13 @@ func (s *ChatState) taskRow(tps *taskProgressState, i int) widget.Widget {
 	var titleWidget widget.Widget
 	if tps.editIdx == i {
 		// 编辑模式：输入框 + 保存/取消按钮
-		in := widget.NewInput("", func(string) {}).WithText(tps.editText)
+		in := widget.NewInput("", func(string) {})
+		in.Text = tps.editText
 		in.Color = *ui.Fg
 		in.CursorColor = *ui.Fg
 		in.PlaceholderColor = *ui.FgMuted
 		in.BGColor = *ui.Bg
 		in.BorderColor = *ui.Border
-		in.FontSize = 11.5
-		in.MinHeight = 22
 		in.Text = tps.editText
 		in.OnSubmit = func(txt string) {
 			if strings.TrimSpace(txt) != "" {

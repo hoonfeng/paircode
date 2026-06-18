@@ -25,6 +25,7 @@ type Tokens struct {
 	Accent       types.Color // 强调（链接/焦点环/选中文字）
 	AccentStrong types.Color // 强调实心（主按钮底）
 	Blue         types.Color // 自主模式蓝（刻意区别于 Accent）
+	Purple       types.Color // MCP 紫色
 	OnAccent     types.Color // 强调底之上的文字（白）
 	Text         types.Color // 主文字
 	TextSubtle   types.Color // 次文字
@@ -55,7 +56,7 @@ type Tokens struct {
 // 稳定指针调色板：companion 各处直接用 ui.Bg 作 *Color、用 *ui.Text 取值；Apply 就地改这些指针的目标。
 var (
 	Bg, BgSubtle, BgMuted, BgHover, BgActive, Border = nc(), nc(), nc(), nc(), nc(), nc()
-	Accent, AccentStrong, Blue, OnAccent, White      = nc(), nc(), nc(), nc(), nc()
+	Accent, AccentStrong, Blue, Purple, OnAccent, White = nc(), nc(), nc(), nc(), nc(), nc()
 	Fg, FgSubtle, FgMuted                            = nc(), nc(), nc() // 前景文字色（名避开 Text/Subtle/Muted 文字 helper）
 	Success, Warning, Danger                         = nc(), nc(), nc()
 	UserBg, UserBorder                               = nc(), nc()
@@ -81,7 +82,7 @@ func darkTokens() Tokens {
 	return Tokens{
 		Bg: h("#0d1117"), BgSubtle: h("#161b22"), BgMuted: h("#21262d"),
 		BgHover: h("#30363d"), BgActive: rgb(28, 45, 74), Border: h("#30363d"),
-		Accent: h("#58a6ff"), AccentStrong: h("#1f6feb"), Blue: rgb(59, 130, 246), OnAccent: rgb(255, 255, 255),
+		Accent: h("#58a6ff"), AccentStrong: h("#1f6feb"), Blue: rgb(59, 130, 246), Purple: rgb(168, 130, 255), OnAccent: rgb(255, 255, 255),
 		Text: h("#e6edf3"), TextSubtle: h("#8b949e"), TextMuted: h("#6e7681"),
 		Success: h("#3fb950"), Warning: h("#d29922"), Danger: h("#f85149"),
 		UserBg: rgb(24, 23, 18), UserBorder: rgb(38, 35, 23),
@@ -103,7 +104,7 @@ func Apply(t Tokens) {
 	}
 	*Bg, *BgSubtle, *BgMuted = t.Bg, t.BgSubtle, t.BgMuted
 	*BgHover, *BgActive, *Border = t.BgHover, t.BgActive, t.Border
-	*Accent, *AccentStrong, *Blue, *OnAccent = t.Accent, t.AccentStrong, t.Blue, t.OnAccent
+	*Accent, *AccentStrong, *Blue, *Purple, *OnAccent = t.Accent, t.AccentStrong, t.Blue, t.Purple, t.OnAccent
 	*White = types.ColorFromRGB(255, 255, 255)
 	*Fg, *FgSubtle, *FgMuted = t.Text, t.TextSubtle, t.TextMuted
 	*Success, *Warning, *Danger = t.Success, t.Warning, t.Danger

@@ -109,8 +109,60 @@ func main() {
 
 	// Ctrl+S 保存当前编辑器标签（全局快捷键，优先于焦点 Widget）。VK_S=0x53。
 	application.ShortcutManager.Register(0x53, event.ModCtrl, func() { editorpanel.Editor.Save() }, "Ctrl+S 保存")
-	application.ShortcutManager.Register(0x46, event.ModCtrl, func() { chatpanel.TheState.ToggleSearch() }, "Ctrl+F 搜索对话") // VK_F
+	application.ShortcutManager.Register(0x46, event.ModCtrl, func() {
+	// 编辑器聚焦时 Ctrl+F 走编辑器内查找，不触发对话搜索（避免冲突）
+	if !widget.HasFocusedEditor() {
+		chatpanel.TheState.ToggleSearch()
+	}
+}, "Ctrl+F 搜索对话") // VK_F
 	application.ShortcutManager.Register(0xBC, event.ModCtrl, func() { settingspanel.OpenDialog() }, "Ctrl+, 打开设置")               // VK_OEM_COMMA
+
+	// ── 菜单快捷键注册（匹配标题栏菜单标注的快捷键）──
+
+	// 文件菜单
+	application.ShortcutManager.Register(0x4E, event.ModCtrl, func() { ctxmenupanel.NewEntryIn(core.Root(), false) }, "Ctrl+N 新建文件") // VK_N
+	application.ShortcutManager.Register(0x4F, event.ModCtrl, func() { ctxmenupanel.OpenFileViaDialog() }, "Ctrl+O 打开文件")          // VK_O
+	application.ShortcutManager.Register(0x4F, event.ModCtrl|event.ModShift, func() { ctxmenupanel.AddFolderViaDialog() }, "Ctrl+Shift+O 添加文件夹到工作区")
+
+	// 编辑菜单（跨文件搜索）
+	application.ShortcutManager.Register(0x46, event.ModCtrl|event.ModShift, func() {
+		if shellStateRef != nil {
+			shellStateRef.showLeft("search")
+		}
+	}, "Ctrl+Shift+F 跨文件搜索") // VK_F + Shift
+
+	// 视图菜单
+	application.ShortcutManager.Register(0x42, event.ModCtrl, func() {
+		if shellStateRef != nil {
+			shellStateRef.showLeft("files")
+		}
+	}, "Ctrl+B 文件树") // VK_B
+	application.ShortcutManager.Register(0x4B, event.ModCtrl, func() {
+		if shellStateRef != nil {
+			shellStateRef.toggleFocusMode()
+		}
+	}, "Ctrl+K 专注模式") // VK_K
+	application.ShortcutManager.Register(0x43, event.ModCtrl|event.ModShift, func() {
+		if shellStateRef != nil {
+			shellStateRef.panels.Toggle(state.ZoneRight)
+			shellStateRef.SetState()
+		}
+	}, "Ctrl+Shift+C 对话") // VK_C + Shift
+	application.ShortcutManager.Register(0x4A, event.ModCtrl, func() {
+		if shellStateRef != nil {
+			shellStateRef.panels.Toggle(state.ZoneBottom)
+			shellStateRef.SetState()
+		}
+	}, "Ctrl+J 终端") // VK_J
+	application.ShortcutManager.Register(0xBB, event.ModCtrl, func() {
+		menuactions.SetEditorFontSize(menuactions.EditorFontSize() + 1)
+	}, "Ctrl+= 放大") // VK_OEM_PLUS
+	application.ShortcutManager.Register(0xBD, event.ModCtrl, func() {
+		menuactions.SetEditorFontSize(menuactions.EditorFontSize() - 1)
+	}, "Ctrl+- 缩小") // VK_OEM_MINUS
+
+	// Agent 菜单
+	application.ShortcutManager.Register(0x4D, event.ModCtrl|event.ModShift, func() { menuactions.ShowAgentMonitor() }, "Ctrl+Shift+M Agent 监控面板") // VK_M + Shift
 
 	// ── 工作区关闭回调：未保存提示 → 清除编辑器标签 + 隐藏面板 + 重建 shell → IDE 欢迎页 ──
 	core.OnCloseProject = func() {
@@ -141,7 +193,7 @@ func main() {
 		chatpanel.TheState.LoadHistory()
 	}
 
-	cfg := app.Config{Title: "伴随式 CodeAgent", Width: 1200, Height: 760, Resizable: true, Borderless: true}
+	cfg := app.Config{Title: "伴随式 CodeAgent", Width: 1200, Height: 760, Resizable: true, Borderless: true, BackgroundColor: types.ColorFromRGB(13, 17, 23)}
 	if err := application.Run(cfg); err != nil {
 		fmt.Println("运行失败:", err)
 	}
@@ -194,6 +246,8 @@ type shellState struct {
 	widget.BaseState
 	panels   *state.Panels // 停靠布局的唯一真相来源
 	leftView string        // 左栏当前视图标签："files" / "git"（复刻参考左区多面板 tab 切换）
+
+	focus                  bool   // 专注模式：隐藏编辑器+终端，仅保留侧栏
 
 	// 面板拖拽停靠（Phase 2）：拖动手柄期间记录正在拖的面板组 + 起点/当前鼠标坐标（窗口坐标）。
 	dragPanel              string
@@ -389,7 +443,7 @@ func (s *shellState) titleMenus() []widget.Widget {
 			{Label: "对话内搜索", Shortcut: "Ctrl+F", Command: "edit.chatsearch"},
 		}, s.onEditMenu),
 		menuBarBtn("视图", []widget.DropdownItem{
-			{Label: "专注模式", Shortcut: "Ctrl+K", Disabled: true},
+			{Label: "专注模式", Shortcut: "Ctrl+K", Command: "view.focus", Checked: s.focus},
 			{Label: "文件树", Shortcut: "Ctrl+B", Command: "view.files", Checked: p.Left && s.leftView != "git", Divided: true},
 			{Label: "搜索", Command: "view.search", Checked: p.Left && s.leftView == "search"},
 			{Label: "Git", Command: "view.git", Checked: p.Left && s.leftView == "git"},
@@ -484,11 +538,19 @@ func (s *shellState) onViewMenu(cmd string) {
 		menuactions.SetEditorFontSize(menuactions.EditorFontSize() + 1)
 	case "view.zoomOut":
 		menuactions.SetEditorFontSize(menuactions.EditorFontSize() - 1)
+	case "view.focus":
+		s.toggleFocusMode()
 	case "view.toggleMinimap":
 		core.Settings.HideMinimap = !core.Settings.HideMinimap
 		core.Save()
 		menuactions.Relayout()
 	}
+}
+
+// toggleFocusMode 切换专注模式：隐藏编辑器和终端，仅保留侧栏（对话/文件树）。
+func (s *shellState) toggleFocusMode() {
+	s.focus = !s.focus
+	s.SetState()
 }
 
 // termMenuItems 菜单栏「终端」下拉：列出 CMD/PowerShell/Git Bash，本机没探测到的灰显（Disabled）。
@@ -591,28 +653,43 @@ func (s *shellState) body() widget.Widget {
 			}),
 		)
 	}
-	cols = append(cols, expand(s.midColumn()))
-	if p.Right {
-		rw := p.RightW
-		if p.RightPanel == "chat" { // 对话在右栏：展开对话列表时整栏加宽
-			rw = rightColW(p.RightW)
+	if s.focus {
+		if p.Right {
+			cols = append(cols,
+				expand(widget.Div(
+					widget.Style{BackgroundColor: ui.Bg, FlexDirection: "column", AlignItems: "stretch"},
+					expand(s.zoneInner(state.ZoneRight)),
+				)),
+			)
 		}
-		cols = append(cols,
-			vDivide(func(d float64) {
-				p.RightW = state.Clamp(p.RightW-d, state.MinSideW, state.MaxSideW) // 右栏左侧条：右拖变窄
-				s.SetState()
-			}),
-			widget.Div(
-				widget.Style{Width: rw, BackgroundColor: ui.Bg, FlexDirection: "column", AlignItems: "stretch"},
-				expand(s.zoneInner(state.ZoneRight)),
-			),
-		)
+	} else {
+		cols = append(cols, expand(s.midColumn()))
+		if p.Right {
+			rw := p.RightW
+			if p.RightPanel == "chat" { // 对话在右栏：展开对话列表时整栏加宽
+				rw = rightColW(p.RightW)
+			}
+			cols = append(cols,
+				vDivide(func(d float64) {
+					p.RightW = state.Clamp(p.RightW-d, state.MinSideW, state.MaxSideW) // 右栏左侧条：右拖变窄
+					s.SetState()
+				}),
+				widget.Div(
+					widget.Style{Width: rw, BackgroundColor: ui.Bg, FlexDirection: "column", AlignItems: "stretch"},
+					expand(s.zoneInner(state.ZoneRight)),
+				),
+			)
+		}
 	}
 	return flexRow(cols...)
 }
 
 // midColumn 中间列：编辑区（撑满，恒居中）+ 底部区面板（按状态）。
+// 专注模式时隐藏编辑器和终端，仅留一个最小占位
 func (s *shellState) midColumn() widget.Widget {
+	if s.focus {
+		return widget.Div(widget.Style{Width: 0, Height: 0}) // 零尺寸，flex:1 不会影响其他列
+	}
 	p := s.panels
 	rows := []widget.Widget{expand(editorpanel.MidContent())}
 	if p.Bottom {
@@ -863,7 +940,7 @@ func label1(s string, c types.Color, size float64) widget.Widget {
 // rightColW 右栏宽度：展开对话列表时额外加宽（列表在对话右侧腾出，对话主区不变）。
 func rightColW(base float64) float64 {
 	if chatpanel.TheState.ShowThreads {
-		return base + 280
+		return base + 370
 	}
 	return base
 }

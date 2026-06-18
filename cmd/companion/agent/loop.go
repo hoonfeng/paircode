@@ -30,6 +30,7 @@ const (
 	EventCircling   EventType = "circling"    // 检测到重复绕圈，已注入「换思路」提示打破死循环（UI 显示一行提示）
 	// EventApproval 等待用户审批某次写类工具调用。由宿主（UI 桥）在 Approve 钩子里 emit，
 	// loop 自身不直接发——loop 只通过 Approve 回调阻塞等待裁决（见 agent_bridge.go）。
+	EventUsage    EventType = "usage"     // LLM 调用完成后的 token 用量（含缓存命中/未命中）
 	EventApproval EventType = "approval"
 )
 
@@ -40,6 +41,7 @@ type Event struct {
 	Tool    string // tool_call/tool_result 的工具名
 	Args    string // tool_call 的参数 JSON
 	CallID  string
+	Usage   *Usage // EventUsage 时携带 API 返回的 token 用量
 }
 
 const finalMarker = "[FINAL]"
@@ -110,6 +112,9 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) ([]Messa
 			}
 			if c.Usage != nil && c.Usage.PromptTokens > 0 {
 				l.lastPromptTokens = c.Usage.PromptTokens // 实测用量驱动下轮压缩判定
+				// 发射 token 用量事件，供 UI 侧栏统计缓存命中/未命中
+				usage := *c.Usage
+				l.emit(Event{Type: EventUsage, Usage: &usage})
 			}
 		})
 		if err != nil {
