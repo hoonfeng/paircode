@@ -13,9 +13,9 @@ import (
 	"strings"
 
 	"github.com/hoonfeng/paircode/cmd/companion/agent"
-	"github.com/hoonfeng/paircode/cmd/companion/ui/mcp"
-	"github.com/hoonfeng/paircode/cmd/companion/ui/skills"
-	"github.com/hoonfeng/paircode/cmd/companion/ui/marketplace"
+	mcppanel "github.com/hoonfeng/paircode/cmd/companion/ui/mcp"
+	skillspanel "github.com/hoonfeng/paircode/cmd/companion/ui/skills"
+	marketplacepanel "github.com/hoonfeng/paircode/cmd/companion/ui/marketplace"
 )
 
 // ─── JSON Schema 小助手（agent 包的 objSchema 未导出，这里自建）──

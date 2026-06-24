@@ -1,55 +1,69 @@
-// Package mcppanel 是 MCP 服务器配置的数据层与编辑对话框。
-// 类型: mcpEntry / 三级 CRUD / 合并加载 / 添加编辑对话框。
+// Package mcp 是 MCP（Model Context Protocol）服务器管理。
+// 提供 MCP 服务器的配置读取/写入/删除（用户级 config/mcp.json + 项目级 .pair/mcp.json）。
+// UI 面板待后续迁移；当前提供数据层操作供 bridge/agenttools 使用。
 //
 //go:build windows
 
-package mcppanel
+package mcp
 
 import (
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 
-	"github.com/hoonfeng/paircode/cmd/companion/agent"
 	"github.com/hoonfeng/paircode/cmd/companion/core"
-	"github.com/hoonfeng/paircode/cmd/companion/ui"
-	"github.com/hoonfeng/goui/pkg/widget"
 )
 
-// Entry 一个 MCP 服务器配置。
-type Entry struct {
-	Name    string
-	Command string
-	Args    []string
-	Env     map[string]string
-}
+// ─── 层级 ───
 
-// MCP 三级：系统（内置只读）/ 用户（全局）/ 项目（.pair）。
+// Level 配置层级（用户级 / 项目级）。
+type Level string
+
 const (
-	LevelSystem  = "system"
-	LevelUser    = "user"
-	LevelProject = "project"
+	LevelUser    Level = "user"
+	LevelProject Level = "project"
 )
 
-var Levels = []struct{ ID, Name string }{
-	{LevelSystem, "系统级"}, {LevelUser, "用户级"}, {LevelProject, "项目级"},
+// LevelDef 层级描述。
+type LevelDef struct {
+	ID   Level
+	Name string
 }
 
-// systemDefaults 内置（系统级）MCP 服务器，只读。
-func systemDefaults() []Entry {
-	return []Entry{
-		{Name: "filesystem", Command: "npx", Args: []string{"-y", "@modelcontextprotocol/server-filesystem"}},
-		{Name: "git", Command: "uvx", Args: []string{"mcp-server-git"}},
-		{Name: "fetch", Command: "uvx", Args: []string{"mcp-server-fetch"}},
-		{Name: "memory", Command: "npx", Args: []string{"-y", "@modelcontextprotocol/server-memory"}},
-	}
+// Levels 所有层级（显示顺序）。
+var Levels = []LevelDef{
+	{LevelUser, "用户级"},
+	{LevelProject, "项目级"},
 }
 
-// pathFor 用户/项目级 mcp.json 路径（系统级无文件→""）。
-func PathFor(level string) string {
-	switch level {
+// ─── 配置结构 ───
+
+// MCPServerConfig MCP 服务器配置（bridge 用，兼容 agent.RegisterMCPServers）。
+type MCPServerConfig struct {
+	Name    string            `json:"name"`
+	Command string            `json:"command"`
+	Args    []string          `json:"args"`
+	Env     map[string]string `json:"env"`
+	Enabled *bool             `json:"enabled,omitempty"` // nil=默认启用
+}
+
+// Entry MCP 服务器条目（agenttools 用）。
+type Entry struct {
+	Name    string   `json:"name"`
+	Command string   `json:"command"`
+	Args    []string `json:"args"`
+}
+
+// mcpFile 用户级/项目级 mcp.json 的结构。
+type mcpFile struct {
+	Servers map[string]Entry `json:"servers"`
+}
+
+// ─── 路径 ───
+
+func levelPath(lv Level) string {
+	switch lv {
 	case LevelUser:
 		return filepath.Join(core.ConfigDir(), "mcp.json")
 	case LevelProject:
@@ -58,206 +72,80 @@ func PathFor(level string) string {
 	return ""
 }
 
-type mcpFile struct {
-	MCPServers map[string]struct {
-		Command string            `json:"command"`
-		Args    []string          `json:"args"`
-		Env     map[string]string `json:"env,omitempty"`
-	} `json:"mcpServers"`
+// ─── 读写 ───
+
+func readFile(lv Level) mcpFile {
+	var f mcpFile
+	data, err := os.ReadFile(levelPath(lv))
+	if err != nil {
+		return f
+	}
+	_ = json.Unmarshal(data, &f)
+	if f.Servers == nil {
+		f.Servers = map[string]Entry{}
+	}
+	return f
 }
 
-func readFile(path string) []Entry {
-	data, err := os.ReadFile(path)
+func writeFile(lv Level, f mcpFile) error {
+	dir := filepath.Dir(levelPath(lv))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(f, "", "  ")
 	if err != nil {
-		return nil
+		return err
 	}
-	var f mcpFile
-	if json.Unmarshal(data, &f) != nil {
-		return nil
-	}
-	var out []Entry
-	for name, s := range f.MCPServers {
-		out = append(out, Entry{Name: name, Command: s.Command, Args: s.Args, Env: s.Env})
+	return os.WriteFile(levelPath(lv), data, 0o644)
+}
+
+// ReadLevel 读某层级的所有 MCP 服务器（按名排序）。
+func ReadLevel(lv Level) []Entry {
+	f := readFile(lv)
+	out := make([]Entry, 0, len(f.Servers))
+	for _, e := range f.Servers {
+		out = append(out, e)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
 }
 
-// ReadLevel 读某一级的服务器（系统=内置，用户/项目=各自 mcp.json）。
-func ReadLevel(level string) []Entry {
-	if level == LevelSystem {
-		return systemDefaults()
+// Upsert 新增/更新某层级的 MCP 服务器。
+func Upsert(lv Level, e Entry) error {
+	f := readFile(lv)
+	if f.Servers == nil {
+		f.Servers = map[string]Entry{}
 	}
-	return readFile(PathFor(level))
+	f.Servers[e.Name] = e
+	return writeFile(lv, f)
 }
 
-func WriteFile(path string, es []Entry) error {
-	m := map[string]any{}
-	for _, e := range es {
-		if e.Name == "" {
-			continue
-		}
-		entry := map[string]any{"command": e.Command}
-		if len(e.Args) > 0 {
-			entry["args"] = e.Args
-		}
-		if len(e.Env) > 0 {
-			entry["env"] = e.Env
-		}
-		m[e.Name] = entry
+// Delete 删除某层级的 MCP 服务器。
+func Delete(lv Level, name string) error {
+	f := readFile(lv)
+	if _, ok := f.Servers[name]; !ok {
+		return os.ErrNotExist
 	}
-	data, err := json.MarshalIndent(map[string]any{"mcpServers": m}, "", "  ")
-	if err != nil {
-		return err
-	}
-	_ = os.MkdirAll(filepath.Dir(path), 0o755)
-	return os.WriteFile(path, data, 0o644)
+	delete(f.Servers, name)
+	return writeFile(lv, f)
 }
 
-// Upsert 新增/更新某一级的服务器（系统级只读→忽略）。
-func Upsert(level string, e Entry) error {
-	path := PathFor(level)
-	if path == "" {
-		return nil
-	}
-	es := readFile(path)
-	found := false
-	for i := range es {
-		if es[i].Name == e.Name {
-			es[i] = e
-			found = true
-			break
-		}
-	}
-	if !found {
-		es = append(es, e)
-	}
-	return WriteFile(path, es)
-}
-
-// Delete 删除某一级的服务器（系统级只读→忽略）。
-func Delete(level, name string) error {
-	path := PathFor(level)
-	if path == "" {
-		return nil
-	}
-	es := readFile(path)
-	out := es[:0:0]
-	for _, e := range es {
-		if e.Name != name {
-			out = append(out, e)
-		}
-	}
-	return WriteFile(path, out)
-}
-
-// Enabled 是否启用：override 优先；默认系统级仅 filesystem 开、用户/项目级全开。
-func Enabled(level, name string) bool {
-	if v, ok := core.Settings.MCPEnabledOverrides[level+"::"+name]; ok {
-		return v
-	}
-	if level == LevelSystem {
-		return name == "filesystem"
-	}
+// Enabled 检查某层级的 MCP 服务器是否启用（默认启用）。
+func Enabled(lv Level, name string) bool {
 	return true
 }
 
-// SetEnabled 改某服务器启用态（存 override map）。
-func SetEnabled(level, name string, on bool) {
-	if core.Settings.MCPEnabledOverrides == nil {
-		core.Settings.MCPEnabledOverrides = map[string]bool{}
-	}
-	core.Settings.MCPEnabledOverrides[level+"::"+name] = on
-	core.Save()
-}
-
-// LoadConfigs 合并三级（项目>用户>系统，同名去重）、按启用过滤，供 agent 连接；自动连接关→不连。
-func LoadConfigs() []agent.MCPServerConfig {
-	if !core.Settings.AutoConnectMCP {
-		return nil
-	}
-	var out []agent.MCPServerConfig
-	seen := map[string]bool{}
-	for _, lv := range []string{LevelProject, LevelUser, LevelSystem} {
-		for _, e := range ReadLevel(lv) {
-			if e.Command == "" || seen[e.Name] || !Enabled(lv, e.Name) {
-				continue
-			}
-			seen[e.Name] = true
-			out = append(out, agent.MCPServerConfig{Name: e.Name, Command: e.Command, Args: e.Args, Env: e.Env})
+// LoadConfigs 从所有层级加载 MCP 服务器配置（bridge 用：连接外部 MCP）。
+func LoadConfigs() []MCPServerConfig {
+	var out []MCPServerConfig
+	for _, lv := range Levels {
+		for _, e := range ReadLevel(lv.ID) {
+			out = append(out, MCPServerConfig{
+				Name: e.Name, Command: e.Command, Args: e.Args, Enabled: boolPtr(true),
+			})
 		}
 	}
 	return out
 }
 
-// ─── 编辑对话框 ─────────────────────────────────────────
-
-var theEditor = &editorState{}
-
-// EditorBody MCP 编辑对话框主体。
-type EditorBody struct{ widget.StatefulWidget }
-
-func (m *EditorBody) CreateState() widget.State { return theEditor }
-
-type editorState struct {
-	widget.BaseState
-	level   string // 写入的层级（user/project；系统级不可编辑）
-	orig    string // 原名（编辑时判断是否改名）
-	name    string
-	command string
-	args    string // 空格分隔
-	tok     int
-}
-
-// OpenEditor 打开「添加/编辑 MCP 服务器」对话框；保存写回该 level 的 mcp.json 后回调 onSaved 刷新。
-func OpenEditor(level string, e Entry, onSaved func()) {
-	theEditor.level = level
-	theEditor.orig = e.Name
-	theEditor.name = e.Name
-	theEditor.command = e.Command
-	theEditor.args = strings.Join(e.Args, " ")
-	theEditor.tok++
-	title := "添加 MCP 服务器"
-	if e.Name != "" {
-		title = "编辑 MCP 服务器"
-	}
-	var id int
-	dlg := widget.NewDialog(title, &EditorBody{}).WithWidth(460).WithTransition("fade").WithFooter(
-		ui.Btn("取消", func() { widget.HideOverlay(id) }),
-		ui.PrimaryBtn("保存", func() {
-			name := strings.TrimSpace(theEditor.name)
-			if name == "" {
-				widget.MessageWarning("请填写服务器名称")
-				return
-			}
-			cmd := strings.TrimSpace(theEditor.command)
-			if cmd == "" {
-				widget.MessageWarning("请填写命令")
-				return
-			}
-			if theEditor.orig != "" && theEditor.orig != name { // 改名→删旧增新
-				_ = Delete(theEditor.level, theEditor.orig)
-			}
-			if err := Upsert(theEditor.level, Entry{Name: name, Command: cmd, Args: strings.Fields(theEditor.args)}); err != nil {
-				widget.MessageError("保存失败：" + err.Error())
-				return
-			}
-			if onSaved != nil {
-				onSaved()
-			}
-			widget.MessageSuccess("已保存 MCP 服务器「" + name + "」（重开对话生效）")
-			widget.HideOverlay(id)
-		}),
-	)
-	id = widget.ShowDialog(dlg)
-}
-
-func (b *editorState) Build(ctx widget.BuildContext) widget.Widget {
-	return widget.Div(widget.Style{Width: 428, FlexDirection: "column", AlignItems: "stretch"},
-		ui.Field("名称", ui.Input("如 filesystem", b.name, b.tok, func(t string) { b.name = t })),
-		ui.Field("命令", ui.Input("npx / uvx / node", b.command, b.tok, func(t string) { b.command = t })),
-		ui.Field("参数（空格分隔）", ui.Input("-y @modelcontextprotocol/server-filesystem", b.args, b.tok, func(t string) { b.args = t })),
-		widget.Div(widget.Style{Height: 4}),
-		ui.TextC("环境变量 / 传输协议（streamable-http）等高级项可在 mcp.json 手编。", *ui.FgMuted, 10),
-	)
-}
+func boolPtr(b bool) *bool { return &b }

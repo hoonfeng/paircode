@@ -1,540 +1,266 @@
-// 搜索面板 —— 左栏「搜索」内容：复刻参考 SearchPanel（搜索框 + 大小写/全词/正则开关 +
-// 结果树：文件头可折叠 + 命中行 行号+高亮匹配）。跨文件内容搜索，点命中行跳编辑器。详见 AGENTS.md。
-//
 //go:build windows
 
-package searchpanel
+// Package search 提供 GWui 版搜索面板。
+// 使用 uixml 声明式 UI 构建面板布局，保留 Go 逻辑处理搜索/渲染。
+package search
 
 import (
-	"bytes"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
-	"regexp"
+	"strconv"
 	"strings"
 
+	"github.com/hoonfeng/gwui/component"
+	"github.com/hoonfeng/gwui/dom"
+	"github.com/hoonfeng/gwui/event"
+	"github.com/hoonfeng/gwui/uixml"
+
 	"github.com/hoonfeng/paircode/cmd/companion/core"
-	"github.com/hoonfeng/paircode/cmd/companion/ui/editor"
 	"github.com/hoonfeng/paircode/cmd/companion/ui"
-	"github.com/hoonfeng/goui/pkg/types"
-	"github.com/hoonfeng/goui/pkg/widget"
 )
 
-var searchHL = types.ColorFromRGB(87, 64, 0) // 命中高亮底（暗金）
-
-const searchMaxMatches = 500
-
-// searchMatch 一行命中：行号 + 行文本（已左 trim）+ 匹配字节区间（相对 trim 后文本）。
-type searchMatch struct {
-	line   int
-	text   string
-	ranges [][2]int
+// SearchResult 搜索结果。
+type SearchResult struct {
+	Path string
+	Line int
+	Text string
 }
 
-type searchFile struct {
-	rel     string
-	abspath string
-	matches []searchMatch
+// SearchPanel 搜索面板。
+type SearchPanel struct {
+	doc       *dom.Document
+	root      *dom.Element
+	inputComp *component.Input
+	content   *dom.Element
+	results   []SearchResult
+	keyword   string
+	lastInput string
 }
 
-// searchFlatItem 扁平化的可见项，供 VirtualList 按需渲染（取代 ScrollView 全量创建 Widget）。
-type searchFlatItem struct {
-	kind     byte // 0=fileHeader, 1=matchRow
-	fileIdx  int  // index in s.files
-	matchIdx int  // index in s.files[fileIdx].matches（仅 kind=1）
-}
+// ── uixml 辅助 ──
 
-var theSearch = &searchState{collapsed: map[string]bool{}}
-
-// SearchPanel 搜索面板组件。
-type SearchPanel struct{ widget.StatefulWidget }
-
-func (p *SearchPanel) CreateState() widget.State { return theSearch }
-
-type searchState struct {
-	widget.BaseState
-	query                           string
-	caseSensitive, wholeWord, regex bool
-	showReplace                     bool
-	replaceText                     string
-	files                           []searchFile
-	totalMatches                    int
-	searched                        bool
-	capped                          bool
-	errMsg                          string
-	collapsed                       map[string]bool
-	previewRe                       *regexp.Regexp // 替换预览用（Build 时按 replaceText 编译；nil=不预览）
-
-	flatItems []searchFlatItem // 扁平化可见项（Build 时重建，供 VirtualList 用）
-}
-
-// compile 据查询 + 选项构造正则。
-func (s *searchState) compile() (*regexp.Regexp, error) {
-	pat := s.query
-	if !s.regex {
-		pat = regexp.QuoteMeta(pat)
+// transferComponents 递归地将 srcDoc 中的组件注册转移到 dstDoc。
+func transferComponents(srcDoc, dstDoc *dom.Document, el *dom.Element) {
+	if comp := srcDoc.ComponentAtNode(el); comp != nil {
+		dstDoc.RegisterComponent(el, comp)
 	}
-	if s.wholeWord {
-		pat = `\b` + pat + `\b`
+	for _, child := range el.Children() {
+		if e, ok := child.(*dom.Element); ok {
+			transferComponents(srcDoc, dstDoc, e)
+		}
 	}
-	if !s.caseSensitive {
-		pat = `(?i)` + pat
-	}
-	return regexp.Compile(pat)
 }
 
-var searchSkipDir = map[string]bool{
-	".git": true, "node_modules": true, "vendor": true, "dist": true, "build": true,
-	".cache": true, ".idea": true, ".vscode": true, "bin": true, "obj": true,
+// New 创建搜索面板。
+func New(doc *dom.Document) *SearchPanel {
+	p := &SearchPanel{doc: doc}
+
+	// 创建真实 Input 组件（主文档上创建，支持 Enter 搜索）
+	inputComp := component.NewInput(doc, "搜索...")
+	inputComp.SetBaseStyle(
+		"background-color: " + ui.InputBg + "; color: " + ui.Text + "; " +
+			"border: 1px solid " + ui.Border + "; padding: 4px 8px; font-size: 15px; flex: 1;")
+	inputComp.OnChange(func(v string) {
+		if v == p.lastInput {
+			if v != "" {
+				p.doSearch(v)
+			}
+		} else {
+			p.lastInput = v
+		}
+	})
+
+	// uixml 注册表：搜索按钮点击
+	reg := uixml.NewRegistry()
+	reg.OnClick("onSearch", func(ctx uixml.EventContext) bool {
+		p.doSearch(inputComp.Value())
+		return true
+	})
+
+	// 静态布局 XML（不含 Input，由占位 div 替代）
+	var xmlUI = fmt.Sprintf(`<div id="searchRoot" style="display:flex;flex-direction:column;height:100%%;background:%s">
+	<div class="panel-header">搜索</div>
+	<div style="display:flex;flex-direction:row;align-items:center;padding:8px;gap:4px;background:%s">
+		<div id="inputPlaceholder" style="flex:1"></div>
+		<button label="搜索" onclick="onSearch" style="background-color:%s;color:#fff;padding:4px 12px;font-size:15px"/>
+	</div>
+	<div id="resultContainer" class="panel-content" style="flex:1;overflow:auto"></div>
+</div>`, ui.SideBg, ui.PanelHeader, ui.Accent)
+
+	// 加载 uixml，捕获元素引用
+	uixml.MustLoadStringInto(ui.Ctx.Doc, xmlUI, reg)
+	p.root = ui.Ctx.Doc.GetElementByID("searchRoot")
+	p.content = ui.Ctx.Doc.GetElementByID("resultContainer")
+
+	// 用真实 Input 替换占位 div
+	if inputPlaceholder := ui.Ctx.Doc.GetElementByID("inputPlaceholder"); inputPlaceholder != nil {
+		if parent, ok := inputPlaceholder.Parent().(*dom.Element); ok {
+			parent.ReplaceChild(inputComp.Element(), inputPlaceholder)
+		}
+	}
+
+	// 转移组件注册到主文档
+	if p.root != nil {
+		transferComponents(ui.Ctx.Doc, doc, p.root)
+	}
+
+	// 从临时文档中移除根元素（避免双亲问题）
+	if p.root != nil && p.root.Parent() != nil {
+		if parent, ok := p.root.Parent().(*dom.Element); ok {
+			parent.RemoveChild(p.root)
+		}
+	}
+
+	p.inputComp = inputComp
+	p.renderResults()
+	return p
 }
 
-// run 跨文件搜索（同步遍历工作区；跳过 .git/node_modules 等、>1MB、二进制；命中上限 500）。
-func (s *searchState) run() {
-	s.searched = true
-	s.files, s.totalMatches, s.capped, s.errMsg = nil, 0, false, ""
-	if strings.TrimSpace(s.query) == "" {
-		s.SetState()
+// Element 返回面板根元素。
+func (p *SearchPanel) Element() *dom.Element { return p.root }
+
+// Refresh 重新渲染结果列表。
+func (p *SearchPanel) Refresh() {
+	p.renderResults()
+}
+
+// doSearch 执行搜索。
+func (p *SearchPanel) doSearch(keyword string) {
+	p.keyword = keyword
+	p.results = nil
+
+	if keyword == "" {
+		p.renderResults()
 		return
 	}
-	re, err := s.compile()
-	if err != nil {
-		s.errMsg = "正则错误：" + err.Error()
-		s.SetState()
-		return
-	}
-	root := core.Root()
-	filepath.WalkDir(root, func(path string, d fs.DirEntry, werr error) error {
-		if werr != nil {
-			return nil
-		}
-		if s.totalMatches >= searchMaxMatches {
-			s.capped = true
-			return filepath.SkipAll
-		}
-		if d.IsDir() {
-			if searchSkipDir[d.Name()] {
+
+	// 遍历工作区所有文件
+	for _, folder := range core.Folders {
+		stopped := false
+		filepath.Walk(folder, func(path string, info os.FileInfo, err error) error {
+			if stopped {
 				return filepath.SkipDir
 			}
+			if err != nil {
+				return nil
+			}
+			if info.IsDir() {
+				if info.Name() == ".git" {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			// 只搜索文本文件，跳过大文件
+			if !isTextFile(path) || info.Size() > 1024*1024 {
+				return nil
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return nil
+			}
+			lines := strings.Split(string(data), "\n")
+			for i, line := range lines {
+				if strings.Contains(line, keyword) {
+					p.results = append(p.results, SearchResult{
+						Path: path,
+						Line: i + 1,
+						Text: strings.TrimSpace(line),
+					})
+					if len(p.results) >= 200 {
+						stopped = true
+						return filepath.SkipDir
+					}
+				}
+			}
 			return nil
-		}
-		if info, e := d.Info(); e == nil && info.Size() > 1<<20 {
-			return nil // >1MB 跳过
-		}
-		data, e := os.ReadFile(path)
-		if e != nil || bytes.IndexByte(data, 0) >= 0 {
-			return nil // 读失败 / 含 NUL → 视为二进制
-		}
-		var matches []searchMatch
-		for i, line := range strings.Split(string(data), "\n") {
-			locs := re.FindAllStringIndex(line, -1)
-			if len(locs) == 0 {
-				continue
-			}
-			trimmed := strings.TrimLeft(line, " \t")
-			shift := len(line) - len(trimmed)
-			var ranges [][2]int
-			for _, l := range locs {
-				a, b := l[0]-shift, l[1]-shift
-				if a < 0 {
-					a = 0
-				}
-				if b > len(trimmed) {
-					b = len(trimmed)
-				}
-				if a < b {
-					ranges = append(ranges, [2]int{a, b})
-				}
-			}
-			matches = append(matches, searchMatch{line: i + 1, text: trimmed, ranges: ranges})
-			s.totalMatches += len(locs)
-			if s.totalMatches >= searchMaxMatches {
-				break
-			}
-		}
-		if len(matches) > 0 {
-			rel, _ := filepath.Rel(root, path)
-			s.files = append(s.files, searchFile{rel: filepath.ToSlash(rel), abspath: path, matches: matches})
-		}
-		return nil
-	})
-	s.SetState()
+		})
+	}
+
+	p.renderResults()
 }
 
-func (s *searchState) toggleFile(rel string) { s.collapsed[rel] = !s.collapsed[rel]; s.SetState() }
+// renderResults 渲染搜索结果。
+func (p *SearchPanel) renderResults() {
+	p.content.ClearChildren()
 
-// searchInputStyle 已下沉到 ui.StyleInput。
-
-// confirmReplaceAll 先确认（替换不可撤销）。
-func (s *searchState) confirmReplaceAll() {
-	if strings.TrimSpace(s.query) == "" || len(s.files) == 0 {
+	if p.keyword == "" {
+		hint := p.doc.CreateElement("div")
+		hint.SetAttribute("style", "padding: 12px; color: "+ui.TextDim+"; font-size: 15px;")
+		hint.SetTextContent("输入关键词搜索")
+		p.content.AppendChild(hint)
 		return
 	}
-	msg := fmt.Sprintf("将在 %d 个文件中把匹配替换为「%s」，此操作不可撤销。确定？", len(s.files), s.replaceText)
-	widget.ShowConfirm("全部替换", msg, widget.MsgWarning, func() { s.replaceAll() }, nil)
-}
 
-// replaceAll 全部替换：写回 + 重搜 + 提示。
-func (s *searchState) replaceAll() {
-	n := s.doReplace()
-	s.run() // 重搜：结果应减少/清空
-	widget.MessageSuccess(fmt.Sprintf("已在 %d 个文件中替换。", n))
-}
-
-// doReplace 对所有命中文件做整文件正则替换并写回（非正则=字面替换；正则=支持 $1）。返回改动文件数。
-func (s *searchState) doReplace() int {
-	re, err := s.compile()
-	if err != nil {
-		return 0
-	}
-	n := 0
-	for _, f := range s.files {
-		data, e := os.ReadFile(f.abspath)
-		if e != nil {
-			continue
-		}
-		var out string
-		if s.regex {
-			out = re.ReplaceAllString(string(data), s.replaceText)
-		} else {
-			out = re.ReplaceAllLiteralString(string(data), s.replaceText)
-		}
-		if out != string(data) {
-			if os.WriteFile(f.abspath, []byte(out), 0o644) == nil {
-				n++
-				editorpanel.Editor.ReloadIfOpen(f.abspath) // 已打开则刷新编辑器
-			}
-		}
-	}
-	return n
-}
-
-// replaceFile 只替换某个文件（增强：参考仅有全部替换）。改动后重搜。
-func (s *searchState) replaceFile(f searchFile) {
-	if s.doReplaceFile(f) {
-		s.run()
-	}
-}
-
-// doReplaceFile 对单个文件做整文件正则替换并写回；返回是否改动。
-func (s *searchState) doReplaceFile(f searchFile) bool {
-	re, err := s.compile()
-	if err != nil {
-		return false
-	}
-	data, e := os.ReadFile(f.abspath)
-	if e != nil {
-		return false
-	}
-	var out string
-	if s.regex {
-		out = re.ReplaceAllString(string(data), s.replaceText)
-	} else {
-		out = re.ReplaceAllLiteralString(string(data), s.replaceText)
-	}
-	if out == string(data) {
-		return false
-	}
-	if os.WriteFile(f.abspath, []byte(out), 0o644) != nil {
-		return false
-	}
-	editorpanel.Editor.ReloadIfOpen(f.abspath)
-	return true
-}
-
-// ─── UI ───────────────────────────────────────────────────────
-
-func (s *searchState) Build(ctx widget.BuildContext) widget.Widget {
-	s.previewRe = nil // 替换预览：替换模式且有替换文本时编译一次，供 matchRow 复用
-	if s.showReplace && s.replaceText != "" {
-		if re, err := s.compile(); err == nil {
-			s.previewRe = re
-		}
-	}
-	rows := []widget.Widget{s.searchBar()}
-	switch {
-	case s.errMsg != "":
-		rows = append(rows, widget.Div(widget.Style{Padding: types.EdgeInsets(10)}, ui.TextC(s.errMsg, *ui.Danger, 11)))
-	case s.searched && len(s.files) == 0:
-		rows = append(rows, ui.Expand(ui.EmptyState("search", "无结果", "没有匹配的内容")))
-	case s.searched:
-		rows = append(rows, s.stats())
-		s.flatItems = s.buildFlatItems()
-		if len(s.flatItems) == 0 {
-			rows = append(rows, ui.Expand(ui.EmptyState("search", "无结果", "没有匹配的内容")))
-		} else {
-			rows = append(rows, ui.Expand(&widget.VirtualList{
-				ItemCount:  len(s.flatItems),
-				ItemHeight: 24,
-				RenderItem: s.renderFlatItem,
-			}))
-		}
-	}
-	return widget.Div(
-		widget.Style{BackgroundColor: ui.ShellSide, FlexDirection: "column", AlignItems: "stretch"},
-		rows,
-	)
-}
-
-// buildFlatItems 据搜索结果和折叠态构建扁平可见项列表。
-func (s *searchState) buildFlatItems() []searchFlatItem {
-	var out []searchFlatItem
-	for fi, f := range s.files {
-		out = append(out, searchFlatItem{kind: 0, fileIdx: fi})
-		if s.collapsed[f.rel] {
-			continue
-		}
-		for mi := range f.matches {
-			out = append(out, searchFlatItem{kind: 1, fileIdx: fi, matchIdx: mi})
-		}
-	}
-	return out
-}
-
-// renderFlatItem VirtualList 回调：按 index 渲染一个扁平项。
-func (s *searchState) renderFlatItem(i int) widget.Widget {
-	if i < 0 || i >= len(s.flatItems) {
-		return nil
-	}
-	fi := s.flatItems[i]
-	switch fi.kind {
-	case 0: // fileHeader
-		f := s.files[fi.fileIdx]
-		return s.flatFileHeader(f.rel, len(f.matches), f.abspath)
-	case 1: // matchRow
-		f := s.files[fi.fileIdx]
-		return s.matchRow(f.abspath, f.matches[fi.matchIdx])
-	}
-	return nil
-}
-
-// flatFileHeader 从扁平项渲染搜索文件头（可折叠，含替换按钮）。
-func (s *searchState) flatFileHeader(rel string, count int, abspath string) widget.Widget {
-	chev := "chevron-down"
-	if s.collapsed[rel] {
-		chev = "chevron-right"
-	}
-	header := &widget.Clickable{
-		SingleChildWidget: widget.SingleChildWidget{Child: widget.Div(
-			widget.Style{Height: 24, Padding: types.EdgeInsetsLTRB(6, 0, 8, 0), FlexDirection: "row", AlignItems: "center"},
-			widget.Lucide(chev, widget.IconSize(13), widget.IconColor(*ui.ShellTextDim)),
-			widget.Div(widget.Style{Width: 3}),
-			widget.Lucide("file-text", widget.IconSize(13), widget.IconColor(*ui.ShellTextDim)),
-			widget.Div(widget.Style{Width: 5}),
-			ui.Expand(ui.TextC(rel, *ui.ShellText, 12)),
-			ui.TextC(ui.Itoa(count), *ui.ShellTextDim, 10),
-		)},
-		OnClick:    func() { s.toggleFile(rel) },
-		HoverColor: *ui.FtHover,
-	}
-	// 替换模式：文件头右侧加「替换此文件」
-	if s.previewRe != nil {
-		r := rel // capture
-		return widget.Div(
-			widget.Style{FlexDirection: "row", AlignItems: "center", BackgroundColor: ui.ShellSide},
-			ui.Expand(header),
-			&widget.Button{
-				SingleChildWidget: widget.SingleChildWidget{Child: ui.TextC("替换", *ui.White, 10)},
-				OnClick:           func() { s.replaceOneFile(r) },
-				Color:             *ui.Warning, MinHeight: 20, Padding: types.EdgeInsetsLTRB(7, 0, 7, 0),
-			},
-			widget.Div(widget.Style{Width: 6}),
-		)
-	}
-	return header
-}
-
-// replaceOneFile 替换单个文件（按 rel 路径在 s.files 中查找并替换）。
-func (s *searchState) replaceOneFile(rel string) {
-	for _, f := range s.files {
-		if f.rel == rel {
-			s.replaceFile(f)
-			return
-		}
-	}
-}
-
-func (s *searchState) searchBar() widget.Widget {
-	in := widget.NewInput("", func(t string) { s.query = t }).WithPlaceholder("搜索").WithOnSubmit(func(string) { s.run() })
-	ui.StyleInput(in)
-	rows := []widget.Widget{
-		widget.Div(
-			widget.Style{FlexDirection: "row", AlignItems: "center"},
-			ui.Expand(in),
-			widget.Div(widget.Style{Width: 4}),
-			ui.ShellIconBtn("search", s.run),
-		),
-		widget.Div(widget.Style{Height: 6}),
-		widget.Div(
-			widget.Style{FlexDirection: "row", AlignItems: "center"},
-			searchToggle("Aa", "区分大小写", s.caseSensitive, func() { s.caseSensitive = !s.caseSensitive; s.run() }),
-			widget.Div(widget.Style{Width: 4}),
-			searchToggle("全词", "全字匹配", s.wholeWord, func() { s.wholeWord = !s.wholeWord; s.run() }),
-			widget.Div(widget.Style{Width: 4}),
-			searchToggle(".*", "正则", s.regex, func() { s.regex = !s.regex; s.run() }),
-			widget.Div(widget.Style{Width: 4}),
-			searchToggle("替换", "替换模式", s.showReplace, func() { s.showReplace = !s.showReplace; s.SetState() }),
-		),
-	}
-	if s.showReplace {
-		rin := widget.NewInput("替换为...", func(t string) { s.replaceText = t; s.SetState() }).WithOnSubmit(func(string) { s.confirmReplaceAll() })
-		ui.StyleInput(rin)
-		rows = append(rows,
-			widget.Div(widget.Style{Height: 6}),
-			widget.Div(
-				widget.Style{FlexDirection: "row", AlignItems: "center"},
-				ui.Expand(rin),
-				widget.Div(widget.Style{Width: 4}),
-				ui.SolidDangerBtnX("全部替换", s.confirmReplaceAll, ui.BtnOpts{Size: ui.SizeSm}),
-			),
-		)
-	}
-	return widget.Div(
-		widget.Style{Padding: types.EdgeInsets(6), FlexDirection: "column", AlignItems: "stretch",
-			BackgroundColor: ui.ShellSide, BorderColor: ui.ShellBorder, BorderWidth: 1},
-		rows,
-	)
-}
-
-func (s *searchState) stats() widget.Widget {
-	txt := fmtMatchStats(s.totalMatches, len(s.files))
-	if s.capped {
-		txt += "（已截断 " + ui.Itoa(searchMaxMatches) + "）"
-	}
-	return widget.Div(
-		widget.Style{Height: 22, Padding: types.EdgeInsetsLTRB(8, 0, 8, 0), FlexDirection: "row", AlignItems: "center"},
-		ui.TextC(txt, *ui.ShellTextDim, 10),
-	)
-}
-
-// fileBlock 一个文件的结果：文件头（可折叠）+ 命中行。
-func (s *searchState) fileBlock(out *[]widget.Widget, f searchFile) {
-	chev := "chevron-down"
-	if s.collapsed[f.rel] {
-		chev = "chevron-right"
-	}
-	header := &widget.Clickable{
-		SingleChildWidget: widget.SingleChildWidget{Child: widget.Div(
-			widget.Style{Height: 24, Padding: types.EdgeInsetsLTRB(6, 0, 8, 0), FlexDirection: "row", AlignItems: "center"},
-			widget.Lucide(chev, widget.IconSize(13), widget.IconColor(*ui.ShellTextDim)),
-			widget.Div(widget.Style{Width: 3}),
-			widget.Lucide("file-text", widget.IconSize(13), widget.IconColor(*ui.ShellTextDim)),
-			widget.Div(widget.Style{Width: 5}),
-			ui.Expand(ui.TextC(f.rel, *ui.ShellText, 12)),
-			ui.TextC(ui.Itoa(len(f.matches)), *ui.ShellTextDim, 10),
-		)},
-		OnClick:    func() { s.toggleFile(f.rel) },
-		HoverColor: *ui.FtHover,
-	}
-	if s.previewRe != nil { // 替换模式：文件头右侧加「替换此文件」（在 Clickable 外，避免点按钮误折叠）
-		ff := f
-		*out = append(*out, widget.Div(
-			widget.Style{FlexDirection: "row", AlignItems: "center", BackgroundColor: ui.ShellSide},
-			ui.Expand(header),
-			&widget.Button{
-				SingleChildWidget: widget.SingleChildWidget{Child: ui.TextC("替换", *ui.White, 10)},
-				OnClick:           func() { s.replaceFile(ff) },
-				Color:             *ui.Warning, MinHeight: 20, Padding: types.EdgeInsetsLTRB(7, 0, 7, 0),
-			},
-			widget.Div(widget.Style{Width: 6}),
-		))
-	} else {
-		*out = append(*out, header)
-	}
-	if s.collapsed[f.rel] {
+	if len(p.results) == 0 {
+		hint := p.doc.CreateElement("div")
+		hint.SetAttribute("style", "padding: 12px; color: "+ui.TextDim+"; font-size: 15px;")
+		hint.SetTextContent("无结果")
+		p.content.AppendChild(hint)
 		return
 	}
-	for _, m := range f.matches {
-		*out = append(*out, s.matchRow(f.abspath, m))
+
+	// 结果计数
+	count := p.doc.CreateElement("div")
+	count.SetAttribute("style",
+		"padding: 4px 12px; color: "+ui.TextDim+"; font-size: 14px; "+
+			"border-bottom: 1px solid "+ui.Border+";")
+	count.SetTextContent(strconv.Itoa(len(p.results)) + " 个结果")
+	p.content.AppendChild(count)
+
+	for _, r := range p.results {
+		row := p.doc.CreateElement("div")
+		row.ClassList().Add("search-result")
+
+		// 文件名:行号
+		fileEl := p.doc.CreateElement("div")
+		fileEl.ClassList().Add("file")
+		fileEl.SetTextContent(r.Path + ":" + strconv.Itoa(r.Line))
+		row.AppendChild(fileEl)
+
+		// 匹配内容
+		textEl := p.doc.CreateElement("div")
+		textEl.ClassList().Add("line")
+		textEl.SetTextContent(r.Text)
+		row.AppendChild(textEl)
+
+		// 点击跳转到文件
+		path := r.Path
+		line := r.Line
+		on(row, event.Click, func(e event.Event) bool {
+			if ui.Ctx.Editor != nil {
+				ui.Ctx.Editor.OpenAt(path, line)
+			}
+			return true
+		})
+
+		p.content.AppendChild(row)
 	}
 }
 
-func (s *searchState) matchRow(abspath string, m searchMatch) widget.Widget {
-	seg := []widget.Widget{
-		widget.Div(widget.Style{Width: 34, FlexDirection: "row", AlignItems: "center"}, ui.TextC(ui.Itoa(m.line), *ui.ShellTextDim, 10)),
+// isTextFile 判断文件是否是文本文件（按扩展名）。
+func isTextFile(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".go", ".js", ".ts", ".tsx", ".jsx", ".py", ".java", ".c", ".cpp", ".h", ".hpp",
+		".cs", ".rs", ".rb", ".php", ".swift", ".kt", ".scala", ".sh", ".bat", ".ps1",
+		".json", ".xml", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".env",
+		".md", ".txt", ".html", ".htm", ".css", ".scss", ".less", ".sql", ".lua",
+		".vue", ".svelte", ".mod", ".sum":
+		return true
 	}
-	seg = append(seg, highlightedLine(m.text, m.ranges)...)
-	mainRow := &widget.Clickable{
-		SingleChildWidget: widget.SingleChildWidget{Child: widget.Div(
-			widget.Style{Height: 22, Padding: types.EdgeInsetsLTRB(20, 0, 6, 0), FlexDirection: "row", AlignItems: "center"},
-			seg,
-		)},
-		OnClick:    func() { editorpanel.Editor.OpenAt(abspath, m.line) },
-		HoverColor: *ui.FtHover,
+	// 无扩展名的已知文本文件
+	name := strings.ToLower(filepath.Base(path))
+	switch name {
+	case "makefile", "dockerfile", "readme", "license", ".gitignore", ".env":
+		return true
 	}
-	if s.previewRe == nil {
-		return mainRow
-	}
-	var repl string // 替换预览：该行替换后的样子（绿色）
-	if s.regex {
-		repl = s.previewRe.ReplaceAllString(m.text, s.replaceText)
-	} else {
-		repl = s.previewRe.ReplaceAllLiteralString(m.text, s.replaceText)
-	}
-	if repl == m.text {
-		return mainRow // 该行无变化（不应发生，保险）
-	}
-	if len(repl) > 200 {
-		repl = repl[:200]
-	}
-	return widget.Div(
-		widget.Style{FlexDirection: "column", AlignItems: "stretch"},
-		mainRow,
-		widget.Div(
-			widget.Style{Padding: types.EdgeInsetsLTRB(40, 0, 6, 2), FlexDirection: "row", AlignItems: "center"},
-			ui.TextC(repl, *ui.Success, 11.5),
-		),
-	)
+	return false
 }
 
-// highlightedLine 把行按匹配区间切成 普通/高亮 段。
-func highlightedLine(text string, ranges [][2]int) []widget.Widget {
-	if len(text) > 200 {
-		text = text[:200] // 超长行截断，避免行过宽
-	}
-	var segs []widget.Widget
-	prev := 0
-	for _, r := range ranges {
-		a, b := r[0], r[1]
-		if a >= len(text) || a < prev {
-			continue
-		}
-		if b > len(text) {
-			b = len(text)
-		}
-		if a > prev {
-			segs = append(segs, ui.TextC(text[prev:a], *ui.ShellTextDim, 11.5))
-		}
-		segs = append(segs, widget.Div(
-			widget.Style{BackgroundColor: &searchHL, Padding: types.EdgeInsetsLTRB(1, 0, 1, 0)},
-			ui.TextC(text[a:b], *ui.ShellText, 11.5),
-		))
-		prev = b
-	}
-	if prev < len(text) {
-		segs = append(segs, ui.TextC(text[prev:], *ui.ShellTextDim, 11.5))
-	}
-	return segs
-}
-
-// searchToggle 选项开关（激活高亮）。
-func searchToggle(text, _ string, on bool, onClick func()) widget.Widget {
-	bg, tc := *ui.ShellTitle, *ui.ShellTextDim
-	if on {
-		bg, tc = *ui.AccentStrong, *ui.White
-	}
-	return &widget.Button{
-		SingleChildWidget: widget.SingleChildWidget{Child: ui.TextC(text, tc, 11)},
-		OnClick:           onClick,
-		Color:             bg,
-		MinWidth:          30,
-		MinHeight:         22,
-		Padding:           types.EdgeInsetsLTRB(6, 0, 6, 0),
+// on 注册事件监听器（通过全局 App）。
+func on(el *dom.Element, typ event.Type, fn func(event.Event) bool) {
+	if ui.Ctx.App != nil {
+		ui.Ctx.App.AddEventListener(el, typ, fn)
 	}
 }
-
-func fmtMatchStats(matches, files int) string {
-	return ui.Itoa(matches) + " 处匹配 · " + ui.Itoa(files) + " 个文件"
-}
-
-// itoa 已下沉到 ui.Itoa。

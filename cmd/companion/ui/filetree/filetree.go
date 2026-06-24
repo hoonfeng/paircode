@@ -1,6 +1,8 @@
 // 文件树面板 —— 左栏「文件」内容：读真实文件系统，懒加载、展开/折叠、按类型图标着色、
 // 点击文件夹展开、点击文件选中（后续接编辑器）。VS Code 深色风。详见 AGENTS.md。
 //
+// GWui 版：使用 dom.Document 创建动态 UI，不再依赖 goui。
+//
 //go:build windows
 
 package filetreepanel
@@ -13,117 +15,192 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hoonfeng/gwui/dom"
+	"github.com/hoonfeng/gwui/event"
+
 	"github.com/hoonfeng/paircode/cmd/companion/core"
-	"github.com/hoonfeng/paircode/cmd/companion/ui"
-	"github.com/hoonfeng/paircode/cmd/companion/ui/editor"
+	editorpanel "github.com/hoonfeng/paircode/cmd/companion/ui/editor"
 	gitpanel "github.com/hoonfeng/paircode/cmd/companion/ui/git"
-	"github.com/hoonfeng/goui/pkg/types"
-	"github.com/hoonfeng/goui/pkg/widget"
+	"github.com/hoonfeng/paircode/cmd/companion/ui"
 )
 
-// 文件类型图标(iconForFile→ui.FileIcon)+ 扩展名色已下沉到 ui 包(供文件树行 + 编辑器标签共用)。
+// ─── 颜色常量 ────────────────────────────────────────────────
+var (
+	colText     = ui.Text        // "#cccccc"
+	colTextDim  = ui.TextDim     // "#8c8c8c"
+	colTextMute = ui.TextMute    // "#6e6e6e"
+	colSide     = ui.SideBg      // "#252526"
+	colEditor   = ui.EditorBg    // "#1e1e1e"
+	colBorder   = ui.Border      // "#2d2d2d"
+	colAccent   = ui.Accent      // "#0e639c"
+	colHover    = ui.HoverBg     // "#2a2d2e"
+	colSelected = ui.ActiveBg    // "#094771"
+	colWarning  = ui.Warning     // "#dcdcaa"
+	colWhite    = "#ffffff"
+)
 
-// ─── 文件树模型 ───────────────────────────────────────────
-
+// FileNode 文件树节点。字段公开，供外部访问。
 type FileNode struct {
-	name     string
-	path     string
-	isDir    bool
-	children []*FileNode
-	expanded bool
-	loaded   bool      // 子节点是否已读
-	modTime  time.Time // 目录修改时间（增量刷新用：mtime 未变则不再读盘）
+	Name     string
+	Path     string
+	IsDir    bool
+	Children []*FileNode
+	Expanded bool
+	Loaded   bool
+	ModTime  time.Time
 }
 
-// loadChildren 读目录子项：目录在前、各按名排序（不区分大小写）。同时记录目录 mtime。
-// 失败置 loaded 防重试。
 func loadChildren(n *FileNode) {
-	n.loaded = true
-	if fi, err := os.Stat(n.path); err == nil {
-		n.modTime = fi.ModTime()
+	n.Loaded = true
+	if fi, err := os.Stat(n.Path); err == nil {
+		n.ModTime = fi.ModTime()
 	}
-	entries, err := os.ReadDir(n.path)
+	entries, err := os.ReadDir(n.Path)
 	if err != nil {
 		return
 	}
 	var dirs, files []*FileNode
 	for _, e := range entries {
-		c := &FileNode{name: e.Name(), path: filepath.Join(n.path, e.Name()), isDir: e.IsDir()}
-		if c.isDir {
+		c := &FileNode{Name: e.Name(), Path: filepath.Join(n.Path, e.Name()), IsDir: e.IsDir()}
+		if c.IsDir {
 			dirs = append(dirs, c)
 		} else {
 			files = append(files, c)
 		}
 	}
 	byName := func(s []*FileNode) {
-		sort.Slice(s, func(i, j int) bool { return strings.ToLower(s[i].name) < strings.ToLower(s[j].name) })
+		sort.Slice(s, func(i, j int) bool { return strings.ToLower(s[i].Name) < strings.ToLower(s[j].Name) })
 	}
 	byName(dirs)
 	byName(files)
-	n.children = append(dirs, files...)
+	n.Children = append(dirs, files...)
 }
 
-// loadChildrenIfNeeded 检查目录 mtime，有变化则重新加载子节点（保留已展开子目录的 expanded 态，
-// 并递归加载其 children——否则 flattenFlat 展平时会丢失深层节点）。
-// 返回 true 表示子节点列表有变化。mtime 未变则跳过读盘。
 func loadChildrenIfNeeded(n *FileNode) bool {
-	if !n.loaded {
+	if !n.Loaded {
 		loadChildren(n)
 		return true
 	}
-	fi, err := os.Stat(n.path)
+	fi, err := os.Stat(n.Path)
 	if err != nil {
 		return false
 	}
-	if fi.ModTime().Equal(n.modTime) {
-		return false // mtime 未变 → 子节点未变化
+	if fi.ModTime().Equal(n.ModTime) {
+		return false
 	}
-	// mtime 变了：重读前备份旧子节点的展开态（包括深层）
 	oldExpanded := map[string]bool{}
 	collectExpanded(n, oldExpanded)
-	n.children = nil
-	loadChildren(n) // 会在内部更新 n.modTime
-	// 递归恢复之前展开的目录（含深层展开的子目录）
+	n.Children = nil
+	loadChildren(n)
 	reExpand(n, oldExpanded)
 	return true
 }
 
-// ─── 文件树面板（有状态，包级单例：跨 relayout 存活，同 ChatPanel）──
+// ─── 文件树面板（包级单例）─────────────────────────────────
 
 var FileTree = &fileTreeState{}
+var Panel = FileTree
 
-// FileTreePanel 文件树面板组件。
-type FileTreePanel struct{ widget.StatefulWidget }
-
-func (f *FileTreePanel) CreateState() widget.State { return FileTree }
+// FileTreePanel 别名（bridge.go 引用）。
+type fileTreePanel = fileTreeState
 
 type fileTreeState struct {
-	widget.BaseState
-	roots     []*FileNode               // 工作区各文件夹的根节点（VS Code 多根）
-	active    string                    // 当前选中文件路径
-	gitStatus map[string]gitpanel.Badge // 绝对路径→git 状态徽标（每次 Build 重建）
-	// 多根拖拽排序（拖根文件夹的手柄重排；首个=Agent 主文件夹）
-	dragPath         string  // 正在拖的根路径（""=未拖）
-	dragLastY        float64 // 上次光标 Y（累积位移判定换位）
-	dragStartPrimary string  // 拖拽开始时的主文件夹（结束时判主是否变→是否重建 agent）
-	// 虚拟列表：扁平化的可见节点序列（Build 时重建）
-	flatNodes []flatNode
-	// 滚动位置缓存（跨重建保留，与 chat.go 同模式）
-	cachedScrollOffset float64
-	// 文件变更清单（底部可折叠面板）
-	changesExpanded bool                     // true=展开显示变更列表
-	changes         []gitpanel.FileChange    // 当前变更文件列表（Build 时填充）
+	doc       *dom.Document
+	rootEl    *dom.Element
+	contentEl *dom.Element
+	changesEl *dom.Element
+
+	roots     []*FileNode
+	active    string
+	gitStatus map[string]gitpanel.Badge
+
+	changesExpanded bool
+	changes         []gitpanel.FileChange
 }
 
-// flatNode VirtualList 中的扁平节点
-type flatNode struct {
-	node  *FileNode
-	depth int
-	root  *FileNode // 非 nil 表示是根行（多根模式下）
-	rIdx  int       // 根索引（root 非 nil 时有效）
+// New 创建文件树面板。
+func New(doc *dom.Document) *fileTreeState {
+	FileTree.doc = doc
+	FileTree.rootEl = doc.CreateElement("div")
+	FileTree.rootEl.SetAttribute("style", "display:flex;flex-direction:column;height:100%;background:"+colSide+";overflow:hidden;")
+
+	// 标题
+	title := doc.CreateElement("div")
+	title.ClassList().Add("panel-header")
+	title.SetTextContent("FILES")
+	FileTree.rootEl.AppendChild(title)
+
+	// 内容容器（含工具栏 + 树 + 变更栏）
+	FileTree.contentEl = doc.CreateElement("div")
+	FileTree.contentEl.SetAttribute("style", "flex:1;display:flex;flex-direction:column;overflow:hidden;")
+
+	// 变更栏
+	FileTree.changesEl = doc.CreateElement("div")
+	FileTree.changesEl.SetAttribute("style", "flex-shrink:0;")
+
+	FileTree.rootEl.AppendChild(FileTree.contentEl)
+	FileTree.rootEl.AppendChild(FileTree.changesEl)
+
+	Panel = FileTree
+	return FileTree
 }
 
-const rootRowH = 24.0 // 根文件夹行高（与 VirtualList ItemHeight 对齐）
+func (s *fileTreeState) Element() *dom.Element { return s.rootEl }
+
+func (s *fileTreeState) Refresh() {
+	s.renderAll()
+}
+
+func (s *fileTreeState) RefreshPath(absPath string) {
+	if len(s.roots) == 0 {
+		return
+	}
+	for _, r := range s.roots {
+		if !isDescendant(r.Path, absPath) {
+			continue
+		}
+		if refreshPathChain(r, absPath) {
+			s.renderAll()
+			if ui.Ctx.App != nil {
+				ui.Ctx.App.MarkDirty()
+			}
+		}
+		return
+	}
+	s.Refresh()
+}
+
+func (s *fileTreeState) SelectPath(p string) {
+	s.active = p
+	s.renderAll()
+	if ui.Ctx.App != nil {
+		ui.Ctx.App.MarkDirty()
+	}
+}
+
+func (s *fileTreeState) RebuildRoots() {
+	s.buildRoots()
+	s.renderAll()
+	if ui.Ctx.App != nil {
+		ui.Ctx.App.MarkDirty()
+	}
+}
+
+func (s *fileTreeState) Toggle(n *FileNode) {
+	if !n.IsDir {
+		return
+	}
+	if !n.Loaded {
+		loadChildren(n)
+	}
+	n.Expanded = !n.Expanded
+	s.renderAll()
+	if ui.Ctx.App != nil {
+		ui.Ctx.App.MarkDirty()
+	}
+}
+
+// ─── 内部 ────────────────────────────────────────────────────
 
 func (s *fileTreeState) ensure() {
 	if len(s.roots) == 0 {
@@ -131,437 +208,362 @@ func (s *fileTreeState) ensure() {
 	}
 }
 
-// buildRoots 据 core.Folders 构建各根（保留原展开态）；无 SetState。
 func (s *fileTreeState) buildRoots() {
-	exp := map[string]bool{} // 快照展开态
+	exp := map[string]bool{}
 	for _, r := range s.roots {
 		collectExpanded(r, exp)
 	}
 	s.roots = nil
-	// 无打开的工作区 → roots 保持 nil（Build 显示「未打开文件夹」空态，而非退当前目录假装加载了项目）。
 	for _, p := range core.Folders {
-		r := &FileNode{name: filepath.Base(p), path: p, isDir: true, expanded: true}
+		r := &FileNode{Name: filepath.Base(p), Path: p, IsDir: true, Expanded: true}
 		loadChildren(r)
 		reExpand(r, exp)
 		s.roots = append(s.roots, r)
 	}
 }
 
-// rebuildRoots 工作区文件夹变化后重建 + 刷新（project.go syncWorkspace 调）。
-func (s *fileTreeState) RebuildRoots() {
-	s.buildRoots()
-	s.SetState()
-}
-
-func (s *fileTreeState) Build(ctx widget.BuildContext) widget.Widget {
+func (s *fileTreeState) renderAll() {
 	s.ensure()
-	if len(s.roots) == 0 { // 未打开工作区 → 空态（不是加载中），复刻 VS Code「尚未打开文件夹」
-		return s.emptyState()
+	s.contentEl.ClearChildren()
+
+	if len(s.roots) == 0 {
+		s.renderEmpty()
+		return
 	}
-	gitpanel.Ensure()                  // 触发 git 状态异步加载（完成后 git drain 会 refresh 文件树→徽标显现）
-	s.gitStatus = gitpanel.StatusMap() // 据当前 git 状态标记改动文件（未加载则 nil）
-	s.changes = gitpanel.ChangedFiles() // 获取变更文件列表（供底部变更清单用）
-	// 重建扁平节点列表（只存指针，不创建 Widget）
-	s.flatNodes = s.flatNodes[:0]
+
+	gitpanel.Ensure()
+	s.gitStatus = gitpanel.StatusMap()
+	s.changes = gitpanel.ChangedFiles()
+
+	// 工具栏
+	s.contentEl.AppendChild(s.toolbar())
+
+	// 树容器（可滚动）
+	treeContainer := s.doc.CreateElement("div")
+	treeContainer.SetAttribute("style", "flex:1;overflow-y:auto;")
+
 	if len(s.roots) == 1 {
-		s.flattenFlat(s.roots[0].children, 0) // 单文件夹：直接显示内容
+		s.renderNodes(s.roots[0].Children, 0, treeContainer)
 	} else {
-		for idx, r := range s.roots { // 多根：每个文件夹作可折叠根节
-			s.flatNodes = append(s.flatNodes, flatNode{node: r, depth: 0, root: r, rIdx: idx})
-			if r.expanded {
-				s.flattenFlat(r.children, 1)
+		for _, r := range s.roots {
+			rootRow := s.rootRow(r)
+			treeContainer.AppendChild(rootRow)
+			if r.Expanded {
+				s.renderNodes(r.Children, 1, treeContainer)
 			}
 		}
 	}
-	itemCount := len(s.flatNodes)
-	itemH := 24.0
-	// 使用 VirtualList 只构建可见行
-	virtualList := &widget.VirtualList{
-		ItemCount:    itemCount,
-		ItemHeight:   itemH,
-		ScrollOffset: s.cachedScrollOffset,
-		OnScroll:     func(so float64) { s.cachedScrollOffset = so },
-		RenderItem: func(i int) widget.Widget {
-			if i < 0 || i >= len(s.flatNodes) {
-				return nil
-			}
-			fn := s.flatNodes[i]
-			if fn.root != nil {
-				return s.rootRow(fn.root, fn.rIdx)
-			}
-			return s.row(fn.node, fn.depth)
-		},
-	}
-	panel := widget.Div(
-		widget.Style{BackgroundColor: ui.ShellSide, FlexDirection: "column", AlignItems: "stretch"},
-		s.toolbar(),
-		ui.Expand(virtualList),
-		s.changesBar(),
-	)
-	return &widget.ContextArea{ // 右键空白处：根目录菜单（行的右键已 StopPropagation，不会冒到这）
-		SingleChildWidget: widget.SingleChildWidget{Child: panel},
-		OnContextMenu: func(x, y float64) {
-			if OnEmptyMenu != nil {
-				OnEmptyMenu(x, y)
-			}
-		},
-	}
+	s.contentEl.AppendChild(treeContainer)
+
+	// 变更栏
+	s.renderChangesBar()
 }
 
-// flattenFlat 递归将可见节点加入 flatNodes（不创建 Widget）
-func (s *fileTreeState) flattenFlat(nodes []*FileNode, depth int) {
+func (s *fileTreeState) renderEmpty() {
+	el := s.doc.CreateElement("div")
+	el.SetAttribute("style", "display:flex;flex-direction:column;align-items:stretch;padding:14px 16px;gap:8px;")
+	t := s.doc.CreateElement("div")
+	t.SetAttribute("style", "color:"+colTextDim+";font-size:12px;")
+	t.SetTextContent("尚未打开文件夹")
+	el.AppendChild(t)
+
+	openBtn := s.doc.CreateElement("div")
+	openBtn.SetAttribute("style", "display:inline-flex;align-items:center;justify-content:center;padding:8px 14px;background:"+colAccent+";color:#fff;cursor:pointer;font-size:12px;min-height:32px;border-radius:4px;")
+	openBtn.SetAttribute("hover-style", "background:#1177bb;")
+	openBtn.SetTextContent("打开文件夹")
+	on(openBtn, event.Click, func(e event.Event) bool {
+		if OnOpenFolder != nil {
+			OnOpenFolder()
+		}
+		return true
+	})
+	el.AppendChild(openBtn)
+
+	s.contentEl.AppendChild(el)
+}
+
+func (s *fileTreeState) toolbar() *dom.Element {
+	bar := s.doc.CreateElement("div")
+	bar.SetAttribute("style", "display:flex;flex-direction:row;align-items:center;height:30px;padding:0 8px 0 8px;background:"+colSide+";border-bottom:1px solid "+colBorder+";flex-shrink:0;")
+
+	folderIcon := s.doc.CreateElement("span")
+	folderIcon.SetAttribute("data-icon", "folder")
+	folderIcon.SetAttribute("style", "width:13px;height:13px;color:"+colText+";flex-shrink:0;")
+	bar.AppendChild(folderIcon)
+	bar.AppendChild(spacer(s.doc, 6))
+
+	nameEl := s.doc.CreateElement("div")
+	nameEl.SetAttribute("style", "flex:1;color:"+colText+";font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;")
+	nameEl.SetTextContent(core.ProjectName())
+	bar.AppendChild(nameEl)
+
+	addBtn := s.doc.CreateElement("div")
+	addBtn.SetAttribute("style", "display:flex;align-items:center;justify-content:center;width:22px;height:22px;cursor:pointer;border-radius:4px;")
+	addBtn.SetAttribute("hover-style", "background:"+colHover+";")
+	addIcon := s.doc.CreateElement("span")
+	addIcon.SetAttribute("data-icon", "folder-plus")
+	addIcon.SetAttribute("style", "width:13px;height:13px;color:"+colTextDim+";")
+	addBtn.AppendChild(addIcon)
+	on(addBtn, event.Click, func(e event.Event) bool {
+		if OnAddFolder != nil {
+			OnAddFolder()
+		}
+		return true
+	})
+	bar.AppendChild(addBtn)
+
+	refBtn := s.doc.CreateElement("div")
+	refBtn.SetAttribute("style", "display:flex;align-items:center;justify-content:center;width:22px;height:22px;cursor:pointer;border-radius:4px;")
+	refBtn.SetAttribute("hover-style", "background:"+colHover+";")
+	refIcon := s.doc.CreateElement("span")
+	refIcon.SetAttribute("data-icon", "refresh-cw")
+	refIcon.SetAttribute("style", "width:13px;height:13px;color:"+colTextDim+";")
+	refBtn.AppendChild(refIcon)
+	on(refBtn, event.Click, func(e event.Event) bool {
+		s.Refresh()
+		return true
+	})
+	bar.AppendChild(refBtn)
+
+	return bar
+}
+
+func (s *fileTreeState) renderNodes(nodes []*FileNode, depth int, parent *dom.Element) {
 	for _, n := range nodes {
-		s.flatNodes = append(s.flatNodes, flatNode{node: n, depth: depth})
-		if n.isDir && n.expanded {
-			s.flattenFlat(n.children, depth+1)
+		parent.AppendChild(s.row(n, depth))
+		if n.IsDir && n.Expanded {
+			s.renderNodes(n.Children, depth+1, parent)
 		}
 	}
 }
 
-// emptyState 未打开工作区时的占位（复刻 VS Code「尚未打开文件夹」）：顶栏 + 提示 + 「打开文件夹」按钮，
-// 而不是退当前目录假装已加载项目。
-func (s *fileTreeState) emptyState() widget.Widget {
-	return widget.Div(
-		widget.Style{BackgroundColor: ui.ShellSide, FlexDirection: "column", AlignItems: "stretch"},
-		s.toolbar(),
-		widget.Div(
-			widget.Style{FlexDirection: "column", AlignItems: "stretch", Gap: 8,
-				Padding: types.EdgeInsetsLTRB(14, 16, 14, 14)},
-			ui.TextLine("尚未打开文件夹", *ui.ShellTextDim, 12),
-			&widget.Button{
-				SingleChildWidget: widget.SingleChildWidget{Child: ui.TextC("打开文件夹", *ui.White, 12)},
-				OnClick: func() {
-					if OnOpenFolder != nil {
-						OnOpenFolder()
-					}
-				},
-				Color: *ui.AccentStrong, MinHeight: 32, Padding: types.EdgeInsetsLTRB(14, 0, 14, 0),
-			},
-		),
-	)
-}
-
-// toolbar 文件树头部：工作区图标 + 工作区名（醒目，让用户看到打开的是哪个项目）+ 打开文件夹 + 刷新。
-func (s *fileTreeState) toolbar() widget.Widget {
-	return widget.Div(
-		widget.Style{Height: 30, Padding: types.EdgeInsetsLTRB(8, 0, 6, 0), FlexDirection: "row", AlignItems: "center",
-			BackgroundColor: ui.ShellSide, BorderColor: ui.ShellBorder, BorderWidth: 1},
-		widget.Lucide("folder", widget.IconSize(13), widget.IconColor(*ui.ShellText)),
-		widget.Div(widget.Style{Width: 6}),
-		ui.Expand(ui.TextLine(core.ProjectName(), *ui.ShellText, 12)), // 工作区名（单文件夹名 / 多根「工作区 (N)」）
-		ui.ShellIconBtn("folder-plus", func() { // 添加文件夹到工作区（VS Code 多根）
-			if OnAddFolder != nil {
-				OnAddFolder()
-			}
-		}),
-		ui.ShellIconBtn("refresh-cw", s.Refresh),
-	)
-}
-
-// row 单行：整行可点（Clickable，铺满宽 + 选中/悬停高亮）+ 缩进 + 图标 + 文件名。
-func (s *fileTreeState) row(n *FileNode, depth int) widget.Widget {
-	icon, iconCol := ui.FileIcon(n.name, n.isDir, n.expanded)
-	bg := types.Color{}
-	if n.path == s.active {
-		bg = *ui.FtSelected
+func (s *fileTreeState) row(n *FileNode, depth int) *dom.Element {
+	icon, iconCol := fileIcon(n.Name, n.IsDir, n.Expanded)
+	bg := ""
+	if n.Path == s.active {
+		bg = colSelected
 	}
 	indent := 8.0 + float64(depth)*14
-	// git 状态：改动文件名变色 + 行尾状态符（M/?/+ 等）。
-	nameCol := *ui.ShellText
-	var trailing widget.Widget = widget.Div(widget.Style{})
-	if gb, ok := s.gitStatus[n.path]; ok {
-		nameCol = gb.Col()
-		trailing = ui.TextC(gb.Sym(), gb.Col(), 11)
+
+	nameCol := colText
+	var trailing string
+	if gb, ok := s.gitStatus[n.Path]; ok {
+		nameCol = gb.Col
+		trailing = gb.Sym
 	}
-	// 目录行：添加展开/折叠箭头 (chevron)
-	var before widget.Widget
-	if n.isDir {
+
+	row := s.doc.CreateElement("div")
+	row.SetAttribute("style", fmt.Sprintf("display:flex;flex-direction:row;align-items:center;height:24px;padding:0 8px 0 %.0fpx;cursor:pointer;background:%s;", indent, bg))
+	row.SetAttribute("hover-style", "background:"+colHover+";")
+
+	// 展开/折叠箭头
+	if n.IsDir {
 		chev := "chevron-right"
-		if n.expanded {
+		if n.Expanded {
 			chev = "chevron-down"
 		}
-		before = widget.Lucide(chev, widget.IconSize(12), widget.IconColor(*ui.ShellTextDim))
+		chevIc := s.doc.CreateElement("span")
+		chevIc.SetAttribute("data-icon", chev)
+		chevIc.SetAttribute("style", "width:12px;height:12px;color:"+colTextDim+";flex-shrink:0;")
+		row.AppendChild(chevIc)
 	} else {
-		before = widget.Div(widget.Style{Width: 12}) // 对齐缩进
+		row.AppendChild(spacer(s.doc, 12))
 	}
-	row := &widget.Clickable{
-		SingleChildWidget: widget.SingleChildWidget{Child: widget.Div(
-			widget.Style{Height: 24, FlexDirection: "row", AlignItems: "center",
-				Padding: types.EdgeInsetsLTRB(indent, 0, 8, 0)},
-			before,
-			widget.Div(widget.Style{Width: 2}),
-			widget.Lucide(icon, widget.IconSize(15), widget.IconColor(iconCol)),
-			widget.Div(widget.Style{Width: 6}),
-			ui.Expand(ui.TextLine(n.name, nameCol, 12.5)),
-			trailing,
-		)},
-		OnClick:    func() { s.onClick(n) },
-		Color:      bg,
-		HoverColor: *ui.FtHover,
-	}
-	return &widget.ContextArea{ // 右键：文件/文件夹菜单（StopPropagation 不冒泡到空白区菜单）
-		SingleChildWidget: widget.SingleChildWidget{Child: row},
-		OnContextMenu: func(x, y float64) {
-			if OnNodeMenu != nil {
-				OnNodeMenu(x, y, n)
-			}
-		},
-	}
-}
 
-// toggle 展开/折叠目录（右键菜单用，等价点击目录）。
-func (s *fileTreeState) Toggle(n *FileNode) {
-	if !n.isDir {
-		return
-	}
-	if !n.loaded {
-		loadChildren(n)
-	}
-	n.expanded = !n.expanded
-	s.SetState()
-}
+	row.AppendChild(spacer(s.doc, 2))
 
-// selectPath 选中某路径（高亮）。
-func (s *fileTreeState) SelectPath(p string) { s.active = p; s.SetState() }
+	// 文件类型图标
+	ic := s.doc.CreateElement("span")
+	ic.SetAttribute("data-icon", icon)
+	ic.SetAttribute("style", fmt.Sprintf("width:15px;height:15px;color:%s;flex-shrink:0;", iconCol))
+	row.AppendChild(ic)
+
+	row.AppendChild(spacer(s.doc, 6))
+
+	// 文件名
+	nameEl := s.doc.CreateElement("div")
+	nameEl.SetAttribute("style", fmt.Sprintf("flex:1;color:%s;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;", nameCol))
+	nameEl.SetTextContent(n.Name)
+	row.AppendChild(nameEl)
+
+	// git 状态后缀
+	if trailing != "" {
+		gb := s.gitStatus[n.Path]
+		trailEl := s.doc.CreateElement("div")
+		trailEl.SetAttribute("style", fmt.Sprintf("color:%s;font-size:11px;margin-left:4px;flex-shrink:0;", gb.Col))
+		trailEl.SetTextContent(trailing)
+		row.AppendChild(trailEl)
+	}
+
+	nodePtr := n
+	on(row, event.Click, func(e event.Event) bool {
+		s.onClick(nodePtr)
+		return true
+	})
+
+	return row
+}
 
 func (s *fileTreeState) onClick(n *FileNode) {
-	if n.isDir {
-		if !n.loaded {
+	if n.IsDir {
+		if !n.Loaded {
 			loadChildren(n)
 		}
-		n.expanded = !n.expanded
+		n.Expanded = !n.Expanded
 	} else {
-		s.active = n.path
-		editorpanel.Editor.Open(n.path) // 在中列编辑区打开（全局 relayout 让编辑区重建读取）
+		s.active = n.Path
+		editorpanel.Editor.Open(n.Path)
 	}
-	s.SetState()
+	s.renderAll()
+	if ui.Ctx.App != nil {
+		ui.Ctx.App.MarkDirty()
+	}
 }
 
-// rootRow 多根工作区里，每个文件夹的可折叠根行：大写名 + chevron + idx==0 金色星标(Agent 主文件夹)
-// + 右侧拖拽手柄(按住上下拖重排，首个=主文件夹)。点行折叠/展开，右键菜单。
-func (s *fileTreeState) rootRow(r *FileNode, idx int) widget.Widget {
+func (s *fileTreeState) rootRow(r *FileNode) *dom.Element {
 	chev := "chevron-down"
-	if !r.expanded {
+	if !r.Expanded {
 		chev = "chevron-right"
 	}
-	trail, trailCol := "", types.Color{}
-	if idx == 0 { // 主文件夹（Agent 首选）：金色星标
-		trail, trailCol = "star", types.ColorFromRGB(229, 192, 123)
-	}
-	// 整行可拖（DragRow 自绘叶子）：点行折叠/展开；长按或拖动→重排（首个=主文件夹）；右键菜单。
-	return &widget.DragRow{
-		LeadIcon: chev, LeadColor: *ui.ShellTextDim,
-		Icon: "folder", Text: strings.ToUpper(r.name), TextColor: *ui.ShellText, TextSize: 11,
-		TrailIcon: trail, TrailColor: trailCol,
-		Height: rootRowH, Indent: 6,
-		Bg: *ui.ShellSide, HoverBg: *ui.FtHover, Active: r.path == s.dragPath,
-		OnTap: func() { s.Toggle(r) },
-		OnContext: func(x, y float64) {
-			if OnRootMenu != nil {
-				OnRootMenu(x, y, r.path)
-			}
-		},
-		OnDragStart: func(y float64) { s.onRootDragStart(r.path, y) },
-		OnDragMove:  func(y float64) { s.onRootDragMove(y) },
-		OnDragEnd:   func() { s.onRootDragEnd() },
-	}
+
+	row := s.doc.CreateElement("div")
+	row.SetAttribute("style", "display:flex;flex-direction:row;align-items:center;height:24px;padding:0 8px 0 6px;cursor:pointer;")
+	row.SetAttribute("hover-style", "background:"+colHover+";")
+
+	chevIc := s.doc.CreateElement("span")
+	chevIc.SetAttribute("data-icon", chev)
+	chevIc.SetAttribute("style", "width:12px;height:12px;color:"+colTextDim+";flex-shrink:0;")
+	row.AppendChild(chevIc)
+
+	row.AppendChild(spacer(s.doc, 4))
+
+	folderIc := s.doc.CreateElement("span")
+	folderIc.SetAttribute("data-icon", "folder")
+	folderIc.SetAttribute("style", "width:14px;height:14px;color:"+colAccent+";flex-shrink:0;")
+	row.AppendChild(folderIc)
+
+	row.AppendChild(spacer(s.doc, 4))
+
+	nameEl := s.doc.CreateElement("div")
+	nameEl.SetAttribute("style", "flex:1;color:"+colText+";font-size:11px;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;")
+	nameEl.SetTextContent(r.Name)
+	row.AppendChild(nameEl)
+
+	on(row, event.Click, func(e event.Event) bool {
+		s.Toggle(r)
+		return true
+	})
+
+	return row
 }
 
-// onRootDragStart 手柄按下开始拖某根文件夹。
-func (s *fileTreeState) onRootDragStart(path string, y float64) {
-	s.dragPath = path
-	s.dragLastY = y
-	s.dragStartPrimary = core.Root()
-	s.SetState()
-}
+// ─── 变更栏（底部可折叠）──────────────────────────────────
 
-// onRootDragMove 拖动中：光标每移过一行高，就与相邻根实时换位（首个=主文件夹）。
-func (s *fileTreeState) onRootDragMove(y float64) {
-	if s.dragPath == "" {
-		return
-	}
-	for y <= s.dragLastY-rootRowH { // 向上够一行高 → 上移
-		i := core.IndexOfFolder(s.dragPath)
-		if i <= 0 {
-			break
-		}
-		s.swapRoots(i, i-1)
-		s.dragLastY -= rootRowH
-	}
-	for y >= s.dragLastY+rootRowH { // 向下够一行高 → 下移
-		i := core.IndexOfFolder(s.dragPath)
-		if i < 0 || i >= len(core.Folders)-1 {
-			break
-		}
-		s.swapRoots(i, i+1)
-		s.dragLastY += rootRowH
-	}
-}
-
-// onRootDragEnd 结束拖拽：落盘新顺序；主文件夹变了才重建 agent。
-func (s *fileTreeState) onRootDragEnd() {
-	if s.dragPath == "" {
-		return
-	}
-	s.dragPath = ""
-	if OnWorkspaceChanged != nil { // 落盘新顺序(project.syncWorkspace 注入；主文件夹变了才重建 agent)
-		OnWorkspaceChanged(core.Root() != s.dragStartPrimary)
-	}
-}
-
-// swapRoots 拖拽中实时换两根（换 core.Folders + s.roots，保留展开态，不落盘——结束时统一落盘）。
-func (s *fileTreeState) swapRoots(i, j int) {
-	core.Folders[i], core.Folders[j] = core.Folders[j], core.Folders[i]
-	if i < len(s.roots) && j < len(s.roots) {
-		s.roots[i], s.roots[j] = s.roots[j], s.roots[i]
-	}
-	s.SetState()
-}
-
-// ─── 文件变更清单（底部可折叠面板）────────────────────────
-
-// changesBar 渲染底部文件变更清单：折叠时仅标题行，展开时显示变更文件列表。
-func (s *fileTreeState) changesBar() widget.Widget {
+func (s *fileTreeState) renderChangesBar() {
+	s.changesEl.ClearChildren()
 	changeCount := len(s.changes)
 	if changeCount == 0 {
-		return widget.Div(widget.Style{}) // 无变更时不显示
+		return
 	}
+
 	chev := "chevron-right"
 	if s.changesExpanded {
 		chev = "chevron-down"
 	}
-	titleColor := *ui.Warning // 有变更时橙色标题
-	// 标题行（整行可点击展开/折叠）
-	header := &widget.Clickable{
-		SingleChildWidget: widget.SingleChildWidget{Child: widget.Div(
-			widget.Style{
-				Height: 24, Padding: types.EdgeInsetsLTRB(8, 0, 8, 0),
-				FlexDirection: "row", AlignItems: "center",
-				BorderColor: ui.ShellBorder, BorderWidth: 1,
-			},
-			widget.Lucide(chev, widget.IconSize(13), widget.IconColor(titleColor)),
-			widget.Div(widget.Style{Width: 4}),
-			widget.Lucide("circle-dot", widget.IconSize(12), widget.IconColor(titleColor)),
-			widget.Div(widget.Style{Width: 4}),
-			ui.Expand(ui.TextC(fmt.Sprintf("文件变更 (%d)", changeCount), titleColor, 11)),
-		)},
-		OnClick:    func() { s.changesExpanded = !s.changesExpanded; s.SetState() },
-		HoverColor: *ui.FtHover,
-	}
+
+	// 标题行
+	header := s.doc.CreateElement("div")
+	header.SetAttribute("style", "display:flex;flex-direction:row;align-items:center;height:24px;padding:0 8px;border-top:1px solid "+colBorder+";cursor:pointer;background:"+colSide+";")
+	header.SetAttribute("hover-style", "background:"+colHover+";")
+
+	chevIc := s.doc.CreateElement("span")
+	chevIc.SetAttribute("data-icon", chev)
+	chevIc.SetAttribute("style", "width:13px;height:13px;color:"+colWarning+";flex-shrink:0;")
+	header.AppendChild(chevIc)
+	header.AppendChild(spacer(s.doc, 4))
+
+	dotIc := s.doc.CreateElement("span")
+	dotIc.SetAttribute("data-icon", "circle-dot")
+	dotIc.SetAttribute("style", "width:12px;height:12px;color:"+colWarning+";flex-shrink:0;")
+	header.AppendChild(dotIc)
+	header.AppendChild(spacer(s.doc, 4))
+
+	titleEl := s.doc.CreateElement("div")
+	titleEl.SetAttribute("style", "flex:1;color:"+colWarning+";font-size:11px;")
+	titleEl.SetTextContent(fmt.Sprintf("文件变更 (%d)", changeCount))
+	header.AppendChild(titleEl)
+
+	on(header, event.Click, func(e event.Event) bool {
+		s.changesExpanded = !s.changesExpanded
+		s.renderChangesBar()
+		if ui.Ctx.App != nil {
+			ui.Ctx.App.MarkDirty()
+		}
+		return true
+	})
+	s.changesEl.AppendChild(header)
+
 	if !s.changesExpanded {
-		return header // 折叠：只显示标题行
+		return
 	}
-	// 展开：显示变更文件列表（按状态分组，内部滚动）
-	var rows []widget.Widget
-	// 已暂存
+
+	// 展开列表
+	changeList := s.doc.CreateElement("div")
+	changeList.SetAttribute("style", "max-height:200px;overflow-y:auto;background:"+colSide+";")
+
 	for _, c := range s.changes {
 		if !c.Staged {
 			continue
 		}
-		rows = append(rows, s.changeRow(c))
+		changeList.AppendChild(s.changeRow(c))
 	}
-	// 已修改+冲突+未跟踪
 	for _, c := range s.changes {
 		if c.Staged {
 			continue
 		}
-		rows = append(rows, s.changeRow(c))
+		changeList.AppendChild(s.changeRow(c))
 	}
-	// 限制最大高度，内部滚动
-	maxH := 200.0
-	if len(rows)*24 < int(maxH) {
-		maxH = float64(len(rows) * 24)
-	}
-	list := widget.NewScrollView(
-		ui.FlexCol(rows...),
-	)
-	scrollDiv := widget.Div(
-		widget.Style{
-			MaxHeight: maxH,
-			BackgroundColor: ui.ShellSide,
-		},
-		list,
-	)
-	return widget.Div(
-		widget.Style{FlexDirection: "column", AlignItems: "stretch"},
-		header,
-		scrollDiv,
-	)
+	s.changesEl.AppendChild(changeList)
 }
 
-// changeRow 变更清单中的一行文件。
-func (s *fileTreeState) changeRow(c gitpanel.FileChange) widget.Widget {
-	return &widget.Clickable{
-		SingleChildWidget: widget.SingleChildWidget{Child: widget.Div(
-			widget.Style{
-				Height: 24, Padding: types.EdgeInsetsLTRB(24, 0, 8, 0),
-				FlexDirection: "row", AlignItems: "center",
-			},
-			widget.Div(widget.Style{Width: 14, FlexDirection: "row", AlignItems: "center"},
-				ui.TextC(c.Sym, c.Col, 12)),
-			widget.Div(widget.Style{Width: 4}),
-			ui.Expand(ui.TextC(c.Path, *ui.ShellText, 11.5)),
-		)},
-		OnClick: func() {
-			abs := filepath.Join(core.Root(), filepath.FromSlash(c.Path))
-			s.active = abs
-			editorpanel.Editor.Open(abs)
-			s.SetState()
-		},
-		HoverColor: *ui.FtHover,
-	}
-}
+func (s *fileTreeState) changeRow(c gitpanel.FileChange) *dom.Element {
+	row := s.doc.CreateElement("div")
+	row.SetAttribute("style", "display:flex;flex-direction:row;align-items:center;height:24px;padding:0 8px 0 24px;cursor:pointer;")
+	row.SetAttribute("hover-style", "background:"+colHover+";")
 
-// ═══════════════════════════════════════════════════════════
-// 增量刷新：基于 mtime 缓存，避免每次 Refresh 都重建整棵树
-// ═══════════════════════════════════════════════════════════
+	symEl := s.doc.CreateElement("div")
+	symEl.SetAttribute("style", "width:14px;display:flex;flex-direction:row;align-items:center;color:"+c.Col+";font-size:12px;flex-shrink:0;")
+	symEl.SetTextContent(c.Sym)
+	row.AppendChild(symEl)
+	row.AppendChild(spacer(s.doc, 4))
 
-// Refresh 增量刷新文件树：只重新读 mtime 变化的目录，保留树结构和展开态。
-// 不再像旧版那样销毁整棵树重建，大幅减少大项目中的磁盘 IO。
-func (s *fileTreeState) Refresh() {
-	if len(s.roots) == 0 {
-		return
-	}
-	changed := false
-	for _, r := range s.roots {
-		if refreshNode(r) {
-			changed = true
+	pathEl := s.doc.CreateElement("div")
+	pathEl.SetAttribute("style", "flex:1;color:"+colText+";font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;")
+	pathEl.SetTextContent(c.Path)
+	row.AppendChild(pathEl)
+
+	on(row, event.Click, func(e event.Event) bool {
+		abs := filepath.Join(core.Root(), filepath.FromSlash(c.Path))
+		s.active = abs
+		editorpanel.Editor.Open(abs)
+		s.renderAll()
+		if ui.Ctx.App != nil {
+			ui.Ctx.App.MarkDirty()
 		}
-	}
-	if changed {
-		s.SetState()
-	}
+		return true
+	})
+	return row
 }
 
-// RefreshPath 已知某文件/目录路径发生变化时，只刷新包含该路径的目录链。
-// 比全量 Refresh 更高效——避免遍历未变化的子树。
-func (s *fileTreeState) RefreshPath(absPath string) {
-	if len(s.roots) == 0 {
-		return
-	}
-	for _, r := range s.roots {
-		if !isDescendant(r.path, absPath) {
-			continue
-		}
-		if refreshPathChain(r, absPath) {
-			s.SetState()
-		}
-		return
-	}
-	// 未找到包含该路径的根——可能是新文件，fallback 到全量刷新
-	s.Refresh()
-}
+// ─── 增量刷新 ──────────────────────────────────────────────
 
-// refreshNode 递归增量刷新节点 n 及其已展开的子目录。
-// 对每个目录先检查 mtime，未变则跳过整个子树。返回是否有变化。
 func refreshNode(n *FileNode) bool {
-	if !n.isDir || !n.loaded {
+	if !n.IsDir || !n.Loaded {
 		return false
 	}
 	changed := loadChildrenIfNeeded(n)
-	// 对已展开的子目录递归刷新
-	for _, c := range n.children {
-		if c.isDir && c.expanded {
+	for _, c := range n.Children {
+		if c.IsDir && c.Expanded {
 			if refreshNode(c) {
 				changed = true
 			}
@@ -570,19 +572,16 @@ func refreshNode(n *FileNode) bool {
 	return changed
 }
 
-// refreshPathChain 从节点 n 开始，沿 absPath 的目录链向下刷新。
-// 只刷新路径链上的目录，不遍历无关子树。
 func refreshPathChain(n *FileNode, absPath string) bool {
-	if !n.isDir || !n.loaded {
+	if !n.IsDir || !n.Loaded {
 		return false
 	}
 	changed := loadChildrenIfNeeded(n)
-	if n.path == absPath {
-		return changed // 已到目标路径
+	if n.Path == absPath {
+		return changed
 	}
-	// 找包含 absPath 的子目录，沿链刷新
-	for _, c := range n.children {
-		if c.isDir && isDescendant(c.path, absPath) {
+	for _, c := range n.Children {
+		if c.IsDir && isDescendant(c.Path, absPath) {
 			if refreshPathChain(c, absPath) {
 				changed = true
 			}
@@ -592,7 +591,6 @@ func refreshPathChain(n *FileNode, absPath string) bool {
 	return changed
 }
 
-// isDescendant 检查 child 路径是否在 parent 目录之下（含等于）。
 func isDescendant(parent, child string) bool {
 	parent = filepath.Clean(parent)
 	child = filepath.Clean(child)
@@ -603,25 +601,80 @@ func isDescendant(parent, child string) bool {
 	return err == nil && !strings.HasPrefix(rel, "..")
 }
 
-// ─── 全量重建（工作区变化时用）────────────────────────────
-
 func collectExpanded(n *FileNode, exp map[string]bool) {
-	for _, c := range n.children {
-		if c.isDir && c.expanded {
-			exp[c.path] = true
+	for _, c := range n.Children {
+		if c.IsDir && c.Expanded {
+			exp[c.Path] = true
 			collectExpanded(c, exp)
 		}
 	}
 }
 
 func reExpand(n *FileNode, exp map[string]bool) {
-	for _, c := range n.children {
-		if c.isDir && exp[c.path] {
+	for _, c := range n.Children {
+		if c.IsDir && exp[c.Path] {
 			loadChildren(c)
-			c.expanded = true
+			c.Expanded = true
 			reExpand(c, exp)
 		}
 	}
 }
 
-// ftIconBtn 文件树工具条图标按钮已下沉到 ui.ShellIconBtn。
+// ─── 工具 ────────────────────────────────────────────────────
+
+func fileIcon(name string, isDir, expanded bool) (string, string) {
+	if isDir {
+		if expanded {
+			return "folder-open", colAccent
+		}
+		return "folder", colAccent
+	}
+	ext := strings.ToLower(filepath.Ext(name))
+	switch ext {
+	case ".go":
+		return "file-code", "#00ADD8"
+	case ".js", ".ts", ".jsx", ".tsx":
+		return "file-code", "#3178C6"
+	case ".py":
+		return "file-code", "#3572A5"
+	case ".rs":
+		return "file-code", "#DEA584"
+	case ".html", ".htm":
+		return "file-code", "#E44D26"
+	case ".css", ".scss", ".less":
+		return "file-code", "#563D7C"
+	case ".json":
+		return "file-code", colTextMute
+	case ".md":
+		return "file-text", colAccent
+	case ".png", ".jpg", ".jpeg", ".gif", ".ico", ".svg":
+		return "file-image", "#CBBE6E"
+	case ".zip", ".tar", ".gz", ".7z", ".rar":
+		return "file-archive", "#CBCB6E"
+	default:
+		return "file", colTextDim
+	}
+}
+
+func spacer(doc *dom.Document, w float64) *dom.Element {
+	s := doc.CreateElement("div")
+	s.SetAttribute("style", fmt.Sprintf("width:%.0fpx;flex-shrink:0;", w))
+	return s
+}
+
+func on(el *dom.Element, typ event.Type, fn func(event.Event) bool) {
+	if ui.Ctx.App != nil {
+		ui.Ctx.App.AddEventListener(el, typ, fn)
+	}
+}
+
+// ─── 外部回调 ────────────────────────────────────────────────
+
+var (
+	OnNodeMenu         func(x, y float64, n *FileNode)
+	OnEmptyMenu        func(x, y float64)
+	OnRootMenu         func(x, y float64, path string)
+	OnOpenFolder       func()
+	OnAddFolder        func()
+	OnWorkspaceChanged func(primaryChanged bool)
+)
