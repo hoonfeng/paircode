@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/hoonfeng/goui/pkg/widget"
+	"github.com/hoonfeng/paircode/cmd/companion/codetypes"
 )
 
 // AppSettings 持久化设置 —— 字段对齐参考 settings.ts（扁平存储；分组注释）。API Key 敏感，存安装目录 config/，不入库。
@@ -85,7 +85,7 @@ type AppSettings struct {
 	SkillEnabledOverrides map[string]bool `json:"skillEnabledOverrides"` // 同上，Skills 用
 
 	// 自定义语言提供者（结构化编辑器用）：把新语言扩展名映射到已有 provider。
-	CustomProviders []widget.CustomProviderConfig `json:"customProviders"`
+	CustomProviders []codetypes.CustomProviderConfig `json:"customProviders"`
 }
 
 var (

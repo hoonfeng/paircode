@@ -14,7 +14,7 @@ import (
 
 	"github.com/hoonfeng/paircode/cmd/companion/agent"
 	"github.com/hoonfeng/paircode/cmd/companion/core"
-	"github.com/hoonfeng/paircode/cmd/companion/ui/settings"
+	settingspanel "github.com/hoonfeng/paircode/cmd/companion/ui/settings"
 )
 
 // ensureRolePrompts 启动时把内置默认角色提示落地到 config/roles/*.md（仅缺失时写），
@@ -107,6 +107,11 @@ func RoleSpecificPhilosophy(roleID string) string {
 // 与角色「提示词」互补：各 Agent 的 System = 角色提示(config/roles/*.md) + rolePhilosophy(角色)，两者并存非替代。
 func RolePhilosophy(roleID string) string {
 	return classicsPhilosophy() + RoleSpecificPhilosophy(roleID)
+}
+
+// PhilosophyPrompt 主执行 Agent 的指导思想（共享经典，启用时）。bridge 注入主系统提示。
+func PhilosophyPrompt() string {
+	return classicsPhilosophy()
 }
 
 // roleDisplayName 角色显示名（哲学小节标题用）。

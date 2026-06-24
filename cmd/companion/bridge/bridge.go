@@ -1,6 +1,6 @@
 // Agent 引擎 ↔ 聊天面板 桥接：把 agent.Loop 接到对话 UI。
-// send → 异步跑 TAOR 循环（goroutine）；事件（thinking/工具调用/结果/final）经**动画帧泵**
-// 每帧在 UI 线程 drain，流式写进当前助手消息（复刻终端面板跨线程模式，见 terminal.go / AGENTS.md）。
+// send → 异步跑 TAOR 循环（goroutine）；事件（thinking/工具调用/结果/final）经**定时器帧泵**
+// 周期在 UI 线程 drain，流式写进当前助手消息（复刻终端面板跨线程模式，见 terminal.go / AGENTS.md）。
 // 本文件还含 Agent 消息卡的富渲染（思考块 + 工具活动行 + 正文）。
 //
 //go:build windows
@@ -18,19 +18,23 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hoonfeng/goui/pkg/animation"
 	"github.com/hoonfeng/paircode/cmd/companion/agent"
 	"github.com/hoonfeng/paircode/cmd/companion/agenttools"
 	"github.com/hoonfeng/paircode/cmd/companion/core"
 	"github.com/hoonfeng/paircode/cmd/companion/roleprompts"
 	chat "github.com/hoonfeng/paircode/cmd/companion/ui/chat"
-	"github.com/hoonfeng/paircode/cmd/companion/ui/editor"
-	"github.com/hoonfeng/paircode/cmd/companion/ui/filetree"
-	"github.com/hoonfeng/paircode/cmd/companion/ui/mcp"
-	"github.com/hoonfeng/paircode/cmd/companion/ui/settings"
-	"github.com/hoonfeng/paircode/cmd/companion/ui/skills"
+	editorpanel "github.com/hoonfeng/paircode/cmd/companion/ui/editor"
+	filetreepanel "github.com/hoonfeng/paircode/cmd/companion/ui/filetree"
+	mcppanel "github.com/hoonfeng/paircode/cmd/companion/ui/mcp"
+	skillspanel "github.com/hoonfeng/paircode/cmd/companion/ui/skills"
 	"github.com/hoonfeng/paircode/cmd/companion/ui/state"
 )
+
+// SetIntervalFunc 由 main 注入：周期回调（替代 goui animation.Controller 帧泵），返回 timer ID。
+var SetIntervalFunc func(interval time.Duration, fn func()) int
+
+// ClearIntervalFunc 由 main 注入：取消定时器。
+var ClearIntervalFunc func(id int)
 
 // agentBridge 持有 Agent 引擎与一次流式回复的运行态。挂在 chat.ChatState 上（懒建）。
 type AgentBridge struct {
@@ -45,7 +49,7 @@ type AgentBridge struct {
 	mu        sync.Mutex
 	running   bool
 	pending   []agent.Event // loop 协程写、帧泵 drain
-	pump      *animation.Controller
+	pumpID    int           // SetInterval 返回的定时器 ID（0=未运行）
 	runThread *state.Thread // 当前流式回复所在会话（捕获，防用户切会话）
 	runIdx    int           // 流式回复在该会话的消息索引
 
@@ -60,6 +64,11 @@ type AgentBridge struct {
 	askCh chan string
 
 	lastDrainTime time.Time
+}
+
+// NewAgentBridge 创建一个绑定到指定 ChatState 的 AgentBridge（由 main 注入 chat.NewBridge）。
+func NewAgentBridge(cs *chat.ChatState) *AgentBridge {
+	return &AgentBridge{Cs: cs}
 }
 
 func (b *AgentBridge) IsRunning() bool {
@@ -139,13 +148,17 @@ func (b *AgentBridge) Start(task string) {
 		b.registerAskTool(reg)                             // ask_user：handler 闭包持有 bridge（需 UI 交互），故在此注册而非默认集
 		agenttools.RegisterManagementTools(reg)            // Agent 自管理 Skills/MCP + 市场 + 技能渐进式披露(skill_read)
 		if cfgs := mcppanel.LoadConfigs(); len(cfgs) > 0 { // 外部 MCP 服务器（mcp.json；失败跳过、不阻断；首条消息时一次性连接）
-			agent.RegisterMCPServers(reg, cfgs)
+			agentCfgs := make([]agent.MCPServerConfig, len(cfgs))
+			for i, c := range cfgs {
+				agentCfgs[i] = agent.MCPServerConfig{Name: c.Name, Command: c.Command, Args: c.Args, Env: c.Env}
+			}
+			agent.RegisterMCPServers(reg, agentCfgs)
 		}
 		sys := agent.DefaultSystemPrompt(core.Folders)
 		if si := strings.TrimSpace(core.Settings.SystemInstructions); si != "" { // 设置里的系统级指令
 			sys += "\n\n# 系统级指令（务必遵守）\n" + si
 		}
-		sys += settingspanel.PhilosophyPrompt() // 思想 tab：指导思想（启用时）
+		sys += roleprompts.PhilosophyPrompt() // 思想 tab：指导思想（启用时）
 		sys += skillspanel.Prompt()             // Skills tab：可用技能（.pair/skills，渐进式披露）
 		sys += "\n\n# 自管理与扩展\n你可自我扩展：skill_list / skill_read（按需读技能全文）/ skill_write / skill_delete 管理技能；" +
 			"mcp_list / mcp_add / mcp_remove 管理 MCP 服务器；marketplace_search / marketplace_install 从市场检索并安装 MCP 或技能。把可复用的工作方式沉淀成技能。"
@@ -297,22 +310,19 @@ func activitySummary(acts []state.Activity) string {
 	return "[上轮已执行：" + strings.Join(parts, "、") + "]"
 }
 
-// startPump 帧泵：运行期间使主循环持续出帧，每帧 drain 把事件应用到流式消息（同终端面板）。
+// startPump 帧泵：运行期间周期 drain 把事件应用到流式消息（同终端面板）。
+// 用 app.SetInterval 替代 goui animation.Controller（GWui 无帧泵控制器）。
 func (b *AgentBridge) startPump() {
-	if b.pump != nil {
+	if b.pumpID != 0 || SetIntervalFunc == nil {
 		return
 	}
-	p := animation.NewController(time.Second, animation.Linear)
-	p.Repeat = true
-	p.OnUpdate = func(float64) { b.drain() }
-	b.pump = p
-	p.Start()
+	b.pumpID = SetIntervalFunc(120*time.Millisecond, func() { b.drain() })
 }
 
 func (b *AgentBridge) stopPump() {
-	if b.pump != nil {
-		b.pump.Stop()
-		b.pump = nil
+	if b.pumpID != 0 && ClearIntervalFunc != nil {
+		ClearIntervalFunc(b.pumpID)
+		b.pumpID = 0
 	}
 }
 
@@ -418,7 +428,7 @@ func (b *AgentBridge) ResolveAsk(answer string) {
 	b.Cs.SetState()
 }
 
-// drain 每帧（UI 线程，animation.Tick 调）把缓冲事件应用到流式消息 + 重绘；结束即停泵。
+// drain 每次定时器回调（UI 线程）把缓冲事件应用到流式消息 + 重绘；结束即停泵。
 func (b *AgentBridge) drain() {
 	b.mu.Lock()
 	evs := b.pending
@@ -550,7 +560,7 @@ func (b *AgentBridge) applyEvent(e agent.Event) {
 				break
 			}
 		}
-	case agent.EventCompacted, agent.EventCircling:
+	case agent.EventCompacted, agent.EventCircling, agent.EventNotice:
 		m.Notes = append(m.Notes, e.Content) // 系统提示（压缩/绕圈）：素色一行显示在卡内
 	case agent.EventUsage:
 		if e.Usage != nil && b.runThread != nil {
@@ -602,14 +612,18 @@ func (b *AgentBridge) syncWorkspaceEdits(evs []agent.Event) {
 			continue // 失败或被拒，磁盘未变
 		}
 		if p := b.toolPath(root, e.CallID); p != "" {
-			filetreepanel.FileTree.RefreshPath(p)
+			if filetreepanel.Panel != nil {
+				filetreepanel.Panel.RefreshPath(p)
+			}
 			editorpanel.Editor.ReloadIfOpen(p)
 			refreshed = true
 		}
 	}
 	if !refreshed {
 		// 所有事件都无有效路径时 fallback 到全量刷新
-		filetreepanel.FileTree.Refresh()
+		if filetreepanel.Panel != nil {
+			filetreepanel.Panel.Refresh()
+		}
 	}
 }
 
@@ -706,13 +720,13 @@ func BuildRoleProvider(model string) agent.Provider {
 // 角色系统提示从 config/roles/<id>.md 加载（缺失回退内置默认）+ 该角色哲学（rolePhilosophy）——非硬编码。
 var MakePlanner = func() *agent.Planner {
 	if pp := BuildPlanProvider(); pp != nil {
-		return &agent.Planner{Provider: pp, SystemPrompt: roleprompts.LoadRolePrompt("planner", agent.DefaultPlannerPrompt()) + settingspanel.RolePhilosophy("planner")}
+		return &agent.Planner{Provider: pp, SystemPrompt: roleprompts.LoadRolePrompt("planner", agent.DefaultPlannerPrompt()) + roleprompts.RolePhilosophy("planner")}
 	}
 	return nil
 }
 var MakeReviewer = func() *agent.Reviewer {
 	if rp := BuildReviewProvider(); rp != nil {
-		return &agent.Reviewer{Provider: rp, SystemPrompt: roleprompts.LoadRolePrompt("reviewer", agent.DefaultReviewerPrompt()) + settingspanel.RolePhilosophy("reviewer")}
+		return &agent.Reviewer{Provider: rp, SystemPrompt: roleprompts.LoadRolePrompt("reviewer", agent.DefaultReviewerPrompt()) + roleprompts.RolePhilosophy("reviewer")}
 	}
 	return nil
 }
@@ -800,7 +814,7 @@ func (b *AgentBridge) runRolePhase(ctx context.Context, roleID, defPrompt, task 
 	phase := &agent.Loop{
 		Provider:      b.loop.Provider,
 		Registry:      b.loop.Registry,
-		System:        roleprompts.LoadRolePrompt(roleID, defPrompt) + settingspanel.RolePhilosophy(roleID),
+		System:        roleprompts.LoadRolePrompt(roleID, defPrompt) + roleprompts.RolePhilosophy(roleID),
 		MaxIterations: 6,
 		OnEvent:       b.pushEvent,
 		Approve: func(context.Context, agent.ToolCall) (bool, string) {

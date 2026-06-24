@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/hoonfeng/goui/pkg/widget"
+	"github.com/hoonfeng/paircode/cmd/companion/uiapi"
 )
 
 // lspServerDef 一种语言的语言服务器配置。
@@ -135,16 +135,15 @@ func MaybeOfferInstall(lang string) {
 	lspPromptMu.Unlock()
 
 	cmdline := inst.cmd + " " + strings.Join(inst.args, " ")
-	widget.ShowConfirm("安装语言服务器",
+	uiapi.ShowConfirm("安装语言服务器",
 		"未检测到 "+d.cmd+"，是否自动安装以获得该语言的代码智能？\n将运行：\n"+cmdline,
-		widget.MsgInfo,
-		func() { installLSPServer(d.cmd, inst.cmd, inst.args) },
-		nil)
+		uiapi.KindInfo,
+		func() { installLSPServer(d.cmd, inst.cmd, inst.args) })
 }
 
 // installLSPServer 后台运行安装命令；overlay 有锁，从协程提示安全。完成后清缓存使重新探测发现。
 func installLSPServer(server, cmd string, args []string) {
-	widget.MessageInfo("正在安装 " + server + " …（后台运行，完成后重开该文件即生效）")
+	uiapi.MessageInfo("正在安装 " + server + " …（后台运行，完成后重开该文件即生效）")
 	go func() {
 		out, err := exec.Command(cmd, args...).CombinedOutput()
 		if err != nil {
@@ -152,15 +151,13 @@ func installLSPServer(server, cmd string, args []string) {
 			if r := []rune(tail); len(r) > 160 {
 				tail = "…" + string(r[len(r)-160:])
 			}
-			widget.MessageError(server + " 安装失败：" + tail)
+			uiapi.MessageError(server + " 安装失败：" + tail)
 		} else {
 			lspPathMu.Lock()
 			delete(lspPathCache, cmd)
 			lspPathMu.Unlock()
-			widget.MessageSuccess(server + " 已安装，重开该文件即生效")
+			uiapi.MessageSuccess(server + " 已安装，重开该文件即生效")
 		}
-		if widget.OnNeedsRepaint != nil {
-			widget.OnNeedsRepaint() // 唤醒 UI 渲染 toast
-		}
+		uiapi.MarkDirty() // 唤醒 UI 渲染 toast
 	}()
 }
