@@ -71,6 +71,13 @@ type Loop struct {
 	compactCooldown  int // 压缩后冷却剩余轮数（防每轮重复压缩，复刻参考 refreshCooldown）
 
 	recentCalls []toolSig // 最近若干次工具调用签名+成败（绕圈检测，见 circling.go）
+
+	// ── 多 agent 编排（阶段四，均可空；空=普通单 agent 模式）──
+	AgentTree      *AgentTree     // agent 编排树（delegate_task/delegate_single_turn 用）
+	State          map[string]any // 跨 agent 共享状态（子 Loop 继承父引用，避免塞进 messages 撑爆上下文）
+	currentMsgs    []Message      // Run 期间当前消息列表（供 delegate handler 读父历史，保缓存前缀命中）
+	finishResult   *string        // finish_task 退出信号（子 Loop：子 agent 调 finish_task 后置；delegate handler 据此取子结果）
+	transferTarget string         // transfer_to_agent 目标名（非空=当前 Loop 应退出，控制权转移给目标 agent）
 }
 
 func (l *Loop) emit(e Event) {
@@ -123,6 +130,7 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) ([]Messa
 			return msgs, err
 		}
 		msgs = append(msgs, assistant)
+		l.currentMsgs = msgs // 同步：供 delegate handler 读父历史（含本轮 assistant；handler 剥离末尾未配对 tool_call 保前缀稳定）
 
 		// ── 完成判定：[FINAL] 标记，或无工具调用（视作已给出文本答复）──
 		if strings.Contains(assistant.Content, finalMarker) || len(assistant.ToolCalls) == 0 {
@@ -160,6 +168,14 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) ([]Messa
 			l.emit(Event{Type: EventToolResult, Tool: tc.Function.Name, Content: result, CallID: tc.ID})
 			msgs = append(msgs, Message{Role: RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: result})
 			l.trackCall(tc.Function.Name, tc.Function.Arguments, terr != nil || strings.HasPrefix(strings.TrimSpace(result), "Error:"))
+
+			// finish_task 退出信号：子 agent 调 finish_task 表示任务完成，记录 result 退出循环。
+			// delegate handler 从 child.finishResult 取子最终结果。仅子 Loop 注册此工具。
+			if tc.Function.Name == "finish_task" {
+				l.finishResult = &result
+				l.emit(Event{Type: EventFinal, Content: result})
+				return msgs, nil
+			}
 		}
 
 		// 绕圈检测：同一操作反复失败/反复执行 → 注入「换思路」提示打破死循环（见 circling.go）。
@@ -178,6 +194,11 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) ([]Messa
 			}
 		} else {
 			consecErr = 0
+		}
+
+		// transfer_to_agent：当前 agent 退出，控制权转移给目标 agent（由调用方接管同一 []Message）。
+		if l.transferTarget != "" {
+			return msgs, nil
 		}
 	}
 	l.emit(Event{Type: EventError, Content: ErrMaxIterations.Error()})

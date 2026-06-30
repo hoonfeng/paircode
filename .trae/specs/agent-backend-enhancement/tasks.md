@@ -151,49 +151,60 @@
 
 ---
 
-## 阶段四：多 agent 编排（不做上下文隔离）
+## 阶段四：多 agent 编排（不做上下文隔离）✅ 已完成
 
-- [ ] 4.1 新增 `agent/subagent.go`：
-  - [ ] 4.1.1 `SubAgent` 结构（Name/Description/System/Tools/MaxIter）
-  - [ ] 4.1.2 `AgentTree` 结构（Root/Children/Parent）
-  - [ ] 4.1.3 `NewAgentTree(root *SubAgent, children ...*SubAgent)` 构造
-  - [ ] 4.1.4 `FindAgent(name)` 查找
-- [ ] 4.2 扩展 `agent/loop.go`：
-  - [ ] 4.2.1 Loop 增加 `AgentTree`、`State map[string]any`、`parentMsgs []Message` 字段
-  - [ ] 4.2.2 Loop.Run 支持"作为子 Loop 运行"模式：接收父 []Message + 合成 user 消息
-  - [ ] 4.2.3 finish_task 退出信号：Loop.Run 检测 finish_task 工具调用即退出
-  - [ ] 4.2.4 子 Loop 的 Provider 调用用父 []Message 作前缀（缓存命中保证）
-  - [ ] 4.2.5 子 Loop 产出追加到父 []Message（不隔离）
-  - [ ] 4.2.6 子 system 提示作为追加 instruction（不替换，保前缀稳定）
-- [ ] 4.3 新增 `agent/delegate.go`（委托工具）：
-  - [ ] 4.3.1 `delegate_task` 工具：多轮委托
+> 阶段四全部完成并通过验证（go build ./cmd/companion/... + go vet + go test ./cmd/companion/agent/ 全绿，agent 包 11.6s，含 11 个阶段四新增测试）。
+> 核心实现集中在 `agent/subagent.go`（编排树）+ `agent/delegate.go`（委托工具）+ `agent/loop.go` 扩展（字段+退出信号）+ `agent/tools.go`（Registry.Copy/Subset）。
+> 关键设计（与 ADK 关键差异）：**不做上下文隔离**——子 agent 共享父 []Message 前缀保证 LLM prompt cache 命中：
+>   - 缓存前缀稳定：子 Loop 用父 currentMsgs 作 history，剥离末尾未配对 assistant tool_call（=委托调用本身），使子首次 LLM 调用 messages 前缀 = 父上一次调用前缀（recordingProvider 断言逐条一致）
+>   - 子 System 不替换父 System：子 Loop.System="" 不插入 system 消息（会破坏前缀）；子 agent 专属 System 作追加 instruction 拼到 task 前
+>   - Registry.Copy()/Subset()：子 Loop 用副本/白名单裁剪表注册 finish_task，避免污染父表；白名单非空时 Subset 裁剪
+>   - finish_task 退出信号：子 agent 调 finish_task → Loop.Run 检测工具名，置 finishResult 并 return；delegate handler 从 child.finishResult 取子结果
+>   - transfer_to_agent：设 transferTarget，Loop.Run 检测后退出当前循环（控制权转移，调用方接管同一 []Message）
+>   - 共享 State：Loop.State map[string]any，子 Loop 继承父引用（跨 agent 传递中间结果，不塞进 messages 撑爆上下文）
+
+- [x] 4.1 新增 `agent/subagent.go`：
+  - [x] 4.1.1 `SubAgent` 结构（Name/Description/System/Tools/MaxIter）
+  - [x] 4.1.2 `AgentTree` 结构（Root/Children/Parent）
+  - [x] 4.1.3 `NewAgentTree(root *SubAgent, children ...*SubAgent)` 构造
+  - [x] 4.1.4 `Find(name)` 查找（+ ParentOf/SubNames/Add）
+- [x] 4.2 扩展 `agent/loop.go`：
+  - [x] 4.2.1 Loop 增加 `AgentTree`、`State map[string]any`、`currentMsgs []Message`、`finishResult`、`transferTarget` 字段
+  - [x] 4.2.2 Loop.Run 同步 currentMsgs（每次 assistant append 后），供 delegate handler 读父历史
+  - [x] 4.2.3 finish_task 退出信号：Loop.Run 检测 finish_task 工具调用即置 finishResult 并退出
+  - [x] 4.2.4 子 Loop 的 Provider 调用用父 []Message 作前缀（缓存命中保证）
+  - [x] 4.2.5 子 Loop 产出作工具结果回到父 []Message（不隔离）
+  - [x] 4.2.6 子 system 提示作为追加 instruction（不替换，保前缀稳定）
+- [x] 4.3 新增 `agent/delegate.go`（委托工具）：
+  - [x] 4.3.1 `delegate_task` 工具：多轮委托
     - 参数：agent_name, task
-    - 创建子 Loop，传入父 []Message 副本 + 合成 user（task）
+    - 创建子 Loop，传入父 []Message（剥离末尾未配对 assistant tool_call）+ 合成 user（task）
     - 运行至 [FINAL] 或 finish_task
-    - 子产出追加到父 []Message
-    - 返回 FR（子 agent 最终结果摘要）
-  - [ ] 4.3.2 `delegate_single_turn` 工具：单轮委托
+    - 子产出作工具结果回到父 []Message
+    - 返回 FR（子 agent 最终结果摘要：finish_task result 优先，否则末条 assistant 正文）
+  - [x] 4.3.2 `delegate_single_turn` 工具：单轮委托
     - 参数：agent_name, input
-    - 同步执行一轮，结果作 FR 返回
-  - [ ] 4.3.3 `finish_task` 工具：子 agent 任务完成信号
+    - maxIter=1 同步执行一轮，结果作 FR 返回
+  - [x] 4.3.3 `finish_task` 工具：子 agent 任务完成信号
     - 参数：result
-    - 触发当前 Loop 退出
-  - [ ] 4.3.4 `transfer_to_agent` 工具：控制权转移
+    - 触发当前 Loop 退出（在 runSubAgent 创建子 Loop 时注册，避免污染父表）
+  - [x] 4.3.4 `transfer_to_agent` 工具：控制权转移
     - 参数：agent_name
-    - 当前 Loop 退出，目标 agent 接管同一 []Message
-- [ ] 4.4 委托工具注册：父 agent Registry 自动注册 delegate_task/delegate_single_turn/transfer_to_agent（基于 AgentTree）；子 agent Registry 注册 finish_task
-- [ ] 4.5 共享 State：Loop 持有 State map，子 Loop 继承父 State 引用
-- [ ] 4.6 缓存前缀稳定性验证：
-  - [ ] 4.6.1 子 Loop 构造 messages 时，前 N 条与父一致（断言）
-  - [ ] 4.6.2 不插入额外 system/不重排历史
-- [ ] 4.7 测试 `agent/subagent_test.go` + `agent/delegate_test.go`：
-  - [ ] 4.7.1 delegate_task 多轮委托（mock provider 断言 messages 前缀）
-  - [ ] 4.7.2 delegate_single_turn 单轮委托
-  - [ ] 4.7.3 finish_task 退出
-  - [ ] 4.7.4 transfer_to_agent
-  - [ ] 4.7.5 缓存前缀命中验证（mock provider 记录 messages，断言前缀与父一致）
-  - [ ] 4.7.6 共享 State 读写
-  - [ ] 4.7.7 子 agent 工具白名单裁剪
+    - 当前 Loop 退出（transferTarget），目标 agent 接管同一 []Message
+- [x] 4.4 委托工具注册：RegisterDelegateTools 向父 Registry 注册 delegate_task/delegate_single_turn/transfer_to_agent（基于 AgentTree）；runSubAgent 在子 Registry 注册 finish_task
+- [x] 4.5 共享 State：Loop 持有 State map，子 Loop 继承父 State 引用（child.State = parent.State）
+- [x] 4.6 缓存前缀稳定性验证：
+  - [x] 4.6.1 子 Loop 构造 messages 时，前 N 条与父一致（recordingProvider 断言 recorded[1].messages[:2] == recorded[0].messages）
+  - [x] 4.6.2 不插入额外 system/不重排历史（子 System="" 复用父 history 中的 system）
+- [x] 4.7 测试 `agent/subagent_test.go` + `agent/delegate_test.go`：
+  - [x] 4.7.1 delegate_task 多轮委托（TestDelegateTask_MultiTurn，recordingProvider 断言 messages 前缀）
+  - [x] 4.7.2 delegate_single_turn 单轮委托（TestDelegateSingleTurn）
+  - [x] 4.7.3 finish_task 退出（TestDelegateTask_MultiTurn 含 finish_task→子退出）
+  - [x] 4.7.4 transfer_to_agent（TestTransferToAgent + TestTransferToAgent_NotFound）
+  - [x] 4.7.5 缓存前缀命中验证（TestDelegateTask_MultiTurn 断言 recorded[1].messages[:2] == recorded[0].messages + 子 system 作追加 instruction）
+  - [x] 4.7.6 共享 State 读写（TestSharedState，子 agent 通过 get_state 读父 State）
+  - [x] 4.7.7 子 agent 工具白名单裁剪（TestToolWhitelist + TestDelegateTask_AgentNotFound）
+  - [x] 4.7.8 Registry.Copy/Subset 单测（TestRegistry_Copy/TestRegistry_Subset）+ AgentTree 构造（TestNewAgentTree/TestAgentTree_Add）
 
 ---
 
