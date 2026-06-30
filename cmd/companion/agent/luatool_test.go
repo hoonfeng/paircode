@@ -72,6 +72,7 @@ func TestLuaToolBadScriptSkipped(t *testing.T) {
 func TestRegistryUnregister(t *testing.T) {
 	reg := NewRegistry()
 	reg.Register(&Tool{Name: "x", Handler: func(context.Context, map[string]any) (string, error) { return "", nil }})
+	reg.Unregister("x")
 	if _, ok := reg.Get("x"); ok {
 		t.Error("Unregister 后不应存在")
 	}

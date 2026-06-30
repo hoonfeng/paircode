@@ -237,8 +237,9 @@ func DefaultSystemPrompt(roots []string) string {
 		"- 写操作和读操作不要混在同一轮——先读完确认，再写。\n\n" +
 		"# 错误恢复\n" +
 		"- 工具调用失败后分析错误原因，换一种方式重试（最多 3 次）。\n" +
-		"- edit_file 失败（字符串不匹配）→ 重新 read_file 获取最新内容再试。\n" +
-		"  ★ 绝不要因为 edit_file 匹配失败就改用 write_file 覆盖整个文件。\n" +
+		"- edit_file/multi_edit 已内置 CRLF 归一化与空白折叠匹配，常规差异无需重读。\n" +
+		"  失败时诊断信息含行号上下文：优先改用 line_start/line_end 行号定位（最可靠）；\n" +
+		"  若仍失败再 read_file 确认最新内容。★ 绝不要因匹配失败就改用 write_file 覆盖整个文件。\n" +
 		"- 连续 3 次工具执行失败 → 自动终止，向用户报告原因。\n" +
 		"- shell_exec 失败 → 检查 stderr 输出，不要只靠 exit code 判断。\n\n" +
 		"# 验证原则\n" +

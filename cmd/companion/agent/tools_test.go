@@ -168,8 +168,10 @@ func TestRegistryDefinitions(t *testing.T) {
 	reg := NewRegistry()
 	RegisterDefaultTools(reg, t.TempDir())
 	defs := reg.Definitions()
-	if len(defs) != 45 { // 19 + git(7) + memory(5) + project_info(6) + binary inspect/write(2) + RE strings/find/patch/info/hash/entropy(6)
-		t.Fatalf("应有 45 个工具定义，得 %d", len(defs))
+	// 下限断言：补齐 project_info/binary/binary_re/debug 后总数远超旧硬编码 45；
+	// 用下限避免每次增减工具都改测试，同时仍能捕获"注册链路整体缺失"的回归。
+	if len(defs) < 50 {
+		t.Fatalf("默认工具数应 >= 50（含核心/git/memory/project_info/binary/binary_re/debug 等），得 %d", len(defs))
 	}
 	if defs[0].Type != "function" || defs[0].Function.Name != "read_file" {
 		t.Errorf("首个定义 = %+v", defs[0])
@@ -177,6 +179,23 @@ func TestRegistryDefinitions(t *testing.T) {
 	req, _ := defs[0].Function.Parameters["required"].([]string)
 	if len(req) == 0 || req[0] != "path" {
 		t.Errorf("read_file required = %v", req)
+	}
+	// 关键工具必须可见（覆盖各注册组）
+	mustHave := []string{
+		"read_file", "write_file", "edit_file", "multi_edit", "list_files", "run_command",
+		"git_status", "memory_write", "find_files_by_pattern", "find_symbol",
+		"get_file_symbols", "task_create", "go_build", "run_test", "go_run",
+		"project_info_write", "project_info_read", "inspect_binary", "binary_strings",
+		"debug_start", "debug_stop", "debug_status",
+	}
+	have := map[string]bool{}
+	for _, d := range defs {
+		have[d.Function.Name] = true
+	}
+	for _, name := range mustHave {
+		if !have[name] {
+			t.Errorf("默认工具 %q 未注册", name)
+		}
 	}
 	// 未知工具 → 报错
 	if _, err := reg.Execute(context.Background(), "no_such_tool", `{}`); err == nil {

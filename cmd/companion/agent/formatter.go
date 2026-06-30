@@ -54,28 +54,39 @@ func registerCodeFormatTool(r *Registry, root string) {
 			apply := argBool(args, "apply")
 
 			if apply {
-				// ── 写入模式：gofmt -w ──
-				argsList := []string{"-w", "-l"}
+				// ── 写入模式：先 gofmt -l（忽略 exit code）收集需改文件，再 gofmt -w 写入 ──
+				// gofmt -l 列出非格式化文件时 exit 1（视作"有差异"），不能当错误。
+				listArgs := []string{"-l"}
 				if fi.IsDir() {
-					argsList = append(argsList, absPath)
+					listArgs = append(listArgs, absPath)
 				} else {
-					argsList = append(argsList, absPath)
+					listArgs = append(listArgs, absPath)
 				}
-				cmd := exec.CommandContext(ctx, "gofmt", argsList...)
-				cmd.Dir = root
-				out, err := cmd.CombinedOutput()
-				output := strings.TrimSpace(string(out))
+				listCmd := exec.CommandContext(ctx, "gofmt", listArgs...)
+				listCmd.Dir = root
+				listOut, _ := listCmd.CombinedOutput() // 忽略 exit code
+				needFix := strings.TrimSpace(string(listOut))
 
-				if err != nil {
-					return "", fmt.Errorf("gofmt 格式化失败: %w\n%s", err, output)
-				}
-
-				if output == "" {
+				if needFix == "" {
 					return "所有文件已符合 Go 格式规范，无需修改。", nil
 				}
 
+				// 实际写入
+				writeArgs := []string{"-w"}
+				if fi.IsDir() {
+					writeArgs = append(writeArgs, absPath)
+				} else {
+					writeArgs = append(writeArgs, absPath)
+				}
+				writeCmd := exec.CommandContext(ctx, "gofmt", writeArgs...)
+				writeCmd.Dir = root
+				writeOut, wErr := writeCmd.CombinedOutput()
+				if wErr != nil {
+					return "", fmt.Errorf("gofmt 格式化失败: %w\n%s", wErr, strings.TrimSpace(string(writeOut)))
+				}
+
 				// 列出被修改的文件（相对路径）
-				lines := strings.Split(output, "\n")
+				lines := strings.Split(needFix, "\n")
 				var relFiles []string
 				for _, line := range lines {
 					line = strings.TrimSpace(line)
@@ -106,11 +117,12 @@ func registerCodeFormatTool(r *Registry, root string) {
 			out, err := cmd.CombinedOutput()
 			diff := string(out)
 
-			if err != nil {
-				return "", fmt.Errorf("gofmt 检查失败: %w\n%s", err, diff)
-			}
-
+			// gofmt -d 有差异时部分版本 exit 1（视作"需格式化"），不能当错误；
+			// 仅在无 diff 且 err 非 nil 时才报错。
 			if strings.TrimSpace(diff) == "" {
+				if err != nil {
+					return "", fmt.Errorf("gofmt 检查失败: %w\n%s", err, diff)
+				}
 				return "✅ 所有文件已符合 Go 格式规范（gofmt 无差异输出）。", nil
 			}
 
