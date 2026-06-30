@@ -88,6 +88,48 @@ func (r *Registry) Unregister(name string) {
 	}
 }
 
+// Copy 深拷贝 Registry（含钩子引用）。子 Loop 用副本注册 finish_task，避免污染父表。
+func (r *Registry) Copy() *Registry {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := &Registry{
+		tools:       map[string]*Tool{},
+		order:       append([]string(nil), r.order...),
+		BeforeTool:  r.BeforeTool,
+		AfterTool:   r.AfterTool,
+		OnToolError: r.OnToolError,
+	}
+	for n, t := range r.tools {
+		out.tools[n] = t
+	}
+	return out
+}
+
+// Subset 按工具名白名单过滤返回新 Registry（含钩子）。
+// 用于子 agent 的 Tools 白名单裁剪：names 非空时只保留白名单内工具。
+// 调用方应先判断白名单是否为空（空=继承父全部，直接用父 Registry 或 Copy）。
+func (r *Registry) Subset(names []string) *Registry {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := &Registry{
+		tools:       map[string]*Tool{},
+		BeforeTool:  r.BeforeTool,
+		AfterTool:   r.AfterTool,
+		OnToolError: r.OnToolError,
+	}
+	set := map[string]bool{}
+	for _, n := range names {
+		set[n] = true
+	}
+	for _, n := range r.order {
+		if set[n] {
+			out.tools[n] = r.tools[n]
+			out.order = append(out.order, n)
+		}
+	}
+	return out
+}
+
 // Definitions 导出全部工具定义（按注册顺序），传给 LLM 作 function-calling。
 func (r *Registry) Definitions() []ToolDefinition {
 	r.mu.RLock()
