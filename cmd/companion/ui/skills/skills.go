@@ -1,5 +1,5 @@
-// Package skills 是 Skills 管理（.pair/skills/*.md）。
-// 提供技能的读取/写入/删除（项目级 .pair/skills/）。
+// Package skills 是 Skills 管理（.pair/skills/）。
+// 数据层委托 agent/skill_loader（目录式 SKILL.md + frontmatter + 三级渐进披露）。
 // UI 面板待后续迁移；当前提供数据层操作供 bridge/agenttools 使用。
 //
 //go:build windows
@@ -8,10 +8,10 @@ package skills
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/hoonfeng/paircode/cmd/companion/agent"
 	"github.com/hoonfeng/paircode/cmd/companion/core"
 	"github.com/hoonfeng/paircode/cmd/companion/ui/mcp"
 )
@@ -24,12 +24,12 @@ type LevelDef struct {
 	Name string
 }
 
-// Levels 所有层级（显示顺序）。技能仅项目级。
+// Levels 所有层级（显示顺序）。技能仅项目级（内置 system 级由 skill_loader 管理，UI 面板不展示）。
 var Levels = []LevelDef{
 	{mcp.LevelProject, "项目级"},
 }
 
-// Entry 技能条目。
+// Entry 技能条目（UI 面板/agenttools 兼容用，内部委托 agent.Skill）。
 type Entry struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
@@ -58,99 +58,51 @@ func skillsDir(lv mcp.Level) string {
 	return ""
 }
 
-// ReadLevel 读某层级的所有技能（按文件名排序）。
+// ReadLevel 读某层级的所有技能（委托 agent.LoadAllSkills，按 level 过滤为项目级）。
 func ReadLevel(lv mcp.Level) []Entry {
-	dir := skillsDir(lv)
-	if dir == "" {
+	if lv != mcp.LevelProject {
 		return nil
 	}
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil
-	}
+	all := agent.LoadAllSkills()
 	var out []Entry
-	for _, ent := range entries {
-		if ent.IsDir() || !strings.HasSuffix(ent.Name(), ".md") {
+	for _, s := range all {
+		if s.Level != agent.LevelProject {
 			continue
 		}
-		name := strings.TrimSuffix(ent.Name(), ".md")
-		e := readSkillFile(filepath.Join(dir, ent.Name()), name)
-		out = append(out, e)
+		out = append(out, Entry{
+			Name:        s.Name,
+			Description: s.Description,
+			Mode:        s.Mode,
+			Content:     s.Body,
+		})
 	}
 	return out
 }
 
-// readSkillFile 解析技能文件：首行 # 标题 → Name；后续行 → Content（Description 取首段）。
-func readSkillFile(path, fallbackName string) Entry {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return Entry{Name: fallbackName}
-	}
-	text := string(data)
-	e := Entry{Name: fallbackName, Mode: "auto"}
-	lines := strings.Split(text, "\n")
-	if len(lines) > 0 && strings.HasPrefix(strings.TrimSpace(lines[0]), "#") {
-		e.Name = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(lines[0]), "#"))
-		lines = lines[1:]
-	}
-	body := strings.TrimSpace(strings.Join(lines, "\n"))
-	e.Content = body
-	// Description：取第一段非空文本（最多 120 字）
-	for _, ln := range lines {
-		if s := strings.TrimSpace(ln); s != "" && !strings.HasPrefix(s, "##") {
-			if len([]rune(s)) > 120 {
-				s = string([]rune(s)[:120]) + "…"
-			}
-			e.Description = s
-			break
-		}
-	}
-	return e
-}
-
-// Write 写入/更新技能（项目级 .pair/skills/<name>.md）。
+// Write 写入/更新技能（目录式 .pair/skills/<name>/SKILL.md，含 frontmatter）。
 func Write(lv mcp.Level, e Entry) error {
-	dir := skillsDir(lv)
-	if dir == "" {
+	if lv != mcp.LevelProject {
 		return fmt.Errorf("技能仅支持项目级")
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-	var sb strings.Builder
-	sb.WriteString("# " + e.Name + "\n\n")
-	if e.Description != "" {
-		sb.WriteString(e.Description + "\n\n")
-	}
-	sb.WriteString(e.Content)
-	path := filepath.Join(dir, e.Name+".md")
-	return os.WriteFile(path, []byte(sb.String()), 0o644)
+	dir := filepath.Join(core.Root(), ".pair", "skills")
+	return agent.WriteSkill(dir, agent.Skill{
+		Name:        e.Name,
+		Description: e.Description,
+		Mode:        e.Mode,
+		Body:        e.Content,
+	})
 }
 
-// Delete 删除技能。
+// Delete 删除技能（整个目录）。
 func Delete(lv mcp.Level, name string) error {
-	dir := skillsDir(lv)
-	if dir == "" {
+	if lv != mcp.LevelProject {
 		return fmt.Errorf("技能仅支持项目级")
 	}
-	path := filepath.Join(dir, name+".md")
-	return os.Remove(path)
+	dir := filepath.Join(core.Root(), ".pair", "skills")
+	return agent.DeleteSkill(dir, name)
 }
 
-// Prompt 返回可用技能的提示词（注入 Agent 系统提示）。
+// Prompt 返回所有启用技能的 L1 提示词（含内置 system 级 + 项目级，注入 system prompt）。
 func Prompt() string {
-	var sb strings.Builder
-	skills := ReadLevel(mcp.LevelProject)
-	if len(skills) == 0 {
-		return ""
-	}
-	sb.WriteString("\n\n# 可用技能（.pair/skills，按需用 skill_read 取全文）\n")
-	for _, s := range skills {
-		desc := s.Description
-		if desc == "" {
-			desc = "（无描述）"
-		}
-		fmt.Fprintf(&sb, "- %s：%s\n", s.Name, desc)
-	}
-	return sb.String()
+	return agent.PromptSkills(agent.LoadAllSkills())
 }

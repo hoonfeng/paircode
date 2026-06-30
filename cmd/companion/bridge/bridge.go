@@ -144,9 +144,14 @@ func (b *AgentBridge) Start(task string) {
 		ApplyIgnoreDirs(root) // 全局设置 + 项目级 .pair/ignore → 注入搜索/探索的忽略目录
 		reg := agent.NewRegistry()
 		agent.WorkspaceRoots = core.Folders
+		// Skills 三级渐进披露：注入全局变量供 agent/skill_loader 使用
+		// （agent 包不依赖 core，故由 bridge 启动时注入，与 WorkspaceRoots 模式一致）。
+		agent.SkillSystemDir = filepath.Join(core.ConfigDir(), "skills")    // 内置技能：安装目录/config/skills
+		agent.SkillProjectDir = filepath.Join(root, ".pair", "skills")      // 项目级技能：工作区 .pair/skills
+		agent.SkillEnabled = core.Settings.SkillEnabledOverrides            // 按 level::name 过滤（不存在默认启用）
 		agent.RegisterDefaultTools(reg, root)
 		b.registerAskTool(reg)                             // ask_user：handler 闭包持有 bridge（需 UI 交互），故在此注册而非默认集
-		agenttools.RegisterManagementTools(reg)            // Agent 自管理 Skills/MCP + 市场 + 技能渐进式披露(skill_read)
+		agenttools.RegisterManagementTools(reg)            // Agent 自管理 Skills/MCP + 市场 + 技能渐进式披露(load_skill)
 		if cfgs := mcppanel.LoadConfigs(); len(cfgs) > 0 { // 外部 MCP 服务器（mcp.json；失败跳过、不阻断；首条消息时一次性连接）
 			agentCfgs := make([]agent.MCPServerConfig, len(cfgs))
 			for i, c := range cfgs {
@@ -160,7 +165,7 @@ func (b *AgentBridge) Start(task string) {
 		}
 		sys += roleprompts.PhilosophyPrompt() // 思想 tab：指导思想（启用时）
 		sys += skillspanel.Prompt()             // Skills tab：可用技能（.pair/skills，渐进式披露）
-		sys += "\n\n# 自管理与扩展\n你可自我扩展：skill_list / skill_read（按需读技能全文）/ skill_write / skill_delete 管理技能；" +
+		sys += "\n\n# 自管理与扩展\n你可自我扩展：skill_list / load_skill（按需读技能全文）/ load_skill_resource（读技能子资源）/ skill_write / skill_delete 管理技能；" +
 			"mcp_list / mcp_add / mcp_remove 管理 MCP 服务器；marketplace_search / marketplace_install 从市场检索并安装 MCP 或技能。把可复用的工作方式沉淀成技能。"
 		if core.Settings.LuaTools { // 告知 Agent 可自建/优化 Lua 工具（沙箱）
 			sys += "\n\n# 自定义工具（Lua）\n可在工作区 .pair/tools/ 下写 .lua 脚本自定义工具（沙箱：仅 string/table/math，无文件/系统访问、单次 10s 超时）。" +
