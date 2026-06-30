@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -126,7 +125,7 @@ func searchContentHandler(root string) ToolHandler {
 				return nil
 			}
 			if glob != "" {
-				if ok, _ := path.Match(glob, d.Name()); !ok {
+				if !matchGlobFilter(glob, d.Name(), relSlash(root, p)) {
 					return nil
 				}
 			}
@@ -224,16 +223,9 @@ func searchRoot(root, rel string) (string, error) {
 	return resolvePath(root, rel)
 }
 
-// matchFile 通配匹配：pattern 含 / 时按相对路径匹配，否则按文件名匹配（均用 path.Match，slash 语义跨平台一致）。
+// matchFile 通配匹配（支持 ** 递归）：pattern 含 / 或 ** 时按相对路径匹配，否则按文件名匹配。
 func matchFile(pattern, base, rel string) bool {
-	pat := filepath.ToSlash(pattern)
-	if strings.Contains(pat, "/") {
-		if ok, _ := path.Match(pat, rel); ok {
-			return true
-		}
-	}
-	ok, _ := path.Match(pat, base)
-	return ok
+	return matchGlobFilter(pattern, base, rel)
 }
 
 // relSlash 取相对工作区根的 slash 路径（给 LLM 看的稳定相对路径）。

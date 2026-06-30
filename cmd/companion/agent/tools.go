@@ -35,6 +35,18 @@ type Registry struct {
 	mu    sync.RWMutex
 	tools map[string]*Tool
 	order []string // 保持注册顺序，传给 LLM 时稳定
+
+	// 钩子（均可空）：
+	//   BeforeTool：执行前调用；返回 proceed=false 则短路——用 override/overrideErr 作结果，不执行 handler。
+	//               用途：审批拒绝、缓存命中、参数校验拦截。
+	//   AfterTool：执行后调用（无论成败，err 非 nil 表示出错）。不可改结果，仅观察。
+	//               用途：统计、日志、耗时监控。
+	//   OnToolError：执行出错时调用（AfterTool 之后）。返回 (result, replacedErr) 替换原结果/错误；
+	//               返回 ("", nil) 可吞掉错误转为成功（避免连续失败止损误触）。
+	//               用途：错误诊断增强、可恢复错误降级。
+	BeforeTool  func(ctx context.Context, name string, args map[string]any) (proceed bool, override string, overrideErr error)
+	AfterTool   func(ctx context.Context, name string, args map[string]any, result string, err error, duration time.Duration)
+	OnToolError func(ctx context.Context, name string, args map[string]any, err error) (result string, replacedErr error)
 }
 
 // NewRegistry 创建空注册表。
@@ -60,6 +72,22 @@ func (r *Registry) Get(name string) (*Tool, bool) {
 	return t, ok
 }
 
+// Unregister 卸载工具（Lua 热重载用）。不存在则无操作。
+func (r *Registry) Unregister(name string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.tools[name]; !ok {
+		return
+	}
+	delete(r.tools, name)
+	for i, n := range r.order {
+		if n == name {
+			r.order = append(r.order[:i], r.order[i+1:]...)
+			break
+		}
+	}
+}
+
 // Definitions 导出全部工具定义（按注册顺序），传给 LLM 作 function-calling。
 func (r *Registry) Definitions() []ToolDefinition {
 	r.mu.RLock()
@@ -76,6 +104,7 @@ func (r *Registry) Definitions() []ToolDefinition {
 }
 
 // Execute 解析 JSON 参数并执行工具。参数 JSON 由 LLM 流式拼接而来，可能为空。
+// 依次触发 BeforeTool → handler → AfterTool → OnToolError（仅出错时）钩子。
 func (r *Registry) Execute(ctx context.Context, name, argsJSON string) (string, error) {
 	t, ok := r.Get(name)
 	if !ok {
@@ -87,7 +116,25 @@ func (r *Registry) Execute(ctx context.Context, name, argsJSON string) (string, 
 			return "", fmt.Errorf("参数 JSON 解析失败: %w（原文 %q）", err, argsJSON)
 		}
 	}
-	return t.Handler(ctx, args)
+	// BeforeTool 钩子：可短路（审批拒绝/缓存命中/校验拦截）
+	if r.BeforeTool != nil {
+		proceed, override, overrideErr := r.BeforeTool(ctx, name, args)
+		if !proceed {
+			return override, overrideErr
+		}
+	}
+	start := time.Now()
+	result, err := t.Handler(ctx, args)
+	dur := time.Since(start)
+	// AfterTool 钩子：观察（统计/日志），不改结果
+	if r.AfterTool != nil {
+		r.AfterTool(ctx, name, args, result, err, dur)
+	}
+	// OnToolError 钩子：错误诊断增强 / 可恢复错误降级（返回 ("",nil) 吞掉错误）
+	if err != nil && r.OnToolError != nil {
+		result, err = r.OnToolError(ctx, name, args, err)
+	}
+	return result, err
 }
 
 // ─── 核心工具集 ──────────────────────────────────────────────
@@ -108,6 +155,10 @@ func RegisterDefaultTools(r *Registry, root string) {
 			data, err := os.ReadFile(p)
 			if err != nil {
 				return "", err
+			}
+			// 二进制保护：含 NULL 字节视为二进制，拒绝读取并引导 inspect_binary（避免把字节流灌进上下文）
+			if strings.IndexByte(string(data), 0) >= 0 {
+				return "", fmt.Errorf("「%s」是二进制文件，read_file 不支持读取二进制内容；请用 inspect_binary 工具查看（hexdump/类型嗅探）", argStr(args, "path"))
 			}
 			offset, limit := argInt(args, "offset", 0), argInt(args, "limit", 0)
 			if offset <= 0 && limit <= 0 { // 全文（超 2000 行截断，提示翻页）
@@ -155,9 +206,18 @@ func RegisterDefaultTools(r *Registry, root string) {
 	})
 
 	r.Register(&Tool{
-		Name:             "edit_file",
-		Description:      "把文件中唯一一处 old_string 替换为 new_string（old_string 必须在文件中恰好出现一次）。",
-		Parameters:       objSchema(props{"path": strProp("文件路径"), "old_string": strProp("待替换的原文（须唯一）"), "new_string": strProp("替换后的新文")}, "path", "old_string", "new_string"),
+		Name: "edit_file",
+		Description: "把文件中唯一一处 old_string 替换为 new_string。" +
+			"匹配策略（自动）：精确→CRLF归一化（兼容 Windows \\r\\n 文件与 LLM 给的 \\n）→空白折叠（容忍缩进/行尾空白/tab与空格差异）；全部失败时返回带行号上下文的诊断。" +
+			"替代方案：用 line_start/line_end 行号定位整段替换（最可靠，old_string 可选作校验）。" +
+			"保留文件原换行风格（CRLF 文件替换后仍 CRLF）。",
+		Parameters: objSchema(props{
+			"path":       strProp("文件路径"),
+			"old_string": strProp("待替换原文（须在文件中唯一；line_start>0 时可省略或作校验）"),
+			"new_string": strProp("替换后的新文"),
+			"line_start": intProp("可选：1 基起始行号，>0 时启用行号定位模式（与 old_string 二选一或并用）"),
+			"line_end":   intProp("可选：1 基结束行号（含）；省略或 < line_start 时只替换 line_start 一行"),
+		}, "path", "new_string"),
 		RequiresApproval: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
 			p, err := resolvePath(root, argStr(args, "path"))
@@ -168,19 +228,15 @@ func RegisterDefaultTools(r *Registry, root string) {
 			if err != nil {
 				return "", err
 			}
-			old, neu := argStr(args, "old_string"), argStr(args, "new_string")
-			if old == "" {
-				return "", fmt.Errorf("old_string 不能为空")
+			out, err := ApplyEdit(string(data), EditOptions{
+				OldString: argStr(args, "old_string"),
+				NewString: argStr(args, "new_string"),
+				LineStart: argInt(args, "line_start", 0),
+				LineEnd:   argInt(args, "line_end", 0),
+			})
+			if err != nil {
+				return "", err
 			}
-			switch strings.Count(string(data), old) {
-			case 0:
-				return "", fmt.Errorf("未找到 old_string，无法定位编辑点")
-			case 1:
-				// ok
-			default:
-				return "", fmt.Errorf("old_string 出现多次，不唯一——请提供更长的上下文")
-			}
-			out := strings.Replace(string(data), old, neu, 1)
 			if err := os.WriteFile(p, []byte(out), 0o644); err != nil {
 				return "", err
 			}
@@ -190,8 +246,9 @@ func RegisterDefaultTools(r *Registry, root string) {
 
 	r.Register(&Tool{
 		Name: "multi_edit",
-		Description: "对一个文件按顺序应用多处替换（edits：每项 old_string→new_string；每个 old_string 须在「应用到该步时」的内容中恰好出现一次）。" +
-			"比多次 edit_file 高效、原子（任一步失败则全部不写）。",
+		Description: "对一个文件按顺序应用多处替换（edits：每项 old_string→new_string 或 line_start/line_end 行号定位）。" +
+			"匹配策略同 edit_file（精确→CRLF归一化→空白折叠→诊断）。原子：任一步失败则全部不写。" +
+			"比多次 edit_file 高效。保留文件原换行风格。",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": props{
@@ -202,10 +259,12 @@ func RegisterDefaultTools(r *Registry, root string) {
 					"items": map[string]any{
 						"type": "object",
 						"properties": props{
-							"old_string": strProp("待替换的原文（须唯一）"),
+							"old_string": strProp("待替换原文（须唯一；line_start>0 时可省略或作校验）"),
 							"new_string": strProp("替换后的新文"),
+							"line_start": intProp("可选：1 基起始行号，>0 时启用行号定位模式"),
+							"line_end":   intProp("可选：1 基结束行号（含）；省略只替换 line_start 一行"),
 						},
-						"required": []string{"old_string", "new_string"},
+						"required": []string{"new_string"},
 					},
 				},
 			},
@@ -233,18 +292,33 @@ func RegisterDefaultTools(r *Registry, root string) {
 				}
 				old, _ := m["old_string"].(string)
 				neu, _ := m["new_string"].(string)
-				if old == "" {
-					return "", fmt.Errorf("edits[%d] old_string 不能为空", i)
+				lineStart := 0
+				lineEnd := 0
+				switch v := m["line_start"].(type) {
+				case float64:
+					lineStart = int(v)
+				case int:
+					lineStart = v
 				}
-				switch strings.Count(content, old) {
-				case 0:
-					return "", fmt.Errorf("edits[%d] 未找到 old_string", i)
-				case 1:
-					// ok
-				default:
-					return "", fmt.Errorf("edits[%d] old_string 不唯一——请提供更长上下文", i)
+				switch v := m["line_end"].(type) {
+				case float64:
+					lineEnd = int(v)
+				case int:
+					lineEnd = v
 				}
-				content = strings.Replace(content, old, neu, 1)
+				if old == "" && lineStart <= 0 {
+					return "", fmt.Errorf("edits[%d] 必须提供 old_string 或 line_start", i)
+				}
+				out, err := ApplyEdit(content, EditOptions{
+					OldString: old,
+					NewString: neu,
+					LineStart: lineStart,
+					LineEnd:   lineEnd,
+				})
+				if err != nil {
+					return "", fmt.Errorf("edits[%d] 应用失败: %w", i, err)
+				}
+				content = out
 			}
 			if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
 				return "", err
@@ -383,12 +457,25 @@ func RegisterDefaultTools(r *Registry, root string) {
 		},
 	})
 
-	registerSearchTools(r, root) // search_content / search_files（见 search.go）
-	registerGitTools(r, root)    // git_status / git_diff / git_log（只读，见 git.go）
-	registerWebTools(r)          // web_fetch（联网读，见 web.go）
-	registerPlanTool(r)          // update_plan（任务清单，见 plan.go）
-	registerShellTools(r, root)  // run_background / read_output / kill_process（后台命令，见 shell.go）
-	registerMemoryTools(r, root) // memory_write/read/list/search（跨会话记忆，见 memory.go）
+	registerSearchTools(r, root)              // search_content / search_files（见 search.go）
+	registerGitTools(r, root)                 // git_status / git_diff / git_log / git_show / git_blame / git_add / ...（见 git.go）
+	registerWebTools(r)                       // web_fetch / web_search（联网，见 web.go）
+	registerPlanTool(r)                       // update_plan（任务清单，见 plan.go）
+	registerShellTools(r, root)               // run_background / read_output / kill_process（后台命令，见 shell.go）
+	registerMemoryTools(r, root)              // memory_write/read/list/search（跨会话记忆，见 memory.go）
+	registerFindFilesByPatternTool(r, root)   // find_files_by_pattern（glob 查文件，支持 **，见 findfiles.go）
+	registerFindSymbolTool(r, root)           // find_symbol（符号定位，见 symbolfinder.go）
+	registerFileSymbolTools(r, root)          // get_file_symbols / find_symbol_usages / check_impact / find_circular_deps（见 filesymbol.go）
+	registerTaskTools(r, root)                // task_create/update/list/delete/summary（持久化任务追踪，见 task_tools.go）
+	registerGoBuildTools(r, root)             // go_build（见 gobuild.go）
+	registerRunTestTools(r, root)             // run_test（见 runtest.go）
+	registerGoRunTools(r, root)               // go_run（见 gorun.go）
+	registerCodeFixTool(r, root)              // code_fix（见 fixer.go）
+	registerCodeFormatTool(r, root)          // code_format（见 formatter.go）
+	registerProjectInfoTools(r, root)        // project_info_write/read/list/search/delete/explore（项目知识库，见 projectinfo.go）
+	registerBinaryTools(r, root)             // inspect_binary / write_binary（二进制读写，见 binary.go）
+	registerBinaryRETools(r, root)           // binary_strings/find/patch/info/hash/entropy（二进制正则，见 binary_re.go）
+	registerDebugTools(r, root)              // debug_start/stop/breakpoint/continue/next/step_in/step_out/stack/variables/evaluate/status（见 debugtools.go）
 }
 
 // ─── 辅助 ────────────────────────────────────────────────────

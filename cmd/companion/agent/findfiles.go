@@ -92,13 +92,10 @@ func findFilesByPatternHandler(root string) ToolHandler {
 				}
 				return nil
 			}
-			// 匹配 glob 模式 — 先匹配文件名
-			matched, _ := filepath.Match(pattern, info.Name())
-			if !matched {
-				// 再匹配相对路径
-				rel, _ := filepath.Rel(root, p)
-				matched, _ = filepath.Match(pattern, filepath.ToSlash(rel))
-			}
+			// 匹配 glob 模式（支持 ** 递归）— 先匹配文件名，再匹配相对路径
+			rel, _ := filepath.Rel(root, p)
+			relSlash := filepath.ToSlash(rel)
+			matched := matchGlobFilter(pattern, info.Name(), relSlash)
 			if !matched {
 				return nil
 			}
