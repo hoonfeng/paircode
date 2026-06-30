@@ -426,47 +426,27 @@ func (p *projectInfoProvider) Count(scope string) (int, error) {
 	return len(items), nil
 }
 
-// 5. skillsProvider — 技能（.pair/skills/<name>/SKILL.md）
+// 5. skillsProvider — 技能（委托 skill_loader，统一目录式 + frontmatter + enabled 过滤）。
 
 type skillsProvider struct {
-	root string
+	root string // 保留兼容构造；实际用 skill_loader 全局变量
 }
 
 func (p *skillsProvider) Type() ResourceType { return ResourceSkills }
 
-func (p *skillsProvider) skillsDir() string { return filepath.Join(p.root, ".pair", "skills") }
-
 func (p *skillsProvider) List(scope string) ([]ResourceMeta, error) {
-	baseDir := p.skillsDir()
-	entries, err := os.ReadDir(baseDir)
-	if err != nil {
-		return nil, nil
-	}
+	skills := LoadAllSkills()
 	var result []ResourceMeta
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		skillDir := filepath.Join(baseDir, e.Name())
-		skillFile := filepath.Join(skillDir, "SKILL.md")
-		data, err := os.ReadFile(skillFile)
-		if err != nil {
-			continue
-		}
-		fi, _ := os.Stat(skillFile)
-		content := string(data)
-		desc := frontmatterField(content, "description")
-		if desc == "" {
-			desc = firstLine(content)
+	for _, s := range skills {
+		if s.Level != LevelProject {
+			continue // resource_manager 仅暴露项目级（内置 system 级由 prompt L1 注入）
 		}
 		result = append(result, ResourceMeta{
-			ID:          e.Name(),
+			ID:          s.Name,
 			Type:        ResourceSkills,
-			Scope:       "project", // Skills 始终项目级
-			Name:        e.Name(),
-			Description: truncateStr(desc, 100),
-			Size:        fi.Size(),
-			ModifiedAt:  fi.ModTime().Format(time.RFC3339),
+			Scope:       "project",
+			Name:        s.Name,
+			Description: truncateStr(s.Description, 100),
 		})
 	}
 	return result, nil

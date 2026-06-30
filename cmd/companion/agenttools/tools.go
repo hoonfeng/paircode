@@ -53,12 +53,23 @@ func RegisterManagementTools(r *agent.Registry) {
 		Handler:    func(_ context.Context, _ map[string]any) (string, error) { return listSkillsText(), nil },
 	})
 	r.Register(&agent.Tool{
-		Name:        "skill_read",
-		Description: "读取某技能的完整 SKILL.md 内容（渐进式披露：系统提示里只给名+描述，需要细则时用本工具按需加载全文）。",
+		Name:        "load_skill",
+		Description: "加载某技能的完整 SKILL.md 正文（L2 渐进式披露：系统提示只给名+描述，需要细则时用本工具按需加载全文）。",
 		ReadOnly:    true,
 		Parameters:  toolObj(map[string]any{"name": strParam("技能名")}, "name"),
 		Handler: func(_ context.Context, args map[string]any) (string, error) {
-			return readSkillFull(argString(args, "name"))
+			return loadSkillFull(argString(args, "name"))
+		},
+	})
+	r.Register(&agent.Tool{
+		Name:        "load_skill_resource",
+		Description: "加载某技能的子资源文件（L3 渐进式披露）：references/ assets/ scripts/ 下的文件，单文件上限 10MiB。路径穿越被拒。",
+		ReadOnly:    true,
+		Parameters: toolObj(map[string]any{
+			"name": strParam("技能名"), "path": strParam("资源相对路径（如 references/faq.md）"),
+		}, "name", "path"),
+		Handler: func(_ context.Context, args map[string]any) (string, error) {
+			return loadSkillResource(argString(args, "name"), argString(args, "path"))
 		},
 	})
 	r.Register(&agent.Tool{
@@ -78,7 +89,7 @@ func RegisterManagementTools(r *agent.Registry) {
 		Name: "skill_delete", Description: "删除一个项目级技能。", RequiresApproval: true,
 		Parameters: toolObj(map[string]any{"name": strParam("技能名")}, "name"),
 		Handler: func(_ context.Context, args map[string]any) (string, error) {
-			if err := skillspanel.Delete(mcppanel.LevelProject, argString(args, "name")); err != nil {
+			if err := agent.DeleteSkill(agent.SkillProjectDir, argString(args, "name")); err != nil {
 				return "", err
 			}
 			return "已删除技能：" + argString(args, "name"), nil
@@ -135,11 +146,14 @@ func RegisterManagementTools(r *agent.Registry) {
 
 // ─── Skills 工具实现 ──
 func listSkillsText() string {
+	skills := agent.LoadAllSkills()
 	var b strings.Builder
-	for _, lv := range skillspanel.Levels {
-		for _, s := range skillspanel.ReadLevel(lv.ID) {
-			fmt.Fprintf(&b, "- [%s] %s（%s）：%s\n", lv.Name, s.Name, skillspanel.ModeLabel(orStr(s.Mode, "auto")), s.Description)
+	for _, s := range skills {
+		lvl := "项目级"
+		if s.Level == agent.LevelSystem {
+			lvl = "内置"
 		}
+		fmt.Fprintf(&b, "- [%s] %s（%s）：%s\n", lvl, s.Name, skillspanel.ModeLabel(orStr(s.Mode, "auto")), s.Description)
 	}
 	if b.Len() == 0 {
 		return "（暂无技能。可用 skill_write 创建或 marketplace_search 从市场安装。）"
@@ -147,24 +161,35 @@ func listSkillsText() string {
 	return b.String()
 }
 
-func readSkillFull(name string) (string, error) {
-	for _, lv := range skillspanel.Levels {
-		for _, s := range skillspanel.ReadLevel(lv.ID) {
-			if s.Name == name {
-				return "# 技能：" + s.Name + "\n" + s.Description + "\n\n" + s.Content, nil
-			}
-		}
+func loadSkillFull(name string) (string, error) {
+	skills := agent.LoadAllSkills()
+	s := agent.FindSkill(skills, name)
+	if s == nil {
+		return "", fmt.Errorf("未找到技能 %q（用 skill_list 看全部）", name)
 	}
-	return "", fmt.Errorf("未找到技能 %q（用 skill_list 看全部）", name)
+	return "# 技能：" + s.Name + "\n" + s.Description + "\n\n" + s.Body, nil
+}
+
+func loadSkillResource(name, path string) (string, error) {
+	skills := agent.LoadAllSkills()
+	s := agent.FindSkill(skills, name)
+	if s == nil {
+		return "", fmt.Errorf("未找到技能 %q（用 skill_list 看全部）", name)
+	}
+	return agent.LoadSkillResource(s, path, 10*1024*1024) // 10MiB 上限
 }
 
 func writeSkillTool(args map[string]any) (string, error) {
-	s := skillspanel.Entry{Name: argString(args, "name"), Description: argString(args, "description"),
-		Mode: orStr(argString(args, "mode"), "auto"), Content: argString(args, "content")}
-	if err := skillspanel.Write(mcppanel.LevelProject, s); err != nil {
+	s := agent.Skill{
+		Name:        argString(args, "name"),
+		Description: argString(args, "description"),
+		Mode:        orStr(argString(args, "mode"), "auto"),
+		Body:        argString(args, "content"),
+	}
+	if err := agent.WriteSkill(agent.SkillProjectDir, s); err != nil {
 		return "", err
 	}
-	return "已写入技能 " + s.Name + "（项目级，下次对话注入系统提示，或现在用 skill_read 取用）", nil
+	return "已写入技能 " + s.Name + "（项目级，下次对话注入系统提示，或现在用 load_skill 取用）", nil
 }
 
 // ─── MCP 工具实现 ──
