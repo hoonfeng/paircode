@@ -1,20 +1,22 @@
-// MCP 客户端：经 stdio JSON-RPC 连接 MCP 服务器，发现其工具并注册进 Registry（handler 代理到 tools/call），
-// 让 agent 用上任意外部 MCP 工具（filesystem/github/...）。stdio 传输=换行分隔的 JSON-RPC 2.0。
-// 传输层抽象成 io.Writer/Reader → 协议逻辑可用 io.Pipe + 假服务器离线测（见 mcp_test.go）。
+// MCP 客户端：用官方 go-sdk（github.com/modelcontextprotocol/go-sdk）经 stdio 连接 MCP 服务器，
+// 发现其工具并注册进 Registry（handler 代理到 tools/call）。
+// 能力：自动重连（Ping 检测 + 重启进程）、分页拉取（ListTools cursor）、结构化输出
+// （StructuredContent 优先 + TextContent 兜底 + IsError）、超时（默认 30s）、细粒度 HITL
+// （MCP 工具 RequiresApproval=true，由 Registry.BeforeTool 钩子统一审批）。
 
 package agent
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // MCPServerConfig 一个 MCP 服务器启动配置。
@@ -25,198 +27,239 @@ type MCPServerConfig struct {
 	Env     map[string]string // 额外环境变量
 }
 
-// mcpClient 一个 MCP 连接：同步 JSON-RPC（agent 串行调用，一把锁足够）。
-type mcpClient struct {
-	mu     sync.Mutex
-	w      io.Writer
-	r      *bufio.Reader
-	nextID int
+// mcpConnection 一个 MCP 连接（go-sdk）：持 session 支持重连，持 cmd 显式保活。
+type mcpConnection struct {
+	cfg         MCPServerConfig
+	client      *mcp.Client
+	mu          sync.Mutex
+	session     *mcp.ClientSession
+	cmd         *exec.Cmd // 显式保活引用（go-sdk 内部也持有，便于诊断）
+	transport   mcp.Transport // 可注入（测试用 InMemoryTransport）；nil 时 connect 内部建 CommandTransport
+	callTimeout time.Duration
 }
 
-func newMCPClient(w io.Writer, r io.Reader) *mcpClient {
-	return &mcpClient{w: w, r: bufio.NewReader(r)}
+// newMCPConnection 创建连接对象（未连接）。
+func newMCPConnection(cfg MCPServerConfig) *mcpConnection {
+	return &mcpConnection{
+		cfg:         cfg,
+		client:      mcp.NewClient(&mcp.Implementation{Name: "companion", Version: "1.0"}, nil),
+		callTimeout: 30 * time.Second,
+	}
 }
 
-type rpcError struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
+// connect 启动进程并建立 session（调用方持 mu）。Connect 内部完成 initialize 握手。
+// 若 transport 字段非 nil（测试注入），直接用它；否则建 CommandTransport 启动子进程。
+func (c *mcpConnection) connect(ctx context.Context) error {
+	var transport mcp.Transport
+	if c.transport != nil {
+		transport = c.transport
+	} else {
+		cmd := exec.Command(c.cfg.Command, c.cfg.Args...)
+		if len(c.cfg.Env) > 0 {
+			cmd.Env = os.Environ()
+			for k, v := range c.cfg.Env {
+				cmd.Env = append(cmd.Env, k+"="+v)
+			}
+		}
+		transport = &mcp.CommandTransport{Command: cmd}
+		c.cmd = cmd
+	}
+	session, err := c.client.Connect(ctx, transport, nil)
+	if err != nil {
+		return fmt.Errorf("MCP %s 连接失败: %w", c.cfg.Name, err)
+	}
+	c.session = session
+	return nil
 }
 
-type rpcMessage struct {
-	ID     *int            `json:"id"`
-	Result json.RawMessage `json:"result"`
-	Error  *rpcError       `json:"error"`
-}
-
-// call 同步请求：写一行 JSON，读到匹配 id 的响应（跳过日志行/通知）。
-func (c *mcpClient) call(method string, params any) (json.RawMessage, error) {
+// close 关闭连接（SIGTERM/SIGKILL 由 CommandTransport.Close 处理）。
+func (c *mcpConnection) close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.nextID++
-	id := c.nextID
-	msg := map[string]any{"jsonrpc": "2.0", "id": id, "method": method}
-	if params != nil {
-		msg["params"] = params
-	}
-	b, _ := json.Marshal(msg)
-	if _, err := c.w.Write(append(b, '\n')); err != nil {
-		return nil, err
-	}
-	for {
-		line, err := c.r.ReadBytes('\n')
-		if err != nil {
-			return nil, err
-		}
-		var m rpcMessage
-		if json.Unmarshal(line, &m) != nil || m.ID == nil || *m.ID != id {
-			continue // 非 JSON / 通知 / 别的 id → 跳过
-		}
-		if m.Error != nil {
-			return nil, fmt.Errorf("%s: %s", method, m.Error.Message)
-		}
-		return m.Result, nil
-	}
-}
-
-func (c *mcpClient) notify(method string, params any) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	msg := map[string]any{"jsonrpc": "2.0", "method": method}
-	if params != nil {
-		msg["params"] = params
-	}
-	b, _ := json.Marshal(msg)
-	_, err := c.w.Write(append(b, '\n'))
-	return err
-}
-
-func (c *mcpClient) initialize() error {
-	if _, err := c.call("initialize", map[string]any{
-		"protocolVersion": "2024-11-05",
-		"capabilities":    map[string]any{},
-		"clientInfo":      map[string]any{"name": "companion", "version": "1.0"},
-	}); err != nil {
+	if c.session != nil {
+		err := c.session.Close()
+		c.session = nil
+		c.cmd = nil
 		return err
 	}
-	return c.notify("notifications/initialized", nil)
+	return nil
 }
 
-type mcpToolDef struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	InputSchema map[string]any `json:"inputSchema"`
+// ensureAlive Ping 检测连接活性，失败则重连。
+func (c *mcpConnection) ensureAlive(ctx context.Context) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.session == nil {
+		return c.connect(ctx)
+	}
+	pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if err := c.session.Ping(pingCtx, nil); err != nil {
+		// Ping 失败：关闭旧 session 并重连
+		_ = c.session.Close()
+		c.session = nil
+		c.cmd = nil
+		return c.connect(ctx)
+	}
+	return nil
 }
 
-func (c *mcpClient) listTools() ([]mcpToolDef, error) {
-	res, err := c.call("tools/list", nil)
-	if err != nil {
-		return nil, err
+// withRetry 可刷新错误重试一次（泛型）。先 ensureAlive，调用 fn，若返回可刷新错误
+// （连接断开类）则重连后重试一次。
+func withRetry[T any](ctx context.Context, c *mcpConnection, fn func(*mcp.ClientSession) (T, error)) (T, error) {
+	var zero T
+	if err := c.ensureAlive(ctx); err != nil {
+		return zero, err
 	}
-	var out struct {
-		Tools []mcpToolDef `json:"tools"`
+	res, err := fn(c.session)
+	if err == nil {
+		return res, nil
 	}
-	err = json.Unmarshal(res, &out)
-	return out.Tools, err
+	if !isRefreshable(err) {
+		return zero, err
+	}
+	// 重连重试一次
+	c.mu.Lock()
+	if c.session != nil {
+		_ = c.session.Close()
+		c.session = nil
+		c.cmd = nil
+	}
+	c.mu.Unlock()
+	if err := c.ensureAlive(ctx); err != nil {
+		return zero, err
+	}
+	return fn(c.session)
 }
 
-func (c *mcpClient) callTool(name string, args map[string]any) (string, error) {
-	res, err := c.call("tools/call", map[string]any{"name": name, "arguments": args})
-	if err != nil {
-		return "", err
+// isRefreshable 判断可刷新错误（连接断开类，值得重连重试）。
+func isRefreshable(err error) bool {
+	if err == nil {
+		return false
 	}
-	var out struct {
-		Content []struct {
-			Text string `json:"text"`
-		} `json:"content"`
-		IsError bool `json:"isError"`
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "connection closed") ||
+		strings.Contains(msg, "session missing") ||
+		strings.Contains(msg, "eof") ||
+		strings.Contains(msg, "broken pipe") ||
+		strings.Contains(msg, "connection reset")
+}
+
+// listAllTools 分页拉取所有工具（按 NextCursor 翻页，直到无下一页）。
+func (c *mcpConnection) listAllTools(ctx context.Context) ([]*mcp.Tool, error) {
+	return withRetry(ctx, c, func(s *mcp.ClientSession) ([]*mcp.Tool, error) {
+		var all []*mcp.Tool
+		cursor := ""
+		for {
+			res, err := s.ListTools(ctx, &mcp.ListToolsParams{Cursor: cursor})
+			if err != nil {
+				return nil, err
+			}
+			all = append(all, res.Tools...)
+			if res.NextCursor == "" {
+				break
+			}
+			cursor = res.NextCursor
+		}
+		return all, nil
+	})
+}
+
+// callTool 调用工具（带超时 + 重连重试）。
+func (c *mcpConnection) callTool(ctx context.Context, name string, args map[string]any) (string, error) {
+	cctx, cancel := context.WithTimeout(ctx, c.callTimeout)
+	defer cancel()
+	return withRetry(cctx, c, func(s *mcp.ClientSession) (string, error) {
+		res, err := s.CallTool(cctx, &mcp.CallToolParams{Name: name, Arguments: args})
+		if err != nil {
+			return "", err
+		}
+		return parseCallToolResult(res)
+	})
+}
+
+// parseCallToolResult 解析工具结果：StructuredContent 优先（结构化输出）+ TextContent 兜底 + IsError 错误。
+func parseCallToolResult(res *mcp.CallToolResult) (string, error) {
+	// 优先 StructuredContent（结构化输出，JSON 对象）
+	if res.StructuredContent != nil {
+		if b, err := json.Marshal(res.StructuredContent); err == nil {
+			text := string(b)
+			if res.IsError {
+				return "", fmt.Errorf("%s", text)
+			}
+			return text, nil
+		}
 	}
-	if err := json.Unmarshal(res, &out); err != nil {
-		return "", err
-	}
+	// 兜底 Content（TextContent 拼接）
 	var sb strings.Builder
-	for _, ct := range out.Content {
-		if ct.Text != "" {
-			sb.WriteString(ct.Text)
+	for _, ct := range res.Content {
+		if tc, ok := ct.(*mcp.TextContent); ok && tc.Text != "" {
+			sb.WriteString(tc.Text)
 			sb.WriteByte('\n')
 		}
 	}
-	txt := strings.TrimSpace(sb.String())
-	if out.IsError {
-		return "", fmt.Errorf("%s", txt)
+	text := strings.TrimSpace(sb.String())
+	if res.IsError {
+		return "", fmt.Errorf("%s", text)
 	}
-	return txt, nil
+	return text, nil
 }
 
-// registerClientTools 把 client 的工具注册进 Registry，名加 "mcp.<server>." 前缀防冲突。返回工具数。
-func registerClientTools(r *Registry, serverName string, c *mcpClient) (int, error) {
-	tools, err := c.listTools()
+// registerClientTools 把连接的工具注册进 Registry，名加 "mcp.<server>." 前缀防冲突。返回工具数。
+// MCP 工具 RequiresApproval=true（外部工具默认需审批）；细粒度 HITL 由 Registry.BeforeTool 钩子
+// 统一处理（阶段一已加钩子链），调用方可在 BeforeTool 中按 "mcp.<server>.<tool>" 前缀做白名单。
+func registerClientTools(r *Registry, conn *mcpConnection) (int, error) {
+	tools, err := conn.listAllTools(context.Background())
 	if err != nil {
 		return 0, err
 	}
+	serverName := conn.cfg.Name
 	for _, td := range tools {
-		schema := td.InputSchema
+		// InputSchema 客户端侧为 map[string]any（go-sdk 文档），但类型是 any，需断言
+		var schema map[string]any
+		if td.InputSchema != nil {
+			if m, ok := td.InputSchema.(map[string]any); ok {
+				schema = m
+			}
+		}
 		if schema == nil {
 			schema = map[string]any{"type": "object", "properties": map[string]any{}}
 		}
-		mcpName := td.Name // 捕获
+		toolName := td.Name // 捕获
+		toolDesc := td.Description
 		r.Register(&Tool{
 			Name:             "mcp." + serverName + "." + td.Name,
-			Description:      "[MCP:" + serverName + "] " + td.Description,
+			Description:      "[MCP:" + serverName + "] " + toolDesc,
 			Parameters:       schema,
-			RequiresApproval: true, // 外部工具默认需审批（安全）
+			RequiresApproval: true,
 			Handler: func(ctx context.Context, args map[string]any) (string, error) {
-				return c.callTool(mcpName, args)
+				return conn.callTool(ctx, toolName, args)
 			},
 		})
 	}
 	return len(tools), nil
 }
 
-// connectMCP 启动一个 MCP 服务器进程并完成初始化（带超时，防卡住启动）。调用方持有 cmd 负责保活。
-func connectMCP(cfg MCPServerConfig) (*mcpClient, *exec.Cmd, error) {
-	c := exec.Command(cfg.Command, cfg.Args...)
-	if len(cfg.Env) > 0 {
-		c.Env = os.Environ()
-		for k, v := range cfg.Env {
-			c.Env = append(c.Env, k+"="+v)
-		}
+// connectMCP 启动并初始化一个 MCP 服务器连接（带 15s 超时，防卡住启动）。
+func connectMCP(cfg MCPServerConfig) (*mcpConnection, error) {
+	conn := newMCPConnection(cfg)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if err := conn.connect(ctx); err != nil {
+		return nil, err
 	}
-	stdin, err := c.StdinPipe()
-	if err != nil {
-		return nil, nil, err
-	}
-	stdout, err := c.StdoutPipe()
-	if err != nil {
-		return nil, nil, err
-	}
-	if err := c.Start(); err != nil {
-		return nil, nil, err
-	}
-	client := newMCPClient(stdin, stdout)
-	done := make(chan error, 1)
-	go func() { done <- client.initialize() }()
-	select {
-	case err := <-done:
-		if err != nil {
-			_ = c.Process.Kill()
-			return nil, nil, err
-		}
-	case <-time.After(15 * time.Second):
-		_ = c.Process.Kill()
-		return nil, nil, fmt.Errorf("MCP 服务器 %s 初始化超时", cfg.Name)
-	}
-	return client, c, nil
+	return conn, nil
 }
 
 // RegisterMCPServers 连接每个配置的 MCP 服务器并注册其工具；起不来的跳过（不阻断 agent）。返回注册的工具总数。
 func RegisterMCPServers(r *Registry, configs []MCPServerConfig) int {
 	total := 0
 	for _, cfg := range configs {
-		client, _, err := connectMCP(cfg)
+		conn, err := connectMCP(cfg)
 		if err != nil {
 			continue
 		}
-		if n, err := registerClientTools(r, cfg.Name, client); err == nil {
+		if n, err := registerClientTools(r, conn); err == nil {
 			total += n
 		}
 	}
