@@ -286,3 +286,92 @@ func TestWriteAndDeleteSkill(t *testing.T) {
 		t.Errorf("删除后应无技能，得 %d", len(skills))
 	}
 }
+
+// ─── 3.6 激活匹配 + allowed-tools 软提示 ──
+
+func TestActiveSkills_Always(t *testing.T) {
+	skills := []Skill{
+		{Name: "always-one", Mode: "always"},
+		{Name: "manual-one", Mode: "manual"},
+	}
+	got := ActiveSkills(skills, "", nil)
+	if len(got) != 1 || got[0].Name != "always-one" {
+		t.Errorf("always 应始终激活，manual 不激活，得 %+v", got)
+	}
+}
+
+func TestActiveSkills_AutoByKeyword(t *testing.T) {
+	skills := []Skill{
+		{Name: "emoji-icons", Description: "禁止使用 Emoji 作为图标", Mode: "auto"},
+		{Name: "unrelated", Description: "无关技能", Mode: "auto"},
+	}
+	// taskDesc 含 "emoji" 关键词 → 激活 emoji-icons
+	got := ActiveSkills(skills, "检查 emoji 使用情况", nil)
+	if len(got) != 1 || got[0].Name != "emoji-icons" {
+		t.Errorf("关键词匹配应激活 emoji-icons，得 %+v", got)
+	}
+	// 无关任务不激活 auto 技能
+	got = ActiveSkills(skills, "完全无关的任务", nil)
+	if len(got) != 0 {
+		t.Errorf("无关任务不应激活 auto 技能，得 %+v", got)
+	}
+}
+
+func TestActiveSkills_AutoByGlobs(t *testing.T) {
+	skills := []Skill{
+		{Name: "css-rule", Description: "CSS 相关", Mode: "auto", Globs: "*.css *.scss"},
+		{Name: "no-glob", Description: "无 glob", Mode: "auto"},
+	}
+	// 当前编辑 .css 文件 → 激活 css-rule
+	got := ActiveSkills(skills, "完全无关的任务描述", []string{"src/style.css"})
+	if len(got) != 1 || got[0].Name != "css-rule" {
+		t.Errorf("globs 匹配 .css 应激活 css-rule，得 %+v", got)
+	}
+	// .go 文件不匹配
+	got = ActiveSkills(skills, "无关描述", []string{"main.go"})
+	if len(got) != 0 {
+		t.Errorf(".go 文件不应激活 css-rule，得 %+v", got)
+	}
+}
+
+func TestActiveSkills_ManualNotAuto(t *testing.T) {
+	skills := []Skill{
+		{Name: "manual-one", Description: "手动", Mode: "manual", Globs: "*.go"},
+	}
+	// manual 模式即使 globs 匹配也不自动激活
+	got := ActiveSkills(skills, "manual-one", []string{"main.go"})
+	if len(got) != 0 {
+		t.Errorf("manual 模式不应自动激活，得 %+v", got)
+	}
+}
+
+func TestActiveSkills_DefaultAuto(t *testing.T) {
+	// Mode 空 → 视作 auto
+	skills := []Skill{
+		{Name: "default-auto", Description: "测试", Mode: ""},
+	}
+	got := ActiveSkills(skills, "default-auto", nil)
+	if len(got) != 1 {
+		t.Errorf("空 Mode 应视作 auto，关键词匹配应激活，得 %+v", got)
+	}
+}
+
+func TestSkillBodyWithTools(t *testing.T) {
+	// 无 allowed-tools：返回原正文
+	s := Skill{Body: "正文内容", AllowedTools: nil}
+	if got := SkillBodyWithTools(s); got != "正文内容" {
+		t.Errorf("无 allowed-tools 应返回原正文，得 %q", got)
+	}
+	// 有 allowed-tools：末尾追加推荐工具集
+	s.AllowedTools = []string{"read_file", "write_file"}
+	got := SkillBodyWithTools(s)
+	if !strings.Contains(got, "正文内容") {
+		t.Errorf("应含原正文，得 %q", got)
+	}
+	if !strings.Contains(got, "推荐工具集") {
+		t.Errorf("应含推荐工具集提示，得 %q", got)
+	}
+	if !strings.Contains(got, "read_file, write_file") {
+		t.Errorf("应含工具列表，得 %q", got)
+	}
+}

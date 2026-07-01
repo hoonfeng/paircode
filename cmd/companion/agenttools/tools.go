@@ -167,7 +167,7 @@ func loadSkillFull(name string) (string, error) {
 	if s == nil {
 		return "", fmt.Errorf("未找到技能 %q（用 skill_list 看全部）", name)
 	}
-	return "# 技能：" + s.Name + "\n" + s.Description + "\n\n" + s.Body, nil
+	return "# 技能：" + s.Name + "\n" + s.Description + "\n\n" + agent.SkillBodyWithTools(*s), nil
 }
 
 func loadSkillResource(name, path string) (string, error) {

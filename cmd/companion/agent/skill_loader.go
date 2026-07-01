@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 )
 
 // ─── 全局配置（由 bridge 初始化，供 agenttools/resource_manager 共用）──
@@ -335,4 +336,87 @@ func PromptSkills(skills []Skill) string {
 		fmt.Fprintf(&sb, "- %s：%s\n", s.Name, desc)
 	}
 	return sb.String()
+}
+
+// ─── 激活匹配（3.6：消费 frontmatter 的 activation/globs 字段）──
+
+// ActiveSkills 返回当前上下文应激活的技能子集（供 L1 prompt 注入或 L2 预加载）。
+// 激活规则（复刻参考源 loader.ts 匹配技能）：
+//   - always：始终激活
+//   - auto：taskDesc 含技能 name/description 关键词，或 globs 匹配 currentFiles 任一文件
+//   - manual（默认 auto 的空值视作 auto）：不自动激活，仅 load_skill 手动加载
+//
+// currentFiles 为当前编辑/打开的文件路径（用于 globs 匹配）；空则跳过 glob 匹配。
+// taskDesc 为本次任务描述；空则跳过关键词匹配（仅 always 激活 + globs 匹配）。
+func ActiveSkills(skills []Skill, taskDesc string, currentFiles []string) []Skill {
+	taskLower := strings.ToLower(taskDesc)
+	var out []Skill
+	for _, s := range skills {
+		mode := s.Mode
+		if mode == "" {
+			mode = "auto"
+		}
+		switch mode {
+		case "always":
+			out = append(out, s)
+		case "auto":
+			if skillMatchAuto(s, taskLower, currentFiles) {
+				out = append(out, s)
+			}
+			// manual：不自动激活
+		}
+	}
+	return out
+}
+
+// skillMatchAuto auto 模式激活判定：关键词命中 或 globs 命中。
+func skillMatchAuto(s Skill, taskLower string, currentFiles []string) bool {
+	// 关键词匹配：name + description 切词，命中任一即激活。
+	// 用 rune 计数（中文单字 rune 数=1 不匹配，避免"无"等单字误命中；英文单词 rune 数>1 才匹配）
+	for _, kw := range skillKeywords(s) {
+		if utf8.RuneCountInString(kw) > 1 && strings.Contains(taskLower, kw) {
+			return true
+		}
+	}
+	// glob 匹配：globs 按空白分割为多个模式，匹配 currentFiles 任一
+	if s.Globs != "" && len(currentFiles) > 0 {
+		patterns := strings.Fields(s.Globs)
+		for _, file := range currentFiles {
+			base := filepath.Base(file)
+			rel := filepath.ToSlash(file)
+			for _, pat := range patterns {
+				if matchGlobFilter(pat, base, rel) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// skillKeywords 提取技能 name+description 的关键词（小写，按空白/连字符/下划线切）。
+func skillKeywords(s Skill) []string {
+	raw := strings.ToLower(s.Name + " " + s.Description)
+	var kw []string
+	for _, w := range strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ' ' || r == '-' || r == '_' || r == ',' || r == '，' || r == '、'
+	}) {
+		if w != "" {
+			kw = append(kw, w)
+		}
+	}
+	return kw
+}
+
+// ─── L2 正文 + allowed-tools 软提示（3.6.1：消费 frontmatter 的 allowed-tools 字段）──
+
+// SkillBodyWithTools 返回 skill 的 L2 正文；如设了 allowed-tools，末尾追加推荐工具集提示。
+// 软提示（非硬裁剪 Registry）：引导 LLM 处理本技能相关任务时优先用白名单工具，
+// 避免多 skill 白名单冲突 + 不破坏现有工具链。load_skill 工具加载时调用本函数。
+func SkillBodyWithTools(s Skill) string {
+	out := s.Body
+	if len(s.AllowedTools) > 0 {
+		out += "\n\n---\n## 推荐工具集\n处理本技能相关任务时优先使用以下工具：" + strings.Join(s.AllowedTools, ", ")
+	}
+	return out
 }
