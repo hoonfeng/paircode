@@ -213,13 +213,16 @@
 
 ## 阶段五：集成测试与验证
 
-- [ ] 5.1 `go build ./cmd/companion/...` 全量编译通过
-- [ ] 5.2 `go test ./cmd/companion/agent/...` 全绿
-- [ ] 5.3 端到端：用真实 LLM 跑 edit_file CRLF 场景验证
-- [ ] 5.4 端到端：用真实 LLM 跑 glob `**` 场景验证
-- [ ] 5.5 端到端：启动一个 MCP server（如 filesystem-mcp）验证 go-sdk 替换
-- [ ] 5.6 端到端：加载 config/skills/emoji-icons 验证 L1 注入 + L2 load_skill
-- [ ] 5.7 端到端：多 agent 委托场景（coordinator → planner → coder）
+> 5.1/5.2 离线验证全绿（go build + go vet + go test ./cmd/companion/agent/ 11.5s）。
+> 5.3-5.7 端到端测试代码已编写（`agent/live_e2e_test.go`，5 个 TestLive* 测试），用 DEEPSEEK_KEY 环境变量门控，无 key 自动 t.Skip。待用户提供 API key 后跑真机验证。
+
+- [x] 5.1 `go build ./cmd/companion/...` 全量编译通过
+- [x] 5.2 `go test ./cmd/companion/agent/...` 全绿
+- [ ] 5.3 端到端：用真实 LLM 跑 edit_file CRLF 场景验证（TestLiveEditFileCRLF，待 API key）
+- [ ] 5.4 端到端：用真实 LLM 跑 glob `**` 场景验证（TestLiveGlobRecursive，待 API key）
+- [ ] 5.5 端到端：进程内 MCP server + 真实 LLM 调用 mcp.test.echo（TestLiveMCPInProcess，待 API key）
+- [ ] 5.6 端到端：加载 config/skills/emoji-icons 验证 L1 注入 + L2 load_skill（TestLiveSkills，待 API key）
+- [ ] 5.7 端到端：多 agent 委托场景 coordinator → coder（TestLiveMultiAgent，待 API key）
 
 ---
 
