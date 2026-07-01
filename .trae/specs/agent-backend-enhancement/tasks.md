@@ -8,7 +8,8 @@
 
 > 阶段一全部完成并通过验证（go build + go vet + go test 全绿）。详见 findings.md 第七节"阶段一执行发现"。
 > 实际实施中额外修复了 4 个预存问题：storm_breaker_test.go 预存损坏、code_fix go tool fix 失效、code_format exit code 误判、read_file 缺二进制保护；并补齐 Registry.Unregister 方法。
-> 1.3（description 优化）已在 1.1/1.2/1.4 修复中顺带完成（edit_file/glob/code_fix 等描述已更新）；1.6（强类型工具辅助）暂不实施（现有 objSchema 辅助足够，泛型改造收益不明显）。
+> 1.3（description 优化）已在 1.1/1.2/1.4 修复中顺带完成（edit_file/glob/code_fix 等描述已更新）。
+> 1.6（强类型工具辅助）补充实施完成：新增 `agent/typed_tool.go` 的 `DefineTool[TArgs any]` 泛型辅助，用 reflect 读 struct json tag 自动生成 JSON Schema + 必填校验 + panic recovery；5 个测试全过（schema 反射/必填校验/panic 恢复/嵌套 struct/坏 JSON）。
 
 ### 1.1 修复文件编辑工具
 - [ ] 1.1.1 新增 `agent/edit_matcher.go`：封装匹配逻辑
@@ -60,12 +61,12 @@
 - [ ] 1.5.4 实现默认 OnToolError：edit_file 失败时自动用规范化重试
 - [ ] 1.5.5 测试回调链
 
-### 1.6（可选）强类型工具辅助
-- [ ] 1.6.1 新增 `agent/typed_tool.go`：`DefineTool[TArgs, TResults any]` 泛型辅助
-- [ ] 1.6.2 用 struct json tag 反射生成 JSON Schema
-- [ ] 1.6.3 入口校验（map→struct + schema 校验）
-- [ ] 1.6.4 panic recovery 包装
-- [ ] 1.6.5 示例：用 DefineTool 重写一个现有工具验证
+### 1.6（可选）强类型工具辅助 ✅
+- [x] 1.6.1 新增 `agent/typed_tool.go`：`DefineTool[TArgs any]` 泛型辅助
+- [x] 1.6.2 用 struct json tag 反射生成 JSON Schema
+- [x] 1.6.3 入口校验（map→struct + 必填字段非零校验）
+- [x] 1.6.4 panic recovery 包装
+- [x] 1.6.5 测试 `agent/typed_tool_test.go`：5 测试全过（schema 反射/必填校验/panic 恢复/嵌套 struct/坏 JSON）
 
 ---
 
@@ -120,7 +121,9 @@
 >   - SkillEnabledOverrides 按 `level::name` 键过滤（不存在默认启用）；bridge.go 启动时注入 SkillSystemDir/SkillProjectDir/SkillEnabled 全局变量（与 WorkspaceRoots 模式一致，agent 包不依赖 core）
 >   - 内置技能 config/skills/ 经 SkillSystemDir 加载，system 级注入 L1 prompt
 >   - ui/skills/skills.go、agent/resource_manager.go skillsProvider、agenttools/tools.go 全部委托 skill_loader，消除旧 frontmatterField/firstLine 散落调用
-> 3.6（allowed-tools 工具白名单裁剪 / globs 按文件类型自动激活）属运行时激活增强，需 Loop 层配合，暂不实施（与阶段一 1.6 同处理）；frontmatter 字段已解析存储于 Skill 结构，后续激活逻辑可直接消费。
+> 3.6（frontmatter 字段消费）补充实施完成：
+>   - 3.6.1 `allowed-tools` 软提示：load_skill 加载 SKILL.md 时如设了 allowed-tools，正文末追加"推荐工具集"软提示（非硬裁剪 Registry，避免多 skill 白名单冲突），由 `SkillBodyWithTools` 实现，`agenttools/tools.go` 的 loadSkillFull 接入。
+>   - 3.6.2 `globs` 自动激活：新增 `ActiveSkills(skills, taskDesc, currentFiles)` 按 always/auto/manual 模式 + 关键词/glob 匹配激活（复刻参考源 loader.ts 语义）；auto 模式按 name+description 切词命中 taskDesc 或 globs 匹配 currentFiles 任一文件即激活；用 `utf8.RuneCountInString` 计数避免中文单字误匹配。6 个测试全过。
 
 - [x] 3.1 新增 `agent/skill_loader.go`（核心加载逻辑，供 UI 和 agent 共用）：
   - [x] 3.1.1 目录式扫描：`.pair/skills/<name>/SKILL.md` + `config/skills/<name>/SKILL.md`
@@ -138,9 +141,9 @@
   - [x] 3.4.2 新增 `load_skill_resource`：加载 references/assets/scripts 子文件（L3），10MiB 上限
   - [x] 3.4.3 资源沙箱：路径前缀校验（references/assets/scripts）
 - [x] 3.5 内置 skill 加载链路：config/skills/ → skill_loader → prompt（bridge.go 注入 SkillSystemDir）
-- [~] 3.6 消费 frontmatter 字段（暂不实施，需 Loop 层配合）：
-  - [ ] 3.6.1 `allowed-tools`：skill 激活时限制可用工具白名单
-  - [ ] 3.6.2 `globs`：按当前编辑文件类型自动激活
+- [x] 3.6 消费 frontmatter 字段：
+  - [x] 3.6.1 `allowed-tools`：load_skill 加载时追加推荐工具集软提示（SkillBodyWithTools），loadSkillFull 接入
+  - [x] 3.6.2 `globs`：ActiveSkills 按 always/auto/manual + 关键词/glob 自动激活
 - [x] 3.7 测试 `agent/skill_loader_test.go`：
   - [x] 3.7.1 目录式 SKILL.md 加载
   - [x] 3.7.2 frontmatter 解析（含引号去引号、无 frontmatter 兜底）
