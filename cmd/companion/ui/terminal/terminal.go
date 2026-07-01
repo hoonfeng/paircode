@@ -127,24 +127,15 @@ func (m *termManager) closeTab(i int) {
 // New 创建终端面板。
 func New(doc *dom.Document) *termManager {
 	theTermMgr.doc = doc
-	theTermMgr.rootEl = doc.CreateElement("div")
-	theTermMgr.rootEl.SetAttribute("style", "display:flex;flex-direction:column;flex:1;background:"+colEditor+";overflow:hidden;")
 
-	title := doc.CreateElement("div")
-	title.ClassList().Add("panel-header")
-	title.SetTextContent("TERMINAL")
-	theTermMgr.rootEl.AppendChild(title)
+	// 加载 HTML 模板（资源目录 html/panels/terminal.html）
+	ui.MustLoadPanelHTML(doc, "panels/terminal.html", nil)
+	theTermMgr.rootEl = doc.GetElementByID("terminal-root")
+	theTermMgr.tabBarEl = doc.GetElementByID("terminal-tabbar")
+	theTermMgr.termEl = doc.GetElementByID("terminal-area")
 
-	// 标签栏
-	theTermMgr.tabBarEl = doc.CreateElement("div")
-	theTermMgr.tabBarEl.SetAttribute("style", "display:flex;flex-direction:row;align-items:stretch;background:"+colStatusBar+";height:28px;flex-shrink:0;overflow:hidden;")
-	theTermMgr.rootEl.AppendChild(theTermMgr.tabBarEl)
-
-	// 终端区（可聚焦，接收键盘输入）
-	theTermMgr.termEl = doc.CreateElement("div")
-	theTermMgr.termEl.SetAttribute("tabindex", "0")
-	theTermMgr.termEl.SetAttribute("style", "flex:1;background:"+colEditor+";overflow:hidden;position:relative;outline:none;")
-	theTermMgr.rootEl.AppendChild(theTermMgr.termEl)
+	// 从临时父节点（body）中分离根元素
+	ui.DetachRoot(theTermMgr.rootEl)
 
 	theTermMgr.renderTabBar()
 	theTermMgr.renderActiveTerm()
@@ -210,6 +201,17 @@ func (m *termManager) Refresh() {
 // NewTerminal 新建默认终端。
 func NewTerminal() {
 	theTermMgr.NewTabWithShell("cmd")
+}
+
+// OpenActiveTerminalDir 在活跃终端中 cd 到指定目录。
+// 若没有活跃终端则新建一个。
+func OpenActiveTerminalDir(dir string) {
+	if theTerminal == nil {
+		NewTerminal()
+	}
+	if theTerminal != nil {
+		theTerminal.OpenDir(dir)
+	}
 }
 
 func (m *termManager) renderTabBar() {

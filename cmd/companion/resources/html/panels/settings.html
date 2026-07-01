@@ -1,0 +1,23 @@
+<!-- 设置面板 HTML 模板（加载到 Modal 内）-->
+<div id="settings-root" style="display:flex;flex-direction:column;gap:14px;min-width:380px;padding:4px 0;">
+  <div style="font-weight:bold;font-size:13px;color:#cccccc;border-bottom:1px solid #e0e0e0;padding-bottom:4px;">LLM 服务</div>
+  <div style="display:flex;flex-direction:row;align-items:center;gap:8px;">
+    <div style="width:100px;font-size:13px;color:#cccccc;">服务商</div>
+    <div id="settings-provider-ph" style="flex:1;"></div>
+  </div>
+  <div style="display:flex;flex-direction:row;align-items:center;gap:8px;">
+    <div style="width:100px;font-size:13px;color:#cccccc;">API Key</div>
+    <div id="settings-apikey-ph" style="flex:1;"></div>
+  </div>
+  <div style="display:flex;flex-direction:row;align-items:center;gap:8px;">
+    <div style="width:100px;font-size:13px;color:#cccccc;">模型</div>
+    <div id="settings-model-ph" style="flex:1;"></div>
+  </div>
+  <div style="font-weight:bold;font-size:13px;color:#cccccc;border-bottom:1px solid #e0e0e0;padding-bottom:4px;">Agent 行为</div>
+  <div id="settings-autoreview-ph"></div>
+  <div id="settings-autonomous-ph"></div>
+  <div style="display:flex;flex-direction:row;gap:8px;justify-content:flex-end;margin-top:8px;">
+    <button label="保存" onclick="saveSettings" style="background-color:#0e639c;color:#fff;padding:4px 12px;font-size:13px;"></button>
+    <button label="取消" onclick="cancelSettings" style="background-color:#3c3c3c;color:#cccccc;padding:4px 12px;font-size:13px;"></button>
+  </div>
+</div>

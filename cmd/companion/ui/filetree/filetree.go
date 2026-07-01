@@ -20,7 +20,6 @@ import (
 
 	"github.com/hoonfeng/paircode/cmd/companion/core"
 	editorpanel "github.com/hoonfeng/paircode/cmd/companion/ui/editor"
-	gitpanel "github.com/hoonfeng/paircode/cmd/companion/ui/git"
 	"github.com/hoonfeng/paircode/cmd/companion/ui"
 )
 
@@ -108,38 +107,36 @@ type fileTreeState struct {
 	doc       *dom.Document
 	rootEl    *dom.Element
 	contentEl *dom.Element
-	changesEl *dom.Element
 
 	roots     []*FileNode
 	active    string
-	gitStatus map[string]gitpanel.Badge
-
-	changesExpanded bool
-	changes         []gitpanel.FileChange
 }
 
 // New 创建文件树面板。
 func New(doc *dom.Document) *fileTreeState {
 	FileTree.doc = doc
-	FileTree.rootEl = doc.CreateElement("div")
-	FileTree.rootEl.SetAttribute("style", "display:flex;flex-direction:column;height:100%;background:"+colSide+";overflow:hidden;")
 
-	// 标题
-	title := doc.CreateElement("div")
-	title.ClassList().Add("panel-header")
-	title.SetTextContent("FILES")
-	FileTree.rootEl.AppendChild(title)
+	// 加载 HTML 模板（资源目录 html/panels/filetree.html）
+	ui.MustLoadPanelHTML(doc, "panels/filetree.html", nil)
+	FileTree.rootEl = doc.GetElementByID("filetree-root")
+	FileTree.contentEl = doc.GetElementByID("filetree-content")
 
-	// 内容容器（含工具栏 + 树 + 变更栏）
-	FileTree.contentEl = doc.CreateElement("div")
-	FileTree.contentEl.SetAttribute("style", "flex:1;display:flex;flex-direction:column;overflow:hidden;")
+	// 从临时父节点（body）中分离根元素
+	ui.DetachRoot(FileTree.rootEl)
 
-	// 变更栏
-	FileTree.changesEl = doc.CreateElement("div")
-	FileTree.changesEl.SetAttribute("style", "flex-shrink:0;")
-
-	FileTree.rootEl.AppendChild(FileTree.contentEl)
-	FileTree.rootEl.AppendChild(FileTree.changesEl)
+	// 文件树空白区域右键菜单
+	if FileTree.contentEl != nil {
+		on(FileTree.contentEl, event.ContextMenu, func(e event.Event) bool {
+			if me, ok := e.(*event.MouseEvent); ok {
+				// 优先冒泡到文件节点（节点自身的 ContextMenu 处理器会返回 true 并阻止传播）
+				// 此处处理空白区域点击：事件必须未被文件节点消费
+				if OnEmptyMenu != nil {
+					OnEmptyMenu(float64(me.X), float64(me.Y))
+				}
+			}
+			return true
+		})
+	}
 
 	Panel = FileTree
 	return FileTree
@@ -231,10 +228,6 @@ func (s *fileTreeState) renderAll() {
 		return
 	}
 
-	gitpanel.Ensure()
-	s.gitStatus = gitpanel.StatusMap()
-	s.changes = gitpanel.ChangedFiles()
-
 	// 工具栏
 	s.contentEl.AppendChild(s.toolbar())
 
@@ -254,9 +247,6 @@ func (s *fileTreeState) renderAll() {
 		}
 	}
 	s.contentEl.AppendChild(treeContainer)
-
-	// 变更栏
-	s.renderChangesBar()
 }
 
 func (s *fileTreeState) renderEmpty() {
@@ -288,12 +278,12 @@ func (s *fileTreeState) toolbar() *dom.Element {
 
 	folderIcon := s.doc.CreateElement("span")
 	folderIcon.SetAttribute("data-icon", "folder")
-	folderIcon.SetAttribute("style", "width:13px;height:13px;color:"+colText+";flex-shrink:0;")
+	folderIcon.SetAttribute("style", "width:16px;height:16px;color:"+colText+";flex-shrink:0;")
 	bar.AppendChild(folderIcon)
 	bar.AppendChild(spacer(s.doc, 6))
 
 	nameEl := s.doc.CreateElement("div")
-	nameEl.SetAttribute("style", "flex:1;color:"+colText+";font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;")
+	nameEl.SetAttribute("style", "flex:1;color:"+colText+";font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;")
 	nameEl.SetTextContent(core.ProjectName())
 	bar.AppendChild(nameEl)
 
@@ -302,7 +292,7 @@ func (s *fileTreeState) toolbar() *dom.Element {
 	addBtn.SetAttribute("hover-style", "background:"+colHover+";")
 	addIcon := s.doc.CreateElement("span")
 	addIcon.SetAttribute("data-icon", "folder-plus")
-	addIcon.SetAttribute("style", "width:13px;height:13px;color:"+colTextDim+";")
+	addIcon.SetAttribute("style", "width:16px;height:16px;color:"+colTextDim+";")
 	addBtn.AppendChild(addIcon)
 	on(addBtn, event.Click, func(e event.Event) bool {
 		if OnAddFolder != nil {
@@ -317,7 +307,7 @@ func (s *fileTreeState) toolbar() *dom.Element {
 	refBtn.SetAttribute("hover-style", "background:"+colHover+";")
 	refIcon := s.doc.CreateElement("span")
 	refIcon.SetAttribute("data-icon", "refresh-cw")
-	refIcon.SetAttribute("style", "width:13px;height:13px;color:"+colTextDim+";")
+	refIcon.SetAttribute("style", "width:16px;height:16px;color:"+colTextDim+";")
 	refBtn.AppendChild(refIcon)
 	on(refBtn, event.Click, func(e event.Event) bool {
 		s.Refresh()
@@ -346,11 +336,6 @@ func (s *fileTreeState) row(n *FileNode, depth int) *dom.Element {
 	indent := 8.0 + float64(depth)*14
 
 	nameCol := colText
-	var trailing string
-	if gb, ok := s.gitStatus[n.Path]; ok {
-		nameCol = gb.Col
-		trailing = gb.Sym
-	}
 
 	row := s.doc.CreateElement("div")
 	row.SetAttribute("style", fmt.Sprintf("display:flex;flex-direction:row;align-items:center;height:24px;padding:0 8px 0 %.0fpx;cursor:pointer;background:%s;", indent, bg))
@@ -375,29 +360,27 @@ func (s *fileTreeState) row(n *FileNode, depth int) *dom.Element {
 	// 文件类型图标
 	ic := s.doc.CreateElement("span")
 	ic.SetAttribute("data-icon", icon)
-	ic.SetAttribute("style", fmt.Sprintf("width:15px;height:15px;color:%s;flex-shrink:0;", iconCol))
+	ic.SetAttribute("style", fmt.Sprintf("width:16px;height:16px;color:%s;flex-shrink:0;", iconCol))
 	row.AppendChild(ic)
 
 	row.AppendChild(spacer(s.doc, 6))
 
 	// 文件名
 	nameEl := s.doc.CreateElement("div")
-	nameEl.SetAttribute("style", fmt.Sprintf("flex:1;color:%s;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;", nameCol))
+	nameEl.SetAttribute("style", fmt.Sprintf("flex:1;color:%s;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;", nameCol))
 	nameEl.SetTextContent(n.Name)
 	row.AppendChild(nameEl)
-
-	// git 状态后缀
-	if trailing != "" {
-		gb := s.gitStatus[n.Path]
-		trailEl := s.doc.CreateElement("div")
-		trailEl.SetAttribute("style", fmt.Sprintf("color:%s;font-size:11px;margin-left:4px;flex-shrink:0;", gb.Col))
-		trailEl.SetTextContent(trailing)
-		row.AppendChild(trailEl)
-	}
 
 	nodePtr := n
 	on(row, event.Click, func(e event.Event) bool {
 		s.onClick(nodePtr)
+		return true
+	})
+	// 右键菜单：ContextMenu 事件由 app_skia.go 在 mouse up 时派发（ButtonRight → ContextMenu）
+	on(row, event.ContextMenu, func(e event.Event) bool {
+		if me, ok := e.(*event.MouseEvent); ok && OnNodeMenu != nil {
+			OnNodeMenu(float64(me.X), float64(me.Y), nodePtr)
+		}
 		return true
 	})
 
@@ -439,7 +422,7 @@ func (s *fileTreeState) rootRow(r *FileNode) *dom.Element {
 
 	folderIc := s.doc.CreateElement("span")
 	folderIc.SetAttribute("data-icon", "folder")
-	folderIc.SetAttribute("style", "width:14px;height:14px;color:"+colAccent+";flex-shrink:0;")
+	folderIc.SetAttribute("style", "width:16px;height:16px;color:"+colAccent+";flex-shrink:0;")
 	row.AppendChild(folderIc)
 
 	row.AppendChild(spacer(s.doc, 4))
@@ -453,105 +436,14 @@ func (s *fileTreeState) rootRow(r *FileNode) *dom.Element {
 		s.Toggle(r)
 		return true
 	})
-
-	return row
-}
-
-// ─── 变更栏（底部可折叠）──────────────────────────────────
-
-func (s *fileTreeState) renderChangesBar() {
-	s.changesEl.ClearChildren()
-	changeCount := len(s.changes)
-	if changeCount == 0 {
-		return
-	}
-
-	chev := "chevron-right"
-	if s.changesExpanded {
-		chev = "chevron-down"
-	}
-
-	// 标题行
-	header := s.doc.CreateElement("div")
-	header.SetAttribute("style", "display:flex;flex-direction:row;align-items:center;height:24px;padding:0 8px;border-top:1px solid "+colBorder+";cursor:pointer;background:"+colSide+";")
-	header.SetAttribute("hover-style", "background:"+colHover+";")
-
-	chevIc := s.doc.CreateElement("span")
-	chevIc.SetAttribute("data-icon", chev)
-	chevIc.SetAttribute("style", "width:13px;height:13px;color:"+colWarning+";flex-shrink:0;")
-	header.AppendChild(chevIc)
-	header.AppendChild(spacer(s.doc, 4))
-
-	dotIc := s.doc.CreateElement("span")
-	dotIc.SetAttribute("data-icon", "circle-dot")
-	dotIc.SetAttribute("style", "width:12px;height:12px;color:"+colWarning+";flex-shrink:0;")
-	header.AppendChild(dotIc)
-	header.AppendChild(spacer(s.doc, 4))
-
-	titleEl := s.doc.CreateElement("div")
-	titleEl.SetAttribute("style", "flex:1;color:"+colWarning+";font-size:11px;")
-	titleEl.SetTextContent(fmt.Sprintf("文件变更 (%d)", changeCount))
-	header.AppendChild(titleEl)
-
-	on(header, event.Click, func(e event.Event) bool {
-		s.changesExpanded = !s.changesExpanded
-		s.renderChangesBar()
-		if ui.Ctx.App != nil {
-			ui.Ctx.App.MarkDirty()
+	// 右键菜单
+	on(row, event.ContextMenu, func(e event.Event) bool {
+		if me, ok := e.(*event.MouseEvent); ok && OnRootMenu != nil {
+			OnRootMenu(float64(me.X), float64(me.Y), r.Path)
 		}
 		return true
 	})
-	s.changesEl.AppendChild(header)
 
-	if !s.changesExpanded {
-		return
-	}
-
-	// 展开列表
-	changeList := s.doc.CreateElement("div")
-	changeList.SetAttribute("style", "max-height:200px;overflow-y:auto;background:"+colSide+";")
-
-	for _, c := range s.changes {
-		if !c.Staged {
-			continue
-		}
-		changeList.AppendChild(s.changeRow(c))
-	}
-	for _, c := range s.changes {
-		if c.Staged {
-			continue
-		}
-		changeList.AppendChild(s.changeRow(c))
-	}
-	s.changesEl.AppendChild(changeList)
-}
-
-func (s *fileTreeState) changeRow(c gitpanel.FileChange) *dom.Element {
-	row := s.doc.CreateElement("div")
-	row.SetAttribute("style", "display:flex;flex-direction:row;align-items:center;height:24px;padding:0 8px 0 24px;cursor:pointer;")
-	row.SetAttribute("hover-style", "background:"+colHover+";")
-
-	symEl := s.doc.CreateElement("div")
-	symEl.SetAttribute("style", "width:14px;display:flex;flex-direction:row;align-items:center;color:"+c.Col+";font-size:12px;flex-shrink:0;")
-	symEl.SetTextContent(c.Sym)
-	row.AppendChild(symEl)
-	row.AppendChild(spacer(s.doc, 4))
-
-	pathEl := s.doc.CreateElement("div")
-	pathEl.SetAttribute("style", "flex:1;color:"+colText+";font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;")
-	pathEl.SetTextContent(c.Path)
-	row.AppendChild(pathEl)
-
-	on(row, event.Click, func(e event.Event) bool {
-		abs := filepath.Join(core.Root(), filepath.FromSlash(c.Path))
-		s.active = abs
-		editorpanel.Editor.Open(abs)
-		s.renderAll()
-		if ui.Ctx.App != nil {
-			ui.Ctx.App.MarkDirty()
-		}
-		return true
-	})
 	return row
 }
 

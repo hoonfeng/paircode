@@ -159,19 +159,14 @@ type gitState struct {
 // New 创建 Git 面板。
 func New(doc *dom.Document) *gitState {
 	theGit.doc = doc
-	theGit.rootEl = doc.CreateElement("div")
-	theGit.rootEl.SetAttribute("style", "display:flex;flex-direction:column;height:100%;background:"+colSideBg+";overflow:hidden;")
 
-	// 标题
-	title := doc.CreateElement("div")
-	title.ClassList().Add("panel-header")
-	title.SetTextContent("GIT")
-	theGit.rootEl.AppendChild(title)
+	// 加载 HTML 模板（资源目录 html/panels/git.html）
+	ui.MustLoadPanelHTML(doc, "panels/git.html", nil)
+	theGit.rootEl = doc.GetElementByID("git-root")
+	theGit.contentEl = doc.GetElementByID("git-content")
 
-	// 内容区
-	theGit.contentEl = doc.CreateElement("div")
-	theGit.contentEl.SetAttribute("style", "flex:1;overflow-y:auto;")
-	theGit.rootEl.AppendChild(theGit.contentEl)
+	// 从临时父节点（body）中分离根元素
+	ui.DetachRoot(theGit.rootEl)
 
 	Panel = theGit
 	return theGit
@@ -483,11 +478,11 @@ func (g *gitState) commit() {
 
 	var msg, desc string
 	msgIn := component.NewInput(doc, "提交信息（必填）")
-	msgIn.SetBaseStyle("background-color:" + colInputBg + ";color:" + colText + ";border:1px solid " + colBorder + ";padding:4px 8px;font-size:15px;width:100%;")
+	msgIn.SetBaseStyle("background-color:" + colInputBg + ";color:" + colText + ";border:1px solid " + colBorder + ";padding:4px 8px;font-size:13px;width:100%;")
 	body.AppendChild(msgIn.Element())
 
 	descIn := component.NewInput(doc, "详细描述（可选）")
-	descIn.SetBaseStyle("background-color:" + colInputBg + ";color:" + colText + ";border:1px solid " + colBorder + ";padding:4px 8px;font-size:15px;width:100%;")
+	descIn.SetBaseStyle("background-color:" + colInputBg + ";color:" + colText + ";border:1px solid " + colBorder + ";padding:4px 8px;font-size:13px;width:100%;")
 	body.AppendChild(descIn.Element())
 
 	hint := doc.CreateElement("div")
@@ -499,12 +494,12 @@ func (g *gitState) commit() {
 	btnRow.SetAttribute("style", "display:flex;flex-direction:row;gap:8px;justify-content:flex-end;")
 
 	cancelBtn := component.NewButton(doc, "取消")
-	cancelBtn.SetStyle("background-color:#9e9e9e;color:#fff;padding:4px 12px;font-size:15px;")
+	cancelBtn.SetStyle("background-color:#9e9e9e;color:#fff;padding:4px 12px;font-size:13px;")
 	cancelBtn.OnClick(func() { modal.Hide() })
 	btnRow.AppendChild(cancelBtn.Element())
 
 	submitBtn := component.NewButton(doc, "提交")
-	submitBtn.SetStyle("background-color:" + colAccent + ";color:#fff;padding:4px 12px;font-size:15px;")
+	submitBtn.SetStyle("background-color:" + colAccent + ";color:#fff;padding:4px 12px;font-size:13px;")
 	submitBtn.OnClick(func() {
 		msg = msgIn.Value()
 		if strings.TrimSpace(msg) == "" {
@@ -653,10 +648,10 @@ func (g *gitState) actionBar() *dom.Element {
 	filler.SetAttribute("style", "flex:1;")
 	bar.AppendChild(filler)
 
-	pullBtn := g.iconToolBtn("arrow-down-to-line", func() { g.pull() })
+	pullBtn := g.iconToolBtn("git-pull", func() { g.pull() })
 	bar.AppendChild(pullBtn)
 
-	pushBtn := g.iconToolBtn("arrow-up-from-line", func() { g.push() })
+	pushBtn := g.iconToolBtn("git-push", func() { g.push() })
 	bar.AppendChild(pushBtn)
 
 	return bar
@@ -902,7 +897,7 @@ func (g *gitState) showAlert(title, msg string) {
 	body.ClearChildren()
 	body.SetAttribute("style", "display:flex;flex-direction:column;gap:12px;min-width:300px;")
 	msgEl := g.doc.CreateElement("div")
-	msgEl.SetAttribute("style", "color:"+colText+";font-size:15px;")
+	msgEl.SetAttribute("style", "color:"+colText+";font-size:13px;")
 	msgEl.SetTextContent(msg)
 	body.AppendChild(msgEl)
 	okBtn := component.NewButton(g.doc, "确定")
@@ -921,7 +916,7 @@ func (g *gitState) showConfirm(title, msg string, onOk func()) {
 	body.ClearChildren()
 	body.SetAttribute("style", "display:flex;flex-direction:column;gap:12px;min-width:300px;")
 	msgEl := g.doc.CreateElement("div")
-	msgEl.SetAttribute("style", "color:"+colText+";font-size:15px;")
+	msgEl.SetAttribute("style", "color:"+colText+";font-size:13px;")
 	msgEl.SetTextContent(msg)
 	body.AppendChild(msgEl)
 
@@ -929,12 +924,12 @@ func (g *gitState) showConfirm(title, msg string, onOk func()) {
 	btnRow.SetAttribute("style", "display:flex;flex-direction:row;gap:8px;justify-content:flex-end;")
 
 	cancelBtn := component.NewButton(g.doc, "取消")
-	cancelBtn.SetStyle("background-color:#9e9e9e;color:#fff;padding:4px 12px;font-size:15px;")
+	cancelBtn.SetStyle("background-color:#9e9e9e;color:#fff;padding:4px 12px;font-size:13px;")
 	cancelBtn.OnClick(func() { modal.Hide() })
 	btnRow.AppendChild(cancelBtn.Element())
 
 	okBtn := component.NewButton(g.doc, "确定")
-	okBtn.SetStyle("background-color:"+colAccent+";color:#fff;padding:4px 12px;font-size:15px;")
+	okBtn.SetStyle("background-color:"+colAccent+";color:#fff;padding:4px 12px;font-size:13px;")
 	okBtn.OnClick(func() { modal.Hide(); onOk() })
 	btnRow.AppendChild(okBtn.Element())
 
@@ -1065,7 +1060,7 @@ func showGitDiff(rel string, staged bool) {
 	btnRow.AppendChild(openBtn.Element())
 
 	closeBtn := component.NewButton(doc, "关闭")
-	closeBtn.SetStyle("background-color:" + colAccent + ";color:#fff;padding:4px 12px;font-size:15px;")
+	closeBtn.SetStyle("background-color:" + colAccent + ";color:#fff;padding:4px 12px;font-size:13px;")
 	closeBtn.OnClick(func() { modal.Hide() })
 	btnRow.AppendChild(closeBtn.Element())
 

@@ -1,0 +1,24 @@
+<!-- 对话面板 HTML 模板 -->
+<!-- 布局：两栏 — 左栏(消息+输入区) | 分隔条 | 右栏(对话列表+统计) -->
+<div id="chat-root" style="display:flex;flex-direction:column;flex:1;overflow:hidden;background:#1e1e1e;">
+  <!-- 工具栏 -->
+  <div id="chat-toolbar" style="height:34px;display:flex;flex-direction:row;align-items:center;padding:0 6px;border-bottom:1px solid #2d2d2d;flex-shrink:0;"></div>
+  <!-- 搜索栏（初始隐藏）-->
+  <div id="chat-searchbar" style="display:none;height:34px;flex-direction:row;align-items:center;padding:0 10px;flex-shrink:0;"></div>
+  <!-- 主体行：左栏（动态）+ 右栏（固定宽度）-->
+  <div id="chat-body" style="display:flex;flex-direction:row;flex:1;overflow:hidden;">
+    <!-- 左栏（消息区 + 输入区）-->
+    <div id="chat-main" style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
+      <!-- 消息区 -->
+      <div id="chat-msg-area" style="flex:1;overflow:hidden;position:relative;"></div>
+      <!-- Ask 卡片（初始隐藏）-->
+      <div id="chat-ask-card" style="display:none;"></div>
+      <!-- 任务进度（初始隐藏）-->
+      <div id="chat-task-progress" style="display:none;"></div>
+      <!-- 输入区（在左栏底部）-->
+      <div id="chat-input-area" style="flex-shrink:0;"></div>
+    </div>
+    <!-- 右栏（固定 150px，对话列表 + 数据统计）-->
+    <div id="chat-sidebar" style="display:flex;flex-direction:column;width:300px;flex-shrink:0;background:#252526;overflow:hidden;"></div>
+  </div>
+</div>
