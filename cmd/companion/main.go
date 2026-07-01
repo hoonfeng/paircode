@@ -1,4 +1,6 @@
-// 伴随式 CodeAgent —— GWui 重构版入口 + 主窗壳（标题栏 / 停靠区 / 状态栏）。
+// 伴随式 CodeAgent —— GWui 重构版入口 + 主窗壳。
+// 使用 HTML 文件加载外壳布局（resources/html/shell.html），替代程序化 DOM 构建。
+// 面板通过 getElementById 挂载到 HTML 容器，各自加载自己的 HTML 模板。
 //
 //go:build windows
 
@@ -8,13 +10,14 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
-	"github.com/hoonfeng/gwui"
 	"github.com/hoonfeng/gwui/app"
 	"github.com/hoonfeng/gwui/component"
 	"github.com/hoonfeng/gwui/dom"
 	"github.com/hoonfeng/gwui/event"
+	"github.com/hoonfeng/gwui/uixml"
 
 	"github.com/hoonfeng/paircode/cmd/companion/bridge"
 	"github.com/hoonfeng/paircode/cmd/companion/codetypes"
@@ -38,26 +41,6 @@ var theApp *app.App
 var theDoc *dom.Document
 var shellState *ui.ShellState
 
-// pendingEvents 在 theApp 创建前缓冲事件注册（app.New 后统一 flush）。
-var pendingEvents []func()
-
-// addEvent 注册事件监听：theApp 已创建则直接注册，否则缓冲到 pendingEvents。
-func addEvent(el *dom.Element, typ event.Type, fn event.Listener) {
-	if theApp != nil {
-		theApp.AddEventListener(el, typ, fn)
-	} else {
-		pendingEvents = append(pendingEvents, func() { theApp.AddEventListener(el, typ, fn) })
-	}
-}
-
-// flushPendingEvents 在 app.New 之后执行所有缓冲的事件注册。
-func flushPendingEvents() {
-	for _, f := range pendingEvents {
-		f()
-	}
-	pendingEvents = nil
-}
-
 func main() {
 	// runtime.LockOSThread() 由 app.New() 内部调用
 
@@ -65,103 +48,44 @@ func main() {
 	settingspanel.Load()
 	core.LoadLastProject()
 
-	// ── 创建文档 + 应用主题 ──
-	doc := gwui.NewDocument()
-	theDoc = doc
-	ui.ApplyTheme(doc)
-
-	// ── 创建 Shell 布局 ──
+	// ── ShellState ──
 	shellState = &ui.ShellState{
-		LeftOpen:   len(core.Folders) > 0,
+		LeftOpen:   true,
 		RightOpen:  true,
 		BottomOpen: len(core.Folders) > 0,
 		LeftView:   "files",
 		LeftW:      260,
-		RightW:     420,
+		RightW:     55.0, // 百分比（55%）
 		BottomH:    200,
 	}
 
-	body := doc.Body()
-	body.SetAttribute("style", "display: flex; flex-direction: column; width: 100%; height: 100%; overflow: hidden;")
+	// ── uixml 注册表：注册 HTML 中 onclick 对应的处理函数 ──
+	reg := uixml.NewRegistry()
+	registerActivityBarHandlers(reg)
 
-	// 标题栏
-	titleBar := buildTitleBar(doc)
-	body.AppendChild(titleBar)
+	// ── 加载外壳 HTML ──
+	doc, err := uixml.LoadFile(ui.ResourcePath("html/shell.html"), reg)
+	if err != nil {
+		log.Fatalf("加载 shell.html 失败: %v（资源目录=%s）", err, ui.ResourceDir())
+	}
+	theDoc = doc
 
-	// 主体
-	mainBody := doc.CreateElement("div")
-	mainBody.ClassList().Add("body")
-	body.AppendChild(mainBody)
+	// ── 加载主题 CSS ──
+	doc.AddStyleSheet(ui.ReadResourceString("css/theme.css"))
 
-	// 左面板
-	leftPanel := doc.CreateElement("div")
-	leftPanel.ClassList().Add("left-panel")
-	leftPanel.SetAttribute("style", "width: 260px; position: relative;")
-	shellState.LeftPanel = leftPanel
-	mainBody.AppendChild(leftPanel)
-
-	// 左分隔条
-	leftDiv := doc.CreateElement("div")
-	leftDiv.ClassList().Add("vdivider")
-	shellState.LeftDivider = leftDiv
-	mainBody.AppendChild(leftDiv)
-
-	// 中间面板（编辑器 + 底栏）
-	centerPanel := doc.CreateElement("div")
-	centerPanel.ClassList().Add("center-panel")
-	mainBody.AppendChild(centerPanel)
-
-	// 编辑器区域
-	editorArea := doc.CreateElement("div")
-	editorArea.SetAttribute("style", "flex: 1; overflow: hidden; display: flex; flex-direction: column;")
-	centerPanel.AppendChild(editorArea)
-
-	// 底部分隔条
-	bottomDiv := doc.CreateElement("div")
-	bottomDiv.ClassList().Add("hdivider")
-	shellState.BottomDivider = bottomDiv
-	centerPanel.AppendChild(bottomDiv)
-
-	// 底栏面板
-	bottomPanel := doc.CreateElement("div")
-	bottomPanel.ClassList().Add("bottom-panel")
-	bottomPanel.SetAttribute("style", "height: 200px;")
-	shellState.BottomPanel = bottomPanel
-	centerPanel.AppendChild(bottomPanel)
-
-	// 右分隔条
-	rightDiv := doc.CreateElement("div")
-	rightDiv.ClassList().Add("vdivider")
-	shellState.RightDivider = rightDiv
-	mainBody.AppendChild(rightDiv)
-
-	// 右面板
-	rightPanel := doc.CreateElement("div")
-	rightPanel.ClassList().Add("right-panel")
-	rightPanel.SetAttribute("style", "width: 420px; display:flex; flex-direction:column;")
-	shellState.RightPanel = rightPanel
-	mainPanel := doc.CreateElement("div")
-		mainPanel.SetAttribute("style", "flex:1;display:flex;flex-direction:column;")
-	rightPanel.AppendChild(mainPanel)
-	shellState.RightPanel = rightPanel
-	mainBody.AppendChild(rightPanel)
-
-	// 状态栏
-	statusBar := buildStatusBar(doc)
-	body.AppendChild(statusBar)
-
-	// ── 初始可见性 ──
-	updatePanelVisibility()
-
-	// ── 分隔条拖动 ──
-	setupDividerDrag(doc, leftDiv, "left")
-	setupDividerDrag(doc, rightDiv, "right")
-	setupDividerDrag(doc, bottomDiv, "bottom")
+	// ── 获取外壳元素引用 ──
+	shellState.LeftPanel = doc.GetElementByID("left-panel")
+	shellState.RightPanel = doc.GetElementByID("right-panel")
+	shellState.BottomPanel = doc.GetElementByID("bottom-panel")
+	shellState.CenterPanel = doc.GetElementByID("center-panel")
+	shellState.LeftDivider = doc.GetElementByID("left-divider")
+	shellState.RightDivider = doc.GetElementByID("right-divider")
+	shellState.BottomDivider = doc.GetElementByID("bottom-divider")
 
 	// ── 字体路径 ──
 	fontPath := findFont()
 
-	// ── 创建 App（theApp / ui.Ctx.App 在此之后可用）──
+	// ── 创建 App ──
 	a, err := app.New(doc, app.Config{
 		Title:     "Pair CodeAgent",
 		Width:     1400,
@@ -177,12 +101,24 @@ func main() {
 	}
 	theApp = a
 	ui.Ctx.App = a
-
-	// ── flush 缓冲的事件注册（buildTitleBar/setupDividerDrag 等在 app.New 前调用的）──
-	flushPendingEvents()
 	ui.Ctx.Doc = doc
 
-	// ── 创建面板（此时 ui.Ctx.App 已可用，面板的 on() 能注册事件）──
+	// ── 注册外壳事件（toggle/win 按钮、分隔条拖动）──
+	registerShellEvents(doc)
+	setupDividerDrag(doc, shellState.LeftDivider, "left")
+	setupDividerDrag(doc, shellState.RightDivider, "right")
+	setupDividerDrag(doc, shellState.BottomDivider, "bottom")
+
+	// ── 构建标题栏下拉菜单 ──
+	buildDropdowns(doc)
+
+	// ── 初始可见性 ──
+	updatePanelVisibility()
+
+	// ── 初始化剪贴板 ──
+	chatpanel.ClipboardWrite = ctxmenupanel.CopyToClipboard
+
+	// ── 创建面板 ──
 	chatView := chatpanel.New(doc)
 	editorView := editorpanel.New(doc)
 	fileTreeView := filetreepanel.New(doc)
@@ -190,71 +126,20 @@ func main() {
 	gitView := gitpanel.New(doc)
 	searchView := searchpanel.New(doc)
 
-	// 装配面板到容器
-	// Tab switching bar at top of left panel
-	tabBar := doc.CreateElement("div")
-	tabBar.SetAttribute("style", "display:flex;flex-direction:row;height:30px;flex-shrink:0;background:#2d2d2d;border-bottom:1px solid #1e1e1e;")
-	tabBtns := make(map[string]*dom.Element)
-	for _, t := range []struct{name, icon, label string}{{"files","folder","Files"},{"search","search","Search"},{"git","git-branch","Git"}} {
-		btn := doc.CreateElement("div")
-		btn.SetAttribute("style", "flex:1;display:flex;align-items:center;justify-content:center;gap:4px;cursor:pointer;font-size:12px;color:#ccc;padding:4px 0;background:#2d2d2d;border-bottom:2px solid transparent;")
-		btn.SetAttribute("hover-style", "color:#fff;background:#3c3c3c;")
-		icon := doc.CreateElement("span")
-		icon.SetAttribute("data-icon", t.icon)
-		icon.SetAttribute("style", "width:14px;height:14px;")
-		btn.AppendChild(icon)
-		lbl := doc.CreateElement("span")
-		lbl.SetTextContent(t.label)
-		btn.AppendChild(lbl)
-		btnN := t.name
-		tabBtns[btnN] = btn
-		addEvent(btn, event.Click, func(e event.Event) bool {
-			if shellState.LeftView == btnN {
-				return true
-			}
-			shellState.LeftView = btnN
-			updateLeftView()
-			for n, b := range tabBtns {
-				if n == btnN {
-					b.SetAttribute("style", "flex:1;display:flex;align-items:center;justify-content:center;gap:4px;cursor:pointer;font-size:12px;color:#fff;padding:4px 0;background:#1e1e1e;border-bottom:2px solid #007acc;")
-				} else {
-					b.SetAttribute("style", "flex:1;display:flex;align-items:center;justify-content:center;gap:4px;cursor:pointer;font-size:12px;color:#ccc;padding:4px 0;background:#2d2d2d;border-bottom:2px solid transparent;")
-				}
-			}
-			switch btnN {
-			case "search":
-				if ui.Ctx.Search != nil && ui.Ctx.Search.Refresh != nil {
-					ui.Ctx.Search.Refresh()
-				}
-			case "git":
-				if ui.Ctx.Git != nil && ui.Ctx.Git.Refresh != nil {
-					ui.Ctx.Git.Refresh()
-				}
-			}
-			if theApp != nil {
-				theApp.MarkDirty()
-			}
-			return true
-		})
-		tabBar.AppendChild(btn)
-	}
-	leftPanel.AppendChild(tabBar)
+	// ── 装配面板到容器 ──
+	viewContainer := doc.GetElementByID("view-container")
+	editorArea := doc.GetElementByID("editor-area")
+	bottomPanel := doc.GetElementByID("bottom-panel")
+	mainPanel := doc.GetElementByID("main-panel")
 
-	leftPanel.AppendChild(fileTreeView.Element())
-	leftPanel.AppendChild(searchView.Element())
-	leftPanel.AppendChild(gitView.Element())
+	viewContainer.AppendChild(fileTreeView.Element())
+	viewContainer.AppendChild(searchView.Element())
+	viewContainer.AppendChild(gitView.Element())
+	// 绝对定位：三个视图叠加，由 updateLeftView 切换显隐
 	shellState.FileTreeEl = fileTreeView.Element()
 	shellState.SearchEl = searchView.Element()
 	shellState.GitEl = gitView.Element()
 	updateLeftView()
-	// Stack views for tab switching
-	for _, el := range []*dom.Element{fileTreeView.Element(), searchView.Element(), gitView.Element()} {
-		el.SetAttribute("style", "position: absolute; top: 0; left: 0; right: 0; bottom: 0; overflow: auto;")
-	}
-	// Highlight files tab as active
-	if btn, ok := tabBtns["files"]; ok {
-		btn.SetAttribute("style", "flex:1;display:flex;align-items:center;justify-content:center;gap:4px;cursor:pointer;font-size:12px;color:#fff;padding:4px 0;background:#1e1e1e;border-bottom:2px solid #007acc;")
-	}
 
 	editorArea.AppendChild(editorView.Element())
 	bottomPanel.AppendChild(termView.Element())
@@ -268,10 +153,10 @@ func main() {
 		Send:    chatView.Send,
 	}
 	ui.Ctx.Editor = &ui.EditorPanelRef{
-		Element: editorView.Element(),
-		Refresh: editorView.Refresh,
-		Open:    editorView.Open,
-		OpenAt:  editorView.OpenAt,
+		Element:     editorView.Element(),
+		Refresh:     editorView.Refresh,
+		Open:        editorView.Open,
+		OpenAt:      editorView.OpenAt,
 		Save:        editorView.Save,
 		CloseTab:    editorView.CloseTab,
 		CloseOthers: editorView.CloseOtherTabs,
@@ -299,12 +184,13 @@ func main() {
 
 	// ── 注入 uiapi 实现 ──
 	injectUIAPI()
-
 	// ── 注入 core 回调 ──
 	injectCoreCallbacks()
-
 	// ── 注入面板回调 ──
 	injectPanelCallbacks()
+
+	// ── 启动状态栏监控 ──
+	startStatusBarMonitor(doc)
 
 	// ── 恢复编辑器会话 ──
 	editorpanel.RestoreSession()
@@ -318,11 +204,472 @@ func main() {
 	// ── 注册快捷键 ──
 	registerShortcuts()
 
-	// ── 触发重布局（面板在 app.New 后才加入 DOM）──
+	// ── 初始化活动栏 active 状态 ──
+	syncActivityBar()
+
+	// ── 初始化命令面板事件 ──
+	initCommandPalette(doc)
+
+	// ── 触发重布局 ──
 	a.MarkDirty()
 
 	// ── 启动 ──
 	a.Run()
+}
+
+// registerActivityBarHandlers 注册活动栏图标的 onclick 处理函数（在 HTML 加载前注册）。
+func registerActivityBarHandlers(reg *uixml.Registry) {
+	// 左面板视图切换：files / search / git
+	leftViews := map[string]string{"files": "actFiles", "search": "actSearch", "git": "actGit"}
+	for name, id := range leftViews {
+		name, id := name, id
+		reg.OnClick(id, func(ctx uixml.EventContext) bool {
+			// 若已处于该视图且左面板打开，则收起左面板（VS Code 行为）
+			if shellState.LeftView == name && shellState.LeftOpen {
+				togglePanel("left")
+				return true
+			}
+			shellState.LeftView = name
+			if !shellState.LeftOpen {
+				shellState.LeftOpen = true
+				updatePanelVisibility()
+			}
+			updateLeftView()
+			syncActivityBar()
+			switch name {
+			case "search":
+				if ui.Ctx.Search != nil && ui.Ctx.Search.Refresh != nil {
+					ui.Ctx.Search.Refresh()
+				}
+			case "git":
+				if ui.Ctx.Git != nil && ui.Ctx.Git.Refresh != nil {
+					ui.Ctx.Git.Refresh()
+				}
+			}
+			if theApp != nil {
+				theApp.MarkDirty()
+			}
+			return true
+		})
+	}
+	// 设置
+	reg.OnClick("actSettings", func(ctx uixml.EventContext) bool {
+		settingspanel.OpenDialog()
+		return true
+	})
+}
+
+// syncActivityBar 同步活动栏图标的 active 状态与 shellState。
+func syncActivityBar() {
+	if theDoc == nil {
+		return
+	}
+	// 左面板视图图标
+	leftAct := map[string]string{"files": "act-files", "search": "act-search", "git": "act-git"}
+	for name, id := range leftAct {
+		if el := theDoc.GetElementByID(id); el != nil {
+			if shellState.LeftOpen && shellState.LeftView == name {
+				el.ClassList().Add("active")
+			} else {
+				el.ClassList().Remove("active")
+			}
+		}
+	}
+}
+
+// registerShellEvents 注册标题栏 win 按钮事件（app.New 之后调用）。
+func registerShellEvents(doc *dom.Document) {
+	// 窗口按钮
+	if btn := doc.GetElementByID("win-min"); btn != nil {
+		theApp.AddEventListener(btn, event.Click, func(e event.Event) bool {
+			if theApp != nil {
+				theApp.Minimize()
+			}
+			return true
+		})
+	}
+	if btn := doc.GetElementByID("win-max"); btn != nil {
+		theApp.AddEventListener(btn, event.Click, func(e event.Event) bool {
+			if theApp != nil {
+				if theApp.IsFullScreen() {
+					theApp.Restore()
+				} else {
+					theApp.Maximize()
+				}
+			}
+			return true
+		})
+	}
+	if btn := doc.GetElementByID("win-close"); btn != nil {
+		theApp.AddEventListener(btn, event.Click, func(e event.Event) bool {
+			if theApp != nil {
+				theApp.Close()
+			}
+			return true
+		})
+	}
+}
+
+// buildDropdowns 构建标题栏下拉菜单并挂到 #menu-bar。
+// 现代化的 AI IDE 菜单体系：每个菜单项都连接到实际功能或显示合理提示。
+func buildDropdowns(doc *dom.Document) {
+	menuBar := doc.GetElementByID("menu-bar")
+	if menuBar == nil {
+		return
+	}
+	menus := []struct {
+		label string
+		items []component.PopupMenuItem
+	}{
+		// ── 文件 ──
+		{"文件", []component.PopupMenuItem{
+			{Label: "新建文件   (Ctrl+N)", OnClick: func() { ctxmenupanel.NewEntryIn(core.Root(), false) }},
+			{Label: "打开文件…   (Ctrl+O)", OnClick: func() { ctxmenupanel.OpenFileViaDialog() }},
+			{Label: "打开文件夹…", OnClick: func() { ctxmenupanel.OpenFolderViaDialog() }},
+			{Label: "添加文件夹到工作区…", OnClick: func() { ctxmenupanel.AddFolderViaDialog() }},
+			{Divider: true},
+			{Label: "保存   (Ctrl+S)", OnClick: func() {
+				if ui.Ctx.Editor != nil {
+					ui.Ctx.Editor.Save()
+				}
+			}},
+			{Label: "全部保存", OnClick: func() {
+				if ui.Ctx.Editor != nil {
+					ui.Ctx.Editor.Save()
+					uiapi.MessageSuccess("已保存")
+				}
+			}},
+			{Divider: true},
+			{Label: "保存工作区", OnClick: func() { core.SaveWorkspaceMenu() }},
+			{Label: "管理工作区文件夹…", OnClick: func() { core.ShowManager() }},
+			{Divider: true},
+			{Label: "关闭项目", OnClick: func() { core.CloseProjectMenu() }},
+			{Label: "关闭工作区", OnClick: func() { core.CloseWorkspaceMenu() }},
+		}},
+		// ── 编辑 ──
+		{"编辑", []component.PopupMenuItem{
+			{Label: "撤销   (Ctrl+Z)", OnClick: func() { uiapi.MessageInfo("撤销功能待实现") }},
+			{Label: "重做   (Ctrl+Shift+Z)", OnClick: func() { uiapi.MessageInfo("重做功能待实现") }},
+			{Divider: true},
+			{Label: "剪切", OnClick: func() { uiapi.MessageInfo("剪切功能待实现") }},
+			{Label: "复制", OnClick: func() { uiapi.MessageInfo("复制功能待实现") }},
+			{Label: "粘贴", OnClick: func() { uiapi.MessageInfo("粘贴功能待实现") }},
+			{Divider: true},
+			{Label: "查找对话   (Ctrl+F)", OnClick: func() { chatpanel.ToggleSearch() }},
+			{Label: "跨文件搜索   (Ctrl+Shift+F)", OnClick: func() {
+				shellState.LeftView = "search"
+				if !shellState.LeftOpen {
+					shellState.LeftOpen = true
+					updatePanelVisibility()
+				}
+				updateLeftView()
+				syncActivityBar()
+				if ui.Ctx.Search != nil && ui.Ctx.Search.Refresh != nil {
+					ui.Ctx.Search.Refresh()
+				}
+				if theApp != nil {
+					theApp.MarkDirty()
+				}
+			}},
+			{Label: "命令面板   (Ctrl+P)", OnClick: func() { openCommandPalette() }},
+		}},
+		// ── 视图 ──
+		{"视图", []component.PopupMenuItem{
+			{Label: "文件资源管理器", OnClick: func() {
+				shellState.LeftView = "files"
+				if !shellState.LeftOpen {
+					togglePanel("left")
+				} else {
+					updateLeftView()
+					syncActivityBar()
+					if theApp != nil { theApp.MarkDirty() }
+				}
+			}},
+			{Label: "搜索", OnClick: func() {
+				shellState.LeftView = "search"
+				if !shellState.LeftOpen { togglePanel("left") }
+				shellState.LeftOpen = true
+				updateLeftView()
+				syncActivityBar()
+				if ui.Ctx.Search != nil && ui.Ctx.Search.Refresh != nil {
+					ui.Ctx.Search.Refresh()
+				}
+				if theApp != nil { theApp.MarkDirty() }
+			}},
+			{Label: "源代码管理", OnClick: func() {
+				shellState.LeftView = "git"
+				if !shellState.LeftOpen { togglePanel("left") }
+				shellState.LeftOpen = true
+				updateLeftView()
+				syncActivityBar()
+				if ui.Ctx.Git != nil && ui.Ctx.Git.Refresh != nil {
+					ui.Ctx.Git.Refresh()
+				}
+				if theApp != nil { theApp.MarkDirty() }
+			}},
+			{Divider: true},
+			{Label: "专注模式   (Ctrl+K)", OnClick: func() { toggleFocusMode() }},
+			{Label: "切换侧边栏   (Ctrl+B)", OnClick: func() { togglePanel("left") }},
+			{Label: "切换终端   (Ctrl+J)", OnClick: func() { togglePanel("bottom") }},
+		}},
+		// ── 终端 ──
+		{"终端", []component.PopupMenuItem{
+			{Label: "新建终端", OnClick: func() { termpanel.NewTerminal() }},
+			{Divider: true},
+			{Label: "清屏", OnClick: func() {
+				uiapi.MessageInfo("请在终端右键菜单中选择清屏，或输入 clear 命令")
+			}},
+		}},
+		// ── Agent ｜ AI IDE 核心特色菜单 ──
+		{"Agent", []component.PopupMenuItem{
+			{Label: "启动新任务", OnClick: func() {
+				if ui.Ctx.Chat != nil && ui.Ctx.Chat.Send != nil {
+					ui.Ctx.Chat.Send("/task ")
+				} else {
+					uiapi.MessageInfo("请先在聊天面板中输入任务描述")
+				}
+			}},
+			{Label: "停止 Agent", OnClick: func() {
+				if chatpanel.IsRunning() {
+					chatpanel.StopAgent()
+				} else {
+					uiapi.MessageInfo("Agent 当前未运行")
+				}
+			}},
+			{Divider: true},
+			{Label: "Agent 监控", OnClick: func() { menuactions.ShowAgentMonitor() }},
+			{Label: "技能管理…", OnClick: func() {
+				settingspanel.OpenDialog()
+			}},
+			{Label: "语言模型配置…", OnClick: func() {
+				settingspanel.OpenDialog()
+			}},
+			{Divider: true},
+			{Label: "Agent 设置…", OnClick: func() {
+				settingspanel.OpenDialog()
+			}},
+		}},
+		// ── 帮助 ──
+		{"帮助", []component.PopupMenuItem{
+			{Label: "快捷键参考", OnClick: func() {
+				uiapi.MessageInfo("快捷键：Ctrl+N 新建 | Ctrl+S 保存 | Ctrl+F 查找 | Ctrl+P 命令面板 | Ctrl+B 侧栏 | Ctrl+J 终端 | Ctrl+K 专注")
+			}},
+			{Label: "文档", OnClick: func() {
+				uiapi.MessageInfo("Pair CodeAgent AI IDE 文档请访问项目 README")
+			}},
+			{Label: "检查更新", OnClick: func() { uiapi.MessageInfo("当前版本：v0.1.0（GWui）") }},
+			{Divider: true},
+			{Label: "报告问题", OnClick: func() { uiapi.MessageInfo("请提交 Issue 到项目仓库") }},
+			{Divider: true},
+			{Label: "关于", OnClick: func() { uiapi.MessageInfo("Pair CodeAgent v0.1.0\n基于 GWui 的现代化 AI IDE") }},
+		}},
+	}
+	menuMaxWidth := float32(280)
+	var activePopup *component.PopupMenu
+	for _, m := range menus {
+		btn := component.NewButton(doc, m.label)
+		btn.SetHoverStyle("background:#2a2d2e;")
+		btn.SetBaseStyle("flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;height:36px;padding:0 10px;font-size:13px;color:#cccccc;background:transparent;border:none;cursor:default;user-select:none;")
+		btn.Element().ClassList().Add("menu-btn")
+		popup := component.NewPopupMenu(doc, btn.Element(), m.items)
+		popup.SetMatchWidth(false)
+		popup.SetMaxWidth(menuMaxWidth)
+		popup.SetPlacement(dom.PlacementBottomStart)
+		btn.OnClick(func() {
+			// 菜单条行为：点击不同按钮关闭前一个，点击同一按钮切换
+			if activePopup != nil && activePopup != popup {
+				activePopup.Close()
+			}
+			popup.Toggle()
+			if popup.IsOpen() {
+				activePopup = popup
+			} else {
+				activePopup = nil
+			}
+		})
+		menuBar.AppendChild(btn.Element())
+	}
+}
+
+// startStatusBarMonitor 启动状态栏定时刷新 goroutine。
+// 仅当状态实际变化时才调用 MarkDirty，避免每 500ms 无谓重布局。
+func startStatusBarMonitor(doc *dom.Document) {
+	dot := doc.GetElementByID("status-dot")
+	agentStatus := doc.GetElementByID("status-agent")
+	gitText := doc.GetElementByID("status-git")
+	cursorPos := doc.GetElementByID("status-cursor")
+	langEl := doc.GetElementByID("status-lang")
+	indentEl := doc.GetElementByID("status-indent")
+	titleCenter := doc.GetElementByID("title-center")
+	go func() {
+		var lastPath, lastBranch, lastCursor, lastAgent, lastLang, lastIndent, lastTitle string
+		var lastRunning bool
+		for {
+			time.Sleep(500 * time.Millisecond)
+			changed := false
+
+			running := chatpanel.IsRunning()
+			agentStr := "就绪"
+			if running {
+				agentStr = "Agent 运行中…"
+			}
+			if running != lastRunning || agentStr != lastAgent {
+				lastRunning = running
+				lastAgent = agentStr
+				if dot != nil {
+					if running {
+						dot.ClassList().Add("running")
+					} else {
+						dot.ClassList().Remove("running")
+					}
+				}
+				if agentStatus != nil {
+					agentStatus.SetTextContent(agentStr)
+				}
+				changed = true
+			}
+
+			branch := gitpanel.Branch()
+			if branch != lastBranch {
+				lastBranch = branch
+				if gitText != nil {
+					gitText.SetTextContent(branch)
+				}
+				changed = true
+			}
+
+			ln, col := editorpanel.CursorPosition()
+			cursorStr := ""
+			if ln > 0 {
+				cursorStr = "Ln " + itoa(ln) + ", Col " + itoa(col)
+			}
+			if cursorStr != lastCursor {
+				lastCursor = cursorStr
+				if cursorPos != nil {
+					cursorPos.SetTextContent(cursorStr)
+				}
+				changed = true
+			}
+
+			// 语言模式 + 缩进 + 标题栏（仅文件变化时更新）
+			curPath := editorpanel.ActivePath()
+			if curPath != lastPath {
+				lastPath = curPath
+				langStr := ""
+				indentStr := ""
+				titleStr := "Pair CodeAgent"
+				if curPath != "" {
+					langStr = languageOf(curPath)
+					indentStr = "空格: 4"
+					titleStr = filepath.Base(curPath) + " - Pair CodeAgent"
+				}
+				if titleStr != lastTitle {
+					lastTitle = titleStr
+					if titleCenter != nil {
+						titleCenter.SetTextContent(titleStr)
+					}
+					changed = true
+				}
+				if langStr != lastLang {
+					lastLang = langStr
+					if langEl != nil {
+						langEl.SetTextContent(langStr)
+					}
+					changed = true
+				}
+				if indentStr != lastIndent {
+					lastIndent = indentStr
+					if indentEl != nil {
+						indentEl.SetTextContent(indentStr)
+					}
+					changed = true
+				}
+			}
+
+			if changed && theApp != nil {
+				theApp.MarkDirty()
+			}
+		}
+	}()
+}
+
+// languageOf 根据文件扩展名返回语言模式名。
+func languageOf(path string) string {
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".go":
+		return "Go"
+	case ".js":
+		return "JavaScript"
+	case ".ts":
+		return "TypeScript"
+	case ".jsx", ".tsx":
+		return "React"
+	case ".py":
+		return "Python"
+	case ".rs":
+		return "Rust"
+	case ".java":
+		return "Java"
+	case ".c", ".h":
+		return "C"
+	case ".cpp", ".hpp", ".cc":
+		return "C++"
+	case ".cs":
+		return "C#"
+	case ".rb":
+		return "Ruby"
+	case ".php":
+		return "PHP"
+	case ".swift":
+		return "Swift"
+	case ".kt":
+		return "Kotlin"
+	case ".sh", ".bash":
+		return "Shell"
+	case ".bat", ".cmd":
+		return "Batch"
+	case ".ps1":
+		return "PowerShell"
+	case ".html", ".htm":
+		return "HTML"
+	case ".css":
+		return "CSS"
+	case ".scss", ".sass":
+		return "SCSS"
+	case ".less":
+		return "LESS"
+	case ".json":
+		return "JSON"
+	case ".xml":
+		return "XML"
+	case ".yaml", ".yml":
+		return "YAML"
+	case ".toml":
+		return "TOML"
+	case ".md":
+		return "Markdown"
+	case ".sql":
+		return "SQL"
+	case ".lua":
+		return "Lua"
+	case ".vue":
+		return "Vue"
+	case ".svelte":
+		return "Svelte"
+	default:
+		if ext == "" {
+			name := strings.ToLower(filepath.Base(path))
+			switch name {
+			case "makefile":
+				return "Makefile"
+			case "dockerfile":
+				return "Dockerfile"
+			}
+			return "纯文本"
+		}
+		return strings.ToUpper(strings.TrimPrefix(ext, "."))
+	}
 }
 
 // findFont 查找字体文件路径。
@@ -341,264 +688,17 @@ func findFont() string {
 	return ""
 }
 
-// buildTitleBar 构建标题栏。
-func buildTitleBar(doc *dom.Document) *dom.Element {
-	bar := doc.CreateElement("div")
-	bar.ClassList().Add("titlebar")
-
-	// Logo
-	logo := doc.CreateElement("div")
-	logo.ClassList().Add("logo")
-	logo.SetTextContent("P")
-	bar.AppendChild(logo)
-
-	// 菜单栏
-	menuBar := doc.CreateElement("div")
-	menuBar.ClassList().Add("menu-bar")
-	bar.AppendChild(menuBar)
-
-	// 菜单项
-	menus := []struct {
-		label string
-		items []component.DropdownItem
-	}{
-		{"文件", []component.DropdownItem{
-			{Label: "新建文件", OnClick: func() { ctxmenupanel.NewEntryIn(core.Root(), false) }},
-			{Label: "打开文件…", OnClick: func() { ctxmenupanel.OpenFileViaDialog() }},
-			{Label: "打开文件夹…", OnClick: func() { ctxmenupanel.OpenFolderViaDialog() }},
-			{Label: "添加文件夹到工作区…", OnClick: func() { ctxmenupanel.AddFolderViaDialog() }},
-			{Label: "保存", OnClick: func() {
-				if ui.Ctx.Editor != nil {
-					ui.Ctx.Editor.Save()
-				}
-			}},
-			{Label: "关闭项目", OnClick: func() { core.CloseProjectMenu() }},
-			{Label: "关闭工作区", OnClick: func() { core.CloseWorkspaceMenu() }},
-		}},
-		{"编辑", []component.DropdownItem{
-			{Label: "查找对话", OnClick: func() { chatpanel.ToggleSearch() }},
-		}},
-		{"视图", []component.DropdownItem{
-			{Label: "文件树", OnClick: func() { togglePanel("left") }},
-			{Label: "对话", OnClick: func() { togglePanel("right") }},
-			{Label: "终端", OnClick: func() { togglePanel("bottom") }},
-			{Label: "专注模式", OnClick: func() { toggleFocusMode() }},
-		}},
-		{"终端", []component.DropdownItem{
-			{Label: "新建终端", OnClick: func() { termpanel.NewTerminal() }},
-		}},
-		{"Agent", []component.DropdownItem{
-			{Label: "Agent 监控", OnClick: func() { menuactions.ShowAgentMonitor() }},
-		}},
-		{"工具", []component.DropdownItem{
-			{Label: "设置…", OnClick: func() { settingspanel.OpenDialog() }},
-		}},
-		{"帮助", []component.DropdownItem{
-			{Label: "关于", OnClick: func() { uiapi.MessageInfo("Pair CodeAgent v0.1.0 (GWui)") }},
-		}},
-	}
-
-	for _, m := range menus {
-		m := m
-		// 使用 Dropdown 组件（自带 trigger，无需单独创建 menu-item）
-		dd := component.NewDropdown(doc, m.label, m.items)
-		menuBar.AppendChild(dd.Element())
-	}
-
-	// 居中标题
-	titleCenter := doc.CreateElement("div")
-	titleCenter.ClassList().Add("title-center")
-	titleCenter.SetTextContent("Pair CodeAgent")
-	bar.AppendChild(titleCenter)
-
-	// 面板开关
-	toggles := doc.CreateElement("div")
-	toggles.ClassList().Add("panel-toggles")
-	bar.AppendChild(toggles)
-
-	toggleLeft := doc.CreateElement("div")
-	toggleLeft.ClassList().Add("toggle-btn")
-	toggleLeft.SetAttribute("title", "文件树")
-	toggleLeft.AppendChild(createIconSpan(doc, "menu"))
-	if shellState.LeftOpen {
-		toggleLeft.ClassList().Add("active")
-	}
-	addEvent(toggleLeft, event.Click, func(e event.Event) bool {
-		togglePanel("left")
-		return true
-	})
-	toggles.AppendChild(toggleLeft)
-
-	toggleBottom := doc.CreateElement("div")
-	toggleBottom.ClassList().Add("toggle-btn")
-	toggleBottom.SetAttribute("title", "终端")
-	toggleBottom.AppendChild(createIconSpan(doc, "terminal"))
-	if shellState.BottomOpen {
-		toggleBottom.ClassList().Add("active")
-	}
-	addEvent(toggleBottom, event.Click, func(e event.Event) bool {
-		togglePanel("bottom")
-		return true
-	})
-	toggles.AppendChild(toggleBottom)
-
-	toggleRight := doc.CreateElement("div")
-	toggleRight.ClassList().Add("toggle-btn")
-	toggleRight.SetAttribute("title", "对话")
-	toggleRight.AppendChild(createIconSpan(doc, "chat"))
-	if shellState.RightOpen {
-		toggleRight.ClassList().Add("active")
-	}
-	addEvent(toggleRight, event.Click, func(e event.Event) bool {
-		togglePanel("right")
-		return true
-	})
-	toggles.AppendChild(toggleRight)
-
-	// 窗口按钮
-	winBtns := doc.CreateElement("div")
-	winBtns.ClassList().Add("win-btns")
-	bar.AppendChild(winBtns)
-
-	minBtn := doc.CreateElement("div")
-	minBtn.ClassList().Add("win-btn")
-	minBtn.AppendChild(createIconSpan(doc, "minus"))
-	addEvent(minBtn, event.Click, func(e event.Event) bool {
-		if theApp != nil {
-			theApp.Minimize()
-		}
-		return true
-	})
-	winBtns.AppendChild(minBtn)
-
-	maxBtn := doc.CreateElement("div")
-	maxBtn.ClassList().Add("win-btn")
-	maxBtn.AppendChild(createIconSpan(doc, "checkbox-unchecked"))
-	addEvent(maxBtn, event.Click, func(e event.Event) bool {
-		if theApp != nil {
-			if theApp.IsFullScreen() {
-				theApp.Restore()
-			} else {
-				theApp.Maximize()
-			}
-		}
-		return true
-	})
-	winBtns.AppendChild(maxBtn)
-
-	closeBtn := doc.CreateElement("div")
-	closeBtn.ClassList().Add("win-btn", "close")
-	closeBtn.AppendChild(createIconSpan(doc, "close"))
-	addEvent(closeBtn, event.Click, func(e event.Event) bool {
-		if theApp != nil {
-			theApp.Close()
-		}
-		return true
-	})
-	winBtns.AppendChild(closeBtn)
-
-	return bar
-}
-
-// createIconSpan 创建一个带 data-icon 属性的 span 元素用于渲染 SVG 图标。
-// 图标尺寸固定 16x16，颜色继承父元素。
-func createIconSpan(doc *dom.Document, iconName string) *dom.Element {
-	span := doc.CreateElement("span")
-	span.SetAttribute("data-icon", iconName)
-	span.SetAttribute("style", "width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center;")
-	return span
-}
-
-// buildStatusBar 构建状态栏。
-func buildStatusBar(doc *dom.Document) *dom.Element {
-	bar := doc.CreateElement("div")
-	bar.ClassList().Add("statusbar")
-
-	left := doc.CreateElement("div")
-	left.ClassList().Add("status-left")
-	bar.AppendChild(left)
-
-	// Agent 状态灯
-	dot := doc.CreateElement("div")
-	dot.ClassList().Add("status-dot")
-	left.AppendChild(dot)
-
-	agentStatus := doc.CreateElement("span")
-	agentStatus.SetTextContent("就绪")
-	left.AppendChild(agentStatus)
-
-	// Git 分支
-	gitInfo := doc.CreateElement("span")
-	gitInfo.ClassList().Add("status-item")
-	gitIcon := createIconSpan(doc, "git-branch")
-	gitIcon.SetAttribute("style", "width: 14px; height: 14px; display: inline-flex; align-items: center; justify-content: center;")
-	gitText := doc.CreateElement("span")
-	gitInfo.AppendChild(gitIcon)
-	gitInfo.AppendChild(gitText)
-	left.AppendChild(gitInfo)
-
-	// 光标位置
-	cursorPos := doc.CreateElement("span")
-	cursorPos.ClassList().Add("status-item")
-	cursorPos.SetTextContent("Ln 1, Col 1")
-	left.AppendChild(cursorPos)
-
-	// 右侧
-	right := doc.CreateElement("div")
-	right.ClassList().Add("status-right")
-	bar.AppendChild(right)
-
-	model := doc.CreateElement("span")
-	model.SetTextContent("deepseek-chat")
-	right.AppendChild(model)
-
-	encoding := doc.CreateElement("span")
-	encoding.SetTextContent("UTF-8")
-	right.AppendChild(encoding)
-
-	version := doc.CreateElement("span")
-	version.SetTextContent("v0.1.0")
-	right.AppendChild(version)
-
-	// 定时刷新状态栏
-	go func() {
-		for {
-			time.Sleep(500 * time.Millisecond)
-			if chatpanel.IsRunning() {
-				dot.ClassList().Add("running")
-				agentStatus.SetTextContent("Agent 运行中…")
-			} else {
-				dot.ClassList().Remove("running")
-				agentStatus.SetTextContent("就绪")
-			}
-			if branch := gitpanel.Branch(); branch != "" {
-				gitText.SetTextContent(branch)
-			} else {
-				gitText.SetTextContent("")
-			}
-			if ln, col := editorpanel.CursorPosition(); ln > 0 {
-				cursorPos.SetTextContent("Ln " + itoa(ln) + ", Col " + itoa(col))
-			}
-			if theApp != nil {
-				theApp.MarkDirty()
-			}
-		}
-	}()
-
-	return bar
-}
-
 // togglePanel 切换面板可见性。
 func togglePanel(panel string) {
 	switch panel {
 	case "left":
 		shellState.LeftOpen = !shellState.LeftOpen
-	case "right":
-		shellState.RightOpen = !shellState.RightOpen
 	case "bottom":
 		shellState.BottomOpen = !shellState.BottomOpen
 	}
 	updatePanelVisibility()
+	// 同步活动栏的 active 状态
+	syncActivityBar()
 	if theApp != nil {
 		theApp.MarkDirty()
 	}
@@ -613,13 +713,12 @@ func toggleFocusMode() {
 	}
 }
 
-
-// updateLeftView switches the active view in the left panel
+// updateLeftView 切换左面板活动视图。
 func updateLeftView() {
 	if shellState == nil {
 		return
 	}
-	showStyle := "position:absolute;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;overflow:hidden;"
+	showStyle := "display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;background:#252526;"
 	hideStyle := "display:none;"
 	if shellState.FileTreeEl != nil {
 		if shellState.LeftView == "files" {
@@ -642,6 +741,17 @@ func updateLeftView() {
 			shellState.GitEl.SetAttribute("style", hideStyle)
 		}
 	}
+	// 更新左面板标题头
+	if hdr := theDoc.GetElementByID("left-panel-header"); hdr != nil {
+		switch shellState.LeftView {
+		case "files":
+			hdr.SetTextContent("资源管理器")
+		case "search":
+			hdr.SetTextContent("搜索")
+		case "git":
+			hdr.SetTextContent("源代码管理")
+		}
+	}
 	if theApp != nil {
 		theApp.MarkDirty()
 	}
@@ -650,14 +760,28 @@ func updateLeftView() {
 // updatePanelVisibility 根据状态更新面板可见性。
 func updatePanelVisibility() {
 	if shellState.FocusMode {
+		// 专注模式：仅保留聊天面板，隐藏编辑区、左面板、底栏
 		shellState.LeftPanel.ClassList().Add("hidden")
-		shellState.RightPanel.ClassList().Add("hidden")
-		shellState.BottomPanel.ClassList().Add("hidden")
 		shellState.LeftDivider.ClassList().Add("hidden")
-		shellState.RightDivider.ClassList().Add("hidden")
+		shellState.BottomPanel.ClassList().Add("hidden")
 		shellState.BottomDivider.ClassList().Add("hidden")
+		shellState.RightDivider.ClassList().Add("hidden")
+		if shellState.CenterPanel != nil {
+			shellState.CenterPanel.ClassList().Add("hidden")
+		}
+		// 右面板占满剩余宽度（活动栏除外）
+		shellState.RightPanel.SetAttribute("style", "flex:1;display:flex;flex-direction:column;")
 		return
 	}
+	// 非专注模式：恢复面板宽度
+	if shellState.CenterPanel != nil {
+		shellState.CenterPanel.ClassList().Remove("hidden")
+	}
+	// 右面板始终可见
+	shellState.RightPanel.SetAttribute("style", "width:"+ftoa(shellState.RightW)+"%;min-width:620px;max-width:70%;flex-shrink:0;display:flex;flex-direction:column;")
+	shellState.RightPanel.ClassList().Remove("hidden")
+	shellState.RightDivider.ClassList().Remove("hidden")
+
 	setVisible := func(el *dom.Element, show bool) {
 		if show {
 			el.ClassList().Remove("hidden")
@@ -667,19 +791,23 @@ func updatePanelVisibility() {
 	}
 	setVisible(shellState.LeftPanel, shellState.LeftOpen)
 	setVisible(shellState.LeftDivider, shellState.LeftOpen)
-	setVisible(shellState.RightPanel, shellState.RightOpen)
-	setVisible(shellState.RightDivider, shellState.RightOpen)
 	setVisible(shellState.BottomPanel, shellState.BottomOpen)
 	setVisible(shellState.BottomDivider, shellState.BottomOpen)
 }
 
 // setupDividerDrag 设置分隔条拖动。
+// 浏览器标准模式：MouseDown 挂分隔条（启动拖拽），MouseMove/MouseUp 挂 doc.Body()（确保鼠标拖出 6px 后仍接收）。
 func setupDividerDrag(doc *dom.Document, divider *dom.Element, side string) {
+	if divider == nil || theApp == nil {
+		return
+	}
+	docBody := doc.Body()
 	var dragging bool
 	var startX, startY float32
 	var startW, startH float32
+	var parentW float32 // 父容器宽度（右面板百分比计算用）
 
-	addEvent(divider, event.MouseDown, func(e event.Event) bool {
+	theApp.AddEventListener(divider, event.MouseDown, func(e event.Event) bool {
 		me := e.(*event.MouseEvent)
 		dragging = true
 		startX = me.X
@@ -688,7 +816,9 @@ func setupDividerDrag(doc *dom.Document, divider *dom.Element, side string) {
 		case "left":
 			startW = shellState.LeftW
 		case "right":
-			startW = shellState.RightW
+			startW = shellState.RightW // 百分比
+			vpW, _ := theApp.Size()
+			parentW = float32(vpW) - 48 // 减去活动栏宽度
 		case "bottom":
 			startH = shellState.BottomH
 		}
@@ -696,7 +826,7 @@ func setupDividerDrag(doc *dom.Document, divider *dom.Element, side string) {
 		return true
 	})
 
-	addEvent(divider, event.MouseMove, func(e event.Event) bool {
+	theApp.AddEventListener(docBody, event.MouseMove, func(e event.Event) bool {
 		if !dragging {
 			return false
 		}
@@ -713,15 +843,21 @@ func setupDividerDrag(doc *dom.Document, divider *dom.Element, side string) {
 			shellState.LeftW = newW
 			shellState.LeftPanel.SetAttribute("style", "width: "+ftoa(newW)+"px;")
 		case "right":
-			newW := startW - (me.X - startX)
-			if newW < ui.MinChatW {
-				newW = ui.MinChatW
+			// startW 是百分比，dx 是像素 → 转百分比变化
+			dx := me.X - startX
+			deltaPct := float32(0)
+			if parentW > 0 {
+				deltaPct = dx / parentW * 100
 			}
-			if newW > ui.MaxSideW {
-				newW = ui.MaxSideW
+			newPct := startW - deltaPct // 右拖→窄，左拖→宽
+			if newPct < 20 {
+				newPct = 20
 			}
-			shellState.RightW = newW
-			shellState.RightPanel.SetAttribute("style", "width: "+ftoa(newW)+"px;")
+			if newPct > 70 {
+				newPct = 70
+			}
+			shellState.RightW = newPct
+			shellState.RightPanel.SetAttribute("style", "width:"+ftoa(newPct)+"%;min-width:620px;max-width:70%;flex-shrink:0;display:flex;flex-direction:column;")
 		case "bottom":
 			newH := startH - (me.Y - startY)
 			if newH < ui.MinBotH {
@@ -739,7 +875,7 @@ func setupDividerDrag(doc *dom.Document, divider *dom.Element, side string) {
 		return true
 	})
 
-	addEvent(divider, event.MouseUp, func(e event.Event) bool {
+	theApp.AddEventListener(docBody, event.MouseUp, func(e event.Event) bool {
 		dragging = false
 		divider.ClassList().Remove("dragging")
 		return true
@@ -796,7 +932,7 @@ func injectUIAPI() {
 			m.Content().AppendChild(footerEl)
 		}
 		m.Show()
-	return 0
+		return 0
 	}
 	// 隐藏浮层
 	uiapi.HideOverlayFunc = func(id int) {
@@ -820,14 +956,10 @@ func injectCoreCallbacks() {
 		if ui.Ctx.FileTree != nil {
 			ui.Ctx.FileTree.RebuildRoots()
 		}
-		if ui.Ctx.Terminal != nil {
-			// termpanel.Active().OpenDir(core.Root())
-		}
 		core.Settings.WorkspaceFolders = append([]string{}, core.Folders...)
 		core.Settings.LastProject = core.Root()
 		core.Loaded = true
 		core.Save()
-		// 工作区变更后更新面板可见性
 		if len(core.Folders) > 0 {
 			shellState.LeftOpen = true
 			shellState.BottomOpen = true
@@ -835,7 +967,9 @@ func injectCoreCallbacks() {
 			shellState.LeftOpen = false
 			shellState.BottomOpen = false
 		}
+		invalidateCmdPaletteFiles()
 		updatePanelVisibility()
+		syncActivityBar()
 		if theApp != nil {
 			theApp.MarkDirty()
 		}
@@ -843,7 +977,9 @@ func injectCoreCallbacks() {
 	core.OnCloseProject = func() {
 		shellState.LeftOpen = false
 		shellState.BottomOpen = false
+		invalidateCmdPaletteFiles()
 		updatePanelVisibility()
+		syncActivityBar()
 		if theApp != nil {
 			theApp.MarkDirty()
 		}
@@ -851,7 +987,9 @@ func injectCoreCallbacks() {
 	core.OnClearWorkspace = func() {
 		shellState.LeftOpen = false
 		shellState.BottomOpen = false
+		invalidateCmdPaletteFiles()
 		updatePanelVisibility()
+		syncActivityBar()
 		if theApp != nil {
 			theApp.MarkDirty()
 		}
@@ -906,6 +1044,7 @@ func injectPanelCallbacks() {
 	// 编辑器回调
 	editorpanel.OnContentMenu = ctxmenupanel.EditorContentMenu
 	editorpanel.OnTabMenu = ctxmenupanel.EditorTabMenu
+	chatpanel.OnChatContextMenu = ctxmenupanel.ChatMessageContextMenu
 	editorpanel.OnOpenFile = ctxmenupanel.OpenFileViaDialog
 	editorpanel.OnNewFile = func() { ctxmenupanel.NewEntryIn(core.Root(), false) }
 	editorpanel.OnOpenFolder = ctxmenupanel.OpenFolderViaDialog
@@ -929,7 +1068,7 @@ func injectPanelCallbacks() {
 		}
 	}
 
-	// Bridge 帧泵注入：用 app.SetInterval/ClearInterval 替代 goui animation.Controller
+	// Bridge 帧泵注入
 	bridge.SetIntervalFunc = func(interval time.Duration, fn func()) int {
 		if theApp == nil {
 			return 0
@@ -983,14 +1122,13 @@ func registerShortcuts() {
 		ctxmenupanel.AddFolderViaDialog()
 	})
 	theApp.RegisterShortcut("Ctrl+Shift+F", func() {
-		// 跨文件搜索
 		shellState.LeftView = "search"
 		if !shellState.LeftOpen {
 			togglePanel("left")
 		}
 	})
-	theApp.RegisterShortcut("Ctrl+Shift+C", func() {
-		togglePanel("right")
+	theApp.RegisterShortcut("Ctrl+P", func() {
+		openCommandPalette()
 	})
 }
 
@@ -1018,7 +1156,6 @@ func itoa(n int) string {
 }
 
 func ftoa(f float32) string {
-	// 简单实现：整数部分
 	n := int(f)
 	return itoa(n)
 }

@@ -5,7 +5,6 @@
 package search
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -38,20 +37,6 @@ type SearchPanel struct {
 	lastInput string
 }
 
-// ── uixml 辅助 ──
-
-// transferComponents 递归地将 srcDoc 中的组件注册转移到 dstDoc。
-func transferComponents(srcDoc, dstDoc *dom.Document, el *dom.Element) {
-	if comp := srcDoc.ComponentAtNode(el); comp != nil {
-		dstDoc.RegisterComponent(el, comp)
-	}
-	for _, child := range el.Children() {
-		if e, ok := child.(*dom.Element); ok {
-			transferComponents(srcDoc, dstDoc, e)
-		}
-	}
-}
-
 // New 创建搜索面板。
 func New(doc *dom.Document) *SearchPanel {
 	p := &SearchPanel{doc: doc}
@@ -60,7 +45,7 @@ func New(doc *dom.Document) *SearchPanel {
 	inputComp := component.NewInput(doc, "搜索...")
 	inputComp.SetBaseStyle(
 		"background-color: " + ui.InputBg + "; color: " + ui.Text + "; " +
-			"border: 1px solid " + ui.Border + "; padding: 4px 8px; font-size: 15px; flex: 1;")
+			"border: 1px solid " + ui.Border + "; padding: 4px 8px; font-size: 13px; flex: 1;")
 	inputComp.OnChange(func(v string) {
 		if v == p.lastInput {
 			if v != "" {
@@ -78,39 +63,21 @@ func New(doc *dom.Document) *SearchPanel {
 		return true
 	})
 
-	// 静态布局 XML（不含 Input，由占位 div 替代）
-	var xmlUI = fmt.Sprintf(`<div id="searchRoot" style="display:flex;flex-direction:column;height:100%%;background:%s">
-	<div class="panel-header">搜索</div>
-	<div style="display:flex;flex-direction:row;align-items:center;padding:8px;gap:4px;background:%s">
-		<div id="inputPlaceholder" style="flex:1"></div>
-		<button label="搜索" onclick="onSearch" style="background-color:%s;color:#fff;padding:4px 12px;font-size:15px"/>
-	</div>
-	<div id="resultContainer" class="panel-content" style="flex:1;overflow:auto"></div>
-</div>`, ui.SideBg, ui.PanelHeader, ui.Accent)
-
-	// 加载 uixml，捕获元素引用
-	uixml.MustLoadStringInto(ui.Ctx.Doc, xmlUI, reg)
-	p.root = ui.Ctx.Doc.GetElementByID("searchRoot")
-	p.content = ui.Ctx.Doc.GetElementByID("resultContainer")
+	// 加载 HTML 模板（资源目录 html/panels/search.html）
+	ui.MustLoadPanelHTML(doc, "panels/search.html", reg)
+	p.root = doc.GetElementByID("search-root")
+	p.content = doc.GetElementByID("search-result-container")
 
 	// 用真实 Input 替换占位 div
-	if inputPlaceholder := ui.Ctx.Doc.GetElementByID("inputPlaceholder"); inputPlaceholder != nil {
-		if parent, ok := inputPlaceholder.Parent().(*dom.Element); ok {
-			parent.ReplaceChild(inputComp.Element(), inputPlaceholder)
-		}
-	}
+	ui.ReplaceChildByID(doc, "search-input-placeholder", inputComp.Element())
 
-	// 转移组件注册到主文档
+	// 转移组件注册到主文档（HTML 加载可能在临时文档上下文，确保组件归属正确）
 	if p.root != nil {
-		transferComponents(ui.Ctx.Doc, doc, p.root)
+		ui.TransferComponents(doc, doc, p.root)
 	}
 
-	// 从临时文档中移除根元素（避免双亲问题）
-	if p.root != nil && p.root.Parent() != nil {
-		if parent, ok := p.root.Parent().(*dom.Element); ok {
-			parent.RemoveChild(p.root)
-		}
-	}
+	// 从临时父节点（body）中分离根元素
+	ui.DetachRoot(p.root)
 
 	p.inputComp = inputComp
 	p.renderResults()
@@ -186,15 +153,13 @@ func (p *SearchPanel) renderResults() {
 
 	if p.keyword == "" {
 		hint := p.doc.CreateElement("div")
-		hint.SetAttribute("style", "padding: 12px; color: "+ui.TextDim+"; font-size: 15px;")
-		hint.SetTextContent("输入关键词搜索")
+		hint.SetAttribute("style", "padding: 12px; color: "+ui.TextDim+"; font-size: 13px;")
+		hint.SetTextContent("输入搜索关键词")
 		p.content.AppendChild(hint)
-		return
 	}
-
-	if len(p.results) == 0 {
+	if len(p.results) == 0 && p.lastInput != "" {
 		hint := p.doc.CreateElement("div")
-		hint.SetAttribute("style", "padding: 12px; color: "+ui.TextDim+"; font-size: 15px;")
+		hint.SetAttribute("style", "padding: 12px; color: "+ui.TextDim+"; font-size: 13px;")
 		hint.SetTextContent("无结果")
 		p.content.AppendChild(hint)
 		return
@@ -203,7 +168,7 @@ func (p *SearchPanel) renderResults() {
 	// 结果计数
 	count := p.doc.CreateElement("div")
 	count.SetAttribute("style",
-		"padding: 4px 12px; color: "+ui.TextDim+"; font-size: 14px; "+
+		"padding: 4px 12px; color: "+ui.TextDim+"; font-size: 13px; "+
 			"border-bottom: 1px solid "+ui.Border+";")
 	count.SetTextContent(strconv.Itoa(len(p.results)) + " 个结果")
 	p.content.AppendChild(count)

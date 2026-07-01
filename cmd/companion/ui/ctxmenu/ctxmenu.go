@@ -6,6 +6,7 @@
 package ctxmenu
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,7 +21,9 @@ import (
 	"github.com/hoonfeng/paircode/cmd/companion/core"
 	"github.com/hoonfeng/paircode/cmd/companion/ui"
 	"github.com/hoonfeng/paircode/cmd/companion/uiapi"
+	chatpanel "github.com/hoonfeng/paircode/cmd/companion/ui/chat"
 	filetreepanel "github.com/hoonfeng/paircode/cmd/companion/ui/filetree"
+	termpanel "github.com/hoonfeng/paircode/cmd/companion/ui/terminal"
 )
 
 // ── 文件对话框（简化为 Modal 输入路径）──
@@ -184,59 +187,307 @@ func showPathDialog(doc *dom.Document, title, placeholder, initial string, onOk 
 
 // ── 右键菜单 ──
 
-// FileNodeMenu 文件节点右键菜单。
+// FileNodeMenu 文件节点右键菜单（根据文件/目录类型动态构建）。
 func FileNodeMenu(x, y float64, n *filetreepanel.FileNode) {
 	doc := ui.Ctx.Doc
 	if doc == nil || n == nil {
 		return
 	}
+	if n.IsDir {
+		dirNodeMenu(doc, x, y, n)
+	} else {
+		fileNodeMenu(doc, x, y, n)
+	}
+}
+
+// fileNodeMenu 文件专属右键菜单。
+func fileNodeMenu(doc *dom.Document, x, y float64, n *filetreepanel.FileNode) {
 	items := []component.ContextMenuItem{
+		// ── 打开 ──
 		{Label: "打开", OnClick: func() {
-			if !n.IsDir && ui.Ctx.Editor != nil {
+			if ui.Ctx.Editor != nil {
 				ui.Ctx.Editor.Open(n.Path)
 			}
 		}},
+		{Label: "打开到侧边", OnClick: func() {
+			uiapi.MessageInfo("打开到侧边功能开发中，现在以正常模式打开文件")
+			if ui.Ctx.Editor != nil {
+				ui.Ctx.Editor.Open(n.Path)
+			}
+		}},
+
+		// ── 剪贴板 ──
+		{Divider: true},
+		{Label: "剪切", OnClick: func() {
+			CopyToClipboard(n.Path)
+			uiapi.MessageInfo("已复制文件路径（剪切操作待实现完整流程）")
+		}},
+		{Label: "复制", OnClick: func() {
+			CopyToClipboard(n.Path)
+			uiapi.MessageInfo("已复制文件路径")
+		}},
+		{Label: "粘贴", OnClick: func() {
+			uiapi.MessageInfo("请在目标目录下使用粘贴（功能待实现）")
+		}},
+
+		// ── 操作 ──
+		{Divider: true},
+		{Label: "重命名", OnClick: func() {
+			showRenameDialog(doc, n)
+		}},
+		{Label: "删除", OnClick: func() {
+			showDeleteConfirm(n)
+		}},
+
+		// ── 路径 ──
+		{Divider: true},
 		{Label: "复制路径", OnClick: func() {
 			CopyToClipboard(n.Path)
-			uiapi.MessageInfo("已复制路径")
+			uiapi.MessageInfo("已复制完整路径")
 		}},
-		{Label: "重命名", OnClick: func() {
-			showPathDialog(doc, "重命名", "输入新名称", n.Name, func(newName string) {
-				if newName == "" || newName == n.Name {
-					return
-				}
-				newPath := filepath.Join(filepath.Dir(n.Path), newName)
-				if err := os.Rename(n.Path, newPath); err != nil {
-					uiapi.MessageError("重命名失败：" + err.Error())
-					return
-				}
-				if ui.Ctx.FileTree != nil {
-					ui.Ctx.FileTree.Refresh()
-				}
-				uiapi.MessageSuccess("已重命名")
-			})
+		{Label: "复制相对路径", OnClick: func() {
+			rel := relativePath(n.Path)
+			CopyToClipboard(rel)
+			uiapi.MessageInfo("已复制相对路径：" + rel)
 		}},
+		{Label: "复制文件名", OnClick: func() {
+			CopyToClipboard(n.Name)
+			uiapi.MessageInfo("已复制文件名：" + n.Name)
+		}},
+
+		// ── 终端/系统 ──
 		{Divider: true},
-		{Label: "删除", OnClick: func() {
-			uiapi.ShowConfirm("删除", "确定删除「"+n.Name+"」？", uiapi.KindWarning, func() {
-				var err error
-				if n.IsDir {
-					err = os.RemoveAll(n.Path)
-				} else {
-					err = os.Remove(n.Path)
-				}
-				if err != nil {
-					uiapi.MessageError("删除失败：" + err.Error())
-					return
-				}
-				if ui.Ctx.FileTree != nil {
-					ui.Ctx.FileTree.Refresh()
-				}
-				uiapi.MessageSuccess("已删除")
-			})
+		{Label: "在终端中打开", OnClick: func() {
+			termpanel.OpenActiveTerminalDir(filepath.Dir(n.Path))
+			uiapi.MessageInfo("已在终端中打开所在目录")
+		}},
+		{Label: "在资源管理器中显示", OnClick: func() {
+			selectInExplorer(n.Path)
+		}},
+
+		// ── AI 操作 ──
+		{Divider: true},
+		{Label: "AI: 解释此文件", OnClick: func() {
+			if ui.Ctx.Editor != nil {
+				ui.Ctx.Editor.Open(n.Path)
+			}
+			if ui.Ctx.Chat != nil && ui.Ctx.Chat.Send != nil {
+				ui.Ctx.Chat.Send("/explain " + n.Path)
+			} else {
+				uiapi.MessageInfo("AI 解释功能：请确保聊天面板可用")
+			}
+		}},
+		{Label: "AI: 优化此文件", OnClick: func() {
+			if ui.Ctx.Editor != nil {
+				ui.Ctx.Editor.Open(n.Path)
+			}
+			if ui.Ctx.Chat != nil && ui.Ctx.Chat.Send != nil {
+				ui.Ctx.Chat.Send("/optimize " + n.Path)
+			} else {
+				uiapi.MessageInfo("AI 优化功能：请确保聊天面板可用")
+			}
+		}},
+		{Label: "AI: 审查代码", OnClick: func() {
+			if ui.Ctx.Editor != nil {
+				ui.Ctx.Editor.Open(n.Path)
+			}
+			if ui.Ctx.Chat != nil && ui.Ctx.Chat.Send != nil {
+				ui.Ctx.Chat.Send("/review " + n.Path)
+			} else {
+				uiapi.MessageInfo("AI 审查功能：请确保聊天面板可用")
+			}
+		}},
+		{Label: "AI: 生成单元测试", OnClick: func() {
+			if ui.Ctx.Chat != nil && ui.Ctx.Chat.Send != nil {
+				ui.Ctx.Chat.Send("/unittest " + n.Path)
+			} else {
+				uiapi.MessageInfo("AI 单元测试生成功能：请确保聊天面板可用")
+			}
+		}},
+		{Label: "AI: 重构此文件", OnClick: func() {
+			if ui.Ctx.Editor != nil {
+				ui.Ctx.Editor.Open(n.Path)
+			}
+			if ui.Ctx.Chat != nil && ui.Ctx.Chat.Send != nil {
+				ui.Ctx.Chat.Send("/refactor " + n.Path)
+			} else {
+				uiapi.MessageInfo("AI 重构功能：请确保聊天面板可用")
+			}
+		}},
+		{Label: "AI: 查找引用", OnClick: func() {
+			if ui.Ctx.Chat != nil && ui.Ctx.Chat.Send != nil {
+				ui.Ctx.Chat.Send("/findrefs " + n.Path)
+			} else {
+				uiapi.MessageInfo("查找引用功能开发中，将在后续版本支持")
+			}
+		}},
+		{Label: "AI: 翻译注释", OnClick: func() {
+			if ui.Ctx.Editor != nil {
+				ui.Ctx.Editor.Open(n.Path)
+			}
+			if ui.Ctx.Chat != nil && ui.Ctx.Chat.Send != nil {
+				ui.Ctx.Chat.Send("/translate " + n.Path)
+			} else {
+				uiapi.MessageInfo("AI 翻译功能：请确保聊天面板可用")
+			}
 		}},
 	}
 	showContextMenu(doc, x, y, items)
+}
+
+// dirNodeMenu 目录专属右键菜单。
+func dirNodeMenu(doc *dom.Document, x, y float64, n *filetreepanel.FileNode) {
+	items := []component.ContextMenuItem{
+		// ── 展开/折叠 ──
+		{Label: "展开/折叠", OnClick: func() {
+			if ui.Ctx.FileTree != nil {
+				filetreepanel.FileTree.Toggle(n)
+			}
+		}},
+
+		// ── 新建 ──
+		{Divider: true},
+		{Label: "新建文件", OnClick: func() { NewEntryIn(n.Path, false) }},
+		{Label: "新建文件夹", OnClick: func() { NewEntryIn(n.Path, true) }},
+
+		// ── 剪贴板 ──
+		{Divider: true},
+		{Label: "剪切", OnClick: func() {
+			CopyToClipboard(n.Path)
+			uiapi.MessageInfo("已复制文件夹路径（剪切操作待实现）")
+		}},
+		{Label: "复制", OnClick: func() {
+			CopyToClipboard(n.Path)
+			uiapi.MessageInfo("已复制文件夹路径")
+		}},
+		{Label: "粘贴", OnClick: func() {
+			uiapi.MessageInfo("请在目标目录下使用粘贴（功能待实现）")
+		}},
+
+		// ── 操作 ──
+		{Divider: true},
+		{Label: "重命名", OnClick: func() {
+			showRenameDialog(doc, n)
+		}},
+		{Label: "删除", OnClick: func() {
+			showDeleteConfirm(n)
+		}},
+
+		// ── 路径 ──
+		{Divider: true},
+		{Label: "复制路径", OnClick: func() {
+			CopyToClipboard(n.Path)
+			uiapi.MessageInfo("已复制完整路径")
+		}},
+		{Label: "复制相对路径", OnClick: func() {
+			rel := relativePath(n.Path)
+			CopyToClipboard(rel)
+			uiapi.MessageInfo("已复制相对路径：" + rel)
+		}},
+
+		// ── 终端/系统 ──
+		{Divider: true},
+		{Label: "在终端中打开", OnClick: func() {
+			termpanel.OpenActiveTerminalDir(n.Path)
+			uiapi.MessageInfo("已在终端中打开此目录")
+		}},
+		{Label: "在资源管理器中显示", OnClick: func() {
+			openInExplorer(n.Path)
+		}},
+
+		// ── AI 操作 ──
+		{Divider: true},
+		{Label: "AI: 分析目录结构", OnClick: func() {
+			if ui.Ctx.Chat != nil && ui.Ctx.Chat.Send != nil {
+				ui.Ctx.Chat.Send("/tree " + n.Path)
+			} else {
+				uiapi.MessageInfo("AI 目录分析功能：请确保聊天面板可用")
+			}
+		}},
+		{Label: "AI: 递归解释目录", OnClick: func() {
+			if ui.Ctx.Chat != nil && ui.Ctx.Chat.Send != nil {
+				ui.Ctx.Chat.Send("/explain-dir " + n.Path)
+			} else {
+				uiapi.MessageInfo("AI 目录解释功能：请确保聊天面板可用")
+			}
+		}},
+		{Label: "AI: 查找引用", OnClick: func() {
+			if ui.Ctx.Chat != nil && ui.Ctx.Chat.Send != nil {
+				ui.Ctx.Chat.Send("/findrefs-dir " + n.Path)
+			} else {
+				uiapi.MessageInfo("查找引用功能开发中")
+			}
+		}},
+		{Label: "AI: 生成目录概述", OnClick: func() {
+			if ui.Ctx.Chat != nil && ui.Ctx.Chat.Send != nil {
+				ui.Ctx.Chat.Send("/summarize-dir " + n.Path)
+			} else {
+				uiapi.MessageInfo("AI 概述功能：请确保聊天面板可用")
+			}
+		}},
+		{Label: "AI: 审查目录代码", OnClick: func() {
+			if ui.Ctx.Chat != nil && ui.Ctx.Chat.Send != nil {
+				ui.Ctx.Chat.Send("/review-dir " + n.Path)
+			} else {
+				uiapi.MessageInfo("AI 代码审查功能：请确保聊天面板可用")
+			}
+		}},
+
+		// ── 工作区操作 ──
+		{Divider: true},
+		{Label: "添加到工作区", OnClick: func() {
+			core.AddFolder(n.Path)
+			uiapi.MessageInfo("已添加文件夹到工作区：" + n.Name)
+		}},
+	}
+	showContextMenu(doc, x, y, items)
+}
+
+// showRenameDialog 显示重命名对话框。
+func showRenameDialog(doc *dom.Document, n *filetreepanel.FileNode) {
+	showPathDialog(doc, "重命名", "输入新名称", n.Name, func(newName string) {
+		if newName == "" || newName == n.Name {
+			return
+		}
+		newPath := filepath.Join(filepath.Dir(n.Path), newName)
+		if err := os.Rename(n.Path, newPath); err != nil {
+			uiapi.MessageError("重命名失败：" + err.Error())
+			return
+		}
+		if ui.Ctx.FileTree != nil {
+			ui.Ctx.FileTree.Refresh()
+		}
+		if n.IsDir {
+			uiapi.MessageSuccess("文件夹已重命名为：" + newName)
+		} else {
+			uiapi.MessageSuccess("文件已重命名为：" + newName)
+		}
+	})
+}
+
+// showDeleteConfirm 显示删除确认对话框。
+func showDeleteConfirm(n *filetreepanel.FileNode) {
+	name := n.Name
+	kind := "文件"
+	if n.IsDir {
+		kind = "文件夹"
+	}
+	uiapi.ShowConfirm("删除", fmt.Sprintf("确定删除%s「%s」？\n此操作不可恢复。", kind, name), uiapi.KindWarning, func() {
+		var err error
+		if n.IsDir {
+			err = os.RemoveAll(n.Path)
+		} else {
+			err = os.Remove(n.Path)
+		}
+		if err != nil {
+			uiapi.MessageError("删除失败：" + err.Error())
+			return
+		}
+		if ui.Ctx.FileTree != nil {
+			ui.Ctx.FileTree.Refresh()
+		}
+		uiapi.MessageSuccess("已删除：" + name)
+	})
 }
 
 // FileTreeEmptyMenu 文件树空白区右键菜单。
@@ -250,8 +501,17 @@ func FileTreeEmptyMenu(x, y float64) {
 		{Label: "新建文件", OnClick: func() { NewEntryIn(root, false) }},
 		{Label: "新建文件夹", OnClick: func() { NewEntryIn(root, true) }},
 		{Divider: true},
+		{Label: "粘贴", OnClick: func() {
+			uiapi.MessageInfo("粘贴功能待实现（请使用系统快捷键 Ctrl+V）")
+		}},
+		{Divider: true},
 		{Label: "打开文件夹…", OnClick: func() { OpenFolderViaDialog() }},
 		{Label: "添加文件夹到工作区…", OnClick: func() { AddFolderViaDialog() }},
+		{Divider: true},
+		{Label: "在终端中打开", OnClick: func() {
+			termpanel.OpenActiveTerminalDir(root)
+			uiapi.MessageInfo("已在终端中打开工作区目录")
+		}},
 	}
 	showContextMenu(doc, x, y, items)
 }
@@ -262,22 +522,115 @@ func WorkspaceRootMenu(x, y float64, path string) {
 	if doc == nil {
 		return
 	}
+	isSingleRoot := len(core.Folders) <= 1
+	rootName := filepath.Base(path)
 	items := []component.ContextMenuItem{
 		{Label: "新建文件", OnClick: func() { NewEntryIn(path, false) }},
 		{Label: "新建文件夹", OnClick: func() { NewEntryIn(path, true) }},
 		{Divider: true},
 		{Label: "复制路径", OnClick: func() {
 			CopyToClipboard(path)
-			uiapi.MessageInfo("已复制路径")
+			uiapi.MessageInfo("已复制路径：" + path)
 		}},
 		{Label: "在资源管理器中打开", OnClick: func() {
 			openInExplorer(path)
 		}},
-		{Divider: true},
-		{Label: "从工作区移除", OnClick: func() {
-			core.RemoveFolder(path)
-			uiapi.MessageInfo("已从工作区移除")
+		{Label: "在终端中打开", OnClick: func() {
+			termpanel.OpenActiveTerminalDir(path)
+			uiapi.MessageInfo("已在终端中打开此目录")
 		}},
+
+		// ── AI 项目操作 ──
+		{Divider: true},
+		{Label: "AI: 项目概览", OnClick: func() {
+			if ui.Ctx.Chat != nil && ui.Ctx.Chat.Send != nil {
+				ui.Ctx.Chat.Send("/project-overview")
+			} else {
+				uiapi.MessageInfo("AI 项目概览功能：请确保聊天面板可用")
+			}
+		}},
+		{Label: "AI: 代码审查", OnClick: func() {
+			if ui.Ctx.Chat != nil && ui.Ctx.Chat.Send != nil {
+				ui.Ctx.Chat.Send("/review-all")
+			} else {
+				uiapi.MessageInfo("AI 代码审查功能：请确保聊天面板可用")
+			}
+		}},
+		{Label: "AI: 生成项目文档", OnClick: func() {
+			if ui.Ctx.Chat != nil && ui.Ctx.Chat.Send != nil {
+				ui.Ctx.Chat.Send("/generate-docs")
+			} else {
+				uiapi.MessageInfo("AI 文档生成功能：请确保聊天面板可用")
+			}
+		}},
+		{Label: "AI: 重构分析", OnClick: func() {
+			if ui.Ctx.Chat != nil && ui.Ctx.Chat.Send != nil {
+				ui.Ctx.Chat.Send("/refactor-analysis")
+			} else {
+				uiapi.MessageInfo("AI 重构分析功能：请确保聊天面板可用")
+			}
+		}},
+		{Label: "AI: 技术债务分析", OnClick: func() {
+			if ui.Ctx.Chat != nil && ui.Ctx.Chat.Send != nil {
+				ui.Ctx.Chat.Send("/tech-debt")
+			} else {
+				uiapi.MessageInfo("AI 技术债务分析功能：请确保聊天面板可用")
+			}
+		}},
+		{Label: "AI: 代码规范检查", OnClick: func() {
+			if ui.Ctx.Chat != nil && ui.Ctx.Chat.Send != nil {
+				ui.Ctx.Chat.Send("/lint-all")
+			} else {
+				uiapi.MessageInfo("AI 规范检查功能：请确保聊天面板可用")
+			}
+		}},
+
+		{Divider: true},
+		{Label: "重命名", OnClick: func() {
+			showPathDialog(doc, "重命名文件夹", "输入新名称", rootName, func(newName string) {
+				if newName == "" || newName == rootName {
+					return
+				}
+				newPath := filepath.Join(filepath.Dir(path), newName)
+				if err := os.Rename(path, newPath); err != nil {
+					uiapi.MessageError("重命名失败：" + err.Error())
+					return
+				}
+				// 更新工作区中的路径
+				core.RemoveFolder(path)
+				core.AddFolder(newPath)
+				if ui.Ctx.FileTree != nil {
+					ui.Ctx.FileTree.RebuildRoots()
+				}
+				uiapi.MessageSuccess("文件夹已重命名为：" + newName)
+			})
+		}},
+		{Label: "删除文件夹", OnClick: func() {
+			uiapi.ShowConfirm("删除文件夹", fmt.Sprintf("确定永久删除「%s」？\n此操作不可恢复。", rootName), uiapi.KindWarning, func() {
+				if err := os.RemoveAll(path); err != nil {
+					uiapi.MessageError("删除失败：" + err.Error())
+					return
+				}
+				core.RemoveFolder(path)
+				uiapi.MessageSuccess("已删除：" + rootName)
+			})
+		}},
+		{Divider: true},
+		{Label: "在新建窗口中打开", OnClick: func() {
+			core.OpenInNewWindow(path)
+		}},
+	}
+	if !isSingleRoot {
+		items = append(items,
+			component.ContextMenuItem{Divider: true},
+			component.ContextMenuItem{
+				Label: "从工作区移除",
+				OnClick: func() {
+					core.RemoveFolder(path)
+					uiapi.MessageInfo("已从工作区移除：" + rootName)
+				},
+			},
+		)
 	}
 	showContextMenu(doc, x, y, items)
 }
@@ -289,12 +642,15 @@ func EditorContentMenu(x, y float64) {
 		return
 	}
 	items := []component.ContextMenuItem{
-		{Label: "剪切", OnClick: func() {}},
-		{Label: "复制", OnClick: func() {}},
-		{Label: "粘贴", OnClick: func() {}},
+		{Label: "撤销", OnClick: func() { uiapi.MessageInfo("撤销功能待实现") }},
+		{Label: "重做", OnClick: func() { uiapi.MessageInfo("重做功能待实现") }},
 		{Divider: true},
-		{Label: "全选", OnClick: func() {}},
-		{Label: "查找", OnClick: func() {}},
+		{Label: "剪切", OnClick: func() { uiapi.MessageInfo("剪切功能待实现") }},
+		{Label: "复制", OnClick: func() { uiapi.MessageInfo("复制功能待实现") }},
+		{Label: "粘贴", OnClick: func() { uiapi.MessageInfo("粘贴功能待实现") }},
+		{Divider: true},
+		{Label: "全选", OnClick: func() { uiapi.MessageInfo("全选功能待实现") }},
+		{Label: "查找", OnClick: func() { uiapi.MessageInfo("查找功能待实现") }},
 	}
 	showContextMenu(doc, x, y, items)
 }
@@ -305,7 +661,6 @@ func EditorTabMenu(x, y float64, i int) {
 	if doc == nil {
 		return
 	}
-	_ = i
 	items := []component.ContextMenuItem{
 		{Label: "关闭", OnClick: func() {
 			if ui.Ctx.Editor != nil && ui.Ctx.Editor.CloseTab != nil {
@@ -322,6 +677,14 @@ func EditorTabMenu(x, y float64, i int) {
 				ui.Ctx.Editor.CloseAll()
 			}
 		}},
+		{Divider: true},
+		{Label: "复制路径", OnClick: func() {
+			if ui.Ctx.Editor != nil {
+				// 获取当前标签路径
+				_ = ui.Ctx.Editor.Element // 通过编辑器获取
+			}
+			uiapi.MessageInfo("复制路径功能开发中")
+		}},
 	}
 	showContextMenu(doc, x, y, items)
 }
@@ -333,8 +696,8 @@ func TerminalMenu(x, y float64) {
 		return
 	}
 	items := []component.ContextMenuItem{
-		{Label: "复制", OnClick: func() {}},
-		{Label: "粘贴", OnClick: func() {}},
+		{Label: "复制", OnClick: func() { uiapi.MessageInfo("终端复制功能待实现") }},
+		{Label: "粘贴", OnClick: func() { uiapi.MessageInfo("终端粘贴功能待实现") }},
 		{Divider: true},
 		{Label: "清屏", OnClick: func() {
 			uiapi.MarkDirty()
@@ -343,15 +706,140 @@ func TerminalMenu(x, y float64) {
 	showContextMenu(doc, x, y, items)
 }
 
-// showContextMenu 创建并显示上下文菜单。
-func showContextMenu(doc *dom.Document, x, y float64, items []component.ContextMenuItem) {
-	cm := component.NewContextMenu(doc, items)
-	cm.ShowAt(float32(x), float32(y))
+// ── 对话（Chat）右键菜单 ──
+
+// ChatMessageContextMenu 对话面板消息区右键菜单。
+func ChatMessageContextMenu(x, y float64) {
+	doc := ui.Ctx.Doc
+	if doc == nil {
+		return
+	}
+	items := []component.ContextMenuItem{
+		{Label: "复制选中文本", OnClick: func() {
+			CopyToClipboard(getSelectedText())
+			uiapi.MessageInfo("已复制选中文本")
+		}},
+		{Label: "复制整个对话", OnClick: func() {
+			if chatpanel.TheState != nil {
+				chatpanel.TheState.ExportActive()
+			} else {
+				uiapi.MessageInfo("对话面板未初始化")
+			}
+		}},
+		{Label: "以当前消息为引用发送", OnClick: func() {
+			// 获取当前活跃会话的最后一条助手消息
+			if chatpanel.TheState != nil && chatpanel.TheState.Store.Active() != nil {
+				t := chatpanel.TheState.Store.Active()
+				if len(t.Messages) > 0 {
+					last := t.Messages[len(t.Messages)-1]
+					if last.Text != "" {
+						chatpanel.TheState.AddRef(last.Text)
+						uiapi.MessageInfo("已添加引用到输入框")
+					}
+				}
+			}
+		}},
+		{Divider: true},
+		{Label: "AI: 分析选中内容", OnClick: func() {
+			if chatpanel.TheState != nil {
+				chatpanel.TheState.Send("/analyze " + getSelectedText())
+			}
+		}},
+		{Label: "AI: 继续生成", OnClick: func() {
+			if chatpanel.TheState != nil {
+				chatpanel.TheState.Send("/continue")
+			}
+		}},
+		{Label: "AI: 优化提示词", OnClick: func() {
+			if chatpanel.TheState != nil {
+				chatpanel.TheState.Send("/improve " + getSelectedText())
+			}
+		}},
+		{Divider: true},
+		{Label: "清空对话", OnClick: func() {
+			if chatpanel.TheState != nil {
+				t := chatpanel.TheState.Store.Active()
+				if t != nil {
+					t.Messages = nil
+					chatpanel.TheState.Refresh()
+					uiapi.MessageInfo("已清空当前对话")
+				}
+			}
+		}},
+		{Label: "导出对话(Markdown)", OnClick: func() {
+			if chatpanel.TheState != nil {
+				chatpanel.TheState.ExportActive()
+			}
+		}},
+	}
+	showContextMenu(doc, x, y, items)
 }
 
-// openInExplorer 在 Windows 资源管理器中打开。
+// getSelectedText 获取当前选中文本（简化实现）。
+func getSelectedText() string {
+	// 从聊天输入框获取内容作为上下文
+	if chatpanel.TheState != nil {
+		draft := chatpanel.TheState.Store.Draft
+		if draft != "" {
+			return draft
+		}
+		t := chatpanel.TheState.Store.Active()
+		if t != nil && len(t.Messages) > 0 {
+			last := t.Messages[len(t.Messages)-1]
+			if last.Text != "" {
+				// 取最后 200 个字符作为上下文
+				runes := []rune(last.Text)
+				if len(runes) > 200 {
+					return string(runes[len(runes)-200:])
+				}
+				return last.Text
+			}
+		}
+	}
+	return ""
+}
+
+// showContextMenu 创建并显示上下文菜单。
+// 使用包级变量 currentCM 跟踪当前菜单实例，显示前关闭旧菜单，防止多次右键叠加。
+var currentCM *component.ContextMenu
+
+func showContextMenu(doc *dom.Document, x, y float64, items []component.ContextMenuItem) {
+	if currentCM != nil {
+		currentCM.Hide()
+	}
+	cm := component.NewContextMenu(doc, items)
+	cm.SetOnClose(func() {
+		if currentCM == cm {
+			currentCM = nil
+		}
+	})
+	cm.ShowAt(float32(x), float32(y))
+	currentCM = cm
+}
+
+// ── 工具函数 ──
+
+// relativePath 返回相对于工作区根的路径。若不在工作区内则返回完整路径。
+func relativePath(absPath string) string {
+	root := core.Root()
+	if root == "" {
+		return absPath
+	}
+	rel, err := filepath.Rel(root, absPath)
+	if err != nil {
+		return absPath
+	}
+	return rel
+}
+
+// openInExplorer 在 Windows 资源管理器中打开目录。
 func openInExplorer(path string) {
 	_ = exec.Command("explorer.exe", path).Start()
+}
+
+// selectInExplorer 在 Windows 资源管理器中选中文件。
+func selectInExplorer(path string) {
+	_ = exec.Command("explorer.exe", "/select,", path).Start()
 }
 
 // ── 剪贴板（Windows API）──

@@ -1,0 +1,92 @@
+<html>
+<head>
+<title>Pair CodeAgent</title>
+</head>
+<body style="display:flex;flex-direction:column;width:100%;height:100%;overflow:hidden;">
+
+  <!-- 标题栏 -->
+  <div class="titlebar">
+    <div class="logo"><span data-icon="sparkles" style="width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;color:#0e639c;"></span></div>
+    <div class="menu-bar" id="menu-bar"></div>
+    <div class="title-center" id="title-center">Pair CodeAgent</div>
+    <div class="win-btns">
+      <div class="win-btn" id="win-min"><span data-icon="minus" style="width:12px;height:12px;display:inline-flex;align-items:center;justify-content:center;"></span></div>
+      <div class="win-btn" id="win-max"><span data-icon="checkbox-unchecked" style="width:12px;height:12px;display:inline-flex;align-items:center;justify-content:center;"></span></div>
+      <div class="win-btn close" id="win-close"><span data-icon="close" style="width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;"></span></div>
+    </div>
+  </div>
+
+  <!-- 主体 -->
+  <div class="body">
+    <!-- 活动栏（最左侧图标条）-->
+    <div class="activity-bar" id="activity-bar">
+      <div class="activity-item active" id="act-files" title="文件" onclick="actFiles">
+        <span data-icon="folder" style="width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;"></span>
+      </div>
+      <div class="activity-item" id="act-search" title="搜索" onclick="actSearch">
+        <span data-icon="search" style="width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;"></span>
+      </div>
+      <div class="activity-item" id="act-git" title="Git" onclick="actGit">
+        <span data-icon="git-branch" style="width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;"></span>
+      </div>
+      <div class="activity-spacer"></div>
+      <div class="activity-item" id="act-settings" title="设置" onclick="actSettings">
+        <span data-icon="settings" style="width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;"></span>
+      </div>
+    </div>
+
+    <!-- 左面板 -->
+    <div class="left-panel" id="left-panel" style="display:flex;flex-direction:column;width:260px;position:relative;">
+      <div class="panel-header" id="left-panel-header">资源管理器</div>
+      <div id="view-container" style="flex:1;position:relative;overflow:hidden;display:flex;flex-direction:column;"></div>
+    </div>
+
+    <!-- 左分隔条 -->
+    <div class="vdivider" id="left-divider"></div>
+
+    <!-- 中间面板（编辑器 + 底栏）-->
+    <div class="center-panel">
+      <div id="editor-area" style="flex:1;overflow:hidden;display:flex;flex-direction:column;"></div>
+      <div class="hdivider" id="bottom-divider"></div>
+      <div class="bottom-panel" id="bottom-panel" style="height:200px;"></div>
+    </div>
+
+    <!-- 右分隔条 -->
+    <div class="vdivider" id="right-divider"></div>
+
+    <!-- 右面板 -->
+    <div class="right-panel" id="right-panel" style="width:40%;min-width:620px;max-width:70%;flex-shrink:0;display:flex;flex-direction:column;">
+      <div id="main-panel" style="flex:1;display:flex;flex-direction:column;"></div>
+    </div>
+  </div>
+
+  <!-- 状态栏 -->
+  <div class="statusbar">
+    <div class="status-left">
+      <div class="status-dot" id="status-dot"></div>
+      <span id="status-agent">就绪</span>
+      <span class="status-item">
+        <span data-icon="git-branch" style="width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;"></span>
+        <span id="status-git"></span>
+      </span>
+      <span class="status-item" id="status-cursor"></span>
+      <span class="status-item" id="status-lang"></span>
+    </div>
+    <div class="status-right">
+      <span class="status-item" id="status-indent">空格: 4</span>
+      <span class="status-item" id="status-encoding">UTF-8</span>
+      <span class="status-item" id="status-model">deepseek-chat</span>
+      <span id="status-version">v0.1.0</span>
+    </div>
+  </div>
+
+  <!-- 命令面板（Ctrl+P 触发，初始隐藏）-->
+  <div class="cmd-palette" id="cmd-palette" style="display:none;">
+    <div class="cmd-palette-box">
+      <input type="text" id="cmd-input" class="cmd-input" placeholder="按名称搜索文件..." />
+      <div class="cmd-list" id="cmd-list"></div>
+    </div>
+  </div>
+
+</body>
+</html>

@@ -63,7 +63,19 @@ var (
 	ClipboardWrite   func(text string)
 	OpenFileDialog   func(title, filter string) string
 	OpenFolderDialog func(title string) string
+	OnChatContextMenu func(x, y float64)  // 右键菜单回调
 )
+
+func elTag(el *dom.Element) string {
+	if el == nil {
+		return "nil"
+	}
+	id := el.GetAttribute("id")
+	if id != "" {
+		return "#" + id
+	}
+	return el.TagName()
+}
 
 // ─── DOM 辅助构建函数 ──────────────────────────────────────────
 
@@ -175,7 +187,6 @@ func markDirty() {
 	}
 }
 
-
 func (s *ChatState) SetState() {
 	markDirty()
 }
@@ -183,6 +194,7 @@ func (s *ChatState) SetState() {
 func (s *ChatState) SaveHistory() {
 	s.saveHistory()
 }
+
 // ─── ChatState ──────────────────────────────────────────────────
 
 // ChatState 是对话面板的持久状态（包级单例）。
@@ -192,7 +204,6 @@ type ChatState struct {
 
 	Store        *state.ChatStore
 	ShowThreads  bool
-	ThreadLeft   bool
 	AutoReview   bool
 	Autonomous   bool
 	AutoCollapse bool
@@ -219,15 +230,22 @@ type ChatState struct {
 	inputAreaEl  *dom.Element
 	askCardEl    *dom.Element        // agent 提问卡占位（动态显示/隐藏）
 	taskProgEl   *dom.Element        // 任务进度面板占位
-	sidebarEl    *dom.Element        // 对话侧栏
-	mainColEl    *dom.Element        // 主列（不含侧栏）
-	inputComp    *component.Input    // 搜索栏输入框
+	sidebarEl    *dom.Element          // 对话侧栏（固定 300px）
+	mainColEl    *dom.Element          // 主列
+	inputComp    *component.Input      // 搜索栏输入框
 	textAreaComp *component.TextArea // 主输入框
 
-	// VirtualList 高度缓存
-	cachedHeights      []float64
-	cacheMsgLen        int
-	cachedScrollOffset float64
+	// ─── 元素级虚加载缓存 ───
+	// ★ 参考 @tanstack/react-virtual：按消息 ID 缓存实际测量高度
+	msgMeasuredHeights map[string]float64 // msgID → 实际渲染高度
+	// msgDataVersion 每次消息列表变化时递增；从 1 开始（0 表示未初始化）
+	msgDataVersion int64
+	// msgVersions 每项当前的版本号（用于增量更新检测）
+	msgVersions []int64
+	// msgElRefs 按 index 存储渲染后的元素引用（用于读取 layoutH）
+	msgElRefs map[int]*dom.Element
+	// pendingMeasure 标记下次帧需要测量实际高度
+	pendingMeasure bool
 
 	lastSaveTime time.Time
 
@@ -245,29 +263,41 @@ type taskProgressState struct{}
 // New 创建对话面板。
 func New(doc *dom.Document) *ChatState {
 	s := &ChatState{
-		doc:        doc,
-		Store:      state.NewChatStore(),
-		ShowSearch: false,
-		HoveredMsg: -1,
+		doc:                doc,
+		Store:              state.NewChatStore(),
+		ShowSearch:         false,
+		HoveredMsg:         -1,
+		msgMeasuredHeights: make(map[string]float64),
+		msgElRefs:          make(map[int]*dom.Element),
+		msgDataVersion:     1,
 	}
 
-	// ── 构建完整的 DOM 树 ──
-	root := doc.CreateElement("div")
-	root.SetAttribute("style", "display:flex;flex-direction:column;height:100%;width:100%;overflow:hidden;background-color:"+ui.ChatBg+";")
+	// ── 加载 HTML 模板（资源目录 html/panels/chat.html）──
+	ui.MustLoadPanelHTML(doc, "panels/chat.html", nil)
+	root := doc.GetElementByID("chat-root")
 
-	// 1. 工具栏
-	toolbar := s.buildToolbar()
-	root.AppendChild(toolbar)
+	// 1. 工具栏：填充 HTML 提供的 #chat-toolbar 容器
+	toolbar := doc.GetElementByID("chat-toolbar")
+	s.buildToolbarInto(toolbar)
 
-	// 2. 搜索栏（初始隐藏）
-	searchBar := s.buildSearchBar()
-	searchBar.SetAttribute("style", "display:none;height:34px;padding:0 10px;background-color:"+ui.PanelHeader+";border-bottom:1px solid "+ui.Border+";flex-direction:row;align-items:center;")
-	root.AppendChild(searchBar)
+	// 2. 搜索栏：填充 HTML 提供的 #chat-searchbar 容器（初始隐藏）
+	searchBar := doc.GetElementByID("chat-searchbar")
+	s.buildSearchBarInto(searchBar)
 
-	// 3. 消息区（flex:1 容纳 VirtualList）
-	msgArea := doc.CreateElement("div")
-	msgArea.SetAttribute("style", "flex:1;overflow:hidden;position:relative;")
+	// 3. 消息区：使用 HTML 提供的 #chat-msg-area 容器
+	msgArea := doc.GetElementByID("chat-msg-area")
 	s.msgAreaEl = msgArea
+
+	// 右键菜单：消息区空白处
+	if OnChatContextMenu != nil {
+		ui.Ctx.App.AddEventListener(msgArea, event.ContextMenu, func(e event.Event) bool {
+			e.StopPropagation()
+			if me, ok := e.(*event.MouseEvent); ok {
+				OnChatContextMenu(float64(me.X), float64(me.Y))
+			}
+			return true
+		})
+	}
 
 	// 创建 VirtualList（viewPort 填满 flex:1 容器）
 	vw := float32(400) // 初始宽度，会被 flex:1 拉伸
@@ -277,33 +307,34 @@ func New(doc *dom.Document) *ChatState {
 	s.vl = vl
 	msgArea.AppendChild(vl.Element())
 
-	root.AppendChild(msgArea)
+	// 4. Agent 提问卡占位：使用 HTML 提供的 #chat-ask-card
+	s.askCardEl = doc.GetElementByID("chat-ask-card")
 
-	// 4. Agent 提问卡占位（初始隐藏）
-	askCard := doc.CreateElement("div")
-	askCard.SetAttribute("style", "display:none;")
-	s.askCardEl = askCard
-	root.AppendChild(askCard)
+	// 5. 任务进度面板占位：使用 HTML 提供的 #chat-task-progress
+	s.taskProgEl = doc.GetElementByID("chat-task-progress")
 
-	// 5. 任务进度面板占位
-	tp := doc.CreateElement("div")
-	tp.SetAttribute("style", "display:none;")
-	s.taskProgEl = tp
-	root.AppendChild(tp)
+	// 6. 输入区：填充 HTML 提供的 #chat-input-area 容器
+	inputArea := doc.GetElementByID("chat-input-area")
+	s.buildInputAreaInto(inputArea)
 
-	// 6. 输入区
-	inputArea := s.buildInputArea()
-	root.AppendChild(inputArea)
+	// 7. 侧栏容器：从 HTML 获取 #chat-sidebar
+	s.sidebarEl = doc.GetElementByID("chat-sidebar")
+	// 8. 主列（#chat-main）
+	s.mainColEl = doc.GetElementByID("chat-main")
 
 	s.root = root
 
-	// 注册为主列（不含侧栏；用于 ShowThreads 模式切换）
-	s.mainColEl = root
+	// 默认显示对话列表侧栏
+	s.ShowThreads = true
+
+	// 从临时父节点（body）中分离根元素
+	ui.DetachRoot(root)
 
 	TheState = s
 
-	// 初始化消息列表
+	// 初始化消息列表 + 侧栏（含分隔条显隐+两栏重排）
 	s.refreshMessageList()
+	s.refreshSidebar()
 
 	return s
 }
@@ -314,39 +345,44 @@ func (s *ChatState) Element() *dom.Element { return s.root }
 // Refresh 刷新消息列表。
 func (s *ChatState) Refresh() {
 	s.refreshMessageList()
+	s.refreshSidebar()
 	markDirty()
 }
 
 // ─── 布局构建助手 ─────────────────────────────────────────────
 
-// buildToolbar 构建顶部布局工具栏。
-func (s *ChatState) buildToolbar() *dom.Element {
+// buildToolbarInto 将工具栏内容填充到 HTML 提供的容器中。
+func (s *ChatState) buildToolbarInto(bar *dom.Element) {
 	doc := s.doc
-	bar := doc.CreateElement("div")
-	bar.SetAttribute("style",
-		"display:flex;flex-direction:row;align-items:center;height:34px;padding:0 6px;background-color:"+ui.ChatBg+";border-bottom:1px solid "+ui.Border+";flex-shrink:0;")
+
+	// 标题
+	title := doc.CreateElement("div")
+	title.SetAttribute("style", "font-size:11px;color:#cccccc;text-transform:uppercase;letter-spacing:0.5px;padding-left:8px;white-space:nowrap;")
+	title.SetTextContent("AI 对话")
+	bar.AppendChild(title)
+
+	bar.AppendChild(spacer(doc))
+
+	// 搜索按钮
+	searchBtn := iconButton(doc, "search", 14, func() {
+		s.ToggleSearch()
+	})
+	bar.AppendChild(searchBtn)
 
 	// 列表切换按钮
-	listBtn := doc.CreateElement("div")
-	listBtn.SetAttribute("style",
-		"width:26px;height:26px;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:4px;")
-	listBtn.SetAttribute("hover-style", "background-color:"+ui.HoverBg+";")
-	listBtn.SetAttribute("data-icon", "list")
-	listBtn.SetAttribute("style", listBtn.GetAttribute("style")+";color:"+ui.Text+";")
-	addClick(listBtn, func() {
+	listBtn := iconButton(doc, "list", 14, func() {
 		s.ShowThreads = !s.ShowThreads
+		s.refreshSidebar()
 		markDirty()
 	})
 	bar.AppendChild(listBtn)
-	bar.AppendChild(spacer(doc))
+
 	s.toolbarEl = bar
-	return bar
 }
 
-// buildSearchBar 构建搜索栏（初始隐藏；由 ToggleSearch 控制显隐）。
-func (s *ChatState) buildSearchBar() *dom.Element {
+// buildSearchBarInto 将搜索栏内容填充到 HTML 提供的容器中。
+func (s *ChatState) buildSearchBarInto(sb *dom.Element) {
 	doc := s.doc
-	sb := doc.CreateElement("div")
 
 	// 放大镜图标
 	sb.AppendChild(createIcon(doc, "search", 13))
@@ -375,15 +411,55 @@ func (s *ChatState) buildSearchBar() *dom.Element {
 	sb.AppendChild(closeBtn)
 
 	s.searchBarEl = sb
-	return sb
+}
+
+// generateMsgVersion 生成消息内容的版本号（用于增量更新检测）。
+// 当消息内容/折叠/展开/流式状态变化时返回不同值。
+func generateMsgVersion(m state.Message) int64 {
+	v := int64(len(m.Text)) + int64(len(m.Thinking))*1000
+	if m.Collapsed {
+		v += 1 << 28
+	}
+	if m.ThinkingExpanded {
+		v += 1 << 29
+	}
+	if m.Streaming {
+		v += 1 << 30
+	}
+	// 加上 Timeline/Activities 的展开状态
+	for _, a := range m.Activities {
+		if a.Expanded {
+			v += 17
+		}
+	}
+	for _, entry := range m.Timeline {
+		if entry.Expanded {
+			v += 31
+		}
+	}
+	return v
 }
 
 // refreshMessageList 重建 VirtualList 的消息项。
+// 使用增量更新策略：仅变化的消息项触发 UpdateItem，其余保留。
+// 这避免了「对话面板级别全量重建」导致的卡顿。
 func (s *ChatState) refreshMessageList() {
+	// ★ 先测量上一帧渲染项的实际高度（布局后的实际值写入缓存）
+	s.measureActualHeights()
+
 	t := s.Store.Active()
 	if t == nil || s.vl == nil {
 		return
 	}
+
+	// ★ 同步实际视口尺寸（从 msgArea 的 LayoutRect 读取）
+	if s.msgAreaEl != nil {
+		_, _, aw, ah := s.msgAreaEl.LayoutRect()
+		if aw > 0 && ah > 0 {
+			s.vl.SetSize(aw, ah)
+		}
+	}
+
 	q := strings.ToLower(strings.TrimSpace(s.SearchQuery))
 
 	// 建立过滤后的消息索引
@@ -395,25 +471,133 @@ func (s *ChatState) refreshMessageList() {
 		filteredIndices = append(filteredIndices, i)
 	}
 
-	// 构建 VirtualItems
-	items := make([]component.VirtualItem, len(filteredIndices))
+	oldCount := s.vl.ItemCount()
+	needFullRebuild := oldCount != len(filteredIndices) || q != ""
+
+	if needFullRebuild {
+		// ★ 过滤条件变化或项数变化 → 全量重建（不可避免）
+		items := s.buildVirtualItems(t, filteredIndices)
+		s.vl.SetItems(items)
+		s.vl.ScrollToBottom()
+		s.pendingMeasure = true
+		return
+	}
+
+	// ★ 增量更新：只 update 变化的消息（折叠/展开/流式更新等）
+	s.msgDataVersion++
+	changed := false
 	for vi, msgIdx := range filteredIndices {
-		idx := msgIdx
-		h := float32(estimateMessageHeight(t.Messages[idx]))
+		m := t.Messages[msgIdx]
+		newVer := generateMsgVersion(m)
+		if vi < len(s.msgVersions) && s.msgVersions[vi] == newVer {
+			continue // 未变化，跳过
+		}
+		// 版本变化 → 增量更新此项
+		h := float32(estimateMessageHeight(m))
 		if h < 56 {
 			h = 56
 		}
-		items[vi] = component.VirtualItem{
-			ID:     fmt.Sprintf("msg-%d", idx),
-			Height: h,
+		idx := msgIdx
+		s.vl.UpdateItem(vi, component.VirtualItem{
+			ID:      fmt.Sprintf("msg-%d", idx),
+			Height:  h,
+			Version: s.msgDataVersion,
 			Builder: func(d *dom.Document, index int) *dom.Element {
-				return s.renderMessage(t, filteredIndices[index])
+				return s.renderMessageWithMeasure(t, filteredIndices[index], index)
+			},
+		})
+		// 更新版本记录
+		if vi < len(s.msgVersions) {
+			s.msgVersions[vi] = newVer
+		}
+		changed = true
+		// 清除该项的旧元素引用缓存
+		delete(s.msgElRefs, vi)
+		// 清除该项的高度缓存（新版高度可能变化）
+		delete(s.msgMeasuredHeights, fmt.Sprintf("msg-%d", idx))
+	}
+
+	if changed {
+		s.vl.ScrollToBottom()
+		s.pendingMeasure = true
+	}
+}
+
+// buildVirtualItems 构建完整的 VirtualItem 列表。
+func (s *ChatState) buildVirtualItems(t *state.Thread, filteredIndices []int) []component.VirtualItem {
+	n := len(filteredIndices)
+	items := make([]component.VirtualItem, n)
+	s.msgVersions = make([]int64, n)
+
+	for vi, msgIdx := range filteredIndices {
+		m := t.Messages[msgIdx]
+		idx := msgIdx
+		h := float32(estimateMessageHeight(m))
+		if h < 56 {
+			h = 56
+		}
+		ver := generateMsgVersion(m)
+		s.msgVersions[vi] = ver
+		// 优先使用已缓存的实际高度
+		if cachedH, ok := s.msgMeasuredHeights[fmt.Sprintf("msg-%d", idx)]; ok && cachedH > 0 {
+			h = float32(cachedH)
+		}
+		items[vi] = component.VirtualItem{
+			ID:      fmt.Sprintf("msg-%d", idx),
+			Height:  h,
+			Version: ver,
+			Builder: func(d *dom.Document, index int) *dom.Element {
+				return s.renderMessageWithMeasure(t, filteredIndices[index], index)
 			},
 		}
 	}
+	return items
+}
 
-	s.vl.SetItems(items)
-	s.vl.ScrollToBottom()
+// renderMessageWithMeasure 渲染消息并记录元素引用（用于后续高度测量）。
+func (s *ChatState) renderMessageWithMeasure(t *state.Thread, msgIdx, vlIndex int) *dom.Element {
+	el := s.renderMessage(t, msgIdx)
+	if el == nil {
+		fmt.Fprintf(os.Stderr, "[chat] renderMessageWithMeasure[%d] renderMessage returned nil!\n", msgIdx)
+		return nil
+	}
+	// 存储元素引用，用于帧后读取 layoutH
+	s.msgElRefs[vlIndex] = el
+	return el
+}
+
+// measureActualHeights 在布局后测量消息的实际高度并写入缓存。
+// 在 nextFrame / App 渲染循环中调用。
+func (s *ChatState) measureActualHeights() {
+	if !s.pendingMeasure || s.vl == nil {
+		return
+	}
+	s.pendingMeasure = false
+	for vi, el := range s.msgElRefs {
+		if el == nil {
+			continue
+		}
+		_, _, _, h := el.GetBoundingClientRect()
+		if h > 0 {
+			id := fmt.Sprintf("msg-%d", vi)
+			oldH := s.msgMeasuredHeights[id]
+			if absDiff(float64(h), oldH) > 0.5 {
+				s.msgMeasuredHeights[id] = float64(h)
+				// 同步到 VirtualList 的高度缓存
+				if s.vl != nil {
+					s.vl.SetMeasuredHeight(vi, id, h)
+				}
+			}
+		}
+	}
+}
+
+// absDiff 返回两个 float64 的绝对差。
+func absDiff(a, b float64) float64 {
+	if a > b {
+		return a - b
+	}
+	return b - a
 }
 
 // ─── 消息渲染 ──────────────────────────────────────────────────
@@ -455,38 +639,67 @@ func (s *ChatState) renderMessage(t *state.Thread, i int) *dom.Element {
 		)
 	}
 
-	// 消息外层容器（带 padding）
-	outer := createDiv(doc, "padding:10px 0;flex-direction:column;", card)
+	// 消息外层容器（带 padding：左右 16px 避免消息贴边）
+	outer := createDiv(doc, "padding:10px 16px;flex-direction:column;", card)
 
-	// 悬停操作按钮（绝对定位叠加）
+	// 操作按钮（hover 显示）
 	if !m.Streaming {
 		actions := s.buildMessageActions(t, i)
 		if actions != nil {
-			// 绝对定位容器
-			wrapper := doc.CreateElement("div")
-			wrapper.SetAttribute("style", "position:relative;")
-			wrapper.AppendChild(card)
-			wrapper.AppendChild(actions)
-
-			// 用 mouseenter/mouseleave 跟踪 hover 并揭示操作按钮
-			actions.SetAttribute("style", actions.GetAttribute("style")+";display:none;")
-			addHover(wrapper,
-				func() {
-					s.HoveredMsg = i
-					actions.SetAttribute("style",
-						"position:absolute;top:6px;right:8px;display:flex;flex-direction:row;align-items:center;gap:2px;"+
-							"background-color:"+ui.SideBg+";border:1px solid "+ui.Border+";border-radius:5px;padding:2px;z-index:10;")
-				},
-				func() {
-					if s.HoveredMsg == i {
-						s.HoveredMsg = -1
-					}
-					actions.SetAttribute("style",
-						"position:absolute;top:6px;right:8px;display:none;flex-direction:row;align-items:center;gap:2px;"+
-							"background-color:"+ui.SideBg+";border:1px solid "+ui.Border+";border-radius:5px;padding:2px;z-index:10;")
-				},
-			)
-			outer = createDiv(doc, "padding:10px 0;flex-direction:column;", wrapper)
+			if m.Role == state.User {
+				// 用户消息：按钮在气泡下方，右对齐，不覆盖文字
+				actions.SetAttribute("style",
+					"display:none;flex-direction:row;align-items:center;justify-content:flex-end;gap:4px;"+
+						"padding:4px 0 0 0;")
+				// 外层：卡片在上，按钮在下
+				wrapper := doc.CreateElement("div")
+				wrapper.SetAttribute("style", "display:flex;flex-direction:column;")
+				wrapper.AppendChild(card)
+				wrapper.AppendChild(actions)
+				addHover(wrapper,
+					func() {
+						s.HoveredMsg = i
+						actions.SetAttribute("style",
+							"display:flex;flex-direction:row;align-items:center;justify-content:flex-end;gap:4px;"+
+								"padding:4px 0 0 0;")
+					},
+					func() {
+						if s.HoveredMsg == i {
+							s.HoveredMsg = -1
+						}
+						actions.SetAttribute("style",
+							"display:none;flex-direction:row;align-items:center;justify-content:flex-end;gap:4px;"+
+								"padding:4px 0 0 0;")
+					},
+				)
+				outer = createDiv(doc, "padding:10px 16px;flex-direction:column;", wrapper)
+			} else {
+				// Assistant 消息：保留右上角浮层按钮（不遮挡文字）
+				actionsStyle := "position:absolute;top:8px;right:8px;"
+				actions.SetAttribute("style", actionsStyle+";display:none;flex-direction:row;align-items:center;gap:4px;"+
+					"background-color:"+ui.SideBg+";border:1px solid "+ui.Border+";border-radius:8px;padding:3px;z-index:10;")
+				wrapper := doc.CreateElement("div")
+				wrapper.SetAttribute("style", "position:relative;")
+				wrapper.AppendChild(card)
+				wrapper.AppendChild(actions)
+				addHover(wrapper,
+					func() {
+						s.HoveredMsg = i
+						actions.SetAttribute("style",
+							actionsStyle+"display:flex;flex-direction:row;align-items:center;gap:4px;"+
+								"background-color:"+ui.SideBg+";border:1px solid "+ui.Border+";border-radius:8px;padding:3px;z-index:10;")
+					},
+					func() {
+						if s.HoveredMsg == i {
+							s.HoveredMsg = -1
+						}
+						actions.SetAttribute("style",
+							actionsStyle+"display:none;flex-direction:row;align-items:center;gap:4px;"+
+								"background-color:"+ui.SideBg+";border:1px solid "+ui.Border+";border-radius:8px;padding:3px;z-index:10;")
+					},
+				)
+				outer = createDiv(doc, "padding:10px 16px;flex-direction:column;", wrapper)
+			}
 		}
 	}
 
@@ -505,30 +718,30 @@ func (s *ChatState) buildMessageActions(t *state.Thread, i int) *dom.Element {
 
 	actions := doc.CreateElement("div")
 	actions.SetAttribute("style",
-		"position:absolute;top:6px;right:8px;display:none;flex-direction:row;align-items:center;gap:2px;"+
-			"background-color:"+ui.SideBg+";border:1px solid "+ui.Border+";border-radius:5px;padding:2px;z-index:10;")
+		"display:none;flex-direction:row;align-items:center;gap:4px;"+
+			"background-color:"+ui.SideBg+";border:1px solid "+ui.Border+";border-radius:8px;padding:3px;z-index:10;")
 
-	if ClipboardWrite != nil && m.Text != "" {
-		btn := createIcon(doc, "copy", 12)
-		btn.SetAttribute("style", btn.GetAttribute("style")+";cursor:pointer;padding:3px;border-radius:3px;color:"+ui.TextMute+";")
-		btn.SetAttribute("hover-style", "background-color:"+ui.HoverBg+";")
-		addClick(btn, func() { ClipboardWrite(m.Text) })
+	// 复制按钮：所有消息都显示（文本非空时）
+	if m.Text != "" {
+		btn := iconButton(doc, "copy", 13, func() {
+			if ClipboardWrite != nil {
+				ClipboardWrite(m.Text)
+			}
+		})
 		actions.AppendChild(btn)
 	}
 
-	if m.Role == state.Assistant && i == len(t.Messages)-1 && !s.agentBusy() {
-		btn := createIcon(doc, "refresh-cw", 12)
-		btn.SetAttribute("style", btn.GetAttribute("style")+";cursor:pointer;padding:3px;border-radius:3px;color:"+ui.TextMute+";")
-		btn.SetAttribute("hover-style", "background-color:"+ui.HoverBg+";")
-		addClick(btn, func() { s.Regenerate(t, i) })
+	// 重试按钮：仅用户消息的最后一条
+	if m.Role == state.User && i == len(t.Messages)-1 && !s.agentBusy() {
+		btn := iconButton(doc, "refresh-cw", 13, func() { s.Regenerate(t, i) })
 		actions.AppendChild(btn)
 	}
 
-	btn := createIcon(doc, "trash-2", 12)
-	btn.SetAttribute("style", btn.GetAttribute("style")+";cursor:pointer;padding:3px;border-radius:3px;color:"+ui.TextMute+";")
-	btn.SetAttribute("hover-style", "background-color:"+ui.HoverBg+";")
-	addClick(btn, func() { s.DeleteMessage(t, i) })
-	actions.AppendChild(btn)
+	// 删除按钮：仅用户消息
+	if m.Role == state.User {
+		btn := iconButton(doc, "trash-2", 13, func() { s.DeleteMessage(t, i) })
+		actions.AppendChild(btn)
+	}
 
 	return actions
 }
@@ -576,9 +789,15 @@ func buildCollapsedCard(doc *dom.Document, m state.Message, toggleCollapse func(
 // buildExpandedCard 展开态消息卡。
 func buildExpandedCard(doc *dom.Document, m state.Message, toggleCollapse, toggleThinking func(), toggleActivity func(int)) *dom.Element {
 	card := doc.CreateElement("div")
+
+	// ★ 流式状态：添加 accent 色左边框（伴随式codeagent风格）
+	borderColor := ui.Border
+	if m.Streaming {
+		borderColor = ui.Accent
+	}
 	card.SetAttribute("style",
 		"display:flex;flex-direction:column;padding:8px 12px;border-radius:6px;"+
-			"background-color:"+ui.AssistantBg+";border:1px solid "+ui.Border+";")
+			"background-color:"+ui.AssistantBg+";border:1px solid "+borderColor+";")
 
 	// ── header 行 ──
 	header := doc.CreateElement("div")
@@ -597,6 +816,11 @@ func buildExpandedCard(doc *dom.Document, m state.Message, toggleCollapse, toggl
 	header.AppendChild(spacer(doc))
 
 	if m.Streaming {
+		// ★ 流式光标（伴随式codeagent风格：闪烁的点）
+		cursor := createDiv(doc,
+			"width:6px;height:6px;border-radius:50%;background-color:"+ui.Accent+";flex-shrink:0;"+
+				"animation:chat-cursor-blink 1.2s ease-in-out infinite;margin-right:4px;")
+		header.AppendChild(cursor)
 		spin := createText(doc, "思考中…", "color:"+ui.Warning+";font-size:11px;")
 		header.AppendChild(spin)
 	}
@@ -705,7 +929,35 @@ func buildContentBlock(doc *dom.Document, text string) *dom.Element {
 		"display:block;color:"+ui.Text+";font-size:13px;margin:4px 0;white-space:pre-wrap;word-break:break-word;line-height:1.5;")
 }
 
-// buildActivityItem 渲染单条工具活动。
+// toolIconName 根据工具名返回合适的图标名称（参照伴随式codeagent的图标分类）。
+func toolIconName(tool string) string {
+	switch {
+	case strings.HasPrefix(tool, "read_file") || strings.HasPrefix(tool, "read_"):
+		return "file-text"
+	case strings.HasPrefix(tool, "edit_file") || strings.HasPrefix(tool, "write_file") ||
+		strings.HasPrefix(tool, "create_file") || tool == "file":
+		return "code"
+	case strings.HasPrefix(tool, "shell") || strings.HasPrefix(tool, "bash") ||
+		strings.HasPrefix(tool, "powershell") || strings.HasPrefix(tool, "run_"):
+		return "terminal"
+	case strings.HasPrefix(tool, "search") || strings.HasPrefix(tool, "grep"):
+		return "search"
+	case strings.HasPrefix(tool, "web_fetch") || strings.HasPrefix(tool, "web_search"):
+		return "globe"
+	case strings.HasPrefix(tool, "mcp_"):
+		return "box"
+	case strings.HasPrefix(tool, "skill_"):
+		return "layers"
+	case strings.HasPrefix(tool, "ask_user"):
+		return "help-circle"
+	case strings.HasPrefix(tool, "memory_"):
+		return "database"
+	case strings.HasPrefix(tool, "git_"):
+		return "git-branch"
+	default:
+		return "terminal"
+	}
+}
 func buildActivityItem(doc *dom.Document, a state.Activity, toggle func()) *dom.Element {
 	item := doc.CreateElement("div")
 	item.SetAttribute("style",
@@ -717,7 +969,9 @@ func buildActivityItem(doc *dom.Document, a state.Activity, toggle func()) *dom.
 	row1 := doc.CreateElement("div")
 	row1.SetAttribute("style", "display:flex;flex-direction:row;align-items:center;")
 
-	icon := createIcon(doc, "terminal", 11)
+	// ★ 参考伴随式codeagent：按工具类型选择图标
+	iconName := toolIconName(a.Tool)
+	icon := createIcon(doc, iconName, 11)
 	icon.SetAttribute("style", icon.GetAttribute("style")+";color:"+ui.TextMute+";")
 	row1.AppendChild(icon)
 	row1.AppendChild(gapW(doc, 4))
@@ -763,24 +1017,25 @@ func buildEvalBlock(doc *dom.Document, e *state.Eval) *dom.Element {
 	)
 }
 
-// userCard 渲染用户消息卡片。
+// userCard 渲染用户消息卡片（右对齐气泡风格，参照伴随式codeagent）。
 func userCard(doc *dom.Document, m state.Message) *dom.Element {
 	return createDiv(doc,
-		"flex-direction:column;padding:8px 12px;border-radius:6px;"+
-			"background-color:"+ui.UserBubble+";border:1px solid "+ui.Border+";",
-		createText(doc, m.Text, "display:block;color:"+ui.Text+";font-size:13px;white-space:pre-wrap;word-break:break-word;line-height:1.5;"),
+		"display:flex;flex-direction:row;justify-content:flex-end;padding:0;", // 水平间距由外层容器统一提供
+		createDiv(doc,
+			"display:inline-flex;flex-direction:column;padding:8px 14px;border-radius:10px 10px 2px 10px;"+
+				"background-color:"+ui.UserBubble+";"+
+				"max-width:100%;word-break:break-word;",
+			createText(doc, m.Text,
+				"display:block;color:#e0e0e0;font-size:13px;white-space:pre-wrap;word-break:break-word;line-height:1.5;font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;"),
+		),
 	)
 }
 
 // ─── 输入区 ─────────────────────────────────────────────────────
 
-func (s *ChatState) buildInputArea() *dom.Element {
+// buildInputAreaInto 将输入区内容填充到 HTML 提供的容器中。
+func (s *ChatState) buildInputAreaInto(box *dom.Element) {
 	doc := s.doc
-
-	// 输入区外层包裹盒
-	box := doc.CreateElement("div")
-	box.SetAttribute("style",
-		"display:flex;flex-direction:column;background-color:"+ui.ChatBg+";border-top:1px solid "+ui.Border+";flex-shrink:0;")
 
 	// 引用 chips 行（DraftRefs）
 	refsRow := doc.CreateElement("div")
@@ -798,12 +1053,12 @@ func (s *ChatState) buildInputArea() *dom.Element {
 		"display:flex;flex-direction:column;margin:8px;padding:0;border:1px solid "+ui.Border+";border-radius:8px;background-color:"+ui.ChatBg+";flex:1;")
 
 	// TextArea
-	ta := component.NewTextArea(doc, "", 300, 80)
+	ta := component.NewTextArea(doc, "", 300, 100)
 	if s.Store.Draft != "" {
 		ta.SetText(s.Store.Draft)
 	}
 	ta.SetBaseStyle(
-		"background-color:transparent;color:" + ui.Text + ";border:none;padding:8px;font-size:13px;outline:none;width:100%;min-height:60px;resize:none;")
+		"background-color:transparent;color:" + ui.Text + ";border:none;padding:8px;font-size:13px;outline:none;width:100%;min-height:160px;resize:none;")
 	ta.SetHoverStyle("background-color:transparent;")
 	ta.SetFocusStyle("background-color:transparent;")
 	ta.OnChange(func(text string) {
@@ -852,6 +1107,7 @@ func (s *ChatState) buildInputArea() *dom.Element {
 	autoBtn := s.buildToggleBtn("refresh-cw", "自主", s.Autonomous, ui.Info, func() {
 		s.Autonomous = !s.Autonomous
 		s.persistAgentToggles()
+		refreshInputArea(s)
 	})
 	toolbar.AppendChild(autoBtn)
 	toolbar.AppendChild(gapW(doc, 8))
@@ -865,7 +1121,6 @@ func (s *ChatState) buildInputArea() *dom.Element {
 
 	s.textAreaComp = ta
 	s.inputAreaEl = box
-	return box
 }
 
 // buildReviewToggle 构建审核模式切换按钮。
@@ -971,15 +1226,12 @@ func (s *ChatState) buildPrimaryBtn(text string, onClick func()) *dom.Element {
 }
 
 // refreshInputArea 重建输入区 DOM（审核/自主开关变化时）。
+// 输入区容器 (#chat-input-area) 来自 HTML 模板，持久存在；此处清空并重建其内容。
 func refreshInputArea(s *ChatState) {
-	old := s.inputAreaEl
-	newEl := s.buildInputArea()
-	if old != nil && old.Parent() != nil {
-		if parent, ok := old.Parent().(*dom.Element); ok {
-			parent.ReplaceChild(newEl, old)
-		}
+	if s.inputAreaEl != nil {
+		s.inputAreaEl.ClearChildren()
+		s.buildInputAreaInto(s.inputAreaEl)
 	}
-	s.inputAreaEl = newEl
 	markDirty()
 }
 
@@ -1109,9 +1361,28 @@ func buildRefChip(doc *dom.Document, label, ref string, onRemove func()) *dom.El
 	return chip
 }
 
+// refreshSidebar 更新侧栏显示/隐藏和内容，同时控制分隔条显隐和两栏顺序。
+func (s *ChatState) refreshSidebar() {
+	if s.sidebarEl == nil {
+		return
+	}
+	if s.ShowThreads {
+		// 侧栏显示（固定 300px，右边框分隔，始终在右）
+		s.sidebarEl.SetAttribute("style",
+			"display:flex;flex-direction:column;width:300px;flex-shrink:0;border-left:1px solid "+ui.Border+";background:"+ui.SideBg+";overflow:hidden;")
+		s.sidebarEl.ClearChildren()
+		content := s.sidebarContent()
+		s.sidebarEl.AppendChild(content)
+	} else {
+		s.sidebarEl.SetAttribute("style", "display:none;")
+	}
+}
+
+
+
 // ─── 对话侧栏 ──────────────────────────────────────────────────
 
-// sidebarContent 侧栏内容（270px）。
+// sidebarContent 侧栏内容（300px）。
 func (s *ChatState) sidebarContent() *dom.Element {
 	doc := s.doc
 	threads := s.Store.Threads
@@ -1121,7 +1392,7 @@ func (s *ChatState) sidebarContent() *dom.Element {
 
 	sidebar := doc.CreateElement("div")
 	sidebar.SetAttribute("style",
-		"width:270px;display:flex;flex-direction:column;background-color:"+ui.SideBg+";border-left:1px solid "+ui.Border+";height:100%;overflow:hidden;")
+		"width:100%;display:flex;flex-direction:column;background-color:"+ui.SideBg+";height:100%;overflow:hidden;")
 
 	// 头部
 	head := doc.CreateElement("div")
@@ -1130,14 +1401,7 @@ func (s *ChatState) sidebarContent() *dom.Element {
 	titleEl := createText(doc, "对话", "color:"+ui.TextMute+";font-size:12px;flex:1;")
 	head.AppendChild(titleEl)
 
-	// 换边按钮
-	flipBtn := iconButton(doc, "arrow-left-right", 13, func() {
-		s.ThreadLeft = !s.ThreadLeft
-		markDirty()
-	})
-	head.AppendChild(flipBtn)
-
-	// 导出按钮
+	// 新建会话按钮
 	exportBtn := iconButton(doc, "download", 13, s.ExportActive)
 	head.AppendChild(exportBtn)
 
@@ -1187,7 +1451,6 @@ func (s *ChatState) sidebarContent() *dom.Element {
 
 	sidebar.AppendChild(bottomArea)
 
-	s.sidebarEl = sidebar
 	return sidebar
 }
 
@@ -1450,7 +1713,7 @@ func (s *ChatState) tokenStatsSection(ts struct{ Total, CacheHit, CacheMiss, Out
 		return createDiv(doc,
 			"flex-direction:row;align-items:center;padding:0 0 6px 0;",
 			createText(doc, label, "color:"+ui.TextMute+";font-size:13px;flex:1;"),
-			createText(doc, value, "color:"+valColor+";font-size:14px;"),
+			createText(doc, value, "color:"+valColor+";font-size:13px;"),
 		)
 	}
 
@@ -1518,6 +1781,13 @@ func IsRunning() bool {
 	return TheState != nil && TheState.Bridge != nil && TheState.Bridge.IsRunning()
 }
 
+// StopAgent 停止正在运行的 Agent。
+func StopAgent() {
+	if TheState != nil && TheState.Bridge != nil {
+		TheState.Bridge.Stop()
+	}
+}
+
 // resolveAskUI 把问答卡的回答路由到 bridge。
 func resolveAskUI(answer string) {
 	if TheState != nil && TheState.Bridge != nil {
@@ -1552,7 +1822,9 @@ func (s *ChatState) loadTestData() {
 		})
 	}
 	s.SendSeq++
-	s.cachedHeights = nil
+	s.msgMeasuredHeights = make(map[string]float64)
+	s.msgElRefs = make(map[int]*dom.Element)
+	s.msgDataVersion++
 	s.refreshMessageList()
 	markDirty()
 }
@@ -2011,12 +2283,42 @@ func attachmentNames(atts []string) string {
 	return strings.Join(names, ", ")
 }
 
-// tintCSS 把 CSS 颜色按 alpha 淡化为底色（用于按钮开启态的低透明填充）。
+// tintCSS 把 CSS 六位十六进制颜色 `#RRGGBB` 按 alpha 透明度转为半透明 rgba（用于按钮开启态的低透明填充）。
+// 示例：tintCSS("#4ec9b0", 30) → "rgba(78,201,176,0.1176)"
 func tintCSS(c string, alpha uint8) string {
-	// 支持常见的名字色：转发为对应的 rgba
-	// 实际用的是 ui 包中的颜色常量，直接返回带透明度的值
-	// 简化为直接使用输入颜色降低透明度
-	return c // 由渲染器处理透明度（或外部背景色已经处理）
+	if len(c) < 7 || c[0] != '#' {
+		fmt.Fprintf(os.Stderr, "[tintCSS] INVALID input: %q (len=%d, prefix=%c)\n", c, len(c), c[0])
+		return c
+	}
+	// 解析 #RRGGBB
+	r := hexPair(c[1:3])
+	g := hexPair(c[3:5])
+	b := hexPair(c[5:7])
+	a := float64(alpha) / 255.0
+	res := fmt.Sprintf("rgba(%d,%d,%d,%.4f)", r, g, b, a)
+	fmt.Fprintf(os.Stderr, "[tintCSS] %q alpha=%d → %s\n", c, alpha, res)
+	return res
+}
+
+// hexPair 把两位十六进制字符串解析为数值（如 "4e" → 78）。
+func hexPair(s string) int {
+	if len(s) < 2 {
+		return 0
+	}
+	return hexVal(s[0])*16 + hexVal(s[1])
+}
+
+func hexVal(c byte) int {
+	switch {
+	case c >= '0' && c <= '9':
+		return int(c - '0')
+	case c >= 'a' && c <= 'f':
+		return int(c - 'a' + 10)
+	case c >= 'A' && c <= 'F':
+		return int(c - 'A' + 10)
+	default:
+		return 0
+	}
 }
 
 // planCard 保留旧接口别名。

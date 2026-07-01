@@ -6,7 +6,6 @@ package settings
 
 import (
 	"github.com/hoonfeng/gwui/component"
-	"github.com/hoonfeng/gwui/dom"
 	"github.com/hoonfeng/gwui/uixml"
 
 	"github.com/hoonfeng/paircode/cmd/companion/core"
@@ -81,29 +80,6 @@ func Save() {
 
 // ── uixml 辅助 ──
 
-// transferComponents 递归地将 srcDoc 中的组件注册转移到 dstDoc。
-func transferComponents(srcDoc, dstDoc *dom.Document, el *dom.Element) {
-	if comp := srcDoc.ComponentAtNode(el); comp != nil {
-		dstDoc.RegisterComponent(el, comp)
-	}
-	for _, child := range el.Children() {
-		if e, ok := child.(*dom.Element); ok {
-			transferComponents(srcDoc, dstDoc, e)
-		}
-	}
-}
-
-// replaceChildByID 查找 tmpDoc 中指定 id 的元素，用 newEl 替换。
-func replaceChildByID(tmpDoc *dom.Document, id string, newEl *dom.Element) {
-	oldEl := ui.Ctx.Doc.GetElementByID(id)
-	if oldEl == nil {
-		return
-	}
-	if parent, ok := oldEl.Parent().(*dom.Element); ok {
-		parent.ReplaceChild(newEl, oldEl)
-	}
-}
-
 // OpenDialog 打开设置对话框（Modal）。
 func OpenDialog() {
 	doc := ui.Ctx.Doc
@@ -121,28 +97,25 @@ func OpenDialog() {
 		return
 	}
 	body.ClearChildren()
-	body.SetAttribute("style",
-		"display: flex; flex-direction: column; gap: 14px; "+
-			"min-width: 380px; padding: 4px 0;")
 
 	// 在主文档上创建真实交互组件，保持完全可控的事件/值访问
 	providerInput := component.NewInput(doc, "Provider（如 deepseek）")
 	providerInput.SetValue(EditingSettings.Provider)
 	providerInput.SetBaseStyle(
 		"background-color: " + ui.InputBg + "; color: " + ui.Text + "; " +
-			"border: 1px solid " + ui.Border + "; padding: 4px 8px; font-size: 15px; width: 100%;")
+			"border: 1px solid " + ui.Border + "; padding: 4px 8px; font-size: 13px; width: 100%;")
 
 	apiKeyInput := component.NewInput(doc, "API Key")
 	apiKeyInput.SetValue(EditingSettings.APIKey)
 	apiKeyInput.SetBaseStyle(
 		"background-color: " + ui.InputBg + "; color: " + ui.Text + "; " +
-			"border: 1px solid " + ui.Border + "; padding: 4px 8px; font-size: 15px; width: 100%;")
+			"border: 1px solid " + ui.Border + "; padding: 4px 8px; font-size: 13px; width: 100%;")
 
 	modelInput := component.NewInput(doc, "模型名（如 deepseek-v4-flash）")
 	modelInput.SetValue(EditingSettings.ExecuteModel)
 	modelInput.SetBaseStyle(
 		"background-color: " + ui.InputBg + "; color: " + ui.Text + "; " +
-			"border: 1px solid " + ui.Border + "; padding: 4px 8px; font-size: 15px; width: 100%;")
+			"border: 1px solid " + ui.Border + "; padding: 4px 8px; font-size: 13px; width: 100%;")
 
 	autoReviewCb := component.NewCheckbox(doc, "自动审核（Auto Review）", EditingSettings.AutoReview)
 	autonomousCb := component.NewCheckbox(doc, "自主模式（Autonomous）", EditingSettings.Autonomous)
@@ -171,52 +144,21 @@ func OpenDialog() {
 		return true
 	})
 
-	const xmlUI = `<div style="display:flex;flex-direction:column;gap:14px;min-width:380px;padding:4px 0">
-	<div style="font-size:16px;font-weight:bold;color:#212121;margin-top:4px;padding-bottom:4px;border-bottom:1px solid #e0e0e0">LLM 服务</div>
-	<div style="display:flex;flex-direction:row;align-items:center;gap:12px">
-		<div style="width:100px;font-size:15px;color:#616161;flex-shrink:0">服务商</div>
-		<div id="providerPH" style="flex:1"></div>
-	</div>
-	<div style="display:flex;flex-direction:row;align-items:center;gap:12px">
-		<div style="width:100px;font-size:15px;color:#616161;flex-shrink:0">API Key</div>
-		<div id="apiKeyPH" style="flex:1"></div>
-	</div>
-	<div style="display:flex;flex-direction:row;align-items:center;gap:12px">
-		<div style="width:100px;font-size:15px;color:#616161;flex-shrink:0">模型</div>
-		<div id="modelPH" style="flex:1"></div>
-	</div>
-	<div style="font-size:16px;font-weight:bold;color:#212121;margin-top:8px;padding-bottom:4px;border-bottom:1px solid #e0e0e0">Agent 行为</div>
-	<div id="autoReviewPH"></div>
-	<div id="autonomousPH"></div>
-	<div style="display:flex;flex-direction:row;gap:8px;justify-content:flex-end;margin-top:8px">
-		<button label="保存" onclick="saveSettings" style="background-color:#0e639c;color:#fff;padding:4px 16px;font-size:15px;border:none;cursor:pointer"/>
-		<button label="取消" onclick="cancelSettings" style="background-color:transparent;color:#ccc;padding:4px 16px;font-size:15px;border:none;cursor:pointer"/>
-	</div>
-</div>`
-
-	// 加载 uixml 布局
-	uixml.MustLoadStringInto(ui.Ctx.Doc, xmlUI, reg)
+	// 加载 HTML 模板（资源目录 html/panels/settings.html）
+	ui.MustLoadPanelHTML(doc, "panels/settings.html", reg)
+	root := doc.GetElementByID("settings-root")
 
 	// 用主文档上的真实组件替换占位元素
-	replaceChildByID(ui.Ctx.Doc, "providerPH", providerInput.Element())
-	replaceChildByID(ui.Ctx.Doc, "apiKeyPH", apiKeyInput.Element())
-	replaceChildByID(ui.Ctx.Doc, "modelPH", modelInput.Element())
-	replaceChildByID(ui.Ctx.Doc, "autoReviewPH", autoReviewCb.Element())
-	replaceChildByID(ui.Ctx.Doc, "autonomousPH", autonomousCb.Element())
+	ui.ReplaceChildByID(doc, "settings-provider-ph", providerInput.Element())
+	ui.ReplaceChildByID(doc, "settings-apikey-ph", apiKeyInput.Element())
+	ui.ReplaceChildByID(doc, "settings-model-ph", modelInput.Element())
+	ui.ReplaceChildByID(doc, "settings-autoreview-ph", autoReviewCb.Element())
+	ui.ReplaceChildByID(doc, "settings-autonomous-ph", autonomousCb.Element())
 
 	// 转移组件注册 + 将布局内容移至 Modal body
-	srcBody := ui.Ctx.Doc.Body()
-	for {
-		c := srcBody.FirstChild()
-		if c == nil {
-			break
-		}
-		srcBody.RemoveChild(c)
-		if el, ok := c.(*dom.Element); ok {
-			transferComponents(ui.Ctx.Doc, doc, el)
-		}
-		body.AppendChild(c)
-	}
+	ui.TransferComponents(doc, doc, root)
+	ui.DetachRoot(root)
+	body.AppendChild(root)
 
 	modal.Show()
 }
