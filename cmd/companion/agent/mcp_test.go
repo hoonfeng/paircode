@@ -256,9 +256,9 @@ func TestMCPRegistryHITL(t *testing.T) {
 	if err != nil || n != 1 {
 		t.Fatalf("注册: %v / %d", err, n)
 	}
-	tool, ok := reg.Get("mcp.hitl.danger")
+	tool, ok := reg.Get("mcp__hitl__danger")
 	if !ok {
-		t.Fatal("mcp.hitl.danger 未注册")
+		t.Fatal("mcp__hitl__danger 未注册")
 	}
 	if !tool.RequiresApproval {
 		t.Error("MCP 外部工具应 RequiresApproval=true")
@@ -268,7 +268,7 @@ func TestMCPRegistryHITL(t *testing.T) {
 	reg.BeforeTool = func(ctx context.Context, name string, args map[string]any) (bool, string, error) {
 		return false, "", fmt.Errorf("用户拒绝执行 %s", name)
 	}
-	_, err = reg.Execute(context.Background(), "mcp.hitl.danger", "{}")
+	_, err = reg.Execute(context.Background(), "mcp__hitl__danger", "{}")
 	if err == nil {
 		t.Fatal("期望被拒绝错误，得 nil")
 	}
@@ -282,7 +282,7 @@ func TestMCPRegistryHITL(t *testing.T) {
 		called = true
 		return true, "", nil
 	}
-	res, err := reg.Execute(context.Background(), "mcp.hitl.danger", "{}")
+	res, err := reg.Execute(context.Background(), "mcp__hitl__danger", "{}")
 	if err != nil {
 		t.Fatalf("放行后执行: %v", err)
 	}

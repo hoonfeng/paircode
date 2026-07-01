@@ -158,13 +158,13 @@ func TestLiveMCPInProcess(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
-	task := "调用 mcp.test.echo 工具，参数 text 填 'hello mcp'，告诉我返回结果。完成后输出 [FINAL]。"
+	task := "调用 mcp__test__echo 工具，参数 text 填 'hello mcp'，告诉我返回结果。完成后输出 [FINAL]。"
 	if _, err := loop.Run(ctx, task, nil); err != nil {
 		t.Fatalf("loop.Run 出错: %v（工具: %v）", err, ev)
 	}
 	joined := strings.Join(ev, " ")
-	if !strings.Contains(joined, "mcp.test.echo") {
-		t.Errorf("LLM 未调用 mcp.test.echo，工具序列: %v", ev)
+	if !strings.Contains(joined, "mcp__test__echo") {
+		t.Errorf("LLM 未调用 mcp__test__echo，工具序列: %v", ev)
 	}
 	t.Logf("✓ MCP go-sdk 真机通过；工具: %v", ev)
 }
@@ -178,7 +178,7 @@ func TestLiveSkills(t *testing.T) {
 	}
 	root := t.TempDir()
 	// 指向真实 config/skills 目录（测试工作目录为 cmd/companion/agent/）
-	skillDir, _ := filepath.Abs(filepath.Join("..", "..", "config", "skills"))
+	skillDir, _ := filepath.Abs(filepath.Join("..", "..", "..", "config", "skills"))
 	origDir := SkillSystemDir
 	SkillSystemDir = skillDir
 	defer func() { SkillSystemDir = origDir }()
@@ -246,10 +246,13 @@ func TestLiveMultiAgent(t *testing.T) {
 	RegisterDefaultTools(reg, root)
 
 	// 编排树：coordinator（协调器）→ coder（编码者）
+	// coder 用工具白名单限定只能用 write_file/read_file（finish_task 由 runSubAgent 自动注册），
+	// 避免继承 delegate_task 导致递归委托死循环。
 	tree := NewAgentTree(
 		&SubAgent{Name: "coordinator", Description: "协调器，分配任务给子 agent"},
 		&SubAgent{Name: "coder", Description: "编码者，创建文件",
 			System:  "你是编码专家，用 write_file 完成文件创建任务，完成后用 finish_task 工具报告结果。",
+			Tools:   []string{"write_file", "read_file"},
 			MaxIter: 6},
 	)
 
