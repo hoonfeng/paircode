@@ -205,9 +205,10 @@ func parseCallToolResult(res *mcp.CallToolResult) (string, error) {
 	return text, nil
 }
 
-// registerClientTools 把连接的工具注册进 Registry，名加 "mcp.<server>." 前缀防冲突。返回工具数。
+// registerClientTools 把连接的工具注册进 Registry，名加 "mcp__<server>__" 前缀防冲突。返回工具数。
 // MCP 工具 RequiresApproval=true（外部工具默认需审批）；细粒度 HITL 由 Registry.BeforeTool 钩子
-// 统一处理（阶段一已加钩子链），调用方可在 BeforeTool 中按 "mcp.<server>.<tool>" 前缀做白名单。
+// 统一处理（阶段一已加钩子链），调用方可在 BeforeTool 中按 "mcp__<server>__<tool>" 前缀做白名单。
+// 用下划线而非点号：OpenAI/DeepSeek API 要求工具名匹配 ^[a-zA-Z0-9_-]+$，点号不被接受。
 func registerClientTools(r *Registry, conn *mcpConnection) (int, error) {
 	tools, err := conn.listAllTools(context.Background())
 	if err != nil {
@@ -228,7 +229,7 @@ func registerClientTools(r *Registry, conn *mcpConnection) (int, error) {
 		toolName := td.Name // 捕获
 		toolDesc := td.Description
 		r.Register(&Tool{
-			Name:             "mcp." + serverName + "." + td.Name,
+			Name:             "mcp__" + serverName + "__" + td.Name,
 			Description:      "[MCP:" + serverName + "] " + toolDesc,
 			Parameters:       schema,
 			RequiresApproval: true,
