@@ -3,7 +3,7 @@ $env:CGO_ENABLED = '1'
 Write-Host "[INFO] CGO_ENABLED=$env:CGO_ENABLED" -ForegroundColor Cyan
 Write-Host "[INFO] Building companion.exe ..." -ForegroundColor Cyan
 
-go build -o companion.exe ./cmd/companion/
+go build -tags skia -o companion.exe ./cmd/companion/
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[ERROR] 构建失败，请确保:" -ForegroundColor Red
     Write-Host "  1. GCC/MinGW 在 PATH 中（CGO 需要 C 编译器）"
