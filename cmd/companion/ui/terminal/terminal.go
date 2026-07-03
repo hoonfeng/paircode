@@ -14,18 +14,14 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/hoonfeng/gwui/dom"
 	"github.com/hoonfeng/gwui/event"
 
-	"github.com/hoonfeng/paircode/cmd/companion/core"
 	"github.com/hoonfeng/paircode/cmd/companion/pty"
 	"github.com/hoonfeng/paircode/cmd/companion/ui"
 	"github.com/hoonfeng/paircode/cmd/companion/vterm"
-	"golang.org/x/text/encoding/simplifiedchinese"
-	"golang.org/x/text/transform"
 )
 
 const termIdleFrames = 180
@@ -358,7 +354,6 @@ type terminalState struct {
 	idleFrames int
 	scrollOff  int
 	pumpID     int
-	decCarry   []byte
 
 	selecting    bool
 	hasSel       bool
@@ -447,8 +442,7 @@ func (t *terminalState) drain() {
 			os.Stderr.WriteString(prefix + " " + strconv.Itoa(len(b)) + " bytes: [" + strings.Join(hexStr, " ") + "]\n")
 		}
 		logHex("[drain] raw", data)
-		data = t.decodeOutput(data)
-		logHex("[drain] decoded", data)
+		// 原始字节直通 vterm（系统 ConPTY 输出已是 UTF-8，不需任何编码转换）
 		before := t.vt.ScrollbackLen()
 		t.vt.Write(data)
 		if t.scrollOff > 0 {
@@ -487,17 +481,32 @@ func (t *terminalState) renderGrid() {
 		endRow = scrLen + rows
 	}
 
-	// 构建完整文本
+	// 构建完整文本（去掉每行尾随空格，避免大量空白撑宽 DOM 破坏显示）
 	var b strings.Builder
 	for r := startRow; r < endRow; r++ {
 		if r > startRow {
 			b.WriteByte('\n')
 		}
 		rowData := t.vt.RowAt(r)
+		// 找到最后一个非空白字符位置
+		lastNonSpace := -1
 		for c := 0; c < cols; c++ {
-			ch := ' '
+			var ch rune
 			if c < len(rowData) && rowData[c].Ch != 0 {
 				ch = rowData[c].Ch
+			} else {
+				ch = ' '
+			}
+			if ch != ' ' {
+				lastNonSpace = c
+			}
+		}
+		for c := 0; c <= lastNonSpace; c++ {
+			var ch rune
+			if c < len(rowData) && rowData[c].Ch != 0 {
+				ch = rowData[c].Ch
+			} else {
+				ch = ' '
 			}
 			b.WriteRune(ch)
 		}
@@ -586,22 +595,7 @@ func (t *terminalState) handleKey(ev *event.KeyboardEvent) {
 	}
 	t.scrollOff = 0
 
-	// 用系统代码页编码转换：GBK 系统需把 UTF-8 输入转 GBK 后写入 ConPTY
-	// decodeOutput 方向相反（GBK→UTF-8），保证 vterm 始终处理 UTF-8。
-	enc := core.Settings.TermEncoding
-	if enc == "auto" {
-		enc = detectSystemEncoding()
-	}
-	if enc == "gbk" {
-		encoder := simplifiedchinese.GBK.NewEncoder()
-		converted, _, err := transform.Bytes(encoder, data)
-		if err == nil && len(converted) > 0 {
-			data = converted
-		} else {
-			os.Stderr.WriteString("[handleKey] gbk encode err: " + err.Error() + "; using raw utf8\n")
-		}
-	}
-
+	// keyToVT 输出已是 UTF-8，直接写入 ConPTY（系统接受 UTF-8，不需转 GBK）
 	logHex := func(prefix string, b []byte) {
 		hexStr := make([]string, len(b))
 		for i, v := range b {
@@ -919,67 +913,10 @@ func (t *terminalState) ClearScreen() {
 	}
 }
 
-// ─── 编码 ────────────────────────────────────────────────────
+// ─── 编码（保留空桩供外部调用兼容）──────────────────────
 
 func TermEncodingLabel() string {
-	if core.Settings.TermEncoding == "gbk" {
-		return "GBK"
-	}
 	return "UTF-8"
-}
-
-func (t *terminalState) decodeOutput(b []byte) []byte {
-	enc := core.Settings.TermEncoding
-	if enc == "auto" {
-		enc = detectSystemEncoding()
-	}
-	if enc != "gbk" {
-		return b
-	}
-	src := b
-	if len(t.decCarry) > 0 {
-		src = append(t.decCarry, b...)
-		t.decCarry = nil
-	}
-	out, carry := gbkToUTF8(src)
-	t.decCarry = carry
-	return out
-}
-
-// detectSystemEncoding 检测 ConPTY 实际使用的输出编码。
-// OEM 代码页（GetOEMCP）是控制台子系统的默认编码，ConPTY 输出使用此编码。
-// 代码页 936（简体中文 GBK）→ 返回 "gbk"，否则返回 "utf-8"。
-func detectSystemEncoding() string {
-	mod := syscall.NewLazyDLL("kernel32.dll")
-	// OEM 代码页是控制台/ConPTY 的原始输出编码（cmd.exe / PowerShell 用此编码输出）
-	proc := mod.NewProc("GetOEMCP")
-	r, _, _ := proc.Call()
-	os.Stderr.WriteString("[encoding] GetOEMCP=" + strconv.FormatUint(uint64(r), 10) + "\n")
-	if r == 936 {
-		return "gbk"
-	}
-	// 回退：检查 ANSI 代码页（UTF-8 beta 开启时 GetACP=65001，否则 936）
-	proc2 := mod.NewProc("GetACP")
-	r2, _, _ := proc2.Call()
-	os.Stderr.WriteString("[encoding] GetACP=" + strconv.FormatUint(uint64(r2), 10) + "\n")
-	if r2 == 936 {
-		return "gbk"
-	}
-	return "utf-8"
-}
-
-func gbkToUTF8(b []byte) (out, carry []byte) {
-	dst := make([]byte, len(b)*2+16)
-	nDst, nSrc, err := simplifiedchinese.GBK.NewDecoder().Transform(dst, b, false)
-	out = append([]byte(nil), dst[:nDst]...)
-	rest := b[nSrc:]
-	switch {
-	case err == transform.ErrShortSrc:
-		carry = append([]byte(nil), rest...)
-	case err != nil && len(rest) > 0:
-		carry = append([]byte(nil), rest[1:]...)
-	}
-	return
 }
 
 // ─── Shell ──────────────────────────────────────────────────
