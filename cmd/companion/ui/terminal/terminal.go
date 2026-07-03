@@ -11,8 +11,10 @@ package termpanel
 
 import (
 	"os"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/hoonfeng/gwui/dom"
@@ -51,8 +53,9 @@ type termManager struct {
 	tabBarEl *dom.Element
 	termEl   *dom.Element
 
-	tabs   []*terminalState
-	active int
+	tabs    []*terminalState
+	active  int
+	focused bool
 }
 
 func newTermManager() *termManager {
@@ -140,10 +143,35 @@ func New(doc *dom.Document) *termManager {
 	theTermMgr.renderTabBar()
 	theTermMgr.renderActiveTerm()
 
-	// 键盘事件
+	// 注册可聚焦组件：使点击终端时能被 GWui 焦点系统识别
+	doc.RegisterComponent(theTermMgr.termEl, &termFocusable{})
+
+	// 焦点跟踪：用于控制光标显示
+	on(theTermMgr.termEl, event.FocusIn, func(e event.Event) bool {
+		theTermMgr.focused = true
+		theTermMgr.Refresh()
+		return true
+	})
+	on(theTermMgr.termEl, event.FocusOut, func(e event.Event) bool {
+		theTermMgr.focused = false
+		theTermMgr.Refresh()
+		return true
+	})
+
+	// 键盘事件（KeyDown：控制键/功能键）
 	on(theTermMgr.termEl, event.KeyDown, func(e event.Event) bool {
 		ke, ok := e.(*event.KeyboardEvent)
 		if !ok || theTerminal == nil {
+			return false
+		}
+		theTerminal.handleKey(ke)
+		return true
+	})
+
+	// 键盘事件（KeyPress：可打印字符——GWui 的 SetCharCallback 通过 KeyPress 分发）
+	on(theTermMgr.termEl, event.KeyPress, func(e event.Event) bool {
+		ke, ok := e.(*event.KeyboardEvent)
+		if !ok || theTerminal == nil || ke.Char == 0 {
 			return false
 		}
 		theTerminal.handleKey(ke)
@@ -164,6 +192,8 @@ func New(doc *dom.Document) *termManager {
 		if !ok || theTerminal == nil {
 			return false
 		}
+		// 点击终端时请求焦点，确保后续键盘事件能路由到终端区域
+		theTermMgr.termEl.Focus()
 		theTerminal.onSelDown(float64(me.X), float64(me.Y))
 		return true
 	})
@@ -286,18 +316,35 @@ func (m *termManager) renderActiveTerm() {
 
 	t := m.tabs[m.active]
 	gridEl := m.doc.CreateElement("div")
-	gridEl.SetAttribute("style", "position:absolute;top:0;left:0;right:0;bottom:0;padding:4px;font-family:Consolas,'Courier New',monospace;font-size:14px;line-height:1.2;color:"+colText+";background:"+colEditor+";overflow:hidden;white-space:pre;")
+	gridEl.SetAttribute("style", "flex:1;min-height:0;padding:4px;font-family:monospace;font-size:14px;line-height:1.2;color:"+colText+";background:"+colEditor+";overflow:hidden;white-space:pre;")
 
 	t.gridEl = gridEl
-	t.renderGrid()
-
 	m.termEl.AppendChild(gridEl)
+
+	// 创建光标覆盖层（绝对定位在 grid 内 + 闪烁动画）
+	cursorEl := m.doc.CreateElement("div")
+	cursorEl.SetAttribute("style", "position:absolute;width:9px;height:17px;background:"+colCursor+";display:none;"+
+		"animation:termCursorBlink 1s step-end infinite;pointer-events:none;z-index:10;"+
+		"transition:left 0.05s,top 0.05s;")
+	// 注入 CSS keyframe（只做一次）
+	if m.doc.GetElementByID("term-cursor-style") == nil {
+		style := m.doc.CreateElement("style")
+		style.SetAttribute("id", "term-cursor-style")
+		style.SetTextContent("@keyframes termCursorBlink { 0%,100% { opacity:1; } 50% { opacity:0.15; } }")
+		m.doc.Head().AppendChild(style)
+	}
+	m.termEl.AppendChild(cursorEl)
+	t.cursorEl = cursorEl
+
+	// 启动 PTY + vterm + pump 全链路
+	t.renderGrid()
 }
 
 // ─── 单终端状态 ─────────────────────────────────────────────
 
 type terminalState struct {
-	gridEl *dom.Element
+	gridEl   *dom.Element
+	cursorEl *dom.Element
 
 	mu         sync.Mutex
 	vt         *vterm.Terminal
@@ -359,11 +406,13 @@ func (t *terminalState) reader(sess pty.PTY) {
 	for {
 		n, err := sess.Read(buf)
 		if n > 0 {
+			os.Stderr.WriteString("[reader] read " + strconv.Itoa(n) + " bytes\n")
 			t.mu.Lock()
 			t.pending = append(t.pending, buf[:n]...)
 			t.mu.Unlock()
 		}
 		if err != nil {
+			os.Stderr.WriteString("[reader] err: " + err.Error() + "\n")
 			t.mu.Lock()
 			t.alive = false
 			t.mu.Unlock()
@@ -386,7 +435,20 @@ func (t *terminalState) drain() {
 	t.mu.Unlock()
 
 	if len(data) > 0 {
+		logHex := func(prefix string, b []byte) {
+			hexStr := make([]string, len(b))
+			for i, v := range b {
+				hexStr[i] = strconv.FormatUint(uint64(v), 16)
+			}
+			maxShow := 64
+			if len(hexStr) > maxShow {
+				hexStr = hexStr[:maxShow]
+			}
+			os.Stderr.WriteString(prefix + " " + strconv.Itoa(len(b)) + " bytes: [" + strings.Join(hexStr, " ") + "]\n")
+		}
+		logHex("[drain] raw", data)
 		data = t.decodeOutput(data)
+		logHex("[drain] decoded", data)
 		before := t.vt.ScrollbackLen()
 		t.vt.Write(data)
 		if t.scrollOff > 0 {
@@ -401,6 +463,7 @@ func (t *terminalState) drain() {
 		}
 	}
 	if idle {
+		os.Stderr.WriteString("[drain] idle, stopping pump\n")
 		t.stopPump()
 	}
 }
@@ -414,13 +477,19 @@ func (t *terminalState) renderGrid() {
 	t.ensurePTY(cols, rows)
 
 	scrLen := t.vt.ScrollbackLen()
-	startRow := scrLen - rows - t.scrollOff
+	// scrollOff=0 时显示当前屏幕（scrLen ~ scrLen+rows-1），scrollOff>0 时向上滚动
+	startRow := scrLen - t.scrollOff
 	if startRow < 0 {
 		startRow = 0
 	}
+	endRow := startRow + rows
+	if endRow > scrLen+rows {
+		endRow = scrLen + rows
+	}
 
+	// 构建完整文本
 	var b strings.Builder
-	for r := startRow; r < startRow+rows && r < scrLen; r++ {
+	for r := startRow; r < endRow; r++ {
 		if r > startRow {
 			b.WriteByte('\n')
 		}
@@ -433,7 +502,79 @@ func (t *terminalState) renderGrid() {
 			b.WriteRune(ch)
 		}
 	}
-	t.gridEl.SetTextContent(b.String())
+	text := b.String()
+
+	// 调试日志
+	os.Stderr.WriteString("[renderGrid] cols=" + strconv.Itoa(cols) + " rows=" + strconv.Itoa(rows) + " textLen=" + strconv.Itoa(len(text)) + " scrollLen=" + strconv.Itoa(scrLen) + "\n")
+	if len(text) > 0 {
+		preview := text
+		if len(preview) > 120 {
+			preview = preview[:120]
+		}
+		os.Stderr.WriteString("[renderGrid] preview=" + strings.ReplaceAll(preview, "\n", "↵") + "\n")
+	}
+
+	// 完全替换元素，强制重布局
+	if theTermMgr != nil && theTermMgr.doc != nil && t.gridEl.Parent() != nil {
+		parentEl, ok := t.gridEl.Parent().(*dom.Element)
+		if ok {
+			newEl := theTermMgr.doc.CreateElement("div")
+			newEl.SetAttribute("style", "flex:1;min-height:0;padding:4px;font-family:monospace;font-size:14px;line-height:1.2;color:"+colText+";background:"+colEditor+";overflow:hidden;white-space:pre;")
+			newEl.SetTextContent(text)
+			parentEl.ReplaceChild(newEl, t.gridEl)
+			t.gridEl = newEl
+		} else {
+			t.gridEl.SetTextContent(text)
+		}
+	} else {
+		t.gridEl.SetTextContent(text)
+	}
+
+	// 验证文本是否设置成功
+	actualText := t.gridEl.TextContent()
+	os.Stderr.WriteString("[renderGrid] after SetTextContent, TextContent() len=" + strconv.Itoa(len(actualText)) + "\n")
+
+	// ── 更新光标位置 ──
+	t.updateCursor(cols, rows, scrLen, startRow)
+}
+
+func (t *terminalState) updateCursor(cols, rows, scrLen, startRow int) {
+	if t.cursorEl == nil || theTermMgr == nil || theTermMgr.doc == nil {
+		return
+	}
+	// 检查终端区域是否有焦点（用 data-focused 标记在 terminal-area 上）
+	focused := theTermMgr.focused
+
+	cx, cy := t.vt.Cursor()
+	// 光标在组合缓冲中的位置：scrolled + cursor row
+	cursorCompositeRow := scrLen + cy
+	visRow := cursorCompositeRow - startRow
+	if visRow < 0 || visRow >= rows {
+		t.cursorEl.SetAttribute("style", "display:none;")
+		return
+	}
+
+	// 计算单元格尺寸
+	padding := 4 // 与 gridEl 的 padding 一致
+	fontSize := 14.0
+	cellW := fontSize * 0.6   // 约 0.6 em = monospace 字符宽
+	cellH := fontSize * 1.2   // line-height
+	left := float64(padding) + float64(cx)*cellW
+	top := float64(padding) + float64(visRow)*cellH
+
+	disp := "block"
+	if !focused {
+		disp = "none"
+	}
+	t.cursorEl.SetAttribute("style",
+		"position:absolute;left:"+strconv.FormatFloat(left, 'f', 1, 64)+"px;"+
+			"top:"+strconv.FormatFloat(top, 'f', 1, 64)+"px;"+
+			"width:"+strconv.FormatFloat(cellW, 'f', 1, 64)+"px;"+
+			"height:"+strconv.FormatFloat(cellH, 'f', 1, 64)+"px;"+
+			"background:"+colCursor+";display:"+disp+";"+
+			"animation:termCursorBlink 1s step-end infinite;"+
+			"pointer-events:none;z-index:10;"+
+			"transition:left 0.05s,top 0.05s;")
 }
 
 // ─── 按键 → VT ─────────────────────────────────────────────
@@ -444,11 +585,42 @@ func (t *terminalState) handleKey(ev *event.KeyboardEvent) {
 		return
 	}
 	t.scrollOff = 0
+
+	// 用系统代码页编码转换：GBK 系统需把 UTF-8 输入转 GBK 后写入 ConPTY
+	// decodeOutput 方向相反（GBK→UTF-8），保证 vterm 始终处理 UTF-8。
+	enc := core.Settings.TermEncoding
+	if enc == "auto" {
+		enc = detectSystemEncoding()
+	}
+	if enc == "gbk" {
+		encoder := simplifiedchinese.GBK.NewEncoder()
+		converted, _, err := transform.Bytes(encoder, data)
+		if err == nil && len(converted) > 0 {
+			data = converted
+		} else {
+			os.Stderr.WriteString("[handleKey] gbk encode err: " + err.Error() + "; using raw utf8\n")
+		}
+	}
+
+	logHex := func(prefix string, b []byte) {
+		hexStr := make([]string, len(b))
+		for i, v := range b {
+			hexStr[i] = strconv.FormatUint(uint64(v), 16)
+		}
+		os.Stderr.WriteString(prefix + " " + strconv.Itoa(len(b)) + " bytes: [" + strings.Join(hexStr, " ") + "]\n")
+	}
+	logHex("[handleKey] writing", data)
+
 	t.mu.Lock()
 	sess := t.sess
 	t.mu.Unlock()
 	if sess != nil {
-		sess.Write(data)
+		n, err := sess.Write(data)
+		if err != nil {
+			os.Stderr.WriteString("[handleKey] write err: " + err.Error() + "\n")
+		} else {
+			os.Stderr.WriteString("[handleKey] write OK: " + strconv.Itoa(n) + " bytes\n")
+		}
 		t.startPump()
 	}
 }
@@ -509,8 +681,8 @@ func keyToVT(ev *event.KeyboardEvent) []byte {
 		return []byte{27, '[', '2', '4', '~'}
 	default:
 		if ev.Char != 0 {
-			ch := byte(ev.Char)
 			if ev.Ctrl {
+				ch := byte(ev.Char)
 				if ch >= 'a' && ch <= 'z' {
 					return []byte{ch - 'a' + 1}
 				}
@@ -518,7 +690,8 @@ func keyToVT(ev *event.KeyboardEvent) []byte {
 					return []byte{ch - 'A' + 1}
 				}
 			}
-			return []byte{ch}
+			// 用 UTF-8 编码 rune（支持中文等多字节字符；byte(ev.Char) 会截断 >255 的字符）
+			return []byte(string(ev.Char))
 		}
 	}
 	return nil
@@ -652,8 +825,10 @@ func (t *terminalState) startPump() {
 	t.mu.Unlock()
 
 	if ui.Ctx.App == nil {
+		os.Stderr.WriteString("[startPump] ui.Ctx.App is nil, CANNOT start pump\n")
 		return
 	}
+	os.Stderr.WriteString("[startPump] registering SetInterval pump\n")
 	t.pumpID = ui.Ctx.App.SetInterval(func() { t.drain() }, 30*time.Millisecond)
 }
 
@@ -754,7 +929,11 @@ func TermEncodingLabel() string {
 }
 
 func (t *terminalState) decodeOutput(b []byte) []byte {
-	if core.Settings.TermEncoding != "gbk" {
+	enc := core.Settings.TermEncoding
+	if enc == "auto" {
+		enc = detectSystemEncoding()
+	}
+	if enc != "gbk" {
 		return b
 	}
 	src := b
@@ -765,6 +944,28 @@ func (t *terminalState) decodeOutput(b []byte) []byte {
 	out, carry := gbkToUTF8(src)
 	t.decCarry = carry
 	return out
+}
+
+// detectSystemEncoding 检测 ConPTY 实际使用的输出编码。
+// OEM 代码页（GetOEMCP）是控制台子系统的默认编码，ConPTY 输出使用此编码。
+// 代码页 936（简体中文 GBK）→ 返回 "gbk"，否则返回 "utf-8"。
+func detectSystemEncoding() string {
+	mod := syscall.NewLazyDLL("kernel32.dll")
+	// OEM 代码页是控制台/ConPTY 的原始输出编码（cmd.exe / PowerShell 用此编码输出）
+	proc := mod.NewProc("GetOEMCP")
+	r, _, _ := proc.Call()
+	os.Stderr.WriteString("[encoding] GetOEMCP=" + strconv.FormatUint(uint64(r), 10) + "\n")
+	if r == 936 {
+		return "gbk"
+	}
+	// 回退：检查 ANSI 代码页（UTF-8 beta 开启时 GetACP=65001，否则 936）
+	proc2 := mod.NewProc("GetACP")
+	r2, _, _ := proc2.Call()
+	os.Stderr.WriteString("[encoding] GetACP=" + strconv.FormatUint(uint64(r2), 10) + "\n")
+	if r2 == 936 {
+		return "gbk"
+	}
+	return "utf-8"
 }
 
 func gbkToUTF8(b []byte) (out, carry []byte) {
@@ -833,6 +1034,15 @@ func ptyShellFor(code string) pty.Shell {
 	return pty.DefaultShell()
 }
 
+// ─── 可聚焦组件 ─────────────────────────────────────────────
+
+// termFocusable 实现 app.FocusableComponent 接口（HandleEvent + Focusable），
+// 使 #terminal-area 能被 GWui 焦点系统识别并接收键盘事件。
+type termFocusable struct{}
+
+func (f *termFocusable) HandleEvent(e event.Event) bool { return false }
+func (f *termFocusable) Focusable() bool                { return true }
+
 // ─── 颜色常量 ────────────────────────────────────────────────
 var (
 	colText      = ui.Text
@@ -841,6 +1051,7 @@ var (
 	colStatusBar = ui.StatusBarBg
 	colHover     = ui.HoverBg
 	colSide      = ui.SideBg
+	colCursor    = "#cccccc"
 )
 
 // ─── 事件辅助 ──────────────────────────────────────────────
