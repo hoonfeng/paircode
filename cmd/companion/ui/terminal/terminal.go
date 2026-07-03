@@ -1,9 +1,13 @@
-// 终端面板 —— 真终端：ConPTY 伪终端(pty) + VT/ANSI 屏幕模型(vterm) + DOM 网格渲染。
-// 多标签：每标签一个持久 PTY 会话喂 vterm；DOM 渲染 vterm 网格。
-// 线程模型：读协程读 PTY 原始字节进 pending(加锁)；帧泵每帧在 UI 线程把 pending 喂进 vterm
-// + 重绘 DOM 网格；久无输出停泵省电。键盘/resize/cd 都在 UI 线程。
+// 终端面板 —— 基于 TextArea 的终端。
 //
-// GWui 版：使用 dom.Document + app.SetInterval，不再依赖 goui。
+// 架构分层：
+//   TextArea（嵌入）— 文本显示、鼠标选中、光标闪烁
+//   vterm — ANSI/VT 字节流 → 单元格网格
+//   PTY — ConPTY 子进程（cmd/powershell）的 I/O
+//
+// 数据流：
+//   PTY 输出 → reader goroutine → pending(mutex) → pump(drain) → vterm.Write() → 提取网格文本 → TextArea.SetText()
+//   键盘输入 → UI 线程 handleKey → keyToVT() 转换 → PTY.Write()
 //
 //go:build windows
 
@@ -29,18 +33,10 @@ const termIdleFrames = 180
 
 var (
 	theTermMgr  *termManager
-	theTerminal *terminalState
+	theTerminal *TerminalWidget
 )
 
 func init() { theTermMgr = newTermManager() }
-
-func NewState() *terminalState {
-	cwd, err := os.Getwd()
-	if err != nil {
-		cwd = "."
-	}
-	return &terminalState{cwd: cwd, shell: "cmd", vt: vterm.New(80, 24), cols: 80, rows: 24}
-}
 
 // ─── 多标签管理器 ───────────────────────────────────────────
 
@@ -50,26 +46,19 @@ type termManager struct {
 	tabBarEl *dom.Element
 	termEl   *dom.Element
 
-	tabs    []*terminalState
-	active  int
-	focused bool
+	tabs   []*TerminalWidget
+	active int
 }
 
 func newTermManager() *termManager {
-	m := &termManager{tabs: []*terminalState{NewState()}}
-	theTerminal = m.tabs[0]
-	return m
+	return &termManager{tabs: []*TerminalWidget{nil}}
 }
 
 func (m *termManager) NewTabWithShell(code string) {
-	t := NewState()
-	t.shell = code
-	if cur := m.tabs[m.active]; cur != nil {
-		t.cwd = cur.cwd
-	}
-	m.tabs = append(m.tabs, t)
+	tw := newTerminalWidget(code, m)
+	m.tabs = append(m.tabs, tw)
 	m.active = len(m.tabs) - 1
-	theTerminal = t
+	theTerminal = tw
 	m.renderTabBar()
 	m.renderActiveTerm()
 	if ui.Ctx.App != nil {
@@ -78,12 +67,12 @@ func (m *termManager) NewTabWithShell(code string) {
 }
 
 func (m *termManager) SetActiveShell(code string) {
-	t := m.tabs[m.active]
-	if t == nil || t.shell == code {
+	tw := m.tabs[m.active]
+	if tw == nil || tw.shell == code {
 		return
 	}
-	t.shell = code
-	t.killPTY()
+	tw.shell = code
+	tw.killPTY()
 	m.renderTabBar()
 	if ui.Ctx.App != nil {
 		ui.Ctx.App.MarkDirty()
@@ -107,7 +96,9 @@ func (m *termManager) closeTab(i int) {
 	if i < 0 || i >= len(m.tabs) || len(m.tabs) == 1 {
 		return
 	}
-	m.tabs[i].killPTY()
+	if tw := m.tabs[i]; tw != nil {
+		tw.killPTY()
+	}
 	m.tabs = append(m.tabs[:i], m.tabs[i+1:]...)
 	if m.active >= len(m.tabs) {
 		m.active = len(m.tabs) - 1
@@ -128,89 +119,63 @@ func (m *termManager) closeTab(i int) {
 func New(doc *dom.Document) *termManager {
 	theTermMgr.doc = doc
 
-	// 加载 HTML 模板（资源目录 html/panels/terminal.html）
 	ui.MustLoadPanelHTML(doc, "panels/terminal.html", nil)
 	theTermMgr.rootEl = doc.GetElementByID("terminal-root")
 	theTermMgr.tabBarEl = doc.GetElementByID("terminal-tabbar")
 	theTermMgr.termEl = doc.GetElementByID("terminal-area")
 
-	// 从临时父节点（body）中分离根元素
 	ui.DetachRoot(theTermMgr.rootEl)
 
-	theTermMgr.renderTabBar()
-	theTermMgr.renderActiveTerm()
-
-	// 注册可聚焦组件：使点击终端时能被 GWui 焦点系统识别
-	doc.RegisterComponent(theTermMgr.termEl, &termFocusable{})
-
-	// 焦点跟踪：用于控制光标显示
-	on(theTermMgr.termEl, event.FocusIn, func(e event.Event) bool {
-		theTermMgr.focused = true
-		theTermMgr.Refresh()
-		return true
-	})
-	on(theTermMgr.termEl, event.FocusOut, func(e event.Event) bool {
-		theTermMgr.focused = false
-		theTermMgr.Refresh()
-		return true
-	})
-
-	// 键盘事件（KeyDown：控制键/功能键）
+	// 键盘事件路由到当前活跃的终端
 	on(theTermMgr.termEl, event.KeyDown, func(e event.Event) bool {
-		ke, ok := e.(*event.KeyboardEvent)
-		if !ok || theTerminal == nil {
+		tw := theTerminal
+		if tw == nil {
 			return false
 		}
-		theTerminal.handleKey(ke)
+		ke, ok := e.(*event.KeyboardEvent)
+		if !ok {
+			return false
+		}
+		tw.handleKey(ke)
 		return true
 	})
 
-	// 键盘事件（KeyPress：可打印字符——GWui 的 SetCharCallback 通过 KeyPress 分发）
 	on(theTermMgr.termEl, event.KeyPress, func(e event.Event) bool {
-		ke, ok := e.(*event.KeyboardEvent)
-		if !ok || theTerminal == nil || ke.Char == 0 {
+		tw := theTerminal
+		if tw == nil {
 			return false
 		}
-		theTerminal.handleKey(ke)
+		ke, ok := e.(*event.KeyboardEvent)
+		if !ok || ke.Char == 0 {
+			return false
+		}
+		tw.handleKey(ke)
 		return true
 	})
 
 	on(theTermMgr.termEl, event.Wheel, func(e event.Event) bool {
+		tw := theTerminal
+		if tw == nil {
+			return false
+		}
 		we, ok := e.(*event.WheelEvent)
-		if !ok || theTerminal == nil {
+		if !ok {
 			return false
 		}
-		theTerminal.handleWheel(float64(we.DeltaY))
+		tw.handleWheel(float64(we.DeltaY))
 		return true
 	})
 
-	on(theTermMgr.termEl, event.MouseDown, func(e event.Event) bool {
-		me, ok := e.(*event.MouseEvent)
-		if !ok || theTerminal == nil {
-			return false
-		}
-		// 点击终端时请求焦点，确保后续键盘事件能路由到终端区域
-		theTermMgr.termEl.Focus()
-		theTerminal.onSelDown(float64(me.X), float64(me.Y))
+	// 焦点跟踪
+	on(theTermMgr.termEl, event.FocusIn, func(e event.Event) bool {
+		return true
+	})
+	on(theTermMgr.termEl, event.FocusOut, func(e event.Event) bool {
 		return true
 	})
 
-	on(theTermMgr.termEl, event.MouseMove, func(e event.Event) bool {
-		me, ok := e.(*event.MouseEvent)
-		if !ok || theTerminal == nil {
-			return false
-		}
-		theTerminal.onSelDrag(float64(me.X), float64(me.Y))
-		return true
-	})
-
-	on(theTermMgr.termEl, event.MouseUp, func(e event.Event) bool {
-		if theTerminal == nil {
-			return false
-		}
-		theTerminal.onSelUp(0, 0)
-		return true
-	})
+	theTermMgr.renderTabBar()
+	theTermMgr.renderActiveTerm()
 
 	return theTermMgr
 }
@@ -225,13 +190,12 @@ func (m *termManager) Refresh() {
 	}
 }
 
-// NewTerminal 新建默认终端。
+// NewTerminal 新建默认终端（供外部调用）。
 func NewTerminal() {
 	theTermMgr.NewTabWithShell("cmd")
 }
 
 // OpenActiveTerminalDir 在活跃终端中 cd 到指定目录。
-// 若没有活跃终端则新建一个。
 func OpenActiveTerminalDir(dir string) {
 	if theTerminal == nil {
 		NewTerminal()
@@ -242,9 +206,12 @@ func OpenActiveTerminalDir(dir string) {
 }
 
 func (m *termManager) renderTabBar() {
+	if m.tabBarEl == nil {
+		return
+	}
 	m.tabBarEl.ClearChildren()
 
-	for i, t := range m.tabs {
+	for i, tw := range m.tabs {
 		idx := i
 		bg := colStatusBar
 		tc := colTextDim
@@ -257,9 +224,13 @@ func (m *termManager) renderTabBar() {
 		tab.SetAttribute("style", "display:flex;flex-direction:row;align-items:center;padding:0 10px;height:28px;cursor:pointer;background:"+bg+";flex-shrink:0;")
 		tab.SetAttribute("hover-style", "background:"+colHover+";")
 
+		shellCode := "cmd"
+		if tw != nil {
+			shellCode = tw.shell
+		}
 		label := m.doc.CreateElement("div")
 		label.SetAttribute("style", "color:"+tc+";font-size:11px;white-space:nowrap;")
-		label.SetTextContent(shellLabel(t.shell))
+		label.SetTextContent(shellLabel(shellCode))
 		tab.AppendChild(label)
 
 		on(tab, event.Click, func(e event.Event) bool {
@@ -306,46 +277,47 @@ func (m *termManager) renderTabBar() {
 }
 
 func (m *termManager) renderActiveTerm() {
+	if m.termEl == nil {
+		return
+	}
 	m.termEl.ClearChildren()
 	if m.active < 0 || m.active >= len(m.tabs) {
 		return
 	}
 
-	t := m.tabs[m.active]
-	gridEl := m.doc.CreateElement("div")
-	gridEl.SetAttribute("style", "flex:1;min-height:0;padding:4px;font-family:monospace-cjk;font-size:14px;line-height:1.2;color:"+colText+";background:"+colEditor+";overflow:hidden;white-space:pre;")
-
-	// 根据实际面板尺寸调整 PTY/vterm 的列行数
-	t.resizeFromPanel(m.termEl)
-
-	t.gridEl = gridEl
-	m.termEl.AppendChild(gridEl)
-
-	// 创建光标覆盖层（绝对定位在 grid 内 + 闪烁动画）
-	cursorEl := m.doc.CreateElement("div")
-	cursorEl.SetAttribute("style", "position:absolute;width:9px;height:17px;background:"+colCursor+";display:none;"+
-		"animation:termCursorBlink 1s step-end infinite;pointer-events:none;z-index:10;"+
-		"transition:left 0.05s,top 0.05s;")
-	// 注入 CSS keyframe（只做一次）
-	if m.doc.GetElementByID("term-cursor-style") == nil {
-		style := m.doc.CreateElement("style")
-		style.SetAttribute("id", "term-cursor-style")
-		style.SetTextContent("@keyframes termCursorBlink { 0%,100% { opacity:1; } 50% { opacity:0.15; } }")
-		m.doc.Head().AppendChild(style)
+	tw := m.tabs[m.active]
+	if tw == nil {
+		// 首次：创建第一个终端
+		tw = newTerminalWidget("cmd", m)
+		m.tabs[m.active] = tw
+		theTerminal = tw
 	}
-	m.termEl.AppendChild(cursorEl)
-	t.cursorEl = cursorEl
 
-	// 启动 PTY + vterm + pump 全链路
-	t.renderGrid()
+	// 将 TextArea 元素放入 #terminal-area
+	m.termEl.AppendChild(tw.textArea.Element())
+
+	// 根据面板尺寸 resize
+	tw.resizeFromPanel(m.termEl)
+
+	// 聚焦终端区域（使键盘事件能到达）
+	m.termEl.Focus()
+
+	// 启动 PTY（如有 pending 数据则保持运行）
+	tw.ensurePTY()
+	_ = tw // 启动 pump
 }
 
-// ─── 单终端状态 ─────────────────────────────────────────────
+// ─── 单终端：TerminalWidget ─────────────────────────────────
 
-type terminalState struct {
-	gridEl   *dom.Element
-	cursorEl *dom.Element
+// TerminalWidget 基于 TextArea 的终端组件。
+// TextArea 处理：文本显示（等宽/无 CJK 问题）、鼠标选中/拖拽、光标闪烁。
+// 本组件处理：键盘 → PTY、PTY→vterm→TextArea 显示、回滚。
+type TerminalWidget struct {
+	textArea *component.TextArea // 显示层
+	doc      *dom.Document
+	tabIdx   int
 
+	// PTY + vterm
 	mu         sync.Mutex
 	vt         *vterm.Terminal
 	sess       pty.PTY
@@ -359,267 +331,344 @@ type terminalState struct {
 	scrollOff  int
 	pumpID     int
 
-	selecting    bool
-	hasSel       bool
-	selAR, selAC int
-	selCR, selCC int
+	// 单元格尺寸缓存（用于 resize/滚动计算）
 	cellW, cellH float64
+
+	// 光标跟踪
+	focused bool
 }
 
-type vtSel struct {
-	rowA, colA int
-	rowB, colB int
+func newTerminalWidget(shell string, mgr *termManager) *TerminalWidget {
+	cwd, _ := os.Getwd()
+
+	ta := component.NewTextArea(mgr.doc, "", 0, 0)
+
+	// 设置终端样式
+	ta.SetBaseStyle(
+		"flex:1;min-height:0;"+
+			"font-family:monospace;font-size:14px;line-height:1.2;"+
+			"color:"+colText+";background:"+colEditor+";"+
+			"padding:4px;"+
+			"overflow:hidden;"+
+			"white-space:pre;"+
+			"border:none;outline:none;"+
+			"box-shadow:none;")
+
+	// 移除 contenteditable（终端不自编辑文本，输入路由到 PTY）
+	ta.Element().RemoveAttribute("contenteditable")
+	// 设置 tabindex=0 使元素可聚焦
+	ta.Element().SetAttribute("tabindex", "0")
+
+	tw := &TerminalWidget{
+		textArea: ta,
+		doc:      mgr.doc,
+		vt:       vterm.New(80, 24),
+		shell:    shell,
+		cwd:      cwd,
+		cols:     80,
+		rows:     24,
+		cellW:    14.0 * 0.6,
+		cellH:    14.0 * 1.2,
+		tabIdx:   len(mgr.tabs),
+	}
+
+	// 注册 TerminalWidget 作为 TextArea 元素的组件，覆盖 TextArea 自身的注册
+	mgr.doc.RegisterComponent(ta.Element(), tw)
+
+	// 点击时聚焦
+	on(ta.Element(), event.MouseDown, func(e event.Event) bool {
+		ta.Element().Focus()
+		return false
+	})
+
+	return tw
 }
 
-func (t *terminalState) ensurePTY(cols, rows int) {
-	t.mu.Lock()
-	if t.alive || t.failed {
-		t.mu.Unlock()
+// HandleEvent 实现 ComponentHandler 接口。
+// 键盘事件 → PTY；鼠标事件 → TextArea（选中/拖拽/复制）；其他 → 回退。
+func (tw *TerminalWidget) HandleEvent(e event.Event) bool {
+	switch e.Type() {
+	case event.KeyDown, event.KeyPress:
+		ke, ok := e.(*event.KeyboardEvent)
+		if !ok {
+			return false
+		}
+		tw.handleKey(ke)
+		return true
+
+	case event.MouseDown:
+		return tw.textArea.HandleEvent(e)
+
+	case event.MouseMove:
+		return tw.textArea.HandleEvent(e)
+
+	case event.MouseUp:
+		tw.textArea.HandleEvent(e)
+		// 选中结束时自动复制到剪贴板
+		if tw.textArea.HasSelection() {
+			text := tw.textArea.SelectedText()
+			if text != "" {
+				component.CopyToClipboard(text)
+				os.Stderr.WriteString("[terminal] auto-copied " + strconv.Itoa(len(text)) + " chars\n")
+			}
+		}
+		return true
+
+	case event.FocusIn:
+		tw.focused = true
+		return tw.textArea.HandleEvent(e)
+
+	case event.FocusOut:
+		tw.focused = false
+		return tw.textArea.HandleEvent(e)
+
+	default:
+		return false
+	}
+}
+
+func (tw *TerminalWidget) Focusable() bool { return true }
+
+// Element 返回终端组件的根 DOM 元素（即 TextArea 的元素）。
+func (tw *TerminalWidget) Element() *dom.Element { return tw.textArea.Element() }
+
+// ─── PTY 管理 ─────────────────────────────────────────────────
+
+func (tw *TerminalWidget) ensurePTY() {
+	tw.mu.Lock()
+	if tw.alive || tw.failed {
+		tw.mu.Unlock()
 		return
 	}
-	t.mu.Unlock()
+	tw.mu.Unlock()
 
-	sess, err := pty.Start(ptyShellFor(t.shell), t.cwd, cols, rows)
+	cols := tw.cols
+	if cols < 10 {
+		cols = 80
+	}
+	rows := tw.rows
+	if rows < 3 {
+		rows = 24
+	}
+
+	sess, err := pty.Start(ptyShellFor(tw.shell), tw.cwd, cols, rows)
 	if err != nil {
-		t.mu.Lock()
-		t.failed = true
-		t.mu.Unlock()
-		t.vt = vterm.New(cols, rows)
-		t.vt.Write([]byte("[终端启动失败: " + err.Error() + "]\r\n"))
-		t.renderGrid()
+		tw.mu.Lock()
+		tw.failed = true
+		tw.mu.Unlock()
+		tw.vt = vterm.New(cols, rows)
+		tw.vt.Write([]byte("[终端启动失败: " + err.Error() + "]\r\n"))
+		tw.syncDisplay()
 		if ui.Ctx.App != nil {
 			ui.Ctx.App.MarkDirty()
 		}
 		return
 	}
-	t.vt = vterm.New(cols, rows)
-	t.mu.Lock()
-	t.sess, t.alive, t.cols, t.rows = sess, true, cols, rows
-	t.mu.Unlock()
-	go t.reader(sess)
-	t.startPump()
+	tw.vt = vterm.New(cols, rows)
+	tw.mu.Lock()
+	tw.sess, tw.alive, tw.cols, tw.rows = sess, true, cols, rows
+	tw.mu.Unlock()
+	go tw.reader(sess)
+	tw.startPump()
 }
 
-func (t *terminalState) reader(sess pty.PTY) {
+func (tw *TerminalWidget) reader(sess pty.PTY) {
 	buf := make([]byte, 4096)
 	for {
 		n, err := sess.Read(buf)
 		if n > 0 {
-			os.Stderr.WriteString("[reader] read " + strconv.Itoa(n) + " bytes\n")
-			t.mu.Lock()
-			t.pending = append(t.pending, buf[:n]...)
-			t.mu.Unlock()
+			tw.mu.Lock()
+			tw.pending = append(tw.pending, buf[:n]...)
+			tw.mu.Unlock()
 		}
 		if err != nil {
 			os.Stderr.WriteString("[reader] err: " + err.Error() + "\n")
-			t.mu.Lock()
-			t.alive = false
-			t.mu.Unlock()
+			tw.mu.Lock()
+			tw.alive = false
+			tw.mu.Unlock()
 			return
 		}
 	}
 }
 
-func (t *terminalState) drain() {
-	t.mu.Lock()
-	var data []byte
-	if len(t.pending) > 0 {
-		data = t.pending
-		t.pending = nil
-		t.idleFrames = 0
-	} else {
-		t.idleFrames++
+func (tw *TerminalWidget) startPump() {
+	tw.mu.Lock()
+	tw.idleFrames = 0
+	if tw.pumpID != 0 {
+		tw.mu.Unlock()
+		return
 	}
-	idle := t.idleFrames > termIdleFrames
-	t.mu.Unlock()
+	tw.mu.Unlock()
+
+	if ui.Ctx.App == nil {
+		return
+	}
+	tw.pumpID = ui.Ctx.App.SetInterval(func() { tw.drain() }, 30*time.Millisecond)
+}
+
+func (tw *TerminalWidget) stopPump() {
+	tw.mu.Lock()
+	id := tw.pumpID
+	tw.pumpID = 0
+	tw.mu.Unlock()
+	if id != 0 && ui.Ctx.App != nil {
+		ui.Ctx.App.ClearInterval(id)
+	}
+}
+
+func (tw *TerminalWidget) killPTY() {
+	tw.mu.Lock()
+	sess := tw.sess
+	tw.sess, tw.alive, tw.failed = nil, false, false
+	tw.mu.Unlock()
+	if sess != nil {
+		sess.Close()
+	}
+	tw.stopPump()
+}
+
+func (tw *TerminalWidget) drain() {
+	tw.mu.Lock()
+	var data []byte
+	if len(tw.pending) > 0 {
+		data = tw.pending
+		tw.pending = nil
+		tw.idleFrames = 0
+	} else {
+		tw.idleFrames++
+	}
+	idle := tw.idleFrames > termIdleFrames
+	tw.mu.Unlock()
 
 	if len(data) > 0 {
-		logHex := func(prefix string, b []byte) {
-			hexStr := make([]string, len(b))
-			for i, v := range b {
-				hexStr[i] = strconv.FormatUint(uint64(v), 16)
-			}
-			maxShow := 64
-			if len(hexStr) > maxShow {
-				hexStr = hexStr[:maxShow]
-			}
-			os.Stderr.WriteString(prefix + " " + strconv.Itoa(len(b)) + " bytes: [" + strings.Join(hexStr, " ") + "]\n")
-		}
-		logHex("[drain] raw", data)
-		// 原始字节直通 vterm（系统 ConPTY 输出已是 UTF-8，不需任何编码转换）
-		before := t.vt.ScrollbackLen()
-		t.vt.Write(data)
-		if t.scrollOff > 0 {
-			t.scrollOff += t.vt.ScrollbackLen() - before
-			if mx := t.vt.ScrollbackLen(); t.scrollOff > mx {
-				t.scrollOff = mx
-			}
-		}
-		t.renderGrid()
+		tw.ensurePTY()
+		tw.vt.Write(data)
+		tw.syncDisplay()
 		if ui.Ctx.App != nil {
 			ui.Ctx.App.MarkDirty()
 		}
 	}
 	if idle {
-		os.Stderr.WriteString("[drain] idle, stopping pump\n")
-		t.stopPump()
+		tw.stopPump()
 	}
 }
 
-func (t *terminalState) renderGrid() {
-	if t.gridEl == nil || t.vt == nil {
+// syncDisplay 提取 vterm 网格文本显示到 TextArea。
+func (tw *TerminalWidget) syncDisplay() {
+	if tw.vt == nil {
 		return
 	}
 
-	cols, rows := t.vt.Size()
-	t.ensurePTY(cols, rows)
+	cols, rows := tw.vt.Size()
+	scrLen := tw.vt.ScrollbackLen()
 
-	scrLen := t.vt.ScrollbackLen()
-	// scrollOff=0 时显示当前屏幕（scrLen ~ scrLen+rows-1），scrollOff>0 时向上滚动
-	startRow := scrLen - t.scrollOff
+	// scrollOff=0 显示当前屏，>0 显示回滚历史
+	startRow := scrLen - tw.scrollOff
 	if startRow < 0 {
 		startRow = 0
 	}
 	endRow := startRow + rows
-	if endRow > scrLen+rows {
-		endRow = scrLen + rows
-	}
 
-	// 构建完整文本（去掉每行尾随空格，避免大量空白撑宽 DOM 破坏显示）
 	var b strings.Builder
-	for r := startRow; r < endRow; r++ {
+	for r := startRow; r < endRow && r < scrLen+rows; r++ {
 		if r > startRow {
 			b.WriteByte('\n')
 		}
-		rowData := t.vt.RowAt(r)
-		// 找到最后一个非空白字符位置
+		rowData := tw.vt.RowAt(r)
+		// 找最后一个非空字符
 		lastNonSpace := -1
 		for c := 0; c < cols; c++ {
-			var ch rune
+			var ch rune = ' '
 			if c < len(rowData) && rowData[c].Ch != 0 {
 				ch = rowData[c].Ch
-			} else {
-				ch = ' '
 			}
 			if ch != ' ' {
 				lastNonSpace = c
 			}
 		}
+		// 写字符（跳过 Ch==0 续格和尾随空格）
 		for c := 0; c <= lastNonSpace; c++ {
-			var ch rune
+			if c < len(rowData) && rowData[c].Ch == 0 {
+				continue // 跳过宽字符续格
+			}
+			var ch rune = ' '
 			if c < len(rowData) && rowData[c].Ch != 0 {
 				ch = rowData[c].Ch
-			} else {
-				ch = ' '
 			}
 			b.WriteRune(ch)
 		}
 	}
 	text := b.String()
 
+	// 设置 TextArea 文本（这会触发 onRender 更新 DOM 和 data-cursor-pos）
+	tw.textArea.SetText(text)
+
 	// 调试日志
-	os.Stderr.WriteString("[renderGrid] cols=" + strconv.Itoa(cols) + " rows=" + strconv.Itoa(rows) + " textLen=" + strconv.Itoa(len(text)) + " scrollLen=" + strconv.Itoa(scrLen) + "\n")
 	if len(text) > 0 {
 		preview := text
-		if len(preview) > 120 {
-			preview = preview[:120]
+		if len(preview) > 80 {
+			preview = preview[:80]
 		}
-		os.Stderr.WriteString("[renderGrid] preview=" + strings.ReplaceAll(preview, "\n", "↵") + "\n")
+		os.Stderr.WriteString("[syncDisplay] rows=" + strconv.Itoa(rows) + " text=" + strings.ReplaceAll(preview, "\n", "↵") + "\n")
 	}
-
-	// 完全替换元素，强制重布局
-	if theTermMgr != nil && theTermMgr.doc != nil && t.gridEl.Parent() != nil {
-		parentEl, ok := t.gridEl.Parent().(*dom.Element)
-		if ok {
-			newEl := theTermMgr.doc.CreateElement("div")
-			newEl.SetAttribute("style", "flex:1;min-height:0;padding:4px;font-family:monospace-cjk;font-size:14px;line-height:1.2;color:"+colText+";background:"+colEditor+";overflow:hidden;white-space:pre;")
-			newEl.SetTextContent(text)
-			parentEl.ReplaceChild(newEl, t.gridEl)
-			t.gridEl = newEl
-		} else {
-			t.gridEl.SetTextContent(text)
-		}
-	} else {
-		t.gridEl.SetTextContent(text)
-	}
-
-	// 验证文本是否设置成功
-	actualText := t.gridEl.TextContent()
-	os.Stderr.WriteString("[renderGrid] after SetTextContent, TextContent() len=" + strconv.Itoa(len(actualText)) + "\n")
-
-	// ── 更新光标位置 ──
-	t.updateCursor(cols, rows, scrLen, startRow)
 }
 
-func (t *terminalState) updateCursor(cols, rows, scrLen, startRow int) {
-	if t.cursorEl == nil || theTermMgr == nil || theTermMgr.doc == nil {
+// ─── Resize ──────────────────────────────────────────────────
+
+func (tw *TerminalWidget) resizeFromPanel(panelEl *dom.Element) {
+	l, t_, r, b := panelEl.GetBoundingClientRect()
+	panelW := r - l
+	panelH := b - t_
+	if panelW < 10 || panelH < 10 {
 		return
 	}
-	// 检查终端区域是否有焦点（用 data-focused 标记在 terminal-area 上）
-	focused := theTermMgr.focused
-
-	cx, cy := t.vt.Cursor()
-	// 光标在组合缓冲中的位置：scrolled + cursor row
-	cursorCompositeRow := scrLen + cy
-	visRow := cursorCompositeRow - startRow
-	if visRow < 0 || visRow >= rows {
-		t.cursorEl.SetAttribute("style", "display:none;")
-		return
-	}
-
-	// 计算单元格尺寸
-	padding := 4 // 与 gridEl 的 padding 一致
+	padding := 4.0 * 2
 	fontSize := 14.0
-	cellW := fontSize * 0.6   // 约 0.6 em = monospace 字符宽
-	cellH := fontSize * 1.2   // line-height
-	left := float64(padding) + float64(cx)*cellW
-	top := float64(padding) + float64(visRow)*cellH
-
-	disp := "block"
-	if !focused {
-		disp = "none"
+	cellW := fontSize * 0.6
+	cellH := fontSize * 1.2
+	newCols := int((float64(panelW) - padding) / cellW)
+	newRows := int((float64(panelH) - padding) / cellH)
+	if newCols < 10 {
+		newCols = 10
 	}
-	t.cursorEl.SetAttribute("style",
-		"position:absolute;left:"+strconv.FormatFloat(left, 'f', 1, 64)+"px;"+
-			"top:"+strconv.FormatFloat(top, 'f', 1, 64)+"px;"+
-			"width:"+strconv.FormatFloat(cellW, 'f', 1, 64)+"px;"+
-			"height:"+strconv.FormatFloat(cellH, 'f', 1, 64)+"px;"+
-			"background:"+colCursor+";display:"+disp+";"+
-			"animation:termCursorBlink 1s step-end infinite;"+
-			"pointer-events:none;z-index:10;"+
-			"transition:left 0.05s,top 0.05s;")
+	if newRows < 3 {
+		newRows = 3
+	}
+	tw.cellW, tw.cellH = cellW, cellH
+	tw.resizeTo(newCols, newRows)
 }
 
-// ─── 按键 → VT ─────────────────────────────────────────────
+func (tw *TerminalWidget) resizeTo(cols, rows int) {
+	tw.mu.Lock()
+	if cols == tw.cols && rows == tw.rows {
+		tw.mu.Unlock()
+		return
+	}
+	tw.cols, tw.rows = cols, rows
+	sess := tw.sess
+	alive := tw.alive
+	tw.mu.Unlock()
+	tw.vt.Resize(cols, rows)
+	if alive && sess != nil {
+		sess.Resize(cols, rows)
+	}
+}
 
-func (t *terminalState) handleKey(ev *event.KeyboardEvent) {
+// ─── 键盘 → VT ─────────────────────────────────────────────
+
+func (tw *TerminalWidget) handleKey(ev *event.KeyboardEvent) {
 	data := keyToVT(ev)
 	if len(data) == 0 {
 		return
 	}
-	t.scrollOff = 0
+	tw.scrollOff = 0 // 用户键入时回到当前屏
 
-	// keyToVT 输出已是 UTF-8，直接写入 ConPTY（系统接受 UTF-8，不需转 GBK）
-	logHex := func(prefix string, b []byte) {
-		hexStr := make([]string, len(b))
-		for i, v := range b {
-			hexStr[i] = strconv.FormatUint(uint64(v), 16)
-		}
-		os.Stderr.WriteString(prefix + " " + strconv.Itoa(len(b)) + " bytes: [" + strings.Join(hexStr, " ") + "]\n")
-	}
-	logHex("[handleKey] writing", data)
-
-	t.mu.Lock()
-	sess := t.sess
-	t.mu.Unlock()
+	tw.mu.Lock()
+	sess := tw.sess
+	tw.mu.Unlock()
 	if sess != nil {
-		n, err := sess.Write(data)
-		if err != nil {
-			os.Stderr.WriteString("[handleKey] write err: " + err.Error() + "\n")
-		} else {
-			os.Stderr.WriteString("[handleKey] write OK: " + strconv.Itoa(n) + " bytes\n")
-		}
-		t.startPump()
+		sess.Write(data)
+		tw.startPump()
 	}
 }
 
@@ -688,7 +737,6 @@ func keyToVT(ev *event.KeyboardEvent) []byte {
 					return []byte{ch - 'A' + 1}
 				}
 			}
-			// 用 UTF-8 编码 rune（支持中文等多字节字符；byte(ev.Char) 会截断 >255 的字符）
 			return []byte(string(ev.Char))
 		}
 	}
@@ -697,210 +745,80 @@ func keyToVT(ev *event.KeyboardEvent) []byte {
 
 // ─── 滚轮回看 ──────────────────────────────────────────────
 
-func (t *terminalState) handleWheel(deltaY float64) {
-	off := t.scrollOff + int(deltaY)*3
-	if mx := t.vt.ScrollbackLen(); off > mx {
+func (tw *TerminalWidget) handleWheel(deltaY float64) {
+	off := tw.scrollOff + int(deltaY)*3
+	if mx := tw.vt.ScrollbackLen(); off > mx {
 		off = mx
 	}
 	if off < 0 {
 		off = 0
 	}
-	if off != t.scrollOff {
-		t.scrollOff = off
-		t.renderGrid()
+	if off != tw.scrollOff {
+		tw.scrollOff = off
+		tw.syncDisplay()
 		if ui.Ctx.App != nil {
 			ui.Ctx.App.MarkDirty()
 		}
 	}
 }
 
-// ─── 鼠标选区 ──────────────────────────────────────────────
-
-func (t *terminalState) cellAt(localX, localY float64) (row, col int) {
-	if t.cellW <= 0 || t.cellH <= 0 {
-		return 0, 0
-	}
-	col = int(localX / t.cellW)
-	if col < 0 {
-		col = 0
-	}
-	vr := int(localY / t.cellH)
-	if vr < 0 {
-		vr = 0
-	}
-	row = (t.vt.ScrollbackLen() - t.scrollOff) + vr
-	return
-}
-
-func (t *terminalState) onSelDown(x, y float64) {
-	t.selAR, t.selAC = t.cellAt(x, y)
-	t.selCR, t.selCC = t.selAR, t.selAC
-	t.selecting, t.hasSel = true, false
-}
-
-func (t *terminalState) onSelDrag(x, y float64) {
-	if !t.selecting {
-		return
-	}
-	t.selCR, t.selCC = t.cellAt(x, y)
-	t.hasSel = t.selCR != t.selAR || t.selCC != t.selAC
-}
-
-func (t *terminalState) onSelUp(x, y float64) {
-	t.selecting = false
-	if t.hasSel {
-		text := t.copySelection()
-		if text != "" {
-			component.CopyToClipboard(text)
-			os.Stderr.WriteString("[terminal] copied " + strconv.Itoa(len(text)) + " chars to clipboard\n")
-		}
-	}
-}
-
-func (t *terminalState) copySelection() string {
-	s := t.normSel()
-	if s == nil {
-		return ""
-	}
-	cols, _ := t.vt.Size()
-	var b strings.Builder
-	for r := s.rowA; r <= s.rowB; r++ {
-		row := t.vt.RowAt(r)
-		c0, c1 := 0, cols
-		if r == s.rowA {
-			c0 = s.colA
-		}
-		if r == s.rowB {
-			c1 = s.colB
-		}
-		var line []rune
-		for c := c0; c < c1; c++ {
-			ch := ' '
-			if c < len(row) && row[c].Ch != 0 {
-				ch = row[c].Ch
-			}
-			line = append(line, ch)
-		}
-		b.WriteString(strings.TrimRight(string(line), " "))
-		if r < s.rowB {
-			b.WriteByte('\n')
-		}
-	}
-	return b.String()
-}
-
-func (t *terminalState) normSel() *vtSel {
-	if !t.hasSel {
-		return nil
-	}
-	rA, cA, rB, cB := t.selAR, t.selAC, t.selCR, t.selCC
-	if rA > rB || (rA == rB && cA > cB) {
-		rA, cA, rB, cB = rB, cB, rA, cA
-	}
-	return &vtSel{rA, cA, rB, cB}
-}
-
-// resizeFromPanel 根据面板元素实际像素尺寸计算并调整 PTY/vterm 的列行数。
-func (t *terminalState) resizeFromPanel(panelEl *dom.Element) {
-	l, t_, r, b := panelEl.GetBoundingClientRect()
-	panelW := r - l
-	panelH := b - t_
-	if panelW < 10 || panelH < 10 {
-		return
-	}
-	padding := 4.0 * 2 // left+right 的 padding
-	fontSize := 14.0
-	cellW := fontSize * 0.6
-	cellH := fontSize * 1.2
-	newCols := int((float64(panelW) - padding) / cellW)
-	newRows := int((float64(panelH) - padding) / cellH)
-	if newCols < 10 {
-		newCols = 10
-	}
-	if newRows < 3 {
-		newRows = 3
-	}
-	t.resizeTo(newCols, newRows)
-}
-
-// ─── PTY ────────────────────────────────────────────────────
-
-func (t *terminalState) resizeTo(cols, rows int) {
-	t.mu.Lock()
-	if !t.alive || (cols == t.cols && rows == t.rows) {
-		t.mu.Unlock()
-		return
-	}
-	t.cols, t.rows = cols, rows
-	sess := t.sess
-	t.mu.Unlock()
-	t.vt.Resize(cols, rows)
-	if sess != nil {
-		sess.Resize(cols, rows)
-	}
-}
-
-func (t *terminalState) startPump() {
-	t.mu.Lock()
-	t.idleFrames = 0
-	if t.pumpID != 0 {
-		t.mu.Unlock()
-		return
-	}
-	t.mu.Unlock()
-
-	if ui.Ctx.App == nil {
-		os.Stderr.WriteString("[startPump] ui.Ctx.App is nil, CANNOT start pump\n")
-		return
-	}
-	os.Stderr.WriteString("[startPump] registering SetInterval pump\n")
-	t.pumpID = ui.Ctx.App.SetInterval(func() { t.drain() }, 30*time.Millisecond)
-}
-
-func (t *terminalState) stopPump() {
-	t.mu.Lock()
-	id := t.pumpID
-	t.pumpID = 0
-	t.mu.Unlock()
-	if id != 0 && ui.Ctx.App != nil {
-		ui.Ctx.App.ClearInterval(id)
-	}
-}
-
-func (t *terminalState) killPTY() {
-	t.mu.Lock()
-	sess := t.sess
-	t.sess, t.alive, t.failed = nil, false, false
-	t.mu.Unlock()
-	if sess != nil {
-		sess.Close()
-	}
-	t.stopPump()
-}
-
 // ─── 操作 ────────────────────────────────────────────────────
 
-func (t *terminalState) OpenDir(dir string) {
-	t.cwd = dir
-	t.mu.Lock()
-	sess := t.sess
-	t.mu.Unlock()
+func (tw *TerminalWidget) OpenDir(dir string) {
+	tw.cwd = dir
+	tw.mu.Lock()
+	sess := tw.sess
+	tw.mu.Unlock()
 	if sess != nil {
 		sess.Write([]byte("cd /d \"" + dir + "\"\r"))
-		t.startPump()
+		tw.startPump()
 	}
 	if ui.Ctx.App != nil {
 		ui.Ctx.App.MarkDirty()
 	}
 }
 
-func (t *terminalState) CopyAll() string {
-	cols, rows := t.vt.Size()
+func (tw *TerminalWidget) ClearScreen() {
+	tw.mu.Lock()
+	sess := tw.sess
+	tw.mu.Unlock()
+	cmd := "clear\r"
+	if tw.shell == "cmd" {
+		cmd = "cls\r"
+	}
+	if sess != nil {
+		sess.Write([]byte(cmd))
+		tw.startPump()
+	} else {
+		tw.vt = vterm.New(tw.cols, tw.rows)
+		tw.syncDisplay()
+		if ui.Ctx.App != nil {
+			ui.Ctx.App.MarkDirty()
+		}
+	}
+}
+
+func (tw *TerminalWidget) PasteToInput() {
+	tw.mu.Lock()
+	sess := tw.sess
+	tw.mu.Unlock()
+	if sess != nil {
+		// TODO: 从剪贴板读取文本
+		tw.startPump()
+	}
+}
+
+// CopyAll 返回当前屏可见文本（用于菜单"全选复制"）。
+func (tw *TerminalWidget) CopyAll() string {
+	if tw.vt == nil {
+		return ""
+	}
+	cols, rows := tw.vt.Size()
 	var b strings.Builder
 	for r := 0; r < rows; r++ {
 		line := make([]rune, 0, cols)
 		for c := 0; c < cols; c++ {
-			if ch := t.vt.Cell(r, c).Ch; ch != 0 {
+			if ch := tw.vt.Cell(r, c).Ch; ch != 0 {
 				line = append(line, ch)
 			}
 		}
@@ -910,41 +828,7 @@ func (t *terminalState) CopyAll() string {
 	return b.String()
 }
 
-func (t *terminalState) PasteToInput() {
-	t.mu.Lock()
-	sess := t.sess
-	t.mu.Unlock()
-	if sess != nil {
-		sess.Write([]byte(t.clipboardText()))
-		t.startPump()
-	}
-}
-
-func (t *terminalState) clipboardText() string {
-	return ""
-}
-
-func (t *terminalState) ClearScreen() {
-	t.mu.Lock()
-	sess := t.sess
-	t.mu.Unlock()
-	cmd := "clear\r"
-	if t.shell == "cmd" {
-		cmd = "cls\r"
-	}
-	if sess != nil {
-		sess.Write([]byte(cmd))
-		t.startPump()
-	} else {
-		t.vt = vterm.New(t.cols, t.rows)
-		t.renderGrid()
-		if ui.Ctx.App != nil {
-			ui.Ctx.App.MarkDirty()
-		}
-	}
-}
-
-// ─── 编码（保留空桩供外部调用兼容）──────────────────────
+// ─── 编码（桩）─────────────────────────────────────────────
 
 func TermEncodingLabel() string {
 	return "UTF-8"
@@ -1002,16 +886,8 @@ func ptyShellFor(code string) pty.Shell {
 	return pty.DefaultShell()
 }
 
-// ─── 可聚焦组件 ─────────────────────────────────────────────
-
-// termFocusable 实现 app.FocusableComponent 接口（HandleEvent + Focusable），
-// 使 #terminal-area 能被 GWui 焦点系统识别并接收键盘事件。
-type termFocusable struct{}
-
-func (f *termFocusable) HandleEvent(e event.Event) bool { return false }
-func (f *termFocusable) Focusable() bool                { return true }
-
 // ─── 颜色常量 ────────────────────────────────────────────────
+
 var (
 	colText      = ui.Text
 	colTextDim   = ui.TextDim
@@ -1019,7 +895,6 @@ var (
 	colStatusBar = ui.StatusBarBg
 	colHover     = ui.HoverBg
 	colSide      = ui.SideBg
-	colCursor    = "#cccccc"
 )
 
 // ─── 事件辅助 ──────────────────────────────────────────────
