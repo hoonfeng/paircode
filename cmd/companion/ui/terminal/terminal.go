@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hoonfeng/gwui/component"
 	"github.com/hoonfeng/gwui/dom"
 	"github.com/hoonfeng/gwui/event"
 
@@ -312,7 +313,10 @@ func (m *termManager) renderActiveTerm() {
 
 	t := m.tabs[m.active]
 	gridEl := m.doc.CreateElement("div")
-	gridEl.SetAttribute("style", "flex:1;min-height:0;padding:4px;font-family:monospace;font-size:14px;line-height:1.2;color:"+colText+";background:"+colEditor+";overflow:hidden;white-space:pre;")
+	gridEl.SetAttribute("style", "flex:1;min-height:0;padding:4px;font-family:monospace-cjk;font-size:14px;line-height:1.2;color:"+colText+";background:"+colEditor+";overflow:hidden;white-space:pre;")
+
+	// 根据实际面板尺寸调整 PTY/vterm 的列行数
+	t.resizeFromPanel(m.termEl)
 
 	t.gridEl = gridEl
 	m.termEl.AppendChild(gridEl)
@@ -528,7 +532,7 @@ func (t *terminalState) renderGrid() {
 		parentEl, ok := t.gridEl.Parent().(*dom.Element)
 		if ok {
 			newEl := theTermMgr.doc.CreateElement("div")
-			newEl.SetAttribute("style", "flex:1;min-height:0;padding:4px;font-family:monospace;font-size:14px;line-height:1.2;color:"+colText+";background:"+colEditor+";overflow:hidden;white-space:pre;")
+			newEl.SetAttribute("style", "flex:1;min-height:0;padding:4px;font-family:monospace-cjk;font-size:14px;line-height:1.2;color:"+colText+";background:"+colEditor+";overflow:hidden;white-space:pre;")
 			newEl.SetTextContent(text)
 			parentEl.ReplaceChild(newEl, t.gridEl)
 			t.gridEl = newEl
@@ -745,7 +749,11 @@ func (t *terminalState) onSelDrag(x, y float64) {
 func (t *terminalState) onSelUp(x, y float64) {
 	t.selecting = false
 	if t.hasSel {
-		t.copySelection()
+		text := t.copySelection()
+		if text != "" {
+			component.CopyToClipboard(text)
+			os.Stderr.WriteString("[terminal] copied " + strconv.Itoa(len(text)) + " chars to clipboard\n")
+		}
 	}
 }
 
@@ -790,6 +798,29 @@ func (t *terminalState) normSel() *vtSel {
 		rA, cA, rB, cB = rB, cB, rA, cA
 	}
 	return &vtSel{rA, cA, rB, cB}
+}
+
+// resizeFromPanel 根据面板元素实际像素尺寸计算并调整 PTY/vterm 的列行数。
+func (t *terminalState) resizeFromPanel(panelEl *dom.Element) {
+	l, t_, r, b := panelEl.GetBoundingClientRect()
+	panelW := r - l
+	panelH := b - t_
+	if panelW < 10 || panelH < 10 {
+		return
+	}
+	padding := 4.0 * 2 // left+right 的 padding
+	fontSize := 14.0
+	cellW := fontSize * 0.6
+	cellH := fontSize * 1.2
+	newCols := int((float64(panelW) - padding) / cellW)
+	newRows := int((float64(panelH) - padding) / cellH)
+	if newCols < 10 {
+		newCols = 10
+	}
+	if newRows < 3 {
+		newRows = 3
+	}
+	t.resizeTo(newCols, newRows)
 }
 
 // ─── PTY ────────────────────────────────────────────────────

@@ -47,6 +47,12 @@ func coordSize(cols, rows int) uintptr {
 }
 
 // Start 起一个 ConPTY 会话跑 shell：伪控制台给 shell 真 tty → 输出行缓冲可流式 + 持久会话 + 交互式程序。
+//
+// 遵循微软官方 ConPTY 示例模式：
+// 1) 创建两条管道（stdin + stdout）
+// 2) 用管道端创建伪控制台
+// 3) 在 STARTUPINFOEX 中设置 PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE
+// 4) 子进程的 std 句柄设到 pipe 端（STARTF_USESTDHANDLES），ConPTY 通过它们重定向 I/O
 func Start(sh Shell, dir string, cols, rows int) (PTY, error) {
 	if cols <= 0 {
 		cols = 80
@@ -54,34 +60,39 @@ func Start(sh Shell, dir string, cols, rows int) (PTY, error) {
 	if rows <= 0 {
 		rows = 24
 	}
-	// 用 raw CreatePipe（同步、字节模式、可继承句柄）——os.Pipe 的句柄能读到初始序列，
-	// 但 conhost 绑不上 shell 的 stdout（已知可用 Go ConPTY 实现都用 CreatePipe + 可继承）。
 	var sa syscall.SecurityAttributes
 	sa.Length = uint32(unsafe.Sizeof(sa))
 	sa.InheritHandle = 1
-	var conIn, ptyIn, ptyOut, conOut syscall.Handle
-	if err := syscall.CreatePipe(&conIn, &ptyIn, &sa, 0); err != nil { // 输入：conIn(读,给 ConPTY) / ptyIn(写,留)
+
+	// stdin 管道：conIn（读端→给 ConPTY 和子进程）/ ptyIn（写端→父进程写键盘）
+	var conIn, ptyIn syscall.Handle
+	if err := syscall.CreatePipe(&conIn, &ptyIn, &sa, 0); err != nil {
 		return nil, err
 	}
-	if err := syscall.CreatePipe(&ptyOut, &conOut, &sa, 0); err != nil { // 输出：ptyOut(读,留) / conOut(写,给 ConPTY)
+	// stdout 管道：ptyOut（读端→父进程读输出）/ conOut（写端→给 ConPTY 和子进程）
+	var ptyOut, conOut syscall.Handle
+	if err := syscall.CreatePipe(&ptyOut, &conOut, &sa, 0); err != nil {
 		syscall.CloseHandle(conIn)
 		syscall.CloseHandle(ptyIn)
 		return nil, err
 	}
 
+	// ── 创建伪控制台 ──
 	var hpc uintptr
 	r1, _, _ := procCreatePseudoConsole.Call(coordSize(cols, rows), uintptr(conIn), uintptr(conOut), 0, uintptr(unsafe.Pointer(&hpc)))
-	syscall.CloseHandle(conIn) // 伪控制台已复制 console 侧句柄，关掉本端副本
-	syscall.CloseHandle(conOut)
 	if r1 != 0 {
+		syscall.CloseHandle(conIn)
+		syscall.CloseHandle(conOut)
 		syscall.CloseHandle(ptyIn)
 		syscall.CloseHandle(ptyOut)
 		return nil, fmt.Errorf("CreatePseudoConsole 失败: 0x%x", r1)
 	}
-	inW := os.NewFile(uintptr(ptyIn), "conpty-in")   // 写键盘
-	outR := os.NewFile(uintptr(ptyOut), "conpty-out") // 读输出
+	// 不关闭 conIn/conOut——它们将作为子进程的 std 句柄传给 CreateProcess。
+	// 父进程侧使用的句柄是 ptyIn（写键盘输入）和 ptyOut（读 shell 输出）。
+	inW := os.NewFile(uintptr(ptyIn), "conpty-in")
+	outR := os.NewFile(uintptr(ptyOut), "conpty-out")
 
-	// 进程线程属性列表（带 PSEUDOCONSOLE）：先问大小，再初始化，再 Update 挂上 hpc。
+	// ── 属性列表（挂上 PSEUDOCONSOLE） ──
 	var attrSize uintptr
 	procInitializeProcThreadAttributeList.Call(0, 1, 0, uintptr(unsafe.Pointer(&attrSize)))
 	attrList := make([]byte, attrSize)
@@ -99,11 +110,17 @@ func Start(sh Shell, dir string, cols, rows int) (PTY, error) {
 		return nil, fmt.Errorf("UpdateProcThreadAttribute: %v", e)
 	}
 
+	// ── 子进程 STARTUPINFO ──
+	// 微软 ConPTY 示例模式：
+	// - 子进程的 stdin/stdout 指向与 ConPTY 共享的同一管道端
+	// - 设置 STARTF_USESTDHANDLES，显式指定句柄
+	// - bInheritHandles=FALSE（句柄通过 STARTUPINFO 显式传递，非继承）
 	var si startupInfoEx
 	si.StartupInfo.Cb = uint32(unsafe.Sizeof(si))
-	// 关键：置 STARTF_USESTDHANDLES（std 句柄留空）→ 子进程不继承父控制台的 std 句柄，
-	// 伪控制台属性才能接管子 shell 的 I/O（否则 shell 输出跑去父控制台——之前的 bug 根因）。
 	si.StartupInfo.Flags = startfUseStdHandles
+	si.StartupInfo.StdInput = conIn   // 读端：子进程读键盘输入
+	si.StartupInfo.StdOutput = conOut // 写端：子进程写终端输出
+	si.StartupInfo.StdErr = conOut
 	si.AttributeList = &attrList[0]
 
 	cmdline := quoteCmd(sh.Path)
@@ -122,6 +139,9 @@ func Start(sh Shell, dir string, cols, rows int) (PTY, error) {
 		extendedStartupInfoPresent, 0, uintptr(unsafe.Pointer(dirPtr)),
 		uintptr(unsafe.Pointer(&si)), uintptr(unsafe.Pointer(&pi)))
 	procDeleteProcThreadAttributeList.Call(uintptr(unsafe.Pointer(&attrList[0])))
+	// CreateProcess 已复制子进程侧的句柄，父进程侧可以安全关闭
+	syscall.CloseHandle(conIn)
+	syscall.CloseHandle(conOut)
 	if r4 == 0 {
 		procClosePseudoConsole.Call(hpc)
 		inW.Close()
