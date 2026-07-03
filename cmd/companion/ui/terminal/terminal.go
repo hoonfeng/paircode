@@ -1,13 +1,14 @@
 // 终端面板 —— 基于 TextArea 的终端。
 //
 // 架构分层：
-//   TextArea（嵌入）— 文本显示、鼠标选中、光标闪烁
+//   TextArea（仅显示层）— 文本显示、等宽字体 / CJK 支持
+//   TerminalWidget（逻辑层）— 事件全部自己处理、不委托给 TextArea
 //   vterm — ANSI/VT 字节流 → 单元格网格
 //   PTY — ConPTY 子进程（cmd/powershell）的 I/O
 //
-// 数据流：
-//   PTY 输出 → reader goroutine → pending(mutex) → pump(drain) → vterm.Write() → 提取网格文本 → TextArea.SetText()
-//   键盘输入 → UI 线程 handleKey → keyToVT() 转换 → PTY.Write()
+// 关键约定：TerminalWidget 完整接管 TextArea 元素的组件注册，所有
+// HandleEvent 不调用 TextArea.HandleEvent。显示直接用 DOM 属性操作
+// （SetTextContent + 设 data-cursor-pos / data-sel-*），绕过 TextController。
 //
 //go:build windows
 
@@ -126,33 +127,7 @@ func New(doc *dom.Document) *termManager {
 
 	ui.DetachRoot(theTermMgr.rootEl)
 
-	// 键盘事件路由到当前活跃的终端
-	on(theTermMgr.termEl, event.KeyDown, func(e event.Event) bool {
-		tw := theTerminal
-		if tw == nil {
-			return false
-		}
-		ke, ok := e.(*event.KeyboardEvent)
-		if !ok {
-			return false
-		}
-		tw.handleKey(ke)
-		return true
-	})
-
-	on(theTermMgr.termEl, event.KeyPress, func(e event.Event) bool {
-		tw := theTerminal
-		if tw == nil {
-			return false
-		}
-		ke, ok := e.(*event.KeyboardEvent)
-		if !ok || ke.Char == 0 {
-			return false
-		}
-		tw.handleKey(ke)
-		return true
-	})
-
+	// 终端 Wheel 事件（在 #terminal-area 上监听，捕获可冒泡至此的 wheel）
 	on(theTermMgr.termEl, event.Wheel, func(e event.Event) bool {
 		tw := theTerminal
 		if tw == nil {
@@ -163,14 +138,6 @@ func New(doc *dom.Document) *termManager {
 			return false
 		}
 		tw.handleWheel(float64(we.DeltaY))
-		return true
-	})
-
-	// 焦点跟踪
-	on(theTermMgr.termEl, event.FocusIn, func(e event.Event) bool {
-		return true
-	})
-	on(theTermMgr.termEl, event.FocusOut, func(e event.Event) bool {
 		return true
 	})
 
@@ -287,7 +254,6 @@ func (m *termManager) renderActiveTerm() {
 
 	tw := m.tabs[m.active]
 	if tw == nil {
-		// 首次：创建第一个终端
 		tw = newTerminalWidget("cmd", m)
 		m.tabs[m.active] = tw
 		theTerminal = tw
@@ -302,21 +268,31 @@ func (m *termManager) renderActiveTerm() {
 	// 根据面板尺寸 resize
 	tw.resizeFromPanel(m.termEl)
 
-	// 聚焦终端区域（使键盘事件能到达）
-	m.termEl.Focus()
+	// 聚焦到 TextArea 元素上（键盘事件路由到 TerminalWidget.HandleEvent）
+	tw.textArea.Element().Focus()
 
-	// 启动 PTY（如有 pending 数据则保持运行）
+	// 启动 PTY
 	tw.ensurePTY()
-	_ = tw // 启动 pump
 }
 
 // ─── 单终端：TerminalWidget ─────────────────────────────────
 
 // TerminalWidget 基于 TextArea 的终端组件。
-// TextArea 处理：文本显示（等宽/无 CJK 问题）、鼠标选中/拖拽、光标闪烁。
-// 本组件处理：键盘 → PTY、PTY→vterm→TextArea 显示、回滚。
+//
+// 事件全部自己处理，不委托给 TextArea.HandleEvent（避免与 TextController
+// 内部的 cursorPos/selStart 状态冲突）。
+//
+// 显示流程（同步，主线程）：
+//   drain() → vt.Write(data) → syncDisplay() →
+//     ta.el.SetTextContent(text)          ← 不入 TextController
+//     ta.el.SetAttribute("data-cursor-pos", …) ← 直接 DOM
+//
+// 鼠标选中（全权拥有）：
+//   HandleEvent(MouseDown/Move/Up) → 自己维护 selStart/selEnd
+//   → 设 data-sel-start/end → 选中复制
+//
 type TerminalWidget struct {
-	textArea *component.TextArea // 显示层
+	textArea *component.TextArea // 仅用于显示层（元素 + 文本节点）
 	doc      *dom.Document
 	tabIdx   int
 
@@ -334,25 +310,38 @@ type TerminalWidget struct {
 	scrollOff  int
 	pumpID     int
 
-	// 单元格尺寸缓存（用于 resize/滚动计算）
+	// 单元格尺寸
 	cellW, cellH float64
+	focused      bool
+	panelEl      *dom.Element
 
-	// 光标跟踪
-	focused bool
+	// 显示文本缓存（由 syncDisplay 更新）
+	displayText string
+	// 指向 TextArea 元素中的 Text 节点（供 SetText 直接更新内容，
+	// 避免 SetTextContent 清空/重建 children 带来的不一致）
+	textNode     *dom.Text
+	// 每行信息缓存（鼠标坐标转换用）
+	// vtermRows[i] = 第 i 行在 displayText 中的 flat 文本（不含行间 \n）
+	vtermRows    []string
+	vtermColFlat []map[int]int // vtermRows[i] 的列 → rune 索引
 
-	// 面板元素引用（用于 resize 检测）
-	panelEl *dom.Element
-
-	// 当前无独立 pending 层：GWui 的 SetInterval 已在主线程执行回调（通过 fireTimers），
-	// drain() 直接在主线程调用 vt.Write + syncDisplay，无需二次派发。
+	// 鼠标选中（TerminalWidget 自管，不入 TextController）
+	selDown  bool
+	selStart int
+	selEnd   int
 }
 
+// newTerminalWidget 创建新终端控件。
+//
+// 注意：TextArea 的 NewTextArea 在内部注册了它自己为组件。
+// 调用后立即用 RegisterComponent 覆盖为 TerminalWidget，使所有事件
+// 路由到 TerminalWidget.HandleEvent，而不是 TextArea.HandleEvent。
 func newTerminalWidget(shell string, mgr *termManager) *TerminalWidget {
 	cwd, _ := os.Getwd()
 
 	ta := component.NewTextArea(mgr.doc, "", 0, 0)
 
-	// 设置终端样式 — 必须包含 width:auto 以覆盖 NewTextArea 初始的 width:0px
+	// 终端样式：必须含 width:auto 覆盖 NewTextArea 的 width:0px
 	ta.SetBaseStyle(
 		"flex:1;min-height:0;width:auto;"+
 			"font-family:monospace;font-size:14px;line-height:1.2;"+
@@ -365,7 +354,6 @@ func newTerminalWidget(shell string, mgr *termManager) *TerminalWidget {
 
 	// 移除 contenteditable（终端不自编辑文本，输入路由到 PTY）
 	ta.Element().RemoveAttribute("contenteditable")
-	// 设置 tabindex=0 使元素可聚焦
 	ta.Element().SetAttribute("tabindex", "0")
 
 	tw := &TerminalWidget{
@@ -381,20 +369,24 @@ func newTerminalWidget(shell string, mgr *termManager) *TerminalWidget {
 		tabIdx:   len(mgr.tabs),
 	}
 
-	// 注册 TerminalWidget 作为 TextArea 元素的组件，覆盖 TextArea 自身的注册
-	mgr.doc.RegisterComponent(ta.Element(), tw)
+	// 获取内置 Text 节点引用（NewTextArea 初始化时创建了一个 " " 文本节点）
+	children := ta.Element().Children()
+	if len(children) > 0 {
+		if tn, ok := children[0].(*dom.Text); ok {
+			tw.textNode = tn
+		}
+	}
 
-	// 点击时聚焦
-	on(ta.Element(), event.MouseDown, func(e event.Event) bool {
-		ta.Element().Focus()
-		return false
-	})
+	// 【关键】覆盖 TextArea 的组件注册，TerminalWidget 成为元素的事件处理器
+	mgr.doc.RegisterComponent(ta.Element(), tw)
 
 	return tw
 }
 
 // HandleEvent 实现 ComponentHandler 接口。
-// 键盘事件 → PTY；鼠标事件 → TextArea 选中/复制，但光标始终跟随 vterm。
+//
+// 【原则】绝不委托给 tw.textArea.HandleEvent。所有事件自处理。
+// 键盘 → PTY；鼠标 → 自己的选中逻辑；焦点 → 记状态。
 func (tw *TerminalWidget) HandleEvent(e event.Event) bool {
 	switch e.Type() {
 	case event.KeyDown, event.KeyPress:
@@ -406,38 +398,44 @@ func (tw *TerminalWidget) HandleEvent(e event.Event) bool {
 		return true
 
 	case event.MouseDown:
-		// 让 TextArea 处理选中开始，但恢复光标到 vterm 位置
-		tw.textArea.HandleEvent(e)
-		tw.restoreCursorPos()
+		me, ok := e.(*event.MouseEvent)
+		if !ok {
+			return false
+		}
+		tw.handleMouseDown(me)
 		return true
 
 	case event.MouseMove:
-		// TextArea 处理拖拽选中（需要它设置 selEnd），但恢复光标
-		tw.textArea.HandleEvent(e)
-		tw.restoreCursorPos()
+		if !tw.selDown {
+			return false
+		}
+		me, ok := e.(*event.MouseEvent)
+		if !ok {
+			return false
+		}
+		tw.handleMouseMove(me)
 		return true
 
 	case event.MouseUp:
-		tw.textArea.HandleEvent(e)
-		tw.restoreCursorPos()
-		// 选中结束时自动复制到剪贴板
-		if tw.textArea.HasSelection() {
-			text := tw.textArea.SelectedText()
-			if text != "" {
-				component.CopyToClipboard(text)
-				os.Stderr.WriteString("[terminal] auto-copied " + strconv.Itoa(len(text)) + " chars\n")
-			}
+		if !tw.selDown {
+			return false
 		}
+		me, ok := e.(*event.MouseEvent)
+		if !ok {
+			return false
+		}
+		tw.handleMouseUp(me)
 		return true
 
 	case event.FocusIn:
 		tw.focused = true
-		tw.restoreCursorPos()
-		return tw.textArea.HandleEvent(e)
+		return false
 
 	case event.FocusOut:
 		tw.focused = false
-		return tw.textArea.HandleEvent(e)
+		// 失焦时隐藏光标
+		tw.textArea.Element().RemoveAttribute("data-cursor-pos")
+		return false
 
 	default:
 		return false
@@ -446,24 +444,37 @@ func (tw *TerminalWidget) HandleEvent(e event.Event) bool {
 
 func (tw *TerminalWidget) Focusable() bool { return true }
 
-// calcCursorPos 计算 vterm 光标在 TextArea 文本中的 flat 索引。
-// 回看时（scrollOff>0）返回 -1（不显示光标）。
-func (tw *TerminalWidget) calcCursorPos() int {
-	if tw.vt == nil || tw.scrollOff > 0 {
-		return -1
+// Element 返回终端组件的根 DOM 元素（即 TextArea 的元素）。
+func (tw *TerminalWidget) Element() *dom.Element { return tw.textArea.Element() }
+
+// ─── 显示同步（核心）─────────────────────────────────────────
+
+// syncDisplay 从 vterm 网格提取文本，直接用 DOM 操作显示。
+//
+// 关键：不使用 TextArea.SetText（它会重置 TextController.cursorPos）。
+// 改用 ta.el.SetTextContent + 直接设 data-cursor-pos。
+func (tw *TerminalWidget) syncDisplay() {
+	if tw.vt == nil {
+		return
 	}
+
+	// 检查面板尺寸变化
+	tw.checkResize()
+
 	cols, rows := tw.vt.Size()
-	cx, cy := tw.vt.Cursor()
 	scrLen := tw.vt.ScrollbackLen()
-	startRow := scrLen
+	startRow := scrLen - tw.scrollOff
+	if startRow < 0 {
+		startRow = 0
+	}
 	endRow := startRow + rows
 
-	// 收集所有行的 flat 文本信息（与 syncDisplay 逻辑一致：不裁剪尾随空格）
-	type lineInfo struct {
-		flatLen   int         // flat 文本的 rune 长度（含尾随空格）
-		colToFlat map[int]int // vterm 列 → flat 位置
+	// 提取网格文本，缓存行信息
+	type rowInfo struct {
+		text      string
+		colToFlat map[int]int
 	}
-	var lines []lineInfo
+	var info []rowInfo
 
 	for r := startRow; r < endRow && r < scrLen+rows; r++ {
 		rowData := tw.vt.RowAt(r)
@@ -473,7 +484,7 @@ func (tw *TerminalWidget) calcCursorPos() int {
 
 		for c := 0; c < cols; c++ {
 			if c < len(rowData) && rowData[c].Ch == 0 {
-				continue
+				continue // 宽字符续格跳过
 			}
 			var ch rune = ' '
 			if c < len(rowData) && rowData[c].Ch != 0 {
@@ -485,72 +496,236 @@ func (tw *TerminalWidget) calcCursorPos() int {
 			colToFlat[c] = len(runes)
 			runes = append(runes, ch)
 		}
-		flatLen := 0
+
 		if contentful {
-			flatLen = len(runes) // 保留所有尾随空格（与 syncDisplay 一致）
+			info = append(info, rowInfo{text: string(runes), colToFlat: colToFlat})
+		} else {
+			info = append(info, rowInfo{text: "", colToFlat: colToFlat})
 		}
-		lines = append(lines, lineInfo{
-			flatLen:   flatLen,
-			colToFlat: colToFlat,
-		})
 	}
 
-	// 找最后一个非空行
-	lastNonEmpty := len(lines) - 1
-	for lastNonEmpty >= 0 && lines[lastNonEmpty].flatLen == 0 {
+	// 裁剪尾随空行
+	lastNonEmpty := len(info) - 1
+	for lastNonEmpty >= 0 && info[lastNonEmpty].text == "" {
 		lastNonEmpty--
 	}
-	if lastNonEmpty < 0 {
-		return 0
-	}
 
-	// cy 超出可见行 → 放在可见最后
-	if cy >= len(lines) {
-		cy = len(lines) - 1
-	}
-
-	// 累计光标行之前所有行的长度（含 \n）
-	pos := 0
-	maxLine := cy
-	if maxLine > lastNonEmpty {
-		maxLine = lastNonEmpty
-	}
-	for i := 0; i < maxLine; i++ {
+	// 拼接文本
+	var b strings.Builder
+	for i := 0; i <= lastNonEmpty; i++ {
 		if i > 0 {
-			pos++
+			b.WriteByte('\n')
 		}
-		pos += lines[i].flatLen
+		b.WriteString(info[i].text)
+	}
+	text := b.String()
+
+	// 【关键】用 Text.SetText 而非 Element.SetTextContent。
+	// SetTextContent 会清空 e.children 再重建 Text 节点，频繁调用可能导致
+	// 布局引擎读到不一致的 children 状态。SetText 只改节点内的字符串，
+	// 保留 children 结构稳定。
+	if tw.textNode != nil {
+		tw.textNode.SetText(text)
+	} else {
+		el := tw.textArea.Element()
+		el.SetTextContent(text)
 	}
 
-	// 光标行
-	if cy <= lastNonEmpty {
+	// 缓存显示文本和行信息（供鼠标坐标转换）
+	tw.displayText = text
+	tw.vtermRows = make([]string, lastNonEmpty+1)
+	tw.vtermColFlat = make([]map[int]int, lastNonEmpty+1)
+	for i := 0; i <= lastNonEmpty; i++ {
+		tw.vtermRows[i] = info[i].text
+		tw.vtermColFlat[i] = info[i].colToFlat
+	}
+
+	// 同步光标
+	cursorPos := tw.calcCursorPos()
+	if cursorPos >= 0 && tw.focused {
+		tw.textArea.Element().SetAttribute("data-cursor-pos", strconv.Itoa(cursorPos))
+	}
+
+	// 日志
+	logText := text
+	if len(logText) > 80 {
+		logText = logText[:80]
+	}
+	os.Stderr.WriteString("[syncDisplay] rows=" + strconv.Itoa(rows) +
+		" textLen=" + strconv.Itoa(len(text)) +
+		" cursor=" + strconv.Itoa(cursorPos) +
+		" text=" + strings.ReplaceAll(logText, "\n", "↵") + "\n")
+}
+
+// calcCursorPos 返回 vterm 光标在 flat 文本中的索引。
+// scrollOff>0（回看）时返回 -1 表示不显示光标。
+func (tw *TerminalWidget) calcCursorPos() int {
+	if tw.vt == nil || tw.scrollOff > 0 {
+		return -1
+	}
+	cx, cy := tw.vt.Cursor()
+
+	// 使用缓存的行信息
+	if cy < len(tw.vtermColFlat) {
+		pos := 0
+		for i := 0; i < cy; i++ {
+			if i > 0 {
+				pos++
+			}
+			pos += len([]rune(tw.vtermRows[i]))
+		}
 		if cy > 0 {
 			pos++ // 行间 \n
 		}
-		if flatCx, ok := lines[cy].colToFlat[cx]; ok {
-			if flatCx > lines[cy].flatLen {
-				flatCx = lines[cy].flatLen
-			}
-			pos += flatCx
+		if flat, ok := tw.vtermColFlat[cy][cx]; ok {
+			pos += flat
 		} else {
-			// cx 指向续格，放在行尾
-			pos += lines[cy].flatLen
+			// cx 对应续格，放在行尾
+			pos += len([]rune(tw.vtermRows[cy]))
+		}
+		return pos
+	}
+	return 0
+}
+
+// ─── 鼠标选中（全权拥有）────────────────────────────────────
+
+// handleMouseDown 处理鼠标点击：定位光标位置，开始选中。
+func (tw *TerminalWidget) handleMouseDown(me *event.MouseEvent) {
+	el := tw.textArea.Element()
+	el.Focus()
+
+	pos := tw.mousePosToFlat(me.OffsetX, me.OffsetY)
+	tw.selDown = true
+	tw.selStart = pos
+	tw.selEnd = pos
+
+	// 清除选中显示
+	el.RemoveAttribute("data-sel-start")
+	el.RemoveAttribute("data-sel-end")
+}
+
+// handleMouseMove 处理鼠标拖拽：更新选中范围。
+func (tw *TerminalWidget) handleMouseMove(me *event.MouseEvent) {
+	pos := tw.mousePosToFlat(me.OffsetX, me.OffsetY)
+	tw.selEnd = pos
+
+	el := tw.textArea.Element()
+	if tw.selStart < tw.selEnd {
+		el.SetAttribute("data-sel-start", strconv.Itoa(tw.selStart))
+		el.SetAttribute("data-sel-end", strconv.Itoa(tw.selEnd))
+	} else if tw.selEnd < tw.selStart {
+		el.SetAttribute("data-sel-start", strconv.Itoa(tw.selEnd))
+		el.SetAttribute("data-sel-end", strconv.Itoa(tw.selStart))
+	} else {
+		el.RemoveAttribute("data-sel-start")
+		el.RemoveAttribute("data-sel-end")
+	}
+}
+
+// handleMouseUp 处理鼠标释放：复制选中文本到剪贴板。
+func (tw *TerminalWidget) handleMouseUp(me *event.MouseEvent) {
+	tw.selDown = false
+
+	if tw.selStart == tw.selEnd {
+		return // 未选中
+	}
+
+	start, end := tw.selStart, tw.selEnd
+	if start > end {
+		start, end = end, start
+	}
+
+	runes := []rune(tw.displayText)
+	if start < len(runes) && end <= len(runes) && start < end {
+		selected := string(runes[start:end])
+		if selected != "" {
+			component.CopyToClipboard(selected)
+			os.Stderr.WriteString("[terminal] auto-copied " + strconv.Itoa(len(selected)) + " chars\n")
 		}
 	}
 
-	return pos
-}
-
-// restoreCursorPos 从 vterm 读取光标位置并同步到 TextArea。
-func (tw *TerminalWidget) restoreCursorPos() {
-	pos := tw.calcCursorPos()
-	if pos >= 0 {
-		tw.textArea.SetCursorPos(pos)
+	// 保留选中高亮
+	el := tw.textArea.Element()
+	if start < end {
+		el.SetAttribute("data-sel-start", strconv.Itoa(start))
+		el.SetAttribute("data-sel-end", strconv.Itoa(end))
 	}
 }
 
-// Element 返回终端组件的根 DOM 元素（即 TextArea 的元素）。
-func (tw *TerminalWidget) Element() *dom.Element { return tw.textArea.Element() }
+// mousePosToFlat 将鼠标偏移坐标（OffsetX/Y，相对于元素内容区）转换为
+// displayText 中的 flat 索引。用缓存行信息定位。
+func (tw *TerminalWidget) mousePosToFlat(ox, oy float32) int {
+	if len(tw.vtermRows) == 0 {
+		return 0
+	}
+
+	// OffsetX/OffsetY 是相对于元素内容区（padding inner edge）的坐标
+	// 终端 padding:4px，所以文本网格从 (4,4) 开始
+	padding := float32(4.0)
+	relX := ox - padding
+	relY := oy - padding
+	if relX < 0 {
+		relX = 0
+	}
+	if relY < 0 {
+		relY = 0
+	}
+
+	cellW := float32(tw.cellW)
+	cellH := float32(tw.cellH)
+	if cellW < 1 {
+		cellW = 14.0 * 0.6
+	}
+	if cellH < 1 {
+		cellH = 14.0 * 1.2
+	}
+
+	col := int(relX / cellW)
+	row := int(relY / cellH)
+
+	// 钳位到有效范围
+	if row >= len(tw.vtermRows) {
+		row = len(tw.vtermRows) - 1
+	}
+	if row < 0 {
+		row = 0
+	}
+	if col < 0 {
+		col = 0
+	}
+
+	// 计算 flat 位置
+	pos := 0
+	for i := 0; i < row; i++ {
+		if i > 0 {
+			pos++
+		}
+		pos += len([]rune(tw.vtermRows[i]))
+	}
+	if row > 0 {
+		pos++
+	}
+
+	// 列→flat 映射
+	if row < len(tw.vtermColFlat) {
+		if flat, ok := tw.vtermColFlat[row][col]; ok {
+			pos += flat
+		} else {
+			// 超出已有列映射，放行尾
+			if row < len(tw.vtermRows) {
+				pos += len([]rune(tw.vtermRows[row]))
+			}
+		}
+	}
+
+	// 钳位到 total length
+	totalLen := len([]rune(tw.displayText))
+	if pos > totalLen {
+		pos = totalLen
+	}
+	return pos
+}
 
 // ─── PTY 管理 ─────────────────────────────────────────────────
 
@@ -597,6 +772,12 @@ func (tw *TerminalWidget) reader(sess pty.PTY) {
 	for {
 		n, err := sess.Read(buf)
 		if n > 0 {
+			preview := string(buf[:n])
+			previewStr := strconv.Quote(preview)
+			if len(previewStr) > 120 {
+				previewStr = previewStr[:120] + "..."
+			}
+			os.Stderr.WriteString("[reader] " + strconv.Itoa(n) + " bytes: " + previewStr + "\n")
 			tw.mu.Lock()
 			tw.pending = append(tw.pending, buf[:n]...)
 			tw.mu.Unlock()
@@ -661,147 +842,58 @@ func (tw *TerminalWidget) drain() {
 	tw.mu.Unlock()
 
 	if len(data) > 0 {
+		os.Stderr.WriteString("[drain] processing " + strconv.Itoa(len(data)) + " bytes\n")
 		tw.ensurePTY()
 		tw.vt.Write(data)
+		os.Stderr.WriteString("[drain] after vt.Write, calling syncDisplay\n")
 		tw.syncDisplay()
+		os.Stderr.WriteString("[drain] syncDisplay done\n")
 		if ui.Ctx.App != nil {
 			ui.Ctx.App.MarkDirty()
 		}
 	}
 	if idle {
+		os.Stderr.WriteString("[drain] idle, stopping pump\n")
 		tw.stopPump()
 	}
 }
 
-// syncDisplay 提取 vterm 网格文本显示到 TextArea。
-//
-// 关键修正：不裁剪尾随空格（空格是有效终端内容，裁剪后导致：
-// 1. 空格键输入不可见 2. 退格后「空格后的文本一次全删」错觉）
-// 使用 contentful 标记判断行是否有内容（而非检查最后一个非空格字符）。
-func (tw *TerminalWidget) syncDisplay() {
-	if tw.vt == nil {
+// ─── Resize ──────────────────────────────────────────────────
+
+func (tw *TerminalWidget) checkResize() {
+	if tw.panelEl == nil {
 		return
 	}
-
-	// 检查面板尺寸是否变化，同步 resize
-	if tw.panelEl != nil {
-		l, t_, r, b := tw.panelEl.GetBoundingClientRect()
-		panelW := float64(r - l)
-		panelH := float64(b - t_)
-		if panelW >= 10 && panelH >= 10 {
-			padding := 8.0
-			fontSize := 14.0
-			cellW := fontSize * 0.6
-			cellH := fontSize * 1.2
-			newCols := int((panelW - padding) / cellW)
-			newRows := int((panelH - padding) / cellH)
-			if newCols < 10 {
-				newCols = 10
-			}
-			if newRows < 3 {
-				newRows = 3
-			}
-			if newCols != tw.cols || newRows != tw.rows {
-				tw.resizeTo(newCols, newRows)
-			}
-		}
-	}
-
-	cols, rows := tw.vt.Size()
-	scrLen := tw.vt.ScrollbackLen()
-
-	startRow := scrLen - tw.scrollOff
-	if startRow < 0 {
-		startRow = 0
-	}
-	endRow := startRow + rows
-
-	// rowResult 存储一行处理后的文本和列映射。
-	type rowResult struct {
-		text      string        // flat 文本（保留所有非续格字符，含空格）
-		colToFlat map[int]int   // vterm 列 → flat rune 索引
-	}
-	var results []rowResult
-	hasContent := false
-
-	for r := startRow; r < endRow && r < scrLen+rows; r++ {
-		rowData := tw.vt.RowAt(r)
-		runes := make([]rune, 0, cols)
-		colToFlat := make(map[int]int, cols)
-		contentful := false // 此行是否有非空格字符
-
-		for c := 0; c < cols; c++ {
-			if c < len(rowData) && rowData[c].Ch == 0 {
-				continue // 跳过宽字符续格
-			}
-			var ch rune = ' '
-			if c < len(rowData) && rowData[c].Ch != 0 {
-				ch = rowData[c].Ch
-			}
-			if ch != ' ' {
-				contentful = true
-			}
-			colToFlat[c] = len(runes)
-			runes = append(runes, ch)
-		}
-		var text string
-		if contentful {
-			// 保留所有字符（含尾随空格），使空格在终端中可见
-			text = string(runes)
-			hasContent = true
-		} // else: 全空格行 → text=""，在 lastNonEmpty 中被视为空行
-		results = append(results, rowResult{text: text, colToFlat: colToFlat})
-	}
-
-	// 无内容时设空文本
-	if !hasContent {
-		tw.textArea.SetText("")
-		tw.restoreCursorPos()
+	l, t_, r, b := tw.panelEl.GetBoundingClientRect()
+	panelW := float64(r - l)
+	panelH := float64(b - t_)
+	if panelW < 10 || panelH < 10 {
 		return
 	}
-
-	// 找最后一个非空行（裁剪尾随空行）
-	lastNonEmpty := len(results) - 1
-	for lastNonEmpty >= 0 && results[lastNonEmpty].text == "" {
-		lastNonEmpty--
+	padding := 4.0 * 2
+	fontSize := 14.0
+	cellW := fontSize * 0.6
+	cellH := fontSize * 1.2
+	newCols := int((panelW - padding) / cellW)
+	newRows := int((panelH - padding) / cellH)
+	if newCols < 10 {
+		newCols = 10
 	}
-
-	// 拼接文本
-	var b strings.Builder
-	for i := 0; i <= lastNonEmpty; i++ {
-		if i > 0 {
-			b.WriteByte('\n')
-		}
-		b.WriteString(results[i].text)
+	if newRows < 3 {
+		newRows = 3
 	}
-	text := b.String()
-
-	// 设置 TextArea 文本
-	tw.textArea.SetText(text)
-
-	// 同步光标位置到 vterm 光标
-	tw.restoreCursorPos()
-
-	// 调试日志
-	if len(text) > 0 {
-		preview := text
-		if len(preview) > 80 {
-			preview = preview[:80]
-		}
-		os.Stderr.WriteString("[syncDisplay] rows=" + strconv.Itoa(rows) + " text=" + strings.ReplaceAll(preview, "\n", "↵") + "\n")
+	if newCols != tw.cols || newRows != tw.rows {
+		tw.resizeTo(newCols, newRows)
+		// resize 后重新同步
+		tw.syncDisplay()
 	}
 }
-
-
-
-// ─── Resize ──────────────────────────────────────────────────
 
 func (tw *TerminalWidget) resizeFromPanel(panelEl *dom.Element) {
 	l, t_, r, b := panelEl.GetBoundingClientRect()
 	panelW := r - l
 	panelH := b - t_
 	if panelW < 10 || panelH < 10 {
-		// 布局尚未完成，安排延迟重试
 		if ui.Ctx.App != nil {
 			ui.Ctx.App.SetTimeout(func() {
 				tw.resizeFromPanel(panelEl)
@@ -850,6 +942,12 @@ func (tw *TerminalWidget) handleKey(ev *event.KeyboardEvent) {
 		return
 	}
 	tw.scrollOff = 0 // 用户键入时回到当前屏
+
+	dataStr := strconv.Quote(string(data))
+	os.Stderr.WriteString("[handleKey] key=" + strconv.Itoa(int(ev.Key)) +
+		" char=" + strconv.Itoa(int(ev.Char)) +
+		" ctrl=" + strconv.FormatBool(ev.Ctrl) +
+		" data=" + dataStr + "\n")
 
 	tw.mu.Lock()
 	sess := tw.sess
