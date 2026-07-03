@@ -58,12 +58,12 @@ type AgentBridge interface {
 // ─── 包级变量 ───────────────────────────────────────────────────
 
 var (
-	TheState         *ChatState
-	NewBridge        func(cs *ChatState) AgentBridge
-	ClipboardWrite   func(text string)
-	OpenFileDialog   func(title, filter string) string
-	OpenFolderDialog func(title string) string
-	OnChatContextMenu func(x, y float64)  // 右键菜单回调
+	TheState          *ChatState
+	NewBridge         func(cs *ChatState) AgentBridge
+	ClipboardWrite    func(text string)
+	OpenFileDialog    func(title, filter string) string
+	OpenFolderDialog  func(title string) string
+	OnChatContextMenu func(x, y float64) // 右键菜单回调
 )
 
 func elTag(el *dom.Element) string {
@@ -230,9 +230,9 @@ type ChatState struct {
 	inputAreaEl  *dom.Element
 	askCardEl    *dom.Element        // agent 提问卡占位（动态显示/隐藏）
 	taskProgEl   *dom.Element        // 任务进度面板占位
-	sidebarEl    *dom.Element          // 对话侧栏（固定 300px）
-	mainColEl    *dom.Element          // 主列
-	inputComp    *component.Input      // 搜索栏输入框
+	sidebarEl    *dom.Element        // 对话侧栏（固定 300px）
+	mainColEl    *dom.Element        // 主列
+	inputComp    *component.Input    // 搜索栏输入框
 	textAreaComp *component.TextArea // 主输入框
 
 	// ─── 元素级虚加载缓存 ───
@@ -1378,8 +1378,6 @@ func (s *ChatState) refreshSidebar() {
 	}
 }
 
-
-
 // ─── 对话侧栏 ──────────────────────────────────────────────────
 
 // sidebarContent 侧栏内容（300px）。
@@ -1431,7 +1429,7 @@ func (s *ChatState) sidebarContent() *dom.Element {
 
 	// 底部：环图 + Token 统计
 	bottomArea := doc.CreateElement("div")
-	bottomArea.SetAttribute("style", "flex:1;display:flex;flex-direction:column;padding:8px;overflow-y:auto;")
+	bottomArea.SetAttribute("style", "flex-shrink:0;display:flex;flex-direction:column;padding:8px;overflow-y:auto;")
 
 	// 环图卡片
 	donutCard := doc.CreateElement("div")

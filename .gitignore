@@ -20,3 +20,10 @@ go.work.sum
 # Debug / temp files
 _*.txt
 _*.go
+*.orig
+*.bat
+.dbg/
+debug-*.md
+diag_*.txt
+doag_*.txt
+build_err.txt
