@@ -342,6 +342,13 @@ type TerminalWidget struct {
 
 	// 面板元素引用（用于 resize 检测）
 	panelEl *dom.Element
+
+	// 分阶段显示更新：timer 协程只设置 pendingDisplay=true，
+	// preRenderHook（主线程）执行实际的 DOM 操作。
+	// 避免 SetInterval goroutine 与主渲染循环的 data race。
+	pendingText     string
+	pendingCursor   int
+	pendingDisplay  bool
 }
 
 func newTerminalWidget(shell string, mgr *termManager) *TerminalWidget {
@@ -386,6 +393,14 @@ func newTerminalWidget(shell string, mgr *termManager) *TerminalWidget {
 		ta.Element().Focus()
 		return false
 	})
+
+	// 注册 pre-render hook：将后台 goroutine 计算的显示状态在主线程应用到 DOM。
+	// 避免 SetInterval goroutine 与主渲染循环的数据竞争。
+	if ui.Ctx.App != nil {
+		ui.Ctx.App.AddPreRenderHook(func() {
+			tw.applyPendingDisplay()
+		})
+	}
 
 	return tw
 }
@@ -452,47 +467,90 @@ func (tw *TerminalWidget) calcCursorPos() int {
 	cols, rows := tw.vt.Size()
 	cx, cy := tw.vt.Cursor()
 	scrLen := tw.vt.ScrollbackLen()
-	startRow := scrLen // scrollOff==0 时 startRow=scrLen
+	startRow := scrLen
 	endRow := startRow + rows
 
-	// 累计光标行之前的所有行长度（含 \n）
-	pos := 0
-	for r := startRow; r < startRow+cy && r < endRow; r++ {
-		row := tw.vt.RowAt(r)
-		if row == nil {
-			break
-		}
-		trimmed := 0
+	// 收集所有行的 flat 文本信息（与 syncDisplay 逻辑一致）
+	type lineInfo struct {
+		flatLen   int         // flat 文本的 rune 长度
+		colToFlat map[int]int // vterm 列 → flat 位置
+	}
+	var lines []lineInfo
+
+	for r := startRow; r < endRow && r < scrLen+rows; r++ {
+		rowData := tw.vt.RowAt(r)
+		runes := make([]rune, 0, cols)
+		colToFlat := make(map[int]int, cols)
+
 		for c := 0; c < cols; c++ {
+			if c < len(rowData) && rowData[c].Ch == 0 {
+				continue
+			}
 			var ch rune = ' '
-			if c < len(row) && row[c].Ch != 0 {
-				ch = row[c].Ch
+			if c < len(rowData) && rowData[c].Ch != 0 {
+				ch = rowData[c].Ch
 			}
-			if ch != ' ' {
-				trimmed = c + 1
-			}
+			colToFlat[c] = len(runes)
+			runes = append(runes, ch)
 		}
-		pos += trimmed + 1 // +1 行间 \n
+		// 裁剪尾随空格
+		lastNonSpace := len(runes) - 1
+		for lastNonSpace >= 0 && runes[lastNonSpace] == ' ' {
+			lastNonSpace--
+		}
+		flatLen := 0
+		if lastNonSpace >= 0 {
+			flatLen = lastNonSpace + 1
+		}
+		lines = append(lines, lineInfo{
+			flatLen:   flatLen,
+			colToFlat: colToFlat,
+		})
 	}
 
-	// 光标行：cx 不得超出 trimmed 长度
-	row := tw.vt.RowAt(startRow + cy)
-	trimmed := 0
-	if row != nil {
-		for c := 0; c < cols; c++ {
-			var ch rune = ' '
-			if c < len(row) && row[c].Ch != 0 {
-				ch = row[c].Ch
+	// 找最后一个非空行
+	lastNonEmpty := len(lines) - 1
+	for lastNonEmpty >= 0 && lines[lastNonEmpty].flatLen == 0 {
+		lastNonEmpty--
+	}
+	if lastNonEmpty < 0 {
+		return 0
+	}
+
+	// cy 超出可见行 → 放在可见最后
+	if cy >= len(lines) {
+		cy = len(lines) - 1
+	}
+
+	// 累计光标行之前所有行的长度（含 \n）
+	pos := 0
+	maxLine := cy
+	if maxLine > lastNonEmpty {
+		maxLine = lastNonEmpty
+	}
+	for i := 0; i < maxLine; i++ {
+		if i > 0 {
+			pos++
+		}
+		pos += lines[i].flatLen
+	}
+
+	// 光标行
+	if cy <= lastNonEmpty {
+		if cy > 0 {
+			pos++ // 行间 \n
+		}
+		if flatCx, ok := lines[cy].colToFlat[cx]; ok {
+			if flatCx > lines[cy].flatLen {
+				flatCx = lines[cy].flatLen
 			}
-			if ch != ' ' {
-				trimmed = c + 1
-			}
+			pos += flatCx
+		} else {
+			// cx 指向续格，放在行尾
+			pos += lines[cy].flatLen
 		}
 	}
-	if cx > trimmed {
-		cx = trimmed
-	}
-	pos += cx
+
 	return pos
 }
 
@@ -618,7 +676,11 @@ func (tw *TerminalWidget) drain() {
 	if len(data) > 0 {
 		tw.ensurePTY()
 		tw.vt.Write(data)
-		tw.syncDisplay()
+		// 分阶段显示更新：timer 协程只标记 pending，不操作 DOM。
+		// applyPendingDisplay（在主线程 preRenderHook 中执行）会负责。
+		tw.mu.Lock()
+		tw.pendingDisplay = true
+		tw.mu.Unlock()
 		if ui.Ctx.App != nil {
 			ui.Ctx.App.MarkDirty()
 		}
@@ -629,6 +691,7 @@ func (tw *TerminalWidget) drain() {
 }
 
 // syncDisplay 提取 vterm 网格文本显示到 TextArea。
+// 修正：正确跳过 Ch==0 续格、裁剪尾随空行及空行中的空格。
 func (tw *TerminalWidget) syncDisplay() {
 	if tw.vt == nil {
 		return
@@ -654,7 +717,6 @@ func (tw *TerminalWidget) syncDisplay() {
 			}
 			if newCols != tw.cols || newRows != tw.rows {
 				tw.resizeTo(newCols, newRows)
-				// 重新读取新的 vterm 尺寸
 			}
 		}
 	}
@@ -662,32 +724,27 @@ func (tw *TerminalWidget) syncDisplay() {
 	cols, rows := tw.vt.Size()
 	scrLen := tw.vt.ScrollbackLen()
 
-	// scrollOff=0 显示当前屏，>0 显示回滚历史
 	startRow := scrLen - tw.scrollOff
 	if startRow < 0 {
 		startRow = 0
 	}
 	endRow := startRow + rows
 
-	var b strings.Builder
+	// rowToText 将一行转为 flat 文本：跳过 Ch==0 续格、裁剪尾随空格。
+	// 返回 flat 文本和 col→flat 映射（用于光标计算）。
+	type rowResult struct {
+		text      string
+		colToFlat map[int]int
+	}
+	var results []rowResult
+	hasContent := false
+
 	for r := startRow; r < endRow && r < scrLen+rows; r++ {
-		if r > startRow {
-			b.WriteByte('\n')
-		}
 		rowData := tw.vt.RowAt(r)
-		// 找最后一个非空字符
-		lastNonSpace := -1
+		runes := make([]rune, 0, cols)
+		colToFlat := make(map[int]int, cols)
+
 		for c := 0; c < cols; c++ {
-			var ch rune = ' '
-			if c < len(rowData) && rowData[c].Ch != 0 {
-				ch = rowData[c].Ch
-			}
-			if ch != ' ' {
-				lastNonSpace = c
-			}
-		}
-		// 写字符（跳过 Ch==0 续格和尾随空格）
-		for c := 0; c <= lastNonSpace; c++ {
 			if c < len(rowData) && rowData[c].Ch == 0 {
 				continue // 跳过宽字符续格
 			}
@@ -695,15 +752,49 @@ func (tw *TerminalWidget) syncDisplay() {
 			if c < len(rowData) && rowData[c].Ch != 0 {
 				ch = rowData[c].Ch
 			}
-			b.WriteRune(ch)
+			colToFlat[c] = len(runes)
+			runes = append(runes, ch)
 		}
+		// 裁剪尾随空格
+		lastNonSpace := len(runes) - 1
+		for lastNonSpace >= 0 && runes[lastNonSpace] == ' ' {
+			lastNonSpace--
+		}
+		var text string
+		if lastNonSpace >= 0 {
+			text = string(runes[:lastNonSpace+1])
+			hasContent = true
+		}
+		results = append(results, rowResult{text: text, colToFlat: colToFlat})
+	}
+
+	// 无内容时设空文本
+	if !hasContent {
+		tw.textArea.SetText("")
+		tw.restoreCursorPos()
+		return
+	}
+
+	// 找最后一个非空行（裁剪尾随空行）
+	lastNonEmpty := len(results) - 1
+	for lastNonEmpty >= 0 && results[lastNonEmpty].text == "" {
+		lastNonEmpty--
+	}
+
+	// 拼接文本
+	var b strings.Builder
+	for i := 0; i <= lastNonEmpty; i++ {
+		if i > 0 {
+			b.WriteByte('\n')
+		}
+		b.WriteString(results[i].text)
 	}
 	text := b.String()
 
 	// 设置 TextArea 文本
 	tw.textArea.SetText(text)
 
-	// 同步光标位置到 vterm 光标（在提示符后，不是文本末尾）
+	// 同步光标位置到 vterm 光标
 	tw.restoreCursorPos()
 
 	// 调试日志
@@ -713,6 +804,28 @@ func (tw *TerminalWidget) syncDisplay() {
 			preview = preview[:80]
 		}
 		os.Stderr.WriteString("[syncDisplay] rows=" + strconv.Itoa(rows) + " text=" + strings.ReplaceAll(preview, "\n", "↵") + "\n")
+	}
+}
+
+// applyPendingDisplay 在主线程（preRenderHook）执行实际的 DOM 更新。
+// 从 pending 字段读取 timer 协程计算的状态，调用 SetText/SetCursorPos。
+func (tw *TerminalWidget) applyPendingDisplay() {
+	tw.mu.Lock()
+	if !tw.pendingDisplay {
+		tw.mu.Unlock()
+		return
+	}
+	tw.pendingDisplay = false
+	// 注意：pendingText/pendingCursor 直接由 syncDisplay 中的计算产生，
+	// 但此处我们不在 timer 协程中预计算文本（原 syncDisplay 做全部工作）。
+	// 改为仅标记 pendingDisplay，让 applyPendingDisplay 调用完整的 syncDisplay。
+	tw.mu.Unlock()
+
+	// 在主线程执行完整的显示更新（含 DOM 操作）
+	tw.syncDisplay()
+	// 确保本帧执行 Layout 以读取新 DOM（否则 a.dirty=false 时不会重新布局）
+	if ui.Ctx.App != nil {
+		ui.Ctx.App.MarkDirty()
 	}
 }
 
@@ -727,7 +840,10 @@ func (tw *TerminalWidget) resizeFromPanel(panelEl *dom.Element) {
 		if ui.Ctx.App != nil {
 			ui.Ctx.App.SetTimeout(func() {
 				tw.resizeFromPanel(panelEl)
-				tw.syncDisplay()
+				// 使用 pending 机制避免 timer goroutine 操作 DOM
+				tw.mu.Lock()
+				tw.pendingDisplay = true
+				tw.mu.Unlock()
 				ui.Ctx.App.MarkDirty()
 			}, 100*time.Millisecond)
 		}
