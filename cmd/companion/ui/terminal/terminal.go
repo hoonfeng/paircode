@@ -296,6 +296,9 @@ func (m *termManager) renderActiveTerm() {
 	// 将 TextArea 元素放入 #terminal-area
 	m.termEl.AppendChild(tw.textArea.Element())
 
+	// 保存面板元素引用，供 resize 检测
+	tw.panelEl = m.termEl
+
 	// 根据面板尺寸 resize
 	tw.resizeFromPanel(m.termEl)
 
@@ -336,6 +339,9 @@ type TerminalWidget struct {
 
 	// 光标跟踪
 	focused bool
+
+	// 面板元素引用（用于 resize 检测）
+	panelEl *dom.Element
 }
 
 func newTerminalWidget(shell string, mgr *termManager) *TerminalWidget {
@@ -343,9 +349,9 @@ func newTerminalWidget(shell string, mgr *termManager) *TerminalWidget {
 
 	ta := component.NewTextArea(mgr.doc, "", 0, 0)
 
-	// 设置终端样式
+	// 设置终端样式 — 必须包含 width:auto 以覆盖 NewTextArea 初始的 width:0px
 	ta.SetBaseStyle(
-		"flex:1;min-height:0;"+
+		"flex:1;min-height:0;width:auto;"+
 			"font-family:monospace;font-size:14px;line-height:1.2;"+
 			"color:"+colText+";background:"+colEditor+";"+
 			"padding:4px;"+
@@ -385,7 +391,7 @@ func newTerminalWidget(shell string, mgr *termManager) *TerminalWidget {
 }
 
 // HandleEvent 实现 ComponentHandler 接口。
-// 键盘事件 → PTY；鼠标事件 → TextArea（选中/拖拽/复制）；其他 → 回退。
+// 键盘事件 → PTY；鼠标事件 → TextArea 选中/复制，但光标始终跟随 vterm。
 func (tw *TerminalWidget) HandleEvent(e event.Event) bool {
 	switch e.Type() {
 	case event.KeyDown, event.KeyPress:
@@ -397,13 +403,20 @@ func (tw *TerminalWidget) HandleEvent(e event.Event) bool {
 		return true
 
 	case event.MouseDown:
-		return tw.textArea.HandleEvent(e)
+		// 让 TextArea 处理选中开始，但恢复光标到 vterm 位置
+		tw.textArea.HandleEvent(e)
+		tw.restoreCursorPos()
+		return true
 
 	case event.MouseMove:
-		return tw.textArea.HandleEvent(e)
+		// TextArea 处理拖拽选中（需要它设置 selEnd），但恢复光标
+		tw.textArea.HandleEvent(e)
+		tw.restoreCursorPos()
+		return true
 
 	case event.MouseUp:
 		tw.textArea.HandleEvent(e)
+		tw.restoreCursorPos()
 		// 选中结束时自动复制到剪贴板
 		if tw.textArea.HasSelection() {
 			text := tw.textArea.SelectedText()
@@ -416,6 +429,7 @@ func (tw *TerminalWidget) HandleEvent(e event.Event) bool {
 
 	case event.FocusIn:
 		tw.focused = true
+		tw.restoreCursorPos()
 		return tw.textArea.HandleEvent(e)
 
 	case event.FocusOut:
@@ -428,6 +442,67 @@ func (tw *TerminalWidget) HandleEvent(e event.Event) bool {
 }
 
 func (tw *TerminalWidget) Focusable() bool { return true }
+
+// calcCursorPos 计算 vterm 光标在 TextArea 文本中的 flat 索引。
+// 回看时（scrollOff>0）返回 -1（不显示光标）。
+func (tw *TerminalWidget) calcCursorPos() int {
+	if tw.vt == nil || tw.scrollOff > 0 {
+		return -1
+	}
+	cols, rows := tw.vt.Size()
+	cx, cy := tw.vt.Cursor()
+	scrLen := tw.vt.ScrollbackLen()
+	startRow := scrLen // scrollOff==0 时 startRow=scrLen
+	endRow := startRow + rows
+
+	// 累计光标行之前的所有行长度（含 \n）
+	pos := 0
+	for r := startRow; r < startRow+cy && r < endRow; r++ {
+		row := tw.vt.RowAt(r)
+		if row == nil {
+			break
+		}
+		trimmed := 0
+		for c := 0; c < cols; c++ {
+			var ch rune = ' '
+			if c < len(row) && row[c].Ch != 0 {
+				ch = row[c].Ch
+			}
+			if ch != ' ' {
+				trimmed = c + 1
+			}
+		}
+		pos += trimmed + 1 // +1 行间 \n
+	}
+
+	// 光标行：cx 不得超出 trimmed 长度
+	row := tw.vt.RowAt(startRow + cy)
+	trimmed := 0
+	if row != nil {
+		for c := 0; c < cols; c++ {
+			var ch rune = ' '
+			if c < len(row) && row[c].Ch != 0 {
+				ch = row[c].Ch
+			}
+			if ch != ' ' {
+				trimmed = c + 1
+			}
+		}
+	}
+	if cx > trimmed {
+		cx = trimmed
+	}
+	pos += cx
+	return pos
+}
+
+// restoreCursorPos 从 vterm 读取光标位置并同步到 TextArea。
+func (tw *TerminalWidget) restoreCursorPos() {
+	pos := tw.calcCursorPos()
+	if pos >= 0 {
+		tw.textArea.SetCursorPos(pos)
+	}
+}
 
 // Element 返回终端组件的根 DOM 元素（即 TextArea 的元素）。
 func (tw *TerminalWidget) Element() *dom.Element { return tw.textArea.Element() }
@@ -559,6 +634,31 @@ func (tw *TerminalWidget) syncDisplay() {
 		return
 	}
 
+	// 检查面板尺寸是否变化，同步 resize
+	if tw.panelEl != nil {
+		l, t_, r, b := tw.panelEl.GetBoundingClientRect()
+		panelW := float64(r - l)
+		panelH := float64(b - t_)
+		if panelW >= 10 && panelH >= 10 {
+			padding := 8.0
+			fontSize := 14.0
+			cellW := fontSize * 0.6
+			cellH := fontSize * 1.2
+			newCols := int((panelW - padding) / cellW)
+			newRows := int((panelH - padding) / cellH)
+			if newCols < 10 {
+				newCols = 10
+			}
+			if newRows < 3 {
+				newRows = 3
+			}
+			if newCols != tw.cols || newRows != tw.rows {
+				tw.resizeTo(newCols, newRows)
+				// 重新读取新的 vterm 尺寸
+			}
+		}
+	}
+
 	cols, rows := tw.vt.Size()
 	scrLen := tw.vt.ScrollbackLen()
 
@@ -600,8 +700,11 @@ func (tw *TerminalWidget) syncDisplay() {
 	}
 	text := b.String()
 
-	// 设置 TextArea 文本（这会触发 onRender 更新 DOM 和 data-cursor-pos）
+	// 设置 TextArea 文本
 	tw.textArea.SetText(text)
+
+	// 同步光标位置到 vterm 光标（在提示符后，不是文本末尾）
+	tw.restoreCursorPos()
 
 	// 调试日志
 	if len(text) > 0 {
@@ -620,6 +723,14 @@ func (tw *TerminalWidget) resizeFromPanel(panelEl *dom.Element) {
 	panelW := r - l
 	panelH := b - t_
 	if panelW < 10 || panelH < 10 {
+		// 布局尚未完成，安排延迟重试
+		if ui.Ctx.App != nil {
+			ui.Ctx.App.SetTimeout(func() {
+				tw.resizeFromPanel(panelEl)
+				tw.syncDisplay()
+				ui.Ctx.App.MarkDirty()
+			}, 100*time.Millisecond)
+		}
 		return
 	}
 	padding := 4.0 * 2
