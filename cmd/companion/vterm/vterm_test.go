@@ -7,12 +7,12 @@ import (
 
 // ─── 行→文本辅助 ──────────────────────────────────────────
 
-// rowToText 将 vterm 的一行转为可显示文本（跳过 Ch==0 续格和尾随空格）。
-// 返回：(文本字符串, 最后一个非空格字符的 flat 位置, col→flat 映射)
-func rowToText(row []Cell, cols int) (string, int, map[int]int) {
+// rowToText 将 vterm 的一行转为可显示文本（跳过 Ch==0 续格，保留尾随空格）。
+// 返回：(文本字符串, 是否有非空格内容, col→flat 映射)
+func rowToText(row []Cell, cols int) (string, bool, map[int]int) {
 	runes := make([]rune, 0, cols)
 	colToFlat := make(map[int]int, cols)
-	lastNonSpace := -1
+	contentful := false
 
 	for c := 0; c < cols; c++ {
 		if c < len(row) && row[c].Ch == 0 {
@@ -23,15 +23,15 @@ func rowToText(row []Cell, cols int) (string, int, map[int]int) {
 			ch = row[c].Ch
 		}
 		if ch != ' ' {
-			lastNonSpace = len(runes)
+			contentful = true
 		}
 		colToFlat[c] = len(runes)
 		runes = append(runes, ch)
 	}
-	if lastNonSpace < 0 {
-		return "", -1, colToFlat
+	if !contentful {
+		return "", false, colToFlat
 	}
-	return string(runes[:lastNonSpace+1]), lastNonSpace, colToFlat
+	return string(runes), true, colToFlat
 }
 
 // colToFlatPos 将 vterm 列号 cx 转为 flat 文本中的 rune 偏移。
@@ -56,7 +56,7 @@ func colToFlatPos(colToFlat map[int]int, cx int) int {
 // ─── 精确提取（行下取整——不输出全屏 24 行的空尾行）────────
 
 // extractTextExact 从 vterm 提取文本，跳过末尾完全空白的行。
-// 与终端最终要实现的逻辑一致（TextArea 只显示有内容的行）。
+// 不裁剪尾随空格（与终端 syncDisplay 逻辑一致）。
 func extractTextExact(t *Terminal, scrollOff int) string {
 	cols, rows := t.Size()
 	scrLen := t.ScrollbackLen()
@@ -69,9 +69,8 @@ func extractTextExact(t *Terminal, scrollOff int) string {
 
 	// 收集所有非空行的文本
 	type lineInfo struct {
-		text       string
-		colToFlat  map[int]int
-		lastNonCol int // 最后一个非空格字符的 vterm 列
+		text      string
+		colToFlat map[int]int
 	}
 
 	var lines []lineInfo
@@ -82,8 +81,8 @@ func extractTextExact(t *Terminal, scrollOff int) string {
 			lines = append(lines, lineInfo{text: "", colToFlat: map[int]int{}})
 			continue
 		}
-		text, _, colToFlat := rowToText(rowData, cols)
-		if text != "" {
+		text, contentful, colToFlat := rowToText(rowData, cols)
+		if contentful {
 			hasContent = true
 		}
 		lines = append(lines, lineInfo{text: text, colToFlat: colToFlat})
@@ -115,7 +114,7 @@ func extractTextExact(t *Terminal, scrollOff int) string {
 }
 
 // calcCursorPosExact 精确计算 vterm 光标在 flat 文本中的 rune 偏移。
-// 正确处理 CJK 续格跳过和尾随空行裁剪。
+// 正确处理 CJK 续格跳过、保留尾随空格（与 syncDisplay 逻辑一致）。
 func calcCursorPosExact(t *Terminal, scrollOff int) int {
 	if t == nil || scrollOff > 0 {
 		return -1
@@ -211,7 +210,7 @@ func TestSimpleText(t *testing.T) {
 	vt := New(80, 24)
 	vt.Write([]byte("hello"))
 	text := extractTextExact(vt, 0)
-	if text != "hello" {
+	if strings.TrimRight(text, " ") != "hello" {
 		t.Errorf("expected %q, got %q", "hello", text)
 	}
 	pos := calcCursorPosExact(vt, 0)
@@ -232,15 +231,13 @@ func TestPrompt(t *testing.T) {
 	if len(lines) != 4 {
 		t.Errorf("expected 4 lines, got %d: %q", len(lines), text)
 	}
-	if lines[3] != "C:\\Users\\test>" {
+	if strings.TrimRight(lines[3], " ") != "C:\\Users\\test>" {
 		t.Errorf("last line should be prompt, got %q", lines[3])
 	}
 
 	pos := calcCursorPosExact(vt, 0)
-	expectedPos := len("Microsoft Windows [Version 10.0.26200.8655]") + 1 +
-		len("(c) Microsoft Corporation. All rights reserved.") + 1 +
-		0 + 1 +
-		len("C:\\Users\\test>")
+	// 每行保留尾随空格：3 行有内容 × 80 列 + 2 个 \n + 空行后的 \n + 光标在提示符后 14 位
+	expectedPos := 80 + 1 + 80 + 1 + 0 + 1 + 14
 	if pos != expectedPos {
 		t.Errorf("cursor should be at %d (after prompt), got %d", expectedPos, pos)
 	}
@@ -261,7 +258,7 @@ func TestCJKCharacters(t *testing.T) {
 	vt := New(80, 24)
 	vt.Write([]byte("你好世界"))
 	text := extractTextExact(vt, 0)
-	if text != "你好世界" {
+	if strings.TrimRight(text, " ") != "你好世界" {
 		t.Errorf("expected %q, got %q", "你好世界", text)
 	}
 	pos := calcCursorPosExact(vt, 0)
@@ -274,12 +271,51 @@ func TestMixedCJKAndAscii(t *testing.T) {
 	vt := New(80, 24)
 	vt.Write([]byte("你好 world"))
 	text := extractTextExact(vt, 0)
-	if text != "你好 world" {
+	if strings.TrimRight(text, " ") != "你好 world" {
 		t.Errorf("expected %q, got %q", "你好 world", text)
 	}
 	pos := calcCursorPosExact(vt, 0)
 	if pos != 8 { // "你" "好" " " "w" "o" "r" "l" "d" = 8 runes
 		t.Errorf("cursor should be at 8, got %d", pos)
+	}
+}
+
+func TestEraseCharacters(t *testing.T) {
+	vt := New(80, 24)
+	// 写入 "hello"，回退 3 格，擦除 3 个字符
+	vt.Write([]byte("hello"))
+	vt.Write([]byte("\x1b[3D"))   // 光标左移 3 → 位置 2
+	vt.Write([]byte("\x1b[3X"))   // 擦除 3 个字符（位置 2,3,4）
+	text := extractTextExact(vt, 0)
+	if trimmed := strings.TrimRight(text, " "); trimmed != "he" {
+		t.Errorf("expected %q, got %q", "he", trimmed)
+	}
+}
+
+func TestCjkEraseWithBackspace(t *testing.T) {
+	vt := New(80, 12)
+	// 模拟终端场景：输入 "你好世界" 后回退
+	vt.Write([]byte("你好世界"))                          // 4 CJK = 8 格
+	vt.Write([]byte("\r\x1b[K"))                          // 回到行首，擦除整行
+	vt.Write([]byte("F:\\>你好世界"))                      // 提示符后输入
+	text := extractTextExact(vt, 0)
+	if strings.TrimRight(text, " ") != "F:\\>你好世界" {
+		t.Errorf("expected %q, got %q", "F:\\>你好世界", text)
+	}
+}
+
+func TestEraseCharactersCjk(t *testing.T) {
+	vt := New(80, 12)
+	vt.Write([]byte("你好世界"))
+	// 光标在 4 个 CJK 字符后（flat count=4, vterm col=8）
+	// 模拟退格：\b 回退 1 格，\x1b[2X 擦除 2 列（1 个 CJK）
+	vt.Write([]byte("\x1b[2D"))   // 回退 2 列（1 个 CJK 字符）
+	vt.Write([]byte("\x1b[2X"))   // 擦除 2 列
+	text := extractTextExact(vt, 0)
+	// 擦除后应该是 "你好世"（最后 1 个 CJK 字符被擦除）
+	trimmed := strings.TrimRight(text, " ")
+	if trimmed != "你好世" {
+		t.Errorf("expected %q, got %q", "你好世", trimmed)
 	}
 }
 
@@ -318,7 +354,8 @@ func TestMultiLineCursor(t *testing.T) {
 	}
 
 	pos := calcCursorPosExact(vt, 0)
-	expectedPos := 10 + 1 + 6 + 1 + 10
+	// 3 行内容 × 80 列 + 2 个 \n + 光标在 "third line" 后第 10 位
+	expectedPos := 80 + 1 + 80 + 1 + 10
 	if pos != expectedPos {
 		t.Errorf("cursor should be at %d (after third line), got %d", expectedPos, pos)
 	}
@@ -331,7 +368,7 @@ func TestCJKAndMultiLine(t *testing.T) {
 	vt.Write([]byte("test>"))
 
 	pos := calcCursorPosExact(vt, 0)
-	expectedPos := 8 + 1 + 5 + 1 + 5
+	expectedPos := 78 + 1 + 80 + 1 + 5
 	if pos != expectedPos {
 		t.Errorf("cursor should be at %d, got %d", expectedPos, pos)
 	}
