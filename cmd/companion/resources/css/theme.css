@@ -19,7 +19,7 @@ body { font-size: 13px; color: #cccccc; background: #1e1e1e; overflow: hidden; }
 
 /* 弹出菜单（现代 IDE 风格，VS Code/Cursor Dark+ 主题） */
 .popup-menu { display: flex; flex-direction: column; min-width: 160px; background: #252526; border: 1px solid #454545; padding: 4px 0; font-size: 13px; color: #cccccc; user-select: none; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
-.popup-menu-item { padding: 4px 24px; height: 26px; display: flex; flex-direction: row; align-items: center; cursor: pointer; white-space: nowrap; color: #cccccc; }
+.popup-menu-item { padding: 4px 12px; height: 28px; display: flex; flex-direction: row; align-items: center; cursor: pointer; white-space: nowrap; color: #cccccc; }
 .popup-menu-item:hover { background: #094771; }
 .popup-menu-item.selected { background: #094771; }
 .popup-menu-item.disabled { color: #6e6e6e; cursor: default; }
@@ -144,7 +144,7 @@ body { font-size: 13px; color: #cccccc; background: #1e1e1e; overflow: hidden; }
 
 /* ── Modal / 对话框（VS Code Dark+ 风格）── */
 .gwui-modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.4); z-index: 999; }
-.gwui-modal-content { background: #252526; border: 1px solid #454545; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); display: flex; flex-direction: column; overflow: hidden; }
+.gwui-modal-content { background: #252526; border: 1px solid #454545; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); display: flex; flex-direction: column; overflow: hidden; padding: 0; }
 .gwui-modal-header { display: flex; flex-direction: row; align-items: center; justify-content: space-between; padding: 8px 16px; background: #2d2d2d; border-bottom: 1px solid #454545; }
 .gwui-modal-title { font-size: 14px; color: #cccccc; font-weight: bold; }
 .gwui-modal-body { flex: 1; overflow: auto; padding: 8px 16px; }
