@@ -32,6 +32,7 @@ import (
 	gitpanel "github.com/hoonfeng/paircode/cmd/companion/ui/git"
 	menuactions "github.com/hoonfeng/paircode/cmd/companion/ui/menu"
 	marketplacepanel "github.com/hoonfeng/paircode/cmd/companion/ui/marketplace"
+	statspanel "github.com/hoonfeng/paircode/cmd/companion/ui/stats"
 	searchpanel "github.com/hoonfeng/paircode/cmd/companion/ui/search"
 	settingspanel "github.com/hoonfeng/paircode/cmd/companion/ui/settings"
 	"github.com/hoonfeng/paircode/cmd/companion/ui/state"
@@ -454,6 +455,10 @@ func buildDropdowns(doc *dom.Document) {
 			{Divider: true},
 			{Label: "Agent 设置…", OnClick: func() {
 				settingspanel.OpenDialog()
+			}},
+			{Divider: true},
+			{Label: "项目统计…", OnClick: func() {
+				statspanel.ShowStatsDialog()
 			}},
 		}},
 		// ── 帮助 ──

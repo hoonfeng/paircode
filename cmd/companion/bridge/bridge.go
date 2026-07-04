@@ -575,6 +575,24 @@ func (b *AgentBridge) applyEvent(e agent.Event) {
 				e.Usage.PromptCacheHitTokens,
 				e.Usage.PromptCacheMissTokens,
 			)
+			// 持久化到项目级统计（安装目录 .pair/stats.json，独立于对话记录）
+			modelName := core.Settings.ExecuteModel
+			if modelName == "" {
+				modelName = core.Settings.Model
+			}
+			if modelName == "" {
+				modelName = "unknown"
+			}
+			core.RecordLLMCall(
+				e.Usage.PromptTokens,
+				e.Usage.CompletionTokens,
+				e.Usage.PromptCacheHitTokens,
+				e.Usage.PromptCacheMissTokens,
+				0,
+				modelName,
+				0,
+				"¥",
+			)
 		}
 	case agent.EventEvaluation:
 		var ev agent.Evaluation
