@@ -1045,6 +1045,7 @@ func injectPanelCallbacks() {
 	editorpanel.OnContentMenu = ctxmenupanel.EditorContentMenu
 	editorpanel.OnTabMenu = ctxmenupanel.EditorTabMenu
 	chatpanel.OnChatContextMenu = ctxmenupanel.ChatMessageContextMenu
+	chatpanel.OnChatInputContextMenu = ctxmenupanel.ChatInputContextMenu
 	editorpanel.OnOpenFile = ctxmenupanel.OpenFileViaDialog
 	editorpanel.OnNewFile = func() { ctxmenupanel.NewEntryIn(core.Root(), false) }
 	editorpanel.OnOpenFolder = ctxmenupanel.OpenFolderViaDialog
