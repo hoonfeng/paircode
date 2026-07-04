@@ -309,6 +309,13 @@ func (t *Terminal) dispatchCSI(cmd rune) {
 		t.eraseDisplay(t.raw(0))
 	case 'K':
 		t.eraseLine(t.raw(0))
+	case 'X':
+		// Erase Characters (ECH)：从光标处擦除 n 个字符，不移动光标
+		n := t.param(0, 1)
+		row := t.grid[t.cy]
+		for c := t.cx; c < t.cx+n && c < t.cols; c++ {
+			row[c] = blankCell()
+		}
 	}
 }
 
