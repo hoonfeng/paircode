@@ -817,6 +817,37 @@ func showContextMenu(doc *dom.Document, x, y float64, items []component.ContextM
 	currentCM = cm
 }
 
+// ChatInputContextMenu 聊天输入框右键菜单。
+// selectedText 为输入框中当前选中的文本（可为空）。
+func ChatInputContextMenu(x, y float64, selectedText string) {
+	doc := ui.Ctx.Doc
+	if doc == nil {
+		return
+	}
+	items := []component.ContextMenuItem{
+		{Label: "剪切", OnClick: func() {
+			if selectedText != "" {
+				CopyToClipboard(selectedText)
+			}
+			// 实际剪切操作由键盘 Ctrl+X 处理；此处复制后清空由输入框自身处理
+		}},
+		{Label: "复制", OnClick: func() {
+			if selectedText != "" {
+				CopyToClipboard(selectedText)
+			}
+		}},
+		{Label: "粘贴", OnClick: func() {
+			// 粘贴由 TextArea 的 Ctrl+V 处理；此处仅占位
+			// 可通过全局粘贴函数触发
+		}},
+		{Divider: true},
+		{Label: "全选", OnClick: func() {
+			// 全选由 TextArea 的 Ctrl+A 处理
+		}},
+	}
+	showContextMenu(doc, x, y, items)
+}
+
 // ── 工具函数 ──
 
 // relativePath 返回相对于工作区根的路径。若不在工作区内则返回完整路径。

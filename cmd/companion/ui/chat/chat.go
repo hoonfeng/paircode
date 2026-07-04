@@ -64,6 +64,7 @@ var (
 	OpenFileDialog    func(title, filter string) string
 	OpenFolderDialog  func(title string) string
 	OnChatContextMenu func(x, y float64) // 右键菜单回调
+	OnChatInputContextMenu func(x, y float64, selectedText string) // 输入框右键菜单回调
 )
 
 func elTag(el *dom.Element) string {
@@ -251,6 +252,11 @@ type ChatState struct {
 
 	// 轮询模式数据版本号（Agent goroutine 写入后递增，UI 线程检测后触发重建）
 	DataVersion atomic.Int64
+
+	// ─── 输入历史（上下键切换历史消息） ───
+	msgHistory   []string // 已发送的消息记录（最新在末尾）
+	historyIdx   int      // 当前浏览位置（-1=未浏览，0=最早）
+	historyDraft string   // 进入历史浏览前保存的当前草稿
 
 	_taskPS *taskProgressState
 }
@@ -598,6 +604,22 @@ func absDiff(a, b float64) float64 {
 		return a - b
 	}
 	return b - a
+}
+
+// saveToMsgHistory 保存发送的消息到输入历史（上下键切换用）。
+// 不保存空白、不保存重复（与最新一条相同），最多保留 100 条。
+func (s *ChatState) saveToMsgHistory(text string) {
+	if text == "" {
+		return
+	}
+	if len(s.msgHistory) > 0 && s.msgHistory[len(s.msgHistory)-1] == text {
+		return
+	}
+	const maxHistory = 100
+	if len(s.msgHistory) >= maxHistory {
+		s.msgHistory = s.msgHistory[1:]
+	}
+	s.msgHistory = append(s.msgHistory, text)
 }
 
 // ─── 消息渲染 ──────────────────────────────────────────────────
@@ -1065,13 +1087,57 @@ func (s *ChatState) buildInputAreaInto(box *dom.Element) {
 		s.Store.Draft = text
 	})
 
-	// Enter 提交
+	// 右键菜单
+	if OnChatInputContextMenu != nil {
+		ta.OnContextMenu(OnChatInputContextMenu)
+	}
+
+	// 键盘事件：Enter 提交 + 上下键历史消息
 	ui.Ctx.App.AddEventListener(ta.Element(), event.KeyDown, func(e event.Event) bool {
-		if ke, ok := e.(*event.KeyboardEvent); ok {
-			if ke.Key == event.CodeEnter && !ke.Shift {
-				s.Send("")
+		ke, ok := e.(*event.KeyboardEvent)
+		if !ok {
+			return false
+		}
+		// Enter 提交（Shift+Enter 保留为换行）
+		if ke.Key == event.CodeEnter && !ke.Shift {
+			s.Send("")
+			return true
+		}
+		// 上键：浏览历史消息（向上）
+		if ke.Key == event.CodeUp && !ke.Shift && !ke.Ctrl {
+			if len(s.msgHistory) == 0 {
 				return true
 			}
+			if s.historyIdx == -1 {
+				// 首次进入历史：保存当前草稿
+				s.historyDraft = ta.Text()
+				s.historyIdx = len(s.msgHistory) - 1
+			} else if s.historyIdx > 0 {
+				s.historyIdx--
+			}
+			text := s.msgHistory[s.historyIdx]
+			ta.SetText(text)
+			ta.SetCursorPos(len([]rune(text)))
+			return true
+		}
+		// 下键：浏览历史消息（向下）
+		if ke.Key == event.CodeDown && !ke.Shift && !ke.Ctrl {
+			if s.historyIdx == -1 {
+				return true
+			}
+			if s.historyIdx == len(s.msgHistory)-1 {
+				// 最新位置：恢复保存的草稿
+				ta.SetText(s.historyDraft)
+				ta.SetCursorPos(len([]rune(s.historyDraft)))
+				s.historyIdx = -1
+				s.historyDraft = ""
+			} else {
+				s.historyIdx++
+				text := s.msgHistory[s.historyIdx]
+				ta.SetText(text)
+				ta.SetCursorPos(len([]rune(text)))
+			}
+			return true
 		}
 		return false
 	})
@@ -1891,6 +1957,8 @@ func (s *ChatState) Send(text string) {
 	if draft == "" {
 		draft = s.Store.Draft
 	}
+	// 保存原始输入到历史（不含附件/长文本后缀）
+	s.saveToMsgHistory(draft)
 	atts := s.Attachments
 	display := draft
 
@@ -1924,6 +1992,8 @@ func (s *ChatState) Send(text string) {
 	s.SendSeq++
 	s.Plan = nil
 	s.Attachments = nil
+	s.historyIdx = -1
+	s.historyDraft = ""
 	if s.Bridge == nil {
 		if NewBridge != nil {
 			s.Bridge = NewBridge(s)

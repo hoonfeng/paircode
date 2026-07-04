@@ -30,7 +30,6 @@ import (
 	"github.com/hoonfeng/paircode/cmd/companion/vterm"
 )
 
-const termIdleFrames = 180
 
 var (
 	theTermMgr  *termManager
@@ -306,7 +305,6 @@ type TerminalWidget struct {
 	shell      string
 	cwd        string
 	cols, rows int
-	idleFrames int
 	scrollOff  int
 	pumpID     int
 
@@ -457,9 +455,6 @@ func (tw *TerminalWidget) syncDisplay() {
 	if tw.vt == nil {
 		return
 	}
-
-	// 检查面板尺寸变化
-	tw.checkResize()
 
 	cols, rows := tw.vt.Size()
 	scrLen := tw.vt.ScrollbackLen()
@@ -793,28 +788,16 @@ func (tw *TerminalWidget) reader(sess pty.PTY) {
 }
 
 func (tw *TerminalWidget) startPump() {
+	if ui.Ctx.App == nil {
+		return
+	}
 	tw.mu.Lock()
-	tw.idleFrames = 0
 	if tw.pumpID != 0 {
 		tw.mu.Unlock()
 		return
 	}
-	tw.mu.Unlock()
-
-	if ui.Ctx.App == nil {
-		return
-	}
 	tw.pumpID = ui.Ctx.App.SetInterval(func() { tw.drain() }, 30*time.Millisecond)
-}
-
-func (tw *TerminalWidget) stopPump() {
-	tw.mu.Lock()
-	id := tw.pumpID
-	tw.pumpID = 0
 	tw.mu.Unlock()
-	if id != 0 && ui.Ctx.App != nil {
-		ui.Ctx.App.ClearInterval(id)
-	}
 }
 
 func (tw *TerminalWidget) killPTY() {
@@ -825,20 +808,18 @@ func (tw *TerminalWidget) killPTY() {
 	if sess != nil {
 		sess.Close()
 	}
-	tw.stopPump()
 }
 
 func (tw *TerminalWidget) drain() {
+	// 【关键】无数据时也要检查尺寸变化（最大化/最小化/拖拽改宽度）
+	resized := tw.checkResize()
+
 	tw.mu.Lock()
 	var data []byte
 	if len(tw.pending) > 0 {
 		data = tw.pending
 		tw.pending = nil
-		tw.idleFrames = 0
-	} else {
-		tw.idleFrames++
 	}
-	idle := tw.idleFrames > termIdleFrames
 	tw.mu.Unlock()
 
 	if len(data) > 0 {
@@ -851,24 +832,27 @@ func (tw *TerminalWidget) drain() {
 		if ui.Ctx.App != nil {
 			ui.Ctx.App.MarkDirty()
 		}
-	}
-	if idle {
-		os.Stderr.WriteString("[drain] idle, stopping pump\n")
-		tw.stopPump()
+	} else if resized {
+		// 无数据但尺寸变了，更新显示
+		tw.syncDisplay()
+		if ui.Ctx.App != nil {
+			ui.Ctx.App.MarkDirty()
+		}
 	}
 }
 
 // ─── Resize ──────────────────────────────────────────────────
 
-func (tw *TerminalWidget) checkResize() {
+// checkResize 检查面板尺寸是否变化，变化时调用 resizeTo 并返回 true。
+func (tw *TerminalWidget) checkResize() bool {
 	if tw.panelEl == nil {
-		return
+		return false
 	}
 	l, t_, r, b := tw.panelEl.GetBoundingClientRect()
 	panelW := float64(r - l)
 	panelH := float64(b - t_)
 	if panelW < 10 || panelH < 10 {
-		return
+		return false
 	}
 	padding := 4.0 * 2
 	fontSize := 14.0
@@ -884,9 +868,9 @@ func (tw *TerminalWidget) checkResize() {
 	}
 	if newCols != tw.cols || newRows != tw.rows {
 		tw.resizeTo(newCols, newRows)
-		// resize 后重新同步
-		tw.syncDisplay()
+		return true
 	}
+	return false
 }
 
 func (tw *TerminalWidget) resizeFromPanel(panelEl *dom.Element) {
