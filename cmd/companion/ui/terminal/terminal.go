@@ -937,6 +937,10 @@ func (tw *TerminalWidget) resizeTo(cols, rows int) {
 // ─── 键盘 → VT ─────────────────────────────────────────────
 
 func (tw *TerminalWidget) handleKey(ev *event.KeyboardEvent) {
+	// KeyPress 控制字符（<=0x1F）由 KeyDown 已处理，跳过避免重复发送到 PTY
+	if ev.Type() == event.KeyPress && ev.Char <= 0x1F {
+		return
+	}
 	data := keyToVT(ev)
 	if len(data) == 0 {
 		return
@@ -965,7 +969,7 @@ func keyToVT(ev *event.KeyboardEvent) []byte {
 	case event.CodeTab:
 		return []byte{'\t'}
 	case event.CodeBackspace:
-		return []byte{'\b'}
+		return []byte{'\x7f'}
 	case event.CodeEscape:
 		return []byte{27}
 	case event.CodeUp:
