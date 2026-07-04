@@ -163,6 +163,26 @@ body { font-size: 13px; color: #cccccc; background: #1e1e1e; overflow: hidden; }
 .welcome .action { padding: 10px 20px; background: #0e639c; color: #fff; cursor: pointer; font-size: 13px; }
 .welcome .action:hover { background: #1177bb; }
 
+/* ── 市场面板（Marketplace）── */
+.marketplace-tabs { display: flex; flex-direction: row; gap: 2px; }
+.marketplace-tab { padding: 4px 10px; cursor: pointer; font-size: 12px; color: #8c8c8c; user-select: none; border-radius: 3px; }
+.marketplace-tab:hover { background: #2a2d2e; color: #cccccc; }
+.marketplace-tab.active { background: #094771; color: #ffffff; }
+.marketplace-item { display: flex; flex-direction: row; align-items: center; gap: 8px; padding: 6px 8px; cursor: default; border-bottom: 1px solid #2d2d2d; }
+.marketplace-item:hover { background: #2a2d2e; }
+.marketplace-item-icon { width: 32px; height: 32px; flex-shrink: 0; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; }
+.marketplace-item-icon.mcp { background: #0e639c; color: #fff; }
+.marketplace-item-icon.skill { background: #4ec9b0; color: #1e1e1e; }
+.marketplace-item-body { flex: 1; overflow: hidden; }
+.marketplace-item-name { font-size: 13px; color: #cccccc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.marketplace-item-desc { font-size: 11px; color: #8c8c8c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.marketplace-item-tags { display: flex; flex-direction: row; gap: 4px; flex-shrink: 0; }
+.marketplace-item-tag { font-size: 10px; padding: 1px 5px; border-radius: 3px; background: #3c3c3c; color: #8c8c8c; }
+.marketplace-item-installed-tag { font-size: 10px; padding: 1px 5px; border-radius: 3px; background: #264f78; color: #4ec9b0; }
+.marketplace-install-btn { padding: 3px 10px; font-size: 11px; background: #0e639c; color: #fff; border: none; cursor: pointer; border-radius: 3px; flex-shrink: 0; }
+.marketplace-install-btn:hover { background: #1177bb; }
+.marketplace-install-btn.installed { background: #3c3c3c; color: #6e6e6e; cursor: default; }
+
 /* ── 对话流式光标闪烁动画 ── */
 @keyframes chat-cursor-blink {
   0%, 100% { opacity: 1; }

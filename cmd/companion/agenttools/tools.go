@@ -226,18 +226,19 @@ func mcpAddTool(args map[string]any) (string, error) {
 }
 // ─── 市场工具实现 ──
 func MarketSearch(query, kind string) string {
-	_ = strings.ToLower(strings.TrimSpace(query))
-	if kind == "" {
-		kind = "all"
+	results := marketplacepanel.Search(query, kind)
+	if len(results) == 0 {
+		return "未找到匹配的市场条目。用 marketplace_install <id> 安装。"
 	}
 	var b strings.Builder
-	if kind == "all" || kind == "mcp" {
-		b.WriteString("## MCP 服务器\n")
+	for _, e := range results {
+		installed := ""
+		if marketplacepanel.IsInstalled(e.ID) {
+			installed = " [已安装]"
+		}
+		fmt.Fprintf(&b, "- [%s] %s（%s）：%s%s\n", e.Kind, e.Name, e.ID, e.Description, installed)
 	}
-	if kind == "all" || kind == "skill" {
-		b.WriteString("\n## 技能\n")
-	}
-	b.WriteString("\n用 marketplace_install <id> 安装。")
+	fmt.Fprintf(&b, "\n共 %d 个条目。用 marketplace_install <id> 安装。", len(results))
 	return b.String()
 }
 

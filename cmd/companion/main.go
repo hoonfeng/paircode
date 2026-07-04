@@ -31,6 +31,7 @@ import (
 	filetreepanel "github.com/hoonfeng/paircode/cmd/companion/ui/filetree"
 	gitpanel "github.com/hoonfeng/paircode/cmd/companion/ui/git"
 	menuactions "github.com/hoonfeng/paircode/cmd/companion/ui/menu"
+	marketplacepanel "github.com/hoonfeng/paircode/cmd/companion/ui/marketplace"
 	searchpanel "github.com/hoonfeng/paircode/cmd/companion/ui/search"
 	settingspanel "github.com/hoonfeng/paircode/cmd/companion/ui/settings"
 	"github.com/hoonfeng/paircode/cmd/companion/ui/state"
@@ -436,6 +437,14 @@ func buildDropdowns(doc *dom.Document) {
 			}},
 			{Divider: true},
 			{Label: "Agent 监控", OnClick: func() { menuactions.ShowAgentMonitor() }},
+			{Divider: true},
+			{Label: "MCP 市场…", OnClick: func() {
+				marketplacepanel.OpenDialog()
+			}},
+			{Label: "技能市场…", OnClick: func() {
+				marketplacepanel.OpenDialog()
+			}},
+			{Divider: true},
 			{Label: "技能管理…", OnClick: func() {
 				settingspanel.OpenDialog()
 			}},
