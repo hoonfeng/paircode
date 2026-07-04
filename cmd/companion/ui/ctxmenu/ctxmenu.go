@@ -22,6 +22,7 @@ import (
 	"github.com/hoonfeng/paircode/cmd/companion/ui"
 	"github.com/hoonfeng/paircode/cmd/companion/uiapi"
 	chatpanel "github.com/hoonfeng/paircode/cmd/companion/ui/chat"
+	editorpanel "github.com/hoonfeng/paircode/cmd/companion/ui/editor"
 	filetreepanel "github.com/hoonfeng/paircode/cmd/companion/ui/filetree"
 	termpanel "github.com/hoonfeng/paircode/cmd/companion/ui/terminal"
 )
@@ -642,15 +643,18 @@ func EditorContentMenu(x, y float64) {
 		return
 	}
 	items := []component.ContextMenuItem{
-		{Label: "撤销", OnClick: func() { uiapi.MessageInfo("撤销功能待实现") }},
-		{Label: "重做", OnClick: func() { uiapi.MessageInfo("重做功能待实现") }},
+		{Label: "撤销", OnClick: func() { editorpanel.Editor.Undo() }},
+		{Label: "重做", OnClick: func() { editorpanel.Editor.Redo() }},
 		{Divider: true},
-		{Label: "剪切", OnClick: func() { uiapi.MessageInfo("剪切功能待实现") }},
-		{Label: "复制", OnClick: func() { uiapi.MessageInfo("复制功能待实现") }},
-		{Label: "粘贴", OnClick: func() { uiapi.MessageInfo("粘贴功能待实现") }},
+		{Label: "剪切", OnClick: func() { editorpanel.Editor.CutSelection() }},
+		{Label: "复制", OnClick: func() { editorpanel.Editor.CopySelection() }},
+		{Label: "粘贴", OnClick: func() { editorpanel.Editor.PasteText() }},
 		{Divider: true},
-		{Label: "全选", OnClick: func() { uiapi.MessageInfo("全选功能待实现") }},
-		{Label: "查找", OnClick: func() { uiapi.MessageInfo("查找功能待实现") }},
+		{Label: "全选", OnClick: func() {
+			if ce := editorpanel.Editor.ActiveCodeEditor(); ce != nil {
+				ce.SelectAll()
+			}
+		}},
 	}
 	showContextMenu(doc, x, y, items)
 }
@@ -679,11 +683,13 @@ func EditorTabMenu(x, y float64, i int) {
 		}},
 		{Divider: true},
 		{Label: "复制路径", OnClick: func() {
-			if ui.Ctx.Editor != nil {
-				// 获取当前标签路径
-				_ = ui.Ctx.Editor.Element // 通过编辑器获取
+			path := editorpanel.ActivePath()
+			if path != "" {
+				CopyToClipboard(path)
+				uiapi.MessageSuccess("已复制路径：" + path)
+			} else {
+				uiapi.MessageInfo("没有打开的文件")
 			}
-			uiapi.MessageInfo("复制路径功能开发中")
 		}},
 	}
 	showContextMenu(doc, x, y, items)
@@ -696,11 +702,22 @@ func TerminalMenu(x, y float64) {
 		return
 	}
 	items := []component.ContextMenuItem{
-		{Label: "复制", OnClick: func() { uiapi.MessageInfo("终端复制功能待实现") }},
-		{Label: "粘贴", OnClick: func() { uiapi.MessageInfo("终端粘贴功能待实现") }},
+		{Label: "复制全部", OnClick: func() {
+			text := termpanel.CopyActiveAll()
+			if text != "" {
+				CopyToClipboard(text)
+				uiapi.MessageSuccess("已复制终端内容")
+			}
+		}},
+		{Label: "粘贴", OnClick: func() {
+			text := component.PasteFromClipboard()
+			if text != "" {
+				termpanel.PasteToActive(text)
+			}
+		}},
 		{Divider: true},
 		{Label: "清屏", OnClick: func() {
-			uiapi.MarkDirty()
+			termpanel.ClearActive()
 		}},
 	}
 	showContextMenu(doc, x, y, items)

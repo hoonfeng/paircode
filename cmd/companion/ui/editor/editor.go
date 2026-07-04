@@ -307,6 +307,60 @@ func (e *editorState) CloseAllTabs() {
 	e.doCloseAll()
 }
 
+// ── 剪贴板与编辑操作（供菜单/快捷键调用）────────────────
+
+// activeEditor 返回当前活动标签的 CodeEditor 实例。
+func (e *editorState) activeEditor() *component.CodeEditor {
+	if e.active < 0 || e.active >= len(e.tabs) {
+		return nil
+	}
+	path := e.tabs[e.active].path
+	if ce, ok := e.editorCache[path]; ok {
+		return ce
+	}
+	return nil
+}
+
+// Undo 撤销当前编辑器中的操作。
+func (e *editorState) Undo() {
+	if ce := e.activeEditor(); ce != nil {
+		ce.Undo()
+	}
+}
+
+// Redo 重做当前编辑器中的操作。
+func (e *editorState) Redo() {
+	if ce := e.activeEditor(); ce != nil {
+		ce.Redo()
+	}
+}
+
+// CopySelection 复制选中文本到剪贴板。
+func (e *editorState) CopySelection() {
+	if ce := e.activeEditor(); ce != nil {
+		ce.CopySelection()
+	}
+}
+
+// CutSelection 剪切选中文本到剪贴板。
+func (e *editorState) CutSelection() {
+	if ce := e.activeEditor(); ce != nil {
+		ce.CutSelection()
+	}
+}
+
+// PasteText 从剪贴板粘贴文本到编辑器。
+func (e *editorState) PasteText() {
+	if ce := e.activeEditor(); ce != nil {
+		ce.PasteText()
+	}
+}
+
+// ActiveCodeEditor 返回当前活动标签的 CodeEditor 实例（供右键菜单等外部使用）。
+func (e *editorState) ActiveCodeEditor() *component.CodeEditor {
+	return e.activeEditor()
+}
+
 func (e *editorState) ReloadIfOpen(path string) bool {
 	for _, t := range e.tabs {
 		if t.path == path {
