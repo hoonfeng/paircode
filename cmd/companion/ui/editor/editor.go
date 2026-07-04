@@ -361,6 +361,14 @@ func (e *editorState) ActiveCodeEditor() *component.CodeEditor {
 	return e.activeEditor()
 }
 
+// SelectedText 返回当前编辑器中的选中文本。
+func (e *editorState) SelectedText() string {
+	if ce := e.activeEditor(); ce != nil {
+		return ce.SelectedText()
+	}
+	return ""
+}
+
 func (e *editorState) ReloadIfOpen(path string) bool {
 	for _, t := range e.tabs {
 		if t.path == path {

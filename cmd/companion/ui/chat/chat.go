@@ -1948,6 +1948,14 @@ func (s *ChatState) saveHistory() {
 
 // ─── 发送 ──────────────────────────────────────────────────────
 
+// SetInputText 设置聊天输入框文本（供外部使用，如右键"添加到对话"）。
+func (s *ChatState) SetInputText(text string) {
+	s.Store.Draft = text
+	if s.textAreaComp != nil {
+		s.textAreaComp.SetText(text)
+	}
+}
+
 // Send 发送输入框草稿消息。
 func (s *ChatState) Send(text string) {
 	if s.Bridge != nil && s.Bridge.IsRunning() {

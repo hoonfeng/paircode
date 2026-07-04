@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"syscall"
 	"unicode/utf16"
 	"unsafe"
@@ -636,24 +637,90 @@ func WorkspaceRootMenu(x, y float64, path string) {
 	showContextMenu(doc, x, y, items)
 }
 
-// EditorContentMenu 编辑器内容右键菜单。
+// EditorContentMenu 编辑器内容右键菜单（AI IDE 风格）。
 func EditorContentMenu(x, y float64) {
 	doc := ui.Ctx.Doc
 	if doc == nil {
 		return
 	}
+
+	// 获取当前文件信息和选中文本
+	path := editorpanel.ActivePath()
+	fileName := filepath.Base(path)
+	selText := editorpanel.Editor.SelectedText()
+	ce := editorpanel.Editor.ActiveCodeEditor()
+
+	// 过长的选中文本截断作为上下文
+	ctxText := selText
+	if len([]rune(ctxText)) > 100 {
+		ctxText = string([]rune(ctxText)[:100]) + "..."
+	}
+
 	items := []component.ContextMenuItem{
-		{Label: "撤销", OnClick: func() { editorpanel.Editor.Undo() }},
-		{Label: "重做", OnClick: func() { editorpanel.Editor.Redo() }},
+		// ── 基本编辑 ──
+		{Label: "撤销   (Ctrl+Z)", OnClick: func() { editorpanel.Editor.Undo() }},
+		{Label: "重做   (Ctrl+Shift+Z)", OnClick: func() { editorpanel.Editor.Redo() }},
 		{Divider: true},
-		{Label: "剪切", OnClick: func() { editorpanel.Editor.CutSelection() }},
-		{Label: "复制", OnClick: func() { editorpanel.Editor.CopySelection() }},
-		{Label: "粘贴", OnClick: func() { editorpanel.Editor.PasteText() }},
-		{Divider: true},
-		{Label: "全选", OnClick: func() {
+		{Label: "剪切   (Ctrl+X)", OnClick: func() { editorpanel.Editor.CutSelection() }},
+		{Label: "复制   (Ctrl+C)", OnClick: func() { editorpanel.Editor.CopySelection() }},
+		{Label: "粘贴   (Ctrl+V)", OnClick: func() { editorpanel.Editor.PasteText() }},
+		{Label: "全选   (Ctrl+A)", OnClick: func() {
 			if ce := editorpanel.Editor.ActiveCodeEditor(); ce != nil {
 				ce.SelectAll()
 			}
+		}},
+
+		// ── AI: 添加到对话 ──
+		{Divider: true},
+		{Label: "AI: 添加到对话", OnClick: func() {
+			if selText != "" {
+				chatpanel.TheState.SetInputText(selText)
+				uiapi.MessageSuccess("已添加到对话，输入指令后按 Enter 发送")
+			} else {
+				uiapi.MessageInfo("请先在编辑器中选中代码")
+			}
+		}},
+
+		// ── 格式化 ──
+		{Divider: true},
+		{Label: "格式化文档", OnClick: func() {
+			uiapi.MessageInfo("格式化功能开发中，将在后续版本支持")
+		}},
+
+		// ── 复制信息 ──
+		{Divider: true},
+		{Label: "复制行内容", OnClick: func() {
+			if ce != nil {
+				// 复制当前光标所在行
+				fullText := ce.Text()
+				lines := strings.Split(fullText, "\n")
+				// 获取光标行（由编辑器外部管理，简化处理：复制选中或第一行）
+				if selText != "" {
+					CopyToClipboard(selText)
+					uiapi.MessageSuccess("已复制选中内容")
+				} else if len(lines) > 0 {
+					CopyToClipboard(lines[0])
+					uiapi.MessageSuccess("已复制第一行内容")
+				}
+			}
+		}},
+		{Label: "复制文件名", OnClick: func() {
+			if fileName != "" {
+				CopyToClipboard(fileName)
+				uiapi.MessageSuccess("已复制文件名：" + fileName)
+			}
+		}},
+		{Label: "复制路径", OnClick: func() {
+			if path != "" {
+				CopyToClipboard(path)
+				uiapi.MessageSuccess("已复制路径：" + path)
+			}
+		}},
+
+		// ── 命令 ──
+		{Divider: true},
+		{Label: "命令面板   (Ctrl+P)", OnClick: func() {
+			uiapi.MessageInfo("命令面板：Ctrl+P 切换文件 | Ctrl+Shift+P 执行命令")
 		}},
 	}
 	showContextMenu(doc, x, y, items)

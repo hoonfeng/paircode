@@ -462,7 +462,7 @@ func buildDropdowns(doc *dom.Document) {
 			{Label: "关于", OnClick: func() { uiapi.MessageInfo("Pair CodeAgent v0.1.0\n基于 GWui 的现代化 AI IDE") }},
 		}},
 	}
-	menuMaxWidth := float32(280)
+	menuMaxWidth := float32(180)
 	var activePopup *component.PopupMenu
 	for _, m := range menus {
 		btn := component.NewButton(doc, m.label)
