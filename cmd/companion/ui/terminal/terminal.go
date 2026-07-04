@@ -171,6 +171,35 @@ func OpenActiveTerminalDir(dir string) {
 	}
 }
 
+// ClearActive 清空活跃终端的屏幕。
+func ClearActive() {
+	if theTerminal != nil {
+		theTerminal.ClearScreen()
+	}
+}
+
+// CopyActiveAll 返回活跃终端的可见屏文本。
+func CopyActiveAll() string {
+	if theTerminal != nil {
+		return theTerminal.CopyAll()
+	}
+	return ""
+}
+
+// PasteToActive 向活跃终端粘贴文本（发送到 PTY）。
+func PasteToActive(text string) {
+	if theTerminal == nil || text == "" {
+		return
+	}
+	theTerminal.mu.Lock()
+	sess := theTerminal.sess
+	theTerminal.mu.Unlock()
+	if sess != nil {
+		sess.Write([]byte(text))
+		theTerminal.startPump()
+	}
+}
+
 func (m *termManager) renderTabBar() {
 	if m.tabBarEl == nil {
 		return

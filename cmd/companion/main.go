@@ -348,12 +348,12 @@ func buildDropdowns(doc *dom.Document) {
 		}},
 		// ── 编辑 ──
 		{"编辑", []component.PopupMenuItem{
-			{Label: "撤销   (Ctrl+Z)", OnClick: func() { uiapi.MessageInfo("撤销功能待实现") }},
-			{Label: "重做   (Ctrl+Shift+Z)", OnClick: func() { uiapi.MessageInfo("重做功能待实现") }},
+			{Label: "撤销   (Ctrl+Z)", OnClick: func() { editorpanel.Editor.Undo() }},
+			{Label: "重做   (Ctrl+Shift+Z)", OnClick: func() { editorpanel.Editor.Redo() }},
 			{Divider: true},
-			{Label: "剪切", OnClick: func() { uiapi.MessageInfo("剪切功能待实现") }},
-			{Label: "复制", OnClick: func() { uiapi.MessageInfo("复制功能待实现") }},
-			{Label: "粘贴", OnClick: func() { uiapi.MessageInfo("粘贴功能待实现") }},
+			{Label: "剪切", OnClick: func() { editorpanel.Editor.CutSelection() }},
+			{Label: "复制", OnClick: func() { editorpanel.Editor.CopySelection() }},
+			{Label: "粘贴", OnClick: func() { editorpanel.Editor.PasteText() }},
 			{Divider: true},
 			{Label: "查找对话   (Ctrl+F)", OnClick: func() { chatpanel.ToggleSearch() }},
 			{Label: "跨文件搜索   (Ctrl+Shift+F)", OnClick: func() {
@@ -416,9 +416,7 @@ func buildDropdowns(doc *dom.Document) {
 		{"终端", []component.PopupMenuItem{
 			{Label: "新建终端", OnClick: func() { termpanel.NewTerminal() }},
 			{Divider: true},
-			{Label: "清屏", OnClick: func() {
-				uiapi.MessageInfo("请在终端右键菜单中选择清屏，或输入 clear 命令")
-			}},
+			{Label: "清屏", OnClick: func() { termpanel.ClearActive() }},
 		}},
 		// ── Agent ｜ AI IDE 核心特色菜单 ──
 		{"Agent", []component.PopupMenuItem{
