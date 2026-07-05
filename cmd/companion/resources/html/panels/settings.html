@@ -1,6 +1,6 @@
 <!-- 设置面板 HTML 模板（加载到 Modal 内）—— 6 tab 标签页结构 -->
 <!-- 内容自然排列，由 modal-body 的 overflow:auto 处理整体滚动。 -->
-<div id="settings-root" style="display:flex;flex-direction:column;flex:1;min-height:0;color:#cccccc;font-size:13px;">
+<div id="settings-root" style="display:flex;flex-direction:column;flex:1;min-height:0;color:#cccccc;font-size:13px;overflow:hidden;">
 
   <!-- ── Tab 导航条（VS Code Dark+ 风格，使用 .settings-tab CSS 类）── -->
   <div style="display:flex;flex-direction:row;border-bottom:1px solid #2d2d2d;background:#252526;flex-shrink:0;">
@@ -13,8 +13,7 @@
     <div id="settings-tab-6" class="settings-tab" onclick="selectSettingsTab(6)">指令</div>
   </div>
 
-  <!-- ── 滚动内容区（单一滚动容器，所有 pane 在其中上下排列）── -->
-  <div style="flex:1;overflow-y:auto;min-height:0;padding:12px 0;background:#1e1e1e;">
+  <!-- ── 各 Tab 面板（作为 settings-root 的直接 flex 子项，独立管理滚动）── -->
 
     <!-- Tab 0: LLM 服务（含主模型 + 上下文压缩子区域） -->
     <div id="settings-pane-0" class="settings-pane" style="display:flex;flex-direction:column;gap:10px;">
@@ -102,7 +101,5 @@
       <div style="font-size:12px;color:#8c8c8c;padding:2px 0;">勾选启用，取消勾选禁用（system=内置，project=项目级）</div>
       <div id="s-skills-list"></div>
     </div>
-  </div>
-
   <!-- 底部按钮已移至 modal.Footer() -->
 </div>
