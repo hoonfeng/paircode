@@ -30,12 +30,12 @@ import (
 	editorpanel "github.com/hoonfeng/paircode/cmd/companion/ui/editor"
 	filetreepanel "github.com/hoonfeng/paircode/cmd/companion/ui/filetree"
 	gitpanel "github.com/hoonfeng/paircode/cmd/companion/ui/git"
-	menuactions "github.com/hoonfeng/paircode/cmd/companion/ui/menu"
 	marketplacepanel "github.com/hoonfeng/paircode/cmd/companion/ui/marketplace"
-	statspanel "github.com/hoonfeng/paircode/cmd/companion/ui/stats"
+	menuactions "github.com/hoonfeng/paircode/cmd/companion/ui/menu"
 	searchpanel "github.com/hoonfeng/paircode/cmd/companion/ui/search"
 	settingspanel "github.com/hoonfeng/paircode/cmd/companion/ui/settings"
 	"github.com/hoonfeng/paircode/cmd/companion/ui/state"
+	statspanel "github.com/hoonfeng/paircode/cmd/companion/ui/stats"
 	termpanel "github.com/hoonfeng/paircode/cmd/companion/ui/terminal"
 )
 
@@ -384,30 +384,40 @@ func buildDropdowns(doc *dom.Document) {
 				} else {
 					updateLeftView()
 					syncActivityBar()
-					if theApp != nil { theApp.MarkDirty() }
+					if theApp != nil {
+						theApp.MarkDirty()
+					}
 				}
 			}},
 			{Label: "搜索", OnClick: func() {
 				shellState.LeftView = "search"
-				if !shellState.LeftOpen { togglePanel("left") }
+				if !shellState.LeftOpen {
+					togglePanel("left")
+				}
 				shellState.LeftOpen = true
 				updateLeftView()
 				syncActivityBar()
 				if ui.Ctx.Search != nil && ui.Ctx.Search.Refresh != nil {
 					ui.Ctx.Search.Refresh()
 				}
-				if theApp != nil { theApp.MarkDirty() }
+				if theApp != nil {
+					theApp.MarkDirty()
+				}
 			}},
 			{Label: "源代码管理", OnClick: func() {
 				shellState.LeftView = "git"
-				if !shellState.LeftOpen { togglePanel("left") }
+				if !shellState.LeftOpen {
+					togglePanel("left")
+				}
 				shellState.LeftOpen = true
 				updateLeftView()
 				syncActivityBar()
 				if ui.Ctx.Git != nil && ui.Ctx.Git.Refresh != nil {
 					ui.Ctx.Git.Refresh()
 				}
-				if theApp != nil { theApp.MarkDirty() }
+				if theApp != nil {
+					theApp.MarkDirty()
+				}
 			}},
 			{Divider: true},
 			{Label: "专注模式   (Ctrl+K)", OnClick: func() { toggleFocusMode() }},
@@ -918,23 +928,29 @@ func injectUIAPI() {
 		m := component.NewModal(theDoc)
 		m.SetTitle(title)
 		m.SetBody(body)
-		bodyEl := m.Content()
-		btnRow := theDoc.CreateElement("div")
-		btnRow.SetAttribute("style", "display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px;")
+		m.SetMaxWidth(480)
+		m.SetMaxHeight(360)
+		footer := m.Footer()
 		confirmBtn := component.NewButton(theDoc, "确定")
 		confirmBtn.OnClick(func() { m.Hide(); onConfirm() })
-		btnRow.AppendChild(confirmBtn.Element())
+		footer.AppendChild(confirmBtn.Element())
 		cancelBtn := component.NewButton(theDoc, "取消")
-		cancelBtn.SetStyle("background-color: #9e9e9e;")
+		cancelBtn.Element().ClassList().Add("btn-secondary")
 		cancelBtn.OnClick(func() { m.Hide() })
-		btnRow.AppendChild(cancelBtn.Element())
-		bodyEl.AppendChild(btnRow)
+		footer.AppendChild(cancelBtn.Element())
 		m.Show()
 	}
 	// 自定义对话框
-	uiapi.ShowDialogFunc = func(title string, _ float32, content, footer interface{}) int {
+	uiapi.ShowDialogFunc = func(title string, width float32, content, footer interface{}) int {
 		m := component.NewModal(theDoc)
 		m.SetTitle(title)
+		// 设尺寸上限防止内容撑满屏幕；width 参数生效，默认 600
+		if width > 0 {
+			m.SetMaxWidth(width)
+		} else {
+			m.SetMaxWidth(600)
+		}
+		m.SetMaxHeight(560)
 		if contentEl, ok := content.(*dom.Element); ok {
 			ce := m.Content()
 			ce.SetTextContent("")
@@ -1015,20 +1031,20 @@ func injectCoreCallbacks() {
 	core.OnShowPrompt = func(title, initial string, onOk func(string)) {
 		m := component.NewModal(theDoc)
 		m.SetTitle(title)
+		m.SetMaxWidth(480)
+		m.SetMaxHeight(360)
 		bodyEl := m.Content()
 		bodyEl.SetTextContent("")
 		inp := component.NewInput(theDoc, initial)
 		bodyEl.AppendChild(inp.Element())
-		btnRow := theDoc.CreateElement("div")
-		btnRow.SetAttribute("style", "display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px;")
+		footer := m.Footer()
 		okBtn := component.NewButton(theDoc, "确定")
 		okBtn.OnClick(func() { m.Hide(); onOk(inp.Value()) })
-		btnRow.AppendChild(okBtn.Element())
+		footer.AppendChild(okBtn.Element())
 		cancelBtn := component.NewButton(theDoc, "取消")
-		cancelBtn.SetStyle("background-color: #9e9e9e;")
+		cancelBtn.Element().ClassList().Add("btn-secondary")
 		cancelBtn.OnClick(func() { m.Hide() })
-		btnRow.AppendChild(cancelBtn.Element())
-		bodyEl.AppendChild(btnRow)
+		footer.AppendChild(cancelBtn.Element())
 		m.Show()
 	}
 }

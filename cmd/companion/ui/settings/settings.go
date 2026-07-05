@@ -127,11 +127,29 @@ func newCheckbox(doc *dom.Document, label string, checked bool) *component.Check
 // ── 占位替换 ──
 
 func replaceInput(doc *dom.Document, id string, inp *component.Input) {
-	ui.ReplaceChildByID(doc, id, inp.Element())
+	el := inp.Element()
+	ui.ReplaceChildByID(doc, id, el)
+	ensureFlex1(el)
 }
 
 func replaceSelect(doc *dom.Document, id string, sel *component.Select) {
-	ui.ReplaceChildByID(doc, id, sel.Element())
+	el := sel.Element()
+	ui.ReplaceChildByID(doc, id, el)
+	ensureFlex1(el)
+}
+
+// ensureFlex1 确保元素的内联 style 包含 flex:1;min-width:0。
+// flex:1 让元素在 settings-row 的 flex 布局中填满剩余空间。
+func ensureFlex1(el *dom.Element) {
+	cur := el.GetAttribute("style")
+	if cur != "" && strings.Contains(cur, "flex:") {
+		return
+	}
+	if cur != "" {
+		el.SetAttribute("style", cur+";flex:1;min-width:0;")
+	} else {
+		el.SetAttribute("style", "flex:1;min-width:0;")
+	}
 }
 
 func replaceCheckbox(doc *dom.Document, id string, cb *component.Checkbox) {
@@ -149,6 +167,7 @@ func replaceCheckbox(doc *dom.Document, id string, cb *component.Checkbox) {
 		container.RemoveChild(c)
 	}
 	container.AppendChild(cb.Element())
+	ensureFlex1(cb.Element())
 }
 
 // ── OpenDialog ──
@@ -248,7 +267,7 @@ func selectTab(doc *dom.Document, idx int) {
 			paneEl.SetAttribute("style", "display:flex;flex-direction:column;gap:10px;")
 		} else {
 			tabEl.SetAttribute("style", "padding:8px 16px;cursor:pointer;font-size:13px;color:"+ui.TextDim+";border-bottom:2px solid transparent;user-select:none;")
-			paneEl.SetAttribute("style", "display:none;flex-direction:column;gap:10px;")
+			paneEl.SetAttribute("style", "display:none;")
 		}
 	}
 }
@@ -256,54 +275,54 @@ func selectTab(doc *dom.Document, idx int) {
 // ── 各 Tab 控件创建 ──
 
 var (
-	providerInput      *component.Input
-	baseURLInput       *component.Input
-	apiKeyInput        *component.Input
-	execModelInput     *component.Input
-	planModelInput     *component.Input
-	reviewModelInput   *component.Input
-	tempInput          *component.Input
-	thinkingSelect     *component.Select
-	maxTokensInput     *component.Input
-	ctxMaxTokensInput  *component.Input
-	compressCb         *component.Checkbox
+	providerInput       *component.Input
+	baseURLInput        *component.Input
+	apiKeyInput         *component.Input
+	execModelInput      *component.Input
+	planModelInput      *component.Input
+	reviewModelInput    *component.Input
+	tempInput           *component.Input
+	thinkingSelect      *component.Select
+	maxTokensInput      *component.Input
+	ctxMaxTokensInput   *component.Input
+	compressCb          *component.Checkbox
 	compressProviderInp *component.Input
-	compressAPIKeyInp  *component.Input
-	compressBaseURLInp *component.Input
-	compressModelInp   *component.Input
-	compressThinkSel   *component.Select
-	autonomousCb       *component.Checkbox
-	autoReviewCb       *component.Checkbox
-	aiReviewCb         *component.Checkbox
-	autoCollapseCb     *component.Checkbox
-	autoIterateCb      *component.Checkbox
-	requireApprovalCb  *component.Checkbox
-	luaToolsCb         *component.Checkbox
-	benchmarkCb        *component.Checkbox
-	maxIterationsInp   *component.Input
-	maxParallelInp     *component.Input
-	reviewRetriesInp   *component.Input
-	searxngInput       *component.Input
-	ignoreDirsInput    *component.Input
-	sysInstructionsInp *component.Input
-	shellSelect        *component.Select
-	termFontSizeInp    *component.Input
-	encodingSelect     *component.Select
-	themeSelect        *component.Select
-	fontFamilyInput    *component.Input
-	editorFontSizeInp  *component.Input
-	editorFontBoldCb   *component.Checkbox
-	editorFontItalicCb *component.Checkbox
-	editorFontULCb     *component.Checkbox
-	uiFontFamilyInp    *component.Input
-	uiFontBoldCb       *component.Checkbox
-	uiFontItalicCb     *component.Checkbox
-	uiFontULCb         *component.Checkbox
-	hideMinimapCb      *component.Checkbox
-	philosophyCb       *component.Checkbox
-	philosophyCbs      []*component.Checkbox // 每个经典一个 checkbox
-	autoConnectMCPCb   *component.Checkbox
-	skillCbs           []*component.Checkbox // 技能开关列表
+	compressAPIKeyInp   *component.Input
+	compressBaseURLInp  *component.Input
+	compressModelInp    *component.Input
+	compressThinkSel    *component.Select
+	autonomousCb        *component.Checkbox
+	autoReviewCb        *component.Checkbox
+	aiReviewCb          *component.Checkbox
+	autoCollapseCb      *component.Checkbox
+	autoIterateCb       *component.Checkbox
+	requireApprovalCb   *component.Checkbox
+	luaToolsCb          *component.Checkbox
+	benchmarkCb         *component.Checkbox
+	maxIterationsInp    *component.Input
+	maxParallelInp      *component.Input
+	reviewRetriesInp    *component.Input
+	searxngInput        *component.Input
+	ignoreDirsInput     *component.Input
+	sysInstructionsInp  *component.Input
+	shellSelect         *component.Select
+	termFontSizeInp     *component.Input
+	encodingSelect      *component.Select
+	themeSelect         *component.Select
+	fontFamilyInput     *component.Input
+	editorFontSizeInp   *component.Input
+	editorFontBoldCb    *component.Checkbox
+	editorFontItalicCb  *component.Checkbox
+	editorFontULCb      *component.Checkbox
+	uiFontFamilyInp     *component.Input
+	uiFontBoldCb        *component.Checkbox
+	uiFontItalicCb      *component.Checkbox
+	uiFontULCb          *component.Checkbox
+	hideMinimapCb       *component.Checkbox
+	philosophyCb        *component.Checkbox
+	philosophyCbs       []*component.Checkbox // 每个经典一个 checkbox
+	autoConnectMCPCb    *component.Checkbox
+	skillCbs            []*component.Checkbox // 技能开关列表
 )
 
 func createLLMTab(doc *dom.Document) {

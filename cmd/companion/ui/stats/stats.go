@@ -54,18 +54,18 @@ func fmtDuration(start, last time.Time) string {
 
 // ─── DOM 辅助 ──────────────────────────────────────────────
 
-func txt(doc dom.Document, text, style string) *dom.Element {
+func txt(doc *dom.Document, text, style string) *dom.Element {
 	el := doc.CreateElement("div")
 	el.SetAttribute("style", style)
-	el.SetText(text)
+	el.SetTextContent(text)
 	return el
 }
 
-func header(doc dom.Document, text string) *dom.Element {
+func header(doc *dom.Document, text string) *dom.Element {
 	return txt(doc, text, "font-size:14px;font-weight:bold;color:"+ui.Text+";margin-top:16px;margin-bottom:8px;")
 }
 
-func div(doc dom.Document, style string) *dom.Element {
+func div(doc *dom.Document, style string) *dom.Element {
 	el := doc.CreateElement("div")
 	el.SetAttribute("style", style)
 	return el
@@ -89,7 +89,7 @@ type donutCat struct {
 	Color string
 }
 
-func donutSection(doc dom.Document, label string, used, max int, cats []donutCat) *dom.Element {
+func donutSection(doc *dom.Document, label string, used, max int, cats []donutCat) *dom.Element {
 	wrapper := div(doc, "display:flex;align-items:center;gap:16px;margin:8px 0;")
 
 	// SVG 环形图
@@ -155,7 +155,7 @@ func donutSection(doc dom.Document, label string, used, max int, cats []donutCat
 	centerText.SetAttribute("fill", ui.Text)
 	centerText.SetAttribute("font-size", "14")
 	centerText.SetAttribute("font-weight", "bold")
-	centerText.SetText(fmt.Sprintf("%d%%", pct))
+	centerText.SetTextContent(fmt.Sprintf("%d%%", pct))
 	svg.AppendChild(centerText)
 
 	wrapper.AppendChild(svg)
@@ -204,8 +204,10 @@ func ShowStatsDialog() {
 
 	ps := core.GetProjectStatsSnapshot()
 
+	// 滚动由 .gwui-modal-body(flex:1 + overflow:auto) 统一处理，
+	// 此处若再设 overflow-y/max-height 会形成双层滚动条。
 	container := doc.CreateElement("div")
-	container.SetAttribute("style", "padding:12px 16px;overflow-y:auto;max-height:480px;")
+	container.SetAttribute("style", "padding:12px 16px;")
 
 	// ── 概览卡片 ──
 	overview := div(doc, "display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;")
@@ -330,7 +332,7 @@ func ShowStatsDialog() {
 	// ── 重置按钮 ──
 	resetBtn := doc.CreateElement("div")
 	resetBtn.SetAttribute("style", fmt.Sprintf("margin-top:12px;padding:6px 12px;background:%s;color:%s;border-radius:4px;font-size:12px;cursor:pointer;text-align:center;", ui.Error, ui.Text))
-	resetBtn.SetText("重置统计数据")
+	resetBtn.SetTextContent("重置统计数据")
 	resetBtn.SetAttribute("hover-style", "opacity:0.8;")
 	container.AppendChild(resetBtn)
 
@@ -338,7 +340,7 @@ func ShowStatsDialog() {
 	addClick(resetBtn, func() {
 		clickCount++
 		if clickCount == 1 {
-			resetBtn.SetText("再次点击确认重置")
+			resetBtn.SetTextContent("再次点击确认重置")
 			resetBtn.SetAttribute("style", fmt.Sprintf("margin-top:12px;padding:6px 12px;background:%s;color:%s;border-radius:4px;font-size:12px;cursor:pointer;text-align:center;opacity:0.8;", ui.Warning, ui.Text))
 		} else {
 			core.ResetProjectStats()
