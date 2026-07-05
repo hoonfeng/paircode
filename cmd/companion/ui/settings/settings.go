@@ -401,9 +401,6 @@ var (
 	compressBaseURLInp  *component.Input
 	compressModelSel    *component.Select
 	compressThinkSel    *component.Select
-	autonomousCb        *component.Checkbox
-	autoReviewCb        *component.Checkbox
-	aiReviewCb          *component.Checkbox
 	autoCollapseCb      *component.Checkbox
 	autoIterateCb       *component.Checkbox
 	requireApprovalCb   *component.Checkbox
@@ -523,15 +520,6 @@ func createCompressTab(doc *dom.Document) {
 
 func createAgentTab(doc *dom.Document) {
 	s := &EditingSettings
-
-	autonomousCb = newCheckbox(doc, "自主模式（Autonomous）", s.Autonomous)
-	replaceCheckbox(doc, "s-autonomous", autonomousCb)
-
-	autoReviewCb = newCheckbox(doc, "自动审核（Auto Review）", s.AutoReview)
-	replaceCheckbox(doc, "s-autoreview", autoReviewCb)
-
-	aiReviewCb = newCheckbox(doc, "AI 审核（用审核模型把关写操作）", s.AIReview)
-	replaceCheckbox(doc, "s-aireview", aiReviewCb)
 
 	autoCollapseCb = newCheckbox(doc, "自动折叠工具调用输出", s.AutoCollapse)
 	replaceCheckbox(doc, "s-autocollapse", autoCollapseCb)
@@ -709,9 +697,6 @@ func saveAll(doc *dom.Document) {
 	s.CompressThinkingMode = compressThinkSel.Value()
 
 	// Agent
-	s.Autonomous = autonomousCb.Checked()
-	s.AutoReview = autoReviewCb.Checked()
-	s.AIReview = aiReviewCb.Checked()
 	s.AutoCollapse = autoCollapseCb.Checked()
 	s.AutoIterate = autoIterateCb.Checked()
 	s.RequireApproval = requireApprovalCb.Checked()
