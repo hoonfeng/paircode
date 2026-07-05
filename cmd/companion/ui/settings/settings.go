@@ -5,12 +5,15 @@
 package settings
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
 	"github.com/hoonfeng/gwui/component"
 	"github.com/hoonfeng/gwui/dom"
+	"github.com/hoonfeng/gwui/event"
 	"github.com/hoonfeng/gwui/uixml"
 
 	"github.com/hoonfeng/paircode/cmd/companion/agent"
@@ -172,6 +175,20 @@ func replaceCheckbox(doc *dom.Document, id string, cb *component.Checkbox) {
 
 // ── OpenDialog ──
 
+// clickHandler 为 GWui 组件注册系统提供点击事件处理。
+type clickHandler struct {
+	fn func()
+}
+
+func (h *clickHandler) HandleEvent(e event.Event) bool {
+	if e.Type() == event.Click {
+		h.fn()
+		return true
+	}
+	return false
+}
+func (h *clickHandler) Focusable() bool { return false }
+
 // OpenDialog 打开设置对话框（Modal）。
 func OpenDialog() {
 	doc := ui.Ctx.Doc
@@ -185,6 +202,24 @@ func OpenDialog() {
 	modal.SetMaxWidth(600)
 	modal.SetMaxHeight(560)
 
+	// ── 在 header 右上角添加操作按钮 ──
+	headerActions := modal.HeaderActions()
+
+	saveBtn := doc.CreateElement("div")
+	saveBtn.SetAttribute("style", "padding:2px 12px;font-size:12px;cursor:pointer;color:#fff;background:#0e639c;border:none;border-radius:3px;user-select:none;")
+	saveBtn.SetTextContent("保存")
+	headerActions.AppendChild(saveBtn)
+
+	exportBtn := doc.CreateElement("div")
+	exportBtn.SetAttribute("style", "padding:2px 10px;font-size:12px;cursor:pointer;color:#cccccc;border:1px solid #454545;border-radius:3px;user-select:none;")
+	exportBtn.SetTextContent("导出")
+	headerActions.AppendChild(exportBtn)
+
+	importBtn := doc.CreateElement("div")
+	importBtn.SetAttribute("style", "padding:2px 10px;font-size:12px;cursor:pointer;color:#cccccc;border:1px solid #454545;border-radius:3px;user-select:none;")
+	importBtn.SetTextContent("导入")
+	headerActions.AppendChild(importBtn)
+
 	body := modal.Content()
 	if body == nil {
 		return
@@ -193,28 +228,11 @@ func OpenDialog() {
 
 	// ── 加载 HTML 模板 ──
 	reg := uixml.NewRegistry()
-	reg.OnClick("saveSettings", func(ctx uixml.EventContext) bool {
-		saveAll(doc)
-		Save()
-		ApplyAgentSettings()
-		ApplyFontFamily()
-		if ApplyIgnoreDirs != nil {
-			ApplyIgnoreDirs(core.Root())
-		}
-		modal.Hide()
-		uiapi.MessageSuccess("设置已保存")
-		return true
-	})
-	reg.OnClick("cancelSettings", func(ctx uixml.EventContext) bool {
-		modal.Hide()
-		return true
-	})
-
-	// Tab 切换
+	// 注册 tab onclick 处理器（使 HTML 中 onclick="selectSettingsTab(n)" 生效）
 	for i := 0; i <= 6; i++ {
-		tabIdx := i // capture
+		idx := i
 		reg.OnClick(fmt.Sprintf("selectSettingsTab(%d)", i), func(ctx uixml.EventContext) bool {
-			selectTab(doc, tabIdx)
+			selectTab(doc, idx)
 			return true
 		})
 	}
@@ -235,6 +253,88 @@ func OpenDialog() {
 	ui.TransferComponents(doc, doc, root)
 	ui.DetachRoot(root)
 	body.AppendChild(root)
+
+	// ── 注册按钮点击事件 ──
+	// 保存
+	doc.RegisterComponent(saveBtn, &clickHandler{
+		fn: func() {
+			saveAll(doc)
+			Save()
+			ApplyAgentSettings()
+			ApplyFontFamily()
+			if ApplyIgnoreDirs != nil {
+				ApplyIgnoreDirs(core.Root())
+			}
+			modal.Hide()
+			uiapi.MessageSuccess("设置已保存")
+		},
+	})
+
+	// 导出
+	doc.RegisterComponent(exportBtn, &clickHandler{
+		fn: func() {
+			path := ui.SaveFileDialog("导出配置", "JSON 文件 (*.json)|*.json", "settings.json")
+			if path == "" {
+				return
+			}
+			data, err := json.MarshalIndent(EditingSettings, "", "  ")
+			if err != nil {
+				uiapi.MessageError("序列化配置失败: " + err.Error())
+				return
+			}
+			if err := os.WriteFile(path, data, 0o600); err != nil {
+				uiapi.MessageError("写入文件失败: " + err.Error())
+				return
+			}
+			uiapi.MessageSuccess("配置已导出: " + path)
+		},
+	})
+
+	// 导入
+	doc.RegisterComponent(importBtn, &clickHandler{
+		fn: func() {
+			path := ui.OpenFileDialog("导入配置", "JSON 文件 (*.json)|*.json")
+			if path == "" {
+				return
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				uiapi.MessageError("读取文件失败: " + err.Error())
+				return
+			}
+			var imported core.AppSettings
+			if err := json.Unmarshal(data, &imported); err != nil {
+				uiapi.MessageError("解析配置文件失败: " + err.Error())
+				return
+			}
+			// 应用导入配置
+			core.Settings = imported
+			core.Save()
+			EditingSettings = core.Settings
+
+			// 重建 UI
+			body.ClearChildren()
+
+			newReg := uixml.NewRegistry()
+			ui.MustLoadPanelHTML(doc, "panels/settings.html", newReg)
+			newRoot := doc.GetElementByID("settings-root")
+
+			createLLMTab(doc)
+			createCompressTab(doc)
+			createAgentTab(doc)
+			createTerminalTab(doc)
+			createAppearanceTab(doc)
+			createPhilosophyTab(doc)
+			createMCPTab(doc)
+
+			ui.TransferComponents(doc, doc, newRoot)
+			ui.DetachRoot(newRoot)
+			body.AppendChild(newRoot)
+
+			selectTab(doc, 0)
+			uiapi.MessageSuccess("配置已导入")
+		},
+	})
 
 	modal.Show()
 	selectTab(doc, 0) // 默认选中第一个 tab
@@ -274,22 +374,32 @@ func selectTab(doc *dom.Document, idx int) {
 
 // ── 各 Tab 控件创建 ──
 
+// 服务商默认 API 地址映射（选择服务商时自动填充 API 地址 / 模型列表）。
+var providerBaseURLs = map[string]string{
+	"deepseek":          "https://api.deepseek.com/v1",
+	"openai":            "https://api.openai.com/v1",
+	"anthropic":         "https://api.anthropic.com",
+	"openai-compatible": "",
+	"custom":            "",
+}
+
 var (
-	providerInput       *component.Input
+	providerSel         *component.Select
 	baseURLInput        *component.Input
 	apiKeyInput         *component.Input
-	execModelInput      *component.Input
-	planModelInput      *component.Input
-	reviewModelInput    *component.Input
-	tempInput           *component.Input
+	execModelSel        *component.Select
+	planModelSel        *component.Select
+	reviewModelSel      *component.Select
+	tempSlider          *component.Slider
+	tempLabel           *dom.Element
 	thinkingSelect      *component.Select
 	maxTokensInput      *component.Input
 	ctxMaxTokensInput   *component.Input
 	compressCb          *component.Checkbox
-	compressProviderInp *component.Input
+	compressProviderSel *component.Select
 	compressAPIKeyInp   *component.Input
 	compressBaseURLInp  *component.Input
-	compressModelInp    *component.Input
+	compressModelSel    *component.Select
 	compressThinkSel    *component.Select
 	autonomousCb        *component.Checkbox
 	autoReviewCb        *component.Checkbox
@@ -327,8 +437,19 @@ var (
 
 func createLLMTab(doc *dom.Document) {
 	s := &EditingSettings
-	providerInput = newInput(doc, "服务商", s.Provider)
-	replaceInput(doc, "s-provider", providerInput)
+	modelOpts := core.GetModels(s.Provider)
+	providerSel = newSelect(doc, core.GetProviders(), s.Provider)
+	providerSel.OnChange(func(idx int, val string) {
+		// 切换服务商时：自动填充 baseURL + 刷新模型列表
+		if url, ok := providerBaseURLs[val]; ok {
+			baseURLInput.SetValue(url)
+		}
+		models := core.GetModels(val)
+		execModelSel.SetOptions(models)
+		planModelSel.SetOptions(models)
+		reviewModelSel.SetOptions(models)
+	})
+	replaceSelect(doc, "s-provider", providerSel)
 
 	baseURLInput = newInput(doc, "API 地址", s.BaseURL)
 	replaceInput(doc, "s-baseurl", baseURLInput)
@@ -336,17 +457,31 @@ func createLLMTab(doc *dom.Document) {
 	apiKeyInput = newInput(doc, "API Key", s.APIKey)
 	replaceInput(doc, "s-apikey", apiKeyInput)
 
-	execModelInput = newInput(doc, "执行模型", s.ExecuteModel)
-	replaceInput(doc, "s-execmodel", execModelInput)
+	execModelSel = newSelect(doc, modelOpts, s.ExecuteModel)
+	replaceSelect(doc, "s-execmodel", execModelSel)
 
-	planModelInput = newInput(doc, "规划模型", s.PlanModel)
-	replaceInput(doc, "s-planmodel", planModelInput)
+	planModelSel = newSelect(doc, modelOpts, s.PlanModel)
+	replaceSelect(doc, "s-planmodel", planModelSel)
 
-	reviewModelInput = newInput(doc, "审核模型", s.ReviewModel)
-	replaceInput(doc, "s-reviewmodel", reviewModelInput)
+	reviewModelSel = newSelect(doc, modelOpts, s.ReviewModel)
+	replaceSelect(doc, "s-reviewmodel", reviewModelSel)
 
-	tempInput = newInput(doc, "温度 0~2", s.Temperature)
-	replaceInput(doc, "s-temperature", tempInput)
+	tempVal := parseFloat(s.Temperature, 0.7)
+	tempSlider = component.NewSlider(doc, 0, 2, tempVal)
+	tempSlider.SetStep(0.1)
+	tempSlider.SetBaseStyle("flex:1;min-width:0;padding:0 4px;")
+	tempLabel = doc.CreateElement("span")
+	tempLabel.SetAttribute("style", "color: "+ui.Text+"; font-size: 13px; min-width: 32px; text-align: right;")
+	tempLabel.SetTextContent(fmt.Sprintf("%.1f", tempVal))
+	tempSlider.OnChange(func(v float32) {
+		tempLabel.SetTextContent(fmt.Sprintf("%.1f", v))
+	})
+	container := doc.GetElementByID("s-temperature")
+	if container != nil {
+		container.ClearChildren()
+		container.AppendChild(tempSlider.Element())
+		container.AppendChild(tempLabel)
+	}
 
 	thinkingSelect = newSelect(doc, []string{"non-thinking", "thinking", "thinking_max"}, s.ThinkingMode)
 	replaceSelect(doc, "s-thinkingmode", thinkingSelect)
@@ -363,8 +498,15 @@ func createCompressTab(doc *dom.Document) {
 	compressCb = newCheckbox(doc, "启用上下文压缩", s.CompressEnabled)
 	replaceCheckbox(doc, "s-compress-enabled", compressCb)
 
-	compressProviderInp = newInput(doc, "服务商", s.CompressProvider)
-	replaceInput(doc, "s-compress-provider", compressProviderInp)
+	compressProviderSel = newSelect(doc, core.GetProviders(), s.CompressProvider)
+	compressProviderSel.OnChange(func(idx int, val string) {
+		// 切换压缩服务商时：自动填充 baseURL + 刷新模型列表
+		if url, ok := providerBaseURLs[val]; ok {
+			compressBaseURLInp.SetValue(url)
+		}
+		compressModelSel.SetOptions(core.GetModels(val))
+	})
+	replaceSelect(doc, "s-compress-provider", compressProviderSel)
 
 	compressAPIKeyInp = newInput(doc, "API Key", s.CompressAPIKey)
 	replaceInput(doc, "s-compress-apikey", compressAPIKeyInp)
@@ -372,8 +514,8 @@ func createCompressTab(doc *dom.Document) {
 	compressBaseURLInp = newInput(doc, "API 地址", s.CompressBaseURL)
 	replaceInput(doc, "s-compress-baseurl", compressBaseURLInp)
 
-	compressModelInp = newInput(doc, "压缩模型名", s.CompressModel)
-	replaceInput(doc, "s-compress-model", compressModelInp)
+	compressModelSel = newSelect(doc, core.GetModels(s.CompressProvider), s.CompressModel)
+	replaceSelect(doc, "s-compress-model", compressModelSel)
 
 	compressThinkSel = newSelect(doc, []string{"non-thinking", "thinking", "thinking_max"}, s.CompressThinkingMode)
 	replaceSelect(doc, "s-compress-thinking", compressThinkSel)
@@ -547,23 +689,23 @@ func saveAll(doc *dom.Document) {
 	s := &EditingSettings
 
 	// LLM
-	s.Provider = providerInput.Value()
+	s.Provider = providerSel.Value()
 	s.BaseURL = baseURLInput.Value()
 	s.APIKey = apiKeyInput.Value()
-	s.ExecuteModel = execModelInput.Value()
-	s.PlanModel = planModelInput.Value()
-	s.ReviewModel = reviewModelInput.Value()
-	s.Temperature = tempInput.Value()
+	s.ExecuteModel = execModelSel.Value()
+	s.PlanModel = planModelSel.Value()
+	s.ReviewModel = reviewModelSel.Value()
+	s.Temperature = fmt.Sprintf("%.1f", tempSlider.Value())
 	s.ThinkingMode = thinkingSelect.Value()
 	s.MaxTokens = parseInt(maxTokensInput.Value())
 	s.ContextMaxTokens = parseInt(ctxMaxTokensInput.Value())
 
 	// 压缩
 	s.CompressEnabled = compressCb.Checked()
-	s.CompressProvider = compressProviderInp.Value()
+	s.CompressProvider = compressProviderSel.Value()
 	s.CompressAPIKey = compressAPIKeyInp.Value()
 	s.CompressBaseURL = compressBaseURLInp.Value()
-	s.CompressModel = compressModelInp.Value()
+	s.CompressModel = compressModelSel.Value()
 	s.CompressThinkingMode = compressThinkSel.Value()
 
 	// Agent
@@ -624,6 +766,18 @@ func saveAll(doc *dom.Document) {
 		overrides[key] = cb.Checked()
 	}
 	s.SkillEnabledOverrides = overrides
+}
+
+func parseFloat(s string, fallback float32) float32 {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return fallback
+	}
+	v, err := strconv.ParseFloat(s, 32)
+	if err != nil {
+		return fallback
+	}
+	return float32(v)
 }
 
 func parseInt(s string) int {
