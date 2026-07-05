@@ -81,6 +81,16 @@ body { font-size: 13px; color: #cccccc; background: #1e1e1e; overflow: hidden; }
 .btn-ghost:hover { background: #2a2d2e; }
 .btn-danger { background: #5a1d1d; color: #f48771; }
 .btn-danger:hover { background: #7a2424; }
+
+/* GWui Button 组件（.gwui-button 类）—— VS Code Dark+ 深色主题覆盖。
+   覆盖 defaults.go 的浅色 Ant Design 默认样式，与 .btn 视觉一致。 */
+.gwui-button { background: #0e639c; color: #fff; border: 1px solid transparent; padding: 4px 14px; font-size: 13px; height: 26px; border-radius: 3px; }
+.gwui-button:hover { background: #1177bb; }
+.gwui-button:active { background: #0958d9; }
+/* 次要按钮（次要按钮（Ghost/Default 风格）：透明背景 + 边框，hover 时背景变化 */
+.gwui-button.btn-secondary { background: transparent; color: #cccccc; border: 1px solid #454545; }
+.gwui-button.btn-secondary:hover { background: #2a2d2e; border-color: #0e639c; color: #cccccc; }
+.gwui-button.btn-secondary:active { background: #1f1f1f; }
 .input { background: #3c3c3c; color: #cccccc; border: 1px solid #2d2d2d; padding: 4px 8px; font-size: 13px; }
 .input:focus { border-color: #0e639c; }
 .muted { color: #8c8c8c; }
@@ -138,16 +148,49 @@ body { font-size: 13px; color: #cccccc; background: #1e1e1e; overflow: hidden; }
 .settings-row { display: flex; flex-direction: row; align-items: center; padding: 4px 12px; gap: 12px; }
 .settings-label { width: 100px; font-size: 13px; color: #cccccc; flex-shrink: 0; }
 .settings-field { flex: 1; }
-.settings-tab { padding: 8px 16px; cursor: pointer; font-size: 13px; user-select: none; }
-.settings-tab:hover { background: #2a2d2e; }
+.settings-tab { padding: 8px 16px; cursor: pointer; font-size: 13px; user-select: none; color: #8c8c8c; border-bottom: 2px solid transparent; }
+.settings-tab:hover { background: #2a2d2e; color: #cccccc; }
+.settings-tab.active { color: #cccccc; border-bottom-color: #0e639c; background: transparent; }
 .settings-pane { padding: 0 12px; }
 
-/* ── Modal / 对话框（VS Code Dark+ 风格）── */
-.gwui-modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.4); z-index: 999; }
-.gwui-modal-content { background: #252526; border: 1px solid #454545; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); display: flex; flex-direction: column; overflow: hidden; padding: 0; }
-.gwui-modal-header { display: flex; flex-direction: row; align-items: center; justify-content: space-between; padding: 8px 16px; background: #2d2d2d; border-bottom: 1px solid #454545; }
-.gwui-modal-title { font-size: 14px; color: #cccccc; font-weight: bold; }
-.gwui-modal-body { flex: 1; overflow: auto; padding: 8px 16px; }
+/* ── 设置面板紧凑控件（覆盖 .gwui-input / .select-trigger 的默认大尺寸）── */
+.gwui-input.settings-input {
+  padding: 3px 8px;
+  height: 28px;
+  font-size: 13px;
+  line-height: 20px;
+}
+.select.settings-select {
+  font-size: 13px;
+}
+.select.settings-select .select-trigger {
+  padding: 3px 8px;
+  min-height: 28px;
+  font-size: 13px;
+}
+
+/* ── Slider（设置面板内紧凑）── */
+.gwui-slider { display: flex; align-items: center; height: 28px; cursor: pointer; }
+.gwui-slider-track { height: 4px; background: #3c3c3c; border-radius: 2px; flex: 1; position: relative; }
+.gwui-slider-track::after {
+  content: ''; position: absolute; top: -6px; left: var(--slider-pct, 0%);
+  width: 16px; height: 16px; border-radius: 50%; background: #0e639c;
+  border: 2px solid #fff; transform: translateX(-50%); box-sizing: border-box;
+}
+.slider-value { font-size: 12px; color: #8c8c8c; margin-left: 8px; min-width: 28px; text-align: right; flex-shrink: 0; }
+
+/* ── Modal / 对话框（VS Code Dark+ 风格，参考 Ant Design/Element Plus 间距标准）── */
+/* 注：遮罩由渲染层 OverlayEntry.BackdropColor 直接绘制，无需 .gwui-modal-overlay 元素；
+   居中由 ComputeOverlayPosition(PlacementCenter) 计算，不依赖 flex 居中。 */
+/* box-sizing:border-box 确保 1px border 计入宽度，避免 modal-content 实际宽度
+   超出布局视口 maxW（GWui 默认 content-box，与浏览器一致）。 */
+/* 间距参考：Ant Design header 16x24 / body 24 / footer 10x16；Element Plus 20x20。
+   IDE 深色主题取折中值，保持紧凑但精致。 */
+.gwui-modal-content { background: #252526; border: 1px solid #454545; border-radius: 8px; box-shadow: 0 12px 32px rgba(0,0,0,0.6); display: flex; flex-direction: column; overflow: hidden; padding: 0; box-sizing: border-box; }
+.gwui-modal-header { display: flex; flex-direction: row; align-items: center; justify-content: space-between; padding: 12px 20px; background: #2d2d2d; border-bottom: 1px solid #454545; flex-shrink: 0; box-sizing: border-box; }
+.gwui-modal-title { font-size: 15px; color: #cccccc; font-weight: 600; }
+.gwui-modal-body { flex: 1; overflow: hidden; padding: 16px 20px; min-height: 0; box-sizing: border-box; color: #cccccc; line-height: 1.5; }
+.gwui-modal-footer { display: flex; flex-direction: row; align-items: center; justify-content: flex-end; gap: 8px; padding: 10px 20px; background: #2d2d2d; border-top: 1px solid #454545; flex-shrink: 0; box-sizing: border-box; }
 
 /* ── Checkbox（VS Code Dark+ 风格）── */
 .gwui-checkbox { display: flex; flex-direction: row; align-items: center; gap: 8px; cursor: pointer; padding: 2px 0; user-select: none; }

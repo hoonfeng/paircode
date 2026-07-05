@@ -1,21 +1,22 @@
-<!-- 设置面板 HTML 模板（加载到 Modal 内）—— 7 tab 标签页结构 -->
-<div id="settings-root" style="display:flex;flex-direction:column;min-width:520px;min-height:400px;color:#cccccc;font-size:13px;">
+<!-- 设置面板 HTML 模板（加载到 Modal 内）—— 6 tab 标签页结构 -->
+<!-- 内容自然排列，由 modal-body 的 overflow:auto 处理整体滚动。 -->
+<div id="settings-root" style="display:flex;flex-direction:column;flex:1;min-height:0;color:#cccccc;font-size:13px;">
 
-  <!-- ── Tab 导航条（VS Code Dark+ 风格） ── -->
+  <!-- ── Tab 导航条（VS Code Dark+ 风格，使用 .settings-tab CSS 类）── -->
   <div style="display:flex;flex-direction:row;border-bottom:1px solid #2d2d2d;background:#252526;flex-shrink:0;">
-    <div id="settings-tab-0" class="settings-tab active" onclick="selectSettingsTab(0)" style="padding:8px 16px;cursor:pointer;font-size:13px;color:#cccccc;border-bottom:2px solid #0e639c;user-select:none;">LLM</div>
-    <div id="settings-tab-1" class="settings-tab" onclick="selectSettingsTab(1)" style="padding:8px 16px;cursor:pointer;font-size:13px;color:#8c8c8c;border-bottom:2px solid transparent;user-select:none;">压缩</div>
-    <div id="settings-tab-2" class="settings-tab" onclick="selectSettingsTab(2)" style="padding:8px 16px;cursor:pointer;font-size:13px;color:#8c8c8c;border-bottom:2px solid transparent;user-select:none;">Agent</div>
-    <div id="settings-tab-3" class="settings-tab" onclick="selectSettingsTab(3)" style="padding:8px 16px;cursor:pointer;font-size:13px;color:#8c8c8c;border-bottom:2px solid transparent;user-select:none;">终端</div>
-    <div id="settings-tab-4" class="settings-tab" onclick="selectSettingsTab(4)" style="padding:8px 16px;cursor:pointer;font-size:13px;color:#8c8c8c;border-bottom:2px solid transparent;user-select:none;">外观</div>
-    <div id="settings-tab-5" class="settings-tab" onclick="selectSettingsTab(5)" style="padding:8px 16px;cursor:pointer;font-size:13px;color:#8c8c8c;border-bottom:2px solid transparent;user-select:none;">思想</div>
-    <div id="settings-tab-6" class="settings-tab" onclick="selectSettingsTab(6)" style="padding:8px 16px;cursor:pointer;font-size:13px;color:#8c8c8c;border-bottom:2px solid transparent;user-select:none;">MCP/技能</div>
+    <div id="settings-tab-0" class="settings-tab active" onclick="selectSettingsTab(0)">LLM</div>
+    <div id="settings-tab-1" class="settings-tab" onclick="selectSettingsTab(1)">Agent</div>
+    <div id="settings-tab-2" class="settings-tab" onclick="selectSettingsTab(2)">终端</div>
+    <div id="settings-tab-3" class="settings-tab" onclick="selectSettingsTab(3)">外观</div>
+    <div id="settings-tab-4" class="settings-tab" onclick="selectSettingsTab(4)">思想</div>
+    <div id="settings-tab-5" class="settings-tab" onclick="selectSettingsTab(5)">MCP/技能</div>
+    <div id="settings-tab-6" class="settings-tab" onclick="selectSettingsTab(6)">指令</div>
   </div>
 
-  <!-- ── 滚动内容区 ── -->
-  <div style="flex:1;overflow-y:auto;padding:12px 0;background:#1e1e1e;">
+  <!-- ── 滚动内容区（单一滚动容器，所有 pane 在其中上下排列）── -->
+  <div style="flex:1;overflow-y:auto;min-height:0;padding:12px 0;background:#1e1e1e;">
 
-    <!-- Tab 0: LLM 服务 -->
+    <!-- Tab 0: LLM 服务（含主模型 + 上下文压缩子区域） -->
     <div id="settings-pane-0" class="settings-pane" style="display:flex;flex-direction:column;gap:10px;">
       <div style="font-weight:bold;font-size:13px;color:#8c8c8c;border-bottom:1px solid #2d2d2d;padding-bottom:4px;margin-bottom:4px;">主模型</div>
       <div class="settings-row"><div class="settings-label">服务商</div><div id="s-provider" style="flex:1;"></div></div>
@@ -24,15 +25,12 @@
       <div class="settings-row"><div class="settings-label">执行模型</div><div id="s-execmodel" style="flex:1;"></div></div>
       <div class="settings-row"><div class="settings-label">规划模型</div><div id="s-planmodel" style="flex:1;"></div></div>
       <div class="settings-row"><div class="settings-label">审核模型</div><div id="s-reviewmodel" style="flex:1;"></div></div>
-      <div class="settings-row"><div class="settings-label">温度</div><div id="s-temperature" style="flex:1;"></div></div>
+      <div class="settings-row"><div class="settings-label">温度</div><div id="s-temperature" style="flex:1;display:flex;flex-direction:row;align-items:center;gap:8px;"></div></div>
       <div class="settings-row"><div class="settings-label">思考模式</div><div id="s-thinkingmode" style="flex:1;"></div></div>
       <div class="settings-row"><div class="settings-label">最大 Token 数</div><div id="s-maxtokens" style="flex:1;"></div></div>
       <div class="settings-row"><div class="settings-label">上下文窗口上限</div><div id="s-ctxmaxtokens" style="flex:1;"></div></div>
-    </div>
 
-    <!-- Tab 1: 压缩模型 -->
-    <div id="settings-pane-1" class="settings-pane" style="display:none;flex-direction:column;gap:10px;">
-      <div style="font-weight:bold;font-size:13px;color:#8c8c8c;border-bottom:1px solid #2d2d2d;padding-bottom:4px;margin-bottom:4px;">上下文压缩</div>
+      <div style="font-weight:bold;font-size:13px;color:#8c8c8c;border-bottom:1px solid #2d2d2d;padding-bottom:4px;margin-top:8px;margin-bottom:4px;">上下文压缩</div>
       <div class="settings-row"><div id="s-compress-enabled" style="flex:1;"></div></div>
       <div class="settings-row"><div class="settings-label">服务商</div><div id="s-compress-provider" style="flex:1;"></div></div>
       <div class="settings-row"><div class="settings-label">API Key</div><div id="s-compress-apikey" style="flex:1;"></div></div>
@@ -41,15 +39,10 @@
       <div class="settings-row"><div class="settings-label">思考模式</div><div id="s-compress-thinking" style="flex:1;"></div></div>
     </div>
 
-    <!-- Tab 2: Agent 行为 -->
-    <div id="settings-pane-2" class="settings-pane" style="display:none;flex-direction:column;gap:10px;">
+    <!-- Tab 1: Agent 行为 -->
+    <div id="settings-pane-1" class="settings-pane" style="display:none;flex-direction:column;gap:10px;">
       <div style="font-weight:bold;font-size:13px;color:#8c8c8c;border-bottom:1px solid #2d2d2d;padding-bottom:4px;margin-bottom:4px;">行为开关</div>
-      <div class="settings-row" style="justify-content:space-between;"><div id="s-autonomous" style="flex:1;"></div></div>
-      <div class="settings-row" style="justify-content:space-between;"><div id="s-autoreview" style="flex:1;"></div></div>
-      <div class="settings-row" style="justify-content:space-between;"><div id="s-aireview" style="flex:1;"></div></div>
       <div class="settings-row" style="justify-content:space-between;"><div id="s-autocollapse" style="flex:1;"></div></div>
-      <div class="settings-row" style="justify-content:space-between;"><div id="s-autoiterate" style="flex:1;"></div></div>
-      <div class="settings-row" style="justify-content:space-between;"><div id="s-requireapproval" style="flex:1;"></div></div>
       <div class="settings-row" style="justify-content:space-between;"><div id="s-luatools" style="flex:1;"></div></div>
       <div class="settings-row" style="justify-content:space-between;"><div id="s-benchmark" style="flex:1;"></div></div>
       <div class="settings-row"><div class="settings-label">最大迭代步数</div><div id="s-maxiterations" style="flex:1;"></div></div>
@@ -58,21 +51,18 @@
       <div style="font-weight:bold;font-size:13px;color:#8c8c8c;border-bottom:1px solid #2d2d2d;padding-bottom:4px;margin-bottom:4px;margin-top:4px;">高级</div>
       <div class="settings-row"><div class="settings-label">SearXNG 地址</div><div id="s-searxng" style="flex:1;"></div></div>
       <div class="settings-row"><div class="settings-label">忽略目录</div><div id="s-ignoredirs" style="flex:1;"></div></div>
-      <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:4px;">
-        <div class="settings-label" style="width:auto;">系统级指令</div>
-        <div id="s-systeminstructions" style="width:100%;"></div>
-      </div>
+      <!-- 系统级指令已移至指令 Tab 6 -->
     </div>
 
-    <!-- Tab 3: 终端 -->
-    <div id="settings-pane-3" class="settings-pane" style="display:none;flex-direction:column;gap:10px;">
+    <!-- Tab 2: 终端 -->
+    <div id="settings-pane-2" class="settings-pane" style="display:none;flex-direction:column;gap:10px;">
       <div class="settings-row"><div class="settings-label">默认 Shell</div><div id="s-defaultshell" style="flex:1;"></div></div>
       <div class="settings-row"><div class="settings-label">字号</div><div id="s-termfontsize" style="flex:1;"></div></div>
       <div class="settings-row"><div class="settings-label">编码</div><div id="s-termencoding" style="flex:1;"></div></div>
     </div>
 
-    <!-- Tab 4: 外观 -->
-    <div id="settings-pane-4" class="settings-pane" style="display:none;flex-direction:column;gap:10px;">
+    <!-- Tab 3: 外观 -->
+    <div id="settings-pane-3" class="settings-pane" style="display:none;flex-direction:column;gap:10px;">
       <div class="settings-row"><div class="settings-label">主题</div><div id="s-theme" style="flex:1;"></div></div>
       <div style="font-weight:bold;font-size:13px;color:#8c8c8c;border-bottom:1px solid #2d2d2d;padding-bottom:4px;margin-bottom:4px;">编辑器字体</div>
       <div class="settings-row"><div class="settings-label">字体族</div><div id="s-fontfamily" style="flex:1;"></div></div>
@@ -88,15 +78,25 @@
       <div class="settings-row" style="justify-content:space-between;"><div id="s-hideminimap" style="flex:1;"></div></div>
     </div>
 
-    <!-- Tab 5: 思想 -->
-    <div id="settings-pane-5" class="settings-pane" style="display:none;flex-direction:column;gap:10px;">
+    <!-- Tab 4: 思想 -->
+    <div id="settings-pane-4" class="settings-pane" style="display:none;flex-direction:column;gap:10px;">
       <div class="settings-row" style="justify-content:space-between;"><div id="s-philosophy-enabled" style="flex:1;"></div></div>
       <div style="font-weight:bold;font-size:13px;color:#8c8c8c;border-bottom:1px solid #2d2d2d;padding-bottom:4px;margin-bottom:4px;">注入经典</div>
       <div id="s-philosophy-list"></div>
     </div>
 
-    <!-- Tab 6: MCP/Skills -->
+    <!-- Tab 6: 指令（系统级 + 项目级） -->
     <div id="settings-pane-6" class="settings-pane" style="display:none;flex-direction:column;gap:10px;">
+      <div style="font-weight:bold;font-size:13px;color:#8c8c8c;border-bottom:1px solid #2d2d2d;padding-bottom:4px;margin-bottom:4px;">系统级指令</div>
+      <div style="font-size:12px;color:#8c8c8c;padding:2px 0 6px 0;">对所有项目生效，存储于全局 settings.json</div>
+      <div id="s-systeminstructions" style="width:100%;"></div>
+      <div style="font-weight:bold;font-size:13px;color:#8c8c8c;border-bottom:1px solid #2d2d2d;padding-bottom:4px;margin-top:8px;margin-bottom:4px;">项目级指令</div>
+      <div style="font-size:12px;color:#8c8c8c;padding:2px 0 6px 0;">仅当前项目生效，存储于项目根目录 .pair/rules.md</div>
+      <div id="s-projectinstructions" style="width:100%;"></div>
+    </div>
+
+    <!-- Tab 5: MCP/Skills -->
+    <div id="settings-pane-5" class="settings-pane" style="display:none;flex-direction:column;gap:10px;">
       <div class="settings-row" style="justify-content:space-between;"><div id="s-autoconnectmcp" style="flex:1;"></div></div>
       <div style="font-weight:bold;font-size:13px;color:#8c8c8c;border-bottom:1px solid #2d2d2d;padding-bottom:4px;margin-bottom:4px;margin-top:8px;">技能管理</div>
       <div style="font-size:12px;color:#8c8c8c;padding:2px 0;">勾选启用，取消勾选禁用（system=内置，project=项目级）</div>
@@ -104,9 +104,5 @@
     </div>
   </div>
 
-  <!-- ── 底部按钮 ── -->
-  <div style="display:flex;flex-direction:row;gap:8px;justify-content:flex-end;padding:8px 0 0 0;border-top:1px solid #2d2d2d;flex-shrink:0;">
-    <button id="settings-save-btn" label="保存" onclick="saveSettings" style="background-color:#0e639c;color:#fff;padding:6px 20px;font-size:13px;border:none;cursor:pointer;"></button>
-    <button id="settings-cancel-btn" label="取消" onclick="cancelSettings" style="background-color:#3c3c3c;color:#cccccc;padding:6px 20px;font-size:13px;border:none;cursor:pointer;"></button>
-  </div>
+  <!-- 底部按钮已移至 modal.Footer() -->
 </div>

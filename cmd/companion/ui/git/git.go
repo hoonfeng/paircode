@@ -1039,12 +1039,18 @@ func showGitDiff(rel string, staged bool) {
 	doc := theGit.doc
 	modal := component.NewModal(doc)
 	modal.SetTitle("差异 — " + rel)
+	// diff 内容较宽（含文件路径与代码），需要更大的宽度与高度；
+	// SetMaxWidth 必须 >= body.min-width，否则布局视口(460)会压缩内容。
+	modal.SetMaxWidth(720)
+	modal.SetMaxHeight(500)
 	body := modal.Content()
 	if body == nil {
 		return
 	}
 	body.ClearChildren()
-	body.SetAttribute("style", "display:flex;flex-direction:column;min-width:640px;max-height:400px;overflow-y:auto;")
+	// 滚动由 .gwui-modal-body(overflow:auto + flex:1) 统一处理，
+	// 这里若再设 max-height/overflow-y 会形成双层滚动条。
+	body.SetAttribute("style", "display:flex;flex-direction:column;min-width:640px;")
 
 	// 渲染差异行
 	for _, ln := range strings.Split(out, "\n") {

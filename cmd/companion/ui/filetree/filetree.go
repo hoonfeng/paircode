@@ -145,7 +145,15 @@ func New(doc *dom.Document) *fileTreeState {
 func (s *fileTreeState) Element() *dom.Element { return s.rootEl }
 
 func (s *fileTreeState) Refresh() {
+	// 重新从磁盘加载所有已展开的目录（通过 ModTime 检测变化），
+	// 否则删除/重命名文件后内存树过期，renderAll 只渲染过期数据。
+	for _, r := range s.roots {
+		refreshNode(r)
+	}
 	s.renderAll()
+	if ui.Ctx.App != nil {
+		ui.Ctx.App.MarkDirty()
+	}
 }
 
 func (s *fileTreeState) RefreshPath(absPath string) {

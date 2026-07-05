@@ -28,6 +28,8 @@ func ShowAgentMonitor() {
 	}
 	modal := component.NewModal(doc)
 	modal.SetTitle("Agent 监控")
+	modal.SetMaxWidth(720)
+	modal.SetMaxHeight(560)
 
 	body := modal.Content()
 	if body == nil {
@@ -36,7 +38,7 @@ func ShowAgentMonitor() {
 	body.ClearChildren()
 	body.SetAttribute("style",
 		"display: flex; flex-direction: column; gap: 8px; "+
-			"min-width: 400px; min-height: 200px;")
+			"min-width: 400px; min-height: 200px; max-height: 480px;")
 
 	reg := uixml.NewRegistry()
 	reg.OnClick("closeMonitor", func(ctx uixml.EventContext) bool {
@@ -59,6 +61,10 @@ func ShowContentDialog(title string, width float32, content *dom.Element) {
 	}
 	modal := component.NewModal(doc)
 	modal.SetTitle(title)
+	// 布局视口必须 >= body.min-width，否则内容被默认 460 视口压缩。
+	if width > 0 {
+		modal.SetMaxWidth(width)
+	}
 
 	body := modal.Content()
 	if body == nil {
@@ -87,15 +93,19 @@ func EditorReferences(refs []codetypes.CodeLoc) {
 	}
 	modal := component.NewModal(doc)
 	modal.SetTitle(fmt.Sprintf("引用 (%d)", len(refs)))
+	// min-width:500px 需要对应的布局视口，默认 460 会压缩内容。
+	modal.SetMaxWidth(540)
+	modal.SetMaxHeight(450)
 
 	body := modal.Content()
 	if body == nil {
 		return
 	}
 	body.ClearChildren()
+	// 滚动交给 .gwui-modal-body(flex:1 + overflow:auto)，避免双层滚动条。
 	body.SetAttribute("style",
 		"display: flex; flex-direction: column; gap: 4px; "+
-			"min-width: 500px; max-height: 400px; overflow-y: auto;")
+			"min-width: 500px;")
 
 	reg := uixml.NewRegistry()
 	reg.OnClick("closeRefs", func(ctx uixml.EventContext) bool {
@@ -119,11 +129,12 @@ func EditorReferences(refs []codetypes.CodeLoc) {
 		for _, ref := range refs {
 			ref := ref
 			item := doc.CreateElement("div")
+			// modal 背景为深色(#252526)，文字需用浅色；hover 用深色高亮背景。
 			item.SetAttribute("style",
 				"display: flex; flex-direction: row; gap: 8px; "+
 					"padding: 6px 8px; cursor: pointer; border-radius: 4px; "+
-					"font-size: 13px; color: #212121;")
-			item.SetAttribute("hover-style", "background-color: #f5f5f5;")
+					"font-size: 13px; color: #cccccc;")
+			item.SetAttribute("hover-style", "background-color: #2a2d2e;")
 			item.SetTextContent(fmt.Sprintf("%s:%d:%d", ref.File, ref.Line, ref.Col))
 			if ui.Ctx.App != nil {
 				path, line := ref.File, ref.Line
@@ -150,15 +161,17 @@ func EditorSymbols(syms []codetypes.CodeSym) {
 	}
 	modal := component.NewModal(doc)
 	modal.SetTitle(fmt.Sprintf("符号 (%d)", len(syms)))
+	modal.SetMaxHeight(450)
 
 	body := modal.Content()
 	if body == nil {
 		return
 	}
 	body.ClearChildren()
+	// 滚动交给 .gwui-modal-body(flex:1 + overflow:auto)，避免双层滚动条。
 	body.SetAttribute("style",
 		"display: flex; flex-direction: column; gap: 4px; "+
-			"min-width: 400px; max-height: 400px; overflow-y: auto;")
+			"min-width: 400px;")
 
 	reg := uixml.NewRegistry()
 	reg.OnClick("closeSyms", func(ctx uixml.EventContext) bool {
@@ -182,10 +195,11 @@ func EditorSymbols(syms []codetypes.CodeSym) {
 			sym := sym
 			item := doc.CreateElement("div")
 			indent := sym.Depth * 16
+			// modal 背景为深色(#252526)，文字需用浅色；hover 用深色高亮背景。
 			item.SetAttribute("style",
 				fmt.Sprintf("padding: 4px 8px 4px %dpx; cursor: pointer; "+
-					"font-size: 13px; color: #212121; border-radius: 4px;", indent+8))
-			item.SetAttribute("hover-style", "background-color: #f5f5f5;")
+					"font-size: 13px; color: #cccccc; border-radius: 4px;", indent+8))
+			item.SetAttribute("hover-style", "background-color: #2a2d2e;")
 			item.SetTextContent(fmt.Sprintf("%s (行 %d)", sym.Name, sym.Line))
 			if ui.Ctx.App != nil {
 				ui.Ctx.App.AddEventListener(item, event.Click, func(e event.Event) bool {
