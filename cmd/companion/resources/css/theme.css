@@ -151,7 +151,7 @@ body { font-size: 13px; color: #cccccc; background: #1e1e1e; overflow: hidden; }
 .settings-tab { padding: 8px 16px; cursor: pointer; font-size: 13px; user-select: none; color: #8c8c8c; border-bottom: 2px solid transparent; }
 .settings-tab:hover { background: #2a2d2e; color: #cccccc; }
 .settings-tab.active { color: #cccccc; border-bottom-color: #0e639c; background: transparent; }
-.settings-pane { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; }
+.settings-pane { display: flex; flex-direction: column; }
 
 /* ── 设置面板紧凑控件（覆盖 .gwui-input / .select-trigger 的默认大尺寸）── */
 .gwui-input.settings-input {
@@ -189,7 +189,7 @@ body { font-size: 13px; color: #cccccc; background: #1e1e1e; overflow: hidden; }
 .gwui-modal-content { background: #252526; border: 1px solid #454545; border-radius: 8px; box-shadow: 0 12px 32px rgba(0,0,0,0.6); display: flex; flex-direction: column; overflow: hidden; padding: 0; box-sizing: border-box; }
 .gwui-modal-header { display: flex; flex-direction: row; align-items: center; justify-content: space-between; padding: 12px 20px; background: #2d2d2d; border-bottom: 1px solid #454545; flex-shrink: 0; box-sizing: border-box; }
 .gwui-modal-title { font-size: 15px; color: #cccccc; font-weight: 600; }
-.gwui-modal-body { flex: 1; overflow: hidden; padding: 16px 20px; min-height: 0; box-sizing: border-box; color: #cccccc; line-height: 1.5; }
+.gwui-modal-body { flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 16px 20px; min-height: 0; box-sizing: border-box; color: #cccccc; line-height: 1.5; }
 .gwui-modal-footer { display: flex; flex-direction: row; align-items: center; justify-content: flex-end; gap: 8px; padding: 10px 20px; background: #2d2d2d; border-top: 1px solid #454545; flex-shrink: 0; box-sizing: border-box; }
 
 /* ── Checkbox（VS Code Dark+ 风格）── */
