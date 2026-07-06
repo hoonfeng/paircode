@@ -399,7 +399,7 @@ func (s *ChatState) buildSearchBarInto(sb *dom.Element) {
 // refreshMessageList 重建消息列表（直接渲染到 #chat-msg-area）。
 func (s *ChatState) refreshMessageList() {
 	t := s.Store.Active()
-	if t == nil || s.msgAreaEl == nil {
+	if s.msgAreaEl == nil {
 		return
 	}
 
@@ -407,6 +407,23 @@ func (s *ChatState) refreshMessageList() {
 
 	// 清空并重建消息列表
 	s.msgAreaEl.SetTextContent("")
+
+	if t == nil {
+		// 无活跃线程，显示提示
+		emptyHint := s.doc.CreateElement("div")
+		emptyHint.SetAttribute("style", "padding:20px;color:#888;font-size:13px;text-align:center;")
+		emptyHint.SetTextContent("暂无对话，在下方输入框发消息开始。")
+		s.msgAreaEl.AppendChild(emptyHint)
+		return
+	}
+
+	// ── 调试计数器 ──
+	dbg := s.doc.CreateElement("div")
+	dbg.SetAttribute("style",
+		"padding:4px 12px;background:#1a3a1a;color:#8c8;font-size:11px;border-radius:4px;margin:4px 12px;flex-shrink:0;")
+	dbg.SetTextContent(fmt.Sprintf("📊 线程: %d | 活跃: %q | 消息: %d 条",
+		len(s.Store.Threads), t.Title, len(t.Messages)))
+	s.msgAreaEl.AppendChild(dbg)
 
 	// 存放所有消息卡片的容器
 	for i, m := range t.Messages {
