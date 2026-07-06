@@ -1303,6 +1303,7 @@ func (s *ChatState) sidebarContent() *dom.Element {
 		s.Store.NewThread()
 		s.saveHistory()
 		s.refreshMessageList()
+		s.refreshSidebar()
 		markDirty()
 	})
 	head.AppendChild(newBtn)
@@ -1368,10 +1369,15 @@ func (s *ChatState) buildThreadItem(t *state.Thread) *dom.Element {
 	item.SetAttribute("style",
 		"display:flex;flex-direction:row;align-items:center;height:36px;padding:0 6px 0 0;cursor:pointer;background-color:"+bgClr+";")
 	item.SetAttribute("hover-style", "background-color:"+hoverClr+";")
-	addClick(item, func() {
-		s.Store.Switch(t.ID)
+	// 直接注册事件监听器，切换对话
+	clickT := t
+	ui.Ctx.App.AddEventListener(item, event.Click, func(e event.Event) bool {
+		e.StopPropagation()
+		s.Store.Switch(clickT.ID)
 		s.refreshMessageList()
+		s.refreshSidebar()
 		markDirty()
+		return true
 	})
 
 	// 左侧强调条（当前会话 3px 强调）
