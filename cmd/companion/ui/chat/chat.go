@@ -226,8 +226,7 @@ type ChatState struct {
 	// DOM 元素引用（用于动态更新）
 	toolbarEl    *dom.Element
 	searchBarEl  *dom.Element
-	msgAreaEl    *dom.Element // flex:1 的消息区容器
-	vl           *component.VirtualList
+	msgAreaEl    *dom.Element // 消息区容器（overflow-y:auto，所有消息直接渲染）
 	inputAreaEl  *dom.Element
 	askCardEl    *dom.Element        // agent 提问卡占位（动态显示/隐藏）
 	taskProgEl   *dom.Element        // 任务进度面板占位
@@ -235,18 +234,6 @@ type ChatState struct {
 	mainColEl    *dom.Element        // 主列
 	inputComp    *component.Input    // 搜索栏输入框
 	textAreaComp *component.TextArea // 主输入框
-
-	// ─── 元素级虚加载缓存 ───
-	// ★ 参考 @tanstack/react-virtual：按消息 ID 缓存实际测量高度
-	msgMeasuredHeights map[string]float64 // msgID → 实际渲染高度
-	// msgDataVersion 每次消息列表变化时递增；从 1 开始（0 表示未初始化）
-	msgDataVersion int64
-	// msgVersions 每项当前的版本号（用于增量更新检测）
-	msgVersions []int64
-	// msgElRefs 按 index 存储渲染后的元素引用（用于读取 layoutH）
-	msgElRefs map[int]*dom.Element
-	// pendingMeasure 标记下次帧需要测量实际高度
-	pendingMeasure bool
 
 	lastSaveTime time.Time
 
@@ -269,14 +256,14 @@ type taskProgressState struct{}
 // New 创建对话面板。
 func New(doc *dom.Document) *ChatState {
 	s := &ChatState{
-		doc:                doc,
-		Store:              state.NewChatStore(),
-		ShowSearch:         false,
-		HoveredMsg:         -1,
-		msgMeasuredHeights: make(map[string]float64),
-		msgElRefs:          make(map[int]*dom.Element),
-		msgDataVersion:     1,
+		doc:        doc,
+		Store:      state.NewChatStore(),
+		ShowSearch: false,
+		HoveredMsg: -1,
 	}
+
+	// ── 加载已有对话历史（.pair/conversations/history.json）──
+	s.Store.Load(core.Root())
 
 	// ── 加载 HTML 模板（资源目录 html/panels/chat.html）──
 	ui.MustLoadPanelHTML(doc, "panels/chat.html", nil)
@@ -290,11 +277,9 @@ func New(doc *dom.Document) *ChatState {
 	searchBar := doc.GetElementByID("chat-searchbar")
 	s.buildSearchBarInto(searchBar)
 
-	// 3. 消息区：使用 HTML 提供的 #chat-msg-area 容器
+	// 3. 消息区：使用 HTML 提供的 #chat-msg-area 容器（overflow-y:auto）
 	msgArea := doc.GetElementByID("chat-msg-area")
 	s.msgAreaEl = msgArea
-
-	// 右键菜单：消息区空白处
 	if OnChatContextMenu != nil {
 		ui.Ctx.App.AddEventListener(msgArea, event.ContextMenu, func(e event.Event) bool {
 			e.StopPropagation()
@@ -304,14 +289,6 @@ func New(doc *dom.Document) *ChatState {
 			return true
 		})
 	}
-
-	// 创建 VirtualList（viewPort 填满 flex:1 容器）
-	vw := float32(400) // 初始宽度，会被 flex:1 拉伸
-	vh := float32(600) // 初始视口高度
-	vl := component.NewVirtualList(doc, vw, vh)
-	vl.SetBaseStyle("position:absolute;top:0;left:0;right:0;bottom:0;")
-	s.vl = vl
-	msgArea.AppendChild(vl.Element())
 
 	// 4. Agent 提问卡占位：使用 HTML 提供的 #chat-ask-card
 	s.askCardEl = doc.GetElementByID("chat-ask-card")
@@ -419,193 +396,34 @@ func (s *ChatState) buildSearchBarInto(sb *dom.Element) {
 	s.searchBarEl = sb
 }
 
-// generateMsgVersion 生成消息内容的版本号（用于增量更新检测）。
-// 当消息内容/折叠/展开/流式状态变化时返回不同值。
-func generateMsgVersion(m state.Message) int64 {
-	v := int64(len(m.Text)) + int64(len(m.Thinking))*1000
-	if m.Collapsed {
-		v += 1 << 28
-	}
-	if m.ThinkingExpanded {
-		v += 1 << 29
-	}
-	if m.Streaming {
-		v += 1 << 30
-	}
-	// 加上 Timeline/Activities 的展开状态
-	for _, a := range m.Activities {
-		if a.Expanded {
-			v += 17
-		}
-	}
-	for _, entry := range m.Timeline {
-		if entry.Expanded {
-			v += 31
-		}
-	}
-	return v
-}
-
-// refreshMessageList 重建 VirtualList 的消息项。
-// 使用增量更新策略：仅变化的消息项触发 UpdateItem，其余保留。
-// 这避免了「对话面板级别全量重建」导致的卡顿。
+// refreshMessageList 重建消息列表（直接渲染到 #chat-msg-area）。
 func (s *ChatState) refreshMessageList() {
-	// ★ 先测量上一帧渲染项的实际高度（布局后的实际值写入缓存）
-	s.measureActualHeights()
-
 	t := s.Store.Active()
-	if t == nil || s.vl == nil {
+	if t == nil || s.msgAreaEl == nil {
 		return
-	}
-
-	// ★ 同步实际视口尺寸（从 msgArea 的 LayoutRect 读取）
-	if s.msgAreaEl != nil {
-		_, _, aw, ah := s.msgAreaEl.LayoutRect()
-		if aw > 0 && ah > 0 {
-			s.vl.SetSize(aw, ah)
-		}
 	}
 
 	q := strings.ToLower(strings.TrimSpace(s.SearchQuery))
 
-	// 建立过滤后的消息索引
-	filteredIndices := make([]int, 0, len(t.Messages))
-	for i := range t.Messages {
-		if q != "" && !msgMatches(t.Messages[i], q) {
+	// 清空并重建消息列表
+	s.msgAreaEl.SetTextContent("")
+
+	// 存放所有消息卡片的容器
+	for i, m := range t.Messages {
+		if q != "" && !msgMatches(m, q) {
 			continue
 		}
-		filteredIndices = append(filteredIndices, i)
-	}
-
-	oldCount := s.vl.ItemCount()
-	needFullRebuild := oldCount != len(filteredIndices) || q != ""
-
-	if needFullRebuild {
-		// ★ 过滤条件变化或项数变化 → 全量重建（不可避免）
-		items := s.buildVirtualItems(t, filteredIndices)
-		s.vl.SetItems(items)
-		s.vl.ScrollToBottom()
-		s.pendingMeasure = true
-		return
-	}
-
-	// ★ 增量更新：只 update 变化的消息（折叠/展开/流式更新等）
-	s.msgDataVersion++
-	changed := false
-	for vi, msgIdx := range filteredIndices {
-		m := t.Messages[msgIdx]
-		newVer := generateMsgVersion(m)
-		if vi < len(s.msgVersions) && s.msgVersions[vi] == newVer {
-			continue // 未变化，跳过
+		el := s.renderMessage(t, i)
+		if el != nil {
+			s.msgAreaEl.AppendChild(el)
 		}
-		// 版本变化 → 增量更新此项
-		h := float32(estimateMessageHeight(m))
-		if h < 56 {
-			h = 56
-		}
-		idx := msgIdx
-		s.vl.UpdateItem(vi, component.VirtualItem{
-			ID:      fmt.Sprintf("msg-%d", idx),
-			Height:  h,
-			Version: s.msgDataVersion,
-			Builder: func(d *dom.Document, index int) *dom.Element {
-				return s.renderMessageWithMeasure(t, filteredIndices[index], index)
-			},
-		})
-		// 更新版本记录
-		if vi < len(s.msgVersions) {
-			s.msgVersions[vi] = newVer
-		}
-		changed = true
-		// 清除该项的旧元素引用缓存
-		delete(s.msgElRefs, vi)
-		// 清除该项的高度缓存（新版高度可能变化）
-		delete(s.msgMeasuredHeights, fmt.Sprintf("msg-%d", idx))
 	}
 
-	if changed {
-		s.vl.ScrollToBottom()
-		s.pendingMeasure = true
-	}
+	// 滚动到底部（通过设置 scroll-y 属性）
+	s.msgAreaEl.SetAttribute("scroll-y", "999999")
 }
 
 // buildVirtualItems 构建完整的 VirtualItem 列表。
-func (s *ChatState) buildVirtualItems(t *state.Thread, filteredIndices []int) []component.VirtualItem {
-	n := len(filteredIndices)
-	items := make([]component.VirtualItem, n)
-	s.msgVersions = make([]int64, n)
-
-	for vi, msgIdx := range filteredIndices {
-		m := t.Messages[msgIdx]
-		idx := msgIdx
-		h := float32(estimateMessageHeight(m))
-		if h < 56 {
-			h = 56
-		}
-		ver := generateMsgVersion(m)
-		s.msgVersions[vi] = ver
-		// 优先使用已缓存的实际高度
-		if cachedH, ok := s.msgMeasuredHeights[fmt.Sprintf("msg-%d", idx)]; ok && cachedH > 0 {
-			h = float32(cachedH)
-		}
-		items[vi] = component.VirtualItem{
-			ID:      fmt.Sprintf("msg-%d", idx),
-			Height:  h,
-			Version: ver,
-			Builder: func(d *dom.Document, index int) *dom.Element {
-				return s.renderMessageWithMeasure(t, filteredIndices[index], index)
-			},
-		}
-	}
-	return items
-}
-
-// renderMessageWithMeasure 渲染消息并记录元素引用（用于后续高度测量）。
-func (s *ChatState) renderMessageWithMeasure(t *state.Thread, msgIdx, vlIndex int) *dom.Element {
-	el := s.renderMessage(t, msgIdx)
-	if el == nil {
-		fmt.Fprintf(os.Stderr, "[chat] renderMessageWithMeasure[%d] renderMessage returned nil!\n", msgIdx)
-		return nil
-	}
-	// 存储元素引用，用于帧后读取 layoutH
-	s.msgElRefs[vlIndex] = el
-	return el
-}
-
-// measureActualHeights 在布局后测量消息的实际高度并写入缓存。
-// 在 nextFrame / App 渲染循环中调用。
-func (s *ChatState) measureActualHeights() {
-	if !s.pendingMeasure || s.vl == nil {
-		return
-	}
-	s.pendingMeasure = false
-	for vi, el := range s.msgElRefs {
-		if el == nil {
-			continue
-		}
-		_, _, _, h := el.GetBoundingClientRect()
-		if h > 0 {
-			id := fmt.Sprintf("msg-%d", vi)
-			oldH := s.msgMeasuredHeights[id]
-			if absDiff(float64(h), oldH) > 0.5 {
-				s.msgMeasuredHeights[id] = float64(h)
-				// 同步到 VirtualList 的高度缓存
-				if s.vl != nil {
-					s.vl.SetMeasuredHeight(vi, id, h)
-				}
-			}
-		}
-	}
-}
-
-// absDiff 返回两个 float64 的绝对差。
-func absDiff(a, b float64) float64 {
-	if a > b {
-		return a - b
-	}
-	return b - a
-}
-
 // saveToMsgHistory 保存发送的消息到输入历史（上下键切换用）。
 // 不保存空白、不保存重复（与最新一条相同），最多保留 100 条。
 func (s *ChatState) saveToMsgHistory(text string) {
@@ -931,14 +749,25 @@ func buildThinkingSection(doc *dom.Document, thinking string, expanded bool, tog
 
 	label := createText(doc, "思考", "color:"+ui.TextDim+";font-size:11px;font-weight:bold;")
 	header.AppendChild(label)
+
+	// 折叠时显示第一行摘要
+	if !expanded {
+		summaryText := firstLine(thinking)
+		summary := createText(doc, "  "+summaryText, "color:"+ui.TextDim+";font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;")
+		header.AppendChild(summary)
+	}
 	sec.AppendChild(header)
 
 	if expanded {
-		content := createText(doc, thinking, "display:block;color:"+ui.TextDim+";font-size:12px;margin-top:4px;white-space:pre-wrap;word-break:break-word;line-height:1.5;")
+		// 展开时也只显示前 6 行（简化展示）
+		simplified := simplifyThinking(thinking)
+		content := createText(doc, simplified, "display:block;color:"+ui.TextDim+";font-size:12px;margin-top:4px;white-space:pre-wrap;word-break:break-word;line-height:1.5;")
 		sec.AppendChild(content)
 	}
 	return sec
 }
+
+// firstLine 返回文本的第一行（去空）。
 
 // buildTimelineThinking 基于 Timeline 渲染思考块。
 func buildTimelineThinking(doc *dom.Document, content string, expanded bool, toggle func()) *dom.Element {
@@ -1565,11 +1394,15 @@ func (s *ChatState) buildThreadItem(t *state.Thread) *dom.Element {
 	closeBtn.SetAttribute("style", closeBtn.GetAttribute("style")+";cursor:pointer;color:"+ui.TextMute+";margin-left:4px;")
 	closeBtn.SetAttribute("hover-style", "color:"+ui.Text+";")
 	tt := t
-	addClick(closeBtn, func() {
+	// 直接注册事件监听器，调用 StopPropagation() 防止冒泡到父级 item
+	ui.Ctx.App.AddEventListener(closeBtn, event.Click, func(e event.Event) bool {
+		e.StopPropagation()
 		s.Store.Delete(tt.ID)
 		s.saveHistory()
 		s.refreshMessageList()
+		s.refreshSidebar()
 		markDirty()
+		return true
 	})
 	item.AppendChild(closeBtn)
 
@@ -1886,9 +1719,6 @@ func (s *ChatState) loadTestData() {
 		})
 	}
 	s.SendSeq++
-	s.msgMeasuredHeights = make(map[string]float64)
-	s.msgElRefs = make(map[int]*dom.Element)
-	s.msgDataVersion++
 	s.refreshMessageList()
 	markDirty()
 }
@@ -2395,6 +2225,33 @@ func hexVal(c byte) int {
 	default:
 		return 0
 	}
+}
+
+// firstLine 返回文本的首行（去空，截断到 60 字符）。
+func firstLine(text string) string {
+	idx := strings.Index(text, "\n")
+	if idx > 0 {
+		text = text[:idx]
+	}
+	text = strings.TrimSpace(text)
+	if len([]rune(text)) > 60 {
+		return string([]rune(text)[:60]) + "…"
+	}
+	return text
+}
+
+// simplifyThinking 简化思考内容：只显示前 6 行或前 300 字符。
+func simplifyThinking(text string) string {
+	lines := strings.SplitN(text, "\n", 8)
+	if len(lines) > 6 {
+		lines = lines[:6]
+		lines = append(lines, "…（思考内容已省略）")
+	}
+	simplified := strings.Join(lines, "\n")
+	if len([]rune(simplified)) > 300 {
+		return string([]rune(simplified)[:300]) + "\n…（思考内容已省略）"
+	}
+	return simplified
 }
 
 // planCard 保留旧接口别名。
