@@ -355,7 +355,7 @@ const sendMessage = async () => {
     try {
       const conv = await api.apiPost('/conversations', { title: '新对话' })
       state.currentConvId = conv.id
-      state.conversations.unshift({ id: conv.id, title: conv.title, createdAt: conv.createdAt, updatedAt: conv.updatedAt })
+      state.conversations.unshift({ id: conv.id, title: conv.title, msgCount: 0, createdAt: conv.createdAt, updatedAt: conv.updatedAt })
       convCtxStats.promptTokens = 0; convCtxStats.completionTokens = 0
     } catch {}
   }
@@ -372,6 +372,11 @@ const sendMessage = async () => {
   state.messages.push(userMsg)
   if (state.currentConvId) {
     await api.apiPost('/conversations/' + state.currentConvId + '/messages', { role: 'user', content: fullContent }).catch(() => {})
+    // 立即用用户消息更新对话标题（不等 onDone，避免 SSE 中断导致标题不更新）
+    autoNameConv(state.currentConvId, lastUserText || fullContent)
+    // 本地递增消息计数
+    const localConv = state.conversations.find(c => c.id === state.currentConvId)
+    if (localConv) localConv.msgCount = (localConv.msgCount || 0) + 1
   }
   state.chatLoading = true; state.agentRunning = true
   if (!state.chatSessionId) state.chatSessionId = 'sess_' + Date.now()
@@ -449,6 +454,11 @@ const sendMessage = async () => {
       currentPhase.value = ''
       if (state.currentConvId && finalContent) {
         api.apiPost('/conversations/' + state.currentConvId + '/messages', { role: 'assistant', content: finalContent }).catch(() => {})
+      }
+      // 递增助手消息计数
+      if (state.currentConvId) {
+        const localConv = state.conversations.find(c => c.id === state.currentConvId)
+        if (localConv) localConv.msgCount = (localConv.msgCount || 0) + 1
       }
       // 自动命名对话：用用户消息更新标题
       if (state.currentConvId && lastUserText) {

@@ -9,8 +9,11 @@
            :class="['conv-item', { active: conv.id === currentConvId }]"
            @click="$emit('switch-conversation', conv.id)">
         <div class="conv-title">{{ conv.title }}</div>
-        <div class="conv-time">{{ conv.updatedAt ? conv.updatedAt.slice(11,16) : '' }}</div>
-        <button class="conv-del" @click.stop="$emit('delete-conversation', conv.id)" title="删除">×</button>
+        <div class="conv-meta">
+          <span class="conv-msg-count">{{ conv.msgCount || 0 }}</span>
+          <span class="conv-time">{{ conv.updatedAt ? conv.updatedAt.slice(11,16) : '' }}</span>
+        </div>
+        <button class="conv-del" @click.stop="$emit('delete-conversation', conv.id)" title="删除对话">×</button>
       </div>
       <div v-if="conversations.length === 0" class="conv-empty">暂无对话</div>
     </div>
@@ -214,16 +217,19 @@ const compOtherPct = computed(() => ((props.convCtxStats.otherTokens / compTotal
   overflow: hidden;
   background: var(--bg-tertiary);
   position: relative;
+  min-width: 200px;
 }
 .conv-sidebar-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 8px;
+  padding: 8px 10px;
   font-size: 12px;
+  font-weight: 600;
   color: var(--text-secondary);
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
+  letter-spacing: 0.3px;
 }
 .conv-list {
   flex: 1 1 auto;
@@ -234,18 +240,22 @@ const compOtherPct = computed(() => ((props.convCtxStats.otherTokens / compTotal
 .conv-item {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 6px 8px;
+  gap: 6px;
+  padding: 8px 10px 8px 12px;
   cursor: pointer;
   font-size: 12px;
   color: var(--text-secondary);
-  border-left: 2px solid transparent;
+  border-left: 3px solid transparent;
   position: relative;
+  transition: background 0.12s, border-color 0.12s;
+  margin: 1px 4px;
+  border-radius: 4px;
 }
 .conv-item.active {
   background: var(--bg-active);
   color: var(--text-primary);
   border-left-color: var(--accent);
+  font-weight: 500;
 }
 .conv-item:hover { background: var(--bg-hover); }
 .conv-title {
@@ -254,11 +264,29 @@ const compOtherPct = computed(() => ((props.convCtxStats.otherTokens / compTotal
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 12px;
+  line-height: 1.4;
+}
+.conv-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.conv-msg-count {
+  font-size: 10px;
+  color: var(--text-muted);
+  background: var(--bg-primary);
+  padding: 0 4px;
+  border-radius: 6px;
+  line-height: 16px;
+  min-width: 16px;
+  text-align: center;
 }
 .conv-time {
   font-size: 10px;
   color: var(--text-muted);
   flex-shrink: 0;
+  opacity: 0.7;
 }
 .conv-del {
   display: none;
@@ -269,14 +297,17 @@ const compOtherPct = computed(() => ((props.convCtxStats.otherTokens / compTotal
   font-size: 14px;
   padding: 0 2px;
   line-height: 1;
+  opacity: 0.5;
+  transition: opacity 0.12s;
 }
 .conv-item:hover .conv-del { display: block; }
-.conv-del:hover { color: #c03; }
+.conv-del:hover { opacity: 1; color: #c03; }
 .conv-empty {
-  padding: 12px 8px;
+  padding: 16px 8px;
   font-size: 11px;
   color: var(--text-muted);
   text-align: center;
+  font-style: italic;
 }
 
 /* ── 统计/上下文面板 ── */
