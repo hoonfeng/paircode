@@ -119,6 +119,11 @@
         </div>
         <!-- 输入区 -->
         <div class="chat-input-area">
+          <!-- 运行时反馈条（Agent 执行中可补充纠正） -->
+          <div v-if="state.chatLoading" class="feedback-bar">
+            <input class="feedback-input" v-model="feedbackText" @keydown="onFeedbackKeydown" placeholder="输入补充/纠正信息，Agent 将在下一轮响应中处理..." />
+            <button class="feedback-send-btn" @click="sendFeedback" :disabled="!feedbackText.trim()" title="发送反馈"><SvgIcon name="send" :size="14" /></button>
+          </div>
           <div class="input-resizer" @mousedown.prevent="startInputResize" title="拖拽调整高度"></div>
           <div v-if="pendingAttachment" class="attachment-badge">
             <div class="att-icon"><SvgIcon :name="pendingAttachment.type === 'file' ? 'file' : 'file-code'" :size="14" /></div>
@@ -165,6 +170,7 @@ const showDebugLog = ref(false)
 const rightPanelWidth = inject('rightPanelWidth')
 const toggleRight = () => { state.rightPanelVisible = false }
 const inputText = ref('')
+const feedbackText = ref('')
 const msgRef = ref(null)
 const inputRef = ref(null)
 const inputHeight = ref(150)
@@ -460,6 +466,22 @@ const stopChat = async () => {
   state.chatLoading = false; state.agentRunning = false
 }
 
+// ── 运行时反馈：Agent 执行中用户补充/纠正 ──
+const sendFeedback = async () => {
+  const text = feedbackText.value.trim()
+  if (!text || !state.chatSessionId) return
+  feedbackText.value = ''
+  try {
+    await api.sendFeedback(state.chatSessionId, text)
+  } catch {}
+}
+const onFeedbackKeydown = (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault()
+    sendFeedback()
+  }
+}
+
 const onAskAnswer = (seg, { callId, answer }) => {
   if (!answer) return; seg.answer = answer
   submitAskAnswer(seg)
@@ -687,17 +709,30 @@ onUnmounted(() => {
 .msg-list-wrap { display: flex; flex-direction: column; gap: 8px; min-height: 100%; }
 .msg-item { display: flex; gap: 8px; align-items: flex-start; content-visibility: auto; contain-intrinsic-size: 60px; }
 .msg-user { flex-direction: row-reverse; justify-content: flex-start; }
-.bubble-user { width: fit-content; max-width: 100%; min-width: 60px; background: var(--accent); color: #fff; padding: 8px 14px; border-radius: 16px 16px 4px 16px; align-self: flex-end; margin-left: auto; }
+.bubble-user {
+  flex: 0 1 auto;
+  width: fit-content;
+  max-width: 85%;
+  min-width: 60px;
+  background: var(--accent);
+  color: #fff;
+  padding: 8px 14px;
+  border-radius: 16px 16px 4px 16px;
+  align-self: flex-end;
+  margin-left: auto;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  overflow: hidden;
+}
 .user-msg-content { width: 100%; }
 .user-msg-content :deep(p) { margin: 2px 0; white-space: pre-wrap; word-break: break-word; }
-.user-msg-content :deep(pre) { white-space: pre-wrap; font-size: 12px; background: rgba(0,0,0,0.15); padding: 6px; border-radius: 4px; }
+.user-msg-content :deep(pre) { white-space: pre-wrap; font-size: 12px; background: rgba(0,0,0,0.15); padding: 6px; border-radius: 4px; max-width: 100%; overflow-x: auto; }
 .user-msg-content :deep(code) { font-size: 12px; }
 .user-msg-placeholder { color: rgba(255,255,255,0.4); font-style: italic; font-size: 12px; }
-.bubble-user .msg-time { color: rgba(255,255,255,0.6); }
 .msg-avatar { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .msg-user .msg-avatar { background: var(--accent); color: #fff; }
 .msg-assistant .msg-avatar { background: var(--bg-tertiary); color: var(--text-secondary); border: 1px solid var(--border-color); }
-.msg-bubble { flex: 1; min-width: 0; max-width: 85%; font-size: 13px; line-height: 1.6; word-break: break-word; position: relative; padding: 2px 0; }
+.msg-bubble { flex: 1; min-width: 0; max-width: 85%; font-size: 13px; line-height: 1.6; word-break: break-word; overflow-wrap: break-word; position: relative; padding: 2px 0; }
 
 .bubble-assistant { background: transparent; color: var(--text-primary); padding: 2px 0; }
 .bubble-agent { background: transparent; border: none; padding: 0 0 0 18px; position: relative; }
@@ -768,6 +803,27 @@ onUnmounted(() => {
 
 /* ── SubAgentBlock 内部样式已移除，替换为时间线展示 ── */
 .seg-content { line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+
+/* ── 运行时反馈条 ── */
+.feedback-bar {
+  display: flex; align-items: center; gap: 4px;
+  padding: 4px 8px; margin: 0 0 4px 0;
+  background: var(--bg-tertiary); border: 1px solid var(--border-color);
+  border-radius: 6px;
+}
+.feedback-input {
+  flex: 1; background: transparent; border: none; outline: none;
+  color: var(--text-primary); font-size: 12px; padding: 4px 0;
+  font-family: inherit;
+}
+.feedback-input::placeholder { color: var(--text-muted); font-size: 11px; }
+.feedback-send-btn {
+  background: var(--accent); color: #fff; border: none;
+  padding: 4px 8px; border-radius: 4px; cursor: pointer;
+  display: flex; align-items: center; flex-shrink: 0;
+}
+.feedback-send-btn:disabled { opacity: 0.4; cursor: default; }
+
 .scroll-more-hint { text-align: center; font-size: 11px; color: var(--text-muted); padding: 4px; }
 .tool-calls { margin-top: 4px; }
 .tool-call { background: var(--bg-primary); padding: 4px 8px; border-radius: 3px; margin-bottom: 2px; font-size: 12px; }

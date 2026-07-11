@@ -167,6 +167,11 @@ async function approveChat(sessionId, callId, approved) {
   return apiPost('/chat/approve', { sessionId, callId, approved })
 }
 
+// 运行时反馈：Agent 执行中用户可补充/纠正
+async function sendFeedback(sessionId, content) {
+  return apiPost('/chat/feedback', { sessionId, content })
+}
+
 // ─── 模型列表 ──────────────────────────────────────────────
 
 async function getModels() {
@@ -193,4 +198,4 @@ async function savePhilosophy(data) {
   return apiPut('/philosophy', data)
 }
 
-export default { apiGet, apiPost, apiPut, apiDelete, chatSSE, stopChat, answerChat, approveChat, getModels, getInstructions, saveInstructions, getPhilosophy, savePhilosophy }
+export default { apiGet, apiPost, apiPut, apiDelete, chatSSE, stopChat, answerChat, approveChat, sendFeedback, getModels, getInstructions, saveInstructions, getPhilosophy, savePhilosophy }

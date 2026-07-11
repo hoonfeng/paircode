@@ -71,6 +71,10 @@ type Loop struct {
 	// 只读工具永不经过它。nil = 自动审核（全部放行）。宿主可在此阻塞等用户点「允许/拒绝」(人工审核)，
 	// 或调审核模型自动裁决并回灌建议(AI 审核)（见 agent_bridge.go）。
 	Approve func(ctx context.Context, tc ToolCall) (approved bool, feedback string)
+	// OnFeedback 用户运行时反馈钩子（可空）。每次 LLM 调用前检查，返回非空字符串时，
+	// 将内容作为 [User] 消息注入本轮上下文，让 Agent 在下一次回复中响应用户的补充/纠正。
+	// 宿主（web/UI）通过此回调将用户的实时反馈传递给 Loop。
+	OnFeedback func() string
 
 	// ── 上下文压缩（可空；复刻参考 context/manager.ts，见 compress.go）──
 	// MaxContextTokens>0 时启用：每次 LLM 调用前，若 tokens/Max 超阈值，把中段老消息压成一条摘要。
@@ -149,6 +153,15 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 		}
 
 		msgs = l.maybeCompact(ctx, msgs) // 超窗口阈值则把中段老消息压成摘要（见 compress.go）
+
+		// ── 检查用户运行时反馈（补充/纠正）──
+		if l.OnFeedback != nil {
+			if fb := l.OnFeedback(); fb != "" {
+				fbMsg := Message{Role: RoleUser, Content: "【用户反馈】" + fb}
+				msgs = append(msgs, fbMsg)
+				l.emit(Event{Type: EventNotice, Content: "收到用户反馈，Agent 将据此调整"})
+			}
+		}
 
 		// ── THINK：LLM 决策（流式 thinking/content 经事件外发）──
 		assistant, err := l.Provider.Chat(ctx, msgs, tools, func(c Chunk) {
