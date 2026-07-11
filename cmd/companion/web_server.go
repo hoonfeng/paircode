@@ -60,6 +60,9 @@ type webAgentSession struct {
 	approvalCh     chan bool
 	approvalCallID string
 
+	// 反馈通道：用户运行时补充/纠正，每次 LLM 调用前检查
+	feedbackCh chan string
+
 	// loop 持久化的 Agent 引擎（跨 HTTP 请求复用，保持 l.History 自闭环）。
 	// 同一 convID 的后续消息复用此 loop，前端只需发信号（task text），
 	// loop 内部通过 l.History 自动管理完整对话历史。

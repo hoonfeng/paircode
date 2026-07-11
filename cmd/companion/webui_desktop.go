@@ -23,6 +23,7 @@ import (
 	marketplacepanel "github.com/hoonfeng/paircode/cmd/companion/ui/marketplace"
 	mcppanel "github.com/hoonfeng/paircode/cmd/companion/ui/mcp"
 	"github.com/hoonfeng/paircode/cmd/companion/ui/skills"
+	"github.com/hoonfeng/paircode/pkg/memory"
 )
 
 func registerExtraHandlers(mux *http.ServeMux, s *webServer) {
@@ -30,6 +31,7 @@ func registerExtraHandlers(mux *http.ServeMux, s *webServer) {
 	mux.HandleFunc("/api/chat/stop", s.handleChatStop)
 	mux.HandleFunc("/api/chat/answer", s.handleChatAnswer)
 	mux.HandleFunc("/api/chat/approve", s.handleChatApprove)
+	mux.HandleFunc("/api/chat/feedback", s.handleChatFeedback)
 	mux.HandleFunc("/api/marketplace/search", s.handleMarketplaceSearch)
 	mux.HandleFunc("/api/marketplace/install", s.handleMarketplaceInstall)
 
@@ -526,10 +528,11 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithCancel(r.Context())
 	session := &webAgentSession{
-		cancel:     cancel,
-		events:     make(chan agent.Event, 100),
-		askCh:      make(chan string, 1),
-		approvalCh: make(chan bool, 1),
+		cancel:      cancel,
+		events:      make(chan agent.Event, 100),
+		askCh:       make(chan string, 1),
+		approvalCh:  make(chan bool, 1),
+		feedbackCh:  make(chan string, 5), // 缓冲 5 条反馈
 	}
 
 	s.mu.Lock()
@@ -641,6 +644,33 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 		if len(stateParts) > 0 {
 			sys += "\n\n# 项目当前状态\n" + strings.Join(stateParts, "\n\n")
 		}
+
+		// 5. 注入最近对话的摘要（跨对话上下文感知）
+		// 来自 memory_index.json（对话结束时由 generateConversationSummary 写入）
+		recentMemories := memory.List()
+		if len(recentMemories) > 0 {
+			var memSb strings.Builder
+			limit := 5
+			if len(recentMemories) < limit {
+				limit = len(recentMemories)
+			}
+			memSb.WriteString(fmt.Sprintf("## 最近对话摘要（最近 %d 条）\n\n", limit))
+			memSb.WriteString("> ⚠️ 以下摘要是**已完成的历史对话**，与当前对话无关。请勿重复执行已完成的任务。\n> 当前对话中用户的新消息在下方 `[User]` 消息中。\n\n")
+			for i := 0; i < limit; i++ {
+				m := recentMemories[i]
+				title := m.Title
+				if title == "" || title == "新对话" {
+					title = "未命名对话"
+				}
+				memSb.WriteString(fmt.Sprintf("- **%s**", title))
+				if m.Summary != "" {
+					memSb.WriteString(": " + m.Summary)
+				}
+				memSb.WriteString("\n")
+			}
+			memSb.WriteString("\n（需要更详细的历史信息可用 memory_search / memory_read 检索具体对话。）")
+			sys += "\n\n# 已完成对话历史\n" + memSb.String()
+		}
 	}
 
 	reg.Register(&agent.Tool{
@@ -704,6 +734,14 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			return true, ""
+		},
+		OnFeedback: func() string {
+			select {
+			case fb := <-session.feedbackCh:
+				return fb
+			default:
+				return ""
+			}
 		},
 	}
 
@@ -788,6 +826,10 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 			case session.events <- agent.Event{Type: agent.EventError, Content: err.Error()}:
 			default:
 			}
+		}
+		// 非自主模式完成后也生成摘要
+		if req.ConvID != "" {
+			go generateConversationSummary(req.ConvID, buildWebCompressor())
 		}
 	}()
 
@@ -950,6 +992,38 @@ func (s *webServer) handleChatApprove(w http.ResponseWriter, r *http.Request) {
 		jsonResp(w, map[string]any{"ok": true})
 	default:
 		jsonErr(w, "审批通道已满或已关闭")
+	}
+}
+
+func (s *webServer) handleChatFeedback(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		jsonErr(w, "仅 POST")
+		return
+	}
+	var req struct {
+		SessionID string `json:"sessionId"`
+		Content   string `json:"content"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonErr(w, err.Error())
+		return
+	}
+	if req.SessionID == "" || req.Content == "" {
+		jsonErr(w, "sessionId 和 content 必填")
+		return
+	}
+	s.mu.Lock()
+	sess, ok := s.activeLoops[req.SessionID]
+	s.mu.Unlock()
+	if !ok {
+		jsonErr(w, "会话不存在或已结束")
+		return
+	}
+	select {
+	case sess.feedbackCh <- req.Content:
+		jsonResp(w, map[string]any{"ok": true})
+	default:
+		jsonErr(w, "反馈队列已满，请稍后再试")
 	}
 }
 
