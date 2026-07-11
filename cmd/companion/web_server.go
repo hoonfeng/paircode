@@ -754,8 +754,24 @@ type Conversation struct {
 		Role    string `json:"role"`
 		Content string `json:"content"`
 	} `json:"messages,omitempty"`
-	Summary   string `json:"summary,omitempty"`   // AI 生成的对话摘要（对话结束后由 LLM 总结）
-	SummaryAt string `json:"summaryAt,omitempty"` // 摘要生成时间（空=未生成）
+	Summary   string `json:"summary,omitempty"`   // AI 生成的对话摘要
+	SummaryAt string `json:"summaryAt,omitempty"` // 摘要生成时间
+	TokenUsage *ConversationTokenUsage `json:"tokenUsage,omitempty"` // 最后一次 agent 报告的上下文统计
+}
+
+// ConversationTokenUsage 保存对话最后一次 agent 调用后的上下文统计（实际值，非估算）
+type ConversationTokenUsage struct {
+	PromptTokens     int `json:"promptTokens"`
+	CompletionTokens int `json:"completionTokens"`
+	TotalTokens      int `json:"totalTokens"`
+	CacheHitTokens   int `json:"cacheHitTokens"`
+	CacheMissTokens  int `json:"cacheMissTokens"`
+	SystemTokens     int `json:"systemTokens"`
+	SkillsTokens     int `json:"skillsTokens"`
+	MCPTokens        int `json:"mcpTokens"`
+	ToolTokens       int `json:"toolTokens"`
+	HistoryTokens    int `json:"historyTokens"`
+	OtherTokens      int `json:"otherTokens"`
 }
 
 var (
@@ -939,11 +955,33 @@ func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Reques
 	}
 }
 
-// calcConvTokenUsage 从对话消息估算 token 用量。
+// calcConvTokenUsage 返回对话的上下文统计。
+// 优先使用 agent 实际报告的 TokenUsage（含 breakdown 明细），
+// 若无则从消息内容估算。
 func calcConvTokenUsage(conv *Conversation) map[string]int {
+	// 优先使用持久化的实际 token 统计（含 PromptBreakdown）
+	if conv.TokenUsage != nil {
+		tu := conv.TokenUsage
+		m := map[string]int{
+			"promptTokens":     tu.PromptTokens,
+			"completionTokens": tu.CompletionTokens,
+			"totalTokens":      tu.TotalTokens,
+			"cacheHitTokens":   tu.CacheHitTokens,
+			"cacheMissTokens":  tu.CacheMissTokens,
+			"systemTokens":     tu.SystemTokens,
+			"skillsTokens":     tu.SkillsTokens,
+			"mcpTokens":        tu.MCPTokens,
+			"toolTokens":       tu.ToolTokens,
+			"historyTokens":    tu.HistoryTokens,
+			"otherTokens":      tu.OtherTokens,
+		}
+		return m
+	}
+
+	// 无实际统计时，从消息内容粗略估算
 	var prompt, completion float64
 	for _, m := range conv.Messages {
-		tokens := float64(0)
+		var tokens float64
 		cjk := 0
 		other := 0
 		for _, r := range m.Content {
@@ -954,7 +992,6 @@ func calcConvTokenUsage(conv *Conversation) map[string]int {
 			}
 		}
 		tokens = float64(cjk)*1.5 + float64(other)*0.25 + 4
-
 		if m.Role == "user" || m.Role == "system" {
 			prompt += tokens
 		} else {
@@ -969,6 +1006,7 @@ func calcConvTokenUsage(conv *Conversation) map[string]int {
 		"totalTokens":      promptInt + completionInt,
 	}
 }
+
 
 // ─── Agent 工作流规划文档 API ──────────────────────────────────
 
