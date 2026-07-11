@@ -1353,7 +1353,6 @@ func (s *webServer) handleTokensStats(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, "不支持的方法")
 	}
 }
-}
 
 // ─── 辅助 ────────────────────────────────────────────────────
 
