@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && !webonly
 
 // Package ui 资源加载辅助。
 // 所有面板通过本包加载 HTML 模板，统一资源目录路径解析。

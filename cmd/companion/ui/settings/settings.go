@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && !webonly
 
 // Package settings 提供设置面板的加载/保存/UI（GWui 版）。
 // 使用 uixml 声明式 UI 构建设置对话框布局，保留 Go 逻辑处理交互与数据。
@@ -239,6 +239,14 @@ func OpenDialog() {
 
 	ui.MustLoadPanelHTML(doc, "panels/settings.html", reg)
 	root := doc.GetElementByID("settings-root")
+
+	// ── 调试条（显示加载状态） ──
+	dbg := doc.CreateElement("div")
+	dbg.SetAttribute("style",
+		"padding:3px 12px;background:#2d5a2d;color:#8f8;font-size:11px;border-radius:0;flex-shrink:0;border-bottom:1px solid #4caf50;")
+	dbg.SetTextContent(fmt.Sprintf("[设置调试] 服务商:%s | 模型:%s | 温度:%s",
+		EditingSettings.Provider, EditingSettings.ExecuteModel, EditingSettings.Temperature))
+	body.AppendChild(dbg)
 
 	// ── 创建所有控件并替换占位 ──
 	createLLMTab(doc)

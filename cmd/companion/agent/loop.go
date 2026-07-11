@@ -12,7 +12,10 @@ import (
 // ErrConsecToolError 连续多轮工具执行失败，由 Loop.Run 返回，桥接层应据此终止本轮后续阶段。
 var ErrConsecToolError = errors.New("连续 3 轮工具执行失败，已停止")
 
-// ErrMaxIterations 已达最大迭代数仍未 [FINAL]，由 Loop.Run 返回。
+// ErrCirclingLoop 绕圈检测连续触发多次，由 Loop.Run 返回。
+
+var ErrCirclingLoop = errors.New("绕圈检测连续 3 次触发，仍在重复同一操作，已停止")
+// ErrMaxIterations 已达最大迭代数仍未完成，由 Loop.Run 返回。
 var ErrMaxIterations = errors.New("已达最大迭代数，停止")
 
 // EventType 循环对外广播的事件类型（供 UI 流式展示）。
@@ -23,7 +26,7 @@ const (
 	EventContent    EventType = "content"     // LLM 正文增量
 	EventToolCall   EventType = "tool_call"   // 即将执行某工具
 	EventToolResult EventType = "tool_result" // 工具结果回来
-	EventFinal      EventType = "final"       // 任务完成（最终答复）
+	EventFinal      EventType = "final"       // 任务完成（仅 delegate 单轮委托用；主 Loop 用 EventDone）
 	EventError      EventType = "error"       // 出错/止损
 	EventCompacted  EventType = "compacted"   // 上下文已压缩（中段老消息压成摘要；UI 显示一行素色提示）
 	EventEvaluation EventType = "evaluation"  // 任务评测评分（完成后评测模型打分；UI 显示评分卡）
@@ -32,7 +35,10 @@ const (
 	// loop 自身不直接发——loop 只通过 Approve 回调阻塞等待裁决（见 agent_bridge.go）。
 	EventUsage    EventType = "usage"     // LLM 调用完成后的 token 用量（含缓存命中/未命中）
 	EventApproval EventType = "approval"
+
 	EventNotice   EventType = "notice"    // 后台任务通知（jobs 包用；UI 显示一行素色提示）
+	EventPhase    EventType = "phase"     // 阶段切换（自主模式下的规划/执行/评测等阶段指示）
+	EventDone     EventType = "done"      // 结构化完成信号（供 delegate/子 agent 使用；主 Loop Exit 走此事件）
 )
 
 // Event 一条循环事件。
@@ -43,12 +49,17 @@ type Event struct {
 	Args    string // tool_call 的参数 JSON
 	CallID  string
 	Usage   *Usage // EventUsage 时携带 API 返回的 token 用量
+	// AgentName 事件来源 Agent 名。空串 = 父/主 Agent；非空 = 子 Agent（供前端区分）。
+	AgentName string
+	// DoneReason 完成原因（仅 EventDone 时设置）。
+	// 取值："task_complete"（自然完成）、"finish_task"（调 finish_task 工具）。
+	DoneReason string
 }
 
-const finalMarker = "[FINAL]"
+
 
 // Loop TAOR 编排器：think(LLM 决策)→act(执行工具)→observe(结果回灌)→repeat。
-// 停止：assistant 输出 [FINAL] 或无工具调用（即给出文本答复）/ 连续 3 轮工具全错 / 达最大迭代 / 外部取消。
+// 停止：调 finish_task / 连续 3 轮工具全错 / 达最大迭代 / 外部取消。
 type Loop struct {
 	Provider      Provider
 	Registry      *Registry
@@ -77,7 +88,16 @@ type Loop struct {
 	State          map[string]any // 跨 agent 共享状态（子 Loop 继承父引用，避免塞进 messages 撑爆上下文）
 	currentMsgs    []Message      // Run 期间当前消息列表（供 delegate handler 读父历史，保缓存前缀命中）
 	finishResult   *string        // finish_task 退出信号（子 Loop：子 agent 调 finish_task 后置；delegate handler 据此取子结果）
+
 	transferTarget string         // transfer_to_agent 目标名（非空=当前 Loop 应退出，控制权转移给目标 agent）
+	Autonomous     bool           // 自主模式标志（供并行子 agent 继承）
+
+	// History 跨 Run 调用的持久化对话消息（自闭环）。
+	// 设计意图：Agent 独立维护自己的消息历史，前端只发信号（当前用户消息文本）。
+	// 首次 Run 前为 nil；每次 Run 返回后更新为当轮完整 msgs。
+	// Run 的 history 参数传 nil 时自动使用此持久化历史——前端无需自行构建/传递历史。
+	// 传非 nil history 时仍保持向后兼容。
+	History []Message
 }
 
 func (l *Loop) emit(e Event) {
@@ -86,18 +106,38 @@ func (l *Loop) emit(e Event) {
 	}
 }
 
-// Run 跑一轮任务。history 为先前对话（可空，不含本次 task）。
-// 返回在 history 基础上追加了 system(首轮)/user/assistant/tool 等本轮全部消息的完整对话。
-func (l *Loop) Run(ctx context.Context, task string, history []Message) ([]Message, error) {
+// Run 跑一轮任务。history 为先前对话（可空）。
+//
+// 自闭环模式：history 传 nil 时使用 l.History（持久化历史），前端只需传 task。
+// 首次调用传 nil，Run 返回后 l.History 自动更新为当轮完整对话。
+// 第二次调用再传 nil，自动使用上一轮保存的 l.History。
+//
+// 向后兼容：传非 nil history 时保持原行为（不更新 l.History）。
+//
+// 返回在 history/l.History 基础上追加了 system(首轮)/user/assistant/tool
+// 等本轮全部消息的完整对话。
+func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []Message, err error) {
+	// 自闭环：history 为 nil 时使用持久化的 l.History
+	if history == nil {
+		history = l.History
+	}
+	// 统一持久化出口：每次 Run 返回后更新 l.History（不论调用方是否传了 history）
+	defer func() {
+		l.History = msgs
+	}()
+
+	// 深复制 history，避免下层 append 污染原切片
+	hist := CopyHistory(history)
+
 	max := l.MaxIterations
 	if max <= 0 {
 		max = 30
 	}
-	msgs := make([]Message, 0, len(history)+4)
-	if l.System != "" && !hasSystem(history) {
+	msgs = make([]Message, 0, len(hist)+4)
+	if l.System != "" && !hasSystem(hist) {
 		msgs = append(msgs, Message{Role: RoleSystem, Content: l.System})
 	}
-	msgs = append(msgs, history...)
+	msgs = append(msgs, hist...)
 	msgs = append(msgs, Message{Role: RoleUser, Content: task})
 
 	tools := l.Registry.Definitions()
@@ -122,6 +162,11 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) ([]Messa
 				l.lastPromptTokens = c.Usage.PromptTokens // 实测用量驱动下轮压缩判定
 				// 发射 token 用量事件，供 UI 侧栏统计缓存命中/未命中
 				usage := *c.Usage
+				// 估算 prompt 构成 breakdown（前端 ConvSidebar 渲染构成占比条用）
+				if usage.PromptBreakdown.SystemTokens == 0 { // 仅 Provider 未返回时估算
+					pb := EstimateBreakdown(msgs, l.Registry.Definitions(), usage.PromptTokens)
+					usage.PromptBreakdown = pb
+				}
 				l.emit(Event{Type: EventUsage, Usage: &usage})
 			}
 		})
@@ -132,11 +177,7 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) ([]Messa
 		msgs = append(msgs, assistant)
 		l.currentMsgs = msgs // 同步：供 delegate handler 读父历史（含本轮 assistant；handler 剥离末尾未配对 tool_call 保前缀稳定）
 
-		// ── 完成判定：[FINAL] 标记，或无工具调用（视作已给出文本答复）──
-		if strings.Contains(assistant.Content, finalMarker) || len(assistant.ToolCalls) == 0 {
-			l.emit(Event{Type: EventFinal, Content: stripFinal(assistant.Content)})
-			return msgs, nil
-		}
+
 
 		// ── ACT + OBSERVE：依次执行工具，结果作 role=tool 消息回灌 ──
 		iterErr := false
@@ -173,7 +214,8 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) ([]Messa
 			// delegate handler 从 child.finishResult 取子最终结果。仅子 Loop 注册此工具。
 			if tc.Function.Name == "finish_task" {
 				l.finishResult = &result
-				l.emit(Event{Type: EventFinal, Content: result})
+				// finish_task 退出：发射 EventDone（含 result），不发射 EventFinal
+				l.emit(Event{Type: EventDone, Content: result, DoneReason: "finish_task"})
 				return msgs, nil
 			}
 		}
@@ -214,11 +256,9 @@ func hasSystem(msgs []Message) bool {
 	return false
 }
 
-func stripFinal(s string) string {
-	return strings.TrimSpace(strings.ReplaceAll(s, finalMarker, ""))
-}
 
-// DefaultSystemPrompt 复刻参考源核心铁律的系统提示词（中文 lock / 改前 read / 工作区限定 / [FINAL]）。
+
+// DefaultSystemPrompt 核心铁律的系统提示词（中文 lock / 改前 read / 工作区限定 / finish_task 退出）。
 // roots 为工作区所有根目录（支持多根工作区）；roots[0] 为主根。
 func DefaultSystemPrompt(roots []string) string {
 	rootInfo := "根目录: " + roots[0]
@@ -241,13 +281,13 @@ func DefaultSystemPrompt(roots []string) string {
 		"- 文件操作只用工作区内路径；修改文件前必须先 read_file 确认当前内容。\n" +
 		"- 每次工具调用后，依据真实结果决定下一步，绝不臆测结果。\n" +
 		"- 禁止破坏性命令（如 rm -rf、强制 push main），禁止修改工作区外文件。\n" +
-		"- 【完成标记】任务彻底完成时，在最终答复末尾单独一行输出 [FINAL]。\n\n" +
+		"- 【完成标记】任务彻底完成时，调用 finish_task 工具提交最终结果摘要，切勿在正文中输出 [FINAL]。\n\n" +
 		"# 任务追踪（核心机制）\n" +
 		"任何需要 3+ 步骤或多文件操作的任务，必须使用 task_create/task_update 追踪进度：\n" +
 		"- 收到任务后第一回合创建完整子任务清单，立即将第一个标记为 in_progress。\n" +
 		"- 完成一项更新一项（task_update），绝不批量更新。\n" +
 		"- 发现新前置依赖或方案不可行时即时调整计划。\n" +
-		"- 所有任务完成后，先调用 task_summary 确认进度摘要，然后才输出 [FINAL]。\n\n" +
+		"- 所有任务完成后，先调用 task_summary 确认进度摘要，然后调用 finish_task 提交结果。\n\n" +
 		"# 读取策略\n" +
 		"读文件时必须串行推进——读完一个文件，分析内容，再决定下一个读什么。\n" +
 		"禁止一次性发出 3+ 个 read_file——你预判需要的文件往往有一半是多余的。\n" +

@@ -2,7 +2,7 @@
 // 数据源：实时遍历 core.Folders 下文件（跳过 .git/node_modules 等）。
 // 交互：输入过滤、上下键选择、Enter 打开、Esc/blur 关闭。
 //
-//go:build windows
+//go:build windows && !webonly
 
 package main
 

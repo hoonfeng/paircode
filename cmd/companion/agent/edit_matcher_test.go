@@ -240,6 +240,16 @@ func TestRestoreNewlines(t *testing.T) {
 	if out != "a\nb\nc" {
 		t.Errorf("LF 保持失败: %q", out)
 	}
+	// ref 含孤立 \r → 也应判断为 CRLF 风格
+	out = restoreNewlines("a\nb\nc", "ref\r")
+	if out != "a\r\nb\r\nc" {
+		t.Errorf("孤立 \\r 应触发 CRLF 风格: %q", out)
+	}
+	// 空 ref → 保持 LF
+	out = restoreNewlines("a\nb\nc", "")
+	if out != "a\nb\nc" {
+		t.Errorf("空 ref 应保持 LF: %q", out)
+	}
 }
 
 func TestFoldWS(t *testing.T) {

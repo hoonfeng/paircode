@@ -19,7 +19,7 @@ const (
 type Message struct {
 	Role       Role       `json:"role"`
 	Content    string     `json:"content"`
-	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`  // assistant 请求的工具调用
+	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`   // assistant 请求的工具调用
 	ToolCallID string     `json:"tool_call_id,omitempty"` // role=tool 时对应的调用 id
 	Name       string     `json:"name,omitempty"`
 	Reasoning  string     `json:"reasoning_content,omitempty"` // 思考链（DeepSeek，回传需保留）
@@ -56,8 +56,21 @@ type Usage struct {
 	PromptTokens          int `json:"prompt_tokens"`
 	CompletionTokens      int `json:"completion_tokens"`
 	TotalTokens           int `json:"total_tokens"`
-	PromptCacheHitTokens   int `json:"prompt_cache_hit_tokens,omitempty"`
-	PromptCacheMissTokens  int `json:"prompt_cache_miss_tokens,omitempty"`
+	PromptCacheHitTokens  int `json:"prompt_cache_hit_tokens,omitempty"`
+	PromptCacheMissTokens int `json:"prompt_cache_miss_tokens,omitempty"`
+	// PromptBreakdown 估算 prompt 内各类构成（归一化到 prompt_tokens），0 表示未估算。
+	PromptBreakdown `json:"prompt_breakdown,omitempty"`
+}
+
+// PromptBreakdown 估算 prompt token 的构成类别（归一化到 prompt_tokens 总和）。
+// 所有字段之和 ≈ PromptTokens。前端据此渲染构成占比条。
+type PromptBreakdown struct {
+	SystemTokens  int `json:"system_tokens"`  // 系统提示词（核心规则+指令+指导思想）
+	SkillsTokens  int `json:"skills_tokens"`  // Skills 技能定义（system prompt 内技能段）
+	MCPTokens     int `json:"mcp_tokens"`     // MCP 服务器工具定义
+	ToolTokens    int `json:"tool_tokens"`    // Agent 内置工具定义（函数 schema）
+	HistoryTokens int `json:"history_tokens"` // 历史对话（前几轮 user/assistant/tool）
+	OtherTokens   int `json:"other_tokens"`   // 当前用户输入 + 其他
 }
 
 // Chunk 流式输出的一片（content/reasoning/toolCalls 为增量）。

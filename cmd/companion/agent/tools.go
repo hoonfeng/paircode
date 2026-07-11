@@ -3,11 +3,14 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -16,6 +19,15 @@ import (
 // WorkspaceRoots 工作区所有根目录（多根工作区支持）。
 // 由 bridge.go 在初始化 agent 时设置。resolvePath 会检查路径是否在任一根目录内。
 var WorkspaceRoots []string
+
+// FileChangeCallback 文件变更回调（可选）。每次写类工具成功修改文件后调用，供外部追踪变更。
+// filePath 为工作区相对路径。由宿主（webui_desktop.go）设置。
+var FileChangeCallback func(filePath string)
+
+// ErrRetry 由 OnToolError 钩子返回，指示 Execute 用修改后的 args 重新执行 handler。
+// 用于可恢复错误（如 edit_file 匹配失败→自动降级行号定位重试）。
+// 注意：OnToolError 应通过 args（引用）设置重试参数。
+var ErrRetry = errors.New("__retry__")
 
 // ToolHandler 工具执行体：收到已解析的 JSON 参数，返回结果文本或 error。
 type ToolHandler func(ctx context.Context, args map[string]any) (string, error)
@@ -172,9 +184,19 @@ func (r *Registry) Execute(ctx context.Context, name, argsJSON string) (string, 
 	if r.AfterTool != nil {
 		r.AfterTool(ctx, name, args, result, err, dur)
 	}
-	// OnToolError 钩子：错误诊断增强 / 可恢复错误降级（返回 ("",nil) 吞掉错误）
+	// OnToolError 钩子：错误诊断增强 / 可恢复错误降级
+	// 返回 ErrRetry 时用修改后的 args 重试 handler（最多 1 次防无限循环）
 	if err != nil && r.OnToolError != nil {
-		result, err = r.OnToolError(ctx, name, args, err)
+		newResult, newErr := r.OnToolError(ctx, name, args, err)
+		if errors.Is(newErr, ErrRetry) {
+			// 重试：handler 用 OnToolError 修改过的 args
+			result, err = t.Handler(ctx, args)
+			if r.AfterTool != nil {
+				r.AfterTool(ctx, name, args, result, err, time.Since(start))
+			}
+		} else {
+			result, err = newResult, newErr
+		}
 	}
 	return result, err
 }
@@ -243,6 +265,9 @@ func RegisterDefaultTools(r *Registry, root string) {
 			if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
 				return "", err
 			}
+			if FileChangeCallback != nil {
+				FileChangeCallback(argStr(args, "path"))
+			}
 			return fmt.Sprintf("已写入 %s（%d 字节）", argStr(args, "path"), len(content)), nil
 		},
 	})
@@ -281,6 +306,9 @@ func RegisterDefaultTools(r *Registry, root string) {
 			}
 			if err := os.WriteFile(p, []byte(out), 0o644); err != nil {
 				return "", err
+			}
+			if FileChangeCallback != nil {
+				FileChangeCallback(argStr(args, "path"))
 			}
 			return "已编辑 " + argStr(args, "path"), nil
 		},
@@ -334,20 +362,8 @@ func RegisterDefaultTools(r *Registry, root string) {
 				}
 				old, _ := m["old_string"].(string)
 				neu, _ := m["new_string"].(string)
-				lineStart := 0
-				lineEnd := 0
-				switch v := m["line_start"].(type) {
-				case float64:
-					lineStart = int(v)
-				case int:
-					lineStart = v
-				}
-				switch v := m["line_end"].(type) {
-				case float64:
-					lineEnd = int(v)
-				case int:
-					lineEnd = v
-				}
+				lineStart := argInt(m, "line_start", 0)
+				lineEnd := argInt(m, "line_end", 0)
 				if old == "" && lineStart <= 0 {
 					return "", fmt.Errorf("edits[%d] 必须提供 old_string 或 line_start", i)
 				}
@@ -364,6 +380,9 @@ func RegisterDefaultTools(r *Registry, root string) {
 			}
 			if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
 				return "", err
+			}
+			if FileChangeCallback != nil {
+				FileChangeCallback(argStr(args, "path"))
 			}
 			return fmt.Sprintf("已对 %s 应用 %d 处编辑", argStr(args, "path"), len(edits)), nil
 		},
@@ -471,6 +490,9 @@ func RegisterDefaultTools(r *Registry, root string) {
 			if err := os.Rename(from, to); err != nil {
 				return "", err
 			}
+			if FileChangeCallback != nil {
+				FileChangeCallback(argStr(args, "from") + " → " + argStr(args, "to"))
+			}
 			return fmt.Sprintf("已移动 %s → %s", argStr(args, "from"), argStr(args, "to")), nil
 		},
 	})
@@ -495,6 +517,9 @@ func RegisterDefaultTools(r *Registry, root string) {
 			if err := os.Remove(p); err != nil {
 				return "", err
 			}
+			if FileChangeCallback != nil {
+				FileChangeCallback("(删除) " + argStr(args, "path"))
+			}
 			return "已删除 " + argStr(args, "path"), nil
 		},
 	})
@@ -518,6 +543,55 @@ func RegisterDefaultTools(r *Registry, root string) {
 	registerBinaryTools(r, root)             // inspect_binary / write_binary（二进制读写，见 binary.go）
 	registerBinaryRETools(r, root)           // binary_strings/find/patch/info/hash/entropy（二进制正则，见 binary_re.go）
 	registerDebugTools(r, root)              // debug_start/stop/breakpoint/continue/next/step_in/step_out/stack/variables/evaluate/status（见 debugtools.go）
+	registerVisionTools(r, root)             // image_analyze / image_ocr（图像视觉分析，见 vision.go）
+	registerScreenshotTools(r, root)         // screenshot_desktop/window/area/webpage（截图工具，见 screenshot_tool.go）
+	registerFinishTask(r)                   // finish_task（任务完成信号，见 loop.go 硬编码检测；注册后使测试省去 error 结果）
+	RegisterBugTools(r, root)                // bug_detect / bug_analyze / bug_fix（BUG 自动检测与修复，见 bugdetect.go + bugfix.go）
+
+	// ── 默认 OnToolError：edit_file/multi_edit 匹配失败→自动行号定位重试 ──
+	// 调用方如需自定义可在之后覆盖 r.OnToolError。
+	if r.OnToolError == nil {
+		r.OnToolError = func(ctx context.Context, name string, args map[string]any, err error) (string, error) {
+			// 只处理 edit_file/multi_edit 的匹配/不唯一失败
+			if name != "edit_file" && name != "multi_edit" {
+				return "", err
+			}
+			// 已使用行号定位不再重试
+			if ls, _ := args["line_start"].(float64); ls > 0 {
+				return "", err
+			}
+			errStr := err.Error()
+			isMatchFail := strings.Contains(errStr, "未找到") || strings.Contains(errStr, "多次") || strings.Contains(errStr, "不唯一")
+			if !isMatchFail {
+				return "", err
+			}
+			// 从诊断信息中提取第一个行号 L(\d+)
+			re := regexp.MustCompile(`L(\d+):`)
+			m := re.FindStringSubmatch(errStr)
+			if len(m) < 2 {
+				return "", err
+			}
+			lineNo, _ := strconv.Atoi(m[1])
+			if lineNo <= 0 {
+				return "", err
+			}
+			// 设置行号定位参数，保留 old_string 作校验
+			args["line_start"] = float64(lineNo)
+			return "", ErrRetry
+		}
+	}
+}
+
+// registerFinishTask 注册 finish_task 工具（任务完成信号）。
+// loop.go 硬编码检测此工具名，注册后使 Execute 正常返回 result 而非 error。
+func registerFinishTask(r *Registry) {
+	r.Register(&Tool{
+		Name:        "finish_task",
+		Parameters:  objSchema(props{"result": strProp("任务结果摘要")}, "result"),
+		Handler: func(_ context.Context, args map[string]any) (string, error) {
+			return argStr(args, "result"), nil
+		},
+	})
 }
 
 // ─── 辅助 ────────────────────────────────────────────────────
@@ -527,6 +601,8 @@ type props = map[string]any
 func strProp(desc string) map[string]any  { return map[string]any{"type": "string", "description": desc} }
 func boolProp(desc string) map[string]any { return map[string]any{"type": "boolean", "description": desc} }
 func intProp(desc string) map[string]any  { return map[string]any{"type": "integer", "description": desc} }
+
+// objSchema 拼 object 类型的 JSON Schema。
 
 // objSchema 拼 object 类型的 JSON Schema。
 func objSchema(properties props, required ...string) map[string]any {

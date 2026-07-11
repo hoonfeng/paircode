@@ -58,12 +58,12 @@ type AgentBridge interface {
 // ─── 包级变量 ───────────────────────────────────────────────────
 
 var (
-	TheState          *ChatState
-	NewBridge         func(cs *ChatState) AgentBridge
-	ClipboardWrite    func(text string)
-	OpenFileDialog    func(title, filter string) string
-	OpenFolderDialog  func(title string) string
-	OnChatContextMenu func(x, y float64) // 右键菜单回调
+	TheState               *ChatState
+	NewBridge              func(cs *ChatState) AgentBridge
+	ClipboardWrite         func(text string)
+	OpenFileDialog         func(title, filter string) string
+	OpenFolderDialog       func(title string) string
+	OnChatContextMenu      func(x, y float64)                      // 右键菜单回调
 	OnChatInputContextMenu func(x, y float64, selectedText string) // 输入框右键菜单回调
 )
 
@@ -189,6 +189,8 @@ func markDirty() {
 }
 
 func (s *ChatState) SetState() {
+	s.refreshMessageList()
+	s.refreshSidebar()
 	markDirty()
 }
 
@@ -224,16 +226,17 @@ type ChatState struct {
 	searchSeq   int
 
 	// DOM 元素引用（用于动态更新）
-	toolbarEl    *dom.Element
-	searchBarEl  *dom.Element
-	msgAreaEl    *dom.Element // 消息区容器（overflow-y:auto，所有消息直接渲染）
-	inputAreaEl  *dom.Element
-	askCardEl    *dom.Element        // agent 提问卡占位（动态显示/隐藏）
-	taskProgEl   *dom.Element        // 任务进度面板占位
-	sidebarEl    *dom.Element        // 对话侧栏（固定 300px）
-	mainColEl    *dom.Element        // 主列
-	inputComp    *component.Input    // 搜索栏输入框
-	textAreaComp *component.TextArea // 主输入框
+	toolbarEl     *dom.Element
+	searchBarEl   *dom.Element
+	msgAreaEl     *dom.Element // 消息区容器（overflow-y:auto，所有消息直接渲染）
+	inputAreaEl   *dom.Element
+	askCardEl     *dom.Element        // agent 提问卡占位（动态显示/隐藏）
+	taskProgEl    *dom.Element        // 任务进度面板占位
+	sidebarEl     *dom.Element        // 对话侧栏（固定 300px）
+	mainColEl     *dom.Element        // 主列
+	debugStatusEl *dom.Element        // 工具栏调试状态显示
+	inputComp     *component.Input    // 搜索栏输入框
+	textAreaComp  *component.TextArea // 主输入框
 
 	lastSaveTime time.Time
 
@@ -246,6 +249,8 @@ type ChatState struct {
 	historyDraft string   // 进入历史浏览前保存的当前草稿
 
 	_taskPS *taskProgressState
+
+	needsPostInit bool // 需要首次挂载后初始化（刷新消息列表 + 侧栏）
 }
 
 // taskProgressState 任务进度面板交互状态。
@@ -310,14 +315,25 @@ func New(doc *dom.Document) *ChatState {
 	// 默认显示对话列表侧栏
 	s.ShowThreads = true
 
+	TheState = s
+
+	// ── 初始消息内容预建 ──
+	// ★ 在 DetachRoot 之前预建消息内容，确保消息子元素在首次布局时
+	//   已在 DOM 树中（尚未从 body 分离）。PostInit 阶段
+	//   （DetachRoot+AppendChild 之后）的 AppendChild 在 GWui 渲染
+	//   引擎中存在脏标记传播问题——新添加的子元素 IsDirty()=false
+	//   且 HasChildDirty()=false，layoutBlock 将其视为"干净子树"
+	//   而跳过，不创建 Box，最终不渲染。
+	s.refreshMessageList()
+	s.refreshSidebar()
+
 	// 从临时父节点（body）中分离根元素
 	ui.DetachRoot(root)
 
-	TheState = s
-
-	// 初始化消息列表 + 侧栏（含分隔条显隐+两栏重排）
-	s.refreshMessageList()
-	s.refreshSidebar()
+	// ── 延迟初始化 ──
+	// PostInit 仅在重新挂载后调用 markDirty 触发首帧渲染，
+	// 不再在此处重建消息列表（已在上面预建）。
+	s.needsPostInit = true
 
 	return s
 }
@@ -332,6 +348,16 @@ func (s *ChatState) Refresh() {
 	markDirty()
 }
 
+// PostInit 在面板挂载到 DOM 树后调用，触发首帧渲染。
+// 消息列表和侧栏已在 New() 中预建（DetachRoot 之前），此处只需 markDirty。
+func (s *ChatState) PostInit() {
+	if !s.needsPostInit {
+		return
+	}
+	s.needsPostInit = false
+	markDirty()
+}
+
 // ─── 布局构建助手 ─────────────────────────────────────────────
 
 // buildToolbarInto 将工具栏内容填充到 HTML 提供的容器中。
@@ -343,6 +369,14 @@ func (s *ChatState) buildToolbarInto(bar *dom.Element) {
 	title.SetAttribute("style", "font-size:11px;color:#cccccc;text-transform:uppercase;letter-spacing:0.5px;padding-left:8px;white-space:nowrap;")
 	title.SetTextContent("AI 对话")
 	bar.AppendChild(title)
+
+	// ── 调试状态（线程数/消息数）──
+	s.debugStatusEl = doc.CreateElement("div")
+	s.debugStatusEl.SetAttribute("style",
+		"font-size:10px;color:#8f8;margin-left:8px;padding:1px 6px;background:#2d5a2d;border-radius:3px;"+
+			"border:1px solid #4caf50;flex-shrink:0;white-space:nowrap;")
+	s.debugStatusEl.SetTextContent("…")
+	bar.AppendChild(s.debugStatusEl)
 
 	bar.AppendChild(spacer(doc))
 
@@ -403,6 +437,18 @@ func (s *ChatState) refreshMessageList() {
 		return
 	}
 
+	// 更新工具栏调试状态
+	if s.debugStatusEl != nil {
+		if t != nil {
+			s.debugStatusEl.SetTextContent(fmt.Sprintf("🗂%d 💬%d", len(s.Store.Threads), len(t.Messages)))
+		} else {
+			s.debugStatusEl.SetTextContent("空")
+		}
+		s.debugStatusEl.SetAttribute("style",
+			"font-size:10px;color:#8f8;margin-left:8px;padding:1px 6px;background:#2d5a2d;border-radius:3px;"+
+				"border:1px solid #4caf50;flex-shrink:0;white-space:nowrap;")
+	}
+
 	q := strings.ToLower(strings.TrimSpace(s.SearchQuery))
 
 	// 清空并重建消息列表
@@ -420,8 +466,8 @@ func (s *ChatState) refreshMessageList() {
 	// ── 调试计数器 ──
 	dbg := s.doc.CreateElement("div")
 	dbg.SetAttribute("style",
-		"padding:4px 12px;background:#1a3a1a;color:#8c8;font-size:11px;border-radius:4px;margin:4px 12px;flex-shrink:0;")
-	dbg.SetTextContent(fmt.Sprintf("📊 线程: %d | 活跃: %q | 消息: %d 条",
+		"padding:4px 12px;background:#2d5a2d;color:#8f8;font-size:12px;border-radius:4px;margin:4px 12px;flex-shrink:0;border:1px solid #4caf50;font-weight:bold;")
+	dbg.SetTextContent(fmt.Sprintf("[对话调试] 线程:%d | 活跃:%q | 消息:%d条",
 		len(s.Store.Threads), t.Title, len(t.Messages)))
 	s.msgAreaEl.AppendChild(dbg)
 
@@ -1052,7 +1098,7 @@ func (s *ChatState) buildReviewToggle() *dom.Element {
 	iconEl := createIcon(doc, iconName, 13)
 	btn.AppendChild(iconEl)
 
-	textEl := createText(doc, text, "color:"+clr+";font-size:11px;")
+	textEl := createText(doc, text, "color:"+clr+";font-size:11px;flex-shrink:0;white-space:nowrap;")
 	btn.AppendChild(textEl)
 
 	addClick(btn, func() {
@@ -1083,7 +1129,7 @@ func (s *ChatState) buildToggleBtn(icon, text string, on bool, onColor string, o
 	iconEl := createIcon(doc, icon, 13)
 	btn.AppendChild(iconEl)
 
-	textEl := createText(doc, text, "color:"+fg+";font-size:11px;")
+	textEl := createText(doc, text, "color:"+fg+";font-size:11px;flex-shrink:0;white-space:nowrap;")
 	btn.AppendChild(textEl)
 
 	addClick(btn, onClick)
@@ -1104,7 +1150,7 @@ func (s *ChatState) buildSendOrStop() *dom.Element {
 		iconEl.SetAttribute("style", iconEl.GetAttribute("style")+";color:#fff;")
 		btn.AppendChild(iconEl)
 
-		textEl := createText(doc, "停止", "color:#fff;font-size:12px;")
+		textEl := createText(doc, "停止", "color:#fff;font-size:12px;flex-shrink:0;white-space:nowrap;")
 		btn.AppendChild(textEl)
 
 		addClick(btn, func() {
@@ -1130,7 +1176,7 @@ func (s *ChatState) buildPrimaryBtn(text string, onClick func()) *dom.Element {
 	iconEl.SetAttribute("style", iconEl.GetAttribute("style")+";color:#fff;")
 	btn.AppendChild(iconEl)
 
-	textEl := createText(doc, text, "color:#fff;font-size:12px;")
+	textEl := createText(doc, text, "color:#fff;font-size:12px;flex-shrink:0;white-space:nowrap;")
 	btn.AppendChild(textEl)
 
 	addClick(btn, onClick)
@@ -1870,6 +1916,7 @@ func (s *ChatState) Send(text string) {
 	s.Bridge.Start(draft + refsText + attachmentContext(atts))
 	s.saveHistory()
 	s.refreshMessageList()
+	s.refreshSidebar()
 	// 清空输入框
 	if s.textAreaComp != nil {
 		s.textAreaComp.SetText("")
@@ -1900,6 +1947,7 @@ func (s *ChatState) sendTask(task string) {
 	s.Bridge.Start(task)
 	s.saveHistory()
 	s.refreshMessageList()
+	s.refreshSidebar()
 	markDirty()
 }
 

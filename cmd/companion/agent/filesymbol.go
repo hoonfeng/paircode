@@ -19,6 +19,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 )
@@ -437,18 +438,37 @@ func getFileSymbolsHandler(root string) ToolHandler {
 		if err != nil {
 			return "", fmt.Errorf("启动语言服务器 %s 失败: %w", server.cmd, err)
 		}
+
 		defer client.Close()
 
-		// 获取文档符号
+
+		// 先打开文件（部分 LSP 服务器需要 didOpen 才能响应 documentSymbol）
+		if err := client.notify("textDocument/didOpen", map[string]interface{}{
+			"textDocument": map[string]interface{}{
+				"uri":        uri,
+				"languageId": server.langID,
+				"version":    1,
+			},
+		}); err != nil {
+			return "", fmt.Errorf("didOpen 失败: %w", err)
+		}
+
+		// 获取文档符号（带自动重试：LSP 服务器初始化可能需要时间）
 		syms, err := client.documentSymbol(uri)
 		if err != nil {
 			return "", fmt.Errorf("获取文档符号失败: %w", err)
+		}
+		if len(syms) == 0 {
+			time.Sleep(300 * time.Millisecond)
+			syms, err = client.documentSymbol(uri)
+			if err != nil {
+				return "", fmt.Errorf("获取文档符号失败(重试): %w", err)
+			}
 		}
 
 		if len(syms) == 0 {
 			return "（文件中未发现符号）", nil
 		}
-
 		// 格式化输出
 		var b strings.Builder
 		fmt.Fprintf(&b, "文件 %s 共 %d 个符号：\n\n", filePath, countSymbols(syms))
@@ -614,10 +634,17 @@ func findSymbolUsagesHandler(root string) ToolHandler {
 			return "", fmt.Errorf("获取文档符号失败: %w", err)
 		}
 		if len(syms) == 0 {
+			// 重试一次：LSP 服务器可能需要时间完成索引
+			time.Sleep(500 * time.Millisecond)
+			syms, err = client.documentSymbol(uri)
+			if err != nil {
+				return "", fmt.Errorf("获取文档符号失败(重试): %w", err)
+			}
+		}
+		if len(syms) == 0 {
 			return fmt.Sprintf("在 %s 中未找到任何符号，无法定位符号 %q", filePath, name), nil
 		}
 
-		// 查找所有匹配的符号位置
 		positions := findSymbolPositions(syms, name)
 		if len(positions) == 0 {
 			return fmt.Sprintf("在 %s 中未找到名为 %q 的符号", filePath, name), nil

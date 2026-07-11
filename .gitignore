@@ -17,6 +17,24 @@ go.work.sum
 # Pair CodeAgent working directory (conversations, session)
 .pair/
 
+# IDE configurations
+.trae/
+
+# Local sensitive configs
+config/settings.json
+config/mcp.json
+config/models.json
+
+# Generated runtime configs
+cmd/companion/config/
+
+# Build artifacts
+bin/
+
+# Node build outputs
+cmd/companion/web-ui/node_modules/
+cmd/companion/web-ui/dist/
+
 # Debug / temp files
 _*.txt
 _*.go
@@ -27,3 +45,6 @@ debug-*.md
 diag_*.txt
 doag_*.txt
 build_err.txt
+
+# Python temporary scripts
+*.py

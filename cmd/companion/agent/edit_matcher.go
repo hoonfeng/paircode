@@ -113,6 +113,7 @@ func applyEditByLine(content string, opts EditOptions) (string, error) {
 // matchWhitespaceFold 在 normContent 中用空白折叠方式找 normOld 的唯一连续匹配，替换为 normNew。
 // 折叠规则：每行 TrimSpace + 行内连续空白（含 tab）折叠为单空格。
 // 命中且唯一时返回替换后的内容；不唯一或未命中返回 ok=false。
+// 如果严格行对齐匹配失败，自动降级为「跳过空行」的宽松匹配。
 func matchWhitespaceFold(normContent, normOld, normNew string) (string, bool) {
 	contentLines := strings.Split(normContent, "\n")
 	oldLines := strings.Split(normOld, "\n")
@@ -140,12 +141,53 @@ func matchWhitespaceFold(normContent, normOld, normNew string) (string, bool) {
 		return "", false
 	}
 
-	// 在 foldContent 中找 foldOld 的连续子序列匹配
+	// ── 策略1：严格连续子序列匹配 ──
 	start, count := -1, 0
 	for i := 0; i+len(oldLines) <= len(contentLines); i++ {
 		match := true
 		for j := range oldLines {
 			if foldContent[i+j] != foldOld[j] {
+				match = false
+				break
+			}
+		}
+		if match {
+			count++
+			if count == 1 {
+				start = i
+			}
+			if count > 1 {
+				return "", false
+			}
+		}
+	}
+	if count == 1 {
+		end := start + len(oldLines)
+		newLines := strings.Split(normNew, "\n")
+		result := make([]string, 0, len(contentLines)-len(oldLines)+len(newLines))
+		result = append(result, contentLines[:start]...)
+		result = append(result, newLines...)
+		result = append(result, contentLines[end:]...)
+		return strings.Join(result, "\n"), true
+	}
+
+	// ── 策略2：宽松匹配（跳过空行）——解决 old_string 多/少空行的差异 ──
+	// 提取非空折叠行序列
+	var nonEmptyOld []int // oldLines 中非空行的索引
+	for i, f := range foldOld {
+		if f != "" {
+			nonEmptyOld = append(nonEmptyOld, i)
+		}
+	}
+	if len(nonEmptyOld) == 0 {
+		return "", false
+	}
+	// 在 contentLines 中按非空序列扫描
+	start, count = -1, 0
+	for i := 0; i <= len(foldContent)-len(nonEmptyOld); i++ {
+		match := true
+		for j, oldIdx := range nonEmptyOld {
+			if foldContent[i+j] != foldOld[oldIdx] {
 				match = false
 				break
 			}
@@ -164,15 +206,28 @@ func matchWhitespaceFold(normContent, normOld, normNew string) (string, bool) {
 		return "", false
 	}
 
-	// 替换 contentLines[start:start+len(oldLines)] 为 normNew 的行
-	end := start + len(oldLines)
+	// 宽松匹配找到了：用 oldLines 的非空行序列定位实际范围
+	// 在 contentLines 中定位起始行（折叠匹配）
+	realStart := start
+	for realStart > 0 && foldContent[realStart-1] == "" {
+		realStart-- // 前拓空行，包容 old 前导空行
+	}
+	// 定位结束行
+	realEnd := start + len(nonEmptyOld) - 1
+	for realEnd+1 < len(foldContent) && foldContent[realEnd+1] == "" {
+		realEnd++ // 后拓空行
+	}
+
+	// 替换 realStart..realEnd 为 normNew
 	newLines := strings.Split(normNew, "\n")
-	result := make([]string, 0, len(contentLines)-len(oldLines)+len(newLines))
-	result = append(result, contentLines[:start]...)
+	result := make([]string, 0, len(contentLines)-(realEnd-realStart+1)+len(newLines))
+	result = append(result, contentLines[:realStart]...)
 	result = append(result, newLines...)
-	result = append(result, contentLines[end:]...)
+	result = append(result, contentLines[realEnd+1:]...)
 	return strings.Join(result, "\n"), true
 }
+
+
 
 // ─── 换行符工具 ─────────────────────────────────────────────
 
@@ -186,8 +241,8 @@ func normalizeNewlines(s string) string {
 // restoreNewlines 把 out 的换行符恢复为 ref 的风格（ref 含 \r\n 则转 CRLF，否则保持 LF）。
 // 保证替换后文件换行风格不变。
 func restoreNewlines(out, ref string) string {
-	if strings.Contains(ref, "\r\n") {
-		// ref 是 CRLF：先把 out 里已有的 \r\n 降级为 \n，再统一升为 \r\n
+	if strings.Contains(ref, "\r\n") || strings.ContainsRune(ref, '\r') {
+		// ref 是 CRLF 风格（含 \r\n 或孤立 \r）：先把 out 里已有的 \r\n 降级为 \n，再统一升为 \r\n
 		out = strings.ReplaceAll(out, "\r\n", "\n")
 		out = strings.ReplaceAll(out, "\n", "\r\n")
 	}
@@ -248,20 +303,32 @@ func diagnoseNotFound(content, old string) error {
 	normOld := normalizeNewlines(old)
 	contentLines := strings.Split(normContent, "\n")
 	oldLines := strings.Split(normOld, "\n")
-	oldFirst := ""
-	if len(oldLines) > 0 {
-		oldFirst = strings.TrimSpace(oldLines[0])
+
+	// 找第一个非空行作为关键词（old_string 首行可能为空行）
+	oldKey := ""
+	oldFullPreview := ""
+	for _, l := range oldLines {
+		s := strings.TrimSpace(l)
+		if s != "" {
+			oldKey = foldWS(s)
+			oldFullPreview = s
+			break
+		}
+	}
+	if oldKey == "" {
+		oldKey = foldWS(oldLines[0]) // 全空行时用空字符串，下面做特判
 	}
 
 	var b strings.Builder
 	b.WriteString("未找到 old_string（精确/CRLF归一化/空白折叠 均未命中）。\n")
-	if oldFirst != "" {
-		b.WriteString("old_string 首行: " + oldFirst + "\n")
+	if oldFullPreview != "" {
+		b.WriteString("old_string 首非空行: " + oldFullPreview + "\n")
+	} else {
+		b.WriteString("old_string 内容: " + foldPreview(old) + "\n")
 	}
-	b.WriteString("文件中相似行（折叠后包含 old 首行关键词）:\n")
+	b.WriteString("文件中相似行（折叠后包含关键词）:\n")
 
 	found := 0
-	oldKey := foldWS(oldFirst)
 	for i, l := range contentLines {
 		if oldKey != "" && strings.Contains(foldWS(l), oldKey) {
 			fmt.Fprintf(&b, "  L%d: %s\n", i+1, strings.TrimSpace(l))

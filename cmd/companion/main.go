@@ -2,7 +2,7 @@
 // 使用 HTML 文件加载外壳布局（resources/html/shell.html），替代程序化 DOM 构建。
 // 面板通过 getElementById 挂载到 HTML 容器，各自加载自己的 HTML 模板。
 //
-//go:build windows
+//go:build windows && !webonly
 
 package main
 
@@ -89,14 +89,15 @@ func main() {
 
 	// ── 创建 App ──
 	a, err := app.New(doc, app.Config{
-		Title:     "Pair CodeAgent",
-		Width:     1400,
-		Height:    900,
-		FontPath:  fontPath,
-		Resizable: true,
-		Centered:  true,
-		MinWidth:  800,
-		MinHeight: 500,
+		Title:        "Pair CodeAgent",
+		Width:        1400,
+		Height:       900,
+		FontPath:     fontPath,
+		Resizable:    true,
+		Centered:     true,
+		MinWidth:     800,
+		MinHeight:    500,
+		UseWebRender: true,
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -146,6 +147,9 @@ func main() {
 	editorArea.AppendChild(editorView.Element())
 	bottomPanel.AppendChild(termView.Element())
 	mainPanel.AppendChild(chatView.Element())
+
+	// 面板挂载到 DOM 树后执行首次初始化渲染（刷新消息列表 + 侧栏）
+	chatView.PostInit()
 
 	// ── 设置全局上下文 ──
 	ui.Ctx.Shell = shellState
@@ -214,6 +218,9 @@ func main() {
 
 	// ── 触发重布局 ──
 	a.MarkDirty()
+
+	// ── 启动 Web UI 服务器（后台 goroutine，不阻塞桌面 GUI）──
+	go startWebUI(9090)
 
 	// ── 启动 ──
 	a.Run()
