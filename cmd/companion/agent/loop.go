@@ -162,12 +162,13 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 				l.lastPromptTokens = c.Usage.PromptTokens // 实测用量驱动下轮压缩判定
 				// 发射 token 用量事件，供 UI 侧栏统计缓存命中/未命中
 				usage := *c.Usage
-				// 估算 prompt 构成 breakdown（前端 ConvSidebar 渲染构成占比条用）
 				if usage.PromptBreakdown.SystemTokens == 0 { // 仅 Provider 未返回时估算
 					pb := EstimateBreakdown(msgs, l.Registry.Definitions(), usage.PromptTokens)
 					usage.PromptBreakdown = pb
 				}
 				l.emit(Event{Type: EventUsage, Usage: &usage})
+				// agent 自闭环：持久化上下文统计到磁盘（供页面刷新后恢复）
+				SaveTokenUsage(&usage)
 			}
 		})
 		if err != nil {
