@@ -121,7 +121,7 @@ func Default() AppSettings {
 		Temperature: "1.0", ThinkingMode: "thinking", MaxTokens: 131072, ContextMaxTokens: 64000,
 		CompressEnabled: true, CompressProvider: "deepseek", CompressBaseURL: "https://api.deepseek.com/v1",
 		CompressModel: "deepseek-v4-flash", CompressThinkingMode: "non-thinking",
-		MaxIterations: 50, MaxParallel: 3, ReviewRetries: 3, AutoIterate: true, RequireApproval: true, Benchmark: true, LuaTools: true,
+	MaxIterations: 50, MaxParallel: 3, ReviewRetries: 3, AutoIterate: true, RequireApproval: true, AutoReview: true, AutoCollapse: true, Benchmark: true, LuaTools: true,
 		DefaultShell: "auto", TermFontSize: 13, TermEncoding: "auto",
 		Theme: "dark", EditorFontSize: 14, FontFamily: "'Cascadia Code', 'Fira Code', Consolas, monospace",
 		PhilosophySelected: []string{"tao-te-ching", "huangdi-yinfu-jing", "sunzi-bingfa"},

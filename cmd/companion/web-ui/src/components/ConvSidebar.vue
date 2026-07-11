@@ -16,7 +16,7 @@
     </div>
 
     <!-- Token 统计面板 -->
-    <div v-if="wsTokenStats.totalTokens > 0" class="conv-stats cs-tokens">
+    <div class="conv-stats cs-tokens">
       <div class="conv-stats-header" @click="toggleTokens">
         <span class="conv-stats-chevron">{{ convStatsExpanded ? '▾' : '▸' }}</span>
         <SvgIcon name="code" :size="11" />
@@ -63,7 +63,7 @@
     </div>
 
     <!-- 上下文窗口 + 构成占比 -->
-    <div v-if="convCtxStats.promptTokens > 0" class="conv-stats cs-context">
+    <div class="conv-stats cs-context">
       <div class="conv-stats-header" @click="toggleCtx">
         <span class="conv-stats-chevron">{{ ctxStatsExpanded ? '▾' : '▸' }}</span>
         <SvgIcon name="layers" :size="11" />
