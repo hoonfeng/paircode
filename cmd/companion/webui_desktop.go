@@ -811,23 +811,10 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 			}
 			if e.Usage != nil {
 				payload["usage"] = e.Usage
-				loadWorkspaceTokenStats()
-				accumulateWorkspaceTokens(
-					e.Usage.PromptTokens,
 			if e.Usage != nil {
 				payload["usage"] = e.Usage
-				loadWorkspaceTokenStats()
-				accumulateWorkspaceTokens(
-					e.Usage.PromptTokens,
-					e.Usage.CompletionTokens,
-					e.Usage.PromptCacheHitTokens,
-					e.Usage.PromptCacheMissTokens,
-					&e.Usage.PromptBreakdown,
-				)
 				// 持久化当前对话的上下文统计（含 breakdown 明细）
 				if req.ConvID != "" {
-					loadConversations()
-					for i := range conversations {
 						if conversations[i].ID == req.ConvID {
 							conversations[i].TokenUsage = &ConversationTokenUsage{
 								PromptTokens:     e.Usage.PromptTokens,

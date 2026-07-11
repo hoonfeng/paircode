@@ -1315,97 +1315,22 @@ func (s *webServer) handleMCPSave(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// ─── 工作区级 Token 统计 ────────────────────────────────────
-
-// WorkspaceTokenStats 工作区累计 token 用量。
-type WorkspaceTokenStats struct {
-	PromptTokens     int `json:"promptTokens"`
-	CompletionTokens int `json:"completionTokens"`
-	TotalTokens      int `json:"totalTokens"`
-	CacheHitTokens   int `json:"cacheHitTokens"`
-	CacheMissTokens  int `json:"cacheMissTokens"`
-	SystemTokens     int `json:"systemTokens"`
-	SkillsTokens     int `json:"skillsTokens"`
-	MCPTokens        int `json:"mcpTokens"`
-	ToolTokens       int `json:"toolTokens"`
-	HistoryTokens    int `json:"historyTokens"`
-	OtherTokens      int `json:"otherTokens"`
-}
-
-var (
-	wsTokenStats       WorkspaceTokenStats
-	wsTokenStatsMu     sync.Mutex
-	wsTokenStatsLoaded bool
-)
-
-func tokenStatsPath() string {
-	root := core.Root()
-	if root == "" {
-		return ""
-	}
-	return filepath.Join(root, ".pair", "token-stats.json")
-}
-
-func loadWorkspaceTokenStats() {
-	wsTokenStatsMu.Lock()
-	defer wsTokenStatsMu.Unlock()
-	if wsTokenStatsLoaded {
-		return
-	}
-	wsTokenStatsLoaded = true
-	path := tokenStatsPath()
-	if path == "" {
-		return
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return
-	}
-	json.Unmarshal(data, &wsTokenStats)
-}
-
-func saveWorkspaceTokenStats() {
-	path := tokenStatsPath()
-	if path == "" {
-		return
-	}
-	data, _ := json.MarshalIndent(wsTokenStats, "", "  ")
-	os.WriteFile(path, data, 0644)
-}
-
-func accumulateWorkspaceTokens(promptTokens, completionTokens, cacheHit, cacheMiss int, pb *agent.PromptBreakdown) {
-	wsTokenStatsMu.Lock()
-	defer wsTokenStatsMu.Unlock()
-	wsTokenStats.PromptTokens += promptTokens
-	wsTokenStats.CompletionTokens += completionTokens
-	wsTokenStats.TotalTokens += promptTokens + completionTokens
-	wsTokenStats.CacheHitTokens += cacheHit
-	wsTokenStats.CacheMissTokens += cacheMiss
-	if pb != nil {
-		wsTokenStats.SystemTokens = pb.SystemTokens
-		wsTokenStats.SkillsTokens = pb.SkillsTokens
-		wsTokenStats.MCPTokens = pb.MCPTokens
-		wsTokenStats.ToolTokens = pb.ToolTokens
-		wsTokenStats.HistoryTokens = pb.HistoryTokens
-		wsTokenStats.OtherTokens = pb.OtherTokens
-	}
-	saveWorkspaceTokenStats()
-}
-
-func resetWorkspaceTokenStats() {
-	wsTokenStatsMu.Lock()
-	defer wsTokenStatsMu.Unlock()
-	wsTokenStats = WorkspaceTokenStats{}
-	saveWorkspaceTokenStats()
-}
+// ─── Token 统计 API（数据由 agent 自闭环持久化） ──────────────
 
 func (s *webServer) handleTokensStats(w http.ResponseWriter, r *http.Request) {
-	loadWorkspaceTokenStats()
 	switch r.Method {
 	case "GET":
-		wsTokenStatsMu.Lock()
-		stats := wsTokenStats
-		wsTokenStatsMu.Unlock()
+		// 从 agent 自闭环存储读取（agent Loop 内部每次 LLM 调用后自动保存）
+		stats := agent.ReadTokenStats()
+		if stats == nil {
+			jsonResp(w, map[string]any{
+				"promptTokens": 0, "completionTokens": 0, "totalTokens": 0,
+				"cacheHitTokens": 0, "cacheMissTokens": 0,
+				"systemTokens": 0, "skillsTokens": 0, "mcpTokens": 0,
+				"toolTokens": 0, "historyTokens": 0, "otherTokens": 0,
+			})
+			return
+		}
 		jsonResp(w, map[string]any{
 			"promptTokens":     stats.PromptTokens,
 			"completionTokens": stats.CompletionTokens,
@@ -1420,11 +1345,11 @@ func (s *webServer) handleTokensStats(w http.ResponseWriter, r *http.Request) {
 			"otherTokens":      stats.OtherTokens,
 		})
 	case "POST":
-		resetWorkspaceTokenStats()
-		jsonResp(w, map[string]any{"ok": true, "message": "Token 统计已重置"})
+		jsonResp(w, map[string]any{"ok": true, "message": "Token 统计由 agent 自闭环管理，无需手动重置"})
 	default:
 		jsonErr(w, "不支持的方法")
 	}
+}
 }
 
 // ─── 辅助 ────────────────────────────────────────────────────
