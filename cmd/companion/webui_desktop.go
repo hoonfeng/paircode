@@ -814,16 +814,39 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 				loadWorkspaceTokenStats()
 				accumulateWorkspaceTokens(
 					e.Usage.PromptTokens,
+			if e.Usage != nil {
+				payload["usage"] = e.Usage
+				loadWorkspaceTokenStats()
+				accumulateWorkspaceTokens(
+					e.Usage.PromptTokens,
 					e.Usage.CompletionTokens,
 					e.Usage.PromptCacheHitTokens,
 					e.Usage.PromptCacheMissTokens,
 					&e.Usage.PromptBreakdown,
 				)
-			}
-			fmt.Fprintf(w, "data: %s\n\n", jsonStr(payload))
-			flusher.Flush()
-			if e.Type == agent.EventError {
-				eventDone = true
+				// 持久化当前对话的上下文统计（含 breakdown 明细）
+				if req.ConvID != "" {
+					loadConversations()
+					for i := range conversations {
+						if conversations[i].ID == req.ConvID {
+							conversations[i].TokenUsage = &ConversationTokenUsage{
+								PromptTokens:     e.Usage.PromptTokens,
+								CompletionTokens: e.Usage.CompletionTokens,
+								TotalTokens:      e.Usage.PromptTokens + e.Usage.CompletionTokens,
+								CacheHitTokens:   e.Usage.PromptCacheHitTokens,
+								CacheMissTokens:  e.Usage.PromptCacheMissTokens,
+								SystemTokens:     e.Usage.SystemTokens,
+								SkillsTokens:     e.Usage.SkillsTokens,
+								MCPTokens:        e.Usage.MCPTokens,
+								ToolTokens:       e.Usage.ToolTokens,
+								HistoryTokens:    e.Usage.HistoryTokens,
+								OtherTokens:      e.Usage.OtherTokens,
+							}
+							break
+						}
+					}
+					saveConversations()
+				}
 			}
 		case <-heartbeat.C:
 			fmt.Fprintf(w, ": keepalive\n\n")
