@@ -637,16 +637,14 @@ watch(showIgnoreEditor, v => { if (v) loadIgnore() })
 
 /* 分支菜单 */
 .branch-menu {
-  position: absolute; top: 32px; left: 8px; right: 8px; z-index: 100;
+  position: absolute; top: 32px; left: 8px; z-index: 100;
+  width: calc(100% - 16px); max-width: 300px;
   background: var(--bg-primary); border: 1px solid var(--border-color);
   border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,0.3);
   max-height: 300px; display: flex; flex-direction: column;
 }
-.branch-menu-header { padding: 8px; border-bottom: 1px solid var(--border-color); }
 .branch-filter-input {
   width: 100%; padding: 4px 8px; font-size: 12px;
-  background: var(--input-bg); border: 1px solid var(--border-color);
-  color: var(--text-primary); border-radius: 3px; outline: none;
 }
 .branch-filter-input:focus { border-color: var(--accent); }
 .branch-list { flex: 1; overflow-y: auto; }

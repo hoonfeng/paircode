@@ -8,7 +8,6 @@
       <MenuBar ref="menuBarRef" />
       <div class="title-center">{{ state.workspaceName }}</div>
       <div class="title-right">
-        <!-- 工作区切换按钮（小屏备用） -->
         <button v-if="wsList.length > 1" class="ws-quick-btn"
                 @click="showQuickSwitcher = !showQuickSwitcher" title="快速切换工作区">
           <SvgIcon name="folder" :size="14" />
@@ -28,6 +27,10 @@
                   @click="state.bottomPanelTab = 'output'">
             <SvgIcon name="output" size="14" /> 输出
           </button>
+          <button :class="{ active: state.bottomPanelTab === 'tasks' }"
+                  @click="state.bottomPanelTab = 'tasks'">
+            <SvgIcon name="check" size="14" /> 任务
+          </button>
           <button :class="{ active: state.bottomPanelTab === 'terminal' }"
                   @click="state.bottomPanelTab = 'terminal'">
             <SvgIcon name="terminal" size="14" /> 终端
@@ -43,13 +46,14 @@
         </div>
         <div class="panel-content">
           <OutputPanel v-if="state.bottomPanelTab === 'output'" />
+          <TasksPanel v-if="state.bottomPanelTab === 'tasks'" />
           <TerminalPanel v-if="state.bottomPanelTab === 'terminal'" />
         </div>
         <div class="panel-resizer" @mousedown.prevent="startBottomResize"></div>
       </div>
     </div>
 
-    <!-- 右侧容器：总宽 = 聊天区域 + 分隔条 + 会话列表(250px) -->
+    <!-- 右侧容器 -->
     <div v-if="state.rightPanelVisible" class="right-container"
          :class="{ 'focus-mode': state.focusMode }"
          :style="state.focusMode ? {} : { width: (rightPanelWidth + 4 + 1 + 250) + 'px' }">
@@ -81,12 +85,13 @@ import EditorArea from './components/EditorArea.vue'
 import RightPanel from './components/RightPanel.vue'
 import StatusBar from './components/StatusBar.vue'
 import OutputPanel from './components/OutputPanel.vue'
+import TasksPanel from './components/TasksPanel.vue'
+import TerminalPanel from './components/TerminalPanel.vue'
 import SettingsModal from './components/SettingsModal.vue'
 import SystemModal from './components/SystemModal.vue'
 import SourceModal from './components/SourceModal.vue'
 import MarketplaceModal from './components/MarketplaceModal.vue'
 import SvgIcon from './components/SvgIcon.vue'
-import TerminalPanel from './components/TerminalPanel.vue'
 import GlobalDialogs from './components/GlobalDialogs.vue'
 
 const showSettings = ref(false)
@@ -95,7 +100,6 @@ const showSource = ref(false)
 const showMarketplace = ref(false)
 const showQuickSwitcher = ref(false)
 
-// 面板尺寸（从 localStorage 恢复）
 function loadPanelSize() {
   try {
     const d = JSON.parse(localStorage.getItem('paircode-panel-size') || '{}')
@@ -122,8 +126,6 @@ provide('showMarketplace', showMarketplace)
 provide('bottomPanelHeight', bottomPanelHeight)
 provide('rightPanelWidth', rightPanelWidth)
 
-// ── 工作区管理（全局 wsList，provide 给 FileExplorer） ──
-// wsList 存储在 state 上以便跨组件访问
 if (!state.wsList) state.wsList = reactive([])
 const wsList = state.wsList
 
@@ -131,14 +133,12 @@ provide('wsList', wsList)
 provide('saveWsList', saveWsList)
 provide('switchWorkspace', switchWorkspace)
 
-// 加载 wsList（从 localStorage）
 function loadWsList() {
   try {
     const saved = JSON.parse(localStorage.getItem('paircode-workspaces') || '[]')
     wsList.length = 0
     for (const w of saved) { wsList.push(reactive(w)) }
   } catch { wsList.length = 0 }
-  // 确保当前工作区在列表中
   if (state.workspaceRoot && !wsList.find(w => w.path === state.workspaceRoot)) {
     wsList.push(reactive({
       path: state.workspaceRoot,
@@ -153,10 +153,7 @@ function loadWsList() {
 function saveWsList() {
   try {
     const data = wsList.map(w => ({
-      path: w.path,
-      name: w.name,
-      folders: w.folders || [],
-      notify: !!w.notify,
+      path: w.path, name: w.name, folders: w.folders || [], notify: !!w.notify,
     }))
     localStorage.setItem('paircode-workspaces', JSON.stringify(data.slice(0, 20)))
   } catch {}
@@ -168,74 +165,43 @@ function checkNotifications() {
   }
 }
 
-// ── 切换工作区（核心：保存当前对话 + 加载目标工作区） ──
 async function switchWorkspace(targetPath) {
   if (!targetPath || targetPath === state.workspaceRoot) return
-
-  // 保存当前工作区的对话
   saveCurrentConversations()
-
   try {
-    // 通知后端切换工作区
     const targetWs = wsList.find(w => w.path === targetPath)
     const folders = targetWs?.folders || []
-    const res = await api.apiPost('/workspace', {
-      action: 'switch',
-      root: targetPath,
+    await api.apiPost('/workspace', {
+      action: 'switch', root: targetPath,
       folders: folders.filter(f => f !== targetPath),
     })
-
     state.workspaceRoot = targetPath
     state.workspaceFolders = folders.length > 0 ? [...folders] : [targetPath]
     state.workspaceName = targetPath.split('\\').filter(Boolean).pop() || targetPath
     document.title = 'PairCode IDE - ' + state.workspaceName
-
-    // 清空编辑器
     state.openFiles = []
     state.activeFile = ''
     state.fileContents = {}
-
-    // 刷新文件树
     await loadFileTree()
-
-    // 从后端同步对话列表（确保与 .pair/conversations.json 一致）
     try {
       const list = await api.apiGet('/conversations')
       if (list && list.length > 0) state.conversations = list
     } catch {}
-
-    // 通知 RightPanel 工作区已切换（重新加载对话列表）
     window.dispatchEvent(new CustomEvent('workspace-switched'))
-
-    // 清除通知
     const ws = wsList.find(w => w.path === targetPath)
     if (ws) ws.notify = false
     state.notificationCount = 0
-
-    // 更新 wsList 中的 folders
-    if (targetWs) {
-      targetWs.folders = [...state.workspaceFolders]
-      saveWsList()
-    }
-
-    // 确保目标工作区在 wsList 中
+    if (targetWs) { targetWs.folders = [...state.workspaceFolders]; saveWsList() }
     if (!wsList.find(w => w.path === targetPath)) {
-      wsList.push(reactive({
-        path: targetPath,
-        name: state.workspaceName,
-        folders: [...state.workspaceFolders],
-        notify: false,
-      }))
+      wsList.push(reactive({ path: targetPath, name: state.workspaceName, folders: [...state.workspaceFolders], notify: false }))
       saveWsList()
     }
-    // 持久化面板状态
     savePersistentState()
   } catch (err) {
     console.error('切换工作区失败:', err)
   }
 }
 
-// 保存当前对话到 localStorage
 function saveCurrentConversations() {
   if (!state.workspaceRoot) return
   try {
@@ -248,7 +214,6 @@ function saveCurrentConversations() {
   } catch {}
 }
 
-// 加载指定工作区的对话
 async function loadConversationsForWorkspace(path) {
   state.conversations = []
   state.currentConvId = ''
@@ -261,14 +226,9 @@ async function loadConversationsForWorkspace(path) {
       state.conversations = data.conversations || []
       state.currentConvId = data.currentConvId || ''
       state.messages = (data.messages || []).map(m => {
-        // 刷新后没有活跃 SSE，清除 stale loading 标志
         if (m._loading) m._loading = false
-        // 如果 content 为空但 segments 有 content 段，回填 content（旧格式兼容）
         if (!m.content && m.segments && m.segments.length > 0) {
-          m.content = m.segments
-            .filter(s => s.type === 'content')
-            .map(s => s.content || '')
-            .join('')
+          m.content = m.segments.filter(s => s.type === 'content').map(s => s.content || '').join('')
         }
         return m
       })
@@ -276,15 +236,11 @@ async function loadConversationsForWorkspace(path) {
   } catch {}
 }
 
-// ── 活动栏切换 ──
 const switchActivity = (id) => {
   if (id === 'settings') { showSettings.value = true; return }
   if (id === 'system') { showSystem.value = true; return }
-  // 源代码管理：显示 Sidebar 中的 GitPanel（不再是模态框）
-  // 如果需要 SourceModal，请在 ActivityBar 单独绑定
   if (id === 'chat') { state.rightPanelVisible = !state.rightPanelVisible; return }
   if (id === 'marketplace') { showMarketplace.value = true; return }
-
   if (state.activeActivity === id) {
     state.sidebarVisible = !state.sidebarVisible
   } else {
@@ -294,13 +250,9 @@ const switchActivity = (id) => {
 }
 provide('switchActivity', switchActivity)
 
-// ── 菜单栏关闭 ──
 const menuBarRef = ref(null)
-const closeAllMenus = () => {
-  if (menuBarRef.value) menuBarRef.value.closeMenu?.()
-}
+const closeAllMenus = () => { if (menuBarRef.value) menuBarRef.value.closeMenu?.() }
 
-// ── 拖拽 ──
 let dragging = false
 let startY = 0, startH = 0
 let startX = 0, startW = 0
@@ -337,7 +289,6 @@ const stopRightResize = () => {
   savePanelSize()
 }
 
-// ── 键盘快捷键 ──
 const handleKeydown = (e) => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
   if (e.ctrlKey && e.key === 'b') { e.preventDefault(); state.sidebarVisible = !state.sidebarVisible }
@@ -349,7 +300,6 @@ const handleKeydown = (e) => {
   if (e.ctrlKey && e.key === 'k') { e.preventDefault(); state.focusMode = !state.focusMode }
 }
 
-// ── 加载文件树（当前工作区的文件夹） ──
 const loadFileTree = async () => {
   const dirs = state.workspaceFolders.length > 0 ? [...state.workspaceFolders] : []
   if (dirs.length === 0 && state.workspaceRoot) dirs.push(state.workspaceRoot)
@@ -360,25 +310,18 @@ const loadFileTree = async () => {
     if (!d) continue
     try {
       const entries = await api.apiGet('/fs/list', { path: d })
-      state.fileTree.push({
-        path: d,
-        name: d.split('\\').filter(Boolean).pop() || d,
-        children: entries || [],
-        loaded: false,
-      })
+      state.fileTree.push({ path: d, name: d.split('\\').filter(Boolean).pop() || d, children: entries || [], loaded: false })
     } catch {}
   }
 }
 provide('loadFileTree', loadFileTree)
 
-// ── 生命周期 ──
 onMounted(async () => {
   document.addEventListener('contextmenu', (e) => {
     if (!e.defaultPrevented) e.preventDefault()
   }, false)
   document.addEventListener('keydown', handleKeydown)
 
-  // 加载工作区
   try {
     const health = await api.apiGet('/health')
     state.workspaceRoot = health.workspace || ''
@@ -389,19 +332,12 @@ onMounted(async () => {
     document.title = 'PairCode IDE - ' + state.workspaceName
   } catch {}
 
-  // 加载设置
   try {
     const settings = await api.apiGet('/settings')
     state.settings = settings
     state.settingsLoaded = true
-    if (settings.theme === 'light') { state.theme = 'light'; document.body.classList.add('light') }
-    if (settings.theme === 'warm') { applyTheme('warm') }
-    if (settings.theme === 'cute') { applyTheme('cute') }
-    if (settings.theme === 'light') { applyTheme('light') }
-    if (settings.theme === 'dark') { applyTheme('dark') }
   } catch {}
 
-  // 加载 wsList + 对话
   loadWsList()
   if (state.workspaceRoot) {
     await loadConversationsForWorkspace(state.workspaceRoot)
@@ -409,12 +345,13 @@ onMounted(async () => {
       const list = await api.apiGet('/conversations')
       if (list && list.length > 0) state.conversations = list
     } catch {}
+    if (state.conversations.length > 0 && !state.rightPanelVisible) {
+      state.rightPanelVisible = true
+    }
   }
 
-  // 恢复持久化状态（面板布局、编辑器文件列表等）
   loadPersistentState()
 
-  // 恢复编辑器打开的文件（从服务器重新加载内容）
   if (state.openFiles.length > 0) {
     for (const fp of state.openFiles) {
       try {
@@ -424,16 +361,12 @@ onMounted(async () => {
       } catch {}
     }
   }
-  // 如果活动文件已不在 openFiles 中，修正
   if (state.activeFile && !state.openFiles.includes(state.activeFile)) {
     state.activeFile = state.openFiles.length > 0 ? state.openFiles[0] : ''
   }
 
-  // 加载文件树
   await loadFileTree()
 
-  // 全局事件
-  // 全局事件（用命名变量存储，以便 onUnmounted 清理）
   const _onRefreshTree = loadFileTree
   const _onSwitchActivity = (e) => { if (e.detail?.id) switchActivity(e.detail.id) }
   const _onOpenMarketplace = () => { showMarketplace.value = true }
@@ -452,7 +385,6 @@ onMounted(async () => {
   window.addEventListener('open-workspace-dialog', _onOpenWorkspaceDialog)
   window.addEventListener('switch-workspace', _onSwitchWorkspace)
 
-  // 在 onUnmounted 中清理全部事件
   const _cleanupEvents = () => {
     window.removeEventListener('refresh-tree', _onRefreshTree)
     window.removeEventListener('switch-activity', _onSwitchActivity)
@@ -472,25 +404,17 @@ onUnmounted(() => {
   if (persistTimer) { clearTimeout(persistTimer); persistTimer = null }
 })
 
-// 初始化通知
 state.notificationCount = 0
 state.workspaceName = state.workspaceName || ''
 
-// 对话变化时自动保存
 watch(() => state.messages.length, () => {
-  saveCurrentConversations()
-  checkNotifications()
-  saveWsList()
+  saveCurrentConversations(); checkNotifications(); saveWsList()
 })
 
-// ── 持久化 watcher（debounce 1s） ──
 let persistTimer = null
 function schedulePersist() {
   if (persistTimer) clearTimeout(persistTimer)
-  persistTimer = setTimeout(() => {
-    savePersistentState()
-    persistTimer = null
-  }, 1000)
+  persistTimer = setTimeout(() => { savePersistentState(); persistTimer = null }, 1000)
 }
 
 watch(() => state.sidebarVisible, schedulePersist)
@@ -550,9 +474,7 @@ watch(() => state.openFiles.length, schedulePersist)
   grid-column: 4; grid-row: 2;
   display: flex; flex-direction: row; overflow: hidden; position: relative;
 }
-.right-container.focus-mode {
-  grid-column: 3 / -1;
-}
+.right-container.focus-mode { grid-column: 3 / -1; }
 .right-panel-resizer {
   width: 4px; cursor: ew-resize; background: transparent; flex-shrink: 0; z-index: 10;
 }

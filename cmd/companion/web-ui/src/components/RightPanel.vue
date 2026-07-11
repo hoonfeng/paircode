@@ -62,7 +62,7 @@
                         <span class="tl-dot tl-dot-thinking"></span>
                         <div class="tl-body tl-think-body">
                           <div v-if="!seg._collapsed" class="tl-thinking-text">{{ seg.content }}</div>
-                          <div v-else class="tl-thinking-collapsed" @click="seg._collapsed = !seg._collapsed">💭 思考…</div>
+                          <div v-else class="tl-thinking-collapsed" @click="seg._collapsed = !seg._collapsed"><SvgIcon name="message-square" :size="12" /> 思考…</div>
                           <div v-if="!seg._collapsed" class="tl-think-fold" @click.stop="seg._collapsed = !seg._collapsed" title="折叠思考">▲ 收起</div>
                         </div>
                       </div>
@@ -171,9 +171,9 @@ const inputHeight = ref(150)
 const convListWidth = ref(250)
 const topSentinel = ref(null)
 let currentAbortSSE = null
-const autoReview = ref(false)
+const autoReview = ref(true)
 const autoIterate = ref(false)
-const autoCollapse = ref(false)
+const autoCollapse = ref(true)
 const autonomous = ref(false)
 const pendingAttachment = ref(null)
 
@@ -358,6 +358,7 @@ const sendMessage = async () => {
   if (pendingAttachment.value) {
     fullContent += '\n\n---\n[附件] ' + (pendingAttachment.value.content || '').slice(0, 2000)
   }
+  const lastUserText = text
   inputText.value = ''; pendingAttachment.value = null
   if (currentAbortSSE) { currentAbortSSE(); currentAbortSSE = null }
   collapsePreviousOutputs()
@@ -388,7 +389,7 @@ const sendMessage = async () => {
           pendingAskCallId = data.callId || data.callID || ''
           msg.segments.push({ type: 'ask_user', question, callId: data.callId || data.callID || '', answer: '', _answered: false })
         } else {
-          msg.segments.push({ type: 'tool_call', name: toolName, argsRaw: data.args ? (typeof data.args === 'string' ? data.args : JSON.stringify(data.args, null, 2)) : '', result: '', _mode: 'collapsed' })
+          msg.segments.push({ type: 'tool_call', name: toolName, argsRaw: data.args ? (typeof data.args === 'string' ? data.args : JSON.stringify(data.args, null, 2)) : '', result: '', _mode: 'expanded', _expanded: true })
         }
       } else if (data.type === 'error') { const seg = pushSegment(msg.segments, 'content'); seg.content += '**[错误]** ' + (data.content || '') }
       else if (data.type === 'usage' && data.usage) {
@@ -443,6 +444,11 @@ const sendMessage = async () => {
       if (state.currentConvId && finalContent) {
         api.apiPost('/conversations/' + state.currentConvId + '/messages', { role: 'assistant', content: finalContent }).catch(() => {})
       }
+      // 自动命名对话：用用户消息更新标题
+      if (state.currentConvId && lastUserText) {
+        autoNameConv(state.currentConvId, lastUserText)
+      }
+      window.dispatchEvent(new Event('save-conversations'))
       window.dispatchEvent(new Event('save-conversations'))
       scrollToBottom()
     },
@@ -639,7 +645,7 @@ const setupResizeObserver = () => {
 
 watch(() => state.messages.length, () => { nextTick(setupResizeObserver) })
 
-watch(() => state.settings, (s) => { if (s) { autoReview.value = !!s.autoReview; autoIterate.value = !!s.autoIterateOnRejection; autonomous.value = !!s.autonomous } }, { immediate: true })
+watch(() => state.settings, (s) => { if (s) { autoReview.value = s.autoReview !== undefined ? !!s.autoReview : true; autoIterate.value = !!s.autoIterateOnRejection; autonomous.value = !!s.autonomous; autoCollapse.value = s.autoCollapse !== undefined ? !!s.autoCollapse : true; } }, { immediate: true })
 
 const handleBeforeUnload = () => { if (state.currentConvId && state.messages.length > 0) { window.dispatchEvent(new Event('save-conversations')) } }
 
@@ -749,7 +755,7 @@ onUnmounted(() => {
 /* ── 输入区 ── */
 .chat-input-area { position: relative; flex-shrink: 0; padding: 0 8px 10px 8px; background: var(--bg-secondary); }
 .input-resizer { position: absolute; top: -8px; left: 0; right: 0; height: 12px; cursor: ns-resize; z-index: 10; }
-.chat-input { display: block; width: 100%; background: var(--input-bg); border: 1px solid var(--border-color); color: var(--text-primary); padding: 12px 16px; padding-bottom: 52px; border-radius: 8px; font-size: 14px; resize: none; outline: none; min-height: 80px; font-family: inherit; line-height: 1.6; box-sizing: border-box; }
+.chat-input { display: block; width: 100%; background: var(--input-bg); border: 1px solid var(--border-color); color: var(--text-primary); padding: 12px 16px 64px 16px; border-radius: 8px; font-size: 14px; resize: none; outline: none; min-height: 80px; font-family: inherit; line-height: 1.6; box-sizing: border-box; }
 .input-overlay { position: absolute; right: 16px; bottom: 20px; display: flex; align-items: center; gap: 6px; pointer-events: none; }
 .input-overlay > * { pointer-events: auto; }
 .overlay-btns { display: flex; align-items: center; gap: 2px; }
