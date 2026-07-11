@@ -49,7 +49,7 @@ func TestLiveEditFileCRLF(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
-	task := "把文件 crlf.txt 中的 'line2 old' 改为 'line2 new'（用 edit_file），然后用 read_file 读回确认内容。完成后输出 [FINAL]。"
+	task := "把文件 crlf.txt 中的 'line2 old' 改为 'line2 new'（用 edit_file），然后用 read_file 读回确认内容。完成后输出 完成。"
 	if _, err := loop.Run(ctx, task, nil); err != nil {
 		t.Fatalf("loop.Run 出错: %v（工具: %v）", err, ev)
 	}
@@ -102,7 +102,7 @@ func TestLiveGlobRecursive(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
-	task := "用 find_files_by_pattern 工具，pattern 参数填 '**/*.go'，查找工作区所有 Go 文件。列出找到的文件路径。完成后输出 [FINAL]。"
+	task := "用 find_files_by_pattern 工具，pattern 参数填 '**/*.go'，查找工作区所有 Go 文件。列出找到的文件路径。完成后输出 完成。"
 	if _, err := loop.Run(ctx, task, nil); err != nil {
 		t.Fatalf("loop.Run 出错: %v（工具: %v）", err, ev)
 	}
@@ -158,7 +158,7 @@ func TestLiveMCPInProcess(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
-	task := "调用 mcp__test__echo 工具，参数 text 填 'hello mcp'，告诉我返回结果。完成后输出 [FINAL]。"
+	task := "调用 mcp__test__echo 工具，参数 text 填 'hello mcp'，告诉我返回结果。完成后输出 完成。"
 	if _, err := loop.Run(ctx, task, nil); err != nil {
 		t.Fatalf("loop.Run 出错: %v（工具: %v）", err, ev)
 	}
@@ -223,7 +223,7 @@ func TestLiveSkills(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
-	task := "用 load_skill 工具加载 'emoji-icons' 技能的正文，然后告诉我这个技能的核心规则是什么。完成后输出 [FINAL]。"
+	task := "用 load_skill 工具加载 'emoji-icons' 技能的正文，然后告诉我这个技能的核心规则是什么。完成后输出 完成。"
 	if _, err := loop.Run(ctx, task, nil); err != nil {
 		t.Fatalf("loop.Run 出错: %v（工具: %v）", err, ev)
 	}
@@ -271,7 +271,7 @@ func TestLiveMultiAgent(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 	defer cancel()
-	task := "用 delegate_task 委托 'coder' 子 agent 在工作区创建文件 done.txt，内容为 'delegated ok'。等子 agent 完成后输出 [FINAL]。"
+	task := "用 delegate_task 委托 'coder' 子 agent 在工作区创建文件 done.txt，内容为 'delegated ok'。等子 agent 完成后输出 完成。"
 	if _, err := loop.Run(ctx, task, nil); err != nil {
 		t.Fatalf("loop.Run 出错: %v（工具: %v）", err, ev)
 	}

@@ -83,6 +83,9 @@ func registerBinaryTools(r *Registry, root string) {
 			if err := os.WriteFile(p, raw, 0o644); err != nil {
 				return "", err
 			}
+			if FileChangeCallback != nil {
+				FileChangeCallback(argStr(args, "path"))
+			}
 			return fmt.Sprintf("已写入 %s（%d 字节）", argStr(args, "path"), len(raw)), nil
 		},
 	})

@@ -49,7 +49,7 @@ func TestLiveDeepSeek(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Second)
 	defer cancel()
-	task := "在工作区创建文件 hello.txt，内容恰好是 goui works，然后用 read_file 读回确认。完成后回复并输出 [FINAL]。"
+	task := "在工作区创建文件 hello.txt，内容恰好是 goui works，然后用 read_file 读回确认。完成后回复并输出 完成。"
 	msgs, err := loop.Run(ctx, task, nil)
 	if err != nil {
 		t.Fatalf("loop.Run 出错: %v（事件: %v）", err, ev)
@@ -87,7 +87,7 @@ func TestLiveMemoryKB(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Second)
 	defer cancel()
 	task := "依次完成三步：①用 memory_write 记一条记忆（name 用中文如「测试记忆」，type=project，描述和正文随便写中文）；" +
-		"②用 project_info_write 写知识库条目（path=概览，内容首行 # 项目概览）；③用 memory_list 看记忆总览。完成后输出 [FINAL]。"
+		"②用 project_info_write 写知识库条目（path=概览，内容首行 # 项目概览）；③用 memory_list 看记忆总览。完成后输出 完成。"
 	if _, err := loop.Run(ctx, task, nil); err != nil {
 		t.Fatalf("loop.Run 出错: %v（工具: %v）", err, ev)
 	}

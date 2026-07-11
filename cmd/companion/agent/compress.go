@@ -245,6 +245,146 @@ func sortedKeys(m map[string]bool) []string {
 	return out
 }
 
+// EstimateBreakdown 估算 prompt token 的构成类别。返回 PromptBreakdown。
+// actualPromptTokens > 0 时用其归一化（从 API 拿到精确值后调和），否则用内部估算。
+// 返回的各分量之和 ≈ prompt tokens，用于前端渲染构成占比条。
+func EstimateBreakdown(msgs []Message, tools []ToolDefinition, actualPromptTokens int) (pb PromptBreakdown) {
+	if len(msgs) == 0 {
+		return
+	}
+
+	// ── 用 textTokens 估算各类原始 token 数 ──
+	sysCoreRaw, skillsRaw, histRaw, userRaw, toolRaw, mcpRaw := 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+
+	// 1. System prompt（首条 role=system）— 拆为 核心提示词 和 Skills 两段
+	if msgs[0].Role == RoleSystem {
+		content := msgs[0].Content
+		// 定位 "可用技能" 标记，其之前为核心提示词，之后为 skills
+		skillIdx := strings.Index(content, "可用技能")
+		if skillIdx >= 0 {
+			sysCoreRaw = textTokens(content[:skillIdx])
+			skillsPart := content[skillIdx:]
+			// skills 到下一个章节 "##" 或 "# " 处结束
+			if end := strings.Index(skillsPart[1:], "##"); end >= 0 {
+				skillsPart = skillsPart[:end+1]
+			} else if end := strings.Index(skillsPart[1:], "\n# "); end >= 0 {
+				skillsPart = skillsPart[:end+1]
+			}
+			skillsRaw = textTokens(skillsPart)
+		} else {
+			sysCoreRaw = textTokens(content) // 无 skills 段 → 全部为核心提示词
+		}
+	}
+
+	// 2. 历史消息（索引 1～倒数第 1）
+	for i := 1; i < len(msgs)-1; i++ {
+		histRaw += estimateTokensFloat([]Message{msgs[i]})
+	}
+
+	// 3. 最后一条 user 消息（当前输入）
+	if len(msgs) > 1 {
+		userRaw = estimateTokensFloat([]Message{msgs[len(msgs)-1]})
+	} else if len(msgs) == 1 {
+		userRaw = estimateTokensFloat(msgs)
+	}
+
+	// 4. 内置工具定义
+	if len(tools) > 0 {
+		// 分离 MCP 工具和普通工具
+		builtinTools := make([]ToolDefinition, 0, len(tools))
+		mcpTools := make([]ToolDefinition, 0, len(tools))
+		for _, t := range tools {
+			if strings.HasPrefix(t.Function.Name, "mcp_") {
+				mcpTools = append(mcpTools, t)
+			} else {
+				builtinTools = append(builtinTools, t)
+			}
+		}
+		if len(builtinTools) > 0 {
+			if data, err := json.Marshal(builtinTools); err == nil {
+				toolRaw = textTokens(string(data))
+			}
+		}
+		if len(mcpTools) > 0 {
+			if data, err := json.Marshal(mcpTools); err == nil {
+				mcpRaw = textTokens(string(data))
+			}
+		}
+	}
+
+	// ── 确定归一化基准 promptTokens ──
+	promptTokens := actualPromptTokens
+	if promptTokens <= 0 {
+		promptTokens = int(estimateTokensFloat(msgs) + toolRaw + mcpRaw)
+		if promptTokens <= 0 {
+			promptTokens = 1000 // 兜底
+		}
+	}
+
+	// ── 原始总量（各分量不重叠）──
+	totalRaw := sysCoreRaw + skillsRaw + histRaw + userRaw + toolRaw + mcpRaw
+	if totalRaw <= 0 {
+		pb.SystemTokens = promptTokens // 实在算不出就全归系统
+		return
+	}
+
+	// ── 等比缩放到 promptTokens ──
+	ratio := float64(promptTokens) / totalRaw
+	pb.SystemTokens = int(sysCoreRaw * ratio)
+	pb.SkillsTokens = int(skillsRaw * ratio)
+	pb.HistoryTokens = int(histRaw * ratio)
+	pb.OtherTokens = int(userRaw * ratio)
+	pb.ToolTokens = int(toolRaw * ratio)
+	pb.MCPTokens = int(mcpRaw * ratio)
+
+	// 因取整可能差 ±1~3，调整到 SystemTokens（最大分量）
+	total := pb.SystemTokens + pb.SkillsTokens + pb.HistoryTokens + pb.OtherTokens + pb.ToolTokens + pb.MCPTokens
+	if diff := promptTokens - total; diff > 0 {
+		pb.SystemTokens += diff
+	} else if diff < 0 {
+		if pb.SystemTokens+diff >= 0 {
+			pb.SystemTokens += diff
+		}
+	}
+	return
+}
+
+// estimateTokensFloat 同 estimateTokens 但返回 float64（内部计算用，避免反复取整）。
+func estimateTokensFloat(msgs []Message) float64 {
+	total := 0.0
+	for _, m := range msgs {
+		total += 4
+		total += textTokens(m.Content)
+		total += textTokens(m.Reasoning)
+		for _, tc := range m.ToolCalls {
+			total += textTokens(tc.Function.Name)
+			total += float64(len([]rune(tc.Function.Arguments)))*0.25 + 8
+		}
+		if m.ToolCallID != "" {
+			total += 6
+		}
+	}
+	return total
+}
+
+// NormalizeBreakdown 把估算的各分量按实际 prompt_tokens 等比缩放（确保总和 ≈ promptTokens）。
+func NormalizeBreakdown(pb PromptBreakdown, promptTokens int) PromptBreakdown {
+	total := pb.SystemTokens + pb.SkillsTokens + pb.MCPTokens + pb.ToolTokens + pb.HistoryTokens + pb.OtherTokens
+	if total <= 0 || promptTokens <= 0 {
+		return pb
+	}
+	ratio := float64(promptTokens) / float64(total)
+	// 先归一化各分量
+	return PromptBreakdown{
+		SystemTokens:  int(float64(pb.SystemTokens) * ratio),
+		SkillsTokens:  int(float64(pb.SkillsTokens) * ratio),
+		MCPTokens:     int(float64(pb.MCPTokens) * ratio),
+		ToolTokens:    int(float64(pb.ToolTokens) * ratio),
+		HistoryTokens: int(float64(pb.HistoryTokens) * ratio),
+		OtherTokens:   int(float64(pb.OtherTokens) * ratio),
+	}
+}
+
 // truncRunesAgent 按 rune 截断（去首尾空白），超长加省略号。
 func truncRunesAgent(s string, n int) string {
 	s = strings.TrimSpace(s)

@@ -182,8 +182,11 @@ func TestLoopRunCompacts(t *testing.T) {
 			ToolCalls: []ToolCall{{ID: "c" + strconv.Itoa(i), Type: "function",
 				Function: FunctionCall{Name: "echo", Arguments: "{\"x\":\"padding content to grow the running context window steadily\"}"}}}})
 	}
-	// 第 19 轮脚本耗尽 → MockProvider 兜底返回 [FINAL]，loop 结束。
-	var compacted, final int
+	// 第 19 轮追加 finish_task — loop 退出。
+	responses = append(responses, Message{Role: RoleAssistant,
+		ToolCalls: []ToolCall{{ID: "f1", Type: "function",
+			Function: FunctionCall{Name: "finish_task", Arguments: `{"result":"压缩测试完成"}`}}}})
+	var compacted, done int
 	l := &Loop{
 		Provider: &MockProvider{Responses: responses}, Registry: reg,
 		MaxContextTokens: 120, MaxIterations: 40,
@@ -191,8 +194,8 @@ func TestLoopRunCompacts(t *testing.T) {
 			switch e.Type {
 			case EventCompacted:
 				compacted++
-			case EventFinal:
-				final++
+			case EventDone:
+				done++
 			}
 		},
 	}
@@ -202,7 +205,7 @@ func TestLoopRunCompacts(t *testing.T) {
 	if compacted == 0 {
 		t.Error("多轮长上下文应至少压缩一次")
 	}
-	if final == 0 {
-		t.Error("loop 应正常完成（EventFinal）")
+	if done == 0 {
+		t.Error("loop 应正常完成（EventDone）")
 	}
 }

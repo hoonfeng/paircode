@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/hoonfeng/paircode/cmd/companion/agent"
+	"github.com/hoonfeng/paircode/pkg/memory"
 	mcppanel "github.com/hoonfeng/paircode/cmd/companion/ui/mcp"
 	skillspanel "github.com/hoonfeng/paircode/cmd/companion/ui/skills"
 	marketplacepanel "github.com/hoonfeng/paircode/cmd/companion/ui/marketplace"
@@ -142,6 +143,29 @@ func RegisterManagementTools(r *agent.Registry) {
 			return marketplacepanel.InstallScoped(argString(args, "id"), true)
 		},
 	})
+
+	// ── 长时记忆索引：检索已完成对话的历史记忆 ──
+	r.Register(&agent.Tool{
+		Name:        "memory_search",
+		Description: "搜索历史已完成对话的记忆（长时记忆索引）。按关键词检索已完成对话的标题、摘要、标签和关键结论。查询结果含时间、消息数和标签。",
+		ReadOnly:    true,
+		Parameters:  toolObj(map[string]any{"query": strParam("搜索关键词（留空=全部）")}),
+		Handler: func(_ context.Context, args map[string]any) (string, error) {
+			return searchMemoryText(argString(args, "query")), nil
+		},
+	})
+	r.Register(&agent.Tool{
+		Name: "memory_list", Description: "列出所有历史已完成对话的记忆摘要（按完成时间倒序）。每条含标题、摘要、标签、消息数和完成时间。",
+		ReadOnly: true, Parameters: toolObj(map[string]any{}),
+		Handler: func(_ context.Context, _ map[string]any) (string, error) { return listMemoryText(), nil },
+	})
+	r.Register(&agent.Tool{
+		Name:        "memory_count",
+		Description: "查询历史记忆索引中的条目总数。",
+		ReadOnly:    true,
+		Parameters:  toolObj(map[string]any{}),
+		Handler:     func(_ context.Context, _ map[string]any) (string, error) { return memoryCountText(), nil },
+	})
 }
 
 // ─── Skills 工具实现 ──
@@ -245,3 +269,85 @@ func MarketSearch(query, kind string) string {
 	func marketInstall(id string) (string, error) {
 		return marketplacepanel.InstallScoped(id, true)
 	}
+
+// ─── 长时记忆工具实现 ──
+
+func searchMemoryText(query string) string {
+	results := memory.Search(query)
+	if len(results) == 0 {
+		return "未找到匹配的历史记忆。"
+	}
+	var b strings.Builder
+	if query != "" {
+		fmt.Fprintf(&b, "搜索「%s」共找到 %d 条历史记忆：\n\n", query, len(results))
+	} else {
+		fmt.Fprintf(&b, "共 %d 条历史记忆（最新的在前）：\n\n", len(results))
+	}
+	for _, m := range results {
+		title := m.Title
+		if title == "" {
+			title = "（未命名）"
+		}
+		summary := m.Summary
+		if len([]rune(summary)) > 200 {
+			summary = string([]rune(summary)[:200]) + "…"
+		}
+		tags := ""
+		if len(m.Tags) > 0 {
+			tags = " 标签:" + strings.Join(m.Tags, ",")
+		}
+		fmt.Fprintf(&b, "- 「%s」%d条消息%s\n", title, m.MessageCount, tags)
+		if summary != "" {
+			fmt.Fprintf(&b, "  %s\n", summary)
+		}
+		fmt.Fprintf(&b, "  完成时间: %s\n\n", m.CompletedAt)
+	}
+	if query != "" {
+		b.WriteString("（需要更精确的搜索请用更具体的关键词。）")
+	}
+	return b.String()
+}
+
+func listMemoryText() string {
+	results := memory.List()
+	if len(results) == 0 {
+		return "（暂无已完成对话的记忆。完成对话后系统会自动生成摘要并索引。）"
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "共 %d 条已完成对话的记忆（按完成时间倒序）：\n\n", len(results))
+	for _, m := range results {
+		title := m.Title
+		if title == "" {
+			title = "（未命名）"
+		}
+		summary := m.Summary
+		if len([]rune(summary)) > 150 {
+			summary = string([]rune(summary)[:150]) + "…"
+		}
+		tags := ""
+		if len(m.Tags) > 0 {
+			tags = " [" + strings.Join(m.Tags, ", ") + "]"
+		}
+		fmt.Fprintf(&b, "%d. 「%s」%s (%d条消息, %s)\n  %s\n\n",
+			len(results)-resultsIdx(m)+1, title, tags, m.MessageCount, m.CompletedAt, summary)
+	}
+	b.WriteString("（需要详情可用 memory_search 搜索关键词。）")
+	return b.String()
+}
+
+func resultsIdx(target memory.Entry) int {
+	for i, m := range memory.List() {
+		if m.ID == target.ID {
+			return i
+		}
+	}
+	return -1
+}
+
+func memoryCountText() string {
+	count := memory.Count()
+	if count == 0 {
+		return "当前没有历史记忆。完成对话后系统会自动生成摘要并建立索引。"
+	}
+	return fmt.Sprintf("历史记忆索引中共有 %d 条已完成对话的记录。", count)
+}

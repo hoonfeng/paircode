@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PairCode IDE</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body, #app { width: 100%; height: 100%; overflow: hidden; }
+    body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { }
+
+    /* ─────────────────────────────────────────────────────
+       主题 1: 暗色科技风 (Dark Tech)
+       ───────────────────────────────────────────────────── */
+    :root, .theme-dark {
+      --bg-primary: #0d1117;
+      --bg-secondary: #161b22;
+      --bg-tertiary: #21262d;
+      --bg-hover: #1c2333;
+      --bg-active: #1f2b3d;
+      --text-primary: #e6edf3;
+      --text-secondary: #8b949e;
+      --text-muted: #6e7681;
+      --border-color: #30363d;
+      --accent: #58a6ff;
+      --accent-light: #79c0ff;
+      --accent-bg: rgba(88, 166, 255, 0.10);
+      --activity-bar-bg: #0d1117;
+      --tab-active-bg: #0d1117;
+      --tab-inactive-bg: #161b22;
+      --sidebar-bg: #161b22;
+      --input-bg: #0d1117;
+      --scrollbar-thumb: #30363d;
+      --scrollbar-thumb-hover: #484f58;
+      --status-text: #fff;
+      --term-text: #d4d4d4;
+      --term-bg: #0d1117;
+      --term-prompt: #6a9955;
+      --focus-ring: rgba(88, 166, 255, 0.25);
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.25);
+      --shadow-md: 0 4px 16px rgba(0,0,0,0.35);
+      --border-radius: 4px;
+      --border-radius-lg: 8px;
+      --font-ui: 'Inter', system-ui, -apple-system, sans-serif;
+      --font-code: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+      --font-editor: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+      --font-size-base: 13px;
+      --font-size-sm: 12px;
+      --font-size-lg: 15px;
+    }
+
+    /* ─────────────────────────────────────────────────────
+       主题 2: 白色简约风 (White Minimal)
+       ───────────────────────────────────────────────────── */
+    .theme-light {
+      --bg-primary: #ffffff;
+      --bg-secondary: #f8f9fa;
+      --bg-tertiary: #f0f1f3;
+      --bg-hover: #e8eaed;
+      --bg-active: #d3e3fd;
+      --text-primary: #1a1a2e;
+      --text-secondary: #5f6368;
+      --text-muted: #9aa0a6;
+      --border-color: #dadce0;
+      --accent: #1a73e8;
+      --accent-light: #4285f4;
+      --accent-bg: rgba(26, 115, 232, 0.08);
+      --activity-bar-bg: #2c2c2c;
+      --tab-active-bg: #ffffff;
+      --tab-inactive-bg: #f0f1f3;
+      --sidebar-bg: #f8f9fa;
+      --input-bg: #ffffff;
+      --scrollbar-thumb: #c1c1c1;
+      --scrollbar-thumb-hover: #a1a1a1;
+      --status-text: #fff;
+      --term-text: #1a1a2e;
+      --term-bg: #ffffff;
+      --term-prompt: #188038;
+      --focus-ring: rgba(26, 115, 232, 0.25);
+      --shadow-sm: 0 1px 2px rgba(0,0,0,0.08);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.10);
+      --border-radius: 4px;
+      --border-radius-lg: 6px;
+      --font-ui: 'Inter', system-ui, -apple-system, sans-serif;
+      --font-code: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+      --font-editor: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+      --font-size-base: 14px;
+      --font-size-sm: 12px;
+      --font-size-lg: 16px;
+    }
+
+    /* ─────────────────────────────────────────────────────
+       主题 3: 暖色温暖风 (Warm Cozy)
+       ───────────────────────────────────────────────────── */
+    .theme-warm {
+      --bg-primary: #faf3e8;
+      --bg-secondary: #f5ece0;
+      --bg-tertiary: #efe4d4;
+      --bg-hover: #e8dbcb;
+      --bg-active: #deccb8;
+      --text-primary: #3d2c1e;
+      --text-secondary: #7a6a5a;
+      --text-muted: #a09080;
+      --border-color: #d6c8b8;
+      --accent: #b87333;
+      --accent-light: #d4956a;
+      --accent-bg: rgba(184, 115, 51, 0.10);
+      --activity-bar-bg: #5c4033;
+      --tab-active-bg: #faf3e8;
+      --tab-inactive-bg: #efe4d4;
+      --sidebar-bg: #f5ece0;
+      --input-bg: #fffcf7;
+      --scrollbar-thumb: #d6c8b8;
+      --scrollbar-thumb-hover: #b8a898;
+      --status-text: #fffcf7;
+      --term-text: #3d2c1e;
+      --term-bg: #faf3e8;
+      --term-prompt: #5a7a4a;
+      --focus-ring: rgba(184, 115, 51, 0.25);
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.10);
+      --shadow-md: 0 4px 14px rgba(0,0,0,0.12);
+      --border-radius: 6px;
+      --border-radius-lg: 10px;
+      --font-ui: 'Noto Serif SC', 'Georgia', 'Times New Roman', serif;
+      --font-code: 'Source Code Pro', 'Consolas', 'Cascadia Code', monospace;
+      --font-editor: 'Source Code Pro', 'Consolas', 'Cascadia Code', monospace;
+      --font-size-base: 14px;
+      --font-size-sm: 12px;
+      --font-size-lg: 16px;
+    }
+
+    /* ─────────────────────────────────────────────────────
+       主题 4: 分分可爱风 (Cute Pink)
+       ───────────────────────────────────────────────────── */
+    .theme-cute {
+      --bg-primary: #fff5f7;
+      --bg-secondary: #fce4ec;
+      --bg-tertiary: #f8d7e0;
+      --bg-hover: #f0c8d4;
+      --bg-active: #f0b8c8;
+      --text-primary: #4a1a2e;
+      --text-secondary: #8e5a6b;
+      --text-muted: #b88898;
+      --border-color: #e8b8c8;
+      --accent: #e84393;
+      --accent-light: #f06292;
+      --accent-bg: rgba(232, 67, 147, 0.10);
+      --activity-bar-bg: #8e3a5a;
+      --tab-active-bg: #fff5f7;
+      --tab-inactive-bg: #f8d7e0;
+      --sidebar-bg: #fce4ec;
+      --input-bg: #fffeff;
+      --scrollbar-thumb: #e8b8c8;
+      --scrollbar-thumb-hover: #d8a8b8;
+      --status-text: #fff;
+      --term-text: #4a1a2e;
+      --term-bg: #fff5f7;
+      --term-prompt: #7ab87a;
+      --focus-ring: rgba(232, 67, 147, 0.25);
+      --shadow-sm: 0 1px 4px rgba(232, 67, 147, 0.08);
+      --shadow-md: 0 4px 16px rgba(232, 67, 147, 0.12);
+      --border-radius: 10px;
+      --border-radius-lg: 16px;
+      --font-ui: 'Nunito', 'Quicksand', 'Segoe UI', sans-serif;
+      --font-code: 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+      --font-editor: 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+      --font-size-base: 14px;
+      --font-size-sm: 12px;
+      --font-size-lg: 16px;
+    }
+
+    /* ── 应用全局变量 ── */
+    body {
+      font-family: var(--font-ui);
+      font-size: var(--font-size-base);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: var(--scrollbar-thumb);
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--scrollbar-thumb-hover);
+    }
+    ::selection {
+      background: var(--accent);
+      color: #fff;
+    }
+    input, textarea, select, button {
+      font-family: inherit;
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

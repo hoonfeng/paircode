@@ -42,6 +42,7 @@ type TimelineEntry struct {
 	Done             bool
 	Expanded         bool
 	AwaitingApproval bool
+	AgentName        string // 事件来源 Agent 名（空串=父/主 Agent；非空=子 Agent）
 }
 
 // Message 一条聊天消息。Assistant 消息可携带 Agent 流式结构（思考链 + 工具活动）。
@@ -108,6 +109,7 @@ type Activity struct {
 	Done             bool   // 结果是否已回来
 	AwaitingApproval bool   // 手动审核：等待用户点「允许/拒绝」（写类工具，见 agent_bridge.go）
 	Expanded         bool   // 展开看全量结果（默认折叠只显首行预览）
+	AgentName        string // 事件来源 Agent 名（空串=父/主 Agent；非空=子 Agent，前端可据此显示标签）
 }
 
 // TokenUsage 记录对话的 token 使用统计（按消息内容启发式估算）。
@@ -290,11 +292,15 @@ func (s *ChatStore) Send(text string) bool {
 }
 
 // Save 把聊天状态持久化到 .pair/conversations/history.json。
-// 保存前自动更新每个会话的 TokenUsage 统计，确保持久化数据包含最新 token 用量。
+// 保存时保留 API 返回的真实 token 用量（AccumulateAPIUsage 累加的值），
+// 仅在 API 从未返回过数据时回退到 CalculateTokenUsage 的启发式估算。
 // 格式为 historyFile（含 version/seq/threads），与项目已有的对话历史格式兼容。
 func (s *ChatStore) Save(root string) {
 	for _, t := range s.Threads {
-		t.TokenUsage = t.CalculateTokenUsage()
+		// 避免 CalculateTokenUsage 的启发式估算覆盖 API 真实值
+		if t.TokenUsage.PromptTokens == 0 && t.TokenUsage.CompletionTokens == 0 {
+			t.TokenUsage = t.CalculateTokenUsage()
+		}
 	}
 	hf := historyFile{
 		Version: 1,

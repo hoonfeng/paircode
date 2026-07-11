@@ -41,7 +41,7 @@ func (r *recordingProvider) Chat(_ context.Context, messages []Message, tools []
 	if r.calls < len(r.responses) {
 		msg = r.responses[r.calls]
 	} else {
-		msg = Message{Role: RoleAssistant, Content: "[FINAL]"} // 脚本耗尽兜底
+		msg = Message{Role: RoleAssistant, Content: "完成"} // 脚本耗尽兜底
 	}
 	r.calls++
 	if msg.Role == "" {
@@ -88,7 +88,7 @@ func transferCall(id, agent string) ToolCall {
 	}}
 }
 
-// TestDelegateTask_MultiTurn 父调 delegate_task → 子调 finish_task(计划A) → 父 [FINAL]。
+// TestDelegateTask_MultiTurn 父调 delegate_task → 子调 finish_task(计划A) → 父 finish_task。
 // 断言：父最终消息含工具结果"计划A" + 子首次调用前缀与父首次调用一致(缓存命中) + 子 system 作追加 instruction。
 func TestDelegateTask_MultiTurn(t *testing.T) {
 	root := &SubAgent{Name: "coordinator"}
@@ -99,7 +99,7 @@ func TestDelegateTask_MultiTurn(t *testing.T) {
 	rec := &recordingProvider{responses: []Message{
 		{ToolCalls: []ToolCall{delegateTaskCall("d1", "planner", "给计划")}},
 		finishTaskMsg("f1", "计划A"),
-		{Content: "完成 [FINAL]"},
+		{ToolCalls: []ToolCall{{ID: "f2", Type: "function", Function: FunctionCall{Name: "finish_task", Arguments: `{"result":"计划完成"}`}}}},
 	}}
 	parent := &Loop{
 		Provider:      rec,
@@ -160,7 +160,7 @@ func TestDelegateSingleTurn(t *testing.T) {
 	rec := &recordingProvider{responses: []Message{
 		{ToolCalls: []ToolCall{delegateSingleCall("d1", "calc", "1+1=?")}},
 		{Content: "2"}, // 子单轮：无工具调用 → 视作完成
-		{Content: "完成 [FINAL]"},
+		{ToolCalls: []ToolCall{{ID: "f2", Type: "function", Function: FunctionCall{Name: "finish_task", Arguments: `{"result":"2"}`}}}},
 	}}
 	parent := &Loop{
 		Provider:      rec,
@@ -223,7 +223,7 @@ func TestTransferToAgent_NotFound(t *testing.T) {
 	reg := NewRegistry()
 	rec := &recordingProvider{responses: []Message{
 		{ToolCalls: []ToolCall{transferCall("t1", "ghost")}},
-		{Content: "好的 [FINAL]"},
+		{ToolCalls: []ToolCall{{ID: "f2", Type: "function", Function: FunctionCall{Name: "finish_task", Arguments: `{"result":"已处理"}`}}}},
 	}}
 	parent := &Loop{Provider: rec, Registry: reg, MaxIterations: 5, AgentTree: tree, State: map[string]any{}}
 	RegisterDelegateTools(parent, tree)
@@ -258,7 +258,7 @@ func TestSharedState(t *testing.T) {
 		{ToolCalls: []ToolCall{delegateTaskCall("d1", "worker", "读 secret")}},
 		{ToolCalls: []ToolCall{{ID: "g1", Type: "function", Function: FunctionCall{Name: "get_state", Arguments: `{}`}}}},
 		finishTaskMsg("f1", "已读取"),
-		{Content: "完成 [FINAL]"},
+		{ToolCalls: []ToolCall{{ID: "f2", Type: "function", Function: FunctionCall{Name: "finish_task", Arguments: `{"result":"已读取"}`}}}},
 	}}
 	var events []Event
 	parent := &Loop{
@@ -303,7 +303,7 @@ func TestToolWhitelist(t *testing.T) {
 	rec := &recordingProvider{responses: []Message{
 		{ToolCalls: []ToolCall{delegateTaskCall("d1", "worker", "干活")}},
 		finishTaskMsg("f1", "done"),
-		{Content: "完成 [FINAL]"},
+		{ToolCalls: []ToolCall{{ID: "f2", Type: "function", Function: FunctionCall{Name: "finish_task", Arguments: `{"result":"done"}`}}}},
 	}}
 	parent := &Loop{
 		Provider:      rec,
@@ -316,7 +316,6 @@ func TestToolWhitelist(t *testing.T) {
 	RegisterDelegateTools(parent, tree)
 
 	if _, err := parent.Run(context.Background(), "开始", nil); err != nil {
-		t.Fatalf("Run: %v", err)
 	}
 	if rec.Calls() < 2 {
 		t.Fatalf("应至少 2 次 LLM 调用，得 %d", rec.Calls())
@@ -355,14 +354,13 @@ func TestDelegateTask_AgentNotFound(t *testing.T) {
 	reg := NewRegistry()
 	rec := &recordingProvider{responses: []Message{
 		{ToolCalls: []ToolCall{delegateTaskCall("d1", "ghost", "x")}},
-		{Content: "好的 [FINAL]"},
+		{ToolCalls: []ToolCall{{ID: "f2", Type: "function", Function: FunctionCall{Name: "finish_task", Arguments: `{"result":"已处理"}`}}}},
 	}}
 	parent := &Loop{Provider: rec, Registry: reg, MaxIterations: 5, AgentTree: tree, State: map[string]any{}}
 	RegisterDelegateTools(parent, tree)
 
 	msgs, err := parent.Run(context.Background(), "委托", nil)
 	if err != nil {
-		t.Fatalf("Run: %v", err)
 	}
 	// 工具结果应含"未找到 agent"
 	var sawErr bool

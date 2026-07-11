@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -100,7 +101,36 @@ func TestOcrTextParser(t *testing.T) {
 }
 
 func TestFindTesseractPath(t *testing.T) {
-	path := findTesseract()
-	t.Logf("Tesseract 路径: %q", path)
-	// 不强制要求存在，只记录日志
+	// 1. 不加 root（通过 PATH/安装路径查找）
+	sysPath := findTesseract("")
+	t.Logf("Tesseract（无 root）: %q", sysPath)
+
+	// 2. 用项目根目录查找（应找到 bin/tesseract/ 或 tesseract/）
+	//    获取项目根目录（通过 go.mod 位置）
+	projectRoot := findProjectRoot()
+	t.Logf("项目根目录: %s", projectRoot)
+	projPath := findTesseract(projectRoot)
+	t.Logf("Tesseract（项目目录）: %q", projPath)
+
+	if projPath != "" {
+		// 验证是 bin/tesseract/ 路径
+		if !strings.Contains(projPath, "tesseract") {
+			t.Errorf("项目 Tesseract 路径应包含 tesseract，实际: %s", projPath)
+		}
+	}
+}
+
+// findProjectRoot 向上查找包含 go.mod 的目录。
+func findProjectRoot() string {
+	dir, _ := os.Getwd()
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
+	}
 }

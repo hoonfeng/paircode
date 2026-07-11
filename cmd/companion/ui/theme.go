@@ -1,3 +1,5 @@
+//go:build windows && !webonly
+
 // Package ui 提供 GWui 版 companion 设计系统：CSS 主题 + 颜色常量 + 共享样式。
 // 所有面板依赖本层；本层只依赖 GWui（dom/css），绝不反向依赖 main。
 package ui

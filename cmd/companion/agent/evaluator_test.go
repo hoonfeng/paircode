@@ -49,7 +49,7 @@ func TestSummarizeRun(t *testing.T) {
 		{Role: RoleTool, Content: "文件内容"},
 		{Role: RoleAssistant, ToolCalls: []ToolCall{{Function: FunctionCall{Name: "write_file", Arguments: `{"path":"a.go"}`}}}},
 		{Role: RoleTool, Content: "Error: 权限不足"},
-		{Role: RoleAssistant, Content: "已完成修改 [FINAL]"},
+		{Role: RoleAssistant, Content: "已完成修改 完成"},
 	}
 	s := SummarizeRun(msgs)
 	if !strings.Contains(s, "工具调用: 2 次") || !strings.Contains(s, "错误: 1 次") {

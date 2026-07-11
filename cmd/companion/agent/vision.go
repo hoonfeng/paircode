@@ -66,7 +66,7 @@ func registerVisionTools(r *Registry, root string) {
 		Name: "image_ocr",
 		Description: "从图片中识别文字（OCR）。" +
 			"返回识别出的文字内容及其在图片中的坐标位置 (x1,y1)-(x2,y2)。" +
-			"需要系统安装 Tesseract OCR 引擎（https://github.com/tesseract-ocr/tesseract）。" +
+			"支持项目内嵌的 Tesseract 便携版（无需安装），也支持系统已安装的 Tesseract。" +
 			"支持 PNG / JPEG 格式。" +
 			"可用 lang 参数指定语言，如 \"chi_sim+eng\"（中英文混合）、\"eng\"（仅英文）。",
 		Parameters: objSchema(props{
@@ -90,7 +90,7 @@ func registerVisionTools(r *Registry, root string) {
 					detail = b
 				}
 			}
-			return ocrImage(p, lang, detail)
+			return ocrImage(root, p, lang, detail)
 		},
 	})
 }
@@ -807,20 +807,24 @@ func filterOtherShapes(shapes []shapeInfo, groups ...[]shapeInfo) []shapeInfo {
 
 // ── OCR ────────────────────────────────────────────────────
 
-// ocrImage 使用 Tesseract OCR 从图片中识别文字。
-func ocrImage(path, lang string, detail bool) (string, error) {
+func ocrImage(root, path, lang string, detail bool) (string, error) {
+
 	// 1. 检查 Tesseract 是否可用
-	tesseractPath := findTesseract()
+	tesseractPath := findTesseract(root)
 	if tesseractPath == "" {
-		return "", fmt.Errorf("未检测到 Tesseract OCR。请安装 Tesseract：\n" +
-			"  Windows: https://github.com/UB-Mannheim/tesseract/wiki (下载 exe 安装)\n" +
-			"  macOS: brew install tesseract\n" +
-			"  Linux: sudo apt install tesseract-ocr\n\n" +
-			"安装后确保 tesseract 命令在 PATH 环境变量中。\n" +
-			"如需中文识别，还需安装中文语言包：tesseract --list-langs | grep chi_sim")
+		return "", fmt.Errorf("未检测到 Tesseract OCR。请运行下载脚本自动获取便携版：\n" +
+			"  项目根目录运行: powershell -ExecutionPolicy Bypass -File download_tesseract.ps1\n" +
+			"  下载后自动部署到 bin/tesseract/ 目录，agent 将自动识别使用。")
 	}
 
-	// 2. 检查图片文件
+	// 2a. 尝试查找内嵌的 tessdata 目录（便携版）
+	tesseractDir := filepath.Dir(tesseractPath)
+	tessdataDir := filepath.Join(tesseractDir, "tessdata")
+	if _, err := os.Stat(tessdataDir); os.IsNotExist(err) {
+		tessdataDir = ""
+	}
+
+	// 2b. 检查图片文件
 	fi, err := os.Stat(path)
 	if err != nil {
 		return "", fmt.Errorf("无法访问图片 %q: %w", path, err)
@@ -830,10 +834,10 @@ func ocrImage(path, lang string, detail bool) (string, error) {
 	}
 
 	// 3. 检查语言包可用性
-	langAvailable := checkTesseractLang(tesseractPath, lang)
+	langAvailable := checkTesseractLang(tesseractPath, tessdataDir, lang)
 	if !langAvailable {
 		// 尝试只用 eng
-		engAvailable := checkTesseractLang(tesseractPath, "eng")
+		engAvailable := checkTesseractLang(tesseractPath, tessdataDir, "eng")
 		if engAvailable {
 			lang = "eng"
 		} else {
@@ -843,8 +847,13 @@ func ocrImage(path, lang string, detail bool) (string, error) {
 	}
 
 	// 4. 调用 Tesseract 输出 TSV 格式（含坐标）
-	// tesseract image.png stdout tsv -l chi_sim+eng
-	args := []string{path, "stdout", "tsv"}
+	// tesseract --tessdata-dir path image.png stdout tsv -l chi_sim+eng
+	// 注意：--tessdata-dir 必须在位置参数之前
+	args := []string{}
+	if tessdataDir != "" {
+		args = append(args, "--tessdata-dir", tessdataDir)
+	}
+	args = append(args, path, "stdout", "tsv")
 	if lang != "" {
 		args = append(args, "-l", lang)
 	}
@@ -1102,37 +1111,84 @@ func parseTesseractTSV(tsv string) []ocrText {
 	return results
 }
 
+
 // findTesseract 查找系统中的 Tesseract 可执行文件。
-func findTesseract() string {
-	// 常见路径
+// 优先级:
+//
+//	 1) 可执行文件同目录 bin/tesseract/tesseract.exe（发布包模式，所有工具在 bin/ 下）
+//	 2) 项目根目录 bin/tesseract/tesseract.exe（开发模式）
+//	 3) 可执行文件同目录 tesseract/tesseract.exe（旧路径，向后兼容）
+//	 4) 项目根目录 tesseract/tesseract.exe（旧路径，向后兼容）
+//	 5) 系统 PATH
+//	 6) Windows 常见安装路径
+func findTesseract(root string) string {
+	// 1. 可执行文件同目录下的 bin/tesseract/（发布包模式，工具统一归到 bin/）
+	if exe, err := os.Executable(); err == nil {
+		exeDir := filepath.Dir(exe)
+		embedded := filepath.Join(exeDir, "bin", "tesseract", "tesseract.exe")
+		if _, err := os.Stat(embedded); err == nil {
+			return embedded
+		}
+	}
+
+	// 2. 项目根目录下的 bin/tesseract/（开发模式）
+	if root != "" {
+		project := filepath.Join(root, "bin", "tesseract", "tesseract.exe")
+		if _, err := os.Stat(project); err == nil {
+			return project
+		}
+	}
+
+	// 3. 可执行文件同目录下的旧路径 tesseract/（向后兼容）
+	if exe, err := os.Executable(); err == nil {
+		exeDir := filepath.Dir(exe)
+		old := filepath.Join(exeDir, "tesseract", "tesseract.exe")
+		if _, err := os.Stat(old); err == nil {
+			return old
+		}
+	}
+
+	// 4. 项目根目录下的旧路径 tesseract/（向后兼容）
+	if root != "" {
+		old := filepath.Join(root, "tesseract", "tesseract.exe")
+		if _, err := os.Stat(old); err == nil {
+			return old
+		}
+	}
+
+	// 5. 系统 PATH
+	if path, err := exec.LookPath("tesseract"); err == nil {
+		return path
+	}
+	if path, err := exec.LookPath("tesseract.exe"); err == nil {
+		return path
+	}
+
+	// 6. Windows 常见安装路径
 	candidates := []string{
-		"tesseract",
-		"tesseract.exe",
-		// Windows 常见安装路径
 		`C:\Program Files\Tesseract-OCR\tesseract.exe`,
 		`C:\Program Files (x86)\Tesseract-OCR\tesseract.exe`,
 	}
-
 	for _, candidate := range candidates {
-		if filepath.IsAbs(candidate) {
-			if _, err := os.Stat(candidate); err == nil {
-				return candidate
-			}
-		} else {
-			if path, err := exec.LookPath(candidate); err == nil {
-				return path
-			}
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
 		}
 	}
 	return ""
 }
 
+
 // checkTesseractLang 检查 Tesseract 是否支持指定语言。
-func checkTesseractLang(tesseractPath, lang string) bool {
+func checkTesseractLang(tesseractPath, tessdataDir, lang string) bool {
 	if lang == "" {
 		return true
 	}
-	cmd := exec.Command(tesseractPath, "--list-langs")
+	args := []string{}
+	if tessdataDir != "" {
+		args = append(args, "--tessdata-dir", tessdataDir)
+	}
+	args = append(args, "--list-langs")
+	cmd := exec.Command(tesseractPath, args...)
 	output, err := cmd.Output()
 	if err != nil {
 		return false

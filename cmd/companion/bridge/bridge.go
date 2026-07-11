@@ -22,6 +22,8 @@ import (
 	"github.com/hoonfeng/paircode/cmd/companion/agenttools"
 	"github.com/hoonfeng/paircode/cmd/companion/core"
 	"github.com/hoonfeng/paircode/cmd/companion/roleprompts"
+	"github.com/hoonfeng/paircode/pkg/memory"
+	"github.com/hoonfeng/paircode/pkg/summary"
 	chat "github.com/hoonfeng/paircode/cmd/companion/ui/chat"
 	editorpanel "github.com/hoonfeng/paircode/cmd/companion/ui/editor"
 	filetreepanel "github.com/hoonfeng/paircode/cmd/companion/ui/filetree"
@@ -109,14 +111,14 @@ func (b *AgentBridge) ResetForNewRoot() {
 }
 
 // autonomousParams 据自主开关算（实际下发给 LLM 的任务文本, 迭代上限）。
-// 自主：追加「列计划→连续完成所有步骤→全部完成再 [FINAL]」提示 + 放宽迭代上限（一气呵成多步任务）。
+// 自主：追加「列计划→连续完成所有步骤→全部完成再调用 finish_task」提示 + 放宽迭代上限。
 func AutonomousParams(task string, autonomous bool) (string, int) {
 	base := core.Settings.MaxIterations // 设置面板「最大迭代步数」；未设=30
 	if base <= 0 {
 		base = 30
 	}
 	if autonomous {
-		return task + "\n\n（自主模式：先用 update_plan 列出完整计划，然后连续完成所有步骤、中途不要停下等我，全部完成后再输出 [FINAL]。）", base * 2
+		return task + "\n\n（自主模式：先用 update_plan 列出完整计划，然后连续完成所有步骤、全部完成后调用 finish_task 工具。）", base * 2
 	}
 	return task, base
 }
@@ -141,6 +143,7 @@ func (b *AgentBridge) Start(task string) {
 		}
 		root := core.Root() // 当前项目根（与文件树/终端统一）
 		b.root = root
+		memory.SetRoot(root)
 		ApplyIgnoreDirs(root) // 全局设置 + 项目级 .pair/ignore → 注入搜索/探索的忽略目录
 		reg := agent.NewRegistry()
 		agent.WorkspaceRoots = core.Folders
@@ -150,6 +153,22 @@ func (b *AgentBridge) Start(task string) {
 		agent.SkillProjectDir = filepath.Join(root, ".pair", "skills")      // 项目级技能：工作区 .pair/skills
 		agent.SkillEnabled = core.Settings.SkillEnabledOverrides            // 按 level::name 过滤（不存在默认启用）
 		agent.RegisterDefaultTools(reg, root)
+		// finish_task
+		reg.Register(&agent.Tool{
+			Name:        "finish_task",
+			Description: "任务完成信号：全部任务完成时调用此工具结束本轮。result 为完成摘要。",
+			Parameters: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"result": map[string]any{"type": "string", "description": "任务完成摘要"},
+				},
+				"required": []string{"result"},
+			},
+			Handler: func(_ context.Context, args map[string]any) (string, error) {
+				r, _ := args["result"].(string)
+				return r, nil
+			},
+		})
 		b.registerAskTool(reg)                             // ask_user：handler 闭包持有 bridge（需 UI 交互），故在此注册而非默认集
 		agenttools.RegisterManagementTools(reg)            // Agent 自管理 Skills/MCP + 市场 + 技能渐进式披露(load_skill)
 		if cfgs := mcppanel.LoadConfigs(); len(cfgs) > 0 { // 外部 MCP 服务器（mcp.json；失败跳过、不阻断；首条消息时一次性连接）
@@ -171,11 +190,24 @@ func (b *AgentBridge) Start(task string) {
 			sys += "\n\n# 自定义工具（Lua）\n可在工作区 .pair/tools/ 下写 .lua 脚本自定义工具（沙箱：仅 string/table/math，无文件/系统访问、单次 10s 超时）。" +
 				"脚本须 return {name=, description=, parameters=(JSON Schema 表), run=function(args) return 结果字符串 end}。写好后下次发送即热加载可用——按需扩展或优化你的工具集。"
 		}
+		sys += "\n\n# 长时记忆检索\n你可以使用以下内部工具检索历史已完成对话的记忆（用于了解之前的工作成果）：\n" +
+			"- `memory_search` 搜索历史记忆（标题/摘要/标签/关键点），按关键词筛选\n" +
+			"- `memory_list` 列出所有历史记忆（按完成时间倒序）\n" +
+			"- `memory_count` 查询记忆总数\n" +
+			"注意：新对话开始时系统已自动注入最近的对话摘要到本提示中；如需更详细的历史记录可使用上述工具检索。"
 		sys += agent.ProjectRules(root)
 		sys += agent.ProjectKnowledge(root, 2500) // 项目知识库概览（.pair/project-info，渐进式披露）
 		b.loop = &agent.Loop{Provider: prov, Registry: reg, System: sys, MaxIterations: 30}
 	}
-	hist := b.history(th)
+	// ── 构建对话上下文 ──
+	// 自闭环：loop 已有持久化历史时，前端只发信号（nil → loop.Run 使用 l.History）。
+	// 首次调用才从 state.Thread 构建历史。
+	var hist []agent.Message
+	if len(b.loop.History) > 0 {
+		hist = nil // 复用 loop 内部持久化历史
+	} else {
+		hist = b.history(th)
+	}
 
 	// 多 Agent 编排：规划/审核 Agent 每次发送按当前设置重建（改设置即时生效）。
 	b.reviewer = nil
@@ -263,18 +295,27 @@ func (b *AgentBridge) Start(task string) {
 		}
 		cancel() // 释放 ctx 资源
 		b.mu.Lock()
+		wasStopped := b.stopped
 		b.running = false
 		b.mu.Unlock()
+
+		// 对话完成 → 异步生成摘要并写入记忆索引（不影响主流程）
+		if !wasStopped {
+			th := b.Cs.Store.Active()
+			if th != nil && len(th.Messages) >= 2 {
+				go b.indexConversation(th)
+			}
+		}
 	}()
 	b.startPump()
 }
 
-// history 把当前会话的既往消息（不含末尾刚加的 user task）转成 LLM 上下文。
+// history 把当前会话的既往消息转成 LLM 上下文。
+// 用 agent.BuildHistory 统一排除末条（当前用户消息），避免 loop.Run 重复添加。
 func (b *AgentBridge) history(th *state.Thread) []agent.Message {
-	var h []agent.Message
 	msgs := th.Messages
-	for i := 0; i < len(msgs)-1; i++ { // 末条是本次 user task，loop 内部会再加 → 这里排除
-		m := msgs[i]
+	all := make([]agent.Message, 0, len(msgs))
+	for _, m := range msgs {
 		content := strings.TrimSpace(m.Text)
 		if m.Role == state.Assistant { // 连续性：带上本轮工具活动摘要，免下轮重复探索
 			if s := activitySummary(m.Activities); s != "" {
@@ -291,9 +332,9 @@ func (b *AgentBridge) history(th *state.Thread) []agent.Message {
 		if m.Role == state.User {
 			role = agent.RoleUser
 		}
-		h = append(h, agent.Message{Role: role, Content: content})
+		all = append(all, agent.Message{Role: role, Content: content})
 	}
-	return h
+	return agent.BuildHistory(all)
 }
 
 // activitySummary 把一条助手消息的工具活动压成一行摘要，供跨轮上下文连续性（Agent 知道上轮做过什么、免重复）。
@@ -313,6 +354,64 @@ func activitySummary(acts []state.Activity) string {
 		parts = append(parts, a.Tool+"("+chat.ArgPreview(a.Args)+")"+mark)
 	}
 	return "[上轮已执行：" + strings.Join(parts, "、") + "]"
+}
+
+// indexConversation 将已完成对话生成摘要并写入记忆索引（供后续 memory_search 等工具检索）。
+func (b *AgentBridge) indexConversation(th *state.Thread) {
+	if th == nil || len(th.Messages) < 2 {
+		return
+	}
+	// 已有摘要则跳过（避免重复）
+	if th.Title != "" && th.Title != "新对话" {
+		// 检查记忆索引中是否已有此条
+		for _, m := range memory.Search(th.ID) {
+			if m.ID == th.ID {
+				return
+			}
+		}
+	}
+
+	// 构建消息列表
+	msgs := make([]summary.Message, len(th.Messages))
+	allContents := make([]string, len(th.Messages))
+	assistantContents := make([]string, 0)
+	for i, m := range th.Messages {
+		role := "user"
+		if m.Role == state.Assistant {
+			role = "assistant"
+		}
+		text := m.Text
+		msgs[i] = summary.Message{Role: role, Content: text}
+		allContents[i] = text
+		if m.Role == state.Assistant {
+			assistantContents = append(assistantContents, text)
+		}
+	}
+
+	convInfo := summary.ConvInfo{
+		ID:        th.ID,
+		Title:     th.Title,
+		CreatedAt: "",
+		UpdatedAt: "",
+		Messages:  msgs,
+	}
+	s := summary.Generate(convInfo)
+	if s == "" {
+		return
+	}
+
+	completedAt := time.Now().Format("2006-01-02 15:04:05")
+	memory.Upsert(memory.Entry{
+		ID:           th.ID,
+		Title:        th.Title,
+		Summary:      s,
+		CreatedAt:    convInfo.CreatedAt,
+		UpdatedAt:    convInfo.UpdatedAt,
+		MessageCount: len(th.Messages),
+		Tags:         memory.ExtractTags(allContents),
+		KeyPoints:    memory.ExtractKeyPoints(assistantContents),
+		CompletedAt:  completedAt,
+	})
 }
 
 // startPump 帧泵：运行期间周期 drain 把事件应用到流式消息（同终端面板）。
@@ -505,7 +604,7 @@ func (b *AgentBridge) applyEvent(e agent.Event) {
 		if n := len(m.Timeline); n > 0 && m.Timeline[n-1].Kind == "thinking" {
 			m.Timeline[n-1].Content += e.Content
 		} else {
-			m.Timeline = append(m.Timeline, state.TimelineEntry{Kind: "thinking", Content: e.Content})
+			m.Timeline = append(m.Timeline, state.TimelineEntry{Kind: "thinking", Content: e.Content, AgentName: e.AgentName})
 		}
 	case agent.EventContent:
 		m.Text += e.Content
@@ -513,7 +612,7 @@ func (b *AgentBridge) applyEvent(e agent.Event) {
 		if n := len(m.Timeline); n > 0 && m.Timeline[n-1].Kind == "content" {
 			m.Timeline[n-1].Content += e.Content
 		} else {
-			m.Timeline = append(m.Timeline, state.TimelineEntry{Kind: "content", Content: e.Content})
+			m.Timeline = append(m.Timeline, state.TimelineEntry{Kind: "content", Content: e.Content, AgentName: e.AgentName})
 		}
 	case agent.EventToolCall:
 		switch e.Tool {
@@ -522,9 +621,9 @@ func (b *AgentBridge) applyEvent(e agent.Event) {
 		case "ask_user": // 提问单独渲染为问答卡（输入区上方），不作通用活动行
 			b.Cs.ApplyAsk(e.Args)
 		default:
-			m.Activities = append(m.Activities, state.Activity{CallID: e.CallID, Tool: e.Tool, Args: e.Args})
+			m.Activities = append(m.Activities, state.Activity{CallID: e.CallID, Tool: e.Tool, Args: e.Args, AgentName: e.AgentName})
 			m.Timeline = append(m.Timeline, state.TimelineEntry{
-				Kind: "tool", Tool: e.Tool, Args: e.Args, CallID: e.CallID,
+				Kind: "tool", Tool: e.Tool, Args: e.Args, CallID: e.CallID, AgentName: e.AgentName,
 			})
 		}
 	case agent.EventApproval:
@@ -538,7 +637,7 @@ func (b *AgentBridge) applyEvent(e agent.Event) {
 			}
 		}
 		if !found {
-			m.Activities = append(m.Activities, state.Activity{CallID: e.CallID, Tool: e.Tool, Args: e.Args, AwaitingApproval: true})
+			m.Activities = append(m.Activities, state.Activity{CallID: e.CallID, Tool: e.Tool, Args: e.Args, AgentName: e.AgentName, AwaitingApproval: true})
 		}
 		// Timeline 同步标记
 		for i := range m.Timeline {
@@ -601,11 +700,12 @@ func (b *AgentBridge) applyEvent(e agent.Event) {
 				Depth: ev.Scores.Depth, Efficiency: ev.Scores.Efficiency,
 				Strengths: ev.Strengths, Weaknesses: ev.Weaknesses, Feedback: ev.Feedback}
 		}
-	case agent.EventFinal:
+	case agent.EventFinal, agent.EventDone:
 		if strings.TrimSpace(e.Content) != "" {
 			m.Text = e.Content
 		}
 		m.Streaming = false
+		// DoneReason 在 EventDone 时携带完成原因，前端可据此显示不同收尾提示
 	case agent.EventError:
 		if b.stopped {
 			return // 用户主动停止：抑制底层取消错误，由 drain 收尾标 [已停止]
@@ -928,7 +1028,7 @@ func buildImproveTask(ev agent.Evaluation) string {
 	if dbg := roleprompts.RoleSpecificPhilosophy("debugger"); dbg != "" { // 自动迭代＝调试角色，注入其哲学指导
 		sb.WriteString(dbg)
 	}
-	sb.WriteString("\n\n完成改进后输出 [FINAL]。")
+	sb.WriteString("\n\n全部改进完成后调用 finish_task 工具。")
 	return sb.String()
 }
 

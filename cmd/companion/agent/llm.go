@@ -37,7 +37,7 @@ func (m *MockProvider) Chat(ctx context.Context, messages []Message, tools []Too
 	if m.calls < len(m.Responses) {
 		msg = m.Responses[m.calls]
 	} else {
-		msg = Message{Role: RoleAssistant, Content: "[FINAL]"} // 脚本耗尽兜底：结束循环，防越界
+		msg = Message{Role: RoleAssistant, Content: "完成"} // 脚本耗尽兜底：结束循环，防越界
 	}
 	m.calls++
 	if msg.Role == "" {

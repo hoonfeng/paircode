@@ -14,8 +14,53 @@ import (
 
 	"github.com/hoonfeng/paircode/cmd/companion/agent"
 	"github.com/hoonfeng/paircode/cmd/companion/core"
-	settingspanel "github.com/hoonfeng/paircode/cmd/companion/ui/settings"
 )
+
+// ─── 哲学/角色数据（从 settings 包内联至此，消除 GWui 依赖）──
+
+// PhilosophyEntry 一部经典哲学（思想 tab 可选）。
+type PhilosophyEntry struct {
+	ID   string
+	Name string
+}
+
+// RoleEntry 一个角色（哲学小节标题用）。
+type RoleEntry struct {
+	ID   string
+	Name string
+}
+
+// Philosophies 可选的经典哲学列表。
+var Philosophies = []PhilosophyEntry{
+	{"tao-te-ching", "《道德经》"},
+	{"huangdi-yinfu-jing", "《黄帝阴符经》"},
+	{"sunzi-bingfa", "《孙子兵法》"},
+	{"lunyu", "《论语》"},
+	{"yijing", "《易经》"},
+	{"zhongyong", "《中庸》"},
+	{"daxue", "《大学》"},
+}
+
+// RoleEntries 角色列表（哲学小节标题用）。
+var RoleEntries = []RoleEntry{
+	{"planner", "规划"},
+	{"reviewer", "审核"},
+	{"judge", "评测"},
+	{"explorer", "探索"},
+	{"verifier", "验证"},
+	{"debugger", "调试"},
+	{"executor", "执行"},
+}
+
+// Contains 检查字符串是否在切片中。
+func Contains(list []string, s string) bool {
+	for _, v := range list {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
 
 // ensureRolePrompts 启动时把内置默认角色提示落地到 config/roles/*.md（仅缺失时写），
 // 让用户一开始就能在 config 里看到并编辑（规划/审核/评分；执行角色提示含工作区根、动态生成不落地）。
@@ -81,8 +126,8 @@ func classicsPhilosophy() string {
 		return ""
 	}
 	var names []string
-	for _, c := range settingspanel.Philosophies {
-		if settingspanel.Contains(core.Settings.PhilosophySelected, c.ID) {
+	for _, c := range Philosophies {
+		if Contains(core.Settings.PhilosophySelected, c.ID) {
 			names = append(names, c.Name)
 		}
 	}
@@ -116,7 +161,7 @@ func PhilosophyPrompt() string {
 
 // roleDisplayName 角色显示名（哲学小节标题用）。
 func RoleDisplayName(roleID string) string {
-	for _, r := range settingspanel.RoleEntries {
+	for _, r := range RoleEntries {
 		if r.ID == roleID {
 			return r.Name
 		}

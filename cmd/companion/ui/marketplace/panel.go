@@ -1,7 +1,7 @@
 // Package marketplace — 市场面板 UI（GWui 版）。
 // 提供对话框形式的市场浏览/搜索/安装功能。
 //
-//go:build windows
+//go:build windows && !webonly
 
 package marketplace
 

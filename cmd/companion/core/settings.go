@@ -118,7 +118,7 @@ func Default() AppSettings {
 	return AppSettings{
 		Provider: "deepseek", BaseURL: "https://api.deepseek.com/v1",
 		PlanModel: "deepseek-v4-pro", ExecuteModel: "deepseek-v4-flash", ReviewModel: "deepseek-v4-pro",
-		Temperature: "1.0", ThinkingMode: "thinking", MaxTokens: 131072, ContextMaxTokens: 1000000,
+		Temperature: "1.0", ThinkingMode: "thinking", MaxTokens: 131072, ContextMaxTokens: 64000,
 		CompressEnabled: true, CompressProvider: "deepseek", CompressBaseURL: "https://api.deepseek.com/v1",
 		CompressModel: "deepseek-v4-flash", CompressThinkingMode: "non-thinking",
 		MaxIterations: 50, MaxParallel: 3, ReviewRetries: 3, AutoIterate: true, RequireApproval: true, Benchmark: true, LuaTools: true,

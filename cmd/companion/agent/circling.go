@@ -29,30 +29,42 @@ func (l *Loop) trackCall(name, args string, failed bool) {
 	}
 }
 
-// detectCircling 检测绕圈：同一操作反复失败 / 反复执行 → 返回「换思路」提示（空=未绕圈）。
-// 失败优先（更早干预）；纯重复（即便成功）也提示——可能在原地打转无进展。
+// detectCircling 检测绕圈：从尾部倒扫，仅当「连续多次相同操作（间无其他操作）」才提示。
+// 不检测间隔重复——「build→读→改→build→读→改→build」是正常的编译修复循环，中间有不同操作，不算绕圈。
+// 「build→build→build」或「edit_file→edit_file(没先读)」才是真绕圈。
+// 返回非空=需注入的系统提示（空=未绕圈）。
 func (l *Loop) detectCircling() string {
-	count := map[string]int{}
-	fails := map[string]int{}
-	for _, r := range l.recentCalls {
-		count[r.sig]++
-		if r.failed {
-			fails[r.sig]++
+	n := len(l.recentCalls)
+	if n < 2 {
+		return ""
+	}
+
+	// ---- 1. 从尾部倒扫连续相同签名（纯重复） ----
+	last := l.recentCalls[n-1].sig
+	sameCount := 1
+	for i := n - 2; i >= 0 && l.recentCalls[i].sig == last; i-- {
+		sameCount++
+	}
+	if sameCount >= circlingRepeatStop {
+		return "[系统提示·打破死循环] 你已连续 " + strconv.Itoa(sameCount) +
+			" 次执行同一操作 `" + shortSig(last) + "`，中间没有任何其他操作——像在原地绕圈。请停下来换思路：先 read_file 看看当前状态，或换工具、换方式推进。别继续重复同一步。"
+	}
+
+	// ---- 2. 从尾部倒扫连续相同签名+失败 ----
+	failCount := 0
+	for i := n - 1; i >= 0 && l.recentCalls[i].sig == last; i-- {
+		if l.recentCalls[i].failed {
+			failCount++
+		} else {
+			break // 中间有成功调用→打断连续失败
 		}
 	}
-	for sig, n := range fails {
-		if n >= circlingFailStop {
-			return "[系统提示·打破死循环] 操作 `" + shortSig(sig) + "` 已连续失败 " + strconv.Itoa(n) +
-				" 次——别再用同样方式重试！请：① 先 read_file / run_command 检查真实状态、定位失败根因；" +
-				"② 换一种工具或思路；③ 仍卡住就用 ask_user 说明卡点求助。绝不要原样再试。"
-		}
+	if failCount >= circlingFailStop {
+		return "[系统提示·打破死循环] 操作 `" + shortSig(last) + "` 已连续失败 " + strconv.Itoa(failCount) +
+			" 次且中间没有其他操作——别原样重试！请：① 先 read_file / run_command 检查真实状态、定位失败根因；" +
+			"② 换一种工具或思路；③ 仍卡住就用 ask_user 说明卡点求助。"
 	}
-	for sig, n := range count {
-		if n >= circlingRepeatStop {
-			return "[系统提示·打破死循环] 你已重复同一操作 `" + shortSig(sig) + "` " + strconv.Itoa(n) +
-				" 次，像在原地绕圈、无实质推进。停下来换思路：重新审视目标、换方式推进，或用 ask_user 求助。不要再重复同一步。"
-		}
-	}
+
 	return ""
 }
 
