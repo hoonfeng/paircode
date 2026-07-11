@@ -176,7 +176,7 @@ func runOrchestrationLoop(ctx context.Context, prov agent.Provider, reg *agent.R
 		loopCount++
 		if err := ctx.Err(); err != nil {
 			execMgr.MarkFailed(execState, ctx.Err())
-			return
+			return allHistory
 		}
 
 		emitPhase(session, fmt.Sprintf("执行 %d/%d", loopCount, maxLoops))
@@ -231,7 +231,7 @@ func runOrchestrationLoop(ctx context.Context, prov agent.Provider, reg *agent.R
 					default:
 					}
 					execMgr.MarkFailed(execState, fmt.Errorf("连续 %d 次修复尝试失败", fixAttempts))
-					return
+					return allHistory
 				}
 
 				// 将解析后的修复任务注入下一轮 loop
@@ -297,7 +297,7 @@ func runOrchestrationLoop(ctx context.Context, prov agent.Provider, reg *agent.R
 					saveTaskPlan(fmt.Sprintf("plan_%s_complete", time.Now().Format("20060102_150405")),
 						fmt.Sprintf("# 任务完成: %s\n\n## 完成时间\n%s\n\n## 完成摘要\n全部任务已完成。\n", task, time.Now().Format("2006-01-02 15:04:05")))
 					execMgr.MarkCompleted(execState, "全部任务已完成")
-					return
+					return msgs
 				}
 
 				// 有下一步任务 → 记录规划并继续
@@ -327,7 +327,7 @@ func runOrchestrationLoop(ctx context.Context, prov agent.Provider, reg *agent.R
 			default:
 			}
 			execMgr.MarkCompleted(execState, "任务完成（无编排 agent）")
-			return
+			return msgs
 		}
 
 		if errors.Is(err, agent.ErrCirclingLoop) {
@@ -339,16 +339,12 @@ func runOrchestrationLoop(ctx context.Context, prov agent.Provider, reg *agent.R
 			case session.events <- agent.Event{Type: agent.EventError, Content: fmt.Sprintf("自主模式异常终止: %v", err)}:
 			default:
 			}
-			return
+			return allHistory
 		}
 
 		// 其他错误
 		execMgr.MarkFailed(execState, err)
-		select {
-		case session.events <- agent.Event{Type: agent.EventError, Content: fmt.Sprintf("自主模式异常终止: %v", err)}:
-		default:
-		}
-		return
+		return allHistory
 	}
 
 	// 达到最大轮次
@@ -853,10 +849,9 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 			}
 			if e.Usage != nil {
 				payload["usage"] = e.Usage
-			if e.Usage != nil {
-				payload["usage"] = e.Usage
 				// 持久化当前对话的上下文统计（含 breakdown 明细）
 				if req.ConvID != "" {
+					for i := range conversations {
 						if conversations[i].ID == req.ConvID {
 							conversations[i].TokenUsage = &ConversationTokenUsage{
 								PromptTokens:     e.Usage.PromptTokens,
