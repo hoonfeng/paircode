@@ -192,7 +192,13 @@ func startWebUI(port int) {
 		return
 	}
 	fileServer := http.FileServer(http.FS(subFS))
-	mux.Handle("/", fileServer)
+	// 禁止浏览器缓存前端文件（避免 Edge 等浏览器加载旧版本 JS/CSS）
+	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		w.Header().Set("Pragma", "no-cache")
+		w.Header().Set("Expires", "0")
+		fileServer.ServeHTTP(w, r)
+	}))
 
 	ws.server = &http.Server{
 		Addr:    fmt.Sprintf(":%d", port),
