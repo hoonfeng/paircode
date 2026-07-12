@@ -411,7 +411,7 @@ var (
 	compressThinkSel    *component.Select
 	autoCollapseCb      *component.Checkbox
 	autoIterateCb       *component.Checkbox
-	requireApprovalCb   *component.Checkbox
+	// aiReviewCb 已移除，审核开关统一在 chat 工具栏
 	luaToolsCb          *component.Checkbox
 	benchmarkCb         *component.Checkbox
 	maxIterationsInp    *component.Input
@@ -535,8 +535,6 @@ func createAgentTab(doc *dom.Document) {
 	autoIterateCb = newCheckbox(doc, "驳回后自动迭代改进", s.AutoIterate)
 	replaceCheckbox(doc, "s-autoiterate", autoIterateCb)
 
-	requireApprovalCb = newCheckbox(doc, "破坏性操作需人类审批", s.RequireApproval)
-	replaceCheckbox(doc, "s-requireapproval", requireApprovalCb)
 
 	luaToolsCb = newCheckbox(doc, "启用 Lua 自定义工具", s.LuaTools)
 	replaceCheckbox(doc, "s-luatools", luaToolsCb)
@@ -707,7 +705,6 @@ func saveAll(doc *dom.Document) {
 	// Agent
 	s.AutoCollapse = autoCollapseCb.Checked()
 	s.AutoIterate = autoIterateCb.Checked()
-	s.RequireApproval = requireApprovalCb.Checked()
 	s.LuaTools = luaToolsCb.Checked()
 	s.Benchmark = benchmarkCb.Checked()
 	s.MaxIterations = parseInt(maxIterationsInp.Value())

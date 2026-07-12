@@ -1835,8 +1835,8 @@ func (s *ChatState) agentBusy() bool { return s.Bridge != nil && s.Bridge.IsRunn
 
 // persistAgentToggles 持久化审核/自主开关。
 func (s *ChatState) persistAgentToggles() {
-	core.Settings.RequireApproval = !s.AutoReview
 	core.Settings.AutoReview = s.AutoReview
+	core.Settings.AIReview = s.AutoReview // 向后兼容：同步旧字段
 	core.Settings.Autonomous = s.Autonomous
 	core.Save()
 }

@@ -198,6 +198,7 @@ func (b *AgentBridge) Start(task string) {
 		sys += agent.ProjectRules(root)
 		sys += agent.ProjectKnowledge(root, 2500) // 项目知识库概览（.pair/project-info，渐进式披露）
 		b.loop = &agent.Loop{Provider: prov, Registry: reg, System: sys, MaxIterations: 30}
+		b.setupReview() // 初始化 loop 时设置审核配置（reviewer + Approve 回调）
 	}
 	// ── 构建对话上下文 ──
 	// 自闭环：loop 已有持久化历史时，前端只发信号（nil → loop.Run 使用 l.History）。
@@ -210,27 +211,12 @@ func (b *AgentBridge) Start(task string) {
 	}
 
 	// 多 Agent 编排：规划/审核 Agent 每次发送按当前设置重建（改设置即时生效）。
-	b.reviewer = nil
-	if core.Settings.AIReview {
-		b.reviewer = MakeReviewer()
-	}
 	b.planner = MakePlanner()
 	b.evaluator = nil
 	if core.Settings.Benchmark {
 		b.evaluator = MakeEvaluator()
 	}
 	b.reloadLuaTools() // Lua 自定义工具：每次发送热重载（.pair/tools/*.lua 增删改即时生效）
-	// 写类工具审批门（每次发送按当前设置重设）：
-	//   AI 审核开 → 审核模型自动裁决（驳回回灌建议）；否则 手动审核(非自主)→ 用户裁决；其余 → 放行。
-	//   注：读取 core.Settings 而非 b.Cs，使 web UI 的 toggle 即时生效。
-	switch {
-	case b.reviewer != nil:
-		b.loop.Approve = b.aiReviewApprove
-	case !core.Settings.AutoReview && !core.Settings.Autonomous:
-		b.loop.Approve = b.approve
-	default:
-		b.loop.Approve = nil
-	}
 
 	// 上下文压缩（按当前设置重设，改设置即时生效）：压缩模型 + 窗口上限灌进 loop（见 agent/compress.go）。
 	b.loop.Compressor = BuildCompressor()
@@ -1060,6 +1046,23 @@ func (b *AgentBridge) aiReviewApprove(ctx context.Context, tc agent.ToolCall) (b
 		return true, ""
 	}
 	return false, v.FeedbackText()
+}
+
+// setupReview 设置审核配置（reviewer + Approve 回调）。
+// 只读 core.Settings，不依赖 state，被 Start 调用。
+func (b *AgentBridge) setupReview() {
+	b.reviewer = nil
+	if core.Settings.AutoReview {
+		b.reviewer = MakeReviewer()
+	}
+	switch {
+	case b.reviewer != nil:
+		b.loop.Approve = b.aiReviewApprove
+	case !core.Settings.AutoReview && !core.Settings.Autonomous:
+		b.loop.Approve = b.approve
+	default:
+		b.loop.Approve = nil
+	}
 }
 
 // planToUpdateArgs 把规划 Agent 的计划转成 update_plan 工具参数 JSON（复用既有计划卡渲染路径）。
