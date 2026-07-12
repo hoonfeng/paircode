@@ -539,12 +539,6 @@ func (s *webServer) handleWorkspace(w http.ResponseWriter, r *http.Request) {
 			}
 			jsonResp(w, map[string]any{"ok": true, "path": projPath, "lang": lang})
 
-		default:
-			if req.Root != "" {
-				core.Folders = append([]string{req.Root}, req.Folders...)
-				core.Settings.LastProject = req.Root
-				core.Settings.WorkspaceFolders = core.Folders
-				core.Loaded = true
 		case "delete":
 			if req.Root == "" {
 				jsonErr(w, "需要 root 参数（工作区路径）")
@@ -561,7 +555,13 @@ func (s *webServer) handleWorkspace(w http.ResponseWriter, r *http.Request) {
 			core.Save()
 			jsonResp(w, map[string]any{"ok": true})
 
-
+		default:
+			if req.Root != "" {
+				core.Folders = append([]string{req.Root}, req.Folders...)
+				core.Settings.LastProject = req.Root
+				core.Settings.WorkspaceFolders = core.Folders
+				core.Loaded = true
+				core.Save()
 				if core.OnSyncWorkspace != nil {
 					core.OnSyncWorkspace(true)
 				}
