@@ -77,6 +77,7 @@
 import { ref, reactive, computed, watch, onMounted, onUnmounted, provide, nextTick } from 'vue'
 import { state, savePersistentState, loadPersistentState, applyTheme } from './main.js'
 import api from './api.js'
+import { processAgentEvent, processAgentDone, processStatus } from './agent-events.js'
 
 import MenuBar from './components/MenuBar.vue'
 import ActivityBar from './components/ActivityBar.vue'
@@ -184,8 +185,8 @@ async function switchWorkspace(targetPath) {
     state.fileContents = {}
     await loadFileTree()
     try {
-      const list = await api.apiGet('/conversations')
-      if (list && list.length > 0) state.conversations = list
+      const list = await api.apiGet('/conversations', { workspace: targetPath })
+      state.conversations = list || []
     } catch {}
     window.dispatchEvent(new CustomEvent('workspace-switched'))
     const ws = wsList.find(w => w.path === targetPath)
@@ -232,6 +233,10 @@ async function loadConversationsForWorkspace(path) {
         }
         return m
       })
+      // 同步到 messagesByConv，避免切换对话时丢失 localStorage 中的消息
+      if (state.currentConvId) {
+        state.messagesByConv[state.currentConvId] = state.messages
+      }
     }
   } catch {}
 }
@@ -342,13 +347,20 @@ onMounted(async () => {
   if (state.workspaceRoot) {
     await loadConversationsForWorkspace(state.workspaceRoot)
     try {
-      const list = await api.apiGet('/conversations')
+      const list = await api.apiGet('/conversations', { workspace: state.workspaceRoot })
       if (list && list.length > 0) state.conversations = list
     } catch {}
     if (state.conversations.length > 0 && !state.rightPanelVisible) {
       state.rightPanelVisible = true
     }
   }
+
+  // 初始化全局 WebSocket：接收所有会话事件（跨工作区并行对话核心）
+  api.initWebSocket({
+    onStatus: (payload) => processStatus(payload),
+    onEvent: (convId, data) => processAgentEvent(convId, data),
+    onDone: (convId, data) => processAgentDone(convId, data),
+  })
 
   loadPersistentState()
 
@@ -402,6 +414,7 @@ onUnmounted(() => {
   document.removeEventListener('keydown', handleKeydown)
   if (window._cleanupAppEvents) { window._cleanupAppEvents(); delete window._cleanupAppEvents }
   if (persistTimer) { clearTimeout(persistTimer); persistTimer = null }
+  api.closeWebSocket()
 })
 
 state.notificationCount = 0

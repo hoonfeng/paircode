@@ -88,6 +88,21 @@ export const state = reactive({
   chatLoading: false,
   chatSessionId: '',
   agentRunning: false,
+  // ── 多会话并行：按 convId 存储各对话的独立状态 ──
+  messagesByConv: {},        // { [convId]: [...] } 各对话消息数组
+  loadingByConv: {},         // { [convId]: boolean } 各对话加载状态
+  agentRunningByConv: {},    // { [convId]: boolean } 各对话 agent 运行状态
+  approvalByConv: {},        // { [convId]: { callId, tool, args, waiting } } 各对话审批状态
+  phaseByConv: {},           // { [convId]: string } 各对话当前阶段（自主模式）
+  nudgeByConv: {},           // { [convId]: string } 各对话 nudge 提示文本
+  convCtxStatsByConv: {},    // { [convId]: reactive({...}) } 各对话上下文 token 统计
+  runningByWorkspace: {},    // { [wsRoot]: count } 各工作区运行中 agent 计数（供工作区列表显示脉冲点）
+  wsTokenStats: reactive({   // 工作区级 token 统计（跨对话汇总）
+    promptTokens: 0, completionTokens: 0, totalTokens: 0,
+    cacheHitTokens: 0, cacheMissTokens: 0,
+    systemTokens: 0, skillsTokens: 0, mcpTokens: 0,
+    toolTokens: 0, historyTokens: 0, otherTokens: 0,
+  }),
   settings: {},
   settingsLoaded: false,
   searchResults: [],

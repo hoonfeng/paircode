@@ -125,6 +125,12 @@ import SvgIcon from './SvgIcon.vue'
 import ContextMenu from './ContextMenu.vue'
 
 // ── 当前工作区的文件夹列表 ──
+// 工作区运行中 agent 计数（从全局 state.runningByWorkspace 读取）
+// 用于在工作区列表显示脉冲点 + 数字，提示该工作区有 agent 正在并行工作
+function wsRunningCount(wsPath) {
+  return state.runningByWorkspace[wsPath] || 0
+}
+
 const currentFolders = computed(() => {
   if (!state.workspaceRoot) return []
   // 从 wsList 中找到当前工作区
@@ -483,6 +489,23 @@ onUnmounted(() => {
 .ws-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary); font-size: 13px; }
 .ws-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .ws-notify { color: #d4a74e; font-size: 10px; }
+/* 工作区运行中 agent 指示器：脉冲点 + 计数 */
+.ws-running-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 1px 6px; border-radius: 8px;
+  background: rgba(78, 204, 163, 0.15);
+  font-size: 10px; color: #4ecca3;
+}
+.ws-running-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #4ecca3;
+  animation: ws-pulse 1.4s ease-in-out infinite;
+}
+.ws-running-num { font-weight: 600; font-variant-numeric: tabular-nums; }
+@keyframes ws-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 0 0 rgba(78,204,163,0.6); }
+  50% { opacity: 0.6; transform: scale(1.2); box-shadow: 0 0 0 4px rgba(78,204,163,0); }
+}
 .ws-badge {
   font-size: 9px; color: var(--accent); background: rgba(126,184,218,0.15);
   padding: 1px 6px; border-radius: 3px;

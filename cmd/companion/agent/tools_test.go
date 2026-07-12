@@ -184,7 +184,7 @@ func TestRegistryDefinitions(t *testing.T) {
 	mustHave := []string{
 		"read_file", "write_file", "edit_file", "multi_edit", "list_files", "run_command",
 		"git_status", "memory_write", "find_files_by_pattern", "find_symbol",
-		"get_file_symbols", "task_create", "go_build", "run_test", "go_run",
+		"get_file_symbols", "task_create",
 		"project_info_write", "project_info_read", "inspect_binary", "binary_strings",
 		"debug_start", "debug_stop", "debug_status",
 	}

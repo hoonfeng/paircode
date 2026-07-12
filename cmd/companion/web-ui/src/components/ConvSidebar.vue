@@ -10,6 +10,10 @@
            @click="$emit('switch-conversation', conv.id)">
         <div class="conv-title">{{ conv.title }}</div>
         <div class="conv-meta">
+          <span v-if="loadingByConv[conv.id]" class="conv-running-tag" title="Agent 运行中">
+            <span class="conv-running-dot"></span>
+            <span class="conv-running-text">运行中</span>
+          </span>
           <span class="conv-msg-count">{{ conv.msgCount || 0 }}</span>
           <span class="conv-time">{{ conv.updatedAt ? conv.updatedAt.slice(11,16) : '' }}</span>
         </div>
@@ -134,6 +138,7 @@ import SvgIcon from './SvgIcon.vue'
 const props = defineProps({
   conversations: { type: Array, default: () => [] },
   currentConvId: { type: String, default: '' },
+  loadingByConv: { type: Object, default: () => ({}) },
   wsTokenStats: { type: Object, default: () => ({ totalTokens: 0, promptTokens: 0, completionTokens: 0, cacheHitTokens: 0, cacheMissTokens: 0 }) },
   convCtxStats: { type: Object, default: () => ({ promptTokens: 0, completionTokens: 0, cacheHitTokens: 0, cacheMissTokens: 0, systemTokens: 0, skillsTokens: 0, mcpTokens: 0, toolTokens: 0, historyTokens: 0, otherTokens: 0 }) },
   ctxMaxTokensVal: { type: Number, default: 64000 },
@@ -271,6 +276,32 @@ const compOtherPct = computed(() => ((props.convCtxStats.otherTokens / compTotal
   align-items: center;
   gap: 4px;
   flex-shrink: 0;
+}
+.conv-running-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: rgba(78, 204, 163, 0.15);
+  color: #4ecca3;
+  font-size: 9px;
+  line-height: 16px;
+  flex-shrink: 0;
+}
+.conv-running-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #4ecca3;
+  animation: conv-pulse 1.2s ease-in-out infinite;
+}
+.conv-running-text {
+  font-weight: 500;
+}
+@keyframes conv-pulse {
+  0%, 100% { opacity: 0.4; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.2); }
 }
 .conv-msg-count {
   font-size: 10px;

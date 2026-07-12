@@ -534,17 +534,15 @@ func RegisterDefaultTools(r *Registry, root string) {
 	registerFindSymbolTool(r, root)           // find_symbol（符号定位，见 symbolfinder.go）
 	registerFileSymbolTools(r, root)          // get_file_symbols / find_symbol_usages / check_impact / find_circular_deps（见 filesymbol.go）
 	registerTaskTools(r, root)                // task_create/update/list/delete/summary（持久化任务追踪，见 task_tools.go）
-	registerGoBuildTools(r, root)             // go_build（见 gobuild.go）
-	registerRunTestTools(r, root)             // run_test（见 runtest.go）
-	registerGoRunTools(r, root)               // go_run（见 gorun.go）
-	registerCodeFixTool(r, root)              // code_fix（见 fixer.go）
-	registerCodeFormatTool(r, root)          // code_format（见 formatter.go）
+	registerProjectInfoTools(r, root)        // project_info_write/read/list/search/delete/explore（项目知识库，见 projectinfo.go）
 	registerProjectInfoTools(r, root)        // project_info_write/read/list/search/delete/explore（项目知识库，见 projectinfo.go）
 	registerBinaryTools(r, root)             // inspect_binary / write_binary（二进制读写，见 binary.go）
 	registerBinaryRETools(r, root)           // binary_strings/find/patch/info/hash/entropy（二进制正则，见 binary_re.go）
 	registerDebugTools(r, root)              // debug_start/stop/breakpoint/continue/next/step_in/step_out/stack/variables/evaluate/status（见 debugtools.go）
 	registerVisionTools(r, root)             // image_analyze / image_ocr（图像视觉分析，见 vision.go）
 	registerScreenshotTools(r, root)         // screenshot_desktop/window/area/webpage（截图工具，见 screenshot_tool.go）
+	registerHeadlessBrowserTool(r)           // headless_browser（JS 渲染页面文本提取，见 headless.go）
+	registerWebDebugTool(r, root)            // web_debug（网页验证：控制台错误+截图+JS执行+交互，见 webdebug.go）
 	registerFinishTask(r)                   // finish_task（任务完成信号，见 loop.go 硬编码检测；注册后使测试省去 error 结果）
 	RegisterBugTools(r, root)                // bug_detect / bug_analyze / bug_fix（BUG 自动检测与修复，见 bugdetect.go + bugfix.go）
 

@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -107,12 +108,50 @@ func buildLuaTool(src, fileName string) (*Tool, error) {
 }
 
 // runLuaTool 新建沙箱状态执行脚本的 run(args)，返回字符串结果（隔离、10s 超时）。
+// 每次调用注入 agent.run_command 全局函数，通过 cctx 传递超时，确保子进程随 Lua 超时一同终止。
 func runLuaTool(ctx context.Context, src string, args map[string]any) (string, error) {
 	cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	L := newSandboxLua()
 	L.SetContext(cctx)
 	defer L.Close()
+	// 注入 agent.run_command({ command="...", cwd="..." }) 全局函数。
+	L.SetGlobal("agent", L.NewTable())
+	agentTbl := L.GetGlobal("agent").(*lua.LTable)
+	agentTbl.RawSetString("run_command", L.NewFunction(func(L *lua.LState) int {
+		argTbl := L.CheckTable(1)
+		cmdStr := ""
+		cwdStr := ""
+		argTbl.ForEach(func(k, v lua.LValue) {
+			if ks, ok := k.(lua.LString); ok {
+				switch string(ks) {
+				case "command":
+					if vs, ok := v.(lua.LString); ok {
+						cmdStr = string(vs)
+					}
+				case "cwd":
+					if vs, ok := v.(lua.LString); ok {
+						cwdStr = string(vs)
+					}
+				}
+			}
+		})
+		if cmdStr == "" {
+			L.Push(lua.LString("错误: command 参数不能为空"))
+			return 1
+		}
+		c := exec.CommandContext(cctx, "cmd", "/C", "chcp 65001 >nul & "+cmdStr)
+		if cwdStr != "" {
+			c.Dir = cwdStr
+		}
+		out, err := c.CombinedOutput()
+		result := string(out)
+		if err != nil {
+			result += "\n[退出: " + err.Error() + "]"
+		}
+		L.Push(lua.LString(result))
+		return 1
+	}))
 	if err := L.DoString(src); err != nil {
 		return "", err
 	}

@@ -48,6 +48,7 @@
                 </template>
                 <!-- Agent 分段渲染 -->
                 <template v-if="msg.role === 'assistant' && msg.segments && msg.segments.length > 0">
+
                   <!-- 折叠摘要 -->
                   <div v-if="msg._folded" class="folded-summary" @click="msg._folded = !msg._folded">
                     <span class="folded-chevron">▸</span>
@@ -101,6 +102,13 @@
                     </template>
                   </template>
                 </template>
+                <!-- 历史消息 fallback：assistant 有 content 但无 segments（从 API 加载的历史对话） -->
+                <template v-if="msg.role === 'assistant' && (!msg.segments || msg.segments.length === 0)">
+                  <div v-if="msg.content" class="tl-item tl-content-item">
+                    <span class="tl-dot tl-dot-content"></span>
+                    <div class="tl-body"><MarkdownRenderer :text="msg.content" :theme="state.theme" /></div>
+                  </div>
+                </template>
                 <div class="msg-time">{{ msg._time || '' }}</div>
               </div>
               <div v-if="msg._loading" class="msg-loading-dots">
@@ -119,6 +127,7 @@
         </div>
         <!-- 输入区 -->
         <div class="chat-input-area">
+          <ApprovalBar v-if="approvalState.waiting" :waiting="approvalState.waiting" :tool="approvalState.tool" :args="approvalState.args" @resolve="resolveApproval" />
           <!-- 运行时反馈条（Agent 执行中可补充纠正） -->
           <div v-if="state.chatLoading" class="feedback-bar">
             <input class="feedback-input" v-model="feedbackText" @keydown="onFeedbackKeydown" placeholder="输入补充/纠正信息，Agent 将在下一轮响应中处理..." />
@@ -147,7 +156,7 @@
       </div>
       <!-- 右侧：Debug日志面板 / 会话列表 -->
       <DebugLogPanel v-if="showDebugLog" @close="showDebugLog = false" />
-      <ConvSidebar v-else :conversations="state.conversations" :current-conv-id="state.currentConvId" :ws-token-stats="wsTokenStats" :conv-ctx-stats="convCtxStats" :ctx-max-tokens-val="state.settings.contextMaxTokens || 1000000" :width="convListWidth" @new-conversation="newConversation" @switch-conversation="switchConv" @delete-conversation="deleteConv" />
+      <ConvSidebar v-else :conversations="state.conversations" :current-conv-id="state.currentConvId" :loading-by-conv="state.loadingByConv" :ws-token-stats="wsTokenStats" :conv-ctx-stats="convCtxStats" :ctx-max-tokens-val="state.settings.contextMaxTokens || 1000000" :width="convListWidth" @new-conversation="newConversation" @switch-conversation="switchConv" @delete-conversation="deleteConv" />
     </div>
   </div>
 </template>
@@ -156,6 +165,7 @@
 import { ref, computed, inject, onMounted, onUnmounted, nextTick, watch, reactive } from 'vue'
 import { state } from '../main.js'
 import api from '../api.js'
+import { setGlobalCtx, startConvRuntime, resetConvRuntime, createAssistantPlaceholder, getConvCtxStats, resetConvCtxStats } from '../agent-events.js'
 import SvgIcon from './SvgIcon.vue'
 import PlanPanel from './PlanPanel.vue'
 import ApprovalBar from './ApprovalBar.vue'
@@ -176,26 +186,27 @@ const inputRef = ref(null)
 const inputHeight = ref(150)
 const convListWidth = ref(250)
 const topSentinel = ref(null)
-let currentAbortSSE = null
 const autoReview = ref(true)
 const autoIterate = ref(false)
 const autoCollapse = ref(true)
 const autonomous = ref(false)
 const pendingAttachment = ref(null)
 
-// nudge 提示条
+// nudge 提示条（从全局 state.nudgeByConv 读取，仅当前对话）
+const currentNudge = computed(() => state.nudgeByConv[state.currentConvId] || '')
 let nudgeTimer = null
-const currentNudge = ref('')
 function showNudge(text) {
-  currentNudge.value = text
+  // nudge 写入全局 state，由 currentNudge computed 响应
+  state.nudgeByConv[state.currentConvId] = text
   if (nudgeTimer) clearTimeout(nudgeTimer)
-  nudgeTimer = setTimeout(() => { currentNudge.value = '' }, 4000)
+  nudgeTimer = setTimeout(() => { state.nudgeByConv[state.currentConvId] = '' }, 4000)
 }
 
 let pendingAskCallId = ''
 const currentPlan = ref([])
 const planExpanded = ref(true)
-const currentPhase = ref('')
+// 阶段指示器从全局 state.phaseByConv 读取（仅当前对话）
+const currentPhase = computed(() => state.phaseByConv[state.currentConvId] || '')
 let phaseTimer = null
 let autoSaveTimer = null
 
@@ -207,9 +218,8 @@ const scrollTopRef = ref(0)
 const containerHeight = ref(600)
 const isNearBottom = ref(true)
 
-// ── 完成报告不再独立展示，由 EventDone 追加为 content segment ──
-
-const approvalState = ref({ callId: '', tool: '', args: '', waiting: false })
+// ── 审批状态从全局 state.approvalByConv 读取（仅当前对话）──
+const approvalState = computed(() => state.approvalByConv[state.currentConvId] || { callId: '', tool: '', args: '', waiting: false })
 const virtualState = computed(() => {
   const msgs = state.messages
   const total = msgs.length
@@ -293,17 +303,17 @@ function formatTerminalCommand(seg) {
   return '$ ' + (seg.argsRaw || '')
 }
 
-// ── 工作区 Token 统计 ──
-const wsTokenStats = reactive({ promptTokens: 0, completionTokens: 0, totalTokens: 0, cacheHitTokens: 0, cacheMissTokens: 0, systemTokens: 0, skillsTokens: 0, mcpTokens: 0, toolTokens: 0, historyTokens: 0, otherTokens: 0 })
-const convCtxStats = reactive({ promptTokens: 0, completionTokens: 0, cacheHitTokens: 0, cacheMissTokens: 0, systemTokens: 0, skillsTokens: 0, mcpTokens: 0, toolTokens: 0, historyTokens: 0, otherTokens: 0 })
+// ── 工作区 Token 统计（使用全局 state，与 agent-events.js 共享）──
+const wsTokenStats = computed(() => state.wsTokenStats)
+const convCtxStats = computed(() => getConvCtxStats(state.currentConvId))
 
 const loadWsTokenStats = async () => {
   try {
     const data = await api.apiGet('/tokens/stats')
-    if (data) Object.assign(wsTokenStats, data)
+    if (data) Object.assign(state.wsTokenStats, data)
     if (state.currentConvId) {
       const ts = await api.apiGet('/conversations/' + state.currentConvId + '/token-stats')
-      if (ts && ts.promptTokens !== undefined) Object.assign(convCtxStats, ts)
+      if (ts && ts.promptTokens !== undefined) Object.assign(getConvCtxStats(state.currentConvId), ts)
     }
   } catch {}
 }
@@ -356,133 +366,98 @@ const sendMessage = async () => {
       const conv = await api.apiPost('/conversations', { title: '新对话' })
       state.currentConvId = conv.id
       state.conversations.unshift({ id: conv.id, title: conv.title, msgCount: 0, createdAt: conv.createdAt, updatedAt: conv.updatedAt })
-      convCtxStats.promptTokens = 0; convCtxStats.completionTokens = 0
+      resetConvCtxStats(conv.id)
     } catch {}
   }
   const userContent = text || ''
   let fullContent = userContent
   if (pendingAttachment.value) {
-    fullContent += '\n\n---\n[附件] ' + (pendingAttachment.value.content || '').slice(0, 2000)
+    const att = pendingAttachment.value
+    if (att.type === 'image') {
+      // 图片保留 dataURL（无法用 read_file）
+      fullContent += '\n\n---\n[图片附件] ' + (att.filename || '') + '\n' + (att.content || '').slice(0, 2000)
+    } else if (att.type === 'file') {
+      fullContent += '\n\n[参考文件] ' + att.path + '\n（如需查看文件内容，请使用 read_file 工具读取上述路径）'
+    } else if (att.type === 'code') {
+      fullContent += '\n\n[参考文件] ' + att.path + ':' + (att.lineStart || 1) + '-' + (att.lineEnd || 1) + '\n（如需查看代码，请使用 read_file 工具读取上述路径和行号）'
+    }
   }
   const lastUserText = text
   inputText.value = ''; pendingAttachment.value = null
-  if (currentAbortSSE) { currentAbortSSE(); currentAbortSSE = null }
+  // 多会话并行：不停止旧 agent 的订阅（旧对话后台继续运行）
   collapsePreviousOutputs()
-  const userMsg = { role: 'user', content: fullContent, segments: [], toolCalls: [], _key: makeMsgKey(), _idx: state.messages.length, _time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) }
-  state.messages.push(userMsg)
-  if (state.currentConvId) {
-    await api.apiPost('/conversations/' + state.currentConvId + '/messages', { role: 'user', content: fullContent }).catch(() => {})
+  // 确保 messagesByConv[convId] 存在
+  const convId = state.currentConvId
+  if (!state.messagesByConv[convId]) state.messagesByConv[convId] = []
+  const userMsg = { role: 'user', content: fullContent, segments: [], toolCalls: [], _key: makeMsgKey(), _idx: state.messagesByConv[convId].length, _time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) }
+  state.messagesByConv[convId].push(userMsg)
+  // 同步到 state.messages（当前对话快捷引用）
+  state.messages = state.messagesByConv[convId]
+  if (convId) {
+    await api.apiPost('/conversations/' + convId + '/messages', { role: 'user', content: fullContent }).catch(() => {})
     // 立即用用户消息更新对话标题（不等 onDone，避免 SSE 中断导致标题不更新）
-    autoNameConv(state.currentConvId, lastUserText || fullContent)
+    autoNameConv(convId, lastUserText || fullContent)
     // 本地递增消息计数
-    const localConv = state.conversations.find(c => c.id === state.currentConvId)
+    const localConv = state.conversations.find(c => c.id === convId)
     if (localConv) localConv.msgCount = (localConv.msgCount || 0) + 1
   }
+  // 标记 loading（按 convId 存储 + 当前对话快捷引用）
+  state.loadingByConv[convId] = true
+  state.agentRunningByConv[convId] = true
   state.chatLoading = true; state.agentRunning = true
+  // 本地递增工作区运行计数（立即在工作区列表显示脉冲点）
+  // 后端 done/error 时会通过 status 消息同步纠正
+  if (state.workspaceRoot) {
+    state.runningByWorkspace = {
+      ...state.runningByWorkspace,
+      [state.workspaceRoot]: (state.runningByWorkspace[state.workspaceRoot] || 0) + 1,
+    }
+  }
   if (!state.chatSessionId) state.chatSessionId = 'sess_' + Date.now()
-  const msgIdx = state.messages.length
-  const assistantMsg = { role: 'assistant', content: '', segments: [], toolCalls: [], _key: makeMsgKey(), _idx: msgIdx, _time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }), _loading: true }
-  state.messages.push(assistantMsg)
-  let finalContent = ''
-  currentAbortSSE = api.chatSSE(fullContent, state.chatSessionId, autonomous.value, state.currentConvId, {
-    onEvent: (data) => {
-      const msg = state.messages[msgIdx]
-      if (!msg) return; msg._loading = false
-      if (data.type === 'thinking') { const seg = pushSegment(msg.segments, 'thinking', { _mode: 'collapsed', _collapsed: true }); seg.content += data.content || '' }
-      else if (data.type === 'content') { finalContent += data.content || ''; const seg = pushSegment(msg.segments, 'content'); seg.content += data.content || '' }
-      else if (data.type === 'tool_call') {
-        const toolName = data.tool || data.name || ''
-        if (toolName === 'finish_task') {
-          // finish_task 不是普通工具调用——不创建 segment，结果由 EventDone 展示为完成报告
-        } else if (toolName === 'ask_user') {
-          let question = ''
-          try { const args = typeof data.args === 'string' ? JSON.parse(data.args) : data.args; question = args.question || '（无问题内容）' } catch {}
-          pendingAskCallId = data.callId || data.callID || ''
-          msg.segments.push({ type: 'ask_user', question, callId: data.callId || data.callID || '', answer: '', _answered: false })
-        } else {
-          msg.segments.push({ type: 'tool_call', name: toolName, argsRaw: data.args ? (typeof data.args === 'string' ? data.args : JSON.stringify(data.args, null, 2)) : '', result: '', _mode: 'expanded', _expanded: true })
-        }
-      } else if (data.type === 'error') { const seg = pushSegment(msg.segments, 'content'); seg.content += '**[错误]** ' + (data.content || '') }
-      else if (data.type === 'usage' && data.usage) {
-        const u = data.usage
-        wsTokenStats.promptTokens += u.prompt_tokens || 0; wsTokenStats.completionTokens += u.completion_tokens || 0
-        wsTokenStats.totalTokens += (u.prompt_tokens || 0) + (u.completion_tokens || 0)
-        convCtxStats.promptTokens = u.prompt_tokens || 0; convCtxStats.completionTokens = u.completion_tokens || 0
-        // 填充上下文构成 breakdown（来自 PromptBreakdown 估算）
-        if (u.prompt_breakdown) {
-          const pb = u.prompt_breakdown
-          convCtxStats.systemTokens = pb.system_tokens || 0
-          convCtxStats.skillsTokens = pb.skills_tokens || 0
-          convCtxStats.mcpTokens = pb.mcp_tokens || 0
-          convCtxStats.toolTokens = pb.tool_tokens || 0
-          convCtxStats.historyTokens = pb.history_tokens || 0
-          convCtxStats.otherTokens = pb.other_tokens || 0
-        }
-      } else if (data.type === 'phase') {
-        currentPhase.value = data.content || ''
-        if (phaseTimer) clearTimeout(phaseTimer)
-        phaseTimer = setTimeout(() => { currentPhase.value = '' }, 6000)
-      } else if (data.type === 'notice') {
-        const nudgeText = (data.content || '').replace(/\n/g, ' ').slice(0, 120)
-        showNudge(nudgeText)
-      } else if (data.type === 'done') {
-        // 完成报告：直接追加为 content segment，不独立展示为组件
-        // 清空 finalContent，避免 onDone 把旧内容写入 msg.content
-        finalContent = ''
-        if (data.content && msg) {
-          msg.segments.push({ type: 'content', content: data.content })
-        }
+  const msgIdx = createAssistantPlaceholder(convId)
+  startConvRuntime(convId, msgIdx, lastUserText || fullContent)
+  try {
+    await api.chatStart(convId, fullContent, autonomous.value, state.workspaceRoot)
+  } catch (err) {
+    const msgs0 = state.messagesByConv[convId]
+    if (msgs0) {
+      const m = msgs0[msgIdx]
+      if (m) { m._loading = false; pushSegment(m.segments, 'content').content += '**[启动失败]** ' + (err.message || err) }
+    }
+    state.loadingByConv[convId] = false
+    state.agentRunningByConv[convId] = false
+    state.chatLoading = false; state.agentRunning = false
+    // 启动失败：递减工作区运行计数
+    if (state.workspaceRoot && state.runningByWorkspace[state.workspaceRoot] > 0) {
+      state.runningByWorkspace = {
+        ...state.runningByWorkspace,
+        [state.workspaceRoot]: Math.max(0, (state.runningByWorkspace[state.workspaceRoot] || 0) - 1),
       }
-      scrollToBottom()
-      scrollToBottom()
-    },
-    onError: (err) => {
-      const msg = state.messages[msgIdx]
-      if (msg) { msg._loading = false; pushSegment(msg.segments, 'content').content += '**[连接错误]** ' + err }
-      state.chatLoading = false; state.agentRunning = false; currentAbortSSE = null
-    },
-    onReconnect: (attempt, maxAttempts, delay) => {
-      const msg = state.messages[msgIdx]
-      if (msg) { const seg = pushSegment(msg.segments, 'content'); seg.content += '\n\n> [重连] ' + attempt + '/' + maxAttempts + '\n\n' }
-      scrollToBottom()
-    },
-    onDone: () => {
-      const msg = state.messages[msgIdx]
-      if (msg) { msg._loading = false; msg.content = finalContent }
-      state.chatLoading = false; state.agentRunning = false; currentAbortSSE = null
-      if (phaseTimer) { clearTimeout(phaseTimer); phaseTimer = null }
-      currentPhase.value = ''
-      if (state.currentConvId && finalContent) {
-        api.apiPost('/conversations/' + state.currentConvId + '/messages', { role: 'assistant', content: finalContent }).catch(() => {})
-      }
-      // 递增助手消息计数
-      if (state.currentConvId) {
-        const localConv = state.conversations.find(c => c.id === state.currentConvId)
-        if (localConv) localConv.msgCount = (localConv.msgCount || 0) + 1
-      }
-      // 自动命名对话：用用户消息更新标题
-      if (state.currentConvId && lastUserText) {
-        autoNameConv(state.currentConvId, lastUserText)
-      }
-      window.dispatchEvent(new Event('save-conversations'))
-      window.dispatchEvent(new Event('save-conversations'))
-      scrollToBottom()
-    },
-  })
+    }
+    resetConvRuntime(convId)
+    return
+  }
+  // 事件流由 App.vue 全局 WebSocket 接收 → agent-events.js processAgentEvent/Done 处理
+  // 切换对话/工作区时 agent 后台继续运行，事件继续写入 messagesByConv[convId]
 }
 
 const stopChat = async () => {
-  try { await api.apiGet('/chat/stop?sessionId=' + state.chatSessionId) } catch {}
+  const convId = state.currentConvId
+  if (!convId) return
+  try { await api.chatStop(convId) } catch {}
+  resetConvRuntime(convId)
+  state.loadingByConv[convId] = false
+  state.agentRunningByConv[convId] = false
   state.chatLoading = false; state.agentRunning = false
 }
 
 // ── 运行时反馈：Agent 执行中用户补充/纠正 ──
 const sendFeedback = async () => {
   const text = feedbackText.value.trim()
-  if (!text || !state.chatSessionId) return
+  if (!text || !state.currentConvId) return
   feedbackText.value = ''
   try {
-    await api.sendFeedback(state.chatSessionId, text)
+    await api.apiPost('/chat/feedback', { convId: state.currentConvId, feedback: text })
   } catch {}
 }
 const onFeedbackKeydown = (e) => {
@@ -500,13 +475,15 @@ const onAskAnswer = (seg, { callId, answer }) => {
 const submitAskAnswer = async (seg) => {
   const answer = (seg.answer || '').trim()
   if (!answer) return; seg._answered = true
-  try { await api.answerChat(state.chatSessionId, answer) } catch {}
+  try { await api.apiPost('/chat/answer', { convId: state.currentConvId, answer }) } catch {}
 }
 
 const resolveApproval = async (approved) => {
-  const a = approvalState.value
-  if (!a.callId || !a.waiting) return; a.waiting = false
-  try { await api.approveChat(state.chatSessionId, a.callId, approved) } catch { a.waiting = true }
+  const convId = state.currentConvId
+  const a = state.approvalByConv[convId]
+  if (!a || !a.callId || !a.waiting) return
+  a.waiting = false
+  try { await api.apiPost('/chat/approve', { convId, approved }) } catch { a.waiting = true }
 }
 
 const onKeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }
@@ -520,39 +497,88 @@ const forceScrollToBottom = () => {
 }
 
 const loadConvList = async () => {
-  try { const list = await api.apiGet('/conversations'); state.conversations = list || [] } catch {}
-}
-
-const newConversation = async () => {
   try {
-    const conv = await api.apiPost('/conversations', { title: '新对话' })
-    state.conversations.unshift({ id: conv.id, title: conv.title, createdAt: conv.createdAt, updatedAt: conv.updatedAt })
-    state.currentConvId = conv.id; state.messages = []; currentPlan.value = []
-    convCtxStats.promptTokens = 0; convCtxStats.completionTokens = 0; inputText.value = ''
+    const list = await api.apiGet('/conversations', { workspace: state.workspaceRoot })
+    state.conversations = list || []
+    // 无对话时自动创建一个"新对话"
+    if (state.conversations.length === 0 && state.workspaceRoot) {
+      await newConversation()
+    }
   } catch {}
 }
 
+const newConversation = async () => {
+  // 多会话并行：不停止旧 agent，立即在后端创建新对话并切换
+  try {
+    const conv = await api.apiPost('/conversations', { title: '新对话', workspaceRoot: state.workspaceRoot })
+    state.currentConvId = conv.id
+    state.conversations.unshift({ id: conv.id, title: conv.title, msgCount: 0, createdAt: conv.createdAt, updatedAt: conv.updatedAt })
+    if (!state.messagesByConv[conv.id]) state.messagesByConv[conv.id] = []
+    state.messages = state.messagesByConv[conv.id]
+    resetConvCtxStats(conv.id)
+  } catch {
+    // 后端创建失败时兜底：用临时空对话
+    state.currentConvId = ''
+    state.messagesByConv[''] = state.messagesByConv[''] || []
+    state.messages = state.messagesByConv['']
+  }
+  state.chatLoading = false
+  state.agentRunning = false
+  currentPlan.value = []
+  inputText.value = ''
+  nextTick(() => inputRef.value?.focus())
+}
+
 const deleteConv = async (id) => {
+  // 若该对话有运行中的 agent，停止它
+  if (state.agentRunningByConv[id]) {
+    try { await api.chatStop(id) } catch {}
+    resetConvRuntime(id)
+  }
   try {
     await api.apiDelete('/conversations/' + id)
     state.conversations = state.conversations.filter(c => c.id !== id)
-    if (state.currentConvId === id) { state.currentConvId = ''; state.messages = []; convCtxStats.promptTokens = 0; convCtxStats.completionTokens = 0 }
+    delete state.messagesByConv[id]
+    delete state.loadingByConv[id]
+    delete state.agentRunningByConv[id]
+    delete state.approvalByConv[id]
+    delete state.phaseByConv[id]
+    delete state.nudgeByConv[id]
+    delete state.convCtxStatsByConv[id]
+    if (state.currentConvId === id) {
+      state.currentConvId = ''
+      state.messages = []
+      state.chatLoading = false
+      state.agentRunning = false
+    }
   } catch {}
 }
 
 const switchConv = async (id) => {
-  state.currentConvId = id; state.messages = []; currentPlan.value = []
-  convCtxStats.promptTokens = 0; convCtxStats.completionTokens = 0
-  try {
-    const ts = await api.apiGet('/conversations/' + id + '/token-stats')
-    if (ts && ts.promptTokens !== undefined) Object.assign(convCtxStats, ts)
-  } catch {}
-  try {
-    const msgs = await api.apiGet('/conversations/' + id + '/messages')
-    state.messages = (msgs || []).map((m, idx) => ({
-      role: m.role, content: m.content || '', toolCalls: m.toolCalls || [], segments: [], _key: 'msg_' + Date.now() + '_' + idx, _idx: idx, _time: m.createdAt ? m.createdAt.slice(11, 19) : '',
-    }))
-  } catch {}
+  // 多会话并行：切换对话不停止旧 agent，事件继续写入 messagesByConv[oldConvId]
+  state.currentConvId = id
+  // 切换 state.messages 指向（不停止旧 agent）
+  if (!state.messagesByConv[id]) state.messagesByConv[id] = []
+  state.messages = state.messagesByConv[id]
+  // 同步 loading 状态
+  state.chatLoading = state.loadingByConv[id] || false
+  state.agentRunning = state.agentRunningByConv[id] || false
+  currentPlan.value = []
+  // approval/phase/nudge/convCtxStats 自动从 state.*ByConv[currentConvId] 读取，无需手动重置
+  // 加载历史（若 messagesByConv[id] 为空）
+  if (state.messagesByConv[id].length === 0) {
+    try {
+      const ts = await api.apiGet('/conversations/' + id + '/token-stats')
+      if (ts && ts.promptTokens !== undefined) Object.assign(getConvCtxStats(id), ts)
+    } catch {}
+    try {
+      const msgs = await api.apiGet('/conversations/' + id + '/messages')
+      state.messagesByConv[id] = (msgs || []).map((m, idx) => ({
+        role: m.role, content: m.content || '', toolCalls: m.toolCalls || [], segments: [], _key: 'msg_' + Date.now() + '_' + idx, _idx: idx, _time: m.createdAt ? m.createdAt.slice(11, 19) : '',
+      }))
+      state.messages = state.messagesByConv[id]
+    } catch {}
+  }
   forceScrollToBottom()
 }
 
@@ -615,12 +641,20 @@ const stopInputResize = () => { inputDragging = false; document.removeEventListe
 // ── 文件拖拽/粘贴 ──
 const handleDrop = (e) => {
   e.preventDefault()
+  // 优先检查工作区文件路径（文件树拖拽携带的路径）
+  const wsPath = e.dataTransfer?.getData('application/x-file-path') || e.dataTransfer?.getData('text/x-file-path') || ''
+  if (wsPath) {
+    pendingAttachment.value = { type: 'file', path: wsPath, filename: wsPath.split(/[\\/]/).pop() }
+    return
+  }
+  // 外部文件（浏览器文件系统）—— 不在工作区内，提示用户
   const files = e.dataTransfer?.files
   if (files && files.length > 0) {
-    const file = files[0]; const reader = new FileReader()
-    reader.onload = (ev) => { pendingAttachment.value = { type: 'file', path: file.name, filename: file.name, content: typeof ev.target?.result === 'string' ? ev.target.result.slice(0, 50000) : '' } }
-    reader.readAsText(file, 'utf-8'); return
+    // 外部文件无法获得工作区相对路径，agent 无法 read_file，提示用户
+    window.$toast && window.$toast('该文件不在工作区内，请先添加到工作区或从文件树拖入', 'warn')
+    return
   }
+  // 纯文本拖拽 —— 保留原逻辑
   const textData = e.dataTransfer?.getData('text/plain')
   if (textData) { inputText.value += textData; inputRef.value?.focus() }
 }
@@ -631,13 +665,17 @@ const handlePaste = (e) => {
     if (item.kind === 'file') {
       e.preventDefault(); const file = item.getAsFile(); if (!file) continue
       if (file.type.startsWith('image/')) {
+        // 图片保留 dataURL（图片无法用 read_file 读取）
+        if (file.size > 1024 * 1024) {
+          window.$toast && window.$toast('图片超过 1MB，请压缩后粘贴', 'warn')
+          return
+        }
         const reader = new FileReader()
         reader.onload = (ev) => { pendingAttachment.value = { type: 'image', path: file.name, filename: file.name, content: ev.target?.result || '' } }
         reader.readAsDataURL(file)
       } else {
-        const reader = new FileReader()
-        reader.onload = (ev) => { pendingAttachment.value = { type: 'file', path: file.name, filename: file.name, content: typeof ev.target?.result === 'string' ? ev.target.result.slice(0, 50000) : '' } }
-        reader.readAsText(file, 'utf-8')
+        // 非图片文件 —— 不读取内容，提示从编辑器或文件树拖入
+        window.$toast && window.$toast('粘贴文件不支持，请从文件树拖入或从编辑器选中代码后拖入', 'warn')
       }
       return
     }
@@ -684,13 +722,54 @@ const handleBeforeUnload = () => { if (state.currentConvId && state.messages.len
 onMounted(() => {
   loadWsTokenStats(); loadConvList(); scrollToBottom(); setupResizeObserver()
   containerHeight.value = msgRef.value?.clientHeight || 600
+
+  // 注册全局 UI 回调：App.vue 的 WebSocket onmessage → agent-events.js → 此处回调
+  setGlobalCtx({
+    scrollToBottom: () => scrollToBottom(),
+    loadWsTokenStats: () => loadWsTokenStats(),
+    autoNameConv: (convId, text) => autoNameConv(convId, text),
+    saveConvMsg: (convId, content) => {
+      api.apiPost('/conversations/' + convId + '/messages', { role: 'assistant', content }).catch(() => {})
+    },
+    onPlanUpdate: (plan, convId) => {
+      if (state.currentConvId === convId) { currentPlan.value = plan; planExpanded.value = true }
+    },
+    onTaskCreate: (task, convId) => {
+      if (state.currentConvId === convId) { currentPlan.value.push(task); planExpanded.value = true }
+    },
+    onPhaseChange: (convId) => {
+      // 阶段指示器自动从 state.phaseByConv 读取，此处启动定时器自动清除
+      if (phaseTimer) clearTimeout(phaseTimer)
+      phaseTimer = setTimeout(() => { state.phaseByConv[convId] = '' }, 6000)
+    },
+    onPhaseEnd: (convId) => {
+      if (phaseTimer) { clearTimeout(phaseTimer); phaseTimer = null }
+      state.phaseByConv[convId] = ''
+    },
+    onNudge: (convId) => {
+      // nudge 自动从 state.nudgeByConv 读取，此处启动定时器清除
+      if (nudgeTimer) clearTimeout(nudgeTimer)
+      nudgeTimer = setTimeout(() => { state.nudgeByConv[convId] = '' }, 4000)
+    },
+  })
+
   window.addEventListener('add-to-chat', (e) => {
     const detail = e.detail; if (!detail) return
     pendingAttachment.value = { type: detail.type || 'file', path: detail.path || '', filename: detail.filename || '', lineStart: detail.lineStart || null, lineEnd: detail.lineEnd || null, content: detail.content || '' }
   })
-  window.addEventListener('workspace-switched', () => {
-    loadConvList(); state.currentConvId = ''; state.messages = []; state.chatLoading = false; state.agentRunning = false; state.chatSessionId = ''; inputText.value = ''
-    convCtxStats.promptTokens = 0; convCtxStats.completionTokens = 0; currentPlan.value = []
+  window.addEventListener('workspace-switched', async () => {
+    // 工作区切换：不清空 messagesByConv/loadingByConv/agentRunningByConv（agent 后台继续运行）
+    // 仅重新加载当前工作区的对话列表；loadConvList 内部会在无对话时自动创建
+    state.chatLoading = false
+    state.agentRunning = false
+    state.chatSessionId = ''
+    inputText.value = ''
+    currentPlan.value = []
+    await loadConvList()
+    // loadConvList 已处理 currentConvId 和 messages 的设置（自动创建或保持空）
+    if (!state.currentConvId) {
+      state.messages = []
+    }
   })
   autoSaveTimer = setInterval(() => { if (state.currentConvId && state.messages.length > 0) { window.dispatchEvent(new Event('save-conversations')) } }, 15000)
   window.addEventListener('beforeunload', handleBeforeUnload)
@@ -699,7 +778,8 @@ onMounted(() => {
 onUnmounted(() => {
   if (autoSaveTimer) { clearInterval(autoSaveTimer); autoSaveTimer = null }
   if (phaseTimer) { clearTimeout(phaseTimer); phaseTimer = null }
-  if (currentAbortSSE) { currentAbortSSE(); currentAbortSSE = null }
+  if (nudgeTimer) { clearTimeout(nudgeTimer); nudgeTimer = null }
+  // 不关闭 WebSocket（由 App.vue 管理生命周期）；不清理 subscriptions（已移除 SSE 订阅模式）
   document.removeEventListener('mousemove', onInputResizeMove); document.removeEventListener('mouseup', stopInputResize)
   if (resizeObserver) { resizeObserver.disconnect(); resizeObserver = null }
   window.removeEventListener('beforeunload', handleBeforeUnload)
@@ -728,13 +808,12 @@ onUnmounted(() => {
   color: #fff;
   padding: 8px 14px;
   border-radius: 16px 16px 4px 16px;
-  align-self: flex-end;
   margin-left: auto;
   overflow-wrap: break-word;
   word-break: break-word;
   overflow: hidden;
 }
-.user-msg-content { width: 100%; }
+.user-msg-content { width: 100%; text-align: right; }
 .user-msg-content :deep(p) { margin: 2px 0; white-space: pre-wrap; word-break: break-word; }
 .user-msg-content :deep(pre) { white-space: pre-wrap; font-size: 12px; background: rgba(0,0,0,0.15); padding: 6px; border-radius: 4px; max-width: 100%; overflow-x: auto; }
 .user-msg-content :deep(code) { font-size: 12px; }

@@ -38,37 +38,15 @@ type webServer struct {
 	server *http.Server
 	port   int
 	mu     sync.Mutex
-	// 当前 agent 运行状态（多会话支持）
-	activeLoops map[string]*webAgentSession
 	// historyCache 持久化对话历史缓存（convID → 完整 []Message）。
 	// 替代 loadConversationHistory + BuildHistory 模式。
 	// loop.Run 返回的完整 msgs 缓存于此，下次同 convID 请求直接复用（传 nil history，loop.Run 自动使用 l.History）。
 	historyCache map[string][]agent.Message
 }
 
-// webAgentSession 一次 agent 运行会话。
-type webAgentSession struct {
-	cancel  context.CancelFunc
-	events  chan agent.Event
-	stopped bool
-
-	// ask_user 问答通道：Handler 阻塞等用户回答
-	askCh   chan string
-	askDone bool // 标记回答已收到，防重复写入
-
-	// 审批通道：Approve 阻塞等用户裁决
-	approvalCh     chan bool
-	approvalCallID string
-
-	// 反馈通道：用户运行时补充/纠正，每次 LLM 调用前检查
-	feedbackCh chan string
-
-	// loop 持久化的 Agent 引擎（跨 HTTP 请求复用，保持 l.History 自闭环）。
-	// 同一 convID 的后续消息复用此 loop，前端只需发信号（task text），
-	// loop 内部通过 l.History 自动管理完整对话历史。
-	loop   *agent.Loop
-	convID string // 此 loop 绑定的对话 ID
-}
+// agentMgr 全局会话管理器：管理并行 agent 会话（Start/Stop/Subscribe 等）。
+// web 层作为套壳，所有会话生命周期通过 agentMgr 管理。
+var agentMgr = agent.NewSessionManager()
 
 var ws *webServer
 
@@ -125,7 +103,6 @@ func startWebUI(port int) {
 	}
 	ws = &webServer{
 		port:         port,
-		activeLoops:  make(map[string]*webAgentSession),
 		historyCache: make(map[string][]agent.Message),
 	}
 	ws.loadHistoryCache() // 从磁盘恢复历史缓存
@@ -183,6 +160,10 @@ func startWebUI(port int) {
 
 	// chat/agent 路由由 registerExtraHandlers 注册（桌面 vs webonly 不同实现）
 	registerExtraHandlers(mux, ws)
+
+	// 启动事件持久化后台 worker：订阅 SubscribeAll，处理 token/历史持久化。
+	// 与传输层（WebSocket）解耦——即使无前端连接，agent 事件仍会被持久化。
+	ws.startEventPersistWorker()
 
 	// ── 静态文件 ──
 	subFS, err := fs.Sub(webUIFiles, "web-ui/dist")
@@ -749,17 +730,18 @@ func (s *webServer) handleExec(w http.ResponseWriter, r *http.Request) {
 // Conversation 一次对话会话。
 // Summary 字段在对话结束后由 AI 生成，用于跨对话的上下文记忆注入。
 type Conversation struct {
-	ID        string `json:"id"`
-	Title     string `json:"title"`
-	CreatedAt string `json:"createdAt"`
-	UpdatedAt string `json:"updatedAt"`
-	Messages  []struct {
+	ID            string `json:"id"`
+	Title         string `json:"title"`
+	CreatedAt     string `json:"createdAt"`
+	UpdatedAt     string `json:"updatedAt"`
+	WorkspaceRoot string `json:"workspaceRoot,omitempty"` // 工作区根路径（跨工作区隔离）
+	Messages      []struct {
 		Role    string `json:"role"`
 		Content string `json:"content"`
 	} `json:"messages,omitempty"`
-	Summary   string `json:"summary,omitempty"`   // AI 生成的对话摘要
-	SummaryAt string `json:"summaryAt,omitempty"` // 摘要生成时间
-	TokenUsage *ConversationTokenUsage `json:"tokenUsage,omitempty"` // 最后一次 agent 报告的上下文统计
+	Summary    string                   `json:"summary,omitempty"`   // AI 生成的对话摘要
+	SummaryAt  string                   `json:"summaryAt,omitempty"` // 摘要生成时间
+	TokenUsage *ConversationTokenUsage  `json:"tokenUsage,omitempty"` // 最后一次 agent 报告的上下文统计
 }
 
 // ConversationTokenUsage 保存对话最后一次 agent 调用后的上下文统计（实际值，非估算）
@@ -822,36 +804,56 @@ func (s *webServer) handleConversations(w http.ResponseWriter, r *http.Request) 
 	switch r.Method {
 	case "GET":
 		loadConversations()
+		// 工作区过滤：?workspace=root 只返回该工作区的对话
+		// 兼容旧对话（WorkspaceRoot 为空）：视为属于当前核心工作区，不过滤掉
+		wsFilter := r.URL.Query().Get("workspace")
+		coreRoot := core.Root()
+		conversationsMu.Lock()
 		type convBrief struct {
-			ID        string `json:"id"`
-			Title     string `json:"title"`
-			CreatedAt string `json:"createdAt"`
-			UpdatedAt string `json:"updatedAt"`
-			MsgCount  int    `json:"msgCount"`
+			ID            string `json:"id"`
+			Title         string `json:"title"`
+			CreatedAt     string `json:"createdAt"`
+			UpdatedAt     string `json:"updatedAt"`
+			WorkspaceRoot string `json:"workspaceRoot,omitempty"`
+			MsgCount      int    `json:"msgCount"`
 		}
 		brief := make([]convBrief, 0, len(conversations))
 		for _, c := range conversations {
+			if wsFilter != "" && c.WorkspaceRoot != wsFilter {
+				// 旧对话（WorkspaceRoot 为空）在请求当前核心工作区时不过滤
+				if !(c.WorkspaceRoot == "" && wsFilter == coreRoot) {
+					continue
+				}
+			}
 			brief = append(brief, convBrief{
 				ID: c.ID, Title: c.Title, CreatedAt: c.CreatedAt,
-				UpdatedAt: c.UpdatedAt, MsgCount: len(c.Messages),
+				UpdatedAt: c.UpdatedAt, WorkspaceRoot: c.WorkspaceRoot, MsgCount: len(c.Messages),
 			})
 		}
+		conversationsMu.Unlock()
 		jsonResp(w, brief)
 
 	case "POST":
 		var req struct {
-			Title string `json:"title"`
+			Title         string `json:"title"`
+			WorkspaceRoot string `json:"workspaceRoot"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			jsonErr(w, err.Error())
 			return
 		}
 		loadConversations()
+		conversationsMu.Lock()
+		wsRoot := req.WorkspaceRoot
+		if wsRoot == "" {
+			wsRoot = core.Root() // 兜底用当前工作区
+		}
 		conv := Conversation{
-			ID:        fmt.Sprintf("conv_%d", time.Now().UnixNano()),
-			Title:     req.Title,
-			CreatedAt: time.Now().Format("2006-01-02T15:04:05"),
-			UpdatedAt: time.Now().Format("2006-01-02T15:04:05"),
+			ID:            fmt.Sprintf("conv_%d", time.Now().UnixNano()),
+			Title:         req.Title,
+			CreatedAt:     time.Now().Format("2006-01-02T15:04:05"),
+			UpdatedAt:     time.Now().Format("2006-01-02T15:04:05"),
+			WorkspaceRoot: wsRoot,
 			Messages: []struct {
 				Role    string `json:"role"`
 				Content string `json:"content"`
@@ -862,11 +864,46 @@ func (s *webServer) handleConversations(w http.ResponseWriter, r *http.Request) 
 		}
 		conversations = append(conversations, conv)
 		saveConversations()
+		conversationsMu.Unlock()
 		jsonResp(w, conv)
 
 	default:
 		jsonErr(w, "不支持的方法")
 	}
+}
+
+// ensureConversation 确保对话记录存在（handleChatSend 启动 agent 时调用）。
+// 若对话不存在则创建并标记 WorkspaceRoot；已存在则更新 WorkspaceRoot（若为空）。
+func (s *webServer) ensureConversation(convID, wsRoot string) {
+	loadConversations()
+	conversationsMu.Lock()
+	defer conversationsMu.Unlock()
+	for i := range conversations {
+		if conversations[i].ID == convID {
+			if conversations[i].WorkspaceRoot == "" && wsRoot != "" {
+				conversations[i].WorkspaceRoot = wsRoot
+				saveConversations()
+			}
+			return
+		}
+	}
+	// 不存在则创建
+	if wsRoot == "" {
+		wsRoot = core.Root()
+	}
+	conv := Conversation{
+		ID:            convID,
+		Title:         "新对话 " + time.Now().Format("15:04"),
+		CreatedAt:     time.Now().Format("2006-01-02T15:04:05"),
+		UpdatedAt:     time.Now().Format("2006-01-02T15:04:05"),
+		WorkspaceRoot: wsRoot,
+		Messages: []struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		}{},
+	}
+	conversations = append(conversations, conv)
+	saveConversations()
 }
 
 func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Request) {
@@ -880,6 +917,8 @@ func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Reques
 	wantTokenStats := len(parts) >= 2 && parts[1] == "token-stats"
 
 	loadConversations()
+	conversationsMu.Lock()
+	defer conversationsMu.Unlock()
 	var conv *Conversation
 	for i := range conversations {
 		if conversations[i].ID == id {
