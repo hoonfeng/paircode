@@ -134,29 +134,40 @@ provide('wsList', wsList)
 provide('saveWsList', saveWsList)
 provide('switchWorkspace', switchWorkspace)
 
-function loadWsList() {
+async function loadWsList() {
+  // 从后端 /api/settings 拉取工作区列表（recentProjects），保证与后端一致
+  wsList.length = 0
   try {
-    const saved = JSON.parse(localStorage.getItem('paircode-workspaces') || '[]')
-    wsList.length = 0
-    for (const w of saved) { wsList.push(reactive(w)) }
-  } catch { wsList.length = 0 }
+    const settings = await api.apiGet('/settings')
+    const projects = settings.recentProjects || []
+    const seen = new Set()
+    for (const p of projects) {
+      if (!p || seen.has(p)) continue
+      seen.add(p)
+      wsList.push(reactive({
+        path: p,
+        name: p.split(/[\\/]/).filter(Boolean).pop() || p,
+        folders: [p],
+        notify: false,
+      }))
+    }
+  } catch {}
   if (state.workspaceRoot && !wsList.find(w => w.path === state.workspaceRoot)) {
     wsList.push(reactive({
       path: state.workspaceRoot,
-      name: state.workspaceRoot.split('\\').filter(Boolean).pop() || state.workspaceRoot,
+      name: state.workspaceRoot.split(/[\\/]/).filter(Boolean).pop() || state.workspaceRoot,
       folders: state.workspaceFolders?.length > 0 ? [...state.workspaceFolders] : [state.workspaceRoot],
       notify: false,
     }))
   }
-  checkNotifications()
 }
 
-function saveWsList() {
+async function saveWsList() {
+  // 同步工作区列表到后端 settings.recentProjects
   try {
-    const data = wsList.map(w => ({
-      path: w.path, name: w.name, folders: w.folders || [], notify: !!w.notify,
-    }))
-    localStorage.setItem('paircode-workspaces', JSON.stringify(data.slice(0, 20)))
+    const settings = await api.apiGet('/settings')
+    settings.recentProjects = wsList.slice(0, 20).map(w => w.path).filter(Boolean)
+    await api.apiPut('/settings', settings)
   } catch {}
 }
 
@@ -168,7 +179,6 @@ function checkNotifications() {
 
 async function switchWorkspace(targetPath) {
   if (!targetPath || targetPath === state.workspaceRoot) return
-  saveCurrentConversations()
   try {
     const targetWs = wsList.find(w => w.path === targetPath)
     const folders = targetWs?.folders || []
@@ -178,7 +188,7 @@ async function switchWorkspace(targetPath) {
     })
     state.workspaceRoot = targetPath
     state.workspaceFolders = folders.length > 0 ? [...folders] : [targetPath]
-    state.workspaceName = targetPath.split('\\').filter(Boolean).pop() || targetPath
+    state.workspaceName = targetPath.split(/[\\/]/).filter(Boolean).pop() || targetPath
     document.title = 'PairCode IDE - ' + state.workspaceName
     state.openFiles = []
     state.activeFile = ''
@@ -192,11 +202,11 @@ async function switchWorkspace(targetPath) {
     const ws = wsList.find(w => w.path === targetPath)
     if (ws) ws.notify = false
     state.notificationCount = 0
-    if (targetWs) { targetWs.folders = [...state.workspaceFolders]; saveWsList() }
+    if (targetWs) { targetWs.folders = [...state.workspaceFolders] }
     if (!wsList.find(w => w.path === targetPath)) {
       wsList.push(reactive({ path: targetPath, name: state.workspaceName, folders: [...state.workspaceFolders], notify: false }))
-      saveWsList()
     }
+    await saveWsList()
     savePersistentState()
   } catch (err) {
     console.error('切换工作区失败:', err)
@@ -204,117 +214,20 @@ async function switchWorkspace(targetPath) {
 }
 
 function saveCurrentConversations() {
-  if (typeof state.workspaceRoot !== 'string' || !state.workspaceRoot) return
-  try {
-    // 使用 btoa 生成兼容旧版数据的 key（与原有 localStorage 数据结构一致）
-    const key = 'conv_' + btoa(unescape(encodeURIComponent(state.workspaceRoot))).slice(0, 40)
-    // 收集所有有消息的对话
-    const allData = {}
-    const ctxStats = {}
-    for (const convId of Object.keys(state.messagesByConv)) {
-      const msgs = state.messagesByConv[convId]
-      if (msgs && msgs.length > 0) {
-        allData[convId] = msgs.map(m => ({
-          role: m.role,
-          content: m.content,
-          segments: m.segments || [],
-          _time: m._time || '',
-        }))
-      }
-      // 持久化上下文 token 统计（用于进程重启后恢复上下文占用数据）
-      const cs = state.convCtxStatsByConv[convId]
-      if (cs && cs.promptTokens > 0) {
-        ctxStats[convId] = {
-          promptTokens: cs.promptTokens,
-          completionTokens: cs.completionTokens,
-          cacheHitTokens: cs.cacheHitTokens,
-          cacheMissTokens: cs.cacheMissTokens,
-          systemTokens: cs.systemTokens,
-          skillsTokens: cs.skillsTokens,
-          mcpTokens: cs.mcpTokens,
-          toolTokens: cs.toolTokens,
-          historyTokens: cs.historyTokens,
-          otherTokens: cs.otherTokens,
-        }
-      }
-    }
-    localStorage.setItem(key, JSON.stringify({
-      conversations: state.conversations,
-      currentConvId: state.currentConvId,
-      messagesByConv: allData,
-      convCtxStats: ctxStats,
-    }))
-  } catch (e) {
-    console.warn('保存对话消息失败（localStorage 可能已满）:', e)
-    // 降级：只保存对话列表
-    try {
-      const key = 'conv_' + btoa(unescape(encodeURIComponent(state.workspaceRoot))).slice(0, 40)
-      localStorage.setItem(key, JSON.stringify({
-        conversations: state.conversations,
-        currentConvId: state.currentConvId,
-      }))
-    } catch {}
-  }
+  // 对话消息由后端持久化到磁盘，前端不再缓存到 localStorage
 }
 
 async function loadConversationsForWorkspace(path) {
+  // 当前对话的消息全部从后端 API 拉取（后端已持久化到磁盘）
   state.conversations = []
   state.currentConvId = ''
   state.messages = []
   if (typeof path !== 'string' || !path) return
   try {
-    const key = 'conv_' + btoa(unescape(encodeURIComponent(path))).slice(0, 40)
-    const saved = localStorage.getItem(key)
-    if (!saved) return
-    const data = JSON.parse(saved)
-    state.conversations = data.conversations || []
-    state.currentConvId = data.currentConvId || ''
-
-    // 恢复新格式 messagesByConv（多对话保存）
-    if (data.messagesByConv) {
-      for (const convId of Object.keys(data.messagesByConv)) {
-        const msgs = data.messagesByConv[convId]
-        if (!Array.isArray(msgs) || msgs.length === 0) continue
-        state.messagesByConv[convId] = msgs.map((m, idx) => ({
-          role: m.role,
-          content: m.content || '',
-          segments: (m.segments || []).map(s => ({ ...s })),
-          _key: 'msg_' + Date.now() + '_' + idx,
-          _idx: idx,
-          _time: m._time || '',
-          _loading: false,
-        }))
-      }
-    } else if (data.messages) {
-      // 兼容旧格式（只保存当前对话的 messages）
-      state.messages = (data.messages || []).map(m => {
-        if (m._loading) m._loading = false
-        if (!m.content && m.segments && m.segments.length > 0) {
-          m.content = m.segments.filter(s => s.type === 'content').map(s => s.content || '').join('')
-        }
-        return m
-      })
-      if (state.currentConvId) {
-        state.messagesByConv[state.currentConvId] = state.messages
-      }
-    }
-
-    // 同步当前对话
-    if (state.currentConvId && state.messagesByConv[state.currentConvId]) {
-      state.messages = state.messagesByConv[state.currentConvId]
-    }
-
-    // 恢复上下文 token 统计
-    if (data.convCtxStats) {
-      for (const convId of Object.keys(data.convCtxStats)) {
-        const saved = data.convCtxStats[convId]
-        if (!saved || saved.promptTokens <= 0) continue
-        const cs = getConvCtxStats(convId)
-        if (cs) Object.assign(cs, saved)
-      }
-    }
+    const list = await api.apiGet('/conversations', { workspace: path })
+    state.conversations = list || []
   } catch (e) {
-    console.warn('加载对话消息失败:', e)
+    console.warn('从后端加载对话消息失败:', e)
   }
 }
 
@@ -420,7 +333,7 @@ onMounted(async () => {
     state.settingsLoaded = true
   } catch {}
 
-  loadWsList()
+  await loadWsList()
   if (state.workspaceRoot) {
     await loadConversationsForWorkspace(state.workspaceRoot)
     try {
@@ -461,7 +374,7 @@ onMounted(async () => {
   const _onOpenMarketplace = () => { showMarketplace.value = true }
   const _onOpenSettings = () => { showSettings.value = true }
   const _onStopAgent = () => { window.dispatchEvent(new CustomEvent('agent-stop')) }
-  const _onSaveConversations = () => { saveCurrentConversations(); checkNotifications(); saveWsList() }
+  const _onSaveConversations = async () => { saveCurrentConversations(); checkNotifications(); await saveWsList() }
   const _onOpenWorkspaceDialog = () => { state.activeActivity = 'explorer'; state.sidebarVisible = true }
   const _onSwitchWorkspace = async (e) => { if (e.detail?.path) await switchWorkspace(e.detail.path) }
 
@@ -497,8 +410,8 @@ onUnmounted(() => {
 state.notificationCount = 0
 state.workspaceName = state.workspaceName || ''
 
-watch(() => state.messages.length, () => {
-  saveCurrentConversations(); checkNotifications(); saveWsList()
+watch(() => state.messages.length, async () => {
+  saveCurrentConversations(); checkNotifications(); await saveWsList()
 })
 
 let persistTimer = null

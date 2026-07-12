@@ -152,7 +152,7 @@ function folderParent(folderPath) {
 async function switchToWorkspace(ws) {
   if (ws.path === state.workspaceRoot) return
 
-  // 保存当前对话
+  // 对话消息已由后端持久化，前端不再缓存到 localStorage
   saveCurrentConversations()
   try {
     const folders = ws.folders || []
@@ -181,82 +181,25 @@ async function switchToWorkspace(ws) {
   }
 }
 
-
-function makeConvKey(path) {
-  if (typeof path !== 'string' || !path) return ''
-  const safe = encodeURIComponent(path).replace(/%[0-9A-F]{2}/g, '').slice(0, 64)
-  return 'conv_' + safe
-}
-
 function saveCurrentConversations() {
-  if (typeof state.workspaceRoot !== 'string' || !state.workspaceRoot) return
-  const key = makeConvKey(state.workspaceRoot)
-  if (!key) return
-  try {
-    const allData = {}
-    for (const convId of Object.keys(state.messagesByConv)) {
-      const msgs = state.messagesByConv[convId]
-      if (msgs && msgs.length > 0) {
-        allData[convId] = msgs.map(m => ({
-          role: m.role,
-          content: m.content,
-          segments: m.segments || [],
-          _time: m._time || '',
-        }))
-      }
-    }
-    localStorage.setItem(key, JSON.stringify({
-      conversations: state.conversations,
-      currentConvId: state.currentConvId,
-      messagesByConv: allData,
-    }))
-  } catch (e) {
-    console.warn('保存对话消息失败:', e)
-    try {
-      localStorage.setItem(key, JSON.stringify({
-        conversations: state.conversations,
-        currentConvId: state.currentConvId,
-        messagesByConv: {},
-      }))
-    } catch (e2) {
-      console.warn('降级保存也失败:', e2)
-    }
-  }
+  // 对话消息由后端持久化到磁盘，前端不再缓存
 }
 
 async function loadConversationsForWorkspace(path) {
+  // 从后端 API 拉取（后端已持久化到磁盘）
+  state.conversations = []
+  state.currentConvId = ''
+  state.messages = []
   if (typeof path !== 'string' || !path) return
-  const key = makeConvKey(path)
-  if (!key) return
   try {
-    const saved = localStorage.getItem(key)
-    if (!saved) return
-    const data = JSON.parse(saved)
-    state.conversations = data.conversations || []
-    state.currentConvId = data.currentConvId || ''
-
-    if (data.messagesByConv) {
-      for (const convId of Object.keys(data.messagesByConv)) {
-        const msgs = data.messagesByConv[convId]
-        if (!Array.isArray(msgs) || msgs.length === 0) continue
-        state.messagesByConv[convId] = msgs.map((m, idx) => ({
-          role: m.role,
-          content: m.content || '',
-          segments: (m.segments || []).map(s => ({ ...s })),
-          _key: 'msg_' + Date.now() + '_' + idx,
-          _idx: idx,
-          _time: m._time || '',
-          _loading: false,
-        }))
-      }
-    }
-
-    if (state.currentConvId && state.messagesByConv[state.currentConvId]) {
-      state.messages = state.messagesByConv[state.currentConvId]
-    }
+    const list = await api.apiGet('/conversations', { workspace: path })
+    state.conversations = list || []
   } catch (e) {
-    console.warn('加载对话消息失败:', e)
-  }
+    console.warn('从后端加载对话消息失败:', e)
+
+
+}
+
 }
 
 
@@ -299,14 +242,14 @@ async function showWsContextMenu(e, ws) {
       const name = await window.$prompt('新名称:', ws.name, '重命名工作区')
       if (name && name.trim()) {
         ws.name = name.trim()
-        saveWsList()
+        await saveWsList()
       }
       break
     }
     case 'delete':
       if (!(await window.$confirm(`确认删除工作区 "${ws.name}" ？（不会删除文件）`))) return
       state.wsList = state.wsList.filter(w => w.path !== ws.path)
-      saveWsList()
+      await saveWsList()
       if (state.workspaceRoot === ws.path) {
         state.workspaceRoot = state.wsList[0]?.path || ''
         state.workspaceName = state.wsList[0]?.name || ''
@@ -339,19 +282,21 @@ async function createWorkspace() {
       newWsName.value = ''
       newWsPath.value = ''
       await switchToWorkspace(ws)
-      saveWsList()
+      await saveWsList()
     }
   } catch (err) { wsError.value = err.message }
 }
 
-function saveWsList() {
+async function saveWsList() {
+  // 同步工作区列表到后端 settings.recentProjects
   try {
-    const data = state.wsList.map(w => ({
-      path: w.path, name: w.name,
-      folders: w.folders || [], notify: !!w.notify,
-    }))
-    localStorage.setItem('paircode-workspaces', JSON.stringify(data.slice(0, 20)))
-  } catch {}
+    const settings = await api.apiGet('/settings')
+    settings.recentProjects = (state.wsList || []).slice(0, 20).map(w => w.path).filter(Boolean)
+    await api.apiPut('/settings', settings)
+  } catch (e) {
+
+
+}
 }
 
 // ── 目录浏览 ──
@@ -457,8 +402,10 @@ async function refreshCurrentWs() {
     state.workspaceFolders = health.folders || []
     const cur = state.wsList.find(w => w.path === state.workspaceRoot)
     if (cur) cur.folders = [...state.workspaceFolders]
-    saveWsList()
-  } catch {}
+    await saveWsList()
+  } catch (e) {
+    console.warn('刷新工作区失败:', e)
+  }
 }
 
 async function refreshAll() {
@@ -471,9 +418,11 @@ async function refreshAll() {
         ws.folders = [...state.workspaceFolders]
       }
     }
-    saveWsList()
-  } catch {}
-  window.dispatchEvent(new CustomEvent('refresh-tree'))
+    await saveWsList()
+    window.dispatchEvent(new CustomEvent('refresh-tree'))
+  } catch (e) {
+    console.warn('刷新全部失败:', e)
+  }
 }
 
 function openFile(path) {
