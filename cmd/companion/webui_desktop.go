@@ -615,12 +615,14 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 	// 历史中含上一轮的系统消息，和当前系统提示前缀相同——保留它以最大化 LLM 缓存命中
 	// （连续请求共享相同 prompt 前缀时命中 KV-cache，大幅降低延迟与成本）。
 	var history []agent.Message
+	var compressedSummaries []string
 	if convID != "" {
 		s.mu.Lock()
 		cached, ok := s.historyCache[convID]
 		s.mu.Unlock()
 		if ok {
-			history = cached
+			history = cached.Messages
+			compressedSummaries = cached.CompressedSummaries
 		} else {
 			history = s.loadConversationHistory(convID)
 		}
@@ -637,14 +639,15 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 	}
 
 	return agent.LoopOpts{
-		Provider:         prov,
-		Registry:         reg,
-		System:           sys,
-		MaxIterations:    maxIter,
-		MaxContextTokens: core.Settings.ContextMaxTokens,
-		Compressor:       buildWebCompressor(),
-		History:          history,
-		Autonomous:       autonomous,
+		Provider:            prov,
+		Registry:            reg,
+		System:              sys,
+		MaxIterations:       maxIter,
+		MaxContextTokens:    core.Settings.ContextMaxTokens,
+		Compressor:          buildWebCompressor(),
+		History:             history,
+		CompressedSummaries: compressedSummaries,
+		Autonomous:          autonomous,
 	}
 }
 
@@ -712,10 +715,18 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 }
 
 // startEventPersistWorker 启动后台 goroutine 订阅全局事件流，
-// 处理 token 持久化（EventUsage）和历史持久化（EventDone）。
+// 处理 token 持久化（EventUsage）和历史持久化（EventDone/定期）。
 // 替代原 handleChatEvents 中的持久化逻辑，与传输层（WebSocket）解耦。
 func (s *webServer) startEventPersistWorker() {
 	ch := agentMgr.SubscribeAll()
+	// 定期持久化后台协程：每 5 秒保存所有运行中会话的历史到磁盘
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			s.persistRunningHistories()
+		}
+	}()
 	go func() {
 		for ge := range ch {
 			convID := ge.ConvID
@@ -745,11 +756,22 @@ func (s *webServer) startEventPersistWorker() {
 					conversationsMu.Unlock()
 					saveConversations()
 				}
+				// 每次 LLM 调用后保存历史（防页面刷新/崩溃丢失上下文）
+				if convID != "" {
+					if hist := agentMgr.GetCurrentHistory(convID); hist != nil {
+						summaries := agentMgr.GetCurrentCompressedSummaries(convID)
+						s.mu.Lock()
+						s.historyCache[convID] = &CachedSession{Messages: hist, CompressedSummaries: summaries}
+						s.mu.Unlock()
+						s.saveHistoryCache()
+					}
+				}
 			}
 			if e.Type == agent.EventDone {
 				if hist := agentMgr.GetHistory(convID); hist != nil {
+					summaries := agentMgr.GetCurrentCompressedSummaries(convID)
 					s.mu.Lock()
-					s.historyCache[convID] = hist
+					s.historyCache[convID] = &CachedSession{Messages: hist, CompressedSummaries: summaries}
 					s.mu.Unlock()
 					s.saveHistoryCache()
 				}
@@ -760,6 +782,21 @@ func (s *webServer) startEventPersistWorker() {
 			}
 		}
 	}()
+}
+
+// persistRunningHistories 持久化所有运行中会话的实时历史到磁盘。
+// 由 startEventPersistWorker 的定期后台协程调用（每 5 秒），
+// 确保页面刷新或进程崩溃时上下文不丢失。
+func (s *webServer) persistRunningHistories() {
+	for _, convID := range agentMgr.ListRunning() {
+		if hist := agentMgr.GetCurrentHistory(convID); hist != nil {
+			summaries := agentMgr.GetCurrentCompressedSummaries(convID)
+			s.mu.Lock()
+			s.historyCache[convID] = &CachedSession{Messages: hist, CompressedSummaries: summaries}
+			s.mu.Unlock()
+		}
+	}
+	s.saveHistoryCache()
 }
 
 // handleChatStop 停止指定会话的 agent 运行。

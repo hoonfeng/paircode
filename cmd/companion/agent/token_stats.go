@@ -37,11 +37,11 @@ func tokenStatsPath() string {
 	return filepath.Join(pairDir, "token-stats.json")
 }
 
-// SaveTokenUsage 保存最新一次 LLM 调用的 token 用量（含 PromptBreakdown）到磁盘。
+// SaveTokenUsage 累积 token 用量到磁盘（每次调用叠加，非覆盖）。
 // 这是 agent 自闭环行为：agent 自己管理自己的上下文统计，不依赖外部宿主。
 //
 // 每次 LLM 调用后，Loop.Run 内部自动调用此函数。
-// 前端 / 外部宿主可通过 ReadTokenStats 读取已持久化的统计。
+// 前端 / 外部宿主可通过 ReadTokenStats 读取已持久化的累积统计。
 func SaveTokenUsage(usage *Usage) {
 	if usage == nil {
 		return
@@ -49,19 +49,30 @@ func SaveTokenUsage(usage *Usage) {
 	tokenStatsMu.Lock()
 	defer tokenStatsMu.Unlock()
 
-	latestTokenStats = TokenStats{
-		PromptTokens:     usage.PromptTokens,
-		CompletionTokens: usage.CompletionTokens,
-		TotalTokens:      usage.TotalTokens,
-		CacheHitTokens:   usage.PromptCacheHitTokens,
-		CacheMissTokens:  usage.PromptCacheMissTokens,
-		SystemTokens:     usage.SystemTokens,
-		SkillsTokens:     usage.SkillsTokens,
-		MCPTokens:        usage.MCPTokens,
-		ToolTokens:       usage.ToolTokens,
-		HistoryTokens:    usage.HistoryTokens,
-		OtherTokens:      usage.OtherTokens,
+	// 先从磁盘读出已有累积值（防止跨进程丢失）
+	if path := tokenStatsPath(); path != "" {
+		if data, err := os.ReadFile(path); err == nil {
+			var disk TokenStats
+			if json.Unmarshal(data, &disk) == nil {
+				if disk.TotalTokens > latestTokenStats.TotalTokens {
+					latestTokenStats = disk
+				}
+			}
+		}
 	}
+
+	// 叠加（累积）
+	latestTokenStats.PromptTokens += usage.PromptTokens
+	latestTokenStats.CompletionTokens += usage.CompletionTokens
+	latestTokenStats.TotalTokens += usage.TotalTokens
+	latestTokenStats.CacheHitTokens += usage.PromptCacheHitTokens
+	latestTokenStats.CacheMissTokens += usage.PromptCacheMissTokens
+	latestTokenStats.SystemTokens += usage.SystemTokens
+	latestTokenStats.SkillsTokens += usage.SkillsTokens
+	latestTokenStats.MCPTokens += usage.MCPTokens
+	latestTokenStats.ToolTokens += usage.ToolTokens
+	latestTokenStats.HistoryTokens += usage.HistoryTokens
+	latestTokenStats.OtherTokens += usage.OtherTokens
 
 	path := tokenStatsPath()
 	if path == "" {
@@ -69,6 +80,17 @@ func SaveTokenUsage(usage *Usage) {
 	}
 	data, _ := json.MarshalIndent(latestTokenStats, "", "  ")
 	os.WriteFile(path, data, 0644)
+}
+
+// ResetTokenStats 重置累积 token 统计（全量清零并写盘）。
+func ResetTokenStats() {
+	tokenStatsMu.Lock()
+	defer tokenStatsMu.Unlock()
+	latestTokenStats = TokenStats{}
+	if path := tokenStatsPath(); path != "" {
+		data, _ := json.MarshalIndent(latestTokenStats, "", "  ")
+		os.WriteFile(path, data, 0644)
+	}
 }
 
 // ReadTokenStats 从磁盘读取已持久化的 token 统计。

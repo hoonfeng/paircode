@@ -24,7 +24,8 @@ const (
 	compactCooldownTurns = 4   // 压缩后冷却轮数：期间不再压缩（复刻参考 refreshCooldown，防每轮重复压缩/反复摘要）
 )
 
-// maybeCompact 若上下文超窗口阈值，把中段老消息压成摘要后返回新 msgs；否则原样返回。
+// maybeCompact 若上下文超窗口阈值，把中段老消息压成摘要后存入 l.CompressedSummaries，
+// 并从中段移除被压缩的消息（不插入摘要消息到历史中——摘要注入系统提示的可变部分）。
 // 复刻参考主动压缩：tokens 优先用上一轮 API 实测 prompt_tokens（含模板开销更可信），否则启发式估算。
 func (l *Loop) maybeCompact(ctx context.Context, msgs []Message) []Message {
 	if l.MaxContextTokens <= 0 {
@@ -41,18 +42,21 @@ func (l *Loop) maybeCompact(ctx context.Context, msgs []Message) []Message {
 	if float64(tokens) < compactRatio*float64(l.MaxContextTokens) {
 		return msgs // 未超阈值
 	}
-	out, dropped := l.compact(ctx, msgs)
+	out, summary, dropped := l.compact(ctx, msgs)
 	if dropped <= 0 {
 		return msgs // 没压成（中段太短，或全是要保的配对）
 	}
+	// 摘要存入 CompressedSummaries（注入系统提示可变部分时使用）
+	l.CompressedSummaries = append(l.CompressedSummaries, summary)
 	l.compactCooldown = compactCooldownTurns // 进入冷却，避免下几轮反复压缩
 	l.lastPromptTokens = 0                    // 重置：压缩后等下轮实测/重新估算
-	l.emit(Event{Type: EventCompacted, Content: fmt.Sprintf("上下文已压缩 · 早期 %d 条对话合并为摘要，保留最近 %d 条", dropped, len(out)-prefixLen(out)-1)})
+	l.emit(Event{Type: EventCompacted, Content: fmt.Sprintf("上下文已压缩 · 早期 %d 条对话合并为摘要，保留最近 %d 条", dropped, prefixLen(out))})
 	return out
 }
 
-// compact 执行压缩：系统前缀 + 一条摘要 + 最近段。返回新 msgs 与被压缩(丢弃)的条数。
-func (l *Loop) compact(ctx context.Context, msgs []Message) ([]Message, int) {
+// compact 执行压缩。返回：新 msgs（不含摘要消息）、摘要文本、被压缩条数。
+// 摘要注入系统提示可变部分而非插入历史消息，以保持 system 前缀稳定。
+func (l *Loop) compact(ctx context.Context, msgs []Message) ([]Message, string, int) {
 	prefix := prefixLen(msgs) // 开头连续 system 条数（恒留）
 	keepFrom := len(msgs) - compactKeepRecent
 	if keepFrom < prefix {
@@ -65,14 +69,14 @@ func (l *Loop) compact(ctx context.Context, msgs []Message) ([]Message, int) {
 	}
 	dropped := msgs[prefix:keepFrom]
 	if len(dropped) < compactMinDrop {
-		return msgs, 0 // 中段太短，不值得压
+		return msgs, "", 0 // 中段太短，不值得压
 	}
 	summary := l.summarize(ctx, dropped)
-	out := make([]Message, 0, prefix+1+len(msgs)-keepFrom)
+	// 不插入摘要消息到 out——摘要将通过系统提示可变部分注入
+	out := make([]Message, 0, prefix+len(msgs)-keepFrom)
 	out = append(out, msgs[:prefix]...)
-	out = append(out, Message{Role: RoleSystem, Content: summary})
 	out = append(out, msgs[keepFrom:]...)
-	return out, len(dropped)
+	return out, summary, len(dropped)
 }
 
 // summarize 把丢弃的中段消息压成一条摘要文本（带标记前缀）。

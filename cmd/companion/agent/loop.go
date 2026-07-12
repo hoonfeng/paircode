@@ -82,6 +82,16 @@ type Loop struct {
 	Compressor       Provider
 	MaxContextTokens int
 
+	// CompressedSummaries 累积的上下文压缩摘要列表。
+	// 每次 maybeCompact 压缩中段老消息后追加一条摘要。
+	// 这些摘要不插入历史消息，而是注入系统提示的可变部分（buildSystemWithSummaries），
+	// 以保持 system 前缀稳定、语义清晰（系统提示的「项目当前状态」段自然包含摘要）。
+	CompressedSummaries []string
+
+	// compressedSummariesInjected 已注入系统提示的摘要数量。
+	// 用于避免每次迭代都重新注入（仅在新增摘要时更新 msgs[0]）。
+	compressedSummariesInjected int
+
 	lastPromptTokens int // 上一轮 API 实测 prompt_tokens（驱动压缩阈值，比纯估算可信）
 	compactCooldown  int // 压缩后冷却剩余轮数（防每轮重复压缩，复刻参考 refreshCooldown）
 
@@ -153,6 +163,13 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 		}
 
 		msgs = l.maybeCompact(ctx, msgs) // 超窗口阈值则把中段老消息压成摘要（见 compress.go）
+
+		// ── 将压缩摘要注入系统提示的可变部分（而非插入历史消息）──
+		// 仅在新增摘要时更新 msgs[0]。Content，避免每轮都改导致缓存前缀变化。
+		if len(l.CompressedSummaries) > l.compressedSummariesInjected && len(msgs) > 0 && msgs[0].Role == RoleSystem {
+			msgs[0].Content = l.buildSystemWithSummaries()
+			l.compressedSummariesInjected = len(l.CompressedSummaries)
+		}
 
 		// ── 检查用户运行时反馈（补充/纠正）──
 		if l.OnFeedback != nil {
@@ -268,6 +285,26 @@ func hasSystem(msgs []Message) bool {
 		}
 	}
 	return false
+}
+
+// buildSystemWithSummaries 构建包含压缩摘要的系统提示词。
+// 在 l.System 的可变部分末尾追加「上下文压缩摘要」段。
+// 摘要仅在中段老消息被压缩时变化，保持 system 前缀稳定、最大化缓存命中。
+func (l *Loop) buildSystemWithSummaries() string {
+	if len(l.CompressedSummaries) == 0 {
+		return l.System
+	}
+	var b strings.Builder
+	b.WriteString(l.System)
+	b.WriteString("\n\n# 上下文已压缩——历史摘要\n\n")
+	b.WriteString("> 以下为之前轮次的消息摘要，Agent 应据此感知已完成的历史上下文。\n> 请勿重复执行摘要中已包含的任务。\n\n")
+	for i, s := range l.CompressedSummaries {
+		if i > 0 {
+			b.WriteString("\n\n---\n\n")
+		}
+		b.WriteString(s)
+	}
+	return b.String()
 }
 
 

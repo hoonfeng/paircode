@@ -41,7 +41,13 @@ type webServer struct {
 	// historyCache 持久化对话历史缓存（convID → 完整 []Message）。
 	// 替代 loadConversationHistory + BuildHistory 模式。
 	// loop.Run 返回的完整 msgs 缓存于此，下次同 convID 请求直接复用（传 nil history，loop.Run 自动使用 l.History）。
-	historyCache map[string][]agent.Message
+	historyCache map[string]*CachedSession
+}
+
+// CachedSession 持久化缓存的会话状态（历史消息 + 压缩摘要）。
+type CachedSession struct {
+	Messages            []agent.Message `json:"messages"`
+	CompressedSummaries []string        `json:"compressedSummaries,omitempty"`
 }
 
 // agentMgr 全局会话管理器：管理并行 agent 会话（Start/Stop/Subscribe 等）。
@@ -86,7 +92,7 @@ func (s *webServer) loadHistoryCache() {
 	if err != nil {
 		return // 文件不存在或读取失败 → 保持空 map
 	}
-	var cached map[string][]agent.Message
+	var cached map[string]*CachedSession
 	if err := json.Unmarshal(data, &cached); err != nil {
 		return
 	}
@@ -103,7 +109,7 @@ func startWebUI(port int) {
 	}
 	ws = &webServer{
 		port:         port,
-		historyCache: make(map[string][]agent.Message),
+		historyCache: make(map[string]*CachedSession),
 	}
 	ws.loadHistoryCache() // 从磁盘恢复历史缓存
 	memory.SetRoot(core.Root())

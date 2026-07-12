@@ -23,6 +23,7 @@ type LoopOpts struct {
 	MaxContextTokens int         // 上下文 token 上限（>0 启用压缩）
 	Compressor       Compressor  // 上下文压缩器（可空）
 	History          []Message   // 初始历史（首次为空；续跑时传上一轮 History）
+	CompressedSummaries []string // 已持久化的压缩摘要（页面刷新后恢复）
 	Autonomous       bool        // 自主模式标志
 	WorkspaceRoot    string      // 工作区根路径（用于跨工作区并行对话的状态指示与隔离）
 }
@@ -139,6 +140,7 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		Compressor:       opts.Compressor,
 		Autonomous:       opts.Autonomous,
 		History:          CopyHistory(opts.History), // 自闭环模式：loop 自己管理持久历史
+		CompressedSummaries: opts.CompressedSummaries, // 恢复已持久化的压缩摘要
 	}
 
 	// OnEvent：将事件写入 session.Events（非阻塞，满则丢弃防阻塞 Loop）
@@ -384,16 +386,43 @@ func (m *SessionManager) IsRunning(convID string) bool {
 	return sess.Running
 }
 
-// GetHistory 返回指定会话的 History 副本（深复制，调用方可安全修改）。
-// 会话不存在返回 nil。
+// GetHistory 返回指定会话的已结束 History 副本（深复制，调用方可安全修改）。
+// 仅在会话结束后（Loop.Run 返回后）可用。会话不存在或正在运行返回 nil。
 func (m *SessionManager) GetHistory(convID string) []Message {
 	m.mu.RLock()
 	sess, ok := m.sessions[convID]
 	m.mu.RUnlock()
-	if !ok {
+	if !ok || sess.Running {
 		return nil
 	}
 	return CopyHistory(sess.History)
+}
+
+// GetCurrentHistory 返回指定会话的当前运行中 History 副本（深复制）。
+// 会话正在运行时读取 Loop 的实时历史（含本轮所有 tool_calls/tool_results）。
+// 会话不存在或 Loop 尚未开始返回 nil。
+func (m *SessionManager) GetCurrentHistory(convID string) []Message {
+	m.mu.RLock()
+	sess, ok := m.sessions[convID]
+	m.mu.RUnlock()
+	if !ok || sess.Loop == nil {
+		return nil
+	}
+	return CopyHistory(sess.Loop.History)
+}
+
+// GetCurrentCompressedSummaries 返回指定会话当前压缩摘要列表（深复制）。
+// 页面刷新后恢复时使用。会话不存在或 Loop 尚未开始返回 nil。
+func (m *SessionManager) GetCurrentCompressedSummaries(convID string) []string {
+	m.mu.RLock()
+	sess, ok := m.sessions[convID]
+	m.mu.RUnlock()
+	if !ok || sess.Loop == nil {
+		return nil
+	}
+	out := make([]string, len(sess.Loop.CompressedSummaries))
+	copy(out, sess.Loop.CompressedSummaries)
+	return out
 }
 
 // ListRunning 返回所有 Running=true 的 convID 列表。

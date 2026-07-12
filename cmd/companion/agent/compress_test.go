@@ -41,22 +41,24 @@ func makeConvo(n int) []Message {
 	return msgs
 }
 
-// TestCompactStructure 压缩后：保系统前缀 + 一条摘要 + 最近段；总数变少；规则式摘要含目标。
+// TestCompactStructure 压缩后：保系统前缀 + 移除中段；总数变少；摘要字符串含目标。
 func TestCompactStructure(t *testing.T) {
 	l := &Loop{} // 无 Compressor → 规则式摘要
 	msgs := makeConvo(20)
-	out, dropped := l.compact(context.Background(), msgs)
+	out, summary, dropped := l.compact(context.Background(), msgs)
 	if dropped <= 0 {
 		t.Fatal("应有中段被压缩")
 	}
 	if out[0].Role != RoleSystem {
 		t.Error("系统前缀应保留在首位")
 	}
-	if out[1].Role != RoleSystem || !strings.Contains(out[1].Content, "[上下文已压缩") {
-		t.Errorf("第二条应为摘要消息，得 %q", out[1].Content)
+	// 不再插入摘要消息——摘要由返回的 summary 携带，注入系统提示可变部分
+	if !strings.Contains(summary, "## 目标") || !strings.Contains(summary, "重构") {
+		t.Errorf("规则摘要应含目标，得 %q", summary)
 	}
-	if !strings.Contains(out[1].Content, "## 目标") || !strings.Contains(out[1].Content, "重构") {
-		t.Errorf("规则摘要应含目标，得 %q", out[1].Content)
+	// 摘要前缀带标记（与 summarize() 一致）
+	if !strings.HasPrefix(summary, "[上下文已压缩") {
+		t.Errorf("摘要应以标记开头，得 %q", summary)
 	}
 	if len(out) >= len(msgs) {
 		t.Errorf("压缩后应更短：%d → %d", len(msgs), len(out))
@@ -73,16 +75,16 @@ func TestCompactToolPairing(t *testing.T) {
 	// 造让 keepFrom(=len-16) 恰好落在 tool 上：system+user + 偶数对后再补一条 assistant 使 len 为奇。
 	msgs := makeConvo(20)
 	msgs = append(msgs, Message{Role: RoleAssistant, Content: "继续"})
-	out, dropped := l.compact(context.Background(), msgs)
+	out, _, dropped := l.compact(context.Background(), msgs)
 	if dropped <= 0 {
 		t.Fatal("应有中段被压缩")
 	}
-	// out[0]=system, out[1]=摘要(user)，out[2]=最近段首条——绝不能是孤立 tool 结果。
-	if out[2].Role == RoleTool {
-		t.Errorf("最近段首条不应为孤立 tool 结果（破坏配对）：%+v", out[2])
+	// out[0]=system, out[1]=最近段首条——绝不能是孤立 tool 结果。
+	if out[1].Role == RoleTool {
+		t.Errorf("最近段首条不应为孤立 tool 结果（破坏配对）：%+v", out[1])
 	}
 	// 全量校验：最近段里每条 tool 之前必有带 tool_calls 的 assistant。
-	tail := out[2:]
+	tail := out[1:]
 	for i, m := range tail {
 		if m.Role != RoleTool {
 			continue
@@ -103,16 +105,16 @@ func TestCompactToolPairing(t *testing.T) {
 	}
 }
 
-// TestCompactLLMMode 有 Compressor → 用其摘要（mock 返回固定文本），摘要进压缩消息。
+// TestCompactLLMMode 有 Compressor → 用其摘要（mock 返回固定文本），摘要通过返回值携带。
 func TestCompactLLMMode(t *testing.T) {
 	mock := &MockProvider{Responses: []Message{{Role: RoleAssistant, Content: "已读取 20 个配置文件并完成重构计划。"}}}
 	l := &Loop{Compressor: mock}
-	out, dropped := l.compact(context.Background(), makeConvo(20))
+	_, summary, dropped := l.compact(context.Background(), makeConvo(20))
 	if dropped <= 0 {
 		t.Fatal("应有中段被压缩")
 	}
-	if !strings.Contains(out[1].Content, "LLM 摘要") || !strings.Contains(out[1].Content, "完成重构计划") {
-		t.Errorf("应使用 LLM 摘要，得 %q", out[1].Content)
+	if !strings.Contains(summary, "LLM 摘要") || !strings.Contains(summary, "完成重构计划") {
+		t.Errorf("应使用 LLM 摘要，得 %q", summary)
 	}
 	if mock.Calls() != 1 {
 		t.Errorf("Compressor 应被调用 1 次，得 %d", mock.Calls())
@@ -123,9 +125,9 @@ func TestCompactLLMMode(t *testing.T) {
 func TestCompactLLMFallback(t *testing.T) {
 	mock := &MockProvider{Responses: []Message{{Role: RoleAssistant, Content: "短"}}}
 	l := &Loop{Compressor: mock}
-	out, _ := l.compact(context.Background(), makeConvo(20))
-	if !strings.Contains(out[1].Content, "规则摘要") {
-		t.Errorf("过短摘要应回退规则式，得 %q", out[1].Content)
+	_, summary, _ := l.compact(context.Background(), makeConvo(20))
+	if !strings.Contains(summary, "规则摘要") {
+		t.Errorf("过短摘要应回退规则式，得 %q", summary)
 	}
 }
 
@@ -153,7 +155,7 @@ func TestMaybeCompactTrigger(t *testing.T) {
 		t.Error("未压缩不应发 EventCompacted")
 	}
 
-	// 超阈值：窗口很小 → 压缩 + 发事件
+	// 超阈值：窗口很小 → 压缩 + 发事件 + 摘要存入 CompressedSummaries
 	l = &Loop{MaxContextTokens: 100, OnEvent: func(e Event) {
 		if e.Type == EventCompacted {
 			events++
@@ -165,6 +167,12 @@ func TestMaybeCompactTrigger(t *testing.T) {
 	}
 	if events != 1 {
 		t.Errorf("压缩应发 1 次 EventCompacted，得 %d", events)
+	}
+	if len(l.CompressedSummaries) != 1 {
+		t.Errorf("摘要应存入 CompressedSummaries，得 %d 条", len(l.CompressedSummaries))
+	}
+	if !strings.Contains(l.CompressedSummaries[0], "## 目标") {
+		t.Errorf("规则摘要应含目标段，得 %q", l.CompressedSummaries[0])
 	}
 }
 
