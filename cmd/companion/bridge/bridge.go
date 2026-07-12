@@ -222,10 +222,11 @@ func (b *AgentBridge) Start(task string) {
 	b.reloadLuaTools() // Lua 自定义工具：每次发送热重载（.pair/tools/*.lua 增删改即时生效）
 	// 写类工具审批门（每次发送按当前设置重设）：
 	//   AI 审核开 → 审核模型自动裁决（驳回回灌建议）；否则 手动审核(非自主)→ 用户裁决；其余 → 放行。
+	//   注：读取 core.Settings 而非 b.Cs，使 web UI 的 toggle 即时生效。
 	switch {
 	case b.reviewer != nil:
 		b.loop.Approve = b.aiReviewApprove
-	case !b.Cs.AutoReview && !b.Cs.Autonomous:
+	case !core.Settings.AutoReview && !core.Settings.Autonomous:
 		b.loop.Approve = b.approve
 	default:
 		b.loop.Approve = nil

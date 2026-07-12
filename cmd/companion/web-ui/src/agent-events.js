@@ -143,10 +143,14 @@ export function processAgentEvent(convId, data) {
       target._expanded = false
     }
   } else if (data.type === 'approval') {
+    // 解析 args JSON，结构化展示
+    let parsedArgs = {}
+    try { parsedArgs = JSON.parse(data.args || '{}') } catch {}
     state.approvalByConv[convId] = {
       callId: data.callId || data.callID || '',
       tool: data.tool || '',
       args: data.args || '',
+      parsedArgs, // 结构化后的参数
       waiting: true,
     }
   } else if (data.type === 'error') {

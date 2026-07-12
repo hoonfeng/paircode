@@ -127,7 +127,7 @@
         </div>
         <!-- 输入区 -->
         <div class="chat-input-area">
-          <ApprovalBar v-if="approvalState.waiting" :waiting="approvalState.waiting" :tool="approvalState.tool" :args="approvalState.args" @resolve="resolveApproval" />
+          <ApprovalBar v-if="approvalState.waiting" :waiting="approvalState.waiting" :tool="approvalState.tool" :args="approvalState.args" :parsedArgs="approvalState.parsedArgs" @resolve="resolveApproval" />
           <!-- 运行时反馈条（Agent 执行中可补充纠正） -->
           <div v-if="state.chatLoading" class="feedback-bar">
             <input class="feedback-input" v-model="feedbackText" @keydown="onFeedbackKeydown" placeholder="输入补充/纠正信息，Agent 将在下一轮响应中处理..." />
@@ -219,7 +219,7 @@ const containerHeight = ref(600)
 const isNearBottom = ref(true)
 
 // ── 审批状态从全局 state.approvalByConv 读取（仅当前对话）──
-const approvalState = computed(() => state.approvalByConv[state.currentConvId] || { callId: '', tool: '', args: '', waiting: false })
+const approvalState = computed(() => state.approvalByConv[state.currentConvId] || { callId: '', tool: '', args: '', parsedArgs: {}, waiting: false })
 const virtualState = computed(() => {
   const msgs = state.messages
   const total = msgs.length
