@@ -550,7 +550,7 @@ func (s *webServer) handleWorkspace(w http.ResponseWriter, r *http.Request) {
 				jsonErr(w, "需要 root 参数（工作区路径）")
 				return
 			}
-			// 从 recentProjects 中移除
+			// 从 recentProjects 中移除（对话数据保存在各工作区自己的 .pair/ 下，不删除）
 			newProjects := make([]string, 0, len(core.Settings.RecentProjects))
 			for _, p := range core.Settings.RecentProjects {
 				if p != req.Root {
@@ -559,19 +559,6 @@ func (s *webServer) handleWorkspace(w http.ResponseWriter, r *http.Request) {
 			}
 			core.Settings.RecentProjects = newProjects
 			core.Save()
-
-			// 删除该工作区的所有对话
-			loadConversations()
-			conversationsMu.Lock()
-			filtered := make([]Conversation, 0, len(conversations))
-			for _, c := range conversations {
-				if c.WorkspaceRoot != req.Root {
-					filtered = append(filtered, c)
-				}
-			}
-			conversations = filtered
-			conversationsMu.Unlock()
-			saveConversations()
 			jsonResp(w, map[string]any{"ok": true})
 
 
