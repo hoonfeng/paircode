@@ -386,7 +386,7 @@ func (m *SessionManager) IsRunning(convID string) bool {
 	return sess.Running
 }
 
-// GetHistory 返回指定会话的已结束 History 副本（深复制，调用方可安全修改）。
+// GetHistory 返回指定会话的已结束 History 副本（深复制 + 剥离 Reasoning）。
 // 仅在会话结束后（Loop.Run 返回后）可用。会话不存在或正在运行返回 nil。
 func (m *SessionManager) GetHistory(convID string) []Message {
 	m.mu.RLock()
@@ -395,10 +395,10 @@ func (m *SessionManager) GetHistory(convID string) []Message {
 	if !ok || sess.Running {
 		return nil
 	}
-	return CopyHistory(sess.History)
+	return copyHistoryNoReasoning(sess.History)
 }
 
-// GetCurrentHistory 返回指定会话的当前运行中 History 副本（深复制）。
+// GetCurrentHistory 返回指定会话的当前运行中 History 副本（深复制 + 剥离 Reasoning）。
 // 会话正在运行时读取 Loop 的实时历史（含本轮所有 tool_calls/tool_results）。
 // 会话不存在或 Loop 尚未开始返回 nil。
 func (m *SessionManager) GetCurrentHistory(convID string) []Message {
@@ -408,7 +408,18 @@ func (m *SessionManager) GetCurrentHistory(convID string) []Message {
 	if !ok || sess.Loop == nil {
 		return nil
 	}
-	return CopyHistory(sess.Loop.History)
+	return copyHistoryNoReasoning(sess.Loop.History)
+}
+
+// copyHistoryNoReasoning 深复制消息列表并剥离所有 Reasoning（防止 reasoning_content
+// 通过 historyCache 回传给 LLM API 时被错误解释为用户输入，导致 self-loop）。
+func copyHistoryNoReasoning(hist []Message) []Message {
+	out := make([]Message, len(hist))
+	for i, m := range hist {
+		out[i] = m
+		out[i].Reasoning = ""
+	}
+	return out
 }
 
 // GetCurrentCompressedSummaries 返回指定会话当前压缩摘要列表（深复制）。
