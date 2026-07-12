@@ -44,7 +44,6 @@
                     <MarkdownRenderer :text="msg.content" :theme="state.theme" />
                   </div>
                   <div v-else class="user-msg-placeholder">（空消息）</div>
-                  <div class="msg-time">{{ msg._time || '' }}</div>
                 </template>
                 <!-- Agent 分段渲染 -->
                 <template v-if="msg.role === 'assistant' && msg.segments && msg.segments.length > 0">
@@ -109,7 +108,7 @@
                     <div class="tl-body"><MarkdownRenderer :text="msg.content" :theme="state.theme" /></div>
                   </div>
                 </template>
-                <div class="msg-time">{{ msg._time || '' }}</div>
+                <div v-if="msg._time" class="msg-time">{{ msg._time }}</div>
               </div>
               <div v-if="msg._loading" class="msg-loading-dots">
                 <span class="dot"></span><span class="dot"></span><span class="dot"></span>
@@ -833,6 +832,10 @@ onUnmounted(() => {
 .msg-list-wrap { display: flex; flex-direction: column; gap: 8px; min-height: 100%; }
 .msg-item { display: flex; gap: 8px; align-items: flex-start; content-visibility: auto; contain-intrinsic-size: 60px; }
 .msg-user { flex-direction: row-reverse; justify-content: flex-start; gap: 10px; }
+
+
+
+
 .bubble-user {
   flex: 0 0 auto;
   max-width: 75%;
@@ -840,13 +843,16 @@ onUnmounted(() => {
   background: var(--accent);
   color: #fff;
   padding: 10px 16px;
-  border-radius: 16px 16px 16px 4px;
+  border-radius: 16px 4px 4px 16px;
   overflow-wrap: break-word;
   word-break: break-word;
   overflow-wrap: anywhere;
 }
-.user-msg-content { width: 100%; text-align: left; }
-.user-msg-content :deep(p) { margin: 4px 0; white-space: pre-wrap; word-break: break-word; }
+/* 选中文字在深色气泡上可见 */
+.bubble-user ::selection {
+  background: rgba(255, 255, 255, 0.3);
+  color: #fff;
+}
 .user-msg-content :deep(p:first-child) { margin-top: 0; }
 .user-msg-content :deep(p:last-child) { margin-bottom: 0; }
 .user-msg-content :deep(pre) { white-space: pre-wrap; font-size: 12px; background: rgba(0,0,0,0.15); padding: 6px 8px; border-radius: 4px; max-width: 100%; overflow-x: auto; margin: 4px 0; }
