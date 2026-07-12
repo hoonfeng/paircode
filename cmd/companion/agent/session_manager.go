@@ -35,6 +35,10 @@ type LoopOpts struct {
 	ReviewProvider Provider
 	// AutoCommit 任务完成时自动 git add + git commit（仅 finish_task 退出时触发）。
 	AutoCommit bool
+
+	// SaveFunc 实时持久化回调：每轮迭代消息有变化时调用。
+	// 设此函数写入 .pair/conversations.json 等持久化存储。
+	SaveFunc func(messages []Message)
 }
 
 // GlobalEvent 是全局订阅者收到的事件：携带 convID 用于前端路由。
@@ -150,6 +154,7 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		Autonomous:       opts.Autonomous,
 		History:          CopyHistory(opts.History), // 自闭环模式：loop 自己管理持久历史
 		CompressedSummaries: opts.CompressedSummaries, // 恢复已持久化的压缩摘要
+		SaveFunc: opts.SaveFunc, // 实时持久化：每轮迭代写盘
 	}
 
 	// OnEvent：将事件写入 session.Events（非阻塞，满则丢弃防阻塞 Loop）

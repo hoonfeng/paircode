@@ -826,6 +826,54 @@ func loadConversations() {
 		conversations = []Conversation{}
 	}
 }
+// saveLoopMessages 将 Loop 实时产生的消息持久化到 conversations.json。
+// 由 Loop.SaveFunc 回调调用，每轮迭代写入完整 []Message。
+func (s *webServer) saveLoopMessages(convID string, msgs []agent.Message) {
+	loadConversations()
+	conversationsMu.Lock()
+	defer conversationsMu.Unlock()
+	for i := range conversations {
+		if conversations[i].ID == convID {
+			simpleMsgs := make([]struct {
+				Role    string `json:"role"`
+				Content string `json:"content"`
+			}, len(msgs))
+			for j, m := range msgs {
+				content := m.Content
+				if content == "" && m.Reasoning != "" {
+					content = m.Reasoning
+				}
+				if content == "" && len(m.ToolCalls) > 0 {
+					var names []string
+					for _, tc := range m.ToolCalls {
+						names = append(names, tc.Function.Name)
+					}
+					content = "[调用工具: " + strings.Join(names, ", ") + "]"
+				}
+				simpleMsgs[j] = struct {
+					Role    string `json:"role"`
+					Content string `json:"content"`
+				}{Role: string(m.Role), Content: content}
+			}
+			conversations[i].Messages = simpleMsgs
+			conversations[i].UpdatedAt = time.Now().Format("2006-01-02T15:04:05")
+			path := conversationsPath()
+			if path == "" {
+				return
+			}
+			data, err := json.MarshalIndent(conversations, "", "  ")
+			if err != nil {
+				log.Printf("[saveLoopMessages] 序列化失败: %v", err)
+				return
+			}
+			if err := os.WriteFile(path, data, 0644); err != nil {
+				log.Printf("[saveLoopMessages] 写入失败: %v", err)
+			}
+			return
+		}
+	}
+}
+
 
 func saveConversations() {
 	path := conversationsPath()

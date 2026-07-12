@@ -128,6 +128,12 @@ type Loop struct {
 	// Run 的 history 参数传 nil 时自动使用此持久化历史——前端无需自行构建/传递历史。
 	// 传非 nil history 时仍保持向后兼容。
 	History []Message
+
+	// SaveFunc 实时持久化回调：每轮迭代消息有变化时调用（同步、应快速返回）。
+	// 外部（web/桌面层）设为此函数写入 .pair/conversations.json 等持久化存储。
+	// 传入的是本轮累积的完整 []Message，由 SaveFunc 自行决定如何序列化。
+	// 设计意图：Agent 内部实时写盘，前端崩溃/WS 断开也不丢消息。
+	SaveFunc func(messages []Message)
 }
 
 func (l *Loop) emit(e Event) {
@@ -337,6 +343,11 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 			}
 		} else {
 			consecErr = 0
+		}
+
+		// ★ 实时持久化：每轮迭代消息有变化时写盘，前端崩溃也不丢
+		if l.SaveFunc != nil {
+			l.SaveFunc(msgs)
 		}
 
 		// transfer_to_agent：当前 agent 退出，控制权转移给目标 agent（由调用方接管同一 []Message）。
