@@ -227,11 +227,16 @@ export function processAgentDone(convId, data) {
   if (msgs && rt) {
     const msg = msgs[rt.msgIdx]
     if (msg) {
-      msg._loading = false
       msg.content = rt.finalContent
       if (data && data.content) {
         msg.segments.push({ type: 'content', content: data.content })
       }
+    }
+  }
+  // 无论 rt 是否存在，都要清除 loading 状态
+  if (msgs) {
+    for (const m of msgs) {
+      if (m._loading) m._loading = false
     }
   }
   state.loadingByConv[convId] = false
