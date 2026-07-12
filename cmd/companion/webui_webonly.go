@@ -197,10 +197,6 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 		Compressor:       nil, // webonly 模式使用规则式压缩，无需 bridge
 		History:          history,
 		Autonomous:       autonomous,
-		SaveFunc: func(msgs []agent.Message) {
-			// 实时持久化：每轮迭代后将完整消息写入 conversations.json
-			s.saveLoopMessages(convID, msgs)
-		},
 	}
 }
 

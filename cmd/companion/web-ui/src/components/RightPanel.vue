@@ -399,7 +399,8 @@ const sendMessage = async () => {
   // 同步到 state.messages（当前对话快捷引用）
   state.messages = state.messagesByConv[convId]
   if (convId) {
-    // 用户消息由 Agent Loop 内部实时持久化，前端不再写入 conversations.json
+    await api.apiPost('/conversations/' + convId + '/messages', { role: 'user', content: fullContent }).catch(() => {})
+    // 立即用用户消息更新对话标题（不等 onDone，避免 SSE 中断导致标题不更新）
     autoNameConv(convId, lastUserText || fullContent)
     // 本地递增消息计数
     const localConv = state.conversations.find(c => c.id === convId)
@@ -762,7 +763,19 @@ onMounted(() => {
     loadWsTokenStats: () => loadWsTokenStats(),
     autoNameConv: (convId, text) => autoNameConv(convId, text),
     saveConvMsg: (convId, content, msgIdx) => {
-      // 消息已由 Loop 内部实时持久化，前端不再写入
+      // 把 segments 也编码进 content，以便后端拉取后能恢复
+      let payload = { role: 'assistant', content }
+      if (msgIdx !== undefined && state.messagesByConv[convId] && state.messagesByConv[convId][msgIdx]) {
+        const segs = state.messagesByConv[convId][msgIdx].segments
+        if (segs && segs.length > 0) {
+          payload.content = JSON.stringify({
+            _type: 'msg',
+            text: content,
+            segs: segs.map(s => ({ type: s.type, content: s.content, name: s.name, argsRaw: s.argsRaw, result: s.result, question: s.question, callId: s.callId })),
+          })
+        }
+      }
+      api.apiPost('/conversations/' + convId + '/messages', payload).catch(e => console.warn('saveConvMsg 失败:', e))
     },
     onPlanUpdate: (plan, convId) => {
       if (state.currentConvId === convId) { currentPlan.value = [...plan]; planExpanded.value = true }
