@@ -52,7 +52,7 @@ func TestCompactStructure(t *testing.T) {
 	if out[0].Role != RoleSystem {
 		t.Error("系统前缀应保留在首位")
 	}
-	if out[1].Role != RoleUser || !strings.Contains(out[1].Content, "[上下文已压缩") {
+	if out[1].Role != RoleSystem || !strings.Contains(out[1].Content, "[上下文已压缩") {
 		t.Errorf("第二条应为摘要消息，得 %q", out[1].Content)
 	}
 	if !strings.Contains(out[1].Content, "## 目标") || !strings.Contains(out[1].Content, "重构") {

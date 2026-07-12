@@ -70,7 +70,7 @@ func (l *Loop) compact(ctx context.Context, msgs []Message) ([]Message, int) {
 	summary := l.summarize(ctx, dropped)
 	out := make([]Message, 0, prefix+1+len(msgs)-keepFrom)
 	out = append(out, msgs[:prefix]...)
-	out = append(out, Message{Role: RoleUser, Content: summary})
+	out = append(out, Message{Role: RoleSystem, Content: summary})
 	out = append(out, msgs[keepFrom:]...)
 	return out, len(dropped)
 }

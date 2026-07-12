@@ -612,13 +612,22 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 	// ── 加载对话历史（Agent 自闭环管理历史） ──
 	// 有缓存历史时传给 LoopOpts.History，SessionManager.Start 会设置到 loop.History。
 	// 无缓存时从 conversations 存储重建（首次加载）。
+	//
+	// 注意：缓存历史中包含上一轮的旧系统消息。
+	// 必须剥离它，让 loop.Run 注入当前系统提示，避免旧过时上下文误导 Agent。
 	var history []agent.Message
 	if convID != "" {
 		s.mu.Lock()
 		cached, ok := s.historyCache[convID]
 		s.mu.Unlock()
 		if ok {
-			history = cached
+			// 剥离旧系统消息，保留用户/助手/工具消息的对话历史
+			history = make([]agent.Message, 0, len(cached))
+			for _, m := range cached {
+				if m.Role != agent.RoleSystem {
+					history = append(history, m)
+				}
+			}
 		} else {
 			history = s.loadConversationHistory(convID)
 		}
