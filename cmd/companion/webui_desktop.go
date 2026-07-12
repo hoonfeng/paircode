@@ -18,6 +18,7 @@ import (
 
 	"github.com/hoonfeng/paircode/cmd/companion/agent"
 	"github.com/hoonfeng/paircode/cmd/companion/agenttools"
+	"github.com/hoonfeng/paircode/cmd/companion/bridge"
 	"github.com/hoonfeng/paircode/cmd/companion/core"
 	"github.com/hoonfeng/paircode/cmd/companion/roleprompts"
 	marketplacepanel "github.com/hoonfeng/paircode/cmd/companion/ui/marketplace"
@@ -143,7 +144,7 @@ func runOrchestrationLoop(ctx context.Context, prov agent.Provider, reg *agent.R
 			System:           webSysPrompt,
 			MaxIterations:    maxIter,
 			MaxContextTokens: core.Settings.ContextMaxTokens,
-			Compressor:       buildWebCompressor(),
+			Compressor:       bridge.BuildCompressor(),
 			OnEvent: func(e agent.Event) {
 				select {
 				case events <- e:
@@ -429,31 +430,6 @@ func planStepsText(plan agent.Plan) string {
 	return sb.String()
 }
 
-// buildWebCompressor 构建上下文压缩器。
-func buildWebCompressor() agent.Provider {
-	if !core.Settings.CompressEnabled {
-		return nil
-	}
-	key := strings.TrimSpace(core.Settings.CompressAPIKey)
-	if key == "" {
-		key = strings.TrimSpace(core.Settings.APIKey)
-	}
-	base := strings.TrimSpace(core.Settings.CompressBaseURL)
-	if base == "" {
-		base = strings.TrimSpace(core.Settings.BaseURL)
-	}
-	model := strings.TrimSpace(core.Settings.CompressModel)
-	if model == "" || key == "" || base == "" {
-		return nil
-	}
-	return &agent.OpenAIProvider{
-		BaseURL: base, APIKey: key, Model: model,
-		Temperature:  0.3,
-		MaxTokens:    1024,
-		ThinkingMode: "non-thinking",
-	}
-}
-
 // reloadWebLuaTools 加载工作区 .pair/tools/*.lua 自定义工具。
 func reloadWebLuaTools(reg *agent.Registry, root string) {
 	if !core.Settings.LuaTools {
@@ -615,14 +591,12 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 	// 历史中含上一轮的系统消息，和当前系统提示前缀相同——保留它以最大化 LLM 缓存命中
 	// （连续请求共享相同 prompt 前缀时命中 KV-cache，大幅降低延迟与成本）。
 	var history []agent.Message
-	var compressedSummaries []string
 	if convID != "" {
 		s.mu.Lock()
 		cached, ok := s.historyCache[convID]
 		s.mu.Unlock()
 		if ok {
 			history = cached.Messages
-			compressedSummaries = cached.CompressedSummaries
 		} else {
 			history = s.loadConversationHistory(convID)
 		}
@@ -639,15 +613,14 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 	}
 
 	return agent.LoopOpts{
-		Provider:            prov,
-		Registry:            reg,
-		System:              sys,
-		MaxIterations:       maxIter,
-		MaxContextTokens:    core.Settings.ContextMaxTokens,
-		Compressor:          buildWebCompressor(),
-		History:             history,
-		CompressedSummaries: compressedSummaries,
-		Autonomous:          autonomous,
+		Provider:         prov,
+		Registry:         reg,
+		System:           sys,
+		MaxIterations:    maxIter,
+		MaxContextTokens: core.Settings.ContextMaxTokens,
+		Compressor:       bridge.BuildCompressor(),
+		History:          history,
+		Autonomous:       autonomous,
 	}
 }
 
@@ -731,37 +704,11 @@ func (s *webServer) startEventPersistWorker() {
 		for ge := range ch {
 			convID := ge.ConvID
 			e := ge.Event
-			if e.Usage != nil {
-				// 持久化当前对话的上下文统计（含 breakdown 明细）
-				if convID != "" {
-					conversationsMu.Lock()
-					for i := range conversations {
-						if conversations[i].ID == convID {
-							conversations[i].TokenUsage = &ConversationTokenUsage{
-								PromptTokens:     e.Usage.PromptTokens,
-								CompletionTokens: e.Usage.CompletionTokens,
-								TotalTokens:      e.Usage.PromptTokens + e.Usage.CompletionTokens,
-								CacheHitTokens:   e.Usage.PromptCacheHitTokens,
-								CacheMissTokens:  e.Usage.PromptCacheMissTokens,
-								SystemTokens:     e.Usage.SystemTokens,
-								SkillsTokens:     e.Usage.SkillsTokens,
-								MCPTokens:        e.Usage.MCPTokens,
-								ToolTokens:       e.Usage.ToolTokens,
-								HistoryTokens:    e.Usage.HistoryTokens,
-								OtherTokens:      e.Usage.OtherTokens,
-							}
-							break
-						}
-					}
-					conversationsMu.Unlock()
-					saveConversations()
-				}
-				// 每次 LLM 调用后保存历史（防页面刷新/崩溃丢失上下文）
+			// 每次 LLM 调用后保存历史（防页面刷新/崩溃丢失上下文）
 				if convID != "" {
 					if hist := agentMgr.GetCurrentHistory(convID); hist != nil {
-						summaries := agentMgr.GetCurrentCompressedSummaries(convID)
 						s.mu.Lock()
-						s.historyCache[convID] = &CachedSession{Messages: hist, CompressedSummaries: summaries}
+						s.historyCache[convID] = &CachedSession{Messages: hist}
 						s.mu.Unlock()
 						s.saveHistoryCache()
 					}
@@ -769,15 +716,14 @@ func (s *webServer) startEventPersistWorker() {
 			}
 			if e.Type == agent.EventDone {
 				if hist := agentMgr.GetHistory(convID); hist != nil {
-					summaries := agentMgr.GetCurrentCompressedSummaries(convID)
 					s.mu.Lock()
-					s.historyCache[convID] = &CachedSession{Messages: hist, CompressedSummaries: summaries}
+					s.historyCache[convID] = &CachedSession{Messages: hist}
 					s.mu.Unlock()
 					s.saveHistoryCache()
 				}
 				// 异步生成对话摘要
 				if convID != "" {
-					go generateConversationSummary(convID, buildWebCompressor())
+					go generateConversationSummary(convID, bridge.BuildCompressor())
 				}
 			}
 		}
@@ -790,9 +736,8 @@ func (s *webServer) startEventPersistWorker() {
 func (s *webServer) persistRunningHistories() {
 	for _, convID := range agentMgr.ListRunning() {
 		if hist := agentMgr.GetCurrentHistory(convID); hist != nil {
-			summaries := agentMgr.GetCurrentCompressedSummaries(convID)
 			s.mu.Lock()
-			s.historyCache[convID] = &CachedSession{Messages: hist, CompressedSummaries: summaries}
+			s.historyCache[convID] = &CachedSession{Messages: hist}
 			s.mu.Unlock()
 		}
 	}

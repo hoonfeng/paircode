@@ -44,10 +44,9 @@ type webServer struct {
 	historyCache map[string]*CachedSession
 }
 
-// CachedSession 持久化缓存的会话状态（历史消息 + 压缩摘要）。
+// CachedSession 持久化缓存的会话状态（历史消息）。
 type CachedSession struct {
-	Messages            []agent.Message `json:"messages"`
-	CompressedSummaries []string        `json:"compressedSummaries,omitempty"`
+	Messages []agent.Message `json:"messages"`
 }
 
 // agentMgr 全局会话管理器：管理并行 agent 会话（Start/Stop/Subscribe 等）。
@@ -745,25 +744,10 @@ type Conversation struct {
 		Role    string `json:"role"`
 		Content string `json:"content"`
 	} `json:"messages,omitempty"`
-	Summary    string                   `json:"summary,omitempty"`   // AI 生成的对话摘要
-	SummaryAt  string                   `json:"summaryAt,omitempty"` // 摘要生成时间
-	TokenUsage *ConversationTokenUsage  `json:"tokenUsage,omitempty"` // 最后一次 agent 报告的上下文统计
+	Summary    string  `json:"summary,omitempty"`   // AI 生成的对话摘要
+	SummaryAt  string  `json:"summaryAt,omitempty"` // 摘要生成时间
 }
 
-// ConversationTokenUsage 保存对话最后一次 agent 调用后的上下文统计（实际值，非估算）
-type ConversationTokenUsage struct {
-	PromptTokens     int `json:"promptTokens"`
-	CompletionTokens int `json:"completionTokens"`
-	TotalTokens      int `json:"totalTokens"`
-	CacheHitTokens   int `json:"cacheHitTokens"`
-	CacheMissTokens  int `json:"cacheMissTokens"`
-	SystemTokens     int `json:"systemTokens"`
-	SkillsTokens     int `json:"skillsTokens"`
-	MCPTokens        int `json:"mcpTokens"`
-	ToolTokens       int `json:"toolTokens"`
-	HistoryTokens    int `json:"historyTokens"`
-	OtherTokens      int `json:"otherTokens"`
-}
 
 var (
 	conversationsMu sync.Mutex
@@ -940,7 +924,7 @@ func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Reques
 	switch r.Method {
 	case "GET":
 		if wantTokenStats {
-			jsonResp(w, calcConvTokenUsage(conv))
+			jsonResp(w, agent.ReadTokenStats())
 			return
 		}
 		if wantMessages {
@@ -1000,58 +984,6 @@ func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Reques
 
 	default:
 		jsonErr(w, "不支持的方法")
-	}
-}
-
-// calcConvTokenUsage 返回对话的上下文统计。
-// 优先使用 agent 实际报告的 TokenUsage（含 breakdown 明细），
-// 若无则从消息内容估算。
-func calcConvTokenUsage(conv *Conversation) map[string]int {
-	// 优先使用持久化的实际 token 统计（含 PromptBreakdown）
-	if conv.TokenUsage != nil {
-		tu := conv.TokenUsage
-		m := map[string]int{
-			"promptTokens":     tu.PromptTokens,
-			"completionTokens": tu.CompletionTokens,
-			"totalTokens":      tu.TotalTokens,
-			"cacheHitTokens":   tu.CacheHitTokens,
-			"cacheMissTokens":  tu.CacheMissTokens,
-			"systemTokens":     tu.SystemTokens,
-			"skillsTokens":     tu.SkillsTokens,
-			"mcpTokens":        tu.MCPTokens,
-			"toolTokens":       tu.ToolTokens,
-			"historyTokens":    tu.HistoryTokens,
-			"otherTokens":      tu.OtherTokens,
-		}
-		return m
-	}
-
-	// 无实际统计时，从消息内容粗略估算
-	var prompt, completion float64
-	for _, m := range conv.Messages {
-		var tokens float64
-		cjk := 0
-		other := 0
-		for _, r := range m.Content {
-			if (r >= 0x4E00 && r <= 0x9FFF) || (r >= 0x3400 && r <= 0x4DBF) || (r >= 0xF900 && r <= 0xFAFF) {
-				cjk++
-			} else {
-				other++
-			}
-		}
-		tokens = float64(cjk)*1.5 + float64(other)*0.25 + 4
-		if m.Role == "user" || m.Role == "system" {
-			prompt += tokens
-		} else {
-			completion += tokens
-		}
-	}
-	promptInt := int(prompt + 0.5)
-	completionInt := int(completion + 0.5)
-	return map[string]int{
-		"promptTokens":     promptInt,
-		"completionTokens": completionInt,
-		"totalTokens":      promptInt + completionInt,
 	}
 }
 
