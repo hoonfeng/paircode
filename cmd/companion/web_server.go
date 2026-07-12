@@ -112,9 +112,24 @@ func startWebUI(port int) {
 	}
 	ws.loadHistoryCache() // 从磁盘恢复历史缓存
 	memory.SetRoot(core.Root())
+	// 初始化 Skills 资源目录（供 LoadAllSkills 使用）
+	if root := core.Root(); root != "" {
+		agent.SkillProjectDir = filepath.Join(root, ".pair", "skills")
+	}
+	if sysDir := filepath.Join(core.ConfigDir(), "skills"); sysDir != "" {
+		agent.SkillSystemDir = sysDir
+	}
 	// 工作区文件夹变更时同步到 agent 路径解析
 	core.OnSyncWorkspace = func(primaryChanged bool) {
 		agent.WorkspaceRoots = core.Folders
+		if primaryChanged {
+			// 主工作区变更：同步技能目录和记忆路径到新工作区
+			root := core.Root()
+			if root != "" {
+				agent.SkillProjectDir = filepath.Join(root, ".pair", "skills")
+				memory.SetRoot(root)
+			}
+		}
 		log.Printf("[WebUI] 工作区文件夹已更新: %v", core.Folders)
 	}
 	mux := http.NewServeMux()
@@ -181,7 +196,7 @@ func startWebUI(port int) {
 
 	ws.server = &http.Server{
 		Addr:    fmt.Sprintf(":%d", port),
-		Handler: corsMiddleware(mux),
+		Handler: corsMiddleware(logMiddleware(mux)),
 	}
 
 	go func() {
@@ -211,6 +226,14 @@ func corsMiddleware(next http.Handler) http.Handler {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// logMiddleware 记录所有传入的 HTTP 请求的方法和路径。
+func logMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("[API] %s %s", r.Method, r.URL.Path)
 		next.ServeHTTP(w, r)
 	})
 }
@@ -744,8 +767,9 @@ type Conversation struct {
 		Role    string `json:"role"`
 		Content string `json:"content"`
 	} `json:"messages,omitempty"`
-	Summary    string  `json:"summary,omitempty"`   // AI 生成的对话摘要
-	SummaryAt  string  `json:"summaryAt,omitempty"` // 摘要生成时间
+	Summary    string      `json:"summary,omitempty"`   // AI 生成的对话摘要
+	SummaryAt  string      `json:"summaryAt,omitempty"` // 摘要生成时间
+	CtxStats   *agent.Usage `json:"ctxStats,omitempty"`  // 最后一次 LLM 调用的上下文 token 构成（对话级累积）
 }
 
 
@@ -924,7 +948,32 @@ func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Reques
 	switch r.Method {
 	case "GET":
 		if wantTokenStats {
-			jsonResp(w, agent.ReadTokenStats())
+			// 返回该对话的上下文 token 构成（每次 LLM 调用时记录，含全部历史）
+			if conv.CtxStats != nil {
+				cs := conv.CtxStats
+				m := map[string]any{
+					"promptTokens":     cs.PromptTokens,
+					"completionTokens": cs.CompletionTokens,
+					"totalTokens":      cs.TotalTokens,
+					"cacheHitTokens":   cs.PromptCacheHitTokens,
+					"cacheMissTokens":  cs.PromptCacheMissTokens,
+				}
+				if cs.PromptBreakdown.SystemTokens > 0 || cs.PromptBreakdown.SkillsTokens > 0 ||
+					cs.PromptBreakdown.MCPTokens > 0 || cs.PromptBreakdown.ToolTokens > 0 {
+					m["systemTokens"] = cs.SystemTokens
+					m["skillsTokens"] = cs.SkillsTokens
+					m["mcpTokens"] = cs.MCPTokens
+					m["toolTokens"] = cs.ToolTokens
+					m["historyTokens"] = cs.HistoryTokens
+					m["otherTokens"] = cs.OtherTokens
+				}
+				jsonResp(w, m)
+			} else {
+				jsonResp(w, map[string]any{
+					"promptTokens": 0, "completionTokens": 0, "totalTokens": 0,
+					"cacheHitTokens": 0, "cacheMissTokens": 0,
+				})
+			}
 			return
 		}
 		if wantMessages {
@@ -970,6 +1019,7 @@ func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Reques
 		jsonResp(w, map[string]any{"ok": true, "messageIndex": len(conv.Messages) - 1})
 
 	case "DELETE":
+		log.Printf("[API] DELETE conversation: %s (found=%v)", id, conv != nil)
 		newConvs := make([]Conversation, 0, len(conversations))
 		for _, c := range conversations {
 			if c.ID != id {
@@ -977,14 +1027,35 @@ func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Reques
 			}
 		}
 		conversations = newConvs
+		before := len(newConvs)
 		saveConversations()
 		// 同步删除记忆索引
 		memory.Delete(id)
+		after := len(conversations)
+		log.Printf("[API] DELETE conversation done: id=%s before=%d after=%d", id, before, after)
 		jsonResp(w, map[string]any{"ok": true})
 
 	default:
 		jsonErr(w, "不支持的方法")
 	}
+}
+
+// saveConvCtxStats 将 LLM 调用的 token 用量保存到对应对话的 CtxStats 中。
+// 每次 agent loop 发出 EventUsage 时由事件持久化 worker 调用。
+func saveConvCtxStats(convID string, usage *agent.Usage) {
+	if convID == "" || usage == nil {
+		return
+	}
+	loadConversations()
+	conversationsMu.Lock()
+	for i := range conversations {
+		if conversations[i].ID == convID {
+			conversations[i].CtxStats = usage
+			break
+		}
+	}
+	conversationsMu.Unlock()
+	saveConversations()
 }
 
 
@@ -1300,8 +1371,8 @@ func (s *webServer) handleMCPSave(w http.ResponseWriter, r *http.Request) {
 func (s *webServer) handleTokensStats(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "GET":
-		// 从 agent 自闭环存储读取（agent Loop 内部每次 LLM 调用后自动保存）
-		stats := agent.ReadTokenStats()
+		// 从 agent 自闭环存储读取（使用当前工作区根路径隔离）
+		stats := agent.ReadTokenStatsForRoot(core.Root())
 		if stats == nil {
 			jsonResp(w, map[string]any{
 				"promptTokens": 0, "completionTokens": 0, "totalTokens": 0,

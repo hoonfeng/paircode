@@ -261,10 +261,12 @@ type taskProgressState struct{}
 // New 创建对话面板。
 func New(doc *dom.Document) *ChatState {
 	s := &ChatState{
-		doc:        doc,
-		Store:      state.NewChatStore(),
-		ShowSearch: false,
-		HoveredMsg: -1,
+		doc:         doc,
+		Store:       state.NewChatStore(),
+		ShowSearch:  false,
+		AutoReview:  core.Settings.AutoReview,
+		Autonomous:  core.Settings.Autonomous,
+		HoveredMsg:  -1,
 	}
 
 	// ── 加载已有对话历史（.pair/conversations/history.json）──

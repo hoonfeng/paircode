@@ -181,35 +181,85 @@ async function switchToWorkspace(ws) {
   }
 }
 
+
+function makeConvKey(path) {
+  if (typeof path !== 'string' || !path) return ''
+  const safe = encodeURIComponent(path).replace(/%[0-9A-F]{2}/g, '').slice(0, 64)
+  return 'conv_' + safe
+}
+
 function saveCurrentConversations() {
-  if (!state.workspaceRoot) return
+  if (typeof state.workspaceRoot !== 'string' || !state.workspaceRoot) return
+  const key = makeConvKey(state.workspaceRoot)
+  if (!key) return
   try {
-    const key = 'conv_' + btoa(state.workspaceRoot).slice(0, 40)
+    const allData = {}
+    for (const convId of Object.keys(state.messagesByConv)) {
+      const msgs = state.messagesByConv[convId]
+      if (msgs && msgs.length > 0) {
+        allData[convId] = msgs.map(m => ({
+          role: m.role,
+          content: m.content,
+          segments: m.segments || [],
+          _time: m._time || '',
+        }))
+      }
+    }
     localStorage.setItem(key, JSON.stringify({
       conversations: state.conversations,
       currentConvId: state.currentConvId,
-      messages: state.messages,
+      messagesByConv: allData,
     }))
-  } catch {}
+  } catch (e) {
+    console.warn('保存对话消息失败:', e)
+    try {
+      localStorage.setItem(key, JSON.stringify({
+        conversations: state.conversations,
+        currentConvId: state.currentConvId,
+        messagesByConv: {},
+      }))
+    } catch (e2) {
+      console.warn('降级保存也失败:', e2)
+    }
+  }
 }
 
 async function loadConversationsForWorkspace(path) {
-  state.conversations = []
-  state.currentConvId = ''
-  state.messages = []
+  if (typeof path !== 'string' || !path) return
+  const key = makeConvKey(path)
+  if (!key) return
   try {
-    const key = 'conv_' + btoa(path).slice(0, 40)
     const saved = localStorage.getItem(key)
-    if (saved) {
-      const data = JSON.parse(saved)
-      state.conversations = data.conversations || []
-      state.currentConvId = data.currentConvId || ''
-      state.messages = data.messages || []
+    if (!saved) return
+    const data = JSON.parse(saved)
+    state.conversations = data.conversations || []
+    state.currentConvId = data.currentConvId || ''
+
+    if (data.messagesByConv) {
+      for (const convId of Object.keys(data.messagesByConv)) {
+        const msgs = data.messagesByConv[convId]
+        if (!Array.isArray(msgs) || msgs.length === 0) continue
+        state.messagesByConv[convId] = msgs.map((m, idx) => ({
+          role: m.role,
+          content: m.content || '',
+          segments: (m.segments || []).map(s => ({ ...s })),
+          _key: 'msg_' + Date.now() + '_' + idx,
+          _idx: idx,
+          _time: m._time || '',
+          _loading: false,
+        }))
+      }
     }
-  } catch {}
+
+    if (state.currentConvId && state.messagesByConv[state.currentConvId]) {
+      state.messages = state.messagesByConv[state.currentConvId]
+    }
+  } catch (e) {
+    console.warn('加载对话消息失败:', e)
+  }
 }
 
-// ── 新建工作区 ──
+
 const showWorkspaceDialog = ref(false)
 const newWsName = ref('')
 const newWsPath = ref('')

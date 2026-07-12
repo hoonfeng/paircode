@@ -10,6 +10,7 @@ package agenttools
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/hoonfeng/paircode/cmd/companion/agent"
@@ -46,12 +47,17 @@ func argString(args map[string]any, key string) string {
 
 
 // registerManagementTools 注册 Agent 自管理工具（在 bridge 建 registry 时调用）。
-func RegisterManagementTools(r *agent.Registry) {
+// root 为工作区根路径（每个会话传自己的，实现多工作区隔离）。
+func RegisterManagementTools(r *agent.Registry, root string) {
+	skillProjectDir := ""
+	if root != "" {
+		skillProjectDir = filepath.Join(root, ".pair", "skills")
+	}
 	// ── Skills：检索 / 读全文(渐进式披露 L2) / 写 / 删 ──
 	r.Register(&agent.Tool{
 		Name: "skill_list", Description: "列出所有可用技能（名/描述/激活模式/层级）。", ReadOnly: true,
 		Parameters: toolObj(map[string]any{}),
-		Handler:    func(_ context.Context, _ map[string]any) (string, error) { return listSkillsText(), nil },
+		Handler:    func(_ context.Context, _ map[string]any) (string, error) { return listSkillsText(root), nil },
 	})
 	r.Register(&agent.Tool{
 		Name:        "load_skill",
@@ -59,7 +65,7 @@ func RegisterManagementTools(r *agent.Registry) {
 		ReadOnly:    true,
 		Parameters:  toolObj(map[string]any{"name": strParam("技能名")}, "name"),
 		Handler: func(_ context.Context, args map[string]any) (string, error) {
-			return loadSkillFull(argString(args, "name"))
+			return loadSkillFull(argString(args, "name"), root)
 		},
 	})
 	r.Register(&agent.Tool{
@@ -70,7 +76,7 @@ func RegisterManagementTools(r *agent.Registry) {
 			"name": strParam("技能名"), "path": strParam("资源相对路径（如 references/faq.md）"),
 		}, "name", "path"),
 		Handler: func(_ context.Context, args map[string]any) (string, error) {
-			return loadSkillResource(argString(args, "name"), argString(args, "path"))
+			return loadSkillResource(argString(args, "name"), argString(args, "path"), root)
 		},
 	})
 	r.Register(&agent.Tool{
@@ -83,14 +89,14 @@ func RegisterManagementTools(r *agent.Registry) {
 			"content": strParam("技能正文（Markdown，写清何时用、怎么做）"),
 		}, "name", "content"),
 		Handler: func(_ context.Context, args map[string]any) (string, error) {
-			return writeSkillTool(args)
+			return writeSkillTool(args, skillProjectDir)
 		},
 	})
 	r.Register(&agent.Tool{
 		Name: "skill_delete", Description: "删除一个项目级技能。", RequiresApproval: true,
 		Parameters: toolObj(map[string]any{"name": strParam("技能名")}, "name"),
 		Handler: func(_ context.Context, args map[string]any) (string, error) {
-			if err := agent.DeleteSkill(agent.SkillProjectDir, argString(args, "name")); err != nil {
+			if err := agent.DeleteSkill(skillProjectDir, argString(args, "name")); err != nil {
 				return "", err
 			}
 			return "已删除技能：" + argString(args, "name"), nil
@@ -169,8 +175,8 @@ func RegisterManagementTools(r *agent.Registry) {
 }
 
 // ─── Skills 工具实现 ──
-func listSkillsText() string {
-	skills := agent.LoadAllSkills()
+func listSkillsText(root string) string {
+	skills := agent.LoadAllSkillsFromRoot(root, agent.SkillSystemDir, agent.SkillEnabled)
 	var b strings.Builder
 	for _, s := range skills {
 		lvl := "项目级"
@@ -185,8 +191,8 @@ func listSkillsText() string {
 	return b.String()
 }
 
-func loadSkillFull(name string) (string, error) {
-	skills := agent.LoadAllSkills()
+func loadSkillFull(name string, root string) (string, error) {
+	skills := agent.LoadAllSkillsFromRoot(root, agent.SkillSystemDir, agent.SkillEnabled)
 	s := agent.FindSkill(skills, name)
 	if s == nil {
 		return "", fmt.Errorf("未找到技能 %q（用 skill_list 看全部）", name)
@@ -194,8 +200,8 @@ func loadSkillFull(name string) (string, error) {
 	return "# 技能：" + s.Name + "\n" + s.Description + "\n\n" + agent.SkillBodyWithTools(*s), nil
 }
 
-func loadSkillResource(name, path string) (string, error) {
-	skills := agent.LoadAllSkills()
+func loadSkillResource(name, path string, root string) (string, error) {
+	skills := agent.LoadAllSkillsFromRoot(root, agent.SkillSystemDir, agent.SkillEnabled)
 	s := agent.FindSkill(skills, name)
 	if s == nil {
 		return "", fmt.Errorf("未找到技能 %q（用 skill_list 看全部）", name)
@@ -203,14 +209,14 @@ func loadSkillResource(name, path string) (string, error) {
 	return agent.LoadSkillResource(s, path, 10*1024*1024) // 10MiB 上限
 }
 
-func writeSkillTool(args map[string]any) (string, error) {
+func writeSkillTool(args map[string]any, projectDir string) (string, error) {
 	s := agent.Skill{
 		Name:        argString(args, "name"),
 		Description: argString(args, "description"),
 		Mode:        orStr(argString(args, "mode"), "auto"),
 		Body:        argString(args, "content"),
 	}
-	if err := agent.WriteSkill(agent.SkillProjectDir, s); err != nil {
+	if err := agent.WriteSkill(projectDir, s); err != nil {
 		return "", err
 	}
 	return "已写入技能 " + s.Name + "（项目级，下次对话注入系统提示，或现在用 load_skill 取用）", nil

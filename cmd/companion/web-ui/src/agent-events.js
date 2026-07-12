@@ -33,6 +33,7 @@ function pushSegment(segs, type, initial) {
 //   saveConvMsg(convId, content),  // 保存助手消息到后端
 //   onPlanUpdate(plan, convId),    // update_plan 工具调用
 //   onTaskCreate(task, convId),    // task_create 工具调用
+//   onTaskUpdate(taskId, status, subject, convId), // task_update 工具调用
 //   onPhaseChange(convId),         // 阶段变化（RightPanel 启动定时器清除）
 // }
 let globalCtx = {}
@@ -117,8 +118,25 @@ export function processAgentEvent(convId, data) {
     } else if (toolName === 'task_create') {
       try {
         const args = data.args ? (typeof data.args === 'string' ? JSON.parse(data.args) : data.args) : {}
-        if (globalCtx.onTaskCreate) globalCtx.onTaskCreate({ step: args.subject || '(新建任务)', status: 'pending', callId: data.callId || data.callID || '' }, convId)
+        if (globalCtx.onTaskCreate) globalCtx.onTaskCreate({ step: args.subject || '(新建任务)', status: 'pending', callId: data.callId || data.callID || '', _taskId: null }, convId)
       } catch {}
+      msg.segments.push({
+        type: 'tool_call', name: toolName,
+        callId: data.callId || data.callID || '',
+        argsRaw: data.args ? (typeof data.args === 'string' ? data.args : JSON.stringify(data.args, null, 2)) : '',
+        result: '', _mode: 'expanded', _expanded: true,
+      })
+    } else if (toolName === 'task_update') {
+      try {
+        const args = data.args ? (typeof data.args === 'string' ? JSON.parse(data.args) : data.args) : {}
+        if (globalCtx.onTaskUpdate) globalCtx.onTaskUpdate(args.id, args.status || '', args.subject || '', convId)
+      } catch {}
+      msg.segments.push({
+        type: 'tool_call', name: toolName,
+        callId: data.callId || data.callID || '',
+        argsRaw: data.args ? (typeof data.args === 'string' ? data.args : JSON.stringify(data.args, null, 2)) : '',
+        result: '', _mode: 'expanded', _expanded: true,
+      })
     } else {
       msg.segments.push({
         type: 'tool_call', name: toolName,
@@ -129,6 +147,14 @@ export function processAgentEvent(convId, data) {
     }
   } else if (data.type === 'tool_result') {
     const callId = data.callId || data.callID || ''
+    const toolName = data.tool || data.name || ''
+
+    // task_create 结果：提取任务 ID 更新计划（无对应 segment）
+    if (toolName === 'task_create' && globalCtx.onTaskSetId) {
+      const idMatch = (data.content || '').match(/ID:\s*`([^`]+)`/)
+      if (idMatch) globalCtx.onTaskSetId(callId, idMatch[1], convId)
+    }
+
     if (!msg || !msg.segments) return
     let target = null
     for (let i = msg.segments.length - 1; i >= 0; i--) {
@@ -158,12 +184,7 @@ export function processAgentEvent(convId, data) {
     seg.content += '**[错误]** ' + (data.content || '')
   } else if (data.type === 'usage' && data.usage) {
     const u = data.usage
-    // 工作区级 token 统计
-    state.wsTokenStats.promptTokens = u.prompt_tokens || 0
-    state.wsTokenStats.completionTokens = u.completion_tokens || 0
-    state.wsTokenStats.totalTokens = (u.prompt_tokens || 0) + (u.completion_tokens || 0)
-    state.wsTokenStats.cacheHitTokens = u.prompt_cache_hit_tokens || 0
-    state.wsTokenStats.cacheMissTokens = u.prompt_cache_miss_tokens || 0
+    // wsTokenStats 从 API /api/tokens/stats 加载（工作区级累积），不被 per-call 值覆盖
     // 仅当前对话才更新 convCtxStats（避免跨对话串扰）
     if (isCurrent) {
       const cs = getConvCtxStats(convId)

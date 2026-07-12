@@ -58,8 +58,22 @@ type Skill struct {
 
 // LoadAllSkills 扫描 system + project 两级目录，合并并按 SkillEnabled 过滤。
 // 用全局 SkillSystemDir/SkillProjectDir/SkillEnabled。
+// UI 层（设置/市场页）可通过此函数读取当前工作区的技能。
+// Agent 运行时不应调用此函数，应使用 LoadAllSkillsFromRoot 并传入会话工作区根。
 func LoadAllSkills() []Skill {
 	return loadAllFrom(SkillSystemDir, SkillProjectDir, SkillEnabled)
+}
+
+// LoadAllSkillsFromRoot 按指定工作区根目录加载技能（不依赖全局 SkillProjectDir）。
+// 适用于 agent 运行时：每个会话传自己的工作区根路径，实现多工作区隔离。
+// systemDir 为内置技能目录（全局固定）；enabled 为启用过滤映射。
+// 若 enabled 为 nil 则全部启用。
+func LoadAllSkillsFromRoot(root, systemDir string, enabled map[string]bool) []Skill {
+	projectDir := ""
+	if root != "" {
+		projectDir = filepath.Join(root, ".pair", "skills")
+	}
+	return loadAllFrom(systemDir, projectDir, enabled)
 }
 
 // loadAllFrom 内部实现（可测试，传参不依赖全局）。

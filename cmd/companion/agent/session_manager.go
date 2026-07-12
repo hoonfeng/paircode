@@ -3,6 +3,8 @@ package agent
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os/exec"
 	"reflect"
 	"strings"
 	"sync"
@@ -26,6 +28,13 @@ type LoopOpts struct {
 	CompressedSummaries []string // 已持久化的压缩摘要（页面刷新后恢复）
 	Autonomous       bool        // 自主模式标志
 	WorkspaceRoot    string      // 工作区根路径（用于跨工作区并行对话的状态指示与隔离）
+	// AutoReview AI 审核开关。true=Loop 内部 AI 审核把关写操作；
+	// false+Autonomous=true=自动放行；false+Autonomous=false=人工审批（前端弹窗）。
+	AutoReview bool
+	// ReviewProvider 审核模型的 Provider（AutoReview=true 时用）。Loop 内部用它懒建 Reviewer。
+	ReviewProvider Provider
+	// AutoCommit 任务完成时自动 git add + git commit（仅 finish_task 退出时触发）。
+	AutoCommit bool
 }
 
 // GlobalEvent 是全局订阅者收到的事件：携带 convID 用于前端路由。
@@ -153,6 +162,7 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 
 	// Approve：写类工具执行前阻塞等用户裁决。
 	// 先发 EventApproval 通知前端弹审批框，再从 approvalCh 读结果。
+	// 当 AutoReview=false + Autonomous=false 时，由 Loop.Run 内部调用本回调。
 	loop.Approve = func(actx context.Context, tc ToolCall) (bool, string) {
 		select {
 		case sess.Events <- Event{
@@ -170,6 +180,9 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 			return false, "用户取消了操作"
 		}
 	}
+	// 审核开关由 Loop 内部自决，外部只需传进来
+	loop.AutoReview = opts.AutoReview
+	loop.ReviewProvider = opts.ReviewProvider
 
 	// OnFeedback：每轮 LLM 调用前检查用户运行时反馈（非阻塞）
 	loop.OnFeedback = func() string {
@@ -273,6 +286,11 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		// 自闭环模式：传 nil history，loop.Run 内部使用 loop.History
 		msgs, err := loop.Run(runCtx, task, nil)
 		sess.History = msgs
+
+		// ★ Auto commit：任务通过 finish_task 正常完成时自动 git 提交
+		if err == nil && opts.AutoCommit && loop.finishResult != nil {
+			doAutoCommit(opts.WorkspaceRoot, task, *loop.finishResult)
+		}
 
 		// 错误处理：Loop 内部已对多数错误发射 EventError，
 		// 此处仅补发 Loop 未发射的错误（如上下文取消），且非用户主动停止时。
@@ -387,15 +405,23 @@ func (m *SessionManager) IsRunning(convID string) bool {
 }
 
 // GetHistory 返回指定会话的已结束 History 副本（深复制 + 剥离 Reasoning）。
-// 仅在会话结束后（Loop.Run 返回后）可用。会话不存在或正在运行返回 nil。
+// 会话不存在返回 nil。若会话刚结束（EventDone 已发射但 Running 尚未清除），
+// 从 Loop.History 读取以消除竞态。
 func (m *SessionManager) GetHistory(convID string) []Message {
 	m.mu.RLock()
 	sess, ok := m.sessions[convID]
 	m.mu.RUnlock()
-	if !ok || sess.Running {
+	if !ok {
 		return nil
 	}
-	return copyHistoryNoReasoning(sess.History)
+	if !sess.Running && sess.History != nil {
+		return copyHistoryNoReasoning(sess.History)
+	}
+	// 正在运行中：从 Loop.History 读取实时历史（EventDone 已发射但 Running 未清除时使用）
+	if sess.Loop != nil && sess.Loop.History != nil {
+		return copyHistoryNoReasoning(sess.Loop.History)
+	}
+	return nil
 }
 
 // GetCurrentHistory 返回指定会话的当前运行中 History 副本（深复制 + 剥离 Reasoning）。
@@ -564,4 +590,40 @@ func (m *SessionManager) GetWorkspaceRoot(convID string) string {
 		return ""
 	}
 	return sess.WorkspaceRoot
+}
+
+// doAutoCommit 在任务完成后自动执行 git add + git commit。
+// root 为工作区根目录，task 为用户任务文本，result 为 finish_task 的结果摘要。
+// commit message 格式："auto: <result 前 60 字>"，方便快速识别自动提交内容。
+// 执行失败时只日志不 panic（不影响 agent 主流程）。
+func doAutoCommit(root, task, result string) {
+	if root == "" {
+		return
+	}
+	// 取 result 前 60 字作 commit message
+	msg := strings.TrimSpace(result)
+	if len(msg) > 60 {
+		msg = msg[:60]
+	}
+	if msg == "" {
+		msg = "auto commit"
+	}
+	// git add -A
+	add := exec.Command("git", "add", "-A")
+	add.Dir = root
+	if out, err := add.CombinedOutput(); err != nil {
+		fmt.Printf("[auto-commit] git add 失败: %v\n%s\n", err, string(out))
+		return
+	}
+	// git commit -m "auto: ..."
+	commit := exec.Command("git", "commit", "-m", "auto: "+msg)
+	commit.Dir = root
+	if out, err := commit.CombinedOutput(); err != nil {
+		// "nothing to commit" 不是真正的错误
+		if !strings.Contains(string(out), "nothing to commit") {
+			fmt.Printf("[auto-commit] git commit 失败: %v\n%s\n", err, string(out))
+		}
+		return
+	}
+	fmt.Printf("[auto-commit] ✅ 已自动提交: auto: %s\n", msg)
 }

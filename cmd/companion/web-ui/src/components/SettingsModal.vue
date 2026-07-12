@@ -160,6 +160,11 @@
                 <label>Lua 工具</label>
                 <input type="checkbox" v-model="local.luaTools" />
               </div>
+              <div class="setting-row">
+                <label>自动 Git 提交</label>
+                <input type="checkbox" v-model="local.autoCommit" />
+                <span class="setting-hint">任务完成时自动 git add + commit</span>
+              </div>
             </div>
             <div class="setting-group" style="margin-top:12px">
               <div class="group-title">搜索与忽略</div>
@@ -520,6 +525,7 @@ const local = reactive({
   autonomous: false,
   aiReview: false,
   luaTools: true,
+  autoCommit: true,
   searxngUrl: '',
   ignoreDirsText: '',
   // 编辑器
@@ -847,6 +853,7 @@ function loadSettings() {
   local.autonomous = !!s.autonomous
   local.aiReview = !!s.aiReview
   local.luaTools = s.luaTools !== false
+  local.autoCommit = s.autoCommit !== false
   local.searxngUrl = s.searxngUrl || ''
   local.ignoreDirsText = (s.ignoreDirs || []).join(', ')
   // 编辑器
@@ -924,6 +931,7 @@ const saveSettings = async () => {
       autonomous: local.autonomous,
       aiReview: local.aiReview,
       luaTools: local.luaTools,
+      autoCommit: local.autoCommit,
       searxngUrl: local.searxngUrl,
       ignoreDirs: local.ignoreDirsText.split(',').map(s => s.trim()).filter(Boolean),
       // 编辑器

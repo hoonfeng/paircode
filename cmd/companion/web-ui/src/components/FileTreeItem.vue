@@ -1,6 +1,6 @@
 <template>
-  <div class="file-tree-item" :style="{ paddingLeft: depth * 16 + 'px' }">
-    <div class="item-row"
+  <div class="file-tree-item">
+    <div class="item-row" :style="{ paddingLeft: depth * 16 + 'px' }"
          :class="{ 'drag-over': dragOver }"
          :draggable="!item.isDir"
          @click="handleClick"
@@ -17,9 +17,9 @@
       <span class="item-name" :class="{ active: state.activeFile === fullPath }">{{ item.name }}</span>
     </div>
     <div v-if="expanded && item.isDir && children.length > 0">
-      <FileTreeItem v-for="child in children" :key="child.name"
-                    :item="child" :parentPath="fullPath" :depth="depth + 1"
-                    @file-click="(p) => emit('fileClick', p)" />
+<FileTreeItem v-for="(child, ci) in children" :key="fullPath + '\\' + child.name + '_' + ci"
+              :item="child" :parentPath="fullPath" :depth="depth + 1"
+              @file-click="(p) => emit('fileClick', p)" />
     </div>
     <!-- 重命名输入框 -->
     <div v-if="renaming" class="rename-input" :style="{ paddingLeft: (depth * 16 + 28) + 'px' }">
@@ -62,10 +62,12 @@ const renameInputRef = ref(null)
 // ── 右键菜单 ──
 const contextMenuRef = ref(null)
 
-const fullPath = computed(() => {
+const childFullPath = computed(() => {
   if (!props.parentPath) return props.item.path || props.item.name
   return props.parentPath + '\\' + props.item.name
 })
+
+const fullPath = childFullPath
 
 // ── 自动展开（props.defaultExpanded=true 时自动加载子目录）──
 if (props.defaultExpanded && props.item.isDir && !props.item.children) {

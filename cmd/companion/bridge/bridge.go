@@ -3,7 +3,7 @@
 // 周期在 UI 线程 drain，流式写进当前助手消息（复刻终端面板跨线程模式，见 terminal.go / AGENTS.md）。
 // 本文件还含 Agent 消息卡的富渲染（思考块 + 工具活动行 + 正文）。
 //
-//go:build windows
+//go:build windows && !webonly
 
 package bridge
 
@@ -43,7 +43,6 @@ type AgentBridge struct {
 	Cs           *chat.ChatState
 	loop         *agent.Loop      // 懒建（provider 来自环境变量）；测试可预置 mock
 	planner      *agent.Planner   // 规划 Agent（自主模式下先列计划；nil=不规划）。每次发送按设置重建
-	reviewer     *agent.Reviewer  // 审核 Agent（AI 审核模式下把关写操作；nil=不审）。每次发送按设置重建
 	evaluator    *agent.Evaluator // 评测 Agent（任务完成后打分；nil=不评测）。每次发送按设置重建
 	luaToolNames []string         // 上轮加载的 Lua 自定义工具名（热重载时先卸载）
 	root         string           // 工作区根（= 工具/文件树/编辑器同根），用于把工具 path 解析为绝对路径
@@ -198,7 +197,7 @@ func (b *AgentBridge) Start(task string) {
 		sys += agent.ProjectRules(root)
 		sys += agent.ProjectKnowledge(root, 2500) // 项目知识库概览（.pair/project-info，渐进式披露）
 		b.loop = &agent.Loop{Provider: prov, Registry: reg, System: sys, MaxIterations: 30}
-		b.setupReview() // 初始化 loop 时设置审核配置（reviewer + Approve 回调）
+		b.setupReview() // 审核开关由 Loop 内部自决，外部只需传 AutoReview
 	}
 	// ── 构建对话上下文 ──
 	// 自闭环：loop 已有持久化历史时，前端只发信号（nil → loop.Run 使用 l.History）。
@@ -1035,32 +1034,15 @@ func stripSystemMsgs(msgs []agent.Message) []agent.Message {
 	return append([]agent.Message(nil), msgs[i:]...)
 }
 
-// aiReviewApprove AI 审核裁决（loop 协程调用，不阻塞 UI）：写类工具交审核模型判，
-// 通过放行，驳回/需要修改则把建议作反馈回灌（loop 据此让执行 Agent 改道）。审核模型故障→放行（审核是增强非强制）。
-func (b *AgentBridge) aiReviewApprove(ctx context.Context, tc agent.ToolCall) (bool, string) {
-	if b.reviewer == nil || !agent.NeedsReview(tc.Function.Name) {
-		return true, ""
-	}
-	v, err := b.reviewer.Review(ctx, tc)
-	if err != nil || v.Approved() {
-		return true, ""
-	}
-	return false, v.FeedbackText()
-}
-
-// setupReview 设置审核配置（reviewer + Approve 回调）。
-// 只读 core.Settings，不依赖 state，被 Start 调用。
+// setupReview 设置审核配置。审核决策由 Loop 内部自决（根据 AutoReview + Autonomous），
+// 外部只需传 AutoReview 和 ReviewProvider。被 Start 调用。
 func (b *AgentBridge) setupReview() {
-	b.reviewer = nil
-	if core.Settings.AutoReview {
-		b.reviewer = MakeReviewer()
-	}
-	switch {
-	case b.reviewer != nil:
-		b.loop.Approve = b.aiReviewApprove
-	case !core.Settings.AutoReview && !core.Settings.Autonomous:
+	b.loop.AutoReview = core.Settings.AutoReview
+	b.loop.ReviewProvider = BuildReviewProvider()
+	// 人工审批回调保留（供 Loop 在 AutoReview=false + Autonomous=false 时使用）
+	if !core.Settings.AutoReview && !core.Settings.Autonomous {
 		b.loop.Approve = b.approve
-	default:
+	} else {
 		b.loop.Approve = nil
 	}
 }

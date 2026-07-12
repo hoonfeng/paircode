@@ -429,13 +429,14 @@ func (p *projectInfoProvider) Count(scope string) (int, error) {
 // 5. skillsProvider — 技能（委托 skill_loader，统一目录式 + frontmatter + enabled 过滤）。
 
 type skillsProvider struct {
-	root string // 保留兼容构造；实际用 skill_loader 全局变量
+	root string
 }
 
 func (p *skillsProvider) Type() ResourceType { return ResourceSkills }
 
 func (p *skillsProvider) List(scope string) ([]ResourceMeta, error) {
-	skills := LoadAllSkills()
+	// 用 root 隔离：从自己的工作区根加载技能，不依赖全局 SkillProjectDir
+	skills := LoadAllSkillsFromRoot(p.root, SkillSystemDir, SkillEnabled)
 	var result []ResourceMeta
 	for _, s := range skills {
 		if s.Level != LevelProject {

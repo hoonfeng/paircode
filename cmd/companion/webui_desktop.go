@@ -1,6 +1,6 @@
 // 桌面版额外路由注册：chat/agent + market。
 //
-//go:build windows
+//go:build windows && !webonly
 
 package main
 
@@ -669,6 +669,14 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 	// 构建 LoopOpts（provider/registry/system/history 全部收敛于此）
 	opts := s.buildWebLoopOpts(req.ConvID, req.Message, req.Autonomous)
 	opts.WorkspaceRoot = req.WorkspaceRoot
+
+	// 审核开关：只需设 AutoReview 和 ReviewProvider，审核决策由 Loop 内部自决
+	opts.AutoReview = core.Settings.AutoReview
+	if core.Settings.AutoReview && core.Settings.ReviewModel != "" {
+		opts.ReviewProvider = bridge.BuildReviewProvider()
+	}
+	// 自动 git 提交开关
+	opts.AutoCommit = core.Settings.AutoCommit
 
 	// 自主模式追加任务指引
 	taskText := req.Message

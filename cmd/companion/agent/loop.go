@@ -106,6 +106,22 @@ type Loop struct {
 	transferTarget string         // transfer_to_agent 目标名（非空=当前 Loop 应退出，控制权转移给目标 agent）
 	Autonomous     bool           // 自主模式标志（供并行子 agent 继承）
 
+	// AutoReview 审核开关。true=AI审核（内部创建审核Agent把关写操作）；
+	// false=走外部Approve回调（人工审批）或自动放行（Autonomous=true时）。
+	// 外部（桌面版/Web）只需设置此字段，审核决策完全由Loop内部决定。
+	AutoReview bool
+
+	// ReviewProvider 审核模型的 Provider（AutoReview=true 时使用）。
+	// 由外部在创建 Loop 时设置，Loop 内部用它懒创建审核 Reviewer。
+	ReviewProvider Provider
+
+	// reviewer 内部懒创建的审核 Agent（由 ReviewProvider 创建，不导出）。
+	reviewer *Reviewer
+
+	// contentOnlyIters 连续 content-only（无 tool_call）轮数计数器。
+	// 防止 Agent 只输出文字不调用 finish_task 导致自我循环。
+	contentOnlyIters int
+
 	// History 跨 Run 调用的持久化对话消息（自闭环）。
 	// 设计意图：Agent 独立维护自己的消息历史，前端只发信号（当前用户消息文本）。
 	// 首次 Run 前为 nil；每次 Run 返回后更新为当轮完整 msgs。
@@ -118,6 +134,26 @@ func (l *Loop) emit(e Event) {
 	if l.OnEvent != nil {
 		l.OnEvent(e)
 	}
+}
+
+// aiReviewApprove 内部 AI 审核裁决（AutoReview=true 时由 Loop.Run 调用）。
+// 通过 ReviewProvider 懒创建 Reviewer，写类工具交审核模型判。
+// 通过放行，驳回/需要修改则把建议作反馈回灌。审核模型故障→放行（审核是增强非强制）。
+func (l *Loop) aiReviewApprove(ctx context.Context, tc ToolCall) (bool, string) {
+	if !NeedsReview(tc.Function.Name) {
+		return true, ""
+	}
+	if l.reviewer == nil {
+		if l.ReviewProvider == nil {
+			return true, "" // 无审核模型 → 放行
+		}
+		l.reviewer = &Reviewer{Provider: l.ReviewProvider, SystemPrompt: DefaultReviewerPrompt()}
+	}
+	v, err := l.reviewer.Review(ctx, tc)
+	if err != nil || v.Approved() {
+		return true, ""
+	}
+	return false, v.FeedbackText()
 }
 
 // Run 跑一轮任务。history 为先前对话（可空）。
@@ -215,11 +251,20 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 		for _, tc := range assistant.ToolCalls {
 			l.emit(Event{Type: EventToolCall, Tool: tc.Function.Name, Args: tc.Function.Arguments, CallID: tc.ID})
 
-			// 审批门：写类工具（RequiresApproval）在手动审核下需用户批准。被拒则不执行，
-			// 把拒绝作为观察回灌（让模型改道，而非当成工具错误计入连续失败）。
-			if l.Approve != nil {
+			// ★ 审批门：Loop 内部根据 AutoReview 自决审核策略 ★
+			// - AutoReview=true → 内部 AI 审核（用 ReviewProvider 懒建 Reviewer）
+			// - AutoReview=false + Autonomous=true → 自动放行（nil=全部通过）
+			// - AutoReview=false + Autonomous=false → 走外部 l.Approve（人工审批）
+			approveFn := l.Approve
+			switch {
+			case l.AutoReview:
+				approveFn = l.aiReviewApprove
+			case l.Autonomous:
+				approveFn = nil
+			}
+			if approveFn != nil {
 				if tool, ok := l.Registry.Get(tc.Function.Name); ok && tool.RequiresApproval {
-					if approved, feedback := l.Approve(ctx, tc); !approved {
+					if approved, feedback := approveFn(ctx, tc); !approved {
 						rej := strings.TrimSpace(feedback)
 						if rej == "" {
 							rej = "用户拒绝了此操作。请勿重试该操作；改用其他方式达成目标，或先向用户说明你为何需要它。"
@@ -241,16 +286,41 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 			msgs = append(msgs, Message{Role: RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: result})
 			l.trackCall(tc.Function.Name, tc.Function.Arguments, terr != nil || strings.HasPrefix(strings.TrimSpace(result), "Error:"))
 
-			// finish_task 退出信号：子 agent 调 finish_task 表示任务完成，记录 result 退出循环。
-			// delegate handler 从 child.finishResult 取子最终结果。仅子 Loop 注册此工具。
+		}
+
+		// ★ finish_task 检测：Agent 调用了 finish_task → 任务完成，保存结果并退出循环
+		for _, tc := range assistant.ToolCalls {
 			if tc.Function.Name == "finish_task" {
-				l.finishResult = &result
-				// finish_task 退出：发射 EventDone（含 result），不发射 EventFinal
+				// 从 msgs 中找到最后一条 finish_task 的工具结果
+				for i := len(msgs) - 1; i >= 0; i-- {
+					if msgs[i].Role == RoleTool && msgs[i].Name == "finish_task" {
+						l.finishResult = &msgs[i].Content
+						break
+					}
+				}
+				result := *l.finishResult
 				l.emit(Event{Type: EventDone, Content: result, DoneReason: "finish_task"})
 				return msgs, nil
 			}
 		}
 
+		// ★ content-only 防护：Agent 连续输出文字但不调用任何工具（含 finish_task）
+		// 说明 Agent 可能在自我循环，注入停止提示。
+		if len(assistant.ToolCalls) == 0 && strings.TrimSpace(assistant.Content) != "" {
+			l.contentOnlyIters++
+			if l.contentOnlyIters == 2 {
+				nudge := "[系统提示] 你已经连续两轮只输出文字而没有调用任何工具。如果任务已完成，请调用 finish_task 工具结束本轮。"
+				l.emit(Event{Type: EventNotice, Content: nudge})
+				msgs = append(msgs, Message{Role: RoleUser, Content: nudge})
+			} else if l.contentOnlyIters >= 3 {
+				l.emit(Event{Type: EventNotice, Content: "检测到内容循环，自动结束"})
+				l.emit(Event{Type: EventDone, Content: strings.TrimSpace(assistant.Content), DoneReason: "content_loop"})
+				return msgs, nil
+			}
+		} else {
+			l.contentOnlyIters = 0
+		}
+		// 绕圈检测：同一操作反复失败/反复执行 → 注入「换思路」提示打破死循环（见 circling.go）。
 		// 绕圈检测：同一操作反复失败/反复执行 → 注入「换思路」提示打破死循环（见 circling.go）。
 		if nudge := l.detectCircling(); nudge != "" {
 			l.emit(Event{Type: EventCircling, Content: "检测到重复操作/反复失败，已提示 Agent 换思路打破死循环"})
@@ -353,9 +423,9 @@ func DefaultSystemPrompt(roots []string) string {
 		"  失败时诊断信息含行号上下文：优先改用 line_start/line_end 行号定位（最可靠）；\n" +
 		"  若仍失败再 read_file 确认最新内容。★ 绝不要因匹配失败就改用 write_file 覆盖整个文件。\n" +
 		"- 连续 3 次工具执行失败 → 自动终止，向用户报告原因。\n" +
-		"- shell_exec 失败 → 检查 stderr 输出，不要只靠 exit code 判断。\n\n" +
+		"- run_command 失败 → 检查 stderr 输出，不要只靠 exit code 判断。\n\n" +
 		"# 验证原则\n" +
-		"每次工具调用后，先验证再行动：文件读取后确认行号匹配；shell_exec 后检查 stdout 内容；\n" +
+		"每次工具调用后，先验证再行动：文件读取后确认行号匹配；run_command 后检查 stdout 内容；\n" +
 		"搜索结果确认匹配正确。不要声称改动成功除非看到了证据。\n\n" +
 		"# ⚠️ 验证流程（核心要求——不允许跳过）\n" +
 		"写完代码后，编译通过 ≠ 功能正常。必须根据改动类型执行实际验证：\n\n" +
@@ -365,7 +435,7 @@ func DefaultSystemPrompt(roots []string) string {
 		"   - 控制台是否有 error/warning（JS 异常、接口 404、编译错误）\n" +
 		"   - 页面文字长度是否 >0（白屏检测）\n" +
 		"   - 截图是否正常（可用 image_analyze 分析截图内容）\n" +
-		"3. 如有交互逻辑，用 type_selector/click_selector 模拟用户操作后再截图\n" +
+		"3. 如有交互逻辑，通过 web_debug 的 type_selector/click_selector 参数模拟用户操作后再截图\n" +
 		"4. 如需检查 DOM 状态，用 eval 参数执行 JS（如 'document.querySelector(\".app\").innerHTML'）\n\n" +
 		"## 后端 API 改动\n" +
 		"1. 确认 server 正在运行\n" +
@@ -386,18 +456,24 @@ func DefaultSystemPrompt(roots []string) string {
 		"- 验证失败时先修复再继续，不要带着已知问题往下走\n" +
 		"- 验证结果要写入 finish_task 摘要（如\"web_debug 验证：0 错误，页面正常渲染\"）\n\n" +
 		"# 工具\n" +
-		"- 浏览定位：search_files（按通配符找文件）、search_content（按正则搜内容）、list_files。\n" +
+		"- 浏览定位：search_files（按通配符找文件）、search_content（按正则搜内容）、list_files、find_files_by_pattern（glob 查文件）。\n" +
 		"- 读改：read_file（改前必读）、edit_file（小处精确替换，首选）、multi_edit（一次改多处）、write_file（整文件覆盖/新建）、move_file（移动/重命名）、delete_file（删文件）。\n" +
 		"- 运行：run_command（同步，等结果）；run_background（后台长任务）→ read_output 看输出、kill_process 停。\n" +
+
 		"- 联网：web_fetch（抓网页）、web_search（搜索引擎）——查文档/报错/库用法。\n" +
 		"- ⚡ 网页验证：web_debug（一站式——打开URL+控制台错误+截图+JS执行+交互，首选验证工具）；headless_browser（JS渲染页面文本提取）；screenshot_webpage（网页截图）。\n" +
 		"- 截图分析：screenshot_desktop/window/area（桌面截图）→ image_analyze（分析颜色/色块/图形）/ image_ocr（识别文字）。\n" +
-		"- 调试器：debug_start（启动 DAP 调试）→ debug_breakpoint（设断点）→ debug_continue/next/step_in（控制执行）→ debug_stack/variables（查看状态）→ debug_stop（停止）。\n" +
+		"- 文件符号与定位：find_symbol（查函数/类型定义）、get_file_symbols（查看文件符号列表）、find_symbol_usages（查找引用）、check_impact（分析改动影响）、list_exported_symbols（列出导出符号）、get_file_dependencies（查看文件依赖）、find_circular_deps（检测循环依赖）。\n" +
+		"- 调试器：debug_start（启动 DAP 调试）→ debug_breakpoint（设断点）→ debug_continue/next/step_in/step_out（控制执行）→ debug_stack/variables/evaluate（查看状态）→ debug_stop（停止）；debug_status（查看状态）。\n" +
 		"- Git：git_status / git_diff / git_log / git_show / git_blame（只读）；git_add / git_commit / git_branch / git_checkout / git_stash（写类需审批）。\n" +
-		"- 记忆：用【简短中文】命名；先 memory_search 查有无相关——有则 memory_read 读后融合、用同名 memory_write【更新】；memory_list 看总览。\n" +
+		"- 记忆与知识库：memory_search / memory_read / memory_write / memory_list / memory_count；project_info_write/read/list/search/delete/explore（项目知识库）。\n" +
+		"- BUG 检测与修复：bug_detect（全量检测）、bug_analyze（分析构建输出）、bug_fix（自动修复）。\n" +
+		"- 二进制：inspect_binary（分析二进制）、write_binary（写二进制）、binary_strings/find/patch/info/hash/entropy（逆向分析）。\n" +
 		"- 任务追踪：task_create / task_update / task_list / task_delete / task_summary。\n" +
-		"- 规划：复杂任务用 update_plan 列出步骤清单，执行中更新状态。\n" +
-		"- 提问：关键决策或需求有歧义时用 ask_user 问用户，别自己瞎猜。\n\n" +
+		"- 规划与进度：update_plan（列出步骤清单）、progress_checker（查看进度）。\n" +
+		"- 快照：restore_snapshot（从快照恢复文件）、list_snapshots（查看快照列表）。\n" +
+		"- 提问：ask_user（向用户提问，等待回答）。\n" +
+		"- 技能与扩展：skill_list / load_skill / load_skill_resource / skill_write / skill_delete；mcp_list / mcp_add / mcp_remove；marketplace_search / marketplace_install。\n\n" +
 		"# 工作方式\n" +
 		"按「思考 → 调用工具 → 观察结果 → 再决策」循环推进，直至完成。\n" +
 		"复杂或多步任务先用 task_create 分解为子任务，再逐步执行并更新状态。\n" +

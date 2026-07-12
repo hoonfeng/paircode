@@ -49,6 +49,9 @@ const reviewerSystemPrompt = `# 角色
 # 审核层次
 ## Shell 命令
 严格审查：破坏性操作（rm -rf、force push、hard reset、drop table、format、del /f /s 等）；路径穿越或访问系统关键目录；编码风险（Windows cmd.exe 中文 echo/type 可能乱码；PowerShell 未指定 -Encoding 可能改变编码）。
+### 阻塞与后台运行（run_command 专用）
+检查 run_command 是否在执行一个长期运行的命令（如 dev server、watch、go run 启动服务、npm run dev 等）。此类命令会阻塞 agent 循环 120s 后超时终止，严重影响 agent 正常运行。发现此类情况应驳回并建议改用 run_background。
+反过来，run_background 用于长命令，短查询则用 run_command。
 ## 文件操作（编码感知）
 安全性：是否引入注入攻击、XSS、路径穿越等漏洞；编码处理：.bat/.cmd 中文须 GBK，.ps1 中文建议 UTF-8 BOM；结构完整性：是否破坏 JSON/XML/YAML 结构、删除关键配置；向后兼容：是否影响已有 API 接口、配置文件格式。
 ## 删除操作（关键文件保护）
@@ -63,13 +66,14 @@ package.json、go.mod、.env、CLAUDE.md、AGENTS.md、Dockerfile、.gitignore �
 - 存在安全问题或触发关键文件保护 → 驳回
 - 需调整但不严重 → 需要修改 + 具体建议
 - 所有审核输出使用中文`
-
 // criticalFiles 关键文件：删除直接驳回（复刻参考，按 companion 项目栈调整：go.mod/go.sum 取代 tsconfig 等）。
 var criticalFiles = map[string]bool{
 	"package.json": true, "go.mod": true, "go.sum": true, ".env": true,
 	"claude.md": true, "agents.md": true, "dockerfile": true,
 	"docker-compose.yml": true, ".gitignore": true,
 }
+
+
 
 // NeedsReview 是否需要审核：只读工具放行，仅写类（写/改/删/移/运行命令）过审。
 func NeedsReview(toolName string) bool {
@@ -105,15 +109,15 @@ func (r *Reviewer) Review(ctx context.Context, tc ToolCall) (ReviewVerdict, erro
 	}
 	return parseVerdict(resp.Content), nil
 }
-
-// reviewUserPrompt 据工具构造审核提示（复刻参考 审核命令 / 审核文件操作）。
 func reviewUserPrompt(name string, args map[string]any) string {
 	if name == "run_command" || name == "run_background" {
 		cmd, _ := args["command"].(string)
 		return "[审核：Shell 命令]\n命令：" + cmd + "\n\n请严格检查：\n" +
 			"1. 破坏性操作（rm -rf、force push、hard reset、format、del /f /s 等）\n" +
 			"2. 会修改项目外系统状态的命令\n3. 路径穿越或访问系统关键目录\n" +
-			"4. 编码风险（cmd.exe 中文乱码 / PowerShell 未指定 -Encoding）\n\n以 JSON 格式输出审核结果。"
+			"4. 编码风险（cmd.exe 中文乱码 / PowerShell 未指定 -Encoding）\n" +
+			"5. 【阻塞检查】run_command 同步执行最长 120s，是否在运行长期命令（dev server / watch / go run 服务 / npm run dev）？" +
+			"此类命令应改用 run_background 后台执行，否则会阻塞 agent 循环\n\n以 JSON 格式输出审核结果。"
 	}
 	path, _ := args["path"].(string)
 	content, _ := args["content"].(string)
@@ -132,6 +136,7 @@ func reviewUserPrompt(name string, args map[string]any) string {
 		"\n\n请严格检查：\n1. 安全性（注入/XSS/路径穿越）\n2. 编码处理（.bat/.cmd 须 GBK；.ps1 建议 UTF-8 BOM）\n" +
 		"3. 结构完整性（JSON/XML/YAML 不被破坏）\n4. 向后兼容（不破坏已有 API/配置格式）\n5. 错误处理\n\n以 JSON 格式输出审核结果。"
 }
+
 
 // parseVerdict 抽 JSON 裁决（首 { 到末 }）。解析失败→「需要修改」（复刻参考 fallback：不放行、提示人工）。
 func parseVerdict(content string) ReviewVerdict {

@@ -12,7 +12,7 @@
     <div v-if="expanded" class="plan-body">
       <div v-for="(step, si) in plan" :key="si" class="plan-step" :class="'step-' + step.status">
         <span class="step-icon">
-          <SvgIcon v-if="step.status === 'done'" name="check" :size="12" class="icon-done" />
+          <SvgIcon v-if="step.status === 'done' || step.status === 'completed'" name="check" :size="12" class="icon-done" />
           <SvgIcon v-else-if="step.status === 'in_progress'" name="cycle" :size="12" class="icon-in-progress" />
           <SvgIcon v-else name="clock" :size="12" class="icon-pending" />
         </span>
@@ -32,7 +32,7 @@ const props = defineProps({
 })
 defineEmits(['toggle'])
 
-const doneCount = computed(() => props.plan.filter(s => s.status === 'done').length)
+const doneCount = computed(() => props.plan.filter(s => s.status === 'done' || s.status === 'completed').length)
 const pct = computed(() => {
   const total = props.plan.length
   return total > 0 ? Math.round(doneCount.value / total * 100) : 0
@@ -71,6 +71,7 @@ function cleanText(raw) {
 .plan-body { border-top: 1px solid var(--border-color); padding: 4px 0; max-height: 200px; overflow-y: auto; }
 .plan-step { display: flex; align-items: flex-start; gap: 6px; padding: 3px 10px; font-size: 12px; }
 .plan-step.step-done { opacity: 0.6; }
+.plan-step.step-completed { opacity: 0.6; }
 .plan-step.step-in_progress { background: var(--bg-active); }
 .step-icon { flex-shrink: 0; width: 16px; text-align: center; line-height: 1.4; display: flex; align-items: center; justify-content: center; }
 .step-text { color: var(--text-primary); line-height: 1.4; word-break: break-word; }

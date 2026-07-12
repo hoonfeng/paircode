@@ -27,30 +27,27 @@ var (
 	tokenStatsMu     sync.Mutex
 )
 
-// tokenStatsPath 返回 .pair/token-stats.json 路径
-func tokenStatsPath() string {
-	if len(WorkspaceRoots) == 0 || WorkspaceRoots[0] == "" {
+// tokenStatsPath 返回指定工作区的 .pair/token-stats.json 路径
+func tokenStatsPath(root string) string {
+	if root == "" {
 		return ""
 	}
-	pairDir := filepath.Join(WorkspaceRoots[0], ".pair")
+	pairDir := filepath.Join(root, ".pair")
 	os.MkdirAll(pairDir, 0755)
 	return filepath.Join(pairDir, "token-stats.json")
 }
 
-// SaveTokenUsage 累积 token 用量到磁盘（每次调用叠加，非覆盖）。
-// 这是 agent 自闭环行为：agent 自己管理自己的上下文统计，不依赖外部宿主。
-//
-// 每次 LLM 调用后，Loop.Run 内部自动调用此函数。
-// 前端 / 外部宿主可通过 ReadTokenStats 读取已持久化的累积统计。
-func SaveTokenUsage(usage *Usage) {
-	if usage == nil {
+// SaveTokenUsageForRoot 按指定工作区根路径累积 token 用量到磁盘。
+// root 为工作区根路径，不同工作区写入不同文件，实现多工作区隔离。
+func SaveTokenUsageForRoot(root string, usage *Usage) {
+	if usage == nil || root == "" {
 		return
 	}
 	tokenStatsMu.Lock()
 	defer tokenStatsMu.Unlock()
 
 	// 先从磁盘读出已有累积值（防止跨进程丢失）
-	if path := tokenStatsPath(); path != "" {
+	if path := tokenStatsPath(root); path != "" {
 		if data, err := os.ReadFile(path); err == nil {
 			var disk TokenStats
 			if json.Unmarshal(data, &disk) == nil {
@@ -74,7 +71,7 @@ func SaveTokenUsage(usage *Usage) {
 	latestTokenStats.HistoryTokens += usage.HistoryTokens
 	latestTokenStats.OtherTokens += usage.OtherTokens
 
-	path := tokenStatsPath()
+	path := tokenStatsPath(root)
 	if path == "" {
 		return
 	}
@@ -83,23 +80,43 @@ func SaveTokenUsage(usage *Usage) {
 }
 
 // ResetTokenStats 重置累积 token 统计（全量清零并写盘）。
+// 使用全局 WorkspaceRoots[0] 确定存储路径（UI 层调用）。
 func ResetTokenStats() {
+	root := ""
+	if len(WorkspaceRoots) > 0 {
+		root = WorkspaceRoots[0]
+	}
+	ResetTokenStatsForRoot(root)
+}
+
+// ResetTokenStatsForRoot 按指定工作区路径重置 token 统计。
+func ResetTokenStatsForRoot(root string) {
 	tokenStatsMu.Lock()
 	defer tokenStatsMu.Unlock()
 	latestTokenStats = TokenStats{}
-	if path := tokenStatsPath(); path != "" {
+	if path := tokenStatsPath(root); path != "" {
 		data, _ := json.MarshalIndent(latestTokenStats, "", "  ")
 		os.WriteFile(path, data, 0644)
 	}
 }
 
 // ReadTokenStats 从磁盘读取已持久化的 token 统计。
+// 使用全局 WorkspaceRoots[0] 确定存储路径（UI 层调用）。
 // 外部宿主（web 服务）通过此函数获取 agent 自闭环保存的统计数据。
 func ReadTokenStats() *TokenStats {
+	root := ""
+	if len(WorkspaceRoots) > 0 {
+		root = WorkspaceRoots[0]
+	}
+	return ReadTokenStatsForRoot(root)
+}
+
+// ReadTokenStatsForRoot 按指定工作区路径读取 token 统计。
+func ReadTokenStatsForRoot(root string) *TokenStats {
 	tokenStatsMu.Lock()
 	defer tokenStatsMu.Unlock()
 
-	path := tokenStatsPath()
+	path := tokenStatsPath(root)
 	if path == "" {
 		return &latestTokenStats
 	}
@@ -116,4 +133,13 @@ func ReadTokenStats() *TokenStats {
 		return &latestTokenStats
 	}
 	return &stats
+}
+
+// SaveTokenUsage 累积 token 用量到磁盘（向后兼容，使用 WorkspaceRoots[0]）。
+func SaveTokenUsage(usage *Usage) {
+	root := ""
+	if len(WorkspaceRoots) > 0 {
+		root = WorkspaceRoots[0]
+	}
+	SaveTokenUsageForRoot(root, usage)
 }

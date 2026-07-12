@@ -125,6 +125,10 @@
             <div class="chat-empty-hint">发送消息即可与 AI 助手对话</div>
           </div>
         </div>
+        <!-- 任务计划面板（固定在输入区上方） -->
+        <div class="plan-container" :class="{ 'plan-empty': currentPlan.length === 0 }">
+          <PlanPanel v-if="currentPlan.length > 0" :plan="currentPlan" :expanded="planExpanded" @toggle="planExpanded = !planExpanded" />
+        </div>
         <!-- 输入区 -->
         <div class="chat-input-area">
           <ApprovalBar v-if="approvalState.waiting" :waiting="approvalState.waiting" :tool="approvalState.tool" :args="approvalState.args" :parsedArgs="approvalState.parsedArgs" @resolve="resolveApproval" />
@@ -146,6 +150,7 @@
             <div class="overlay-btns">
               <span :class="['obtn', { active: autoReview }]" @click="toggleAuto('autoReview')" title="自动审核：开启=Agent自行审批，关闭=等待用户审批"><SvgIcon name="sparkles" :size="12" /> 审核</span>
               <span :class="['obtn', { active: autoCollapse }]" @click="autoCollapse = !autoCollapse" title="自动折叠：新消息发出时折叠旧输出，显示完成摘要"><SvgIcon name="list" :size="12" /> 折叠</span>
+              <span :class="['obtn', { active: autoCommit }]" @click="toggleAuto('autoCommit')" title="自动 Git 提交：任务完成时自动 git add + commit"><SvgIcon name="git-commit" :size="12" /> 提交</span>
               <span class="obtn-sep"></span>
               <span :class="['obtn', 'obtn-agent', { active: autonomous }]" @click="toggleAuto('autonomous')" title="自主模式：开启=连续执行全部计划步骤，关闭=单次回复"><SvgIcon name="sparkles" :size="12" color="#d4a74e" /> 自主</span>
             </div>
@@ -190,6 +195,7 @@ const autoReview = ref(true)
 const autoIterate = ref(false)
 const autoCollapse = ref(true)
 const autonomous = ref(false)
+const autoCommit = ref(true)
 const pendingAttachment = ref(null)
 
 // nudge 提示条（从全局 state.nudgeByConv 读取，仅当前对话）
@@ -538,6 +544,8 @@ const deleteConv = async (id) => {
   try {
     await api.apiDelete('/conversations/' + id)
     state.conversations = state.conversations.filter(c => c.id !== id)
+    // 删除后立即同步到 localStorage，防止页面刷新后旧数据复现
+    window.dispatchEvent(new Event('save-conversations'))
     delete state.messagesByConv[id]
     delete state.loadingByConv[id]
     delete state.agentRunningByConv[id]
@@ -589,7 +597,8 @@ const toggleAuto = async (field) => {
   // 同步 local ref（浅 watch 不触发，需要手动同步）
   if (field === 'autoReview') autoReview.value = newVal
   else if (field === 'autonomous') autonomous.value = newVal
-  try { await api.apiPut('/settings', state.settings) } catch { state.settings[field] = oldVal; if (field === 'autoReview') autoReview.value = oldVal; else if (field === 'autonomous') autonomous.value = oldVal }
+  else if (field === 'autoCommit') autoCommit.value = newVal
+  try { await api.apiPut('/settings', state.settings) } catch { state.settings[field] = oldVal; if (field === 'autoReview') autoReview.value = oldVal; else if (field === 'autonomous') autonomous.value = oldVal; else if (field === 'autoCommit') autoCommit.value = oldVal }
 }
 
 const autoNameConv = async (convId, content) => {
@@ -622,10 +631,18 @@ function handleTaskTool(data) {
   try {
     const args = data.args ? (typeof data.args === 'string' ? JSON.parse(data.args) : data.args) : {}
     if (toolName === 'update_plan' && Array.isArray(args.plan)) { currentPlan.value = args.plan; planExpanded.value = true; return true }
-    if (toolName === 'task_create') { currentPlan.value.push({ step: args.subject || '(新建任务)', status: 'pending', callId: data.callId || data.callID || '' }); planExpanded.value = true; return true }
+    if (toolName === 'task_create') { currentPlan.value.push({ step: args.subject || '(新建任务)', status: 'pending', callId: data.callId || data.callID || '', _taskId: null }); planExpanded.value = true; return true }
+    if (toolName === 'task_update') {
+      for (let i = 0; i < currentPlan.value.length; i++) {
+        if (currentPlan.value[i]._taskId && currentPlan.value[i]._taskId === args.id) { currentPlan.value[i].status = args.status; planExpanded.value = true; return true }
+        if (args.subject && currentPlan.value[i].step === args.subject) { currentPlan.value[i].status = args.status; planExpanded.value = true; return true }
+      }
+      return true
+    }
     return true
   } catch { return false }
 }
+
 
 // ── 输入框拖拽调整 ──
 let inputDragging = false
@@ -715,7 +732,7 @@ const setupResizeObserver = () => {
 
 watch(() => state.messages.length, () => { nextTick(setupResizeObserver) })
 
-watch(() => state.settings, (s) => { if (s) { autoReview.value = s.autoReview !== undefined ? !!s.autoReview : true; autoIterate.value = !!s.autoIterateOnRejection; autonomous.value = !!s.autonomous; autoCollapse.value = s.autoCollapse !== undefined ? !!s.autoCollapse : true; } }, { immediate: true })
+watch(() => state.settings, (s) => { if (s) { autoReview.value = s.autoReview !== undefined ? !!s.autoReview : true; autoIterate.value = !!s.autoIterateOnRejection; autonomous.value = !!s.autonomous; autoCollapse.value = s.autoCollapse !== undefined ? !!s.autoCollapse : true; autoCommit.value = s.autoCommit !== false; } }, { immediate: true })
 
 const handleBeforeUnload = () => { if (state.currentConvId && state.messages.length > 0) { window.dispatchEvent(new Event('save-conversations')) } }
 
@@ -736,6 +753,22 @@ onMounted(() => {
     },
     onTaskCreate: (task, convId) => {
       if (state.currentConvId === convId) { currentPlan.value.push(task); planExpanded.value = true }
+    },
+    onTaskSetId: (callId, taskId, convId) => {
+      if (state.currentConvId !== convId) return
+      const plan = currentPlan.value
+      for (let i = 0; i < plan.length; i++) {
+        if (plan[i].callId === callId) { plan[i]._taskId = taskId; break }
+      }
+    },
+    onTaskUpdate: (taskId, status, subject, convId) => {
+      if (state.currentConvId !== convId) return
+      const plan = currentPlan.value
+      for (let i = 0; i < plan.length; i++) {
+        // 优先按 _taskId 匹配，其次按 step（subject）匹配
+        if (plan[i]._taskId && plan[i]._taskId === taskId) { plan[i].status = status; planExpanded.value = true; return }
+        if (subject && plan[i].step === subject) { plan[i].status = status; planExpanded.value = true; return }
+      }
     },
     onPhaseChange: (convId) => {
       // 阶段指示器自动从 state.phaseByConv 读取，此处启动定时器自动清除
@@ -798,24 +831,24 @@ onUnmounted(() => {
 .chat-messages { flex: 1; overflow-y: auto; padding: 8px 12px; min-height: 0; scroll-behavior: smooth; }
 .msg-list-wrap { display: flex; flex-direction: column; gap: 8px; min-height: 100%; }
 .msg-item { display: flex; gap: 8px; align-items: flex-start; content-visibility: auto; contain-intrinsic-size: 60px; }
-.msg-user { flex-direction: row-reverse; justify-content: flex-start; }
+.msg-user { flex-direction: row-reverse; justify-content: flex-start; gap: 10px; }
 .bubble-user {
-  flex: 0 1 auto;
-  width: fit-content;
-  max-width: 85%;
-  min-width: 60px;
+  flex: 0 0 auto;
+  max-width: 80%;
+  min-width: 40px;
   background: var(--accent);
   color: #fff;
-  padding: 8px 14px;
+  padding: 10px 16px;
   border-radius: 16px 16px 4px 16px;
-  margin-left: auto;
   overflow-wrap: break-word;
   word-break: break-word;
-  overflow: hidden;
+  overflow-wrap: anywhere;
 }
 .user-msg-content { width: 100%; text-align: right; }
-.user-msg-content :deep(p) { margin: 2px 0; white-space: pre-wrap; word-break: break-word; }
-.user-msg-content :deep(pre) { white-space: pre-wrap; font-size: 12px; background: rgba(0,0,0,0.15); padding: 6px; border-radius: 4px; max-width: 100%; overflow-x: auto; }
+.user-msg-content :deep(p) { margin: 4px 0; white-space: pre-wrap; word-break: break-word; }
+.user-msg-content :deep(p:first-child) { margin-top: 0; }
+.user-msg-content :deep(p:last-child) { margin-bottom: 0; }
+.user-msg-content :deep(pre) { white-space: pre-wrap; font-size: 12px; background: rgba(0,0,0,0.15); padding: 6px 8px; border-radius: 4px; max-width: 100%; overflow-x: auto; margin: 4px 0; }
 .user-msg-content :deep(code) { font-size: 12px; }
 .user-msg-placeholder { color: rgba(255,255,255,0.4); font-style: italic; font-size: 12px; }
 .msg-avatar { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
@@ -879,8 +912,8 @@ onUnmounted(() => {
 /* ── 输入区 ── */
 .chat-input-area { position: relative; flex-shrink: 0; padding: 0 8px 10px 8px; background: var(--bg-secondary); }
 .input-resizer { position: absolute; top: -8px; left: 0; right: 0; height: 12px; cursor: ns-resize; z-index: 10; }
-.chat-input { display: block; width: 100%; background: var(--input-bg); border: 1px solid var(--border-color); color: var(--text-primary); padding: 12px 16px 64px 16px; border-radius: 8px; font-size: 14px; resize: none; outline: none; min-height: 80px; font-family: inherit; line-height: 1.6; box-sizing: border-box; }
-.input-overlay { position: absolute; right: 16px; bottom: 20px; display: flex; align-items: center; gap: 6px; pointer-events: none; }
+.chat-input { display: block; width: 100%; background: var(--input-bg); border: 1px solid var(--border-color); color: var(--text-primary); padding: 14px 16px 52px 16px; border-radius: 8px; font-size: 14px; resize: none; outline: none; min-height: 80px; font-family: inherit; line-height: 1.6; box-sizing: border-box; }
+.input-overlay { position: absolute; right: 16px; bottom: 18px; display: flex; align-items: center; gap: 6px; pointer-events: none; }
 .input-overlay > * { pointer-events: auto; }
 .overlay-btns { display: flex; align-items: center; gap: 2px; }
 .obtn { display: flex; align-items: center; gap: 3px; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; color: var(--text-muted); background: var(--bg-tertiary); border: 1px solid var(--border-color); white-space: nowrap; user-select: none; }
@@ -916,4 +949,20 @@ onUnmounted(() => {
 .scroll-more-hint { text-align: center; font-size: 11px; color: var(--text-muted); padding: 4px; }
 .tool-calls { margin-top: 4px; }
 .tool-call { background: var(--bg-primary); padding: 4px 8px; border-radius: 3px; margin-bottom: 2px; font-size: 12px; }
+
+/* ── 任务计划容器（输入区上方）── */
+.plan-container {
+  flex-shrink: 0;
+  overflow: hidden;
+  transition: max-height 0.25s ease;
+}
+.plan-container.plan-empty {
+  max-height: 0;
+}
+.plan-container:not(.plan-empty) {
+  max-height: 300px;
+}
+.plan-container .plan-panel {
+  margin: 0 0 4px 0;
+}
 </style>
