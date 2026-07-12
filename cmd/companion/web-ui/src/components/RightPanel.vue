@@ -573,12 +573,13 @@ const switchConv = async (id) => {
   state.agentRunning = state.agentRunningByConv[id] || false
   currentPlan.value = []
   // approval/phase/nudge/convCtxStats 自动从 state.*ByConv[currentConvId] 读取，无需手动重置
+  // 始终从后端刷新 token 统计（无论本地是否缓存了消息）
+  try {
+    const ts = await api.apiGet('/conversations/' + id + '/token-stats')
+    if (ts && ts.promptTokens !== undefined) Object.assign(getConvCtxStats(id), ts)
+  } catch {}
   // 加载历史（若 messagesByConv[id] 为空）
   if (state.messagesByConv[id].length === 0) {
-    try {
-      const ts = await api.apiGet('/conversations/' + id + '/token-stats')
-      if (ts && ts.promptTokens !== undefined) Object.assign(getConvCtxStats(id), ts)
-    } catch {}
     try {
       const msgs = await api.apiGet('/conversations/' + id + '/messages')
       state.messagesByConv[id] = (msgs || []).map((m, idx) => ({

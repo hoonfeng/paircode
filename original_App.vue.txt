@@ -53,7 +53,7 @@
 import { ref, reactive, computed, watch, onMounted, onUnmounted, provide, nextTick } from 'vue'
 import { state, savePersistentState, loadPersistentState, applyTheme } from './main.js'
 import api from './api.js'
-import { processAgentEvent, processAgentDone, processStatus, getConvCtxStats } from './agent-events.js'
+import { processAgentEvent, processAgentDone, processStatus } from './agent-events.js'
 
 import MenuBar from './components/MenuBar.vue'
 import ActivityBar from './components/ActivityBar.vue'
@@ -173,13 +173,7 @@ async function switchWorkspace(targetPath) {
     }
     savePersistentState()
   } catch (err) {
-
-function makeConvKey(path) {
-  if (typeof path !== 'string' || !path) return ''
-  // 用 encodeURIComponent 编码路径后取前 64 字符作为稳定 key
-  const safe = encodeURIComponent(path).replace(/%[0-9A-F]{2}/g, '').slice(0, 64)
-  return 'conv_' + safe
-}
+    console.error('切换工作区失败:', err)
   }
 }
 
@@ -197,7 +191,6 @@ function saveCurrentConversations() {
   try {
     // 收集所有有消息的对话（保存精简结构，去掉运行时字段）
     const allData = {}
-    const ctxStats = {}
     for (const convId of Object.keys(state.messagesByConv)) {
       const msgs = state.messagesByConv[convId]
       if (msgs && msgs.length > 0) {
@@ -208,28 +201,11 @@ function saveCurrentConversations() {
           _time: m._time || '',
         }))
       }
-      // 持久化上下文 token 统计
-      const cs = state.convCtxStatsByConv[convId]
-      if (cs && cs.promptTokens > 0) {
-        ctxStats[convId] = {
-          promptTokens: cs.promptTokens,
-          completionTokens: cs.completionTokens,
-          cacheHitTokens: cs.cacheHitTokens,
-          cacheMissTokens: cs.cacheMissTokens,
-          systemTokens: cs.systemTokens,
-          skillsTokens: cs.skillsTokens,
-          mcpTokens: cs.mcpTokens,
-          toolTokens: cs.toolTokens,
-          historyTokens: cs.historyTokens,
-          otherTokens: cs.otherTokens,
-        }
-      }
     }
     localStorage.setItem(key, JSON.stringify({
       conversations: state.conversations,
       currentConvId: state.currentConvId,
       messagesByConv: allData,
-      convCtxStats: ctxStats,
     }))
   } catch (e) {
     console.warn('保存对话消息失败（可能 localStorage 已满）:', e)
@@ -281,16 +257,6 @@ async function loadConversationsForWorkspace(path) {
     // 同步当前对话
     if (state.currentConvId && state.messagesByConv[state.currentConvId]) {
       state.messages = state.messagesByConv[state.currentConvId]
-    }
-
-    // 恢复上下文 token 统计
-    if (data.convCtxStats) {
-      for (const convId of Object.keys(data.convCtxStats)) {
-        const saved = data.convCtxStats[convId]
-        if (!saved || saved.promptTokens <= 0) continue
-        const cs = getConvCtxStats(convId)
-        if (cs) Object.assign(cs, saved)
-      }
     }
   } catch (e) {
     console.warn('加载对话消息失败:', e)
