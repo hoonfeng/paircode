@@ -248,6 +248,8 @@ async function showWsContextMenu(e, ws) {
     }
     case 'delete':
       if (!(await window.$confirm(`确认删除工作区 "${ws.name}" ？（不会删除文件）`))) return
+      // 通知后端删除该工作区的所有对话
+      try { await api.apiPost('/workspace', { action: 'delete', root: ws.path }) } catch (e) { console.warn('删除工作区后端失败:', e) }
       state.wsList = state.wsList.filter(w => w.path !== ws.path)
       await saveWsList()
       if (state.workspaceRoot === ws.path) {
