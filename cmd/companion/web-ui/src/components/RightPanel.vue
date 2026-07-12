@@ -835,17 +835,17 @@ onUnmounted(() => {
 .msg-user { flex-direction: row-reverse; justify-content: flex-start; gap: 10px; }
 .bubble-user {
   flex: 0 0 auto;
-  max-width: 80%;
+  max-width: 75%;
   min-width: 40px;
   background: var(--accent);
   color: #fff;
   padding: 10px 16px;
-  border-radius: 16px 16px 4px 16px;
+  border-radius: 16px 16px 16px 4px;
   overflow-wrap: break-word;
   word-break: break-word;
   overflow-wrap: anywhere;
 }
-.user-msg-content { width: 100%; text-align: right; }
+.user-msg-content { width: 100%; text-align: left; }
 .user-msg-content :deep(p) { margin: 4px 0; white-space: pre-wrap; word-break: break-word; }
 .user-msg-content :deep(p:first-child) { margin-top: 0; }
 .user-msg-content :deep(p:last-child) { margin-bottom: 0; }
@@ -913,8 +913,8 @@ onUnmounted(() => {
 /* ── 输入区 ── */
 .chat-input-area { position: relative; flex-shrink: 0; padding: 0 8px 10px 8px; background: var(--bg-secondary); }
 .input-resizer { position: absolute; top: -8px; left: 0; right: 0; height: 12px; cursor: ns-resize; z-index: 10; }
-.chat-input { display: block; width: 100%; background: var(--input-bg); border: 1px solid var(--border-color); color: var(--text-primary); padding: 14px 16px 52px 16px; border-radius: 8px; font-size: 14px; resize: none; outline: none; min-height: 80px; font-family: inherit; line-height: 1.6; box-sizing: border-box; }
-.input-overlay { position: absolute; right: 16px; bottom: 18px; display: flex; align-items: center; gap: 6px; pointer-events: none; }
+.chat-input { display: block; width: 100%; background: var(--input-bg); border: 1px solid var(--border-color); color: var(--text-primary); padding: 14px 16px 68px 16px; border-radius: 8px; font-size: 14px; resize: none; outline: none; min-height: 80px; font-family: inherit; line-height: 1.6; box-sizing: border-box; }
+.input-overlay { position: absolute; right: 12px; bottom: 16px; display: flex; align-items: center; gap: 6px; pointer-events: none; }
 .input-overlay > * { pointer-events: auto; }
 .overlay-btns { display: flex; align-items: center; gap: 2px; }
 .obtn { display: flex; align-items: center; gap: 3px; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; color: var(--text-muted); background: var(--bg-tertiary); border: 1px solid var(--border-color); white-space: nowrap; user-select: none; }
