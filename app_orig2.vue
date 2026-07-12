@@ -77,7 +77,7 @@
 import { ref, reactive, computed, watch, onMounted, onUnmounted, provide, nextTick } from 'vue'
 import { state, savePersistentState, loadPersistentState, applyTheme } from './main.js'
 import api from './api.js'
-import { processAgentEvent, processAgentDone, processStatus, getConvCtxStats } from './agent-events.js'
+import { processAgentEvent, processAgentDone, processStatus } from './agent-events.js'
 
 import MenuBar from './components/MenuBar.vue'
 import ActivityBar from './components/ActivityBar.vue'
@@ -204,89 +204,28 @@ async function switchWorkspace(targetPath) {
 }
 
 function saveCurrentConversations() {
-  if (typeof state.workspaceRoot !== 'string' || !state.workspaceRoot) return
+  if (!state.workspaceRoot) return
   try {
-    // 使用 btoa 生成兼容旧版数据的 key（与原有 localStorage 数据结构一致）
-    const key = 'conv_' + btoa(unescape(encodeURIComponent(state.workspaceRoot))).slice(0, 40)
-    // 收集所有有消息的对话
-    const allData = {}
-    const ctxStats = {}
-    for (const convId of Object.keys(state.messagesByConv)) {
-      const msgs = state.messagesByConv[convId]
-      if (msgs && msgs.length > 0) {
-        allData[convId] = msgs.map(m => ({
-          role: m.role,
-          content: m.content,
-          segments: m.segments || [],
-          _time: m._time || '',
-        }))
-      }
-      // 持久化上下文 token 统计（用于进程重启后恢复上下文占用数据）
-      const cs = state.convCtxStatsByConv[convId]
-      if (cs && cs.promptTokens > 0) {
-        ctxStats[convId] = {
-          promptTokens: cs.promptTokens,
-          completionTokens: cs.completionTokens,
-          cacheHitTokens: cs.cacheHitTokens,
-          cacheMissTokens: cs.cacheMissTokens,
-          systemTokens: cs.systemTokens,
-          skillsTokens: cs.skillsTokens,
-          mcpTokens: cs.mcpTokens,
-          toolTokens: cs.toolTokens,
-          historyTokens: cs.historyTokens,
-          otherTokens: cs.otherTokens,
-        }
-      }
-    }
+    const key = 'conv_' + btoa(state.workspaceRoot).slice(0, 40)
     localStorage.setItem(key, JSON.stringify({
       conversations: state.conversations,
       currentConvId: state.currentConvId,
-      messagesByConv: allData,
-      convCtxStats: ctxStats,
+      messages: state.messages,
     }))
-  } catch (e) {
-    console.warn('保存对话消息失败（localStorage 可能已满）:', e)
-    // 降级：只保存对话列表
-    try {
-      const key = 'conv_' + btoa(unescape(encodeURIComponent(state.workspaceRoot))).slice(0, 40)
-      localStorage.setItem(key, JSON.stringify({
-        conversations: state.conversations,
-        currentConvId: state.currentConvId,
-      }))
-    } catch {}
-  }
+  } catch {}
 }
 
 async function loadConversationsForWorkspace(path) {
   state.conversations = []
   state.currentConvId = ''
   state.messages = []
-  if (typeof path !== 'string' || !path) return
   try {
-    const key = 'conv_' + btoa(unescape(encodeURIComponent(path))).slice(0, 40)
+    const key = 'conv_' + btoa(path).slice(0, 40)
     const saved = localStorage.getItem(key)
-    if (!saved) return
-    const data = JSON.parse(saved)
-    state.conversations = data.conversations || []
-    state.currentConvId = data.currentConvId || ''
-
-    // 恢复新格式 messagesByConv（多对话保存）
-    if (data.messagesByConv) {
-      for (const convId of Object.keys(data.messagesByConv)) {
-        const msgs = data.messagesByConv[convId]
-        if (!Array.isArray(msgs) || msgs.length === 0) continue
-        state.messagesByConv[convId] = msgs.map((m, idx) => ({
-          role: m.role,
-          content: m.content || '',
-          segments: (m.segments || []).map(s => ({ ...s })),
-          _key: 'msg_' + Date.now() + '_' + idx,
-          _idx: idx,
-          _time: m._time || '',
-          _loading: false,
-        }))
-      }
-    } else if (data.messages) {
-      // 兼容旧格式（只保存当前对话的 messages）
+    if (saved) {
+      const data = JSON.parse(saved)
+      state.conversations = data.conversations || []
+      state.currentConvId = data.currentConvId || ''
       state.messages = (data.messages || []).map(m => {
         if (m._loading) m._loading = false
         if (!m.content && m.segments && m.segments.length > 0) {
@@ -294,28 +233,12 @@ async function loadConversationsForWorkspace(path) {
         }
         return m
       })
+      // 同步到 messagesByConv，避免切换对话时丢失 localStorage 中的消息
       if (state.currentConvId) {
         state.messagesByConv[state.currentConvId] = state.messages
       }
     }
-
-    // 同步当前对话
-    if (state.currentConvId && state.messagesByConv[state.currentConvId]) {
-      state.messages = state.messagesByConv[state.currentConvId]
-    }
-
-    // 恢复上下文 token 统计
-    if (data.convCtxStats) {
-      for (const convId of Object.keys(data.convCtxStats)) {
-        const saved = data.convCtxStats[convId]
-        if (!saved || saved.promptTokens <= 0) continue
-        const cs = getConvCtxStats(convId)
-        if (cs) Object.assign(cs, saved)
-      }
-    }
-  } catch (e) {
-    console.warn('加载对话消息失败:', e)
-  }
+  } catch {}
 }
 
 const switchActivity = (id) => {

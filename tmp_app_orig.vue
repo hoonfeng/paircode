@@ -22,32 +22,8 @@
       <EditorArea />
       <div class="bottom-panel" v-if="state.bottomPanelVisible"
            :style="{ height: bottomPanelHeight + 'px' }">
-        <div class="panel-tabs">
-          <button :class="{ active: state.bottomPanelTab === 'output' }"
-                  @click="state.bottomPanelTab = 'output'">
-            <SvgIcon name="output" size="14" /> 输出
-          </button>
-          <button :class="{ active: state.bottomPanelTab === 'tasks' }"
-                  @click="state.bottomPanelTab = 'tasks'">
-            <SvgIcon name="check" size="14" /> 任务
-          </button>
-          <button :class="{ active: state.bottomPanelTab === 'terminal' }"
-                  @click="state.bottomPanelTab = 'terminal'">
-            <SvgIcon name="terminal" size="14" /> 终端
-          </button>
-          <div class="panel-actions">
-            <span class="panel-notify" v-if="state.notificationCount > 0" title="有待处理通知">
-              <SvgIcon name="bell" :size="12" /> {{ state.notificationCount }}
-            </span>
-            <button class="panel-close" @click="state.bottomPanelVisible = false">
-              <SvgIcon name="close" size="14" />
-            </button>
-          </div>
-        </div>
         <div class="panel-content">
-          <OutputPanel v-if="state.bottomPanelTab === 'output'" />
-          <TasksPanel v-if="state.bottomPanelTab === 'tasks'" />
-          <TerminalPanel v-if="state.bottomPanelTab === 'terminal'" />
+          <TerminalPanel />
         </div>
         <div class="panel-resizer" @mousedown.prevent="startBottomResize"></div>
       </div>
@@ -85,8 +61,6 @@ import Sidebar from './components/Sidebar.vue'
 import EditorArea from './components/EditorArea.vue'
 import RightPanel from './components/RightPanel.vue'
 import StatusBar from './components/StatusBar.vue'
-import OutputPanel from './components/OutputPanel.vue'
-import TasksPanel from './components/TasksPanel.vue'
 import TerminalPanel from './components/TerminalPanel.vue'
 import SettingsModal from './components/SettingsModal.vue'
 import SystemModal from './components/SystemModal.vue'
@@ -199,16 +173,29 @@ async function switchWorkspace(targetPath) {
     }
     savePersistentState()
   } catch (err) {
-    console.error('切换工作区失败:', err)
+
+function makeConvKey(path) {
+  if (typeof path !== 'string' || !path) return ''
+  // 用 encodeURIComponent 编码路径后取前 64 字符作为稳定 key
+  const safe = encodeURIComponent(path).replace(/%[0-9A-F]{2}/g, '').slice(0, 64)
+  return 'conv_' + safe
+}
   }
+}
+
+function makeConvKey(path) {
+  if (typeof path !== 'string' || !path) return ''
+  // 用 encodeURIComponent 编码路径后取前 64 字符作为稳定 key
+  const safe = encodeURIComponent(path).replace(/%[0-9A-F]{2}/g, '').slice(0, 64)
+  return 'conv_' + safe
 }
 
 function saveCurrentConversations() {
   if (typeof state.workspaceRoot !== 'string' || !state.workspaceRoot) return
+  const key = makeConvKey(state.workspaceRoot)
+  if (!key) return
   try {
-    // 使用 btoa 生成兼容旧版数据的 key（与原有 localStorage 数据结构一致）
-    const key = 'conv_' + btoa(unescape(encodeURIComponent(state.workspaceRoot))).slice(0, 40)
-    // 收集所有有消息的对话
+    // 收集所有有消息的对话（保存精简结构，去掉运行时字段）
     const allData = {}
     const ctxStats = {}
     for (const convId of Object.keys(state.messagesByConv)) {
@@ -221,7 +208,7 @@ function saveCurrentConversations() {
           _time: m._time || '',
         }))
       }
-      // 持久化上下文 token 统计（用于进程重启后恢复上下文占用数据）
+      // 持久化上下文 token 统计
       const cs = state.convCtxStatsByConv[convId]
       if (cs && cs.promptTokens > 0) {
         ctxStats[convId] = {
@@ -245,32 +232,36 @@ function saveCurrentConversations() {
       convCtxStats: ctxStats,
     }))
   } catch (e) {
-    console.warn('保存对话消息失败（localStorage 可能已满）:', e)
-    // 降级：只保存对话列表
+    console.warn('保存对话消息失败（可能 localStorage 已满）:', e)
+    // 降级：只保存对话列表，不保存消息内容
     try {
-      const key = 'conv_' + btoa(unescape(encodeURIComponent(state.workspaceRoot))).slice(0, 40)
       localStorage.setItem(key, JSON.stringify({
         conversations: state.conversations,
         currentConvId: state.currentConvId,
+        messagesByConv: {},
       }))
-    } catch {}
+    } catch (e2) {
+      console.warn('降级保存对话消息也失败:', e2)
+    }
   }
 }
 
 async function loadConversationsForWorkspace(path) {
+  // 重置
   state.conversations = []
   state.currentConvId = ''
   state.messages = []
   if (typeof path !== 'string' || !path) return
+  const key = makeConvKey(path)
+  if (!key) return
   try {
-    const key = 'conv_' + btoa(unescape(encodeURIComponent(path))).slice(0, 40)
     const saved = localStorage.getItem(key)
     if (!saved) return
     const data = JSON.parse(saved)
     state.conversations = data.conversations || []
     state.currentConvId = data.currentConvId || ''
 
-    // 恢复新格式 messagesByConv（多对话保存）
+    // 恢复所有对话的消息到 messagesByConv
     if (data.messagesByConv) {
       for (const convId of Object.keys(data.messagesByConv)) {
         const msgs = data.messagesByConv[convId]
@@ -284,18 +275,6 @@ async function loadConversationsForWorkspace(path) {
           _time: m._time || '',
           _loading: false,
         }))
-      }
-    } else if (data.messages) {
-      // 兼容旧格式（只保存当前对话的 messages）
-      state.messages = (data.messages || []).map(m => {
-        if (m._loading) m._loading = false
-        if (!m.content && m.segments && m.segments.length > 0) {
-          m.content = m.segments.filter(s => s.type === 'content').map(s => s.content || '').join('')
-        }
-        return m
-      })
-      if (state.currentConvId) {
-        state.messagesByConv[state.currentConvId] = state.messages
       }
     }
 
@@ -575,21 +554,6 @@ watch(() => state.openFiles.length, schedulePersist)
   border-top: 1px solid var(--border-color);
   display: flex; flex-direction: column; min-height: 60px;
 }
-.panel-tabs {
-  display: flex; align-items: center; background: var(--bg-tertiary);
-  border-bottom: 1px solid var(--border-color); padding: 0 8px; height: 28px; flex-shrink: 0; gap: 2px;
-}
-.panel-tabs button {
-  background: none; border: none; color: var(--text-secondary); font-size: 12px;
-  padding: 4px 12px; cursor: pointer; border-top: 2px solid transparent;
-  display: flex; align-items: center; gap: 4px;
-}
-.panel-tabs button.active { color: var(--text-primary); border-top-color: var(--accent); background: var(--bg-secondary); }
-.panel-tabs button:hover { color: var(--text-primary); }
-.panel-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; }
-.panel-notify { font-size: 11px; color: #d4a74e; display: flex; align-items: center; gap: 2px; }
-.panel-close { background: none; border: none; color: var(--text-secondary); font-size: 14px; cursor: pointer; padding: 2px 6px; }
-.panel-close:hover { color: var(--text-primary); }
-.panel-content { flex: 1; overflow: auto; padding: 4px; }
+.panel-content { flex: 1; overflow: auto; }
 .panel-resizer { position: absolute; top: -3px; left: 0; right: 0; height: 6px; cursor: ns-resize; z-index: 10; }
 </style>
