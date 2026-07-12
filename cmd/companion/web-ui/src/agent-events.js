@@ -244,7 +244,7 @@ export function processAgentDone(convId, data) {
   }
   if (globalCtx.loadWsTokenStats) globalCtx.loadWsTokenStats()
   if (rt && rt.finalContent && globalCtx.saveConvMsg) {
-    globalCtx.saveConvMsg(convId, rt.finalContent)
+    globalCtx.saveConvMsg(convId, rt.finalContent, rt.msgIdx)
   }
   const localConv = state.conversations.find(c => c.id === convId)
   if (localConv) localConv.msgCount = (localConv.msgCount || 0) + 1

@@ -50,7 +50,6 @@ function cleanText(raw) {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: var(--border-radius);
-  margin: 4px 8px;
   overflow: hidden;
   flex-shrink: 0;
 }

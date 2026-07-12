@@ -578,12 +578,29 @@ const switchConv = async (id) => {
     if (ts && ts.promptTokens !== undefined) Object.assign(getConvCtxStats(id), ts)
   } catch {}
   // 加载历史（若 messagesByConv[id] 为空）
-  if (state.messagesByConv[id].length === 0) {
+      if (state.messagesByConv[id].length === 0) {
     try {
       const msgs = await api.apiGet('/conversations/' + id + '/messages')
-      state.messagesByConv[id] = (msgs || []).map((m, idx) => ({
-        role: m.role, content: m.content || '', toolCalls: m.toolCalls || [], segments: [], _key: 'msg_' + Date.now() + '_' + idx, _idx: idx, _time: m.createdAt ? m.createdAt.slice(11, 19) : '',
-      }))
+      state.messagesByConv[id] = (msgs || []).map((m, idx) => {
+        // 尝试解包编码的 content（含 segments）
+        let content = m.content || ''
+        let segments = []
+        if (content && content.startsWith('{"_type":"msg"')) {
+          try {
+            const decoded = JSON.parse(content)
+            content = decoded.text || ''
+            segments = (decoded.segs || []).map(s => {
+              const seg = { ...s, _expanded: false, _collapsed: s.type === 'thinking' ? true : false }
+              return seg
+            })
+          } catch {}
+        }
+        return {
+          role: m.role, content, segments,
+          _key: 'msg_' + Date.now() + '_' + idx, _idx: idx,
+          _time: '',
+        }
+      })
       state.messages = state.messagesByConv[id]
     } catch {}
   }
@@ -745,30 +762,44 @@ onMounted(() => {
     scrollToBottom: () => scrollToBottom(),
     loadWsTokenStats: () => loadWsTokenStats(),
     autoNameConv: (convId, text) => autoNameConv(convId, text),
-    saveConvMsg: (convId, content) => {
-      api.apiPost('/conversations/' + convId + '/messages', { role: 'assistant', content }).catch(() => {})
+    saveConvMsg: (convId, content, msgIdx) => {
+      // 把 segments 也编码进 content，以便后端拉取后能恢复
+      let payload = { role: 'assistant', content }
+      if (msgIdx !== undefined && state.messagesByConv[convId] && state.messagesByConv[convId][msgIdx]) {
+        const segs = state.messagesByConv[convId][msgIdx].segments
+        if (segs && segs.length > 0) {
+          payload.content = JSON.stringify({
+            _type: 'msg',
+            text: content,
+            segs: segs.map(s => ({ type: s.type, content: s.content, name: s.name, argsRaw: s.argsRaw, result: s.result, question: s.question, callId: s.callId })),
+          })
+        }
+      }
+      api.apiPost('/conversations/' + convId + '/messages', payload).catch(e => console.warn('saveConvMsg 失败:', e))
     },
     onPlanUpdate: (plan, convId) => {
-      if (state.currentConvId === convId) { currentPlan.value = plan; planExpanded.value = true }
+      if (state.currentConvId === convId) { currentPlan.value = [...plan]; planExpanded.value = true }
     },
     onTaskCreate: (task, convId) => {
-      if (state.currentConvId === convId) { currentPlan.value.push(task); planExpanded.value = true }
+      if (state.currentConvId === convId) { currentPlan.value = [...currentPlan.value, task]; planExpanded.value = true }
     },
     onTaskSetId: (callId, taskId, convId) => {
       if (state.currentConvId !== convId) return
-      const plan = currentPlan.value
+      const plan = [...currentPlan.value]
       for (let i = 0; i < plan.length; i++) {
-        if (plan[i].callId === callId) { plan[i]._taskId = taskId; break }
+        if (plan[i].callId === callId) { plan[i] = { ...plan[i], _taskId: taskId }; break }
       }
+      currentPlan.value = plan
     },
     onTaskUpdate: (taskId, status, subject, convId) => {
       if (state.currentConvId !== convId) return
-      const plan = currentPlan.value
+      const plan = [...currentPlan.value]
+      let changed = false
       for (let i = 0; i < plan.length; i++) {
-        // 优先按 _taskId 匹配，其次按 step（subject）匹配
-        if (plan[i]._taskId && plan[i]._taskId === taskId) { plan[i].status = status; planExpanded.value = true; return }
-        if (subject && plan[i].step === subject) { plan[i].status = status; planExpanded.value = true; return }
+        if (plan[i]._taskId && plan[i]._taskId === taskId) { plan[i] = { ...plan[i], status }; changed = true; break }
+        if (subject && plan[i].step === subject) { plan[i] = { ...plan[i], status }; changed = true; break }
       }
+      if (changed) { currentPlan.value = plan; planExpanded.value = true }
     },
     onPhaseChange: (convId) => {
       // 阶段指示器自动从 state.phaseByConv 读取，此处启动定时器自动清除
@@ -838,21 +869,24 @@ onUnmounted(() => {
 
 .bubble-user {
   flex: 0 0 auto;
-  max-width: 75%;
+  max-width: 80%;
   min-width: 40px;
   background: var(--accent);
   color: #fff;
   padding: 10px 16px;
-  border-radius: 16px 4px 4px 16px;
+  border-radius: 18px;
   overflow-wrap: break-word;
   word-break: break-word;
   overflow-wrap: anywhere;
+  margin: 2px 0;
 }
 /* 选中文字在深色气泡上可见 */
 .bubble-user ::selection {
   background: rgba(255, 255, 255, 0.3);
   color: #fff;
 }
+.user-msg-content { width: 100%; text-align: left; }
+.user-msg-content :deep(p) { margin: 4px 0; white-space: pre-wrap; word-break: break-word; }
 .user-msg-content :deep(p:first-child) { margin-top: 0; }
 .user-msg-content :deep(p:last-child) { margin-bottom: 0; }
 .user-msg-content :deep(pre) { white-space: pre-wrap; font-size: 12px; background: rgba(0,0,0,0.15); padding: 6px 8px; border-radius: 4px; max-width: 100%; overflow-x: auto; margin: 4px 0; }
@@ -962,9 +996,11 @@ onUnmounted(() => {
   flex-shrink: 0;
   overflow: hidden;
   transition: max-height 0.25s ease;
+  padding: 0 8px;
 }
 .plan-container.plan-empty {
   max-height: 0;
+  padding: 0 8px;
 }
 .plan-container:not(.plan-empty) {
   max-height: 300px;
