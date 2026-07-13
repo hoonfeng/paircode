@@ -315,6 +315,7 @@ defineProps({
 .stop-pulse-ring {
   animation: stopRingPulse 1.2s ease-in-out infinite;
   fill: none;
+  transform-origin: center;
 }
 .svg-icon {
   display: inline-block;
