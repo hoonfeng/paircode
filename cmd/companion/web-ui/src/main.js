@@ -133,7 +133,7 @@ export const state = reactive({
   focusMode: false,
 })
 
-// ─── 字体加载映射 ────────────────────────────────────────────
+// ─── 字体加载映射（所有主题统一用 Inter + JetBrains Mono）───
 const FONT_CONFIG = {
   dark: {
     ui: ['Inter:400,500,600,700'],
@@ -146,14 +146,14 @@ const FONT_CONFIG = {
     google: ['Inter', 'JetBrains Mono'],
   },
   warm: {
-    ui: ['Noto+Serif+SC:400,600,700'],
-    code: ['Source+Code+Pro:400,500,600'],
-    google: ['Noto Serif SC', 'Source Code Pro'],
+    ui: ['Inter:400,500,600,700'],
+    code: ['JetBrains Mono:400,500,600'],
+    google: ['Inter', 'JetBrains Mono'],
   },
   cute: {
-    ui: ['Nunito:400,600,700,800'],
-    code: ['Fira+Code:400,500,600'],
-    google: ['Nunito', 'Fira Code'],
+    ui: ['Inter:400,500,600,700'],
+    code: ['JetBrains Mono:400,500,600'],
+    google: ['Inter', 'JetBrains Mono'],
   },
 }
 
