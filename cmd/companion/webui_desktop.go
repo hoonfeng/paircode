@@ -736,6 +736,35 @@ func (s *webServer) startEventPersistWorker() {
 							_ = store.AppendMessage(convID, hist[i], agent.SegmentsFromMessage(hist[i], hist, i))
 						}
 					}
+					// ── 持久化 EventDone 的完成报告（如 finish_task 结果）──
+					// EventDone.Content 包含完成摘要，但不在 history 的 Message 中（仅事件）。
+					// 追加为一条 content segment 到消息末尾，确保页面刷新后仍能显示完成报告。
+					if ge.Event.Type == agent.EventDone && ge.Event.Content != "" {
+						_, existingAfter := store.Count(convID)
+						if existingAfter > 0 {
+							// 读最后一条消息
+							lastMsgs, _, _ := store.LoadLatest(convID, 1)
+							if len(lastMsgs) > 0 {
+								last := lastMsgs[0]
+								// 检查是否已有同内容的 content segment（防重复持久化）
+								hasDone := false
+								for _, seg := range last.Segments {
+									if seg.Type == "content" && seg.Content == ge.Event.Content {
+										hasDone = true
+										break
+									}
+								}
+								if !hasDone {
+									// 追加为独立的 assistant 消息（带 content segment），
+									// 刷新页面后作为完成报告展示在消息列表中。
+									_ = store.AppendMessage(convID,
+										agent.Message{Role: agent.RoleAssistant, Content: ge.Event.Content},
+										[]agent.Segment{{Type: "content", Content: ge.Event.Content}},
+									)
+								}
+							}
+						}
+					}
 				}
 			}
 				if ge.Event.Type == agent.EventDone && convID != "" {

@@ -296,6 +296,8 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 		}
 
 		// ★ finish_task 检测：Agent 调用了 finish_task → 任务完成，保存结果并退出循环
+		// 先同步 currentMsgs（包含 tool results），供 persist worker 获取完整历史
+		l.currentMsgs = msgs
 		for _, tc := range assistant.ToolCalls {
 			if tc.Function.Name == "finish_task" {
 				// 从 msgs 中找到最后一条 finish_task 的工具结果

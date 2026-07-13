@@ -300,6 +300,29 @@ func (s *webServer) startEventPersistWorker() {
 							_ = store.AppendMessage(convID, hist[i], agent.SegmentsFromMessage(hist[i], hist, i))
 						}
 					}
+					// ── 持久化 EventDone 的完成报告（如 finish_task 结果）──
+					if ge.Event.Type == agent.EventDone && ge.Event.Content != "" {
+						_, existingAfter := store.Count(convID)
+						if existingAfter > 0 {
+							lastMsgs, _, _ := store.LoadLatest(convID, 1)
+							if len(lastMsgs) > 0 {
+								last := lastMsgs[0]
+								hasDone := false
+								for _, seg := range last.Segments {
+									if seg.Type == "content" && seg.Content == ge.Event.Content {
+										hasDone = true
+										break
+									}
+								}
+								if !hasDone {
+									_ = store.AppendMessage(convID,
+										agent.Message{Role: agent.RoleAssistant, Content: ge.Event.Content},
+										[]agent.Segment{{Type: "content", Content: ge.Event.Content}},
+									)
+								}
+							}
+						}
+					}
 				}
 			}
 				if ge.Event.Type == agent.EventDone && convID != "" {
