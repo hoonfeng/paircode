@@ -297,8 +297,17 @@ export function processStatus(payload) {
   const runningSet = new Set(runningConvs)
   // 标记仍在运行的
   for (const convId of runningSet) {
+    // ── 防误覆盖：若该 conv 最后一条消息已是完成态的 assistant（_loading=false），
+    // 说明 processAgentDone 已处理完毕，仅为 status 消息的 50ms 竞态延迟所致（status
+    // 发出时后端 Running 标志尚未异步落地）。此时跳过 loading 设置，避免覆盖已清理的状态。
+    const convMsgs = state.messagesByConv[convId]
+    const lastMsg = convMsgs && convMsgs.length > 0 ? convMsgs[convMsgs.length - 1] : null
+    const alreadyDone = lastMsg && lastMsg.role === 'assistant' && !lastMsg._loading
+
     state.agentRunningByConv[convId] = true
-    state.loadingByConv[convId] = true
+    if (!alreadyDone) {
+      state.loadingByConv[convId] = true
+    }
     // 页面刷新后 agent 仍在运行：前端没有 runtime，事件会被丢弃。
     // 为这些对话创建 messagesByConv 占位 + runtime，确保后续事件能被处理。
     if (!runtimes[convId]) {
@@ -307,19 +316,22 @@ export function processStatus(payload) {
       // 若最后一条不是 loading 的 assistant 消息，则创建占位
       const last = msgs[msgs.length - 1]
       if (!last || last.role !== 'assistant' || !last._loading) {
-        const msgIdx = msgs.length
-        msgs.push({
-          role: 'assistant', content: '', segments: [], toolCalls: [],
-          _key: makeMsgKey(), _idx: msgIdx,
-          _time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
-          _loading: true,
-        })
-        runtimes[convId] = { msgIdx, finalContent: '', lastUserText: '' }
+        // 已是完成态的消息（alreadyDone=true）则不创建 loading 占位
+        if (!alreadyDone) {
+          const msgIdx = msgs.length
+          msgs.push({
+            role: 'assistant', content: '', segments: [], toolCalls: [],
+            _key: makeMsgKey(), _idx: msgIdx,
+            _time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+            _loading: true,
+          })
+          runtimes[convId] = { msgIdx, finalContent: '', lastUserText: '' }
+        }
       } else {
         // 已有 loading 的 assistant 消息，直接复用其索引
         runtimes[convId] = { msgIdx: msgs.length - 1, finalContent: '', lastUserText: '' }
       }
-      // 若是当前对话，同步 state.messages
+      // 若是当前对话，同步 state.messages（仅当有更改时）
       if (state.currentConvId === convId) {
         state.messages = msgs
       }
