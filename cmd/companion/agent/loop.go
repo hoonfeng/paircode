@@ -455,7 +455,8 @@ func DefaultSystemPrompt(roots []string) string {
 		"4. ★ 行号定位优先 ★ 当 edit_file 匹配失败时，优先用 line_start/line_end 行号定位，不再尝试 old_string 匹配。\n" +
 		"5. ★ 文件结构错乱时 ★ 如果文件已经因为反复修改而结构错乱（重复定义、大括号不匹配），先用 git checkout -- 文件 恢复原始版本，再重新做完整修改——不在乱文件上继续打补丁。\n\n" +
 		"## 验证\n" +
-		"1. Go 文件改完后立即运行 gofmt -e 文件路径 验证语法（无输出=正确）。\n" +
+		"1. Go 文件改完后立即运行 gofmt -e 文件路径 验证语法（无输出=正确），\n" +
+		"   然后运行 go build ./改的包路径/... 验证编译，go vet ./改的包路径/... 验证 lint。\n" +
 		"2. Vue/JS 文件改完后立即运行 npx vite build 验证编译。\n" +
 		"3. 编译通过≠功能正确，仍需执行相应运行时验证。\n\n" +
 		"# 验证原则\n" +
