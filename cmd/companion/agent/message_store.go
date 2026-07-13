@@ -23,6 +23,8 @@ type Segment struct {
 	Question string `json:"question,omitempty"` // 问题文本（ask_user）
 	CallID   string `json:"callId,omitempty"`   // 工具调用 ID（tool_call/ask_user）
 	Answer   string `json:"answer,omitempty"`   // 用户答案（ask_user）
+	AskType  string   `json:"askType,omitempty"`  // 提问类型：text(默认) | single(单选) | multi(多选) | single-with-input(单选+自由输入)
+	Options  []string `json:"options,omitempty"`  // 选项列表（ask_user 选择类用），如 ["是","否","不确定"]
 }
 
 // StoredMessage JSONL 中的一行。

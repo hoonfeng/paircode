@@ -490,13 +490,15 @@ func (b *AgentBridge) askUser(ctx context.Context, args map[string]any) (string,
 func (b *AgentBridge) registerAskTool(r *agent.Registry) {
 	r.Register(&agent.Tool{
 		Name: "ask_user",
-		Description: "向用户提问并等待回答（用于关键决策、歧义澄清，别滥用）。question 必填；options 可选(给用户快捷选项)；" +
-			"用户也可自由输入。调用会阻塞直到用户回答。",
+		Description: "向用户提问并等待回答（用于关键决策、歧义澄清，别滥用）。" +
+			"question 必填；askType 可选(text/single/multi/single-with-input)，默认 text 纯文本输入；" +
+			"options 可选(选择类 question 的选项列表)。调用会阻塞直到用户回答。",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
 				"question": map[string]any{"type": "string", "description": "要问用户的问题"},
-				"options":  map[string]any{"type": "array", "description": "可选：快捷选项", "items": map[string]any{"type": "string"}},
+				"askType":  map[string]any{"type": "string", "enum": []string{"text", "single", "multi", "single-with-input"}, "description": "提问类型：text(纯文本)/single(单选)/multi(多选)/single-with-input(单选+自由输入)"},
+				"options":  map[string]any{"type": "array", "description": "选择类问题用：可选项列表", "items": map[string]any{"type": "string"}},
 			},
 			"required": []string{"question"},
 		},

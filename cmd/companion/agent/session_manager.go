@@ -236,12 +236,16 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 	// Register 同名覆盖，安全替换调用方可能已注册的旧版本。
 	if opts.Registry != nil {
 		opts.Registry.Register(&Tool{
-			Name:        "ask_user",
-			Description: "向用户提问，等待用户回答",
+			Name: "ask_user",
+			Description: "向用户提问并等待回答（用于关键决策、歧义澄清，别滥用）。" +
+				"question 必填；type 可选(text/single/multi/single-with-input)，默认 text 纯文本输入；" +
+				"options 可选(选择类 question 的选项列表)。调用会阻塞直到用户回答。",
 			Parameters: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"question": map[string]any{"type": "string", "description": "问题内容"},
+					"question": map[string]any{"type": "string", "description": "向用户提出的问题"},
+					"askType":   map[string]any{"type": "string", "enum": []string{"text", "single", "multi", "single-with-input"}, "description": "提问类型：text(纯文本)/single(单选)/multi(多选)/single-with-input(单选+自由输入)"},
+					"options":   map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "选择类问题用：可选项列表"},
 				},
 				"required": []string{"question"},
 			},

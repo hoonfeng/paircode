@@ -91,7 +91,7 @@
                       <!-- Ask User：交互式 -->
                       <div v-else-if="seg.type === 'ask_user'" class="tl-item">
                         <span class="tl-dot tl-dot-ask"></span>
-                        <div class="tl-body"><AskUserCard :question="seg.question" :call-id="seg.callId" :answered="seg._answered" @answer="onAskAnswer(seg, $event)" /></div>
+                        <div class="tl-body"><AskUserCard :question="seg.question" :ask-type="seg.askType" :options="seg.options" :call-id="seg.callId" :answered="seg._answered" @answer="onAskAnswer(seg, $event)" /></div>
                       </div>
                       <!-- Content：纯 Markdown，无边框无圆点包裹 -->
                       <div v-else-if="seg.type === 'content'" class="tl-item tl-content-item">

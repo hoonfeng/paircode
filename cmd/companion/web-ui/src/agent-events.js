@@ -101,12 +101,18 @@ export function processAgentEvent(convId, data) {
       // 不创建 segment，结果由 EventDone 展示
     } else if (toolName === 'ask_user') {
       let question = ''
+      let askType = 'text'
+      let options = []
       try {
         const args = typeof data.args === 'string' ? JSON.parse(data.args) : data.args
         question = args.question || '（无问题内容）'
+        askType = args.askType || 'text'
+        if (Array.isArray(args.options)) {
+          options = args.options
+        }
       } catch {}
       msg.segments.push({
-        type: 'ask_user', question,
+        type: 'ask_user', question, askType, options,
         callId: data.callId || data.callID || '',
         answer: '', _answered: false,
       })
