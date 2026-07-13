@@ -265,70 +265,25 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := context.Background()
+	fmt.Printf("[handleChatSend] 开始 Start conv=%s message=%q\n", req.ConvID, req.Message[:min(len(req.Message), 30)])
 	if err := agentMgr.Start(ctx, req.ConvID, taskText, opts); err != nil {
+		fmt.Printf("[handleChatSend] Start 失败: %v\n", err)
 		jsonErr(w, err.Error())
 		return
 	}
+	fmt.Printf("[handleChatSend] Start 成功 conv=%s\n", req.ConvID)
 
 	jsonResp(w, map[string]any{"ok": true, "convId": req.ConvID})
 }
 
-// startEventPersistWorker 启动后台 goroutine 订阅全局事件流（无 bridge 依赖）。
+// startEventPersistWorker 已简化：消息写盘由 Session goroutine 在 loop.Run 返回后直接完成。
+// web 层只需设置 OnDone 回调——agent 在写盘后调用以生成对话摘要。
 func (s *webServer) startEventPersistWorker() {
-	ch := agentMgr.SubscribeAll()
-	go func() {
-		// 只持久化关键事件（EventUsage/EventDone/EventError），高频 thinking/content/tool_call 不做磁盘 I/O。
-		// 不做 ticker 轮询持久化（去掉 persisterRunningHistories），只在 EventDone/EventError 时一次性写。
-		// ★ 用 GetCurrentHistoryRaw 获取含 Reasoning 的消息存入 store（前端 SegmentsFromMessage 展示 thinking 段需要），
-		//   但 LoadAll 回传给 LLM 前会剥离 Reasoning（见 buildWebLoopOpts）。
-		for ge := range ch {
-			convID := ge.ConvID
-			if convID == "" {
-				continue
-			}
-			switch ge.Event.Type {
-			case agent.EventUsage:
-				if ge.Event.Usage != nil {
-					if store := agentMgr.Store(); store != nil {
-						_ = store.SetCtxStats(convID, ge.Event.Usage)
-					}
-				}
-			case agent.EventDone, agent.EventError:
-				hist := agentMgr.GetCurrentHistoryRaw(convID)
-				if hist != nil {
-				if store := agentMgr.Store(); store != nil {
-					// ★ 使用基于内容 diff 的增量写入，而非基于 Count 偏移量 ★
-					// 因为 handleChatSend 会预写用户消息（简化版 Role+Content），
-					// 而 hist 包含完整消息（含 System），直接用 Count 作偏移量会重复写用户消息。
-					// 正确做法：加载已有消息列表 → 过滤 hist 中 System 消息 → 比较数量 → 只写新增的。
-					existing, _ := store.LoadAll(convID)
-					// 统计 hist 中非 System 消息数（System 由 Loop 动态构建，不应持久化）
-					nonSystemCount := 0
-					for _, m := range hist {
-						if m.Role != agent.RoleSystem {
-							nonSystemCount++
-						}
-					}
-					if nonSystemCount > len(existing) {
-						written := 0
-						for i, m := range hist {
-							if m.Role == agent.RoleSystem {
-								continue
-							}
-							if written >= len(existing) {
-								_ = store.AppendMessage(convID, m, agent.SegmentsFromMessage(m, hist, i))
-							}
-							written++
-						}
-					}
-				}
-			}
-				if ge.Event.Type == agent.EventDone && convID != "" {
-					go generateConversationSummary(convID, nil) // webonly 无 bridge compressor
-				}
-			}
-		}
-	}()
+	// 写盘逻辑（ticker + EventUsage/EventDone）已移至 agent/session_manager.go 内部。
+	// 此处仅设置 OnDone 回调——agent 在 EventDone 时调用以生成对话摘要。
+	agentMgr.OnDone = func(convID string) {
+		go generateConversationSummary(convID, nil) // webonly 无 bridge compressor
+	}
 }
 
 // handleChatStop 停止指定会话的 agent 运行。

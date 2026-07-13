@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -135,10 +136,13 @@ func (p *OpenAIProvider) Chat(ctx context.Context, messages []Message, tools []T
 	req.Header.Set("Authorization", "Bearer "+p.APIKey)
 	req.Header.Set("Accept", "text/event-stream")
 
+	log.Printf("[trace] llm.Chat: 发送 HTTP POST %s model=%s messages=%d tools=%d", url, p.Model, len(messages), len(tools))
 	resp, err := p.client().Do(req)
 	if err != nil {
+		log.Printf("[trace] llm.Chat: HTTP 请求失败 err=%v", err)
 		return Message{}, err
 	}
+	log.Printf("[trace] llm.Chat: HTTP 响应 status=%d", resp.StatusCode)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))

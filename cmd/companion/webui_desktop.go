@@ -703,112 +703,11 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 	jsonResp(w, map[string]any{"ok": true, "convId": req.ConvID})
 }
 
-// startEventPersistWorker 启动后台 goroutine 订阅全局事件流，
-// 处理 token 持久化（EventUsage）和历史持久化（EventDone/定期）。
-// 替代原 handleChatEvents 中的持久化逻辑，与传输层（WebSocket）解耦。
+// startEventPersistWorker 已简化：消息写盘由 Session goroutine 在 loop.Run 返回后直接完成。
+// web 层只需设置 OnDone 回调——agent 在写盘后调用以生成对话摘要。
 func (s *webServer) startEventPersistWorker() {
-	ch := agentMgr.SubscribeAll()
-	// 定期持久化后台协程：每 5 秒增量追加运行中会话的新消息到 MessageStore
-	go func() {
-		ticker := time.NewTicker(5 * time.Second)
-		defer ticker.Stop()
-		for range ticker.C {
-			s.persistRunningHistories()
-		}
-	}()
-	go func() {
-		// 按需持久化：EventUsage（token 统计写入 store）、EventDone/EventError（diff-based 追加历史）
-		// 不对 thinking/content/tool_call 等高频事件做磁盘 I/O，避免阻塞事件消费循环。
-		for ge := range ch {
-			convID := ge.ConvID
-			if convID == "" {
-				continue
-			}
-			switch ge.Event.Type {
-			case agent.EventUsage:
-				// 每次调用后保存上下文构成到 store（页面刷新后恢复）
-				if ge.Event.Usage != nil {
-					if store := agentMgr.Store(); store != nil {
-						_ = store.SetCtxStats(convID, ge.Event.Usage)
-					}
-				}
-			case agent.EventDone, agent.EventError:
-				// 会话结束或出错时 diff-based 追加新消息到 store
-				// 使用 GetCurrentHistoryRaw 保留 Reasoning（让 SegmentsFromMessage 能创建 thinking segment）
-				hist := agentMgr.GetCurrentHistoryRaw(convID)
-				if hist != nil {
-				if store := agentMgr.Store(); store != nil {
-					// ★ 使用基于内容 diff 的增量写入，而非基于 Count 偏移量 ★
-					// 因为 handleChatSend 会预写用户消息（简化版），而 hist 含 System 消息，
-					// 直接用 Count 作偏移量会导致用户消息重复存储。
-					existing, _ := store.LoadAll(convID)
-					nonSystemCount := 0
-					for _, m := range hist {
-						if m.Role != agent.RoleSystem {
-							nonSystemCount++
-						}
-					}
-					if nonSystemCount > len(existing) {
-						written := 0
-						for i, m := range hist {
-							if m.Role == agent.RoleSystem {
-								continue
-							}
-							if written >= len(existing) {
-								_ = store.AppendMessage(convID, m, agent.SegmentsFromMessage(m, hist, i))
-							}
-							written++
-						}
-					}
-					// ── 持久化 EventDone 的完成报告（如 finish_task 结果）──
-					// EventDone.Content 包含完成摘要，且 finish_task 的 tool_result 已在 diff
-					// 增量持久化中写入 store（作为 history 中的 tool 消息）。前端 processAgentDone
-					// 会将其展示为 content segment。此处不再追加独立 assistant 消息，
-					// 避免下次加载时出现重复（消息回灌）。
-				}
-			}
-				if ge.Event.Type == agent.EventDone && convID != "" {
-					go generateConversationSummary(convID, bridge.BuildCompressor())
-				}
-			}
-			// 其他事件类型（thinking/content/tool_call/tool_result/approval/phase/notice/compacted/circling/evaluation）
-			// 不触发磁盘写入——由上方 ticker goroutine 每 5 秒统一增量持久化运行中会话的历史。
-		}
-	}()
-}
-
-// persistRunningHistories 增量追加所有运行中会话的新消息到 MessageStore。
-// 由 startEventPersistWorker 的定期后台协程调用（每 5 秒），
-// 确保页面刷新或进程崩溃时上下文不丢失。
-func (s *webServer) persistRunningHistories() {
-	for _, convID := range agentMgr.ListRunning() {
-		hist := agentMgr.GetCurrentHistoryRaw(convID)
-		if hist == nil {
-			continue
-		}
-		if store := agentMgr.Store(); store != nil {
-			// ★ 使用基于内容 diff 的增量写入，而非基于 Count 偏移量 ★
-			// 避免因 handleChatSend 预写用户消息导致重复存储。
-			existing, _ := store.LoadAll(convID)
-			nonSystemCount := 0
-			for _, m := range hist {
-				if m.Role != agent.RoleSystem {
-					nonSystemCount++
-				}
-			}
-			if nonSystemCount > len(existing) {
-				written := 0
-				for i, m := range hist {
-					if m.Role == agent.RoleSystem {
-						continue
-					}
-					if written >= len(existing) {
-						_ = store.AppendMessage(convID, m, agent.SegmentsFromMessage(m, hist, i))
-					}
-					written++
-				}
-			}
-		}
+	agentMgr.OnDone = func(convID string) {
+		go generateConversationSummary(convID, bridge.BuildCompressor())
 	}
 }
 

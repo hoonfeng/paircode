@@ -326,6 +326,102 @@ func (s *MessageStore) AppendUserMessage(convID, content string) error {
 	return s.AppendMessage(convID, Message{Role: RoleUser, Content: content}, nil)
 }
 
+// PersistNewMessages 原子性追加 hist 中尚未持久化的新消息到 store。
+// 在 per-conv mutex 保护下完成：读当前行数 → 比较 diff → 逐条写入 → 更新 index。
+//
+// 消除 Ticker/EventDone/Session goroutine 三方并发写导致的 TOCTOU 重复
+// （三者此前都用「先 LoadAll 计数、再 AppendMessage」的非原子方式，并发下产生重复）。
+//
+// 与 AppendMessage 的区别：
+//   - AppendMessage 追加单条（由 handleChatSend 预写用户消息等调用）
+//   - PersistNewMessages 批量追加且内部完成 diff 检查（供持久化 worker 调用）
+func (s *MessageStore) PersistNewMessages(convID string, hist []Message) error {
+	mu := s.getConvMutex(convID)
+	mu.Lock()
+	defer mu.Unlock()
+
+	// 读取当前 JSONL 行数（已有 count 条已持久化）
+	count, err := s.countJSONLLines(convID)
+	if err != nil {
+		return fmt.Errorf("PersistNewMessages: 统计行数失败: %w", err)
+	}
+
+	// 统计 hist 中非 System 消息数（System 由 Loop 动态构建，不应持久化）
+	nonSystemCount := 0
+	for _, m := range hist {
+		if m.Role != RoleSystem {
+			nonSystemCount++
+		}
+	}
+	if nonSystemCount <= count {
+		return nil // 无新消息
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	newCount := count
+	written := 0
+	for i, m := range hist {
+		if m.Role == RoleSystem {
+			continue
+		}
+		if written >= count {
+			sm := StoredMessage{
+				Idx:       newCount,
+				Message:   m,
+				Segments:  SegmentsFromMessage(m, hist, i),
+				Timestamp: now,
+			}
+			data, err := json.Marshal(sm)
+			if err != nil {
+				return fmt.Errorf("PersistNewMessages: JSON 编码失败: %w", err)
+			}
+			data = append(data, '\n')
+
+			f, err := os.OpenFile(s.convFilePath(convID), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+			if err != nil {
+				return fmt.Errorf("PersistNewMessages: 打开文件失败: %w", err)
+			}
+			if _, err := f.Write(data); err != nil {
+				f.Close()
+				return fmt.Errorf("PersistNewMessages: 写入失败: %w", err)
+			}
+			f.Close()
+			newCount++
+		}
+		written++
+	}
+
+	// 更新 index.json：MsgsCount = newCount，UpdatedAt = now
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
+
+	metas, err := s.loadIndex()
+	if err != nil {
+		return fmt.Errorf("PersistNewMessages: 读取 index 失败: %w", err)
+	}
+
+	found := false
+	for i := range metas {
+		if metas[i].ID == convID {
+			metas[i].MsgCount = newCount
+			metas[i].UpdatedAt = now
+			found = true
+			break
+		}
+	}
+	if !found {
+		metas = append(metas, ConversationMeta{
+			ID:        convID,
+			Title:     "新对话 " + time.Now().UTC().Format("15:04"),
+			CreatedAt: now,
+			UpdatedAt: now,
+			MsgCount:  newCount,
+		})
+	}
+
+	return s.saveIndex(metas)
+}
+
 // rebuildSegmentsIfMissing 为 segments 为空的消息重建 segments。
 // 需要完整消息列表做 look-ahead（tool result 可能在后面的消息中）。
 // 旧数据（修复前用 segments=nil 保存）通过此方法在读取时动态补全，

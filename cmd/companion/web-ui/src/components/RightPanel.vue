@@ -144,7 +144,7 @@
           <PlanPanel v-if="currentPlan.length > 0" :plan="currentPlan" :expanded="planExpanded" @toggle="planExpanded = !planExpanded" />
         </div>
         <!-- 输入区 -->
-        <div class="chat-input-area">
+        <div class="chat-input-area" ref="chatInputAreaRef">
           <ApprovalBar v-if="approvalState.waiting" :waiting="approvalState.waiting" :tool="approvalState.tool" :args="approvalState.args" :parsedArgs="approvalState.parsedArgs" @resolve="resolveApproval" />
           <!-- 运行时反馈条（Agent 执行中可补充纠正） -->
           <div v-if="state.chatLoading" class="feedback-bar">
@@ -202,6 +202,20 @@ const inputText = ref('')
 const feedbackText = ref('')
 const msgRef = ref(null)
 const inputRef = ref(null)
+const chatInputAreaRef = ref(null)
+let inputOverlayObserver = null
+
+// 根据 .input-overlay 的实际高度动态调整 .chat-input 的 padding-bottom
+function updateInputPadding() {
+  if (!chatInputAreaRef.value) return
+  const overlay = chatInputAreaRef.value.querySelector('.input-overlay')
+  const textarea = chatInputAreaRef.value.querySelector('.chat-input')
+  if (!overlay || !textarea) return
+  // overlay 高度 + 底部间距(16px) + 安全余量(12px)
+  const overlayHeight = overlay.offsetHeight
+  const paddingBottom = Math.max(68, overlayHeight + 28)
+  textarea.style.paddingBottom = paddingBottom + 'px'
+}
 const inputHeight = ref(150)
 const convListWidth = ref(250)
 const topSentinel = ref(null)
@@ -857,6 +871,18 @@ const handleBeforeUnload = () => { if (state.currentConvId && state.messages.len
 onMounted(() => {
   loadWsTokenStats(); loadConvList(); scrollToBottom()
 
+  // 监听 .input-overlay 尺寸变化，动态调整 textarea padding-bottom
+  nextTick(() => {
+    updateInputPadding()
+    if (chatInputAreaRef.value) {
+      const overlay = chatInputAreaRef.value.querySelector('.input-overlay')
+      if (overlay) {
+        inputOverlayObserver = new ResizeObserver(() => updateInputPadding())
+        inputOverlayObserver.observe(overlay)
+      }
+    }
+  })
+
   // ⚡ 初始加载：若已有当前对话，从 API 加载任务计划
   // （页面刷新或从其他工作区切换回来时，currentPlan 为空，需要从 TaskManager 恢复）
   nextTick(async () => {
@@ -951,6 +977,7 @@ onUnmounted(() => {
   if (autoSaveTimer) { clearInterval(autoSaveTimer); autoSaveTimer = null }
   if (phaseTimer) { clearTimeout(phaseTimer); phaseTimer = null }
   if (nudgeTimer) { clearTimeout(nudgeTimer); nudgeTimer = null }
+  if (inputOverlayObserver) { inputOverlayObserver.disconnect(); inputOverlayObserver = null }
   // 不关闭 WebSocket（由 App.vue 管理生命周期）；不清理 subscriptions（已移除 SSE 订阅模式）
   document.removeEventListener('mousemove', onInputResizeMove); document.removeEventListener('mouseup', stopInputResize)
   window.removeEventListener('beforeunload', handleBeforeUnload)

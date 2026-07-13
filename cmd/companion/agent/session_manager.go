@@ -83,6 +83,13 @@ type SessionManager struct {
 	globalSubscribers []chan GlobalEvent
 
 	store *MessageStore // 消息持久化存储（web 层通过 SetWorkspaceRoot 注入）
+
+	// 内部持久化 worker 状态
+	persistWorkerStarted bool
+
+	// OnDone 会话完成回调（由 web 层设置，用于生成对话摘要等副作用）。
+	// 在 Session goroutine 写盘后调用，convID 为刚结束的会话 ID。
+	OnDone func(convID string)
 }
 
 // NewSessionManager 创建会话管理器，默认保留 100 个已结束会话。
@@ -98,8 +105,16 @@ func NewSessionManager() *SessionManager {
 // 重复调用以最后一次为准（重新创建 store）。
 func (m *SessionManager) SetWorkspaceRoot(root string) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	m.store = NewMessageStore(root)
+	shouldStart := !m.persistWorkerStarted
+	if shouldStart {
+		m.persistWorkerStarted = true
+	}
+	m.mu.Unlock()
+
+	if shouldStart {
+		m.startPersistWorker()
+	}
 }
 
 // Store 返回 MessageStore 引用（供 web 层调用 AppendMessage/LoadLatest 等）。
@@ -136,9 +151,9 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 	}
 
 	m.mu.Lock()
+	defer m.mu.Unlock()
 	// 已有运行中的会话则拒绝（同一对话不可并行跑两个 Loop）
 	if s, ok := m.sessions[convID]; ok && s.Running {
-		m.mu.Unlock()
 		return ErrSessionRunning
 	}
 
@@ -227,6 +242,22 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 			return fb
 		default:
 			return ""
+		}
+	}
+
+	// OnBatchPersist：每 5 轮由 loop.Run 内部回调，将当前完整消息列表写盘。
+	// loop.Run 返回后 defer 中会额外调用一次 OnBatchPersist 作为兜底。
+	// ★ 注意：不能调用 m.Store()，因为 Start 已持有 m.mu.Lock() 写锁，而 m.Store() 会尝试读锁导致死锁。
+	// 直接使用已持有的 m.store 变量。
+	if m.store != nil {
+		store := m.store
+		loop.OnBatchPersist = func(msgs []Message) {
+			err := store.PersistNewMessages(convID, msgs)
+			if err != nil {
+				fmt.Printf("[persist] OnBatchPersist 失败 conv=%s err=%v\n", convID, err)
+			} else {
+				fmt.Printf("[persist] OnBatchPersist 成功 conv=%s msgs=%d\n", convID, len(msgs))
+			}
 		}
 	}
 
@@ -769,4 +800,22 @@ func (m *SessionManager) AppendPersistedUserMessage(convID, content string) erro
 		return nil
 	}
 	return store.AppendUserMessage(convID, content)
+}
+
+// startPersistWorker 启动内部持久化 worker goroutine（在 SetWorkspaceRoot 注入 store 后自动调用）。
+func (m *SessionManager) startPersistWorker() {
+	ch := make(chan GlobalEvent, 200)
+	m.globalSubMu.Lock()
+	m.globalSubscribers = append(m.globalSubscribers, ch)
+	m.globalSubMu.Unlock()
+
+	go func() {
+		for ge := range ch {
+			if ge.Event.Type == EventUsage && ge.Event.Usage != nil {
+				if store := m.Store(); store != nil {
+					_ = store.SetCtxStats(ge.ConvID, ge.Event.Usage)
+				}
+			}
+		}
+	}()
 }
