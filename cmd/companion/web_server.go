@@ -713,7 +713,55 @@ func (s *webServer) handleFSSearch(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *webServer) handleTasks(w http.ResponseWriter, r *http.Request) {
-	jsonResp(w, map[string]any{"tasks": []any{}, "message": "任务管理使用方式：运行 go run ./cmd/guitest/"})
+	root := core.Root()
+	if root == "" {
+		jsonResp(w, map[string]any{"tasks": []any{}})
+		return
+	}
+	switch r.Method {
+	case "GET":
+		// 从 TaskManager 持久化目录 .pair/tasks/*.json 读取真实任务状态
+		type planStep struct {
+			Step        string `json:"step"`
+			Status      string `json:"status"`
+			TaskID      string `json:"taskId"`
+			Description string `json:"description"`
+		}
+		tasksDir := filepath.Join(root, ".pair", "tasks")
+		entries, err := os.ReadDir(tasksDir)
+		if err != nil {
+			jsonResp(w, map[string]any{"tasks": []any{}})
+			return
+		}
+		plan := make([]planStep, 0)
+		for _, e := range entries {
+			if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+				continue
+			}
+			data, err := os.ReadFile(filepath.Join(tasksDir, e.Name()))
+			if err != nil {
+				continue
+			}
+			var t struct {
+				ID          string `json:"id"`
+				Subject     string `json:"subject"`
+				Description string `json:"description"`
+				Status      string `json:"status"`
+			}
+			if err := json.Unmarshal(data, &t); err != nil {
+				continue
+			}
+			plan = append(plan, planStep{
+				Step:        t.Subject,
+				Status:      t.Status,
+				TaskID:      t.ID,
+				Description: t.Description,
+			})
+		}
+		jsonResp(w, map[string]any{"tasks": plan})
+	default:
+		jsonErr(w, "不支持的方法")
+	}
 }
 
 // ─── 终端命令执行 API ──────────────────────────────────────────

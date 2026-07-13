@@ -645,14 +645,35 @@ const switchConv = async (id) => {
       state.messages = state.messagesByConv[id]
       state.msgTotalByConv[id] = data.total || loaded.length
       state.msgLoadedByConv[id] = loaded.length
-      // ── 从加载的消息段中重建任务计划 ──
-      currentPlan.value = rebuildPlanFromMessages(loaded)
-      planExpanded.value = currentPlan.value.length > 0
     } catch {
       state.msgTotalByConv[id] = 0
       state.msgLoadedByConv[id] = 0
     }
   }
+  // ── 从后端 API 加载真实任务状态（TaskManager 持久化到 .pair/tasks/*.json）──
+  // 放在消息加载之外，确保每次切换/刷新都从真实数据加载而非从消息重建
+  try {
+    const taskData = await api.apiGet('/tasks')
+    if (taskData && taskData.tasks && taskData.tasks.length > 0) {
+      currentPlan.value = taskData.tasks.map(t => ({
+        step: t.step,
+        status: t.status,
+        _taskId: t.taskId,
+      }))
+    } else {
+      // API 返回空时，fallback 到从消息 segments 重建
+      const msgs = state.messagesByConv[id] || []
+      if (msgs.length > 0) {
+        currentPlan.value = rebuildPlanFromMessages(msgs)
+      }
+    }
+  } catch {
+    const msgs = state.messagesByConv[id] || []
+    if (msgs.length > 0) {
+      currentPlan.value = rebuildPlanFromMessages(msgs)
+    }
+  }
+  planExpanded.value = currentPlan.value.length > 0
   forceScrollToBottom()
 }
 
@@ -806,6 +827,24 @@ const handleBeforeUnload = () => { if (state.currentConvId && state.messages.len
 
 onMounted(() => {
   loadWsTokenStats(); loadConvList(); scrollToBottom()
+
+  // ⚡ 初始加载：若已有当前对话，从 API 加载任务计划
+  // （页面刷新或从其他工作区切换回来时，currentPlan 为空，需要从 TaskManager 恢复）
+  nextTick(async () => {
+    if (state.currentConvId) {
+      try {
+        const taskData = await api.apiGet('/tasks')
+        if (taskData && taskData.tasks && taskData.tasks.length > 0) {
+          currentPlan.value = taskData.tasks.map(t => ({
+            step: t.step,
+            status: t.status,
+            _taskId: t.taskId,
+          }))
+          planExpanded.value = true
+        }
+      } catch {}
+    }
+  })
 
   // 注册全局 UI 回调：App.vue 的 WebSocket onmessage → agent-events.js → 此处回调
   setGlobalCtx({
