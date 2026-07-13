@@ -563,8 +563,7 @@ const newConversation = async () => {
   try {
     const conv = await api.apiPost('/conversations', { title: '新对话', workspaceRoot: state.workspaceRoot })
     state.currentConvId = conv.id
-    state.conversations.unshift({ id: conv.id, title: conv.title, msgCount: 0, createdAt: conv.createdAt, updatedAt: conv.updatedAt })
-    if (!state.messagesByConv[conv.id]) state.messagesByConv[conv.id] = []
+    state.conversations.unshift({ id: conv.id, title: conv.title || '新对话', msgCount: 0, createdAt: conv.createdAt, updatedAt: conv.updatedAt })
     state.messages = state.messagesByConv[conv.id]
     state.msgTotalByConv[conv.id] = 0
     state.msgLoadedByConv[conv.id] = 0

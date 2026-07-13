@@ -782,7 +782,7 @@ func (s *webServer) handleConversations(w http.ResponseWriter, r *http.Request) 
 			jsonErr(w, err.Error())
 			return
 		}
-		jsonResp(w, map[string]any{"ok": true, "id": id})
+		jsonResp(w, map[string]any{"ok": true, "id": id, "title": title})
 
 	default:
 		jsonErr(w, "不支持的方法")
