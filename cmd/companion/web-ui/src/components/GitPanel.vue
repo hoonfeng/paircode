@@ -393,7 +393,7 @@ async function loadStatus() {
       try {
         const log = await api.apiGet('/git/log', { count: 50 })
         commits.value = log || []
-      } catch {}
+      } catch (err) { console.warn('[GitPanel] 加载提交历史失败:', err) }
     }
   } catch (err) {
     hasData.value = true
@@ -414,13 +414,13 @@ async function refresh() {
 async function refreshCommits() {
   try {
     commits.value = await api.apiGet('/git/log', { count: 50 }) || []
-  } catch {}
+  } catch (err) { console.warn('[GitPanel] 刷新提交历史失败:', err) }
 }
 
 async function loadStashes() {
   try {
     stashes.value = await api.apiGet('/git/stash-list') || []
-  } catch { stashes.value = [] }
+  } catch (err) { console.warn('[GitPanel] 加载暂存列表失败:', err); stashes.value = [] }
 }
 
 async function stageAll() {
@@ -553,7 +553,7 @@ async function loadIgnore() {
   try {
     const res = await api.apiGet('/git/ignore')
     ignoreContent.value = res.content || ''
-  } catch { ignoreContent.value = '' }
+  } catch (err) { console.warn('[GitPanel] 加载 .gitignore 失败:', err); ignoreContent.value = '' }
 }
 
 async function showFileDiff(path, staged) {
@@ -573,7 +573,7 @@ async function showCommitDetail(c) {
   try {
     const res = await api.apiGet('/system/exec', { command: 'git show --stat ' + c.hash })
     commitDiff.value = res.stdout || '（无输出）'
-  } catch { commitDiff.value = '（无法加载详情）' }
+  } catch (err) { console.warn('[GitPanel] 加载提交详情失败:', err); commitDiff.value = '（无法加载详情）' }
 }
 
 async function copyHash(hash) {
@@ -581,7 +581,7 @@ async function copyHash(hash) {
   try {
     await navigator.clipboard.writeText(hash)
     window.$toast?.('已复制', 'success')
-  } catch {}
+  } catch (err) { console.warn('[GitPanel] 复制哈希失败:', err) }
 }
 
 // ─── 辅助 ─────────────────────────────────────────────────────
