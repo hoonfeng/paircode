@@ -123,6 +123,16 @@
     <template v-else-if="name === 'send'">
       <line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>
     </template>
+    <!-- Send Plane (paper airplane) -->
+    <template v-else-if="name === 'send-plane'">
+      <line x1="22" y1="2" x2="11" y2="13"/>
+      <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+    </template>
+    <!-- Stop Dot (pulsing circle) -->
+    <template v-else-if="name === 'stop-dot'">
+      <circle cx="12" cy="12" r="6" class="stop-pulse"/>
+      <circle cx="12" cy="12" r="10" class="stop-pulse-ring"/>
+    </template>
     <!-- Wrench / Tool -->
     <template v-else-if="name === 'wrench'">
       <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
@@ -291,6 +301,21 @@ defineProps({
 </script>
 
 <style scoped>
+@keyframes stopPulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+@keyframes stopRingPulse {
+  0%, 100% { opacity: 0.3; transform: scale(1); }
+  50% { opacity: 0.15; transform: scale(1.15); }
+}
+.stop-pulse {
+  animation: stopPulse 1.2s ease-in-out infinite;
+}
+.stop-pulse-ring {
+  animation: stopRingPulse 1.2s ease-in-out infinite;
+  fill: none;
+}
 .svg-icon {
   display: inline-block;
   vertical-align: middle;

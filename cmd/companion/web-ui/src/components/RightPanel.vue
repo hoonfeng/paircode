@@ -153,8 +153,8 @@
               <span class="obtn-sep"></span>
               <span :class="['obtn', 'obtn-agent', { active: autonomous }]" @click="toggleAuto('autonomous')" title="自主模式：开启=连续执行全部计划步骤，关闭=单次回复"><SvgIcon name="sparkles" :size="12" color="#d4a74e" /> 自主</span>
             </div>
-            <button v-if="!state.chatLoading" class="send-btn" @click="sendMessage" :disabled="!inputText.trim()"><SvgIcon name="send" :size="16" /></button>
-            <button v-else class="stop-btn" @click="stopChat"><SvgIcon name="close" :size="14" /></button>
+            <button v-if="!state.chatLoading" class="send-btn" @click="sendMessage" :disabled="!inputText.trim()"><SvgIcon name="send-plane" :size="16" /></button>
+            <button v-else class="stop-btn" @click="stopChat"><SvgIcon name="stop-dot" :size="20" /></button>
           </div>
         </div>
       </div>
