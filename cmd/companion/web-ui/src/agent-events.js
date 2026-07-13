@@ -252,11 +252,8 @@ export function processAgentDone(convId, data) {
     if (msg) {
       msg.content = rt.finalContent
       if (data && data.content) {
-        // finish_task 结果：仅当 LLM 无正文输出（如纯工具型子 agent）时展示，
-        // 避免与 LLM 流式输出的正文重复（把同一份报告展示两遍）。
-        if (!rt.finalContent) {
-          msg.segments.push({ type: 'content', content: data.content })
-        }
+        // finish_task 结果：始终追加为独立的 content segment，与 LLM 流式输出正文不冲突
+        msg.segments.push({ type: 'content', content: data.content })
       }
     }
   }
