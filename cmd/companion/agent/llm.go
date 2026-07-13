@@ -98,6 +98,84 @@ func applyThinking(body map[string]any, model, mode string) {
 	}
 }
 
+// sanitizeToolPairing 修复消息列表中的工具调用配对，确保满足 OpenAI 兼容 API 的契约：
+// 每条 assistant 消息的 tool_calls 必须后跟对应数量的 role=tool 消息，
+// 孤立 role=tool 消息将被丢弃，缺失 tool result 将被填充占位符。
+func sanitizeToolPairing(msgs []Message) []Message {
+	out := make([]Message, 0, len(msgs))
+	for i := 0; i < len(msgs); {
+		m := msgs[i]
+		if m.Role == RoleAssistant && len(m.ToolCalls) > 0 {
+			// 收集后续连续的 role=tool 消息
+			j := i + 1
+			for j < len(msgs) && msgs[j].Role == RoleTool {
+				j++
+			}
+			// 配对：按 ID 匹配或按顺序匹配
+			avail := msgs[i+1 : j]
+			out = append(out, m)
+			out = append(out, pairToolResults(m.ToolCalls, avail)...)
+			i = j
+			continue
+		}
+		if m.Role == RoleTool {
+			i++ // 孤立 role=tool 消息，丢弃
+			continue
+		}
+		out = append(out, m)
+		i++
+	}
+	return out
+}
+
+const interruptedToolResult = "[no result: the previous turn was interrupted before this tool call completed]"
+
+// pairToolResults 将 tool call 与 tool result 配对。
+// 优先按 ToolCall.ID 匹配；ID 不全或重复则按顺序匹配。
+func pairToolResults(calls []ToolCall, avail []Message) []Message {
+	out := make([]Message, 0, len(calls))
+	// 检查所有 ToolCall 的 ID 是否唯一且非空
+	idsDistinct := true
+	seen := make(map[string]struct{}, len(calls))
+	for _, tc := range calls {
+		if tc.ID == "" {
+			idsDistinct = false
+			break
+		}
+		if _, dup := seen[tc.ID]; dup {
+			idsDistinct = false
+			break
+		}
+		seen[tc.ID] = struct{}{}
+	}
+	if idsDistinct {
+		// 按 ID 匹配
+		byID := make(map[string]Message, len(avail))
+		for _, r := range avail {
+			byID[r.ToolCallID] = r
+		}
+		for _, tc := range calls {
+			if r, ok := byID[tc.ID]; ok {
+				out = append(out, r)
+			} else {
+				out = append(out, Message{Role: RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: interruptedToolResult})
+			}
+		}
+		return out
+	}
+	// ID 不全或重复，按顺序匹配
+	for k, tc := range calls {
+		if k < len(avail) {
+			r := avail[k]
+			r.ToolCallID = tc.ID
+			out = append(out, r)
+		} else {
+			out = append(out, Message{Role: RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: interruptedToolResult})
+		}
+	}
+	return out
+}
+
 func (p *OpenAIProvider) client() *http.Client {
 	if p.Client != nil {
 		return p.Client
@@ -106,6 +184,9 @@ func (p *OpenAIProvider) client() *http.Client {
 }
 
 func (p *OpenAIProvider) Chat(ctx context.Context, messages []Message, tools []ToolDefinition, onChunk func(Chunk)) (Message, error) {
+	// ★ 修复消息中的 tool 调用配对，确保满足 OpenAI API 的 role=tool 契约
+	messages = sanitizeToolPairing(messages)
+
 	body := map[string]any{
 		"model":          p.Model,
 		"messages":       messages,
