@@ -15,6 +15,10 @@
           <div class="search-icon"><SvgIcon name="search" :size="14" /></div>
           <input v-model="query" placeholder="搜索 MCP 服务器或技能…" @input="debounceSearch" class="search-input" />
           <button v-if="query" class="search-clear" @click="query='';doSearch()">×</button>
+          <button class="market-refresh-btn" @click="refreshRemote" :disabled="refreshing" :title="refreshTip">
+            <SvgIcon :name="refreshing ? 'cycle' : 'refresh'" :size="14" />
+            {{ refreshing ? '刷新中…' : '刷新' }}
+          </button>
         </div>
 
         <!-- 加载状态 -->
@@ -81,7 +85,9 @@ const query = ref('')
 const items = ref([])
 const installing = ref('')
 const loading = ref(false)
+const refreshing = ref(false)
 const error = ref('')
+const refreshTip = ref('')
 const listRef = ref(null)
 
 let debounceTimer = null
@@ -106,6 +112,24 @@ async function doSearch() {
     items.value = []
   } finally {
     loading.value = false
+  }
+}
+
+async function refreshRemote() {
+  refreshing.value = true
+  error.value = ''
+  try {
+    const result = await api.apiPost('/marketplace/refresh', {})
+    refreshTip.value = result.status || '已刷新'
+    window.$toast?.(result.message || '远程市场已刷新', 'success')
+    // 刷新后重新搜索
+    await doSearch()
+  } catch (err) {
+    error.value = '刷新失败: ' + err.message
+    window.$toast?.('刷新远程市场失败: ' + err.message, 'error')
+  } finally {
+    refreshing.value = false
+    setTimeout(() => { refreshTip.value = '' }, 5000)
   }
 }
 
@@ -269,6 +293,25 @@ onMounted(() => {
   font-size: 14px;
 }
 .search-clear:hover { color: var(--text-primary); background: var(--bg-hover); }
+.market-refresh-btn {
+  position: absolute;
+  right: 50px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s;
+}
+.market-refresh-btn:hover { color: var(--text-primary); border-color: var(--accent); }
+.market-refresh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ── 加载状态 ── */
 .market-loading {

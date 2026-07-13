@@ -1,9 +1,42 @@
 // Package marketplace 是 MCP/Skills 市场注册表。
 // 包含精选可安装的 MCP 服务器和技能条目。
+// 支持远程注册表（JSON 格式）+ 本地缓存 + fallback。
 //
 //go:build windows
 
 package marketplace
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"time"
+)
+
+// ─── 远程市场默认 URL（仅 HTTPS） ───
+
+// DefaultMarketplaceURL 远程市场注册表 JSON 的默认地址。
+// 必须为 HTTPS 协议，指向托管 registry.json 的 URL。
+const DefaultMarketplaceURL = "https://raw.githubusercontent.com/hoonfeng/paircode-marketplace/main/registry.json"
+
+// 条目字段最大长度（防注入）
+const (
+	maxIDLen          = 128
+	maxNameLen        = 200
+	maxDescLen        = 500
+	maxTagLen         = 50
+	maxTagsCount      = 20
+	maxContentLen     = 100 * 1024 // 100KB
+	maxCommandLen     = 256
+	maxArgsCount      = 50
+	maxArgLen         = 512
+	maxEntriesPerFetch = 5000
+)
 
 // ─── 注册表条目类型 ───
 
@@ -42,10 +75,10 @@ func RegistryMCP(id, name, desc, cmd string, args []string) RegistryEntry {
 	}
 }
 
-// ─── 市场注册表 ───
+// ─── 内置注册表（fallback） ───
 
-// Registry 所有可安装的市场条目。
-var Registry = []RegistryEntry{
+// builtinRegistry 内置硬编码条目，远程获取失败时使用。
+var builtinRegistry = []RegistryEntry{
 	// ═══════════════════════════════════════
 	// MCP 服务器
 	// ═══════════════════════════════════════
@@ -126,23 +159,259 @@ func makeSkillContent(name, description, activation, body string) string {
 	return s
 }
 
-// ─── 查询函数 ───
+// ─── 远程注册表缓存状态 ───
 
-// Search 按关键词和类型搜索市场注册表。
+var (
+	remoteEntries []RegistryEntry
+	remoteURL     = DefaultMarketplaceURL
+	lastFetchTime time.Time
+	fetchMu       sync.RWMutex
+	lastFetchErr  string
+	cacheInitOnce sync.Once
+)
+
+// SetMarketplaceURL 设置远程市场 URL。
+// 仅接受 HTTPS 协议 URL，空值恢复默认。
+func SetMarketplaceURL(rawURL string) error {
+	fetchMu.Lock()
+	defer fetchMu.Unlock()
+	if rawURL == "" {
+		remoteURL = DefaultMarketplaceURL
+		return nil
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("URL 格式无效: %w", err)
+	}
+	if u.Scheme != "https" {
+		return fmt.Errorf("仅支持 HTTPS 协议，不支持 %q", u.Scheme)
+	}
+	remoteURL = rawURL
+	return nil
+}
+
+// GetMarketplaceURL 获取当前远程市场 URL。
+func GetMarketplaceURL() string {
+	fetchMu.RLock()
+	defer fetchMu.RUnlock()
+	return remoteURL
+}
+
+// GetLastFetchTime 获取上次成功获取的时间。
+func GetLastFetchTime() time.Time {
+	fetchMu.RLock()
+	defer fetchMu.RUnlock()
+	return lastFetchTime
+}
+
+// GetLastFetchErr 获取上次获取错误信息。
+func GetLastFetchErr() string {
+	fetchMu.RLock()
+	defer fetchMu.RUnlock()
+	return lastFetchErr
+}
+
+// FetchStatus 返回市场获取状态摘要。
+func FetchStatus() string {
+	fetchMu.RLock()
+	defer fetchMu.RUnlock()
+	if lastFetchErr != "" {
+		return fmt.Sprintf("远程市场获取失败: %s（使用内置数据）", lastFetchErr)
+	}
+	if !lastFetchTime.IsZero() {
+		return fmt.Sprintf("远程市场已获取（%s），共 %d 个条目", lastFetchTime.Format("15:04:05"), len(remoteEntries))
+	}
+	return "尚未获取远程市场（使用内置数据）"
+}
+
+// ─── 条目验证 ───
+
+// validateEntry 校验单个注册表条目的字段合法性。
+func validateEntry(e RegistryEntry) error {
+	if len(e.ID) > maxIDLen {
+		return fmt.Errorf("ID 过长: %d > %d", len(e.ID), maxIDLen)
+	}
+	if len(e.Name) > maxNameLen {
+		return fmt.Errorf("Name 过长: %d > %d", len(e.Name), maxNameLen)
+	}
+	if len(e.Description) > maxDescLen {
+		return fmt.Errorf("Description 过长: %d > %d", len(e.Description), maxDescLen)
+	}
+	if len(e.Tags) > maxTagsCount {
+		return fmt.Errorf("Tags 数量过多: %d > %d", len(e.Tags), maxTagsCount)
+	}
+	for _, tag := range e.Tags {
+		if len(tag) > maxTagLen {
+			return fmt.Errorf("Tag 过长: %d > %d", len(tag), maxTagLen)
+		}
+	}
+	if len(e.Content) > maxContentLen {
+		return fmt.Errorf("Content 过长: %d > %d", len(e.Content), maxContentLen)
+	}
+	if len(e.Command) > maxCommandLen {
+		return fmt.Errorf("Command 过长: %d > %d", len(e.Command), maxCommandLen)
+	}
+	if len(e.Args) > maxArgsCount {
+		return fmt.Errorf("Args 数量过多: %d > %d", len(e.Args), maxArgsCount)
+	}
+	for _, arg := range e.Args {
+		if len(arg) > maxArgLen {
+			return fmt.Errorf("Arg 过长: %d > %d", len(arg), maxArgLen)
+		}
+	}
+	if e.Kind != "mcp" && e.Kind != "skill" {
+		return fmt.Errorf("无效 Kind: %q（仅支持 mcp/skill）", e.Kind)
+	}
+	return nil
+}
+
+// ─── 远程获取 ───
+
+// FetchRemoteRegistry 从远程 URL 获取市场注册表 JSON 并缓存到本地。
+// force=true 时忽略缓存时间强制获取。
+// 获取成功时合并远程 + 内置条目；失败时 fallback 内置数据。
+func FetchRemoteRegistry(workspaceRoot string, force bool) error {
+	fetchMu.Lock()
+	defer fetchMu.Unlock()
+
+	if !force && !lastFetchTime.IsZero() && time.Since(lastFetchTime) < 1*time.Hour {
+		return nil
+	}
+
+	url := remoteURL
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		lastFetchErr = fmt.Sprintf("网络请求失败: %v", err)
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		lastFetchErr = fmt.Sprintf("HTTP %d", resp.StatusCode)
+		return fmt.Errorf("远程市场返回状态码 %d", resp.StatusCode)
+	}
+
+	var registry struct {
+		Version int             `json:"version"`
+		Entries []RegistryEntry `json:"entries"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&registry); err != nil {
+		lastFetchErr = fmt.Sprintf("JSON 解析失败: %v", err)
+		return err
+	}
+
+	// 条目数量上限检查
+	if len(registry.Entries) > maxEntriesPerFetch {
+		lastFetchErr = fmt.Sprintf("远程条目过多（%d），超过上限 %d", len(registry.Entries), maxEntriesPerFetch)
+		return fmt.Errorf("远程条目过多: %d > %d", len(registry.Entries), maxEntriesPerFetch)
+	}
+
+	// 逐条 schema 验证
+	for _, e := range registry.Entries {
+		if err := validateEntry(e); err != nil {
+			lastFetchErr = fmt.Sprintf("条目 %q 校验失败: %v", e.ID, err)
+			return fmt.Errorf("条目 %q 校验失败: %w", e.ID, err)
+		}
+	}
+
+	remoteEntries = registry.Entries
+	lastFetchTime = time.Now()
+	lastFetchErr = ""
+
+	// 缓存到本地文件
+	if workspaceRoot != "" {
+		cacheDir := filepath.Join(workspaceRoot, ".pair", "marketplace")
+		os.MkdirAll(cacheDir, 0755)
+		cacheFile := filepath.Join(cacheDir, "registry_cache.json")
+		if data, err := json.MarshalIndent(registry, "", "  "); err == nil {
+			os.WriteFile(cacheFile, data, 0644)
+		}
+	}
+
+	return nil
+}
+
+// loadCachedRegistry 从本地缓存加载远程注册表。
+func loadCachedRegistry(workspaceRoot string) {
+	if workspaceRoot == "" {
+		return
+	}
+	cacheFile := filepath.Join(workspaceRoot, ".pair", "marketplace", "registry_cache.json")
+	data, err := os.ReadFile(cacheFile)
+	if err != nil {
+		return
+	}
+	var registry struct {
+		Version int             `json:"version"`
+		Entries []RegistryEntry `json:"entries"`
+	}
+	if err := json.Unmarshal(data, &registry); err != nil {
+		return
+	}
+	if len(registry.Entries) == 0 {
+		return
+	}
+	// 验证缓存数据
+	for _, e := range registry.Entries {
+		if err := validateEntry(e); err != nil {
+			return // 缓存损坏，丢弃
+		}
+	}
+
+	fetchMu.Lock()
+	remoteEntries = registry.Entries
+	lastFetchTime = time.Now()
+	fetchMu.Unlock()
+}
+
+// ─── 查询（合并内置 + 远程） ───
+
+// getAllEntries 获取所有条目（远程 + 内置，去重，远程优先）。
+func getAllEntries() []RegistryEntry {
+	fetchMu.RLock()
+	remotes := remoteEntries
+	fetchMu.RUnlock()
+
+	seen := make(map[string]bool, len(builtinRegistry)+len(remotes))
+	result := make([]RegistryEntry, 0, len(builtinRegistry)+len(remotes))
+
+	for _, e := range remotes {
+		if !seen[e.ID] {
+			seen[e.ID] = true
+			result = append(result, e)
+		}
+	}
+	for _, e := range builtinRegistry {
+		if !seen[e.ID] {
+			seen[e.ID] = true
+			result = append(result, e)
+		}
+	}
+	return result
+}
+
+// AllEntries 获取所有条目（远程 + 内置，去重，远程优先）。
+func AllEntries() []RegistryEntry {
+	return getAllEntries()
+}
+
+// Search 按关键词和类型搜索市场注册表（合并远程 + 内置）。
 func Search(query, kind string) []RegistryEntry {
 	if kind == "" || kind == "all" {
 		kind = ""
 	}
+	all := getAllEntries()
 	var out []RegistryEntry
-	for _, e := range Registry {
+	for _, e := range all {
 		if kind != "" && e.Kind != kind {
 			continue
 		}
 		if query != "" {
-			q := stringsToLower(query)
-			if !contains(stringsToLower(e.ID), q) &&
-				!contains(stringsToLower(e.Name), q) &&
-				!contains(stringsToLower(e.Description), q) {
+			q := strings.ToLower(query)
+			if !strings.Contains(strings.ToLower(e.ID), q) &&
+				!strings.Contains(strings.ToLower(e.Name), q) &&
+				!strings.Contains(strings.ToLower(e.Description), q) {
 				continue
 			}
 		}
@@ -153,7 +422,7 @@ func Search(query, kind string) []RegistryEntry {
 
 // Find 按 ID 查找注册表条目。
 func Find(id string) *RegistryEntry {
-	for _, e := range Registry {
+	for _, e := range getAllEntries() {
 		if e.ID == id {
 			return &e
 		}
@@ -161,28 +430,13 @@ func Find(id string) *RegistryEntry {
 	return nil
 }
 
-// contains returns true if substr is in s.
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || inString(s, substr))
-}
-
-func inString(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
-
-func stringsToLower(s string) string {
-	var b []byte
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if 'A' <= c && c <= 'Z' {
-			c += 'a' - 'A'
-		}
-		b = append(b, c)
-	}
-	return string(b)
+// Init 初始化市场系统：尝试从本地缓存加载，异步获取远程。
+// 在 web 层启动时调用。
+func Init(workspaceRoot string) {
+	cacheInitOnce.Do(func() {
+		loadCachedRegistry(workspaceRoot)
+	})
+	go func() {
+		FetchRemoteRegistry(workspaceRoot, false)
+	}()
 }

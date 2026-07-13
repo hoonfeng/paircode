@@ -36,6 +36,7 @@ func registerExtraHandlers(mux *http.ServeMux, s *webServer) {
 	mux.HandleFunc("/api/chat/feedback", s.handleChatFeedback)
 	mux.HandleFunc("/api/marketplace/search", s.handleMarketplaceSearch)
 	mux.HandleFunc("/api/marketplace/install", s.handleMarketplaceInstall)
+	mux.HandleFunc("/api/marketplace/refresh", s.handleMarketplaceRefresh)
 	mux.HandleFunc("/api/memory/search", s.handleMemorySearch)
 	mux.HandleFunc("/api/memory/list", s.handleMemoryList)
 	mux.HandleFunc("/api/memory/rebuild", s.handleMemoryRebuild)
@@ -454,6 +455,20 @@ func (s *webServer) handleMarketplaceInstall(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	jsonResp(w, map[string]any{"ok": true, "message": msg})
+}
+
+// handleMarketplaceRefresh 刷新远程市场缓存。
+func (s *webServer) handleMarketplaceRefresh(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		jsonErr(w, "仅 POST")
+		return
+	}
+	root := core.Root()
+	if err := marketplacepanel.FetchRemoteRegistry(root, true); err != nil {
+		jsonResp(w, map[string]any{"ok": false, "message": err.Error(), "status": marketplacepanel.FetchStatus()})
+		return
+	}
+	jsonResp(w, map[string]any{"ok": true, "message": "远程市场已刷新", "status": marketplacepanel.FetchStatus()})
 }
 
 // ─── 辅助函数 ───────────────────────────────────────────────

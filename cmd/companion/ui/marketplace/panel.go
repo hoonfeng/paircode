@@ -242,7 +242,7 @@ func InstallHelp() string {
 	b.WriteString("使用 marketplace_search [query] [kind] 浏览市场。\n")
 	b.WriteString("使用 marketplace_install <id> 安装。\n\n")
 	b.WriteString("目前可用条目：\n")
-	for _, e := range Registry {
+	for _, e := range AllEntries() {
 		status := ""
 		if IsInstalled(e.ID) {
 			status = " [已安装]"

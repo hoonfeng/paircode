@@ -57,6 +57,8 @@ func startWebUI(port int) {
 	}
 	// 初始化 MessageStore（消息持久化的唯一权威），并迁移旧格式数据
 	root := core.Root()
+	// 初始化市场系统（尝试从本地缓存加载，异步获取远程注册表）
+	marketplacepanel.Init(root)
 	if root != "" {
 		agentMgr.SetWorkspaceRoot(root)
 		// 迁移旧 conversations.json + history_cache.json 到新格式
