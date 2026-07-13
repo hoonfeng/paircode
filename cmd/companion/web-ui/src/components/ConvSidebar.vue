@@ -127,84 +127,14 @@
           </div>
         </div>
 
-        <!-- ═══ 任务追踪 ═══ -->
-        <div class="skill-mgr-wrap">
-          <div class="skill-mgr-header">
-            <SvgIcon name="list" :size="11" />
-            <span>任务</span>
-            <span v-if="tasks.length > 0" class="skill-token-badge">{{ tasks.filter(t => t.status !== 'completed' && t.status !== 'done' && t.status !== 'cancelled').length }}/{{ tasks.length }}</span>
-          </div>
-          <div v-if="tasks.length === 0" class="skill-mgr-empty">暂无任务追踪</div>
-          <div v-else class="installed-list">
-            <div v-for="(task, ti) in tasks" :key="task._taskId || ti" class="installed-item" :class="'task-' + task.status">
-              <span class="task-status-icon">
-                <SvgIcon v-if="task.status === 'completed' || task.status === 'done'" name="check" :size="10" class="task-icon-done" />
-                <SvgIcon v-else-if="task.status === 'in_progress'" name="cycle" :size="10" class="task-icon-run" />
-                <SvgIcon v-else name="clock" :size="10" class="task-icon-pending" />
-              </span>
-              <div class="installed-info">
-                <span class="installed-name">{{ task.step || task.subject || '(无标题)' }}</span>
-                <span class="installed-detail">{{ statusLabel(task.status) }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- ═══ MCP 管理 ═══ -->
-        <div class="skill-mgr-wrap">
-          <div class="skill-mgr-header">
-            <SvgIcon name="package" :size="11" />
-            <span>MCP 服务器</span>
-            <span v-if="mcpItems.length > 0" class="skill-token-badge">{{ mcpItems.length }}</span>
-          </div>
-          <div class="skill-mgr-actions">
-            <button class="skill-mgr-btn" @click="openMarketplace" title="从市场安装新 MCP">
-              <SvgIcon name="plus" :size="10" /> 安装
-            </button>
-          </div>
-          <div v-if="mcpItems.length === 0" class="skill-mgr-empty">暂无 MCP 配置</div>
-          <div v-else class="installed-list">
-            <div v-for="mcp in mcpItems" :key="mcp.name" class="installed-item">
-              <div class="installed-info">
-                <span class="installed-name">{{ mcp.name }}</span>
-                <span class="installed-detail">{{ mcp.command }} {{ mcp.args?.join(' ') }}</span>
-              </div>
-              <button class="installed-del-btn" @click="uninstallMCP(mcp)" title="卸载 MCP">
-                <SvgIcon name="trash" :size="10" />
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- ═══ 技能管理 ═══ -->
-        <div class="skill-mgr-wrap">
-          <div class="skill-mgr-header">
-            <SvgIcon name="code" :size="11" />
-            <span>技能</span>
-            <span v-if="installedSkills.length > 0" class="skill-token-badge">{{ installedSkills.length }}</span>
-          </div>
-          <div class="skill-mgr-actions">
-            <button class="skill-mgr-btn" @click="openMarketplace" title="从市场安装新技能">
-              <SvgIcon name="plus" :size="10" /> 添加技能
-            </button>
-            <button class="skill-mgr-btn" @click="openSettings" title="在设置中管理已安装技能">
-              <SvgIcon name="settings" :size="10" /> 管理
-            </button>
-          </div>
-          <div v-if="installedSkills.length === 0" class="skill-mgr-empty">
-            {{ skillsLoadError ? '加载失败' : '暂无技能 — 从市场添加后生效' }}
-          </div>
-          <div v-else class="installed-list">
-            <div v-for="sk in installedSkills" :key="sk.name" class="installed-item">
-              <div class="installed-info">
-                <span class="installed-name">{{ sk.name }}</span>
-                <span class="installed-detail">{{ sk.description?.slice(0, 40) }}</span>
-              </div>
-              <button v-if="sk.level === 'project'" class="installed-del-btn" @click="uninstallSkill(sk)" title="卸载技能">
-                <SvgIcon name="trash" :size="10" />
-              </button>
-            </div>
-          </div>
+        <!-- ═══ 底部快捷入口 ═══ -->
+        <div class="conv-footer-actions">
+          <button class="conv-footer-btn" @click="openMarketplace" title="市场（安装 MCP/技能）">
+            <SvgIcon name="package" :size="10" /> 市场
+          </button>
+          <button class="conv-footer-btn" @click="openSettings" title="设置（管理已安装技能）">
+            <SvgIcon name="settings" :size="10" /> 设置
+          </button>
         </div>
       </div>
     </div>
@@ -212,9 +142,8 @@
 </template>
 
 <script setup>
-import { ref, computed, inject, onMounted } from 'vue'
+import { ref, computed, inject } from 'vue'
 import SvgIcon from './SvgIcon.vue'
-import api from '../api.js'
 
 const showMarketplace = inject('showMarketplace', null)
 const showSettings = inject('showSettings', null)
@@ -226,62 +155,6 @@ function openSettings() {
   if (showSettings) showSettings.value = true
 }
 
-// ── MCP 管理 ──
-const mcpItems = ref([])
-const mcpLoadError = ref('')
-
-async function loadMCPList() {
-  mcpLoadError.value = ''
-  try {
-    const list = await api.getMcpList('all')
-    mcpItems.value = list || []
-  } catch (err) {
-    mcpLoadError.value = err.message
-    mcpItems.value = []
-  }
-}
-
-async function uninstallMCP(mcp) {
-  try {
-    await api.saveMcpItem({ action: 'delete', name: mcp.name, level: mcp.level || 'user' })
-    mcpItems.value = mcpItems.value.filter(m => m.name !== mcp.name)
-    window.$toast?.('已卸载 MCP: ' + mcp.name, 'success')
-  } catch (err) {
-    window.$toast?.('卸载失败: ' + err.message, 'error')
-  }
-}
-
-// ── 技能管理 ──
-const installedSkills = ref([])
-const skillsLoadError = ref('')
-
-async function loadSkills() {
-  skillsLoadError.value = ''
-  try {
-    const list = await api.getSkillsList()
-    // 只显示项目级技能（system 级不可删除）
-    installedSkills.value = (list || []).filter(s => s.level === 'project')
-  } catch (err) {
-    skillsLoadError.value = err.message
-    installedSkills.value = []
-  }
-}
-
-async function uninstallSkill(sk) {
-  try {
-    await api.deleteSkill(sk.name)
-    installedSkills.value = installedSkills.value.filter(s => s.name !== sk.name)
-    window.$toast?.('已卸载技能: ' + sk.name, 'success')
-  } catch (err) {
-    window.$toast?.('卸载失败: ' + err.message, 'error')
-  }
-}
-
-onMounted(() => {
-  loadMCPList()
-  loadSkills()
-})
-
 const props = defineProps({
   conversations: { type: Array, default: () => [] },
   currentConvId: { type: String, default: '' },
@@ -290,7 +163,6 @@ const props = defineProps({
   convCtxStats: { type: Object, default: () => ({ promptTokens: 0, completionTokens: 0, cacheHitTokens: 0, cacheMissTokens: 0, systemTokens: 0, skillsTokens: 0, mcpTokens: 0, toolTokens: 0, historyTokens: 0, otherTokens: 0 }) },
   ctxMaxTokensVal: { type: Number, default: 64000 },
   width: { type: Number, default: 250 },
-  tasks: { type: Array, default: () => [] },
 })
 
 defineEmits(['new-conversation', 'switch-conversation', 'delete-conversation'])
@@ -766,18 +638,32 @@ const compOtherPct = computed(() => ((props.convCtxStats.otherTokens / compTotal
   background: rgba(204,0,51,0.08);
 }
 
-/* ── 任务状态图标 ── */
-.task-status-icon {
-  width: 14px;
-  height: 14px;
+/* ── 底部快捷入口 ── */
+.conv-footer-actions {
+  display: flex;
+  gap: 2px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+.conv-footer-btn {
+  flex: 1;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  padding: 5px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
+  gap: 4px;
+  transition: all 0.12s;
 }
-.task-icon-done { color: var(--accent); }
-.task-icon-run { color: #d4a74e; }
-.task-icon-pending { color: var(--text-muted); }
-.task-completed, .task-done { opacity: 0.65; }
-.task-in_progress { background: var(--bg-active); }
+.conv-footer-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+  border-color: var(--accent);
+}
 </style>

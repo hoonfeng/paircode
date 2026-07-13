@@ -134,8 +134,10 @@
           </div>
         </div>
         <!-- 任务计划面板（固定在输入区上方） -->
-        <div class="plan-container" :class="{ 'plan-empty': currentPlan.length === 0 }">
+        <div class="plan-container" :class="{ 'plan-empty': currentPlan.length === 0 && currentTasks.length === 0 }">
           <PlanPanel v-if="currentPlan.length > 0" :plan="currentPlan" :expanded="planExpanded" @toggle="planExpanded = !planExpanded" />
+          <!-- 任务追踪面板（task_create/task_update 创建的任务，默认展开显示进行中任务） -->
+          <TaskPanel v-if="currentTasks.length > 0" :tasks="currentTasks" :expanded="tasksExpanded" @toggle="tasksExpanded = !tasksExpanded" />
         </div>
         <!-- 输入区 -->
         <div class="chat-input-area" ref="chatInputAreaRef">
@@ -169,7 +171,7 @@
       </div>
       <!-- 右侧：Debug日志面板 / 会话列表 -->
       <DebugLogPanel v-if="showDebugLog" @close="showDebugLog = false" />
-      <ConvSidebar v-else :conversations="state.conversations" :current-conv-id="state.currentConvId" :loading-by-conv="state.loadingByConv" :ws-token-stats="wsTokenStats" :conv-ctx-stats="convCtxStats" :ctx-max-tokens-val="state.settings.contextMaxTokens || 1000000" :width="convListWidth" :tasks="currentTasks" @new-conversation="newConversation" @switch-conversation="switchConv" @delete-conversation="deleteConv" />
+      <ConvSidebar v-else :conversations="state.conversations" :current-conv-id="state.currentConvId" :loading-by-conv="state.loadingByConv" :ws-token-stats="wsTokenStats" :conv-ctx-stats="convCtxStats" :ctx-max-tokens-val="state.settings.contextMaxTokens || 1000000" :width="convListWidth" @new-conversation="newConversation" @switch-conversation="switchConv" @delete-conversation="deleteConv" />
     </div>
   </div>
 </template>
@@ -181,6 +183,7 @@ import api from '../api.js'
 import { setGlobalCtx, startConvRuntime, resetConvRuntime, createAssistantPlaceholder, getConvCtxStats, resetConvCtxStats } from '../agent-events.js'
 import SvgIcon from './SvgIcon.vue'
 import PlanPanel from './PlanPanel.vue'
+import TaskPanel from './TaskPanel.vue'
 import ApprovalBar from './ApprovalBar.vue'
 import ConvSidebar from './ConvSidebar.vue'
 import AskUserCard from './AskUserCard.vue'
@@ -234,6 +237,7 @@ let pendingAskCallId = ''
 const currentPlan = ref([])
 const currentTasks = ref([])
 const planExpanded = ref(true)
+const tasksExpanded = ref(true)
 // 阶段指示器从全局 state.phaseByConv 读取（仅当前对话）
 const currentPhase = computed(() => state.phaseByConv[state.currentConvId] || '')
 let phaseTimer = null
@@ -1200,7 +1204,7 @@ onUnmounted(() => {
 /* ── 任务计划容器（输入区上方）── */
 .plan-container {
   flex-shrink: 0;
-  overflow: hidden;
+  overflow-y: auto;
   transition: max-height 0.25s ease;
   padding: 0 8px;
 }
@@ -1209,7 +1213,7 @@ onUnmounted(() => {
   padding: 0 8px;
 }
 .plan-container:not(.plan-empty) {
-  max-height: 300px;
+  max-height: 400px;
 }
 .plan-container .plan-panel {
   margin: 0 0 4px 0;
