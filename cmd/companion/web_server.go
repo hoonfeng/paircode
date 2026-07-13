@@ -24,6 +24,7 @@ import (
 
 	"github.com/hoonfeng/paircode/cmd/companion/agent"
 	"github.com/hoonfeng/paircode/cmd/companion/core"
+	marketplacepanel "github.com/hoonfeng/paircode/cmd/companion/ui/marketplace"
 	mcppanel "github.com/hoonfeng/paircode/cmd/companion/ui/mcp"
 	"github.com/hoonfeng/paircode/pkg/memory"
 	"github.com/hoonfeng/paircode/pkg/summary"
@@ -1060,7 +1061,6 @@ func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Reques
 		jsonErr(w, "不支持的方法")
 	}
 }
-
 
 // ─── Agent 工作流规划文档 API ──────────────────────────────────
 
