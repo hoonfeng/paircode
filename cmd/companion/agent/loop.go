@@ -188,7 +188,14 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 		msgs = append(msgs, Message{Role: RoleSystem, Content: l.System})
 	}
 	msgs = append(msgs, hist...)
-	msgs = append(msgs, Message{Role: RoleUser, Content: task})
+	// 防重复用户消息：hist（来自 store.LoadAll）末尾可能已有一条内容相同的 RoleUser
+	// （由 handleChatSend 写入 store 后再 LoadAll 取回）。仅当内容一致时才跳过追加，
+	// 避免子 agent（delegate_task）的 history 末尾是父 agent 的用户消息但任务不同时被误跳过。
+	if len(msgs) > 0 && msgs[len(msgs)-1].Role == RoleUser && msgs[len(msgs)-1].Content == task {
+		// 末尾已有同内容用户消息，跳过，防持久化后重复
+	} else {
+		msgs = append(msgs, Message{Role: RoleUser, Content: task})
+	}
 
 	tools := l.Registry.Definitions()
 	consecErr := 0

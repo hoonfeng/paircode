@@ -291,12 +291,7 @@ func (s *webServer) startEventPersistWorker() {
 					}
 				}
 			case agent.EventDone, agent.EventError:
-				var hist []agent.Message
-				if ge.Event.Type == agent.EventDone {
-					hist = agentMgr.GetHistory(convID)
-				} else {
-					hist = agentMgr.GetCurrentHistory(convID)
-				}
+				hist := agentMgr.GetCurrentHistoryRaw(convID)
 				if hist != nil {
 				if store := agentMgr.Store(); store != nil {
 					existing, _ := store.Count(convID)
@@ -319,7 +314,7 @@ func (s *webServer) startEventPersistWorker() {
 // persistRunningHistories 增量追加所有运行中会话的新消息到 MessageStore。
 func (s *webServer) persistRunningHistories() {
 	for _, convID := range agentMgr.ListRunning() {
-		hist := agentMgr.GetCurrentHistory(convID)
+		hist := agentMgr.GetCurrentHistoryRaw(convID)
 		if hist == nil {
 			continue
 		}

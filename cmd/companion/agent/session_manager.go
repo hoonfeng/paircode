@@ -495,7 +495,33 @@ func copyHistoryNoReasoning(hist []Message) []Message {
 	return out
 }
 
-// GetCurrentCompressedSummaries 返回指定会话当前压缩摘要列表（深复制）。
+// copyHistoryRaw 深复制消息列表，保留全部字段（含 Reasoning）。
+// 供 persistRunningHistories 和 EventDone 持久化时使用，
+// 确保 SegmentsFromMessage 能读取 Reasoning 创建 thinking segment。
+func copyHistoryRaw(hist []Message) []Message {
+	out := make([]Message, len(hist))
+	copy(out, hist)
+	return out
+}
+
+// GetCurrentHistoryRaw 返回指定会话的当前运行中 History 深复制副本（保留 Reasoning）。
+// 供 persistRunningHistories 持久化时使用，确保 SegmentsFromMessage 能读取 reasoning 创建 thinking segment。
+// 优先使用 currentMsgs（运行中每轮更新），其次是 Loop.History（Run 退出后由 defer 设置）。
+func (m *SessionManager) GetCurrentHistoryRaw(convID string) []Message {
+	m.mu.RLock()
+	sess, ok := m.sessions[convID]
+	m.mu.RUnlock()
+	if !ok || sess.Loop == nil {
+		return nil
+	}
+	if sess.Loop.currentMsgs != nil {
+		return copyHistoryRaw(sess.Loop.currentMsgs)
+	}
+	if sess.Loop.History != nil {
+		return copyHistoryRaw(sess.Loop.History)
+	}
+	return nil
+}
 // 页面刷新后恢复时使用。会话不存在或 Loop 尚未开始返回 nil。
 func (m *SessionManager) GetCurrentCompressedSummaries(convID string) []string {
 	m.mu.RLock()

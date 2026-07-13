@@ -726,12 +726,8 @@ func (s *webServer) startEventPersistWorker() {
 				}
 			case agent.EventDone, agent.EventError:
 				// 会话结束或出错时 diff-based 追加新消息到 store
-				var hist []agent.Message
-				if ge.Event.Type == agent.EventDone {
-					hist = agentMgr.GetHistory(convID)
-				} else {
-					hist = agentMgr.GetCurrentHistory(convID)
-				}
+				// 使用 GetCurrentHistoryRaw 保留 Reasoning（让 SegmentsFromMessage 能创建 thinking segment）
+				hist := agentMgr.GetCurrentHistoryRaw(convID)
 				if hist != nil {
 				if store := agentMgr.Store(); store != nil {
 					existing, _ := store.Count(convID)
@@ -757,7 +753,7 @@ func (s *webServer) startEventPersistWorker() {
 // 确保页面刷新或进程崩溃时上下文不丢失。
 func (s *webServer) persistRunningHistories() {
 	for _, convID := range agentMgr.ListRunning() {
-		hist := agentMgr.GetCurrentHistory(convID)
+		hist := agentMgr.GetCurrentHistoryRaw(convID)
 		if hist == nil {
 			continue
 		}
