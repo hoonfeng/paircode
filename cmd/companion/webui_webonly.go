@@ -184,6 +184,8 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 			}
 		}
 	}
+	// 裁剪中断会话（用户停止）产生的不完整 assistant 消息，确保新消息有清晰分界
+	history = agent.TrimInterruptedHistory(history)
 
 	maxIter := core.Settings.MaxIterations
 	if autonomous {

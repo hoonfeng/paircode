@@ -131,6 +131,59 @@ var ErrSessionRunning = errors.New("该会话已有运行中的任务")
 // ErrSessionNotFound convID 无会话（SendAnswer/Approve 等交互时找不到目标）。
 var ErrSessionNotFound = errors.New("会话不存在")
 
+// TrimInterruptedHistory 从历史消息中移除因用户主动停止而未完成的最后一段 assistant/tool 消息，
+// 但保留后续的用户消息（由 AppendPersistedUserMessage 预写入的新消息）。
+// 判定规则：从末尾向前找最后一条不含 finish_task 的 assistant 消息，删除它及其后连续的
+// assistant/tool 消息，遇到用户消息则停止删除（保留新消息）。
+func TrimInterruptedHistory(history []Message) []Message {
+	if len(history) == 0 {
+		return history
+	}
+	// 从末尾向前找最后一条 assistant 消息
+	for i := len(history) - 1; i >= 0; i-- {
+		if history[i].Role == RoleAssistant {
+			hasFinishTask := false
+			for _, tc := range history[i].ToolCalls {
+				if tc.Function.Name == "finish_task" {
+					hasFinishTask = true
+					break
+				}
+			}
+			if !hasFinishTask && strings.TrimSpace(history[i].Content) != "" {
+				// 该 assistant 没有 finish_task → 会话被中断
+				// 从 i 开始向后扫描，移除 assistant/tool 消息，但保留用户消息
+				// 找到下一个用户消息的位置（如果有）
+				nextUserIdx := -1
+				for j := i + 1; j < len(history); j++ {
+					if history[j].Role == RoleUser {
+						nextUserIdx = j
+						break
+					}
+				}
+				if nextUserIdx > 0 {
+					// 保留到 i-1（不含中断的 assistant），然后把后续用户消息拼接上
+					// 但跳过中间的所有 assistant/tool 消息
+					result := make([]Message, 0, i+1+(len(history)-nextUserIdx))
+					result = append(result, history[:i]...)
+					// 把从 nextUserIdx 开始的所有消息（含用户消息）追加
+					for j := nextUserIdx; j < len(history); j++ {
+						if history[j].Role == RoleUser {
+							result = append(result, history[j])
+						}
+						// 跳过 assistant/tool（它们是中断会话的残留）
+					}
+					return result
+				}
+				// 没有后续用户消息，直接截断到 i-1
+				return history[:i]
+			}
+			// 有 finish_task → 会话正常完成，跳出循环保留全部
+			break
+		}
+	}
+	return history
+}
+
 // ErrSessionNotRunning 会话未在运行（向已结束的会话发交互信号）。
 var ErrSessionNotRunning = errors.New("会话未在运行")
 
