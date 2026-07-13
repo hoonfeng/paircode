@@ -349,6 +349,23 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		msgs, err := loop.Run(runCtx, task, nil)
 		sess.History = msgs
 
+		// ★ 直接持久化：loop.Run 完成后立即将新消息写入 MessageStore（不依赖 EventDone 事件流）
+		// 确保所有 agent 回复（assistant/tool）都被持久化，避免因事件流排队/丢弃导致丢失。
+		if store := m.Store(); store != nil && msgs != nil {
+			existing, _ := store.LoadAll(convID)
+			existingCount := len(existing)
+			writeIdx := 0
+			for i, msg := range msgs {
+				if msg.Role == RoleSystem {
+					continue
+				}
+				if writeIdx >= existingCount {
+					_ = store.AppendMessage(convID, msg, SegmentsFromMessage(msg, msgs, i))
+				}
+				writeIdx++
+			}
+		}
+
 		// ★ Auto commit：任务通过 finish_task 正常完成时自动 git 提交
 		if err == nil && opts.AutoCommit && loop.finishResult != nil {
 			doAutoCommit(opts.WorkspaceRoot, task, *loop.finishResult)

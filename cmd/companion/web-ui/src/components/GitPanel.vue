@@ -391,7 +391,7 @@ async function loadStatus() {
     }
     if (isRepo.value) {
       try {
-        const log = await api.apiGet('/git/log', { count: 50 })
+        const log = await api.apiGet('/git-log', { count: 50 })
         commits.value = log || []
       } catch (err) { console.warn('[GitPanel] 加载提交历史失败:', err) }
     }
@@ -413,7 +413,7 @@ async function refresh() {
 
 async function refreshCommits() {
   try {
-    commits.value = await api.apiGet('/git/log', { count: 50 }) || []
+    commits.value = await api.apiGet('/git-log', { count: 50 }) || []
   } catch (err) { console.warn('[GitPanel] 刷新提交历史失败:', err) }
 }
 

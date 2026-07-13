@@ -128,6 +128,7 @@ func startWebUI(port int) {
 	mux.HandleFunc("/api/git/reset", ws.handleGitReset)
 	mux.HandleFunc("/api/git/commit", ws.handleGitCommit)
 	mux.HandleFunc("/api/git/log", ws.handleGitLog)
+	mux.HandleFunc("/api/git-log", ws.handleGitLog) // 避广告拦截器
 	mux.HandleFunc("/api/git/branch", ws.handleGitBranch)
 	mux.HandleFunc("/api/git/checkout", ws.handleGitCheckout)
 	mux.HandleFunc("/api/git/stash", ws.handleGitStash)
