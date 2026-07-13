@@ -1125,7 +1125,7 @@ watch(() => props.theme, () => {
 <style scoped>
 /* ═══════════════ Markdown 渲染器 ═══════════════ */
 .markdown-renderer { width: 100%; max-width: 100%; overflow-x: hidden; }
-.md-html { line-height: 1.6; white-space: pre-wrap; word-break: break-word; overflow-wrap: break-word; }
+.md-html { line-height: 1.6; word-break: break-word; overflow-wrap: break-word; }
 
 /* ── Markdown 内容样式（紧凑间距） ── */
 .md-html :deep(h1), .md-html :deep(h2), .md-html :deep(h3), .md-html :deep(h4) { margin: 6px 0 2px; font-weight: 600; }

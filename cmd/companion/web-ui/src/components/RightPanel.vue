@@ -1025,10 +1025,7 @@ onUnmounted(() => {
 .tl-tc-section pre { background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 4px; padding: 6px 8px; font-size: 11px; color: var(--text-secondary); max-height: 150px; overflow: auto; white-space: pre-wrap; font-family: var(--font-code); margin: 0; }
 .tl-tc-command { background: #1e1e1e; color: #d4d4d4; padding: 6px 10px 6px 14px; border-radius: 4px; font-family: var(--font-code); font-size: 12px; white-space: pre-wrap; border: 1px solid var(--border-color); }
 .tl-tc-output { background: #1e1e1e; color: #6a9955; padding: 8px 10px; border-radius: 4px; font-family: var(--font-code); font-size: 11px; white-space: pre-wrap; max-height: 200px; overflow: auto; border: 1px solid var(--border-color); }
-/* Content 段：纯 Markdown，无多余装饰 */
-.tl-content-item .tl-body :deep(p) { margin: 4px 0; }
-.tl-content-item .tl-body :deep(pre) { margin: 4px 0; white-space: pre-wrap; word-break: break-word; font-size: 12px; }
-.tl-content-item .tl-body :deep(code) { font-size: 12px; }
+/* Content 段：纯 Markdown，由 MarkdownRenderer 统一管理样式，此处不覆盖 */
 
 /* ── nudge 提示条 ── */
 .chat-nudge-bar { position: sticky; bottom: 0; z-index: 20; margin: 4px 12px; padding: 4px 10px; border-radius: 4px; background: var(--bg-tertiary); border: 1px solid var(--border-color); font-size: 11px; color: var(--text-muted); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; animation: nudgeFadeIn 0.3s ease; }
