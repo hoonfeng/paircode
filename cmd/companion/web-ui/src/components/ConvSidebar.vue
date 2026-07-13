@@ -276,20 +276,18 @@ const compOtherPct = computed(() => ((props.convCtxStats.otherTokens / compTotal
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 10px 8px 12px;
+  padding: 8px 10px;
   cursor: pointer;
   font-size: 12px;
   color: var(--text-secondary);
-  border-left: 3px solid transparent;
   position: relative;
-  transition: background 0.12s, border-color 0.12s;
+  transition: background 0.12s;
   margin: 1px 4px;
   border-radius: 4px;
 }
 .conv-item.active {
   background: var(--bg-active);
   color: var(--text-primary);
-  border-left-color: var(--accent);
   font-weight: 500;
 }
 .conv-item:hover { background: var(--bg-hover); }

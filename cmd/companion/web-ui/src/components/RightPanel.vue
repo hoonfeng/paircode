@@ -101,6 +101,11 @@
                     </template>
                   </template>
                 </template>
+                <!-- 🔽 折叠整条输出（展开后可用） -->
+                <div v-if="!msg._folded && msg.role === 'assistant' && msg.segments && msg.segments.length > 0" class="msg-fold-btn" @click="msg._folded = true">
+                  <SvgIcon name="chevron-up" :size="12" />
+                  <span>折叠输出</span>
+                </div>
                 <!-- 历史消息 fallback：assistant 有 content 但无 segments（从 API 加载的历史对话） -->
                 <template v-if="msg.role === 'assistant' && (!msg.segments || msg.segments.length === 0)">
                   <div v-if="msg.content" class="tl-item tl-content-item">
@@ -996,6 +1001,17 @@ onUnmounted(() => {
 .chat-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; min-height: 200px; color: var(--text-muted); }
 .folded-summary { display: flex; align-items: center; gap: 5px; padding: 5px 10px; background: var(--bg-primary); border: 1px solid var(--border-color); border-left: 3px solid var(--accent); border-radius: 6px; font-size: 12px; cursor: pointer; transition: background 0.15s, border-color 0.15s; }
 .folded-summary:hover { background: var(--bg-hover); border-color: var(--accent); }
+
+/* ── 折叠按钮（展开后使用） ── */
+.msg-fold-btn {
+  display: flex; align-items: center; justify-content: center; gap: 4px;
+  padding: 4px 0; margin-top: 4px;
+  font-size: 11px; color: var(--text-muted); cursor: pointer;
+  user-select: none; border-top: 1px solid transparent;
+  transition: all 0.12s; opacity: 0.4;
+}
+.msg-fold-btn:hover { opacity: 1; color: var(--text-secondary); background: var(--bg-hover); border-radius: 4px; }
+
 /* ── 时间线展示（替代旧 SubAgentBlock 卡片 + content-flow）── */
 .bubble-agent { position: relative; }
 .bubble-agent::before { content: ''; position: absolute; left: 8px; top: 0; bottom: 0; width: 2px; background: linear-gradient(180deg, var(--accent) 0%, var(--border-color) 100%); opacity: 0.4; border-radius: 1px; }
