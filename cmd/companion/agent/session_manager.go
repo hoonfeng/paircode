@@ -487,8 +487,12 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		}
 
 		// ★ Auto commit：任务通过 finish_task 正常完成时自动 git 提交
-		if err == nil && opts.AutoCommit && loop.finishResult != nil {
-			doAutoCommit(opts.WorkspaceRoot, task, *loop.finishResult)
+		if opts.AutoCommit && err == nil {
+			result := ""
+			if loop.finishResult != nil {
+				result = *loop.finishResult
+			}
+			doAutoCommit(opts.WorkspaceRoot, task, result)
 		}
 
 		// 错误处理：Loop 内部已对多数错误发射 EventError，
@@ -829,8 +833,9 @@ func (m *SessionManager) GetWorkspaceRoot(convID string) string {
 }
 
 // doAutoCommit 在任务完成后自动执行 git add + git commit。
-// root 为工作区根目录，task 为用户任务文本，result 为 finish_task 的结果摘要。
+// root 为工作区根目录，task 为用户任务文本，result 为 finish_task 的结果摘要（可为空）。
 // commit message 格式："auto: <result 前 60 字>"，方便快速识别自动提交内容。
+// 自动设置 git user config 避免因全局配置缺失导致提交失败。
 // 执行失败时只日志不 panic（不影响 agent 主流程）。
 func doAutoCommit(root, task, result string) {
 	if root == "" {
@@ -851,8 +856,11 @@ func doAutoCommit(root, task, result string) {
 		fmt.Printf("[auto-commit] git add 失败: %v\n%s\n", err, string(out))
 		return
 	}
-	// git commit -m "auto: ..."
-	commit := exec.Command("git", "commit", "-m", "auto: "+msg)
+	// git commit -m "auto: ..."（带内联 user config，防止全局未配置导致失败）
+	commit := exec.Command("git",
+		"-c", "user.name=Pairode",
+		"-c", "user.email=agent@paircode.dev",
+		"commit", "-m", "auto: "+msg)
 	commit.Dir = root
 	if out, err := commit.CombinedOutput(); err != nil {
 		// "nothing to commit" 不是真正的错误
