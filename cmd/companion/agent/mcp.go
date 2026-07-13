@@ -205,16 +205,32 @@ func parseCallToolResult(res *mcp.CallToolResult) (string, error) {
 	return text, nil
 }
 
+// sanitizeToolName 把工具名中的非法字符替换为下划线。
+// OpenAI/DeepSeek API 要求工具名匹配 ^[a-zA-Z0-9_-]+$，中文/点号/空格等需过滤。
+func sanitizeToolName(name string) string {
+	var b strings.Builder
+	b.Grow(len(name))
+	for _, r := range name {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-' {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte('_')
+		}
+	}
+	return b.String()
+}
+
 // registerClientTools 把连接的工具注册进 Registry，名加 "mcp__<server>__" 前缀防冲突。返回工具数。
 // MCP 工具 RequiresApproval=true（外部工具默认需审批）；细粒度 HITL 由 Registry.BeforeTool 钩子
 // 统一处理（阶段一已加钩子链），调用方可在 BeforeTool 中按 "mcp__<server>__<tool>" 前缀做白名单。
 // 用下划线而非点号：OpenAI/DeepSeek API 要求工具名匹配 ^[a-zA-Z0-9_-]+$，点号不被接受。
+// 会对 serverName 和 td.Name 做 sanitize 过滤非法字符。
 func registerClientTools(r *Registry, conn *mcpConnection) (int, error) {
 	tools, err := conn.listAllTools(context.Background())
 	if err != nil {
 		return 0, err
 	}
-	serverName := conn.cfg.Name
+	serverName := sanitizeToolName(conn.cfg.Name)
 	for _, td := range tools {
 		// InputSchema 客户端侧为 map[string]any（go-sdk 文档），但类型是 any，需断言
 		var schema map[string]any
@@ -226,11 +242,12 @@ func registerClientTools(r *Registry, conn *mcpConnection) (int, error) {
 		if schema == nil {
 			schema = map[string]any{"type": "object", "properties": map[string]any{}}
 		}
-		toolName := td.Name // 捕获
+		toolName := td.Name       // 原始名，传给 MCP 服务器用（不 sanitize）
+		regName := sanitizeToolName(td.Name) // 注册到 Registry 的名，必须符合 ^[a-zA-Z0-9_-]+$
 		toolDesc := td.Description
 		r.Register(&Tool{
-			Name:             "mcp__" + serverName + "__" + td.Name,
-			Description:      "[MCP:" + serverName + "] " + toolDesc,
+			Name:             "mcp__" + serverName + "__" + regName,
+			Description:      "[MCP:" + conn.cfg.Name + "] " + toolDesc,
 			Parameters:       schema,
 			RequiresApproval: true,
 			Handler: func(ctx context.Context, args map[string]any) (string, error) {

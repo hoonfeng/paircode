@@ -32,18 +32,33 @@ func SearchText(query, kind string) string {
 // ─── 安装 ───
 
 // InstallScoped 从市场按 id 安装一个 MCP 服务器或技能。
-// auto=true 表示由 Agent 自动安装；auto=false 表示 UI 触发。
-func InstallScoped(id string, auto bool) (string, error) {
+// auto=true 表示由 Agent 自动安装；scope 可选 "user"（默认，用户级/全局）或 "project"（项目级/工作区）。
+// 不传 scope 时默认 user（向后兼容）。
+func InstallScoped(id string, auto bool, scope ...string) (string, error) {
+	s := "user"
+	if len(scope) > 0 && scope[0] != "" {
+		s = scope[0]
+	}
 	entry := Find(id)
 	if entry == nil {
 		return "", fmt.Errorf("市场未找到条目 %q", id)
 	}
+	return InstallEntry(*entry, auto, s)
+}
 
+// InstallEntry 直接从 RegistryEntry 安装 MCP 或技能（不查注册表）。
+// 适用于前端搜索结果已包含 command/args 的场景。
+// scope 可选 "user"（默认）或 "project"。
+func InstallEntry(entry RegistryEntry, auto bool, scope ...string) (string, error) {
+	s := "user"
+	if len(scope) > 0 && scope[0] != "" {
+		s = scope[0]
+	}
 	switch entry.Kind {
 	case "mcp":
-		return installMCP(*entry, auto)
+		return installMCP(entry, auto, s)
 	case "skill":
-		return installSkill(*entry, auto)
+		return installSkill(entry, auto)
 	default:
 		return "", fmt.Errorf("未知条目类型: %s", entry.Kind)
 	}
@@ -59,7 +74,7 @@ func InstallAndNotify(id string) {
 	uiapi.MessageSuccess(msg)
 }
 
-func installMCP(entry RegistryEntry, auto bool) (string, error) {
+func installMCP(entry RegistryEntry, auto bool, scope string) (string, error) {
 	e := mcppanel.Entry{
 		Name:    entry.ID,
 		Command: entry.Command,
@@ -71,10 +86,20 @@ func installMCP(entry RegistryEntry, auto bool) (string, error) {
 	if e.Command == "" {
 		e.Command = "npx"
 	}
-	if err := mcppanel.Upsert(mcppanel.LevelUser, e); err != nil {
+	var level mcppanel.Level
+	var levelLabel string
+	switch scope {
+	case "project":
+		level = mcppanel.LevelProject
+		levelLabel = "项目级（工作区）"
+	default:
+		level = mcppanel.LevelUser
+		levelLabel = "用户级（全局）"
+	}
+	if err := mcppanel.Upsert(level, e); err != nil {
 		return "", fmt.Errorf("写入 MCP 配置失败: %w", err)
 	}
-	msg := fmt.Sprintf("✅ 已安装 MCP 服务器「%s」（用户级 mcp.json）", entry.Name)
+	msg := fmt.Sprintf("✅ 已安装 MCP 服务器「%s」（%s）", entry.Name, levelLabel)
 	if auto {
 		msg += "。下次对话连接生效。"
 	}

@@ -394,6 +394,8 @@ func (s *webServer) handleMarketplaceSearch(w http.ResponseWriter, r *http.Reque
 		Name        string   `json:"name"`
 		Description string   `json:"description"`
 		Tags        []string `json:"tags"`
+		Command     string   `json:"command"`
+		Args        []string `json:"args"`
 		Installed   bool     `json:"installed"`
 	}
 	out := make([]resultItem, 0, len(results))
@@ -401,6 +403,7 @@ func (s *webServer) handleMarketplaceSearch(w http.ResponseWriter, r *http.Reque
 		out = append(out, resultItem{
 			ID: e.ID, Kind: e.Kind, Name: e.Name,
 			Description: e.Description, Tags: e.Tags,
+			Command: e.Command, Args: e.Args,
 			Installed: marketplacepanel.IsInstalled(e.ID),
 		})
 	}
@@ -415,7 +418,10 @@ func (s *webServer) handleMarketplaceInstall(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	var req struct {
-		ID string `json:"id"`
+		ID      string   `json:"id"`
+		Kind    string   `json:"kind"`
+		Command string   `json:"command"`
+		Args    []string `json:"args"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonErr(w, err.Error())
@@ -425,7 +431,17 @@ func (s *webServer) handleMarketplaceInstall(w http.ResponseWriter, r *http.Requ
 		jsonErr(w, "id 必填")
 		return
 	}
-	msg, err := marketplacepanel.InstallScoped(req.ID, false)
+	var msg string
+	var err error
+	if req.Command != "" {
+		entry := marketplacepanel.RegistryEntry{
+			ID: req.ID, Kind: req.Kind,
+			Command: req.Command, Args: req.Args,
+		}
+		msg, err = marketplacepanel.InstallEntry(entry, false)
+	} else {
+		msg, err = marketplacepanel.InstallScoped(req.ID, false)
+	}
 	if err != nil {
 		jsonErr(w, err.Error())
 		return

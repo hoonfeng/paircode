@@ -284,6 +284,11 @@ var (
 	fetchMu       sync.RWMutex
 	lastFetchErr  string
 	cacheInitOnce sync.Once
+
+	// searchCache 瞬态搜索结果缓存（npm/GitHub 实时搜索结果）
+	// 供 InstallScoped → Find 找到实时搜索到的条目。
+	searchCache   map[string]RegistryEntry
+	searchCacheMu sync.RWMutex
 )
 
 // SetMarketplaceURL 设置远程市场 URL。
@@ -513,14 +518,92 @@ func AllEntries() []RegistryEntry {
 	return getAllEntries()
 }
 
-// Search 按关键词和类型搜索市场注册表（合并远程 + 内置）。
+// Search 按关键词和类型搜索市场注册表。
+// 搜索策略：
+//   - 优先匹配内置注册表（本地快速）
+//   - 同时实时搜索 npm registry（MCP 包）和 GitHub API（技能项目）
+//   - 合并去重后返回
 func Search(query, kind string) []RegistryEntry {
 	if kind == "" || kind == "all" {
 		kind = ""
 	}
+
+	// 1. 本地搜索内置注册表
 	all := getAllEntries()
+	local := searchLocal(all, query, kind)
+
+	// 2. 没有查询关键词时只返回本地结果（API 搜索需要关键词）
+	if query == "" {
+		return local
+	}
+
+	// 3. 实时 API 搜索（并发）
+	type apiResult struct {
+		entries []RegistryEntry
+		kind    string
+	}
+	ch := make(chan apiResult, 2)
+
+	go func() {
+		if kind == "" || kind == "mcp" {
+			ch <- apiResult{searchNPM(query), "mcp"}
+		} else {
+			ch <- apiResult{nil, "mcp"}
+		}
+	}()
+	go func() {
+		if kind == "" || kind == "skill" {
+			ch <- apiResult{searchGitHub(query), "skill"}
+		} else {
+			ch <- apiResult{nil, "skill"}
+		}
+	}()
+
+	// 收集结果
+	var mcpResults, skillResults []RegistryEntry
+	for i := 0; i < 2; i++ {
+		r := <-ch
+		switch r.kind {
+		case "mcp":
+			mcpResults = r.entries
+		case "skill":
+			skillResults = r.entries
+		}
+	}
+
+	// 4. 合并去重（本地优先，远程补充）
+	seen := make(map[string]bool, len(local))
+	for _, e := range local {
+		seen[e.ID] = true
+	}
+	for _, e := range mcpResults {
+		if !seen[e.ID] {
+			seen[e.ID] = true
+			local = append(local, e)
+		}
+	}
+	for _, e := range skillResults {
+		if !seen[e.ID] {
+			seen[e.ID] = true
+			local = append(local, e)
+		}
+	}
+
+	// 5. 缓存搜索结果（供 Find / Install 使用）
+	searchCacheMu.Lock()
+	searchCache = make(map[string]RegistryEntry, len(local))
+	for _, e := range local {
+		searchCache[e.ID] = e
+	}
+	searchCacheMu.Unlock()
+
+	return local
+}
+
+// searchLocal 在本地注册表中搜索匹配条目。
+func searchLocal(entries []RegistryEntry, query, kind string) []RegistryEntry {
 	var out []RegistryEntry
-	for _, e := range all {
+	for _, e := range entries {
 		if kind != "" && e.Kind != kind {
 			continue
 		}
@@ -537,8 +620,179 @@ func Search(query, kind string) []RegistryEntry {
 	return out
 }
 
+// ─── 实时 API 搜索（npm registry + GitHub） ───
+
+const (
+	apiSearchTimeout = 8 * time.Second
+	maxAPISearch     = 20 // 每个 API 最多取回的结果数
+)
+
+// searchNPM 实时搜索 npm registry（MCP 包）。
+// 搜索 MCP 相关 npm 包：在用户查询词后追加 "mcp" 以获得相关结果。
+func searchNPM(query string) []RegistryEntry {
+	if query == "" {
+		return nil
+	}
+	// npm 搜索：用 query + mcp 关键词提高相关性
+	searchQ := url.QueryEscape(query + " mcp")
+	apiURL := "https://registry.npmjs.org/-/v1/search?text=" + searchQ + "&size=" + fmt.Sprintf("%d", maxAPISearch)
+
+	client := &http.Client{Timeout: apiSearchTimeout}
+	resp, err := client.Get(apiURL)
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil
+	}
+
+	var result struct {
+		Objects []struct {
+			Package struct {
+				Name        string   `json:"name"`
+				Description string   `json:"description"`
+				Version     string   `json:"version"`
+				Keywords    []string `json:"keywords"`
+				Date        string   `json:"date"`
+				Links       struct {
+					Npm      string `json:"npm"`
+					Homepage string `json:"homepage"`
+				} `json:"links"`
+				Publisher struct {
+					Username string `json:"username"`
+				} `json:"publisher"`
+			} `json:"package"`
+			Score struct {
+				Final float64 `json:"final"`
+			} `json:"score"`
+		} `json:"objects"`
+		Total int `json:"total"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil
+	}
+
+	var entries []RegistryEntry
+	for _, obj := range result.Objects {
+		pkg := obj.Package
+		id := "npm-" + pkg.Name
+		// 提取短名作为显示名
+		name := pkg.Name
+		if strings.HasPrefix(name, "@") {
+			// scoped package: @scope/name → name
+			if parts := strings.SplitN(name, "/", 2); len(parts) == 2 {
+				name = parts[1]
+			}
+		} else {
+			// 取最后一段
+			if parts := strings.SplitN(name, "/", 2); len(parts) == 2 {
+				name = parts[1]
+			}
+		}
+
+		// 构建启动命令参数
+		cmd := "npx"
+		args := []string{"-y", pkg.Name}
+
+		entries = append(entries, RegistryEntry{
+			ID:          id,
+			Kind:        "mcp",
+			Name:        name,
+			Description: pkg.Description,
+			Tags:        append([]string{"mcp"}, pkg.Keywords...),
+			Source:      pkg.Links.Npm,
+			Command:     cmd,
+			Args:        args,
+		})
+	}
+	return entries
+}
+
+// searchGitHub 实时搜索 GitHub（技能/工具项目）。
+func searchGitHub(query string) []RegistryEntry {
+	if query == "" {
+		return nil
+	}
+	searchQ := url.QueryEscape(query)
+	apiURL := "https://api.github.com/search/repositories?q=" + searchQ + "&sort=stars&per_page=" + fmt.Sprintf("%d", maxAPISearch)
+
+	client := &http.Client{Timeout: apiSearchTimeout}
+	req, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil
+	}
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+	req.Header.Set("User-Agent", "Pair-CodeAgent/1.0")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil
+	}
+
+	var result struct {
+		Items []struct {
+			ID          int    `json:"id"`
+			FullName    string `json:"full_name"`
+			Description string `json:"description"`
+			Stars       int    `json:"stargazers_count"`
+			UpdatedAt   string `json:"updated_at"`
+			HTMLURL     string `json:"html_url"`
+			Topics      []string `json:"topics"`
+			Language    string `json:"language"`
+		} `json:"items"`
+		TotalCount int `json:"total_count"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil
+	}
+
+	var entries []RegistryEntry
+	for _, item := range result.Items {
+		id := "gh-" + item.FullName
+		name := item.FullName
+		// 取短名
+		if parts := strings.SplitN(item.FullName, "/", 2); len(parts) == 2 {
+			name = parts[1]
+		}
+
+		tags := []string{"skill"}
+		tags = append(tags, item.Topics...)
+		if item.Language != "" {
+			tags = append(tags, item.Language)
+		}
+
+		entries = append(entries, RegistryEntry{
+			ID:          id,
+			Kind:        "skill",
+			Name:        name,
+			Description: item.Description,
+			Tags:        tags,
+			Source:      item.HTMLURL,
+		})
+	}
+	return entries
+}
+
 // Find 按 ID 查找注册表条目。
 func Find(id string) *RegistryEntry {
+	// 优先查瞬态搜索缓存（npm/GitHub 实时搜索结果）
+	searchCacheMu.RLock()
+	if cached, ok := searchCache[id]; ok {
+		searchCacheMu.RUnlock()
+		return &cached
+	}
+	searchCacheMu.RUnlock()
+
+	// 再查持久注册表
 	for _, e := range getAllEntries() {
 		if e.ID == id {
 			return &e

@@ -111,11 +111,13 @@ func RegisterManagementTools(r *agent.Registry, root string) {
 	})
 	r.Register(&agent.Tool{
 		Name:             "mcp_add",
-		Description:      "新增一个 MCP 服务器到用户级配置（mcp.json）。下次对话连接生效。",
+		Description:      "新增一个 MCP 服务器。scope 可选 user（用户级/全局，默认）或 project（项目级/工作区）。下次对话连接生效。",
 		RequiresApproval: true,
 		Parameters: toolObj(map[string]any{
-			"name": strParam("服务器名（工具前缀）"), "command": strParam("启动命令，如 npx / uvx"),
-			"args": map[string]any{"type": "array", "description": "命令参数", "items": map[string]any{"type": "string"}},
+			"name":    strParam("服务器名（工具前缀）"),
+			"command": strParam("启动命令，如 npx / uvx"),
+			"args":    map[string]any{"type": "array", "description": "命令参数", "items": map[string]any{"type": "string"}},
+			"scope":   strParam("安装位置：user（用户级/全局，默认）或 project（项目级/工作区）"),
 		}, "name", "command"),
 		Handler: func(_ context.Context, args map[string]any) (string, error) { return mcpAddTool(args) },
 	})
@@ -142,11 +144,18 @@ func RegisterManagementTools(r *agent.Registry, root string) {
 	})
 	r.Register(&agent.Tool{
 		Name:             "marketplace_install",
-		Description:      "从市场按 id 安装一个 MCP 服务器（写入用户级 mcp.json）或技能（写入项目级 .pair/skills）。",
+		Description:      "从市场按 id 安装一个 MCP 服务器或技能。scope 可选 user（用户级/全局，默认）或 project（项目级/工作区）。",
 		RequiresApproval: true,
-		Parameters:       toolObj(map[string]any{"id": strParam("市场条目 id（见 marketplace_search）")}, "id"),
+		Parameters: toolObj(map[string]any{
+			"id":    strParam("市场条目 id（见 marketplace_search）"),
+			"scope": strParam("安装位置：user（用户级/全局，默认）或 project（项目级/工作区）"),
+		}, "id"),
 		Handler: func(_ context.Context, args map[string]any) (string, error) {
-			return marketplacepanel.InstallScoped(argString(args, "id"), true)
+			scope := argString(args, "scope")
+			if scope == "" {
+				scope = "user"
+			}
+			return marketplacepanel.InstallScoped(argString(args, "id"), true, scope)
 		},
 	})
 
@@ -249,11 +258,23 @@ func mcpAddTool(args map[string]any) (string, error) {
 	if e.Name == "" || e.Command == "" {
 		return "", fmt.Errorf("name 与 command 必填")
 	}
-	if err := mcppanel.Upsert(mcppanel.LevelUser, e); err != nil {
+	scope := argString(args, "scope")
+	var level mcppanel.Level
+	var levelLabel string
+	switch scope {
+	case "project":
+		level = mcppanel.LevelProject
+		levelLabel = "项目级（工作区）"
+	default:
+		level = mcppanel.LevelUser
+		levelLabel = "用户级（全局）"
+	}
+	if err := mcppanel.Upsert(level, e); err != nil {
 		return "", err
 	}
-	return "已添加 MCP 服务器 " + e.Name + "（用户级，下次对话连接生效）", nil
+	return "已添加 MCP 服务器 " + e.Name + "（" + levelLabel + "，下次对话连接生效）", nil
 }
+
 // ─── 市场工具实现 ──
 func MarketSearch(query, kind string) string {
 	results := marketplacepanel.Search(query, kind)
