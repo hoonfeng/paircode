@@ -339,6 +339,14 @@ export function processStatus(payload) {
       delete runtimes[convId]
     }
   }
+  // 也清理 loadingByConv 中遗漏的条目：某些场景下 agentRunningByConv 可能为空
+  // 但 loadingByConv 仍残留 true（如页面刷新后 WS 重连前的 done 事件丢失）。
+  // 只要 conv 不在 runningSet 中，loading 状态都应清除。
+  for (const convId of Object.keys(state.loadingByConv)) {
+    if (state.loadingByConv[convId] && !runningSet.has(convId)) {
+      state.loadingByConv[convId] = false
+    }
+  }
 }
 
 // ─── convCtxStats 辅助 ──

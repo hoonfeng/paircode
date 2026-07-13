@@ -678,6 +678,9 @@ const switchConv = async (id) => {
       state.messages = state.messagesByConv[id]
       state.msgTotalByConv[id] = data.total || loaded.length
       state.msgLoadedByConv[id] = loaded.length
+      // ── 从加载的消息段中重建任务计划 ──
+      currentPlan.value = rebuildPlanFromMessages(loaded)
+      planExpanded.value = currentPlan.value.length > 0
     } catch {
       state.msgTotalByConv[id] = 0
       state.msgLoadedByConv[id] = 0
@@ -718,6 +721,32 @@ function phaseIcon(phase) {
   if (phase.includes('完成')) return 'check'
   if (phase.includes('继续')) return 'send'
   return 'cycle'
+}
+
+function rebuildPlanFromMessages(msgs) {
+  // 从已加载消息的 segments 中扫描 update_plan/task_create/task_update 工具调用，
+  // 重建任务计划列表。用于页面刷新后恢复计划显示。
+  let plan = []
+  for (const msg of msgs) {
+    if (!msg.segments) continue
+    for (const seg of msg.segments) {
+      if (seg.type !== 'tool_call') continue
+      const name = seg.name || ''
+      let args
+      try { args = seg.argsRaw ? JSON.parse(seg.argsRaw) : {} } catch { continue }
+      if (name === 'update_plan' && Array.isArray(args.plan)) {
+        plan = args.plan.map(s => ({ ...s }))
+      } else if (name === 'task_create') {
+        plan.push({ step: args.subject || '(新建任务)', status: 'pending', callId: seg.callId || '', _taskId: null })
+      } else if (name === 'task_update') {
+        for (let i = 0; i < plan.length; i++) {
+          if (plan[i]._taskId && plan[i]._taskId === args.id) { plan[i].status = args.status; break }
+          if (args.subject && plan[i].step === args.subject) { plan[i].status = args.status; break }
+        }
+      }
+    }
+  }
+  return plan
 }
 
 function handleTaskTool(data) {
