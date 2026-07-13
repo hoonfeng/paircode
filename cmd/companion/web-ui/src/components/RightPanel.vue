@@ -67,6 +67,15 @@
                       </div>
                       <!-- Tool Call：折叠行，无卡片包裹 -->
                       <div v-else-if="seg.type === 'tool_call'" class="tl-item">
+                        <!-- finish_task：直接渲染为 markdown 完成报告 -->
+                        <template v-if="seg.name === 'finish_task'">
+                          <span class="tl-dot tl-dot-done"></span>
+                          <div class="tl-body">
+                            <MarkdownRenderer v-if="seg.result" :text="seg.result" :theme="state.theme" />
+                          </div>
+                        </template>
+                        <!-- 其他工具调用：折叠行 -->
+                        <template v-else>
                         <span class="tl-dot tl-dot-tool"></span>
                         <div class="tl-body tl-tool">
                           <div class="tl-tc-header" @click="seg._expanded = !seg._expanded">
@@ -87,6 +96,7 @@
                             </template>
                           </div>
                         </div>
+                        </template>
                       </div>
                       <!-- Ask User：交互式 -->
                       <div v-else-if="seg.type === 'ask_user'" class="tl-item">
@@ -1022,6 +1032,7 @@ onUnmounted(() => {
 .tl-dot-tool { border-color: #d4a74e; background: rgba(212,167,78,0.2); box-shadow: 0 0 0 2px var(--bg-primary), 0 0 6px rgba(212,167,78,0.2); }
 .tl-dot-ask { border-color: #c586c0; background: rgba(197,134,192,0.2); box-shadow: 0 0 0 2px var(--bg-primary), 0 0 6px rgba(197,134,192,0.2); }
 .tl-dot-content { border-color: #6a9955; background: rgba(106,153,85,0.2); box-shadow: 0 0 0 2px var(--bg-primary), 0 0 6px rgba(106,153,85,0.2); }
+.tl-dot-done { border-color: var(--accent); background: var(--accent); box-shadow: 0 0 0 2px var(--bg-primary), 0 0 6px rgba(126,184,218,0.4); }
 .tl-body { flex: 1; min-width: 0; font-size: 13px; line-height: 1.6; padding-left: 20px; }
 /* ── 思考段：背景区分 + 左边框 + 改进滚动条 ── */
 .tl-think-body { position: relative; }
