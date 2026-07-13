@@ -1,5 +1,5 @@
 <template>
-  <div v-if="plan.length > 0 && !allDone" class="plan-panel" :class="{ collapsed: !expanded }">
+  <div v-if="plan.length > 0" class="plan-panel" :class="{ collapsed: !expanded, 'all-done': allDone }">
     <div class="plan-header" @click="$emit('toggle')">
       <span class="plan-chevron">{{ expanded ? '▾' : '▸' }}</span>
       <SvgIcon name="list" :size="12" />
@@ -55,6 +55,9 @@ function cleanText(raw) {
   flex-shrink: 0;
 }
 .plan-panel.collapsed .plan-body { display: none; }
+.plan-panel.all-done { opacity: 0.7; }
+.plan-panel.all-done .plan-bar-fill { background: #6a9955; }
+.plan-panel.all-done .plan-header .plan-progress::after { content: ' ✅'; font-size: 10px; }
 .plan-header {
   display: flex; align-items: center; gap: 6px;
   padding: 6px 10px; cursor: pointer; user-select: none;

@@ -975,8 +975,22 @@ onMounted(() => {
       const plan = [...currentPlan.value]
       let changed = false
       for (let i = 0; i < plan.length; i++) {
+        // 按 _taskId 匹配（taskId 来自后端 TaskManager）
         if (plan[i]._taskId && plan[i]._taskId === taskId) { plan[i] = { ...plan[i], status }; changed = true; break }
+        // 按 callId 匹配（_taskId 尚未通过 onTaskSetId 设置的 fallback）
+        if (plan[i].callId === taskId) { plan[i] = { ...plan[i], status, _taskId: taskId }; changed = true; break }
+        // 按 subject 匹配
         if (subject && plan[i].step === subject) { plan[i] = { ...plan[i], status }; changed = true; break }
+      }
+      if (!changed) {
+        // 最后 fallback：按顺序匹配第一个 pending/in_progress 的任务
+        for (let i = 0; i < plan.length; i++) {
+          if (plan[i].status === 'pending' || plan[i].status === 'in_progress') {
+            plan[i] = { ...plan[i], status, _taskId: plan[i]._taskId || taskId }
+            changed = true
+            break
+          }
+        }
       }
       if (changed) { currentPlan.value = plan; planExpanded.value = true }
     },

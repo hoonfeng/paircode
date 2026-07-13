@@ -121,6 +121,13 @@ export function processAgentEvent(convId, data) {
         const args = data.args ? (typeof data.args === 'string' ? JSON.parse(data.args) : data.args) : {}
         if (Array.isArray(args.plan) && globalCtx.onPlanUpdate) globalCtx.onPlanUpdate(args.plan, convId)
       } catch {}
+      // 也推送 segment，让用户在消息流中看到规划过程
+      msg.segments.push({
+        type: 'tool_call', name: toolName,
+        callId: data.callId || data.callID || '',
+        argsRaw: data.args ? (typeof data.args === 'string' ? data.args : JSON.stringify(data.args, null, 2)) : '',
+        result: '', _mode: 'collapsed', _collapsed: false, _expanded: false,
+      })
     } else if (toolName === 'task_create') {
       try {
         const args = data.args ? (typeof data.args === 'string' ? JSON.parse(data.args) : data.args) : {}
