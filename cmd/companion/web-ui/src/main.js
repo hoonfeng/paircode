@@ -199,7 +199,7 @@ export function applyTheme(themeName) {
   savePersistentState()
 }
 
-// ─── 持久化：保存全部状态到 localStorage ────────────────────
+// ─── 持久化：保存 UI 布局偏好到 localStorage（仅面板位置/主题等纯展示设置，不含工作区数据）───
 export function savePersistentState() {
   try {
     const data = {
@@ -211,17 +211,13 @@ export function savePersistentState() {
       bottomPanelTab: state.bottomPanelTab,
       theme: state.theme,
       focusMode: state.focusMode,
-      workspaceRoot: state.workspaceRoot,
-      workspaceFolders: [...state.workspaceFolders],
-      workspaceName: state.workspaceName,
-      openFiles: [...state.openFiles],
-      activeFile: state.activeFile,
     }
     localStorage.setItem(PERSIST_KEY, JSON.stringify(data))
   } catch (e) {}
 }
 
-// ─── 持久化：从 localStorage 恢复状态 ──────────────────────
+// ─── 持久化：从 localStorage 恢复 UI 布局偏好 ────────────
+// 只恢复面板位置/主题等纯展示设置，工作区和编辑器数据全部从 API 加载。
 export function loadPersistentState() {
   try {
     const raw = localStorage.getItem(PERSIST_KEY)
@@ -244,11 +240,9 @@ export function loadPersistentState() {
     }
     if (typeof data.focusMode === 'boolean') state.focusMode = data.focusMode
 
-    if (data.workspaceName) state.workspaceName = data.workspaceName
-    if (data.openFiles && Array.isArray(data.openFiles)) {
-      state.openFiles = data.openFiles.filter(f => f)
-    }
-    if (data.activeFile) state.activeFile = data.activeFile
+    // ★ 以下字段不再从 localStorage 读取，全部从 API 获取：
+    //   workspaceRoot / workspaceFolders / workspaceName ← 从 /api/health
+    //   openFiles / activeFile / fileContents ← 从编辑器状态恢复
   } catch (e) {}
 }
 
