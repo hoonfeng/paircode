@@ -115,10 +115,10 @@
               </div>
             </div>
           </div>
-          <div v-if="state.chatLoading && state.messages.length > 0" class="msg-loading-banner">
+          <div v-if="state.chatLoading && state.messages && state.messages.length > 0" class="msg-loading-banner">
             <span class="dot-pulse"></span><span>思考中...</span>
           </div>
-          <div v-if="state.messages.length === 0 && !state.chatLoading" class="chat-empty">
+          <div v-if="(!state.messages || state.messages.length === 0) && !state.chatLoading" class="chat-empty">
             <div class="chat-empty-icon"><SvgIcon name="bot" :size="32" /></div>
             <div class="chat-empty-text">开始新的对话</div>
             <div class="chat-empty-hint">发送消息即可与 AI 助手对话</div>
@@ -564,6 +564,7 @@ const newConversation = async () => {
     const conv = await api.apiPost('/conversations', { title: '新对话', workspaceRoot: state.workspaceRoot })
     state.currentConvId = conv.id
     state.conversations.unshift({ id: conv.id, title: conv.title || '新对话', msgCount: 0, createdAt: conv.createdAt, updatedAt: conv.updatedAt })
+    if (!state.messagesByConv[conv.id]) state.messagesByConv[conv.id] = []
     state.messages = state.messagesByConv[conv.id]
     state.msgTotalByConv[conv.id] = 0
     state.msgLoadedByConv[conv.id] = 0
@@ -791,7 +792,7 @@ const handlePaste = (e) => {
 }
 
 // ── 新消息自动滚底：仅当用户处于底部附近时跟随新内容
-watch(() => state.messages.length, () => {
+watch(() => (state.messages || []).length, () => {
   nextTick(() => {
     if (isNearBottom.value && msgRef.value) {
       msgRef.value.scrollTop = msgRef.value.scrollHeight

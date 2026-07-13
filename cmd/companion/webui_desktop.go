@@ -598,7 +598,14 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 	var history []agent.Message
 	if convID != "" {
 		if store := agentMgr.Store(); store != nil {
-			history, _ = store.LoadAll(convID)
+			raw, _ := store.LoadAll(convID)
+			if raw != nil {
+				history = make([]agent.Message, len(raw))
+				for i := range raw {
+					history[i] = raw[i]
+					history[i].Reasoning = ""
+				}
+			}
 		}
 	}
 
