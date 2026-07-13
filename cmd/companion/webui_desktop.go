@@ -745,34 +745,10 @@ func (s *webServer) startEventPersistWorker() {
 						}
 					}
 					// ── 持久化 EventDone 的完成报告（如 finish_task 结果）──
-					// EventDone.Content 包含完成摘要，但不在 history 的 Message 中（仅事件）。
-					// 追加为一条 content segment 到消息末尾，确保页面刷新后仍能显示完成报告。
-					if ge.Event.Type == agent.EventDone && ge.Event.Content != "" {
-						_, existingAfter := store.Count(convID)
-						if existingAfter > 0 {
-							// 读最后一条消息
-							lastMsgs, _, _ := store.LoadLatest(convID, 1)
-							if len(lastMsgs) > 0 {
-								last := lastMsgs[0]
-								// 检查是否已有同内容的 content segment（防重复持久化）
-								hasDone := false
-								for _, seg := range last.Segments {
-									if seg.Type == "content" && seg.Content == ge.Event.Content {
-										hasDone = true
-										break
-									}
-								}
-								if !hasDone {
-									// 追加为独立的 assistant 消息（带 content segment），
-									// 刷新页面后作为完成报告展示在消息列表中。
-									_ = store.AppendMessage(convID,
-										agent.Message{Role: agent.RoleAssistant, Content: ge.Event.Content},
-										[]agent.Segment{{Type: "content", Content: ge.Event.Content}},
-									)
-								}
-							}
-						}
-					}
+					// EventDone.Content 包含完成摘要，且 finish_task 的 tool_result 已在 diff
+					// 增量持久化中写入 store（作为 history 中的 tool 消息）。前端 processAgentDone
+					// 会将其展示为 content segment。此处不再追加独立 assistant 消息，
+					// 避免下次加载时出现重复（消息回灌）。
 				}
 			}
 				if ge.Event.Type == agent.EventDone && convID != "" {
