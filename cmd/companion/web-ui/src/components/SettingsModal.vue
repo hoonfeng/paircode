@@ -670,6 +670,7 @@ async function loadPhilosophy() {
 
 // ─── MCP / Skills ───
 const localMcpList = ref([])
+const originalMcpList = ref([]) // 加载时的快照，用于删除检测
 const localSkills = ref([])
 const mcpEditMode = ref('simple')
 const mcpJsonText = ref('')
@@ -694,6 +695,8 @@ async function loadMcpSkills() {
   } catch {
     localMcpList.value = []
   }
+  // 保存快照用于删除检测
+  originalMcpList.value = localMcpList.value.map(m => ({ ...m, args: [...(m.args||[])] }))
   // 从 JSON 文本同步
   syncMcpJsonFromList()
 }
@@ -808,6 +811,20 @@ function syncMcpList() {
 
 // persistMcpToServer 将本地 MCP 列表同步到后端 API
 async function persistMcpToServer() {
+  // 1) 找出已删除的条目（原始列表中有、当前列表中没有的）
+  const currentNames = new Set(localMcpList.value.map(m => m.name))
+  for (const orig of originalMcpList.value) {
+    if (!currentNames.has(orig.name)) {
+      try {
+        await api.saveMcpItem({
+          action: 'delete',
+          name: orig.name,
+          level: orig.level || 'user',
+        })
+      } catch {}
+    }
+  }
+  // 2) 保存/更新当前条目
   for (const m of localMcpList.value) {
     try {
       await api.saveMcpItem({

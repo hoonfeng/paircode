@@ -170,12 +170,14 @@ func (b *AgentBridge) Start(task string) {
 		})
 		b.registerAskTool(reg)                             // ask_user：handler 闭包持有 bridge（需 UI 交互），故在此注册而非默认集
 		agenttools.RegisterManagementTools(reg)            // Agent 自管理 Skills/MCP + 市场 + 技能渐进式披露(load_skill)
-		if cfgs := mcppanel.LoadConfigs(); len(cfgs) > 0 { // 外部 MCP 服务器（mcp.json；失败跳过、不阻断；首条消息时一次性连接）
-			agentCfgs := make([]agent.MCPServerConfig, len(cfgs))
-			for i, c := range cfgs {
-				agentCfgs[i] = agent.MCPServerConfig{Name: c.Name, Command: c.Command, Args: c.Args, Env: c.Env}
+		if core.Settings.AutoConnectMCP {
+			if cfgs := mcppanel.LoadConfigs(); len(cfgs) > 0 { // 外部 MCP 服务器（mcp.json；失败跳过、不阻断；首条消息时一次性连接）
+				agentCfgs := make([]agent.MCPServerConfig, len(cfgs))
+				for i, c := range cfgs {
+					agentCfgs[i] = agent.MCPServerConfig{Name: c.Name, Command: c.Command, Args: c.Args, Env: c.Env}
+				}
+				agent.RegisterMCPServers(reg, agentCfgs)
 			}
-			agent.RegisterMCPServers(reg, agentCfgs)
 		}
 		sys := agent.DefaultSystemPrompt(core.Folders)
 		if si := strings.TrimSpace(core.Settings.SystemInstructions); si != "" { // 设置里的系统级指令

@@ -967,7 +967,16 @@ async function initMermaid() {
     const code = srcEl.textContent.trim(); if (!code) continue
     try {
       const { svg } = await mermaid.render(id + '-svg', code)
-      el.innerHTML = svg
+      // 移除 SVG 内联宽/高属性，让 CSS 控制自适应缩放
+      const parser = new DOMParser()
+      const doc = parser.parseFromString(svg, 'image/svg+xml')
+      const svgEl = doc.querySelector('svg')
+      if (svgEl) {
+        svgEl.removeAttribute('width')
+        svgEl.removeAttribute('height')
+        svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet')
+      }
+      el.innerHTML = svgEl ? doc.documentElement.outerHTML : svg
     } catch (err) {
       console.warn('[Mermaid] 渲染失败:', err.message)
       const parts = id.replace('mermaid-', '').split('-')
@@ -1100,8 +1109,20 @@ function formatNum(n) {
 }
 
 // ── 生命周期 ──
-onMounted(() => { nextTick(() => { initMermaid(); renderDataCharts() }) })
+let resizeObserver = null
+onMounted(() => {
+  nextTick(() => { initMermaid(); renderDataCharts() })
+  // ResizeObserver：容器宽度变化时自动重绘 Canvas 图表
+  if (renderRef.value && typeof ResizeObserver !== 'undefined') {
+    resizeObserver = new ResizeObserver(() => {
+      renderDataCharts()
+    })
+    resizeObserver.observe(renderRef.value)
+  }
+})
 onBeforeUnmount(() => {
+  // 清理 ResizeObserver
+  if (resizeObserver) { resizeObserver.disconnect(); resizeObserver = null }
   // 清理 Mermaid SVG 实例（防止内存泄漏）
   if (renderRef.value) {
     renderRef.value.querySelectorAll('.mermaid-container svg').forEach(el => el.remove())
@@ -1178,8 +1199,8 @@ watch(() => props.theme, () => {
 .chart-retry-btn:hover { color: var(--text-primary); border-color: var(--accent); }
 
 /* ── Mermaid 图表容器 ── */
-.mermaid-container { padding: 16px; overflow-x: auto; overflow-y: hidden; display: flex; justify-content: center; min-height: 60px; max-width: 100%; }
-.mermaid-container svg { max-width: 100%; height: auto; }
+.mermaid-container { padding: 16px; overflow-x: hidden; overflow-y: hidden; display: flex; justify-content: center; align-items: center; min-height: 60px; max-width: 100%; width: 100%; }
+.mermaid-container svg { max-width: 100%; width: 100%; height: auto; display: block; }
 @media (max-width: 600px) { .mermaid-container { padding: 8px; } }
 .mermaid-src { display: none; }
 .chart-error .mermaid-container { display: none; }
@@ -1189,8 +1210,8 @@ watch(() => props.theme, () => {
 .chart-error-hint { margin: 6px 0 0; font-size: 11px; color: #f85149; opacity: 0.7; }
 
 /* ── 数据图表 Canvas 容器 ── */
-.chart-canvas-wrap { padding: 12px; min-height: 200px; position: relative; }
-.data-chart-canvas { width: 100%; height: 200px; display: block; }
+.chart-canvas-wrap { padding: 12px; min-height: 200px; position: relative; width: 100%; max-width: 100%; overflow-x: hidden; }
+.data-chart-canvas { width: 100%; height: 200px; display: block; max-width: 100%; }
 
 /* ── 源数据表切换 ── */
 .chart-table-toggle { border-top: 1px solid var(--border-color); }
