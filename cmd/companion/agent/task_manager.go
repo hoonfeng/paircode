@@ -311,3 +311,35 @@ func (tm *TaskManager) readAllLocked() []*Task {
 	}
 	return tasks
 }
+
+// CompleteAllInProgress 将指定对话（convID）所有进行中的任务标记为已完成。
+func (tm *TaskManager) CompleteAllInProgress(convID string) {
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
+	entries, err := os.ReadDir(tm.tasksDir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(tm.tasksDir, e.Name()))
+		if err != nil {
+			continue
+		}
+		var t Task
+		if err := json.Unmarshal(data, &t); err != nil {
+			continue
+		}
+		if convID != "" && t.ConvID != convID {
+			continue
+		}
+		if t.Status != TaskPending && t.Status != TaskInProgress {
+			continue
+		}
+		t.Status = TaskCompleted
+		t.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+		tm.writeTaskLocked(&t)
+	}
+}

@@ -35,7 +35,7 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { state } from '../main.js'
 import api from '../api.js'
 import SvgIcon from './SvgIcon.vue'
@@ -422,6 +422,23 @@ const onDrop = async (e) => {
     window.dispatchEvent(new CustomEvent('refresh-tree'))
   } catch (err) { window.$toast('移动失败: ' + (err.message || err), 'error') }
 }
+
+// ── 监听 refresh-tree：已展开的目录自动重新加载子节点 ──
+function onRefreshTree() {
+  if (expanded.value && props.item.isDir) {
+    loaded.value = false
+    api.apiGet('/fs/list', { path: fullPath.value }).then(entries => {
+      children.value = entries || []
+      loaded.value = true
+    }).catch(() => {})
+  }
+}
+onMounted(() => {
+  window.addEventListener('refresh-tree', onRefreshTree)
+})
+onUnmounted(() => {
+  window.removeEventListener('refresh-tree', onRefreshTree)
+})
 </script>
 
 <style scoped>

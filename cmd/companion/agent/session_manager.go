@@ -371,6 +371,30 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 				return fmt.Sprintf("✅ 已创建任务 [%s] %s\n> %s\n\n状态: ⏳ 待执行\nID: `%s`", task.ID, task.Subject, task.Description, task.ID), nil
 			},
 		})
+
+		// 注册本对话专属的 finish_task：任务完成时自动更新未完成任务状态
+		opts.Registry.Register(&Tool{
+			Name:        "finish_task",
+			Description: "任务完成信号：全部任务完成时调用此工具结束本轮。result 为完成摘要。",
+			Parameters: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"result": map[string]any{"type": "string", "description": "任务完成摘要"},
+				},
+				"required": []string{"result"},
+			},
+			Handler: func(hctx context.Context, args map[string]any) (string, error) {
+				r, _ := args["result"].(string)
+				// 自动完成本对话所有未完成任务
+				root := sess.WorkspaceRoot
+				if root == "" {
+					root = ""
+				}
+				tm := UseTaskManager(root)
+				tm.CompleteAllInProgress(sess.ConvID)
+				return r, nil
+			},
+		})
 	}
 
 	// 存入 map（覆盖已结束的旧会话），并做已结束会话上限淘汰
@@ -432,6 +456,18 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		// 自闭环模式：传 nil history，loop.Run 内部使用 loop.History
 		msgs, err := loop.Run(runCtx, task, nil)
 		sess.History = msgs
+
+		// ★ 自动完成所有未完成任务（无论 finish_task 还是自然结束）
+		// 确保任务列表与运行状态一致，避免前端显示未完成的遗留任务
+		if opts.WorkspaceRoot != "" {
+			tm := UseTaskManager(opts.WorkspaceRoot)
+			tm.CompleteAllInProgress(convID)
+			// 发射 Event 通知前端刷新计划面板
+			select {
+			case sess.Events <- Event{Type: EventNotice, Content: "任务已全部标记为完成"}:
+			default:
+			}
+		}
 
 		// ★ 直接持久化：loop.Run 完成后立即将新消息写入 MessageStore（不依赖 EventDone 事件流）
 		// 确保所有 agent 回复（assistant/tool）都被持久化，避免因事件流排队/丢弃导致丢失。

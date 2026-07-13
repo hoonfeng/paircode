@@ -18,6 +18,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -107,6 +108,9 @@ func startWebUI(port int) {
 	mux.HandleFunc("/api/fs/search", ws.handleFSSearch)
 	mux.HandleFunc("/api/fs/delete", ws.handleFSDelete)
 	mux.HandleFunc("/api/fs/mkdir", ws.handleFSMkdir)
+	mux.HandleFunc("/api/fs/image", ws.handleFSImage)
+	mux.HandleFunc("/api/fs/file-info", ws.handleFSFileInfo)
+	mux.HandleFunc("/api/fs/hex", ws.handleFSHex)
 	mux.HandleFunc("/api/tasks", ws.handleTasks)
 	mux.HandleFunc("/api/conversations", ws.handleConversations)
 	mux.HandleFunc("/api/conversations/", ws.handleConversationByID)
@@ -251,8 +255,8 @@ func (s *webServer) handleFSList(w http.ResponseWriter, r *http.Request) {
 			Name: e.Name(), IsDir: e.IsDir(), Size: sz, ModTime: mt,
 		})
 	}
-	jsonResp(w, result)
 }
+
 
 func (s *webServer) handleFSRead(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Query().Get("path")
@@ -265,6 +269,190 @@ func (s *webServer) handleFSRead(w http.ResponseWriter, r *http.Request) {
 		"content": string(data),
 		"size":    len(data),
 		"path":    path,
+	})
+}
+
+// imageMime 根据扩展名返回图片 MIME 类型。
+func imageMime(path string) string {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".png":
+		return "image/png"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".gif":
+		return "image/gif"
+	case ".svg":
+		return "image/svg+xml"
+	case ".webp":
+		return "image/webp"
+	case ".bmp":
+		return "image/bmp"
+	case ".ico":
+		return "image/x-icon"
+	}
+	return ""
+}
+
+// handleFSImage 提供图片浏览（直接返回原始字节 + 正确 Content-Type）。
+func (s *webServer) handleFSImage(w http.ResponseWriter, r *http.Request) {
+	path := filepath.Clean(r.URL.Query().Get("path"))
+	mime := imageMime(path)
+	if mime == "" {
+		jsonErr(w, "不支持的文件类型")
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		jsonErr(w, "读取文件失败")
+		return
+	}
+	w.Header().Set("Content-Type", mime)
+	w.Header().Set("Cache-Control", "private, max-age=86400")
+	w.Write(data)
+}
+
+// handleFSFileInfo 返回文件类型信息（用于前端判断展示方式）。
+func (s *webServer) handleFSFileInfo(w http.ResponseWriter, r *http.Request) {
+	path := filepath.Clean(r.URL.Query().Get("path"))
+	fi, err := os.Stat(path)
+	if err != nil {
+		jsonErr(w, "文件不存在或无法访问")
+		return
+	}
+	if fi.IsDir() {
+		jsonResp(w, map[string]any{"type": "directory", "size": fi.Size()})
+		return
+	}
+	if fi.Size() > 100<<20 {
+		jsonErr(w, "文件超过 100MB")
+		return
+	}
+
+	header := make([]byte, 512)
+	f, _ := os.Open(path)
+	n, _ := f.Read(header)
+	f.Close()
+
+	mime := imageMime(path)
+	isImage := mime != ""
+	isBinary := n > 0 && bytes.IndexByte(header[:n], 0) >= 0
+
+	fileType := "text"
+	if isImage {
+		fileType = "image"
+	} else if isBinary {
+		fileType = "binary"
+	}
+
+	jsonResp(w, map[string]any{
+		"type":     fileType,
+		"size":     fi.Size(),
+		"isImage":  isImage,
+		"isBinary": isBinary,
+		"mimeType": mime,
+	})
+}
+
+// handleFSHex 返回文件十六进制转储（支持 offset/length 分块，懒加载）。
+func (s *webServer) handleFSHex(w http.ResponseWriter, r *http.Request) {
+	path := filepath.Clean(r.URL.Query().Get("path"))
+	offsetStr := r.URL.Query().Get("offset")
+	limitStr := r.URL.Query().Get("length")
+
+	offset := 0
+	if offsetStr != "" {
+		offset, _ = strconv.Atoi(offsetStr)
+	}
+	length := 256
+	if limitStr != "" {
+		length, _ = strconv.Atoi(limitStr)
+		if length > 4096 {
+			length = 4096
+		}
+	}
+
+	fi, err := os.Stat(path)
+	if err != nil {
+		jsonErr(w, "文件不存在")
+		return
+	}
+	fileSize := fi.Size()
+	if fileSize > 100<<20 {
+		jsonErr(w, "文件超过 100MB")
+		return
+	}
+
+	f, err := os.Open(path)
+	if err != nil {
+		jsonErr(w, "无法打开文件")
+		return
+	}
+	defer f.Close()
+
+	if offset > int(fileSize) {
+		offset = int(fileSize)
+	}
+	if offset+length > int(fileSize) {
+		length = int(fileSize) - offset
+	}
+	if length <= 0 {
+		jsonResp(w, map[string]any{
+			"hex":      "",
+			"offset":   offset,
+			"fileSize": fileSize,
+			"hasMore":  false,
+		})
+		return
+	}
+
+	buf := make([]byte, length)
+	n, err := f.ReadAt(buf, int64(offset))
+	if err != nil && n == 0 {
+		jsonErr(w, "读取失败")
+		return
+	}
+	buf = buf[:n]
+
+	var lines []string
+	bpl := 16
+	for i := 0; i < n; i += bpl {
+		end := i + bpl
+		if end > n {
+			end = n
+		}
+		chunk := buf[i:end]
+		addr := fmt.Sprintf("%08X", offset+i)
+
+		hexPart := ""
+		for j, b := range chunk {
+			if j > 0 && j%8 == 0 {
+				hexPart += " "
+			}
+			hexPart += fmt.Sprintf("%02X ", b)
+		}
+		pad := bpl - len(chunk)
+		for j := 0; j < pad; j++ {
+			if j > 0 && (len(chunk)+j)%8 == 0 {
+				hexPart += " "
+			}
+			hexPart += "   "
+		}
+
+		asciiPart := ""
+		for _, b := range chunk {
+			if b >= 32 && b <= 126 {
+				asciiPart += string(b)
+			} else {
+				asciiPart += "."
+			}
+		}
+		lines = append(lines, fmt.Sprintf("%s  %s %s", addr, hexPart, asciiPart))
+	}
+
+	jsonResp(w, map[string]any{
+		"hex":      strings.Join(lines, "\n"),
+		"fileSize": fileSize,
+		"hasMore":  offset+n < int(fileSize),
 	})
 }
 

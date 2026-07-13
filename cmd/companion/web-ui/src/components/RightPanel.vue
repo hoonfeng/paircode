@@ -138,6 +138,10 @@
             <div class="chat-empty-text">开始新的对话</div>
             <div class="chat-empty-hint">发送消息即可与 AI 助手对话</div>
           </div>
+          <!-- 新消息跳底按钮 -->
+          <div v-if="showScrollDown" class="scroll-down-btn" :class="{ 'show-pulse': state.chatLoading }" @click.stop="scrollToBottom">
+            <button><SvgIcon name="chevron-down" :size="14" /> 新消息</button>
+          </div>
         </div>
         <!-- 任务计划面板（固定在输入区上方） -->
         <div class="plan-container" :class="{ 'plan-empty': currentPlan.length === 0 }">
@@ -247,6 +251,7 @@ let autoSaveTimer = null
 // ── 滚动控制 ──
 const scrollTopRef = ref(0)
 const isNearBottom = ref(true)
+const showScrollDown = ref(false)
 
 // ── 审批状态从全局 state.approvalByConv 读取（仅当前对话）──
 const approvalState = computed(() => state.approvalByConv[state.currentConvId] || { callId: '', tool: '', args: '', parsedArgs: {}, waiting: false })
@@ -265,9 +270,12 @@ const loadingMoreTop = ref(false)
 
 function onScroll() {
   if (msgRef.value) {
-    scrollTopRef.value = msgRef.value.scrollTop
     const el = msgRef.value
-    isNearBottom.value = el.scrollTop + el.clientHeight >= el.scrollHeight - 150
+    scrollTopRef.value = el.scrollTop
+    const threshold = 100
+    isNearBottom.value = el.scrollTop + el.clientHeight >= el.scrollHeight - threshold
+    // 用户离开底部（滚动向上 > threshold）时隐藏跳底按钮
+    showScrollDown.value = !isNearBottom.value && state.messages && state.messages.length > 0
     // 顶部懒加载：scrollTop < 100 且还有更早消息可加载
     if (el.scrollTop < 100 && !loadingMoreTop.value) {
       loadMoreMessages()
@@ -569,11 +577,13 @@ const resolveApproval = async (approved) => {
 const onKeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }
 
 const scrollToBottom = () => {
-  nextTick(() => { if (msgRef.value) { msgRef.value.scrollTop = msgRef.value.scrollHeight; isNearBottom.value = true; onScroll() } })
+  showScrollDown.value = false
+  nextTick(() => { if (msgRef.value) { msgRef.value.scrollTop = msgRef.value.scrollHeight; isNearBottom.value = true; } })
 }
 
 const forceScrollToBottom = () => {
-  nextTick(() => { if (msgRef.value) { msgRef.value.scrollTop = msgRef.value.scrollHeight; isNearBottom.value = true; onScroll() } })
+  showScrollDown.value = false
+  nextTick(() => { if (msgRef.value) { msgRef.value.scrollTop = msgRef.value.scrollHeight; isNearBottom.value = true; } })
 }
 
 const loadConvList = async () => {
@@ -855,14 +865,46 @@ const handlePaste = (e) => {
   }
 }
 
+// ── 流式内容尺寸观察器：捕捉 segment 内容增长导致的容器尺寸变化
+let contentResizeObserver = null
+function startContentResizeObserver() {
+  stopContentResizeObserver()
+  if (!msgRef.value) return
+  const wrap = msgRef.value.querySelector('.msg-list-wrap')
+  if (!wrap) return
+  contentResizeObserver = new ResizeObserver(() => {
+    if (isNearBottom.value && msgRef.value && !loadingMoreTop.value) {
+      msgRef.value.scrollTop = msgRef.value.scrollHeight
+    }
+  })
+  contentResizeObserver.observe(wrap)
+}
+function stopContentResizeObserver() {
+  if (contentResizeObserver) {
+    contentResizeObserver.disconnect()
+    contentResizeObserver = null
+  }
+}
+
 // ── 新消息自动滚底：仅当用户处于底部附近时跟随新内容
+// 配合 ResizeObserver（捕捉 segment 内内容增长），此处只处理消息增删场景
 watch(() => (state.messages || []).length, () => {
   nextTick(() => {
-    if (isNearBottom.value && msgRef.value) {
+    if (isNearBottom.value && msgRef.value && !loadingMoreTop.value) {
       msgRef.value.scrollTop = msgRef.value.scrollHeight
     }
   })
 })
+
+// ── 对话切换时重启内容尺寸观察器（DOM 重建）
+watch(() => state.currentConvId, () => {
+  nextTick(() => startContentResizeObserver())
+})
+
+// ── 对话消息全量替换（如首次加载/切换）时也重启观察器
+watch(() => state.messages, () => {
+  nextTick(() => startContentResizeObserver())
+}, { deep: false })
 
 watch(() => state.settings, (s) => { if (s) { autoReview.value = s.autoReview !== undefined ? !!s.autoReview : true; autoIterate.value = !!s.autoIterateOnRejection; autonomous.value = !!s.autonomous; autoCollapse.value = s.autoCollapse !== undefined ? !!s.autoCollapse : true; autoCommit.value = s.autoCommit !== false; } }, { immediate: true })
 
@@ -870,6 +912,9 @@ const handleBeforeUnload = () => { if (state.currentConvId && state.messages.len
 
 onMounted(() => {
   loadWsTokenStats(); loadConvList(); scrollToBottom()
+
+  // 监听消息内容尺寸变化（流式输出时自动跟随滚底）
+  nextTick(() => startContentResizeObserver())
 
   // 监听 .input-overlay 尺寸变化，动态调整 textarea padding-bottom
   nextTick(() => {
@@ -977,6 +1022,7 @@ onUnmounted(() => {
   if (autoSaveTimer) { clearInterval(autoSaveTimer); autoSaveTimer = null }
   if (phaseTimer) { clearTimeout(phaseTimer); phaseTimer = null }
   if (nudgeTimer) { clearTimeout(nudgeTimer); nudgeTimer = null }
+  stopContentResizeObserver()
   if (inputOverlayObserver) { inputOverlayObserver.disconnect(); inputOverlayObserver = null }
   // 不关闭 WebSocket（由 App.vue 管理生命周期）；不清理 subscriptions（已移除 SSE 订阅模式）
   document.removeEventListener('mousemove', onInputResizeMove); document.removeEventListener('mouseup', stopInputResize)
@@ -993,7 +1039,7 @@ onUnmounted(() => {
 .rp-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
 .rp-body { flex: 1; display: flex; flex-direction: row; overflow: hidden; min-height: 0; }
 .chat-area { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; max-width: 100%; }
-.chat-messages { flex: 1; overflow-y: auto; padding: 8px 12px; min-height: 0; scroll-behavior: smooth; overflow-anchor: auto; }
+.chat-messages { flex: 1; overflow-y: auto; padding: 8px 12px; min-height: 0; position: relative; }
 .msg-list-wrap { display: flex; flex-direction: column; gap: 12px; min-height: 100%; }
 .msg-item { display: flex; gap: 8px; align-items: flex-start; content-visibility: auto; contain-intrinsic-size: 60px; }
 .msg-user { flex-direction: row-reverse; justify-content: flex-start; gap: 10px; }
@@ -1097,6 +1143,39 @@ onUnmounted(() => {
 /* ── nudge 提示条 ── */
 .chat-nudge-bar { position: sticky; bottom: 0; z-index: 20; margin: 4px 12px; padding: 4px 10px; border-radius: 4px; background: var(--bg-tertiary); border: 1px solid var(--border-color); font-size: 11px; color: var(--text-muted); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; animation: nudgeFadeIn 0.3s ease; }
 @keyframes nudgeFadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ── 滚动到底部按钮 ── */
+.scroll-down-btn {
+  position: sticky; bottom: 0; z-index: 30;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  width: 100%; padding: 4px 0 6px;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+.scroll-down-btn > button {
+  pointer-events: auto;
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+  padding: 5px 14px; border-radius: 20px;
+  background: var(--accent); color: #fff;
+  border: none; font-size: 12px; cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+  transition: background 0.15s, transform 0.15s;
+  white-space: nowrap;
+}
+.scroll-down-btn > button:hover {
+  background: var(--accent-hover, var(--accent));
+  transform: scale(1.05);
+}
+.scroll-down-btn > button:active {
+  transform: scale(0.95);
+}
+@keyframes scrollDownPulse {
+  0%, 100% { box-shadow: 0 2px 8px rgba(0,0,0,0.25); }
+  50% { box-shadow: 0 2px 16px rgba(0,0,0,0.4); }
+}
+.scroll-down-btn.show-pulse > button {
+  animation: scrollDownPulse 1.5s ease infinite;
+}
 
 /* ── 完成报告卡已移除，由 EventDone 追加为 content segment ── */
 

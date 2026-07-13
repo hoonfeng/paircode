@@ -282,14 +282,16 @@ func FetchRemoteRegistry(workspaceRoot string, force bool) error {
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Get(url)
 	if err != nil {
-		lastFetchErr = fmt.Sprintf("网络请求失败: %v", err)
-		return err
+		// 远程不可用时静默回退到内置注册表
+		lastFetchErr = ""
+		return nil
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		lastFetchErr = fmt.Sprintf("HTTP %d", resp.StatusCode)
-		return fmt.Errorf("远程市场返回状态码 %d", resp.StatusCode)
+		// 远程返回非 200（如 404）时静默回退到内置注册表
+		lastFetchErr = ""
+		return nil
 	}
 
 	var registry struct {

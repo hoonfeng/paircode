@@ -17,7 +17,7 @@
       <button class="tb-action" @click="redoAction" title="重做 (Ctrl+Y)" :disabled="!state.activeFile"><SvgIcon name="redo" :size="12" /></button>
     </div>
 
-    <!-- 欢迎页 / 编辑器 -->
+    <!-- 欢迎页 / 编辑器 / 图片 / Hex -->
     <div class="editor-body">
       <div v-if="state.openFiles.length === 0" class="welcome">
         <div class="welcome-logo">PairCode</div>
@@ -28,7 +28,16 @@
         </div>
       </div>
       <div v-else-if="state.activeFile" class="editor-wrapper">
-        <CodeEditor
+        <!-- 图片文件 -->
+        <ImageViewer v-if="getFileType(state.activeFile) === 'image'"
+          :key="'img_' + state.activeFile"
+          :path="state.activeFile" />
+        <!-- 二进制文件（Hex 查看） -->
+        <HexViewer v-else-if="getFileType(state.activeFile) === 'binary'"
+          :key="'hex_' + state.activeFile"
+          :path="state.activeFile" />
+        <!-- 文本文件（代码编辑器） -->
+        <CodeEditor v-else
           ref="editorRef"
           :key="state.activeFile"
           :modelValue="currentContent"
@@ -55,12 +64,65 @@ import { state } from '../main.js'
 import api from '../api.js'
 import SvgIcon from './SvgIcon.vue'
 import CodeEditor from './CodeEditor.vue'
+import HexViewer from './HexViewer.vue'
+import ImageViewer from './ImageViewer.vue'
 import ContextMenu from './ContextMenu.vue'
 
 const editorRef = ref(null)
 const tabContextMenu = ref(null)
 const editorCtxMenu = ref(null)
 let contextFile = ''
+
+// ── 文件类型缓存 · 按文件路径缓存 type（text/image/binary）──
+const fileTypeCache = {}
+
+const imageExtensions = new Set([
+  '.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.bmp', '.ico'
+])
+
+function getFileType(path) {
+  if (!path) return 'text'
+  // 先从缓存取
+  if (fileTypeCache[path]) return fileTypeCache[path]
+  // 按扩展名快速预判
+  const ext = path.split('.').pop().toLowerCase()
+  const fullExt = '.' + ext
+  // 文本扩展名直接判定，跳过 API 请求
+  const textExts = new Set([
+    'go', 'js', 'ts', 'vue', 'html', 'css', 'scss', 'less',
+    'json', 'md', 'xml', 'yaml', 'yml', 'toml', 'py', 'java',
+    'rs', 'c', 'cpp', 'h', 'hpp', 'cs', 'rb', 'php', 'swift',
+    'kt', 'dart', 'sh', 'bat', 'ps1', 'env', 'txt', 'cfg',
+    'conf', 'ini', 'log', 'sql', 'graphql', 'svelte', 'sass',
+    'mod', 'sum', 'gitignore', 'editorconfig', 'dockerfile',
+  ])
+  if (textExts.has(ext)) {
+    fileTypeCache[path] = 'text'
+    return 'text'
+  }
+  if (imageExtensions.has(fullExt)) {
+    fileTypeCache[path] = 'image'
+    return 'image'
+  }
+  // 未知扩展名 → 异步请求 API 判断（但不阻塞，先返回 'text' 让 CodeEditor 显示）
+  fetchFileType(path)
+  return 'text'
+}
+
+async function fetchFileType(path) {
+  try {
+    const info = await api.apiGet('/fs/file-info', { path })
+    const t = info.type || 'text'
+    fileTypeCache[path] = t
+    // 如果是当前激活文件，强制重渲染
+    if (state.activeFile === path) {
+      // 通过切换 key 来强制刷新组件
+      const cur = state.activeFile
+      state.activeFile = ''
+      nextTick(() => { state.activeFile = cur })
+    }
+  } catch { /* 保持默认 text */ }
+}
 
 const currentContent = computed(() => state.fileContents[state.activeFile] ?? '')
 

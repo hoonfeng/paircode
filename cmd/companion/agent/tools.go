@@ -550,6 +550,7 @@ func RegisterDefaultTools(r *Registry, root string) {
 	registerFinishTask(r)                   // finish_task（任务完成信号，见 loop.go 硬编码检测；注册后使测试省去 error 结果）
 	RegisterBugTools(r, root)                // bug_detect / bug_analyze / bug_fix（BUG 自动检测与修复，见 bugdetect.go + bugfix.go）
 	RegisterSnapshotTools(r, root)           // restore_snapshot / list_snapshots（文件快照与恢复，见 snapshot.go）
+	registerOfficeTools(r, root)             // csv_read / csv_write / json_to_table / table_stats / text_report / word_read（见 officetools.go）
 
 	// ── 默认 OnToolError：edit_file/multi_edit 匹配失败→自动行号定位重试 ──
 	// 调用方如需自定义可在之后覆盖 r.OnToolError。

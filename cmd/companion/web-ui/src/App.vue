@@ -22,21 +22,8 @@
       <EditorArea />
       <div class="bottom-panel" v-if="state.bottomPanelVisible"
            :style="{ height: bottomPanelHeight + 'px' }">
-        <div class="panel-tabs">
-          <div class="panel-title-inline">
-            <SvgIcon name="terminal" size="14" /> 终端
-          </div>
-          <div class="panel-actions">
-            <span class="panel-notify" v-if="state.notificationCount > 0" title="有待处理通知">
-              <SvgIcon name="bell" :size="12" /> {{ state.notificationCount }}
-            </span>
-            <button class="panel-close" @click="state.bottomPanelVisible = false">
-              <SvgIcon name="close" size="14" />
-            </button>
-          </div>
-        </div>
         <div class="panel-content">
-          <TerminalPanel />
+          <TerminalPanel @close-panel="state.bottomPanelVisible = false" />
         </div>
         <div class="panel-resizer" @mousedown.prevent="startBottomResize"></div>
       </div>
@@ -475,27 +462,6 @@ watch(() => state.openFiles.length, schedulePersist)
   border-top: 1px solid var(--border-color);
   display: flex; flex-direction: column; min-height: 60px;
 }
-.panel-tabs {
-  display: flex; align-items: center; background: var(--bg-tertiary);
-  border-bottom: 1px solid var(--border-color); padding: 0 8px; height: 28px; flex-shrink: 0; gap: 2px;
-}
-.panel-title-inline {
-  display: flex; align-items: center; gap: 4px;
-  color: var(--text-primary); font-size: 12px;
-  padding: 4px 12px; border-top: 2px solid var(--accent);
-  background: var(--bg-secondary);
-}
-.panel-tabs button {
-  background: none; border: none; color: var(--text-secondary); font-size: 12px;
-  padding: 4px 12px; cursor: pointer; border-top: 2px solid transparent;
-  display: flex; align-items: center; gap: 4px;
-}
-.panel-tabs button.active { color: var(--text-primary); border-top-color: var(--accent); background: var(--bg-secondary); }
-.panel-tabs button:hover { color: var(--text-primary); }
-.panel-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; }
-.panel-notify { font-size: 11px; color: #d4a74e; display: flex; align-items: center; gap: 2px; }
-.panel-close { background: none; border: none; color: var(--text-secondary); font-size: 14px; cursor: pointer; padding: 2px 6px; }
-.panel-close:hover { color: var(--text-primary); }
-.panel-content { flex: 1; overflow: auto; padding: 4px; }
+.panel-content { flex: 1; overflow: hidden; padding: 0; }
 .panel-resizer { position: absolute; top: -3px; left: 0; right: 0; height: 6px; cursor: ns-resize; z-index: 10; }
 </style>

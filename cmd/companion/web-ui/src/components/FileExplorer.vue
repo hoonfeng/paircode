@@ -418,7 +418,10 @@ async function refreshCurrentWs() {
   }
 }
 
+let _refreshingTree = false
 async function refreshAll() {
+  if (_refreshingTree) return // 防止 re-entry 循环
+  _refreshingTree = true
   try {
     const health = await api.apiGet('/health')
     state.workspaceFolders = health.folders || []
@@ -432,6 +435,8 @@ async function refreshAll() {
     window.dispatchEvent(new CustomEvent('refresh-tree'))
   } catch (e) {
     console.warn('刷新全部失败:', e)
+  } finally {
+    _refreshingTree = false
   }
 }
 
@@ -443,6 +448,15 @@ function openFile(path) {
 
 async function loadFileContent(path) {
   if (state.fileContents[path]) return
+  // 图片和已知二进制文件不加载文本内容（由 ImageViewer/HexViewer 自行处理）
+  const ext = (path.split('.').pop() || '').toLowerCase()
+  const imgExts = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'bmp', 'ico']
+  const knownBinExts = ['exe', 'dll', 'so', 'dylib', 'zip', 'tar', 'gz', 'rar',
+    '7z', 'pdf', 'ttf', 'otf', 'woff', 'woff2', 'eot', 'ico', 'icns']
+  if (imgExts.includes(ext) || knownBinExts.includes(ext)) {
+    state.fileContents[path] = '' // 空占位
+    return
+  }
   try {
     const data = await api.apiGet('/fs/read', { path })
     state.fileContents[path] = data.content || ''
