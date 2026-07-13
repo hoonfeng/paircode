@@ -43,7 +43,7 @@ func registerTaskTools(r *Registry, root string) {
 			subject := argStr(args, "subject")
 			desc := argStr(args, "description")
 			deps := argStrSlice(args, "dependencies")
-			task := tm.Create(subject, desc, deps)
+			task := tm.Create(subject, desc, deps, "")
 			return fmt.Sprintf("✅ 已创建任务 [%s] %s\n> %s\n\n状态: ⏳ 待执行\nID: `%s`", task.ID, task.Subject, task.Description, task.ID), nil
 		},
 	})
