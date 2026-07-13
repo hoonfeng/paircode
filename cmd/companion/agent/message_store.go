@@ -53,14 +53,16 @@ type ConversationMeta struct {
 // 并发安全：per-conv mutex（sync.Map[convID]*sync.Mutex）防同一文件并发 append 冲突，
 // index.json 全局 mutex 防元数据读写冲突。
 type MessageStore struct {
-	root    string     // 工作区根路径
-	convMu  sync.Map   // map[string]*sync.Mutex  key=convID，懒初始化
-	indexMu sync.Mutex // index.json 全局锁
+	root           string          // 工作区根路径
+	convMu         sync.Map        // map[string]*sync.Mutex  key=convID，懒初始化
+	indexMu        sync.Mutex      // index.json 全局锁
+	persistedCount map[string]int  // convID → 已持久化的非 System 消息数（内存计数器，避免每轮读文件+全量遍历）
+	pcMu           sync.RWMutex    // persistedCount 的并发锁
 }
 
 // NewMessageStore 创建消息存储器，初始化 .pair/conversations/ 目录。
 func NewMessageStore(root string) *MessageStore {
-	s := &MessageStore{root: root}
+	s := &MessageStore{root: root, persistedCount: make(map[string]int)}
 	_ = os.MkdirAll(s.conversationsDir(), 0o755)
 	return s
 }
@@ -340,56 +342,103 @@ func (s *MessageStore) PersistNewMessages(convID string, hist []Message) error {
 	mu.Lock()
 	defer mu.Unlock()
 
-	// 读取当前 JSONL 行数（已有 count 条已持久化）
-	count, err := s.countJSONLLines(convID)
-	if err != nil {
-		return fmt.Errorf("PersistNewMessages: 统计行数失败: %w", err)
-	}
+	// 从内存计数器读取已持久化的非 System 消息数——避免每轮读文件+全量遍历
+	s.pcMu.RLock()
+	count := s.persistedCount[convID]
+	s.pcMu.RUnlock()
 
-	// 统计 hist 中非 System 消息数（System 由 Loop 动态构建，不应持久化）
-	nonSystemCount := 0
-	for _, m := range hist {
-		if m.Role != RoleSystem {
-			nonSystemCount++
+	// 首次访问：内存计数器为 0 但文件可能已有内容（如 AppendMessage 预写的用户消息），
+	// 从文件同步一次计数器，避免重写已有消息。
+	if count == 0 {
+		fileCount, err := s.countJSONLLines(convID)
+		if err != nil {
+			return fmt.Errorf("PersistNewMessages: 统计行数失败: %w", err)
+		}
+		if fileCount > 0 {
+			s.pcMu.Lock()
+			s.persistedCount[convID] = fileCount
+			s.pcMu.Unlock()
+			count = fileCount
 		}
 	}
-	if nonSystemCount <= count {
-		return nil // 无新消息
+
+	// 统计 hist 中非 System 消息数（System 由 Loop 动态构建，不应持久化）.
+	// 只需计算超出 count 的部分，不用遍历整个 hist.
+	if count > 0 {
+		// 跳过前 count 条非 System 消息，直接从第 count 条开始遍历
+		idx := 0 // idx 表示 hist 中的绝对索引
+		nonSystemSeen := 0
+		for idx < len(hist) && nonSystemSeen < count {
+			if hist[idx].Role != RoleSystem {
+				nonSystemSeen++
+			}
+			idx++
+		}
+		// hist 中非 System 消息数不大于 count → 无新消息
+		if nonSystemSeen < count {
+			return nil // 不会发生，但兜底
+		}
+		if idx >= len(hist) && nonSystemSeen == count {
+			return nil // 无新消息
+		}
+	} else if count == 0 && len(hist) == 0 {
+		return nil // 第一次调用但 hist 为空
 	}
 
+	// 直接用 append 模式写新增的消息（跳过已持久化的部分）
+	s.pcMu.RLock()
+	startCount := s.persistedCount[convID]
+	s.pcMu.RUnlock()
+
 	now := time.Now().UTC().Format(time.RFC3339)
-	newCount := count
-	written := 0
-	for i, m := range hist {
+	newCount := startCount
+	nonSystemSeen := 0
+
+	// 找到要写入的起始位置：跳过前 startCount 条非 System 消息
+	startIdx := 0
+	for startIdx < len(hist) {
+		if hist[startIdx].Role != RoleSystem {
+			if nonSystemSeen >= startCount {
+				break
+			}
+			nonSystemSeen++
+		}
+		startIdx++
+	}
+
+	for i := startIdx; i < len(hist); i++ {
+		m := hist[i]
 		if m.Role == RoleSystem {
 			continue
 		}
-		if written >= count {
-			sm := StoredMessage{
-				Idx:       newCount,
-				Message:   m,
-				Segments:  SegmentsFromMessage(m, hist, i),
-				Timestamp: now,
-			}
-			data, err := json.Marshal(sm)
-			if err != nil {
-				return fmt.Errorf("PersistNewMessages: JSON 编码失败: %w", err)
-			}
-			data = append(data, '\n')
-
-			f, err := os.OpenFile(s.convFilePath(convID), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-			if err != nil {
-				return fmt.Errorf("PersistNewMessages: 打开文件失败: %w", err)
-			}
-			if _, err := f.Write(data); err != nil {
-				f.Close()
-				return fmt.Errorf("PersistNewMessages: 写入失败: %w", err)
-			}
-			f.Close()
-			newCount++
+		sm := StoredMessage{
+			Idx:       newCount,
+			Message:   m,
+			Segments:  SegmentsFromMessage(m, hist, i),
+			Timestamp: now,
 		}
-		written++
+		data, err := json.Marshal(sm)
+		if err != nil {
+			return fmt.Errorf("PersistNewMessages: JSON 编码失败: %w", err)
+		}
+		data = append(data, '\n')
+
+		f, err := os.OpenFile(s.convFilePath(convID), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		if err != nil {
+			return fmt.Errorf("PersistNewMessages: 打开文件失败: %w", err)
+		}
+		if _, err := f.Write(data); err != nil {
+			f.Close()
+			return fmt.Errorf("PersistNewMessages: 写入失败: %w", err)
+		}
+		f.Close()
+		newCount++
 	}
+
+	// 更新内存计数器（在释放 conv mutex 前完成，保证并发可见性）
+	s.pcMu.Lock()
+	s.persistedCount[convID] = newCount
+	s.pcMu.Unlock()
 
 	// 更新 index.json：MsgsCount = newCount，UpdatedAt = now
 	s.indexMu.Lock()

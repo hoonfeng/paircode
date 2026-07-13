@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -77,9 +76,9 @@ type Loop struct {
 	// 宿主（web/UI）通过此回调将用户的实时反馈传递给 Loop。
 	OnFeedback func() string
 
-	// OnBatchPersist 批量持久化回调（可空）。每 5 轮由 Loop.Run 内部回调一次当前完整消息列表。
-	// loop.Run 返回后（defer 中）会额外调用一次以确保最后一次写盘。
-	// 用于 agent 运行中途写盘，防止进程崩溃导致全部数据丢失。
+	// OnBatchPersist 批量持久化回调（可空）。每轮迭代结束立即回调一次当前完整消息列表，
+	// 确保 tool_call 与 tool_result 配对完整写入磁盘。loop.Run 返回后 defer 中会额外调用
+	// 一次以确保最后一轮写盘（PersistNewMessages 内部 diff 去重，无重复写开销）。
 	OnBatchPersist func(msgs []Message)
 
 	// ── 上下文压缩（可空；复刻参考 context/manager.ts，见 compress.go）──
@@ -173,7 +172,6 @@ func (l *Loop) aiReviewApprove(ctx context.Context, tc ToolCall) (bool, string) 
 // 返回在 history/l.History 基础上追加了 system(首轮)/user/assistant/tool
 // 等本轮全部消息的完整对话。
 func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []Message, err error) {
-	log.Printf("[trace] loop.Run 开始 task=%q provider=%s", task[:min(len(task), 50)], l.Provider.Name())
 	// 自闭环：history 为 nil 时使用持久化的 l.History
 	if history == nil {
 		history = l.History
@@ -365,8 +363,9 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 			return msgs, nil
 		}
 
-		// 每 5 轮调用一次 OnBatchPersist（中途写盘防崩溃丢数据）
-		if l.OnBatchPersist != nil && iter > 0 && iter%5 == 0 {
+		// ★ 每轮迭代结束立即持久化，确保 tool_call 与 tool_result 配对完整写入磁盘。
+		//   即使进程崩溃，最多丢失当前正在执行的这一轮，之前的所有轮次消息完好。
+		if l.OnBatchPersist != nil {
 			l.OnBatchPersist(msgs)
 		}
 	}
