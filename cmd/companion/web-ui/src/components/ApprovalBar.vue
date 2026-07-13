@@ -100,10 +100,11 @@ const structuredSummary = computed(() => {
 .approval-bar {
   display: flex; align-items: center; gap: 6px;
   margin: 4px 8px; padding: 6px 10px;
-  background: var(--bg-warning, #fff3cd); border: 1px solid var(--border-warning, #ffc107);
+  background: var(--accent-bg);
+  border: 1px solid var(--accent);
   border-radius: var(--border-radius); flex-shrink: 0;
 }
-.approval-bar-icon { flex-shrink: 0; color: #cc7b1e; }
+.approval-bar-icon { flex-shrink: 0; color: var(--accent); }
 .approval-bar-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .approval-bar-tool { font-size: 12px; font-weight: 600; color: var(--text-primary); }
 .approval-bar-args { font-size: 11px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
