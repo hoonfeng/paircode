@@ -36,6 +36,23 @@
         <HexViewer v-else-if="getFileType(state.activeFile) === 'binary'"
           :key="'hex_' + state.activeFile"
           :path="state.activeFile" />
+        <!-- Markdown 文件（渲染/编辑切换） -->
+        <template v-else-if="isMarkdownFile(state.activeFile)">
+          <div class="md-mode-bar">
+            <button :class="['md-mode-btn', { active: mdPreview }]" @click="mdPreview = true">预览</button>
+            <button :class="['md-mode-btn', { active: !mdPreview }]" @click="mdPreview = false">编辑</button>
+          </div>
+          <MarkdownRenderer v-if="mdPreview" :text="currentContent" :theme="state.theme" />
+          <CodeEditor v-else
+            ref="editorRef"
+            :key="'md_' + state.activeFile"
+            :modelValue="currentContent"
+            :path="state.activeFile"
+            @update:modelValue="onContentChange"
+            @cursorPos="onCursorPos"
+            @contextmenu="onEditorContextMenu"
+            @save="saveFile" />
+        </template>
         <!-- 文本文件（代码编辑器） -->
         <CodeEditor v-else
           ref="editorRef"
@@ -66,11 +83,13 @@ import SvgIcon from './SvgIcon.vue'
 import CodeEditor from './CodeEditor.vue'
 import HexViewer from './HexViewer.vue'
 import ImageViewer from './ImageViewer.vue'
+import MarkdownRenderer from './MarkdownRenderer.vue'
 import ContextMenu from './ContextMenu.vue'
 
 const editorRef = ref(null)
 const tabContextMenu = ref(null)
 const editorCtxMenu = ref(null)
+const mdPreview = ref(true)  // markdown 文件默认预览模式
 let contextFile = ''
 
 // ── 文件类型缓存 · 按文件路径缓存 type（text/image/binary）──
@@ -107,6 +126,12 @@ function getFileType(path) {
   // 未知扩展名 → 异步请求 API 判断（但不阻塞，先返回 'text' 让 CodeEditor 显示）
   fetchFileType(path)
   return 'text'
+}
+
+function isMarkdownFile(path) {
+  if (!path) return false
+  const ext = path.split('.').pop().toLowerCase()
+  return ext === 'md' || ext === 'markdown'
 }
 
 async function fetchFileType(path) {
@@ -408,5 +433,22 @@ onUnmounted(() => { document.removeEventListener('keydown', handleKeydown) })
 .welcome-text { font-size: 18px; color: var(--text-secondary); }
 .welcome-sub { font-size: 13px; }
 .workspace-info { margin-top: 20px; text-align: center; font-size: 12px; }
+
+/* ── Markdown 模式切换栏 ── */
+.md-mode-bar {
+  display: flex; align-items: center; gap: 2px;
+  padding: 4px 12px; background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color); flex-shrink: 0;
+}
+.md-mode-btn {
+  background: none; border: 1px solid var(--border-color);
+  color: var(--text-secondary); padding: 2px 14px; font-size: 12px;
+  cursor: pointer; border-radius: 3px; transition: all 0.12s;
+}
+.md-mode-btn.active {
+  background: var(--accent); color: #fff; border-color: var(--accent);
+}
+.md-mode-btn:hover:not(.active) { background: var(--bg-hover); color: var(--text-primary); }
+
 .editor-wrapper { height: 100%; overflow: hidden; }
 </style>

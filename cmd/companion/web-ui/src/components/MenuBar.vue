@@ -26,7 +26,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, inject, onMounted, onUnmounted } from 'vue'
 import { state } from '../main.js'
 import api from '../api.js'
 
@@ -88,10 +88,9 @@ const menus = [
   {
     label: 'Agent',
     items: [
-      { label: '性能监控', icon: 'activity', action: 'perf-monitor' },
-      { label: 'Agent 监控', icon: 'terminal', action: 'agent-monitor' },
-      { label: '进化图', icon: 'git-branch', action: 'evolution-graph' },
-      { label: '探索项目知识库', icon: 'search', action: 'explore-knowledge' },
+      { label: '打开设置', action: 'open-settings' },
+      { label: '打开市场', action: 'open-marketplace' },
+      { label: '系统信息', action: 'system-info' },
     ],
   },
   {
@@ -112,6 +111,10 @@ const openMenu = ref(null)
 const btnRefs = ref({})
 const dropdownPos = ref({ x: 0, y: 0 })
 let closeTimer = null
+
+const showSettingsModal = inject('showSettings', null)
+const showMarketplaceModal = inject('showMarketplace', null)
+const showSystemModal = inject('showSystem', null)
 
 const currentItems = computed(() => {
   const m = menus.find(m => m.label === openMenu.value)
@@ -286,25 +289,17 @@ const execItem = async (item) => {
   if (a === 'new-terminal') { state.bottomPanelVisible = true; state.bottomPanelTab = 'terminal'; return }
   if (a === 'clear-terminal') { window.dispatchEvent(new CustomEvent('clear-terminal')); return }
 
-  // ── Agent ──
-  if (a === 'stop-agent') {
-    window.dispatchEvent(new CustomEvent('stop-agent'))
-    if (state.chatSessionId) {
-      try { await api.stopChat(state.chatSessionId) } catch {}
-    }
+  // ── Agent / 工具 ──
+  if (a === 'open-settings') {
+    if (showSettingsModal) showSettingsModal.value = true
     return
   }
-  if (a === 'perf-monitor') { window.$toast('性能监控面板开发中', 'info'); return }
-  if (a === 'agent-monitor') {
-    state.bottomPanelVisible = true
-    state.bottomPanelTab = 'terminal'
+  if (a === 'open-marketplace') {
+    if (showMarketplaceModal) showMarketplaceModal.value = true
     return
   }
-  if (a === 'evolution-graph') { window.$toast('进化图功能开发中', 'info'); return }
-  if (a === 'explore-knowledge') {
-    // 打开搜索面板以探索知识库
-    state.activeActivity = 'search'
-    state.sidebarVisible = true
+  if (a === 'system-info') {
+    if (showSystemModal) showSystemModal.value = true
     return
   }
 

@@ -534,9 +534,8 @@ function filterItemLines(lines, lang) {
 }
 
 function getIsDark() {
-  return document.documentElement.classList.contains('dark') ||
-         document.body.classList.contains('dark-mode') ||
-         window.matchMedia?.('(prefers-color-scheme: dark)')?.matches
+  const t = props.theme || 'dark'
+  return t === 'dark' || t === 'night'
 }
 
 function getBgColors(isDark) {
@@ -1002,9 +1001,9 @@ function drawChart(canvas, data, chartType) {
   const rect = canvas.getBoundingClientRect()
   canvas.width = rect.width * dpr; canvas.height = rect.height * dpr; ctx.scale(dpr, dpr)
   const w = rect.width; const h = rect.height
-  const isDark = props.theme === 'dark'
-  const textColor = isDark ? '#e6edf3' : '#1a1a2e'
-  const gridColor = isDark ? 'rgba(48,54,61,0.5)' : 'rgba(218,220,224,0.5)'
+  const isDark = props.theme === 'dark' || props.theme === 'night'
+  const textColor = isDark ? '#d8d4e0' : (props.theme === 'warm' ? '#3d2c1e' : '#1a1a2e')
+  const gridColor = isDark ? 'rgba(45,41,64,0.5)' : 'rgba(218,220,224,0.5)'
   ctx.clearRect(0, 0, w, h)
   const pad = { top: 20, right: 20, bottom: 40, left: 50 }
   const chartW = w - pad.left - pad.right; const chartH = h - pad.top - pad.bottom

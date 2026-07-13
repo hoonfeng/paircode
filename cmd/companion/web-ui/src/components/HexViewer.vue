@@ -3,10 +3,18 @@
     <div class="hex-toolbar">
       <span class="hex-file-info">{{ fileName }} · {{ formatSize(fileSize) }}</span>
       <span class="hex-spacer"></span>
-      <button class="hex-btn" @click="loadPrev" :disabled="offset <= 0" title="上一页">▲ 上页</button>
-      <span class="hex-pos">偏移 {{ formatOffset(offset) }}</span>
-      <button class="hex-btn" @click="loadNext" :disabled="!hasMore" title="下一页">▼ 下页</button>
-      <button class="hex-btn" @click="loadAll" :disabled="loading" title="加载全部">加载全部</button>
+      <button class="hex-btn" @click="loadPrev" :disabled="currentPage <= 0" title="上一页 (PageUp)">▲</button>
+      <span class="hex-pos">第 {{ currentPage + 1 }}/{{ totalPages }} 页</span>
+      <button class="hex-btn" @click="loadNext" :disabled="currentPage >= totalPages - 1" title="下一页 (PageDown)">▼</button>
+      <span class="hex-sep"></span>
+      <label class="hex-goto">
+        偏移:
+        <input type="text" v-model="gotoInput" class="hex-goto-input"
+               placeholder="0x or decimal" @keydown.enter="goToOffset" />
+        <button class="hex-btn" @click="goToOffset" title="跳转">跳转</button>
+      </label>
+      <span class="hex-sep"></span>
+      <button class="hex-btn" @click="loadAll" :disabled="loading" title="加载全部">全部</button>
     </div>
     <div class="hex-body">
       <div v-if="loading" class="hex-loading">加载中...</div>
@@ -24,12 +32,12 @@ const props = defineProps({
 })
 
 const hexDump = ref('')
-const offset = ref(0)
+const currentPage = ref(0)
+const totalPages = ref(0)
 const fileSize = ref(0)
-const hasMore = ref(false)
 const loading = ref(false)
-const loadedAll = ref(false)
-const chunkSize = 512 // 每页字节数
+const chunkSize = 512
+const gotoInput = ref('')
 
 const fileName = computed(() => {
   const p = props.path || ''
@@ -42,26 +50,20 @@ function formatSize(s) {
   return (s / (1024 * 1024)).toFixed(1) + ' MB'
 }
 
-function formatOffset(o) {
-  return '0x' + o.toString(16).toUpperCase().padStart(8, '0')
-}
-
-async function fetchHex(newOffset) {
+async function fetchPage(page) {
   loading.value = true
   try {
+    const offset = page * chunkSize
     const res = await api.apiGet('/fs/hex', {
       path: props.path,
-      offset: String(newOffset),
+      offset: String(offset),
       length: String(chunkSize),
     })
-    if (newOffset === 0) {
-      hexDump.value = res.hex || ''
-    } else {
-      hexDump.value += '\n' + (res.hex || '')
-    }
-    offset.value = newOffset + (res.length || 0)
+    hexDump.value = res.hex || ''
+    currentPage.value = page
     fileSize.value = res.fileSize || 0
-    hasMore.value = res.hasMore || false
+    const total = Math.ceil((res.fileSize || 0) / chunkSize)
+    totalPages.value = total > 0 ? total : 1
   } catch (e) {
     hexDump.value = `加载失败: ${e.message || e}`
   } finally {
@@ -70,44 +72,35 @@ async function fetchHex(newOffset) {
 }
 
 function loadNext() {
-  if (!hasMore.value || loading.value) return
-  fetchHex(offset.value)
+  if (currentPage.value < totalPages - 1) fetchPage(currentPage.value + 1)
 }
 
 function loadPrev() {
-  if (offset.value <= chunkSize) {
-    // 重新从 0 开始
-    hexDump.value = ''
-    fetchHex(0)
-    return
-  }
-  const newOffset = Math.max(0, offset.value - chunkSize * 2)
-  hexDump.value = ''
-  fetchHex(newOffset)
+  if (currentPage.value > 0) fetchPage(currentPage.value - 1)
 }
 
 async function loadAll() {
-  if (loadedAll.value || loading.value) return
+  if (loading.value) return
   loading.value = true
-  loadedAll.value = true
   try {
     let allHex = ''
-    let off = 0
+    let page = 0
     for (;;) {
+      const offset = page * chunkSize
       const res = await api.apiGet('/fs/hex', {
         path: props.path,
-        offset: String(off),
+        offset: String(offset),
         length: String(chunkSize),
       })
       if (allHex) allHex += '\n'
       allHex += res.hex || ''
-      off += res.length || 0
+      page++
       if (!res.hasMore) break
     }
     hexDump.value = allHex
-    offset.value = off
     fileSize.value = 0
-    hasMore.value = false
+    totalPages.value = 0
+    currentPage.value = 0
   } catch (e) {
     hexDump.value = `加载失败: ${e.message || e}`
   } finally {
@@ -115,41 +108,70 @@ async function loadAll() {
   }
 }
 
+function goToOffset() {
+  let raw = gotoInput.value.trim()
+  if (!raw) return
+  let offset = 0
+  if (raw.startsWith('0x') || raw.startsWith('0X')) {
+    offset = parseInt(raw, 16)
+  } else {
+    offset = parseInt(raw, 10)
+  }
+  if (isNaN(offset) || offset < 0) {
+    window.$toast?.('无效的偏移量', 'error')
+    return
+  }
+  const page = Math.floor(offset / chunkSize)
+  fetchPage(page)
+}
+
 onMounted(() => {
-  fetchHex(0)
+  fetchPage(0)
 })
 
 watch(() => props.path, () => {
   hexDump.value = ''
-  offset.value = 0
+  currentPage.value = 0
+  totalPages.value = 0
   fileSize.value = 0
-  hasMore.value = false
-  loadedAll.value = false
-  fetchHex(0)
+  gotoInput.value = ''
+  fetchPage(0)
 })
 </script>
 
 <style scoped>
 .hex-viewer {
   display: flex; flex-direction: column; height: 100%;
-  background: #1e1e1e; color: #d4d4d4; font-family: var(--font-code, 'Cascadia Code', 'Consolas', monospace);
+  background: var(--bg-primary); color: var(--text-primary);
+  font-family: var(--font-code, 'Cascadia Code', 'Consolas', monospace);
 }
 .hex-toolbar {
-  display: flex; align-items: center; gap: 8px;
-  padding: 4px 8px; background: #252526; border-bottom: 1px solid #3c3c3c;
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 8px; background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
   flex-shrink: 0; font-size: 12px;
+  flex-wrap: wrap;
 }
-.hex-file-info { color: #9cdcfe; }
+.hex-file-info { color: var(--accent-light); }
 .hex-spacer { flex: 1; }
+.hex-sep { width: 1px; height: 18px; background: var(--border-color); }
 .hex-btn {
-  background: #3c3c3c; border: 1px solid #555; color: #d4d4d4;
-  padding: 2px 8px; border-radius: 3px; cursor: pointer; font-size: 11px;
+  background: var(--bg-tertiary); border: 1px solid var(--border-color);
+  color: var(--text-secondary); padding: 2px 8px; border-radius: 3px;
+  cursor: pointer; font-size: 11px;
 }
-.hex-btn:hover { background: #505050; }
+.hex-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
 .hex-btn:disabled { opacity: 0.4; cursor: default; }
-.hex-pos { color: #6a9955; font-size: 11px; min-width: 80px; text-align: center; }
+.hex-pos { color: var(--text-muted); font-size: 11px; min-width: 80px; text-align: center; white-space: nowrap; }
+.hex-goto { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-muted); }
+.hex-goto-input {
+  width: 90px; background: var(--input-bg); border: 1px solid var(--border-color);
+  color: var(--text-primary); padding: 1px 6px; font-size: 11px; outline: none;
+  border-radius: 3px; font-family: var(--font-code);
+}
+.hex-goto-input:focus { border-color: var(--accent); }
 .hex-body { flex: 1; overflow: auto; padding: 0; }
-.hex-loading { display: flex; align-items: center; justify-content: center; height: 100%; color: #888; font-size: 13px; }
+.hex-loading { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-muted); font-size: 13px; }
 .hex-dump {
   margin: 0; padding: 8px 12px;
   font-size: 12px; line-height: 1.5;
