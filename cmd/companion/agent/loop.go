@@ -59,7 +59,7 @@ type Event struct {
 
 
 // Loop TAOR 编排器：think(LLM 决策)→act(执行工具)→observe(结果回灌)→repeat。
-// 停止：调 finish_task / 连续 3 轮工具全错 / 达最大迭代 / 外部取消。
+// 停止：自然终止（无 tool_call + 有正文）/ 调 finish_task / 连续 3 轮工具全错 / 达最大迭代 / 外部取消。
 type Loop struct {
 	Provider      Provider
 	Registry      *Registry
@@ -322,13 +322,22 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 			}
 		}
 
+		// ★ 自然终止：模型首次无工具调用且有正文 → 视为任务完成（借鉴 DeepSeek-Reasonix 模式）
+		// 条件：contentOnlyIters==0（尚未触发 content-only 防护）+ 无 tool_call + 有正文
+		// 与 finish_task 检测是 OR 关系：任意一个触发即可结束
+		if l.contentOnlyIters == 0 && len(assistant.ToolCalls) == 0 && strings.TrimSpace(assistant.Content) != "" {
+			l.emit(Event{Type: EventDone, Content: strings.TrimSpace(assistant.Content), DoneReason: "task_complete"})
+			return msgs, nil
+		}
+
 		// ★ content-only 防护：Agent 连续输出文字但不调用任何工具（含 finish_task）
 		// 说明 Agent 可能在自我循环，注入停止提示。
 		// 阈值放宽到 3 轮提示、4 轮结束——复杂任务可能需要多轮分析总结。
+		// 自然终止已优先处理首次 content-only，此处仅处理第 2 轮及以后的内容循环兜底。
 		if len(assistant.ToolCalls) == 0 && strings.TrimSpace(assistant.Content) != "" {
 			l.contentOnlyIters++
 			if l.contentOnlyIters == 3 {
-				nudge := "[系统提示] 你已经连续三轮只输出文字而没有调用任何工具。如果任务已完成，请调用 finish_task 工具结束本轮；如果还需要继续工作，请调用相应工具推进。"
+				nudge := "[系统提示] 你已经连续三轮只输出文字而没有调用任何工具。如果任务已完成，请直接输出最终报告（系统会自动检测完成）；如果还需要继续工作，请调用相应工具推进。"
 				l.emit(Event{Type: EventNotice, Content: nudge})
 				msgs = append(msgs, Message{Role: RoleUser, Content: nudge})
 			} else if l.contentOnlyIters >= 4 {
@@ -427,7 +436,8 @@ func DefaultSystemPrompt(roots []string) string {
 		"- 文件操作只用工作区内路径；修改文件前必须先 read_file 确认当前内容。\n" +
 		"- 每次工具调用后，依据真实结果决定下一步，绝不臆测结果。\n" +
 		"- 禁止破坏性命令（如 rm -rf、强制 push main），禁止修改工作区外文件。\n" +
-		"- 【完成标记】任务彻底完成时，调用 finish_task 工具提交最终结果摘要，切勿在正文中输出 [FINAL]。\n\n" +
+		"- 【完成标记】任务完成时停止调用工具，直接输出最终报告即可。系统会自动检测到你已经完成。\n" +
+		"  也可显式调用 finish_task 工具提交结果（两种方式等价）。切勿在正文中输出 [FINAL] 等标记。\n\n" +
 		"# ★ 调研优先（强制——违反必出错）\n" +
 		"收到任务后，第一回合必须先收集资料、理解上下文，再动手改代码：\n" +
 		"- 先用 search_content / search_files / find_symbol 定位相关文件和函数，搞清楚代码结构和调用关系。\n" +
@@ -441,7 +451,7 @@ func DefaultSystemPrompt(roots []string) string {
 		"- 收到任务后第一回合创建完整子任务清单，立即将第一个标记为 in_progress。\n" +
 		"- 完成一项更新一项（task_update），绝不批量更新。\n" +
 		"- 发现新前置依赖或方案不可行时即时调整计划。\n" +
-		"- 所有任务完成后，先调用 task_summary 确认进度摘要，然后调用 finish_task 提交结果。\n\n" +
+		"- 所有任务完成后，先调用 task_summary 确认进度摘要，然后结束本轮任务（直接输出最终报告或调用 finish_task 均可）。\n\n" +
 		"# 读取策略\n" +
 		"读文件时必须串行推进——读完一个文件，分析内容，再决定下一个读什么。\n" +
 		"禁止一次性发出 3+ 个 read_file——你预判需要的文件往往有一半是多余的。\n" +

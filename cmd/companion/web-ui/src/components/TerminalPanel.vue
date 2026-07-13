@@ -2,288 +2,428 @@
   <div class="terminal-panel">
     <!-- 终端标签栏 -->
     <div class="term-tabs">
-      <button v-for="(term, i) in terminals" :key="i"
-              :class="['term-tab', { active: i === activeTermIdx }]"
-              @click="activeTermIdx = i"
-              @mouseup.middle="closeTerm(i)">
+      <button v-for="(tab, i) in tabs" :key="tab.id"
+              :class="['term-tab', { active: i === activeIdx }]"
+              @click="switchTab(i)"
+              @mouseup.middle="closeTab(i)">
         <SvgIcon name="terminal" :size="12" />
-        <span class="term-tab-label">{{ term.label }}</span>
-        <span class="term-tab-close" @click.stop="closeTerm(i)" title="关闭">×</span>
+        <span class="term-tab-label">{{ tab.label }}</span>
+        <span v-if="tabs.length > 1" class="term-tab-close" @click.stop="closeTab(i)" title="关闭">×</span>
       </button>
-      <button class="term-tab new-tab" @click="newTerminal" title="新建终端">
+      <button class="term-tab new-tab" @click="showNewDialog = true" title="新建终端">
         <SvgIcon name="plus" :size="12" />
       </button>
     </div>
 
-    <!-- 当前终端内容 -->
-    <div v-if="terminals.length > 0" class="term-content">
-      <div class="term-output" ref="termRef">
-        <div v-for="(line, j) in currentTerm.output" :key="j"
-             :class="['term-line', line.type === 'stderr' ? 'term-err' : '']">
-          <span class="term-text">{{ line.text }}</span>
-        </div>
-        <div v-if="currentTerm.executing" class="term-line term-executing">
-          <span class="term-cursor">_</span>
-        </div>
-      </div>
-      <div class="term-input-line">
-        <span class="term-prompt-inline">{{ currentTerm.cwd }}&gt;</span>
-        <input ref="inputRef"
-               v-model="currentTerm.input"
-               class="term-input"
-               @keydown="onKeydown"
-               placeholder="输入命令..."
-               :disabled="currentTerm.executing" />
-        <button class="term-btn-run" @click="runCommand" :disabled="!currentTerm.input.trim() || currentTerm.executing">
-          <SvgIcon name="send" :size="12" />
-        </button>
+    <!-- 终端容器 -->
+    <div class="term-container">
+      <div v-for="tab in tabs" :key="tab.id"
+           :ref="el => setTermRef(tab.id, el)"
+           :class="['term-xterm', { active: tab.id === activeId }]">
       </div>
     </div>
 
     <!-- 无终端时 -->
-    <div v-else class="term-empty">
-      <button class="term-create-btn" @click="newTerminal">新建终端</button>
+    <div v-if="tabs.length === 0" class="term-empty">
+      <button class="term-create-btn" @click="showNewDialog = true">新建终端</button>
+    </div>
+
+    <!-- 新建终端对话框 -->
+    <div v-if="showNewDialog" class="term-dialog-overlay" @click.self="showNewDialog = false">
+      <div class="term-dialog">
+        <h3>新建终端</h3>
+        <div class="dialog-row">
+          <label>Shell 类型：</label>
+          <select v-model="newShell">
+            <option value="cmd">CMD</option>
+            <option value="powershell">PowerShell</option>
+            <option value="gitbash">Git Bash</option>
+          </select>
+        </div>
+        <div class="dialog-row">
+          <label>工作目录：</label>
+          <input v-model="newCwd" class="dialog-input" placeholder="默认工作区根目录" />
+        </div>
+        <div class="dialog-actions">
+          <button class="btn-cancel" @click="showNewDialog = false">取消</button>
+          <button class="btn-confirm" @click="createTerminal">创建</button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
-import api from '../api.js'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { Terminal } from '@xterm/xterm'
+import { FitAddon } from '@xterm/addon-fit'
+import '@xterm/xterm/css/xterm.css'
 import SvgIcon from './SvgIcon.vue'
 
-// ── 多终端实例 ──
-const terminals = ref([])
-const activeTermIdx = ref(-1)
-const termRef = ref(null)
-const inputRef = ref(null)
-let termCounter = 0
+// ─── 状态 ──────────────────────────────────────────────────
 
-const currentTerm = computed(() => {
-  if (activeTermIdx.value < 0 || activeTermIdx.value >= terminals.value.length) {
-    return { output: [], input: '', executing: false, cwd: 'C:\\', label: '终端', history: [], histIdx: -1 }
+const tabs = ref([])          // { id, label, shell, term, fitAddon, ws }
+const activeIdx = ref(-1)
+const showNewDialog = ref(false)
+const newShell = ref('cmd')
+const newCwd = ref('')
+
+let termIdCounter = 0
+
+const activeId = ref(null)
+
+// DOM 引用映射：tabId → HTMLDivElement
+const termRefs = {}
+
+function setTermRef(tabId, el) {
+  if (el) termRefs[tabId] = el
+}
+
+// ─── 创建终端 ──────────────────────────────────────────────
+
+function createTerminal() {
+  showNewDialog.value = false
+  termIdCounter++
+  const id = 'term-' + termIdCounter
+  const shell = newShell.value
+  const cwd = newCwd.value || ''
+
+  const tab = {
+    id,
+    label: shellLabel(shell) + ' ' + termIdCounter,
+    shell,
+    cwd,
+    term: null,
+    fitAddon: null,
+    ws: null,
   }
-  return terminals.value[activeTermIdx.value]
+  tabs.value.push(tab)
+  activeIdx.value = tabs.value.length - 1
+  activeId.value = id
+
+  nextTick(() => {
+    initTerminal(tab)
+  })
+}
+
+function shellLabel(shell) {
+  switch (shell) {
+    case 'powershell': return 'PowerShell'
+    case 'gitbash': return 'Bash'
+    default: return 'CMD'
+  }
+}
+
+// ─── 初始化 xterm.js + WebSocket ──────────────────────────
+
+function initTerminal(tab) {
+  const container = termRefs[tab.id]
+  if (!container) {
+    console.error('[Terminal] 未找到容器:', tab.id)
+    return
+  }
+
+  // 创建 xterm
+  const term = new Terminal({
+    cursorBlink: true,
+    cursorStyle: 'block',
+    fontSize: 13,
+    fontFamily: "'Consolas', 'Cascadia Code', 'Courier New', monospace",
+    theme: {
+      background: '#1e1e1e',
+      foreground: '#d4d4d4',
+      cursor: '#d4d4d4',
+      selectionBackground: '#264f78',
+      black: '#000000',
+      red: '#cd3131',
+      green: '#0dbc79',
+      yellow: '#e5e510',
+      blue: '#2472c8',
+      magenta: '#bc3fbc',
+      cyan: '#11a8cd',
+      white: '#e5e5e5',
+      brightBlack: '#666666',
+      brightRed: '#f14c4c',
+      brightGreen: '#23d18b',
+      brightYellow: '#f5f543',
+      brightBlue: '#3b8eea',
+      brightMagenta: '#d670d6',
+      brightCyan: '#29b8db',
+      brightWhite: '#e5e5e5',
+    },
+    allowTransparency: false,
+    scrollback: 5000,
+    allowProposedApi: true,
+  })
+
+  const fitAddon = new FitAddon()
+  term.loadAddon(fitAddon)
+
+  // 挂载到 DOM
+  term.open(container)
+  fitAddon.fit()
+
+  // 连接 WebSocket
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const url = proto + '//' + location.host + '/api/terminal/ws'
+  let ws
+  try {
+    ws = new WebSocket(url)
+  } catch (e) {
+    term.write('\r\n\x1b[31m[错误] WebSocket 连接失败: ' + e.message + '\x1b[0m\r\n')
+    tab.term = term
+    tab.fitAddon = fitAddon
+    return
+  }
+
+  ws.binaryType = 'arraybuffer'
+
+  ws.onopen = () => {
+    // 发送 init 消息
+    const initMsg = JSON.stringify({
+      type: 'init',
+      shell: tab.shell,
+      cwd: tab.cwd || undefined,
+      cols: term.cols,
+      rows: term.rows,
+    })
+    ws.send(initMsg)
+  }
+
+  ws.onmessage = (ev) => {
+    if (ev.data instanceof ArrayBuffer) {
+      // 二进制帧 = PTY 输出（VT 序列）
+      term.write(new Uint8Array(ev.data))
+    } else {
+      // 文本帧 = JSON 控制消息
+      try {
+        const msg = JSON.parse(ev.data)
+        if (msg.type === 'error') {
+          term.write('\r\n\x1b[31m[错误] ' + (msg.msg || '未知错误') + '\x1b[0m\r\n')
+        } else if (msg.type === 'closed') {
+          term.write('\r\n\x1b[33m[终端会话已关闭]\x1b[0m\r\n')
+        }
+      } catch {}
+    }
+  }
+
+  ws.onclose = () => {
+    try { term.write('\r\n\x1b[33m[连接已断开]\x1b[0m\r\n') } catch {}
+  }
+
+  ws.onerror = (e) => {
+    term.write('\r\n\x1b[31m[WebSocket 错误]\x1b[0m\r\n')
+  }
+
+  // 键盘输入 → WebSocket 二进制帧
+  term.onData((data) => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(data)
+    }
+  })
+
+  // 尺寸变化 → 发送 resize + fit
+  const resizeObserver = new ResizeObserver(() => {
+    try {
+      fitAddon.fit()
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'resize',
+          cols: term.cols,
+          rows: term.rows,
+        }))
+      }
+    } catch {}
+  })
+  if (container.parentElement) {
+    resizeObserver.observe(container.parentElement)
+  }
+
+  // 保存引用
+  tab.term = term
+  tab.fitAddon = fitAddon
+  tab.ws = ws
+  tab._resizeObserver = resizeObserver
+
+  // 聚焦
+  term.focus()
+}
+
+// ─── 切换 Tab ──────────────────────────────────────────────
+
+function switchTab(i) {
+  if (i < 0 || i >= tabs.value.length || i === activeIdx.value) return
+  activeIdx.value = i
+  activeId.value = tabs.value[i].id
+  nextTick(() => {
+    const tab = tabs.value[activeIdx.value]
+    if (tab && tab.fitAddon) {
+      try { tab.fitAddon.fit() } catch {}
+    }
+    if (tab && tab.term) {
+      tab.term.focus()
+    }
+  })
+}
+
+// ─── 关闭 Tab ──────────────────────────────────────────────
+
+function closeTab(i) {
+  if (tabs.value.length <= 1) return
+  const tab = tabs.value[i]
+  if (!tab) return
+
+  // 关闭 WebSocket
+  if (tab.ws) {
+    try {
+      tab.ws.send(JSON.stringify({ type: 'close' }))
+      tab.ws.close()
+    } catch {}
+  }
+
+  // 清理 ResizeObserver
+  if (tab._resizeObserver) {
+    try { tab._resizeObserver.disconnect() } catch {}
+  }
+
+  // 销毁 xterm
+  if (tab.term) {
+    try { tab.term.dispose() } catch {}
+  }
+
+  tabs.value.splice(i, 1)
+  if (activeIdx.value >= tabs.value.length) {
+    activeIdx.value = tabs.value.length - 1
+  }
+  if (activeIdx.value >= 0) {
+    activeId.value = tabs.value[activeIdx.value].id
+  } else {
+    activeId.value = null
+  }
+}
+
+// ─── 生命周期 ──────────────────────────────────────────────
+
+onMounted(() => {
+  // 默认创建一个终端
+  createTerminal()
 })
 
-function createTerminal(cwd) {
-  termCounter++
-  return {
-    label: '终端 ' + termCounter,
-    cwd: cwd || 'C:\\',
-    input: '',
-    output: [],
-    executing: false,
-    history: [],
-    histIdx: -1,
+onUnmounted(() => {
+  for (const tab of tabs.value) {
+    if (tab.ws) {
+      try {
+        tab.ws.send(JSON.stringify({ type: 'close' }))
+        tab.ws.close()
+      } catch {}
+    }
+    if (tab._resizeObserver) {
+      try { tab._resizeObserver.disconnect() } catch {}
+    }
+    if (tab.term) {
+      try { tab.term.dispose() } catch {}
+    }
   }
-}
-
-function newTerminal() {
-  const term = createTerminal(currentTerm.value?.cwd)
-  terminals.value.push(term)
-  activeTermIdx.value = terminals.value.length - 1
-  term.output.push({ type: 'stdout', text: 'PairCode 终端 (Windows) — ' + term.label })
-  term.output.push({ type: 'stdout', text: '' })
-  saveTerminals()
-  nextTick(() => scrollToBottom())
-}
-
-function closeTerm(i) {
-  if (terminals.value.length <= 1) return
-  terminals.value.splice(i, 1)
-  if (activeTermIdx.value >= terminals.value.length) {
-    activeTermIdx.value = terminals.value.length - 1
-  }
-  saveTerminals()
-}
-
-// ── 命令执行 ──
-async function runCommand() {
-  const term = terminals.value[activeTermIdx.value]
-  if (!term || !term.input.trim() || term.executing) return
-  const cmd = term.input.trim()
-  term.output.push({ type: 'stdout', text: term.cwd + '> ' + cmd })
-  term.history.unshift(cmd)
-  term.histIdx = -1
-  term.input = ''
-  term.executing = true
-  try {
-    const res = await api.apiPost('/system/exec', { command: cmd, cwd: term.cwd })
-    if (res.stdout) {
-      for (const line of res.stdout.split('\n').filter(Boolean)) {
-        term.output.push({ type: 'stdout', text: line })
-      }
-    }
-    if (res.stderr) {
-      for (const line of res.stderr.split('\n').filter(Boolean)) {
-        term.output.push({ type: 'stderr', text: line })
-      }
-    }
-    if (res.cwd) { term.cwd = res.cwd; saveTerminals() }
-  } catch (err) {
-    term.output.push({ type: 'stderr', text: '错误: ' + err.message })
-  }
-  term.executing = false
-  scrollToBottom()
-}
-
-const onKeydown = (e) => {
-  const term = terminals.value[activeTermIdx.value]
-  if (!term) return
-  if (e.key === 'Enter') { e.preventDefault(); runCommand(); return }
-  if (e.key === 'ArrowUp') {
-    e.preventDefault()
-    if (term.history.length > 0) {
-      term.histIdx = Math.min(term.histIdx + 1, term.history.length - 1)
-      term.input = term.history[term.histIdx]
-    }
-    return
-  }
-  if (e.key === 'ArrowDown') {
-    e.preventDefault()
-    if (term.histIdx > 0) {
-      term.histIdx--
-      term.input = term.history[term.histIdx]
-    } else {
-      term.histIdx = -1
-      term.input = ''
-    }
-    return
-  }
-}
-
-const scrollToBottom = () => {
-  nextTick(() => {
-    if (termRef.value) termRef.value.scrollTop = termRef.value.scrollHeight
-  })
-}
-
-// 保存/恢复终端列表
-const TERM_KEY = 'paircode-terminals'
-function saveTerminals() {
-  try {
-    const data = terminals.value.map(t => ({
-      label: t.label,
-      cwd: t.cwd,
-    }))
-    localStorage.setItem(TERM_KEY, JSON.stringify(data))
-  } catch {}
-}
-function loadTerminals() {
-  try {
-    const raw = localStorage.getItem(TERM_KEY)
-    if (!raw) return false
-    const data = JSON.parse(raw)
-    if (!Array.isArray(data) || data.length === 0) return false
-    let restored = false
-    for (const t of data) {
-      termCounter++
-      terminals.value.push({
-        label: t.label || '终端 ' + termCounter,
-        cwd: t.cwd || 'C:\\',
-        input: '',
-        output: [{ type: 'stdout', text: 'PairCode 终端 (Windows) — ' + (t.label || '终端 ' + termCounter) }],
-        executing: false,
-        history: [],
-        histIdx: -1,
-      })
-    }
-    if (terminals.value.length > 0) {
-      activeTermIdx.value = 0
-      restored = true
-    }
-    return restored
-  } catch { return false }
-}
-
-// 监听终端切换目录事件
-onMounted(() => {
-  // 尝试恢复终端
-  if (!loadTerminals()) {
-    // 默认创建一个终端
-    newTerminal()
-  }
-  api.apiGet('/system/info').then(info => {
-    if (info.cwd && terminals.value[0]) {
-      terminals.value[0].cwd = info.cwd
-    }
-  }).catch(e => console.warn('[终端] 获取系统信息失败:', e))
-  // 监听终端路径切换
-  window.addEventListener('terminal-cwd', (e) => {
-    const cwd = e.detail?.cwd
-    if (cwd) {
-      const term = terminals.value[activeTermIdx.value]
-      if (term) term.cwd = cwd
-      saveTerminals()
-    }
-  })
+  tabs.value = []
 })
 </script>
 
 <style scoped>
 .terminal-panel {
   display: flex; flex-direction: column; height: 100%;
-  background: var(--bg-primary); color: var(--text-primary); font-size: 13px;
+  background: #1e1e1e; color: #d4d4d4; font-size: 13px;
 }
+
 /* ── 终端标签栏 ── */
 .term-tabs {
-  display: flex; align-items: stretch; background: var(--bg-tertiary);
-  border-bottom: 1px solid var(--border-color); flex-shrink: 0; overflow-x: auto;
+  display: flex; align-items: stretch; background: #2d2d2d;
+  border-bottom: 1px solid #3c3c3c; flex-shrink: 0; overflow-x: auto;
 }
 .term-tab {
   display: flex; align-items: center; gap: 4px; padding: 4px 10px;
-  background: none; border: none; border-right: 1px solid var(--border-color);
-  color: var(--text-secondary); font-size: 12px; cursor: pointer; white-space: nowrap;
+  background: none; border: none; border-right: 1px solid #3c3c3c;
+  color: #999; font-size: 12px; cursor: pointer; white-space: nowrap;
 }
 .term-tab.active {
-  background: var(--bg-primary); color: var(--text-primary);
-  border-bottom: 1px solid var(--bg-primary); margin-bottom: -1px;
+  background: #1e1e1e; color: #d4d4d4;
+  border-bottom: 1px solid #1e1e1e; margin-bottom: -1px;
 }
-.term-tab:hover:not(.active) { background: var(--bg-hover); }
-.term-tab-close { font-size: 12px; margin-left: 2px; opacity: 0.5; }
-.term-tab-close:hover { opacity: 1; color: #c03; }
+.term-tab:hover:not(.active) { background: #3c3c3c; }
+.term-tab-close { font-size: 12px; margin-left: 2px; opacity: 0.5; color: #999; }
+.term-tab-close:hover { opacity: 1; color: #e06c75; }
 .term-tab.new-tab { padding: 4px 8px; }
 
 /* ── 内容区 ── */
-.term-content {
-  flex: 1; display: flex; flex-direction: column; min-height: 0;
+.term-container {
+  flex: 1; display: flex; min-height: 0; position: relative;
 }
-.term-output {
-  flex: 1; overflow-y: auto; padding: 4px 8px;
-  font-family: 'Consolas', 'Cascadia Code', monospace; font-size: 12px; line-height: 1.5;
+.term-xterm {
+  display: none; width: 100%; height: 100%;
 }
-.term-line { white-space: pre-wrap; word-break: break-all; margin: 1px 0; }
-.term-text { color: var(--term-text); }
-.term-err .term-text { color: #f48771; }
-.term-executing { color: var(--term-prompt); }
-.term-cursor { animation: blink 1s infinite; color: var(--term-text); }
-@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+.term-xterm.active {
+  display: block;
+}
 
-.term-input-line {
-  display: flex; align-items: center; gap: 4px; padding: 4px 8px;
-  border-top: 1px solid var(--border-color); flex-shrink: 0;
-  background: var(--bg-tertiary);
+/* 覆盖 xterm 默认背景以完全填充 */
+.term-xterm :deep(.xterm) {
+  height: 100%; padding: 0;
 }
-.term-prompt-inline { color: var(--term-prompt); font-family: var(--font-code); font-size: 12px; white-space: nowrap; flex-shrink: 0; margin-right: 4px; }
-.term-input {
-  flex: 1; background: transparent; border: none; color: var(--term-text);
-  font-family: var(--font-code); font-size: 12px; outline: none; padding: 2px 0;
+.term-xterm :deep(.xterm-viewport) {
+  scrollbar-width: thin;
+  scrollbar-color: #424242 #1e1e1e;
 }
-.term-input::placeholder { color: var(--text-muted); }
-.term-btn-run {
-  background: var(--bg-hover); border: 1px solid var(--border-color);
-  color: var(--text-secondary); padding: 2px 8px; border-radius: 3px; cursor: pointer;
-  display: flex; align-items: center;
-}
-.term-btn-run:hover { background: var(--accent); color: #000; }
-.term-btn-run:disabled { opacity: 0.4; cursor: default; }
 
+/* ── 空状态 ── */
 .term-empty {
   flex: 1; display: flex; align-items: center; justify-content: center;
+  background: #1e1e1e;
 }
 .term-create-btn {
-  background: var(--accent); color: #000; border: none;
+  background: #007acc; color: #fff; border: none;
   padding: 6px 16px; border-radius: 4px; cursor: pointer; font-size: 13px;
 }
+.term-create-btn:hover { background: #0098ff; }
+
+/* ── 新建终端对话框 ── */
+.term-dialog-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5); z-index: 1000;
+  display: flex; align-items: center; justify-content: center;
+}
+.term-dialog {
+  background: #252526; border: 1px solid #3c3c3c;
+  border-radius: 8px; padding: 20px; min-width: 360px;
+  color: #d4d4d4; box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+.term-dialog h3 {
+  margin: 0 0 16px; font-size: 15px; font-weight: 600;
+  color: #e0e0e0;
+}
+.dialog-row {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
+}
+.dialog-row label {
+  font-size: 12px; color: #999; white-space: nowrap; min-width: 80px;
+}
+.dialog-row select, .dialog-input {
+  flex: 1; background: #3c3c3c; border: 1px solid #555;
+  color: #d4d4d4; padding: 4px 8px; border-radius: 3px;
+  font-size: 12px; outline: none;
+}
+.dialog-row select:focus, .dialog-input:focus {
+  border-color: #007acc;
+}
+.dialog-actions {
+  display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px;
+}
+.btn-cancel {
+  background: #3c3c3c; color: #d4d4d4; border: 1px solid #555;
+  padding: 4px 16px; border-radius: 3px; cursor: pointer; font-size: 12px;
+}
+.btn-confirm {
+  background: #007acc; color: #fff; border: none;
+  padding: 4px 16px; border-radius: 3px; cursor: pointer; font-size: 12px;
+}
+.btn-cancel:hover { background: #555; }
+.btn-confirm:hover { background: #0098ff; }
 </style>

@@ -30,6 +30,7 @@ import (
 func registerExtraHandlers(mux *http.ServeMux, s *webServer) {
 	mux.HandleFunc("/api/chat/send", s.handleChatSend)
 	mux.HandleFunc("/ws", s.handleWebSocket)
+	mux.HandleFunc("/api/terminal/ws", s.handleTerminalWS) // 终端 PTY WebSocket
 	mux.HandleFunc("/api/chat/stop", s.handleChatStop)
 	mux.HandleFunc("/api/chat/answer", s.handleChatAnswer)
 	mux.HandleFunc("/api/chat/approve", s.handleChatApprove)

@@ -23,18 +23,9 @@
       <div class="bottom-panel" v-if="state.bottomPanelVisible"
            :style="{ height: bottomPanelHeight + 'px' }">
         <div class="panel-tabs">
-          <button :class="{ active: state.bottomPanelTab === 'output' }"
-                  @click="state.bottomPanelTab = 'output'">
-            <SvgIcon name="output" size="14" /> 输出
-          </button>
-          <button :class="{ active: state.bottomPanelTab === 'tasks' }"
-                  @click="state.bottomPanelTab = 'tasks'">
-            <SvgIcon name="check" size="14" /> 任务
-          </button>
-          <button :class="{ active: state.bottomPanelTab === 'terminal' }"
-                  @click="state.bottomPanelTab = 'terminal'">
+          <div class="panel-title-inline">
             <SvgIcon name="terminal" size="14" /> 终端
-          </button>
+          </div>
           <div class="panel-actions">
             <span class="panel-notify" v-if="state.notificationCount > 0" title="有待处理通知">
               <SvgIcon name="bell" :size="12" /> {{ state.notificationCount }}
@@ -45,9 +36,7 @@
           </div>
         </div>
         <div class="panel-content">
-          <OutputPanel v-if="state.bottomPanelTab === 'output'" />
-          <TasksPanel v-if="state.bottomPanelTab === 'tasks'" />
-          <TerminalPanel v-if="state.bottomPanelTab === 'terminal'" />
+          <TerminalPanel />
         </div>
         <div class="panel-resizer" @mousedown.prevent="startBottomResize"></div>
       </div>
@@ -85,8 +74,6 @@ import Sidebar from './components/Sidebar.vue'
 import EditorArea from './components/EditorArea.vue'
 import RightPanel from './components/RightPanel.vue'
 import StatusBar from './components/StatusBar.vue'
-import OutputPanel from './components/OutputPanel.vue'
-import TasksPanel from './components/TasksPanel.vue'
 import TerminalPanel from './components/TerminalPanel.vue'
 import SettingsModal from './components/SettingsModal.vue'
 import SystemModal from './components/SystemModal.vue'
@@ -423,7 +410,7 @@ function schedulePersist() {
 watch(() => state.sidebarVisible, schedulePersist)
 watch(() => state.rightPanelVisible, schedulePersist)
 watch(() => state.bottomPanelVisible, schedulePersist)
-watch(() => state.bottomPanelTab, schedulePersist)
+
 watch(() => state.activeActivity, schedulePersist)
 watch(() => state.theme, (t) => { if (t) applyTheme(t); schedulePersist() })
 watch(() => state.activeFile, schedulePersist)
@@ -491,6 +478,12 @@ watch(() => state.openFiles.length, schedulePersist)
 .panel-tabs {
   display: flex; align-items: center; background: var(--bg-tertiary);
   border-bottom: 1px solid var(--border-color); padding: 0 8px; height: 28px; flex-shrink: 0; gap: 2px;
+}
+.panel-title-inline {
+  display: flex; align-items: center; gap: 4px;
+  color: var(--text-primary); font-size: 12px;
+  padding: 4px 12px; border-top: 2px solid var(--accent);
+  background: var(--bg-secondary);
 }
 .panel-tabs button {
   background: none; border: none; color: var(--text-secondary); font-size: 12px;
