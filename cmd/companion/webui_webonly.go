@@ -59,22 +59,6 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 	reg := agent.NewRegistry()
 	agent.RegisterDefaultTools(reg, root)
 
-	reg.Register(&agent.Tool{
-		Name:        "finish_task",
-		Description: "任务完成信号：全部任务完成时调用此工具结束本轮。result 为完成摘要。",
-		Parameters: map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"result": map[string]any{"type": "string", "description": "任务完成摘要"},
-			},
-			"required": []string{"result"},
-		},
-		Handler: func(_ context.Context, args map[string]any) (string, error) {
-			r, _ := args["result"].(string)
-			return r, nil
-		},
-	})
-
 	agenttools.RegisterManagementTools(reg, root)
 	if cfgs := mcppanel.LoadConfigs(); len(cfgs) > 0 {
 		agentCfgs := make([]agent.MCPServerConfig, len(cfgs))
@@ -264,7 +248,7 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 
 	taskText := req.Message
 	if req.Autonomous {
-		taskText += "\n\n（自主模式：先用 update_plan 列出完整计划，然后连续完成所有步骤、全部完成后调用 finish_task 工具。）"
+		taskText += "\n\n（自主模式：先用 update_plan 列出完整计划，然后连续完成所有步骤、全部完成后输出最终报告。）"
 	}
 
 	ctx := context.Background()

@@ -100,7 +100,7 @@ func (r *Registry) Unregister(name string) {
 	}
 }
 
-// Copy 深拷贝 Registry（含钩子引用）。子 Loop 用副本注册 finish_task，避免污染父表。
+// Copy 深拷贝 Registry（含钩子引用）。子 Loop 用副本注册工具，避免污染父表。
 func (r *Registry) Copy() *Registry {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -547,7 +547,6 @@ func RegisterDefaultTools(r *Registry, root string) {
 	registerScreenshotTools(r, root)         // screenshot_desktop/window/area/webpage（截图工具，见 screenshot_tool.go）
 	registerHeadlessBrowserTool(r)           // headless_browser（JS 渲染页面文本提取，见 headless.go）
 	registerWebDebugTool(r, root)            // web_debug（网页验证：控制台错误+截图+JS执行+交互，见 webdebug.go）
-	registerFinishTask(r)                   // finish_task（任务完成信号，见 loop.go 硬编码检测；注册后使测试省去 error 结果）
 	RegisterBugTools(r, root)                // bug_detect / bug_analyze / bug_fix（BUG 自动检测与修复，见 bugdetect.go + bugfix.go）
 	RegisterSnapshotTools(r, root)           // restore_snapshot / list_snapshots（文件快照与恢复，见 snapshot.go）
 	registerOfficeTools(r, root)             // csv_read / csv_write / json_to_table / table_stats / text_report / word_read（见 officetools.go）
@@ -584,18 +583,6 @@ func RegisterDefaultTools(r *Registry, root string) {
 			return "", ErrRetry
 		}
 	}
-}
-
-// registerFinishTask 注册 finish_task 工具（任务完成信号）。
-// loop.go 硬编码检测此工具名，注册后使 Execute 正常返回 result 而非 error。
-func registerFinishTask(r *Registry) {
-	r.Register(&Tool{
-		Name:        "finish_task",
-		Parameters:  objSchema(props{"result": strProp("任务结果摘要")}, "result"),
-		Handler: func(_ context.Context, args map[string]any) (string, error) {
-			return argStr(args, "result"), nil
-		},
-	})
 }
 
 // ─── 辅助 ────────────────────────────────────────────────────

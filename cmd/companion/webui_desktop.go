@@ -240,7 +240,7 @@ func runOrchestrationLoop(ctx context.Context, prov agent.Provider, reg *agent.R
 				}
 
 				// 将解析后的修复任务注入下一轮 loop
-				missionTask = errMsg + "\n\n（请根据上述错误分析逐条修复，每次修复后运行 go_build 验证。全部修复完成后调用 finish_task。）"
+				missionTask = errMsg + "\n\n（请根据上述错误分析逐条修复，每次修复后运行 go_build 验证。全部修复完成后输出最终报告。）"
 				execState.MissionTask = missionTask
 				execState.Errors = append(execState.Errors, fmt.Sprintf("构建失败（第 %d 次修复尝试）", fixAttempts))
 				execMgr.Save(execState)
@@ -296,7 +296,7 @@ func runOrchestrationLoop(ctx context.Context, prov agent.Provider, reg *agent.R
 					emitPhase(events, "全部完成")
 					// 发射最终的 EventDone（含完成摘要），供前端展示完成报告
 					select {
-					case events <- agent.Event{Type: agent.EventDone, Content: fmt.Sprintf("全部任务已完成。\n\n完成轮次: %d\n总任务: %s\n", loopCount, task), DoneReason: "finish_task"}:
+					case events <- agent.Event{Type: agent.EventDone, Content: fmt.Sprintf("全部任务已完成。\n\n完成轮次: %d\n总任务: %s\n", loopCount, task), DoneReason: "task_complete"}:
 					default:
 					}
 					saveTaskPlan(fmt.Sprintf("plan_%s_complete", time.Now().Format("20060102_150405")),
@@ -320,7 +320,7 @@ func runOrchestrationLoop(ctx context.Context, prov agent.Provider, reg *agent.R
 				})
 
 				emitPhase(events, "继续下一步")
-				missionTask = nextTask + "\n\n（请基于已完成的上下文，继续执行上述下一步任务。完成后调用 finish_task。）"
+				missionTask = nextTask + "\n\n（请基于已完成的上下文，继续执行上述下一步任务。完成后输出最终报告。）"
 				execState.MissionTask = missionTask
 				execMgr.Save(execState)
 				allHistory = msgs
@@ -471,23 +471,6 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 	agent.WorkspaceRoots = core.Folders
 	reg := agent.NewRegistry()
 	agent.RegisterDefaultTools(reg, root)
-
-	// finish_task：任务完成后 Agent 调用此工具结束本轮（loop 检测到后设置完成信号）。
-	reg.Register(&agent.Tool{
-		Name:        "finish_task",
-		Description: "任务完成信号：全部任务完成时调用此工具结束本轮。result 为完成摘要。",
-		Parameters: map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"result": map[string]any{"type": "string", "description": "任务完成摘要"},
-			},
-			"required": []string{"result"},
-		},
-		Handler: func(_ context.Context, args map[string]any) (string, error) {
-			r, _ := args["result"].(string)
-			return r, nil
-		},
-	})
 
 	agenttools.RegisterManagementTools(reg)
 	if cfgs := mcppanel.LoadConfigs(); len(cfgs) > 0 {
@@ -692,7 +675,7 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 	// 自主模式追加任务指引
 	taskText := req.Message
 	if req.Autonomous {
-		taskText += "\n\n（自主模式：先用 update_plan 列出完整计划，然后连续完成所有步骤、全部完成后调用 finish_task 工具。）"
+		taskText += "\n\n（自主模式：先用 update_plan 列出完整计划，然后连续完成所有步骤、全部完成后输出最终报告。）"
 	}
 
 	// 非阻塞启动：agentMgr.Start 内部 goroutine 跑 loop.Run，立即返回

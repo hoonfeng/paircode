@@ -97,9 +97,7 @@ export function processAgentEvent(convId, data) {
     seg.content += data.content || ''
   } else if (data.type === 'tool_call') {
     const toolName = data.tool || data.name || ''
-    if (toolName === 'finish_task') {
-      // 不创建 segment，结果由 EventDone 展示
-    } else if (toolName === 'ask_user') {
+    if (toolName === 'ask_user') {
       let question = ''
       let askType = 'text'
       let options = []
@@ -161,10 +159,6 @@ export function processAgentEvent(convId, data) {
   } else if (data.type === 'tool_result') {
     const callId = data.callId || data.callID || ''
     const toolName = data.tool || data.name || ''
-
-    // finish_task 的结果会通过 EventDone 推送（processAgentDone 追加为 content segment），
-    // 此处不创建 segment 也不赋值给 other tool_call，避免双向污染。
-    if (toolName === 'finish_task') return
 
     // ── 文件修改工具 → 触发文件树刷新 ──
     const fileTools = ['write_file', 'edit_file', 'multi_edit', 'delete_file', 'move_file']
@@ -252,7 +246,6 @@ export function processAgentDone(convId, data) {
     if (msg) {
       msg.content = rt.finalContent
       if (data && data.content) {
-        // finish_task 结果：始终追加为独立的 content segment，与 LLM 流式输出正文不冲突
         msg.segments.push({ type: 'content', content: data.content })
       }
     }

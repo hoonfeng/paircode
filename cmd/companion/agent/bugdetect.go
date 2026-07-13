@@ -634,7 +634,7 @@ func BuildFixPrompt(result *BugDetectResult) string {
 		b.WriteString("\n")
 	}
 
-	b.WriteString("\n修复完成后，直接输出最终报告或调用 finish_task 工具提交结果。")
+	b.WriteString("\n修复完成后，直接输出最终报告。")
 	return b.String()
 }
 

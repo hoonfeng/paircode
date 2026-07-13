@@ -110,14 +110,14 @@ func (b *AgentBridge) ResetForNewRoot() {
 }
 
 // autonomousParams 据自主开关算（实际下发给 LLM 的任务文本, 迭代上限）。
-// 自主：追加「列计划→连续完成所有步骤→全部完成再调用 finish_task」提示 + 放宽迭代上限。
+// 自主：追加「列计划→连续完成全部步骤」提示 + 放宽迭代上限。
 func AutonomousParams(task string, autonomous bool) (string, int) {
 	base := core.Settings.MaxIterations // 设置面板「最大迭代步数」；未设=30
 	if base <= 0 {
 		base = 30
 	}
 	if autonomous {
-		return task + "\n\n（自主模式：先用 update_plan 列出完整计划，然后连续完成所有步骤、全部完成后调用 finish_task 工具。）", base * 2
+		return task + "\n\n（自主模式：先用 update_plan 列出完整计划，然后连续完成所有步骤、全部完成后输出最终报告。）", base * 2
 	}
 	return task, base
 }
@@ -152,22 +152,6 @@ func (b *AgentBridge) Start(task string) {
 		agent.SkillProjectDir = filepath.Join(root, ".pair", "skills")      // 项目级技能：工作区 .pair/skills
 		agent.SkillEnabled = core.Settings.SkillEnabledOverrides            // 按 level::name 过滤（不存在默认启用）
 		agent.RegisterDefaultTools(reg, root)
-		// finish_task
-		reg.Register(&agent.Tool{
-			Name:        "finish_task",
-			Description: "任务完成信号：全部任务完成时调用此工具结束本轮。result 为完成摘要。",
-			Parameters: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"result": map[string]any{"type": "string", "description": "任务完成摘要"},
-				},
-				"required": []string{"result"},
-			},
-			Handler: func(_ context.Context, args map[string]any) (string, error) {
-				r, _ := args["result"].(string)
-				return r, nil
-			},
-		})
 		b.registerAskTool(reg)                             // ask_user：handler 闭包持有 bridge（需 UI 交互），故在此注册而非默认集
 		agenttools.RegisterManagementTools(reg)            // Agent 自管理 Skills/MCP + 市场 + 技能渐进式披露(load_skill)
 		if core.Settings.AutoConnectMCP {
@@ -1018,7 +1002,7 @@ func buildImproveTask(ev agent.Evaluation) string {
 	if dbg := roleprompts.RoleSpecificPhilosophy("debugger"); dbg != "" { // 自动迭代＝调试角色，注入其哲学指导
 		sb.WriteString(dbg)
 	}
-	sb.WriteString("\n\n全部改进完成后调用 finish_task 工具。")
+	sb.WriteString("\n\n（请根据上述分析逐条改进，每次改进后验证。完成后输出最终报告。）")
 	return sb.String()
 }
 

@@ -33,7 +33,7 @@ type LoopOpts struct {
 	AutoReview bool
 	// ReviewProvider 审核模型的 Provider（AutoReview=true 时用）。Loop 内部用它懒建 Reviewer。
 	ReviewProvider Provider
-	// AutoCommit 任务完成时自动 git add + git commit（仅 finish_task 退出时触发）。
+	// AutoCommit 任务完成时自动 git add + git commit。
 	AutoCommit bool
 }
 
@@ -133,8 +133,7 @@ var ErrSessionNotFound = errors.New("会话不存在")
 
 // TrimInterruptedHistory 从历史消息中移除因用户主动停止而未完成的最后一段 assistant/tool 消息，
 // 但保留后续的用户消息（由 AppendPersistedUserMessage 预写入的新消息）。
-// 判定规则：从末尾向前找最后一条不含 finish_task 的 assistant 消息，删除它及其后连续的
-// assistant/tool 消息，遇到用户消息则停止删除（保留新消息）。
+// 判定规则：从末尾向前找最后一条 assistant 消息，如果它有 tool_call 但无匹配的 tool_result 则判定为中断。
 func TrimInterruptedHistory(history []Message) []Message {
 	if len(history) == 0 {
 		return history
@@ -142,43 +141,50 @@ func TrimInterruptedHistory(history []Message) []Message {
 	// 从末尾向前找最后一条 assistant 消息
 	for i := len(history) - 1; i >= 0; i-- {
 		if history[i].Role == RoleAssistant {
-			hasFinishTask := false
-			for _, tc := range history[i].ToolCalls {
-				if tc.Function.Name == "finish_task" {
-					hasFinishTask = true
-					break
-				}
+			// 如果最后一条 assistant 有正文且无 tool_call → 自然完成，保留全部
+			if strings.TrimSpace(history[i].Content) != "" && len(history[i].ToolCalls) == 0 {
+				return history
 			}
-			if !hasFinishTask && strings.TrimSpace(history[i].Content) != "" {
-				// 该 assistant 没有 finish_task → 会话被中断
-				// 从 i 开始向后扫描，移除 assistant/tool 消息，但保留用户消息
-				// 找到下一个用户消息的位置（如果有）
-				nextUserIdx := -1
+			// 有 tool_call：检查是否有匹配的 tool_result
+			hasAllResults := true
+			for _, tc := range history[i].ToolCalls {
+				hasResult := false
 				for j := i + 1; j < len(history); j++ {
-					if history[j].Role == RoleUser {
-						nextUserIdx = j
+					if history[j].Role == RoleTool && history[j].ToolCallID == tc.ID {
+						hasResult = true
 						break
 					}
 				}
-				if nextUserIdx > 0 {
-					// 保留到 i-1（不含中断的 assistant），然后把后续用户消息拼接上
-					// 但跳过中间的所有 assistant/tool 消息
-					result := make([]Message, 0, i+1+(len(history)-nextUserIdx))
-					result = append(result, history[:i]...)
-					// 把从 nextUserIdx 开始的所有消息（含用户消息）追加
-					for j := nextUserIdx; j < len(history); j++ {
-						if history[j].Role == RoleUser {
-							result = append(result, history[j])
-						}
-						// 跳过 assistant/tool（它们是中断会话的残留）
-					}
-					return result
+				if !hasResult {
+					hasAllResults = false
+					break
 				}
-				// 没有后续用户消息，直接截断到 i-1
-				return history[:i]
 			}
-			// 有 finish_task → 会话正常完成，跳出循环保留全部
-			break
+			if hasAllResults {
+				// 所有 tool_call 都有结果 → 正常完成，保留全部
+				return history
+			}
+			// 有未匹配的 tool_call → 会话被中断
+			// 从 i 开始向后扫描，移除 assistant/tool 消息，但保留用户消息
+			nextUserIdx := -1
+			for j := i + 1; j < len(history); j++ {
+				if history[j].Role == RoleUser {
+					nextUserIdx = j
+					break
+				}
+			}
+			if nextUserIdx > 0 {
+				result := make([]Message, 0, i+1+(len(history)-nextUserIdx))
+				result = append(result, history[:i]...)
+				for j := nextUserIdx; j < len(history); j++ {
+					if history[j].Role == RoleUser {
+						result = append(result, history[j])
+					}
+				}
+				return result
+			}
+			// 没有后续用户消息，直接截断到 i-1
+			return history[:i]
 		}
 	}
 	return history
@@ -372,29 +378,6 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 			},
 		})
 
-		// 注册本对话专属的 finish_task：任务完成时自动更新未完成任务状态
-		opts.Registry.Register(&Tool{
-			Name:        "finish_task",
-			Description: "任务完成信号：全部任务完成时调用此工具结束本轮。result 为完成摘要。",
-			Parameters: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"result": map[string]any{"type": "string", "description": "任务完成摘要"},
-				},
-				"required": []string{"result"},
-			},
-			Handler: func(hctx context.Context, args map[string]any) (string, error) {
-				r, _ := args["result"].(string)
-				// 自动完成本对话所有未完成任务
-				root := sess.WorkspaceRoot
-				if root == "" {
-					root = ""
-				}
-				tm := UseTaskManager(root)
-				tm.CompleteAllInProgress(sess.ConvID)
-				return r, nil
-			},
-		})
 	}
 
 	// 存入 map（覆盖已结束的旧会话），并做已结束会话上限淘汰
@@ -457,7 +440,7 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		msgs, err := loop.Run(runCtx, task, nil)
 		sess.History = msgs
 
-		// ★ 自动完成所有未完成任务（无论 finish_task 还是自然结束）
+		// ★ 自动完成所有未完成任务（自然结束）
 		// 确保任务列表与运行状态一致，避免前端显示未完成的遗留任务
 		if opts.WorkspaceRoot != "" {
 			tm := UseTaskManager(opts.WorkspaceRoot)
@@ -486,7 +469,7 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 			}
 		}
 
-		// ★ Auto commit：任务通过 finish_task 正常完成时自动 git 提交
+		// ★ Auto commit：任务正常完成时自动 git 提交
 		if opts.AutoCommit && err == nil {
 			result := ""
 			if loop.finishResult != nil {
@@ -833,7 +816,7 @@ func (m *SessionManager) GetWorkspaceRoot(convID string) string {
 }
 
 // doAutoCommit 在任务完成后自动执行 git add + git commit。
-// root 为工作区根目录，task 为用户任务文本，result 为 finish_task 的结果摘要（可为空）。
+// root 为工作区根目录，task 为用户任务文本，result 为最终结果摘要（可为空）。
 // commit message 格式："auto: <result 前 60 字>"，方便快速识别自动提交内容。
 // 自动设置 git user config 避免因全局配置缺失导致提交失败。
 // 执行失败时只日志不 panic（不影响 agent 主流程）。

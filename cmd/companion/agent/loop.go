@@ -52,14 +52,13 @@ type Event struct {
 	// AgentName 事件来源 Agent 名。空串 = 父/主 Agent；非空 = 子 Agent（供前端区分）。
 	AgentName string
 	// DoneReason 完成原因（仅 EventDone 时设置）。
-	// 取值："task_complete"（自然完成）、"finish_task"（调 finish_task 工具）。
 	DoneReason string
 }
 
 
 
 // Loop TAOR 编排器：think(LLM 决策)→act(执行工具)→observe(结果回灌)→repeat。
-// 停止：自然终止（无 tool_call + 有正文）/ 调 finish_task / 连续 3 轮工具全错 / 达最大迭代 / 外部取消。
+// 停止：自然终止（无 tool_call + 有正文）/ 连续 3 轮工具全错 / 达最大迭代 / 外部取消。
 type Loop struct {
 	Provider      Provider
 	Registry      *Registry
@@ -106,7 +105,7 @@ type Loop struct {
 	AgentTree      *AgentTree     // agent 编排树（delegate_task/delegate_single_turn 用）
 	State          map[string]any // 跨 agent 共享状态（子 Loop 继承父引用，避免塞进 messages 撑爆上下文）
 	currentMsgs    []Message      // Run 期间当前消息列表（供 delegate handler 读父历史，保缓存前缀命中）
-	finishResult   *string        // finish_task 退出信号（子 Loop：子 agent 调 finish_task 后置；delegate handler 据此取子结果）
+	finishResult   *string        // 退出信号（子 Loop：子 agent 结束时的最终内容）
 
 	transferTarget string         // transfer_to_agent 目标名（非空=当前 Loop 应退出，控制权转移给目标 agent）
 	Autonomous     bool           // 自主模式标志（供并行子 agent 继承）
@@ -124,7 +123,7 @@ type Loop struct {
 	reviewer *Reviewer
 
 	// contentOnlyIters 连续 content-only（无 tool_call）轮数计数器。
-	// 防止 Agent 只输出文字不调用 finish_task 导致自我循环。
+	// 防止 Agent 只输出文字导致自我循环。
 	contentOnlyIters int
 
 	// History 跨 Run 调用的持久化对话消息（自闭环）。
@@ -304,33 +303,19 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 
 		}
 
-		// ★ finish_task 检测：Agent 调用了 finish_task → 任务完成，保存结果并退出循环
 		// 先同步 currentMsgs（包含 tool results），供 persist worker 获取完整历史
 		l.currentMsgs = msgs
-		for _, tc := range assistant.ToolCalls {
-			if tc.Function.Name == "finish_task" {
-				// 从 msgs 中找到最后一条 finish_task 的工具结果
-				for i := len(msgs) - 1; i >= 0; i-- {
-					if msgs[i].Role == RoleTool && msgs[i].Name == "finish_task" {
-						l.finishResult = &msgs[i].Content
-						break
-					}
-				}
-				result := *l.finishResult
-				l.emit(Event{Type: EventDone, Content: result, DoneReason: "finish_task"})
-				return msgs, nil
-			}
-		}
 
-		// ★ 自然终止：模型首次无工具调用且有正文 → 视为任务完成（借鉴 DeepSeek-Reasonix 模式）
+		// ★ 自然终止：模型首次无工具调用且有正文 → 视为任务完成
 		// 条件：contentOnlyIters==0（尚未触发 content-only 防护）+ 无 tool_call + 有正文
-		// 与 finish_task 检测是 OR 关系：任意一个触发即可结束
 		if l.contentOnlyIters == 0 && len(assistant.ToolCalls) == 0 && strings.TrimSpace(assistant.Content) != "" {
-			l.emit(Event{Type: EventDone, Content: strings.TrimSpace(assistant.Content), DoneReason: "task_complete"})
+			content := strings.TrimSpace(assistant.Content)
+			l.finishResult = &content
+			l.emit(Event{Type: EventDone, Content: content, DoneReason: "task_complete"})
 			return msgs, nil
 		}
 
-		// ★ content-only 防护：Agent 连续输出文字但不调用任何工具（含 finish_task）
+		// ★ content-only 防护：Agent 连续输出文字但不调用任何工具
 		// 说明 Agent 可能在自我循环，注入停止提示。
 		// 阈值放宽到 3 轮提示、4 轮结束——复杂任务可能需要多轮分析总结。
 		// 自然终止已优先处理首次 content-only，此处仅处理第 2 轮及以后的内容循环兜底。
@@ -413,7 +398,7 @@ func (l *Loop) buildSystemWithSummaries() string {
 
 
 
-// DefaultSystemPrompt 核心铁律的系统提示词（中文 lock / 改前 read / 工作区限定 / finish_task 退出）。
+// DefaultSystemPrompt 核心铁律的系统提示词（中文 lock / 改前 read / 工作区限定）。
 // roots 为工作区所有根目录（支持多根工作区）；roots[0] 为主根。
 func DefaultSystemPrompt(roots []string) string {
 	rootInfo := "根目录: " + roots[0]
@@ -436,8 +421,7 @@ func DefaultSystemPrompt(roots []string) string {
 		"- 文件操作只用工作区内路径；修改文件前必须先 read_file 确认当前内容。\n" +
 		"- 每次工具调用后，依据真实结果决定下一步，绝不臆测结果。\n" +
 		"- 禁止破坏性命令（如 rm -rf、强制 push main），禁止修改工作区外文件。\n" +
-		"- 【完成标记】任务完成时停止调用工具，直接输出最终报告即可。系统会自动检测到你已经完成。\n" +
-		"  也可显式调用 finish_task 工具提交结果（两种方式等价）。切勿在正文中输出 [FINAL] 等标记。\n\n" +
+		"- 【完成标记】任务完成时停止调用工具，直接输出最终报告即可。系统会自动检测到你已经完成。切勿在正文中输出 [FINAL] 等标记。\n\n" +
 		"# ★ 调研优先（强制——违反必出错）\n" +
 		"收到任务后，第一回合必须先收集资料、理解上下文，再动手改代码：\n" +
 		"- 先用 search_content / search_files / find_symbol 定位相关文件和函数，搞清楚代码结构和调用关系。\n" +
@@ -450,7 +434,7 @@ func DefaultSystemPrompt(roots []string) string {
 		"任何需要 3+ 步骤或多文件操作的任务，必须使用 task_create/task_update 追踪进度：\n" +
 		"- 收到任务后第一回合创建完整子任务清单，立即将第一个标记为 in_progress。\n" +
 		"- 完成一项更新一项（task_update），绝不批量更新。任务不会自动完成，必须显式调用 task_update。\n" +
-		"- ★ 致命陷阱：不调用 task_update 就调用 finish_task——未完成的任务会保持「进行中」状态，" +
+		"- ★ 致命陷阱：不调用 task_update 就更新任务状态——未完成的任务会保持「进行中」状态，" +
 		"用户看不到进度。\n" +
 		"- 发现新前置依赖或方案不可行时即时调整计划。\n" +
 		"- 所有任务完成后，调用 task_summary 确认全部已完成，然后结束本轮任务。" +
@@ -514,8 +498,7 @@ func DefaultSystemPrompt(roots []string) string {
 		"3. 用 image_analyze 分析截图（颜色/布局/元素位置）\n\n" +
 		"## 验证纪律\n" +
 		"- 每次代码改动后必须验证，不允许只编译就声称完成\n" +
-		"- 验证失败时先修复再继续，不要带着已知问题往下走\n" +
-		"- 验证结果要写入 finish_task 摘要（如\"web_debug 验证：0 错误，页面正常渲染\"）\n\n" +
+		"- 验证失败时先修复再继续，不要带着已知问题往下走\n\n" +
 		"# 工具\n" +
 		"- 浏览定位：search_files（按通配符找文件）、search_content（按正则搜内容）、list_files、find_files_by_pattern（glob 查文件）。\n" +
 		"- 读改：read_file（改前必读）、edit_file（小处精确替换，首选）、multi_edit（一次改多处）、write_file（整文件覆盖/新建）、move_file（移动/重命名）、delete_file（删文件）。\n" +

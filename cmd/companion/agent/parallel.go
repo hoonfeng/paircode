@@ -559,16 +559,8 @@ func (po *ParallelOrchestrator) runSingleSubAgent(ctx context.Context, task SubT
 		childReg = po.Parent.Registry.Copy()
 	}
 
-	// 注册并行上下文工具 + finish_task
+	// 注册并行上下文工具
 	registerParallelContextTools(childReg, po.ContextPool, task.AgentName)
-	childReg.Register(&Tool{
-		Name:        "finish_task",
-		Description: "任务完成信号：调用后子 Agent 退出循环，result 作为任务结果返回。",
-		Parameters:  objSchema(props{"result": strProp("任务结果摘要")}, "result"),
-		Handler: func(_ context.Context, args map[string]any) (string, error) {
-			return argStr(args, "result"), nil
-		},
-	})
 
 	maxIter := sa.MaxIter
 	if maxIter <= 0 {

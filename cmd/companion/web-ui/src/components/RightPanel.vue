@@ -67,15 +67,6 @@
                       </div>
                       <!-- Tool Call：折叠行，无卡片包裹 -->
                       <div v-else-if="seg.type === 'tool_call'" class="tl-item">
-                        <!-- finish_task：直接渲染为 markdown 完成报告 -->
-                        <template v-if="seg.name === 'finish_task'">
-                          <span class="tl-dot tl-dot-done"></span>
-                          <div class="tl-body">
-                            <MarkdownRenderer v-if="seg.result" :text="seg.result" :theme="state.theme" />
-                          </div>
-                        </template>
-                        <!-- 其他工具调用：折叠行 -->
-                        <template v-else>
                         <span class="tl-dot tl-dot-tool"></span>
                         <div class="tl-body tl-tool">
                           <div class="tl-tc-header" @click="seg._expanded = !seg._expanded">
@@ -96,7 +87,6 @@
                             </template>
                           </div>
                         </div>
-                        </template>
                       </div>
                       <!-- Ask User：交互式 -->
                       <div v-else-if="seg.type === 'ask_user'" class="tl-item">
@@ -371,7 +361,6 @@ function toolMeta(seg) {
   if (/^bug_detect\b/.test(name)) return { icon: 'bug', title: 'BUG 检测', detail: '', summary: '已完成', resultIcon: 'check' }
   if (/^bug_fix\b/.test(name)) return { icon: 'bug', title: 'BUG 修复', detail: '', summary: '已完成', resultIcon: 'check' }
   if (/^ask_user\b/.test(name)) return { icon: 'message-square', title: '询问用户', detail: '', summary: '', resultIcon: 'check' }
-  if (/^finish_task\b/.test(name)) return { icon: 'check', title: '完成任务', detail: '', summary: '', resultIcon: 'check' }
   return { icon: 'wrench', title: seg.name || '工具调用', detail: '', summary: (seg.result || '').slice(0, 80), resultIcon: 'check' }
 }
 
@@ -678,7 +667,7 @@ const switchConv = async (id) => {
         .map((m, i) => {
           const role = m.message?.role || m.role || ''
           const segments = (m.segments || []).map(seg => {
-            // ★ 将 finish_task 工具调用转为 content 段（用 markdown 渲染完成报告）
+            // 兼容旧数据：finish_task 工具调用转为 content 段渲染
             if (seg.type === 'tool_call' && seg.name === 'finish_task') {
               return { type: 'content', content: seg.result || '' }
             }

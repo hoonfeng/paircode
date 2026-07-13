@@ -4,7 +4,7 @@
 //
 // 编排示例（coordinator 协调）：
 //	父调 delegate_task(agent="planner", task="分析并给计划")
-//	  子 agent 看到完整父历史 + task（缓存命中），产出计划后调 finish_task(result=计划)
+//	  子 agent 看到完整父历史 + task（缓存命中），产出计划后调自然退出
 //	  计划作为工具结果回到父 []Message
 //	父调 delegate_task(agent="coder", task="按计划重构")
 //	  coder 看到父历史（含 planner 计划）+ task，缓存命中
