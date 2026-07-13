@@ -181,6 +181,9 @@ onMounted(() => {
   flex-direction: column;
   overflow: hidden;
   box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+  height: 75vh;
+  min-height: 400px;
+  max-height: 90vh;
 }
 
 /* ── 头部 ── */
@@ -244,6 +247,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-height: 0;
 }
 
 /* ── 搜索框 ── */
@@ -339,6 +343,7 @@ onMounted(() => {
   flex: 1;
   overflow-y: auto;
   padding: 8px 12px;
+  min-height: 0;
 }
 .market-item {
   display: flex;
