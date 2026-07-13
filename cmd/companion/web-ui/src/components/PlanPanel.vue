@@ -1,5 +1,5 @@
 <template>
-  <div v-if="plan.length > 0" class="plan-panel" :class="{ collapsed: !expanded }">
+  <div v-if="plan.length > 0 && !allDone" class="plan-panel" :class="{ collapsed: !expanded }">
     <div class="plan-header" @click="$emit('toggle')">
       <span class="plan-chevron">{{ expanded ? '▾' : '▸' }}</span>
       <SvgIcon name="list" :size="12" />
@@ -33,6 +33,7 @@ const props = defineProps({
 defineEmits(['toggle'])
 
 const doneCount = computed(() => props.plan.filter(s => s.status === 'done' || s.status === 'completed').length)
+const allDone = computed(() => props.plan.length > 0 && doneCount.value === props.plan.length)
 const pct = computed(() => {
   const total = props.plan.length
   return total > 0 ? Math.round(doneCount.value / total * 100) : 0

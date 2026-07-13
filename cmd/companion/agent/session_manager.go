@@ -259,13 +259,35 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 				}
 			},
 		})
+
+		// 注册本对话专属的 task_create：捕获 sess.ConvID 写入任务持久化记录
+		opts.Registry.Register(&Tool{
+			Name: "task_create",
+			Description: "创建新的子任务。创建后必须立即执行该任务：先调用 task_update 标记为 in_progress 开始执行，" +
+				"执行完成后调用 task_update 标记为 completed 并说明结果。重复此流程直到所有子任务完成。",
+			Parameters: objSchema(props{
+				"subject":      strProp("任务标题，用祈使句（如\"修复登录超时\"）"),
+				"description":  strProp("详细描述：做什么、涉及哪些文件。不要包含文件原始内容，只写摘要。"),
+				"dependencies": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "依赖的任务 ID 列表"},
+			}, "subject", "description"),
+			Handler: func(hctx context.Context, args map[string]any) (string, error) {
+				subject := argStr(args, "subject")
+				desc := argStr(args, "description")
+				deps := argStrSlice(args, "dependencies")
+				root := sess.WorkspaceRoot
+				if root == "" {
+					root = ""
+				}
+				tm := UseTaskManager(root)
+				task := tm.Create(subject, desc, deps, sess.ConvID)
+				return fmt.Sprintf("✅ 已创建任务 [%s] %s\n> %s\n\n状态: ⏳ 待执行\nID: `%s`", task.ID, task.Subject, task.Description, task.ID), nil
+			},
+		})
 	}
 
 	// 存入 map（覆盖已结束的旧会话），并做已结束会话上限淘汰
 	m.sessions[convID] = sess
 	m.evictIfNeeded()
-
-	m.mu.Unlock()
 
 	// fan-out goroutine：从 Events 读取，写入所有 subscribers（非阻塞，满则丢弃）。
 	// 同时写入全局订阅者（WebSocket 端点），让跨工作区的所有会话事件都可通过单一连接传输。

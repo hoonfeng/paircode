@@ -652,8 +652,9 @@ const switchConv = async (id) => {
   }
   // ── 从后端 API 加载真实任务状态（TaskManager 持久化到 .pair/tasks/*.json）──
   // 放在消息加载之外，确保每次切换/刷新都从真实数据加载而非从消息重建
+  // 传入当前对话 ID 过滤，只显示本对话创建的任务
   try {
-    const taskData = await api.apiGet('/tasks')
+    const taskData = await api.apiGet('/tasks', { convId: id })
     if (taskData && taskData.tasks && taskData.tasks.length > 0) {
       currentPlan.value = taskData.tasks.map(t => ({
         step: t.step,
@@ -833,7 +834,7 @@ onMounted(() => {
   nextTick(async () => {
     if (state.currentConvId) {
       try {
-        const taskData = await api.apiGet('/tasks')
+        const taskData = await api.apiGet('/tasks', { convId: state.currentConvId })
         if (taskData && taskData.tasks && taskData.tasks.length > 0) {
           currentPlan.value = taskData.tasks.map(t => ({
             step: t.step,

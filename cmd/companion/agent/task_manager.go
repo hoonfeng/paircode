@@ -34,6 +34,7 @@ type Task struct {
 	Description  string     `json:"description"`
 	Status       TaskStatus `json:"status"`
 	Dependencies []string   `json:"dependencies"`
+	ConvID       string     `json:"convId,omitempty"` // 所属对话 ID，为空时视为全局任务
 	CreatedAt    string     `json:"created_at"`
 	UpdatedAt    string     `json:"updated_at"`
 }
@@ -67,7 +68,7 @@ func (tm *TaskManager) taskFilePath(id string) string {
 
 // ── 公共操作 ───────────────────────────────────────────────
 
-func (tm *TaskManager) Create(subject, description string, dependencies []string) *Task {
+func (tm *TaskManager) Create(subject, description string, dependencies []string, convID string) *Task {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
 	now := time.Now().UTC().Format(time.RFC3339)
@@ -78,7 +79,7 @@ func (tm *TaskManager) Create(subject, description string, dependencies []string
 	task := &Task{
 		ID: id, Subject: subject, Description: description,
 		Status: TaskPending, Dependencies: dependencies,
-		CreatedAt: now, UpdatedAt: now,
+		ConvID: convID, CreatedAt: now, UpdatedAt: now,
 	}
 	tm.writeTaskLocked(task)
 	return task
