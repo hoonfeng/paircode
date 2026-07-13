@@ -297,10 +297,28 @@ func (s *webServer) startEventPersistWorker() {
 				hist := agentMgr.GetCurrentHistoryRaw(convID)
 				if hist != nil {
 				if store := agentMgr.Store(); store != nil {
-					existing, _ := store.Count(convID)
-					if len(hist) > existing {
-						for i := existing; i < len(hist); i++ {
-							_ = store.AppendMessage(convID, hist[i], agent.SegmentsFromMessage(hist[i], hist, i))
+					// ★ 使用基于内容 diff 的增量写入，而非基于 Count 偏移量 ★
+					// 因为 handleChatSend 会预写用户消息（简化版 Role+Content），
+					// 而 hist 包含完整消息（含 System），直接用 Count 作偏移量会重复写用户消息。
+					// 正确做法：加载已有消息列表 → 过滤 hist 中 System 消息 → 比较数量 → 只写新增的。
+					existing, _ := store.LoadAll(convID)
+					// 统计 hist 中非 System 消息数（System 由 Loop 动态构建，不应持久化）
+					nonSystemCount := 0
+					for _, m := range hist {
+						if m.Role != agent.RoleSystem {
+							nonSystemCount++
+						}
+					}
+					if nonSystemCount > len(existing) {
+						written := 0
+						for i, m := range hist {
+							if m.Role == agent.RoleSystem {
+								continue
+							}
+							if written >= len(existing) {
+								_ = store.AppendMessage(convID, m, agent.SegmentsFromMessage(m, hist, i))
+							}
+							written++
 						}
 					}
 				}

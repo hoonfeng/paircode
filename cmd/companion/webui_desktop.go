@@ -738,10 +738,26 @@ func (s *webServer) startEventPersistWorker() {
 				hist := agentMgr.GetCurrentHistoryRaw(convID)
 				if hist != nil {
 				if store := agentMgr.Store(); store != nil {
-					existing, _ := store.Count(convID)
-					if len(hist) > existing {
-						for i := existing; i < len(hist); i++ {
-							_ = store.AppendMessage(convID, hist[i], agent.SegmentsFromMessage(hist[i], hist, i))
+					// ★ 使用基于内容 diff 的增量写入，而非基于 Count 偏移量 ★
+					// 因为 handleChatSend 会预写用户消息（简化版），而 hist 含 System 消息，
+					// 直接用 Count 作偏移量会导致用户消息重复存储。
+					existing, _ := store.LoadAll(convID)
+					nonSystemCount := 0
+					for _, m := range hist {
+						if m.Role != agent.RoleSystem {
+							nonSystemCount++
+						}
+					}
+					if nonSystemCount > len(existing) {
+						written := 0
+						for i, m := range hist {
+							if m.Role == agent.RoleSystem {
+								continue
+							}
+							if written >= len(existing) {
+								_ = store.AppendMessage(convID, m, agent.SegmentsFromMessage(m, hist, i))
+							}
+							written++
 						}
 					}
 					// ── 持久化 EventDone 的完成报告（如 finish_task 结果）──
@@ -771,10 +787,25 @@ func (s *webServer) persistRunningHistories() {
 			continue
 		}
 		if store := agentMgr.Store(); store != nil {
-			existing, _ := store.Count(convID)
-			if len(hist) > existing {
-				for i := existing; i < len(hist); i++ {
-					_ = store.AppendMessage(convID, hist[i], agent.SegmentsFromMessage(hist[i], hist, i))
+			// ★ 使用基于内容 diff 的增量写入，而非基于 Count 偏移量 ★
+			// 避免因 handleChatSend 预写用户消息导致重复存储。
+			existing, _ := store.LoadAll(convID)
+			nonSystemCount := 0
+			for _, m := range hist {
+				if m.Role != agent.RoleSystem {
+					nonSystemCount++
+				}
+			}
+			if nonSystemCount > len(existing) {
+				written := 0
+				for i, m := range hist {
+					if m.Role == agent.RoleSystem {
+						continue
+					}
+					if written >= len(existing) {
+						_ = store.AppendMessage(convID, m, agent.SegmentsFromMessage(m, hist, i))
+					}
+					written++
 				}
 			}
 		}
