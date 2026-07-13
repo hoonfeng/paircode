@@ -63,6 +63,54 @@ func NewMessageStore(root string) *MessageStore {
 	return s
 }
 
+// SegmentsFromMessage 从 agent.Message 自动构建前端展示用 segments。
+// 用于后端 diff-based 持久化时，为 loop.History 中的原始消息补充 segments，
+// 使刷新页面后历史消息仍能看到思考、工具调用及结果等内容。
+//
+// 映射规则：
+//   - RoleTool 消息 → tool_result segment（Content 作为 result，ToolCallID 关联调用）
+//   - assistant 消息的 Reasoning → thinking segment
+//   - assistant 消息的 ToolCalls → tool_call segments（含 name/argsRaw/callId）
+//   - assistant/user 消息的 Content → content segment
+//
+// 若传入完整 history 和当前 index，会向前查找 tool result 填入对应 tool_call segment，
+// 使 tool_call 与 result 在同一条 assistant 消息内完整呈现（前端无需渲染独立的 tool 消息）。
+func SegmentsFromMessage(msg Message, hist []Message, idx int) []Segment {
+	if msg.Role == RoleTool {
+		return []Segment{{
+			Type:   "tool_result",
+			Result: msg.Content,
+			CallID: msg.ToolCallID,
+		}}
+	}
+	var segs []Segment
+	if msg.Reasoning != "" {
+		segs = append(segs, Segment{Type: "thinking", Content: msg.Reasoning})
+	}
+	for _, tc := range msg.ToolCalls {
+		seg := Segment{
+			Type:    "tool_call",
+			Name:    tc.Function.Name,
+			ArgsRaw: tc.Function.Arguments,
+			CallID:  tc.ID,
+		}
+		// 向前查找对应的 tool result（RoleTool 消息，ToolCallID 匹配）
+		if hist != nil {
+			for j := idx + 1; j < len(hist); j++ {
+				if hist[j].Role == RoleTool && hist[j].ToolCallID == tc.ID {
+					seg.Result = hist[j].Content
+					break
+				}
+			}
+		}
+		segs = append(segs, seg)
+	}
+	if msg.Content != "" {
+		segs = append(segs, Segment{Type: "content", Content: msg.Content})
+	}
+	return segs
+}
+
 // conversationsDir 返回 {root}/.pair/conversations/ 路径。
 func (s *MessageStore) conversationsDir() string {
 	return filepath.Join(s.root, ".pair", "conversations")
@@ -276,10 +324,32 @@ func (s *MessageStore) AppendUserMessage(convID, content string) error {
 	return s.AppendMessage(convID, Message{Role: RoleUser, Content: content}, nil)
 }
 
+// rebuildSegmentsIfMissing 为 segments 为空的消息重建 segments。
+// 需要完整消息列表做 look-ahead（tool result 可能在后面的消息中）。
+// 旧数据（修复前用 segments=nil 保存）通过此方法在读取时动态补全，
+// 使刷新页面后历史消息仍能看到思考、工具调用及结果等内容。
+func rebuildSegmentsIfMissing(msgs []StoredMessage) {
+	if len(msgs) == 0 {
+		return
+	}
+	// 先提取完整 Message 列表用于 look-ahead
+	hist := make([]Message, len(msgs))
+	for i, sm := range msgs {
+		hist[i] = sm.Message
+	}
+	// 对 segments 为空的消息重建
+	for i := range msgs {
+		if len(msgs[i].Segments) == 0 {
+			msgs[i].Segments = SegmentsFromMessage(msgs[i].Message, hist, i)
+		}
+	}
+}
+
 // LoadLatest 加载对话最新的消息。
 // 返回：消息切片、总数、错误。
 // limit <= 0 或 limit >= total 时返回全部；否则返回最后 limit 条（idx 升序）。
 // 文件不存在返回空切片、total=0、nil。JSON 解码失败的行跳过（容错）。
+// 对 segments 为空的旧数据会动态重建 segments（基于完整 history 做 look-ahead）。
 func (s *MessageStore) LoadLatest(convID string, limit int) ([]StoredMessage, int, error) {
 	msgs, err := s.readJSONL(convID)
 	if err != nil {
@@ -288,6 +358,8 @@ func (s *MessageStore) LoadLatest(convID string, limit int) ([]StoredMessage, in
 	if msgs == nil {
 		msgs = []StoredMessage{}
 	}
+	// 在完整消息列表上重建 segments（look-ahead 需要 tool result）
+	rebuildSegmentsIfMissing(msgs)
 	total := len(msgs)
 	if limit <= 0 || limit >= total {
 		return msgs, total, nil
@@ -297,6 +369,7 @@ func (s *MessageStore) LoadLatest(convID string, limit int) ([]StoredMessage, in
 
 // LoadBefore 加载 idx < beforeIdx 的最新 limit 条消息（idx 升序）。
 // limit <= 0 时默认 50。供前端向上分页 prepend。
+// 对 segments 为空的旧数据会动态重建 segments（基于完整 history 做 look-ahead）。
 func (s *MessageStore) LoadBefore(convID string, beforeIdx int, limit int) ([]StoredMessage, error) {
 	if limit <= 0 {
 		limit = 50
@@ -305,6 +378,8 @@ func (s *MessageStore) LoadBefore(convID string, beforeIdx int, limit int) ([]St
 	if err != nil {
 		return nil, err
 	}
+	// 先在完整消息列表上重建 segments（look-ahead 需要 tool result）
+	rebuildSegmentsIfMissing(msgs)
 
 	// 过滤 Idx < beforeIdx（msgs 已按 idx 升序）
 	var filtered []StoredMessage

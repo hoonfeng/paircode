@@ -65,23 +65,37 @@ type OpenAIProvider struct {
 
 func (p *OpenAIProvider) Name() string { return "openai:" + p.Model }
 
-// applyThinking 把思考模式下发到请求体——1:1 复刻参考源 llm/adapter.ts：
-// 仅对 DeepSeek V4 系模型（model 含 "v4"）生效；非 v4 模型不带思考参数（避免被服务端拒绝）。
-// 非 non-thinking → thinking{enabled} + reasoning_effort(high|max)；non-thinking → thinking{disabled}。
+// applyThinking 把思考模式下发到请求体。
+// DeepSeek V4 系模型（model 含 "v4"）：完整支持 thinking{enabled/disabled} + reasoning_effort。
+// 非 v4 模型（如 OpenAI o-series、其他兼容模型）：仅下发 reasoning_effort（OpenAI 兼容），
+// 不支持的服务端会忽略未知参数，安全无副作用。non-thinking 对非 v4 不下发（用服务端默认）。
 func applyThinking(body map[string]any, model, mode string) {
-	if mode == "" || !strings.Contains(model, "v4") {
+	if mode == "" {
 		return
 	}
-	if mode == "non-thinking" {
-		body["thinking"] = map[string]any{"type": "disabled"}
+	// DeepSeek V4 系：完整 thinking + reasoning_effort 支持
+	if strings.Contains(model, "v4") {
+		if mode == "non-thinking" {
+			body["thinking"] = map[string]any{"type": "disabled"}
+			return
+		}
+		body["thinking"] = map[string]any{"type": "enabled"}
+		eff := "high"
+		if mode == "thinking_max" {
+			eff = "max"
+		}
+		body["reasoning_effort"] = eff
 		return
 	}
-	body["thinking"] = map[string]any{"type": "enabled"}
-	eff := "high"
-	if mode == "thinking_max" {
-		eff = "max"
+	// 非 v4 模型：尝试 reasoning_effort（OpenAI o-series / 兼容模型）
+	// 仅对 thinking/thinking_max 下发；non-thinking 不下发（用服务端默认行为）
+	if mode == "thinking" || mode == "thinking_max" {
+		eff := "high"
+		if mode == "thinking_max" {
+			eff = "max"
+		}
+		body["reasoning_effort"] = eff
 	}
-	body["reasoning_effort"] = eff
 }
 
 func (p *OpenAIProvider) client() *http.Client {

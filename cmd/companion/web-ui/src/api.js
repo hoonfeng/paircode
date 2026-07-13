@@ -196,6 +196,17 @@ async function getModels() {
   return apiGet('/models')
 }
 
+// ─── MCP 配置（从后端 API 获取，不再用 localStorage） ────────
+
+async function getMcpList(level = 'all') {
+  return apiGet('/mcp/list', { level })
+}
+
+// 保存单个 MCP 配置（action: save/delete）
+async function saveMcpItem({ action, name, command, args, level }) {
+  return apiPost('/mcp/save', { action, name, command, args: args || [], level: level || 'user' })
+}
+
 // ─── 指令管理 ──────────────────────────────────────────────
 
 async function getInstructions(scope = 'system') {
@@ -216,4 +227,4 @@ async function savePhilosophy(data) {
   return apiPut('/philosophy', data)
 }
 
-export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, closeWebSocket, isWebSocketOpen, chatStart, answerChat, approveChat, sendFeedback, chatStop, getMessages, getMessagesCount, getModels, getInstructions, saveInstructions, getPhilosophy, savePhilosophy }
+export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, closeWebSocket, isWebSocketOpen, chatStart, answerChat, approveChat, sendFeedback, chatStop, getMessages, getMessagesCount, getModels, getMcpList, saveMcpItem, getInstructions, saveInstructions, getPhilosophy, savePhilosophy }

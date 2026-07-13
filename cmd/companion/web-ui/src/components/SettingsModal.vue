@@ -61,10 +61,12 @@
                 <label>温度</label>
                 <input type="range" min="0" max="2" step="0.1" v-model.number="local.temperature" />
                 <span class="range-val">{{ local.temperature }}</span>
+                <span class="setting-hint" v-if="local.temperature > 0.8">⚠️ 高温度降低代码稳定性，建议 ≤0.5</span>
               </div>
               <div class="setting-row">
                 <label>最大 Token</label>
-                <input type="number" v-model.number="local.maxTokens" min="256" max="128000" />
+                <input type="number" v-model.number="local.maxTokens" min="4096" max="128000" />
+                <span class="setting-hint" v-if="local.maxTokens < 8192">⚠️ 过小会导致思考/回复被截断，建议 ≥8192</span>
               </div>
               <div class="setting-row">
                 <label>上下文 Token</label>
@@ -504,10 +506,10 @@ const local = reactive({
   executeModelCustom: '',
   planModel: '',
   reviewModel: '',
-  temperature: 0.7,
-  maxTokens: 4096,
+  temperature: 0.3,
+  maxTokens: 16384,
   contextMaxTokens: 1000000,
-  thinkingMode: '',
+  thinkingMode: 'thinking',
   // 压缩
   compressEnabled: false,
   compressProvider: '',
@@ -674,10 +676,21 @@ const mcpJsonText = ref('')
 const mcpJsonDirty = ref(false)
 const mcpJsonValid = ref(null) // null=未知, true=正确, false=错误
 
-function loadMcpSkills() {
+async function loadMcpSkills() {
   try {
-    const saved = JSON.parse(localStorage.getItem('paircode-mcp-config') || '[]')
-    localMcpList.value = saved.map(m => ({ ...m, level: m.level || 'user', _expanded: false }))
+    const results = await api.getMcpList('all')
+    if (results && results.length > 0) {
+      localMcpList.value = results.map(m => ({
+        name: m.name,
+        command: m.command,
+        args: m.args || [],
+        env: {},
+        level: m.level || 'user',
+        _expanded: false,
+      }))
+    } else {
+      localMcpList.value = []
+    }
   } catch {
     localMcpList.value = []
   }
@@ -742,7 +755,7 @@ function updateMcpFromJson(idx, text) {
   } catch {
     localMcpList.value[idx]._jsonError = true
   }
-  saveMcpConfig()
+  syncMcpList()
 }
 
 function toggleMcpExpand(idx) {
@@ -778,7 +791,7 @@ async function loadMcpFromServer() {
           })
         }
       }
-      saveMcpConfig()
+      syncMcpList()
       window.$toast?.('已加载 ' + results.length + ' 个 MCP 配置', 'success')
     } else {
       window.$toast?.('服务器暂无 MCP 配置', 'info')
@@ -788,18 +801,24 @@ async function loadMcpFromServer() {
   }
 }
 
-function saveMcpConfig() {
-  try {
-    const data = localMcpList.value.map(m => ({
-      name: m.name,
-      command: m.command,
-      args: m.args || [],
-      env: m.env || {},
-      level: m.level || 'user',
-    }))
-    localStorage.setItem('paircode-mcp-config', JSON.stringify(data))
-    syncMcpJsonFromList()
-  } catch {}
+// syncMcpList 只更新本地 JSON 文本预览（不再写 localStorage）
+function syncMcpList() {
+  syncMcpJsonFromList()
+}
+
+// persistMcpToServer 将本地 MCP 列表同步到后端 API
+async function persistMcpToServer() {
+  for (const m of localMcpList.value) {
+    try {
+      await api.saveMcpItem({
+        action: 'save',
+        name: m.name,
+        command: m.command,
+        args: m.args || [],
+        level: m.level || 'user',
+      })
+    } catch {}
+  }
 }
 
 function formatMcpJsonText() {
@@ -832,10 +851,10 @@ function loadSettings() {
   local.executeModel = s.executeModel || s.model || ''
   local.planModel = s.planModel || ''
   local.reviewModel = s.reviewModel || ''
-  local.temperature = s.temperature ?? 0.7
-  local.maxTokens = s.maxTokens || 4096
+  local.temperature = s.temperature ?? 0.3
+  local.maxTokens = s.maxTokens || 16384
   local.contextMaxTokens = s.contextMaxTokens || 1000000
-  local.thinkingMode = s.thinkingMode || ''
+  local.thinkingMode = s.thinkingMode || 'thinking'
   // 压缩
   local.compressEnabled = !!s.compressEnabled
   local.compressProvider = s.compressProvider || ''
@@ -971,6 +990,8 @@ const saveSettings = async () => {
       selected: local.philosophySelected,
       roles: roles,
     })
+    // 同步 MCP 配置到后端（不再用 localStorage）
+    await persistMcpToServer()
     window.$toast('设置已保存', 'success')
     emit('close')
   } catch (err) {

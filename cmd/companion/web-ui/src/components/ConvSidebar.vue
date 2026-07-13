@@ -126,14 +126,44 @@
             <span v-if="convCtxStats.otherTokens > 0" class="comp-leg-item"><span class="leg-dot comp-other-dot"></span>其他 {{ shortTokens(convCtxStats.otherTokens) }}</span>
           </div>
         </div>
+
+        <!-- ═══ 技能管理 ═══ -->
+        <div class="skill-mgr-wrap">
+          <div class="skill-mgr-header">
+            <SvgIcon name="code" :size="11" />
+            <span>技能</span>
+            <span v-if="convCtxStats.skillsTokens > 0" class="skill-token-badge">{{ shortTokens(convCtxStats.skillsTokens) }}</span>
+          </div>
+          <div class="skill-mgr-actions">
+            <button class="skill-mgr-btn" @click="openMarketplace" title="从市场安装新技能">
+              <SvgIcon name="plus" :size="10" /> 添加技能
+            </button>
+            <button class="skill-mgr-btn" @click="openSettings" title="在设置中管理已安装技能">
+              <SvgIcon name="settings" :size="10" /> 管理
+            </button>
+          </div>
+          <div v-if="convCtxStats.skillsTokens === 0" class="skill-mgr-empty">
+            暂无活跃技能 — 从市场添加后生效
+          </div>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, inject } from 'vue'
 import SvgIcon from './SvgIcon.vue'
+
+const showMarketplace = inject('showMarketplace', null)
+const showSettings = inject('showSettings', null)
+
+function openMarketplace() {
+  if (showMarketplace) showMarketplace.value = true
+}
+function openSettings() {
+  if (showSettings) showSettings.value = true
+}
 
 const props = defineProps({
   conversations: { type: Array, default: () => [] },
@@ -498,4 +528,61 @@ const compOtherPct = computed(() => ((props.convCtxStats.otherTokens / compTotal
   padding: 2px 6px; cursor: pointer; border-radius: 3px; display: flex; align-items: center;
 }
 .rp-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+/* ── 技能管理区域 ── */
+.skill-mgr-wrap {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-color);
+}
+.skill-mgr-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 6px;
+}
+.skill-token-badge {
+  margin-left: auto;
+  font-family: var(--font-code);
+  font-size: 10px;
+  color: #6a9955;
+  background: rgba(106, 153, 85, 0.1);
+  padding: 0 5px;
+  border-radius: 6px;
+  line-height: 16px;
+}
+.skill-mgr-actions {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+.skill-mgr-btn {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, color 0.12s;
+}
+.skill-mgr-btn:hover {
+  background: var(--bg-hover);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.skill-mgr-empty {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 2px 0;
+}
 </style>

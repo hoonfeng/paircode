@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -443,6 +444,10 @@ func buildWebProvider() agent.Provider {
 	if s.APIKey == "" || s.BaseURL == "" {
 		return nil
 	}
+	// 配置健康检查：maxTokens 过小会导致思考/回复被截断
+	if s.MaxTokens > 0 && s.MaxTokens < 8192 {
+		log.Printf("[WARN] maxTokens=%d 过小（<8192），可能导致思考/回复被截断。建议在设置中调大至 ≥8192", s.MaxTokens)
+	}
 	return &agent.OpenAIProvider{
 		BaseURL:      s.BaseURL,
 		APIKey:       s.APIKey,
@@ -728,15 +733,15 @@ func (s *webServer) startEventPersistWorker() {
 					hist = agentMgr.GetCurrentHistory(convID)
 				}
 				if hist != nil {
-					if store := agentMgr.Store(); store != nil {
-						existing, _ := store.Count(convID)
-						if len(hist) > existing {
-							for i := existing; i < len(hist); i++ {
-								_ = store.AppendMessage(convID, hist[i], nil)
-							}
+				if store := agentMgr.Store(); store != nil {
+					existing, _ := store.Count(convID)
+					if len(hist) > existing {
+						for i := existing; i < len(hist); i++ {
+							_ = store.AppendMessage(convID, hist[i], agent.SegmentsFromMessage(hist[i], hist, i))
 						}
 					}
 				}
+			}
 				if ge.Event.Type == agent.EventDone && convID != "" {
 					go generateConversationSummary(convID, bridge.BuildCompressor())
 				}
@@ -760,7 +765,7 @@ func (s *webServer) persistRunningHistories() {
 			existing, _ := store.Count(convID)
 			if len(hist) > existing {
 				for i := existing; i < len(hist); i++ {
-					_ = store.AppendMessage(convID, hist[i], nil)
+					_ = store.AppendMessage(convID, hist[i], agent.SegmentsFromMessage(hist[i], hist, i))
 				}
 			}
 		}

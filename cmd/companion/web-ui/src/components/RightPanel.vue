@@ -74,6 +74,7 @@
                             <span class="tl-tc-chevron">{{ seg._expanded ? '▾' : '▸' }}</span>
                             <SvgIcon :name="toolMeta(seg).icon" :size="11" class="tl-tc-icon" />
                             <span class="tl-tc-name">{{ toolMeta(seg).title }}</span>
+                            <span v-if="toolMeta(seg).detail" class="tl-tc-param">{{ toolMeta(seg).detail }}</span>
                             <span v-if="seg.result && !seg._expanded" class="tl-tc-summary">{{ toolResultSummary(seg) }}</span>
                           </div>
                           <div v-if="seg._expanded" class="tl-tc-detail">
@@ -291,14 +292,16 @@ const loadMoreMessages = async () => {
   const oldScrollHeight = msgRef.value ? msgRef.value.scrollHeight : 0
   try {
     const data = await api.getMessages(id, { before: oldestIdx, limit: 50 })
-    const older = (data.messages || []).map((m, i) => ({
-      role: m.message?.role || m.role || '',
-      content: m.message?.content || m.content || '',
-      segments: m.segments || [],
-      _key: 'msg_' + Date.now() + '_older_' + i,
-      _idx: m.idx,
-      _time: m.timestamp || '',
-    }))
+    const older = (data.messages || [])
+      .filter(m => (m.message?.role || m.role) !== 'tool')
+      .map((m, i) => ({
+        role: m.message?.role || m.role || '',
+        content: m.message?.content || m.content || '',
+        segments: m.segments || [],
+        _key: 'msg_' + Date.now() + '_older_' + i,
+        _idx: m.idx,
+        _time: m.timestamp || '',
+      }))
     if (older.length > 0) {
       // prepend 到数组头部
       state.messagesByConv[id] = [...older, ...msgs]
@@ -344,11 +347,26 @@ function toolMeta(seg) {
   if (/^read_file\b/.test(name)) return { icon: 'file-text', title: '读取文件', detail: args.path || '', summary: '已读取', resultIcon: 'check' }
   if (/^write_file\b/.test(name)) return { icon: 'file-plus', title: '写入文件', detail: args.path || '', summary: '已写入', resultIcon: 'check' }
   if (/^edit_file\b/.test(name)) return { icon: 'edit', title: '编辑文件', detail: args.path || '', summary: '已编辑', resultIcon: 'check' }
-  if (/^run_command\b/.test(name)) return { icon: 'terminal', title: '执行命令', detail: (args.command || '').slice(0, 40), summary: '已完成', resultIcon: 'check' }
-  if (/^search_content\b/.test(name)) return { icon: 'search', title: '搜索内容', detail: (args.pattern || '').slice(0, 40), summary: '已搜索', resultIcon: 'check' }
-  if (/^search_files\b/.test(name)) return { icon: 'search', title: '搜索文件', detail: (args.pattern || '').slice(0, 40), summary: '已搜索', resultIcon: 'check' }
-  if (/^web_search\b/.test(name)) return { icon: 'globe', title: '网络搜索', detail: (args.query || '').slice(0, 40), summary: '已搜索', resultIcon: 'globe' }
+  if (/^multi_edit\b/.test(name)) return { icon: 'edit', title: '多处编辑', detail: args.path || '', summary: '已编辑', resultIcon: 'check' }
+  if (/^run_command\b/.test(name)) return { icon: 'terminal', title: '执行命令', detail: '$ ' + (args.command || '').slice(0, 60), summary: '已完成', resultIcon: 'check' }
+  if (/^run_test\b/.test(name)) return { icon: 'check', title: '运行测试', detail: args.package_path || '', summary: '已完成', resultIcon: 'check' }
+  if (/^search_content\b/.test(name)) return { icon: 'search', title: '搜索内容', detail: '/' + (args.pattern || '') + '/', summary: '已搜索', resultIcon: 'check' }
+  if (/^search_files\b/.test(name)) return { icon: 'search', title: '搜索文件', detail: (args.pattern || ''), summary: '已搜索', resultIcon: 'check' }
+  if (/^web_search\b/.test(name)) return { icon: 'globe', title: '网络搜索', detail: (args.query || '').slice(0, 60), summary: '已搜索', resultIcon: 'globe' }
+  if (/^web_fetch\b/.test(name)) return { icon: 'globe', title: '抓取网页', detail: (args.url || '').slice(0, 60), summary: '已抓取', resultIcon: 'globe' }
   if (/^git_status\b/.test(name)) return { icon: 'source-control', title: 'Git 状态', detail: '', summary: '已查看', resultIcon: 'check' }
+  if (/^git_diff\b/.test(name)) return { icon: 'source-control', title: 'Git 差异', detail: args.file ? args.file.slice(0, 40) : '', summary: '已查看', resultIcon: 'check' }
+  if (/^git_log\b/.test(name)) return { icon: 'source-control', title: 'Git 日志', detail: '', summary: '已查看', resultIcon: 'check' }
+  if (/^find_symbol\b/.test(name)) return { icon: 'search', title: '查找符号', detail: args.symbol || args.symbol || '', summary: '已查找', resultIcon: 'check' }
+  if (/^screenshot_desktop\b/.test(name)) return { icon: 'image', title: '桌面截图', detail: '', summary: '已截图', resultIcon: 'check' }
+  if (/^screenshot_window\b/.test(name)) return { icon: 'image', title: '窗口截图', detail: (args.title || '').slice(0, 40), summary: '已截图', resultIcon: 'check' }
+  if (/^web_debug\b/.test(name)) return { icon: 'globe', title: '网页调试', detail: args.url ? args.url.slice(0, 50) : '', summary: '已验证', resultIcon: 'check' }
+  if (/^go_build\b/.test(name)) return { icon: 'terminal', title: 'Go 构建', detail: args.path || '.', summary: '已完成', resultIcon: 'check' }
+  if (/^go_run\b/.test(name)) return { icon: 'terminal', title: 'Go 运行', detail: args.path || '.', summary: '已完成', resultIcon: 'check' }
+  if (/^bug_detect\b/.test(name)) return { icon: 'bug', title: 'BUG 检测', detail: '', summary: '已完成', resultIcon: 'check' }
+  if (/^bug_fix\b/.test(name)) return { icon: 'bug', title: 'BUG 修复', detail: '', summary: '已完成', resultIcon: 'check' }
+  if (/^ask_user\b/.test(name)) return { icon: 'message-square', title: '询问用户', detail: '', summary: '', resultIcon: 'check' }
+  if (/^finish_task\b/.test(name)) return { icon: 'check', title: '完成任务', detail: '', summary: '', resultIcon: 'check' }
   return { icon: 'wrench', title: seg.name || '工具调用', detail: '', summary: (seg.result || '').slice(0, 80), resultIcon: 'check' }
 }
 
@@ -460,7 +478,7 @@ const sendMessage = async () => {
   // 同步到 state.messages（当前对话快捷引用）
   state.messages = state.messagesByConv[convId]
   if (convId) {
-    await api.apiPost('/conversations/' + convId + '/messages', { role: 'user', content: fullContent }).catch(() => {})
+    // 用户消息已由后端 handleChatSend → AppendPersistedUserMessage 持久化，前端不再重复 POST
     // 立即用用户消息更新对话标题（不等 onDone，避免 SSE 中断导致标题不更新）
     autoNameConv(convId, lastUserText || fullContent)
     // 本地递增消息计数
@@ -646,14 +664,16 @@ const switchConv = async (id) => {
   if (state.messagesByConv[id].length === 0) {
     try {
       const data = await api.getMessages(id, { limit: 50 })
-      const loaded = (data.messages || []).map((m, i) => ({
-        role: m.message?.role || m.role || '',
-        content: m.message?.content || m.content || '',
-        segments: m.segments || [],
-        _key: 'msg_' + Date.now() + '_' + i,
-        _idx: m.idx,
-        _time: m.timestamp || '',
-      }))
+      const loaded = (data.messages || [])
+        .filter(m => (m.message?.role || m.role) !== 'tool')
+        .map((m, i) => ({
+          role: m.message?.role || m.role || '',
+          content: m.message?.content || m.content || '',
+          segments: m.segments || [],
+          _key: 'msg_' + Date.now() + '_' + i,
+          _idx: m.idx,
+          _time: m.timestamp || '',
+        }))
       state.messagesByConv[id] = loaded
       state.messages = state.messagesByConv[id]
       state.msgTotalByConv[id] = data.total || loaded.length
@@ -822,18 +842,9 @@ onMounted(() => {
     loadWsTokenStats: () => loadWsTokenStats(),
     autoNameConv: (convId, text) => autoNameConv(convId, text),
     saveConvMsg: (convId, content, msgIdx) => {
-      // 直接传 segments 独立字段，后端 store.AppendMessage 接受独立 segments 参数
-      let payload = { role: 'assistant', content }
-      if (msgIdx !== undefined && state.messagesByConv[convId] && state.messagesByConv[convId][msgIdx]) {
-        const segs = state.messagesByConv[convId][msgIdx].segments
-        if (segs && segs.length > 0) {
-          payload.segments = segs.map(s => ({
-            type: s.type, content: s.content, name: s.name, argsRaw: s.argsRaw,
-            result: s.result, question: s.question, callId: s.callId,
-          }))
-        }
-      }
-      api.apiPost('/conversations/' + convId + '/messages', payload).catch(e => console.warn('saveConvMsg 失败:', e))
+      // 后端 startEventPersistWorker 已通过 SegmentsFromMessage 自动持久化
+      // loop.History 中的消息（含 ToolCalls→tool_call, Reasoning→thinking, Content→content）。
+      // 前端不再重复 POST，避免消息重复追加。
     },
     onPlanUpdate: (plan, convId) => {
       if (state.currentConvId === convId) { currentPlan.value = [...plan]; planExpanded.value = true }
@@ -918,7 +929,7 @@ onUnmounted(() => {
 .rp-body { flex: 1; display: flex; flex-direction: row; overflow: hidden; min-height: 0; }
 .chat-area { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; max-width: 100%; }
 .chat-messages { flex: 1; overflow-y: auto; padding: 8px 12px; min-height: 0; scroll-behavior: smooth; }
-.msg-list-wrap { display: flex; flex-direction: column; gap: 8px; min-height: 100%; }
+.msg-list-wrap { display: flex; flex-direction: column; gap: 12px; min-height: 100%; }
 .msg-item { display: flex; gap: 8px; align-items: flex-start; content-visibility: auto; contain-intrinsic-size: 60px; }
 .msg-user { flex-direction: row-reverse; justify-content: flex-start; gap: 10px; }
 
@@ -932,11 +943,16 @@ onUnmounted(() => {
   background: var(--accent);
   color: #fff;
   padding: 10px 16px;
-  border-radius: 18px;
+  border-radius: 16px 16px 4px 16px;
   overflow-wrap: break-word;
   word-break: break-word;
   overflow-wrap: anywhere;
   margin: 2px 0;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.18);
+  transition: box-shadow 0.15s ease, transform 0.1s ease;
+}
+.msg-user .bubble-user:hover {
+  box-shadow: 0 2px 6px rgba(0,0,0,0.25);
 }
 /* 选中文字在深色气泡上可见 */
 .msg-user .bubble-user ::selection {
@@ -968,30 +984,32 @@ onUnmounted(() => {
 .msg-loading-banner { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 8px; color: var(--text-muted); font-size: 12px; }
 .phase-bar { display: flex; align-items: center; gap: 6px; padding: 4px 12px; background: linear-gradient(90deg, rgba(212, 167, 78, 0.08), rgba(212, 167, 78, 0.02)); border-bottom: 1px solid rgba(212, 167, 78, 0.2); font-size: 12px; color: #d4a74e; flex-shrink: 0; }
 .chat-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; min-height: 200px; color: var(--text-muted); }
-.folded-summary { display: flex; align-items: center; gap: 5px; padding: 5px 10px; background: var(--bg-primary); border: 1px solid var(--border-color); border-left: 3px solid var(--accent); border-radius: 6px; font-size: 12px; cursor: pointer; }
+.folded-summary { display: flex; align-items: center; gap: 5px; padding: 5px 10px; background: var(--bg-primary); border: 1px solid var(--border-color); border-left: 3px solid var(--accent); border-radius: 6px; font-size: 12px; cursor: pointer; transition: background 0.15s, border-color 0.15s; }
+.folded-summary:hover { background: var(--bg-hover); border-color: var(--accent); }
 /* ── 时间线展示（替代旧 SubAgentBlock 卡片 + content-flow）── */
 .bubble-agent { position: relative; }
 .bubble-agent::before { content: ''; position: absolute; left: 8px; top: 0; bottom: 0; width: 2px; background: linear-gradient(180deg, var(--accent) 0%, var(--border-color) 100%); opacity: 0.4; border-radius: 1px; }
 .tl-item { display: flex; align-items: flex-start; gap: 0; padding: 2px 0; position: relative; }
-.tl-dot { position: absolute; left: 8px; top: 7px; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; border: 2px solid var(--border-color); background: var(--bg-primary); z-index: 1; }
-.tl-dot-thinking { border-color: var(--accent); background: var(--accent-bg); }
-.tl-dot-tool { border-color: #d4a74e; background: rgba(212,167,78,0.15); }
-.tl-dot-ask { border-color: #c586c0; background: rgba(197,134,192,0.15); }
-.tl-dot-content { border-color: #6a9955; background: rgba(106,153,85,0.15); }
+.tl-dot { position: absolute; left: 8px; top: 7px; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; border: 2px solid var(--border-color); background: var(--bg-primary); z-index: 1; box-shadow: 0 0 0 2px var(--bg-primary); }
+.tl-dot-thinking { border-color: var(--accent); background: var(--accent-bg); box-shadow: 0 0 0 2px var(--bg-primary), 0 0 6px rgba(212,167,78,0.3); }
+.tl-dot-tool { border-color: #d4a74e; background: rgba(212,167,78,0.2); box-shadow: 0 0 0 2px var(--bg-primary), 0 0 6px rgba(212,167,78,0.2); }
+.tl-dot-ask { border-color: #c586c0; background: rgba(197,134,192,0.2); box-shadow: 0 0 0 2px var(--bg-primary), 0 0 6px rgba(197,134,192,0.2); }
+.tl-dot-content { border-color: #6a9955; background: rgba(106,153,85,0.2); box-shadow: 0 0 0 2px var(--bg-primary), 0 0 6px rgba(106,153,85,0.2); }
 .tl-body { flex: 1; min-width: 0; font-size: 13px; line-height: 1.6; padding-left: 20px; }
-/* ── 思考段：默认折叠，展开后末尾有 sticky 收起按钮 ── */
+/* ── 思考段：背景区分 + 左边框 + 改进滚动条 ── */
 .tl-think-body { position: relative; }
-.tl-thinking-text { color: var(--text-secondary); font-style: italic; white-space: pre-wrap; padding: 2px 0; max-height: 300px; overflow-y: auto; }
+.tl-thinking-text { color: var(--text-secondary); font-style: italic; white-space: pre-wrap; padding: 6px 10px; max-height: 300px; overflow-y: auto; background: var(--bg-tertiary); border-radius: 6px; border-left: 2px solid var(--accent); margin: 2px 0; }
 .tl-think-fold { position: sticky; bottom: 0; display: inline-block; font-size: 11px; color: var(--accent); cursor: pointer; padding: 3px 10px; margin-top: 4px; user-select: none; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; transition: background 0.15s; }
 .tl-think-fold:hover { background: var(--bg-hover); color: var(--accent-light); }
 .tl-thinking-collapsed { color: var(--text-muted); font-style: italic; font-size: 12px; cursor: pointer; padding: 2px 0; }
-.tl-tc-header { display: flex; align-items: center; gap: 4px; cursor: pointer; padding: 2px 0; user-select: none; border-radius: 3px; }
+.tl-tc-header { display: flex; align-items: center; gap: 4px; cursor: pointer; padding: 4px 8px; user-select: none; border-radius: 4px; transition: background 0.15s; }
 .tl-tc-header:hover { background: var(--bg-hover); }
-.tl-tc-chevron { font-size: 9px; color: var(--text-muted); width: 8px; text-align: center; flex-shrink: 0; }
+.tl-tc-chevron { font-size: 9px; color: var(--text-muted); width: 8px; text-align: center; flex-shrink: 0; transition: transform 0.15s; }
 .tl-tc-icon { flex-shrink: 0; color: var(--text-secondary); }
-.tl-tc-name { font-size: 12px; font-weight: 500; color: var(--text-primary); font-family: var(--font-code); }
+.tl-tc-name { font-size: 12px; font-weight: 500; color: var(--text-primary); font-family: var(--font-code); flex-shrink: 0; }
+.tl-tc-param { font-size: 11px; color: var(--accent-light); margin-left: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; font-family: var(--font-code); }
 .tl-tc-summary { font-size: 11px; color: var(--text-muted); margin-left: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
-.tl-tc-detail { padding: 4px 0 4px 16px; }
+.tl-tc-detail { padding: 6px 0 6px 12px; margin: 2px 0 2px 4px; border-left: 1px solid var(--border-color); }
 .tl-tc-section { margin-bottom: 4px; }
 .tl-tc-section-title { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; font-weight: 500; }
 .tl-tc-section pre { background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 4px; padding: 6px 8px; font-size: 11px; color: var(--text-secondary); max-height: 150px; overflow: auto; white-space: pre-wrap; font-family: var(--font-code); margin: 0; }

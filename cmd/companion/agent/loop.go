@@ -306,13 +306,14 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 
 		// ★ content-only 防护：Agent 连续输出文字但不调用任何工具（含 finish_task）
 		// 说明 Agent 可能在自我循环，注入停止提示。
+		// 阈值放宽到 3 轮提示、4 轮结束——复杂任务可能需要多轮分析总结。
 		if len(assistant.ToolCalls) == 0 && strings.TrimSpace(assistant.Content) != "" {
 			l.contentOnlyIters++
-			if l.contentOnlyIters == 2 {
-				nudge := "[系统提示] 你已经连续两轮只输出文字而没有调用任何工具。如果任务已完成，请调用 finish_task 工具结束本轮。"
+			if l.contentOnlyIters == 3 {
+				nudge := "[系统提示] 你已经连续三轮只输出文字而没有调用任何工具。如果任务已完成，请调用 finish_task 工具结束本轮；如果还需要继续工作，请调用相应工具推进。"
 				l.emit(Event{Type: EventNotice, Content: nudge})
 				msgs = append(msgs, Message{Role: RoleUser, Content: nudge})
-			} else if l.contentOnlyIters >= 3 {
+			} else if l.contentOnlyIters >= 4 {
 				l.emit(Event{Type: EventNotice, Content: "检测到内容循环，自动结束"})
 				l.emit(Event{Type: EventDone, Content: strings.TrimSpace(assistant.Content), DoneReason: "content_loop"})
 				return msgs, nil
@@ -403,6 +404,14 @@ func DefaultSystemPrompt(roots []string) string {
 		"- 每次工具调用后，依据真实结果决定下一步，绝不臆测结果。\n" +
 		"- 禁止破坏性命令（如 rm -rf、强制 push main），禁止修改工作区外文件。\n" +
 		"- 【完成标记】任务彻底完成时，调用 finish_task 工具提交最终结果摘要，切勿在正文中输出 [FINAL]。\n\n" +
+		"# ★ 调研优先（强制——违反必出错）\n" +
+		"收到任务后，第一回合必须先收集资料、理解上下文，再动手改代码：\n" +
+		"- 先用 search_content / search_files / find_symbol 定位相关文件和函数，搞清楚代码结构和调用关系。\n" +
+		"- 用 read_file 细读关键文件的目标区域，确认当前实现、变量名、缩进风格、上下文逻辑。\n" +
+		"- 如果涉及多个文件，先用 check_impact / find_symbol_usages 了解影响范围，不要漏改调用方。\n" +
+		"- 对于不熟悉的库/框架用法，用 web_search 查证最新文档，别凭记忆臆测 API。\n" +
+		"- 只有在充分理解代码现状后，才开始动手修改。宁可多花 2 轮调研，也不要在不了解全貌时动手。\n" +
+		"- ★ 禁止凭任务描述就臆测代码内容——你的记忆可能是旧版或错误的，必须以 read_file 看到的实际内容为准。\n\n" +
 		"# 任务追踪（核心机制）\n" +
 		"任何需要 3+ 步骤或多文件操作的任务，必须使用 task_create/task_update 追踪进度：\n" +
 		"- 收到任务后第一回合创建完整子任务清单，立即将第一个标记为 in_progress。\n" +
