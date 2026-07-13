@@ -149,9 +149,19 @@ async function installItem(item) {
 }
 
 async function uninstallItem(item) {
-  // 卸载功能需要后端支持，目前简化：仅前端标记
-  item.installed = false
-  window.$toast?.('已标记为卸载状态', 'info')
+  error.value = ''
+  try {
+    if (item.kind === 'mcp') {
+      await api.saveMcpItem({ action: 'delete', name: item.id, level: 'user' })
+    } else if (item.kind === 'skill') {
+      await api.deleteSkill(item.id)
+    }
+    item.installed = false
+    window.$toast?.('已卸载: ' + item.name, 'success')
+  } catch (err) {
+    error.value = '卸载失败: ' + err.message
+    window.$toast?.('卸载失败: ' + err.message, 'error')
+  }
 }
 
 onMounted(() => {

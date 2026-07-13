@@ -127,12 +127,38 @@
           </div>
         </div>
 
+        <!-- ═══ MCP 管理 ═══ -->
+        <div class="skill-mgr-wrap">
+          <div class="skill-mgr-header">
+            <SvgIcon name="package" :size="11" />
+            <span>MCP 服务器</span>
+            <span v-if="mcpItems.length > 0" class="skill-token-badge">{{ mcpItems.length }}</span>
+          </div>
+          <div class="skill-mgr-actions">
+            <button class="skill-mgr-btn" @click="openMarketplace" title="从市场安装新 MCP">
+              <SvgIcon name="plus" :size="10" /> 安装
+            </button>
+          </div>
+          <div v-if="mcpItems.length === 0" class="skill-mgr-empty">暂无 MCP 配置</div>
+          <div v-else class="installed-list">
+            <div v-for="mcp in mcpItems" :key="mcp.name" class="installed-item">
+              <div class="installed-info">
+                <span class="installed-name">{{ mcp.name }}</span>
+                <span class="installed-detail">{{ mcp.command }} {{ mcp.args?.join(' ') }}</span>
+              </div>
+              <button class="installed-del-btn" @click="uninstallMCP(mcp)" title="卸载 MCP">
+                <SvgIcon name="trash" :size="10" />
+              </button>
+            </div>
+          </div>
+        </div>
+
         <!-- ═══ 技能管理 ═══ -->
         <div class="skill-mgr-wrap">
           <div class="skill-mgr-header">
             <SvgIcon name="code" :size="11" />
             <span>技能</span>
-            <span v-if="convCtxStats.skillsTokens > 0" class="skill-token-badge">{{ shortTokens(convCtxStats.skillsTokens) }}</span>
+            <span v-if="installedSkills.length > 0" class="skill-token-badge">{{ installedSkills.length }}</span>
           </div>
           <div class="skill-mgr-actions">
             <button class="skill-mgr-btn" @click="openMarketplace" title="从市场安装新技能">
@@ -142,8 +168,19 @@
               <SvgIcon name="settings" :size="10" /> 管理
             </button>
           </div>
-          <div v-if="convCtxStats.skillsTokens === 0" class="skill-mgr-empty">
-            暂无活跃技能 — 从市场添加后生效
+          <div v-if="installedSkills.length === 0" class="skill-mgr-empty">
+            {{ skillsLoadError ? '加载失败' : '暂无技能 — 从市场添加后生效' }}
+          </div>
+          <div v-else class="installed-list">
+            <div v-for="sk in installedSkills" :key="sk.name" class="installed-item">
+              <div class="installed-info">
+                <span class="installed-name">{{ sk.name }}</span>
+                <span class="installed-detail">{{ sk.description?.slice(0, 40) }}</span>
+              </div>
+              <button v-if="sk.level === 'project'" class="installed-del-btn" @click="uninstallSkill(sk)" title="卸载技能">
+                <SvgIcon name="trash" :size="10" />
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -152,8 +189,9 @@
 </template>
 
 <script setup>
-import { ref, computed, inject } from 'vue'
+import { ref, computed, inject, onMounted } from 'vue'
 import SvgIcon from './SvgIcon.vue'
+import api from '../api.js'
 
 const showMarketplace = inject('showMarketplace', null)
 const showSettings = inject('showSettings', null)
@@ -164,6 +202,62 @@ function openMarketplace() {
 function openSettings() {
   if (showSettings) showSettings.value = true
 }
+
+// ── MCP 管理 ──
+const mcpItems = ref([])
+const mcpLoadError = ref('')
+
+async function loadMCPList() {
+  mcpLoadError.value = ''
+  try {
+    const list = await api.getMcpList('all')
+    mcpItems.value = list || []
+  } catch (err) {
+    mcpLoadError.value = err.message
+    mcpItems.value = []
+  }
+}
+
+async function uninstallMCP(mcp) {
+  try {
+    await api.saveMcpItem({ action: 'delete', name: mcp.name, level: mcp.level || 'user' })
+    mcpItems.value = mcpItems.value.filter(m => m.name !== mcp.name)
+    window.$toast?.('已卸载 MCP: ' + mcp.name, 'success')
+  } catch (err) {
+    window.$toast?.('卸载失败: ' + err.message, 'error')
+  }
+}
+
+// ── 技能管理 ──
+const installedSkills = ref([])
+const skillsLoadError = ref('')
+
+async function loadSkills() {
+  skillsLoadError.value = ''
+  try {
+    const list = await api.getSkillsList()
+    // 只显示项目级技能（system 级不可删除）
+    installedSkills.value = (list || []).filter(s => s.level === 'project')
+  } catch (err) {
+    skillsLoadError.value = err.message
+    installedSkills.value = []
+  }
+}
+
+async function uninstallSkill(sk) {
+  try {
+    await api.deleteSkill(sk.name)
+    installedSkills.value = installedSkills.value.filter(s => s.name !== sk.name)
+    window.$toast?.('已卸载技能: ' + sk.name, 'success')
+  } catch (err) {
+    window.$toast?.('卸载失败: ' + err.message, 'error')
+  }
+}
+
+onMounted(() => {
+  loadMCPList()
+  loadSkills()
+})
 
 const props = defineProps({
   conversations: { type: Array, default: () => [] },
@@ -582,5 +676,62 @@ const compOtherPct = computed(() => ((props.convCtxStats.otherTokens / compTotal
   color: var(--text-muted);
   font-style: italic;
   padding: 2px 0;
+}
+
+/* ── 已安装列表 ── */
+.installed-list {
+  margin-top: 2px;
+}
+.installed-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  transition: background 0.1s;
+}
+.installed-item:hover {
+  background: var(--bg-hover);
+}
+.installed-info {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+.installed-name {
+  font-weight: 500;
+  color: var(--text-primary);
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.installed-detail {
+  font-size: 10px;
+  color: var(--text-muted);
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.installed-del-btn {
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.12s;
+}
+.installed-del-btn:hover {
+  color: #c03;
+  border-color: rgba(204,0,51,0.2);
+  background: rgba(204,0,51,0.08);
 }
 </style>

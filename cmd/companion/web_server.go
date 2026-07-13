@@ -121,6 +121,8 @@ func startWebUI(port int) {
 	mux.HandleFunc("/api/philosophy", ws.handlePhilosophy)
 	mux.HandleFunc("/api/mcp/list", ws.handleMCPList)
 	mux.HandleFunc("/api/mcp/save", ws.handleMCPSave)
+	mux.HandleFunc("/api/skills/list", ws.handleSkillsList)
+	mux.HandleFunc("/api/skills/delete", ws.handleSkillsDelete)
 	mux.HandleFunc("/api/tokens/stats", ws.handleTokensStats)
 	mux.HandleFunc("/api/debug/logs", ws.handleDebugLogs)
 	mux.HandleFunc("/api/debug/logs/", ws.handleDebugLogByID)
@@ -1593,6 +1595,55 @@ func (s *webServer) handleTokensStats(w http.ResponseWriter, r *http.Request) {
 	default:
 		jsonErr(w, "不支持的方法")
 	}
+
+
+}
+
+// ─── Skills HTTP API ──────────────────────────────────────
+
+func (s *webServer) handleSkillsList(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		jsonErr(w, "仅 GET")
+		return
+	}
+	type skillItem struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+		Mode        string `json:"mode"`
+		Level       string `json:"level"`
+	}
+	skills := agent.LoadAllSkills()
+	out := make([]skillItem, 0, len(skills))
+	for _, sk := range skills {
+		out = append(out, skillItem{
+			Name: sk.Name, Description: sk.Description,
+			Mode: sk.Mode, Level: string(sk.Level),
+		})
+	}
+	jsonResp(w, out)
+}
+
+func (s *webServer) handleSkillsDelete(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		jsonErr(w, "仅 POST")
+		return
+	}
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonErr(w, err.Error())
+		return
+	}
+	if req.Name == "" {
+		jsonErr(w, "name 必填")
+		return
+	}
+	if err := agent.DeleteSkill(agent.SkillProjectDir, req.Name); err != nil {
+		jsonErr(w, err.Error())
+		return
+	}
+	jsonResp(w, map[string]any{"ok": true, "message": "已删除技能: " + req.Name})
 }
 
 // ─── 辅助 ────────────────────────────────────────────────────

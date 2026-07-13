@@ -207,6 +207,16 @@ async function saveMcpItem({ action, name, command, args, level }) {
   return apiPost('/mcp/save', { action, name, command, args: args || [], level: level || 'user' })
 }
 
+// ─── Skills API ────────────────────────────────────────────
+
+async function getSkillsList() {
+  return apiGet('/skills/list')
+}
+
+async function deleteSkill(name) {
+  return apiPost('/skills/delete', { name })
+}
+
 // ─── 指令管理 ──────────────────────────────────────────────
 
 async function getInstructions(scope = 'system') {
@@ -227,4 +237,4 @@ async function savePhilosophy(data) {
   return apiPut('/philosophy', data)
 }
 
-export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, closeWebSocket, isWebSocketOpen, chatStart, answerChat, approveChat, sendFeedback, chatStop, getMessages, getMessagesCount, getModels, getMcpList, saveMcpItem, getInstructions, saveInstructions, getPhilosophy, savePhilosophy }
+export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, closeWebSocket, isWebSocketOpen, chatStart, answerChat, approveChat, sendFeedback, chatStop, getMessages, getMessagesCount, getModels, getMcpList, saveMcpItem, getSkillsList, deleteSkill, getInstructions, saveInstructions, getPhilosophy, savePhilosophy }
