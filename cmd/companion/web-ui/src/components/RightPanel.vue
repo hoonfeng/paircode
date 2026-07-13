@@ -19,16 +19,15 @@
           <span class="phase-text">{{ currentPhase }}</span>
           <span class="phase-dots"><span class="pd1"></span><span class="pd2"></span><span class="pd3"></span></span>
         </div>
-        <!-- 消息区（带虚拟滚动） -->
+        <!-- 消息区（滚动容器） -->
         <div class="chat-messages" ref="msgRef" @scroll="onScroll">
           <!-- 顶部加载更多提示 -->
           <div v-if="hasMoreTop" class="scroll-more-hint" ref="topSentinel">
             <span>加载更早消息...</span>
           </div>
-          <!-- 渲染的消息列表 -->
-          <div class="msg-list-wrap"
-               :style="{ paddingTop: virtualOffset.top + 'px', paddingBottom: virtualOffset.bottom + 'px' }">
-            <div v-for="msg in visibleMessages" :key="msg._key"
+          <!-- 渲染的消息列表（全量渲染，overflow-anchor 保底部稳定） -->
+          <div class="msg-list-wrap">
+            <div v-for="msg in state.messages" :key="msg._key"
                  :class="['msg-item', msg.role === 'user' ? 'msg-user' : 'msg-assistant']"
                  :data-msg-idx="msg._idx">
               <!-- 头像 -->
@@ -216,42 +215,12 @@ const currentPhase = computed(() => state.phaseByConv[state.currentConvId] || ''
 let phaseTimer = null
 let autoSaveTimer = null
 
-// ── 虚拟滚动 ──
-const SCROLL_BUFFER = 20
-const ESTIMATED_HEIGHT = 100
-const msgHeights = reactive({})
+// ── 滚动控制 ──
 const scrollTopRef = ref(0)
-const containerHeight = ref(600)
 const isNearBottom = ref(true)
 
 // ── 审批状态从全局 state.approvalByConv 读取（仅当前对话）──
 const approvalState = computed(() => state.approvalByConv[state.currentConvId] || { callId: '', tool: '', args: '', parsedArgs: {}, waiting: false })
-const virtualState = computed(() => {
-  const msgs = state.messages
-  const total = msgs.length
-  if (total === 0) return { visible: [], offset: { top: 0, bottom: 0 }, totalHeight: 0 }
-  const scrollTop = scrollTopRef.value
-  const viewHeight = containerHeight.value || 600
-  let acc = 0, startIdx = 0, endIdx = total, foundStart = false, foundEnd = false
-  for (let i = 0; i < total; i++) {
-    const h = msgHeights[msgs[i]._key] || ESTIMATED_HEIGHT
-    if (!foundStart && acc + h > scrollTop - SCROLL_BUFFER * ESTIMATED_HEIGHT) {
-      startIdx = Math.max(0, i - Math.floor(SCROLL_BUFFER / 2)); foundStart = true
-    }
-    if (foundStart && !foundEnd && acc + h > scrollTop + viewHeight + SCROLL_BUFFER * ESTIMATED_HEIGHT) {
-      endIdx = Math.min(total, i + Math.floor(SCROLL_BUFFER / 2)); foundEnd = true
-    }
-    acc += h
-  }
-  if (!foundStart) startIdx = 0
-  if (!foundEnd) endIdx = total
-  let topOffset = 0, bottomOffset = 0
-  for (let i = 0; i < startIdx; i++) topOffset += msgHeights[msgs[i]._key] || ESTIMATED_HEIGHT
-  for (let i = endIdx; i < total; i++) bottomOffset += msgHeights[msgs[i]._key] || ESTIMATED_HEIGHT
-  return { visible: msgs.slice(startIdx, endIdx), offset: { top: topOffset, bottom: bottomOffset }, total: total }
-})
-const visibleMessages = computed(() => virtualState.value.visible)
-const virtualOffset = computed(() => virtualState.value.offset)
 const hasMoreTop = computed(() => {
   const id = state.currentConvId
   const msgs = state.messagesByConv[id]
@@ -268,7 +237,6 @@ const loadingMoreTop = ref(false)
 function onScroll() {
   if (msgRef.value) {
     scrollTopRef.value = msgRef.value.scrollTop
-    containerHeight.value = msgRef.value.clientHeight
     const el = msgRef.value
     isNearBottom.value = el.scrollTop + el.clientHeight >= el.scrollHeight - 150
     // 顶部懒加载：scrollTop < 100 且还有更早消息可加载
@@ -288,8 +256,9 @@ const loadMoreMessages = async () => {
   const oldestIdx = msgs[0]._idx
   if (oldestIdx === undefined || oldestIdx === null || oldestIdx <= 0) return
   loadingMoreTop.value = true
-  // 记录 prepend 前的 scrollHeight，用于补偿滚动位置
+  // 记录 prepend 前的 scrollHeight + scrollTop，用于补偿滚动位置
   const oldScrollHeight = msgRef.value ? msgRef.value.scrollHeight : 0
+  const oldScrollTop = msgRef.value ? msgRef.value.scrollTop : 0
   try {
     const data = await api.getMessages(id, { before: oldestIdx, limit: 50 })
     const older = (data.messages || [])
@@ -303,16 +272,14 @@ const loadMoreMessages = async () => {
         _time: m.timestamp || '',
       }))
     if (older.length > 0) {
-      // prepend 到数组头部
+      // prepend 到数组头部（全量渲染下 scrollHeight 会自然增加）
       state.messagesByConv[id] = [...older, ...msgs]
       state.messages = state.messagesByConv[id]
       state.msgLoadedByConv[id] = (state.msgLoadedByConv[id] || 0) + older.length
-      // 补偿滚动位置：保持当前可视消息不动
+      // 补偿滚动位置：保持当前视口内容不动（新增的 older 消息在顶部）
       nextTick(() => {
         if (msgRef.value) {
-          const newScrollHeight = msgRef.value.scrollHeight
-          msgRef.value.scrollTop = newScrollHeight - oldScrollHeight
-          // 懒加载 prepend 不改变 isNearBottom
+          msgRef.value.scrollTop = oldScrollTop + (msgRef.value.scrollHeight - oldScrollHeight)
         }
       })
     } else {
@@ -573,7 +540,7 @@ const resolveApproval = async (approved) => {
 const onKeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }
 
 const scrollToBottom = () => {
-  nextTick(() => { if (msgRef.value && isNearBottom.value) { msgRef.value.scrollTop = msgRef.value.scrollHeight; onScroll() } })
+  nextTick(() => { if (msgRef.value) { msgRef.value.scrollTop = msgRef.value.scrollHeight; isNearBottom.value = true; onScroll() } })
 }
 
 const forceScrollToBottom = () => {
@@ -824,46 +791,21 @@ const handlePaste = (e) => {
   }
 }
 
-// ResizeObserver
-let resizeObserver = null
-const reObserveItems = () => {
-  if (!msgRef.value || !resizeObserver) return
-  msgRef.value.querySelectorAll('.msg-item').forEach(el => resizeObserver.observe(el))
-}
-const setupResizeObserver = () => {
+// ── 新消息自动滚底：仅当用户处于底部附近时跟随新内容
+watch(() => state.messages.length, () => {
   nextTick(() => {
-    if (!msgRef.value) return
-    if (!resizeObserver) {
-      resizeObserver = new ResizeObserver((entries) => {
-        let heightChanged = false
-        for (const entry of entries) {
-          const el = entry.target; const idx = el.dataset.msgIdx
-          if (idx !== undefined) {
-            const key = state.messages[Number(idx)]?._key
-            if (key) {
-              const oldH = msgHeights[key]; msgHeights[key] = entry.contentRect.height
-              const keys = Object.keys(msgHeights)
-              if (keys.length > 150) { const toDelete = keys.slice(0, keys.length - 150); for (const k of toDelete) delete msgHeights[k] }
-              if (oldH && oldH !== entry.contentRect.height) heightChanged = true
-            }
-          }
-        }
-        if (heightChanged && isNearBottom.value && msgRef.value) { msgRef.value.scrollTop = msgRef.value.scrollHeight }
-      })
+    if (isNearBottom.value && msgRef.value) {
+      msgRef.value.scrollTop = msgRef.value.scrollHeight
     }
-    reObserveItems()
   })
-}
-
-watch(() => state.messages.length, () => { nextTick(setupResizeObserver) })
+})
 
 watch(() => state.settings, (s) => { if (s) { autoReview.value = s.autoReview !== undefined ? !!s.autoReview : true; autoIterate.value = !!s.autoIterateOnRejection; autonomous.value = !!s.autonomous; autoCollapse.value = s.autoCollapse !== undefined ? !!s.autoCollapse : true; autoCommit.value = s.autoCommit !== false; } }, { immediate: true })
 
 const handleBeforeUnload = () => { if (state.currentConvId && state.messages.length > 0) { window.dispatchEvent(new Event('save-conversations')) } }
 
 onMounted(() => {
-  loadWsTokenStats(); loadConvList(); scrollToBottom(); setupResizeObserver()
-  containerHeight.value = msgRef.value?.clientHeight || 600
+  loadWsTokenStats(); loadConvList(); scrollToBottom()
 
   // 注册全局 UI 回调：App.vue 的 WebSocket onmessage → agent-events.js → 此处回调
   setGlobalCtx({
@@ -943,7 +885,6 @@ onUnmounted(() => {
   if (nudgeTimer) { clearTimeout(nudgeTimer); nudgeTimer = null }
   // 不关闭 WebSocket（由 App.vue 管理生命周期）；不清理 subscriptions（已移除 SSE 订阅模式）
   document.removeEventListener('mousemove', onInputResizeMove); document.removeEventListener('mouseup', stopInputResize)
-  if (resizeObserver) { resizeObserver.disconnect(); resizeObserver = null }
   window.removeEventListener('beforeunload', handleBeforeUnload)
 })
 </script>
@@ -957,7 +898,7 @@ onUnmounted(() => {
 .rp-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
 .rp-body { flex: 1; display: flex; flex-direction: row; overflow: hidden; min-height: 0; }
 .chat-area { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; max-width: 100%; }
-.chat-messages { flex: 1; overflow-y: auto; padding: 8px 12px; min-height: 0; scroll-behavior: smooth; }
+.chat-messages { flex: 1; overflow-y: auto; padding: 8px 12px; min-height: 0; scroll-behavior: smooth; overflow-anchor: auto; }
 .msg-list-wrap { display: flex; flex-direction: column; gap: 12px; min-height: 100%; }
 .msg-item { display: flex; gap: 8px; align-items: flex-start; content-visibility: auto; contain-intrinsic-size: 60px; }
 .msg-user { flex-direction: row-reverse; justify-content: flex-start; gap: 10px; }
