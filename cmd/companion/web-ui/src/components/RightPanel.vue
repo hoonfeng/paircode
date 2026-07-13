@@ -648,14 +648,26 @@ const switchConv = async (id) => {
       const data = await api.getMessages(id, { limit: 50 })
       const loaded = (data.messages || [])
         .filter(m => (m.message?.role || m.role) !== 'tool')
-        .map((m, i) => ({
-          role: m.message?.role || m.role || '',
-          content: m.message?.content || m.content || '',
-          segments: m.segments || [],
-          _key: 'msg_' + Date.now() + '_' + i,
-          _idx: m.idx,
-          _time: m.timestamp || '',
-        }))
+        .map((m, i) => {
+          const role = m.message?.role || m.role || ''
+          const segments = (m.segments || []).map(seg => {
+            // ★ 将 finish_task 工具调用转为 content 段（用 markdown 渲染完成报告）
+            if (seg.type === 'tool_call' && seg.name === 'finish_task') {
+              return { type: 'content', content: seg.result || '' }
+            }
+            return seg
+          })
+          return {
+            role,
+            content: m.message?.content || m.content || '',
+            segments,
+            _key: 'msg_' + Date.now() + '_' + i,
+            _idx: m.idx,
+            _time: m.timestamp || '',
+          }
+        })
+        // 按 idx 升序排列（用户消息在前，agent 输出在后）
+        loaded.sort((a, b) => (a._idx || 0) - (b._idx || 0))
       state.messagesByConv[id] = loaded
       state.messages = state.messagesByConv[id]
       state.msgTotalByConv[id] = data.total || loaded.length
