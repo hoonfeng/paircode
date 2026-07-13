@@ -179,7 +179,7 @@
       </div>
       <!-- 右侧：Debug日志面板 / 会话列表 -->
       <DebugLogPanel v-if="showDebugLog" @close="showDebugLog = false" />
-      <ConvSidebar v-else :conversations="state.conversations" :current-conv-id="state.currentConvId" :loading-by-conv="state.loadingByConv" :ws-token-stats="wsTokenStats" :conv-ctx-stats="convCtxStats" :ctx-max-tokens-val="state.settings.contextMaxTokens || 1000000" :width="convListWidth" @new-conversation="newConversation" @switch-conversation="switchConv" @delete-conversation="deleteConv" />
+      <ConvSidebar v-else :conversations="state.conversations" :current-conv-id="state.currentConvId" :loading-by-conv="state.loadingByConv" :ws-token-stats="wsTokenStats" :conv-ctx-stats="convCtxStats" :ctx-max-tokens-val="state.settings.contextMaxTokens || 1000000" :width="convListWidth" :tasks="currentTasks" @new-conversation="newConversation" @switch-conversation="switchConv" @delete-conversation="deleteConv" />
     </div>
   </div>
 </template>
@@ -242,6 +242,7 @@ function showNudge(text) {
 
 let pendingAskCallId = ''
 const currentPlan = ref([])
+const currentTasks = ref([])
 const planExpanded = ref(true)
 // 阶段指示器从全局 state.phaseByConv 读取（仅当前对话）
 const currentPhase = computed(() => state.phaseByConv[state.currentConvId] || '')
@@ -617,6 +618,7 @@ const newConversation = async () => {
   state.chatLoading = false
   state.agentRunning = false
   currentPlan.value = []
+  currentTasks.value = []
   inputText.value = ''
   nextTick(() => inputRef.value?.focus())
 }
@@ -660,6 +662,7 @@ const switchConv = async (id) => {
   state.chatLoading = state.loadingByConv[id] || false
   state.agentRunning = state.agentRunningByConv[id] || false
   currentPlan.value = []
+  currentTasks.value = []
   // approval/phase/nudge/convCtxStats 自动从 state.*ByConv[currentConvId] 读取，无需手动重置
   // 始终从后端刷新 token 统计（无论本地是否缓存了消息）
   try {
@@ -707,23 +710,23 @@ const switchConv = async (id) => {
   try {
     const taskData = await api.apiGet('/tasks', { convId: id })
     if (taskData && taskData.tasks && taskData.tasks.length > 0) {
-      currentPlan.value = taskData.tasks.map(t => ({
-        step: t.step,
+      currentTasks.value = taskData.tasks.map(t => ({
+        step: t.step || t.subject || '',
         status: t.status,
         _taskId: t.taskId,
       }))
     } else {
-      // API 返回空时，fallback 到从消息 segments 重建
-      const msgs = state.messagesByConv[id] || []
-      if (msgs.length > 0) {
-        currentPlan.value = rebuildPlanFromMessages(msgs)
-      }
+      currentTasks.value = []
     }
   } catch {
-    const msgs = state.messagesByConv[id] || []
-    if (msgs.length > 0) {
-      currentPlan.value = rebuildPlanFromMessages(msgs)
-    }
+    currentTasks.value = []
+  }
+  // ── 从消息重建 plan（update_plan 工具调用）──
+  const msgs = state.messagesByConv[id] || []
+  if (msgs.length > 0) {
+    currentPlan.value = rebuildPlanFromMessages(msgs)
+  } else {
+    currentPlan.value = []
   }
   planExpanded.value = currentPlan.value.length > 0
   forceScrollToBottom()
@@ -765,25 +768,17 @@ function phaseIcon(phase) {
 }
 
 function rebuildPlanFromMessages(msgs) {
-  // 从已加载消息的 segments 中扫描 update_plan/task_create/task_update 工具调用，
-  // 重建任务计划列表。用于页面刷新后恢复计划显示。
+  // 从已加载消息的 segments 中扫描 update_plan 工具调用，重建规划清单。
   let plan = []
   for (const msg of msgs) {
     if (!msg.segments) continue
     for (const seg of msg.segments) {
       if (seg.type !== 'tool_call') continue
-      const name = seg.name || ''
+      if (seg.name !== 'update_plan') continue
       let args
       try { args = seg.argsRaw ? JSON.parse(seg.argsRaw) : {} } catch { continue }
-      if (name === 'update_plan' && Array.isArray(args.plan)) {
+      if (Array.isArray(args.plan)) {
         plan = args.plan.map(s => ({ ...s }))
-      } else if (name === 'task_create') {
-        plan.push({ step: args.subject || '(新建任务)', status: 'pending', callId: seg.callId || '', _taskId: null })
-      } else if (name === 'task_update') {
-        for (let i = 0; i < plan.length; i++) {
-          if (plan[i]._taskId && plan[i]._taskId === args.id) { plan[i].status = args.status; break }
-          if (args.subject && plan[i].step === args.subject) { plan[i].status = args.status; break }
-        }
       }
     }
   }
@@ -795,16 +790,6 @@ function handleTaskTool(data) {
   const taskTools = ['update_plan', 'task_create', 'task_update', 'task_list', 'task_delete', 'task_summary']
   if (!taskTools.includes(toolName)) return false
   try {
-    const args = data.args ? (typeof data.args === 'string' ? JSON.parse(data.args) : data.args) : {}
-    if (toolName === 'update_plan' && Array.isArray(args.plan)) { currentPlan.value = args.plan; planExpanded.value = true; return true }
-    if (toolName === 'task_create') { currentPlan.value.push({ step: args.subject || '(新建任务)', status: 'pending', callId: data.callId || data.callID || '', _taskId: null }); planExpanded.value = true; return true }
-    if (toolName === 'task_update') {
-      for (let i = 0; i < currentPlan.value.length; i++) {
-        if (currentPlan.value[i]._taskId && currentPlan.value[i]._taskId === args.id) { currentPlan.value[i].status = args.status; planExpanded.value = true; return true }
-        if (args.subject && currentPlan.value[i].step === args.subject) { currentPlan.value[i].status = args.status; planExpanded.value = true; return true }
-      }
-      return true
-    }
     return true
   } catch { return false }
 }
@@ -928,19 +913,18 @@ onMounted(() => {
     }
   })
 
-  // ⚡ 初始加载：若已有当前对话，从 API 加载任务计划
-  // （页面刷新或从其他工作区切换回来时，currentPlan 为空，需要从 TaskManager 恢复）
+  // ⚡ 初始加载：若已有当前对话，从 API 加载任务状态
+  // （页面刷新或从其他工作区切换回来时，currentTasks 为空，需要从 TaskManager 恢复）
   nextTick(async () => {
     if (state.currentConvId) {
       try {
         const taskData = await api.apiGet('/tasks', { convId: state.currentConvId })
         if (taskData && taskData.tasks && taskData.tasks.length > 0) {
-          currentPlan.value = taskData.tasks.map(t => ({
-            step: t.step,
+          currentTasks.value = taskData.tasks.map(t => ({
+            step: t.step || t.subject || '',
             status: t.status,
             _taskId: t.taskId,
           }))
-          planExpanded.value = true
         }
       } catch {}
     }
@@ -957,42 +941,32 @@ onMounted(() => {
       // 前端不再重复 POST，避免消息重复追加。
     },
     onPlanUpdate: (plan, convId) => {
-      if (state.currentConvId === convId) { currentPlan.value = [...plan]; planExpanded.value = true }
+      if (state.currentConvId !== convId) return
+      // update_plan 全量替换规划清单（自主模式使用），只展示在 PlanPanel
+      currentPlan.value = [...plan]
+      planExpanded.value = true
     },
     onTaskCreate: (task, convId) => {
-      if (state.currentConvId === convId) { currentPlan.value = [...currentPlan.value, task]; planExpanded.value = true }
+      if (state.currentConvId !== convId) return
+      currentTasks.value = [...currentTasks.value, task]
     },
     onTaskSetId: (callId, taskId, convId) => {
       if (state.currentConvId !== convId) return
-      const plan = [...currentPlan.value]
-      for (let i = 0; i < plan.length; i++) {
-        if (plan[i].callId === callId) { plan[i] = { ...plan[i], _taskId: taskId }; break }
+      const tasks = [...currentTasks.value]
+      for (let i = 0; i < tasks.length; i++) {
+        if (tasks[i].callId === callId) { tasks[i] = { ...tasks[i], _taskId: taskId }; break }
       }
-      currentPlan.value = plan
+      currentTasks.value = tasks
     },
     onTaskUpdate: (taskId, status, subject, convId) => {
       if (state.currentConvId !== convId) return
-      const plan = [...currentPlan.value]
+      const tasks = [...currentTasks.value]
       let changed = false
-      for (let i = 0; i < plan.length; i++) {
-        // 按 _taskId 匹配（taskId 来自后端 TaskManager）
-        if (plan[i]._taskId && plan[i]._taskId === taskId) { plan[i] = { ...plan[i], status }; changed = true; break }
-        // 按 callId 匹配（_taskId 尚未通过 onTaskSetId 设置的 fallback）
-        if (plan[i].callId === taskId) { plan[i] = { ...plan[i], status, _taskId: taskId }; changed = true; break }
-        // 按 subject 匹配
-        if (subject && plan[i].step === subject) { plan[i] = { ...plan[i], status }; changed = true; break }
+      for (let i = 0; i < tasks.length; i++) {
+        if (tasks[i]._taskId && tasks[i]._taskId === taskId) { tasks[i] = { ...tasks[i], status }; changed = true; break }
+        if (subject && tasks[i].step === subject) { tasks[i] = { ...tasks[i], status, _taskId: tasks[i]._taskId || taskId }; changed = true; break }
       }
-      if (!changed) {
-        // 最后 fallback：按顺序匹配第一个 pending/in_progress 的任务
-        for (let i = 0; i < plan.length; i++) {
-          if (plan[i].status === 'pending' || plan[i].status === 'in_progress') {
-            plan[i] = { ...plan[i], status, _taskId: plan[i]._taskId || taskId }
-            changed = true
-            break
-          }
-        }
-      }
-      if (changed) { currentPlan.value = plan; planExpanded.value = true }
+      if (changed) currentTasks.value = tasks
     },
     onPhaseChange: (convId) => {
       // 阶段指示器自动从 state.phaseByConv 读取，此处启动定时器自动清除

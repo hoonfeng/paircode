@@ -127,6 +127,29 @@
           </div>
         </div>
 
+        <!-- ═══ 任务追踪 ═══ -->
+        <div class="skill-mgr-wrap">
+          <div class="skill-mgr-header">
+            <SvgIcon name="list" :size="11" />
+            <span>任务</span>
+            <span v-if="tasks.length > 0" class="skill-token-badge">{{ tasks.filter(t => t.status !== 'completed' && t.status !== 'done' && t.status !== 'cancelled').length }}/{{ tasks.length }}</span>
+          </div>
+          <div v-if="tasks.length === 0" class="skill-mgr-empty">暂无任务追踪</div>
+          <div v-else class="installed-list">
+            <div v-for="(task, ti) in tasks" :key="task._taskId || ti" class="installed-item" :class="'task-' + task.status">
+              <span class="task-status-icon">
+                <SvgIcon v-if="task.status === 'completed' || task.status === 'done'" name="check" :size="10" class="task-icon-done" />
+                <SvgIcon v-else-if="task.status === 'in_progress'" name="cycle" :size="10" class="task-icon-run" />
+                <SvgIcon v-else name="clock" :size="10" class="task-icon-pending" />
+              </span>
+              <div class="installed-info">
+                <span class="installed-name">{{ task.step || task.subject || '(无标题)' }}</span>
+                <span class="installed-detail">{{ statusLabel(task.status) }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- ═══ MCP 管理 ═══ -->
         <div class="skill-mgr-wrap">
           <div class="skill-mgr-header">
@@ -267,6 +290,7 @@ const props = defineProps({
   convCtxStats: { type: Object, default: () => ({ promptTokens: 0, completionTokens: 0, cacheHitTokens: 0, cacheMissTokens: 0, systemTokens: 0, skillsTokens: 0, mcpTokens: 0, toolTokens: 0, historyTokens: 0, otherTokens: 0 }) },
   ctxMaxTokensVal: { type: Number, default: 64000 },
   width: { type: Number, default: 250 },
+  tasks: { type: Array, default: () => [] },
 })
 
 defineEmits(['new-conversation', 'switch-conversation', 'delete-conversation'])
@@ -282,6 +306,13 @@ function shortTokens(n) {
   if (n >= 999950) return (n / 1_000_000).toFixed(1) + 'M'
   if (n >= 1000) return (n / 1000).toFixed(1) + 'K'
   return String(n)
+}
+
+function statusLabel(s) {
+  if (s === 'completed' || s === 'done') return '✅ 已完成'
+  if (s === 'in_progress') return '🔄 进行中'
+  if (s === 'cancelled') return '❌ 已取消'
+  return '⏳ 待执行'
 }
 
 const cacheRate = computed(() => {
@@ -734,4 +765,19 @@ const compOtherPct = computed(() => ((props.convCtxStats.otherTokens / compTotal
   border-color: rgba(204,0,51,0.2);
   background: rgba(204,0,51,0.08);
 }
+
+/* ── 任务状态图标 ── */
+.task-status-icon {
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.task-icon-done { color: var(--accent); }
+.task-icon-run { color: #d4a74e; }
+.task-icon-pending { color: var(--text-muted); }
+.task-completed, .task-done { opacity: 0.65; }
+.task-in_progress { background: var(--bg-active); }
 </style>
