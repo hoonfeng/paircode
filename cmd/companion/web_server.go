@@ -255,6 +255,7 @@ func (s *webServer) handleFSList(w http.ResponseWriter, r *http.Request) {
 			Name: e.Name(), IsDir: e.IsDir(), Size: sz, ModTime: mt,
 		})
 	}
+	jsonResp(w, result)
 }
 
 
