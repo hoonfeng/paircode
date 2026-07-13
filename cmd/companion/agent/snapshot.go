@@ -84,8 +84,12 @@ func cleanupOldSnapshots(snapDir string) {
 		os.Remove(filepath.Join(snapDir, entries[i].Name()))
 	}
 }
-func RestoreSnapshot(root, relPath string) error {
-	relPath = filepath.ToSlash(relPath)
+
+// RestoreSnapshot 从快照恢复指定文件。
+// snapshotIndex：0=最旧（原始），-1=最新，>0=第 N 份（1 基从最旧算）。
+// 默认传 0 使多次改错后仍能回到最初状态。
+func RestoreSnapshot(root, relPath string, snapshotIndex int) error {
+	relPath = filepath.ToSlash(filepath.Clean(relPath))
 	snapDir := filepath.Join(snapshotRoot(root), relPath)
 
 	// 列出快照文件
@@ -94,7 +98,7 @@ func RestoreSnapshot(root, relPath string) error {
 		return fmt.Errorf("snapshot: 无快照可用（%s）", relPath)
 	}
 
-	// 按文件名（时间戳）排序，取最新
+	// 收集快照文件，按时间戳升序（最旧在前）
 	snapshots := make([]string, 0, len(entries))
 	for _, e := range entries {
 		if !e.IsDir() {
@@ -104,18 +108,29 @@ func RestoreSnapshot(root, relPath string) error {
 	if len(snapshots) == 0 {
 		return fmt.Errorf("snapshot: 无快照可用（%s）", relPath)
 	}
-	sort.Strings(snapshots)
-	latest := snapshots[len(snapshots)-1]
+	sort.Strings(snapshots) // 升序：最旧在前
+
+	var target string
+	switch {
+	case snapshotIndex == 0:
+		target = snapshots[0] // 最旧（原始）
+	case snapshotIndex == -1:
+		target = snapshots[len(snapshots)-1] // 最新
+	case snapshotIndex >= 1 && snapshotIndex <= len(snapshots):
+		target = snapshots[snapshotIndex-1] // 第 N 份（1 基）
+	default:
+		return fmt.Errorf("snapshot: index %d 越界（可用 1-%d，0=最旧，-1=最新）", snapshotIndex, len(snapshots))
+	}
 
 	// 读快照内容
-	data, err := os.ReadFile(filepath.Join(snapDir, latest))
+	data, err := os.ReadFile(filepath.Join(snapDir, target))
 	if err != nil {
 		return fmt.Errorf("snapshot: 读取快照失败: %w", err)
 	}
 
 	// 写回原文件
 	absPath := filepath.Join(root, relPath)
-	if err := os.WriteFile(absPath, data, 0o644); err != nil {
+	if err := os.WriteFile(absPath, data, 0644); err != nil {
 		return fmt.Errorf("snapshot: 恢复文件失败: %w", err)
 	}
 	return nil
@@ -149,12 +164,14 @@ func ListSnapshots(root, relPath string) ([]string, error) {
 func RegisterSnapshotTools(r *Registry, root string) {
 	r.Register(&Tool{
 		Name: "restore_snapshot",
-		Description: "从最近的快照恢复指定文件。快照在 edit_file/multi_edit/write_file 修改前自动创建。" +
-			"先用 list_snapshots 查看可用快照，再用本工具恢复到修改前的内容。",
+		Description: "从快照恢复指定文件。快照在 edit_file/multi_edit/write_file 修改前自动创建。" +
+			"默认恢复到最旧快照（原始文件）。可用 list_snapshots 查看快照列表。" +
+			"指定 index 参数恢复特定版本（0=最旧原始文件，-1=最新，1~N=第 N 份从最旧算）。",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": props{
-				"path": strProp("要恢复的文件路径（工作区相对路径，如 \"cmd/main.go\"）"),
+				"path":  strProp("要恢复的文件路径（工作区相对路径，如 \"cmd/main.go\"）"),
+				"index": strProp("可选快照索引：0=最旧(原始/默认)，-1=最新，1~N=第 N 份"),
 			},
 			"required": []string{"path"},
 		},
@@ -163,6 +180,11 @@ func RegisterSnapshotTools(r *Registry, root string) {
 			relPath := argStr(args, "path")
 			if relPath == "" {
 				return "", fmt.Errorf("path 不能为空")
+			}
+			idxStr := argStr(args, "index")
+			idx := 0 // 默认恢复到最旧（原始）
+			if idxStr != "" {
+				fmt.Sscanf(idxStr, "%d", &idx)
 			}
 
 			// 解析为绝对路径并验证在工作区内
@@ -173,17 +195,26 @@ func RegisterSnapshotTools(r *Registry, root string) {
 
 			// 重新计算相对路径（resolvePath 可能已修正路径格式）
 			resolvedRel, _ := filepath.Rel(root, absPath)
-			if err := RestoreSnapshot(root, resolvedRel); err != nil {
+			if err := RestoreSnapshot(root, resolvedRel, idx); err != nil {
 				return "", err
 			}
 
-			return "✅ 已从快照恢复 " + relPath + " 到修改前的内容", nil
+			label := "最旧（原始）"
+			switch idx {
+			case 0:
+				label = "最旧（原始）"
+			case -1:
+				label = "最新"
+			default:
+				label = fmt.Sprintf("第 %d 份", idx)
+			}
+			return "✅ 已从快照恢复 " + relPath + "（" + label + "）", nil
 		},
 	})
 
 	r.Register(&Tool{
 		Name:        "list_snapshots",
-		Description: "列出指定文件的所有可用快照（按时间倒序）。",
+		Description: "列出指定文件的所有可用快照（按时间倒序，带索引号）。用 restore_snapshot 的 index 参数可恢复指定版本。",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": props{
@@ -204,17 +235,26 @@ func RegisterSnapshotTools(r *Registry, root string) {
 			if len(snapshots) == 0 {
 				return "（无快照。文件修改时自动创建快照。）", nil
 			}
+			// 升序列出（从最旧到最新），显示索引号
+			// ListSnapshots 返回倒序，反转
+			sorted := make([]string, len(snapshots))
+			for i, s := range snapshots {
+				sorted[len(sorted)-1-i] = s
+			}
 			var b strings.Builder
-			b.WriteString(fmt.Sprintf("文件 %s 的快照（共 %d 个）：\n\n", relPath, len(snapshots)))
-			for _, s := range snapshots {
+			b.WriteString(fmt.Sprintf("文件 %s 的快照（共 %d 个，索引 1=%d=最旧原始）：\n\n", relPath, len(snapshots), 1))
+			for i, s := range sorted {
 				parts := strings.SplitN(s, "@", 2)
 				ts := ""
 				if len(parts) == 2 {
 					ts = formatSnapshotTime(parts[1])
 				}
-				b.WriteString(fmt.Sprintf("  • %s\n", ts))
+				b.WriteString(fmt.Sprintf("  [%d] • %s\n", i+1, ts))
 			}
-			b.WriteString("\n使用 restore_snapshot(path=" + relPath + ") 恢复到最近一份快照。")
+			b.WriteString(fmt.Sprintf("\n用法：\n"))
+			b.WriteString(fmt.Sprintf("  restore_snapshot(path=%q)           → 恢复最旧（原始）\n", relPath))
+			b.WriteString(fmt.Sprintf("  restore_snapshot(path=%q, index=-1) → 恢复最新\n", relPath))
+			b.WriteString(fmt.Sprintf("  restore_snapshot(path=%q, index=1)  → 恢复第 1 份\n", relPath))
 			return b.String(), nil
 		},
 	})
