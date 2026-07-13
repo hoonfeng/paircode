@@ -81,6 +81,8 @@ type SessionManager struct {
 	// 全局订阅者：WebSocket 端点订阅所有会话事件（跨工作区并行）
 	globalSubMu       sync.RWMutex
 	globalSubscribers []chan GlobalEvent
+
+	store *MessageStore // 消息持久化存储（web 层通过 SetWorkspaceRoot 注入）
 }
 
 // NewSessionManager 创建会话管理器，默认保留 100 个已结束会话。
@@ -89,6 +91,23 @@ func NewSessionManager() *SessionManager {
 		sessions:    make(map[string]*Session),
 		maxSessions: 100,
 	}
+}
+
+// SetWorkspaceRoot 注入工作区根路径，初始化 MessageStore。
+// 必须在 Start 之前调用一次（由 web 层在 core.Root() 可用后调用）。
+// 重复调用以最后一次为准（重新创建 store）。
+func (m *SessionManager) SetWorkspaceRoot(root string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.store = NewMessageStore(root)
+}
+
+// Store 返回 MessageStore 引用（供 web 层调用 AppendMessage/LoadLatest 等）。
+// 若 SetWorkspaceRoot 未调用则返回 nil（web 层需自行判空）。
+func (m *SessionManager) Store() *MessageStore {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.store
 }
 
 // ErrSessionRunning convID 已有运行中的会话（同一对话不可并行跑两个 Loop）。
@@ -121,6 +140,23 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 	if s, ok := m.sessions[convID]; ok && s.Running {
 		m.mu.Unlock()
 		return ErrSessionRunning
+	}
+
+	// 持久化：确保 store 中存在该对话的元数据。
+	// store 为 nil（web 层未注入）时跳过；CreateConversation 失败只警告不阻塞 Start。
+	if m.store != nil {
+		existing, getErr := m.store.GetConversation(convID)
+		if getErr != nil {
+			fmt.Printf("[session] 查询对话 %s 元数据失败: %v\n", convID, getErr)
+		} else if existing == nil {
+			title := task
+			if len(title) > 30 {
+				title = title[:30]
+			}
+			if createErr := m.store.CreateConversation(convID, title, opts.WorkspaceRoot); createErr != nil {
+				fmt.Printf("[session] 创建对话 %s 元数据失败: %v\n", convID, createErr)
+			}
+		}
 	}
 
 	// 创建会话上下文（独立于调用方 ctx，Stop 时可单独取消）
@@ -405,14 +441,25 @@ func (m *SessionManager) IsRunning(convID string) bool {
 }
 
 // GetHistory 返回指定会话的已结束 History 副本（深复制 + 剥离 Reasoning）。
-// 会话不存在返回 nil。若会话刚结束（EventDone 已发射但 Running 尚未清除），
+// 会话不存在时 fallback 到 MessageStore 加载完整历史（含 ToolCalls/Reasoning）。
+// 若会话刚结束（EventDone 已发射但 Running 尚未清除），
 // 从 Loop.History 读取以消除竞态。
 func (m *SessionManager) GetHistory(convID string) []Message {
 	m.mu.RLock()
 	sess, ok := m.sessions[convID]
+	store := m.store
 	m.mu.RUnlock()
 	if !ok {
-		return nil
+		// 会话不在内存中：fallback 到 store 加载完整历史
+		if store == nil {
+			return nil
+		}
+		msgs, err := store.LoadAll(convID)
+		if err != nil {
+			fmt.Printf("[session] GetHistory 从 store 加载 %s 失败: %v\n", convID, err)
+			return nil
+		}
+		return msgs
 	}
 	if !sess.Running && sess.History != nil {
 		return copyHistoryNoReasoning(sess.History)
@@ -626,4 +673,31 @@ func doAutoCommit(root, task, result string) {
 		return
 	}
 	fmt.Printf("[auto-commit] ✅ 已自动提交: auto: %s\n", msg)
+}
+
+// AppendPersistedMessage 追加一条消息到 MessageStore（持久化）。
+// 供 web 层 startEventPersistWorker 在 EventDone 等时机调用，
+// 将 loop.History 中的新消息增量持久化。
+// 若 store 为 nil 则无操作（web 层未注入时静默跳过）。
+func (m *SessionManager) AppendPersistedMessage(convID string, msg Message, segments []Segment) error {
+	m.mu.RLock()
+	store := m.store
+	m.mu.RUnlock()
+	if store == nil {
+		return nil
+	}
+	return store.AppendMessage(convID, msg, segments)
+}
+
+// AppendPersistedUserMessage 追加一条用户消息到 MessageStore（便捷封装）。
+// 供 web 层 handleChatSend 在调 Start 前调用，先持久化用户消息。
+// 若 store 为 nil 则无操作。
+func (m *SessionManager) AppendPersistedUserMessage(convID, content string) error {
+	m.mu.RLock()
+	store := m.store
+	m.mu.RUnlock()
+	if store == nil {
+		return nil
+	}
+	return store.AppendUserMessage(convID, content)
 }

@@ -175,6 +175,21 @@ async function sendFeedback(convId, content) {
   return apiPost('/chat/feedback', { convId, content })
 }
 
+// ─── 对话消息懒加载 ──────────────────────────────────────────
+
+// 获取对话消息（分页）：默认拉最新 limit 条；传 before 时向前翻页
+// 返回 { messages: [...], total: N }，messages 中每条含 segments 字段
+async function getMessages(convId, { limit = 50, before = null } = {}) {
+  const params = { limit }
+  if (before !== null && before !== undefined) params.before = before
+  return apiGet('/conversations/' + encodeURIComponent(convId) + '/messages', params)
+}
+
+// 获取对话消息总数
+async function getMessagesCount(convId) {
+  return apiGet('/conversations/' + encodeURIComponent(convId) + '/messages/count')
+}
+
 // ─── 模型列表 ──────────────────────────────────────────────
 
 async function getModels() {
@@ -201,4 +216,4 @@ async function savePhilosophy(data) {
   return apiPut('/philosophy', data)
 }
 
-export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, closeWebSocket, isWebSocketOpen, chatStart, answerChat, approveChat, sendFeedback, chatStop, getModels, getInstructions, saveInstructions, getPhilosophy, savePhilosophy }
+export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, closeWebSocket, isWebSocketOpen, chatStart, answerChat, approveChat, sendFeedback, chatStop, getMessages, getMessagesCount, getModels, getInstructions, saveInstructions, getPhilosophy, savePhilosophy }

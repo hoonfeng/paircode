@@ -96,6 +96,8 @@ export const state = reactive({
   phaseByConv: {},           // { [convId]: string } 各对话当前阶段（自主模式）
   nudgeByConv: {},           // { [convId]: string } 各对话 nudge 提示文本
   convCtxStatsByConv: {},    // { [convId]: reactive({...}) } 各对话上下文 token 统计
+  msgTotalByConv: {},        // { [convId]: number } 各对话总消息数（懒加载判断是否还有更早消息）
+  msgLoadedByConv: {},       // { [convId]: number } 各对话已加载消息数
   runningByWorkspace: {},    // { [wsRoot]: count } 各工作区运行中 agent 计数（供工作区列表显示脉冲点）
   wsTokenStats: reactive({   // 工作区级 token 统计（跨对话汇总）
     promptTokens: 0, completionTokens: 0, totalTokens: 0,

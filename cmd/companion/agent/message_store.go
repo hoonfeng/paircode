@@ -1,0 +1,633 @@
+// MessageStore: 对话消息持久化的唯一权威，JSONL 单文件存储 + index.json 元数据
+package agent
+
+import (
+	"bufio"
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"sync"
+	"time"
+)
+
+// Segment 前端展示用的消息分段（thinking/content/tool_call/tool_result/ask_user 等）。
+type Segment struct {
+	Type     string `json:"type"`               // thinking | content | tool_call | tool_result | ask_user
+	Content  string `json:"content,omitempty"`  // 文本内容（thinking/content/tool_result）
+	Name     string `json:"name,omitempty"`     // 工具名（tool_call）
+	ArgsRaw  string `json:"argsRaw,omitempty"`  // 工具参数 JSON 字符串（tool_call）
+	Result   string `json:"result,omitempty"`   // 工具结果（tool_call）
+	Question string `json:"question,omitempty"` // 问题文本（ask_user）
+	CallID   string `json:"callId,omitempty"`   // 工具调用 ID（tool_call/ask_user）
+	Answer   string `json:"answer,omitempty"`   // 用户答案（ask_user）
+}
+
+// StoredMessage JSONL 中的一行。
+type StoredMessage struct {
+	Idx       int       `json:"idx"`       // 自增序号（0-based），用于分页游标
+	Message   Message   `json:"message"`   // 完整 agent.Message
+	Segments  []Segment `json:"segments"`  // 前端展示用 segments
+	Timestamp string    `json:"timestamp"` // 写入时间 RFC3339
+}
+
+// ConversationMeta 对话元数据（存于 index.json）。
+type ConversationMeta struct {
+	ID            string `json:"id"`
+	Title         string `json:"title"`
+	CreatedAt     string `json:"createdAt"`
+	UpdatedAt     string `json:"updatedAt"`
+	WorkspaceRoot string `json:"workspaceRoot,omitempty"`
+	MsgCount      int    `json:"msgCount"`
+	Summary       string `json:"summary,omitempty"`
+	SummaryAt     string `json:"summaryAt,omitempty"`
+	CtxStats      *Usage  `json:"ctxStats,omitempty"`
+}
+
+// MessageStore 对话消息持久化的唯一权威。
+// 每对话一个 JSONL 文件 + 集中的 index.json 元数据。
+// 并发安全：per-conv mutex（sync.Map[convID]*sync.Mutex）防同一文件并发 append 冲突，
+// index.json 全局 mutex 防元数据读写冲突。
+type MessageStore struct {
+	root    string     // 工作区根路径
+	convMu  sync.Map   // map[string]*sync.Mutex  key=convID，懒初始化
+	indexMu sync.Mutex // index.json 全局锁
+}
+
+// NewMessageStore 创建消息存储器，初始化 .pair/conversations/ 目录。
+func NewMessageStore(root string) *MessageStore {
+	s := &MessageStore{root: root}
+	_ = os.MkdirAll(s.conversationsDir(), 0o755)
+	return s
+}
+
+// conversationsDir 返回 {root}/.pair/conversations/ 路径。
+func (s *MessageStore) conversationsDir() string {
+	return filepath.Join(s.root, ".pair", "conversations")
+}
+
+// convFilePath 返回 {root}/.pair/conversations/{convID}.jsonl 路径。
+func (s *MessageStore) convFilePath(convID string) string {
+	return filepath.Join(s.conversationsDir(), convID+".jsonl")
+}
+
+// indexPath 返回 {root}/.pair/conversations/index.json 路径。
+func (s *MessageStore) indexPath() string {
+	return filepath.Join(s.conversationsDir(), "index.json")
+}
+
+// getConvMutex 懒初始化并返回 per-conv mutex（LoadOrStore 模式）。
+func (s *MessageStore) getConvMutex(convID string) *sync.Mutex {
+	v, _ := s.convMu.LoadOrStore(convID, &sync.Mutex{})
+	return v.(*sync.Mutex)
+}
+
+// loadIndex 读取 index.json，文件不存在返回空切片。
+func (s *MessageStore) loadIndex() ([]ConversationMeta, error) {
+	data, err := os.ReadFile(s.indexPath())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []ConversationMeta{}, nil
+		}
+		return nil, err
+	}
+	var metas []ConversationMeta
+	if err := json.Unmarshal(data, &metas); err != nil {
+		return nil, err
+	}
+	if metas == nil {
+		metas = []ConversationMeta{}
+	}
+	return metas, nil
+}
+
+// saveIndex 写入 index.json（全量覆盖，MarshalIndent 缩进）。
+func (s *MessageStore) saveIndex(metas []ConversationMeta) error {
+	data, err := json.MarshalIndent(metas, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(s.indexPath(), data, 0o644)
+}
+
+// readJSONL 读取 JSONL 文件全部行并解码为 StoredMessage 切片。
+// 解码失败的行跳过（容错）。文件不存在返回 nil, nil。
+// 使用 10MB buffer（工具结果可能很长）。
+func (s *MessageStore) readJSONL(convID string) ([]StoredMessage, error) {
+	f, err := os.Open(s.convFilePath(convID))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 1024*1024), 10*1024*1024) // 10MB buffer
+	var msgs []StoredMessage
+	for scanner.Scan() {
+		line := bytes.TrimSpace(scanner.Bytes())
+		if len(line) == 0 {
+			continue
+		}
+		var sm StoredMessage
+		if err := json.Unmarshal(line, &sm); err != nil {
+			continue // 容错：跳过解码失败的行
+		}
+		msgs = append(msgs, sm)
+	}
+	return msgs, scanner.Err()
+}
+
+// countJSONLLines 统计 JSONL 文件的非空行数。文件不存在返回 0。
+func (s *MessageStore) countJSONLLines(convID string) (int, error) {
+	f, err := os.Open(s.convFilePath(convID))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 1024*1024), 10*1024*1024) // 10MB buffer
+	count := 0
+	for scanner.Scan() {
+		if len(bytes.TrimSpace(scanner.Bytes())) > 0 {
+			count++
+		}
+	}
+	return count, scanner.Err()
+}
+
+// CreateConversation 创建对话元数据（幂等：已存在则直接返回 nil）。
+// 不创建空 JSONL 文件（按需在 AppendMessage 时创建）。
+func (s *MessageStore) CreateConversation(convID, title, workspaceRoot string) error {
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
+
+	metas, err := s.loadIndex()
+	if err != nil {
+		return fmt.Errorf("CreateConversation: 读取 index 失败: %w", err)
+	}
+
+	// 幂等：已存在则直接返回
+	for _, m := range metas {
+		if m.ID == convID {
+			return nil
+		}
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	metas = append(metas, ConversationMeta{
+		ID:            convID,
+		Title:         title,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+		WorkspaceRoot: workspaceRoot,
+		MsgCount:      0,
+	})
+
+	if err := s.saveIndex(metas); err != nil {
+		return fmt.Errorf("CreateConversation: 写入 index 失败: %w", err)
+	}
+	return nil
+}
+
+// AppendMessage 追加一条消息到对话的 JSONL 文件，并更新 index.json。
+// 获取 per-conv mutex 后：读取当前 JSONL 行数作为新 Idx（文件不存在则 Idx=0）。
+func (s *MessageStore) AppendMessage(convID string, msg Message, segments []Segment) error {
+	mu := s.getConvMutex(convID)
+	mu.Lock()
+	defer mu.Unlock()
+
+	// 读取当前 JSONL 行数作为新 Idx
+	count, err := s.countJSONLLines(convID)
+	if err != nil {
+		return fmt.Errorf("AppendMessage: 统计行数失败: %w", err)
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	sm := StoredMessage{
+		Idx:       count,
+		Message:   msg,
+		Segments:  segments,
+		Timestamp: now,
+	}
+
+	// JSON 编码 + 追加一行
+	data, err := json.Marshal(sm)
+	if err != nil {
+		return fmt.Errorf("AppendMessage: JSON 编码失败: %w", err)
+	}
+	data = append(data, '\n')
+
+	f, err := os.OpenFile(s.convFilePath(convID), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return fmt.Errorf("AppendMessage: 打开文件失败: %w", err)
+	}
+	defer f.Close()
+
+	if _, err := f.Write(data); err != nil {
+		return fmt.Errorf("AppendMessage: 写入失败: %w", err)
+	}
+
+	// 更新 index.json：对应 conv 的 MsgCount++、UpdatedAt=now（若不存在则创建 meta）
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
+
+	metas, err := s.loadIndex()
+	if err != nil {
+		return fmt.Errorf("AppendMessage: 读取 index 失败: %w", err)
+	}
+
+	found := false
+	for i := range metas {
+		if metas[i].ID == convID {
+			metas[i].MsgCount++
+			metas[i].UpdatedAt = now
+			found = true
+			break
+		}
+	}
+	if !found {
+		// 若不存在则创建 meta
+		metas = append(metas, ConversationMeta{
+			ID:        convID,
+			Title:     "新对话 " + time.Now().UTC().Format("15:04"),
+			CreatedAt: now,
+			UpdatedAt: now,
+			MsgCount:  1,
+		})
+	}
+
+	if err := s.saveIndex(metas); err != nil {
+		return fmt.Errorf("AppendMessage: 写入 index 失败: %w", err)
+	}
+	return nil
+}
+
+// AppendUserMessage 便捷封装：追加一条用户消息。
+func (s *MessageStore) AppendUserMessage(convID, content string) error {
+	return s.AppendMessage(convID, Message{Role: RoleUser, Content: content}, nil)
+}
+
+// LoadLatest 加载对话最新的消息。
+// 返回：消息切片、总数、错误。
+// limit <= 0 或 limit >= total 时返回全部；否则返回最后 limit 条（idx 升序）。
+// 文件不存在返回空切片、total=0、nil。JSON 解码失败的行跳过（容错）。
+func (s *MessageStore) LoadLatest(convID string, limit int) ([]StoredMessage, int, error) {
+	msgs, err := s.readJSONL(convID)
+	if err != nil {
+		return nil, 0, err
+	}
+	if msgs == nil {
+		msgs = []StoredMessage{}
+	}
+	total := len(msgs)
+	if limit <= 0 || limit >= total {
+		return msgs, total, nil
+	}
+	return msgs[total-limit:], total, nil
+}
+
+// LoadBefore 加载 idx < beforeIdx 的最新 limit 条消息（idx 升序）。
+// limit <= 0 时默认 50。供前端向上分页 prepend。
+func (s *MessageStore) LoadBefore(convID string, beforeIdx int, limit int) ([]StoredMessage, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	msgs, err := s.readJSONL(convID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 过滤 Idx < beforeIdx（msgs 已按 idx 升序）
+	var filtered []StoredMessage
+	for _, m := range msgs {
+		if m.Idx < beforeIdx {
+			filtered = append(filtered, m)
+		}
+	}
+	if len(filtered) == 0 {
+		return []StoredMessage{}, nil
+	}
+
+	// 取最新 limit 条（filtered 已按 idx 升序，取末尾 limit 条）
+	if len(filtered) <= limit {
+		return filtered, nil
+	}
+	return filtered[len(filtered)-limit:], nil
+}
+
+// LoadAll 加载对话全部消息（仅 Message，不含 Segments），供 LLM 上下文恢复。
+func (s *MessageStore) LoadAll(convID string) ([]Message, error) {
+	msgs, err := s.readJSONL(convID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Message, 0, len(msgs))
+	for _, sm := range msgs {
+		out = append(out, sm.Message)
+	}
+	return out, nil
+}
+
+// Count 返回对话 JSONL 行数。文件不存在返回 0。
+func (s *MessageStore) Count(convID string) (int, error) {
+	return s.countJSONLLines(convID)
+}
+
+// DeleteConversation 删除对话：移除 JSONL 文件 + 从 index.json 移除 meta + 清理 per-conv mutex。
+func (s *MessageStore) DeleteConversation(convID string) error {
+	mu := s.getConvMutex(convID)
+	mu.Lock()
+	defer mu.Unlock()
+
+	// 删除 JSONL 文件（忽略 IsNotExist）
+	if err := os.Remove(s.convFilePath(convID)); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("DeleteConversation: 删除 JSONL 失败: %w", err)
+	}
+
+	// 从 index.json 移除该 conv meta
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
+
+	metas, err := s.loadIndex()
+	if err != nil {
+		return fmt.Errorf("DeleteConversation: 读取 index 失败: %w", err)
+	}
+
+	newMetas := make([]ConversationMeta, 0, len(metas))
+	for _, m := range metas {
+		if m.ID != convID {
+			newMetas = append(newMetas, m)
+		}
+	}
+
+	if err := s.saveIndex(newMetas); err != nil {
+		return fmt.Errorf("DeleteConversation: 写入 index 失败: %w", err)
+	}
+
+	// 清理 per-conv mutex（Delete from sync.Map）
+	s.convMu.Delete(convID)
+	return nil
+}
+
+// ListConversations 列出指定工作区的对话（按 UpdatedAt 倒序）。
+// 兼容旧数据：WorkspaceRoot 为空视为属于传入的 workspaceRoot（一并返回）。
+func (s *MessageStore) ListConversations(workspaceRoot string) ([]ConversationMeta, error) {
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
+
+	metas, err := s.loadIndex()
+	if err != nil {
+		return nil, fmt.Errorf("ListConversations: 读取 index 失败: %w", err)
+	}
+
+	out := make([]ConversationMeta, 0, len(metas))
+	for _, m := range metas {
+		if m.WorkspaceRoot == workspaceRoot || m.WorkspaceRoot == "" {
+			out = append(out, m)
+		}
+	}
+
+	// 按 UpdatedAt 倒序
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].UpdatedAt > out[j].UpdatedAt
+	})
+
+	return out, nil
+}
+
+// UpdateTitle 更新对话标题及 UpdatedAt。
+func (s *MessageStore) UpdateTitle(convID, title string) error {
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
+
+	metas, err := s.loadIndex()
+	if err != nil {
+		return fmt.Errorf("UpdateTitle: 读取 index 失败: %w", err)
+	}
+
+	for i := range metas {
+		if metas[i].ID == convID {
+			metas[i].Title = title
+			metas[i].UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+			return s.saveIndex(metas)
+		}
+	}
+	return nil // 不存在则无操作
+}
+
+// SetSummary 设置对话摘要及 SummaryAt、UpdatedAt。
+func (s *MessageStore) SetSummary(convID, summary, summaryAt string) error {
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
+
+	metas, err := s.loadIndex()
+	if err != nil {
+		return fmt.Errorf("SetSummary: 读取 index 失败: %w", err)
+	}
+
+	for i := range metas {
+		if metas[i].ID == convID {
+			metas[i].Summary = summary
+			metas[i].SummaryAt = summaryAt
+			metas[i].UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+			return s.saveIndex(metas)
+		}
+	}
+	return nil
+}
+
+// GetConversation 查找对话元数据，返回副本。不存在返回 nil, nil。
+func (s *MessageStore) GetConversation(convID string) (*ConversationMeta, error) {
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
+
+	metas, err := s.loadIndex()
+	if err != nil {
+		return nil, fmt.Errorf("GetConversation: 读取 index 失败: %w", err)
+	}
+
+	for _, m := range metas {
+		if m.ID == convID {
+			cp := m // 返回副本
+			return &cp, nil
+		}
+	}
+	return nil, nil
+}
+
+// SetCtxStats 更新对话的上下文 token 统计及 UpdatedAt。
+func (s *MessageStore) SetCtxStats(convID string, stats *Usage) error {
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
+
+	metas, err := s.loadIndex()
+	if err != nil {
+		return fmt.Errorf("SetCtxStats: 读取 index 失败: %w", err)
+	}
+
+	for i := range metas {
+		if metas[i].ID == convID {
+			metas[i].CtxStats = stats
+			metas[i].UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+			return s.saveIndex(metas)
+		}
+	}
+	return nil
+}
+
+// ─── 旧格式迁移 ───
+
+// legacyMessage conversations.json 中的简化消息格式（无 ToolCalls/Reasoning）。
+type legacyMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+// legacyConversation conversations.json 的对话结构。
+type legacyConversation struct {
+	ID            string          `json:"id"`
+	Title         string          `json:"title"`
+	CreatedAt     string          `json:"createdAt"`
+	UpdatedAt     string          `json:"updatedAt"`
+	WorkspaceRoot string          `json:"workspaceRoot"`
+	Messages      []legacyMessage `json:"messages,omitempty"`
+	Summary       string          `json:"summary,omitempty"`
+	SummaryAt     string          `json:"summaryAt,omitempty"`
+	CtxStats      *Usage          `json:"ctxStats,omitempty"`
+}
+
+// legacyCachedSession history_cache.json 的缓存会话结构。
+// 含完整 History（含 ToolCalls/Reasoning），供迁移时保留完整上下文。
+// 同时兼容 Messages 字段（旧数据可能用此字段名）。
+type legacyCachedSession struct {
+	History  []Message `json:"history"`
+	Messages []Message `json:"messages"`
+}
+
+// MigrateFromLegacy 从旧格式（conversations.json + history_cache.json）迁移到新格式。
+//
+// 迁移逻辑：
+//   - 解析 conversations.json，对每个对话：
+//   - 若 convID 已存在（之前迁移过），跳过整个对话
+//   - 调 CreateConversation(id, title, workspaceRoot)
+//   - 若 history_cache.json 中有对应 convID 的 History，用 History 中的 Message 追加（segments=nil）
+//   - 否则用 conversations.json 的简化 messages 重建（无 ToolCalls/Reasoning）
+//   - 同时设置 summary/summaryAt（若有）、ctxStats（若有）
+//
+// 迁移成功后将旧文件重命名为 .bak（不删除，防回滚）。若 .bak 已存在则覆盖。
+func (s *MessageStore) MigrateFromLegacy(conversationsJSONPath, historyCacheJSONPath string) error {
+	// 1. 解析 conversations.json
+	convData, err := os.ReadFile(conversationsJSONPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil // 无旧文件，无需迁移
+		}
+		return fmt.Errorf("migrate: 读取 conversations.json 失败: %w", err)
+	}
+	var legacyConvs []legacyConversation
+	if err := json.Unmarshal(convData, &legacyConvs); err != nil {
+		return fmt.Errorf("migrate: 解析 conversations.json 失败: %w", err)
+	}
+
+	// 2. 解析 history_cache.json（可选，文件不存在则跳过）
+	var historyCache map[string]*legacyCachedSession
+	if hcData, err := os.ReadFile(historyCacheJSONPath); err == nil {
+		_ = json.Unmarshal(hcData, &historyCache)
+	}
+
+	// 3. 逐个迁移对话
+	for _, lc := range legacyConvs {
+		// 若 convID 已存在（之前迁移过），跳过整个对话，避免重复
+		existing, err := s.GetConversation(lc.ID)
+		if err != nil {
+			return fmt.Errorf("migrate: 查询对话 %s 失败: %w", lc.ID, err)
+		}
+		if existing != nil {
+			continue
+		}
+
+		// 创建对话元数据
+		if err := s.CreateConversation(lc.ID, lc.Title, lc.WorkspaceRoot); err != nil {
+			return fmt.Errorf("migrate: 创建对话 %s 失败: %w", lc.ID, err)
+		}
+
+		// 追加消息：优先用 history_cache 的完整 History（含 ToolCalls/Reasoning）
+		usedHistory := false
+		if cached, ok := historyCache[lc.ID]; ok && cached != nil {
+			var msgs []Message
+			if len(cached.History) > 0 {
+				msgs = cached.History
+			} else if len(cached.Messages) > 0 {
+				// 兼容旧数据可能用 Messages 字段
+				msgs = cached.Messages
+			}
+			if len(msgs) > 0 {
+				for _, msg := range msgs {
+					if err := s.AppendMessage(lc.ID, msg, nil); err != nil {
+						return fmt.Errorf("migrate: 追加消息失败 (conv=%s): %w", lc.ID, err)
+					}
+				}
+				usedHistory = true
+			}
+		}
+
+		// 若未用 history_cache，则用 conversations.json 的简化 messages 重建
+		if !usedHistory {
+			for _, lm := range lc.Messages {
+				msg := Message{
+					Role:    Role(lm.Role),
+					Content: lm.Content,
+				}
+				if err := s.AppendMessage(lc.ID, msg, nil); err != nil {
+					return fmt.Errorf("migrate: 追加消息失败 (conv=%s): %w", lc.ID, err)
+				}
+			}
+		}
+
+		// 设置摘要（若有）
+		if lc.Summary != "" || lc.SummaryAt != "" {
+			if err := s.SetSummary(lc.ID, lc.Summary, lc.SummaryAt); err != nil {
+				return fmt.Errorf("migrate: 设置摘要失败 (conv=%s): %w", lc.ID, err)
+			}
+		}
+
+		// 设置上下文统计（若有）
+		if lc.CtxStats != nil {
+			if err := s.SetCtxStats(lc.ID, lc.CtxStats); err != nil {
+				return fmt.Errorf("migrate: 设置上下文统计失败 (conv=%s): %w", lc.ID, err)
+			}
+		}
+	}
+
+	// 4. 将旧文件重命名为 .bak（不删除，防回滚）。若 .bak 已存在则覆盖。
+	if err := renameToBak(conversationsJSONPath); err != nil {
+		return fmt.Errorf("migrate: 重命名 conversations.json 失败: %w", err)
+	}
+	// history_cache.json 可能不存在，忽略 IsNotExist 错误
+	if err := renameToBak(historyCacheJSONPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("migrate: 重命名 history_cache.json 失败: %w", err)
+	}
+
+	return nil
+}
+
+// renameToBak 将文件重命名为 .bak。若 .bak 已存在则先删除再重命名（覆盖）。
+// 源文件不存在时返回 IsNotExist 错误。
+func renameToBak(src string) error {
+	if _, err := os.Stat(src); err != nil {
+		return err
+	}
+	bakPath := src + ".bak"
+	// 若 .bak 已存在则先删除（覆盖）
+	_ = os.Remove(bakPath)
+	return os.Rename(src, bakPath)
+}

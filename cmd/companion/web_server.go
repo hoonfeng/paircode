@@ -38,15 +38,6 @@ type webServer struct {
 	server *http.Server
 	port   int
 	mu     sync.Mutex
-	// historyCache 持久化对话历史缓存（convID → 完整 []Message）。
-	// 替代 loadConversationHistory + BuildHistory 模式。
-	// loop.Run 返回的完整 msgs 缓存于此，下次同 convID 请求直接复用（传 nil history，loop.Run 自动使用 l.History）。
-	historyCache map[string]*CachedSession
-}
-
-// CachedSession 持久化缓存的会话状态（历史消息）。
-type CachedSession struct {
-	Messages []agent.Message `json:"messages"`
 }
 
 // agentMgr 全局会话管理器：管理并行 agent 会话（Start/Stop/Subscribe 等）。
@@ -56,61 +47,26 @@ var agentMgr = agent.NewSessionManager()
 var ws *webServer
 
 // startWebUI 在后台启动 Web UI 服务器。
-// historyCachePath 返回 historyCache 持久化文件路径。
-func historyCachePath() string {
-	root := core.Root()
-	if root == "" {
-		return ""
-	}
-	return filepath.Join(root, ".pair", "history_cache.json")
-}
-
-// saveHistoryCache 将 historyCache 持久化到磁盘。
-func (s *webServer) saveHistoryCache() {
-	path := historyCachePath()
-	if path == "" {
-		return
-	}
-	s.mu.Lock()
-	data, err := json.MarshalIndent(s.historyCache, "", "  ")
-	s.mu.Unlock()
-	if err != nil {
-		return
-	}
-	_ = os.MkdirAll(filepath.Dir(path), 0755)
-	_ = os.WriteFile(path, data, 0644)
-}
-
-// loadHistoryCache 从磁盘加载 historyCache。
-func (s *webServer) loadHistoryCache() {
-	path := historyCachePath()
-	if path == "" {
-		return
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return // 文件不存在或读取失败 → 保持空 map
-	}
-	var cached map[string]*CachedSession
-	if err := json.Unmarshal(data, &cached); err != nil {
-		return
-	}
-	s.mu.Lock()
-	for k, v := range cached {
-		s.historyCache[k] = v
-	}
-	s.mu.Unlock()
-}
-
 func startWebUI(port int) {
 	if ws != nil {
 		return
 	}
 	ws = &webServer{
-		port:         port,
-		historyCache: make(map[string]*CachedSession),
+		port: port,
 	}
-	ws.loadHistoryCache() // 从磁盘恢复历史缓存
+	// 初始化 MessageStore（消息持久化的唯一权威），并迁移旧格式数据
+	root := core.Root()
+	if root != "" {
+		agentMgr.SetWorkspaceRoot(root)
+		// 迁移旧 conversations.json + history_cache.json 到新格式
+		convPath := filepath.Join(root, ".pair", "conversations.json")
+		hcPath := filepath.Join(root, ".pair", "history_cache.json")
+		if store := agentMgr.Store(); store != nil {
+			if err := store.MigrateFromLegacy(convPath, hcPath); err != nil {
+				fmt.Printf("[WebUI] 迁移旧对话数据失败（不阻塞启动）: %v\n", err)
+			}
+		}
+	}
 	memory.SetRoot(core.Root())
 	// 初始化 Skills 资源目录（供 LoadAllSkills 使用）
 	if root := core.Root(); root != "" {
@@ -776,101 +732,28 @@ func (s *webServer) handleExec(w http.ResponseWriter, r *http.Request) {
 
 // ─── 对话列表 API ────────────────────────────────────────────
 
-// Conversation 对话。
-// Conversation 一次对话会话。
-// Summary 字段在对话结束后由 AI 生成，用于跨对话的上下文记忆注入。
-type Conversation struct {
-	ID            string `json:"id"`
-	Title         string `json:"title"`
-	CreatedAt     string `json:"createdAt"`
-	UpdatedAt     string `json:"updatedAt"`
-	WorkspaceRoot string `json:"workspaceRoot,omitempty"` // 工作区根路径（跨工作区隔离）
-	Messages      []struct {
-		Role    string `json:"role"`
-		Content string `json:"content"`
-	} `json:"messages,omitempty"`
-	Summary    string      `json:"summary,omitempty"`   // AI 生成的对话摘要
-	SummaryAt  string      `json:"summaryAt,omitempty"` // 摘要生成时间
-	CtxStats   *agent.Usage `json:"ctxStats,omitempty"`  // 最后一次 LLM 调用的上下文 token 构成（对话级累积）
-}
-
-
-var (
-	conversationsMu sync.Mutex
-	conversations   []Conversation
-)
-
-func conversationsPath() string {
-	root := core.Root()
-	if root == "" {
-		return ""
-	}
-	pairDir := filepath.Join(root, ".pair")
-	os.MkdirAll(pairDir, 0755)
-	return filepath.Join(pairDir, "conversations.json")
-}
-
-func loadConversations() {
-	path := conversationsPath()
-	if path == "" {
-		conversations = []Conversation{}
-		return
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		conversations = []Conversation{}
-		return
-	}
-	json.Unmarshal(data, &conversations)
-	if conversations == nil {
-		conversations = []Conversation{}
-	}
-}
-
-func saveConversations() {
-	path := conversationsPath()
-	if path == "" {
-		return
-	}
-	data, _ := json.MarshalIndent(conversations, "", "  ")
-	os.WriteFile(path, data, 0644)
-}
-
 func (s *webServer) handleConversations(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "GET":
-		loadConversations()
-		// 工作区过滤：?workspace=root 只返回该工作区的对话
-		// 兼容旧对话（WorkspaceRoot 为空）：视为属于当前核心工作区，不过滤掉
 		wsFilter := r.URL.Query().Get("workspace")
-		coreRoot := core.Root()
-		conversationsMu.Lock()
-		type convBrief struct {
-			ID            string `json:"id"`
-			Title         string `json:"title"`
-			CreatedAt     string `json:"createdAt"`
-			UpdatedAt     string `json:"updatedAt"`
-			WorkspaceRoot string `json:"workspaceRoot,omitempty"`
-			MsgCount      int    `json:"msgCount"`
+		store := agentMgr.Store()
+		if store == nil {
+			jsonResp(w, []agent.ConversationMeta{})
+			return
 		}
-		brief := make([]convBrief, 0, len(conversations))
-		for _, c := range conversations {
-			if wsFilter != "" && c.WorkspaceRoot != wsFilter {
-				// 旧对话（WorkspaceRoot 为空）在请求当前核心工作区时不过滤
-				if !(c.WorkspaceRoot == "" && wsFilter == coreRoot) {
-					continue
-				}
-			}
-			brief = append(brief, convBrief{
-				ID: c.ID, Title: c.Title, CreatedAt: c.CreatedAt,
-				UpdatedAt: c.UpdatedAt, WorkspaceRoot: c.WorkspaceRoot, MsgCount: len(c.Messages),
-			})
+		metas, err := store.ListConversations(wsFilter)
+		if err != nil {
+			jsonErr(w, err.Error())
+			return
 		}
-		conversationsMu.Unlock()
-		jsonResp(w, brief)
+		if metas == nil {
+			metas = []agent.ConversationMeta{}
+		}
+		jsonResp(w, metas)
 
 	case "POST":
 		var req struct {
+			ID            string `json:"id"`
 			Title         string `json:"title"`
 			WorkspaceRoot string `json:"workspaceRoot"`
 		}
@@ -878,68 +761,32 @@ func (s *webServer) handleConversations(w http.ResponseWriter, r *http.Request) 
 			jsonErr(w, err.Error())
 			return
 		}
-		loadConversations()
-		conversationsMu.Lock()
+		store := agentMgr.Store()
+		if store == nil {
+			jsonErr(w, "消息存储未初始化")
+			return
+		}
+		id := req.ID
+		if id == "" {
+			id = fmt.Sprintf("conv_%d", time.Now().UnixNano())
+		}
 		wsRoot := req.WorkspaceRoot
 		if wsRoot == "" {
-			wsRoot = core.Root() // 兜底用当前工作区
+			wsRoot = core.Root()
 		}
-		conv := Conversation{
-			ID:            fmt.Sprintf("conv_%d", time.Now().UnixNano()),
-			Title:         req.Title,
-			CreatedAt:     time.Now().Format("2006-01-02T15:04:05"),
-			UpdatedAt:     time.Now().Format("2006-01-02T15:04:05"),
-			WorkspaceRoot: wsRoot,
-			Messages: []struct {
-				Role    string `json:"role"`
-				Content string `json:"content"`
-			}{},
+		title := req.Title
+		if title == "" {
+			title = "新对话 " + time.Now().Format("15:04")
 		}
-		if conv.Title == "" {
-			conv.Title = "新对话 " + time.Now().Format("15:04")
+		if err := store.CreateConversation(id, title, wsRoot); err != nil {
+			jsonErr(w, err.Error())
+			return
 		}
-		conversations = append(conversations, conv)
-		saveConversations()
-		conversationsMu.Unlock()
-		jsonResp(w, conv)
+		jsonResp(w, map[string]any{"ok": true, "id": id})
 
 	default:
 		jsonErr(w, "不支持的方法")
 	}
-}
-
-// ensureConversation 确保对话记录存在（handleChatSend 启动 agent 时调用）。
-// 若对话不存在则创建并标记 WorkspaceRoot；已存在则更新 WorkspaceRoot（若为空）。
-func (s *webServer) ensureConversation(convID, wsRoot string) {
-	loadConversations()
-	conversationsMu.Lock()
-	defer conversationsMu.Unlock()
-	for i := range conversations {
-		if conversations[i].ID == convID {
-			if conversations[i].WorkspaceRoot == "" && wsRoot != "" {
-				conversations[i].WorkspaceRoot = wsRoot
-				saveConversations()
-			}
-			return
-		}
-	}
-	// 不存在则创建
-	if wsRoot == "" {
-		wsRoot = core.Root()
-	}
-	conv := Conversation{
-		ID:            convID,
-		Title:         "新对话 " + time.Now().Format("15:04"),
-		CreatedAt:     time.Now().Format("2006-01-02T15:04:05"),
-		UpdatedAt:     time.Now().Format("2006-01-02T15:04:05"),
-		WorkspaceRoot: wsRoot,
-		Messages: []struct {
-			Role    string `json:"role"`
-			Content string `json:"content"`
-		}{},
-	}
-	conversations = append(conversations, conv)
-	saveConversations()
 }
 
 func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Request) {
@@ -949,59 +796,109 @@ func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	id := parts[0]
-	wantMessages := len(parts) >= 2 && parts[1] == "messages"
-	wantTokenStats := len(parts) >= 2 && parts[1] == "token-stats"
-
-	loadConversations()
-	conversationsMu.Lock()
-	defer conversationsMu.Unlock()
-	var conv *Conversation
-	for i := range conversations {
-		if conversations[i].ID == id {
-			conv = &conversations[i]
-			break
-		}
+	sub := ""
+	if len(parts) >= 2 {
+		sub = parts[1]
 	}
-	if conv == nil {
-		jsonErr(w, "对话不存在")
+	subSub := ""
+	if len(parts) >= 3 {
+		subSub = parts[2]
+	}
+
+	store := agentMgr.Store()
+	if store == nil {
+		jsonErr(w, "消息存储未初始化")
 		return
 	}
 
 	switch r.Method {
 	case "GET":
-		if wantTokenStats {
-			// 返回该对话的上下文 token 构成（每次 LLM 调用时记录，含全部历史）
-			if conv.CtxStats != nil {
-				cs := conv.CtxStats
-				m := map[string]any{
-					"promptTokens":     cs.PromptTokens,
-					"completionTokens": cs.CompletionTokens,
-					"totalTokens":      cs.TotalTokens,
-					"cacheHitTokens":   cs.PromptCacheHitTokens,
-					"cacheMissTokens":  cs.PromptCacheMissTokens,
+		switch {
+		case sub == "messages" && subSub == "count":
+			n, err := store.Count(id)
+			if err != nil {
+				jsonErr(w, err.Error())
+				return
+			}
+			jsonResp(w, map[string]any{"count": n})
+
+		case sub == "messages":
+			limit := 50
+			if l := r.URL.Query().Get("limit"); l != "" {
+				fmt.Sscanf(l, "%d", &limit)
+			}
+			beforeStr := r.URL.Query().Get("before")
+			if beforeStr != "" {
+				var before int
+				fmt.Sscanf(beforeStr, "%d", &before)
+				msgs, err := store.LoadBefore(id, before, limit)
+				if err != nil {
+					jsonErr(w, err.Error())
+					return
 				}
-				if cs.PromptBreakdown.SystemTokens > 0 || cs.PromptBreakdown.SkillsTokens > 0 ||
-					cs.PromptBreakdown.MCPTokens > 0 || cs.PromptBreakdown.ToolTokens > 0 {
-					m["systemTokens"] = cs.SystemTokens
-					m["skillsTokens"] = cs.SkillsTokens
-					m["mcpTokens"] = cs.MCPTokens
-					m["toolTokens"] = cs.ToolTokens
-					m["historyTokens"] = cs.HistoryTokens
-					m["otherTokens"] = cs.OtherTokens
+				if msgs == nil {
+					msgs = []agent.StoredMessage{}
 				}
-				jsonResp(w, m)
+				total, _ := store.Count(id)
+				jsonResp(w, map[string]any{"messages": msgs, "total": total})
 			} else {
+				msgs, total, err := store.LoadLatest(id, limit)
+				if err != nil {
+					jsonErr(w, err.Error())
+					return
+				}
+				if msgs == nil {
+					msgs = []agent.StoredMessage{}
+				}
+				jsonResp(w, map[string]any{"messages": msgs, "total": total})
+			}
+
+		case sub == "token-stats":
+			meta, err := store.GetConversation(id)
+			if err != nil {
+				jsonErr(w, err.Error())
+				return
+			}
+			if meta == nil || meta.CtxStats == nil {
 				jsonResp(w, map[string]any{
 					"promptTokens": 0, "completionTokens": 0, "totalTokens": 0,
 					"cacheHitTokens": 0, "cacheMissTokens": 0,
 				})
+				return
 			}
-			return
-		}
-		if wantMessages {
-			jsonResp(w, conv.Messages)
-		} else {
-			jsonResp(w, conv)
+			cs := meta.CtxStats
+			m := map[string]any{
+				"promptTokens":     cs.PromptTokens,
+				"completionTokens": cs.CompletionTokens,
+				"totalTokens":      cs.TotalTokens,
+				"cacheHitTokens":   cs.PromptCacheHitTokens,
+				"cacheMissTokens":  cs.PromptCacheMissTokens,
+			}
+			if cs.PromptBreakdown.SystemTokens > 0 || cs.PromptBreakdown.SkillsTokens > 0 ||
+				cs.PromptBreakdown.MCPTokens > 0 || cs.PromptBreakdown.ToolTokens > 0 {
+				m["systemTokens"] = cs.SystemTokens
+				m["skillsTokens"] = cs.SkillsTokens
+				m["mcpTokens"] = cs.MCPTokens
+				m["toolTokens"] = cs.ToolTokens
+				m["historyTokens"] = cs.HistoryTokens
+				m["otherTokens"] = cs.OtherTokens
+			}
+			jsonResp(w, m)
+
+		case sub == "":
+			meta, err := store.GetConversation(id)
+			if err != nil {
+				jsonErr(w, err.Error())
+				return
+			}
+			if meta == nil {
+				jsonErr(w, "对话不存在")
+				return
+			}
+			jsonResp(w, meta)
+
+		default:
+			jsonErr(w, "未知的子路径: "+sub)
 		}
 
 	case "PUT":
@@ -1013,20 +910,22 @@ func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		if req.Title != "" {
-			conv.Title = req.Title
+			if err := store.UpdateTitle(id, req.Title); err != nil {
+				jsonErr(w, err.Error())
+				return
+			}
 		}
-		conv.UpdatedAt = time.Now().Format("2006-01-02T15:04:05")
-		saveConversations()
-		jsonResp(w, conv)
+		jsonResp(w, map[string]any{"ok": true})
 
 	case "POST":
-		if !wantMessages {
+		if sub != "messages" {
 			jsonErr(w, "请使用 /conversations/{id}/messages")
 			return
 		}
 		var msg struct {
-			Role    string `json:"role"`
-			Content string `json:"content"`
+			Role     string          `json:"role"`
+			Content  string          `json:"content"`
+			Segments []agent.Segment `json:"segments"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
 			jsonErr(w, err.Error())
@@ -1035,49 +934,27 @@ func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Reques
 		if msg.Role == "" {
 			msg.Role = "user"
 		}
-		conv.Messages = append(conv.Messages, msg)
-		conv.UpdatedAt = time.Now().Format("2006-01-02T15:04:05")
-		saveConversations()
-		jsonResp(w, map[string]any{"ok": true, "messageIndex": len(conv.Messages) - 1})
+		agentMsg := agent.Message{Role: agent.Role(msg.Role), Content: msg.Content}
+		if err := store.AppendMessage(id, agentMsg, msg.Segments); err != nil {
+			jsonErr(w, err.Error())
+			return
+		}
+		jsonResp(w, map[string]any{"ok": true})
 
 	case "DELETE":
-		log.Printf("[API] DELETE conversation: %s (found=%v)", id, conv != nil)
-		newConvs := make([]Conversation, 0, len(conversations))
-		for _, c := range conversations {
-			if c.ID != id {
-				newConvs = append(newConvs, c)
-			}
+		log.Printf("[API] DELETE conversation: %s", id)
+		if err := store.DeleteConversation(id); err != nil {
+			jsonErr(w, err.Error())
+			return
 		}
-		conversations = newConvs
-		before := len(newConvs)
-		saveConversations()
-		// 同步删除记忆索引
+		// 同步删除记忆索引（跨对话摘要索引）
 		memory.Delete(id)
-		after := len(conversations)
-		log.Printf("[API] DELETE conversation done: id=%s before=%d after=%d", id, before, after)
+		log.Printf("[API] DELETE conversation done: id=%s", id)
 		jsonResp(w, map[string]any{"ok": true})
 
 	default:
 		jsonErr(w, "不支持的方法")
 	}
-}
-
-// saveConvCtxStats 将 LLM 调用的 token 用量保存到对应对话的 CtxStats 中。
-// 每次 agent loop 发出 EventUsage 时由事件持久化 worker 调用。
-func saveConvCtxStats(convID string, usage *agent.Usage) {
-	if convID == "" || usage == nil {
-		return
-	}
-	loadConversations()
-	conversationsMu.Lock()
-	for i := range conversations {
-		if conversations[i].ID == convID {
-			conversations[i].CtxStats = usage
-			break
-		}
-	}
-	conversationsMu.Unlock()
-	saveConversations()
 }
 
 
@@ -1535,107 +1412,88 @@ console.log("Hello from %s!");
 	}
 }
 
-// loadConversationHistory 从对话文件加载过往消息作为 LLM 上下文。
-// 同时注入其他对话的历史摘要，让 Agent 了解之前对话的背景。
-// 用 agent.BuildHistory 排除最后一条消息避免 loop.Run 重复添加。
+// loadConversationHistory 从 MessageStore 加载对话的全部过往消息作为 LLM 上下文。
+// 委托给 agentMgr.Store().LoadAll(convID)；store 未注入时返回 nil。
 func (s *webServer) loadConversationHistory(convID string) []agent.Message {
-	// 直接使用内存中的 conversations，不从磁盘重读（避免并发 save 的竞态）
-	hist := make([]agent.Message, 0, 32)
-
-	// ── 1. 加载当前对话的过往消息 ──
 	if convID == "" {
-		return hist
+		return nil
 	}
-	var conv *Conversation
-	for i := range conversations {
-		if conversations[i].ID == convID {
-			conv = &conversations[i]
-			break
-		}
+	store := agentMgr.Store()
+	if store == nil {
+		return nil
 	}
-	if conv == nil || len(conv.Messages) == 0 {
-		return hist
+	msgs, err := store.LoadAll(convID)
+	if err != nil {
+		return nil
 	}
-	// 统一用 agent.BuildHistory 排除最后一条用户消息，
-	// 避免 loop.Run 内部再次添加时造成重复。
-	all := make([]agent.Message, 0, len(conv.Messages))
-	for _, msg := range conv.Messages {
-		role := agent.RoleAssistant
-		switch msg.Role {
-		case "user":
-			role = agent.RoleUser
-		case "system":
-			role = agent.RoleSystem
-		}
-		all = append(all, agent.Message{Role: role, Content: msg.Content})
-	}
-	return agent.BuildHistory(all)
+	return msgs
 }
 
 // ── 对话摘要生成 ──────────────────────────────────────────
 
-// generateConversationSummary 用 LLM 生成对话摘要并保存到 conversations.json。
-// 在对话完全结束后调用（goroutine 内异步）。prov 为用于生成摘要的 provider。
-// 如 prov 为 nil 或生成失败，则用规则式摘要作为兜底，不影响主流程。
+// generateConversationSummary 用规则式生成对话摘要并保存到 MessageStore。
+// 在对话完全结束后调用（goroutine 内异步）。prov 保留兼容但当前未使用（规则式摘要）。
 func generateConversationSummary(convID string, prov agent.Provider) {
 	if convID == "" {
 		return
 	}
 	_ = prov
 
-	loadConversations()
-	var conv *Conversation
-	for i := range conversations {
-		if conversations[i].ID == convID {
-			conv = &conversations[i]
-			break
-		}
-	}
-	if conv == nil || len(conv.Messages) == 0 {
+	store := agentMgr.Store()
+	if store == nil {
 		return
 	}
 
-	// 已有摘要且消息数没变 → 跳过（避免重复生成）
-	if conv.Summary != "" {
+	meta, err := store.GetConversation(convID)
+	if err != nil || meta == nil {
+		return
+	}
+
+	// 已有摘要 → 跳过（避免重复生成）
+	if meta.Summary != "" {
+		return
+	}
+
+	msgs, err := store.LoadAll(convID)
+	if err != nil || len(msgs) == 0 {
 		return
 	}
 
 	// 使用 pkg/summary 生成摘要
-	msgs := make([]summary.Message, len(conv.Messages))
-	for i, m := range conv.Messages {
-		msgs[i] = summary.Message{Role: m.Role, Content: m.Content}
+	summaryMsgs := make([]summary.Message, len(msgs))
+	for i, m := range msgs {
+		summaryMsgs[i] = summary.Message{Role: string(m.Role), Content: m.Content}
 	}
 	s := summary.Generate(summary.ConvInfo{
-		ID: conv.ID, Title: conv.Title,
-		CreatedAt: conv.CreatedAt, UpdatedAt: conv.UpdatedAt,
-		Messages: msgs,
+		ID: meta.ID, Title: meta.Title,
+		CreatedAt: meta.CreatedAt, UpdatedAt: meta.UpdatedAt,
+		Messages: summaryMsgs,
 	})
 	if s == "" {
 		return
 	}
-	conv.Summary = s
-	conv.SummaryAt = time.Now().Format("2006-01-02 15:04:05")
-	saveConversations()
+	summaryAt := time.Now().Format("2006-01-02 15:04:05")
+	store.SetSummary(convID, s, summaryAt)
 
 	// 同步写入记忆索引
 	assistantMsgs := make([]string, 0)
-	allMsgs := make([]string, len(conv.Messages))
-	for i, m := range conv.Messages {
+	allMsgs := make([]string, len(msgs))
+	for i, m := range msgs {
 		allMsgs[i] = m.Content
-		if m.Role == "assistant" {
+		if m.Role == agent.RoleAssistant {
 			assistantMsgs = append(assistantMsgs, m.Content)
 		}
 	}
 	memory.Upsert(memory.Entry{
-		ID:           conv.ID,
-		Title:        conv.Title,
+		ID:           meta.ID,
+		Title:        meta.Title,
 		Summary:      s,
-		CreatedAt:    conv.CreatedAt,
-		UpdatedAt:    conv.UpdatedAt,
-		MessageCount: len(conv.Messages),
+		CreatedAt:    meta.CreatedAt,
+		UpdatedAt:    meta.UpdatedAt,
+		MessageCount: len(msgs),
 		Tags:         memory.ExtractTags(allMsgs),
 		KeyPoints:    memory.ExtractKeyPoints(assistantMsgs),
-		CompletedAt:  conv.SummaryAt,
+		CompletedAt:  summaryAt,
 	})
 }
 
@@ -1657,35 +1515,45 @@ func (s *webServer) handleMemoryRebuild(w http.ResponseWriter, r *http.Request) 
 		jsonErr(w, "仅 POST")
 		return
 	}
-	loadConversations()
+	store := agentMgr.Store()
+	if store == nil {
+		jsonErr(w, "消息存储未初始化")
+		return
+	}
+	metas, err := store.ListConversations(core.Root())
+	if err != nil {
+		jsonErr(w, err.Error())
+		return
+	}
 	count := 0
-	for _, c := range conversations {
-		if len(c.Messages) < 2 {
+	for _, meta := range metas {
+		msgs, err := store.LoadAll(meta.ID)
+		if err != nil || len(msgs) < 2 {
 			continue
 		}
-		s := c.Summary
-		if s == "" {
-			msgs := make([]summary.Message, len(c.Messages))
-			for j, m := range c.Messages {
-				msgs[j] = summary.Message{Role: m.Role, Content: m.Content}
+		summaryStr := meta.Summary
+		if summaryStr == "" {
+			summaryMsgs := make([]summary.Message, len(msgs))
+			for j, m := range msgs {
+				summaryMsgs[j] = summary.Message{Role: string(m.Role), Content: m.Content}
 			}
-			s = summary.Generate(summary.ConvInfo{ID: c.ID, Title: c.Title, Messages: msgs})
+			summaryStr = summary.Generate(summary.ConvInfo{ID: meta.ID, Title: meta.Title, Messages: summaryMsgs})
 		}
 		assistantMsgs := make([]string, 0)
-		allMsgs := make([]string, len(c.Messages))
-		for j, m := range c.Messages {
+		allMsgs := make([]string, len(msgs))
+		for j, m := range msgs {
 			allMsgs[j] = m.Content
-			if m.Role == "assistant" {
+			if m.Role == agent.RoleAssistant {
 				assistantMsgs = append(assistantMsgs, m.Content)
 			}
 		}
 		memory.Upsert(memory.Entry{
-			ID: c.ID, Title: c.Title, Summary: s,
-			CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt,
-			MessageCount: len(c.Messages),
+			ID: meta.ID, Title: meta.Title, Summary: summaryStr,
+			CreatedAt: meta.CreatedAt, UpdatedAt: meta.UpdatedAt,
+			MessageCount: len(msgs),
 			Tags:         memory.ExtractTags(allMsgs),
 			KeyPoints:    memory.ExtractKeyPoints(assistantMsgs),
-			CompletedAt:  c.SummaryAt,
+			CompletedAt:  meta.SummaryAt,
 		})
 		count++
 	}
@@ -1724,7 +1592,7 @@ func runGitInternal(ctx context.Context, args ...string) (string, error) {
 		if out != "" {
 			return out, nil
 		}
-		return "", fmt.Errorf(errMsg)
+		return "", fmt.Errorf("%s", errMsg)
 	}
 	return out, nil
 }

@@ -584,21 +584,16 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 			sys += "\n\n# 已完成对话历史\n" + memSb.String()
 		}
 	}
-	// ── 加载对话历史（Agent 自闭环管理历史） ──
-	// 有缓存历史时传给 LoopOpts.History，SessionManager.Start 会设置到 loop.History。
-	// 无缓存时从 conversations 存储重建（首次加载）。
+	// ── 加载对话历史（委托给 MessageStore） ──
+	// 从 store 加载完整历史（含 ToolCalls/Reasoning），传给 LoopOpts.History。
+	// SessionManager.Start 会设置到 loop.History。
 	//
 	// 历史中含上一轮的系统消息，和当前系统提示前缀相同——保留它以最大化 LLM 缓存命中
 	// （连续请求共享相同 prompt 前缀时命中 KV-cache，大幅降低延迟与成本）。
 	var history []agent.Message
 	if convID != "" {
-		s.mu.Lock()
-		cached, ok := s.historyCache[convID]
-		s.mu.Unlock()
-		if ok {
-			history = cached.Messages
-		} else {
-			history = s.loadConversationHistory(convID)
+		if store := agentMgr.Store(); store != nil {
+			history, _ = store.LoadAll(convID)
 		}
 	}
 
@@ -663,8 +658,8 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 若对话不存在则创建（标记 WorkspaceRoot）
-	s.ensureConversation(req.ConvID, req.WorkspaceRoot)
+	// 持久化用户消息到 MessageStore（SessionManager.Start 内部会调 store.CreateConversation 若不存在）
+	agentMgr.AppendPersistedUserMessage(req.ConvID, req.Message)
 
 	// 构建 LoopOpts（provider/registry/system/history 全部收敛于此）
 	opts := s.buildWebLoopOpts(req.ConvID, req.Message, req.Autonomous)
@@ -700,7 +695,7 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 // 替代原 handleChatEvents 中的持久化逻辑，与传输层（WebSocket）解耦。
 func (s *webServer) startEventPersistWorker() {
 	ch := agentMgr.SubscribeAll()
-	// 定期持久化后台协程：每 5 秒保存所有运行中会话的历史到磁盘
+	// 定期持久化后台协程：每 5 秒增量追加运行中会话的新消息到 MessageStore
 	go func() {
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
@@ -709,47 +704,67 @@ func (s *webServer) startEventPersistWorker() {
 		}
 	}()
 	go func() {
+		// 按需持久化：EventUsage（token 统计写入 store）、EventDone/EventError（diff-based 追加历史）
+		// 不对 thinking/content/tool_call 等高频事件做磁盘 I/O，避免阻塞事件消费循环。
 		for ge := range ch {
 			convID := ge.ConvID
-			e := ge.Event
-			// 每次 LLM 调用后保存历史（防页面刷新/崩溃丢失上下文）
-				if convID != "" {
-					if hist := agentMgr.GetCurrentHistory(convID); hist != nil {
-						s.mu.Lock()
-						s.historyCache[convID] = &CachedSession{Messages: hist}
-						s.mu.Unlock()
-						s.saveHistoryCache()
+			if convID == "" {
+				continue
+			}
+			switch ge.Event.Type {
+			case agent.EventUsage:
+				// 每次调用后保存上下文构成到 store（页面刷新后恢复）
+				if ge.Event.Usage != nil {
+					if store := agentMgr.Store(); store != nil {
+						_ = store.SetCtxStats(convID, ge.Event.Usage)
 					}
 				}
-			}
-			if e.Type == agent.EventDone {
-				if hist := agentMgr.GetHistory(convID); hist != nil {
-					s.mu.Lock()
-					s.historyCache[convID] = &CachedSession{Messages: hist}
-					s.mu.Unlock()
-					s.saveHistoryCache()
+			case agent.EventDone, agent.EventError:
+				// 会话结束或出错时 diff-based 追加新消息到 store
+				var hist []agent.Message
+				if ge.Event.Type == agent.EventDone {
+					hist = agentMgr.GetHistory(convID)
+				} else {
+					hist = agentMgr.GetCurrentHistory(convID)
 				}
-				// 异步生成对话摘要
-				if convID != "" {
+				if hist != nil {
+					if store := agentMgr.Store(); store != nil {
+						existing, _ := store.Count(convID)
+						if len(hist) > existing {
+							for i := existing; i < len(hist); i++ {
+								_ = store.AppendMessage(convID, hist[i], nil)
+							}
+						}
+					}
+				}
+				if ge.Event.Type == agent.EventDone && convID != "" {
 					go generateConversationSummary(convID, bridge.BuildCompressor())
 				}
 			}
+			// 其他事件类型（thinking/content/tool_call/tool_result/approval/phase/notice/compacted/circling/evaluation）
+			// 不触发磁盘写入——由上方 ticker goroutine 每 5 秒统一增量持久化运行中会话的历史。
 		}
 	}()
 }
 
-// persistRunningHistories 持久化所有运行中会话的实时历史到磁盘。
+// persistRunningHistories 增量追加所有运行中会话的新消息到 MessageStore。
 // 由 startEventPersistWorker 的定期后台协程调用（每 5 秒），
 // 确保页面刷新或进程崩溃时上下文不丢失。
 func (s *webServer) persistRunningHistories() {
 	for _, convID := range agentMgr.ListRunning() {
-		if hist := agentMgr.GetCurrentHistory(convID); hist != nil {
-			s.mu.Lock()
-			s.historyCache[convID] = &CachedSession{Messages: hist}
-			s.mu.Unlock()
+		hist := agentMgr.GetCurrentHistory(convID)
+		if hist == nil {
+			continue
+		}
+		if store := agentMgr.Store(); store != nil {
+			existing, _ := store.Count(convID)
+			if len(hist) > existing {
+				for i := existing; i < len(hist); i++ {
+					_ = store.AppendMessage(convID, hist[i], nil)
+				}
+			}
 		}
 	}
-	s.saveHistoryCache()
 }
 
 // handleChatStop 停止指定会话的 agent 运行。

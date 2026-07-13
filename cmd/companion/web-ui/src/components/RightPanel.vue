@@ -251,7 +251,18 @@ const virtualState = computed(() => {
 })
 const visibleMessages = computed(() => virtualState.value.visible)
 const virtualOffset = computed(() => virtualState.value.offset)
-const hasMoreTop = computed(() => virtualState.value.visible.length < state.messages.length)
+const hasMoreTop = computed(() => {
+  const id = state.currentConvId
+  const msgs = state.messagesByConv[id]
+  if (!msgs || msgs.length === 0) return false
+  if (msgs[0]._noMoreAbove) return false
+  // 依据最早已加载消息的 _idx 判断是否还有更早消息（比 msgTotal/Loaded 更可靠）
+  const oldestIdx = msgs[0]._idx
+  return oldestIdx !== undefined && oldestIdx !== null && oldestIdx > 0
+})
+
+// loadingMoreTop 防止懒加载重复触发
+const loadingMoreTop = ref(false)
 
 function onScroll() {
   if (msgRef.value) {
@@ -259,6 +270,56 @@ function onScroll() {
     containerHeight.value = msgRef.value.clientHeight
     const el = msgRef.value
     isNearBottom.value = el.scrollTop + el.clientHeight >= el.scrollHeight - 150
+    // 顶部懒加载：scrollTop < 100 且还有更早消息可加载
+    if (el.scrollTop < 100 && !loadingMoreTop.value) {
+      loadMoreMessages()
+    }
+  }
+}
+
+// loadMoreMessages 向前分页加载更早消息，prepend 到数组并维护滚动位置
+const loadMoreMessages = async () => {
+  const id = state.currentConvId
+  if (!id) return
+  const msgs = state.messagesByConv[id]
+  if (!msgs || msgs.length === 0) return
+  if (msgs[0]._noMoreAbove) return
+  const oldestIdx = msgs[0]._idx
+  if (oldestIdx === undefined || oldestIdx === null || oldestIdx <= 0) return
+  loadingMoreTop.value = true
+  // 记录 prepend 前的 scrollHeight，用于补偿滚动位置
+  const oldScrollHeight = msgRef.value ? msgRef.value.scrollHeight : 0
+  try {
+    const data = await api.getMessages(id, { before: oldestIdx, limit: 50 })
+    const older = (data.messages || []).map((m, i) => ({
+      role: m.message?.role || m.role || '',
+      content: m.message?.content || m.content || '',
+      segments: m.segments || [],
+      _key: 'msg_' + Date.now() + '_older_' + i,
+      _idx: m.idx,
+      _time: m.timestamp || '',
+    }))
+    if (older.length > 0) {
+      // prepend 到数组头部
+      state.messagesByConv[id] = [...older, ...msgs]
+      state.messages = state.messagesByConv[id]
+      state.msgLoadedByConv[id] = (state.msgLoadedByConv[id] || 0) + older.length
+      // 补偿滚动位置：保持当前可视消息不动
+      nextTick(() => {
+        if (msgRef.value) {
+          const newScrollHeight = msgRef.value.scrollHeight
+          msgRef.value.scrollTop = newScrollHeight - oldScrollHeight
+          // 懒加载 prepend 不改变 isNearBottom
+        }
+      })
+    } else {
+      // 无更早消息：标记防止重复请求
+      msgs[0]._noMoreAbove = true
+    }
+  } catch (e) {
+    console.warn('loadMoreMessages 失败:', e)
+  } finally {
+    loadingMoreTop.value = false
   }
 }
 
@@ -520,6 +581,8 @@ const newConversation = async () => {
     state.conversations.unshift({ id: conv.id, title: conv.title, msgCount: 0, createdAt: conv.createdAt, updatedAt: conv.updatedAt })
     if (!state.messagesByConv[conv.id]) state.messagesByConv[conv.id] = []
     state.messages = state.messagesByConv[conv.id]
+    state.msgTotalByConv[conv.id] = 0
+    state.msgLoadedByConv[conv.id] = 0
     resetConvCtxStats(conv.id)
   } catch {
     // 后端创建失败时兜底：用临时空对话
@@ -552,6 +615,8 @@ const deleteConv = async (id) => {
     delete state.phaseByConv[id]
     delete state.nudgeByConv[id]
     delete state.convCtxStatsByConv[id]
+    delete state.msgTotalByConv[id]
+    delete state.msgLoadedByConv[id]
     if (state.currentConvId === id) {
       state.currentConvId = ''
       state.messages = []
@@ -577,32 +642,26 @@ const switchConv = async (id) => {
     const ts = await api.apiGet('/conversations/' + id + '/token-stats')
     if (ts && ts.promptTokens !== undefined) Object.assign(getConvCtxStats(id), ts)
   } catch {}
-  // 加载历史（若 messagesByConv[id] 为空）
-      if (state.messagesByConv[id].length === 0) {
+  // 懒加载：若本地尚无消息缓存，拉取最新 50 条
+  if (state.messagesByConv[id].length === 0) {
     try {
-      const msgs = await api.apiGet('/conversations/' + id + '/messages')
-      state.messagesByConv[id] = (msgs || []).map((m, idx) => {
-        // 尝试解包编码的 content（含 segments）
-        let content = m.content || ''
-        let segments = []
-        if (content && content.startsWith('{"_type":"msg"')) {
-          try {
-            const decoded = JSON.parse(content)
-            content = decoded.text || ''
-            segments = (decoded.segs || []).map(s => {
-              const seg = { ...s, _expanded: false, _collapsed: s.type === 'thinking' ? true : false }
-              return seg
-            })
-          } catch {}
-        }
-        return {
-          role: m.role, content, segments,
-          _key: 'msg_' + Date.now() + '_' + idx, _idx: idx,
-          _time: '',
-        }
-      })
+      const data = await api.getMessages(id, { limit: 50 })
+      const loaded = (data.messages || []).map((m, i) => ({
+        role: m.message?.role || m.role || '',
+        content: m.message?.content || m.content || '',
+        segments: m.segments || [],
+        _key: 'msg_' + Date.now() + '_' + i,
+        _idx: m.idx,
+        _time: m.timestamp || '',
+      }))
+      state.messagesByConv[id] = loaded
       state.messages = state.messagesByConv[id]
-    } catch {}
+      state.msgTotalByConv[id] = data.total || loaded.length
+      state.msgLoadedByConv[id] = loaded.length
+    } catch {
+      state.msgTotalByConv[id] = 0
+      state.msgLoadedByConv[id] = 0
+    }
   }
   forceScrollToBottom()
 }
@@ -763,16 +822,15 @@ onMounted(() => {
     loadWsTokenStats: () => loadWsTokenStats(),
     autoNameConv: (convId, text) => autoNameConv(convId, text),
     saveConvMsg: (convId, content, msgIdx) => {
-      // 把 segments 也编码进 content，以便后端拉取后能恢复
+      // 直接传 segments 独立字段，后端 store.AppendMessage 接受独立 segments 参数
       let payload = { role: 'assistant', content }
       if (msgIdx !== undefined && state.messagesByConv[convId] && state.messagesByConv[convId][msgIdx]) {
         const segs = state.messagesByConv[convId][msgIdx].segments
         if (segs && segs.length > 0) {
-          payload.content = JSON.stringify({
-            _type: 'msg',
-            text: content,
-            segs: segs.map(s => ({ type: s.type, content: s.content, name: s.name, argsRaw: s.argsRaw, result: s.result, question: s.question, callId: s.callId })),
-          })
+          payload.segments = segs.map(s => ({
+            type: s.type, content: s.content, name: s.name, argsRaw: s.argsRaw,
+            result: s.result, question: s.question, callId: s.callId,
+          }))
         }
       }
       api.apiPost('/conversations/' + convId + '/messages', payload).catch(e => console.warn('saveConvMsg 失败:', e))
@@ -867,7 +925,7 @@ onUnmounted(() => {
 
 
 
-.bubble-user {
+.msg-user .bubble-user {
   flex: 0 0 auto;
   max-width: 80%;
   min-width: 40px;
@@ -881,7 +939,7 @@ onUnmounted(() => {
   margin: 2px 0;
 }
 /* 选中文字在深色气泡上可见 */
-.bubble-user ::selection {
+.msg-user .bubble-user ::selection {
   background: rgba(255, 255, 255, 0.3);
   color: #fff;
 }
