@@ -15,6 +15,8 @@ export const dialogState = reactive({
   cancelText: '取消',
   inputValue: '',
   inputPlaceholder: '',
+  checkboxLabel: '',   // confirm 类型时可选 checkbox 文案
+  checkboxValue: false,// confirm 类型时 checkbox 状态
   resolve: null,  // Promise resolve 函数
   toasts: [],     // { id, message, type }
 })
@@ -26,6 +28,23 @@ window.$confirm = (message, title = '确认', confirmText = '确定', cancelText
     dialogState.message = message
     dialogState.confirmText = confirmText
     dialogState.cancelText = cancelText
+    dialogState.checkboxLabel = ''
+    dialogState.checkboxValue = false
+    dialogState.show = true
+    dialogState.resolve = resolve
+  })
+}
+
+// $confirmWithCheckbox 带 checkbox 的确认对话框，resolve({ confirmed: bool, checked: bool })
+window.$confirmWithCheckbox = (message, title = '确认', checkboxLabel = '', confirmText = '确定', cancelText = '取消') => {
+  return new Promise(resolve => {
+    dialogState.type = 'confirm'
+    dialogState.title = title
+    dialogState.message = message
+    dialogState.confirmText = confirmText
+    dialogState.cancelText = cancelText
+    dialogState.checkboxLabel = checkboxLabel
+    dialogState.checkboxValue = false
     dialogState.show = true
     dialogState.resolve = resolve
   })

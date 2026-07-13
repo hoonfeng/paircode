@@ -247,16 +247,24 @@ async function showWsContextMenu(e, ws) {
       break
     }
     case 'delete':
-      if (!(await window.$confirm(`确认删除工作区 "${ws.name}" ？（不会删除文件）`))) return
-      // 通知后端删除该工作区的所有对话
-      try { await api.apiPost('/workspace', { action: 'delete', root: ws.path }) } catch (e) { console.warn('删除工作区后端失败:', e) }
-      state.wsList = state.wsList.filter(w => w.path !== ws.path)
-      await saveWsList()
-      if (state.workspaceRoot === ws.path) {
-        state.workspaceRoot = state.wsList[0]?.path || ''
-        state.workspaceName = state.wsList[0]?.name || ''
-        if (state.workspaceRoot) await switchToWorkspace(state.wsList[0])
-      }
+      (async () => {
+        const result = await window.$confirmWithCheckbox(
+          `确认删除工作区 "${ws.name}"？`,
+          '删除工作区',
+          '同时删除该工作区的对话历史、快照等文件 (.pair目录)'
+        )
+        if (!result || !result.confirmed) return
+        try {
+          await api.apiPost('/workspace', { action: 'delete', root: ws.path, deleteFiles: result.checked })
+        } catch (e) { console.warn('删除工作区后端失败:', e) }
+        state.wsList = state.wsList.filter(w => w.path !== ws.path)
+        await saveWsList()
+        if (state.workspaceRoot === ws.path) {
+          state.workspaceRoot = state.wsList[0]?.path || ''
+          state.workspaceName = state.wsList[0]?.name || ''
+          if (state.workspaceRoot) await switchToWorkspace(state.wsList[0])
+        }
+      })()
       break
     case 'open-terminal': {
       state.bottomPanelVisible = true

@@ -379,13 +379,14 @@ func (s *webServer) handleWorkspace(w http.ResponseWriter, r *http.Request) {
 		})
 	case "POST":
 		var req struct {
-			Action    string   `json:"action"`
-			Root      string   `json:"root"`
-			Folders   []string `json:"folders"`
-			Name      string   `json:"name"`
-			Path      string   `json:"path"`
-			ParentDir string   `json:"parentDir"`
-			Lang      string   `json:"lang"`
+			Action      string   `json:"action"`
+			Root        string   `json:"root"`
+			Folders     []string `json:"folders"`
+			Name        string   `json:"name"`
+			Path        string   `json:"path"`
+			ParentDir   string   `json:"parentDir"`
+			Lang        string   `json:"lang"`
+			DeleteFiles bool     `json:"deleteFiles"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			jsonErr(w, err.Error())
@@ -500,15 +501,56 @@ func (s *webServer) handleWorkspace(w http.ResponseWriter, r *http.Request) {
 				jsonErr(w, "需要 root 参数（工作区路径）")
 				return
 			}
-			// 从 recentProjects 中移除（对话数据保存在各工作区自己的 .pair/ 下，不删除）
+			root := req.Root
+			// 1. 从 RecentProjects 中移除
 			newProjects := make([]string, 0, len(core.Settings.RecentProjects))
 			for _, p := range core.Settings.RecentProjects {
-				if p != req.Root {
+				if p != root {
 					newProjects = append(newProjects, p)
 				}
 			}
 			core.Settings.RecentProjects = newProjects
+
+			// 2. 从 WorkspaceFolders 中移除
+			newFolders := make([]string, 0, len(core.Settings.WorkspaceFolders))
+			for _, f := range core.Settings.WorkspaceFolders {
+				if f != root {
+					newFolders = append(newFolders, f)
+				}
+			}
+			core.Settings.WorkspaceFolders = newFolders
+
+			// 3. 从 core.Folders 中移除
+			core.Folders = newFolders
+
+			// 4. 如果 LastProject 匹配，清空（避免 health 接口仍返回已删除的工作区）
+			if core.Settings.LastProject == root {
+				core.Settings.LastProject = ""
+				if len(core.Folders) > 0 {
+					core.Settings.LastProject = core.Folders[0]
+				}
+			}
+			if core.Settings.LastProject == "" {
+				core.Loaded = false
+			}
 			core.Save()
+
+			// 5. 可选：删除工作区下的 .pair 目录（对话历史、快照等）
+			if req.DeleteFiles {
+				pairDir := filepath.Join(root, ".pair")
+				if stat, err := os.Stat(pairDir); err == nil && stat.IsDir() {
+					if err := os.RemoveAll(pairDir); err != nil {
+						log.Printf("[Workspace] 删除 %s 失败: %v", pairDir, err)
+					} else {
+						log.Printf("[Workspace] 已删除 %s", pairDir)
+					}
+				}
+			}
+
+			// 同步工作区变更
+			if core.OnSyncWorkspace != nil {
+				core.OnSyncWorkspace(true)
+			}
 			jsonResp(w, map[string]any{"ok": true})
 
 		default:

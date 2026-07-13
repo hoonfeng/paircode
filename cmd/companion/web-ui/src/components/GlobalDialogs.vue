@@ -12,6 +12,10 @@
     <div class="dlg-box" style="max-width:400px">
       <div class="dlg-title">{{ dialogState.title }}</div>
       <div class="dlg-body">{{ dialogState.message }}</div>
+      <label v-if="dialogState.checkboxLabel" class="dlg-checkbox" @click.stop>
+        <input type="checkbox" v-model="dialogState.checkboxValue" />
+        <span>{{ dialogState.checkboxLabel }}</span>
+      </label>
       <div class="dlg-actions">
         <button class="dlg-btn" @click="handleCancel">{{ dialogState.cancelText }}</button>
         <button class="dlg-btn primary" @click="handleConfirm">{{ dialogState.confirmText }}</button>
@@ -66,16 +70,36 @@ watch(() => dialogState.show, (v) => {
 })
 
 function handleConfirm() {
-  const val = dialogState.type === 'prompt' ? dialogState.inputValue : true
-  dialogState.show = false
-  if (dialogState.resolve) dialogState.resolve(val)
+  if (dialogState.type === 'prompt') {
+    const val = dialogState.inputValue
+    dialogState.show = false
+    if (dialogState.resolve) dialogState.resolve(val)
+  } else if (dialogState.type === 'confirm' && dialogState.checkboxLabel) {
+    // 带 checkbox 的 confirm：resolve { confirmed, checked }
+    const confirmed = true
+    const checked = dialogState.checkboxValue
+    dialogState.show = false
+    if (dialogState.resolve) dialogState.resolve({ confirmed, checked })
+  } else {
+    const val = true
+    dialogState.show = false
+    if (dialogState.resolve) dialogState.resolve(val)
+  }
   dialogState.resolve = null
 }
 
 function handleCancel() {
-  const val = dialogState.type === 'prompt' ? null : false
-  dialogState.show = false
-  if (dialogState.resolve) dialogState.resolve(val)
+  if (dialogState.type === 'confirm' && dialogState.checkboxLabel) {
+    // 带 checkbox 的 confirm：取消时 resolve { confirmed: false, checked }
+    dialogState.show = false
+    if (dialogState.resolve) dialogState.resolve({ confirmed: false, checked: dialogState.checkboxValue })
+  } else if (dialogState.type === 'prompt') {
+    dialogState.show = false
+    if (dialogState.resolve) dialogState.resolve(null)
+  } else {
+    dialogState.show = false
+    if (dialogState.resolve) dialogState.resolve(false)
+  }
   dialogState.resolve = null
 }
 </script>
@@ -122,4 +146,13 @@ function handleCancel() {
   color: var(--text-primary); padding: 8px 10px; border-radius: 4px; font-size: 13px; outline: none;
 }
 .dlg-input:focus { border-color: var(--accent); }
+.dlg-checkbox {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 16px; font-size: 13px; color: var(--text-secondary);
+  cursor: pointer; user-select: none;
+}
+.dlg-checkbox input[type="checkbox"] {
+  width: 16px; height: 16px; cursor: pointer;
+  accent-color: var(--accent);
+}
 </style>
