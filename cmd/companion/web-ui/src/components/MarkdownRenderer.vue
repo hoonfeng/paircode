@@ -87,7 +87,7 @@ import mermaid from 'mermaid'
 
 const props = defineProps({
   text: { type: String, default: '' },
-  // 图表主题：'dark' | 'light' | 'warm' | 'cute'
+  // 图表主题：'dark' | 'light' | 'warm' | 'night'
   theme: { type: String, default: 'dark' },
 })
 
@@ -129,13 +129,13 @@ function getMermaidTheme(themeName) {
         mainBkg: '#f5ece0',
       },
     }
-    case 'cute': return { theme: 'default',
+    case 'night': return { theme: 'dark',
       themeVariables: {
-        primaryColor: '#fce4ec', primaryTextColor: '#4a1a2e', primaryBorderColor: '#e8b8c8',
-        lineColor: '#e84393', secondaryColor: '#fff5f7', tertiaryColor: '#f8d7e0',
-        clusterBkg: '#fff5f7', clusterBorder: '#e8b8c8', edgeLabelBackground: '#fce4ec',
-        nodeBorder: '#e84393', nodeTextColor: '#4a1a2e', background: 'transparent',
-        mainBkg: '#fce4ec',
+        primaryColor: '#2d2940', primaryTextColor: '#d8d4e0', primaryBorderColor: '#2d2940',
+        lineColor: '#9b8ec4', secondaryColor: '#1a1726', tertiaryColor: '#221f30',
+        clusterBkg: '#12101a', clusterBorder: '#2d2940', edgeLabelBackground: '#1a1726',
+        nodeBorder: '#9b8ec4', nodeTextColor: '#d8d4e0', background: 'transparent',
+        mainBkg: '#1a1726',
       },
     }
     default: return { theme: 'dark' }

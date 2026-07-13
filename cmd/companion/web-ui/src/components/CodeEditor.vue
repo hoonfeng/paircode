@@ -85,11 +85,11 @@ function createEditor() {
       '.cm-gutters': { backgroundColor: '#f5ece0', borderRight: '1px solid #d6c8b8' },
       '&.cm-focused .cm-cursor': { borderLeftColor: '#b87333' },
     }))
-  } else if (state.theme === 'cute') {
+  } else if (state.theme === 'night') {
     extensions.push(EditorView.theme({
-      '&': { backgroundColor: '#fff5f7', color: '#4a1a2e' },
-      '.cm-gutters': { backgroundColor: '#fce4ec', borderRight: '1px solid #e8b8c8' },
-      '&.cm-focused .cm-cursor': { borderLeftColor: '#e84393' },
+      '&': { backgroundColor: '#12101a', color: '#d8d4e0' },
+      '.cm-gutters': { backgroundColor: '#1a1726', borderRight: '1px solid #2d2940' },
+      '&.cm-focused .cm-cursor': { borderLeftColor: '#9b8ec4' },
     }))
   } else {
     // light

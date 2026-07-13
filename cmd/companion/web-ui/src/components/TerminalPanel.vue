@@ -37,7 +37,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
+import { state } from '../main.js'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
@@ -56,29 +57,39 @@ let resizeObserver = null
 const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
 const wsUrl = proto + '//' + location.host + '/api/terminal/ws'
 
-// ── xterm 主题（适配暗色） ──
-const xtermTheme = {
-  background: '#0d1117',
-  foreground: '#e6edf3',
-  cursor: '#58a6ff',
-  cursorAccent: '#0d1117',
-  selectionBackground: '#58a6ff44',
-  black: '#484f58',
-  red: '#ff7b72',
-  green: '#3fb950',
-  yellow: '#d29922',
-  blue: '#58a6ff',
-  magenta: '#bc8cff',
-  cyan: '#39c5cf',
-  white: '#b1bac4',
-  brightBlack: '#6e7681',
-  brightRed: '#ffa198',
-  brightGreen: '#56d364',
-  brightYellow: '#e3b341',
-  brightBlue: '#79c0ff',
-  brightMagenta: '#d2a8ff',
-  brightCyan: '#56d4dd',
-  brightWhite: '#f0f6fc',
+// ── xterm 主题（从 CSS 变量动态读取） ──
+function getXtermTheme() {
+  const s = getComputedStyle(document.documentElement)
+  const bg = s.getPropertyValue('--term-bg').trim() || '#0d1117'
+  const fg = s.getPropertyValue('--term-text').trim() || '#e6edf3'
+  const accent = s.getPropertyValue('--accent').trim() || '#58a6ff'
+  const border = s.getPropertyValue('--border-color').trim() || '#30363d'
+  const muted = s.getPropertyValue('--text-muted').trim() || '#6e7681'
+  const sec = s.getPropertyValue('--text-secondary').trim() || '#8b949e'
+  const prompt = s.getPropertyValue('--term-prompt').trim() || '#6a9955'
+  return {
+    background: bg,
+    foreground: fg,
+    cursor: accent,
+    cursorAccent: bg,
+    selectionBackground: accent + '44',
+    black: border,
+    red: '#e57373',
+    green: prompt,
+    yellow: '#d4a74e',
+    blue: accent,
+    magenta: '#b39ddb',
+    cyan: '#4dd0e1',
+    white: sec,
+    brightBlack: muted,
+    brightRed: '#ef9a9a',
+    brightGreen: '#81c784',
+    brightYellow: '#ffd54f',
+    brightBlue: accent,
+    brightMagenta: '#ce93d8',
+    brightCyan: '#80deea',
+    brightWhite: fg,
+  }
 }
 
 // ── 创建 xterm 实例 ──
@@ -88,7 +99,7 @@ function createXtermInstance(domEl) {
     cursorStyle: 'bar',
     fontSize: 13,
     fontFamily: "'Consolas', 'Cascadia Code', 'JetBrains Mono', monospace",
-    theme: xtermTheme,
+    theme: getXtermTheme(),
     allowProposedApi: true,
     cols: 80,
     rows: 24,
@@ -426,6 +437,16 @@ onBeforeUnmount(() => {
     resizeObserver = null
   }
 })
+
+// ── 主题切换时刷新 xterm 配色 ──
+watch(() => state.theme, () => {
+  const theme = getXtermTheme()
+  for (const term of terminals.value) {
+    if (term.xterm && term.xterm.setOption) {
+      term.xterm.setOption('theme', theme)
+    }
+  }
+})
 </script>
 
 <style>
@@ -446,31 +467,31 @@ onBeforeUnmount(() => {
 <style scoped>
 .terminal-panel {
   display: flex; flex-direction: column; height: 100%;
-  background: #0d1117; color: #e6edf3; font-size: 13px;
+  background: var(--term-bg); color: var(--term-text); font-size: 13px;
 }
 /* ── 终端标签栏 ── */
 .term-tabs {
-  display: flex; align-items: stretch; background: #161b22;
-  border-bottom: 1px solid #30363d; flex-shrink: 0; overflow-x: auto;
+  display: flex; align-items: stretch; background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color); flex-shrink: 0; overflow-x: auto;
   min-height: 28px;
 }
 .term-tab {
   display: flex; align-items: center; gap: 4px; padding: 4px 10px;
-  background: none; border: none; border-right: 1px solid #30363d;
-  color: #8b949e; font-size: 12px; cursor: pointer; white-space: nowrap;
+  background: none; border: none; border-right: 1px solid var(--border-color);
+  color: var(--text-secondary); font-size: 12px; cursor: pointer; white-space: nowrap;
   user-select: none;
 }
 .term-tab.active {
-  background: #0d1117; color: #e6edf3;
-  border-bottom: 1px solid #0d1117; margin-bottom: -1px;
+  background: var(--term-bg); color: var(--text-primary);
+  border-bottom: 1px solid var(--term-bg); margin-bottom: -1px;
 }
-.term-tab:hover:not(.active) { background: #1c2333; }
+.term-tab:hover:not(.active) { background: var(--bg-hover); }
 .term-tab-close { font-size: 12px; margin-left: 2px; opacity: 0.5; }
-.term-tab-close:hover { opacity: 1; color: #ff7b72; }
+.term-tab-close:hover { opacity: 1; color: #e57373; }
 .term-tab.new-tab { padding: 4px 8px; }
 .term-tabs-filler { flex: 1; }
 .term-panel-close { opacity: 0.5; padding: 4px 8px; }
-.term-panel-close:hover { opacity: 1; color: #ff7b72; }
+.term-panel-close:hover { opacity: 1; color: #e57373; }
 
 /* ── 终端内容区 ── */
 .term-content {

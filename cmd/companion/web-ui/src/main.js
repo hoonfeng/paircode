@@ -150,7 +150,7 @@ const FONT_CONFIG = {
     code: ['JetBrains Mono:400,500,600'],
     google: ['Inter', 'JetBrains Mono'],
   },
-  cute: {
+  night: {
     ui: ['Inter:400,500,600,700'],
     code: ['JetBrains Mono:400,500,600'],
     google: ['Inter', 'JetBrains Mono'],
@@ -184,8 +184,8 @@ export function applyTheme(themeName) {
   state.theme = theme
 
   // 移除所有主题 class
-  document.documentElement.classList.remove('theme-dark', 'theme-light', 'theme-warm', 'theme-cute')
-  document.body.classList.remove('theme-dark', 'theme-light', 'theme-warm', 'theme-cute')
+  document.documentElement.classList.remove('theme-dark', 'theme-light', 'theme-warm', 'theme-night')
+  document.body.classList.remove('theme-dark', 'theme-light', 'theme-warm', 'theme-night')
 
   // 添加对应 class
   const cls = 'theme-' + theme
@@ -234,7 +234,7 @@ export function loadPersistentState() {
     // 恢复主题
     if (data.theme) {
       // 只在主题有效时恢复
-      if (['dark', 'light', 'warm', 'cute'].includes(data.theme)) {
+      if (['dark', 'light', 'warm', 'night'].includes(data.theme)) {
         applyTheme(data.theme)
       }
     }

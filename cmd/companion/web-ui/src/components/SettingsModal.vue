@@ -582,9 +582,9 @@ const themeList = [
   { id: 'warm', label: '暖色温暖风', fontDesc: 'Noto Serif SC + Source Code Pro',
     colors: { activity: '#5c4033', sidebar: '#f5ece0', editor: '#faf3e8',
               line1: '#efe4d4', line2: '#b8733344', line3: '#d6c8b8', accent: '#b87333' } },
-  { id: 'cute', label: '分分可爱风', fontDesc: 'Nunito + Fira Code',
-    colors: { activity: '#8e3a5a', sidebar: '#fce4ec', editor: '#fff5f7',
-              line1: '#f8d7e0', line2: '#e8439344', line3: '#e8b8c8', accent: '#e84393' } },
+  { id: 'night', label: '暗夜紫风', fontDesc: 'Inter + JetBrains Mono',
+    colors: { activity: '#12101a', sidebar: '#1a1726', editor: '#12101a',
+              line1: '#221f30', line2: '#9b8ec444', line3: '#2d2940', accent: '#9b8ec4' } },
 ]
 
 // ─── 模型 ───
