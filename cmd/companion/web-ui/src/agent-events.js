@@ -149,6 +149,10 @@ export function processAgentEvent(convId, data) {
     const callId = data.callId || data.callID || ''
     const toolName = data.tool || data.name || ''
 
+    // finish_task 的结果会通过 EventDone 推送（processAgentDone 追加为 content segment），
+    // 此处不创建 segment 也不赋值给其他 tool_call，避免双向污染。
+    if (toolName === 'finish_task') return
+
     // task_create 结果：提取任务 ID 更新计划（无对应 segment）
     if (toolName === 'task_create' && globalCtx.onTaskSetId) {
       const idMatch = (data.content || '').match(/ID:\s*`([^`]+)`/)

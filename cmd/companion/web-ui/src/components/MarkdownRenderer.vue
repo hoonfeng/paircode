@@ -1127,24 +1127,24 @@ watch(() => props.theme, () => {
 .markdown-renderer { width: 100%; max-width: 100%; overflow-x: hidden; }
 .md-html { line-height: 1.6; white-space: pre-wrap; word-break: break-word; overflow-wrap: break-word; }
 
-/* ── Markdown 内容样式 ── */
-.md-html :deep(h1), .md-html :deep(h2), .md-html :deep(h3), .md-html :deep(h4) { margin: 8px 0 4px; font-weight: 600; }
-.md-html :deep(h1) { font-size: 16px; }
-.md-html :deep(h2) { font-size: 15px; }
-.md-html :deep(h3) { font-size: 14px; }
-.md-html :deep(p) { margin: 4px 0; }
-.md-html :deep(ul), .md-html :deep(ol) { margin: 4px 0; padding-left: 20px; }
-.md-html :deep(li) { margin: 2px 0; }
+/* ── Markdown 内容样式（紧凑间距） ── */
+.md-html :deep(h1), .md-html :deep(h2), .md-html :deep(h3), .md-html :deep(h4) { margin: 6px 0 2px; font-weight: 600; }
+.md-html :deep(h1) { font-size: 15px; }
+.md-html :deep(h2) { font-size: 14px; }
+.md-html :deep(h3) { font-size: 13px; }
+.md-html :deep(p) { margin: 2px 0; }
+.md-html :deep(ul), .md-html :deep(ol) { margin: 2px 0; padding-left: 18px; }
+.md-html :deep(li) { margin: 1px 0; }
 .md-html :deep(code) { background: rgba(0,0,0,0.15); padding: 1px 4px; border-radius: 3px; font-family: var(--font-code); font-size: 12px; }
-.md-html :deep(pre) { background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 6px; padding: 8px 10px; margin: 6px 0; overflow-x: auto; font-size: 12px; line-height: 1.4; white-space: pre-wrap; word-break: break-word; max-width: 100%; }
+.md-html :deep(pre) { background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 6px; padding: 6px 10px; margin: 4px 0; overflow-x: auto; font-size: 12px; line-height: 1.4; white-space: pre-wrap; word-break: break-word; max-width: 100%; }
 .md-html :deep(pre code) { background: none; padding: 0; border-radius: 0; white-space: pre-wrap; word-break: break-word; }
-.md-html :deep(blockquote) { border-left: 3px solid var(--accent); padding-left: 8px; margin: 6px 0; color: var(--text-secondary); font-style: italic; }
+.md-html :deep(blockquote) { border-left: 3px solid var(--accent); padding-left: 8px; margin: 4px 0; color: var(--text-secondary); font-style: italic; }
 .md-html :deep(a) { color: var(--accent-light); text-decoration: none; }
 .md-html :deep(a:hover) { text-decoration: underline; }
-.md-html :deep(table) { border-collapse: collapse; margin: 6px 0; font-size: 12px; width: 100%; }
-.md-html :deep(th), .md-html :deep(td) { border: 1px solid var(--border-color); padding: 4px 8px; text-align: left; }
+.md-html :deep(table) { border-collapse: collapse; margin: 4px 0; font-size: 12px; width: 100%; }
+.md-html :deep(th), .md-html :deep(td) { border: 1px solid var(--border-color); padding: 3px 6px; text-align: left; }
 .md-html :deep(th) { background: var(--bg-tertiary); font-weight: 600; }
-.md-html :deep(hr) { border: none; border-top: 1px solid var(--border-color); margin: 8px 0; }
+.md-html :deep(hr) { border: none; border-top: 1px solid var(--border-color); margin: 6px 0; }
 .md-html :deep(img) { max-width: 100%; border-radius: 4px; }
 .md-html :deep(strong) { font-weight: 600; }
 .md-html :deep(em) { font-style: italic; }
