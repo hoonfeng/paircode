@@ -188,7 +188,7 @@ func listSkillsText(root string) string {
 	skills := agent.LoadAllSkillsFromRoot(root, agent.SkillSystemDir, agent.SkillEnabled)
 	var b strings.Builder
 	for _, s := range skills {
-		lvl := "项目级"
+		lvl := "工作区级"
 		if s.Level == agent.LevelSystem {
 			lvl = "内置"
 		}
@@ -228,7 +228,7 @@ func writeSkillTool(args map[string]any, projectDir string) (string, error) {
 	if err := agent.WriteSkill(projectDir, s); err != nil {
 		return "", err
 	}
-	return "已写入技能 " + s.Name + "（项目级，下次对话注入系统提示，或现在用 load_skill 取用）", nil
+	return "已写入技能 " + s.Name + "（工作区级，下次对话注入系统提示，或现在用 load_skill 取用）", nil
 }
 
 // ─── MCP 工具实现 ──
@@ -264,7 +264,7 @@ func mcpAddTool(args map[string]any) (string, error) {
 	switch scope {
 	case "project":
 		level = mcppanel.LevelProject
-		levelLabel = "项目级（工作区）"
+		levelLabel = "工作区级"
 	default:
 		level = mcppanel.LevelUser
 		levelLabel = "用户级（全局）"

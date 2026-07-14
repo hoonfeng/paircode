@@ -213,8 +213,10 @@ async function getSkillsList() {
   return apiGet('/skills/list')
 }
 
-async function readSkill(name) {
-  return apiGet('/skills/read', { name })
+async function readSkill(name, level) {
+  const params = { name }
+  if (level) params.level = level
+  return apiGet('/skills/read', params)
 }
 
 async function deleteSkill(name) {

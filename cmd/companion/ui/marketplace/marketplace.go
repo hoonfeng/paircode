@@ -91,7 +91,7 @@ func installMCP(entry RegistryEntry, auto bool, scope string) (string, error) {
 	switch scope {
 	case "project":
 		level = mcppanel.LevelProject
-		levelLabel = "项目级（工作区）"
+		levelLabel = "工作区级"
 	default:
 		level = mcppanel.LevelUser
 		levelLabel = "用户级（全局）"
@@ -119,7 +119,7 @@ func installSkill(entry RegistryEntry, auto bool) (string, error) {
 	if err := agent.WriteSkill(agent.SkillProjectDir, s); err != nil {
 		return "", fmt.Errorf("写入技能失败: %w", err)
 	}
-	msg := fmt.Sprintf("✅ 已安装技能「%s」（项目级 .pair/skills）", entry.Name)
+	msg := fmt.Sprintf("✅ 已安装技能「%s」（工作区级 .pair/skills）", entry.Name)
 	if auto {
 		msg += "。下次对话注入 system prompt。"
 	}

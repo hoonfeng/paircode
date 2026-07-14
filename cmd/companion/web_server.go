@@ -1656,6 +1656,7 @@ func jsonResp(w http.ResponseWriter, data any) {
 
 
 // handleSkillsRead 读取技能正文内容。
+// 支持 level 查询参数：system（全局 config/skills/）或 project（工作区 .pair/skills/，默认）。
 func (s *webServer) handleSkillsRead(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" {
 		jsonErr(w, "仅 GET")
@@ -1666,13 +1667,63 @@ func (s *webServer) handleSkillsRead(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, "name 必填")
 		return
 	}
-	skillPath := filepath.Join(agent.SkillProjectDir, name, "SKILL.md")
-	data, err := os.ReadFile(skillPath)
-	if err != nil {
-		jsonErr(w, "技能文件读取失败")
+	// 白名单校验：仅允许字母、数字、下划线、中划线
+	if !validSkillName(name) {
+		jsonErr(w, "无效的键名")
 		return
 	}
-	jsonResp(w, map[string]string{"name": name, "content": string(data)})
+	level := r.URL.Query().Get("level")
+	var baseDir string
+	switch level {
+	case "system", "global":
+		baseDir = agent.SkillSystemDir
+	default:
+		baseDir = agent.SkillProjectDir
+	}
+	skillPath := filepath.Join(baseDir, name, "SKILL.md")
+	// 路径穿越防护：校验最终路径必须以 baseDir 开头
+	absPath, err := filepath.Abs(skillPath)
+	if err != nil || !strings.HasPrefix(absPath, filepath.Clean(baseDir)+string(filepath.Separator)) {
+		jsonErr(w, "请求的资源不存在")
+		return
+	}
+	data, err := os.ReadFile(absPath)
+	if err != nil {
+		// 默认(project)级别找不到时回退系统级
+		if level == "" || level == "project" {
+			if agent.SkillSystemDir != "" {
+				fallback := filepath.Join(agent.SkillSystemDir, name, "SKILL.md")
+				absFallback, fbErr := filepath.Abs(fallback)
+				if fbErr == nil && strings.HasPrefix(absFallback, filepath.Clean(agent.SkillSystemDir)+string(filepath.Separator)) {
+					data, fbErr = os.ReadFile(absFallback)
+					if fbErr == nil {
+						jsonResp(w, map[string]string{"name": name, "content": string(data), "level": "system"})
+						return
+					}
+				}
+			}
+		}
+		jsonErr(w, "请求的资源不存在")
+		return
+	}
+	respLevel := level
+	if respLevel == "" {
+		respLevel = "project"
+	}
+	jsonResp(w, map[string]string{"name": name, "content": string(data), "level": respLevel})
+}
+
+// validSkillName 校验技能名仅含字母、数字、下划线、中划线。
+func validSkillName(name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, r := range name {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-') {
+			return false
+		}
+	}
+	return true
 }
 
 func jsonErr(w http.ResponseWriter, msg string) {

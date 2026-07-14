@@ -34,7 +34,7 @@ type LevelDef struct {
 // Levels 所有层级（显示顺序）。
 var Levels = []LevelDef{
 	{LevelUser, "用户级"},
-	{LevelProject, "项目级"},
+	{LevelProject, "工作区级"},
 }
 
 // ─── 配置结构 ───

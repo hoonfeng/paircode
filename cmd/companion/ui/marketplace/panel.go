@@ -257,24 +257,32 @@ func refreshInstalled(doc *dom.Document, modal *component.Modal, listEl *dom.Ele
 
 	// 收集已安装的 MCP 和技能
 	type installedItem struct {
-		kind string // "mcp" / "skill"
-		name string
-		desc string
+		kind  string // "mcp" / "skill"
+		name  string
+		desc  string
+		level string // "user" / "project"
 	}
 	var items []installedItem
 
 	for _, e := range mcppanel.ReadLevel(mcppanel.LevelUser) {
-		items = append(items, installedItem{kind: "mcp", name: e.Name, desc: "MCP 服务器（用户级）"})
+		items = append(items, installedItem{kind: "mcp", name: e.Name, desc: "MCP 服务器（用户级）", level: "user"})
 	}
 	for _, e := range mcppanel.ReadLevel(mcppanel.LevelProject) {
-		items = append(items, installedItem{kind: "mcp", name: e.Name, desc: "MCP 服务器（项目级）"})
+		items = append(items, installedItem{kind: "mcp", name: e.Name, desc: "MCP 服务器（工作区级）", level: "project"})
+	}
+	for _, e := range skillspanel.ReadLevel(skillspanel.LevelUser) {
+		desc := e.Description
+		if desc == "" {
+			desc = "技能（用户级）"
+		}
+		items = append(items, installedItem{kind: "skill", name: e.Name, desc: desc, level: "user"})
 	}
 	for _, e := range skillspanel.ReadLevel(skillspanel.LevelProject) {
 		desc := e.Description
 		if desc == "" {
-			desc = "技能（项目级）"
+			desc = "技能（工作区级）"
 		}
-		items = append(items, installedItem{kind: "skill", name: e.Name, desc: desc})
+		items = append(items, installedItem{kind: "skill", name: e.Name, desc: desc, level: "project"})
 	}
 
 	// 更新计数

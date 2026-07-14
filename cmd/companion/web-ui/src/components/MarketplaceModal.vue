@@ -37,7 +37,7 @@
           <div class="mcp-form-row"><label>层级</label>
             <select v-model="mcpForm.level">
               <option value="user">用户级（全局）</option>
-              <option value="project">项目级（工作区）</option>
+              <option value="project">工作区级</option>
             </select>
           </div>
           <div class="mcp-form-actions">
@@ -57,7 +57,7 @@
           <div class="mcp-form-row"><label>层级</label>
             <select v-model="editMCPForm.level">
               <option value="user">用户级（全局）</option>
-              <option value="project">项目级（工作区）</option>
+              <option value="project">工作区级</option>
             </select>
           </div>
           <div class="mcp-form-actions">
@@ -91,7 +91,7 @@
               <div class="ii-body">
                 <div class="ii-name">{{ item.name }}</div>
                 <div class="ii-desc">{{ item.command }} {{ (item.args || []).join(' ') }}</div>
-                <span class="ii-badge">MCP · {{ item.level === 'project' ? '项目级' : '用户级' }}</span>
+                <span class="ii-badge">MCP · {{ item.level === 'project' ? '工作区级' : '用户级' }}</span>
               </div>
               <div class="ii-actions">
                 <button class="ii-btn ii-edit" @click="startEditMCP(item)" title="编辑">编辑</button>
@@ -102,16 +102,16 @@
           <!-- 技能分组 -->
           <div v-if="installedSkills.length > 0" class="installed-group">
             <div class="installed-group-title">技能</div>
-            <div v-for="item in installedSkills" :key="'skill-' + item.name" class="installed-item">
+            <div v-for="item in installedSkills" :key="'skill-' + item.name + '-' + item.level" class="installed-item">
               <div class="ii-icon icon-skill"><SvgIcon name="code" :size="18" /></div>
               <div class="ii-body">
                 <div class="ii-name">{{ item.name }}</div>
                 <div class="ii-desc">{{ item.description || '无描述' }}</div>
-                <span class="ii-badge">技能 · {{ item.mode === 'always' ? '始终' : item.mode === 'manual' ? '手动' : '按需' }}</span>
+                <span class="ii-badge">技能 · {{ item.mode === 'always' ? '始终' : item.mode === 'manual' ? '手动' : '按需' }} · {{ item.level === 'system' ? '用户级' : '工作区级' }}</span>
               </div>
               <div class="ii-actions">
                 <button class="ii-btn ii-view" @click="viewSkill(item)" title="查看内容">查看</button>
-                <button class="ii-btn ii-del" @click="delSkill(item)" title="删除">删除</button>
+                <button v-if="item.level !== 'system'" class="ii-btn ii-del" @click="delSkill(item)" title="删除">删除</button>
               </div>
             </div>
           </div>
@@ -276,7 +276,7 @@ async function delMCP(item) {
 
 async function viewSkill(item) {
   try {
-    const data = await api.readSkill(item.name)
+    const data = await api.readSkill(item.name, item.level)
     viewingSkill.value = data || { name: item.name, content: '（内容读取失败）' }
   } catch (err) {
     viewingSkill.value = { name: item.name, content: '读取失败: ' + err.message }

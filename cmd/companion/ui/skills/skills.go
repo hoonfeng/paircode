@@ -24,9 +24,11 @@ type LevelDef struct {
 	Name string
 }
 
-// Levels 所有层级（显示顺序）。技能仅项目级（内置 system 级由 skill_loader 管理，UI 面板不展示）。
+// Levels 所有层级（显示顺序）。技能包含用户级（内置 config/skills）和 工作区级（.pair/skills）。
+// 用户级由配置目录承载，工作区级由项目 .pair 目录承载。
 var Levels = []LevelDef{
-	{mcp.LevelProject, "项目级"},
+	{mcp.LevelUser, "用户级"},
+	{mcp.LevelProject, "工作区级"},
 }
 
 // Entry 技能条目（UI 面板/agenttools 兼容用，内部委托 agent.Skill）。
@@ -50,23 +52,28 @@ func ModeLabel(mode string) string {
 	return "按需"
 }
 
-// skillsDir 技能目录（项目级 .pair/skills/）。
+// skillsDir 技能目录（按层级）。
 func skillsDir(lv mcp.Level) string {
-	if lv == mcp.LevelProject {
+	switch lv {
+	case mcp.LevelUser:
+		return filepath.Join(core.ConfigDir(), "skills")
+	case mcp.LevelProject:
 		return filepath.Join(core.Root(), ".pair", "skills")
 	}
 	return ""
 }
 
-// ReadLevel 读某层级的所有技能（委托 agent.LoadAllSkills，按 level 过滤为项目级）。
+// ReadLevel 读某层级的所有技能（委托 agent.LoadAllSkills，按 level 过滤）。
 func ReadLevel(lv mcp.Level) []Entry {
-	if lv != mcp.LevelProject {
-		return nil
-	}
 	all := agent.LoadAllSkills()
 	var out []Entry
 	for _, s := range all {
-		if s.Level != agent.LevelProject {
+		// 用户级→agent.LevelSystem, 工作区级→agent.LevelProject
+		want := agent.LevelProject
+		if lv == mcp.LevelUser {
+			want = agent.LevelSystem
+		}
+		if s.Level != want {
 			continue
 		}
 		out = append(out, Entry{
@@ -80,9 +87,10 @@ func ReadLevel(lv mcp.Level) []Entry {
 }
 
 // Write 写入/更新技能（目录式 .pair/skills/<name>/SKILL.md，含 frontmatter）。
+// 仅支持工作区级；用户级（系统内置）为只读。
 func Write(lv mcp.Level, e Entry) error {
-	if lv != mcp.LevelProject {
-		return fmt.Errorf("技能仅支持项目级")
+	if lv == mcp.LevelUser {
+		return fmt.Errorf("系统内置技能为只读，不可写入")
 	}
 	dir := filepath.Join(core.Root(), ".pair", "skills")
 	return agent.WriteSkill(dir, agent.Skill{
@@ -94,9 +102,10 @@ func Write(lv mcp.Level, e Entry) error {
 }
 
 // Delete 删除技能（整个目录）。
+// 仅支持工作区级；用户级（系统内置）为只读。
 func Delete(lv mcp.Level, name string) error {
-	if lv != mcp.LevelProject {
-		return fmt.Errorf("技能仅支持项目级")
+	if lv == mcp.LevelUser {
+		return fmt.Errorf("系统内置技能为只读，不可删除")
 	}
 	dir := filepath.Join(core.Root(), ".pair", "skills")
 	return agent.DeleteSkill(dir, name)
