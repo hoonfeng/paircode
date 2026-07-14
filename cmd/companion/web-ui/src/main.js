@@ -119,12 +119,7 @@ export const state = reactive({
   msgTotalByConv: {},        // { [convId]: number } 各对话总消息数（懒加载判断是否还有更早消息）
   msgLoadedByConv: {},       // { [convId]: number } 各对话已加载消息数
   runningByWorkspace: {},    // { [wsRoot]: count } 各工作区运行中 agent 计数（供工作区列表显示脉冲点）
-  wsTokenStats: reactive({   // 工作区级 token 统计（跨对话汇总）
-    promptTokens: 0, completionTokens: 0, totalTokens: 0,
-    cacheHitTokens: 0, cacheMissTokens: 0,
-    systemTokens: 0, skillsTokens: 0, mcpTokens: 0,
-    toolTokens: 0, historyTokens: 0, otherTokens: 0,
-  }),
+  wsTokenStatsByWs: {},      // { [wsRoot]: { promptTokens, ... } } 各工作区 token 统计（隔离）
   settings: {},
   settingsLoaded: false,
   searchResults: [],

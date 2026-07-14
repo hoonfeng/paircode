@@ -399,13 +399,18 @@ function formatTerminalCommand(seg) {
 }
 
 // ── 工作区 Token 统计（使用全局 state，与 agent-events.js 共享）──
-const wsTokenStats = computed(() => state.wsTokenStats)
+const wsTokenStats = computed(() => state.wsTokenStatsByWs[state.workspaceRoot] || { totalTokens: 0, promptTokens: 0, completionTokens: 0, cacheHitTokens: 0, cacheMissTokens: 0, systemTokens: 0, skillsTokens: 0, mcpTokens: 0, toolTokens: 0, historyTokens: 0, otherTokens: 0 })
 const convCtxStats = computed(() => getConvCtxStats(state.currentConvId))
 
 const loadWsTokenStats = async () => {
   try {
     const data = await api.apiGet('/tokens/stats')
-    if (data) Object.assign(state.wsTokenStats, data)
+    if (data) {
+      if (!state.wsTokenStatsByWs[state.workspaceRoot]) {
+        state.wsTokenStatsByWs[state.workspaceRoot] = { totalTokens: 0, promptTokens: 0, completionTokens: 0, cacheHitTokens: 0, cacheMissTokens: 0, systemTokens: 0, skillsTokens: 0, mcpTokens: 0, toolTokens: 0, historyTokens: 0, otherTokens: 0 }
+      }
+      Object.assign(state.wsTokenStatsByWs[state.workspaceRoot], data)
+    }
     if (state.currentConvId) {
       const ts = await api.apiGet('/conversations/' + state.currentConvId + '/token-stats')
       if (ts && ts.promptTokens !== undefined) Object.assign(getConvCtxStats(state.currentConvId), ts)
