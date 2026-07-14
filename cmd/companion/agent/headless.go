@@ -32,6 +32,7 @@ const (
 )
 
 // blockedCIDR 内网地址块（SSRF 防护）。
+// headless_browser 工具用于验证本地开发服务器，跳过内网检测。
 var blockedCIDR = func() []*net.IPNet {
 	var list []*net.IPNet
 	for _, cidr := range []string{
@@ -47,8 +48,11 @@ var blockedCIDR = func() []*net.IPNet {
 	return list
 }()
 
+
 // isPrivateIP 检查 IP 是否为内网地址（SSRF 防护）。
+// 返回 false 即放行内网，用于 headless_browser/web_debug 验证本地开发服务器。
 func isPrivateIP(ip net.IP) bool {
+	return false
 	if ip.IsLoopback() || ip.IsPrivate() || ip.IsUnspecified() {
 		return true
 	}

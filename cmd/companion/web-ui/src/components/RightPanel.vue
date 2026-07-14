@@ -955,7 +955,11 @@ onMounted(() => {
 
   // 注册全局 UI 回调：App.vue 的 WebSocket onmessage → agent-events.js → 此处回调
   setGlobalCtx({
-    scrollToBottom: () => scrollToBottom(),
+    scrollToBottom: () => {
+      // ★ 用户上翻时锁定自动滚动，直到手动滚回底部或点击跳底按钮
+      if (window.__scrollLockTimer) return
+      scrollToBottom()
+    },
     loadWsTokenStats: () => loadWsTokenStats(),
     autoNameConv: (convId, text) => autoNameConv(convId, text),
     saveConvMsg: (convId, content, msgIdx) => {

@@ -239,8 +239,10 @@ async function loadFileContent(path) {
   if (state.fileContents[path]) return
   try {
     const data = await api.apiGet('/fs/read', { path })
-    state.fileSavedContent[path] = data.content || ''
-    state.fileContents[path] = data.content || ''
+    // ★ 标准化 CRLF→LF，与 CodeMirror 内部格式一致
+    const normalized = (data.content || '').replace(/\r\n/g, '\n')
+    state.fileSavedContent[path] = normalized
+    state.fileContents[path] = normalized
     state.fileDirty[path] = false
   } catch (err) {
     state.fileContents[path] = '// 错误: ' + err.message
