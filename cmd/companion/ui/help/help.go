@@ -1,4 +1,4 @@
-//go:build windows && !webonly
+//go:build desktop
 
 // Package help 提供帮助文档对话框（GWui 版）。
 // 每个 Show* 函数打开一个 Modal，加载对应 HTML 模板显示格式化的文档内容。

@@ -1,4 +1,4 @@
-//go:build windows
+//go:build desktop
 
 // Package search 提供 GWui 版搜索面板。
 // 使用 uixml 声明式 UI 构建面板布局，保留 Go 逻辑处理搜索/渲染。

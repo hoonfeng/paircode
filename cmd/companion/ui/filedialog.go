@@ -1,4 +1,4 @@
-//go:build windows && !webonly
+//go:build desktop
 
 package ui
 

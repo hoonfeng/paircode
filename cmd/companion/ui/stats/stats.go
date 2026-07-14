@@ -1,7 +1,7 @@
 // 项目级 Token/上下文统计面板 —— 以 Modal 对话框展示持久化的项目使用统计。
 // 数据来源：core.ProjectStats（存储于安装目录 .pair/stats.json，独立于对话记录）。
 //
-//go:build windows
+//go:build desktop
 
 package stats
 

@@ -3,7 +3,7 @@
 //
 // GWui 版：使用 dom.Document 创建动态 UI，不再依赖 goui。
 //
-//go:build windows
+//go:build desktop
 
 package filetreepanel
 

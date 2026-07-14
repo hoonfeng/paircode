@@ -1,6 +1,6 @@
 // Package ui 提供 GWui 版 companion 的全局应用上下文。
 // 所有面板通过本包访问 app/doc 和其他面板引用。
-//go:build windows && !webonly
+//go:build desktop
 
 package ui
 

@@ -10,7 +10,7 @@
 // HandleEvent 不调用 TextArea.HandleEvent。显示直接用 DOM 属性操作
 // （SetTextContent + 设 data-cursor-pos / data-sel-*），绕过 TextController。
 //
-//go:build windows
+//go:build desktop
 
 package termpanel
 

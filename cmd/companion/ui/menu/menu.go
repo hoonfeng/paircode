@@ -1,4 +1,4 @@
-//go:build windows
+//go:build desktop
 
 // Package menu 提供菜单动作（Agent 监控、引用/符号对话框等）（GWui 版）。
 // 使用 HTML 模板构建对话框内容（资源目录 html/panels/）。

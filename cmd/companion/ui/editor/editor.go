@@ -1,7 +1,7 @@
 // 编辑器面板 —— 中列编辑区：多标签页 + 编辑 + 保存（Ctrl+S）。
 // 点文件树文件 → 新标签（或切到已打开标签）；改动标 dirty(●)；Ctrl+S 写盘。
 //
-//go:build windows
+//go:build desktop
 
 package editorpanel
 

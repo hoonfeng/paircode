@@ -1,7 +1,7 @@
-// Web-only 模式启动入口：跳过 GWui 桌面 GUI，只启动 Web IDE 管理服务器。
+// Web-only 模式启动入口：启动 Web IDE 管理服务器（无本地桌面 UI）。
 // 用于自举开发（用浏览器管理项目、编辑代码、运行 Agent）。
 //
-//go:build webonly
+//go:build windows
 
 package main
 

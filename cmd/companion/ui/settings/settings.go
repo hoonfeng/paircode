@@ -1,4 +1,4 @@
-//go:build windows && !webonly
+//go:build desktop
 
 // Package settings 提供设置面板的加载/保存/UI（GWui 版）。
 // 使用 uixml 声明式 UI 构建设置对话框布局，保留 Go 逻辑处理交互与数据。

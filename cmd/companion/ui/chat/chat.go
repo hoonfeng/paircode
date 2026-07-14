@@ -1,7 +1,7 @@
 // 对话面板 —— GWui 版（DOM 重写）。
 // 布局：工具栏 + 可折叠对话侧栏 + 用户/Agent 消息卡 + 输入区。
 //
-//go:build windows
+//go:build desktop
 
 package chatpanel
 

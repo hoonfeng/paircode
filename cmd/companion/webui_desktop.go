@@ -1,6 +1,6 @@
 // 桌面版额外路由注册：chat/agent + market。
 //
-//go:build windows && !webonly
+//go:build desktop
 
 package main
 

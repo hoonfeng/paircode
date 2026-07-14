@@ -1,6 +1,6 @@
 // Web-only 版——仅注册平台回调 + 路由，所有 handler 逻辑在 web_server.go 统一实现。
 //
-//go:build webonly
+//go:build windows
 
 package main
 

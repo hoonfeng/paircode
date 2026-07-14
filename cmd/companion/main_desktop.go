@@ -1,8 +1,8 @@
 // 伴随式 CodeAgent —— GWui 重构版入口 + 主窗壳。
 // 使用 HTML 文件加载外壳布局（resources/html/shell.html），替代程序化 DOM 构建。
-// 面板通过 getElementById 挂载到 HTML 容器，各自加载自己的 HTML 模板。
+// 保留以供参考（桌面模式使用 -tags desktop 编译）。
 //
-//go:build windows && !webonly
+//go:build desktop
 
 package main
 

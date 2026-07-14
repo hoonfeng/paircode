@@ -1,4 +1,4 @@
-//go:build windows
+//go:build desktop
 
 // menurender — 标题栏菜单渲染坐标验证工具
 // 使用真实管线渲染含菜单的标题栏，输出所有组件和文本的精确坐标。

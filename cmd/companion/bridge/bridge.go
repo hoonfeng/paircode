@@ -3,7 +3,7 @@
 // 周期在 UI 线程 drain，流式写进当前助手消息（复刻终端面板跨线程模式，见 terminal.go / AGENTS.md）。
 // 本文件还含 Agent 消息卡的富渲染（思考块 + 工具活动行 + 正文）。
 //
-//go:build windows && !webonly
+//go:build desktop
 
 package bridge
 

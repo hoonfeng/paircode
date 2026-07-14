@@ -1,6 +1,8 @@
 // wr_ideverify — IDE UI 渲染验证工具
 // 用 RecordingCanvas 替代 Skia 后端，完整记录绘制调用
 // 然后按 WebKit 规范验证布局 + 绘制的正确性
+//go:build desktop
+
 package main
 
 import (

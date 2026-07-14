@@ -1,5 +1,4 @@
-//go:build windows
-
+//go:build desktop
 // Package ctxmenu 提供右键菜单和文件对话框（GWui 版）。
 // 所有 UI 元素均为运行时动态创建，无静态面板结构。
 // 如需将对话框改造为 uixml 模板，需解决跨文档组件注册（ComponentAtNode）和焦点委托问题。

@@ -1,4 +1,6 @@
-package main
+//go:build desktop
+
+
 
 import (
 	"fmt"

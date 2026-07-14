@@ -1,3 +1,5 @@
+gioui.org v0.10.1 h1:Dvp6iDk9RKuZk19jxhOmb4p673CLVvb656LyMxQ+uO0=
+gioui.org v0.10.1/go.mod h1:MZJZsdEPkTBzChdqeE8CiiQhreUQBj43qusDxQNDf7k=
 github.com/Masterminds/semver/v3 v3.5.0 h1:kQceYJfbupGfZOKZQg0kou0DgAKhzDg2NZPAwZ/2OOE=
 github.com/Masterminds/semver/v3 v3.5.0/go.mod h1:4V+yj/TJE1HU9XfppCwVMZq3I84lprf4nC11bSS5beM=
 github.com/dlclark/regexp2/v2 v2.2.1 h1:mf4KkFUj0gJuarK8P+LgiS+Lit7m9N1yAwEfPbee7R0=
