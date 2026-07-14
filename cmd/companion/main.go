@@ -330,13 +330,6 @@ func buildDropdowns(doc *dom.Document) {
 		label string
 		items []component.PopupMenuItem
 	}{
-		// ── 文件 ──
-		{"文件", []component.PopupMenuItem{
-			{Label: "打开文件…   (Ctrl+O)", OnClick: func() { ctxmenupanel.OpenFileViaDialog() }},
-			{Divider: true},
-			{Label: "关闭项目", OnClick: func() { core.CloseProjectMenu() }},
-			{Label: "关闭工作区", OnClick: func() { core.CloseWorkspaceMenu() }},
-		}},
 		// ── Agent ｜ AI IDE 核心特色菜单 ──
 		{"Agent", []component.PopupMenuItem{
 			{Label: "启动新任务", OnClick: func() {
