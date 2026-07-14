@@ -279,6 +279,25 @@ function onScroll() {
   }
 }
 
+// mergeAssistantMessages 合并连续 assistant 消息：落盘时每轮 Loop 迭代的
+// assistant 消息是独立 StoredMessage，加载后各自生成一个气泡。将它们合并
+// 为一个消息块，与实时事件流行为一致（一个 Loop 的所有输出在一个气泡内）。
+function mergeAssistantMessages(arr) {
+  if (arr.length === 0) return
+  const out = [arr[0]]
+  for (let i = 1; i < arr.length; i++) {
+    const prev = out[out.length - 1]
+    const cur = arr[i]
+    if (prev.role === 'assistant' && cur.role === 'assistant') {
+      prev.segments.push(...cur.segments)
+      if (cur.content) prev.content += '\n' + cur.content
+    } else {
+      out.push(cur)
+    }
+  }
+  arr.splice(0, arr.length, ...out)
+}
+
 // loadMoreMessages 向前分页加载更早消息，prepend 到数组并维护滚动位置
 const loadMoreMessages = async () => {
   const id = state.currentConvId
@@ -305,8 +324,12 @@ const loadMoreMessages = async () => {
         _time: m.timestamp || '',
       }))
     if (older.length > 0) {
+      // ★ 合并连续 assistant 消息（落盘分段修复）
+      mergeAssistantMessages(older)
       // prepend 到数组头部（全量渲染下 scrollHeight 会自然增加）
       state.messagesByConv[id] = [...older, ...msgs]
+      // ★ 边界合并：older 末尾和 msgs 头部可能都是 assistant
+      mergeAssistantMessages(state.messagesByConv[id])
       state.messages = state.messagesByConv[id]
       state.msgLoadedByConv[id] = (state.msgLoadedByConv[id] || 0) + older.length
       // 补偿滚动位置：保持当前视口内容不动（新增的 older 消息在顶部）
@@ -696,6 +719,8 @@ const switchConv = async (id) => {
         })
         // 按 idx 升序排列（用户消息在前，agent 输出在后）
         loaded.sort((a, b) => (a._idx || 0) - (b._idx || 0))
+        // ★ 合并连续 assistant 消息（落盘分段修复）
+        mergeAssistantMessages(loaded)
       state.messagesByConv[id] = loaded
       state.messages = state.messagesByConv[id]
       state.msgTotalByConv[id] = data.total || loaded.length
