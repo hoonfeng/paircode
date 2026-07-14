@@ -32,24 +32,6 @@ import api from '../api.js'
 
 const menus = [
   {
-    label: 'Agent',
-    items: [
-      { label: '启动新任务', action: 'new-task' },
-      { label: '停止 Agent', action: 'stop-agent' },
-      { divider: true },
-      { label: 'Agent 监控', action: 'agent-monitor' },
-      { divider: true },
-      { label: 'MCP 市场…', action: 'open-marketplace' },
-      { label: '技能市场…', action: 'open-marketplace' },
-      { divider: true },
-      { label: '技能管理…', action: 'open-settings' },
-      { label: '语言模型配置…', action: 'open-settings' },
-      { label: 'Agent 设置…', action: 'open-settings' },
-      { divider: true },
-      { label: '项目统计…', action: 'project-stats' },
-    ],
-  },
-  {
     label: '帮助',
     items: [
       { label: '快捷键参考', action: 'help-shortcuts' },
@@ -66,7 +48,6 @@ let closeTimer = null
 
 const showSettingsModal = inject('showSettings', null)
 const showMarketplaceModal = inject('showMarketplace', null)
-const showSystemModal = inject('showSystem', null)
 
 const currentItems = computed(() => {
   const m = menus.find(m => m.label === openMenu.value)
@@ -241,23 +222,7 @@ const execItem = async (item) => {
   if (a === 'new-terminal') { state.bottomPanelVisible = true; state.bottomPanelTab = 'terminal'; return }
   if (a === 'clear-terminal') { window.dispatchEvent(new CustomEvent('clear-terminal')); return }
 
-  // ── Agent / 工具 ──
-  if (a === 'new-task') {
-    window.dispatchEvent(new CustomEvent('agent-new-task'))
-    return
-  }
-  if (a === 'stop-agent') {
-    window.dispatchEvent(new CustomEvent('agent-stop'))
-    return
-  }
-  if (a === 'agent-monitor') {
-    window.$alert('Agent 监控面板即将推出', '提示')
-    return
-  }
-  if (a === 'project-stats') {
-    window.$alert('项目统计功能即将推出', '提示')
-    return
-  }
+  // ── 工具 ──
   if (a === 'open-settings') {
     if (showSettingsModal) showSettingsModal.value = true
     return
