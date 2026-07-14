@@ -250,7 +250,13 @@ func parseRustFile(b *LangBuilder, filePath string, source []byte) (string, erro
 	ext.fileID = fileID
 
 	lines := ext.lines
-	implType := ""
+
+	// 使用 brace 栈跟踪 impl 块归属
+	type implFrame struct {
+		implType string // 当前 impl 的类型
+		braceDepth int  // 进入时的花括号深度
+	}
+	implStack := []implFrame{}
 	braceDepth := 0
 
 	for lineNo, line := range lines {
@@ -260,21 +266,65 @@ func parseRustFile(b *LangBuilder, filePath string, source []byte) (string, erro
 		}
 		ln := lineNo + 1
 
-		// 跟踪花括号深度（用于 impl 方法归属）
-		braceDepth += strings.Count(trimmed, "{") - strings.Count(trimmed, "}")
+		// 计算本行的 brace 变化（忽略字符串中的括号）
+		openBrace := 0; closeBrace := 0
+		for _, ch := range trimmed {
+			if ch == '{' { openBrace++ }
+			if ch == '}' { closeBrace++ }
+		}
+
+		// 检查是否在 impl 块开始时记录
+		if reRustImpl.MatchString(trimmed) && braceDepth == 0 {
+			m := reRustImpl.FindStringSubmatch(trimmed)
+			implType := m[1]
+			if len(m) > 2 && m[2] != "" {
+				implType = m[2] // impl Trait for Type → 取 Type
+			}
+			implStack = append(implStack, implFrame{
+				implType:   implType,
+				braceDepth: braceDepth,
+			})
+		}
+
+		// 应用 brace 变化
+		braceDepth += openBrace - closeBrace
+
+		// 关闭 impl 块
+		for len(implStack) > 0 && implStack[len(implStack)-1].braceDepth > braceDepth {
+			implStack = implStack[:len(implStack)-1]
+		}
+
+		// 获取当前 impl 类型（检查 impl 栈帧的 braceDepth 是否在当前深度范围内）
+		currentImpl := ""
+		for i := len(implStack) - 1; i >= 0; i-- {
+			f := implStack[i]
+			if f.braceDepth <= braceDepth-openBrace {
+				currentImpl = f.implType
+				break
+			}
+		}
+		// 如果当前在 impl 块内但 braceDepth 没更新到，用栈顶
+		if currentImpl == "" && len(implStack) > 0 {
+			lastFrame := implStack[len(implStack)-1]
+			if braceDepth > lastFrame.braceDepth {
+				currentImpl = lastFrame.implType
+			}
+		}
 
 		switch {
 		case reRustFn.MatchString(trimmed):
 			m := reRustFn.FindStringSubmatch(trimmed)
 			name := m[1]
-			if implType != "" {
-				// 方法
-				id := ext.addEntity(EntityMethod, implType+"."+name, fmt.Sprintf("%s.%s(...)", implType, name), ln)
-				if clsID := ext.addEntity(EntityStruct, implType, "", 0); clsID != "" {
-					ext.addRel(clsID, id, RelDefines, ln)
+			sig := fmt.Sprintf("fn %s(...)", name)
+			if currentImpl != "" {
+				id := ext.addEntity(EntityMethod, currentImpl+"."+name, sig, ln)
+				if clsID := ext.addEntity(EntityStruct, currentImpl, "", 0); clsID != "" {
+					b.graph.AddRelation(&Relation{
+						SourceID: clsID, TargetID: id, Kind: RelDefines, File: filePath, Line: ln,
+					})
 				}
 			} else {
-				id := ext.addEntity(EntityFunction, name, fmt.Sprintf("fn %s(...)", name), ln)
+				id := ext.addEntity(EntityFunction, name, sig, ln)
 				ext.addRel(fileID, id, RelContains, ln)
 			}
 
@@ -282,7 +332,6 @@ func parseRustFile(b *LangBuilder, filePath string, source []byte) (string, erro
 			m := reRustStruct.FindStringSubmatch(trimmed)
 			id := ext.addEntity(EntityStruct, m[1], fmt.Sprintf("struct %s", m[1]), ln)
 			ext.addRel(fileID, id, RelContains, ln)
-			implType = "" // struct 定义不改变 impl 上下文
 
 		case reRustEnum.MatchString(trimmed):
 			m := reRustEnum.FindStringSubmatch(trimmed)
@@ -294,10 +343,6 @@ func parseRustFile(b *LangBuilder, filePath string, source []byte) (string, erro
 			id := ext.addEntity(EntityInterface, m[1], fmt.Sprintf("trait %s", m[1]), ln)
 			ext.addRel(fileID, id, RelContains, ln)
 
-		case reRustImpl.MatchString(trimmed):
-			m := reRustImpl.FindStringSubmatch(trimmed)
-			implType = m[1]
-
 		case reRustUse.MatchString(trimmed):
 			m := reRustUse.FindStringSubmatch(trimmed)
 			impID := ext.addEntity(EntityImport, m[1], m[1], ln)
@@ -307,11 +352,6 @@ func parseRustFile(b *LangBuilder, filePath string, source []byte) (string, erro
 			m := reRustConst.FindStringSubmatch(trimmed)
 			id := ext.addEntity(EntityConstant, m[1], fmt.Sprintf("const %s", m[1]), ln)
 			ext.addRel(fileID, id, RelContains, ln)
-		}
-
-		// impl 块结束后重置
-		if braceDepth == 0 && implType != "" {
-			// 检查是否已离开 impl 块
 		}
 	}
 	return fileID, nil

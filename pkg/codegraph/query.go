@@ -467,3 +467,155 @@ func calcRelevance(e *Entity, query string) float64 {
 
 	return score
 }
+
+// ── 增强查询方法 ──────────────────────────────────────
+
+// FindTypeUsages 查找使用指定类型的所有位置。
+func (qe *QueryEngine) FindTypeUsages(typeName string) []SearchHit {
+	se := NewSearchEngine(qe.graph, "")
+	req := SearchRequest{
+		Query:      typeName,
+		Scope:      ScopeVariable,
+		MaxResults: 100,
+	}
+	resp := se.Search(req)
+	return resp.Results
+}
+
+// ── 克隆检测 ──────────────────────────────────────────
+
+// CloneGroup 一组相似的代码实体。
+type CloneGroup struct {
+	Entities   []*Entity `json:"entities"`
+	Similarity float64   `json:"similarity"`
+	Pattern    string    `json:"pattern"`
+}
+
+// DetectClones 检测结构相似的代码实体（基于签名/结构）。
+func (qe *QueryEngine) DetectClones(threshold float64) []CloneGroup {
+	entities := qe.graph.GetEntitiesByKind(EntityFunction)
+	entities = append(entities, qe.graph.GetEntitiesByKind(EntityMethod)...)
+
+	patternGroups := make(map[string][]*Entity)
+	for _, e := range entities {
+		pattern := normalizeSignature(e.Signature)
+		if pattern != "" {
+			patternGroups[pattern] = append(patternGroups[pattern], e)
+		}
+	}
+
+	var groups []CloneGroup
+	for pattern, ents := range patternGroups {
+		if len(ents) >= 2 {
+			groups = append(groups, CloneGroup{
+				Entities:   ents,
+				Similarity: calcGroupSimilarity(ents),
+				Pattern:    pattern,
+			})
+		}
+	}
+	return groups
+}
+
+func normalizeSignature(sig string) string {
+	sig = strings.TrimSpace(sig)
+	if sig == "" {
+		return ""
+	}
+	parts := strings.SplitN(sig, "(", 2)
+	if len(parts) < 2 {
+		return sig
+	}
+	return parts[0] + "(...)"
+}
+
+func calcGroupSimilarity(ents []*Entity) float64 {
+	if len(ents) <= 1 {
+		return 1.0
+	}
+	firstLines := ents[0].EndLine - ents[0].Line
+	matchCount := 0
+	for _, e := range ents[1:] {
+		lines := e.EndLine - e.Line
+		if abs(lines-firstLines) <= 3 {
+			matchCount++
+		}
+	}
+	if len(ents) <= 1 {
+		return 0
+	}
+	return float64(matchCount) / float64(len(ents)-1)
+}
+
+func abs(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
+// ── 依赖图分析 ──────────────────────────────────────
+
+// DependencyGraph 模块依赖图。
+type DependencyGraph struct {
+	Nodes []string    `json:"nodes"`
+	Edges [][2]string `json:"edges"`
+}
+
+// BuildDependencyGraph 从图谱构建模块依赖图。
+func (qe *QueryEngine) BuildDependencyGraph() *DependencyGraph {
+	dg := &DependencyGraph{}
+	pkgs := qe.graph.GetEntitiesByKind(EntityPackage)
+	pkgSet := make(map[string]bool)
+	for _, p := range pkgs {
+		if !pkgSet[p.Name] {
+			dg.Nodes = append(dg.Nodes, p.Name)
+			pkgSet[p.Name] = true
+		}
+	}
+	seen := make(map[string]bool)
+	for _, p := range pkgs {
+		rels := qe.graph.GetRelations(p.ID, RelDependsOn, "out")
+		for _, r := range rels {
+			target := qe.graph.GetEntity(r.TargetID)
+			if target != nil {
+				key := p.Name + "→" + target.Name
+				if !seen[key] {
+					dg.Edges = append(dg.Edges, [2]string{p.Name, target.Name})
+					seen[key] = true
+				}
+			}
+		}
+	}
+	return dg
+}
+
+// CloneReport 生成克隆检测报告。
+func CloneReport(groups []CloneGroup) string {
+	if len(groups) == 0 {
+		return "未检测到代码克隆。"
+	}
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("代码克隆检测结果（共 %d 组）：\n\n", len(groups)))
+	for i, g := range groups {
+		b.WriteString(fmt.Sprintf("组 %d: %s (相似度: %.0f%%)\n", i+1, g.Pattern, g.Similarity*100))
+		for _, e := range g.Entities {
+			b.WriteString(fmt.Sprintf("  - %s (%s:%d)\n", e.Name, e.FilePath, e.Line))
+		}
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+// DependencyReport 生成依赖图报告。
+func DependencyReport(dg *DependencyGraph) string {
+	if len(dg.Nodes) == 0 {
+		return "依赖图为空。"
+	}
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("模块依赖图（%d 个包，%d 条依赖）：\n\n", len(dg.Nodes), len(dg.Edges)))
+	for _, e := range dg.Edges {
+		b.WriteString(fmt.Sprintf("  %s → %s\n", e[0], e[1]))
+	}
+	return b.String()
+}
