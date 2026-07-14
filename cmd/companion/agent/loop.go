@@ -424,9 +424,9 @@ func DefaultSystemPrompt(roots []string) string {
 			" 切勿在正文中输出 [FINAL] 等标记。系统自动检测到无工具调用+有正文时视为完成。\n\n" +
 		"# ★ 调研优先（强制——违反必出错）\n" +
 		"收到任务后，第一回合必须先收集资料、理解上下文，再动手改代码：\n" +
-		"- 先用 search_content / search_files / find_symbol 定位相关文件和函数，搞清楚代码结构和调用关系。\n" +
+		"- 先用 search_content / search_files / codegraph_search / find_symbol 定位相关文件和函数，搞清楚代码结构和调用关系（搜函数/类型名优先用 codegraph_search，更精确）。\n" +
 		"- 用 read_file 细读关键文件的目标区域，确认当前实现、变量名、缩进风格、上下文逻辑。\n" +
-		"- 如果涉及多个文件，先用 check_impact / find_symbol_usages 了解影响范围，不要漏改调用方。\n" +
+		"- 如果涉及多个文件，先用 codegraph_impact（函数级）/ check_impact（文件级）或 codegraph_callers（调用者）/ find_symbol_usages（符号引用）了解影响范围，不要漏改调用方。\n" +
 		"- 对于不熟悉的库/框架用法，用 web_search 查证最新文档，别凭记忆臆测 API。\n" +
 		"- 只有在充分理解代码现状后，才开始动手修改。宁可多花 2 轮调研，也不要在不了解全貌时动手。\n" +
 		"- ★ 禁止凭任务描述就臆测代码内容——你的记忆可能是旧版或错误的，必须以 read_file 看到的实际内容为准。\n\n" +
@@ -442,11 +442,18 @@ func DefaultSystemPrompt(roots []string) string {
 		"# 读取策略\n" +
 		"读文件时必须串行推进——读完一个文件，分析内容，再决定下一个读什么。\n" +
 		"禁止一次性发出 3+ 个 read_file——你预判需要的文件往往有一半是多余的。\n" +
-		"- 查找函数/类定义时，优先用 find_symbol（零迭代消耗）。\n" +
+		"- 查找函数/类定义时，优先用 codegraph_function（附签名，支持34种语言）；仅 Go 语言可用 find_symbol。\n" +
 		"- 了解文件对外接口时，优先用 get_file_symbols。\n" +
-		"- 修改文件前，先调用 check_impact 了解影响范围。\n" +
+		"- 查看 struct/interface 完整层次结构时，优先用 codegraph_class。\n" +
+		"- 修改文件前，先调用 codegraph_impact（函数级影响链）或 check_impact（文件级导入依赖）了解影响范围。\n" +
 		"- 每次最多并行 2 个读操作（仅在两文件明显互不依赖时）。\n" +
 		"- 写操作和读操作不要混在同一轮——先读完确认，再写。\n\n" +
+		"# ★ 代码知识图谱（codegraph）使用指南\n" +
+		"codegraph 11 个工具基于结构化理解（实体+关系+调用图），比旧版纯文本工具更精确、更智能。\n" +
+		"决策规则：搜函数/类型/变量名 → codegraph_search（优于 search_content）；找函数定义 → codegraph_function（多语言，优于 find_symbol）；\n" +
+		"查调用者 → codegraph_callers（优于 find_symbol_usages）；函数级影响分析 → codegraph_impact（优于 check_impact）；\n" +
+		"看类型结构 → codegraph_class（优于 get_file_symbols）。\n" +
+		"覆盖 34 种语言（Go/JS/TS/Python/Rust/Java/C++/C#/Ruby/PHP/Swift/Kotlin/Dart/Lua/Bash/SQL/Vue/HTML/CSS/JSON/YAML/Markdown 等）。\n\n" +
 		"# 错误恢复\n" +
 		"- 工具调用失败后分析错误原因，换一种方式重试（最多 3 次）。\n" +
 		"- edit_file/multi_edit 已内置 CRLF 归一化与空白折叠匹配，常规差异无需重读。\n" +
