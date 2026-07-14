@@ -56,10 +56,11 @@ func init() {
 var Editor = &editorState{}
 
 type editorTab struct {
-	path    string
-	content string
-	lang    string
-	dirty   bool
+	path         string
+	content      string
+	savedContent string // 磁盘上最后保存/加载的内容，用于准确判断是否修改
+	lang         string
+	dirty        bool
 }
 
 // editorSession 用于 JSON 序列化的会话数据。
@@ -251,6 +252,7 @@ func (e *editorState) Save() {
 	}
 	if err := os.WriteFile(t.path, []byte(t.content), 0o644); err == nil {
 		t.dirty = false
+		t.savedContent = t.content
 		// 更新脏标记：不重建整条 tab 栏，只修改对应标签的样式
 		e.updateTabDirtyDot(e.active)
 		if ui.Ctx.App != nil {
@@ -709,8 +711,10 @@ func (e *editorState) buildEditorWrapper(t *editorTab, tabIdx int) *dom.Element 
 		}
 		tt := Editor.tabs[tabIdx]
 		tt.content = v
-		if !tt.dirty {
-			tt.dirty = true
+		if v != tt.savedContent {
+			if !tt.dirty {
+				tt.dirty = true
+			}
 			// 只更新脏点样式，不重建 tab 栏（核心性能优化）
 			Editor.updateTabDirtyDot(tabIdx)
 			if ui.Ctx.App != nil {
@@ -1042,6 +1046,7 @@ func loadTabContent(t *editorTab) {
 		return
 	}
 	t.content = strings.ReplaceAll(string(data), "\t", "    ")
+	t.savedContent = t.content
 	t.lang = strings.TrimPrefix(strings.ToLower(filepath.Ext(t.path)), ".")
 }
 
