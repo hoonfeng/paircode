@@ -332,110 +332,10 @@ func buildDropdowns(doc *dom.Document) {
 	}{
 		// ── 文件 ──
 		{"文件", []component.PopupMenuItem{
-			{Label: "新建文件   (Ctrl+N)", OnClick: func() { ctxmenupanel.NewEntryIn(core.Root(), false) }},
 			{Label: "打开文件…   (Ctrl+O)", OnClick: func() { ctxmenupanel.OpenFileViaDialog() }},
-			{Label: "打开文件夹…", OnClick: func() { ctxmenupanel.OpenFolderViaDialog() }},
-			{Label: "添加文件夹到工作区…", OnClick: func() { ctxmenupanel.AddFolderViaDialog() }},
-			{Divider: true},
-			{Label: "保存   (Ctrl+S)", OnClick: func() {
-				if ui.Ctx.Editor != nil {
-					ui.Ctx.Editor.Save()
-				}
-			}},
-			{Label: "全部保存", OnClick: func() {
-				if ui.Ctx.Editor != nil {
-					ui.Ctx.Editor.Save()
-					uiapi.MessageSuccess("已保存")
-				}
-			}},
-			{Divider: true},
-			{Label: "保存工作区", OnClick: func() { core.SaveWorkspaceMenu() }},
-			{Label: "管理工作区文件夹…", OnClick: func() { core.ShowManager() }},
 			{Divider: true},
 			{Label: "关闭项目", OnClick: func() { core.CloseProjectMenu() }},
 			{Label: "关闭工作区", OnClick: func() { core.CloseWorkspaceMenu() }},
-		}},
-		// ── 编辑 ──
-		{"编辑", []component.PopupMenuItem{
-			{Label: "撤销   (Ctrl+Z)", OnClick: func() { editorpanel.Editor.Undo() }},
-			{Label: "重做   (Ctrl+Shift+Z)", OnClick: func() { editorpanel.Editor.Redo() }},
-			{Divider: true},
-			{Label: "剪切", OnClick: func() { editorpanel.Editor.CutSelection() }},
-			{Label: "复制", OnClick: func() { editorpanel.Editor.CopySelection() }},
-			{Label: "粘贴", OnClick: func() { editorpanel.Editor.PasteText() }},
-			{Divider: true},
-			{Label: "查找对话   (Ctrl+F)", OnClick: func() { chatpanel.ToggleSearch() }},
-			{Label: "跨文件搜索   (Ctrl+Shift+F)", OnClick: func() {
-				shellState.LeftView = "search"
-				if !shellState.LeftOpen {
-					shellState.LeftOpen = true
-					updatePanelVisibility()
-				}
-				updateLeftView()
-				syncActivityBar()
-				if ui.Ctx.Search != nil && ui.Ctx.Search.Refresh != nil {
-					ui.Ctx.Search.Refresh()
-				}
-				if theApp != nil {
-					theApp.MarkDirty()
-				}
-			}},
-			{Label: "命令面板   (Ctrl+P)", OnClick: func() { openCommandPalette() }},
-		}},
-		// ── 视图 ──
-		{"视图", []component.PopupMenuItem{
-			{Label: "文件资源管理器", OnClick: func() {
-				shellState.LeftView = "files"
-				if !shellState.LeftOpen {
-					togglePanel("left")
-				} else {
-					updateLeftView()
-					syncActivityBar()
-					if theApp != nil {
-						theApp.MarkDirty()
-					}
-				}
-			}},
-			{Label: "搜索", OnClick: func() {
-				shellState.LeftView = "search"
-				if !shellState.LeftOpen {
-					togglePanel("left")
-				}
-				shellState.LeftOpen = true
-				updateLeftView()
-				syncActivityBar()
-				if ui.Ctx.Search != nil && ui.Ctx.Search.Refresh != nil {
-					ui.Ctx.Search.Refresh()
-				}
-				if theApp != nil {
-					theApp.MarkDirty()
-				}
-			}},
-			{Label: "源代码管理", OnClick: func() {
-				shellState.LeftView = "git"
-				if !shellState.LeftOpen {
-					togglePanel("left")
-				}
-				shellState.LeftOpen = true
-				updateLeftView()
-				syncActivityBar()
-				if ui.Ctx.Git != nil && ui.Ctx.Git.Refresh != nil {
-					ui.Ctx.Git.Refresh()
-				}
-				if theApp != nil {
-					theApp.MarkDirty()
-				}
-			}},
-			{Divider: true},
-			{Label: "专注模式   (Ctrl+K)", OnClick: func() { toggleFocusMode() }},
-			{Label: "切换侧边栏   (Ctrl+B)", OnClick: func() { togglePanel("left") }},
-			{Label: "切换终端   (Ctrl+J)", OnClick: func() { togglePanel("bottom") }},
-		}},
-		// ── 终端 ──
-		{"终端", []component.PopupMenuItem{
-			{Label: "新建终端", OnClick: func() { termpanel.NewTerminal() }},
-			{Divider: true},
-			{Label: "清屏", OnClick: func() { termpanel.ClearActive() }},
 		}},
 		// ── Agent ｜ AI IDE 核心特色菜单 ──
 		{"Agent", []component.PopupMenuItem{
@@ -483,12 +383,6 @@ func buildDropdowns(doc *dom.Document) {
 			{Label: "快捷键参考", OnClick: func() {
 				uiapi.MessageInfo("快捷键：Ctrl+N 新建 | Ctrl+S 保存 | Ctrl+F 查找 | Ctrl+P 命令面板 | Ctrl+B 侧栏 | Ctrl+J 终端 | Ctrl+K 专注")
 			}},
-			{Label: "文档", OnClick: func() {
-				uiapi.MessageInfo("Pair CodeAgent AI IDE 文档请访问项目 README")
-			}},
-			{Label: "检查更新", OnClick: func() { uiapi.MessageInfo("当前版本：v0.1.0（GWui）") }},
-			{Divider: true},
-			{Label: "报告问题", OnClick: func() { uiapi.MessageInfo("请提交 Issue 到项目仓库") }},
 			{Divider: true},
 			{Label: "关于", OnClick: func() { uiapi.MessageInfo("Pair CodeAgent v0.1.0\n基于 GWui 的现代化 AI IDE") }},
 		}},
