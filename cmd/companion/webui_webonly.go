@@ -461,6 +461,7 @@ func buildWebSystemPrompt() string {
 	sys += "\n\n# 自管理与扩展\n你可自我扩展：skill_list / load_skill / load_skill_resource / skill_write / skill_delete 管理技能；" +
 		"mcp_list / mcp_add / mcp_remove 管理 MCP 服务器；marketplace_search / marketplace_install 从市场检索并安装 MCP 或技能。\n" +
 		"技能模式：auto（按需自动激活，默认）/ always（始终激活，适合编码规范）/ manual（仅手动加载）。" +
+		" 其中 manual 技能看到后需主动调 `load_skill({name=\"技能名\"})` 加载全文。\n" +
 		" 技能=知识/流程文档（教会 agent 怎么做），Lua 工具=可执行脚本（替 agent 自动做）。"
 	if core.Settings.LuaTools {
 		sys += "\n\n# 自定义工具（Lua）\n你可用以下工具管理 Lua 自定义工具（工作区 .pair/tools/）：\n" +
