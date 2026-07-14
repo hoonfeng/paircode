@@ -262,8 +262,8 @@ func (b *AgentBridge) Start(task string) {
 			}
 		}
 		finalMsgs, loopErr := loop.Run(ctx, runTask, hist)
-		// 连续错误或达最大迭代：标记 stopped 以跳过后续验证/评测阶段，由 drain 处理收尾。
-		if loopErr != nil && (errors.Is(loopErr, agent.ErrConsecToolError) || errors.Is(loopErr, agent.ErrMaxIterations)) {
+		// 达最大迭代：标记 stopped 以跳过后续验证/评测阶段，由 drain 处理收尾。
+		if loopErr != nil && errors.Is(loopErr, agent.ErrMaxIterations) {
 			b.mu.Lock()
 			b.stopped = true
 			b.mu.Unlock()

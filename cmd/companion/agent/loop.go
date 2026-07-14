@@ -9,9 +9,6 @@ import (
 	"strings"
 )
 
-// ErrConsecToolError 连续多轮工具执行失败，由 Loop.Run 返回，桥接层应据此终止本轮后续阶段。
-var ErrConsecToolError = errors.New("连续 3 轮工具执行失败，已停止")
-
 // ErrCirclingLoop 绕圈检测连续触发多次，由 Loop.Run 返回。
 
 var ErrCirclingLoop = errors.New("绕圈检测连续 3 次触发，仍在重复同一操作，已停止")
@@ -58,7 +55,7 @@ type Event struct {
 
 
 // Loop TAOR 编排器：think(LLM 决策)→act(执行工具)→observe(结果回灌)→repeat。
-// 停止：自然终止（无 tool_call + 有正文）/ 连续 3 轮工具全错 / 达最大迭代 / 外部取消。
+// 停止：自然终止（无 tool_call + 有正文）/ 达最大迭代 / 外部取消。
 type Loop struct {
 	Provider      Provider
 	Registry      *Registry
@@ -205,7 +202,6 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 	}
 
 	tools := l.Registry.Definitions()
-	consecErr := 0
 
 	for iter := 0; iter < max; iter++ {
 		if err := ctx.Err(); err != nil {
@@ -261,7 +257,6 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 
 
 		// ── ACT + OBSERVE：依次执行工具，结果作 role=tool 消息回灌 ──
-		iterErr := false
 		for _, tc := range assistant.ToolCalls {
 			l.emit(Event{Type: EventToolCall, Tool: tc.Function.Name, Args: tc.Function.Arguments, CallID: tc.ID})
 
@@ -294,7 +289,6 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 			result, terr := l.Registry.Execute(ctx, tc.Function.Name, tc.Function.Arguments)
 			if terr != nil {
 				result = "Error: " + terr.Error()
-				iterErr = true
 			}
 			l.emit(Event{Type: EventToolResult, Tool: tc.Function.Name, Content: result, CallID: tc.ID})
 			msgs = append(msgs, Message{Role: RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: result})
@@ -338,17 +332,6 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 			l.emit(Event{Type: EventCircling, Content: "检测到重复操作/反复失败，已提示 Agent 换思路打破死循环"})
 			msgs = append(msgs, Message{Role: RoleUser, Content: nudge})
 			l.recentCalls = nil // 提示后清零，给新思路一个干净起点
-		}
-
-		// 连续 3 轮工具全有错 → 止损停（复刻参考源 3-consecutive-error）。
-		// 返回 sentinel 错误供桥接层判断，避免误以为正常完成而继续验证/评测阶段。
-		if iterErr {
-			if consecErr++; consecErr >= 3 {
-				l.emit(Event{Type: EventError, Content: ErrConsecToolError.Error()})
-				return msgs, ErrConsecToolError
-			}
-		} else {
-			consecErr = 0
 		}
 
 		// transfer_to_agent：当前 agent 退出，控制权转移给目标 agent（由调用方接管同一 []Message）。
@@ -456,7 +439,7 @@ func DefaultSystemPrompt(roots []string) string {
 		"- edit_file/multi_edit 已内置 CRLF 归一化与空白折叠匹配，常规差异无需重读。\n" +
 		"  失败时诊断信息含行号上下文：优先改用 line_start/line_end 行号定位（最可靠）；\n" +
 		"  若仍失败再 read_file 确认最新内容。★ 绝不要因匹配失败就改用 write_file 覆盖整个文件。\n" +
-		"- 连续 3 次工具执行失败 → 自动终止，向用户报告原因。\n" +
+		"- 工具执行失败后分析错误原因，换一种方式重试。\n" +
 		"- run_command 失败 → 检查 stderr 输出，不要只靠 exit code 判断。\n\n" +
 		"# 代码修改纪律（严格遵守，防改错）\n" +
 		"★★ 以下规则是反复改出语法错误后总结的铁律，必须遵守 ★★\n\n" +
