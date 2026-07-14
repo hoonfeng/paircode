@@ -177,6 +177,7 @@ const closeTab = async (path) => {
   state.openFiles = state.openFiles.filter(f => f !== path)
   delete state.fileContents[path]
   delete state.fileDirty[path]
+  delete state.fileSavedContent[path]
   if (state.activeFile === path) {
     state.activeFile = state.openFiles[state.openFiles.length - 1] || ''
   }
@@ -218,7 +219,7 @@ async function closeOtherTabs(file) {
   state.openFiles = [file]
   state.activeFile = file
   for (const key of Object.keys(state.fileContents)) {
-    if (key !== file) { delete state.fileContents[key]; delete state.fileDirty[key] }
+    if (key !== file) { delete state.fileContents[key]; delete state.fileDirty[key]; delete state.fileSavedContent[key] }
   }
 }
 
@@ -229,7 +230,7 @@ async function closeAllTabs() {
     }
   }
   state.openFiles = []; state.activeFile = ''
-  for (const key of Object.keys(state.fileContents)) { delete state.fileContents[key]; delete state.fileDirty[key] }
+  for (const key of Object.keys(state.fileContents)) { delete state.fileContents[key]; delete state.fileDirty[key]; delete state.fileSavedContent[key] }
 }
 
 // ── ===== 编辑器右键菜单（匹配 GUI EditorContentMenu）===== ──

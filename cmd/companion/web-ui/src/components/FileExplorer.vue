@@ -461,8 +461,8 @@ async function loadFileContent(path) {
   }
   try {
     const data = await api.apiGet('/fs/read', { path })
-    state.fileContents[path] = data.content || ''
     state.fileSavedContent[path] = data.content || ''
+    state.fileContents[path] = data.content || ''
     state.fileDirty[path] = false
   } catch (err) {
     state.fileContents[path] = `// 错误: ${err.message}`
