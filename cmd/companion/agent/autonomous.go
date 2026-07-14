@@ -6,6 +6,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -545,10 +546,38 @@ func RunAutonomous(ctx context.Context, planProv Provider, innerLoop *Loop, task
 		OnEvent:       innerLoop.OnEvent, // 共用事件推送通道
 	}
 
-	// 3. 运行外层 Loop（设计者 agent 开始工作）
-	msgs, err := outer.Run(ctx, task, nil)
-	if err != nil && !errors.Is(err, ErrMaxIterations) {
-		return "", err
+	// 3. 运行外层 Loop（设计者 agent 开始工作），
+	//    每轮检查计划是否全部完成，未完成则注入 nudge 继续，
+	//    防止自然终止条件（无 tool_call+有正文=完成）在 delegate_task 返回后被误触发。
+	maxContinuations := innerLoop.MaxIterations / 3
+	if maxContinuations < 5 {
+		maxContinuations = 5
+	}
+	var msgs []Message
+	var err error
+	continuationTask := task
+	for {
+		msgs, err = outer.Run(ctx, continuationTask, nil)
+		if err != nil && !errors.Is(err, ErrMaxIterations) {
+			return "", err
+		}
+
+		// 检查计划是否全部完成
+		complete, _ := planStatus(msgs)
+		if complete {
+			break
+		}
+
+		// 计划未完成 → 注入 nudge 继续执行剩余项目
+		maxContinuations--
+		if maxContinuations <= 0 {
+			break
+		}
+
+		// 重置 Loop 内部状态，防止上一轮的 finishResult/contentOnlyIters 影响新一轮
+		outer.finishResult = nil
+		outer.contentOnlyIters = 0
+		continuationTask = "你制定的计划中尚有未完成的项目。请继续执行：先调用 update_plan 更新各步状态，然后调用 delegate_task 执行下一项。不要输出分析文字，直接推进工作。"
 	}
 
 	// 4. 提取最终输出
@@ -560,6 +589,56 @@ func RunAutonomous(ctx context.Context, planProv Provider, innerLoop *Loop, task
 		}
 	}
 	return output, nil
+}
+
+// planStatus 从消息列表中提取最后一个 update_plan 调用，解析计划状态。
+// 返回 (全部完成?, 计划摘要)。
+func planStatus(msgs []Message) (bool, string) {
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].Role != RoleAssistant {
+			continue
+		}
+		for _, tc := range msgs[i].ToolCalls {
+			if tc.Function.Name != "update_plan" {
+				continue
+			}
+			// 解析 Arguments 中的 plan
+			var args struct {
+				Plan []struct {
+					Step   string `json:"step"`
+					Status string `json:"status"`
+				} `json:"plan"`
+			}
+			if err := json.Unmarshal([]byte(tc.Function.Arguments), &args); err != nil {
+				return false, ""
+			}
+			if len(args.Plan) == 0 {
+				return false, ""
+			}
+			pending := 0
+			inProg := 0
+			done := 0
+			var summary strings.Builder
+			for _, item := range args.Plan {
+				if summary.Len() > 0 {
+					summary.WriteString(", ")
+				}
+				summary.WriteString(fmt.Sprintf("[%s] %s", item.Status, item.Step))
+				switch item.Status {
+				case "done":
+					done++
+				case "in_progress":
+					inProg++
+				default:
+					pending++
+				}
+			}
+			allDone := pending == 0 && inProg == 0 && done > 0
+			return allDone, fmt.Sprintf("计划共 %d 步: %d 完成, %d 进行中, %d 待办 — %s",
+				len(args.Plan), done, inProg, pending, summary.String())
+		}
+	}
+	return false, "(未找到计划)"
 }
 
 // outerDesignerPrompt 外层设计者 Agent 的系统提示语。
@@ -613,4 +692,10 @@ const outerDesignerPrompt = `你是项目设计者和总指挥。
 - **你不需要做具体执行**，你的工作是设计、决策、协调
 - **每次只委托一个任务**，等结果回来后再决定下一步
 - **结果不理想时可以调整**后续计划或重新委托
-- **保持计划可见**：每次更新 plan 状态，让用户看到整体进度`
+- **保持计划可见**：每次更新 plan 状态，让用户看到整体进度
+
+# ★ 关键：避免被系统误判为「已完成」
+每次 delegate_task 返回结果后，请**立即**调用 update_plan 更新状态（将刚完成项标记为 done、下一项标记为 in_progress），
+然后立即调用 delegate_task 执行下一项。
+**不要输出分析文字/总结**——系统检测到「无工具调用+有正文」会认为任务已完成并终止循环，
+导致剩余计划项无法执行。只有全部计划项都标记为 done 后，才输出最终总结。`
