@@ -552,6 +552,17 @@ func RunAutonomous(ctx context.Context, planProv Provider, innerLoop *Loop, task
 		return "", err
 	}
 
+	// 兜底：外层 Loop 自然终止（LLM 输出文字未调工具）但计划未完成时，
+	// 给一次续推机会，明确告诉它继续执行剩余项。
+	if err == nil && planIncomplete(msgs) {
+		outer.finishResult = nil
+		outer.contentOnlyIters = 0
+		msgs, err = outer.Run(ctx, "你制定的计划中还有未完成的项目，请继续执行。不要输出分析文字，直接调用 update_plan 更新状态并 delegate_task 推进下一项。", msgs)
+		if err != nil && !errors.Is(err, ErrMaxIterations) {
+			return "", err
+		}
+	}
+
 	// 4. 提取最终输出
 	output := ""
 	for i := len(msgs) - 1; i >= 0; i-- {
@@ -561,6 +572,43 @@ func RunAutonomous(ctx context.Context, planProv Provider, innerLoop *Loop, task
 		}
 	}
 	return output, nil
+}
+
+// planIncomplete 从消息列表中找到最后一个 update_plan 的工具结果，
+// 检查计划是否还有待办项（完成数 < 总数）。
+// update_plan handler 返回格式为 "...完成 X/Y 步"。
+func planIncomplete(msgs []Message) bool {
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].Role != RoleTool || !strings.Contains(msgs[i].Content, "完成 ") || !strings.Contains(msgs[i].Content, "/") {
+			continue
+		}
+		// 提取 "完成 X/Y" 中的 X 和 Y
+		idx := strings.Index(msgs[i].Content, "完成 ")
+		if idx < 0 {
+			continue
+		}
+		rest := msgs[idx+len("完成 "):]
+		slash := strings.IndexByte(rest, '/')
+		if slash < 0 {
+			continue
+		}
+		doneStr := strings.TrimSpace(rest[:slash])
+		tail := rest[slash+1:]
+		space := strings.IndexByte(tail, ' ')
+		if space < 0 {
+			continue
+		}
+		totalStr := strings.TrimSpace(tail[:space])
+		done, total := 0, 0
+		if _, e1 := fmt.Sscanf(doneStr, "%d", &done); e1 != nil {
+			continue
+		}
+		if _, e2 := fmt.Sscanf(totalStr, "%d", &total); e2 != nil || total <= 0 {
+			continue
+		}
+		return done < total
+	}
+	return false
 }
 
 // outerDesignerPrompt 外层设计者 Agent 的系统提示语。

@@ -48,13 +48,13 @@ func registerPlanTool(r *Registry) {
 					if status == "done" {
 						done++
 					}
-					statusIcon := "⏳"
-					switch status {
-					case "done":
-						statusIcon = "✅"
-					case "in_progress":
-						statusIcon = "▶️"
-					}
+				statusIcon := "[待办]"
+				switch status {
+				case "done":
+					statusIcon = "[完成]"
+				case "in_progress":
+					statusIcon = "[进行中]"
+				}
 					b.WriteString(fmt.Sprintf("%d. %s %s\n", i+1, statusIcon, step))
 				}
 			}
