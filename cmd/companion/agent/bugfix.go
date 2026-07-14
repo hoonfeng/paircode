@@ -197,7 +197,7 @@ func BuildDetailedFixPrompt(detected *BugDetectResult, root string) string {
 	b.WriteString("3. 使用 `edit_file` 或 `write_file` 修复\n")
 	b.WriteString("4. 修改后使用 `go_build` 验证是否通过\n")
 	b.WriteString("5. 如果仍有错误，继续修复\n")
-	b.WriteString("6. 所有错误修复完成后，运行 `go_build` 确认全部通过，然后输出最终报告。\n\n")
+	b.WriteString("6. 所有错误修复完成后，运行 `go_build` 确认全部通过，然后输出完成总结。\n\n")
 
 	b.WriteString("请开始修复。")
 
