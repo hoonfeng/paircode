@@ -70,7 +70,7 @@ type Builder struct {
 	goBuilder       *GoBuilder
 	jsBuilder       *JSBuilder
 	pyBuilder       *PyBuilder
-	tsitBuilder     *TsitBuilder
+	langBuilder     *LangBuilder
 	importAnalyzer  *ImportAnalyzer
 }
 
@@ -96,7 +96,7 @@ func NewBuilder(config BuildConfig) *Builder {
 			root:       config.Root,
 			graph:      graph,
 		},
-		tsitBuilder: &TsitBuilder{
+		langBuilder: &LangBuilder{
 			ModuleName: config.ModuleName,
 			root:       config.Root,
 			graph:      graph,
@@ -149,14 +149,19 @@ func isGoFile(path string) bool {
 
 // isSupportedFile 检查文件是否支持。
 func isSupportedFile(path string) bool {
-	return isGoFile(path) || isJSFile(path) || isPyFile(path)
+	if isGoFile(path) || isJSFile(path) || isPyFile(path) {
+		return true
+	}
+	ext := strings.ToLower(filepath.Ext(path))
+	return isLangSupportedExtra(ext)
 }
 
 // parseFile 根据语言路由解析单个文件。
-//   - .go   → GoBuilder（go/parser, 完整实体提取）
-//   - .js/.ts → JSBuilder（goja 解析器）
-//   - .py   → PyBuilder（规则解析）
-//   - 其他  → TsitBuilder（tsit 树遍历，预留）
+//   - .go       → GoBuilder（go/parser, 完整实体提取）
+//   - .js/.ts   → JSBuilder（goja 解析器）
+//   - .py       → PyBuilder（规则解析）
+//   - .rs/.java/.c/.cpp/.cs → LangBuilder（正则解析）
+//   - .rb/.php/.swift/.kt/.dart/.lua/.sh/.sql/.vue  → LangBuilder（正则解析）
 func (b *Builder) parseFile(filePath string) (string, error) {
 	switch {
 	case isGoFile(filePath):
@@ -169,7 +174,8 @@ func (b *Builder) parseFile(filePath string) (string, error) {
 		b.pyBuilder.ModuleName = b.config.ModuleName
 		return b.pyBuilder.ParseFile(filePath)
 	default:
-		return b.tsitBuilder.ParseFile(filePath)
+		b.langBuilder.ModuleName = b.config.ModuleName
+		return b.langBuilder.ParseFile(filePath)
 	}
 }
 
@@ -186,8 +192,8 @@ func (b *Builder) parseFileInto(filePath string, targetGraph *Graph) (string, er
 		pb := &PyBuilder{ModuleName: b.config.ModuleName, root: b.config.Root, graph: targetGraph}
 		return pb.ParseFile(filePath)
 	default:
-		tb := &TsitBuilder{ModuleName: b.config.ModuleName, root: b.config.Root, graph: targetGraph}
-		return tb.ParseFile(filePath)
+		lb := &LangBuilder{ModuleName: b.config.ModuleName, root: b.config.Root, graph: targetGraph}
+		return lb.ParseFile(filePath)
 	}
 }
 
@@ -205,8 +211,10 @@ func (b *Builder) BuildFull() (*BuildResult, error) {
 	if b.config.ModuleName == "" {
 		b.config.ModuleName = DetectModuleName(b.config.Root)
 	}
+	b.langBuilder.ModuleName = b.config.ModuleName
 	b.goBuilder.ModuleName = b.config.ModuleName
-	b.tsitBuilder.ModuleName = b.config.ModuleName
+	b.jsBuilder.ModuleName = b.config.ModuleName
+	b.pyBuilder.ModuleName = b.config.ModuleName
 	b.importAnalyzer.ModuleName = b.config.ModuleName
 
 	result := &BuildResult{}
@@ -291,7 +299,7 @@ func (b *Builder) IncrementalBuild() (*BuildResult, error) {
 	b.goBuilder.graph = graph
 	b.jsBuilder.graph = graph
 	b.pyBuilder.graph = graph
-	b.tsitBuilder.graph = graph
+	b.langBuilder.graph = graph
 
 	// 加载文件索引
 	index, err := b.store.LoadIndex()
