@@ -1,0 +1,1 @@
+cmd/companion/ui/settings/settings.go:638:2: expected declaration, found s
