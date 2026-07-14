@@ -458,19 +458,11 @@ func buildWebSystemPrompt() string {
 	}
 	sys += roleprompts.PhilosophyPrompt()
 	sys += skills.Prompt()
-	sys += "\n\n# 自管理与扩展\n你可自我扩展：skill_list / load_skill / load_skill_resource / skill_write / skill_delete 管理技能；" +
-		"mcp_list / mcp_add / mcp_remove 管理 MCP 服务器；marketplace_search / marketplace_install 从市场检索并安装 MCP 或技能。\n" +
-		"技能模式：auto（按需自动激活，默认）/ always（始终激活，适合编码规范）/ manual（仅手动加载）。" +
-		" 其中 manual 技能看到后需主动调 `load_skill({name=\"技能名\"})` 加载全文。\n" +
-		" 技能=知识/流程文档（教会 agent 怎么做），Lua 工具=可执行脚本（替 agent 自动做）。"
+	sys += agent.SelfManagementPrompt()
 	if core.Settings.LuaTools {
 		sys += agent.LuaToolsPrompt()
 	}
-	sys += "\n\n# 长时记忆检索\n你可以使用以下内部工具检索历史已完成对话的记忆（用于了解之前的工作成果）：\n" +
-		"- `memory_search` 搜索历史记忆（标题/摘要/标签/关键点），按关键词筛选\n" +
-		"- `memory_list` 列出所有历史记忆（按完成时间倒序）\n" +
-		"- `memory_count` 查询记忆总数\n" +
-		"注意：新对话开始时系统已自动注入最近的对话摘要到本提示中；如需更详细的历史记录可使用上述工具检索。"
+	sys += agent.LongTermMemoryPrompt()
 	root := core.Root()
 	sys += agent.ProjectRules(root)
 	sys += agent.ProjectKnowledge(root, 2500)

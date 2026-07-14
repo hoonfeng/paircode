@@ -175,11 +175,7 @@ func (b *AgentBridge) Start(task string) {
 			sys += agent.LuaToolsPrompt()
 		}
 
-		sys += "\n\n# 长时记忆检索\n你可以使用以下内部工具检索历史已完成对话的记忆（用于了解之前的工作成果）：\n" +
-			"- `memory_search` 搜索历史记忆（标题/摘要/标签/关键点），按关键词筛选\n" +
-			"- `memory_list` 列出所有历史记忆（按完成时间倒序）\n" +
-			"- `memory_count` 查询记忆总数\n" +
-			"注意：新对话开始时系统已自动注入最近的对话摘要到本提示中；如需更详细的历史记录可使用上述工具检索。"
+		sys += agent.LongTermMemoryPrompt()
 		sys += agent.ProjectRules(root)
 		sys += agent.ProjectKnowledge(root, 2500) // 项目知识库概览（.pair/project-info，渐进式披露）
 		b.loop = &agent.Loop{Provider: prov, Registry: reg, System: sys, MaxIterations: 30}
