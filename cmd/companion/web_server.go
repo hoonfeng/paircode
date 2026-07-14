@@ -1652,8 +1652,8 @@ func (s *webServer) handleSkillsDelete(w http.ResponseWriter, r *http.Request) {
 func jsonResp(w http.ResponseWriter, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(data)
-	jsonResp(w, map[string]any{"ok": true, "message": "已删除技能"})
 }
+
 
 // handleSkillsRead 读取技能正文内容。
 func (s *webServer) handleSkillsRead(w http.ResponseWriter, r *http.Request) {
