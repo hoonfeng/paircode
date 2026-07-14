@@ -129,7 +129,7 @@ func runSubAgent(ctx context.Context, parent *Loop, tree *AgentTree, name, task 
 	}
 	// ★ 包装结果，防止父 agent 将子 agent 的执行报告误判为「整体任务已完成」。
 	// 子 agent 的输出原样回灌会让父 LLM 产生已完成全部工作的错觉，导致提前收尾。
-	return fmt.Sprintf("【子 agent(%s)执行结果】\n%s\n\n---\n请根据以上子 agent 的执行结果决定下一步。若还有剩余工作请继续委托，全部完成后才调用 generate_commit_message。", name, result), nil
+	return fmt.Sprintf("【子 agent(%s)执行结果】\n%s\n\n---\n请根据以上结果决定下一步：\n1. **立即调用 update_plan 将当前项标记为 done**（无论是否还有剩余项，必须先更新计划状态）\n2. 如果还有剩余计划项，再调用 delegate_task 执行下一项\n3. 如果全部计划项都已是 done 状态，再调用 generate_commit_message 完成收尾", name, result), nil
 }
 
 // runSingleLLMCall 单轮委托：直接做 1 次 LLM 调用（不进 Loop.Run），取 assistant.Content 返回。
@@ -175,7 +175,7 @@ func runSingleLLMCall(ctx context.Context, parent *Loop, sa *SubAgent, childReg 
 	result := assistant.Content
 	onEvent(Event{Type: EventFinal, Content: result})
 	onEvent(Event{Type: EventDone, Content: result, DoneReason: "task_complete"})
-	return fmt.Sprintf("【子 agent(%s)执行结果】\n%s\n\n---\n请根据以上结果继续推进。若后续还有工作请继续委托，全部完成后才调用 generate_commit_message。", name, result), nil
+	return fmt.Sprintf("【子 agent(%s)执行结果】\n%s\n\n---\n请根据以上结果决定下一步：\n1. **立即调用 update_plan 将当前项标记为 done**（无论是否还有剩余项，必须先更新计划状态）\n2. 如果还有剩余计划项，再调用 delegate_task 执行下一项\n3. 如果全部计划项都已是 done 状态，再调用 generate_commit_message 完成收尾", name, result), nil
 }
 
 // lastAssistantContent 取消息列表中最后一条非空 assistant 正文。

@@ -519,7 +519,7 @@ func RunAutonomous(ctx context.Context, planProv Provider, innerLoop *Loop, task
 			// 导致外层提前调用 generate_commit_message 并结束，不会继续推进剩余计划项。
 			// 加上明确的「这是内层结果，外层据此决策」标记后，外层 agent 能清楚区分
 			// 内层的执行结果和外层自身的决策职责，不会混淆。
-			return fmt.Sprintf("【内层执行结果】\n%s\n\n---\n请根据以上内层的执行结果，决定下一步：\n- 如果还有剩余计划项，请调用 update_plan 更新状态并 delegate_task 执行下一项\n- 如果全部计划项已完成，请调用 generate_commit_message 完成收尾", output), nil
+			return fmt.Sprintf("【内层执行结果】\n%s\n\n---\n请根据以上内层的执行结果，决定下一步：\n1. **立即调用 update_plan 将当前项标记为 done**（无论是否还有剩余项，必须先更新计划状态）\n2. 如果还有剩余计划项，再调用 delegate_task 执行下一项\n3. 如果全部计划项都已是 done 状态，再调用 generate_commit_message 完成收尾", output), nil
 		},
 	})
 
