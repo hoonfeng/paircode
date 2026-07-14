@@ -173,8 +173,15 @@ func (b *AgentBridge) Start(task string) {
 		sys += "\n\n# 自管理与扩展\n你可自我扩展：skill_list / load_skill（按需读技能全文）/ load_skill_resource（读技能子资源）/ skill_write / skill_delete 管理技能；" +
 			"mcp_list / mcp_add / mcp_remove 管理 MCP 服务器；marketplace_search / marketplace_install 从市场检索并安装 MCP 或技能。把可复用的工作方式沉淀成技能。"
 		if core.Settings.LuaTools { // 告知 Agent 可自建/优化 Lua 工具（沙箱）
-			sys += "\n\n# 自定义工具（Lua）\n可在工作区 .pair/tools/ 下写 .lua 脚本自定义工具（沙箱：仅 string/table/math，无文件/系统访问、单次 10s 超时）。" +
-				"脚本须 return {name=, description=, parameters=(JSON Schema 表), run=function(args) return 结果字符串 end}。写好后下次发送即热加载可用——按需扩展或优化你的工具集。"
+			sys += "\n\n# 自定义工具（Lua）\n你可用以下工具管理 Lua 自定义工具（工作区 .pair/tools/ 下的 .lua 脚本，沙箱安全执行）：\n" +
+				"- `lua_tool_list` 列出所有 Lua 自定义工具\n" +
+				"- `lua_tool_create` 创建新 Lua 工具（自动热加载）\n" +
+				"- `lua_tool_update` 更新现有 Lua 工具\n" +
+				"- `lua_tool_delete` 删除 Lua 工具\n\n" +
+				"脚本格式：return {name=, description=, parameters=(Lua 表), run=function(args) end}。" +
+				" 沙箱仅开 string/table/math（无文件/系统访问），单次 10s 超时。" +
+				" run 函数内可用 agent.run_command({command=..., cwd=...}) 执行 shell 命令。" +
+				" 创建后下次发送自动热加载生效。"
 		}
 		sys += "\n\n# 长时记忆检索\n你可以使用以下内部工具检索历史已完成对话的记忆（用于了解之前的工作成果）：\n" +
 			"- `memory_search` 搜索历史记忆（标题/摘要/标签/关键点），按关键词筛选\n" +

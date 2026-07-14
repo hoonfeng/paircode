@@ -551,6 +551,7 @@ func RegisterDefaultTools(r *Registry, root string) {
 	RegisterSnapshotTools(r, root)           // restore_snapshot / list_snapshots（文件快照与恢复，见 snapshot.go）
 	registerOfficeTools(r, root)             // csv_read / csv_write / json_to_table / table_stats / text_report / word_read（见 officetools.go）
 	registerCodeGraphTools(r, root)          // codegraph_build / codegraph_search / codegraph_impact / ...（代码知识图谱，见 codegraph_tools.go + pkg/codegraph）
+	registerLuaToolTools(r, root)            // lua_tool_list/create/update/delete（Lua 自定义工具管理，见 luatool_tools.go）
 
 	// ── 默认 OnToolError：edit_file/multi_edit 匹配失败→自动行号定位重试 ──
 	// 调用方如需自定义可在之后覆盖 r.OnToolError。
