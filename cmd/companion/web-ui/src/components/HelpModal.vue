@@ -26,7 +26,9 @@
         <!-- 文档内容 -->
         <div class="doc-content">
           <div class="doc-content-inner" ref="contentRef">
-            <div v-if="activeDoc === 'features'" class="doc-markdown" v-html="renderedFeatures"></div>
+            <div v-if="activeDoc === 'faq'" class="doc-markdown" v-html="renderedFaq"></div>
+            <div v-else-if="activeDoc === 'getting-started'" class="doc-markdown" v-html="renderedGettingStarted"></div>
+            <div v-else-if="activeDoc === 'features'" class="doc-markdown" v-html="renderedFeatures"></div>
             <div v-else-if="activeDoc === 'api'" class="doc-markdown" v-html="renderedApi"></div>
             <div v-else-if="activeDoc === 'tools'" class="doc-markdown" v-html="renderedTools"></div>
             <div v-else-if="activeDoc === 'shortcuts'" class="doc-markdown" v-html="renderedShortcuts"></div>
@@ -55,10 +57,12 @@ import featuresMd from '../docs/features.md?raw'
 import apiDocsMd from '../docs/api-docs.md?raw'
 import toolsMd from '../docs/tools.md?raw'
 import shortcutsMd from '../docs/shortcuts.md?raw'
+import faqMd from '../docs/faq.md?raw'
+import gettingStartedMd from '../docs/getting-started.md?raw'
 import { marked } from 'marked'
 
 const props = defineProps({
-  initialDoc: { type: String, default: 'features' },
+  initialDoc: { type: String, default: 'getting-started' },
 })
 
 const emit = defineEmits(['close'])
@@ -67,6 +71,8 @@ const searchQuery = ref('')
 const contentRef = ref(null)
 
 const docsList = [
+  { id: 'faq', title: '常见问题', icon: 'help' },
+  { id: 'getting-started', title: '快速开始', icon: 'home' },
   { id: 'features', title: '功能介绍', icon: 'info' },
   { id: 'api', title: 'API 文档', icon: 'code' },
   { id: 'tools', title: '工具文档', icon: 'tool' },
@@ -95,6 +101,8 @@ const renderMd = (md) => {
   return html.replace(/<table>/g, '<table class="doc-table">')
 }
 
+const renderedFaq = computed(() => renderMd(faqMd))
+const renderedGettingStarted = computed(() => renderMd(gettingStartedMd))
 const renderedFeatures = computed(() => renderMd(featuresMd))
 const renderedApi = computed(() => renderMd(apiDocsMd))
 const renderedTools = computed(() => renderMd(toolsMd))

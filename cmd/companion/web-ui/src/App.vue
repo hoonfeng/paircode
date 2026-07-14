@@ -92,7 +92,7 @@ const showHelpWrapper = {
       showHelp.value = true
     } else {
       showHelp.value = !!v
-      if (showHelp.value) helpDocTarget.value = 'features'
+      if (showHelp.value) helpDocTarget.value = 'getting-started'
     }
   }
 }
@@ -100,7 +100,7 @@ const showHelpWrapper = {
 function onAboutOpenHelp() {
   showAbout.value = false
   showHelp.value = true
-  helpDocTarget.value = 'features'
+  helpDocTarget.value = 'getting-started'
 }
 
 function loadPanelSize() {

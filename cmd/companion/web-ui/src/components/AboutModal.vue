@@ -2,7 +2,7 @@
   <div class="modal-overlay" @click.self="$emit('close')">
     <div class="modal-content about-modal">
       <div class="modal-header">
-        <h2><SvgIcon name="info" :size="18" /> 关于 PairCode IDE</h2>
+        <h2><SvgIcon name="info" :size="18" /> 关于 PairCode</h2>
         <button class="modal-close" @click="$emit('close')">&times;</button>
       </div>
       <div class="modal-body">
@@ -18,9 +18,10 @@
         <!-- 描述 -->
         <div class="about-section">
           <p class="about-description">
-            PairCode IDE 是一款集成 AI 助手的现代化编程环境。
-            以「对话即编程」为核心理念，将 AI 代码生成能力与 IDE 的编辑、调试、版本管理等功能无缝融合，
-            让开发者通过自然语言与代码进行交互，显著提升开发效率。
+            PairCode 是一款「对话即编程」的 AI 原生 IDE。
+            在这里，你无需死记语法、无需翻阅文档，只需用自然语言描述你想要的功能，
+            AI 就能自主完成代码编写、文件管理、命令执行。
+            而你，只需像产品经理一样提需求、做决策。
           </p>
         </div>
 
@@ -28,14 +29,14 @@
         <div class="about-section">
           <div class="section-title">主要特性</div>
           <ul class="feature-list">
-            <li><SvgIcon name="bot" :size="14" color="var(--accent)" /> AI 对话编程 — 自然语言驱动代码生成与重构</li>
-            <li><SvgIcon name="file" :size="14" color="var(--accent)" /> 多语言代码编辑器 — 基于 CodeMirror 6</li>
-            <li><SvgIcon name="git-branch" :size="14" color="var(--accent)" /> Git 集成 — 可视化的版本管理</li>
-            <li><SvgIcon name="terminal" :size="14" color="var(--accent)" /> 内建终端 — 无需离开 IDE 执行命令</li>
-            <li><SvgIcon name="search" :size="14" color="var(--accent)" /> 智能搜索 — 全文搜索与代码导航</li>
-            <li><SvgIcon name="settings" :size="14" color="var(--accent)" /> BUG 自动检测 — 自动发现并修复代码问题</li>
-            <li><SvgIcon name="tool" :size="14" color="var(--accent)" /> 丰富工具链 — 文件处理/网络/截图/办公文档</li>
-            <li><SvgIcon name="grid" :size="14" color="var(--accent)" /> Skills / MCP 扩展 — 可插拔的工具生态</li>
+            <li><SvgIcon name="bot" :size="14" color="var(--accent)" /> AI 对话编程 — 用自然语言与 AI 对话，自动生成与重构代码</li>
+            <li><SvgIcon name="file" :size="14" color="var(--accent)" /> 智能代码编辑器 — 多语言语法高亮，流畅的编辑体验</li>
+            <li><SvgIcon name="git-branch" :size="14" color="var(--accent)" /> Git 版本控制 — 在对话中完成全部 Git 操作</li>
+            <li><SvgIcon name="terminal" :size="14" color="var(--accent)" /> 内置终端 — 无需离开 IDE 即可执行命令</li>
+            <li><SvgIcon name="search" :size="14" color="var(--accent)" /> 全局搜索 — 快速搜索文件、代码内容与符号</li>
+            <li><SvgIcon name="settings" :size="14" color="var(--accent)" /> BUG 自动检测 — AI 自动发现并修复代码问题</li>
+            <li><SvgIcon name="tool" :size="14" color="var(--accent)" /> 丰富工具集 — 文件处理、图片分析、办公文档、网页抓取等</li>
+            <li><SvgIcon name="grid" :size="14" color="var(--accent)" /> Skills / MCP 扩展 — 通过技能市场扩展 IDE 能力</li>
           </ul>
         </div>
 

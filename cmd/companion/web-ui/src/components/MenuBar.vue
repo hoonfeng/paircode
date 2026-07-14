@@ -34,6 +34,8 @@ const menus = [
   {
     label: '帮助',
     items: [
+      { label: '常见问题', action: 'help-faq' },
+      { label: '快速开始', action: 'help-getting-started' },
       { label: '文档中心', action: 'help-docs' },
       { label: '功能介绍', action: 'help-features' },
       { label: 'API 文档', action: 'help-api' },
@@ -239,6 +241,14 @@ const execItem = async (item) => {
   }
 
   // ── 帮助 ──
+  if (a === 'help-faq') {
+    if (showHelpModal) { showHelpModal.value = 'faq'; return }
+    return
+  }
+  if (a === 'help-getting-started') {
+    if (showHelpModal) { showHelpModal.value = 'getting-started'; return }
+    return
+  }
   if (a === 'help-docs') {
     if (showHelpModal) showHelpModal.value = true
     return
