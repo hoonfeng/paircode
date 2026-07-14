@@ -247,10 +247,21 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 	// 自动 git 提交开关
 	opts.AutoCommit = core.Settings.AutoCommit
 
-	taskText := req.Message
+	// 自主模式：设置规划 Provider
 	if req.Autonomous {
-		taskText += "\n\n（自主模式：用 task_create 把任务分解为子任务逐步执行，用 task_update 更新每个子任务的状态与进度。）"
+		pm := strings.TrimSpace(core.Settings.PlanModel)
+		if pm != "" && core.Settings.BaseURL != "" && core.Settings.APIKey != "" {
+			opts.PlanProvider = &agent.OpenAIProvider{
+				BaseURL: core.Settings.BaseURL, APIKey: core.Settings.APIKey,
+				Model: pm, Temperature: core.Temperature(), MaxTokens: core.Settings.MaxTokens,
+				ThinkingMode: core.Settings.ThinkingMode,
+			}
+		} else if prov := buildWebProvider(); prov != nil {
+			opts.PlanProvider = prov
+		}
 	}
+
+	taskText := req.Message
 
 	ctx := context.Background()
 	fmt.Printf("[handleChatSend] 开始 Start conv=%s message=%q\n", req.ConvID, req.Message[:min(len(req.Message), 30)])

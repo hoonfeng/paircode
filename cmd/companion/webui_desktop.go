@@ -668,11 +668,20 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 	// 自动 git 提交开关
 	opts.AutoCommit = core.Settings.AutoCommit
 
-	// 自主模式：用 task_create 分解任务、task_update 跟踪进度
-	taskText := req.Message
+	// 自主模式：设置规划 Provider（外层设计者 Loop 使用）
 	if req.Autonomous {
-		taskText += "\n\n（自主模式：用 task_create 把任务分解为子任务逐步执行，用 task_update 更新每个子任务的状态与进度。）"
+		if pm := strings.TrimSpace(core.Settings.PlanModel); pm != "" {
+			opts.PlanProvider = &agent.OpenAIProvider{
+				BaseURL: core.Settings.BaseURL, APIKey: core.Settings.APIKey,
+				Model: pm, Temperature: core.Temperature(), MaxTokens: core.Settings.MaxTokens,
+				ThinkingMode: core.Settings.ThinkingMode,
+			}
+		} else {
+			opts.PlanProvider = buildWebProvider() // 回退使用主模型
+		}
 	}
+
+	taskText := req.Message
 
 	// 非阻塞启动：agentMgr.Start 内部 goroutine 跑 loop.Run，立即返回
 	ctx := context.Background()

@@ -36,6 +36,9 @@ type LoopOpts struct {
 	ReviewProvider Provider
 	// AutoCommit 任务完成时自动 git add + git commit。
 	AutoCommit bool
+	// PlanProvider 规划模型的 Provider（自主模式用）。非空时启动外层设计者 Loop（update_plan + delegate_task），
+	// 而非直接跑单层 Loop。桌面端/web端的行为统一。
+	PlanProvider Provider
 }
 
 // GlobalEvent 是全局订阅者收到的事件：携带 convID 用于前端路由。
@@ -438,7 +441,15 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		}()
 
 		// 自闭环模式：传 nil history，loop.Run 内部使用 loop.History
-		msgs, err := loop.Run(runCtx, task, nil)
+		var msgs []Message
+		var err error
+		if opts.Autonomous && opts.PlanProvider != nil {
+			// 自主模式：外层设计者 Loop（update_plan + delegate_task）→ 内层执行 Loop
+			_, err = RunAutonomous(runCtx, opts.PlanProvider, loop, task)
+			msgs = loop.History
+		} else {
+			msgs, err = loop.Run(runCtx, task, nil)
+		}
 		sess.History = msgs
 
 		// ★ 自动完成所有未完成任务（自然结束）
