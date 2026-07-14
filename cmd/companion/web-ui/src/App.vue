@@ -45,6 +45,8 @@
     <SystemModal v-if="showSystem" @close="showSystem = false" />
     <SourceModal v-if="showSource" @close="showSource = false" />
     <MarketplaceModal v-if="showMarketplace" @close="showMarketplace = false" />
+    <HelpModal v-if="showHelp" @close="showHelp = false" :initialDoc="helpDocTarget" />
+    <AboutModal v-if="showAbout" @close="showAbout = false" @openHelp="onAboutOpenHelp" />
     <GlobalDialogs />
   </div>
 </template>
@@ -66,6 +68,8 @@ import SettingsModal from './components/SettingsModal.vue'
 import SystemModal from './components/SystemModal.vue'
 import SourceModal from './components/SourceModal.vue'
 import MarketplaceModal from './components/MarketplaceModal.vue'
+import HelpModal from './components/HelpModal.vue'
+import AboutModal from './components/AboutModal.vue'
 import SvgIcon from './components/SvgIcon.vue'
 import GlobalDialogs from './components/GlobalDialogs.vue'
 
@@ -74,6 +78,30 @@ const showSystem = ref(false)
 const showSource = ref(false)
 const showMarketplace = ref(false)
 const showQuickSwitcher = ref(false)
+const showHelp = ref(false)
+const showAbout = ref(false)
+const helpDocTarget = ref('features')
+
+// showHelp 可被设为字符串（文档id）或 true（默认 features）
+// 用 computed 包装以拦截 set
+const showHelpWrapper = {
+  get() { return showHelp.value },
+  set(v) {
+    if (typeof v === 'string') {
+      helpDocTarget.value = v
+      showHelp.value = true
+    } else {
+      showHelp.value = !!v
+      if (showHelp.value) helpDocTarget.value = 'features'
+    }
+  }
+}
+
+function onAboutOpenHelp() {
+  showAbout.value = false
+  showHelp.value = true
+  helpDocTarget.value = 'features'
+}
 
 function loadPanelSize() {
   try {
@@ -104,6 +132,8 @@ provide('showSettings', showSettings)
 provide('showSystem', showSystem)
 provide('showSource', showSource)
 provide('showMarketplace', showMarketplace)
+provide('showHelp', showHelpWrapper)
+provide('showAbout', showAbout)
 provide('bottomPanelHeight', bottomPanelHeight)
 provide('rightPanelWidth', rightPanelWidth)
 provide('sidebarWidth', sidebarWidth)

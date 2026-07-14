@@ -34,6 +34,10 @@ const menus = [
   {
     label: '帮助',
     items: [
+      { label: '文档中心', action: 'help-docs' },
+      { label: '功能介绍', action: 'help-features' },
+      { label: 'API 文档', action: 'help-api' },
+      { label: '工具文档', action: 'help-tools' },
       { label: '快捷键参考', action: 'help-shortcuts' },
       { divider: true },
       { label: '关于 PairCode IDE', action: 'about' },
@@ -48,6 +52,8 @@ let closeTimer = null
 
 const showSettingsModal = inject('showSettings', null)
 const showMarketplaceModal = inject('showMarketplace', null)
+const showHelpModal = inject('showHelp', null)
+const showAboutModal = inject('showAbout', null)
 
 const currentItems = computed(() => {
   const m = menus.find(m => m.label === openMenu.value)
@@ -233,11 +239,30 @@ const execItem = async (item) => {
   }
 
   // ── 帮助 ──
-  if (a === 'help-shortcuts') {
-    window.$alert('快捷键：\nCtrl+N 新建 | Ctrl+S 保存 | Ctrl+O 打开\nCtrl+F 查找对话 | Ctrl+P 命令面板\nCtrl+B 侧栏 | Ctrl+J 终端 | Ctrl+K 专注\nCtrl+Z 撤销 | Ctrl+Shift+Z 重做', '快捷键')
+  if (a === 'help-docs') {
+    if (showHelpModal) showHelpModal.value = true
     return
   }
-  if (a === 'about') { window.$alert('PairCode IDE v0.1.0\n基于 GWui 的现代化 AI IDE', '关于'); return }
+  if (a === 'help-features') {
+    if (showHelpModal) { showHelpModal.value = 'features'; return }
+    return
+  }
+  if (a === 'help-api') {
+    if (showHelpModal) { showHelpModal.value = 'api'; return }
+    return
+  }
+  if (a === 'help-tools') {
+    if (showHelpModal) { showHelpModal.value = 'tools'; return }
+    return
+  }
+  if (a === 'help-shortcuts') {
+    if (showHelpModal) { showHelpModal.value = 'shortcuts'; return }
+    return
+  }
+  if (a === 'about') {
+    if (showAboutModal) showAboutModal.value = true
+    return
+  }
 }
 
 // 点击外部关闭菜单
