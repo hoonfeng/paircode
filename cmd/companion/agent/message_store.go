@@ -665,6 +665,132 @@ func (s *MessageStore) MergeLastAssistantRun(convID string) error {
 	return nil
 }
 
+// mergeAssistantRun 合并 stored 中从 startIdx 开始的连续 assistant 条目，
+// 返回合并后的结果切片和下一个要处理的位置。
+// 供 MergeAllAssistantRuns 内部使用。
+func mergeAssistantRun(stored []StoredMessage, startIdx int) ([]StoredMessage, int) {
+	// 收集从 startIdx 开始的连续 assistant 索引
+	assistantIdxs := []int{}
+	for i := startIdx; i < len(stored); i++ {
+		r := stored[i].Message.Role
+		if r == RoleAssistant {
+			assistantIdxs = append(assistantIdxs, i)
+		} else if r == RoleTool {
+			continue
+		} else {
+			break
+		}
+	}
+
+	// 只保留第一条 assistant，其他合并到它
+	base := stored[assistantIdxs[0]]
+	for idx := 1; idx < len(assistantIdxs); idx++ {
+		next := stored[assistantIdxs[idx]]
+		base.Segments = append(base.Segments, next.Segments...)
+		if next.Message.Content != "" {
+			if base.Message.Content == "" {
+				base.Message.Content = next.Message.Content
+			} else {
+				base.Message.Content += "\n" + next.Message.Content
+			}
+		}
+		if len(next.Message.ToolCalls) > 0 {
+			base.Message.ToolCalls = append(base.Message.ToolCalls, next.Message.ToolCalls...)
+		}
+	}
+
+	// 重建：保留 startIdx 之前的内容，追加合并后的 base，跳过被合并的 assistant 行
+	var result []StoredMessage
+	result = append(result, stored[:assistantIdxs[0]]...)
+	result = append(result, base)
+	for i := startIdx; i < len(stored); i++ {
+		isAssistant := false
+		for _, ai := range assistantIdxs {
+			if i == ai {
+				isAssistant = true
+				break
+			}
+		}
+		if !isAssistant {
+			result = append(result, stored[i])
+		}
+	}
+	return result, assistantIdxs[0] + 1 // 返回合并后 base 的位置
+}
+
+// MergeAllAssistantRuns 全量合并 JSONL 中所有 user→assistant 跑批的连续助理条目。
+// 批量扫描用（如初始化修复历史数据），将整个文件所有 run 都合并。
+func (s *MessageStore) MergeAllAssistantRuns(convID string) error {
+	mu := s.getConvMutex(convID)
+	mu.Lock()
+	defer mu.Unlock()
+
+	stored, err := s.readJSONL(convID)
+	if err != nil {
+		return fmt.Errorf("MergeAllAssistantRuns: 读取失败: %w", err)
+	}
+	if len(stored) == 0 {
+		return nil
+	}
+
+	merged := false
+	i := 1 // 从索引 1 开始（跳过首条，通常是 user）
+	for i < len(stored) {
+		if stored[i].Message.Role == RoleAssistant {
+			// 检查后面还有没有同 run 的 assistant
+			hasNext := false
+			for j := i + 1; j < len(stored); j++ {
+				r := stored[j].Message.Role
+				if r == RoleAssistant {
+					hasNext = true
+					break
+				} else if r == RoleTool {
+					continue
+				} else {
+					break
+				}
+			}
+			if hasNext {
+				stored, i = mergeAssistantRun(stored, i)
+				merged = true
+			} else {
+				i++
+			}
+		} else {
+			i++
+		}
+	}
+
+	if !merged {
+		return nil
+	}
+
+	// 重写索引
+	for i := range stored {
+		stored[i].Idx = i
+	}
+
+	// 写回
+	out, err := os.Create(s.convFilePath(convID))
+	if err != nil {
+		return fmt.Errorf("MergeAllAssistantRuns: 创建文件失败: %w", err)
+	}
+	defer out.Close()
+	enc := json.NewEncoder(out)
+	for _, sm := range stored {
+		if err := enc.Encode(sm); err != nil {
+			return fmt.Errorf("MergeAllAssistantRuns: JSON 编码失败: %w", err)
+		}
+	}
+
+	// 更新计数器
+	s.pcMu.Lock()
+	s.persistedCount[convID] = len(stored)
+	s.pcMu.Unlock()
+
+	return nil
+}
+
 // LoadAll 加载对话全部消息（仅 Message，不含 Segments），供 LLM 上下文恢复。
 func (s *MessageStore) LoadAll(convID string) ([]Message, error) {
 	msgs, err := s.readJSONL(convID)
