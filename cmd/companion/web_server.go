@@ -49,6 +49,29 @@ var agentMgr = agent.NewSessionManager()
 
 var ws *webServer
 
+// findMessageStoreRoot 在所有工作区文件夹中查找第一个有对话数据目录的路径。
+// 解决 bug：当 WorkspaceFolders 排序变化后，core.Root() 指向了没有对话数据的文件夹，
+// 导致 MessageStore 读不到已有的 index.json，对话列表为空。
+func findMessageStoreRoot() string {
+	primary := core.Root()
+	if primary == "" {
+		return ""
+	}
+	// 遍历 core.Folders，找第一个已有对话数据的目录
+	for _, f := range core.Folders {
+		idxPath := filepath.Join(f, ".pair", "conversations", "index.json")
+		if info, err := os.Stat(idxPath); err == nil && !info.IsDir() {
+			return f
+		}
+		// 也检查旧格式 conversations.json（尚未迁移的）
+		legacyPath := filepath.Join(f, ".pair", "conversations.json")
+		if info, err := os.Stat(legacyPath); err == nil && !info.IsDir() {
+			return f
+		}
+	}
+	return primary
+}
+
 // startWebUI 在后台启动 Web UI 服务器。
 func startWebUI(port int) {
 	if ws != nil {
@@ -58,7 +81,8 @@ func startWebUI(port int) {
 		port: port,
 	}
 	// 初始化 MessageStore（消息持久化的唯一权威），并迁移旧格式数据
-	root := core.Root()
+	// ★ 先找已有对话数据的工作区目录（排序变化后 core.Root() 可能指向了没有对话数据的目录）
+	root := findMessageStoreRoot()
 	// 初始化市场系统（尝试从本地缓存加载，异步获取远程注册表）
 	marketplacepanel.Init(root)
 	if root != "" {
