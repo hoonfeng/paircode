@@ -24,25 +24,6 @@
         </div>
       </div>
 
-      <!-- 数据图表（从表格自动生成） -->
-      <div v-else-if="block.type === 'table-chart'" class="chart-block chart-data">
-        <div class="chart-label">
-          <span class="chart-icon">📈</span>
-          <span class="chart-title">{{ block.title }}</span>
-        </div>
-        <div class="chart-canvas-wrap">
-          <canvas :id="'chart-' + uid + '-' + i"
-                  class="data-chart-canvas"
-                  :data-chart-data="block.chartData ? JSON.stringify(block.chartData) : ''"
-                  :data-chart-type="block.chartType">
-          </canvas>
-        </div>
-        <details class="chart-table-toggle">
-          <summary>📋 查看源数据表</summary>
-          <div class="chart-table-wrap" v-html="block.tableHtml"></div>
-        </details>
-      </div>
-
       <!-- UI 布局可视化（增强版：支持所有布局类型） -->
       <div v-else-if="block.type === 'layout'" class="layout-block"
            :class="'layout-style-' + block.layoutStyle">
@@ -87,7 +68,7 @@ import mermaid from 'mermaid'
 
 const props = defineProps({
   text: { type: String, default: '' },
-  // 图表主题：'dark' | 'light' | 'warm' | 'night'
+  // 图表主题：'dark' | 'light' | 'warm' | 'cute'
   theme: { type: String, default: 'dark' },
 })
 
@@ -129,13 +110,13 @@ function getMermaidTheme(themeName) {
         mainBkg: '#f5ece0',
       },
     }
-    case 'night': return { theme: 'dark',
+    case 'cute': return { theme: 'default',
       themeVariables: {
-        primaryColor: '#2d2940', primaryTextColor: '#d8d4e0', primaryBorderColor: '#2d2940',
-        lineColor: '#9b8ec4', secondaryColor: '#1a1726', tertiaryColor: '#221f30',
-        clusterBkg: '#12101a', clusterBorder: '#2d2940', edgeLabelBackground: '#1a1726',
-        nodeBorder: '#9b8ec4', nodeTextColor: '#d8d4e0', background: 'transparent',
-        mainBkg: '#1a1726',
+        primaryColor: '#fce4ec', primaryTextColor: '#4a1a2e', primaryBorderColor: '#e8b8c8',
+        lineColor: '#e84393', secondaryColor: '#fff5f7', tertiaryColor: '#f8d7e0',
+        clusterBkg: '#fff5f7', clusterBorder: '#e8b8c8', edgeLabelBackground: '#fce4ec',
+        nodeBorder: '#e84393', nodeTextColor: '#4a1a2e', background: 'transparent',
+        mainBkg: '#fce4ec',
       },
     }
     default: return { theme: 'dark' }
@@ -168,7 +149,7 @@ function layoutTypeLabel(lang) {
 const blocks = computed(() => {
   const raw = props.text || ''
   const parts = []
-  const chartLangRe = /^(?:mermaid|chart|chart-bar|chart-line|chart-pie|chart-radar|graphviz|vega|vega-lite|layout|flex|grid|box|wireframe|card|list|navbar|sidebar|tabs|dashboard|form|modal|tree|flow|map)$/i
+  const chartLangRe = /^(?:mermaid|layout|flex|grid|box|wireframe|card|list|navbar|sidebar|tabs|dashboard|form|modal|tree|flow|map)$/i
 
   let lastIdx = 0
   const codeBlockRe = /```(\w*)\s*\n([\s\S]*?)```/g
@@ -194,26 +175,6 @@ const blocks = computed(() => {
           layoutStyle: lang, containerStyle: layoutResult.containerStyle,
           items: layoutResult.items, rawCode: code.trim(),
         })
-      } else if (lang.startsWith('chart-')) {
-        const chartType = lang.replace('chart-', '')
-        const chartData = parseTableTextToChartData(code, chartType)
-        parts.push({
-          type: 'table-chart', chartType, chartData,
-          title: detectChartTitle(code) || `${chartType.toUpperCase()} 图表`,
-          tableHtml: code.trim() ? renderMd('```\n' + code.trim() + '\n```') : '',
-        })
-      } else {
-        const html = renderMd(match[0])
-        parts.push({ type: 'html', content: html })
-      }
-    } else if (lang === '' || lang === 'csv' || lang === 'data') {
-      const chartData = tryParseTableData(code.trim())
-      if (chartData) {
-        parts.push({
-          type: 'table-chart', chartType: 'bar', chartData,
-          title: detectChartTitle(code) || '数据图表',
-          tableHtml: renderMd('```\n' + code.trim() + '\n```'),
-        })
       } else {
         const html = renderMd(match[0])
         parts.push({ type: 'html', content: html })
@@ -232,33 +193,7 @@ const blocks = computed(() => {
     parts.push({ type: 'html', content: html })
   }
 
-  // 检测 markdown 表格并转换为图表
-  const finalParts = []
-  for (const part of parts) {
-    if (part.type === 'html') {
-      const tableCharts = extractTablesFromHtml(part.content)
-      if (tableCharts.length > 0) {
-        let remaining = part.content
-        for (const tc of tableCharts) {
-          const before = remaining.slice(0, tc.offset)
-          const after = remaining.slice(tc.offset + tc.html.length)
-          if (before.trim()) finalParts.push({ type: 'html', content: before })
-          finalParts.push({
-            type: 'table-chart', chartType: 'bar', chartData: tc.data,
-            title: tc.title || '数据图表', tableHtml: tc.html,
-          })
-          remaining = after
-        }
-        if (remaining.trim()) finalParts.push({ type: 'html', content: remaining })
-      } else {
-        finalParts.push(part)
-      }
-    } else {
-      finalParts.push(part)
-    }
-  }
-
-  return finalParts
+  return parts
 })
 
 // ── 用 marked 渲染普通 markdown ──
@@ -534,8 +469,9 @@ function filterItemLines(lines, lang) {
 }
 
 function getIsDark() {
-  const t = props.theme || 'dark'
-  return t === 'dark' || t === 'night'
+  return document.documentElement.classList.contains('dark') ||
+         document.body.classList.contains('dark-mode') ||
+         window.matchMedia?.('(prefers-color-scheme: dark)')?.matches
 }
 
 function getBgColors(isDark) {
@@ -848,122 +784,7 @@ function toggleBoxZoom(i) {
 }
 
 // ── 解析表格文本为 Chart.js 数据格式 ──
-function parseTableTextToChartData(text, chartType) {
-  const lines = text.trim().split('\n').filter(l => l.trim())
-  if (lines.length < 2) return null
-  const sep = lines[0].includes('\t') ? '\t' : ','
-  const headers = lines[0].split(sep).map(h => h.trim()).filter(Boolean)
-  if (headers.length < 2) return null
-  const labels = []
-  const datasets = []
-  for (let i = 1; i < headers.length; i++) {
-    datasets.push({ label: headers[i], data: [], backgroundColor: getChartColor(i - 1, 'bg'), borderColor: getChartColor(i - 1, 'border') })
-  }
-  for (let r = 1; r < lines.length; r++) {
-    const cells = lines[r].split(sep).map(c => c.trim())
-    if (cells.length < 2) continue
-    labels.push(cells[0])
-    for (let c = 1; c < cells.length && c - 1 < datasets.length; c++) {
-      const val = parseFloat(cells[c])
-      datasets[c - 1].data.push(isNaN(val) ? 0 : val)
-    }
-  }
-  if (labels.length === 0) return null
-  return { labels, datasets, chartType }
-}
 
-// ── 尝试将纯文本解析为表格数据 ──
-function tryParseTableData(text) {
-  if (!text) return null
-  const lines = text.split('\n').filter(l => l.trim())
-  if (lines.length < 2) return null
-  if (lines.some(l => l.includes('|'))) {
-    const mdTableLines = lines.filter(l => l.trim().startsWith('|') || l.trim().includes('|'))
-    if (mdTableLines.length >= 3) {
-      const dataLines = mdTableLines.filter(l => !/^[\s|:-]+$/.test(l.trim()))
-      if (dataLines.length >= 2) {
-        const csvLines = dataLines.map(l => l.split('|').slice(1, -1).map(c => c.trim()).join(','))
-        return autoDetectChartType(parseTableTextToChartData(csvLines.join('\n'), 'bar'))
-      }
-    }
-  }
-  const sep = lines[0].includes('\t') ? '\t' : ','
-  const firstRow = lines[0].split(sep).map(c => c.trim()).filter(Boolean)
-  if (firstRow.length < 2) return null
-  let numericCount = 0
-  for (let r = 1; r < Math.min(lines.length, 20); r++) {
-    const cells = lines[r].split(sep).map(c => c.trim()).filter(Boolean)
-    if (cells.length >= 2 && !isNaN(parseFloat(cells[1]))) numericCount++
-  }
-  if (numericCount >= 1) return autoDetectChartType(parseTableTextToChartData(text, 'bar'))
-  return null
-}
-
-// ── 自动检测图表类型 ──
-// 单系列+≤6项→饼图；多系列→柱状图；标签数多→折线图
-function autoDetectChartType(chartData) {
-  if (!chartData || !chartData.datasets) return chartData
-  const n = chartData.labels ? chartData.labels.length : 0
-  const dsCount = chartData.datasets.length
-  if (dsCount === 1 && n > 0 && n <= 6) chartData.chartType = 'pie'
-  else if (n > 15) chartData.chartType = 'line'
-  else chartData.chartType = 'bar'
-  return chartData
-}
-
-// ── 从已渲染的 HTML 中提取表格数据 ──
-function extractTablesFromHtml(html) {
-  const tables = []
-  const tableRe = /<table>([\s\S]*?)<\/table>/g
-  let match
-  while ((match = tableRe.exec(html)) !== null) {
-    const tableHtml = match[0]; const inner = match[1]
-    const rows = inner.match(/<tr>([\s\S]*?)<\/tr>/g)
-    if (!rows || rows.length < 2) continue
-    const headers = []
-    const headerMatch = rows[0].match(/<th[^>]*>([\s\S]*?)<\/th>/g)
-    if (headerMatch) { for (const th of headerMatch) { const t = th.replace(/<[^>]+>/g, '').trim(); if (t) headers.push(t) } }
-    else {
-      const tdMatch = rows[0].match(/<td[^>]*>([\s\S]*?)<\/td>/g)
-      if (tdMatch) { for (const td of tdMatch) { const t = td.replace(/<[^>]+>/g, '').trim(); if (t) headers.push(t) } }
-    }
-    if (headers.length < 2) continue
-    const labels = []
-    const datasets = []
-    for (let h = 1; h < headers.length; h++) datasets.push({ label: headers[h], data: [], backgroundColor: getChartColor(h - 1, 'bg'), borderColor: getChartColor(h - 1, 'border') })
-    let hasData = false
-    for (let r = 1; r < rows.length; r++) {
-      const cells = rows[r].match(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/g)
-      if (!cells || cells.length < 2) continue
-      const label = cells[0].replace(/<[^>]+>/g, '').trim()
-      labels.push(label)
-      for (let c = 1; c < cells.length && c - 1 < datasets.length; c++) {
-        const val = parseFloat(cells[c].replace(/<[^>]+>/g, '').trim())
-        if (!isNaN(val)) { datasets[c - 1].data.push(val); hasData = true } else datasets[c - 1].data.push(0)
-      }
-    }
-    if (hasData && labels.length > 0) {
-      const beforeHtml = html.slice(0, match.index)
-      const titleMatch = beforeHtml.match(/<(h[2-4])[^>]*>([^<]+)<\/\1>[^<]*$/i)
-      const autoData = autoDetectChartType({ labels, datasets, chartType: 'bar' })
-      tables.push({ html: tableHtml, offset: match.index, data: autoData, title: titleMatch ? titleMatch[2].trim() : '数据图表' })
-    }
-  }
-  return tables
-}
-
-// ── 图表颜色方案 ──
-const CHART_COLORS = [
-  { bg: 'rgba(88, 166, 255, 0.7)', border: '#58a6ff' },
-  { bg: 'rgba(63, 185, 80, 0.7)', border: '#3fb950' },
-  { bg: 'rgba(210, 153, 34, 0.7)', border: '#d29922' },
-  { bg: 'rgba(188, 140, 255, 0.7)', border: '#bc8cff' },
-  { bg: 'rgba(248, 81, 73, 0.7)', border: '#f85149' },
-  { bg: 'rgba(110, 118, 129, 0.7)', border: '#6e7681' },
-]
-function getChartColor(idx, type) { const c = CHART_COLORS[idx % CHART_COLORS.length]; return c[type] }
-
-// ── 重试 Mermaid ──
 function retryMermaid(i) { mermaidErrors.value = { ...mermaidErrors.value, [i]: false }; nextTick(() => initMermaid()) }
 
 // ── 初始化 Mermaid 渲染 ──
@@ -979,16 +800,7 @@ async function initMermaid() {
     const code = srcEl.textContent.trim(); if (!code) continue
     try {
       const { svg } = await mermaid.render(id + '-svg', code)
-      // 移除 SVG 内联宽/高属性，让 CSS 控制自适应缩放
-      const parser = new DOMParser()
-      const doc = parser.parseFromString(svg, 'image/svg+xml')
-      const svgEl = doc.querySelector('svg')
-      if (svgEl) {
-        svgEl.removeAttribute('width')
-        svgEl.removeAttribute('height')
-        svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet')
-      }
-      el.innerHTML = svgEl ? doc.documentElement.outerHTML : svg
+      el.innerHTML = svg
     } catch (err) {
       console.warn('[Mermaid] 渲染失败:', err.message)
       const parts = id.replace('mermaid-', '').split('-')
@@ -997,309 +809,21 @@ async function initMermaid() {
   }
 }
 
-// ── 图表辅助函数 ──
-function chartIcon(type) {
-  const icons = { bar: '📊', line: '📈', pie: '🥧', radar: '🕸️', area: '📉', doughnut: '🍩' }
-  return icons[type] || '📊'
-}
-function chartTypeLabel(type) {
-  const labels = { bar: '柱状图', line: '折线图', pie: '饼图', radar: '雷达图', area: '面积图', doughnut: '环形图' }
-  return labels[type] || type
-}
-// 动态图表高度：根据数据点数量计算，避免拥挤
-function chartHeight(chartData) {
-  if (!chartData || !chartData.labels) return 200
-  const n = chartData.labels.length
-  const ds = (chartData.datasets || []).length
-  // 每个标签至少 30px，有多个数据集再加成
-  return Math.max(180, Math.min(500, n * Math.max(28, 40 - n * 0.5) + ds * 10))
-}
-
-// ── 使用 Canvas API 渲染图表（支持 bar/line/pie/radar/area） ──
-function renderDataCharts() {
-  if (!renderRef.value) return
-  const canvases = renderRef.value.querySelectorAll('.data-chart-canvas')
-  for (const canvas of canvases) {
-    const chartDataStr = canvas.dataset.chartData; const chartType = canvas.dataset.chartType
-    if (!chartDataStr) continue
-    try { drawChart(canvas, JSON.parse(chartDataStr), chartType) } catch {}
-  }
-}
-
-function drawChart(canvas, data, chartType) {
-  const ctx = canvas.getContext('2d'); if (!ctx) return
-  const dpr = window.devicePixelRatio || 1
-  const rect = canvas.getBoundingClientRect()
-  canvas.width = rect.width * dpr; canvas.height = rect.height * dpr; ctx.scale(dpr, dpr)
-  const w = rect.width; const h = rect.height
-  const isDark = props.theme === 'dark' || props.theme === 'night'
-  const textColor = isDark ? '#d8d4e0' : (props.theme === 'warm' ? '#3d2c1e' : '#1a1a2e')
-  const gridColor = isDark ? 'rgba(45,41,64,0.3)' : 'rgba(218,220,224,0.4)'
-  ctx.clearRect(0, 0, w, h)
-  const datasets = data.datasets || []; const labels = data.labels || []
-  if (labels.length === 0 || datasets.length === 0) return
-
-  // 饼图/环形图：独立渲染路径
-  const ct = chartType || 'bar'
-  if (ct === 'pie' || ct === 'doughnut') {
-    renderPieChart(ctx, datasets, labels, w, h, textColor, ct === 'doughnut')
-    renderLegend(ctx, datasets, labels, w, h, textColor)
-    return
-  }
-
-  const pad = { top: 16, right: 16, bottom: Math.max(36, labels.length * 3 + 24), left: 50 }
-  // 雷达图用不同的布局
-  if (ct === 'radar') {
-    renderRadarChart(ctx, datasets, labels, w, h, textColor, gridColor)
-    renderLegend(ctx, datasets, labels, w, h, textColor)
-    return
-  }
-  const chartW = w - pad.left - pad.right; const chartH = h - pad.top - pad.bottom
-  if (chartW <= 20 || chartH <= 20) { ctx.fillStyle = textColor; ctx.font = '11px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('图表区域太小', w/2, h/2); return }
-
-  // 计算最大值
-  let maxVal = 0; for (const ds of datasets) { for (const v of ds.data) { if (v > maxVal) maxVal = v } }
-  maxVal = Math.ceil(maxVal * 1.15) || 1
-
-  // 网格线（自适应刻度数）
-  const gridLines = Math.max(3, Math.min(8, Math.floor(chartH / 28)))
-  ctx.font = '10px Inter, system-ui, sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle'
-  for (let i = 0; i <= gridLines; i++) {
-    const y = pad.top + chartH - (chartH / gridLines) * i; const val = (maxVal / gridLines) * i
-    ctx.strokeStyle = gridColor; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(w - pad.right, y); ctx.stroke()
-    ctx.fillStyle = textColor; ctx.globalAlpha = 0.5; ctx.fillText(formatNum(val), pad.left - 6, y); ctx.globalAlpha = 1
-  }
-
-  // X 轴标签
-  const labelCount = labels.length
-  const groupWidth = chartW / labelCount
-  const barWidth = groupWidth / Math.max(datasets.length, 1) * 0.7
-  const barGap = 2
-  const fontSize = labelCount > 12 ? 8 : labelCount > 8 ? 9 : 10
-
-  ctx.textAlign = 'center'; ctx.textBaseline = 'top'
-  for (let li = 0; li < labelCount; li++) {
-    const xCenter = pad.left + groupWidth * li + groupWidth / 2
-    ctx.fillStyle = textColor; ctx.globalAlpha = 0.55; ctx.font = fontSize + 'px Inter, system-ui, sans-serif'
-    const label = labels[li]
-    const maxLabelLen = Math.max(6, Math.floor(groupWidth / (fontSize * 0.6)))
-    const shortLabel = label.length > maxLabelLen ? label.slice(0, maxLabelLen - 1) + '…' : label
-    // 标签太多时旋转45度避免重叠
-    if (labelCount > 10) {
-      ctx.save(); ctx.translate(xCenter, h - pad.bottom + 6); ctx.rotate(-Math.PI / 4); ctx.textAlign = 'right'
-      ctx.fillText(shortLabel, 0, 0); ctx.restore()
-    } else {
-      ctx.fillText(shortLabel, xCenter, h - pad.bottom + 6)
-    }
-    ctx.globalAlpha = 1
-
-    // 绘制系列柱/点
-    for (let di = 0; di < datasets.length; di++) {
-      const val = datasets[di].data[li] || 0
-      const barH = (val / maxVal) * chartH
-      const barX = xCenter - (datasets.length * (barWidth + barGap)) / 2 + di * (barWidth + barGap)
-      const barY = pad.top + chartH - barH
-      const color = datasets[di].backgroundColor || CHART_COLORS[di % CHART_COLORS.length].bg
-      const border = datasets[di].borderColor || CHART_COLORS[di % CHART_COLORS.length].border
-
-      if (ct === 'line' || ct === 'area') {
-        // 折线/面积图：仅描点，连线在循环外
-        ctx.beginPath(); ctx.arc(barX + barWidth / 2, barY, 3, 0, Math.PI * 2); ctx.fillStyle = border; ctx.fill()
-      } else if (ct === 'bar') {
-        // 柱状图：圆角矩形
-        const r = Math.min(3, barWidth / 4)
-        ctx.beginPath(); ctx.moveTo(barX + r, pad.top + chartH); ctx.lineTo(barX + r, barY + r)
-        ctx.quadraticCurveTo(barX, barY + r, barX, barY)
-        ctx.lineTo(barX + barWidth - r, barY); ctx.quadraticCurveTo(barX + barWidth, barY, barX + barWidth, barY + r)
-        ctx.lineTo(barX + barWidth, pad.top + chartH); ctx.closePath(); ctx.fillStyle = color; ctx.fill()
-      }
-
-      // 数值标签（仅在柱足够高时显示）
-      if (ct === 'bar' && barH > 14 && val > 0) {
-        ctx.fillStyle = textColor; ctx.globalAlpha = 0.7; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'
-        ctx.font = Math.min(9, fontSize) + 'px Inter, system-ui, sans-serif'
-        ctx.fillText(formatNum(val), barX + barWidth / 2, barY - 2); ctx.globalAlpha = 1
-      }
-    }
-  }
-
-  // 折线/面积图：连接线
-  if (ct === 'line' || ct === 'area') {
-    for (let di = 0; di < datasets.length; di++) {
-      const border = datasets[di].borderColor || CHART_COLORS[di % CHART_COLORS.length].border
-      ctx.strokeStyle = border; ctx.lineWidth = 1.5; ctx.beginPath()
-      for (let li = 0; li < labelCount; li++) {
-        const val = datasets[di].data[li] || 0
-        const xCenter = pad.left + groupWidth * li + groupWidth / 2
-        const x = xCenter - (datasets.length * (barWidth + barGap)) / 2 + di * (barWidth + barGap) + barWidth / 2
-        const y = pad.top + chartH - (val / maxVal) * chartH
-        if (li === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y)
-      }
-      ctx.stroke()
-      // 面积图：填充区域
-      if (ct === 'area') {
-        const lastX = pad.left + groupWidth * (labelCount - 1) + groupWidth / 2
-        ctx.lineTo(lastX, pad.top + chartH); ctx.lineTo(pad.left + groupWidth / 2, pad.top + chartH); ctx.closePath()
-        ctx.fillStyle = datasets[di].backgroundColor || CHART_COLORS[di % CHART_COLORS.length].bg
-        ctx.globalAlpha = 0.25; ctx.fill(); ctx.globalAlpha = 1
-      }
-    }
-  }
-
-  // 图例
-  renderLegend(ctx, datasets, labels, w, h, textColor)
-}
-
-// ── 图例渲染（公共函数） ──
-function renderLegend(ctx, datasets, labels, w, h, textColor) {
-  if (!datasets || datasets.length <= 1) return
-  const legendY = h - 4; let legendX = 12
-  ctx.textBaseline = 'bottom'; ctx.textAlign = 'left'; ctx.font = '9px Inter, system-ui, sans-serif'
-  for (let di = 0; di < datasets.length; di++) {
-    const color = datasets[di].backgroundColor || CHART_COLORS[di % CHART_COLORS.length].bg
-    ctx.fillStyle = color; ctx.fillRect(legendX, legendY - 7, 8, 8)
-    ctx.fillStyle = textColor; ctx.globalAlpha = 0.6
-    const label = datasets[di].label || ('S' + (di + 1))
-    ctx.fillText(label, legendX + 11, legendY); ctx.globalAlpha = 1
-    legendX += ctx.measureText(label).width + 24
-    // 换行
-    if (legendX > w - 20) { legendX = 12; ctx.fillText('', 0, legendY - 12) }
-  }
-}
-
-// ── 饼图渲染 ──
-function renderPieChart(ctx, datasets, labels, w, h, textColor, isDoughnut) {
-  let data = [], total = 0
-  if (datasets.length > 0 && datasets[0].data) {
-    data = datasets[0].data; total = data.reduce((a, b) => a + b, 0)
-  }
-  if (total === 0) { ctx.fillStyle = textColor; ctx.font = '12px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('无数据', w/2, h/2); return }
-  const radius = Math.min(w, h) / 2 - Math.max(50, labels.length * 12 + 20)
-  const cx = w / 2; const cy = h / 2 - 10
-  const innerR = isDoughnut ? radius * 0.45 : 0
-  let startAngle = -Math.PI / 2
-
-  for (let i = 0; i < data.length; i++) {
-    const sliceAngle = (data[i] / total) * Math.PI * 2
-    ctx.beginPath()
-    if (isDoughnut) {
-      ctx.arc(cx, cy, radius, startAngle, startAngle + sliceAngle)
-      ctx.arc(cx, cy, innerR, startAngle + sliceAngle, startAngle, true)
-    } else {
-      ctx.moveTo(cx, cy); ctx.arc(cx, cy, radius, startAngle, startAngle + sliceAngle); ctx.closePath()
-    }
-    ctx.fillStyle = CHART_COLORS[i % CHART_COLORS.length].bg; ctx.fill()
-    ctx.strokeStyle = isDark ? '#1e1e1e' : '#fff'; ctx.lineWidth = 2; ctx.stroke()
-    // 百分比标签
-    if (data[i] > 0 && sliceAngle > 0.1) {
-      const midAngle = startAngle + sliceAngle / 2
-      const labelR = isDoughnut ? innerR + (radius - innerR) * 0.65 : radius * 0.62
-      ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-      ctx.font = 'bold 11px Inter, system-ui, sans-serif'
-      ctx.fillText(Math.round((data[i] / total) * 100) + '%', cx + Math.cos(midAngle) * labelR, cy + Math.sin(midAngle) * labelR)
-    }
-    startAngle += sliceAngle
-  }
-  // 标签列表（在饼下方排列）
-  const legendStartY = Math.min(h - 20, cy + radius + 24)
-  ctx.textBaseline = 'top'; ctx.textAlign = 'left'; ctx.font = '10px Inter, system-ui, sans-serif'
-  let lx = Math.max(12, cx - 80), ly = legendStartY
-  const maxItems = Math.min(labels.length, data.length)
-  for (let i = 0; i < maxItems; i++) {
-    if (lx > w - 40) { lx = Math.max(12, cx - 80); ly += 16 }
-    ctx.fillStyle = CHART_COLORS[i % CHART_COLORS.length].bg
-    ctx.fillRect(lx, ly + 1, 8, 8)
-    ctx.fillStyle = textColor; ctx.globalAlpha = 0.7
-    const pct = Math.round((data[i] / total) * 100)
-    ctx.fillText((labels[i].length > 10 ? labels[i].slice(0, 10) + '…' : labels[i]) + ' ' + pct + '%', lx + 11, ly)
-    ctx.globalAlpha = 1
-    lx += 100
-  }
-}
-
-// ── 雷达图渲染 ──
-function renderRadarChart(ctx, datasets, labels, w, h, textColor, gridColor) {
-  const cx = w / 2; const cy = h / 2 - 10
-  const radius = Math.min(w, h) / 2 - Math.max(40, labels.length * 10 + 20)
-  if (radius < 30) return
-  const n = labels.length; if (n < 3) return
-  let maxVal = 0; for (const ds of datasets) { for (const v of ds.data) { if (v > maxVal) maxVal = v } }
-  maxVal = Math.ceil(maxVal * 1.15) || 1
-  const angleStep = (Math.PI * 2) / n
-  const levels = 4
-
-  // 网格
-  for (let l = 1; l <= levels; l++) {
-    const r = (radius / levels) * l
-    ctx.strokeStyle = gridColor; ctx.lineWidth = 0.5; ctx.beginPath()
-    for (let i = 0; i <= n; i++) {
-      const angle = -Math.PI / 2 + i * angleStep
-      const x = cx + r * Math.cos(angle); const y = cy + r * Math.sin(angle)
-      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
-    }
-    ctx.stroke()
-  }
-  // 轴线
-  for (let i = 0; i < n; i++) {
-    const angle = -Math.PI / 2 + i * angleStep
-    ctx.strokeStyle = gridColor; ctx.lineWidth = 0.5; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + radius * Math.cos(angle), cy + radius * Math.sin(angle)); ctx.stroke()
-    const lx = cx + (radius + 14) * Math.cos(angle); const ly = cy + (radius + 14) * Math.sin(angle)
-    ctx.fillStyle = textColor; ctx.globalAlpha = 0.6; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '9px sans-serif'
-    ctx.fillText(labels[i].length > 6 ? labels[i].slice(0, 6) + '…' : labels[i], lx, ly); ctx.globalAlpha = 1
-  }
-  // 数据集
-  for (let di = 0; di < datasets.length; di++) {
-    const border = datasets[di].borderColor || CHART_COLORS[di % CHART_COLORS.length].border
-    ctx.strokeStyle = border; ctx.lineWidth = 1.5; ctx.beginPath()
-    for (let i = 0; i <= n; i++) {
-      const idx = i % n; const val = datasets[di].data[idx] || 0
-      const r = (val / maxVal) * radius; const angle = -Math.PI / 2 + idx * angleStep
-      const x = cx + r * Math.cos(angle); const y = cy + r * Math.sin(angle)
-      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
-    }
-    ctx.stroke()
-    ctx.fillStyle = datasets[di].backgroundColor || CHART_COLORS[di % CHART_COLORS.length].bg
-    ctx.globalAlpha = 0.15; ctx.fill(); ctx.globalAlpha = 1
-  }
-}
-
-function formatNum(n) {
-  if (n >= 1000000) return (n/1000000).toFixed(1)+'M'
-  if (n >= 1000) return (n/1000).toFixed(1)+'K'
-  return n.toFixed(0)
-}
-
 // ── 生命周期 ──
-let resizeObserver = null
-onMounted(() => {
-  nextTick(() => { initMermaid(); renderDataCharts() })
-  // ResizeObserver：容器宽度变化时自动重绘 Canvas 图表
-  if (renderRef.value && typeof ResizeObserver !== 'undefined') {
-    resizeObserver = new ResizeObserver(() => {
-      renderDataCharts()
-    })
-    resizeObserver.observe(renderRef.value)
-  }
-})
+onMounted(() => { nextTick(() => { initMermaid() }) })
 onBeforeUnmount(() => {
-  // 清理 ResizeObserver
-  if (resizeObserver) { resizeObserver.disconnect(); resizeObserver = null }
   // 清理 Mermaid SVG 实例（防止内存泄漏）
   if (renderRef.value) {
     renderRef.value.querySelectorAll('.mermaid-container svg').forEach(el => el.remove())
-    renderRef.value.querySelectorAll('.data-chart-canvas').forEach(canvas => {
-      const ctx = canvas.getContext('2d')
-      if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height)
-    })
   }
   mermaidErrors.value = {}
   boxZoomed.value = {}
 })
-watch(() => props.text, () => { mermaidErrors.value = {}; boxZoomed.value = {}; nextTick(() => { initMermaid(); renderDataCharts() }) })
+watch(() => props.text, () => { mermaidErrors.value = {}; boxZoomed.value = {}; nextTick(() => { initMermaid() }) })
 watch(() => props.theme, () => {
   nextTick(() => {
     if (renderRef.value) renderRef.value.querySelectorAll('.mermaid-container svg').forEach(el => el.remove())
-    initMermaid(); renderDataCharts()
+    initMermaid()
   })
 })
 </script>
@@ -1315,7 +839,8 @@ watch(() => props.theme, () => {
 .md-html :deep(h2) { font-size: 14px; }
 .md-html :deep(h3) { font-size: 13px; }
 .md-html :deep(p) { margin: 2px 0; }
-.md-html :deep(ul) { margin: 2px 0; padding-left: 18px; }\n.md-html :deep(ol) { margin: 2px 0; padding-left: 28px; }
+.md-html :deep(ul) { margin: 2px 0; padding-left: 18px; }
+.md-html :deep(ol) { margin: 2px 0; padding-left: 28px; }
 .md-html :deep(li) { margin: 1px 0; }
 .md-html :deep(code) { background: rgba(0,0,0,0.15); padding: 1px 4px; border-radius: 3px; font-family: var(--font-code); font-size: 12px; }
 .md-html :deep(pre) { background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 6px; padding: 6px 10px; margin: 4px 0; overflow-x: auto; font-size: 12px; line-height: 1.4; white-space: pre-wrap; word-break: break-word; max-width: 100%; }
@@ -1360,8 +885,8 @@ watch(() => props.theme, () => {
 .chart-retry-btn:hover { color: var(--text-primary); border-color: var(--accent); }
 
 /* ── Mermaid 图表容器 ── */
-.mermaid-container { padding: 16px; overflow-x: hidden; overflow-y: hidden; display: flex; justify-content: center; align-items: center; min-height: 60px; max-width: 100%; width: 100%; }
-.mermaid-container svg { max-width: 100%; width: 100%; height: auto; display: block; }
+.mermaid-container { padding: 16px; overflow-x: auto; overflow-y: hidden; display: flex; justify-content: center; min-height: 60px; max-width: 100%; }
+.mermaid-container svg { max-width: 100%; height: auto; }
 @media (max-width: 600px) { .mermaid-container { padding: 8px; } }
 .mermaid-src { display: none; }
 .chart-error .mermaid-container { display: none; }
@@ -1371,8 +896,6 @@ watch(() => props.theme, () => {
 .chart-error-hint { margin: 6px 0 0; font-size: 11px; color: #f85149; opacity: 0.7; }
 
 /* ── 数据图表 Canvas 容器 ── */
-.chart-canvas-wrap { padding: 12px; min-height: 180px; position: relative; width: 100%; max-width: 100%; overflow-x: hidden; }
-.data-chart-canvas { width: 100%; min-height: 180px; display: block; max-width: 100%; }
 
 /* ── 源数据表切换 ── */
 .chart-table-toggle { border-top: 1px solid var(--border-color); }
