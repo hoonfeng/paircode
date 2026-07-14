@@ -1,29 +1,29 @@
 @echo off
-REM PairCode æ„å»ºè„šæœ¬ â€” Web-only æ¨¡å¼ + ç³»ç»Ÿæ‰˜ç›˜
+REM PairCode ¹¹½¨½Å±¾ ¡ª Web-only Ä£Ê½ + ÏµÍ³ÍĞÅÌ
 set CGO_ENABLED=0
 
 echo [INFO] CGO_ENABLED=%CGO_ENABLED%
 
 echo.
-echo === 1. æ„å»º Web æœåŠ¡å™¨ (companion.exe) ===
+echo === 1. ¹¹½¨ Web ·şÎñÆ÷ (companion.exe) ===
 go build -o companion.exe ./cmd/companion/
 if %ERRORLEVEL% neq 0 (
-echo [ERROR] companion.exe æ„å»ºå¤±è´¥
+echo [ERROR] companion.exe ¹¹½¨Ê§°Ü
 exit /b %ERRORLEVEL%
 )
-echo [OK] companion.exe æ„å»ºæˆåŠŸ
+echo [OK] companion.exe ¹¹½¨³É¹¦
 
 echo.
 
-echo === 2. æ„å»ºç³»ç»Ÿæ‰˜ç›˜å¯åŠ¨å™¨ (companion-tray.exe) ===
+echo === 2. ¹¹½¨ÏµÍ³ÍĞÅÌÆô¶¯Æ÷ (companion-tray.exe) ===
 go build -o companion-tray.exe ./cmd/companion-tray/
 if %ERRORLEVEL% neq 0 (
-echo [ERROR] companion-tray.exe æ„å»ºå¤±è´¥
+echo [ERROR] companion-tray.exe ¹¹½¨Ê§°Ü
 exit /b %ERRORLEVEL%
 )
-echo [OK] companion-tray.exe æ„å»ºæˆåŠŸ
+echo [OK] companion-tray.exe ¹¹½¨³É¹¦
 
 echo.
-echo === å…¨éƒ¨æ„å»ºæˆåŠŸ ===
-echo   companion.exe     (Web IDE æœåŠ¡å™¨)
-echo   companion-tray.exe (ç³»ç»Ÿæ‰˜ç›˜å¯åŠ¨å™¨)
+echo === È«²¿¹¹½¨³É¹¦ ===
+echo   companion.exe     (Web IDE ·şÎñÆ÷)
+echo   companion-tray.exe (ÏµÍ³ÍĞÅÌÆô¶¯Æ÷)
