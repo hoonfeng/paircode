@@ -110,8 +110,7 @@ func (b *AgentBridge) ResetForNewRoot() {
 }
 
 // autonomousParams 据自主开关算（实际下发给 LLM 的任务文本, 迭代上限）。
-// 自主：追加「用 task_create 分解→task_update 追进度」提示 + 放宽迭代上限。
-// 注：外层 AutonomousController 持有 update_plan 做高层规划，内层 Loop 用 task 工具做细粒度追踪。
+// 注：外层设计者 Loop 用 update_plan 做规划 + delegate_task 分派任务，内层 Loop 用 update_tasks 做细粒度追踪。
 func AutonomousParams(task string, autonomous bool) (string, int) {
 	base := core.Settings.MaxIterations // 设置面板「最大迭代步数」；未设=30
 	if base <= 0 {
@@ -232,9 +231,7 @@ func (b *AgentBridge) Start(task string) {
 	autoIter := core.Settings.AutoIterate && core.Settings.ReviewRetries > 0 // 自动迭代改进开关 + 上限
 	reviewRetries := core.Settings.ReviewRetries
 	go func() {
-		// ── 自主模式：使用 AutonomousController 外层编排器 ──
-		// 外层只持有 plan 工具（update_pan），内层 Loop 持有完整执行工具集（含 task 工具）。
-		// 实现规划层与执行层的工具隔离。
+		// ── 自主模式：外层设计者 Loop（update_plan + delegate_task）→ 内层执行 Loop ──
 		if autonomous {
 			b.runAutonomousMode(ctx, task, hist, loop)
 			cancel()
@@ -916,15 +913,12 @@ func (b *AgentBridge) pushEvent(e agent.Event) {
 	b.pending = append(b.pending, e)
 	b.mu.Unlock()
 }
-
-// runAutonomousMode 使用 AutonomousController 外层编排器运行自主模式。
-// 外层只持有 plan 工具（update_plan），内层 Loop 持有完整执行工具集（含 task_create/update 等）。
-// 实现规划层与执行层的工具隔离。
+// runAutonomousMode 运行自主模式：外层设计者 Loop → 内层执行 Loop。
+// 所有编排逻辑由 agent.RunAutonomous 处理，桥接层只负责提供 Provider 和事件通道。
 func (b *AgentBridge) runAutonomousMode(ctx context.Context, task string, hist []agent.Message, loop *agent.Loop) {
-	// 1. 构建外层规划 Provider（使用设置中的规划模型）
+	// 构建规划 Provider（使用设置中的规划模型）
 	planProv := BuildPlanProvider()
 	if planProv == nil {
-		// 无规划模型时回退使用主模型
 		planProv = BuildProvider()
 		if planProv == nil {
 			b.pushEvent(agent.Event{Type: agent.EventError, Content: "自主模式需要配置 API Key"})
@@ -932,55 +926,8 @@ func (b *AgentBridge) runAutonomousMode(ctx context.Context, task string, hist [
 		}
 	}
 
-	// 2. 构建外层计划工具注册表（仅含 update_plan 等 plan 工具）
-	planReg := agent.NewRegistry()
-	agent.RegisterPlanOnlyTools(planReg)
-
-	// 3. 创建 AutonomousController
-	ac := agent.NewAutonomousController(planProv, planReg, agent.AutonomousConfig{
-		MaxIterations: loop.MaxIterations,
-		SystemPrompt:  loop.System,
-	})
-
-	// 4. 构造 TaskRunner：桥接外层的任务执行到内层 Loop
-	//    将外层生成的每个子任务交给内层 Loop 执行。
-	runner := func(innerCtx context.Context, subTask string) (string, error) {
-		// 执行前注入探索阶段（只读收集上下文）
-		if strings.TrimSpace(subTask) == "" {
-			return "", nil
-		}
-		// 内层 Loop 运行子任务，传 nil history 以复用 Loop 持久化历史
-		finalMsgs, runErr := loop.Run(innerCtx, subTask, nil)
-
-		// 提取最终输出
-		output := ""
-		if len(finalMsgs) > 0 {
-			for i := len(finalMsgs) - 1; i >= 0; i-- {
-				if finalMsgs[i].Role == agent.RoleAssistant && strings.TrimSpace(finalMsgs[i].Content) != "" {
-					output = finalMsgs[i].Content
-					break
-				}
-			}
-		}
-
-		// 验证阶段：执行后验证
-		if innerCtx.Err() == nil && !b.stopped {
-			b.runRolePhase(innerCtx, "verifier", roleprompts.DefaultVerifierPrompt,
-				"（只读验证，勿改文件）确认上述任务是否真正完成、改动是否生效，列出遗留问题：\n"+subTask,
-				stripSystemMsgs(finalMsgs))
-		}
-
-		return output, runErr
-	}
-
-	// 5. 运行自主模式
-	report, err := ac.Run(ctx, task, runner, b.pushEvent)
-	if err != nil && !b.stopped {
-		b.pushEvent(agent.Event{Type: agent.EventError, Content: "自主模式异常: " + err.Error()})
-	}
-	if !b.stopped && report != "" {
-		b.pushEvent(agent.Event{Type: agent.EventContent, Content: report})
-	}
+	// 委托给 agent 包：外层设计者 Loop 全权负责规划与执行
+	_, _ = agent.RunAutonomous(ctx, planProv, loop, task)
 }
 
 // runRolePhase 跑一个只读角色阶段（探索/验证，编排子 Agent）：用「角色提示 + 角色哲学」的 Loop，
