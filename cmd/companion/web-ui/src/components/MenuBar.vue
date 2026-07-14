@@ -32,75 +32,27 @@ import api from '../api.js'
 
 const menus = [
   {
-    label: '文件',
-    items: [
-      { label: '新建文件', shortcut: 'Ctrl+N', action: 'new-file' },
-      { label: '打开文件…', shortcut: 'Ctrl+O', action: 'open-file' },
-      { label: '打开文件夹…', action: 'open-folder' },
-      { label: '添加文件夹到工作区…', action: 'add-folder' },
-      { divider: true },
-      { label: '保存', shortcut: 'Ctrl+S', action: 'save' },
-      { label: '全部保存', action: 'save-all' },
-      { divider: true },
-      { label: '保存工作区', action: 'save-workspace' },
-      { label: '管理工作区文件夹…', action: 'manage-workspace' },
-      { divider: true },
-      { label: '关闭项目', action: 'close-project' },
-      { label: '关闭工作区', action: 'close-workspace' },
-    ],
-  },
-  {
-    label: '编辑',
-    items: [
-      { label: '撤销', shortcut: 'Ctrl+Z', action: 'undo' },
-      { label: '重做', shortcut: 'Ctrl+Shift+Z', action: 'redo' },
-      { divider: true },
-      { label: '剪切', shortcut: 'Ctrl+X', action: 'cut' },
-      { label: '复制', shortcut: 'Ctrl+C', action: 'copy' },
-      { label: '粘贴', shortcut: 'Ctrl+V', action: 'paste' },
-      { divider: true },
-      { label: '查找对话', shortcut: 'Ctrl+F', action: 'find-chat' },
-      { label: '跨文件搜索', shortcut: 'Ctrl+Shift+F', action: 'global-search' },
-      { label: '命令面板', shortcut: 'Ctrl+P', action: 'find-file' },
-    ],
-  },
-  {
-    label: '视图',
-    items: [
-      { label: '文件资源管理器', shortcut: 'Ctrl+Shift+E', action: 'view-explorer' },
-      { label: '搜索', action: 'view-search' },
-      { label: '源代码管理', action: 'view-git' },
-      { divider: true },
-      { label: '专注模式', shortcut: 'Ctrl+K', action: 'focus-mode' },
-      { label: '切换侧边栏', shortcut: 'Ctrl+B', action: 'toggle-sidebar' },
-      { label: '切换终端', shortcut: 'Ctrl+J', action: 'toggle-terminal' },
-      { label: '切换右侧面板', shortcut: 'Ctrl+Shift+C', action: 'toggle-right' },
-    ],
-  },
-  {
-    label: '终端',
-    items: [
-      { label: '新建终端', action: 'new-terminal' },
-      { divider: true },
-      { label: '清屏', action: 'clear-terminal' },
-    ],
-  },
-  {
     label: 'Agent',
     items: [
-      { label: '打开设置', action: 'open-settings' },
-      { label: '打开市场', action: 'open-marketplace' },
-      { label: '系统信息', action: 'system-info' },
+      { label: '启动新任务', action: 'new-task' },
+      { label: '停止 Agent', action: 'stop-agent' },
+      { divider: true },
+      { label: 'Agent 监控', action: 'agent-monitor' },
+      { divider: true },
+      { label: 'MCP 市场…', action: 'open-marketplace' },
+      { label: '技能市场…', action: 'open-marketplace' },
+      { divider: true },
+      { label: '技能管理…', action: 'open-settings' },
+      { label: '语言模型配置…', action: 'open-settings' },
+      { label: 'Agent 设置…', action: 'open-settings' },
+      { divider: true },
+      { label: '项目统计…', action: 'project-stats' },
     ],
   },
   {
     label: '帮助',
     items: [
       { label: '快捷键参考', action: 'help-shortcuts' },
-      { label: '文档', action: 'help-docs' },
-      { label: '检查更新', action: 'check-update' },
-      { divider: true },
-      { label: '报告问题', action: 'report-issue' },
       { divider: true },
       { label: '关于 PairCode IDE', action: 'about' },
     ],
@@ -290,6 +242,22 @@ const execItem = async (item) => {
   if (a === 'clear-terminal') { window.dispatchEvent(new CustomEvent('clear-terminal')); return }
 
   // ── Agent / 工具 ──
+  if (a === 'new-task') {
+    window.dispatchEvent(new CustomEvent('agent-new-task'))
+    return
+  }
+  if (a === 'stop-agent') {
+    window.dispatchEvent(new CustomEvent('agent-stop'))
+    return
+  }
+  if (a === 'agent-monitor') {
+    window.$alert('Agent 监控面板即将推出', '提示')
+    return
+  }
+  if (a === 'project-stats') {
+    window.$alert('项目统计功能即将推出', '提示')
+    return
+  }
   if (a === 'open-settings') {
     if (showSettingsModal) showSettingsModal.value = true
     return
@@ -298,19 +266,12 @@ const execItem = async (item) => {
     if (showMarketplaceModal) showMarketplaceModal.value = true
     return
   }
-  if (a === 'system-info') {
-    if (showSystemModal) showSystemModal.value = true
-    return
-  }
 
   // ── 帮助 ──
   if (a === 'help-shortcuts') {
     window.$alert('快捷键：\nCtrl+N 新建 | Ctrl+S 保存 | Ctrl+O 打开\nCtrl+F 查找对话 | Ctrl+P 命令面板\nCtrl+B 侧栏 | Ctrl+J 终端 | Ctrl+K 专注\nCtrl+Z 撤销 | Ctrl+Shift+Z 重做', '快捷键')
     return
   }
-  if (a === 'help-docs') { window.open('https://github.com', '_blank'); return }
-  if (a === 'check-update') { window.$alert('当前版本：v0.1.0（Web IDE）', '检查更新'); return }
-  if (a === 'report-issue') { window.open('https://github.com', '_blank'); return }
   if (a === 'about') { window.$alert('PairCode IDE v0.1.0\n基于 GWui 的现代化 AI IDE', '关于'); return }
 }
 
