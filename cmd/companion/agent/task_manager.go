@@ -248,6 +248,50 @@ func (tm *TaskManager) GetBlocked() []BlockedTask {
 	return blocked
 }
 
+// ReplaceAll 全量替换任务列表（原子操作：先清空旧文件，再批量写入）。
+// 与 update_plan 的全量替换模式对齐——Agent 每次传入完整任务列表即可。
+func (tm *TaskManager) ReplaceAll(tasks []Task) error {
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
+
+	// 读取当前所有任务 ID，用于清理已不再列表中的任务
+	entries, err := os.ReadDir(tm.tasksDir)
+	if err != nil {
+		return err
+	}
+
+	// 构建新任务集合（按 id 索引）
+	keep := map[string]bool{}
+	for i := range tasks {
+		t := &tasks[i]
+		if t.ID == "" {
+			t.ID = fmt.Sprintf("%d", time.Now().UnixNano()+int64(i))
+		}
+		if t.CreatedAt == "" {
+			t.CreatedAt = time.Now().UTC().Format(time.RFC3339)
+		}
+		t.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+		if t.Status == "" {
+			t.Status = TaskPending
+		}
+		keep[t.ID] = true
+		tm.writeTaskLocked(t)
+	}
+
+	// 删除不在新列表中的旧任务
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		id := strings.TrimSuffix(e.Name(), ".json")
+		if !keep[id] {
+			os.Remove(filepath.Join(tm.tasksDir, e.Name()))
+		}
+	}
+
+	return nil
+}
+
 // ── 全局实例 ──────────────────────────────────────────────
 
 var (
