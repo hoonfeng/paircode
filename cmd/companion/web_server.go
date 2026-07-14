@@ -177,6 +177,7 @@ func startWebUI(port int) {
 
 	// ── Git API 路由 ──
 	mux.HandleFunc("/api/git/status", ws.handleGitStatus)
+	mux.HandleFunc("/api/git/init", ws.handleGitInit)
 	mux.HandleFunc("/api/git/diff", ws.handleGitDiff)
 	mux.HandleFunc("/api/git/add", ws.handleGitAdd)
 	mux.HandleFunc("/api/git/reset", ws.handleGitReset)
@@ -2616,6 +2617,21 @@ func (s *webServer) handleGitStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jsonResp(w, res)
+}
+
+// handleGitInit POST /api/git/init 初始化 Git 仓库（在指定目录下执行 git init）。
+func (s *webServer) handleGitInit(w http.ResponseWriter, r *http.Request) {
+	r = withGitDir(r)
+	if r.Method != "POST" {
+		jsonErr(w, "仅 POST")
+		return
+	}
+	out, err := runGitInternal(r.Context(), "init")
+	if err != nil {
+		jsonErr(w, err.Error())
+		return
+	}
+	jsonResp(w, map[string]any{"output": out})
 }
 
 // handleGitDiff GET /api/git/diff?file=xxx&staged=true 查看文件差异。

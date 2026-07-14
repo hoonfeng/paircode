@@ -538,12 +538,12 @@ async function pull() {
 
 async function initRepo() {
   try {
-    const res = await api.apiPost('/system/exec', { command: 'git init' })
-    if (res.exitCode === 0) {
+    const res = await api.apiPost('/git/init', {}, gitParams())
+    if (res && !res.error) {
       window.$toast?.('Git 仓库已初始化', 'success')
       await loadStatus()
     } else {
-      window.$toast?.('初始化失败: ' + (res.stderr || '未知错误'), 'error')
+      window.$toast?.('初始化失败: ' + (res?.error || '未知错误'), 'error')
     }
   } catch (err) { window.$toast?.('初始化失败: ' + err.message, 'error') }
 }
