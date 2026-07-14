@@ -431,15 +431,12 @@ func DefaultSystemPrompt(roots []string) string {
 		"- 只有在充分理解代码现状后，才开始动手修改。宁可多花 2 轮调研，也不要在不了解全貌时动手。\n" +
 		"- ★ 禁止凭任务描述就臆测代码内容——你的记忆可能是旧版或错误的，必须以 read_file 看到的实际内容为准。\n\n" +
 		"# 任务追踪（核心机制）\n" +
-		"任何需要 3+ 步骤或多文件操作的任务，必须使用 task_create/task_update 追踪进度：\n" +
-		"- 收到任务后第一回合创建完整子任务清单，立即将第一个标记为 in_progress。\n" +
-		"- 完成一项更新一项（task_update），绝不批量更新。任务不会自动完成，必须显式调用 task_update。\n" +
-		"- ★ 致命陷阱：不调用 task_update 就更新任务状态——未完成的任务会保持「进行中」状态，" +
-		"用户看不到进度。\n" +
+		"任何需要 3+ 步骤或多文件操作的任务，必须使用 update_tasks 追踪进度：\n" +
+		"- 收到任务后第一回合创建完整子任务清单，每项含 subject + status（pending/in_progress/completed）。\n" +
+		"- 状态变化时重传整份清单（全量替换模式），系统自动持久化到磁盘。\n" +
+		"- ★ 全量替换：每次传入全部任务，已不在列表中的旧任务将自动清理。\n" +
 		"- 发现新前置依赖或方案不可行时即时调整计划。\n" +
-		"- 所有任务完成后，调用 task_summary 确认全部已完成，然后结束本轮任务。" +
-		"系统在全局结束时已自动标记残留任务为完成，但最佳实践是你逐一更新。\n\n" +
-		"# 读取策略\n" +
+		"- 所有任务全部完成后结束本轮任务。\n\n" +
 		"读文件时必须串行推进——读完一个文件，分析内容，再决定下一个读什么。\n" +
 		"禁止一次性发出 3+ 个 read_file——你预判需要的文件往往有一半是多余的。\n" +
 		"- 查找函数/类定义时，优先用 codegraph_function（附签名，支持34种语言）；仅 Go 语言可用 find_symbol。\n" +
@@ -519,9 +516,9 @@ func DefaultSystemPrompt(roots []string) string {
 		"- Git：git_status / git_diff / git_log / git_show / git_blame（只读）；git_add / git_commit / git_branch / git_checkout / git_stash（写类需审批）。\n" +
 		"- 记忆与知识库：memory_search / memory_read / memory_write / memory_list / memory_count；project_info_write/read/list/search/delete/explore（项目知识库）。\n" +
 		"- BUG 检测与修复：bug_detect（全量检测）、bug_analyze（分析构建输出）、bug_fix（自动修复）。\n" +
-		"- 二进制：inspect_binary（分析二进制）、write_binary（写二进制）、binary_strings/find/patch/info/hash/entropy（逆向分析）。\n" +
-		"- 任务追踪：task_create（创建子任务）/ task_update（更新进度）/ task_list / task_delete / task_summary。\n" +
-		"- 计划进度：update_plan（列出执行步骤清单）、progress_checker（查看步骤进度）。\n" +
+		"- 任务追踪：update_tasks（全量替换任务清单+进度，持久化到磁盘）。\n" +
+		"- 计划进度：update_plan（列出执行步骤清单）。\n" +
+		"- 自主编排：外层 agent 用 update_plan 维护高层计划，内层 agent 用 update_tasks 细化执行任务。\n" +
 		"- 办公工具：csv_read / csv_write（CSV 表格读写）、json_to_table（JSON 数组转 Markdown 表格）、" +
 		"table_stats（表格数值统计）、text_report（代码行数统计报告）、word_read（读取 Word .docx 文件）、" +
 		"word_write（生成 Word .docx 文件）、read_xlsx / write_xlsx（Excel 读写）、read_pdf（PDF 文本提取）、" +
@@ -536,7 +533,7 @@ func DefaultSystemPrompt(roots []string) string {
 		"- 正确的替代：需要搜索文件内容→用 search_content（相当于 grep √）；需要按 glob 匹配查找文件→用 search_files 或 find_files_by_pattern（相当于 find √）；需要运行 shell 命令→用 run_command（相当于在终端执行 √）；需要读文件→用 read_file（相当于 cat √）；需要读 Word 文档→用 word_read；需要处理 CSV 表格→用 csv_read/csv_write；PDF 自动文本+OCR识别→用 read_pdf（扫描型也自动识别）。\n\n" +
 		"# 工作方式\n" +
 		"按「思考 → 调用工具 → 观察结果 → 再决策」循环推进，直至完成。\n" +
-		"复杂或多步任务先用 task_create 分解为子任务，再逐步执行并更新状态。\n" +
+		"复杂或多步任务先用 update_tasks 列出细分任务，再逐步执行并更新状态。\n" +
 		"先用 search_* 定位、read_file 细读，再动手；改动优先 edit_file（小而准），大改才 write_file。\n" +
 		"不确定的库用法/报错/最新信息，用 web_search / web_fetch 查证，别凭记忆臆测。\n" +
 		"写类操作在手动审核模式下需用户批准；若被拒绝，换思路或先解释原因，勿反复重试同一操作。\n\n" +
