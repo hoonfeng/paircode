@@ -514,7 +514,12 @@ func RunAutonomous(ctx context.Context, planProv Provider, innerLoop *Loop, task
 			if output == "" {
 				output = "(子任务未产出内容)"
 			}
-			return output, nil
+			// ★ 包装返回结果，防止外层 agent 误以为「整个任务已完成」。
+			// 内层 agent 的输出（含完成报告）原样回灌会让外层 LLM 产生"全部任务已完成"的错觉，
+			// 导致外层提前调用 generate_commit_message 并结束，不会继续推进剩余计划项。
+			// 加上明确的「这是内层结果，外层据此决策」标记后，外层 agent 能清楚区分
+			// 内层的执行结果和外层自身的决策职责，不会混淆。
+			return fmt.Sprintf("【内层执行结果】\n%s\n\n---\n请根据以上内层的执行结果，决定下一步：\n- 如果还有剩余计划项，请调用 update_plan 更新状态并 delegate_task 执行下一项\n- 如果全部计划项已完成，请调用 generate_commit_message 完成收尾", output), nil
 		},
 	})
 
