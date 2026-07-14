@@ -152,8 +152,8 @@ func isSupportedFile(path string) bool {
 	if isGoFile(path) || isJSFile(path) || isPyFile(path) {
 		return true
 	}
-	ext := strings.ToLower(filepath.Ext(path))
-	return isLangSupportedExtra(ext)
+	name := filepath.Base(path)
+	return isLangSupportedExtra(name)
 }
 
 // parseFile 根据语言路由解析单个文件。

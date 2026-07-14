@@ -18,6 +18,7 @@ import (
 // getLangParser 根据文件扩展名返回对应的语言解析函数。
 func getLangParser(ext string) func(b *LangBuilder, filePath string, source []byte) (string, error) {
 	switch ext {
+	// 原有语言
 	case ".rs":
 		return parseRustFile
 	case ".java":
@@ -46,6 +47,39 @@ func getLangParser(ext string) func(b *LangBuilder, filePath string, source []by
 		return parseSqlFile
 	case ".vue":
 		return parseVueFile
+	// 新增 16 种语言
+	case ".html", ".htm":
+		return parseHTMLFile
+	case ".css", ".scss", ".sass", ".less", ".styl":
+		return parseCSSFile
+	case ".json":
+		return parseJSONFile
+	case ".yaml", ".yml":
+		return parseYAMLFile
+	case ".md", ".markdown", ".mdown", ".mdwn":
+		return parseMarkdownFile
+	case "Dockerfile", ".dockerfile":
+		return parseDockerfileFile
+	case "Makefile", "makefile", ".mk":
+		return parseMakefileFile
+	case ".toml":
+		return parseTOMLFile
+	case ".tf", ".hcl":
+		return parseHCLFile
+	case ".ps1", ".psm1", ".psd1":
+		return parsePSFile
+	case ".zig":
+		return parseZigFile
+	case ".scala":
+		return parseScalaFile
+	case ".ex", ".exs":
+		return parseElixirFile
+	case ".r", ".R":
+		return parseRFile
+	case ".graphql", ".gql":
+		return parseGraphQLFile
+	case "CMakeLists.txt", ".cmake":
+		return parseCMakeFile
 	// Go/JS/Python 已由各自的 builder 处理
 	default:
 		return nil
@@ -83,13 +117,75 @@ func getLangExtensions(lang string) []string {
 		return []string{".sql"}
 	case "vue":
 		return []string{".vue"}
+	case "html":
+		return []string{".html", ".htm"}
+	case "css":
+		return []string{".css", ".scss", ".sass", ".less", ".styl"}
+	case "json":
+		return []string{".json"}
+	case "yaml":
+		return []string{".yaml", ".yml"}
+	case "markdown":
+		return []string{".md", ".markdown", ".mdown", ".mdwn"}
+	case "dockerfile":
+		return []string{"Dockerfile", ".dockerfile"}
+	case "makefile":
+		return []string{"Makefile", "makefile", ".mk"}
+	case "toml":
+		return []string{".toml"}
+	case "hcl":
+		return []string{".tf", ".hcl"}
+	case "powershell":
+		return []string{".ps1", ".psm1", ".psd1"}
+	case "zig":
+		return []string{".zig"}
+	case "scala":
+		return []string{".scala"}
+	case "elixir":
+		return []string{".ex", ".exs"}
+	case "r":
+		return []string{".r", ".R"}
+	case "graphql":
+		return []string{".graphql", ".gql"}
+	case "cmake":
+		return []string{"CMakeLists.txt", ".cmake"}
 	}
 	return nil
 }
 
-// isLangSupportedExtra 检查扩展名是否由 lang_builders 支持。
-func isLangSupportedExtra(ext string) bool {
-	return getLangParser(ext) != nil
+// isLangSupportedExtra 检查文件是否由 lang_builders 支持。
+// 需要同时检查文件扩展名和完整文件名（如 Dockerfile/Makefile）。
+func isLangSupportedExtra(name string) bool {
+	// 先检查扩展名
+	ext := strings.ToLower(filepath.Ext(name))
+	if getLangParser(ext) != nil {
+		return true
+	}
+	// 再检查完整文件名
+	base := strings.ToLower(filepath.Base(name))
+	switch base {
+	case "dockerfile", "makefile", "cmakelists.txt":
+		return true
+	}
+	return false
+}
+
+// getLangParserByFile 根据文件名获取解析器（同时检查扩展名和完整文件名）。
+func getLangParserByFile(name string) func(b *LangBuilder, filePath string, source []byte) (string, error) {
+	ext := strings.ToLower(filepath.Ext(name))
+	if parser := getLangParser(ext); parser != nil {
+		return parser
+	}
+	base := strings.ToLower(filepath.Base(name))
+	switch base {
+	case "dockerfile":
+		return parseDockerfileFile
+	case "makefile":
+		return parseMakefileFile
+	case "cmakelists.txt":
+		return parseCMakeFile
+	}
+	return nil
 }
 
 // ── 通用正则 ──────────────────────────────────────────
@@ -129,10 +225,10 @@ func (b *LangBuilder) ParseFile(filePath string) (string, error) {
 		return "", fmt.Errorf("读取文件 %s 失败: %w", filePath, err)
 	}
 
-	ext := strings.ToLower(filepath.Ext(filePath))
-	parser := getLangParser(ext)
+	baseName := filepath.Base(filePath)
+	parser := getLangParserByFile(baseName)
 	if parser == nil {
-		return "", fmt.Errorf("不支持的语言: %s", ext)
+		return "", fmt.Errorf("不支持的语言: %s", filepath.Ext(filePath))
 	}
 
 	return parser(b, filePath, source)
@@ -1066,10 +1162,827 @@ func extractNameAfterKeyword(s, keyword string) string {
 	parts := strings.Fields(after)
 	if len(parts) > 0 {
 		name := parts[0]
-		if name[0] == '(' {
+		if len(name) > 0 && name[0] == '(' {
 			return ""
 		}
 		return name
 	}
 	return ""
+}
+
+// ═══════════════════════════════════════════════════════
+// 新增 16 种语言解析器
+// ═══════════════════════════════════════════════════════
+
+// ── HTML ──────────────────────────────────────────────
+
+var (
+	reHTMLTag      = regexp.MustCompile(`(?i)<(/?)([a-z]\w*)(?:\s+[^>]*)?>`)
+	reHTMLClass    = regexp.MustCompile(`(?i)class\s*=\s*["']([^"']+)["']`)
+	reHTMLID       = regexp.MustCompile(`(?i)id\s*=\s*["']([^"']+)["']`)
+	reHTMLComponent = regexp.MustCompile(`(?i)<([A-Z]\w*)(?:\s+[^>]*)?>`)
+)
+
+func parseHTMLFile(b *LangBuilder, filePath string, source []byte) (string, error) {
+	ext := newExtract(string(source), filePath, "", b.graph)
+	fileName := filepath.Base(filePath)
+	fileID := ext.addEntity(EntityFile, fileName, "", 1)
+	ext.fileID = fileID
+
+	sourceStr := string(source)
+	tags := make(map[string]bool)
+	classes := make(map[string]bool)
+	ids := make(map[string]bool)
+	components := make(map[string]bool)
+
+	for _, m := range reHTMLTag.FindAllStringSubmatch(sourceStr, -1) {
+		if m[1] != "/" { // 非闭合标签
+			tags[m[2]] = true
+		}
+	}
+	for _, m := range reHTMLComponent.FindAllStringSubmatch(sourceStr, -1) {
+		components[m[1]] = true
+	}
+	for _, m := range reHTMLClass.FindAllStringSubmatch(sourceStr, -1) {
+		for _, cls := range strings.Fields(m[1]) {
+			classes[cls] = true
+		}
+	}
+	for _, m := range reHTMLID.FindAllStringSubmatch(sourceStr, -1) {
+		ids[m[1]] = true
+	}
+
+	for tag := range tags {
+		id := ext.addEntity(EntityType, "html."+tag, fmt.Sprintf("<%s>", tag), 1)
+		ext.addRel(fileID, id, RelContains, 1)
+	}
+	for cls := range classes {
+		id := ext.addEntity(EntityType, "."+cls, fmt.Sprintf(".%s", cls), 1)
+		ext.addRel(fileID, id, RelContains, 1)
+	}
+	for idName := range ids {
+		id := ext.addEntity(EntityStruct, "#"+idName, fmt.Sprintf("#%s", idName), 1)
+		ext.addRel(fileID, id, RelContains, 1)
+	}
+	for comp := range components {
+		id := ext.addEntity(EntityStruct, comp, fmt.Sprintf("<%s />", comp), 1)
+		ext.addRel(fileID, id, RelContains, 1)
+	}
+
+	// 提取 script/style 中的实体
+	if idx := strings.Index(sourceStr, "<style"); idx >= 0 {
+		end := strings.Index(sourceStr[idx:], "</style>")
+		if end > 0 {
+			_ = end // CSS 提取由 CSS 解析器处理
+		}
+	}
+	if idx := strings.Index(sourceStr, "<script"); idx >= 0 {
+		start := strings.Index(sourceStr[idx:], ">")
+		end := strings.Index(sourceStr[idx:], "</script>")
+		if start > 0 && end > start {
+			jsCode := sourceStr[idx+start+1 : idx+end]
+			_ = jsCode // JS 提取由 JSBuilder 处理
+		}
+	}
+
+	return fileID, nil
+}
+
+// ── CSS/SCSS ─────────────────────────────────────────
+
+var (
+	reCSSClass     = regexp.MustCompile(`\.([a-zA-Z_]\w*)\s*\{`)
+	reCSSID        = regexp.MustCompile(`#([a-zA-Z_]\w*)\s*\{`)
+	reCSSKeyframes = regexp.MustCompile(`@keyframes\s+([a-zA-Z_]\w*)`)
+	reCSSMedia     = regexp.MustCompile(`@media\s+(.+?)\{`)
+	reCSSImport    = regexp.MustCompile(`@import\s+['"](.+?)['"]`)
+	reCSSMixin     = regexp.MustCompile(`@mixin\s+([a-zA-Z_]\w*)`)
+	reCSSInclude   = regexp.MustCompile(`@include\s+([a-zA-Z_]\w*)`)
+	reCSSFunction  = regexp.MustCompile(`@function\s+([a-zA-Z_]\w*)`)
+)
+
+func parseCSSFile(b *LangBuilder, filePath string, source []byte) (string, error) {
+	ext := newExtract(string(source), filePath, "", b.graph)
+	fileName := filepath.Base(filePath)
+	fileID := ext.addEntity(EntityFile, fileName, "", 1)
+	ext.fileID = fileID
+
+	sourceStr := string(source)
+	for _, m := range reCSSClass.FindAllStringSubmatch(sourceStr, -1) {
+		id := ext.addEntity(EntityType, "."+m[1], fmt.Sprintf(".%s {}", m[1]), 1)
+		ext.addRel(fileID, id, RelContains, 1)
+	}
+	for _, m := range reCSSID.FindAllStringSubmatch(sourceStr, -1) {
+		id := ext.addEntity(EntityStruct, "#"+m[1], fmt.Sprintf("#%s {}", m[1]), 1)
+		ext.addRel(fileID, id, RelContains, 1)
+	}
+	for _, m := range reCSSKeyframes.FindAllStringSubmatch(sourceStr, -1) {
+		id := ext.addEntity(EntityFunction, m[1], fmt.Sprintf("@keyframes %s", m[1]), 1)
+		ext.addRel(fileID, id, RelContains, 1)
+	}
+	for _, m := range reCSSMixin.FindAllStringSubmatch(sourceStr, -1) {
+		id := ext.addEntity(EntityFunction, m[1], fmt.Sprintf("@mixin %s", m[1]), 1)
+		ext.addRel(fileID, id, RelContains, 1)
+	}
+	for _, m := range reCSSFunction.FindAllStringSubmatch(sourceStr, -1) {
+		id := ext.addEntity(EntityFunction, m[1], fmt.Sprintf("@function %s", m[1]), 1)
+		ext.addRel(fileID, id, RelContains, 1)
+	}
+	for _, m := range reCSSImport.FindAllStringSubmatch(sourceStr, -1) {
+		id := ext.addEntity(EntityImport, m[1], m[1], 1)
+		ext.addRel(fileID, id, RelImports, 1)
+	}
+	return fileID, nil
+}
+
+// ── JSON ──────────────────────────────────────────────
+
+var (
+	reJSONKey = regexp.MustCompile(`^\s*"([a-zA-Z_]\w*)"\s*:`)
+	reJSONType = regexp.MustCompile(`^\s*"([a-zA-Z_]\w*)"\s*:\s*(\{|\[|"|\d+|true|false|null)`)
+)
+
+func parseJSONFile(b *LangBuilder, filePath string, source []byte) (string, error) {
+	ext := newExtract(string(source), filePath, "", b.graph)
+	fileName := filepath.Base(filePath)
+	fileID := ext.addEntity(EntityFile, fileName, "", 1)
+	ext.fileID = fileID
+
+	for lineNo, line := range strings.Split(string(source), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "/*") {
+			continue
+		}
+		if m := reJSONKey.FindStringSubmatch(trimmed); m != nil {
+			id := ext.addEntity(EntityVariable, m[1], trimmed, lineNo+1)
+			ext.addRel(fileID, id, RelContains, lineNo+1)
+		}
+	}
+	return fileID, nil
+}
+
+// ── YAML ──────────────────────────────────────────────
+
+var (
+	reYAMLKey = regexp.MustCompile(`^([a-zA-Z_]\w*)\s*:`)
+)
+
+func parseYAMLFile(b *LangBuilder, filePath string, source []byte) (string, error) {
+	ext := newExtract(string(source), filePath, "", b.graph)
+	fileName := filepath.Base(filePath)
+	fileID := ext.addEntity(EntityFile, fileName, "", 1)
+	ext.fileID = fileID
+
+	seen := make(map[string]bool)
+	for lineNo, line := range strings.Split(string(source), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "  ") {
+			continue
+		}
+		if m := reYAMLKey.FindStringSubmatch(trimmed); m != nil && !seen[m[1]] {
+			seen[m[1]] = true
+			id := ext.addEntity(EntityVariable, m[1], trimmed, lineNo+1)
+			ext.addRel(fileID, id, RelContains, lineNo+1)
+		}
+	}
+	return fileID, nil
+}
+
+// ── Markdown ──────────────────────────────────────────
+
+var (
+	reMDHeading = regexp.MustCompile(`^(#{1,6})\s+(.+)$`)
+	reMDCodeFence = regexp.MustCompile("^`{3,}(\\w*)")
+	reMDLink    = regexp.MustCompile(`\[([^\]]+)\]\(([^)]+)\)`)
+)
+
+func parseMarkdownFile(b *LangBuilder, filePath string, source []byte) (string, error) {
+	ext := newExtract(string(source), filePath, "", b.graph)
+	fileName := filepath.Base(filePath)
+	fileID := ext.addEntity(EntityFile, fileName, "", 1)
+	ext.fileID = fileID
+
+	for lineNo, line := range strings.Split(string(source), "\n") {
+		trimmed := strings.TrimSpace(line)
+		ln := lineNo + 1
+
+		if m := reMDHeading.FindStringSubmatch(trimmed); m != nil {
+			level := len(m[1])
+			title := m[2]
+			kind := EntityFunction
+			if level >= 2 {
+				kind = EntityMethod
+			}
+			id := ext.addEntity(kind, title, trimmed, ln)
+			ext.addRel(fileID, id, RelContains, ln)
+		}
+		if m := reMDCodeFence.FindStringSubmatch(trimmed); m != nil && m[1] != "" {
+			id := ext.addEntity(EntityType, "code:"+m[1], fmt.Sprintf("```%s", m[1]), ln)
+			ext.addRel(fileID, id, RelContains, ln)
+		}
+	}
+	return fileID, nil
+}
+
+// ── Dockerfile ────────────────────────────────────────
+
+var (
+	reDockerFrom    = regexp.MustCompile(`(?i)^\s*FROM\s+(\S+)(?:\s+AS\s+(\S+))?`)
+	reDockerRun     = regexp.MustCompile(`(?i)^\s*RUN\s+(.+)`)
+	reDockerCopy    = regexp.MustCompile(`(?i)^\s*COPY\s+(.+?)\s+(.+)`)
+	reDockerExpose  = regexp.MustCompile(`(?i)^\s*EXPOSE\s+(\d+)`)
+	reDockerArg     = regexp.MustCompile(`(?i)^\s*ARG\s+(\S+)`)
+	reDockerEnv     = regexp.MustCompile(`(?i)^\s*ENV\s+(\S+)(?:=(.+))?`)
+	reDockerLabel   = regexp.MustCompile(`(?i)^\s*LABEL\s+(\S+)=`)
+)
+
+func parseDockerfileFile(b *LangBuilder, filePath string, source []byte) (string, error) {
+	ext := newExtract(string(source), filePath, "", b.graph)
+	fileName := filepath.Base(filePath)
+	fileID := ext.addEntity(EntityFile, fileName, "", 1)
+	ext.fileID = fileID
+
+	for lineNo, line := range strings.Split(string(source), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		ln := lineNo + 1
+
+		switch {
+		case reDockerFrom.MatchString(trimmed):
+			m := reDockerFrom.FindStringSubmatch(trimmed)
+			imageName := m[1]
+			impID := ext.addEntity(EntityImport, "docker:"+imageName, trimmed, ln)
+			ext.addRel(fileID, impID, RelImports, ln)
+			if len(m) > 2 && m[2] != "" {
+				stageID := ext.addEntity(EntityStruct, "stage:"+m[2], fmt.Sprintf("FROM %s AS %s", imageName, m[2]), ln)
+				ext.addRel(fileID, stageID, RelContains, ln)
+			}
+
+		case reDockerArg.MatchString(trimmed):
+			m := reDockerArg.FindStringSubmatch(trimmed)
+			id := ext.addEntity(EntityVariable, m[1], trimmed, ln)
+			ext.addRel(fileID, id, RelContains, ln)
+
+		case reDockerEnv.MatchString(trimmed):
+			m := reDockerEnv.FindStringSubmatch(trimmed)
+			id := ext.addEntity(EntityVariable, m[1], trimmed, ln)
+			ext.addRel(fileID, id, RelContains, ln)
+
+		case reDockerLabel.MatchString(trimmed):
+			m := reDockerLabel.FindStringSubmatch(trimmed)
+			id := ext.addEntity(EntityConstant, m[1], trimmed, ln)
+			ext.addRel(fileID, id, RelContains, ln)
+		}
+	}
+	return fileID, nil
+}
+
+// ── Makefile ──────────────────────────────────────────
+
+var (
+	reMakeTarget = regexp.MustCompile(`^([a-zA-Z_]\w*)\s*:`)
+	reMakeVar    = regexp.MustCompile(`^([A-Z_]\w*)\s*[\+\?]?=\s*(.*)`)
+	reMakeInclude = regexp.MustCompile(`^include\s+(\S+)`)
+)
+
+func parseMakefileFile(b *LangBuilder, filePath string, source []byte) (string, error) {
+	ext := newExtract(string(source), filePath, "", b.graph)
+	fileName := filepath.Base(filePath)
+	fileID := ext.addEntity(EntityFile, fileName, "", 1)
+	ext.fileID = fileID
+
+	for lineNo, line := range strings.Split(string(source), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		ln := lineNo + 1
+
+		switch {
+		case reMakeTarget.MatchString(trimmed):
+			m := reMakeTarget.FindStringSubmatch(trimmed)
+			if !strings.HasPrefix(m[1], ".") { // 忽略 .PHONY 等
+				id := ext.addEntity(EntityFunction, m[1], trimmed, ln)
+				ext.addRel(fileID, id, RelContains, ln)
+			}
+
+		case reMakeVar.MatchString(trimmed):
+			m := reMakeVar.FindStringSubmatch(trimmed)
+			id := ext.addEntity(EntityVariable, m[1], trimmed, ln)
+			ext.addRel(fileID, id, RelContains, ln)
+
+		case reMakeInclude.MatchString(trimmed):
+			m := reMakeInclude.FindStringSubmatch(trimmed)
+			id := ext.addEntity(EntityImport, m[1], trimmed, ln)
+			ext.addRel(fileID, id, RelImports, ln)
+		}
+	}
+	return fileID, nil
+}
+
+// ── TOML ──────────────────────────────────────────────
+
+var (
+	reTOMLTable = regexp.MustCompile(`^\[([^\]]+)\]`)
+	reTOMLArray = regexp.MustCompile(`^\[\[([^\]]+)\]\]`)
+	reTOMLKey   = regexp.MustCompile(`^([a-zA-Z_]\w*)\s*=`)
+)
+
+func parseTOMLFile(b *LangBuilder, filePath string, source []byte) (string, error) {
+	ext := newExtract(string(source), filePath, "", b.graph)
+	fileName := filepath.Base(filePath)
+	fileID := ext.addEntity(EntityFile, fileName, "", 1)
+	ext.fileID = fileID
+
+	for lineNo, line := range strings.Split(string(source), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		ln := lineNo + 1
+
+		switch {
+		case reTOMLTable.MatchString(trimmed):
+			m := reTOMLTable.FindStringSubmatch(trimmed)
+			id := ext.addEntity(EntityStruct, m[1], trimmed, ln)
+			ext.addRel(fileID, id, RelContains, ln)
+
+		case reTOMLKey.MatchString(trimmed):
+			m := reTOMLKey.FindStringSubmatch(trimmed)
+			id := ext.addEntity(EntityVariable, m[1], trimmed, ln)
+			ext.addRel(fileID, id, RelContains, ln)
+		}
+	}
+	return fileID, nil
+}
+
+// ── HCL / Terraform ───────────────────────────────────
+
+var (
+	reHCLResource  = regexp.MustCompile(`^\s*resource\s+"([^"]+)"\s+"([^"]+)"`)
+	reHCLData      = regexp.MustCompile(`^\s*data\s+"([^"]+)"\s+"([^"]+)"`)
+	reHCLVariable  = regexp.MustCompile(`^\s*variable\s+"([^"]+)"`)
+	reHCLOutput    = regexp.MustCompile(`^\s*output\s+"([^"]+)"`)
+	reHCLModule    = regexp.MustCompile(`^\s*module\s+"([^"]+)"`)
+	reHCLLocals    = regexp.MustCompile(`^\s*locals\s*\{`)
+	reHCLProvider  = regexp.MustCompile(`^\s*provider\s+"([^"]+)"`)
+	reHCLTerraform = regexp.MustCompile(`^\s*terraform\s*\{`)
+)
+
+func parseHCLFile(b *LangBuilder, filePath string, source []byte) (string, error) {
+	ext := newExtract(string(source), filePath, "", b.graph)
+	fileName := filepath.Base(filePath)
+	fileID := ext.addEntity(EntityFile, fileName, "", 1)
+	ext.fileID = fileID
+
+	for lineNo, line := range strings.Split(string(source), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "//") {
+			continue
+		}
+		ln := lineNo + 1
+
+		switch {
+		case reHCLResource.MatchString(trimmed):
+			m := reHCLResource.FindStringSubmatch(trimmed)
+			name := m[1] + "." + m[2]
+			id := ext.addEntity(EntityStruct, name, trimmed, ln)
+			ext.addRel(fileID, id, RelContains, ln)
+
+		case reHCLData.MatchString(trimmed):
+			m := reHCLData.FindStringSubmatch(trimmed)
+			name := "data." + m[1] + "." + m[2]
+			id := ext.addEntity(EntityStruct, name, trimmed, ln)
+			ext.addRel(fileID, id, RelContains, ln)
+
+		case reHCLVariable.MatchString(trimmed):
+			m := reHCLVariable.FindStringSubmatch(trimmed)
+			id := ext.addEntity(EntityVariable, "var."+m[1], trimmed, ln)
+			ext.addRel(fileID, id, RelContains, ln)
+
+		case reHCLOutput.MatchString(trimmed):
+			m := reHCLOutput.FindStringSubmatch(trimmed)
+			id := ext.addEntity(EntityVariable, "output."+m[1], trimmed, ln)
+			ext.addRel(fileID, id, RelContains, ln)
+
+		case reHCLModule.MatchString(trimmed):
+			m := reHCLModule.FindStringSubmatch(trimmed)
+			id := ext.addEntity(EntityImport, "module."+m[1], trimmed, ln)
+			ext.addRel(fileID, id, RelImports, ln)
+
+		case reHCLProvider.MatchString(trimmed):
+			m := reHCLProvider.FindStringSubmatch(trimmed)
+			id := ext.addEntity(EntityImport, "provider."+m[1], trimmed, ln)
+			ext.addRel(fileID, id, RelImports, ln)
+		}
+	}
+	return fileID, nil
+}
+
+// ── PowerShell ────────────────────────────────────────
+
+var (
+	rePSFunction = regexp.MustCompile(`(?i)^\s*function\s+([a-zA-Z_]\w*)`)
+	rePSVariable = regexp.MustCompile(`^\s*\$\{?([a-zA-Z_]\w*)\}?\s*=`)
+	rePSModule   = regexp.MustCompile(`(?i)^\s*import-module\s+(\S+)`)
+	rePSCmdlet   = regexp.MustCompile(`(?i)^\s*(?:begin|process|end)\s*\{`)
+	rePSClass    = regexp.MustCompile(`(?i)^\s*class\s+([a-zA-Z_]\w*)`)
+)
+
+func parsePSFile(b *LangBuilder, filePath string, source []byte) (string, error) {
+	ext := newExtract(string(source), filePath, "", b.graph)
+	fileName := filepath.Base(filePath)
+	fileID := ext.addEntity(EntityFile, fileName, "", 1)
+	ext.fileID = fileID
+
+	for lineNo, line := range strings.Split(string(source), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "<#") {
+			continue
+		}
+		ln := lineNo + 1
+
+		switch {
+		case rePSFunction.MatchString(trimmed):
+			m := rePSFunction.FindStringSubmatch(trimmed)
+			id := ext.addEntity(EntityFunction, m[1], trimmed, ln)
+			ext.addRel(fileID, id, RelContains, ln)
+
+		case rePSClass.MatchString(trimmed):
+			m := rePSClass.FindStringSubmatch(trimmed)
+			id := ext.addEntity(EntityStruct, m[1], trimmed, ln)
+			ext.addRel(fileID, id, RelContains, ln)
+
+		case rePSVariable.MatchString(trimmed):
+			m := rePSVariable.FindStringSubmatch(trimmed)
+			if !strings.HasPrefix(m[1], "?") {
+				id := ext.addEntity(EntityVariable, "$"+m[1], trimmed, ln)
+				ext.addRel(fileID, id, RelContains, ln)
+			}
+
+		case rePSModule.MatchString(trimmed):
+			m := rePSModule.FindStringSubmatch(trimmed)
+			id := ext.addEntity(EntityImport, m[1], trimmed, ln)
+			ext.addRel(fileID, id, RelImports, ln)
+		}
+	}
+	return fileID, nil
+}
+
+// ── Zig ───────────────────────────────────────────────
+
+var (
+	reZigFn      = regexp.MustCompile(`^\s*(?:pub\s+)?fn\s+([a-zA-Z_]\w*)\s*\(`)
+	reZigStruct  = regexp.MustCompile(`^\s*(?:pub\s+)?(?:const\s+)?([A-Z]\w*)\s*=\s*(?:struct|union|enum)\s*\{`)
+	reZigConst   = regexp.MustCompile(`^\s*(?:pub\s+)?const\s+([a-zA-Z_]\w*)\s*=`)
+	reZigVar     = regexp.MustCompile(`^\s*(?:pub\s+)?var\s+([a-zA-Z_]\w*)\s*:`)
+	reZigTest    = regexp.MustCompile(`^\s*test\s+"(.+?)"`)
+)
+
+func parseZigFile(b *LangBuilder, filePath string, source []byte) (string, error) {
+	ext := newExtract(string(source), filePath, "", b.graph)
+	fileName := filepath.Base(filePath)
+	fileID := ext.addEntity(EntityFile, fileName, "", 1)
+	ext.fileID = fileID
+
+	for lineNo, line := range strings.Split(string(source), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "//") {
+			continue
+		}
+		ln := lineNo + 1
+
+		switch {
+		case reZigFn.MatchString(trimmed):
+			m := reZigFn.FindStringSubmatch(trimmed)
+			id := ext.addEntity(EntityFunction, m[1], trimmed, ln)
+			ext.addRel(fileID, id, RelContains, ln)
+
+		case reZigStruct.MatchString(trimmed):
+			m := reZigStruct.FindStringSubmatch(trimmed)
+			id := ext.addEntity(EntityStruct, m[1], trimmed, ln)
+			ext.addRel(fileID, id, RelContains, ln)
+
+		case reZigConst.MatchString(trimmed):
+			m := reZigConst.FindStringSubmatch(trimmed)
+			id := ext.addEntity(EntityConstant, m[1], trimmed, ln)
+			ext.addRel(fileID, id, RelContains, ln)
+
+		case reZigVar.MatchString(trimmed):
+			m := reZigVar.FindStringSubmatch(trimmed)
+			id := ext.addEntity(EntityVariable, m[1], trimmed, ln)
+			ext.addRel(fileID, id, RelContains, ln)
+
+		case reZigTest.MatchString(trimmed):
+			m := reZigTest.FindStringSubmatch(trimmed)
+			id := ext.addEntity(EntityFunction, "test."+m[1], trimmed, ln)
+			ext.addRel(fileID, id, RelContains, ln)
+		}
+	}
+	return fileID, nil
+}
+
+// ── Scala ─────────────────────────────────────────────
+
+var (
+	reScalaClass   = regexp.MustCompile(`^\s*(?:abstract\s+|sealed\s+|case\s+|final\s+)?(?:class|object|trait|case class|enum)\s+([A-Z]\w*)`)
+	reScalaDef     = regexp.MustCompile(`^\s*(?:private|protected|override|abstract|final|implicit|lazy)?\s*def\s+([a-zA-Z_]\w*)\s*\(`)
+	reScalaVal     = regexp.MustCompile(`^\s*(?:private|protected|override|implicit|lazy)?\s*(?:val|var|lazy val)\s+([a-zA-Z_]\w*)\s*(?::|=)`)
+	reScalaImport  = regexp.MustCompile(`^\s*import\s+(\S+)`)
+	reScalaPackage = regexp.MustCompile(`^\s*package\s+(\S+)`)
+	reScalaType    = regexp.MustCompile(`^\s*(?:type)\s+([a-zA-Z_]\w*)\s*=`)
+	reScalaEnum    = regexp.MustCompile(`^\s*enum\s+([A-Z]\w*)`)
+)
+
+func parseScalaFile(b *LangBuilder, filePath string, source []byte) (string, error) {
+	ext := newExtract(string(source), filePath, "", b.graph)
+	fileName := filepath.Base(filePath)
+	fileID := ext.addEntity(EntityFile, fileName, "", 1)
+	ext.fileID = fileID
+
+	lines := strings.Split(string(source), "\n")
+	currentClass := ""
+
+	for lineNo, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "/*") {
+			continue
+		}
+		ln := lineNo + 1
+
+		switch {
+		case reScalaPackage.MatchString(trimmed):
+			m := reScalaPackage.FindStringSubmatch(trimmed)
+			id := ext.addEntity(EntityPackage, m[1], trimmed, ln)
+			ext.addRel(fileID, id, RelContains, ln)
+
+		case reScalaClass.MatchString(trimmed) || reScalaEnum.MatchString(trimmed):
+			m := reScalaClass.FindStringSubmatch(trimmed)
+			if m == nil {
+				m = reScalaEnum.FindStringSubmatch(trimmed)
+			}
+			currentClass = m[1]
+			id := ext.addEntity(EntityStruct, currentClass, trimmed, ln)
+			ext.addRel(fileID, id, RelContains, ln)
+
+		case reScalaDef.MatchString(trimmed):
+			m := reScalaDef.FindStringSubmatch(trimmed)
+			name := m[1]
+			if currentClass != "" {
+				id := ext.addEntity(EntityMethod, currentClass+"."+name, trimmed, ln)
+				clsID := EntityID(EntityStruct, "", currentClass)
+				ext.addRel(clsID, id, RelDefines, ln)
+			} else {
+				id := ext.addEntity(EntityFunction, name, trimmed, ln)
+				ext.addRel(fileID, id, RelContains, ln)
+			}
+
+		case reScalaVal.MatchString(trimmed):
+			m := reScalaVal.FindStringSubmatch(trimmed)
+			id := ext.addEntity(EntityVariable, m[1], trimmed, ln)
+			ext.addRel(fileID, id, RelContains, ln)
+
+		case reScalaImport.MatchString(trimmed):
+			m := reScalaImport.FindStringSubmatch(trimmed)
+			id := ext.addEntity(EntityImport, m[1], trimmed, ln)
+			ext.addRel(fileID, id, RelImports, ln)
+
+		case reScalaType.MatchString(trimmed):
+			m := reScalaType.FindStringSubmatch(trimmed)
+			id := ext.addEntity(EntityType, m[1], trimmed, ln)
+			ext.addRel(fileID, id, RelContains, ln)
+		}
+	}
+	return fileID, nil
+}
+
+// ── Elixir ────────────────────────────────────────────
+
+var (
+	reElixirModule = regexp.MustCompile(`^\s*defmodule\s+([A-Z]\w*(?:\.[A-Z]\w+)*)\s+do`)
+	reElixirDef    = regexp.MustCompile(`^\s*def\s+([a-zA-Z_]\w*)\s*\(`)
+	reElixirDefP   = regexp.MustCompile(`^\s*defp\s+([a-zA-Z_]\w*)\s*\(`)
+	reElixirDefMacro = regexp.MustCompile(`^\s*defmacro\s+([a-zA-Z_]\w*)\s*\(`)
+	reElixirImport = regexp.MustCompile(`^\s*(?:import|alias|use|require)\s+([A-Z]\w*(?:\.[A-Z]\w+)*)`)
+	reElixirStruct = regexp.MustCompile(`^\s*defstruct\s+(?:[a-z_]\w*:\s*)?(\w+)`)
+)
+
+func parseElixirFile(b *LangBuilder, filePath string, source []byte) (string, error) {
+	ext := newExtract(string(source), filePath, "", b.graph)
+	fileName := filepath.Base(filePath)
+	fileID := ext.addEntity(EntityFile, fileName, "", 1)
+	ext.fileID = fileID
+
+	lines := strings.Split(string(source), "\n")
+	currentModule := ""
+
+	for lineNo, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		ln := lineNo + 1
+
+		switch {
+		case reElixirModule.MatchString(trimmed):
+			m := reElixirModule.FindStringSubmatch(trimmed)
+			currentModule = m[1]
+			id := ext.addEntity(EntityStruct, currentModule, trimmed, ln)
+			ext.addRel(fileID, id, RelContains, ln)
+
+		case reElixirDef.MatchString(trimmed):
+			m := reElixirDef.FindStringSubmatch(trimmed)
+			name := m[1]
+			if currentModule != "" {
+				id := ext.addEntity(EntityMethod, currentModule+"."+name, trimmed, ln)
+				clsID := EntityID(EntityStruct, "", currentModule)
+				ext.addRel(clsID, id, RelDefines, ln)
+			} else {
+				id := ext.addEntity(EntityFunction, name, trimmed, ln)
+				ext.addRel(fileID, id, RelContains, ln)
+			}
+
+		case reElixirDefP.MatchString(trimmed):
+			m := reElixirDefP.FindStringSubmatch(trimmed)
+			name := m[1]
+			if currentModule != "" {
+				id := ext.addEntity(EntityMethod, currentModule+"."+name, trimmed, ln)
+				clsID := EntityID(EntityStruct, "", currentModule)
+				ext.addRel(clsID, id, RelDefines, ln)
+			} else {
+				id := ext.addEntity(EntityFunction, name, trimmed, ln)
+				ext.addRel(fileID, id, RelContains, ln)
+			}
+
+		case reElixirImport.MatchString(trimmed):
+			m := reElixirImport.FindStringSubmatch(trimmed)
+			id := ext.addEntity(EntityImport, m[1], trimmed, ln)
+			ext.addRel(fileID, id, RelImports, ln)
+		}
+	}
+	return fileID, nil
+}
+
+// ── R ─────────────────────────────────────────────────
+
+var (
+	reRFunc   = regexp.MustCompile(`^([a-zA-Z_]\w*)\s*<-\s*function\s*\(`)
+	reRAssign = regexp.MustCompile(`^([a-zA-Z_]\w*)\s*<-\s+`)
+	reRSource = regexp.MustCompile(`^\s*source\(['"](.+?)['"]\)`)
+	reRLibrary = regexp.MustCompile(`^\s*(?:library|require)\(['"]?(.+?)['"]?\)`)
+)
+
+func parseRFile(b *LangBuilder, filePath string, source []byte) (string, error) {
+	ext := newExtract(string(source), filePath, "", b.graph)
+	fileName := filepath.Base(filePath)
+	fileID := ext.addEntity(EntityFile, fileName, "", 1)
+	ext.fileID = fileID
+
+	for lineNo, line := range strings.Split(string(source), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		ln := lineNo + 1
+
+		switch {
+		case reRFunc.MatchString(trimmed):
+			m := reRFunc.FindStringSubmatch(trimmed)
+			id := ext.addEntity(EntityFunction, m[1], trimmed, ln)
+			ext.addRel(fileID, id, RelContains, ln)
+
+		case reRLibrary.MatchString(trimmed):
+			m := reRLibrary.FindStringSubmatch(trimmed)
+			id := ext.addEntity(EntityImport, m[1], trimmed, ln)
+			ext.addRel(fileID, id, RelImports, ln)
+
+		case reRAssign.MatchString(trimmed):
+			m := reRAssign.FindStringSubmatch(trimmed)
+			// 排除函数赋值（已处理）
+			if !strings.Contains(trimmed, "function") && !strings.HasPrefix(trimmed, ".") {
+				id := ext.addEntity(EntityVariable, m[1], trimmed, ln)
+				ext.addRel(fileID, id, RelContains, ln)
+			}
+		}
+	}
+	return fileID, nil
+}
+
+// ── GraphQL ───────────────────────────────────────────
+
+var (
+	reGQLType      = regexp.MustCompile(`(?i)^\s*(?:type|input|interface|union|enum)\s+([A-Z]\w*)`)
+	reGQLExtend    = regexp.MustCompile(`(?i)^\s*extend\s+(?:type|input|interface)\s+([A-Z]\w*)`)
+	reGQLQuery     = regexp.MustCompile(`(?i)^\s*(?:type\s+)?query\s*\{`)
+	reGQLMutation  = regexp.MustCompile(`(?i)^\s*(?:type\s+)?mutation\s*\{`)
+	reGQLSubscript = regexp.MustCompile(`(?i)^\s*(?:type\s+)?subscription\s*\{`)
+	reGQLSchema    = regexp.MustCompile(`(?i)^\s*schema\s*\{`)
+	reGQLDirective = regexp.MustCompile(`(?i)^\s*directive\s+@([a-zA-Z_]\w*)`)
+	reGQLScalar    = regexp.MustCompile(`(?i)^\s*scalar\s+([A-Z]\w*)`)
+)
+
+func parseGraphQLFile(b *LangBuilder, filePath string, source []byte) (string, error) {
+	ext := newExtract(string(source), filePath, "", b.graph)
+	fileName := filepath.Base(filePath)
+	fileID := ext.addEntity(EntityFile, fileName, "", 1)
+	ext.fileID = fileID
+
+	for lineNo, line := range strings.Split(string(source), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, `"""`) {
+			continue
+		}
+		ln := lineNo + 1
+
+		switch {
+		case reGQLType.MatchString(trimmed):
+			m := reGQLType.FindStringSubmatch(trimmed)
+			if strings.Contains(trimmed, "interface") {
+				id := ext.addEntity(EntityInterface, m[1], trimmed, ln)
+				ext.addRel(fileID, id, RelContains, ln)
+			} else {
+				id := ext.addEntity(EntityStruct, m[1], trimmed, ln)
+				ext.addRel(fileID, id, RelContains, ln)
+			}
+
+		case reGQLScalar.MatchString(trimmed):
+			m := reGQLScalar.FindStringSubmatch(trimmed)
+			id := ext.addEntity(EntityType, m[1], trimmed, ln)
+			ext.addRel(fileID, id, RelContains, ln)
+
+		case reGQLDirective.MatchString(trimmed):
+			m := reGQLDirective.FindStringSubmatch(trimmed)
+			id := ext.addEntity(EntityFunction, "@"+m[1], trimmed, ln)
+			ext.addRel(fileID, id, RelContains, ln)
+		}
+	}
+	return fileID, nil
+}
+
+// ── CMake ─────────────────────────────────────────────
+
+var (
+	reCMakeFunction = regexp.MustCompile(`(?i)^\s*function\s*\(\s*([a-zA-Z_]\w*)`)
+	reCMakeMacro    = regexp.MustCompile(`(?i)^\s*macro\s*\(\s*([a-zA-Z_]\w*)`)
+	reCMakeSet      = regexp.MustCompile(`(?i)^\s*set\s*\(\s*([a-zA-Z_]\w*)`)
+	reCMakeOption   = regexp.MustCompile(`(?i)^\s*option\s*\(\s*([a-zA-Z_]\w*)`)
+	reCMakeProject  = regexp.MustCompile(`(?i)^\s*project\s*\(\s*(\S+)`)
+	reCMakeAddSub   = regexp.MustCompile(`(?i)^\s*add_subdirectory\s*\(\s*(\S+)`)
+	reCMakeFindPkg  = regexp.MustCompile(`(?i)^\s*find_package\s*\(\s*(\S+)`)
+	reCMakeTarget   = regexp.MustCompile(`(?i)^\s*(?:add_executable|add_library|add_test)\s*\(\s*(\S+)`)
+)
+
+func parseCMakeFile(b *LangBuilder, filePath string, source []byte) (string, error) {
+	ext := newExtract(string(source), filePath, "", b.graph)
+	fileName := filepath.Base(filePath)
+	fileID := ext.addEntity(EntityFile, fileName, "", 1)
+	ext.fileID = fileID
+
+	for lineNo, line := range strings.Split(string(source), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		ln := lineNo + 1
+
+		switch {
+		case reCMakeFunction.MatchString(trimmed):
+			m := reCMakeFunction.FindStringSubmatch(trimmed)
+			id := ext.addEntity(EntityFunction, m[1], trimmed, ln)
+			ext.addRel(fileID, id, RelContains, ln)
+
+		case reCMakeMacro.MatchString(trimmed):
+			m := reCMakeMacro.FindStringSubmatch(trimmed)
+			id := ext.addEntity(EntityFunction, m[1], trimmed, ln)
+			ext.addRel(fileID, id, RelContains, ln)
+
+		case reCMakeSet.MatchString(trimmed):
+			m := reCMakeSet.FindStringSubmatch(trimmed)
+			id := ext.addEntity(EntityVariable, m[1], trimmed, ln)
+			ext.addRel(fileID, id, RelContains, ln)
+
+		case reCMakeOption.MatchString(trimmed):
+			m := reCMakeOption.FindStringSubmatch(trimmed)
+			id := ext.addEntity(EntityVariable, m[1], trimmed, ln)
+			ext.addRel(fileID, id, RelContains, ln)
+
+		case reCMakeProject.MatchString(trimmed):
+			m := reCMakeProject.FindStringSubmatch(trimmed)
+			id := ext.addEntity(EntityPackage, m[1], trimmed, ln)
+			ext.addRel(fileID, id, RelContains, ln)
+
+		case reCMakeTarget.MatchString(trimmed):
+			m := reCMakeTarget.FindStringSubmatch(trimmed)
+			id := ext.addEntity(EntityStruct, m[1], trimmed, ln)
+			ext.addRel(fileID, id, RelContains, ln)
+
+		case reCMakeFindPkg.MatchString(trimmed):
+			m := reCMakeFindPkg.FindStringSubmatch(trimmed)
+			id := ext.addEntity(EntityImport, m[1], trimmed, ln)
+			ext.addRel(fileID, id, RelImports, ln)
+		}
+	}
+	return fileID, nil
 }
