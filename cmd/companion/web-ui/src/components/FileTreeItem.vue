@@ -239,6 +239,7 @@ async function loadFileContent(path) {
   if (state.fileContents[path]) return
   try {
     const data = await api.apiGet('/fs/read', { path })
+    state.fileSavedContent[path] = data.content || ''
     state.fileContents[path] = data.content || ''
     state.fileDirty[path] = false
   } catch (err) {
