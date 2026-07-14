@@ -6,7 +6,6 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -485,11 +484,12 @@ func RunAutonomous(ctx context.Context, planProv Provider, innerLoop *Loop, task
 	// 注册 delegate_task：handler 运行内层 Loop
 	outerReg.Register(&Tool{
 		Name: "delegate_task",
-		Description: "把任务委托给执行 agent。执行 agent 拥有完整工具集（读写文件、运行命令、搜索代码等），" +
-			"可以独立完成具体任务。委托后等待结果返回，根据结果决定下一步。\n\n" +
-			"每次只委托一个任务，等结果回来再决定下一步。",
+		Description: "把**一项具体子任务**委托给执行 agent（拥有完整工具集：读写文件、运行命令、搜索代码等）。" +
+			"执行 agent 独立完成该子任务后返回结果，你根据结果决定下一步。\n\n" +
+			"**重要：每次只委托计划中的一项子任务**，不要一次性委托整个大任务。\n" +
+			"委托前应先调用 update_plan 将该项标记为 in_progress，完成后立即更新为 done 并标记下一项。",
 		Parameters: objSchema(props{
-			"task": strProp("要执行的具体任务描述，需清晰说明做什么、涉及哪些文件、预期产出"),
+			"task": strProp("要执行的子任务描述（计划中的一项），需清晰说明做什么、涉及哪些文件、预期产出"),
 		}, "task"),
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
 			subTask := argStr(args, "task")
@@ -546,38 +546,10 @@ func RunAutonomous(ctx context.Context, planProv Provider, innerLoop *Loop, task
 		OnEvent:       innerLoop.OnEvent, // 共用事件推送通道
 	}
 
-	// 3. 运行外层 Loop（设计者 agent 开始工作），
-	//    每轮检查计划是否全部完成，未完成则注入 nudge 继续，
-	//    防止自然终止条件（无 tool_call+有正文=完成）在 delegate_task 返回后被误触发。
-	maxContinuations := innerLoop.MaxIterations / 3
-	if maxContinuations < 5 {
-		maxContinuations = 5
-	}
-	var msgs []Message
-	var err error
-	continuationTask := task
-	for {
-		msgs, err = outer.Run(ctx, continuationTask, nil)
-		if err != nil && !errors.Is(err, ErrMaxIterations) {
-			return "", err
-		}
-
-		// 检查计划是否全部完成
-		complete, _ := planStatus(msgs)
-		if complete {
-			break
-		}
-
-		// 计划未完成 → 注入 nudge 继续执行剩余项目
-		maxContinuations--
-		if maxContinuations <= 0 {
-			break
-		}
-
-		// 重置 Loop 内部状态，防止上一轮的 finishResult/contentOnlyIters 影响新一轮
-		outer.finishResult = nil
-		outer.contentOnlyIters = 0
-		continuationTask = "你制定的计划中尚有未完成的项目。请继续执行：先调用 update_plan 更新各步状态，然后调用 delegate_task 执行下一项。不要输出分析文字，直接推进工作。"
+	// 3. 运行外层 Loop（设计者 agent 开始工作）
+	msgs, err := outer.Run(ctx, task, nil)
+	if err != nil && !errors.Is(err, ErrMaxIterations) {
+		return "", err
 	}
 
 	// 4. 提取最终输出
@@ -589,56 +561,6 @@ func RunAutonomous(ctx context.Context, planProv Provider, innerLoop *Loop, task
 		}
 	}
 	return output, nil
-}
-
-// planStatus 从消息列表中提取最后一个 update_plan 调用，解析计划状态。
-// 返回 (全部完成?, 计划摘要)。
-func planStatus(msgs []Message) (bool, string) {
-	for i := len(msgs) - 1; i >= 0; i-- {
-		if msgs[i].Role != RoleAssistant {
-			continue
-		}
-		for _, tc := range msgs[i].ToolCalls {
-			if tc.Function.Name != "update_plan" {
-				continue
-			}
-			// 解析 Arguments 中的 plan
-			var args struct {
-				Plan []struct {
-					Step   string `json:"step"`
-					Status string `json:"status"`
-				} `json:"plan"`
-			}
-			if err := json.Unmarshal([]byte(tc.Function.Arguments), &args); err != nil {
-				return false, ""
-			}
-			if len(args.Plan) == 0 {
-				return false, ""
-			}
-			pending := 0
-			inProg := 0
-			done := 0
-			var summary strings.Builder
-			for _, item := range args.Plan {
-				if summary.Len() > 0 {
-					summary.WriteString(", ")
-				}
-				summary.WriteString(fmt.Sprintf("[%s] %s", item.Status, item.Step))
-				switch item.Status {
-				case "done":
-					done++
-				case "in_progress":
-					inProg++
-				default:
-					pending++
-				}
-			}
-			allDone := pending == 0 && inProg == 0 && done > 0
-			return allDone, fmt.Sprintf("计划共 %d 步: %d 完成, %d 进行中, %d 待办 — %s",
-				len(args.Plan), done, inProg, pending, summary.String())
-		}
-	}
-	return false, "(未找到计划)"
 }
 
 // outerDesignerPrompt 外层设计者 Agent 的系统提示语。

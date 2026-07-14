@@ -6,6 +6,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"strings"
 )
 
 func registerPlanTool(r *Registry) {
@@ -38,14 +39,27 @@ func registerPlanTool(r *Registry) {
 				return "", fmt.Errorf("plan 为空")
 			}
 			done := 0
-			for _, it := range plan {
+			var b strings.Builder
+			b.WriteString(fmt.Sprintf("计划已更新：共 %d 步\n\n", len(plan)))
+			for i, it := range plan {
 				if m, ok := it.(map[string]any); ok {
-					if s, _ := m["status"].(string); s == "done" {
+					step, _ := m["step"].(string)
+					status, _ := m["status"].(string)
+					if status == "done" {
 						done++
 					}
+					statusIcon := "⏳"
+					switch status {
+					case "done":
+						statusIcon = "✅"
+					case "in_progress":
+						statusIcon = "▶️"
+					}
+					b.WriteString(fmt.Sprintf("%d. %s %s\n", i+1, statusIcon, step))
 				}
 			}
-			return fmt.Sprintf("计划已更新：共 %d 步（%d 完成）", len(plan), done), nil
+			b.WriteString(fmt.Sprintf("\n完成 %d/%d 步", done, len(plan)))
+			return b.String(), nil
 		},
 	})
 }
