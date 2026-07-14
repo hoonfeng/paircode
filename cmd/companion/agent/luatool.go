@@ -3,8 +3,13 @@ package agent
 // Lua 自定义工具（动态增减 + 优化）—— 嵌入 gopher-lua，让用户/Agent 用 .lua 脚本定义工具：
 // 放进工具目录即热加载、改脚本即优化、删文件即移除。companion 在每次发送时热重载（见 agent_bridge.go）。
 //
-// 安全沙箱：只开 base/string/table/math，不开 os/io/package（防文件/系统越权）；每次调用新建状态（隔离）；
-// 单次执行 10s 超时（防死循环）。自定义工具默认 RequiresApproval（写类，需审批）。
+// 安全沙箱：
+//   - 已开启：base/string/table/math/coroutine + 安全 os 子集（time/date/clock/difftime）
+//   - 禁用：io、debug、package、os.execute/os.remove/os.rename/os.exit
+//   - agent 桥接函数：run_command / read_file / write_file / list_files /
+//     json_encode / json_decode / timestamp / log / env
+//   - 每次调用新建状态（隔离）；单次执行 10s 超时（防死循环）。
+//   - 自定义工具默认 RequiresApproval（写类，需审批）。
 //
 // 脚本格式——每个 .lua 文件 return 一个表：
 //   return {
@@ -16,6 +21,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -50,9 +56,11 @@ func LoadLuaTools(r *Registry, dir string) []string {
 	return loaded
 }
 
-// newSandboxLua 建受限 Lua 状态：只开 base/string/table/math（无 os/io/package）。
+// newSandboxLua 建受限 Lua 状态：base/string/table/math/coroutine + 安全 os 子集。
+// 禁用：io、debug、package、以及 os 库中的危险函数。
 func newSandboxLua() *lua.LState {
 	L := lua.NewState(lua.Options{SkipOpenLibs: true})
+	// 安全库：base / table / string / math / coroutine
 	for _, lib := range []struct {
 		name string
 		fn   lua.LGFunction
@@ -61,12 +69,22 @@ func newSandboxLua() *lua.LState {
 		{lua.TabLibName, lua.OpenTable},
 		{lua.StringLibName, lua.OpenString},
 		{lua.MathLibName, lua.OpenMath},
+		{lua.CoroutineLibName, lua.OpenCoroutine},
 	} {
 		L.Push(L.NewFunction(lib.fn))
 		L.Push(lua.LString(lib.name))
 		L.Call(1, 0)
 	}
-	// 抹掉 base 库里仍可加载外部代码的危险函数。
+	// 打开 os 库后抹掉危险函数
+	L.Push(L.NewFunction(lua.OpenOs))
+	L.Push(lua.LString(lua.OsLibName))
+	L.Call(1, 0)
+	for _, danger := range []string{"execute", "remove", "rename", "exit", "tmpname", "setlocale"} {
+		L.SetGlobal("os", L.GetGlobal("os").(*lua.LTable))
+		osTbl := L.GetGlobal("os").(*lua.LTable)
+		osTbl.RawSetString(danger, lua.LNil)
+	}
+	// 抹掉 base 库里仍可加载外部代码的危险函数
 	for _, danger := range []string{"dofile", "loadfile", "load", "loadstring", "require", "collectgarbage"} {
 		L.SetGlobal(danger, lua.LNil)
 	}
@@ -108,16 +126,19 @@ func buildLuaTool(src, fileName string) (*Tool, error) {
 }
 
 // runLuaTool 新建沙箱状态执行脚本的 run(args)，返回字符串结果（隔离、10s 超时）。
-// 每次调用注入 agent.run_command 全局函数，通过 cctx 传递超时，确保子进程随 Lua 超时一同终止。
+// 每次调用注入 agent 桥接函数，通过 cctx 传递超时，确保子进程随 Lua 超时一同终止。
 func runLuaTool(ctx context.Context, src string, args map[string]any) (string, error) {
 	cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	L := newSandboxLua()
 	L.SetContext(cctx)
 	defer L.Close()
-	// 注入 agent.run_command({ command="...", cwd="..." }) 全局函数。
+
+	// ── 注入 agent 桥接表 ──
 	L.SetGlobal("agent", L.NewTable())
 	agentTbl := L.GetGlobal("agent").(*lua.LTable)
+
+	// agent.run_command({ command="...", cwd="..." }) — 执行 shell 命令
 	agentTbl.RawSetString("run_command", L.NewFunction(func(L *lua.LState) int {
 		argTbl := L.CheckTable(1)
 		cmdStr := ""
@@ -152,6 +173,138 @@ func runLuaTool(ctx context.Context, src string, args map[string]any) (string, e
 		L.Push(lua.LString(result))
 		return 1
 	}))
+
+	// agent.read_file(path) — 读取工作区内文件内容（UTF-8 文本，最长 512KB）
+	agentTbl.RawSetString("read_file", L.NewFunction(func(L *lua.LState) int {
+		path := L.CheckString(1)
+		root := workspaceRoot()
+		full, err := resolvePath(root, path)
+		if err != nil {
+			L.Push(lua.LString("错误: " + err.Error()))
+			return 1
+		}
+		data, err := os.ReadFile(full)
+		if err != nil {
+			L.Push(lua.LString("错误: 读取失败 - " + err.Error()))
+			return 1
+		}
+		if len(data) > 512*1024 {
+			L.Push(lua.LString("错误: 文件过大（>512KB），请在 run_command 中用 findstr/type 选择性读取"))
+			return 1
+		}
+		L.Push(lua.LString(string(data)))
+		return 1
+	}))
+
+	// agent.write_file(path, content) — 写入工作区内文件（覆盖）
+	agentTbl.RawSetString("write_file", L.NewFunction(func(L *lua.LState) int {
+		path := L.CheckString(1)
+		content := L.CheckString(2)
+		root := workspaceRoot()
+		full, err := resolvePath(root, path)
+		if err != nil {
+			L.Push(lua.LString("错误: " + err.Error()))
+			return 1
+		}
+		parent := filepath.Dir(full)
+		if err := os.MkdirAll(parent, 0o755); err != nil {
+			L.Push(lua.LString("错误: 创建目录失败 - " + err.Error()))
+			return 1
+		}
+		if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
+			L.Push(lua.LString("错误: 写入失败 - " + err.Error()))
+			return 1
+		}
+		L.Push(lua.LString("已写入 " + path + "（" + fmt.Sprintf("%d", len(content)) + " 字节）"))
+		return 1
+	}))
+
+	// agent.list_files(dir, pattern?) — 列出目录内容
+	agentTbl.RawSetString("list_files", L.NewFunction(func(L *lua.LState) int {
+		dir := L.CheckString(1)
+		pattern := L.OptString(2, "")
+		root := workspaceRoot()
+		full, err := resolvePath(root, dir)
+		if err != nil {
+			L.Push(lua.LString("错误: " + err.Error()))
+			return 1
+		}
+		entries, err := os.ReadDir(full)
+		if err != nil {
+			L.Push(lua.LString("错误: 读取目录失败 - " + err.Error()))
+			return 1
+		}
+		var result []string
+		for _, e := range entries {
+			name := e.Name()
+			if pattern != "" {
+				if ok, _ := filepath.Match(pattern, name); !ok {
+					continue
+				}
+			}
+			if e.IsDir() {
+				result = append(result, name+"/")
+			} else {
+				result = append(result, name)
+			}
+		}
+		if len(result) == 0 {
+			L.Push(lua.LString("（空目录或无匹配）"))
+			return 1
+		}
+		L.Push(lua.LString(strings.Join(result, "\n")))
+		return 1
+	}))
+
+	// agent.json_encode(value) — JSON 编码（Go 标准库）
+	agentTbl.RawSetString("json_encode", L.NewFunction(func(L *lua.LState) int {
+		val := L.Get(1)
+		goVal := luaToGo(val)
+		data, err := json.Marshal(goVal)
+		if err != nil {
+			L.Push(lua.LString("错误: JSON 编码失败 - " + err.Error()))
+			return 1
+		}
+		L.Push(lua.LString(string(data)))
+		return 1
+	}))
+
+	// agent.json_decode(str) — JSON 解码为 Lua 表
+	agentTbl.RawSetString("json_decode", L.NewFunction(func(L *lua.LState) int {
+		str := L.CheckString(1)
+		var v any
+		if err := json.Unmarshal([]byte(str), &v); err != nil {
+			L.Push(lua.LString("错误: JSON 解码失败 - " + err.Error()))
+			return 1
+		}
+		L.Push(goToLua(L, v))
+		return 1
+	}))
+
+	// agent.timestamp() — 当前时间字符串（2006-01-02 15:04:05）
+	agentTbl.RawSetString("timestamp", L.NewFunction(func(L *lua.LState) int {
+		L.Push(lua.LString(time.Now().Format("2006-01-02 15:04:05")))
+		return 1
+	}))
+
+	// agent.log(level, message) — 结构化日志输出
+	agentTbl.RawSetString("log", L.NewFunction(func(L *lua.LState) int {
+		level := L.CheckString(1)
+		msg := L.CheckString(2)
+		line := fmt.Sprintf("[LuaTool %s] %s", level, msg)
+		L.Push(lua.LString(line))
+		return 1
+	}))
+
+	// agent.env(key) — 读取环境变量
+	agentTbl.RawSetString("env", L.NewFunction(func(L *lua.LState) int {
+		key := L.CheckString(1)
+		val := os.Getenv(key)
+		L.Push(lua.LString(val))
+		return 1
+	}))
+
+	// ── 执行脚本 ──
 	if err := L.DoString(src); err != nil {
 		return "", err
 	}
@@ -169,6 +322,14 @@ func runLuaTool(ctx context.Context, src string, args map[string]any) (string, e
 		return "", fmt.Errorf("Lua 工具执行出错: %w", err)
 	}
 	return luaResultStr(L.Get(-1)), nil
+}
+
+// workspaceRoot 取第一个工作区根目录作为 Lua 文件操作的基路径。
+func workspaceRoot() string {
+	if len(WorkspaceRoots) > 0 {
+		return WorkspaceRoots[0]
+	}
+	return "."
 }
 
 // ─── Lua ↔ Go 值转换 ─────────────────────────────────────────
@@ -214,7 +375,7 @@ func luaToGo(lv lua.LValue) any {
 	return nil
 }
 
-// goToLua 把 Go 值转 Lua（map→table / slice→array）。
+// goToLua 把 Go 值转 Lua（map→table / slice→array / nil→LNil）。
 func goToLua(L *lua.LState, v any) lua.LValue {
 	switch val := v.(type) {
 	case string:
@@ -237,6 +398,8 @@ func goToLua(L *lua.LState, v any) lua.LValue {
 			t.RawSetString(k, goToLua(L, e))
 		}
 		return t
+	case nil:
+		return lua.LNil
 	}
 	return lua.LNil
 }

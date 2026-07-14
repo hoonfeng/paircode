@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -43,16 +44,67 @@ func TestLuaToolLoadAndRun(t *testing.T) {
 	}
 }
 
-// TestLuaToolSandbox 沙箱禁止访问 os（os 为 nil）→ 执行出错，挡住越权。
+// TestLuaToolSandbox 沙箱禁止危险 os 函数（execute/remove/rename），但允许安全函数（time/date/clock/getenv）。
 func TestLuaToolSandbox(t *testing.T) {
 	dir := t.TempDir()
-	bad := `return { name="evil", parameters={type="object",properties={}}, run=function(args) return os.getenv("PATH") end }`
-	os.WriteFile(filepath.Join(dir, "evil.lua"), []byte(bad), 0o644)
+	// 危险函数应被阻止
+	evil1 := `return { name="evil1", parameters={type="object",properties={}}, run=function(args) return os.execute("dir") or "ok" end }`
+	os.WriteFile(filepath.Join(dir, "evil1.lua"), []byte(evil1), 0o644)
+	evil2 := `return { name="evil2", parameters={type="object",properties={}}, run=function(args) return os.remove("test.txt") or "ok" end }`
+	os.WriteFile(filepath.Join(dir, "evil2.lua"), []byte(evil2), 0o644)
+	// 安全函数应正常工作
+	safe := `return { name="safe", parameters={type="object",properties={}}, run=function(args) return os.time() .. "|" .. os.date("%Y") end }`
+	os.WriteFile(filepath.Join(dir, "safe.lua"), []byte(safe), 0o644)
 	reg := NewRegistry()
 	LoadLuaTools(reg, dir)
-	if _, err := reg.Execute(context.Background(), "evil", "{}"); err == nil {
-		t.Error("沙箱应禁止访问 os（应执行出错）")
+	if _, err := reg.Execute(context.Background(), "evil1", "{}"); err == nil {
+		t.Error("os.execute 应被禁用")
 	}
+	if _, err := reg.Execute(context.Background(), "evil2", "{}"); err == nil {
+		t.Error("os.remove 应被禁用")
+	}
+	// 安全函数应正常执行
+	out, err := reg.Execute(context.Background(), "safe", "{}")
+	if err != nil {
+		t.Fatalf("os.time/os.date 应可访问，得错误: %v", err)
+	}
+	if out == "" || out == "(无返回)" {
+		t.Errorf("os.time/os.date 应返回结果，得 %q", out)
+	}
+}
+
+// TestLuaToolAgentBridge 测试 agent 桥接函数（json_encode/json_decode/timestamp/log/env）。
+func TestLuaToolAgentBridge(t *testing.T) {
+	dir := t.TempDir()
+	script := `return { name="bridge_test", parameters={type="object",properties={msg={type="string"}}},
+	  run = function(args)
+		local ts = agent.timestamp()
+		local encoded = agent.json_encode({a=1, b="hello"})
+		local decoded = agent.json_decode(encoded)
+		local logline = agent.log("info", "测试消息: " .. (args.msg or ""))
+		local path = agent.env("PATH")
+		return "ts=" .. ts .. "|encoded=" .. encoded .. "|decoded_b=" .. decoded.b .. "|log=" .. logline .. "|path_len=" .. #path
+	  end
+	}`
+	os.WriteFile(filepath.Join(dir, "bridge.lua"), []byte(script), 0o644)
+	reg := NewRegistry()
+	LoadLuaTools(reg, dir)
+	out, err := reg.Execute(context.Background(), "bridge_test", `{"msg":"hello"}`)
+	if err != nil {
+		t.Fatalf("桥接函数应正常执行，得错误: %v", err)
+	}
+	if !containsAll(out, "ts=", "encoded=", "decoded_b=hello", "log=", "path_len=") {
+		t.Errorf("桥接函数结果不完整: %q", out)
+	}
+}
+
+func containsAll(s string, substrings ...string) bool {
+	for _, sub := range substrings {
+		if !strings.Contains(s, sub) {
+			return false
+		}
+	}
+	return true
 }
 
 // TestLuaToolBadScriptSkipped 语法错/缺 name 的脚本跳过，只注册合法的。

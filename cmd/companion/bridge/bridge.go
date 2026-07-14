@@ -179,18 +179,28 @@ func (b *AgentBridge) Start(task string) {
 				"- `lua_tool_update` 更新现有 Lua 工具\n" +
 				"- `lua_tool_delete` 删除 Lua 工具\n\n" +
 				"### 何时创建 Lua 工具\n" +
-				"- **重复模式**：发现反复执行同一组 shell 命令（如「构建→测试→收集覆盖率」）→ 封装为 Lua 工具，下次直接调用\n" +
-				"- **错误兜底**：某内置工具频繁失败 → 用 Lua 重写带自定义错误处理和重试逻辑的版本\n" +
-				"- **项目专用**：项目有特定的构建/部署/检查流程 → 参数化封装，后续复用\n" +
-				"- **组合操作**：需要条件判断+循环执行多个命令 → Lua 的 if/for 比单次 run_command 灵活\n\n" +
+				"- **重复模式**：反复执行同一组 shell 命令 → 封装为 Lua 工具参数化复用\n" +
+				"- **错误兜底**：内置工具频繁失败 → Lua 重写带自定义重试/错误处理\n" +
+				"- **项目专用**：项目特有构建/部署/检查流程 → 参数化封装，后续直接调用\n" +
+				"- **组合操作**：需条件判断+循环+多个命令 → Lua 的 if/for 比单次 run_command 灵活\n\n" +
 				"### 何时不该用\n" +
-				"- **一次操作**：简单单次命令直接用 `run_command`，不必创建工具\n" +
-				"- **需要文件 IO**：沙箱无 os/io 库，读写文件只能用 `agent.run_command` 间接做\n" +
-				"- **超时风险**：单次执行 10s 超时，长时间任务不适合\n" +
-				"- **复杂处理**：Lua 只有 string/table/math，复杂数据处理用内置工具\n\n" +
-				"脚本格式：return {name=, description=, parameters=(Lua 表), run=function(args) end}。" +
-				" 沙箱仅开 string/table/math（无文件/系统访问），单次 10s 超时。" +
-				" run 函数内可用 agent.run_command({command=..., cwd=...}) 执行 shell 命令。" +
+				"- **一次操作**：简单单次命令直接用 `run_command`\n" +
+				"- **超时风险**：单次执行 10s 超时，长时间任务不适合\n\n" +
+				"### 沙箱能力\n" +
+				"已开启库：`base`（不含 dofile/loadfile/load/loadstring/require）、`string`、`table`、`math`、`coroutine`、`os.time/date/clock/difftime/getenv`\n\n" +
+				"### agent 桥接函数（Lua 内通过 `agent.xxx()` 调用）\n" +
+				"| 函数 | 说明 | 示例 |\n" +
+				"|------|------|------|\n" +
+				"| `agent.run_command({command=, cwd=})` | 执行 shell 命令（工作区根目录） | `agent.run_command({command=\"go build .\"})` |\n" +
+				"| `agent.read_file(path)` | 读取工作区内文件内容（UTF-8，≤512KB） | `local src = agent.read_file(\"main.go\")` |\n" +
+				"| `agent.write_file(path, content)` | 写入工作区内文件（覆盖，自动建目录） | `agent.write_file(\"out.txt\", \"hello\")` |\n" +
+				"| `agent.list_files(dir, pattern?)` | 列出目录内容，可选通配符过滤 | `local files = agent.list_files(\".\", \"*.go\")` |\n" +
+				"| `agent.json_encode(value)` | 值 → JSON 字符串 | `local json = agent.json_encode({a=1})` |\n" +
+				"| `agent.json_decode(str)` | JSON 字符串 → Lua 表 | `local tbl = agent.json_decode(json)` |\n" +
+				"| `agent.timestamp()` | 当前时间字符串 \"2006-01-02 15:04:05\" | `local now = agent.timestamp()` |\n" +
+				"| `agent.log(level, msg)` | 结构化日志输出 | `agent.log(\"warn\", \"磁盘不足\")` |\n" +
+				"| `agent.env(key)` | 读取环境变量 | `local home = agent.env(\"HOME\")` |\n\n" +
+				"脚本格式：`return {name=, description=, parameters=, run=function(args) end}`。" +
 				" 创建后下次发送自动热加载生效。"
 		}
 		sys += "\n\n# 长时记忆检索\n你可以使用以下内部工具检索历史已完成对话的记忆（用于了解之前的工作成果）：\n" +
