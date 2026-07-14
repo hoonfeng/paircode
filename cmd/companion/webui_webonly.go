@@ -464,18 +464,7 @@ func buildWebSystemPrompt() string {
 		" 其中 manual 技能看到后需主动调 `load_skill({name=\"技能名\"})` 加载全文。\n" +
 		" 技能=知识/流程文档（教会 agent 怎么做），Lua 工具=可执行脚本（替 agent 自动做）。"
 	if core.Settings.LuaTools {
-		sys += "\n\n# 自定义工具（Lua）\n你可用以下工具管理 Lua 自定义工具（工作区 .pair/tools/）：\n" +
-			"- `lua_tool_list` 列出所有 Lua 自定义工具\n" +
-			"- `lua_tool_create` 创建新 Lua 工具（自动热加载）\n" +
-			"- `lua_tool_update` 更新现有 Lua 工具\n" +
-			"- `lua_tool_delete` 删除 Lua 工具\n\n" +
-			"**沙箱能力**：base/string/table/math/coroutine + os.time/date/clock/getenv，10s 超时。\n" +
-			"**桥接函数**：agent.run_command({command=, cwd=}) / agent.read_file(path) / agent.write_file(path, content) / agent.list_files(dir, pattern?) / agent.json_encode(value) / agent.json_decode(str) / agent.timestamp() / agent.log(level, msg) / agent.env(key)\n\n" +
-			"**适用场景**：重复 shell 命令组合 / 内置工具失败兜底 / 项目特有流程 / 条件+循环组合操作\n" +
-			"**不适用场景**：单次命令（用 run_command）/ 超时>10s / 复杂数据处理\n\n" +
-			"脚本格式：return {name=, description=, parameters=(表), run=function(args) end}。" +
-			" 沙箱仅开 string/table/math，10s 超时。" +
-			" run 内可用 agent.run_command({command=...}) 执行 shell。"
+		sys += agent.LuaToolsPrompt()
 	}
 	sys += "\n\n# 长时记忆检索\n你可以使用以下内部工具检索历史已完成对话的记忆（用于了解之前的工作成果）：\n" +
 		"- `memory_search` 搜索历史记忆（标题/摘要/标签/关键点），按关键词筛选\n" +
