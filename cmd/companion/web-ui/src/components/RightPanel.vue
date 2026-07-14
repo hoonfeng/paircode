@@ -57,46 +57,38 @@
                   <template v-if="!msg._folded">
                     <template v-for="(seg, si) in msg.segments" :key="si">
                       <!-- Thinking：简约斜体，默认折叠，展开后在末尾提供折叠按钮 -->
-                      <div v-if="seg.type === 'thinking'" class="tl-item">
-                        <span class="tl-dot tl-dot-thinking"></span>
-                        <div class="tl-body tl-think-body">
-                          <div v-if="!seg._collapsed" class="tl-thinking-text">{{ seg.content }}</div>
-                          <div v-else class="tl-thinking-collapsed" @click="seg._collapsed = !seg._collapsed"><SvgIcon name="message-square" :size="12" /> 思考…</div>
-                          <div v-if="!seg._collapsed" class="tl-think-fold" @click.stop="seg._collapsed = !seg._collapsed" title="折叠思考">▲ 收起</div>
-                        </div>
+                      <div v-if="seg.type === 'thinking'" class="seg-thinking">
+                        <div v-if="!seg._collapsed" class="tl-thinking-text">{{ seg.content }}</div>
+                        <div v-else class="tl-thinking-collapsed" @click="seg._collapsed = !seg._collapsed"><SvgIcon name="message-square" :size="12" /> 思考…</div>
+                        <div v-if="!seg._collapsed" class="tl-think-fold" @click.stop="seg._collapsed = !seg._collapsed" title="折叠思考">▲ 收起</div>
                       </div>
                       <!-- Tool Call：折叠行，无卡片包裹 -->
-                      <div v-else-if="seg.type === 'tool_call'" class="tl-item">
-                        <span class="tl-dot tl-dot-tool"></span>
-                        <div class="tl-body tl-tool">
-                          <div class="tl-tc-header" @click="seg._expanded = !seg._expanded">
-                            <span class="tl-tc-chevron">{{ seg._expanded ? '▾' : '▸' }}</span>
-                            <SvgIcon :name="toolMeta(seg).icon" :size="11" class="tl-tc-icon" />
-                            <span class="tl-tc-name">{{ toolMeta(seg).title }}</span>
-                            <span v-if="toolMeta(seg).detail" class="tl-tc-param">{{ toolMeta(seg).detail }}</span>
-                            <span v-if="seg.result && !seg._expanded" class="tl-tc-summary">{{ toolResultSummary(seg) }}</span>
-                          </div>
-                          <div v-if="seg._expanded" class="tl-tc-detail">
-                            <template v-if="isTerminalTool(seg)">
-                              <div class="tl-tc-section"><div class="tl-tc-section-title">命令</div><div class="tl-tc-command">{{ formatTerminalCommand(seg) }}</div></div>
-                              <div v-if="seg.result" class="tl-tc-section"><div class="tl-tc-section-title">输出</div><pre class="tl-tc-output">{{ seg.result }}</pre></div>
-                            </template>
-                            <template v-else>
-                              <div v-if="seg.argsRaw" class="tl-tc-section"><div class="tl-tc-section-title">参数</div><pre><code>{{ seg.argsRaw }}</code></pre></div>
-                              <div v-if="seg.result" class="tl-tc-section"><div class="tl-tc-section-title">结果</div><pre><code>{{ seg.result }}</code></pre></div>
-                            </template>
-                          </div>
+                      <div v-else-if="seg.type === 'tool_call'" class="seg-toolcall">
+                        <div class="tl-tc-header" @click="seg._expanded = !seg._expanded">
+                          <span class="tl-tc-chevron">{{ seg._expanded ? '▾' : '▸' }}</span>
+                          <SvgIcon :name="toolMeta(seg).icon" :size="11" class="tl-tc-icon" />
+                          <span class="tl-tc-name">{{ toolMeta(seg).title }}</span>
+                          <span v-if="toolMeta(seg).detail" class="tl-tc-param">{{ toolMeta(seg).detail }}</span>
+                          <span v-if="seg.result && !seg._expanded" class="tl-tc-summary">{{ toolResultSummary(seg) }}</span>
+                        </div>
+                        <div v-if="seg._expanded" class="tl-tc-detail">
+                          <template v-if="isTerminalTool(seg)">
+                            <div class="tl-tc-section"><div class="tl-tc-section-title">命令</div><div class="tl-tc-command">{{ formatTerminalCommand(seg) }}</div></div>
+                            <div v-if="seg.result" class="tl-tc-section"><div class="tl-tc-section-title">输出</div><pre class="tl-tc-output">{{ seg.result }}</pre></div>
+                          </template>
+                          <template v-else>
+                            <div v-if="seg.argsRaw" class="tl-tc-section"><div class="tl-tc-section-title">参数</div><pre><code>{{ seg.argsRaw }}</code></pre></div>
+                            <div v-if="seg.result" class="tl-tc-section"><div class="tl-tc-section-title">结果</div><pre><code>{{ seg.result }}</code></pre></div>
+                          </template>
                         </div>
                       </div>
                       <!-- Ask User：交互式 -->
-                      <div v-else-if="seg.type === 'ask_user'" class="tl-item">
-                        <span class="tl-dot tl-dot-ask"></span>
-                        <div class="tl-body"><AskUserCard :question="seg.question" :ask-type="seg.askType" :options="seg.options" :call-id="seg.callId" :answered="seg._answered" @answer="onAskAnswer(seg, $event)" /></div>
+                      <div v-else-if="seg.type === 'ask_user'" class="seg-askuser">
+                        <AskUserCard :question="seg.question" :ask-type="seg.askType" :options="seg.options" :call-id="seg.callId" :answered="seg._answered" @answer="onAskAnswer(seg, $event)" />
                       </div>
-                      <!-- Content：纯 Markdown，无边框无圆点包裹 -->
-                      <div v-else-if="seg.type === 'content'" class="tl-item tl-content-item">
-                        <span class="tl-dot tl-dot-content"></span>
-                        <div class="tl-body"><MarkdownRenderer :text="seg.content" :theme="state.theme" /></div>
+                      <!-- Content：纯 Markdown -->
+                      <div v-else-if="seg.type === 'content'" class="seg-content">
+                        <MarkdownRenderer :text="seg.content" :theme="state.theme" />
                       </div>
                     </template>
                   </template>
@@ -108,9 +100,8 @@
                 </div>
                 <!-- 历史消息 fallback：assistant 有 content 但无 segments（从 API 加载的历史对话） -->
                 <template v-if="msg.role === 'assistant' && (!msg.segments || msg.segments.length === 0)">
-                  <div v-if="msg.content" class="tl-item tl-content-item">
-                    <span class="tl-dot tl-dot-content"></span>
-                    <div class="tl-body"><MarkdownRenderer :text="msg.content" :theme="state.theme" /></div>
+                  <div v-if="msg.content" class="seg-content">
+                    <MarkdownRenderer :text="msg.content" :theme="state.theme" />
                   </div>
                 </template>
                 <div v-if="msg._time" class="msg-time">{{ msg._time }}</div>
@@ -1128,14 +1119,11 @@ onUnmounted(() => {
 /* ── 时间线展示（替代旧 SubAgentBlock 卡片 + content-flow）── */
 .bubble-agent { position: relative; }
 .bubble-agent::before { content: ''; position: absolute; left: 8px; top: 0; bottom: 0; width: 2px; background: linear-gradient(180deg, var(--accent) 0%, var(--border-color) 100%); opacity: 0.4; border-radius: 1px; }
-.tl-item { display: flex; align-items: flex-start; gap: 0; padding: 2px 0; position: relative; }
-.tl-dot { position: absolute; left: 8px; top: 7px; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; border: 2px solid var(--border-color); background: var(--bg-primary); z-index: 1; box-shadow: 0 0 0 2px var(--bg-primary); }
-.tl-dot-thinking { border-color: var(--accent); background: var(--accent-bg); box-shadow: 0 0 0 2px var(--bg-primary), 0 0 6px rgba(212,167,78,0.3); }
-.tl-dot-tool { border-color: #d4a74e; background: rgba(212,167,78,0.2); box-shadow: 0 0 0 2px var(--bg-primary), 0 0 6px rgba(212,167,78,0.2); }
-.tl-dot-ask { border-color: #c586c0; background: rgba(197,134,192,0.2); box-shadow: 0 0 0 2px var(--bg-primary), 0 0 6px rgba(197,134,192,0.2); }
-.tl-dot-content { border-color: #6a9955; background: rgba(106,153,85,0.2); box-shadow: 0 0 0 2px var(--bg-primary), 0 0 6px rgba(106,153,85,0.2); }
-.tl-dot-done { border-color: var(--accent); background: var(--accent); box-shadow: 0 0 0 2px var(--bg-primary), 0 0 6px rgba(126,184,218,0.4); }
-.tl-body { flex: 1; min-width: 0; font-size: 13px; line-height: 1.6; padding-left: 20px; }
+.tl-body { flex: 1; min-width: 0; font-size: 13px; line-height: 1.6; }
+.seg-thinking { margin: 4px 0; }
+.seg-toolcall { margin: 4px 0; border: 1px solid var(--border-color); border-radius: 6px; overflow: hidden; background: var(--bg-primary); }
+.seg-content { margin: 2px 0; line-height: 1.6; }
+.seg-askuser { margin: 4px 0; }
 /* ── 思考段：背景区分 + 左边框 + 改进滚动条 ── */
 .tl-think-body { position: relative; }
 .tl-thinking-text { color: var(--text-secondary); font-style: italic; white-space: pre-wrap; padding: 6px 10px; max-height: 300px; overflow-y: auto; background: var(--bg-tertiary); border-radius: 6px; border-left: 2px solid var(--accent); margin: 2px 0; }

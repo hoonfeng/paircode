@@ -121,8 +121,7 @@ onMounted(async () => {
   border: 1px solid var(--border-color);
   border-radius: 8px;
   width: 880px;
-  height: 495px;
-  max-height: 85vh;
+  height: 580px;
   max-width: 90vw;
   display: flex;
   flex-direction: column;
@@ -151,11 +150,11 @@ onMounted(async () => {
 
 .modal-body {
   flex: 1;
-  overflow-y: auto;
   padding: 20px;
   display: grid;
   grid-template-columns: 1fr 1.1fr;
   gap: 28px;
+  overflow: hidden;
 }
 .modal-footer {
   display: flex; align-items: center; justify-content: flex-end;
