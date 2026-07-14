@@ -320,6 +320,13 @@ func (s *MessageStore) AppendMessage(convID string, msg Message, segments []Segm
 	if err := s.saveIndex(metas); err != nil {
 		return fmt.Errorf("AppendMessage: 写入 index 失败: %w", err)
 	}
+
+	// ★ 同步 persistedCount，使 AppendMessage（如预写入用户消息）后
+	// PersistNewMessages 能准确跳过已持久化的消息，避免重写或误过滤。
+	s.pcMu.Lock()
+	s.persistedCount[convID] = count + 1
+	s.pcMu.Unlock()
+
 	return nil
 }
 
@@ -409,6 +416,12 @@ func (s *MessageStore) PersistNewMessages(convID string, hist []Message) error {
 	for i := startIdx; i < len(hist); i++ {
 		m := hist[i]
 		if m.Role == RoleSystem {
+			continue
+		}
+		// ★ 跳过 RoleUser 消息：真实用户消息已在 AppendPersistedUserMessage
+		// 预写入 store（计入 persistedCount），新出现的 User 消息是由自主模式内层
+		// Loop 注入的子任务(subTask)，不应作为用户消息被持久化。
+		if m.Role == RoleUser {
 			continue
 		}
 		sm := StoredMessage{

@@ -243,7 +243,7 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 	sess := &Session{
 		ConvID:        convID,
 		WorkspaceRoot: opts.WorkspaceRoot,
-		Events:        make(chan Event, 100),
+		Events:        make(chan Event, 500),
 		Cancel:        cancel,
 		History:       CopyHistory(opts.History), // 深复制避免外部修改
 		Running:       true,
@@ -464,22 +464,8 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 			}
 		}
 
-		// ★ 直接持久化：loop.Run 完成后立即将新消息写入 MessageStore（不依赖 EventDone 事件流）
-		// 确保所有 agent 回复（assistant/tool）都被持久化，避免因事件流排队/丢弃导致丢失。
-		if store := m.Store(); store != nil && msgs != nil {
-			existing, _ := store.LoadAll(convID)
-			existingCount := len(existing)
-			writeIdx := 0
-			for i, msg := range msgs {
-				if msg.Role == RoleSystem {
-					continue
-				}
-				if writeIdx >= existingCount {
-					_ = store.AppendMessage(convID, msg, SegmentsFromMessage(msg, msgs, i))
-				}
-				writeIdx++
-			}
-		}
+		// ★ 直接持久化：已由 OnBatchPersist（PersistNewMessages）在 loop.Run 内部增量处理，
+		// 此处不再重复写入，避免并发竞态导致用户消息重复存盘。
 
 		// ★ Auto commit：任务正常完成时自动 git 提交
 		if opts.AutoCommit && err == nil {
