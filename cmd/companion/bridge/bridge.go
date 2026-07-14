@@ -178,6 +178,16 @@ func (b *AgentBridge) Start(task string) {
 				"- `lua_tool_create` 创建新 Lua 工具（自动热加载）\n" +
 				"- `lua_tool_update` 更新现有 Lua 工具\n" +
 				"- `lua_tool_delete` 删除 Lua 工具\n\n" +
+				"### 何时创建 Lua 工具\n" +
+				"- **重复模式**：发现反复执行同一组 shell 命令（如「构建→测试→收集覆盖率」）→ 封装为 Lua 工具，下次直接调用\n" +
+				"- **错误兜底**：某内置工具频繁失败 → 用 Lua 重写带自定义错误处理和重试逻辑的版本\n" +
+				"- **项目专用**：项目有特定的构建/部署/检查流程 → 参数化封装，后续复用\n" +
+				"- **组合操作**：需要条件判断+循环执行多个命令 → Lua 的 if/for 比单次 run_command 灵活\n\n" +
+				"### 何时不该用\n" +
+				"- **一次操作**：简单单次命令直接用 `run_command`，不必创建工具\n" +
+				"- **需要文件 IO**：沙箱无 os/io 库，读写文件只能用 `agent.run_command` 间接做\n" +
+				"- **超时风险**：单次执行 10s 超时，长时间任务不适合\n" +
+				"- **复杂处理**：Lua 只有 string/table/math，复杂数据处理用内置工具\n\n" +
 				"脚本格式：return {name=, description=, parameters=(Lua 表), run=function(args) end}。" +
 				" 沙箱仅开 string/table/math（无文件/系统访问），单次 10s 超时。" +
 				" run 函数内可用 agent.run_command({command=..., cwd=...}) 执行 shell 命令。" +

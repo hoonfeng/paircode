@@ -466,6 +466,8 @@ func buildWebSystemPrompt() string {
 			"- `lua_tool_create` 创建新 Lua 工具（自动热加载）\n" +
 			"- `lua_tool_update` 更新现有 Lua 工具\n" +
 			"- `lua_tool_delete` 删除 Lua 工具\n\n" +
+			"**适合创建 Lua 工具的场景**：重复的 shell 命令组合 / 内置工具频繁失败需兜底 / 项目专用构建部署流程\n" +
+			"**不适合的场景**：一次操作（直接用 run_command）/ 需要文件 IO / 超时风险 >10s / 复杂数据处理\n\n" +
 			"脚本格式：return {name=, description=, parameters=(表), run=function(args) end}。" +
 			" 沙箱仅开 string/table/math，10s 超时。" +
 			" run 内可用 agent.run_command({command=...}) 执行 shell。"
