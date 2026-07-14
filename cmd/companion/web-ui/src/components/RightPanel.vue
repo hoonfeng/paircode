@@ -1235,7 +1235,6 @@ onUnmounted(() => {
 /* ── 执行步骤容器（输入区上方）── */
 .plan-container {
   flex-shrink: 0;
-  overflow-y: auto;
   transition: max-height 0.25s ease;
   padding: 0 8px;
 }

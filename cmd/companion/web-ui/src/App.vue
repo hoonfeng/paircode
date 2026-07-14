@@ -81,6 +81,11 @@ function loadPanelSize() {
     if (d.rpw) rightPanelWidth.value = d.rpw
     if (d.bph) bottomPanelHeight.value = d.bph
   } catch {}
+  // 恢复侧栏宽度
+  try {
+    const sw = localStorage.getItem('paircode-sidebar-width')
+    if (sw) sidebarWidth.value = parseInt(sw, 10)
+  } catch {}
 }
 function savePanelSize() {
   try {
@@ -93,6 +98,7 @@ loadPanelSize()
 
 const bottomPanelHeight = ref(180)
 const rightPanelWidth = ref(600)
+const sidebarWidth = ref(280)
 
 provide('showSettings', showSettings)
 provide('showSystem', showSystem)
@@ -100,6 +106,7 @@ provide('showSource', showSource)
 provide('showMarketplace', showMarketplace)
 provide('bottomPanelHeight', bottomPanelHeight)
 provide('rightPanelWidth', rightPanelWidth)
+provide('sidebarWidth', sidebarWidth)
 
 if (!state.wsList) state.wsList = reactive([])
 const wsList = state.wsList
