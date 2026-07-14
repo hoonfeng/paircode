@@ -1,6 +1,7 @@
 @echo off
 REM PairCode Build Script - GUI Panel + Web Server (same process)
-echo [INFO] CGO mode enabled (Skia GPU)
+set CGO_ENABLED=1
+echo [INFO] CGO_ENABLED=%CGO_ENABLED%
 
 echo.
 echo === Building companion.exe ===
@@ -12,5 +13,5 @@ if %ERRORLEVEL% neq 0 (
 echo [OK] companion.exe built successfully
 
 echo.
-echo === All builds successful ===
+echo === Done ===
 echo companion.exe - GUI startup panel + Web IDE server

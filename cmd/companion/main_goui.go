@@ -14,9 +14,8 @@ import (
 	"github.com/hoonfeng/goui/pkg/app"
 	"github.com/hoonfeng/goui/pkg/types"
 	"github.com/hoonfeng/goui/pkg/widget"
-	"github.com/hoonfeng/goui/pkg/window"
 
-	_ "github.com/hoonfeng/goui/pkg/platform" // 注册 Win32 窗口后端
+	_ "github.com/hoonfeng/goui/pkg/platform"
 )
 
 // ── 启动面板 StatefulWidget ─────────────────────────────
@@ -34,12 +33,10 @@ type panelState struct {
 	port      int    // 端口号
 	err       string // 当前错误提示
 	autoStart bool   // 开机自启
-	trayID    int    // 托盘图标 ID，0=未创建
 }
 
 func (s *panelState) InitState() {
 	s.port = InitCore() // 读取 core 配置取得默认端口
-	s.trayID = 0
 }
 
 // toggleServer 切换服务器启动/停止。
@@ -78,81 +75,55 @@ func (s *panelState) Build(ctx widget.BuildContext) widget.Widget {
 		statusText = "● 已停止"
 	}
 
-	// 标题 + 状态
-	titleBar := widget.HBox(
-		widget.NewText("PairCode 启动面板", types.ColorFromRGB(48, 49, 51)),
-		widget.SpacerDiv(),
-		widget.NewText(statusText, statusColor),
-	)
-
-	// 端口行
-	portInput := widget.NewInput("9090", func(text string) {
-		if text != "" {
-			fmt.Sscanf(text, "%d", &s.port)
-		}
-	})
-	if s.port > 0 {
-		portInput.Text = fmt.Sprintf("%d", s.port)
-	}
-
-	portRow := widget.HBox(
-		widget.NewText("监听端口:", types.ColorFromRGB(96, 98, 102)),
-		widget.SpacerDiv(),
-		portInput,
-	)
-
-	// 自动启动行
-	autoRow := widget.HBox(
-		widget.NewText("开机自动启动:", types.ColorFromRGB(96, 98, 102)),
-		widget.SpacerDiv(),
-		widget.NewSwitch(s.autoStart, func(v bool) { s.autoStart = v; s.SetState() }),
-	)
-
-	// 按钮
-	btnText := "启动服务器"
-	btnColor := types.ColorFromRGB(64, 158, 255)
-	if running {
-		btnText = "停止服务器"
-		btnColor = types.ColorFromRGB(234, 67, 53)
-	}
-
-	// 提示文字
-	hintText := fmt.Sprintf("Web IDE 模式 — 在浏览器中访问 http://localhost:%d 使用", s.port)
-
-	// 分隔线
-	sep := &widget.Container{
-		Height:      1,
-		Margin:      types.EdgeInsetsLTRB(0, 4, 0, 8),
-		Background:  &widget.PaintWidget{Color: ptrColor(220, 224, 228)},
-	}
-
 	return widget.Div(
 		widget.Style{
 			Padding:       types.EdgeInsets(24),
 			FlexDirection: "column",
-			Gap:           8,
+			Gap:           12,
 		},
-		titleBar,
-		sep,
-		portRow,
-		autoRow,
+		// 标题 + 状态
+		widget.HBox(
+			widget.NewText("PairCode 启动面板", types.ColorFromRGB(48, 49, 51)),
+			widget.SpacerDiv(),
+			widget.NewText(statusText, statusColor),
+		),
+		// 端口行
+		widget.HBox(
+			widget.NewText("监听端口:", types.ColorFromRGB(96, 98, 102)),
+			widget.SpacerDiv(),
+			widget.NewInput("9090", func(text string) {
+				if text != "" {
+					fmt.Sscanf(text, "%d", &s.port)
+				}
+			}),
+		),
+		// 开机自动启动
+		widget.HBox(
+			widget.NewText("开机自动启动:", types.ColorFromRGB(96, 98, 102)),
+			widget.SpacerDiv(),
+			widget.NewSwitch(s.autoStart, func(v bool) { s.autoStart = v; s.SetState() }),
+		),
+		// 按钮
 		widget.Div(
 			widget.Style{Padding: types.EdgeInsetsLTRB(0, 16, 0, 8)},
-			widget.NewButton(btnText, s.toggleServer).
-				WithColor(btnColor).
+			widget.NewButton(func() string {
+				if running {
+					return "停止服务器"
+				}
+				return "启动服务器"
+			}(), s.toggleServer).
+				WithColor(func() types.Color {
+					if running { return types.ColorFromRGB(234, 67, 53) }
+					return types.ColorFromRGB(64, 158, 255)
+				}()).
 				WithMinWidth(140),
 		),
-		widget.Div(
-			widget.Style{Padding: types.EdgeInsetsLTRB(0, 4, 0, 0)},
-			widget.NewText(hintText, types.ColorFromRGB(144, 147, 153)),
+		// 提示文字
+		widget.NewText(
+			fmt.Sprintf("Web IDE 模式 — 在浏览器中访问 http://localhost:%d 使用", s.port),
+			types.ColorFromRGB(144, 147, 153),
 		),
 	)
-}
-
-// ptrColor 创建 *types.Color。
-func ptrColor(r, g, b uint8) *types.Color {
-	c := types.ColorFromRGB(r, g, b)
-	return &c
 }
 
 // openBrowser 在默认浏览器中打开 URL。
@@ -172,43 +143,33 @@ func openBrowser(port int) {
 
 // ── main ──────────────────────────────────────────────
 
+var application *app.Application
+
 func main() {
 	runtime.LockOSThread()
 
-	// 初始化面板
-	application := app.NewApplication()
+	application = app.NewApplication()
 	application.SetRootWidget(&PanelRoot{})
 
-	// 应用配置
 	cfg := app.DefaultConfig()
 	cfg.Title = "PairCode 启动面板"
 	cfg.Width = 480
 	cfg.Height = 360
 	cfg.Resizable = false
 
-	// 设置 Ready 回调：窗口显示后添加系统托盘
+	// ---- Ready：首帧后注册系统托盘 ----
 	application.Ready = func() {
-		hwnd := application.Window.NativeHandle()
-		if hwnd == 0 {
-			return
-		}
-		// 使用 assets/icon64.png 作为托盘图标
-		iconPath := "assets/icon64.png"
-		if _, err := os.Stat(iconPath); err != nil {
-			iconPath = ""
-		}
-		trayID := window.AddTrayIcon(hwnd, "PairCode Web IDE", iconPath, func() {
-			port := 9090
-			openBrowser(port)
+		trayID := application.AddTray("PairCode Web IDE", "", func() {
+			openBrowser(9090)
 		})
 		if trayID > 0 {
-			window.SetTrayMenu(trayID, []window.TrayMenuItem{
+			application.SetTrayMenu(trayID, []app.TrayMenuItem{
 				{ID: 1, Label: "在浏览器中打开"},
 				{Separator: true},
 				{ID: 2, Label: "启动/停止服务器"},
 				{ID: 3, Label: "显示窗口"},
 				{Separator: true},
-				{ID: 4, Label: "退出"},
+				{ID: 9, Label: "退出"},
 			}, func(id int) {
 				switch id {
 				case 1:
@@ -224,14 +185,14 @@ func main() {
 					}
 				case 3:
 					application.Window.Show()
-				case 4:
+				case 9:
 					application.Quit()
 				}
 			})
 		}
 	}
 
-	// 运行应用（阻塞直到窗口关闭）
+	// ---- 运行 ----
 	if err := application.Run(cfg); err != nil {
 		log.Fatalf("启动面板退出: %v", err)
 	}
