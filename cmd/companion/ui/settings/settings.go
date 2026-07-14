@@ -16,7 +16,6 @@ import (
 	"github.com/hoonfeng/gwui/event"
 	"github.com/hoonfeng/gwui/uixml"
 
-	"github.com/hoonfeng/paircode/cmd/companion/agent"
 	"github.com/hoonfeng/paircode/cmd/companion/core"
 	"github.com/hoonfeng/paircode/cmd/companion/ui"
 	"github.com/hoonfeng/paircode/cmd/companion/uiapi"
@@ -229,7 +228,7 @@ func OpenDialog() {
 	// ── 加载 HTML 模板 ──
 	reg := uixml.NewRegistry()
 	// 注册 tab onclick 处理器（使 HTML 中 onclick="selectSettingsTab(n)" 生效）
-	for i := 0; i <= 6; i++ {
+	for i := 0; i <= 5; i++ {
 		idx := i
 		reg.OnClick(fmt.Sprintf("selectSettingsTab(%d)", i), func(ctx uixml.EventContext) bool {
 			selectTab(doc, idx)
@@ -255,7 +254,6 @@ func OpenDialog() {
 	createTerminalTab(doc)
 	createAppearanceTab(doc)
 	createPhilosophyTab(doc)
-	createMCPTab(doc)
 
 	// 转移组件 + 移入 Modal
 	ui.TransferComponents(doc, doc, root)
@@ -333,7 +331,6 @@ func OpenDialog() {
 			createTerminalTab(doc)
 			createAppearanceTab(doc)
 			createPhilosophyTab(doc)
-			createMCPTab(doc)
 
 			ui.TransferComponents(doc, doc, newRoot)
 			ui.DetachRoot(newRoot)
@@ -364,7 +361,7 @@ func ApplyFontFamily() {
 // ── Tab 切换 ──
 
 func selectTab(doc *dom.Document, idx int) {
-	for i := 0; i <= 6; i++ {
+	for i := 0; i <= 5; i++ {
 		tabEl := doc.GetElementByID(fmt.Sprintf("settings-tab-%d", i))
 		paneEl := doc.GetElementByID(fmt.Sprintf("settings-pane-%d", i))
 		if tabEl == nil || paneEl == nil {
@@ -436,8 +433,6 @@ var (
 	hideMinimapCb       *component.Checkbox
 	philosophyCb        *component.Checkbox
 	philosophyCbs       []*component.Checkbox // 每个经典一个 checkbox
-	autoConnectMCPCb    *component.Checkbox
-	skillCbs            []*component.Checkbox // 技能开关列表
 )
 
 func createLLMTab(doc *dom.Document) {
@@ -636,46 +631,7 @@ func createPhilosophyTab(doc *dom.Document) {
 	}
 }
 
-func createMCPTab(doc *dom.Document) {
-	s := &EditingSettings
-	autoConnectMCPCb = newCheckbox(doc, "启动时自动连接 MCP 服务器", s.AutoConnectMCP)
-	replaceCheckbox(doc, "s-autoconnectmcp", autoConnectMCPCb)
 
-	// ── 技能管理列表 ──
-	skillCbs = nil
-	listContainer := doc.GetElementByID("s-skills-list")
-	if listContainer == nil {
-		return
-	}
-	listContainer.ClearChildren()
-
-	skills := agent.LoadAllSkills()
-	for _, sk := range skills {
-		sk := sk // capture
-		// 检查当前启用态
-		key := string(sk.Level) + "::" + sk.Name
-		enabled := true
-		if v, ok := s.SkillEnabledOverrides[key]; ok {
-			enabled = v
-		}
-		// 显示标签：层级前缀 + 名 + 描述
-		levelTag := "system"
-		if sk.Level == agent.LevelProject {
-			levelTag = "project"
-		}
-		label := "[" + levelTag + "] " + sk.Name
-		if sk.Description != "" {
-			label += " — " + sk.Description
-		}
-		cb := newCheckbox(doc, label, enabled)
-		skillCbs = append(skillCbs, cb)
-
-		row := doc.CreateElement("div")
-		row.SetAttribute("style", "padding: 2px 0;")
-		row.AppendChild(cb.Element())
-		listContainer.AppendChild(row)
-	}
-}
 
 // ── 保存 ──
 
@@ -741,21 +697,6 @@ func saveAll(doc *dom.Document) {
 		}
 	}
 
-	// MCP
-	s.AutoConnectMCP = autoConnectMCPCb.Checked()
-
-	// 技能管理
-	skills := agent.LoadAllSkills()
-	overrides := make(map[string]bool)
-	for i, cb := range skillCbs {
-		if i >= len(skills) {
-			break
-		}
-		key := string(skills[i].Level) + "::" + skills[i].Name
-		// 只存与实际默认态不同的项：true=显式启用（当默认禁用时），false=显式禁用（当默认启用时）
-		overrides[key] = cb.Checked()
-	}
-	s.SkillEnabledOverrides = overrides
 }
 
 func parseFloat(s string, fallback float32) float32 {

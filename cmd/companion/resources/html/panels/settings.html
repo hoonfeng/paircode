@@ -8,8 +8,7 @@
     <div id="settings-tab-2" class="settings-tab" onclick="selectSettingsTab(2)">终端</div>
     <div id="settings-tab-3" class="settings-tab" onclick="selectSettingsTab(3)">外观</div>
     <div id="settings-tab-4" class="settings-tab" onclick="selectSettingsTab(4)">思想</div>
-    <div id="settings-tab-5" class="settings-tab" onclick="selectSettingsTab(5)">MCP/技能</div>
-    <div id="settings-tab-6" class="settings-tab" onclick="selectSettingsTab(6)">指令</div>
+    <div id="settings-tab-5" class="settings-tab" onclick="selectSettingsTab(5)">指令</div>
   </div>
 
   <!-- ── 滚动内容区（统一管理所有 pane 的滚动，selectTab 只切换 pane 的 display，不动此容器）── -->
@@ -85,16 +84,8 @@
       <div id="s-philosophy-list"></div>
     </div>
 
-    <!-- Tab 5: MCP/Skills -->
+    <!-- Tab 5: 指令（系统级 + 项目级） -->
     <div id="settings-pane-5" class="settings-pane" style="display:none;">
-      <div class="settings-row" style="justify-content:space-between;"><div id="s-autoconnectmcp" style="flex:1;"></div></div>
-      <div style="font-weight:bold;font-size:13px;color:#8c8c8c;border-bottom:1px solid #2d2d2d;padding-bottom:4px;margin-bottom:4px;margin-top:8px;">技能管理</div>
-      <div style="font-size:12px;color:#8c8c8c;padding:2px 0;">勾选启用，取消勾选禁用（system=内置，project=项目级）</div>
-      <div id="s-skills-list"></div>
-    </div>
-
-    <!-- Tab 6: 指令（系统级 + 项目级） -->
-    <div id="settings-pane-6" class="settings-pane" style="display:none;">
       <div style="font-weight:bold;font-size:13px;color:#8c8c8c;border-bottom:1px solid #2d2d2d;padding-bottom:4px;margin-bottom:4px;">系统级指令</div>
       <div style="font-size:12px;color:#8c8c8c;padding:2px 0 6px 0;">对所有项目生效，存储于全局 settings.json</div>
       <div id="s-systeminstructions" style="width:100%;"></div>
