@@ -467,6 +467,14 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		// ★ 直接持久化：已由 OnBatchPersist（PersistNewMessages）在 loop.Run 内部增量处理，
 		// 此处不再重复写入，避免并发竞态导致用户消息重复存盘。
 
+		// ★ 合并末尾连续 assistant 条目：OnBatchPersist 每轮写一条，刷新后前端会
+		// 看到多条 assistant 气泡。合并后与事件流行为一致（一个 run 只显示一条）。
+		if m.store != nil {
+			if cerr := m.store.MergeLastAssistantRun(convID); cerr != nil {
+				fmt.Printf("[session] MergeLastAssistantRun 失败 conv=%s err=%v\n", convID, cerr)
+			}
+		}
+
 		// ★ Auto commit：任务正常完成时自动 git 提交
 		if opts.AutoCommit && err == nil {
 			result := ""

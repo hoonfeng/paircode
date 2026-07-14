@@ -559,6 +559,112 @@ func (s *MessageStore) LoadBefore(convID string, beforeIdx int, limit int) ([]St
 	return filtered[len(filtered)-limit:], nil
 }
 
+// MergeLastAssistantRun 合并 JSONL 末尾最近一个用户→助手的连续助理条目。
+// OnBatchPersist 每轮迭代写一条助理消息，导致同一 run 的多个迭代在 JSONL 中
+// 是独立行。此方法在 Loop 完成后调用，扫描文件末尾从最近一条 user 消息后的
+// 连续 assistant 行，合并为一条（tool 行保留不动）。
+// 结果：前端加载后一个 run 只看到 1 条 assistant 消息。
+func (s *MessageStore) MergeLastAssistantRun(convID string) error {
+	mu := s.getConvMutex(convID)
+	mu.Lock()
+	defer mu.Unlock()
+
+	stored, err := s.readJSONL(convID)
+	if err != nil {
+		return fmt.Errorf("MergeLastAssistantRun: 读取失败: %w", err)
+	}
+	if len(stored) == 0 {
+		return nil
+	}
+
+	// 从末尾找最后一个 user
+	lastUser := -1
+	for i := len(stored) - 1; i >= 0; i-- {
+		if stored[i].Message.Role == RoleUser {
+			lastUser = i
+			break
+		}
+	}
+	if lastUser < 0 || lastUser >= len(stored)-1 {
+		return nil
+	}
+
+	// 收集 user 后的连续 assistant 索引
+	assistantIdxs := []int{}
+	for i := lastUser + 1; i < len(stored); i++ {
+		r := stored[i].Message.Role
+		if r == RoleAssistant {
+			assistantIdxs = append(assistantIdxs, i)
+		} else if r == RoleTool {
+			continue
+		} else {
+			break
+		}
+	}
+	if len(assistantIdxs) <= 1 {
+		return nil
+	}
+
+	// 合并
+	base := stored[assistantIdxs[0]]
+	for idx := 1; idx < len(assistantIdxs); idx++ {
+		next := stored[assistantIdxs[idx]]
+		base.Segments = append(base.Segments, next.Segments...)
+		if next.Message.Content != "" {
+			if base.Message.Content == "" {
+				base.Message.Content = next.Message.Content
+			} else {
+				base.Message.Content += "\n" + next.Message.Content
+			}
+		}
+		if len(next.Message.ToolCalls) > 0 {
+			base.Message.ToolCalls = append(base.Message.ToolCalls, next.Message.ToolCalls...)
+		}
+	}
+
+	// 重建结果切片
+	var result []StoredMessage
+	result = append(result, stored[:lastUser+1]...)
+	result = append(result, base)
+	for i := lastUser + 1; i < len(stored); i++ {
+		isAssistant := false
+		for _, ai := range assistantIdxs {
+			if i == ai {
+				isAssistant = true
+				break
+			}
+		}
+		if !isAssistant {
+			result = append(result, stored[i])
+		}
+	}
+
+	// 重写索引
+	for i := range result {
+		result[i].Idx = i
+	}
+
+	// 写回（JSONL 格式：每行一个 JSON 对象）
+	out, err := os.Create(s.convFilePath(convID))
+	if err != nil {
+		return fmt.Errorf("MergeLastAssistantRun: 创建文件失败: %w", err)
+	}
+	defer out.Close()
+	enc := json.NewEncoder(out)
+	for _, sm := range result {
+		if err := enc.Encode(sm); err != nil {
+			return fmt.Errorf("MergeLastAssistantRun: JSON 编码失败: %w", err)
+		}
+	}
+
+	// 更新计数器
+	s.pcMu.Lock()
+	s.persistedCount[convID] = len(result)
+	s.pcMu.Unlock()
+
+	return nil
+}
+
 // LoadAll 加载对话全部消息（仅 Message，不含 Segments），供 LLM 上下文恢复。
 func (s *MessageStore) LoadAll(convID string) ([]Message, error) {
 	msgs, err := s.readJSONL(convID)
