@@ -1,6 +1,7 @@
-// PairCode 启动面板 —— goui 桌面 GUI。
-// 深色主题 + 自定义标题栏 + 系统托盘。
-// 服务商配置（Select 选择 + 新增）+ 环境检测 + 端口检测。
+// PairCode IDE 启动面板 — goui 桌面 GUI。
+// 深色科技风 + 自定义标题栏 + 系统托盘。
+// 仅维护 models.json（服务商配置），不设置当前模型。
+// 环境检测：git / python / uv / npm。
 //
 //go:build windows
 
@@ -22,54 +23,53 @@ import (
 	_ "github.com/hoonfeng/goui/pkg/platform"
 )
 
-// ── 深色主题 ──
+// ── 科技风深色主题 ──
 
 func init() {
 	th := widget.DefaultTheme()
-	th.BGColor = types.ColorFromRGB(26, 27, 30)         // #1a1b1e
-	th.SurfaceColor = types.ColorFromRGB(37, 38, 43)    // #25262b
-	th.TextColor = types.ColorFromRGB(228, 228, 231)    // #e4e4e7
-	th.SecondaryText = types.ColorFromRGB(161, 161, 170) // #a1a1aa
-	th.PrimaryColor = types.ColorFromRGB(99, 102, 241)   // #6366f1 紫蓝
-	th.SuccessColor = types.ColorFromRGB(52, 211, 153)   // #34d399 翠绿
-	th.ErrorColor = types.ColorFromRGB(239, 68, 68)      // #ef4444
-	th.WarningColor = types.ColorFromRGB(251, 191, 36)   // #fbbf24
-	th.BorderColor = types.ColorFromRGB(53, 55, 64)      // #353740
-	th.DividerColor = types.ColorFromRGB(39, 39, 42)     // #27272a
-	th.FillColor = types.ColorFromRGB(37, 38, 43)
-	th.TextRegular = types.ColorFromRGB(161, 161, 170)
-	th.PlaceholderColor = types.ColorFromRGB(113, 113, 122)
-	th.Input.BGColor = types.ColorFromRGB(30, 31, 36)
-	th.Input.TextColor = types.ColorFromRGB(228, 228, 231)
-	th.Input.BorderColor = types.ColorFromRGB(53, 55, 64)
-	th.Input.FocusBorderColor = types.ColorFromRGB(99, 102, 241)
-	th.Input.PlaceholderColor = types.ColorFromRGB(113, 113, 122)
-	th.Button.DefaultColor = types.ColorFromRGB(99, 102, 241)
+	th.BGColor = types.ColorFromRGB(13, 17, 23)
+	th.SurfaceColor = types.ColorFromRGB(22, 27, 34)
+	th.TextColor = types.ColorFromRGB(240, 246, 252)
+	th.SecondaryText = types.ColorFromRGB(139, 148, 158)
+	th.PrimaryColor = types.ColorFromRGB(88, 166, 255)
+	th.SuccessColor = types.ColorFromRGB(63, 185, 80)
+	th.ErrorColor = types.ColorFromRGB(248, 81, 73)
+	th.WarningColor = types.ColorFromRGB(210, 153, 34)
+	th.BorderColor = types.ColorFromRGB(48, 54, 61)
+	th.DividerColor = types.ColorFromRGB(33, 38, 45)
+	th.FillColor = types.ColorFromRGB(22, 27, 34)
+	th.TextRegular = types.ColorFromRGB(139, 148, 158)
+	th.PlaceholderColor = types.ColorFromRGB(113, 120, 128)
+	th.Input.BGColor = types.ColorFromRGB(13, 17, 23)
+	th.Input.TextColor = types.ColorFromRGB(240, 246, 252)
+	th.Input.BorderColor = types.ColorFromRGB(48, 54, 61)
+	th.Input.FocusBorderColor = types.ColorFromRGB(88, 166, 255)
+	th.Input.PlaceholderColor = types.ColorFromRGB(113, 120, 128)
+	th.Button.DefaultColor = types.ColorFromRGB(88, 166, 255)
 	th.Button.TextColor = types.ColorFromRGB(255, 255, 255)
 	widget.SetTheme(th)
 
 	widget.SetSelectTheme(
-		types.ColorFromRGB(30, 31, 36),
-		types.ColorFromRGB(228, 228, 231),
-		types.ColorFromRGB(53, 55, 64),
-		types.ColorFromRGB(39, 39, 42),
-		types.ColorFromRGB(113, 113, 122),
+		types.ColorFromRGB(13, 17, 23),
+		types.ColorFromRGB(240, 246, 252),
+		types.ColorFromRGB(48, 54, 61),
+		types.ColorFromRGB(33, 38, 45),
+		types.ColorFromRGB(113, 120, 128),
 	)
 	widget.SetMenuTheme(
-		types.ColorFromRGB(37, 38, 43),
-		types.ColorFromRGB(228, 228, 231),
-		types.ColorFromRGB(39, 39, 42),
-		types.ColorFromRGB(53, 55, 64),
-		types.ColorFromRGB(113, 113, 122),
+		types.ColorFromRGB(22, 27, 34),
+		types.ColorFromRGB(240, 246, 252),
+		types.ColorFromRGB(33, 38, 45),
+		types.ColorFromRGB(48, 54, 61),
+		types.ColorFromRGB(113, 120, 128),
 	)
 	widget.SetDialogTheme(
-		types.ColorFromRGB(37, 38, 43),
-		types.ColorFromRGB(228, 228, 231),
-		types.ColorFromRGB(161, 161, 170),
+		types.ColorFromRGB(22, 27, 34),
+		types.ColorFromRGB(240, 246, 252),
+		types.ColorFromRGB(139, 148, 158),
 	)
 }
 
-// 已知服务商默认接口地址。
 var defaultBaseURLs = map[string]string{
 	"deepseek":          "https://api.deepseek.com/v1",
 	"openai":            "https://api.openai.com/v1",
@@ -77,14 +77,14 @@ var defaultBaseURLs = map[string]string{
 	"openai-compatible": "",
 }
 
-// 环境检测工具列表。
-var envTools = []struct {
+var envChecks = []struct {
 	name string
 	cmd  string
 }{
-	{"Git", "git"}, {"Go", "go"}, {"Node.js", "node"},
-	{"npm", "npm"}, {"Python", "python"}, {"uv", "uv"},
-	{"GCC", "gcc"}, {"Rust", "rustc"},
+	{"Git", "git"},
+	{"Python", "python"},
+	{"uv", "uv"},
+	{"npm", "npm"},
 }
 
 // ── 有状态根组件 ──
@@ -106,15 +106,10 @@ type panelState struct {
 	newName    string
 	newURL     string
 	newModels  []string
-	envResults []envResult
+	envOK      map[string]bool
 	portStatus string
 	portOK     bool
 	err        string
-}
-
-type envResult struct {
-	name string
-	ok   bool
 }
 
 func (s *panelState) InitState() {
@@ -136,10 +131,10 @@ func (s *panelState) refreshProviders() {
 }
 
 func (s *panelState) checkEnv() {
-	s.envResults = make([]envResult, 0, len(envTools))
-	for _, t := range envTools {
-		_, err := exec.LookPath(t.cmd)
-		s.envResults = append(s.envResults, envResult{name: t.name, ok: err == nil})
+	s.envOK = make(map[string]bool, len(envChecks))
+	for _, e := range envChecks {
+		_, err := exec.LookPath(e.cmd)
+		s.envOK[e.name] = err == nil
 	}
 }
 
@@ -185,7 +180,7 @@ func (s *panelState) saveConfig() {
 		s.msg = "配置已保存"
 		s.msgOK = true
 	} else {
-		s.msg = "已保存，但密钥或接口地址为空"
+		s.msg = "已保存，但密钥或地址为空"
 		s.msgOK = false
 	}
 	s.SetState()
@@ -215,7 +210,7 @@ func (s *panelState) toggleServer() {
 
 func (s *panelState) confirmAdd() {
 	if s.newName == "" {
-		s.msg, s.msgOK = "服务商名称不能为空", false
+		s.msg, s.msgOK = "名称不能为空", false
 		s.SetState()
 		return
 	}
@@ -241,26 +236,22 @@ func (s *panelState) Build(ctx widget.BuildContext) widget.Widget {
 	running := IsWebServerRunning()
 	configured := core.Configured()
 
-	primary := types.ColorFromRGB(99, 102, 241)
-	green := types.ColorFromRGB(52, 211, 153)
-	red := types.ColorFromRGB(239, 68, 68)
-	textCol := types.ColorFromRGB(228, 228, 231)
-	muted := types.ColorFromRGB(161, 161, 170)
-	warning := types.ColorFromRGB(251, 191, 36)
-	inputBg := types.ColorFromRGB(30, 31, 36)
+	blue := types.ColorFromRGB(88, 166, 255)
+	green := types.ColorFromRGB(63, 185, 80)
+	red := types.ColorFromRGB(248, 81, 73)
+	text := types.ColorFromRGB(240, 246, 252)
+	muted := types.ColorFromRGB(139, 148, 158)
+	warn := types.ColorFromRGB(210, 153, 34)
+	cardBg := types.ColorRef(22, 27, 34)
+	borderClr := ptrColor(48, 54, 61)
+	btnDim := types.ColorFromRGB(48, 54, 61)
 
 	// 状态栏
-	statusColor := green
-	statusText := "● Running"
+	sc := green
+	st := "● Running"
 	if !running {
-		statusColor = muted
-		statusText = "● Stopped"
-	}
-	var cfgLine widget.Widget
-	if configured {
-		cfgLine = widget.NewText(fmt.Sprintf("%s · %s", s.provider, core.MainModel()), green)
-	} else {
-		cfgLine = widget.NewText("未配置 API Key", warning)
+		sc = muted
+		st = "● Stopped"
 	}
 
 	// ── 控件 ──
@@ -269,22 +260,15 @@ func (s *panelState) Build(ctx widget.BuildContext) widget.Widget {
 		WithValue(s.provider).
 		WithOnChanged(s.onProviderChange).
 		WithWidth(220)
-
 	baseURLInput := widget.NewInput("https://api.xxx.com/v1", func(t string) { s.baseURL = t })
 	baseURLInput.Text = s.baseURL
-	baseURLInput.BGColor = inputBg
-
 	apiKeyInput := widget.NewInput("sk-...", func(t string) { s.apiKey = t })
 	apiKeyInput.Text = s.apiKey
-	apiKeyInput.BGColor = inputBg
-
 	portInput := widget.NewInput("9090", func(t string) {
 		if t != "" { fmt.Sscanf(t, "%d", &s.serverPort) }
 	})
 	portInput.Text = fmt.Sprintf("%d", s.serverPort)
-	portInput.BGColor = inputBg
 
-	// ── 提示 ──
 	var msgEl widget.Widget
 	if s.msg != "" {
 		c := green
@@ -292,173 +276,154 @@ func (s *panelState) Build(ctx widget.BuildContext) widget.Widget {
 		msgEl = widget.NewText(s.msg, c)
 	}
 	var errEl widget.Widget
-	if s.err != "" {
-		errEl = widget.NewText("错误: "+s.err, red)
-	}
+	if s.err != "" { errEl = widget.NewText(s.err, red) }
 
-	// ── 辅助 ──
-	label := func(t string) widget.Widget {
-		return widget.NewText(t, muted)
-	}
-	w220 := func(w widget.Widget) widget.Widget {
-		return widget.Div(widget.Style{Width: 220}, w)
-	}
-	row := func(l, c widget.Widget) widget.Widget {
-		return widget.HBox(l, widget.SpacerDiv(), c)
-	}
+	// 辅助
+	lb := func(t string) widget.Widget { return widget.NewText(t, muted) }
+	w220 := func(w widget.Widget) widget.Widget { return widget.Div(widget.Style{Width: 220}, w) }
+	rw := func(l, c widget.Widget) widget.Widget { return widget.HBox(l, widget.SpacerDiv(), c) }
 
-	// ── 环境检测行 ──
-	var envLine widget.Widget
-	{
-		var items []widget.Widget
-		for _, r := range s.envResults {
-			ico, col := "✗", red
-			if r.ok { ico, col = "✓", green }
-			items = append(items, widget.NewText(ico+" "+r.name, col))
+	// card 工厂
+	card := func(ch ...widget.Widget) widget.Widget {
+		args := []interface{}{
+			widget.Style{
+				BackgroundColor: cardBg,
+				BorderRadius:    8,
+				BorderColor:     borderClr,
+				BorderWidth:     1,
+				Padding:         types.EdgeInsets(12),
+				FlexDirection:   "column", Gap: 8,
+			},
 		}
-		n := len(items)
-		l1 := widget.HBox(items[:imin(4, n)]...)
-		var l2 widget.Widget
-		if n > 4 { l2 = widget.HBox(items[4:imin(8, n)]...) }
-		envLine = widget.Div(
-			widget.Style{Padding: types.EdgeInsetsLTRB(0, 4, 0, 4), FlexDirection: "column", Gap: 4},
-			l1, l2,
-		)
-	}
-
-	// ── 端口状态 ──
-	psWidget := widget.NewText(s.portStatus, green)
-	if !s.portOK && s.portStatus != "" {
-		psWidget = widget.NewText(s.portStatus, red)
-	}
-
-	// ── 区块标题 ──
-	sectionTitle := func(t string) widget.Widget {
-		return widget.Div(
-			widget.Style{Padding: types.EdgeInsetsLTRB(0, 4, 0, 2)},
-			widget.NewText(t, muted),
-		)
-	}
-	cardDiv := func(children ...widget.Widget) widget.Widget {
-		args := []interface{}{widget.Style{
-			BackgroundColor: types.ColorRef(30, 31, 36),
-			BorderRadius:    8,
-			BorderColor:     types.ColorRef(53, 55, 64),
-			BorderWidth:     1,
-			Padding:         types.EdgeInsets(12),
-			FlexDirection:   "column", Gap: 8,
-		}}
-		for _, c := range children { args = append(args, c) }
+		for _, c2 := range ch { args = append(args, c2) }
 		return widget.Div(args...)
 	}
 
-	// ── 新增服务商 ──
+	// ── 新增面板 ──
 	var addPanel widget.Widget
 	if s.adding {
-		nIn := widget.NewInput("deepseek-vllm", func(t string) { s.newName = t })
-		nIn.Text = s.newName; nIn.BGColor = inputBg
+		nIn := widget.NewInput("my-provider", func(t string) { s.newName = t })
+		nIn.Text = s.newName
 		uIn := widget.NewInput("https://api.example.com/v1", func(t string) { s.newURL = t })
-		uIn.Text = s.newURL; uIn.BGColor = inputBg
+		uIn.Text = s.newURL
 		tagIn := widget.NewInputTag(s.newModels...)
 		tagIn.Placeholder = "输入模型名，回车添加"
 		tagIn.OnChange = func(t []string) { s.newModels = t }
-		addArgs := []interface{}{widget.Style{
-			BackgroundColor: types.ColorRef(37, 38, 43),
-			BorderRadius:    8, Padding: types.EdgeInsets(12),
-			FlexDirection: "column", Gap: 8,
-		},
-			widget.NewText("新增服务商", textCol),
-			row(label("名称"), w220(nIn)),
-			row(label("API URL"), w220(uIn)),
-			row(label("模型"), tagIn),
+
+		addPanel = widget.Div(
+			widget.Style{
+				BackgroundColor: types.ColorRef(13, 17, 23),
+				BorderRadius:    8,
+				BorderColor:     borderClr,
+				BorderWidth:     1,
+				Padding:         types.EdgeInsets(12),
+				FlexDirection:   "column", Gap: 8,
+			},
+			widget.NewText("新增服务商", text),
+			rw(lb("名称"), w220(nIn)),
+			rw(lb("API地址"), w220(uIn)),
+			tagIn,
 			widget.HBox(widget.SpacerDiv(),
 				widget.NewButton("取消", func() { s.adding = false; s.SetState() }).
-					WithColor(types.ColorFromRGB(53, 55, 64)).WithTextColor(textCol),
+					WithColor(btnDim).WithTextColor(text),
 				widget.Div(widget.Style{Width: 8}),
-				widget.NewButton("添加", s.confirmAdd).WithColor(primary).WithMinWidth(100),
+				widget.NewButton("添加", s.confirmAdd).
+					WithColor(blue).WithMinWidth(100),
 			),
-		}
-		addPanel = widget.Div(addArgs...)
+		)
 	}
 
-	// ── 服务商卡片 ──
-	provCard := cardDiv(
-		row(label("服务商"), providerSel),
-		row(label("接口地址"), w220(baseURLInput)),
-		row(label("API 密钥"), w220(apiKeyInput)),
-		widget.HBox(widget.SpacerDiv(),
-			widget.NewLink("+ 新增服务商", func() { s.adding = true; s.SetState() }),
-			widget.Div(widget.Style{Width: 8}),
-			widget.NewButton("保存", s.saveConfig).WithColor(primary).WithMinWidth(80),
-		),
-		msgEl,
-	)
+	// ── 环境检测 ──
+	var envItems []widget.Widget
+	for _, e := range envChecks {
+		ico, col := "✗", red
+		if s.envOK[e.name] { ico, col = "✓", green }
+		envItems = append(envItems, widget.NewText(ico+" "+e.name, col))
+	}
+	envLine := widget.HBox(envItems...)
 
-	// ── 服务器卡片 ──
-	serverCard := cardDiv(
-		row(label("端口"), w220(portInput)),
-		widget.HBox(widget.SpacerDiv(),
-			widget.NewButton("检测端口", s.checkPort).
-				WithColor(types.ColorFromRGB(53, 55, 64)).WithTextColor(primary),
-		),
-		psWidget,
-		widget.NewButton(func() string {
-			if running { return "停止服务器" }
-			return "启动服务器"
-		}(), s.toggleServer).
-			WithColor(func() types.Color {
-				if running { return red }
-				return primary
-			}()).
-			WithMinWidth(140),
-		errEl,
-	)
+	// ── 端口状态 ──
+	psW := widget.NewText(s.portStatus, green)
+	if !s.portOK && s.portStatus != "" { psW = widget.NewText(s.portStatus, red) }
 
-	// ── 完整布局 ──
+	// ── 区域 ──
+	sectionTitle := func(t string) widget.Widget {
+		return widget.NewText(t, muted)
+	}
+	
+
 	body := widget.Div(
 		widget.Style{Padding: types.EdgeInsets(16), FlexDirection: "column", Gap: 10},
-		widget.HBox(widget.NewText(statusText, statusColor), widget.SpacerDiv(), cfgLine),
-		sectionTitle("服务商"),
-		provCard,
+		widget.HBox(widget.NewText(st, sc), widget.SpacerDiv(),
+			func() widget.Widget {
+				if configured { return widget.NewText(s.provider, green) }
+				return widget.NewText("未配置 API Key", warn)
+			}(),
+		),
+		// SERVICE PROVIDER
+		sectionTitle("SERVICE PROVIDER"),
+		card(
+			rw(lb("Provider"), providerSel),
+			rw(lb("Base URL"), w220(baseURLInput)),
+			rw(lb("API Key"), w220(apiKeyInput)),
+			widget.HBox(widget.SpacerDiv(),
+				widget.NewButton("+ New", func() { s.adding = true; s.SetState() }).
+					WithColor(btnDim).WithTextColor(blue),
+				widget.Div(widget.Style{Width: 8}),
+				widget.NewButton("Save", s.saveConfig).WithColor(blue).WithMinWidth(80),
+			),
+			msgEl,
+		),
 		addPanel,
-		sectionTitle("环境"),
-		cardDiv(envLine),
-		sectionTitle("服务器"),
-		serverCard,
+		// ENVIRONMENT
+		sectionTitle("ENVIRONMENT"),
+		card(envLine),
+		// SERVER
+		sectionTitle("SERVER"),
+		card(
+			rw(lb("Port"), w220(portInput)),
+			widget.HBox(widget.SpacerDiv(),
+				widget.NewButton("Check Port", s.checkPort).
+					WithColor(btnDim).WithTextColor(blue),
+			),
+			psW,
+			widget.NewButton(func() string {
+				if running { return "Stop Server" }
+				return "Start Server"
+			}(), s.toggleServer).
+				WithColor(func() types.Color {
+					if running { return red }
+					return blue
+				}()).
+				WithMinWidth(140),
+			errEl,
+		),
 		widget.SpacerDiv(),
 		widget.NewText(fmt.Sprintf("http://localhost:%d  —  PairCode IDE", s.serverPort), muted),
 	)
 
 	return widget.VBox(
 		titleBar(),
-		&widget.Container{
-			Height:     1,
-			Background: &widget.PaintWidget{Color: ptrColor(53, 55, 64)},
-		},
-		&widget.Expanded{
-			SingleChildWidget: widget.SingleChildWidget{Child: body},
-			Flex:              1,
-		},
+		&widget.Container{Height: 1, Background: &widget.PaintWidget{Color: ptrColor(48, 54, 61)}},
+		&widget.Expanded{SingleChildWidget: widget.SingleChildWidget{Child: body}, Flex: 1},
 	)
 }
 
-// ── 自定义标题栏 ──
+// ── 标题栏 ──
 
 func titleBar() widget.Widget {
-	primary := types.ColorFromRGB(99, 102, 241)
-	tc := types.ColorFromRGB(228, 228, 231)
-
+	blue := types.ColorFromRGB(88, 166, 255)
+	tc := types.ColorFromRGB(240, 246, 252)
 	return widget.Div(
-		widget.Style{Height: 36, BackgroundColor: types.ColorRef(26, 27, 30)},
+		widget.Style{Height: 36, BackgroundColor: types.ColorRef(13, 17, 23)},
 		widget.HBox(
 			&widget.Expanded{
 				SingleChildWidget: widget.SingleChildWidget{
-					Child: widget.Div(
-						widget.Style{Padding: types.EdgeInsetsLTRB(14, 0, 0, 0), Height: 36},
+					Child: widget.Div(widget.Style{Padding: types.EdgeInsetsLTRB(14, 0, 0, 0), Height: 36},
 						widget.HBox(
-							widget.NewText("◆", primary),
+							widget.NewText("◈", blue),
 							widget.Div(widget.Style{Width: 8}),
-							widget.NewText("PairCode", tc),
+							widget.NewText("PairCode IDE", tc),
 						),
 					),
 				},
@@ -477,7 +442,7 @@ func titleBar() widget.Widget {
 func tbBtn(label string, onClick func()) widget.Widget {
 	return &widget.Button{
 		Text: label, OnClick: onClick,
-		Color: types.ColorFromRGB(26, 27, 30), TextColor: types.ColorFromRGB(161, 161, 170),
+		Color: types.ColorFromRGB(13, 17, 23), TextColor: types.ColorFromRGB(139, 148, 158),
 		MinWidth: 46, MinHeight: 36,
 	}
 }
@@ -485,11 +450,6 @@ func tbBtn(label string, onClick func()) widget.Widget {
 func ptrColor(r, g, b uint8) *types.Color {
 	c := types.ColorFromRGB(r, g, b)
 	return &c
-}
-
-func imin(a, b int) int {
-	if a < b { return a }
-	return b
 }
 
 func openBrowser(port int) {
@@ -509,7 +469,7 @@ func main() {
 	cfg := app.DefaultConfig()
 	cfg.Title = "PairCode IDE"
 	cfg.Width = 480
-	cfg.Height = 640
+	cfg.Height = 620
 	cfg.Resizable = true
 	cfg.Borderless = true
 
