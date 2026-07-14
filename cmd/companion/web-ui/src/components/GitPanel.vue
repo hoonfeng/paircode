@@ -601,7 +601,7 @@ watch(showIgnoreEditor, v => { if (v) loadIgnore() })
 </script>
 
 <style scoped>
-.git-panel { display: flex; flex-direction: column; height: 100%; font-size: 12px; overflow: hidden; color: var(--text-primary); }
+.git-panel { display: flex; flex-direction: column; height: 100%; font-size: 12px; overflow: hidden; color: var(--text-primary); position: relative; }
 
 /* 加载与空状态 */
 .git-loading, .git-empty {
@@ -645,6 +645,8 @@ watch(showIgnoreEditor, v => { if (v) loadIgnore() })
 }
 .branch-filter-input {
   width: 100%; padding: 4px 8px; font-size: 12px;
+  background: var(--bg-primary); border: 1px solid var(--border-color);
+  color: var(--text-primary); outline: none; border-radius: 3px;
 }
 .branch-filter-input:focus { border-color: var(--accent); }
 .branch-list { flex: 1; overflow-y: auto; }

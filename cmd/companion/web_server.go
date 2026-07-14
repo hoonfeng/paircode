@@ -1985,7 +1985,6 @@ func (s *webServer) handleGitStatus(w http.ResponseWriter, r *http.Request) {
 	statusOut, err := runGitInternal(r.Context(), "status", "--porcelain")
 	if err == nil {
 		for _, line := range strings.Split(statusOut, "\n") {
-			line = strings.TrimSpace(line)
 			if len(line) < 4 {
 				continue
 			}
