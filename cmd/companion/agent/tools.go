@@ -531,7 +531,8 @@ func RegisterDefaultTools(r *Registry, root string) {
 	registerSearchTools(r, root)              // search_content / search_files（见 search.go）
 	registerGitTools(r, root)                 // git_status / git_diff / git_log / git_show / git_blame / git_add / ...（见 git.go）
 	registerWebTools(r)                       // web_fetch / web_search（联网，见 web.go）
-	registerPlanTool(r)                       // update_plan（任务清单，见 plan.go）
+	// update_plan 仅在自主模式外层 agent 注册（RunAutonomous → RegisterPlanOnlyTools），
+	// 普通模式不暴露规划工具，避免 Agent 误用。
 	registerShellTools(r, root)               // run_background / read_output / kill_process（后台命令，见 shell.go）
 	registerMemoryTools(r, root)              // memory_write/read/list/search（跨会话记忆，见 memory.go）
 	registerFindFilesByPatternTool(r, root)   // find_files_by_pattern（glob 查文件，支持 **，见 findfiles.go）
