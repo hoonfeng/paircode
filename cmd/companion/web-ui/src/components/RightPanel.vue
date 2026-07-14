@@ -268,7 +268,20 @@ function onScroll() {
     const el = msgRef.value
     scrollTopRef.value = el.scrollTop
     const threshold = 100
+    const wasNearBottom = isNearBottom.value
     isNearBottom.value = el.scrollTop + el.clientHeight >= el.scrollHeight - threshold
+    // 用户主动上翻→锁定自动滚底3秒
+    if (wasNearBottom && !isNearBottom.value) {
+      window.__scrollLockTimer = true
+      if (window.__scrollLockTimeout) clearTimeout(window.__scrollLockTimeout)
+      window.__scrollLockTimeout = setTimeout(() => { window.__scrollLockTimer = false }, 3000)
+    }
+    // 用户手动滚回底部→立即解锁
+    if (!wasNearBottom && isNearBottom.value) {
+      if (window.__scrollLockTimeout) { clearTimeout(window.__scrollLockTimeout) }
+      window.__scrollLockTimer = false
+    }
+    // 显示跳到底部按钮
     // 用户离开底部（滚动向上 > threshold）时隐藏跳底按钮
     showScrollDown.value = !isNearBottom.value && state.messages && state.messages.length > 0
     // 顶部懒加载：scrollTop < 100 且还有更早消息可加载
@@ -851,6 +864,8 @@ function startContentResizeObserver() {
   const wrap = msgRef.value.querySelector('.msg-list-wrap')
   if (!wrap) return
   contentResizeObserver = new ResizeObserver(() => {
+    // 用户主动上翻后锁定期间不自动滚底
+    if (window.__scrollLockTimer) return
     if (isNearBottom.value && msgRef.value && !loadingMoreTop.value) {
       msgRef.value.scrollTop = msgRef.value.scrollHeight
     }
@@ -1020,7 +1035,7 @@ onUnmounted(() => {
 .rp-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
 .rp-body { flex: 1; display: flex; flex-direction: row; overflow: hidden; min-height: 0; }
 .chat-area { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; max-width: 100%; }
-.chat-messages { flex: 1; overflow-y: auto; padding: 8px 12px; min-height: 0; position: relative; }
+.chat-messages { flex: 1; overflow-y: auto; padding: 8px 12px; min-height: 0; position: relative; overflow-anchor: none; }
 .msg-list-wrap { display: flex; flex-direction: column; gap: 12px; min-height: 100%; }
 .msg-item { display: flex; gap: 8px; align-items: flex-start; content-visibility: auto; contain-intrinsic-size: 60px; }
 .msg-user { flex-direction: row-reverse; justify-content: flex-start; gap: 10px; }
