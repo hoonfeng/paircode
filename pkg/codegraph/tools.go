@@ -236,7 +236,7 @@ func EnsureBuildIfNeeded(root string) (*Graph, bool, error) {
 		return nil, false, err
 	}
 	_ = result
-	return builder.goBuilder.Graph(), true, nil
+	return builder.Graph(), true, nil
 }
 
 // NormalizeFilePath 规范化文件路径（统一使用正斜杠，相对路径）。
