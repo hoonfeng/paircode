@@ -169,6 +169,8 @@ async function switchToWorkspace(ws) {
     state.openFiles = []
     state.activeFile = ''
     state.fileContents = {}
+    state.fileSavedContent = {}
+    state.fileDirty = {}
 
     // 加载目标工作区对话
     await loadConversationsForWorkspace(ws.path)
@@ -460,6 +462,7 @@ async function loadFileContent(path) {
   try {
     const data = await api.apiGet('/fs/read', { path })
     state.fileContents[path] = data.content || ''
+    state.fileSavedContent[path] = data.content || ''
     state.fileDirty[path] = false
   } catch (err) {
     state.fileContents[path] = `// 错误: ${err.message}`

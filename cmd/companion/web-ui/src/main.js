@@ -98,6 +98,7 @@ export const state = reactive({
   openFiles: [],
   activeFile: '',
   fileContents: {},
+  fileSavedContent: {}, // 磁盘上原始内容，用于准确判断是否修改
   fileDirty: {},
   cursorLine: 1,
   cursorCol: 1,

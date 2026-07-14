@@ -344,8 +344,10 @@ function copyCurrentLine() {
 
 // ── 编辑器内容变更 ──
 const onContentChange = (val) => {
-  state.fileContents[state.activeFile] = val
-  state.fileDirty[state.activeFile] = true
+  const path = state.activeFile
+  if (!path) return
+  state.fileContents[path] = val
+  state.fileDirty[path] = (val !== state.fileSavedContent[path])
 }
 const onCursorPos = (pos) => {
   state.cursorLine = pos.line
@@ -359,6 +361,7 @@ const saveFile = async () => {
   try {
     await api.apiPost('/fs/write', { path, content: state.fileContents[path] })
     state.fileDirty[path] = false
+    state.fileSavedContent[path] = state.fileContents[path]
   } catch (err) { window.$toast('保存失败: ' + err.message, 'error') }
 }
 
