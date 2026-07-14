@@ -8,12 +8,13 @@ package main
 import (
 	"fmt"
 	"log"
-	"os"
+	"os/exec"
 	"runtime"
 
 	"github.com/hoonfeng/goui/pkg/app"
 	"github.com/hoonfeng/goui/pkg/types"
 	"github.com/hoonfeng/goui/pkg/widget"
+	"github.com/hoonfeng/paircode/cmd/companion/core"
 
 	_ "github.com/hoonfeng/goui/pkg/platform"
 )
@@ -27,16 +28,32 @@ type PanelRoot struct {
 
 func (p *PanelRoot) CreateState() widget.State { return &panelState{} }
 
+// modelInfo 模型配置信息摘要。
+type modelInfo struct {
+	configured   bool
+	provider     string
+	model        string
+	baseURL      string
+}
+
 // panelState 启动面板运行时状态。
 type panelState struct {
 	widget.BaseState
 	port      int    // 端口号
 	err       string // 当前错误提示
 	autoStart bool   // 开机自启
+	models    modelInfo
 }
 
 func (s *panelState) InitState() {
-	s.port = InitCore() // 读取 core 配置取得默认端口
+	s.port = InitCore()
+	// 读取模型配置
+	s.models.configured = core.Configured()
+	if s.models.configured {
+		s.models.provider = core.Settings.Provider
+		s.models.model = core.MainModel()
+		s.models.baseURL = core.Settings.BaseURL
+	}
 }
 
 // toggleServer 切换服务器启动/停止。
@@ -59,7 +76,6 @@ func (s *panelState) toggleServer() {
 	}
 	s.err = ""
 	s.SetState()
-	// 自动打开浏览器
 	openBrowser(s.port)
 }
 
@@ -67,19 +83,41 @@ func (s *panelState) toggleServer() {
 func (s *panelState) Build(ctx widget.BuildContext) widget.Widget {
 	running := IsWebServerRunning()
 
-	// 状态颜色与文字
-	statusColor := types.ColorFromRGB(82, 196, 26) // 绿色
+	// 状态
+	statusColor := types.ColorFromRGB(82, 196, 26)
 	statusText := fmt.Sprintf("● 运行中 (端口 %d)", s.port)
 	if !running {
-		statusColor = types.ColorFromRGB(160, 160, 160) // 灰色
+		statusColor = types.ColorFromRGB(160, 160, 160)
 		statusText = "● 已停止"
 	}
+
+	// 模型配置信息
+	var modelWidget widget.Widget
+	if s.models.configured {
+		t := fmt.Sprintf("模型: %s / %s", s.models.provider, s.models.model)
+		modelWidget = widget.HBox(
+			widget.NewText("已配置: ", types.ColorFromRGB(82, 196, 26)),
+			widget.NewText(t, types.ColorFromRGB(96, 98, 102)),
+		)
+	} else {
+		modelWidget = widget.NewText(
+			"⚠ 未配置 API — 启动后请在浏览器中打开设置面板完成配置",
+			types.ColorFromRGB(234, 67, 53),
+		)
+	}
+
+	// 端口输入（宽度受限：用 Container 约束）
+	portInput := widget.NewInput("9090", func(text string) {
+		if text != "" {
+			fmt.Sscanf(text, "%d", &s.port)
+		}
+	})
 
 	return widget.Div(
 		widget.Style{
 			Padding:       types.EdgeInsets(24),
 			FlexDirection: "column",
-			Gap:           12,
+			Gap:           10,
 		},
 		// 标题 + 状态
 		widget.HBox(
@@ -87,15 +125,19 @@ func (s *panelState) Build(ctx widget.BuildContext) widget.Widget {
 			widget.SpacerDiv(),
 			widget.NewText(statusText, statusColor),
 		),
-		// 端口行
+		// 分隔线
+		&widget.Container{
+			Height:     1,
+			Margin:     types.EdgeInsetsLTRB(0, 2, 0, 2),
+			Background: &widget.PaintWidget{Color: ptrColor(220, 224, 228)},
+		},
+		// 模型配置信息
+		modelWidget,
+		// 端口行（Input 用 Div 限制宽度 100px）
 		widget.HBox(
 			widget.NewText("监听端口:", types.ColorFromRGB(96, 98, 102)),
 			widget.SpacerDiv(),
-			widget.NewInput("9090", func(text string) {
-				if text != "" {
-					fmt.Sscanf(text, "%d", &s.port)
-				}
-			}),
+			widget.Div(widget.Style{Width: 100}, portInput),
 		),
 		// 开机自动启动
 		widget.HBox(
@@ -113,30 +155,34 @@ func (s *panelState) Build(ctx widget.BuildContext) widget.Widget {
 				return "启动服务器"
 			}(), s.toggleServer).
 				WithColor(func() types.Color {
-					if running { return types.ColorFromRGB(234, 67, 53) }
+					if running {
+						return types.ColorFromRGB(234, 67, 53)
+					}
 					return types.ColorFromRGB(64, 158, 255)
 				}()).
 				WithMinWidth(140),
 		),
 		// 提示文字
 		widget.NewText(
-			fmt.Sprintf("Web IDE 模式 — 在浏览器中访问 http://localhost:%d 使用", s.port),
+			fmt.Sprintf("Web IDE — 浏览器访问 http://localhost:%d", s.port),
 			types.ColorFromRGB(144, 147, 153),
 		),
 	)
+}
+
+// ptrColor 创建 *types.Color 辅助函数。
+func ptrColor(r, g, b uint8) *types.Color {
+	c := types.ColorFromRGB(r, g, b)
+	return &c
 }
 
 // openBrowser 在默认浏览器中打开 URL。
 func openBrowser(port int) {
 	url := fmt.Sprintf("http://localhost:%d", port)
 	go func() {
-		proc, err := os.StartProcess("rundll32",
-			[]string{"rundll32", "url.dll,FileProtocolHandler", url},
-			&os.ProcAttr{Files: []*os.File{nil, nil, nil}})
-		if err != nil {
+		// os/exec.Command 会自动搜索 PATH（os.StartProcess 不搜索）
+		if err := exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start(); err != nil {
 			log.Printf("打开浏览器失败: %v", err)
-		} else {
-			proc.Release()
 		}
 	}()
 }
@@ -154,7 +200,7 @@ func main() {
 	cfg := app.DefaultConfig()
 	cfg.Title = "PairCode 启动面板"
 	cfg.Width = 480
-	cfg.Height = 360
+	cfg.Height = 380
 	cfg.Resizable = false
 
 	// ---- Ready：首帧后注册系统托盘 ----
