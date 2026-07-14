@@ -272,7 +272,7 @@
     </Teleport>
 
     <!-- 提交详情 -->
-    <Modal v-if="showCommitDetailModal" @close="showCommitDetailModal = false" :maxWidth="'520px'">
+    <Modal v-if="showCommitDetailModal" @close="showCommitDetailModal = false" :maxWidth="'600px'">
       <template #title>{{ detailCommit?.short }} — {{ detailCommit?.msg?.substring(0, 40) }}</template>
       <div class="detail-content">
         <div class="detail-meta">
@@ -287,6 +287,17 @@
       <div class="form-actions" style="padding: 8px 16px;">
         <button class="git-btn" @click="showCommitDetailModal = false">关闭</button>
         <button class="git-btn btn-primary" @click="copyHash(detailCommit?.hash)">复制哈希</button>
+      </div>
+    </Modal>
+
+    <!-- 文件差异对话框 -->
+    <Modal v-if="showDiffDialog" @close="showDiffDialog = false" :maxWidth="'700px'">
+      <template #title><span class="diff-title">{{ diffFilePath }}</span></template>
+      <div class="diff-content">
+        <pre class="diff-text">{{ diffContent || '（无差异）' }}</pre>
+      </div>
+      <div class="form-actions" style="padding: 8px 16px;">
+        <button class="git-btn" @click="showDiffDialog = false">关闭</button>
       </div>
     </Modal>
   </div>
@@ -329,6 +340,9 @@ const showIgnoreEditor = ref(false)
 const showCommitDetailModal = ref(false)
 const detailCommit = ref(null)
 const commitDiff = ref('')
+const showDiffDialog = ref(false)
+const diffFilePath = ref('')
+const diffContent = ref('')
 
 const commitMsg = ref('')
 const commitDesc = ref('')
@@ -558,12 +572,14 @@ async function loadIgnore() {
 }
 
 async function showFileDiff(path, staged) {
+  diffFilePath.value = path
+  diffContent.value = '加载中...'
+  showDiffDialog.value = true
   try {
     const res = await api.apiGet('/git/diff', { file: path, staged: staged ? 'true' : 'false' })
-    const content = res.diff || '（无差异）'
-    window.$alert?.(content, '差异 — ' + path)
+    diffContent.value = res.diff || '（无差异）'
   } catch (err) {
-    window.$toast?.('无法加载差异: ' + err.message, 'error')
+    diffContent.value = '无法加载差异: ' + err.message
   }
 }
 
@@ -804,6 +820,29 @@ watch(() => state.workspaceRoot, () => { loadStatus() })
   font-family: monospace; font-size: 11px; line-height: 1.5;
   overflow-x: auto; color: var(--text-primary); white-space: pre-wrap;
   max-height: 300px; overflow-y: auto;
+}
+
+/* 文件差异对话框 */
+.diff-title {
+  display: inline-block;
+  max-width: 500px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.diff-content {
+  padding: 12px 16px;
+  max-height: 400px;
+  overflow: auto;
+}
+.diff-text {
+  font-family: monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  color: var(--text-primary);
+  margin: 0;
 }
 
 /* 滚动条 */

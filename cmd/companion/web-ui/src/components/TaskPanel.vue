@@ -4,7 +4,7 @@
       <span class="task-chevron">{{ expanded ? '▾' : '▸' }}</span>
       <SvgIcon name="list" :size="12" />
       <span class="task-title">子任务进度</span>
-      <span class="task-progress">{{ activeCount }}/{{ tasks.length }}</span>
+      <span class="task-progress">{{ doneCount }}/{{ tasks.length }}</span>
       <span class="task-bar">
         <span class="task-bar-fill" :style="{ width: pct + '%' }"></span>
       </span>
