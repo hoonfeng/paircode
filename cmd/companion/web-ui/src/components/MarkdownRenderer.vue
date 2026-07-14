@@ -1315,7 +1315,7 @@ watch(() => props.theme, () => {
 .md-html :deep(h2) { font-size: 14px; }
 .md-html :deep(h3) { font-size: 13px; }
 .md-html :deep(p) { margin: 2px 0; }
-.md-html :deep(ul), .md-html :deep(ol) { margin: 2px 0; padding-left: 18px; }
+.md-html :deep(ul) { margin: 2px 0; padding-left: 18px; }\n.md-html :deep(ol) { margin: 2px 0; padding-left: 28px; }
 .md-html :deep(li) { margin: 1px 0; }
 .md-html :deep(code) { background: rgba(0,0,0,0.15); padding: 1px 4px; border-radius: 3px; font-family: var(--font-code); font-size: 12px; }
 .md-html :deep(pre) { background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 6px; padding: 6px 10px; margin: 4px 0; overflow-x: auto; font-size: 12px; line-height: 1.4; white-space: pre-wrap; word-break: break-word; max-width: 100%; }

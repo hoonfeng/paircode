@@ -457,5 +457,5 @@ onUnmounted(() => { document.removeEventListener('keydown', handleKeydown) })
 .md-mode-btn:hover:not(.active) { background: var(--bg-hover); color: var(--text-primary); }
 
 .editor-wrapper { height: 100%; overflow: hidden; display: flex; flex-direction: column; }
-.md-preview-wrap { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+.md-preview-wrap { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 16px 20px; }
 </style>
