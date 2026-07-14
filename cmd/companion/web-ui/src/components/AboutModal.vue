@@ -18,10 +18,10 @@
         <!-- 描述 -->
         <div class="about-section">
           <p class="about-description">
-            PairCode 是一款「对话即编程」的 AI 原生 IDE。
-            在这里，你无需死记语法、无需翻阅文档，只需用自然语言描述你想要的功能，
-            AI 就能自主完成代码编写、文件管理、命令执行。
-            而你，只需像产品经理一样提需求、做决策。
+            PairCode IDE 是一个 AI 辅助编程的 Web 版本集成开发环境。
+            它将 AI 对话能力深度融入编码工作流，你可以像和资深开发者对话一样，
+            通过自然语言描述需求，AI 自动理解上下文并生成代码、修复错误、优化结构。
+            无需切换工具，在同一个界面内完成编码、调试、版本控制全部环节。
           </p>
         </div>
 
@@ -33,10 +33,10 @@
             <li><SvgIcon name="file" :size="14" color="var(--accent)" /> 智能代码编辑器 — 多语言语法高亮，流畅的编辑体验</li>
             <li><SvgIcon name="git-branch" :size="14" color="var(--accent)" /> Git 版本控制 — 在对话中完成全部 Git 操作</li>
             <li><SvgIcon name="terminal" :size="14" color="var(--accent)" /> 内置终端 — 无需离开 IDE 即可执行命令</li>
-            <li><SvgIcon name="search" :size="14" color="var(--accent)" /> 全局搜索 — 快速搜索文件、代码内容与符号</li>
-            <li><SvgIcon name="settings" :size="14" color="var(--accent)" /> BUG 自动检测 — AI 自动发现并修复代码问题</li>
-            <li><SvgIcon name="tool" :size="14" color="var(--accent)" /> 丰富工具集 — 文件处理、图片分析、办公文档、网页抓取等</li>
-            <li><SvgIcon name="grid" :size="14" color="var(--accent)" /> Skills / MCP 扩展 — 通过技能市场扩展 IDE 能力</li>
+            <li><SvgIcon name="search" :size="14" color="var(--accent)" /> 全局搜索 — 快速搜索文件与代码内容</li>
+            <li><SvgIcon name="settings" :size="14" color="var(--accent)" /> 自主 Agent 模式 — AI 主动分析项目并自动执行任务</li>
+            <li><SvgIcon name="grid" :size="14" color="var(--accent)" /> 对话历史管理 — 自动保存、回溯与继续历史对话</li>
+            <li><SvgIcon name="tool" :size="14" color="var(--accent)" /> Skills / MCP 扩展 — 通过技能市场扩展 IDE 能力</li>
           </ul>
         </div>
 
@@ -46,10 +46,10 @@
           <div class="tech-stack">
             <span class="tech-badge">Go</span>
             <span class="tech-badge">Vue 3</span>
-            <span class="tech-badge">CodeMirror 6</span>
-            <span class="tech-badge">GWui</span>
             <span class="tech-badge">WebSocket</span>
             <span class="tech-badge">MCP</span>
+            <span class="tech-badge">CodeMirror</span>
+            <span class="tech-badge">REST API</span>
           </div>
         </div>
 
@@ -60,7 +60,7 @@
             <div class="info-row"><span class="info-label">主机名</span><span>{{ sysInfo.hostname }}</span></div>
             <div class="info-row"><span class="info-label">操作系统</span><span>{{ sysInfo.os }}</span></div>
             <div class="info-row"><span class="info-label">工作区</span><span class="info-path">{{ sysInfo.workspace }}</span></div>
-            <div class="info-row"><span class="info-label">Go 版本</span><span>{{ sysInfo.goos }}</span></div>
+            <div class="info-row"><span class="info-label">平台信息</span><span>{{ sysInfo.goos }}</span></div>
           </div>
           <div v-else class="loading-info">加载中...</div>
         </div>
@@ -88,7 +88,7 @@ defineProps({
   showHelpBtn: { type: Boolean, default: true },
 })
 
-const version = ref('1.0.0')
+const version = ref('v0.1.0')
 const sysInfo = ref({})
 const sysLoading = ref(true)
 
