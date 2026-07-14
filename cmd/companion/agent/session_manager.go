@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 )
 
 // Compressor 上下文压缩器（语义别名，复用 Provider 接口）。
@@ -816,18 +817,22 @@ func (m *SessionManager) GetWorkspaceRoot(convID string) string {
 }
 
 // doAutoCommit 在任务完成后自动执行 git add + git commit。
-// root 为工作区根目录，task 为用户任务文本（用其作 commit message），result 为最终结果摘要。
+// 从 agent 的 result（最终输出）中提取第一行实质性内容作为 commit message，
+// 不直接使用用户消息，确保提交信息反映 agent 实际完成的工作。
 // 自动设置 git user config 避免因全局配置缺失导致提交失败。
 // 执行失败时只日志不 panic（不影响 agent 主流程）。
 func doAutoCommit(root, task, result string) {
 	if root == "" {
 		return
 	}
-	// 用任务描述作 commit message
-	msg := strings.TrimSpace(task)
-	if len(msg) > 60 {
-		// 截取到最后一个完整词
-		msg = msg[:60]
+	// 从 agent 生成的结果中提取第一行实质性内容作 commit message
+	msg := extractSummary(result)
+	if msg == "" {
+		// 备选：如果 agent 结果为空，用任务描述
+		msg = strings.TrimSpace(task)
+	}
+	if len(msg) > 72 {
+		msg = msg[:72]
 		if idx := strings.LastIndex(msg, " "); idx > 30 {
 			msg = msg[:idx]
 		}
@@ -835,7 +840,6 @@ func doAutoCommit(root, task, result string) {
 	if msg == "" {
 		msg = "auto commit"
 	}
-	// git add -A
 	add := exec.Command("git", "add", "-A")
 	add.Dir = root
 	if out, err := add.CombinedOutput(); err != nil {
@@ -860,6 +864,37 @@ func doAutoCommit(root, task, result string) {
 		return
 	}
 	fmt.Printf("[auto-commit] ✅ 已自动提交: auto: %s\n", msg)
+}
+
+// extractSummary 从 agent 输出的结果中提取第一行实质性内容。
+// 跳过 markdown 标题、空行、纯标点行，找到第一段有实际文字的句子。
+func extractSummary(text string) string {
+	lines := strings.Split(text, "\n")
+	for _, line := range lines {
+		l := strings.TrimSpace(line)
+		// 跳过 markdown 标题、分割线、空行
+		l = strings.TrimLeft(l, "#*> \t")
+		if l == "" || len(l) < 4 {
+			continue
+		}
+		// 跳过纯标点/符号行（如 "---"、"==="、"****"）
+		hasLetter := false
+		for _, r := range l {
+			if r > 127 || unicode.IsLetter(r) {
+				hasLetter = true
+				break
+			}
+		}
+		if !hasLetter {
+			continue
+		}
+		// 取第一句（到句号/换行），最长 72 字
+		if idx := strings.IndexAny(l, "。.！!\n"); idx > 0 {
+			l = l[:idx+1]
+		}
+		return strings.TrimSpace(l)
+	}
+	return ""
 }
 
 // AppendPersistedMessage 追加一条消息到 MessageStore（持久化）。
