@@ -1,0 +1,92 @@
+<!-- API 文档 — PairCode IDE（Web 版本） -->
+<div style="display:flex;flex-direction:column;gap:14px;padding:8px;color:#cccccc;font-size:14px;line-height:1.7;">
+
+<p style="margin:0;color:#bbbbbb;">
+PairCode IDE 提供一组 REST API 接口，供前端和外部工具与后端交互。
+以下按功能分类列出所有 API 路径及其用途说明。
+</p>
+
+<h2 style="color:#e0e0e0;font-size:18px;margin:0;">健康检查</h2>
+<table style="width:100%;border-collapse:collapse;margin:4px 0;font-size:13px;">
+<tr style="background:#2d2d2d;"><th style="border:1px solid #404040;padding:6px 8px;text-align:left;color:#e0e0e0;">路径</th><th style="border:1px solid #404040;padding:6px 8px;text-align:left;color:#e0e0e0;">说明</th></tr>
+<tr><td style="border:1px solid #404040;padding:6px 8px;color:#ce9178;">GET /health</td><td style="border:1px solid #404040;padding:6px 8px;">服务健康检查，返回运行状态</td></tr>
+</table>
+
+<h2 style="color:#e0e0e0;font-size:18px;margin:12px 0 0 0;">文件系统</h2>
+<table style="width:100%;border-collapse:collapse;margin:4px 0;font-size:13px;">
+<tr style="background:#2d2d2d;"><th style="border:1px solid #404040;padding:6px 8px;text-align:left;color:#e0e0e0;">路径</th><th style="border:1px solid #404040;padding:6px 8px;text-align:left;color:#e0e0e0;">说明</th></tr>
+<tr><td style="border:1px solid #404040;padding:6px 8px;color:#ce9178;">POST /api/read-file</td><td style="border:1px solid #404040;padding:6px 8px;">读取文件内容</td></tr>
+<tr><td style="border:1px solid #404040;padding:6px 8px;color:#ce9178;">POST /api/write-file</td><td style="border:1px solid #404040;padding:6px 8px;">写入/覆盖文件</td></tr>
+<tr><td style="border:1px solid #404040;padding:6px 8px;color:#ce9178;">POST /api/list-files</td><td style="border:1px solid #404040;padding:6px 8px;">列出目录内容</td></tr>
+<tr><td style="border:1px solid #404040;padding:6px 8px;color:#ce9178;">POST /api/search-files</td><td style="border:1px solid #404040;padding:6px 8px;">按通配符搜索文件</td></tr>
+<tr><td style="border:1px solid #404040;padding:6px 8px;color:#ce9178;">POST /api/search-content</td><td style="border:1px solid #404040;padding:6px 8px;">按正则搜索文件内容</td></tr>
+<tr><td style="border:1px solid #404040;padding:6px 8px;color:#ce9178;">POST /api/move-file</td><td style="border:1px solid #404040;padding:6px 8px;">移动/重命名文件</td></tr>
+<tr><td style="border:1px solid #404040;padding:6px 8px;color:#ce9178;">POST /api/delete-file</td><td style="border:1px solid #404040;padding:6px 8px;">删除文件</td></tr>
+</table>
+
+<h2 style="color:#e0e0e0;font-size:18px;margin:12px 0 0 0;">工作区管理</h2>
+<table style="width:100%;border-collapse:collapse;margin:4px 0;font-size:13px;">
+<tr style="background:#2d2d2d;"><th style="border:1px solid #404040;padding:6px 8px;text-align:left;color:#e0e0e0;">路径</th><th style="border:1px solid #404040;padding:6px 8px;text-align:left;color:#e0e0e0;">说明</th></tr>
+<tr><td style="border:1px solid #404040;padding:6px 8px;color:#ce9178;">POST /api/open-folder</td><td style="border:1px solid #404040;padding:6px 8px;">打开文件夹作为工作区</td></tr>
+<tr><td style="border:1px solid #404040;padding:6px 8px;color:#ce9178;">POST /api/workspace-root</td><td style="border:1px solid #404040;padding:6px 8px;">获取/设置工作区根目录</td></tr>
+</table>
+
+<h2 style="color:#e0e0e0;font-size:18px;margin:12px 0 0 0;">系统设置</h2>
+<table style="width:100%;border-collapse:collapse;margin:4px 0;font-size:13px;">
+<tr style="background:#2d2d2d;"><th style="border:1px solid #404040;padding:6px 8px;text-align:left;color:#e0e0e0;">路径</th><th style="border:1px solid #404040;padding:6px 8px;text-align:left;color:#e0e0e0;">说明</th></tr>
+<tr><td style="border:1px solid #404040;padding:6px 8px;color:#ce9178;">POST /api/settings-get</td><td style="border:1px solid #404040;padding:6px 8px;">获取设置项值</td></tr>
+<tr><td style="border:1px solid #404040;padding:6px 8px;color:#ce9178;">POST /api/settings-set</td><td style="border:1px solid #404040;padding:6px 8px;">设置配置项</td></tr>
+<tr><td style="border:1px solid #404040;padding:6px 8px;color:#ce9178;">POST /api/run-command</td><td style="border:1px solid #404040;padding:6px 8px;">执行 Shell 命令</td></tr>
+</table>
+
+<h2 style="color:#e0e0e0;font-size:18px;margin:12px 0 0 0;">AI 模型</h2>
+<table style="width:100%;border-collapse:collapse;margin:4px 0;font-size:13px;">
+<tr style="background:#2d2d2d;"><th style="border:1px solid #404040;padding:6px 8px;text-align:left;color:#e0e0e0;">路径</th><th style="border:1px solid #404040;padding:6px 8px;text-align:left;color:#e0e0e0;">说明</th></tr>
+<tr><td style="border:1px solid #404040;padding:6px 8px;color:#ce9178;">POST /api/chat</td><td style="border:1px solid #404040;padding:6px 8px;">发送对话消息</td></tr>
+<tr><td style="border:1px solid #404040;padding:6px 8px;color:#ce9178;">POST /api/stop</td><td style="border:1px solid #404040;padding:6px 8px;">停止 AI 生成</td></tr>
+<tr><td style="border:1px solid #404040;padding:6px 8px;color:#ce9178;">POST /api/models</td><td style="border:1px solid #404040;padding:6px 8px;">获取可用模型列表</td></tr>
+</table>
+
+<h2 style="color:#e0e0e0;font-size:18px;margin:12px 0 0 0;">对话管理</h2>
+<table style="width:100%;border-collapse:collapse;margin:4px 0;font-size:13px;">
+<tr style="background:#2d2d2d;"><th style="border:1px solid #404040;padding:6px 8px;text-align:left;color:#e0e0e0;">路径</th><th style="border:1px solid #404040;padding:6px 8px;text-align:left;color:#e0e0e0;">说明</th></tr>
+<tr><td style="border:1px solid #404040;padding:6px 8px;color:#ce9178;">POST /api/conversations</td><td style="border:1px solid #404040;padding:6px 8px;">列出历史会话</td></tr>
+<tr><td style="border:1px solid #404040;padding:6px 8px;color:#ce9178;">POST /api/conversation-load</td><td style="border:1px solid #404040;padding:6px 8px;">加载指定会话</td></tr>
+<tr><td style="border:1px solid #404040;padding:6px 8px;color:#ce9178;">POST /api/conversation-delete</td><td style="border:1px solid #404040;padding:6px 8px;">删除会话</td></tr>
+<tr><td style="border:1px solid #404040;padding:6px 8px;color:#ce9178;">POST /api/conversation-rename</td><td style="border:1px solid #404040;padding:6px 8px;">重命名会话</td></tr>
+</table>
+
+<h2 style="color:#e0e0e0;font-size:18px;margin:12px 0 0 0;">Git 操作</h2>
+<table style="width:100%;border-collapse:collapse;margin:4px 0;font-size:13px;">
+<tr style="background:#2d2d2d;"><th style="border:1px solid #404040;padding:6px 8px;text-align:left;color:#e0e0e0;">路径</th><th style="border:1px solid #404040;padding:6px 8px;text-align:left;color:#e0e0e0;">说明</th></tr>
+<tr><td style="border:1px solid #404040;padding:6px 8px;color:#ce9178;">POST /api/git-diff</td><td style="border:1px solid #404040;padding:6px 8px;">查看文件差异</td></tr>
+<tr><td style="border:1px solid #404040;padding:6px 8px;color:#ce9178;">POST /api/git-commit</td><td style="border:1px solid #404040;padding:6px 8px;">提交变更</td></tr>
+<tr><td style="border:1px solid #404040;padding:6px 8px;color:#ce9178;">POST /api/git-status</td><td style="border:1px solid #404040;padding:6px 8px;">查看仓库状态</td></tr>
+<tr><td style="border:1px solid #404040;padding:6px 8px;color:#ce9178;">POST /api/git-log</td><td style="border:1px solid #404040;padding:6px 8px;">查看提交历史</td></tr>
+</table>
+
+<h2 style="color:#e0e0e0;font-size:18px;margin:12px 0 0 0;">Skills / MCP / 市场</h2>
+<table style="width:100%;border-collapse:collapse;margin:4px 0;font-size:13px;">
+<tr style="background:#2d2d2d;"><th style="border:1px solid #404040;padding:6px 8px;text-align:left;color:#e0e0e0;">路径</th><th style="border:1px solid #404040;padding:6px 8px;text-align:left;color:#e0e0e0;">说明</th></tr>
+<tr><td style="border:1px solid #404040;padding:6px 8px;color:#ce9178;">POST /api/skills-list</td><td style="border:1px solid #404040;padding:6px 8px;">列出已安装技能</td></tr>
+<tr><td style="border:1px solid #404040;padding:6px 8px;color:#ce9178;">POST /api/skill-load</td><td style="border:1px solid #404040;padding:6px 8px;">加载技能详情</td></tr>
+<tr><td style="border:1px solid #404040;padding:6px 8px;color:#ce9178;">POST /api/mcp-list</td><td style="border:1px solid #404040;padding:6px 8px;">列出 MCP 服务器</td></tr>
+<tr><td style="border:1px solid #404040;padding:6px 8px;color:#ce9178;">POST /api/marketplace-search</td><td style="border:1px solid #404040;padding:6px 8px;">搜索市场</td></tr>
+<tr><td style="border:1px solid #404040;padding:6px 8px;color:#ce9178;">POST /api/marketplace-install</td><td style="border:1px solid #404040;padding:6px 8px;">安装市场扩展</td></tr>
+</table>
+
+<h2 style="color:#e0e0e0;font-size:18px;margin:12px 0 0 0;">其他 API</h2>
+<table style="width:100%;border-collapse:collapse;margin:4px 0;font-size:13px;">
+<tr style="background:#2d2d2d;"><th style="border:1px solid #404040;padding:6px 8px;text-align:left;color:#e0e0e0;">路径</th><th style="border:1px solid #404040;padding:6px 8px;text-align:left;color:#e0e0e0;">说明</th></tr>
+<tr><td style="border:1px solid #404040;padding:6px 8px;color:#ce9178;">POST /api/token-stats</td><td style="border:1px solid #404040;padding:6px 8px;">Token 用量统计</td></tr>
+<tr><td style="border:1px solid #404040;padding:6px 8px;color:#ce9178;">POST /api/debug-log</td><td style="border:1px solid #404040;padding:6px 8px;">调试日志查询</td></tr>
+<tr><td style="border:1px solid #404040;padding:6px 8px;color:#ce9178;">POST /api/memory-*</td><td style="border:1px solid #404040;padding:6px 8px;">记忆系统读写</td></tr>
+<tr><td style="border:1px solid #404040;padding:6px 8px;color:#ce9178;">WS /api/ws</td><td style="border:1px solid #404040;padding:6px 8px;">WebSocket 实时通信</td></tr>
+</table>
+
+<p style="margin:8px 0 0 0;color:#888888;font-size:13px;">
+注意：所有 API 通过 POST 请求调用，请求和响应均为 JSON 格式。WebSocket 用于流式对话和实时事件推送。
+</p>
+
+<button label="关闭" onclick="closeHelp" style="margin-top:12px;align-self:flex-end;padding:6px 20px;background:#0e639c;color:#fff;border:none;border-radius:3px;cursor:pointer;font-size:14px;"></button>
+</div>

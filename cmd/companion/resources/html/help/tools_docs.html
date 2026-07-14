@@ -1,0 +1,104 @@
+<!-- 工具文档 — PairCode IDE AI 工具集 -->
+<div style="display:flex;flex-direction:column;gap:14px;padding:8px;color:#cccccc;font-size:14px;line-height:1.7;">
+
+<p style="margin:0;color:#bbbbbb;">
+PairCode IDE 的 AI Agent 内置了丰富的工具集，用于完成代码阅读、搜索、编辑、
+调试、版本控制等任务。以下按功能分类列出所有可用工具的名称和用途。
+</p>
+
+<h2 style="color:#e0e0e0;font-size:18px;margin:0;">代码阅读与搜索</h2>
+<table style="width:100%;border-collapse:collapse;margin:4px 0;font-size:13px;">
+<tr style="background:#2d2d2d;"><th style="border:1px solid #404040;padding:5px 8px;text-align:left;color:#e0e0e0;">工具</th><th style="border:1px solid #404040;padding:5px 8px;text-align:left;color:#e0e0e0;">用途</th></tr>
+<tr><td style="border:1px solid #404040;padding:5px 8px;color:#ce9178;">read_file</td><td style="border:1px solid #404040;padding:5px 8px;">读取文件内容，支持指定行范围</td></tr>
+<tr><td style="border:1px solid #404040;padding:5px 8px;color:#ce9178;">search_files</td><td style="border:1px solid #404040;padding:5px 8px;">按通配符查找文件</td></tr>
+<tr><td style="border:1px solid #404040;padding:5px 8px;color:#ce9178;">search_content</td><td style="border:1px solid #404040;padding:5px 8px;">正则搜索文件内容</td></tr>
+<tr><td style="border:1px solid #404040;padding:5px 8px;color:#ce9178;">find_files_by_pattern</td><td style="border:1px solid #404040;padding:5px 8px;">Glob 模式查找，附带语言/大小信息</td></tr>
+</table>
+
+<h2 style="color:#e0e0e0;font-size:18px;margin:12px 0 0 0;">CodeGraph（代码知识图谱）</h2>
+<table style="width:100%;border-collapse:collapse;margin:4px 0;font-size:13px;">
+<tr style="background:#2d2d2d;"><th style="border:1px solid #404040;padding:5px 8px;text-align:left;color:#e0e0e0;">工具</th><th style="border:1px solid #404040;padding:5px 8px;text-align:left;color:#e0e0e0;">用途</th></tr>
+<tr><td style="border:1px solid #404040;padding:5px 8px;color:#ce9178;">codegraph_search</td><td style="border:1px solid #404040;padding:5px 8px;">按名称搜索代码实体（函数/类型/变量）</td></tr>
+<tr><td style="border:1px solid #404040;padding:5px 8px;color:#ce9178;">codegraph_function</td><td style="border:1px solid #404040;padding:5px 8px;">按名称查找函数定义位置与签名</td></tr>
+<tr><td style="border:1px solid #404040;padding:5px 8px;color:#ce9178;">codegraph_class</td><td style="border:1px solid #404040;padding:5px 8px;">获取结构体/接口的完整层次结构</td></tr>
+<tr><td style="border:1px solid #404040;padding:5px 8px;color:#ce9178;">codegraph_callers</td><td style="border:1px solid #404040;padding:5px 8px;">查询哪些函数调用了指定函数</td></tr>
+<tr><td style="border:1px solid #404040;padding:5px 8px;color:#ce9178;">codegraph_impact</td><td style="border:1px solid #404040;padding:5px 8px;">分析修改某函数/文件的影响范围</td></tr>
+<tr><td style="border:1px solid #404040;padding:5px 8px;color:#ce9178;">codegraph_file_structure</td><td style="border:1px solid #404040;padding:5px 8px;">查看文件的实体结构树</td></tr>
+</table>
+
+<h2 style="color:#e0e0e0;font-size:18px;margin:12px 0 0 0;">文件操作</h2>
+<table style="width:100%;border-collapse:collapse;margin:4px 0;font-size:13px;">
+<tr style="background:#2d2d2d;"><th style="border:1px solid #404040;padding:5px 8px;text-align:left;color:#e0e0e0;">工具</th><th style="border:1px solid #404040;padding:5px 8px;text-align:left;color:#e0e0e0;">用途</th></tr>
+<tr><td style="border:1px solid #404040;padding:5px 8px;color:#ce9178;">write_file</td><td style="border:1px solid #404040;padding:5px 8px;">写入/覆盖文件</td></tr>
+<tr><td style="border:1px solid #404040;padding:5px 8px;color:#ce9178;">edit_file</td><td style="border:1px solid #404040;padding:5px 8px;">精确替换文件中的内容</td></tr>
+<tr><td style="border:1px solid #404040;padding:5px 8px;color:#ce9178;">multi_edit</td><td style="border:1px solid #404040;padding:5px 8px;">同一文件多处替换</td></tr>
+<tr><td style="border:1px solid #404040;padding:5px 8px;color:#ce9178;">move_file</td><td style="border:1px solid #404040;padding:5px 8px;">移动/重命名文件</td></tr>
+<tr><td style="border:1px solid #404040;padding:5px 8px;color:#ce9178;">delete_file</td><td style="border:1px solid #404040;padding:5px 8px;">删除文件</td></tr>
+</table>
+
+<h2 style="color:#e0e0e0;font-size:18px;margin:12px 0 0 0;">命令执行与网络</h2>
+<table style="width:100%;border-collapse:collapse;margin:4px 0;font-size:13px;">
+<tr style="background:#2d2d2d;"><th style="border:1px solid #404040;padding:5px 8px;text-align:left;color:#e0e0e0;">工具</th><th style="border:1px solid #404040;padding:5px 8px;text-align:left;color:#e0e0e0;">用途</th></tr>
+<tr><td style="border:1px solid #404040;padding:5px 8px;color:#ce9178;">run_command</td><td style="border:1px solid #404040;padding:5px 8px;">执行 Shell 命令</td></tr>
+<tr><td style="border:1px solid #404040;padding:5px 8px;color:#ce9178;">run_background</td><td style="border:1px solid #404040;padding:5px 8px;">后台运行长任务</td></tr>
+<tr><td style="border:1px solid #404040;padding:5px 8px;color:#ce9178;">web_fetch</td><td style="border:1px solid #404040;padding:5px 8px;">抓取网页内容</td></tr>
+<tr><td style="border:1px solid #404040;padding:5px 8px;color:#ce9178;">web_search</td><td style="border:1px solid #404040;padding:5px 8px;">搜索引擎查询</td></tr>
+</table>
+
+<h2 style="color:#e0e0e0;font-size:18px;margin:12px 0 0 0;">网页验证与截图</h2>
+<table style="width:100%;border-collapse:collapse;margin:4px 0;font-size:13px;">
+<tr style="background:#2d2d2d;"><th style="border:1px solid #404040;padding:5px 8px;text-align:left;color:#e0e0e0;">工具</th><th style="border:1px solid #404040;padding:5px 8px;text-align:left;color:#e0e0e0;">用途</th></tr>
+<tr><td style="border:1px solid #404040;padding:5px 8px;color:#ce9178;">web_debug</td><td style="border:1px solid #404040;padding:5px 8px;">一站式网页验证（打开+截图+控制台+JS）</td></tr>
+<tr><td style="border:1px solid #404040;padding:5px 8px;color:#ce9178;">screenshot_webpage</td><td style="border:1px solid #404040;padding:5px 8px;">网页截图</td></tr>
+<tr><td style="border:1px solid #404040;padding:5px 8px;color:#ce9178;">headless_browser</td><td style="border:1px solid #404040;padding:5px 8px;">无头浏览器渲染获取页面</td></tr>
+</table>
+
+<h2 style="color:#e0e0e0;font-size:18px;margin:12px 0 0 0;">图像分析（桌面截图 + OCR）</h2>
+<table style="width:100%;border-collapse:collapse;margin:4px 0;font-size:13px;">
+<tr style="background:#2d2d2d;"><th style="border:1px solid #404040;padding:5px 8px;text-align:left;color:#e0e0e0;">工具</th><th style="border:1px solid #404040;padding:5px 8px;text-align:left;color:#e0e0e0;">用途</th></tr>
+<tr><td style="border:1px solid #404040;padding:5px 8px;color:#ce9178;">image_analyze</td><td style="border:1px solid #404040;padding:5px 8px;">分析图片颜色/色块/图形</td></tr>
+<tr><td style="border:1px solid #404040;padding:5px 8px;color:#ce9178;">image_ocr</td><td style="border:1px solid #404040;padding:5px 8px;">图片文字识别</td></tr>
+<tr><td style="border:1px solid #404040;padding:5px 8px;color:#ce9178;">screenshot_desktop</td><td style="border:1px solid #404040;padding:5px 8px;">截取桌面</td></tr>
+<tr><td style="border:1px solid #404040;padding:5px 8px;color:#ce9178;">screenshot_window</td><td style="border:1px solid #404040;padding:5px 8px;">按窗口标题截图</td></tr>
+<tr><td style="border:1px solid #404040;padding:5px 8px;color:#ce9178;">screenshot_area</td><td style="border:1px solid #404040;padding:5px 8px;">按坐标区域截图</td></tr>
+</table>
+
+<h2 style="color:#e0e0e0;font-size:18px;margin:12px 0 0 0;">Git 与调试</h2>
+<table style="width:100%;border-collapse:collapse;margin:4px 0;font-size:13px;">
+<tr style="background:#2d2d2d;"><th style="border:1px solid #404040;padding:5px 8px;text-align:left;color:#e0e0e0;">工具</th><th style="border:1px solid #404040;padding:5px 8px;text-align:left;color:#e0e0e0;">用途</th></tr>
+<tr><td style="border:1px solid #404040;padding:5px 8px;color:#ce9178;">git_status/diff/log/show/blame</td><td style="border:1px solid #404040;padding:5px 8px;">版本控制操作</td></tr>
+<tr><td style="border:1px solid #404040;padding:5px 8px;color:#ce9178;">debug_start/stop/breakpoint</td><td style="border:1px solid #404040;padding:5px 8px;">DAP 调试器控制</td></tr>
+<tr><td style="border:1px solid #404040;padding:5px 8px;color:#ce9178;">debug_continue/next/step_in/out</td><td style="border:1px solid #404040;padding:5px 8px;">调试执行控制</td></tr>
+<tr><td style="border:1px solid #404040;padding:5px 8px;color:#ce9178;">debug_stack/variables/evaluate</td><td style="border:1px solid #404040;padding:5px 8px;">调试状态查看</td></tr>
+</table>
+
+<h2 style="color:#e0e0e0;font-size:18px;margin:12px 0 0 0;">BUG 检测与修复</h2>
+<table style="width:100%;border-collapse:collapse;margin:4px 0;font-size:13px;">
+<tr style="background:#2d2d2d;"><th style="border:1px solid #404040;padding:5px 8px;text-align:left;color:#e0e0e0;">工具</th><th style="border:1px solid #404040;padding:5px 8px;text-align:left;color:#e0e0e0;">用途</th></tr>
+<tr><td style="border:1px solid #404040;padding:5px 8px;color:#ce9178;">bug_detect</td><td style="border:1px solid #404040;padding:5px 8px;">全量检测项目 BUG</td></tr>
+<tr><td style="border:1px solid #404040;padding:5px 8px;color:#ce9178;">bug_analyze</td><td style="border:1px solid #404040;padding:5px 8px;">分析构建/测试输出</td></tr>
+<tr><td style="border:1px solid #404040;padding:5px 8px;color:#ce9178;">bug_fix</td><td style="border:1px solid #404040;padding:5px 8px;">自动检测并生成修复方案</td></tr>
+</table>
+
+<h2 style="color:#e0e0e0;font-size:18px;margin:12px 0 0 0;">项目知识库与记忆</h2>
+<table style="width:100%;border-collapse:collapse;margin:4px 0;font-size:13px;">
+<tr style="background:#2d2d2d;"><th style="border:1px solid #404040;padding:5px 8px;text-align:left;color:#e0e0e0;">工具</th><th style="border:1px solid #404040;padding:5px 8px;text-align:left;color:#e0e0e0;">用途</th></tr>
+<tr><td style="border:1px solid #404040;padding:5px 8px;color:#ce9178;">project_info_*</td><td style="border:1px solid #404040;padding:5px 8px;">项目知识库读写搜索</td></tr>
+<tr><td style="border:1px solid #404040;padding:5px 8px;color:#ce9178;">memory_*</td><td style="border:1px solid #404040;padding:5px 8px;">长时记忆读写搜索删除</td></tr>
+</table>
+
+<h2 style="color:#e0e0e0;font-size:18px;margin:12px 0 0 0;">任务规划与 Skill/MCP</h2>
+<table style="width:100%;border-collapse:collapse;margin:4px 0;font-size:13px;">
+<tr style="background:#2d2d2d;"><th style="border:1px solid #404040;padding:5px 8px;text-align:left;color:#e0e0e0;">工具</th><th style="border:1px solid #404040;padding:5px 8px;text-align:left;color:#e0e0e0;">用途</th></tr>
+<tr><td style="border:1px solid #404040;padding:5px 8px;color:#ce9178;">update_plan / update_tasks</td><td style="border:1px solid #404040;padding:5px 8px;">任务规划与进度追踪</td></tr>
+<tr><td style="border:1px solid #404040;padding:5px 8px;color:#ce9178;">skill_* / mcp_*</td><td style="border:1px solid #404040;padding:5px 8px;">技能与 MCP 管理</td></tr>
+<tr><td style="border:1px solid #404040;padding:5px 8px;color:#ce9178;">marketplace_*</td><td style="border:1px solid #404040;padding:5px 8px;">市场搜索安装</td></tr>
+<tr><td style="border:1px solid #404040;padding:5px 8px;color:#ce9178;">lua_tool_*</td><td style="border:1px solid #404040;padding:5px 8px;">Lua 自定义工具管理</td></tr>
+</table>
+
+<p style="margin:8px 0 0 0;color:#888888;font-size:13px;">
+AI Agent 会根据任务自动选择合适的工具组合，无需手动指定。用户也可以在对话中显式要求 AI 使用特定工具。
+</p>
+
+<button label="关闭" onclick="closeHelp" style="margin-top:12px;align-self:flex-end;padding:6px 20px;background:#0e639c;color:#fff;border:none;border-radius:3px;cursor:pointer;font-size:14px;"></button>
+</div>

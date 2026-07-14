@@ -34,6 +34,7 @@ function pushSegment(segs, type, initial) {
 //   onPlanUpdate(plan, convId),    // update_plan 工具调用
 //   onTaskCreate(task, convId),    // task_create 工具调用
 //   onTaskUpdate(taskId, status, subject, convId), // task_update 工具调用
+//   onTaskReplace(tasks, convId),  // update_tasks 全量替换子任务清单调用
 //   onPhaseChange(convId),         // 阶段变化（RightPanel 启动定时器清除）
 // }
 let globalCtx = {}
@@ -147,6 +148,25 @@ export function processAgentEvent(convId, data) {
         callId: data.callId || data.callID || '',
         argsRaw: data.args ? (typeof data.args === 'string' ? data.args : JSON.stringify(data.args, null, 2)) : '',
         result: '', _mode: 'expanded', _expanded: true,
+      })
+    } else if (toolName === 'update_tasks') {
+      // update_tasks 全量替换子任务清单（用于内层 Loop 的 update_tasks 子任务跟踪）
+      try {
+        const args = data.args ? (typeof data.args === 'string' ? JSON.parse(data.args) : data.args) : {}
+        if (Array.isArray(args.tasks) && globalCtx.onTaskReplace) {
+          const tasks = args.tasks.map(t => ({
+            step: t.subject || t.description || '(无标题)',
+            status: t.status || 'pending',
+            _taskId: t.id || null,
+          }))
+          globalCtx.onTaskReplace(tasks, convId)
+        }
+      } catch {}
+      msg.segments.push({
+        type: 'tool_call', name: toolName,
+        callId: data.callId || data.callID || '',
+        argsRaw: data.args ? (typeof data.args === 'string' ? data.args : JSON.stringify(data.args, null, 2)) : '',
+        result: '', _mode: 'collapsed', _collapsed: false, _expanded: false,
       })
     } else {
       msg.segments.push({

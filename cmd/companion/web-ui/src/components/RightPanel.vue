@@ -991,6 +991,12 @@ onMounted(() => {
       }
       if (changed) currentTasks.value = tasks
     },
+    onTaskReplace: (tasks, convId) => {
+      // update_tasks 全量替换：直接覆盖 currentTasks
+      if (state.currentConvId !== convId) return
+      currentTasks.value = [...tasks]
+      tasksExpanded.value = true
+    },
     onPhaseChange: (convId) => {
       // 阶段指示器自动从 state.phaseByConv 读取，此处启动定时器自动清除
       if (phaseTimer) clearTimeout(phaseTimer)

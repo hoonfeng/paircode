@@ -36,6 +36,8 @@ import (
 	settingspanel "github.com/hoonfeng/paircode/cmd/companion/ui/settings"
 	"github.com/hoonfeng/paircode/cmd/companion/ui/state"
 	termpanel "github.com/hoonfeng/paircode/cmd/companion/ui/terminal"
+
+	helppanel "github.com/hoonfeng/paircode/cmd/companion/ui/help"
 )
 
 var theApp *app.App
@@ -318,6 +320,70 @@ func registerShellEvents(doc *dom.Document) {
 	}
 }
 
+// showAboutDialog 显示「关于」对话框（仅 Web 版本信息）。
+func showAboutDialog() {
+	doc := theDoc
+	if doc == nil {
+		return
+	}
+	modal := component.NewModal(doc)
+	modal.SetTitle("关于 PairCode IDE")
+	modal.SetMaxWidth(480)
+	modal.SetMaxHeight(400)
+
+	body := modal.Content()
+	if body == nil {
+		return
+	}
+	body.ClearChildren()
+
+	container := doc.CreateElement("div")
+	container.SetAttribute("style",
+		"display:flex;flex-direction:column;gap:12px;padding:16px;"+
+			"color:#cccccc;font-size:14px;line-height:1.7;")
+
+	logo := doc.CreateElement("div")
+	logo.SetAttribute("style",
+		"text-align:center;padding:8px 0;font-size:24px;color:#0e639c;font-weight:bold;")
+	logo.SetTextContent("PairCode IDE")
+	container.AppendChild(logo)
+
+	ver := doc.CreateElement("div")
+	ver.SetAttribute("style", "text-align:center;font-size:13px;color:#888888;")
+	ver.SetTextContent("版本 v0.1.0 — Web 版本")
+	container.AppendChild(ver)
+
+	hr := doc.CreateElement("div")
+	hr.SetAttribute("style", "height:1px;background:#404040;margin:4px 0;")
+	container.AppendChild(hr)
+
+	desc := doc.CreateElement("div")
+	desc.SetAttribute("style", "color:#bbbbbb;font-size:13px;")
+	desc.SetTextContent("PairCode IDE Web 版本是一个现代化的 AI 辅助编程集成开发环境，将 AI 对话能力深度融入编码工作流。支持自然语言编程、自主 Agent 模式、智能代码编辑、版本控制集成等功能。")
+	container.AppendChild(desc)
+
+	tech := doc.CreateElement("div")
+	tech.SetAttribute("style", "color:#888888;font-size:12px;margin-top:8px;")
+	tech.SetTextContent("基于 Go + GWui 构建 | 支持多模型 AI | 开放 Skills/MCP 扩展生态")
+	container.AppendChild(tech)
+
+	closeBtn := doc.CreateElement("button")
+	closeBtn.SetAttribute("style",
+		"margin-top:12px;align-self:flex-end;padding:6px 20px;"+
+			"background:#0e639c;color:#fff;border:none;border-radius:3px;cursor:pointer;font-size:14px;")
+	closeBtn.SetTextContent("关闭")
+	if theApp != nil {
+		theApp.AddEventListener(closeBtn, event.Click, func(e event.Event) bool {
+			modal.Hide()
+			return true
+		})
+	}
+	container.AppendChild(closeBtn)
+
+	body.AppendChild(container)
+	modal.Show()
+}
+
 // buildDropdowns 构建标题栏下拉菜单并挂到 #menu-bar。
 // 现代化的 AI IDE 菜单体系：每个菜单项都连接到实际功能或显示合理提示。
 func buildDropdowns(doc *dom.Document) {
@@ -331,11 +397,14 @@ func buildDropdowns(doc *dom.Document) {
 	}{
 		// ── 帮助 ──
 		{"帮助", []component.PopupMenuItem{
-			{Label: "快捷键参考", OnClick: func() {
-				uiapi.MessageInfo("快捷键：Ctrl+N 新建 | Ctrl+S 保存 | Ctrl+F 查找 | Ctrl+P 命令面板 | Ctrl+B 侧栏 | Ctrl+J 终端 | Ctrl+K 专注")
-			}},
+			{Label: "快速开始", OnClick: func() { helppanel.ShowGettingStarted() }},
+			{Label: "功能介绍", OnClick: func() { helppanel.ShowFeatures() }},
+			{Label: "API 文档", OnClick: func() { helppanel.ShowAPIDocs() }},
+			{Label: "工具文档", OnClick: func() { helppanel.ShowToolsDocs() }},
+			{Label: "常见问题", OnClick: func() { helppanel.ShowFAQ() }},
+			{Label: "快捷键参考", OnClick: func() { helppanel.ShowShortcuts() }},
 			{Divider: true},
-			{Label: "关于", OnClick: func() { uiapi.MessageInfo("Pair CodeAgent v0.1.0\n基于 GWui 的现代化 AI IDE") }},
+			{Label: "关于", OnClick: func() { showAboutDialog() }},
 		}},
 	}
 	menuMaxWidth := float32(180)
