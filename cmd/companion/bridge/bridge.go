@@ -171,7 +171,20 @@ func (b *AgentBridge) Start(task string) {
 		sys += roleprompts.PhilosophyPrompt() // 思想 tab：指导思想（启用时）
 		sys += skillspanel.Prompt()             // Skills tab：可用技能（.pair/skills，渐进式披露）
 		sys += "\n\n# 自管理与扩展\n你可自我扩展：skill_list / load_skill（按需读技能全文）/ load_skill_resource（读技能子资源）/ skill_write / skill_delete 管理技能；" +
-			"mcp_list / mcp_add / mcp_remove 管理 MCP 服务器；marketplace_search / marketplace_install 从市场检索并安装 MCP 或技能。把可复用的工作方式沉淀成技能。"
+			"mcp_list / mcp_add / mcp_remove 管理 MCP 服务器；marketplace_search / marketplace_install 从市场检索并安装 MCP 或技能。把可复用的工作方式沉淀成技能。" +
+			"\n\n### 技能模式说明（skill_write 的 mode 参数）\n" +
+			"- `auto`（默认）：自动按需激活——当任务描述或文件名匹配技能关键词时，agent 会自动加载使用\n" +
+			"- `always`：始终激活——任何对话都会自动加载此技能（适合通用规则/编码规范）\n" +
+			"- `manual`：仅手动加载——不会自动激活，必须通过 `load_skill` 手动加载\n\n" +
+			"### 何时创建技能\n" +
+			"- **项目规则**：项目特有的编码规范、API 约定、目录结构说明 → 写为 `always` 技能，每次对话自动可用\n" +
+			"- **复杂工作流**：需要多步骤的流程（如「发布前检查清单」） → 写为 `auto` 技能，触发时自动加载\n" +
+			"- **领域知识**：框架/库的常见问题与模式 → 写为 `manual` 技能，需要时手动加载\n" +
+			"- **复用经验**：修复某类问题的通用步骤 → 写为 `auto` 技能，下次相似场景自动匹配\n\n" +
+			"### 技能 vs Lua 工具\n" +
+			"- **技能**（SKILL.md）：知识/规则/流程文档，**教会 agent 怎么做**。适合编码规范、架构说明、检查清单\n" +
+			"- **Lua 工具**（.lua 脚本）：可执行代码，**替 agent 自动做**。适合自动化命令、条件判断循环\n" +
+			"- 两者可配合：技能描述中可指导 agent 调用特定 Lua 工具完成自动化步骤"
 		if core.Settings.LuaTools { // 告知 Agent 可自建/优化 Lua 工具（沙箱）
 			sys += "\n\n# 自定义工具（Lua）\n你可用以下工具管理 Lua 自定义工具（工作区 .pair/tools/ 下的 .lua 脚本，沙箱安全执行）：\n" +
 				"- `lua_tool_list` 列出所有 Lua 自定义工具\n" +
