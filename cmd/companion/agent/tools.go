@@ -59,13 +59,13 @@ type Registry struct {
 	BeforeTool  func(ctx context.Context, name string, args map[string]any) (proceed bool, override string, overrideErr error)
 	AfterTool   func(ctx context.Context, name string, args map[string]any, result string, err error, duration time.Duration)
 	OnToolError func(ctx context.Context, name string, args map[string]any, err error) (result string, replacedErr error)
+	CommitMessage string // agent 通过 generate_commit_message 工具显式设置的提交信息
 }
 
 // NewRegistry 创建空注册表。
 func NewRegistry() *Registry {
 	return &Registry{tools: map[string]*Tool{}}
 }
-
 // Register 注册一个工具（同名覆盖，顺序不变）。
 func (r *Registry) Register(t *Tool) {
 	r.mu.Lock()

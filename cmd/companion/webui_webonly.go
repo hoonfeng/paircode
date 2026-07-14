@@ -58,6 +58,7 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 	agent.SkillEnabled = core.Settings.SkillEnabledOverrides
 	reg := agent.NewRegistry()
 	agent.RegisterDefaultTools(reg, root)
+	agent.RegisterCommitMessageTool(reg)
 
 	agenttools.RegisterManagementTools(reg, root)
 	if cfgs := mcppanel.LoadConfigs(); len(cfgs) > 0 {

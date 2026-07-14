@@ -106,20 +106,19 @@ type Loop struct {
 	State          map[string]any // 跨 agent 共享状态（子 Loop 继承父引用，避免塞进 messages 撑爆上下文）
 	currentMsgs    []Message      // Run 期间当前消息列表（供 delegate handler 读父历史，保缓存前缀命中）
 	finishResult   *string        // 退出信号（子 Loop：子 agent 结束时的最终内容）
+	commitMessage  string         // agent 通过 generate_commit_message 工具显式设置的提交信息
 
 	transferTarget string         // transfer_to_agent 目标名（非空=当前 Loop 应退出，控制权转移给目标 agent）
 	Autonomous     bool           // 自主模式标志（供并行子 agent 继承）
 
 	// AutoReview 审核开关。true=AI审核（内部创建审核Agent把关写操作）；
-	// false=走外部Approve回调（人工审批）或自动放行（Autonomous=true时）。
-	// 外部（桌面版/Web）只需设置此字段，审核决策完全由Loop内部决定。
 	AutoReview bool
-
 	// ReviewProvider 审核模型的 Provider（AutoReview=true 时使用）。
 	// 由外部在创建 Loop 时设置，Loop 内部用它懒创建审核 Reviewer。
 	ReviewProvider Provider
 
 	// reviewer 内部懒创建的审核 Agent（由 ReviewProvider 创建，不导出）。
+
 	reviewer *Reviewer
 
 	// contentOnlyIters 连续 content-only（无 tool_call）轮数计数器。

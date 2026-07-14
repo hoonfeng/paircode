@@ -471,6 +471,7 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 	agent.WorkspaceRoots = core.Folders
 	reg := agent.NewRegistry()
 	agent.RegisterDefaultTools(reg, root)
+	agent.RegisterCommitMessageTool(reg)
 
 	agenttools.RegisterManagementTools(reg)
 	if cfgs := mcppanel.LoadConfigs(); len(cfgs) > 0 {

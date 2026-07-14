@@ -476,7 +476,8 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 			if loop.finishResult != nil {
 				result = *loop.finishResult
 			}
-			doAutoCommit(opts.WorkspaceRoot, task, result)
+			commitMsg := loop.Registry.CommitMessage
+			doAutoCommit(opts.WorkspaceRoot, task, result, commitMsg)
 		}
 
 		// 错误处理：Loop 内部已对多数错误发射 EventError，
@@ -821,14 +822,18 @@ func (m *SessionManager) GetWorkspaceRoot(convID string) string {
 // 不直接使用用户消息，确保提交信息反映 agent 实际完成的工作。
 // 自动设置 git user config 避免因全局配置缺失导致提交失败。
 // 执行失败时只日志不 panic（不影响 agent 主流程）。
-func doAutoCommit(root, task, result string) {
+func doAutoCommit(root, task, result, commitMsg string) {
 	if root == "" {
 		return
 	}
-	// 从 agent 生成的结果中提取第一行实质性内容作 commit message
-	msg := extractSummary(result)
+	// 优先使用 agent 通过 generate_commit_message 工具生成的提交信息
+	msg := strings.TrimSpace(commitMsg)
 	if msg == "" {
-		// 备选：如果 agent 结果为空，用任务描述
+		// 备选：从 agent 输出结果提取第一行实质性内容
+		msg = extractSummary(result)
+	}
+	if msg == "" {
+		// 最后备选：用任务描述
 		msg = strings.TrimSpace(task)
 	}
 	if len(msg) > 72 {
@@ -837,6 +842,7 @@ func doAutoCommit(root, task, result string) {
 			msg = msg[:idx]
 		}
 	}
+
 	if msg == "" {
 		msg = "auto commit"
 	}
