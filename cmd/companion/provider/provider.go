@@ -65,17 +65,44 @@ const interruptedToolResult = "[no result: the previous turn was interrupted bef
 // SanitizeToolPairing repairs a history so it satisfies the tool-call contract
 // that OpenAI-compatible APIs enforce: every assistant tool_calls entry must be
 // answered by a following tool message, and orphan tool messages are dropped.
+//
+// ★ Defensive dedup: tracks tool_call_id across assistant segments.
+// If all tool_call IDs of an assistant block have already been paired earlier,
+// the entire block (including its trailing tool results) is skipped — prevents
+// "Duplicate value for 'tool_call_id'" errors from the API.
 func SanitizeToolPairing(msgs []Message) []Message {
 	out := make([]Message, 0, len(msgs))
+	seenCallIDs := make(map[string]struct{})
+
 	for i := 0; i < len(msgs); {
 		m := msgs[i]
 		if m.Role == RoleAssistant && len(m.ToolCalls) > 0 {
+			// ★ Skip if all IDs already seen in earlier pairings
+			allSeen := true
+			for _, tc := range m.ToolCalls {
+				if _, ok := seenCallIDs[tc.ID]; !ok {
+					allSeen = false
+					break
+				}
+			}
+			if allSeen {
+				j := i + 1
+				for j < len(msgs) && msgs[j].Role == RoleTool {
+					j++
+				}
+				i = j
+				continue
+			}
+
 			j := i + 1
 			for j < len(msgs) && msgs[j].Role == RoleTool {
 				j++
 			}
 			out = append(out, repairToolCallArgs(m))
 			out = append(out, pairToolResults(m.ToolCalls, msgs[i+1:j])...)
+			for _, tc := range m.ToolCalls {
+				seenCallIDs[tc.ID] = struct{}{}
+			}
 			i = j
 			continue
 		}

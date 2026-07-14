@@ -101,11 +101,35 @@ func applyThinking(body map[string]any, model, mode string) {
 // sanitizeToolPairing 修复消息列表中的工具调用配对，确保满足 OpenAI 兼容 API 的契约：
 // 每条 assistant 消息的 tool_calls 必须后跟对应数量的 role=tool 消息，
 // 孤立 role=tool 消息将被丢弃，缺失 tool result 将被填充占位符。
+//
+// ★ 防御性去重：跨 assistant 跟踪已配对的 tool_call_id。
+// 如果某段 assistant 的全部 tool_call ID 都已在前面的配对中出现过，
+// 说明该段是历史消息重复段，直接跳过——防止 "Duplicate value for 'tool_call_id'" 错误。
 func sanitizeToolPairing(msgs []Message) []Message {
 	out := make([]Message, 0, len(msgs))
+	seenCallIDs := make(map[string]struct{}) // 跨 assistant 去重
+
 	for i := 0; i < len(msgs); {
 		m := msgs[i]
 		if m.Role == RoleAssistant && len(m.ToolCalls) > 0 {
+			// ★ 检查此 assistant 的所有 tool_call ID 是否都已处理过
+			allSeen := true
+			for _, tc := range m.ToolCalls {
+				if _, ok := seenCallIDs[tc.ID]; !ok {
+					allSeen = false
+					break
+				}
+			}
+			if allSeen {
+				// 全部 ID 都已在前面的配对段中出现 → 跳过整个段（含后续连续 tool result）
+				j := i + 1
+				for j < len(msgs) && msgs[j].Role == RoleTool {
+					j++
+				}
+				i = j
+				continue
+			}
+
 			// 收集后续连续的 role=tool 消息
 			j := i + 1
 			for j < len(msgs) && msgs[j].Role == RoleTool {
@@ -115,6 +139,10 @@ func sanitizeToolPairing(msgs []Message) []Message {
 			avail := msgs[i+1 : j]
 			out = append(out, m)
 			out = append(out, pairToolResults(m.ToolCalls, avail)...)
+			// 记录已配对的 tool_call_id
+			for _, tc := range m.ToolCalls {
+				seenCallIDs[tc.ID] = struct{}{}
+			}
 			i = j
 			continue
 		}
