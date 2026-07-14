@@ -83,8 +83,8 @@ const showAbout = ref(false)
 const helpDocTarget = ref('features')
 
 // showHelp 可被设为字符串（文档id）或 true（默认 features）
-// 用 computed 包装以拦截 set
-const showHelpWrapper = {
+// 用 computed 包装以拦截 set（必须用 computed() 才能让 .value 赋值触发 setter）
+const showHelpWrapper = computed({
   get() { return showHelp.value },
   set(v) {
     if (typeof v === 'string') {
@@ -95,7 +95,7 @@ const showHelpWrapper = {
       if (showHelp.value) helpDocTarget.value = 'getting-started'
     }
   }
-}
+})
 
 function onAboutOpenHelp() {
   showAbout.value = false
