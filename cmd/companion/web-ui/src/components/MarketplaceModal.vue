@@ -7,11 +7,13 @@
           <button :class="{ active: tab === 'all' }" @click="tab='all';doSearch()">全部</button>
           <button :class="{ active: tab === 'mcp' }" @click="tab='mcp';doSearch()">MCP</button>
           <button :class="{ active: tab === 'skill' }" @click="tab='skill';doSearch()">技能</button>
+          <button :class="{ active: tab === 'installed' }" @click="tab='installed';loadInstalled()">已安装</button>
         </div>
         <button class="modal-close" @click="$emit('close')">×</button>
       </div>
       <div class="modal-body">
-        <div class="market-search">
+        <!-- 搜索栏（非「已安装」tab 显示） -->
+        <div v-if="tab !== 'installed'" class="market-search">
           <div class="search-icon"><SvgIcon name="search" :size="14" /></div>
           <input v-model="query" placeholder="搜索 MCP 服务器或技能…" @input="debounceSearch" class="search-input" />
           <button v-if="query" class="search-clear" @click="query='';doSearch()">×</button>
@@ -21,13 +23,106 @@
           </button>
         </div>
 
+        <!-- 「已安装」tab 的操作栏 -->
+        <div v-if="tab === 'installed'" class="installed-toolbar">
+          <button class="btn-add-mcp" @click="showAddMCP = true"><SvgIcon name="plus" :size="14" /> 添加 MCP 服务器</button>
+          <button class="btn-refresh" @click="loadInstalled"><SvgIcon name="refresh" :size="14" /> 刷新</button>
+        </div>
+
+        <!-- 添加 MCP 表单 -->
+        <div v-if="showAddMCP" class="mcp-form">
+          <div class="mcp-form-row"><label>名称</label><input v-model="mcpForm.name" placeholder="如 my-server" /></div>
+          <div class="mcp-form-row"><label>命令</label><input v-model="mcpForm.command" placeholder="如 npx / uvx" /></div>
+          <div class="mcp-form-row"><label>参数</label><input v-model="mcpForm.argsText" placeholder="如 -y @modelcontextprotocol/server-filesystem" /></div>
+          <div class="mcp-form-row"><label>层级</label>
+            <select v-model="mcpForm.level">
+              <option value="user">用户级（全局）</option>
+              <option value="project">项目级（工作区）</option>
+            </select>
+          </div>
+          <div class="mcp-form-actions">
+            <button class="btn-primary" @click="saveMCP" :disabled="!mcpForm.name || savingMCP">
+              {{ savingMCP ? '保存中…' : '保存' }}
+            </button>
+            <button class="btn-secondary" @click="showAddMCP = false; resetMCPForm()">取消</button>
+          </div>
+          <div v-if="mcpError" class="mcp-form-error">{{ mcpError }}</div>
+        </div>
+
+        <!-- 编辑 MCP 表单 -->
+        <div v-if="editingMCP" class="mcp-form">
+          <div class="mcp-form-row"><label>名称</label><input v-model="editMCPForm.name" /></div>
+          <div class="mcp-form-row"><label>命令</label><input v-model="editMCPForm.command" /></div>
+          <div class="mcp-form-row"><label>参数</label><input v-model="editMCPForm.argsText" /></div>
+          <div class="mcp-form-row"><label>层级</label>
+            <select v-model="editMCPForm.level">
+              <option value="user">用户级（全局）</option>
+              <option value="project">项目级（工作区）</option>
+            </select>
+          </div>
+          <div class="mcp-form-actions">
+            <button class="btn-primary" @click="updateMCP" :disabled="!editMCPForm.name">保存</button>
+            <button class="btn-secondary" @click="editingMCP = false">取消</button>
+          </div>
+        </div>
+
+        <!-- 技能内容查看 -->
+        <div v-if="viewingSkill" class="skill-viewer">
+          <div class="skill-viewer-header">
+            <strong>{{ viewingSkill.name }}</strong>
+            <button class="modal-close" @click="viewingSkill = null">×</button>
+          </div>
+          <pre class="skill-viewer-content">{{ viewingSkill.content }}</pre>
+        </div>
+
         <!-- 加载状态 -->
         <div v-if="loading" class="market-loading">
           <span class="dot-pulse"></span>
           <span>搜索中...</span>
         </div>
 
-        <!-- 结果列表 -->
+        <!-- 已安装列表 -->
+        <div v-else-if="tab === 'installed'" class="market-list" ref="listRef">
+          <!-- MCP 分组 -->
+          <div v-if="installedMCPs.length > 0" class="installed-group">
+            <div class="installed-group-title">MCP 服务器</div>
+            <div v-for="item in installedMCPs" :key="'mcp-' + item.name + '-' + item.level" class="installed-item">
+              <div class="ii-icon icon-mcp"><SvgIcon name="package" :size="18" /></div>
+              <div class="ii-body">
+                <div class="ii-name">{{ item.name }}</div>
+                <div class="ii-desc">{{ item.command }} {{ (item.args || []).join(' ') }}</div>
+                <span class="ii-badge">MCP · {{ item.level === 'project' ? '项目级' : '用户级' }}</span>
+              </div>
+              <div class="ii-actions">
+                <button class="ii-btn ii-edit" @click="startEditMCP(item)" title="编辑">编辑</button>
+                <button class="ii-btn ii-del" @click="delMCP(item)" title="删除">删除</button>
+              </div>
+            </div>
+          </div>
+          <!-- 技能分组 -->
+          <div v-if="installedSkills.length > 0" class="installed-group">
+            <div class="installed-group-title">技能</div>
+            <div v-for="item in installedSkills" :key="'skill-' + item.name" class="installed-item">
+              <div class="ii-icon icon-skill"><SvgIcon name="code" :size="18" /></div>
+              <div class="ii-body">
+                <div class="ii-name">{{ item.name }}</div>
+                <div class="ii-desc">{{ item.description || '无描述' }}</div>
+                <span class="ii-badge">技能 · {{ item.mode === 'always' ? '始终' : item.mode === 'manual' ? '手动' : '按需' }}</span>
+              </div>
+              <div class="ii-actions">
+                <button class="ii-btn ii-view" @click="viewSkill(item)" title="查看内容">查看</button>
+                <button class="ii-btn ii-del" @click="delSkill(item)" title="删除">删除</button>
+              </div>
+            </div>
+          </div>
+          <div v-if="installedMCPs.length === 0 && installedSkills.length === 0" class="market-empty">
+            <div class="me-icon"><SvgIcon name="package" :size="32" /></div>
+            <div>暂无已安装的 MCP 服务器或技能</div>
+            <div class="me-hint">切换到「全部」tab 搜索安装，或点击上方「添加 MCP 服务器」</div>
+          </div>
+        </div>
+
+        <!-- 搜索/浏览列表 -->
         <div v-else class="market-list" ref="listRef">
           <div v-for="item in items" :key="item.id" class="market-item">
             <div class="mi-icon" :class="'icon-' + item.kind">
@@ -64,7 +159,7 @@
         </div>
       </div>
       <div class="modal-footer">
-        <span class="market-count">共 {{ items.length }} 个条目</span>
+        <span class="market-count">{{ tab === 'installed' ? (installedMCPs.length + installedSkills.length) : items.length }} 个条目</span>
         <span v-if="error" class="market-error">{{ error }}</span>
         <span class="market-tip">安装后下次对话生效</span>
         <button class="btn-secondary" @click="$emit('close')">关闭</button>
@@ -89,6 +184,116 @@ const refreshing = ref(false)
 const error = ref('')
 const refreshTip = ref('')
 const listRef = ref(null)
+
+// ── 已安装管理 ──
+const installedMCPs = ref([])
+const installedSkills = ref([])
+const showAddMCP = ref(false)
+const savingMCP = ref(false)
+const mcpError = ref('')
+const editingMCP = ref(false)
+const viewingSkill = ref(null)
+const mcpForm = ref({ name: '', command: '', argsText: '', level: 'user' })
+const editMCPForm = ref({ name: '', command: '', argsText: '', level: 'user', origName: '' })
+
+function resetMCPForm() {
+  mcpForm.value = { name: '', command: '', argsText: '', level: 'user' }
+  mcpError.value = ''
+}
+
+async function loadInstalled() {
+  loading.value = true
+  error.value = ''
+  try {
+    const [mcpList, skillList] = await Promise.all([
+      api.getMcpList('all'),
+      api.getSkillsList()
+    ])
+    installedMCPs.value = mcpList || []
+    installedSkills.value = skillList || []
+  } catch (err) {
+    error.value = '加载失败: ' + err.message
+  } finally {
+    loading.value = false
+  }
+}
+
+async function saveMCP() {
+  const f = mcpForm.value
+  if (!f.name) return
+  savingMCP.value = true
+  mcpError.value = ''
+  try {
+    const args = f.argsText ? f.argsText.split(' ').filter(Boolean) : []
+    await api.saveMcpItem({ action: 'save', name: f.name, command: f.command || 'npx', args, level: f.level })
+    showAddMCP.value = false
+    resetMCPForm()
+    await loadInstalled()
+  } catch (err) {
+    mcpError.value = err.message
+  } finally {
+    savingMCP.value = false
+  }
+}
+
+function startEditMCP(item) {
+  editMCPForm.value = {
+    origName: item.name,
+    name: item.name,
+    command: item.command,
+    argsText: (item.args || []).join(' '),
+    level: item.level,
+  }
+  editingMCP.value = true
+}
+
+async function updateMCP() {
+  const f = editMCPForm.value
+  if (!f.name) return
+  try {
+    if (f.origName !== f.name) {
+      // 改名相当于先删旧再建新
+      await api.saveMcpItem({ action: 'delete', name: f.origName, level: f.level })
+    }
+    const args = f.argsText ? f.argsText.split(' ').filter(Boolean) : []
+    await api.saveMcpItem({ action: 'save', name: f.name, command: f.command || 'npx', args, level: f.level })
+    editingMCP.value = false
+    await loadInstalled()
+  } catch (err) {
+    error.value = '保存失败: ' + err.message
+  }
+}
+
+async function delMCP(item) {
+  if (!confirm(`确认删除 MCP 服务器「${item.name}」？`)) return
+  try {
+    await api.saveMcpItem({ action: 'delete', name: item.name, level: item.level })
+    await loadInstalled()
+  } catch (err) {
+    error.value = '删除失败: ' + err.message
+  }
+}
+
+async function viewSkill(item) {
+  try {
+    const data = await api.readSkill(item.name)
+    viewingSkill.value = data || { name: item.name, content: '（内容读取失败）' }
+  } catch (err) {
+    viewingSkill.value = { name: item.name, content: '读取失败: ' + err.message }
+  }
+}
+
+async function delSkill(item) {
+  if (!confirm(`确认删除技能「${item.name}」？`)) return
+  try {
+    await api.deleteSkill(item.name)
+    await loadInstalled()
+  } catch (err) {
+    error.value = '删除失败: ' + err.message
+  }
+}
+
+// ── 市场搜索 ──
 
 let debounceTimer = null
 function debounceSearch() {
@@ -122,7 +327,6 @@ async function refreshRemote() {
     const result = await api.apiPost('/marketplace/refresh', {})
     refreshTip.value = result.status || '已刷新'
     window.$toast?.(result.message || '远程市场已刷新', 'success')
-    // 刷新后重新搜索
     await doSearch()
   } catch (err) {
     error.value = '刷新失败: ' + err.message
@@ -185,7 +389,7 @@ onMounted(() => {
   border: 1px solid var(--border-color);
   border-radius: 12px;
   width: 85vw;
-  max-width: 720px;
+  max-width: 800px;
   max-height: 80vh;
   display: flex;
   flex-direction: column;
@@ -193,7 +397,6 @@ onMounted(() => {
   box-shadow: 0 8px 32px rgba(0,0,0,0.3);
   height: 75vh;
   min-height: 400px;
-  max-height: 90vh;
 }
 
 /* ── 头部 ── */
@@ -326,6 +529,153 @@ onMounted(() => {
 }
 .market-refresh-btn:hover { color: var(--text-primary); border-color: var(--accent); }
 .market-refresh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── 已安装工具栏 ── */
+.installed-toolbar {
+  display: flex;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+.btn-add-mcp {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.btn-add-mcp:hover { filter: brightness(1.1); }
+.btn-refresh {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.btn-refresh:hover { color: var(--text-primary); }
+
+/* ── MCP 表单 ── */
+.mcp-form {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+}
+.mcp-form-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.mcp-form-row label { width: 50px; font-size: 13px; color: var(--text-secondary); flex-shrink: 0; }
+.mcp-form-row input,
+.mcp-form-row select {
+  flex: 1;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  padding: 5px 8px;
+  font-size: 13px;
+  border-radius: 4px;
+  outline: none;
+}
+.mcp-form-row input:focus { border-color: var(--accent); }
+.mcp-form-actions { display: flex; gap: 8px; margin-top: 8px; }
+.mcp-form-error { margin-top: 6px; font-size: 12px; color: #c03; }
+.btn-primary {
+  background: var(--accent); color: #fff; border: none;
+  padding: 6px 16px; border-radius: 6px; cursor: pointer; font-size: 13px;
+}
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-secondary {
+  background: var(--bg-tertiary); border: 1px solid var(--border-color);
+  color: var(--text-primary); padding: 6px 16px; cursor: pointer; border-radius: 6px; font-size: 13px;
+}
+.btn-secondary:hover { background: var(--bg-hover); }
+
+/* ── 技能查看器 ── */
+.skill-viewer {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  max-height: 300px;
+  overflow: auto;
+}
+.skill-viewer-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+.skill-viewer-header .modal-close {
+  margin-left: auto;
+  font-size: 18px;
+  width: 24px;
+  height: 24px;
+}
+.skill-viewer-content {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-all;
+  line-height: 1.5;
+  max-height: 240px;
+  overflow: auto;
+}
+
+/* ── 已安装列表 ── */
+.installed-group { margin-bottom: 4px; }
+.installed-group-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 8px 12px 4px;
+  letter-spacing: 0.5px;
+}
+.installed-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+}
+.installed-item:hover { background: var(--bg-hover); }
+.ii-icon {
+  width: 36px; height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.ii-body { flex: 1; min-width: 0; }
+.ii-name { font-size: 13px; color: var(--text-primary); font-weight: 600; }
+.ii-desc { font-size: 12px; color: var(--text-muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ii-badge { font-size: 10px; color: var(--text-muted); background: var(--bg-tertiary); padding: 0 6px; border-radius: 3px; display: inline-block; margin-top: 2px; }
+.ii-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.ii-btn {
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+.ii-btn:hover { color: var(--text-primary); border-color: var(--accent); }
+.ii-del:hover { color: #c03; border-color: #c03; background: rgba(204,0,51,0.08); }
 
 /* ── 加载状态 ── */
 .market-loading {

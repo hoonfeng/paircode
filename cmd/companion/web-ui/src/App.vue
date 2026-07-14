@@ -18,6 +18,7 @@
     <!-- 内容区域 -->
     <ActivityBar />
     <Sidebar v-if="state.sidebarVisible" />
+    <div class="sidebar-resizer" v-if="state.sidebarVisible" @mousedown.prevent="startSidebarResize"></div>
     <div v-if="!state.focusMode" class="main-area">
       <EditorArea />
       <div class="bottom-panel" v-if="state.bottomPanelVisible"
@@ -80,12 +81,13 @@ function loadPanelSize() {
     const d = JSON.parse(localStorage.getItem('paircode-panel-size') || '{}')
     if (d.rpw) rightPanelWidth.value = d.rpw
     if (d.bph) bottomPanelHeight.value = d.bph
+    if (d.sw) sidebarWidth.value = d.sw
   } catch {}
 }
 function savePanelSize() {
   try {
     localStorage.setItem('paircode-panel-size', JSON.stringify({
-      rpw: rightPanelWidth.value, bph: bottomPanelHeight.value
+      rpw: rightPanelWidth.value, bph: bottomPanelHeight.value, sw: sidebarWidth.value
     }))
   } catch {}
 }
@@ -93,6 +95,7 @@ loadPanelSize()
 
 const bottomPanelHeight = ref(180)
 const rightPanelWidth = ref(600)
+const sidebarWidth = ref(280)
 
 provide('showSettings', showSettings)
 provide('showSystem', showSystem)
@@ -100,6 +103,7 @@ provide('showSource', showSource)
 provide('showMarketplace', showMarketplace)
 provide('bottomPanelHeight', bottomPanelHeight)
 provide('rightPanelWidth', rightPanelWidth)
+provide('sidebarWidth', sidebarWidth)
 
 if (!state.wsList) state.wsList = reactive([])
 const wsList = state.wsList
@@ -255,6 +259,22 @@ const stopRightResize = () => {
   dragging = false
   document.removeEventListener('mousemove', onRightMove)
   document.removeEventListener('mouseup', stopRightResize)
+  savePanelSize()
+}
+
+const startSidebarResize = (e) => {
+  dragging = true; startX = e.clientX; startW = sidebarWidth.value
+  document.addEventListener('mousemove', onSidebarMove)
+  document.addEventListener('mouseup', stopSidebarResize)
+}
+const onSidebarMove = (e) => {
+  if (!dragging) return
+  sidebarWidth.value = Math.max(120, Math.min(800, startW + (e.clientX - startX)))
+}
+const stopSidebarResize = () => {
+  dragging = false
+  document.removeEventListener('mousemove', onSidebarMove)
+  document.removeEventListener('mouseup', stopSidebarResize)
   savePanelSize()
 }
 
@@ -445,6 +465,12 @@ watch(() => state.openFiles.length, schedulePersist)
 .ws-quick-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
 .activity-bar { grid-column: 1; grid-row: 2; z-index: 20; }
 .sidebar { grid-column: 2; grid-row: 2; z-index: 10; overflow: hidden; }
+.sidebar-resizer {
+  grid-column: 2; grid-row: 2;
+  width: 4px; cursor: ew-resize; background: transparent; z-index: 20;
+  justify-self: end; height: 100%;
+}
+.sidebar-resizer:hover { background: var(--accent); }
 .main-area {
   grid-column: 3; grid-row: 2;
   display: flex; flex-direction: column; min-width: 0; overflow: hidden;

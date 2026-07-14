@@ -122,6 +122,7 @@ func startWebUI(port int) {
 	mux.HandleFunc("/api/mcp/list", ws.handleMCPList)
 	mux.HandleFunc("/api/mcp/save", ws.handleMCPSave)
 	mux.HandleFunc("/api/skills/list", ws.handleSkillsList)
+	mux.HandleFunc("/api/skills/read", ws.handleSkillsRead)
 	mux.HandleFunc("/api/skills/delete", ws.handleSkillsDelete)
 	mux.HandleFunc("/api/tokens/stats", ws.handleTokensStats)
 	mux.HandleFunc("/api/debug/logs", ws.handleDebugLogs)
@@ -1651,6 +1652,27 @@ func (s *webServer) handleSkillsDelete(w http.ResponseWriter, r *http.Request) {
 func jsonResp(w http.ResponseWriter, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(data)
+	jsonResp(w, map[string]any{"ok": true, "message": "已删除技能"})
+}
+
+// handleSkillsRead 读取技能正文内容。
+func (s *webServer) handleSkillsRead(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		jsonErr(w, "仅 GET")
+		return
+	}
+	name := r.URL.Query().Get("name")
+	if name == "" {
+		jsonErr(w, "name 必填")
+		return
+	}
+	skillPath := filepath.Join(agent.SkillProjectDir, name, "SKILL.md")
+	data, err := os.ReadFile(skillPath)
+	if err != nil {
+		jsonErr(w, "技能文件读取失败")
+		return
+	}
+	jsonResp(w, map[string]string{"name": name, "content": string(data)})
 }
 
 func jsonErr(w http.ResponseWriter, msg string) {

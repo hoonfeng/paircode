@@ -1,5 +1,5 @@
 <template>
-  <div class="sidebar" :style="{ width: '280px' }">
+  <div class="sidebar" :style="{ width: sidebarWidth + 'px' }">
     <div class="sidebar-header">
       <span>{{ headerTitle }}</span>
     </div>
@@ -15,11 +15,13 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, inject, ref } from 'vue'
 import { state } from '../main.js'
 import FileExplorer from './FileExplorer.vue'
 import SearchPanel from './SearchPanel.vue'
 import GitPanel from './GitPanel.vue'
+
+const sidebarWidth = inject('sidebarWidth', ref(280))
 
 const headerTitle = computed(() => {
   const titles = { explorer: '文件浏览器', search: '搜索', source: '源代码管理' }

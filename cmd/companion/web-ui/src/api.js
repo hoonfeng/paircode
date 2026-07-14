@@ -213,6 +213,10 @@ async function getSkillsList() {
   return apiGet('/skills/list')
 }
 
+async function readSkill(name) {
+  return apiGet('/skills/read', { name })
+}
+
 async function deleteSkill(name) {
   return apiPost('/skills/delete', { name })
 }
@@ -237,4 +241,4 @@ async function savePhilosophy(data) {
   return apiPut('/philosophy', data)
 }
 
-export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, closeWebSocket, isWebSocketOpen, chatStart, answerChat, approveChat, sendFeedback, chatStop, getMessages, getMessagesCount, getModels, getMcpList, saveMcpItem, getSkillsList, deleteSkill, getInstructions, saveInstructions, getPhilosophy, savePhilosophy }
+export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, closeWebSocket, isWebSocketOpen, chatStart, answerChat, approveChat, sendFeedback, chatStop, getMessages, getMessagesCount, getModels, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, getInstructions, saveInstructions, getPhilosophy, savePhilosophy }
