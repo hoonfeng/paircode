@@ -153,7 +153,7 @@ async function showContextMenu(e) {
       { separator: true },
       { label: '在终端中打开', icon: 'terminal', action: 'open-terminal' },
       { label: '在资源管理器中显示', action: 'show-in-explorer' },
-      { label: '添加到工作区', action: 'add-to-workspace' },
+      { label: '从工作区移除', action: 'remove-from-workspace' },
     ]
   } else {
     // ── 文件右键菜单（匹配 GUI fileNodeMenu）──
@@ -220,7 +220,7 @@ async function showContextMenu(e) {
     case 'add-to-chat': await addToChat(path, name, isDir); break
 
     // 添加到工作区
-    case 'add-to-workspace': await addToWorkspace(path); break
+    case 'remove-from-workspace': await removeFromWorkspace(path); break
 
     // AI 操作（通过对话发送命令）
 
@@ -359,6 +359,14 @@ async function addToWorkspace(path) {
     await api.apiPost('/workspace', { action: 'add-folder', path })
     window.dispatchEvent(new CustomEvent('refresh-tree'))
   } catch (err) { window.$toast('添加失败: ' + err.message, 'error') }
+}
+
+// ── 从工作区移除 ──
+async function removeFromWorkspace(path) {
+  try {
+    await api.apiPost('/workspace', { action: 'remove-folder', path })
+    window.dispatchEvent(new CustomEvent('refresh-tree'))
+  } catch (err) { window.$toast('移除失败: ' + err.message, 'error') }
 }
 
 // ── 添加到对话（发送文件内容 + 路径引用）──
