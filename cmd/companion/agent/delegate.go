@@ -184,17 +184,15 @@ func lastAssistantContent(msgs []Message) string {
 	return ""
 }
 
-// ── 外层 agent 专用工具（plan/task 管理）：不允许透传给子 agent ──
+// ── 外层 agent 专用工具：不允许透传给子 agent ──
+// update_plan 是自主模式编排 agent 用来维护执行计划清单的，内层子 agent
+// 不需要看到它。task_* 工具（task_create/update/list/delete/summary）则是
+// 给内层子 agent 追踪自身任务进度用的，需要保留在子 registry 中。
 var outerOnlyTools = map[string]bool{
-	"update_plan":  true,
-	"task_create":  true,
-	"task_update":  true,
-	"task_list":    true,
-	"task_delete":  true,
-	"task_summary": true,
+	"update_plan": true,
 }
 
-// rebuildSubRegistry 创建子 agent 的注册表，自动排除外层专用工具（plan/task）。
+// rebuildSubRegistry 创建子 agent 的注册表，自动排除外层专用工具。
 // 若子 agent 有显式白名单 (sa.Tools)，则先过滤掉外层专用工具，再 Subset。
 // 若无白名单，则从父注册表 Copy 后移除外层专用工具。
 func rebuildSubRegistry(parent *Registry, sa *SubAgent) *Registry {
