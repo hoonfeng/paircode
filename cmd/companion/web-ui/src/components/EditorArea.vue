@@ -42,7 +42,9 @@
             <button :class="['md-mode-btn', { active: mdPreview }]" @click="mdPreview = true">预览</button>
             <button :class="['md-mode-btn', { active: !mdPreview }]" @click="mdPreview = false">编辑</button>
           </div>
-          <MarkdownRenderer v-if="mdPreview" :text="currentContent" :theme="state.theme" />
+          <div v-if="mdPreview" class="md-preview-wrap">
+            <MarkdownRenderer :text="currentContent" :theme="state.theme" />
+          </div>
           <CodeEditor v-else
             ref="editorRef"
             :key="'md_' + state.activeFile"
@@ -450,5 +452,6 @@ onUnmounted(() => { document.removeEventListener('keydown', handleKeydown) })
 }
 .md-mode-btn:hover:not(.active) { background: var(--bg-hover); color: var(--text-primary); }
 
-.editor-wrapper { height: 100%; overflow: hidden; }
+.editor-wrapper { height: 100%; overflow: hidden; display: flex; flex-direction: column; }
+.md-preview-wrap { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
 </style>
