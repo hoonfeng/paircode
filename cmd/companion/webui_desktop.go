@@ -28,6 +28,11 @@ import (
 	"github.com/hoonfeng/paircode/pkg/memory"
 )
 
+func init() {
+	// 桌面版：使用 bridge 压缩器
+	webCompressor = func() agent.Compressor { return bridge.BuildCompressor() }
+}
+
 func registerExtraHandlers(mux *http.ServeMux, s *webServer) {
 	mux.HandleFunc("/api/chat/send", s.handleChatSend)
 	mux.HandleFunc("/ws", s.handleWebSocket) // WebSocket 端点（替代 SSE /api/chat/events）
@@ -359,107 +364,16 @@ func runOrchestrationLoop(ctx context.Context, prov agent.Provider, reg *agent.R
 	execMgr.Save(execState)
 	select {
 	case events <- agent.Event{Type: agent.EventError, Content: fmt.Sprintf("自主模式已达最大执行轮次 %d，终止", maxLoops)}:
-	default:
-	}
-	return allHistory
-}
-
-// buildWebSystemPrompt 构建 web 模式的完整系统提示词。
-func buildWebSystemPrompt() string {
-	sys := agent.DefaultSystemPrompt(core.Folders)
-	if si := strings.TrimSpace(core.Settings.SystemInstructions); si != "" {
-		sys += "\n\n# 系统级指令（务必遵守）\n" + si
-	}
-	sys += roleprompts.PhilosophyPrompt()
-	sys += skills.Prompt()
-	sys += agent.SelfManagementPrompt()
-	if core.Settings.LuaTools {
-		sys += agent.LuaToolsPrompt()
-	}
-	sys += agent.LongTermMemoryPrompt()
-	root := core.Root()
-	sys += agent.ProjectRules(root)
-	sys += agent.ProjectKnowledge(root, 2500)
-	return sys
-}
-func buildWebPlanner() *agent.Planner {
-	base := strings.TrimSpace(core.Settings.BaseURL)
-	key := strings.TrimSpace(core.Settings.APIKey)
-	if base == "" || key == "" {
-		return nil
-	}
-	model := strings.TrimSpace(core.Settings.PlanModel)
-	if model == "" {
-		return nil
-	}
-	return &agent.Planner{
-		Provider: &agent.OpenAIProvider{
-			BaseURL: base, APIKey: key, Model: model,
-			Temperature: 0.3, MaxTokens: 2048, ThinkingMode: "non-thinking",
-		},
-		SystemPrompt: roleprompts.LoadRolePrompt("planner", agent.DefaultPlannerPrompt()) + roleprompts.RolePhilosophy("planner"),
-	}
-}
-
-// planToUpdateArgs 把规划 Agent 的计划转成 update_plan 工具参数 JSON。
-func planToUpdateArgs(plan agent.Plan) string {
-	steps := make([]map[string]any, len(plan.Steps))
-	for i, s := range plan.Steps {
-		steps[i] = map[string]any{
-			"id": s.ID, "description": s.Description,
-			"status": "pending", "dependencies": s.Dependencies,
-		}
-	}
-	b, _ := json.Marshal(map[string]any{"steps": steps})
-	return string(b)
-}
-
-// planStepsText 把计划转成给执行 Agent 的纲领文本。
-func planStepsText(plan agent.Plan) string {
-	var sb strings.Builder
-	sb.WriteString("## 规划思路\n" + plan.Reasoning + "\n\n## 执行步骤\n")
-	for i, s := range plan.Steps {
-		deps := ""
-		if len(s.Dependencies) > 0 {
-			deps = " [前置: " + strings.Join(s.Dependencies, ", ") + "]"
-		}
-		sb.WriteString(fmt.Sprintf("%d. **%s**%s\n", i+1, s.Description, deps))
-	}
-	return sb.String()
-}
-
-// reloadWebLuaTools 加载工作区 .pair/tools/*.lua 自定义工具。
-func reloadWebLuaTools(reg *agent.Registry, root string) {
-	if !core.Settings.LuaTools {
-		return
-	}
-	agent.LoadLuaTools(reg, filepath.Join(root, ".pair", "tools"))
-}
-
-func buildWebProvider() agent.Provider {
-	s := core.Settings
-	if s.APIKey == "" || s.BaseURL == "" {
-		return nil
-	}
-	// 配置健康检查：maxTokens 过小会导致思考/回复被截断
-	if s.MaxTokens > 0 && s.MaxTokens < 8192 {
-		log.Printf("[WARN] maxTokens=%d 过小（<8192），可能导致思考/回复被截断。建议在设置中调大至 ≥8192", s.MaxTokens)
-	}
-	return &agent.OpenAIProvider{
-		BaseURL:      s.BaseURL,
-		APIKey:       s.APIKey,
-		Model:        core.MainModel(),
-		Temperature:  core.Temperature(),
-		MaxTokens:    s.MaxTokens,
-		ThinkingMode: s.ThinkingMode,
-	}
+// buildWebSystemPrompt / buildWebProvider / reloadWebLuaTools / countStates 已在 web_server.go 中统一实现
 }
 
 // ─── Chat / Agent SSE API ───────────────────────────────────
 
 // buildWebLoopOpts 构建 agent.LoopOpts（收敛 provider/registry/system/history 构造逻辑）。
 // 从原 handleChatSend 中提取，供非阻塞启动调用 agentMgr.Start 使用。
-func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) agent.LoopOpts {
+// handleChatSend / Stop / Answer / Approve / Feedback / Market 等已在 web_server.go 中统一实现
+
+// ─── 自动构建验证 ── {
 	prov := buildWebProvider()
 
 	root := core.Root()
@@ -616,7 +530,9 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 
 // handleChatSend 启动一次 agent 会话（非阻塞）。
 // 构建 LoopOpts 后调用 agentMgr.Start 立即返回；前端通过全局 WebSocket /ws 接收事件流。
-func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
+// handleChatSend / Stop / Answer / Approve / Feedback / Market 等已统一到 web_server.go
+
+
 	if r.Method != "POST" {
 		jsonErr(w, "仅 POST")
 		return
@@ -677,7 +593,7 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 				ThinkingMode: core.Settings.ThinkingMode,
 			}
 		} else {
-			opts.PlanProvider = buildWebProvider() // 回退使用主模型
+			opts.PlanProvider = s.buildWebProvider() // 回退使用主模型
 		}
 	}
 
@@ -696,7 +612,9 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 
 // startEventPersistWorker 已简化：消息写盘由 Session goroutine 在 loop.Run 返回后直接完成。
 // web 层只需设置 OnDone 回调——agent 在写盘后调用以生成对话摘要。
-func (s *webServer) startEventPersistWorker() {
+// startEventPersistWorker 已统一到 web_server.go（通过 webCompressor 回调差异）
+
+// handleChatStop
 	agentMgr.OnDone = func(convID string) {
 		go generateConversationSummary(convID, bridge.BuildCompressor())
 	}
@@ -718,7 +636,7 @@ func (s *webServer) handleChatStop(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleChatAnswer 向指定会话发送 ask_user 的用户回答。
-func (s *webServer) handleChatAnswer(w http.ResponseWriter, r *http.Request) {
+// handleChatAnswer
 	if r.Method != "POST" {
 		jsonErr(w, "仅 POST")
 		return
@@ -743,7 +661,7 @@ func (s *webServer) handleChatAnswer(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleChatApprove 向指定会话发送审批结果。
-func (s *webServer) handleChatApprove(w http.ResponseWriter, r *http.Request) {
+// handleChatApprove
 	if r.Method != "POST" {
 		jsonErr(w, "仅 POST")
 		return
@@ -768,7 +686,7 @@ func (s *webServer) handleChatApprove(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleChatFeedback 向指定会话发送运行时反馈（补充/纠正）。
-func (s *webServer) handleChatFeedback(w http.ResponseWriter, r *http.Request) {
+// handleChatFeedback
 	if r.Method != "POST" {
 		jsonErr(w, "仅 POST")
 		return
@@ -795,7 +713,9 @@ func (s *webServer) handleChatFeedback(w http.ResponseWriter, r *http.Request) {
 
 // ─── 市场搜索 API ──────────────────────────────────────────
 
-func (s *webServer) handleMarketplaceSearch(w http.ResponseWriter, r *http.Request) {
+// handleMarketplaceSearch 等已统一到 web_server.go
+
+func (s *webServer) handleMarketplaceSearch
 	query := r.URL.Query().Get("q")
 	kind := r.URL.Query().Get("kind")
 	if kind == "" {
@@ -827,7 +747,7 @@ func (s *webServer) handleMarketplaceSearch(w http.ResponseWriter, r *http.Reque
 
 // ─── 市场安装 API ──────────────────────────────────────────
 
-func (s *webServer) handleMarketplaceInstall(w http.ResponseWriter, r *http.Request) {
+// handleMarketplaceInstall
 	if r.Method != "POST" {
 		jsonErr(w, "仅 POST")
 		return
@@ -865,7 +785,7 @@ func (s *webServer) handleMarketplaceInstall(w http.ResponseWriter, r *http.Requ
 }
 
 // handleMarketplaceRefresh 刷新远程市场缓存。
-func (s *webServer) handleMarketplaceRefresh(w http.ResponseWriter, r *http.Request) {
+// handleMarketplaceRefresh
 	if r.Method != "POST" {
 		jsonErr(w, "仅 POST")
 		return
@@ -991,7 +911,9 @@ func autoVerifyProject(root string) verifyResult {
 }
 
 // countStates 统计具备指定状态的执行状态数量。
-func countStates(states []*agent.ExecutionState, status agent.ExecStatus) int {
+// countStates 已在 web_server.go 中统一实现
+
+
 	n := 0
 	for _, s := range states {
 		if s.Status == status {
