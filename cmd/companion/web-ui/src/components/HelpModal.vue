@@ -7,6 +7,9 @@
         <div class="header-actions">
           <input type="text" class="doc-search-input" v-model="searchQuery"
                  placeholder="搜索文档..." @input="filterDocs" />
+          <button class="btn-export" @click="exportCurrentDoc" title="导出当前文档">
+            <SvgIcon name="download" :size="14" /> 导出
+          </button>
           <button class="modal-close" @click="$emit('close')">&times;</button>
         </div>
       </div>
@@ -125,6 +128,28 @@ function nextDoc() {
   }
 }
 
+function exportCurrentDoc() {
+  const docMap = {
+    'faq': { md: faqMd, name: 'faq', title: '常见问题' },
+    'getting-started': { md: gettingStartedMd, name: 'getting-started', title: '快速开始' },
+    'features': { md: featuresMd, name: 'features', title: '功能介绍' },
+    'api': { md: apiDocsMd, name: 'api-docs', title: 'API 文档' },
+    'tools': { md: toolsMd, name: 'tools', title: '工具文档' },
+    'shortcuts': { md: shortcutsMd, name: 'shortcuts', title: '快捷键' },
+  }
+  const doc = docMap[activeDoc.value]
+  if (!doc) return
+  const blob = new Blob([doc.md], { type: 'text/markdown;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'paircode-' + doc.name + '.md'
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
 onMounted(() => {
   filterDocs()
 })
@@ -140,8 +165,8 @@ onMounted(() => {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 8px;
-  width: 850px;
-  height: 75vh;
+  width: 980px;
+  height: 85vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -242,6 +267,22 @@ onMounted(() => {
 }
 .doc-markdown :deep(p) {
   margin: 8px 0;
+}
+.btn-export {
+  display: flex; align-items: center; gap: 4px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.btn-export:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--accent);
 }
 .doc-markdown :deep(code) {
   font-family: var(--font-code);

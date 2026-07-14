@@ -18,9 +18,10 @@
         <!-- 描述 -->
         <div class="about-section">
           <p class="about-description">
-            PairCode IDE 是一款纯 Web 端的 AI 辅助编程集成开发环境。
-            无需安装任何桌面应用，在浏览器中打开即可使用。它将 AI 对话能力深度融入编码工作流，
-            你只需在对话面板中用自然语言描述需求，AI 就能自动理解上下文、读写文件、执行命令、
+            PairCode IDE 是一款纯 Web 端的 AI 辅助编程集成开发环境，
+            专为浏览器而设计。无需安装任何桌面客户端或本地 IDE 软件，
+            打开浏览器即可开始编程。它将 AI 对话能力深度融入编码工作流，
+            你只需用自然语言描述需求，AI 就能自动理解上下文、读写文件、执行命令、
             管理版本控制。从代码生成到项目运维，在同一个浏览器窗口中全部完成。
           </p>
         </div>
@@ -30,13 +31,15 @@
           <div class="section-title">主要特性</div>
           <ul class="feature-list">
             <li><SvgIcon name="bot" :size="14" color="var(--accent)" /> AI 对话编程 — 用自然语言与 AI 对话，自动生成与重构代码</li>
-            <li><SvgIcon name="file" :size="14" color="var(--accent)" /> 智能代码编辑器 — 多语言语法高亮，流畅的编辑体验</li>
+            <li><SvgIcon name="file" :size="14" color="var(--accent)" /> 智能代码编辑器 — 多语言语法高亮，浏览器中流畅编辑</li>
             <li><SvgIcon name="git-branch" :size="14" color="var(--accent)" /> Git 版本控制 — 在对话中完成全部 Git 操作</li>
-            <li><SvgIcon name="terminal" :size="14" color="var(--accent)" /> 内置终端 — 无需离开 IDE 即可执行命令</li>
+            <li><SvgIcon name="terminal" :size="14" color="var(--accent)" /> 内置终端 — 无需离开浏览器即可执行命令</li>
             <li><SvgIcon name="search" :size="14" color="var(--accent)" /> 全局搜索 — 快速搜索文件与代码内容</li>
             <li><SvgIcon name="settings" :size="14" color="var(--accent)" /> 自主 Agent 模式 — AI 主动分析项目并自动执行任务</li>
             <li><SvgIcon name="grid" :size="14" color="var(--accent)" /> 对话历史管理 — 自动保存、回溯与继续历史对话</li>
             <li><SvgIcon name="tool" :size="14" color="var(--accent)" /> Skills / MCP 扩展 — 通过技能市场扩展 IDE 能力</li>
+            <li><SvgIcon name="code" :size="14" color="var(--accent)" /> 内置调试器 — 支持 Go 程序的断点、单步和变量查看</li>
+            <li><SvgIcon name="image" :size="14" color="var(--accent)" /> 网页验证 — 打开 URL、截图、分析页面效果</li>
           </ul>
         </div>
 
@@ -50,6 +53,7 @@
             <span class="tech-badge">MCP</span>
             <span class="tech-badge">CodeMirror</span>
             <span class="tech-badge">REST API</span>
+            <span class="tech-badge">DAP</span>
           </div>
         </div>
 
@@ -110,7 +114,7 @@ onMounted(async () => {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 8px;
-  width: 520px;
+  width: 680px;
   max-height: 80vh;
   display: flex;
   flex-direction: column;

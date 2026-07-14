@@ -328,8 +328,8 @@ func showAboutDialog() {
 	}
 	modal := component.NewModal(doc)
 	modal.SetTitle("关于 PairCode IDE")
-	modal.SetMaxWidth(480)
-	modal.SetMaxHeight(400)
+	modal.SetMaxWidth(600)   // 480 → 600，更宽可以让版本描述不换行
+	modal.SetMaxHeight(520)  // 400 → 520，让所有内容完整显示，无需滚动
 
 	body := modal.Content()
 	if body == nil {
@@ -339,7 +339,7 @@ func showAboutDialog() {
 
 	container := doc.CreateElement("div")
 	container.SetAttribute("style",
-		"display:flex;flex-direction:column;gap:12px;padding:16px;"+
+		"display:flex;flex-direction:column;gap:16px;padding:20px;"+
 			"color:#cccccc;font-size:14px;line-height:1.7;")
 
 	logo := doc.CreateElement("div")
