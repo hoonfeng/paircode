@@ -55,10 +55,11 @@ type BuildError struct {
 }
 
 // Builder 图谱构建编排器。
-// 整合 Go AST 解析、导入分析、调用图构建。
+// 整合 Tree-sitter (tsit) AST 解析（多语言）、导入分析、调用图构建。
 type Builder struct {
 	config        BuildConfig
 	store         *Store
+	tsitBuilder   *TsitBuilder
 	goBuilder     *GoBuilder
 	importAnalyzer *ImportAnalyzer
 }
@@ -68,6 +69,7 @@ func NewBuilder(config BuildConfig) *Builder {
 	return &Builder{
 		config: config,
 		store:  NewStore(config.Root),
+		tsitBuilder: NewTsitBuilder(config.Root, config.ModuleName),
 		goBuilder: NewGoBuilder(config.Root, config.ModuleName),
 		importAnalyzer: NewImportAnalyzer(config.Root, config.ModuleName),
 	}
@@ -90,10 +92,13 @@ func ReadModuleName(root string) (string, error) {
 
 // Graph 返回当前构建的图实例。
 func (b *Builder) Graph() *Graph {
-	if b.goBuilder == nil {
-		return NewGraph()
+	if b.tsitBuilder != nil && b.tsitBuilder.Graph().Stats().EntityCount > 0 {
+		return b.tsitBuilder.Graph()
 	}
-	return b.goBuilder.Graph()
+	if b.goBuilder != nil {
+		return b.goBuilder.Graph()
+	}
+	return NewGraph()
 }
 
 // DetectModuleName 尝试自动检测模块名（从 go.mod 或 go.work）。
@@ -119,21 +124,22 @@ func DetectModuleName(root string) string {
 
 // ── 构建执行 ──────────────────────────────────────────
 
-// BuildFull 执行完整构建：AST 解析 → 导入分析 → 调用图构建。
+// BuildFull 执行完整构建：Tree-sitter AST 解析 → 导入分析 → 调用图构建。
+// 使用 tsit 的多语言解析器（Go/JS/TS 等）。
 func (b *Builder) BuildFull() (*BuildResult, error) {
 	start := time.Now()
 
 	// 自动检测模块名
 	if b.config.ModuleName == "" {
 		b.config.ModuleName = DetectModuleName(b.config.Root)
-		b.goBuilder.ModuleName = b.config.ModuleName
+		b.tsitBuilder.ModuleName = b.config.ModuleName
 		b.importAnalyzer.ModuleName = b.config.ModuleName
 	}
 
 	result := &BuildResult{}
 
-	// 1. AST 解析所有 Go 源文件
-	filesParsed, astErrors := b.goBuilder.ParseDir(".")
+	// 1. Tree-sitter AST 解析（多语言）
+	filesParsed, astErrors := b.tsitBuilder.ParseDir(".")
 	result.FilesParsed = filesParsed
 	for _, err := range astErrors {
 		result.Errors = append(result.Errors, BuildError{
@@ -142,7 +148,7 @@ func (b *Builder) BuildFull() (*BuildResult, error) {
 		})
 	}
 
-	graph := b.goBuilder.Graph()
+	graph := b.tsitBuilder.Graph()
 	result.EntitiesAdded = graph.Stats().EntityCount
 	result.RelationsAdded = graph.Stats().RelationCount
 
