@@ -579,15 +579,19 @@ func RunAutonomous(ctx context.Context, planProv Provider, innerLoop *Loop, task
 // update_plan handler 返回格式为 "...完成 X/Y 步"。
 func planIncomplete(msgs []Message) bool {
 	for i := len(msgs) - 1; i >= 0; i-- {
-		if msgs[i].Role != RoleTool || !strings.Contains(msgs[i].Content, "完成 ") || !strings.Contains(msgs[i].Content, "/") {
+		if msgs[i].Role != RoleTool {
+			continue
+		}
+		c := msgs[i].Content
+		if !strings.Contains(c, "完成 ") || !strings.Contains(c, "/") {
 			continue
 		}
 		// 提取 "完成 X/Y" 中的 X 和 Y
-		idx := strings.Index(msgs[i].Content, "完成 ")
+		idx := strings.Index(c, "完成 ")
 		if idx < 0 {
 			continue
 		}
-		rest := msgs[idx+len("完成 "):]
+		rest := c[idx+len("完成 "):]
 		slash := strings.IndexByte(rest, '/')
 		if slash < 0 {
 			continue
