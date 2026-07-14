@@ -228,7 +228,7 @@ func OpenDialog() {
 	// ── 加载 HTML 模板 ──
 	reg := uixml.NewRegistry()
 	// 注册 tab onclick 处理器（使 HTML 中 onclick="selectSettingsTab(n)" 生效）
-	for i := 0; i <= 5; i++ {
+	for i := 0; i <= 6; i++ {
 		idx := i
 		reg.OnClick(fmt.Sprintf("selectSettingsTab(%d)", i), func(ctx uixml.EventContext) bool {
 			selectTab(doc, idx)
@@ -239,14 +239,6 @@ func OpenDialog() {
 	ui.MustLoadPanelHTML(doc, "panels/settings.html", reg)
 	root := doc.GetElementByID("settings-root")
 
-	// ── 调试条（显示加载状态） ──
-	dbg := doc.CreateElement("div")
-	dbg.SetAttribute("style",
-		"padding:3px 12px;background:#2d5a2d;color:#8f8;font-size:11px;border-radius:0;flex-shrink:0;border-bottom:1px solid #4caf50;")
-	dbg.SetTextContent(fmt.Sprintf("[设置调试] 服务商:%s | 模型:%s | 温度:%s",
-		EditingSettings.Provider, EditingSettings.ExecuteModel, EditingSettings.Temperature))
-	body.AppendChild(dbg)
-
 	// ── 创建所有控件并替换占位 ──
 	createLLMTab(doc)
 	createCompressTab(doc)
@@ -254,6 +246,7 @@ func OpenDialog() {
 	createTerminalTab(doc)
 	createAppearanceTab(doc)
 	createPhilosophyTab(doc)
+	createProvidersTab(doc)
 
 	// 转移组件 + 移入 Modal
 	ui.TransferComponents(doc, doc, root)
@@ -331,6 +324,7 @@ func OpenDialog() {
 			createTerminalTab(doc)
 			createAppearanceTab(doc)
 			createPhilosophyTab(doc)
+			createProvidersTab(doc)
 
 			ui.TransferComponents(doc, doc, newRoot)
 			ui.DetachRoot(newRoot)
@@ -361,18 +355,18 @@ func ApplyFontFamily() {
 // ── Tab 切换 ──
 
 func selectTab(doc *dom.Document, idx int) {
-	for i := 0; i <= 5; i++ {
+	for i := 0; i <= 6; i++ {
 		tabEl := doc.GetElementByID(fmt.Sprintf("settings-tab-%d", i))
 		paneEl := doc.GetElementByID(fmt.Sprintf("settings-pane-%d", i))
 		if tabEl == nil || paneEl == nil {
 			continue
 		}
 		if i == idx {
-			tabEl.SetAttribute("style", "padding:8px 16px;cursor:pointer;font-size:13px;color:"+ui.Text+";border-bottom:2px solid "+ui.Accent+";user-select:none;")
-			paneEl.SetAttribute("style", "display:flex;flex-direction:column;gap:10px;")
+			tabEl.ClassList().Add("active")
+			paneEl.ClassList().Remove("hidden")
 		} else {
-			tabEl.SetAttribute("style", "padding:8px 16px;cursor:pointer;font-size:13px;color:"+ui.TextDim+";border-bottom:2px solid transparent;user-select:none;")
-			paneEl.SetAttribute("style", "display:none;")
+			tabEl.ClassList().Remove("active")
+			paneEl.ClassList().Add("hidden")
 		}
 	}
 }
@@ -407,9 +401,10 @@ var (
 	compressModelSel    *component.Select
 	compressThinkSel    *component.Select
 	autoCollapseCb      *component.Checkbox
-	autoIterateCb       *component.Checkbox
+	autoIterateCb        *component.Checkbox
 	// aiReviewCb 已移除，审核开关统一在 chat 工具栏
-	luaToolsCb          *component.Checkbox
+	requireApprovalCb    *component.Checkbox
+	luaToolsCb           *component.Checkbox
 	benchmarkCb         *component.Checkbox
 	maxIterationsInp    *component.Input
 	maxParallelInp      *component.Input
@@ -530,6 +525,8 @@ func createAgentTab(doc *dom.Document) {
 	autoIterateCb = newCheckbox(doc, "驳回后自动迭代改进", s.AutoIterate)
 	replaceCheckbox(doc, "s-autoiterate", autoIterateCb)
 
+	requireApprovalCb = newCheckbox(doc, "破坏性操作需人工审批", s.RequireApproval)
+	replaceCheckbox(doc, "s-requireapproval", requireApprovalCb)
 
 	luaToolsCb = newCheckbox(doc, "启用 Lua 自定义工具", s.LuaTools)
 	replaceCheckbox(doc, "s-luatools", luaToolsCb)
@@ -604,6 +601,330 @@ func createAppearanceTab(doc *dom.Document) {
 	replaceCheckbox(doc, "s-hideminimap", hideMinimapCb)
 }
 
+func createProvidersTab(doc *dom.Document) {
+	listContainer := doc.GetElementByID("s-provider-list")
+	if listContainer == nil {
+		return
+	}
+	listContainer.ClearChildren()
+
+	providers := core.GetProviders()
+	for _, name := range providers {
+		models := core.GetModels(name)
+		row := buildProviderRow(doc, name, models)
+		listContainer.AppendChild(row)
+	}
+
+	// 注册添加按钮
+	addBtn := doc.GetElementByID("s-btn-add-provider")
+	if addBtn != nil {
+		doc.RegisterComponent(addBtn, &clickHandler{
+			fn: func() {
+				showProviderEditModal(doc, "", nil)
+			},
+		})
+	}
+}
+
+func buildProviderRow(doc *dom.Document, name string, models []string) *dom.Element {
+	row := doc.CreateElement("div")
+	modelStr := fmt.Sprintf("%d 个模型", len(models))
+	row.SetAttribute("style",
+		"display:flex;flex-direction:row;align-items:center;gap:8px;padding:6px 12px;"+
+			"background:"+ui.Bg+";border:1px solid "+ui.Border+";border-radius:3px;")
+
+	// 服务商名
+	nameEl := doc.CreateElement("div")
+	nameEl.SetAttribute("style", "flex:1;font-size:13px;color:"+ui.Text+";font-weight:bold;")
+	nameEl.SetTextContent(name)
+	row.AppendChild(nameEl)
+
+	// 模型数
+	modelCountEl := doc.CreateElement("div")
+	modelCountEl.SetAttribute("style", "font-size:11px;color:"+ui.TextDim+";margin-right:8px;")
+	modelCountEl.SetTextContent(modelStr)
+	row.AppendChild(modelCountEl)
+
+	// 编辑按钮
+	editBtn := doc.CreateElement("div")
+	editBtn.SetAttribute("style",
+		"padding:2px 10px;font-size:11px;cursor:pointer;color:#cccccc;border:1px solid #454545;border-radius:3px;user-select:none;")
+	editBtn.SetTextContent("编辑")
+	row.AppendChild(editBtn)
+	doc.RegisterComponent(editBtn, &clickHandler{
+		fn: func() {
+			showProviderEditModal(doc, name, models)
+		},
+	})
+
+	// 删除按钮
+	delBtn := doc.CreateElement("div")
+	delBtn.SetAttribute("style",
+		"padding:2px 10px;font-size:11px;cursor:pointer;color:#e06c75;border:1px solid #5a2d32;border-radius:3px;user-select:none;")
+	delBtn.SetTextContent("删除")
+	row.AppendChild(delBtn)
+	doc.RegisterComponent(delBtn, &clickHandler{
+		fn: func() {
+			confirmDeleteProvider(doc, name)
+		},
+	})
+
+	return row
+}
+
+func showProviderEditModal(doc *dom.Document, name string, models []string) {
+	isNew := name == ""
+	modal := component.NewModal(doc)
+	modal.SetTitle(func() string {
+		if isNew {
+			return "添加服务商"
+		}
+		return "编辑服务商: " + name
+	}())
+	modal.SetMaxWidth(450)
+	modal.SetMaxHeight(400)
+
+	body := modal.Content()
+	if body == nil {
+		return
+	}
+	body.ClearChildren()
+
+	// 服务商名称
+	nameLabel := doc.CreateElement("div")
+	nameLabel.SetAttribute("style", "color:"+ui.Text+";font-size:13px;margin-bottom:4px;")
+	nameLabel.SetTextContent("服务商名称")
+	body.AppendChild(nameLabel)
+
+	nameInput := component.NewInput(doc, "如 deepseek, openai")
+	if !isNew {
+		nameInput.SetValue(name)
+	}
+	nameInput.SetBaseStyle(inputBase)
+	body.AppendChild(nameInput.Element())
+
+	// 模型列表（多行文本）
+	body.AppendChild(doc.CreateElement("br"))
+
+	modelsLabel := doc.CreateElement("div")
+	modelsLabel.SetAttribute("style", "color:"+ui.Text+";font-size:13px;margin-bottom:4px;margin-top:8px;")
+	modelsLabel.SetTextContent("模型列表（每行一个模型名）")
+	body.AppendChild(modelsLabel)
+
+	modelsInput := component.NewInput(doc, "deepseek-v4-flash")
+	if !isNew && len(models) > 0 {
+		modelsInput.SetValue(strings.Join(models, "\n"))
+	}
+	modelsInput.SetBaseStyle(inputBase + ";height:120px;white-space:pre;overflow-y:auto;")
+	body.AppendChild(modelsInput.Element())
+
+	// 错误信息
+	errEl := doc.CreateElement("div")
+	errEl.SetAttribute("style", "color:#e06c75;font-size:12px;padding:4px 0;display:none;")
+	errEl.SetTextContent("")
+	body.AppendChild(errEl)
+
+	// Base URL（可选）
+	body.AppendChild(doc.CreateElement("br"))
+	baseURLLabel := doc.CreateElement("div")
+	baseURLLabel.SetAttribute("style", "color:"+ui.Text+";font-size:13px;margin-bottom:4px;margin-top:8px;")
+	baseURLLabel.SetTextContent("Base URL（可选）")
+	body.AppendChild(baseURLLabel)
+
+	baseURLInput := component.NewInput(doc, "https://api.deepseek.com/v1")
+	if url, ok := providerBaseURLs[name]; ok {
+		baseURLInput.SetValue(url)
+	}
+	baseURLInput.SetBaseStyle(inputBase)
+	body.AppendChild(baseURLInput.Element())
+
+	// 按钮行
+	btnRow := doc.CreateElement("div")
+	btnRow.SetAttribute("style", "display:flex;flex-direction:row;justify-content:flex-end;gap:8px;margin-top:16px;")
+
+	cancelBtn := doc.CreateElement("div")
+	cancelBtn.SetAttribute("style",
+		"padding:4px 16px;font-size:12px;cursor:pointer;color:#cccccc;border:1px solid #454545;border-radius:3px;user-select:none;")
+	cancelBtn.SetTextContent("取消")
+	btnRow.AppendChild(cancelBtn)
+	doc.RegisterComponent(cancelBtn, &clickHandler{
+		fn: func() {
+			modal.Hide()
+		},
+	})
+
+	saveBtn := doc.CreateElement("div")
+	saveBtn.SetAttribute("style",
+		"padding:4px 16px;font-size:12px;cursor:pointer;color:#fff;background:#0e639c;border:none;border-radius:3px;user-select:none;")
+	saveBtn.SetTextContent("保存")
+	btnRow.AppendChild(saveBtn)
+	doc.RegisterComponent(saveBtn, &clickHandler{
+		fn: func() {
+			newName := nameInput.Value()
+			modelText := modelsInput.Value()
+
+			// 解析模型列表
+			var modelList []string
+			for _, line := range strings.Split(modelText, "\n") {
+				line = strings.TrimSpace(line)
+				if line != "" {
+					modelList = append(modelList, line)
+				}
+			}
+
+			if newName == "" {
+				errEl.SetAttribute("style", "color:#e06c75;font-size:12px;padding:4px 0;")
+				errEl.SetTextContent("服务商名称不能为空")
+				return
+			}
+
+			var err error
+			if isNew {
+				err = core.AddProvider(newName, modelList)
+			} else {
+				// 重命名或更新模型
+				if newName != name {
+					if err = core.RenameProvider(name, newName); err == nil {
+						err = core.UpdateProviderModels(newName, modelList)
+					}
+				} else {
+					err = core.UpdateProviderModels(name, modelList)
+				}
+			}
+
+			if err != nil {
+				errEl.SetAttribute("style", "color:#e06c75;font-size:12px;padding:4px 0;")
+				errEl.SetTextContent(err.Error())
+				return
+			}
+
+			// 同步 baseURL 映射
+			baseURLVal := baseURLInput.Value()
+			if baseURLVal != "" {
+				providerBaseURLs[newName] = baseURLVal
+			}
+
+			modal.Hide()
+
+			// 刷新 UI
+			refreshProviderSelectors(doc)
+			createProvidersTab(doc)
+			uiapi.MessageSuccess(func() string {
+				if isNew {
+					return "服务商 " + newName + " 已添加"
+				}
+				return "服务商 " + newName + " 已更新"
+			}())
+		},
+	})
+
+	body.AppendChild(btnRow)
+	modal.Show()
+}
+
+func confirmDeleteProvider(doc *dom.Document, name string) {
+	modal := component.NewModal(doc)
+	modal.SetTitle("确认删除")
+	modal.SetMaxWidth(350)
+	modal.SetMaxHeight(200)
+
+	body := modal.Content()
+	if body == nil {
+		return
+	}
+	body.ClearChildren()
+
+	warn := doc.CreateElement("div")
+	warn.SetAttribute("style", "color:"+ui.Text+";font-size:13px;padding:12px;")
+	warn.SetTextContent(fmt.Sprintf("确定要删除服务商「%s」吗？\n此操作不可撤销。", name))
+	body.AppendChild(warn)
+
+	// 检查是否正在使用
+	inUse := false
+	if EditingSettings.Provider == name || EditingSettings.CompressProvider == name {
+		inUse = true
+		inUseMsg := doc.CreateElement("div")
+		inUseMsg.SetAttribute("style", "color:#e06c75;font-size:12px;padding:0 12px 8px;")
+		inUseMsg.SetTextContent("该服务商正在被主模型或压缩模型使用，删除后将自动切换到第一个可用服务商。")
+		body.AppendChild(inUseMsg)
+	}
+
+	btnRow := doc.CreateElement("div")
+	btnRow.SetAttribute("style", "display:flex;flex-direction:row;justify-content:flex-end;gap:8px;padding:12px;")
+
+	cancelBtn := doc.CreateElement("div")
+	cancelBtn.SetAttribute("style",
+		"padding:4px 16px;font-size:12px;cursor:pointer;color:#cccccc;border:1px solid #454545;border-radius:3px;user-select:none;")
+	cancelBtn.SetTextContent("取消")
+	btnRow.AppendChild(cancelBtn)
+	doc.RegisterComponent(cancelBtn, &clickHandler{
+		fn: func() { modal.Hide() },
+	})
+
+	delBtn := doc.CreateElement("div")
+	delBtn.SetAttribute("style",
+		"padding:4px 16px;font-size:12px;cursor:pointer;color:#fff;background:#c42b1c;border:none;border-radius:3px;user-select:none;")
+	delBtn.SetTextContent("删除")
+	btnRow.AppendChild(delBtn)
+	doc.RegisterComponent(delBtn, &clickHandler{
+		fn: func() {
+			if err := core.RemoveProvider(name); err != nil {
+				uiapi.MessageError("删除失败: " + err.Error())
+				modal.Hide()
+				return
+			}
+
+			// 如果正在使用，自动切换到第一个可用服务商
+			if inUse {
+				providers := core.GetProviders()
+				if len(providers) > 0 {
+					if EditingSettings.Provider == name {
+						EditingSettings.Provider = providers[0]
+					}
+					if EditingSettings.CompressProvider == name {
+						EditingSettings.CompressProvider = providers[0]
+					}
+				}
+			}
+
+			delete(providerBaseURLs, name)
+			modal.Hide()
+			refreshProviderSelectors(doc)
+			createProvidersTab(doc)
+			uiapi.MessageSuccess("服务商 " + name + " 已删除")
+		},
+	})
+
+	body.AppendChild(btnRow)
+	modal.Show()
+}
+
+// refreshProviderSelectors 刷新 LLM tab 和压缩 tab 中的服务商选择器
+func refreshProviderSelectors(doc *dom.Document) {
+	providers := core.GetProviders()
+	providerSel.SetOptions(providers)
+	compressProviderSel.SetOptions(providers)
+
+	// 如果当前选中的服务商已被删除，切到第一个
+	if len(providers) > 0 {
+		if !containsString(providers, providerSel.Value()) {
+			providerSel.SetSelectedIndex(0)
+		}
+		if !containsString(providers, compressProviderSel.Value()) {
+			compressProviderSel.SetSelectedIndex(0)
+		}
+	}
+}
+
+func containsString(list []string, s string) bool {
+	for _, v := range list {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
 func createPhilosophyTab(doc *dom.Document) {
 	s := &EditingSettings
 	philosophyCb = newCheckbox(doc, "启用思想注入（Philosophy）", s.PhilosophyEnabled)
@@ -661,6 +982,7 @@ func saveAll(doc *dom.Document) {
 	// Agent
 	s.AutoCollapse = autoCollapseCb.Checked()
 	s.AutoIterate = autoIterateCb.Checked()
+	s.RequireApproval = requireApprovalCb.Checked()
 	s.LuaTools = luaToolsCb.Checked()
 	s.Benchmark = benchmarkCb.Checked()
 	s.MaxIterations = parseInt(maxIterationsInp.Value())

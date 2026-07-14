@@ -152,6 +152,7 @@ body { font-size: 13px; color: #cccccc; background: #1e1e1e; overflow: hidden; }
 .settings-tab:hover { background: #2a2d2e; color: #cccccc; }
 .settings-tab.active { color: #cccccc; border-bottom-color: #0e639c; background: transparent; }
 .settings-pane { display: flex; flex-direction: column; }
+.settings-pane.hidden { display: none; }
 
 /* ── 设置面板紧凑控件（覆盖 .gwui-input / .select-trigger 的默认大尺寸）── */
 .gwui-input.settings-input {

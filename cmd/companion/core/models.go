@@ -4,6 +4,7 @@ package core
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -90,6 +91,89 @@ func GetProviders() []string {
 	}
 	sort.Strings(providers)
 	return providers
+}
+
+// SaveModelList 将 ModelList 持久化到 models.json
+func SaveModelList() error {
+	if ModelList == nil {
+		return fmt.Errorf("模型列表未加载")
+	}
+	p := ModelsPath()
+	data, err := json.MarshalIndent(ModelList, "", "  ")
+	if err != nil {
+		return fmt.Errorf("序列化模型列表失败: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		return fmt.Errorf("创建目录失败: %w", err)
+	}
+	return os.WriteFile(p, data, 0o644)
+}
+
+// AddProvider 添加新服务商及模型列表
+func AddProvider(name string, models []string) error {
+	if ModelList == nil {
+		LoadModelList()
+	}
+	if _, exists := ModelList[name]; exists {
+		return fmt.Errorf("服务商 %q 已存在", name)
+	}
+	if name == "" {
+		return fmt.Errorf("服务商名称不能为空")
+	}
+	ModelList[name] = models
+	return SaveModelList()
+}
+
+// RemoveProvider 删除服务商
+func RemoveProvider(name string) error {
+	if ModelList == nil {
+		LoadModelList()
+	}
+	if _, exists := ModelList[name]; !exists {
+		return fmt.Errorf("服务商 %q 不存在", name)
+	}
+	delete(ModelList, name)
+	return SaveModelList()
+}
+
+// UpdateProviderModels 更新指定服务商的模型列表
+func UpdateProviderModels(name string, models []string) error {
+	if ModelList == nil {
+		LoadModelList()
+	}
+	if _, exists := ModelList[name]; !exists {
+		return fmt.Errorf("服务商 %q 不存在", name)
+	}
+	ModelList[name] = models
+	return SaveModelList()
+}
+
+// RenameProvider 重命名服务商（同时更新 settings 中引用的 provider 名）
+func RenameProvider(oldName, newName string) error {
+	if ModelList == nil {
+		LoadModelList()
+	}
+	models, exists := ModelList[oldName]
+	if !exists {
+		return fmt.Errorf("服务商 %q 不存在", oldName)
+	}
+	if _, exists := ModelList[newName]; exists {
+		return fmt.Errorf("服务商 %q 已存在", newName)
+	}
+	if newName == "" {
+		return fmt.Errorf("服务商名称不能为空")
+	}
+	delete(ModelList, oldName)
+	ModelList[newName] = models
+	// 更新 settings 中的 provider 引用
+	if Settings.Provider == oldName {
+		Settings.Provider = newName
+	}
+	if Settings.CompressProvider == oldName {
+		Settings.CompressProvider = newName
+	}
+	Save()
+	return SaveModelList()
 }
 
 // WriteDefaultModels 在安装目录下写入内置默认 models.json（仅在文件不存在时）。

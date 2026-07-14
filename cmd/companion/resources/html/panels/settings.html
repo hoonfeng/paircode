@@ -9,6 +9,7 @@
     <div id="settings-tab-3" class="settings-tab" onclick="selectSettingsTab(3)">外观</div>
     <div id="settings-tab-4" class="settings-tab" onclick="selectSettingsTab(4)">思想</div>
     <div id="settings-tab-5" class="settings-tab" onclick="selectSettingsTab(5)">指令</div>
+    <div id="settings-tab-6" class="settings-tab" onclick="selectSettingsTab(6)">服务商</div>
   </div>
 
   <!-- ── 滚动内容区（统一管理所有 pane 的滚动，selectTab 只切换 pane 的 display，不动此容器）── -->
@@ -92,6 +93,15 @@
       <div style="font-weight:bold;font-size:13px;color:#8c8c8c;border-bottom:1px solid #2d2d2d;padding-bottom:4px;margin-top:8px;margin-bottom:4px;">项目级指令</div>
       <div style="font-size:12px;color:#8c8c8c;padding:2px 0 6px 0;">仅当前项目生效，存储于项目根目录 .pair/rules.md</div>
       <div id="s-projectinstructions" style="width:100%;"></div>
+    </div>
+
+    <!-- Tab 6: 服务商管理 -->
+    <div id="settings-pane-6" class="settings-pane" style="display:none;">
+      <div style="display:flex;flex-direction:row;justify-content:space-between;align-items:center;padding:4px 12px;border-bottom:1px solid #2d2d2d;padding-bottom:8px;margin-bottom:8px;">
+        <div style="font-weight:bold;font-size:13px;color:#8c8c8c;">已配置 AI 服务商</div>
+        <div id="s-btn-add-provider" style="padding:3px 12px;font-size:12px;cursor:pointer;color:#fff;background:#0e639c;border:none;border-radius:3px;user-select:none;">+ 添加服务商</div>
+      </div>
+      <div id="s-provider-list" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:4px;"></div>
     </div>
   </div>
 </div>
