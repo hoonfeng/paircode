@@ -270,15 +270,12 @@ function onScroll() {
     const threshold = 100
     const wasNearBottom = isNearBottom.value
     isNearBottom.value = el.scrollTop + el.clientHeight >= el.scrollHeight - threshold
-    // 用户主动上翻→锁定自动滚底3秒
+    // 用户主动上翻→锁定自动滚底（直到手动滚回底部或点击跳底按钮才解锁）
     if (wasNearBottom && !isNearBottom.value) {
       window.__scrollLockTimer = true
-      if (window.__scrollLockTimeout) clearTimeout(window.__scrollLockTimeout)
-      window.__scrollLockTimeout = setTimeout(() => { window.__scrollLockTimer = false }, 3000)
     }
     // 用户手动滚回底部→立即解锁
     if (!wasNearBottom && isNearBottom.value) {
-      if (window.__scrollLockTimeout) { clearTimeout(window.__scrollLockTimeout) }
       window.__scrollLockTimer = false
     }
     // 显示跳到底部按钮
@@ -590,11 +587,13 @@ const onKeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefa
 
 const scrollToBottom = () => {
   showScrollDown.value = false
+  window.__scrollLockTimer = false
   nextTick(() => { if (msgRef.value) { msgRef.value.scrollTop = msgRef.value.scrollHeight; isNearBottom.value = true; } })
 }
 
 const forceScrollToBottom = () => {
   showScrollDown.value = false
+  window.__scrollLockTimer = false
   nextTick(() => { if (msgRef.value) { msgRef.value.scrollTop = msgRef.value.scrollHeight; isNearBottom.value = true; } })
 }
 
