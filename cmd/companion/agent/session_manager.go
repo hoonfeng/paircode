@@ -816,18 +816,21 @@ func (m *SessionManager) GetWorkspaceRoot(convID string) string {
 }
 
 // doAutoCommit 在任务完成后自动执行 git add + git commit。
-// root 为工作区根目录，task 为用户任务文本，result 为最终结果摘要（可为空）。
-// commit message 格式："auto: <result 前 60 字>"，方便快速识别自动提交内容。
+// root 为工作区根目录，task 为用户任务文本（用其作 commit message），result 为最终结果摘要。
 // 自动设置 git user config 避免因全局配置缺失导致提交失败。
 // 执行失败时只日志不 panic（不影响 agent 主流程）。
 func doAutoCommit(root, task, result string) {
 	if root == "" {
 		return
 	}
-	// 取 result 前 60 字作 commit message
-	msg := strings.TrimSpace(result)
+	// 用任务描述作 commit message
+	msg := strings.TrimSpace(task)
 	if len(msg) > 60 {
+		// 截取到最后一个完整词
 		msg = msg[:60]
+		if idx := strings.LastIndex(msg, " "); idx > 30 {
+			msg = msg[:idx]
+		}
 	}
 	if msg == "" {
 		msg = "auto commit"
@@ -846,10 +849,14 @@ func doAutoCommit(root, task, result string) {
 		"commit", "-m", "auto: "+msg)
 	commit.Dir = root
 	if out, err := commit.CombinedOutput(); err != nil {
-		// "nothing to commit" 不是真正的错误
-		if !strings.Contains(string(out), "nothing to commit") {
-			fmt.Printf("[auto-commit] git commit 失败: %v\n%s\n", err, string(out))
+		if strings.Contains(string(out), "nothing to commit") {
+			// 无可提交内容 → 取消暂存，避免文件残留在暂存区
+			exec.Command("git", "reset", "HEAD").Run()
+			return
 		}
+		fmt.Printf("[auto-commit] git commit 失败: %v\n%s\n", err, string(out))
+		// 提交失败 → 取消暂存，避免文件残留在暂存区
+		exec.Command("git", "reset", "HEAD").Run()
 		return
 	}
 	fmt.Printf("[auto-commit] ✅ 已自动提交: auto: %s\n", msg)

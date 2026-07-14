@@ -296,6 +296,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import SvgIcon from './SvgIcon.vue'
 import Modal from './Modal.vue'
+import { state } from '../main.js'
 import api from '../api.js'
 
 // ─── 状态 ─────────────────────────────────────────────────────
@@ -595,9 +596,9 @@ function statusIcon(s) {
   if (s === '?' || s === '!') return s
   return '~'
 }
-
 watch(showStashPanel, v => { if (v) loadStashes() })
 watch(showIgnoreEditor, v => { if (v) loadIgnore() })
+watch(() => state.workspaceRoot, () => { loadStatus() })
 </script>
 
 <style scoped>
