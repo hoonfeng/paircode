@@ -2,124 +2,77 @@
   <div class="modal-overlay" @click.self="$emit('close')">
     <div class="modal-content about-modal">
       <div class="modal-header">
-        <h2><SvgIcon name="info" :size="18" /> 关于 PairCode IDE</h2>
+        <h2><SvgIcon name="info" :size="18" /> 关于 PairCode</h2>
         <button class="modal-close" @click="$emit('close')">&times;</button>
       </div>
       <div class="modal-body">
-        <div class="about-layout-row">
-          <!-- 左列：Logo + 描述 + 技术栈 -->
-          <div class="about-left-col">
-            <!-- Logo + 标题 -->
-            <div class="about-hero">
-              <div class="about-logo">
-                <SvgIcon name="code" :size="48" color="#58a6ff" />
-              </div>
-              <div class="about-title">PairCode IDE</div>
-              <div class="about-version">版本 {{ version }}</div>
+        <!-- 左列：Logo + 描述 + 技术栈 -->
+        <div class="about-left-col">
+          <!-- Logo + 标题 -->
+          <div class="about-hero">
+            <div class="about-logo">
+              <SvgIcon name="code" :size="48" color="#58a6ff" />
             </div>
-
-            <!-- 描述 -->
-            <div class="about-section about-desc-section">
-              <p class="about-description">
-                PairCode IDE 是一款集成 AI 助手的现代化编程环境。
-                以「对话即编程」为核心理念，将 AI 代码生成能力与 IDE 的编辑、调试、版本管理等功能无缝融合，
-                让开发者通过自然语言与代码进行交互，显著提升开发效率。
-              </p>
-            </div>
-
-            <!-- 技术栈 -->
-            <div class="about-section about-tech-section">
-              <div class="section-title">技术栈</div>
-              <div class="tech-stack">
-                <span class="tech-badge">Go</span>
-                <span class="tech-badge">Vue 3</span>
-                <span class="tech-badge">CodeMirror 6</span>
-                <span class="tech-badge">GWui</span>
-                <span class="tech-badge">WebSocket</span>
-                <span class="tech-badge">MCP</span>
-              </div>
-            </div>
+            <div class="about-title">PairCode IDE</div>
+            <div class="about-version">版本 {{ version }}</div>
           </div>
 
-          <!-- 右列：特性 + 系统信息 -->
-          <div class="about-right-col">
-            <!-- 特性亮点 -->
-            <div class="about-section">
-              <div class="section-title">主要特性</div>
-              <ul class="feature-list">
-                <li><SvgIcon name="bot" :size="14" color="var(--accent)" /> AI 对话编程 — 自然语言驱动代码生成与重构</li>
-                <li><SvgIcon name="file" :size="14" color="var(--accent)" /> 多语言代码编辑器 — 基于 CodeMirror 6</li>
-                <li><SvgIcon name="git-branch" :size="14" color="var(--accent)" /> Git 集成 — 可视化的版本管理</li>
-                <li><SvgIcon name="terminal" :size="14" color="var(--accent)" /> 内建终端 — 无需离开 IDE 执行命令</li>
-                <li><SvgIcon name="search" :size="14" color="var(--accent)" /> 智能搜索 — 全文搜索与代码导航</li>
-                <li><SvgIcon name="settings" :size="14" color="var(--accent)" /> BUG 自动检测 — 自动发现并修复代码问题</li>
-                <li><SvgIcon name="tool" :size="14" color="var(--accent)" /> 丰富工具链 — 文件处理/网络/截图/办公文档</li>
-                <li><SvgIcon name="grid" :size="14" color="var(--accent)" /> Skills / MCP 扩展 — 可插拔的工具生态</li>
-              </ul>
-            </div>
-
-            <!-- 系统信息 -->
-            <div class="about-section about-sys-section">
-              <div class="section-title">系统信息</div>
-              <div class="sys-info" v-if="!sysLoading">
-                <div class="info-row"><span class="info-label">主机名</span><span>{{ sysInfo.hostname }}</span></div>
-                <div class="info-row"><span class="info-label">操作系统</span><span>{{ sysInfo.os }}</span></div>
-                <div class="info-row"><span class="info-label">工作区</span><span class="info-path">{{ sysInfo.workspace }}</span></div>
-                <div class="info-row"><span class="info-label">Go 版本</span><span>{{ sysInfo.goos }}</span></div>
-              </div>
-              <div v-else class="loading-info">加载中...</div>
-            </div>
+          <!-- 描述 -->
+          <div class="about-section">
+            <p class="about-description">
+              PairCode IDE 是一款纯 Web 端的 AI 辅助编程集成开发环境，
+              专为浏览器而设计。无需安装任何桌面客户端或本地 IDE 软件，
+              打开浏览器即可开始编程。它将 AI 对话能力深度融入编码工作流，
+              你只需用自然语言描述需求，AI 就能自动理解上下文、读写文件、执行命令、
+              管理版本控制。从代码生成到项目运维，在同一个浏览器窗口中全部完成。
+            </p>
           </div>
-  width: 820px;
-  max-height: 480px;
-          <p class="about-description">
-            PairCode IDE 是一款集成 AI 助手的现代化编程环境。
-            以「对话即编程」为核心理念，将 AI 代码生成能力与 IDE 的编辑、调试、版本管理等功能无缝融合，
-            让开发者通过自然语言与代码进行交互，显著提升开发效率。
-          </p>
-        </div>
 
-        <!-- 特性亮点 -->
-        <div class="about-section">
-          <div class="section-title">主要特性</div>
-          <ul class="feature-list">
-            <li><SvgIcon name="bot" :size="14" color="var(--accent)" /> AI 对话编程 — 自然语言驱动代码生成与重构</li>
-            <li><SvgIcon name="file" :size="14" color="var(--accent)" /> 多语言代码编辑器 — 基于 CodeMirror 6</li>
-            <li><SvgIcon name="git-branch" :size="14" color="var(--accent)" /> Git 集成 — 可视化的版本管理</li>
-            <li><SvgIcon name="terminal" :size="14" color="var(--accent)" /> 内建终端 — 无需离开 IDE 执行命令</li>
-            <li><SvgIcon name="search" :size="14" color="var(--accent)" /> 智能搜索 — 全文搜索与代码导航</li>
-            <li><SvgIcon name="settings" :size="14" color="var(--accent)" /> BUG 自动检测 — 自动发现并修复代码问题</li>
-            <li><SvgIcon name="tool" :size="14" color="var(--accent)" /> 丰富工具链 — 文件处理/网络/截图/办公文档</li>
-            <li><SvgIcon name="grid" :size="14" color="var(--accent)" /> Skills / MCP 扩展 — 可插拔的工具生态</li>
-          </ul>
-        </div>
-
-        <!-- 技术栈 -->
-        <div class="about-section">
-          <div class="section-title">技术栈</div>
-          <div class="tech-stack">
-.modal-body {
-  flex: 1;
-  overflow: hidden;
-  padding: 16px 20px;
-}
-            <span class="tech-badge">CodeMirror 6</span>
-            <span class="tech-badge">GWui</span>
-            <span class="tech-badge">WebSocket</span>
-            <span class="tech-badge">MCP</span>
+          <!-- 技术栈 -->
+          <div class="about-section">
+            <div class="section-title">技术栈</div>
+            <div class="tech-stack">
+              <span class="tech-badge">Go</span>
+              <span class="tech-badge">Vue 3</span>
+              <span class="tech-badge">WebSocket</span>
+              <span class="tech-badge">MCP</span>
+              <span class="tech-badge">CodeMirror</span>
+              <span class="tech-badge">REST API</span>
+              <span class="tech-badge">DAP</span>
+            </div>
           </div>
         </div>
 
-        <!-- 系统信息 -->
-        <div class="about-section">
-          <div class="section-title">系统信息</div>
-          <div class="sys-info" v-if="!sysLoading">
-            <div class="info-row"><span class="info-label">主机名</span><span>{{ sysInfo.hostname }}</span></div>
-            <div class="info-row"><span class="info-label">操作系统</span><span>{{ sysInfo.os }}</span></div>
-            <div class="info-row"><span class="info-label">工作区</span><span class="info-path">{{ sysInfo.workspace }}</span></div>
-            <div class="info-row"><span class="info-label">Go 版本</span><span>{{ sysInfo.goos }}</span></div>
+        <!-- 右列：特性 + 系统信息 -->
+        <div class="about-right-col">
+          <!-- 特性亮点 -->
+          <div class="about-section">
+            <div class="section-title">主要特性</div>
+            <ul class="feature-list">
+              <li><SvgIcon name="bot" :size="14" color="var(--accent)" /> AI 对话编程 — 用自然语言与 AI 对话，自动生成与重构代码</li>
+              <li><SvgIcon name="file" :size="14" color="var(--accent)" /> 智能代码编辑器 — 多语言语法高亮，浏览器中流畅编辑</li>
+              <li><SvgIcon name="git-branch" :size="14" color="var(--accent)" /> Git 版本控制 — 在对话中完成全部 Git 操作</li>
+              <li><SvgIcon name="terminal" :size="14" color="var(--accent)" /> 内置终端 — 无需离开浏览器即可执行命令</li>
+              <li><SvgIcon name="search" :size="14" color="var(--accent)" /> 全局搜索 — 快速搜索文件与代码内容</li>
+              <li><SvgIcon name="settings" :size="14" color="var(--accent)" /> 自主 Agent 模式 — AI 主动分析项目并自动执行任务</li>
+              <li><SvgIcon name="grid" :size="14" color="var(--accent)" /> 对话历史管理 — 自动保存、回溯与继续历史对话</li>
+              <li><SvgIcon name="tool" :size="14" color="var(--accent)" /> Skills / MCP 扩展 — 通过技能市场扩展 IDE 能力</li>
+              <li><SvgIcon name="code" :size="14" color="var(--accent)" /> 内置调试器 — 支持 Go 程序的断点、单步和变量查看</li>
+              <li><SvgIcon name="image" :size="14" color="var(--accent)" /> 网页验证 — 打开 URL、截图、分析页面效果</li>
+            </ul>
           </div>
-          <div v-else class="loading-info">加载中...</div>
+
+          <!-- 系统信息 -->
+          <div class="about-section">
+            <div class="section-title">系统信息</div>
+            <div class="sys-info" v-if="!sysLoading">
+              <div class="info-row"><span class="info-label">主机名</span><span>{{ sysInfo.hostname }}</span></div>
+              <div class="info-row"><span class="info-label">操作系统</span><span>{{ sysInfo.os }}</span></div>
+              <div class="info-row"><span class="info-label">工作区</span><span class="info-path">{{ sysInfo.workspace }}</span></div>
+              <div class="info-row"><span class="info-label">平台信息</span><span>{{ sysInfo.goos }}</span></div>
+            </div>
+            <div v-else class="loading-info">加载中...</div>
+          </div>
         </div>
       </div>
 
@@ -145,7 +98,7 @@ defineProps({
   showHelpBtn: { type: Boolean, default: true },
 })
 
-const version = ref('1.0.0')
+const version = ref('v0.1.0')
 const sysInfo = ref({})
 const sysLoading = ref(true)
 
@@ -167,8 +120,10 @@ onMounted(async () => {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 8px;
-  width: 520px;
-  max-height: 80vh;
+  width: 880px;
+  height: 495px;
+  max-height: 85vh;
+  max-width: 90vw;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -195,7 +150,12 @@ onMounted(async () => {
 .modal-close:hover { background: var(--bg-hover); color: var(--text-primary); }
 
 .modal-body {
-  flex: 1; overflow-y: auto; padding: 20px;
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: grid;
+  grid-template-columns: 1fr 1.1fr;
+  gap: 28px;
 }
 .modal-footer {
   display: flex; align-items: center; justify-content: flex-end;
@@ -208,7 +168,7 @@ onMounted(async () => {
 /* Hero */
 .about-hero {
   text-align: center;
-  padding: 16px 0 20px;
+  padding: 8px 0 16px;
 }
 .about-logo {
   margin-bottom: 8px;
@@ -225,10 +185,10 @@ onMounted(async () => {
 
 /* 描述 */
 .about-section {
-  margin: 16px 0;
+  margin: 12px 0;
 }
 .about-description {
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.7;
   color: var(--text-secondary);
 }
@@ -251,8 +211,8 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 0;
-  font-size: 13px;
+  padding: 4px 0;
+  font-size: 12.5px;
   color: var(--text-secondary);
 }
 
@@ -319,40 +279,4 @@ onMounted(async () => {
   font-size: 13px;
 }
 .btn-secondary:hover { background: var(--bg-hover); }
-
-/* ── 横向两列布局 ── */
-.about-layout-row {
-  display: flex;
-  flex-direction: row;
-  gap: 24px;
-  height: 100%;
-}
-.about-left-col {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  overflow-y: auto;
-}
-.about-right-col {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  overflow-y: auto;
-}
-.about-desc-section {
-  margin: 2px 0;
-}
-.about-tech-section {
-  margin: 2px 0;
-}
-.about-sys-section {
-  margin: 2px 0;
-}
-.about-section {
-  margin: 4px 0;
-}
 </style>
