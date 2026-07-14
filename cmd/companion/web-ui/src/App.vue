@@ -3,7 +3,7 @@
     <!-- 标题栏 + 菜单栏 -->
     <div class="titlebar" @click="closeAllMenus">
       <div class="app-logo">
-        <SvgIcon name="code" :size="16" color="#0e639c" />
+        <img :src="logoUrl" class="logo-img" alt="PairCode" />
       </div>
       <MenuBar ref="menuBarRef" />
       <div class="title-center">{{ state.workspaceName }}</div>
@@ -72,6 +72,7 @@ import HelpModal from './components/HelpModal.vue'
 import AboutModal from './components/AboutModal.vue'
 import SvgIcon from './components/SvgIcon.vue'
 import GlobalDialogs from './components/GlobalDialogs.vue'
+import logoUrl from './assets/logo.svg'
 
 const showSettings = ref(false)
 const showSystem = ref(false)
@@ -480,6 +481,9 @@ watch(() => state.openFiles.length, schedulePersist)
 .app-logo {
   width: 48px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   -webkit-app-region: no-drag;
+}
+.logo-img {
+  width: 18px; height: 18px;
 }
 .title-center {
   flex: 1; text-align: center; font-size: 12px; color: var(--text-muted);

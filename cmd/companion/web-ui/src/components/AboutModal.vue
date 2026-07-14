@@ -11,7 +11,7 @@
           <!-- Logo + 标题 -->
           <div class="about-hero">
             <div class="about-logo">
-              <SvgIcon name="code" :size="48" color="#58a6ff" />
+              <img :src="logoUrl" class="about-logo-img" alt="PairCode" />
             </div>
             <div class="about-title">PairCode IDE</div>
             <div class="about-version">版本 {{ version }}</div>
@@ -91,6 +91,7 @@
 import { ref, onMounted } from 'vue'
 import SvgIcon from './SvgIcon.vue'
 import api from '../api.js'
+import logoUrl from '../assets/logo.svg'
 
 const emit = defineEmits(['close', 'openHelp'])
 
@@ -171,6 +172,9 @@ onMounted(async () => {
 }
 .about-logo {
   margin-bottom: 8px;
+}
+.about-logo-img {
+  width: 64px; height: 64px;
 }
 .about-title {
   font-size: 22px; font-weight: 700;

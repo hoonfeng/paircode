@@ -868,11 +868,7 @@ function startContentResizeObserver() {
   const wrap = msgRef.value.querySelector('.msg-list-wrap')
   if (!wrap) return
   contentResizeObserver = new ResizeObserver(() => {
-    // 用户主动上翻后锁定期间不自动滚底
-    if (window.__scrollLockTimer) return
-    if (isNearBottom.value && msgRef.value && !loadingMoreTop.value) {
-      msgRef.value.scrollTop = msgRef.value.scrollHeight
-    }
+    // 已移除自动滚动 — 由 agent-events.js 的 scrollToBottom 统一控制
   })
   contentResizeObserver.observe(wrap)
 }
@@ -883,15 +879,7 @@ function stopContentResizeObserver() {
   }
 }
 
-// ── 新消息自动滚底：仅当用户处于底部附近时跟随新内容
-// 配合 ResizeObserver（捕捉 segment 内内容增长），此处只处理消息增删场景
-watch(() => (state.messages || []).length, () => {
-  nextTick(() => {
-    if (isNearBottom.value && msgRef.value && !loadingMoreTop.value) {
-      msgRef.value.scrollTop = msgRef.value.scrollHeight
-    }
-  })
-})
+// ── 新消息自动滚底（已移除 — 由 agent-events.js 的 scrollToBottom 统一控制）
 
 // ── 对话切换时重启内容尺寸观察器（DOM 重建）
 watch(() => state.currentConvId, () => {
