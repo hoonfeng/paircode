@@ -15,6 +15,8 @@ import (
 	"github.com/hoonfeng/goui/pkg/types"
 	"github.com/hoonfeng/goui/pkg/widget"
 	"github.com/hoonfeng/goui/pkg/window"
+
+	_ "github.com/hoonfeng/goui/pkg/platform" // 注册 Win32 窗口后端
 )
 
 // ── 启动面板 StatefulWidget ─────────────────────────────

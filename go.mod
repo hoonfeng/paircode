@@ -30,3 +30,4 @@ require (
 )
 
 replace github.com/hoonfeng/gwui => F:\syproject\GWui
+replace github.com/hoonfeng/goskia => F:\syproject\goskia
