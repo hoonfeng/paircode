@@ -35,7 +35,6 @@ import (
 	searchpanel "github.com/hoonfeng/paircode/cmd/companion/ui/search"
 	settingspanel "github.com/hoonfeng/paircode/cmd/companion/ui/settings"
 	"github.com/hoonfeng/paircode/cmd/companion/ui/state"
-	statspanel "github.com/hoonfeng/paircode/cmd/companion/ui/stats"
 	termpanel "github.com/hoonfeng/paircode/cmd/companion/ui/terminal"
 )
 
@@ -330,47 +329,6 @@ func buildDropdowns(doc *dom.Document) {
 		label string
 		items []component.PopupMenuItem
 	}{
-		// ── Agent ｜ AI IDE 核心特色菜单 ──
-		{"Agent", []component.PopupMenuItem{
-			{Label: "启动新任务", OnClick: func() {
-				if ui.Ctx.Chat != nil && ui.Ctx.Chat.Send != nil {
-					ui.Ctx.Chat.Send("/task ")
-				} else {
-					uiapi.MessageInfo("请先在聊天面板中输入任务描述")
-				}
-			}},
-			{Label: "停止 Agent", OnClick: func() {
-				if chatpanel.IsRunning() {
-					chatpanel.StopAgent()
-				} else {
-					uiapi.MessageInfo("Agent 当前未运行")
-				}
-			}},
-			{Divider: true},
-			{Label: "Agent 监控", OnClick: func() { menuactions.ShowAgentMonitor() }},
-			{Divider: true},
-			{Label: "MCP 市场…", OnClick: func() {
-				marketplacepanel.OpenDialog()
-			}},
-			{Label: "技能市场…", OnClick: func() {
-				marketplacepanel.OpenDialog()
-			}},
-			{Divider: true},
-			{Label: "技能管理…", OnClick: func() {
-				settingspanel.OpenDialog()
-			}},
-			{Label: "语言模型配置…", OnClick: func() {
-				settingspanel.OpenDialog()
-			}},
-			{Divider: true},
-			{Label: "Agent 设置…", OnClick: func() {
-				settingspanel.OpenDialog()
-			}},
-			{Divider: true},
-			{Label: "项目统计…", OnClick: func() {
-				statspanel.ShowStatsDialog()
-			}},
-		}},
 		// ── 帮助 ──
 		{"帮助", []component.PopupMenuItem{
 			{Label: "快捷键参考", OnClick: func() {

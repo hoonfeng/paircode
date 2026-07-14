@@ -15,11 +15,14 @@ import (
 	"github.com/hoonfeng/gwui/uixml"
 
 	"github.com/hoonfeng/paircode/cmd/companion/ui"
+	mcppanel "github.com/hoonfeng/paircode/cmd/companion/ui/mcp"
+	skillspanel "github.com/hoonfeng/paircode/cmd/companion/ui/skills"
 )
 
 // ─── 数据状态 ──
 
 type panelState struct {
+	tabIndex   int    // 0=全部 1=MCP 2=技能 3=已安装
 	filterKind string // "" / "mcp" / "skill"
 	searchText string
 }
@@ -34,7 +37,7 @@ func OpenDialog() {
 	if doc == nil {
 		return
 	}
-	state = panelState{filterKind: ""}
+	state = panelState{filterKind: "", tabIndex: 0}
 
 	modal := component.NewModal(doc)
 	modal.SetTitle("市场 — MCP 服务器 & 技能")
@@ -54,20 +57,29 @@ func OpenDialog() {
 	// Tab 切换：使用 onclick 字符串注册
 	reg.OnClick("selectMarketTab(0)", func(ctx uixml.EventContext) bool {
 		state.filterKind = ""
+		state.tabIndex = 0
 		refreshList(doc, modal)
 		updateTabActive(doc, 0)
 		return true
 	})
 	reg.OnClick("selectMarketTab(1)", func(ctx uixml.EventContext) bool {
 		state.filterKind = "mcp"
+		state.tabIndex = 1
 		refreshList(doc, modal)
 		updateTabActive(doc, 1)
 		return true
 	})
 	reg.OnClick("selectMarketTab(2)", func(ctx uixml.EventContext) bool {
 		state.filterKind = "skill"
+		state.tabIndex = 2
 		refreshList(doc, modal)
 		updateTabActive(doc, 2)
+		return true
+	})
+	reg.OnClick("selectMarketTab(3)", func(ctx uixml.EventContext) bool {
+		state.tabIndex = 3
+		refreshList(doc, modal)
+		updateTabActive(doc, 3)
 		return true
 	})
 
@@ -78,7 +90,7 @@ func OpenDialog() {
 
 	// 搜索输入框回车触发
 	searchInput := doc.GetElementByID("marketplace-search-input")
-		if ui.Ctx.App != nil {
+	if ui.Ctx.App != nil {
 		ui.Ctx.App.AddEventListener(searchInput, event.KeyDown, func(e event.Event) bool {
 			ke := e.(*event.KeyboardEvent)
 			if ke.Key == event.CodeEnter {
@@ -107,6 +119,12 @@ func refreshList(doc *dom.Document, modal *component.Modal) {
 		return
 	}
 	listEl.ClearChildren()
+
+	// 已安装 tab 走独立渲染
+	if state.tabIndex == 3 {
+		refreshInstalled(doc, modal, listEl)
+		return
+	}
 
 	results := Search(state.searchText, state.filterKind)
 
@@ -209,7 +227,7 @@ func refreshList(doc *dom.Document, modal *component.Modal) {
 }
 
 func updateTabActive(doc *dom.Document, activeIdx int) {
-	tabIDs := []string{"marketplace-tab-all", "marketplace-tab-mcp", "marketplace-tab-skill"}
+	tabIDs := []string{"marketplace-tab-all", "marketplace-tab-mcp", "marketplace-tab-skill", "marketplace-tab-installed"}
 	for i, id := range tabIDs {
 		el := doc.GetElementByID(id)
 		if el == nil {
@@ -233,6 +251,109 @@ func abbrev(kind string) string {
 	return "?"
 }
 
+// refreshInstalled 渲染「已安装」标签页的内容。
+func refreshInstalled(doc *dom.Document, modal *component.Modal, listEl *dom.Element) {
+	listEl.ClearChildren()
+
+	// 收集已安装的 MCP 和技能
+	type installedItem struct {
+		kind string // "mcp" / "skill"
+		name string
+		desc string
+	}
+	var items []installedItem
+
+	for _, e := range mcppanel.ReadLevel(mcppanel.LevelUser) {
+		items = append(items, installedItem{kind: "mcp", name: e.Name, desc: "MCP 服务器（用户级）"})
+	}
+	for _, e := range mcppanel.ReadLevel(mcppanel.LevelProject) {
+		items = append(items, installedItem{kind: "mcp", name: e.Name, desc: "MCP 服务器（项目级）"})
+	}
+	for _, e := range skillspanel.ReadLevel(skillspanel.LevelProject) {
+		desc := e.Description
+		if desc == "" {
+			desc = "技能（项目级）"
+		}
+		items = append(items, installedItem{kind: "skill", name: e.Name, desc: desc})
+	}
+
+	// 更新计数
+	countEl := doc.GetElementByID("marketplace-count")
+	if countEl != nil {
+		countEl.SetTextContent(fmt.Sprintf("%d", len(items)))
+	}
+
+	if len(items) == 0 {
+		empty := doc.CreateElement("div")
+		empty.SetAttribute("style", "padding: 24px; text-align: center; font-size: 13px; color: #6e6e6e;")
+		empty.SetTextContent("暂无已安装的 MCP 服务器或技能")
+		listEl.AppendChild(empty)
+		return
+	}
+
+	for _, it := range items {
+		it := it
+		item := doc.CreateElement("div")
+		item.ClassList().Add("marketplace-item")
+
+		// 图标
+		icon := doc.CreateElement("div")
+		icon.ClassList().Add("marketplace-item-icon")
+		if it.kind == "mcp" {
+			icon.ClassList().Add("mcp")
+		} else {
+			icon.ClassList().Add("skill")
+		}
+		icon.SetTextContent(abbrev(it.kind))
+		item.AppendChild(icon)
+
+		// 主体
+		bodyDiv := doc.CreateElement("div")
+		bodyDiv.ClassList().Add("marketplace-item-body")
+
+		nameEl := doc.CreateElement("div")
+		nameEl.ClassList().Add("marketplace-item-name")
+		nameEl.SetTextContent(it.name)
+		bodyDiv.AppendChild(nameEl)
+
+		descEl := doc.CreateElement("div")
+		descEl.ClassList().Add("marketplace-item-desc")
+		descEl.SetTextContent(it.desc)
+		bodyDiv.AppendChild(descEl)
+
+		item.AppendChild(bodyDiv)
+
+		// 卸载按钮
+		btn := doc.CreateElement("div")
+		btn.ClassList().Add("marketplace-install-btn")
+		btn.SetAttribute("style", "background:#5a1d1d;color:#f48771;")
+		btn.SetTextContent("卸载")
+		if ui.Ctx.App != nil {
+			ui.Ctx.App.AddEventListener(btn, event.Click, func(e event.Event) bool {
+				uninstallItem(it.kind, it.name)
+				refreshInstalled(doc, modal, listEl)
+				return true
+			})
+		}
+		item.AppendChild(btn)
+
+		listEl.AppendChild(item)
+	}
+}
+
+// uninstallItem 卸载已安装的 MCP 或技能。
+func uninstallItem(kind, name string) {
+	switch kind {
+	case "mcp":
+		// MCP 可能安装在用户级或项目级，先尝试用户级再尝试项目级
+		if err := mcppanel.Delete(mcppanel.LevelUser, name); err != nil {
+			mcppanel.Delete(mcppanel.LevelProject, name)
+		}
+	case "skill":
+		skillspanel.Delete(skillspanel.LevelProject, name)
+	}
+}
+
 // ─── URL / 说明文本 ──
 
 // InstallHelp 返回安装帮助文本（给 agenttools 用）。
@@ -242,7 +363,7 @@ func InstallHelp() string {
 	b.WriteString("使用 marketplace_search [query] [kind] 浏览市场。\n")
 	b.WriteString("使用 marketplace_install <id> 安装。\n\n")
 	b.WriteString("目前可用条目：\n")
-	for _, e := range AllEntries() {
+	for _, e := range Registry {
 		status := ""
 		if IsInstalled(e.ID) {
 			status = " [已安装]"
