@@ -162,6 +162,8 @@ async function switchToWorkspace(ws) {
     })
     state.workspaceRoot = ws.path
     state.workspaceFolders = folders.length > 0 ? [...folders] : [ws.path]
+    // 同步 settings 中的 workspaceFolders，防止设置对话框保存时覆盖
+    state.settings.workspaceFolders = [...state.workspaceFolders]
     state.workspaceName = ws.name || ws.path.split('\\').filter(Boolean).pop() || ws.path
     document.title = 'PairCode IDE - ' + state.workspaceName
 
@@ -414,6 +416,8 @@ async function refreshCurrentWs() {
     state.workspaceFolders = health.folders || []
     const cur = state.wsList.find(w => w.path === state.workspaceRoot)
     if (cur) cur.folders = [...state.workspaceFolders]
+    // 同步 settings 中的 workspaceFolders，防止设置对话框保存时覆盖
+    state.settings.workspaceFolders = [...state.workspaceFolders]
     await saveWsList()
   } catch (e) {
     console.warn('刷新工作区失败:', e)
@@ -433,6 +437,8 @@ async function refreshAll() {
         ws.folders = [...state.workspaceFolders]
       }
     }
+    // 同步 settings 中的 workspaceFolders，防止设置对话框保存时覆盖
+    state.settings.workspaceFolders = [...state.workspaceFolders]
     await saveWsList()
     window.dispatchEvent(new CustomEvent('refresh-tree'))
   } catch (e) {

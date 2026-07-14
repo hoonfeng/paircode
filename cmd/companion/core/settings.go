@@ -33,9 +33,10 @@ type AppSettings struct {
 	CompressModel        string `json:"compressModel"`
 	CompressThinkingMode string `json:"compressThinkingMode"`
 	// 工作区
-	LastProject      string   `json:"lastProject"`
-	WorkspaceFolders []string `json:"workspaceFolders"`
-	RecentProjects   []string `json:"recentProjects"`
+	LastProject        string              `json:"lastProject"`
+	WorkspaceFolders   []string            `json:"workspaceFolders"`
+	WorkspaceFolderLists map[string][]string `json:"workspaceFolderLists"` // 每工作区的文件夹列表，key=工作区根目录
+	RecentProjects     []string            `json:"recentProjects"`
 	// Agent 行为
 	AutoReview         bool   `json:"autoReview"`
 	Autonomous         bool   `json:"autonomous"`

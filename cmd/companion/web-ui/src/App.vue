@@ -121,14 +121,19 @@ async function loadWsList() {
   try {
     const settings = await api.apiGet('/settings')
     const projects = settings.recentProjects || []
+    const folderLists = settings.workspaceFolderLists || {}
     const seen = new Set()
     for (const p of projects) {
       if (!p || seen.has(p)) continue
       seen.add(p)
+      // 从 workspaceFolderLists 恢复文件夹列表，没有则默认为 [p]
+      const folders = folderLists[p]?.length > 0 ? [...folderLists[p]] : [p]
       wsList.push(reactive({
         path: p,
         name: p.split(/[\\/]/).filter(Boolean).pop() || p,
-        folders: [p],
+        folders: p === state.workspaceRoot && state.workspaceFolders?.length > 0
+          ? [...state.workspaceFolders]
+          : folders,
         notify: false,
       }))
     }
@@ -144,10 +149,17 @@ async function loadWsList() {
 }
 
 async function saveWsList() {
-  // 同步工作区列表到后端 settings.recentProjects
+  // 同步工作区列表到后端 settings
   try {
     const settings = await api.apiGet('/settings')
     settings.recentProjects = wsList.slice(0, 20).map(w => w.path).filter(Boolean)
+    // 持久化每工作区的文件夹列表
+    settings.workspaceFolderLists = settings.workspaceFolderLists || {}
+    for (const ws of wsList) {
+      if (ws.folders?.length > 0) {
+        settings.workspaceFolderLists[ws.path] = [...ws.folders]
+      }
+    }
     await api.apiPut('/settings', settings)
   } catch {}
 }
@@ -169,6 +181,8 @@ async function switchWorkspace(targetPath) {
     })
     state.workspaceRoot = targetPath
     state.workspaceFolders = folders.length > 0 ? [...folders] : [targetPath]
+    // 同步 settings 中的 workspaceFolders，防止设置对话框保存时覆盖
+    state.settings.workspaceFolders = [...state.workspaceFolders]
     state.workspaceName = targetPath.split(/[\\/]/).filter(Boolean).pop() || targetPath
     document.title = 'PairCode IDE - ' + state.workspaceName
     state.openFiles = []
