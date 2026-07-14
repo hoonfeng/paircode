@@ -415,6 +415,50 @@ func registerOuterExplorationTools(r *Registry, root string) {
 			return exploreProjectStructure(root), nil
 		},
 	})
+
+	// ── 记忆工具只读子集（memory_read/memory_list/memory_search）──
+	r.Register(&Tool{
+		Name:        "memory_read",
+		Description: "按 name 读取一条记忆的全文。",
+		Parameters:  objSchema(props{"name": strProp("记忆名")}, "name"),
+		ReadOnly:    true,
+		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			dir := memoryDir(root)
+			name := safeMemName(argStr(args, "name"))
+			data, err := os.ReadFile(filepath.Join(dir, name+".md"))
+			if err != nil {
+				return "", fmt.Errorf("无此记忆: %s", name)
+			}
+			return string(data), nil
+		},
+	})
+	r.Register(&Tool{
+		Name:        "memory_list",
+		Description: "列出所有记忆的【总览】（名 + 摘要，渐进式披露的总览层）；要某条细则用 memory_read 读全文。",
+		Parameters:  objSchema(props{}),
+		ReadOnly:    true,
+		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			dir := memoryDir(root)
+			if c := genMemIndex(dir); c != "" {
+				return c, nil
+			}
+			return "（暂无记忆）", nil
+		},
+	})
+	r.Register(&Tool{
+		Name:        "memory_search",
+		Description: "按关键词搜索记忆（匹配名/摘要/正文），返回命中条目的名+摘要。",
+		Parameters:  objSchema(props{"query": strProp("关键词")}, "query"),
+		ReadOnly:    true,
+		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			dir := memoryDir(root)
+			q := strings.TrimSpace(argStr(args, "query"))
+			if q == "" {
+				return "", fmt.Errorf("query 不能为空")
+			}
+			return listMemories(dir, q), nil
+		},
+	})
 }
 
 // RunAutonomous 运行自主模式。
@@ -548,6 +592,7 @@ const outerDesignerPrompt = `你是项目设计者和总指挥。
 - **find_symbol** / **get_file_symbols** — 查找符号定义
 - **project_info_list** / **project_info_read** / **project_info_search** — 项目知识库
 - **project_info_explore** — 项目目录结构概览
+- **memory_read** / **memory_list** / **memory_search** — 读写长时记忆（历史决策、项目约定、用户偏好）
 - **web_search** / **web_fetch** — 搜索外部文档
 
 ## 规划与执行工具
