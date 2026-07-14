@@ -1,8 +1,7 @@
 <template>
-  <div class="conv-sidebar" :style="{ width: width + 'px' }">
+  <div class="conv-sidebar" :class="{ 'conv-sidebar-horizontal': horizontal }" :style="horizontal ? {} : { width: width + 'px' }">
     <div class="conv-sidebar-header">
       <span>会话</span>
-      <button class="rp-btn" @click="$emit('new-conversation')" title="新对话"><SvgIcon name="plus" :size="12" /></button>
     </div>
     <div class="conv-list">
       <div v-for="conv in conversations" :key="conv.id"
@@ -163,6 +162,7 @@ const props = defineProps({
   convCtxStats: { type: Object, default: () => ({ promptTokens: 0, completionTokens: 0, cacheHitTokens: 0, cacheMissTokens: 0, systemTokens: 0, skillsTokens: 0, mcpTokens: 0, toolTokens: 0, historyTokens: 0, otherTokens: 0 }) },
   ctxMaxTokensVal: { type: Number, default: 64000 },
   width: { type: Number, default: 250 },
+  horizontal: { type: Boolean, default: false },
 })
 
 defineEmits(['new-conversation', 'switch-conversation', 'delete-conversation'])
@@ -665,5 +665,146 @@ const compOtherPct = computed(() => ((props.convCtxStats.otherTokens / compTotal
   color: var(--text-primary);
   background: var(--bg-hover);
   border-color: var(--accent);
+}
+.conv-footer-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+  border-color: var(--accent);
+}
+
+/* ── 水平横条布局 ── */
+.conv-sidebar-horizontal {
+  display: flex !important;
+  flex-direction: row !important;
+  width: 100% !important;
+  height: 100% !important;
+  border-left: none !important;
+  min-width: 0 !important;
+  overflow: hidden;
+}
+.conv-sidebar-horizontal .conv-sidebar-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: none;
+  border-right: 1px solid var(--border-color);
+  min-width: 44px;
+  flex-shrink: 0;
+}
+.conv-sidebar-horizontal .conv-sidebar-header span {
+  writing-mode: vertical-lr;
+  font-size: 11px;
+  letter-spacing: 2px;
+}
+.conv-sidebar-horizontal .conv-list {
+  display: flex;
+  flex-direction: row !important;
+  gap: 4px;
+  padding: 6px 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex: 1;
+  min-width: 0;
+  align-items: stretch;
+}
+.conv-sidebar-horizontal .conv-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 6px 10px;
+  min-width: 120px;
+  max-width: 180px;
+  flex-shrink: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  margin: 0;
+  background: var(--bg-primary);
+}
+.conv-sidebar-horizontal .conv-item.active {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+.conv-sidebar-horizontal .conv-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  font-weight: 500;
+  width: 100%;
+}
+.conv-sidebar-horizontal .conv-meta {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.conv-sidebar-horizontal .conv-del {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+}
+.conv-sidebar-horizontal .conv-empty {
+  font-size: 11px;
+  padding: 8px 16px;
+  white-space: nowrap;
+}
+.conv-sidebar-horizontal .conv-stats {
+  border-top: none;
+  border-left: 1px solid var(--border-color);
+  min-width: 180px;
+  max-width: 260px;
+  flex-shrink: 0;
+  overflow-y: auto;
+}
+.conv-sidebar-horizontal .conv-stats-header {
+  padding: 4px 8px;
+  font-size: 10px;
+}
+.conv-sidebar-horizontal .conv-stats-body {
+  padding: 4px 8px 6px;
+  gap: 4px;
+}
+.conv-sidebar-horizontal .cache-ring-wrap {
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+}
+.conv-sidebar-horizontal .cache-ring {
+  width: 64px;
+  height: 64px;
+}
+.conv-sidebar-horizontal .cache-ring-pct {
+  font-size: 14px;
+}
+.conv-sidebar-horizontal .conv-stats-detail {
+  font-size: 10px;
+}
+.conv-sidebar-horizontal .cs-row {
+  padding: 1px 0;
+}
+.conv-sidebar-horizontal .cs-val {
+  font-size: 10px;
+}
+.conv-sidebar-horizontal .ctx-bar {
+  height: 8px;
+}
+.conv-sidebar-horizontal .comp-bar {
+  height: 6px;
+}
+.conv-sidebar-horizontal .comp-bar-title {
+  font-size: 9px;
+}
+.conv-sidebar-horizontal .ctx-detail {
+  font-size: 10px;
+}
+.conv-sidebar-horizontal .conv-footer-actions {
+  padding: 4px 8px;
+}
+.conv-sidebar-horizontal .conv-footer-btn {
+  font-size: 9px;
+  padding: 3px 6px;
 }
 </style>

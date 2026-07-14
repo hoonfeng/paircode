@@ -170,8 +170,10 @@
         </div>
       </div>
       <!-- 右侧：Debug日志面板 / 会话列表 -->
-      <DebugLogPanel v-if="showDebugLog" @close="showDebugLog = false" />
-      <ConvSidebar v-else :conversations="state.conversations" :current-conv-id="state.currentConvId" :loading-by-conv="state.loadingByConv" :ws-token-stats="wsTokenStats" :conv-ctx-stats="convCtxStats" :ctx-max-tokens-val="state.settings.contextMaxTokens || 1000000" :width="convListWidth" @new-conversation="newConversation" @switch-conversation="switchConv" @delete-conversation="deleteConv" />
+      <div class="conv-horizontal-wrap">
+        <DebugLogPanel v-if="showDebugLog" @close="showDebugLog = false" />
+        <ConvSidebar v-else :horizontal="true" :conversations="state.conversations" :current-conv-id="state.currentConvId" :loading-by-conv="state.loadingByConv" :ws-token-stats="wsTokenStats" :conv-ctx-stats="convCtxStats" :ctx-max-tokens-val="state.settings.contextMaxTokens || 1000000" :width="convListWidth" @new-conversation="newConversation" @switch-conversation="switchConv" @delete-conversation="deleteConv" />
+      </div>
     </div>
   </div>
 </template>
@@ -1054,8 +1056,8 @@ onUnmounted(() => {
 .rp-header-actions { display: flex; gap: 4px; }
 .rp-btn { background: none; border: 1px solid transparent; color: var(--text-secondary); padding: 2px 6px; cursor: pointer; border-radius: 3px; display: flex; align-items: center; }
 .rp-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
-.rp-body { flex: 1; display: flex; flex-direction: row; overflow: hidden; min-height: 0; }
-.chat-area { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; max-width: 100%; }
+.rp-body { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
+.chat-area { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
 .chat-messages { flex: 1; overflow-y: auto; padding: 8px 12px; min-height: 0; position: relative; overflow-anchor: none; }
 .msg-list-wrap { display: flex; flex-direction: column; gap: 12px; min-height: 100%; }
 .msg-item { display: flex; gap: 8px; align-items: flex-start; content-visibility: auto; contain-intrinsic-size: 60px; }
@@ -1252,5 +1254,26 @@ onUnmounted(() => {
 }
 .plan-container .plan-panel {
   margin: 0 0 4px 0;
+}
+.plan-container .plan-panel {
+  margin: 0 0 4px 0;
+}
+
+/* ── 底部横条包装器（ConvSidebar/DebugLogPanel）── */
+.conv-horizontal-wrap {
+  flex-shrink: 0;
+  height: 220px;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  overflow: hidden;
+  background: var(--bg-tertiary);
+}
+.conv-horizontal-wrap > .conv-sidebar {
+  width: 100% !important;
+  border-left: none;
+  flex-direction: row !important;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  min-width: 0;
 }
 </style>
