@@ -497,8 +497,23 @@ func RunAutonomous(ctx context.Context, planProv Provider, innerLoop *Loop, task
 				return "", fmt.Errorf("task 不能为空")
 			}
 
+			// ★ 过滤内层 Loop 的 EventDone，防止其泄漏到 WebSocket，
+			//   导致前端误判为一次完整的 assistant 回复，从而在当前对话中
+			//   创建第二条 assistant 占位消息（外层 Loop 随后发射的事件会
+			//   被写入新占位，造成"一次 loop 的输出被分散成多条回复"的假象）。
+			savedOnEvent := innerLoop.OnEvent
+			innerLoop.OnEvent = func(e Event) {
+				if e.Type == EventDone {
+					return // 不转发内层 Loop 的完成信号
+				}
+				if savedOnEvent != nil {
+					savedOnEvent(e)
+				}
+			}
 			// 内层 Loop 运行子任务
 			msgs, runErr := innerLoop.Run(ctx, subTask, nil)
+			// 恢复原始事件回调（外层 Loop 的事件不受影响）
+			innerLoop.OnEvent = savedOnEvent
 			if runErr != nil && !errors.Is(runErr, ErrMaxIterations) {
 				return "", runErr
 			}
