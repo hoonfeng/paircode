@@ -68,6 +68,8 @@ type AppSettings struct {
 	UIFontItalic    bool   `json:"uiFontItalic"`
 	UIFontUnderline bool   `json:"uiFontUnderline"`
 	HideMinimap     bool   `json:"hideMinimap"`
+	TabSize         int    `json:"tabSize"`
+	WordWrap        bool   `json:"wordWrap"`
 	// 思想
 	PhilosophyEnabled  bool              `json:"philosophyEnabled"`
 	PhilosophySelected []string          `json:"philosophySelected"`
@@ -124,7 +126,7 @@ func Default() AppSettings {
 		CompressModel: "deepseek-v4-flash", CompressThinkingMode: "non-thinking",
 	MaxIterations: 50, MaxParallel: 3, ReviewRetries: 3, AutoIterate: true, RequireApproval: true, AutoReview: true, AutoCommit: true, AutoCollapse: true, Benchmark: true, LuaTools: true,
 		DefaultShell: "auto", TermFontSize: 13, TermEncoding: "auto",
-		Theme: "dark", EditorFontSize: 14, FontFamily: "'Cascadia Code', 'Fira Code', Consolas, monospace",
+		Theme: "dark", EditorFontSize: 14, TabSize: 2, FontFamily: "'Cascadia Code', 'Fira Code', Consolas, monospace",
 		PhilosophySelected: []string{"tao-te-ching", "huangdi-yinfu-jing", "sunzi-bingfa"},
 		AutoConnectMCP:     true,
 	}

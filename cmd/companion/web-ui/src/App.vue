@@ -305,6 +305,9 @@ onMounted(async () => {
     const settings = await api.apiGet('/settings')
     state.settings = settings
     state.settingsLoaded = true
+    if (settings.theme && ['dark', 'light', 'warm', 'night'].includes(settings.theme)) {
+      applyTheme(settings.theme)
+    }
   } catch {}
 
   await loadWsList()
