@@ -3,7 +3,7 @@
     <div class="plan-header" @click="$emit('toggle')">
       <span class="plan-chevron">{{ expanded ? '▾' : '▸' }}</span>
       <SvgIcon name="list" :size="12" />
-      <span class="plan-title">任务计划</span>
+      <span class="plan-title">执行步骤</span>
       <span class="plan-progress">{{ doneCount }}/{{ plan.length }}</span>
       <span class="plan-bar">
         <span class="plan-bar-fill" :style="{ width: pct + '%' }"></span>

@@ -672,10 +672,10 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 	// 自动 git 提交开关
 	opts.AutoCommit = core.Settings.AutoCommit
 
-	// 自主模式追加任务指引
+	// 自主模式：用 task_create 分解任务、task_update 跟踪进度
 	taskText := req.Message
 	if req.Autonomous {
-		taskText += "\n\n（自主模式：先用 update_plan 列出完整计划，然后连续完成所有步骤、全部完成后输出最终报告。）"
+		taskText += "\n\n（自主模式：用 task_create 把任务分解为子任务逐步执行，用 task_update 更新每个子任务的状态与进度。）"
 	}
 
 	// 非阻塞启动：agentMgr.Start 内部 goroutine 跑 loop.Run，立即返回

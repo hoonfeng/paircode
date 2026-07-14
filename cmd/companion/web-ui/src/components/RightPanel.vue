@@ -133,10 +133,10 @@
             <button><SvgIcon name="chevron-down" :size="14" /> 新消息</button>
           </div>
         </div>
-        <!-- 任务计划面板（固定在输入区上方） -->
+        <!-- 执行步骤面板（update_plan 传入，由外层 AutonomousController 使用） -->
         <div class="plan-container" :class="{ 'plan-empty': currentPlan.length === 0 && currentTasks.length === 0 }">
           <PlanPanel v-if="currentPlan.length > 0" :plan="currentPlan" :expanded="planExpanded" @toggle="planExpanded = !planExpanded" />
-          <!-- 任务追踪面板（task_create/task_update 创建的任务，默认展开显示进行中任务） -->
+          <!-- 子任务进度面板（task_create/task_update 创建的子任务，由内层 Loop 使用） -->
           <TaskPanel v-if="currentTasks.length > 0" :tasks="currentTasks" :expanded="tasksExpanded" @toggle="tasksExpanded = !tasksExpanded" />
         </div>
         <!-- 输入区 -->
@@ -761,7 +761,7 @@ function phaseIcon(phase) {
 }
 
 function rebuildPlanFromMessages(msgs) {
-  // 从已加载消息的 segments 中扫描 update_plan 工具调用，重建规划清单。
+    // 从已加载消息的 segments 中扫描 update_plan 工具调用，重建执行步骤。
   let plan = []
   for (const msg of msgs) {
     if (!msg.segments) continue
@@ -935,7 +935,7 @@ onMounted(() => {
     },
     onPlanUpdate: (plan, convId) => {
       if (state.currentConvId !== convId) return
-      // update_plan 全量替换规划清单（自主模式使用），只展示在 PlanPanel
+      // update_plan 全量替换执行步骤清单（外层 AutonomousController 使用），只展示在 PlanPanel
       currentPlan.value = [...plan]
       planExpanded.value = true
     },
@@ -1201,7 +1201,7 @@ onUnmounted(() => {
 .tool-calls { margin-top: 4px; }
 .tool-call { background: var(--bg-primary); padding: 4px 8px; border-radius: 3px; margin-bottom: 2px; font-size: 12px; }
 
-/* ── 任务计划容器（输入区上方）── */
+/* ── 执行步骤容器（输入区上方）── */
 .plan-container {
   flex-shrink: 0;
   overflow-y: auto;

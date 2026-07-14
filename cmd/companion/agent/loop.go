@@ -513,8 +513,8 @@ func DefaultSystemPrompt(roots []string) string {
 		"- 记忆与知识库：memory_search / memory_read / memory_write / memory_list / memory_count；project_info_write/read/list/search/delete/explore（项目知识库）。\n" +
 		"- BUG 检测与修复：bug_detect（全量检测）、bug_analyze（分析构建输出）、bug_fix（自动修复）。\n" +
 		"- 二进制：inspect_binary（分析二进制）、write_binary（写二进制）、binary_strings/find/patch/info/hash/entropy（逆向分析）。\n" +
-		"- 任务追踪：task_create / task_update / task_list / task_delete / task_summary。\n" +
-		"- 规划与进度：update_plan（列出步骤清单）、progress_checker（查看进度）。\n" +
+		"- 任务追踪：task_create（创建子任务）/ task_update（更新进度）/ task_list / task_delete / task_summary。\n" +
+		"- 计划进度：update_plan（列出执行步骤清单）、progress_checker（查看步骤进度）。\n" +
 		"- 办公工具：csv_read / csv_write（CSV 表格读写）、json_to_table（JSON 数组转 Markdown 表格）、" +
 		"table_stats（表格数值统计）、text_report（代码行数统计报告）、word_read（读取 Word .docx 文件）、" +
 		"word_write（生成 Word .docx 文件）、read_xlsx / write_xlsx（Excel 读写）、read_pdf（PDF 文本提取）、" +

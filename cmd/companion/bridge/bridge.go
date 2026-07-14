@@ -110,14 +110,15 @@ func (b *AgentBridge) ResetForNewRoot() {
 }
 
 // autonomousParams 据自主开关算（实际下发给 LLM 的任务文本, 迭代上限）。
-// 自主：追加「列计划→连续完成全部步骤」提示 + 放宽迭代上限。
+// 自主：追加「用 task_create 分解→task_update 追进度」提示 + 放宽迭代上限。
+// 注：外层 AutonomousController 持有 update_plan 做高层规划，内层 Loop 用 task 工具做细粒度追踪。
 func AutonomousParams(task string, autonomous bool) (string, int) {
 	base := core.Settings.MaxIterations // 设置面板「最大迭代步数」；未设=30
 	if base <= 0 {
 		base = 30
 	}
 	if autonomous {
-		return task + "\n\n（自主模式：先用 update_plan 列出完整计划，然后连续完成所有步骤、全部完成后输出最终报告。）", base * 2
+		return task + "\n\n（自主模式：用 task_create 把任务分解为子任务逐步执行，用 task_update 更新每个子任务的状态与进度。）", base * 2
 	}
 	return task, base
 }
@@ -231,11 +232,30 @@ func (b *AgentBridge) Start(task string) {
 	b.loop.OnEvent = b.pushEvent // loop 协程调用 → 缓冲（加锁），不碰 UI/Element
 	loop := b.loop
 	planner := b.planner
-	autonomous := b.Cs.Autonomous                                            // 自主模式：跑完整编排（规划→探索→执行→验证→评测→迭代）
+	autonomous := b.Cs.Autonomous                                            // 自主模式：跑完整编排（规划→执行→验证→评测→迭代）
 	usePlanner := autonomous && planner != nil                               // + 配了规划模型 → 先由规划 Agent 列计划
 	autoIter := core.Settings.AutoIterate && core.Settings.ReviewRetries > 0 // 自动迭代改进开关 + 上限
 	reviewRetries := core.Settings.ReviewRetries
 	go func() {
+		// ── 自主模式：使用 AutonomousController 外层编排器 ──
+		// 外层只持有 plan 工具（update_pan），内层 Loop 持有完整执行工具集（含 task 工具）。
+		// 实现规划层与执行层的工具隔离。
+		if autonomous {
+			b.runAutonomousMode(ctx, task, hist, loop)
+			cancel()
+			b.mu.Lock()
+			wasStopped := b.stopped
+			b.running = false
+			b.mu.Unlock()
+			if !wasStopped {
+				th := b.Cs.Store.Active()
+				if th != nil && len(th.Messages) >= 2 {
+					go b.indexConversation(th)
+				}
+			}
+			return
+		}
+		// ── 非自主模式：原有单循环执行路径 ──
 		runTask := task
 		if usePlanner { // 规划阶段：规划 Agent(planModel) 先分解任务 → 计划卡 + 注入执行纲领
 			if plan, perr := planner.Plan(ctx, task, hist); perr == nil && len(plan.Steps) > 0 {
@@ -243,7 +263,7 @@ func (b *AgentBridge) Start(task string) {
 				runTask = task + "\n\n（规划 Agent 已制定以下计划，请据此连续执行、用 update_plan 更新各步状态）：\n" + planStepsText(plan)
 			}
 		}
-		if autonomous && ctx.Err() == nil { // 探索阶段：只读 Explorer 收集上下文（编排子 Agent）
+		if ctx.Err() == nil { // 探索阶段：只读 Explorer 收集上下文（编排子 Agent）
 			b.pushNote("探索阶段：探索 Agent 只读了解项目上下文…")
 			if found := b.runRolePhase(ctx, "explorer", roleprompts.DefaultExplorerPrompt, "（只读探索，勿改文件）了解与以下任务相关的项目结构、关键文件与上下文，简要汇报发现：\n"+task, hist); strings.TrimSpace(found) != "" {
 				runTask += "\n\n（探索 Agent 的发现，供参考）：\n" + found
@@ -256,7 +276,7 @@ func (b *AgentBridge) Start(task string) {
 			b.stopped = true
 			b.mu.Unlock()
 		}
-		if autonomous && ctx.Err() == nil && !b.stopped { // 验证阶段：只读 Verifier 确认改动生效（编排子 Agent）
+		if ctx.Err() == nil && !b.stopped { // 验证阶段：只读 Verifier 确认改动生效（编排子 Agent）
 			b.pushNote("验证阶段：验证 Agent 只读确认改动是否生效…")
 			b.runRolePhase(ctx, "verifier", roleprompts.DefaultVerifierPrompt, "（只读验证，勿改文件）确认上述任务是否真正完成、改动是否生效，列出遗留问题：\n"+task, stripSystemMsgs(finalMsgs))
 		}
@@ -900,6 +920,72 @@ func (b *AgentBridge) pushEvent(e agent.Event) {
 	b.mu.Lock()
 	b.pending = append(b.pending, e)
 	b.mu.Unlock()
+}
+
+// runAutonomousMode 使用 AutonomousController 外层编排器运行自主模式。
+// 外层只持有 plan 工具（update_plan），内层 Loop 持有完整执行工具集（含 task_create/update 等）。
+// 实现规划层与执行层的工具隔离。
+func (b *AgentBridge) runAutonomousMode(ctx context.Context, task string, hist []agent.Message, loop *agent.Loop) {
+	// 1. 构建外层规划 Provider（使用设置中的规划模型）
+	planProv := BuildPlanProvider()
+	if planProv == nil {
+		// 无规划模型时回退使用主模型
+		planProv = BuildProvider()
+		if planProv == nil {
+			b.pushEvent(agent.Event{Type: agent.EventError, Content: "自主模式需要配置 API Key"})
+			return
+		}
+	}
+
+	// 2. 构建外层计划工具注册表（仅含 update_plan 等 plan 工具）
+	planReg := agent.NewRegistry()
+	agent.RegisterPlanOnlyTools(planReg)
+
+	// 3. 创建 AutonomousController
+	ac := agent.NewAutonomousController(planProv, planReg, agent.AutonomousConfig{
+		MaxIterations: loop.MaxIterations,
+		SystemPrompt:  loop.System,
+	})
+
+	// 4. 构造 TaskRunner：桥接外层的任务执行到内层 Loop
+	//    将外层生成的每个子任务交给内层 Loop 执行。
+	runner := func(innerCtx context.Context, subTask string) (string, error) {
+		// 执行前注入探索阶段（只读收集上下文）
+		if strings.TrimSpace(subTask) == "" {
+			return "", nil
+		}
+		// 内层 Loop 运行子任务，传 nil history 以复用 Loop 持久化历史
+		finalMsgs, runErr := loop.Run(innerCtx, subTask, nil)
+
+		// 提取最终输出
+		output := ""
+		if len(finalMsgs) > 0 {
+			for i := len(finalMsgs) - 1; i >= 0; i-- {
+				if finalMsgs[i].Role == agent.RoleAssistant && strings.TrimSpace(finalMsgs[i].Content) != "" {
+					output = finalMsgs[i].Content
+					break
+				}
+			}
+		}
+
+		// 验证阶段：执行后验证
+		if innerCtx.Err() == nil && !b.stopped {
+			b.runRolePhase(innerCtx, "verifier", roleprompts.DefaultVerifierPrompt,
+				"（只读验证，勿改文件）确认上述任务是否真正完成、改动是否生效，列出遗留问题：\n"+subTask,
+				stripSystemMsgs(finalMsgs))
+		}
+
+		return output, runErr
+	}
+
+	// 5. 运行自主模式
+	report, err := ac.Run(ctx, task, runner, b.pushEvent)
+	if err != nil && !b.stopped {
+		b.pushEvent(agent.Event{Type: agent.EventError, Content: "自主模式异常: " + err.Error()})
+	}
+	if !b.stopped && report != "" {
+		b.pushEvent(agent.Event{Type: agent.EventContent, Content: report})
+	}
 }
 
 // runRolePhase 跑一个只读角色阶段（探索/验证，编排子 Agent）：用「角色提示 + 角色哲学」的 Loop，
