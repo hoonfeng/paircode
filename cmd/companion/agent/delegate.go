@@ -79,13 +79,8 @@ func runSubAgent(ctx context.Context, parent *Loop, tree *AgentTree, name, task 
 		return "", fmt.Errorf("未找到 agent %q（可用：%s）", name, strings.Join(tree.SubNames(), ", "))
 	}
 
-	// 子 Registry：白名单裁剪或父副本。
-	var childReg *Registry
-	if len(sa.Tools) > 0 {
-		childReg = parent.Registry.Subset(sa.Tools)
-	} else {
-		childReg = parent.Registry.Copy()
-	}
+	// 子 Registry：白名单裁剪或父副本（自动排除外层专用工具：plan/task）。
+	childReg := rebuildSubRegistry(parent.Registry, sa)
 
 	// ── 单轮委托：不走 Loop.Run，直接单次 LLM 调用 ──
 	if singleTurn {
@@ -187,4 +182,38 @@ func lastAssistantContent(msgs []Message) string {
 		}
 	}
 	return ""
+}
+
+// ── 外层 agent 专用工具（plan/task 管理）：不允许透传给子 agent ──
+var outerOnlyTools = map[string]bool{
+	"update_plan":  true,
+	"task_create":  true,
+	"task_update":  true,
+	"task_list":    true,
+	"task_delete":  true,
+	"task_summary": true,
+}
+
+// rebuildSubRegistry 创建子 agent 的注册表，自动排除外层专用工具（plan/task）。
+// 若子 agent 有显式白名单 (sa.Tools)，则先过滤掉外层专用工具，再 Subset。
+// 若无白名单，则从父注册表 Copy 后移除外层专用工具。
+func rebuildSubRegistry(parent *Registry, sa *SubAgent) *Registry {
+	// 有白名单：先过滤掉外层专用工具
+	if len(sa.Tools) > 0 {
+		filtered := make([]string, 0, len(sa.Tools))
+		for _, t := range sa.Tools {
+			if !outerOnlyTools[t] {
+				filtered = append(filtered, t)
+			}
+		}
+		return parent.Subset(filtered)
+	}
+	// 无白名单：继承父的全部工具，但排除外层专用工具
+	names := make([]string, 0, len(parent.order))
+	for _, n := range parent.order {
+		if !outerOnlyTools[n] {
+			names = append(names, n)
+		}
+	}
+	return parent.Subset(names)
 }

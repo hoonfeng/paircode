@@ -266,10 +266,11 @@ export function processAgentDone(convId, data) {
   if (msgs && rt) {
     const msg = msgs[rt.msgIdx]
     if (msg) {
+      // 用流式累积的 finalContent 替换（已在 content 事件中逐字推送，不含重复）
       msg.content = rt.finalContent
-      if (data && data.content) {
-        msg.segments.push({ type: 'content', content: data.content })
-      }
+      // ★ 不在此处追加 data.content 段 —— content 已被流式 content 事件或 tool_call/tool_result
+      //   推送过（finish_task 的结果已在 tool_result 中显示）。若在此重复追加会造成「两次完
+      //   成报告」的视觉重复。
     }
   }
   // 无论 rt 是否存在，都要清除 loading 状态
