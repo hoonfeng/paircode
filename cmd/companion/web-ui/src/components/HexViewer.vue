@@ -72,7 +72,7 @@ async function fetchPage(page) {
 }
 
 function loadNext() {
-  if (currentPage.value < totalPages - 1) fetchPage(currentPage.value + 1)
+  if (currentPage.value < totalPages.value - 1) fetchPage(currentPage.value + 1)
 }
 
 function loadPrev() {
