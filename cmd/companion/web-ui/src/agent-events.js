@@ -218,6 +218,28 @@ export function processAgentEvent(convId, data) {
         cs.historyTokens = pb.history_tokens || 0
         cs.otherTokens = pb.other_tokens || 0
       }
+
+      // ★ 累加到工作区级 token 统计，让侧边栏实时更新，不等对话结束才显示
+      const wsRoot = state.workspaceRoot
+      if (wsRoot) {
+        if (!state.wsTokenStatsByWs[wsRoot]) {
+          state.wsTokenStatsByWs[wsRoot] = { totalTokens: 0, promptTokens: 0, completionTokens: 0, cacheHitTokens: 0, cacheMissTokens: 0, systemTokens: 0, skillsTokens: 0, mcpTokens: 0, toolTokens: 0, historyTokens: 0, otherTokens: 0 }
+        }
+        const wsStats = state.wsTokenStatsByWs[wsRoot]
+        wsStats.promptTokens += u.prompt_tokens || 0
+        wsStats.completionTokens += u.completion_tokens || 0
+        wsStats.totalTokens += (u.prompt_tokens || 0) + (u.completion_tokens || 0)
+        wsStats.cacheHitTokens += u.prompt_cache_hit_tokens || 0
+        wsStats.cacheMissTokens += u.prompt_cache_miss_tokens || 0
+        if (u.prompt_breakdown) {
+          wsStats.systemTokens += u.prompt_breakdown.system_tokens || 0
+          wsStats.skillsTokens += u.prompt_breakdown.skills_tokens || 0
+          wsStats.mcpTokens += u.prompt_breakdown.mcp_tokens || 0
+          wsStats.toolTokens += u.prompt_breakdown.tool_tokens || 0
+          wsStats.historyTokens += u.prompt_breakdown.history_tokens || 0
+          wsStats.otherTokens += u.prompt_breakdown.other_tokens || 0
+        }
+      }
     }
   } else if (data.type === 'phase') {
     state.phaseByConv[convId] = data.content || ''
