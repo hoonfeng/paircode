@@ -1,6 +1,5 @@
 // PairCode 启动面板 —— goui 桌面 GUI。
-// 无边框窗口 + 自定义标题栏 + 系统托盘。
-// 与 Web 服务器同进程，包含服务商配置和服务器启停。
+// 无边框窗口 + 自定义标题栏 + 系统托盘 + 服务商配置选择器。
 //
 //go:build windows
 
@@ -11,7 +10,6 @@ import (
 	"log"
 	"os/exec"
 	"runtime"
-
 	"github.com/hoonfeng/goui/pkg/app"
 	"github.com/hoonfeng/goui/pkg/types"
 	"github.com/hoonfeng/goui/pkg/widget"
@@ -20,7 +18,16 @@ import (
 	_ "github.com/hoonfeng/goui/pkg/platform"
 )
 
-// ── 有状态根组件 ───────────────────────────────────────
+// ── 已知服务商默认 BaseURL ──
+var defaultBaseURLs = map[string]string{
+	"deepseek":          "https://api.deepseek.com/v1",
+	"openai":            "https://api.openai.com/v1",
+	"anthropic":         "https://api.anthropic.com/v1",
+	"openai-compatible": "",
+	"custom":            "",
+}
+
+// ── 有状态根组件 ──
 
 type PanelRoot struct{ widget.StatefulWidget }
 
@@ -28,14 +35,16 @@ func (p *PanelRoot) CreateState() widget.State { return &panelState{} }
 
 type panelState struct {
 	widget.BaseState
-	port     int
-	provider string
-	baseURL  string
-	apiKey   string
-	model    string
-	err      string
-	msg      string
-	msgOK    bool
+	port        int
+	provider    string
+	baseURL     string
+	apiKey      string
+	model       string
+	modelOpts   []widget.SelectOption // 当前服务商下的模型选项
+	err         string
+	msg         string
+	msgOK       bool
+	serverPort  int
 }
 
 func (s *panelState) InitState() {
@@ -44,8 +53,56 @@ func (s *panelState) InitState() {
 	s.baseURL = core.Settings.BaseURL
 	s.apiKey = core.Settings.APIKey
 	s.model = core.MainModel()
+	s.serverPort = s.port
+	s.refreshModelOptions()
 }
 
+// refreshModelOptions 根据当前 provider 刷新模型选项列表。
+func (s *panelState) refreshModelOptions() {
+	models := core.GetModels(s.provider)
+	if models == nil {
+		models = []string{}
+	}
+	s.modelOpts = make([]widget.SelectOption, 0, len(models))
+	for _, m := range models {
+		s.modelOpts = append(s.modelOpts, widget.SelectOption{
+			Label: m,
+			Value: m,
+		})
+	}
+}
+
+// onProviderChange 服务商选择变化时自动填充默认 BaseURL 并刷新模型列表。
+func (s *panelState) onProviderChange(val string) {
+	if val == "" || val == s.provider {
+		return
+	}
+	s.provider = val
+	// 自动填充默认 BaseURL
+	if url, ok := defaultBaseURLs[val]; ok {
+		s.baseURL = url
+	}
+	// 重置模型：取默认列表第一个
+	models := core.GetModels(val)
+	if len(models) > 0 {
+		s.model = models[0]
+	} else {
+		s.model = ""
+	}
+	s.refreshModelOptions()
+	s.SetState()
+}
+
+// onModelChange 模型选择变化。
+func (s *panelState) onModelChange(val string) {
+	if val == "" {
+		return
+	}
+	s.model = val
+	s.SetState()
+}
+
+// toggleServer 切换服务器启动/停止。
 func (s *panelState) toggleServer() {
 	if IsWebServerRunning() {
 		StopWebServer()
@@ -53,21 +110,22 @@ func (s *panelState) toggleServer() {
 		s.SetState()
 		return
 	}
-	if s.port <= 0 || s.port > 65535 {
+	if s.serverPort <= 0 || s.serverPort > 65535 {
 		s.err = "端口号无效"
 		s.SetState()
 		return
 	}
-	if err := StartWebServer(s.port); err != nil {
+	if err := StartWebServer(s.serverPort); err != nil {
 		s.err = err.Error()
 		s.SetState()
 		return
 	}
 	s.err = ""
 	s.SetState()
-	openBrowser(s.port)
+	openBrowser(s.serverPort)
 }
 
+// saveConfig 保存配置到 core.Settings。
 func (s *panelState) saveConfig() {
 	core.Settings.Provider = s.provider
 	core.Settings.BaseURL = s.baseURL
@@ -85,6 +143,7 @@ func (s *panelState) saveConfig() {
 	s.SetState()
 }
 
+// Build 构建面板 UI。
 func (s *panelState) Build(ctx widget.BuildContext) widget.Widget {
 	running := IsWebServerRunning()
 	configured := core.Configured()
@@ -96,84 +155,99 @@ func (s *panelState) Build(ctx widget.BuildContext) widget.Widget {
 		statusColor = types.ColorFromRGB(160, 160, 160)
 		statusText = "● 已停止"
 	}
-	statusLine := widget.NewText(statusText, statusColor)
 
-	// ── 配置状态 ──
+	// ── 配置状态行 ──
 	var cfgLine widget.Widget
 	if configured {
-		cfgLine = widget.HBox(
-			widget.NewText("✓ 已配置 ", types.ColorFromRGB(82, 196, 26)),
-			widget.NewText(s.provider+"/"+s.model, types.ColorFromRGB(96, 98, 102)),
+		cfgLine = widget.NewText(
+			fmt.Sprintf("✓ %s / %s", s.provider, s.model),
+			types.ColorFromRGB(82, 196, 26),
 		)
 	} else {
-		cfgLine = widget.NewText("⚠ 未配置 API — 填写下方信息后保存", types.ColorFromRGB(234, 67, 53))
+		cfgLine = widget.NewText("⚠ 未配置 — 选择服务商、填写密钥后保存", types.ColorFromRGB(234, 67, 53))
 	}
 
-	// ── 输入控件 ──
-	providerInput := widget.NewInput("deepseek", func(t string) { s.provider = t })
-	providerInput.Text = s.provider
-	baseURLInput := widget.NewInput("https://api.deepseek.com/v1", func(t string) { s.baseURL = t })
+	// ── 服务商 Select ──
+	providers := core.GetProviders()
+	provOpts := make([]widget.SelectOption, 0, len(providers))
+	for _, p := range providers {
+		provOpts = append(provOpts, widget.SelectOption{Label: p, Value: p})
+	}
+	providerSel := widget.NewSelect(provOpts).
+		WithPlaceholder("选择服务商").
+		WithValue(s.provider).
+		WithOnChanged(s.onProviderChange).
+		WithWidth(200)
+
+	// ── 模型 Select ──
+	modelSel := widget.NewSelect(s.modelOpts).
+		WithPlaceholder("选择模型").
+		WithValue(s.model).
+		WithOnChanged(s.onModelChange).
+		WithWidth(200)
+
+	// ── 文本输入 ──
+	baseURLInput := widget.NewInput("https://...", func(t string) { s.baseURL = t })
 	baseURLInput.Text = s.baseURL
+
 	apiKeyInput := widget.NewInput("sk-...", func(t string) { s.apiKey = t })
 	apiKeyInput.Text = s.apiKey
-	modelInput := widget.NewInput("deepseek-v4-flash", func(t string) { s.model = t })
-	modelInput.Text = s.model
+
 	portInput := widget.NewInput("9090", func(t string) {
 		if t != "" {
-			fmt.Sscanf(t, "%d", &s.port)
+			fmt.Sscanf(t, "%d", &s.serverPort)
 		}
 	})
-	portInput.Text = fmt.Sprintf("%d", s.port)
+	portInput.Text = fmt.Sprintf("%d", s.serverPort)
 
 	// ── 提示消息 ──
-	var msgWidget widget.Widget
+	var msgEl widget.Widget
 	if s.msg != "" {
 		c := types.ColorFromRGB(82, 196, 26)
 		if !s.msgOK {
 			c = types.ColorFromRGB(234, 67, 53)
 		}
-		msgWidget = widget.NewText(s.msg, c)
+		msgEl = widget.NewText(s.msg, c)
 	}
-	var errWidget widget.Widget
+	var errEl widget.Widget
 	if s.err != "" {
-		errWidget = widget.NewText("错误: "+s.err, types.ColorFromRGB(234, 67, 53))
+		errEl = widget.NewText("错误: "+s.err, types.ColorFromRGB(234, 67, 53))
 	}
 
 	// ── label 辅助 ──
-	label := func(t string) widget.Widget {
+	lbl := func(t string) widget.Widget {
 		return widget.NewText(t, types.ColorFromRGB(96, 98, 102))
 	}
-	// 输入行：左侧标签 + 右侧固定 200px 输入框
-	inputRow := func(lbl string, inp widget.Widget) widget.Widget {
-		return widget.HBox(
-			label(lbl),
-			widget.SpacerDiv(),
-			widget.Div(widget.Style{Width: 200}, inp),
-		)
+	// 输入行：标签 + 固定 200px 控件
+	rowF := func(label widget.Widget, ctrl widget.Widget) widget.Widget {
+		return widget.HBox(label, widget.SpacerDiv(), ctrl)
+	}
+	w200 := func(w widget.Widget) widget.Widget {
+		return widget.Div(widget.Style{Width: 200}, w)
 	}
 
-	// ── 配置区块 ──
-	configSection := widget.Div(
-		widget.Style{Padding: types.EdgeInsetsLTRB(0, 2, 0, 2)},
-		widget.NewText("── 服务商配置 ──", types.ColorFromRGB(144, 147, 153)),
-		inputRow("提供者:", providerInput),
-		inputRow("接口地址:", baseURLInput),
-		inputRow("API密钥:", apiKeyInput),
-		inputRow("模型:", modelInput),
+	// ── 服务商配置区块 ──
+	configBody := widget.Div(
+		widget.Style{Padding: types.EdgeInsetsLTRB(0, 2, 18, 2), FlexDirection: "column", Gap: 6},
+		widget.NewText("── 服务商 ──", types.ColorFromRGB(144, 147, 153)),
+		rowF(lbl("服务商:"), providerSel),
+		rowF(lbl("接口地址:"), w200(baseURLInput)),
+		rowF(lbl("API 密钥:"), w200(apiKeyInput)),
+		rowF(lbl("模型:"), modelSel),
 		widget.HBox(
 			widget.SpacerDiv(),
 			widget.NewButton("保存配置", s.saveConfig).
 				WithColor(types.ColorFromRGB(64, 158, 255)).
 				WithMinWidth(120),
 		),
-		msgWidget,
+		msgEl,
 	)
 
 	// ── 服务器区块 ──
-	serverSection := widget.Div(
-		widget.Style{Padding: types.EdgeInsetsLTRB(0, 2, 0, 2)},
+	serverBody := widget.Div(
+		widget.Style{Padding: types.EdgeInsetsLTRB(0, 2, 2, 2), FlexDirection: "column", Gap: 6},
 		widget.NewText("── 服务器 ──", types.ColorFromRGB(144, 147, 153)),
-		inputRow("监听端口:", portInput),
+		rowF(lbl("监听端口:"), w200(portInput)),
 		widget.NewButton(func() string {
 			if running {
 				return "停止服务器"
@@ -187,28 +261,26 @@ func (s *panelState) Build(ctx widget.BuildContext) widget.Widget {
 				return types.ColorFromRGB(64, 158, 255)
 			}()).
 			WithMinWidth(140),
-		errWidget,
+		errEl,
 	)
 
-	// ── 拼装总面板（不含标题栏——标题栏在 Build 外由 titleBar() 返回） ──
+	// ── 内容体 ──
 	body := widget.Div(
-		widget.Style{
-			Padding:       types.EdgeInsets(16),
-			FlexDirection: "column",
-			Gap:           4,
-		},
-		statusLine,
-		cfgLine,
-		configSection,
-		serverSection,
+		widget.Style{Padding: types.EdgeInsets(16), FlexDirection: "column", Gap: 4},
+		widget.HBox(
+			widget.NewText(statusText, statusColor),
+			widget.SpacerDiv(),
+			cfgLine,
+		),
+		configBody,
+		serverBody,
 		widget.SpacerDiv(),
 		widget.NewText(
-			fmt.Sprintf("Web IDE — http://localhost:%d", s.port),
+			fmt.Sprintf("Web IDE — http://localhost:%d", s.serverPort),
 			types.ColorFromRGB(144, 147, 153),
 		),
 	)
 
-	// 返回垂直布局：标题栏 + 分隔线 + 内容体
 	return widget.VBox(
 		titleBar(),
 		&widget.Container{Height: 1, Background: &widget.PaintWidget{Color: ptrColor(220, 224, 228)}},
@@ -216,7 +288,8 @@ func (s *panelState) Build(ctx widget.BuildContext) widget.Widget {
 	)
 }
 
-// titleBar 自定义标题栏：左拖动区 + 右 — ✕ 按钮。
+// ── 自定义标题栏 ──
+
 func titleBar() widget.Widget {
 	return widget.Div(
 		widget.Style{Height: 36, BackgroundColor: types.ColorRef(48, 52, 64)},
@@ -230,39 +303,31 @@ func titleBar() widget.Widget {
 				},
 				Flex: 1,
 			},
-			trayButton("—", func() {
+			tbBtn("—", func() {
 				if application != nil && application.Window != nil {
 					application.Window.Hide()
 				}
 			}),
-			trayButton("✕", func() {
-				if application != nil {
-					application.Quit()
-				}
-			}),
+			tbBtn("✕", func() { application.Quit() }),
 		),
 	)
 }
 
-// trayButton 标题栏按钮。
-func trayButton(label string, onClick func()) widget.Widget {
+func tbBtn(label string, onClick func()) widget.Widget {
 	return &widget.Button{
-		Text:      label,
-		OnClick:   onClick,
-		Color:     types.ColorFromRGB(48, 52, 64),
-		TextColor: types.ColorFromRGB(235, 238, 245),
-		MinWidth:  46,
-		MinHeight: 36,
+		Text: label, OnClick: onClick,
+		Color: types.ColorFromRGB(48, 52, 64), TextColor: types.ColorFromRGB(235, 238, 245),
+		MinWidth: 46, MinHeight: 36,
 	}
 }
 
-// ptrColor 辅助：创建 *types.Color。
+// ── 辅助 ──
+
 func ptrColor(r, g, b uint8) *types.Color {
 	c := types.ColorFromRGB(r, g, b)
 	return &c
 }
 
-// openBrowser 在默认浏览器中打开 URL。
 func openBrowser(port int) {
 	url := fmt.Sprintf("http://localhost:%d", port)
 	go func() {
@@ -285,12 +350,11 @@ func main() {
 	cfg := app.DefaultConfig()
 	cfg.Title = "PairCode 启动面板"
 	cfg.Width = 480
-	cfg.Height = 520
+	cfg.Height = 560
 	cfg.Resizable = true
 	cfg.Borderless = true
 
 	application.Ready = func() {
-		// 系统托盘
 		trayID := application.AddTray("PairCode Web IDE", "", func() {
 			openBrowser(9090)
 		})
@@ -324,7 +388,7 @@ func main() {
 				}
 			})
 		}
-		// 声明标题栏拖拽区（36px 高，右侧 92px 留给按钮）
+		// 自绘标题栏命中区：36px 高，右侧 2×46=92px 留给按钮
 		application.SetTitleBar(36, 92)
 		application.EnableWindowEffects()
 	}
