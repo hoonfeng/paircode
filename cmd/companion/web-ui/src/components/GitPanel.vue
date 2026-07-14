@@ -18,7 +18,11 @@
       <!-- 仓库顶栏 -->
       <div class="git-repo-bar">
         <SvgIcon name="source-control" :size="14" color="var(--accent)" />
-        <div class="git-branch-select" @click.stop="showBranchMenu = !showBranchMenu">
+        <!-- 项目选择器（多根工作区时显示） -->
+        <select v-if="workspaceProjects.length > 1" v-model="gitProject" class="git-project-select" @change="loadStatus">
+          <option v-for="p in workspaceProjects" :key="p" :value="p">{{ p.split('\\').pop() || p }}</option>
+        </select>
+        <div class="git-branch-select" @click.stop="showBranchMenu = !showBranchMenu">">
           <SvgIcon name="git-branch" :size="12" />
           <span class="branch-name">{{ currentBranch || '（无分支）' }}</span>
           <SvgIcon name="chevron-down" :size="10" />
@@ -354,6 +358,14 @@ const stashMsg = ref('')
 const stashes = ref([])
 const ignoreContent = ref('')
 
+// ── 多项目切换 ──
+const workspaceProjects = computed(() => [...new Set((state.workspaceFolders || []).filter(Boolean))])
+const gitProject = ref('')
+function gitParams(extra = {}) {
+  if (gitProject.value) extra.path = gitProject.value
+  return extra
+}
+
 let refreshTimer = null
 
 // ─── 计算属性 ─────────────────────────────────────────────────
@@ -369,6 +381,10 @@ const filteredBranches = computed(() => {
 
 // ─── 生命周期 ─────────────────────────────────────────────────
 onMounted(() => {
+  // 初始化 git 项目为工作区首个项目
+  if (workspaceProjects.value.length > 0) {
+    gitProject.value = workspaceProjects.value[0]
+  }
   loadStatus()
   refreshTimer = setInterval(loadStatus, 30000)
   document.addEventListener('click', handleOutsideClick)
@@ -388,7 +404,7 @@ async function loadStatus() {
   if (loading.value) return
   loading.value = true
   try {
-    const res = await api.apiGet('/git/status')
+    const res = await api.apiGet('/git/status', gitParams())
     hasData.value = true
     isRepo.value = res.isRepo || false
     if (isRepo.value) {
@@ -406,7 +422,7 @@ async function loadStatus() {
     }
     if (isRepo.value) {
       try {
-        const log = await api.apiGet('/git-log', { count: 50 })
+        const log = await api.apiGet('/git-log', gitParams({ count: 50 }))
         commits.value = log || []
       } catch (err) { console.warn('[GitPanel] 加载提交历史失败:', err) }
     }
@@ -428,42 +444,42 @@ async function refresh() {
 
 async function refreshCommits() {
   try {
-    commits.value = await api.apiGet('/git-log', { count: 50 }) || []
+    commits.value = await api.apiGet('/git-log', gitParams({ count: 50 })) || []
   } catch (err) { console.warn('[GitPanel] 刷新提交历史失败:', err) }
 }
 
 async function loadStashes() {
   try {
-    stashes.value = await api.apiGet('/git/stash-list') || []
+    stashes.value = await api.apiGet('/git/stash-list', gitParams()) || []
   } catch (err) { console.warn('[GitPanel] 加载暂存列表失败:', err); stashes.value = [] }
 }
 
 async function stageAll() {
-  try { await api.apiPost('/git/add', { files: [] }); await loadStatus(); window.$toast?.('已全部暂存', 'success') }
+  try { await api.apiPost('/git/add', { files: [] }, gitParams()); await loadStatus(); window.$toast?.('已全部暂存', 'success') }
   catch (err) { window.$toast?.('暂存失败: ' + err.message, 'error') }
 }
 
 async function stageFile(path) {
-  try { await api.apiPost('/git/add', { files: [path] }); await loadStatus() }
+  try { await api.apiPost('/git/add', { files: [path] }, gitParams()); await loadStatus() }
   catch (err) { window.$toast?.('暂存失败: ' + err.message, 'error') }
 }
 
 async function unstageFile(path) {
-  try { await api.apiPost('/git/reset', { files: [path] }); await loadStatus() }
+  try { await api.apiPost('/git/reset', { files: [path] }, gitParams()); await loadStatus() }
   catch (err) { window.$toast?.('取消暂存失败: ' + err.message, 'error') }
 }
 
 async function discardFile(path) {
   const ok = await window.$confirm?.(`确定丢弃「${path}」的工作区更改？不可撤销。`, '丢弃更改', '确定丢弃', '取消')
   if (!ok) return
-  try { await api.apiPost('/git/discard', { files: [path] }); await loadStatus() }
+  try { await api.apiPost('/git/discard', { files: [path] }, gitParams()); await loadStatus() }
   catch (err) { window.$toast?.('丢弃失败: ' + err.message, 'error') }
 }
 
 async function doCommit() {
   if (!commitMsg.value.trim()) return
   try {
-    await api.apiPost('/git/commit', { message: commitMsg.value, all: false })
+    await api.apiPost('/git/commit', { message: commitMsg.value, all: false }, gitParams())
     commitMsg.value = ''; commitDesc.value = ''
     showCommitDialog.value = false
     window.$toast?.('提交成功', 'success')
@@ -474,7 +490,7 @@ async function doCommit() {
 async function switchBranch(name) {
   if (name === currentBranch.value) return
   try {
-    await api.apiPost('/git/branch', { action: 'switch', name })
+    await api.apiPost('/git/branch', { action: 'switch', name }, gitParams())
     showBranchMenu.value = false
     await loadStatus()
   } catch (err) { window.$toast?.('切换分支失败: ' + err.message, 'error') }
@@ -483,7 +499,7 @@ async function switchBranch(name) {
 async function deleteBranch(name) {
   const ok = await window.$confirm?.(`确定删除分支「${name}」？`, '删除分支', '确定删除', '取消')
   if (!ok) return
-  try { await api.apiPost('/git/branch', { action: 'delete', name }); await loadStatus() }
+  try { await api.apiPost('/git/branch', { action: 'delete', name }, gitParams()); await loadStatus() }
   catch (err) { window.$toast?.('删除分支失败: ' + err.message, 'error') }
 }
 
@@ -491,9 +507,9 @@ async function createBranch() {
   if (!newBranchName.value.trim()) return
   try {
     if (switchAfterCreate.value) {
-      await api.apiPost('/git/branch', { action: 'create-switch', name: newBranchName.value })
+      await api.apiPost('/git/branch', { action: 'create-switch', name: newBranchName.value }, gitParams())
     } else {
-      await api.apiPost('/git/branch', { action: 'create', name: newBranchName.value })
+      await api.apiPost('/git/branch', { action: 'create', name: newBranchName.value }, gitParams())
     }
     newBranchName.value = ''; showCreateBranch.value = false
     await loadStatus()
@@ -505,7 +521,7 @@ async function doPush() {
     const body = {}
     if (pushRemote.value && pushRemote.value !== 'origin') body.remote = pushRemote.value
     if (pushBranch.value) body.branch = pushBranch.value
-    await api.apiPost('/git/push', body)
+    await api.apiPost('/git/push', body, gitParams())
     showPushDialog.value = false
     window.$toast?.('推送成功', 'success')
     await loadStatus()
@@ -514,7 +530,7 @@ async function doPush() {
 
 async function pull() {
   try {
-    await api.apiPost('/git/pull', {})
+    await api.apiPost('/git/pull', {}, gitParams())
     window.$toast?.('拉取成功', 'success')
     await loadStatus()
   } catch (err) { window.$toast?.('拉取失败: ' + err.message, 'error') }
@@ -534,7 +550,7 @@ async function initRepo() {
 
 async function stashPush() {
   try {
-    await api.apiPost('/git/stash', { action: 'push', message: stashMsg.value })
+    await api.apiPost('/git/stash', { action: 'push', message: stashMsg.value }, gitParams())
     stashMsg.value = ''
     window.$toast?.('已暂存', 'success')
     await loadStatus(); await loadStashes()
@@ -543,7 +559,7 @@ async function stashPush() {
 
 async function stashPop(index) {
   try {
-    await api.apiPost('/git/stash', { action: 'pop', index })
+    await api.apiPost('/git/stash', { action: 'pop', index }, gitParams())
     window.$toast?.('已弹出暂存', 'success')
     await loadStatus(); await loadStashes()
   } catch (err) { window.$toast?.('弹出失败: ' + err.message, 'error') }
@@ -552,13 +568,13 @@ async function stashPop(index) {
 async function stashDrop(index) {
   const ok = await window.$confirm?.(`确定删除暂存 ${index}？`, '删除暂存', '确定', '取消')
   if (!ok) return
-  try { await api.apiPost('/git/stash', { action: 'drop', index }); await loadStashes() }
+  try { await api.apiPost('/git/stash', { action: 'drop', index }, gitParams()); await loadStashes() }
   catch (err) { window.$toast?.('删除失败: ' + err.message, 'error') }
 }
 
 async function saveIgnore() {
   try {
-    await api.apiPost('/git/ignore', { content: ignoreContent.value })
+    await api.apiPost('/git/ignore', { content: ignoreContent.value }, gitParams())
     showIgnoreEditor.value = false
     window.$toast?.('.gitignore 已保存', 'success')
   } catch (err) { window.$toast?.('保存失败: ' + err.message, 'error') }
@@ -566,7 +582,7 @@ async function saveIgnore() {
 
 async function loadIgnore() {
   try {
-    const res = await api.apiGet('/git/ignore')
+    const res = await api.apiGet('/git/ignore', gitParams())
     ignoreContent.value = res.content || ''
   } catch (err) { console.warn('[GitPanel] 加载 .gitignore 失败:', err); ignoreContent.value = '' }
 }
@@ -576,7 +592,7 @@ async function showFileDiff(path, staged) {
   diffContent.value = '加载中...'
   showDiffDialog.value = true
   try {
-    const res = await api.apiGet('/git/diff', { file: path, staged: staged ? 'true' : 'false' })
+    const res = await api.apiGet('/git/diff', gitParams({ file: path, staged: staged ? 'true' : 'false' }))
     diffContent.value = res.diff || '（无差异）'
   } catch (err) {
     diffContent.value = '无法加载差异: ' + err.message
@@ -614,7 +630,10 @@ function statusIcon(s) {
 }
 watch(showStashPanel, v => { if (v) loadStashes() })
 watch(showIgnoreEditor, v => { if (v) loadIgnore() })
-watch(() => state.workspaceRoot, () => { loadStatus() })
+watch(() => state.workspaceRoot, () => {
+  if (workspaceProjects.value.length > 0) gitProject.value = workspaceProjects.value[0]
+  loadStatus()
+})
 </script>
 
 <style scoped>
@@ -641,6 +660,12 @@ watch(() => state.workspaceRoot, () => { loadStatus() })
 }
 .git-branch-select:hover { background: var(--bg-hover); }
 .branch-name { max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.git-project-select {
+  font-size: 11px; background: var(--bg-tertiary); color: var(--text-primary);
+  border: 1px solid var(--border-color); border-radius: 3px; padding: 1px 4px;
+  max-width: 120px; cursor: pointer;
+}
+.git-project-select:hover { border-color: var(--accent); }
 .ahead-badge { color: #4ec9b0; font-size: 10px; }
 .behind-badge { color: #dcdcaa; font-size: 10px; }
 .repo-actions { margin-left: auto; display: flex; gap: 2px; }

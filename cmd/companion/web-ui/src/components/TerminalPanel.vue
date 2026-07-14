@@ -13,6 +13,14 @@
       <button class="term-tab new-tab" @click="newTerminal" title="新建终端">
         <SvgIcon name="plus" :size="12" />
       </button>
+      <!-- Shell 类型选择 -->
+      <div class="term-shell-select" title="选择终端类型">
+        <select v-model="defaultShell" @change="saveShellPreference">
+          <option value="cmd">cmd</option>
+          <option value="powershell">PowerShell</option>
+          <option value="gitbash">Git Bash</option>
+        </select>
+      </div>
       <span class="term-tabs-filler"></span>
       <button class="term-tab term-panel-close" @click="$emit('close-panel')" title="关闭终端面板">
         <SvgIcon name="close" :size="12" />
@@ -52,6 +60,12 @@ const activeTermIdx = ref(-1)
 const termRefs = reactive({})
 let termCounter = 0
 let resizeObserver = null
+
+// ── Shell 类型选择（持久化到 localStorage） ──
+const defaultShell = ref(localStorage.getItem('term-default-shell') || 'cmd')
+function saveShellPreference() {
+  localStorage.setItem('term-default-shell', defaultShell.value)
+}
 
 // ── WebSocket 基础 URL ──
 const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -142,7 +156,7 @@ function createWebSocket(termState, xtermInstance, fitAddon) {
       const rows = xtermInstance.rows || 24
       const msg = JSON.stringify({
         type: 'init',
-        shell: 'cmd',
+        shell: termState.shell || 'cmd',
         cwd: termState.cwd || '',
         cols,
         rows,
@@ -243,13 +257,15 @@ function createWebSocket(termState, xtermInstance, fitAddon) {
 }
 
 // ── 创建终端（xterm + WebSocket） ──
-function createTerminal(cwd) {
+function createTerminal(cwd, shell) {
   termCounter++
   const id = 'term-' + termCounter + '-' + Date.now().toString(36)
+  const s = shell || 'cmd'
   return reactive({
     id,
-    label: '终端 ' + termCounter,
+    label: s === 'powershell' ? 'PS ' + termCounter : (s === 'gitbash' ? 'Bash ' + termCounter : '终端 ' + termCounter),
     cwd: cwd || '',
+    shell: s,
     status: 'init', // init / connected / ready / error / closed / disconnected
     xterm: null,
     fitAddon: null,
@@ -338,7 +354,7 @@ function switchTerm(idx) {
 function newTerminal() {
   const prevTerm = activeTermIdx.value >= 0 ? terminals.value[activeTermIdx.value] : null
   const cwd = prevTerm?.cwd || ''
-  const term = createTerminal(cwd)
+  const term = createTerminal(cwd, defaultShell.value)
   terminals.value.push(term)
   switchTerm(terminals.value.length - 1)
   saveTerminals()
@@ -381,6 +397,7 @@ function saveTerminals() {
     const data = terminals.value.map(t => ({
       label: t.label,
       cwd: t.cwd,
+      shell: t.shell,
     }))
     localStorage.setItem(TERM_KEY, JSON.stringify(data))
   } catch {}
@@ -398,6 +415,7 @@ function loadTerminals() {
         id: 'term-' + termCounter + '-' + Date.now().toString(36),
         label: t.label || '终端 ' + termCounter,
         cwd: t.cwd || '',
+        shell: t.shell || 'cmd',
         status: 'init',
         xterm: null,
         fitAddon: null,
@@ -489,6 +507,12 @@ watch(() => state.theme, () => {
 .term-tab-close { font-size: 12px; margin-left: 2px; opacity: 0.5; }
 .term-tab-close:hover { opacity: 1; color: #e57373; }
 .term-tab.new-tab { padding: 4px 8px; }
+.term-shell-select select {
+  font-size: 11px; background: transparent; color: var(--text-secondary);
+  border: 1px solid var(--border-color); border-radius: 3px; padding: 1px 4px;
+  margin: 0 4px; cursor: pointer; height: 22px;
+}
+.term-shell-select select:hover { border-color: var(--accent); }
 .term-tabs-filler { flex: 1; }
 .term-panel-close { opacity: 0.5; padding: 4px 8px; }
 .term-panel-close:hover { opacity: 1; color: #e57373; }

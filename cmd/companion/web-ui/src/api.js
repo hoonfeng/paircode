@@ -19,8 +19,8 @@ async function apiGet(path, params = {}) {
   return r.json()
 }
 
-async function apiPost(path, body = {}) {
-  const r = await fetch(apiURL(path), {
+async function apiPost(path, body = {}, params = {}) {
+  const r = await fetch(apiURL(path, params), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),

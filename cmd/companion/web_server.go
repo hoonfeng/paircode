@@ -2004,8 +2004,26 @@ func (s *webServer) handleMemoryRebuild(w http.ResponseWriter, r *http.Request) 
 
 // ─── Git API 处理函数 ─────────────────────────────────────────
 
-// gitRoot 返回 git 工作目录（工作区根），无工作区时返回空。
-func gitRoot() string {
+// gitDirCtxKey 用于在 request context 中传递 git 目录覆盖（支持 ?path= 参数）。
+type gitDirCtxKey struct{}
+
+// withGitDir 从请求查询参数中读取 path，并注入到 request context。
+// 若没有 ?path= 参数，返回原 request，不创建新 context。
+func withGitDir(r *http.Request) *http.Request {
+	if p := r.URL.Query().Get("path"); p != "" {
+		ctx := context.WithValue(r.Context(), gitDirCtxKey{}, p)
+		return r.WithContext(ctx)
+	}
+	return r
+}
+
+// gitRoot 返回 git 工作目录。若 context 中有 path 覆盖则优先使用。
+func gitRoot(ctx context.Context) string {
+	if ctx != nil {
+		if dir, ok := ctx.Value(gitDirCtxKey{}).(string); ok && dir != "" {
+			return dir
+		}
+	}
 	if root := core.Root(); root != "" {
 		return root
 	}
@@ -2015,7 +2033,7 @@ func gitRoot() string {
 
 // runGitInternal 执行 git 命令，返回标准输出。
 func runGitInternal(ctx context.Context, args ...string) (string, error) {
-	dir := gitRoot()
+	dir := gitRoot(ctx)
 	if dir == "" {
 		return "", fmt.Errorf("未设置工作区")
 	}
@@ -2061,6 +2079,7 @@ type gitChangeEntry struct {
 
 // handleGitStatus GET /api/git/status 获取完整的 Git 状态。
 func (s *webServer) handleGitStatus(w http.ResponseWriter, r *http.Request) {
+	r = withGitDir(r)
 	res := gitStatusResult{}
 
 	out, err := runGitInternal(r.Context(), "rev-parse", "--is-inside-work-tree")
@@ -2121,6 +2140,7 @@ func (s *webServer) handleGitStatus(w http.ResponseWriter, r *http.Request) {
 
 // handleGitDiff GET /api/git/diff?file=xxx&staged=true 查看文件差异。
 func (s *webServer) handleGitDiff(w http.ResponseWriter, r *http.Request) {
+	r = withGitDir(r)
 	file := r.URL.Query().Get("file")
 	staged := r.URL.Query().Get("staged") == "true"
 
@@ -2144,6 +2164,7 @@ func (s *webServer) handleGitDiff(w http.ResponseWriter, r *http.Request) {
 
 // handleGitAdd POST /api/git/add 暂存文件。
 func (s *webServer) handleGitAdd(w http.ResponseWriter, r *http.Request) {
+	r = withGitDir(r)
 	if r.Method != "POST" {
 		jsonErr(w, "仅 POST")
 		return
@@ -2171,6 +2192,7 @@ func (s *webServer) handleGitAdd(w http.ResponseWriter, r *http.Request) {
 
 // handleGitReset POST /api/git/reset 取消暂存文件。
 func (s *webServer) handleGitReset(w http.ResponseWriter, r *http.Request) {
+	r = withGitDir(r)
 	if r.Method != "POST" {
 		jsonErr(w, "仅 POST")
 		return
@@ -2198,6 +2220,7 @@ func (s *webServer) handleGitReset(w http.ResponseWriter, r *http.Request) {
 
 // handleGitCommit POST /api/git/commit 提交暂存区。
 func (s *webServer) handleGitCommit(w http.ResponseWriter, r *http.Request) {
+	r = withGitDir(r)
 	if r.Method != "POST" {
 		jsonErr(w, "仅 POST")
 		return
@@ -2228,6 +2251,7 @@ func (s *webServer) handleGitCommit(w http.ResponseWriter, r *http.Request) {
 
 // handleGitLog GET /api/git/log?count=15&file=xxx 查看提交历史。
 func (s *webServer) handleGitLog(w http.ResponseWriter, r *http.Request) {
+	r = withGitDir(r)
 	count := r.URL.Query().Get("count")
 	file := r.URL.Query().Get("file")
 	if count == "" {
@@ -2270,6 +2294,7 @@ func (s *webServer) handleGitLog(w http.ResponseWriter, r *http.Request) {
 
 // handleGitBranch POST /api/git/branch 分支操作。
 func (s *webServer) handleGitBranch(w http.ResponseWriter, r *http.Request) {
+	r = withGitDir(r)
 	if r.Method != "POST" {
 		jsonErr(w, "仅 POST")
 		return
@@ -2355,6 +2380,7 @@ func (s *webServer) handleGitBranch(w http.ResponseWriter, r *http.Request) {
 
 // handleGitCheckout POST /api/git/checkout 切换分支或恢复文件。
 func (s *webServer) handleGitCheckout(w http.ResponseWriter, r *http.Request) {
+	r = withGitDir(r)
 	if r.Method != "POST" {
 		jsonErr(w, "仅 POST")
 		return
@@ -2387,6 +2413,7 @@ func (s *webServer) handleGitCheckout(w http.ResponseWriter, r *http.Request) {
 
 // handleGitStash POST /api/git/stash 暂存操作（push/pop/drop/apply）。
 func (s *webServer) handleGitStash(w http.ResponseWriter, r *http.Request) {
+	r = withGitDir(r)
 	if r.Method != "POST" {
 		jsonErr(w, "仅 POST")
 		return
@@ -2444,6 +2471,7 @@ func (s *webServer) handleGitStash(w http.ResponseWriter, r *http.Request) {
 
 // handleGitStashList GET /api/git/stash-list 列出 stash 列表。
 func (s *webServer) handleGitStashList(w http.ResponseWriter, r *http.Request) {
+	r = withGitDir(r)
 	out, err := runGitInternal(r.Context(), "stash", "list", "--format=%(stash): %(stashsubject) | %(stashdate:short)")
 	if err != nil {
 		jsonResp(w, []any{})
@@ -2483,7 +2511,8 @@ func (s *webServer) handleGitStashList(w http.ResponseWriter, r *http.Request) {
 
 // handleGitIgnore GET/POST /api/git/ignore 管理 .gitignore。
 func (s *webServer) handleGitIgnore(w http.ResponseWriter, r *http.Request) {
-	root := gitRoot()
+	r = withGitDir(r)
+	root := gitRoot(r.Context())
 	ignorePath := filepath.Join(root, ".gitignore")
 
 	switch r.Method {
@@ -2533,6 +2562,7 @@ func (s *webServer) handleGitIgnore(w http.ResponseWriter, r *http.Request) {
 
 // handleGitDiscard POST /api/git/discard 丢弃工作区更改。
 func (s *webServer) handleGitDiscard(w http.ResponseWriter, r *http.Request) {
+	r = withGitDir(r)
 	if r.Method != "POST" {
 		jsonErr(w, "仅 POST")
 		return
@@ -2561,6 +2591,7 @@ func (s *webServer) handleGitDiscard(w http.ResponseWriter, r *http.Request) {
 
 // handleGitPush POST /api/git/push 推送。
 func (s *webServer) handleGitPush(w http.ResponseWriter, r *http.Request) {
+	r = withGitDir(r)
 	if r.Method != "POST" {
 		jsonErr(w, "仅 POST")
 		return
@@ -2588,6 +2619,7 @@ func (s *webServer) handleGitPush(w http.ResponseWriter, r *http.Request) {
 
 // handleGitPull POST /api/git/pull 拉取。
 func (s *webServer) handleGitPull(w http.ResponseWriter, r *http.Request) {
+	r = withGitDir(r)
 	if r.Method != "POST" {
 		jsonErr(w, "仅 POST")
 		return
@@ -2621,6 +2653,7 @@ func (s *webServer) handleGitPull(w http.ResponseWriter, r *http.Request) {
 
 // handleGitRemote GET/POST /api/git/remote 远程仓库管理。
 func (s *webServer) handleGitRemote(w http.ResponseWriter, r *http.Request) {
+	r = withGitDir(r)
 	switch r.Method {
 	case "GET":
 		type remoteInfo struct {
