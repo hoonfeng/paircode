@@ -906,6 +906,17 @@ watch(() => state.messages, () => {
 
 watch(() => state.settings, (s) => { if (s) { autoReview.value = s.autoReview !== undefined ? !!s.autoReview : true; autoIterate.value = !!s.autoIterateOnRejection; autonomous.value = !!s.autonomous; autoCollapse.value = s.autoCollapse !== undefined ? !!s.autoCollapse : true; autoCommit.value = s.autoCommit !== false; } }, { immediate: true })
 
+// ── 工作区切换时加载 Token 统计（onMounted 时 workspaceRoot 可能还未设）
+watch(() => state.workspaceRoot, (root) => {
+  if (root && root !== '') {
+    // 清理 onMounted 阶段可能存到空 key 的脏数据
+    if (state.wsTokenStatsByWs['']) {
+      delete state.wsTokenStatsByWs['']
+    }
+    loadWsTokenStats()
+  }
+})
+
 const handleBeforeUnload = () => { if (state.currentConvId && state.messages.length > 0) { window.dispatchEvent(new Event('save-conversations')) } }
 
 onMounted(() => {
