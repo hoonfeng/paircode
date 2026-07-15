@@ -10,6 +10,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 
@@ -392,4 +394,90 @@ func registerCodeGraphTools(r *Registry, root string) {
 			return codegraph.GitHistoryText(commits), nil
 		},
 	})
+}
+
+// CodeGraphProjectSummary 从 codegraph 提取项目结构的关键信息，
+// 供系统提示注入。返回 ~200 字的紧凑概览：
+// 入口、核心包（目录级）、文件/函数统计。
+// 比单纯的数字统计更有实际指引价值。
+func CodeGraphProjectSummary(cg *codegraph.Graph, root string) string {
+	stats := cg.Stats()
+	if stats.FileCount == 0 {
+		return ""
+	}
+
+	// 收集项目内部包（通过文件路径判断——相对路径不含外部 vendor）
+	pkgDirs := make(map[string]struct{}) // 顶层目录
+	mainFiles := make([]string, 0)
+	totalInternal := 0
+
+	for _, fe := range cg.GetEntitiesByKind(codegraph.EntityFile) {
+		if fe.FilePath == "" {
+			continue
+		}
+		totalInternal++
+		// 提取顶层分类目录
+		dir := filepath.Dir(fe.FilePath)
+		parts := strings.SplitN(dir, string(filepath.Separator), 2)
+		if len(parts) > 0 && parts[0] != "." && parts[0] != "" {
+			topDir := parts[0]
+			// 只统计有意义的内部分类目录
+			if topDir != ".git" && topDir != "node_modules" && topDir != "vendor" {
+				pkgDirs[topDir] = struct{}{}
+			}
+		}
+	}
+
+	// 找入口文件
+	for _, fe := range cg.GetEntitiesByKind(codegraph.EntityFile) {
+		if fe.Name == "main.go" || fe.Name == "main.ts" || fe.Name == "main.py" ||
+			fe.Name == "index.js" || fe.Name == "app.go" || fe.Name == "Server.go" {
+			mainFiles = append(mainFiles, fe.FilePath)
+		}
+	}
+	// 也找 main 函数
+	for _, fn := range cg.GetEntitiesByKind(codegraph.EntityFunction) {
+		if fn.Name == "main" && fn.FilePath != "" {
+			if !contains(mainFiles, fn.FilePath) {
+				mainFiles = append(mainFiles, fn.FilePath)
+			}
+		}
+	}
+
+	// 排序顶层目录
+	sortedDirs := make([]string, 0, len(pkgDirs))
+	for d := range pkgDirs {
+		sortedDirs = append(sortedDirs, d)
+	}
+	sort.Strings(sortedDirs)
+
+	// 构建摘要
+	var b strings.Builder
+	if len(mainFiles) > 0 {
+		b.WriteString("入口: ")
+		for i, mf := range mainFiles {
+			if i > 2 {
+				b.WriteString("…")
+				break
+			}
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			b.WriteString(mf)
+		}
+		b.WriteString("\n")
+	}
+
+	b.WriteString(fmt.Sprintf("核心模块: %s\n", strings.Join(sortedDirs, ", ")))
+	b.WriteString(fmt.Sprintf("文件: %d | 函数: %d | 类型: %d | 包: %d",
+		stats.FileCount,
+		stats.KindCounts["function"]+stats.KindCounts["method"],
+		stats.KindCounts["struct"],
+		stats.PackageCount))
+
+	result := b.String()
+	if len(result) > 400 {
+		result = result[:400] + "…"
+	}
+	return result
 }
