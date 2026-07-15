@@ -692,6 +692,65 @@ func (s *DBStore) LoadCompressedSummaries(convID string) ([]string, error) {
 	return summaries, nil
 }
 
+// ReplaceHistory 删除 convID 的全部旧消息，替换为压缩后的 msgs 版本。
+// 在 maybeCompact 压缩历史后调用，防止 DB 无限增长。
+// 事务保证：DELETE + INSERT 原子提交，失败则回滚，旧数据不受影响。
+func (s *DBStore) ReplaceHistory(convID string, msgs []Message) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.checkDB(); err != nil {
+		return err
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("ReplaceHistory 开启事务失败: %w", err)
+	}
+	defer tx.Rollback()
+
+	// 删除此对话的全部旧消息
+	if _, err := tx.Exec(`DELETE FROM messages WHERE conv_id = ?`, convID); err != nil {
+		return fmt.Errorf("ReplaceHistory 删除旧消息失败: %w", err)
+	}
+
+	// 插入新消息（只保留 assistant/tool，system/user 不持久化）
+	stmt, err := tx.Prepare(
+		`INSERT INTO messages (conv_id, idx, role, content, reasoning, tool_calls, tool_call_id, name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	)
+	if err != nil {
+		return fmt.Errorf("ReplaceHistory 预编译插入语句失败: %w", err)
+	}
+	defer stmt.Close()
+
+	inserted := 0
+	for i, m := range msgs {
+		if m.Role == RoleSystem || m.Role == RoleUser {
+			continue
+		}
+		tcJSON := "[]"
+		if len(m.ToolCalls) > 0 {
+			data, _ := json.Marshal(m.ToolCalls)
+			tcJSON = string(data)
+		}
+		if _, err := stmt.Exec(convID, i, string(m.Role), m.Content, m.Reasoning, tcJSON, m.ToolCallID, m.Name, now); err != nil {
+			return fmt.Errorf("ReplaceHistory 插入消息 idx=%d 失败: %w", i, err)
+		}
+		inserted++
+	}
+
+	// 更新 conversations 表的 msg_count
+	if _, err := tx.Exec(`UPDATE conversations SET msg_count=?, updated_at=? WHERE id=?`, inserted, now, convID); err != nil {
+		return fmt.Errorf("ReplaceHistory 更新 msg_count 失败: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("ReplaceHistory 提交事务失败: %w", err)
+	}
+	return nil
+}
+
+
 // ── 旧格式迁移 ──
 
 // MigrateFromLegacy 从旧 JSONL 格式迁移到 SQLite。

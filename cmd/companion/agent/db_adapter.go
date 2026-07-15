@@ -462,6 +462,51 @@ func (a *DBAdapter) LoadCompressedSummaries(convID string) ([]string, error) {
 	return a.db.LoadCompressedSummaries(convID)
 }
 
+// ReplaceHistory 委托给底层 DBStore 实现。
+func (a *DBAdapter) ReplaceHistory(convID string, msgs []Message) error {
+	// 用 rawDB 直接执行 DELETE + INSERT 替换
+	now := time.Now().UTC().Format(time.RFC3339)
+	tx, err := a.rawDB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(`DELETE FROM messages WHERE conv_id = ?`, convID); err != nil {
+		return err
+	}
+
+	stmt, err := tx.Prepare(
+		`INSERT INTO messages (conv_id, idx, role, content, reasoning, tool_calls, tool_call_id, name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	inserted := 0
+	for i, m := range msgs {
+		if m.Role == RoleSystem || m.Role == RoleUser {
+			continue
+		}
+		tcJSON := "[]"
+		if len(m.ToolCalls) > 0 {
+			data, _ := json.Marshal(m.ToolCalls)
+			tcJSON = string(data)
+		}
+		if _, err := stmt.Exec(convID, i, string(m.Role), m.Content, m.Reasoning, tcJSON, m.ToolCallID, m.Name, now); err != nil {
+			return err
+		}
+		inserted++
+	}
+
+	if _, err := tx.Exec(`UPDATE conversations SET msg_count=?, updated_at=? WHERE id=?`, inserted, now, convID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// ── 旧格式迁移 ──
 // ── 旧格式迁移 ──
 
 func (a *DBAdapter) MigrateFromLegacy(conversationsJSONPath, historyCacheJSONPath string) error {

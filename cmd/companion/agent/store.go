@@ -29,6 +29,9 @@ type ConversationStore interface {
 	SaveCompressedSummaries(convID string, summaries []string) error
 	LoadCompressedSummaries(convID string) ([]string, error)
 
+	// ReplaceHistory 替换整个对话的消息历史（压缩后调用——删除旧消息，写入压缩后的版本）。
+	ReplaceHistory(convID string, msgs []Message) error
+
 	// 迁移
 	MigrateFromLegacy(conversationsJSONPath, historyCacheJSONPath string) error
 }
