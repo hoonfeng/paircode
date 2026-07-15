@@ -164,10 +164,10 @@ if exist "bin\config\models.json" copy "bin\config\models.json" "%DIST_DIR%\bin\
 REM 4. headless-check.js
 if exist "bin\headless-check.js" copy "bin\headless-check.js" "%DIST_DIR%\bin\" >nul 2>&1
 
-REM 5. app config
+REM 5. app config (settings.json uses template to avoid exposing API keys)
 echo  -> config...
 if exist "config\models.json" copy "config\models.json" "%DIST_DIR%\config\" >nul 2>&1
-if exist "config\settings.json" copy "config\settings.json" "%DIST_DIR%\config\" >nul 2>&1
+if exist "config\settings.template.json" copy "config\settings.template.json" "%DIST_DIR%\config\settings.json" >nul 2>&1
 if exist "config\mcp.json" copy "config\mcp.json" "%DIST_DIR%\config\" >nul 2>&1
 if exist "config\skills\*" xcopy /E /I /Y "config\skills\*" "%DIST_DIR%\config\skills\" >nul 2>&1
 if exist "config\roles\*" xcopy /E /I /Y "config\roles\*" "%DIST_DIR%\config\roles\" >nul 2>&1
