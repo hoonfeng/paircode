@@ -279,8 +279,15 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 			l.emit(Event{Type: EventError, Content: err.Error()})
 			return msgs, err
 		}
-		msgs = append(msgs, assistant)
+        msgs = append(msgs, assistant)
 		l.currentMsgs = msgs // 同步：供 delegate handler 读父历史（含本轮 assistant；handler 剥离末尾未配对 tool_call 保前缀稳定）
+
+		// ★ 在工具执行前立即持久化 assistant 消息（含 thinking + tool_calls），
+		//   确保 ask_user 等阻塞工具不会导致本轮 assistant 输出丢失。
+		//   后续工具结果由迭代末尾的 OnBatchPersist 补充。
+		if l.OnBatchPersist != nil {
+			l.OnBatchPersist(msgs)
+		}
 
 		// ★ 记录执行日志：当 assistant 有分析内容且有工具调用时（即将执行委托/操作前）
 		// 外层 agent 的分析和决策，在 delegate_task 之前可见
