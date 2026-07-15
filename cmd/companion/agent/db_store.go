@@ -420,7 +420,7 @@ func (s *DBStore) PersistNewMessages(convID string, hist []Message) error {
 
 	newCount := 0
 	for i, m := range hist {
-		if m.Role == RoleSystem {
+		if m.Role == RoleSystem || m.Role == RoleUser {
 			continue
 		}
 		// 只处理未持久化的消息

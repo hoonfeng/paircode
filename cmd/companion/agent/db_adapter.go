@@ -190,7 +190,7 @@ func (a *DBAdapter) PersistNewMessages(convID string, hist []Message) error {
 
 	newCount := 0
 	for i, m := range hist {
-		if m.Role == RoleSystem {
+		if m.Role == RoleSystem || m.Role == RoleUser {
 			continue
 		}
 		if i <= maxIdx {
