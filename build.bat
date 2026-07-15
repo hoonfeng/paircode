@@ -15,14 +15,12 @@ set "ICON_SRC=assets\icon.png"
 set "SRC_DIR=cmd\companion"
 set "DIST_DIR=release\PairCode"
 
-REM ── preflight checks ──
+REM -- preflight checks --
 echo [CHECK] Checking dependencies...
 
 where ffmpeg >nul 2>nul
 if %ERRORLEVEL% neq 0 (
-    echo [ERROR] ffmpeg not found.
-    echo        Install from: https://ffmpeg.org/download.html
-    echo        Or via winget: winget install FFmpeg
+    echo [ERROR] ffmpeg not found. Install from: https://ffmpeg.org/download.html
     popd
     exit /b 1
 ) else (
@@ -31,9 +29,7 @@ if %ERRORLEVEL% neq 0 (
 
 where windres >nul 2>nul
 if %ERRORLEVEL% neq 0 (
-    echo [ERROR] windres not found (part of MinGW-w64).
-    echo        Install from: https://www.mingw-w64.org/
-    echo        Or via winget: winget install mingw
+    echo [ERROR] windres not found (MinGW-w64). Install from: https://www.mingw-w64.org/
     popd
     exit /b 1
 ) else (
@@ -42,8 +38,7 @@ if %ERRORLEVEL% neq 0 (
 
 go version >nul 2>nul
 if %ERRORLEVEL% neq 0 (
-    echo [ERROR] Go not found.
-    echo        Install from: https://go.dev/dl/
+    echo [ERROR] Go not found. Install from: https://go.dev/dl/
     popd
     exit /b 1
 ) else (
@@ -53,7 +48,7 @@ if %ERRORLEVEL% neq 0 (
 echo [INFO] CGO_ENABLED=%CGO_ENABLED%
 echo.
 
-REM ═══════════════ Step 1: Generate icons ═══════════════
+REM === Step 1: Generate icons ===
 echo === [1/4] Generate Windows icon (.ico) ===
 echo  -> scaling to multiple sizes...
 ffmpeg -y -i "%ICON_SRC%" -s 16x16 -update 1 "%SRC_DIR%\icon_16.png" >nul 2>&1
@@ -79,7 +74,7 @@ if %ERRORLEVEL% neq 0 (
 echo [OK] icon.ico generated
 echo.
 
-REM ═══════════════ Step 2: Compile resource ═══════════════
+REM === Step 2: Compile resource ===
 echo === [2/4] Compile resource (.rc -> .syso) ===
 windres -i "%SRC_DIR%\companion.rc" -o "%SRC_DIR%\companion.syso" -O coff
 if %ERRORLEVEL% neq 0 (
@@ -91,7 +86,7 @@ if %ERRORLEVEL% neq 0 (
 echo [OK] companion.syso generated
 echo.
 
-REM ═══════════════ Step 3: Build frontend ═══════════════
+REM === Step 3: Build frontend ===
 echo === [3/4] Build Web UI ===
 pushd "%SRC_DIR%\web-ui"
 call npm run build
@@ -105,9 +100,8 @@ popd
 echo [OK] Web UI built
 echo.
 
-REM ═══════════════ Step 4: Build Go binary ═══════════════
+REM === Step 4: Build Go binary ===
 echo === [4/4] Build companion.exe ===
-echo  -> CGO_ENABLED=%CGO_ENABLED%
 go build -o companion.exe ./cmd/companion/
 if %ERRORLEVEL% neq 0 (
     echo [ERROR] companion.exe build failed.
@@ -117,7 +111,7 @@ if %ERRORLEVEL% neq 0 (
 echo [OK] companion.exe built (with icon + embedded Web UI)
 echo.
 
-REM ═══════════════ Optional: pack release ═══════════════
+REM === Optional: pack release ===
 if /i "%1"=="pack" goto :PACKAGE
 
 echo === Build complete ===
@@ -127,7 +121,7 @@ echo To pack release: build.bat pack
 popd
 goto :EOF
 
-REM ═══════════════ Release packaging ═══════════════
+REM === Release packaging ===
 :PACKAGE
 echo.
 echo === Packing release package ===
@@ -139,7 +133,7 @@ REM create directory structure via PowerShell
 powershell -NoProfile -Command "& {
     $d = '%DIST_DIR%';
     @(
-        'bin\tesseract\tessdata','bin\tesseract\doc','bin\config',
+        'bin\tesseract\tessdata','bin\config',
         'config\skills','config\roles','config\philosophy',
         'assets','fonts','lib'
     ) | ForEach-Object {
@@ -156,12 +150,13 @@ if exist "companion.exe" (
     echo [WARN] companion.exe not found, skipping
 )
 
-REM 2. tesseract OCR engine
+REM 2. tesseract OCR engine (only runtime files, no training tools)
 echo  -> bin\tesseract...
-if exist "bin\tesseract\*.exe" copy "bin\tesseract\*.exe" "%DIST_DIR%\bin\tesseract\" >nul 2>&1
+if exist "bin\tesseract\tesseract.exe" copy "bin\tesseract\tesseract.exe" "%DIST_DIR%\bin\tesseract\" >nul 2>&1
+if exist "bin\tesseract\tesseract-uninstall.exe" copy "bin\tesseract\tesseract-uninstall.exe" "%DIST_DIR%\bin\tesseract\" >nul 2>&1
+if exist "bin\tesseract\winpath.exe" copy "bin\tesseract\winpath.exe" "%DIST_DIR%\bin\tesseract\" >nul 2>&1
 if exist "bin\tesseract\*.dll" copy "bin\tesseract\*.dll" "%DIST_DIR%\bin\tesseract\" >nul 2>&1
 if exist "bin\tesseract\tessdata\*" xcopy /E /I /Y "bin\tesseract\tessdata\*" "%DIST_DIR%\bin\tesseract\tessdata\" >nul 2>&1
-if exist "bin\tesseract\doc\*" xcopy /E /I /Y "bin\tesseract\doc\*" "%DIST_DIR%\bin\tesseract\doc\" >nul 2>&1
 
 REM 3. bin config
 if exist "bin\config\models.json" copy "bin\config\models.json" "%DIST_DIR%\bin\config\" >nul 2>&1

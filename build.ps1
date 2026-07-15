@@ -6,7 +6,7 @@ param(
     [switch]$IconsOnly
 )
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
 $ROOT = Split-Path -Parent $MyInvocation.MyCommand.Definition
 Set-Location $ROOT
 
@@ -17,7 +17,7 @@ $DistDir = "release\PairCode"
 
 Write-Host "[INFO] CGO_ENABLED=$env:CGO_ENABLED" -ForegroundColor Cyan
 
-# ── preflight ──
+# -- preflight --
 Write-Host "`n[CHECK] Checking dependencies..." -ForegroundColor Cyan
 $tools = @{ffmpeg = $false; windres = $false; go = $false}
 Get-Command ffmpeg -ErrorAction SilentlyContinue | Out-Null; if ($?) { $tools.ffmpeg = $true }
@@ -28,7 +28,7 @@ foreach ($k in $tools.Keys) {
     else { Write-Host "  [FAIL] $k" -ForegroundColor Red; exit 1 }
 }
 
-# ═══════════════ Step 1: Icons ═══════════════
+# === Step 1: Icons ===
 Write-Host "`n=== [1/4] Generate Windows icon (.ico) ===" -ForegroundColor Cyan
 Write-Host "  -> scaling to multiple sizes..."
 foreach ($s in @(16,32,48,64,128,256)) {
@@ -38,21 +38,19 @@ foreach ($s in @(16,32,48,64,128,256)) {
 if (-not (Test-Path "$SrcDir\icon_256.png")) {
     Write-Host "[ERROR] Icon scaling failed" -ForegroundColor Red; exit 1
 }
-
 Write-Host "  -> packing into .ico..."
 go run scripts\make_icon.go
 if ($LASTEXITCODE -ne 0) { Write-Host "[ERROR] ICO packaging failed" -ForegroundColor Red; exit 1 }
 Write-Host "[OK] icon.ico generated" -ForegroundColor Green
+if ($IconsOnly) { Write-Host "`n[OK] Icons only" -ForegroundColor Green; return }
 
-if ($IconsOnly) { Write-Host "`n[OK] Icons generated only (use -Pack or no switch for full build)" -ForegroundColor Green; return }
-
-# ═══════════════ Step 2: Resource ═══════════════
+# === Step 2: Resource ===
 Write-Host "`n=== [2/4] Compile resource (.rc -> .syso) ===" -ForegroundColor Cyan
 windres -i "$SrcDir\companion.rc" -o "$SrcDir\companion.syso" -O coff
 if ($LASTEXITCODE -ne 0) { Write-Host "[ERROR] Resource compilation failed" -ForegroundColor Red; exit 1 }
 Write-Host "[OK] companion.syso generated" -ForegroundColor Green
 
-# ═══════════════ Step 3: Frontend ═══════════════
+# === Step 3: Frontend ===
 Write-Host "`n=== [3/4] Build Web UI ===" -ForegroundColor Cyan
 Push-Location "$SrcDir\web-ui"
 npm run build
@@ -60,13 +58,13 @@ if ($LASTEXITCODE -ne 0) { Write-Host "[ERROR] Web UI build failed" -ForegroundC
 Pop-Location
 Write-Host "[OK] Web UI built" -ForegroundColor Green
 
-# ═══════════════ Step 4: Go build ═══════════════
+# === Step 4: Go build ===
 Write-Host "`n=== [4/4] Build companion.exe ===" -ForegroundColor Cyan
 go build -o companion.exe ./cmd/companion/
 if ($LASTEXITCODE -ne 0) { Write-Host "[ERROR] companion.exe build failed" -ForegroundColor Red; exit 1 }
 Write-Host "[OK] companion.exe built (with icon + embedded Web UI)" -ForegroundColor Green
 
-# ═══════════════ Optional: pack ═══════════════
+# === Optional: pack ===
 if (-not $Pack) {
     Write-Host "`n=== Build complete ===" -ForegroundColor Green
     Write-Host "  companion.exe"
@@ -80,7 +78,7 @@ Write-Host "  Output: $DistDir"
 if (Test-Path $DistDir) { Remove-Item -Recurse -Force $DistDir }
 
 $dirs = @(
-    "bin\tesseract\tessdata","bin\tesseract\doc","bin\config",
+    "bin\tesseract\tessdata","bin\config",
     "config\skills","config\roles","config\philosophy",
     "assets","fonts","lib"
 )
@@ -89,12 +87,14 @@ foreach ($d in $dirs) { New-Item -ItemType Directory -Path (Join-Path $DistDir $
 # 1. main binary
 if (Test-Path "companion.exe") { Copy-Item "companion.exe" "$DistDir\" }
 
-# 2. tesseract
+# 2. tesseract (only runtime files, no training tools)
 Write-Host "  -> bin\tesseract..."
-if (Test-Path "bin\tesseract\*.exe") { Copy-Item "bin\tesseract\*.exe" "$DistDir\bin\tesseract\" }
+foreach ($exe in @('tesseract.exe','tesseract-uninstall.exe','winpath.exe')) {
+    $src = "bin\tesseract\$exe"
+    if (Test-Path $src) { Copy-Item $src "$DistDir\bin\tesseract\" }
+}
 if (Test-Path "bin\tesseract\*.dll") { Copy-Item "bin\tesseract\*.dll" "$DistDir\bin\tesseract\" }
 if (Test-Path "bin\tesseract\tessdata") { Copy-Item -Recurse "bin\tesseract\tessdata\*" "$DistDir\bin\tesseract\tessdata\" }
-if (Test-Path "bin\tesseract\doc") { Copy-Item -Recurse "bin\tesseract\doc\*" "$DistDir\bin\tesseract\doc\" }
 
 # 3-4. bin config + headless-check
 if (Test-Path "bin\config\models.json") { Copy-Item "bin\config\models.json" "$DistDir\bin\config\" }
