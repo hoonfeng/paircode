@@ -2099,6 +2099,7 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 
 	var history []agent.Message
 	var summaries []string
+	var sumErr error
 	if convID != "" {
 		if store := agentMgr.Store(); store != nil {
 			raw, loadErr := store.LoadAll(convID)
@@ -2113,7 +2114,7 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 				}
 			}
 			// 加载已持久化的压缩摘要（页面刷新后恢复上下文连续性）
-			summaries, sumErr := store.LoadCompressedSummaries(convID)
+			summaries, sumErr = store.LoadCompressedSummaries(convID)
 			if sumErr != nil {
 				log.Printf("[chat] LoadCompressedSummaries 失败 conv=%s err=%v", convID, sumErr)
 			}
