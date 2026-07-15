@@ -121,46 +121,6 @@ func NewLSPTools(mgr *Manager) []ToolAdapter {
 				return mgr.Diagnostics(ctx, file)
 			},
 		},
-		{
-			Mgr:  mgr,
-			Name: "get_file_symbols",
-			Desc: "列出指定文件中所有检测到的符号（函数、类、接口、类型、常量、变量等），返回每个符号的名称、种类、所在行号及子符号。基于 LSP（语言服务器协议）的 documentSymbol 能力，支持 Go / TypeScript / JavaScript / Python / Rust / C/C++ / Java 等语言。",
-			Param: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"filePath": map[string]any{"type": "string", "description": "文件路径（工作区内）"},
-				},
-				"required": []string{"filePath"},
-			},
-			Exec: func(ctx context.Context, args map[string]any) (string, error) {
-				file, ok := args["filePath"].(string)
-				if !ok || file == "" {
-					return "", fmt.Errorf("filePath is required")
-				}
-				return mgr.DocumentSymbol(ctx, file)
-			},
-		},
-		{
-			Mgr:  mgr,
-			Name: "find_symbol_usages",
-			Desc: "搜索指定符号在项目中的所有引用位置（使用 LSP textDocument/references 能力）。先通过 documentSymbol 在给定文件中定位符号定义，再查询其全部引用。返回每个引用的文件路径、行号和摘要上下文。支持 Go / TypeScript / JavaScript / Python / Rust / C/C++ / Java 等语言。",
-			Param: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"name":     map[string]any{"type": "string", "description": "符号名称（如函数名、类型名、变量名）"},
-					"filePath": map[string]any{"type": "string", "description": "符号所在的文件路径（用于定位符号定义位置，必填）"},
-				},
-				"required": []string{"name", "filePath"},
-			},
-			Exec: func(ctx context.Context, args map[string]any) (string, error) {
-				name, _ := args["name"].(string)
-				filePath, _ := args["filePath"].(string)
-				if name == "" || filePath == "" {
-					return "", fmt.Errorf("name and filePath are required")
-				}
-				return mgr.References(ctx, filePath, 1, name)
-			},
-		},
 	}
 }
 

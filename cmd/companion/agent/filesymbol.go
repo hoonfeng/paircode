@@ -22,31 +22,8 @@ import (
 // ── 工具注册 ──
 
 // registerFileSymbolTools 注册符号和依赖分析相关的工具。
+// get_file_symbols 和 find_symbol_usages 已由 codegraph 工具替代，不再注册。
 func registerFileSymbolTools(r *Registry, root string) {
-	r.Register(&Tool{
-		Name: "get_file_symbols",
-		Description: "列出指定文件中所有检测到的符号（函数、类、接口、类型、常量、变量等），" +
-			"返回每个符号的名称、种类、所在行号及子符号。基于 LSP（语言服务器协议）的 documentSymbol 能力，" +
-			"支持 Go / TypeScript / JavaScript / Python / Rust / C/C++ / Java / JSON / HTML / CSS / YAML 等语言。",
-		Parameters: objSchema(props{
-			"filePath": strProp("文件路径（工作区内）"),
-		}, "filePath"),
-		ReadOnly: true,
-		Handler:  getFileSymbolsHandler(root),
-	})
-
-	r.Register(&Tool{
-		Name: "find_symbol_usages",
-		Description: "搜索指定符号在项目中的所有引用位置（使用 LSP textDocument/references 能力）。" +
-			"先通过 documentSymbol 在给定文件中定位符号定义，再查询其全部引用。返回每个引用的文件路径、行号和摘要上下文。" +
-			"支持 Go / TypeScript / JavaScript / Python / Rust / C/C++ / Java 等语言。",
-		Parameters: objSchema(props{
-			"name":     strProp("符号名称（如函数名、类型名、变量名）"),
-			"filePath": strProp("符号所在的文件路径（用于定位符号定义位置，必填）"),
-		}, "name", "filePath"),
-		ReadOnly: true,
-		Handler:  findSymbolUsagesHandler(root),
-	})
 
 	r.Register(&Tool{
 		Name: "list_exported_symbols",
@@ -90,34 +67,8 @@ func registerFileSymbolTools(r *Registry, root string) {
 	})
 }
 
-// ── 工具处理函数 ──
 
-func getFileSymbolsHandler(root string) ToolHandler {
-	return func(ctx context.Context, args map[string]any) (string, error) {
-		filePath := argStr(args, "filePath")
-		if filePath == "" {
-			return "", fmt.Errorf("filePath 不能为空")
-		}
-		mgr := getLSPManager(root)
-		return mgr.DocumentSymbol(ctx, filePath)
-	}
-}
 
-// ── find_symbol_usages 处理函数 ──
-
-func findSymbolUsagesHandler(root string) ToolHandler {
-	return func(ctx context.Context, args map[string]any) (string, error) {
-		name := argStr(args, "name")
-		filePath := argStr(args, "filePath")
-		if name == "" || filePath == "" {
-			return "", fmt.Errorf("name 和 filePath 不能为空")
-		}
-		mgr := getLSPManager(root)
-		return mgr.References(ctx, filePath, 1, name)
-	}
-}
-
-// 返回去重后的位置列表（可能存在重名符号如重载）。
 
 type exportedSymbol struct {
 	Name     string // 符号名
