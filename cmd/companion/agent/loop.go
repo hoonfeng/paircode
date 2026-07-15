@@ -197,28 +197,6 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 	}
 	// 统一持久化出口：每次 Run 返回后更新 l.History（不论调用方是否传了 history）
 	defer func() {
-		// ★ 任务完成时自动摘要并缩减历史 ★
-		// 当 Run 成功返回（无错误）且 msgs 非空时，生成结构化摘要，
-		// 存入 CompressedSummaries 和 memory，然后裁剪 l.History，
-		// 防止下一轮对话时历史无限膨胀浪费 token。
-		if err == nil && len(msgs) > 0 {
-			summary := l.generateRunSummary(msgs, task)
-			l.CompressedSummaries = append(l.CompressedSummaries, summary)
-			// 裁剪：只保留 system + 本轮最后一条 assistant（最终结果）
-			var trimmed []Message
-			if len(msgs) > 0 && msgs[0].Role == RoleSystem {
-				trimmed = append(trimmed, msgs[0])
-			}
-			for i := len(msgs) - 1; i >= 0; i-- {
-				if msgs[i].Role == RoleAssistant && len(msgs[i].ToolCalls) == 0 && strings.TrimSpace(msgs[i].Content) != "" {
-					trimmed = append(trimmed, msgs[i])
-					break
-				}
-			}
-			if len(trimmed) > 1 {
-				msgs = trimmed
-			}
-		}
 		l.History = msgs
 		// 最终写盘兜底：OnBatchPersist 非空则调用一次
 		if l.OnBatchPersist != nil && msgs != nil {
@@ -631,49 +609,4 @@ func readCapped(root, name string) string {
 		s = s[:8000] + "\n…（已截断）"
 	}
 	return s
-}
-
-// ── 历史摘要与裁剪 ─────────────────────────────────────────
-
-// generateRunSummary 从 msgs 和 task 生成结构化摘要。
-func (l *Loop) generateRunSummary(msgs []Message, task string) string {
-	var b strings.Builder
-	b.WriteString("[完成报告] ")
-	b.WriteString(truncateString(task, 120))
-	b.WriteString("\n")
-
-	toolCalls := 0
-	errors := 0
-	filesModified := 0
-
-	for _, m := range msgs {
-		if m.Role == RoleAssistant && len(m.ToolCalls) > 0 {
-			toolCalls += len(m.ToolCalls)
-		}
-		if m.Role == RoleTool && strings.HasPrefix(m.Content, "Error:") {
-			errors++
-		}
-	}
-
-	for _, m := range msgs {
-		if m.Role == RoleTool && (strings.HasPrefix(m.Content, "已编辑 ") || strings.HasPrefix(m.Content, "已写入 ") ||
-			strings.HasPrefix(m.Content, "已移动 ") || strings.HasPrefix(m.Content, "已删除 ")) {
-			filesModified++
-		}
-	}
-
-	b.WriteString(fmt.Sprintf("工具调用: %d 次 | 错误: %d 个 | 文件变更: %d 个\n", toolCalls, errors, filesModified))
-
-	for i := len(msgs) - 1; i >= 0; i-- {
-		if msgs[i].Role == RoleAssistant && len(msgs[i].ToolCalls) == 0 && strings.TrimSpace(msgs[i].Content) != "" {
-			result := strings.TrimSpace(msgs[i].Content)
-			if len(result) > 500 {
-				result = result[:500] + "…"
-			}
-			b.WriteString("\n最终结果:\n" + result)
-			break
-		}
-	}
-
-	return b.String()
 }
