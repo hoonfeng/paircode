@@ -71,22 +71,21 @@ func registerSearchTools(r *Registry, root string) {
 		ReadOnly: true,
 		Handler:  searchContentHandler(root),
 	})
-
 	r.Register(&Tool{
 		Name: "search_files",
 		Description: "在工作区内按通配符递归查找文件，返回相对路径列表（已排序）。" +
 			"pattern 为通配符：不含 / 时匹配文件名（如 *.go、*config*），含 / 时匹配相对路径（如 internal/*/main.go）；" +
-			"path 限定子目录；max_results 上限（默认 500）。跳过 .git/node_modules 等。",
+			"path 限定子目录；language 可选按语言过滤；max_results 上限（默认 500）。跳过 .git/node_modules 等。",
 		Parameters: objSchema(props{
 			"pattern":     strProp("文件名/路径通配符，如 *.go"),
 			"path":        strProp("限定子目录（省略=工作区根）"),
+			"language":    strProp("可选：按语言过滤，如 \"go\"、\"typescript\"、\"python\""),
 			"max_results": intProp("结果上限（默认 500）"),
 		}, "pattern"),
 		ReadOnly: true,
 		Handler:  searchFilesHandler(root),
 	})
 }
-
 func searchContentHandler(root string) ToolHandler {
 	return func(ctx context.Context, args map[string]any) (string, error) {
 		pattern := strings.TrimSpace(argStr(args, "pattern"))
@@ -173,6 +172,7 @@ func searchFilesHandler(root string) ToolHandler {
 			return "", err
 		}
 		max := clampInt(argInt(args, "max_results", 500), 500, 1, 5000)
+		langFilter := strings.TrimSpace(argStr(args, "language"))
 
 		var matches []string
 		truncated := false
@@ -188,6 +188,16 @@ func searchFilesHandler(root string) ToolHandler {
 					return fs.SkipDir
 				}
 				return nil
+			}
+			if langFilter != "" {
+				ext := strings.ToLower(filepath.Ext(p))
+				detectedLang := extLangMap[ext]
+				if detectedLang == "" {
+					detectedLang = strings.TrimPrefix(ext, ".")
+				}
+				if !strings.EqualFold(detectedLang, langFilter) {
+					return nil
+				}
 			}
 			if matchFile(pattern, d.Name(), relSlash(root, p)) {
 				matches = append(matches, relSlash(root, p))

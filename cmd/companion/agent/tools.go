@@ -535,7 +535,7 @@ func RegisterDefaultTools(r *Registry, root string) {
 	// 普通模式不暴露规划工具，避免 Agent 误用。
 	registerShellTools(r, root)               // run_background / read_output / kill_process（后台命令，见 shell.go）
 	registerMemoryTools(r, root)              // memory_write/read/list/search（跨会话记忆，见 memory.go）
-	registerFindFilesByPatternTool(r, root)   // find_files_by_pattern（glob 查文件，支持 **，见 findfiles.go）
+	// find_files_by_pattern 已合并到 search_files（增加 language 参数），不再独立注册。
 	registerFindSymbolTool(r, root)           // find_symbol（符号定位，见 symbolfinder.go）
 	registerFileSymbolTools(r, root)          // list_exported_symbols / get_file_dependencies / check_impact / find_circular_deps（见 filesymbol.go）
 	registerTaskTools(r, root)                // task_create/update/list/delete/summary（持久化任务追踪，见 task_tools.go）

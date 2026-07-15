@@ -1,1 +1,0 @@
-SELECT idx, role, substr(content,1,150) FROM messages WHERE conv_id='conv_1784149174415778400' AND idx  ORDER BY idx ASC LIMIT 30; 

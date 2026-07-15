@@ -167,23 +167,23 @@ func RegisterManagementTools(r *Registry, root string) {
 		},
 	})
 
-	// ── 长时记忆 ──
+	// ── 已完成对话历史 ──
 	r.Register(&Tool{
-		Name: "memory_search", Description: "搜索已完成对话的记忆。", ReadOnly: true,
+		Name: "history_search", Description: "按关键词搜索已完成对话的历史记录（标题/摘要/标签/关键点）。", ReadOnly: true,
 		Parameters: mObjSchema(map[string]any{"query": mStrProp("搜索关键词")}),
 		Handler: func(_ context.Context, args map[string]any) (string, error) {
-			return searchMemoryText(mArgStr(args, "query")), nil
+			return searchHistoryText(mArgStr(args, "query")), nil
 		},
 	})
 	r.Register(&Tool{
-		Name: "memory_list", Description: "列出已完成对话的记忆摘要。",
+		Name: "history_list", Description: "列出所有已完成对话的历史记录（按完成时间倒序）。",
 		ReadOnly: true, Parameters: mObjSchema(map[string]any{}),
-		Handler: func(_ context.Context, _ map[string]any) (string, error) { return listMemoryText(), nil },
+		Handler: func(_ context.Context, _ map[string]any) (string, error) { return listHistoryText(), nil },
 	})
 	r.Register(&Tool{
-		Name: "memory_count", Description: "查询记忆索引条目总数。",
+		Name: "history_count", Description: "查询已完成对话的历史记录总数。",
 		ReadOnly: true, Parameters: mObjSchema(map[string]any{}),
-		Handler: func(_ context.Context, _ map[string]any) (string, error) { return memoryCountText(), nil },
+		Handler: func(_ context.Context, _ map[string]any) (string, error) { return historyCountText(), nil },
 	})
 }
 
@@ -299,9 +299,9 @@ func marketSearchText(query, kind string) string {
 	return b.String()
 }
 
-// ─── 长时记忆工具实现 ──
+// ─── 已完成对话历史工具实现 ──
 
-func searchMemoryText(query string) string {
+func searchHistoryText(query string) string {
 	results := memory.Search(query)
 	if len(results) == 0 {
 		return "未找到匹配的历史记忆。"
@@ -337,13 +337,13 @@ func searchMemoryText(query string) string {
 	return b.String()
 }
 
-func listMemoryText() string {
+func listHistoryText() string {
 	results := memory.List()
 	if len(results) == 0 {
-		return "（暂无已完成对话的记忆。）"
+		return "（暂无已完成对话的历史记录。）"
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "共 %d 条已完成对话的记忆：\n\n", len(results))
+	fmt.Fprintf(&b, "共 %d 条已完成对话的历史记录：\n\n", len(results))
 	for _, m := range results {
 		title := m.Title
 		if title == "" {
@@ -358,13 +358,13 @@ func listMemoryText() string {
 			tags = " [" + strings.Join(m.Tags, ", ") + "]"
 		}
 		fmt.Fprintf(&b, "%d. 「%s」%s (%d条消息, %s)\n  %s\n\n",
-			len(results)-memoryFindIdx(m, results)+1, title, tags, m.MessageCount, m.CompletedAt, summary)
+			len(results)-historyFindIdx(m, results)+1, title, tags, m.MessageCount, m.CompletedAt, summary)
 	}
-	b.WriteString("（需要详情可用 memory_search 搜索关键词。）")
+	b.WriteString("（需要详情可用 history_search 搜索关键词。）")
 	return b.String()
 }
 
-func memoryFindIdx(target memory.Entry, results []memory.Entry) int {
+func historyFindIdx(target memory.Entry, results []memory.Entry) int {
 	for i, m := range results {
 		if m.ID == target.ID {
 			return i
@@ -373,10 +373,10 @@ func memoryFindIdx(target memory.Entry, results []memory.Entry) int {
 	return -1
 }
 
-func memoryCountText() string {
+func historyCountText() string {
 	count := memory.Count()
 	if count == 0 {
-		return "当前没有历史记忆。"
+		return "当前没有已完成对话的历史记录。"
 	}
-	return fmt.Sprintf("历史记忆索引中共有 %d 条已完成对话的记录。", count)
+	return fmt.Sprintf("已完成对话历史记录索引中共有 %d 条记录。", count)
 }

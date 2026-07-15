@@ -2097,7 +2097,7 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 				}
 				memSb.WriteString("\n")
 			}
-			memSb.WriteString("\n（需要更详细的历史信息可用 memory_search / memory_read 检索具体对话。）")
+			memSb.WriteString("\n（需要更详细的历史信息可用 history_search / history_list / memory_read 检索具体对话。）")
 			sys += "\n\n# 已完成对话历史\n" + memSb.String()
 		}
 
