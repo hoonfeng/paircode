@@ -38,15 +38,14 @@ func NewDBStore(root string) *DBStore {
 
 	db, err := sql.Open("sqlite", dbPath+"?_journal_mode=WAL&_busy_timeout=5000")
 	if err != nil {
-		// 降级：返回一个仅记录错误的桩
-		return &DBStore{root: root, db: nil}
+		return nil
 	}
 	db.SetMaxOpenConns(1)
 
 	s := &DBStore{db: db, root: root}
 	if err := s.migrate(); err != nil {
 		db.Close()
-		return &DBStore{root: root, db: nil}
+		return nil
 	}
 	return s
 }
@@ -109,11 +108,23 @@ func (s *DBStore) Close() error {
 	return s.db.Close()
 }
 
+// checkDB 检查数据库连接是否有效，无效时尝试重连。
+// 所有公共方法应在获取 s.mu 后最先调用此方法。
+func (s *DBStore) checkDB() error {
+	if s.db == nil {
+		return s.ensureDB()
+	}
+	return nil
+}
+
 // ── 对话 CRUD ──
 
 func (s *DBStore) CreateConversation(convID, title, workspaceRoot string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.checkDB(); err != nil {
+		return err
+	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	_, err := s.db.Exec(
 		`INSERT OR IGNORE INTO conversations (id, title, workspace_root, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
@@ -125,6 +136,9 @@ func (s *DBStore) CreateConversation(convID, title, workspaceRoot string) error 
 func (s *DBStore) GetConversation(convID string) (*ConversationMeta, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.checkDB(); err != nil {
+		return nil, err
+	}
 	row := s.db.QueryRow(
 		`SELECT id, title, workspace_root, created_at, updated_at, summary, msg_count FROM conversations WHERE id = ?`,
 		convID,
@@ -150,6 +164,9 @@ func (s *DBStore) GetConversation(convID string) (*ConversationMeta, error) {
 func (s *DBStore) UpdateConversation(meta *ConversationMeta) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.checkDB(); err != nil {
+		return err
+	}
 	_, err := s.db.Exec(
 		`UPDATE conversations SET title=?, updated_at=?, summary=?, msg_count=? WHERE id=?`,
 		meta.Title, meta.UpdatedAt, meta.Summary, meta.MsgCount, meta.ID,
@@ -160,6 +177,9 @@ func (s *DBStore) UpdateConversation(meta *ConversationMeta) error {
 func (s *DBStore) ListConversations(workspaceRoot string) ([]ConversationMeta, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.checkDB(); err != nil {
+		return nil, err
+	}
 	rows, err := s.db.Query(
 		`SELECT id, title, workspace_root, created_at, updated_at, summary, msg_count FROM conversations WHERE workspace_root=? OR workspace_root='' ORDER BY updated_at DESC`,
 		workspaceRoot,
@@ -193,6 +213,9 @@ func (s *DBStore) ListConversations(workspaceRoot string) ([]ConversationMeta, e
 func (s *DBStore) DeleteConversation(convID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.checkDB(); err != nil {
+		return err
+	}
 	_, _ = s.db.Exec(`DELETE FROM messages WHERE conv_id = ?`, convID)
 	_, _ = s.db.Exec(`DELETE FROM conv_summaries WHERE conv_id = ?`, convID)
 	_, _ = s.db.Exec(`DELETE FROM store_kv WHERE key = ?`, "ctx_"+convID)
@@ -207,7 +230,9 @@ func (s *DBStore) DeleteConversation(convID string) error {
 func (s *DBStore) AppendMessage(convID string, msg Message, _ []Segment) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
+	if err := s.checkDB(); err != nil {
+		return err
+	}
 	// 获取当前序号
 	var idx int
 	err := s.db.QueryRow(`SELECT COUNT(*) FROM messages WHERE conv_id = ?`, convID).Scan(&idx)
@@ -245,8 +270,9 @@ func (s *DBStore) AppendUserMessage(convID, content string) error {
 func (s *DBStore) LoadLatest(convID string, limit int) ([]StoredMessage, int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	// 获取总数
+	if err := s.checkDB(); err != nil {
+		return nil, 0, err
+	}
 	var total int
 	_ = s.db.QueryRow(`SELECT COUNT(*) FROM messages WHERE conv_id = ?`, convID).Scan(&total)
 
@@ -280,6 +306,9 @@ func (s *DBStore) LoadLatest(convID string, limit int) ([]StoredMessage, int, er
 func (s *DBStore) LoadBefore(convID string, beforeIdx int, limit int) ([]StoredMessage, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.checkDB(); err != nil {
+		return nil, err
+	}
 	if limit <= 0 {
 		limit = 50
 	}
@@ -307,6 +336,9 @@ func (s *DBStore) LoadBefore(convID string, beforeIdx int, limit int) ([]StoredM
 func (s *DBStore) LoadAll(convID string) ([]Message, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.checkDB(); err != nil {
+		return nil, err
+	}
 	rows, err := s.db.Query(
 		`SELECT role, content, reasoning, tool_calls, tool_call_id, name FROM messages WHERE conv_id = ? ORDER BY idx ASC`,
 		convID,
@@ -338,6 +370,9 @@ func (s *DBStore) LoadAll(convID string) ([]Message, error) {
 func (s *DBStore) Count(convID string) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.checkDB(); err != nil {
+		return 0, err
+	}
 	var count int
 	err := s.db.QueryRow(`SELECT COUNT(*) FROM messages WHERE conv_id = ?`, convID).Scan(&count)
 	return count, err
@@ -348,6 +383,9 @@ func (s *DBStore) Count(convID string) (int, error) {
 func (s *DBStore) GetPersistedCount(convID string) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.checkDB(); err != nil {
+		return 0
+	}
 	var count int
 	_ = s.db.QueryRow(`SELECT COUNT(*) FROM messages WHERE conv_id = ? AND role != 'system'`, convID).Scan(&count)
 	return count
@@ -358,7 +396,9 @@ func (s *DBStore) GetPersistedCount(convID string) int {
 func (s *DBStore) PersistNewMessages(convID string, hist []Message) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
+	if err := s.checkDB(); err != nil {
+		return err
+	}
 	// 获取当前最大 idx
 	var maxIdx int
 	_ = s.db.QueryRow(`SELECT COALESCE(MAX(idx), -1) FROM messages WHERE conv_id = ?`, convID).Scan(&maxIdx)
@@ -426,6 +466,9 @@ func (s *DBStore) MergeAllAssistantRuns(convID string) error {
 func (s *DBStore) UpdateTitle(convID, title string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.checkDB(); err != nil {
+		return err
+	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	_, err := s.db.Exec(`UPDATE conversations SET title=?, updated_at=? WHERE id=?`, title, now, convID)
 	return err
@@ -435,6 +478,9 @@ func (s *DBStore) UpdateTitle(convID, title string) error {
 func (s *DBStore) SetSummary(convID, summary, summaryAt string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.checkDB(); err != nil {
+		return err
+	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	_, err := s.db.Exec(`UPDATE conversations SET summary=?, updated_at=? WHERE id=?`, summary, now, convID)
 	if err != nil {
@@ -448,6 +494,9 @@ func (s *DBStore) SetSummary(convID, summary, summaryAt string) error {
 func (s *DBStore) SetCtxStats(convID string, stats *Usage) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.checkDB(); err != nil {
+		return err
+	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	if stats == nil {
 		_, _ = s.db.Exec(`UPDATE conversations SET updated_at=? WHERE id=?`, now, convID)
@@ -469,6 +518,9 @@ func (s *DBStore) SetCtxStats(convID string, stats *Usage) error {
 func (s *DBStore) SaveCompressedSummaries(convID string, summaries []string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.checkDB(); err != nil {
+		return err
+	}
 	// 删除旧摘要
 	_, _ = s.db.Exec(`DELETE FROM conv_summaries WHERE conv_id = ?`, convID)
 	if len(summaries) == 0 {
@@ -496,6 +548,9 @@ func (s *DBStore) SaveCompressedSummaries(convID string, summaries []string) err
 func (s *DBStore) LoadCompressedSummaries(convID string) ([]string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.checkDB(); err != nil {
+		return nil, err
+	}
 	rows, err := s.db.Query(`SELECT summary FROM conv_summaries WHERE conv_id = ? ORDER BY idx ASC`, convID)
 	if err != nil {
 		return nil, err
@@ -624,21 +679,22 @@ func (s *DBStore) writeKV(key, value string) error {
 }
 
 // ensureDB 确保数据库已连接，未连接时尝试重连。
-func (s *DBStore) ensureDB() {
+func (s *DBStore) ensureDB() error {
 	if s.db != nil {
-		return
+		return nil
 	}
 	dbPath := filepath.Join(s.root, ".pair", "pair.db")
 	db, err := sql.Open("sqlite", dbPath+"?_journal_mode=WAL&_busy_timeout=5000")
 	if err != nil {
-		return
+		return fmt.Errorf("重连数据库失败: %w", err)
 	}
 	db.SetMaxOpenConns(1)
 	if err := s.migrate(); err != nil {
 		db.Close()
-		return
+		return fmt.Errorf("重新迁移失败: %w", err)
 	}
 	s.db = db
+	return nil
 }
 
 // ── 兼容：MessageStore 未提供的额外方法 ──

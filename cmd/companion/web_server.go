@@ -2184,8 +2184,11 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	ctx := context.Background()
-	if err := agentMgr.Start(ctx, req.ConvID, req.Message, opts); err != nil {
+	// 使用分离的 context：setupCtx 用于 Start 方法本身的超时（避免在获取锁或建表时永久阻塞），
+	// Loop 的运行由内部独立的 context 管理（Stop 可取消），不受此超时影响。
+	setupCtx, setupCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer setupCancel()
+	if err := agentMgr.Start(setupCtx, req.ConvID, req.Message, opts); err != nil {
 		jsonErr(w, err.Error())
 		return
 	}

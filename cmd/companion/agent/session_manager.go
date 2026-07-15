@@ -451,6 +451,11 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 	// Loop.Run goroutine：结束后标记 Running=false、更新 History、关闭 Events。
 	go func() {
 		defer func() {
+			// panic recovery：确保会话状态和事件通道始终被清理
+			if r := recover(); r != nil {
+				fmt.Printf("[session] Loop goroutine panic conv=%s: %v\n", convID, r)
+				sess.History = loop.History
+			}
 			// 更新 History（loop.Run 的 defer 已更新 loop.History，同步到 session）
 			sess.History = loop.History
 			// 标记结束
