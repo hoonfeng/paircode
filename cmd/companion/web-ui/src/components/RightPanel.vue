@@ -579,7 +579,7 @@ const sendMessage = async () => {
 
 const stopChat = async () => {
   const convId = state.currentConvId
-  console.log('[RP] stopChat conv=%s runtimeKeys=%o', convId, Object.keys(runtimes).length>0?Object.keys(runtimes):'runtime空')
+  console.log('[RP] stopChat conv=%s runtimeExists=%s', convId, !!getConvRuntime(convId))
   if (!convId) return
   try { await api.chatStop(convId) } catch {}
   resetConvRuntime(convId)
