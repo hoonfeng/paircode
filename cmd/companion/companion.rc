@@ -1,0 +1,38 @@
+#include <windows.h>
+
+// ★ PairCode IDE 图标 ★
+APP_ICON ICON "icon.ico"
+
+// ★ 版本信息 ★
+1 VERSIONINFO
+FILEVERSION     1,0,0,0
+PRODUCTVERSION  1,0,0,0
+FILEFLAGSMASK   0x17L
+#ifdef _DEBUG
+FILEFLAGS       0x1L
+#else
+FILEFLAGS       0x0L
+#endif
+FILEOS          0x40004L
+FILETYPE        0x1L
+FILESUBTYPE     0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "080404B0"
+        BEGIN
+            VALUE "CompanyName",        "PairCode"
+            VALUE "FileDescription",    "PairCode IDE - AI-Powered Code Companion"
+            VALUE "FileVersion",        "1.0.0"
+            VALUE "InternalName",       "companion"
+            VALUE "LegalCopyright",     "Copyright (C) 2026"
+            VALUE "OriginalFilename",   "companion.exe"
+            VALUE "ProductName",        "PairCode IDE"
+            VALUE "ProductVersion",     "1.0.0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x804, 1200
+    END
+END

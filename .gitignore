@@ -1,6 +1,8 @@
 *.exe
 *.exe~
 *.dll
+*.syso
+*.ico
 *.test
 *.test.exe
 *.log
@@ -30,6 +32,7 @@ cmd/companion/config/
 
 # Build artifacts
 bin/
+release/
 
 # Node build outputs
 cmd/companion/web-ui/node_modules/
