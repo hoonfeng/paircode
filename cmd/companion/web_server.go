@@ -826,18 +826,20 @@ func (s *webServer) handleSettings(w http.ResponseWriter, r *http.Request) {
 	case "GET":
 		jsonResp(w, core.Settings)
 	case "PUT":
+		// convId 参数可选：来自工具栏切换时传当前对话 ID，仅实时更新该对话的 Loop
+		convId := r.URL.Query().Get("convId")
 		var newSettings core.AppSettings
 		if err := json.NewDecoder(r.Body).Decode(&newSettings); err != nil {
 			jsonErr(w, err.Error())
 			return
 		}
-		// 检查审核开关是否变更，用于后续通知运行中的会话
+		// 检查审核开关是否变更，用于后续通知正在运行的会话
 		oldAutoReview := core.Settings.AutoReview
 		core.Settings = newSettings
 		core.Save()
-		// 审核开关变更时，实时通知所有运行中的会话
-		if oldAutoReview != newSettings.AutoReview {
-			agentMgr.SetAutoReviewForAll(newSettings.AutoReview)
+		// 审核开关变更时，仅实时更新当前对话的 Loop（其他对话不受影响）
+		if oldAutoReview != newSettings.AutoReview && convId != "" {
+			agentMgr.SetAutoReview(convId, newSettings.AutoReview)
 		}
 		// 同步工作区文件夹列表（确保 core.Folders 与 settings 一致，
 		// 避免 DefaultSystemPrompt 等依赖 Folders 的地方读到空切片而 panic）

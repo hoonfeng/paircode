@@ -793,7 +793,7 @@ const toggleAuto = async (field) => {
   else if (field === 'autonomous') autonomous.value = newVal
   else if (field === 'autoCommit') autoCommit.value = newVal
   else if (field === 'autoCollapse') autoCollapse.value = newVal
-  try { await api.apiPut('/settings', state.settings) } catch { state.settings[field] = oldVal; if (field === 'autoReview') autoReview.value = oldVal; else if (field === 'autonomous') autonomous.value = oldVal; else if (field === 'autoCommit') autoCommit.value = oldVal; else if (field === 'autoCollapse') autoCollapse.value = oldVal }
+  try { await api.apiPut('/settings?convId=' + encodeURIComponent(state.currentConvId), state.settings) } catch { state.settings[field] = oldVal; if (field === 'autoReview') autoReview.value = oldVal; else if (field === 'autonomous') autonomous.value = oldVal; else if (field === 'autoCommit') autoCommit.value = oldVal; else if (field === 'autoCollapse') autoCollapse.value = oldVal }
 }
 
 const autoNameConv = async (convId, content) => {

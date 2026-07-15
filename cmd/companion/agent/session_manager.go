@@ -749,16 +749,15 @@ func copyHistoryRaw(hist []Message) []Message {
 	return out
 }
 
-// SetAutoReviewForAll 实时更新所有运行中会话的审核开关。
-// 用户在设置面板切换 autoReview 时立即生效，无需新消息。
-func (m *SessionManager) SetAutoReviewForAll(v bool) {
+// SetAutoReview 实时更新指定会话的审核开关（只影响当前对话）。
+// 用户在工具栏切换 autoReview 时立即生效，无需新消息。
+func (m *SessionManager) SetAutoReview(convID string, v bool) {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
-	for convID, sess := range m.sessions {
-		if sess.Loop != nil {
-			sess.Loop.SetAutoReview(v)
-			fmt.Printf("[session] 实时更新审核开关 conv=%s autoReview=%v\n", convID, v)
-		}
+	sess, ok := m.sessions[convID]
+	m.mu.RUnlock()
+	if ok && sess.Loop != nil {
+		sess.Loop.SetAutoReview(v)
+		fmt.Printf("[session] 实时更新审核开关 conv=%s autoReview=%v\n", convID, v)
 	}
 }
 
