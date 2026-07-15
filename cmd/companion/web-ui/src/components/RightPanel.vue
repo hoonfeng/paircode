@@ -749,24 +749,28 @@ const switchConv = async (id) => {
         })
         // 按 idx 升序排列（用户消息在前，agent 输出在后）
         loaded.sort((a, b) => (a._idx || 0) - (b._idx || 0))
+      // ★ 在替换数组前保存已有的 loading 占位对象（可能已被 await 期间到达的
+      //   WebSocket events 修改过内容，直接丢失会丢掉首批输出）
+      const existingLoading = state.messagesByConv[id].find(m => m._loading)
       state.messagesByConv[id] = loaded
       state.messages = state.messagesByConv[id]
       state.msgTotalByConv[id] = data.total || loaded.length
       state.msgLoadedByConv[id] = loaded.length
       // ★ processStatus 可能已为此 conv 创建了 runtime（agent 仍在运行），
-      //   但 runtime 的 msgIdx 指向旧数组中已被替换的 loading 占位。
-      //   需要在加载的真实消息末尾追加一条 loading 占位，并更新 runtime 的 msgIdx。
+      //   需将 loading 占位（优先复用已有对象，保留 await 期间已写入的内容）放回，
+      //   并更新 runtime 的 msgIdx。
       const rt = getConvRuntime(id)
       if (rt) {
-        const loadingMsg = {
+        const loadingMsg = existingLoading || {
           role: 'assistant', content: '', segments: [], toolCalls: [],
-          _key: makeMsgKey(), _idx: loaded.length,
+          _key: makeMsgKey(),
           _time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
           _loading: true,
         }
+        loadingMsg._idx = loaded.length
         state.messagesByConv[id].push(loadingMsg)
         state.messages = state.messagesByConv[id]
-        rt.msgIdx = loaded.length  // 指向新追加的 loading 占位
+        rt.msgIdx = state.messagesByConv[id].length - 1
       }
     } catch {
       state.msgTotalByConv[id] = 0
