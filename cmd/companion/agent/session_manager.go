@@ -86,7 +86,7 @@ type SessionManager struct {
 	globalSubMu       sync.RWMutex
 	globalSubscribers []chan GlobalEvent
 
-	store *MessageStore // 消息持久化存储（web 层通过 SetWorkspaceRoot 注入）
+	store ConversationStore // 消息持久化存储（通过 SetWorkspaceRoot 注入）
 
 	// 内部持久化 worker 状态
 	persistWorkerStarted bool
@@ -104,12 +104,12 @@ func NewSessionManager() *SessionManager {
 	}
 }
 
-// SetWorkspaceRoot 注入工作区根路径，初始化 MessageStore。
+// SetWorkspaceRoot 注入工作区根路径，初始化 DBStore（SQLite 存储）。
 // 必须在 Start 之前调用一次（由 web 层在 core.Root() 可用后调用）。
 // 重复调用以最后一次为准（重新创建 store）。
 func (m *SessionManager) SetWorkspaceRoot(root string) {
 	m.mu.Lock()
-	m.store = NewMessageStore(root)
+	m.store = NewDBStore(root)
 	shouldStart := !m.persistWorkerStarted
 	if shouldStart {
 		m.persistWorkerStarted = true
@@ -121,9 +121,9 @@ func (m *SessionManager) SetWorkspaceRoot(root string) {
 	}
 }
 
-// Store 返回 MessageStore 引用（供 web 层调用 AppendMessage/LoadLatest 等）。
+// Store 返回 ConversationStore 引用（供 web 层调用 AppendMessage/LoadLatest 等）。
 // 若 SetWorkspaceRoot 未调用则返回 nil（web 层需自行判空）。
-func (m *SessionManager) Store() *MessageStore {
+func (m *SessionManager) Store() ConversationStore {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.store
