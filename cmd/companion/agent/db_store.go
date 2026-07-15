@@ -233,13 +233,9 @@ func (s *DBStore) AppendMessage(convID string, msg Message, _ []Segment) error {
 	if err := s.checkDB(); err != nil {
 		return err
 	}
-	// 获取当前序号
+	// 获取当前序号：使用 MAX(idx)+1 而非 COUNT(*)，避免 PersistNewMessages 产生 idx 空洞后冲突
 	var idx int
-	err := s.db.QueryRow(`SELECT COUNT(*) FROM messages WHERE conv_id = ?`, convID).Scan(&idx)
-	if err != nil {
-		idx = 0
-	}
-
+	err := s.db.QueryRow(`SELECT COALESCE(MAX(idx), -1) + 1 FROM messages WHERE conv_id = ?`, convID).Scan(&idx)
 	now := time.Now().UTC().Format(time.RFC3339)
 	tcJSON := "[]"
 	if len(msg.ToolCalls) > 0 {
