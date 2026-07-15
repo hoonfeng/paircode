@@ -127,14 +127,18 @@ func startWebUI(port int) {
 	if sysDir := filepath.Join(core.ConfigDir(), "skills"); sysDir != "" {
 		agent.SkillSystemDir = sysDir
 	}
+	// 初始化 MCP 配置路径（供 agent/mcp_config.go 读写 mcp.json）
+	agent.MCPUserConfigPath = filepath.Join(core.ConfigDir(), "mcp.json")
+	agent.MCPProjectConfigPath = filepath.Join(core.Root(), ".pair", "mcp.json")
 	// 工作区文件夹变更时同步到 agent 路径解析
 	core.OnSyncWorkspace = func(primaryChanged bool) {
 		agent.WorkspaceRoots = core.Folders
 		if primaryChanged {
-			// 主工作区变更：同步技能目录和记忆路径到新工作区
+			// 主工作区变更：同步技能/MCP/记忆路径到新工作区
 			root := core.Root()
 			if root != "" {
 				agent.SkillProjectDir = filepath.Join(root, ".pair", "skills")
+				agent.MCPProjectConfigPath = filepath.Join(root, ".pair", "mcp.json")
 				memory.SetRoot(root)
 			}
 		}
@@ -1971,6 +1975,9 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 		agent.SkillSystemDir = sysDir
 	}
 	agent.SkillEnabled = core.Settings.SkillEnabledOverrides
+	// 初始化 MCP 配置路径（供 buildWebLoopOpts 内 mcppanel.LoadConfigs 使用）
+	agent.MCPUserConfigPath = filepath.Join(core.ConfigDir(), "mcp.json")
+	agent.MCPProjectConfigPath = filepath.Join(core.Root(), ".pair", "mcp.json")
 	reg := agent.NewRegistry()
 	agent.RegisterDefaultTools(reg, root)
 	agent.RegisterCommitMessageTool(reg)

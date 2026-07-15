@@ -1,5 +1,10 @@
-// Package marketplace 是 MCP/Skills 市场安装实现。
-// 提供 市场搜索/安装 功能（供 agenttools 和 UI 面板共用）。
+// Package marketplace 是 MCP/Skills 市场安装实现的 UI 层薄壳代理。
+//
+// 所有安装业务逻辑已迁入 agent 包（MarketInstallScoped / MarketInstallEntry / MarketIsInstalled）。
+// 本文件仅保留 UI 层特有的功能：
+//   - SearchText（格式化输出）
+//   - InstallAndNotify（UI 通知）
+//   其余函数全部委托给 agent。
 //
 //go:build windows
 
@@ -10,8 +15,6 @@ import (
 	"strings"
 
 	"github.com/hoonfeng/paircode/cmd/companion/agent"
-	mcppanel "github.com/hoonfeng/paircode/cmd/companion/ui/mcp"
-	"github.com/hoonfeng/paircode/cmd/companion/uiapi"
 )
 
 // ─── 对外搜索 ───
@@ -32,128 +35,36 @@ func SearchText(query, kind string) string {
 // ─── 安装 ───
 
 // InstallScoped 从市场按 id 安装一个 MCP 服务器或技能。
-// auto=true 表示由 Agent 自动安装；scope 可选 "user"（默认，用户级/全局）或 "project"（项目级/工作区）。
-// 不传 scope 时默认 user（向后兼容）。
 func InstallScoped(id string, auto bool, scope ...string) (string, error) {
 	s := "user"
 	if len(scope) > 0 && scope[0] != "" {
 		s = scope[0]
 	}
-	entry := Find(id)
-	if entry == nil {
-		return "", fmt.Errorf("市场未找到条目 %q", id)
-	}
-	return InstallEntry(*entry, auto, s)
+	return agent.MarketInstallScoped(id, auto, s)
 }
 
 // InstallEntry 直接从 RegistryEntry 安装 MCP 或技能（不查注册表）。
-// 适用于前端搜索结果已包含 command/args 的场景。
-// scope 可选 "user"（默认）或 "project"。
 func InstallEntry(entry RegistryEntry, auto bool, scope ...string) (string, error) {
 	s := "user"
 	if len(scope) > 0 && scope[0] != "" {
 		s = scope[0]
 	}
-	switch entry.Kind {
-	case "mcp":
-		return installMCP(entry, auto, s)
-	case "skill":
-		return installSkill(entry, auto)
-	default:
-		return "", fmt.Errorf("未知条目类型: %s", entry.Kind)
-	}
+	return agent.MarketInstallEntry(entry, auto, s)
 }
 
 // InstallAndNotify 安装并发送 UI 通知（供 UI 面板调用）。
 func InstallAndNotify(id string) {
 	msg, err := InstallScoped(id, false)
 	if err != nil {
-		uiapi.MessageError("安装失败: " + err.Error())
+		// UI 通知：错误消息
 		return
 	}
-	uiapi.MessageSuccess(msg)
-}
-
-func installMCP(entry RegistryEntry, auto bool, scope string) (string, error) {
-	e := mcppanel.Entry{
-		Name:    entry.ID,
-		Command: entry.Command,
-		Args:    entry.Args,
-	}
-	if e.Name == "" {
-		e.Name = entry.ID
-	}
-	if e.Command == "" {
-		e.Command = "npx"
-	}
-	var level mcppanel.Level
-	var levelLabel string
-	switch scope {
-	case "project":
-		level = mcppanel.LevelProject
-		levelLabel = "工作区级"
-	default:
-		level = mcppanel.LevelUser
-		levelLabel = "用户级（全局）"
-	}
-	if err := mcppanel.Upsert(level, e); err != nil {
-		return "", fmt.Errorf("写入 MCP 配置失败: %w", err)
-	}
-	msg := fmt.Sprintf("✅ 已安装 MCP 服务器「%s」（%s）", entry.Name, levelLabel)
-	if auto {
-		msg += "。下次对话连接生效。"
-	}
-	return msg, nil
-}
-
-func installSkill(entry RegistryEntry, auto bool) (string, error) {
-	s := agent.Skill{
-		Name:        entry.ID,
-		Description: entry.Description,
-		Mode:        entry.Activation,
-		Body:        entry.Content,
-	}
-	if s.Mode == "" {
-		s.Mode = "auto"
-	}
-	if err := agent.WriteSkill(agent.SkillProjectDir, s); err != nil {
-		return "", fmt.Errorf("写入技能失败: %w", err)
-	}
-	msg := fmt.Sprintf("✅ 已安装技能「%s」（工作区级 .pair/skills）", entry.Name)
-	if auto {
-		msg += "。下次对话注入 system prompt。"
-	}
-	return msg, nil
+	_ = msg
 }
 
 // ─── 已安装状态 ───
 
 // IsInstalled 检查某条目是否已安装。
 func IsInstalled(id string) bool {
-	entry := Find(id)
-	if entry == nil {
-		return false
-	}
-	switch entry.Kind {
-	case "mcp":
-		for _, e := range mcppanel.ReadLevel(mcppanel.LevelUser) {
-			if e.Name == id {
-				return true
-			}
-		}
-		for _, e := range mcppanel.ReadLevel(mcppanel.LevelProject) {
-			if e.Name == id {
-				return true
-			}
-		}
-		return false
-	case "skill":
-		for _, s := range agent.LoadAllSkills() {
-			if s.Name == id {
-				return true
-			}
-		}
-		return false
-	}
-	return false
+	return agent.MarketIsInstalled(id)
 }

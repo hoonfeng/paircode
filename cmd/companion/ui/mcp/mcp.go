@@ -1,35 +1,34 @@
-// Package mcp 是 MCP（Model Context Protocol）服务器管理。
-// 提供 MCP 服务器的配置读取/写入/删除（用户级 config/mcp.json + 项目级 .pair/mcp.json）。
-// UI 面板待后续迁移；当前提供数据层操作供 bridge/agenttools 使用。
+// package mcp 是 MCP（Model Context Protocol）服务器管理的薄壳代理。
+//
+// 设计意图：
+// 所有配置 CRUD 业务逻辑（JSON 读写、路径管理、排序）已迁入 agent/mcp_config.go。
+// 本文件仅做两件事：
+//  1. 初始化函数 InitMCP —— 注入用户级和项目级配置路径到 agent 全局变量
+//  2. 类型别名 + 函数转发 —— 保持旧 API 兼容（外部调用者无需改代码）
+//
+// 维护注意事项：
+// - 不要在此文件中添加任何业务逻辑，全部委托给 agent.MCPXXX()
+// - 类型别名 `=` 不是类型定义，外部代码使用 `mcppanel.Level` 即 `agent.MCPLevel`
+// - 如果 agent 包中的 MCP 函数签名变化，本文件的转发函数需同步更新
 //
 //go:build windows
 
 package mcp
 
 import (
-	"encoding/json"
-	"os"
-	"path/filepath"
-	"sort"
-
-	"github.com/hoonfeng/paircode/cmd/companion/core"
+	"github.com/hoonfeng/paircode/cmd/companion/agent"
 )
 
-// ─── 层级 ───
-
 // Level 配置层级（用户级 / 项目级）。
-type Level string
+type Level = agent.MCPLevel
 
 const (
-	LevelUser    Level = "user"
-	LevelProject Level = "project"
+	LevelUser    Level = agent.MCPLevelUser    // 用户级 MCP 配置
+	LevelProject Level = agent.MCPLevelProject // 项目级（工作区级）MCP 配置
 )
 
 // LevelDef 层级描述。
-type LevelDef struct {
-	ID   Level
-	Name string
-}
+type LevelDef = agent.MCPLevelDef
 
 // Levels 所有层级（显示顺序）。
 var Levels = []LevelDef{
@@ -37,115 +36,40 @@ var Levels = []LevelDef{
 	{LevelProject, "工作区级"},
 }
 
-// ─── 配置结构 ───
-
 // MCPServerConfig MCP 服务器配置（bridge 用，兼容 agent.RegisterMCPServers）。
-type MCPServerConfig struct {
-	Name    string            `json:"name"`
-	Command string            `json:"command"`
-	Args    []string          `json:"args"`
-	Env     map[string]string `json:"env"`
-	Enabled *bool             `json:"enabled,omitempty"` // nil=默认启用
-}
+type MCPServerConfig = agent.MCPServerConfig
 
-// Entry MCP 服务器条目（agenttools 用）。
-type Entry struct {
-	Name    string   `json:"name"`
-	Command string   `json:"command"`
-	Args    []string `json:"args"`
-}
+// Entry MCP 服务器条目。
+type Entry = agent.MCPEntry
 
-// mcpFile 用户级/项目级 mcp.json 的结构。
-type mcpFile struct {
-	Servers map[string]Entry `json:"servers"`
-}
-
-// ─── 路径 ───
-
-func levelPath(lv Level) string {
-	switch lv {
-	case LevelUser:
-		return filepath.Join(core.ConfigDir(), "mcp.json")
-	case LevelProject:
-		return filepath.Join(core.Root(), ".pair", "mcp.json")
-	}
-	return ""
-}
-
-// ─── 读写 ───
-
-func readFile(lv Level) mcpFile {
-	var f mcpFile
-	data, err := os.ReadFile(levelPath(lv))
-	if err != nil {
-		return f
-	}
-	_ = json.Unmarshal(data, &f)
-	if f.Servers == nil {
-		f.Servers = map[string]Entry{}
-	}
-	return f
-}
-
-func writeFile(lv Level, f mcpFile) error {
-	dir := filepath.Dir(levelPath(lv))
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-	data, err := json.MarshalIndent(f, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(levelPath(lv), data, 0o644)
+// InitMCP 注入用户级和项目级 MCP 配置路径到 agent 全局变量。
+// 由 web_server.go 在启动时调用，传参来自 core.ConfigDir() 和 core.Root()。
+func InitMCP(userConfigPath, projectConfigPath string) {
+	agent.MCPUserConfigPath = userConfigPath
+	agent.MCPProjectConfigPath = projectConfigPath
 }
 
 // ReadLevel 读某层级的所有 MCP 服务器（按名排序）。
 func ReadLevel(lv Level) []Entry {
-	f := readFile(lv)
-	out := make([]Entry, 0, len(f.Servers))
-	for _, e := range f.Servers {
-		out = append(out, e)
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
-	return out
+	return agent.MCPReadLevel(lv)
 }
 
 // Upsert 新增/更新某层级的 MCP 服务器。
 func Upsert(lv Level, e Entry) error {
-	f := readFile(lv)
-	if f.Servers == nil {
-		f.Servers = map[string]Entry{}
-	}
-	f.Servers[e.Name] = e
-	return writeFile(lv, f)
+	return agent.MCPUpsert(lv, e)
 }
 
 // Delete 删除某层级的 MCP 服务器。
 func Delete(lv Level, name string) error {
-	f := readFile(lv)
-	if _, ok := f.Servers[name]; !ok {
-		return os.ErrNotExist
-	}
-	delete(f.Servers, name)
-	return writeFile(lv, f)
+	return agent.MCPDelete(lv, name)
 }
 
 // Enabled 检查某层级的 MCP 服务器是否启用（默认启用）。
 func Enabled(lv Level, name string) bool {
-	return true
+	return agent.MCPEnabled(lv, name)
 }
 
 // LoadConfigs 从所有层级加载 MCP 服务器配置（bridge 用：连接外部 MCP）。
 func LoadConfigs() []MCPServerConfig {
-	var out []MCPServerConfig
-	for _, lv := range Levels {
-		for _, e := range ReadLevel(lv.ID) {
-			out = append(out, MCPServerConfig{
-				Name: e.Name, Command: e.Command, Args: e.Args, Enabled: boolPtr(true),
-			})
-		}
-	}
-	return out
+	return agent.MCPLoadConfigs()
 }
-
-func boolPtr(b bool) *bool { return &b }
