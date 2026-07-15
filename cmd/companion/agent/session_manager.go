@@ -273,8 +273,10 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		}
 	}
 
-	// 创建会话上下文（独立于调用方 ctx，Stop 时可单独取消）
-	runCtx, cancel := context.WithCancel(ctx)
+	// 创建会话上下文（使用独立的 context.Background()，不依赖调用方 ctx，
+	// 避免 handleChatSend 的 defer setupCancel() 级联取消 runCtx，
+	// 导致 Loop 尚未开始就 ctx.Err() != nil 直接返回）。
+	runCtx, cancel := context.WithCancel(context.Background())
 
 	sess := &Session{
 		ConvID:        convID,

@@ -403,9 +403,15 @@ func (l *Loop) buildSystemWithSummaries() string {
 
 // DefaultSystemPrompt 核心铁律的系统提示词（中文 lock / 改前 read / 工作区限定）。
 // roots 为工作区所有根目录（支持多根工作区）；roots[0] 为主根。
+// roots 为空时使用当前工作目录作为兜底根目录。
 func DefaultSystemPrompt(roots []string) string {
-	rootInfo := "根目录: " + roots[0]
+	primaryRoot := "（未设置工作区）"
+	if len(roots) > 0 {
+		primaryRoot = roots[0]
+	}
+	rootInfo := "根目录: " + primaryRoot
 	if len(roots) > 1 {
+		rootInfo += "\n工作区包含以下所有项目目录（均可访问）："
 		rootInfo += "\n工作区包含以下所有项目目录（均可访问）："
 		for i, r := range roots {
 			rootInfo += fmt.Sprintf("\n  %d. %s", i+1, r)

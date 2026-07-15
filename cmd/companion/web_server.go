@@ -833,6 +833,14 @@ func (s *webServer) handleSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		core.Settings = newSettings
 		core.Save()
+		// 同步工作区文件夹列表（确保 core.Folders 与 settings 一致，
+		// 避免 DefaultSystemPrompt 等依赖 Folders 的地方读到空切片而 panic）
+		if newSettings.WorkspaceFolders != nil {
+			core.Folders = newSettings.WorkspaceFolders
+			if core.OnSyncWorkspace != nil {
+				core.OnSyncWorkspace(false)
+			}
+		}
 		jsonResp(w, map[string]any{"ok": true})
 	default:
 		jsonErr(w, "不支持的方法")
