@@ -551,6 +551,7 @@ func RegisterDefaultTools(r *Registry, root string) {
 	registerOfficeTools(r, root)             // csv_read / csv_write / json_to_table / table_stats / text_report / word_read（见 officetools.go）
 	registerLSPTools(r, root)              // lsp_definition / lsp_references / lsp_hover / lsp_diagnostics（见 lsptools.go）
 	registerCodeGraphTools(r, root)          // codegraph_build / codegraph_search / codegraph_impact / ...（代码知识图谱，见 codegraph_tools.go + pkg/codegraph）
+	registerExtraCodeGraphTools(r, root)     // codegraph_find_by_signature / codegraph_explore（额外工具，见 codegraph_extra.go）
 	registerLuaToolTools(r, root)            // lua_tool_list/create/update/delete（Lua 自定义工具管理，见 luatool_tools.go）
 
 	// ── 默认 BeforeTool：edit_file/multi_edit 执行前用 codegraph 注入最新行号 ──
