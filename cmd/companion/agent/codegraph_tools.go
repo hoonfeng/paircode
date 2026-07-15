@@ -8,6 +8,7 @@ package agent
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strings"
 	"sync"
@@ -22,7 +23,16 @@ var (
 	cgGraphMu   sync.RWMutex
 	cgRoot      string
 	cgInitOnce  sync.Once
+
+	// cgDB 共享 SQLite 数据库连接，非空时 codegraph 使用 SQLiteStore 代替 JSONStore。
+	cgDB *sql.DB
 )
+
+// SetCodeGraphDB 设置 codegraph 使用的共享数据库连接。
+// 由 web_server.go 在 buildWebLoopOpts 中调用。
+func SetCodeGraphDB(db *sql.DB) {
+	cgDB = db
+}
 
 // ensureCodeGraph 确保图谱已初始化。首次调用时自动加载或构建。
 func ensureCodeGraph(root string) (*codegraph.Graph, error) {
@@ -85,6 +95,10 @@ func registerCodeGraphTools(r *Registry, root string) {
 			config.AutoSave = true
 
 			builder := codegraph.NewBuilder(config)
+			// 共享 DB 连接时使用 SQLiteStore（增量写入）
+			if cgDB != nil {
+				builder.SetStore(codegraph.NewSQLiteStore(root, cgDB))
+			}
 
 			var result *codegraph.BuildResult
 			var err error

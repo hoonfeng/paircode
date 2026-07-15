@@ -10,13 +10,24 @@ type DB interface {
 	GetConversation(id string) (*Conversation, error)
 	UpdateConversation(conv *Conversation) error
 	ListConversations() ([]*Conversation, error)
+	ListConversationsByWorkspace(workspaceRoot string) ([]*Conversation, error)
 	DeleteConversation(id string) error
+	UpdateTitle(id, title string) error
 
 	// 消息
 	AppendMessage(msg *Message) error
 	GetMessages(convID string, offset, limit int) ([]*Message, error)
 	GetMessageCount(convID string) (int, error)
 	DeleteMessages(convID string) error
+
+	// KV 存储（CtxStats 等）
+	WriteKV(key, value string) error
+	ReadKV(key string) (string, error)
+	DeleteKV(prefix string) error
+
+	// 压缩摘要
+	SaveCompressedSummaries(convID string, summaries []string) error
+	LoadCompressedSummaries(convID string) ([]string, error)
 
 	// 计划
 	CreatePlan(plan *Plan) error
@@ -55,6 +66,9 @@ type DB interface {
 	UpsertCodeEntity(entity *CodeEntity) (int64, error)
 	SearchCodeEntities(query string, kind string) ([]*CodeEntity, error)
 	GetCodeEntitiesByFile(filePath string) ([]*CodeEntity, error)
+	// 批量替换某文件的所有实体（事务内先 DELETE 再 INSERT）
+	ReplaceFileEntities(filePath string, entities []CodeEntity) error
+	DeleteFileEntities(filePath string) error
 
 	// 代码关系
 	UpsertCodeRelation(sourceID, targetID int64, kind string) error
@@ -68,6 +82,9 @@ type DB interface {
 	CreateSnapshot(snap *Snapshot) error
 	ListSnapshots(filePath string) ([]*Snapshot, error)
 	DeleteSnapshots(before time.Time) (int, error)
+
+	// SQLiteDB 特有：暴露底层连接供 codegraph/adapter 直接查询
+	RawDB() interface{}
 
 	// 维护
 	Close() error

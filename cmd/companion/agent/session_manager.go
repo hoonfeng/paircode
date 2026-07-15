@@ -2,14 +2,18 @@ package agent
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"sync"
 	"time"
 	"unicode"
+
+	pkgdb "github.com/hoonfeng/paircode/pkg/db"
 )
 
 // Compressor 上下文压缩器（语义别名，复用 Provider 接口）。
@@ -88,6 +92,9 @@ type SessionManager struct {
 
 	store ConversationStore // 消息持久化存储（通过 SetWorkspaceRoot 注入）
 
+	// ds 统一 SQLite 数据库实例，codegraph/其他组件共用同一连接。
+	ds *pkgdb.SQLiteDB
+
 	// 内部持久化 worker 状态
 	persistWorkerStarted bool
 
@@ -104,12 +111,23 @@ func NewSessionManager() *SessionManager {
 	}
 }
 
-// SetWorkspaceRoot 注入工作区根路径，初始化 DBStore（SQLite 存储）。
-// 必须在 Start 之前调用一次（由 web 层在 core.Root() 可用后调用）。
-// 重复调用以最后一次为准（重新创建 store）。
+// SetWorkspaceRoot 注入工作区根路径，初始化统一 SQLite 存储。
+// 创建 pkg/db.SQLiteDB 实例（唯一数据库连接），再用 DBAdapter 包装为 ConversationStore。
+// 重复调用以最后一次为准。
+// codegraph 等其他组件通过 RawDB() 获取同一 *sql.DB 实例。
 func (m *SessionManager) SetWorkspaceRoot(root string) {
 	m.mu.Lock()
-	m.store = NewDBStore(root)
+	
+	dbPath := filepath.Join(root, ".pair", "pair.db")
+	if ds, err := pkgdb.NewSQLiteDB(dbPath); err == nil {
+		m.ds = ds
+		m.store = NewDBAdapter(ds, root)
+	} else {
+		fmt.Printf("[session] 打开 SQLite 数据库失败: %v\n", err)
+		m.ds = nil
+		m.store = nil
+	}
+
 	shouldStart := !m.persistWorkerStarted
 	if shouldStart {
 		m.persistWorkerStarted = true
@@ -127,6 +145,24 @@ func (m *SessionManager) Store() ConversationStore {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.store
+}
+
+// RawDB 返回底层 *sql.DB（供 codegraph 等组件共享同一连接）。
+// 返回 nil 表示数据库未初始化。
+func (m *SessionManager) RawDB() *sql.DB {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.ds == nil {
+		return nil
+	}
+	return m.ds.RawDB().(*sql.DB)
+}
+
+// SQLiteDB 返回 pkg/db.SQLiteDB 实例（供 codegraph SQLiteStore 等组件使用）。
+func (m *SessionManager) SQLiteDB() *pkgdb.SQLiteDB {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.ds
 }
 
 // ErrSessionRunning convID 已有运行中的会话（同一对话不可并行跑两个 Loop）。

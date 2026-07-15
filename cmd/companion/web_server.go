@@ -110,6 +110,7 @@ func startWebUI(port int) {
 	marketplacepanel.Init(root)
 	if root != "" {
 		agentMgr.SetWorkspaceRoot(root)
+		agent.SetCodeGraphDB(agentMgr.RawDB())
 		// 迁移旧 conversations.json + history_cache.json 到新格式
 		convPath := filepath.Join(root, ".pair", "conversations.json")
 		hcPath := filepath.Join(root, ".pair", "history_cache.json")
@@ -1992,6 +1993,7 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 	}
 
 	reloadWebLuaTools(reg, root)
+	agent.SetCodeGraphDB(agentMgr.RawDB())
 	agent.InitDebugLogger(root, 50)
 
 	sys := buildWebSystemPrompt()

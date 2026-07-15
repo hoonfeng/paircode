@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 )
 
 // ── 实体类型（节点类型） ──────────────────────────────────
@@ -52,6 +53,17 @@ const (
 	// 演化运维层（预留）
 	EntityCommit     EntityKind = "commit"      // Git 提交
 )
+
+// GraphStore 图谱持久化接口（JSON 和 SQLite 两种实现）。
+type GraphStore interface {
+	Save(g *Graph) error
+	Load() (*Graph, error)
+	SaveIndex(index map[string]time.Time) error
+	LoadIndex() (map[string]time.Time, error)
+	CachedGraph(maxAge int) *Graph
+	Exists() bool
+	Delete() error
+}
 
 // ── 关系类型（边类型） ──────────────────────────────────
 

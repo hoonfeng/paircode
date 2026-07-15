@@ -65,7 +65,7 @@ type BuildError struct {
 //   - 其他 → TsitBuilder (tsit 树遍历, 预留)
 type Builder struct {
 	config          BuildConfig
-	store           *Store
+	store           GraphStore
 	graph           *Graph
 	goBuilder       *GoBuilder
 	jsBuilder       *JSBuilder
@@ -79,8 +79,8 @@ func NewBuilder(config BuildConfig) *Builder {
 	graph := NewGraph()
 	return &Builder{
 		config: config,
-		store:  NewStore(config.Root),
-		graph:  graph,
+	store:          NewStore(config.Root),
+	graph:          graph,
 		goBuilder: &GoBuilder{
 			ModuleName: config.ModuleName,
 			root:       config.Root,
@@ -104,6 +104,9 @@ func NewBuilder(config BuildConfig) *Builder {
 		importAnalyzer: NewImportAnalyzer(config.Root, config.ModuleName),
 	}
 }
+
+// SetStore 设置自定义图谱存储（默认 JSONStore，可切换为 SQLiteStore）。
+func (b *Builder) SetStore(s GraphStore) { b.store = s }
 
 // Graph 返回当前构建的图实例。
 func (b *Builder) Graph() *Graph { return b.graph }

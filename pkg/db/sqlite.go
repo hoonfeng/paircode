@@ -20,7 +20,7 @@ func NewSQLiteDB(dbPath string) (*SQLiteDB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open db: %w", err)
 	}
-	db.SetMaxOpenConns(1) // SQLite 不支持并发写
+	db.SetMaxOpenConns(1)
 	s := &SQLiteDB{db: db, path: dbPath}
 	if err := s.migrate(); err != nil {
 		db.Close()
@@ -56,6 +56,16 @@ func (s *SQLiteDB) migrate() error {
 			UNIQUE(conv_id, idx)
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages(conv_id, idx)`,
+		`CREATE TABLE IF NOT EXISTS store_kv (
+			key TEXT PRIMARY KEY,
+			value TEXT DEFAULT ''
+		)`,
+		`CREATE TABLE IF NOT EXISTS conv_summaries (
+			conv_id TEXT NOT NULL,
+			idx INTEGER NOT NULL,
+			summary TEXT DEFAULT '',
+			PRIMARY KEY(conv_id, idx)
+		)`,
 		`CREATE TABLE IF NOT EXISTS plans (
 			id TEXT PRIMARY KEY,
 			conv_id TEXT REFERENCES conversations(id),
@@ -122,6 +132,7 @@ func (s *SQLiteDB) migrate() error {
 			kind TEXT NOT NULL,
 			UNIQUE(source_id, target_id, kind)
 		)`,
+		`CREATE INDEX IF NOT EXISTS idx_relations_source ON code_relations(source_id)`,
 		`CREATE TABLE IF NOT EXISTS evals (
 			id TEXT PRIMARY KEY,
 			task TEXT DEFAULT '',
@@ -156,11 +167,82 @@ func (s *SQLiteDB) Close() error {
 	return s.db.Close()
 }
 
+// RawDB 暴露底层 *sql.DB，供 codegraph/adapter 直接查询。
+func (s *SQLiteDB) RawDB() interface{} {
+	return s.db
+}
+
+// ── KV 存储 ──
+
+func (s *SQLiteDB) WriteKV(key, value string) error {
+	_, err := s.db.Exec(
+		`INSERT INTO store_kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`,
+		key, value,
+	)
+	return err
+}
+
+func (s *SQLiteDB) ReadKV(key string) (string, error) {
+	var value string
+	err := s.db.QueryRow(`SELECT value FROM store_kv WHERE key = ?`, key).Scan(&value)
+	if err != nil {
+		return "", err
+	}
+	return value, nil
+}
+
+func (s *SQLiteDB) DeleteKV(prefix string) error {
+	_, err := s.db.Exec(`DELETE FROM store_kv WHERE key LIKE ?`, prefix+"%")
+	return err
+}
+
+// ── 压缩摘要 ──
+
+func (s *SQLiteDB) SaveCompressedSummaries(convID string, summaries []string) error {
+	_, _ = s.db.Exec(`DELETE FROM conv_summaries WHERE conv_id = ?`, convID)
+	if len(summaries) == 0 {
+		return nil
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	stmt, err := tx.Prepare(`INSERT INTO conv_summaries (conv_id, idx, summary) VALUES (?, ?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	for i, summary := range summaries {
+		if _, err := stmt.Exec(convID, i, summary); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (s *SQLiteDB) LoadCompressedSummaries(convID string) ([]string, error) {
+	rows, err := s.db.Query(`SELECT summary FROM conv_summaries WHERE conv_id = ? ORDER BY idx ASC`, convID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var summaries []string
+	for rows.Next() {
+		var summary string
+		if err := rows.Scan(&summary); err != nil {
+			continue
+		}
+		summaries = append(summaries, summary)
+	}
+	return summaries, nil
+}
+
 // ── 对话相关 ──
 
 func (s *SQLiteDB) CreateConversation(conv *Conversation) error {
 	_, err := s.db.Exec(
-		`INSERT INTO conversations (id, title, workspace_root, created_at, updated_at, summary, msg_count) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT OR IGNORE INTO conversations (id, title, workspace_root, created_at, updated_at, summary, msg_count) VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		conv.ID, conv.Title, conv.WorkspaceRoot, conv.CreatedAt.UTC().Format(time.RFC3339), conv.UpdatedAt.UTC().Format(time.RFC3339), conv.Summary, conv.MsgCount,
 	)
 	return err
@@ -186,8 +268,26 @@ func (s *SQLiteDB) UpdateConversation(conv *Conversation) error {
 	return err
 }
 
+func (s *SQLiteDB) UpdateTitle(id, title string) error {
+	_, err := s.db.Exec(`UPDATE conversations SET title=?, updated_at=datetime('now') WHERE id=?`, title, id)
+	return err
+}
+
 func (s *SQLiteDB) ListConversations() ([]*Conversation, error) {
-	rows, err := s.db.Query(`SELECT id, title, workspace_root, created_at, updated_at, summary, msg_count FROM conversations ORDER BY updated_at DESC`)
+	return s.ListConversationsByWorkspace("")
+}
+
+func (s *SQLiteDB) ListConversationsByWorkspace(workspaceRoot string) ([]*Conversation, error) {
+	var rows *sql.Rows
+	var err error
+	if workspaceRoot != "" {
+		rows, err = s.db.Query(
+			`SELECT id, title, workspace_root, created_at, updated_at, summary, msg_count FROM conversations WHERE workspace_root=? OR workspace_root='' ORDER BY updated_at DESC`,
+			workspaceRoot,
+		)
+	} else {
+		rows, err = s.db.Query(`SELECT id, title, workspace_root, created_at, updated_at, summary, msg_count FROM conversations ORDER BY updated_at DESC`)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -207,6 +307,9 @@ func (s *SQLiteDB) ListConversations() ([]*Conversation, error) {
 }
 
 func (s *SQLiteDB) DeleteConversation(id string) error {
+	_, _ = s.db.Exec(`DELETE FROM messages WHERE conv_id = ?`, id)
+	_, _ = s.db.Exec(`DELETE FROM conv_summaries WHERE conv_id = ?`, id)
+	_, _ = s.db.Exec(`DELETE FROM store_kv WHERE key LIKE ?`, "ctx_"+id+"%")
 	_, err := s.db.Exec(`DELETE FROM conversations WHERE id = ?`, id)
 	return err
 }
@@ -593,6 +696,40 @@ func (s *SQLiteDB) GetCodeEntitiesByFile(filePath string) ([]*CodeEntity, error)
 		ents = append(ents, &ent)
 	}
 	return ents, nil
+}
+
+// ReplaceFileEntities 在事务内删除某文件的所有实体，再插入新实体。
+func (s *SQLiteDB) ReplaceFileEntities(filePath string, entities []CodeEntity) error {
+	if err := s.DeleteFileEntities(filePath); err != nil {
+		return err
+	}
+	if len(entities) == 0 {
+		return nil
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare(
+		`INSERT OR IGNORE INTO code_entities (kind, name, file_path, line, signature, package_name, module) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+	)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	for _, e := range entities {
+		if _, err := stmt.Exec(e.Kind, e.Name, e.FilePath, e.Line, e.Signature, e.PackageName, e.Module); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (s *SQLiteDB) DeleteFileEntities(filePath string) error {
+	_, err := s.db.Exec(`DELETE FROM code_entities WHERE file_path = ?`, filePath)
+	return err
 }
 
 // ── 代码关系 ──
