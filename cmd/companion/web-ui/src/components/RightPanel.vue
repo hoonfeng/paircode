@@ -582,11 +582,26 @@ const stopChat = async () => {
   console.log('[RP] stopChat conv=%s runtimeExists=%s', convId, !!getConvRuntime(convId))
   if (!convId) return
   try { await api.chatStop(convId) } catch {}
+  // ★ 在清理 runtime 前保存 msgIdx，用于清理 messagesByConv 中残留的 loading 占位
+  const rt = getConvRuntime(convId)
+  const oldMsgIdx = rt ? rt.msgIdx : -1
   resetConvRuntime(convId)
-  console.log('[RP] stopChat 完成 conv=%s runtime已清理', convId)
+  // ★ 从 messagesByConv 中移除残留的 loading 占位（防止停止后 tool_result 写入导致残留）
+  if (oldMsgIdx >= 0 && state.messagesByConv[convId]) {
+    const msgs = state.messagesByConv[convId]
+    if (oldMsgIdx < msgs.length && msgs[oldMsgIdx]._loading) {
+      msgs.splice(oldMsgIdx, 1)
+      // 同步 state.messages 如果当前对话
+      if (state.currentConvId === convId) {
+        state.messages = msgs
+      }
+      console.log('[RP] stopChat 已移除旧 loading 占位 idx=%d', oldMsgIdx)
+    }
+  }
   state.loadingByConv[convId] = false
   state.agentRunningByConv[convId] = false
   state.chatLoading = false; state.agentRunning = false
+  console.log('[RP] stopChat 完成 conv=%s messagesByConv=%d条', convId, (state.messagesByConv[convId]||[]).length)
 }
 
 // ── 运行时反馈：Agent 执行中用户补充/纠正 ──
