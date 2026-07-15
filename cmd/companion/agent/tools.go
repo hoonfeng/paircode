@@ -572,7 +572,32 @@ func RegisterDefaultTools(r *Registry, root string) {
 			if !isMatchFail {
 				return "", err
 			}
-			// 从诊断信息中提取第一个行号 L(\d+)
+
+			// ★ 阶段一：用 codegraph 定位符号的最新行号（比从错误诊断提取更精准）
+			if oldStr, _ := args["old_string"].(string); oldStr != "" {
+				if filePath, _ := args["path"].(string); filePath != "" {
+					if symName := extractGoSymbolName(oldStr); symName != "" {
+						if cg, cgErr := getCodeGraph(root); cgErr == nil && cg != nil {
+							entities := cg.SearchEntities(symName)
+							for _, e := range entities {
+								if e.FilePath != filePath {
+									continue
+								}
+								if !strings.Contains(e.Name, symName) {
+									continue
+								}
+								args["line_start"] = float64(e.Line)
+								if e.EndLine > e.Line {
+									args["line_end"] = float64(e.EndLine)
+								}
+								return "", ErrRetry
+							}
+						}
+					}
+				}
+			}
+
+			// ★ 阶段二：回退到从诊断信息提取行号 L(\d+)
 			re := regexp.MustCompile(`L(\d+):`)
 			m := re.FindStringSubmatch(errStr)
 			if len(m) < 2 {
@@ -582,7 +607,6 @@ func RegisterDefaultTools(r *Registry, root string) {
 			if lineNo <= 0 {
 				return "", err
 			}
-			// 设置行号定位参数，保留 old_string 作校验
 			args["line_start"] = float64(lineNo)
 			return "", ErrRetry
 		}
@@ -683,4 +707,50 @@ func capOutput(s string, limit int) string {
 	head := limit * 3 / 4
 	tail := limit - head
 	return s[:head] + "\n...[输出截断 " + fmt.Sprint(len(s)-limit) + " 字节]...\n" + s[len(s)-tail:]
+}
+
+// extractGoSymbolName 从 Go 代码片段（old_string）中提取符号名称。
+// 用于 edit_file 匹配失败时通过 codegraph 定位符号的最新行号。
+// 匹配优先级：方法 > 函数 > 类型 > 变量 > 常量。
+func extractGoSymbolName(s string) string {
+	if s == "" {
+		return ""
+	}
+	// 去掉可能的前导空白和注释
+	s = strings.TrimSpace(s)
+	if strings.HasPrefix(s, "//") || strings.HasPrefix(s, "/*") {
+		return ""
+	}
+
+	// 方法：func (r *Receiver) MethodName(
+	re := regexp.MustCompile(`(?m)^func\s+\([^)]*\)\s*(\w+)\s*\(`)
+	if m := re.FindStringSubmatch(s); len(m) > 1 {
+		return m[1]
+	}
+
+	// 函数：func FunctionName(
+	re = regexp.MustCompile(`(?m)^func\s+(\w+)\s*\(`)
+	if m := re.FindStringSubmatch(s); len(m) > 1 {
+		return m[1]
+	}
+
+	// 类型/结构体/接口：type TypeName
+	re = regexp.MustCompile(`(?m)^type\s+(\w+)`)
+	if m := re.FindStringSubmatch(s); len(m) > 1 {
+		return m[1]
+	}
+
+	// 变量：var VarName
+	re = regexp.MustCompile(`(?m)^var\s+(\w+)`)
+	if m := re.FindStringSubmatch(s); len(m) > 1 {
+		return m[1]
+	}
+
+	// 常量：const ConstName
+	re = regexp.MustCompile(`(?m)^const\s+(\w+)`)
+	if m := re.FindStringSubmatch(s); len(m) > 1 {
+		return m[1]
+	}
+
+	return ""
 }
