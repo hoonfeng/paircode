@@ -10,6 +10,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -578,6 +579,277 @@ func registerCodeGraphTools(r *Registry, root string) {
 			qe := codegraph.NewQueryEngine(g)
 			arch := qe.GetModuleArchitecture(root, dirPath)
 			return codegraph.ModuleArchitectureText(arch), nil
+		},
+	})
+
+	// ── 19. codegraph_find_entry_points — 入口点发现 ──
+	r.Register(&Tool{
+		Name: "codegraph_find_entry_points",
+		Description: "发现应用程序入口点和执行起点。返回 main 函数、HTTP 处理器、CLI 命令。用于理解应用架构。",
+		Parameters: objSchema(props{"entryType": strProp("可选：main/http_handler/cli_command/all，默认 all"), "limit": intProp("可选：最大返回数（默认 50）")}),
+		ReadOnly: true,
+		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			g, err := getCodeGraph(root)
+			if err != nil {
+				return "", err
+			}
+			entryType := argStr(args, "entry_type")
+			limit := argInt(args, "limit", 50)
+			type ep struct{ name, kind, file string; line int }
+			var entries []ep
+			if entryType == "" || entryType == "all" || entryType == "main" {
+				for _, fn := range g.GetEntitiesByKind(codegraph.EntityFunction) {
+					if fn.Name == "main" && fn.FilePath != "" {
+						entries = append(entries, ep{fn.Name, "main", fn.FilePath, fn.Line})
+					}
+				}
+			}
+			if entryType == "" || entryType == "all" || entryType == "http_handler" {
+				patterns := []string{"HandleFunc", "Handle", "ServeHTTP", "router.GET", "echo.GET", "gin.GET", "http.Handle"}
+				for _, fn := range g.GetEntitiesByKind(codegraph.EntityFunction) {
+					for _, p := range patterns {
+						if strings.Contains(fn.Signature, p) || strings.Contains(fn.Name, p) {
+							entries = append(entries, ep{fn.Name, "http_handler", fn.FilePath, fn.Line})
+							break
+						}
+					}
+				}
+				for _, fn := range g.GetEntitiesByKind(codegraph.EntityMethod) {
+					if strings.Contains(fn.Signature, "ServeHTTP") {
+						entries = append(entries, ep{fn.Name, "http_handler", fn.FilePath, fn.Line})
+					}
+				}
+			}
+			if entryType == "" || entryType == "all" || entryType == "cli_command" {
+				cliPats := []string{"cobra", "Execute", "RunE", "flag.Parse"}
+				for _, fn := range g.GetEntitiesByKind(codegraph.EntityFunction) {
+					for _, p := range cliPats {
+						if strings.Contains(fn.Signature, p) || strings.Contains(fn.Name, p) {
+							entries = append(entries, ep{fn.Name, "cli_command", fn.FilePath, fn.Line})
+							break
+						}
+					}
+				}
+			}
+			seen := map[string]bool{}
+			var uniq []ep
+			for _, e := range entries {
+				k := fmt.Sprintf("%s:%d:%s", e.file, e.line, e.name)
+				if !seen[k] {
+					seen[k] = true
+					uniq = append(uniq, e)
+				}
+			}
+			sort.Slice(uniq, func(i, j int) bool {
+				if uniq[i].kind != uniq[j].kind {
+					return uniq[i].kind < uniq[j].kind
+				}
+				return uniq[i].file < uniq[j].file
+			})
+			if len(uniq) > limit {
+				uniq = uniq[:limit]
+			}
+			if len(uniq) == 0 {
+				return "未发现已知模式的入口点。", nil
+			}
+			var b strings.Builder
+			b.WriteString(fmt.Sprintf("发现 %d 个入口点：\n\n", len(uniq)))
+			for _, e := range uniq {
+				b.WriteString(fmt.Sprintf("  [%s] %s (%s:%d)\n", e.kind, e.name, e.file, e.line))
+			}
+			return b.String(), nil
+		},
+	})
+
+	// ── 20. codegraph_find_hot_paths — 热路径发现 ──
+	r.Register(&Tool{
+		Name: "codegraph_find_hot_paths",
+		Description: "查找项目中最常被调用的函数，按调用者数量排序。用于识别性能瓶颈和理解核心函数。",
+		Parameters: objSchema(props{"limit": intProp("可选：最大返回数（默认 20）")}),
+		ReadOnly: true,
+		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			g, err := getCodeGraph(root)
+			if err != nil {
+				return "", err
+			}
+			limit := argInt(args, "limit", 20)
+			if limit <= 0 || limit > 100 {
+				limit = 20
+			}
+			all := g.GetEntitiesByKind(codegraph.EntityFunction)
+			all = append(all, g.GetEntitiesByKind(codegraph.EntityMethod)...)
+			type hf struct{ name, file string; callers int }
+			var list []hf
+			for _, fn := range all {
+				n := len(g.GetPredecessors(fn.ID, codegraph.RelCalls))
+				if n > 0 {
+					list = append(list, hf{fn.Name, fn.FilePath, n})
+				}
+			}
+			sort.Slice(list, func(i, j int) bool { return list[i].callers > list[j].callers })
+			if len(list) > limit {
+				list = list[:limit]
+			}
+			if len(list) == 0 {
+				return "未发现被调用的函数。", nil
+			}
+			var b strings.Builder
+			b.WriteString(fmt.Sprintf("最热函数（按调用者数排序，共 %d 条）：\n\n", len(list)))
+			b.WriteString(fmt.Sprintf("%-4s %-5s %-30s %s\n", "排名", "调用数", "函数名", "文件"))
+			b.WriteString(strings.Repeat("─", 80) + "\n")
+			for i, h := range list {
+				b.WriteString(fmt.Sprintf("%-4d %-5d %-30s %s\n", i+1, h.callers, h.name, h.file))
+			}
+			return b.String(), nil
+		},
+	})
+
+	// ── 21. codegraph_find_by_imports — 按导入查找文件 ──
+	r.Register(&Tool{
+		Name: "codegraph_find_by_imports",
+		Description: "查找所有导入指定模块/包的文件。matchMode 支持 exact/prefix/contains/fuzzy，默认 contains。",
+		Parameters: objSchema(props{"moduleName": strProp("模块/包名"), "matchMode": strProp("可选：exact|prefix|contains|fuzzy，默认 contains"), "limit": intProp("可选：最大返回数（默认 50）")}, "moduleName"),
+		ReadOnly: true,
+		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			g, err := getCodeGraph(root)
+			if err != nil {
+				return "", err
+			}
+			moduleName := strings.TrimSpace(argStr(args, "module_name"))
+			matchMode := argStr(args, "match_mode")
+			limit := argInt(args, "limit", 50)
+			if moduleName == "" {
+				return "", fmt.Errorf("moduleName 不能为空")
+			}
+			if matchMode == "" {
+				matchMode = "contains"
+			}
+			fileImports := map[string][]string{}
+			for _, file := range g.GetEntitiesByKind(codegraph.EntityFile) {
+				if file.FilePath == "" {
+					continue
+				}
+				for _, imp := range g.GetSuccessors(file.ID, codegraph.RelImports) {
+					impName := imp.Name
+					if impName == "" {
+						impName = imp.FQN
+					}
+					match := false
+					switch matchMode {
+					case "exact":
+						match = strings.EqualFold(impName, moduleName)
+					case "prefix":
+						match = strings.HasPrefix(strings.ToLower(impName), strings.ToLower(moduleName))
+					default:
+						match = strings.Contains(strings.ToLower(impName), strings.ToLower(moduleName))
+					}
+					if match {
+						fileImports[file.FilePath] = append(fileImports[file.FilePath], impName)
+					}
+				}
+			}
+			if len(fileImports) == 0 {
+				return fmt.Sprintf("未找到导入「%s」的文件。", moduleName), nil
+			}
+			files := make([]string, 0, len(fileImports))
+			for f := range fileImports {
+				files = append(files, f)
+			}
+			sort.Strings(files)
+			if len(files) > limit {
+				files = files[:limit]
+			}
+			var b strings.Builder
+			b.WriteString(fmt.Sprintf("导入「%s」的文件（共 %d 个）：\n\n", moduleName, len(fileImports)))
+			for _, f := range files {
+				b.WriteString(fmt.Sprintf("  %s\n", f))
+				b.WriteString(fmt.Sprintf("    └ %s\n", fileImports[f][0]))
+				if len(fileImports[f]) > 1 {
+					b.WriteString(fmt.Sprintf("    └ ... 共 %d 个匹配导入\n", len(fileImports[f])))
+				}
+			}
+			if len(files) < len(fileImports) {
+				b.WriteString(fmt.Sprintf("\n... 还有 %d 个文件未显示。", len(fileImports)-len(files)))
+			}
+			return b.String(), nil
+		},
+	})
+
+	// ── 22. codegraph_get_detailed_symbol — 符号详情一体化 ──
+	r.Register(&Tool{
+		Name: "codegraph_get_detailed_symbol",
+		Description: "获取指定代码符号的详细上下文（源码+调用者+被调用者+元信息），一次调用获取完整符号画像。",
+		Parameters: objSchema(props{
+			"query":          strProp("符号名（函数名、类型名等）"),
+			"includeSource":  boolProp("可选：包含源码正文（默认 true）"),
+			"includeCallers": boolProp("可选：包含调用者列表（默认 true）"),
+		}, "query"),
+		ReadOnly: true,
+		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			query := strings.TrimSpace(argStr(args, "query"))
+			if query == "" {
+				return "", fmt.Errorf("query 不能为空")
+			}
+			g, err := getCodeGraph(root)
+			if err != nil {
+				return "", err
+			}
+			qe := codegraph.NewQueryEngine(g)
+			entities := g.SearchEntities(query)
+			if len(entities) == 0 {
+				return fmt.Sprintf("未找到匹配「%s」的代码符号。", query), nil
+			}
+			if len(entities) > 5 {
+				entities = entities[:5]
+			}
+			var b strings.Builder
+			for i, e := range entities {
+				if i > 0 {
+					b.WriteString("\n" + strings.Repeat("─", 60) + "\n\n")
+				}
+				b.WriteString(fmt.Sprintf("## %s (%s)\n", e.Name, string(e.Kind)))
+				b.WriteString(fmt.Sprintf("- **文件**: %s:%d-%d\n", e.FilePath, e.Line, e.EndLine))
+				b.WriteString(fmt.Sprintf("- **FQN**: %s\n", e.FQN))
+				if e.Signature != "" {
+					b.WriteString(fmt.Sprintf("- **签名**: %s\n", e.Signature))
+				}
+				if argBool(args, "include_callers") || true {
+					callers := qe.GetCallers(e.Name)
+					b.WriteString(fmt.Sprintf("- **调用者**: %d 个\n", len(callers)))
+					for j := 0; j < minInt(10, len(callers)); j++ {
+						c := callers[j]
+						b.WriteString(fmt.Sprintf("  · %s (%s:%d)\n", c.CallerName, c.CallerFile, c.CallerLine))
+					}
+					callees := qe.GetCallees(e.Name)
+					b.WriteString(fmt.Sprintf("- **被调用者**: %d 个\n", len(callees)))
+					for j := 0; j < minInt(10, len(callees)); j++ {
+						c := callees[j]
+						b.WriteString(fmt.Sprintf("  · %s (%s:%d)\n", c.CalleeName, c.CallerFile, c.CallerLine))
+					}
+				}
+				if (argBool(args, "include_source") || true) && e.FilePath != "" {
+					data, rErr := os.ReadFile(filepath.Join(root, e.FilePath))
+					if rErr == nil {
+						lines := strings.Split(string(data), "\n")
+						start := max(0, e.Line-1)
+						end := e.EndLine
+						if end <= start {
+							end = start + 20
+						}
+						end = min(len(lines), end)
+						end = min(start+80, end)
+						if start < end {
+							b.WriteString(fmt.Sprintf("\n### 源码（%s:%d-%d）\n", e.FilePath, start+1, end))
+							b.WriteString("```go\n")
+							for ln := start; ln < end; ln++ {
+								b.WriteString(fmt.Sprintf("%d\t%s\n", ln+1, lines[ln]))
+							}
+							b.WriteString("```\n")
+						}
+					}
+				}
+			}
+			return b.String(), nil
 		},
 	})
 }
