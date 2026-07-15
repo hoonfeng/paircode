@@ -537,7 +537,7 @@ func RegisterDefaultTools(r *Registry, root string) {
 	registerMemoryTools(r, root)              // memory_write/read/list/search（跨会话记忆，见 memory.go）
 	registerFindFilesByPatternTool(r, root)   // find_files_by_pattern（glob 查文件，支持 **，见 findfiles.go）
 	registerFindSymbolTool(r, root)           // find_symbol（符号定位，见 symbolfinder.go）
-	registerFileSymbolTools(r, root)          // get_file_symbols / find_symbol_usages / check_impact / find_circular_deps（见 filesymbol.go）
+	registerFileSymbolTools(r, root)          // list_exported_symbols / get_file_dependencies / check_impact / find_circular_deps（见 filesymbol.go）
 	registerTaskTools(r, root)                // task_create/update/list/delete/summary（持久化任务追踪，见 task_tools.go）
 	registerProjectInfoTools(r, root)        // project_info_write/read/list/search/delete/explore（项目知识库，见 projectinfo.go）
 	registerProjectInfoTools(r, root)        // project_info_write/read/list/search/delete/explore（项目知识库，见 projectinfo.go）
@@ -551,53 +551,62 @@ func RegisterDefaultTools(r *Registry, root string) {
 	RegisterBugTools(r, root)                // bug_detect / bug_analyze / bug_fix（BUG 自动检测与修复，见 bugdetect.go + bugfix.go）
 	RegisterSnapshotTools(r, root)           // restore_snapshot / list_snapshots（文件快照与恢复，见 snapshot.go）
 	registerOfficeTools(r, root)             // csv_read / csv_write / json_to_table / table_stats / text_report / word_read（见 officetools.go）
-	registerLSPTools(r, root)              // lsp_definition / lsp_references / lsp_hover / lsp_diagnostics / get_file_symbols / find_symbol_usages（见 lsptools.go）
+	registerLSPTools(r, root)              // lsp_definition / lsp_references / lsp_hover / lsp_diagnostics（见 lsptools.go）
 	registerCodeGraphTools(r, root)          // codegraph_build / codegraph_search / codegraph_impact / ...（代码知识图谱，见 codegraph_tools.go + pkg/codegraph）
 	registerLuaToolTools(r, root)            // lua_tool_list/create/update/delete（Lua 自定义工具管理，见 luatool_tools.go）
 
+	// ── 默认 BeforeTool：edit_file/multi_edit 执行前用 codegraph 注入最新行号 ──
+	// codegraph 的符号级行号比 old_string 字符串匹配更可靠（不受 CRLF/空白折叠/行号偏移影响）。
+	if r.BeforeTool == nil {
+		r.BeforeTool = func(ctx context.Context, name string, args map[string]any) (bool, string, error) {
+			if name != "edit_file" && name != "multi_edit" {
+				return true, "", nil // 放行
+			}
+			oldStr, _ := args["old_string"].(string)
+			filePath, _ := args["path"].(string)
+			if oldStr == "" || filePath == "" {
+				return true, "", nil // 放行
+			}
+			symName := extractGoSymbolName(oldStr)
+			if symName == "" {
+				return true, "", nil // 放行
+			}
+			cg, cgErr := getCodeGraph(root)
+			if cgErr != nil || cg == nil {
+				return true, "", nil // 放行
+			}
+			for _, e := range cg.SearchEntities(symName) {
+				if e.FilePath != filePath {
+					continue
+				}
+				if !strings.Contains(e.Name, symName) {
+					continue
+				}
+				// ★ 找到匹配实体 → 注入最新行号，让 edit_file 用行号定位执行
+				args["line_start"] = float64(e.Line)
+				if e.EndLine > e.Line {
+					args["line_end"] = float64(e.EndLine)
+				}
+				break
+			}
+			return true, "", nil // 放行（参数已被修改）
+		}
+	}
+
 	// ── 默认 OnToolError：edit_file/multi_edit 匹配失败→自动行号定位重试 ──
-	// 调用方如需自定义可在之后覆盖 r.OnToolError。
+	// 注意：BeforeTool 已用 codegraph 预注入行号，此处为兜底（codegraph 找不到时）。
 	if r.OnToolError == nil {
 		r.OnToolError = func(ctx context.Context, name string, args map[string]any, err error) (string, error) {
-			// 只处理 edit_file/multi_edit 的匹配/不唯一失败
 			if name != "edit_file" && name != "multi_edit" {
 				return "", err
 			}
-			// 已使用行号定位不再重试
 			if ls, _ := args["line_start"].(float64); ls > 0 {
 				return "", err
 			}
 			errStr := err.Error()
-			isMatchFail := strings.Contains(errStr, "未找到") || strings.Contains(errStr, "多次") || strings.Contains(errStr, "不唯一")
-			if !isMatchFail {
+			if !strings.Contains(errStr, "未找到") && !strings.Contains(errStr, "多次") && !strings.Contains(errStr, "不唯一") {
 				return "", err
 			}
-
-			// ★ 阶段一：用 codegraph 定位符号的最新行号（比从错误诊断提取更精准）
-			if oldStr, _ := args["old_string"].(string); oldStr != "" {
-				if filePath, _ := args["path"].(string); filePath != "" {
-					if symName := extractGoSymbolName(oldStr); symName != "" {
-						if cg, cgErr := getCodeGraph(root); cgErr == nil && cg != nil {
-							entities := cg.SearchEntities(symName)
-							for _, e := range entities {
-								if e.FilePath != filePath {
-									continue
-								}
-								if !strings.Contains(e.Name, symName) {
-									continue
-								}
-								args["line_start"] = float64(e.Line)
-								if e.EndLine > e.Line {
-									args["line_end"] = float64(e.EndLine)
-								}
-								return "", ErrRetry
-							}
-						}
-					}
-				}
-			}
-
-			// ★ 阶段二：回退到从诊断信息提取行号 L(\d+)
 			re := regexp.MustCompile(`L(\d+):`)
 			m := re.FindStringSubmatch(errStr)
 			if len(m) < 2 {
