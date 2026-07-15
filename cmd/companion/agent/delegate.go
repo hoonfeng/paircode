@@ -117,6 +117,12 @@ func runSubAgent(ctx context.Context, parent *Loop, tree *AgentTree, name, task 
 		history = history[:len(history)-1]
 	}
 
+	// ★ 记录执行日志：提取外层分析内容 + 委派任务
+	if analysis := lastAssistantContent(history); analysis != "" {
+		parent.LogAnalysis(analysis)
+	}
+	parent.LogDelegation(name, childTask)
+
 	// ★ 委托前刷盘：将外层 agent 当前消息（含分析+delegate_task）落盘为独立 assistant 消息
 	if parent.OnBatchPersist != nil {
 		parent.OnBatchPersist(parent.currentMsgs)
@@ -142,6 +148,9 @@ func runSubAgent(ctx context.Context, parent *Loop, tree *AgentTree, name, task 
 	} else {
 		result = "(子 agent 未产出结果)"
 	}
+	// ★ 记录执行日志：子 agent 的执行结果
+	parent.LogResult(name, result)
+
 	// ★ 包装结果，防止父 agent 将子 agent 的执行报告误判为「整体任务已完成」。
 	// 子 agent 的输出原样回灌会让父 LLM 产生已完成全部工作的错觉，导致提前收尾。
 	return fmt.Sprintf("【子 agent(%s)执行结果】\n%s\n\n---\n请根据以上结果决定下一步：\n1. **立即调用 update_plan 将当前项标记为 done**（无论是否还有剩余项，必须先更新计划状态）\n2. 如果还有剩余计划项，再调用 delegate_task 执行下一项\n3. 如果全部计划项都已是 done 状态，再调用 generate_commit_message 完成收尾", name, result), nil
@@ -165,6 +174,12 @@ func runSingleLLMCall(ctx context.Context, parent *Loop, sa *SubAgent, childReg 
 	msgs := make([]Message, 0, len(history)+2)
 	msgs = append(msgs, history...)
 	msgs = append(msgs, Message{Role: RoleUser, Content: childTask})
+
+	// ★ 记录执行日志：single turn 的分析和委派
+	if analysis := lastAssistantContent(history); analysis != "" {
+		parent.LogAnalysis(analysis)
+	}
+	parent.LogDelegation(name, childTask)
 
 	// ★ 单轮委托也执行刷盘：外层分析+委派落盘为独立 assistant 消息
 	if parent.OnBatchPersist != nil {
@@ -195,6 +210,9 @@ func runSingleLLMCall(ctx context.Context, parent *Loop, sa *SubAgent, childReg 
 	if err != nil {
 		return "", err
 	}
+
+	// ★ 记录执行日志：single turn 执行结果
+	parent.LogResult(name, assistant.Content)
 
 	// 结果通过函数返回值回传，EventFinal/EventDone 被 SubAgentSink 丢弃 → 不泄漏
 	result := assistant.Content

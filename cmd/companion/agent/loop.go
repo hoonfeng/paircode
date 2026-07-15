@@ -258,7 +258,11 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 		msgs = append(msgs, assistant)
 		l.currentMsgs = msgs // 同步：供 delegate handler 读父历史（含本轮 assistant；handler 剥离末尾未配对 tool_call 保前缀稳定）
 
-
+		// ★ 记录执行日志：当 assistant 有分析内容且有工具调用时（即将执行委托/操作前）
+		// 外层 agent 的分析和决策，在 delegate_task 之前可见
+		if strings.TrimSpace(assistant.Content) != "" && len(assistant.ToolCalls) > 0 {
+			l.LogAnalysis(assistant.Content)
+		}
 
 		// ── ACT + OBSERVE：依次执行工具，结果作 role=tool 消息回灌 ──
 		for _, tc := range assistant.ToolCalls {
@@ -366,19 +370,27 @@ func hasSystem(msgs []Message) bool {
 // 在 l.System 的可变部分末尾追加「上下文压缩摘要」段。
 // 摘要仅在中段老消息被压缩时变化，保持 system 前缀稳定、最大化缓存命中。
 func (l *Loop) buildSystemWithSummaries() string {
-	if len(l.CompressedSummaries) == 0 {
-		return l.System
-	}
 	var b strings.Builder
 	b.WriteString(l.System)
-	b.WriteString("\n\n# 上下文已压缩——历史摘要\n\n")
-	b.WriteString("> 以下为之前轮次的消息摘要，Agent 应据此感知已完成的历史上下文。\n> 请勿重复执行摘要中已包含的任务。\n\n")
-	for i, s := range l.CompressedSummaries {
-		if i > 0 {
-			b.WriteString("\n\n---\n\n")
+
+	// 历史摘要（上下文压缩后产生）
+	if len(l.CompressedSummaries) > 0 {
+		b.WriteString("\n\n# 上下文已压缩——历史摘要\n\n")
+		b.WriteString("> 以下为之前轮次的消息摘要，Agent 应据此感知已完成的历史上下文。\n> 请勿重复执行摘要中已包含的任务。\n\n")
+		for i, s := range l.CompressedSummaries {
+			if i > 0 {
+				b.WriteString("\n\n---\n\n")
+			}
+			b.WriteString(s)
 		}
-		b.WriteString(s)
 	}
+
+	// ★ 执行日志：记录各轮的分析与操作，不受上下文压缩影响
+	if logStr := l.FormatExecutionLog(); logStr != "" {
+		b.WriteString("\n\n")
+		b.WriteString(logStr)
+	}
+
 	return b.String()
 }
 
