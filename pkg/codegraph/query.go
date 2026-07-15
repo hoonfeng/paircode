@@ -2,6 +2,8 @@ package codegraph
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 )
@@ -617,5 +619,521 @@ func DependencyReport(dg *DependencyGraph) string {
 	for _, e := range dg.Edges {
 		b.WriteString(fmt.Sprintf("  %s → %s\n", e[0], e[1]))
 	}
+	return b.String()
+}
+
+// ════════════════════════════════════════════════════════════════
+// 上下文聚合（get_edit_context / get_ai_context）
+// ════════════════════════════════════════════════════════════════
+
+// EditContext 修改某个代码位置所需的全部上下文。
+type EditContext struct {
+	Symbol     SymbolDetail   `json:"symbol"`     // 目标符号完整信息
+	Callers    []CallerDetail `json:"callers"`    // 调用者列表
+	Tests      []TestDetail   `json:"tests"`      // 关联测试
+	Memories   []MemoryBrief  `json:"memories"`   // 相关记忆摘要
+	GitHistory []CommitBrief  `json:"gitHistory"` // 近期 Git 历史
+	TokenUsed  int            `json:"tokenUsed"`  // 已用 token 估算
+}
+
+// SymbolDetail 符号详细信息。
+type SymbolDetail struct {
+	Name       string `json:"name"`
+	Kind       string `json:"kind"`
+	FilePath   string `json:"filePath"`
+	Line       int    `json:"line"`
+	EndLine    int    `json:"endLine"`
+	Signature  string `json:"signature"`
+	Doc        string `json:"doc"`
+	SourceCode string `json:"sourceCode"` // 函数/类型全文源码
+}
+
+// CallerDetail 调用者详细信息。
+type CallerDetail struct {
+	Name       string `json:"name"`
+	Kind       string `json:"kind"`
+	FilePath   string `json:"filePath"`
+	Line       int    `json:"line"`
+	Signature  string `json:"signature"`
+	SourceCode string `json:"sourceCode,omitempty"` // 调用者源码片段
+}
+
+// TestDetail 关联测试信息。
+type TestDetail struct {
+	Name       string `json:"name"`
+	FilePath   string `json:"filePath"`
+	Line       int    `json:"line"`
+	SourceCode string `json:"sourceCode,omitempty"`
+}
+
+// MemoryBrief 简略记忆条目。
+type MemoryBrief struct {
+	Title   string   `json:"title"`
+	Summary string   `json:"summary"`
+	Tags    []string `json:"tags"`
+}
+
+// CommitBrief 简略提交信息。
+type CommitBrief struct {
+	Hash    string `json:"hash"`
+	Author  string `json:"author"`
+	Date    string `json:"date"`
+	Message string `json:"message"`
+}
+
+// GetEditContext 获取修改某位置代码所需的完整上下文。
+// filePath 为工作区相对路径，line 为 1 基行号。
+// maxTokens 控制返回内容的 token 预算（0=不限）。
+// memoryFunc 为可选的记忆查找回调（由 agent 层提供），用于注入相关记忆。
+func GetEditContext(qe *QueryEngine, root, filePath string, line int, maxTokens int, memoryFunc func(query string) []MemoryBrief) *EditContext {
+	ctx := &EditContext{}
+	usedTokens := 0
+
+	// 1. 找该行所属的实体（函数/方法/类型）
+	entities := qe.graph.GetEntitiesByFile(filePath)
+	var target *Entity
+	for _, e := range entities {
+		if line >= e.Line && line <= e.EndLine && e.EndLine > e.Line {
+			if e.Kind == EntityFunction || e.Kind == EntityMethod || e.Kind == EntityStruct || e.Kind == EntityInterface {
+				if target == nil || (e.Line >= target.Line && e.EndLine <= target.EndLine) {
+					target = e
+				}
+			}
+		}
+	}
+	if target == nil {
+		// 回退：精确行匹配
+		for _, e := range entities {
+			if e.Line == line && (e.Kind == EntityFunction || e.Kind == EntityMethod) {
+				target = e
+				break
+			}
+		}
+	}
+	if target == nil && len(entities) > 0 {
+		target = entities[0] // 兜底
+	}
+
+	if target != nil {
+		ctx.Symbol = SymbolDetail{
+			Name:      target.Name,
+			Kind:      string(target.Kind),
+			FilePath:  target.FilePath,
+			Line:      target.Line,
+			EndLine:   target.EndLine,
+			Signature: target.Signature,
+			Doc:       target.Doc,
+		}
+		// 读取源码
+		if source, err := readFileLines(root, filePath, target.Line, target.EndLine); err == nil {
+			ctx.Symbol.SourceCode = source
+			usedTokens += estimateTokens(source)
+		}
+	}
+
+	// 2. 查找调用者
+	if target != nil {
+		callers := qe.GetCallers(target.Name)
+		for _, c := range callers {
+			cd := CallerDetail{
+				Name:      c.CallerName,
+				Kind:      c.CallerKind,
+				FilePath:  c.CallerFile,
+				Line:      c.CallerLine,
+			}
+			// 读取调用者源码（前后 5 行）
+			if source, err := readFileLines(root, c.CallerFile, c.CallerLine-3, c.CallerLine+3); err == nil {
+				cd.SourceCode = source
+			}
+			// 查询调用者的签名
+			for _, e := range qe.graph.GetEntitiesByFile(c.CallerFile) {
+				if e.Name == c.CallerName && (e.Kind == EntityFunction || e.Kind == EntityMethod) {
+					cd.Signature = e.Signature
+					break
+				}
+			}
+			ctx.Callers = append(ctx.Callers, cd)
+			usedTokens += estimateTokens(cd.SourceCode)
+		}
+		// 按 token 预算截断
+		if maxTokens > 0 && usedTokens > maxTokens && len(ctx.Callers) > 3 {
+			ctx.Callers = ctx.Callers[:3]
+		}
+	}
+
+	// 3. 查找关联测试
+	if target != nil {
+		ctx.Tests = findRelatedTests(qe, root, target)
+		for _, t := range ctx.Tests {
+			usedTokens += estimateTokens(t.SourceCode)
+		}
+		if maxTokens > 0 && usedTokens > maxTokens && len(ctx.Tests) > 3 {
+			ctx.Tests = ctx.Tests[:3]
+		}
+	}
+
+	// 4. 查询 Git 历史
+	gh := NewGitHistory(root)
+	if target != nil && target.FilePath != "" {
+		if commits, err := gh.GetCommitsAffecting(target.FilePath, 10); err == nil {
+			for _, c := range commits {
+				ctx.GitHistory = append(ctx.GitHistory, CommitBrief{
+					Hash:    c.Hash,
+					Author:  c.Author,
+					Date:    c.Date,
+					Message: c.Message,
+				})
+			}
+		}
+	}
+
+	// 5. 记忆注入（通过回调）
+	if memoryFunc != nil && target != nil {
+		ctx.Memories = memoryFunc(target.Name)
+	}
+
+	ctx.TokenUsed = usedTokens
+	return ctx
+}
+
+// readFileLines 读取文件的指定行范围（1 基，含两端）。
+func readFileLines(root, filePath string, startLine, endLine int) (string, error) {
+	if filePath == "" || startLine <= 0 {
+		return "", fmt.Errorf("无效参数")
+	}
+	fullPath := filePath
+	if !filepath.IsAbs(fullPath) {
+		fullPath = filepath.Join(root, fullPath)
+	}
+	data, err := os.ReadFile(fullPath)
+	if err != nil {
+		return "", err
+	}
+	lines := strings.Split(string(data), "\n")
+	if startLine > len(lines) {
+		return "", fmt.Errorf("起始行 %d 超出文件行数 %d", startLine, len(lines))
+	}
+	if endLine > len(lines) {
+		endLine = len(lines)
+	}
+	return strings.Join(lines[startLine-1:endLine], "\n"), nil
+}
+
+// estimateTokens 粗略估算 token 数（~4 chars/token）。
+func estimateTokens(s string) int {
+	return len(s) / 4
+}
+
+// ════════════════════════════════════════════════════════════════
+// 测试发现（find_related_tests）
+// ════════════════════════════════════════════════════════════════
+
+// RelatedTestResult 测试发现结果。
+type RelatedTestResult struct {
+	Tests      []TestDetail `json:"tests"`
+	TotalCount int          `json:"totalCount"`
+}
+
+// FindRelatedTests 查找与某个函数/方法关联的测试。
+// 通过两种方式发现：（1）调用链中该函数被测试调用；（2）同名 TestXxx 函数。
+func FindRelatedTests(qe *QueryEngine, root, funcName string) *RelatedTestResult {
+	result := &RelatedTestResult{}
+
+	// 方式 1: 查找调用了目标函数的所有测试
+	callers := qe.GetCallers(funcName)
+	for _, c := range callers {
+		if !strings.HasSuffix(c.CallerFile, "_test.go") {
+			continue
+		}
+		td := TestDetail{
+			Name:     c.CallerName,
+			FilePath: c.CallerFile,
+			Line:     c.CallerLine,
+		}
+		if source, err := readFileLines(root, c.CallerFile, c.CallerLine-2, c.CallerLine+5); err == nil {
+			td.SourceCode = source
+		}
+		result.Tests = append(result.Tests, td)
+	}
+
+	// 方式 2: 按命名约定（TestXxx 对应 Xxx 函数）
+	for _, e := range qe.graph.GetEntitiesByKind(EntityFunction) {
+		if !strings.HasSuffix(e.FilePath, "_test.go") {
+			continue
+		}
+		testName := e.Name
+		if strings.HasPrefix(testName, "Test") {
+			// TestFoo → foo / Foo
+			candidate := testName[4:] // 去掉 "Test" 前缀
+			if strings.EqualFold(candidate, funcName) ||
+				strings.EqualFold(candidate, strings.TrimPrefix(funcName, "Test")) {
+				// 避免重复
+				dup := false
+				for _, existing := range result.Tests {
+					if existing.Name == e.Name && existing.FilePath == e.FilePath {
+						dup = true
+						break
+					}
+				}
+				if !dup {
+					td := TestDetail{
+						Name:     e.Name,
+						FilePath: e.FilePath,
+						Line:     e.Line,
+					}
+					if source, err := readFileLines(root, e.FilePath, e.Line, e.EndLine); err == nil {
+						td.SourceCode = source
+					}
+					result.Tests = append(result.Tests, td)
+				}
+			}
+		}
+	}
+
+	result.TotalCount = len(result.Tests)
+	return result
+}
+
+// findRelatedTests 内部辅助：通过实体查找关联测试。
+func findRelatedTests(qe *QueryEngine, root string, entity *Entity) []TestDetail {
+	if entity == nil {
+		return nil
+	}
+	// 用 FindRelatedTests 的内部实现，避免递归循环
+	// 直接查找调用者和同名约定
+	var tests []TestDetail
+	callers := qe.GetCallers(entity.Name)
+	for _, c := range callers {
+		if !strings.HasSuffix(c.CallerFile, "_test.go") {
+			continue
+		}
+		td := TestDetail{
+			Name:     c.CallerName,
+			FilePath: c.CallerFile,
+			Line:     c.CallerLine,
+		}
+		if source, err := readFileLines(root, c.CallerFile, c.CallerLine-2, c.CallerLine+5); err == nil {
+			td.SourceCode = source
+		}
+		tests = append(tests, td)
+	}
+	// 同名约定
+	for _, e := range qe.graph.GetEntitiesByKind(EntityFunction) {
+		if !strings.HasSuffix(e.FilePath, "_test.go") {
+			continue
+		}
+		if strings.HasPrefix(e.Name, "Test") {
+			candidate := e.Name[4:]
+			if strings.EqualFold(candidate, entity.Name) {
+				dup := false
+				for _, existing := range tests {
+					if existing.Name == e.Name && existing.FilePath == e.FilePath {
+						dup = true
+						break
+					}
+				}
+				if !dup {
+					td := TestDetail{
+						Name:     e.Name,
+						FilePath: e.FilePath,
+						Line:     e.Line,
+					}
+					if source, err := readFileLines(root, e.FilePath, e.Line, e.EndLine); err == nil {
+						td.SourceCode = source
+					}
+					tests = append(tests, td)
+				}
+			}
+		}
+	}
+	return tests
+}
+
+// ════════════════════════════════════════════════════════════════
+// 复杂度分析（analyze_complexity）
+// ════════════════════════════════════════════════════════════════
+
+// ComplexityReport 某个文件或函数的复杂度分析报告。
+type ComplexityReport struct {
+	Functions      []FunctionComplexity `json:"functions"`
+	TotalFunctions int                  `json:"totalFunctions"`
+	AvgComplexity  float64              `json:"avgComplexity"`
+	MaxComplexity  int                  `json:"maxComplexity"`
+	OverallGrade   string               `json:"overallGrade"`
+}
+
+// FunctionComplexity 单个函数的复杂度结果。
+type FunctionComplexity struct {
+	Name       string `json:"name"`
+	Line       int    `json:"line"`
+	EndLine    int    `json:"endLine"`
+	Complexity int    `json:"complexity"`
+	Grade      string `json:"grade"`
+	LOC        int    `json:"loc"`
+}
+
+// AnalyzeComplexity 分析指定文件的函数复杂度。
+// filePath 为工作区相对路径；如为空则分析所有函数。
+func AnalyzeComplexity(qe *QueryEngine, root, filePath string) *ComplexityReport {
+	report := &ComplexityReport{}
+
+	var funcs []*Entity
+	if filePath != "" {
+		funcs = qe.graph.GetEntitiesByFile(filePath)
+	} else {
+		funcs = qe.graph.GetEntitiesByKind(EntityFunction)
+		funcs = append(funcs, qe.graph.GetEntitiesByKind(EntityMethod)...)
+	}
+
+	for _, e := range funcs {
+		if e.Kind != EntityFunction && e.Kind != EntityMethod {
+			continue
+		}
+		if filePath != "" && e.FilePath != filePath {
+			continue
+		}
+
+		fc := FunctionComplexity{
+			Name:       e.Name,
+			Line:       e.Line,
+			EndLine:    e.EndLine,
+			Complexity: 1, // 基线复杂度
+			LOC:        e.EndLine - e.Line + 1,
+		}
+
+		// 读取源码计算圈复杂度
+		if source, err := readFileLines(root, e.FilePath, e.Line, e.EndLine); err == nil {
+			fc.Complexity = calcCyclomaticComplexity(source)
+		}
+
+		fc.Grade = complexityGrade(fc.Complexity)
+		report.Functions = append(report.Functions, fc)
+
+		if fc.Complexity > report.MaxComplexity {
+			report.MaxComplexity = fc.Complexity
+		}
+		report.AvgComplexity += float64(fc.Complexity)
+	}
+
+	report.TotalFunctions = len(report.Functions)
+	if report.TotalFunctions > 0 {
+		report.AvgComplexity /= float64(report.TotalFunctions)
+	}
+	report.OverallGrade = complexityGrade(int(report.AvgComplexity))
+
+	return report
+}
+
+// calcCyclomaticComplexity 基于正则匹配计算圈复杂度。
+// 计数决策关键词：if、else if、for、while、case、&&、||、catch。
+func calcCyclomaticComplexity(source string) int {
+	complexity := 1 // 基线
+	lower := source
+
+	// 统计决策关键词（简单词法：忽略字符串/注释中的匹配）
+	keywords := []string{
+		"if ", "else if ", "for ", "range ",
+		"case ", "default:",
+		"&&", "||",
+		"catch ", "except:", "except ",
+	}
+	for _, kw := range keywords {
+		count := strings.Count(lower, kw)
+		// 避免过度计数（如 "if " 在注释中）
+		if count > 0 {
+			complexity += count
+		}
+	}
+
+	return complexity
+}
+
+// complexityGrade 根据复杂度评分等级。
+func complexityGrade(complexity int) string {
+	switch {
+	case complexity <= 5:
+		return "A"
+	case complexity <= 10:
+		return "B"
+	case complexity <= 20:
+		return "C"
+	case complexity <= 30:
+		return "D"
+	default:
+		return "E"
+	}
+}
+
+// ComplexityReportText 生成可读复杂度报告。
+func ComplexityReportText(r *ComplexityReport) string {
+	if r == nil || len(r.Functions) == 0 {
+		return "（未找到函数或文件为空）"
+	}
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("复杂度分析：%d 个函数，平均 %.1f，最高 %d，总体评分 %s\n\n",
+		r.TotalFunctions, r.AvgComplexity, r.MaxComplexity, r.OverallGrade))
+	b.WriteString("函数名\t复杂度\t评分\t行数\t位置\n")
+	b.WriteString("------\t----\t---\t----\t----\n")
+	for _, f := range r.Functions {
+		b.WriteString(fmt.Sprintf("%s\t%d\t%s\t%d\tL%d\n",
+			f.Name, f.Complexity, f.Grade, f.LOC, f.Line))
+	}
+	return b.String()
+}
+
+// RelatedTestsText 生成可读测试发现报告。
+func RelatedTestsText(r *RelatedTestResult) string {
+	if r == nil || len(r.Tests) == 0 {
+		return "未找到关联测试。"
+	}
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("关联测试（共 %d 个）：\n\n", r.TotalCount))
+	for _, t := range r.Tests {
+		b.WriteString(fmt.Sprintf("  %s (%s:%d)\n", t.Name, t.FilePath, t.Line))
+	}
+	return b.String()
+}
+
+// EditContextText 生成可读的编辑上下文报告。
+func EditContextText(ctx *EditContext) string {
+	if ctx == nil {
+		return "（空上下文）"
+	}
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("■ 符号: %s (%s)\n", ctx.Symbol.Name, ctx.Symbol.Kind))
+	b.WriteString(fmt.Sprintf("  位置: %s:%d-%d\n", ctx.Symbol.FilePath, ctx.Symbol.Line, ctx.Symbol.EndLine))
+	if ctx.Symbol.Signature != "" {
+		b.WriteString(fmt.Sprintf("  签名: %s\n", ctx.Symbol.Signature))
+	}
+
+	if len(ctx.Callers) > 0 {
+		b.WriteString(fmt.Sprintf("\n■ 调用者（%d 个）：\n", len(ctx.Callers)))
+		for _, c := range ctx.Callers {
+			b.WriteString(fmt.Sprintf("  %s (%s:%d)\n", c.Name, c.FilePath, c.Line))
+		}
+	}
+
+	if len(ctx.Tests) > 0 {
+		b.WriteString(fmt.Sprintf("\n■ 关联测试（%d 个）：\n", len(ctx.Tests)))
+		for _, t := range ctx.Tests {
+			b.WriteString(fmt.Sprintf("  %s (%s:%d)\n", t.Name, t.FilePath, t.Line))
+		}
+	}
+
+	if len(ctx.Memories) > 0 {
+		b.WriteString(fmt.Sprintf("\n■ 相关记忆（%d 条）：\n", len(ctx.Memories)))
+		for _, m := range ctx.Memories {
+			b.WriteString(fmt.Sprintf("  %s\n", m.Title))
+		}
+	}
+
+	if len(ctx.GitHistory) > 0 {
+		b.WriteString(fmt.Sprintf("\n■ Git 历史（最近 %d 条）：\n", len(ctx.GitHistory)))
+		for _, c := range ctx.GitHistory {
+			b.WriteString(fmt.Sprintf("  %s | %s | %s\n", c.Hash, c.Date, c.Message))
+		}
+	}
+
+	b.WriteString(fmt.Sprintf("\n（估算 token: %d）\n", ctx.TokenUsed))
 	return b.String()
 }

@@ -16,6 +16,7 @@ import (
 	"sync"
 
 	"github.com/hoonfeng/paircode/pkg/codegraph"
+	"github.com/hoonfeng/paircode/pkg/memory"
 )
 
 // ── 全局状态 ──────────────────────────────────────────
@@ -392,6 +393,93 @@ func registerCodeGraphTools(r *Registry, root string) {
 			}
 
 			return codegraph.GitHistoryText(commits), nil
+		},
+	})
+
+	// ── 12. codegraph_get_edit_context — 编辑上下文聚合 ──
+	r.Register(&Tool{
+		Name: "codegraph_get_edit_context",
+		Description: "获取修改某个代码位置所需的完整上下文。" +
+			"一次调用返回：符号源码、调用者列表、关联测试、近期 Git 历史、相关记忆。" +
+			"比分别调用多个工具更高效。参数 maxTokens 控制返回内容的 token 预算。",
+		Parameters: objSchema(props{
+			"file":      strProp("文件路径（工作区相对路径，如 'cmd/main.go'）"),
+			"line":      intProp("行号（1 基，目标函数/类型所在行）"),
+			"maxTokens": intProp("可选：token 预算上限（默认 4000，0 不限）"),
+		}, "file", "line"),
+		ReadOnly: true,
+		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			filePath := argStr(args, "file")
+			line := argInt(args, "line", 1)
+			maxTokens := argInt(args, "max_tokens", 4000)
+
+			g, err := getCodeGraph(root)
+			if err != nil {
+				return "", err
+			}
+			qe := codegraph.NewQueryEngine(g)
+
+			// 构建记忆回调函数
+			memoryFunc := func(query string) []codegraph.MemoryBrief {
+				// 从 pkg/memory 搜索相关记忆
+				entries := memory.Search(query)
+				var mems []codegraph.MemoryBrief
+				for _, e := range entries {
+					mems = append(mems, codegraph.MemoryBrief{
+						Title:   e.Title,
+						Summary: e.Summary,
+						Tags:    e.Tags,
+					})
+				}
+				return mems
+			}
+
+			ctxResult := codegraph.GetEditContext(qe, root, filePath, line, maxTokens, memoryFunc)
+			return codegraph.EditContextText(ctxResult), nil
+		},
+	})
+
+	// ── 13. codegraph_find_related_tests — 测试发现 ──
+	r.Register(&Tool{
+		Name: "codegraph_find_related_tests",
+		Description: "查找与指定函数/方法关联的测试。发现方式：" +
+			"（1）测试函数调用了目标函数；（2）命名约定匹配（TestXxx ↔ Xxx）。" +
+			"返回测试文件路径、行号和源码片段。",
+		Parameters: objSchema(props{
+			"function": strProp("函数/方法名（如 'SendRequest'、'handler.Handle'）"),
+		}, "function"),
+		ReadOnly: true,
+		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			funcName := argStr(args, "function")
+			g, err := getCodeGraph(root)
+			if err != nil {
+				return "", err
+			}
+			qe := codegraph.NewQueryEngine(g)
+			result := codegraph.FindRelatedTests(qe, root, funcName)
+			return codegraph.RelatedTestsText(result), nil
+		},
+	})
+
+	// ── 14. codegraph_analyze_complexity — 圈复杂度分析 ──
+	r.Register(&Tool{
+		Name: "codegraph_analyze_complexity",
+		Description: "测量代码圈复杂度，用于评估重构优先级。" +
+			"返回每个函数的复杂度评分（1=最低）、等级（A-E）和行数。" +
+			"复杂度 >10 建议考虑重构，>20 为高风险。file 指定文件分析单个文件，省略则分析所有函数。",
+		Parameters: objSchema(props{
+			"file": strProp("可选：文件路径（工作区相对路径），分析单个文件；省略则分析全部"),
+		}),
+		ReadOnly: true,
+		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			filePath := strings.TrimSpace(argStr(args, "file"))
+			g, err := getCodeGraph(root)
+			if err != nil {
+				return "", err
+			}
+			qe := codegraph.NewQueryEngine(g)
+			report := codegraph.AnalyzeComplexity(qe, root, filePath)
+			return codegraph.ComplexityReportText(report), nil
 		},
 	})
 }
