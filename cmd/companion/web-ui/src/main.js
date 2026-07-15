@@ -209,9 +209,12 @@ export function savePersistentState() {
       bottomPanelTab: state.bottomPanelTab,
       theme: state.theme,
       focusMode: state.focusMode,
+      currentConvId: state.currentConvId,
     }
     localStorage.setItem(PERSIST_KEY, JSON.stringify(data))
-  } catch (e) {}
+  } catch (e) {
+    console.warn('savePersistentState error:', e)
+  }
 }
 
 // ─── 持久化：从 localStorage 恢复 UI 布局偏好 ────────────
@@ -237,6 +240,11 @@ export function loadPersistentState() {
       }
     }
     if (typeof data.focusMode === 'boolean') state.focusMode = data.focusMode
+
+    // ★ 恢复当前对话 ID（页面刷新后自动选中上次对话）
+    if (data.currentConvId) {
+      state.currentConvId = data.currentConvId
+    }
 
     // ★ 以下字段不再从 localStorage 读取，全部从 API 获取：
     //   workspaceRoot / workspaceFolders / workspaceName ← 从 /api/health

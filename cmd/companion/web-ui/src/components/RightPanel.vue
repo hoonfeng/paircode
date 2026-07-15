@@ -983,6 +983,17 @@ onMounted(() => {
     }
   })
 
+  // ★ 监听 App.vue 在 loadPersistentState() 后派发的 restore-conversation 事件，
+  //   自动加载被持久化的 currentConvId 的消息（页面刷新后恢复对话内容）。
+  const _onRestoreConversation = (e) => {
+    const convId = e.detail?.convId || state.currentConvId
+    if (convId && state.currentConvId === convId) {
+      // 延迟执行，等 loadConvList 完成后才调用 switchConv
+      setTimeout(() => switchConv(convId), 300)
+    }
+  }
+  window.addEventListener('restore-conversation', _onRestoreConversation)
+
   // 注册全局 UI 回调：App.vue 的 WebSocket onmessage → agent-events.js → 此处回调
   setGlobalCtx({
     scrollToBottom: () => {

@@ -383,6 +383,11 @@ onMounted(async () => {
 
   loadPersistentState()
 
+  // ★ 若持久化中恢复了当前对话 ID，派发事件让 RightPanel 自动加载消息
+  if (state.currentConvId) {
+    window.dispatchEvent(new CustomEvent('restore-conversation', { detail: { convId: state.currentConvId } }))
+  }
+
   if (state.openFiles.length > 0) {
     for (const fp of state.openFiles) {
       try {
@@ -457,6 +462,8 @@ watch(() => state.activeActivity, schedulePersist)
 watch(() => state.theme, (t) => { if (t) applyTheme(t); schedulePersist() })
 watch(() => state.activeFile, schedulePersist)
 watch(() => state.openFiles.length, schedulePersist)
+// ★ 当前对话变化时持久化，页面刷新后可自动恢复
+watch(() => state.currentConvId, schedulePersist)
 </script>
 
 <style scoped>
