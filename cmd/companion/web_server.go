@@ -135,9 +135,11 @@ func startWebUI(port int) {
 	core.OnSyncWorkspace = func(primaryChanged bool) {
 		agent.WorkspaceRoots = core.Folders
 		if primaryChanged {
-			// 主工作区变更：同步技能/MCP/记忆路径到新工作区
+			// 主工作区变更：同步数据库/技能/MCP/记忆路径到新工作区
 			root := core.Root()
 			if root != "" {
+				agentMgr.SetWorkspaceRoot(root)
+				agent.SetCodeGraphDB(agentMgr.RawDB())
 				agent.SkillProjectDir = filepath.Join(root, ".pair", "skills")
 				agent.MCPProjectConfigPath = filepath.Join(root, ".pair", "mcp.json")
 				memory.SetRoot(root)

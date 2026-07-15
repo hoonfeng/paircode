@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
@@ -119,6 +120,14 @@ func (m *SessionManager) SetWorkspaceRoot(root string) {
 	m.mu.Lock()
 	
 	dbPath := filepath.Join(root, ".pair", "pair.db")
+	// 确保 .pair/ 目录存在（SQLite 会创建 db 文件但不会创建父目录）
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
+		fmt.Printf("[session] 创建数据库目录失败: %v\n", err)
+		m.ds = nil
+		m.store = nil
+		m.mu.Unlock()
+		return
+	}
 	if ds, err := pkgdb.NewSQLiteDB(dbPath); err == nil {
 		m.ds = ds
 		m.store = NewDBAdapter(ds, root)
@@ -127,6 +136,7 @@ func (m *SessionManager) SetWorkspaceRoot(root string) {
 		m.ds = nil
 		m.store = nil
 	}
+
 
 	shouldStart := !m.persistWorkerStarted
 	if shouldStart {
