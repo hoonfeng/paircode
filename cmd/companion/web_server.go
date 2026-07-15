@@ -2125,7 +2125,11 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 				history = make([]agent.Message, len(raw))
 				for i := range raw {
 					history[i] = raw[i]
-					history[i].Reasoning = ""
+					// ★ 保留 Reasoning（思考链）不丢弃！DeepSeek 文档明确要求：
+					//   进行工具调用的轮次，reasoning_content 在后续所有请求中必须回传。
+					//   无工具调用的轮次，API 也会自动忽略 reasoning_content，保留无害。
+					//   之前清空会导致 Agent 失去历史思考连贯性（变笨），
+					//   且有工具调用的轮次缺失 reasoning_content 可能引发 API 400 错误。
 				}
 			}
 			// 加载已持久化的压缩摘要（页面刷新后恢复上下文连续性）
