@@ -92,6 +92,10 @@ func SegmentsFromMessage(msg Message, hist []Message, idx int) []Segment {
 	if msg.Reasoning != "" {
 		segs = append(segs, Segment{Type: "thinking", Content: msg.Reasoning})
 	}
+	// ★ 正文（content）必须在工具调用（tool_call）之前，使刷新后顺序与实时流一致。
+	if msg.Content != "" {
+		segs = append(segs, Segment{Type: "content", Content: msg.Content})
+	}
 	for _, tc := range msg.ToolCalls {
 		name := tc.Function.Name
 		// ★ 委托工具不生成 tool_call segment——委派任务会作为独立用户消息持久化
@@ -135,9 +139,6 @@ func SegmentsFromMessage(msg Message, hist []Message, idx int) []Segment {
 			}
 		}
 		segs = append(segs, seg)
-	}
-	if msg.Content != "" {
-		segs = append(segs, Segment{Type: "content", Content: msg.Content})
 	}
 	return segs
 }
