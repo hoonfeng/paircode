@@ -10,10 +10,15 @@ import (
 	"sort"
 )
 
-// ModelListMap 按服务商分组可用模型列表。
-// 加载自 config/models.json（安装目录），运行时通过 GetModels(provider) 查询。
-// 若文件不存在或加载失败，使用内置默认列表。
-type ModelListMap map[string][]string
+// ProviderEntry 一个服务商的信息，含 API 基地址和可用模型列表。
+type ProviderEntry struct {
+	BaseURL string   `json:"baseURL"`
+	Models  []string `json:"models"`
+}
+
+// ModelListMap 按服务商分组，key=服务商名，value=ProviderEntry。
+// 加载自 config/models.json（安装目录），运行时通过 GetModels / GetProviderBaseURL 查询。
+type ModelListMap map[string]ProviderEntry
 
 var (
 	// ModelList 当前生效的模型列表（加载自安装目录或内置默认）。
@@ -21,11 +26,11 @@ var (
 
 	// defaultModels 仅在 models.json 不存在或解析失败时使用的兜底列表。
 	defaultModels = ModelListMap{
-		"deepseek":          {"deepseek-r1", "deepseek-v4-pro", "deepseek-v4-flash"},
-		"openai":            {"gpt-4o", "gpt-4o-mini", "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "o1", "o3-mini", "o4-mini"},
-		"anthropic":         {"claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-4-sonnet-20250514", "claude-4-haiku-latest"},
-		"openai-compatible": {"custom"},
-		"custom":            {"custom"},
+		"deepseek":          {BaseURL: "https://api.deepseek.com/v1", Models: []string{"deepseek-r1", "deepseek-v4-pro", "deepseek-v4-flash"}},
+		"openai":            {BaseURL: "https://api.openai.com/v1", Models: []string{"gpt-4o", "gpt-4o-mini", "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "o1", "o3-mini", "o4-mini"}},
+		"anthropic":         {BaseURL: "https://api.anthropic.com/v1", Models: []string{"claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-4-sonnet-20250514", "claude-4-haiku-latest"}},
+		"openai-compatible": {BaseURL: "", Models: []string{"custom"}},
+		"custom":            {BaseURL: "", Models: []string{"custom"}},
 	}
 )
 
@@ -42,29 +47,26 @@ func LoadModelList() {
 	p := ModelsPath()
 	data, err := os.ReadFile(p)
 	if err != nil {
-		// 文件不存在或不可读 → 使用内置默认
 		useDefaultModels()
 		return
 	}
 
 	var fileModels ModelListMap
 	if err := json.Unmarshal(data, &fileModels); err != nil {
-		// 格式错误 → 使用内置默认
 		useDefaultModels()
 		return
 	}
 
-	// 文件有效 → 完全使用文件数据
 	ModelList = fileModels
 }
 
-// useDefaultModels 将 ModelList 设为内置默认列表的副本。
 func useDefaultModels() {
 	ModelList = make(ModelListMap, len(defaultModels))
 	for k, v := range defaultModels {
-		list := make([]string, len(v))
-		copy(list, v)
-		ModelList[k] = list
+		entry := ProviderEntry{BaseURL: v.BaseURL}
+		entry.Models = make([]string, len(v.Models))
+		copy(entry.Models, v.Models)
+		ModelList[k] = entry
 	}
 }
 
@@ -73,11 +75,35 @@ func GetModels(provider string) []string {
 	if ModelList == nil {
 		LoadModelList()
 	}
-	list, ok := ModelList[provider]
+	entry, ok := ModelList[provider]
 	if !ok {
 		return nil
 	}
-	return list
+	return entry.Models
+}
+
+// GetProviderBaseURL 返回指定服务商的默认 API 地址。
+func GetProviderBaseURL(provider string) string {
+	if ModelList == nil {
+		LoadModelList()
+	}
+	entry, ok := ModelList[provider]
+	if !ok {
+		return ""
+	}
+	return entry.BaseURL
+}
+
+// GetProviderBaseURLs 返回全部服务商的默认 API 地址映射。
+func GetProviderBaseURLs() map[string]string {
+	if ModelList == nil {
+		LoadModelList()
+	}
+	out := make(map[string]string, len(ModelList))
+	for k, v := range ModelList {
+		out[k] = v.BaseURL
+	}
+	return out
 }
 
 // GetProviders 返回 ModelList 中的所有服务商名称（排序后）。
@@ -109,8 +135,8 @@ func SaveModelList() error {
 	return os.WriteFile(p, data, 0o644)
 }
 
-// AddProvider 添加新服务商及模型列表
-func AddProvider(name string, models []string) error {
+// AddProvider 添加新服务商（含 API 地址和模型列表）
+func AddProvider(name, baseURL string, models []string) error {
 	if ModelList == nil {
 		LoadModelList()
 	}
@@ -120,7 +146,7 @@ func AddProvider(name string, models []string) error {
 	if name == "" {
 		return fmt.Errorf("服务商名称不能为空")
 	}
-	ModelList[name] = models
+	ModelList[name] = ProviderEntry{BaseURL: baseURL, Models: models}
 	return SaveModelList()
 }
 
@@ -137,14 +163,19 @@ func RemoveProvider(name string) error {
 }
 
 // UpdateProviderModels 更新指定服务商的模型列表
-func UpdateProviderModels(name string, models []string) error {
+func UpdateProviderModels(name string, baseURL string, models []string) error {
 	if ModelList == nil {
 		LoadModelList()
 	}
-	if _, exists := ModelList[name]; !exists {
+	entry, exists := ModelList[name]
+	if !exists {
 		return fmt.Errorf("服务商 %q 不存在", name)
 	}
-	ModelList[name] = models
+	entry.Models = models
+	if baseURL != "" {
+		entry.BaseURL = baseURL
+	}
+	ModelList[name] = entry
 	return SaveModelList()
 }
 
@@ -153,7 +184,7 @@ func RenameProvider(oldName, newName string) error {
 	if ModelList == nil {
 		LoadModelList()
 	}
-	models, exists := ModelList[oldName]
+	entry, exists := ModelList[oldName]
 	if !exists {
 		return fmt.Errorf("服务商 %q 不存在", oldName)
 	}
@@ -164,7 +195,7 @@ func RenameProvider(oldName, newName string) error {
 		return fmt.Errorf("服务商名称不能为空")
 	}
 	delete(ModelList, oldName)
-	ModelList[newName] = models
+	ModelList[newName] = entry
 	// 更新 settings 中的 provider 引用
 	if Settings.Provider == oldName {
 		Settings.Provider = newName
@@ -179,13 +210,10 @@ func RenameProvider(oldName, newName string) error {
 // WriteDefaultModels 在安装目录下写入内置默认 models.json（仅在文件不存在时）。
 func WriteDefaultModels() error {
 	p := ModelsPath()
-	// 如果已存在则跳过
 	if _, err := os.Stat(p); err == nil {
 		return nil
 	}
-	// 确保目录存在
 	_ = os.MkdirAll(filepath.Dir(p), 0o755)
-
 	data, err := json.MarshalIndent(defaultModels, "", "  ")
 	if err != nil {
 		return err
@@ -197,31 +225,4 @@ func WriteDefaultModels() error {
 func EnsureModelList() {
 	WriteDefaultModels()
 	LoadModelList()
-}
-
-// ─── 服务商默认 API 地址 ───
-
-var providerDefaultBaseURLs = map[string]string{
-	"deepseek":          "https://api.deepseek.com/v1",
-	"openai":            "https://api.openai.com/v1",
-	"anthropic":         "https://api.anthropic.com/v1",
-	"openai-compatible": "",
-	"custom":            "",
-}
-
-// GetProviderBaseURL 返回指定服务商的默认 API 地址。
-func GetProviderBaseURL(provider string) string {
-	if url, ok := providerDefaultBaseURLs[provider]; ok {
-		return url
-	}
-	return ""
-}
-
-// GetProviderBaseURLs 返回全部服务商的默认 API 地址映射。
-func GetProviderBaseURLs() map[string]string {
-	out := make(map[string]string, len(providerDefaultBaseURLs))
-	for k, v := range providerDefaultBaseURLs {
-		out[k] = v
-	}
-	return out
 }

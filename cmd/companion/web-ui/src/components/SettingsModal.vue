@@ -46,14 +46,20 @@
                 <select v-model="local.planModel">
                   <option value="" disabled>选择模型</option>
                   <option v-for="m in modelsForProvider" :key="m" :value="m">{{ m }}</option>
+                  <option value="custom">自定义</option>
                 </select>
+                <input v-if="local.planModel === 'custom'" v-model="local.planModelCustom"
+                       placeholder="手动输入模型名" class="set-input-sm flex-1" />
               </div>
               <div class="setting-row">
                 <label>审核模型</label>
                 <select v-model="local.reviewModel">
                   <option value="" disabled>选择模型</option>
                   <option v-for="m in modelsForProvider" :key="m" :value="m">{{ m }}</option>
+                  <option value="custom">自定义</option>
                 </select>
+                <input v-if="local.reviewModel === 'custom'" v-model="local.reviewModelCustom"
+                       placeholder="手动输入模型名" class="set-input-sm flex-1" />
               </div>
               <div class="setting-row">
                 <label>温度</label>
@@ -408,6 +414,9 @@ const local = reactive({
   compressApiKey: '',
   compressModel: '',
   compressThinkingMode: 'non-thinking',
+  planModelCustom: '',
+  reviewModelCustom: '',
+  compressModelCustom: '',
   // Agent
   maxIterations: 50,
   maxParallel: 3,
@@ -488,9 +497,9 @@ async function loadModels() {
     const data = await api.getModels()
     providers.value = data.providers || []
     modelsMap.value = data.models || {}
-    // 使用后端返回的默认 API 地址覆盖前端硬编码
+    // 使用后端返回的默认 API 地址
     if (data.providerBaseURLs) {
-      Object.assign(providerDefaultBaseURLs, data.providerBaseURLs)
+      runtimeProviderBaseURLs = data.providerBaseURLs
     }
   } catch (e) {
     // fallback
@@ -504,20 +513,24 @@ async function loadModels() {
   }
 }
 
-// ─── 服务商默认 API 地址 ───
-const providerDefaultBaseURLs = {
+// ─── 服务商默认 API 地址（硬编码兜底，运行时优先用后端返回的值）───
+const defaultProviderBaseURLs = {
   deepseek: 'https://api.deepseek.com/v1',
   openai: 'https://api.openai.com/v1',
   anthropic: 'https://api.anthropic.com/v1',
   'openai-compatible': '',
   custom: '',
 }
+// 运行时从后端获取的 providerBaseURLs（loadModels 时更新）
+let runtimeProviderBaseURLs = {}
+
+function getProviderBaseURL(provider) {
+  return runtimeProviderBaseURLs[provider] || defaultProviderBaseURLs[provider] || ''
+}
 
 function onProviderChange() {
   // 自动填充对应服务商的 API 地址
-  if (providerDefaultBaseURLs[local.provider] !== undefined) {
-    local.baseURL = providerDefaultBaseURLs[local.provider]
-  }
+  local.baseURL = getProviderBaseURL(local.provider)
   // 如果当前模型不在新服务商列表中，重置
   const models = modelsMap.value[local.provider] || []
   if (models.length > 0) {
@@ -529,9 +542,7 @@ function onProviderChange() {
 
 function onCompressProviderChange() {
   // 自动填充压缩服务商的 API 地址
-  if (providerDefaultBaseURLs[local.compressProvider] !== undefined) {
-    local.compressBaseURL = providerDefaultBaseURLs[local.compressProvider]
-  }
+  local.compressBaseURL = getProviderBaseURL(local.compressProvider)
   const models = modelsMap.value[local.compressProvider] || []
   if (models.length > 0 && !models.includes(local.compressModel)) {
     local.compressModel = models[0]
@@ -589,8 +600,25 @@ function loadSettings() {
   local.baseURL = s.baseURL || ''
   local.apiKey = s.apiKey || ''
   local.executeModel = s.executeModel || s.model || ''
+  // 检测自定义模型：如果模型名不在下拉列表中，标记为自定义并填入自定义输入框
+  const execModels = modelsMap.value[local.provider] || []
+  local.executeModelCustom = ''
+  if (local.executeModel && execModels.length > 0 && !execModels.includes(local.executeModel) && local.executeModel !== 'custom') {
+    local.executeModelCustom = local.executeModel
+    local.executeModel = 'custom'
+  }
   local.planModel = s.planModel || ''
+  local.planModelCustom = ''
+  if (local.planModel && execModels.length > 0 && !execModels.includes(local.planModel) && local.planModel !== 'custom') {
+    local.planModelCustom = local.planModel
+    local.planModel = 'custom'
+  }
   local.reviewModel = s.reviewModel || ''
+  local.reviewModelCustom = ''
+  if (local.reviewModel && execModels.length > 0 && !execModels.includes(local.reviewModel) && local.reviewModel !== 'custom') {
+    local.reviewModelCustom = local.reviewModel
+    local.reviewModel = 'custom'
+  }
   local.temperature = s.temperature ?? 0.3
   local.maxTokens = s.maxTokens || 16384
   local.contextMaxTokens = s.contextMaxTokens || 1000000
@@ -601,6 +629,12 @@ function loadSettings() {
   local.compressBaseURL = s.compressBaseURL || ''
   local.compressApiKey = s.compressApiKey || ''
   local.compressModel = s.compressModel || ''
+  local.compressModelCustom = ''
+  const compressModels = modelsMap.value[local.compressProvider] || []
+  if (local.compressModel && compressModels.length > 0 && !compressModels.includes(local.compressModel) && local.compressModel !== 'custom') {
+    local.compressModelCustom = local.compressModel
+    local.compressModel = 'custom'
+  }
   local.compressThinkingMode = s.compressThinkingMode || 'non-thinking'
   // Agent
   local.maxIterations = s.maxIterations || 50
@@ -665,8 +699,8 @@ const saveSettings = async () => {
       baseURL: local.baseURL,
       apiKey: local.apiKey,
       executeModel: local.executeModel === 'custom' ? local.executeModelCustom : local.executeModel,
-      planModel: local.planModel === 'custom' ? '' : local.planModel,
-      reviewModel: local.reviewModel === 'custom' ? '' : local.reviewModel,
+      planModel: local.planModel === 'custom' ? local.planModelCustom : local.planModel,
+      reviewModel: local.reviewModel === 'custom' ? local.reviewModelCustom : local.reviewModel,
       temperature: String(local.temperature),
       maxTokens: local.maxTokens,
       contextMaxTokens: local.contextMaxTokens,
@@ -676,7 +710,7 @@ const saveSettings = async () => {
       compressProvider: local.compressProvider,
       compressBaseURL: local.compressBaseURL,
       compressApiKey: local.compressApiKey,
-      compressModel: local.compressModel,
+      compressModel: local.compressModel === 'custom' ? local.compressModelCustom : local.compressModel,
       compressThinkingMode: local.compressThinkingMode,
       // Agent
       maxIterations: local.maxIterations,
