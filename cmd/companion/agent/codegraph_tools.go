@@ -51,6 +51,11 @@ func ensureCodeGraph(root string) (*codegraph.Graph, error) {
 	return cgGraph, nil
 }
 
+// EnsureCodeGraph 公开包装器，供 web_server.go 调用。
+func EnsureCodeGraph(root string) (*codegraph.Graph, error) {
+	return ensureCodeGraph(root)
+}
+
 // getCodeGraph 获取当前图谱实例（确保已初始化）。
 func getCodeGraph(root string) (*codegraph.Graph, error) {
 	cgGraphMu.RLock()

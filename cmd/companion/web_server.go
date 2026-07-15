@@ -2100,6 +2100,21 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 			memSb.WriteString("\n（需要更详细的历史信息可用 memory_search / memory_read 检索具体对话。）")
 			sys += "\n\n# 已完成对话历史\n" + memSb.String()
 		}
+
+		// ★ 自动构建 codegraph 并注入项目代码结构概览，让 agent 无需从头探测
+		if root != "" {
+			if cg, cgErr := agent.EnsureCodeGraph(root); cgErr == nil && cg != nil {
+				stats := cg.Stats()
+				if stats.FileCount > 0 {
+					cgInfo := fmt.Sprintf("## 项目代码结构（预加载 — codegraph）\n")
+					funcs := stats.KindCounts["function"]
+					types := stats.KindCounts["type"]
+					cgInfo += fmt.Sprintf("包: %d | 文件: %d | 函数: %d | 类型: %d | 关系: %d\n",
+						stats.PackageCount, stats.FileCount, funcs, types, stats.RelationCount)
+					sys += "\n\n# 项目代码结构（预加载）\n" + cgInfo
+				}
+			}
+		}
 	}
 
 	var history []agent.Message
