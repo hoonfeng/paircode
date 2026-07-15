@@ -266,8 +266,8 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		CompressedSummaries: opts.CompressedSummaries, // 恢复已持久化的压缩摘要
 	}
 
-	// ★ 恢复上一轮自主任务的执行日志（跨轮感知：新自主能知道上一轮每轮分析/委托了什么）
-	if opts.WorkspaceRoot != "" && opts.Autonomous {
+	// ★ 恢复上一轮的执行日志（跨轮感知：无论自主还是非自主，新 Loop 都能知道之前每轮的分析/操作）
+	if opts.WorkspaceRoot != "" {
 		if savedLog := LoadExecutionLog(opts.WorkspaceRoot, convID); savedLog != nil && len(savedLog.Entries) > 0 {
 			if loop.State == nil {
 				loop.State = map[string]any{}
@@ -486,14 +486,15 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 				}
 			}
 
-			// ★ 持久化执行日志到磁盘，供下一轮自主任务恢复
-			if opts.WorkspaceRoot != "" {
-				SaveExecutionLog(opts.WorkspaceRoot, convID, loop.GetExecutionLog())
-			}
 		} else {
 			msgs, err = loop.Run(runCtx, task, nil)
 		}
 		sess.History = msgs
+
+		// ★ 持久化执行日志到磁盘（无论自主还是非自主，保证下轮能感知本轮分析和操作）
+		if opts.WorkspaceRoot != "" {
+			SaveExecutionLog(opts.WorkspaceRoot, convID, loop.GetExecutionLog())
+		}
 
 		// ★ 自动完成所有未完成任务（自然结束）
 		// 确保任务列表与运行状态一致，避免前端显示未完成的遗留任务
