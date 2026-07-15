@@ -2101,7 +2101,10 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 	var summaries []string
 	if convID != "" {
 		if store := agentMgr.Store(); store != nil {
-			raw, _ := store.LoadAll(convID)
+			raw, loadErr := store.LoadAll(convID)
+			if loadErr != nil {
+				log.Printf("[chat] LoadAll 失败 conv=%s err=%v", convID, loadErr)
+			}
 			if raw != nil {
 				history = make([]agent.Message, len(raw))
 				for i := range raw {
@@ -2110,7 +2113,10 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 				}
 			}
 			// 加载已持久化的压缩摘要（页面刷新后恢复上下文连续性）
-			summaries, _ = store.LoadCompressedSummaries(convID)
+			summaries, sumErr := store.LoadCompressedSummaries(convID)
+			if sumErr != nil {
+				log.Printf("[chat] LoadCompressedSummaries 失败 conv=%s err=%v", convID, sumErr)
+			}
 		}
 	}
 	history = agent.TrimInterruptedHistory(history)
@@ -2176,7 +2182,11 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	agentMgr.AppendPersistedUserMessage(req.ConvID, req.Message)
+	if err := agentMgr.AppendPersistedUserMessage(req.ConvID, req.Message); err != nil {
+		log.Printf("[chat] AppendPersistedUserMessage 失败 conv=%s err=%v", req.ConvID, err)
+		jsonErr(w, "写入用户消息失败: "+err.Error())
+		return
+	}
 	opts := s.buildWebLoopOpts(req.ConvID, req.Message, req.Autonomous)
 	opts.WorkspaceRoot = req.WorkspaceRoot
 
