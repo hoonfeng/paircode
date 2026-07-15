@@ -1,3 +1,5 @@
+//go:build ignore
+
 // pack_release.go — 打包发布包（仅 runtime 文件，不包含训练工具）
 // go run scripts/pack_release.go
 package main

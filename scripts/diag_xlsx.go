@@ -1,7 +1,10 @@
+//go:build ignore
+
 package main
 
 import (
 	"archive/zip"
+	"bytes"
 	"encoding/xml"
 	"fmt"
 	"io"
@@ -20,7 +23,7 @@ func main() {
 		fmt.Printf("读取失败: %v\n", err)
 		os.Exit(1)
 	}
-	zr, err := zip.NewReader(data, int64(len(data)))
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		fmt.Printf("ZIP 打开失败: %v\n", err)
 		os.Exit(1)
