@@ -550,6 +550,7 @@ const sendMessage = async () => {
   }
   if (!state.chatSessionId) state.chatSessionId = 'sess_' + Date.now()
   const msgIdx = createAssistantPlaceholder(convId)
+  console.log('[RP] sendMessage conv=%s msgIdx=%d msgsLen=%d currentChatLoading=%s', convId, msgIdx, state.messagesByConv[convId].length, state.chatLoading)
   startConvRuntime(convId, msgIdx, lastUserText || fullContent)
   try {
     await api.chatStart(convId, fullContent, autonomous.value, state.workspaceRoot)
@@ -578,9 +579,11 @@ const sendMessage = async () => {
 
 const stopChat = async () => {
   const convId = state.currentConvId
+  console.log('[RP] stopChat conv=%s runtimeKeys=%o', convId, Object.keys(runtimes).length>0?Object.keys(runtimes):'runtime空')
   if (!convId) return
   try { await api.chatStop(convId) } catch {}
   resetConvRuntime(convId)
+  console.log('[RP] stopChat 完成 conv=%s runtime已清理', convId)
   state.loadingByConv[convId] = false
   state.agentRunningByConv[convId] = false
   state.chatLoading = false; state.agentRunning = false
@@ -701,6 +704,11 @@ const deleteConv = async (id) => {
 }
 
 const switchConv = async (id) => {
+  console.log('[RP] switchConv id=%s messagesByConv[id].length=%d runtimeExists=%s', id, (state.messagesByConv[id]||[]).length, !!getConvRuntime(id))
+  if (state.messagesByConv[id] && state.messagesByConv[id].length > 0) {
+    const msgs = state.messagesByConv[id]
+    console.log('[RP] switchConv 现有消息: first_idx=%d last_idx=%d loading=%d', msgs[0]._idx, msgs[msgs.length-1]._idx, msgs.filter(m=>m._loading).length)
+  }
   // 多会话并行：切换对话不停止旧 agent，事件继续写入 messagesByConv[oldConvId]
   state.currentConvId = id
   // 切换 state.messages 指向（不停止旧 agent）
@@ -749,6 +757,11 @@ const switchConv = async (id) => {
         })
         // 按 idx 升序排列（用户消息在前，agent 输出在后）
         loaded.sort((a, b) => (a._idx || 0) - (b._idx || 0))
+      console.log('[RP] switchConv API返回 loaded=%d total=%d userMsgs=%d assistantMsgs=%d hasLoading=%s',
+        loaded.length, data.total,
+        loaded.filter(m=>m.role==='user').length,
+        loaded.filter(m=>m.role==='assistant').length,
+        loaded.some(m=>m._loading))
       // ★ 在替换数组前保存已有的 loading 占位对象（可能已被 await 期间到达的
       //   WebSocket events 修改过内容，直接丢失会丢掉首批输出）
       const existingLoading = state.messagesByConv[id].find(m => m._loading)
@@ -771,6 +784,7 @@ const switchConv = async (id) => {
         state.messagesByConv[id].push(loadingMsg)
         state.messages = state.messagesByConv[id]
         rt.msgIdx = state.messagesByConv[id].length - 1
+        console.log('[RP] switchConv runtime更新: msgIdx=%d totalMsgs=%d loadedMsgs=%d', rt.msgIdx, state.messagesByConv[id].length, loaded.length)
       }
     } catch {
       state.msgTotalByConv[id] = 0

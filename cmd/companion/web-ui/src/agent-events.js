@@ -67,6 +67,7 @@ export function createAssistantPlaceholder(convId) {
   const msgs = state.messagesByConv[convId]
   if (!msgs) return -1
   const msgIdx = msgs.length
+  console.log('[AE] createAssistantPlaceholder conv=%s msgIdx=%d msgsLen=%d', convId, msgIdx, msgs.length)
   const assistantMsg = {
     role: 'assistant', content: '', segments: [], toolCalls: [],
     _key: makeMsgKey(), _idx: msgIdx,
@@ -80,11 +81,23 @@ export function createAssistantPlaceholder(convId) {
 // ─── 事件处理 ──
 export function processAgentEvent(convId, data) {
   const rt = runtimes[convId]
-  if (!rt) return
+  if (!rt) {
+    console.warn('[AE] processAgentEvent 丢弃: 无 runtime conv=%s type=%s', convId, data.type)
+    return
+  }
   const msgs = state.messagesByConv[convId]
-  if (!msgs) return
+  if (!msgs) {
+    console.warn('[AE] processAgentEvent 丢弃: 无 messagesByConv conv=%s type=%s', convId, data.type)
+    return
+  }
   const msg = msgs[rt.msgIdx]
-  if (!msg) return
+  if (!msg) {
+    console.warn('[AE] processAgentEvent 丢弃: msgIdx=%d 越界 msgsLen=%d conv=%s type=%s', rt.msgIdx, msgs.length, convId, data.type)
+    return
+  }
+  if (data.type !== 'content' && data.type !== 'thinking') {
+    console.log('[AE] processAgentEvent conv=%s type=%s msgIdx=%d', convId, data.type, rt.msgIdx)
+  }
   msg._loading = false
 
   const isCurrent = state.currentConvId === convId
@@ -281,6 +294,7 @@ export function processAgentEvent(convId, data) {
 }
 
 export function processAgentDone(convId, data) {
+  console.log('[AE] processAgentDone conv=%s hasRuntime=%s msgByConvLen=%d', convId, !!runtimes[convId], (state.messagesByConv[convId]||[]).length)
   const rt = runtimes[convId]
   const msgs = state.messagesByConv[convId]
   if (msgs && rt) {
@@ -341,6 +355,9 @@ export function processAgentDisconnect(convId, errMsg) {
   }
 }
 
+// ─── processStatus 日志辅助 ──
+let statusLogCounter = 0
+
 // 处理 WebSocket 收到的 status 消息（连接建立/重连后、以及会话 done 后推送）
 // payload: { runningConvs: [...], runningByWorkspace: {wsRoot: count} }
 export function processStatus(payload) {
@@ -355,6 +372,9 @@ export function processStatus(payload) {
 
   // 同步运行中状态：后端报告的 runningConvs 标记为 running
   const runningSet = new Set(runningConvs)
+  if (statusLogCounter++ < 100) {
+    console.log('[AE] processStatus runningConvs=%o runtimeKeys=%o', runningConvs, Object.keys(runtimes))
+  }
   // 标记仍在运行的
   for (const convId of runningSet) {
     // ── 防误覆盖：若该 conv 最后一条消息已是完成态的 assistant（_loading=false），
@@ -379,6 +399,7 @@ export function processStatus(payload) {
         // 已是完成态的消息（alreadyDone=true）则不创建 loading 占位
         if (!alreadyDone) {
           const msgIdx = msgs.length
+          console.log('[AE] processStatus 创建runtime+loading conv=%s msgIdx=%d msgsLen=%d alreadyDone=%s', convId, msgIdx, msgs.length, alreadyDone)
           msgs.push({
             role: 'assistant', content: '', segments: [], toolCalls: [],
             _key: makeMsgKey(), _idx: msgIdx,
@@ -389,6 +410,7 @@ export function processStatus(payload) {
         }
       } else {
         // 已有 loading 的 assistant 消息，直接复用其索引
+        console.log('[AE] processStatus 复用runtime conv=%s msgIdx=%d', convId, msgs.length - 1)
         runtimes[convId] = { msgIdx: msgs.length - 1, finalContent: '', lastUserText: '' }
       }
       // 若是当前对话，同步 state.messages（仅当有更改时）
