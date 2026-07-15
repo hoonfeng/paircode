@@ -341,7 +341,12 @@ async function installItem(item) {
   installing.value = item.id
   error.value = ''
   try {
-    const result = await api.apiPost('/marketplace/install', { id: item.id })
+    const result = await api.apiPost('/marketplace/install', {
+      id: item.id,
+      kind: item.kind || '',
+      command: item.command || '',
+      args: item.args || [],
+    })
     item.installed = true
     window.$toast?.(result.message || '安装成功', 'success')
   } catch (err) {
