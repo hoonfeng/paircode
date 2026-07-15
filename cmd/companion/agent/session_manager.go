@@ -320,9 +320,15 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 				fmt.Printf("[persist] OnBatchPersist 失败 conv=%s err=%v\n", convID, err)
 			} else {
 				fmt.Printf("[persist] OnBatchPersist 成功 conv=%s msgs=%d\n", convID, len(msgs))
+				// 同时持久化压缩摘要，确保页面刷新后能恢复
+				if serr := store.SaveCompressedSummaries(convID, loop.CompressedSummaries); serr != nil {
+					fmt.Printf("[persist] SaveCompressedSummaries 失败 conv=%s err=%v\n", convID, serr)
+				}
 			}
 		}
 	}
+
+	sess.Loop = loop
 
 	sess.Loop = loop
 

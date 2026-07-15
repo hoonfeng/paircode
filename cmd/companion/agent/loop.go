@@ -481,7 +481,7 @@ func DefaultSystemPrompt(roots []string) string {
 		"4. 如涉及复杂逻辑，用 debug_start 设置断点，debug_variables 查看变量状态\n\n" +
 		"## GUI 桌面端改动\n" +
 		"1. 编译通过后运行程序\n" +
-		"2. 用 screenshot_desktop 或 screenshot_window 截图查看界面\n" +
+		"2. 用 screenshot_webpage 截图验证网页渲染\n" +
 		"3. 用 image_analyze 分析截图（颜色/布局/元素位置）\n\n" +
 		"## 验证纪律\n" +
 		"- 每次代码改动后必须验证，不允许只编译就声称完成\n" +
@@ -493,7 +493,7 @@ func DefaultSystemPrompt(roots []string) string {
 
 		"- 联网：web_fetch（抓网页）、web_search（搜索引擎）——查文档/报错/库用法。\n" +
 		"- ⚡ 网页验证：web_debug（一站式——打开URL+控制台错误+截图+JS执行+交互，首选验证工具）；headless_browser（JS渲染页面文本提取）；screenshot_webpage（网页截图）。\n" +
-		"- 截图分析：screenshot_desktop/window/area（桌面截图）→ image_analyze（分析颜色/色块/图形）/ image_ocr（识别文字）。\n" +
+		"- 截图：screenshot_webpage/screenshot_desktop/screenshot_window/screenshot_area → image_analyze（分析颜色/色块/图形）/ image_ocr（识别文字）。\n" +
 		"- 文件符号与定位：find_symbol（查函数/类型定义）、get_file_symbols（查看文件符号列表）、find_symbol_usages（查找引用）、check_impact（分析改动影响）、list_exported_symbols（列出导出符号）、get_file_dependencies（查看文件依赖）、find_circular_deps（检测循环依赖）。\n" +
 		"- 调试器：debug_start（启动 DAP 调试）→ debug_breakpoint（设断点）→ debug_continue/next/step_in/step_out（控制执行）→ debug_stack/variables/evaluate（查看状态）→ debug_stop（停止）；debug_status（查看状态）。\n" +
 		"- Git：git_status / git_diff / git_log / git_show / git_blame（只读）；git_add / git_commit / git_branch / git_checkout / git_stash（写类需审批）。\n" +

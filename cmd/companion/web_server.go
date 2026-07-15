@@ -2078,6 +2078,7 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 	}
 
 	var history []agent.Message
+	var summaries []string
 	if convID != "" {
 		if store := agentMgr.Store(); store != nil {
 			raw, _ := store.LoadAll(convID)
@@ -2088,11 +2089,15 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 					history[i].Reasoning = ""
 				}
 			}
+			// 加载已持久化的压缩摘要（页面刷新后恢复上下文连续性）
+			summaries, _ = store.LoadCompressedSummaries(convID)
 		}
 	}
 	history = agent.TrimInterruptedHistory(history)
 
 	maxIter := core.Settings.MaxIterations
+
+
 	if autonomous {
 		if maxIter <= 0 {
 			maxIter = 60
@@ -2109,6 +2114,7 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 		MaxContextTokens: core.Settings.ContextMaxTokens,
 		Compressor:       webCompressor(),
 		History:          history,
+		CompressedSummaries: summaries,
 		Autonomous:       autonomous,
 	}
 }

@@ -125,6 +125,47 @@ func (s *MessageStore) convFilePath(convID string) string {
 	return filepath.Join(s.conversationsDir(), convID+".jsonl")
 }
 
+
+
+
+// convSummariesPath 返回 {root}/.pair/conversations/{convID}.summaries.json 路径。
+func (s *MessageStore) convSummariesPath(convID string) string {
+	return filepath.Join(s.conversationsDir(), convID+".summaries.json")
+}
+
+// SaveCompressedSummaries 持久化压缩摘要列表到对话的 summaries 文件。
+// 格式：JSON 数组 ["摘要1", "摘要2", ...]，单行写入。
+// summaries 为空时删除文件（幂等）。
+func (s *MessageStore) SaveCompressedSummaries(convID string, summaries []string) error {
+	if len(summaries) == 0 {
+		_ = os.Remove(s.convSummariesPath(convID))
+		return nil
+	}
+	data, err := json.Marshal(summaries)
+	if err != nil {
+		return fmt.Errorf("SaveCompressedSummaries: JSON 编码失败: %w", err)
+	}
+	return os.WriteFile(s.convSummariesPath(convID), data, 0o644)
+}
+
+// LoadCompressedSummaries 从 summaries 文件加载压缩摘要列表。
+// 文件不存在或解码失败返回空切片。
+func (s *MessageStore) LoadCompressedSummaries(convID string) ([]string, error) {
+	data, err := os.ReadFile(s.convSummariesPath(convID))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("LoadCompressedSummaries: 读取失败: %w", err)
+	}
+	var summaries []string
+	if err := json.Unmarshal(data, &summaries); err != nil {
+		return nil, nil // 容错：损坏文件返回空
+	}
+	return summaries, nil
+}
+
+// indexPath 返回 {root}/.pair/conversations/index.json 路径。
 // indexPath 返回 {root}/.pair/conversations/index.json 路径。
 func (s *MessageStore) indexPath() string {
 	return filepath.Join(s.conversationsDir(), "index.json")
@@ -349,13 +390,12 @@ func (s *MessageStore) PersistNewMessages(convID string, hist []Message) error {
 	mu.Lock()
 	defer mu.Unlock()
 
-	// 从内存计数器读取已持久化的非 System 消息数——避免每轮读文件+全量遍历
+	// 从内存计数器读取已持久化的非 System 消息数
 	s.pcMu.RLock()
 	count := s.persistedCount[convID]
 	s.pcMu.RUnlock()
 
-	// 首次访问：内存计数器为 0 但文件可能已有内容（如 AppendMessage 预写的用户消息），
-	// 从文件同步一次计数器，避免重写已有消息。
+	// 首次访问：从文件同步计数器
 	if count == 0 {
 		fileCount, err := s.countJSONLLines(convID)
 		if err != nil {
@@ -369,43 +409,98 @@ func (s *MessageStore) PersistNewMessages(convID string, hist []Message) error {
 		}
 	}
 
-	// 统计 hist 中非 System 消息数（System 由 Loop 动态构建，不应持久化）.
-	// 只需计算超出 count 的部分，不用遍历整个 hist.
-	if count > 0 {
-		// 跳过前 count 条非 System 消息，直接从第 count 条开始遍历
-		idx := 0 // idx 表示 hist 中的绝对索引
-		nonSystemSeen := 0
-		for idx < len(hist) && nonSystemSeen < count {
-			if hist[idx].Role != RoleSystem {
-				nonSystemSeen++
-			}
-			idx++
+	// 统计 hist 中非 System 消息数
+	histNonSystemCount := 0
+	for _, m := range hist {
+		if m.Role != RoleSystem {
+			histNonSystemCount++
 		}
-		// hist 中非 System 消息数不大于 count → 无新消息
-		if nonSystemSeen < count {
-			return nil // 不会发生，但兜底
-		}
-		if idx >= len(hist) && nonSystemSeen == count {
-			return nil // 无新消息
-		}
-	} else if count == 0 && len(hist) == 0 {
-		return nil // 第一次调用但 hist 为空
 	}
 
-	// 直接用 append 模式写新增的消息（跳过已持久化的部分）
-	s.pcMu.RLock()
-	startCount := s.persistedCount[convID]
-	s.pcMu.RUnlock()
+	// ★ 检测压缩：hist 中非 System 消息数小于 persistedCount → maybeCompact 移除了消息
+	// 全量重写 JSONL 文件，移除已被压缩走的消息，重置 persistedCount
+	if count > 0 && histNonSystemCount < count {
+		stored, err := s.readJSONL(convID)
+		if err != nil {
+			return fmt.Errorf("PersistNewMessages: 压缩后重写时读取失败: %w", err)
+		}
+
+		// 从 hist 中提取非 System 消息的内容作为匹配依据
+		histContents := make([]string, 0, histNonSystemCount)
+		for _, m := range hist {
+			if m.Role != RoleSystem {
+				histContents = append(histContents, m.Content)
+			}
+		}
+
+		// 只保留 hist 中仍然存在的消息（按内容匹配）
+		var kept []StoredMessage
+		for _, hc := range histContents {
+			for _, sm := range stored {
+				if sm.Message.Content == hc {
+					kept = append(kept, sm)
+					break
+				}
+			}
+		}
+
+		// 全量重写 JSONL
+		out, err := os.Create(s.convFilePath(convID))
+		if err != nil {
+			return fmt.Errorf("PersistNewMessages: 创建新文件失败: %w", err)
+		}
+		enc := json.NewEncoder(out)
+		for i, sm := range kept {
+			sm.Idx = i
+			if err := enc.Encode(sm); err != nil {
+				out.Close()
+				return fmt.Errorf("PersistNewMessages: JSON 编码失败: %w", err)
+			}
+		}
+		out.Close()
+
+		// 重置计数器
+		s.pcMu.Lock()
+		s.persistedCount[convID] = len(kept)
+		count = len(kept)
+		s.pcMu.Unlock()
+
+		// 更新 index.json
+		now := time.Now().UTC().Format(time.RFC3339)
+		s.indexMu.Lock()
+		metas, err := s.loadIndex()
+		if err == nil {
+			for i := range metas {
+				if metas[i].ID == convID {
+					metas[i].MsgCount = len(kept)
+					metas[i].UpdatedAt = now
+					break
+				}
+			}
+			_ = s.saveIndex(metas)
+		}
+		s.indexMu.Unlock()
+
+		// 如果压缩后无新消息，直接返回
+		if histNonSystemCount <= count {
+			return nil
+		}
+	}
+
+	// 无新消息
+	if histNonSystemCount <= count {
+		return nil
+	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
-	newCount := startCount
-	nonSystemSeen := 0
+	newCount := count
 
-	// 找到要写入的起始位置：跳过前 startCount 条非 System 消息
+	// 找到要写入的起始位置：跳过前 count 条非 System 消息
 	startIdx := 0
+	nonSystemSeen := 0
 	for startIdx < len(hist) {
 		if hist[startIdx].Role != RoleSystem {
-			if nonSystemSeen >= startCount {
+			if nonSystemSeen >= count {
 				break
 			}
 			nonSystemSeen++
@@ -413,14 +508,12 @@ func (s *MessageStore) PersistNewMessages(convID string, hist []Message) error {
 		startIdx++
 	}
 
+	// 批量追加新消息
 	for i := startIdx; i < len(hist); i++ {
 		m := hist[i]
 		if m.Role == RoleSystem {
 			continue
 		}
-		// ★ 跳过 RoleUser 消息：真实用户消息已在 AppendPersistedUserMessage
-		// 预写入 store（计入 persistedCount），新出现的 User 消息是由自主模式内层
-		// Loop 注入的子任务(subTask)，不应作为用户消息被持久化。
 		if m.Role == RoleUser {
 			continue
 		}
@@ -448,12 +541,12 @@ func (s *MessageStore) PersistNewMessages(convID string, hist []Message) error {
 		newCount++
 	}
 
-	// 更新内存计数器（在释放 conv mutex 前完成，保证并发可见性）
+	// 更新内存计数器
 	s.pcMu.Lock()
 	s.persistedCount[convID] = newCount
 	s.pcMu.Unlock()
 
-	// 更新 index.json：MsgsCount = newCount，UpdatedAt = now
+	// 更新 index.json
 	s.indexMu.Lock()
 	defer s.indexMu.Unlock()
 
@@ -483,6 +576,8 @@ func (s *MessageStore) PersistNewMessages(convID string, hist []Message) error {
 
 	return s.saveIndex(metas)
 }
+
+
 
 // rebuildSegmentsIfMissing 为 segments 为空的消息重建 segments。
 // 需要完整消息列表做 look-ahead（tool result 可能在后面的消息中）。

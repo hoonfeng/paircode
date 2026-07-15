@@ -75,10 +75,10 @@ var criticalFiles = map[string]bool{
 
 
 
-// NeedsReview 是否需要审核：只读工具放行，仅写类（写/改/删/移/运行命令）过审。
+// NeedsReview 是否需要审核：只读工具放行，仅写类（写/改/删/移/运行命令/后台命令）过审。
 func NeedsReview(toolName string) bool {
 	switch toolName {
-	case "write_file", "edit_file", "multi_edit", "move_file", "delete_file", "run_command", "run_background":
+	case "write_file", "edit_file", "multi_edit", "move_file", "delete_file", "run_command", "run_background", "kill_process":
 		return true
 	}
 	return strings.HasPrefix(toolName, "git_") && !strings.Contains(toolName, "status") &&
@@ -86,11 +86,41 @@ func NeedsReview(toolName string) bool {
 		!strings.Contains(toolName, "show") && !strings.Contains(toolName, "blame")
 }
 
+// isSafeShellCommand 判断 shell 命令是否安全，无须审核。
+// 安全命令：构建、测试、开发服务器、包安装、格式检查、查询、简单文件操作。
+// 破坏性命令：删除/格式化/重置/强推/磁盘操作等才需审核。
+func isSafeShellCommand(command string) bool {
+	cmd := strings.TrimSpace(command)
+	// 常见安全前缀
+	safePrefixes := []string{
+		"go build", "go test", "go vet", "go fmt", "go run", "go mod",
+		"npm run", "npm test", "npm install", "npm ci", "npm audit", "npm start",
+		"npx tsc", "npx vite", "npx webpack",
+		"vite build", "tsc --noEmit",
+		"git status", "git diff", "git log", "git show", "git blame",
+		"dir", "ls ", "echo ", "type ", "cd ", "chcp",
+		"pnpm", "yarn",
+		"chdir", "node ", "python", "dotnet build", "cargo build", "cargo test",
+	}
+	for _, p := range safePrefixes {
+		if strings.HasPrefix(cmd, p) {
+			return true
+		}
+	}
+	return false
+}
+
 // Review 审核一次写类工具调用。关键文件删除→直接驳回（无需 LLM）；否则交审核模型判（JSON 裁决）。
 func (r *Reviewer) Review(ctx context.Context, tc ToolCall) (ReviewVerdict, error) {
 	var args map[string]any
 	_ = json.Unmarshal([]byte(tc.Function.Arguments), &args)
 	name := tc.Function.Name
+
+	// run_command/run_background 安全命令智能放行（无需 LLM 审核）
+	if (name == "run_command" || name == "run_background") && isSafeShellCommand(argStr(args, "command")) {
+		return ReviewVerdict{Verdict: "通过", Confidence: 1, Summary: "安全检查通过：普通构建/测试/查询命令"}, nil
+	}
+
 	path, _ := args["path"].(string)
 
 	// 关键文件保护（复刻参考 审核删除操作）：删除关键文件直接驳回，省一次 LLM 调用。

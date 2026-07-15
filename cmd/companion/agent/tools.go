@@ -21,7 +21,7 @@ import (
 var WorkspaceRoots []string
 
 // FileChangeCallback 文件变更回调（可选）。每次写类工具成功修改文件后调用，供外部追踪变更。
-// filePath 为工作区相对路径。由宿主（webui_desktop.go）设置。
+// filePath 为工作区相对路径。由 orchestration.go 或外部宿主设置。
 var FileChangeCallback func(filePath string)
 
 // ErrRetry 由 OnToolError 钩子返回，指示 Execute 用修改后的 args 重新执行 handler。
