@@ -17,11 +17,11 @@ import (
 )
 
 const (
-	compactRatio         = 0.8 // 触发阈值：tokens/MaxContextTokens 超此即压缩（复刻参考主动压缩 ~0.83）
+	compactRatio         = 0.95 // 触发阈值：tokens/MaxContextTokens 超此即压缩（改为 0.95 避免过早压缩导致遗忘）
 	compactKeepRecent    = 16  // 恒留最近条数（复刻参考 keepCount=16）
 	compactMinDrop       = 2   // 中段可丢条数下限：太少不值得压
 	compactLLMSlice      = 40  // LLM 摘要喂入的末尾非 system 条数上限（复刻参考 slice(-40)）
-	compactCooldownTurns = 4   // 压缩后冷却轮数：期间不再压缩（复刻参考 refreshCooldown，防每轮重复压缩/反复摘要）
+	compactCooldownTurns = 10  // 压缩后冷却轮数：期间不再压缩（改为 10 轮，大幅降低压缩频率）
 )
 
 // maybeCompact 若上下文超窗口阈值，把中段老消息压成摘要后存入 l.CompressedSummaries，

@@ -565,20 +565,11 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		// ★ 直接持久化：已由 OnBatchPersist（PersistNewMessages）在 loop.Run 内部增量处理，
 		// 此处不再重复写入，避免并发竞态导致用户消息重复存盘。
 
-		// ★ 若压缩发生过（CompressedSummaries 有内容），替换 DB 旧消息为压缩版本，
-		// 防止 DB 无限增长，下个 Loop 重新 LoadAll 时也能拿到精简版。
-		if m.store != nil && len(loop.CompressedSummaries) > 0 {
-			// 合并旧 summary 计数：如果是从 DB 加载的已有 summaries，
-			// 只有新增的才说明本轮发生了新的压缩
-			initialSummaries := len(opts.CompressedSummaries)
-			if len(loop.CompressedSummaries) > initialSummaries {
-				if rerr := m.store.ReplaceHistory(convID, loop.History); rerr != nil {
-					fmt.Printf("[session] ReplaceHistory 失败 conv=%s err=%v\n", convID, rerr)
-				} else {
-					fmt.Printf("[session] ReplaceHistory 成功 conv=%s msgs=%d (压缩前更多)\n", convID, len(loop.History))
-				}
-			}
-		}
+		// ── ReplaceHistory 已移除 ──
+		// 之前在此处调用了 ReplaceHistory，将压缩后的精简版历史写入 DB，
+		// 导致下个 loop 从数据库加载全量历史时拿到的是摘要版，Agent 遗忘过多。
+		// 现在 DB 中始终保留完整原始消息，压缩仅在运行时内存中进行，
+		// 下次 loop 从 DB LoadAll 时仍能拿到完整上下文。
 
 		// ★ 合并末尾连续 assistant 条目：OnBatchPersist 每轮写一条，刷新后前端会
 		// 看到多条 assistant 气泡。合并后与事件流行为一致（一个 run 只显示一条）。
