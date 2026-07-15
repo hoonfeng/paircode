@@ -401,7 +401,7 @@ const convCtxStats = computed(() => getConvCtxStats(state.currentConvId))
 
 const loadWsTokenStats = async () => {
   try {
-    const data = await api.apiGet('/tokens/stats')
+    const data = await api.apiGet('/tokens/stats', { workspaceRoot: state.workspaceRoot })
     if (data) {
       if (!state.wsTokenStatsByWs[state.workspaceRoot]) {
         state.wsTokenStatsByWs[state.workspaceRoot] = { totalTokens: 0, promptTokens: 0, completionTokens: 0, cacheHitTokens: 0, cacheMissTokens: 0, systemTokens: 0, skillsTokens: 0, mcpTokens: 0, toolTokens: 0, historyTokens: 0, otherTokens: 0 }

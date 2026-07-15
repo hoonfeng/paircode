@@ -1615,8 +1615,12 @@ func (s *webServer) handleMCPSave(w http.ResponseWriter, r *http.Request) {
 func (s *webServer) handleTokensStats(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "GET":
-		// 从 agent 自闭环存储读取（使用当前工作区根路径隔离）
-		stats := agent.ReadTokenStatsForRoot(core.Root())
+		// 从 agent 自闭环存储读取（优先使用 query 参数中的 workspaceRoot，兜底用 core.Root()）
+		wsRoot := r.URL.Query().Get("workspaceRoot")
+		if wsRoot == "" {
+			wsRoot = core.Root()
+		}
+		stats := agent.ReadTokenStatsForRoot(wsRoot)
 		if stats == nil {
 			jsonResp(w, map[string]any{
 				"promptTokens": 0, "completionTokens": 0, "totalTokens": 0,
