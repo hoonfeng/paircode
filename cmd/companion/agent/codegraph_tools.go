@@ -482,6 +482,104 @@ func registerCodeGraphTools(r *Registry, root string) {
 			return codegraph.ComplexityReportText(report), nil
 		},
 	})
+
+	// ── 15. codegraph_search_by_pattern — 正则模式搜索 ──
+	r.Register(&Tool{
+		Name: "codegraph_search_by_pattern",
+		Description: "用正则表达式在代码实体的名称、签名、文档注释中搜索。" +
+			"比 codegraph_search 更精确，支持 scope 过滤（name/signature/docstring/any）。" +
+			"支持按实体类型过滤（function/method/struct/interface/variable）。",
+		Parameters: objSchema(props{
+			"pattern":    strProp("正则表达式，如 'unwrap\\(\\)'、'SELECT .* FROM'、'TODO'"),
+			"scope":      strProp("可选：搜索范围，any(默认)/name/signature/docstring"),
+			"entityKind": strProp("可选：实体类型过滤，如 function/method/struct/interface/variable"),
+			"maxResults": intProp("可选：最大返回数（默认 50）"),
+		}, "pattern"),
+		ReadOnly: true,
+		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			g, err := getCodeGraph(root)
+			if err != nil {
+				return "", err
+			}
+			qe := codegraph.NewQueryEngine(g)
+			req := codegraph.PatternSearchRequest{
+				Pattern:    argStr(args, "pattern"),
+				Scope:      argStr(args, "scope"),
+				MaxResults: argInt(args, "max_results", 50),
+			}
+			if kind := argStr(args, "entity_kind"); kind != "" {
+				req.EntityKind = codegraph.EntityKind(kind)
+			}
+			hits := qe.SearchByPattern(req)
+			return codegraph.PatternSearchText(hits), nil
+		},
+	})
+
+	// ── 16. codegraph_trace_call_chain — 调用链追踪 ──
+	r.Register(&Tool{
+		Name: "codegraph_trace_call_chain",
+		Description: "追踪函数/方法的调用链。" +
+			"支持 callers（反向追踪谁调用了它）、callees（正向追踪它调用了谁）、both（双向）。" +
+			"maxDepth 控制追踪深度（默认 5）。返回树形调用链。",
+		Parameters: objSchema(props{
+			"function":  strProp("函数/方法名（如 'SendRequest'、'handler.Handle'）"),
+			"direction": strProp("可选：callers(反向)/callees(正向)/both(双向)，默认 callers"),
+			"maxDepth":  intProp("可选：最大深度（默认 5）"),
+		}, "function"),
+		ReadOnly: true,
+		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			funcName := argStr(args, "function")
+			direction := argStr(args, "direction")
+			maxDepth := argInt(args, "max_depth", 5)
+			g, err := getCodeGraph(root)
+			if err != nil {
+				return "", err
+			}
+			qe := codegraph.NewQueryEngine(g)
+			nodes := qe.TraceCallChain(funcName, direction, maxDepth)
+			return codegraph.CallChainText(nodes), nil
+		},
+	})
+
+	// ── 17. codegraph_find_dead_code — 死代码检测 ──
+	r.Register(&Tool{
+		Name: "codegraph_find_dead_code",
+		Description: "检测项目中疑似没有被调用的函数、类型、变量。" +
+			"判定方式：函数无 incoming RelCalls 边 + 无其他引用。注意：Go 反射和接口分发可能误报，结果仅供参考。",
+		Parameters: objSchema(props{}),
+		ReadOnly:   true,
+		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			g, err := getCodeGraph(root)
+			if err != nil {
+				return "", err
+			}
+			qe := codegraph.NewQueryEngine(g)
+			result := qe.FindDeadCode()
+			return codegraph.DeadCodeText(result), nil
+		},
+	})
+
+	// ── 18. codegraph_module_architecture — 模块架构分析 ──
+	r.Register(&Tool{
+		Name: "codegraph_module_architecture",
+		Description: "获取一个目录/模块的架构概览。" +
+			"返回：文件数、函数数、导出函数列表、类型列表、外部依赖、" +
+			"内部依赖、复杂度热点。用于快速理解一个模块的职责和结构。",
+		Parameters: objSchema(props{
+			"path": strProp("目录路径（工作区相对路径，如 'cmd/companion/agent'）"),
+		}, "path"),
+		ReadOnly: true,
+		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			dirPath := argStr(args, "path")
+			g, err := getCodeGraph(root)
+			if err != nil {
+				return "", err
+			}
+			qe := codegraph.NewQueryEngine(g)
+			arch := qe.GetModuleArchitecture(root, dirPath)
+			return codegraph.ModuleArchitectureText(arch), nil
+		},
+	})
 }
 
 // CodeGraphProjectSummary 从 codegraph 提取项目结构的关键信息，

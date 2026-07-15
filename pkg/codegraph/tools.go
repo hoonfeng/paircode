@@ -240,9 +240,9 @@ func EnsureBuildIfNeeded(root string) (*Graph, bool, error) {
 }
 
 // NormalizeFilePath 规范化文件路径（统一使用正斜杠，相对路径）。
+
 func NormalizeFilePath(root, path string) string {
 	p := filepath.ToSlash(path)
-	// 如果 path 是绝对路径且在工作区内，转为相对路径
 	if filepath.IsAbs(path) {
 		if rel, err := filepath.Rel(root, path); err == nil {
 			p = filepath.ToSlash(rel)
@@ -250,3 +250,122 @@ func NormalizeFilePath(root, path string) string {
 	}
 	return p
 }
+// ── 新增格式函数 ───────────────────────────────────
+
+// PatternSearchText 生成可读的模式搜索结果。
+func PatternSearchText(hits []PatternSearchHit) string {
+	if len(hits) == 0 {
+		return "未找到匹配结果。"
+	}
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("模式搜索结果（共 %d 条）：\n\n", len(hits)))
+	for _, h := range hits {
+		b.WriteString(fmt.Sprintf("  [%s] %s (%s:%d)\n", h.MatchedIn, h.EntityName, h.FilePath, h.Line))
+		if h.Signature != "" {
+			b.WriteString(fmt.Sprintf("    签名: %s\n", h.Signature))
+		}
+		if h.Snippet != "" {
+			b.WriteString(fmt.Sprintf("    片段: %s\n", h.Snippet))
+		}
+	}
+	return b.String()
+}
+
+// CallChainText 生成可读的调用链树。
+func CallChainText(nodes []CallChainNode) string {
+	if len(nodes) == 0 {
+		return "（无调用链）"
+	}
+	var b strings.Builder
+	b.WriteString("调用链追踪：\n\n")
+	var printTree func(nodes []CallChainNode, indent string)
+	printTree = func(ns []CallChainNode, indent string) {
+		for _, n := range ns {
+			direction := ""
+			if n.Depth > 0 {
+				arrow := "← 被 "
+				if n.Depth < 10 {
+					arrow = "← "
+				}
+				direction = arrow
+			}
+			b.WriteString(fmt.Sprintf("%s%s%s (%s:%d)\n", indent, direction, n.Name, n.FilePath, n.Line))
+			if len(n.Children) > 0 {
+				printTree(n.Children, indent+"  ")
+			}
+		}
+	}
+	printTree(nodes, "")
+	return b.String()
+}
+
+// DeadCodeText 生成可读的死代码报告。
+func DeadCodeText(r *DeadCodeResult) string {
+	if r == nil || r.Total == 0 {
+		return "未检测到疑似死代码。"
+	}
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("死代码检测结果（共 %d 个）：\n\n", r.Total))
+
+	if len(r.Functions) > 0 {
+		b.WriteString(fmt.Sprintf("■ 函数/方法（%d 个）：\n", len(r.Functions)))
+		for _, f := range r.Functions {
+			b.WriteString(fmt.Sprintf("  %s (%s:%d) — %s\n", f.Name, f.FilePath, f.Line, f.Reason))
+		}
+		b.WriteString("\n")
+	}
+	if len(r.Types) > 0 {
+		b.WriteString(fmt.Sprintf("■ 类型（%d 个）：\n", len(r.Types)))
+		for _, t := range r.Types {
+			b.WriteString(fmt.Sprintf("  %s (%s:%d) — %s\n", t.Name, t.FilePath, t.Line, t.Reason))
+		}
+		b.WriteString("\n")
+	}
+	if len(r.Variables) > 0 {
+		b.WriteString(fmt.Sprintf("■ 变量/常量（%d 个）：\n", len(r.Variables)))
+		for _, v := range r.Variables {
+			b.WriteString(fmt.Sprintf("  %s (%s:%d) — %s\n", v.Name, v.FilePath, v.Line, v.Reason))
+		}
+	}
+	return b.String()
+}
+
+// ModuleArchitectureText 生成可读的模块架构报告。
+func ModuleArchitectureText(arch *ModuleArchitecture) string {
+	if arch == nil {
+		return "（模块为空）"
+	}
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("■ 模块: %s\n", arch.Directory))
+	b.WriteString(fmt.Sprintf("  文件: %d | 函数: %d\n\n", arch.FileCount, arch.FunctionCount))
+
+	if len(arch.ExportedFuncs) > 0 {
+		b.WriteString(fmt.Sprintf("导出函数（%d 个）：\n", len(arch.ExportedFuncs)))
+		for _, f := range arch.ExportedFuncs {
+			b.WriteString(fmt.Sprintf("  %s\n", f))
+		}
+		b.WriteString("\n")
+	}
+	if len(arch.Types) > 0 {
+		b.WriteString(fmt.Sprintf("类型（%d 个）：\n", len(arch.Types)))
+		for _, t := range arch.Types {
+			b.WriteString(fmt.Sprintf("  %s\n", t))
+		}
+		b.WriteString("\n")
+	}
+	if len(arch.ComplexHotspots) > 0 {
+		b.WriteString("复杂度热点（前 5）：\n")
+		for _, h := range arch.ComplexHotspots {
+			b.WriteString(fmt.Sprintf("  %s (评分 %s, 复杂度 %d, %d 行)\n", h.Name, h.Grade, h.Complexity, h.LOC))
+		}
+		b.WriteString("\n")
+	}
+	if len(arch.Imports) > 0 {
+		b.WriteString(fmt.Sprintf("外部依赖（%d 个）：\n", len(arch.Imports)))
+		for _, dep := range arch.Imports {
+			b.WriteString(fmt.Sprintf("  %s\n", dep))
+		}
+	}
+	return b.String()
+}
+

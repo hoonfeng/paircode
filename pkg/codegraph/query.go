@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -947,6 +948,432 @@ func findRelatedTests(qe *QueryEngine, root string, entity *Entity) []TestDetail
 		}
 	}
 	return tests
+}
+
+// ════════════════════════════════════════════════════════════════
+// 模式搜索（search_by_pattern）
+// ════════════════════════════════════════════════════════════════
+
+// PatternSearchRequest 模式搜索请求。
+type PatternSearchRequest struct {
+	Pattern    string     `json:"pattern"`    // 正则表达式
+	Scope      string     `json:"scope"`      // 搜索范围: "any"(默认) / "function_body" / "signature" / "name" / "docstring"
+	EntityKind EntityKind `json:"entityKind"` // 实体类型过滤（可选）
+	MaxResults int        `json:"maxResults"` // 最大结果数（默认 50）
+}
+
+// PatternSearchHit 模式搜索命中。
+type PatternSearchHit struct {
+	EntityName string `json:"entityName"`
+	EntityKind string `json:"entityKind"`
+	FilePath   string `json:"filePath"`
+	Line       int    `json:"line"`
+	Signature  string `json:"signature,omitempty"`
+	Snippet    string `json:"snippet,omitempty"` // 匹配上下文片段
+	MatchedIn  string `json:"matchedIn"`         // "function_body" / "signature" / "name" / "docstring"
+}
+
+// SearchByPattern 用正则表达式在代码实体的名称/签名/正文中搜索。
+// 返回匹配的实体名称、位置和匹配的上下文片段。
+func (qe *QueryEngine) SearchByPattern(req PatternSearchRequest) []PatternSearchHit {
+	if req.MaxResults <= 0 {
+		req.MaxResults = 50
+	}
+	if req.Scope == "" {
+		req.Scope = "any"
+	}
+
+	re, err := regexp.Compile(req.Pattern)
+	if err != nil {
+		return nil
+	}
+
+	var candidates []*Entity
+	if req.EntityKind != "" {
+		candidates = qe.graph.GetEntitiesByKind(req.EntityKind)
+	} else {
+		// 搜索函数/方法/类型/变量
+		for _, k := range []EntityKind{EntityFunction, EntityMethod, EntityStruct, EntityInterface, EntityVariable, EntityConstant, EntityType} {
+			candidates = append(candidates, qe.graph.GetEntitiesByKind(k)...)
+		}
+	}
+
+	var hits []PatternSearchHit
+	for _, e := range candidates {
+		if len(hits) >= req.MaxResults {
+			break
+		}
+
+		// 搜索名称
+		if req.Scope == "any" || req.Scope == "name" {
+			if re.MatchString(e.Name) || re.MatchString(e.FQN) {
+				hits = append(hits, PatternSearchHit{
+					EntityName: e.Name,
+					EntityKind: string(e.Kind),
+					FilePath:   e.FilePath,
+					Line:       e.Line,
+					Signature:  e.Signature,
+					MatchedIn:  "name",
+				})
+				continue
+			}
+		}
+
+		// 搜索签名
+		if (req.Scope == "any" || req.Scope == "signature") && e.Signature != "" {
+			if re.MatchString(e.Signature) {
+				hits = append(hits, PatternSearchHit{
+					EntityName: e.Name,
+					EntityKind: string(e.Kind),
+					FilePath:   e.FilePath,
+					Line:       e.Line,
+					Signature:  e.Signature,
+					MatchedIn:  "signature",
+				})
+				continue
+			}
+		}
+
+		// 搜索文档注释
+		if (req.Scope == "any" || req.Scope == "docstring") && e.Doc != "" {
+			if re.MatchString(e.Doc) {
+				hits = append(hits, PatternSearchHit{
+					EntityName: e.Name,
+					EntityKind: string(e.Kind),
+					FilePath:   e.FilePath,
+					Line:       e.Line,
+					Signature:  e.Signature,
+					MatchedIn:  "docstring",
+				})
+				continue
+			}
+		}
+	}
+
+	return hits
+}
+
+// ════════════════════════════════════════════════════════════════
+// 调用链追踪（trace_call_chain）
+// ════════════════════════════════════════════════════════════════
+
+// CallChainNode 调用链节点（树形结构）。
+type CallChainNode struct {
+	Name      string          `json:"name"`
+	Kind      string          `json:"kind"`
+	FilePath  string          `json:"filePath"`
+	Line      int             `json:"line"`
+	Depth     int             `json:"depth"`
+	Signature string          `json:"signature,omitempty"`
+	Children  []CallChainNode `json:"children,omitempty"`
+}
+
+// TraceCallChain 追踪调用链。
+// direction: "callers"（反向追踪谁调用了它）/ "callees"（正向追踪它调用了谁）
+// maxDepth 为最大深度（默认 5）
+// funcName 为目标函数名
+func (qe *QueryEngine) TraceCallChain(funcName string, direction string, maxDepth int) []CallChainNode {
+	if maxDepth <= 0 {
+		maxDepth = 5
+	}
+
+	// 找到目标实体
+	entities := qe.graph.SearchEntities(funcName)
+	var target *Entity
+	for _, e := range entities {
+		if e.Kind == EntityFunction || e.Kind == EntityMethod {
+			if strings.EqualFold(e.Name, funcName) {
+				target = e
+				break
+			}
+		}
+	}
+	if target == nil && len(entities) > 0 {
+		target = entities[0]
+	}
+	if target == nil {
+		return nil
+	}
+
+	visited := make(map[string]bool)
+	var buildTree func(entityID string, depth int) []CallChainNode
+	buildTree = func(entityID string, depth int) []CallChainNode {
+		if depth >= maxDepth {
+			return nil
+		}
+		if visited[entityID] {
+			return nil
+		}
+		visited[entityID] = true
+
+		var related []*Entity
+		switch direction {
+		case "callers", "inbound", "":
+			related = qe.graph.GetPredecessors(entityID, RelCalls)
+		case "callees", "outbound":
+			// 通过 call_site 节点间接找到被调用者
+			callSites := qe.graph.GetSuccessors(entityID, RelCalls)
+			for _, cs := range callSites {
+				if cs.Kind == EntityCallSite && cs.Metadata != nil {
+					if calleeName := cs.Metadata["callee"]; calleeName != "" {
+						// 找到被调用的函数实体
+						calleeEntities := qe.graph.SearchEntities(calleeName)
+						for _, ce := range calleeEntities {
+							if ce.Kind == EntityFunction || ce.Kind == EntityMethod {
+								if !containsEntity(related, ce) {
+									related = append(related, ce)
+								}
+							}
+						}
+					}
+				}
+				// 如果 cs 本身是函数，也加入
+				if cs.Kind == EntityFunction || cs.Kind == EntityMethod {
+					if !containsEntity(related, cs) {
+						related = append(related, cs)
+					}
+				}
+			}
+		case "both":
+			inbound := qe.graph.GetPredecessors(entityID, RelCalls)
+			outbound := qe.graph.GetSuccessors(entityID, RelCalls)
+			related = append(related, inbound...)
+			related = append(related, outbound...)
+			// 解析 call_site 的 callee
+			for _, cs := range outbound {
+				if cs.Kind == EntityCallSite && cs.Metadata != nil {
+					if calleeName := cs.Metadata["callee"]; calleeName != "" {
+						calleeEntities := qe.graph.SearchEntities(calleeName)
+						for _, ce := range calleeEntities {
+							if ce.Kind == EntityFunction || ce.Kind == EntityMethod {
+								if !containsEntity(related, ce) {
+									related = append(related, ce)
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+
+		var children []CallChainNode
+		for _, r := range related {
+			cn := CallChainNode{
+				Name:      r.Name,
+				Kind:      string(r.Kind),
+				FilePath:  r.FilePath,
+				Line:      r.Line,
+				Depth:     depth + 1,
+				Signature: r.Signature,
+			}
+			cn.Children = buildTree(r.ID, depth+1)
+			children = append(children, cn)
+		}
+		return children
+	}
+
+	root := CallChainNode{
+		Name:      target.Name,
+		Kind:      string(target.Kind),
+		FilePath:  target.FilePath,
+		Line:      target.Line,
+		Depth:     0,
+		Signature: target.Signature,
+	}
+	root.Children = buildTree(target.ID, 0)
+	return []CallChainNode{root}
+}
+
+func containsEntity(entities []*Entity, e *Entity) bool {
+	for _, existing := range entities {
+		if existing.ID == e.ID {
+			return true
+		}
+	}
+	return false
+}
+
+// ════════════════════════════════════════════════════════════════
+// 死代码检测（find_dead_code）
+// ════════════════════════════════════════════════════════════════
+
+// DeadCodeResult 死代码检测结果。
+type DeadCodeResult struct {
+	Functions []DeadEntity `json:"functions"` // 未被调用的函数
+	Types     []DeadEntity `json:"types"`     // 未被引用的类型
+	Variables []DeadEntity `json:"variables"` // 未被引用的变量
+	Total     int          `json:"total"`     // 总数
+}
+
+// DeadEntity 可疑的死代码实体。
+type DeadEntity struct {
+	Name     string `json:"name"`
+	Kind     string `json:"kind"`
+	FilePath string `json:"filePath"`
+	Line     int    `json:"line"`
+	Reason   string `json:"reason"` // 判定理由
+}
+
+// FindDeadCode 检测项目中疑似「死代码」的实体。
+// 判定逻辑：
+//   - 函数/方法：没有被其他函数/方法调用（无 incoming RelCalls 边）
+//   - 全局变量/常量：没有被引用
+//   - 结构体/接口：没有被引用
+// 注意：Go 的反射和接口动态分发可能导致误报，结果仅供参考。
+func (qe *QueryEngine) FindDeadCode() *DeadCodeResult {
+	result := &DeadCodeResult{}
+
+	// 函数和方法的死代码检测
+	allFuncs := qe.graph.GetEntitiesByKind(EntityFunction)
+	allFuncs = append(allFuncs, qe.graph.GetEntitiesByKind(EntityMethod)...)
+
+	// 常见的「入口点」函数名（不能算死代码）
+	entryPoints := map[string]bool{
+		"main":    true,
+		"init":    true,
+		"TestMain": true,
+	}
+
+	for _, fn := range allFuncs {
+		if entryPoints[fn.Name] {
+			continue
+		}
+		// 函数如果有文档注释且以 "// Package" 开头，是导出 API，跳过
+		if strings.HasPrefix(fn.Doc, "Package") || strings.HasPrefix(fn.Doc, "package") {
+			continue
+		}
+		// 检查是否有 incoming RelCalls 边
+		callers := qe.graph.GetPredecessors(fn.ID, RelCalls)
+		if len(callers) == 0 {
+			// 再检查是否有其他函数引用
+			allRefs := qe.graph.GetPredecessors(fn.ID, "")
+			if len(allRefs) == 0 || (len(allRefs) == 1 && allRefs[0].Kind == EntityFile) {
+				reason := "无调用者"
+				if strings.HasPrefix(fn.Name, "Test") {
+					reason = "测试函数（不被其他代码调用）"
+				}
+				result.Functions = append(result.Functions, DeadEntity{
+					Name: fn.Name, Kind: string(fn.Kind),
+					FilePath: fn.FilePath, Line: fn.Line, Reason: reason,
+				})
+			}
+		}
+	}
+
+	// 全局变量/常量
+	for _, v := range qe.graph.GetEntitiesByKind(EntityVariable) {
+		refs := qe.graph.GetPredecessors(v.ID, "")
+		if len(refs) <= 1 { // 只有文件包含关系，别无引用
+			result.Variables = append(result.Variables, DeadEntity{
+				Name: v.Name, Kind: string(v.Kind),
+				FilePath: v.FilePath, Line: v.Line, Reason: "未被其他代码引用",
+			})
+		}
+	}
+	for _, c := range qe.graph.GetEntitiesByKind(EntityConstant) {
+		refs := qe.graph.GetPredecessors(c.ID, "")
+		if len(refs) <= 1 {
+			result.Variables = append(result.Variables, DeadEntity{
+				Name: c.Name, Kind: string(c.Kind),
+				FilePath: c.FilePath, Line: c.Line, Reason: "未被其他代码引用",
+			})
+		}
+	}
+
+	result.Total = len(result.Functions) + len(result.Types) + len(result.Variables)
+	return result
+}
+
+// ════════════════════════════════════════════════════════════════
+// 模块架构分析（module_architecture）
+// ════════════════════════════════════════════════════════════════
+
+// ModuleArchitecture 模块架构信息。
+type ModuleArchitecture struct {
+	Directory      string        `json:"directory"`      // 目录路径
+	FileCount      int           `json:"fileCount"`      // 文件数
+	FunctionCount  int           `json:"functionCount"`  // 函数/方法数
+	ExportedFuncs  []string      `json:"exportedFuncs"`  // 导出函数列表
+	Types          []string      `json:"types"`          // 类型列表
+	Imports        []string      `json:"imports"`        // 导入的外部包
+	InternalDeps   []string      `json:"internalDeps"`   // 内部依赖
+	ComplexHotspots []FunctionComplexity `json:"complexHotspots"` // 高复杂度热点
+}
+
+// GetModuleArchitecture 获取一个目录/模块的架构概览。
+// dirPath 为工作区相对路径（如 "cmd/companion/agent"）。
+func (qe *QueryEngine) GetModuleArchitecture(root, dirPath string) *ModuleArchitecture {
+	arch := &ModuleArchitecture{
+		Directory: dirPath,
+	}
+	allEntities := qe.graph.GetEntitiesByKind(EntityFile)
+	exportedSet := make(map[string]bool)
+	typeSet := make(map[string]bool)
+	importSet := make(map[string]bool)
+	internalDepSet := make(map[string]bool)
+
+
+	for _, fe := range allEntities {
+		if !strings.HasPrefix(fe.FilePath, dirPath) {
+			continue
+		}
+		arch.FileCount++
+
+		// 获取该文件的所有实体
+		fileEntities := qe.graph.GetEntitiesByFile(fe.FilePath)
+		for _, e := range fileEntities {
+			switch e.Kind {
+			case EntityFunction:
+				arch.FunctionCount++
+				// 首字母大写 = 导出
+				if len(e.Name) > 0 && e.Name[0] >= 'A' && e.Name[0] <= 'Z' {
+					if !exportedSet[e.Name] {
+						arch.ExportedFuncs = append(arch.ExportedFuncs, e.Name)
+						exportedSet[e.Name] = true
+					}
+				}
+			case EntityMethod:
+				arch.FunctionCount++
+				if len(e.Name) > 0 && e.Name[0] >= 'A' && e.Name[0] <= 'Z' {
+					if !exportedSet[e.Name] {
+						arch.ExportedFuncs = append(arch.ExportedFuncs, e.Name)
+						exportedSet[e.Name] = true
+					}
+				}
+			case EntityStruct, EntityInterface, EntityType:
+				if !typeSet[e.Name] {
+					arch.Types = append(arch.Types, e.Name)
+					typeSet[e.Name] = true
+				}
+			case EntityImport:
+				if e.FilePath != "" && !strings.HasPrefix(e.Name, "github.com/hoonfeng/paircode") && !strings.Contains(e.Name, ".") {
+					if !importSet[e.Name] {
+						arch.Imports = append(arch.Imports, e.Name)
+						importSet[e.Name] = true
+					}
+				} else if strings.HasPrefix(e.Name, "github.com/hoonfeng/paircode") && !internalDepSet[e.Name] {
+					arch.InternalDeps = append(arch.InternalDeps, e.Name)
+					internalDepSet[e.Name] = true
+				}
+			}
+		}
+	}
+
+	// 计算该目录函数的复杂度热点
+	hotspots := AnalyzeComplexity(qe, root, dirPath)
+	if hotspots != nil && len(hotspots.Functions) > 0 {
+		// 按复杂度降序，取前 5
+		sort.Slice(hotspots.Functions, func(i, j int) bool {
+			return hotspots.Functions[i].Complexity > hotspots.Functions[j].Complexity
+		})
+		max := 5
+		if len(hotspots.Functions) < max {
+			max = len(hotspots.Functions)
+		}
+		arch.ComplexHotspots = hotspots.Functions[:max]
+	}
+
+	return arch
 }
 
 // ════════════════════════════════════════════════════════════════
