@@ -6,26 +6,16 @@ package main
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/hoonfeng/paircode/cmd/companion/agent"
-	"github.com/hoonfeng/paircode/cmd/companion/agenttools"
 	"github.com/hoonfeng/paircode/cmd/companion/bridge"
 	"github.com/hoonfeng/paircode/cmd/companion/core"
-	"github.com/hoonfeng/paircode/cmd/companion/roleprompts"
-	marketplacepanel "github.com/hoonfeng/paircode/cmd/companion/ui/marketplace"
-	mcppanel "github.com/hoonfeng/paircode/cmd/companion/ui/mcp"
-	"github.com/hoonfeng/paircode/cmd/companion/ui/skills"
-	"github.com/hoonfeng/paircode/pkg/memory"
 )
 
 func init() {
@@ -59,7 +49,7 @@ func emitPhase(events chan agent.Event, phase string) {
 	}
 }
 
-// runOrchestrationLoop 外部编排循环。
+// runOrchestrationLoop 外部编排循环（新版，基于 OrchestrationEngine 状态机）。
 // 每次 loop.Run 完成后，用编排 agent 分析已完成内容并决定下一个任务，
 // 将规划记录到 .pair/tasks/ 目录，然后继续执行，直到编排 agent 判定全部完成。
 // 支持执行状态持久化和断点续跑。
@@ -69,733 +59,58 @@ func emitPhase(events chan agent.Event, phase string) {
 func runOrchestrationLoop(ctx context.Context, prov agent.Provider, reg *agent.Registry, events chan agent.Event, approvalCh chan bool, task string, history []agent.Message, roots []string, root string, convID string, restoredState *agent.ExecutionState) []agent.Message {
 	emitPhase(events, "自主执行中")
 
-	allHistory := make([]agent.Message, len(history))
-	copy(allHistory, history)
-
-	webSysPrompt := buildWebSystemPrompt()
+	// ── 构建编排引擎 ──
 	planner := buildWebPlanner()
-	missionTask := task
-	var loopCount int
-	if restoredState != nil {
-		loopCount = restoredState.LoopCount
-	}
-	const maxLoops = 10 // 最大编排轮次，防无限循环
+	webSysPrompt := buildWebSystemPrompt()
 
-	// ── 初始化执行状态管理器 ──
-	execMgr := agent.InitExecStateManager(root)
-	var execState *agent.ExecutionState
-	if restoredState != nil {
-		execState = restoredState
-		execState.Status = agent.ExecRunning
-		missionTask = execState.MissionTask
-		if missionTask == "" {
-			missionTask = task
+	eng := agent.NewOrchestrationEngine(
+		prov, reg, planner,
+		events, approvalCh,
+		webSysPrompt, root, roots, convID,
+	)
+	eng.Task = task
+	eng.History = history
+	eng.RestoredState = restoredState
+	eng.MaxLoops = 10
+
+	// 内层 Loop 配置
+	maxIter := core.Settings.MaxIterations * 2
+	if maxIter <= 0 {
+		maxIter = 60
+	}
+	eng.MaxIterations = maxIter
+	eng.MaxContextTokens = core.Settings.ContextMaxTokens
+	eng.Compressor = bridge.BuildCompressor()
+
+	// 构建验证回调
+	eng.VerifyFunc = func(r string) (bool, string) {
+		result := autoVerifyProject(r)
+		return result.success, result.output
+	}
+
+	// ── Panic 静默恢复（防止编排循环 panic 导致整个服务崩溃）──
+	defer func() {
+		if r := recover(); r != nil {
+			agent.WritePanic("runOrchestrationLoop", r, "",
+				map[string]string{"convId": convID, "task": task})
+			panic(r)
 		}
-		execMgr.Save(execState)
-	} else {
-		execState = execMgr.Create(task, maxLoops, convID)
-		execState.MissionTask = missionTask
-	}
+	}()
 
-	// ── Panic 静默恢复 ──
-	ctxMap := map[string]string{"convId": convID, "task": task}
-	defer execMgr.RecoverPanic(&execState, "runOrchestrationLoop", ctxMap)
+	// ── 运行编排引擎（阻塞直到终态）──
+	result := eng.Run(ctx)
 
-	// ── 记录任务规划到 .pair/tasks/ ──
-	saveTaskPlan := func(name, content string) {
-		if root == "" {
-			return
-		}
-		tasksDir := filepath.Join(root, ".pair", "tasks")
-		os.MkdirAll(tasksDir, 0755)
-		filePath := filepath.Join(tasksDir, name+".md")
-		os.WriteFile(filePath, []byte(content), 0644)
-	}
-
-	// ── 文件变更追踪（通过 agent.FileChangeCallback 自动触发）──
-	// 在 loop 开始前设置回调
-	agent.FileChangeCallback = func(filePath string) {
-		execMgr.RecordFileChange(execState, filePath)
-	}
-
-	// ── 初次规划阶段 ──
-	if planner != nil {
-		emitPhase(events, "规划阶段")
-		execState.Phase = "规划阶段"
-		execMgr.Save(execState)
-		plan, perr := planner.Plan(ctx, missionTask, history)
-		if perr == nil && len(plan.Steps) > 0 {
-			evtArgs := planToUpdateArgs(plan)
+	// 结果处理
+	if result.IsTerminal() && result.Phase != agent.PhaseDone {
+		// 失败/取消 → 发送错误事件
+		if result.Phase == agent.PhaseFailed {
 			select {
-			case events <- agent.Event{Type: agent.EventToolCall, Tool: "update_plan", Args: evtArgs}:
+			case events <- agent.Event{Type: agent.EventError, Content: result.Reason}:
 			default:
 			}
-			// 记录初始规划
-			planContent := fmt.Sprintf("# 初始规划: %s\n\n## 推理\n%s\n\n## 步骤\n%s\n\n- 创建时间: %s\n- 状态: 进行中\n",
-				missionTask, plan.Reasoning, planStepsText(plan), time.Now().Format("2006-01-02 15:04:05"))
-			saveTaskPlan(fmt.Sprintf("plan_%s", time.Now().Format("20060102_150405")), planContent)
-			missionTask = missionTask + "\n\n（规划 Agent 已制定以下计划，请据此连续执行、用 update_plan 更新各步状态）：\n" + planStepsText(plan)
-			execState.MissionTask = missionTask
-			execMgr.Save(execState)
 		}
 	}
-
-	buildMainLoop := func() *agent.Loop {
-		maxIter := core.Settings.MaxIterations * 2
-		if maxIter <= 0 {
-			maxIter = 60
-		}
-		return &agent.Loop{
-			Provider:         prov,
-			Registry:         reg,
-			Autonomous:       true,
-			System:           webSysPrompt,
-			MaxIterations:    maxIter,
-			MaxContextTokens: core.Settings.ContextMaxTokens,
-			Compressor:       bridge.BuildCompressor(),
-			OnEvent: func(e agent.Event) {
-				select {
-				case events <- e:
-				default:
-				}
-			},
-			Approve: func(ctx context.Context, tc agent.ToolCall) (bool, string) {
-				if core.Settings.RequireApproval {
-					select {
-					case events <- agent.Event{
-						Type:   agent.EventApproval,
-						Tool:   tc.Function.Name,
-						Args:   tc.Function.Arguments,
-						CallID: tc.ID,
-					}:
-					default:
-					}
-					select {
-					case approved := <-approvalCh:
-						return approved, ""
-					case <-ctx.Done():
-						return false, "用户取消了操作"
-					}
-				}
-				return true, ""
-			},
-		}
-	}
-
-	for loopCount < maxLoops {
-		loopCount++
-		if err := ctx.Err(); err != nil {
-			execMgr.MarkFailed(execState, ctx.Err())
-			return allHistory
-		}
-
-		emitPhase(events, fmt.Sprintf("执行 %d/%d", loopCount, maxLoops))
-		execState.LoopCount = loopCount
-		execState.Phase = fmt.Sprintf("执行 %d/%d", loopCount, maxLoops)
-		execMgr.Save(execState)
-
-		mainLoop := buildMainLoop()
-		msgs, err := mainLoop.Run(ctx, missionTask, allHistory)
-
-		// 如果不是首次循环，记录本轮完成摘要
-		currentTask := missionTask
-		if loopCount > 1 {
-			currentTask = fmt.Sprintf("第 %d 轮任务", loopCount)
-		}
-
-		// ── 自动构建验证 ──
-		if err == nil && root != "" {
-			emitPhase(events, "验证中")
-			execState.Phase = "验证中"
-			execMgr.Save(execState)
-			verifyResult := autoVerifyProject(root)
-			if !verifyResult.success {
-				// ── 记录构建错误日志 ──
-				agent.WriteBuildError("autoVerifyProject", verifyResult.output,
-					map[string]string{"convId": convID, "loopCount": fmt.Sprintf("%d", loopCount)})
-
-				// 构建失败 → 使用 BugDetector 自动分析错误位置并生成详细的修复任务
-				errMsg := agent.FormatBuildErrorForAgent(verifyResult.output, root)
-
-				// 发通知到前端
-				select {
-				case events <- agent.Event{Type: agent.EventNotice, Content: errMsg}:
-				default:
-				}
-
-				// 检查是否已设置 fixAttempts（首次修复时初始化为 0）
-				// 从 execState.Errors 推断是否已有修复尝试
-				fixAttempts := 0
-				for _, e := range execState.Errors {
-					if strings.Contains(e, "修复尝试") {
-						fixAttempts++
-					}
-				}
-				fixAttempts++
-
-				if fixAttempts > 3 {
-					// 超过 3 次修复尝试仍未通过，报告错误并退出
-					finalErrMsg := fmt.Sprintf("❌ 连续 %d 次修复尝试后构建仍未通过:\n\n%s", fixAttempts, verifyResult.output)
-					select {
-					case events <- agent.Event{Type: agent.EventError, Content: finalErrMsg}:
-					default:
-					}
-					execMgr.MarkFailed(execState, fmt.Errorf("连续 %d 次修复尝试失败", fixAttempts))
-					return allHistory
-				}
-
-				// 将解析后的修复任务注入下一轮 loop
-				missionTask = errMsg + "\n\n（请根据上述错误分析逐条修复，每次修复后运行 go_build 验证。全部修复完成后输出最终报告。）"
-				execState.MissionTask = missionTask
-				execState.Errors = append(execState.Errors, fmt.Sprintf("构建失败（第 %d 次修复尝试）", fixAttempts))
-				execMgr.Save(execState)
-				allHistory = msgs
-				continue
-			}
-			// ── 构建通过 → 检查 debug 日志中是否有需要分析的错误 ──
-			emitPhase(events, "debug 分析")
-			execState.Phase = "debug 分析"
-			execMgr.Save(execState)
-			errorSummary := ""
-			if agent.GlobalDebugLogger != nil {
-				errorSummary = agent.GlobalDebugLogger.GetErrorSummary(5)
-			}
-			if errorSummary != "" && errorSummary != "（无错误日志）" {
-				// 有错误日志 → 注入到下一轮任务中
-				debugTaskMsg := fmt.Sprintf("检测到以下错误日志，请分析并修复:\n\n%s\n\n（分析完成后，如果不需要修复或已修复，继续推进其他任务。）", errorSummary)
-				select {
-				case events <- agent.Event{Type: agent.EventNotice, Content: debugTaskMsg}:
-				default:
-				}
-				// 注入 debug 分析任务（不中断主任务流，作为额外提示）
-				msgs = append(msgs, agent.Message{Role: "user", Content: debugTaskMsg})
-			}
-		}
-
-		if err == nil {
-			// ── loop 正常完成 → 用编排 agent 分析下一步 ──
-			emitPhase(events, "分析完成情况")
-			execState.Phase = "分析完成情况"
-			execMgr.Save(execState)
-			if planner != nil {
-				// 将本轮结果传给编排 agent 做分析
-				analysisPrompt := fmt.Sprintf(`你执行了任务。请分析本轮结果并决定下一步。
-
-总体任务: %s
-
-如果全部完成，请回复：全部完成
-如果还有下一步，请回复：下一步任务：<具体描述>`, task)
-
-				analysis, aerr := planner.Plan(ctx, analysisPrompt, msgs)
-				nextTask := ""
-				if aerr == nil && len(analysis.Steps) > 0 {
-					nextTask = analysis.Reasoning
-					if idx := strings.Index(nextTask, "下一步任务："); idx >= 0 {
-						nextTask = strings.TrimSpace(nextTask[idx+len("下一步任务："):])
-					} else if idx := strings.Index(nextTask, "下一步："); idx >= 0 {
-						nextTask = strings.TrimSpace(nextTask[idx+len("下一步："):])
-					}
-				}
-
-				if nextTask == "" || strings.Contains(nextTask, "全部完成") || strings.Contains(strings.ToLower(nextTask), "all complete") {
-					emitPhase(events, "全部完成")
-					// 发射最终的 EventDone（含完成摘要），供前端展示完成报告
-					select {
-					case events <- agent.Event{Type: agent.EventDone, Content: fmt.Sprintf("全部任务已完成。\n\n完成轮次: %d\n总任务: %s\n", loopCount, task), DoneReason: "task_complete"}:
-					default:
-					}
-					saveTaskPlan(fmt.Sprintf("plan_%s_complete", time.Now().Format("20060102_150405")),
-						fmt.Sprintf("# 任务完成: %s\n\n## 完成时间\n%s\n\n## 完成摘要\n全部任务已完成。\n", task, time.Now().Format("2006-01-02 15:04:05")))
-					execMgr.MarkCompleted(execState, "全部任务已完成")
-					return msgs
-				}
-
-				// 有下一步任务 → 记录规划并继续
-				planContent := fmt.Sprintf("# 任务规划: %s\n\n## 当前轮次\n第 %d 轮\n\n## 已完成\n%s\n\n## 下一步\n%s\n\n- 时间: %s\n",
-					task, loopCount, currentTask, nextTask, time.Now().Format("2006-01-02 15:04:05"))
-				saveTaskPlan(fmt.Sprintf("plan_%s_r%02d", time.Now().Format("20060102_150405"), loopCount), planContent)
-
-				// 记录完成的步骤
-				execState.CompletedSteps = append(execState.CompletedSteps, agent.StepRecord{
-					StepNum:     loopCount,
-					Description: currentTask,
-					Status:      "completed",
-					CompletedAt: time.Now().Format("2006-01-02 15:04:05"),
-					Summary:     fmt.Sprintf("完成 → 下一步: %s", nextTask),
-				})
-
-				emitPhase(events, "继续下一步")
-				missionTask = nextTask + "\n\n（请基于已完成的上下文，继续执行上述下一步任务。完成后输出最终报告。）"
-				execState.MissionTask = missionTask
-				execMgr.Save(execState)
-				allHistory = msgs
-				continue
-			}
-			// 没有编排 agent → 直接结束
-			select {
-			case events <- agent.Event{Type: agent.EventDone, Content: fmt.Sprintf("任务完成（自动模式）\n\n完成轮次: %d", loopCount), DoneReason: "task_complete"}:
-			default:
-			}
-			execMgr.MarkCompleted(execState, "任务完成（无编排 agent）")
-			return msgs
-		}
-
-		if errors.Is(err, agent.ErrCirclingLoop) {
-			saveTaskPlan(fmt.Sprintf("plan_%s_circling", time.Now().Format("20060102_150405")),
-				fmt.Sprintf("# 任务绕圈: %s\n\n## 时间\n%s\n\n## 错误\n检测到重复绕圈，已停止。\n",
-					task, time.Now().Format("2006-01-02 15:04:05")))
-			execMgr.MarkFailed(execState, err)
-			select {
-			case events <- agent.Event{Type: agent.EventError, Content: fmt.Sprintf("自主模式异常终止: %v", err)}:
-			default:
-			}
-			return allHistory
-		}
-
-		// 其他错误
-		execMgr.MarkFailed(execState, err)
-		return allHistory
-	}
-
-	// 达到最大轮次
-	emitPhase(events, "达到最大执行轮次")
-	execState.Status = agent.ExecFailed
-	execState.Errors = append(execState.Errors, fmt.Sprintf("已达最大执行轮次 %d", maxLoops))
-	execMgr.Save(execState)
-	select {
-	case events <- agent.Event{Type: agent.EventError, Content: fmt.Sprintf("自主模式已达最大执行轮次 %d，终止", maxLoops)}:
-// buildWebSystemPrompt / buildWebProvider / reloadWebLuaTools / countStates 已在 web_server.go 中统一实现
-}
-
-// ─── Chat / Agent SSE API ───────────────────────────────────
-
-// buildWebLoopOpts 构建 agent.LoopOpts（收敛 provider/registry/system/history 构造逻辑）。
-// 从原 handleChatSend 中提取，供非阻塞启动调用 agentMgr.Start 使用。
-// handleChatSend / Stop / Answer / Approve / Feedback / Market 等已在 web_server.go 中统一实现
-
-// ─── 自动构建验证 ── {
-	prov := buildWebProvider()
-
-	root := core.Root()
-	agent.WorkspaceRoots = core.Folders
-	reg := agent.NewRegistry()
-	agent.RegisterDefaultTools(reg, root)
-	agent.RegisterCommitMessageTool(reg)
-
-	agenttools.RegisterManagementTools(reg)
-	if cfgs := mcppanel.LoadConfigs(); len(cfgs) > 0 {
-		agentCfgs := make([]agent.MCPServerConfig, len(cfgs))
-		for i, c := range cfgs {
-			agentCfgs[i] = agent.MCPServerConfig{Name: c.Name, Command: c.Command, Args: c.Args, Env: c.Env}
-		}
-		agent.RegisterMCPServers(reg, agentCfgs)
-	}
-
-	reloadWebLuaTools(reg, root)
-
-	// ── 初始化调试日志系统 ──
-	agent.InitDebugLogger(root, 50)
-
-	sys := buildWebSystemPrompt()
-
-	// ── 跨对话项目状态感知：注入完整的项目当前状态上下文 ──
-	// 包括：未完成任务、已完成任务、错误日志、修改文件等
-	if root != "" {
-		execMgr := agent.InitExecStateManager(root)
-		var stateParts []string
-
-		// 1. 注入中断的任务状态
-		interrupted := execMgr.FindInterrupted()
-		if interrupted != nil {
-			stateSummary := interrupted.GetSummary()
-			stateParts = append(stateParts,
-				"## 项目未完成任务\n"+stateSummary+
-					"\n注意：以上是项目中尚未完成的任务状态。请继续推进完成这些任务。"+
-					"\n如果状态显示有中断的运行，请优先恢复并完成它。")
-		}
-
-		// 2. 注入最近完成的任务摘要
-		allStates := execMgr.ListAll()
-		completedStates := make([]*agent.ExecutionState, 0)
-		for _, st := range allStates {
-			if st.Status == agent.ExecCompleted {
-				completedStates = append(completedStates, st)
-			}
-		}
-		if len(completedStates) > 0 {
-			var completedSb strings.Builder
-			completedSb.WriteString(fmt.Sprintf("## 已完成任务（最近 %d 条）\n\n", min(3, len(completedStates))))
-			for i := 0; i < min(3, len(completedStates)); i++ {
-				st := completedStates[i]
-				completedSb.WriteString(fmt.Sprintf("- **%s** — %s (%d 轮, %d 文件变更)\n",
-					st.Task, st.UpdatedAt, st.LoopCount, len(st.ModifiedFiles)))
-			}
-			stateParts = append(stateParts, completedSb.String())
-		}
-
-		// 3. 注入最近错误日志摘要
-		if agent.GlobalDebugLogger != nil {
-			errorSummary := agent.GlobalDebugLogger.GetErrorSummary(3)
-			if errorSummary != "" && errorSummary != "（无错误日志）" {
-				stateParts = append(stateParts,
-					"## 项目中待处理的错误\n"+errorSummary+
-						"\n注意：以上是检测到的错误。请分析并修复它们。")
-			}
-		}
-
-		// 4. 注入所有执行状态统计
-		if len(allStates) > 0 {
-			stats := fmt.Sprintf("## 项目执行统计\n- 总执行次数: %d\n- 运行中: %d\n- 已完成: %d\n- 失败: %d\n- 已取消: %d\n",
-				len(allStates),
-				countStates(allStates, agent.ExecRunning),
-				countStates(allStates, agent.ExecCompleted),
-				countStates(allStates, agent.ExecFailed),
-				countStates(allStates, agent.ExecCancelled))
-			stateParts = append(stateParts, stats)
-		}
-
-		if len(stateParts) > 0 {
-			sys += "\n\n# 项目当前状态\n" + strings.Join(stateParts, "\n\n")
-		}
-
-		// 5. 注入最近对话的摘要（跨对话上下文感知）
-		recentMemories := memory.List()
-		if len(recentMemories) > 0 {
-			var memSb strings.Builder
-			limit := 5
-			if len(recentMemories) < limit {
-				limit = len(recentMemories)
-			}
-			memSb.WriteString(fmt.Sprintf("## 最近对话摘要（最近 %d 条）\n\n", limit))
-			memSb.WriteString("> ⚠️ 以下摘要是**已完成的历史对话**，与当前对话无关。请勿重复执行已完成的任务。\n> 当前对话中用户的新消息在下方 `[User]` 消息中。\n\n")
-			for i := 0; i < limit; i++ {
-				m := recentMemories[i]
-				title := m.Title
-				if title == "" || title == "新对话" {
-					title = "未命名对话"
-				}
-				memSb.WriteString(fmt.Sprintf("- **%s**", title))
-				if m.Summary != "" {
-					memSb.WriteString(": " + m.Summary)
-				}
-				memSb.WriteString("\n")
-			}
-			memSb.WriteString("\n（需要更详细的历史信息可用 memory_search / memory_read 检索具体对话。）")
-			sys += "\n\n# 已完成对话历史\n" + memSb.String()
-		}
-	}
-	// ── 加载对话历史（委托给 MessageStore） ──
-	// 从 store 加载完整历史（含 ToolCalls/Reasoning），传给 LoopOpts.History。
-	// SessionManager.Start 会设置到 loop.History。
-	//
-	// 历史中含上一轮的系统消息，和当前系统提示前缀相同——保留它以最大化 LLM 缓存命中
-	// （连续请求共享相同 prompt 前缀时命中 KV-cache，大幅降低延迟与成本）。
-	var history []agent.Message
-	if convID != "" {
-		if store := agentMgr.Store(); store != nil {
-			raw, _ := store.LoadAll(convID)
-			if raw != nil {
-				history = make([]agent.Message, len(raw))
-				for i := range raw {
-					history[i] = raw[i]
-					history[i].Reasoning = ""
-				}
-			}
-		}
-	}
-	// 裁剪中断会话（用户停止）产生的不完整 assistant 消息，确保新消息有清晰分界
-	history = agent.TrimInterruptedHistory(history)
-
-	// ── 最大迭代数（自主模式翻倍） ──
-	maxIter := core.Settings.MaxIterations
-	if autonomous {
-		if maxIter <= 0 {
-			maxIter = 60
-		} else {
-			maxIter *= 2
-		}
-	}
-
-	return agent.LoopOpts{
-		Provider:         prov,
-		Registry:         reg,
-		System:           sys,
-		MaxIterations:    maxIter,
-		MaxContextTokens: core.Settings.ContextMaxTokens,
-		Compressor:       bridge.BuildCompressor(),
-		History:          history,
-		Autonomous:       autonomous,
-	}
-}
-
-// handleChatSend 启动一次 agent 会话（非阻塞）。
-// 构建 LoopOpts 后调用 agentMgr.Start 立即返回；前端通过全局 WebSocket /ws 接收事件流。
-// handleChatSend / Stop / Answer / Approve / Feedback / Market 等已统一到 web_server.go
-
-
-	if r.Method != "POST" {
-		jsonErr(w, "仅 POST")
-		return
-	}
-	var req struct {
-		Message       string `json:"message"`
-		SessionID     string `json:"sessionId"` // 保留兼容但不再使用
-		Autonomous    bool   `json:"autonomous"`
-		ConvID        string `json:"convId"`
-		WorkspaceRoot string `json:"workspaceRoot"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonErr(w, err.Error())
-		return
-	}
-	if req.Message == "" {
-		jsonErr(w, "消息不能为空")
-		return
-	}
-	const maxMsgLen = 50000
-	if len(req.Message) > maxMsgLen {
-		req.Message = req.Message[:maxMsgLen] + "\n\n…（消息过长，已截断至 " + fmt.Sprint(maxMsgLen) + " 字符）"
-	}
-	if req.ConvID == "" {
-		req.ConvID = fmt.Sprintf("conv_%d", time.Now().UnixNano())
-	}
-	// 兜底：若前端未传 workspaceRoot，用当前核心工作区
-	if req.WorkspaceRoot == "" {
-		req.WorkspaceRoot = core.Root()
-	}
-
-	if !core.Configured() {
-		jsonErr(w, "未配置 API key。请在设置面板中配置 API Key 和模型。")
-		return
-	}
-
-	// 持久化用户消息到 MessageStore（SessionManager.Start 内部会调 store.CreateConversation 若不存在）
-	agentMgr.AppendPersistedUserMessage(req.ConvID, req.Message)
-
-	// 构建 LoopOpts（provider/registry/system/history 全部收敛于此）
-	opts := s.buildWebLoopOpts(req.ConvID, req.Message, req.Autonomous)
-	opts.WorkspaceRoot = req.WorkspaceRoot
-
-	// 审核开关：只需设 AutoReview 和 ReviewProvider，审核决策由 Loop 内部自决
-	opts.AutoReview = core.Settings.AutoReview
-	if core.Settings.AutoReview && core.Settings.ReviewModel != "" {
-		opts.ReviewProvider = bridge.BuildReviewProvider()
-	}
-	// 自动 git 提交开关
-	opts.AutoCommit = core.Settings.AutoCommit
-
-	// 自主模式：设置规划 Provider（外层设计者 Loop 使用）
-	if req.Autonomous {
-		if pm := strings.TrimSpace(core.Settings.PlanModel); pm != "" {
-			opts.PlanProvider = &agent.OpenAIProvider{
-				BaseURL: core.Settings.BaseURL, APIKey: core.Settings.APIKey,
-				Model: pm, Temperature: core.Temperature(), MaxTokens: core.Settings.MaxTokens,
-				ThinkingMode: core.Settings.ThinkingMode,
-			}
-		} else {
-			opts.PlanProvider = s.buildWebProvider() // 回退使用主模型
-		}
-	}
-
-	taskText := req.Message
-
-	// 非阻塞启动：agentMgr.Start 内部 goroutine 跑 loop.Run，立即返回
-	ctx := context.Background()
-	if err := agentMgr.Start(ctx, req.ConvID, taskText, opts); err != nil {
-		jsonErr(w, err.Error())
-		return
-	}
-
-	// 立即返回（不等 agent 完成）
-	jsonResp(w, map[string]any{"ok": true, "convId": req.ConvID})
-}
-
-// startEventPersistWorker 已简化：消息写盘由 Session goroutine 在 loop.Run 返回后直接完成。
-// web 层只需设置 OnDone 回调——agent 在写盘后调用以生成对话摘要。
-// startEventPersistWorker 已统一到 web_server.go（通过 webCompressor 回调差异）
-
-// handleChatStop
-	agentMgr.OnDone = func(convID string) {
-		go generateConversationSummary(convID, bridge.BuildCompressor())
-	}
-}
-
-// handleChatStop 停止指定会话的 agent 运行。
-func (s *webServer) handleChatStop(w http.ResponseWriter, r *http.Request) {
-	convID := r.URL.Query().Get("convId")
-	if convID == "" {
-		// 兼容旧参数名
-		convID = r.URL.Query().Get("sessionId")
-	}
-	if convID == "" {
-		jsonErr(w, "缺少 convId 参数")
-		return
-	}
-	agentMgr.Stop(convID)
-	jsonResp(w, map[string]any{"ok": true})
-}
-
-// handleChatAnswer 向指定会话发送 ask_user 的用户回答。
-// handleChatAnswer
-	if r.Method != "POST" {
-		jsonErr(w, "仅 POST")
-		return
-	}
-	var req struct {
-		ConvID string `json:"convId"`
-		Answer string `json:"answer"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonErr(w, err.Error())
-		return
-	}
-	if req.ConvID == "" {
-		jsonErr(w, "convId 必填")
-		return
-	}
-	if err := agentMgr.SendAnswer(req.ConvID, req.Answer); err != nil {
-		jsonErr(w, err.Error())
-		return
-	}
-	jsonResp(w, map[string]any{"ok": true})
-}
-
-// handleChatApprove 向指定会话发送审批结果。
-// handleChatApprove
-	if r.Method != "POST" {
-		jsonErr(w, "仅 POST")
-		return
-	}
-	var req struct {
-		ConvID   string `json:"convId"`
-		Approved bool   `json:"approved"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonErr(w, err.Error())
-		return
-	}
-	if req.ConvID == "" {
-		jsonErr(w, "convId 必填")
-		return
-	}
-	if err := agentMgr.Approve(req.ConvID, req.Approved); err != nil {
-		jsonErr(w, err.Error())
-		return
-	}
-	jsonResp(w, map[string]any{"ok": true})
-}
-
-// handleChatFeedback 向指定会话发送运行时反馈（补充/纠正）。
-// handleChatFeedback
-	if r.Method != "POST" {
-		jsonErr(w, "仅 POST")
-		return
-	}
-	var req struct {
-		ConvID   string `json:"convId"`
-		Feedback string `json:"feedback"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonErr(w, err.Error())
-		return
-	}
-	if req.ConvID == "" {
-		jsonErr(w, "convId 必填")
-		return
-	}
-	if err := agentMgr.SendFeedback(req.ConvID, req.Feedback); err != nil {
-		jsonErr(w, err.Error())
-		return
-	}
-	jsonResp(w, map[string]any{"ok": true})
-}
-
-
-// ─── 市场搜索 API ──────────────────────────────────────────
-
-// handleMarketplaceSearch 等已统一到 web_server.go
-
-func (s *webServer) handleMarketplaceSearch
-	query := r.URL.Query().Get("q")
-	kind := r.URL.Query().Get("kind")
-	if kind == "" {
-		kind = "all"
-	}
-
-	results := marketplacepanel.Search(query, kind)
-	type resultItem struct {
-		ID          string   `json:"id"`
-		Kind        string   `json:"kind"`
-		Name        string   `json:"name"`
-		Description string   `json:"description"`
-		Tags        []string `json:"tags"`
-		Command     string   `json:"command"`
-		Args        []string `json:"args"`
-		Installed   bool     `json:"installed"`
-	}
-	out := make([]resultItem, 0, len(results))
-	for _, e := range results {
-		out = append(out, resultItem{
-			ID: e.ID, Kind: e.Kind, Name: e.Name,
-			Description: e.Description, Tags: e.Tags,
-			Command: e.Command, Args: e.Args,
-			Installed: marketplacepanel.IsInstalled(e.ID),
-		})
-	}
-	jsonResp(w, out)
-}
-
-// ─── 市场安装 API ──────────────────────────────────────────
-
-// handleMarketplaceInstall
-	if r.Method != "POST" {
-		jsonErr(w, "仅 POST")
-		return
-	}
-	var req struct {
-		ID      string   `json:"id"`
-		Kind    string   `json:"kind"`
-		Command string   `json:"command"`
-		Args    []string `json:"args"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonErr(w, err.Error())
-		return
-	}
-	if req.ID == "" {
-		jsonErr(w, "id 必填")
-		return
-	}
-	var msg string
-	var err error
-	if req.Command != "" {
-		entry := marketplacepanel.RegistryEntry{
-			ID: req.ID, Kind: req.Kind,
-			Command: req.Command, Args: req.Args,
-		}
-		msg, err = marketplacepanel.InstallEntry(entry, false)
-	} else {
-		msg, err = marketplacepanel.InstallScoped(req.ID, false)
-	}
-	if err != nil {
-		jsonErr(w, err.Error())
-		return
-	}
-	jsonResp(w, map[string]any{"ok": true, "message": msg})
-}
-
-// handleMarketplaceRefresh 刷新远程市场缓存。
-// handleMarketplaceRefresh
-	if r.Method != "POST" {
-		jsonErr(w, "仅 POST")
-		return
-	}
-	root := core.Root()
-	if err := marketplacepanel.FetchRemoteRegistry(root, true); err != nil {
-		jsonResp(w, map[string]any{"ok": false, "message": err.Error(), "status": marketplacepanel.FetchStatus()})
-		return
-	}
-	jsonResp(w, map[string]any{"ok": true, "message": "远程市场已刷新", "status": marketplacepanel.FetchStatus()})
+	return result.History
 }
 
 // ─── 自动构建验证 ──────────────────────────────────────────
@@ -912,13 +227,3 @@ func autoVerifyProject(root string) verifyResult {
 
 // countStates 统计具备指定状态的执行状态数量。
 // countStates 已在 web_server.go 中统一实现
-
-
-	n := 0
-	for _, s := range states {
-		if s.Status == status {
-			n++
-		}
-	}
-	return n
-}
