@@ -188,7 +188,7 @@
 import { ref, computed, inject, onMounted, onUnmounted, nextTick, watch, reactive } from 'vue'
 import { state } from '../main.js'
 import api from '../api.js'
-import { setGlobalCtx, startConvRuntime, resetConvRuntime, createAssistantPlaceholder, getConvCtxStats, resetConvCtxStats } from '../agent-events.js'
+import { setGlobalCtx, startConvRuntime, resetConvRuntime, createAssistantPlaceholder, getConvRuntime, getConvCtxStats, resetConvCtxStats } from '../agent-events.js'
 import SvgIcon from './SvgIcon.vue'
 import PlanPanel from './PlanPanel.vue'
 import TaskPanel from './TaskPanel.vue'
@@ -717,8 +717,10 @@ const switchConv = async (id) => {
     const ts = await api.apiGet('/conversations/' + id + '/token-stats')
     if (ts && ts.promptTokens !== undefined) Object.assign(getConvCtxStats(id), ts)
   } catch {}
-  // 懒加载：若本地尚无消息缓存，拉取最新 50 条
-  if (state.messagesByConv[id].length === 0) {
+  // 懒加载：若本地尚无真实消息缓存（忽略 processStatus 抢先插入的 loading 占位），拉取最新 50 条
+  const hasRealMsgs = state.messagesByConv[id].length > 0 &&
+    state.messagesByConv[id].some(m => !m._loading)
+  if (!hasRealMsgs) {
     try {
       const data = await api.getMessages(id, { limit: 50 })
       const loaded = (data.messages || [])
@@ -751,6 +753,21 @@ const switchConv = async (id) => {
       state.messages = state.messagesByConv[id]
       state.msgTotalByConv[id] = data.total || loaded.length
       state.msgLoadedByConv[id] = loaded.length
+      // ★ processStatus 可能已为此 conv 创建了 runtime（agent 仍在运行），
+      //   但 runtime 的 msgIdx 指向旧数组中已被替换的 loading 占位。
+      //   需要在加载的真实消息末尾追加一条 loading 占位，并更新 runtime 的 msgIdx。
+      const rt = getConvRuntime(id)
+      if (rt) {
+        const loadingMsg = {
+          role: 'assistant', content: '', segments: [], toolCalls: [],
+          _key: makeMsgKey(), _idx: loaded.length,
+          _time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+          _loading: true,
+        }
+        state.messagesByConv[id].push(loadingMsg)
+        state.messages = state.messagesByConv[id]
+        rt.msgIdx = loaded.length  // 指向新追加的 loading 占位
+      }
     } catch {
       state.msgTotalByConv[id] = 0
       state.msgLoadedByConv[id] = 0
