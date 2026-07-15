@@ -46,8 +46,22 @@ func (l *Loop) maybeCompact(ctx context.Context, msgs []Message) []Message {
 	if dropped <= 0 {
 		return msgs // 没压成（中段太短，或全是要保的配对）
 	}
-	// 摘要存入 CompressedSummaries（注入系统提示可变部分时使用）
+	// 摘要存入 CompressedSummaries（注入系统提示可变部分时使用）。
+	// ★ 限制最多保留 3 条，超过时合并最旧的 2 条，防止系统提示无限膨胀。
+	const maxSummaries = 3
+	if len(l.CompressedSummaries) >= maxSummaries {
+		// 合并最旧的 2 条
+		merged := "[历史摘要合并]\n" + l.CompressedSummaries[0] + "\n" + l.CompressedSummaries[1]
+		if len(merged) > 600 {
+			merged = merged[:600] + "…"
+		}
+		l.CompressedSummaries = append([]string{merged}, l.CompressedSummaries[2:]...)
+	}
 	l.CompressedSummaries = append(l.CompressedSummaries, summary)
+	if len(l.CompressedSummaries) > maxSummaries {
+		// 再次钳位（安全兜底）
+		l.CompressedSummaries = l.CompressedSummaries[len(l.CompressedSummaries)-maxSummaries:]
+	}
 	l.compactCooldown = compactCooldownTurns // 进入冷却，避免下几轮反复压缩
 	l.lastPromptTokens = 0                    // 重置：压缩后等下轮实测/重新估算
 	l.emit(Event{Type: EventCompacted, Content: fmt.Sprintf("上下文已压缩 · 早期 %d 条对话合并为摘要，保留最近 %d 条", dropped, prefixLen(out))})
