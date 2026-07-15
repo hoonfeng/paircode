@@ -23,8 +23,10 @@ type TokenStats struct {
 }
 
 var (
-	latestTokenStats TokenStats
-	tokenStatsMu     sync.Mutex
+	// latestTokenStatsByRoot 按工作区根路径存储内存中的最新 token 统计。
+	// 不同工作区完全隔离，避免跨工作区污染。
+	latestTokenStatsByRoot = make(map[string]*TokenStats)
+	tokenStatsMu           sync.Mutex
 )
 
 // tokenStatsPath 返回指定工作区的 .pair/token-stats.json 路径
@@ -46,36 +48,40 @@ func SaveTokenUsageForRoot(root string, usage *Usage) {
 	tokenStatsMu.Lock()
 	defer tokenStatsMu.Unlock()
 
-	// 先从磁盘读出已有累积值（防止跨进程丢失）
-	if path := tokenStatsPath(root); path != "" {
-		if data, err := os.ReadFile(path); err == nil {
-			var disk TokenStats
-			if json.Unmarshal(data, &disk) == nil {
-				if disk.TotalTokens > latestTokenStats.TotalTokens {
-					latestTokenStats = disk
+	// 从 map 取本工作区内存累计值，没有则从磁盘恢复或新建
+	stats, ok := latestTokenStatsByRoot[root]
+	if !ok {
+		stats = &TokenStats{}
+		// 尝试从磁盘恢复已有累积值（防止跨进程丢失）
+		if path := tokenStatsPath(root); path != "" {
+			if data, err := os.ReadFile(path); err == nil {
+				var disk TokenStats
+				if json.Unmarshal(data, &disk) == nil {
+					stats = &disk
 				}
 			}
 		}
+		latestTokenStatsByRoot[root] = stats
 	}
 
 	// 叠加（累积）
-	latestTokenStats.PromptTokens += usage.PromptTokens
-	latestTokenStats.CompletionTokens += usage.CompletionTokens
-	latestTokenStats.TotalTokens += usage.TotalTokens
-	latestTokenStats.CacheHitTokens += usage.PromptCacheHitTokens
-	latestTokenStats.CacheMissTokens += usage.PromptCacheMissTokens
-	latestTokenStats.SystemTokens += usage.SystemTokens
-	latestTokenStats.SkillsTokens += usage.SkillsTokens
-	latestTokenStats.MCPTokens += usage.MCPTokens
-	latestTokenStats.ToolTokens += usage.ToolTokens
-	latestTokenStats.HistoryTokens += usage.HistoryTokens
-	latestTokenStats.OtherTokens += usage.OtherTokens
+	stats.PromptTokens += usage.PromptTokens
+	stats.CompletionTokens += usage.CompletionTokens
+	stats.TotalTokens += usage.TotalTokens
+	stats.CacheHitTokens += usage.PromptCacheHitTokens
+	stats.CacheMissTokens += usage.PromptCacheMissTokens
+	stats.SystemTokens += usage.SystemTokens
+	stats.SkillsTokens += usage.SkillsTokens
+	stats.MCPTokens += usage.MCPTokens
+	stats.ToolTokens += usage.ToolTokens
+	stats.HistoryTokens += usage.HistoryTokens
+	stats.OtherTokens += usage.OtherTokens
 
 	path := tokenStatsPath(root)
 	if path == "" {
 		return
 	}
-	data, _ := json.MarshalIndent(latestTokenStats, "", "  ")
+	data, _ := json.MarshalIndent(stats, "", "  ")
 	os.WriteFile(path, data, 0644)
 }
 
@@ -93,9 +99,9 @@ func ResetTokenStats() {
 func ResetTokenStatsForRoot(root string) {
 	tokenStatsMu.Lock()
 	defer tokenStatsMu.Unlock()
-	latestTokenStats = TokenStats{}
+	delete(latestTokenStatsByRoot, root)
 	if path := tokenStatsPath(root); path != "" {
-		data, _ := json.MarshalIndent(latestTokenStats, "", "  ")
+		data, _ := json.MarshalIndent(TokenStats{}, "", "  ")
 		os.WriteFile(path, data, 0644)
 	}
 }
@@ -116,21 +122,23 @@ func ReadTokenStatsForRoot(root string) *TokenStats {
 	tokenStatsMu.Lock()
 	defer tokenStatsMu.Unlock()
 
+	// 内存最新值优先（当前进程内新产生的统计尚未刷盘）
+	if stats, ok := latestTokenStatsByRoot[root]; ok {
+		return stats
+	}
+
+	// 内存没有，从磁盘读取
 	path := tokenStatsPath(root)
 	if path == "" {
-		return &latestTokenStats
+		return &TokenStats{}
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return &latestTokenStats
+		return &TokenStats{}
 	}
 	var stats TokenStats
 	if err := json.Unmarshal(data, &stats); err != nil {
-		return &latestTokenStats
-	}
-	// 内存最新值优先于磁盘（当前进程内新产生的统计尚未刷盘）
-	if latestTokenStats.TotalTokens > stats.TotalTokens {
-		return &latestTokenStats
+		return &TokenStats{}
 	}
 	return &stats
 }
