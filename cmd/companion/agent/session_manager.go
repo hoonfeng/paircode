@@ -266,6 +266,16 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		CompressedSummaries: opts.CompressedSummaries, // 恢复已持久化的压缩摘要
 	}
 
+	// ★ 恢复上一轮自主任务的执行日志（跨轮感知：新自主能知道上一轮每轮分析/委托了什么）
+	if opts.WorkspaceRoot != "" && opts.Autonomous {
+		if savedLog := LoadExecutionLog(opts.WorkspaceRoot, convID); savedLog != nil && len(savedLog.Entries) > 0 {
+			if loop.State == nil {
+				loop.State = map[string]any{}
+			}
+			loop.State["executionLog"] = savedLog
+		}
+	}
+
 	// OnEvent：将事件写入 session.Events（非阻塞，满则丢弃防阻塞 Loop）
 	loop.OnEvent = func(e Event) {
 		select {
@@ -474,6 +484,11 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 					// 持久化到 store，确保页面刷新后仍可读取
 					_ = m.store.AppendMessage(convID, feedbackMsg, nil)
 				}
+			}
+
+			// ★ 持久化执行日志到磁盘，供下一轮自主任务恢复
+			if opts.WorkspaceRoot != "" {
+				SaveExecutionLog(opts.WorkspaceRoot, convID, loop.GetExecutionLog())
 			}
 		} else {
 			msgs, err = loop.Run(runCtx, task, nil)

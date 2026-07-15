@@ -5,7 +5,10 @@ package agent
 // 每轮 LLM 调用前注入系统提示的【执行日志】段。
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -129,4 +132,54 @@ func (l *Loop) logKeyExists(phase string) bool {
 		}
 	}
 	return false
+}
+
+// ── 磁盘持久化 ──
+
+// executionLogDir 返回执行日志存储目录。
+func executionLogDir(root string) string {
+	return filepath.Join(root, ".pair", "execution_logs")
+}
+
+// executionLogPath 返回指定 convID 的执行日志文件路径。
+func executionLogPath(root, convID string) string {
+	return filepath.Join(executionLogDir(root), convID+".json")
+}
+
+// SaveExecutionLog 将执行日志持久化到磁盘。
+// 在自主模式每轮结束时调用，供下一轮恢复。
+func SaveExecutionLog(root, convID string, log *ExecutionLog) {
+	if log == nil || len(log.Entries) == 0 {
+		return
+	}
+	dir := executionLogDir(root)
+	os.MkdirAll(dir, 0o755)
+	path := executionLogPath(root, convID)
+	data, err := json.Marshal(log)
+	if err != nil {
+		return
+	}
+	os.WriteFile(path, data, 0o644)
+}
+
+// LoadExecutionLog 从磁盘加载执行日志。
+// 新自主开始时调用，恢复上一轮的完整执行日志。
+func LoadExecutionLog(root, convID string) *ExecutionLog {
+	path := executionLogPath(root, convID)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var log ExecutionLog
+	if err := json.Unmarshal(data, &log); err != nil {
+		return nil
+	}
+	return &log
+}
+
+// ClearExecutionLog 清除指定 convID 的执行日志文件。
+// 对话删除时调用，避免残留。
+func ClearExecutionLog(root, convID string) {
+	path := executionLogPath(root, convID)
+	os.Remove(path)
 }
