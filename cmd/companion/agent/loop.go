@@ -197,6 +197,35 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 	}
 	// 统一持久化出口：每次 Run 返回后更新 l.History（不论调用方是否传了 history）
 	defer func() {
+		// ★ 任务完成时自动摘要并缩减历史 ★
+		// 当 Run 成功返回（无错误）且 msgs 非空时，生成结构化摘要，
+		// 存入 CompressedSummaries 和 memory，然后裁剪 l.History，
+		// 防止下一轮对话时历史无限膨胀浪费 token。
+		if err == nil && len(msgs) > 0 {
+			summary := l.generateRunSummary(msgs, task)
+			l.CompressedSummaries = append(l.CompressedSummaries, summary)
+			// 裁剪：只保留 system + 本轮最后一条 assistant（最终结果）
+			var trimmed []Message
+			if len(msgs) > 0 && msgs[0].Role == RoleSystem {
+				trimmed = append(trimmed, msgs[0])
+			}
+			for i := len(msgs) - 1; i >= 0; i-- {
+				if msgs[i].Role == RoleAssistant && len(msgs[i].ToolCalls) == 0 && strings.TrimSpace(msgs[i].Content) != "" {
+					trimmed = append(trimmed, msgs[i])
+					break
+				}
+			}
+			if len(trimmed) > 1 {
+				msgs = trimmed
+			}
+			// 存为跨会话记忆
+			memSummary := extractRunSummary(msgs)
+			if memSummary != "" {
+				memName := fmt.Sprintf("完成报告-%s", truncateString(task, 40))
+				memContent := fmt.Sprintf("## 任务\n%s\n\n## 完成报告\n%s", task, memSummary)
+				l.saveCompletionMemory(memName, memContent)
+			}
+		}
 		l.History = msgs
 		// 最终写盘兜底：OnBatchPersist 非空则调用一次
 		if l.OnBatchPersist != nil && msgs != nil {
@@ -527,7 +556,7 @@ func DefaultSystemPrompt(roots []string) string {
 		"4. 如涉及复杂逻辑，用 debug_start 设置断点，debug_variables 查看变量状态\n\n" +
 		"## GUI 桌面端改动\n" +
 		"1. 编译通过后运行程序\n" +
-		"2. 用 screenshot_webpage 截图验证网页渲染\n" +
+		"2. 用 web_debug 截图验证网页渲染\n" +
 		"3. 用 image_analyze 分析截图（颜色/布局/元素位置）\n\n" +
 		"## 验证纪律\n" +
 		"- 每次代码改动后必须验证，不允许只编译就声称完成\n" +
@@ -538,8 +567,8 @@ func DefaultSystemPrompt(roots []string) string {
 		"- 运行：run_command（同步，等结果）；run_background（后台长任务）→ read_output 看输出、kill_process 停。\n" +
 
 		"- 联网：web_fetch（抓网页）、web_search（搜索引擎）——查文档/报错/库用法。\n" +
-		"- ⚡ 网页验证：web_debug（一站式——打开URL+控制台错误+截图+JS执行+交互，首选验证工具）；headless_browser（JS渲染页面文本提取）；screenshot_webpage（网页截图）。\n" +
-		"- 截图：screenshot_webpage/screenshot_desktop/screenshot_window/screenshot_area → image_analyze（分析颜色/色块/图形）/ image_ocr（识别文字）。\n" +
+		"- ⚡ 网页验证：web_debug（一站式——打开URL+控制台错误+截图+JS执行+交互，首选验证工具）。\n" +
+		"- 截图：screenshot_desktop/screenshot_window/screenshot_area → image_analyze（分析颜色/色块/图形）/ image_ocr（识别文字）。\n" +
 		"- 文件符号与定位：find_symbol（查函数/类型定义）、get_file_symbols（查看文件符号列表）、find_symbol_usages（查找引用）、check_impact（分析改动影响）、list_exported_symbols（列出导出符号）、get_file_dependencies（查看文件依赖）、find_circular_deps（检测循环依赖）。\n" +
 		"- 调试器：debug_start（启动 DAP 调试）→ debug_breakpoint（设断点）→ debug_continue/next/step_in/step_out（控制执行）→ debug_stack/variables/evaluate（查看状态）→ debug_stop（停止）；debug_status（查看状态）。\n" +
 		"- Git：git_status / git_diff / git_log / git_show / git_blame（只读）；git_add / git_commit / git_branch / git_checkout / git_stash（写类需审批）。\n" +
@@ -605,4 +634,79 @@ func readCapped(root, name string) string {
 		s = s[:8000] + "\n…（已截断）"
 	}
 	return s
+}
+
+// ── 历史摘要与裁剪 ─────────────────────────────────────────
+
+// generateRunSummary 从 msgs 和 task 生成结构化摘要。
+func (l *Loop) generateRunSummary(msgs []Message, task string) string {
+	var b strings.Builder
+	b.WriteString("[完成报告] ")
+	b.WriteString(truncateString(task, 120))
+	b.WriteString("\n")
+
+	toolCalls := 0
+	errors := 0
+	filesModified := 0
+
+	for _, m := range msgs {
+		if m.Role == RoleAssistant && len(m.ToolCalls) > 0 {
+			toolCalls += len(m.ToolCalls)
+		}
+		if m.Role == RoleTool && strings.HasPrefix(m.Content, "Error:") {
+			errors++
+		}
+	}
+
+	for _, m := range msgs {
+		if m.Role == RoleTool && (strings.HasPrefix(m.Content, "已编辑 ") || strings.HasPrefix(m.Content, "已写入 ") ||
+			strings.HasPrefix(m.Content, "已移动 ") || strings.HasPrefix(m.Content, "已删除 ")) {
+			filesModified++
+		}
+	}
+
+	b.WriteString(fmt.Sprintf("工具调用: %d 次 | 错误: %d 个 | 文件变更: %d 个\n", toolCalls, errors, filesModified))
+
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].Role == RoleAssistant && len(msgs[i].ToolCalls) == 0 && strings.TrimSpace(msgs[i].Content) != "" {
+			result := strings.TrimSpace(msgs[i].Content)
+			if len(result) > 500 {
+				result = result[:500] + "…"
+			}
+			b.WriteString("\n最终结果:\n" + result)
+			break
+		}
+	}
+
+	return b.String()
+}
+
+// extractRunSummary 从 msgs 中提取紧凑的结果摘要（用于跨会话记忆）。
+func extractRunSummary(msgs []Message) string {
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].Role == RoleAssistant && len(msgs[i].ToolCalls) == 0 && strings.TrimSpace(msgs[i].Content) != "" {
+			content := strings.TrimSpace(msgs[i].Content)
+			if len(content) > 800 {
+				content = content[:800] + "…"
+			}
+			return content
+		}
+	}
+	return ""
+}
+
+// saveCompletionMemory 将完成报告保存为跨会话记忆。
+func (l *Loop) saveCompletionMemory(name, content string) {
+	root := l.WorkspaceRoot
+	if root == "" {
+		return
+	}
+	dir := filepath.Join(root, ".pair", "memory")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return
+	}
+	path := filepath.Join(dir, name+".md")
+	body := fmt.Sprintf("---\nname: %s\ntype: project\ndescription: 任务完成报告\n---\n\n%s\n", name, content)
+	_ = os.WriteFile(path, []byte(body), 0o644)
+	writeMemIndex(dir)
 }

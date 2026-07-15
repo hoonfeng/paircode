@@ -1941,6 +1941,10 @@ func buildWebSystemPrompt() string {
 	root := core.Root()
 	sys += agent.ProjectRules(root)
 	sys += agent.ProjectKnowledge(root, 2500)
+	// 自动注入项目结构概览，避免 Agent 每次从头探测
+	if overview := agent.ProjectStructureOverview(core.Folders); overview != "" {
+		sys += "\n\n# 项目环境（预加载—无需探测）\n" + overview
+	}
 	return sys
 }
 
