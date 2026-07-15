@@ -442,12 +442,141 @@ func (s *DBStore) PersistNewMessages(convID string, hist []Message) error {
 	return tx.Commit()
 }
 
-// MergeLastAssistantRun 合并 JSONL 末尾最近的连续助理条目。
-// SQLite 模式下，消息已经是原子写入的，无需合并。
-// 保留此方法用于向后兼容。
+// MergeLastAssistantRun 合并末尾最近一次 user 消息后的连续 assistant 消息。
+// PersistNewMessages 每轮迭代写一条 assistant，合并后只保留第一条。
 func (s *DBStore) MergeLastAssistantRun(convID string) error {
-	// SQLite 模式下每条消息独立写入，不存在合并问题
-	return nil
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.checkDB(); err != nil {
+		return err
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("MergeLastAssistantRun: 事务开始: %w", err)
+	}
+	defer tx.Rollback()
+
+	rows, err := tx.Query(
+		`SELECT idx, role, content, reasoning, tool_calls, tool_call_id, name, created_at FROM messages WHERE conv_id = ? ORDER BY idx ASC`,
+		convID,
+	)
+	if err != nil {
+		return fmt.Errorf("MergeLastAssistantRun: 查询: %w", err)
+	}
+
+	type msgRow struct {
+		idx                                 int
+		role, content, reasoning, toolCalls string
+		toolCallID, name, createdAt        string
+	}
+	var all []msgRow
+	for rows.Next() {
+		var r msgRow
+		if err := rows.Scan(&r.idx, &r.role, &r.content, &r.reasoning, &r.toolCalls, &r.toolCallID, &r.name, &r.createdAt); err != nil {
+			rows.Close()
+			return fmt.Errorf("MergeLastAssistantRun: 扫描: %w", err)
+		}
+		all = append(all, r)
+	}
+	rows.Close()
+	if len(all) < 2 {
+		return nil
+	}
+
+	lastUser := -1
+	for i := len(all) - 1; i >= 0; i-- {
+		if all[i].role == "user" {
+			lastUser = i
+			break
+		}
+	}
+	if lastUser < 0 || lastUser >= len(all)-1 {
+		return nil
+	}
+
+	assistantIdxs := []int{}
+	for i := lastUser + 1; i < len(all); i++ {
+		r := all[i].role
+		if r == "assistant" {
+			assistantIdxs = append(assistantIdxs, i)
+		} else if r == "tool" {
+			continue
+		} else {
+			break
+		}
+	}
+	if len(assistantIdxs) <= 1 {
+		return nil
+	}
+
+	base := all[assistantIdxs[0]]
+	type tcItem struct {
+		ID       string `json:"id"`
+		Type     string `json:"type"`
+		Function struct {
+			Name      string `json:"name"`
+			Arguments string `json:"arguments"`
+		} `json:"function"`
+	}
+	var allToolCalls []tcItem
+	if base.toolCalls != "" && base.toolCalls != "[]" {
+		json.Unmarshal([]byte(base.toolCalls), &allToolCalls)
+	}
+	for idx := 1; idx < len(assistantIdxs); idx++ {
+		next := all[assistantIdxs[idx]]
+		if next.content != "" {
+			if base.content == "" {
+				base.content = next.content
+			} else {
+				base.content += "\n" + next.content
+			}
+		}
+		if next.toolCalls != "" && next.toolCalls != "[]" {
+			var extra []tcItem
+			if json.Unmarshal([]byte(next.toolCalls), &extra) == nil {
+				allToolCalls = append(allToolCalls, extra...)
+			}
+		}
+	}
+	mergedTC, _ := json.Marshal(allToolCalls)
+	base.toolCalls = string(mergedTC)
+
+	var result []msgRow
+	result = append(result, all[:lastUser+1]...)
+	result = append(result, base)
+	for i := lastUser + 1; i < len(all); i++ {
+		isAssistant := false
+		for _, ai := range assistantIdxs {
+			if i == ai {
+				isAssistant = true
+				break
+			}
+		}
+		if !isAssistant {
+			result = append(result, all[i])
+		}
+	}
+	for i := range result {
+		result[i].idx = i
+	}
+
+	if _, err := tx.Exec(`DELETE FROM messages WHERE conv_id = ?`, convID); err != nil {
+		return fmt.Errorf("MergeLastAssistantRun: 删除: %w", err)
+	}
+	stmt, err := tx.Prepare(
+		`INSERT INTO messages (conv_id, idx, role, content, reasoning, tool_calls, tool_call_id, name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	)
+	if err != nil {
+		return fmt.Errorf("MergeLastAssistantRun: 准备插入: %w", err)
+	}
+	defer stmt.Close()
+	for _, r := range result {
+		if _, err := stmt.Exec(convID, r.idx, r.role, r.content, r.reasoning, r.toolCalls, r.toolCallID, r.name, r.createdAt); err != nil {
+			return fmt.Errorf("MergeLastAssistantRun: 插入: %w", err)
+		}
+	}
+	return tx.Commit()
 }
 
 // MergeAllAssistantRuns 全量合并 JSONL 中所有 user→assistant 的连续条目。

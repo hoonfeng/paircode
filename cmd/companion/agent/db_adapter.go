@@ -303,9 +303,153 @@ func (a *DBAdapter) GetPersistedCount(convID string) int {
 	return count
 }
 
-// ── 合并方法（SQLite 模式下均为无操作）──
+// ── 合并方法 ──
 
-func (a *DBAdapter) MergeLastAssistantRun(convID string) error { return nil }
+// MergeLastAssistantRun 合并末尾最近一次 user 消息后的连续 assistant 消息。
+// PersistNewMessages 每轮迭代写一条 assistant 消息（可能带空 content + tool_calls），
+// 合并后只保留第一条，累积所有 content 和 tool_calls。
+func (a *DBAdapter) MergeLastAssistantRun(convID string) error {
+	// 使用事务：读全部 → 合并 → 全量重写
+	tx, err := a.rawDB.Begin()
+	if err != nil {
+		return fmt.Errorf("MergeLastAssistantRun: 事务开始失败: %w", err)
+	}
+	defer tx.Rollback()
+
+	// 读全部消息
+	rows, err := tx.Query(
+		`SELECT idx, role, content, reasoning, tool_calls, tool_call_id, name, created_at FROM messages WHERE conv_id = ? ORDER BY idx ASC`,
+		convID,
+	)
+	if err != nil {
+		return fmt.Errorf("MergeLastAssistantRun: 查询失败: %w", err)
+	}
+
+	type row struct {
+		idx                                 int
+		role, content, reasoning, toolCalls string
+		toolCallID, name, createdAt        string
+	}
+	var all []row
+	for rows.Next() {
+		var r row
+		if err := rows.Scan(&r.idx, &r.role, &r.content, &r.reasoning, &r.toolCalls, &r.toolCallID, &r.name, &r.createdAt); err != nil {
+			rows.Close()
+			return fmt.Errorf("MergeLastAssistantRun: 扫描失败: %w", err)
+		}
+		all = append(all, r)
+	}
+	rows.Close()
+
+	if len(all) < 2 {
+		return nil
+	}
+
+	// 从末尾找最后一个 user
+	lastUser := -1
+	for i := len(all) - 1; i >= 0; i-- {
+		if all[i].role == "user" {
+			lastUser = i
+			break
+		}
+	}
+	if lastUser < 0 || lastUser >= len(all)-1 {
+		return nil
+	}
+
+	// 收集 user 后的连续 assistant 索引
+	assistantIdxs := []int{}
+	for i := lastUser + 1; i < len(all); i++ {
+		r := all[i].role
+		if r == "assistant" {
+			assistantIdxs = append(assistantIdxs, i)
+		} else if r == "tool" {
+			continue
+		} else {
+			break
+		}
+	}
+	if len(assistantIdxs) <= 1 {
+		return nil
+	}
+
+	// 合并到第一条 assistant
+	base := all[assistantIdxs[0]]
+	type tcItem struct {
+		ID       string `json:"id"`
+		Type     string `json:"type"`
+		Function struct {
+			Name      string `json:"name"`
+			Arguments string `json:"arguments"`
+		} `json:"function"`
+	}
+	var allToolCalls []tcItem
+	if base.toolCalls != "" && base.toolCalls != "[]" {
+		json.Unmarshal([]byte(base.toolCalls), &allToolCalls)
+	}
+	for idx := 1; idx < len(assistantIdxs); idx++ {
+		next := all[assistantIdxs[idx]]
+		if next.content != "" {
+			if base.content == "" {
+				base.content = next.content
+			} else {
+				base.content += "\n" + next.content
+			}
+		}
+		if next.toolCalls != "" && next.toolCalls != "[]" {
+			var extra []tcItem
+			if json.Unmarshal([]byte(next.toolCalls), &extra) == nil {
+				allToolCalls = append(allToolCalls, extra...)
+			}
+		}
+	}
+	mergedTC, _ := json.Marshal(allToolCalls)
+	base.toolCalls = string(mergedTC)
+
+	// 重建：lastUser前的全部 + 合并后的第一条assistant + 中间的tool消息 + 之后的非assistant消息
+	var result []row
+	result = append(result, all[:lastUser+1]...)
+	result = append(result, base)
+	for i := lastUser + 1; i < len(all); i++ {
+		isAssistant := false
+		for _, ai := range assistantIdxs {
+			if i == ai {
+				isAssistant = true
+				break
+			}
+		}
+		if !isAssistant {
+			result = append(result, all[i])
+		}
+	}
+
+	// 重写索引
+	for i := range result {
+		result[i].idx = i
+	}
+
+	// 全量删除旧消息
+	if _, err := tx.Exec(`DELETE FROM messages WHERE conv_id = ?`, convID); err != nil {
+		return fmt.Errorf("MergeLastAssistantRun: 删除旧消息失败: %w", err)
+	}
+
+	// 批量插入
+	stmt, err := tx.Prepare(
+		`INSERT INTO messages (conv_id, idx, role, content, reasoning, tool_calls, tool_call_id, name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	)
+	if err != nil {
+		return fmt.Errorf("MergeLastAssistantRun: 准备插入失败: %w", err)
+	}
+	defer stmt.Close()
+	for _, r := range result {
+		if _, err := stmt.Exec(convID, r.idx, r.role, r.content, r.reasoning, r.toolCalls, r.toolCallID, r.name, r.createdAt); err != nil {
+			return fmt.Errorf("MergeLastAssistantRun: 插入失败: %w", err)
+		}
+	}
+
+	return tx.Commit()
+}
+
 func (a *DBAdapter) MergeAllAssistantRuns(convID string) error { return nil }
 
 // ── 压缩摘要 ──
