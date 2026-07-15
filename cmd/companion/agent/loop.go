@@ -77,6 +77,10 @@ type Loop struct {
 	// 一次以确保最后一轮写盘（PersistNewMessages 内部 diff 去重，无重复写开销）。
 	OnBatchPersist func(msgs []Message)
 
+	// OnMessagePersist 单条消息强制持久化（可空）。用于 delegate_task 等场景：
+	// 委托前将外层助手消息刷盘，并将委派任务作为用户消息独立存储，使前端看到清晰的层次。
+	OnMessagePersist func(msg Message) error
+
 	// ── 上下文压缩（可空；复刻参考 context/manager.ts，见 compress.go）──
 	// MaxContextTokens>0 时启用：每次 LLM 调用前，若 tokens/Max 超阈值，把中段老消息压成一条摘要。
 	// Compressor 非空→用它（轻量压缩模型）做 LLM 摘要，否则/失败→规则式摘要。

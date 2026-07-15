@@ -39,8 +39,16 @@
               <div class="msg-bubble" :class="msg.role === 'user' ? 'bubble-user' : (msg.segments && msg.segments.length > 0 ? 'bubble-agent' : 'bubble-assistant')">
                 <!-- 用户消息：右对齐，自适应宽度，Markdown 渲染 -->
                 <template v-if="msg.role === 'user'">
+                  <!-- agent 委派 / 反馈 徽章 -->
+                  <div v-if="isDelegation(msg)" class="user-msg-header">
+                    <span class="umh-badge badge-delegation"><SvgIcon name="git-branch" :size="10" /> 委派任务</span>
+                    <span class="umh-agent">{{ delegationAgent(msg) }}</span>
+                  </div>
+                  <div v-else-if="isFeedback(msg)" class="user-msg-header">
+                    <span class="umh-badge badge-feedback"><SvgIcon name="message-square" :size="10" /> 用户反馈</span>
+                  </div>
                   <div v-if="msg.content" class="user-msg-content">
-                    <MarkdownRenderer :text="msg.content" :theme="state.theme" />
+                    <MarkdownRenderer :text="cleanMsgContent(msg)" :theme="state.theme" />
                   </div>
                   <div v-else class="user-msg-placeholder">（空消息）</div>
                 </template>
@@ -308,7 +316,10 @@ const loadMoreMessages = async () => {
       .map((m, i) => ({
         role: m.message?.role || m.role || '',
         content: m.message?.content || m.content || '',
-        segments: m.segments || [],
+        segments: (m.segments || []).map(seg => {
+          if (seg.type === 'ask_user') seg._answered = !!seg.answer
+          return seg
+        }),
         _key: 'msg_' + Date.now() + '_older_' + i,
         _idx: m.idx,
         _time: m.timestamp || '',
@@ -439,6 +450,33 @@ function msgSummary(msg) {
   if (summaryText) parts.push('「' + summaryText + '…」')
   if (!hasContent && toolCount === 0) parts.push('已完成')
   return parts.join(' · ')
+}
+
+// ── 消息展示辅助函数 ──
+
+// isDelegation 判断用户消息是否来自外层 agent 委派任务。
+function isDelegation(msg) {
+  return msg.role === 'user' && typeof msg.content === 'string' && msg.content.startsWith('【任务委派 →')
+}
+
+// delegationAgent 从委派消息内容中提取目标 agent 名。
+function delegationAgent(msg) {
+  if (!msg.content) return ''
+  const m = msg.content.match(/^【任务委派 → (\w+)】/)
+  return m ? m[1] : ''
+}
+
+// isFeedback 判断用户消息是否为用户反馈。
+function isFeedback(msg) {
+  return msg.role === 'user' && typeof msg.content === 'string' && msg.content.startsWith('【用户反馈】')
+}
+
+// cleanMsgContent 去除消息中的标记前缀，只展示纯内容。
+function cleanMsgContent(msg) {
+  if (!msg.content) return ''
+  return msg.content
+    .replace(/^【任务委派 → \w+】\n*/, '')
+    .replace(/^【用户反馈】/, '')
 }
 
 function collapsePreviousOutputs() {
@@ -691,6 +729,10 @@ const switchConv = async (id) => {
             // 兼容旧数据：finish_task 工具调用转为 content 段渲染
             if (seg.type === 'tool_call' && seg.name === 'finish_task') {
               return { type: 'content', content: seg.result || '' }
+            }
+            // ask_user 持久化数据初始化 _answered 状态
+            if (seg.type === 'ask_user') {
+              seg._answered = !!seg.answer
             }
             return seg
           })
@@ -1085,6 +1127,11 @@ onUnmounted(() => {
 .user-msg-content :deep(p:last-child) { margin-bottom: 0; }
 .user-msg-content :deep(pre) { white-space: pre-wrap; font-size: 12px; background: rgba(0,0,0,0.15); padding: 6px 8px; border-radius: 4px; max-width: 100%; overflow-x: auto; margin: 4px 0; }
 .user-msg-content :deep(code) { font-size: 12px; }
+.user-msg-header { margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+.umh-badge { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; padding: 1px 6px; border-radius: 3px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.badge-delegation { background: rgba(99, 102, 241, 0.2); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.3); }
+.badge-feedback { background: rgba(251, 191, 36, 0.15); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.3); }
+.umh-agent { font-size: 11px; color: var(--text-muted); background: var(--bg-tertiary); padding: 1px 6px; border-radius: 3px; }
 .user-msg-placeholder { color: rgba(255,255,255,0.4); font-style: italic; font-size: 12px; }
 .msg-avatar { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .msg-user .msg-avatar { background: var(--accent); color: #fff; }

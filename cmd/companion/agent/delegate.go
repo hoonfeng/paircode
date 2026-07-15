@@ -100,6 +100,9 @@ func runSubAgent(ctx context.Context, parent *Loop, tree *AgentTree, name, task 
 		OnEvent:       SubAgentSink(parent.OnEvent, name),
 		State:         parent.State,
 		AgentTree:     tree,
+		// ★ 继承父的持久化回调，使子 agent 的每轮迭代独立落盘
+		OnBatchPersist:   parent.OnBatchPersist,
+		OnMessagePersist: parent.OnMessagePersist,
 	}
 
 	// 子 task：子 system 作追加 instruction（不替换父 system，保前缀）
@@ -113,6 +116,18 @@ func runSubAgent(ctx context.Context, parent *Loop, tree *AgentTree, name, task 
 	if len(history) > 0 && history[len(history)-1].Role == RoleAssistant && len(history[len(history)-1].ToolCalls) > 0 {
 		history = history[:len(history)-1]
 	}
+
+	// ★ 委托前刷盘：将外层 agent 当前消息（含分析+delegate_task）落盘为独立 assistant 消息
+	if parent.OnBatchPersist != nil {
+		parent.OnBatchPersist(parent.currentMsgs)
+	}
+	// ★ 委派任务存为用户消息：使前端展示为独立气泡，清晰区分「外层分析」→「委派任务」→「内层执行」
+	delegationMsg := Message{Role: RoleUser, Content: "【任务委派 → " + name + "】\n" + task}
+	if parent.OnMessagePersist != nil {
+		_ = parent.OnMessagePersist(delegationMsg)
+	}
+	// 将委派消息追加到子 history，使子 agent 首次调用时它作为「用户最新消息」
+	history = append(history, delegationMsg)
 
 	childMsgs, err := child.Run(ctx, childTask, history)
 	if err != nil && !errors.Is(err, ErrMaxIterations) {
@@ -150,6 +165,16 @@ func runSingleLLMCall(ctx context.Context, parent *Loop, sa *SubAgent, childReg 
 	msgs := make([]Message, 0, len(history)+2)
 	msgs = append(msgs, history...)
 	msgs = append(msgs, Message{Role: RoleUser, Content: childTask})
+
+	// ★ 单轮委托也执行刷盘：外层分析+委派落盘为独立 assistant 消息
+	if parent.OnBatchPersist != nil {
+		parent.OnBatchPersist(parent.currentMsgs)
+	}
+	// ★ 委派任务存为用户消息
+	delegationMsg := Message{Role: RoleUser, Content: "【任务委派 → " + name + "】\n" + task}
+	if parent.OnMessagePersist != nil {
+		_ = parent.OnMessagePersist(delegationMsg)
+	}
 
 	// 事件经过 SubAgentSink 过滤：EventFinal/EventDone 丢弃，其他事件标记 AgentName 后转发
 	onEvent := SubAgentSink(parent.OnEvent, name)

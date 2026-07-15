@@ -93,13 +93,39 @@ func SegmentsFromMessage(msg Message, hist []Message, idx int) []Segment {
 		segs = append(segs, Segment{Type: "thinking", Content: msg.Reasoning})
 	}
 	for _, tc := range msg.ToolCalls {
+		name := tc.Function.Name
+		// ★ 委托工具不生成 tool_call segment——委派任务会作为独立用户消息持久化
+		if name == "delegate_task" || name == "delegate_single_turn" || name == "transfer_to_agent" {
+			continue
+		}
+		if name == "ask_user" {
+			// ★ ask_user 生成独立交互式 segment
+			question, askType, options := parseAskArgs(tc.Function.Arguments)
+			seg := Segment{
+				Type:     "ask_user",
+				Question: question,
+				AskType:  askType,
+				Options:  options,
+				CallID:   tc.ID,
+			}
+			if hist != nil {
+				for j := idx + 1; j < len(hist); j++ {
+					if hist[j].Role == RoleTool && hist[j].ToolCallID == tc.ID {
+						seg.Answer = hist[j].Content
+						break
+					}
+				}
+			}
+			segs = append(segs, seg)
+			continue
+		}
+		// 普通工具调用：生成 tool_call segment
 		seg := Segment{
 			Type:    "tool_call",
-			Name:    tc.Function.Name,
+			Name:    name,
 			ArgsRaw: tc.Function.Arguments,
 			CallID:  tc.ID,
 		}
-		// 向前查找对应的 tool result（RoleTool 消息，ToolCallID 匹配）
 		if hist != nil {
 			for j := idx + 1; j < len(hist); j++ {
 				if hist[j].Role == RoleTool && hist[j].ToolCallID == tc.ID {
@@ -114,6 +140,30 @@ func SegmentsFromMessage(msg Message, hist []Message, idx int) []Segment {
 		segs = append(segs, Segment{Type: "content", Content: msg.Content})
 	}
 	return segs
+}
+
+// parseAskArgs 从问用户工具的 JSON arguments 中提取结构化字段。
+func parseAskArgs(argsRaw string) (question, askType string, options []string) {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(argsRaw), &raw); err != nil {
+		return argsRaw, "text", nil
+	}
+	question, _ = raw["question"].(string)
+	if question == "" {
+		question = argsRaw
+	}
+	askType, _ = raw["askType"].(string)
+	if askType == "" {
+		askType = "text"
+	}
+	if opts, ok := raw["options"].([]any); ok {
+		for _, o := range opts {
+			if s, ok := o.(string); ok {
+				options = append(options, s)
+			}
+		}
+	}
+	return
 }
 
 // conversationsDir 返回 {root}/.pair/conversations/ 路径。

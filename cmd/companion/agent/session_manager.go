@@ -326,6 +326,10 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 				}
 			}
 		}
+		// OnMessagePersist：单条消息强制落盘（delegate_task 委派任务用）
+		loop.OnMessagePersist = func(msg Message) error {
+			return store.AppendMessage(convID, msg, nil)
+		}
 	}
 
 	sess.Loop = loop
