@@ -264,6 +264,7 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		Autonomous:       opts.Autonomous,
 		History:          CopyHistory(opts.History), // 自闭环模式：loop 自己管理持久历史
 		CompressedSummaries: opts.CompressedSummaries, // 恢复已持久化的压缩摘要
+		WorkspaceRoot:    opts.WorkspaceRoot, // 工作区根路径（用于 SaveTokenUsage 等工作区级持久化）
 	}
 
 	// ★ 恢复上一轮的执行日志（跨轮感知：无论自主还是非自主，新 Loop 都能知道之前每轮的分析/操作）

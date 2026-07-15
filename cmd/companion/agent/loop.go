@@ -109,6 +109,7 @@ type Loop struct {
 	finishResult   *string        // 退出信号（子 Loop：子 agent 结束时的最终内容）
 	commitMessage  string         // agent 通过 generate_commit_message 工具显式设置的提交信息
 
+	WorkspaceRoot string // 工作区根路径（用于 SaveTokenUsage 等工作区级持久化）
 	transferTarget string         // transfer_to_agent 目标名（非空=当前 Loop 应退出，控制权转移给目标 agent）
 	Autonomous     bool           // 自主模式标志（供并行子 agent 继承）
 
@@ -248,7 +249,11 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 				}
 				l.emit(Event{Type: EventUsage, Usage: &usage})
 				// agent 自闭环：持久化上下文统计到磁盘（供页面刷新后恢复）
-				SaveTokenUsage(&usage)
+				if l.WorkspaceRoot != "" {
+					SaveTokenUsageForRoot(l.WorkspaceRoot, &usage)
+				} else {
+					SaveTokenUsage(&usage)
+				}
 			}
 		})
 		if err != nil {
