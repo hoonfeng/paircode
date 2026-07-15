@@ -344,7 +344,7 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		}
 	}
 	// 审核开关由 Loop 内部自决，外部只需传进来
-	loop.AutoReview = opts.AutoReview
+	loop.SetAutoReview(opts.AutoReview)
 	loop.ReviewProvider = opts.ReviewProvider
 
 	// OnFeedback：每轮 LLM 调用前检查用户运行时反馈（非阻塞）
@@ -747,6 +747,19 @@ func copyHistoryRaw(hist []Message) []Message {
 	out := make([]Message, len(hist))
 	copy(out, hist)
 	return out
+}
+
+// SetAutoReviewForAll 实时更新所有运行中会话的审核开关。
+// 用户在设置面板切换 autoReview 时立即生效，无需新消息。
+func (m *SessionManager) SetAutoReviewForAll(v bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for convID, sess := range m.sessions {
+		if sess.Loop != nil {
+			sess.Loop.SetAutoReview(v)
+			fmt.Printf("[session] 实时更新审核开关 conv=%s autoReview=%v\n", convID, v)
+		}
+	}
 }
 
 // GetCurrentHistoryRaw 返回指定会话的当前运行中 History 深复制副本（保留 Reasoning）。

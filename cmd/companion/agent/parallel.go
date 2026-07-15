@@ -576,6 +576,9 @@ func (po *ParallelOrchestrator) runSingleSubAgent(ctx context.Context, task SubT
 		State:         po.Parent.State,
 		AgentTree:     po.Tree,
 		Autonomous:    po.Parent.Autonomous,
+		// ★ 继承父的审核设置，使并行子 agent 的写操作也经过 AI 审核
+		AutoReview:     po.Parent.AutoReview,
+		ReviewProvider: po.Parent.ReviewProvider,
 	}
 
 	// 子 task：子 system 作追加 instruction

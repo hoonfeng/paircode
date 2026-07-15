@@ -831,8 +831,14 @@ func (s *webServer) handleSettings(w http.ResponseWriter, r *http.Request) {
 			jsonErr(w, err.Error())
 			return
 		}
+		// 检查审核开关是否变更，用于后续通知运行中的会话
+		oldAutoReview := core.Settings.AutoReview
 		core.Settings = newSettings
 		core.Save()
+		// 审核开关变更时，实时通知所有运行中的会话
+		if oldAutoReview != newSettings.AutoReview {
+			agentMgr.SetAutoReviewForAll(newSettings.AutoReview)
+		}
 		// 同步工作区文件夹列表（确保 core.Folders 与 settings 一致，
 		// 避免 DefaultSystemPrompt 等依赖 Folders 的地方读到空切片而 panic）
 		if newSettings.WorkspaceFolders != nil {

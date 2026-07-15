@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 // ErrCirclingLoop 绕圈检测连续触发多次，由 Loop.Run 返回。
@@ -113,6 +114,8 @@ type Loop struct {
 	transferTarget string         // transfer_to_agent 目标名（非空=当前 Loop 应退出，控制权转移给目标 agent）
 	Autonomous     bool           // 自主模式标志（供并行子 agent 继承）
 
+	mu sync.Mutex // 保护 AutoReview 的并发读写（SetAutoReview/getAutoReview）
+
 	// AutoReview 审核开关。true=AI审核（内部创建审核Agent把关写操作）；
 	AutoReview bool
 	// ReviewProvider 审核模型的 Provider（AutoReview=true 时使用）。
@@ -139,6 +142,22 @@ func (l *Loop) emit(e Event) {
 	if l.OnEvent != nil {
 		l.OnEvent(e)
 	}
+}
+
+// SetAutoReview 运行时更新审核开关（线程安全）。
+// 修改立即生效：正在运行的 Loop 在下一个工具调用前会读到新值。
+func (l *Loop) SetAutoReview(v bool) {
+	l.mu.Lock()
+	l.AutoReview = v
+	l.mu.Unlock()
+}
+
+// getAutoReview 线程安全读取 AutoReview（供 approve 门使用）。
+func (l *Loop) getAutoReview() bool {
+	l.mu.Lock()
+	v := l.AutoReview
+	l.mu.Unlock()
+	return v
 }
 
 // aiReviewApprove 内部 AI 审核裁决（AutoReview=true 时由 Loop.Run 调用）。
@@ -279,7 +298,7 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 			// - AutoReview=false + Autonomous=false → 走外部 l.Approve（人工审批）
 			approveFn := l.Approve
 			switch {
-			case l.AutoReview:
+			case l.getAutoReview():
 				approveFn = l.aiReviewApprove
 			case l.Autonomous:
 				approveFn = nil
