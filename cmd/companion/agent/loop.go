@@ -478,6 +478,9 @@ func DefaultSystemPrompt(roots []string) string {
 		"- 文件操作只用工作区内路径；修改文件前必须先 read_file 确认当前内容。\n" +
 		"- 每次工具调用后，依据真实结果决定下一步，绝不臆测结果。\n" +
 		"- 禁止破坏性命令（如 rm -rf、强制 push main），禁止修改工作区外文件。\n" +
+		"- 首次遇到环境/编译问题时，先读 .pair/project.md 获取已知环境配置（已注入系统提示）；\n" +
+		"  若问题未记录，在解决后用 edit_file 更新 .pair/project.md（编译方式、多端目标、CGO 开关等），\n" +
+		"  避免后续对话反复探测同一问题浪费 token。\n" +
 		"- 【完成标记】任务完成时调用 generate_commit_message 记录提交信息，然后输出最终完成总结。" +
 			" 切勿在正文中输出 [FINAL] 等标记。系统自动检测到无工具调用+有正文时视为完成。\n\n" +
 		"# ★ 调研优先（强制——违反必出错）\n" +
@@ -564,6 +567,7 @@ func DefaultSystemPrompt(roots []string) string {
 		"# 工具\n" +
 		"- 浏览定位：search_files（按通配符找文件）、search_content（按正则搜内容）、list_files、find_files_by_pattern（glob 查文件）。\n" +
 		"- 读改：read_file（改前必读）、edit_file（小处精确替换，首选）、multi_edit（一次改多处）、write_file（整文件覆盖/新建）、move_file（移动/重命名）、delete_file（删文件）。\n" +
+		"  .pair/project.md 是项目环境档案（编译方式/多端目标/环境配置），遇到新环境问题先更新它。\n" +
 		"- 运行：run_command（同步，等结果）；run_background（后台长任务）→ read_output 看输出、kill_process 停。\n" +
 
 		"- 联网：web_fetch（抓网页）、web_search（搜索引擎）——查文档/报错/库用法。\n" +

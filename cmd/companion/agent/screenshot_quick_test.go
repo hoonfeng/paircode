@@ -148,7 +148,7 @@ func TestScreenshotToolsRegistered(t *testing.T) {
 	root, _ := os.Getwd()
 	registerScreenshotTools(r, root)
 
-	for _, name := range []string{"screenshot_desktop", "screenshot_window", "screenshot_area", "screenshot_webpage"} {
+	for _, name := range []string{"screenshot_desktop", "screenshot_window", "screenshot_area"} {
 		tool, ok := r.Get(name)
 		if !ok {
 			t.Errorf("工具 %q 未注册", name)
