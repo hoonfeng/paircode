@@ -5,8 +5,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"strings"
 	"time"
@@ -235,25 +237,73 @@ func (p *OpenAIProvider) Chat(ctx context.Context, messages []Message, tools []T
 	if err != nil {
 		return Message{}, err
 	}
-	url := strings.TrimRight(p.BaseURL, "/") + "/chat/completions"
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(buf))
-	if err != nil {
-		return Message{}, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+p.APIKey)
-	req.Header.Set("Accept", "text/event-stream")
 
-	resp, err := p.client().Do(req)
-	if err != nil {
-		return Message{}, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
+	url := strings.TrimRight(p.BaseURL, "/") + "/chat/completions"
+
+	const maxRetries = 10
+	var lastErr error
+
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			// 指数退避 + 抖动：0.5s, 1s, 2s, 4s, 8s, 16s, 30s, 30s...
+			delay := time.Duration(500*(1<<(attempt-1))) * time.Millisecond
+			if delay > 30*time.Second {
+				delay = 30 * time.Second
+			}
+			delay += time.Duration(rand.Intn(250)) * time.Millisecond
+			select {
+			case <-ctx.Done():
+				return Message{}, ctx.Err()
+			case <-time.After(delay):
+			}
+		}
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(buf))
+		if err != nil {
+			return Message{}, err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+p.APIKey)
+		req.Header.Set("Accept", "text/event-stream")
+
+		resp, err := p.client().Do(req)
+		if err != nil {
+			// 网络级错误（连接重置、DNS 失败等）→ 可重试
+			// 但 context 取消/超时不重试
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return Message{}, err
+			}
+			lastErr = fmt.Errorf("LLM 请求失败 (第%d次): %w", attempt+1, err)
+			continue
+		}
+
+		if resp.StatusCode == http.StatusOK {
+			return parseSSE(resp.Body, onChunk)
+		}
+
+		// 处理非 200 状态码
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return Message{}, fmt.Errorf("LLM HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
+		resp.Body.Close()
+
+		statusCode := resp.StatusCode
+		bodyStr := strings.TrimSpace(string(b))
+
+		// 401/403 → 认证错误，不重试
+		if statusCode == http.StatusUnauthorized || statusCode == http.StatusForbidden {
+			return Message{}, fmt.Errorf("LLM HTTP %d (认证失败): %s", statusCode, bodyStr)
+		}
+
+		// 可重试状态码：408（超时）、429（限流）、5xx（服务端错误）
+		if statusCode == http.StatusRequestTimeout || statusCode == http.StatusTooManyRequests || (statusCode >= 500 && statusCode <= 599) {
+			lastErr = fmt.Errorf("LLM HTTP %d (第%d次): %s", statusCode, attempt+1, bodyStr)
+			continue
+		}
+
+		// 其他 4xx → 客户端错误，不重试
+		return Message{}, fmt.Errorf("LLM HTTP %d: %s", statusCode, bodyStr)
 	}
-	return parseSSE(resp.Body, onChunk)
+
+	return Message{}, fmt.Errorf("LLM 请求失败（已达最大重试次数 %d）: %w", maxRetries, lastErr)
 }
 
 // sseResp 是 SSE 每帧的解析目标（OpenAI 流式 chunk 结构）。

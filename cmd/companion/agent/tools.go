@@ -540,14 +540,12 @@ func RegisterDefaultTools(r *Registry, root string) {
 	registerFileSymbolTools(r, root)          // list_exported_symbols / get_file_dependencies / check_impact / find_circular_deps（见 filesymbol.go）
 	registerTaskTools(r, root)                // task_create/update/list/delete/summary（持久化任务追踪，见 task_tools.go）
 	registerProjectInfoTools(r, root)        // project_info_write/read/list/search/delete/explore（项目知识库，见 projectinfo.go）
-	registerProjectInfoTools(r, root)        // project_info_write/read/list/search/delete/explore（项目知识库，见 projectinfo.go）
 	registerBinaryTools(r, root)             // inspect_binary / write_binary（二进制读写，见 binary.go）
 	registerBinaryRETools(r, root)           // binary_strings/find/patch/info/hash/entropy（二进制正则，见 binary_re.go）
 	registerDebugTools(r, root)              // debug_start/stop/breakpoint/continue/next/step_in/step_out/stack/variables/evaluate/status（见 debugtools.go）
 	registerVisionTools(r, root)             // image_analyze / image_ocr（图像视觉分析，见 vision.go）
 	registerScreenshotTools(r, root)         // screenshot_desktop/window/area/webpage（截图工具，见 screenshot_tool.go）
-	registerHeadlessBrowserTool(r)           // headless_browser（JS 渲染页面文本提取，见 headless.go）
-	registerWebDebugTool(r, root)            // web_debug（网页验证：控制台错误+截图+JS执行+交互，见 webdebug.go）
+	registerWebDebugTool(r, root)            // web_debug（网页验证：控制台错误+截图+JS执行+交互+文字提取，见 webdebug.go）
 	RegisterBugTools(r, root)                // bug_detect / bug_analyze / bug_fix（BUG 自动检测与修复，见 bugdetect.go + bugfix.go）
 	RegisterSnapshotTools(r, root)           // restore_snapshot / list_snapshots（文件快照与恢复，见 snapshot.go）
 	registerOfficeTools(r, root)             // csv_read / csv_write / json_to_table / table_stats / text_report / word_read（见 officetools.go）

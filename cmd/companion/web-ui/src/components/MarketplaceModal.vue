@@ -1,5 +1,5 @@
 <template>
-  <div class="modal-overlay" @click.self="$emit('close')">
+  <div class="modal-overlay">
     <div class="modal-content market-modal">
       <div class="modal-header">
         <h2><SvgIcon name="package" :size="20" /> 市场</h2>

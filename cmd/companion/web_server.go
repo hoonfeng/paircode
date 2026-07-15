@@ -1423,8 +1423,9 @@ func (s *webServer) handleModels(w http.ResponseWriter, r *http.Request) {
 		modelMap[p] = core.GetModels(p)
 	}
 	jsonResp(w, map[string]any{
-		"providers": providers,
-		"models":    modelMap,
+		"providers":    providers,
+		"models":       modelMap,
+		"providerBaseURLs": core.GetProviderBaseURLs(),
 	})
 }
 

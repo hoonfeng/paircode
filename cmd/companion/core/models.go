@@ -198,3 +198,30 @@ func EnsureModelList() {
 	WriteDefaultModels()
 	LoadModelList()
 }
+
+// ─── 服务商默认 API 地址 ───
+
+var providerDefaultBaseURLs = map[string]string{
+	"deepseek":          "https://api.deepseek.com/v1",
+	"openai":            "https://api.openai.com/v1",
+	"anthropic":         "https://api.anthropic.com/v1",
+	"openai-compatible": "",
+	"custom":            "",
+}
+
+// GetProviderBaseURL 返回指定服务商的默认 API 地址。
+func GetProviderBaseURL(provider string) string {
+	if url, ok := providerDefaultBaseURLs[provider]; ok {
+		return url
+	}
+	return ""
+}
+
+// GetProviderBaseURLs 返回全部服务商的默认 API 地址映射。
+func GetProviderBaseURLs() map[string]string {
+	out := make(map[string]string, len(providerDefaultBaseURLs))
+	for k, v := range providerDefaultBaseURLs {
+		out[k] = v
+	}
+	return out
+}

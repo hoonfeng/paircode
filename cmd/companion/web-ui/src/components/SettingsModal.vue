@@ -1,5 +1,5 @@
 <template>
-  <div class="modal-overlay" @click.self="$emit('close')">
+  <div class="modal-overlay">
     <div class="modal-content settings-modal">
       <div class="modal-header">
         <h2><SvgIcon name="settings" :size="18" /> 设置</h2>
@@ -46,7 +46,6 @@
                 <select v-model="local.planModel">
                   <option value="" disabled>选择模型</option>
                   <option v-for="m in modelsForProvider" :key="m" :value="m">{{ m }}</option>
-                  <option value="custom">自定义</option>
                 </select>
               </div>
               <div class="setting-row">
@@ -54,7 +53,6 @@
                 <select v-model="local.reviewModel">
                   <option value="" disabled>选择模型</option>
                   <option v-for="m in modelsForProvider" :key="m" :value="m">{{ m }}</option>
-                  <option value="custom">自定义</option>
                 </select>
               </div>
               <div class="setting-row">
@@ -108,7 +106,6 @@
                 <select v-model="local.compressModel">
                   <option value="" disabled>选择模型</option>
                   <option v-for="m in compressModelsForProvider" :key="m" :value="m">{{ m }}</option>
-                  <option value="custom">自定义</option>
                 </select>
               </div>
               <div class="setting-row">
@@ -491,6 +488,10 @@ async function loadModels() {
     const data = await api.getModels()
     providers.value = data.providers || []
     modelsMap.value = data.models || {}
+    // 使用后端返回的默认 API 地址覆盖前端硬编码
+    if (data.providerBaseURLs) {
+      Object.assign(providerDefaultBaseURLs, data.providerBaseURLs)
+    }
   } catch (e) {
     // fallback
     providers.value = ['deepseek', 'openai', 'anthropic', 'openai-compatible']
@@ -503,7 +504,20 @@ async function loadModels() {
   }
 }
 
+// ─── 服务商默认 API 地址 ───
+const providerDefaultBaseURLs = {
+  deepseek: 'https://api.deepseek.com/v1',
+  openai: 'https://api.openai.com/v1',
+  anthropic: 'https://api.anthropic.com/v1',
+  'openai-compatible': '',
+  custom: '',
+}
+
 function onProviderChange() {
+  // 自动填充对应服务商的 API 地址
+  if (providerDefaultBaseURLs[local.provider] !== undefined) {
+    local.baseURL = providerDefaultBaseURLs[local.provider]
+  }
   // 如果当前模型不在新服务商列表中，重置
   const models = modelsMap.value[local.provider] || []
   if (models.length > 0) {
@@ -514,6 +528,10 @@ function onProviderChange() {
 }
 
 function onCompressProviderChange() {
+  // 自动填充压缩服务商的 API 地址
+  if (providerDefaultBaseURLs[local.compressProvider] !== undefined) {
+    local.compressBaseURL = providerDefaultBaseURLs[local.compressProvider]
+  }
   const models = modelsMap.value[local.compressProvider] || []
   if (models.length > 0 && !models.includes(local.compressModel)) {
     local.compressModel = models[0]

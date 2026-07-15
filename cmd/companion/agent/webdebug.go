@@ -37,7 +37,7 @@ func registerWebDebugTool(r *Registry, root string) {
 	r.Register(&Tool{
 		Name: "web_debug",
 		Description: "一站式网页验证工具：在无头浏览器中打开 URL，捕获控制台错误/警告，" +
-			"可选输入文字、点击元素、执行 JS，最后截图保存。" +
+			"可选输入文字、点击元素、执行 JS（eval 参数可返回页面文本用于文字提取），最后截图保存。" +
 			"用于验证前端改动是否正常工作（白屏、JS 异常、接口报错、样式错乱等）。" +
 			"截图保存到 screenshots/ 目录，返回文件路径可用 image_analyze 进一步分析。" +
 			"注意：首次使用会自动下载 Chromium（约 150MB），后续复用缓存。",

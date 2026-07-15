@@ -1,13 +1,12 @@
-// screenshot_tool.go 截图工具集：桌面截图 + 窗口截图 + 区域截图 + 网页截图。
+// screenshot_tool.go 截图工具集：桌面截图 + 窗口截图 + 区域截图。
 //
-// 提供四个工具：
+// 提供三个工具：
 //   - screenshot_desktop：截取整个桌面（所有显示器）
 //   - screenshot_window：按窗口标题截取特定窗口
 //   - screenshot_area：按坐标截取指定区域
-//   - screenshot_webpage：用浏览器打开 URL 并截图
 //
-// 桌面/窗口/区域截图使用 Windows GDI API（golang.org/x/sys/windows），零额外依赖。
-// 网页截图使用 go-rod（github.com/go-rod/rod），自动查找本地的 Edge/Chrome。
+// 所有截图使用 Windows GDI API（golang.org/x/sys/windows），零额外依赖。
+// 网页截图与验证请使用 web_debug 工具（见 webdebug.go）。
 // 所有截图保存为 PNG 文件到工作区的 screenshots/ 目录。
 
 package agent
@@ -25,8 +24,6 @@ import (
 	"unicode/utf16"
 	"unsafe"
 
-	"github.com/go-rod/rod"
-	"github.com/go-rod/rod/lib/launcher"
 	"golang.org/x/sys/windows"
 )
 
@@ -167,32 +164,6 @@ func registerScreenshotTools(r *Registry, root string) {
 		},
 	})
 
-	// ── screenshot_webpage ──
-	r.Register(&Tool{
-		Name: "screenshot_webpage",
-		Description: "打开指定 URL 的网页并截图，保存为 PNG 图片到 screenshots/ 目录。" +
-			"使用本地的 Edge/Chrome 浏览器（无头模式）。" +
-			"可设置 viewport 尺寸（默认 1920x1080）和等待时间。",
-		Parameters: objSchema(props{
-			"url":    strProp("要截图的网页 URL（如 \"https://example.com\"）"),
-			"width":  intProp("可选：视口宽度（像素），默认 1920"),
-			"height": intProp("可选：视口高度（像素），默认 1080"),
-			"wait":   intProp("可选：页面加载后额外等待的毫秒数，默认 1000（给 JS 渲染时间）"),
-			"name":   strProp("可选：自定义文件名"),
-		}, "url"),
-		ReadOnly: true,
-		Handler: func(ctx context.Context, args map[string]any) (string, error) {
-			url := argStr(args, "url")
-			width := argInt(args, "width", 1920)
-			height := argInt(args, "height", 1080)
-			waitMs := argInt(args, "wait", 1000)
-			name := argStr(args, "name")
-			if url == "" {
-				return "", fmt.Errorf("参数 url 不能为空")
-			}
-			return captureWebpage(root, url, width, height, waitMs, name)
-		},
-	})
 }
 
 // ── 截图实现 ───────────────────────────────────────────────
@@ -308,41 +279,6 @@ func captureArea(root, leftStr, topStr, rightStr, bottomStr, name string) (strin
 
 	label := fmt.Sprintf("area_%dx%d", w, h)
 	return saveScreenshot(root, img, name, label)
-}
-
-// captureWebpage 用浏览器打开 URL 并截图。
-func captureWebpage(root, urlStr string, width, height, waitMs int, name string) (string, error) {
-	if !strings.HasPrefix(urlStr, "http://") && !strings.HasPrefix(urlStr, "https://") {
-		urlStr = "https://" + urlStr
-	}
-
-	path, ok := launcher.LookPath()
-	if !ok || path == "" {
-		return "", fmt.Errorf("未找到本地浏览器（Edge/Chrome/Chromium）。请先安装 Edge 或 Chrome。")
-	}
-
-	u := launcher.New().Headless(true).Bin(path).MustLaunch()
-
-	browser := rod.New().ControlURL(u).MustConnect()
-	defer browser.MustClose()
-
-	page := browser.MustPage(urlStr)
-	defer page.MustClose()
-
-	page.MustSetViewport(width, height, 0, false)
-	page.MustWaitLoad()
-
-	if waitMs > 0 {
-		time.Sleep(time.Duration(waitMs) * time.Millisecond)
-	}
-
-	buf, err := page.Screenshot(true, nil)
-	if err != nil {
-		return "", fmt.Errorf("网页截图失败: %w", err)
-	}
-
-	return saveScreenshotFromBytes(root, buf, name, fmt.Sprintf("webpage_%s_%dx%d",
-		sanitizeName(extractHost(urlStr)), width, height))
 }
 
 // captureRect 用 Windows GDI 截取指定矩形区域的屏幕内容。
