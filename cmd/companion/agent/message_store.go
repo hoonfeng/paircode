@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -367,6 +368,11 @@ func (s *MessageStore) AppendMessage(convID string, msg Message, segments []Segm
 	s.pcMu.Lock()
 	s.persistedCount[convID] = count + 1
 	s.pcMu.Unlock()
+
+	// 检查是否需要归档
+	if count+1 >= ArchiveThreshold {
+		_ = s.checkAndArchive(convID)
+	}
 
 	return nil
 }
@@ -1044,6 +1050,206 @@ func (s *MessageStore) SetCtxStats(convID string, stats *Usage) error {
 		}
 	}
 	return nil
+}
+
+// ── 自动归档 ──
+
+// ArchiveThreshold 触发归档的消息数阈值。
+const ArchiveThreshold = 500
+
+// ArchiveRatio 归档后保留的消息比例（保留最新的 1/ArchiveRatio）。
+const ArchiveRatio = 4
+
+// SummaryLength 归档摘要的最大字符数。
+const SummaryLength = 200
+
+// ArchivedFileSuffix 归档后截断部分的文件后缀。
+const ArchivedFileSuffix = ".archived.jsonl"
+
+// checkAndArchive 检查对话消息数，超过阈值则自动归档最早的消息。
+// 归档策略：将最早的一部分消息移出主 JSONL，写入 {convID}.archived.jsonl 文件，
+// 并在主文件中保留一条归档摘要消息。
+func (s *MessageStore) checkAndArchive(convID string) error {
+	count := s.GetPersistedCount(convID)
+	if count < ArchiveThreshold {
+		return nil
+	}
+
+	// 读取全部消息
+	messages, err := s.ReadAll(convID)
+	if err != nil {
+		return fmt.Errorf("读取消息以归档: %w", err)
+	}
+
+	// 计算保留数量（保留最新的 1/4）
+	keepCount := len(messages) / ArchiveRatio
+	if keepCount < 50 {
+		keepCount = 50 // 至少保留 50 条
+	}
+	archiveCount := len(messages) - keepCount
+	if archiveCount <= 0 {
+		return nil
+	}
+
+	// 提取要归档的消息（最早的 archiveCount 条）
+	archived := messages[:archiveCount]
+	keep := messages[archiveCount:]
+
+	// 生成归档摘要
+	summary := s.generateArchiveSummary(convID, archived)
+
+	// 将归档消息写入 .archived.jsonl
+	archivedPath := s.convFilePath(convID) + ArchivedFileSuffix
+	f, err := os.OpenFile(archivedPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return fmt.Errorf("创建归档文件: %w", err)
+	}
+	defer f.Close()
+	encoder := json.NewEncoder(f)
+	for _, msg := range archived {
+		if err := encoder.Encode(msg); err != nil {
+			return fmt.Errorf("写入归档消息: %w", err)
+		}
+	}
+
+	// 重写主文件（只保留 keep + 摘要消息）
+	mainPath := s.convFilePath(convID)
+	tmpPath := mainPath + ".tmp"
+	tf, err := os.Create(tmpPath)
+	if err != nil {
+		return fmt.Errorf("创建临时文件: %w", err)
+	}
+	mainEncoder := json.NewEncoder(tf)
+
+	// 写入归档摘要消息作为第一条（使前端能看到归档记录）
+	summaryMsg := StoredMessage{
+		Idx:       0,
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+		Message: Message{
+			Role:    RoleAssistant,
+			Content: summary,
+		},
+		Segments: []Segment{{
+			Type:    "content",
+			Content: summary,
+		}},
+	}
+	if err := mainEncoder.Encode(summaryMsg); err != nil {
+		tf.Close()
+		os.Remove(tmpPath)
+		return fmt.Errorf("写入摘要消息: %w", err)
+	}
+
+	// 重编号并写入保留消息
+	for i, msg := range keep {
+		msg.Idx = i + 1 // 摘要消息占 idx=0，保留消息从 1 开始
+		if err := mainEncoder.Encode(msg); err != nil {
+			tf.Close()
+			os.Remove(tmpPath)
+			return fmt.Errorf("写入保留消息: %w", err)
+		}
+	}
+	tf.Close()
+
+	// 原子替换
+	if err := os.Rename(tmpPath, mainPath); err != nil {
+		return fmt.Errorf("替换主文件: %w", err)
+	}
+
+	// 更新持久化计数
+	s.pcMu.Lock()
+	s.persistedCount[convID] = len(keep) + 1 // +1 算上摘要
+	s.pcMu.Unlock()
+
+	return nil
+}
+
+// generateArchiveSummary 从归档消息生成摘要文本。
+func (s *MessageStore) generateArchiveSummary(convID string, msgs []StoredMessage) string {
+	if len(msgs) == 0 {
+		return "（历史消息已归档，无内容）"
+	}
+
+	// 统计各类消息数
+	userMsgs := 0
+	assistantMsgs := 0
+	toolCalls := 0
+	toolResults := 0
+
+	for _, m := range msgs {
+		switch m.Message.Role {
+		case RoleUser:
+			userMsgs++
+		case RoleAssistant:
+			assistantMsgs++
+			if len(m.Message.ToolCalls) > 0 {
+				toolCalls++
+			}
+		case RoleTool:
+			toolResults++
+		}
+	}
+
+	// 提取第一条用户消息作为上下文
+	firstUserMsg := ""
+	for _, m := range msgs {
+		if m.Message.Role == RoleUser && m.Message.Content != "" {
+			firstUserMsg = m.Message.Content
+			if len(firstUserMsg) > 100 {
+				firstUserMsg = firstUserMsg[:100] + "…"
+			}
+			break
+		}
+	}
+
+	summary := fmt.Sprintf("📦 **历史归档**（共 %d 条消息：用户 %d 条、助手 %d 条、工具调用 %d 次）",
+		len(msgs), userMsgs, assistantMsgs, toolCalls+toolResults)
+	if firstUserMsg != "" {
+		summary += fmt.Sprintf("\n最早对话主题：%s", firstUserMsg)
+	}
+	summary += fmt.Sprintf("\n_已归档至 %s.archived.jsonl，需要时可查看_", convID)
+
+	if len(summary) > SummaryLength {
+		summary = summary[:SummaryLength] + "…"
+	}
+	return summary
+}
+
+// GetPersistedCount 获取已持久化的非 System 消息数。
+func (s *MessageStore) GetPersistedCount(convID string) int {
+	s.pcMu.RLock()
+	defer s.pcMu.RUnlock()
+	return s.persistedCount[convID]
+}
+
+// ReadAll 读取对话全部消息。
+func (s *MessageStore) ReadAll(convID string) ([]StoredMessage, error) {
+	path := s.convFilePath(convID)
+	f, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	defer f.Close()
+
+	var msgs []StoredMessage
+	scanner := bufio.NewScanner(f)
+	// 增加扫描缓冲区大小（处理长行）
+	scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		var msg StoredMessage
+		if err := json.Unmarshal([]byte(line), &msg); err != nil {
+			continue // 跳过损坏行
+		}
+		msgs = append(msgs, msg)
+	}
+	return msgs, scanner.Err()
 }
 
 // ─── 旧格式迁移 ───

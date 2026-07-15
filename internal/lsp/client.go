@@ -249,6 +249,14 @@ func (c *client) references(ctx context.Context, uri string, pos Position) (json
 	})
 }
 
+// documentSymbol 请求 textDocument/documentSymbol，返回文件的符号树。
+// 响应可能是 []DocumentSymbol（嵌套）或 []SymbolInformation（扁平），统一解析为 DocumentSymbol 列表。
+func (c *client) documentSymbol(ctx context.Context, uri string) (json.RawMessage, error) {
+	return c.callRetry(ctx, "textDocument/documentSymbol", map[string]any{
+		"textDocument": map[string]any{"uri": uri},
+	})
+}
+
 func (c *client) close() {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()

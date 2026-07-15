@@ -255,6 +255,119 @@ func (m *Manager) Diagnostics(ctx context.Context, file string) (string, error) 
 	return formatDiagnostics(m.rel(path), diags), nil
 }
 
+// DocumentSymbol 返回文件中所有符号（函数、类型、变量等）的树形列表。
+// 参数 file 是工作区相对路径。返回格式化后的符号树文本。
+func (m *Manager) DocumentSymbol(ctx context.Context, file string) (string, error) {
+	path := m.abs(file)
+	c, err := m.resolve(path)
+	if err != nil {
+		return "", err
+	}
+	uri := pathToURI(path)
+	if err := c.ensureSynced(uri, path); err != nil {
+		return "", err
+	}
+	raw, err := c.documentSymbol(ctx, uri)
+	if err != nil {
+		return indexingOr(err)
+	}
+	syms := parseDocumentSymbols(raw)
+	if len(syms) == 0 {
+		return "（文件中未发现符号）", nil
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "文件 %s 共 %d 个符号：\n\n", file, countDocSymbols(syms))
+	b.WriteString(formatDocSymbols(syms, ""))
+	return b.String(), nil
+}
+
+// countDocSymbols 递归计算符号总数。
+func countDocSymbols(syms []DocumentSymbol) int {
+	n := len(syms)
+	for _, s := range syms {
+		n += countDocSymbols(s.Children)
+	}
+	return n
+}
+
+// formatDocSymbols 递归格式化符号列表。
+func formatDocSymbols(syms []DocumentSymbol, indent string) string {
+	var b strings.Builder
+	for _, sym := range syms {
+		kind := symbolKindName(sym.Kind)
+		line := sym.Range.Start.Line + 1
+		if sym.Detail != "" {
+			fmt.Fprintf(&b, "%s%s %s（%s）→ %d\n", indent, kind, sym.Name, sym.Detail, line)
+		} else {
+			fmt.Fprintf(&b, "%s%s %s → %d\n", indent, kind, sym.Name, line)
+		}
+		if len(sym.Children) > 0 {
+			b.WriteString(formatDocSymbols(sym.Children, indent+"  "))
+		}
+	}
+	return b.String()
+}
+
+// symbolKindName 将 LSP SymbolKind 数值映射为可读名称。
+func symbolKindName(kind int) string {
+	switch kind {
+	case 1:
+		return "file"
+	case 2:
+		return "module"
+	case 3:
+		return "namespace"
+	case 4:
+		return "package"
+	case 5:
+		return "class"
+	case 6:
+		return "method"
+	case 7:
+		return "property"
+	case 8:
+		return "field"
+	case 9:
+		return "constructor"
+	case 10:
+		return "enum"
+	case 11:
+		return "interface"
+	case 12:
+		return "function"
+	case 13:
+		return "variable"
+	case 14:
+		return "constant"
+	case 15:
+		return "string"
+	case 16:
+		return "number"
+	case 17:
+		return "boolean"
+	case 18:
+		return "array"
+	case 19:
+		return "object"
+	case 20:
+		return "key"
+	case 21:
+		return "null"
+	case 22:
+		return "enum_member"
+	case 23:
+		return "struct"
+	case 24:
+		return "event"
+	case 25:
+		return "operator"
+	case 26:
+		return "type_parameter"
+	default:
+		return fmt.Sprintf("kind(%d)", kind)
+	}
+}
+
 func (m *Manager) rel(path string) string {
 	if r, err := filepath.Rel(m.wsRoot, path); err == nil && !strings.HasPrefix(r, "..") {
 		return filepath.ToSlash(r)

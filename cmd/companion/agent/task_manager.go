@@ -39,15 +39,6 @@ type Task struct {
 	UpdatedAt    string     `json:"updated_at"`
 }
 
-// TaskSummary 任务统计摘要。
-type TaskSummary struct {
-	Total      int `json:"total"`
-	Completed  int `json:"completed"`
-	InProgress int `json:"in_progress"`
-	Pending    int `json:"pending"`
-	Cancelled  int `json:"cancelled"`
-}
-
 // TaskManager 任务管理器（并发安全）。
 type TaskManager struct {
 	mu       sync.RWMutex

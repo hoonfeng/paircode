@@ -1,4 +1,6 @@
 import { createApp, reactive } from 'vue'
+import { createPinia } from 'pinia'
+import router from './router'
 import App from './App.vue'
 
 // ─── 持久化键名 ──────────────────────────────────────────────
@@ -246,4 +248,6 @@ export function loadPersistentState() {
 applyTheme('dark')
 
 const app = createApp(App)
+app.use(createPinia())
+app.use(router)
 app.mount('#app')
