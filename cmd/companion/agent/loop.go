@@ -218,13 +218,6 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 			if len(trimmed) > 1 {
 				msgs = trimmed
 			}
-			// 存为跨会话记忆
-			memSummary := extractRunSummary(msgs)
-			if memSummary != "" {
-				memName := fmt.Sprintf("完成报告-%s", truncateString(task, 40))
-				memContent := fmt.Sprintf("## 任务\n%s\n\n## 完成报告\n%s", task, memSummary)
-				l.saveCompletionMemory(memName, memContent)
-			}
 		}
 		l.History = msgs
 		// 最终写盘兜底：OnBatchPersist 非空则调用一次
@@ -683,34 +676,4 @@ func (l *Loop) generateRunSummary(msgs []Message, task string) string {
 	}
 
 	return b.String()
-}
-
-// extractRunSummary 从 msgs 中提取紧凑的结果摘要（用于跨会话记忆）。
-func extractRunSummary(msgs []Message) string {
-	for i := len(msgs) - 1; i >= 0; i-- {
-		if msgs[i].Role == RoleAssistant && len(msgs[i].ToolCalls) == 0 && strings.TrimSpace(msgs[i].Content) != "" {
-			content := strings.TrimSpace(msgs[i].Content)
-			if len(content) > 800 {
-				content = content[:800] + "…"
-			}
-			return content
-		}
-	}
-	return ""
-}
-
-// saveCompletionMemory 将完成报告保存为跨会话记忆。
-func (l *Loop) saveCompletionMemory(name, content string) {
-	root := l.WorkspaceRoot
-	if root == "" {
-		return
-	}
-	dir := filepath.Join(root, ".pair", "memory")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return
-	}
-	path := filepath.Join(dir, name+".md")
-	body := fmt.Sprintf("---\nname: %s\ntype: project\ndescription: 任务完成报告\n---\n\n%s\n", name, content)
-	_ = os.WriteFile(path, []byte(body), 0o644)
-	writeMemIndex(dir)
 }
