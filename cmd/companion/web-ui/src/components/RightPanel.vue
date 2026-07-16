@@ -216,13 +216,12 @@ function updateInputPadding() {
   const overlay = chatInputAreaRef.value.querySelector('.input-overlay')
   const textarea = chatInputAreaRef.value.querySelector('.chat-input')
   if (!overlay || !textarea) return
-  // overlay 高度 + 底部间距(16px) + 安全余量(24px) — 考虑按钮换行场景
+  // 根据按钮区域实际高度动态设置 padding-bottom
   const overlayHeight = overlay.offsetHeight
   const paddingBottom = Math.max(84, overlayHeight + 40)
   textarea.style.paddingBottom = paddingBottom + 'px'
-  // ★ 确保 content box 至少有一行文字空间（~22px），防止文字溢出到 padding 区域与按钮重叠
-  const minContent = 22
-  const neededMin = paddingBottom + 14 + minContent
+  // 确保总高度足够容纳 padding + 至少一行文字
+  const neededMin = paddingBottom + 14 + 22
   if (inputHeight.value < neededMin) {
     inputHeight.value = neededMin
   }
@@ -908,15 +907,16 @@ let inputDragging = false
 let inputStartY = 0
 let inputStartH = 0
 const startInputResize = (e) => {
-  inputDragging = true; inputStartY = e.clientY; inputStartH = inputHeight.value
+  inputDragging = true; inputStartY = e.clientY
+  // 用实际渲染高度（考虑 CSS min-height），避免跳变
+  inputStartH = inputRef.value?.offsetHeight || inputHeight.value
   document.addEventListener('mousemove', onInputResizeMove); document.addEventListener('mouseup', stopInputResize)
 }
 const onInputResizeMove = (e) => {
   if (!inputDragging) return
-  // 拖拽时同步维护最小高度：确保 content box > 0（至少一行文字 22px）
-  const curPB = Math.max(84, (chatInputAreaRef.value?.querySelector('.input-overlay')?.offsetHeight || 0) + 40)
-  const minH = curPB + 14 + 22
-  inputHeight.value = Math.max(minH, Math.min(600, inputStartH + (inputStartY - e.clientY)))
+  const newH = inputStartH + (inputStartY - e.clientY)
+  // min-height + 拖拽方向保护
+  inputHeight.value = Math.max(120, Math.min(600, newH))
 }
 const stopInputResize = () => { inputDragging = false; document.removeEventListener('mousemove', onInputResizeMove); document.removeEventListener('mouseup', stopInputResize); nextTick(() => updateInputPadding()) }
 
@@ -1311,7 +1311,7 @@ onUnmounted(() => {
 /* ── 输入区 ── */
 .chat-input-area { position: relative; flex-shrink: 0; padding: 0 8px 10px 8px; background: var(--bg-secondary); }
 .input-resizer { position: absolute; top: -8px; left: 0; right: 0; height: 12px; cursor: ns-resize; z-index: 10; }
-.chat-input { display: block; width: 100%; background: var(--input-bg); border: 1px solid var(--border-color); color: var(--text-primary); padding: 14px 16px 84px 16px; border-radius: 8px; font-size: 14px; resize: none; outline: none; min-height: 80px; font-family: inherit; line-height: 1.6; box-sizing: border-box; }
+.chat-input { display: block; width: 100%; background: var(--input-bg); border: 1px solid var(--border-color); color: var(--text-primary); padding: 14px 16px 84px 16px; border-radius: 8px; font-size: 14px; resize: none; outline: none; min-height: 120px; font-family: inherit; line-height: 1.6; box-sizing: border-box; }
 .input-overlay { position: absolute; right: 12px; bottom: 16px; display: flex; align-items: center; gap: 6px; pointer-events: none; }
 .input-overlay > * { pointer-events: auto; }
 .overlay-btns { display: flex; align-items: center; gap: 2px; }
