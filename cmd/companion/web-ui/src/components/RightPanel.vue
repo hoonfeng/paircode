@@ -220,6 +220,12 @@ function updateInputPadding() {
   const overlayHeight = overlay.offsetHeight
   const paddingBottom = Math.max(84, overlayHeight + 40)
   textarea.style.paddingBottom = paddingBottom + 'px'
+  // ★ 确保 content box 至少有一行文字空间（~22px），防止文字溢出到 padding 区域与按钮重叠
+  const minContent = 22
+  const neededMin = paddingBottom + 14 + minContent
+  if (inputHeight.value < neededMin) {
+    inputHeight.value = neededMin
+  }
 }
 const inputHeight = ref(150)
 const convListWidth = ref(250)
@@ -905,8 +911,14 @@ const startInputResize = (e) => {
   inputDragging = true; inputStartY = e.clientY; inputStartH = inputHeight.value
   document.addEventListener('mousemove', onInputResizeMove); document.addEventListener('mouseup', stopInputResize)
 }
-const onInputResizeMove = (e) => { if (!inputDragging) return; inputHeight.value = Math.max(80, Math.min(600, inputStartH + (inputStartY - e.clientY))) }
-const stopInputResize = () => { inputDragging = false; document.removeEventListener('mousemove', onInputResizeMove); document.removeEventListener('mouseup', stopInputResize) }
+const onInputResizeMove = (e) => {
+  if (!inputDragging) return
+  // 拖拽时同步维护最小高度：确保 content box > 0（至少一行文字 22px）
+  const curPB = Math.max(84, (chatInputAreaRef.value?.querySelector('.input-overlay')?.offsetHeight || 0) + 40)
+  const minH = curPB + 14 + 22
+  inputHeight.value = Math.max(minH, Math.min(600, inputStartH + (inputStartY - e.clientY)))
+}
+const stopInputResize = () => { inputDragging = false; document.removeEventListener('mousemove', onInputResizeMove); document.removeEventListener('mouseup', stopInputResize); nextTick(() => updateInputPadding()) }
 
 // ── 文件拖拽/粘贴 ──
 const handleDrop = (e) => {
