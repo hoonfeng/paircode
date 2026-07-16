@@ -145,6 +145,60 @@ func SegmentsFromMessage(msg Message, hist []Message, idx int) []Segment {
 	return segs
 }
 
+// MergeConsecutiveAssistants 合并连续相邻的 assistant 消息为一条。
+// 将各条 assistant 的 segments 按出现顺序拼接（保留 thinking/content/tool_call/ask_user 时序）。
+// 用于 API 返回前，使前端将一个 agent 回复的多轮 LLM 迭代显示为单个气泡。
+// 非 assistant 消息（user/system）保持不变，作为合并的天然边界。
+func MergeConsecutiveAssistants(msgs []StoredMessage) []StoredMessage {
+	if len(msgs) == 0 {
+		return msgs
+	}
+	out := make([]StoredMessage, 0, len(msgs))
+	var pending *StoredMessage
+	for i := range msgs {
+		m := msgs[i]
+		if m.Message.Role == RoleAssistant {
+			if pending == nil {
+				pending = &StoredMessage{
+					Idx:       m.Idx,
+					Message:   m.Message,
+					Segments:  append([]Segment{}, m.Segments...),
+					Timestamp: m.Timestamp,
+				}
+			} else {
+				pending.Segments = append(pending.Segments, m.Segments...)
+				if m.Message.Content != "" {
+					if pending.Message.Content != "" {
+						pending.Message.Content += "\n\n" + m.Message.Content
+					} else {
+						pending.Message.Content = m.Message.Content
+					}
+				}
+				if len(m.Message.ToolCalls) > 0 {
+					pending.Message.ToolCalls = append(pending.Message.ToolCalls, m.Message.ToolCalls...)
+				}
+				if m.Message.Reasoning != "" {
+					if pending.Message.Reasoning != "" {
+						pending.Message.Reasoning += "\n\n" + m.Message.Reasoning
+					} else {
+						pending.Message.Reasoning = m.Message.Reasoning
+					}
+				}
+			}
+		} else {
+			if pending != nil {
+				out = append(out, *pending)
+				pending = nil
+			}
+			out = append(out, m)
+		}
+	}
+	if pending != nil {
+		out = append(out, *pending)
+	}
+	return out
+}
+
 // parseAskArgs 从问用户工具的 JSON arguments 中提取结构化字段。
 func parseAskArgs(argsRaw string) (question, askType string, options []string) {
 	var raw map[string]any

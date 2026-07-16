@@ -1210,21 +1210,23 @@ func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Reques
 					jsonErr(w, err.Error())
 					return
 				}
-				if msgs == nil {
-					msgs = []agent.StoredMessage{}
-				}
-				total, _ := store.Count(id)
-				jsonResp(w, map[string]any{"messages": msgs, "total": total})
-			} else {
-				msgs, total, err := store.LoadLatest(id, limit)
-				if err != nil {
-					jsonErr(w, err.Error())
-					return
-				}
-				if msgs == nil {
-					msgs = []agent.StoredMessage{}
-				}
-				jsonResp(w, map[string]any{"messages": msgs, "total": total})
+			if msgs == nil {
+				msgs = []agent.StoredMessage{}
+			}
+			msgs = agent.MergeConsecutiveAssistants(msgs)
+			total, _ := store.Count(id)
+			jsonResp(w, map[string]any{"messages": msgs, "total": total})
+		} else {
+			msgs, total, err := store.LoadLatest(id, limit)
+			if err != nil {
+				jsonErr(w, err.Error())
+				return
+			}
+			if msgs == nil {
+				msgs = []agent.StoredMessage{}
+			}
+			msgs = agent.MergeConsecutiveAssistants(msgs)
+			jsonResp(w, map[string]any{"messages": msgs, "total": total})
 			}
 
 		case sub == "token-stats":
