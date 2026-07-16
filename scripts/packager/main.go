@@ -36,19 +36,20 @@ type Config struct {
 	Copyright        string     `json:"copyright"`
 	Icon             string     `json:"icon"`
 	FrontendDir      string     `json:"frontendDir"`
-	SkipBuildFrontend bool      `json:"skipBuildFrontend"`
+	SkipBuildFrontend bool      `json:"skipBuildFrontend,omitempty"`
 	MainPkg          string     `json:"mainPkg"`
 	Output           string     `json:"output"`
-	Console          bool       `json:"console"`
-	Hooks            Hooks      `json:"hooks"`
+	Console          bool       `json:"console,omitempty"`
+	Pipeline         []string   `json:"pipeline,omitempty"`
+	Hooks            Hooks      `json:"hooks,omitempty"`
 	Secrets          SecretsCfg `json:"secrets"`
 	Dist             DistConfig `json:"dist"`
 	Tools            Tools      `json:"tools"`
 }
 
 type SecretsCfg struct {
-	Fields []string `json:"fields"`
-	Files  []string `json:"files"`
+	Fields []string `json:"fields,omitempty"`
+	Files  []string `json:"files,omitempty"`
 }
 
 type DistConfig struct {
@@ -69,6 +70,24 @@ type Tools struct {
 	FFmpeg  string `json:"ffmpeg"`
 	Go      string `json:"go"`
 	Npm     string `json:"npm"`
+}
+
+// 预定义的步骤名
+const (
+	StepFrontend   = "build-frontend"
+	StepIcon       = "generate-icon"
+	StepResource   = "compile-resource"
+	StepGoBuild    = "build-go"
+	StepPackage    = "package"
+)
+
+// 默认 pipeline（向后兼容）
+var defaultPipeline = []string{
+	StepFrontend,
+	StepIcon,
+	StepResource,
+	StepGoBuild,
+	StepPackage,
 }
 
 func main() {
@@ -121,57 +140,74 @@ func main() {
 	// 前置钩子（所有步骤之前）
 	runHooks(root, "preBuild", cfg.Hooks.PreBuild)
 
-	// Step 1: 构建前端
-	runHooks(root, "preFrontend", cfg.Hooks.PreFrontend)
-	if !cfg.SkipBuildFrontend && !skipFrontend {
-		step("1/4", "构建前端...")
-		if err := buildFrontend(root, cfg); err != nil {
-			fatalf("前端构建失败: %v", err)
-		}
-		ok("前端构建完成")
-	} else {
-		fmt.Println("  跳过前端构建")
+	// 确定 pipeline（配置了就用配置的，否则用默认）
+	pipeline := cfg.Pipeline
+	if len(pipeline) == 0 {
+		pipeline = defaultPipeline
 	}
-	runHooks(root, "postFrontend", cfg.Hooks.PostFrontend)
 
-	// Step 2: 生成图标
-	step("2/4", "生成 Windows 图标...")
-	if err := generateIcon(root, cfg); err != nil {
-		fmt.Printf("  图标生成失败（可跳过）: %v\n", err)
-	} else {
-		ok("图标生成完成")
-	}
-	runHooks(root, "postIcon", cfg.Hooks.PostIcon)
+	total := len(pipeline)
+	for i, stepName := range pipeline {
+		stepLabel := fmt.Sprintf("%d/%d", i+1, total)
 
-	// Step 3: 编译资源
-	step("3/4", "编译资源文件...")
-	if err := compileResource(cfg); err != nil {
-		fmt.Printf("  资源编译失败（可跳过）: %v\n", err)
-	} else {
-		ok("资源编译完成")
-	}
-	runHooks(root, "postResource", cfg.Hooks.PostResource)
+		switch stepName {
+		case StepFrontend:
+			runHooks(root, "preFrontend", cfg.Hooks.PreFrontend)
+			if !cfg.SkipBuildFrontend && !skipFrontend {
+				step(stepLabel, "构建前端...")
+				if err := buildFrontend(root, cfg); err != nil {
+					fatalf("前端构建失败: %v", err)
+				}
+				ok("前端构建完成")
+			} else {
+				fmt.Println("  跳过前端构建")
+			}
+			runHooks(root, "postFrontend", cfg.Hooks.PostFrontend)
 
-	// Step 4: 编译 Go 二进制
-	runHooks(root, "preGoBuild", cfg.Hooks.PreGoBuild)
-	step("4/4", "编译 companion.exe...")
-	exePath, err := buildGo(cfg)
-	if err != nil {
-		fatalf("Go 编译失败: %v", err)
-	}
-	ok(fmt.Sprintf("编译完成: %s", exePath))
-	runHooks(root, "postBuild", cfg.Hooks.PostBuild)
+		case StepIcon:
+			step(stepLabel, "生成 Windows 图标...")
+			if err := generateIcon(root, cfg); err != nil {
+				fmt.Printf("  图标生成失败（可跳过）: %v\n", err)
+			} else {
+				ok("图标生成完成")
+			}
+			runHooks(root, "postIcon", cfg.Hooks.PostIcon)
 
-	// 打包发布目录
-	distDir, zipPath, err := packageDist(root, exePath, cfg)
-	if err != nil {
-		fmt.Printf("  打包失败: %v\n", err)
-	} else {
-		ok(fmt.Sprintf("发布目录: %s", distDir))
-		if zipPath != "" {
-			info, _ := os.Stat(zipPath)
-			sizeMB := float64(info.Size()) / 1024 / 1024
-			ok(fmt.Sprintf("ZIP 包: %s (%.1f MB)", zipPath, sizeMB))
+		case StepResource:
+			step(stepLabel, "编译资源文件...")
+			if err := compileResource(cfg); err != nil {
+				fmt.Printf("  资源编译失败（可跳过）: %v\n", err)
+			} else {
+				ok("资源编译完成")
+			}
+			runHooks(root, "postResource", cfg.Hooks.PostResource)
+
+		case StepGoBuild:
+			runHooks(root, "preGoBuild", cfg.Hooks.PreGoBuild)
+			step(stepLabel, "编译 companion.exe...")
+			exePath, err := buildGo(cfg)
+			if err != nil {
+				fatalf("Go 编译失败: %v", err)
+			}
+			ok(fmt.Sprintf("编译完成: %s", exePath))
+			runHooks(root, "postBuild", cfg.Hooks.PostBuild)
+
+		case StepPackage:
+			distDir, zipPath, err := packageDist(root, cfg)
+			if err != nil {
+				fmt.Printf("  打包失败: %v\n", err)
+			} else {
+				ok(fmt.Sprintf("发布目录: %s", distDir))
+				if zipPath != "" {
+					info, _ := os.Stat(zipPath)
+					sizeMB := float64(info.Size()) / 1024 / 1024
+					ok(fmt.Sprintf("ZIP 包: %s (%.1f MB)", zipPath, sizeMB))
+				}
+			}
+
+		default:
+			// 未知的步骤名当作自定义命令执行
+			runHooks(root, stepName, []string{stepName})
 		}
 	}
 
@@ -212,6 +248,9 @@ func loadConfig(path string) *Config {
 	}
 	if cfg.Tools.Go == "" {
 		cfg.Tools.Go = "go"
+	}
+	if len(cfg.Pipeline) == 0 {
+		cfg.Pipeline = defaultPipeline
 	}
 	return &cfg
 }
@@ -404,7 +443,8 @@ func buildGo(cfg *Config) (string, error) {
 
 // ─── 打包发布目录 ──────────────────────────────────────────
 
-func packageDist(root, exePath string, cfg *Config) (string, string, error) {
+func packageDist(root string, cfg *Config) (string, string, error) {
+	exePath := filepath.Join(root, "release", cfg.Output)
 	distDir := filepath.Join(root, cfg.Dist.OutputDir, cfg.Dist.DirName)
 	os.RemoveAll(distDir)
 	os.MkdirAll(distDir, 0755)
