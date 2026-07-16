@@ -306,7 +306,7 @@ func updateRCVersion(cfg *Config) {
 
 func printHelp() {
 	fmt.Println(`
-PairCode Release Packager
+PairCode 发布打包工具 (Packager)
 产品编译打包工具，不含脱敏/代码发布功能。
 
 用法:
