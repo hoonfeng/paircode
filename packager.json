@@ -10,6 +10,11 @@
   "mainPkg": "./cmd/companion",
   "output": "companion.exe",
 
+  "secrets": {
+    "fields": ["apiKey", "APIKey", "api_password", "secret", "token"],
+    "files": ["config/settings.json", "config/mcp.json"]
+  },
+
   "dist": {
     "outputDir": "release",
     "dirName": "PairCode",

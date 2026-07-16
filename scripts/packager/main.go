@@ -27,8 +27,14 @@ type Config struct {
 	SkipBuildFrontend bool      `json:"skipBuildFrontend"`
 	MainPkg          string     `json:"mainPkg"`
 	Output           string     `json:"output"`
+	Secrets          SecretsCfg `json:"secrets"`
 	Dist             DistConfig `json:"dist"`
 	Tools            Tools      `json:"tools"`
+}
+
+type SecretsCfg struct {
+	Fields []string `json:"fields"`
+	Files  []string `json:"files"`
 }
 
 type DistConfig struct {
@@ -305,6 +311,11 @@ func packageDist(root, exePath string, cfg *Config) (string, string, error) {
 		}
 	}
 
+	// 清除密钥
+	if len(cfg.Secrets.Fields) > 0 && len(cfg.Secrets.Files) > 0 {
+		stripSecrets(distDir, cfg.Secrets.Fields, cfg.Secrets.Files)
+	}
+
 	// ZIP
 	zipName := fmt.Sprintf("%s-%s.zip", cfg.Dist.DirName, cfg.Version)
 	zipPath := filepath.Join(root, cfg.Dist.OutputDir, zipName)
@@ -343,4 +354,31 @@ func copyFile(dst, src string) error {
 	defer d.Close()
 	_, err = io.Copy(d, s)
 	return err
+}
+
+// stripSecrets 从发布目录的指定 JSON 文件中删除密钥字段。
+func stripSecrets(distDir string, fields, files []string) {
+	for _, rel := range files {
+		path := filepath.Join(distDir, rel)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		var m map[string]any
+		if err := json.Unmarshal(data, &m); err != nil {
+			continue
+		}
+		changed := false
+		for _, f := range fields {
+			if _, ok := m[f]; ok {
+				delete(m, f)
+				changed = true
+			}
+		}
+		if changed {
+			cleaned, _ := json.MarshalIndent(m, "", "  ")
+			os.WriteFile(path, cleaned, 0644)
+			fmt.Printf("  密钥已清除: %s\n", rel)
+		}
+	}
 }
