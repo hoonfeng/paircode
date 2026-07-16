@@ -853,9 +853,10 @@ func (s *DBStore) scanMessages(rows *sql.Rows) []StoredMessage {
 		if r.segJSON != "" && r.segJSON != "[]" {
 			json.Unmarshal([]byte(r.segJSON), &segs)
 		}
-		if len(segs) == 0 {
-			segs = SegmentsFromMessage(msg, hist, i)
-		}
+		// ★ 不检查 len(segs)==0，始终用完整 hist 重建 segments。
+		// PersistNewMessages 不写 segments 列，旧 AppendMessage 写入的 segments
+		// 可能缺少 tool_result（分次写入时工具结果尚未生成）。
+		segs = SegmentsFromMessage(msg, hist, i)
 
 		out[i] = StoredMessage{
 			Idx:       r.idx,

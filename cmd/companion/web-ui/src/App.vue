@@ -377,6 +377,17 @@ onMounted(async () => {
     if (state.conversations.length > 0 && !state.rightPanelVisible) {
       state.rightPanelVisible = true
     }
+
+    // ★ 从后端对话列表中自动选中最近更新的对话（不依赖 localStorage）
+    if (state.conversations.length > 0 && !state.currentConvId) {
+      state.currentConvId = state.conversations[0].id
+    }
+    // ★ 先加载历史消息，再初始化 WebSocket。
+    // 解决刷新时 WS processStatus 抢占优先 → 历史被 runtime 占位覆盖的时序 bug。
+    if (state.currentConvId) {
+      window.dispatchEvent(new CustomEvent('restore-conversation', { detail: { convId: state.currentConvId } }))
+      await new Promise(r => setTimeout(r, 100))
+    }
   }
 
   // 初始化全局 WebSocket：接收所有会话事件（跨工作区并行对话核心）
@@ -387,11 +398,6 @@ onMounted(async () => {
   })
 
   loadPersistentState()
-
-  // ★ 若持久化中恢复了当前对话 ID，派发事件让 RightPanel 自动加载消息
-  if (state.currentConvId) {
-    window.dispatchEvent(new CustomEvent('restore-conversation', { detail: { convId: state.currentConvId } }))
-  }
 
   if (state.openFiles.length > 0) {
     for (const fp of state.openFiles) {

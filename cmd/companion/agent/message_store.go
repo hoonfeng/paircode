@@ -1,4 +1,6 @@
-// MessageStore: 对话消息持久化的唯一权威，JSONL 单文件存储 + index.json 元数据
+// MessageStore — 历史遗留的 JSONL 存储实现（已弃用）。
+// 自迁移至 SQLite 后不再作为活动存储，保留用于旧数据迁移兼容。
+// 活动存储见 DBAdapter (db_adapter.go) / DBStore (db_store.go).
 package agent
 
 import (
