@@ -555,11 +555,14 @@ func (s *MessageStore) PersistNewMessages(convID string, hist []Message) error {
 	newCount := count
 
 	// 找到要写入的起始位置：跳过前 count 条非 System 消息
+	// ★ 修复：条件为 nonSystemSeen > count（非 >=）。当 nonSystemSeen == count 时，
+	// 表示找到了第 count 条非 System 消息（已持久化），需要继续前进到 count+1 条。
+	// 原 >= 条件导致重写最后一条已持久化的 assistant 消息，产生重复。
 	startIdx := 0
 	nonSystemSeen := 0
 	for startIdx < len(hist) {
 		if hist[startIdx].Role != RoleSystem {
-			if nonSystemSeen >= count {
+			if nonSystemSeen > count {
 				break
 			}
 			nonSystemSeen++

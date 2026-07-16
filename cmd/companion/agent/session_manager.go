@@ -571,13 +571,15 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		// 现在 DB 中始终保留完整原始消息，压缩仅在运行时内存中进行，
 		// 下次 loop 从 DB LoadAll 时仍能拿到完整上下文。
 
-		// ★ 合并末尾连续 assistant 条目：OnBatchPersist 每轮写一条，刷新后前端会
-		// 看到多条 assistant 气泡。合并后与事件流行为一致（一个 run 只显示一条）。
-		if m.store != nil {
-			if cerr := m.store.MergeLastAssistantRun(convID); cerr != nil {
-				fmt.Printf("[session] MergeLastAssistantRun 失败 conv=%s err=%v\n", convID, cerr)
-			}
-		}
+		// ★ 不复存在：MergeLastAssistantRun 已移除。
+		// 之前这里调用了 MergeLastAssistantRun 将末尾连续多条 assistant 消息合并成一条，
+		// 导致：
+		//   1. 各轮次的思考（reasoning）丢失——只有第一条 assistant 的 reasoning 保留
+		//   2. 各轮次正文被简单拼接成一个长字符串
+		//   3. 所有工具调用聚到同一条 assistant 中，失去了"思考→工具→结果→再思考"的时序结构
+		//   4. 前端拿到后无法展示不同轮次的 thinking 段
+		// 现在每轮 assistant 独立存储，由 SegmentsFromMessage 在读取时通过 look-ahead
+		// 自动将 tool_result 嵌入对应 tool_call segment，形成完整的"工具+结果"链路。
 
 		// ★ Auto commit：任务正常完成时自动 git 提交
 		if opts.AutoCommit && err == nil {

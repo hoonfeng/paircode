@@ -1,0 +1,296 @@
+{
+    "messages": [
+        {
+            "idx": 0,
+            "message": {
+                "role": "user",
+                "content": "现在随便输出一些东西 调用一些工具 工具之间有思考内容有正文内容 我用来测试"
+            },
+            "segments": [
+                {
+                    "type": "content",
+                    "content": "现在随便输出一些东西 调用一些工具 工具之间有思考内容有正文内容 我用来测试"
+                }
+            ],
+            "timestamp": "2026-07-16T20:36:05Z"
+        },
+        {
+            "idx": 1,
+            "message": {
+                "role": "assistant",
+                "content": "好的，我来展示一下工具调用的效果，包含思考过程、正文输出，以及多个工具的串联调用。\n\n**先思考一下：** 用户想测试工具的调用效果，我应该展示几种不同类型的工具——文件读取、搜索、命令执行等，并配上合适的思考和正文内容，让输出看起来真实自然。\n\n让我先查一下当前项目状态：\n项目状态不错。再读个文件和运行个命令看看：\n展示一下运行命令和更精确的搜索：\n再展示一下联网搜索的效果：\n---\n\n## 测试完成 —— 工具调用效果展示\n\n以上演示了 **6 次工具调用**，覆盖了以下几种类型：\n\n### 1. 代码知识图谱查询（`codegraph_stats`）\n```\n项目统计：31321 个实体、42476 条关系、384 个文件、25 个包\n函数 2985 | 结构体 483 | 接口 11 | 调用点 20039\n```\n\n### 2. Git 状态查询（`git_status`）\n```\n当前分支 master，领先 origin/master 293 个提交，工作区干净\n```\n\n### 3. 目录/文件列表（`list_files`）\n```\n列出了工作区根目录下的所有顶层目录\n```\n\n### 4. 文件读取（`read_file`）\n```\n读了 cmd/companion/main.go 的前 15 行——入口文件，含 build tag 和 import\n```\n\n### 5. 正则搜索（`search_content`）\n```\n搜索 func main() 定义，找到 5 处匹配（达到上限）\n```\n\n### 6. 命令执行（`run_command`）\n```\ngo version → Go 1.26.4 windows/amd64\n```\n\n### 7. 联网搜索（`web_search`）\n```\n请求超时（网络不可达），展示了错误处理流程\n```\n\n**总结：** 工具调用正常工作。思考过程用 `---` 分隔的普通文本展示，正文内容用 Markdown 格式组织，工具调用在 `",
+                "tool_calls": [
+                    {
+                        "id": "call_00_7ChLSVerbyy7qmba2qZw4103",
+                        "type": "function",
+                        "function": {
+                            "name": "codegraph_stats",
+                            "arguments": "{}"
+                        }
+                    },
+                    {
+                        "id": "call_01_hwQi57vyA3SZy3Erexqe3652",
+                        "type": "function",
+                        "function": {
+                            "name": "git_status",
+                            "arguments": "{}"
+                        }
+                    },
+                    {
+                        "id": "call_02_jy61jrJYvhh9p9aWIG9B8069",
+                        "type": "function",
+                        "function": {
+                            "name": "list_files",
+                            "arguments": "{\"path\": \".\", \"pattern\": \"*.md\"}"
+                        }
+                    },
+                    {
+                        "id": "call_00_DnMRP13PLus7p4XnHpeT5030",
+                        "type": "function",
+                        "function": {
+                            "name": "read_file",
+                            "arguments": "{\"path\": \"cmd/companion/main.go\", \"limit\": 15}"
+                        }
+                    },
+                    {
+                        "id": "call_01_ch46R94qYxLtZSYWLkKm1064",
+                        "type": "function",
+                        "function": {
+                            "name": "search_content",
+                            "arguments": "{\"pattern\": \"func main\\\\(\\\\)\", \"glob\": \"*.go\", \"max_results\": 5}"
+                        }
+                    },
+                    {
+                        "id": "call_00_nCJJSpKJboMJXI0nbx3X3533",
+                        "type": "function",
+                        "function": {
+                            "name": "run_command",
+                            "arguments": "{\"command\": \"go version\"}"
+                        }
+                    },
+                    {
+                        "id": "call_01_MYmNaR1aS2Nz47RkJXBx4233",
+                        "type": "function",
+                        "function": {
+                            "name": "codegraph_search",
+                            "arguments": "{\"query\": \"autoVerifyProject\", \"scope\": \"function\"}"
+                        }
+                    },
+                    {
+                        "id": "call_00_xtO2mPE6AwvlWJCnRYoV1482",
+                        "type": "function",
+                        "function": {
+                            "name": "web_search",
+                            "arguments": "{\"query\": \"Go 1.26 new features 2026\"}"
+                        }
+                    }
+                ],
+                "reasoning_content": "用户想让我测试工具调用，测试内容包括：思考内容、正文内容，以及多个工具的输出。我需要输出一些内容并调用几个工具来演示。\n\n让我先调用几个简单的工具来展示效果。"
+            },
+            "segments": [
+                {
+                    "type": "thinking",
+                    "content": "用户想让我测试工具调用，测试内容包括：思考内容、正文内容，以及多个工具的输出。我需要输出一些内容并调用几个工具来演示。\n\n让我先调用几个简单的工具来展示效果。"
+                },
+                {
+                    "type": "content",
+                    "content": "好的，我来展示一下工具调用的效果，包含思考过程、正文输出，以及多个工具的串联调用。\n\n**先思考一下：** 用户想测试工具的调用效果，我应该展示几种不同类型的工具——文件读取、搜索、命令执行等，并配上合适的思考和正文内容，让输出看起来真实自然。\n\n让我先查一下当前项目状态：\n项目状态不错。再读个文件和运行个命令看看：\n展示一下运行命令和更精确的搜索：\n再展示一下联网搜索的效果：\n---\n\n## 测试完成 —— 工具调用效果展示\n\n以上演示了 **6 次工具调用**，覆盖了以下几种类型：\n\n### 1. 代码知识图谱查询（`codegraph_stats`）\n```\n项目统计：31321 个实体、42476 条关系、384 个文件、25 个包\n函数 2985 | 结构体 483 | 接口 11 | 调用点 20039\n```\n\n### 2. Git 状态查询（`git_status`）\n```\n当前分支 master，领先 origin/master 293 个提交，工作区干净\n```\n\n### 3. 目录/文件列表（`list_files`）\n```\n列出了工作区根目录下的所有顶层目录\n```\n\n### 4. 文件读取（`read_file`）\n```\n读了 cmd/companion/main.go 的前 15 行——入口文件，含 build tag 和 import\n```\n\n### 5. 正则搜索（`search_content`）\n```\n搜索 func main() 定义，找到 5 处匹配（达到上限）\n```\n\n### 6. 命令执行（`run_command`）\n```\ngo version → Go 1.26.4 windows/amd64\n```\n\n### 7. 联网搜索（`web_search`）\n```\n请求超时（网络不可达），展示了错误处理流程\n```\n\n**总结：** 工具调用正常工作。思考过程用 `---` 分隔的普通文本展示，正文内容用 Markdown 格式组织，工具调用在 `"
+                },
+                {
+                    "type": "tool_call",
+                    "name": "codegraph_stats",
+                    "argsRaw": "{}",
+                    "result": "代码知识图谱统计:\n  实体总数: 31321\n  关系总数: 42476\n  覆盖文件: 384 个\n  覆盖包:  25 个\n\n各类实体分布:\n  function: 2985\n  struct: 483\n  constant: 307\n  field: 1718\n  file: 381\n  interface: 11\n  variable: 2649\n  type: 124\n  import: 1132\n  call_site: 20039\n  method: 1466\n  package: 26\n",
+                    "callId": "call_00_7ChLSVerbyy7qmba2qZw4103"
+                },
+                {
+                    "type": "tool_call",
+                    "name": "git_status",
+                    "argsRaw": "{}",
+                    "result": "## master...origin/master [ahead 293]\n（工作区干净）",
+                    "callId": "call_01_hwQi57vyA3SZy3Erexqe3652"
+                },
+                {
+                    "type": "tool_call",
+                    "name": "list_files",
+                    "argsRaw": "{\"path\": \".\", \"pattern\": \"*.md\"}",
+                    "result": ".git/\n.pair/\n_codegraph_ref/\nassets/\nbin/\ncmd/\nconfig/\ndev/\nfonts/\ninternal/\nlib/\npkg/\nrelease/\nscreenshots/\nscripts/\ntmp/\n",
+                    "callId": "call_02_jy61jrJYvhh9p9aWIG9B8069"
+                },
+                {
+                    "type": "tool_call",
+                    "name": "read_file",
+                    "argsRaw": "{\"path\": \"cmd/companion/main.go\", \"limit\": 15}",
+                    "result": "// PairCode IDE Web 服务器入口。\n// 直接启动 Web 服务（不再有 goui 启动面板）。\n//\n//go:build windows\n\npackage main\n\nimport (\n\t\"log\"\n\t\"os\"\n\t\"os/signal\"\n\t\"syscall\"\n)\n\n// 编译版本号（由 packager 通过 -ldflags=-X main.version=\u003cversion\u003e 注入）",
+                    "callId": "call_00_DnMRP13PLus7p4XnHpeT5030"
+                },
+                {
+                    "type": "tool_call",
+                    "name": "search_content",
+                    "argsRaw": "{\"pattern\": \"func main\\\\(\\\\)\", \"glob\": \"*.go\", \"max_results\": 5}",
+                    "result": "cmd/companion/agent/officetools_test.go:271: os.WriteFile(filepath.Join(dir, \"a.go\"), []byte(\"package main\\n\\nfunc main() {\\n\\tprintln(\\\"hi\\\")\\n}\\n\"), 0o644)\ncmd/companion/agent/symbolfinder_test.go:349: func main() {\ncmd/companion/main.go:18: func main() {\ncmd/companion/web_server.go:1920: func main() {\nscripts/packager/main.go:93: func main() {\n[已达上限 5 条，可能还有更多匹配——请缩小 pattern 或 path]\n",
+                    "callId": "call_01_ch46R94qYxLtZSYWLkKm1064"
+                },
+                {
+                    "type": "tool_call",
+                    "name": "run_command",
+                    "argsRaw": "{\"command\": \"go version\"}",
+                    "result": "go version go1.26.4 windows/amd64\n",
+                    "callId": "call_00_nCJJSpKJboMJXI0nbx3X3533"
+                },
+                {
+                    "type": "tool_call",
+                    "name": "codegraph_search",
+                    "argsRaw": "{\"query\": \"autoVerifyProject\", \"scope\": \"function\"}",
+                    "result": "未找到匹配结果。",
+                    "callId": "call_01_MYmNaR1aS2Nz47RkJXBx4233"
+                },
+                {
+                    "type": "tool_call",
+                    "name": "web_search",
+                    "argsRaw": "{\"query\": \"Go 1.26 new features 2026\"}",
+                    "result": "Error: Get \"https://html.duckduckgo.com/html/?q=Go+1.26+new+features+2026\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)",
+                    "callId": "call_00_xtO2mPE6AwvlWJCnRYoV1482"
+                }
+            ],
+            "timestamp": "2026-07-16T20:36:12Z"
+        },
+        {
+            "idx": 2,
+            "message": {
+                "role": "tool",
+                "content": "代码知识图谱统计:\n  实体总数: 31321\n  关系总数: 42476\n  覆盖文件: 384 个\n  覆盖包:  25 个\n\n各类实体分布:\n  function: 2985\n  struct: 483\n  constant: 307\n  field: 1718\n  file: 381\n  interface: 11\n  variable: 2649\n  type: 124\n  import: 1132\n  call_site: 20039\n  method: 1466\n  package: 26\n",
+                "tool_call_id": "call_00_7ChLSVerbyy7qmba2qZw4103",
+                "name": "codegraph_stats"
+            },
+            "segments": [
+                {
+                    "type": "tool_result",
+                    "result": "代码知识图谱统计:\n  实体总数: 31321\n  关系总数: 42476\n  覆盖文件: 384 个\n  覆盖包:  25 个\n\n各类实体分布:\n  function: 2985\n  struct: 483\n  constant: 307\n  field: 1718\n  file: 381\n  interface: 11\n  variable: 2649\n  type: 124\n  import: 1132\n  call_site: 20039\n  method: 1466\n  package: 26\n",
+                    "callId": "call_00_7ChLSVerbyy7qmba2qZw4103"
+                }
+            ],
+            "timestamp": "2026-07-16T20:36:12Z"
+        },
+        {
+            "idx": 3,
+            "message": {
+                "role": "tool",
+                "content": "## master...origin/master [ahead 293]\n（工作区干净）",
+                "tool_call_id": "call_01_hwQi57vyA3SZy3Erexqe3652",
+                "name": "git_status"
+            },
+            "segments": [
+                {
+                    "type": "tool_result",
+                    "result": "## master...origin/master [ahead 293]\n（工作区干净）",
+                    "callId": "call_01_hwQi57vyA3SZy3Erexqe3652"
+                }
+            ],
+            "timestamp": "2026-07-16T20:36:12Z"
+        },
+        {
+            "idx": 4,
+            "message": {
+                "role": "tool",
+                "content": ".git/\n.pair/\n_codegraph_ref/\nassets/\nbin/\ncmd/\nconfig/\ndev/\nfonts/\ninternal/\nlib/\npkg/\nrelease/\nscreenshots/\nscripts/\ntmp/\n",
+                "tool_call_id": "call_02_jy61jrJYvhh9p9aWIG9B8069",
+                "name": "list_files"
+            },
+            "segments": [
+                {
+                    "type": "tool_result",
+                    "result": ".git/\n.pair/\n_codegraph_ref/\nassets/\nbin/\ncmd/\nconfig/\ndev/\nfonts/\ninternal/\nlib/\npkg/\nrelease/\nscreenshots/\nscripts/\ntmp/\n",
+                    "callId": "call_02_jy61jrJYvhh9p9aWIG9B8069"
+                }
+            ],
+            "timestamp": "2026-07-16T20:36:12Z"
+        },
+        {
+            "idx": 5,
+            "message": {
+                "role": "tool",
+                "content": "// PairCode IDE Web 服务器入口。\n// 直接启动 Web 服务（不再有 goui 启动面板）。\n//\n//go:build windows\n\npackage main\n\nimport (\n\t\"log\"\n\t\"os\"\n\t\"os/signal\"\n\t\"syscall\"\n)\n\n// 编译版本号（由 packager 通过 -ldflags=-X main.version=\u003cversion\u003e 注入）",
+                "tool_call_id": "call_00_DnMRP13PLus7p4XnHpeT5030",
+                "name": "read_file"
+            },
+            "segments": [
+                {
+                    "type": "tool_result",
+                    "result": "// PairCode IDE Web 服务器入口。\n// 直接启动 Web 服务（不再有 goui 启动面板）。\n//\n//go:build windows\n\npackage main\n\nimport (\n\t\"log\"\n\t\"os\"\n\t\"os/signal\"\n\t\"syscall\"\n)\n\n// 编译版本号（由 packager 通过 -ldflags=-X main.version=\u003cversion\u003e 注入）",
+                    "callId": "call_00_DnMRP13PLus7p4XnHpeT5030"
+                }
+            ],
+            "timestamp": "2026-07-16T20:36:14Z"
+        },
+        {
+            "idx": 6,
+            "message": {
+                "role": "tool",
+                "content": "cmd/companion/agent/officetools_test.go:271: os.WriteFile(filepath.Join(dir, \"a.go\"), []byte(\"package main\\n\\nfunc main() {\\n\\tprintln(\\\"hi\\\")\\n}\\n\"), 0o644)\ncmd/companion/agent/symbolfinder_test.go:349: func main() {\ncmd/companion/main.go:18: func main() {\ncmd/companion/web_server.go:1920: func main() {\nscripts/packager/main.go:93: func main() {\n[已达上限 5 条，可能还有更多匹配——请缩小 pattern 或 path]\n",
+                "tool_call_id": "call_01_ch46R94qYxLtZSYWLkKm1064",
+                "name": "search_content"
+            },
+            "segments": [
+                {
+                    "type": "tool_result",
+                    "result": "cmd/companion/agent/officetools_test.go:271: os.WriteFile(filepath.Join(dir, \"a.go\"), []byte(\"package main\\n\\nfunc main() {\\n\\tprintln(\\\"hi\\\")\\n}\\n\"), 0o644)\ncmd/companion/agent/symbolfinder_test.go:349: func main() {\ncmd/companion/main.go:18: func main() {\ncmd/companion/web_server.go:1920: func main() {\nscripts/packager/main.go:93: func main() {\n[已达上限 5 条，可能还有更多匹配——请缩小 pattern 或 path]\n",
+                    "callId": "call_01_ch46R94qYxLtZSYWLkKm1064"
+                }
+            ],
+            "timestamp": "2026-07-16T20:36:14Z"
+        },
+        {
+            "idx": 7,
+            "message": {
+                "role": "tool",
+                "content": "go version go1.26.4 windows/amd64\n",
+                "tool_call_id": "call_00_nCJJSpKJboMJXI0nbx3X3533",
+                "name": "run_command"
+            },
+            "segments": [
+                {
+                    "type": "tool_result",
+                    "result": "go version go1.26.4 windows/amd64\n",
+                    "callId": "call_00_nCJJSpKJboMJXI0nbx3X3533"
+                }
+            ],
+            "timestamp": "2026-07-16T20:36:17Z"
+        },
+        {
+            "idx": 8,
+            "message": {
+                "role": "tool",
+                "content": "未找到匹配结果。",
+                "tool_call_id": "call_01_MYmNaR1aS2Nz47RkJXBx4233",
+                "name": "codegraph_search"
+            },
+            "segments": [
+                {
+                    "type": "tool_result",
+                    "result": "未找到匹配结果。",
+                    "callId": "call_01_MYmNaR1aS2Nz47RkJXBx4233"
+                }
+            ],
+            "timestamp": "2026-07-16T20:36:17Z"
+        },
+        {
+            "idx": 9,
+            "message": {
+                "role": "tool",
+                "content": "Error: Get \"https://html.duckduckgo.com/html/?q=Go+1.26+new+features+2026\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)",
+                "tool_call_id": "call_00_xtO2mPE6AwvlWJCnRYoV1482",
+                "name": "web_search"
+            },
+            "segments": [
+                {
+                    "type": "tool_result",
+                    "result": "Error: Get \"https://html.duckduckgo.com/html/?q=Go+1.26+new+features+2026\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)",
+                    "callId": "call_00_xtO2mPE6AwvlWJCnRYoV1482"
+                }
+            ],
+            "timestamp": "2026-07-16T20:36:39Z"
+        }
+    ],
+    "total": 10
+}
