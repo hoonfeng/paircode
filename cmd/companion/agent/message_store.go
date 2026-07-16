@@ -649,11 +649,12 @@ func rebuildSegmentsIfMissing(msgs []StoredMessage) {
 	for i, sm := range msgs {
 		hist[i] = sm.Message
 	}
-	// 对 segments 为空的消息重建
+	// ★ 始终重建 segments（不限空），确保 tool_result 被正确回填到 tool_call 段。
+	// PersistNewMessages 分多次写入：首次写入 assistant 时 tool_result 尚未生成，
+	// 后续写入 tool_result 但不会回溯更新已写入的 assistant 消息。
+	// 加载时用完整 hist 做 look-ahead 才能拿到所有 tool_result。
 	for i := range msgs {
-		if len(msgs[i].Segments) == 0 {
-			msgs[i].Segments = SegmentsFromMessage(msgs[i].Message, hist, i)
-		}
+		msgs[i].Segments = SegmentsFromMessage(msgs[i].Message, hist, i)
 	}
 }
 
