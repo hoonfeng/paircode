@@ -178,6 +178,8 @@ func startWebUI(port int) {
 	mux.HandleFunc("/api/mcp/list", ws.handleMCPList)
 	mux.HandleFunc("/api/mcp/save", ws.handleMCPSave)
 	mux.HandleFunc("/api/skills/list", ws.handleSkillsList)
+	mux.HandleFunc("/api/skills/save", ws.handleSkillsSave)
+	mux.HandleFunc("/api/skills/read", ws.handleSkillsRead)
 	mux.HandleFunc("/api/skills/read", ws.handleSkillsRead)
 	mux.HandleFunc("/api/skills/delete", ws.handleSkillsDelete)
 	mux.HandleFunc("/api/tokens/stats", ws.handleTokensStats)
@@ -1687,7 +1689,6 @@ func (s *webServer) handleTokensStats(w http.ResponseWriter, r *http.Request) {
 }
 
 // ─── Skills HTTP API ──────────────────────────────────────
-
 func (s *webServer) handleSkillsList(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" {
 		jsonErr(w, "仅 GET")
@@ -1698,15 +1699,30 @@ func (s *webServer) handleSkillsList(w http.ResponseWriter, r *http.Request) {
 		Description string `json:"description"`
 		Mode        string `json:"mode"`
 		Level       string `json:"level"`
+		Status      string `json:"status"`
 	}
 	skills := agent.LoadAllSkills()
 	out := make([]skillItem, 0, len(skills))
 	for _, sk := range skills {
+		origMode := sk.Mode
+		key := string(sk.Level) + "::" + sk.Name
+		status := "on"
+		if s, ok := agent.SkillStatusOverride[key]; ok {
+			status = s
+		} else {
+			if v, ok := agent.SkillEnabled[key]; ok && !v {
+				status = "off"
+			} else if origMode == "always" {
+				status = "max"
+			}
+		}
 		out = append(out, skillItem{
 			Name: sk.Name, Description: sk.Description,
-			Mode: sk.Mode, Level: string(sk.Level),
+			Mode: origMode, Level: string(sk.Level),
+			Status: status,
 		})
 	}
+
 	jsonResp(w, out)
 }
 
@@ -1731,6 +1747,45 @@ func (s *webServer) handleSkillsDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonResp(w, map[string]any{"ok": true, "message": "已删除技能: " + req.Name})
+}
+
+func (s *webServer) handleSkillsSave(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		jsonErr(w, "仅 POST")
+		return
+	}
+	var req struct {
+		Action string `json:"action"`
+		Name   string `json:"name"`
+		Level  string `json:"level"`
+		Status string `json:"status"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonErr(w, err.Error())
+		return
+	}
+	if req.Name == "" {
+		jsonErr(w, "name 必填")
+		return
+	}
+	lv := agent.LevelProject
+	if req.Level == "system" {
+		lv = agent.LevelSystem
+	}
+	switch req.Action {
+	case "set-status":
+		if req.Status != "off" && req.Status != "on" && req.Status != "max" {
+			jsonErr(w, "status 必须为 off/on/max")
+			return
+		}
+		agent.SkillSetStatus(req.Name, lv, req.Status)
+		core.Settings.SkillStatusOverrides = agent.SkillStatusOverride
+		core.Settings.SkillEnabledOverrides = agent.SkillEnabled
+		core.Save()
+		jsonResp(w, map[string]any{"ok": true, "action": "set-status", "name": req.Name, "status": req.Status})
+	default:
+		jsonErr(w, "未知 action: "+req.Action)
+	}
 }
 
 // ─── 辅助 ────────────────────────────────────────────────────

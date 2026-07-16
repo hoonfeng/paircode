@@ -111,9 +111,20 @@
               <div class="ii-body">
                 <div class="ii-name">{{ item.name }}</div>
                 <div class="ii-desc">{{ item.description || '无描述' }}</div>
-                <span class="ii-badge">技能 · {{ item.mode === 'always' ? '始终' : item.mode === 'manual' ? '手动' : '按需' }} · {{ item.level === 'system' ? '用户级' : '工作区级' }}</span>
+                <span class="ii-badge">
+                  技能 ·
+                  <span :class="'status-' + (item.status || 'on')">
+                    {{ item.status === 'off' ? '关闭' : item.status === 'max' ? '始终激活' : '按需' }}
+                  </span>
+                  · {{ item.level === 'system' ? '用户级' : '工作区级' }}
+                </span>
               </div>
               <div class="ii-actions">
+                <select class="ss-status-select" :value="item.status || 'on'" @change="setSkillStatus(item, $event.target.value)" :title="statusTitle(item)">
+                  <option value="off">关闭</option>
+                  <option value="on">按需</option>
+                  <option value="max">始终激活</option>
+                </select>
                 <button class="ii-btn ii-view" @click="viewSkill(item)" title="查看内容">查看</button>
                 <button v-if="item.level !== 'system'" class="ii-btn ii-del" @click="delSkill(item)" title="删除">删除</button>
               </div>
@@ -308,6 +319,23 @@ async function delSkill(item) {
     await loadInstalled()
   } catch (err) {
     error.value = '删除失败: ' + err.message
+  }
+}
+
+function statusTitle(item) {
+  if (item.status === 'off') return '已关闭：技能完全禁用，不加载'
+  if (item.status === 'max') return '始终激活：技能常驻 system prompt'
+  return '按需：根据关键词/文件匹配自动激活'
+}
+
+async function setSkillStatus(item, status) {
+  try {
+    await api.saveSkillStatus(item.name, item.level || 'project', status)
+    item.status = status
+    window.$toast?.(`技能「${item.name}」状态已设为 ${status === 'off' ? '关闭' : status === 'max' ? '始终激活' : '按需'}`, 'success')
+  } catch (err) {
+    error.value = '设置失败: ' + err.message
+    window.$toast?.('设置失败: ' + err.message, 'error')
   }
 }
 
@@ -717,6 +745,24 @@ onMounted(() => {
 .ii-toggle { min-width: 44px; }
 .ii-toggle.is-enabled { color: #6a9955; border-color: #6a9955; background: rgba(106,153,85,0.08); }
 .ii-toggle:not(.is-enabled) { color: var(--text-muted); border-color: var(--border-color); }
+
+/* ── 技能状态选择器 ── */
+.ss-status-select {
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  font-size: 12px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  outline: none;
+  cursor: pointer;
+  min-width: 68px;
+}
+.ss-status-select:focus { border-color: var(--accent); }
+.ss-status-select option { background: var(--bg-primary); color: var(--text-primary); }
+.status-off { color: #c03; }
+.status-max { color: #6a9955; }
+.status-on { color: var(--text-secondary); }
 
 /* ── 连接状态指示点 ── */
 .ii-status-dot {

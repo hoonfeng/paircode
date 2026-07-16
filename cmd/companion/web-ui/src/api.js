@@ -228,6 +228,10 @@ async function deleteSkill(name) {
   return apiPost('/skills/delete', { name })
 }
 
+async function saveSkillStatus(name, level, status) {
+  return apiPost('/skills/save', { action: 'set-status', name, level, status })
+}
+
 // ─── 指令管理 ──────────────────────────────────────────────
 
 async function getInstructions(scope = 'system') {
@@ -248,4 +252,4 @@ async function savePhilosophy(data) {
   return apiPut('/philosophy', data)
 }
 
-export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, closeWebSocket, isWebSocketOpen, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatStop, getMessages, getMessagesCount, getModels, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, getInstructions, saveInstructions, getPhilosophy, savePhilosophy }
+export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, closeWebSocket, isWebSocketOpen, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatStop, getMessages, getMessagesCount, getModels, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, getPhilosophy, savePhilosophy }

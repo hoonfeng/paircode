@@ -78,7 +78,8 @@ type AppSettings struct {
 	// MCP / Skills
 	AutoConnectMCP        bool            `json:"autoConnectMCP"`
 	MCPEnabledOverrides   map[string]bool `json:"mcpEnabledOverrides"`
-	SkillEnabledOverrides map[string]bool `json:"skillEnabledOverrides"`
+	SkillEnabledOverrides map[string]bool   `json:"skillEnabledOverrides"`
+	SkillStatusOverrides  map[string]string `json:"skillStatusOverrides"`
 	// 自定义语言提供者
 	CustomProviders []codetypes.CustomProviderConfig `json:"customProviders"`
 }

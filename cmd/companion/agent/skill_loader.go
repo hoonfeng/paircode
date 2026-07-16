@@ -30,6 +30,14 @@ var SkillProjectDir string
 // 键不存在时默认启用。由 bridge 从 settings.json 的 SkillEnabledOverrides 注入。
 var SkillEnabled map[string]bool
 
+// SkillStatusOverride 技能状态覆盖（键 "level::name"，值 "off"/"on"/"max"）。
+//   "off"  → 关闭（完全禁用，不加载）
+//   "on"   → 开启（按关键词/globs 自动激活）
+//   "max"  → 始终激活（注入 system prompt）
+// 优先级高于 SkillEnabled 和 frontmatter 的 activation 字段。
+// 由 bridge 从 settings.json 的 SkillStatusOverrides 注入。
+var SkillStatusOverride map[string]string
+
 // ─── 类型 ──
 
 // SkillLevel 技能层级。
@@ -81,6 +89,10 @@ func loadAllFrom(systemDir, projectDir string, enabled map[string]bool) []Skill 
 	var all []Skill
 	all = append(all, loadSkillsFromDir(systemDir, LevelSystem, enabled)...)
 	all = append(all, loadSkillsFromDir(projectDir, LevelProject, enabled)...)
+	// 应用状态覆盖（优先级高于 enabled 过滤和 frontmatter activation）
+	if len(SkillStatusOverride) > 0 {
+		all = applyStatusOverride(all, SkillStatusOverride)
+	}
 	return all
 }
 
@@ -334,6 +346,81 @@ func DeleteSkill(projectDir, name string) error {
 }
 
 // ─── L1 提示词 ──
+
+// SkillEffectiveStatus 计算技能的有效状态（综合考虑 SkillStatusOverride 和 frontmatter Mode）。
+// 返回 "off"(关闭)/"on"(开启)/"max"(始终激活)。
+func SkillEffectiveStatus(name string, level SkillLevel, mode string) string {
+	key := string(level) + "::" + name
+	if s, ok := SkillStatusOverride[key]; ok {
+		switch s {
+		case "off":
+			return "off"
+		case "max":
+			return "max"
+		case "on":
+			return "on"
+		}
+	}
+	// 无覆盖时，检查 SkillEnabled
+	if v, ok := SkillEnabled[key]; ok && !v {
+		return "off"
+	}
+	// 根据 frontmatter Mode 判断
+	if mode == "always" {
+		return "max"
+	}
+	return "on"
+}
+
+// SkillSetStatus 设置技能状态覆盖并持久化到全局内存（调用方需自行持久化到磁盘）。
+func SkillSetStatus(name string, level SkillLevel, status string) {
+	key := string(level) + "::" + name
+	if SkillStatusOverride == nil {
+		SkillStatusOverride = map[string]string{}
+	}
+	switch status {
+	case "off":
+		SkillStatusOverride[key] = "off"
+	case "max":
+		SkillStatusOverride[key] = "max"
+	default:
+		delete(SkillStatusOverride, key)
+	}
+	// 同步 SkillEnabled 兼容（max/on 确保不禁用，off 确保禁用）
+	if SkillEnabled == nil {
+		SkillEnabled = map[string]bool{}
+	}
+	if status == "off" {
+		SkillEnabled[key] = false
+	} else {
+		delete(SkillEnabled, key)
+	}
+}
+
+// applyStatusOverride 对已加载的技能列表应用状态覆盖。
+func applyStatusOverride(skills []Skill, overrides map[string]string) []Skill {
+	if len(overrides) == 0 {
+		return skills
+	}
+	var out []Skill
+	for _, s := range skills {
+		key := string(s.Level) + "::" + s.Name
+		if status, ok := overrides[key]; ok {
+			switch status {
+			case "off":
+				continue // 完全跳过
+			case "max":
+				s.Mode = "always" // 强制始终激活
+			case "on":
+				if s.Mode == "always" {
+					s.Mode = "auto" // 降级为按需
+				}
+			}
+		}
+		out = append(out, s)
+	}
+	return out
+}
 
 // PromptSkills 返回 L1 提示词（所有启用 skill 的 name+description 列表，注入 system prompt）。
 func PromptSkills(skills []Skill) string {
