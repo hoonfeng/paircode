@@ -111,7 +111,7 @@ func registerExtraCodeGraphTools(r *Registry, root string) {
 			g, err := getCodeGraph(root); if err != nil { return "", err }
 			qe := codegraph.NewQueryEngine(g)
 			entities := g.SearchEntities(query)
-			if len(entities) == 0 { return fmt.Sprintf("未找到符号。", query), nil }
+			if len(entities) == 0 { return fmt.Sprintf("未找到符号: %s", query), nil }
 			if len(entities) > 5 { entities = entities[:5] }
 			var b strings.Builder
 			for i, e := range entities {

@@ -186,11 +186,14 @@ func (a *DBAdapter) PersistNewMessages(convID string, hist []Message) error {
 	defer insertStmt.Close()
 
 	newCount := 0
-	for i, m := range hist {
-		if m.Role == RoleSystem || m.Role == RoleUser {
+	nextIdx := maxIdx + 1
+	nonSystemSeen := 0
+	for _, m := range hist {
+		if m.Role == RoleSystem {
 			continue
 		}
-		if i <= maxIdx {
+		nonSystemSeen++
+		if nonSystemSeen <= maxIdx+1 {
 			continue
 		}
 		tcJSON := "[]"
@@ -198,10 +201,11 @@ func (a *DBAdapter) PersistNewMessages(convID string, hist []Message) error {
 			jdata, _ := json.Marshal(m.ToolCalls)
 			tcJSON = string(jdata)
 		}
-		if _, err := insertStmt.Exec(convID, i, string(m.Role), m.Content, m.Reasoning, tcJSON, m.ToolCallID, m.Name, now); err != nil {
+		if _, err := insertStmt.Exec(convID, nextIdx, string(m.Role), m.Content, m.Reasoning, tcJSON, m.ToolCallID, m.Name, now); err != nil {
 			return fmt.Errorf("PersistNewMessages: %w", err)
 		}
 		newCount++
+		nextIdx++
 	}
 	if newCount > 0 {
 		_, _ = tx.Exec(`UPDATE conversations SET msg_count=msg_count+?, updated_at=? WHERE id=?`, newCount, now, convID)

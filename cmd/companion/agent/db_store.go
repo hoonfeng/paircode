@@ -436,12 +436,14 @@ func (s *DBStore) PersistNewMessages(convID string, hist []Message) error {
 	defer insertStmt.Close()
 
 	newCount := 0
-	for i, m := range hist {
-		if m.Role == RoleSystem || m.Role == RoleUser {
+	nextIdx := maxIdx + 1
+	nonSystemSeen := 0
+	for _, m := range hist {
+		if m.Role == RoleSystem {
 			continue
 		}
-		// 只处理未持久化的消息
-		if i <= maxIdx {
+		nonSystemSeen++
+		if nonSystemSeen <= maxIdx+1 {
 			continue
 		}
 		tcJSON := "[]"
@@ -449,11 +451,12 @@ func (s *DBStore) PersistNewMessages(convID string, hist []Message) error {
 			data, _ := json.Marshal(m.ToolCalls)
 			tcJSON = string(data)
 		}
-		_, err := insertStmt.Exec(convID, i, string(m.Role), m.Content, m.Reasoning, tcJSON, m.ToolCallID, m.Name, now)
+		_, err := insertStmt.Exec(convID, nextIdx, string(m.Role), m.Content, m.Reasoning, tcJSON, m.ToolCallID, m.Name, now)
 		if err != nil {
 			return fmt.Errorf("PersistNewMessages: %w", err)
 		}
 		newCount++
+		nextIdx++
 	}
 
 	if newCount > 0 {
