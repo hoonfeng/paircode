@@ -17,6 +17,17 @@ import (
 	"strings"
 )
 
+type Hooks struct {
+	PreBuild     []string `json:"preBuild"`     // 所有步骤之前
+	PreFrontend  []string `json:"preFrontend"`  // 构建前端前
+	PostFrontend []string `json:"postFrontend"` // 构建前端后
+	PostIcon     []string `json:"postIcon"`     // 图标生成后
+	PostResource []string `json:"postResource"` // 资源编译后
+	PreGoBuild   []string `json:"preGoBuild"`   // Go 编译前
+	PostBuild    []string `json:"postBuild"`    // Go 编译完成，打包前
+	PostPackage  []string `json:"postPackage"`  // 全部完成后
+}
+
 type Config struct {
 	Version          string     `json:"version"`
 	AppName          string     `json:"appName"`
@@ -29,6 +40,7 @@ type Config struct {
 	MainPkg          string     `json:"mainPkg"`
 	Output           string     `json:"output"`
 	Console          bool       `json:"console"`
+	Hooks            Hooks      `json:"hooks"`
 	Secrets          SecretsCfg `json:"secrets"`
 	Dist             DistConfig `json:"dist"`
 	Tools            Tools      `json:"tools"`
@@ -106,7 +118,11 @@ func main() {
 	fmt.Printf("  工作区: %s\n", root)
 	fmt.Println(strings.Repeat("-", 60))
 
+	// 前置钩子（所有步骤之前）
+	runHooks(root, "preBuild", cfg.Hooks.PreBuild)
+
 	// Step 1: 构建前端
+	runHooks(root, "preFrontend", cfg.Hooks.PreFrontend)
 	if !cfg.SkipBuildFrontend && !skipFrontend {
 		step("1/4", "构建前端...")
 		if err := buildFrontend(root, cfg); err != nil {
@@ -116,6 +132,7 @@ func main() {
 	} else {
 		fmt.Println("  跳过前端构建")
 	}
+	runHooks(root, "postFrontend", cfg.Hooks.PostFrontend)
 
 	// Step 2: 生成图标
 	step("2/4", "生成 Windows 图标...")
@@ -124,6 +141,7 @@ func main() {
 	} else {
 		ok("图标生成完成")
 	}
+	runHooks(root, "postIcon", cfg.Hooks.PostIcon)
 
 	// Step 3: 编译资源
 	step("3/4", "编译资源文件...")
@@ -132,14 +150,17 @@ func main() {
 	} else {
 		ok("资源编译完成")
 	}
+	runHooks(root, "postResource", cfg.Hooks.PostResource)
 
 	// Step 4: 编译 Go 二进制
+	runHooks(root, "preGoBuild", cfg.Hooks.PreGoBuild)
 	step("4/4", "编译 companion.exe...")
 	exePath, err := buildGo(cfg)
 	if err != nil {
 		fatalf("Go 编译失败: %v", err)
 	}
 	ok(fmt.Sprintf("编译完成: %s", exePath))
+	runHooks(root, "postBuild", cfg.Hooks.PostBuild)
 
 	// 打包发布目录
 	distDir, zipPath, err := packageDist(root, exePath, cfg)
@@ -153,6 +174,9 @@ func main() {
 			ok(fmt.Sprintf("ZIP 包: %s (%.1f MB)", zipPath, sizeMB))
 		}
 	}
+
+	// 后置钩子（全部完成后）
+	runHooks(root, "postPackage", cfg.Hooks.PostPackage)
 
 	fmt.Println(strings.Repeat("-", 60))
 	fmt.Println("打包完成!")
@@ -239,6 +263,31 @@ func updateRCVersion(cfg *Config) {
 		}
 	}
 	os.WriteFile(rcFile, []byte(strings.Join(lines, "\n")), 0644)
+}
+
+// ─── 钩子执行 ────────────────────────────────────────────
+
+func runHooks(root, phase string, cmds []string) {
+	if len(cmds) == 0 {
+		return
+	}
+	step("⚡", fmt.Sprintf("执行钩子 [%s]...", phase))
+	for _, cmdStr := range cmds {
+		fmt.Printf("  $ %s\n", cmdStr)
+		var cmd *exec.Cmd
+		if runtime.GOOS == "windows" {
+			cmd = exec.Command("cmd", "/C", cmdStr)
+		} else {
+			cmd = exec.Command("sh", "-c", cmdStr)
+		}
+		cmd.Dir = root
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			fatalf("钩子 [%s] 失败: %v", phase, err)
+		}
+	}
+	ok(fmt.Sprintf("钩子 [%s] 完成 (%d 条)", phase, len(cmds)))
 }
 
 // ─── 1. 构建前端 ───────────────────────────────────────────
