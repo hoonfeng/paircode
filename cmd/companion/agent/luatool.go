@@ -27,8 +27,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
+)
 
+import (
 	lua "github.com/yuin/gopher-lua"
 )
 
@@ -162,6 +165,7 @@ func runLuaTool(ctx context.Context, src string, args map[string]any) (string, e
 			return 1
 		}
 		c := exec.CommandContext(cctx, "cmd", "/C", "chcp 65001 >nul & "+cmdStr)
+		c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 		if cwdStr != "" {
 			c.Dir = cwdStr
 		}

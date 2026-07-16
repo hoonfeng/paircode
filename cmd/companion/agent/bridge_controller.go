@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -315,8 +316,9 @@ func (bc *BridgeController) ExecCommand(ctx context.Context, command, cwd string
 
 	cctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-
 	c := exec.CommandContext(cctx, "cmd", "/C", "chcp 65001 >nul & "+command)
+	c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	c.Dir = dir
 	c.Dir = dir
 	out, err := c.CombinedOutput()
 	result := string(out)

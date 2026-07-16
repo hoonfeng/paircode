@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -224,6 +225,7 @@ func runGit(ctx context.Context, dir string, args ...string) (string, error) {
 	defer cancel()
 	full := append([]string{"-c", "core.quotepath=false"}, args...)
 	c := exec.CommandContext(cctx, "git", full...)
+	c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	c.Dir = dir
 	out, err := c.CombinedOutput()
 	res := capOutput(string(out), 16000)

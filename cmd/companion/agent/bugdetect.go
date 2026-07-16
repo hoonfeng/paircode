@@ -3,7 +3,6 @@ package agent
 // bugdetect.go — 项目 BUG 自动检测引擎。
 // 自动编译/测试/运行项目，检测并分析错误，提取文件位置和代码上下文。
 // 核心能力：Detect → Analyze → Locate，为 Autofix 提供输入。
-
 import (
 	"bufio"
 	"context"
@@ -12,8 +11,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -423,6 +424,7 @@ func runGoVet(root string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "go", "vet", "-tags", "webonly", "./cmd/companion")
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	cmd.Dir = root
 	out, _ := cmd.CombinedOutput()
 	return strings.TrimSpace(string(out))
@@ -433,6 +435,7 @@ func runGoBuild(root string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "go", "build", "-tags", "webonly", "./cmd/companion")
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	cmd.Dir = root
 	out, _ := cmd.CombinedOutput()
 	return strings.TrimSpace(string(out))
@@ -443,6 +446,7 @@ func runGoTest(root string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "go", "test", "-count=1", "-timeout", "30s", "./cmd/companion/agent")
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	cmd.Dir = root
 	out, _ := cmd.CombinedOutput()
 	output := strings.TrimSpace(string(out))
