@@ -466,8 +466,6 @@ watch(() => state.activeActivity, schedulePersist)
 watch(() => state.theme, (t) => { if (t) applyTheme(t); schedulePersist() })
 watch(() => state.activeFile, schedulePersist)
 watch(() => state.openFiles.length, schedulePersist)
-// ★ 当前对话变化时持久化，页面刷新后可自动恢复
-watch(() => state.currentConvId, schedulePersist)
 </script>
 
 <style scoped>

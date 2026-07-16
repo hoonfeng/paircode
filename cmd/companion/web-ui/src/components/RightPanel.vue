@@ -1027,12 +1027,7 @@ watch(() => state.workspaceRoot, (root) => {
   }
 })
 
-const handleBeforeUnload = () => {
-  if (state.currentConvId && state.messages.length > 0) {
-    window.dispatchEvent(new Event('save-conversations'))
-    savePersistentState()
-  }
-}
+const handleBeforeUnload = () => { if (state.currentConvId && state.messages.length > 0) { window.dispatchEvent(new Event('save-conversations')) } }
 
 onMounted(() => {
   loadWsTokenStats(); loadConvList(); scrollToBottom()
