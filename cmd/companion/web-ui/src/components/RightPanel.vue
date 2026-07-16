@@ -163,17 +163,19 @@
               <span class="att-type">{{ pendingAttachment.type === 'file' ? '文件' : '选中代码' }}</span></div>
             <button class="att-close" @click="pendingAttachment = null" title="移除">×</button>
           </div>
-          <textarea class="chat-input" ref="inputRef" v-model="inputText" @keydown="onKeydown" @dragover.prevent @drop="handleDrop" @paste="handlePaste" :style="{ height: inputHeight + 'px' }" placeholder="发送消息到 AI... (Enter 发送, Shift+Enter 换行)" :disabled="state.chatLoading"></textarea>
-          <div class="input-overlay">
-            <div class="overlay-btns">
-              <span :class="['obtn', { active: autoReview }]" @click="toggleAuto('autoReview')" title="自动审核：开启=Agent自行审批，关闭=等待用户审批"><SvgIcon name="sparkles" :size="12" /> 审核</span>
-              <span :class="['obtn', { active: autoCollapse }]" @click="toggleAuto('autoCollapse')" title="自动折叠：新消息发出时折叠旧输出，显示完成摘要"><SvgIcon name="list" :size="12" /> 折叠</span>
-              <span :class="['obtn', { active: autoCommit }]" @click="toggleAuto('autoCommit')" title="自动 Git 提交：任务完成时自动 git add + commit"><SvgIcon name="git-commit" :size="12" /> 提交</span>
-              <span class="obtn-sep"></span>
-              <span :class="['obtn', 'obtn-agent', { active: autonomous }]" @click="toggleAuto('autonomous')" title="自主模式：开启=连续执行全部计划步骤，关闭=单次回复"><SvgIcon name="sparkles" :size="12" color="#d4a74e" /> 自主</span>
+          <div class="input-wrapper">
+            <textarea class="chat-input" ref="inputRef" v-model="inputText" @keydown="onKeydown" @dragover.prevent @drop="handleDrop" @paste="handlePaste" :style="{ height: inputHeight + 'px' }" placeholder="发送消息到 AI... (Enter 发送, Shift+Enter 换行)" :disabled="state.chatLoading"></textarea>
+            <div class="input-bottom-bar">
+              <div class="ibb-btns">
+                <span :class="['obtn', { active: autoReview }]" @click="toggleAuto('autoReview')" title="自动审核：开启=Agent自行审批，关闭=等待用户审批"><SvgIcon name="sparkles" :size="12" /> 审核</span>
+                <span :class="['obtn', { active: autoCollapse }]" @click="toggleAuto('autoCollapse')" title="自动折叠：新消息发出时折叠旧输出，显示完成摘要"><SvgIcon name="list" :size="12" /> 折叠</span>
+                <span :class="['obtn', { active: autoCommit }]" @click="toggleAuto('autoCommit')" title="自动 Git 提交：任务完成时自动 git add + commit"><SvgIcon name="git-commit" :size="12" /> 提交</span>
+                <span class="obtn-sep"></span>
+                <span :class="['obtn', 'obtn-agent', { active: autonomous }]" @click="toggleAuto('autonomous')" title="自主模式：开启=连续执行全部计划步骤，关闭=单次回复"><SvgIcon name="sparkles" :size="12" color="#d4a74e" /> 自主</span>
+              </div>
+              <button v-if="!state.chatLoading" class="send-btn" @click="sendMessage" :disabled="!inputText.trim()"><SvgIcon name="send-plane" :size="16" /></button>
+              <button v-else class="stop-btn" @click="stopChat"><SvgIcon name="stop-dot" :size="20" /></button>
             </div>
-            <button v-if="!state.chatLoading" class="send-btn" @click="sendMessage" :disabled="!inputText.trim()"><SvgIcon name="send-plane" :size="16" /></button>
-            <button v-else class="stop-btn" @click="stopChat"><SvgIcon name="stop-dot" :size="20" /></button>
           </div>
         </div>
       </div>
@@ -208,23 +210,9 @@ const feedbackText = ref('')
 const msgRef = ref(null)
 const inputRef = ref(null)
 const chatInputAreaRef = ref(null)
-let inputOverlayObserver = null
-
-// 根据 .input-overlay 的实际高度动态调整 .chat-input 的 padding-bottom
+// 按钮已移至 textarea 外部下方（.input-bottom-bar），无需动态 padding
 function updateInputPadding() {
-  if (!chatInputAreaRef.value) return
-  const overlay = chatInputAreaRef.value.querySelector('.input-overlay')
-  const textarea = chatInputAreaRef.value.querySelector('.chat-input')
-  if (!overlay || !textarea) return
-  // 根据按钮区域实际高度动态设置 padding-bottom
-  const overlayHeight = overlay.offsetHeight
-  const paddingBottom = Math.max(84, overlayHeight + 40)
-  textarea.style.paddingBottom = paddingBottom + 'px'
-  // 确保总高度足够容纳 padding + 至少一行文字
-  const neededMin = paddingBottom + 14 + 22
-  if (inputHeight.value < neededMin) {
-    inputHeight.value = neededMin
-  }
+  if (inputHeight.value < 80) inputHeight.value = 80
 }
 const inputHeight = ref(150)
 const convListWidth = ref(250)
@@ -916,7 +904,7 @@ const onInputResizeMove = (e) => {
   if (!inputDragging) return
   const newH = inputStartH + (inputStartY - e.clientY)
   // min-height + 拖拽方向保护
-  inputHeight.value = Math.max(120, Math.min(600, newH))
+  inputHeight.value = Math.max(80, Math.min(600, newH))
 }
 const stopInputResize = () => { inputDragging = false; document.removeEventListener('mousemove', onInputResizeMove); document.removeEventListener('mouseup', stopInputResize); nextTick(() => updateInputPadding()) }
 
@@ -1016,17 +1004,8 @@ onMounted(() => {
   // 监听消息内容尺寸变化（流式输出时自动跟随滚底）
   nextTick(() => startContentResizeObserver())
 
-  // 监听 .input-overlay 尺寸变化，动态调整 textarea padding-bottom
-  nextTick(() => {
-    updateInputPadding()
-    if (chatInputAreaRef.value) {
-      const overlay = chatInputAreaRef.value.querySelector('.input-overlay')
-      if (overlay) {
-        inputOverlayObserver = new ResizeObserver(() => updateInputPadding())
-        inputOverlayObserver.observe(overlay)
-      }
-    }
-  })
+  // 按钮在 textarea 外部下方，无需动态调整 padding
+  nextTick(() => updateInputPadding())
 
   // ⚡ 初始加载：若已有当前对话，从 API 加载任务状态
   // （页面刷新或从其他工作区切换回来时，currentTasks 为空，需要从 TaskManager 恢复）
@@ -1309,12 +1288,12 @@ onUnmounted(() => {
 /* ── 完成报告卡已移除，由 EventDone 追加为 content segment ── */
 
 /* ── 输入区 ── */
-.chat-input-area { position: relative; flex-shrink: 0; padding: 0 8px 10px 8px; background: var(--bg-secondary); }
+.chat-input-area { display: flex; flex-direction: column; flex-shrink: 0; padding: 0 8px 8px 8px; background: var(--bg-secondary); }
 .input-resizer { position: absolute; top: -8px; left: 0; right: 0; height: 12px; cursor: ns-resize; z-index: 10; }
-.chat-input { display: block; width: 100%; background: var(--input-bg); border: 1px solid var(--border-color); color: var(--text-primary); padding: 14px 16px 84px 16px; border-radius: 8px; font-size: 14px; resize: none; outline: none; min-height: 120px; font-family: inherit; line-height: 1.6; box-sizing: border-box; }
-.input-overlay { position: absolute; right: 12px; bottom: 16px; display: flex; align-items: center; gap: 6px; pointer-events: none; }
-.input-overlay > * { pointer-events: auto; }
-.overlay-btns { display: flex; align-items: center; gap: 2px; }
+.input-wrapper { background: var(--input-bg); border: 1px solid var(--border-color); border-radius: 8px; }
+.chat-input { display: block; width: 100%; background: transparent; border: none; color: var(--text-primary); padding: 14px 16px 8px 16px; border-radius: 0; font-size: 14px; resize: none; outline: none; min-height: 80px; font-family: inherit; line-height: 1.6; box-sizing: border-box; }
+.input-bottom-bar { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 0 12px 8px 12px; }
+.ibb-btns { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; }
 .obtn { display: flex; align-items: center; gap: 3px; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; color: var(--text-muted); background: var(--bg-tertiary); border: 1px solid var(--border-color); white-space: nowrap; user-select: none; }
 .obtn.active { color: var(--accent); background: rgba(212, 167, 78, 0.1); border-color: rgba(212, 167, 78, 0.3); }
 .obtn-obtn-agent.active { color: #d4a74e; }
