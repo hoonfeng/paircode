@@ -106,7 +106,7 @@ func registerResourceTools(r *Registry, root string) {
 			}
 
 			b.WriteString("\n---\n")
-			b.WriteString("💡 **提示**：\n")
+			b.WriteString("[提示] **提示**：\n")
 			b.WriteString("- 用 `resource_search(query)` 搜索资源\n")
 			b.WriteString("- 用 `resource_stats` 查看统计\n")
 			b.WriteString("- 用 `tool_stats` 查看工具调用统计\n")
@@ -189,7 +189,7 @@ func registerResourceTools(r *Registry, root string) {
 			fmt.Fprintf(&b, "\n**合计**: %d 项资源\n", total)
 
 			b.WriteString("\n---\n")
-			b.WriteString("💡 用 `resource_list` 查看明细，`resource_search` 搜索资源。\n")
+			b.WriteString("[提示] 用 `resource_list` 查看明细，`resource_search` 搜索资源。\n")
 
 			return b.String(), nil
 		},

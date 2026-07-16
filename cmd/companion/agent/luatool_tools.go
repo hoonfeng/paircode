@@ -67,7 +67,7 @@ func registerLuaToolTools(r *Registry, root string) {
 				fmt.Fprintf(&b, "| `%s` | %s | %s |\n", t.Name, strings.TrimSuffix(t.Description, "（Lua 自定义工具）"), paramStr)
 			}
 			b.WriteString("\n---\n")
-			b.WriteString("💡 用 `lua_tool_create` 创建新工具，`lua_tool_update` 更新，`lua_tool_delete` 删除。\n")
+			b.WriteString("[提示] 用 `lua_tool_create` 创建新工具，`lua_tool_update` 更新，`lua_tool_delete` 删除。\n")
 			return b.String(), nil
 		},
 	})

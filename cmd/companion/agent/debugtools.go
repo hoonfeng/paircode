@@ -134,9 +134,9 @@ func registerDebugTools(r *Registry, root string) {
 			var result string
 			verified := 0
 			for _, bp := range bps {
-				status := "✓"
+				status := "[是]"
 				if !bp.Verified {
-					status = "✗"
+					status = "[否]"
 				} else {
 					verified++
 				}

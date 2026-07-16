@@ -291,7 +291,7 @@ func entropyReport(data []byte, chunk int) string {
 		off := c * chunk
 		end := min(off+chunk, len(data))
 		e := shannon(data[off:end])
-		flag := ""
+		flag := " [警告]高熵"
 		if e > 7.5 {
 			flag = " ⚠高熵"
 		}

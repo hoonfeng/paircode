@@ -59,7 +59,7 @@ func registerBridgeTools(r *Registry, root string) {
 			if err := bc.SwitchToTakeover("user"); err != nil {
 				return "", err
 			}
-			return "✅ 已切换至接管模式（全面管控）。\n\n" +
+			return "[成功] 已切换至接管模式（全面管控）。\n\n" +
 				"当前可用系统能力：\n" + bc.CapabilitiesText() + "\n\n" +
 				"接管原因：" + reason + "\n\n" +
 				"请在完成管理任务后调用 bridge_lockdown 归还权限，回到安全桥接模式。", nil
@@ -80,7 +80,7 @@ func registerBridgeTools(r *Registry, root string) {
 				}
 				return "", err
 			}
-			return "✅ 已切换回桥接模式（安全受限）。\n\n" +
+			return "[成功] 已切换回桥接模式（安全受限）。\n\n" +
 				"当前可用的系统能力：\n" + bc.CapabilitiesText() + "\n\n" +
 				"所有操作已回到安全约束下。", nil
 		},
@@ -175,9 +175,9 @@ func registerBridgeTools(r *Registry, root string) {
 
 			nameNote := ""
 			if argStr(args, "name") != name {
-				nameNote = fmt.Sprintf("\n⚠️ 工具名已自动清理（原 %q → %q）以符合 API 命名规范。", argStr(args, "name"), name)
+				nameNote = fmt.Sprintf("\n[警告] 工具名已自动清理（原 %q → %q）以符合 API 命名规范。", argStr(args, "name"), name)
 			}
-			return fmt.Sprintf("✅ 系统管理工具 %q 已注册。\n\n"+
+			return fmt.Sprintf("[成功] 系统管理工具 %q 已注册。\n\n"+
 				"工具描述: %s\n"+
 				"生效范围: 仅接管模式下可用\n"+
 				"注意: 下次重启后此工具不会持久化（需重新注册）。如需持久化，请将其写为 Lua 工具配合接管模式使用。%s",

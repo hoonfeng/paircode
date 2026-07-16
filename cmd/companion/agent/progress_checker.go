@@ -37,7 +37,7 @@ func registerProgressChecker(r *Registry, root string) {
 
 			allTasks := tm.List("")
 			if len(allTasks) == 0 {
-				return "📋 **当前没有活跃的任务**\n\n没有需要跟踪的任务进度。可以使用 `task_create` 创建新任务。", nil
+				return "[任务] **当前没有活跃的任务**\n\n没有需要跟踪的任务进度。可以使用 `task_create` 创建新任务。", nil
 			}
 
 			summary := tm.GetSummary()
@@ -53,22 +53,22 @@ func registerProgressChecker(r *Registry, root string) {
 			bar := buildProgressBar(done, total, 20)
 
 			var lines []string
-			lines = append(lines, fmt.Sprintf("📋 **任务进度报告**"))
+			lines = append(lines, fmt.Sprintf("[任务] **任务进度报告**"))
 			lines = append(lines, "")
 			lines = append(lines, fmt.Sprintf("进度: %s %d/%d (%.0f%%)", bar, done, total, pct(done, total)))
 			lines = append(lines, "")
-			lines = append(lines, "📊 **状态统计**")
-			lines = append(lines, fmt.Sprintf("  - ✅ 已完成: %d", len(completed)))
-			lines = append(lines, fmt.Sprintf("  - 🔄 进行中: %d", len(inProgress)))
-			lines = append(lines, fmt.Sprintf("  - ⏳ 待执行: %d", len(pending)))
-			lines = append(lines, fmt.Sprintf("  - ⏩ 可立即执行: %d", len(ready)))
+			lines = append(lines, "[统计] **状态统计**")
+			lines = append(lines, fmt.Sprintf("  - [成功] 已完成: %d", len(completed)))
+			lines = append(lines, fmt.Sprintf("  - [进行中] 进行中: %d", len(inProgress)))
+			lines = append(lines, fmt.Sprintf("  - [待执行] 待执行: %d", len(pending)))
+			lines = append(lines, fmt.Sprintf("  - [就绪] 可立即执行: %d", len(ready)))
 			if len(blocked) > 0 {
-				lines = append(lines, fmt.Sprintf("  - ⛔ 被阻塞: %d", len(blocked)))
+				lines = append(lines, fmt.Sprintf("  - [阻塞] 被阻塞: %d", len(blocked)))
 			}
 
 			if len(ready) > 0 {
 				lines = append(lines, "")
-				lines = append(lines, "💡 **建议下一步**")
+				lines = append(lines, "[提示] **建议下一步**")
 				for _, task := range ready {
 					if len(lines) < 15 { // 最多显示 5 条建议
 						lines = append(lines, fmt.Sprintf("  - `[%s]` %s", task.ID, task.Subject))
@@ -81,7 +81,7 @@ func registerProgressChecker(r *Registry, root string) {
 
 			if len(blocked) > 0 {
 				lines = append(lines, "")
-				lines = append(lines, "⛔ **被阻塞的任务**")
+				lines = append(lines, "[阻塞] **被阻塞的任务**")
 				for _, bt := range blocked {
 					if len(lines) < 25 {
 						blockers := make([]string, len(bt.BlockedBy))
@@ -95,17 +95,17 @@ func registerProgressChecker(r *Registry, root string) {
 
 			if detailMode == "full" {
 				lines = append(lines, "")
-				lines = append(lines, "📄 **所有任务详情**")
+				lines = append(lines, "[详情] **所有任务详情**")
 				statusIcon := map[TaskStatus]string{
-					TaskPending:    "⏳",
-					TaskInProgress: "🔄",
-					TaskCompleted:  "✅",
-					TaskCancelled:  "❌",
+					TaskPending:    "[待执行]",
+					TaskInProgress: "[进行中]",
+					TaskCompleted:  "[成功]",
+					TaskCancelled:  "[已取消]",
 				}
 				for _, task := range allTasks {
 					icon := statusIcon[task.Status]
 					if icon == "" {
-						icon = "❓"
+						icon = "[未知]"
 					}
 					depsStr := ""
 					if len(task.Dependencies) > 0 {
@@ -121,9 +121,7 @@ func registerProgressChecker(r *Registry, root string) {
 					}
 				}
 			}
-
-			lines = append(lines, "")
-			lines = append(lines, "💡 **提示**: 使用 `task_create` 创建新任务，`task_update` 更新任务状态。")
+			lines = append(lines, "", "[提示] 使用 `task_create` 创建新任务，`task_update` 更新任务状态。")
 
 			return strings.Join(lines, "\n"), nil
 		},

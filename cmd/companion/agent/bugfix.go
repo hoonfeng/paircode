@@ -117,7 +117,7 @@ func VerifyAfterFix(root string, result *BugFixResult) *BugFixResult {
 		result.Fixed = true
 		result.Remaining = 0
 		result.FixedCount = result.Detected.ErrorCount
-		result.FixSummary = fmt.Sprintf("✅ 全部修复成功（共 %d 个问题）", result.FixedCount)
+		result.FixSummary = fmt.Sprintf("[成功] 全部修复成功（共 %d 个问题）", result.FixedCount)
 		result.RolledBack = false
 	} else {
 		result.Remaining = result.FinalDetect.ErrorCount
@@ -134,10 +134,10 @@ func VerifyAfterFix(root string, result *BugFixResult) *BugFixResult {
 			if result.backupDir != "" {
 				rollbackFiles(result.backupDir, root)
 				result.RolledBack = true
-				result.FixSummary = fmt.Sprintf("❌ 修复失败（尝试 %d 次），已回滚。剩余 %d 个问题。",
+			result.FixSummary = fmt.Sprintf("[失败] 修复失败（尝试 %d 次），已回滚。剩余 %d 个问题。",
 					result.Attempts, result.Remaining)
 			} else {
-				result.FixSummary = fmt.Sprintf("❌ 修复失败（尝试 %d 次），无备份无法回滚。剩余 %d 个问题。",
+			result.FixSummary = fmt.Sprintf("[失败] 修复失败（尝试 %d 次），无备份无法回滚。剩余 %d 个问题。",
 					result.Attempts, result.Remaining)
 			}
 		} else {
@@ -358,7 +358,7 @@ func registerBugFixTools(r *Registry, root string) {
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
 			result := DetectProjectErrors(root)
 			if result.Success {
-				return "✅ 项目检测通过，未发现错误。", nil
+				return "[成功] 项目检测通过，未发现错误。", nil
 			}
 			return result.Summary, nil
 		},
@@ -376,7 +376,7 @@ func registerBugFixTools(r *Registry, root string) {
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
 			result := AutoDetectAndFix(root, argInt(args, "max_attempts", 3), "")
 			if result.Fixed {
-				return "✅ 项目检测通过，无需修复。", nil
+				return "[成功] 项目检测通过，无需修复。", nil
 			}
 			return result.AgentTask, nil
 		},

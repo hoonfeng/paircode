@@ -256,7 +256,7 @@ func normalizeCycleKey(cycle []string) string {
 // formatCycleReport 格式化循环检测报告。
 func formatCycleReport(cycles [][]string, graph depGraph, pkgOfFile map[string]string, moduleName, root string) string {
 	var b strings.Builder
-
+	b.WriteString("[成功] 未检测到循环依赖！项目内部包之间的依赖关系健康。\n\n")
 	if len(cycles) == 0 {
 		b.WriteString("✅ 未检测到循环依赖！项目内部包之间的依赖关系健康。\n\n")
 
@@ -270,9 +270,8 @@ func formatCycleReport(cycles [][]string, graph depGraph, pkgOfFile map[string]s
 		return b.String()
 	}
 
-	// 有循环
 	cycleCount := len(cycles)
-	fmt.Fprintf(&b, "⚠ 检测到 %d 个循环依赖！\n\n", cycleCount)
+	fmt.Fprintf(&b, "[警告] 检测到 %d 个循环依赖！\n\n", cycleCount)
 
 	// 通过 sort 使输出稳定
 	sort.Slice(cycles, func(i, j int) bool {

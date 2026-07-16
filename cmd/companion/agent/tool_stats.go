@@ -351,7 +351,7 @@ func registerToolStatsTool(r *Registry) {
 			}
 
 			b.WriteString("\n---\n")
-			b.WriteString("💡 **提示**：如果发现某工具失败率高，Agent 可以：\n")
+			b.WriteString("[提示] **提示**：如果发现某工具失败率高，Agent 可以：\n")
 			b.WriteString("1. 分析失败原因，调整调用方式\n")
 			b.WriteString("2. 用 `lua_tool_create` 创建新工具替代\n")
 			b.WriteString("3. 用 `evolution_save_capsule` 保存修复经验\n")

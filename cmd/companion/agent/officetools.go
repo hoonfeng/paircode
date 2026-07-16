@@ -1716,7 +1716,7 @@ func registerPDFRead(r *Registry, root string) {
 					ocrNote += "或安装 poppler-utils（pdftoppm）后重试。"
 				} else {
 					content = ocrResult
-					ocrNote = "\n\n---\n📷 **自动 OCR 识别**（该 PDF 为扫描/图片型文档，已调 pdftoppm + Tesseract 识别文字）"
+					ocrNote = "\n\n---\n[OCR] **自动 OCR 识别**（该 PDF 为扫描/图片型文档，已调 pdftoppm + Tesseract 识别文字）"
 				}
 			}
 

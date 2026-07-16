@@ -60,7 +60,7 @@ func registerEvolutionTools(r *Registry, root string) {
 			if err := ee.SaveCapsule(capsule); err != nil {
 				return "", fmt.Errorf("保存胶囊失败: %w", err)
 			}
-			return fmt.Sprintf("✅ 经验胶囊已保存: %s\n类型: %s\n作用域: %s\n摘要: %s", capsule.ID, capsule.Signal.ErrorType, scope, capsule.Solution.Summary), nil
+			return fmt.Sprintf("[成功] 经验胶囊已保存: %s\n类型: %s\n作用域: %s\n摘要: %s", capsule.ID, capsule.Signal.ErrorType, scope, capsule.Solution.Summary), nil
 		},
 	})
 
@@ -155,7 +155,7 @@ func registerEvolutionTools(r *Registry, root string) {
 			if err := ee.SaveGene(gene); err != nil {
 				return "", fmt.Errorf("保存基因失败: %w", err)
 			}
-			return fmt.Sprintf("✅ 技能基因已保存: %s\n分类: %s\n作用域: %s\n描述: %s", gene.ID, gene.Category, scope, gene.Description), nil
+			return fmt.Sprintf("[成功] 技能基因已保存: %s\n分类: %s\n作用域: %s\n描述: %s", gene.ID, gene.Category, scope, gene.Description), nil
 		},
 	})
 

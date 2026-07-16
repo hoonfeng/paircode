@@ -486,13 +486,10 @@ func extractLocationFromStack(stack []string, root string) (BugLocation, bool) {
 // buildSummary 构建人类可读的检测摘要。
 func buildSummary(result *BugDetectResult) string {
 	if result.Success {
-		return "✅ 全部通过：编译、测试均无错误"
+		return "[成功] 全部通过：编译、测试均无错误"
 	}
-
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("❌ 发现 %d 个问题:\n\n", result.ErrorCount))
-
-	// 按类型分组统计
+	b.WriteString(fmt.Sprintf("[失败] 发现 %d 个问题:\n\n", result.ErrorCount))
 	typeCount := make(map[BugType]int)
 	for _, s := range result.Symptoms {
 		typeCount[s.Type]++

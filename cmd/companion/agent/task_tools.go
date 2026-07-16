@@ -102,7 +102,7 @@ func registerTaskTools(r *Registry, root string) {
 			fmt.Fprintf(&b, "进度: %s %d/%d (%.0f%%)\n", bar, summary.Completed, summary.Total, pct(summary.Completed, summary.Total))
 
 			if len(ready) > 0 {
-				fmt.Fprintf(&b, "\n🔄 可执行任务:\n")
+				fmt.Fprintf(&b, "\n[进行中] 可执行任务:\n")
 				for _, t := range ready {
 					fmt.Fprintf(&b, "  [%s] %s\n", t.ID, t.Subject)
 				}

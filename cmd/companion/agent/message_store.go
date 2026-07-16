@@ -1253,7 +1253,7 @@ func (s *MessageStore) generateArchiveSummary(convID string, msgs []StoredMessag
 		}
 	}
 
-	summary := fmt.Sprintf("📦 **历史归档**（共 %d 条消息：用户 %d 条、助手 %d 条、工具调用 %d 次）",
+	summary := fmt.Sprintf("[归档] **历史归档**（共 %d 条消息：用户 %d 条、助手 %d 条、工具调用 %d 次）",
 		len(msgs), userMsgs, assistantMsgs, toolCalls+toolResults)
 	if firstUserMsg != "" {
 		summary += fmt.Sprintf("\n最早对话主题：%s", firstUserMsg)
