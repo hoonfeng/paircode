@@ -367,7 +367,7 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		}
 	}
 
-	// OnBatchPersist：每 5 轮由 loop.Run 内部回调，将当前完整消息列表写盘。
+	// OnBatchPersist：每轮迭代由 loop.Run 内部回调，将当前完整消息列表写盘。
 	// loop.Run 返回后 defer 中会额外调用一次 OnBatchPersist 作为兜底。
 	// ★ 注意：不能调用 m.Store()，因为 Start 已持有 m.mu.Lock() 写锁，而 m.Store() 会尝试读锁导致死锁。
 	// 直接使用已持有的 m.store 变量。
