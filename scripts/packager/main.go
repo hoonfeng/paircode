@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 )
 
@@ -60,17 +61,52 @@ type Tools struct {
 func main() {
 	root, _ := os.Getwd()
 	cfgPath := filepath.Join(root, "packager.json")
-	if len(os.Args) > 1 {
-		cfgPath = os.Args[1]
+	bump := ""
+	setVersion := ""
+	skipFrontend := false
+
+	for i := 1; i < len(os.Args); i++ {
+		switch os.Args[i] {
+		case "--bump":
+			if i+1 < len(os.Args) {
+				bump = os.Args[i+1]
+				i++
+			}
+		case "--version":
+			if i+1 < len(os.Args) {
+				setVersion = os.Args[i+1]
+				i++
+			}
+		case "--skip-frontend":
+			skipFrontend = true
+		case "-h", "--help":
+			fmt.Println("用法: packager [--bump patch|minor|major] [--version x.y.z] [--skip-frontend]")
+			return
+		}
 	}
 
 	cfg := loadConfig(cfgPath)
+
+	// 版本号迭代
+	if setVersion != "" {
+		cfg.Version = setVersion
+	} else if bump != "" {
+		oldVer := cfg.Version
+		cfg.Version = bumpVersion(cfg.Version, bump)
+		fmt.Printf("  bump: %s (%s → %s)\n", bump, oldVer, cfg.Version)
+	}
+	if setVersion != "" || bump != "" {
+		saveConfig(cfgPath, cfg)
+		updateRCVersion(cfg)
+		fmt.Println("  版本已更新: packager.json + companion.rc")
+	}
+
 	fmt.Printf("PairCode Packager v%s\n", cfg.Version)
 	fmt.Printf("  工作区: %s\n", root)
 	fmt.Println(strings.Repeat("-", 60))
 
 	// Step 1: 构建前端
-	if !cfg.SkipBuildFrontend {
+	if !cfg.SkipBuildFrontend && !skipFrontend {
 		step("1/4", "构建前端...")
 		if err := buildFrontend(root, cfg); err != nil {
 			fatalf("前端构建失败: %v", err)
@@ -153,6 +189,55 @@ func loadConfig(path string) *Config {
 		cfg.Tools.Go = "go"
 	}
 	return &cfg
+}
+
+func saveConfig(path string, cfg *Config) {
+	data, _ := json.MarshalIndent(cfg, "", "  ")
+	os.WriteFile(path, data, 0644)
+}
+
+func bumpVersion(current, level string) string {
+	parts := strings.SplitN(current, ".", 3)
+	if len(parts) < 3 {
+		return "1.0.0"
+	}
+	major, _ := strconv.Atoi(parts[0])
+	minor, _ := strconv.Atoi(parts[1])
+	patch, _ := strconv.Atoi(parts[2])
+	switch level {
+	case "major":
+		major++
+		minor, patch = 0, 0
+	case "minor":
+		minor++
+		patch = 0
+	default: // patch
+		patch++
+	}
+	return fmt.Sprintf("%d.%d.%d", major, minor, patch)
+}
+
+func updateRCVersion(cfg *Config) {
+	rcFile := filepath.Join(filepath.Dir(cfg.MainPkg), "companion.rc")
+	data, err := os.ReadFile(rcFile)
+	if err != nil {
+		return
+	}
+	verComma := strings.ReplaceAll(cfg.Version, ".", ",")
+	lines := strings.Split(string(data), "\n")
+	for i, line := range lines {
+		t := strings.TrimSpace(line)
+		if strings.HasPrefix(t, "FILEVERSION") {
+			lines[i] = "FILEVERSION     " + verComma
+		} else if strings.HasPrefix(t, "PRODUCTVERSION") {
+			lines[i] = "PRODUCTVERSION  " + verComma
+		} else if strings.Contains(t, `VALUE "FileVersion"`) {
+			lines[i] = fmt.Sprintf(`            VALUE "FileVersion",        "%s"`, cfg.Version)
+		} else if strings.Contains(t, `VALUE "ProductVersion"`) {
+			lines[i] = fmt.Sprintf(`            VALUE "ProductVersion",     "%s"`, cfg.Version)
+		}
+	}
+	os.WriteFile(rcFile, []byte(strings.Join(lines, "\n")), 0644)
 }
 
 // ─── 1. 构建前端 ───────────────────────────────────────────
