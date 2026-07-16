@@ -180,7 +180,7 @@ func startWebUI(port int) {
 	mux.HandleFunc("/api/skills/list", ws.handleSkillsList)
 	mux.HandleFunc("/api/skills/save", ws.handleSkillsSave)
 	mux.HandleFunc("/api/skills/read", ws.handleSkillsRead)
-	mux.HandleFunc("/api/skills/read", ws.handleSkillsRead)
+
 	mux.HandleFunc("/api/skills/delete", ws.handleSkillsDelete)
 	mux.HandleFunc("/api/tokens/stats", ws.handleTokensStats)
 	mux.HandleFunc("/api/debug/logs", ws.handleDebugLogs)
