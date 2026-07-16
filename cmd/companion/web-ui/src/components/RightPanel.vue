@@ -1004,9 +1004,12 @@ function stopContentResizeObserver() {
 
 // ── 新消息自动滚底（已移除 — 由 agent-events.js 的 scrollToBottom 统一控制）
 
-// ── 对话切换时重启内容尺寸观察器（DOM 重建）
-watch(() => state.currentConvId, () => {
+// ── 对话切换时：重启内容尺寸观察器 + 按需加载消息
+watch(() => state.currentConvId, (id) => {
   nextTick(() => startContentResizeObserver())
+  if (id && (!state.messagesByConv[id] || state.messagesByConv[id].length === 0)) {
+    switchConv(id)
+  }
 })
 
 // ── 对话消息全量替换（如首次加载/切换）时也重启观察器

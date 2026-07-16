@@ -378,11 +378,12 @@ onMounted(async () => {
       state.rightPanelVisible = true
     }
 
-    // ★ 从后端对话列表中自动选中最近更新的对话（不依赖 localStorage）
+    // ★ 从后端对话列表中自动选中最近更新的对话
     if (state.conversations.length > 0 && !state.currentConvId) {
       state.currentConvId = state.conversations[0].id
     }
   }
+
 
   // 初始化全局 WebSocket：接收所有会话事件（跨工作区并行对话核心）
   api.initWebSocket({
@@ -392,7 +393,6 @@ onMounted(async () => {
   })
 
   loadPersistentState()
-
   if (state.openFiles.length > 0) {
     for (const fp of state.openFiles) {
       try {
