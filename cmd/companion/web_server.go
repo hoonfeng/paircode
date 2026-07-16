@@ -2832,7 +2832,7 @@ func (s *webServer) handleGitLog(w http.ResponseWriter, r *http.Request) {
 		Msg    string `json:"msg"`
 	}
 
-	args := []string{"log", "--max-count=" + count, "--pretty=format:%H|%h|%an|%ai|%s"}
+	args := []string{"log", "--max-count=" + count, "--pretty=format:%H|%h|%an|%ai|%B"}
 	if file != "" {
 		args = append(args, "--", file)
 	}

@@ -14,7 +14,7 @@
             <span class="conv-running-text">运行中</span>
           </span>
           <span class="conv-msg-count">{{ conv.msgCount || 0 }}</span>
-          <span class="conv-time">{{ conv.updatedAt ? conv.updatedAt.slice(11,16) : '' }}</span>
+          <span class="conv-time">{{ conv.updatedAt ? formatConvTime(conv.updatedAt) : '' }}</span>
         </div>
         <button class="conv-del" @click.stop="$emit('delete-conversation', conv.id)" title="删除对话">×</button>
       </div>
@@ -152,6 +152,16 @@ function openMarketplace() {
 }
 function openSettings() {
   if (showSettings) showSettings.value = true
+}
+function formatConvTime(iso) {
+  if (!iso) return ''
+  try {
+    const d = new Date(iso)
+    if (isNaN(d.getTime())) return iso.slice(11,16) || ''
+    return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+  } catch {
+    return iso.slice(11,16) || ''
+  }
 }
 
 const props = defineProps({

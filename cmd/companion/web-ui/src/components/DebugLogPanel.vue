@@ -107,7 +107,8 @@ function formatTime(iso) {
   if (!iso) return ''
   try {
     const d = new Date(iso)
-    return d.toLocaleTimeString()
+    if (isNaN(d.getTime())) return iso
+    return d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
   } catch {
     return iso
   }

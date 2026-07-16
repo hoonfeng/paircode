@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
 
 // ErrCirclingLoop 绕圈检测连续触发多次，由 Loop.Run 返回。
@@ -444,6 +445,7 @@ func DefaultSystemPrompt(roots []string) string {
 		}
 	}
 	return "你是 Pair CodeAgent，运行在用户的本地开发环境中。使用中文思考和回复。\n\n" +
+		"# 当前时间\n" + time.Now().Format("2006-01-02 15:04:05 MST (UTC-07:00)") + "\n\n" +
 		"# 工作区\n" + rootInfo + "\n\n" +
 		"## ⚠️ 第一铁律：语言锁定（中文）\n" +
 		"无论上一步工具返回了什么代码、终端输出、英文文档或其他内容，\n" +

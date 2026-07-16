@@ -176,7 +176,7 @@
         <div v-if="!collapsed.history" class="history-list">
           <div v-for="c in commits" :key="c.hash" class="commit-row" @dblclick="showCommitDetail(c)">
             <span class="commit-hash">{{ c.short }}</span>
-            <span class="commit-msg">{{ c.msg }}</span>
+            <span class="commit-msg">{{ c.msg?.split('\n')[0] }}</span>
             <span class="commit-date">{{ formatDate(c.date) }}</span>
           </div>
         </div>
@@ -277,11 +277,11 @@
 
     <!-- 提交详情 -->
     <Modal v-if="showCommitDetailModal" @close="showCommitDetailModal = false" :maxWidth="'600px'">
-      <template #title>{{ detailCommit?.short }} — {{ detailCommit?.msg?.substring(0, 40) }}</template>
+      <template #title>{{ detailCommit?.short }} — {{ detailCommit?.msg?.split('\n')[0]?.substring(0, 40) }}</template>
       <div class="detail-content">
         <div class="detail-meta">
           <div><strong>作者：</strong>{{ detailCommit?.author }}</div>
-          <div><strong>日期：</strong>{{ detailCommit?.date }}</div>
+          <div><strong>日期：</strong>{{ formatDate(detailCommit?.date, true) }}</div>
           <div><strong>哈希：</strong><code>{{ detailCommit?.hash }}</code></div>
         </div>
         <div class="detail-diff">
@@ -601,12 +601,9 @@ async function showFileDiff(path, staged) {
 
 async function showCommitDetail(c) {
   detailCommit.value = c
-  commitDiff.value = ''
+  // 显示完整提交描述（%B 含 subject+body）
+  commitDiff.value = c.msg || '（无内容）'
   showCommitDetailModal.value = true
-  try {
-    const res = await api.apiGet('/system/exec', { command: 'git show --stat ' + c.hash })
-    commitDiff.value = res.stdout || '（无输出）'
-  } catch (err) { console.warn('[GitPanel] 加载提交详情失败:', err); commitDiff.value = '（无法加载详情）' }
 }
 
 async function copyHash(hash) {
@@ -619,7 +616,24 @@ async function copyHash(hash) {
 
 // ─── 辅助 ─────────────────────────────────────────────────────
 function toggleCollapse(key) { collapsed[key] = !collapsed[key] }
-function formatDate(d) { return d ? d.substring(0, 10) : '' }
+function formatDate(d, full) {
+  if (!d) return ''
+  try {
+    const dt = new Date(d)
+    if (!isNaN(dt.getTime())) {
+      if (full) {
+        return dt.toLocaleString('zh-CN', {
+          year: 'numeric', month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit'
+        })
+      }
+      return dt.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
+    }
+    return d.substring(0, 10)
+  } catch {
+    return d ? d.substring(0, 10) : ''
+  }
+}
 function statusIcon(s) {
   if (s === 'M' || s === 'm') return '~'
   if (s === 'A' || s === 'a') return '+'
