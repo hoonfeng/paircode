@@ -10,6 +10,7 @@
   "mainPkg": "./cmd/companion",
   "output": "companion.exe",
   "console": true,
+  "pipeline": ["build-frontend", "build-go", "package"],
   "secrets": {
     "fields": [
       "apiKey",
@@ -129,7 +130,6 @@
         "optional": true,
         "recursive": true
       }
-
     ]
   },
   "tools": {
