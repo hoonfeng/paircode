@@ -28,6 +28,7 @@ type Config struct {
 	SkipBuildFrontend bool      `json:"skipBuildFrontend"`
 	MainPkg          string     `json:"mainPkg"`
 	Output           string     `json:"output"`
+	Console          bool       `json:"console"`
 	Secrets          SecretsCfg `json:"secrets"`
 	Dist             DistConfig `json:"dist"`
 	Tools            Tools      `json:"tools"`
@@ -334,7 +335,7 @@ func compileResource(cfg *Config) error {
 
 func buildGo(cfg *Config) (string, error) {
 	ldflags := fmt.Sprintf("-s -w -X main.version=%s", cfg.Version)
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == "windows" && !cfg.Console {
 		ldflags += " -H windowsgui"
 	}
 	outputPath := filepath.Join("release", cfg.Output)

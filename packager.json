@@ -9,6 +9,7 @@
   "skipBuildFrontend": false,
   "mainPkg": "./cmd/companion",
   "output": "companion.exe",
+  "console": true,
   "secrets": {
     "fields": [
       "apiKey",
