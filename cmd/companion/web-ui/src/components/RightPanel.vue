@@ -216,9 +216,9 @@ function updateInputPadding() {
   const overlay = chatInputAreaRef.value.querySelector('.input-overlay')
   const textarea = chatInputAreaRef.value.querySelector('.chat-input')
   if (!overlay || !textarea) return
-  // overlay 高度 + 底部间距(16px) + 安全余量(12px)
+  // overlay 高度 + 底部间距(16px) + 安全余量(24px) — 考虑按钮换行场景
   const overlayHeight = overlay.offsetHeight
-  const paddingBottom = Math.max(68, overlayHeight + 28)
+  const paddingBottom = Math.max(84, overlayHeight + 40)
   textarea.style.paddingBottom = paddingBottom + 'px'
 }
 const inputHeight = ref(150)
@@ -1299,7 +1299,7 @@ onUnmounted(() => {
 /* ── 输入区 ── */
 .chat-input-area { position: relative; flex-shrink: 0; padding: 0 8px 10px 8px; background: var(--bg-secondary); }
 .input-resizer { position: absolute; top: -8px; left: 0; right: 0; height: 12px; cursor: ns-resize; z-index: 10; }
-.chat-input { display: block; width: 100%; background: var(--input-bg); border: 1px solid var(--border-color); color: var(--text-primary); padding: 14px 16px 68px 16px; border-radius: 8px; font-size: 14px; resize: none; outline: none; min-height: 80px; font-family: inherit; line-height: 1.6; box-sizing: border-box; }
+.chat-input { display: block; width: 100%; background: var(--input-bg); border: 1px solid var(--border-color); color: var(--text-primary); padding: 14px 16px 84px 16px; border-radius: 8px; font-size: 14px; resize: none; outline: none; min-height: 80px; font-family: inherit; line-height: 1.6; box-sizing: border-box; }
 .input-overlay { position: absolute; right: 12px; bottom: 16px; display: flex; align-items: center; gap: 6px; pointer-events: none; }
 .input-overlay > * { pointer-events: auto; }
 .overlay-btns { display: flex; align-items: center; gap: 2px; }
