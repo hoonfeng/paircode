@@ -10,11 +10,13 @@ import (
 	"github.com/yalue/onnxruntime_go"
 )
 
-// ONNXBackend ONNX Runtime 嵌入后端。
+// ONNXBackend ONNX Runtime 嵌入后端（bge-small-zh-v1.5, 512维）。
 type ONNXBackend struct {
 	session   *onnxruntime_go.AdvancedSession
 	tokenizer *BERTTokenizer
-	modelPath string
+	inputIDs  *onnxruntime_go.Tensor[int64]
+	attention *onnxruntime_go.Tensor[int64]
+	output    *onnxruntime_go.Tensor[float32]
 	dim       int
 }
 
@@ -24,85 +26,74 @@ func NewONNXBackend(root string) (*ONNXBackend, error) {
 	modelPath := filepath.Join(embedDir, "model.onnx")
 
 	if _, err := os.Stat(modelPath); err != nil {
-		return nil, fmt.Errorf("模型文件不存在 %s: %w", modelPath, err)
+		return nil, fmt.Errorf("模型不存在 %s", modelPath)
 	}
-
 	tokenizer, err := LoadBERTTokenizer(embedDir)
 	if err != nil {
-		return nil, fmt.Errorf("加载分词器失败: %w", err)
+		return nil, fmt.Errorf("分词器失败: %w", err)
 	}
-
 	if err := onnxruntime_go.InitializeEnvironment(); err != nil {
-		return nil, fmt.Errorf("初始化 ONNX Runtime 失败: %w", err)
+		return nil, fmt.Errorf("ONNX Runtime 初始化失败: %w", err)
 	}
+	// 创建固定 512 长度的输入张量
+	seqLen := int64(512)
+	dim := int64(512)
+	shape := onnxruntime_go.NewShape(int64(1), seqLen)
+	outputShape := onnxruntime_go.NewShape(int64(1), seqLen, dim)
 
-	inputNames := []string{"input_ids", "attention_mask"}
-	outputNames := []string{"last_hidden_state"}
+	inIDs := make([]int64, 512)
+	inMask := make([]int64, 512)
+	inputTensor, _ := onnxruntime_go.NewTensor(shape, inIDs)
+	maskTensor, _ := onnxruntime_go.NewTensor(shape, inMask)
+	outputTensor, _ := onnxruntime_go.NewTensor(outputShape, make([]float32, 512*512))
 
 	session, err := onnxruntime_go.NewAdvancedSession(
 		modelPath,
-		inputNames,
-		outputNames,
-		nil, nil,
+		[]string{"input_ids", "attention_mask"},
+		[]string{"last_hidden_state"},
+		[]onnxruntime_go.Value{inputTensor, maskTensor},
+		[]onnxruntime_go.Value{outputTensor},
+		nil,
 	)
 	if err != nil {
+		inputTensor.Destroy()
+		maskTensor.Destroy()
+		outputTensor.Destroy()
 		return nil, fmt.Errorf("创建 ONNX 会话失败: %w", err)
 	}
 
-	backend := &ONNXBackend{
+	return &ONNXBackend{
 		session:   session,
 		tokenizer: tokenizer,
-		modelPath: modelPath,
+		inputIDs:  inputTensor,
+		attention: maskTensor,
+		output:    outputTensor,
 		dim:       512,
-	}
-
-	return backend, nil
+	}, nil
 }
 
-// Embed 计算文本的嵌入向量。
+// Embed 计算文本嵌入（均值池化 + 归一化）。
 func (b *ONNXBackend) Embed(text string) ([]float32, error) {
-	if b.session == nil {
-		return nil, fmt.Errorf("ONNX 会话未初始化")
-	}
-	inputIDs, attentionMask, err := b.tokenizer.Encode(text)
+	ids, mask, err := b.tokenizer.Encode(text)
 	if err != nil {
 		return nil, fmt.Errorf("分词失败: %w", err)
 	}
-	shape := onnxruntime_go.NewShape(int64(1), int64(len(inputIDs)))
-	inputTensor, err := onnxruntime_go.NewTensor(shape, inputIDs)
-	if err != nil {
-		return nil, fmt.Errorf("创建输入张量失败: %w", err)
+	copy(b.inputIDs.GetData(), ids)
+	copy(b.attention.GetData(), mask)
+	if err := b.session.Run(); err != nil {
+		return nil, fmt.Errorf("推理失败: %w", err)
 	}
-	defer inputTensor.Destroy()
-	maskTensor, err := onnxruntime_go.NewTensor(shape, attentionMask)
-	if err != nil {
-		return nil, fmt.Errorf("创建掩码张量失败: %w", err)
-	}
-	defer maskTensor.Destroy()
-	outputShape := onnxruntime_go.NewShape(int64(1), int64(len(inputIDs)), int64(b.dim))
-	outputData := make([]float32, len(inputIDs)*b.dim)
-	outputTensor, err := onnxruntime_go.NewTensor(outputShape, outputData)
-	if err != nil {
-		return nil, fmt.Errorf("创建输出张量失败: %w", err)
-	}
-	defer outputTensor.Destroy()
-	err = b.session.Run(
-		[]*onnxruntime_go.Tensor[float32]{&inputTensor.Tensor, &maskTensor.Tensor},
-		[]*onnxruntime_go.Tensor[float32]{&outputTensor.Tensor},
-	)
-	if err != nil {
-		return nil, fmt.Errorf("ONNX 推理失败: %w", err)
-	}
-	embedding := MeanPool(outputData, attentionMask, b.dim)
-	Normalize(embedding)
-	return embedding, nil
+	data := b.output.GetData()
+	vec := MeanPool(data, mask, b.dim)
+	Normalize(vec)
+	return vec, nil
 }
 
 func (b *ONNXBackend) Available() bool { return b.session != nil }
 func (b *ONNXBackend) Dim() int        { return b.dim }
 func (b *ONNXBackend) Close() error {
-	if b.session != nil {
-		return b.session.Destroy()
-	}
-	return nil
+	b.inputIDs.Destroy()
+	b.attention.Destroy()
+	b.output.Destroy()
+	return b.session.Destroy()
 }
