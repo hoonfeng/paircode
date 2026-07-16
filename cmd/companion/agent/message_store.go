@@ -149,6 +149,8 @@ func SegmentsFromMessage(msg Message, hist []Message, idx int) []Segment {
 // 将各条 assistant 的 segments 按出现顺序拼接（保留 thinking/content/tool_call/ask_user 时序）。
 // 用于 API 返回前，使前端将一个 agent 回复的多轮 LLM 迭代显示为单个气泡。
 // 非 assistant 消息（user/system）保持不变，作为合并的天然边界。
+// ★ RoleTool 消息跳过（不打断合并，也不输出到结果）——其工具执行结果已通过
+//   SegmentsFromMessage 合并到对应 assistant 消息的 tool_call segment 中。
 func MergeConsecutiveAssistants(msgs []StoredMessage) []StoredMessage {
 	if len(msgs) == 0 {
 		return msgs
@@ -185,6 +187,10 @@ func MergeConsecutiveAssistants(msgs []StoredMessage) []StoredMessage {
 					}
 				}
 			}
+		} else if m.Message.Role == RoleTool {
+			// ★ Tool 消息跳过：不打断合并也不输出，其结果已通过 SegmentsFromMessage
+			//   合并到前一条 assistant 的 tool_call segment 中。
+			continue
 		} else {
 			if pending != nil {
 				out = append(out, *pending)
