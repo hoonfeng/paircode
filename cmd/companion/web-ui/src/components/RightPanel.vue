@@ -1055,16 +1055,12 @@ onMounted(() => {
     }
   })
 
-  // ★ 监听 App.vue 在 loadPersistentState() 后派发的 restore-conversation 事件，
-  //   自动加载被持久化的 currentConvId 的消息（页面刷新后恢复对话内容）。
-  const _onRestoreConversation = (e) => {
-    const convId = e.detail?.convId || state.currentConvId
-    if (convId && state.currentConvId === convId) {
-      // 延迟执行，等 loadConvList 完成后才调用 switchConv
-      setTimeout(() => switchConv(convId), 300)
-    }
+  // ★ 直接检查是否需要恢复对话（替换 restore-conversation 事件机制：
+  //   App.vue onMounted 中 dispatchEvent 时 RightPanel 尚未挂载，事件永远丢失。
+  //   改为直接检测 currentConvId → 若已设但消息未加载，调用 switchConv 加载。）
+  if (state.currentConvId && (!state.messagesByConv[state.currentConvId] || state.messagesByConv[state.currentConvId].length === 0)) {
+    switchConv(state.currentConvId)
   }
-  window.addEventListener('restore-conversation', _onRestoreConversation)
 
   // 注册全局 UI 回调：App.vue 的 WebSocket onmessage → agent-events.js → 此处回调
   setGlobalCtx({
