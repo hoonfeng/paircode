@@ -305,6 +305,16 @@ export function processAgentDone(convId, data) {
       // ★ 不在此处追加 data.content 段 —— content 已被流式 content 事件或 tool_call/tool_result
       //   推送过（finish_task 的结果已在 tool_result 中显示）。若在此重复追加会造成「两次完
       //   成报告」的视觉重复。
+
+      // ★ 用户主动停止时，若没有流式内容（finalContent 为空），显示停止提示
+      if (data && data.doneReason === 'stopped') {
+        if (!rt.finalContent) {
+          msg.content = '**[任务已终止]** ' + (data.content || '用户终止了任务')
+        } else {
+          // 已有部分内容，追加一行说明
+          pushSegment(msg.segments, 'content').content += '\n\n**[任务已终止]** ' + (data.content || '用户终止了任务')
+        }
+      }
     }
   }
   // 无论 rt 是否存在，都要清除 loading 状态
