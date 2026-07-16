@@ -7,23 +7,8 @@
   "icon": "assets/icon.png",
   "frontendDir": "cmd/companion/web-ui",
   "skipBuildFrontend": false,
-  "skipGoModTidy": true,
   "mainPkg": "./cmd/companion",
   "output": "companion.exe",
-
-  "sanitize": {
-    "enabled": true,
-    "oldModule": "github.com/hoonfeng/paircode",
-    "newModule": "github.com/paircode-ide/paircode",
-    "replacements": [],
-    "skipFiles": [
-      ".git",
-      "node_modules",
-      ".pair",
-      "vendor",
-      "screenshots"
-    ]
-  },
 
   "dist": {
     "outputDir": "release",
@@ -45,9 +30,7 @@
       {"src": "bin/config/models.json", "dst": "bin/config/models.json", "optional": true},
       {"src": "bin/config/onnx", "dst": "bin/config/onnx", "optional": true, "recursive": true},
       {"src": "bin/headless-check.js", "dst": "bin/headless-check.js", "optional": true},
-      {"src": "models", "dst": "models", "optional": true, "recursive": true},
-      {"src": ".pair/tasks", "dst": ".pair/tasks", "optional": true, "recursive": true},
-      {"src": ".pair/rollback", "dst": ".pair/rollback", "optional": true, "recursive": true}
+      {"src": "models", "dst": "models", "optional": true, "recursive": true}
     ]
   },
 
