@@ -23,6 +23,7 @@ func registerExtraHandlers(mux *http.ServeMux, s *webServer) {
 	mux.HandleFunc("/api/chat/answer", s.handleChatAnswer)
 	mux.HandleFunc("/api/chat/approve", s.handleChatApprove)
 	mux.HandleFunc("/api/chat/feedback", s.handleChatFeedback)
+	mux.HandleFunc("/api/chat/rollback", s.handleChatRollback)
 	mux.HandleFunc("/api/marketplace/search", s.handleMarketplaceSearch)
 	mux.HandleFunc("/api/marketplace/install", s.handleMarketplaceInstall)
 	mux.HandleFunc("/api/marketplace/refresh", s.handleMarketplaceRefresh)

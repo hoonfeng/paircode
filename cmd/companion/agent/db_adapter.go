@@ -297,11 +297,21 @@ func (a *DBAdapter) Count(convID string) (int, error) {
 	return a.db.GetMessageCount(convID)
 }
 
+func (a *DBAdapter) TruncateTo(convID string, count int) error {
+	if _, err := a.rawDB.Exec(`DELETE FROM messages WHERE conv_id = ? AND idx >= ?`, convID, count); err != nil {
+		return err
+	}
+	_, err := a.rawDB.Exec(`UPDATE conversations SET msg_count = ? WHERE id = ?`, count, convID)
+	return err
+}
+
 func (a *DBAdapter) GetPersistedCount(convID string) int {
 	var count int
 	_ = a.rawDB.QueryRow(`SELECT COUNT(*) FROM messages WHERE conv_id = ? AND role != 'system'`, convID).Scan(&count)
 	return count
 }
+
+// ── 合并方法 ──
 
 // ── 合并方法 ──
 

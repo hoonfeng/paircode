@@ -961,6 +961,50 @@ func (s *MessageStore) Count(convID string) (int, error) {
 	return s.countJSONLLines(convID)
 }
 
+// TruncateTo 截断对话消息文件，只保留前 count 条消息。
+// 同时更新 index.json 中的 MsgCount 和 UpdatedAt。
+func (s *MessageStore) TruncateTo(convID string, count int) error {
+	if count < 0 {
+		count = 0
+	}
+	mu := s.getConvMutex(convID)
+	mu.Lock()
+	defer mu.Unlock()
+
+	fpath := s.convFilePath(convID)
+	raw, err := os.ReadFile(fpath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("TruncateTo: 读取文件失败: %w", err)
+	}
+	lines := strings.Split(string(raw), "\n")
+	for len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	if count >= len(lines) {
+		return nil
+	}
+	kept := strings.Join(lines[:count], "\n") + "\n"
+	if err := os.WriteFile(fpath, []byte(kept), 0644); err != nil {
+		return fmt.Errorf("TruncateTo: 写入文件失败: %w", err)
+	}
+
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
+	metas, _ := s.loadIndex()
+	now := time.Now().UTC().Format(time.RFC3339)
+	for i := range metas {
+		if metas[i].ID == convID {
+			metas[i].MsgCount = count
+			metas[i].UpdatedAt = now
+			break
+		}
+	}
+	return s.saveIndex(metas)
+}
+
 // DeleteConversation 删除对话：移除 JSONL 文件 + 从 index.json 移除 meta + 清理 per-conv mutex。
 func (s *MessageStore) DeleteConversation(convID string) error {
 	mu := s.getConvMutex(convID)

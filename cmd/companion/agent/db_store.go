@@ -374,6 +374,27 @@ func (s *DBStore) Count(convID string) (int, error) {
 	return count, err
 }
 
+// TruncateTo 截断对话消息，只保留前 count 条。
+func (s *DBStore) TruncateTo(convID string, count int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.checkDB(); err != nil {
+		return err
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`DELETE FROM messages WHERE conv_id = ? AND idx >= ?`, convID, count); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE conversations SET msg_count = ? WHERE id = ?`, count, convID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 // GetPersistedCount 返回已持久化的非 System 消息数。
 // SQLite 模式下，所有消息均已持久化，直接返回 COUNT。
 func (s *DBStore) GetPersistedCount(convID string) int {

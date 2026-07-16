@@ -121,6 +121,8 @@ func startWebUI(port int) {
 		}
 	}
 	memory.SetRoot(core.Root())
+	// 初始化快照跟踪器（对话回滚用）
+	agent.InitTracker(core.Root())
 	// 初始化 Skills 资源目录（供 LoadAllSkills 使用）
 	if root := core.Root(); root != "" {
 		agent.SkillProjectDir = filepath.Join(root, ".pair", "skills")
@@ -2207,6 +2209,14 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, "写入用户消息失败: "+err.Error())
 		return
 	}
+	// 记录当前消息索引，后续文件编辑快照关联到此消息
+	if store := agentMgr.Store(); store != nil {
+		if count, err := store.Count(req.ConvID); err == nil && count > 0 {
+			if tr := agent.GetTracker(); tr != nil {
+				tr.SetCurrentMsg(req.ConvID, count-1)
+			}
+		}
+	}
 	opts := s.buildWebLoopOpts(req.ConvID, req.Message, req.Autonomous)
 	opts.WorkspaceRoot = req.WorkspaceRoot
 
@@ -2332,6 +2342,45 @@ func (s *webServer) handleChatFeedback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonResp(w, map[string]any{"ok": true})
+}
+
+// handleChatRollback POST /api/chat/rollback 回滚到指定用户消息前的状态。
+// 恢复该消息关联的所有文件快照，并删除该消息之后的对话历史。
+// 请求体: { convId, msgIdx }
+// convId 为对话 ID，msgIdx 为用户消息索引（0 基）。
+func (s *webServer) handleChatRollback(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		jsonErr(w, "仅 POST")
+		return
+	}
+	var req struct {
+		ConvID string `json:"convId"`
+		MsgIdx int    `json:"msgIdx"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonErr(w, err.Error())
+		return
+	}
+	if req.ConvID == "" {
+		jsonErr(w, "convId 必填")
+		return
+	}
+	root := core.Root()
+	if root == "" {
+		jsonErr(w, "工作区未设置")
+		return
+	}
+	var store agent.ConversationStore
+	if agentMgr != nil {
+		store = agentMgr.Store()
+	}
+	if err := agent.RollbackToMsg(root, req.ConvID, req.MsgIdx, store); err != nil {
+		jsonErr(w, err.Error())
+		return
+	}
+	// 停止正在运行的 agent 会话（如果有）
+	agentMgr.Stop(req.ConvID)
+	jsonResp(w, map[string]any{"ok": true, "msgIdx": req.MsgIdx})
 }
 
 // startEventPersistWorker 设置 OnDone 回调（compressor 由 webCompressor 回调提供）。

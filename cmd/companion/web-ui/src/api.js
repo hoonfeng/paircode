@@ -175,6 +175,11 @@ async function sendFeedback(convId, content) {
   return apiPost('/chat/feedback', { convId, content })
 }
 
+// 回滚到指定用户消息前的状态：恢复文件快照 + 删除后续对话历史
+async function chatRollback(convId, msgIdx) {
+  return apiPost('/chat/rollback', { convId, msgIdx })
+}
+
 // ─── 对话消息懒加载 ──────────────────────────────────────────
 
 // 获取对话消息（分页）：默认拉最新 limit 条；传 before 时向前翻页
@@ -243,4 +248,4 @@ async function savePhilosophy(data) {
   return apiPut('/philosophy', data)
 }
 
-export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, closeWebSocket, isWebSocketOpen, chatStart, answerChat, approveChat, sendFeedback, chatStop, getMessages, getMessagesCount, getModels, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, getInstructions, saveInstructions, getPhilosophy, savePhilosophy }
+export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, closeWebSocket, isWebSocketOpen, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatStop, getMessages, getMessagesCount, getModels, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, getInstructions, saveInstructions, getPhilosophy, savePhilosophy }

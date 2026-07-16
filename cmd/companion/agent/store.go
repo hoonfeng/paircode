@@ -34,4 +34,6 @@ type ConversationStore interface {
 
 	// 迁移
 	MigrateFromLegacy(conversationsJSONPath, historyCacheJSONPath string) error
+
+	TruncateTo(convID string, count int) error
 }

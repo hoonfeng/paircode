@@ -258,7 +258,7 @@ func RegisterDefaultTools(r *Registry, root string) {
 			if err != nil {
 				return "", err
 			}
-			SnapshotBeforeWrite(root, p) // 修改前自动快照
+			SnapshotBeforeWriteWithTracking(root, p) // 修改前自动快照（关联到当前消息）
 			content := argStr(args, "content")
 			if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 				return "", err
@@ -292,7 +292,7 @@ func RegisterDefaultTools(r *Registry, root string) {
 			if err != nil {
 				return "", err
 			}
-			SnapshotBeforeWrite(root, p) // 修改前自动快照
+			SnapshotBeforeWriteWithTracking(root, p) // 修改前自动快照（关联到当前消息）
 
 			data, err := os.ReadFile(p)
 			if err != nil {
@@ -349,7 +349,7 @@ func RegisterDefaultTools(r *Registry, root string) {
 			if err != nil {
 				return "", err
 			}
-			SnapshotBeforeWrite(root, p) // 修改前自动快照
+			SnapshotBeforeWriteWithTracking(root, p) // 修改前自动快照（关联到当前消息）
 			data, err := os.ReadFile(p)
 			if err != nil {
 				return "", err
@@ -547,7 +547,6 @@ func RegisterDefaultTools(r *Registry, root string) {
 	registerScreenshotTools(r, root)         // screenshot_desktop/window/area/webpage（截图工具，见 screenshot_tool.go）
 	registerWebDebugTool(r, root)            // web_debug（网页验证：控制台错误+截图+JS执行+交互+文字提取，见 webdebug.go）
 	RegisterBugTools(r, root)                // bug_detect / bug_analyze / bug_fix（BUG 自动检测与修复，见 bugdetect.go + bugfix.go）
-	RegisterSnapshotTools(r, root)           // restore_snapshot / list_snapshots（文件快照与恢复，见 snapshot.go）
 	registerOfficeTools(r, root)             // csv_read / csv_write / json_to_table / table_stats / text_report / word_read（见 officetools.go）
 	registerLSPTools(r, root)              // lsp_definition / lsp_references / lsp_hover / lsp_diagnostics（见 lsptools.go）
 	registerCodeGraphTools(r, root)          // codegraph_build / codegraph_search / codegraph_impact / ...（代码知识图谱，见 codegraph_tools.go + pkg/codegraph）
