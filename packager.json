@@ -1,0 +1,60 @@
+{
+  "version": "1.0.0",
+  "appName": "PairCode IDE",
+  "description": "AI-Powered Code Companion",
+  "company": "PairCode",
+  "copyright": "Copyright (C) 2026 PairCode",
+  "icon": "assets/icon.png",
+  "frontendDir": "cmd/companion/web-ui",
+  "skipBuildFrontend": false,
+  "skipGoModTidy": true,
+  "mainPkg": "./cmd/companion",
+  "output": "companion.exe",
+
+  "sanitize": {
+    "enabled": true,
+    "oldModule": "github.com/hoonfeng/paircode",
+    "newModule": "github.com/paircode-ide/paircode",
+    "replacements": [],
+    "skipFiles": [
+      ".git",
+      "node_modules",
+      "release",
+      "screenshots",
+      ".pair",
+      "vendor",
+      "assets",
+      "fonts",
+      "lib"
+    ]
+  },
+
+  "dist": {
+    "outputDir": "release",
+    "dirName": "PairCode",
+    "include": [
+      {"src": "config/models.json", "dst": "config/models.json", "optional": true},
+      {"src": "config/settings.template.json", "dst": "config/settings.json", "optional": true},
+      {"src": "config/mcp.json", "dst": "config/mcp.json", "optional": true},
+      {"src": "config/skills", "dst": "config/skills", "optional": true, "recursive": true},
+      {"src": "config/roles", "dst": "config/roles", "optional": true, "recursive": true},
+      {"src": "config/philosophy", "dst": "config/philosophy", "optional": true, "recursive": true},
+      {"src": "assets/icon.svg", "dst": "assets/icon.svg", "optional": true},
+      {"src": "assets/icon.png", "dst": "assets/icon.png", "optional": true},
+      {"src": "assets/icon64.png", "dst": "assets/icon64.png", "optional": true},
+      {"src": "assets/icon128.png", "dst": "assets/icon128.png", "optional": true},
+      {"src": "fonts", "dst": "fonts", "optional": true, "recursive": true},
+      {"src": "lib/libSkiaSharp.dll", "dst": "lib/libSkiaSharp.dll", "optional": true},
+      {"src": "bin/tesseract", "dst": "bin/tesseract", "optional": true, "recursive": true},
+      {"src": "bin/config/models.json", "dst": "bin/config/models.json", "optional": true},
+      {"src": "bin/headless-check.js", "dst": "bin/headless-check.js", "optional": true}
+    ]
+  },
+
+  "tools": {
+    "windres": "windres",
+    "ffmpeg": "ffmpeg",
+    "go": "go",
+    "npm": "npm"
+  }
+}
