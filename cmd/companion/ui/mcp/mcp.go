@@ -32,8 +32,8 @@ type LevelDef = agent.MCPLevelDef
 
 // Levels 所有层级（显示顺序）。
 var Levels = []LevelDef{
-	{LevelUser, "用户级"},
-	{LevelProject, "工作区级"},
+	{ID: LevelUser, Name: "用户级"},
+	{ID: LevelProject, Name: "工作区级"},
 }
 
 // MCPServerConfig MCP 服务器配置（bridge 用，兼容 agent.RegisterMCPServers）。

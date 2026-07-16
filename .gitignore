@@ -28,6 +28,15 @@ config/mcp.json
 config/models.json
 
 # Generated runtime configs
+
+# Temporary files
+tmp/
+
+# Reference code (not part of the build)
+_codegraph_ref/
+
+# Release artifacts
+release/companion.exe
 cmd/companion/config/
 
 # Build artifacts

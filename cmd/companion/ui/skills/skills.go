@@ -29,11 +29,10 @@ type LevelDef struct {
 }
 
 // Levels 所有层级（显示顺序）。
+// Levels 所有层级（显示顺序）。
 var Levels = []LevelDef{
-	{LevelUser, "用户级"},
-	{LevelProject, "工作区级"},
+	{ID: LevelProject, Name: "工作区级"},
 }
-
 // Entry 技能条目（UI 面板兼容）。
 type Entry struct {
 	Name        string `json:"name"`

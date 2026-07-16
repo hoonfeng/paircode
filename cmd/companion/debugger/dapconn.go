@@ -23,7 +23,7 @@ type dapConn struct {
 
 // newDAPConn 创建到 host:port 的 DAP 连接。
 func newDAPConn(host string, port int) (*dapConn, error) {
-	addr := fmt.Sprintf("%s:%d", host, port)
+	addr := net.JoinHostPort(host, fmt.Sprintf("%d", port))
 	c, err := net.Dial("tcp", addr)
 	if err != nil {
 		return nil, fmt.Errorf("连接 dlv dap 失败 (%s): %w", addr, err)

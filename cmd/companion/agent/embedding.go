@@ -94,7 +94,7 @@ type EmbeddingCache struct {
 	path    string
 	mu      sync.RWMutex
 	Vectors map[string][]float32 `json:"vectors"`
-	version int                   `json:"version"`
+	Version int                   `json:"version"`
 }
 
 // LoadEmbeddingCache 从文件加载嵌入缓存。
