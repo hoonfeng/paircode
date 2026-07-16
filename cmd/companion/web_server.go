@@ -861,6 +861,7 @@ func (s *webServer) handleSettings(w http.ResponseWriter, r *http.Request) {
 
 func (s *webServer) handleSysInfo(w http.ResponseWriter, r *http.Request) {
 	host, _ := os.Hostname()
+
 	cwd, _ := os.Getwd()
 	jsonResp(w, map[string]any{
 		"hostname":  host,
@@ -869,9 +870,9 @@ func (s *webServer) handleSysInfo(w http.ResponseWriter, r *http.Request) {
 		"goos":      "windows",
 		"workspace": core.Root(),
 		"folders":   core.Folders,
+		"version":   version,
 	})
 }
-
 func (s *webServer) handleFSSearch(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query().Get("q")
 	searchPath := r.URL.Query().Get("path")

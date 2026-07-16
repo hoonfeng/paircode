@@ -45,7 +45,7 @@
     <SystemModal v-if="showSystem" @close="showSystem = false" />
     <SourceModal v-if="showSource" @close="showSource = false" />
     <MarketplaceModal v-if="showMarketplace" @close="showMarketplace = false" />
-    <HelpModal v-if="showHelp" @close="showHelp = false" :initialDoc="helpDocTarget" />
+    <HelpModal v-if="showHelp" @close="showHelp = false" @openAbout="onHelpOpenAbout" :initialDoc="helpDocTarget" />
     <AboutModal v-if="showAbout" @close="showAbout = false" @openHelp="onAboutOpenHelp" />
     <GlobalDialogs />
   </div>
@@ -102,6 +102,11 @@ function onAboutOpenHelp() {
   showAbout.value = false
   showHelp.value = true
   helpDocTarget.value = 'getting-started'
+}
+
+function onHelpOpenAbout() {
+  showHelp.value = false
+  showAbout.value = true
 }
 
 function loadPanelSize() {

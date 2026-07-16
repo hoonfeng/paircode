@@ -99,13 +99,15 @@ defineProps({
   showHelpBtn: { type: Boolean, default: true },
 })
 
-const version = ref('v0.1.0')
+const version = ref('')
 const sysInfo = ref({})
 const sysLoading = ref(true)
 
 onMounted(async () => {
   try {
-    sysInfo.value = await api.apiGet('/system/info')
+    const info = await api.apiGet('/system/info')
+    sysInfo.value = info
+    if (info.version) version.value = info.version
   } catch {}
   sysLoading.value = false
 })

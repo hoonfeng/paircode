@@ -12,6 +12,9 @@ import (
 	"syscall"
 )
 
+// 编译版本号（由 packager 通过 -ldflags=-X main.version=<version> 注入）
+var version = "v0.1.0-dev"
+
 func main() {
 	port := InitCore()
 

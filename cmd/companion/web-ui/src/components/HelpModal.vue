@@ -5,10 +5,8 @@
       <div class="modal-header">
         <h2><SvgIcon name="book-open" :size="18" /> 帮助文档</h2>
         <div class="header-actions">
-          <input type="text" class="doc-search-input" v-model="searchQuery"
-                 placeholder="搜索文档..." @input="filterDocs" />
-          <button class="btn-export" @click="exportCurrentDoc" title="导出当前文档">
-            <SvgIcon name="download" :size="14" /> 导出
+          <button class="btn-about" @click="$emit('openAbout')" title="关于 PairCode">
+            <SvgIcon name="info" :size="14" /> 关于
           </button>
           <button class="modal-close" @click="$emit('close')">&times;</button>
         </div>
@@ -18,11 +16,31 @@
       <div class="modal-body">
         <!-- 侧边导航 -->
         <div class="doc-sidebar">
-          <div v-for="doc in filteredDocs" :key="doc.id"
-               :class="['doc-nav-item', { active: activeDoc === doc.id }]"
-               @click="activeDoc = doc.id">
-            <SvgIcon :name="doc.icon" :size="16" />
-            <span>{{ doc.title }}</span>
+          <!-- 文档中心分组 -->
+          <div class="doc-sidebar-group">
+            <div class="doc-sidebar-header">
+              <SvgIcon name="book" :size="14" />
+              <span>文档中心</span>
+            </div>
+            <div v-for="doc in filteredCenterDocs" :key="doc.id"
+                 :class="['doc-nav-item', { active: activeDoc === doc.id }]"
+                 @click="activeDoc = doc.id">
+              <SvgIcon :name="doc.icon" :size="16" />
+              <span>{{ doc.title }}</span>
+            </div>
+          </div>
+
+          <!-- 更新日志 -->
+          <div class="doc-sidebar-group">
+            <div class="doc-sidebar-header">
+              <SvgIcon name="clock" :size="14" />
+              <span>其他</span>
+            </div>
+            <div :class="['doc-nav-item', { active: activeDoc === 'changelog' }]"
+                 @click="activeDoc = 'changelog'">
+              <SvgIcon name="activity" :size="16" />
+              <span>更新日志</span>
+            </div>
           </div>
         </div>
 
@@ -35,6 +53,7 @@
             <div v-else-if="activeDoc === 'api'" class="doc-markdown" v-html="renderedApi"></div>
             <div v-else-if="activeDoc === 'tools'" class="doc-markdown" v-html="renderedTools"></div>
             <div v-else-if="activeDoc === 'shortcuts'" class="doc-markdown" v-html="renderedShortcuts"></div>
+            <div v-else-if="activeDoc === 'changelog'" class="doc-markdown" v-html="renderedChangelog"></div>
           </div>
 
           <!-- 底部翻页 -->
@@ -42,7 +61,7 @@
             <button class="page-btn" @click="prevDoc" :disabled="!hasPrev">
               <SvgIcon name="chevron-left" :size="14" /> 上一页
             </button>
-            <span class="page-info">{{ currentDocIndex + 1 }} / {{ filteredDocs.length }}</span>
+            <span class="page-info">{{ currentDocIndex + 1 }} / {{ flatDocs.length }}</span>
             <button class="page-btn" @click="nextDoc" :disabled="!hasNext">
               下一页 <SvgIcon name="chevron-right" :size="14" />
             </button>
@@ -62,45 +81,56 @@ import toolsMd from '../docs/tools.md?raw'
 import shortcutsMd from '../docs/shortcuts.md?raw'
 import faqMd from '../docs/faq.md?raw'
 import gettingStartedMd from '../docs/getting-started.md?raw'
+import changelogMd from '../docs/changelog.md?raw'
 import { marked } from 'marked'
 
 const props = defineProps({
   initialDoc: { type: String, default: 'getting-started' },
 })
 
-const emit = defineEmits(['close'])
+const emit = defineEmits(['close', 'openAbout'])
 const activeDoc = ref(props.initialDoc)
 const searchQuery = ref('')
 const contentRef = ref(null)
 
-const docsList = [
-  { id: 'faq', title: '常见问题', icon: 'help' },
+// 文档中心下的文档列表
+const centerDocs = [
   { id: 'getting-started', title: '快速开始', icon: 'home' },
   { id: 'features', title: '功能介绍', icon: 'info' },
   { id: 'api', title: 'API 文档', icon: 'code' },
   { id: 'tools', title: '工具文档', icon: 'tool' },
   { id: 'shortcuts', title: '快捷键', icon: 'keyboard' },
+  { id: 'faq', title: '常见问题', icon: 'help' },
 ]
 
-const filteredDocs = ref(docsList)
+// 过滤后的文档中心
+const filteredCenterDocs = ref(centerDocs)
+
+// 所有文档（平铺，用于翻页导航计算）
+const flatDocs = computed(() => {
+  return [...filteredCenterDocs.value, { id: 'changelog', title: '更新日志', icon: 'activity' }]
+})
+
+const currentDocIndex = computed(() => flatDocs.value.findIndex(d => d.id === activeDoc.value))
+const hasPrev = computed(() => currentDocIndex.value > 0)
+const hasNext = computed(() => currentDocIndex.value < flatDocs.value.length - 1)
 
 function filterDocs() {
   const q = searchQuery.value.toLowerCase().trim()
   if (!q) {
-    filteredDocs.value = docsList
+    filteredCenterDocs.value = centerDocs
     return
   }
-  filteredDocs.value = docsList.filter(d =>
+  filteredCenterDocs.value = centerDocs.filter(d =>
     d.title.toLowerCase().includes(q) || d.id.includes(q)
   )
-  if (filteredDocs.value.length > 0 && !filteredDocs.value.find(d => d.id === activeDoc.value)) {
-    activeDoc.value = filteredDocs.value[0].id
+  if (filteredCenterDocs.value.length > 0 && !filteredCenterDocs.value.find(d => d.id === activeDoc.value)) {
+    activeDoc.value = filteredCenterDocs.value[0].id
   }
 }
 
 const renderMd = (md) => {
   const html = marked(md, { breaks: true, gfm: true })
-  // 给表格加 class
   return html.replace(/<table>/g, '<table class="doc-table">')
 }
 
@@ -110,20 +140,17 @@ const renderedFeatures = computed(() => renderMd(featuresMd))
 const renderedApi = computed(() => renderMd(apiDocsMd))
 const renderedTools = computed(() => renderMd(toolsMd))
 const renderedShortcuts = computed(() => renderMd(shortcutsMd))
-
-const currentDocIndex = computed(() => filteredDocs.value.findIndex(d => d.id === activeDoc.value))
-const hasPrev = computed(() => currentDocIndex.value > 0)
-const hasNext = computed(() => currentDocIndex.value < filteredDocs.value.length - 1)
+const renderedChangelog = computed(() => renderMd(changelogMd))
 
 function prevDoc() {
   if (hasPrev.value) {
-    activeDoc.value = filteredDocs.value[currentDocIndex.value - 1].id
+    activeDoc.value = flatDocs.value[currentDocIndex.value - 1].id
     contentRef.value?.scrollTo(0, 0)
   }
 }
 function nextDoc() {
   if (hasNext.value) {
-    activeDoc.value = filteredDocs.value[currentDocIndex.value + 1].id
+    activeDoc.value = flatDocs.value[currentDocIndex.value + 1].id
     contentRef.value?.scrollTo(0, 0)
   }
 }
@@ -136,6 +163,7 @@ function exportCurrentDoc() {
     'api': { md: apiDocsMd, name: 'api-docs', title: 'API 文档' },
     'tools': { md: toolsMd, name: 'tools', title: '工具文档' },
     'shortcuts': { md: shortcutsMd, name: 'shortcuts', title: '快捷键' },
+    'changelog': { md: changelogMd, name: 'changelog', title: '更新日志' },
   }
   const doc = docMap[activeDoc.value]
   if (!doc) return
@@ -185,17 +213,20 @@ onMounted(() => {
 .header-actions {
   display: flex; align-items: center; gap: 12px;
 }
-.doc-search-input {
-  background: var(--input-bg);
+.btn-about {
+  display: flex; align-items: center; gap: 4px;
+  background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
-  color: var(--text-primary);
-  padding: 5px 10px;
+  color: var(--text-secondary);
+  padding: 4px 10px;
   border-radius: 4px;
+  cursor: pointer;
   font-size: 12px;
-  width: 180px;
-  outline: none;
+  white-space: nowrap;
 }
-.doc-search-input:focus {
+.btn-about:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
   border-color: var(--accent);
 }
 .modal-close {
@@ -220,9 +251,24 @@ onMounted(() => {
   overflow-y: auto;
   background: var(--bg-tertiary);
 }
+.doc-sidebar-group {
+  margin-bottom: 4px;
+}
+.doc-sidebar-header {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 16px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  cursor: default;
+  user-select: none;
+}
 .doc-nav-item {
   display: flex; align-items: center; gap: 8px;
   padding: 8px 16px;
+  padding-left: 28px;
   cursor: pointer; font-size: 13px;
   color: var(--text-secondary);
   transition: all 0.15s;
@@ -267,22 +313,6 @@ onMounted(() => {
 }
 .doc-markdown :deep(p) {
   margin: 8px 0;
-}
-.btn-export {
-  display: flex; align-items: center; gap: 4px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  color: var(--text-secondary);
-  padding: 4px 10px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 12px;
-  white-space: nowrap;
-}
-.btn-export:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-  border-color: var(--accent);
 }
 .doc-markdown :deep(code) {
   font-family: var(--font-code);
