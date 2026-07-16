@@ -123,11 +123,12 @@
         "recursive": false
       },
       {
-        "src": "models",
+        "src": "cmd/companion/models",
         "dst": "models",
         "optional": true,
         "recursive": true
       }
+
     ]
   },
   "tools": {
