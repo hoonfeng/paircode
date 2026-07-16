@@ -1577,7 +1577,7 @@ func (s *webServer) handleMCPList(w http.ResponseWriter, r *http.Request) {
 		for _, e := range mcppanel.ReadLevel(mcppanel.LevelUser) {
 			out = append(out, mcpItem{
 				Name: e.Name, Command: e.Command, Args: e.Args,
-				Level: "user", Enabled: true,
+				Level: "user", Enabled: mcppanel.Enabled(mcppanel.LevelUser, e.Name),
 			})
 		}
 	}
@@ -1585,7 +1585,7 @@ func (s *webServer) handleMCPList(w http.ResponseWriter, r *http.Request) {
 		for _, e := range mcppanel.ReadLevel(mcppanel.LevelProject) {
 			out = append(out, mcpItem{
 				Name: e.Name, Command: e.Command, Args: e.Args,
-				Level: "project", Enabled: true,
+				Level: "project", Enabled: mcppanel.Enabled(mcppanel.LevelProject, e.Name),
 			})
 		}
 	}
@@ -1622,6 +1622,13 @@ func (s *webServer) handleMCPSave(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		jsonResp(w, map[string]any{"ok": true, "action": "deleted", "name": req.Name})
+	case "toggle":
+		old := mcppanel.Enabled(lv, req.Name)
+		if err := mcppanel.SetEnabled(lv, req.Name, !old); err != nil {
+			jsonErr(w, err.Error())
+			return
+		}
+		jsonResp(w, map[string]any{"ok": true, "action": "toggled", "name": req.Name, "enabled": !old})
 	default:
 		if req.Name == "" || req.Command == "" {
 			jsonErr(w, "name 和 command 必填")
@@ -2432,6 +2439,7 @@ func (s *webServer) handleMarketplaceInstall(w http.ResponseWriter, r *http.Requ
 		Kind    string   `json:"kind"`
 		Command string   `json:"command"`
 		Args    []string `json:"args"`
+		Scope   string   `json:"scope"` // "user" 或 "project"，默认 "user"
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonErr(w, err.Error())
@@ -2441,6 +2449,9 @@ func (s *webServer) handleMarketplaceInstall(w http.ResponseWriter, r *http.Requ
 		jsonErr(w, "id 必填")
 		return
 	}
+	if req.Scope == "" {
+		req.Scope = "user"
+	}
 	var msg string
 	var err error
 	if req.Command != "" {
@@ -2448,9 +2459,9 @@ func (s *webServer) handleMarketplaceInstall(w http.ResponseWriter, r *http.Requ
 			ID: req.ID, Kind: req.Kind,
 			Command: req.Command, Args: req.Args,
 		}
-		msg, err = marketplacepanel.InstallEntry(entry, false)
+		msg, err = marketplacepanel.InstallEntry(entry, false, req.Scope)
 	} else {
-		msg, err = marketplacepanel.InstallScoped(req.ID, false)
+		msg, err = marketplacepanel.InstallScoped(req.ID, false, req.Scope)
 	}
 	if err != nil {
 		jsonErr(w, err.Error())

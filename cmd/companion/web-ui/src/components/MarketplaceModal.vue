@@ -88,12 +88,16 @@
             <div class="installed-group-title">MCP 服务器</div>
             <div v-for="item in installedMCPs" :key="'mcp-' + item.name + '-' + item.level" class="installed-item">
               <div class="ii-icon icon-mcp"><SvgIcon name="package" :size="18" /></div>
+              <div class="ii-status-dot" :class="item.enabled === false ? 'dot-disabled' : (item._connected ? 'dot-connected' : 'dot-idle')" :title="item.enabled === false ? '已禁用' : (item._connected ? '已连接' : '未连接')"></div>
               <div class="ii-body">
                 <div class="ii-name">{{ item.name }}</div>
                 <div class="ii-desc">{{ item.command }} {{ (item.args || []).join(' ') }}</div>
                 <span class="ii-badge">MCP · {{ item.level === 'project' ? '工作区级' : '用户级' }}</span>
               </div>
               <div class="ii-actions">
+                <button class="ii-btn ii-toggle" :class="{ 'is-enabled': item.enabled !== false }" @click="toggleMCP(item)" :title="item.enabled === false ? '点击启用' : '点击禁用'">
+                  {{ item.enabled === false ? '禁用' : '启用' }}
+                </button>
                 <button class="ii-btn ii-edit" @click="startEditMCP(item)" title="编辑">编辑</button>
                 <button class="ii-btn ii-del" @click="delMCP(item)" title="删除">删除</button>
               </div>
@@ -139,13 +143,27 @@
                 <span v-if="item.installed" class="mi-installed"><SvgIcon name="check" :size="10" /> 已安装</span>
               </div>
             </div>
-            <button v-if="!item.installed"
-                    class="mi-install-btn"
-                    @click="installItem(item)"
-                    :disabled="installing === item.id">
-              <SvgIcon v-if="installing === item.id" name="cycle" :size="12" />
-              {{ installing === item.id ? '安装中…' : '安装' }}
-            </button>
+            <div v-if="!item.installed" class="mi-install-area">
+              <button v-if="item.kind !== 'mcp'"
+                      class="mi-install-btn"
+                      @click="installItem(item, 'user')"
+                      :disabled="installing === item.id">
+                <SvgIcon v-if="installing === item.id" name="cycle" :size="12" />
+                {{ installing === item.id ? '安装中…' : '安装' }}
+              </button>
+              <template v-else>
+                <select v-model="item._installScope" class="mi-scope-select" @click.stop>
+                  <option value="user">用户级</option>
+                  <option value="project">工作区级</option>
+                </select>
+                <button class="mi-install-btn"
+                        @click="installItem(item, item._installScope || 'user')"
+                        :disabled="installing === item.id">
+                  <SvgIcon v-if="installing === item.id" name="cycle" :size="12" />
+                  {{ installing === item.id ? '安装中…' : '安装' }}
+                </button>
+              </template>
+            </div>
             <button v-else class="mi-uninstall-btn" @click="uninstallItem(item)">
               <SvgIcon name="trash" :size="12" /> 卸载
             </button>
@@ -337,16 +355,20 @@ async function refreshRemote() {
   }
 }
 
-async function installItem(item) {
+async function installItem(item, scope) {
   installing.value = item.id
   error.value = ''
   try {
-    const result = await api.apiPost('/marketplace/install', {
+    const body = {
       id: item.id,
       kind: item.kind || '',
       command: item.command || '',
       args: item.args || [],
-    })
+    }
+    if (item.kind === 'mcp') {
+      body.scope = scope || 'user'
+    }
+    const result = await api.apiPost('/marketplace/install', body)
     item.installed = true
     window.$toast?.(result.message || '安装成功', 'success')
   } catch (err) {
@@ -354,6 +376,17 @@ async function installItem(item) {
     window.$toast?.('安装失败: ' + err.message, 'error')
   } finally {
     installing.value = ''
+  }
+}
+
+async function toggleMCP(item) {
+  try {
+    const result = await api.saveMcpItem({ action: 'toggle', name: item.name, level: item.level })
+    item.enabled = result.enabled
+    window.$toast?.(`MCP 服务器「${item.name}」${result.enabled ? '已启用' : '已禁用'}`, 'success')
+  } catch (err) {
+    error.value = '切换失败: ' + err.message
+    window.$toast?.('切换失败: ' + err.message, 'error')
   }
 }
 
@@ -681,6 +714,20 @@ onMounted(() => {
 }
 .ii-btn:hover { color: var(--text-primary); border-color: var(--accent); }
 .ii-del:hover { color: #c03; border-color: #c03; background: rgba(204,0,51,0.08); }
+.ii-toggle { min-width: 44px; }
+.ii-toggle.is-enabled { color: #6a9955; border-color: #6a9955; background: rgba(106,153,85,0.08); }
+.ii-toggle:not(.is-enabled) { color: var(--text-muted); border-color: var(--border-color); }
+
+/* ── 连接状态指示点 ── */
+.ii-status-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-right: -4px;
+}
+.ii-status-dot.dot-connected { background: #6a9955; box-shadow: 0 0 4px rgba(106,153,85,0.5); }
+.ii-status-dot.dot-idle { background: var(--text-muted); opacity: 0.4; }
+.ii-status-dot.dot-disabled { background: #c03; opacity: 0.6; }
 
 /* ── 加载状态 ── */
 .market-loading {
@@ -767,6 +814,20 @@ onMounted(() => {
 }
 .mi-install-btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
 .mi-install-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+/* ── 安装区域（含 scope 选择）── */
+.mi-install-area { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.mi-scope-select {
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  font-size: 11px;
+  padding: 4px 4px;
+  border-radius: 4px;
+  outline: none;
+  cursor: pointer;
+}
+.mi-scope-select:focus { border-color: var(--accent); }
 .mi-uninstall-btn {
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);

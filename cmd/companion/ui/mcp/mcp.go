@@ -69,6 +69,11 @@ func Enabled(lv Level, name string) bool {
 	return agent.MCPEnabled(lv, name)
 }
 
+// SetEnabled 设置某层级 MCP 服务器的启用/禁用状态。
+func SetEnabled(lv Level, name string, enabled bool) error {
+	return agent.MCPSetEnabled(lv, name, enabled)
+}
+
 // LoadConfigs 从所有层级加载 MCP 服务器配置（bridge 用：连接外部 MCP）。
 func LoadConfigs() []MCPServerConfig {
 	return agent.MCPLoadConfigs()

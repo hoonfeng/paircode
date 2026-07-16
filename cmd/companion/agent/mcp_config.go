@@ -52,6 +52,7 @@ type MCPEntry struct {
 	Name    string   `json:"name"`
 	Command string   `json:"command"`
 	Args    []string `json:"args"`
+	Enabled *bool    `json:"enabled,omitempty"` // nil=启用(true), false=禁用, true=启用
 }
 
 // mcpFile 用户级/项目级 mcp.json 的结构（不导出）。
@@ -163,15 +164,39 @@ func MCPDelete(lv MCPLevel, name string) error {
 
 // MCPEnabled 检查某层级的 MCP 服务器是否启用（默认启用）。
 func MCPEnabled(lv MCPLevel, name string) bool {
-	return true
+	f := mcpReadFile(lv)
+	e, ok := f.Servers[name]
+	if !ok {
+		return false
+	}
+	if e.Enabled != nil {
+		return *e.Enabled
+	}
+	return true // 未设置则默认启用
+}
+
+// MCPSetEnabled 设置（启用/禁用）某层级的 MCP 服务器。
+func MCPSetEnabled(lv MCPLevel, name string, enabled bool) error {
+	f := mcpReadFile(lv)
+	e, ok := f.Servers[name]
+	if !ok {
+		return os.ErrNotExist
+	}
+	e.Enabled = &enabled
+	f.Servers[name] = e
+	return mcpWriteFile(lv, f)
 }
 
 // MCPLoadConfigs 从所有层级加载 MCP 服务器配置（供 RegisterMCPServers 连接外部 MCP）。
+// 只返回已启用的服务器。
 // 返回 agent.MCPServerConfig 列表（已在 mcp.go 定义），与 agent 自闭环兼容。
 func MCPLoadConfigs() []MCPServerConfig {
 	var out []MCPServerConfig
 	for _, lv := range MCPLevels {
 		for _, e := range MCPReadLevel(lv.ID) {
+			if !MCPEnabled(lv.ID, e.Name) {
+				continue
+			}
 			out = append(out, MCPServerConfig{
 				Name: e.Name, Command: e.Command, Args: e.Args,
 			})
