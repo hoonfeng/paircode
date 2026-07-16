@@ -19,7 +19,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hoonfeng/paircode/cmd/companion/agent"
+	"github.com/hoonfeng/paircode/internal/agent"
 )
 
 // Status is a job's lifecycle state.

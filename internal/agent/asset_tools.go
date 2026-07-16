@@ -17,7 +17,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/hoonfeng/paircode/cmd/companion/core"
+	"github.com/hoonfeng/paircode/internal/core"
 )
 
 // registerAssetTools 注册 asset_list / asset_search / asset_delete 工具。

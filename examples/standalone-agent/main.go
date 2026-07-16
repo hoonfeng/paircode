@@ -1,4 +1,9 @@
 // 独立 Agent 示例——展示如何将 agent 包作为基座嵌入任意 Go 应用。
+//
+// 两种使用方式：
+//   方式一：直接使用 Loop（轻量级）
+//   方式二：使用 AgentBase（完整生命周期管理）
+//
 // 运行: go run ./examples/standalone-agent/main.go
 //
 //go:build ignore
@@ -12,7 +17,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/hoonfeng/paircode/cmd/companion/agent"
+	"github.com/hoonfeng/paircode/internal/agent"
 )
 
 func main() {
@@ -88,5 +93,63 @@ func main() {
 	if len(msgs) > 0 {
 		last := msgs[len(msgs)-1]
 		fmt.Printf("  [%s] %s\n", last.Role, last.Content)
+	}
+}
+
+// ExampleAgentBase 展示如何使用 AgentBase（自闭环生命周期管理）。
+// 取消注释并运行以体验完整生命周期：
+//
+//	func init() { main = ExampleAgentBase }
+//
+//go:build ignore
+func ExampleAgentBase() {
+	tmpDir, _ := os.MkdirTemp("", "agentbase-example")
+	defer os.RemoveAll(tmpDir)
+	os.WriteFile(filepath.Join(tmpDir, "readme.md"), []byte("# Test Project\nThis is a test."), 0o644)
+
+	// 创建 Agent 基座
+	base := agent.NewAgentBase(agent.AgentConfig{
+		WorkspaceRoot: tmpDir,
+		Provider: &agent.MockProvider{
+			Responses: []agent.Message{
+				{
+					Role: agent.RoleAssistant,
+					ToolCalls: []agent.ToolCall{{
+						ID: "c1", Type: "function",
+						Function: agent.FunctionCall{
+							Name:      "read_file",
+							Arguments: `{"path":"readme.md"}`,
+						},
+					}},
+				},
+				{
+					Role:    agent.RoleAssistant,
+					Content: "文件内容读到了：# Test Project\n任务完成。",
+				},
+			},
+		},
+		SystemPrompt: "你是文件助手。用工具完成任务后回复结果。",
+		MaxIterations: 10,
+		OnEvent: func(e agent.Event) {
+			switch e.Type {
+			case agent.EventToolCall:
+				fmt.Printf("🔧 调用工具: %s(%s)\n", e.Tool, e.Args)
+			case agent.EventContent:
+				fmt.Printf("💬 %s\n", e.Content)
+			case agent.EventDone:
+				fmt.Printf("✅ 完成\n")
+			}
+		},
+	})
+
+	// 初始化 → 运行 → 关闭（自闭环生命周期）
+	fmt.Println("\n=== AgentBase 示例 ===")
+	if err := base.Init(); err != nil {
+		log.Fatalf("AgentBase 初始化失败: %v", err)
+	}
+	defer base.Shutdown()
+
+	if err := base.Run(context.Background()); err != nil {
+		log.Printf("AgentBase 运行完成（可能已取消）: %v", err)
 	}
 }

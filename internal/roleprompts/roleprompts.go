@@ -12,8 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/hoonfeng/paircode/cmd/companion/agent"
-	"github.com/hoonfeng/paircode/cmd/companion/core"
+	"github.com/hoonfeng/paircode/internal/agent"
+	"github.com/hoonfeng/paircode/internal/core"
 )
 
 // ─── 哲学/角色数据（从 settings 包内联至此，消除 GWui 依赖）──

@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hoonfeng/paircode/cmd/companion/debugger"
+	"github.com/hoonfeng/paircode/internal/debugger"
 )
 
 // ─── 全局调试会话管理器 ───────────────────────────────────────────

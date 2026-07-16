@@ -10,7 +10,7 @@ import (
 	"os"
 	"sync/atomic"
 
-	"github.com/hoonfeng/paircode/cmd/companion/core"
+	"github.com/hoonfeng/paircode/internal/core"
 )
 
 // serverRunning 原子标志，标记 Web 服务器是否已启动。

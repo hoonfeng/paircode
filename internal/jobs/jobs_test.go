@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hoonfeng/paircode/cmd/companion/agent"
+	"github.com/hoonfeng/paircode/internal/agent"
 )
 
 func collectEvents() (func() []agent.Event, func(agent.Event)) {

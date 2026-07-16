@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/hoonfeng/paircode/cmd/companion/codetypes"
+	"github.com/hoonfeng/paircode/internal/codetypes"
 )
 
 // AppSettings 持久化设置 —— 字段对齐参考 settings.ts（扁平存储；分组注释）。

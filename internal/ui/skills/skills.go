@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/hoonfeng/paircode/cmd/companion/agent"
+	"github.com/hoonfeng/paircode/internal/agent"
 )
 
 // Level 配置层级（复用 agent 的 MCPLevel 概念，映射到 SkillLevel）。

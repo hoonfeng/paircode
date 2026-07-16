@@ -26,8 +26,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/hoonfeng/paircode/cmd/companion/core"
-	"github.com/hoonfeng/paircode/cmd/companion/pty"
+	"github.com/hoonfeng/paircode/internal/core"
+	"github.com/hoonfeng/paircode/internal/pty"
 )
 
 // ─── 并发限制 ──────────────────────────────────────────────

@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hoonfeng/paircode/cmd/companion/core"
+	"github.com/hoonfeng/paircode/internal/core"
 )
 
 // ── 类型定义 ───────────────────────────────────────────────

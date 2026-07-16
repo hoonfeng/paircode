@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hoonfeng/paircode/cmd/companion/agent"
+	"github.com/hoonfeng/paircode/internal/agent"
 )
 
 // websocketGUID 是 WebSocket 握手协议规定的固定 GUID。

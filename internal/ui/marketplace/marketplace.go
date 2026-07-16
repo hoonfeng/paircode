@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/hoonfeng/paircode/cmd/companion/agent"
+	"github.com/hoonfeng/paircode/internal/agent"
 )
 
 // ─── 对外搜索 ───

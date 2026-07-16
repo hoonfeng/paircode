@@ -9,7 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/hoonfeng/paircode/cmd/companion/uiapi"
+	"github.com/hoonfeng/paircode/internal/uiapi"
 )
 
 // ─── 注入回调（UI 面板操作，由 main 注入）──

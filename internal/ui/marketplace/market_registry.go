@@ -23,7 +23,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hoonfeng/paircode/cmd/companion/agent"
+	"github.com/hoonfeng/paircode/internal/agent"
 )
 
 // ─── 远程市场默认 URL ───

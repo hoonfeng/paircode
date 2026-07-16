@@ -7,7 +7,7 @@
 package agenttools
 
 import (
-	"github.com/hoonfeng/paircode/cmd/companion/agent"
+	"github.com/hoonfeng/paircode/internal/agent"
 )
 
 // RegisterManagementTools 注册 Agent 自管理工具。

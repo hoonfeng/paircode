@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/hoonfeng/paircode/cmd/companion/uiapi"
+	"github.com/hoonfeng/paircode/internal/uiapi"
 )
 
 // lspServerDef 一种语言的语言服务器配置。

@@ -16,7 +16,7 @@
 package mcp
 
 import (
-	"github.com/hoonfeng/paircode/cmd/companion/agent"
+	"github.com/hoonfeng/paircode/internal/agent"
 )
 
 // Level 配置层级（用户级 / 项目级）。
