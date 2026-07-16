@@ -20,13 +20,26 @@ type ONNXBackend struct {
 	dim       int
 }
 
-// NewONNXBackend 创建 ONNX 嵌入后端。
-func NewONNXBackend(root string) (*ONNXBackend, error) {
-	embedDir := filepath.Join(root, ".pair", "embeddings", "bge-small-zh-v1.5")
-	modelPath := filepath.Join(embedDir, "model.onnx")
+// findModelDir 按优先级查找模型目录：便携模式 > 工作区 .pair/。
+func findModelDir(root string) string {
+	if exe, err := os.Executable(); err == nil {
+		p := filepath.Join(filepath.Dir(exe), "models", "bge-small-zh-v1.5")
+		if _, err := os.Stat(filepath.Join(p, "model.onnx")); err == nil {
+			return p
+		}
+	}
+	p := filepath.Join(root, ".pair", "embeddings", "bge-small-zh-v1.5")
+	if _, err := os.Stat(filepath.Join(p, "model.onnx")); err == nil {
+		return p
+	}
+	return ""
+}
 
-	if _, err := os.Stat(modelPath); err != nil {
-		return nil, fmt.Errorf("模型不存在 %s", modelPath)
+// NewONNXBackend 创建 ONNX 嵌入后端（便携 models/ 优先）。
+func NewONNXBackend(root string) (*ONNXBackend, error) {
+	embedDir := findModelDir(root)
+	if embedDir == "" {
+		return nil, fmt.Errorf("模型文件未找到（已检查便携 models/ 和 .pair/embeddings/）")
 	}
 	tokenizer, err := LoadBERTTokenizer(embedDir)
 	if err != nil {
@@ -35,12 +48,9 @@ func NewONNXBackend(root string) (*ONNXBackend, error) {
 	if err := onnxruntime_go.InitializeEnvironment(); err != nil {
 		return nil, fmt.Errorf("ONNX Runtime 初始化失败: %w", err)
 	}
-	// 创建固定 512 长度的输入张量
-	seqLen := int64(512)
-	dim := int64(512)
+	seqLen, dim := int64(512), int64(512)
 	shape := onnxruntime_go.NewShape(int64(1), seqLen)
 	outputShape := onnxruntime_go.NewShape(int64(1), seqLen, dim)
-
 	inIDs := make([]int64, 512)
 	inMask := make([]int64, 512)
 	inputTensor, _ := onnxruntime_go.NewTensor(shape, inIDs)
@@ -48,7 +58,7 @@ func NewONNXBackend(root string) (*ONNXBackend, error) {
 	outputTensor, _ := onnxruntime_go.NewTensor(outputShape, make([]float32, 512*512))
 
 	session, err := onnxruntime_go.NewAdvancedSession(
-		modelPath,
+		filepath.Join(embedDir, "model.onnx"),
 		[]string{"input_ids", "attention_mask"},
 		[]string{"last_hidden_state"},
 		[]onnxruntime_go.Value{inputTensor, maskTensor},
@@ -56,19 +66,12 @@ func NewONNXBackend(root string) (*ONNXBackend, error) {
 		nil,
 	)
 	if err != nil {
-		inputTensor.Destroy()
-		maskTensor.Destroy()
-		outputTensor.Destroy()
+		inputTensor.Destroy(); maskTensor.Destroy(); outputTensor.Destroy()
 		return nil, fmt.Errorf("创建 ONNX 会话失败: %w", err)
 	}
-
 	return &ONNXBackend{
-		session:   session,
-		tokenizer: tokenizer,
-		inputIDs:  inputTensor,
-		attention: maskTensor,
-		output:    outputTensor,
-		dim:       512,
+		session: session, tokenizer: tokenizer,
+		inputIDs: inputTensor, attention: maskTensor, output: outputTensor, dim: 512,
 	}, nil
 }
 
