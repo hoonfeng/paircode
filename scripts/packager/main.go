@@ -112,7 +112,7 @@ func main() {
 		case "--skip-frontend":
 			skipFrontend = true
 		case "-h", "--help":
-			fmt.Println("用法: packager [--bump patch|minor|major] [--version x.y.z] [--skip-frontend]")
+			printHelp()
 			return
 		}
 	}
@@ -302,6 +302,54 @@ func updateRCVersion(cfg *Config) {
 		}
 	}
 	os.WriteFile(rcFile, []byte(strings.Join(lines, "\n")), 0644)
+}
+
+func printHelp() {
+	fmt.Println(`
+PairCode Release Packager
+产品编译打包工具，不含脱敏/代码发布功能。
+
+用法:
+  packager [选项...]
+
+选项:
+  --bump <level>        自动递增版本号: patch | minor | major
+  --version <x.y.z>     手动指定版本号
+  --skip-frontend       跳过前端构建（使用已有的 dist）
+  -h, --help            显示此帮助
+
+pipeline 步骤（由 packager.json 的 pipeline 字段控制，默认全部执行）:
+  1. build-frontend     npm run build (Vue 前端构建)
+  2. generate-icon      从 PNG 源生成多尺寸 .ico 图标
+  3. compile-resource   windres 编译 .rc → .syso（嵌入版本/图标信息）
+  4. build-go           CGO_ENABLED=1 go build 编译主程序
+  5. package            复制发布文件 + ZIP 打包
+
+packager.json 配置字段:
+  version             版本号 (如 "1.0.3")
+  appName             应用名 (如 "PairCode IDE")
+  mainPkg             Go 主包路径 (如 "./cmd/companion")
+  output              输出名 (如 "companion.exe")
+  frontendDir         前端目录 (如 "cmd/companion/web-ui")
+  skipBuildFrontend   是否跳过前端构建 (可选)
+  console             是否控制台程序 (可选，false=隐藏窗口)
+  pipeline            自定义步骤顺序 (可选)
+  hooks.preBuild      所有步骤前执行的自定义命令
+  hooks.postBuild     Go 编译完成后执行的命令
+  hooks.postPackage   打包完成后执行的命令
+  (hooks 支持: preBuild/preFrontend/postFrontend/postIcon/postResource/preGoBuild/postBuild/postPackage)
+  dist.include        发布时包含的额外文件列表
+  secrets.fields/     密钥字段名 + 文件路径，打包时自动清除
+         files
+
+示例:
+  packager                          完整打包
+  packager --bump patch             补丁版本打包 (1.0.3 → 1.0.4)
+  packager --bump minor             次版本打包 (1.0.3 → 1.1.0)
+  packager --version 2.0.0          指定版本打包
+  packager --skip-frontend          跳过前端构建（调试时快）
+  packager -h                       显示帮助
+`)
 }
 
 // ─── 钩子执行 ────────────────────────────────────────────
