@@ -455,8 +455,7 @@ watch(() => state.messages.length, async () => {
 
 let persistTimer = null
 function schedulePersist() {
-  if (persistTimer) clearTimeout(persistTimer)
-  persistTimer = setTimeout(() => { savePersistentState(); persistTimer = null }, 1000)
+  savePersistentState()
 }
 
 watch(() => state.sidebarVisible, schedulePersist)
