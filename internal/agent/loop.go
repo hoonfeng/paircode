@@ -510,8 +510,8 @@ func DefaultSystemPrompt(roots []string) string {
 		"  若仍失败再 read_file 确认最新内容。★ 绝不要因匹配失败就改用 write_file 覆盖整个文件。\n" +
 		"- 工具执行失败后分析错误原因，换一种方式重试。\n" +
 		"- run_command 失败 → 检查 stderr 输出，不要只靠 exit code 判断。\n" +
-		"- ★ run_command 超时（120s）→ 说明命令是长期进程（如 dev server）。你用了错误的工具！" +
-			"请立即改用 run_background 启动该命令，不要用 run_command 重试。\n\n" +
+		"- ★ run_command 被 isBlockingCommand 拦截 → 说明命令是长期进程（如 dev server）。" +
+			"你用了错误的工具！请改用 run_background 执行，不要用 run_command 重试。\n\n" +
 		"# 代码修改纪律（严格遵守，防改错）\n" +
 		"★★ 以下规则是反复改出语法错误后总结的铁律，必须遵守 ★★\n\n" +
 		"## 改前准备\n" +
@@ -561,7 +561,7 @@ func DefaultSystemPrompt(roots []string) string {
 		"- 不要连续 3 轮只输出分析文本而不调用任何工具。\n" +
 		"- 不确定时宁可声明完成并向用户汇报，让用户决定是否继续。\n" +
 		"- 不要在「让我再看看…」和「也许还需要…」之间反复循环。\n" +
-		"- ★ run_command 阻塞预防：启动 dev server、watch、调试服务、npm run dev 等长期进程时，必须用 run_background（后台不阻塞）。误用 run_command 会阻塞 120s 直到超时，严重拖慢开发。\n" +
+		"- ★ run_command 阻塞预防：启动 dev server、watch、调试服务、npm run dev 等长期进程时，必须用 run_background（后台不阻塞）。误用 run_command 会被 isBlockingCommand 拦截报错，拖慢开发进度。\n" +
 		"- 完成任务后输出 Markdown 总结：完成了什么、改了哪些文件（路径+改动）、如何验证结果、遗留问题。\n\n" +
 		"# 防止卡死\n" +
 		"- 不要连续 3 轮只输出分析文本而不调用任何工具。\n" +

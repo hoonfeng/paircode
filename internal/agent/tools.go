@@ -443,7 +443,7 @@ func RegisterDefaultTools(r *Registry, root string) {
 
 	r.Register(&Tool{
 		Name:             "run_command",
-		Description:      "同步执行一条 shell 命令并返回输出（120s 超时）。适用于构建、编译、测试、文件查询等短命令（几秒内完成）。\n禁止用于以下场景（会阻塞 agent）：启动 dev server、npm run dev、go run 启动服务、watch 模式、tcp 监听、任何需保持运行的进程。此类命令请改用 run_background。",
+		Description:      "同步执行一条 shell 命令并返回输出。适用于构建、编译、测试、文件查询等短命令（几秒内完成）。\n禁止用于以下场景（会阻塞 agent）：启动 dev server、npm run dev、go run 启动服务、watch 模式、tcp 监听、任何需保持运行的进程。此类命令请改用 run_background。",
 		Parameters:       objSchema(props{"command": strProp("要执行的命令"), "cwd": strProp("可选工作目录（工作区内，省略=根）")}, "command"),
 		RequiresApproval: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
