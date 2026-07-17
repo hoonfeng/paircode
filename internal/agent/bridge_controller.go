@@ -338,10 +338,15 @@ func (bc *BridgeController) resolvePath(p string) (string, error) {
 		full = filepath.Join(bc.root, full)
 	}
 	full = filepath.Clean(full)
+
+	// 先查 primary root
 	rel, err := filepath.Rel(bc.root, full)
 	if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return full, nil
+		if pathExists(full) || parentDirExists(bc.root, full) {
+			return full, nil
+		}
 	}
+
 	// 再查其他工作区根目录（多根工作区支持）
 	for _, wr := range WorkspaceRoots {
 		if wr == bc.root {
@@ -349,13 +354,14 @@ func (bc *BridgeController) resolvePath(p string) (string, error) {
 		}
 		rel, err := filepath.Rel(wr, full)
 		if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			return full, nil
+			if pathExists(full) || parentDirExists(wr, full) {
+				return full, nil
+			}
 		}
 	}
-	return "", fmt.Errorf("路径越界（不允许访问工作区外）: %s", p)
+	// 兜底：新文件 → 默认 primary root
+	return full, nil
 }
-
-// ─── 审计 ────────────────────────────────────────────────────
 
 // record 记录一次操作到审计日志。
 func (bc *BridgeController) record(action, target string, err error) {

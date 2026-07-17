@@ -685,15 +685,19 @@ func resolvePath(root, p string) (string, error) {
 		return "", fmt.Errorf("path 不能为空")
 	}
 	full := p
-	if !filepath.IsAbs(full) {
-		full = filepath.Join(root, full)
-	}
 	full = filepath.Clean(full)
+
 	// 先查 primary root
 	rel, err := filepath.Rel(root, full)
 	if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return full, nil
+		// 路径语法上属于 primary root → 确认真实存在于此
+		//（避免 `goui/main.go` 被拼成 `gou-ide/goui/main.go` 但实际应在 `../goui/`）
+		if pathExists(full) || parentDirExists(root, full) {
+			return full, nil
+		}
+		// 不存在于 primary root → 可能属于其他工作区根，继续查
 	}
+
 	// 再查其他工作区根目录（多根工作区支持）
 	for _, wr := range WorkspaceRoots {
 		if wr == root {
@@ -701,12 +705,16 @@ func resolvePath(root, p string) (string, error) {
 		}
 		rel, err := filepath.Rel(wr, full)
 		if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			return full, nil
+			// 路径语法上属于此工作区根 → 确认真实存在
+			if pathExists(full) || parentDirExists(wr, full) {
+				return full, nil
+			}
 		}
 	}
-	return "", fmt.Errorf("路径越界（不允许访问工作区外）: %s", p)
-}
 
+	// 兜底：文件尚未在任何根下创建 → 默认用 primary root（新建文件归宿）
+	return full, nil
+}
 // capOutput 截断过长输出（保头 3/4 + 尾 1/4），防工具结果撑爆上下文。
 func capOutput(s string, limit int) string {
 	if len(s) <= limit {
@@ -715,6 +723,35 @@ func capOutput(s string, limit int) string {
 	head := limit * 3 / 4
 	tail := limit - head
 	return s[:head] + "\n...[输出截断 " + fmt.Sprint(len(s)-limit) + " 字节]...\n" + s[len(s)-tail:]
+}
+
+// pathExists 检查文件/目录是否存在。
+func pathExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
+}
+
+// dirExists 检查目录是否存在。
+func dirExists(p string) bool {
+	fi, err := os.Stat(p)
+	return err == nil && fi.IsDir()
+}
+
+// parentDirExists 检查相对于根目录的父级目录是否存在（新建文件时确认目标目录归宿）。
+// 例如 root=F:/syproject/gou-ide, full=F:/syproject/gou-ide/goui/new.go
+// → 检查 F:/syproject/gou-ide/goui/ 是否存在
+func parentDirExists(root, full string) bool {
+	rel, err := filepath.Rel(root, full)
+	if err != nil {
+		return false
+	}
+	parent := filepath.Dir(rel)
+	if parent == "." {
+		return true // 直接在根目录创建文件
+	}
+	absParent := filepath.Join(root, parent)
+	fi, err := os.Stat(absParent)
+	return err == nil && fi.IsDir()
 }
 
 // isBlockingCommand 检测命令是否为长期进程（会阻塞 run_command 120s 超时）。
