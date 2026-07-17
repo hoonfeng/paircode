@@ -14,19 +14,15 @@ import (
 	"path/filepath"
 )
 
-// Folders 工作区的所有文件夹（多根，VS Code 模型）。空=未打开工作区，用运行目录兜底。
+// Folders 工作区的所有文件夹（多根，VS Code 模型）。空=未打开工作区。
 var Folders []string
 
-// Root 主文件夹（工作区首个；agent/终端默认在此）；未打开则运行目录。
+// Root 主文件夹（工作区首个；agent/终端默认在此）。未打开工作区时返回空字符串。
 func Root() string {
 	if len(Folders) > 0 {
 		return Folders[0]
 	}
-	wd, err := os.Getwd()
-	if err != nil {
-		return "."
-	}
-	return wd
+	return ""
 }
 
 // ProjectName 工作区显示名：未打开=「未打开文件夹」；单文件夹=文件夹名；多根=「工作区 (N)」。
@@ -66,7 +62,11 @@ func OpenInNewWindow(p string) {
 
 // SaveWorkspaceFile 把工作区文件夹列表存成可移植/可入库的 .pair/core.json（在主文件夹下）。
 func SaveWorkspaceFile() error {
-	dir := filepath.Join(Root(), ".pair")
+	root := Root()
+	if root == "" {
+		return nil
+	}
+	dir := filepath.Join(root, ".pair")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}

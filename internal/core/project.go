@@ -105,8 +105,8 @@ func AddFolder(p string) {
 		}
 	}
 	if len(Folders) == 0 {
-		Folders = append(Folders, Root())
-		if Folders[0] == p {
+		if p == Root() {
+			Folders = append(Folders, p)
 			if OnSyncWorkspace != nil {
 				OnSyncWorkspace(false)
 			}
