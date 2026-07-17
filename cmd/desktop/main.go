@@ -46,7 +46,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("[Desktop] 未找到构建产物: %s", htmlPath)
 	}
-	if err := wv.LoadHTML(string(htmlData)); err != nil {
+
+	// 注入诊断脚本和测试 DIV
+	diagScript := `<div id="_test" style="position:fixed;top:10px;left:10px;width:200px;height:50px;background:red;color:white;z-index:99999;font-size:20px;padding:10px">RENDER TEST</div><script>console.log("VM:"+typeof Vue);</script>`
+	injected := strings.Replace(string(htmlData), "<div id=\"app\"></div>", "<div id=\"app\"></div>"+diagScript, 1)
+
+	if err := wv.LoadHTML(injected); err != nil {
 		log.Fatalf("[Desktop] LoadHTML 失败: %v", err)
 	}
 	log.Println("[Desktop] 前端页面已加载")
@@ -56,6 +61,16 @@ func main() {
 	} else {
 		log.Printf("[Desktop] JS 引擎异常: %v", err)
 	}
+
+	// 注入测试 DOM
+	wv.EvalJS(`(function(){
+		var d=document.createElement('div');
+		d.id='_test';
+		d.style='position:fixed;top:10px;left:10px;width:200px;height:50px;background:red;color:white;z-index:99999;font-size:20px;padding:10px';
+		d.textContent='TEST';
+		document.body.appendChild(d);
+	})()`)
+	log.Println("[Desktop] 测试 DIV 已注入")
 
 	host, err := app.NewHost(wv, 1280, 800, "PairCode IDE")
 	if err != nil {
