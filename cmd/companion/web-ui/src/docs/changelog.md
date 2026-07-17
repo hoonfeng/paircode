@@ -19,6 +19,8 @@
 - 修复切换对话时 loading 状态卡死的问题（switchConv 提前放行占位消息）
 - 修复消息历史顺序错乱和思考链（reasoning_content）丢失的严重问题
 - 修复 MergeConsecutiveAssistants 跳过 RoleTool 消息导致工具调用结果不完整的问题
+- **修复消息持久化比较口径不一致** — `PersistNewMessages` 中 `persistedCount` 使用 `countJSONLLines`（统计文件总行数含 System），与 `histNonSystemCount`（统计非 System 消息数）口径不同，导致含 tool_call 的 assistant 消息在工具执行前被误判为"已落盘"而跳过写入。阻塞工具（如 ask_user）的前端始终无响应。改用 `readJSONL` 精确统计非 System 消息数
+- **修复对话/任务/执行计划 API 空实现** — `GET /api/conversations/{id}` 缺 agent 运行状态，`GET /api/tasks` 和 `GET /api/taskplan` 原返回对话列表（完全错误的 stub），改为返回真实数据
 
 ---
 
