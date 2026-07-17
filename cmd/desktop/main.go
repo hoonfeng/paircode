@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"wb-ui/app"
+	"wb-ui/dom"
 	"wb-ui/jsc"
 	"wb-ui/webkit"
 
@@ -54,9 +55,37 @@ func main() {
 	}
 	log.Println("[Desktop] 前端页面已加载")
 
-	// 检查 JS 错误
-	if v, err := wv.EvalJS(`window.__errors.length?window.__errors[0]:''`); err == nil {
-		if s := v.ToString(); s != "" { log.Printf("[Desktop] JS错误: %s", s) }
+	// 读取 Console 输出找 Vue 错误
+	if out := wv.ConsoleOutput(); out != "" {
+		for _, l := range strings.Split(out, "\n") {
+			if strings.TrimSpace(l) != "" { log.Printf("[CONSOLE] %s", l) }
+		}
+	}
+
+	// 从 Go DOM 检查渲染结果
+	if doc := wv.Document(); doc != nil {
+		if body := doc.Body(); body != nil {
+			kids := body.ChildNodes()
+			log.Printf("[DOM] body children: %d", len(kids))
+			for i, n := range kids {
+				if i >= 5 { break }
+				switch v := n.(type) {
+				case *dom.Element:
+					log.Printf("[DOM]   [%d] <%s> id=%q class=%q", i, v.TagName(), v.GetId(), v.GetClassName())
+				case *dom.Text:
+					txt := v.Data()
+					if len(txt) > 60 { txt = txt[:60] + "..." }
+					log.Printf("[DOM]   [%d] TEXT: %q", i, txt)
+				default:
+					log.Printf("[DOM]   [%d] %T", i, n)
+				}
+			}
+		}
+		if app := doc.GetElementById("app"); app != nil {
+			log.Printf("[DOM] #app children: %d", len(app.ChildNodes()))
+		} else {
+			log.Printf("[DOM] #app NOT FOUND")
+		}
 	}
 
 	wv.RebuildRenderTree()
@@ -108,7 +137,9 @@ func resolvePath(src, distDir string) string {
 
 func registerDesktopBridge(wv *webkit.WebView, reg *bridge.Registry) {
 	interp := wv.JSInterpreter()
-	interp.SetupGlobal(&jsc.BufferLogger{})
+	logger := &jsc.BufferLogger{}
+	interp.SetupGlobal(logger)
+	wv.SetConsoleLogger(logger)
 	log.Println("[Desktop] 注册 desktopBridge...")
 	bridgeObj := jsc.NewObject(interp.ObjectPrototype())
 	bridgeCall := jsc.NewNativeFunction("bridgeCall", func(in *jsc.Interpreter, this jsc.JSValue, args []jsc.JSValue) jsc.JSValue {
