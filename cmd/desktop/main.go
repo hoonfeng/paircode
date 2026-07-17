@@ -73,7 +73,12 @@ func setupLoaders(wv *webkit.WebView, distDir string) {
 				if err != nil {
 					return "", fmt.Errorf("load script %q: %w", src, err)
 				}
-				return string(data), nil
+				code := string(data)
+				// 包裹 try-catch 捕获初始化错误
+				if strings.HasSuffix(src, "bundle.js") {
+					code = `try{` + code + `}catch(e){window.__lastError=(e&&e.message)||String(e)}`
+				}
+				return code, nil
 			}
 			fr.StyleSheetLoader = func(href string) (string, error) {
 				p := resolvePath(href, absDist)
