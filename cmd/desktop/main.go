@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -34,10 +36,22 @@ func main() {
 
 	wv := webkit.NewWebView()
 	wv.Resize(1280, 800)
+
+	// 设置资源加载器（解析相对路径到 dist 目录）
+	distDir := "cmd/desktop/web-ui/dist"
+	setupLoaders(wv, distDir)
+
+	// 注册 desktopBridge 到 JS 解释器
 	registerDesktopBridge(wv, reg)
 
-	log.Printf("[Desktop] 正在加载前端页面...")
-	if err := wv.LoadHTML(testPage()); err != nil {
+	// 读取并加载前端 HTML（外部 JS/CSS 由 ScriptLoader/StyleSheetLoader 自动加载）
+	htmlPath := distDir + "/index.html"
+	htmlData, err := os.ReadFile(htmlPath)
+	if err != nil {
+		log.Printf("[Desktop] 未找到构建产物 %s，使用测试页 (%v)", htmlPath, err)
+		htmlData = []byte(testPage())
+	}
+	if err := wv.LoadHTML(string(htmlData)); err != nil {
 		log.Fatalf("[Desktop] LoadHTML 失败: %v", err)
 	}
 	log.Println("[Desktop] 前端页面已加载")
@@ -49,6 +63,36 @@ func main() {
 	log.Println("[Desktop] 窗口已启动，进入事件循环")
 	host.Run()
 	log.Println("[Desktop] 已退出。")
+}
+
+func setupLoaders(wv *webkit.WebView, distDir string) {
+	absDist, _ := filepath.Abs(distDir)
+	if mf := wv.MainFrame(); mf != nil {
+		if fr := mf.Frame(); fr != nil {
+			fr.ScriptLoader = func(src string) (string, error) {
+				p := resolvePath(src, absDist)
+				data, err := os.ReadFile(p)
+				if err != nil {
+					return "", fmt.Errorf("load script %q: %w", src, err)
+				}
+				return string(data), nil
+			}
+			fr.StyleSheetLoader = func(href string) (string, error) {
+				p := resolvePath(href, absDist)
+				data, err := os.ReadFile(p)
+				if err != nil {
+					return "", fmt.Errorf("load stylesheet %q: %w", href, err)
+				}
+				return string(data), nil
+			}
+		}
+	}
+}
+
+func resolvePath(src, distDir string) string {
+	p := strings.TrimPrefix(src, "file://")
+	p = strings.TrimPrefix(p, "./")
+	return filepath.Join(distDir, p)
 }
 
 func registerDesktopBridge(wv *webkit.WebView, reg *bridge.Registry) {
@@ -90,24 +134,15 @@ func registerDesktopBridge(wv *webkit.WebView, reg *bridge.Registry) {
 
 func testPage() string {
 	return `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><title>PairCode IDE 桌面端</title></head>
+<html><head><meta charset="utf-8"><title>PairCode IDE</title></head>
 <body style="background:#0d1117;color:#e6edf3;font-family:sans-serif;padding:40px">
-<h1>PairCode IDE</h1>
-<p id="status">桥接测试中...</p>
-<script>
-try {
-	var result = window.desktopBridge.call("GET", "/api/health", "", "");
-	var parsed = JSON.parse(result);
-	var body = JSON.parse(parsed.body);
-	document.getElementById("status").textContent =
-		"桥接正常 ✓  工作区: " + body.workspace + "  状态: " + body.status;
-} catch(e) {
-	document.getElementById("status").textContent = "错误: " + e.message;
-}
-</script>
-</body>
-</html>`
+<h1>PairCode IDE</h1><p id="s">测试中...</p>
+<script>try{
+var r=window.desktopBridge.call("GET","/api/health","","");
+var b=JSON.parse(JSON.parse(r).body);
+document.getElementById("s").textContent="桥接正常 工作区:"+b.workspace;
+}catch(e){document.getElementById("s").textContent="错误:"+e.message}</script>
+</body></html>`
 }
 
 func errResult(msg string) jsc.JSValue {
