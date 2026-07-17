@@ -180,7 +180,7 @@ func (l *Loop) aiReviewApprove(ctx context.Context, tc ToolCall) (bool, string) 
 		}
 		l.reviewer = &Reviewer{Provider: l.ReviewProvider, SystemPrompt: DefaultReviewerPrompt()}
 	}
-	v, err := l.reviewer.Review(ctx, tc, l.currentMsgs)
+	v, err := l.reviewer.Review(ctx, tc)
 	if err != nil || v.Approved() {
 		return true, ""
 	}

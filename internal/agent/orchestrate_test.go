@@ -83,7 +83,7 @@ func TestRoleCustomPrompt(t *testing.T) {
 		t.Errorf("应用宿主自定义提示，得 %q", cp.system)
 	}
 	cr := &capProvider{reply: `{"verdict":"通过"}`}
-	(&Reviewer{Provider: cr}).Review(context.Background(), writeCall("a.go", "x"), nil)
+	(&Reviewer{Provider: cr}).Review(context.Background(), writeCall("a.go", "x"))
 	if !strings.Contains(cr.system, "审核 Agent") {
 		t.Error("空 SystemPrompt 应回退内置默认审核提示")
 	}
@@ -100,7 +100,7 @@ func writeCall(path, content string) ToolCall {
 func TestReviewerApprove(t *testing.T) {
 	mock := &MockProvider{Responses: []Message{{Content: `{"verdict":"通过","confidence":0.9,"issues":[],"suggestions":[],"summary":"变更安全合理"}`}}}
 	r := &Reviewer{Provider: mock}
-	v, err := r.Review(context.Background(), writeCall("a.go", "package main"), nil)
+	v, err := r.Review(context.Background(), writeCall("a.go", "package main"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +113,7 @@ func TestReviewerApprove(t *testing.T) {
 func TestReviewerReject(t *testing.T) {
 	mock := &MockProvider{Responses: []Message{{Content: `{"verdict":"驳回","confidence":0.95,"suggestions":["改用参数化查询","校验输入"],"summary":"存在 SQL 注入风险"}`}}}
 	r := &Reviewer{Provider: mock}
-	v, _ := r.Review(context.Background(), writeCall("db.go", "query"), nil)
+	v, _ := r.Review(context.Background(), writeCall("db.go", "query"))
 	if v.Approved() {
 		t.Error("驳回不应放行")
 	}
@@ -128,7 +128,7 @@ func TestReviewerCriticalFile(t *testing.T) {
 	mock := &MockProvider{Responses: []Message{{Content: `{"verdict":"通过"}`}}}
 	r := &Reviewer{Provider: mock}
 	tc := ToolCall{ID: "d", Type: "function", Function: FunctionCall{Name: "delete_file", Arguments: `{"path":"src/go.mod"}`}}
-	v, _ := r.Review(context.Background(), tc, nil)
+	v, _ := r.Review(context.Background(), tc)
 	if v.Approved() || !strings.Contains(v.Summary, "关键文件") {
 		t.Errorf("删除关键文件应直接驳回，得 %+v", v)
 	}

@@ -46,14 +46,6 @@ func DefaultReviewerPrompt() string { return reviewerSystemPrompt }
 const reviewerSystemPrompt = `# 角色
 你是审核 Agent（Reviewer）——代码变更前的最后一道防线。审核代码变更、Shell 命令的安全性、正确性和一致性，拥有一票否决权。
 
-# 重要：结合上下文判断
-你收到的审核请求会附带当前对话的上下文（用户的任务要求 + Agent 的分析/决策过程）。
-**务必结合这些上下文判断操作是否合理**，而不是孤立地审查工具调用本身。
-例如：
-- 如果用户要求「修改构建脚本」，Agent 正在修改 build.sh，这**应该放行**而非驳回
-- 如果 Agent 在用户没有给出任何指示的情况下突然要删除关键文件，这才是需要驳回的情况
-- 审核的职责是检查**实现方式是否安全合理**，而不是判断**是否应该做这个任务**（任务方向由用户决定）
-
 # 审核层次
 ## Shell 命令
 严格审查：破坏性操作（rm -rf、force push、hard reset、drop table、format、del /f /s 等）；路径穿越或访问系统关键目录；编码风险（Windows cmd.exe 中文 echo/type 可能乱码；PowerShell 未指定 -Encoding 可能改变编码）。
@@ -74,7 +66,6 @@ package.json、go.mod、.env、CLAUDE.md、AGENTS.md、Dockerfile、.gitignore �
 - Agent 正按照用户的任务要求修改文件/运行命令 → 除非有明确的安全风险，否则应放行
 - 存在安全问题或触发关键文件保护 → 驳回
 - 需调整但不严重 → 需要修改 + 具体建议
-- 注意：审核重点是「实现方式是否安全合理」，而非「是否应该做这个任务」。任务的大方向由用户决定，审核不应代替用户做决策。
 - 所有审核输出使用中文`
 // criticalFiles 关键文件：删除直接驳回（复刻参考，按 companion 项目栈调整：go.mod/go.sum 取代 tsconfig 等）。
 var criticalFiles = map[string]bool{
@@ -120,9 +111,8 @@ func isSafeShellCommand(command string) bool {
 	return false
 }
 
-// Review 审核一次写类工具调用。contextMsgs 为当前对话上下文（执行 agent 的对话历史），
-// 审核模型据此理解任务背景，而非孤立地审查工具调用。
-func (r *Reviewer) Review(ctx context.Context, tc ToolCall, contextMsgs []Message) (ReviewVerdict, error) {
+// Review 审核一次写类工具调用。
+func (r *Reviewer) Review(ctx context.Context, tc ToolCall) (ReviewVerdict, error) {
 	var args map[string]any
 	_ = json.Unmarshal([]byte(tc.Function.Arguments), &args)
 	name := tc.Function.Name
@@ -146,54 +136,17 @@ func (r *Reviewer) Review(ctx context.Context, tc ToolCall, contextMsgs []Messag
 
 	resp, err := r.Provider.Chat(ctx, []Message{
 		{Role: RoleSystem, Content: orDefault(r.SystemPrompt, reviewerSystemPrompt)},
-		{Role: RoleUser, Content: reviewUserPrompt(name, args, contextMsgs)},
+		{Role: RoleUser, Content: reviewUserPrompt(name, args)},
 	}, nil, nil)
 	if err != nil {
 		return ReviewVerdict{}, err
 	}
 	return parseVerdict(resp.Content), nil
 }
-// reviewContextPreview 从对话上下文中提取用户任务和 Agent 分析决策，供审核模型理解操作背景。
-func reviewContextPreview(msgs []Message) string {
-	var b strings.Builder
-	b.WriteString("当前对话上下文（任务背景）：\n\n")
-	n := len(msgs)
-	collected := 0
-	for i := n - 1; i >= 0 && collected < 3; i-- {
-		m := msgs[i]
-		if m.Role == RoleUser {
-			if b.Len() > 0 {
-				b.WriteString("\n---\n")
-			}
-			txt := strings.TrimSpace(m.Content)
-			if len([]rune(txt)) > 500 {
-				txt = string([]rune(txt)[:500]) + "…（截断）"
-			}
-			b.WriteString("[用户/系统] " + txt)
-			collected++
-		} else if m.Role == RoleAssistant && strings.TrimSpace(m.Content) != "" {
-			if b.Len() > 0 {
-				b.WriteString("\n---\n")
-			}
-			txt := strings.TrimSpace(m.Content)
-			if len([]rune(txt)) > 300 {
-				txt = string([]rune(txt)[:300]) + "…（截断）"
-			}
-			b.WriteString("[Agent 分析/决策] " + txt)
-			collected++
-		}
-	}
-	if b.Len() == 0 {
-		return "（无上下文）"
-	}
-	return b.String()
-}
-
-func reviewUserPrompt(name string, args map[string]any, contextMsgs []Message) string {
+func reviewUserPrompt(name string, args map[string]any) string {
 	if name == "run_command" || name == "run_background" {
 		cmd, _ := args["command"].(string)
-		ctxStr := reviewContextPreview(contextMsgs)
-		return ctxStr + "\n\n---\n\n[审核：Shell 命令]\n命令：" + cmd + "\n\n请严格检查：\n" +
+		return "[审核：Shell 命令]\n命令：" + cmd + "\n\n请严格检查：\n" +
 			"1. 破坏性操作（rm -rf、force push、hard reset、format、del /f /s 等）\n" +
 			"2. 会修改项目外系统状态的命令\n3. 路径穿越或访问系统关键目录\n" +
 			"4. 编码风险（cmd.exe 中文乱码 / PowerShell 未指定 -Encoding）\n" +
@@ -213,8 +166,7 @@ func reviewUserPrompt(name string, args map[string]any, contextMsgs []Message) s
 	} else if strings.Contains(name, "move") {
 		op = "移动/重命名"
 	}
-	ctxStr := reviewContextPreview(contextMsgs)
-	return ctxStr + "\n\n---\n\n[审核：代码变更]\n文件：" + path + "\n操作：" + op + "\n内容预览：" + truncRunesAgent(content, 500) +
+	return "[审核：代码变更]\n文件：" + path + "\n操作：" + op + "\n内容预览：" + truncRunesAgent(content, 500) +
 		"\n\n请严格检查：\n1. 安全性（注入/XSS/路径穿越）\n2. 编码处理（.bat/.cmd 须 GBK；.ps1 建议 UTF-8 BOM）\n" +
 		"3. 结构完整性（JSON/XML/YAML 不被破坏）\n4. 向后兼容（不破坏已有 API/配置格式）\n5. 错误处理\n\n以 JSON 格式输出审核结果。"
 }
