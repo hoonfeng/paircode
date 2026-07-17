@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 
 	"wb-ui/app"
@@ -24,6 +25,7 @@ import (
 var version = "v1.0.3-desktop"
 
 func main() {
+	runtime.LockOSThread()
 	log.Printf("[Desktop] PairCode IDE 桌面版 %s", version)
 	core.Load()
 	core.LoadLastProject()
