@@ -67,6 +67,7 @@ type MessageStore struct {
 func NewMessageStore(root string) *MessageStore {
 	s := &MessageStore{root: root, persistedCount: make(map[string]int)}
 	_ = os.MkdirAll(s.conversationsDir(), 0o755)
+	s.CleanupTempFiles()
 	return s
 }
 
@@ -234,6 +235,36 @@ func (s *MessageStore) conversationsDir() string {
 	return filepath.Join(s.root, ".pair", "conversations")
 }
 
+// CleanupTempFiles 清理因异常中断残留的 .tmp 和 .bak 文件。
+// - 删除孤立的 .tmp 文件（对应的 .jsonl 已存在或不存在）
+// - 若 .jsonl 不存在而 .bak 存在，将 .bak 恢复为 .jsonl
+// 在 MessageStore 初始化后调用。
+func (s *MessageStore) CleanupTempFiles() {
+	dir := s.conversationsDir()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if strings.HasSuffix(name, ".tmp") {
+			// 删除所有残留 .tmp 文件（它们是不完整的写入）
+			os.Remove(filepath.Join(dir, name))
+		} else if strings.HasSuffix(name, ".bak") {
+			jsonlPath := filepath.Join(dir, strings.TrimSuffix(name, ".bak"))
+			bakPath := filepath.Join(dir, name)
+			if _, err := os.Stat(jsonlPath); os.IsNotExist(err) {
+				// .jsonl 不存在但 .bak 存在 → 恢复
+				os.Rename(bakPath, jsonlPath)
+				fmt.Printf("[MessageStore] 从 .bak 恢复对话文件: %s\n", jsonlPath)
+			} else {
+				// .jsonl 已存在，.bak 可以安全删除
+				os.Remove(bakPath)
+			}
+		}
+	}
+}
+
 // convFilePath 返回 {root}/.pair/conversations/{convID}.jsonl 路径。
 func (s *MessageStore) convFilePath(convID string) string {
 	return filepath.Join(s.conversationsDir(), convID+".jsonl")
@@ -343,6 +374,35 @@ func (s *MessageStore) readJSONL(convID string) ([]StoredMessage, error) {
 		var sm StoredMessage
 		if err := json.Unmarshal(line, &sm); err != nil {
 			continue // 容错：跳过解码失败的行
+		}
+		msgs = append(msgs, sm)
+	}
+	return msgs, scanner.Err()
+}
+
+// readJSONLBak 尝试从 .bak 备份文件读取 JSONL 数据（崩溃恢复用）。
+func (s *MessageStore) readJSONLBak(convID string) ([]StoredMessage, error) {
+	bakPath := s.convFilePath(convID) + ".bak"
+	f, err := os.Open(bakPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 1024*1024), 10*1024*1024)
+	var msgs []StoredMessage
+	for scanner.Scan() {
+		line := bytes.TrimSpace(scanner.Bytes())
+		if len(line) == 0 {
+			continue
+		}
+		var sm StoredMessage
+		if err := json.Unmarshal(line, &sm); err != nil {
+			continue
 		}
 		msgs = append(msgs, sm)
 	}
@@ -544,13 +604,26 @@ func (s *MessageStore) PersistNewMessages(convID string, hist []Message) error {
 	}
 	out.Close()
 
-	// 原子替换（Windows 需要先删目标）
+	// ★ 崩溃安全原子替换：先备份旧文件再替换，崩溃后可恢复。
+	// Windows 不允许 Rename 覆盖已有文件，故用三步法：
+	//   1. Rename dest → dest.bak（备份旧文件）
+	//   2. Rename tmp → dest（新文件就位）
+	//   3. Remove .bak（新文件确认无误后删备份）
+	// 若步骤 1-2 间崩溃 → dest 不存在但 .bak 存在，LoadAll 可从 .bak 恢复。
+	// 若步骤 2-3 间崩溃 → dest 已就位，.bak 可被后续写入或启动时清理。
 	destPath := s.convFilePath(convID)
-	os.Remove(destPath)
+	bakPath := destPath + ".bak"
+	// 步骤 1：备份旧文件（旧文件不存在时忽略错误）
+	os.Rename(destPath, bakPath)
+	// 步骤 2：新文件就位
 	if err := os.Rename(tmpPath, destPath); err != nil {
+		// 替换失败：尝试恢复备份
+		os.Rename(bakPath, destPath)
 		os.Remove(tmpPath)
 		return fmt.Errorf("PersistNewMessages: 替换文件失败: %w", err)
 	}
+	// 步骤 3：新文件确认无误，删除备份
+	os.Remove(bakPath)
 
 	// 更新 index.json
 	s.indexMu.Lock()
@@ -892,10 +965,22 @@ func (s *MessageStore) MergeAllAssistantRuns(convID string) error {
 }
 
 // LoadAll 加载对话全部消息（仅 Message，不含 Segments），供 LLM 上下文恢复。
+// 若主文件（.jsonl）不存在，自动尝试从 .bak 备份恢复。
 func (s *MessageStore) LoadAll(convID string) ([]Message, error) {
 	msgs, err := s.readJSONL(convID)
 	if err != nil {
 		return nil, err
+	}
+	if msgs == nil {
+		// ★ 主文件不存在：尝试从 .bak 恢复
+		bakMsgs, bakErr := s.readJSONLBak(convID)
+		if bakErr == nil && bakMsgs != nil {
+			// 恢复成功：将 .bak 恢复为正式文件
+			destPath := s.convFilePath(convID)
+			bakPath := destPath + ".bak"
+			os.Rename(bakPath, destPath)
+			msgs = bakMsgs
+		}
 	}
 	out := make([]Message, 0, len(msgs))
 	for _, sm := range msgs {

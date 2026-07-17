@@ -380,6 +380,28 @@ export function processAgentDisconnect(convId, errMsg) {
   }
 }
 
+// 处理全部 WebSocket 重连失败（后端进程已关闭）。
+// 清理所有标记为 running 的对话，重置状态。
+export function processAllDisconnected() {
+  for (const convId of Object.keys(state.agentRunningByConv)) {
+    const rt = runtimes[convId]
+    const msgs = state.messagesByConv[convId]
+    if (msgs && rt) {
+      const msg = msgs[rt.msgIdx]
+      if (msg) {
+        msg._loading = false
+        if (!msg.content) msg.content = ''
+        pushSegment(msg.segments, 'content').content += '**[连接中断]** 后端进程已关闭，请重新发送消息。'
+      }
+    }
+    state.agentRunningByConv[convId] = false
+    state.loadingByConv[convId] = false
+    delete runtimes[convId]
+  }
+  state.chatLoading = false
+  state.agentRunning = false
+}
+
 // ─── processStatus 日志辅助 ──
 let statusLogCounter = 0
 

@@ -121,6 +121,10 @@ function scheduleWsReconnect(reason) {
   if (wsManuallyClosed) return
   if (wsReconnectCount >= WS_MAX_RECONNECT) {
     console.warn('[WS] 重连已达上限:', reason)
+    // ★ 通知前端所有 running 会话已中断（后端进程已不在）
+    if (wsCallbacks?.onDisconnected) {
+      wsCallbacks.onDisconnected()
+    }
     return
   }
   wsReconnectCount++

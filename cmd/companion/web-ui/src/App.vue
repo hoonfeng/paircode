@@ -390,6 +390,7 @@ onMounted(async () => {
     onStatus: (payload) => processStatus(payload),
     onEvent: (convId, data) => processAgentEvent(convId, data),
     onDone: (convId, data) => processAgentDone(convId, data),
+    onDisconnected: () => processAllDisconnected(),
   })
 
   loadPersistentState()
