@@ -422,7 +422,7 @@ onMounted(async () => {
   const _onOpenMarketplace = () => { showMarketplace.value = true }
   const _onOpenSettings = () => { showSettings.value = true }
   const _onStopAgent = () => { window.dispatchEvent(new CustomEvent('agent-stop')) }
-  const _onSaveConversations = async () => { saveCurrentConversations(); checkNotifications(); await saveWsList() }
+  const _onSaveConversations = async () => { checkNotifications() }
   const _onOpenWorkspaceDialog = () => { state.activeActivity = 'explorer'; state.sidebarVisible = true }
   const _onSwitchWorkspace = async (e) => { if (e.detail?.path) await switchWorkspace(e.detail.path) }
 
