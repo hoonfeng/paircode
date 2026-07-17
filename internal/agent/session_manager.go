@@ -994,22 +994,27 @@ func (m *SessionManager) GetWorkspaceRoot(convID string) string {
 }
 
 // doAutoCommit 在任务完成后自动执行 git add + git commit。
+// 遍历所有工作区目录（WorkspaceRoots），对每个 git 仓库提交改动。
 // 从 agent 的 result（最终输出）中提取第一行实质性内容作为 commit message，
 // 不直接使用用户消息，确保提交信息反映 agent 实际完成的工作。
 // 自动设置 git user config 避免因全局配置缺失导致提交失败。
 // 执行失败时只日志不 panic（不影响 agent 主流程）。
-func doAutoCommit(root, task, result, commitMsg string) {
-	if root == "" {
+func doAutoCommit(primaryRoot, task, result, commitMsg string) {
+	// 收集所有要提交的目录：用 WorkspaceRoots（全量），兜底 primaryRoot
+	roots := WorkspaceRoots
+	if len(roots) == 0 && primaryRoot != "" {
+		roots = []string{primaryRoot}
+	}
+	if len(roots) == 0 {
 		return
 	}
+
 	// 优先使用 agent 通过 generate_commit_message 工具生成的提交信息
 	msg := strings.TrimSpace(commitMsg)
 	if msg == "" {
-		// 备选：从 agent 输出结果提取第一行实质性内容
 		msg = extractSummary(result)
 	}
 	if msg == "" {
-		// 最后备选：用任务描述
 		msg = strings.TrimSpace(task)
 	}
 	if len(msg) > 72 {
@@ -1018,34 +1023,44 @@ func doAutoCommit(root, task, result, commitMsg string) {
 			msg = msg[:idx]
 		}
 	}
-
 	if msg == "" {
 		msg = "auto commit"
 	}
-	add := exec.Command("git", "add", "-A")
-	add.Dir = root
-	if out, err := add.CombinedOutput(); err != nil {
-		fmt.Printf("[auto-commit] git add 失败: %v\n%s\n", err, string(out))
-		return
-	}
-	// git commit -m "auto: ..."（带内联 user config，防止全局未配置导致失败）
-	commit := exec.Command("git",
-		"-c", "user.name=Pairode",
-		"-c", "user.email=agent@paircode.dev",
-		"commit", "-m", "auto: "+msg)
-	commit.Dir = root
-	if out, err := commit.CombinedOutput(); err != nil {
-		if strings.Contains(string(out), "nothing to commit") {
-			// 无可提交内容 → 取消暂存，避免文件残留在暂存区
-			exec.Command("git", "reset", "HEAD").Run()
-			return
+
+	for _, root := range roots {
+		if root == "" {
+			continue
 		}
-		fmt.Printf("[auto-commit] git commit 失败: %v\n%s\n", err, string(out))
-		// 提交失败 → 取消暂存，避免文件残留在暂存区
-		exec.Command("git", "reset", "HEAD").Run()
-		return
+		// 检查是否为 git 仓库
+		gitDir := filepath.Join(root, ".git")
+		if fi, err := os.Stat(gitDir); err != nil || !fi.IsDir() {
+			continue // 不是 git 仓库，跳过
+		}
+
+		add := exec.Command("git", "add", "-A")
+		add.Dir = root
+		if out, err := add.CombinedOutput(); err != nil {
+			fmt.Printf("[auto-commit] git add 失败 (%s): %v\n%s\n", root, err, string(out))
+			continue
+		}
+
+		commit := exec.Command("git",
+			"-c", "user.name=Pairode",
+			"-c", "user.email=agent@paircode.dev",
+			"commit", "-m", "auto: "+msg)
+		commit.Dir = root
+		if out, err := commit.CombinedOutput(); err != nil {
+			errStr := string(out)
+			if strings.Contains(errStr, "nothing to commit") {
+				exec.Command("git", "reset", "HEAD").Run()
+				continue
+			}
+			fmt.Printf("[auto-commit] git commit 失败 (%s): %v\n%s\n", root, err, errStr)
+			exec.Command("git", "reset", "HEAD").Run()
+			continue
+		}
+		fmt.Printf("[auto-commit] ✅ 已自动提交 (%s): auto: %s\n", root, msg)
 	}
-	fmt.Printf("[auto-commit] ✅ 已自动提交: auto: %s\n", msg)
 }
 
 // extractSummary 从 agent 输出的结果中提取第一行实质性内容。
