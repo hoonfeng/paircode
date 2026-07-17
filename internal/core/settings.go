@@ -4,6 +4,7 @@ package core
 
 import (
 	"encoding/json"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -145,6 +146,9 @@ func Load() bool {
 	if Settings.ExecuteModel == "" && Settings.Model != "" {
 		Settings.ExecuteModel = Settings.Model
 	}
+	if loaded {
+		log.Printf("[Settings] 已加载 workspaceFolderLists: %v", Settings.WorkspaceFolderLists)
+	}
 	Loaded = loaded
 	// 确保模型列表已加载（models.json 不存在则自动写入默认）
 	EnsureModelList()
@@ -153,6 +157,7 @@ func Load() bool {
 
 // Save 把 Settings 存盘。
 func Save() {
+	log.Printf("[Settings] 保存 workspaceFolderLists: %v", Settings.WorkspaceFolderLists)
 	p := SettingsPath()
 	_ = os.MkdirAll(filepath.Dir(p), 0o755)
 	if data, err := json.MarshalIndent(Settings, "", "  "); err == nil {

@@ -232,7 +232,7 @@ func startWebUI(port int) {
 
 	ws.server = &http.Server{
 		Addr:    fmt.Sprintf(":%d", port),
-		Handler: corsMiddleware(logMiddleware(mux)),
+		Handler: corsMiddleware(mux),
 	}
 
 	go func() {
@@ -262,14 +262,6 @@ func corsMiddleware(next http.Handler) http.Handler {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-		next.ServeHTTP(w, r)
-	})
-}
-
-// logMiddleware 记录所有传入的 HTTP 请求的方法和路径。
-func logMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("[API] %s %s", r.Method, r.URL.Path)
 		next.ServeHTTP(w, r)
 	})
 }
@@ -845,6 +837,7 @@ func (s *webServer) handleSettings(w http.ResponseWriter, r *http.Request) {
 		// 检查审核开关是否变更，用于后续通知正在运行的会话
 		oldAutoReview := core.Settings.AutoReview
 		core.Settings = newSettings
+		log.Printf("[Settings] PUT 收到 workspaceFolderLists: %v", newSettings.WorkspaceFolderLists)
 		core.Save()
 		// 审核开关变更时，仅实时更新当前对话的 Loop（其他对话不受影响）
 		if oldAutoReview != newSettings.AutoReview && convId != "" {
@@ -1321,14 +1314,12 @@ func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Reques
 		jsonResp(w, map[string]any{"ok": true})
 
 	case "DELETE":
-		log.Printf("[API] DELETE conversation: %s", id)
 		if err := store.DeleteConversation(id); err != nil {
 			jsonErr(w, err.Error())
 			return
 		}
 		// 同步删除记忆索引（跨对话摘要索引）
 		memory.Delete(id)
-		log.Printf("[API] DELETE conversation done: id=%s", id)
 		jsonResp(w, map[string]any{"ok": true})
 
 	default:
