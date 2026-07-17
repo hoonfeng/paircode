@@ -42,27 +42,22 @@ func main() {
 	registerDesktopBridge(wv, reg)
 
 	htmlPath := distDir + "/index.html"
-	htmlData, err := os.ReadFile(htmlPath)
-	if err != nil {
-		log.Fatalf("[Desktop] 请先构建前端: cd cmd/desktop/web-ui && npm run build")
+	if _, err := os.Stat(htmlPath); err != nil {
+		log.Printf("[Desktop] 未找到构建产物: %s", htmlPath)
 	}
-	if err := wv.LoadHTML(string(htmlData)); err != nil {
+
+	// 使用简单测试页验证渲染
+	testHTML := `<!DOCTYPE html>
+<html><body>
+<div style="background:red;color:white;padding:20px;font-size:24px">
+HELLO WB-UI
+</div>
+</body></html>`
+
+	if err := wv.LoadHTML(testHTML); err != nil {
 		log.Fatalf("[Desktop] LoadHTML 失败: %v", err)
 	}
 	log.Println("[Desktop] 前端页面已加载")
-
-	// 注入测试 DIV 验证渲染
-	wv.EvalJS(`(function(){
-		var d=document.createElement('div');
-		d.id='_test';
-		d.setAttribute('style','position:fixed;top:0;left:0;width:100%;height:30px;background:red;color:white;z-index:99999;text-align:center;font-size:20px;line-height:30px');
-		d.textContent='RENDER OK';
-		document.body.appendChild(d);
-	})()`)
-
-	// 重建渲染树
-	wv.RebuildRenderTree()
-	log.Println("[Desktop] 渲染树已重建")
 
 	host, err := app.NewHost(wv, 1280, 800, "PairCode IDE")
 	if err != nil {
