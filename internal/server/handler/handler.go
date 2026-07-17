@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/hoonfeng/paircode/internal/bridge"
+	"github.com/hoonfeng/paircode/internal/agent"
 )
 
 // ─── 辅助函数 ──────────────────────────────────────────────
@@ -21,6 +22,16 @@ func jsonErr(w http.ResponseWriter, msg string) {
 	w.WriteHeader(http.StatusBadRequest)
 	json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
+
+// ─── 全局依赖注入 ──────────────────────────────────────────
+// 由入口（cmd/desktop/main.go）在运行前设置。
+// 避免每个 handler 都通过 Context 传递，保持签名简洁。
+
+// AgentMgr 全局会话管理器，用于 Chat handler。
+var AgentMgr *agent.SessionManager
+
+// BuildLoopOpts 构建 agent 循环参数的函数，各平台自行注入。
+var BuildLoopOpts func(convID, message string, autonomous bool) agent.LoopOpts
 
 // ─── 注册接口 ──────────────────────────────────────────────
 
