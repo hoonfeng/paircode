@@ -51,7 +51,16 @@ func main() {
 	}
 	log.Println("[Desktop] 前端页面已加载")
 
-	// 重建渲染树 — Vue 已修改 DOM，初始渲染树已过时
+	// 注入测试 DIV 验证渲染
+	wv.EvalJS(`(function(){
+		var d=document.createElement('div');
+		d.id='_test';
+		d.setAttribute('style','position:fixed;top:0;left:0;width:100%;height:30px;background:red;color:white;z-index:99999;text-align:center;font-size:20px;line-height:30px');
+		d.textContent='RENDER OK';
+		document.body.appendChild(d);
+	})()`)
+
+	// 重建渲染树
 	wv.RebuildRenderTree()
 	log.Println("[Desktop] 渲染树已重建")
 
