@@ -459,7 +459,7 @@ state.notificationCount = 0
 state.workspaceName = state.workspaceName || ''
 
 watch(() => state.messages.length, async () => {
-  saveCurrentConversations(); checkNotifications(); await saveWsList()
+  saveCurrentConversations(); checkNotifications()
 })
 
 let persistTimer = null
