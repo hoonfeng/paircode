@@ -514,17 +514,23 @@ func (s *MessageStore) PersistNewMessages(convID string, hist []Message) error {
 	count := s.persistedCount[convID]
 	s.pcMu.RUnlock()
 
-	// 首次访问：从文件同步计数器
+	// 首次访问：从文件同步计数器（只统计非 System 消息，与 histNonSystemCount 口径一致）
 	if count == 0 {
-		fileCount, err := s.countJSONLLines(convID)
+		stored, err := s.readJSONL(convID)
 		if err != nil {
-			return fmt.Errorf("PersistNewMessages: 统计行数失败: %w", err)
+			return fmt.Errorf("PersistNewMessages: 读取文件失败: %w", err)
 		}
-		if fileCount > 0 {
+		nonSysCount := 0
+		for _, sm := range stored {
+			if sm.Message.Role != RoleSystem {
+				nonSysCount++
+			}
+		}
+		if len(stored) > 0 {
 			s.pcMu.Lock()
-			s.persistedCount[convID] = fileCount
+			s.persistedCount[convID] = nonSysCount
 			s.pcMu.Unlock()
-			count = fileCount
+			count = nonSysCount
 		}
 	}
 
