@@ -1,79 +1,66 @@
 # PairCode IDE 桌面端
 
-## 目录结构
+## 架构
 
 ```
 cmd/desktop/
-├── main.go          ← 桌面端入口（初始化 → 注册 Handler → 启动窗口）
+├── main.go          ← 桌面端入口（直接使用 wb-ui SDK）
 └── web-ui/          ← 前端工程（从 cmd/companion/web-ui 复制）
-    ├── package.json
-    ├── index.html
-    ├── vite.config.js     ← 桌面端 Vite 配置（注入 __DESKTOP_MODE__ 标志）
-    └── src/
-        ├── sdk.js         ← 双模式 SDK（核心！Web 模式 HTTP+WS，桌面模式 Go 直调）
-        ├── api.js         ← 向后兼容包装层（re-export from sdk.js）
-        ├── agent-events.js
-        ├── main.js
-        ├── App.vue
-        └── components/    ← Vue 组件
+    ├── src/
+    │   ├── sdk.js   ← 双模式通信 SDK（Web: HTTP+WS / 桌面: desktopBridge 直调）
+    │   └── api.js   ← 向后兼容包装层
+    └── ...
 
 internal/bridge/
-├── registry.go       ← Handler 注册表（method + path → HandlerFunc）
-└── desktop.go        ← 桌面桥接（WebView 窗口 + JS 注入 + 事件推送）
+└── registry.go      ← Handler 注册表（method + path → HandlerFunc，纯注册无 UI 依赖）
 ```
 
 ## 通信模式
 
-| 模式 | API 调用 | 事件推送 |
-|------|---------|---------|
-| **Web 开发** | HTTP fetch → Go Server | WebSocket |
-| **桌面端** | desktopBridge.call() → Go Handler 直调 | Go → JS 回调 |
+| 模式 | SDK 层 | 传输方式 | 窗口引擎 |
+|------|--------|---------|---------|
+| **Web 开发** | `sdk.js` | HTTP fetch + WebSocket | 浏览器 |
+| **桌面端** | `sdk.js` 检测 `__DESKTOP_MODE__` | `window.desktopBridge.call()` → Go 直调 | wb-ui (GLFW + Skia) |
 
-前端代码完全不变，仅通过 `window.__DESKTOP_MODE__` 标志切换通信方式。
+数据流：
+```
+前端 Vue App
+  → sdk.js: apiGet('/api/fs/list', {path: '...'})
+    → window.desktopBridge.call('GET', '/api/fs/list', '', '{"path":"..."}')
+      → wb-ui jsc 引擎 → Go jsc.NewNativeFunction 回调
+        → bridge.Registry.Dispatch('GET', '/api/fs/list', ...)
+          → handleFSList(w, r)
+            → 返回 JSON 结果
+```
 
-## 构建与运行
+**无 HTTP 请求、无 TCP 开销、无端口占用。**
 
-### 前端构建
+## wb-ui 依赖
+
+wb-ui 项目位于 `F:\syproject\wb-ui`，是纯 Go 的桌面 UI SDK：
+- **GLFW** → 窗口管理 + 输入事件
+- **Skia** (goskia) → GPU 加速 2D 渲染
+- **JavaScriptCore Port** → JS 引擎（支持 Proxy/Promise/ES Module）
+- **WebKit Port** → HTML/CSS 解析 + 布局 + 渲染管线
+- **bindings** → Go↔JS 桥接（注册 Go 函数为 JS 全局对象）
+
+## 构建
+
 ```bash
+# 需要 CGO（wb-ui 依赖 GLFW + Skia）
+set CGO_ENABLED=1
+
+# 构建桌面端
+go build -tags=cgo ./cmd/desktop
+
+# 构建前需要先构建前端
 cd cmd/desktop/web-ui
 npm install
 npm run build    # 输出到 dist/
 ```
 
-### Go 构建
-```bash
-cd F:\syproject\gou-ide
-go build ./cmd/desktop
-```
+## 关键约束
 
-### 开发模式（前端 HMR）
-```bash
-# 终端1：启动前端 dev server
-cd cmd/desktop/web-ui
-npm run dev      # 端口 5174
-
-# 终端2：运行桌面端（前端页面通过 WebView 加载 dev server 地址）
-go run ./cmd/desktop
-```
-
-## 集成 WebView
-
-桌面窗口目前是桩实现，需要集成 WebView 库。推荐方案：
-
-### 方案 A：github.com/webview/webview（推荐）
-```go
-import "github.com/webview/webview"
-
-w := webview.New(false)
-defer w.Destroy()
-w.SetTitle("PairCode IDE")
-w.SetSize(1280, 800, webview.HintNone)
-w.Bind("bridgeCall", bridgeInstance.BridgeCall)  // 绑定 Go 函数为 JS 全局函数
-w.Init(BridgeInjectionScript())                   // 注入 desktopBridge JS 对象
-w.Navigate("http://localhost:5174")                // 开发模式
-// 或 w.Navigate("file:///path/to/dist/index.html") // 生产模式
-w.Run()
-```
-
-### 方案 B：WebView2（Windows 专用）
-使用 `github.com/jchv/go-webview2` 或 Microsoft 官方 WebView2。
+1. **构建标签**：`cmd/desktop/main.go` 使用 `//go:build windows && cgo`，只在 Windows + CGO 环境下编译
+2. **前端加载**：先读取 `web-ui/dist/index.html`（Vite 构建产物），不存在时退回到内嵌测试页
+3. **Handler 迁移**：所有 Handler 桩需从 `cmd/companion/web_server.go` 逐步迁移到共享包

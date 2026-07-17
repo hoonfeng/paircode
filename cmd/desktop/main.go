@@ -1,19 +1,30 @@
 // PairCode IDE 桌面端入口。
-// 桌面模式在原生窗口中运行 Vue 前端，通过 desktopBridge 直调 Go 函数，
-// 无 HTTP/WebSocket 通信负担。
+// 直接使用 wb-ui SDK 提供桌面窗口和 Go↔JS 桥接。
 //
-//go:build windows
+// wb-ui 是完整的桌面 UI SDK，提供：
+//   - app.Host：窗口管理 + 事件循环（GLFW + Skia GPU 渲染）
+//   - webkit.WebView：HTML/CSS 渲染引擎 + JS 解释器
+//   - jsc：纯 Go JavaScriptCore 引擎（支持 Proxy/Promise/ES Module）
+//   - bindings：Go↔JS 桥接（注册 Go 函数为 JS 全局对象）
+//
+// 构建条件：CGO_ENABLED=1（依赖 GLFW + Skia）
+//
+//go:build windows && cgo
 
 package main
 
 import (
-	"encoding/json"
 	"log"
-	"net/http"
 	"os"
-	"os/signal"
 	"strings"
-	"syscall"
+	"time"
+
+	"wb-ui/app"
+	"time"
+
+	"wb-ui/app"
+	"wb-ui/jsc"
+	"wb-ui/webkit"
 
 	"github.com/hoonfeng/paircode/internal/bridge"
 	"github.com/hoonfeng/paircode/internal/core"
@@ -24,7 +35,7 @@ var version = "v1.0.3-desktop"
 func main() {
 	log.Printf("[Desktop] PairCode IDE 桌面版 %s", version)
 
-	// ── 初始化核心配置（与 companion 共享） ──
+	// ── 初始化核心配置 ──
 	core.Load()
 	core.LoadLastProject()
 
@@ -33,47 +44,187 @@ func main() {
 	}
 
 	log.Printf("[Desktop] 工作区: %s", core.Root())
-	log.Printf("[Desktop] 文件夹: %v", core.Folders)
 
 	// ── 创建 Handler 注册表 ──
 	reg := bridge.NewRegistry()
-
-	// ── 注册所有 API Handler ──
 	registerAllHandlers(reg)
+	log.Printf("[Desktop] 已注册 %d 个 Handler", len(reg.AllRoutes()))
 
-	// ── 初始化桌面桥接 ──
-	// 桌面桥接将 Registry 导出为 JS 全局函数 window.desktopBridge，
-	// 使得前端 sdk.js 的 bridgeCall() 直接路由到 Go Handler。
-	//
-	// 实现方式：使用系统 WebView（WebView2 on Windows）加载前端页面，
-	// 在页面加载前注入 desktopBridge 对象。
-	bridgeInstance := bridge.NewDesktopBridge(reg)
+	// ── 创建 wb-ui WebView ──
+	wv := webkit.NewWebView()
+	width, height := 1280, 800
+	wv.Resize(width, height)
 
-	// ── 启动桌面窗口 ──
-	// 创建原生窗口，加载 web-ui 页面，注入 desktopBridge。
-	if err := bridgeInstance.StartWindow(1280, 800, "PairCode IDE"); err != nil {
-		log.Fatalf("[Desktop] 窗口启动失败: %v", err)
+	// ── 注册 desktopBridge 到 JS 解释器 ──
+	// ★ 必须在 LoadHTML 之前注册，确保前端 JS 执行时 bridge 已就绪
+	registerDesktopBridge(wv, reg)
+
+	// ── 加载 Vue 前端页面 ──
+	// 读取内嵌的 Vue 构建产物 HTML
+	htmlContent, err := getVueAppHTML()
+	if err != nil {
+		log.Fatalf("[Desktop] 加载前端页面失败: %v", err)
 	}
-	defer bridgeInstance.Stop()
+	if err := wv.LoadHTML(htmlContent); err != nil {
+		log.Fatalf("[Desktop] LoadHTML 失败: %v", err)
+	}
+	log.Println("[Desktop] 前端页面已加载")
 
-	log.Println("[Desktop] 桌面端已启动。")
+	// ── 创建 Host 窗口 ──
+	host, err := app.NewHost(wv, width, height, "PairCode IDE")
+	if err != nil {
+		log.Fatalf("[Desktop] 创建窗口失败: %v", err)
+	}
 
-	// 等待退出信号
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-	<-sig
-
-	log.Println("[Desktop] 正在关闭...")
+	// 信号处理（优雅退出）
+	// ── 启动事件循环（阻塞直到窗口关闭） ──
+	// 用户点击窗口关闭按钮后 Run() 返回，程序退出。
+	log.Println("[Desktop] 窗口已启动，进入事件循环")
+	host.Run()
+	log.Println("[Desktop] 已退出。")
+}
 }
 
-// registerAllHandlers 注册所有 API Handler 到注册表。
-// 这些 Handler 与 cmd/companion/web_server.go 完全一致。
-// TODO: 后续将 web_server.go 的 Handler 抽取到内部包共用。
-func registerAllHandlers(reg *bridge.Registry) {
-	// ── 系统 ──
-	reg.Register("GET", "/api/health", handleHealth)
+// registerDesktopBridge 在 wb-ui 的 JS 解释器上注册 desktopBridge 全局对象。
+// 前端 sdk.js 通过 window.desktopBridge.call(method, path, body, params)
+// 直接调用 Go 端的 Handler，无需 HTTP/WebSocket。
+func registerDesktopBridge(wv *webkit.WebView, reg *bridge.Registry) {
+	interp := wv.JSInterpreter()
+	interp.SetupGlobal(&jsc.BufferLogger{})
 
-	// ── 文件系统 ──
+	log.Println("[Desktop] 注册 desktopBridge 到 JS 解释器...")
+
+	// ── 创建 desktopBridge 对象 ──
+	bridgeObj := jsc.NewObject(interp.ObjectPrototype())
+
+	// bridgeCall — 前端 API 调用的统一入口
+	// 签名：call(method, path, bodyJSON?, paramsJSON?) → BridgeCallResponse JSON
+	bridgeCall := jsc.NewNativeFunction("bridgeCall", func(in *jsc.Interpreter, this jsc.JSValue, args []jsc.JSValue) jsc.JSValue {
+		if len(args) < 2 {
+			return bridgeErrorResult("至少需要 method 和 path 参数")
+		}
+
+		method := safeToString(args[0])
+		path := safeToString(args[1])
+		bodyJSON := ""
+		paramsJSON := ""
+		if len(args) > 2 {
+			bodyJSON = safeToString(args[2])
+		}
+		if len(args) > 3 {
+			paramsJSON = safeToString(args[3])
+		}
+
+		// 构造 BridgeCallRequest
+		callReq := `{"method":"` + jsString(method) + `","path":"` + jsString(path) +
+			`","body":` + maybeJSON(bodyJSON) + `,"params":` + maybeJSON(paramsJSON) + `}`
+
+		result := reg.HandleBridgeCall(callReq)
+		return jsc.StringValue(result)
+	})
+	bridgeObj.Set("call", jsc.FunctionValue(bridgeCall))
+
+	// onAgentEvent — Go 端通过它推送 agent 事件（占位，由 Go 端 EvalJS 调用）
+	bridgeObj.Set("onAgentEvent", jsc.FunctionValue(jsc.NewNativeFunction("onAgentEvent",
+		func(in *jsc.Interpreter, this jsc.JSValue, args []jsc.JSValue) jsc.JSValue {
+			return jsc.Undefined()
+		}, 2)))
+
+	// onStatus — Go 端通过它推送运行状态
+	bridgeObj.Set("onStatus", jsc.FunctionValue(jsc.NewNativeFunction("onStatus",
+		func(in *jsc.Interpreter, this jsc.JSValue, args []jsc.JSValue) jsc.JSValue {
+			return jsc.Undefined()
+		}, 1)))
+
+	// 注册为全局对象
+	interp.GlobalObject().Set("desktopBridge", jsc.ObjectValue(bridgeObj))
+	interp.GlobalObject().Set("__DESKTOP_MODE__", jsc.BooleanValue(true))
+
+	log.Println("[Desktop] desktopBridge 注册完成")
+}
+
+// ─── 事件推送（Go → JS） ──────────────────────────────────
+
+// PushAgentEvent 向 JS 前端推送 agent 事件。
+func PushAgentEvent(wv *webkit.WebView, convId string, data any) {
+	dataJSON, err := json.Marshal(data)
+	if err != nil {
+		log.Printf("[Desktop] PushAgentEvent marshal 失败: %v", err)
+		return
+	}
+
+	js := fmt.Sprintf(`if(window.desktopBridge&&window.desktopBridge.onAgentEvent){window.desktopBridge.onAgentEvent(%s,%s)}`,
+		jsonQuote(convId), string(dataJSON))
+
+	if _, err := wv.EvalJS(js); err != nil {
+		log.Printf("[Desktop] PushAgentEvent EvalJS 失败: %v", err)
+	}
+}
+
+// PushStatus 向 JS 前端推送运行状态。
+func PushStatus(wv *webkit.WebView, payload any) {
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("[Desktop] PushStatus marshal 失败: %v", err)
+		return
+	}
+
+	js := `if(window.desktopBridge&&window.desktopBridge.onStatus){window.desktopBridge.onStatus(` +
+		string(payloadJSON) + `)}`
+
+	if _, err := wv.EvalJS(js); err != nil {
+		log.Printf("[Desktop] PushStatus EvalJS 失败: %v", err)
+	}
+}
+
+// ─── 前端页面加载 ──────────────────────────────────────────
+
+// getVueAppHTML 获取 Vue 前端页面 HTML 内容。
+// TODO: 读取 web-ui/dist/index.html (Vite 构建产物)
+// 当前返回简单测试页，待集成 Vue build 产物后替换。
+func getVueAppHTML() (string, error) {
+	// 尝试读取构建产物
+	htmlPath := "cmd/desktop/web-ui/dist/index.html"
+	if data, err := os.ReadFile(htmlPath); err == nil {
+		return string(data), nil
+	}
+
+	// 退回到简单测试页
+	return `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>PairCode IDE</title></head>
+<body>
+<div id="app">
+	<h1>PairCode IDE 桌面版</h1>
+	<p>正在加载...</p>
+</div>
+<script>
+(function(){
+	console.log("[Desktop] 桌面模式已启动");
+	console.log("[Desktop] __DESKTOP_MODE__:", window.__DESKTOP_MODE__);
+	console.log("[Desktop] desktopBridge:", typeof window.desktopBridge);
+
+	// 测试 bridge 调用
+	if(window.desktopBridge && window.desktopBridge.call) {
+		var result = window.desktopBridge.call("GET", "/api/health", "", "");
+		console.log("[Desktop] /api/health 响应:", result);
+		var data = JSON.parse(result);
+		document.getElementById("app").innerHTML = "<h1>PairCode IDE</h1><p>状态: " +
+			(data.body ? JSON.parse(data.body).status : "unknown") + "</p>" +
+			"<p>工作区: " + (data.body ? JSON.parse(data.body).workspace : "") + "</p>";
+	}
+})();
+</script>
+</body>
+</html>`, nil
+}
+
+// ─── Handler 注册 ──────────────────────────────────────────
+
+func registerAllHandlers(reg *bridge.Registry) {
+	// 这些 Handler 与 cmd/companion/web_server.go 完全一致。
+	// TODO: 后续将 Handler 实现提取到共享包。
+	reg.Register("GET", "/api/health", handleHealth)
 	reg.Register("GET", "/api/fs/list", handleFSList)
 	reg.Register("GET", "/api/fs/read", handleFSRead)
 	reg.Register("POST", "/api/fs/write", handleFSWrite)
@@ -85,18 +236,12 @@ func registerAllHandlers(reg *bridge.Registry) {
 	reg.Register("GET", "/api/fs/image", handleFSImage)
 	reg.Register("GET", "/api/fs/file-info", handleFSFileInfo)
 	reg.Register("GET", "/api/fs/hex", handleFSHex)
-
-	// ── 工作区 ──
 	reg.Register("GET", "/api/workspace", handleWorkspace)
 	reg.Register("GET", "/api/settings", handleSettings)
 	reg.Register("PUT", "/api/settings", handleSettingsPut)
 	reg.Register("POST", "/api/workspace", handleWorkspacePost)
-
-	// ── 系统 ──
 	reg.Register("GET", "/api/system/info", handleSysInfo)
 	reg.Register("POST", "/api/system/exec", handleExec)
-
-	// ── Git ──
 	reg.Register("GET", "/api/git/status", handleGitStatus)
 	reg.Register("GET", "/api/git/diff", handleGitDiff)
 	reg.Register("POST", "/api/git/add", handleGitAdd)
@@ -113,89 +258,61 @@ func registerAllHandlers(reg *bridge.Registry) {
 	reg.Register("GET", "/api/git/remote", handleGitRemote)
 	reg.Register("GET", "/api/git/init", handleGitInit)
 	reg.Register("POST", "/api/git/reset", handleGitReset)
-
-	// ── 对话 ──
 	reg.Register("POST", "/api/chat/send", handleChatSend)
 	reg.Register("POST", "/api/chat/stop", handleChatStop)
 	reg.Register("POST", "/api/chat/answer", handleChatAnswer)
 	reg.Register("POST", "/api/chat/approve", handleChatApprove)
 	reg.Register("POST", "/api/chat/feedback", handleChatFeedback)
 	reg.Register("POST", "/api/chat/rollback", handleChatRollback)
-
-	// ── 对话列表/消息 ──
 	reg.Register("GET", "/api/conversations", handleConversations)
 	reg.Register("POST", "/api/conversations", handleConversationCreate)
 	reg.Register("GET", "/api/conversations/", handleConversationByID)
-
-	// ── Tasks / Plan ──
 	reg.Register("GET", "/api/tasks", handleTasks)
 	reg.Register("GET", "/api/taskplan", handleTaskPlan)
-
-	// ── 模型 ──
 	reg.Register("GET", "/api/models", handleModels)
-
-	// ── 指令 / 思想 ──
 	reg.Register("GET", "/api/instructions", handleInstructions)
 	reg.Register("PUT", "/api/instructions", handleInstructionsPut)
 	reg.Register("GET", "/api/philosophy", handlePhilosophy)
 	reg.Register("PUT", "/api/philosophy", handlePhilosophyPut)
-
-	// ── MCP ──
 	reg.Register("GET", "/api/mcp/list", handleMCPList)
 	reg.Register("POST", "/api/mcp/save", handleMCPSave)
-
-	// ── Skills ──
 	reg.Register("GET", "/api/skills/list", handleSkillsList)
 	reg.Register("GET", "/api/skills/read", handleSkillsRead)
 	reg.Register("POST", "/api/skills/save", handleSkillsSave)
 	reg.Register("POST", "/api/skills/delete", handleSkillsDelete)
-
-	// ── Token / Debug ──
 	reg.Register("GET", "/api/tokens/stats", handleTokensStats)
 	reg.Register("GET", "/api/debug/logs", handleDebugLogs)
 	reg.Register("GET", "/api/debug/logs/", handleDebugLogByID)
-
-	// ── 市场 ──
 	reg.Register("GET", "/api/marketplace/search", handleMarketplaceSearch)
 	reg.Register("POST", "/api/marketplace/install", handleMarketplaceInstall)
 	reg.Register("POST", "/api/marketplace/refresh", handleMarketplaceRefresh)
-
-	// ── 记忆 ──
 	reg.Register("GET", "/api/memory/search", handleMemorySearch)
 	reg.Register("GET", "/api/memory/list", handleMemoryList)
 	reg.Register("POST", "/api/memory/rebuild", handleMemoryRebuild)
-
-	log.Printf("[Desktop] 已注册 %d 个 Handler", len(reg.AllRoutes()))
 }
 
-// ─── Handler 占位实现 ───────────────────────────────────────
-// 这些是桩（stub），业务逻辑后续从 web_server.go 迁移到内部包共用。
-// 先提供最小实现让桌面端可以编译运行。
+// ─── Handler 桩实现（占位，后续从 web_server.go 提取共享实现） ──
 
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	jsonResp(w, map[string]any{"status": "ok", "workspace": core.Root(), "folders": core.Folders})
 }
-
-func handleFSList(w http.ResponseWriter, r *http.Request)   { jsonResp(w, []string{}) }
-func handleFSRead(w http.ResponseWriter, r *http.Request)   { jsonResp(w, "") }
-func handleFSWrite(w http.ResponseWriter, r *http.Request)  { jsonResp(w, map[string]string{"status": "ok"}) }
-func handleFSRename(w http.ResponseWriter, r *http.Request) { jsonResp(w, map[string]string{"status": "ok"}) }
-func handleFSDelete(w http.ResponseWriter, r *http.Request) { jsonResp(w, map[string]string{"status": "ok"}) }
-func handleFSMkdir(w http.ResponseWriter, r *http.Request)  { jsonResp(w, map[string]string{"status": "ok"}) }
-func handleFSSearch(w http.ResponseWriter, r *http.Request) { jsonResp(w, []string{}) }
-func handleFSDrives(w http.ResponseWriter, r *http.Request) { jsonResp(w, []string{}) }
-func handleFSImage(w http.ResponseWriter, r *http.Request)  { jsonResp(w, "") }
+func handleFSList(w http.ResponseWriter, r *http.Request)     { jsonResp(w, []string{}) }
+func handleFSRead(w http.ResponseWriter, r *http.Request)     { jsonResp(w, "") }
+func handleFSWrite(w http.ResponseWriter, r *http.Request)    { jsonResp(w, map[string]string{"status": "ok"}) }
+func handleFSRename(w http.ResponseWriter, r *http.Request)   { jsonResp(w, map[string]string{"status": "ok"}) }
+func handleFSDelete(w http.ResponseWriter, r *http.Request)   { jsonResp(w, map[string]string{"status": "ok"}) }
+func handleFSMkdir(w http.ResponseWriter, r *http.Request)    { jsonResp(w, map[string]string{"status": "ok"}) }
+func handleFSSearch(w http.ResponseWriter, r *http.Request)   { jsonResp(w, []string{}) }
+func handleFSDrives(w http.ResponseWriter, r *http.Request)   { jsonResp(w, []string{}) }
+func handleFSImage(w http.ResponseWriter, r *http.Request)    { jsonResp(w, "") }
 func handleFSFileInfo(w http.ResponseWriter, r *http.Request) { jsonResp(w, map[string]any{}) }
-func handleFSHex(w http.ResponseWriter, r *http.Request)    { jsonResp(w, "") }
-
+func handleFSHex(w http.ResponseWriter, r *http.Request)      { jsonResp(w, "") }
 func handleWorkspace(w http.ResponseWriter, r *http.Request)     { jsonResp(w, map[string]any{}) }
 func handleSettings(w http.ResponseWriter, r *http.Request)      { jsonResp(w, map[string]any{}) }
 func handleSettingsPut(w http.ResponseWriter, r *http.Request)   { jsonResp(w, map[string]string{"status": "ok"}) }
 func handleWorkspacePost(w http.ResponseWriter, r *http.Request) { jsonResp(w, map[string]string{"status": "ok"}) }
-
-func handleSysInfo(w http.ResponseWriter, r *http.Request) { jsonResp(w, map[string]any{}) }
-func handleExec(w http.ResponseWriter, r *http.Request)    { jsonResp(w, map[string]any{}) }
-
+func handleSysInfo(w http.ResponseWriter, r *http.Request)  { jsonResp(w, map[string]any{}) }
+func handleExec(w http.ResponseWriter, r *http.Request)     { jsonResp(w, map[string]any{}) }
 func handleGitStatus(w http.ResponseWriter, r *http.Request)     { jsonResp(w, "") }
 func handleGitDiff(w http.ResponseWriter, r *http.Request)       { jsonResp(w, "") }
 func handleGitAdd(w http.ResponseWriter, r *http.Request)        { jsonResp(w, map[string]string{"status": "ok"}) }
@@ -212,44 +329,34 @@ func handleGitPull(w http.ResponseWriter, r *http.Request)       { jsonResp(w, m
 func handleGitRemote(w http.ResponseWriter, r *http.Request)     { jsonResp(w, map[string]any{}) }
 func handleGitInit(w http.ResponseWriter, r *http.Request)       { jsonResp(w, map[string]string{"status": "ok"}) }
 func handleGitReset(w http.ResponseWriter, r *http.Request)      { jsonResp(w, map[string]string{"status": "ok"}) }
-
 func handleChatSend(w http.ResponseWriter, r *http.Request)     { jsonResp(w, map[string]string{"status": "ok"}) }
 func handleChatStop(w http.ResponseWriter, r *http.Request)     { jsonResp(w, map[string]string{"status": "ok"}) }
 func handleChatAnswer(w http.ResponseWriter, r *http.Request)   { jsonResp(w, map[string]string{"status": "ok"}) }
 func handleChatApprove(w http.ResponseWriter, r *http.Request)  { jsonResp(w, map[string]string{"status": "ok"}) }
 func handleChatFeedback(w http.ResponseWriter, r *http.Request) { jsonResp(w, map[string]string{"status": "ok"}) }
 func handleChatRollback(w http.ResponseWriter, r *http.Request) { jsonResp(w, map[string]string{"status": "ok"}) }
-
 func handleConversations(w http.ResponseWriter, r *http.Request)      { jsonResp(w, []string{}) }
 func handleConversationCreate(w http.ResponseWriter, r *http.Request) { jsonResp(w, map[string]any{}) }
 func handleConversationByID(w http.ResponseWriter, r *http.Request)   { jsonResp(w, map[string]any{}) }
-
-func handleTasks(w http.ResponseWriter, r *http.Request)   { jsonResp(w, []string{}) }
+func handleTasks(w http.ResponseWriter, r *http.Request)    { jsonResp(w, []string{}) }
 func handleTaskPlan(w http.ResponseWriter, r *http.Request) { jsonResp(w, map[string]any{}) }
-
-func handleModels(w http.ResponseWriter, r *http.Request) { jsonResp(w, []string{}) }
-
+func handleModels(w http.ResponseWriter, r *http.Request)   { jsonResp(w, []string{}) }
 func handleInstructions(w http.ResponseWriter, r *http.Request)     { jsonResp(w, "") }
 func handleInstructionsPut(w http.ResponseWriter, r *http.Request)  { jsonResp(w, map[string]string{"status": "ok"}) }
 func handlePhilosophy(w http.ResponseWriter, r *http.Request)       { jsonResp(w, "") }
 func handlePhilosophyPut(w http.ResponseWriter, r *http.Request)    { jsonResp(w, map[string]string{"status": "ok"}) }
-
 func handleMCPList(w http.ResponseWriter, r *http.Request)  { jsonResp(w, []string{}) }
 func handleMCPSave(w http.ResponseWriter, r *http.Request)  { jsonResp(w, map[string]string{"status": "ok"}) }
-
 func handleSkillsList(w http.ResponseWriter, r *http.Request)   { jsonResp(w, []string{}) }
 func handleSkillsRead(w http.ResponseWriter, r *http.Request)   { jsonResp(w, "") }
 func handleSkillsSave(w http.ResponseWriter, r *http.Request)   { jsonResp(w, map[string]string{"status": "ok"}) }
 func handleSkillsDelete(w http.ResponseWriter, r *http.Request) { jsonResp(w, map[string]string{"status": "ok"}) }
-
-func handleTokensStats(w http.ResponseWriter, r *http.Request)    { jsonResp(w, map[string]any{}) }
-func handleDebugLogs(w http.ResponseWriter, r *http.Request)      { jsonResp(w, []string{}) }
-func handleDebugLogByID(w http.ResponseWriter, r *http.Request)   { jsonResp(w, "") }
-
-func handleMarketplaceSearch(w http.ResponseWriter, r *http.Request)   { jsonResp(w, []string{}) }
-func handleMarketplaceInstall(w http.ResponseWriter, r *http.Request)  { jsonResp(w, map[string]string{"status": "ok"}) }
-func handleMarketplaceRefresh(w http.ResponseWriter, r *http.Request)  { jsonResp(w, map[string]string{"status": "ok"}) }
-
+func handleTokensStats(w http.ResponseWriter, r *http.Request)  { jsonResp(w, map[string]any{}) }
+func handleDebugLogs(w http.ResponseWriter, r *http.Request)    { jsonResp(w, []string{}) }
+func handleDebugLogByID(w http.ResponseWriter, r *http.Request) { jsonResp(w, "") }
+func handleMarketplaceSearch(w http.ResponseWriter, r *http.Request)  { jsonResp(w, []string{}) }
+func handleMarketplaceInstall(w http.ResponseWriter, r *http.Request) { jsonResp(w, map[string]string{"status": "ok"}) }
+func handleMarketplaceRefresh(w http.ResponseWriter, r *http.Request) { jsonResp(w, map[string]string{"status": "ok"}) }
 func handleMemorySearch(w http.ResponseWriter, r *http.Request)  { jsonResp(w, []string{}) }
 func handleMemoryList(w http.ResponseWriter, r *http.Request)    { jsonResp(w, []string{}) }
 func handleMemoryRebuild(w http.ResponseWriter, r *http.Request) { jsonResp(w, map[string]string{"status": "ok"}) }
@@ -267,5 +374,36 @@ func jsonErr(w http.ResponseWriter, msg string) {
 	json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
 
-// 抑制未使用导入
-var _ = strings.TrimSpace
+func bridgeErrorResult(msg string) jsc.JSValue {
+	resp, _ := json.Marshal(bridge.BridgeCallResponse{
+		Status: 400,
+		Body:   fmt.Sprintf(`{"error":"%s"}`, msg),
+	})
+	return jsc.StringValue(string(resp))
+}
+
+func safeToString(v jsc.JSValue) string {
+	if v.IsString() {
+		return v.AsString()
+	}
+	return fmt.Sprint(v)
+}
+
+func jsString(s string) string {
+	return strings.ReplaceAll(s, `"`, `\"`)
+}
+
+func maybeJSON(s string) string {
+	if s == "" {
+		return `""`
+	}
+	return s
+}
+
+func jsonQuote(s string) string {
+	b, _ := json.Marshal(s)
+	return string(b)
+}
+
+// 确保时间包被使用
+var _ = time.Now
