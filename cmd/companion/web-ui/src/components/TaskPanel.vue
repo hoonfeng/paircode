@@ -42,10 +42,10 @@ const pct = computed(() => {
 })
 
 function statusLabel(s) {
-  if (s === 'completed' || s === 'done') return '✅'
-  if (s === 'in_progress') return '🔄'
-  if (s === 'cancelled') return '❌'
-  return '⏳'
+  if (s === 'completed' || s === 'done') return '完成'
+  if (s === 'in_progress') return '进行中'
+  if (s === 'cancelled') return '已取消'
+  return '待处理'
 }
 </script>
 
