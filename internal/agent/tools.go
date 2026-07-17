@@ -443,7 +443,7 @@ func RegisterDefaultTools(r *Registry, root string) {
 
 	r.Register(&Tool{
 		Name:             "run_command",
-		Description:      "在工作区执行一条 shell 命令并返回输出（同步、120s 超时、UTF-8）。用于构建/测试/查询。",
+		Description:      "同步执行一条 shell 命令并返回输出（120s 超时）。适用于构建、编译、测试、文件查询等短命令（几秒内完成）。\n禁止用于以下场景（会阻塞 agent）：启动 dev server、npm run dev、go run 启动服务、watch 模式、tcp 监听、任何需保持运行的进程。此类命令请改用 run_background。",
 		Parameters:       objSchema(props{"command": strProp("要执行的命令"), "cwd": strProp("可选工作目录（工作区内，省略=根）")}, "command"),
 		RequiresApproval: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
@@ -714,6 +714,80 @@ func capOutput(s string, limit int) string {
 	head := limit * 3 / 4
 	tail := limit - head
 	return s[:head] + "\n...[输出截断 " + fmt.Sprint(len(s)-limit) + " 字节]...\n" + s[len(s)-tail:]
+}
+
+// isBlockingCommand 检测命令是否为长期进程（会阻塞 run_command 120s 超时）。
+// 匹配高置信度模式：dev server / watch / 文件监听等。短命令（build/test/install）不命中。
+func isBlockingCommand(command string) bool {
+	cmd := strings.TrimSpace(command)
+	lower := strings.ToLower(cmd)
+
+	// 精确匹配 npm start（独立启动服务）
+	if lower == "npm start" || lower == "yarn start" || lower == "pnpm start" {
+		return true
+	}
+	// npm run / yarn / pnpm + 阻塞子命令
+	if matched := hasRunCommandBlockingPattern(lower); matched {
+		return true
+	}
+	// 裸 go run .（运行当前包，通常是服务端）
+	if lower == "go run ." || lower == "go run ./..." {
+		return true
+	}
+	// go run ./cmd/xxx（可能是服务入口）
+	if strings.HasPrefix(lower, "go run ./cmd/") && !strings.Contains(lower, " ") {
+		return true
+	}
+	// 裸 vite / webpack-dev-server / nodemon
+	baseCmd := extractBaseCommand(lower)
+	switch baseCmd {
+	case "vite", "vitepress", "nodemon", "webpack-dev-server", "live-server",
+		"browser-sync", "parcel", "ts-node-dev", "concurrently":
+		return true
+	}
+	// 带 --watch / --serve / watch 标志
+	if strings.Contains(lower, "--watch") || strings.Contains(lower, "-w") ||
+		strings.Contains(lower, "--serve") || strings.Contains(lower, "watch") {
+		return true
+	}
+	return false
+}
+
+// hasRunCommandBlockingPattern 检查 npm run / yarn / pnpm 后的子命令是否为阻塞类型。
+func hasRunCommandBlockingPattern(cmd string) bool {
+	// 提取 run 后的子命令
+	subCmd := ""
+	if idx := strings.Index(cmd, " run "); idx >= 0 {
+		subCmd = cmd[idx+5:]
+	} else if strings.HasPrefix(cmd, "yarn ") && !strings.HasPrefix(cmd, "yarn run ") {
+		subCmd = cmd[5:]
+	}
+	if subCmd == "" {
+		return false
+	}
+	subCmd = strings.TrimSpace(subCmd)
+	// 移除尾部参数（如 --port 3000）
+	if spaceIdx := strings.Index(subCmd, " "); spaceIdx > 0 {
+		subCmd = subCmd[:spaceIdx]
+	}
+	blockingSubCmds := map[string]bool{
+		"dev": true, "serve": true, "start": true, "watch": true,
+		"develop": true, "server": true, "hot": true, "hmr": true,
+		"webpack-dev-server": true, "storybook": true, "docs:dev": true,
+	}
+	return blockingSubCmds[subCmd]
+}
+
+// extractBaseCommand 提取命令行的首命令（去掉路径前缀和参数）。
+func extractBaseCommand(cmd string) string {
+	cmd = strings.TrimSpace(cmd)
+	if idx := strings.Index(cmd, " "); idx > 0 {
+		cmd = cmd[:idx]
+	}
+	// 取 basename
+	cmd = strings.TrimPrefix(cmd, "./")
+	cmd = strings.TrimPrefix(cmd, "npx ")
+	return cmd
 }
 
 // extractGoSymbolName 从 Go 代码片段（old_string）中提取符号名称。

@@ -124,6 +124,52 @@ func registerCodeGraphTools(r *Registry, root string) {
 				return "", fmt.Errorf("构建图谱失败: %w", err)
 			}
 
+			// ★ 多项目支持：对 WorkspaceRoots[1:] 中每个项目独立建图后合并到主图
+			var extraParts []string
+			if len(WorkspaceRoots) > 1 && rebuild {
+				for i, extraRoot := range WorkspaceRoots {
+					if i == 0 {
+						continue
+					}
+					projName := filepath.Base(extraRoot)
+					extraModule := codegraph.DetectModuleName(extraRoot)
+					if extraModule == "" || extraModule == "unknown" {
+						extraParts = append(extraParts, fmt.Sprintf("  ⚠ %s: 未检测到模块名，跳过", projName))
+						continue
+					}
+					extraConfig := codegraph.DefaultBuildConfig(extraRoot)
+					extraConfig.ModuleName = extraModule
+					extraConfig.AutoSave = false // 不单独保存，合并到主图
+
+					extraBuilder := codegraph.NewBuilder(extraConfig)
+					extraResult, extraErr := extraBuilder.BuildFull()
+					if extraErr != nil {
+						extraParts = append(extraParts, fmt.Sprintf("  ⚠ %s: %v", projName, extraErr))
+						continue
+					}
+
+					// 合并：调整文件路径为主项目相对路径，再逐个添加到主图
+					snap := extraBuilder.Graph().ToSnapshot()
+					prefix := "../" + projName + "/"
+					for _, e := range snap.Entities {
+						if e.FilePath != "" {
+							e.FilePath = prefix + e.FilePath
+						}
+						builder.Graph().AddEntity(e)
+					}
+					for _, r := range snap.Relations {
+						builder.Graph().AddRelation(r)
+					}
+
+					extraParts = append(extraParts, fmt.Sprintf("  ✅ %s: %d 实体, %d 关系",
+						projName, extraResult.EntitiesAdded, extraResult.RelationsAdded))
+					result.EntitiesAdded += extraResult.EntitiesAdded
+					result.RelationsAdded += extraResult.RelationsAdded
+				}
+			} else if len(WorkspaceRoots) > 1 && !rebuild {
+				extraParts = append(extraParts, "  ℹ 增量模式下仅扫描主项目；需全量建图请用 rebuild=true")
+			}
+
 			// 更新缓存
 			cgGraphMu.Lock()
 			cgGraph = builder.Graph()
@@ -131,7 +177,11 @@ func registerCodeGraphTools(r *Registry, root string) {
 			cgRoot = root
 			cgGraphMu.Unlock()
 
-			return codegraph.BuildResultText(result), nil
+			output := codegraph.BuildResultText(result)
+			if len(extraParts) > 0 {
+				output += "\n\n## 其他项目\n" + strings.Join(extraParts, "\n")
+			}
+			return output, nil
 		},
 	})
 

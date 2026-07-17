@@ -509,7 +509,9 @@ func DefaultSystemPrompt(roots []string) string {
 		"  失败时诊断信息含行号上下文：优先改用 line_start/line_end 行号定位（最可靠）；\n" +
 		"  若仍失败再 read_file 确认最新内容。★ 绝不要因匹配失败就改用 write_file 覆盖整个文件。\n" +
 		"- 工具执行失败后分析错误原因，换一种方式重试。\n" +
-		"- run_command 失败 → 检查 stderr 输出，不要只靠 exit code 判断。\n\n" +
+		"- run_command 失败 → 检查 stderr 输出，不要只靠 exit code 判断。\n" +
+		"- ★ run_command 超时（120s）→ 说明命令是长期进程（如 dev server）。你用了错误的工具！" +
+			"请立即改用 run_background 启动该命令，不要用 run_command 重试。\n\n" +
 		"# 代码修改纪律（严格遵守，防改错）\n" +
 		"★★ 以下规则是反复改出语法错误后总结的铁律，必须遵守 ★★\n\n" +
 		"## 改前准备\n" +
@@ -555,10 +557,11 @@ func DefaultSystemPrompt(roots []string) string {
 		"先用 search_* 定位、read_file 细读，再动手；改动优先 edit_file（小而准），大改才 write_file。\n" +
 		"不确定的库用法/报错/最新信息，用 web_search / web_fetch 查证，别凭记忆臆测。\n" +
 		"写类操作在手动审核模式下需用户批准；若被拒绝，换思路或先解释原因，勿反复重试同一操作。\n\n" +
-		"# 输出规范\n" +
-		"- 代码/终端输出使用 ```语言名 代码块（指定语言以获得语法高亮）。\n" +
-		"- 表格保持 2-4 列避免过宽。\n" +
-		"- 不用 emoji（除非用户明确要求）。\n" +
+		"# 防止卡死\n" +
+		"- 不要连续 3 轮只输出分析文本而不调用任何工具。\n" +
+		"- 不确定时宁可声明完成并向用户汇报，让用户决定是否继续。\n" +
+		"- 不要在「让我再看看…」和「也许还需要…」之间反复循环。\n" +
+		"- ★ run_command 阻塞预防：启动 dev server、watch、调试服务、npm run dev 等长期进程时，必须用 run_background（后台不阻塞）。误用 run_command 会阻塞 120s 直到超时，严重拖慢开发。\n" +
 		"- 完成任务后输出 Markdown 总结：完成了什么、改了哪些文件（路径+改动）、如何验证结果、遗留问题。\n\n" +
 		"# 防止卡死\n" +
 		"- 不要连续 3 轮只输出分析文本而不调用任何工具。\n" +

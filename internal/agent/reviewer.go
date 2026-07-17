@@ -128,8 +128,11 @@ func (r *Reviewer) Review(ctx context.Context, tc ToolCall, contextMsgs []Messag
 	name := tc.Function.Name
 
 	// run_command/run_background 安全命令智能放行（无需 LLM 审核）
-	if (name == "run_command" || name == "run_background") && isSafeShellCommand(argStr(args, "command")) {
+	if name == "run_command" && isSafeShellCommand(argStr(args, "command")) && !isBlockingCommand(argStr(args, "command")) {
 		return ReviewVerdict{Verdict: "通过", Confidence: 1, Summary: "安全检查通过：普通构建/测试/查询命令"}, nil
+	}
+	if name == "run_background" && isSafeShellCommand(argStr(args, "command")) {
+		return ReviewVerdict{Verdict: "通过", Confidence: 1, Summary: "安全检查通过：后台运行安全命令"}, nil
 	}
 
 	path, _ := args["path"].(string)

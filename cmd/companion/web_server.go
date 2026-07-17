@@ -2069,8 +2069,31 @@ func buildWebSystemDynamic() string {
 	b.WriteString(agent.LongTermMemoryPrompt())
 	b.WriteString(agent.ProjectRules(root))
 	b.WriteString(agent.ProjectKnowledge(root, 2500))
-	if projEnv := agent.ReadProjectEnv(root); projEnv != "" {
-		b.WriteString("\n\n# 项目环境档案（.pair/project.md — agent 可读写维护）\n" + projEnv)
+
+	// ★ 项目环境：遍历所有工作区根目录，分别读取各自的 .pair/project.md
+	if len(core.Folders) > 0 {
+		b.WriteString("\n\n# 项目环境")
+		for i, f := range core.Folders {
+			projName := filepath.Base(f)
+			if i == 0 {
+				b.WriteString(fmt.Sprintf("\n\n### %s（主项目）\n", projName))
+			} else {
+				b.WriteString(fmt.Sprintf("\n\n### %s\n", projName))
+			}
+			b.WriteString(fmt.Sprintf("> 路径: %s\n", f))
+			projEnv := agent.ReadProjectEnv(f)
+			if projEnv != "" {
+				// 去除 project.md 自带的 # 项目环境档案 顶栏标题，避免与 ### 嵌套层级混乱
+				lines := strings.SplitN(projEnv, "\n", 2)
+				if len(lines) > 1 && strings.HasPrefix(strings.TrimSpace(lines[0]), "# ") {
+					b.WriteString(strings.TrimSpace(lines[1]) + "\n")
+				} else {
+					b.WriteString(projEnv + "\n")
+				}
+			} else {
+				b.WriteString("（无环境配置）\n")
+			}
+		}
 	}
 	// ★ 时间戳放在动态区，变化不影响静态前缀缓存
 	b.WriteString("\n\n# 当前时间\n" + time.Now().Format("2006-01-02 15:04:05 MST (UTC-07:00)"))

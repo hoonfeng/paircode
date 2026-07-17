@@ -92,8 +92,9 @@ func registerShellTools(r *Registry, root string) {
 
 	r.Register(&Tool{
 		Name: "run_background",
-		Description: "在后台启动一条长命令（如 dev server / watch），立即返回进程 id、不阻塞循环。" +
-			"随后用 read_output 读输出、kill_process 停止。短命令请用 run_command。",
+		Description: "在后台启动一条长命令，不阻塞 agent 循环（推荐用于 dev server、watch 模式、调试服务等）。" +
+			"返回进程 id，随后用 read_output 读输出、kill_process 停止。" +
+			"如果命令会长期运行或保持监听状态，优先用此工具。短查询请用 run_command。",
 		Parameters:       objSchema(props{"command": strProp("要后台执行的命令"), "cwd": strProp("可选工作目录（工作区内）")}, "command"),
 		RequiresApproval: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
