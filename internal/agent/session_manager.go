@@ -524,15 +524,26 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 			_, err = RunAutonomous(runCtx, opts.PlanProvider, loop, task)
 			msgs = loop.History
 
-			// ★ 自主模式消息回灌：提取执行结果摘要并注入对话历史
-			// 让同一对话的下一次自主执行能感知上一轮完成了什么
-			// 防止"开始下一个自主时并不知道上一轮都干了什么"
+			// ★ 自主模式消息回灌：只注入最后的完成报告
+			// 不再注入完整历史上下文（之前的 extractAutonomousRunSummary 提取多条 assistant 消息，
+			// 导致上下文膨胀且携带过多无关中间细节）。
+			// 改为只注入 loop.finishResult（最终完成报告），让下一轮感知上一轮的核心成果。
 			if err == nil && !sess.stopped && m.store != nil {
-				summary := extractAutonomousRunSummary(msgs, task)
+				summary := ""
+				if loop.finishResult != nil {
+					summary = *loop.finishResult
+				}
+				if summary == "" {
+					// 兜底：取最后一条非空 assistant 消息作为完成报告
+					summary = extractLastAssistantContent(msgs)
+				}
 				if summary != "" {
+					if len(summary) > 1000 {
+						summary = summary[:1000] + "…（完成报告已截断）"
+					}
 					feedbackMsg := Message{
 						Role:    RoleUser,
-						Content: "【上一轮自主执行已完成】\n" + summary + "\n（以上为上一轮自主执行的完整记录。请在此基础上继续，如有需要可延续相关任务。）",
+						Content: "【上一轮自主执行完成报告】\n" + summary + "\n（以上为上一轮自主执行的最终完成报告。后续任务请在此基础上继续推进。）",
 					}
 					msgs = append(msgs, feedbackMsg)
 					loop.History = msgs
@@ -944,45 +955,18 @@ func (m *SessionManager) UnsubscribeAll(ch <-chan GlobalEvent) {
 	}
 }
 
-// extractAutonomousRunSummary 从执行完毕的自主模式消息历史中提取关键成果摘要。
-// 搜索消息历史中的最后几条 assistant 消息，提取它们的内容摘要作为回灌。
-// 用于自主模式完成后注入对话历史，让下一轮自主执行能感知上一轮成果。
-func extractAutonomousRunSummary(msgs []Message, originalTask string) string {
+// extractLastAssistantContent 从消息历史中提取最后一条非空 assistant 消息的内容。
+// 用于自主模式完成后注入对话历史，只保留最终的完成报告而非完整上下文。
+func extractLastAssistantContent(msgs []Message) string {
 	if len(msgs) == 0 {
 		return ""
 	}
-	// 从后向前找最后的 assistant 消息（含最终报告）
-	var lastAssistants []string
-	for i := len(msgs) - 1; i >= 0 && len(lastAssistants) < 3; i-- {
+	for i := len(msgs) - 1; i >= 0; i-- {
 		if msgs[i].Role == RoleAssistant && strings.TrimSpace(msgs[i].Content) != "" {
-			lastAssistants = append(lastAssistants, strings.TrimSpace(msgs[i].Content))
+			return strings.TrimSpace(msgs[i].Content)
 		}
 	}
-	if len(lastAssistants) == 0 {
-		return ""
-	}
-	// 反转回正序
-	for i, j := 0, len(lastAssistants)-1; i < j; i, j = i+1, j-1 {
-		lastAssistants[i], lastAssistants[j] = lastAssistants[j], lastAssistants[i]
-	}
-	// 合并摘要（取每段前 500 字符限制）
-	var sb strings.Builder
-	sb.WriteString("原始任务: " + originalTask + "\n\n")
-	sb.WriteString("执行成果:\n")
-	for i, s := range lastAssistants {
-		if i > 0 {
-			sb.WriteString("\n---\n")
-		}
-		if len(s) > 500 {
-			s = s[:500] + "…（截断）"
-		}
-		sb.WriteString(s)
-	}
-	result := sb.String()
-	if len(result) > 2000 {
-		result = result[:2000] + "…（完整记录见上方对话历史）"
-	}
-	return result
+	return ""
 }
 
 // closeGlobalChan 安全关闭全局 channel（已关闭时 recover 防 panic）。

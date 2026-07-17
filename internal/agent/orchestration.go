@@ -407,8 +407,8 @@ func (eng *OrchestrationEngine) stepVerifying(ctx context.Context) bool {
 		if errorSummary != "" && errorSummary != "（无错误日志）" {
 			debugTaskMsg := fmt.Sprintf("检测到以下错误日志，请分析并修复:\n\n%s\n\n（分析完成后，如果不需要修复或已修复，继续推进其他任务。）", errorSummary)
 			eng.emit(Event{Type: EventNotice, Content: debugTaskMsg})
-			// 注入 debug 分析消息到历史
-			eng.allHistory = append(eng.allHistory, Message{Role: "user", Content: debugTaskMsg})
+			// debug 日志仅作通知，不注入对话历史（避免干扰 agent 判断）
+			// 去除旧版「注入 debug 分析消息到历史」逻辑
 		}
 	}
 
