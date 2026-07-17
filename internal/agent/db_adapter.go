@@ -167,8 +167,20 @@ func (a *DBAdapter) AppendUserMessage(convID, content string) error {
 
 // PersistNewMessages 增量持久化 hist 中的新消息（idx > 已持久化最大 idx 的写入事务）。
 func (a *DBAdapter) PersistNewMessages(convID string, hist []Message) error {
-	var maxIdx int
-	_ = a.rawDB.QueryRow(`SELECT COALESCE(MAX(idx), -1) FROM messages WHERE conv_id = ?`, convID).Scan(&maxIdx)
+	// 统计 hist 中非 system 消息总数
+	nonSystemTotal := 0
+	for _, m := range hist {
+		if m.Role != RoleSystem {
+			nonSystemTotal++
+		}
+	}
+	if nonSystemTotal == 0 {
+		return nil
+	}
+
+	// 获取数据库中非 system 消息总数
+	var dbCount int
+	_ = a.rawDB.QueryRow(`SELECT COUNT(*) FROM messages WHERE conv_id = ?`, convID).Scan(&dbCount)
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	tx, err := a.rawDB.Begin()
@@ -176,6 +188,16 @@ func (a *DBAdapter) PersistNewMessages(convID string, hist []Message) error {
 		return err
 	}
 	defer tx.Rollback()
+
+	// ★ 修复：检测到压缩/截断（hist 中非 system 消息数少于数据库中已有记录数），
+	//   说明中段消息已被 maybeCompact 移除，此时 nonSystemSeen 永远 ≤ dbCount，
+	//   增量写入会丢失所有新消息。需要全量重写以确保数据库与 hist 一致。
+	if nonSystemTotal < dbCount {
+		if _, err := tx.Exec(`DELETE FROM messages WHERE conv_id = ?`, convID); err != nil {
+			return fmt.Errorf("PersistNewMessages 清理旧消息: %w", err)
+		}
+		dbCount = 0
+	}
 
 	insertStmt, err := tx.Prepare(
 		`INSERT OR IGNORE INTO messages (conv_id, idx, role, content, reasoning, tool_calls, tool_call_id, name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -186,14 +208,14 @@ func (a *DBAdapter) PersistNewMessages(convID string, hist []Message) error {
 	defer insertStmt.Close()
 
 	newCount := 0
-	nextIdx := maxIdx + 1
+	nextIdx := dbCount // 从 dbCount 开始写入（已有 dbCount 条，新消息的起始序号）
 	nonSystemSeen := 0
 	for _, m := range hist {
 		if m.Role == RoleSystem {
 			continue
 		}
-		nonSystemSeen++
-		if nonSystemSeen <= maxIdx+1 {
+		if nonSystemSeen < dbCount {
+			nonSystemSeen++
 			continue
 		}
 		tcJSON := "[]"
@@ -207,8 +229,15 @@ func (a *DBAdapter) PersistNewMessages(convID string, hist []Message) error {
 		newCount++
 		nextIdx++
 	}
+
 	if newCount > 0 {
-		_, _ = tx.Exec(`UPDATE conversations SET msg_count=msg_count+?, updated_at=? WHERE id=?`, newCount, now, convID)
+		if nonSystemTotal < dbCount {
+			// 全量重写：直接设置 msg_count 为实际条数
+			_, _ = tx.Exec(`UPDATE conversations SET msg_count=?, updated_at=? WHERE id=?`, nonSystemTotal, now, convID)
+		} else {
+			// 增量写入：累加
+			_, _ = tx.Exec(`UPDATE conversations SET msg_count=msg_count+?, updated_at=? WHERE id=?`, newCount, now, convID)
+		}
 	}
 	return tx.Commit()
 }
