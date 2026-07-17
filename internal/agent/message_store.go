@@ -585,15 +585,15 @@ func (s *MessageStore) PersistNewMessages(convID string, hist []Message) error {
 		}
 	}
 
-	// 先构建 StoredMessage 列表，合并连续 assistant 后写入 JSONL。
-	// 这样 JSONL 始终存合并终态，无需读取时再合并（与参考项目模式一致）。
+	// 先构建 StoredMessage 列表（不合并连续 assistant），
+	// 保持每条 assistant 消息独立存储，时序结构与事件流一致。
+	// 合并操作仅在 API 读取时由 web_server ConvMerge 按需执行。
 	var stored []StoredMessage
 	for i, mi := range msgs {
 		sm := StoredMessage{Idx: i, Message: mi.msg, Timestamp: now}
 		sm.Segments = SegmentsFromMessage(mi.msg, hist, mi.hIdx)
 		stored = append(stored, sm)
 	}
-	stored = MergeConsecutiveAssistants(stored)
 	for i := range stored {
 		stored[i].Idx = i
 	}
@@ -678,12 +678,31 @@ func rebuildSegmentsIfMissing(msgs []StoredMessage) {
 	for i, sm := range msgs {
 		hist[i] = sm.Message
 	}
-	// ★ 始终重建 segments（不限空），确保 tool_result 被正确回填到 tool_call 段。
-	// PersistNewMessages 分多次写入：首次写入 assistant 时 tool_result 尚未生成，
-	// 后续写入 tool_result 但不会回溯更新已写入的 assistant 消息。
-	// 加载时用完整 hist 做 look-ahead 才能拿到所有 tool_result。
+	// ★ 仅当 segments 为空或缺少 tool_result 时才重建。
+	// 若 JSONL 中已有正确 segments（含 tool_result），直接保留——避免重建时
+	// 将已合并的 reasoning/content 压缩成单个 thinking/content segment，
+	// 丢失各轮次间的时序分隔。
+	needsRebuild := false
 	for i := range msgs {
-		msgs[i].Segments = SegmentsFromMessage(msgs[i].Message, hist, i)
+		if len(msgs[i].Segments) == 0 {
+			needsRebuild = true
+			break
+		}
+		// 检查是否有 tool_call segment 缺少 result
+		for _, seg := range msgs[i].Segments {
+			if seg.Type == "tool_call" && seg.Result == "" {
+				needsRebuild = true
+				break
+			}
+		}
+		if needsRebuild {
+			break
+		}
+	}
+	if needsRebuild {
+		for i := range msgs {
+			msgs[i].Segments = SegmentsFromMessage(msgs[i].Message, hist, i)
+		}
 	}
 }
 

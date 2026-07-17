@@ -151,6 +151,9 @@ func (c *wsConn) writeCloseFrame() error {
 // 处理掩码解码、分片拼接（continuation frame）。
 // 收到 ping 自动回复 pong，收到 close 返回 io.EOF。
 func (c *wsConn) readFrame() (opcode byte, payload []byte, err error) {
+	if c == nil {
+		return 0, nil, io.ErrUnexpectedEOF
+	}
 	for {
 		op, data, e := c.readSingleFrame()
 		if e != nil {
@@ -173,6 +176,9 @@ func (c *wsConn) readFrame() (opcode byte, payload []byte, err error) {
 
 // readSingleFrame 读取单个帧（不含 continuation 处理）。
 func (c *wsConn) readSingleFrame() (opcode byte, payload []byte, err error) {
+	if c == nil || c.br == nil {
+		return 0, nil, io.ErrUnexpectedEOF
+	}
 	// 字节 0: FIN(1) + RSV(3) + Opcode(4)
 	b0, err := c.br.ReadByte()
 	if err != nil {

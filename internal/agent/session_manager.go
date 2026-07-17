@@ -288,7 +288,7 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 	sess := &Session{
 		ConvID:        convID,
 		WorkspaceRoot: opts.WorkspaceRoot,
-		Events:        make(chan Event, 500),
+		Events:        make(chan Event, 5000),
 		Cancel:        cancel,
 		History:       CopyHistory(opts.History), // 深复制避免外部修改
 		Running:       true,
