@@ -57,7 +57,7 @@ function cleanText(raw) {
 .plan-panel.collapsed .plan-body { display: none; }
 .plan-panel.all-done { opacity: 0.7; }
 .plan-panel.all-done .plan-bar-fill { background: #6a9955; }
-.plan-panel.all-done .plan-header .plan-progress::after { content: ' ✅'; font-size: 10px; }
+.plan-panel.all-done .plan-header .plan-progress::after { content: ' 全部完成'; font-size: 10px; color: #6a9955; }
 .plan-header {
   display: flex; align-items: center; gap: 6px;
   padding: 6px 10px; cursor: pointer; user-select: none;
@@ -81,4 +81,5 @@ function cleanText(raw) {
 .icon-done { color: var(--accent); }
 .icon-in-progress { color: #d4a74e; }
 .icon-pending { color: var(--text-muted); }
+.plan-panel.all-done .plan-header .plan-progress::after { content: ' 全部完成'; font-size: 10px; color: #6a9955; }
 </style>
