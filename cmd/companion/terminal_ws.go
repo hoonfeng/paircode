@@ -273,7 +273,15 @@ func (ps *ptySession) wsReader() {
 	defer ps.close()
 
 	for {
-		opcode, payload, err := ps.conn.readFrame()
+		// 通过锁获取 conn，防止 ptyReader 协程并发 close() 置 nil 导致 panic
+		ps.mu.Lock()
+		conn := ps.conn
+		ps.mu.Unlock()
+		if conn == nil {
+			return
+		}
+
+		opcode, payload, err := conn.readFrame()
 		if err != nil {
 			return
 		}
