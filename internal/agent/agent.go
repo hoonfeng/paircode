@@ -122,8 +122,8 @@ func (a *AgentBase) Init() error {
 		}
 	}
 
-	// 2. 初始化存储
-	store := NewDBStore(root)
+	// 2. 初始化存储（JSONL）
+	store := NewMessageStore(root)
 	a.Store = store
 
 	// 3. 初始化工具注册表

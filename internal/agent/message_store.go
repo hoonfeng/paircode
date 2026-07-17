@@ -509,201 +509,77 @@ func (s *MessageStore) PersistNewMessages(convID string, hist []Message) error {
 	mu.Lock()
 	defer mu.Unlock()
 
-	// 从内存计数器读取已持久化的非 System 消息数
-	s.pcMu.RLock()
-	count := s.persistedCount[convID]
-	s.pcMu.RUnlock()
+	// 从 hist 中提取所有非 System 消息，全量写回 JSONL。
+	// 历史不压缩、不做 diff 计数，每次全量覆盖保证一致性。
+	now := time.Now().UTC().Format(time.RFC3339)
 
-	// 首次访问：从文件同步计数器（只统计非 System 消息，与 histNonSystemCount 口径一致）
-	if count == 0 {
-		stored, err := s.readJSONL(convID)
-		if err != nil {
-			return fmt.Errorf("PersistNewMessages: 读取文件失败: %w", err)
-		}
-		nonSysCount := 0
-		for _, sm := range stored {
-			if sm.Message.Role != RoleSystem {
-				nonSysCount++
-			}
-		}
-		if len(stored) > 0 {
-			s.pcMu.Lock()
-			s.persistedCount[convID] = nonSysCount
-			s.pcMu.Unlock()
-			count = nonSysCount
-		}
-	}
-
-	// 统计 hist 中非 System 消息数
-	histNonSystemCount := 0
+	// 收集要写入的消息（跳过 System）
+	var msgs []Message
 	for _, m := range hist {
 		if m.Role != RoleSystem {
-			histNonSystemCount++
+			msgs = append(msgs, m)
 		}
 	}
 
-	// ★ 检测压缩：hist 中非 System 消息数小于 persistedCount → maybeCompact 移除了消息
-	// 全量重写 JSONL 文件，移除已被压缩走的消息，重置 persistedCount
-	if count > 0 && histNonSystemCount < count {
-		stored, err := s.readJSONL(convID)
-		if err != nil {
-			return fmt.Errorf("PersistNewMessages: 压缩后重写时读取失败: %w", err)
-		}
-
-		// 从 hist 中提取非 System 消息的内容作为匹配依据
-		histContents := make([]string, 0, histNonSystemCount)
-		for _, m := range hist {
-			if m.Role != RoleSystem {
-				histContents = append(histContents, m.Content)
-			}
-		}
-
-		// 只保留 hist 中仍然存在的消息（按内容匹配）
-		var kept []StoredMessage
-		for _, hc := range histContents {
-			for _, sm := range stored {
-				if sm.Message.Content == hc {
-					kept = append(kept, sm)
-					break
-				}
-			}
-		}
-
-		// 全量重写 JSONL
-		out, err := os.Create(s.convFilePath(convID))
-		if err != nil {
-			return fmt.Errorf("PersistNewMessages: 创建新文件失败: %w", err)
-		}
-		enc := json.NewEncoder(out)
-		for i, sm := range kept {
-			sm.Idx = i
-			if err := enc.Encode(sm); err != nil {
-				out.Close()
-				return fmt.Errorf("PersistNewMessages: JSON 编码失败: %w", err)
-			}
-		}
-		out.Close()
-
-		// 重置计数器
-		s.pcMu.Lock()
-		s.persistedCount[convID] = len(kept)
-		count = len(kept)
-		s.pcMu.Unlock()
-
-		// 更新 index.json
-		now := time.Now().UTC().Format(time.RFC3339)
-		s.indexMu.Lock()
-		metas, err := s.loadIndex()
-		if err == nil {
-			for i := range metas {
-				if metas[i].ID == convID {
-					metas[i].MsgCount = len(kept)
-					metas[i].UpdatedAt = now
-					break
-				}
-			}
-			_ = s.saveIndex(metas)
-		}
-		s.indexMu.Unlock()
-
-		// 如果压缩后无新消息，直接返回
-		if histNonSystemCount <= count {
-			return nil
-		}
+	// 写入临时文件，成功后 rename 实现原子替换
+	tmpPath := s.convFilePath(convID) + ".tmp"
+	out, err := os.Create(tmpPath)
+	if err != nil {
+		return fmt.Errorf("PersistNewMessages: 创建临时文件失败: %w", err)
 	}
-
-	// 无新消息
-	if histNonSystemCount <= count {
-		return nil
-	}
-
-	now := time.Now().UTC().Format(time.RFC3339)
-	newCount := count
-
-	// 找到要写入的起始位置：跳过前 count 条非 System 消息
-	// ★ 修复：条件为 nonSystemSeen > count（非 >=）。当 nonSystemSeen == count 时，
-	// 表示找到了第 count 条非 System 消息（已持久化），需要继续前进到 count+1 条。
-	// 原 >= 条件导致重写最后一条已持久化的 assistant 消息，产生重复。
-	startIdx := 0
-	nonSystemSeen := 0
-	for startIdx < len(hist) {
-		if hist[startIdx].Role != RoleSystem {
-			if nonSystemSeen > count {
-				break
-			}
-			nonSystemSeen++
-		}
-		startIdx++
-	}
-
-	// 批量追加新消息
-	for i := startIdx; i < len(hist); i++ {
-		m := hist[i]
-		if m.Role == RoleSystem {
-			continue
-		}
-		if m.Role == RoleUser {
-			continue
-		}
+	enc := json.NewEncoder(out)
+	for i, m := range msgs {
 		sm := StoredMessage{
-			Idx:       newCount,
+			Idx:       i,
 			Message:   m,
-			Segments:  SegmentsFromMessage(m, hist, i),
 			Timestamp: now,
 		}
-		data, err := json.Marshal(sm)
-		if err != nil {
+		// 利用完整 hist 重建 segments（look-ahead 需要 tool result）
+		sm.Segments = SegmentsFromMessage(m, hist, i)
+		if err := enc.Encode(sm); err != nil {
+			out.Close()
+			os.Remove(tmpPath)
 			return fmt.Errorf("PersistNewMessages: JSON 编码失败: %w", err)
 		}
-		data = append(data, '\n')
-
-		f, err := os.OpenFile(s.convFilePath(convID), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-		if err != nil {
-			return fmt.Errorf("PersistNewMessages: 打开文件失败: %w", err)
-		}
-		if _, err := f.Write(data); err != nil {
-			f.Close()
-			return fmt.Errorf("PersistNewMessages: 写入失败: %w", err)
-		}
-		f.Close()
-		newCount++
 	}
+	out.Close()
 
-	// 更新内存计数器
-	s.pcMu.Lock()
-	s.persistedCount[convID] = newCount
-	s.pcMu.Unlock()
+	// 原子替换（Windows 需要先删目标）
+	destPath := s.convFilePath(convID)
+	os.Remove(destPath)
+	if err := os.Rename(tmpPath, destPath); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("PersistNewMessages: 替换文件失败: %w", err)
+	}
 
 	// 更新 index.json
 	s.indexMu.Lock()
-	defer s.indexMu.Unlock()
-
 	metas, err := s.loadIndex()
-	if err != nil {
-		return fmt.Errorf("PersistNewMessages: 读取 index 失败: %w", err)
-	}
-
-	found := false
-	for i := range metas {
-		if metas[i].ID == convID {
-			metas[i].MsgCount = newCount
-			metas[i].UpdatedAt = now
-			found = true
-			break
+	if err == nil {
+		for i := range metas {
+			if metas[i].ID == convID {
+				metas[i].MsgCount = len(msgs)
+				metas[i].UpdatedAt = now
+				break
+			}
 		}
+		_ = s.saveIndex(metas)
 	}
-	if !found {
-		metas = append(metas, ConversationMeta{
-			ID:        convID,
-			Title:     "新对话 " + time.Now().UTC().Format("15:04"),
-			CreatedAt: now,
-			UpdatedAt: now,
-			MsgCount:  newCount,
-		})
-	}
+	s.indexMu.Unlock()
 
-	return s.saveIndex(metas)
+	// 更新内存计数器（仅用于 GetPersistedCount 兼容）
+	s.pcMu.Lock()
+	s.persistedCount[convID] = len(msgs)
+	s.pcMu.Unlock()
+
+	return nil
 }
+
+
+
+
+
+// rebuildSegmentsIfMissing
 
 
 
