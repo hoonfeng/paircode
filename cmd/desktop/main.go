@@ -46,10 +46,18 @@ func main() {
 	if err != nil {
 		log.Fatalf("[Desktop] 请先构建前端: cd cmd/desktop/web-ui && npm run build")
 	}
-	if err := wv.LoadHTML(string(htmlData)); err != nil {
+	// 注入 onerror 捕获 JS 错误
+	html := strings.Replace(string(htmlData), "<head>",
+		`<head><script>window.__errors=[];window.onerror=function(m,s,l,c,e){window.__errors.push(String(m||e))}</script>`, 1)
+	if err := wv.LoadHTML(html); err != nil {
 		log.Fatalf("[Desktop] LoadHTML 失败: %v", err)
 	}
 	log.Println("[Desktop] 前端页面已加载")
+
+	// 检查 JS 错误
+	if v, err := wv.EvalJS(`window.__errors.length?window.__errors[0]:''`); err == nil {
+		if s := v.ToString(); s != "" { log.Printf("[Desktop] JS错误: %s", s) }
+	}
 
 	wv.RebuildRenderTree()
 
