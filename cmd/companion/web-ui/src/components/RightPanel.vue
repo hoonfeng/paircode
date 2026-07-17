@@ -248,7 +248,6 @@ const tasksExpanded = ref(true)
 // 阶段指示器从全局 state.phaseByConv 读取（仅当前对话）
 const currentPhase = computed(() => state.phaseByConv[state.currentConvId] || '')
 let phaseTimer = null
-let autoSaveTimer = null
 
 // ── 滚动控制 ──
 const scrollTopRef = ref(0)
@@ -1182,12 +1181,10 @@ onMounted(() => {
       state.messages = []
     }
   })
-  autoSaveTimer = setInterval(() => { if (state.currentConvId && state.messages.length > 0) { window.dispatchEvent(new Event('save-conversations')) } }, 15000)
   window.addEventListener('beforeunload', handleBeforeUnload)
 })
 
 onUnmounted(() => {
-  if (autoSaveTimer) { clearInterval(autoSaveTimer); autoSaveTimer = null }
   if (phaseTimer) { clearTimeout(phaseTimer); phaseTimer = null }
   if (nudgeTimer) { clearTimeout(nudgeTimer); nudgeTimer = null }
   stopContentResizeObserver()
