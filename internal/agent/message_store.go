@@ -585,22 +585,26 @@ func (s *MessageStore) PersistNewMessages(convID string, hist []Message) error {
 		}
 	}
 
-	// 写入临时文件，成功后 rename 实现原子替换
+	// 先构建 StoredMessage 列表，合并连续 assistant 后写入 JSONL。
+	// 这样 JSONL 始终存合并终态，无需读取时再合并（与参考项目模式一致）。
+	var stored []StoredMessage
+	for i, mi := range msgs {
+		sm := StoredMessage{Idx: i, Message: mi.msg, Timestamp: now}
+		sm.Segments = SegmentsFromMessage(mi.msg, hist, mi.hIdx)
+		stored = append(stored, sm)
+	}
+	stored = MergeConsecutiveAssistants(stored)
+	for i := range stored {
+		stored[i].Idx = i
+	}
+
 	tmpPath := s.convFilePath(convID) + ".tmp"
 	out, err := os.Create(tmpPath)
 	if err != nil {
 		return fmt.Errorf("PersistNewMessages: 创建临时文件失败: %w", err)
 	}
 	enc := json.NewEncoder(out)
-	for i, mi := range msgs {
-		sm := StoredMessage{
-			Idx:       i,
-			Message:   mi.msg,
-			Timestamp: now,
-		}
-		// 使用 mi.hIdx（原始 hist 中的索引）确保 SegmentsFromMessage 的 look-ahead
-		// 从正确位置开始搜索后续 tool_result。
-		sm.Segments = SegmentsFromMessage(mi.msg, hist, mi.hIdx)
+	for _, sm := range stored {
 		if err := enc.Encode(sm); err != nil {
 			out.Close()
 			os.Remove(tmpPath)
@@ -636,7 +640,7 @@ func (s *MessageStore) PersistNewMessages(convID string, hist []Message) error {
 	if err == nil {
 		for i := range metas {
 			if metas[i].ID == convID {
-				metas[i].MsgCount = len(msgs)
+				metas[i].MsgCount = len(stored)
 				metas[i].UpdatedAt = now
 				break
 			}
@@ -647,7 +651,7 @@ func (s *MessageStore) PersistNewMessages(convID string, hist []Message) error {
 
 	// 更新内存计数器（仅用于 GetPersistedCount 兼容）
 	s.pcMu.Lock()
-	s.persistedCount[convID] = len(msgs)
+	s.persistedCount[convID] = len(stored)
 	s.pcMu.Unlock()
 
 	return nil
