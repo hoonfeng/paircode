@@ -225,7 +225,7 @@ const convListWidth = ref(250)
 const topSentinel = ref(null)
 const autoReview = ref(true)
 const autoIterate = ref(false)
-const autoCollapse = ref(true)
+const autoCollapse = ref(localStorage.getItem('autoCollapse') !== 'false')
 const autonomous = ref(false)
 const autoCommit = ref(true)
 const pendingAttachment = ref(null)
@@ -488,6 +488,21 @@ function collapsePreviousOutputs() {
       if (seg.type === 'tool_call') seg._expanded = false
     }
     msg._folded = true
+  }
+}
+
+// applyAutoCollapse 页面刷新后对已加载的历史消息应用折叠状态。
+// 在 switchConv 加载完消息后调用，确保折叠开关开启时历史消息正确折叠。
+function applyAutoCollapse() {
+  if (!autoCollapse.value) return
+  for (const msg of state.messages) {
+    if (msg.role !== 'assistant' || msg._loading) continue
+    if (!msg.segments || msg.segments.length === 0) continue
+    for (const seg of msg.segments) {
+      if (seg.type === 'thinking' && seg._collapsed === undefined) seg._collapsed = true
+      if (seg.type === 'tool_call' && seg._expanded === undefined) seg._expanded = false
+    }
+    if (msg._folded === undefined) msg._folded = true
   }
 }
 
@@ -808,6 +823,8 @@ const switchConv = async (id) => {
       state.messages = state.messagesByConv[id]
       state.msgTotalByConv[id] = data.total || loaded.length
       state.msgLoadedByConv[id] = loaded.length
+      // 页面刷新后：如果折叠开关打开，对历史消息应用折叠状态
+      nextTick(() => applyAutoCollapse())
       // ★ processStatus 可能已为此 conv 创建了 runtime（agent 仍在运行），
       //   需将 loading 占位（优先复用已有对象，保留 await 期间已写入的内容）放回，
       //   并更新 runtime 的 msgIdx。
@@ -855,6 +872,8 @@ const switchConv = async (id) => {
     currentPlan.value = []
   }
   planExpanded.value = currentPlan.value.length > 0
+  // 页面刷新后：如果折叠开关打开，对已加载的历史消息应用折叠状态
+  applyAutoCollapse()
   forceScrollToBottom()
 }
 
@@ -866,7 +885,7 @@ const toggleAuto = async (field) => {
   if (field === 'autoReview') autoReview.value = newVal
   else if (field === 'autonomous') autonomous.value = newVal
   else if (field === 'autoCommit') autoCommit.value = newVal
-  else if (field === 'autoCollapse') autoCollapse.value = newVal
+  else if (field === 'autoCollapse') { autoCollapse.value = newVal; localStorage.setItem('autoCollapse', newVal) }
   try { await api.apiPut('/settings?convId=' + encodeURIComponent(state.currentConvId), state.settings) } catch { state.settings[field] = oldVal; if (field === 'autoReview') autoReview.value = oldVal; else if (field === 'autonomous') autonomous.value = oldVal; else if (field === 'autoCommit') autoCommit.value = oldVal; else if (field === 'autoCollapse') autoCollapse.value = oldVal }
 }
 
