@@ -152,6 +152,22 @@ func (tm *TaskManager) Delete(id string) bool {
 	return true
 }
 
+// ListByConvID 返回指定对话关联的所有任务，按创建时间降序。
+func (tm *TaskManager) ListByConvID(convID string) []*Task {
+	tm.mu.RLock()
+	defer tm.mu.RUnlock()
+	all := tm.readAllLocked()
+	filtered := make([]*Task, 0)
+	for _, t := range all {
+		if convID != "" && t.ConvID != convID {
+			continue
+		}
+		filtered = append(filtered, t)
+	}
+	sort.Slice(filtered, func(i, j int) bool { return filtered[i].CreatedAt > filtered[j].CreatedAt })
+	return filtered
+}
+
 func (tm *TaskManager) GetSummary() TaskSummary {
 	tm.mu.RLock()
 	defer tm.mu.RUnlock()

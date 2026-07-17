@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -298,7 +300,28 @@ func HandleConversationByID(w http.ResponseWriter, r *http.Request) {
 				jsonErr(w, "对话不存在")
 				return
 			}
-			jsonResp(w, meta)
+			// 注入 agent 运行状态
+			resp := map[string]any{
+				"id":        meta.ID,
+				"title":     meta.Title,
+				"createdAt": meta.CreatedAt,
+				"updatedAt": meta.UpdatedAt,
+				"msgCount":  meta.MsgCount,
+				"summary":   meta.Summary,
+				"summaryAt": meta.SummaryAt,
+			}
+			if meta.WorkspaceRoot != "" {
+				resp["workspaceRoot"] = meta.WorkspaceRoot
+			}
+			if meta.CtxStats != nil {
+				resp["ctxStats"] = meta.CtxStats
+			}
+			if status := AgentMgr.GetStatus(id); status != nil {
+				resp["running"] = status.Running
+				resp["stopped"] = status.Stopped
+				resp["startedAt"] = status.StartedAt
+			}
+			jsonResp(w, resp)
 		}
 	case "PUT":
 		var req struct{ Title string `json:"title"` }
@@ -347,30 +370,47 @@ func HandleConversationByID(w http.ResponseWriter, r *http.Request) {
 // ─── Tasks ────────────────────────────────────────────────
 
 func HandleTasks(w http.ResponseWriter, r *http.Request) {
-	_ = r.URL.Query().Get("convId")
-	store := AgentMgr.Store()
-	if store == nil {
-		jsonResp(w, []agent.ConversationMeta{})
-		return
+	convID := r.URL.Query().Get("convId")
+	root := core.Root()
+	tm := agent.UseTaskManager(root)
+	tasks := tm.ListByConvID(convID)
+	summary := tm.GetSummary()
+	if tasks == nil {
+		tasks = []*agent.Task{}
 	}
-	metas, _ := store.ListConversations("")
-	if metas == nil {
-		metas = []agent.ConversationMeta{}
-	}
-	jsonResp(w, metas)
+	jsonResp(w, map[string]any{
+		"tasks":   tasks,
+		"summary": summary,
+	})
 }
 
 func HandleTaskPlan(w http.ResponseWriter, r *http.Request) {
-	store := AgentMgr.Store()
-	if store == nil {
-		jsonResp(w, []agent.ConversationMeta{})
+	root := core.Root()
+	if root == "" {
+		jsonResp(w, []map[string]any{})
 		return
 	}
-	metas, _ := store.ListConversations("")
-	if metas == nil {
-		metas = []agent.ConversationMeta{}
+	tasksDir := filepath.Join(root, ".pair", "tasks")
+	entries, err := os.ReadDir(tasksDir)
+	if err != nil {
+		jsonResp(w, []map[string]any{})
+		return
 	}
-	jsonResp(w, metas)
+	plans := make([]map[string]any, 0)
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".md") {
+			info, _ := e.Info()
+			plans = append(plans, map[string]any{
+				"name":      strings.TrimSuffix(e.Name(), ".md"),
+				"size":      info.Size(),
+				"updatedAt": info.ModTime().Format(time.RFC3339),
+			})
+		}
+	}
+	if plans == nil {
+		plans = []map[string]any{}
+	}
+	jsonResp(w, plans)
 }
 
 // ─── 模型 / 指令 / 思想 ──────────────────────────────────

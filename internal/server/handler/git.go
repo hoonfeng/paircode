@@ -236,7 +236,10 @@ func HandleGitLog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	type entry struct {
-		Hash, Author, Date, Message string `json:"hash,author,date,message"`
+		Hash    string `json:"hash"`
+		Author  string `json:"author"`
+		Date    string `json:"date"`
+		Message string `json:"message"`
 	}
 	var list []entry
 	for _, line := range strings.Split(out, "\n") {

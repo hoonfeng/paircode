@@ -705,6 +705,30 @@ func (m *SessionManager) Unsubscribe(convID string, ch <-chan Event) {
 	}
 }
 
+// SessionStatus 会话状态快照。
+type SessionStatus struct {
+	Running       bool      `json:"running"`
+	Stopped       bool      `json:"stopped"`
+	StartedAt     time.Time `json:"startedAt"`
+	WorkspaceRoot string    `json:"workspaceRoot,omitempty"`
+}
+
+// GetStatus 查询指定会话的完整运行状态，会话不存在时返回 nil。
+func (m *SessionManager) GetStatus(convID string) *SessionStatus {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	sess, ok := m.sessions[convID]
+	if !ok {
+		return nil
+	}
+	return &SessionStatus{
+		Running:       sess.Running,
+		Stopped:       sess.stopped,
+		StartedAt:     sess.StartedAt,
+		WorkspaceRoot: sess.WorkspaceRoot,
+	}
+}
+
 // IsRunning 查询指定会话是否在运行。
 func (m *SessionManager) IsRunning(convID string) bool {
 	m.mu.RLock()
