@@ -51,6 +51,12 @@ func main() {
 	}
 	log.Println("[Desktop] 前端页面已加载")
 
+	if v, err := wv.EvalJS(`"JSC_OK"`); err == nil {
+		log.Printf("[Desktop] JS 引擎正常: %v", v)
+	} else {
+		log.Printf("[Desktop] JS 引擎异常: %v", err)
+	}
+
 	host, err := app.NewHost(wv, 1280, 800, "PairCode IDE")
 	if err != nil {
 		log.Fatalf("[Desktop] 创建窗口失败: %v", err)
@@ -67,7 +73,6 @@ func setupLoaders(wv *webkit.WebView, distDir string) {
 		if fr := mf.Frame(); fr != nil {
 			fr.ScriptLoader = func(src string) (string, error) {
 				p := resolvePath(src, absDist)
-				log.Printf("[Desktop] 加载脚本: %s → %s", src, p)
 				data, err := os.ReadFile(p)
 				if err != nil {
 					return "", fmt.Errorf("load script %q: %w", src, err)
@@ -96,19 +101,15 @@ func registerDesktopBridge(wv *webkit.WebView, reg *bridge.Registry) {
 	interp := wv.JSInterpreter()
 	interp.SetupGlobal(&jsc.BufferLogger{})
 	log.Println("[Desktop] 注册 desktopBridge...")
-
 	bridgeObj := jsc.NewObject(interp.ObjectPrototype())
 	bridgeCall := jsc.NewNativeFunction("bridgeCall", func(in *jsc.Interpreter, this jsc.JSValue, args []jsc.JSValue) jsc.JSValue {
-		if len(args) < 2 {
-			return errResult("至少需要 method 和 path")
-		}
-		method := safeStr(args[0])
-		path := safeStr(args[1])
-		b, p := "", ""
+		if len(args) < 2 { return errResult("至少需要 method 和 path") }
+		m, p := safeStr(args[0]), safeStr(args[1])
+		b, q := "", ""
 		if len(args) > 2 { b = safeStr(args[2]) }
-		if len(args) > 3 { p = safeStr(args[3]) }
+		if len(args) > 3 { q = safeStr(args[3]) }
 		req := fmt.Sprintf(`{"method":"%s","path":"%s","body":%s,"params":%s}`,
-			escStr(method), escStr(path), maybeJSON(b), maybeJSON(p))
+			escStr(m), escStr(p), maybeJSON(b), maybeJSON(q))
 		return jsc.StringValue(reg.HandleBridgeCall(req))
 	}, 4)
 	bridgeObj.Set("call", jsc.FunctionValue(bridgeCall))
@@ -125,10 +126,6 @@ func errResult(msg string) jsc.JSValue {
 	r, _ := json.Marshal(bridge.BridgeCallResponse{Status: 400, Body: fmt.Sprintf(`{"error":"%s"}`, msg)})
 	return jsc.StringValue(string(r))
 }
-
-func safeStr(v jsc.JSValue) string {
-	if v.IsString() { return v.AsString() }
-	return fmt.Sprint(v)
-}
-func escStr(s string) string    { return strings.ReplaceAll(s, `"`, `\"`) }
-func maybeJSON(s string) string { if s == "" { return `""` }; return s }
+func safeStr(v jsc.JSValue) string { if v.IsString() { return v.AsString() }; return fmt.Sprint(v) }
+func escStr(s string) string        { return strings.ReplaceAll(s, `"`, `\"`) }
+func maybeJSON(s string) string     { if s == "" { return `""` }; return s }
