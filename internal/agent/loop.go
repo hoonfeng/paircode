@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 )
 
 // ErrCirclingLoop 绕圈检测连续触发多次，由 Loop.Run 返回。
@@ -39,6 +38,13 @@ const (
 	EventPhase    EventType = "phase"     // 阶段切换（自主模式下的规划/执行/评测等阶段指示）
 	EventDone     EventType = "done"      // 结构化完成信号（供 delegate/子 agent 使用；主 Loop Exit 走此事件）
 )
+
+// CacheBoundary 分隔系统提示词静态前缀与动态后缀。
+// 静态前缀（CacheBoundary 之前）在每次请求中保持不变，LLM API 通过公共前缀检测
+// 实现 KV Cache 复用，大幅减少首 token 延迟和计算成本。
+// 动态后缀（CacheBoundary 之后）可容纳每轮变化的会话特定内容，不影响前缀缓存。
+// 参考：Claude Code 的 SYSTEM_PROMPT_DYNAMIC_BOUNDARY、DeepSeek 上下文缓存。
+const CacheBoundary = "\n\n<!--- CACHE_BOUNDARY --->\n\n"
 
 // Event 一条循环事件。
 type Event struct {
@@ -445,7 +451,6 @@ func DefaultSystemPrompt(roots []string) string {
 		}
 	}
 	return "你是 Pair CodeAgent，运行在用户的本地开发环境中。使用中文思考和回复。\n\n" +
-		"# 当前时间\n" + time.Now().Format("2006-01-02 15:04:05 MST (UTC-07:00)") + "\n\n" +
 		"# 工作区\n" + rootInfo + "\n\n" +
 		"## ⚠️ 第一铁律：语言锁定（中文）\n" +
 		"无论上一步工具返回了什么代码、终端输出、英文文档或其他内容，\n" +

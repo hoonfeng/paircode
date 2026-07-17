@@ -2018,27 +2018,68 @@ func (s *webServer) loadConversationHistory(convID string) []agent.Message {
 
 // ── 统一 API 层（平台无关，差异通过回调参数化） ─────────────────
 
-// buildWebSystemPrompt 构建完整系统提示词（桌面和 web 端共享）。
-func buildWebSystemPrompt() string {
-	sys := agent.DefaultSystemPrompt(core.Folders)
+// systemStaticPrefixCache 缓存 system prompt 静态前缀（CACHE_BOUNDARY 之前部分）。
+// 键由 workspace roots hash + SystemInstructions + Philosophy 构成；
+// 只要这些不变，静态前缀就无需重新拼接。
+var systemStaticPrefixCache struct {
+	mu     sync.Mutex
+	key    string
+	prefix string
+}
+
+func systemStaticPrefixKey() string {
+	roots := strings.Join(core.Folders, "|")
+	si := core.Settings.SystemInstructions
+	return fmt.Sprintf("%s|%s|%s", roots, si, roleprompts.PhilosophyPrompt())
+}
+
+// buildSystemStaticPrefix 构建 system prompt 静态前缀（CACHE_BOUNDARY 之前）。
+// 结果会被缓存，避免每次请求重复拼接字符串。
+func buildSystemStaticPrefix() string {
+	k := systemStaticPrefixKey()
+	systemStaticPrefixCache.mu.Lock()
+	defer systemStaticPrefixCache.mu.Unlock()
+	if systemStaticPrefixCache.key == k && systemStaticPrefixCache.prefix != "" {
+		return systemStaticPrefixCache.prefix
+	}
+	var b strings.Builder
+	b.WriteString(agent.DefaultSystemPrompt(core.Folders))
 	if si := strings.TrimSpace(core.Settings.SystemInstructions); si != "" {
-		sys += "\n\n# 系统级指令（务必遵守）\n" + si
+		b.WriteString("\n\n# 系统级指令（务必遵守）\n" + si)
 	}
-	sys += roleprompts.PhilosophyPrompt()
-	sys += skills.Prompt()
-	sys += agent.SelfManagementPrompt()
-	if core.Settings.LuaTools {
-		sys += agent.LuaToolsPrompt()
-	}
-	sys += agent.LongTermMemoryPrompt()
+	b.WriteString(roleprompts.PhilosophyPrompt())
+	b.WriteString(agent.SelfManagementPrompt())
+	// CACHE_BOUNDARY 分隔静态前缀与动态后缀
+	b.WriteString(agent.CacheBoundary)
+	systemStaticPrefixCache.key = k
+	systemStaticPrefixCache.prefix = b.String()
+	return systemStaticPrefixCache.prefix
+}
+
+// buildWebSystemDynamic 构建 system prompt 动态后缀（CACHE_BOUNDARY 之后）。
+// 包括 skills、项目知识库、时间戳等会话特定内容。
+func buildWebSystemDynamic() string {
+	var b strings.Builder
 	root := core.Root()
-	sys += agent.ProjectRules(root)
-	sys += agent.ProjectKnowledge(root, 2500)
-	// 读取 .pair/project.md 项目环境档案（agent 可自行维护，避免反复探测环境）
-	if projEnv := agent.ReadProjectEnv(root); projEnv != "" {
-		sys += "\n\n# 项目环境档案（.pair/project.md — agent 可读写维护）\n" + projEnv
+	b.WriteString(skills.Prompt())
+	if core.Settings.LuaTools {
+		b.WriteString(agent.LuaToolsPrompt())
 	}
-	return sys
+	b.WriteString(agent.LongTermMemoryPrompt())
+	b.WriteString(agent.ProjectRules(root))
+	b.WriteString(agent.ProjectKnowledge(root, 2500))
+	if projEnv := agent.ReadProjectEnv(root); projEnv != "" {
+		b.WriteString("\n\n# 项目环境档案（.pair/project.md — agent 可读写维护）\n" + projEnv)
+	}
+	// ★ 时间戳放在动态区，变化不影响静态前缀缓存
+	b.WriteString("\n\n# 当前时间\n" + time.Now().Format("2006-01-02 15:04:05 MST (UTC-07:00)"))
+	return b.String()
+}
+
+// buildWebSystemPrompt 构建完整系统提示词（桌面和 web 端共享）。
+// 使用 CACHE_BOUNDARY 分隔静态前缀与动态后缀，最大化 LLM KV Cache 命中率。
+func buildWebSystemPrompt() string {
+	return buildSystemStaticPrefix() + buildWebSystemDynamic()
 }
 
 // buildWebProvider 构建 LLM Provider（桌面和 web 端共享）。
