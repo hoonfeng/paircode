@@ -573,11 +573,15 @@ func (s *MessageStore) PersistNewMessages(convID string, hist []Message) error {
 	// 历史不压缩、不做 diff 计数，每次全量覆盖保证一致性。
 	now := time.Now().UTC().Format(time.RFC3339)
 
-	// 收集要写入的消息（跳过 System）
-	var msgs []Message
-	for _, m := range hist {
+	// 收集要写入的消息（跳过 System），同时记录每个消息在原始 hist 中的索引。
+	type msgWithIdx struct {
+		msg   Message
+		hIdx  int // 在原始 hist 中的位置
+	}
+	var msgs []msgWithIdx
+	for hi, m := range hist {
 		if m.Role != RoleSystem {
-			msgs = append(msgs, m)
+			msgs = append(msgs, msgWithIdx{msg: m, hIdx: hi})
 		}
 	}
 
@@ -588,14 +592,15 @@ func (s *MessageStore) PersistNewMessages(convID string, hist []Message) error {
 		return fmt.Errorf("PersistNewMessages: 创建临时文件失败: %w", err)
 	}
 	enc := json.NewEncoder(out)
-	for i, m := range msgs {
+	for i, mi := range msgs {
 		sm := StoredMessage{
 			Idx:       i,
-			Message:   m,
+			Message:   mi.msg,
 			Timestamp: now,
 		}
-		// 利用完整 hist 重建 segments（look-ahead 需要 tool result）
-		sm.Segments = SegmentsFromMessage(m, hist, i)
+		// 使用 mi.hIdx（原始 hist 中的索引）确保 SegmentsFromMessage 的 look-ahead
+		// 从正确位置开始搜索后续 tool_result。
+		sm.Segments = SegmentsFromMessage(mi.msg, hist, mi.hIdx)
 		if err := enc.Encode(sm); err != nil {
 			out.Close()
 			os.Remove(tmpPath)
