@@ -51,6 +51,13 @@ func main() {
 	}
 	log.Println("[Desktop] 前端页面已加载")
 
+	// 诊断：检查 app 元素
+	if v, err := wv.EvalJS(`(document.getElementById('app')||{}).childElementCount||-1`); err == nil {
+		log.Printf("[Desktop] #app 子元素数: %.0f (isNum=%v)", v.ToNumber(), v.IsNumber())
+	} else {
+		log.Printf("[Desktop] EvalJS 错误: %v", err)
+	}
+
 	// 重建渲染树（Vue 已修改 DOM）
 	wv.RebuildRenderTree()
 
