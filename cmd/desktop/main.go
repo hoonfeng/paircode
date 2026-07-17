@@ -42,22 +42,17 @@ func main() {
 	registerDesktopBridge(wv, reg)
 
 	htmlPath := distDir + "/index.html"
-	if _, err := os.Stat(htmlPath); err != nil {
-		log.Printf("[Desktop] 未找到构建产物: %s", htmlPath)
+	htmlData, err := os.ReadFile(htmlPath)
+	if err != nil {
+		log.Fatalf("[Desktop] 请先构建前端: cd cmd/desktop/web-ui && npm run build")
 	}
-
-	// 使用简单测试页验证渲染
-	testHTML := `<!DOCTYPE html>
-<html><head><title>Test</title></head>
-<body>
-<h1>Hello</h1>
-<p>This is a test page.</p>
-</body></html>`
-
-	if err := wv.LoadHTML(testHTML); err != nil {
+	if err := wv.LoadHTML(string(htmlData)); err != nil {
 		log.Fatalf("[Desktop] LoadHTML 失败: %v", err)
 	}
 	log.Println("[Desktop] 前端页面已加载")
+
+	// 重建渲染树（Vue 已修改 DOM）
+	wv.RebuildRenderTree()
 
 	host, err := app.NewHost(wv, 1280, 800, "PairCode IDE")
 	if err != nil {
