@@ -1,5 +1,5 @@
 {
-  "version": "1.0.3",
+  "version": "1.0.4",
   "appName": "PairCode IDE",
   "description": "AI-Powered Code Companion",
   "company": "PairCode",
@@ -15,7 +15,7 @@
   "pipeline": [
     {
       "name": "build-frontend",
-      "command": "cd {{frontendDir}} && npm run build",
+      "command": "cd {{frontendDir}} \u0026\u0026 npm run build",
       "ignoreError": true
     },
     {
@@ -39,32 +39,116 @@
       "type": "package"
     }
   ],
-  "stripSecrets": {
-    "fields": ["apiKey", "APIKey", "api_password", "secret", "token"],
-    "files": ["config/settings.json", "config/mcp.json"]
-  },
   "dist": {
     "outputDir": "release",
     "dirName": "PairCode",
     "format": "zip",
     "include": [
-      { "src": "config/models.json", "dst": "config/models.json", "optional": true },
-      { "src": "config/settings.template.json", "dst": "config/settings.json", "optional": true },
-      { "src": "config/mcp.json", "dst": "config/mcp.json", "optional": true },
-      { "src": "config/skills", "dst": "config/skills", "optional": true, "recursive": true },
-      { "src": "config/roles", "dst": "config/roles", "optional": true, "recursive": true },
-      { "src": "config/philosophy", "dst": "config/philosophy", "optional": true, "recursive": true },
-      { "src": "assets/icon.svg", "dst": "assets/icon.svg", "optional": true },
-      { "src": "assets/icon.png", "dst": "assets/icon.png", "optional": true },
-      { "src": "assets/icon64.png", "dst": "assets/icon64.png", "optional": true },
-      { "src": "assets/icon128.png", "dst": "assets/icon128.png", "optional": true },
-      { "src": "fonts", "dst": "fonts", "optional": true, "recursive": true },
-      { "src": "lib/libSkiaSharp.dll", "dst": "lib/libSkiaSharp.dll", "optional": true },
-      { "src": "bin/tesseract", "dst": "bin/tesseract", "optional": true, "recursive": true },
-      { "src": "bin/config/models.json", "dst": "bin/config/models.json", "optional": true },
-      { "src": "bin/config/onnx", "dst": "bin/config/onnx", "optional": true, "recursive": true },
-      { "src": "bin/headless-check.js", "dst": "bin/headless-check.js", "optional": true },
-      { "src": "config/models", "dst": "models", "optional": true, "recursive": true }
+      {
+        "src": "config/models.json",
+        "dst": "config/models.json",
+        "optional": true
+      },
+      {
+        "src": "config/settings.template.json",
+        "dst": "config/settings.json",
+        "optional": true
+      },
+      {
+        "src": "config/mcp.json",
+        "dst": "config/mcp.json",
+        "optional": true
+      },
+      {
+        "src": "config/skills",
+        "dst": "config/skills",
+        "optional": true,
+        "recursive": true
+      },
+      {
+        "src": "config/roles",
+        "dst": "config/roles",
+        "optional": true,
+        "recursive": true
+      },
+      {
+        "src": "config/philosophy",
+        "dst": "config/philosophy",
+        "optional": true,
+        "recursive": true
+      },
+      {
+        "src": "assets/icon.svg",
+        "dst": "assets/icon.svg",
+        "optional": true
+      },
+      {
+        "src": "assets/icon.png",
+        "dst": "assets/icon.png",
+        "optional": true
+      },
+      {
+        "src": "assets/icon64.png",
+        "dst": "assets/icon64.png",
+        "optional": true
+      },
+      {
+        "src": "assets/icon128.png",
+        "dst": "assets/icon128.png",
+        "optional": true
+      },
+      {
+        "src": "fonts",
+        "dst": "fonts",
+        "optional": true,
+        "recursive": true
+      },
+      {
+        "src": "lib/libSkiaSharp.dll",
+        "dst": "lib/libSkiaSharp.dll",
+        "optional": true
+      },
+      {
+        "src": "bin/tesseract",
+        "dst": "bin/tesseract",
+        "optional": true,
+        "recursive": true
+      },
+      {
+        "src": "bin/config/models.json",
+        "dst": "bin/config/models.json",
+        "optional": true
+      },
+      {
+        "src": "bin/config/onnx",
+        "dst": "bin/config/onnx",
+        "optional": true,
+        "recursive": true
+      },
+      {
+        "src": "bin/headless-check.js",
+        "dst": "bin/headless-check.js",
+        "optional": true
+      },
+      {
+        "src": "config/models",
+        "dst": "models",
+        "optional": true,
+        "recursive": true
+      }
+    ]
+  },
+  "stripSecrets": {
+    "fields": [
+      "apiKey",
+      "APIKey",
+      "api_password",
+      "secret",
+      "token"
+    ],
+    "files": [
+      "config/settings.json",
+      "config/mcp.json"
     ]
   }
 }
