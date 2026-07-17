@@ -89,7 +89,7 @@ func registerDesktopBridge(wv *webkit.WebView, reg *bridge.Registry) {
 			`","body":` + maybeJSON(bodyJSON) + `,"params":` + maybeJSON(paramsJSON) + `}`
 		result := reg.HandleBridgeCall(callReq)
 		return jsc.StringValue(result)
-	})
+	}, 4)
 	bridgeObj.Set("call", jsc.FunctionValue(bridgeCall))
 	bridgeObj.Set("onAgentEvent", jsc.FunctionValue(jsc.NewNativeFunction("onAgentEvent",
 		func(in *jsc.Interpreter, this jsc.JSValue, args []jsc.JSValue) jsc.JSValue {
