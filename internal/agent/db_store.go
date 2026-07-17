@@ -417,21 +417,6 @@ func (s *DBStore) PersistNewMessages(convID string, hist []Message) error {
 		return err
 	}
 
-	// 统计 hist 中非 system 消息总数
-	nonSystemTotal := 0
-	for _, m := range hist {
-		if m.Role != RoleSystem {
-			nonSystemTotal++
-		}
-	}
-	if nonSystemTotal == 0 {
-		return nil
-	}
-
-	// 获取数据库中非 system 消息总数
-	var dbCount int
-	_ = s.db.QueryRow(`SELECT COUNT(*) FROM messages WHERE conv_id = ?`, convID).Scan(&dbCount)
-
 	now := time.Now().UTC().Format(time.RFC3339)
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -439,33 +424,23 @@ func (s *DBStore) PersistNewMessages(convID string, hist []Message) error {
 	}
 	defer tx.Rollback()
 
-	// ★ 修复：检测到压缩/截断（hist 中非 system 消息数少于数据库中已有记录数），
-	//   说明中段消息已被 maybeCompact 移除，此时 nonSystemSeen 永远 ≤ dbCount，
-	//   增量写入会丢失所有新消息。需要全量重写以确保数据库与 hist 一致。
-	if nonSystemTotal < dbCount {
-		if _, err := tx.Exec(`DELETE FROM messages WHERE conv_id = ?`, convID); err != nil {
-			return fmt.Errorf("PersistNewMessages 清理旧消息: %w", err)
-		}
-		dbCount = 0
+	// ★ 全量替换：删除该对话所有旧消息，重新写入 hist 中非 system 消息。
+	//   参考伴随式 codeagent 每次完整写盘的方式，避免增量计数在压缩后错乱。
+	if _, err := tx.Exec(`DELETE FROM messages WHERE conv_id = ?`, convID); err != nil {
+		return fmt.Errorf("PersistNewMessages 清理: %w", err)
 	}
 
-	insertStmt, err := tx.Prepare(
-		`INSERT OR IGNORE INTO messages (conv_id, idx, role, content, reasoning, tool_calls, tool_call_id, name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	ins, err := tx.Prepare(
+		`INSERT INTO messages (conv_id, idx, role, content, reasoning, tool_calls, tool_call_id, name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 	)
 	if err != nil {
 		return err
 	}
-	defer insertStmt.Close()
+	defer ins.Close()
 
-	newCount := 0
-	nextIdx := dbCount // 从 dbCount 开始写入（已有 dbCount 条，新消息的起始序号）
-	nonSystemSeen := 0
+	idx := 0
 	for _, m := range hist {
 		if m.Role == RoleSystem {
-			continue
-		}
-		if nonSystemSeen < dbCount {
-			nonSystemSeen++
 			continue
 		}
 		tcJSON := "[]"
@@ -473,24 +448,15 @@ func (s *DBStore) PersistNewMessages(convID string, hist []Message) error {
 			data, _ := json.Marshal(m.ToolCalls)
 			tcJSON = string(data)
 		}
-		_, err := insertStmt.Exec(convID, nextIdx, string(m.Role), m.Content, m.Reasoning, tcJSON, m.ToolCallID, m.Name, now)
-		if err != nil {
+		if _, err := ins.Exec(convID, idx, string(m.Role), m.Content, m.Reasoning, tcJSON, m.ToolCallID, m.Name, now); err != nil {
 			return fmt.Errorf("PersistNewMessages: %w", err)
 		}
-		newCount++
-		nextIdx++
+		idx++
 	}
 
-	if newCount > 0 {
-		if nonSystemTotal < dbCount {
-			// 全量重写：直接设置 msg_count 为实际条数
-			_, _ = tx.Exec(`UPDATE conversations SET msg_count=?, updated_at=? WHERE id=?`, nonSystemTotal, now, convID)
-		} else {
-			// 增量写入：累加
-			_, _ = tx.Exec(`UPDATE conversations SET msg_count=msg_count+?, updated_at=? WHERE id=?`, newCount, now, convID)
-		}
+	if idx > 0 {
+		_, _ = tx.Exec(`UPDATE conversations SET msg_count=?, updated_at=? WHERE id=?`, idx, now, convID)
 	}
-
 	return tx.Commit()
 }
 
