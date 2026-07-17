@@ -405,11 +405,17 @@ func hasSystem(msgs []Message) bool {
 }
 
 // buildSystemWithSummaries 构建包含压缩摘要的系统提示词。
-// 在 l.System 的可变部分末尾追加「上下文压缩摘要」段。
-// 摘要仅在中段老消息被压缩时变化，保持 system 前缀稳定、最大化缓存命中。
+// 在 CACHE_BOUNDARY 之后的动态区追加「上下文压缩摘要」段和执行日志，
+// 确保静态前缀不变，最大化 KV 缓存命中。
 func (l *Loop) buildSystemWithSummaries() string {
 	var b strings.Builder
 	b.WriteString(l.System)
+
+	// ★ 确保 CACHE_BOUNDARY 存在于 system prompt 中 — 动态内容追加在其后
+	//   如果 l.System 尚未包含 CACHE_BOUNDARY（如 AgentBase 直接传入），在末尾补一个
+	if !strings.Contains(l.System, CacheBoundary) {
+		b.WriteString(CacheBoundary)
+	}
 
 	// 历史摘要（上下文压缩后产生）
 	if len(l.CompressedSummaries) > 0 {

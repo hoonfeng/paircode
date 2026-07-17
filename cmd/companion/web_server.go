@@ -217,6 +217,9 @@ func startWebUI(port int) {
 	// 与传输层（WebSocket）解耦——即使无前端连接，agent 事件仍会被持久化。
 	ws.startEventPersistWorker()
 
+	// ★ 预热 system prompt 编译缓存（启动时在后台线程中预热，不阻塞主流程）
+	go agent.PromptCacheWarmer.WarmUp(buildWebSystemPrompt)
+
 	// ── 静态文件 ──
 	subFS, err := fs.Sub(webUIFiles, "web-ui/dist")
 	if err != nil {
@@ -2027,9 +2030,8 @@ var systemStaticPrefixCache struct {
 }
 
 func systemStaticPrefixKey() string {
-	roots := strings.Join(core.Folders, "|")
 	si := core.Settings.SystemInstructions
-	return fmt.Sprintf("%s|%s|%s", roots, si, roleprompts.PhilosophyPrompt())
+	return fmt.Sprintf("%s|%s", si, roleprompts.PhilosophyPrompt())
 }
 
 // buildSystemStaticPrefix 构建 system prompt 静态前缀（CACHE_BOUNDARY 之前）。
@@ -2042,7 +2044,7 @@ func buildSystemStaticPrefix() string {
 		return systemStaticPrefixCache.prefix
 	}
 	var b strings.Builder
-	b.WriteString(agent.DefaultSystemPrompt(core.Folders))
+	b.WriteString(agent.DefaultSystemPrompt(nil)) // 工作区信息已移至第 2 条 user msg，不嵌入 system prompt
 	if si := strings.TrimSpace(core.Settings.SystemInstructions); si != "" {
 		b.WriteString("\n\n# 系统级指令（务必遵守）\n" + si)
 	}
@@ -2156,7 +2158,21 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 
 	sys := buildWebSystemPrompt()
 
-	// ── 跨对话项目状态感知 ──
+	// ── 跨对话项目状态感知（作为第 2 条 user msg 注入，不污染 system prompt）──
+	var contextContents strings.Builder
+
+	// ★ 工作区信息（不在 system prompt 中，避免 roots 变化破坏缓存前缀）
+	if len(core.Folders) > 0 {
+		contextContents.WriteString("# 工作区\n根目录: " + core.Folders[0])
+		if len(core.Folders) > 1 {
+			contextContents.WriteString("\n工作区包含以下所有项目目录（均可访问）：")
+			for i, r := range core.Folders {
+				contextContents.WriteString(fmt.Sprintf("\n  %d. %s", i+1, r))
+			}
+		}
+		contextContents.WriteString("\n\n")
+	}
+
 	if root != "" {
 		execMgr := agent.InitExecStateManager(root)
 		var stateParts []string
@@ -2208,7 +2224,7 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 		}
 
 		if len(stateParts) > 0 {
-			sys += "\n\n# 项目当前状态\n" + strings.Join(stateParts, "\n\n")
+			contextContents.WriteString("# 项目当前状态\n" + strings.Join(stateParts, "\n\n"))
 		}
 
 		recentMemories := memory.List()
@@ -2233,15 +2249,15 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 				memSb.WriteString("\n")
 			}
 			memSb.WriteString("\n（需要更详细的历史信息可用 history_search / history_list / memory_read 检索具体对话。）")
-			sys += "\n\n# 已完成对话历史\n" + memSb.String()
+			contextContents.WriteString("\n\n# 已完成对话历史\n" + memSb.String())
 		}
 
 		// ★ 自动构建 codegraph 并注入项目结构概览，让 agent 无需从头探测
 		if root != "" {
 			if cg, cgErr := agent.EnsureCodeGraph(root); cgErr == nil && cg != nil {
 				if summary := agent.CodeGraphProjectSummary(cg, root); summary != "" {
-					sys += "\n\n# 项目代码结构（预加载 — codegraph）\n" + summary +
-						"\n（优先用 codegraph 工具定位函数/类型，避免全文搜索浪费 token。）"
+					contextContents.WriteString("\n\n# 项目代码结构（预加载 — codegraph）\n" + summary +
+						"\n（优先用 codegraph 工具定位函数/类型，避免全文搜索浪费 token。）")
 				}
 			}
 		}
@@ -2275,6 +2291,17 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 		}
 	}
 	history = agent.TrimInterruptedHistory(history)
+
+	// ★ 将项目状态/记忆/codegraph 作为第 2 条 user msg 注入（不在 system prompt 中）
+	//   使 system prompt 保持稳定，最大化 KV Cache 命中率。
+	if contextContents.Len() > 0 {
+		contextMsg := agent.Message{
+			Role:    agent.RoleUser,
+			Content: "[工作区/项目上下文]\n" + contextContents.String(),
+		}
+		// 插入到 history 开头（system 消息之后的首条 user 消息）
+		history = append([]agent.Message{contextMsg}, history...)
+	}
 
 	maxIter := core.Settings.MaxIterations
 

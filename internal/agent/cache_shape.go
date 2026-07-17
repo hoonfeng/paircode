@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"sync"
 	"sync/atomic"
 )
 
@@ -99,4 +100,100 @@ func (sc *sessionCache) record(hit, miss int) {
 // Snapshot 返回当前会话的累积缓存命中/未命中。
 func (sc *sessionCache) Snapshot() (hit, miss int) {
 	return int(sc.hit.Load()), int(sc.miss.Load())
+}
+
+// ─── system prompt 编译缓存（compileCache）──
+// 参考伴随式codeagent PromptCompiler.compileCache + PromptCacheWarmer。
+// 用于缓存已编译的 system prompt 字符串，避免每次请求重复拼接。
+
+// promptCompileCache 按 cacheKey 缓存已编译的 system prompt。
+// cacheKey 格式: "rootsHash|instructionsHash|philosophyHash"
+var (
+	promptCompileCacheMu sync.RWMutex
+	promptCompileCache   = make(map[string]string)
+)
+
+// CacheSystemPrompt 缓存已编译的 system prompt。
+// roots: 工作区根目录列表；instructions: 系统指令；philosophy: 哲学指导思想。
+// 内部计算哈希后存缓存。
+func CacheSystemPrompt(roots []string, instructions, philosophy string, prompt string) string {
+	key := compileCacheKey(roots, instructions, philosophy)
+	promptCompileCacheMu.Lock()
+	promptCompileCache[key] = prompt
+	promptCompileCacheMu.Unlock()
+	return prompt
+}
+
+// GetCachedSystemPrompt 获取缓存的 system prompt。
+func GetCachedSystemPrompt(roots []string, instructions, philosophy string) (string, bool) {
+	key := compileCacheKey(roots, instructions, philosophy)
+	promptCompileCacheMu.RLock()
+	p, ok := promptCompileCache[key]
+	promptCompileCacheMu.RUnlock()
+	return p, ok
+}
+
+// ClearPromptCompileCache 清空编译缓存（用于测试）。
+func ClearPromptCompileCache() {
+	promptCompileCacheMu.Lock()
+	promptCompileCache = make(map[string]string)
+	promptCompileCacheMu.Unlock()
+}
+
+// PromptCompileCacheSize 返回编译缓存条目数。
+func PromptCompileCacheSize() int {
+	promptCompileCacheMu.RLock()
+	n := len(promptCompileCache)
+	promptCompileCacheMu.RUnlock()
+	return n
+}
+
+func compileCacheKey(roots []string, instructions, philosophy string) string {
+	h := sha256.New()
+	for _, r := range roots {
+		h.Write([]byte(r))
+		h.Write([]byte{0})
+	}
+	h.Write([]byte(instructions))
+	h.Write([]byte{0})
+	h.Write([]byte(philosophy))
+	return fmt.Sprintf("%x", h.Sum(nil)[:16])
+}
+
+// ─── PromptCacheWarmer system prompt 编译预热器 ──
+// 参考伴随式codeagent src/agent/context/cache-warmer.ts
+// 在 Agent 启动时预填充 system prompt 编译缓存，避免首次请求时的重复拼接开销。
+
+// PromptCacheWarmer 预热器实例（单例）。
+var PromptCacheWarmer = &promptCacheWarmer{}
+
+type promptCacheWarmer struct {
+	warmedUp bool
+	mu       sync.Mutex
+}
+
+// WarmUp 预热编译缓存。传入当前构建 system prompt 的函数。
+// 在 Agent 启动时调用一次即可。
+func (w *promptCacheWarmer) WarmUp(buildFn func() string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.warmedUp {
+		return
+	}
+	_ = buildFn() // 调用构建函数，触发 CacheSystemPrompt 写缓存
+	w.warmedUp = true
+}
+
+// IsWarmedUp 返回预热状态。
+func (w *promptCacheWarmer) IsWarmedUp() bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.warmedUp
+}
+
+// Reset 重置预热状态（用于测试）。
+func (w *promptCacheWarmer) Reset() {
+	w.mu.Lock()
+	w.warmedUp = false
+	w.mu.Unlock()
 }
