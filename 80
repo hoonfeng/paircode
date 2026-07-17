@@ -1,1 +1,0 @@
-SELECT idx, role, CASE WHEN length(content) THEN substr(content,1,80)
