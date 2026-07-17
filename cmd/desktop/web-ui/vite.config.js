@@ -1,10 +1,6 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
-// 桌面端 Vite 配置：
-// - 开发模式下不 proxy API 到 Go 后端（前端通过 desktopBridge 直接调 Go）
-// - 定义 __DESKTOP_MODE__ 供 SDK 检测环境
-// - 构建结果嵌入 Go binary（与 companion 相同模式）
 export default defineConfig({
   plugins: [
     vue(),
@@ -29,10 +25,21 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    cssCodeSplit: false,
     assetsInlineLimit: 8192,
+    rollupOptions: {
+      output: {
+        format: 'iife',
+        name: 'PairCodeIDE',
+        inlineDynamicImports: true,
+        entryFileNames: 'assets/bundle.js',
+        chunkFileNames: 'assets/bundle.js',
+        assetFileNames: 'assets/[name].[ext]',
+      },
+    },
   },
   server: {
-    port: 5174, // 与 companion 的 5173 错开，避免端口冲突
+    port: 5174,
   },
   define: {
     __DESKTOP_MODE__: JSON.stringify(true),
