@@ -1071,6 +1071,80 @@ func (s *MessageStore) TruncateTo(convID string, count int) error {
 	return s.saveIndex(metas)
 }
 
+// ReplaceHistory 删除对话的全部旧消息，替换为压缩后的 msgs 版本。
+// 全量重写 JSONL 文件：只保留 msgs 中的 assistant/tool 消息（跳过 system/user）。
+// 在压缩历史后调用，防止 JSONL 文件无限增长。
+func (s *MessageStore) ReplaceHistory(convID string, msgs []Message) error {
+	mu := s.getConvMutex(convID)
+	mu.Lock()
+	defer mu.Unlock()
+
+	now := time.Now().UTC().Format(time.RFC3339)
+
+	// 只保留 assistant/tool 消息，跳过 system/user
+	var kept []StoredMessage
+	for i, m := range msgs {
+		if m.Role == RoleSystem || m.Role == RoleUser {
+			continue
+		}
+		sm := StoredMessage{
+			Idx:       len(kept),
+			Message:   m,
+			Segments:  SegmentsFromMessage(m, msgs, i),
+			Timestamp: now,
+		}
+		kept = append(kept, sm)
+	}
+
+	// 全量重写 JSONL 文件
+	fpath := s.convFilePath(convID)
+	out, err := os.Create(fpath)
+	if err != nil {
+		return fmt.Errorf("ReplaceHistory: 创建文件失败: %w", err)
+	}
+	defer out.Close()
+	enc := json.NewEncoder(out)
+	for _, sm := range kept {
+		if err := enc.Encode(sm); err != nil {
+			return fmt.Errorf("ReplaceHistory: JSON 编码失败: %w", err)
+		}
+	}
+
+	// 更新内存计数器
+	s.pcMu.Lock()
+	s.persistedCount[convID] = len(kept)
+	s.pcMu.Unlock()
+
+	// 更新 index.json
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
+
+	metas, err := s.loadIndex()
+	if err != nil {
+		return fmt.Errorf("ReplaceHistory: 读取 index 失败: %w", err)
+	}
+
+	found := false
+	for i := range metas {
+		if metas[i].ID == convID {
+			metas[i].MsgCount = len(kept)
+			metas[i].UpdatedAt = now
+			found = true
+			break
+		}
+	}
+	if !found {
+		metas = append(metas, ConversationMeta{
+			ID:        convID,
+			Title:     "新对话 " + time.Now().UTC().Format("15:04"),
+			CreatedAt: now,
+			UpdatedAt: now,
+			MsgCount:  len(kept),
+		})
+	}
+	return s.saveIndex(metas)
+}
+
 // DeleteConversation 删除对话：移除 JSONL 文件 + 从 index.json 移除 meta + 清理 per-conv mutex。
 func (s *MessageStore) DeleteConversation(convID string) error {
 	mu := s.getConvMutex(convID)

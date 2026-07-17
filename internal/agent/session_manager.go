@@ -112,31 +112,28 @@ func NewSessionManager() *SessionManager {
 	}
 }
 
-// SetWorkspaceRoot 注入工作区根路径，初始化统一 SQLite 存储。
-// 创建 pkg/db.SQLiteDB 实例（唯一数据库连接），再用 DBAdapter 包装为 ConversationStore。
-// 重复调用以最后一次为准。
-// codegraph 等其他组件通过 RawDB() 获取同一 *sql.DB 实例。
+// SetWorkspaceRoot 注入工作区根路径，初始化 MessageStore（JSONL 消息存储）和 SQLite（供 codegraph 使用）。
+// 消息持久化使用 MessageStore（JSONL），codegraph 等组件通过 RawDB() 获取同一 *sql.DB 实例。
 func (m *SessionManager) SetWorkspaceRoot(root string) {
 	m.mu.Lock()
-	
+
+	// 初始化 MessageStore（JSONL 消息存储）
+	m.store = NewMessageStore(root)
+
+	// 初始化 SQLite（供 codegraph 等组件使用，不再担当消息存储）
 	dbPath := filepath.Join(root, ".pair", "pair.db")
-	// 确保 .pair/ 目录存在（SQLite 会创建 db 文件但不会创建父目录）
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
 		fmt.Printf("[session] 创建数据库目录失败: %v\n", err)
 		m.ds = nil
-		m.store = nil
 		m.mu.Unlock()
 		return
 	}
 	if ds, err := pkgdb.NewSQLiteDB(dbPath); err == nil {
 		m.ds = ds
-		m.store = NewDBAdapter(ds, root)
 	} else {
 		fmt.Printf("[session] 打开 SQLite 数据库失败: %v\n", err)
 		m.ds = nil
-		m.store = nil
 	}
-
 
 	shouldStart := !m.persistWorkerStarted
 	if shouldStart {
