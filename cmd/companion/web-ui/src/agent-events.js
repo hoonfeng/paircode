@@ -306,6 +306,21 @@ export function processAgentDone(convId, data) {
       //   推送过（finish_task 的结果已在 tool_result 中显示）。若在此重复追加会造成「两次完
       //   成报告」的视觉重复。
 
+      // ★ 处理空占位：若 finalContent 为空且 segments 中无有效内容（无 tool_call/ask_user、
+      //   无非空 content/thinking 段），给个最低限度的提示，避免前端显示空白气泡。
+      const hasEffectiveSeg = (msg.segments || []).some(seg => {
+        if (seg.type === 'tool_call' || seg.type === 'ask_user') return true
+        if (seg.type === 'content' && seg.content && seg.content.trim()) return true
+        if (seg.type === 'thinking' && seg.content && seg.content.trim()) return true
+        return false
+      })
+      const isEmptyPlaceholder = !rt.finalContent && !hasEffectiveSeg && (!data || data.doneReason !== 'stopped')
+      if (isEmptyPlaceholder) {
+        console.log('[AE] processAgentDone 空占位 conv=%s msgIdx=%d 设为完成提示', convId, rt.msgIdx)
+        msg.content = '**[操作完成]**'
+        pushSegment(msg.segments, 'content').content = '**[操作完成]**'
+      }
+
       // ★ 用户主动停止时，若没有流式内容（finalContent 为空），显示停止提示
       if (data && data.doneReason === 'stopped') {
         if (!rt.finalContent) {

@@ -160,6 +160,11 @@ func MergeConsecutiveAssistants(msgs []StoredMessage) []StoredMessage {
 	for i := range msgs {
 		m := msgs[i]
 		if m.Message.Role == RoleAssistant {
+			// ★ 跳过完全空的 assistant 消息（Content、Reasoning、ToolCalls 全为零值），
+			//   避免因 LLM 返回空响应导致前端出现空白气泡。
+			if m.Message.Content == "" && m.Message.Reasoning == "" && len(m.Message.ToolCalls) == 0 {
+				continue
+			}
 			if pending == nil {
 				pending = &StoredMessage{
 					Idx:       m.Idx,
