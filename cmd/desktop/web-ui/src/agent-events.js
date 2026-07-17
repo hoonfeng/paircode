@@ -306,6 +306,21 @@ export function processAgentDone(convId, data) {
       //   推送过（finish_task 的结果已在 tool_result 中显示）。若在此重复追加会造成「两次完
       //   成报告」的视觉重复。
 
+      // ★ 处理空占位：若 finalContent 为空且 segments 中无有效内容（无 tool_call/ask_user、
+      //   无非空 content/thinking 段），给个最低限度的提示，避免前端显示空白气泡。
+      const hasEffectiveSeg = (msg.segments || []).some(seg => {
+        if (seg.type === 'tool_call' || seg.type === 'ask_user') return true
+        if (seg.type === 'content' && seg.content && seg.content.trim()) return true
+        if (seg.type === 'thinking' && seg.content && seg.content.trim()) return true
+        return false
+      })
+      const isEmptyPlaceholder = !rt.finalContent && !hasEffectiveSeg && (!data || data.doneReason !== 'stopped')
+      if (isEmptyPlaceholder) {
+        console.log('[AE] processAgentDone 空占位 conv=%s msgIdx=%d 设为完成提示', convId, rt.msgIdx)
+        msg.content = '**[操作完成]**'
+        pushSegment(msg.segments, 'content').content = '**[操作完成]**'
+      }
+
       // ★ 用户主动停止时，若没有流式内容（finalContent 为空），显示停止提示
       if (data && data.doneReason === 'stopped') {
         if (!rt.finalContent) {
@@ -365,6 +380,28 @@ export function processAgentDisconnect(convId, errMsg) {
   }
 }
 
+// 处理全部 WebSocket 重连失败（后端进程已关闭）。
+// 清理所有标记为 running 的对话，重置状态。
+export function processAllDisconnected() {
+  for (const convId of Object.keys(state.agentRunningByConv)) {
+    const rt = runtimes[convId]
+    const msgs = state.messagesByConv[convId]
+    if (msgs && rt) {
+      const msg = msgs[rt.msgIdx]
+      if (msg) {
+        msg._loading = false
+        if (!msg.content) msg.content = ''
+        pushSegment(msg.segments, 'content').content += '**[连接中断]** 后端进程已关闭，请重新发送消息。'
+      }
+    }
+    state.agentRunningByConv[convId] = false
+    state.loadingByConv[convId] = false
+    delete runtimes[convId]
+  }
+  state.chatLoading = false
+  state.agentRunning = false
+}
+
 // ─── processStatus 日志辅助 ──
 let statusLogCounter = 0
 
@@ -387,17 +424,9 @@ export function processStatus(payload) {
   }
   // 标记仍在运行的
   for (const convId of runningSet) {
-    // ── 防误覆盖：若该 conv 最后一条消息已是完成态的 assistant（_loading=false），
-    // 说明 processAgentDone 已处理完毕，仅为 status 消息的 50ms 竞态延迟所致（status
-    // 发出时后端 Running 标志尚未异步落地）。此时跳过 loading 设置，避免覆盖已清理的状态。
-    const convMsgs = state.messagesByConv[convId]
-    const lastMsg = convMsgs && convMsgs.length > 0 ? convMsgs[convMsgs.length - 1] : null
-    const alreadyDone = lastMsg && lastMsg.role === 'assistant' && !lastMsg._loading
-
     state.agentRunningByConv[convId] = true
-    if (!alreadyDone) {
-      state.loadingByConv[convId] = true
-    }
+    // 后端认为它在运行，就标记 loading（即使已加载的历史消息没有 _loading 标记）
+    state.loadingByConv[convId] = true
     // 页面刷新后 agent 仍在运行：前端没有 runtime，事件会被丢弃。
     // 为这些对话创建 messagesByConv 占位 + runtime，确保后续事件能被处理。
     if (!runtimes[convId]) {
@@ -406,18 +435,15 @@ export function processStatus(payload) {
       // 若最后一条不是 loading 的 assistant 消息，则创建占位
       const last = msgs[msgs.length - 1]
       if (!last || last.role !== 'assistant' || !last._loading) {
-        // 已是完成态的消息（alreadyDone=true）则不创建 loading 占位
-        if (!alreadyDone) {
-          const msgIdx = msgs.length
-          console.log('[AE] processStatus 创建runtime+loading conv=%s msgIdx=%d msgsLen=%d alreadyDone=%s', convId, msgIdx, msgs.length, alreadyDone)
-          msgs.push({
-            role: 'assistant', content: '', segments: [], toolCalls: [],
-            _key: makeMsgKey(), _idx: msgIdx,
-            _time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
-            _loading: true,
-          })
-          runtimes[convId] = { msgIdx, finalContent: '', lastUserText: '' }
-        }
+        const msgIdx = msgs.length
+        console.log('[AE] processStatus 创建runtime+loading conv=%s msgIdx=%d msgsLen=%d', convId, msgIdx, msgs.length)
+        msgs.push({
+          role: 'assistant', content: '', segments: [], toolCalls: [],
+          _key: makeMsgKey(), _idx: msgIdx,
+          _time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+          _loading: true,
+        })
+        runtimes[convId] = { msgIdx, finalContent: '', lastUserText: '' }
       } else {
         // 已有 loading 的 assistant 消息，直接复用其索引
         console.log('[AE] processStatus 复用runtime conv=%s msgIdx=%d', convId, msgs.length - 1)

@@ -390,6 +390,7 @@ onMounted(async () => {
     onStatus: (payload) => processStatus(payload),
     onEvent: (convId, data) => processAgentEvent(convId, data),
     onDone: (convId, data) => processAgentDone(convId, data),
+    onDisconnected: () => processAllDisconnected(),
   })
 
   loadPersistentState()
@@ -408,12 +409,21 @@ onMounted(async () => {
 
   await loadFileTree()
 
-  const _onRefreshTree = loadFileTree
+  const _onRefreshTree = () => {
+    // ★ 清除所有非 dirty 文件的编辑器缓存，确保 AI 修改文件后重新打开时是最新内容
+    for (const path of Object.keys(state.fileContents)) {
+      if (!state.fileDirty[path]) {
+        delete state.fileContents[path]
+        delete state.fileSavedContent[path]
+      }
+    }
+    loadFileTree()
+  }
   const _onSwitchActivity = (e) => { if (e.detail?.id) switchActivity(e.detail.id) }
   const _onOpenMarketplace = () => { showMarketplace.value = true }
   const _onOpenSettings = () => { showSettings.value = true }
   const _onStopAgent = () => { window.dispatchEvent(new CustomEvent('agent-stop')) }
-  const _onSaveConversations = async () => { saveCurrentConversations(); checkNotifications(); await saveWsList() }
+  const _onSaveConversations = async () => { checkNotifications() }
   const _onOpenWorkspaceDialog = () => { state.activeActivity = 'explorer'; state.sidebarVisible = true }
   const _onSwitchWorkspace = async (e) => { if (e.detail?.path) await switchWorkspace(e.detail.path) }
 
@@ -450,7 +460,7 @@ state.notificationCount = 0
 state.workspaceName = state.workspaceName || ''
 
 watch(() => state.messages.length, async () => {
-  saveCurrentConversations(); checkNotifications(); await saveWsList()
+  saveCurrentConversations(); checkNotifications()
 })
 
 let persistTimer = null
