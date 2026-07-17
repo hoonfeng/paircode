@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"time"
 
 	"wb-ui/app"
 	"wb-ui/jsc"
@@ -51,16 +50,6 @@ func main() {
 		log.Fatalf("[Desktop] LoadHTML 失败: %v", err)
 	}
 	log.Println("[Desktop] 前端页面已加载")
-
-	// 定期输出 JS 控制台日志
-	go func() {
-		for i := 0; i < 20; i++ {
-			time.Sleep(3 * time.Second)
-			if out := wv.ConsoleOutput(); out != "" {
-				log.Printf("[JS Console]\n%s", out)
-			}
-		}
-	}()
 
 	host, err := app.NewHost(wv, 1280, 800, "PairCode IDE")
 	if err != nil {

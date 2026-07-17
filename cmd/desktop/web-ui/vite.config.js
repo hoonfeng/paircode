@@ -25,6 +25,7 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    target: 'es2015',
     cssCodeSplit: false,
     assetsInlineLimit: 8192,
     rollupOptions: {
