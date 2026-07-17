@@ -26,9 +26,8 @@ func InitCore() int {
 		log.Println("[WebMode] 未发现已有配置，将使用默认设置。")
 	}
 
-	log.Printf("[WebMode] 工作区: %s", core.Root())
-	log.Printf("[WebMode] 文件夹: %v", core.Folders)
-	log.Printf("[WebMode] 已配置 API: %v", core.Configured())
+	log.Printf("[WebMode] 工作区: %s (%d 个文件夹), API: %v",
+		core.ProjectName(), len(core.Folders), core.Configured())
 
 	port := 9090
 	if p := os.Getenv("WEB_PORT"); p != "" {

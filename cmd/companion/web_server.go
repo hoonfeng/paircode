@@ -867,7 +867,6 @@ func (s *webServer) handleSettings(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		log.Printf("[Settings] PUT 收到 workspaceFolderLists: %v", core.Settings.WorkspaceFolderLists)
 		core.Save()
 		// 审核开关变更时，仅实时更新当前对话的 Loop（其他对话不受影响）
 		if newAutoReview, ok := rawMap["autoReview"]; ok {
