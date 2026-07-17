@@ -408,7 +408,16 @@ onMounted(async () => {
 
   await loadFileTree()
 
-  const _onRefreshTree = loadFileTree
+  const _onRefreshTree = () => {
+    // ★ 清除所有非 dirty 文件的编辑器缓存，确保 AI 修改文件后重新打开时是最新内容
+    for (const path of Object.keys(state.fileContents)) {
+      if (!state.fileDirty[path]) {
+        delete state.fileContents[path]
+        delete state.fileSavedContent[path]
+      }
+    }
+    loadFileTree()
+  }
   const _onSwitchActivity = (e) => { if (e.detail?.id) switchActivity(e.detail.id) }
   const _onOpenMarketplace = () => { showMarketplace.value = true }
   const _onOpenSettings = () => { showSettings.value = true }

@@ -455,7 +455,12 @@ function openFile(path) {
 }
 
 async function loadFileContent(path) {
-  if (state.fileContents[path]) return
+  // ★ 有未保存编辑时保留缓存，不覆盖用户正在编辑的内容
+  if (state.fileDirty[path]) return
+  // ★ 清除缓存，强制从后端重新读取最新内容
+  delete state.fileContents[path]
+  delete state.fileSavedContent[path]
+  delete state.fileDirty[path]
   // 图片和已知二进制文件不加载文本内容（由 ImageViewer/HexViewer 自行处理）
   const ext = (path.split('.').pop() || '').toLowerCase()
   const imgExts = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'bmp', 'ico']

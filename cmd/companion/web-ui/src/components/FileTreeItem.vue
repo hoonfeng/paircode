@@ -236,7 +236,12 @@ function openFile(path) {
 }
 
 async function loadFileContent(path) {
-  if (state.fileContents[path]) return
+  // ★ 有未保存编辑时保留缓存，不覆盖用户正在编辑的内容
+  if (state.fileDirty[path]) return
+  // ★ 清除缓存，强制从后端重新读取最新内容
+  delete state.fileContents[path]
+  delete state.fileSavedContent[path]
+  delete state.fileDirty[path]
   try {
     const data = await api.apiGet('/fs/read', { path })
     // ★ 标准化 CRLF→LF，与 CodeMirror 内部格式一致
