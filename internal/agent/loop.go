@@ -232,6 +232,11 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 		msgs = append(msgs, Message{Role: RoleUser, Content: task})
 	}
 
+	// ★ 启动时检查记忆/知识库过期引用，如发现则注入一条通知（避免 silent 误导）
+	if staleMsg := AutoVerifyStale(); staleMsg != "" {
+		msgs = append(msgs, Message{Role: RoleUser, Content: staleMsg})
+	}
+
 	tools := l.Registry.Definitions()
 
 	for iter := 0; iter < max; iter++ {

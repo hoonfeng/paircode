@@ -33,11 +33,14 @@ func SelfManagementPrompt() string {
 		"### 技能 vs Lua 工具\n" +
 		"- **技能**（SKILL.md）：知识/规则/流程文档，**教会 agent 怎么做**。适合编码规范、架构说明、检查清单\n" +
 		"- **Lua 工具**（.lua 脚本）：可执行代码，**替 agent 自动做**。适合自动化命令、条件判断循环\n" +
-		"- 两者可配合：技能描述中可指导 agent 调用特定 Lua 工具完成自动化步骤"
+		"- 两者可配合：技能描述中可指导 agent 调用特定 Lua 工具完成自动化步骤\n\n" +
+		"### 数据保鲜\n" +
+		"- `memory_verify` 检查记忆条目中引用的文件/目录是否仍然存在，过时则更新或删除\n" +
+		"- `project_info_verify` 检查知识库条目同理\n" +
+		"- 启动 Loop 时系统会自动检查过期条目并提示，但建议也定期手动运行验证工具保持数据新鲜"
 }
 
 // LuaToolsPrompt 返回"自定义工具（Lua）"段落的系统提示文本。
-// 包含：4 个管理工具、沙箱已开启的库、9 个 agent 桥接函数表、何时创建/不该创建。
 func LuaToolsPrompt() string {
 	return "" +
 		"\n\n# 自定义工具（Lua）\n" +
