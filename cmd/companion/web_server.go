@@ -11,12 +11,14 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -829,24 +831,54 @@ func (s *webServer) handleSettings(w http.ResponseWriter, r *http.Request) {
 	case "PUT":
 		// convId 参数可选：来自工具栏切换时传当前对话 ID，仅实时更新该对话的 Loop
 		convId := r.URL.Query().Get("convId")
-		var newSettings core.AppSettings
-		if err := json.NewDecoder(r.Body).Decode(&newSettings); err != nil {
+		// 读取原始请求体
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
 			jsonErr(w, err.Error())
 			return
 		}
-		// 检查审核开关是否变更，用于后续通知正在运行的会话
+		// 解析为 map 判断哪些字段被提交
+		var rawMap map[string]json.RawMessage
+		if err := json.Unmarshal(body, &rawMap); err != nil {
+			jsonErr(w, err.Error())
+			return
+		}
+
+		// 检查审核开关是否变更
 		oldAutoReview := core.Settings.AutoReview
-		core.Settings = newSettings
-		log.Printf("[Settings] PUT 收到 workspaceFolderLists: %v", newSettings.WorkspaceFolderLists)
+
+		// 增量 merge：只更新 rawMap 中存在的字段
+		sv := reflect.ValueOf(&core.Settings).Elem()
+		st := sv.Type()
+		for i := 0; i < sv.NumField(); i++ {
+			field := st.Field(i)
+			jsonKey := strings.Split(field.Tag.Get("json"), ",")[0]
+			if jsonKey == "" || jsonKey == "-" {
+				continue
+			}
+			rawVal, ok := rawMap[jsonKey]
+			if !ok {
+				continue
+			}
+			// 用 json.Unmarshal 解析到字段类型，保留类型精度
+			newVal := reflect.New(field.Type).Interface()
+			if err := json.Unmarshal(rawVal, newVal); err == nil {
+				sv.Field(i).Set(reflect.ValueOf(newVal).Elem())
+			}
+		}
+
+		log.Printf("[Settings] PUT 收到 workspaceFolderLists: %v", core.Settings.WorkspaceFolderLists)
 		core.Save()
 		// 审核开关变更时，仅实时更新当前对话的 Loop（其他对话不受影响）
-		if oldAutoReview != newSettings.AutoReview && convId != "" {
-			agentMgr.SetAutoReview(convId, newSettings.AutoReview)
+		if newAutoReview, ok := rawMap["autoReview"]; ok {
+			var newVal bool
+			if err := json.Unmarshal(newAutoReview, &newVal); err == nil && newVal != oldAutoReview && convId != "" {
+				agentMgr.SetAutoReview(convId, newVal)
+			}
 		}
-		// 同步工作区文件夹列表（确保 core.Folders 与 settings 一致，
-		// 避免 DefaultSystemPrompt 等依赖 Folders 的地方读到空切片而 panic）
-		if newSettings.WorkspaceFolders != nil {
-			core.Folders = newSettings.WorkspaceFolders
+		// 同步工作区文件夹列表（确保 core.Folders 与 settings 一致）
+		if _, ok := rawMap["workspaceFolders"]; ok && core.Settings.WorkspaceFolders != nil {
+			core.Folders = core.Settings.WorkspaceFolders
 			if core.OnSyncWorkspace != nil {
 				core.OnSyncWorkspace(false)
 			}
