@@ -21,7 +21,7 @@ import (
 	"github.com/hoonfeng/paircode/internal/server/handler"
 )
 
-var version = "v1.0.4-desktop"
+var version = "v1.0.6-desktop"
 
 func main() {
 	runtime.LockOSThread()
