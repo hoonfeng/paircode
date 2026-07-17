@@ -500,9 +500,11 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 			if r := recover(); r != nil {
 				fmt.Printf("[session] Loop goroutine panic conv=%s: %v\n", convID, r)
 				// ★ panic 恢复时也发送 EventError，否则前端无任何信号（assistant 永久 loading）
-				go func() {
-					sess.Events <- Event{Type: EventError, Content: fmt.Sprintf("Agent 异常终止: %v", r)}
-				}()
+				// 注：用 select+default 非阻塞发送，不阻塞 defer 关闭流程，也不向已关闭 channel panic
+				select {
+				case sess.Events <- Event{Type: EventError, Content: fmt.Sprintf("Agent 异常终止: %v", r)}:
+				default:
+				}
 				sess.History = loop.History
 			}
 			// 更新 History（loop.Run 的 defer 已更新 loop.History，同步到 session）
@@ -595,18 +597,20 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		// ★ 错误/停止处理：确保前端总收到结束信号（防止 assistant 消息永久 loading）
 		// Loop.Run 内部已对多数错误发射 EventError，此处补发 Loop 未覆盖的信号：
 		//   1. 用户主动停止 → 发 EventDone (stopped)，触发前端 processAgentDone 清理
-		//   2. 异常终止（非用户停止）→ 用 goroutine 确保 EventError 送达 Events 通道
-		//      （不阻塞关闭流程，且避免 select-default 在通道满时静默丢弃）
+		//   2. 异常终止（非用户停止）→ 用 select+default 非阻塞发送 EventError
+		//      （不阻塞关闭流程，且通道满时静默放弃，无 goroutine 泄露风险）
 		//   3. Loop 正常完成（err==nil）→ EventDone 已由 Loop.Run 内部发射，无需重复
 		if sess.stopped {
-			go func() {
-				sess.Events <- Event{Type: EventDone, DoneReason: "stopped", Content: "用户终止了任务"}
-			}()
+			select {
+			case sess.Events <- Event{Type: EventDone, DoneReason: "stopped", Content: "用户终止了任务"}:
+			default:
+			}
 		} else if err != nil {
 			finalErr := err.Error()
-			go func() {
-				sess.Events <- Event{Type: EventError, Content: finalErr}
-			}()
+			select {
+			case sess.Events <- Event{Type: EventError, Content: finalErr}:
+			default:
+			}
 		}
 	}()
 
