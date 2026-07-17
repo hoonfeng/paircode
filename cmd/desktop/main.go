@@ -13,7 +13,6 @@ import (
 	"strings"
 
 	"wb-ui/app"
-	"wb-ui/dom"
 	"wb-ui/jsc"
 	"wb-ui/webkit"
 
@@ -29,7 +28,6 @@ func main() {
 	log.Printf("[Desktop] PairCode IDE 桌面版 %s", version)
 	core.Load()
 	core.LoadLastProject()
-	log.Printf("[Desktop] 工作区: %s", core.Root())
 
 	reg := bridge.NewRegistry()
 	handler.RegisterAll(&handler.Router{Reg: reg})
@@ -42,97 +40,54 @@ func main() {
 	setupLoaders(wv, distDir)
 	registerDesktopBridge(wv, reg)
 
-	htmlPath := distDir + "/index.html"
-	htmlData, err := os.ReadFile(htmlPath)
-	if err != nil {
-		log.Fatalf("[Desktop] 请先构建前端: cd cmd/desktop/web-ui && npm run build")
-	}
-	// 注入 onerror 捕获 JS 错误
-	html := strings.Replace(string(htmlData), "<head>",
-		`<head><script>window.__errors=[];window.onerror=function(m,s,l,c,e){window.__errors.push(String(m||e))}</script>`, 1)
-	if err := wv.LoadHTML(html); err != nil {
-		log.Fatalf("[Desktop] LoadHTML 失败: %v", err)
-	}
+	htmlData, _ := os.ReadFile(distDir + "/index.html")
+	html := strings.Replace(string(htmlData), "<head>", `<head><script>window.__errors=[];window.onerror=function(m){window.__errors.push(''+m)};console.log('CONSOLE_OK')</script>`, 1)
+	wv.LoadHTML(html)
 	log.Println("[Desktop] 前端页面已加载")
 
-	// 读取 Console 输出找 Vue 错误
 	if out := wv.ConsoleOutput(); out != "" {
-		for _, l := range strings.Split(out, "\n") {
-			if strings.TrimSpace(l) != "" { log.Printf("[CONSOLE] %s", l) }
-		}
+		log.Printf("[CONSOLE]\n%s", out)
 	}
 
-	// 从 Go DOM 检查渲染结果
+	// JS 诊断
+	wv.EvalJS(`(function(){
+		console.log('DIAG: app='+(document.getElementById('app')!==null)+' qs='+(document.querySelector('#app')!==null));
+		if(window.__errors&&window.__errors.length) console.log('ERR:',window.__errors.join(';'));
+	})()`)
+
+	if out2 := wv.ConsoleOutput(); out2 != "" {
+		log.Printf("[CONSOLE2]\n%s", out2)
+	}
+
+	// 从 Go DOM 检查
 	if doc := wv.Document(); doc != nil {
-		if body := doc.Body(); body != nil {
-			kids := body.ChildNodes()
-			log.Printf("[DOM] body children: %d", len(kids))
-			for i, n := range kids {
-				if i >= 5 { break }
-				switch v := n.(type) {
-				case *dom.Element:
-					log.Printf("[DOM]   [%d] <%s> id=%q class=%q", i, v.TagName(), v.GetId(), v.GetClassName())
-				case *dom.Text:
-					txt := v.Data()
-					if len(txt) > 60 { txt = txt[:60] + "..." }
-					log.Printf("[DOM]   [%d] TEXT: %q", i, txt)
-				default:
-					log.Printf("[DOM]   [%d] %T", i, n)
-				}
-			}
-		}
 		if app := doc.GetElementById("app"); app != nil {
 			log.Printf("[DOM] #app children: %d", len(app.ChildNodes()))
-		} else {
-			log.Printf("[DOM] #app NOT FOUND")
 		}
 	}
 
 	wv.RebuildRenderTree()
 
-	host, err := app.NewHost(wv, 1280, 800, "PairCode IDE")
-	if err != nil {
-		log.Fatalf("[Desktop] 创建窗口失败: %v", err)
-	}
-	log.Println("[Desktop] 窗口已启动，进入事件循环")
+	host, _ := app.NewHost(wv, 1280, 800, "PairCode IDE")
+	log.Println("[Desktop] 窗口已启动")
 	host.Run()
 	log.Println("[Desktop] 已退出。")
 }
 
 func setupLoaders(wv *webkit.WebView, distDir string) {
 	absDist, _ := filepath.Abs(distDir)
-	log.Printf("[Desktop] 资源目录: %s", absDist)
 	if mf := wv.MainFrame(); mf != nil {
 		if fr := mf.Frame(); fr != nil {
 			fr.ScriptLoader = func(src string) (string, error) {
-				p := resolvePath(src, absDist)
-				data, err := os.ReadFile(p)
-				if err != nil {
-					return "", fmt.Errorf("load script %q: %w", src, err)
-				}
-				code := string(data)
-				// 包裹 try-catch 捕获初始化错误
-				if strings.HasSuffix(src, "bundle.js") {
-					code = `try{` + code + `}catch(e){window.__lastError=(e&&e.message)||String(e)}`
-				}
-				return code, nil
+				data, _ := os.ReadFile(filepath.Join(absDist, strings.TrimPrefix(strings.TrimPrefix(src, "file://"), "./")))
+				return string(data), nil
 			}
 			fr.StyleSheetLoader = func(href string) (string, error) {
-				p := resolvePath(href, absDist)
-				data, err := os.ReadFile(p)
-				if err != nil {
-					return "", fmt.Errorf("load stylesheet %q: %w", href, err)
-				}
+				data, _ := os.ReadFile(filepath.Join(absDist, strings.TrimPrefix(strings.TrimPrefix(href, "file://"), "./")))
 				return string(data), nil
 			}
 		}
 	}
-}
-
-func resolvePath(src, distDir string) string {
-	p := strings.TrimPrefix(src, "file://")
-	p = strings.TrimPrefix(p, "./")
-	return filepath.Join(distDir, p)
 }
 
 func registerDesktopBridge(wv *webkit.WebView, reg *bridge.Registry) {
@@ -143,13 +98,12 @@ func registerDesktopBridge(wv *webkit.WebView, reg *bridge.Registry) {
 	log.Println("[Desktop] 注册 desktopBridge...")
 	bridgeObj := jsc.NewObject(interp.ObjectPrototype())
 	bridgeCall := jsc.NewNativeFunction("bridgeCall", func(in *jsc.Interpreter, this jsc.JSValue, args []jsc.JSValue) jsc.JSValue {
-		if len(args) < 2 { return errResult("至少需要 method 和 path") }
+		if len(args) < 2 { return errResult("need method and path") }
 		m, p := safeStr(args[0]), safeStr(args[1])
 		b, q := "", ""
 		if len(args) > 2 { b = safeStr(args[2]) }
 		if len(args) > 3 { q = safeStr(args[3]) }
-		req := fmt.Sprintf(`{"method":"%s","path":"%s","body":%s,"params":%s}`,
-			escStr(m), escStr(p), maybeJSON(b), maybeJSON(q))
+		req := fmt.Sprintf(`{"method":"%s","path":"%s","body":%s,"params":%s}`, escStr(m), escStr(p), maybeJSON(b), maybeJSON(q))
 		return jsc.StringValue(reg.HandleBridgeCall(req))
 	}, 4)
 	bridgeObj.Set("call", jsc.FunctionValue(bridgeCall))
