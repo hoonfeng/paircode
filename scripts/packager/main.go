@@ -478,7 +478,7 @@ func loadConfig(path string) *PackagerConfig {
 		fatalf("解析配置失败: %v", err)
 	}
 	if cfg.Version == "" {
-		cfg.Version = "1.0.0"
+		cfg.Version = "1.0.7"
 	}
 	if cfg.Dist != nil && cfg.Dist.OutputDir == "" {
 		cfg.Dist.OutputDir = "release"
