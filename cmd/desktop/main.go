@@ -48,10 +48,10 @@ func main() {
 
 	// 使用简单测试页验证渲染
 	testHTML := `<!DOCTYPE html>
-<html><body>
-<div style="background:red;color:white;padding:20px;font-size:24px">
-HELLO WB-UI
-</div>
+<html><head><title>Test</title></head>
+<body>
+<h1>Hello</h1>
+<p>This is a test page.</p>
 </body></html>`
 
 	if err := wv.LoadHTML(testHTML); err != nil {
