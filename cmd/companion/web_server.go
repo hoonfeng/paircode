@@ -2044,7 +2044,7 @@ func buildSystemStaticPrefix() string {
 		return systemStaticPrefixCache.prefix
 	}
 	var b strings.Builder
-	b.WriteString(agent.DefaultSystemPrompt(nil)) // 工作区信息已移至第 2 条 user msg，不嵌入 system prompt
+	b.WriteString(agent.DefaultSystemPrompt(core.Folders)) // 工作区路径基本固定，放 system prompt 静态前缀可最大化 KV Cache 命中
 	if si := strings.TrimSpace(core.Settings.SystemInstructions); si != "" {
 		b.WriteString("\n\n# 系统级指令（务必遵守）\n" + si)
 	}
