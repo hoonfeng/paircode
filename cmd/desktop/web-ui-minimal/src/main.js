@@ -10,10 +10,23 @@ try { app._container = c; window.__S5__='OK' } catch(e) { window.__S5__=''+e }
 try { h('div', {}, 't'); window.__S6__='OK' } catch(e) { window.__S6__=''+e }
 try { var vn = h(App); window.__S6b__='OK' } catch(e) { window.__S6b__=''+e }
 try { app._component = App; window.__S9__='OK' } catch(e) { window.__S9__=''+e }
-// 尝试 mount 到新创建的 div
+// 逐步追踪 mount 内部
+try { var root = h(App); window.__M1__='OK' } catch(e) { window.__M1__=''+e }
+try { root.appContext = app._context; window.__M2__='OK' } catch(e) { window.__M2__=''+e }
+try { app._instance = null; window.__M3__='OK' } catch(e) { window.__M3__=''+e }
+// 检查 mount 内部
+try {
+  var mountSrc = app.mount.toString();
+  window.__MOUNT_SRC__ = mountSrc.substring(0,200)
+} catch(e) { window.__MOUNT_SRC__ = ''+e }
+// mount 到新 div
 try {
   var newDiv = document.createElement('div');
   document.body.appendChild(newDiv);
+  window.__BEFORE_MOUNT__ = 1
   app.mount(newDiv);
   window.__S7__='OK'
-} catch(e) { window.__S7__=''+e }
+} catch(e) { 
+  window.__S7__=''+e
+  window.__AFTER_ERR__ = (app._instance ? 'instance_set' : 'instance_null')
+}
