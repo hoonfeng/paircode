@@ -142,7 +142,9 @@ func main() {
 			console.log('APP_CREATED: '+(window.__APP_CREATED__||'0'));
 			console.log('MOUNT_DONE: '+(window.__MOUNT_DONE__||'0'));
 			console.log('APP_ERR: '+(window.__APP_ERR__||'none'));
-			console.log('APP_ERR_STACK: '+(window.__APP_ERR_STACK__||'none'));
+			console.log('STEP_ERR1: '+(window.__STEP_ERR_1__||'none'));
+			console.log('STEP_ERR2: '+(window.__STEP_ERR_2__||'none'));
+			console.log('STEP_ERR3: '+(window.__STEP_ERR_3__||'none'));
 			if(window.__VUE_STEPS__) console.log('STEPS: '+window.__VUE_STEPS__.join(' | '));
 			console.log('ERR_CNT: '+(window.__errors?window.__errors.length:0));
 		if(window.__errors&&window.__errors.length) console.log('ERR:',window.__errors.join('|'));

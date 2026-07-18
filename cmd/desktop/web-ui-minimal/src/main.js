@@ -9,6 +9,7 @@ function logStep(name, ok) {
 }
 
 window.__MOUNT_START__ = 1
+window.__BUILD_ID__ = 'build003'
 
 var app
 try {
@@ -30,10 +31,12 @@ try {
 }
 
 if (container) {
-  try { container.innerHTML = '' } catch(e) { window.__APP_ERR__ = 'innerHTML:'+e; logStep('setupContainer', false) }
-  try { container.__vue_app__ = app } catch(e) { window.__APP_ERR__ = 'vue_app:'+e; logStep('setupContainer', false) }
-  try { app._container = container } catch(e) { window.__APP_ERR__ = 'container:'+e; logStep('setupContainer', false) }
-  logStep('setupContainer', true)
+  var _setupFailed = false
+  try { container.innerHTML = '' } catch(e) { window.__STEP_ERR_1__=''+e; _setupFailed = true }
+  if(!_setupFailed) { try { container.__vue_app__ = app } catch(e) { window.__STEP_ERR_2__=''+e; _setupFailed = true } }
+  if(!_setupFailed) { try { app._container = container } catch(e) { window.__STEP_ERR_3__=''+e; _setupFailed = true } }
+  logStep('setupContainer', !_setupFailed)
+  if(_setupFailed) { throw new Error('setupContainer failed') }
 } else {
   logStep('setupContainer', false)
   window.__APP_ERR__ = 'container_null'
