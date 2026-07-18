@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
 
 // ErrCirclingLoop 绕圈检测连续触发多次，由 Loop.Run 返回。
@@ -229,7 +230,10 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 	if len(msgs) > 0 && msgs[len(msgs)-1].Role == RoleUser && msgs[len(msgs)-1].Content == task {
 		// 末尾已有同内容用户消息，跳过，防持久化后重复
 	} else {
-		msgs = append(msgs, Message{Role: RoleUser, Content: task})
+		// 时间戳注入用户消息（而非系统提示词），避免破坏 KV Cache 前缀命中。
+		timestamp := time.Now().Format("2006-01-02 15:04:05 MST (UTC-07:00)")
+		taskWithTs := task + "\n\n**消息时间**: " + timestamp
+		msgs = append(msgs, Message{Role: RoleUser, Content: taskWithTs})
 	}
 
 	// ★ 启动时检查记忆/知识库过期引用，如发现则注入一条通知（避免 silent 误导）
@@ -571,7 +575,8 @@ func DefaultSystemPrompt(roots []string) string {
 		"# 防止卡死\n" +
 		"- 不要连续 3 轮只输出分析文本而不调用任何工具。\n" +
 		"- 不确定时宁可声明完成并向用户汇报，让用户决定是否继续。\n" +
-		"- 不要在「让我再看看…」和「也许还需要…」之间反复循环。"
+		"- 不要在「让我再看看…」和「也许还需要…」之间反复循环。" +
+		CacheBoundary
 }
 
 // ProjectRules 读工作区根的项目约定，拼成系统提示附加段供 agent 遵守：

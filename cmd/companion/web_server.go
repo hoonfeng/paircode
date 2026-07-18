@@ -2095,8 +2095,7 @@ func buildWebSystemDynamic() string {
 			}
 		}
 	}
-	// ★ 时间戳放在动态区，变化不影响静态前缀缓存
-	b.WriteString("\n\n# 当前时间\n" + time.Now().Format("2006-01-02 15:04:05 MST (UTC-07:00)"))
+	// 时间戳已移至用户消息内（Loop.Run 中注入），保持系统提示词缓存前缀稳定。
 	return b.String()
 }
 
