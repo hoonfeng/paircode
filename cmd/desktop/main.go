@@ -42,6 +42,7 @@ func main() {
 
 	htmlData, _ := os.ReadFile(distDir + "/index.html")
 	html := strings.Replace(string(htmlData), "<head>", `<head><script>window.__errors=[];window.onerror=function(m){window.__errors.push(''+m)};console.log('CONSOLE_OK')</script>`, 1)
+	wv.EvalJS(`console.log('PRE_BASIC_TEST')`)
 	wv.LoadHTML(html)
 	log.Println("[Desktop] 前端页面已加载")
 
