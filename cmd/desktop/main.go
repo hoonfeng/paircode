@@ -36,7 +36,7 @@ func main() {
 	wv := webkit.NewWebView()
 	wv.Resize(1280, 800)
 
-	distDir := "cmd/desktop/web-ui/dist"
+	distDir := "cmd/desktop/web-ui-minimal/dist"
 	setupLoaders(wv, distDir)
 	registerDesktopBridge(wv, reg)
 
@@ -118,8 +118,11 @@ func main() {
 	wv.EvalJS(`(function(){
 		console.log('DIAG: app='+(document.getElementById('app')!==null)+' qs='+(document.querySelector('#app')!==null));
 		console.log('MOUNT_REACHED: '+(window.__MOUNT_REACHED__===true?'YES':'NO:'+typeof window.__MOUNT_REACHED__));
-		console.log('STAGES: '+(window.__VUE_STAGE__||'NOT_SET'));
-		console.log('ERR_CNT: '+(window.__errors?window.__errors.length:0));
+			console.log('STAGES: '+(window.__VUE_STAGE__||'NOT_SET'));
+			console.log('MOUNT_START: '+(window.__MOUNT_START__||'0'));
+			console.log('APP_CREATED: '+(window.__APP_CREATED__||'0'));
+			console.log('MOUNT_DONE: '+(window.__MOUNT_DONE__||'0'));
+			console.log('ERR_CNT: '+(window.__errors?window.__errors.length:0));
 		if(window.__errors&&window.__errors.length) console.log('ERR:',window.__errors.join('|'));
 		// Check key Vue APIs
 		var apis = ['createApp','reactive','ref','computed','defineComponent'];
