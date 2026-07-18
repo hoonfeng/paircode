@@ -609,7 +609,7 @@ const compactContext = async () => {
   if (!convId) { window.$toast?.('没有活跃对话', 'warning'); return }
   try {
     await api.chatCompact(convId)
-    window.$toast?.('已请求上下文压缩，将在下一轮迭代执行', 'success')
+    window.$toast?.('上下文已压缩（历史消息已压缩，运行中 agent 将在下一轮生效）', 'success')
   } catch (e) {
     window.$toast?.('压缩请求失败: ' + (e.message || e), 'error')
   }

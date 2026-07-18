@@ -151,6 +151,8 @@ func runSubAgent(ctx context.Context, parent *Loop, tree *AgentTree, name, task 
 	} else {
 		result = "(子 agent 未产出结果)"
 	}
+	// ★ 压缩结果：只保留报告正文，截去中间工具输出，限制总长
+	result = compressAgentResult(result)
 	// ★ 记录执行日志：子 agent 的执行结果
 	parent.LogResult(name, result)
 
@@ -218,7 +220,7 @@ func runSingleLLMCall(ctx context.Context, parent *Loop, sa *SubAgent, childReg 
 	parent.LogResult(name, assistant.Content)
 
 	// 结果通过函数返回值回传，EventFinal/EventDone 被 SubAgentSink 丢弃 → 不泄漏
-	result := assistant.Content
+	result := compressAgentResult(assistant.Content)
 	onEvent(Event{Type: EventFinal, Content: result})
 	onEvent(Event{Type: EventDone, Content: result, DoneReason: "task_complete"})
 	return fmt.Sprintf("【子 agent(%s)执行结果】\n%s\n\n---\n请根据以上结果决定下一步：\n1. **立即调用 update_plan 将当前项标记为 done**（无论是否还有剩余项，必须先更新计划状态）\n2. 如果还有剩余计划项，再调用 delegate_task 执行下一项\n3. 如果全部计划项都已是 done 状态，再调用 generate_commit_message 完成收尾", name, result), nil
@@ -240,6 +242,19 @@ func lastAssistantContent(msgs []Message) string {
 // 给内层子 agent 追踪自身任务进度用的，需要保留在子 registry 中。
 var outerOnlyTools = map[string]bool{
 	"update_plan": true,
+}
+
+// maxDelegateResultLen 子 agent 结果最大长度（超出截断保留首尾）。
+const maxDelegateResultLen = 2000
+
+// compressAgentResult 压缩子 agent 的输出：截断到 maxDelegateResultLen，
+// 优先保留首尾各一半，中间用「…（中间输出已截断）…」替代。
+func compressAgentResult(result string) string {
+	if len(result) <= maxDelegateResultLen {
+		return result
+	}
+	half := maxDelegateResultLen / 2
+	return result[:half] + "\n\n…（中间输出已截断，完整结果见执行日志）…\n\n" + result[len(result)-half:]
 }
 
 // rebuildSubRegistry 创建子 agent 的注册表，自动排除外层专用工具。

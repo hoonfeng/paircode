@@ -669,15 +669,52 @@ func (m *SessionManager) Stop(convID string) {
 	sess.Cancel()
 }
 
-// Compact 请求指定会话在下一轮迭代中压缩上下文。
+// Compact 请求压缩上下文。
+// 如果有运行中的 Loop，设置 CompactRequested 让下轮迭代触发压缩。
+// 同时直接压缩已存储的历史消息（无论 Loop 是否运行），使下次加载时上下文更小。
 func (m *SessionManager) Compact(convID string) {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
 	sess, ok := m.sessions[convID]
-	if !ok || sess.Loop == nil {
+	store := m.store
+	m.mu.RUnlock()
+
+	// 有运行中的 Loop → 标记下次迭代压缩
+	if ok && sess.Loop != nil && sess.Running {
+		sess.Loop.CompactRequested = true
+	}
+
+	// 直接压缩已存储的历史消息
+	if store == nil {
 		return
 	}
-	sess.Loop.CompactRequested = true
+	msgs, err := store.LoadAll(convID)
+	if err != nil || len(msgs) < 3 {
+		return
+	}
+	// 跳过前导 system 消息，找到可丢弃的中段
+	prefix := prefixLen(msgs)
+	keepFrom := len(msgs) - compactKeepRecent
+	if keepFrom < prefix {
+		return // 消息太少，不值得压缩
+	}
+	for keepFrom < len(msgs) && msgs[keepFrom].Role == RoleTool {
+		keepFrom++
+	}
+	dropped := msgs[prefix:keepFrom]
+	if len(dropped) < compactMinDrop {
+		return
+	}
+	// 用规则式摘要（无 LLM 压缩模型时也保证能用）
+	summary := "[上下文已压缩 — 规则摘要]\n\n" + ruleSummarize(dropped)
+	out := make([]Message, 0, prefix+1+len(msgs)-keepFrom)
+	out = append(out, msgs[:prefix]...)
+	// 摘要作为一条 user 消息插入
+	out = append(out, Message{Role: RoleUser, Content: "【上下文压缩摘要】\n" + summary})
+	out = append(out, msgs[keepFrom:]...)
+	// 替换 store 中的历史
+	if err := store.ReplaceHistory(convID, out); err != nil {
+		fmt.Printf("[session] Compact 替换 store 失败 conv=%s: %v\n", convID, err)
+	}
 }
 
 // Subscribe 订阅指定会话的事件流（fan-out 分发）。
