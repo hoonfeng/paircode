@@ -44,9 +44,16 @@ func main() {
 	wv.EvalJS(`window.process={env:{NODE_ENV:"production","__NODE_ENV":"production"}}`)
 	wv.EvalJS(`window.__VUE_OPTIONS_API__=true;window.__VUE_PROD_DEVTOOLS__=false`)
 	wv.EvalJS(`window.__VUE_PROD_HYDRATION_MISMATCH_DETAILS__=false`)
-	// polyfill: safe style setProperty
-	wv.EvalJS(`if(window.CSSStyleDeclaration&&CSSStyleDeclaration.prototype.setProperty){var _osp=CSSStyleDeclaration.prototype.setProperty;CSSStyleDeclaration.prototype.setProperty=function(p,v,i){try{return _osp.call(this,p,String(v),i)}catch(e){return}}}`)
-	
+	// Comprehensive polyfills for missing JSC features
+	wv.EvalJS(`
+	if(!Array.prototype.flatMap)Array.prototype.flatMap=function(f){var r=[];for(var i=0;i<this.length;i++){var v=f(this[i],i,this);if(v instanceof Array)for(var j=0;j<v.length;j++)r.push(v[j]);else r.push(v)}return r};
+	if(!Promise.allSettled)Promise.allSettled=function(ps){return Promise.all(ps.map(function(p){return p.then(function(v){return{status:"fulfilled",value:v}},function(r){return{status:"rejected",reason:r}})}))};
+	if(!Promise.any)Promise.any=function(ps){return new Promise(function($r,$j){var c=0;var es=[];ps.forEach(function(p,i){p.then($r,function(e){c++;es[i]=e;if(c===ps.length)$j(new Error("AggregateError: "+es.join(", ")))})})})};
+	window.queueMicrotask=function(f){try{Promise.resolve().then(f)}catch(e){setTimeout(f,0)}};
+	Object.hasOwn=function(o,p){return Object.prototype.hasOwnProperty.call(o,p)};
+	Object.getOwnPropertyNames=function(o){if(!o)return [];var k=[];for(var n in o)k.push(n);return k};
+	console.log('POLYFILLS_OK');
+	`)
 	htmlData, _ := os.ReadFile(distDir + "/index.html")
 	html := strings.Replace(string(htmlData), "<head>", `<head><script>window.__errors=[];window.onerror=function(m){window.__errors.push(''+m)};console.log('CONSOLE_OK')</script>`, 1)
 	wv.LoadHTML(html)
@@ -63,6 +70,9 @@ func main() {
 		try {
 			var app = document.getElementById('app');
 			if(app) console.log('APP: children='+app.childNodes.length+' html='+(app.innerHTML||'').substring(0,100));
+			// Check if Vue app was created
+			if(window.__vue_app__) console.log('VUE_APP: exists');
+			else console.log('VUE_APP: NOT found');
 		} catch(e) { console.log('APP_ERR:'+e); }
 	})()`)
 
