@@ -2031,7 +2031,8 @@ var systemStaticPrefixCache struct {
 
 func systemStaticPrefixKey() string {
 	si := core.Settings.SystemInstructions
-	return fmt.Sprintf("%s|%s", si, roleprompts.PhilosophyPrompt())
+	roots := strings.Join(core.Folders, "|")
+	return fmt.Sprintf("%s|%s|%s", roots, si, roleprompts.PhilosophyPrompt())
 }
 
 // buildSystemStaticPrefix 构建 system prompt 静态前缀（CACHE_BOUNDARY 之前）。
@@ -2342,6 +2343,16 @@ func (s *webServer) handleChatStop(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	agentMgr.Stop(convID)
+	jsonResp(w, map[string]any{"ok": true})
+}
+
+func (s *webServer) handleChatCompact(w http.ResponseWriter, r *http.Request) {
+	convID := r.URL.Query().Get("convId")
+	if convID == "" {
+		jsonErr(w, "缺少 convId 参数")
+		return
+	}
+	agentMgr.Compact(convID)
 	jsonResp(w, map[string]any{"ok": true})
 }
 

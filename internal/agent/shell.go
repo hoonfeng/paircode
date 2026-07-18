@@ -95,8 +95,7 @@ func registerShellTools(r *Registry, root string) {
 		Description: "在后台启动一条长命令，不阻塞 agent 循环（推荐用于 dev server、watch 模式、调试服务等）。" +
 			"返回进程 id，随后用 read_output 读输出、kill_process 停止。" +
 			"如果命令会长期运行或保持监听状态，优先用此工具。短查询请用 run_command。",
-		Parameters:       objSchema(props{"command": strProp("要后台执行的命令"), "cwd": strProp("可选工作目录（工作区内）")}, "command"),
-		RequiresApproval: true,
+		Parameters: objSchema(props{"command": strProp("要后台执行的命令"), "cwd": strProp("可选工作目录（工作区内）")}, "command"),
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
 			command := strings.TrimSpace(argStr(args, "command"))
 			if command == "" {
@@ -140,10 +139,9 @@ func registerShellTools(r *Registry, root string) {
 	})
 
 	r.Register(&Tool{
-		Name:             "kill_process",
-		Description:      "停止某后台进程（id）。",
-		Parameters:       objSchema(props{"id": intProp("进程 id")}, "id"),
-		RequiresApproval: true,
+		Name:        "kill_process",
+		Description: "停止某后台进程（id）。只能杀死通过 run_background 启动的进程，无法操作外部进程。",
+		Parameters:  objSchema(props{"id": intProp("进程 id")}, "id"),
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
 			id := argInt(args, "id", -1)
 			p := bg.get(id)

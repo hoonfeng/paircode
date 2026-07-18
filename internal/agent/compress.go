@@ -28,6 +28,17 @@ const (
 // 并从中段移除被压缩的消息（不插入摘要消息到历史中——摘要注入系统提示的可变部分）。
 // 复刻参考主动压缩：tokens 优先用上一轮 API 实测 prompt_tokens（含模板开销更可信），否则启发式估算。
 func (l *Loop) maybeCompact(ctx context.Context, msgs []Message) []Message {
+	// 主动压缩请求（由前端压缩按钮触发）：忽略冷却和阈值，直接压缩
+	if l.CompactRequested {
+		l.CompactRequested = false
+		if out, summary, dropped := l.compact(ctx, msgs); dropped > 0 {
+			l.CompressedSummaries = append(l.CompressedSummaries, summary)
+			l.compactCooldown = compactCooldownTurns
+			l.emit(Event{Type: EventCompacted, Content: fmt.Sprintf("上下文已压缩 · 早期 %d 条对话合并为摘要，保留最近 %d 条", dropped, prefixLen(out))})
+			return out
+		}
+		return msgs
+	}
 	if l.MaxContextTokens <= 0 {
 		return msgs // 未配置窗口上限 → 压缩关闭
 	}

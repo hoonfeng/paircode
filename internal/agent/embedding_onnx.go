@@ -1,4 +1,4 @@
-//go:build onnx
+//go:build cgo
 
 package agent
 

@@ -1,25 +1,25 @@
-//go:build !onnx
+//go:build !cgo
 
 package agent
 
 import "fmt"
 
-// ── 非 ONNX 编译的回退实现 ──────────────────────────
+// ── 非 CGo 编译的回退实现 ──
 //
-// 构建时不带 -tags onnx 时使用此文件。
-// 所有函数返回不可用状态，调用者自动回退关键词搜索。
+// 构建环境无 C 编译器（CGO_ENABLED=0）时使用此文件。
+// NewONNXBackend 返回错误，调用者自动回退关键词搜索。
 
 // ONNXBackend 在此构建模式下不可用。
 type ONNXBackend struct{}
 
-// NewONNXBackend 返回错误提示用户启用 ONNX 构建。
+// NewONNXBackend 返回错误提示缺少 C 编译器。
 func NewONNXBackend(root string) (*ONNXBackend, error) {
-	return nil, fmt.Errorf("ONNX Runtime 支持未启用。请使用 -tags onnx 构建：go build -tags onnx ./cmd/companion")
+	return nil, fmt.Errorf("ONNX Runtime 需要 CGo。请安装 GCC 或 MinGW-w64 后重新构建")
 }
 
 // Embed 不支持。
 func (b *ONNXBackend) Embed(text string) ([]float32, error) {
-	return nil, fmt.Errorf("ONNX 未启用")
+	return nil, fmt.Errorf("ONNX 未启用（CGo 不可用）")
 }
 
 // Available 返回 false。

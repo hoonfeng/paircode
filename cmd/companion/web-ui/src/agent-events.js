@@ -44,11 +44,11 @@ export function setGlobalCtx(ctx) {
 }
 
 // ─── 运行时管理 ──
-// msgIdx 是 assistant 占位消息在 messagesByConv[convId] 中的索引
-// （由 createAssistantPlaceholder 返回，必须在 push 之后取 length-1）
-export function startConvRuntime(convId, msgIdx, lastUserText = '') {
+// msgKey 是 assistant 占位消息的唯一标识 _key（比 msgIdx 数组下标稳定，
+// 不会被 loadMoreMessages 的 prepend 操作破坏）。
+export function startConvRuntime(convId, msgKey, lastUserText = '') {
   runtimes[convId] = {
-    msgIdx: msgIdx,
+    msgKey: msgKey,
     finalContent: '',
     lastUserText,
   }
@@ -62,20 +62,30 @@ export function resetConvRuntime(convId) {
   delete runtimes[convId]
 }
 
+// 通过 _key 在消息数组中查找 assistant 消息（稳定，不受 prepend 影响）
+function findMsgByKey(msgs, key) {
+  if (!msgs || !key) return null
+  for (const m of msgs) {
+    if (m._key === key) return m
+  }
+  return null
+}
+
 // 创建助手消息占位符（由 RightPanel sendMessage 调用，在 chatStart 之前）
+// 返回 msgKey（唯一标识，比数组下标稳定）。
 export function createAssistantPlaceholder(convId) {
   const msgs = state.messagesByConv[convId]
-  if (!msgs) return -1
-  const msgIdx = msgs.length
-  console.log('[AE] createAssistantPlaceholder conv=%s msgIdx=%d msgsLen=%d', convId, msgIdx, msgs.length)
+  if (!msgs) return ''
+  const key = makeMsgKey()
+  console.log('[AE] createAssistantPlaceholder conv=%s key=%s msgsLen=%d', convId, key, msgs.length)
   const assistantMsg = {
     role: 'assistant', content: '', segments: [], toolCalls: [],
-    _key: makeMsgKey(), _idx: msgIdx,
+    _key: key, _idx: msgs.length,
     _time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
     _loading: true,
   }
   msgs.push(assistantMsg)
-  return msgIdx
+  return key
 }
 
 // ─── 事件处理 ──
@@ -90,13 +100,14 @@ export function processAgentEvent(convId, data) {
     console.warn('[AE] processAgentEvent 丢弃: 无 messagesByConv conv=%s type=%s', convId, data.type)
     return
   }
-  const msg = msgs[rt.msgIdx]
+  // 用 _key 查找（比数组下标稳定，不会被 loadMoreMessages prepend 破坏）
+  const msg = findMsgByKey(msgs, rt.msgKey)
   if (!msg) {
-    console.warn('[AE] processAgentEvent 丢弃: msgIdx=%d 越界 msgsLen=%d conv=%s type=%s', rt.msgIdx, msgs.length, convId, data.type)
+    console.warn('[AE] processAgentEvent 丢弃: 未找到 msgKey=%s conv=%s type=%s', rt.msgKey, convId, data.type)
     return
   }
   if (data.type !== 'content' && data.type !== 'thinking') {
-    console.log('[AE] processAgentEvent conv=%s type=%s msgIdx=%d', convId, data.type, rt.msgIdx)
+    console.log('[AE] processAgentEvent conv=%s type=%s msgKey=%s', convId, data.type, rt.msgKey)
   }
   msg._loading = false
 
@@ -298,7 +309,7 @@ export function processAgentDone(convId, data) {
   const rt = runtimes[convId]
   const msgs = state.messagesByConv[convId]
   if (msgs && rt) {
-    const msg = msgs[rt.msgIdx]
+    const msg = findMsgByKey(msgs, rt.msgKey)
     if (msg) {
       // 用流式累积的 finalContent 替换（已在 content 事件中逐字推送，不含重复）
       msg.content = rt.finalContent
@@ -316,7 +327,7 @@ export function processAgentDone(convId, data) {
       })
       const isEmptyPlaceholder = !rt.finalContent && !hasEffectiveSeg && (!data || data.doneReason !== 'stopped')
       if (isEmptyPlaceholder) {
-        console.log('[AE] processAgentDone 空占位 conv=%s msgIdx=%d 设为完成提示', convId, rt.msgIdx)
+        console.log('[AE] processAgentDone 空占位 conv=%s msgKey=%s 设为完成提示', convId, rt.msgKey)
         msg.content = '**[操作完成]**'
         pushSegment(msg.segments, 'content').content = '**[操作完成]**'
       }
@@ -348,7 +359,9 @@ export function processAgentDone(convId, data) {
   }
   if (globalCtx.loadWsTokenStats) globalCtx.loadWsTokenStats()
   if (rt && rt.finalContent && globalCtx.saveConvMsg) {
-    globalCtx.saveConvMsg(convId, rt.finalContent, rt.msgIdx)
+    const savedMsg = findMsgByKey(msgs, rt.msgKey)
+    const savedIdx = savedMsg ? savedMsg._idx : -1
+    globalCtx.saveConvMsg(convId, rt.finalContent, savedIdx)
   }
   const localConv = state.conversations.find(c => c.id === convId)
   if (localConv) localConv.msgCount = (localConv.msgCount || 0) + 1
@@ -365,7 +378,7 @@ export function processAgentDisconnect(convId, errMsg) {
   const rt = runtimes[convId]
   const msgs = state.messagesByConv[convId]
   if (msgs && rt) {
-    const msg = msgs[rt.msgIdx]
+    const msg = findMsgByKey(msgs, rt.msgKey)
     if (msg) {
       msg._loading = false
       pushSegment(msg.segments, 'content').content += '**[连接中断]** ' + errMsg
@@ -387,7 +400,7 @@ export function processAllDisconnected() {
     const rt = runtimes[convId]
     const msgs = state.messagesByConv[convId]
     if (msgs && rt) {
-      const msg = msgs[rt.msgIdx]
+      const msg = findMsgByKey(msgs, rt.msgKey)
       if (msg) {
         msg._loading = false
         if (!msg.content) msg.content = ''
@@ -435,19 +448,19 @@ export function processStatus(payload) {
       // 若最后一条不是 loading 的 assistant 消息，则创建占位
       const last = msgs[msgs.length - 1]
       if (!last || last.role !== 'assistant' || !last._loading) {
-        const msgIdx = msgs.length
-        console.log('[AE] processStatus 创建runtime+loading conv=%s msgIdx=%d msgsLen=%d', convId, msgIdx, msgs.length)
+        const key = makeMsgKey()
+        console.log('[AE] processStatus 创建runtime+loading conv=%s key=%s msgsLen=%d', convId, key, msgs.length)
         msgs.push({
           role: 'assistant', content: '', segments: [], toolCalls: [],
-          _key: makeMsgKey(), _idx: msgIdx,
+          _key: key, _idx: msgs.length,
           _time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
           _loading: true,
         })
-        runtimes[convId] = { msgIdx, finalContent: '', lastUserText: '' }
+        runtimes[convId] = { msgKey: key, finalContent: '', lastUserText: '' }
       } else {
-        // 已有 loading 的 assistant 消息，直接复用其索引
-        console.log('[AE] processStatus 复用runtime conv=%s msgIdx=%d', convId, msgs.length - 1)
-        runtimes[convId] = { msgIdx: msgs.length - 1, finalContent: '', lastUserText: '' }
+        // 已有 loading 的 assistant 消息，复用其 _key
+        console.log('[AE] processStatus 复用runtime conv=%s key=%s', convId, last._key)
+        runtimes[convId] = { msgKey: last._key, finalContent: '', lastUserText: '' }
       }
       // 若是当前对话，同步 state.messages（仅当有更改时）
       if (state.currentConvId === convId) {

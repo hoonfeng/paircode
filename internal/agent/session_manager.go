@@ -669,6 +669,17 @@ func (m *SessionManager) Stop(convID string) {
 	sess.Cancel()
 }
 
+// Compact 请求指定会话在下一轮迭代中压缩上下文。
+func (m *SessionManager) Compact(convID string) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	sess, ok := m.sessions[convID]
+	if !ok || sess.Loop == nil {
+		return
+	}
+	sess.Loop.CompactRequested = true
+}
+
 // Subscribe 订阅指定会话的事件流（fan-out 分发）。
 // 返回一个缓冲 100 的只读 channel；会话不存在返回 nil。
 // 若会话已结束（fan-out 已退出），返回一个已关闭的 channel（订阅者立即收到流结束信号）。

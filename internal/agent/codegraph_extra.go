@@ -403,6 +403,150 @@ func registerExtraCodeGraphTools(r *Registry, root string) {
 		},
 	})
 
+	// ── 29.5. codegraph_semantic_search — 语义搜索代码 ──
+	r.Register(&Tool{
+		Name: "codegraph_semantic_search",
+		Description: "基于语义理解搜索代码（需 ONNX 嵌入模型）。支持自然语言查询，如「读取文件的函数」「处理错误的逻辑」。结果按语义相似度排序，比关键词搜索更准确。",
+		Parameters: objSchema(props{
+			"query":     strProp("自然语言查询，如「读取配置文件」「处理 HTTP 请求」"),
+			"limit":     intProp("可选：最大返回数（默认 10）"),
+			"reindex":   boolProp("可选：强制重新索引代码实体（默认 false）"),
+		}, "query"),
+		ReadOnly: true,
+		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			query := strings.TrimSpace(argStr(args, "query"))
+			limit := argInt(args, "limit", 10)
+			reindex := argBool(args, "reindex")
+			if query == "" {
+				return "", fmt.Errorf("query 不能为空")
+			}
+			if limit <= 0 || limit > 50 {
+				limit = 10
+			}
+
+			g, err := getCodeGraph(root)
+			if err != nil {
+				return "", err
+			}
+
+			backend := GetEmbeddingBackend(root)
+			if !backend.Available() {
+				return "嵌入模型不可用。需要 CGo（安装 GCC/MinGW-w64 后构建）且模型文件在 models/bge-small-zh-v1.5/ 或 .pair/embeddings/bge-small-zh-v1.5/ 中。", nil
+			}
+
+			cache := LoadEmbeddingCache(root)
+
+			// 惰性索引：首次调用或强制重索引时计算所有代码实体的嵌入向量
+			indexedCount := 0
+			if reindex || len(cache.Vectors) == 0 {
+				entities := g.GetEntitiesByKind(codegraph.EntityFunction)
+				entities = append(entities, g.GetEntitiesByKind(codegraph.EntityMethod)...)
+				entities = append(entities, g.GetEntitiesByKind(codegraph.EntityStruct)...)
+				entities = append(entities, g.GetEntitiesByKind(codegraph.EntityInterface)...)
+				entities = append(entities, g.GetEntitiesByKind(codegraph.EntityType)...)
+
+				for _, e := range entities {
+					key := "code:" + e.ID
+					if !reindex && cache.Get(key) != nil {
+						continue // 已有向量且非强制重索引
+					}
+					// 构建文本：类型 + 名称 + 签名 + 文档注释
+					var text strings.Builder
+					text.WriteString(string(e.Kind))
+					text.WriteString(": ")
+					text.WriteString(e.Name)
+					text.WriteString("\n")
+					if e.Signature != "" {
+						text.WriteString(e.Signature)
+						text.WriteString("\n")
+					}
+					if e.Doc != "" {
+						text.WriteString(e.Doc)
+					}
+					vec, err := backend.Embed(text.String())
+					if err == nil && len(vec) > 0 {
+						cache.Set(key, vec)
+						indexedCount++
+					}
+				}
+				if indexedCount > 0 {
+					cache.Save()
+				}
+			}
+
+			// 算查询向量
+			qv, err := backend.Embed(query)
+			if err != nil || len(qv) == 0 {
+				return "", fmt.Errorf("查询向量计算失败: %w", err)
+			}
+
+			// 遍历缓存，计算余弦相似度
+			type se struct {
+				entity *codegraph.Entity
+				sim    float64
+			}
+			var results []se
+			for key, vec := range cache.Vectors {
+				if !strings.HasPrefix(key, "code:") {
+					continue
+				}
+				entityID := strings.TrimPrefix(key, "code:")
+				e := g.GetEntity(entityID)
+				if e == nil {
+					continue
+				}
+				sim := CosineSimilarity(qv, vec)
+				if sim > 0.3 {
+					results = append(results, se{e, sim})
+				}
+			}
+
+			// 按相似度降序
+			sort.Slice(results, func(i, j int) bool {
+				return results[i].sim > results[j].sim
+			})
+			if len(results) > limit {
+				results = results[:limit]
+			}
+
+			if len(results) == 0 {
+				return fmt.Sprintf("未找到与「%s」语义相关的代码。（共 %d 个已索引实体）", query, indexedCount), nil
+			}
+
+			var b strings.Builder
+			b.WriteString(fmt.Sprintf("## 语义搜索结果\n查询: `%s` | 找到 %d 个结果\n\n", query, len(results)))
+			for i, r := range results {
+				sig := r.entity.Signature
+				if len(sig) > 100 {
+					sig = sig[:100] + "…"
+				}
+				b.WriteString(fmt.Sprintf("### %d. %s (`%s`)\n", i+1, r.entity.Name, string(r.entity.Kind)))
+				b.WriteString(fmt.Sprintf("- 相似度: **%.3f**\n", r.sim))
+				b.WriteString(fmt.Sprintf("- 文件: `%s:%d`\n", r.entity.FilePath, r.entity.Line))
+				if r.entity.Doc != "" {
+					doc := r.entity.Doc
+					if len(doc) > 200 {
+						doc = doc[:200] + "…"
+					}
+					b.WriteString(fmt.Sprintf("- 说明: %s\n", doc))
+				}
+				if sig != "" {
+					b.WriteString(fmt.Sprintf("- 签名: `%s`\n", sig))
+				}
+				b.WriteString("\n")
+			}
+			// 统计缓存的代码实体总数
+			totalCached := 0
+			for k := range cache.Vectors {
+				if strings.HasPrefix(k, "code:") {
+					totalCached++
+				}
+			}
+			b.WriteString(fmt.Sprintf("---\n已索引 %d 个代码实体（共 %d 个缓存），相似度阈值 0.3", indexedCount, totalCached))
+			return b.String(), nil
+		},
+	})
+
 	// ── 30. codegraph_explore — 自然语言→源码 ──
 	r.Register(&Tool{
 		Name: "codegraph_explore",

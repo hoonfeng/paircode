@@ -82,6 +82,8 @@ func upgradeWebSocket(w http.ResponseWriter, r *http.Request) (*wsConn, error) {
 
 // writeTextFrame 写入一个 WebSocket 文本帧（服务器→客户端，不掩码）。
 func (c *wsConn) writeTextFrame(data []byte) error {
+	c.netConn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+	defer c.netConn.SetWriteDeadline(time.Time{})
 	// 帧头：FIN=1, opcode=0x1 (text)
 	if err := c.bw.WriteByte(0x81); err != nil {
 		return err
@@ -127,6 +129,8 @@ func (c *wsConn) writeTextFrame(data []byte) error {
 
 // writePingFrame 写入一个 Ping 帧（用于心跳保活）。
 func (c *wsConn) writePingFrame() error {
+	c.netConn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+	defer c.netConn.SetWriteDeadline(time.Time{})
 	if err := c.bw.WriteByte(0x89); err != nil { // FIN=1, opcode=0x9 (ping)
 		return err
 	}
@@ -295,10 +299,17 @@ func (s *webServer) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	defer heartbeat.Stop()
 
 	// 后台读取客户端消息（处理 close 帧、忽略其他）
-	clientClosed := make(chan struct{})
+	// 设置 60s 读超时，配合 30s 心跳：2 次心跳未回复即为断开
+	clientClosed := make(chan struct{}, 1)
 	go func() {
-		defer close(clientClosed)
+		defer func() {
+			select {
+			case clientClosed <- struct{}{}:
+			default:
+			}
+		}()
 		for {
+			wsc.netConn.SetReadDeadline(time.Now().Add(70 * time.Second))
 			_, _, e := wsc.readFrame()
 			if e != nil {
 				return

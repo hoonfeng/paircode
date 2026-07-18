@@ -98,8 +98,8 @@ type Loop struct {
 
 	// CompressedSummaries 累积的上下文压缩摘要列表。
 	// 每次 maybeCompact 压缩中段老消息后追加一条摘要。
-	// 这些摘要不插入历史消息，而是注入系统提示的可变部分（buildSystemWithSummaries），
-	// 以保持 system 前缀稳定、语义清晰（系统提示的「项目当前状态」段自然包含摘要）。
+	// 这些摘要不作为 system message 的可变部分注入（那会破坏 KV Cache 前缀），
+	// 而是在循环迭代中通过 buildInjectionMessage 构建并作为 user 消息插入历史。
 	CompressedSummaries []string
 
 	// compressedSummariesInjected 已注入系统提示的摘要数量。
@@ -120,6 +120,7 @@ type Loop struct {
 
 	WorkspaceRoot string // 工作区根路径（用于 SaveTokenUsage 等工作区级持久化）
 	transferTarget string         // transfer_to_agent 目标名（非空=当前 Loop 应退出，控制权转移给目标 agent）
+	CompactRequested bool         // 外部设置后下轮迭代触发上下文压缩（供主动压缩 API 使用）
 	Autonomous     bool           // 自主模式标志（供并行子 agent 继承）
 
 	mu sync.Mutex // 保护 AutoReview 的并发读写（SetAutoReview/getAutoReview）
@@ -250,10 +251,18 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 
 		msgs = l.maybeCompact(ctx, msgs) // 超窗口阈值则把中段老消息压成摘要（见 compress.go）
 
-		// ── 将压缩摘要注入系统提示的可变部分（而非插入历史消息）──
-		// 仅在新增摘要时更新 msgs[0]。Content，避免每轮都改导致缓存前缀变化。
+		// ── 将压缩摘要和（自主模式下）执行日志作为 user 消息注入历史 ──
+		// 不修改 msgs[0].Content（system 消息），避免破坏 LLM API KV Cache 前缀命中。
+		// 在 system 前缀后插入，使 Agent 看到摘要作为背景上下文而非最新指令。
 		if len(l.CompressedSummaries) > l.compressedSummariesInjected && len(msgs) > 0 && msgs[0].Role == RoleSystem {
-			msgs[0].Content = l.buildSystemWithSummaries()
+			if summaryMsg := l.buildInjectionMessage(); summaryMsg != "" {
+				prefix := prefixLen(msgs)
+				summary := Message{Role: RoleUser, Content: summaryMsg}
+				// 插入 system 之后、其余消息之前
+				tail := make([]Message, len(msgs)-prefix)
+				copy(tail, msgs[prefix:])
+				msgs = append(msgs[:prefix], append([]Message{summary}, tail...)...)
+			}
 			l.compressedSummariesInjected = len(l.CompressedSummaries)
 		}
 
@@ -413,22 +422,15 @@ func hasSystem(msgs []Message) bool {
 	return false
 }
 
-// buildSystemWithSummaries 构建包含压缩摘要的系统提示词。
-// 在 CACHE_BOUNDARY 之后的动态区追加「上下文压缩摘要」段和执行日志，
-// 确保静态前缀不变，最大化 KV 缓存命中。
-func (l *Loop) buildSystemWithSummaries() string {
+// buildInjectionMessage 构建注入历史消息中的背景上下文。
+// 包含：压缩摘要（上下文压缩后产生）+ 自主模式下的执行日志。
+// 不修改 system message（msgs[0]），不破坏 KV Cache 前缀。
+func (l *Loop) buildInjectionMessage() string {
 	var b strings.Builder
-	b.WriteString(l.System)
-
-	// ★ 确保 CACHE_BOUNDARY 存在于 system prompt 中 — 动态内容追加在其后
-	//   如果 l.System 尚未包含 CACHE_BOUNDARY（如 AgentBase 直接传入），在末尾补一个
-	if !strings.Contains(l.System, CacheBoundary) {
-		b.WriteString(CacheBoundary)
-	}
 
 	// 历史摘要（上下文压缩后产生）
 	if len(l.CompressedSummaries) > 0 {
-		b.WriteString("\n\n# 上下文已压缩——历史摘要\n\n")
+		b.WriteString("# 上下文已压缩——历史摘要\n\n")
 		b.WriteString("> 以下为之前轮次的消息摘要，Agent 应据此感知已完成的历史上下文。\n> 请勿重复执行摘要中已包含的任务。\n\n")
 		for i, s := range l.CompressedSummaries {
 			if i > 0 {
@@ -439,9 +441,14 @@ func (l *Loop) buildSystemWithSummaries() string {
 	}
 
 	// ★ 执行日志：记录各轮的分析与操作，不受上下文压缩影响
-	if logStr := l.FormatExecutionLog(); logStr != "" {
-		b.WriteString("\n\n")
-		b.WriteString(logStr)
+	// 仅在自主模式注入——非自主模式下执行日志与消息历史冗余。
+	if l.Autonomous {
+		if logStr := l.FormatExecutionLog(); logStr != "" {
+			if b.Len() > 0 {
+				b.WriteString("\n\n")
+			}
+			b.WriteString(logStr)
+		}
 	}
 
 	return b.String()
@@ -570,12 +577,8 @@ func DefaultSystemPrompt(roots []string) string {
 		"- 不要连续 3 轮只输出分析文本而不调用任何工具。\n" +
 		"- 不确定时宁可声明完成并向用户汇报，让用户决定是否继续。\n" +
 		"- 不要在「让我再看看…」和「也许还需要…」之间反复循环。\n" +
-		"- ★ run_command 阻塞预防：启动 dev server、watch、调试服务、npm run dev 等长期进程时，必须用 run_background（后台不阻塞）。误用 run_command 会被 isBlockingCommand 拦截报错，拖慢开发进度。\n" +
-		"- 完成任务后输出 Markdown 总结：完成了什么、改了哪些文件（路径+改动）、如何验证结果、遗留问题。\n\n" +
-		"# 防止卡死\n" +
-		"- 不要连续 3 轮只输出分析文本而不调用任何工具。\n" +
-		"- 不确定时宁可声明完成并向用户汇报，让用户决定是否继续。\n" +
-		"- 不要在「让我再看看…」和「也许还需要…」之间反复循环。" +
+		"- run_command 阻塞预防：长期进程用 run_background（后台不阻塞）。\n" +
+		"- 完成后输出 Markdown 总结：改了哪些文件、如何验证、遗留问题。" +
 		CacheBoundary
 }
 

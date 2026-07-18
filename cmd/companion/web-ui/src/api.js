@@ -62,6 +62,7 @@ let wsReconnectCount = 0
 const WS_MAX_RECONNECT = 5
 let wsCallbacks = null
 let wsManuallyClosed = false
+let wsPongTimer = null  // 检测后端 ping 超时：90s 无响应则主动重连
 
 // initWebSocket 建立全局 WebSocket 连接，接收所有会话事件。
 // callbacks: { onStatus(payload), onEvent(convId, data), onDone(convId, data) }
@@ -70,6 +71,7 @@ let wsManuallyClosed = false
 function initWebSocket(callbacks) {
   wsCallbacks = callbacks
   wsManuallyClosed = false
+  wsReconnectCount = 0  // 新开连接时重置计数
   if (wsSocket && (wsSocket.readyState === WebSocket.OPEN || wsSocket.readyState === WebSocket.CONNECTING)) {
     return
   }
@@ -88,8 +90,20 @@ function doWsConnect() {
   wsSocket.onopen = () => {
     wsReconnectCount = 0
     if (wsReconnectTimer) { clearTimeout(wsReconnectTimer); wsReconnectTimer = null }
+    // 后端每 30s 发 ping，90s（3次）未收到则主动重连
+    if (wsPongTimer) clearTimeout(wsPongTimer)
+    wsPongTimer = setTimeout(() => {
+      console.warn('[WS] 90s 未收到 pong，触发重连')
+      wsSocket.close()
+    }, 90000)
   }
   wsSocket.onmessage = (ev) => {
+    // 收到任何消息都重置 pong 超时（后端 ping 帧也会触发 onmessage）
+    if (wsPongTimer) { clearTimeout(wsPongTimer) }
+    wsPongTimer = setTimeout(() => {
+      console.warn('[WS] 90s 无消息，触发重连')
+      if (wsSocket) wsSocket.close()
+    }, 90000)
     let data
     try { data = JSON.parse(ev.data) } catch { return }
     if (!data) return
@@ -137,6 +151,7 @@ function scheduleWsReconnect(reason) {
 function closeWebSocket() {
   wsManuallyClosed = true
   if (wsReconnectTimer) { clearTimeout(wsReconnectTimer); wsReconnectTimer = null }
+  if (wsPongTimer) { clearTimeout(wsPongTimer); wsPongTimer = null }
   wsCallbacks = null
   wsReconnectCount = WS_MAX_RECONNECT
   if (wsSocket) {
@@ -182,6 +197,11 @@ async function sendFeedback(convId, content) {
 // 回滚到指定用户消息前的状态：恢复文件快照 + 删除后续对话历史
 async function chatRollback(convId, msgIdx) {
   return apiPost('/chat/rollback', { convId, msgIdx })
+}
+
+// 请求当前运行中的对话在下一轮迭代压缩上下文
+async function chatCompact(convId) {
+  return apiPost('/chat/compact?convId=' + encodeURIComponent(convId), {})
 }
 
 // ─── 对话消息懒加载 ──────────────────────────────────────────
@@ -256,4 +276,4 @@ async function savePhilosophy(data) {
   return apiPut('/philosophy', data)
 }
 
-export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, closeWebSocket, isWebSocketOpen, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatStop, getMessages, getMessagesCount, getModels, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, getPhilosophy, savePhilosophy }
+export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, closeWebSocket, isWebSocketOpen, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatCompact, chatStop, getMessages, getMessagesCount, getModels, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, getPhilosophy, savePhilosophy }

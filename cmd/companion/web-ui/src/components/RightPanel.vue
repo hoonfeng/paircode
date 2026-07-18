@@ -178,6 +178,8 @@
                 <span :class="['obtn', { active: autoCommit }]" @click="toggleAuto('autoCommit')" title="自动 Git 提交：任务完成时自动 git add + commit"><SvgIcon name="git-commit" :size="12" /> 提交</span>
                 <span class="obtn-sep"></span>
                 <span :class="['obtn', 'obtn-agent', { active: autonomous }]" @click="toggleAuto('autonomous')" title="自主模式：开启=连续执行全部计划步骤，关闭=单次回复"><SvgIcon name="cycle" :size="12" color="#d4a74e" /> 自主</span>
+                <span class="obtn-sep"></span>
+                <span class="obtn" @click="compactContext" title="主动压缩上下文：将早期消息压缩为摘要，减少 token 消耗"><SvgIcon name="minus" :size="12" /> 压缩</span>
               </div>
               <button v-if="!state.chatLoading" class="send-btn" @click="sendMessage" :disabled="!inputText.trim()"><SvgIcon name="send-plane" :size="16" /></button>
               <button v-else class="stop-btn" @click="stopChat"><SvgIcon name="stop-dot" :size="20" /></button>
@@ -509,6 +511,18 @@ const sendMessage = async () => {
   const text = inputText.value.trim()
   if (!text && !pendingAttachment.value) return
   if (state.chatLoading) return
+  // ★ 等待 WebSocket 连接就绪，避免事件丢失
+  if (!api.isWebSocketOpen()) {
+    console.log('[RP] sendMessage 等待 WS 连接...')
+    await new Promise((resolve, reject) => {
+      let waited = 0
+      const check = setInterval(() => {
+        waited += 200
+        if (api.isWebSocketOpen()) { clearInterval(check); resolve() }
+        else if (waited >= 8000) { clearInterval(check); reject(new Error('WebSocket 连接超时')) }
+      }, 200)
+    })
+  }
   if (!state.currentConvId) {
     try {
       const conv = await api.apiPost('/conversations', { title: '新对话' })
@@ -562,15 +576,15 @@ const sendMessage = async () => {
     }
   }
   if (!state.chatSessionId) state.chatSessionId = 'sess_' + Date.now()
-  const msgIdx = createAssistantPlaceholder(convId)
-  console.log('[RP] sendMessage conv=%s msgIdx=%d msgsLen=%d currentChatLoading=%s', convId, msgIdx, state.messagesByConv[convId].length, state.chatLoading)
-  startConvRuntime(convId, msgIdx, lastUserText || fullContent)
+  const msgKey = createAssistantPlaceholder(convId)
+  console.log('[RP] sendMessage conv=%s msgKey=%s msgsLen=%d currentChatLoading=%s', convId, msgKey, state.messagesByConv[convId].length, state.chatLoading)
+  startConvRuntime(convId, msgKey, lastUserText || fullContent)
   try {
     await api.chatStart(convId, fullContent, autonomous.value, state.workspaceRoot)
   } catch (err) {
     const msgs0 = state.messagesByConv[convId]
     if (msgs0) {
-      const m = msgs0[msgIdx]
+      const m = msgs0.find(x => x._key === msgKey)
       if (m) { m._loading = false; pushSegment(m.segments, 'content').content += '**[启动失败]** ' + (err.message || err) }
     }
     state.loadingByConv[convId] = false
@@ -590,20 +604,32 @@ const sendMessage = async () => {
   // 切换对话/工作区时 agent 后台继续运行，事件继续写入 messagesByConv[convId]
 }
 
+const compactContext = async () => {
+  const convId = state.currentConvId
+  if (!convId) { window.$toast?.('没有活跃对话', 'warning'); return }
+  try {
+    await api.chatCompact(convId)
+    window.$toast?.('已请求上下文压缩，将在下一轮迭代执行', 'success')
+  } catch (e) {
+    window.$toast?.('压缩请求失败: ' + (e.message || e), 'error')
+  }
+}
+
 const stopChat = async () => {
   const convId = state.currentConvId
   console.log('[RP] stopChat conv=%s runtimeExists=%s', convId, !!getConvRuntime(convId))
   if (!convId) return
   try { await api.chatStop(convId) } catch {}
-  // ★ 在清理 runtime 前保存 msgIdx，用于清理 messagesByConv 中残留的 loading 占位
+  // ★ 在清理 runtime 前保存 msgKey，用于清理 messagesByConv 中残留的 loading 占位
   const rt = getConvRuntime(convId)
-  const oldMsgIdx = rt ? rt.msgIdx : -1
+  const oldMsgKey = rt ? rt.msgKey : ''
   resetConvRuntime(convId)
   // ★ 从 messagesByConv 中移除残留的 loading 占位（防止停止后 tool_result 写入导致残留）
-  if (oldMsgIdx >= 0 && state.messagesByConv[convId]) {
+  if (oldMsgKey && state.messagesByConv[convId]) {
     const msgs = state.messagesByConv[convId]
-    if (oldMsgIdx < msgs.length && msgs[oldMsgIdx]._loading) {
-      msgs.splice(oldMsgIdx, 1)
+    const idx = msgs.findIndex(m => m._key === oldMsgKey && m._loading)
+    if (idx >= 0) {
+      msgs.splice(idx, 1)
       // 同步 state.messages 如果当前对话
       if (state.currentConvId === convId) {
         state.messages = msgs
@@ -824,29 +850,22 @@ const switchConv = async (id) => {
       state.msgLoadedByConv[id] = loaded.length
       // 页面刷新后：如果折叠开关打开，对历史消息应用折叠状态
       nextTick(() => applyAutoCollapse())
-      // ★ processStatus 可能已为此 conv 创建了 runtime（agent 仍在运行），
-      //   更新 runtime 的 msgIdx：优先复用历史消息中最后一条 assistant 消息，
-      //   使 agent 后续输出追加到 ask_user 所在气泡中，而不是另建一个新气泡。
-
       const rt = getConvRuntime(id)
       if (rt) {
-        // ★ BUG FIX: 不再复用历史 assistant 消息作为 runtime 目标。
-        //   processStatus 可能已为此 conv 创建了 runtime，若此处将 rt.msgIdx
-        //   指向历史 assistant 消息，会导致当前 agent 运行的新事件（thinking/
-        //   content/tool_call）被追加到旧气泡中，造成「刷新后消息错乱到其他气泡」。
-        //   始终创建新的 loading 占位，确保当前运行的事件写入新气泡。
+        // 当前 agent 仍在运行，创建新的 loading 占位（由后端 agent 使用）
+        const loadingKey = makeMsgKey()
         const loadingMsg = existingLoading || {
           role: 'assistant', content: '', segments: [], toolCalls: [],
-          _key: makeMsgKey(),
+          _key: loadingKey,
           _time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
           _loading: true,
         }
         loadingMsg._idx = loaded.length
         state.messagesByConv[id].push(loadingMsg)
         state.messages = state.messagesByConv[id]
-        rt.msgIdx = state.messagesByConv[id].length - 1
-        console.log('[RP] switchConv runtime 已存在，创建新占位 msgIdx=%d loadedLen=%d',
-          rt.msgIdx, loaded.length)
+        rt.msgKey = loadingKey
+        console.log('[RP] switchConv runtime 已存在，创建新占位 key=%s loadedLen=%d',
+          loadingKey, loaded.length)
       }
 
     } catch {

@@ -12,8 +12,7 @@ import (
 // KV 缓存命中的核心条件：后续请求的 messages 数组必须以之前请求的 messages
 // 数组为完整前缀。本项目实现中，多个因素会破坏此条件：
 //   1. time.Now() 在系统提示词动态后缀中（buildWebSystemDynamic）
-//   2. buildSystemWithSummaries 修改 messages[0].Content（压缩后）
-//   3. 自主模式完成报告注入改变历史结构
+//   2. 自主模式完成报告注入改变历史结构
 //
 // 本测试模拟多轮对话，验证：
 //   - 同轮次内各迭代的消息前缀是否稳定（msg_seq 增长模式）
@@ -25,9 +24,7 @@ func TestKVCachePrefixStability(t *testing.T) {
 
 	// 检查 CacheBoundary 是否存在于 DefaultSystemPrompt 中
 	if !strings.Contains(stableSystem, CacheBoundary) {
-		t.Error("DefaultSystemPrompt 应包含 CacheBoundary，已缺失！\n" +
-			"缺少 CacheBoundary 会导致 buildSystemWithSummaries 首次调用时\n" +
-			"大幅修改 messages[0]，使压缩前后的缓存前缀完全失效。")
+		t.Error("DefaultSystemPrompt 应包含 CacheBoundary，已缺失！")
 	}
 
 	// ── 场景 1：同次会话内，连续迭代的消息前缀稳定性 ──
@@ -61,8 +58,7 @@ func TestKVCachePrefixStability(t *testing.T) {
 		if msgs[0].Content != stableSystem {
 			t.Errorf("messages[0].Content 在 Run 结束后被修改！\n"+
 				"预期长度: %d, 实际长度: %d\n"+
-				"这可能是因为 buildSystemWithSummaries 修改了 messages[0]。\n"+
-				"压缩后 messages[0] 的变化会破坏 KV 缓存前缀。",
+				"（msgs[0] 的任何变化都会破坏 KV 缓存前缀）",
 				len(stableSystem), len(msgs[0].Content))
 		}
 	})
@@ -95,45 +91,32 @@ func TestSystemPromptVariance(t *testing.T) {
 	}
 }
 
-// TestBuildSystemWithSummariesStability 验证 buildSystemWithSummaries
-// 不会不必要地修改系统提示词前缀。
-func TestBuildSystemWithSummariesStability(t *testing.T) {
-	sysWithBoundary := DefaultSystemPrompt([]string{"/test"})
-
+// TestBuildInjectionMessage 验证 buildInjectionMessage
+// 不会触及 system prompt 且输出内容合理。
+func TestBuildInjectionMessage(t *testing.T) {
 	loop := &Loop{
-		System:              sysWithBoundary,
 		CompressedSummaries: []string{"[压缩摘要] 用户要求读取文件 a.go，已读取完毕"},
 	}
 
-	// 首次调用 buildSystemWithSummaries
-	result1 := loop.buildSystemWithSummaries()
+	// 首次调用 buildInjectionMessage
+	result1 := loop.buildInjectionMessage()
+	if result1 == "" {
+		t.Error("有摘要时 buildInjectionMessage 不应返回空")
+	}
+	if !strings.Contains(result1, "上下文已压缩") {
+		t.Error("buildInjectionMessage 应包含压缩摘要标记")
+	}
 
 	// 模拟新增一条摘要
 	loop.CompressedSummaries = append(loop.CompressedSummaries, "[压缩摘要] 用户要求修改 b.go，已修改完毕")
-
-	result2 := loop.buildSystemWithSummaries()
-
-	// 检查：第二次结果必须以第一次结果为前缀
-	if !strings.HasPrefix(result2, result1) {
-		diffPos := -1
-		minLen := len(result1)
-		if len(result2) < minLen {
-			minLen = len(result2)
-		}
-		for i := 0; i < minLen; i++ {
-			if result1[i] != result2[i] {
-				diffPos = i
-				break
-			}
-		}
-		t.Errorf("buildSystemWithSummaries 的第二次输出不以第一次为前缀！\n"+
-			"差异位置: %d\n"+
-			"（压缩摘要注入破坏了系统提示词前缀稳定性）",
-			diffPos)
-	} else {
-		t.Logf("buildSystemWithSummaries 前缀稳定 ✓ (result1=%d, result2=%d)",
-			len(result1), len(result2))
+	result2 := loop.buildInjectionMessage()
+	if result2 == "" {
+		t.Error("有摘要时 buildInjectionMessage 不应返回空")
 	}
+	if len(result2) <= len(result1) {
+		t.Error("新增摘要后 buildInjectionMessage 应更长")
+	}
+	t.Logf("buildInjectionMessage ✓ (result1=%d, result2=%d)", len(result1), len(result2))
 }
 
 // TestSerializedMessagesPrefix 验证序列化后的 messages 数组是否保持前缀稳定。
