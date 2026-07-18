@@ -40,6 +40,9 @@ func main() {
 	setupLoaders(wv, distDir)
 	registerDesktopBridge(wv, reg)
 
+	// Set up Vue/Vite expected globals
+	wv.EvalJS(`window.process={env:{NODE_ENV:"production"}}`)
+	
 	htmlData, _ := os.ReadFile(distDir + "/index.html")
 	html := strings.Replace(string(htmlData), "<head>", `<head><script>window.__errors=[];window.onerror=function(m){window.__errors.push(''+m)};console.log('CONSOLE_OK')</script>`, 1)
 	wv.LoadHTML(html)
