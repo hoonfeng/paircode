@@ -827,36 +827,28 @@ const switchConv = async (id) => {
       // ★ processStatus 可能已为此 conv 创建了 runtime（agent 仍在运行），
       //   更新 runtime 的 msgIdx：优先复用历史消息中最后一条 assistant 消息，
       //   使 agent 后续输出追加到 ask_user 所在气泡中，而不是另建一个新气泡。
+
       const rt = getConvRuntime(id)
       if (rt) {
-        // 从 loaded 中找最后一条 assistant 消息（即含 ask_user 卡片的那条）
-        let lastAssIdx = -1
-        for (let i = loaded.length - 1; i >= 0; i--) {
-          if (loaded[i].role === 'assistant') {
-            lastAssIdx = i
-            break
-          }
+        // ★ BUG FIX: 不再复用历史 assistant 消息作为 runtime 目标。
+        //   processStatus 可能已为此 conv 创建了 runtime，若此处将 rt.msgIdx
+        //   指向历史 assistant 消息，会导致当前 agent 运行的新事件（thinking/
+        //   content/tool_call）被追加到旧气泡中，造成「刷新后消息错乱到其他气泡」。
+        //   始终创建新的 loading 占位，确保当前运行的事件写入新气泡。
+        const loadingMsg = existingLoading || {
+          role: 'assistant', content: '', segments: [], toolCalls: [],
+          _key: makeMsgKey(),
+          _time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+          _loading: true,
         }
-        if (lastAssIdx >= 0) {
-          // ★ 复用历史 assistant 消息：将 runtime 指向它，标记为 loading 以接收后续事件
-          rt.msgIdx = lastAssIdx
-          loaded[lastAssIdx]._loading = true
-          console.log('[RP] switchConv 复用 assistant 消息 idx=%d totalMsgs=%d loadedMsgs=%d', lastAssIdx, state.messagesByConv[id].length, loaded.length)
-        } else {
-          // ★ 没有历史 assistant 消息时才创建新的 loading 占位
-          const loadingMsg = existingLoading || {
-            role: 'assistant', content: '', segments: [], toolCalls: [],
-            _key: makeMsgKey(),
-            _time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
-            _loading: true,
-          }
-          loadingMsg._idx = loaded.length
-          state.messagesByConv[id].push(loadingMsg)
-          state.messages = state.messagesByConv[id]
-          rt.msgIdx = state.messagesByConv[id].length - 1
-          console.log('[RP] switchConv 无 assistant 消息，创建占位 msgIdx=%d', rt.msgIdx)
-        }
+        loadingMsg._idx = loaded.length
+        state.messagesByConv[id].push(loadingMsg)
+        state.messages = state.messagesByConv[id]
+        rt.msgIdx = state.messagesByConv[id].length - 1
+        console.log('[RP] switchConv runtime 已存在，创建新占位 msgIdx=%d loadedLen=%d',
+          rt.msgIdx, loaded.length)
       }
+
     } catch {
       state.msgTotalByConv[id] = 0
       state.msgLoadedByConv[id] = 0
