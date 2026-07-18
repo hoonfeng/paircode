@@ -7,11 +7,13 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    minify: false,
     rollupOptions: {
       output: {
         format: 'iife',
         inlineDynamicImports: true,
         entryFileNames: 'assets/app-[hash].js',
+        preserveModules: false,
       },
     },
   },
