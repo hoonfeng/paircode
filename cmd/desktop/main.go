@@ -69,10 +69,17 @@ func main() {
 		if(window.__errors&&window.__errors.length) console.log('ERR:',window.__errors.join(';'));
 		try {
 			var app = document.getElementById('app');
-			if(app) console.log('APP: children='+app.childNodes.length+' html='+(app.innerHTML||'').substring(0,100));
-			// Check if Vue app was created
-			if(window.__vue_app__) console.log('VUE_APP: exists');
-			else console.log('VUE_APP: NOT found');
+			if(app) {
+				console.log('APP: children='+app.childNodes.length+' html='+(app.innerHTML||'').substring(0,100));
+				// Vue 3 stores __vue_app__ on the container element, not window
+				if(app.__vue_app__) console.log('VUE_APP: mounted');
+				else {
+					// Check if __vue_app__ exists anywhere
+					var found=false;
+					for(var k in document.body||{}){if(k.indexOf('__vue')>=0){found=true;break}}
+					console.log('VUE_APP: NOT found on app (body_has_vue='+found+')');
+				}
+			}
 		} catch(e) { console.log('APP_ERR:'+e); }
 	})()`)
 
