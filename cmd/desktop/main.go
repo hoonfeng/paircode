@@ -136,6 +136,20 @@ func main() {
 	wv.EvalJS(`try{var o={};Object.defineProperty(o,'test',{value:1,writable:true,enumerable:true,configurable:true});console.log('OBJ_defineProperty: OK val='+o.test)}catch(e){console.log('OBJ_defineProperty_ERR:'+e)}`)
 	wv.EvalJS(`try{var arr=[];arr[0]=1;arr[1]=2;console.log('ARR_setIndex: OK len='+arr.length+' 1='+arr[1])}catch(e){console.log('ARR_setIndex_ERR:'+e)}`)
 	wv.EvalJS(`try{console.log('FUNC_call_bind: OK '+(function(){return 42}).call(null))}catch(e){console.log('FUNC_call_bind_ERR:'+e)}`)
+	// 全面扫描 mount 会用到的 DOM API
+	wv.EvalJS(`try{var p=document.createElement('div');console.log('DOM_nodeType: '+p.nodeType)}catch(e){console.log('DOM_nodeType_ERR:'+e)}`)
+	wv.EvalJS(`try{var p=document.createElement('div');console.log('DOM_nodeName: '+p.nodeName)}catch(e){console.log('DOM_nodeName_ERR:'+e)}`)
+	wv.EvalJS(`try{var p=document.createElement('div');console.log('DOM_ownerDocument: '+(typeof p.ownerDocument))}catch(e){console.log('DOM_ownerDocument_ERR:'+e)}`)
+	wv.EvalJS(`try{var p=document.createElement('div');console.log('DOM_parentNode: '+(p.parentNode===null))}catch(e){console.log('DOM_parentNode_ERR:'+e)}`)
+	wv.EvalJS(`try{var p=document.createElement('div');console.log('DOM_firstChild: '+(p.firstChild===null))}catch(e){console.log('DOM_firstChild_ERR:'+e)}`)
+	wv.EvalJS(`try{var p=document.createElement('div');console.log('DOM_nextSibling: '+(p.nextSibling===null))}catch(e){console.log('DOM_nextSibling_ERR:'+e)}`)
+	wv.EvalJS(`try{var p=document.createElement('div');p.isConnected=false;console.log('DOM_isConnected: '+p.isConnected)}catch(e){console.log('DOM_isConnected_ERR:'+e)}`)
+	wv.EvalJS(`try{var p=document.createElement('div');var c=p.cloneNode();console.log('DOM_cloneNode: '+(c!==null))}catch(e){console.log('DOM_cloneNode_ERR:'+e)}`)
+	wv.EvalJS(`try{var p=document.createElement('div');p.removeEventListener('click',function(){});console.log('DOM_removeEventListener: OK')}catch(e){console.log('DOM_removeEventListener_ERR:'+e)}`)
+	wv.EvalJS(`try{var f=document.createDocumentFragment();console.log('DOM_createDocumentFragment: '+(f!==null))}catch(e){console.log('DOM_createDocumentFragment_ERR:'+e)}`)
+	wv.EvalJS(`try{var e=new Event('click');console.log('DOM_Event: OK type='+e.type)}catch(e){console.log('DOM_Event_ERR:'+e)}`)
+	wv.EvalJS(`try{var ce=new CustomEvent('test',{detail:{x:1}});console.log('DOM_CustomEvent: OK type='+ce.type)}catch(e){console.log('DOM_CustomEvent_ERR:'+e)}`)
+	wv.EvalJS(`try{console.log('DOM_Object_keys: '+(typeof Object.keys))}catch(e){console.log('DOM_Object_keys_ERR:'+e)}`)
 	// h() 参数组合测试（如果 h 在全局不可访问，这些会失败，但会告诉我们是否缺少绑定）
 	wv.EvalJS(`try{var x=document.querySelector('#app');console.log('QS_type: '+(typeof x)+' proto='+Object.getPrototypeOf(x).constructor.name)}catch(e){console.log('QS_type_ERR:'+e)}`)
 
