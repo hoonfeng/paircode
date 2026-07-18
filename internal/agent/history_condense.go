@@ -33,7 +33,7 @@ func CondenseHistory(msgs []Message) []Message {
 	}
 	lastUserPos := userIdx[len(userIdx)-1]
 
-	// 拼接所有旧轮次的正文内容
+	// 拼接所有旧轮次的正文内容（只保留用户消息和助理正文）
 	var history strings.Builder
 	history.WriteString("【历史对话】\n\n")
 
@@ -57,16 +57,7 @@ func CondenseHistory(msgs []Message) []Message {
 				history.WriteString(fmt.Sprintf("### 用户\n%s\n\n", content))
 			case RoleAssistant:
 				history.WriteString(fmt.Sprintf("### 助手\n%s\n\n", content))
-			case RoleTool:
-				// 跳过 read_file 结果（文件内容对后续理解无帮助）
-				if m.Name == "read_file" {
-					continue
-				}
-				// tool_result：截断到合理长度，避免超大输出
-				if len(content) > 300 {
-					content = content[:300] + "…（已截断）"
-				}
-				history.WriteString(fmt.Sprintf("### 工具结果（%s）\n%s\n\n", m.Name, content))
+			// RoleTool 跳过——工具结果对后续理解无帮助
 			}
 		}
 	}
