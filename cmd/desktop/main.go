@@ -44,16 +44,16 @@ func main() {
 	wv.EvalJS(`window.process={env:{NODE_ENV:"production","__NODE_ENV":"production"}}`)
 	wv.EvalJS(`window.__VUE_OPTIONS_API__=true;window.__VUE_PROD_DEVTOOLS__=false`)
 	wv.EvalJS(`window.__VUE_PROD_HYDRATION_MISMATCH_DETAILS__=false`)
-	// Comprehensive polyfills for missing JSC features
-	wv.EvalJS(`
-	if(!Array.prototype.flatMap)Array.prototype.flatMap=function(f){var r=[];for(var i=0;i<this.length;i++){var v=f(this[i],i,this);if(v instanceof Array)for(var j=0;j<v.length;j++)r.push(v[j]);else r.push(v)}return r};
-	if(!Promise.allSettled)Promise.allSettled=function(ps){return Promise.all(ps.map(function(p){return p.then(function(v){return{status:"fulfilled",value:v}},function(r){return{status:"rejected",reason:r}})}))};
-	if(!Promise.any)Promise.any=function(ps){return new Promise(function($r,$j){var c=0;var es=[];ps.forEach(function(p,i){p.then($r,function(e){c++;es[i]=e;if(c===ps.length)$j(new Error("AggregateError: "+es.join(", ")))})})})};
-	window.queueMicrotask=function(f){try{Promise.resolve().then(f)}catch(e){setTimeout(f,0)}};
-	Object.hasOwn=function(o,p){return Object.prototype.hasOwnProperty.call(o,p)};
-	Object.getOwnPropertyNames=function(o){if(!o)return [];var k=[];for(var n in o)k.push(n);return k};
-	console.log('POLYFILLS_OK');
-	`)
+	// Full polyfills based on WebKit reference — all missing Array/String/Number/ methods
+	wv.EvalJS(`Object.getOwnPropertyNames=function(o){if(!o)return [];var k=[];for(var n in o)k.push(n);return k}`)
+	wv.EvalJS(`Object.hasOwn=function(o,p){return Object.prototype.hasOwnProperty.call(o,p)}`)
+	wv.EvalJS(`Object.fromEntries=function(e){var r={};for(var i=0;e&&i<e.length;i++)if(e[i])r[e[i][0]]=e[i][1];return r}`)
+	wv.EvalJS(`if(!Array.prototype.flatMap)Array.prototype.flatMap=function(f){var r=[];for(var i=0;i<this.length;i++){var v=f(this[i],i,this);if(v&&v.length)for(var j=0;j<v.length;j++)r.push(v[j]);else r.push(v)}return r}`)
+	wv.EvalJS(`if(!Array.prototype.join)Array.prototype.join=function(s){s=s!==undefined?s:',';var r='';for(var i=0;i<this.length;i++){if(i>0)r+=s;if(this[i]!==null&&this[i]!==undefined)r+=this[i]}return r}`)
+	wv.EvalJS(`if(!Array.prototype.keys)Array.prototype.keys=function(){var i=0;return{next:function(){return i<this.length?{value:i++,done:false}:{done:true}}}}`)
+	wv.EvalJS(`if(!Array.prototype.reduceRight)Array.prototype.reduceRight=function(f,i){var a=this;var s=i!==undefined?a.length-1:a.length-2;var v=i!==undefined?i:a[a.length-1];for(var j=s;j>=0;j--)v=f(v,a[j],j,a);return v}`)
+	wv.EvalJS(`if(!Array.prototype.at)Array.prototype.at=function(i){var n=Number(i);if(isNaN(n))n=0;var l=this.length;n=n>=0?n:l+n;if(n<0||n>=l)return undefined;return this[n]}`)
+	wv.EvalJS(`console.log('POLYFILLS_OK')`)
 	htmlData, _ := os.ReadFile(distDir + "/index.html")
 	html := strings.Replace(string(htmlData), "<head>", `<head><script>window.__errors=[];window.onerror=function(m){window.__errors.push(''+m)};console.log('CONSOLE_OK')</script>`, 1)
 	wv.LoadHTML(html)
