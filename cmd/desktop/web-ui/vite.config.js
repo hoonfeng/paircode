@@ -7,6 +7,7 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    minify: false,
     assetsInlineLimit: 8192,
     cssCodeSplit: false,
     rollupOptions: {

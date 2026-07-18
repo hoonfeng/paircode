@@ -35,16 +35,16 @@ func main() {
 
 	wv := webkit.NewWebView()
 	wv.Resize(1280, 800)
+	wv.Resize(1280, 800)
 
 	distDir := "cmd/desktop/web-ui-minimal/dist"
 	setupLoaders(wv, distDir)
-	registerDesktopBridge(wv, reg)
 
 	// Vue/Vite expected globals
 	wv.EvalJS(`window.process={env:{NODE_ENV:"production","__NODE_ENV":"production"}}`)
 	wv.EvalJS(`window.__VUE_OPTIONS_API__=true;window.__VUE_PROD_DEVTOOLS__=false`)
 	wv.EvalJS(`window.__VUE_PROD_HYDRATION_MISMATCH_DETAILS__=false`)
-	// Full polyfills based on WebKit reference — all missing Array/String/Number/ methods
+	distDir = "cmd/desktop/web-ui-minimal/dist"
 	wv.EvalJS(`Object.getOwnPropertyNames=function(o){if(!o)return [];var k=[];for(var n in o)k.push(n);return k}`)
 	wv.EvalJS(`Object.hasOwn=function(o,p){return Object.prototype.hasOwnProperty.call(o,p)}`)
 	wv.EvalJS(`Object.fromEntries=function(e){var r={};for(var i=0;e&&i<e.length;i++)if(e[i])r[e[i][0]]=e[i][1];return r}`)
@@ -65,9 +65,10 @@ func main() {
 	// Set a global marker before loading Vue
 	wv.EvalJS(`window.__VUE_STAGE__='before_loadhtml'`)
 	htmlData, _ := os.ReadFile(distDir + "/index.html")
-	html := strings.Replace(string(htmlData), "<head>", `<head><script>window.__errors=[];window.onerror=function(m){window.__errors.push(''+m);window.__VUE_ERR__=m};console.log('CONSOLE_OK')</script>`, 1)
-	wv.LoadHTML(html)
-	log.Println("[Desktop] 前端页面已加载")
+	s := string(htmlData)
+	s = strings.Replace(s, `type="module"`, "", 1)
+	s = strings.Replace(s, "<head>", `<head><script>window.__errors=[];window.onerror=function(m){window.__errors.push(''+m);window.__VUE_ERR__=m};console.log('CONSOLE_OK')</script>`, 1)
+	wv.LoadHTML(s)
 	// Check stage after load
 	wv.EvalJS(`console.log('STAGE_AFTER_LOAD: '+(window.__VUE_STAGE__||'NOT_SET'))`)
 	wv.EvalJS(`if(window.__VUE_ERR__)console.log('VUE_ERR_CAUGHT:',window.__VUE_ERR__)`)
