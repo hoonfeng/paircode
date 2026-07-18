@@ -13,7 +13,6 @@ import (
 	"strings"
 
 	"wb-ui/app"
-	"wb-ui/dom"
 	"wb-ui/jsc"
 	"wb-ui/webkit"
 
@@ -67,6 +66,7 @@ func main() {
 	// JS 诊断
 	wv.EvalJS(`(function(){
 		console.log('DIAG: app='+(document.getElementById('app')!==null)+' qs='+(document.querySelector('#app')!==null));
+		console.log('MOUNT_REACHED: '+(window.__MOUNT_REACHED__===true?'YES':'NO:'+typeof window.__MOUNT_REACHED__));
 		if(window.__errors&&window.__errors.length) console.log('ERR:',window.__errors.join(';'));
 		try {
 			var app = document.getElementById('app');
@@ -94,28 +94,10 @@ func main() {
 		log.Printf("[CONSOLE2]\n%s", out2)
 	}
 
-	// 从 Go DOM 检查
+	// DOM 检查
 	if doc := wv.Document(); doc != nil {
 		if app := doc.GetElementById("app"); app != nil {
 			log.Printf("[DOM] #app children: %d", len(app.ChildNodes()))
-		} else {
-			log.Println("[DOM] #app NOT FOUND")
-		}
-		// Check body children
-		if body := doc.Body(); body != nil {
-			log.Printf("[DOM] body children: %d", len(body.ChildNodes()))
-			for i, c := range body.ChildNodes() {
-				if i > 5 { break }
-				if el, ok := c.(*dom.Element); ok {
-					log.Printf("[DOM]   body child[%d]: tag=%s id=%s", i, el.TagName(), el.GetId())
-				}
-			}
-		} else {
-			log.Println("[DOM] body NOT FOUND")
-		}
-		// Check document element
-		if de := doc.DocumentElement(); de != nil {
-			log.Printf("[DOM] documentElement: %s", de.TagName())
 		}
 	}
 
