@@ -30,3 +30,9 @@ try {
   window.__S7__=''+e
   window.__AFTER_ERR__ = (app._instance ? 'instance_set' : 'instance_null')
 }
+// mount 后诊断
+try { window.__MI_CHILDREN__ = newDiv.childNodes.length } catch(e) { window.__MI_CHILDREN__ = ''+e }
+try { window.__MI_VUE_APP__ = (newDiv.__vue_app__ ? 'YES' : 'no') } catch(e) { window.__MI_VUE_APP__ = ''+e }
+try { window.__MI_HTML__ = (newDiv.innerHTML||'').substring(0,100) } catch(e) { window.__MI_HTML__ = ''+e }
+try { window.__MI_DATAV__ = (newDiv.getAttribute?newDiv.getAttribute('data-v-app')||'no':'N/A') } catch(e) { window.__MI_DATAV__ = ''+e }
+try { window.__APP_CONTAINER__ = (app._container ? 'YES' : 'no') } catch(e) { window.__APP_CONTAINER__ = ''+e }
