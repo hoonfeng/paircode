@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"wb-ui/app"
+	"wb-ui/dom"
 	"wb-ui/jsc"
 	"wb-ui/webkit"
 
@@ -71,15 +72,21 @@ func main() {
 			var app = document.getElementById('app');
 			if(app) {
 				console.log('APP: children='+app.childNodes.length+' html='+(app.innerHTML||'').substring(0,100));
-				// Vue 3 stores __vue_app__ on the container element, not window
 				if(app.__vue_app__) console.log('VUE_APP: mounted');
-				else {
-					// Check if __vue_app__ exists anywhere
-					var found=false;
-					for(var k in document.body||{}){if(k.indexOf('__vue')>=0){found=true;break}}
-					console.log('VUE_APP: NOT found on app (body_has_vue='+found+')');
-				}
+				else console.log('VUE_APP: NOT found');
 			}
+			// Test DOM manipulation
+			var d = document.createElement('div');
+			d.id = 'test-div';
+			d.textContent = 'hello world';
+			document.body.appendChild(d);
+			var testEl = document.getElementById('test-div');
+			console.log('DOM_TEST: found='+(testEl!==null)+' text='+(testEl?testEl.textContent:'n/a'));
+			// Test app.appendChild
+			var child = document.createElement('span');
+			child.textContent = 'test-child';
+			app.appendChild(child);
+			console.log('APPEND_TEST: app.children now='+app.childNodes.length);
 		} catch(e) { console.log('APP_ERR:'+e); }
 	})()`)
 
@@ -91,6 +98,24 @@ func main() {
 	if doc := wv.Document(); doc != nil {
 		if app := doc.GetElementById("app"); app != nil {
 			log.Printf("[DOM] #app children: %d", len(app.ChildNodes()))
+		} else {
+			log.Println("[DOM] #app NOT FOUND")
+		}
+		// Check body children
+		if body := doc.Body(); body != nil {
+			log.Printf("[DOM] body children: %d", len(body.ChildNodes()))
+			for i, c := range body.ChildNodes() {
+				if i > 5 { break }
+				if el, ok := c.(*dom.Element); ok {
+					log.Printf("[DOM]   body child[%d]: tag=%s id=%s", i, el.TagName(), el.GetId())
+				}
+			}
+		} else {
+			log.Println("[DOM] body NOT FOUND")
+		}
+		// Check document element
+		if de := doc.DocumentElement(); de != nil {
+			log.Printf("[DOM] documentElement: %s", de.TagName())
 		}
 	}
 
