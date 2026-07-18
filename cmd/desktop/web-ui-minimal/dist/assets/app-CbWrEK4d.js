@@ -3159,7 +3159,6 @@
     const prev = setCurrentRenderingInstance(instance);
     let result;
     let fallthroughAttrs;
-
     try {
       if (vnode.shapeFlag & 4) {
         const proxyToUse = withProxy || proxy;
@@ -6204,15 +6203,14 @@
   }
   const _export_sfc = (sfc, props) => {
     const target = sfc.__vccOpts || sfc;
-    for (var _i = 0; _i < props.length; _i++) {
-      var _p = props[_i];
-      target[_p[0]] = _p[1];
+    for (const [key, val] of props) {
+      target[key] = val;
     }
     return target;
   };
   const _sfc_main = {};
   function _sfc_render(_ctx, _cache) {
-    return openBlock(), createElementBlock("div", null, "hello", 0, null, 9);
+    return openBlock(), createElementBlock("div", null, "hello");
   }
   const App = /* @__PURE__ */ _export_sfc(_sfc_main, [["render", _sfc_render]]);
   console.log("A");
