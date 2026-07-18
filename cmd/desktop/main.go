@@ -64,12 +64,51 @@ func main() {
 	wv.EvalJS(`console.log('STAGE_AFTER_LOAD: '+(window.__VUE_STAGE__||'NOT_SET'))`)
 	wv.EvalJS(`if(window.__VUE_ERR__)console.log('VUE_ERR_CAUGHT:',window.__VUE_ERR__)`)
 
-	// Test: try a minimal Vue-like script
-	wv.EvalJS(`console.log('TEST: globalThis===window='+(globalThis===window))`)
-	wv.EvalJS(`console.log('TEST: typeof createApp='+typeof window.createApp)`)
-	// Check if the script actually ran: look for _Vue or other global from the iife
-	wv.EvalJS(`console.log('TEST: _Vue='+typeof window._Vue+', $confirm='+typeof window.$confirm+', $toast='+typeof window.$toast)`)
-	wv.EvalJS(`try{var t=document.getElementById('app');console.log('TEST: #app='+(t!==null)+' inner="'+t.innerHTML.substring(0,100)+'"')}catch(e){console.log('TEST_ERR:'+e)}`)
+	// === 全面 API 诊断（直接 typeof 不用 eval） ===
+	wv.EvalJS(`console.log('=== API_AUDIT ===')`)
+	wv.EvalJS(`console.log('APICHK_Object_assign: '+typeof Object.assign)`)
+	wv.EvalJS(`console.log('APICHK_Object_create: '+typeof Object.create)`)
+	wv.EvalJS(`console.log('APICHK_Object_defineProperty: '+typeof Object.defineProperty)`)
+	wv.EvalJS(`console.log('APICHK_Object_freeze: '+typeof Object.freeze)`)
+	wv.EvalJS(`console.log('APICHK_Object_keys: '+typeof Object.keys)`)
+	wv.EvalJS(`console.log('APICHK_Array_isArray: '+typeof Array.isArray)`)
+	wv.EvalJS(`console.log('APICHK_Array_from: '+typeof Array.from)`)
+	wv.EvalJS(`console.log('APICHK_Symbol: '+typeof Symbol)`)
+	wv.EvalJS(`console.log('APICHK_Promise: '+typeof Promise)`)
+	wv.EvalJS(`console.log('APICHK_Map: '+typeof Map)`)
+	wv.EvalJS(`console.log('APICHK_Set: '+typeof Set)`)
+	wv.EvalJS(`console.log('APICHK_Proxy: '+typeof Proxy)`)
+	wv.EvalJS(`console.log('APICHK_Reflect: '+typeof Reflect)`)
+	wv.EvalJS(`console.log('APICHK_WeakMap: '+typeof WeakMap)`)
+	wv.EvalJS(`console.log('APICHK_WeakSet: '+typeof WeakSet)`)
+	wv.EvalJS(`console.log('APICHK_RegExp: '+typeof RegExp)`)
+	wv.EvalJS(`console.log('APICHK_eval: '+typeof eval)`)
+	// String.prototype methods
+	wv.EvalJS(`var s='';console.log('APICHK_str_startsWith: '+typeof s.startsWith)`)
+	wv.EvalJS(`console.log('APICHK_str_endsWith: '+typeof s.endsWith)`)
+	wv.EvalJS(`console.log('APICHK_str_includes: '+typeof s.includes)`)
+	wv.EvalJS(`console.log('APICHK_str_trim: '+typeof s.trim)`)
+	wv.EvalJS(`console.log('APICHK_str_repeat: '+typeof s.repeat)`)
+	wv.EvalJS(`console.log('APICHK_str_padStart: '+typeof s.padStart)`)
+	wv.EvalJS(`console.log('APICHK_str_replace: '+typeof s.replace)`)
+	wv.EvalJS(`console.log('APICHK_str_replaceAll: '+typeof s.replaceAll)`)
+	wv.EvalJS(`console.log('APICHK_str_split: '+typeof s.split)`)
+	wv.EvalJS(`console.log('APICHK_str_slice: '+typeof s.slice)`)
+	wv.EvalJS(`console.log('APICHK_str_toLowerCase: '+typeof s.toLowerCase)`)
+	wv.EvalJS(`console.log('APICHK_str_indexOf: '+typeof s.indexOf)`)
+	wv.EvalJS(`console.log('APICHK_str_charAt: '+typeof s.charAt)`)
+	wv.EvalJS(`console.log('APICHK_str_match: '+typeof s.match)`)
+	// Number
+	wv.EvalJS(`console.log('APICHK_Number_isNaN: '+typeof Number.isNaN)`)
+	wv.EvalJS(`console.log('APICHK_Number_isInteger: '+typeof Number.isInteger)`)
+	// Symbol
+	wv.EvalJS(`console.log('APICHK_Symbol_iterator: '+typeof Symbol.iterator)`)
+	wv.EvalJS(`console.log('APICHK_Symbol_toStringTag: '+typeof Symbol.toStringTag)`)
+	wv.EvalJS(`console.log('APICHK_Symbol_for: '+typeof Symbol.for)`)
+	// 行为测试
+	wv.EvalJS(`var o1=Object.create(null);console.log('BEH_ObjectCreateNull: proto='+(Object.getPrototypeOf(o1)===null))`)
+	wv.EvalJS(`try{var arr=Array.from([1,2,3]);console.log('BEH_ArrayFrom: len='+arr.length+' 0='+arr[0])}catch(e){console.log('BEH_ArrayFrom_ERR:'+e)}`)
+	wv.EvalJS(`try{var o2={a:1,b:2};var o3=Object.assign({},o2);console.log('BEH_ObjectAssign: b='+o3.b)}catch(e){console.log('BEH_ObjectAssign_ERR:'+e)}`)
 
 	if out := wv.ConsoleOutput(); out != "" {
 		log.Printf("[CONSOLE]\n%s", out)
