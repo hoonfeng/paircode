@@ -53,6 +53,14 @@ func main() {
 	wv.EvalJS(`if(!Array.prototype.keys)Array.prototype.keys=function(){var i=0;return{next:function(){return i<this.length?{value:i++,done:false}:{done:true}}}}`)
 	wv.EvalJS(`if(!Array.prototype.reduceRight)Array.prototype.reduceRight=function(f,i){var a=this;var s=i!==undefined?a.length-1:a.length-2;var v=i!==undefined?i:a[a.length-1];for(var j=s;j>=0;j--)v=f(v,a[j],j,a);return v}`)
 	wv.EvalJS(`if(!Array.prototype.at)Array.prototype.at=function(i){var n=Number(i);if(isNaN(n))n=0;var l=this.length;n=n>=0?n:l+n;if(n<0||n>=l)return undefined;return this[n]}`)
+	wv.EvalJS(`if(!Array.prototype.at)Array.prototype.at=function(i){var n=Number(i);if(isNaN(n))n=0;var l=this.length;n=n>=0?n:l+n;if(n<0||n>=l)return undefined;return this[n]}`)
+	wv.EvalJS(`if(!Object.isExtensible)Object.isExtensible=function(){return true}`)
+	wv.EvalJS(`if(!Object.isSealed)Object.isSealed=function(){return false}`)
+	wv.EvalJS(`if(!Object.isFrozen)Object.isFrozen=function(){return false}`)
+	wv.EvalJS(`if(!Object.getPrototypeOf)Object.getPrototypeOf=function(o){return o&&o.constructor?o.constructor.prototype:null}`)
+	wv.EvalJS(`if(!Object.setPrototypeOf)Object.setPrototypeOf=function(o,p){o.__proto__=p;return o}`)
+	wv.EvalJS(`if(!Object.preventExtensions)Object.preventExtensions=function(o){return o}`)
+	wv.EvalJS(`if(!Object.seal)Object.seal=function(o){return o}`)
 	wv.EvalJS(`console.log('POLYFILLS_OK')`)
 	// Set a global marker before loading Vue
 	wv.EvalJS(`window.__VUE_STAGE__='before_loadhtml'`)
@@ -144,6 +152,8 @@ func main() {
 		console.log('S4_vue_app: '+(window.__S4__||'none'));
 		console.log('S5_container: '+(window.__S5__||'none'));
 		console.log('S6_h: '+(window.__S6__||'none'));
+		console.log('S6b_hApp: '+(window.__S6b__||'none'));
+		console.log('S9_component: '+(window.__S9__||'none'));
 		console.log('S7_mount: '+(window.__S7__||'none'));
 		console.log('ERR_CNT: '+(window.__errors?window.__errors.length:0));
 		if(window.__errors&&window.__errors.length) console.log('ERR:',window.__errors.join('|'));

@@ -8,4 +8,6 @@ try { c.innerHTML = ''; window.__S3__='OK' } catch(e) { window.__S3__=''+e }
 try { c.__vue_app__ = app; window.__S4__='OK' } catch(e) { window.__S4__=''+e }
 try { app._container = c; window.__S5__='OK' } catch(e) { window.__S5__=''+e }
 try { h('div', {}, 't'); window.__S6__='OK' } catch(e) { window.__S6__=''+e }
+try { var vn = h(App); window.__S6b__='OK' } catch(e) { window.__S6b__=''+e }
+try { app._component = App; window.__S9__='OK' } catch(e) { window.__S9__=''+e }
 try { app.mount('#app'); window.__S7__='OK' } catch(e) { window.__S7__=''+e }
