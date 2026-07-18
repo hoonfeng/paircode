@@ -109,6 +109,25 @@ func main() {
 	wv.EvalJS(`var o1=Object.create(null);console.log('BEH_ObjectCreateNull: proto='+(Object.getPrototypeOf(o1)===null))`)
 	wv.EvalJS(`try{var arr=Array.from([1,2,3]);console.log('BEH_ArrayFrom: len='+arr.length+' 0='+arr[0])}catch(e){console.log('BEH_ArrayFrom_ERR:'+e)}`)
 	wv.EvalJS(`try{var o2={a:1,b:2};var o3=Object.assign({},o2);console.log('BEH_ObjectAssign: b='+o3.b)}catch(e){console.log('BEH_ObjectAssign_ERR:'+e)}`)
+	// DOM API 详细测试
+	wv.EvalJS(`try{var el=document.createElement('div');console.log('DOM_createElement: OK type='+typeof el)}catch(e){console.log('DOM_createElement_ERR:'+e)}`)
+	wv.EvalJS(`try{document.body.appendChild(document.createElement('span'));console.log('DOM_appendChild: OK')}catch(e){console.log('DOM_appendChild_ERR:'+e)}`)
+	wv.EvalJS(`try{el=document.createElement('div');el.textContent='test';document.body.appendChild(el);console.log('DOM_textContent: OK')}catch(e){console.log('DOM_textContent_ERR:'+e)}`)
+	wv.EvalJS(`try{el=document.createElement('div');el.setAttribute('id','test-id');console.log('DOM_setAttribute: OK id='+el.getAttribute('id'))}catch(e){console.log('DOM_setAttribute_ERR:'+e)}`)
+	wv.EvalJS(`try{el=document.createElement('p');document.body.appendChild(el);el.innerHTML='<b>bold</b>';console.log('DOM_innerHTML: OK html='+el.innerHTML)}catch(e){console.log('DOM_innerHTML_ERR:'+e)}`)
+	// Vue 3 renderer 用到的额外 DOM API
+	wv.EvalJS(`try{var tn=document.createTextNode('hello');console.log('DOM_createTextNode: OK text='+tn.textContent)}catch(e){console.log('DOM_createTextNode_ERR:'+e)}`)
+	wv.EvalJS(`try{var cn=document.createComment('test');console.log('DOM_createComment: OK')}catch(e){console.log('DOM_createComment_ERR:'+e)}`)
+	wv.EvalJS(`try{var p=document.createElement('div');p.insertBefore(document.createElement('span'),null);console.log('DOM_insertBefore: OK')}catch(e){console.log('DOM_insertBefore_ERR:'+e)}`)
+	wv.EvalJS(`try{var p=document.createElement('div');p.removeChild(document.createElement('span'));console.log('DOM_removeChild: OK')}catch(e){console.log('DOM_removeChild_ERR:'+e)}`)
+	wv.EvalJS(`try{var p=document.createElement('div');p.replaceChild(document.createElement('span'),document.createElement('b'));console.log('DOM_replaceChild: OK')}catch(e){console.log('DOM_replaceChild_ERR:'+e)}`)
+	wv.EvalJS(`try{var p=document.createElement('div');p.addEventListener('click',function(){});console.log('DOM_addEventListener: OK')}catch(e){console.log('DOM_addEventListener_ERR:'+e)}`)
+	wv.EvalJS(`try{var p=document.createElement('div');p.setAttribute('style','color:red');console.log('DOM_setAttribute_style: OK val='+p.getAttribute('style'))}catch(e){console.log('DOM_setAttribute_style_ERR:'+e)}`)
+	// Vue 3 mount 内部操作测试
+	wv.EvalJS(`try{var d=document.getElementById('app');d.innerHTML='';console.log('DOM_innerHTML_clear: OK')}catch(e){console.log('DOM_innerHTML_clear_ERR:'+e)}`)
+	wv.EvalJS(`try{var o={};Object.defineProperty(o,'test',{value:1,writable:true,enumerable:true,configurable:true});console.log('OBJ_defineProperty: OK val='+o.test)}catch(e){console.log('OBJ_defineProperty_ERR:'+e)}`)
+	wv.EvalJS(`try{var arr=[];arr[0]=1;arr[1]=2;console.log('ARR_setIndex: OK len='+arr.length+' 1='+arr[1])}catch(e){console.log('ARR_setIndex_ERR:'+e)}`)
+	wv.EvalJS(`try{console.log('FUNC_call_bind: OK '+(function(){return 42}).call(null))}catch(e){console.log('FUNC_call_bind_ERR:'+e)}`)
 
 	if out := wv.ConsoleOutput(); out != "" {
 		log.Printf("[CONSOLE]\n%s", out)
@@ -122,6 +141,9 @@ func main() {
 			console.log('MOUNT_START: '+(window.__MOUNT_START__||'0'));
 			console.log('APP_CREATED: '+(window.__APP_CREATED__||'0'));
 			console.log('MOUNT_DONE: '+(window.__MOUNT_DONE__||'0'));
+			console.log('APP_ERR: '+(window.__APP_ERR__||'none'));
+			console.log('APP_ERR_STACK: '+(window.__APP_ERR_STACK__||'none'));
+			if(window.__VUE_STEPS__) console.log('STEPS: '+window.__VUE_STEPS__.join(' | '));
 			console.log('ERR_CNT: '+(window.__errors?window.__errors.length:0));
 		if(window.__errors&&window.__errors.length) console.log('ERR:',window.__errors.join('|'));
 		// Check key Vue APIs
