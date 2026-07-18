@@ -10,7 +10,6 @@ function logStep(name, ok) {
 
 window.__MOUNT_START__ = 1
 
-// Step 1: createApp
 var app
 try {
   app = createApp(App)
@@ -21,7 +20,6 @@ try {
   window.__APP_ERR__ = '' + e
 }
 
-// Step 2: get container
 var container
 try {
   container = document.querySelector('#app')
@@ -31,28 +29,32 @@ try {
   window.__APP_ERR__ = 'qs:' + e
 }
 
-// Step 3: mount (try-catch around the whole thing)
+if (container) {
+  try { container.innerHTML = '' } catch(e) { window.__APP_ERR__ = 'innerHTML:'+e; logStep('setupContainer', false) }
+  try { container.__vue_app__ = app } catch(e) { window.__APP_ERR__ = 'vue_app:'+e; logStep('setupContainer', false) }
+  try { app._container = container } catch(e) { window.__APP_ERR__ = 'container:'+e; logStep('setupContainer', false) }
+  logStep('setupContainer', true)
+} else {
+  logStep('setupContainer', false)
+  window.__APP_ERR__ = 'container_null'
+}
+
 try {
-  // Vue 3 mount internally does:
-  // 1. container = querySelector
-  // 2. container.__vue_app__ = app
-  // 3. app._container = container
-  // 4. Render root component
-  // 5. patch(container._vnode, vnode)
-  
-  // Let's try setup the container manually first
-  container.__vue_app__ = app
-  logStep('set_vue_app', true)
-  
-  app._container = container
-  logStep('set_container', true)
-  
-  // Now call mount - this should work
+  var testVNode = h('div', {id: 'test'}, 'hello')
+  logStep('h_simple', testVNode !== null)
+} catch(e) {
+  logStep('h_simple', false)
+  window.__APP_ERR__ = 'h_simple:' + e
+}
+
+try {
+  window.__MOUNT_STEP__ = 'app_mount'
   var result = app.mount('#app')
   window.__MOUNT_DONE__ = 1
-  logStep('mount_call', result !== null && result !== undefined)
+  logStep('mount', result !== null)
 } catch(e) {
-  logStep('mount_call', false)
+  logStep('mount', false)
   window.__APP_ERR__ = 'mount:' + (e && e.message ? e.message : e)
-  window.__APP_ERR_STACK__ = (e && e.stack ? e.stack : 'no stack')
+  window.__APP_ERR_STACK__ = (e && e.stack ? e.stack : 'none')
+  window.__MOUNT_STEP_FAIL__ = window.__MOUNT_STEP__
 }
