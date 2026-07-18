@@ -128,6 +128,8 @@ func main() {
 	wv.EvalJS(`try{var o={};Object.defineProperty(o,'test',{value:1,writable:true,enumerable:true,configurable:true});console.log('OBJ_defineProperty: OK val='+o.test)}catch(e){console.log('OBJ_defineProperty_ERR:'+e)}`)
 	wv.EvalJS(`try{var arr=[];arr[0]=1;arr[1]=2;console.log('ARR_setIndex: OK len='+arr.length+' 1='+arr[1])}catch(e){console.log('ARR_setIndex_ERR:'+e)}`)
 	wv.EvalJS(`try{console.log('FUNC_call_bind: OK '+(function(){return 42}).call(null))}catch(e){console.log('FUNC_call_bind_ERR:'+e)}`)
+	// h() 参数组合测试（如果 h 在全局不可访问，这些会失败，但会告诉我们是否缺少绑定）
+	wv.EvalJS(`try{var x=document.querySelector('#app');console.log('QS_type: '+(typeof x)+' proto='+Object.getPrototypeOf(x).constructor.name)}catch(e){console.log('QS_type_ERR:'+e)}`)
 
 	if out := wv.ConsoleOutput(); out != "" {
 		log.Printf("[CONSOLE]\n%s", out)
