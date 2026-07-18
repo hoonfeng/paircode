@@ -2181,113 +2181,12 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 
 	sys := buildWebSystemPrompt()
 
-	// ── 跨对话项目状态感知（作为第 2 条 user msg 注入，不污染 system prompt）──
-	var contextContents strings.Builder
 
-	// ★ 工作区信息（不在 system prompt 中，避免 roots 变化破坏缓存前缀）
-	if len(core.Folders) > 0 {
-		contextContents.WriteString("# 工作区\n根目录: " + core.Folders[0])
-		if len(core.Folders) > 1 {
-			contextContents.WriteString("\n工作区包含以下所有项目目录（均可访问）：")
-			for i, r := range core.Folders {
-				contextContents.WriteString(fmt.Sprintf("\n  %d. %s", i+1, r))
-			}
-		}
-		contextContents.WriteString("\n\n")
-	}
-
-	if root != "" {
-		execMgr := agent.InitExecStateManager(root)
-		var stateParts []string
-
-		interrupted := execMgr.FindInterrupted()
-		if interrupted != nil {
-			stateSummary := interrupted.GetSummary()
-			stateParts = append(stateParts,
-				"## 项目未完成任务\n"+stateSummary+
-					"\n注意：以上是项目中尚未完成的任务状态。请继续推进完成这些任务。"+
-					"\n如果状态显示有中断的运行，请优先恢复并完成它。")
-		}
-
-		allStates := execMgr.ListAll()
-		completedStates := make([]*agent.ExecutionState, 0)
-		for _, st := range allStates {
-			if st.Status == agent.ExecCompleted {
-				completedStates = append(completedStates, st)
-			}
-		}
-		if len(completedStates) > 0 {
-			var completedSb strings.Builder
-			completedSb.WriteString(fmt.Sprintf("## 已完成任务（最近 %d 条）\n\n", min(3, len(completedStates))))
-			for i := 0; i < min(3, len(completedStates)); i++ {
-				st := completedStates[i]
-				completedSb.WriteString(fmt.Sprintf("- **%s** — %s (%d 轮, %d 文件变更)\n",
-					st.Task, st.UpdatedAt, st.LoopCount, len(st.ModifiedFiles)))
-			}
-			stateParts = append(stateParts, completedSb.String())
-		}
-
-		if agent.GlobalDebugLogger != nil {
-			errorSummary := agent.GlobalDebugLogger.GetErrorSummary(3)
-			if errorSummary != "" && errorSummary != "（无错误日志）" {
-				stateParts = append(stateParts,
-					"## 项目中待处理的错误\n"+errorSummary+
-						"\n注意：以上是检测到的错误。请分析并修复它们。")
-			}
-		}
-
-		if len(allStates) > 0 {
-			stats := fmt.Sprintf("## 项目执行统计\n- 总执行次数: %d\n- 运行中: %d\n- 已完成: %d\n- 失败: %d\n- 已取消: %d\n",
-				len(allStates),
-				countStates(allStates, agent.ExecRunning),
-				countStates(allStates, agent.ExecCompleted),
-				countStates(allStates, agent.ExecFailed),
-				countStates(allStates, agent.ExecCancelled))
-			stateParts = append(stateParts, stats)
-		}
-
-		if len(stateParts) > 0 {
-			contextContents.WriteString("# 项目当前状态\n" + strings.Join(stateParts, "\n\n"))
-		}
-
-		recentMemories := memory.List()
-		if len(recentMemories) > 0 {
-			var memSb strings.Builder
-			limit := 5
-			if len(recentMemories) < limit {
-				limit = len(recentMemories)
-			}
-			memSb.WriteString(fmt.Sprintf("## 最近对话摘要（最近 %d 条）\n\n", limit))
-			memSb.WriteString("> ⚠️ 以下摘要是**已完成的历史对话**，与当前对话无关。请勿重复执行已完成的任务。\n> 当前对话中用户的新消息在下方 `[User]` 消息中。\n\n")
-			for i := 0; i < limit; i++ {
-				m := recentMemories[i]
-				title := m.Title
-				if title == "" || title == "新对话" {
-					title = "未命名对话"
-				}
-				memSb.WriteString(fmt.Sprintf("- **%s**", title))
-				if m.Summary != "" {
-					memSb.WriteString(": " + m.Summary)
-				}
-				memSb.WriteString("\n")
-			}
-			memSb.WriteString("\n（需要更详细的历史信息可用 history_search / history_list / memory_read 检索具体对话。）")
-			contextContents.WriteString("\n\n# 已完成对话历史\n" + memSb.String())
-		}
-
-		// ★ 自动构建 codegraph 并注入项目结构概览，让 agent 无需从头探测
-		if root != "" {
-			if cg, cgErr := agent.EnsureCodeGraph(root); cgErr == nil && cg != nil {
-				if summary := agent.CodeGraphProjectSummary(cg, root); summary != "" {
-					contextContents.WriteString("\n\n# 项目代码结构（预加载 — codegraph）\n" + summary +
-						"\n（优先用 codegraph 工具定位函数/类型，避免全文搜索浪费 token。）")
-				}
-			}
-		}
-	}
+	
 
 	var history []agent.Message
 	var summaries []string
+
 	var sumErr error
 	if convID != "" {
 		if store := agentMgr.Store(); store != nil {
@@ -2315,16 +2214,11 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 	}
 	history = agent.TrimInterruptedHistory(history)
 
-	// ★ 将项目状态/记忆/codegraph 作为第 2 条 user msg 注入（不在 system prompt 中）
-	//   使 system prompt 保持稳定，最大化 KV Cache 命中率。
-	if contextContents.Len() > 0 {
-		contextMsg := agent.Message{
-			Role:    agent.RoleUser,
-			Content: "[工作区/项目上下文]\n" + contextContents.String(),
-		}
-		// 插入到 history 开头（system 消息之后的首条 user 消息）
-		history = append([]agent.Message{contextMsg}, history...)
-	}
+
+
+
+
+
 
 	maxIter := core.Settings.MaxIterations
 
