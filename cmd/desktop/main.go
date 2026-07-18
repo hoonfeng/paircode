@@ -189,6 +189,24 @@ func main() {
 				if(app.__vue_app__) console.log('VUE_APP: mounted');
 				else console.log('VUE_APP: NOT found');
 			}
+			// Check rendered Vue content
+			try {
+				// Check Mi's __vue_app__ and data-v-app
+				var bd = document.body;
+				var cnt = bd.childNodes?bd.childNodes.length:0;
+				console.log('VUE_BODY_CHILDREN: count='+cnt);
+				for(var vi=0; vi<cnt; vi++){
+					var ch = bd.childNodes[vi];
+					var tag = ch.tagName||'#text';
+					var va = ch.__vue_app__!==undefined?'YES':'no';
+					var dv = ch.getAttribute?ch.getAttribute('data-v-app'):'N/A';
+					if(tag !== '#text') {
+						console.log('VUE_EL: tag='+tag+' vue_app='+va+' data-v-app='+dv+' children='+(ch.childNodes?ch.childNodes.length:0)+' html='+(ch.innerHTML||'').substring(0,200));
+					}
+				}
+				// Check body.innerHTML
+				console.log('BODY_HTML: '+(bd.innerHTML||'').substring(0,300));
+			} catch(e) { console.log('VUE_RENDER_ERR:'+e); }
 			// Test DOM manipulation
 			var d = document.createElement('div');
 			d.id = 'test-div';
