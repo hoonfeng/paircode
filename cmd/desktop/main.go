@@ -54,10 +54,22 @@ func main() {
 	wv.EvalJS(`if(!Array.prototype.reduceRight)Array.prototype.reduceRight=function(f,i){var a=this;var s=i!==undefined?a.length-1:a.length-2;var v=i!==undefined?i:a[a.length-1];for(var j=s;j>=0;j--)v=f(v,a[j],j,a);return v}`)
 	wv.EvalJS(`if(!Array.prototype.at)Array.prototype.at=function(i){var n=Number(i);if(isNaN(n))n=0;var l=this.length;n=n>=0?n:l+n;if(n<0||n>=l)return undefined;return this[n]}`)
 	wv.EvalJS(`console.log('POLYFILLS_OK')`)
+	// Set a global marker before loading Vue
+	wv.EvalJS(`window.__VUE_STAGE__='before_loadhtml'`)
 	htmlData, _ := os.ReadFile(distDir + "/index.html")
-	html := strings.Replace(string(htmlData), "<head>", `<head><script>window.__errors=[];window.onerror=function(m){window.__errors.push(''+m)};console.log('CONSOLE_OK')</script>`, 1)
+	html := strings.Replace(string(htmlData), "<head>", `<head><script>window.__errors=[];window.onerror=function(m){window.__errors.push(''+m);window.__VUE_ERR__=m};console.log('CONSOLE_OK')</script>`, 1)
 	wv.LoadHTML(html)
 	log.Println("[Desktop] 前端页面已加载")
+	// Check stage after load
+	wv.EvalJS(`console.log('STAGE_AFTER_LOAD: '+(window.__VUE_STAGE__||'NOT_SET'))`)
+	wv.EvalJS(`if(window.__VUE_ERR__)console.log('VUE_ERR_CAUGHT:',window.__VUE_ERR__)`)
+
+	// Test: try a minimal Vue-like script
+	wv.EvalJS(`console.log('TEST: globalThis===window='+(globalThis===window))`)
+	wv.EvalJS(`console.log('TEST: typeof createApp='+typeof window.createApp)`)
+	// Check if the script actually ran: look for _Vue or other global from the iife
+	wv.EvalJS(`console.log('TEST: _Vue='+typeof window._Vue+', $confirm='+typeof window.$confirm+', $toast='+typeof window.$toast)`)
+	wv.EvalJS(`try{var t=document.getElementById('app');console.log('TEST: #app='+(t!==null)+' inner="'+t.innerHTML.substring(0,100)+'"')}catch(e){console.log('TEST_ERR:'+e)}`)
 
 	if out := wv.ConsoleOutput(); out != "" {
 		log.Printf("[CONSOLE]\n%s", out)
@@ -67,7 +79,14 @@ func main() {
 	wv.EvalJS(`(function(){
 		console.log('DIAG: app='+(document.getElementById('app')!==null)+' qs='+(document.querySelector('#app')!==null));
 		console.log('MOUNT_REACHED: '+(window.__MOUNT_REACHED__===true?'YES':'NO:'+typeof window.__MOUNT_REACHED__));
-		if(window.__errors&&window.__errors.length) console.log('ERR:',window.__errors.join(';'));
+		console.log('STAGES: '+(window.__VUE_STAGE__||'NOT_SET'));
+		console.log('ERR_CNT: '+(window.__errors?window.__errors.length:0));
+		if(window.__errors&&window.__errors.length) console.log('ERR:',window.__errors.join('|'));
+		// Check key Vue APIs
+		var apis = ['createApp','reactive','ref','computed','defineComponent'];
+		for(var i=0;i<apis.length;i++){
+			try { console.log('API_'+apis[i]+': '+(typeof eval(apis[i]))); } catch(e){ console.log('API_'+apis[i]+': ERR:'+e); }
+		}
 		try {
 			var app = document.getElementById('app');
 			if(app) {
