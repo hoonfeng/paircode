@@ -40,8 +40,12 @@ func main() {
 	setupLoaders(wv, distDir)
 	registerDesktopBridge(wv, reg)
 
-	// Set up Vue/Vite expected globals
-	wv.EvalJS(`window.process={env:{NODE_ENV:"production"}}`)
+	// Vue/Vite expected globals
+	wv.EvalJS(`window.process={env:{NODE_ENV:"production","__NODE_ENV":"production"}}`)
+	wv.EvalJS(`window.__VUE_OPTIONS_API__=true;window.__VUE_PROD_DEVTOOLS__=false`)
+	wv.EvalJS(`window.__VUE_PROD_HYDRATION_MISMATCH_DETAILS__=false`)
+	// polyfill: safe style setProperty
+	wv.EvalJS(`if(window.CSSStyleDeclaration&&CSSStyleDeclaration.prototype.setProperty){var _osp=CSSStyleDeclaration.prototype.setProperty;CSSStyleDeclaration.prototype.setProperty=function(p,v,i){try{return _osp.call(this,p,String(v),i)}catch(e){return}}}`)
 	
 	htmlData, _ := os.ReadFile(distDir + "/index.html")
 	html := strings.Replace(string(htmlData), "<head>", `<head><script>window.__errors=[];window.onerror=function(m){window.__errors.push(''+m)};console.log('CONSOLE_OK')</script>`, 1)
@@ -56,6 +60,10 @@ func main() {
 	wv.EvalJS(`(function(){
 		console.log('DIAG: app='+(document.getElementById('app')!==null)+' qs='+(document.querySelector('#app')!==null));
 		if(window.__errors&&window.__errors.length) console.log('ERR:',window.__errors.join(';'));
+		try {
+			var app = document.getElementById('app');
+			if(app) console.log('APP: children='+app.childNodes.length+' html='+(app.innerHTML||'').substring(0,100));
+		} catch(e) { console.log('APP_ERR:'+e); }
 	})()`)
 
 	if out2 := wv.ConsoleOutput(); out2 != "" {
