@@ -146,8 +146,12 @@
                 <input type="checkbox" v-model="local.requireHumanApprovalForDestructive" />
               </div>
               <div class="setting-row">
-                <label>自动审核</label>
-                <input type="checkbox" v-model="local.autoReview" />
+                <label>审核模式</label>
+                <select v-model="local.reviewMode" style="flex:1">
+                  <option value="auto">AI审核（自动审批写操作）</option>
+                  <option value="manual">手动审批（每次需用户确认）</option>
+                  <option value="off">关闭审核（全部放行）</option>
+                </select>
               </div>
               <div class="setting-row">
                 <label>拒绝后自动迭代</label>
@@ -422,7 +426,7 @@ const local = reactive({
   maxParallel: 3,
   reviewRetries: 3,
   requireHumanApprovalForDestructive: true,
-  autoReview: false,
+  reviewMode: 'auto',
   autoIterateOnRejection: false,
   autonomous: false,
   aiReview: false,
@@ -641,7 +645,7 @@ function loadSettings() {
   local.maxParallel = s.maxParallel || 3
   local.reviewRetries = s.reviewRetries || 3
   local.requireHumanApprovalForDestructive = s.requireHumanApprovalForDestructive !== false
-  local.autoReview = !!s.autoReview
+  local.reviewMode = s.reviewMode || 'auto'
   local.autoIterateOnRejection = !!s.autoIterateOnRejection
   local.autonomous = !!s.autonomous
   local.aiReview = !!s.aiReview
@@ -718,7 +722,7 @@ const saveSettings = async () => {
       maxReviewRetries: local.reviewRetries,
       reviewRetries: local.reviewRetries,
       requireHumanApprovalForDestructive: local.requireHumanApprovalForDestructive,
-      autoReview: local.autoReview,
+      reviewMode: local.reviewMode,
       autoIterateOnRejection: local.autoIterateOnRejection,
       autonomous: local.autonomous,
       aiReview: local.aiReview,

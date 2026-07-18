@@ -250,6 +250,11 @@
     <template v-else-if="name === 'shield'">
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
     </template>
+    <!-- Shield Off / No Review -->
+    <template v-else-if="name === 'shield-off'">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+      <line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </template>
     <!-- Code / Brackets -->
     <template v-else-if="name === 'code'">
       <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>

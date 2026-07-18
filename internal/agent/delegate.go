@@ -103,8 +103,8 @@ func runSubAgent(ctx context.Context, parent *Loop, tree *AgentTree, name, task 
 		// ★ 继承父的持久化回调，使子 agent 的每轮迭代独立落盘
 		OnBatchPersist:   parent.OnBatchPersist,
 		OnMessagePersist: parent.OnMessagePersist,
-		// ★ 继承父的审核设置，使子 agent 的写操作也经过 AI 审核
-		AutoReview:     parent.AutoReview,
+		// ★ 继承父的审核设置，使子 agent 的写操作也经过审核
+		ReviewMode:      parent.ReviewMode,
 		ReviewProvider: parent.ReviewProvider,
 	}
 

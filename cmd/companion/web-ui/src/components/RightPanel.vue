@@ -173,7 +173,7 @@
             <textarea class="chat-input" ref="inputRef" v-model="inputText" @keydown="onKeydown" @dragover.prevent @drop="handleDrop" @paste="handlePaste" :style="{ height: inputHeight + 'px' }" placeholder="发送消息到 AI... (Enter 发送, Shift+Enter 换行)" :disabled="state.chatLoading"></textarea>
             <div class="input-bottom-bar">
               <div class="ibb-btns">
-                <span :class="['obtn', { active: autoReview }]" @click="toggleAuto('autoReview')" title="自动审核：开启=Agent自行审批，关闭=等待用户审批"><SvgIcon name="shield" :size="12" /> 审核</span>
+                <span :class="['obtn', reviewBtnClass]" @click="cycleReviewMode" :title="reviewBtnTitle"><SvgIcon :name="reviewIconName" :size="12" /> {{ reviewBtnLabel }}</span>
                 <span :class="['obtn', { active: autoCollapse }]" @click="toggleAuto('autoCollapse')" title="自动折叠：新消息发出时折叠旧输出，显示完成摘要"><SvgIcon name="list" :size="12" /> 折叠</span>
                 <span :class="['obtn', { active: autoCommit }]" @click="toggleAuto('autoCommit')" title="自动 Git 提交：任务完成时自动 git add + commit"><SvgIcon name="git-commit" :size="12" /> 提交</span>
                 <span class="obtn-sep"></span>
@@ -225,7 +225,36 @@ function updateInputPadding() {
 const inputHeight = ref(150)
 const convListWidth = ref(250)
 const topSentinel = ref(null)
-const autoReview = ref(true)
+const reviewMode = ref('auto')  // 'auto'=AI审核, 'manual'=人工审批, 'off'=全部放行
+const reviewBtnTitle = computed(() => {
+  const m = reviewMode.value
+  return m === 'auto' ? 'AI审核：Agent自行审批写操作' : m === 'manual' ? '手动审批：每次操作需用户确认' : '关闭审核：全部放行，不经过任何审核'
+})
+const reviewBtnLabel = computed(() => {
+  const m = reviewMode.value
+  return m === 'auto' ? '审核' : m === 'manual' ? '审批' : '放行'
+})
+const reviewIconName = computed(() => {
+  const m = reviewMode.value
+  return m === 'off' ? 'shield-off' : 'shield'
+})
+const reviewBtnClass = computed(() => {
+  const m = reviewMode.value
+  if (m === 'auto') return 'obtn-review-auto'
+  if (m === 'manual') return 'obtn-review-manual'
+  return 'obtn-review-off'
+})
+function cycleReviewMode() {
+  const m = reviewMode.value
+  const next = m === 'auto' ? 'manual' : m === 'manual' ? 'off' : 'auto'
+  reviewMode.value = next
+  state.settings['reviewMode'] = next
+  api.apiPut('/settings?convId=' + encodeURIComponent(state.currentConvId), state.settings).catch(() => {
+    // 失败时回退
+    reviewMode.value = m
+    state.settings['reviewMode'] = m
+  })
+}
 const autoIterate = ref(false)
 const autoCollapse = ref(localStorage.getItem('autoCollapse') !== 'false')
 const autonomous = ref(false)
@@ -908,11 +937,10 @@ const toggleAuto = async (field) => {
   const newVal = !oldVal
   state.settings[field] = newVal
   // 同步 local ref（浅 watch 不触发，需要手动同步）
-  if (field === 'autoReview') autoReview.value = newVal
-  else if (field === 'autonomous') autonomous.value = newVal
+  if (field === 'autonomous') autonomous.value = newVal
   else if (field === 'autoCommit') autoCommit.value = newVal
   else if (field === 'autoCollapse') { autoCollapse.value = newVal; localStorage.setItem('autoCollapse', newVal) }
-  try { await api.apiPut('/settings?convId=' + encodeURIComponent(state.currentConvId), state.settings) } catch { state.settings[field] = oldVal; if (field === 'autoReview') autoReview.value = oldVal; else if (field === 'autonomous') autonomous.value = oldVal; else if (field === 'autoCommit') autoCommit.value = oldVal; else if (field === 'autoCollapse') autoCollapse.value = oldVal }
+  try { await api.apiPut('/settings?convId=' + encodeURIComponent(state.currentConvId), state.settings) } catch { state.settings[field] = oldVal; if (field === 'autonomous') autonomous.value = oldVal; else if (field === 'autoCommit') autoCommit.value = oldVal; else if (field === 'autoCollapse') autoCollapse.value = oldVal }
 }
 
 const autoNameConv = async (convId, content) => {
@@ -1062,7 +1090,7 @@ watch(() => state.messages, () => {
   nextTick(() => startContentResizeObserver())
 }, { deep: false })
 
-watch(() => state.settings, (s) => { if (s) { autoReview.value = s.autoReview !== undefined ? !!s.autoReview : true; autoIterate.value = !!s.autoIterateOnRejection; autonomous.value = !!s.autonomous; autoCollapse.value = s.autoCollapse !== undefined ? !!s.autoCollapse : true; autoCommit.value = s.autoCommit !== false; } }, { immediate: true })
+watch(() => state.settings, (s) => { if (s) { reviewMode.value = s.reviewMode || 'auto'; autoIterate.value = !!s.autoIterateOnRejection; autonomous.value = !!s.autonomous; autoCollapse.value = s.autoCollapse !== undefined ? !!s.autoCollapse : true; autoCommit.value = s.autoCommit !== false; } }, { immediate: true })
 
 // ── 工作区切换时加载 Token 统计（onMounted 时 workspaceRoot 可能还未设）
 watch(() => state.workspaceRoot, (root) => {
@@ -1373,6 +1401,10 @@ onUnmounted(() => {
 .obtn { display: flex; align-items: center; gap: 3px; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; color: var(--text-muted); background: var(--bg-tertiary); border: 1px solid var(--border-color); white-space: nowrap; user-select: none; }
 .obtn.active { color: var(--accent); background: rgba(212, 167, 78, 0.1); border-color: rgba(212, 167, 78, 0.3); }
 .obtn-obtn-agent.active { color: #d4a74e; }
+/* 三态审核按钮样式 */
+.obtn-review-auto { color: #5bbc7a; background: rgba(91, 188, 122, 0.1); border-color: rgba(91, 188, 122, 0.3); }
+.obtn-review-manual { color: #d4a74e; background: rgba(212, 167, 78, 0.1); border-color: rgba(212, 167, 78, 0.3); }
+.obtn-review-off { color: var(--text-muted); background: var(--bg-tertiary); border-color: var(--border-color); opacity: 0.6; }
 .send-btn { background: var(--accent); color: #fff; padding: 6px 14px; border-radius: 4px; cursor: pointer; border: none; }
 .stop-btn { background: #c03; color: #fff; padding: 6px 14px; border-radius: 4px; cursor: pointer; border: none; }
 .attachment-badge { display: flex; align-items: center; gap: 6px; padding: 4px 8px; margin: 4px 0; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px; }

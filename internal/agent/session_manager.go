@@ -34,10 +34,10 @@ type LoopOpts struct {
 	CompressedSummaries []string // 已持久化的压缩摘要（页面刷新后恢复）
 	Autonomous       bool        // 自主模式标志
 	WorkspaceRoot    string      // 工作区根路径（用于跨工作区并行对话的状态指示与隔离）
-	// AutoReview AI 审核开关。true=Loop 内部 AI 审核把关写操作；
-	// false+Autonomous=true=自动放行；false+Autonomous=false=人工审批（前端弹窗）。
-	AutoReview bool
-	// ReviewProvider 审核模型的 Provider（AutoReview=true 时用）。Loop 内部用它懒建 Reviewer。
+	// ReviewMode 审核模式："auto"=AI审核, "manual"=手动审批, "off"=全部放行。
+	// "auto"=Loop 内部 AI 审核把关写操作；"off"=全部放行（不经过任何审核）；"manual"=人工审批（前端弹窗）。
+	ReviewMode string
+	// ReviewProvider 审核模型的 Provider（ReviewMode="auto" 时用）。Loop 内部用它懒建 Reviewer。
 	ReviewProvider Provider
 	// AutoCommit 任务完成时自动 git add + git commit。
 	AutoCommit bool
@@ -332,7 +332,7 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 
 	// Approve：写类工具执行前阻塞等用户裁决。
 	// 先发 EventApproval 通知前端弹审批框，再从 approvalCh 读结果。
-	// 当 AutoReview=false + Autonomous=false 时，由 Loop.Run 内部调用本回调。
+	// 当 ReviewMode="manual" 时，由 Loop.Run 内部调用本回调。
 	loop.Approve = func(actx context.Context, tc ToolCall) (bool, string) {
 		select {
 		case sess.Events <- Event{
@@ -350,8 +350,8 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 			return false, "用户取消了操作"
 		}
 	}
-	// 审核开关由 Loop 内部自决，外部只需传进来
-	loop.SetAutoReview(opts.AutoReview)
+	// 审核模式由 Loop 内部自决，外部只需传进来
+	loop.SetReviewMode(opts.ReviewMode)
 	loop.ReviewProvider = opts.ReviewProvider
 
 	// OnFeedback：每轮 LLM 调用前检查用户运行时反馈（非阻塞）
@@ -846,15 +846,15 @@ func copyHistoryRaw(hist []Message) []Message {
 	return out
 }
 
-// SetAutoReview 实时更新指定会话的审核开关（只影响当前对话）。
-// 用户在工具栏切换 autoReview 时立即生效，无需新消息。
-func (m *SessionManager) SetAutoReview(convID string, v bool) {
+// SetReviewMode 实时更新指定会话的审核模式（只影响当前对话）。
+// 用户在工具栏切换审核模式时立即生效，无需新消息。
+func (m *SessionManager) SetReviewMode(convID string, v string) {
 	m.mu.RLock()
 	sess, ok := m.sessions[convID]
 	m.mu.RUnlock()
 	if ok && sess.Loop != nil {
-		sess.Loop.SetAutoReview(v)
-		fmt.Printf("[session] 实时更新审核开关 conv=%s autoReview=%v\n", convID, v)
+		sess.Loop.SetReviewMode(v)
+		fmt.Printf("[session] 实时更新审核模式 conv=%s reviewMode=%s\n", convID, v)
 	}
 }
 

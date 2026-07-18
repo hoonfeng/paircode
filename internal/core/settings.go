@@ -39,7 +39,7 @@ type AppSettings struct {
 	WorkspaceFolderLists map[string][]string `json:"workspaceFolderLists"` // 每工作区的文件夹列表，key=工作区根目录
 	RecentProjects     []string            `json:"recentProjects"`
 	// Agent 行为
-	AutoReview         bool   `json:"autoReview"`
+	ReviewMode         string `json:"reviewMode"`    // 审核模式："auto"=AI审核, "manual"=手动审批, "off"=全部放行
 	Autonomous         bool   `json:"autonomous"`
 	AutoCollapse       bool   `json:"autoCollapse"`
 	MaxIterations      int    `json:"maxIterations"`
@@ -127,7 +127,7 @@ func Default() AppSettings {
 		Temperature: "0.3", ThinkingMode: "thinking", MaxTokens: 131072, ContextMaxTokens: 64000,
 		CompressEnabled: true, CompressProvider: "deepseek", CompressBaseURL: "https://api.deepseek.com/v1",
 		CompressModel: "deepseek-v4-flash", CompressThinkingMode: "non-thinking",
-	MaxIterations: 50, MaxParallel: 3, ReviewRetries: 3, AutoIterate: true, RequireApproval: true, AutoReview: true, AutoCommit: true, AutoCollapse: true, Benchmark: true, LuaTools: true,
+	MaxIterations: 50, MaxParallel: 3, ReviewRetries: 3, AutoIterate: true, RequireApproval: true, ReviewMode: "auto", AutoCommit: true, AutoCollapse: true, Benchmark: true, LuaTools: true,
 		DefaultShell: "auto", TermFontSize: 13, TermEncoding: "auto",
 		Theme: "dark", EditorFontSize: 14, TabSize: 2, FontFamily: "'Cascadia Code', 'Fira Code', Consolas, monospace",
 		PhilosophySelected: []string{"tao-te-ching", "huangdi-yinfu-jing", "sunzi-bingfa"},
@@ -142,6 +142,24 @@ func Load() bool {
 	if data, err := os.ReadFile(SettingsPath()); err == nil {
 		_ = json.Unmarshal(data, &Settings)
 		loaded = true
+		// ★ 迁移旧版 autoReview 字段 → reviewMode
+		// 旧版：autoReview=true → "auto", autoReview=false → "manual"（原非自主模式=手动审批）
+		// 检查逻辑：如果 JSON 中有 autoReview 字段但无 reviewMode 字段，才执行迁移
+		var raw map[string]json.RawMessage
+		if json.Unmarshal(data, &raw) == nil {
+			_, hasNew := raw["reviewMode"]
+			oldVal, hasOld := raw["autoReview"]
+			if !hasNew && hasOld {
+				var oldBool bool
+				if json.Unmarshal(oldVal, &oldBool) == nil {
+					if oldBool {
+						Settings.ReviewMode = "auto"
+					} else {
+						Settings.ReviewMode = "manual"
+					}
+				}
+			}
+		}
 	}
 	if Settings.ExecuteModel == "" && Settings.Model != "" {
 		Settings.ExecuteModel = Settings.Model

@@ -34,7 +34,7 @@ type AgentConfig struct {
 	Compressor Compressor
 	// 规划 Provider（可选）。非空时启用自主模式双层 Loop。
 	PlanProvider Provider
-	// 审核 Provider（可选）。非空+AutoReview=true 时启用 AI 审核。
+	// 审核 Provider（可选）。非空+ReviewMode="auto" 时启用 AI 审核。
 	ReviewProvider Provider
 
 	// OnEvent 事件回调（可选）。宿主通过此回调接收 Agent 流式事件。
@@ -49,8 +49,8 @@ type AgentConfig struct {
 
 	// 自主模式标志（双层 Loop：设计者→执行者）
 	Autonomous bool
-	// AI 审核开关
-	AutoReview bool
+	// 审核模式："auto"=AI审核, "manual"=手动审批, "off"=全部放行
+	ReviewMode string
 	// 自动 Git 提交
 	AutoCommit bool
 }

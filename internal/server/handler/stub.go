@@ -62,7 +62,8 @@ func HandleChatSend(w http.ResponseWriter, r *http.Request) {
 	}
 	opts := BuildLoopOpts(req.ConvID, req.Message, req.Autonomous)
 	opts.WorkspaceRoot = req.WorkspaceRoot
-	if opts.AutoReview = core.Settings.AutoReview; opts.AutoReview && core.Settings.ReviewModel != "" {
+	opts.ReviewMode = core.Settings.ReviewMode
+	if core.Settings.ReviewMode == "auto" && core.Settings.ReviewModel != "" {
 		pm := strings.TrimSpace(core.Settings.PlanModel)
 		base := strings.TrimSpace(core.Settings.BaseURL)
 		key := strings.TrimSpace(core.Settings.APIKey)

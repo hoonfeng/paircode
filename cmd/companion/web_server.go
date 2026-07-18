@@ -847,8 +847,8 @@ func (s *webServer) handleSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// 检查审核开关是否变更
-		oldAutoReview := core.Settings.AutoReview
+		// 检查审核模式是否变更
+		oldReviewMode := core.Settings.ReviewMode
 
 		// 增量 merge：只更新 rawMap 中存在的字段
 		sv := reflect.ValueOf(&core.Settings).Elem()
@@ -871,11 +871,11 @@ func (s *webServer) handleSettings(w http.ResponseWriter, r *http.Request) {
 		}
 
 		core.Save()
-		// 审核开关变更时，仅实时更新当前对话的 Loop（其他对话不受影响）
-		if newAutoReview, ok := rawMap["autoReview"]; ok {
-			var newVal bool
-			if err := json.Unmarshal(newAutoReview, &newVal); err == nil && newVal != oldAutoReview && convId != "" {
-				agentMgr.SetAutoReview(convId, newVal)
+		// 审核模式变更时，仅实时更新当前对话的 Loop（其他对话不受影响）
+		if newReviewMode, ok := rawMap["reviewMode"]; ok {
+			var newVal string
+			if err := json.Unmarshal(newReviewMode, &newVal); err == nil && newVal != oldReviewMode && convId != "" {
+				agentMgr.SetReviewMode(convId, newVal)
 			}
 		}
 		// 同步工作区文件夹列表（确保 core.Folders 与 settings 一致）
@@ -2300,8 +2300,8 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 	opts := s.buildWebLoopOpts(req.ConvID, req.Message, req.Autonomous)
 	opts.WorkspaceRoot = req.WorkspaceRoot
 
-	opts.AutoReview = core.Settings.AutoReview
-	if core.Settings.AutoReview && core.Settings.ReviewModel != "" {
+	opts.ReviewMode = core.Settings.ReviewMode
+	if core.Settings.ReviewMode == "auto" && core.Settings.ReviewModel != "" {
 		pm := strings.TrimSpace(core.Settings.PlanModel)
 		base := strings.TrimSpace(core.Settings.BaseURL)
 		key := strings.TrimSpace(core.Settings.APIKey)

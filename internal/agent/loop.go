@@ -123,11 +123,11 @@ type Loop struct {
 	CompactRequested bool         // 外部设置后下轮迭代触发上下文压缩（供主动压缩 API 使用）
 	Autonomous     bool           // 自主模式标志（供并行子 agent 继承）
 
-	mu sync.Mutex // 保护 AutoReview 的并发读写（SetAutoReview/getAutoReview）
+	mu sync.Mutex // 保护 ReviewMode 的并发读写（SetReviewMode/getReviewMode）
 
-	// AutoReview 审核开关。true=AI审核（内部创建审核Agent把关写操作）；
-	AutoReview bool
-	// ReviewProvider 审核模型的 Provider（AutoReview=true 时使用）。
+	// ReviewMode 审核模式："auto"=AI审核, "manual"=手动审批, "off"=全部放行。
+	ReviewMode string
+	// ReviewProvider 审核模型的 Provider（ReviewMode="auto" 时使用）。
 	// 由外部在创建 Loop 时设置，Loop 内部用它懒创建审核 Reviewer。
 	ReviewProvider Provider
 
@@ -153,23 +153,23 @@ func (l *Loop) emit(e Event) {
 	}
 }
 
-// SetAutoReview 运行时更新审核开关（线程安全）。
+// SetReviewMode 运行时更新审核模式（线程安全）。
 // 修改立即生效：正在运行的 Loop 在下一个工具调用前会读到新值。
-func (l *Loop) SetAutoReview(v bool) {
+func (l *Loop) SetReviewMode(v string) {
 	l.mu.Lock()
-	l.AutoReview = v
+	l.ReviewMode = v
 	l.mu.Unlock()
 }
 
-// getAutoReview 线程安全读取 AutoReview（供 approve 门使用）。
-func (l *Loop) getAutoReview() bool {
+// getReviewMode 线程安全读取 ReviewMode（供 approve 门使用）。
+func (l *Loop) getReviewMode() string {
 	l.mu.Lock()
-	v := l.AutoReview
+	v := l.ReviewMode
 	l.mu.Unlock()
 	return v
 }
 
-// aiReviewApprove 内部 AI 审核裁决（AutoReview=true 时由 Loop.Run 调用）。
+// aiReviewApprove 内部 AI 审核裁决（ReviewMode="auto" 时由 Loop.Run 调用）。
 // 通过 ReviewProvider 懒创建 Reviewer，写类工具交审核模型判。
 // 通过放行，驳回/需要修改则把建议作反馈回灌。审核模型故障→放行（审核是增强非强制）。
 func (l *Loop) aiReviewApprove(ctx context.Context, tc ToolCall) (bool, string) {
@@ -324,15 +324,15 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 		for _, tc := range assistant.ToolCalls {
 			l.emit(Event{Type: EventToolCall, Tool: tc.Function.Name, Args: tc.Function.Arguments, CallID: tc.ID})
 
-			// ★ 审批门：Loop 内部根据 AutoReview 自决审核策略 ★
-			// - AutoReview=true → 内部 AI 审核（用 ReviewProvider 懒建 Reviewer）
-			// - AutoReview=false + Autonomous=true → 自动放行（nil=全部通过）
-			// - AutoReview=false + Autonomous=false → 走外部 l.Approve（人工审批）
+			// ★ 审批门：Loop 内部根据 ReviewMode 自决审核策略 ★
+			// - ReviewMode="auto" → 内部 AI 审核（用 ReviewProvider 懒建 Reviewer）
+			// - ReviewMode="off" → 全部放行（nil=全部通过，不经过任何审核）
+			// - ReviewMode="manual" → 走外部 l.Approve（人工审批）
 			approveFn := l.Approve
-			switch {
-			case l.getAutoReview():
+			switch l.getReviewMode() {
+			case "auto":
 				approveFn = l.aiReviewApprove
-			case l.Autonomous:
+			case "off":
 				approveFn = nil
 			}
 			if approveFn != nil {
