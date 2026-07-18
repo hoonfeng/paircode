@@ -2213,7 +2213,10 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 		}
 	}
 	history = agent.TrimInterruptedHistory(history)
-
+	// ★ 历史精简：跨轮次加载时只保留最近一轮完整交互细节，
+	//   旧轮次压缩为 [用户消息, 助手最终报告]，丢弃中间 tool 输出。
+	//   大幅减少上下文体积，同时保持语义连续性。
+	history = agent.CondenseHistory(history)
 
 
 
