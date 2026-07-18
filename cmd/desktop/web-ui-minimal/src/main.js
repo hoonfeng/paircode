@@ -10,4 +10,10 @@ try { app._container = c; window.__S5__='OK' } catch(e) { window.__S5__=''+e }
 try { h('div', {}, 't'); window.__S6__='OK' } catch(e) { window.__S6__=''+e }
 try { var vn = h(App); window.__S6b__='OK' } catch(e) { window.__S6b__=''+e }
 try { app._component = App; window.__S9__='OK' } catch(e) { window.__S9__=''+e }
-try { app.mount('#app'); window.__S7__='OK' } catch(e) { window.__S7__=''+e }
+// 尝试 mount 到新创建的 div
+try {
+  var newDiv = document.createElement('div');
+  document.body.appendChild(newDiv);
+  app.mount(newDiv);
+  window.__S7__='OK'
+} catch(e) { window.__S7__=''+e }

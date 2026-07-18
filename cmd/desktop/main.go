@@ -154,6 +154,9 @@ func main() {
 		console.log('S6_h: '+(window.__S6__||'none'));
 		console.log('S6b_hApp: '+(window.__S6b__||'none'));
 		console.log('S9_component: '+(window.__S9__||'none'));
+		console.log('M1_props: '+(window.__M1__||'none'));
+		console.log('M2_mountType: '+(window.__M2__||'none'));
+		console.log('M3_ctx: '+(window.__M3__||'none'));
 		console.log('S7_mount: '+(window.__S7__||'none'));
 		console.log('ERR_CNT: '+(window.__errors?window.__errors.length:0));
 		if(window.__errors&&window.__errors.length) console.log('ERR:',window.__errors.join('|'));
