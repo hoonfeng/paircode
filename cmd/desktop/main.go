@@ -136,17 +136,14 @@ func main() {
 	// JS 诊断
 	wv.EvalJS(`(function(){
 		console.log('DIAG: app='+(document.getElementById('app')!==null)+' qs='+(document.querySelector('#app')!==null));
-		console.log('MOUNT_REACHED: '+(window.__MOUNT_REACHED__===true?'YES':'NO:'+typeof window.__MOUNT_REACHED__));
-			console.log('STAGES: '+(window.__VUE_STAGE__||'NOT_SET'));
-			console.log('MOUNT_START: '+(window.__MOUNT_START__||'0'));
-			console.log('APP_CREATED: '+(window.__APP_CREATED__||'0'));
-			console.log('MOUNT_DONE: '+(window.__MOUNT_DONE__||'0'));
-			console.log('APP_ERR: '+(window.__APP_ERR__||'none'));
-			console.log('STEP_ERR1: '+(window.__STEP_ERR_1__||'none'));
-			console.log('STEP_ERR2: '+(window.__STEP_ERR_2__||'none'));
-			console.log('STEP_ERR3: '+(window.__STEP_ERR_3__||'none'));
-			if(window.__VUE_STEPS__) console.log('STEPS: '+window.__VUE_STEPS__.join(' | '));
-			console.log('ERR_CNT: '+(window.__errors?window.__errors.length:0));
+		console.log('S1_createApp: '+(window.__S1__||'0'));
+		console.log('S2_container: '+(window.__S2__||'none'));
+		console.log('S3_innerHTML: '+(window.__S3__||'none'));
+		console.log('S4_vue_app: '+(window.__S4__||'none'));
+		console.log('S5_container: '+(window.__S5__||'none'));
+		console.log('S6_h: '+(window.__S6__||'none'));
+		console.log('S7_mount: '+(window.__S7__||'none'));
+		console.log('ERR_CNT: '+(window.__errors?window.__errors.length:0));
 		if(window.__errors&&window.__errors.length) console.log('ERR:',window.__errors.join('|'));
 		// Check key Vue APIs
 		var apis = ['createApp','reactive','ref','computed','defineComponent'];
