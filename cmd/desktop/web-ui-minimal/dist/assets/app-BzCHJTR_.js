@@ -1,8 +1,5 @@
 (function() {
   "use strict";
-  var __vite_style__ = document.createElement("style");
-  __vite_style__.textContent = "\n.app-layout[data-v-5c41247c] {\n  display: flex;\n  width: 100%;\n  height: 100%;\n  background: var(--bg-primary, #0d1117);\n  color: var(--text-primary, #e6edf3);\n  font-family: var(--font-ui, system-ui, sans-serif);\n  font-size: var(--font-size-base, 13px);\n}\n\n/* 活动栏 */\n.activity-bar[data-v-5c41247c] {\n  display: flex;\n  flex-direction: column;\n  width: 48px;\n  background: var(--activity-bar-bg, #0d1117);\n  border-right: 1px solid var(--border-color, #30363d);\n  padding-top: 8px;\n  align-items: center;\n  gap: 4px;\n}\n.activity-item[data-v-5c41247c] {\n  width: 36px;\n  height: 36px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  border-radius: var(--border-radius, 4px);\n  cursor: pointer;\n  color: var(--text-muted, #6e7681);\n  font-size: 16px;\n}\n.activity-item.active[data-v-5c41247c] {\n  color: var(--accent, #58a6ff);\n  background: var(--accent-bg, rgba(88, 166, 255, 0.10));\n}\n.activity-item[data-v-5c41247c]:hover {\n  background: var(--bg-hover, #1c2333);\n}\n\n/* 侧边栏 */\n.sidebar[data-v-5c41247c] {\n  width: 220px;\n  background: var(--sidebar-bg, #161b22);\n  border-right: 1px solid var(--border-color, #30363d);\n  padding: 8px 0;\n  overflow-y: auto;\n}\n.sidebar-header[data-v-5c41247c] {\n  padding: 8px 16px 4px;\n  font-size: var(--font-size-sm, 12px);\n  color: var(--text-secondary, #8b949e);\n  font-weight: 600;\n  letter-spacing: 1px;\n}\n.sidebar-item[data-v-5c41247c] {\n  padding: 4px 16px;\n  cursor: pointer;\n  color: var(--text-primary, #e6edf3);\n  font-size: var(--font-size-base, 13px);\n}\n.sidebar-item[data-v-5c41247c]:hover {\n  background: var(--bg-hover, #1c2333);\n}\n.sidebar-divider[data-v-5c41247c] {\n  height: 1px;\n  margin: 8px 16px;\n  background: var(--border-color, #30363d);\n}\n\n/* 主内容 */\n.main-content[data-v-5c41247c] {\n  flex: 1;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n}\n.tab-bar[data-v-5c41247c] {\n  display: flex;\n  background: var(--tab-inactive-bg, #161b22);\n  border-bottom: 1px solid var(--border-color, #30363d);\n}\n.tab[data-v-5c41247c] {\n  padding: 8px 20px;\n  cursor: pointer;\n  color: var(--text-secondary, #8b949e);\n  font-size: var(--font-size-sm, 12px);\n  border-right: 1px solid var(--border-color, #30363d);\n}\n.tab.active[data-v-5c41247c] {\n  background: var(--tab-active-bg, #0d1117);\n  color: var(--text-primary, #e6edf3);\n  border-bottom: 2px solid var(--accent, #58a6ff);\n}\n\n/* 编辑器 */\n.editor[data-v-5c41247c] {\n  flex: 1;\n  padding: 24px;\n  overflow-y: auto;\n}\n.editor-title[data-v-5c41247c] {\n  font-size: var(--font-size-lg, 15px);\n  font-weight: 600;\n  margin-bottom: 16px;\n  color: var(--text-primary, #e6edf3);\n}\n.editor-content h1[data-v-5c41247c] {\n  font-size: 32px;\n  margin-bottom: 8px;\n  color: var(--accent, #58a6ff);\n}\n.editor-content p[data-v-5c41247c] {\n  font-size: var(--font-size-base, 13px);\n  line-height: 1.6;\n  color: var(--text-secondary, #8b949e);\n  margin-bottom: 8px;\n}\n.status-badge[data-v-5c41247c] {\n  display: inline-block;\n  padding: 4px 12px;\n  background: var(--accent-bg, rgba(88, 166, 255, 0.10));\n  border: 1px solid var(--accent, #58a6ff);\n  border-radius: var(--border-radius, 4px);\n  color: var(--accent-light, #79c0ff);\n  font-size: var(--font-size-sm, 12px);\n}\n\n/* 状态栏 */\n.status-bar[data-v-5c41247c] {\n  display: flex;\n  justify-content: space-between;\n  padding: 4px 12px;\n  background: var(--bg-tertiary, #21262d);\n  border-top: 1px solid var(--border-color, #30363d);\n  color: var(--text-secondary, #8b949e);\n  font-size: var(--font-size-sm, 12px);\n}\n.status-left[data-v-5c41247c], .status-right[data-v-5c41247c] {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n}\n/*$vite$:1*/";
-  document.head.appendChild(__vite_style__);
   /**
   * @vue/shared v3.5.40
   * (c) 2018-present Yuxi (Evan) You and Vue contributors
@@ -5123,9 +5120,6 @@
   const Static = /* @__PURE__ */ Symbol.for("v-stc");
   const blockStack = [];
   let currentBlock = null;
-  function openBlock(disableTracking = false) {
-    blockStack.push(currentBlock = disableTracking ? null : []);
-  }
   function closeBlock() {
     blockStack.pop();
     currentBlock = blockStack[blockStack.length - 1] || null;
@@ -5136,27 +5130,6 @@
     if (value < 0 && currentBlock && inVOnce) {
       currentBlock.hasOnce = true;
     }
-  }
-  function setupBlock(vnode) {
-    vnode.dynamicChildren = isBlockTreeEnabled > 0 ? currentBlock || EMPTY_ARR : null;
-    closeBlock();
-    if (isBlockTreeEnabled > 0 && currentBlock) {
-      currentBlock.push(vnode);
-    }
-    return vnode;
-  }
-  function createElementBlock(type, props, children, patchFlag, dynamicProps, shapeFlag) {
-    return setupBlock(
-      createBaseVNode(
-        type,
-        props,
-        children,
-        patchFlag,
-        dynamicProps,
-        shapeFlag,
-        true
-      )
-    );
   }
   function isVNode(value) {
     return value ? value.__v_isVNode === true : false;
@@ -5340,11 +5313,6 @@
   }
   function createTextVNode(text = " ", flag = 0) {
     return createVNode(Text, null, text, flag);
-  }
-  function createStaticVNode(content, numberOfNodes) {
-    const vnode = createVNode(Static, null, content);
-    vnode.staticCount = numberOfNodes;
-    return vnode;
   }
   function normalizeVNode(child) {
     if (child == null || typeof child === "boolean") {
@@ -5731,6 +5699,31 @@
     const c = /* @__PURE__ */ computed$1(getterOrOptions, debugOptions, isInSSRComponentSetup);
     return c;
   };
+  function h(type, propsOrChildren, children) {
+    try {
+      setBlockTracking(-1);
+      const l = arguments.length;
+      if (l === 2) {
+        if (isObject(propsOrChildren) && !isArray(propsOrChildren)) {
+          if (isVNode(propsOrChildren)) {
+            return createVNode(type, null, [propsOrChildren]);
+          }
+          return createVNode(type, propsOrChildren);
+        } else {
+          return createVNode(type, null, propsOrChildren);
+        }
+      } else {
+        if (l > 3) {
+          children = Array.prototype.slice.call(arguments, 2);
+        } else if (l === 3 && isVNode(children)) {
+          children = [children];
+        }
+        return createVNode(type, propsOrChildren, children);
+      }
+    } finally {
+      setBlockTracking(1);
+    }
+  }
   const version = "3.5.40";
   /**
   * @vue/runtime-dom v3.5.40
@@ -6209,27 +6202,53 @@
     }
     return container;
   }
-  const _export_sfc = (sfc, props) => {
-    const target = sfc.__vccOpts || sfc;
-    for (const [key, val] of props) {
-      target[key] = val;
+  var app = createApp({
+    render() {
+      return h("div", { id: "app-root" });
     }
-    return target;
-  };
-  const _sfc_main = {};
-  const _hoisted_1 = { class: "app-layout" };
-  function _sfc_render(_ctx, _cache) {
-    return openBlock(), createElementBlock("div", _hoisted_1, [..._cache[0] || (_cache[0] = [
-      createStaticVNode('<div class="activity-bar" data-v-5c41247c><div class="activity-item active" data-v-5c41247c>⚡</div><div class="activity-item" data-v-5c41247c>📁</div><div class="activity-item" data-v-5c41247c>🔍</div><div class="activity-item" data-v-5c41247c>⚙</div></div><div class="sidebar" data-v-5c41247c><div class="sidebar-header" data-v-5c41247c>EXPLORER</div><div class="sidebar-item" data-v-5c41247c>📄 index.html</div><div class="sidebar-item" data-v-5c41247c>📄 main.js</div><div class="sidebar-item" data-v-5c41247c>📄 App.vue</div><div class="sidebar-divider" data-v-5c41247c></div><div class="sidebar-header" data-v-5c41247c>OUTLINE</div><div class="sidebar-item" data-v-5c41247c>▶ App</div></div><div class="main-content" data-v-5c41247c><div class="tab-bar" data-v-5c41247c><div class="tab active" data-v-5c41247c>App.vue</div><div class="tab" data-v-5c41247c>main.js</div></div><div class="editor" data-v-5c41247c><div class="editor-title" data-v-5c41247c>PairCode IDE - Desktop</div><div class="editor-content" data-v-5c41247c><h1 data-v-5c41247c>hello</h1><p data-v-5c41247c>Vue 3 桌面端渲染成功！</p><p class="status-badge" data-v-5c41247c>✅ JSC ES6 引擎已完善</p></div></div></div><div class="status-bar" data-v-5c41247c><span class="status-left" data-v-5c41247c>main.js</span><span class="status-right" data-v-5c41247c>UTF-8 | JavaScript | Ln 1, Col 1</span></div>', 4)
-    ])]);
-  }
-  const App = /* @__PURE__ */ _export_sfc(_sfc_main, [["render", _sfc_render], ["__scopeId", "data-v-5c41247c"]]);
+  });
   console.log("A");
-  var app = createApp(App);
+  app.mount("#app");
   console.log("B");
-  var root = app.mount("#app");
-  console.log("D root=" + typeof root);
+  var root = document.getElementById("app-root");
+  root.innerHTML = `
+<div class="app-layout">
+  <div class="activity-bar">
+    <div class="activity-item active">⚡</div>
+    <div class="activity-item">📁</div>
+    <div class="activity-item">🔍</div>
+    <div class="activity-item">⚙</div>
+  </div>
+  <div class="sidebar">
+    <div class="sidebar-header">EXPLORER</div>
+    <div class="sidebar-item">📄 index.html</div>
+    <div class="sidebar-item">📄 main.js</div>
+    <div class="sidebar-item">📄 App.vue</div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-header">OUTLINE</div>
+    <div class="sidebar-item">▶ App</div>
+  </div>
+  <div class="main-content">
+    <div class="tab-bar">
+      <div class="tab active">App.vue</div>
+      <div class="tab">main.js</div>
+    </div>
+    <div class="editor">
+      <div class="editor-title">PairCode IDE - Desktop</div>
+      <div class="editor-content">
+        <h1>hello</h1>
+        <p>Vue 3 桌面端渲染成功！</p>
+        <p class="status-badge">✅ JSC ES6 引擎已完善</p>
+      </div>
+    </div>
+  </div>
+  <div class="status-bar">
+    <span class="status-left">main.js</span>
+    <span class="status-right">UTF-8 | JavaScript | Ln 1, Col 1</span>
+  </div>
+</div>
+`;
+  console.log("C root children=" + root.childNodes.length);
   var el = document.getElementById("app");
-  console.log("E children=" + el.childNodes.length + " html=[" + el.innerHTML.substring(0, 50) + "]");
-  console.log("F __vue_app__=" + (el.__vue_app__ ? "yes" : "no"));
+  console.log("D children=" + el.childNodes.length);
 })();

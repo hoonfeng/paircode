@@ -3,11 +3,38 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Vue3 Test</title>
+  <title>PairCode IDE</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body, #app { width: 100%; height: 100%; }
-    body { font-family: system-ui, sans-serif; background: #0d1117; color: #e6edf3; }
+    html, body, #app { width: 100%; height: 100%; overflow: hidden; }
+    :root {
+      --bg-primary: #0d1117; --bg-secondary: #161b22; --bg-tertiary: #21262d;
+      --bg-hover: #1c2333; --text-primary: #e6edf3; --text-secondary: #8b949e;
+      --text-muted: #6e7681; --border-color: #30363d; --accent: #58a6ff;
+      --accent-light: #79c0ff; --accent-bg: rgba(88,166,255,0.10);
+      --activity-bar-bg: #0d1117; --sidebar-bg: #161b22; --tab-active-bg: #0d1117;
+      --tab-inactive-bg: #161b22;
+    }
+    body { font-family: system-ui,sans-serif; font-size: 13px; background: var(--bg-primary); color: var(--text-primary); }
+    .app-layout { display: flex; width: 100%; height: 100%; }
+    .activity-bar { display: flex; flex-direction: column; width: 48px; background: var(--activity-bar-bg); border-right: 1px solid var(--border-color); padding-top: 8px; align-items: center; gap: 4px; }
+    .activity-item { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 4px; cursor: pointer; color: var(--text-muted); font-size: 16px; }
+    .activity-item.active { color: var(--accent); background: var(--accent-bg); }
+    .sidebar { width: 220px; background: var(--sidebar-bg); border-right: 1px solid var(--border-color); padding: 8px 0; overflow-y: auto; }
+    .sidebar-header { padding: 8px 16px 4px; font-size: 12px; color: var(--text-secondary); font-weight: 600; letter-spacing: 1px; }
+    .sidebar-item { padding: 4px 16px; cursor: pointer; color: var(--text-primary); font-size: 13px; }
+    .sidebar-divider { height: 1px; margin: 8px 16px; background: var(--border-color); }
+    .main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    .tab-bar { display: flex; background: var(--tab-inactive-bg); border-bottom: 1px solid var(--border-color); }
+    .tab { padding: 8px 20px; cursor: pointer; color: var(--text-secondary); font-size: 12px; border-right: 1px solid var(--border-color); }
+    .tab.active { background: var(--tab-active-bg); color: var(--text-primary); border-bottom: 2px solid var(--accent); }
+    .editor { flex: 1; padding: 24px; overflow-y: auto; }
+    .editor-title { font-size: 15px; font-weight: 600; margin-bottom: 16px; color: var(--text-primary); }
+    .editor-content h1 { font-size: 32px; margin-bottom: 8px; color: var(--accent); }
+    .editor-content p { font-size: 13px; line-height: 1.6; color: var(--text-secondary); margin-bottom: 8px; }
+    .status-badge { display: inline-block; padding: 4px 12px; background: var(--accent-bg); border: 1px solid var(--accent); border-radius: 4px; color: var(--accent-light); font-size: 12px; }
+    .status-bar { display: flex; justify-content: space-between; padding: 4px 12px; background: var(--bg-tertiary); border-top: 1px solid var(--border-color); color: var(--text-secondary); font-size: 12px; }
+    .status-left, .status-right { display: flex; align-items: center; gap: 8px; }
   </style>
 </head>
 <body>
