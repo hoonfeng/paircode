@@ -100,18 +100,26 @@ export function processAgentEvent(convId, data) {
     console.warn('[AE] processAgentEvent 丢弃: 无 messagesByConv conv=%s type=%s', convId, data.type)
     return
   }
-  // 用 _key 查找（比数组下标稳定，不会被 loadMoreMessages prepend 破坏）
-  const msg = findMsgByKey(msgs, rt.msgKey)
+  const isCurrent = state.currentConvId === convId
+
+  // 找目标 assistant 消息：优先用 rt.msgKey 定位，找不到则 fallback 到最后一个 assistant
+  // （页面刷新后 runtime 的 msgKey 可能已失效，但历史消息中最后一条仍是正确的目标）
+  let msg = findMsgByKey(msgs, rt.msgKey)
   if (!msg) {
-    console.warn('[AE] processAgentEvent 丢弃: 未找到 msgKey=%s conv=%s type=%s', rt.msgKey, convId, data.type)
+    const lastAssistant = [...msgs].reverse().find(m => m.role === 'assistant')
+    if (lastAssistant) {
+      console.log('[AE] processAgentEvent fallback 到最后 assistant conv=%s type=%s', convId, data.type)
+      msg = lastAssistant
+    }
+  }
+  if (!msg) {
+    console.warn('[AE] processAgentEvent 丢弃: 无目标 msg conv=%s type=%s', convId, data.type)
     return
   }
   if (data.type !== 'content' && data.type !== 'thinking') {
     console.log('[AE] processAgentEvent conv=%s type=%s msgKey=%s', convId, data.type, rt.msgKey)
   }
   msg._loading = false
-
-  const isCurrent = state.currentConvId === convId
 
   if (data.type === 'thinking') {
     const seg = pushSegment(msg.segments, 'thinking', { _mode: 'collapsed', _collapsed: true })

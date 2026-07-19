@@ -3,7 +3,6 @@ var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { en
 var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
 (function() {
   "use strict";
-  var __textOfDepth = 0;
   var _a2, _b, _c2, _d, _e2, _f, _g, _h, _i6, _j, _k, _l2, _m, _n2, _o, _p, _q, _r2, _s2, _t2, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H, _I, _J, _K, _L, _M, _N, _O, _P, _Q, _R, _S, _T, _U, _V, _W, _X, _Y, _Z, __, _$, _aa, _ba, _ca, _da, _ea, _fa, _ga, _ha, _ia, _ja, _ka, _la, _ma, _na, _oa, _pa, _qa, _ra, _sa, _ta, _ua, _va, _wa, _xa, _ya, _za, _Aa, _Ba, _Ca, _Da, _Ea, _Fa, _Ga, _Ha, _Ia, _Ja, _Ka, _La, _Ma, _Na, _Oa, _Pa, _Qa, _Ra, _Sa, _Ta, _Ua, _Va, _Wa, _Xa, _Ya, _Za, __a, _$a, _ab, _bb, _cb, _db, _eb, _fb, _gb, _hb, _ib, _jb, _kb, _lb, _mb, _nb, _ob, _pb, _qb, _rb, _sb, _tb, _ub, _vb, _wb, _xb, _yb, _zb, _Ab, _Bb, _Cb, _Db, _Eb, _Fb, _Gb, _Hb, _Ib, _Jb, _Kb, _Lb, _Mb, _Nb, _Ob, _Pb, _Qb, _Rb, _Sb, _Tb, _Ub, _Vb, _Wb, _Xb, _Yb, _Zb, __b, _$b, _ac, _bc, _cc, _dc, _ec, _fc, _gc, _hc, _ic, _jc, _kc, _lc, _mc, _nc, _oc, _pc, _qc, _rc, _sc, _tc, _uc, _vc, _wc, _xc, _yc, _zc, _Ac, _Bc, _Cc, _Dc, _Ec, _Fc, _Gc, _Hc, _Ic, _Jc, _Kc, _Lc, _Mc, _Nc, _Oc, _Pc, _Qc, _Rc, _Sc, _Tc, _Uc, _Vc, _Wc, _Xc;
   var _documentCurrentScript = typeof document !== "undefined" ? document.currentScript : null;
   /**
@@ -8740,30 +8739,30 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     {
       path: "/",
       name: "home",
-      component: () => __vitePreload(() => Promise.resolve().then(() => ChatView$1), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href)
+      component: () => __vitePreload(() => Promise.resolve().then(() => ChatView$1), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href)
     },
     {
       path: "/workspace/:wsId",
       name: "workspace",
-      component: () => __vitePreload(() => Promise.resolve().then(() => ChatView$1), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href),
+      component: () => __vitePreload(() => Promise.resolve().then(() => ChatView$1), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href),
       props: true
     },
     {
       path: "/workspace/:wsId/chat/:convId",
       name: "conversation",
-      component: () => __vitePreload(() => Promise.resolve().then(() => ChatView$1), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href),
+      component: () => __vitePreload(() => Promise.resolve().then(() => ChatView$1), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href),
       props: true
     },
     {
       path: "/workspace/:wsId/plan/:planId",
       name: "plan",
-      component: () => __vitePreload(() => Promise.resolve().then(() => PlanView$1), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href),
+      component: () => __vitePreload(() => Promise.resolve().then(() => PlanView$1), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href),
       props: true
     },
     {
       path: "/tasks",
       name: "tasks",
-      component: () => __vitePreload(() => Promise.resolve().then(() => TaskBoard$1), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href)
+      component: () => __vitePreload(() => Promise.resolve().then(() => TaskBoard$1), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href)
     }
   ];
   const router = createRouter({
@@ -11955,14 +11954,14 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
   const _hoisted_66$3 = { class: "stash-list" };
   const _hoisted_67$3 = { class: "stash-ref" };
   const _hoisted_68$3 = { class: "stash-msg" };
-  const _hoisted_69$2 = { class: "stash-actions" };
-  const _hoisted_70$1 = ["onClick"];
-  const _hoisted_71$1 = ["onClick"];
-  const _hoisted_72$1 = {
+  const _hoisted_69$3 = { class: "stash-actions" };
+  const _hoisted_70$2 = ["onClick"];
+  const _hoisted_71$2 = ["onClick"];
+  const _hoisted_72$2 = {
     key: 0,
     class: "stash-empty"
   };
-  const _hoisted_73$1 = { class: "overlay-panel ignore-panel" };
+  const _hoisted_73$2 = { class: "overlay-panel ignore-panel" };
   const _hoisted_74$1 = { class: "overlay-header" };
   const _hoisted_75$1 = { class: "ignore-actions" };
   const _hoisted_76$1 = { class: "detail-content" };
@@ -12909,7 +12908,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                     }, [
                       createBaseVNode("span", _hoisted_67$3, toDisplayString(s2.index), 1),
                       createBaseVNode("span", _hoisted_68$3, toDisplayString(s2.msg), 1),
-                      createBaseVNode("div", _hoisted_69$2, [
+                      createBaseVNode("div", _hoisted_69$3, [
                         createBaseVNode("button", {
                           class: "icon-btn",
                           onClick: ($event) => stashPop(s2.index),
@@ -12919,7 +12918,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                             name: "undo",
                             size: 12
                           })
-                        ], 8, _hoisted_70$1),
+                        ], 8, _hoisted_70$2),
                         createBaseVNode("button", {
                           class: "icon-btn",
                           onClick: ($event) => stashDrop(s2.index),
@@ -12929,11 +12928,11 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                             name: "trash",
                             size: 12
                           })
-                        ], 8, _hoisted_71$1)
+                        ], 8, _hoisted_71$2)
                       ])
                     ]);
                   }), 128)),
-                  stashes.value.length === 0 ? (openBlock(), createElementBlock("div", _hoisted_72$1, "没有暂存的更改")) : createCommentVNode("", true)
+                  stashes.value.length === 0 ? (openBlock(), createElementBlock("div", _hoisted_72$2, "没有暂存的更改")) : createCommentVNode("", true)
                 ])
               ])
             ])) : createCommentVNode("", true)
@@ -12944,7 +12943,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
               class: "overlay",
               onClick: _cache[33] || (_cache[33] = withModifiers(($event) => showIgnoreEditor.value = false, ["self"]))
             }, [
-              createBaseVNode("div", _hoisted_73$1, [
+              createBaseVNode("div", _hoisted_73$2, [
                 createBaseVNode("div", _hoisted_74$1, [
                   _cache[54] || (_cache[54] = createBaseVNode("span", null, ".gitignore", -1)),
                   createBaseVNode("button", {
@@ -13330,17 +13329,11 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     Create a `Text` instance for the given array of lines.
     */
     static of(text2) {
-      __textOfDepth++;
-      if (__textOfDepth > 10) { __textOfDepth--; return Text2.empty; }
-      try {
-        if (text2.length == 0)
-          throw new RangeError("A document must have at least one line");
-        if (text2.length == 1 && !text2[0])
-          return Text2.empty;
-        return text2.length <= 32 ? new TextLeaf(text2) : TextNode$1.from(TextLeaf.split(text2, []));
-      } finally {
-        __textOfDepth--;
-      }
+      if (text2.length == 0)
+        throw new RangeError("A document must have at least one line");
+      if (text2.length == 1 && !text2[0])
+        return Text2.empty;
+      return text2.length <= 32 ? new TextLeaf(text2) : TextNode$1.from(TextLeaf.split(text2, []));
     }
   };
   class TextLeaf extends Text$1 {
@@ -54290,7 +54283,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
       const { default: katex2 } = await __vitePreload(async () => {
         const { default: katex3 } = await Promise.resolve().then(() => katex$1);
         return { default: katex3 };
-      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
       const outputMode = config2.forceLegacyMathML || !isMathMLSupported() && config2.legacyMathML ? "htmlAndMathml" : "mathml";
       return text2.split(lineBreakRegex).map(
         (line2) => hasKatex(line2) ? `<div style="display: flex; align-items: center; justify-content: center; white-space: nowrap;">${line2}</div>` : `<div>${line2}</div>`
@@ -73702,16 +73695,16 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     registerLayoutLoaders([
       {
         name: "dagre",
-        loader: /* @__PURE__ */ __name$1(async () => await __vitePreload(() => Promise.resolve().then(() => dagreVKFMJZFB), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href), "loader")
+        loader: /* @__PURE__ */ __name$1(async () => await __vitePreload(() => Promise.resolve().then(() => dagreVKFMJZFB), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href), "loader")
       },
       {
         name: "swimlane",
-        loader: /* @__PURE__ */ __name$1(async () => await __vitePreload(() => Promise.resolve().then(() => swimlanes5IMT3BWC), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href), "loader")
+        loader: /* @__PURE__ */ __name$1(async () => await __vitePreload(() => Promise.resolve().then(() => swimlanes5IMT3BWC), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href), "loader")
       },
       ...[
         {
           name: "cose-bilkent",
-          loader: /* @__PURE__ */ __name$1(async () => await __vitePreload(() => Promise.resolve().then(() => coseBilkentJH36ORCC), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href), "loader")
+          loader: /* @__PURE__ */ __name$1(async () => await __vitePreload(() => Promise.resolve().then(() => coseBilkentJH36ORCC), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href), "loader")
         }
       ]
     ]);
@@ -74129,7 +74122,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => c4DiagramLMCZKHZV);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
     return { id, diagram: diagram2 };
   }, "loader");
   var plugin = {
@@ -74150,7 +74143,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => flowDiagram23GEKE2U);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
     return { id: id2, diagram: diagram2 };
   }, "loader");
   var plugin2 = {
@@ -74177,7 +74170,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => flowDiagram23GEKE2U);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
     return { id: id3, diagram: diagram2 };
   }, "loader");
   var plugin3 = {
@@ -74194,7 +74187,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => swimlanesDiagramG3AALYLV);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
     return { id: id4, diagram: diagram2 };
   }, "loader");
   var plugin4 = {
@@ -74211,7 +74204,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => erDiagramQ63AITRT);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
     return { id: id5, diagram: diagram2 };
   }, "loader");
   var plugin5 = {
@@ -74228,7 +74221,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => gitGraphDiagramIHSO6WYX);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
     return { id: id6, diagram: diagram2 };
   }, "loader");
   var plugin6 = {
@@ -74245,7 +74238,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => ganttDiagramNO4QXBWP);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
     return { id: id7, diagram: diagram2 };
   }, "loader");
   var plugin7 = {
@@ -74262,7 +74255,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => infoDiagramFWYZ7A6U);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
     return { id: id8, diagram: diagram2 };
   }, "loader");
   var info = {
@@ -74278,7 +74271,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => pieDiagramENE6RG2P);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
     return { id: id9, diagram: diagram2 };
   }, "loader");
   var pie = {
@@ -74294,7 +74287,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => quadrantDiagramABIIQ3AL);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
     return { id: id10, diagram: diagram2 };
   }, "loader");
   var plugin8 = {
@@ -74311,7 +74304,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => xychartDiagramFW5EYKEG);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
     return { id: id11, diagram: diagram2 };
   }, "loader");
   var plugin9 = {
@@ -74328,7 +74321,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => requirementDiagramTGXJPOKE);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
     return { id: id12, diagram: diagram2 };
   }, "loader");
   var plugin10 = {
@@ -74345,7 +74338,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => sequenceDiagramDBY2YBRQ);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
     return { id: id13, diagram: diagram2 };
   }, "loader");
   var plugin11 = {
@@ -74366,7 +74359,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => classDiagramOUVF2IWQ);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
     return { id: id14, diagram: diagram2 };
   }, "loader");
   var plugin12 = {
@@ -74387,7 +74380,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => classDiagramV2EOCWNBFH);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
     return { id: id15, diagram: diagram2 };
   }, "loader");
   var plugin13 = {
@@ -74408,7 +74401,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => stateDiagram2N3HPSRC);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
     return { id: id16, diagram: diagram2 };
   }, "loader");
   var plugin14 = {
@@ -74432,7 +74425,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => stateDiagramV26OUMAXLB);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
     return { id: id17, diagram: diagram2 };
   }, "loader");
   var plugin15 = {
@@ -74449,7 +74442,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => journeyDiagram5HDEW3XC);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
     return { id: id18, diagram: diagram2 };
   }, "loader");
   var plugin16 = {
@@ -74520,7 +74513,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => flowDiagram23GEKE2U);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
     return { id: id19, diagram: diagram2 };
   }, "loader");
   var plugin17 = {
@@ -74537,7 +74530,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => timelineDefinitionFHXFAJF6);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
     return { id: id20, diagram: diagram2 };
   }, "loader");
   var plugin18 = {
@@ -74554,7 +74547,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => mindmapDefinitionLN4V7U3C);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
     return { id: id21, diagram: diagram2 };
   }, "loader");
   var plugin19 = {
@@ -74571,7 +74564,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => kanbanDefinitionHUTT4EX6);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
     return { id: id22, diagram: diagram2 };
   }, "loader");
   var plugin20 = {
@@ -74588,7 +74581,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => sankeyDiagramHTMAVEWB);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
     return { id: id23, diagram: diagram2 };
   }, "loader");
   var plugin21 = {
@@ -74605,7 +74598,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => diagramNH7WQ7WH);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
     return { id: id24, diagram: diagram2 };
   }, "loader");
   var packet = {
@@ -74621,7 +74614,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => diagramWEI45ONY);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
     return { id: id25, diagram: diagram2 };
   }, "loader");
   var radar = {
@@ -74637,7 +74630,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => blockDiagram677ZJIJ3);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
     return { id: id26, diagram: diagram2 };
   }, "loader");
   var plugin22 = {
@@ -74654,7 +74647,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => diagramOA4YK3LP);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
     return { id: id27, diagram: diagram2 };
   }, "loader");
   var plugin23 = {
@@ -74671,7 +74664,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => architectureDiagramZJ3FMSHR);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
     return { id: id28, diagram: diagram2 };
   }, "loader");
   var architecture = {
@@ -74688,7 +74681,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => diagramFQU43EPY);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
     return { id: id29, diagram: diagram2 };
   }, "loader");
   var plugin24 = {
@@ -74705,7 +74698,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => ishikawaDiagramFXEZZL3T);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
     return { id: id30, diagram: diagram2 };
   }, "loader");
   var ishikawa = {
@@ -74721,7 +74714,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => vennDiagramL72KCM5P);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
     return { id: id31, diagram: diagram2 };
   }, "loader");
   var plugin25 = {
@@ -74738,7 +74731,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => diagramG47NLZAW);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
     return { id: id32, diagram: diagram2 };
   }, "loader");
   var treemap = {
@@ -74754,7 +74747,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => wardleyDiagramEHGQE667);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
     return { id: id33, diagram: diagram2 };
   }, "loader");
   var plugin26 = {
@@ -74771,7 +74764,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => cynefinDiagramTSTJHNR4);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
     return { id: id34, diagram: diagram2 };
   }, "loader");
   var cynefin = {
@@ -74787,7 +74780,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => railroadDiagramRFXS5EU6);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
     return { id: id35, diagram: diagram2 };
   }, "loader");
   var railroad = {
@@ -74803,7 +74796,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => ebnfDiagramCCIWWBDH);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
     return { id: id36, diagram: diagram2 };
   }, "loader");
   var railroadEbnf = {
@@ -74819,7 +74812,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => abnfDiagramVRR7QNED);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
     return { id: id37, diagram: diagram2 };
   }, "loader");
   var railroadAbnf = {
@@ -74835,7 +74828,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => pegDiagram2B236MQR);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
     return { id: id38, diagram: diagram2 };
   }, "loader");
   var railroadPeg = {
@@ -78466,136 +78459,150 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
   const _hoisted_8$6 = { class: "phase-icon" };
   const _hoisted_9$6 = { class: "phase-text" };
   const _hoisted_10$6 = { class: "msg-list-wrap" };
-  const _hoisted_11$6 = ["data-msg-idx"];
-  const _hoisted_12$6 = { class: "msg-avatar" };
-  const _hoisted_13$5 = {
+  const _hoisted_11$6 = ["data-first-idx"];
+  const _hoisted_12$6 = {
+    key: 0,
+    class: "combo-user-row"
+  };
+  const _hoisted_13$5 = { class: "msg-avatar" };
+  const _hoisted_14$5 = { class: "msg-bubble bubble-user" };
+  const _hoisted_15$4 = {
     key: 0,
     class: "user-msg-header"
   };
-  const _hoisted_14$5 = { class: "umh-badge badge-delegation" };
-  const _hoisted_15$4 = { class: "umh-agent" };
-  const _hoisted_16$4 = {
+  const _hoisted_16$4 = { class: "umh-badge badge-delegation" };
+  const _hoisted_17$4 = { class: "umh-agent" };
+  const _hoisted_18$4 = {
     key: 1,
     class: "user-msg-header"
   };
-  const _hoisted_17$4 = { class: "umh-badge badge-feedback" };
-  const _hoisted_18$4 = {
+  const _hoisted_19$4 = { class: "umh-badge badge-feedback" };
+  const _hoisted_20$4 = {
     key: 2,
     class: "user-msg-content"
   };
-  const _hoisted_19$4 = {
+  const _hoisted_21$3 = {
     key: 3,
     class: "user-msg-placeholder"
   };
-  const _hoisted_20$4 = {
+  const _hoisted_22$3 = {
     key: 4,
     class: "rollback-area"
   };
-  const _hoisted_21$3 = ["onClick"];
-  const _hoisted_22$3 = ["onClick"];
-  const _hoisted_23$2 = { class: "folded-desc" };
+  const _hoisted_23$2 = ["onClick"];
   const _hoisted_24$2 = {
+    key: 5,
+    class: "msg-time combo-time-user"
+  };
+  const _hoisted_25$2 = {
+    key: 1,
+    class: "combo-assistant-row"
+  };
+  const _hoisted_26$2 = { class: "msg-avatar" };
+  const _hoisted_27$2 = ["onClick"];
+  const _hoisted_28$2 = { class: "folded-desc" };
+  const _hoisted_29$2 = {
     key: 0,
     class: "tl-item"
   };
-  const _hoisted_25$2 = { class: "tl-body tl-think-body" };
-  const _hoisted_26$2 = {
+  const _hoisted_30$2 = { class: "tl-body tl-think-body" };
+  const _hoisted_31$2 = {
     key: 0,
     class: "tl-thinking-text"
   };
-  const _hoisted_27$2 = ["onClick"];
-  const _hoisted_28$2 = ["onClick"];
-  const _hoisted_29$2 = {
+  const _hoisted_32$2 = ["onClick"];
+  const _hoisted_33$2 = ["onClick"];
+  const _hoisted_34$2 = {
     key: 1,
     class: "tl-item"
   };
-  const _hoisted_30$2 = { class: "tl-body tl-tool" };
-  const _hoisted_31$2 = ["onClick"];
-  const _hoisted_32$2 = { class: "tl-tc-chevron" };
-  const _hoisted_33$2 = { class: "tl-tc-name" };
-  const _hoisted_34$2 = {
+  const _hoisted_35$2 = { class: "tl-body tl-tool" };
+  const _hoisted_36$2 = ["onClick"];
+  const _hoisted_37$2 = { class: "tl-tc-chevron" };
+  const _hoisted_38$2 = { class: "tl-tc-name" };
+  const _hoisted_39$2 = {
     key: 0,
     class: "tl-tc-param"
   };
-  const _hoisted_35$2 = {
+  const _hoisted_40$2 = {
     key: 1,
     class: "tl-tc-summary"
   };
-  const _hoisted_36$2 = {
+  const _hoisted_41$2 = {
     key: 0,
     class: "tl-tc-detail"
   };
-  const _hoisted_37$2 = { class: "tl-tc-section" };
-  const _hoisted_38$2 = { class: "tl-tc-command" };
-  const _hoisted_39$2 = {
+  const _hoisted_42$2 = { class: "tl-tc-section" };
+  const _hoisted_43$2 = { class: "tl-tc-command" };
+  const _hoisted_44$2 = {
     key: 0,
     class: "tl-tc-section"
   };
-  const _hoisted_40$2 = { class: "tl-tc-output" };
-  const _hoisted_41$2 = {
+  const _hoisted_45$2 = { class: "tl-tc-output" };
+  const _hoisted_46$2 = {
     key: 0,
     class: "tl-tc-section"
   };
-  const _hoisted_42$2 = {
+  const _hoisted_47$2 = {
     key: 1,
     class: "tl-tc-section"
   };
-  const _hoisted_43$2 = {
+  const _hoisted_48$2 = {
     key: 2,
     class: "tl-item"
   };
-  const _hoisted_44$2 = { class: "tl-body" };
-  const _hoisted_45$2 = {
+  const _hoisted_49$2 = { class: "tl-body" };
+  const _hoisted_50$2 = {
     key: 3,
     class: "tl-item tl-content-item"
   };
-  const _hoisted_46$2 = { class: "tl-body" };
-  const _hoisted_47$2 = ["onClick"];
-  const _hoisted_48$2 = {
+  const _hoisted_51$2 = { class: "tl-body" };
+  const _hoisted_52$2 = ["onClick"];
+  const _hoisted_53$2 = {
     key: 0,
     class: "tl-item tl-content-item"
   };
-  const _hoisted_49$2 = { class: "tl-body" };
-  const _hoisted_50$2 = {
-    key: 4,
+  const _hoisted_54$2 = { class: "tl-body" };
+  const _hoisted_55$2 = {
+    key: 3,
     class: "msg-time"
   };
-  const _hoisted_51$2 = {
+  const _hoisted_56$2 = {
     key: 0,
     class: "msg-loading-dots"
   };
-  const _hoisted_52$2 = {
+  const _hoisted_57$2 = {
     key: 1,
     class: "msg-loading-banner"
   };
-  const _hoisted_53$2 = {
+  const _hoisted_58$2 = {
     key: 2,
     class: "chat-empty"
   };
-  const _hoisted_54$2 = { class: "chat-empty-icon" };
-  const _hoisted_55$2 = {
+  const _hoisted_59$2 = { class: "chat-empty-icon" };
+  const _hoisted_60$2 = {
     key: 1,
     class: "feedback-bar"
   };
-  const _hoisted_56$2 = ["disabled"];
-  const _hoisted_57$2 = {
+  const _hoisted_61$2 = ["disabled"];
+  const _hoisted_62$2 = {
     key: 2,
     class: "attachment-badge"
   };
-  const _hoisted_58$2 = { class: "att-icon" };
-  const _hoisted_59$2 = { class: "att-info" };
-  const _hoisted_60$2 = { class: "att-filename" };
-  const _hoisted_61$2 = {
+  const _hoisted_63$2 = { class: "att-icon" };
+  const _hoisted_64$2 = { class: "att-info" };
+  const _hoisted_65$2 = { class: "att-filename" };
+  const _hoisted_66$2 = {
     key: 0,
     class: "att-lines"
   };
-  const _hoisted_62$2 = { class: "att-type" };
-  const _hoisted_63$2 = { class: "input-wrapper" };
-  const _hoisted_64$2 = ["disabled"];
-  const _hoisted_65$2 = { class: "input-bottom-bar" };
-  const _hoisted_66$2 = { class: "ibb-btns" };
-  const _hoisted_67$2 = ["title"];
-  const _hoisted_68$2 = ["disabled"];
+  const _hoisted_67$2 = { class: "att-type" };
+  const _hoisted_68$2 = { class: "input-wrapper" };
+  const _hoisted_69$2 = ["disabled"];
+  const _hoisted_70$1 = { class: "input-bottom-bar" };
+  const _hoisted_71$1 = { class: "ibb-btns" };
+  const _hoisted_72$1 = ["title"];
+  const _hoisted_73$1 = ["disabled"];
   const _sfc_main$d = {
     __name: "RightPanel",
     setup(__props) {
@@ -78667,6 +78674,28 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
         if (msgs[0]._noMoreAbove) return false;
         const oldestIdx = msgs[0]._idx;
         return oldestIdx !== void 0 && oldestIdx !== null && oldestIdx > 0;
+      });
+      const messageCombos = computed(() => {
+        const msgs = state$2.messages || [];
+        const combos = [];
+        let current = null;
+        for (const msg of msgs) {
+          if (msg.role === "user") {
+            current = { user: msg, assistant: null };
+            combos.push(current);
+          } else if (msg.role === "assistant" && current) {
+            if (current.assistant) {
+              current = { user: null, assistant: msg };
+              combos.push(current);
+            } else {
+              current.assistant = msg;
+            }
+          } else if (msg.role === "assistant" && !current) {
+            current = { user: null, assistant: msg };
+            combos.push(current);
+          }
+        }
+        return combos;
       });
       const loadingMoreTop = /* @__PURE__ */ ref(false);
       function onScroll() {
@@ -79635,38 +79664,31 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                   createBaseVNode("span", null, "加载更早消息...", -1)
                 ])], 512)) : createCommentVNode("", true),
                 createBaseVNode("div", _hoisted_10$6, [
-                  (openBlock(true), createElementBlock(Fragment, null, renderList(unref(state$2).messages, (msg) => {
+                  (openBlock(true), createElementBlock(Fragment, null, renderList(messageCombos.value, (combo, ci2) => {
                     return openBlock(), createElementBlock("div", {
-                      key: msg._key,
-                      class: normalizeClass(["msg-item", msg.role === "user" ? "msg-user" : "msg-assistant"]),
-                      "data-msg-idx": msg._idx
+                      key: "c" + ci2,
+                      class: "msg-item msg-combo",
+                      "data-first-idx": combo.user ? combo.user._idx : combo.assistant ? combo.assistant._idx : -1
                     }, [
-                      createBaseVNode("div", _hoisted_12$6, [
-                        msg.role === "user" ? (openBlock(), createBlock(SvgIcon, {
-                          key: 0,
-                          name: "user",
-                          size: 16
-                        })) : (openBlock(), createBlock(SvgIcon, {
-                          key: 1,
-                          name: "bot",
-                          size: 16
-                        }))
-                      ]),
-                      createBaseVNode("div", {
-                        class: normalizeClass(["msg-bubble", msg.role === "user" ? "bubble-user" : msg.segments && msg.segments.length > 0 ? "bubble-agent" : "bubble-assistant"])
-                      }, [
-                        msg.role === "user" ? (openBlock(), createElementBlock(Fragment, { key: 0 }, [
-                          isDelegation(msg) ? (openBlock(), createElementBlock("div", _hoisted_13$5, [
-                            createBaseVNode("span", _hoisted_14$5, [
+                      combo.user ? (openBlock(), createElementBlock("div", _hoisted_12$6, [
+                        createBaseVNode("div", _hoisted_13$5, [
+                          createVNode(SvgIcon, {
+                            name: "user",
+                            size: 16
+                          })
+                        ]),
+                        createBaseVNode("div", _hoisted_14$5, [
+                          isDelegation(combo.user) ? (openBlock(), createElementBlock("div", _hoisted_15$4, [
+                            createBaseVNode("span", _hoisted_16$4, [
                               createVNode(SvgIcon, {
                                 name: "git-branch",
                                 size: 10
                               }),
                               _cache[14] || (_cache[14] = createTextVNode(" 委派任务", -1))
                             ]),
-                            createBaseVNode("span", _hoisted_15$4, toDisplayString(delegationAgent(msg)), 1)
-                          ])) : isFeedback(msg) ? (openBlock(), createElementBlock("div", _hoisted_16$4, [
-                            createBaseVNode("span", _hoisted_17$4, [
+                            createBaseVNode("span", _hoisted_17$4, toDisplayString(delegationAgent(combo.user)), 1)
+                          ])) : isFeedback(combo.user) ? (openBlock(), createElementBlock("div", _hoisted_18$4, [
+                            createBaseVNode("span", _hoisted_19$4, [
                               createVNode(SvgIcon, {
                                 name: "message-square",
                                 size: 10
@@ -79674,16 +79696,16 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                               _cache[15] || (_cache[15] = createTextVNode(" 用户反馈", -1))
                             ])
                           ])) : createCommentVNode("", true),
-                          msg.content ? (openBlock(), createElementBlock("div", _hoisted_18$4, [
+                          combo.user.content ? (openBlock(), createElementBlock("div", _hoisted_20$4, [
                             createVNode(MarkdownRenderer, {
-                              text: cleanMsgContent(msg),
+                              text: cleanMsgContent(combo.user),
                               theme: unref(state$2).theme
                             }, null, 8, ["text", "theme"])
-                          ])) : (openBlock(), createElementBlock("div", _hoisted_19$4, "（空消息）")),
-                          !unref(state$2).chatLoading ? (openBlock(), createElementBlock("div", _hoisted_20$4, [
+                          ])) : (openBlock(), createElementBlock("div", _hoisted_21$3, "（空消息）")),
+                          !unref(state$2).chatLoading ? (openBlock(), createElementBlock("div", _hoisted_22$3, [
                             createBaseVNode("button", {
                               class: "rollback-btn",
-                              onClick: ($event) => rollbackTo(msg._idx),
+                              onClick: ($event) => rollbackTo(combo.user._idx),
                               title: "回到此消息前的状态（恢复文件快照 + 删除后续对话）"
                             }, [
                               createVNode(SvgIcon, {
@@ -79691,151 +79713,164 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                 size: 11
                               }),
                               _cache[16] || (_cache[16] = createTextVNode(" 回退 ", -1))
-                            ], 8, _hoisted_21$3)
-                          ])) : createCommentVNode("", true)
-                        ], 64)) : createCommentVNode("", true),
-                        msg.role === "assistant" && msg.segments && msg.segments.length > 0 ? (openBlock(), createElementBlock(Fragment, { key: 1 }, [
-                          msg._folded ? (openBlock(), createElementBlock("div", {
-                            key: 0,
-                            class: "folded-summary",
-                            onClick: ($event) => msg._folded = !msg._folded
-                          }, [
-                            _cache[17] || (_cache[17] = createBaseVNode("span", { class: "folded-chevron" }, "▸", -1)),
-                            createVNode(SvgIcon, {
-                              name: "list",
-                              size: 11
-                            }),
-                            _cache[18] || (_cache[18] = createBaseVNode("span", { class: "folded-title" }, "完成摘要", -1)),
-                            createBaseVNode("span", _hoisted_23$2, toDisplayString(msgSummary(msg)), 1)
-                          ], 8, _hoisted_22$3)) : createCommentVNode("", true),
-                          !msg._folded ? (openBlock(true), createElementBlock(Fragment, { key: 1 }, renderList(msg.segments, (seg, si2) => {
-                            return openBlock(), createElementBlock(Fragment, { key: si2 }, [
-                              seg.type === "thinking" ? (openBlock(), createElementBlock("div", _hoisted_24$2, [
-                                _cache[20] || (_cache[20] = createBaseVNode("span", { class: "tl-dot tl-dot-thinking" }, null, -1)),
-                                createBaseVNode("div", _hoisted_25$2, [
-                                  !seg._collapsed ? (openBlock(), createElementBlock("div", _hoisted_26$2, toDisplayString(seg.content), 1)) : (openBlock(), createElementBlock("div", {
-                                    key: 1,
-                                    class: "tl-thinking-collapsed",
-                                    onClick: ($event) => seg._collapsed = !seg._collapsed
-                                  }, [
-                                    createVNode(SvgIcon, {
-                                      name: "message-square",
-                                      size: 12
-                                    }),
-                                    _cache[19] || (_cache[19] = createTextVNode(" 思考…", -1))
-                                  ], 8, _hoisted_27$2)),
-                                  !seg._collapsed ? (openBlock(), createElementBlock("div", {
-                                    key: 2,
-                                    class: "tl-think-fold",
-                                    onClick: withModifiers(($event) => seg._collapsed = !seg._collapsed, ["stop"]),
-                                    title: "折叠思考"
-                                  }, "▲ 收起", 8, _hoisted_28$2)) : createCommentVNode("", true)
-                                ])
-                              ])) : seg.type === "tool_call" ? (openBlock(), createElementBlock("div", _hoisted_29$2, [
-                                _cache[25] || (_cache[25] = createBaseVNode("span", { class: "tl-dot tl-dot-tool" }, null, -1)),
-                                createBaseVNode("div", _hoisted_30$2, [
-                                  createBaseVNode("div", {
-                                    class: "tl-tc-header",
-                                    onClick: ($event) => seg._expanded = !seg._expanded
-                                  }, [
-                                    createBaseVNode("span", _hoisted_32$2, toDisplayString(seg._expanded ? "▾" : "▸"), 1),
-                                    createVNode(SvgIcon, {
-                                      name: toolMeta(seg).icon,
-                                      size: 11,
-                                      class: "tl-tc-icon"
-                                    }, null, 8, ["name"]),
-                                    createBaseVNode("span", _hoisted_33$2, toDisplayString(toolMeta(seg).title), 1),
-                                    toolMeta(seg).detail ? (openBlock(), createElementBlock("span", _hoisted_34$2, toDisplayString(toolMeta(seg).detail), 1)) : createCommentVNode("", true),
-                                    seg.result && !seg._expanded ? (openBlock(), createElementBlock("span", _hoisted_35$2, toDisplayString(toolResultSummary(seg)), 1)) : createCommentVNode("", true)
-                                  ], 8, _hoisted_31$2),
-                                  seg._expanded ? (openBlock(), createElementBlock("div", _hoisted_36$2, [
-                                    isTerminalTool(seg) ? (openBlock(), createElementBlock(Fragment, { key: 0 }, [
-                                      createBaseVNode("div", _hoisted_37$2, [
-                                        _cache[21] || (_cache[21] = createBaseVNode("div", { class: "tl-tc-section-title" }, "命令", -1)),
-                                        createBaseVNode("div", _hoisted_38$2, toDisplayString(formatTerminalCommand(seg)), 1)
-                                      ]),
-                                      seg.result ? (openBlock(), createElementBlock("div", _hoisted_39$2, [
-                                        _cache[22] || (_cache[22] = createBaseVNode("div", { class: "tl-tc-section-title" }, "输出", -1)),
-                                        createBaseVNode("pre", _hoisted_40$2, toDisplayString(seg.result), 1)
-                                      ])) : createCommentVNode("", true)
-                                    ], 64)) : (openBlock(), createElementBlock(Fragment, { key: 1 }, [
-                                      seg.argsRaw ? (openBlock(), createElementBlock("div", _hoisted_41$2, [
-                                        _cache[23] || (_cache[23] = createBaseVNode("div", { class: "tl-tc-section-title" }, "参数", -1)),
-                                        createBaseVNode("pre", null, [
-                                          createBaseVNode("code", null, toDisplayString(seg.argsRaw), 1)
-                                        ])
-                                      ])) : createCommentVNode("", true),
-                                      seg.result ? (openBlock(), createElementBlock("div", _hoisted_42$2, [
-                                        _cache[24] || (_cache[24] = createBaseVNode("div", { class: "tl-tc-section-title" }, "结果", -1)),
-                                        createBaseVNode("pre", null, [
-                                          createBaseVNode("code", null, toDisplayString(seg.result), 1)
-                                        ])
-                                      ])) : createCommentVNode("", true)
-                                    ], 64))
-                                  ])) : createCommentVNode("", true)
-                                ])
-                              ])) : seg.type === "ask_user" ? (openBlock(), createElementBlock("div", _hoisted_43$2, [
-                                _cache[26] || (_cache[26] = createBaseVNode("span", { class: "tl-dot tl-dot-ask" }, null, -1)),
-                                createBaseVNode("div", _hoisted_44$2, [
-                                  createVNode(AskUserCard, {
-                                    question: seg.question,
-                                    "ask-type": seg.askType,
-                                    options: seg.options,
-                                    "call-id": seg.callId,
-                                    answered: seg._answered,
-                                    onAnswer: ($event) => onAskAnswer(seg, $event)
-                                  }, null, 8, ["question", "ask-type", "options", "call-id", "answered", "onAnswer"])
-                                ])
-                              ])) : seg.type === "content" ? (openBlock(), createElementBlock("div", _hoisted_45$2, [
-                                _cache[27] || (_cache[27] = createBaseVNode("span", { class: "tl-dot tl-dot-content" }, null, -1)),
-                                createBaseVNode("div", _hoisted_46$2, [
-                                  createVNode(MarkdownRenderer, {
-                                    text: seg.content,
-                                    theme: unref(state$2).theme
-                                  }, null, 8, ["text", "theme"])
-                                ])
-                              ])) : createCommentVNode("", true)
-                            ], 64);
-                          }), 128)) : createCommentVNode("", true)
-                        ], 64)) : createCommentVNode("", true),
-                        !msg._folded && msg.role === "assistant" && msg.segments && msg.segments.length > 0 ? (openBlock(), createElementBlock("div", {
-                          key: 2,
-                          class: "msg-fold-btn",
-                          onClick: ($event) => msg._folded = true
-                        }, [
+                            ], 8, _hoisted_23$2)
+                          ])) : createCommentVNode("", true),
+                          combo.user._time ? (openBlock(), createElementBlock("div", _hoisted_24$2, toDisplayString(combo.user._time), 1)) : createCommentVNode("", true)
+                        ])
+                      ])) : createCommentVNode("", true),
+                      combo.assistant ? (openBlock(), createElementBlock("div", _hoisted_25$2, [
+                        createBaseVNode("div", _hoisted_26$2, [
                           createVNode(SvgIcon, {
-                            name: "chevron-up",
-                            size: 12
-                          }),
-                          _cache[28] || (_cache[28] = createBaseVNode("span", null, "折叠输出", -1))
-                        ], 8, _hoisted_47$2)) : createCommentVNode("", true),
-                        msg.role === "assistant" && (!msg.segments || msg.segments.length === 0) ? (openBlock(), createElementBlock(Fragment, { key: 3 }, [
-                          msg.content ? (openBlock(), createElementBlock("div", _hoisted_48$2, [
-                            _cache[29] || (_cache[29] = createBaseVNode("span", { class: "tl-dot tl-dot-content" }, null, -1)),
-                            createBaseVNode("div", _hoisted_49$2, [
-                              createVNode(MarkdownRenderer, {
-                                text: msg.content,
-                                theme: unref(state$2).theme
-                              }, null, 8, ["text", "theme"])
-                            ])
-                          ])) : createCommentVNode("", true)
-                        ], 64)) : createCommentVNode("", true),
-                        msg._time ? (openBlock(), createElementBlock("div", _hoisted_50$2, toDisplayString(msg._time), 1)) : createCommentVNode("", true)
-                      ], 2),
-                      msg._loading ? (openBlock(), createElementBlock("div", _hoisted_51$2, [..._cache[30] || (_cache[30] = [
-                        createBaseVNode("span", { class: "dot" }, null, -1),
-                        createBaseVNode("span", { class: "dot" }, null, -1),
-                        createBaseVNode("span", { class: "dot" }, null, -1)
-                      ])])) : createCommentVNode("", true)
-                    ], 10, _hoisted_11$6);
+                            name: "bot",
+                            size: 16
+                          })
+                        ]),
+                        createBaseVNode("div", {
+                          class: normalizeClass(["msg-bubble", combo.assistant.segments && combo.assistant.segments.length > 0 ? "bubble-agent" : "bubble-assistant"])
+                        }, [
+                          combo.assistant.segments && combo.assistant.segments.length > 0 ? (openBlock(), createElementBlock(Fragment, { key: 0 }, [
+                            combo.assistant._folded ? (openBlock(), createElementBlock("div", {
+                              key: 0,
+                              class: "folded-summary",
+                              onClick: ($event) => combo.assistant._folded = !combo.assistant._folded
+                            }, [
+                              _cache[17] || (_cache[17] = createBaseVNode("span", { class: "folded-chevron" }, "▸", -1)),
+                              createVNode(SvgIcon, {
+                                name: "list",
+                                size: 11
+                              }),
+                              _cache[18] || (_cache[18] = createBaseVNode("span", { class: "folded-title" }, "完成摘要", -1)),
+                              createBaseVNode("span", _hoisted_28$2, toDisplayString(msgSummary(combo.assistant)), 1)
+                            ], 8, _hoisted_27$2)) : createCommentVNode("", true),
+                            !combo.assistant._folded ? (openBlock(true), createElementBlock(Fragment, { key: 1 }, renderList(combo.assistant.segments, (seg, si2) => {
+                              return openBlock(), createElementBlock(Fragment, { key: si2 }, [
+                                seg.type === "thinking" ? (openBlock(), createElementBlock("div", _hoisted_29$2, [
+                                  _cache[20] || (_cache[20] = createBaseVNode("span", { class: "tl-dot tl-dot-thinking" }, null, -1)),
+                                  createBaseVNode("div", _hoisted_30$2, [
+                                    !seg._collapsed ? (openBlock(), createElementBlock("div", _hoisted_31$2, toDisplayString(seg.content), 1)) : (openBlock(), createElementBlock("div", {
+                                      key: 1,
+                                      class: "tl-thinking-collapsed",
+                                      onClick: ($event) => seg._collapsed = !seg._collapsed
+                                    }, [
+                                      createVNode(SvgIcon, {
+                                        name: "message-square",
+                                        size: 12
+                                      }),
+                                      _cache[19] || (_cache[19] = createTextVNode(" 思考…", -1))
+                                    ], 8, _hoisted_32$2)),
+                                    !seg._collapsed ? (openBlock(), createElementBlock("div", {
+                                      key: 2,
+                                      class: "tl-think-fold",
+                                      onClick: withModifiers(($event) => seg._collapsed = !seg._collapsed, ["stop"]),
+                                      title: "折叠思考"
+                                    }, "▲ 收起", 8, _hoisted_33$2)) : createCommentVNode("", true)
+                                  ])
+                                ])) : seg.type === "tool_call" ? (openBlock(), createElementBlock("div", _hoisted_34$2, [
+                                  _cache[25] || (_cache[25] = createBaseVNode("span", { class: "tl-dot tl-dot-tool" }, null, -1)),
+                                  createBaseVNode("div", _hoisted_35$2, [
+                                    createBaseVNode("div", {
+                                      class: "tl-tc-header",
+                                      onClick: ($event) => seg._expanded = !seg._expanded
+                                    }, [
+                                      createBaseVNode("span", _hoisted_37$2, toDisplayString(seg._expanded ? "▾" : "▸"), 1),
+                                      createVNode(SvgIcon, {
+                                        name: toolMeta(seg).icon,
+                                        size: 11,
+                                        class: "tl-tc-icon"
+                                      }, null, 8, ["name"]),
+                                      createBaseVNode("span", _hoisted_38$2, toDisplayString(toolMeta(seg).title), 1),
+                                      toolMeta(seg).detail ? (openBlock(), createElementBlock("span", _hoisted_39$2, toDisplayString(toolMeta(seg).detail), 1)) : createCommentVNode("", true),
+                                      seg.result && !seg._expanded ? (openBlock(), createElementBlock("span", _hoisted_40$2, toDisplayString(toolResultSummary(seg)), 1)) : createCommentVNode("", true)
+                                    ], 8, _hoisted_36$2),
+                                    seg._expanded ? (openBlock(), createElementBlock("div", _hoisted_41$2, [
+                                      isTerminalTool(seg) ? (openBlock(), createElementBlock(Fragment, { key: 0 }, [
+                                        createBaseVNode("div", _hoisted_42$2, [
+                                          _cache[21] || (_cache[21] = createBaseVNode("div", { class: "tl-tc-section-title" }, "命令", -1)),
+                                          createBaseVNode("div", _hoisted_43$2, toDisplayString(formatTerminalCommand(seg)), 1)
+                                        ]),
+                                        seg.result ? (openBlock(), createElementBlock("div", _hoisted_44$2, [
+                                          _cache[22] || (_cache[22] = createBaseVNode("div", { class: "tl-tc-section-title" }, "输出", -1)),
+                                          createBaseVNode("pre", _hoisted_45$2, toDisplayString(seg.result), 1)
+                                        ])) : createCommentVNode("", true)
+                                      ], 64)) : (openBlock(), createElementBlock(Fragment, { key: 1 }, [
+                                        seg.argsRaw ? (openBlock(), createElementBlock("div", _hoisted_46$2, [
+                                          _cache[23] || (_cache[23] = createBaseVNode("div", { class: "tl-tc-section-title" }, "参数", -1)),
+                                          createBaseVNode("pre", null, [
+                                            createBaseVNode("code", null, toDisplayString(seg.argsRaw), 1)
+                                          ])
+                                        ])) : createCommentVNode("", true),
+                                        seg.result ? (openBlock(), createElementBlock("div", _hoisted_47$2, [
+                                          _cache[24] || (_cache[24] = createBaseVNode("div", { class: "tl-tc-section-title" }, "结果", -1)),
+                                          createBaseVNode("pre", null, [
+                                            createBaseVNode("code", null, toDisplayString(seg.result), 1)
+                                          ])
+                                        ])) : createCommentVNode("", true)
+                                      ], 64))
+                                    ])) : createCommentVNode("", true)
+                                  ])
+                                ])) : seg.type === "ask_user" ? (openBlock(), createElementBlock("div", _hoisted_48$2, [
+                                  _cache[26] || (_cache[26] = createBaseVNode("span", { class: "tl-dot tl-dot-ask" }, null, -1)),
+                                  createBaseVNode("div", _hoisted_49$2, [
+                                    createVNode(AskUserCard, {
+                                      question: seg.question,
+                                      "ask-type": seg.askType,
+                                      options: seg.options,
+                                      "call-id": seg.callId,
+                                      answered: seg._answered,
+                                      onAnswer: ($event) => onAskAnswer(seg, $event)
+                                    }, null, 8, ["question", "ask-type", "options", "call-id", "answered", "onAnswer"])
+                                  ])
+                                ])) : seg.type === "content" ? (openBlock(), createElementBlock("div", _hoisted_50$2, [
+                                  _cache[27] || (_cache[27] = createBaseVNode("span", { class: "tl-dot tl-dot-content" }, null, -1)),
+                                  createBaseVNode("div", _hoisted_51$2, [
+                                    createVNode(MarkdownRenderer, {
+                                      text: seg.content,
+                                      theme: unref(state$2).theme
+                                    }, null, 8, ["text", "theme"])
+                                  ])
+                                ])) : createCommentVNode("", true)
+                              ], 64);
+                            }), 128)) : createCommentVNode("", true)
+                          ], 64)) : createCommentVNode("", true),
+                          !combo.assistant._folded && combo.assistant.segments && combo.assistant.segments.length > 0 ? (openBlock(), createElementBlock("div", {
+                            key: 1,
+                            class: "msg-fold-btn",
+                            onClick: ($event) => combo.assistant._folded = true
+                          }, [
+                            createVNode(SvgIcon, {
+                              name: "chevron-up",
+                              size: 12
+                            }),
+                            _cache[28] || (_cache[28] = createBaseVNode("span", null, "折叠输出", -1))
+                          ], 8, _hoisted_52$2)) : createCommentVNode("", true),
+                          !combo.assistant.segments || combo.assistant.segments.length === 0 ? (openBlock(), createElementBlock(Fragment, { key: 2 }, [
+                            combo.assistant.content ? (openBlock(), createElementBlock("div", _hoisted_53$2, [
+                              _cache[29] || (_cache[29] = createBaseVNode("span", { class: "tl-dot tl-dot-content" }, null, -1)),
+                              createBaseVNode("div", _hoisted_54$2, [
+                                createVNode(MarkdownRenderer, {
+                                  text: combo.assistant.content,
+                                  theme: unref(state$2).theme
+                                }, null, 8, ["text", "theme"])
+                              ])
+                            ])) : createCommentVNode("", true)
+                          ], 64)) : createCommentVNode("", true),
+                          combo.assistant._time ? (openBlock(), createElementBlock("div", _hoisted_55$2, toDisplayString(combo.assistant._time), 1)) : createCommentVNode("", true)
+                        ], 2),
+                        combo.assistant._loading ? (openBlock(), createElementBlock("div", _hoisted_56$2, [..._cache[30] || (_cache[30] = [
+                          createBaseVNode("span", { class: "dot" }, null, -1),
+                          createBaseVNode("span", { class: "dot" }, null, -1),
+                          createBaseVNode("span", { class: "dot" }, null, -1)
+                        ])])) : createCommentVNode("", true)
+                      ])) : createCommentVNode("", true)
+                    ], 8, _hoisted_11$6);
                   }), 128))
                 ]),
-                unref(state$2).chatLoading && unref(state$2).messages && unref(state$2).messages.length > 0 ? (openBlock(), createElementBlock("div", _hoisted_52$2, [..._cache[31] || (_cache[31] = [
+                unref(state$2).chatLoading && unref(state$2).messages && unref(state$2).messages.length > 0 ? (openBlock(), createElementBlock("div", _hoisted_57$2, [..._cache[31] || (_cache[31] = [
                   createBaseVNode("span", { class: "dot-pulse" }, null, -1),
                   createBaseVNode("span", null, "思考中...", -1)
                 ])])) : createCommentVNode("", true),
-                (!unref(state$2).messages || unref(state$2).messages.length === 0) && !unref(state$2).chatLoading ? (openBlock(), createElementBlock("div", _hoisted_53$2, [
-                  createBaseVNode("div", _hoisted_54$2, [
+                (!unref(state$2).messages || unref(state$2).messages.length === 0) && !unref(state$2).chatLoading ? (openBlock(), createElementBlock("div", _hoisted_58$2, [
+                  createBaseVNode("div", _hoisted_59$2, [
                     createVNode(SvgIcon, {
                       name: "bot",
                       size: 32
@@ -79887,7 +79922,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                   parsedArgs: approvalState.value.parsedArgs,
                   onResolve: resolveApproval
                 }, null, 8, ["waiting", "tool", "args", "parsedArgs"])) : createCommentVNode("", true),
-                unref(state$2).chatLoading ? (openBlock(), createElementBlock("div", _hoisted_55$2, [
+                unref(state$2).chatLoading ? (openBlock(), createElementBlock("div", _hoisted_60$2, [
                   withDirectives(createBaseVNode("input", {
                     class: "feedback-input",
                     "onUpdate:modelValue": _cache[3] || (_cache[3] = ($event) => feedbackText.value = $event),
@@ -79906,24 +79941,24 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                       name: "send",
                       size: 14
                     })
-                  ], 8, _hoisted_56$2)
+                  ], 8, _hoisted_61$2)
                 ])) : createCommentVNode("", true),
                 createBaseVNode("div", {
                   class: "input-resizer",
                   onMousedown: withModifiers(startInputResize, ["prevent"]),
                   title: "拖拽调整高度"
                 }, null, 32),
-                pendingAttachment.value ? (openBlock(), createElementBlock("div", _hoisted_57$2, [
-                  createBaseVNode("div", _hoisted_58$2, [
+                pendingAttachment.value ? (openBlock(), createElementBlock("div", _hoisted_62$2, [
+                  createBaseVNode("div", _hoisted_63$2, [
                     createVNode(SvgIcon, {
                       name: pendingAttachment.value.type === "file" ? "file" : "file-code",
                       size: 14
                     }, null, 8, ["name"])
                   ]),
-                  createBaseVNode("div", _hoisted_59$2, [
-                    createBaseVNode("span", _hoisted_60$2, toDisplayString(pendingAttachment.value.path || pendingAttachment.value.filename), 1),
-                    pendingAttachment.value.lineStart ? (openBlock(), createElementBlock("span", _hoisted_61$2, ":" + toDisplayString(pendingAttachment.value.lineStart) + "-" + toDisplayString(pendingAttachment.value.lineEnd), 1)) : createCommentVNode("", true),
-                    createBaseVNode("span", _hoisted_62$2, toDisplayString(pendingAttachment.value.type === "file" ? "文件" : "选中代码"), 1)
+                  createBaseVNode("div", _hoisted_64$2, [
+                    createBaseVNode("span", _hoisted_65$2, toDisplayString(pendingAttachment.value.path || pendingAttachment.value.filename), 1),
+                    pendingAttachment.value.lineStart ? (openBlock(), createElementBlock("span", _hoisted_66$2, ":" + toDisplayString(pendingAttachment.value.lineStart) + "-" + toDisplayString(pendingAttachment.value.lineEnd), 1)) : createCommentVNode("", true),
+                    createBaseVNode("span", _hoisted_67$2, toDisplayString(pendingAttachment.value.type === "file" ? "文件" : "选中代码"), 1)
                   ]),
                   createBaseVNode("button", {
                     class: "att-close",
@@ -79931,7 +79966,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                     title: "移除"
                   }, "×")
                 ])) : createCommentVNode("", true),
-                createBaseVNode("div", _hoisted_63$2, [
+                createBaseVNode("div", _hoisted_68$2, [
                   withDirectives(createBaseVNode("textarea", {
                     class: "chat-input",
                     ref_key: "inputRef",
@@ -79945,11 +79980,11 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                     style: normalizeStyle({ height: inputHeight.value + "px" }),
                     placeholder: "发送消息到 AI... (Enter 发送, Shift+Enter 换行)",
                     disabled: unref(state$2).chatLoading
-                  }, null, 44, _hoisted_64$2), [
+                  }, null, 44, _hoisted_69$2), [
                     [vModelText, inputText.value]
                   ]),
-                  createBaseVNode("div", _hoisted_65$2, [
-                    createBaseVNode("div", _hoisted_66$2, [
+                  createBaseVNode("div", _hoisted_70$1, [
+                    createBaseVNode("div", _hoisted_71$1, [
                       createBaseVNode("span", {
                         class: normalizeClass(["obtn", reviewBtnClass.value]),
                         onClick: cycleReviewMode,
@@ -79960,7 +79995,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                           size: 12
                         }, null, 8, ["name"]),
                         createTextVNode(" " + toDisplayString(reviewBtnLabel.value), 1)
-                      ], 10, _hoisted_67$2),
+                      ], 10, _hoisted_72$1),
                       createBaseVNode("span", {
                         class: normalizeClass(["obtn", { active: autoCollapse.value }]),
                         onClick: _cache[7] || (_cache[7] = ($event) => toggleAuto("autoCollapse")),
@@ -80007,7 +80042,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                         name: "send-plane",
                         size: 16
                       })
-                    ], 8, _hoisted_68$2)) : (openBlock(), createElementBlock("button", {
+                    ], 8, _hoisted_73$1)) : (openBlock(), createElementBlock("button", {
                       key: 1,
                       class: "stop-btn",
                       onClick: stopChat
@@ -80042,7 +80077,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
       };
     }
   };
-  const RightPanel = /* @__PURE__ */ _export_sfc(_sfc_main$d, [["__scopeId", "data-v-a8a88b0f"]]);
+  const RightPanel = /* @__PURE__ */ _export_sfc(_sfc_main$d, [["__scopeId", "data-v-76d50874"]]);
   const _hoisted_1$c = { class: "status-bar" };
   const _hoisted_2$c = { class: "status-left" };
   const _hoisted_3$b = {
@@ -113303,7 +113338,7 @@ AI 会自动分解复杂任务为可追踪的子任务步骤，每步的执行�
       const { captureNodeSizes: captureNodeSizes2 } = await __vitePreload(async () => {
         const { captureNodeSizes: captureNodeSizes3 } = await Promise.resolve().then(() => sizeCaptureX5ZJPWSS);
         return { captureNodeSizes: captureNodeSizes3 };
-      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
       captureNodeSizes2(element2, data4Layout);
     }
     return {
@@ -194643,7 +194678,7 @@ ${content2}`;
       const { createInfoServices: createInfoServices2 } = await __vitePreload(async () => {
         const { createInfoServices: createInfoServices22 } = await Promise.resolve().then(() => infoDKCQHKI2);
         return { createInfoServices: createInfoServices22 };
-      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
       const parser2 = createInfoServices2().Info.parser.LangiumParser;
       parsers.info = parser2;
     }, "info"),
@@ -194651,7 +194686,7 @@ ${content2}`;
       const { createPacketServices: createPacketServices2 } = await __vitePreload(async () => {
         const { createPacketServices: createPacketServices22 } = await Promise.resolve().then(() => packet7NZHBO7P);
         return { createPacketServices: createPacketServices22 };
-      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
       const parser2 = createPacketServices2().Packet.parser.LangiumParser;
       parsers.packet = parser2;
     }, "packet"),
@@ -194659,7 +194694,7 @@ ${content2}`;
       const { createPieServices: createPieServices2 } = await __vitePreload(async () => {
         const { createPieServices: createPieServices22 } = await Promise.resolve().then(() => pieRZYD4A2V);
         return { createPieServices: createPieServices22 };
-      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
       const parser2 = createPieServices2().Pie.parser.LangiumParser;
       parsers.pie = parser2;
     }, "pie"),
@@ -194667,7 +194702,7 @@ ${content2}`;
       const { createTreeViewServices: createTreeViewServices2 } = await __vitePreload(async () => {
         const { createTreeViewServices: createTreeViewServices22 } = await Promise.resolve().then(() => treeViewQDETBFTQ);
         return { createTreeViewServices: createTreeViewServices22 };
-      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
       const parser2 = createTreeViewServices2().TreeView.parser.LangiumParser;
       parsers.treeView = parser2;
     }, "treeView"),
@@ -194675,7 +194710,7 @@ ${content2}`;
       const { createArchitectureServices: createArchitectureServices2 } = await __vitePreload(async () => {
         const { createArchitectureServices: createArchitectureServices22 } = await Promise.resolve().then(() => architectureTIHT7OUA);
         return { createArchitectureServices: createArchitectureServices22 };
-      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
       const parser2 = createArchitectureServices2().Architecture.parser.LangiumParser;
       parsers.architecture = parser2;
     }, "architecture"),
@@ -194683,7 +194718,7 @@ ${content2}`;
       const { createGitGraphServices: createGitGraphServices2 } = await __vitePreload(async () => {
         const { createGitGraphServices: createGitGraphServices22 } = await Promise.resolve().then(() => gitGraphTEB2WS4Q);
         return { createGitGraphServices: createGitGraphServices22 };
-      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
       const parser2 = createGitGraphServices2().GitGraph.parser.LangiumParser;
       parsers.gitGraph = parser2;
     }, "gitGraph"),
@@ -194691,7 +194726,7 @@ ${content2}`;
       const { createEventModelingServices: createEventModelingServices2 } = await __vitePreload(async () => {
         const { createEventModelingServices: createEventModelingServices22 } = await Promise.resolve().then(() => eventmodeling45OFAUF4);
         return { createEventModelingServices: createEventModelingServices22 };
-      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
       const parser2 = createEventModelingServices2().EventModel.parser.LangiumParser;
       parsers.eventmodeling = parser2;
     }, "eventmodeling"),
@@ -194699,7 +194734,7 @@ ${content2}`;
       const { createRadarServices: createRadarServices2 } = await __vitePreload(async () => {
         const { createRadarServices: createRadarServices22 } = await Promise.resolve().then(() => radarI7S5WNFK);
         return { createRadarServices: createRadarServices22 };
-      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
       const parser2 = createRadarServices2().Radar.parser.LangiumParser;
       parsers.radar = parser2;
     }, "radar"),
@@ -194707,7 +194742,7 @@ ${content2}`;
       const { createRailroadServices: createRailroadServices2 } = await __vitePreload(async () => {
         const { createRailroadServices: createRailroadServices22 } = await Promise.resolve().then(() => railroad3IZDKUUU);
         return { createRailroadServices: createRailroadServices22 };
-      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
       const parser2 = createRailroadServices2().Railroad.parser.LangiumParser;
       parsers.railroad = parser2;
     }, "railroad"),
@@ -194715,7 +194750,7 @@ ${content2}`;
       const { createRailroadEbnfServices: createRailroadEbnfServices2 } = await __vitePreload(async () => {
         const { createRailroadEbnfServices: createRailroadEbnfServices22 } = await Promise.resolve().then(() => railroadEbnfEBAXGLYW);
         return { createRailroadEbnfServices: createRailroadEbnfServices22 };
-      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
       const parser2 = createRailroadEbnfServices2().RailroadEbnf.parser.LangiumParser;
       parsers.railroadEbnf = parser2;
     }, "railroadEbnf"),
@@ -194723,7 +194758,7 @@ ${content2}`;
       const { createRailroadAbnfServices: createRailroadAbnfServices2 } = await __vitePreload(async () => {
         const { createRailroadAbnfServices: createRailroadAbnfServices22 } = await Promise.resolve().then(() => railroadAbnfAHOZXSZD);
         return { createRailroadAbnfServices: createRailroadAbnfServices22 };
-      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
       const parser2 = createRailroadAbnfServices2().RailroadAbnf.parser.LangiumParser;
       parsers.railroadAbnf = parser2;
     }, "railroadAbnf"),
@@ -194731,7 +194766,7 @@ ${content2}`;
       const { createRailroadPegServices: createRailroadPegServices2 } = await __vitePreload(async () => {
         const { createRailroadPegServices: createRailroadPegServices22 } = await Promise.resolve().then(() => railroadPegLSFZ7HO6);
         return { createRailroadPegServices: createRailroadPegServices22 };
-      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
       const parser2 = createRailroadPegServices2().RailroadPeg.parser.LangiumParser;
       parsers.railroadPeg = parser2;
     }, "railroadPeg"),
@@ -194739,7 +194774,7 @@ ${content2}`;
       const { createTreemapServices: createTreemapServices2 } = await __vitePreload(async () => {
         const { createTreemapServices: createTreemapServices22 } = await Promise.resolve().then(() => treemap6X3UGDF4);
         return { createTreemapServices: createTreemapServices22 };
-      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
       const parser2 = createTreemapServices2().Treemap.parser.LangiumParser;
       parsers.treemap = parser2;
     }, "treemap"),
@@ -194747,7 +194782,7 @@ ${content2}`;
       const { createWardleyServices: createWardleyServices2 } = await __vitePreload(async () => {
         const { createWardleyServices: createWardleyServices22 } = await Promise.resolve().then(() => wardleyOPB4EBWU);
         return { createWardleyServices: createWardleyServices22 };
-      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
       const parser2 = createWardleyServices2().Wardley.parser.LangiumParser;
       parsers.wardley = parser2;
     }, "wardley"),
@@ -194755,7 +194790,7 @@ ${content2}`;
       const { createCynefinServices: createCynefinServices2 } = await __vitePreload(async () => {
         const { createCynefinServices: createCynefinServices22 } = await Promise.resolve().then(() => cynefinVYW2F7L2);
         return { createCynefinServices: createCynefinServices22 };
-      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CY4PGTQD.js", document.baseURI).href);
+      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CskqkK5b.js", document.baseURI).href);
       const parser2 = createCynefinServices2().Cynefin.parser.LangiumParser;
       parsers.cynefin = parser2;
     }, "cynefin")
