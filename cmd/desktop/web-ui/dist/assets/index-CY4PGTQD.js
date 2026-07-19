@@ -3,6 +3,7 @@ var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { en
 var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
 (function() {
   "use strict";
+  var __textOfDepth = 0;
   var _a2, _b, _c2, _d, _e2, _f, _g, _h, _i6, _j, _k, _l2, _m, _n2, _o, _p, _q, _r2, _s2, _t2, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H, _I, _J, _K, _L, _M, _N, _O, _P, _Q, _R, _S, _T, _U, _V, _W, _X, _Y, _Z, __, _$, _aa, _ba, _ca, _da, _ea, _fa, _ga, _ha, _ia, _ja, _ka, _la, _ma, _na, _oa, _pa, _qa, _ra, _sa, _ta, _ua, _va, _wa, _xa, _ya, _za, _Aa, _Ba, _Ca, _Da, _Ea, _Fa, _Ga, _Ha, _Ia, _Ja, _Ka, _La, _Ma, _Na, _Oa, _Pa, _Qa, _Ra, _Sa, _Ta, _Ua, _Va, _Wa, _Xa, _Ya, _Za, __a, _$a, _ab, _bb, _cb, _db, _eb, _fb, _gb, _hb, _ib, _jb, _kb, _lb, _mb, _nb, _ob, _pb, _qb, _rb, _sb, _tb, _ub, _vb, _wb, _xb, _yb, _zb, _Ab, _Bb, _Cb, _Db, _Eb, _Fb, _Gb, _Hb, _Ib, _Jb, _Kb, _Lb, _Mb, _Nb, _Ob, _Pb, _Qb, _Rb, _Sb, _Tb, _Ub, _Vb, _Wb, _Xb, _Yb, _Zb, __b, _$b, _ac, _bc, _cc, _dc, _ec, _fc, _gc, _hc, _ic, _jc, _kc, _lc, _mc, _nc, _oc, _pc, _qc, _rc, _sc, _tc, _uc, _vc, _wc, _xc, _yc, _zc, _Ac, _Bc, _Cc, _Dc, _Ec, _Fc, _Gc, _Hc, _Ic, _Jc, _Kc, _Lc, _Mc, _Nc, _Oc, _Pc, _Qc, _Rc, _Sc, _Tc, _Uc, _Vc, _Wc, _Xc;
   var _documentCurrentScript = typeof document !== "undefined" ? document.currentScript : null;
   /**
@@ -13329,11 +13330,17 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     Create a `Text` instance for the given array of lines.
     */
     static of(text2) {
-      if (text2.length == 0)
-        throw new RangeError("A document must have at least one line");
-      if (text2.length == 1 && !text2[0])
-        return Text2.empty;
-      return text2.length <= 32 ? new TextLeaf(text2) : TextNode$1.from(TextLeaf.split(text2, []));
+      __textOfDepth++;
+      if (__textOfDepth > 10) { __textOfDepth--; return Text2.empty; }
+      try {
+        if (text2.length == 0)
+          throw new RangeError("A document must have at least one line");
+        if (text2.length == 1 && !text2[0])
+          return Text2.empty;
+        return text2.length <= 32 ? new TextLeaf(text2) : TextNode$1.from(TextLeaf.split(text2, []));
+      } finally {
+        __textOfDepth--;
+      }
     }
   };
   class TextLeaf extends Text$1 {
