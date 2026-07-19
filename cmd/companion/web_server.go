@@ -2315,6 +2315,8 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 	opts.WorkspaceRoot = req.WorkspaceRoot
 
 	opts.ReviewMode = core.Settings.ReviewMode
+	opts.ReviewBlacklist = core.Settings.ReviewBlacklist
+	opts.ReviewWhitelist = core.Settings.ReviewWhitelist
 	if core.Settings.ReviewMode == "auto" && core.Settings.ReviewModel != "" {
 		pm := strings.TrimSpace(core.Settings.PlanModel)
 		base := strings.TrimSpace(core.Settings.BaseURL)
@@ -2407,6 +2409,7 @@ func (s *webServer) handleChatApprove(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		ConvID   string `json:"convId"`
 		Approved bool   `json:"approved"`
+		Reply    string `json:"reply"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonErr(w, err.Error())
@@ -2416,7 +2419,7 @@ func (s *webServer) handleChatApprove(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, "convId 必填")
 		return
 	}
-	if err := agentMgr.Approve(req.ConvID, req.Approved); err != nil {
+	if err := agentMgr.Approve(req.ConvID, req.Approved, req.Reply); err != nil {
 		jsonErr(w, err.Error())
 		return
 	}

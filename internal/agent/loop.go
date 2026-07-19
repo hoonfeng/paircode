@@ -127,6 +127,10 @@ type Loop struct {
 
 	// ReviewMode 审核模式："auto"=AI审核, "manual"=手动审批, "off"=全部放行。
 	ReviewMode string
+	// ReviewBlacklist 审核黑名单：命中此列表的工具需要审核（为空=全部工具按 ReviewMode 审核）。
+	ReviewBlacklist []string
+	// ReviewWhitelist 审核白名单：命中此列表的工具跳过审核（黑名单优先）。
+	ReviewWhitelist []string
 	// ReviewProvider 审核模型的 Provider（ReviewMode="auto" 时使用）。
 	// 由外部在创建 Loop 时设置，Loop 内部用它懒创建审核 Reviewer。
 	ReviewProvider Provider
@@ -328,16 +332,46 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 		for _, tc := range assistant.ToolCalls {
 			l.emit(Event{Type: EventToolCall, Tool: tc.Function.Name, Args: tc.Function.Arguments, CallID: tc.ID})
 
-			// ★ 审批门：Loop 内部根据 ReviewMode 自决审核策略 ★
+			// ★ 审批门：Loop 内部根据 ReviewMode + 黑白名单自决审核策略 ★
 			// - ReviewMode="auto" → 内部 AI 审核（用 ReviewProvider 懒建 Reviewer）
 			// - ReviewMode="off" → 全部放行（nil=全部通过，不经过任何审核）
 			// - ReviewMode="manual" → 走外部 l.Approve（人工审批）
+			// ★ 黑白名单优先于 ReviewMode：
+			//   - 若 ReviewBlacklist 非空且命中 → 强制审核
+			//   - 若 ReviewWhitelist 非空且命中 → 跳过审核
+			//   - 黑名单优先于白名单
 			approveFn := l.Approve
-			switch l.getReviewMode() {
-			case "auto":
-				approveFn = l.aiReviewApprove
-			case "off":
+			toolName := tc.Function.Name
+			// 检查黑白名单
+			inBlacklist := false
+			for _, name := range l.ReviewBlacklist {
+				if strings.Contains(toolName, name) { inBlacklist = true; break }
+			}
+			inWhitelist := false
+			if !inBlacklist {
+				for _, name := range l.ReviewWhitelist {
+					if strings.Contains(toolName, name) { inWhitelist = true; break }
+				}
+			}
+			if inBlacklist {
+				// 黑名单命中：按 ReviewMode 审核（即使 mode=off 也审核）
+				switch l.getReviewMode() {
+				case "auto":
+					approveFn = l.aiReviewApprove
+				default:
+					approveFn = l.Approve
+				}
+			} else if inWhitelist {
+				// 白名单命中：跳过审核
 				approveFn = nil
+			} else {
+				// 不在黑白名单中：按 ReviewMode 执行
+				switch l.getReviewMode() {
+				case "auto":
+					approveFn = l.aiReviewApprove
+				case "off":
+					approveFn = nil
+				}
 			}
 			if approveFn != nil {
 				if tool, ok := l.Registry.Get(tc.Function.Name); ok && tool.RequiresApproval {

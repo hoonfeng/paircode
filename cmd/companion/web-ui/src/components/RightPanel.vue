@@ -163,6 +163,24 @@
             <div class="input-bottom-bar">
               <div class="ibb-btns">
                 <span :class="['obtn', reviewBtnClass]" @click="cycleReviewMode" :title="reviewBtnTitle"><SvgIcon :name="reviewIconName" :size="12" /> {{ reviewBtnLabel }}</span>
+                <span class="obtn obtn-review-config" @click="reviewConfigOpen = !reviewConfigOpen" title="审核黑白名单配置" :class="{ active: reviewConfigOpen }"><SvgIcon name="settings" :size="12" /> 配置</span>
+                <!-- 审核配置弹窗 -->
+                <div v-if="reviewConfigOpen" class="review-config-popover" @click.stop>
+                  <div class="rcp-header">审核黑白名单配置</div>
+                  <div class="rcp-desc">每行一个工具名，支持部分匹配（如 edit_file 匹配 edit_file/multi_edit）</div>
+                  <div class="rcp-section">
+                    <label class="rcp-label">黑名单（需审核的工具）</label>
+                    <textarea class="rcp-input" v-model="reviewBlacklistText" rows="3" placeholder="edit_file&#10;write_file&#10;delete_file"></textarea>
+                  </div>
+                  <div class="rcp-section">
+                    <label class="rcp-label">白名单（跳过审核的工具）</label>
+                    <textarea class="rcp-input" v-model="reviewWhitelistText" rows="3" placeholder="read_file&#10;search_content&#10;web_search"></textarea>
+                  </div>
+                  <div class="rcp-actions">
+                    <button class="rcp-btn rcp-btn-save" @click="saveReviewConfig">保存</button>
+                    <button class="rcp-btn rcp-btn-close" @click="reviewConfigOpen = false">关闭</button>
+                  </div>
+                </div>
                 <span :class="['obtn', { active: autoCollapse }]" @click="toggleAuto('autoCollapse')" title="自动折叠：新消息发出时折叠旧输出，显示完成摘要"><SvgIcon name="list" :size="12" /> 折叠</span>
                 <span :class="['obtn', { active: autoCommit }]" @click="toggleAuto('autoCommit')" title="自动 Git 提交：任务完成时自动 git add + commit"><SvgIcon name="git-commit" :size="12" /> 提交</span>
                 <span class="obtn-sep"></span>
@@ -215,6 +233,9 @@ const inputHeight = ref(150)
 const convListWidth = ref(250)
 const topSentinel = ref(null)
 const reviewMode = ref('auto')  // 'auto'=AI审核, 'manual'=人工审批, 'off'=全部放行
+const reviewConfigOpen = ref(false)
+const reviewBlacklistText = ref('')
+const reviewWhitelistText = ref('')
 const reviewBtnTitle = computed(() => {
   const m = reviewMode.value
   return m === 'auto' ? 'AI审核：Agent自行审批写操作' : m === 'manual' ? '手动审批：每次操作需用户确认' : '关闭审核：全部放行，不经过任何审核'
@@ -243,6 +264,20 @@ function cycleReviewMode() {
     reviewMode.value = m
     state.settings['reviewMode'] = m
   })
+}
+// saveReviewConfig 保存审核黑白名单配置到后端。
+const saveReviewConfig = async () => {
+  const blacklist = reviewBlacklistText.value.split('\n').map(s => s.trim()).filter(Boolean)
+  const whitelist = reviewWhitelistText.value.split('\n').map(s => s.trim()).filter(Boolean)
+  state.settings['reviewBlacklist'] = blacklist
+  state.settings['reviewWhitelist'] = whitelist
+  try {
+    await api.apiPut('/settings?convId=' + encodeURIComponent(state.currentConvId), state.settings)
+    window.$toast?.('审核配置已保存', 'success')
+    reviewConfigOpen.value = false
+  } catch (e) {
+    window.$toast?.('保存失败: ' + (e.message || e), 'error')
+  }
 }
 const autoIterate = ref(false)
 const autoCollapse = ref(localStorage.getItem('autoCollapse') !== 'false')
@@ -289,8 +324,10 @@ const hasMoreTop = computed(() => {
 // ★ messageCombos：将平铺的 user/assistant 消息按用户消息分组。
 // 每组：{ user, assistant }，assistant 可能为 null（用户消息后无回复）。
 // 保持对原消息对象的引用，WS 流式写入自动反映到 combo 内。
+// ★ 强制按 _idx 排序，确保顺序始终稳定（loadMoreMessages prepend +
+// WS 并发写入不会打乱顺序）。
 const messageCombos = computed(() => {
-  const msgs = state.messages || []
+  const msgs = [...(state.messages || [])].sort((a, b) => (a._idx ?? 0) - (b._idx ?? 0))
   const combos = []
   let current = null
   for (const msg of msgs) {
@@ -298,7 +335,6 @@ const messageCombos = computed(() => {
       current = { user: msg, assistant: null }
       combos.push(current)
     } else if (msg.role === 'assistant' && current) {
-      // 若当前 user 已有 assistant，则作为新组合（连续 assistant 消息）
       if (current.assistant) {
         current = { user: null, assistant: msg }
         combos.push(current)
@@ -306,7 +342,6 @@ const messageCombos = computed(() => {
         current.assistant = msg
       }
     } else if (msg.role === 'assistant' && !current) {
-      // 开头的 assistant 消息（无前驱 user）
       current = { user: null, assistant: msg }
       combos.push(current)
     }
@@ -731,11 +766,14 @@ const submitAskAnswer = async (seg) => {
 }
 
 const resolveApproval = async (approved) => {
+  // 兼容两种调用：直接传 boolean（旧）或 { approved, reply }（新）
+  const isApproved = typeof approved === 'object' ? approved.approved : approved
+  const reply = typeof approved === 'object' ? (approved.reply || '') : ''
   const convId = state.currentConvId
   const a = state.approvalByConv[convId]
   if (!a || !a.callId || !a.waiting) return
   a.waiting = false
-  try { await api.apiPost('/chat/approve', { convId, approved }) } catch { a.waiting = true }
+  try { await api.apiPost('/chat/approve', { convId, approved: isApproved, reply }) } catch { a.waiting = true }
 }
 
 // ── 回退按钮 ──
@@ -976,6 +1014,11 @@ const toggleAuto = async (field) => {
 
 const autoNameConv = async (convId, content) => {
   if (!convId || !content) return
+  // ★ 只设置一次标题：若已有非默认标题，不再覆盖
+  const existing = state.conversations.find(c => c.id === convId)
+  if (existing && existing.title && existing.title !== '新对话' && existing.title !== '') {
+    return
+  }
   try {
     let title = content.replace(/```[\s\S]*?```/g, '').replace(/[#*>`_~\[\]\(\)]/g, '').replace(/\s+/g, ' ').replace(/^[\s,;:，；：、。.！!？?]+/, '').trim()
     if (title.length > 30) title = title.slice(0, 28) + '…'
@@ -1121,7 +1164,7 @@ watch(() => state.messages, () => {
   nextTick(() => startContentResizeObserver())
 }, { deep: false })
 
-watch(() => state.settings, (s) => { if (s) { reviewMode.value = s.reviewMode || 'auto'; autoIterate.value = !!s.autoIterateOnRejection; autonomous.value = !!s.autonomous; autoCollapse.value = s.autoCollapse !== undefined ? !!s.autoCollapse : true; autoCommit.value = s.autoCommit !== false; } }, { immediate: true })
+watch(() => state.settings, (s) => { if (s) { reviewMode.value = s.reviewMode || 'auto'; autoIterate.value = !!s.autoIterateOnRejection; autonomous.value = !!s.autonomous; autoCollapse.value = s.autoCollapse !== undefined ? !!s.autoCollapse : true; autoCommit.value = s.autoCommit !== false; reviewBlacklistText.value = (Array.isArray(s.reviewBlacklist) ? s.reviewBlacklist : []).join('\n'); reviewWhitelistText.value = (Array.isArray(s.reviewWhitelist) ? s.reviewWhitelist : []).join('\n'); } }, { immediate: true })
 
 // ── 工作区切换时加载 Token 统计（onMounted 时 workspaceRoot 可能还未设）
 watch(() => state.workspaceRoot, (root) => {
@@ -1428,7 +1471,7 @@ onUnmounted(() => {
 .input-wrapper { background: var(--input-bg); border: 1px solid var(--border-color); border-radius: 8px; }
 .chat-input { display: block; width: 100%; background: transparent; border: none; color: var(--text-primary); padding: 14px 16px 14px 16px; border-radius: 0; font-size: 14px; resize: none; outline: none; min-height: 80px; font-family: inherit; line-height: 1.6; box-sizing: border-box; }
 .input-bottom-bar { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 0 12px 8px 12px; }
-.ibb-btns { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; }
+.ibb-btns { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; position: relative; }
 .obtn { display: flex; align-items: center; gap: 3px; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; color: var(--text-muted); background: var(--bg-tertiary); border: 1px solid var(--border-color); white-space: nowrap; user-select: none; }
 .obtn.active { color: var(--accent); background: rgba(212, 167, 78, 0.1); border-color: rgba(212, 167, 78, 0.3); }
 .obtn-obtn-agent.active { color: #d4a74e; }
@@ -1436,6 +1479,29 @@ onUnmounted(() => {
 .obtn-review-auto { color: #5bbc7a; background: rgba(91, 188, 122, 0.1); border-color: rgba(91, 188, 122, 0.3); }
 .obtn-review-manual { color: #d4a74e; background: rgba(212, 167, 78, 0.1); border-color: rgba(212, 167, 78, 0.3); }
 .obtn-review-off { color: var(--text-muted); background: var(--bg-tertiary); border-color: var(--border-color); opacity: 0.6; }
+.obtn-review-config { color: var(--text-muted); background: var(--bg-tertiary); border-color: var(--border-color); }
+.obtn-review-config.active { color: var(--accent); background: rgba(212, 167, 78, 0.1); border-color: rgba(212, 167, 78, 0.3); }
+
+/* 审核配置弹窗 */
+.review-config-popover {
+  position: absolute; z-index: 100;
+  top: 100%; left: 0; margin-top: 4px;
+  width: 360px; max-width: 90vw;
+  background: var(--bg-primary); border: 1px solid var(--border-color);
+  border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  padding: 12px; font-size: 12px;
+}
+.rcp-header { font-weight: 600; color: var(--text-primary); margin-bottom: 4px; font-size: 13px; }
+.rcp-desc { color: var(--text-muted); font-size: 10px; margin-bottom: 8px; }
+.rcp-section { margin-bottom: 8px; }
+.rcp-label { display: block; font-size: 11px; color: var(--text-secondary); margin-bottom: 2px; font-weight: 500; }
+.rcp-input { width: 100%; box-sizing: border-box; background: var(--input-bg); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); padding: 4px 6px; font-size: 11px; font-family: var(--font-code); resize: vertical; }
+.rcp-input::placeholder { color: var(--text-muted); font-size: 10px; }
+.rcp-actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: 4px; }
+.rcp-btn { padding: 4px 12px; border: none; border-radius: 3px; font-size: 11px; cursor: pointer; }
+.rcp-btn-save { background: var(--accent); color: #fff; }
+.rcp-btn-close { background: var(--bg-tertiary); color: var(--text-secondary); border: 1px solid var(--border-color); }
+
 .send-btn { background: var(--accent); color: #fff; padding: 6px 14px; border-radius: 4px; cursor: pointer; border: none; }
 .stop-btn { background: #c03; color: #fff; padding: 6px 14px; border-radius: 4px; cursor: pointer; border: none; }
 .attachment-badge { display: flex; align-items: center; gap: 6px; padding: 4px 8px; margin: 4px 0; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px; }

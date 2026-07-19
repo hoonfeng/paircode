@@ -38,6 +38,10 @@ type LoopOpts struct {
 	// ReviewMode 审核模式："auto"=AI审核, "manual"=手动审批, "off"=全部放行。
 	// "auto"=Loop 内部 AI 审核把关写操作；"off"=全部放行（不经过任何审核）；"manual"=人工审批（前端弹窗）。
 	ReviewMode string
+	// ReviewBlacklist 审核黑名单：命中此列表的工具需要审核（为空=全部工具按 ReviewMode 审核）。
+	ReviewBlacklist []string
+	// ReviewWhitelist 审核白名单：命中此列表的工具跳过审核（黑名单优先）。
+	ReviewWhitelist []string
 	// ReviewProvider 审核模型的 Provider（ReviewMode="auto" 时用）。Loop 内部用它懒建 Reviewer。
 	ReviewProvider Provider
 	// AutoCommit 任务完成时自动 git add + git commit。
@@ -53,7 +57,16 @@ type GlobalEvent struct {
 	ConvID string
 	Event  Event
 }
+// ApprovalResult 审批结果（由用户通过前端 ApprovalBar 提交）。
+type ApprovalResult struct {
+	Approved bool
+	Reply    string // 用户输入的回复内容（拒绝时填写原因，允许时可选）
+}
 
+var DefaultApproved = ApprovalResult{Approved: true, Reply: ""}
+var DefaultDenied = ApprovalResult{Approved: false, Reply: "用户拒绝了此操作"}
+
+// Session 一次 agent 运行会话。从 web 层 webAgentSession 下沉而来，
 // Session 一次 agent 运行会话。从 web 层 webAgentSession 下沉而来，
 // 封装 Loop、事件通道、交互通道与订阅者 fan-out，供 SessionManager 统一管理。
 type Session struct {
@@ -68,7 +81,7 @@ type Session struct {
 
 	// 交互通道（从 web 层 webAgentSession 迁移）
 	askCh      chan string // ask_user 工具阻塞等用户回答
-	approvalCh chan bool   // Approve 钩子阻塞等用户裁决
+	approvalCh chan ApprovalResult   // Approve 钩子阻塞等用户裁决
 	feedbackCh chan string // OnFeedback 每轮 LLM 调用前检查
 
 	// 订阅者 fan-out：多个 SSE 客户端可订阅同一会话事件
@@ -295,7 +308,7 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		Running:       true,
 		StartedAt:     time.Now(),
 		askCh:         make(chan string, 1),
-		approvalCh:    make(chan bool, 1),
+		approvalCh:    make(chan ApprovalResult, 1),
 		feedbackCh:    make(chan string, 5),
 	}
 
@@ -345,8 +358,8 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		default:
 		}
 		select {
-		case approved := <-sess.approvalCh:
-			return approved, ""
+		case ar := <-sess.approvalCh:
+			return ar.Approved, ar.Reply
 		case <-actx.Done():
 			return false, "用户取消了操作"
 		}
@@ -354,6 +367,8 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 	// 审核模式由 Loop 内部自决，外部只需传进来
 	loop.SetReviewMode(opts.ReviewMode)
 	loop.ReviewProvider = opts.ReviewProvider
+	loop.ReviewBlacklist = opts.ReviewBlacklist
+	loop.ReviewWhitelist = opts.ReviewWhitelist
 
 	// OnFeedback：每轮 LLM 调用前检查用户运行时反馈（非阻塞）
 	loop.OnFeedback = func() string {
@@ -927,9 +942,9 @@ func (m *SessionManager) SendAnswer(convID string, answer string) error {
 	}
 }
 
-// Approve 向指定会话发送审批结果（true=允许，false=拒绝）。
-// 会话不存在或未运行返回错误。
-func (m *SessionManager) Approve(convID string, approved bool) error {
+// Approve 向指定会话发送审批结果。
+// approved=true=允许，approved=false=拒绝。reply 为用户输入的回复内容。
+func (m *SessionManager) Approve(convID string, approved bool, reply ...string) error {
 	m.mu.RLock()
 	sess, ok := m.sessions[convID]
 	m.mu.RUnlock()
@@ -939,8 +954,12 @@ func (m *SessionManager) Approve(convID string, approved bool) error {
 	if !sess.Running {
 		return ErrSessionNotRunning
 	}
+	r := ""
+	if len(reply) > 0 {
+		r = reply[0]
+	}
 	select {
-	case sess.approvalCh <- approved:
+	case sess.approvalCh <- ApprovalResult{Approved: approved, Reply: r}:
 		return nil
 	default:
 		return errors.New("审批通道已满（可能已有待处理审批）")

@@ -39,8 +39,10 @@ type AppSettings struct {
 	WorkspaceFolderLists map[string][]string `json:"workspaceFolderLists"` // 每工作区的文件夹列表，key=工作区根目录
 	RecentProjects     []string            `json:"recentProjects"`
 	// Agent 行为
-	ReviewMode         string `json:"reviewMode"`    // 审核模式："auto"=AI审核, "manual"=手动审批, "off"=全部放行
-	Autonomous         bool   `json:"autonomous"`
+	ReviewMode         string   `json:"reviewMode"`    // 审核模式："auto"=AI审核, "manual"=手动审批, "off"=全部放行
+	ReviewBlacklist    []string `json:"reviewBlacklist"`    // 审核黑名单：命中此列表的工具需要审核（为空=全部审核）
+	ReviewWhitelist    []string `json:"reviewWhitelist"`    // 审核白名单：命中此列表的工具跳过审核（黑名单优先）
+	Autonomous         bool     `json:"autonomous"`
 	AutoCollapse       bool   `json:"autoCollapse"`
 	MaxIterations      int    `json:"maxIterations"`
 	MaxParallel        int    `json:"maxParallelAgents"`

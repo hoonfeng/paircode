@@ -119,12 +119,13 @@ func HandleChatApprove(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		ConvID   string `json:"convId"`
 		Approved bool   `json:"approved"`
+		Reply    string `json:"reply"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonErr(w, err.Error())
 		return
 	}
-	if err := AgentMgr.Approve(req.ConvID, req.Approved); err != nil {
+	if err := AgentMgr.Approve(req.ConvID, req.Approved, req.Reply); err != nil {
 		jsonErr(w, err.Error())
 		return
 	}

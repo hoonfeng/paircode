@@ -373,9 +373,6 @@ export function processAgentDone(convId, data) {
   }
   const localConv = state.conversations.find(c => c.id === convId)
   if (localConv) localConv.msgCount = (localConv.msgCount || 0) + 1
-  if (rt && rt.lastUserText && globalCtx.autoNameConv) {
-    globalCtx.autoNameConv(convId, rt.lastUserText)
-  }
   window.dispatchEvent(new Event('save-conversations'))
   if (isCurrent && globalCtx.scrollToBottom) globalCtx.scrollToBottom(convId)
   delete runtimes[convId]
