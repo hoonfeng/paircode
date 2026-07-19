@@ -27,106 +27,101 @@
           </div>
           <!-- 渲染的消息列表（按用户消息分组渲染：每个 combo = 一个用户消息 + 对应 agent 回复） -->
           <div class="msg-list-wrap">
-            <div v-for="(combo, ci) in messageCombos" :key="'c' + ci"
-                 class="msg-item msg-combo" :data-first-idx="combo.user ? combo.user._idx : (combo.assistant ? combo.assistant._idx : -1)">
-              <!-- ── 用户消息行 ── -->
-              <template v-if="combo.user">
-                <div class="combo-user-row">
-                  <div class="msg-avatar"><SvgIcon name="user" :size="16" /></div>
-                  <div class="msg-bubble bubble-user">
-                    <div v-if="isDelegation(combo.user)" class="user-msg-header">
-                      <span class="umh-badge badge-delegation"><SvgIcon name="git-branch" :size="10" /> 委派任务</span>
-                      <span class="umh-agent">{{ delegationAgent(combo.user) }}</span>
-                    </div>
-                    <div v-else-if="isFeedback(combo.user)" class="user-msg-header">
-                      <span class="umh-badge badge-feedback"><SvgIcon name="message-square" :size="10" /> 用户反馈</span>
-                    </div>
-                    <div v-if="combo.user.content" class="user-msg-content">
-                      <MarkdownRenderer :text="cleanMsgContent(combo.user)" :theme="state.theme" />
-                    </div>
-                    <div v-else class="user-msg-placeholder">（空消息）</div>
-                    <div class="rollback-area" v-if="!state.chatLoading">
-                      <button class="rollback-btn" @click="rollbackTo(combo.user._idx)" title="回到此消息前的状态（恢复文件快照 + 删除后续对话）">
-                        <SvgIcon name="undo" :size="11" /> 回退
-                      </button>
-                    </div>
-                    <div v-if="combo.user._time" class="msg-time combo-time-user">{{ combo.user._time }}</div>
+            <!-- ★ 遍历 messageCombos，每个 user / assistant 分别渲染为独立气泡 -->
+            <template v-for="(combo, ci) in messageCombos" :key="'c' + ci">
+              <!-- ── 用户消息独立气泡（右对齐） ── -->
+              <div v-if="combo.user" class="msg-item msg-user" :data-idx="combo.user._idx">
+                <div class="msg-avatar"><SvgIcon name="user" :size="16" /></div>
+                <div class="msg-bubble bubble-user">
+                  <div v-if="isDelegation(combo.user)" class="user-msg-header">
+                    <span class="umh-badge badge-delegation"><SvgIcon name="git-branch" :size="10" /> 委派任务</span>
+                    <span class="umh-agent">{{ delegationAgent(combo.user) }}</span>
                   </div>
+                  <div v-else-if="isFeedback(combo.user)" class="user-msg-header">
+                    <span class="umh-badge badge-feedback"><SvgIcon name="message-square" :size="10" /> 用户反馈</span>
+                  </div>
+                  <div v-if="combo.user.content" class="user-msg-content">
+                    <MarkdownRenderer :text="cleanMsgContent(combo.user)" :theme="state.theme" />
+                  </div>
+                  <div v-else class="user-msg-placeholder">（空消息）</div>
+                  <div class="rollback-area" v-if="!state.chatLoading">
+                    <button class="rollback-btn" @click="rollbackTo(combo.user._idx)" title="回到此消息前的状态">
+                      <SvgIcon name="undo" :size="11" /> 回退
+                    </button>
+                  </div>
+                  <div v-if="combo.user._time" class="msg-time">{{ combo.user._time }}</div>
                 </div>
-              </template>
-              <!-- ── Agent 回复行 ── -->
-              <template v-if="combo.assistant">
-                <div class="combo-assistant-row">
-                  <div class="msg-avatar"><SvgIcon name="bot" :size="16" /></div>
-                  <div class="msg-bubble" :class="combo.assistant.segments && combo.assistant.segments.length > 0 ? 'bubble-agent' : 'bubble-assistant'">
-                    <template v-if="combo.assistant.segments && combo.assistant.segments.length > 0">
-                      <div v-if="combo.assistant._folded" class="folded-summary" @click="combo.assistant._folded = !combo.assistant._folded">
-                        <span class="folded-chevron">▸</span>
-                        <SvgIcon name="list" :size="11" />
-                        <span class="folded-title">完成摘要</span>
-                        <span class="folded-desc">{{ msgSummary(combo.assistant) }}</span>
-                      </div>
-                      <template v-if="!combo.assistant._folded">
-                        <template v-for="(seg, si) in combo.assistant.segments" :key="si">
-                          <div v-if="seg.type === 'thinking'" class="tl-item">
-                            <span class="tl-dot tl-dot-thinking"></span>
-                            <div class="tl-body tl-think-body">
-                              <div v-if="!seg._collapsed" class="tl-thinking-text">{{ seg.content }}</div>
-                              <div v-else class="tl-thinking-collapsed" @click="seg._collapsed = !seg._collapsed"><SvgIcon name="message-square" :size="12" /> 思考…</div>
-                              <div v-if="!seg._collapsed" class="tl-think-fold" @click.stop="seg._collapsed = !seg._collapsed" title="折叠思考">▲ 收起</div>
+              </div>
+              <!-- ── Agent 回复独立气泡（左对齐），不分段，直接显示到一起 ── -->
+              <div v-if="combo.assistant" class="msg-item msg-assistant" :data-idx="combo.assistant._idx">
+                <div class="msg-avatar"><SvgIcon name="bot" :size="16" /></div>
+                <div class="msg-bubble bubble-assistant">
+                  <template v-if="combo.assistant.segments && combo.assistant.segments.length > 0">
+                    <div v-if="combo.assistant._folded" class="folded-summary" @click="combo.assistant._folded = !combo.assistant._folded">
+                      <span class="folded-chevron">▸</span>
+                      <SvgIcon name="list" :size="11" />
+                      <span class="folded-title">完成摘要</span>
+                      <span class="folded-desc">{{ msgSummary(combo.assistant) }}</span>
+                    </div>
+                    <template v-if="!combo.assistant._folded">
+                      <template v-for="(seg, si) in combo.assistant.segments" :key="si">
+                        <div v-if="seg.type === 'thinking'" class="tl-item">
+                          <span class="tl-dot tl-dot-thinking"></span>
+                          <div class="tl-body tl-think-body">
+                            <div v-if="!seg._collapsed" class="tl-thinking-text">{{ seg.content }}</div>
+                            <div v-else class="tl-thinking-collapsed" @click="seg._collapsed = !seg._collapsed"><SvgIcon name="message-square" :size="12" /> 思考…</div>
+                            <div v-if="!seg._collapsed" class="tl-think-fold" @click.stop="seg._collapsed = !seg._collapsed" title="折叠思考">▲ 收起</div>
+                          </div>
+                        </div>
+                        <div v-else-if="seg.type === 'tool_call'" class="tl-item">
+                          <span class="tl-dot tl-dot-tool"></span>
+                          <div class="tl-body tl-tool">
+                            <div class="tl-tc-header" @click="seg._expanded = !seg._expanded">
+                              <span class="tl-tc-chevron">{{ seg._expanded ? '▾' : '▸' }}</span>
+                              <SvgIcon :name="toolMeta(seg).icon" :size="11" class="tl-tc-icon" />
+                              <span class="tl-tc-name">{{ toolMeta(seg).title }}</span>
+                              <span v-if="toolMeta(seg).detail" class="tl-tc-param">{{ toolMeta(seg).detail }}</span>
+                              <span v-if="seg.result && !seg._expanded" class="tl-tc-summary">{{ toolResultSummary(seg) }}</span>
+                            </div>
+                            <div v-if="seg._expanded" class="tl-tc-detail">
+                              <template v-if="isTerminalTool(seg)">
+                                <div class="tl-tc-section"><div class="tl-tc-section-title">命令</div><div class="tl-tc-command">{{ formatTerminalCommand(seg) }}</div></div>
+                                <div v-if="seg.result" class="tl-tc-section"><div class="tl-tc-section-title">输出</div><pre class="tl-tc-output">{{ seg.result }}</pre></div>
+                              </template>
+                              <template v-else>
+                                <div v-if="seg.argsRaw" class="tl-tc-section"><div class="tl-tc-section-title">参数</div><pre><code>{{ seg.argsRaw }}</code></pre></div>
+                                <div v-if="seg.result" class="tl-tc-section"><div class="tl-tc-section-title">结果</div><pre><code>{{ seg.result }}</code></pre></div>
+                              </template>
                             </div>
                           </div>
-                          <div v-else-if="seg.type === 'tool_call'" class="tl-item">
-                            <span class="tl-dot tl-dot-tool"></span>
-                            <div class="tl-body tl-tool">
-                              <div class="tl-tc-header" @click="seg._expanded = !seg._expanded">
-                                <span class="tl-tc-chevron">{{ seg._expanded ? '▾' : '▸' }}</span>
-                                <SvgIcon :name="toolMeta(seg).icon" :size="11" class="tl-tc-icon" />
-                                <span class="tl-tc-name">{{ toolMeta(seg).title }}</span>
-                                <span v-if="toolMeta(seg).detail" class="tl-tc-param">{{ toolMeta(seg).detail }}</span>
-                                <span v-if="seg.result && !seg._expanded" class="tl-tc-summary">{{ toolResultSummary(seg) }}</span>
-                              </div>
-                              <div v-if="seg._expanded" class="tl-tc-detail">
-                                <template v-if="isTerminalTool(seg)">
-                                  <div class="tl-tc-section"><div class="tl-tc-section-title">命令</div><div class="tl-tc-command">{{ formatTerminalCommand(seg) }}</div></div>
-                                  <div v-if="seg.result" class="tl-tc-section"><div class="tl-tc-section-title">输出</div><pre class="tl-tc-output">{{ seg.result }}</pre></div>
-                                </template>
-                                <template v-else>
-                                  <div v-if="seg.argsRaw" class="tl-tc-section"><div class="tl-tc-section-title">参数</div><pre><code>{{ seg.argsRaw }}</code></pre></div>
-                                  <div v-if="seg.result" class="tl-tc-section"><div class="tl-tc-section-title">结果</div><pre><code>{{ seg.result }}</code></pre></div>
-                                </template>
-                              </div>
-                            </div>
-                          </div>
-                          <div v-else-if="seg.type === 'ask_user'" class="tl-item">
-                            <span class="tl-dot tl-dot-ask"></span>
-                            <div class="tl-body"><AskUserCard :question="seg.question" :ask-type="seg.askType" :options="seg.options" :call-id="seg.callId" :answered="seg._answered" @answer="onAskAnswer(seg, $event)" /></div>
-                          </div>
-                          <div v-else-if="seg.type === 'content'" class="tl-item tl-content-item">
-                            <span class="tl-dot tl-dot-content"></span>
-                            <div class="tl-body"><MarkdownRenderer :text="seg.content" :theme="state.theme" /></div>
-                          </div>
-                        </template>
+                        </div>
+                        <div v-else-if="seg.type === 'ask_user'" class="tl-item">
+                          <span class="tl-dot tl-dot-ask"></span>
+                          <div class="tl-body"><AskUserCard :question="seg.question" :ask-type="seg.askType" :options="seg.options" :call-id="seg.callId" :answered="seg._answered" @answer="onAskAnswer(seg, $event)" /></div>
+                        </div>
+                        <div v-else-if="seg.type === 'content'" class="tl-item tl-content-item">
+                          <span class="tl-dot tl-dot-content"></span>
+                          <div class="tl-body"><MarkdownRenderer :text="seg.content" :theme="state.theme" /></div>
+                        </div>
                       </template>
                     </template>
-                    <div v-if="!combo.assistant._folded && combo.assistant.segments && combo.assistant.segments.length > 0" class="msg-fold-btn" @click="combo.assistant._folded = true">
-                      <SvgIcon name="chevron-up" :size="12" />
-                      <span>折叠输出</span>
+                  </template>
+                  <div v-if="!combo.assistant._folded && combo.assistant.segments && combo.assistant.segments.length > 0" class="msg-fold-btn" @click="combo.assistant._folded = true">
+                    <SvgIcon name="chevron-up" :size="12" /><span>折叠输出</span>
+                  </div>
+                  <template v-if="(!combo.assistant.segments || combo.assistant.segments.length === 0)">
+                    <div v-if="combo.assistant.content" class="tl-item tl-content-item">
+                      <span class="tl-dot tl-dot-content"></span>
+                      <div class="tl-body"><MarkdownRenderer :text="combo.assistant.content" :theme="state.theme" /></div>
                     </div>
-                    <template v-if="(!combo.assistant.segments || combo.assistant.segments.length === 0)">
-                      <div v-if="combo.assistant.content" class="tl-item tl-content-item">
-                        <span class="tl-dot tl-dot-content"></span>
-                        <div class="tl-body"><MarkdownRenderer :text="combo.assistant.content" :theme="state.theme" /></div>
-                      </div>
-                    </template>
-                    <div v-if="combo.assistant._time" class="msg-time">{{ combo.assistant._time }}</div>
-                  </div>
-                  <div v-if="combo.assistant._loading" class="msg-loading-dots">
-                    <span class="dot"></span><span class="dot"></span><span class="dot"></span>
-                  </div>
+                  </template>
+                  <div v-if="combo.assistant._time" class="msg-time">{{ combo.assistant._time }}</div>
                 </div>
-              </template>
-            </div>
+                <div v-if="combo.assistant._loading" class="msg-loading-dots">
+                  <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+                </div>
+              </div>
+            </template>
           </div>
           <div v-if="state.chatLoading && state.messages && state.messages.length > 0" class="msg-loading-banner">
             <span class="dot-pulse"></span><span>思考中...</span>
@@ -1255,11 +1250,6 @@ onUnmounted(() => {
 .msg-list-wrap { display: flex; flex-direction: column; gap: 12px; min-height: 100%; }
 .msg-item { display: flex; gap: 8px; align-items: flex-start; content-visibility: auto; contain-intrinsic-size: 60px; }
 .msg-user { flex-direction: row-reverse; justify-content: flex-start; gap: 10px; }
-/* ★ 组合气泡：用户+agent 上下排列 */
-.msg-combo { flex-direction: column; gap: 4px; margin-bottom: 2px; content-visibility: visible; contain-intrinsic-size: auto; }
-.combo-user-row { display: flex; gap: 8px; flex-direction: row-reverse; align-items: flex-start; }
-.combo-assistant-row { display: flex; gap: 8px; flex-direction: row; align-items: flex-start; }
-.combo-time-user { font-size: 11px; color: rgba(255,255,255,0.5); text-align: right; margin-top: 4px; }
 
 
 
