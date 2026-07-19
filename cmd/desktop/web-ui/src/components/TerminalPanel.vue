@@ -214,10 +214,11 @@ function createWebSocket(termState, xtermInstance, fitAddon) {
     reconnectTimer = setTimeout(connect, delay)
   }
 
-  // 键盘输入 → WebSocket 二进制
+  // 键盘输入 → WebSocket 二进制帧（后端 opcode 0x2 才识别为键盘输入）
   const disposeData = xtermInstance.onData(data => {
     if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(data)
+      // 使用 TextEncoder 转为 UTF-8 字节序列发送二进制帧（而非文本帧）
+      socket.send(new TextEncoder().encode(data))
     }
   })
 
@@ -341,6 +342,11 @@ function switchTerm(idx) {
     // 激活后重新 fit
     if (term.fitAddon) {
       try { term.fitAddon.fit() } catch {}
+    }
+
+    // 自动聚焦 xterm，用户可直接输入
+    if (term.xterm) {
+      try { term.xterm.focus() } catch {}
     }
 
     // 切换 ResizeObserver 到新活动终端
