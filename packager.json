@@ -5,7 +5,7 @@
   "company": "PairCode",
   "copyright": "Copyright (C) 2026 PairCode",
   "vars": {
-    "cgo": "0",
+    "cgo": "1",
     "console": "true",
     "frontendDir": "cmd/companion/web-ui",
     "icon": "assets/icon.png",

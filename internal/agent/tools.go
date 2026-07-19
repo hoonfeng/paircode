@@ -553,6 +553,7 @@ func RegisterDefaultTools(r *Registry, root string) {
 	registerCodeGraphTools(r, root)          // codegraph_build / codegraph_search / codegraph_impact / ...（代码知识图谱，见 codegraph_tools.go + pkg/codegraph）
 	registerExtraCodeGraphTools(r, root)     // codegraph_find_by_signature / codegraph_explore（额外工具，见 codegraph_extra.go）
 	registerLuaToolTools(r, root)            // lua_tool_list/create/update/delete（Lua 自定义工具管理，见 luatool_tools.go）
+	RegisterFinishTaskTool(r)                // finish_task（完成_任务）— 子 agent 报告完成
 
 	// ── 默认 BeforeTool：edit_file/multi_edit 执行前用 codegraph 注入最新行号 ──
 	// codegraph 的符号级行号比 old_string 字符串匹配更可靠（不受 CRLF/空白折叠/行号偏移影响）。

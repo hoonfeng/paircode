@@ -359,12 +359,21 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 				result = "Error: " + terr.Error()
 			}
 			l.emit(Event{Type: EventToolResult, Tool: tc.Function.Name, Content: result, CallID: tc.ID})
+			msgs = append(msgs, Message{Role: RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: result})
 			l.trackCall(tc.Function.Name, tc.Function.Arguments, terr != nil || strings.HasPrefix(strings.TrimSpace(result), "Error:"))
 
 			// ★ 自主模式：检测 generate_commit_message 被调用 → 标记提交已记录
 			// 后续自然终止处据此判断是阶段完成（继续迭代）还是全部完成（正常退出）。
 			if tc.Function.Name == "generate_commit_message" {
 				l.commitRecorded = true
+			}
+
+			// ★ finish_task：设置完成结果并退出循环
+			// Agent 调用此工具报告任务完成，Loop 立即退出不再继续迭代。
+			if tc.Function.Name == "finish_task" {
+				l.finishResult = &result
+				l.emit(Event{Type: EventDone, Content: result, DoneReason: "finish_task"})
+				return msgs, nil
 			}
 
 		}
