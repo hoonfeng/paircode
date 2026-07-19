@@ -30,7 +30,8 @@ type LoopOpts struct {
 	MaxIterations    int         // 最大迭代数（<=0 时 Loop 内部默认 30）
 	MaxContextTokens int         // 上下文 token 上限（>0 启用压缩）
 	Compressor       Compressor  // 上下文压缩器（可空）
-	History          []Message   // 初始历史（首次为空；续跑时传上一轮 History）
+	History          []Message   // 初始历史（首次为空；续跑时传上一轮 History）。传入时可能已被 CondenseHistory 压缩。
+	HistoryOriginal  []Message   // 原始未压缩历史（与 History 对应，用于持久化而非 LLM 上下文）。
 	CompressedSummaries []string // 已持久化的压缩摘要（页面刷新后恢复）
 	Autonomous       bool        // 自主模式标志
 	WorkspaceRoot    string      // 工作区根路径（用于跨工作区并行对话的状态指示与隔离）
@@ -370,8 +371,25 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 	// 直接使用已持有的 m.store 变量。
 	if m.store != nil {
 		store := m.store
+		// ★ 捕捉原始（未压缩）历史，用作持久化的基准。
+		// msgs 中头部是 CondenseHistory 压缩后的版本（通常更短），尾部是本轮新增消息。
+		// 直接用 msgs 持久化会写回压缩版、丢失原始消息结构。
+		// 正确做法：原始历史 + 新增尾部 = 持久化版本。
+		originalHist := opts.HistoryOriginal
+		condensedHist := opts.History
 		loop.OnBatchPersist = func(msgs []Message) {
-			err := store.PersistNewMessages(convID, msgs)
+			// 重组：原始历史（未压缩）+ 本轮新增消息（msgs 尾部）
+			condensedLen := len(condensedHist)
+			var combined []Message
+			if condensedLen > 0 && len(msgs) >= condensedLen {
+				combined = make([]Message, 0, len(originalHist)+len(msgs)-condensedLen)
+				combined = append(combined, originalHist...)
+				combined = append(combined, msgs[condensedLen:]...)
+			} else {
+				// 兜底（无压缩场景）：直接用 msgs
+				combined = msgs
+			}
+			err := store.PersistNewMessages(convID, combined)
 			if err != nil {
 				fmt.Printf("[persist] OnBatchPersist 失败 conv=%s err=%v\n", convID, err)
 			} else {

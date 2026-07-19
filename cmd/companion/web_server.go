@@ -2213,6 +2213,11 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 		}
 	}
 	history = agent.TrimInterruptedHistory(history)
+
+	// ★ 保存原始（未压缩）历史，供持久化使用——压缩版只给 LLM 上下文，不写回历史记录
+	originalHistory := make([]agent.Message, len(history))
+	copy(originalHistory, history)
+
 	// ★ 历史精简：跨轮次加载时只保留最近一轮完整交互细节，
 	//   旧轮次压缩为 [用户消息, 助手最终报告]，丢弃中间 tool 输出。
 	//   大幅减少上下文体积，同时保持语义连续性。
@@ -2241,7 +2246,8 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 		MaxIterations:    maxIter,
 		MaxContextTokens: core.Settings.ContextMaxTokens,
 		Compressor:       webCompressor(),
-		History:          history,
+		History:          history,          // 压缩版：供 LLM 上下文使用
+		HistoryOriginal:  originalHistory,  // 原始版：供持久化使用，防止压缩版写回历史记录
 		CompressedSummaries: summaries,
 		Autonomous:       autonomous,
 	}
