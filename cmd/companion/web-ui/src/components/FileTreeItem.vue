@@ -1,9 +1,9 @@
 <template>
   <div class="file-tree-item">
     <div class="item-row" :style="{ paddingLeft: depth * 16 + 'px' }"
-         :class="{ 'drag-over': dragOver }"
-         :draggable="!item.isDir"
-         @click="handleClick"
+         :class="{ 'drag-over': dragOver, 'selected': isSelected }"
+         draggable="true"
+         @click="handleClick($event)"
          @contextmenu.prevent="showContextMenu"
          @dragstart="onDragStart"
          @dragover.prevent="onDragOver"
@@ -107,8 +107,12 @@ const fileIcon = computed(() => {
 })
 
 // ── 点击展开/打开 ──
-const handleClick = async () => {
+// ── 是否被选中（多选状态）──
+const isSelected = computed(() => state.selectedFilePaths.includes(fullPath.value))
+
+const handleClick = async (e) => {
   if (props.item.isDir) {
+    // 目录：展开/折叠
     expanded.value = !expanded.value
     if (expanded.value && !loaded.value) {
       try {
@@ -117,7 +121,44 @@ const handleClick = async () => {
         loaded.value = true
       } catch {}
     }
+    return
+  }
+
+  // 文件：多选逻辑
+  if (e.ctrlKey || e.metaKey) {
+    // Ctrl+点击：切换选择
+    const idx = state.selectedFilePaths.indexOf(fullPath.value)
+    if (idx >= 0) {
+      state.selectedFilePaths.splice(idx, 1)
+    } else {
+      state.selectedFilePaths.push(fullPath.value)
+    }
+    // 更新 lastClicked
+    state.lastClickedFilePath = fullPath.value
+  } else if (e.shiftKey && state.lastClickedFilePath) {
+    // Shift+点击：范围选择（需要父目录中所有文件列表，简化为选择当前到最后一个之间的所有已打开文件）
+    const lastIdx = state.openFiles.indexOf(state.lastClickedFilePath)
+    const curIdx = state.openFiles.indexOf(fullPath.value)
+    if (lastIdx >= 0 && curIdx >= 0) {
+      const start = Math.min(lastIdx, curIdx)
+      const end = Math.max(lastIdx, curIdx)
+      for (let i = start; i <= end; i++) {
+        const fp = state.openFiles[i]
+        if (fp && !state.selectedFilePaths.includes(fp)) {
+          state.selectedFilePaths.push(fp)
+        }
+      }
+    } else {
+      // 不在 openFiles 中，只选当前
+      if (!state.selectedFilePaths.includes(fullPath.value)) {
+        state.selectedFilePaths.push(fullPath.value)
+      }
+    }
   } else {
+    // 普通点击：清除多选，只选当前
+    state.selectedFilePaths.length = 0
+    state.selectedFilePaths.push(fullPath.value)
+    state.lastClickedFilePath = fullPath.value
     emit('fileClick', fullPath.value)
   }
 }
@@ -416,27 +457,90 @@ async function reloadChildren() {
 }
 
 // ── 拖拽事件 ──
-const dragSourcePath = ref('')
 const onDragStart = (e) => {
-  if (props.item.isDir) { e.preventDefault(); return }
-  dragSourcePath.value = fullPath.value
-  e.dataTransfer.setData('text/plain', fullPath.value)
-  e.dataTransfer.effectAllowed = 'move'
+  // 如果有多选选中的文件，拖拽全部选中项；否则只拖当前
+  let paths = []
+  if (state.selectedFilePaths.length > 1 && state.selectedFilePaths.includes(fullPath.value)) {
+    paths = state.selectedFilePaths
+  } else {
+    paths = [fullPath.value]
+  }
+  e.dataTransfer.setData('text/plain', JSON.stringify(paths))
+  e.dataTransfer.effectAllowed = e.ctrlKey ? 'copy' : 'move'
+  // 设置拖拽图标（可选）
+  if (e.dataTransfer.setDragImage && paths.length === 1) {
+    // 使用当前元素作为拖拽图标
+    const el = e.currentTarget
+    e.dataTransfer.setDragImage(el, 10, 10)
+  }
 }
 const onDragOver = (e) => {
-  if (props.item.isDir) dragOver.value = true
+  if (props.item.isDir) {
+    dragOver.value = true
+    e.dataTransfer.dropEffect = e.ctrlKey ? 'copy' : 'move'
+  }
 }
 const onDragLeave = () => { dragOver.value = false }
 const onDrop = async (e) => {
   dragOver.value = false
   if (!props.item.isDir) return
-  const srcPath = e.dataTransfer.getData('text/plain')
-  if (!srcPath || srcPath === fullPath.value || srcPath.startsWith(fullPath.value + '\\')) return
-  const srcName = srcPath.split('\\').pop()
-  try {
-    await api.apiPost('/fs/rename', { from: srcPath, to: fullPath.value + '\\' + srcName })
+  const raw = e.dataTransfer.getData('text/plain')
+  if (!raw) return
+  let paths = []
+  try { paths = JSON.parse(raw) } catch { paths = [raw] }
+  if (!Array.isArray(paths)) paths = [paths]
+  if (paths.length === 0) return
+
+  const targetDir = fullPath.value
+  const isCopy = e.ctrlKey || e.shiftKey
+  let successCount = 0
+  let failCount = 0
+
+  for (const srcPath of paths) {
+    if (!srcPath || srcPath === targetDir || srcPath.startsWith(targetDir + '\\')) continue
+    const srcName = srcPath.split('\\').pop()
+    const destPath = targetDir + '\\' + srcName
+    try {
+      if (isCopy) {
+        // Ctrl+拖拽 = 复制
+        await api.apiPost('/fs/copy', { from: srcPath, to: destPath })
+        // 复制编辑器缓存
+        if (state.fileContents[srcPath]) {
+          state.fileContents[destPath] = state.fileContents[srcPath]
+          state.fileSavedContent[destPath] = state.fileSavedContent[srcPath]
+        }
+      } else {
+        // 普通拖拽 = 移动
+        await api.apiPost('/fs/rename', { from: srcPath, to: destPath })
+        // 更新编辑器路径
+        if (state.activeFile === srcPath) {
+          state.activeFile = destPath
+          const idx = state.openFiles.indexOf(srcPath)
+          if (idx !== -1) state.openFiles[idx] = destPath
+        }
+        if (state.fileContents[srcPath]) {
+          state.fileContents[destPath] = state.fileContents[srcPath]
+          state.fileSavedContent[destPath] = state.fileSavedContent[srcPath]
+          delete state.fileContents[srcPath]
+          delete state.fileSavedContent[srcPath]
+          delete state.fileDirty[srcPath]
+        }
+      }
+      successCount++
+    } catch (err) {
+      console.warn('[拖拽] 操作失败:', srcPath, '→', destPath, err)
+      failCount++
+    }
+  }
+
+  if (successCount > 0) {
     window.dispatchEvent(new CustomEvent('refresh-tree'))
-  } catch (err) { window.$toast('移动失败: ' + (err.message || err), 'error') }
+    window.$toast(isCopy
+      ? `已复制 ${successCount} 个${failCount > 0 ? '（' + failCount + ' 个失败）' : ''}`
+      : `已移动 ${successCount} 个${failCount > 0 ? '（' + failCount + ' 个失败）' : ''}`, 'success')
+  } else if (failCount > 0) {
+    window.$toast('拖拽操作失败: ' + failCount + ' 个错误', 'error')
+  }
 }
 
 // ── 监听 refresh-tree：已展开的目录自动重新加载子节点 ──
@@ -464,6 +568,7 @@ onUnmounted(() => {
   padding: 2px 4px; cursor: pointer; font-size: 13px; white-space: nowrap;
 }
 .item-row:hover { background: var(--bg-hover); }
+.item-row.selected { background: var(--accent-bg); outline: 1px solid var(--accent); outline-offset: -1px; }
 .item-row.drag-over { background: rgba(126, 184, 218, 0.2); outline: 1px dashed var(--accent); }
 .chevron-wrap { width: 12px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
 .chevron { transition: transform .15s; color: var(--text-muted); }

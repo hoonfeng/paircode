@@ -412,11 +412,24 @@ onMounted(async () => {
   await loadFileTree()
 
   const _onRefreshTree = () => {
-    // ★ 清除所有非 dirty 文件的编辑器缓存，确保 AI 修改文件后重新打开时是最新内容
+    // 只清除未打开文件的缓存，已打开文件保留内容并重新读取（确保 AI 修改后同步）
     for (const path of Object.keys(state.fileContents)) {
-      if (!state.fileDirty[path]) {
+      if (state.openFiles.includes(path)) {
+        // 已打开文件：非 dirty 则重新读取最新内容
+        if (!state.fileDirty[path]) {
+          api.apiGet('/fs/read', { path }).then(data => {
+            const normalized = (data.content || '').replace(/\r\n/g, '\n')
+            state.fileContents[path] = normalized
+            state.fileSavedContent[path] = normalized
+            state.fileDirty[path] = false
+          }).catch(() => {})
+        }
+        // dirty 文件保留用户编辑内容，不清除
+      } else {
+        // 未打开文件：清除缓存
         delete state.fileContents[path]
         delete state.fileSavedContent[path]
+        delete state.fileDirty[path]
       }
     }
     loadFileTree()

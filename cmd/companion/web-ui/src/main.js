@@ -125,6 +125,8 @@ export const state = reactive({
   settings: {},
   settingsLoaded: false,
   searchResults: [],
+  selectedFilePaths: [],  // 文件树多选路径列表
+  lastClickedFilePath: '', // 文件树最近点击（Shift范围选择用）
   tasks: [],
   notificationCount: 0,
   theme: 'dark',

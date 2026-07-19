@@ -6,6 +6,8 @@
 import { ref, onMounted, onBeforeUnmount, watch, inject } from 'vue'
 import { EditorView, basicSetup } from 'codemirror'
 import { EditorState } from '@codemirror/state'
+import { syntaxHighlighting, HighlightStyle } from '@codemirror/language'
+import { tags } from '@lezer/highlight'
 import { javascript } from '@codemirror/lang-javascript'
 import { python } from '@codemirror/lang-python'
 import { html } from '@codemirror/lang-html'
@@ -76,28 +78,129 @@ function createEditor() {
     }),
   ]
 
-  // 主题
+  // 主题：为每个模式创建完整的语法高亮
+  let themeExt = null
+  let syntaxExt = null
+
   if (state.theme === 'dark') {
-    extensions.push(oneDark)
-  } else if (state.theme === 'warm') {
-    extensions.push(EditorView.theme({
-      '&': { backgroundColor: '#faf3e8', color: '#3d2c1e' },
-      '.cm-gutters': { backgroundColor: '#f5ece0', borderRight: '1px solid #d6c8b8' },
-      '&.cm-focused .cm-cursor': { borderLeftColor: '#b87333' },
-    }))
-  } else if (state.theme === 'night') {
-    extensions.push(EditorView.theme({
-      '&': { backgroundColor: '#12101a', color: '#d8d4e0' },
-      '.cm-gutters': { backgroundColor: '#1a1726', borderRight: '1px solid #2d2940' },
-      '&.cm-focused .cm-cursor': { borderLeftColor: '#9b8ec4' },
-    }))
-  } else {
-    // light
-    extensions.push(EditorView.theme({
+    // 暗色主题：使用 oneDark + 微调
+    themeExt = oneDark
+    syntaxExt = syntaxHighlighting(HighlightStyle.define([])) // oneDark 自带高亮
+  } else if (state.theme === 'light') {
+    themeExt = EditorView.theme({
       '&': { backgroundColor: '#ffffff', color: '#1a1a2e' },
-      '.cm-gutters': { backgroundColor: '#f8f9fa', borderRight: '1px solid #dadce0' },
-    }))
+      '.cm-gutters': { backgroundColor: '#f8f9fa', borderRight: '1px solid #dadce0', color: '#6e7681' },
+      '.cm-activeLineGutter': { backgroundColor: '#e8eaed' },
+      '.cm-activeLine': { backgroundColor: '#f0f4ff' },
+      '&.cm-focused .cm-cursor': { borderLeftColor: '#1a73e8' },
+      '.cm-selectionBackground': { background: '#1a73e830 !important' },
+      '.cm-matchingBracket': { background: '#1a73e820', outline: '1px solid #1a73e840' },
+    })
+    syntaxExt = syntaxHighlighting(HighlightStyle.define([
+      { tag: tags.keyword, color: '#d73a49' },
+      { tag: [tags.definitionKeyword, tags.modifier], color: '#d73a49' },
+      { tag: tags.typeName, color: '#005cc5' },
+      { tag: tags.className, color: '#6f42c1' },
+      { tag: tags.function(tags.variableName), color: '#6f42c1' },
+      { tag: tags.function(tags.propertyName), color: '#6f42c1' },
+      { tag: tags.definition(tags.propertyName), color: '#005cc5' },
+      { tag: tags.definition(tags.typeName), color: '#6f42c1' },
+      { tag: tags.propertyName, color: '#005cc5' },
+      { tag: tags.attributeName, color: '#005cc5' },
+      { tag: tags.attributeValue, color: '#032f62' },
+      { tag: tags.number, color: '#005cc5' },
+      { tag: tags.string, color: '#032f62' },
+      { tag: tags.bool, color: '#005cc5' },
+      { tag: tags.regexp, color: '#032f62' },
+      { tag: tags.variableName, color: '#e36209' },
+      { tag: tags.comment, color: '#6a737d', fontStyle: 'italic' },
+      { tag: tags.invalid, color: '#d73a49' },
+      { tag: tags.operator, color: '#d73a49' },
+      { tag: tags.bracket, color: '#1a1a2e' },
+      { tag: tags.paren, color: '#1a1a2e' },
+      { tag: tags.separator, color: '#1a1a2e' },
+      { tag: tags.link, color: '#032f62', textDecoration: 'underline' },
+      { tag: tags.strong, fontWeight: 'bold' },
+      { tag: tags.emphasis, fontStyle: 'italic' },
+      { tag: tags.strikethrough, textDecoration: 'line-through' },
+      { tag: tags.heading, color: '#005cc5', fontWeight: 'bold' },
+      { tag: tags.processingInstruction, color: '#6a737d' },
+      { tag: tags.meta, color: '#6a737d' },
+    ]))
+  } else if (state.theme === 'warm') {
+    themeExt = EditorView.theme({
+      '&': { backgroundColor: '#faf3e8', color: '#3d2c1e' },
+      '.cm-gutters': { backgroundColor: '#f5ece0', borderRight: '1px solid #d6c8b8', color: '#a09080' },
+      '.cm-activeLineGutter': { backgroundColor: '#e8dbcb' },
+      '.cm-activeLine': { backgroundColor: '#f0e8d8' },
+      '&.cm-focused .cm-cursor': { borderLeftColor: '#b87333' },
+      '.cm-selectionBackground': { background: '#b8733330 !important' },
+      '.cm-matchingBracket': { background: '#b8733320', outline: '1px solid #b8733340' },
+    })
+    syntaxExt = syntaxHighlighting(HighlightStyle.define([
+      { tag: tags.keyword, color: '#8b6f47' },
+      { tag: [tags.definitionKeyword, tags.modifier], color: '#8b6f47' },
+      { tag: tags.typeName, color: '#6b4c7a' },
+      { tag: tags.className, color: '#6b4c7a' },
+      { tag: tags.function(tags.variableName), color: '#8b5c3a' },
+      { tag: tags.function(tags.propertyName), color: '#8b5c3a' },
+      { tag: tags.definition(tags.propertyName), color: '#5a7a4a' },
+      { tag: tags.definition(tags.typeName), color: '#6b4c7a' },
+      { tag: tags.propertyName, color: '#5a7a4a' },
+      { tag: tags.attributeName, color: '#5a7a4a' },
+      { tag: tags.attributeValue, color: '#7a6a5a' },
+      { tag: tags.number, color: '#b87333' },
+      { tag: tags.string, color: '#7a5a3a' },
+      { tag: tags.bool, color: '#b87333' },
+      { tag: tags.regexp, color: '#7a5a3a' },
+      { tag: tags.variableName, color: '#3d2c1e' },
+      { tag: tags.comment, color: '#a09080', fontStyle: 'italic' },
+      { tag: tags.invalid, color: '#c04040' },
+      { tag: tags.operator, color: '#8b6f47' },
+      { tag: tags.bracket, color: '#5a4a3a' },
+      { tag: tags.paren, color: '#5a4a3a' },
+      { tag: tags.link, color: '#7a5a3a', textDecoration: 'underline' },
+      { tag: tags.heading, color: '#8b6f47', fontWeight: 'bold' },
+    ]))
+  } else if (state.theme === 'night') {
+    themeExt = EditorView.theme({
+      '&': { backgroundColor: '#12101a', color: '#d8d4e0' },
+      '.cm-gutters': { backgroundColor: '#1a1726', borderRight: '1px solid #2d2940', color: '#6a6680' },
+      '.cm-activeLineGutter': { backgroundColor: '#252235' },
+      '.cm-activeLine': { backgroundColor: '#1e1b30' },
+      '&.cm-focused .cm-cursor': { borderLeftColor: '#9b8ec4' },
+      '.cm-selectionBackground': { background: '#9b8ec430 !important' },
+      '.cm-matchingBracket': { background: '#9b8ec420', outline: '1px solid #9b8ec440' },
+    })
+    syntaxExt = syntaxHighlighting(HighlightStyle.define([
+      { tag: tags.keyword, color: '#c4b8e8' },
+      { tag: [tags.definitionKeyword, tags.modifier], color: '#c4b8e8' },
+      { tag: tags.typeName, color: '#8ab8d4' },
+      { tag: tags.className, color: '#b8add4' },
+      { tag: tags.function(tags.variableName), color: '#b8add4' },
+      { tag: tags.function(tags.propertyName), color: '#b8add4' },
+      { tag: tags.definition(tags.propertyName), color: '#8ab8d4' },
+      { tag: tags.definition(tags.typeName), color: '#b8add4' },
+      { tag: tags.propertyName, color: '#8ab8d4' },
+      { tag: tags.attributeName, color: '#8ab8d4' },
+      { tag: tags.attributeValue, color: '#a8b4c0' },
+      { tag: tags.number, color: '#b8add4' },
+      { tag: tags.string, color: '#a8b4c0' },
+      { tag: tags.bool, color: '#b8add4' },
+      { tag: tags.regexp, color: '#a8b4c0' },
+      { tag: tags.variableName, color: '#d8d4e0' },
+      { tag: tags.comment, color: '#6a6680', fontStyle: 'italic' },
+      { tag: tags.invalid, color: '#d08080' },
+      { tag: tags.operator, color: '#c4b8e8' },
+      { tag: tags.bracket, color: '#8884a0' },
+      { tag: tags.paren, color: '#8884a0' },
+      { tag: tags.link, color: '#a8b4c0', textDecoration: 'underline' },
+      { tag: tags.heading, color: '#c4b8e8', fontWeight: 'bold' },
+    ]))
   }
+
+  if (themeExt) extensions.push(themeExt)
+  if (syntaxExt) extensions.push(syntaxExt)
 
   // 语言
   const langImpl = lang ? lang() : null
