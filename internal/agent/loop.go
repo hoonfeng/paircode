@@ -139,6 +139,10 @@ type Loop struct {
 	// 防止 Agent 只输出文字导致自我循环。
 	contentOnlyIters int
 
+	// commitRecorded generate_commit_message 是否已被调用。
+	// 自主模式下用于判断：false=阶段完成需继续迭代，true=全部已完成可正常退出。
+	commitRecorded bool
+
 	// History 跨 Run 调用的持久化对话消息（自闭环）。
 	// 设计意图：Agent 独立维护自己的消息历史，前端只发信号（当前用户消息文本）。
 	// 首次 Run 前为 nil；每次 Run 返回后更新为当轮完整 msgs。
@@ -355,8 +359,13 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 				result = "Error: " + terr.Error()
 			}
 			l.emit(Event{Type: EventToolResult, Tool: tc.Function.Name, Content: result, CallID: tc.ID})
-			msgs = append(msgs, Message{Role: RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: result})
 			l.trackCall(tc.Function.Name, tc.Function.Arguments, terr != nil || strings.HasPrefix(strings.TrimSpace(result), "Error:"))
+
+			// ★ 自主模式：检测 generate_commit_message 被调用 → 标记提交已记录
+			// 后续自然终止处据此判断是阶段完成（继续迭代）还是全部完成（正常退出）。
+			if tc.Function.Name == "generate_commit_message" {
+				l.commitRecorded = true
+			}
 
 		}
 
@@ -367,6 +376,30 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 		// 条件：contentOnlyIters==0（尚未触发 content-only 防护）+ 无 tool_call + 有正文
 		if l.contentOnlyIters == 0 && len(assistant.ToolCalls) == 0 && strings.TrimSpace(assistant.Content) != "" {
 			content := strings.TrimSpace(assistant.Content)
+
+			// ★ 自主模式阶段化继续：generate_commit_message 尚未调用 → 阶段完成，持久化后继续迭代
+			// 每完成一个计划后自动落盘，注入阶段报告消息，让 Agent 在同一 Loop 内继续推进下一阶段。
+			if l.Autonomous && !l.commitRecorded {
+				// 阶段持久化（确保每阶段消息落盘，页面刷新后可读取）
+				if l.OnBatchPersist != nil {
+					l.OnBatchPersist(msgs)
+				}
+				summary := content
+				if len(summary) > 500 {
+					summary = summary[:500] + "…（已截断）"
+				}
+				continueMsg := fmt.Sprintf(
+					"【阶段任务完成】\n%s\n\n---\n以上为本阶段执行结果，已持久化保存。请根据以上结果继续推进：\n"+
+						"1. 如果还有未完成的计划项，请继续执行\n"+
+						"2. 如果全部计划项已完成，请调用 **generate_commit_message** 记录提交信息并输出最终总结",
+					summary,
+				)
+				msgs = append(msgs, Message{Role: RoleUser, Content: continueMsg})
+				l.contentOnlyIters = 0
+				l.emit(Event{Type: EventNotice, Content: "阶段完成，Agent 将继续推进下一阶段"})
+				continue // 继续下一轮迭代，不退出 Loop
+			}
+
 			l.finishResult = &content
 			l.emit(Event{Type: EventDone, Content: content, DoneReason: "task_complete"})
 			return msgs, nil

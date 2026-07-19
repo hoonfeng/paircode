@@ -1,6 +1,8 @@
-// 自主模式：外层设计者 Loop（update_plan + delegate_task）→ 内层执行 Loop（全部工具）。
-// 外层 LLM 是真正的设计者，通过工具调用控制计划、分派任务、调整策略。
-// 所有逻辑在 agent 包内完成，bridge 只需一句调用。
+// 自主模式（旧版外层/内层嵌套架构，已废弃）。
+//
+// 新架构在单 Loop 内实现阶段化循环（见 loop.go Loop.Run 自然终止处的 Autonomous 分支），
+// 不再使用 RunAutonomous 的外层设计者 Loop + 内层执行 Loop 嵌套模式。
+// 此文件保留供参考，不再被任何代码调用。
 
 package agent
 

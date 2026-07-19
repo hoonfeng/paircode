@@ -537,40 +537,15 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		// 自闭环模式：传 nil history，loop.Run 内部使用 loop.History
 		var msgs []Message
 		var err error
-		if opts.Autonomous && opts.PlanProvider != nil {
-			// 自主模式：外层设计者 Loop（update_plan + delegate_task）→ 内层执行 Loop
-			_, err = RunAutonomous(runCtx, opts.PlanProvider, loop, task)
-			msgs = loop.History
-
-			// ★ 自主模式消息回灌：只注入最后的完成报告
-			// 不再注入完整历史上下文（之前的 extractAutonomousRunSummary 提取多条 assistant 消息，
-			// 导致上下文膨胀且携带过多无关中间细节）。
-			// 改为只注入 loop.finishResult（最终完成报告），让下一轮感知上一轮的核心成果。
-			if err == nil && !sess.stopped && m.store != nil {
-				summary := ""
-				if loop.finishResult != nil {
-					summary = *loop.finishResult
-				}
-				if summary == "" {
-					// 兜底：取最后一条非空 assistant 消息作为完成报告
-					summary = extractLastAssistantContent(msgs)
-				}
-				if summary != "" {
-					if len(summary) > 1000 {
-						summary = summary[:1000] + "…（完成报告已截断）"
-					}
-					feedbackMsg := Message{
-						Role:    RoleUser,
-						Content: "【上一轮自主执行完成报告】\n" + summary + "\n（以上为上一轮自主执行的最终完成报告。后续任务请在此基础上继续推进。）",
-					}
-					msgs = append(msgs, feedbackMsg)
-					loop.History = msgs
-
-					// 持久化到 store，确保页面刷新后仍可读取
-					_ = m.store.AppendMessage(convID, feedbackMsg, nil)
-				}
-			}
-
+		if opts.Autonomous {
+			// ★ 新自主模式：单 Loop 内阶段化循环
+			// 不再使用 RunAutonomous（外层设计者 Loop + 内层执行 Loop 的嵌套架构）。
+			// 改为设置 loop.Autonomous=true，让 Loop.Run 在自然终止处自主检测：
+			//   - generate_commit_message 尚未调用 → 阶段完成：持久化 + 注入继续消息 + 继续迭代
+			//   - generate_commit_message 已被调用 → 全部完成：正常退出返回
+			// 由此实现「规划→执行→规划→执行...」的同 Loop 循环，每阶段自动落盘后继续。
+			loop.Autonomous = true
+			msgs, err = loop.Run(runCtx, task, nil)
 		} else {
 			msgs, err = loop.Run(runCtx, task, nil)
 		}
