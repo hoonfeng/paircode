@@ -17,9 +17,6 @@ func main() {
 
 	wd, _ := os.Getwd()
 	distDir := filepath.Join(wd, "cmd", "desktop", "web-ui-minimal", "dist")
-	if _, err := os.Stat(distDir); os.IsNotExist(err) {
-		distDir = filepath.Join(wd, "web-ui-minimal", "dist")
-	}
 	log.Printf("[Desktop] distDir: %s", distDir)
 
 	wv := webkit.NewWebView()
