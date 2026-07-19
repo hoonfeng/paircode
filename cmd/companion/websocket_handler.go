@@ -14,11 +14,16 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hoonfeng/paircode/internal/agent"
 )
+
+// wsTraceMu 保护 ws_trace.jsonl 的写操作。
+var wsTraceMu sync.Mutex
 
 // websocketGUID 是 WebSocket 握手协议规定的固定 GUID。
 const websocketGUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
@@ -287,6 +292,15 @@ func (s *webServer) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 	defer wsc.Close()
 
+	// 记录连接建立/断开
+	writeWSTrace(map[string]any{
+		"msgType": "connect",
+		"remote":  r.RemoteAddr,
+	})
+	defer writeWSTrace(map[string]any{
+		"msgType": "disconnect",
+	})
+
 	// 订阅全局事件流
 	ch := agentMgr.SubscribeAll()
 	defer agentMgr.UnsubscribeAll(ch)
@@ -352,6 +366,43 @@ func (s *webServer) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// wsTraceFile 是 WebSocket 推送消息的跟踪日志路径。
+// 每次推送事件/status/ping 都会追加记录，用于排查前端消息分段问题。
+const wsTraceFile = "ws_trace.jsonl"
+
+// writeWSTrace 向 ws_trace.jsonl 追加一条 JSONL 记录。
+// 并发安全（wsTraceMu 保护）。
+func writeWSTrace(record map[string]any) {
+	wsTraceMu.Lock()
+	defer wsTraceMu.Unlock()
+
+	// 自动填充时间戳
+	if _, ok := record["ts"]; !ok {
+		record["ts"] = time.Now().Format(time.RFC3339Nano)
+	}
+
+	data, err := json.Marshal(record)
+	if err != nil {
+		log.Printf("[WS-TRACE] JSON marshal error: %v", err)
+		return
+	}
+
+	f, err := os.OpenFile(wsTraceFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Printf("[WS-TRACE] open error: %v", err)
+		return
+	}
+	defer f.Close()
+
+	if _, err := f.Write(data); err != nil {
+		log.Printf("[WS-TRACE] write error: %v", err)
+		return
+	}
+	if _, err := f.Write([]byte{'\n'}); err != nil {
+		log.Printf("[WS-TRACE] write newline error: %v", err)
+	}
+}
+
 // buildStatusPayload 构造一条 status 消息，包含：
 //   - runningConvs: 当前所有运行中的 convID 列表
 //   - runningByWorkspace: 按工作区根路径分组的运行计数 {wsRoot: count}
@@ -378,6 +429,11 @@ func buildStatusPayload() []byte {
 		log.Printf("[WS] status JSON encode error: %v", err)
 		return []byte(`{"type":"status","runningConvs":[],"runningByWorkspace":{}}`)
 	}
+	// 记录跟踪日志
+	writeWSTrace(map[string]any{
+		"msgType": "status",
+		"payload": string(data),
+	})
 	return data
 }
 
@@ -401,5 +457,21 @@ func buildWSPayload(ge agent.GlobalEvent) []byte {
 		log.Printf("[WS] JSON encode error: %v", err)
 		return []byte(`{"type":"error","content":"JSON encode failed"}`)
 	}
+	// 记录跟踪日志（content 截取前 500 字符避免日志过大）
+	contentPreview := e.Content
+	if len(contentPreview) > 500 {
+		contentPreview = contentPreview[:500] + "..."
+	}
+	writeWSTrace(map[string]any{
+		"msgType":    "event",
+		"convId":     ge.ConvID,
+		"eventType":  string(e.Type),
+		"tool":       e.Tool,
+		"callId":     e.CallID,
+		"doneReason": e.DoneReason,
+		"contentLen": len(e.Content),
+		"content":    contentPreview,
+		"payload":    string(data),
+	})
 	return data
 }
