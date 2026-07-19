@@ -382,9 +382,21 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 			condensedLen := len(condensedHist)
 			var combined []Message
 			if condensedLen > 0 && len(msgs) >= condensedLen {
-				combined = make([]Message, 0, len(originalHist)+len(msgs)-condensedLen)
+				// ★ msgs 进入 Loop.Run 后结构为:
+				//   [system(可能), ...condensedHist, user_task(可能,去重后), ...newMessages]
+				// 原代码 msgs[condensedLen:] 未考虑 system 占据索引 0，
+				// 实际取到了 condensedHist 尾部（含最后一条用户消息），而 originalHist
+				// 已有该用户消息，导致 combined 中用户消息重复。
+				sysOffset := 0
+				if len(msgs) > condensedLen && msgs[0].Role == RoleSystem {
+					sysOffset = 1
+				}
+				newTailStart := condensedLen + sysOffset
+				combined = make([]Message, 0, len(originalHist)+len(msgs)-newTailStart)
 				combined = append(combined, originalHist...)
-				combined = append(combined, msgs[condensedLen:]...)
+				if newTailStart < len(msgs) {
+					combined = append(combined, msgs[newTailStart:]...)
+				}
 			} else {
 				// 兜底（无压缩场景）：直接用 msgs
 				combined = msgs
