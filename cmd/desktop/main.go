@@ -16,7 +16,10 @@ func main() {
 	log.Println("[Desktop] PairCode IDE 桌面版 v1.0.6-desktop")
 
 	wd, _ := os.Getwd()
-	distDir := filepath.Join(wd, "cmd", "desktop", "web-ui-minimal", "dist")
+	distDir := filepath.Join(wd, "cmd", "desktop", "web-ui", "dist")
+	if _, err := os.Stat(distDir); os.IsNotExist(err) {
+		distDir = filepath.Join(wd, "web-ui-minimal", "dist")
+	}
 	log.Printf("[Desktop] distDir: %s", distDir)
 
 	wv := webkit.NewWebView()
