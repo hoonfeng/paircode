@@ -540,17 +540,31 @@ const sendMessage = async () => {
   const text = inputText.value.trim()
   if (!text && !pendingAttachment.value) return
   if (state.chatLoading) return
+  // ★ 立即锁定 loading 状态（在 WS 等待之前），防止 WS 等待期间用户双击
+  //   发送绕过 guard 导致创建多个 assistant 占位（气泡分割根因）。
+  state.chatLoading = true; state.agentRunning = true
   // ★ 等待 WebSocket 连接就绪，避免事件丢失
   if (!api.isWebSocketOpen()) {
     console.log('[RP] sendMessage 等待 WS 连接...')
-    await new Promise((resolve, reject) => {
-      let waited = 0
-      const check = setInterval(() => {
-        waited += 200
-        if (api.isWebSocketOpen()) { clearInterval(check); resolve() }
-        else if (waited >= 8000) { clearInterval(check); reject(new Error('WebSocket 连接超时')) }
-      }, 200)
-    })
+    try {
+      await new Promise((resolve, reject) => {
+        let waited = 0
+        const check = setInterval(() => {
+          waited += 200
+          if (api.isWebSocketOpen()) { clearInterval(check); resolve() }
+          else if (waited >= 8000) { clearInterval(check); reject(new Error('WebSocket 连接超时')) }
+        }, 200)
+      })
+    } catch (err) {
+      state.chatLoading = false; state.agentRunning = false
+      console.warn('[RP] sendMessage WS等待失败:', err.message)
+      return
+    }
+  }
+  // ★ WS 等待期间用户可能已点击停止，检查后中止发送
+  if (!state.chatLoading || !state.agentRunning) {
+    console.log('[RP] sendMessage 等待期间已停止，中止发送')
+    return
   }
   if (!state.currentConvId) {
     try {
@@ -595,7 +609,7 @@ const sendMessage = async () => {
   // 标记 loading（按 convId 存储 + 当前对话快捷引用）
   state.loadingByConv[convId] = true
   state.agentRunningByConv[convId] = true
-  state.chatLoading = true; state.agentRunning = true
+  // chatLoading/agentRunning 已在函数顶部提前设置，防止双击绕过 guard
   // 本地递增工作区运行计数（立即在工作区列表显示脉冲点）
   // 后端 done/error 时会通过 status 消息同步纠正
   if (state.workspaceRoot) {

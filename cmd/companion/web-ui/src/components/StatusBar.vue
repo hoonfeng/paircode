@@ -73,10 +73,20 @@ function switchToGit() {
 
 onMounted(async () => {
   const check = async () => {
-    try { const r = await fetch('/api/health'); connected.value = r.ok } catch { connected.value = false }
+    try {
+      const wsOk = api.isWebSocketOpen()
+      if (wsOk) { connected.value = true; return }
+      const r = await fetch('/api/health')
+      connected.value = r.ok
+    } catch { connected.value = false }
   }
   await check()
-  setInterval(check, 30000)
+  // 缩短检测间隔，更快反映 WS 断连状态
+  setInterval(check, 5000)
+  // Listen for WS connection changes via custom event from App.vue
+  const onWsChange = (e) => { connected.value = e.detail?.connected ?? false }
+  window.addEventListener('ws-connection-change', onWsChange)
+  window.__wsStatusCleanup = () => window.removeEventListener('ws-connection-change', onWsChange)
   // Load git info
   await loadGitInfo()
   gitTimer = setInterval(loadGitInfo, 15000)
@@ -84,6 +94,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   if (gitTimer) clearInterval(gitTimer)
+  if (window.__wsStatusCleanup) { window.__wsStatusCleanup(); delete window.__wsStatusCleanup }
 })
 </script>
 

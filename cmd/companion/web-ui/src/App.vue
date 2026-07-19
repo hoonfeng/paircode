@@ -239,6 +239,8 @@ async function switchWorkspace(targetPath) {
     }
     await saveWsList()
     savePersistentState()
+    // ★ 工作区切换后强制重建 WebSocket 连接（后端可能因工作区切换断开 WS）
+    api.reconnectWebSocket()
   } catch (err) {
     console.error('切换工作区失败:', err)
   }

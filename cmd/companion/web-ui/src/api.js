@@ -59,10 +59,10 @@ async function apiDelete(path) {
 let wsSocket = null
 let wsReconnectTimer = null
 let wsReconnectCount = 0
-const WS_MAX_RECONNECT = 5
+const WS_MAX_RECONNECT = 20  // 从 5 提升到 20，减少因短暂网络波动导致永久断连
 let wsCallbacks = null
 let wsManuallyClosed = false
-let wsPongTimer = null  // 检测后端 ping 超时：90s 无响应则主动重连
+let wsPongTimer = null  // 检测后端 ping 超时：45s 无响应则主动重连（从 90s 缩短）
 
 // initWebSocket 建立全局 WebSocket 连接，接收所有会话事件。
 // callbacks: { onStatus(payload), onEvent(convId, data), onDone(convId, data) }
@@ -90,20 +90,21 @@ function doWsConnect() {
   wsSocket.onopen = () => {
     wsReconnectCount = 0
     if (wsReconnectTimer) { clearTimeout(wsReconnectTimer); wsReconnectTimer = null }
-    // 后端每 30s 发 ping，90s（3次）未收到则主动重连
+    window.dispatchEvent(new CustomEvent('ws-connection-change', { detail: { connected: true } }))
+    // 后端每 30s 发 ping，45s（1.5次）未收到则主动重连
     if (wsPongTimer) clearTimeout(wsPongTimer)
     wsPongTimer = setTimeout(() => {
-      console.warn('[WS] 90s 未收到 pong，触发重连')
+      console.warn('[WS] 45s 未收到 pong，触发重连')
       wsSocket.close()
-    }, 90000)
+    }, 45000)
   }
   wsSocket.onmessage = (ev) => {
     // 收到任何消息都重置 pong 超时（后端 ping 帧也会触发 onmessage）
     if (wsPongTimer) { clearTimeout(wsPongTimer) }
     wsPongTimer = setTimeout(() => {
-      console.warn('[WS] 90s 无消息，触发重连')
+      console.warn('[WS] 45s 无消息，触发重连')
       if (wsSocket) wsSocket.close()
-    }, 90000)
+    }, 45000)
     let data
     try { data = JSON.parse(ev.data) } catch { return }
     if (!data) return
@@ -124,6 +125,7 @@ function doWsConnect() {
   }
   wsSocket.onclose = () => {
     wsSocket = null
+    window.dispatchEvent(new CustomEvent('ws-connection-change', { detail: { connected: false } }))
     if (!wsManuallyClosed) scheduleWsReconnect('连接已关闭')
   }
   wsSocket.onerror = () => {
@@ -142,10 +144,26 @@ function scheduleWsReconnect(reason) {
     return
   }
   wsReconnectCount++
-  const delay = Math.min(1000 * Math.pow(2, wsReconnectCount - 1), 8000)
+  // 更快重连：初始 500ms，最大 5s（原策略 1s→8s）
+  const delay = Math.min(500 * Math.pow(1.5, wsReconnectCount - 1), 5000)
   console.warn('[WS] ' + reason + '，' + delay + 'ms 后重连 (' + wsReconnectCount + '/' + WS_MAX_RECONNECT + ')')
   if (wsReconnectTimer) clearTimeout(wsReconnectTimer)
   wsReconnectTimer = setTimeout(() => { doWsConnect() }, delay)
+}
+
+// 主动重启 WebSocket 连接（工作区切换、检测到连接异常等场景）
+// 与 closeWebSocket 不同，此函数会在关闭后立即重建连接并恢复回调。
+function reconnectWebSocket() {
+  if (wsSocket) {
+    wsSocket.onclose = null  // 防止触发自动重连
+    wsSocket.close()
+    wsSocket = null
+  }
+  if (wsReconnectTimer) { clearTimeout(wsReconnectTimer); wsReconnectTimer = null }
+  if (wsPongTimer) { clearTimeout(wsPongTimer); wsPongTimer = null }
+  wsReconnectCount = 0
+  wsManuallyClosed = false
+  doWsConnect()
 }
 
 function closeWebSocket() {
@@ -276,4 +294,4 @@ async function savePhilosophy(data) {
   return apiPut('/philosophy', data)
 }
 
-export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, closeWebSocket, isWebSocketOpen, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatCompact, chatStop, getMessages, getMessagesCount, getModels, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, getPhilosophy, savePhilosophy }
+export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, isWebSocketOpen, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatCompact, chatStop, getMessages, getMessagesCount, getModels, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, getPhilosophy, savePhilosophy }
