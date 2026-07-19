@@ -49,7 +49,9 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['fileClick'])
-const expanded = ref(props.defaultExpanded && props.item.isDir)
+const expanded = ref(
+  state.expandedDirs[fullPath.value] ?? (props.defaultExpanded && props.item.isDir)
+)
 const children = ref(props.item.children || [])
 const loaded = ref(props.item.loaded || false)
 const dragOver = ref(false)
@@ -114,6 +116,7 @@ const handleClick = async (e) => {
   if (props.item.isDir) {
     // 目录：展开/折叠
     expanded.value = !expanded.value
+    state.expandedDirs[fullPath.value] = expanded.value
     if (expanded.value && !loaded.value) {
       try {
         const entries = await api.apiGet('/fs/list', { path: fullPath.value })
@@ -546,6 +549,8 @@ const onDrop = async (e) => {
 // ── 监听 refresh-tree：已展开的目录自动重新加载子节点 ──
 function onRefreshTree() {
   if (expanded.value && props.item.isDir) {
+    // 展开状态下保存当前展开标记
+    state.expandedDirs[fullPath.value] = true
     loaded.value = false
     api.apiGet('/fs/list', { path: fullPath.value }).then(entries => {
       children.value = entries || []

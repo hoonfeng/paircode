@@ -344,6 +344,11 @@ const loadFileTree = async () => {
 }
 provide('loadFileTree', loadFileTree)
 
+// ── 文件树自动刷新防抖：3 秒内不重复刷新 ──
+let _lastRefreshTime = 0
+const MIN_TREE_REFRESH_INTERVAL = 3000
+let _savedTreeScrollTop = 0
+
 onMounted(async () => {
   document.addEventListener('contextmenu', (e) => {
     if (!e.defaultPrevented) e.preventDefault()
@@ -412,6 +417,14 @@ onMounted(async () => {
   await loadFileTree()
 
   const _onRefreshTree = () => {
+    const now = Date.now()
+    if (now - _lastRefreshTime < MIN_TREE_REFRESH_INTERVAL) return
+    _lastRefreshTime = now
+
+    // ★ 保存滚动位置
+    const scrollEl = document.querySelector('.project-section')
+    if (scrollEl) _savedTreeScrollTop = scrollEl.scrollTop
+
     // 只清除未打开文件的缓存，已打开文件保留内容并重新读取（确保 AI 修改后同步）
     for (const path of Object.keys(state.fileContents)) {
       if (state.openFiles.includes(path)) {
@@ -432,7 +445,15 @@ onMounted(async () => {
         delete state.fileDirty[path]
       }
     }
-    loadFileTree()
+    loadFileTree().then(() => {
+      // ★ 恢复滚动位置
+      if (_savedTreeScrollTop > 0) {
+        nextTick(() => {
+          const c = document.querySelector('.project-section')
+          if (c) c.scrollTop = _savedTreeScrollTop
+        })
+      }
+    })
   }
   const _onSwitchActivity = (e) => { if (e.detail?.id) switchActivity(e.detail.id) }
   const _onOpenMarketplace = () => { showMarketplace.value = true }
@@ -451,7 +472,16 @@ onMounted(async () => {
   window.addEventListener('open-workspace-dialog', _onOpenWorkspaceDialog)
   window.addEventListener('switch-workspace', _onSwitchWorkspace)
 
+  // ★ 定时轮询文件树（检测 agent 新建/修改的文件），仅页面可见时执行
+  let _refreshTimer = setInterval(() => {
+    if (document.visibilityState === 'visible') {
+      _lastRefreshTime = 0 // 重置防抖，让下一轮 refresh-tree 事件能触发
+      window.dispatchEvent(new CustomEvent('refresh-tree'))
+    }
+  }, 5000)
+
   const _cleanupEvents = () => {
+    if (_refreshTimer) { clearInterval(_refreshTimer); _refreshTimer = null }
     window.removeEventListener('refresh-tree', _onRefreshTree)
     window.removeEventListener('switch-activity', _onSwitchActivity)
     window.removeEventListener('open-marketplace', _onOpenMarketplace)

@@ -425,9 +425,15 @@ async function refreshCurrentWs() {
 }
 
 let _refreshingTree = false
+let _savedTreeScrollTop = 0
 async function refreshAll() {
   if (_refreshingTree) return // 防止 re-entry 循环
   _refreshingTree = true
+
+  // ★ 保存滚动位置
+  const container = document.querySelector('.project-section')
+  if (container) _savedTreeScrollTop = container.scrollTop
+
   try {
     const health = await api.apiGet('/health')
     state.workspaceFolders = health.folders || []
@@ -445,6 +451,13 @@ async function refreshAll() {
     console.warn('刷新全部失败:', e)
   } finally {
     _refreshingTree = false
+    // ★ 恢复滚动位置
+    if (_savedTreeScrollTop > 0) {
+      nextTick(() => {
+        const c = document.querySelector('.project-section')
+        if (c) c.scrollTop = _savedTreeScrollTop
+      })
+    }
   }
 }
 
