@@ -10,11 +10,14 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
+	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/hoonfeng/paircode/pkg/codegraph"
 	"github.com/hoonfeng/paircode/pkg/memory"
@@ -30,6 +33,11 @@ var (
 
 	// cgDB 共享 SQLite 数据库连接，非空时 codegraph 使用 SQLiteStore 代替 JSONStore。
 	cgDB *sql.DB
+
+	// ★ 自动增量更新缓存
+	cgLastCheck    time.Time   // 上次文件变更检查时间
+	cgCheckMu      sync.Mutex  // 检查互斥锁
+	cgSrcDirs      = []string{"cmd", "internal", "pkg"} // 主要源文件目录
 )
 
 // SetCodeGraphDB 设置 codegraph 使用的共享数据库连接。
@@ -61,11 +69,24 @@ func EnsureCodeGraph(root string) (*codegraph.Graph, error) {
 }
 
 // getCodeGraph 获取当前图谱实例（确保已初始化）。
+// ★ 自动检测文件变更，需要时触发增量构建。
 func getCodeGraph(root string) (*codegraph.Graph, error) {
 	cgGraphMu.RLock()
 	if cgGraph != nil {
+		// ★ 每 30 秒检测一次源文件变更
 		cgGraphMu.RUnlock()
-		return cgGraph, nil
+		cgCheckMu.Lock()
+		if time.Since(cgLastCheck) > 30*time.Second {
+			cgLastCheck = time.Now()
+			cgCheckMu.Unlock()
+			tryIncrementalBuild(root)
+		} else {
+			cgCheckMu.Unlock()
+		}
+		cgGraphMu.RLock()
+		graph := cgGraph
+		cgGraphMu.RUnlock()
+		return graph, nil
 	}
 	cgGraphMu.RUnlock()
 	return ensureCodeGraph(root)
@@ -77,6 +98,79 @@ func resetCodeGraph() {
 	cgGraph = nil
 	cgInitOnce = sync.Once{}
 	cgGraphMu.Unlock()
+}
+
+// ── 自动增量更新 ──────────────────────────────────────
+
+// needRebuild 轻量检测：检查是否有 .go 源文件比 graph.json 更新。
+// 只扫描主要源目录（cmd/ internal/ pkg/），不反序列化图谱文件。
+func needRebuild(root string) bool {
+	graphPath := filepath.Join(root, ".pair", "codegraph", "graph.json")
+	graphInfo, err := os.Stat(graphPath)
+	if err != nil {
+		return true // 文件不存在，需要重新构建
+	}
+	graphMtime := graphInfo.ModTime()
+
+	// 快速扫描主要源目录
+	for _, dir := range cgSrcDirs {
+		srcDir := filepath.Join(root, dir)
+		if fi, err := os.Stat(srcDir); err != nil || !fi.IsDir() {
+			continue
+		}
+		hasNewer := false
+		filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return nil
+			}
+			if info.IsDir() {
+				return nil
+			}
+			if strings.HasSuffix(info.Name(), ".go") && info.ModTime().After(graphMtime) {
+				hasNewer = true
+				return filepath.SkipAll
+			}
+			return nil
+		})
+		if hasNewer {
+			return true
+		}
+	}
+	return false
+}
+
+// tryIncrementalBuild 尝试增量构建图谱，只在检测到文件变更时执行。
+func tryIncrementalBuild(root string) {
+	if !needRebuild(root) {
+		return // 没有变更
+	}
+
+	moduleName := codegraph.DetectModuleName(root)
+	config := codegraph.DefaultBuildConfig(root)
+	config.ModuleName = moduleName
+	config.AutoSave = true
+
+	builder := codegraph.NewBuilder(config)
+	if cgDB != nil {
+		builder.SetStore(codegraph.NewSQLiteStore(root, cgDB))
+	}
+
+	result, err := builder.IncrementalBuild()
+	if err != nil {
+		log.Printf("[codegraph] 自动增量构建失败: %v", err)
+		return
+	}
+	if result.FilesParsed == 0 {
+		return // 没有实际变更
+	}
+
+	// 更新缓存
+	cgGraphMu.Lock()
+	cgGraph = builder.Graph()
+	cgGraphMu.Unlock()
+
+	log.Printf("[codegraph] 自动增量完成: %d 文件变更, %d 新实体, %d 新关系",
+		result.FilesParsed, result.EntitiesAdded, result.RelationsAdded)
 }
 
 // ── 工具注册 ──────────────────────────────────────────

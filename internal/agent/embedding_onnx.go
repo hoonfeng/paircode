@@ -20,7 +20,7 @@ type ONNXBackend struct {
 	dim       int
 }
 
-// findModelDir 按优先级查找模型目录：便携模式 > 工作区 .pair/。
+// findModelDir 按优先级查找模型目录：便携模式 > 项目 config/models/ > 工作区 .pair/。
 func findModelDir(root string) string {
 	if exe, err := os.Executable(); err == nil {
 		p := filepath.Join(filepath.Dir(exe), "models", "bge-small-zh-v1.5")
@@ -28,7 +28,13 @@ func findModelDir(root string) string {
 			return p
 		}
 	}
-	p := filepath.Join(root, ".pair", "embeddings", "bge-small-zh-v1.5")
+	// 项目 config/models/ 目录（开发环境）
+	p := filepath.Join(root, "config", "models", "bge-small-zh-v1.5")
+	if _, err := os.Stat(filepath.Join(p, "model.onnx")); err == nil {
+		return p
+	}
+	// 工作区 .pair/embeddings/
+	p = filepath.Join(root, ".pair", "embeddings", "bge-small-zh-v1.5")
 	if _, err := os.Stat(filepath.Join(p, "model.onnx")); err == nil {
 		return p
 	}

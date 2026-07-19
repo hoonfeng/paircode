@@ -214,6 +214,7 @@ func atoi(s string) int {
 
 // EnsureBuildIfNeeded 检查图谱是否已构建，如未构建则自动触发构建。
 // 返回构建后的图谱和是否刚执行了构建。
+// ★ 空图检测：如果已持久化的图为空（entities 数为 0），视同未构建，自动重建。
 func EnsureBuildIfNeeded(root string) (*Graph, bool, error) {
 	store := NewStore(root)
 	if store.Exists() {
@@ -221,7 +222,11 @@ func EnsureBuildIfNeeded(root string) (*Graph, bool, error) {
 		if err != nil {
 			return nil, false, err
 		}
-		return graph, false, nil
+		// ★ 空图检测：持久化文件可能是空图（旧的构建产物），需要重建
+		if graph.Stats().EntityCount > 0 {
+			return graph, false, nil
+		}
+		// 空图：继续向下执行自动构建
 	}
 
 	// 自动构建

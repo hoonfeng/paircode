@@ -121,6 +121,14 @@ func startWebUI(port int) {
 				fmt.Printf("[WebUI] 迁移旧对话数据失败（不阻塞启动）: %v\n", err)
 			}
 		}
+		// ★ 启动时异步构建代码知识图谱（不阻塞 HTTP 服务器启动）
+		go func() {
+			if _, err := agent.EnsureCodeGraph(root); err != nil {
+				log.Printf("[WebUI] 启动时构建代码图谱失败（不阻塞启动）: %v", err)
+			} else {
+				log.Printf("[WebUI] 代码知识图谱已就绪")
+			}
+		}()
 	}
 	if root := core.Root(); root != "" {
 		memory.SetRoot(root)
