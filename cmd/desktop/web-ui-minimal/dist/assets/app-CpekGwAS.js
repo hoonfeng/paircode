@@ -20,8 +20,8 @@
   (key.charCodeAt(2) > 122 || key.charCodeAt(2) < 97);
   const isModelListener = (key) => key.startsWith("onUpdate:");
   const extend = Object.assign;
-  const remove = (arr, el2) => {
-    const i = arr.indexOf(el2);
+  const remove = (arr, el) => {
+    const i = arr.indexOf(el);
     if (i > -1) {
       arr.splice(i, 1);
     }
@@ -1476,6 +1476,44 @@
   // @__NO_SIDE_EFFECTS__
   function isRef(r) {
     return r ? r["__v_isRef"] === true : false;
+  }
+  // @__NO_SIDE_EFFECTS__
+  function ref(value) {
+    return createRef(value, false);
+  }
+  function createRef(rawValue, shallow) {
+    if (/* @__PURE__ */ isRef(rawValue)) {
+      return rawValue;
+    }
+    return new RefImpl(rawValue, shallow);
+  }
+  class RefImpl {
+    constructor(value, isShallow2) {
+      this.dep = new Dep();
+      this["__v_isRef"] = true;
+      this["__v_isShallow"] = false;
+      this._rawValue = isShallow2 ? value : /* @__PURE__ */ toRaw(value);
+      this._value = isShallow2 ? value : toReactive(value);
+      this["__v_isShallow"] = isShallow2;
+    }
+    get value() {
+      {
+        this.dep.track();
+      }
+      return this._value;
+    }
+    set value(newValue) {
+      const oldValue = this._rawValue;
+      const useDirectValue = this["__v_isShallow"] || /* @__PURE__ */ isShallow(newValue) || /* @__PURE__ */ isReadonly(newValue);
+      newValue = useDirectValue ? newValue : /* @__PURE__ */ toRaw(newValue);
+      if (hasChanged(newValue, oldValue)) {
+        this._rawValue = newValue;
+        this._value = useDirectValue ? newValue : toReactive(newValue);
+        {
+          this.dep.trigger();
+        }
+      }
+    }
   }
   function unref(ref2) {
     return /* @__PURE__ */ isRef(ref2) ? ref2.value : ref2;
@@ -3210,10 +3248,10 @@
       handleError(err, instance, 1);
       result = createVNode(Comment);
     }
-    let root2 = result;
+    let root = result;
     if (fallthroughAttrs && inheritAttrs !== false) {
       const keys = Object.keys(fallthroughAttrs);
-      const { shapeFlag } = root2;
+      const { shapeFlag } = root;
       if (keys.length) {
         if (shapeFlag & (1 | 6)) {
           if (propsOptions && keys.some(isModelListener)) {
@@ -3222,19 +3260,19 @@
               propsOptions
             );
           }
-          root2 = cloneVNode(root2, fallthroughAttrs, false, true);
+          root = cloneVNode(root, fallthroughAttrs, false, true);
         }
       }
     }
     if (vnode.dirs) {
-      root2 = cloneVNode(root2, null, false, true);
-      root2.dirs = root2.dirs ? root2.dirs.concat(vnode.dirs) : vnode.dirs;
+      root = cloneVNode(root, null, false, true);
+      root.dirs = root.dirs ? root.dirs.concat(vnode.dirs) : vnode.dirs;
     }
     if (vnode.transition) {
-      setTransitionHooks(root2, vnode.transition);
+      setTransitionHooks(root, vnode.transition);
     }
     {
-      result = root2;
+      result = root;
     }
     setCurrentRenderingInstance(prev);
     return result;
@@ -3322,22 +3360,22 @@
     }
     return nextProp !== prevProp;
   }
-  function updateHOCHostEl({ vnode, parent, suspense }, el2) {
+  function updateHOCHostEl({ vnode, parent, suspense }, el) {
     while (parent) {
-      const root2 = parent.subTree;
-      if (root2.suspense && root2.suspense.activeBranch === vnode) {
-        root2.suspense.vnode.el = root2.el = el2;
-        vnode = root2;
+      const root = parent.subTree;
+      if (root.suspense && root.suspense.activeBranch === vnode) {
+        root.suspense.vnode.el = root.el = el;
+        vnode = root;
       }
-      if (root2 === vnode) {
-        (vnode = parent.vnode).el = el2;
+      if (root === vnode) {
+        (vnode = parent.vnode).el = el;
         parent = parent.parent;
       } else {
         break;
       }
     }
     if (suspense && suspense.activeBranch === vnode) {
-      suspense.vnode.el = el2;
+      suspense.vnode.el = el;
     }
   }
   const internalObjectProto = {};
@@ -3835,9 +3873,9 @@
           anchor
         );
       } else {
-        const el2 = n2.el = n1.el;
+        const el = n2.el = n1.el;
         if (n2.children !== n1.children) {
-          hostSetText(el2, n2.children);
+          hostSetText(el, n2.children);
         }
       }
     };
@@ -3862,21 +3900,21 @@
         n2.anchor
       );
     };
-    const moveStaticNode = ({ el: el2, anchor }, container, nextSibling) => {
+    const moveStaticNode = ({ el, anchor }, container, nextSibling) => {
       let next;
-      while (el2 && el2 !== anchor) {
-        next = hostNextSibling(el2);
-        hostInsert(el2, container, nextSibling);
-        el2 = next;
+      while (el && el !== anchor) {
+        next = hostNextSibling(el);
+        hostInsert(el, container, nextSibling);
+        el = next;
       }
       hostInsert(anchor, container, nextSibling);
     };
-    const removeStaticNode = ({ el: el2, anchor }) => {
+    const removeStaticNode = ({ el, anchor }) => {
       let next;
-      while (el2 && el2 !== anchor) {
-        next = hostNextSibling(el2);
-        hostRemove(el2);
-        el2 = next;
+      while (el && el !== anchor) {
+        next = hostNextSibling(el);
+        hostRemove(el);
+        el = next;
       }
       hostRemove(anchor);
     };
@@ -3920,21 +3958,21 @@
       }
     };
     const mountElement = (vnode, container, anchor, parentComponent, parentSuspense, namespace, slotScopeIds, optimized) => {
-      let el2;
+      let el;
       let vnodeHook;
       const { props, shapeFlag, transition, dirs } = vnode;
-      el2 = vnode.el = hostCreateElement(
+      el = vnode.el = hostCreateElement(
         vnode.type,
         namespace,
         props && props.is,
         props
       );
       if (shapeFlag & 8) {
-        hostSetElementText(el2, vnode.children);
+        hostSetElementText(el, vnode.children);
       } else if (shapeFlag & 16) {
         mountChildren(
           vnode.children,
-          el2,
+          el,
           null,
           parentComponent,
           parentSuspense,
@@ -3946,15 +3984,15 @@
       if (dirs) {
         invokeDirectiveHook(vnode, null, parentComponent, "created");
       }
-      setScopeId(el2, vnode, vnode.scopeId, slotScopeIds, parentComponent);
+      setScopeId(el, vnode, vnode.scopeId, slotScopeIds, parentComponent);
       if (props) {
         for (const key in props) {
           if (key !== "value" && !isReservedProp(key)) {
-            hostPatchProp(el2, key, null, props[key], namespace, parentComponent);
+            hostPatchProp(el, key, null, props[key], namespace, parentComponent);
           }
         }
         if ("value" in props) {
-          hostPatchProp(el2, "value", null, props.value, namespace);
+          hostPatchProp(el, "value", null, props.value, namespace);
         }
         if (vnodeHook = props.onVnodeBeforeMount) {
           invokeVNodeHook(vnodeHook, parentComponent, vnode);
@@ -3965,27 +4003,27 @@
       }
       const needCallTransitionHooks = needTransition(parentSuspense, transition);
       if (needCallTransitionHooks) {
-        transition.beforeEnter(el2);
+        transition.beforeEnter(el);
       }
-      hostInsert(el2, container, anchor);
+      hostInsert(el, container, anchor);
       if ((vnodeHook = props && props.onVnodeMounted) || needCallTransitionHooks || dirs) {
         queuePostRenderEffect(() => {
           try {
             vnodeHook && invokeVNodeHook(vnodeHook, parentComponent, vnode);
-            needCallTransitionHooks && transition.enter(el2);
+            needCallTransitionHooks && transition.enter(el);
             dirs && invokeDirectiveHook(vnode, null, parentComponent, "mounted");
           } finally {
           }
         }, parentSuspense);
       }
     };
-    const setScopeId = (el2, vnode, scopeId, slotScopeIds, parentComponent) => {
+    const setScopeId = (el, vnode, scopeId, slotScopeIds, parentComponent) => {
       if (scopeId) {
-        hostSetScopeId(el2, scopeId);
+        hostSetScopeId(el, scopeId);
       }
       if (slotScopeIds) {
         for (let i = 0; i < slotScopeIds.length; i++) {
-          hostSetScopeId(el2, slotScopeIds[i]);
+          hostSetScopeId(el, slotScopeIds[i]);
         }
       }
       if (parentComponent) {
@@ -3993,7 +4031,7 @@
         if (vnode === subTree || isSuspense(subTree.type) && (subTree.ssContent === vnode || subTree.ssFallback === vnode)) {
           const parentVNode = parentComponent.vnode;
           setScopeId(
-            el2,
+            el,
             parentVNode,
             parentVNode.scopeId,
             parentVNode.slotScopeIds,
@@ -4019,7 +4057,7 @@
       }
     };
     const patchElement = (n1, n2, parentComponent, parentSuspense, namespace, slotScopeIds, optimized) => {
-      const el2 = n2.el = n1.el;
+      const el = n2.el = n1.el;
       let { patchFlag, dynamicChildren, dirs } = n2;
       patchFlag |= n1.patchFlag & 16;
       const oldProps = n1.props || EMPTY_OBJ;
@@ -4043,13 +4081,13 @@
         dynamicChildren = null;
       }
       if (oldProps.innerHTML && newProps.innerHTML == null || oldProps.textContent && newProps.textContent == null) {
-        hostSetElementText(el2, "");
+        hostSetElementText(el, "");
       }
       if (dynamicChildren) {
         patchBlockChildren(
           n1.dynamicChildren,
           dynamicChildren,
-          el2,
+          el,
           parentComponent,
           parentSuspense,
           resolveChildrenNamespace(n2, namespace),
@@ -4059,7 +4097,7 @@
         patchChildren(
           n1,
           n2,
-          el2,
+          el,
           null,
           parentComponent,
           parentSuspense,
@@ -4070,15 +4108,15 @@
       }
       if (patchFlag > 0) {
         if (patchFlag & 16) {
-          patchProps(el2, oldProps, newProps, parentComponent, namespace);
+          patchProps(el, oldProps, newProps, parentComponent, namespace);
         } else {
           if (patchFlag & 2) {
             if (oldProps.class !== newProps.class) {
-              hostPatchProp(el2, "class", null, newProps.class, namespace);
+              hostPatchProp(el, "class", null, newProps.class, namespace);
             }
           }
           if (patchFlag & 4) {
-            hostPatchProp(el2, "style", oldProps.style, newProps.style, namespace);
+            hostPatchProp(el, "style", oldProps.style, newProps.style, namespace);
           }
           if (patchFlag & 8) {
             const propsToUpdate = n2.dynamicProps;
@@ -4087,18 +4125,18 @@
               const prev = oldProps[key];
               const next = newProps[key];
               if (next !== prev || key === "value") {
-                hostPatchProp(el2, key, prev, next, namespace, parentComponent);
+                hostPatchProp(el, key, prev, next, namespace, parentComponent);
               }
             }
           }
         }
         if (patchFlag & 1) {
           if (n1.children !== n2.children) {
-            hostSetElementText(el2, n2.children);
+            hostSetElementText(el, n2.children);
           }
         }
       } else if (!optimized && dynamicChildren == null) {
-        patchProps(el2, oldProps, newProps, parentComponent, namespace);
+        patchProps(el, oldProps, newProps, parentComponent, namespace);
       }
       if ((vnodeHook = newProps.onVnodeUpdated) || dirs) {
         queuePostRenderEffect(() => {
@@ -4138,13 +4176,13 @@
         );
       }
     };
-    const patchProps = (el2, oldProps, newProps, parentComponent, namespace) => {
+    const patchProps = (el, oldProps, newProps, parentComponent, namespace) => {
       if (oldProps !== newProps) {
         if (oldProps !== EMPTY_OBJ) {
           for (const key in oldProps) {
             if (!isReservedProp(key) && !(key in newProps)) {
               hostPatchProp(
-                el2,
+                el,
                 key,
                 oldProps[key],
                 null,
@@ -4159,11 +4197,11 @@
           const next = newProps[key];
           const prev = oldProps[key];
           if (next !== prev && key !== "value") {
-            hostPatchProp(el2, key, prev, next, namespace, parentComponent);
+            hostPatchProp(el, key, prev, next, namespace, parentComponent);
           }
         }
         if ("value" in newProps) {
-          hostPatchProp(el2, "value", oldProps.value, newProps.value, namespace);
+          hostPatchProp(el, "value", oldProps.value, newProps.value, namespace);
         }
       }
     };
@@ -4309,8 +4347,8 @@
       const componentUpdateFn = () => {
         if (!instance.isMounted) {
           let vnodeHook;
-          const { el: el2, props } = initialVNode;
-          const { bm, m, parent, root: root2, type } = instance;
+          const { el, props } = initialVNode;
+          const { bm, m, parent, root, type } = instance;
           const isAsyncWrapperVNode = isAsyncWrapper(initialVNode);
           toggleRecurse(instance, false);
           if (bm) {
@@ -4321,8 +4359,8 @@
           }
           toggleRecurse(instance, true);
           {
-            if (root2.ce && root2.ce._hasShadowRoot()) {
-              root2.ce._injectChildStyle(
+            if (root.ce && root.ce._hasShadowRoot()) {
+              root.ce._injectChildStyle(
                 type,
                 instance.parent ? instance.parent.type : void 0
               );
@@ -4719,7 +4757,7 @@
       }
     };
     const move = (vnode, container, anchor, moveType, parentSuspense = null) => {
-      const { el: el2, type, transition, children, shapeFlag } = vnode;
+      const { el, type, transition, children, shapeFlag } = vnode;
       if (shapeFlag & 6) {
         move(vnode.component.subTree, container, anchor, moveType);
         return;
@@ -4733,7 +4771,7 @@
         return;
       }
       if (type === Fragment) {
-        hostInsert(el2, container, anchor);
+        hostInsert(el, container, anchor);
         for (let i = 0; i < children.length; i++) {
           move(children[i], container, anchor, moveType);
         }
@@ -4747,26 +4785,26 @@
       const needTransition2 = moveType !== 2 && shapeFlag & 1 && transition;
       if (needTransition2) {
         if (moveType === 0) {
-          if (transition.persisted && !el2[leaveCbKey]) {
-            hostInsert(el2, container, anchor);
+          if (transition.persisted && !el[leaveCbKey]) {
+            hostInsert(el, container, anchor);
           } else {
-            transition.beforeEnter(el2);
-            hostInsert(el2, container, anchor);
-            queuePostRenderEffect(() => transition.enter(el2), parentSuspense);
+            transition.beforeEnter(el);
+            hostInsert(el, container, anchor);
+            queuePostRenderEffect(() => transition.enter(el), parentSuspense);
           }
         } else {
           const { leave, delayLeave, afterLeave } = transition;
           const remove22 = () => {
             if (vnode.ctx.isUnmounted) {
-              hostRemove(el2);
+              hostRemove(el);
             } else {
-              hostInsert(el2, container, anchor);
+              hostInsert(el, container, anchor);
             }
           };
           const performLeave = () => {
-            const wasLeaving = el2._isLeaving || !!el2[leaveCbKey];
-            if (el2._isLeaving) {
-              el2[leaveCbKey](
+            const wasLeaving = el._isLeaving || !!el[leaveCbKey];
+            if (el._isLeaving) {
+              el[leaveCbKey](
                 true
                 /* cancelled */
               );
@@ -4774,20 +4812,20 @@
             if (transition.persisted && !wasLeaving) {
               remove22();
             } else {
-              leave(el2, () => {
+              leave(el, () => {
                 remove22();
                 afterLeave && afterLeave();
               });
             }
           };
           if (delayLeave) {
-            delayLeave(el2, remove22, performLeave);
+            delayLeave(el, remove22, performLeave);
           } else {
             performLeave();
           }
         }
       } else {
-        hostInsert(el2, container, anchor);
+        hostInsert(el, container, anchor);
       }
     };
     const unmount = (vnode, parentComponent, parentSuspense, doRemove = false, optimized = false) => {
@@ -4875,10 +4913,10 @@
       }
     };
     const remove2 = (vnode) => {
-      const { type, el: el2, anchor, transition } = vnode;
+      const { type, el, anchor, transition } = vnode;
       if (type === Fragment) {
         {
-          removeFragment(el2, anchor);
+          removeFragment(el, anchor);
         }
         return;
       }
@@ -4887,14 +4925,14 @@
         return;
       }
       const performRemove = () => {
-        hostRemove(el2);
+        hostRemove(el);
         if (transition && !transition.persisted && transition.afterLeave) {
           transition.afterLeave();
         }
       };
       if (vnode.shapeFlag & 1 && transition && !transition.persisted) {
         const { leave, delayLeave } = transition;
-        const performLeave = () => leave(el2, performRemove);
+        const performLeave = () => leave(el, performRemove);
         if (delayLeave) {
           delayLeave(vnode.el, performRemove, performLeave);
         } else {
@@ -4944,9 +4982,9 @@
       if (vnode.shapeFlag & 128) {
         return vnode.suspense.next();
       }
-      const el2 = hostNextSibling(vnode.anchor || vnode.el);
-      const teleportEnd = el2 && el2[TeleportEndKey];
-      return teleportEnd ? hostNextSibling(teleportEnd) : el2;
+      const el = hostNextSibling(vnode.anchor || vnode.el);
+      const teleportEnd = el && el[TeleportEndKey];
+      return teleportEnd ? hostNextSibling(teleportEnd) : el;
     };
     let isFlushing = false;
     const render = (vnode, container, namespace) => {
@@ -5756,25 +5794,25 @@
       }
     },
     createElement: (tag, namespace, is, props) => {
-      const el2 = namespace === "svg" ? doc.createElementNS(svgNS, tag) : namespace === "mathml" ? doc.createElementNS(mathmlNS, tag) : is ? doc.createElement(tag, { is }) : doc.createElement(tag);
+      const el = namespace === "svg" ? doc.createElementNS(svgNS, tag) : namespace === "mathml" ? doc.createElementNS(mathmlNS, tag) : is ? doc.createElement(tag, { is }) : doc.createElement(tag);
       if (tag === "select" && props && props.multiple != null) {
-        el2.setAttribute("multiple", props.multiple);
+        el.setAttribute("multiple", props.multiple);
       }
-      return el2;
+      return el;
     },
     createText: (text) => doc.createTextNode(text),
     createComment: (text) => doc.createComment(text),
     setText: (node, text) => {
       node.nodeValue = text;
     },
-    setElementText: (el2, text) => {
-      el2.textContent = text;
+    setElementText: (el, text) => {
+      el.textContent = text;
     },
     parentNode: (node) => node.parentNode,
     nextSibling: (node) => node.nextSibling,
     querySelector: (selector) => doc.querySelector(selector),
-    setScopeId(el2, id) {
-      el2.setAttribute(id, "");
+    setScopeId(el, id) {
+      el.setAttribute(id, "");
     },
     // __UNSAFE__
     // Reason: innerHTML.
@@ -5810,25 +5848,25 @@
     }
   };
   const vtcKey = /* @__PURE__ */ Symbol("_vtc");
-  function patchClass(el2, value, isSVG) {
-    const transitionClasses = el2[vtcKey];
+  function patchClass(el, value, isSVG) {
+    const transitionClasses = el[vtcKey];
     if (transitionClasses) {
       value = (value ? [value, ...transitionClasses] : [...transitionClasses]).join(" ");
     }
     if (value == null) {
-      el2.removeAttribute("class");
+      el.removeAttribute("class");
     } else if (isSVG) {
-      el2.setAttribute("class", value);
+      el.setAttribute("class", value);
     } else {
-      el2.className = value;
+      el.className = value;
     }
   }
   const vShowOriginalDisplay = /* @__PURE__ */ Symbol("_vod");
   const vShowHidden = /* @__PURE__ */ Symbol("_vsh");
   const CSS_VAR_TEXT = /* @__PURE__ */ Symbol("");
   const displayRE = /(?:^|;)\s*display\s*:/;
-  function patchStyle(el2, prev, next) {
-    const style = el2.style;
+  function patchStyle(el, prev, next) {
+    const style = el.style;
     const isCssString = isString(next);
     let hasControlledDisplay = false;
     if (next && !isCssString) {
@@ -5855,7 +5893,7 @@
         const value = next[key];
         if (value != null) {
           if (!shouldPreserveTextareaResizeStyle(
-            el2,
+            el,
             key,
             !isString(prev) && prev ? prev[key] : void 0,
             value
@@ -5877,12 +5915,12 @@
           hasControlledDisplay = displayRE.test(next);
         }
       } else if (prev) {
-        el2.removeAttribute("style");
+        el.removeAttribute("style");
       }
     }
-    if (vShowOriginalDisplay in el2) {
-      el2[vShowOriginalDisplay] = hasControlledDisplay ? style.display : "";
-      if (el2[vShowHidden]) {
+    if (vShowOriginalDisplay in el) {
+      el[vShowOriginalDisplay] = hasControlledDisplay ? style.display : "";
+      if (el[vShowHidden]) {
         style.display = "none";
       }
     }
@@ -5929,56 +5967,56 @@
     }
     return rawName;
   }
-  function shouldPreserveTextareaResizeStyle(el2, key, prev, next) {
-    return el2.tagName === "TEXTAREA" && (key === "width" || key === "height") && isString(next) && prev === next;
+  function shouldPreserveTextareaResizeStyle(el, key, prev, next) {
+    return el.tagName === "TEXTAREA" && (key === "width" || key === "height") && isString(next) && prev === next;
   }
   const xlinkNS = "http://www.w3.org/1999/xlink";
-  function patchAttr(el2, key, value, isSVG, instance, isBoolean = isSpecialBooleanAttr(key)) {
+  function patchAttr(el, key, value, isSVG, instance, isBoolean = isSpecialBooleanAttr(key)) {
     if (isSVG && key.startsWith("xlink:")) {
       if (value == null) {
-        el2.removeAttributeNS(xlinkNS, key.slice(6, key.length));
+        el.removeAttributeNS(xlinkNS, key.slice(6, key.length));
       } else {
-        el2.setAttributeNS(xlinkNS, key, value);
+        el.setAttributeNS(xlinkNS, key, value);
       }
     } else {
       if (value == null || isBoolean && !includeBooleanAttr(value)) {
-        el2.removeAttribute(key);
+        el.removeAttribute(key);
       } else {
-        el2.setAttribute(
+        el.setAttribute(
           key,
           isBoolean ? "" : isSymbol(value) ? String(value) : value
         );
       }
     }
   }
-  function patchDOMProp(el2, key, value, parentComponent, attrName) {
+  function patchDOMProp(el, key, value, parentComponent, attrName) {
     if (key === "innerHTML" || key === "textContent") {
       if (value != null) {
-        el2[key] = key === "innerHTML" ? unsafeToTrustedHTML(value) : value;
+        el[key] = key === "innerHTML" ? unsafeToTrustedHTML(value) : value;
       }
       return;
     }
-    const tag = el2.tagName;
+    const tag = el.tagName;
     if (key === "value" && tag !== "PROGRESS" && // custom elements may use _value internally
     !tag.includes("-")) {
-      const oldValue = tag === "OPTION" ? el2.getAttribute("value") || "" : el2.value;
+      const oldValue = tag === "OPTION" ? el.getAttribute("value") || "" : el.value;
       const newValue = value == null ? (
         // #11647: value should be set as empty string for null and undefined,
         // but <input type="checkbox"> should be set as 'on'.
-        el2.type === "checkbox" ? "on" : ""
+        el.type === "checkbox" ? "on" : ""
       ) : String(value);
-      if (oldValue !== newValue || !("_value" in el2)) {
-        el2.value = newValue;
+      if (oldValue !== newValue || !("_value" in el)) {
+        el.value = newValue;
       }
       if (value == null) {
-        el2.removeAttribute(key);
+        el.removeAttribute(key);
       }
-      el2._value = value;
+      el._value = value;
       return;
     }
     let needRemove = false;
     if (value === "" || value == null) {
-      const type = typeof el2[key];
+      const type = typeof el[key];
       if (type === "boolean") {
         value = includeBooleanAttr(value);
       } else if (value == null && type === "string") {
@@ -5990,20 +6028,20 @@
       }
     }
     try {
-      el2[key] = value;
+      el[key] = value;
     } catch (e) {
     }
-    needRemove && el2.removeAttribute(attrName || key);
+    needRemove && el.removeAttribute(attrName || key);
   }
-  function addEventListener(el2, event, handler, options) {
-    el2.addEventListener(event, handler, options);
+  function addEventListener(el, event, handler, options) {
+    el.addEventListener(event, handler, options);
   }
-  function removeEventListener(el2, event, handler, options) {
-    el2.removeEventListener(event, handler, options);
+  function removeEventListener(el, event, handler, options) {
+    el.removeEventListener(event, handler, options);
   }
   const veiKey = /* @__PURE__ */ Symbol("_vei");
-  function patchEvent(el2, rawName, prevValue, nextValue, instance = null) {
-    const invokers = el2[veiKey] || (el2[veiKey] = {});
+  function patchEvent(el, rawName, prevValue, nextValue, instance = null) {
+    const invokers = el[veiKey] || (el[veiKey] = {});
     const existingInvoker = invokers[rawName];
     if (nextValue && existingInvoker) {
       existingInvoker.value = nextValue;
@@ -6014,9 +6052,9 @@
           nextValue,
           instance
         );
-        addEventListener(el2, name, invoker, options);
+        addEventListener(el, name, invoker, options);
       } else if (existingInvoker) {
-        removeEventListener(el2, name, existingInvoker, options);
+        removeEventListener(el, name, existingInvoker, options);
         invokers[rawName] = void 0;
       }
     }
@@ -6082,43 +6120,43 @@
   }
   const isNativeOn = (key) => key.charCodeAt(0) === 111 && key.charCodeAt(1) === 110 && // lowercase letter
   key.charCodeAt(2) > 96 && key.charCodeAt(2) < 123;
-  const patchProp = (el2, key, prevValue, nextValue, namespace, parentComponent) => {
+  const patchProp = (el, key, prevValue, nextValue, namespace, parentComponent) => {
     const isSVG = namespace === "svg";
     if (key === "class") {
-      patchClass(el2, nextValue, isSVG);
+      patchClass(el, nextValue, isSVG);
     } else if (key === "style") {
-      patchStyle(el2, prevValue, nextValue);
+      patchStyle(el, prevValue, nextValue);
     } else if (isOn(key)) {
       if (!isModelListener(key)) {
-        patchEvent(el2, key, prevValue, nextValue, parentComponent);
+        patchEvent(el, key, prevValue, nextValue, parentComponent);
       }
-    } else if (key[0] === "." ? (key = key.slice(1), true) : key[0] === "^" ? (key = key.slice(1), false) : shouldSetAsProp(el2, key, nextValue, isSVG)) {
-      patchDOMProp(el2, key, nextValue);
-      if (!el2.tagName.includes("-") && (key === "value" || key === "checked" || key === "selected")) {
-        patchAttr(el2, key, nextValue, isSVG, parentComponent, key !== "value");
+    } else if (key[0] === "." ? (key = key.slice(1), true) : key[0] === "^" ? (key = key.slice(1), false) : shouldSetAsProp(el, key, nextValue, isSVG)) {
+      patchDOMProp(el, key, nextValue);
+      if (!el.tagName.includes("-") && (key === "value" || key === "checked" || key === "selected")) {
+        patchAttr(el, key, nextValue, isSVG, parentComponent, key !== "value");
       }
     } else if (
       // #11081 force set props for possible async custom element
-      el2._isVueCE && // #12408 check if it's declared prop or it's async custom element
-      (shouldSetAsPropForVueCE(el2, key) || // @ts-expect-error _def is private
-      el2._def.__asyncLoader && (/[A-Z]/.test(key) || !isString(nextValue)))
+      el._isVueCE && // #12408 check if it's declared prop or it's async custom element
+      (shouldSetAsPropForVueCE(el, key) || // @ts-expect-error _def is private
+      el._def.__asyncLoader && (/[A-Z]/.test(key) || !isString(nextValue)))
     ) {
-      patchDOMProp(el2, camelize(key), nextValue, parentComponent, key);
+      patchDOMProp(el, camelize(key), nextValue, parentComponent, key);
     } else {
       if (key === "true-value") {
-        el2._trueValue = nextValue;
+        el._trueValue = nextValue;
       } else if (key === "false-value") {
-        el2._falseValue = nextValue;
+        el._falseValue = nextValue;
       }
-      patchAttr(el2, key, nextValue, isSVG);
+      patchAttr(el, key, nextValue, isSVG);
     }
   };
-  function shouldSetAsProp(el2, key, value, isSVG) {
+  function shouldSetAsProp(el, key, value, isSVG) {
     if (isSVG) {
       if (key === "innerHTML" || key === "textContent") {
         return true;
       }
-      if (key in el2 && isNativeOn(key) && isFunction(value)) {
+      if (key in el && isNativeOn(key) && isFunction(value)) {
         return true;
       }
       return false;
@@ -6126,20 +6164,20 @@
     if (key === "spellcheck" || key === "draggable" || key === "translate" || key === "autocorrect") {
       return false;
     }
-    if (key === "sandbox" && el2.tagName === "IFRAME") {
+    if (key === "sandbox" && el.tagName === "IFRAME") {
       return false;
     }
     if (key === "form") {
       return false;
     }
-    if (key === "list" && el2.tagName === "INPUT") {
+    if (key === "list" && el.tagName === "INPUT") {
       return false;
     }
-    if (key === "type" && el2.tagName === "TEXTAREA") {
+    if (key === "type" && el.tagName === "TEXTAREA") {
       return false;
     }
     if (key === "width" || key === "height") {
-      const tag = el2.tagName;
+      const tag = el.tagName;
       if (tag === "IMG" || tag === "VIDEO" || tag === "CANVAS" || tag === "SOURCE") {
         return false;
       }
@@ -6147,12 +6185,12 @@
     if (isNativeOn(key) && isString(value)) {
       return false;
     }
-    return key in el2;
+    return key in el;
   }
-  function shouldSetAsPropForVueCE(el2, key) {
+  function shouldSetAsPropForVueCE(el, key) {
     const props = (
       // @ts-expect-error _def is private
-      el2._def.props
+      el._def.props
     );
     if (!props) {
       return false;
@@ -6202,53 +6240,83 @@
     }
     return container;
   }
-  var app = createApp({
+  window.__VUE_H__ = h;
+  const App = {
+    setup() {
+      const count = /* @__PURE__ */ ref(0);
+      const message = /* @__PURE__ */ ref("Hello from Vue 3!");
+      const items = /* @__PURE__ */ reactive(["Vue", "Goja", "WebKit", "PairCode"]);
+      const doubleCount = computed(() => count.value * 2);
+      onMounted(() => {
+        console.log("Vue 3 app mounted successfully!");
+        console.log("Initial count:", count.value);
+      });
+      function increment() {
+        count.value++;
+        console.log("Count incremented to:", count.value);
+      }
+      function addItem() {
+        items.push("Item " + (items.length + 1));
+      }
+      return { count, message, items, doubleCount, increment, addItem };
+    },
     render() {
-      return h("div", { id: "app-root" });
+      console.log("App.render() called");
+      try {
+        const vnode = h("div", { class: "app-layout" }, [
+          h("div", { class: "activity-bar" }, [
+            h("div", { class: "activity-item active" }, "📁"),
+            h("div", { class: "activity-item" }, "🔍"),
+            h("div", { class: "activity-item" }, "⚙")
+          ]),
+          h("div", { class: "sidebar" }, [
+            h("div", { class: "sidebar-header" }, "EXPLORER"),
+            h("div", { class: "sidebar-item" }, "📄 index.html"),
+            h("div", { class: "sidebar-item" }, "📄 main.js"),
+            h("div", { class: "sidebar-item" }, "📄 App.vue"),
+            h("div", { class: "sidebar-divider" }),
+            h("div", { class: "sidebar-header" }, "COMPUTED"),
+            h("div", { class: "sidebar-item" }, "Double count: " + this.doubleCount)
+          ]),
+          h("div", { class: "main-content" }, [
+            h("div", { class: "tab-bar" }, [
+              h("div", { class: "tab active" }, "main.js"),
+              h("div", { class: "tab" }, "App.vue")
+            ]),
+            h("div", { class: "editor" }, [
+              h("div", { class: "editor-title" }, this.message),
+              h("div", { class: "editor-content" }, [
+                h("h1", "PairCode IDE"),
+                h("p", ["Count: ", h("span", { class: "status-badge" }, String(this.count))]),
+                h("p", ["Double: ", h("span", { class: "status-badge" }, String(this.doubleCount))]),
+                h("button", { onClick: this.increment }, "+1"),
+                h("button", { onClick: this.addItem }, "+ Item"),
+                h("ul", this.items.map((item, idx) => h("li", { key: idx }, item)))
+              ])
+            ])
+          ]),
+          h("div", { class: "status-bar" }, [
+            h("div", { class: "status-left" }, "Vue 3 + Goja"),
+            h("div", { class: "status-right" }, "ES6+ Supported")
+          ])
+        ]);
+        console.log("App.render() created vnode:", vnode ? vnode.type : "null");
+        return vnode;
+      } catch (e) {
+        console.error("App.render() error:", e);
+        return h("div", "Render Error: " + e.message);
+      }
     }
-  });
-  console.log("A");
-  app.mount("#app");
-  console.log("B");
-  var root = document.getElementById("app-root");
-  root.innerHTML = `
-<div class="app-layout">
-  <div class="activity-bar">
-    <div class="activity-item active">⚡</div>
-    <div class="activity-item">📁</div>
-    <div class="activity-item">🔍</div>
-    <div class="activity-item">⚙</div>
-  </div>
-  <div class="sidebar">
-    <div class="sidebar-header">EXPLORER</div>
-    <div class="sidebar-item">📄 index.html</div>
-    <div class="sidebar-item">📄 main.js</div>
-    <div class="sidebar-item">📄 App.vue</div>
-    <div class="sidebar-divider"></div>
-    <div class="sidebar-header">OUTLINE</div>
-    <div class="sidebar-item">▶ App</div>
-  </div>
-  <div class="main-content">
-    <div class="tab-bar">
-      <div class="tab active">App.vue</div>
-      <div class="tab">main.js</div>
-    </div>
-    <div class="editor">
-      <div class="editor-title">PairCode IDE - Desktop</div>
-      <div class="editor-content">
-        <h1>hello</h1>
-        <p>Vue 3 桌面端渲染成功！</p>
-        <p class="status-badge">✅ JSC ES6 引擎已完善</p>
-      </div>
-    </div>
-  </div>
-  <div class="status-bar">
-    <span class="status-left">main.js</span>
-    <span class="status-right">UTF-8 | JavaScript | Ln 1, Col 1</span>
-  </div>
-</div>
-`;
-  console.log("C root children=" + root.childNodes.length);
-  var el = document.getElementById("app");
-  console.log("D children=" + el.childNodes.length);
+  };
+  console.log("Creating Vue app...");
+  const app = createApp(App);
+  console.log("Vue app created");
+  app.config.errorHandler = (err, vm2, info) => {
+    console.error("Vue Error:", err, info);
+  };
+  console.log("Mounting Vue app...");
+  const vm = app.mount("#app");
+  console.log("Vue app mounted, vm:", !!vm);
+  window.__VUE_APP__ = app;
+  window.__VUE_VM__ = vm;
 })();
