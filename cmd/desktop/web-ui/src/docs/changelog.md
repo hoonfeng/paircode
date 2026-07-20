@@ -4,6 +4,17 @@
 
 ---
 
+## 1.0.19 — 2026-07-17
+
+### 修复
+- **修复 Web 端文件树不显示** — `FileExplorer.vue` 的 `<script setup>` 编译后 JS 中存在变量暂时性死区（TDZ），导致 `setup()` 抛出 `Cannot access 'd' before initialization`，文件树组件挂载失败。重建前端并重新编译 `companion.exe` 嵌入新版 dist 后修复
+- **修复后端 dist 嵌入路径不一致** — `cmd/companion/main.go` 通过 `//go:embed web-ui/dist` 引用 companion 目录下的副本，但此前构建脚本将 dist 输出到 `cmd/desktop/web-ui/dist/`，两者不同步导致嵌入的仍是旧版 JS。统一构建流程后将新版 dist 正确复制到 `cmd/companion/web-ui/dist/`
+
+### 改进
+- 统一更新版本号至 1.0.19（后端 main.go、两个前端的 package.json）
+
+---
+
 ## 1.0.8 — 2026-07-17
 
 ### 新增
