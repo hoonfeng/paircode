@@ -74,7 +74,7 @@ func main() {
 	// Check S markers
 	for _, name := range []string{"__S1__", "__S2__", "__S6__", "__S6b__", "__S7__"} {
 		if v, e := vm.Run("window." + name); e == nil {
-			fmt.Printf("%s = %v (tag=%d)\n", name, v, v.Tag())
+			fmt.Printf("%s = %v\n", name, v)
 		}
 	}
 	fmt.Fprintf(os.Stderr, "Console output:\n%s\n", logger.String())

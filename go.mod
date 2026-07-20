@@ -39,6 +39,7 @@ require (
 )
 
 replace (
+	github.com/dop251/goja => ../goja
 	github.com/hoonfeng/goskia => ../goskia
 	wb-ui => ../wb-ui
 )
