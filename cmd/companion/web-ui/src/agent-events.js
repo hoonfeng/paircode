@@ -79,9 +79,12 @@ export function createAssistantPlaceholder(convId, key) {
   const msgs = state.messagesByConv[convId]
   if (!msgs) return ''
   if (!key) key = makeMsgKey()
+  // ★ 计算 _idx：取当前最大 _idx + 1，而非数组长度
+  let nextIdx = msgs.length
+  for (const m of msgs) { if ((m._idx ?? 0) >= nextIdx) nextIdx = (m._idx ?? 0) + 1 }
   const assistantMsg = {
     role: 'assistant', content: '', segments: [], toolCalls: [],
-    _key: key, _idx: msgs.length,
+    _key: key, _idx: nextIdx,
     _time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
     _loading: true,
   }
@@ -108,9 +111,11 @@ export function processAgentEvent(convId, data) {
       // 内容类事件没有 runtime 也无 loading 消息时，创建新 assistant 占位
       console.log('[AE] processAgentEvent 创建临时占位 conv=%s type=%s', convId, data.type)
       const key = makeMsgKey()
+      let phNextIdx = msgs.length
+      for (const m of msgs) { if ((m._idx ?? 0) >= phNextIdx) phNextIdx = (m._idx ?? 0) + 1 }
       const placeholder = {
         role: 'assistant', content: '', segments: [], toolCalls: [],
-        _key: key, _idx: msgs.length,
+        _key: key, _idx: phNextIdx,
         _time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
         _loading: false,
       }
@@ -512,10 +517,12 @@ export function processStatus(payload) {
       const lastLoading = [...msgsArr].reverse().find(m => m._loading)
       if (hasRealMsgs && !lastLoading) {
         const key = makeMsgKey()
+        let psNextIdx = msgsArr.length
+        for (const m of msgsArr) { if ((m._idx ?? 0) >= psNextIdx) psNextIdx = (m._idx ?? 0) + 1 }
         console.log('[AE] processStatus 兜底创建占位 conv=%s key=%s', convId, key)
         msgsArr.push({
           role: 'assistant', content: '', segments: [], toolCalls: [],
-          _key: key, _idx: msgsArr.length,
+          _key: key, _idx: psNextIdx,
           _time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
           _loading: true,
         })

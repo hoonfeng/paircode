@@ -718,9 +718,12 @@ const sendMessage = async () => {
   collapsePreviousOutputs()
 
   if (!state.messagesByConv[convId]) state.messagesByConv[convId] = []
+  // ★ 计算新消息 _idx：取当前最大 _idx + 1，而非数组长度（历史消息 _idx 来自数据库，可能远大于数组长度）
+  let nextIdx = state.messagesByConv[convId].length
+  for (const m of state.messagesByConv[convId]) { if ((m._idx ?? 0) >= nextIdx) nextIdx = (m._idx ?? 0) + 1 }
   const userMsg = {
     role: 'user', content: fullContent, segments: [], toolCalls: [],
-    _key: makeMsgKey(), _idx: state.messagesByConv[convId].length,
+    _key: makeMsgKey(), _idx: nextIdx,
     _time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
   }
   state.messagesByConv[convId].push(userMsg)
@@ -1015,9 +1018,11 @@ const switchConv = async (id) => {
         const key = makeMsgKey()
         console.log('[RP] switchConv 对话运行中，创建占位 conv=%s key=%s', id, key)
         startConvRuntime(id, key, '')
+        let siNextIdx = mergedMsgs.length
+        for (const m of mergedMsgs) { if ((m._idx ?? 0) >= siNextIdx) siNextIdx = (m._idx ?? 0) + 1 }
         mergedMsgs.push({
           role: 'assistant', content: '', segments: [], toolCalls: [],
-          _key: key, _idx: mergedMsgs.length,
+          _key: key, _idx: siNextIdx,
           _time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
           _loading: true,
         })
