@@ -14,6 +14,7 @@ require (
 )
 
 require (
+	github.com/dop251/goja v0.0.0-20260719185829-0fc1d42c1dc9 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/go-gl/glfw/v3.3/glfw v0.0.0-20260406072232-3ac4aa2bb164 // indirect
 	github.com/go-sourcemap/sourcemap v2.1.3+incompatible // indirect

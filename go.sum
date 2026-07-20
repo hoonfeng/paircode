@@ -1,5 +1,7 @@
 github.com/dop251/goja v0.0.0-20260627200808-0b76000cabdb h1:qxbH9q0zvt7Fwy9UJrHdd9grPTlO07G/vUUE3eqfZ4w=
 github.com/dop251/goja v0.0.0-20260627200808-0b76000cabdb/go.mod h1:Sc+QOu1WruvaaeT/cxFez/pXHpI9ZDjg/E8QNfSVveI=
+github.com/dop251/goja v0.0.0-20260719185829-0fc1d42c1dc9 h1:Z9u8XVKd8MPk81Wctd4bl7wZyYal2sgm06Oh6Ldulro=
+github.com/dop251/goja v0.0.0-20260719185829-0fc1d42c1dc9/go.mod h1:LiIEzozrcvNXorsG/3+ypGqdTUAqZryhzSsqi0oU/Qg=
 github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=
 github.com/dustin/go-humanize v1.0.1/go.mod h1:Mu1zIs6XwVuF/gI1OepvI0qD18qycQx+mFykh5fBlto=
 github.com/go-gl/glfw/v3.3/glfw v0.0.0-20260406072232-3ac4aa2bb164 h1:ddtotcEXIT7dFhSeXIWjK8YMFYl5bB2NdYQwgv6Uqjk=
