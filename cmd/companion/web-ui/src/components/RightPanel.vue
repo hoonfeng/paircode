@@ -205,7 +205,7 @@
 import { ref, computed, inject, onMounted, onUnmounted, nextTick, watch, reactive } from 'vue'
 import { state } from '../main.js'
 import api from '../api.js'
-import { setGlobalCtx, startConvRuntime, resetConvRuntime, createAssistantPlaceholder, getConvRuntime, getConvCtxStats, resetConvCtxStats } from '../agent-events.js'
+import { setGlobalCtx, startConvRuntime, resetConvRuntime, createAssistantPlaceholder, getConvRuntime, getConvCtxStats, resetConvCtxStats, suspendConv, resumeConv } from '../agent-events.js'
 import SvgIcon from './SvgIcon.vue'
 import PlanPanel from './PlanPanel.vue'
 import TaskPanel from './TaskPanel.vue'
@@ -881,6 +881,9 @@ const deleteConv = async (id) => {
 }
 
 const switchConv = async (id) => {
+  // ★ 挂起该 conv 的 WS 事件处理，确保历史消息先于 WS 写入
+  suspendConv(id)
+  try {
   console.log('[RP] switchConv id=%s messagesByConv[id].length=%d runtimeExists=%s', id, (state.messagesByConv[id]||[]).length, !!getConvRuntime(id))
   if (state.messagesByConv[id] && state.messagesByConv[id].length > 0) {
     const msgs = state.messagesByConv[id]
@@ -1009,6 +1012,10 @@ const switchConv = async (id) => {
   // 页面刷新后：如果折叠开关打开，对已加载的历史消息应用折叠状态
   applyAutoCollapse()
   forceScrollToBottom()
+  } finally {
+    // ★ 恢复 WS 事件处理，flush 缓冲的事件
+    resumeConv(id)
+  }
 }
 
 const toggleAuto = async (field) => {
