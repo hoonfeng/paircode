@@ -124,12 +124,39 @@ export function processAgentEvent(convId, data) {
     _pendingByConv[convId].push({ type: 'event', convId, data })
     return
   }
-  const rt = runtimes[convId]
-  if (!rt) {
-    console.warn('[AE] processAgentEvent 丢弃: 无 runtime conv=%s type=%s', convId, data.type)
-    return
-  }
+
+  // 确保 messagesByConv 存在
+  if (!state.messagesByConv[convId]) state.messagesByConv[convId] = []
   const msgs = state.messagesByConv[convId]
+
+  // ★ 自动恢复 runtime（防止因各种原因 runtime 丢失导致事件永久丢弃）
+  let rt = runtimes[convId]
+  if (!rt) {
+    // 尝试找 messages 中最后一条 loading 的 assistant 消息
+    const lastLoading = [...msgs].reverse().find(m => m.role === 'assistant' && m._loading)
+    if (lastLoading && lastLoading._key) {
+      console.log('[AE] processAgentEvent 自动恢复 runtime conv=%s key=%s type=%s', convId, lastLoading._key, data.type)
+      rt = { msgKey: lastLoading._key, finalContent: '', lastUserText: '' }
+      runtimes[convId] = rt
+    } else if (data.type === 'content' || data.type === 'thinking' || data.type === 'done') {
+      // 内容类事件没有 runtime 也无 loading 消息时，创建新 assistant 占位
+      console.log('[AE] processAgentEvent 创建临时占位 conv=%s type=%s', convId, data.type)
+      const key = makeMsgKey()
+      const placeholder = {
+        role: 'assistant', content: '', segments: [], toolCalls: [],
+        _key: key, _idx: msgs.length,
+        _time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+        _loading: false,
+      }
+      msgs.push(placeholder)
+      rt = { msgKey: key, finalContent: '', lastUserText: '' }
+      runtimes[convId] = rt
+    } else {
+      // 非内容类事件直接丢弃
+      console.warn('[AE] processAgentEvent 丢弃(无 runtime 且无法恢复): conv=%s type=%s', convId, data.type)
+      return
+    }
+  }
   if (!msgs) {
     console.warn('[AE] processAgentEvent 丢弃: 无 messagesByConv conv=%s type=%s', convId, data.type)
     return
@@ -144,6 +171,8 @@ export function processAgentEvent(convId, data) {
     if (lastAssistant) {
       console.log('[AE] processAgentEvent fallback 到最后 assistant conv=%s type=%s', convId, data.type)
       msg = lastAssistant
+      // 更新 runtime 的 msgKey 指向实际找到的消息
+      if (lastAssistant._key) rt.msgKey = lastAssistant._key
     }
   }
   if (!msg) {
@@ -391,10 +420,28 @@ export function processAgentDone(convId, data) {
       }
     }
   }
-  // 无论 rt 是否存在，都要清除 loading 状态
+
+  // ★ 兜底：即使 rt 或 msgKey 失效，也要修复 messages 中所有 loading 状态
+  //   并保证最后一条 assistant 消息能够正确显示。
   if (msgs) {
+    // 1. 清除所有 _loading 标记
     for (const m of msgs) {
       if (m._loading) m._loading = false
+    }
+    // 2. 如果最后一条 assistant 消息 content 仍为空且无 segments，
+    //    尝试从 data.content 回填
+    if (!rt) {
+      const lastAssistant = [...msgs].reverse().find(m => m.role === 'assistant')
+      if (lastAssistant && !lastAssistant.content && (!lastAssistant.segments || lastAssistant.segments.length === 0)) {
+        if (data && data.content) {
+          lastAssistant.content = data.content
+        } else if (data && data.doneReason === 'stopped') {
+          lastAssistant.content = '**[任务已终止]** ' + (data.content || '用户终止了任务')
+        } else {
+          lastAssistant.content = '**[操作完成]**'
+        }
+        console.log('[AE] processAgentDone 兜底回填 content conv=%s', convId)
+      }
     }
   }
   state.loadingByConv[convId] = false
@@ -450,6 +497,16 @@ export function processAllDisconnected() {
         msg._loading = false
         if (!msg.content) msg.content = ''
         pushSegment(msg.segments, 'content').content += '**[连接中断]** 后端进程已关闭，请重新发送消息。'
+      } else {
+        // 清理所有 _loading 标记
+        for (const m of msgs) {
+          if (m._loading) m._loading = false
+        }
+      }
+    } else if (msgs) {
+      // 即使无 runtime，也要清理 messages 中的 loading 标记
+      for (const m of msgs) {
+        if (m._loading) m._loading = false
       }
     }
     state.agentRunningByConv[convId] = false
@@ -527,7 +584,13 @@ export function processStatus(payload) {
         state.chatLoading = false
         state.agentRunning = false
       }
-      // 清理可能残留的 runtime
+      // ★ 同时清除 messages 中残留的 _loading 标记（防止个别消息永久显示 loading 动画）
+      const msgsArr = state.messagesByConv[convId]
+      if (msgsArr) {
+        for (const m of msgsArr) {
+          if (m._loading) m._loading = false
+        }
+      }
       delete runtimes[convId]
     }
   }
@@ -537,6 +600,13 @@ export function processStatus(payload) {
   for (const convId of Object.keys(state.loadingByConv)) {
     if (state.loadingByConv[convId] && !runningSet.has(convId)) {
       state.loadingByConv[convId] = false
+      // ★ 同步清除 messages 中的 _loading 标记
+      const msgsArr = state.messagesByConv[convId]
+      if (msgsArr) {
+        for (const m of msgsArr) {
+          if (m._loading) m._loading = false
+        }
+      }
     }
   }
 }

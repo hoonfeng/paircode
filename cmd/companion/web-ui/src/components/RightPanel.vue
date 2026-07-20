@@ -326,24 +326,26 @@ const hasMoreTop = computed(() => {
 // 保持对原消息对象的引用，WS 流式写入自动反映到 combo 内。
 // ★ 强制按 _idx 排序，确保顺序始终稳定（loadMoreMessages prepend +
 // WS 并发写入不会打乱顺序）。
+// ★ 过滤掉 _tempPlaceholder 标记的临时占位（由 processStatus 创建，
+//   switchConv 中会清理，但兜底过滤防止残留导致配对错乱）。
 const messageCombos = computed(() => {
-  const msgs = [...(state.messages || [])].sort((a, b) => (a._idx ?? 0) - (b._idx ?? 0))
+  const msgs = [...(state.messages || [])]
+    .filter(m => !m._tempPlaceholder)
+    .sort((a, b) => (a._idx ?? 0) - (b._idx ?? 0))
   const combos = []
   let current = null
   for (const msg of msgs) {
     if (msg.role === 'user') {
       current = { user: msg, assistant: null }
       combos.push(current)
-    } else if (msg.role === 'assistant' && current) {
-      if (current.assistant) {
+    } else if (msg.role === 'assistant') {
+      if (current && !current.assistant) {
+        current.assistant = msg
+      } else {
+        // 没有前置 user 或 user 已有 assistant → 新起一个独立 assistant 气泡
         current = { user: null, assistant: msg }
         combos.push(current)
-      } else {
-        current.assistant = msg
       }
-    } else if (msg.role === 'assistant' && !current) {
-      current = { user: null, assistant: msg }
-      combos.push(current)
     }
   }
   return combos
@@ -729,7 +731,7 @@ const stopChat = async () => {
       if (state.currentConvId === convId) {
         state.messages = msgs
       }
-      console.log('[RP] stopChat 已移除旧 loading 占位 idx=%d', oldMsgIdx)
+      console.log('[RP] stopChat 已移除旧 loading 占位 idx=%d', idx)
     }
   }
   state.loadingByConv[convId] = false
