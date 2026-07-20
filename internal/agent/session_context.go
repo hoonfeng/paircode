@@ -7,8 +7,10 @@
 package agent
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -26,6 +28,8 @@ type SessionContext struct {
 	WorkspaceStructure     string   // 工作区结构概览
 	LastActivity           string   // 上次活动时间/内容
 	RecentFileEdits        []string // 最近编辑的文件列表
+	GitStatus              string   // Git 状态快照（最近提交 + 未提交改动）
+	CodeGraphStats         string   // 代码图谱统计（实体数/覆盖率）
 }
 
 // BuildSessionContext 构建会话连贯性上下文。
@@ -38,17 +42,19 @@ func BuildSessionContext(convID string, workspaceRoots []string, currentTask str
 	sc := &SessionContext{}
 
 	// 1. 对话摘要（从持久化摘要中读取）
+	var convSummary string
 	if store != nil {
 		if meta, err := store.GetConversation(convID); err == nil && meta != nil && meta.Summary != "" {
 			sc.ConversationSummary = meta.Summary
+			convSummary = meta.Summary
 		}
 	}
 
 	// 2. 任务进度（从持久化的 update_tasks 读取）
 	sc.TaskProgress = buildTaskProgressContext(workspaceRoots)
 
-	// 3. 自动召回相关项目记忆
-	sc.RelevantMemories = buildRecallContext(workspaceRoots, currentTask)
+	// 3. 自动召回相关项目记忆（增强：不仅基于 task，也基于对话摘要和历史最近消息）
+	sc.RelevantMemories = buildEnhancedRecallContext(workspaceRoots, currentTask, convSummary, history)
 
 	// 4. 项目归属推断（根据历史和当前任务）
 	sc.ProjectHint = inferProject(workspaceRoots, currentTask, history)
@@ -61,6 +67,12 @@ func BuildSessionContext(convID string, workspaceRoots []string, currentTask str
 
 	// 7. 最近编辑的文件
 	sc.RecentFileEdits = extractRecentEdits(history, workspaceRoots)
+
+	// 8. Git 状态快照（感知项目变更）
+	sc.GitStatus = buildGitStatus(workspaceRoots)
+
+	// 9. 代码图谱统计
+	sc.CodeGraphStats = buildCodeGraphStats()
 
 	return sc
 }
@@ -105,6 +117,18 @@ func (sc *SessionContext) FormatForInjection() string {
 	if sc.LastActivity != "" {
 		b.WriteString("\n## 最近活动\n")
 		b.WriteString(sc.LastActivity + "\n")
+		hasContent = true
+	}
+
+	if sc.GitStatus != "" {
+		b.WriteString("\n## Git 状态（项目变更感知）\n")
+		b.WriteString(sc.GitStatus + "\n")
+		hasContent = true
+	}
+
+	if sc.CodeGraphStats != "" {
+		b.WriteString("\n## 代码图谱统计\n")
+		b.WriteString(sc.CodeGraphStats + "\n")
 		hasContent = true
 	}
 
@@ -185,9 +209,44 @@ func buildTaskProgressContext(roots []string) string {
 
 // buildRecallContext 从所有工作区自动召回相关记忆。
 func buildRecallContext(roots []string, task string) string {
+	return buildEnhancedRecallContext(roots, task, "", nil)
+}
+
+// buildEnhancedRecallContext 增强版记忆召回：不仅基于当前 task 文本，
+// 还融合对话摘要和历史最近消息，大幅提高召回率（解决"继续"类短任务召回不到记忆的问题）。
+func buildEnhancedRecallContext(roots []string, task, convSummary string, history []Message) string {
+	// 聚合所有召回关键词
+	var recallText strings.Builder
+	recallText.WriteString(task)
+	if convSummary != "" {
+		recallText.WriteString(" " + convSummary)
+	}
+	// 取最近 3 条用户消息和最后一条助手消息作为补充上下文
+	userCount := 0
+	var lastAssistantContent string
+	for i := len(history) - 1; i >= 0; i-- {
+		m := history[i]
+		switch m.Role {
+		case RoleUser:
+			if userCount < 3 {
+				recallText.WriteString(" " + m.Content)
+				userCount++
+			}
+		case RoleAssistant:
+			if lastAssistantContent == "" && m.Content != "" {
+				lastAssistantContent = m.Content
+				recallText.WriteString(" " + sessionTruncateStr(m.Content, 200))
+			}
+		}
+		if userCount >= 3 && lastAssistantContent != "" {
+			break
+		}
+	}
+
 	var allHits []string
+	mergedText := recallText.String()
 	for _, root := range roots {
-		if result := RecallMemories(root, task, 5); result != "" {
+		if result := RecallMemories(root, mergedText, 5); result != "" {
 			allHits = append(allHits, result)
 		}
 	}
@@ -451,14 +510,98 @@ func sessionTruncateStr(s string, maxLen int) string {
 	return string(runes[:maxLen]) + "…"
 }
 
-// ── 注入入口 ────────────────────────────────────────────────
+// ── Git 状态与代码图谱 ──────────────────────────────────────
 
+// buildGitStatus 从所有工作区获取 Git 状态快照。
+func buildGitStatus(roots []string) string {
+	if len(roots) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for _, root := range roots {
+		name := filepath.Base(root)
+		logOutput, logErr := runGitCmd(root, "log", "--oneline", "-5", "--no-decorate")
+		if logErr != nil {
+			continue
+		}
+		logOutput = strings.TrimSpace(logOutput)
+		statusOutput, _ := runGitCmd(root, "status", "--porcelain=v1", "--branch")
+		statusOutput = strings.TrimSpace(statusOutput)
+		if logOutput == "" && statusOutput == "" {
+			continue
+		}
+		b.WriteString(fmt.Sprintf("### %s\n", name))
+		if logOutput != "" {
+			b.WriteString(fmt.Sprintf("最近提交:\n%s\n", logOutput))
+		}
+		if statusOutput != "" && !strings.HasPrefix(statusOutput, "##") {
+			b.WriteString(fmt.Sprintf("未提交改动:\n%s\n", statusOutput))
+		} else if strings.HasPrefix(statusOutput, "##") && !strings.Contains(statusOutput, "\n") {
+			b.WriteString("工作区干净\n")
+		} else if statusOutput != "" {
+			b.WriteString(statusOutput + "\n")
+		}
+	}
+	result := strings.TrimSpace(b.String())
+	if len(result) > 2000 {
+		result = result[:2000] + "\n…（已截断）"
+	}
+	return result
+}
+
+// runGitCmd 在指定目录运行 git 命令。
+func runGitCmd(dir string, args ...string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
+}
+
+// buildCodeGraphStats 获取代码图谱统计信息。
+func buildCodeGraphStats() string {
+	cgGraphMu.RLock()
+	g := cgGraph
+	cgGraphMu.RUnlock()
+	if g == nil {
+		return ""
+	}
+	stats := g.Stats()
+	if stats.FileCount == 0 && stats.EntityCount == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("代码图谱已覆盖 %d 个文件、%d 个包。\n", stats.FileCount, stats.PackageCount))
+	if stats.EntityCount > 0 {
+		b.WriteString(fmt.Sprintf("实体总数：%d", stats.EntityCount))
+		// 按类别展开
+		if len(stats.KindCounts) > 0 {
+			parts := make([]string, 0, len(stats.KindCounts))
+			for k, v := range stats.KindCounts {
+				parts = append(parts, fmt.Sprintf("%s %d", k, v))
+			}
+			b.WriteString("（" + strings.Join(parts, "、") + "）")
+		}
+		b.WriteString("\n")
+	}
+	if stats.RelationCount > 0 {
+		b.WriteString(fmt.Sprintf("关系总数：%d。\n", stats.RelationCount))
+	}
+	b.WriteString("如果项目文件有变更，用 codegraph_build 重建图谱获取最新结构。")
+	return b.String()
+}
+
+// ── 注入入口 ────────────────────────────────────────────────
 // BuildResumeContext 为对话恢复构建主动注入的上下文块。
 // 应在 buildWebSystemDynamic() 中调用，作为系统提示的动态后缀。
 // 仅当对话有历史（非首次对话）时返回非空。
 func BuildResumeContext(convID, currentTask string, history []Message, store MessageStoreReader, roots []string) string {
 	if len(history) == 0 {
-		// 新对话：仅注入工作区结构概览 + 自动召回记忆
+		// 新对话：注入工作区结构概览 + 自动召回记忆 + Git 状态 + 代码图谱
 		var b strings.Builder
 		if ws := buildWorkspaceStructureOverview(roots); ws != "" {
 			b.WriteString("\n\n# 工作区结构\n")
@@ -468,6 +611,14 @@ func BuildResumeContext(convID, currentTask string, history []Message, store Mes
 			b.WriteString("\n\n# 相关项目记忆（自动召回）\n")
 			b.WriteString(recall)
 			b.WriteString("\n（需要细节用 memory_read 读全文。）")
+		}
+		if gs := buildGitStatus(roots); gs != "" {
+			b.WriteString("\n\n# Git 状态\n")
+			b.WriteString(gs)
+		}
+		if cgs := buildCodeGraphStats(); cgs != "" {
+			b.WriteString("\n\n# 代码图谱\n")
+			b.WriteString(cgs)
 		}
 		return b.String()
 	}
