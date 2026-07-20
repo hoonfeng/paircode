@@ -666,9 +666,14 @@ const sendMessage = async () => {
   const convId = state.currentConvId
   if (!convId) { state.chatLoading = false; state.agentRunning = false; return }
 
-  // ── ★ 立即创建用户消息（确保用户消息在任何情况下都可见） ──
-  const userContent = text || ''
-  let fullContent = userContent
+  // ── ★ 先创建 runtime（在 push 任何消息之前），防止 processStatus 竞态创建兜底占位 ──
+  const msgKey = makeMsgKey()
+  const lastUserText = text
+  startConvRuntime(convId, msgKey, lastUserText)
+  console.log('[RP] sendMessage ▸ 用户发送 conv=%s msgKey=%s textLen=%d', convId, msgKey, lastUserText.length)
+
+  // ── ★ 创建用户消息 ──
+  let fullContent = lastUserText
   if (pendingAttachment.value) {
     const att = pendingAttachment.value
     if (att.type === 'image') {
@@ -679,7 +684,6 @@ const sendMessage = async () => {
       fullContent += '\n\n[参考文件] ' + att.path + ':' + (att.lineStart || 1) + '-' + (att.lineEnd || 1) + '\n（如需查看代码，请使用 read_file 工具读取上述路径和行号）'
     }
   }
-  const lastUserText = text
   inputText.value = ''; pendingAttachment.value = null
   collapsePreviousOutputs()
 
@@ -690,13 +694,11 @@ const sendMessage = async () => {
     _time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
   }
   state.messagesByConv[convId].push(userMsg)
-  // ★ 用展开创建新数组引用，强制 Vue 响应式更新
-  state.messages = [...state.messagesByConv[convId]]
+  console.log('[RP] sendMessage ▸ 用户消息已推入 idx=%d', userMsg._idx)
 
-  // ★ 立即创建 assistant 占位（用户看到"思考中"状态）
-  const msgKey = createAssistantPlaceholder(convId)
-  startConvRuntime(convId, msgKey, lastUserText || fullContent)
-  // createAssistantPlaceholder 已 push 到同一数组，同步引用
+  // ★ 创建 assistant 占位并用预生成的 msgKey（runtime 已绑定此 key）
+  createAssistantPlaceholder(convId, msgKey)
+  // ★ 同步响应式引用（仅一次；runtime 已存在，processStatus 不会创建兜底占位）
   state.messages = [...state.messagesByConv[convId]]
 
   // 更新对话标题和计数
@@ -713,7 +715,7 @@ const sendMessage = async () => {
     }
   }
   if (!state.chatSessionId) state.chatSessionId = 'sess_' + Date.now()
-  console.log('[RP] sendMessage conv=%s msgKey=%s msgsLen=%d', convId, msgKey, state.messagesByConv[convId].length)
+  console.log('[RP] sendMessage ▸ 调用 chatStart conv=%s msgsLen=%d', convId, state.messagesByConv[convId].length)
 
   // ── 调用后端 chatStart（HTTP 发送，WS 事件异步更新 assistant 消息） ──
   try {

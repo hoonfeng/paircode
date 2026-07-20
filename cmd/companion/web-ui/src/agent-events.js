@@ -75,11 +75,10 @@ function findMsgByKey(msgs, key) {
 
 // 创建助手消息占位符（由 RightPanel sendMessage 调用，在 chatStart 之前）
 // 返回 msgKey（唯一标识，比数组下标稳定）。
-export function createAssistantPlaceholder(convId) {
+export function createAssistantPlaceholder(convId, key) {
   const msgs = state.messagesByConv[convId]
   if (!msgs) return ''
-  const key = makeMsgKey()
-  console.log('[AE] createAssistantPlaceholder conv=%s key=%s msgsLen=%d', convId, key, msgs.length)
+  if (!key) key = makeMsgKey()
   const assistantMsg = {
     role: 'assistant', content: '', segments: [], toolCalls: [],
     _key: key, _idx: msgs.length,
@@ -145,9 +144,6 @@ export function processAgentEvent(convId, data) {
   if (!msg) {
     console.warn('[AE] processAgentEvent 丢弃: 无目标 msg conv=%s type=%s', convId, data.type)
     return
-  }
-  if (data.type !== 'content' && data.type !== 'thinking') {
-    console.log('[AE] processAgentEvent conv=%s type=%s msgKey=%s', convId, data.type, rt.msgKey)
   }
   msg._loading = false
 
@@ -339,6 +335,13 @@ export function processAgentEvent(convId, data) {
     msg.segments.push({ type: 'content', content: '> 📊 任务评测：\n' + (data.content || '') })
   }
 
+  // ★ 同步 state.messages（当前对话时），确保 Vue 响应式更新
+  //    processAgentEvent 直接修改 messagesByConv[convId]，需要同步到 state.messages
+  //    让 messageCombos computed 能感知到消息对象内部属性的变化。
+  if (isCurrent) {
+    state.messages = msgs
+  }
+
   if (isCurrent && globalCtx.scrollToBottom) globalCtx.scrollToBottom(convId)
 }
 
@@ -423,6 +426,10 @@ export function processAgentDone(convId, data) {
   const localConv = state.conversations.find(c => c.id === convId)
   if (localConv) localConv.msgCount = (localConv.msgCount || 0) + 1
   window.dispatchEvent(new Event('save-conversations'))
+  // ★ 同步 state.messages（当前对话时），确保 Vue 响应式更新
+  if (isCurrent) {
+    state.messages = msgs
+  }
   if (isCurrent && globalCtx.scrollToBottom) globalCtx.scrollToBottom(convId)
   delete runtimes[convId]
 }
@@ -479,9 +486,6 @@ export function processAllDisconnected() {
   state.agentRunning = false
 }
 
-// ─── processStatus 日志辅助 ──
-let statusLogCounter = 0
-
 // 处理 WebSocket 收到的 status 消息（连接建立/重连后、以及会话 done 后推送）
 // payload: { runningConvs: [...], runningByWorkspace: {wsRoot: count} }
 export function processStatus(payload) {
@@ -496,9 +500,6 @@ export function processStatus(payload) {
 
   // 同步运行中状态：后端报告的 runningConvs 标记为 running
   const runningSet = new Set(runningConvs)
-  if (statusLogCounter++ < 100) {
-    console.log('[AE] processStatus runningConvs=%o runtimeKeys=%o', runningConvs, Object.keys(runtimes))
-  }
   // 标记仍在运行的（只设置状态标记，不创建占位也不创建 runtime）
   // ★ 占位和 runtime 由 switchConv（加载完历史后）或 processAgentEvent（首次收到事件时）负责创建
   for (const convId of runningSet) {
