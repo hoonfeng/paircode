@@ -499,37 +499,30 @@ export function processStatus(payload) {
   if (statusLogCounter++ < 100) {
     console.log('[AE] processStatus runningConvs=%o runtimeKeys=%o', runningConvs, Object.keys(runtimes))
   }
-  // 标记仍在运行的
+  // 标记仍在运行的（只设置状态标记，不创建占位也不创建 runtime）
+  // ★ 占位和 runtime 由 switchConv（加载完历史后）或 processAgentEvent（首次收到事件时）负责创建
   for (const convId of runningSet) {
     state.agentRunningByConv[convId] = true
-    // 后端认为它在运行，就标记 loading（即使已加载的历史消息没有 _loading 标记）
     state.loadingByConv[convId] = true
-    // 页面刷新后 agent 仍在运行：前端没有 runtime，事件会被丢弃。
-    // 为这些对话创建 messagesByConv 占位 + runtime，确保后续事件能被处理。
-    if (!runtimes[convId]) {
-      if (!state.messagesByConv[convId]) state.messagesByConv[convId] = []
-      const msgs = state.messagesByConv[convId]
-      // 若最后一条不是 loading 的 assistant 消息，则创建占位
-      const last = msgs[msgs.length - 1]
-      if (!last || last.role !== 'assistant' || !last._loading) {
+    // ★ 兜底：若消息已加载（switchConv 已完成）但无 runtime，创建占位
+    const msgsArr = state.messagesByConv[convId]
+    if (msgsArr && msgsArr.length > 0 && !runtimes[convId]) {
+      const hasRealMsgs = msgsArr.some(m => !m._loading)
+      const lastLoading = [...msgsArr].reverse().find(m => m._loading)
+      if (hasRealMsgs && !lastLoading) {
         const key = makeMsgKey()
-        console.log('[AE] processStatus 创建runtime+loading conv=%s key=%s msgsLen=%d', convId, key, msgs.length)
-        msgs.push({
+        console.log('[AE] processStatus 兜底创建占位 conv=%s key=%s', convId, key)
+        msgsArr.push({
           role: 'assistant', content: '', segments: [], toolCalls: [],
-          _key: key,
-          _idx: msgs.length,
+          _key: key, _idx: msgsArr.length,
           _time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
           _loading: true,
         })
         runtimes[convId] = { msgKey: key, finalContent: '', lastUserText: '' }
-      } else {
-        // 已有 loading 的 assistant 消息，复用其 _key
-        console.log('[AE] processStatus 复用runtime conv=%s key=%s', convId, last._key)
-        runtimes[convId] = { msgKey: last._key, finalContent: '', lastUserText: '' }
-      }
-      // 若是当前对话，同步 state.messages（仅当有更改时）
-      if (state.currentConvId === convId) {
-        state.messages = msgs
+        // 若是当前对话，同步 state.messages
+        if (state.currentConvId === convId) {
+          state.messages = msgsArr
+        }
       }
     }
   }

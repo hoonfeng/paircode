@@ -969,20 +969,29 @@ const switchConv = async (id) => {
         .sort((a, b) => (a._idx || 0) - (b._idx || 0))
       console.log('[RP] switchConv API返回 loaded=%d total=%d', loaded.length, data.total)
 
-      // ★ 合并：保留 messagesByConv 中已有的 loading 占位（processStatus 创建），
-      //   追加 API 返回的消息（按 _idx 去重），保持顺序
-      const existing = state.messagesByConv[id] || []
-      const keepMsgs = existing.filter(m => m._loading)  // 保留 loading 占位
-      const existingIdxSet = new Set(existing.map(m => m._idx))
-      for (const m of loaded) {
-        if (!existingIdxSet.has(m._idx)) { keepMsgs.push(m); existingIdxSet.add(m._idx) }
-      }
-      const mergedMsgs = mergeConsecutiveAssistant(keepMsgs)
+      // ★ 合并：API 返回的消息直接使用（processStatus 不再创建 loading 占位，无需保留逻辑）
+      const mergedMsgs = mergeConsecutiveAssistant(loaded)
       state.messagesByConv[id] = mergedMsgs
       state.messages = mergedMsgs
       state.msgTotalByConv[id] = data.total || loaded.length
-      state.msgLoadedByConv[id] = mergedMsgs.filter(m => !m._loading).length
+      state.msgLoadedByConv[id] = mergedMsgs.length
       nextTick(() => applyAutoCollapse())
+
+      // ★ 若该对话正在运行（agentRunningByConv 已由 processStatus 设置），
+      //   创建 assistant 占位 + runtime，准备接收 WS 实时事件
+      if (state.agentRunningByConv[id] && !getConvRuntime(id)) {
+        const key = makeMsgKey()
+        console.log('[RP] switchConv 对话运行中，创建占位 conv=%s key=%s', id, key)
+        startConvRuntime(id, key, '')
+        mergedMsgs.push({
+          role: 'assistant', content: '', segments: [], toolCalls: [],
+          _key: key, _idx: mergedMsgs.length,
+          _time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+          _loading: true,
+        })
+        state.messagesByConv[id] = mergedMsgs
+        state.messages = mergedMsgs
+      }
     } catch {
       state.msgTotalByConv[id] = 0
       state.msgLoadedByConv[id] = 0

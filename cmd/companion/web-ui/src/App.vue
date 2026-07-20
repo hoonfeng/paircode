@@ -391,13 +391,16 @@ onMounted(async () => {
     }
   }
 
-  // ★ 初始化 WebSocket（置于对话加载之后）：确保历史消息先加载完毕再接收 WS 事件
-  api.initWebSocket({
-    onStatus: (payload) => processStatus(payload),
-    onEvent: (convId, data) => processAgentEvent(convId, data),
-    onDone: (convId, data) => processAgentDone(convId, data),
-    onDisconnected: () => processAllDisconnected(),
-  })
+  // ★ 初始化 WebSocket（延迟 200ms，让 switchConv 先启动加载历史）
+  //    processStatus 不再创建占位，所以 WS 早连也不会有副作用
+  setTimeout(() => {
+    api.initWebSocket({
+      onStatus: (payload) => processStatus(payload),
+      onEvent: (convId, data) => processAgentEvent(convId, data),
+      onDone: (convId, data) => processAgentDone(convId, data),
+      onDisconnected: () => processAllDisconnected(),
+    })
+  }, 200)
 
   loadPersistentState()
   if (state.openFiles.length > 0) {
