@@ -391,9 +391,7 @@ onMounted(async () => {
     }
   }
 
-  // ★ 初始化 WebSocket（置于对话加载之后）：确保历史消息先加载完毕
-  //   再接收 WS 事件。同时 switchConv 中通过 suspendConv/resumeConv
-  //   在 await API 期间挂起 WS 处理，双重保障消息时序。
+  // ★ 初始化 WebSocket（置于对话加载之后）：确保历史消息先加载完毕再接收 WS 事件
   api.initWebSocket({
     onStatus: (payload) => processStatus(payload),
     onEvent: (convId, data) => processAgentEvent(convId, data),

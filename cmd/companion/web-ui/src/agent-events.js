@@ -37,33 +37,7 @@ function pushSegment(segs, type, initial) {
 //   onTaskReplace(tasks, convId),  // update_tasks 全量替换子任务清单调用
 //   onPhaseChange(convId),         // 阶段变化（RightPanel 启动定时器清除）
 // }
-// ─── Conv 级消息加载锁：在 switchConv 加载历史消息期间，挂起该 conv 的 WS 事件
-//   确保「历史消息先于 WS 写入」，避免 await API 期间 agent 事件的并发写入
-const _suspendedConvs = new Set()
-const _pendingByConv = {}
 
-export function suspendConv(convId) {
-  if (convId) {
-    _suspendedConvs.add(convId)
-    if (!_pendingByConv[convId]) _pendingByConv[convId] = []
-  }
-}
-
-export function resumeConv(convId) {
-  if (!convId) return
-  _suspendedConvs.delete(convId)
-  const buf = _pendingByConv[convId] || []
-  delete _pendingByConv[convId]
-  // flush 缓冲：按到达顺序处理
-  for (const item of buf) {
-    try {
-      if (item.type === 'event') processAgentEvent(item.convId, item.data)
-      else if (item.type === 'done') processAgentDone(item.convId, item.data)
-    } catch (e) {
-      console.warn('[AE] flush 缓冲事件失败 conv=%s type=%s err=%s', item.convId, item.type, e.message)
-    }
-  }
-}
 
 let globalCtx = {}
 
@@ -118,13 +92,6 @@ export function createAssistantPlaceholder(convId) {
 
 // ─── 事件处理 ──
 export function processAgentEvent(convId, data) {
-  // ── 若该 conv 正在加载历史消息，缓冲事件 ──
-  if (_suspendedConvs.has(convId)) {
-    if (!_pendingByConv[convId]) _pendingByConv[convId] = []
-    _pendingByConv[convId].push({ type: 'event', convId, data })
-    return
-  }
-
   // 确保 messagesByConv 存在
   if (!state.messagesByConv[convId]) state.messagesByConv[convId] = []
   const msgs = state.messagesByConv[convId]
@@ -376,12 +343,7 @@ export function processAgentEvent(convId, data) {
 }
 
 export function processAgentDone(convId, data) {
-  // ── 若该 conv 正在加载历史消息，缓冲事件 ──
-  if (_suspendedConvs.has(convId)) {
-    if (!_pendingByConv[convId]) _pendingByConv[convId] = []
-    _pendingByConv[convId].push({ type: 'done', convId, data })
-    return
-  }
+
   console.log('[AE] processAgentDone conv=%s hasRuntime=%s msgByConvLen=%d', convId, !!runtimes[convId], (state.messagesByConv[convId]||[]).length)
   const rt = runtimes[convId]
   const msgs = state.messagesByConv[convId]
@@ -555,12 +517,9 @@ export function processStatus(payload) {
         msgs.push({
           role: 'assistant', content: '', segments: [], toolCalls: [],
           _key: key,
-          // ★ 使用负数 _idx 避免与真实 API 消息冲突（真实消息 idx >= 0）
-          _idx: -Date.now(),
+          _idx: msgs.length,
           _time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
           _loading: true,
-          // ★ 标记为 processStatus 创建的临时占位，switchConv merge 时会移除
-          _tempPlaceholder: true,
         })
         runtimes[convId] = { msgKey: key, finalContent: '', lastUserText: '' }
       } else {

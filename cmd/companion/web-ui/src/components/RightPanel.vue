@@ -205,7 +205,7 @@
 import { ref, computed, inject, onMounted, onUnmounted, nextTick, watch, reactive } from 'vue'
 import { state } from '../main.js'
 import api from '../api.js'
-import { setGlobalCtx, startConvRuntime, resetConvRuntime, createAssistantPlaceholder, getConvRuntime, getConvCtxStats, resetConvCtxStats, suspendConv, resumeConv } from '../agent-events.js'
+import { setGlobalCtx, startConvRuntime, resetConvRuntime, createAssistantPlaceholder, getConvRuntime, getConvCtxStats, resetConvCtxStats } from '../agent-events.js'
 import SvgIcon from './SvgIcon.vue'
 import PlanPanel from './PlanPanel.vue'
 import TaskPanel from './TaskPanel.vue'
@@ -322,18 +322,11 @@ const hasMoreTop = computed(() => {
 })
 
 // ★ messageCombos：将平铺的 user/assistant 消息按用户消息分组。
-// 每组：{ user, assistant }，assistant 可能为 null（用户消息后无回复）。
-// 保持对原消息对象的引用，WS 流式写入自动反映到 combo 内。
-// ★ 强制按 _idx 排序，确保顺序始终稳定（loadMoreMessages prepend +
-// WS 并发写入不会打乱顺序）。
-// ★ 过滤掉 _tempPlaceholder 标记的临时占位（由 processStatus 创建，
-//   switchConv 中会清理，但兜底过滤防止残留导致配对错乱）。
-// ★ 连续 assistant 消息合并：不在 computed 中做（会修改响应式对象触发无限循环），
-//   而是在 switchConv/loadMoreMessages 加载历史消息后做预处理合并。
-// ★ computed 只做纯分组，不修改任何响应式对象。
+// 每组：{ user, assistant }，assistant 可能为 null。
+// ★ 保持对原消息对象的引用，WS 流式写入自动反映到 combo 内。
+// ★ 强制按 _idx 排序。连续 assistant 消息已在 switchConv/loadMoreMessages 中预处理合并。
 const messageCombos = computed(() => {
   const msgs = [...(state.messages || [])]
-    .filter(m => !m._tempPlaceholder)
     .sort((a, b) => (a._idx ?? 0) - (b._idx ?? 0))
   const combos = []
   let current = null
@@ -678,11 +671,14 @@ const sendMessage = async () => {
     _time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
   }
   state.messagesByConv[convId].push(userMsg)
-  state.messages = state.messagesByConv[convId]
+  // ★ 用展开创建新数组引用，强制 Vue 响应式更新
+  state.messages = [...state.messagesByConv[convId]]
 
-  // ★ 立即创建 assistant 占位（即使 WS 未就绪，用户也能看到"思考中"状态）
+  // ★ 立即创建 assistant 占位（用户看到"思考中"状态）
   const msgKey = createAssistantPlaceholder(convId)
   startConvRuntime(convId, msgKey, lastUserText || fullContent)
+  // createAssistantPlaceholder 已 push 到同一数组，同步引用
+  state.messages = [...state.messagesByConv[convId]]
 
   // 更新对话标题和计数
   autoNameConv(convId, lastUserText || fullContent)
@@ -700,25 +696,7 @@ const sendMessage = async () => {
   if (!state.chatSessionId) state.chatSessionId = 'sess_' + Date.now()
   console.log('[RP] sendMessage conv=%s msgKey=%s msgsLen=%d', convId, msgKey, state.messagesByConv[convId].length)
 
-  // ── WS 等待（非阻塞：超时后仍继续发送消息，后端会缓冲事件） ──
-  if (!api.isWebSocketOpen()) {
-    console.log('[RP] sendMessage 等待 WS 连接...')
-    try {
-      await new Promise((resolve, reject) => {
-        let waited = 0
-        const check = setInterval(() => {
-          waited += 200
-          if (api.isWebSocketOpen()) { clearInterval(check); resolve() }
-          else if (waited >= 8000) { clearInterval(check); reject(new Error('WebSocket 连接超时')) }
-        }, 200)
-      })
-    } catch (err) {
-      console.warn('[RP] sendMessage WS等待失败:', err.message)
-      // WS 超时：不阻断消息发送，chatStart 走 HTTP 会返回正常，只是 WS 事件流不可用
-    }
-  }
-
-  // ── 调用后端 chatStart ──
+  // ── 调用后端 chatStart（HTTP 发送，WS 事件异步更新 assistant 消息） ──
   try {
     await api.chatStart(convId, fullContent, autonomous.value, state.workspaceRoot)
   } catch (err) {
@@ -923,36 +901,33 @@ const deleteConv = async (id) => {
   } catch {}
 }
 
+// ── 对话切换：纯历史消息加载，不管理运行时/不创建占位/不挂起 WS
+//   WS 事件通过 processAgentEvent 直接写入 messagesByConv[convId]，
+//   不受 switchConv 影响（多对话并行场景下各 conv 独立更新）。
+//   页面刷新后的初始加载由 watch(currentConvId) 触发。
+const _loadingConvs = new Set()
 const switchConv = async (id) => {
-  // ★ guard：防止 watch + sidebar 直接调用并发竞态
-  switchingGuard = true
-  // ★ 挂起该 conv 的 WS 事件处理，确保历史消息先于 WS 写入
-  suspendConv(id)
+  if (!id || _loadingConvs.has(id)) return
+  _loadingConvs.add(id)
   try {
-  console.log('[RP] switchConv id=%s messagesByConv[id].length=%d runtimeExists=%s', id, (state.messagesByConv[id]||[]).length, !!getConvRuntime(id))
-  if (state.messagesByConv[id] && state.messagesByConv[id].length > 0) {
-    const msgs = state.messagesByConv[id]
-    console.log('[RP] switchConv 现有消息: first_idx=%d last_idx=%d loading=%d', msgs[0]._idx, msgs[msgs.length-1]._idx, msgs.filter(m=>m._loading).length)
-  }
-  // 多会话并行：切换对话不停止旧 agent，事件继续写入 messagesByConv[oldConvId]
+  console.log('[RP] switchConv id=%s messagesByConvLen=%d', id, (state.messagesByConv[id]||[]).length)
   state.currentConvId = id
-  // 切换 state.messages 指向（不停止旧 agent）
   if (!state.messagesByConv[id]) state.messagesByConv[id] = []
   state.messages = state.messagesByConv[id]
-  // 同步 loading 状态
   state.chatLoading = state.loadingByConv[id] || false
   state.agentRunning = state.agentRunningByConv[id] || false
   currentPlan.value = []
   currentTasks.value = []
-  // approval/phase/nudge/convCtxStats 自动从 state.*ByConv[currentConvId] 读取，无需手动重置
-  // 始终从后端刷新 token 统计（无论本地是否缓存了消息）
+
+  // 加载 token 统计
   try {
     const ts = await api.apiGet('/conversations/' + id + '/token-stats')
     if (ts && ts.promptTokens !== undefined) Object.assign(getConvCtxStats(id), ts)
   } catch {}
-  // 懒加载：若本地尚无真实消息缓存（忽略 processStatus 抢先插入的 loading 占位），拉取最新 50 条
-  const hasRealMsgs = state.messagesByConv[id].length > 0 &&
-    state.messagesByConv[id].some(m => !m._loading)
+
+  // 若本地无缓存消息，从 API 加载
+  const msgs = state.messagesByConv[id]
+  const hasRealMsgs = msgs.length > 0 && msgs.some(m => !m._loading)
   if (!hasRealMsgs) {
     try {
       const data = await api.getMessages(id, { limit: 50 })
@@ -961,118 +936,58 @@ const switchConv = async (id) => {
         .map((m, i) => {
           const role = m.message?.role || m.role || ''
           const segments = (m.segments || []).map(seg => {
-            // 兼容旧数据：finish_task 工具调用转为 content 段渲染
             if (seg.type === 'tool_call' && seg.name === 'finish_task') {
               return { type: 'content', content: seg.result || '' }
             }
-            // ask_user 持久化数据初始化 _answered 状态
-            if (seg.type === 'ask_user') {
-              seg._answered = !!seg.answer
-            }
+            if (seg.type === 'ask_user') seg._answered = !!seg.answer
             return seg
           })
           return {
-            role,
-            content: m.message?.content || m.content || '',
-            segments,
-            _key: 'msg_' + Date.now() + '_' + i,
-            _idx: m.idx,
-            _time: m.timestamp || '',
+            role, content: m.message?.content || m.content || '', segments,
+            _key: 'msg_' + Date.now() + '_' + i, _idx: m.idx, _time: m.timestamp || '',
           }
         })
-        // 按 idx 升序排列（用户消息在前，agent 输出在后）
-        loaded.sort((a, b) => (a._idx || 0) - (b._idx || 0))
-      console.log('[RP] switchConv API返回 loaded=%d total=%d userMsgs=%d assistantMsgs=%d hasLoading=%s',
-        loaded.length, data.total,
-        loaded.filter(m=>m.role==='user').length,
-        loaded.filter(m=>m.role==='assistant').length,
-        loaded.some(m=>m._loading))
-      // ★ 修复竞态：merge 而非替换！保证 await 期间 WebSocket 写入的消息不被丢弃
-      const existingMsgs = state.messagesByConv[id] || []
-      // ★ 移除 processStatus 创建的临时 loading 占位（_tempPlaceholder），
-      //   它们只是 status 消息的占位符，API 返回真实数据后不再需要。
-      //   但保留运行时创建的 loading 占位（无 _tempPlaceholder 标记）。
-      const existingLoading = existingMsgs.find(m => m._loading && !m._tempPlaceholder)
-      const cleanedMsgs = existingMsgs.filter(m => !m._tempPlaceholder)
-      const existingIdxSet = new Set(cleanedMsgs.map(m => m._idx))
-      // 只追加 API 返回中本地不存在的消息（按 _idx 去重）
+        .sort((a, b) => (a._idx || 0) - (b._idx || 0))
+      console.log('[RP] switchConv API返回 loaded=%d total=%d', loaded.length, data.total)
+
+      // ★ 合并：保留 messagesByConv 中已有的 loading 占位（processStatus 创建），
+      //   追加 API 返回的消息（按 _idx 去重），保持顺序
+      const existing = state.messagesByConv[id] || []
+      const keepMsgs = existing.filter(m => m._loading)  // 保留 loading 占位
+      const existingIdxSet = new Set(existing.map(m => m._idx))
       for (const m of loaded) {
-        if (!existingIdxSet.has(m._idx)) {
-          cleanedMsgs.push(m)
-          existingIdxSet.add(m._idx)
-        }
+        if (!existingIdxSet.has(m._idx)) { keepMsgs.push(m); existingIdxSet.add(m._idx) }
       }
-      // 按 _idx 排序保持顺序
-      const mergedMsgs = mergeConsecutiveAssistant(cleanedMsgs)
+      const mergedMsgs = mergeConsecutiveAssistant(keepMsgs)
       state.messagesByConv[id] = mergedMsgs
       state.messages = mergedMsgs
       state.msgTotalByConv[id] = data.total || loaded.length
-      state.msgLoadedByConv[id] = cleanedMsgs.length
-      // 页面刷新后：如果折叠开关打开，对历史消息应用折叠状态
+      state.msgLoadedByConv[id] = mergedMsgs.filter(m => !m._loading).length
       nextTick(() => applyAutoCollapse())
-      const rt = getConvRuntime(id)
-      if (rt) {
-        // 当前 agent 仍在运行，复用或创建 loading 占位
-        // ★ 必须保持 _key 与 rt.msgKey 一致，否则 processAgentEvent 的
-        //   findMsgByKey 找不到目标消息，导致 WS 事件丢失。
-        const existLoading = existingMsgs.find(m => m._loading && !m._tempPlaceholder)
-        if (existLoading) {
-          // 复用现有 loading 消息，确保 _key 与 rt.msgKey 一致
-          rt.msgKey = existLoading._key
-          existLoading._idx = cleanedMsgs.length
-          console.log('[RP] switchConv 复用 loading 占位 key=%s idx=%d', rt.msgKey, existLoading._idx)
-        } else {
-          const loadingKey = makeMsgKey()
-          rt.msgKey = loadingKey
-          const newLoading = {
-            role: 'assistant', content: '', segments: [], toolCalls: [],
-            _key: loadingKey,
-            _idx: cleanedMsgs.length,
-            _time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
-            _loading: true,
-          }
-          mergedMsgs.push(newLoading)
-          console.log('[RP] switchConv 创建新 loading 占位 key=%s mergedLen=%d',
-            loadingKey, mergedMsgs.length)
-        }
-      }
     } catch {
       state.msgTotalByConv[id] = 0
       state.msgLoadedByConv[id] = 0
     }
   }
-  // ── 从后端 API 加载真实任务状态（TaskManager 持久化到 .pair/tasks/*.json）──
-  // 放在消息加载之外，确保每次切换/刷新都从真实数据加载而非从消息重建
-  // 传入当前对话 ID 过滤，只显示本对话创建的任务
+
+  // 加载任务状态
   try {
     const taskData = await api.apiGet('/tasks', { convId: id })
     if (taskData && taskData.tasks && taskData.tasks.length > 0) {
       currentTasks.value = taskData.tasks.map(t => ({
-        step: t.step || t.subject || '',
-        status: t.status,
-        _taskId: t.taskId,
+        step: t.step || t.subject || '', status: t.status, _taskId: t.taskId,
       }))
-    } else {
-      currentTasks.value = []
-    }
-  } catch {
-    currentTasks.value = []
-  }
-  // ── 从消息重建 plan（update_plan 工具调用）──
-  const msgs = state.messagesByConv[id] || []
-  if (msgs.length > 0) {
-    currentPlan.value = rebuildPlanFromMessages(msgs)
-  } else {
-    currentPlan.value = []
-  }
+    } else { currentTasks.value = [] }
+  } catch { currentTasks.value = [] }
+
+  // 从消息重建 plan
+  const planMsgs = state.messagesByConv[id] || []
+  currentPlan.value = planMsgs.length > 0 ? rebuildPlanFromMessages(planMsgs) : []
   planExpanded.value = currentPlan.value.length > 0
-  // 页面刷新后：如果折叠开关打开，对已加载的历史消息应用折叠状态
   applyAutoCollapse()
   forceScrollToBottom()
   } finally {
-    // ★ 恢复 WS 事件处理，flush 缓冲的事件
-    resumeConv(id)
-    switchingGuard = false
+    _loadingConvs.delete(id)
   }
 }
 
@@ -1226,17 +1141,10 @@ function stopContentResizeObserver() {
 
 // ── 新消息自动滚底（已移除 — 由 agent-events.js 的 scrollToBottom 统一控制）
 
-// ── 对话切换时：重启内容尺寸观察器 + switchConv 兜底
-// ★ watch 恢复 switchConv 调用以兜底 App.vue async onMounted 中
-//   currentConvId 设置滞后于 RightPanel onMounted 导致初始加载丢失。
-//   使用 switchingGuard 防止与 sidebar 直接调用并发竞态。
-//   guard 在 switchConv 函数入口置 true、finally 置 false。
-let switchingGuard = false
+// ★ watch 兜底：App.vue async onMounted 设置 currentConvId 后自动加载消息
+//   _loadingConvs 防重入：sidebar 直接调用时 watch 自动跳过
 watch(() => state.currentConvId, (id, oldId) => {
-  if (id && id !== oldId && !switchingGuard) {
-    switchingGuard = true
-    switchConv(id).finally(() => { switchingGuard = false })
-  }
+  if (id && id !== oldId) switchConv(id)
   nextTick(() => startContentResizeObserver())
 })
 
