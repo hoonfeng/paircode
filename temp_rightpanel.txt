@@ -54,13 +54,6 @@
               <div v-if="combo.assistant" class="msg-item msg-assistant" :data-idx="combo.assistant._idx">
                 <div class="msg-avatar"><SvgIcon name="bot" :size="16" /></div>
                 <div class="msg-bubble bubble-assistant">
-                  <!-- ★ 用户反馈标记（合并到 agent 输出中，不显示为独立用户气泡） -->
-                  <div v-if="combo.assistant._feedbacks && combo.assistant._feedbacks.length > 0" class="fb-merged-section">
-                    <div v-for="(fb, fi) in combo.assistant._feedbacks" :key="'fb'+fi" class="fb-merged-item">
-                      <div class="fb-merge-label"><SvgIcon name="message-square" :size="11" /> 用户反馈</div>
-                      <div class="fb-merge-content">{{ fb.content }}</div>
-                    </div>
-                  </div>
                   <!-- Agent 分段渲染（兼容 WS 流式更新通过 pushSegment 写入 segments） -->
                   <template v-if="combo.assistant.segments && combo.assistant.segments.length > 0">
                     <div v-if="combo.assistant._folded" class="folded-summary" @click="combo.assistant._folded = !combo.assistant._folded">
@@ -332,53 +325,30 @@ const hasMoreTop = computed(() => {
 // 每组：{ user, assistant }，assistant 可能为 null。
 // ★ 保持对原消息对象的引用，WS 流式写入自动反映到 combo 内。
 // ★ 强制按 _idx 排序。连续 assistant 消息已在 switchConv/loadMoreMessages 中预处理合并。
-// ★ 用户反馈（【用户反馈】前缀）合并到前一个 assistant 气泡，不创建独立用户气泡。
 const messageCombos = computed(() => {
   const msgs = [...(state.messages || [])]
     .sort((a, b) => (a._idx ?? 0) - (b._idx ?? 0))
   const combos = []
   let current = null
-  let pendingFeedback = null
   for (const msg of msgs) {
     if (msg.role === 'user') {
-      // ★ 用户反馈消息：合并到前一个 assistant，不创建独立气泡
-      if (isFeedback(msg)) {
-        pendingFeedback = msg
-        continue
-      }
-      pendingFeedback = null
       current = { user: msg, assistant: null }
       combos.push(current)
     } else if (msg.role === 'assistant') {
-      // ★ 如果前一个消息是 feedback user，合并到上一个 combo 的 assistant 中
-      if (pendingFeedback && current) {
-        if (!current.assistant) {
-          // 前一个 combo 没有 assistant → feedback 的回复成为 assistant
-          current.assistant = msg
-        }
-        // 将 feedback 内容和 agent 回复附加到 assistant 的 _feedbacks 数组
-        if (!current.assistant._feedbacks) current.assistant._feedbacks = []
-        current.assistant._feedbacks.push({
-          content: cleanMsgContent(pendingFeedback),
-          replyMsg: msg
-        })
-        pendingFeedback = null
-        continue
-      }
       if (current && current.assistant === null) {
         // 正常配对：user → assistant
         current.assistant = msg
       } else {
         // 没有前置 user 或已有 assistant → 新起一个独立气泡
+        // （连续 assistant 的情况已在 switchConv/loadMoreMessages 中预处理合并，
+        //  此处不应再出现连续 assistant，但兜底处理不合并，防止 computed 副作用）
         current = { user: null, assistant: msg }
         combos.push(current)
       }
-      pendingFeedback = null
     }
   }
   return combos
 })
-
 
 // loadingMoreTop 防止懒加载重复触发
 const loadingMoreTop = ref(false)
@@ -1603,35 +1573,6 @@ onUnmounted(() => {
   display: flex; align-items: center; flex-shrink: 0;
 }
 .feedback-send-btn:disabled { opacity: 0.4; cursor: default; }
-
-/* ── 合并到 agent 气泡中的用户反馈标记 ── */
-.fb-merged-section {
-  margin-bottom: 8px;
-}
-.fb-merged-item {
-  background: rgba(212, 167, 78, 0.08);
-  border: 1px solid rgba(212, 167, 78, 0.3);
-  border-radius: 6px;
-  padding: 8px 10px;
-  margin-bottom: 6px;
-}
-.fb-merged-item:last-child { margin-bottom: 0; }
-.fb-merge-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: #d4a74e;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-bottom: 4px;
-}
-.fb-merge-content {
-  font-size: 12px;
-  color: var(--text-primary);
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
 
 .scroll-more-hint { text-align: center; font-size: 11px; color: var(--text-muted); padding: 4px; }
 .tool-calls { margin-top: 4px; }
