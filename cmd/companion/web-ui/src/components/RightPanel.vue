@@ -328,9 +328,9 @@ const hasMoreTop = computed(() => {
 // WS 并发写入不会打乱顺序）。
 // ★ 过滤掉 _tempPlaceholder 标记的临时占位（由 processStatus 创建，
 //   switchConv 中会清理，但兜底过滤防止残留导致配对错乱）。
-// ★ 合并连续 assistant 消息：历史加载时后端可能返回多条 assistant 消息
-//   （各 WS 事件阶段分别持久化），连续 assistant 应合并为同一条显示，
-//   避免用户看到分段气泡。
+// ★ 连续 assistant 消息合并：不在 computed 中做（会修改响应式对象触发无限循环），
+//   而是在 switchConv/loadMoreMessages 加载历史消息后做预处理合并。
+// ★ computed 只做纯分组，不修改任何响应式对象。
 const messageCombos = computed(() => {
   const msgs = [...(state.messages || [])]
     .filter(m => !m._tempPlaceholder)
@@ -345,31 +345,10 @@ const messageCombos = computed(() => {
       if (current && current.assistant === null) {
         // 正常配对：user → assistant
         current.assistant = msg
-      } else if (current && current.assistant !== null) {
-        // ★ 修复：连续 assistant 消息 → 合并到已有 assistant，不分新气泡
-        //   历史加载时后端返回多条 assistant 消息（各 WS 阶段分别持久化），
-        //   每条的 segments 各不相同。合并后展示在同一个气泡中。
-        const exist = current.assistant
-        // 合并新的 segments 到已有 segments（去重：避免 content 段重复）
-        if (msg.segments && msg.segments.length > 0) {
-          if (!exist.segments) exist.segments = []
-          for (const seg of msg.segments) {
-            // content 段追加到已有 content 末尾（而非重复创建新段）
-            if (seg.type === 'content' && seg.content) {
-              const lastContent = [...exist.segments].reverse().find(s => s.type === 'content')
-              if (lastContent && lastContent.content.endsWith(seg.content)) continue
-              exist.segments.push(seg)
-            } else {
-              exist.segments.push(seg)
-            }
-          }
-        }
-        // 合并 content 回填
-        if (msg.content && !exist.content) {
-          exist.content = msg.content
-        }
       } else {
-        // 没有前置 user → 新起一个独立 assistant 气泡
+        // 没有前置 user 或已有 assistant → 新起一个独立气泡
+        // （连续 assistant 的情况已在 switchConv/loadMoreMessages 中预处理合并，
+        //  此处不应再出现连续 assistant，但兜底处理不合并，防止 computed 副作用）
         current = { user: null, assistant: msg }
         combos.push(current)
       }
@@ -436,8 +415,9 @@ const loadMoreMessages = async () => {
       }))
     if (older.length > 0) {
       // prepend 到数组头部（全量渲染下 scrollHeight 会自然增加）
-      state.messagesByConv[id] = [...older, ...msgs]
-      state.messages = state.messagesByConv[id]
+      const mergedBefore = mergeConsecutiveAssistant([...older, ...msgs])
+      state.messagesByConv[id] = mergedBefore
+      state.messages = mergedBefore
       state.msgLoadedByConv[id] = (state.msgLoadedByConv[id] || 0) + older.length
       // 补偿滚动位置：保持当前视口内容不动（新增的 older 消息在顶部）
       nextTick(() => {
@@ -546,6 +526,43 @@ function pushSegment(segs, type, initial) {
   const seg = { type, content: '', ...initial }
   segs.push(seg)
   return seg
+}
+
+// mergeConsecutiveAssistant 合并连续的 assistant 消息为一条。
+// 历史加载时后端可能返回多条 assistant 消息（各 WS 事件阶段分别持久化），
+// 合并后展示在同一个气泡中，避免分段显示。
+// ★ 此函数在消息列表设置到 state 之前调用，不在 computed 中做，
+//   避免修改响应式对象触发无限循环。
+function mergeConsecutiveAssistant(msgs) {
+  const result = []
+  for (const msg of msgs) {
+    if (msg.role === 'assistant' && result.length > 0) {
+      const last = result[result.length - 1]
+      if (last.role === 'assistant') {
+        // 合并 segments 到已有的 assistant 消息
+        if (msg.segments && msg.segments.length > 0) {
+          if (!last.segments) last.segments = []
+          for (const seg of msg.segments) {
+            if (seg.type === 'content' && seg.content) {
+              // content 段去重：避免重复追加
+              const lastContent = [...last.segments].reverse().find(s => s.type === 'content')
+              if (lastContent && lastContent.content.endsWith(seg.content)) continue
+              last.segments.push(seg)
+            } else {
+              last.segments.push(seg)
+            }
+          }
+        }
+        // 合并 content 回填
+        if (msg.content && !last.content) {
+          last.content = msg.content
+        }
+        continue // 跳过此条，不加入 result
+      }
+    }
+    result.push(msg)
+  }
+  return result
 }
 
 function msgSummary(msg) {
@@ -984,8 +1001,9 @@ const switchConv = async (id) => {
         }
       }
       // 按 _idx 排序保持顺序
-      state.messagesByConv[id] = cleanedMsgs
-      state.messages = cleanedMsgs
+      const mergedMsgs = mergeConsecutiveAssistant(cleanedMsgs)
+      state.messagesByConv[id] = mergedMsgs
+      state.messages = mergedMsgs
       state.msgTotalByConv[id] = data.total || loaded.length
       state.msgLoadedByConv[id] = cleanedMsgs.length
       // 页面刷新后：如果折叠开关打开，对历史消息应用折叠状态
