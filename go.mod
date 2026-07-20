@@ -3,7 +3,6 @@ module github.com/hoonfeng/paircode
 go 1.26
 
 require (
-	github.com/dop251/goja v0.0.0-20260627200808-0b76000cabdb
 	github.com/go-rod/rod v0.116.2
 	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/yalue/onnxruntime_go v1.31.0
@@ -11,6 +10,7 @@ require (
 	golang.org/x/sys v0.44.0
 	modernc.org/sqlite v1.53.0
 	wb-ui v0.0.0
+	wb-ui.com/goja v0.0.0-00010101000000-000000000000 // indirect
 )
 
 require (
@@ -39,7 +39,7 @@ require (
 )
 
 replace (
-	github.com/dop251/goja => ../goja
 	github.com/hoonfeng/goskia => ../goskia
 	wb-ui => ../wb-ui
+	wb-ui.com/goja => ../wb-ui/goja
 )

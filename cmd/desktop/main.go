@@ -15,17 +15,22 @@ func main() {
 	log.Println("[Desktop] PairCode IDE 桌面版 v1.0.6-desktop")
 
 	wd, _ := os.Getwd()
-	// Try relative to executable (running from cmd/desktop/)
-	distDir := filepath.Join(wd, "web-ui-minimal", "dist")
+	// Try web-ui/dist (full IDE) first
+	distDir := filepath.Join(wd, "web-ui", "dist")
 	if _, err := os.Stat(distDir); os.IsNotExist(err) {
-		// Try relative to project root
-		distDir = filepath.Join(wd, "cmd", "desktop", "web-ui-minimal", "dist")
+		// Try relative to project root (running from cmd/desktop/)
+		distDir = filepath.Join(wd, "cmd", "desktop", "web-ui", "dist")
 	}
 	if _, err := os.Stat(distDir); os.IsNotExist(err) {
-		// Try web-ui
-		distDir2 := filepath.Join(wd, "web-ui", "dist")
+		// Fallback: web-ui-minimal (demo)
+		distDir2 := filepath.Join(wd, "web-ui-minimal", "dist")
 		if _, err2 := os.Stat(distDir2); err2 == nil {
 			distDir = distDir2
+		} else {
+			distDir3 := filepath.Join(wd, "cmd", "desktop", "web-ui-minimal", "dist")
+			if _, err3 := os.Stat(distDir3); err3 == nil {
+				distDir = distDir3
+			}
 		}
 	}
 	log.Printf("[Desktop] distDir: %s", distDir)
@@ -52,6 +57,7 @@ Attr=function Attr(){};Attr.prototype=Object.create(Node.prototype);Attr.prototy
 	htmlData, _ := os.ReadFile(distDir + "/index.html")
 	s := string(htmlData)
 	s = strings.Replace(s, `type="module"`, "", 1)
+	s = strings.ReplaceAll(s, `crossorigin`, "")
 	log.Printf("[LoadHTML] 开始加载, 大小=%d", len(s))
 	err := wv.LoadHTML(s)
 	if err != nil {
@@ -63,10 +69,32 @@ Attr=function Attr(){};Attr.prototype=Object.create(Node.prototype);Attr.prototy
 		log.Printf("[CONSOLE]\n%s", out)
 	}
 
-	// Post-load polyfill: MutationObserver
+	// Post-load: full browser polyfills for IDE
 	wv.EvalJS(`if(typeof MutationObserver==='undefined'){
   MutationObserver=function(){this.observe=function(){};this.disconnect=function(){}};
 }`)
+	wv.EvalJS(`if(typeof navigator==='undefined')navigator={onLine:true,userAgent:'Goja/1.0',language:'zh-CN',platform:'Win32'};
+if(!navigator.onLine)navigator.onLine=true;
+if(typeof localStorage==='undefined'){
+  (function(){
+    var store={};
+    localStorage={
+      getItem:function(k){return store.hasOwnProperty(k)?store[k]:null},
+      setItem:function(k,v){store[k]=String(v)},
+      removeItem:function(k){delete store[k]},
+      clear:function(){store={}},
+      key:function(i){var ks=Object.keys(store);return ks[i]||null},
+      get length(){return Object.keys(store).length}
+    };
+  })();
+}
+if(typeof location==='undefined')location={href:'about:blank',origin:'file://',protocol:'file:',host:'',pathname:'/index.html',search:'',hash:''};
+if(typeof history==='undefined')history={pushState:function(){},replaceState:function(){},back:function(){},forward:function(){},go:function(){},length:1,state:null};
+if(typeof requestAnimationFrame==='undefined')requestAnimationFrame=function(cb){return setTimeout(cb,16)};
+if(typeof cancelAnimationFrame==='undefined')cancelAnimationFrame=function(id){clearTimeout(id)};
+if(typeof customElements==='undefined')customElements={define:function(){},get:function(){return null},whenDefined:function(){return Promise.resolve()}};
+if(typeof matchMedia==='undefined')matchMedia=function(){return{matches:false,media:'',addListener:function(){},removeListener:function(){},addEventListener:function(){},removeEventListener:function(){}}};
+`)
 
 	wv.RebuildRenderTree()
 
