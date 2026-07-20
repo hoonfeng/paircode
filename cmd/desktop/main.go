@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"wb-ui/app"
 	"wb-ui/webkit"
@@ -88,6 +89,12 @@ if(typeof MutationObserver==='undefined'){
   MutationObserver.prototype.disconnect=function(){this._observed=[]};
   MutationObserver.prototype.takeRecords=function(){return[]};
 }
+if(typeof WebSocket==='undefined'){
+  WebSocket=function(url){this.url=url;this.readyState=3;this.CONNECTING=0;this.OPEN=1;this.CLOSING=2;this.CLOSED=3};
+  WebSocket.prototype.send=function(){};
+  WebSocket.prototype.close=function(){};
+  WebSocket.CONNECTING=0;WebSocket.OPEN=1;WebSocket.CLOSING=2;WebSocket.CLOSED=3;
+}
 if(typeof navigator==='undefined')navigator={onLine:true,userAgent:'Goja/1.0',language:'zh-CN',platform:'Win32'};
 if(!navigator.onLine)navigator.onLine=true;
 if(typeof localStorage==='undefined'){
@@ -162,6 +169,14 @@ func main() {
 
 	// Post-polyfill: more browser APIs
 	wv.EvalJS(postPolyfill)
+
+	// Vue 组件的异步挂载需要多个 microtask 周期。连续重建 render tree
+	// 多次以捕获 Vue 注入的组件样式和 DOM 结构。
+	for i := 0; i < 8; i++ {
+		wv.RebuildRenderTree()
+		wv.EnsureLayout()
+		time.Sleep(100 * time.Millisecond)
+	}
 	wv.RebuildRenderTree()
 
 	log.Println("[Desktop] window+render tree ready, creating host...")
