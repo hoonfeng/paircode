@@ -621,10 +621,69 @@ const sendMessage = async () => {
   const text = inputText.value.trim()
   if (!text && !pendingAttachment.value) return
   if (state.chatLoading) return
-  // ★ 立即锁定 loading 状态（在 WS 等待之前），防止 WS 等待期间用户双击
-  //   发送绕过 guard 导致创建多个 assistant 占位（气泡分割根因）。
+
+  // ★ 立即锁定 loading 状态
   state.chatLoading = true; state.agentRunning = true
-  // ★ 等待 WebSocket 连接就绪，避免事件丢失
+
+  // ★ 确保 convId 存在（在创建用户消息前完成，避免 await 间隙状态变化）
+  if (!state.currentConvId) {
+    try {
+      const conv = await api.apiPost('/conversations', { title: '新对话' })
+      state.currentConvId = conv.id
+      state.conversations.unshift({ id: conv.id, title: conv.title, msgCount: 0, createdAt: conv.createdAt, updatedAt: conv.updatedAt })
+      resetConvCtxStats(conv.id)
+    } catch {}
+  }
+  const convId = state.currentConvId
+  if (!convId) { state.chatLoading = false; state.agentRunning = false; return }
+
+  // ── ★ 立即创建用户消息（确保用户消息在任何情况下都可见） ──
+  const userContent = text || ''
+  let fullContent = userContent
+  if (pendingAttachment.value) {
+    const att = pendingAttachment.value
+    if (att.type === 'image') {
+      fullContent += '\n\n---\n[图片附件] ' + (att.filename || '') + '\n' + (att.content || '').slice(0, 2000)
+    } else if (att.type === 'file') {
+      fullContent += '\n\n[参考文件] ' + att.path + '\n（如需查看文件内容，请使用 read_file 工具读取上述路径）'
+    } else if (att.type === 'code') {
+      fullContent += '\n\n[参考文件] ' + att.path + ':' + (att.lineStart || 1) + '-' + (att.lineEnd || 1) + '\n（如需查看代码，请使用 read_file 工具读取上述路径和行号）'
+    }
+  }
+  const lastUserText = text
+  inputText.value = ''; pendingAttachment.value = null
+  collapsePreviousOutputs()
+
+  if (!state.messagesByConv[convId]) state.messagesByConv[convId] = []
+  const userMsg = {
+    role: 'user', content: fullContent, segments: [], toolCalls: [],
+    _key: makeMsgKey(), _idx: state.messagesByConv[convId].length,
+    _time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+  }
+  state.messagesByConv[convId].push(userMsg)
+  state.messages = state.messagesByConv[convId]
+
+  // ★ 立即创建 assistant 占位（即使 WS 未就绪，用户也能看到"思考中"状态）
+  const msgKey = createAssistantPlaceholder(convId)
+  startConvRuntime(convId, msgKey, lastUserText || fullContent)
+
+  // 更新对话标题和计数
+  autoNameConv(convId, lastUserText || fullContent)
+  const localConv = state.conversations.find(c => c.id === convId)
+  if (localConv) localConv.msgCount = (localConv.msgCount || 0) + 1
+
+  state.loadingByConv[convId] = true
+  state.agentRunningByConv[convId] = true
+  if (state.workspaceRoot) {
+    state.runningByWorkspace = {
+      ...state.runningByWorkspace,
+      [state.workspaceRoot]: (state.runningByWorkspace[state.workspaceRoot] || 0) + 1,
+    }
+  }
+  if (!state.chatSessionId) state.chatSessionId = 'sess_' + Date.now()
+  console.log('[RP] sendMessage conv=%s msgKey=%s msgsLen=%d', convId, msgKey, state.messagesByConv[convId].length)
+
+  // ── WS 等待（非阻塞：超时后仍继续发送消息，后端会缓冲事件） ──
   if (!api.isWebSocketOpen()) {
     console.log('[RP] sendMessage 等待 WS 连接...')
     try {
@@ -637,72 +696,12 @@ const sendMessage = async () => {
         }, 200)
       })
     } catch (err) {
-      state.chatLoading = false; state.agentRunning = false
       console.warn('[RP] sendMessage WS等待失败:', err.message)
-      return
+      // WS 超时：不阻断消息发送，chatStart 走 HTTP 会返回正常，只是 WS 事件流不可用
     }
   }
-  // ★ WS 等待期间用户可能已点击停止，检查后中止发送
-  if (!state.chatLoading || !state.agentRunning) {
-    console.log('[RP] sendMessage 等待期间已停止，中止发送')
-    return
-  }
-  if (!state.currentConvId) {
-    try {
-      const conv = await api.apiPost('/conversations', { title: '新对话' })
-      state.currentConvId = conv.id
-      state.conversations.unshift({ id: conv.id, title: conv.title, msgCount: 0, createdAt: conv.createdAt, updatedAt: conv.updatedAt })
-      resetConvCtxStats(conv.id)
-    } catch {}
-  }
-  const userContent = text || ''
-  let fullContent = userContent
-  if (pendingAttachment.value) {
-    const att = pendingAttachment.value
-    if (att.type === 'image') {
-      // 图片保留 dataURL（无法用 read_file）
-      fullContent += '\n\n---\n[图片附件] ' + (att.filename || '') + '\n' + (att.content || '').slice(0, 2000)
-    } else if (att.type === 'file') {
-      fullContent += '\n\n[参考文件] ' + att.path + '\n（如需查看文件内容，请使用 read_file 工具读取上述路径）'
-    } else if (att.type === 'code') {
-      fullContent += '\n\n[参考文件] ' + att.path + ':' + (att.lineStart || 1) + '-' + (att.lineEnd || 1) + '\n（如需查看代码，请使用 read_file 工具读取上述路径和行号）'
-    }
-  }
-  const lastUserText = text
-  inputText.value = ''; pendingAttachment.value = null
-  // 多会话并行：不停止旧 agent 的订阅（旧对话后台继续运行）
-  collapsePreviousOutputs()
-  // 确保 messagesByConv[convId] 存在
-  const convId = state.currentConvId
-  if (!state.messagesByConv[convId]) state.messagesByConv[convId] = []
-  const userMsg = { role: 'user', content: fullContent, segments: [], toolCalls: [], _key: makeMsgKey(), _idx: state.messagesByConv[convId].length, _time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) }
-  state.messagesByConv[convId].push(userMsg)
-  // 同步到 state.messages（当前对话快捷引用）
-  state.messages = state.messagesByConv[convId]
-  if (convId) {
-    // 用户消息已由后端 handleChatSend → AppendPersistedUserMessage 持久化，前端不再重复 POST
-    // 立即用用户消息更新对话标题（不等 onDone，避免 SSE 中断导致标题不更新）
-    autoNameConv(convId, lastUserText || fullContent)
-    // 本地递增消息计数
-    const localConv = state.conversations.find(c => c.id === convId)
-    if (localConv) localConv.msgCount = (localConv.msgCount || 0) + 1
-  }
-  // 标记 loading（按 convId 存储 + 当前对话快捷引用）
-  state.loadingByConv[convId] = true
-  state.agentRunningByConv[convId] = true
-  // chatLoading/agentRunning 已在函数顶部提前设置，防止双击绕过 guard
-  // 本地递增工作区运行计数（立即在工作区列表显示脉冲点）
-  // 后端 done/error 时会通过 status 消息同步纠正
-  if (state.workspaceRoot) {
-    state.runningByWorkspace = {
-      ...state.runningByWorkspace,
-      [state.workspaceRoot]: (state.runningByWorkspace[state.workspaceRoot] || 0) + 1,
-    }
-  }
-  if (!state.chatSessionId) state.chatSessionId = 'sess_' + Date.now()
-  const msgKey = createAssistantPlaceholder(convId)
-  console.log('[RP] sendMessage conv=%s msgKey=%s msgsLen=%d currentChatLoading=%s', convId, msgKey, state.messagesByConv[convId].length, state.chatLoading)
-  startConvRuntime(convId, msgKey, lastUserText || fullContent)
+
+  // ── 调用后端 chatStart ──
   try {
     await api.chatStart(convId, fullContent, autonomous.value, state.workspaceRoot)
   } catch (err) {
@@ -714,7 +713,6 @@ const sendMessage = async () => {
     state.loadingByConv[convId] = false
     state.agentRunningByConv[convId] = false
     state.chatLoading = false; state.agentRunning = false
-    // 启动失败：递减工作区运行计数
     if (state.workspaceRoot && state.runningByWorkspace[state.workspaceRoot] > 0) {
       state.runningByWorkspace = {
         ...state.runningByWorkspace,
@@ -725,7 +723,6 @@ const sendMessage = async () => {
     return
   }
   // 事件流由 App.vue 全局 WebSocket 接收 → agent-events.js processAgentEvent/Done 处理
-  // 切换对话/工作区时 agent 后台继续运行，事件继续写入 messagesByConv[convId]
 }
 
 const compactContext = async () => {
