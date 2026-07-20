@@ -924,6 +924,8 @@ const deleteConv = async (id) => {
 }
 
 const switchConv = async (id) => {
+  // ★ guard：防止 watch + sidebar 直接调用并发竞态
+  switchingGuard = true
   // ★ 挂起该 conv 的 WS 事件处理，确保历史消息先于 WS 写入
   suspendConv(id)
   try {
@@ -1070,6 +1072,7 @@ const switchConv = async (id) => {
   } finally {
     // ★ 恢复 WS 事件处理，flush 缓冲的事件
     resumeConv(id)
+    switchingGuard = false
   }
 }
 
@@ -1223,13 +1226,17 @@ function stopContentResizeObserver() {
 
 // ── 新消息自动滚底（已移除 — 由 agent-events.js 的 scrollToBottom 统一控制）
 
-// ── 对话切换时：重启内容尺寸观察器
-// ★ 不再在此处调用 switchConv —— switchConv 已由以下入口直接调用：
-//   1. sidebar @switch-conversation="switchConv"
-//   2. onMounted 中的恢复检查
-//   3. App.vue 工作区切换后的事件
-// watch 中再调用会导致两段异步函数并发执行，state.messages 被互相覆盖。
-watch(() => state.currentConvId, (id) => {
+// ── 对话切换时：重启内容尺寸观察器 + switchConv 兜底
+// ★ watch 恢复 switchConv 调用以兜底 App.vue async onMounted 中
+//   currentConvId 设置滞后于 RightPanel onMounted 导致初始加载丢失。
+//   使用 switchingGuard 防止与 sidebar 直接调用并发竞态。
+//   guard 在 switchConv 函数入口置 true、finally 置 false。
+let switchingGuard = false
+watch(() => state.currentConvId, (id, oldId) => {
+  if (id && id !== oldId && !switchingGuard) {
+    switchingGuard = true
+    switchConv(id).finally(() => { switchingGuard = false })
+  }
   nextTick(() => startContentResizeObserver())
 })
 
