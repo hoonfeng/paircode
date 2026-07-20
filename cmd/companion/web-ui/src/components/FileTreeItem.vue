@@ -49,6 +49,13 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['fileClick'])
+
+const childFullPath = computed(() => {
+  if (!props.parentPath) return props.item.path || props.item.name
+  return props.parentPath + '\\' + props.item.name
+})
+const fullPath = childFullPath
+
 const expanded = ref(
   state.expandedDirs[fullPath.value] ?? (props.defaultExpanded && props.item.isDir)
 )
@@ -63,13 +70,6 @@ const renameInputRef = ref(null)
 
 // ── 右键菜单 ──
 const contextMenuRef = ref(null)
-
-const childFullPath = computed(() => {
-  if (!props.parentPath) return props.item.path || props.item.name
-  return props.parentPath + '\\' + props.item.name
-})
-
-const fullPath = childFullPath
 
 // ── 自动展开（props.defaultExpanded=true 时自动加载子目录）──
 if (props.defaultExpanded && props.item.isDir && !props.item.children) {

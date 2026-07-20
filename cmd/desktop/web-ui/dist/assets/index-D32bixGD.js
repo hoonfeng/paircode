@@ -8739,30 +8739,30 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     {
       path: "/",
       name: "home",
-      component: () => __vitePreload(() => Promise.resolve().then(() => ChatView$1), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href)
+      component: () => __vitePreload(() => Promise.resolve().then(() => ChatView$1), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href)
     },
     {
       path: "/workspace/:wsId",
       name: "workspace",
-      component: () => __vitePreload(() => Promise.resolve().then(() => ChatView$1), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href),
+      component: () => __vitePreload(() => Promise.resolve().then(() => ChatView$1), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href),
       props: true
     },
     {
       path: "/workspace/:wsId/chat/:convId",
       name: "conversation",
-      component: () => __vitePreload(() => Promise.resolve().then(() => ChatView$1), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href),
+      component: () => __vitePreload(() => Promise.resolve().then(() => ChatView$1), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href),
       props: true
     },
     {
       path: "/workspace/:wsId/plan/:planId",
       name: "plan",
-      component: () => __vitePreload(() => Promise.resolve().then(() => PlanView$1), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href),
+      component: () => __vitePreload(() => Promise.resolve().then(() => PlanView$1), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href),
       props: true
     },
     {
       path: "/tasks",
       name: "tasks",
-      component: () => __vitePreload(() => Promise.resolve().then(() => TaskBoard$1), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href)
+      component: () => __vitePreload(() => Promise.resolve().then(() => TaskBoard$1), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href)
     }
   ];
   const router = createRouter({
@@ -8820,12 +8820,14 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
   let wsSocket = null;
   let wsReconnectTimer = null;
   let wsReconnectCount = 0;
-  const WS_MAX_RECONNECT = 5;
+  const WS_MAX_RECONNECT = 20;
   let wsCallbacks = null;
   let wsManuallyClosed = false;
+  let wsPongTimer = null;
   function initWebSocket(callbacks) {
     wsCallbacks = callbacks;
     wsManuallyClosed = false;
+    wsReconnectCount = 0;
     if (wsSocket && (wsSocket.readyState === WebSocket.OPEN || wsSocket.readyState === WebSocket.CONNECTING)) {
       return;
     }
@@ -8846,9 +8848,22 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         clearTimeout(wsReconnectTimer);
         wsReconnectTimer = null;
       }
+      window.dispatchEvent(new CustomEvent("ws-connection-change", { detail: { connected: true } }));
+      if (wsPongTimer) clearTimeout(wsPongTimer);
+      wsPongTimer = setTimeout(() => {
+        console.warn("[WS] 45s 未收到 pong，触发重连");
+        wsSocket.close();
+      }, 45e3);
     };
     wsSocket.onmessage = (ev) => {
       var _a3, _b2, _c3;
+      if (wsPongTimer) {
+        clearTimeout(wsPongTimer);
+      }
+      wsPongTimer = setTimeout(() => {
+        console.warn("[WS] 45s 无消息，触发重连");
+        if (wsSocket) wsSocket.close();
+      }, 45e3);
       let data2;
       try {
         data2 = JSON.parse(ev.data);
@@ -8873,6 +8888,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     };
     wsSocket.onclose = () => {
       wsSocket = null;
+      window.dispatchEvent(new CustomEvent("ws-connection-change", { detail: { connected: false } }));
       if (!wsManuallyClosed) scheduleWsReconnect("连接已关闭");
     };
     wsSocket.onerror = () => {
@@ -8888,18 +8904,40 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       return;
     }
     wsReconnectCount++;
-    const delay = Math.min(1e3 * Math.pow(2, wsReconnectCount - 1), 8e3);
+    const delay = Math.min(500 * Math.pow(1.5, wsReconnectCount - 1), 5e3);
     console.warn("[WS] " + reason + "，" + delay + "ms 后重连 (" + wsReconnectCount + "/" + WS_MAX_RECONNECT + ")");
     if (wsReconnectTimer) clearTimeout(wsReconnectTimer);
     wsReconnectTimer = setTimeout(() => {
       doWsConnect();
     }, delay);
   }
+  function reconnectWebSocket() {
+    if (wsSocket) {
+      wsSocket.onclose = null;
+      wsSocket.close();
+      wsSocket = null;
+    }
+    if (wsReconnectTimer) {
+      clearTimeout(wsReconnectTimer);
+      wsReconnectTimer = null;
+    }
+    if (wsPongTimer) {
+      clearTimeout(wsPongTimer);
+      wsPongTimer = null;
+    }
+    wsReconnectCount = 0;
+    wsManuallyClosed = false;
+    doWsConnect();
+  }
   function closeWebSocket() {
     wsManuallyClosed = true;
     if (wsReconnectTimer) {
       clearTimeout(wsReconnectTimer);
       wsReconnectTimer = null;
+    }
+    if (wsPongTimer) {
+      clearTimeout(wsPongTimer);
+      wsPongTimer = null;
     }
     wsCallbacks = null;
     wsReconnectCount = WS_MAX_RECONNECT;
@@ -8931,6 +8969,9 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
   }
   async function chatRollback(convId, msgIdx) {
     return apiPost("/chat/rollback", { convId, msgIdx });
+  }
+  async function chatCompact(convId) {
+    return apiPost("/chat/compact?convId=" + encodeURIComponent(convId), {});
   }
   async function getMessages(convId, { limit: limit2 = 50, before = null } = {}) {
     const params = { limit: limit2 };
@@ -8975,7 +9016,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
   async function savePhilosophy(data2) {
     return apiPut("/philosophy", data2);
   }
-  const api = { apiGet, apiPost, apiPut, apiDelete, initWebSocket, closeWebSocket, isWebSocketOpen, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatStop, getMessages, getMessagesCount, getModels, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, getPhilosophy, savePhilosophy };
+  const api = { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, isWebSocketOpen, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatCompact, chatStop, getMessages, getMessagesCount, getModels, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, getPhilosophy, savePhilosophy };
   const runtimes = {};
   let msgKeyCounter = 0;
   function makeMsgKey() {
@@ -8992,9 +9033,9 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
   function setGlobalCtx(ctx) {
     globalCtx = ctx || {};
   }
-  function startConvRuntime(convId, msgIdx, lastUserText = "") {
+  function startConvRuntime(convId, msgKey, lastUserText = "") {
     runtimes[convId] = {
-      msgIdx,
+      msgKey,
       finalContent: "",
       lastUserText
     };
@@ -9005,23 +9046,30 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
   function resetConvRuntime(convId) {
     delete runtimes[convId];
   }
+  function findMsgByKey(msgs, key) {
+    if (!msgs || !key) return null;
+    for (const m2 of msgs) {
+      if (m2._key === key) return m2;
+    }
+    return null;
+  }
   function createAssistantPlaceholder(convId) {
     const msgs = state$2.messagesByConv[convId];
-    if (!msgs) return -1;
-    const msgIdx = msgs.length;
-    console.log("[AE] createAssistantPlaceholder conv=%s msgIdx=%d msgsLen=%d", convId, msgIdx, msgs.length);
+    if (!msgs) return "";
+    const key = makeMsgKey();
+    console.log("[AE] createAssistantPlaceholder conv=%s key=%s msgsLen=%d", convId, key, msgs.length);
     const assistantMsg = {
       role: "assistant",
       content: "",
       segments: [],
       toolCalls: [],
-      _key: makeMsgKey(),
-      _idx: msgIdx,
+      _key: key,
+      _idx: msgs.length,
       _time: (/* @__PURE__ */ new Date()).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
       _loading: true
     };
     msgs.push(assistantMsg);
-    return msgIdx;
+    return key;
   }
   function processAgentEvent(convId, data2) {
     const rt2 = runtimes[convId];
@@ -9034,16 +9082,23 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       console.warn("[AE] processAgentEvent 丢弃: 无 messagesByConv conv=%s type=%s", convId, data2.type);
       return;
     }
-    const msg = msgs[rt2.msgIdx];
+    const isCurrent = state$2.currentConvId === convId;
+    let msg = findMsgByKey(msgs, rt2.msgKey);
     if (!msg) {
-      console.warn("[AE] processAgentEvent 丢弃: msgIdx=%d 越界 msgsLen=%d conv=%s type=%s", rt2.msgIdx, msgs.length, convId, data2.type);
+      const lastAssistant = [...msgs].reverse().find((m2) => m2.role === "assistant");
+      if (lastAssistant) {
+        console.log("[AE] processAgentEvent fallback 到最后 assistant conv=%s type=%s", convId, data2.type);
+        msg = lastAssistant;
+      }
+    }
+    if (!msg) {
+      console.warn("[AE] processAgentEvent 丢弃: 无目标 msg conv=%s type=%s", convId, data2.type);
       return;
     }
     if (data2.type !== "content" && data2.type !== "thinking") {
-      console.log("[AE] processAgentEvent conv=%s type=%s msgIdx=%d", convId, data2.type, rt2.msgIdx);
+      console.log("[AE] processAgentEvent conv=%s type=%s msgKey=%s", convId, data2.type, rt2.msgKey);
     }
     msg._loading = false;
-    const isCurrent = state$2.currentConvId === convId;
     if (data2.type === "thinking") {
       const seg = pushSegment(msg.segments, "thinking", { _mode: "collapsed", _collapsed: true });
       seg.content += data2.content || "";
@@ -9259,7 +9314,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     const rt2 = runtimes[convId];
     const msgs = state$2.messagesByConv[convId];
     if (msgs && rt2) {
-      const msg = msgs[rt2.msgIdx];
+      const msg = findMsgByKey(msgs, rt2.msgKey);
       if (msg) {
         msg.content = rt2.finalContent;
         const hasEffectiveSeg = (msg.segments || []).some((seg) => {
@@ -9270,7 +9325,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         });
         const isEmptyPlaceholder = !rt2.finalContent && !hasEffectiveSeg && (!data2 || data2.doneReason !== "stopped");
         if (isEmptyPlaceholder) {
-          console.log("[AE] processAgentDone 空占位 conv=%s msgIdx=%d 设为完成提示", convId, rt2.msgIdx);
+          console.log("[AE] processAgentDone 空占位 conv=%s msgKey=%s 设为完成提示", convId, rt2.msgKey);
           msg.content = "**[操作完成]**";
           pushSegment(msg.segments, "content").content = "**[操作完成]**";
         }
@@ -9298,13 +9353,12 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     }
     if (globalCtx.loadWsTokenStats) globalCtx.loadWsTokenStats();
     if (rt2 && rt2.finalContent && globalCtx.saveConvMsg) {
-      globalCtx.saveConvMsg(convId, rt2.finalContent, rt2.msgIdx);
+      const savedMsg = findMsgByKey(msgs, rt2.msgKey);
+      const savedIdx = savedMsg ? savedMsg._idx : -1;
+      globalCtx.saveConvMsg(convId, rt2.finalContent, savedIdx);
     }
     const localConv = state$2.conversations.find((c2) => c2.id === convId);
     if (localConv) localConv.msgCount = (localConv.msgCount || 0) + 1;
-    if (rt2 && rt2.lastUserText && globalCtx.autoNameConv) {
-      globalCtx.autoNameConv(convId, rt2.lastUserText);
-    }
     window.dispatchEvent(new Event("save-conversations"));
     if (isCurrent && globalCtx.scrollToBottom) globalCtx.scrollToBottom(convId);
     delete runtimes[convId];
@@ -9327,22 +9381,22 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         const msgs = state$2.messagesByConv[convId];
         const last2 = msgs[msgs.length - 1];
         if (!last2 || last2.role !== "assistant" || !last2._loading) {
-          const msgIdx = msgs.length;
-          console.log("[AE] processStatus 创建runtime+loading conv=%s msgIdx=%d msgsLen=%d", convId, msgIdx, msgs.length);
+          const key = makeMsgKey();
+          console.log("[AE] processStatus 创建runtime+loading conv=%s key=%s msgsLen=%d", convId, key, msgs.length);
           msgs.push({
             role: "assistant",
             content: "",
             segments: [],
             toolCalls: [],
-            _key: makeMsgKey(),
-            _idx: msgIdx,
+            _key: key,
+            _idx: msgs.length,
             _time: (/* @__PURE__ */ new Date()).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
             _loading: true
           });
-          runtimes[convId] = { msgIdx, finalContent: "", lastUserText: "" };
+          runtimes[convId] = { msgKey: key, finalContent: "", lastUserText: "" };
         } else {
-          console.log("[AE] processStatus 复用runtime conv=%s msgIdx=%d", convId, msgs.length - 1);
-          runtimes[convId] = { msgIdx: msgs.length - 1, finalContent: "", lastUserText: "" };
+          console.log("[AE] processStatus 复用runtime conv=%s key=%s", convId, last2._key);
+          runtimes[convId] = { msgKey: last2._key, finalContent: "", lastUserText: "" };
         }
         if (state$2.currentConvId === convId) {
           state$2.messages = msgs;
@@ -9413,7 +9467,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     class: "menu-divider"
   };
   const _hoisted_4$t = ["onClick"];
-  const _hoisted_5$r = { class: "menu-item-label" };
+  const _hoisted_5$q = { class: "menu-item-label" };
   const _hoisted_6$p = {
     key: 0,
     class: "menu-item-shortcut"
@@ -9757,7 +9811,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                   class: normalizeClass(["menu-item", { disabled: item.disabled }]),
                   onClick: ($event) => !item.disabled && execItem(item)
                 }, [
-                  createBaseVNode("span", _hoisted_5$r, toDisplayString(item.label), 1),
+                  createBaseVNode("span", _hoisted_5$q, toDisplayString(item.label), 1),
                   item.shortcut ? (openBlock(), createElementBlock("span", _hoisted_6$p, toDisplayString(item.shortcut), 1)) : createCommentVNode("", true)
                 ], 10, _hoisted_4$t)) : createCommentVNode("", true)
               ], 64);
@@ -9781,7 +9835,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     key: 10,
     points: "9 6 15 12 9 18"
   };
-  const _hoisted_5$q = {
+  const _hoisted_5$p = {
     key: 11,
     points: "6 9 12 15 18 9"
   };
@@ -9789,14 +9843,14 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     key: 30,
     d: "M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"
   };
-  const _hoisted_7$l = {
+  const _hoisted_7$m = {
     key: 48,
     x1: "5",
     y1: "12",
     x2: "19",
     y2: "12"
   };
-  const _hoisted_8$g = {
+  const _hoisted_8$h = {
     key: 52,
     d: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
   };
@@ -9808,11 +9862,11 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     key: 58,
     d: "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"
   };
-  const _hoisted_11$f = {
+  const _hoisted_11$g = {
     key: 68,
     d: "M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"
   };
-  const _hoisted_12$e = {
+  const _hoisted_12$f = {
     key: 70,
     points: "15 6 9 12 15 18"
   };
@@ -9888,7 +9942,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
           ], 64)) : __props.name === "home" ? (openBlock(), createElementBlock(Fragment, { key: 9 }, [
             _cache[15] || (_cache[15] = createBaseVNode("path", { d: "M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" }, null, -1)),
             _cache[16] || (_cache[16] = createBaseVNode("polyline", { points: "9 22 9 12 15 12 15 22" }, null, -1))
-          ], 64)) : __props.name === "chevron-right" ? (openBlock(), createElementBlock("polyline", _hoisted_4$s)) : __props.name === "chevron-down" ? (openBlock(), createElementBlock("polyline", _hoisted_5$q)) : __props.name === "plus" ? (openBlock(), createElementBlock(Fragment, { key: 12 }, [
+          ], 64)) : __props.name === "chevron-right" ? (openBlock(), createElementBlock("polyline", _hoisted_4$s)) : __props.name === "chevron-down" ? (openBlock(), createElementBlock("polyline", _hoisted_5$p)) : __props.name === "plus" ? (openBlock(), createElementBlock(Fragment, { key: 12 }, [
             _cache[17] || (_cache[17] = createBaseVNode("line", {
               x1: "12",
               y1: "5",
@@ -10242,7 +10296,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
               ry: "2"
             }, null, -1)),
             _cache[108] || (_cache[108] = createBaseVNode("path", { d: "M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" }, null, -1))
-          ], 64)) : __props.name === "minus" ? (openBlock(), createElementBlock("line", _hoisted_7$l)) : __props.name === "edit" ? (openBlock(), createElementBlock(Fragment, { key: 49 }, [
+          ], 64)) : __props.name === "minus" ? (openBlock(), createElementBlock("line", _hoisted_7$m)) : __props.name === "edit" ? (openBlock(), createElementBlock(Fragment, { key: 49 }, [
             _cache[109] || (_cache[109] = createBaseVNode("path", { d: "M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" }, null, -1)),
             _cache[110] || (_cache[110] = createBaseVNode("path", { d: "M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" }, null, -1))
           ], 64)) : __props.name === "trash" ? (openBlock(), createElementBlock(Fragment, { key: 50 }, [
@@ -10263,7 +10317,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
               x2: "15",
               y2: "15"
             }, null, -1))
-          ], 64)) : __props.name === "message-square" ? (openBlock(), createElementBlock("path", _hoisted_8$g)) : __props.name === "folder-plus" ? (openBlock(), createElementBlock(Fragment, { key: 53 }, [
+          ], 64)) : __props.name === "message-square" ? (openBlock(), createElementBlock("path", _hoisted_8$h)) : __props.name === "folder-plus" ? (openBlock(), createElementBlock(Fragment, { key: 53 }, [
             _cache[117] || (_cache[117] = createBaseVNode("path", { d: "M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2v3" }, null, -1)),
             _cache[118] || (_cache[118] = createBaseVNode("line", {
               x1: "12",
@@ -10346,9 +10400,9 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
           ], 64)) : __props.name === "book-open" ? (openBlock(), createElementBlock(Fragment, { key: 67 }, [
             _cache[145] || (_cache[145] = createBaseVNode("path", { d: "M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" }, null, -1)),
             _cache[146] || (_cache[146] = createBaseVNode("path", { d: "M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" }, null, -1))
-          ], 64)) : __props.name === "tool" ? (openBlock(), createElementBlock("path", _hoisted_11$f)) : __props.name === "keyboard" ? (openBlock(), createElementBlock(Fragment, { key: 69 }, [
+          ], 64)) : __props.name === "tool" ? (openBlock(), createElementBlock("path", _hoisted_11$g)) : __props.name === "keyboard" ? (openBlock(), createElementBlock(Fragment, { key: 69 }, [
             _cache[147] || (_cache[147] = createStaticVNode('<rect x="2" y="4" width="20" height="16" rx="2" ry="2" data-v-90f89230></rect><line x1="6" y1="8" x2="6.01" y2="8" data-v-90f89230></line><line x1="10" y1="8" x2="10.01" y2="8" data-v-90f89230></line><line x1="14" y1="8" x2="14.01" y2="8" data-v-90f89230></line><line x1="18" y1="8" x2="18.01" y2="8" data-v-90f89230></line><line x1="6" y1="12" x2="6.01" y2="12" data-v-90f89230></line><line x1="10" y1="12" x2="10.01" y2="12" data-v-90f89230></line><line x1="14" y1="12" x2="14.01" y2="12" data-v-90f89230></line><line x1="18" y1="12" x2="18.01" y2="12" data-v-90f89230></line><line x1="6" y1="16" x2="18" y2="16" data-v-90f89230></line>', 10))
-          ], 64)) : __props.name === "chevron-left" ? (openBlock(), createElementBlock("polyline", _hoisted_12$e)) : __props.name === "grid" ? (openBlock(), createElementBlock(Fragment, { key: 71 }, [
+          ], 64)) : __props.name === "chevron-left" ? (openBlock(), createElementBlock("polyline", _hoisted_12$f)) : __props.name === "grid" ? (openBlock(), createElementBlock(Fragment, { key: 71 }, [
             _cache[148] || (_cache[148] = createBaseVNode("rect", {
               x: "3",
               y: "3",
@@ -10459,7 +10513,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
   };
   const _hoisted_3$t = ["onClick"];
   const _hoisted_4$q = { class: "ctx-label" };
-  const _hoisted_5$p = {
+  const _hoisted_5$o = {
     key: 1,
     class: "ctx-shortcut"
   };
@@ -10538,7 +10592,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                       class: "ctx-icon"
                     }, null, 8, ["name"])) : createCommentVNode("", true),
                     createBaseVNode("span", _hoisted_4$q, toDisplayString(item.label), 1),
-                    item.shortcut ? (openBlock(), createElementBlock("span", _hoisted_5$p, toDisplayString(item.shortcut), 1)) : createCommentVNode("", true)
+                    item.shortcut ? (openBlock(), createElementBlock("span", _hoisted_5$o, toDisplayString(item.shortcut), 1)) : createCommentVNode("", true)
                   ], 10, _hoisted_3$t))
                 ], 64);
               }), 128))
@@ -10550,16 +10604,15 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
   };
   const ContextMenu = /* @__PURE__ */ _export_sfc(_sfc_main$v, [["__scopeId", "data-v-dde82381"]]);
   const _hoisted_1$t = { class: "file-tree-item" };
-  const _hoisted_2$t = ["draggable"];
-  const _hoisted_3$s = {
+  const _hoisted_2$t = {
     key: 0,
     class: "chevron-wrap"
   };
-  const _hoisted_4$p = {
+  const _hoisted_3$s = {
     key: 1,
     class: "chevron-placeholder"
   };
-  const _hoisted_5$o = { key: 0 };
+  const _hoisted_4$p = { key: 0 };
   const _sfc_main$u = {
     __name: "FileTreeItem",
     props: {
@@ -10572,7 +10625,14 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     setup(__props, { emit: __emit }) {
       const props = __props;
       const emit2 = __emit;
-      const expanded = /* @__PURE__ */ ref(props.defaultExpanded && props.item.isDir);
+      const childFullPath = computed(() => {
+        if (!props.parentPath) return props.item.path || props.item.name;
+        return props.parentPath + "\\" + props.item.name;
+      });
+      const fullPath = childFullPath;
+      const expanded = /* @__PURE__ */ ref(
+        state$2.expandedDirs[fullPath.value] ?? (props.defaultExpanded && props.item.isDir)
+      );
       const children2 = /* @__PURE__ */ ref(props.item.children || []);
       const loaded = /* @__PURE__ */ ref(props.item.loaded || false);
       const dragOver = /* @__PURE__ */ ref(false);
@@ -10580,11 +10640,6 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       const renameValue = /* @__PURE__ */ ref("");
       const renameInputRef = /* @__PURE__ */ ref(null);
       const contextMenuRef = /* @__PURE__ */ ref(null);
-      const childFullPath = computed(() => {
-        if (!props.parentPath) return props.item.path || props.item.name;
-        return props.parentPath + "\\" + props.item.name;
-      });
-      const fullPath = childFullPath;
       if (props.defaultExpanded && props.item.isDir && !props.item.children) {
         api.apiGet("/fs/list", { path: fullPath.value }).then((entries2) => {
           children2.value = entries2 || [];
@@ -10654,9 +10709,11 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         };
         return iconMap[ext] || "file";
       });
-      const handleClick = async () => {
+      const isSelected = computed(() => state$2.selectedFilePaths.includes(fullPath.value));
+      const handleClick = async (e3) => {
         if (props.item.isDir) {
           expanded.value = !expanded.value;
+          state$2.expandedDirs[fullPath.value] = expanded.value;
           if (expanded.value && !loaded.value) {
             try {
               const entries2 = await api.apiGet("/fs/list", { path: fullPath.value });
@@ -10665,7 +10722,37 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
             } catch {
             }
           }
+          return;
+        }
+        if (e3.ctrlKey || e3.metaKey) {
+          const idx = state$2.selectedFilePaths.indexOf(fullPath.value);
+          if (idx >= 0) {
+            state$2.selectedFilePaths.splice(idx, 1);
+          } else {
+            state$2.selectedFilePaths.push(fullPath.value);
+          }
+          state$2.lastClickedFilePath = fullPath.value;
+        } else if (e3.shiftKey && state$2.lastClickedFilePath) {
+          const lastIdx = state$2.openFiles.indexOf(state$2.lastClickedFilePath);
+          const curIdx = state$2.openFiles.indexOf(fullPath.value);
+          if (lastIdx >= 0 && curIdx >= 0) {
+            const start2 = Math.min(lastIdx, curIdx);
+            const end2 = Math.max(lastIdx, curIdx);
+            for (let i2 = start2; i2 <= end2; i2++) {
+              const fp = state$2.openFiles[i2];
+              if (fp && !state$2.selectedFilePaths.includes(fp)) {
+                state$2.selectedFilePaths.push(fp);
+              }
+            }
+          } else {
+            if (!state$2.selectedFilePaths.includes(fullPath.value)) {
+              state$2.selectedFilePaths.push(fullPath.value);
+            }
+          }
         } else {
+          state$2.selectedFilePaths.length = 0;
+          state$2.selectedFilePaths.push(fullPath.value);
+          state$2.lastClickedFilePath = fullPath.value;
           emit2("fileClick", fullPath.value);
         }
       };
@@ -10959,18 +11046,25 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         }
         window.dispatchEvent(new CustomEvent("refresh-tree"));
       }
-      const dragSourcePath = /* @__PURE__ */ ref("");
       const onDragStart = (e3) => {
-        if (props.item.isDir) {
-          e3.preventDefault();
-          return;
+        let paths = [];
+        if (state$2.selectedFilePaths.length > 1 && state$2.selectedFilePaths.includes(fullPath.value)) {
+          paths = state$2.selectedFilePaths;
+        } else {
+          paths = [fullPath.value];
         }
-        dragSourcePath.value = fullPath.value;
-        e3.dataTransfer.setData("text/plain", fullPath.value);
-        e3.dataTransfer.effectAllowed = "move";
+        e3.dataTransfer.setData("text/plain", JSON.stringify(paths));
+        e3.dataTransfer.effectAllowed = e3.ctrlKey ? "copy" : "move";
+        if (e3.dataTransfer.setDragImage && paths.length === 1) {
+          const el2 = e3.currentTarget;
+          e3.dataTransfer.setDragImage(el2, 10, 10);
+        }
       };
       const onDragOver = (e3) => {
-        if (props.item.isDir) dragOver.value = true;
+        if (props.item.isDir) {
+          dragOver.value = true;
+          e3.dataTransfer.dropEffect = e3.ctrlKey ? "copy" : "move";
+        }
       };
       const onDragLeave = () => {
         dragOver.value = false;
@@ -10978,18 +11072,62 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       const onDrop = async (e3) => {
         dragOver.value = false;
         if (!props.item.isDir) return;
-        const srcPath = e3.dataTransfer.getData("text/plain");
-        if (!srcPath || srcPath === fullPath.value || srcPath.startsWith(fullPath.value + "\\")) return;
-        const srcName = srcPath.split("\\").pop();
+        const raw = e3.dataTransfer.getData("text/plain");
+        if (!raw) return;
+        let paths = [];
         try {
-          await api.apiPost("/fs/rename", { from: srcPath, to: fullPath.value + "\\" + srcName });
+          paths = JSON.parse(raw);
+        } catch {
+          paths = [raw];
+        }
+        if (!Array.isArray(paths)) paths = [paths];
+        if (paths.length === 0) return;
+        const targetDir = fullPath.value;
+        const isCopy = e3.ctrlKey || e3.shiftKey;
+        let successCount = 0;
+        let failCount = 0;
+        for (const srcPath of paths) {
+          if (!srcPath || srcPath === targetDir || srcPath.startsWith(targetDir + "\\")) continue;
+          const srcName = srcPath.split("\\").pop();
+          const destPath = targetDir + "\\" + srcName;
+          try {
+            if (isCopy) {
+              await api.apiPost("/fs/copy", { from: srcPath, to: destPath });
+              if (state$2.fileContents[srcPath]) {
+                state$2.fileContents[destPath] = state$2.fileContents[srcPath];
+                state$2.fileSavedContent[destPath] = state$2.fileSavedContent[srcPath];
+              }
+            } else {
+              await api.apiPost("/fs/rename", { from: srcPath, to: destPath });
+              if (state$2.activeFile === srcPath) {
+                state$2.activeFile = destPath;
+                const idx = state$2.openFiles.indexOf(srcPath);
+                if (idx !== -1) state$2.openFiles[idx] = destPath;
+              }
+              if (state$2.fileContents[srcPath]) {
+                state$2.fileContents[destPath] = state$2.fileContents[srcPath];
+                state$2.fileSavedContent[destPath] = state$2.fileSavedContent[srcPath];
+                delete state$2.fileContents[srcPath];
+                delete state$2.fileSavedContent[srcPath];
+                delete state$2.fileDirty[srcPath];
+              }
+            }
+            successCount++;
+          } catch (err) {
+            console.warn("[拖拽] 操作失败:", srcPath, "→", destPath, err);
+            failCount++;
+          }
+        }
+        if (successCount > 0) {
           window.dispatchEvent(new CustomEvent("refresh-tree"));
-        } catch (err) {
-          window.$toast("移动失败: " + (err.message || err), "error");
+          window.$toast(isCopy ? `已复制 ${successCount} 个${failCount > 0 ? "（" + failCount + " 个失败）" : ""}` : `已移动 ${successCount} 个${failCount > 0 ? "（" + failCount + " 个失败）" : ""}`, "success");
+        } else if (failCount > 0) {
+          window.$toast("拖拽操作失败: " + failCount + " 个错误", "error");
         }
       };
       function onRefreshTree() {
         if (expanded.value && props.item.isDir) {
+          state$2.expandedDirs[fullPath.value] = true;
           loaded.value = false;
           api.apiGet("/fs/list", { path: fullPath.value }).then((entries2) => {
             children2.value = entries2 || [];
@@ -11008,23 +11146,23 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         const _component_FileTreeItem = resolveComponent("FileTreeItem", true);
         return openBlock(), createElementBlock("div", _hoisted_1$t, [
           createBaseVNode("div", {
-            class: normalizeClass(["item-row", { "drag-over": dragOver.value }]),
+            class: normalizeClass(["item-row", { "drag-over": dragOver.value, "selected": isSelected.value }]),
             style: normalizeStyle({ paddingLeft: __props.depth * 16 + "px" }),
-            draggable: !__props.item.isDir,
-            onClick: handleClick,
+            draggable: "true",
+            onClick: _cache[0] || (_cache[0] = ($event) => handleClick($event)),
             onContextmenu: withModifiers(showContextMenu, ["prevent"]),
             onDragstart: onDragStart,
             onDragover: withModifiers(onDragOver, ["prevent"]),
             onDragleave: onDragLeave,
             onDrop: withModifiers(onDrop, ["prevent"])
           }, [
-            __props.item.isDir ? (openBlock(), createElementBlock("span", _hoisted_3$s, [
+            __props.item.isDir ? (openBlock(), createElementBlock("span", _hoisted_2$t, [
               createVNode(SvgIcon, {
                 name: "chevron-right",
                 size: 10,
                 class: normalizeClass(["chevron", { expanded: expanded.value }])
               }, null, 8, ["class"])
-            ])) : (openBlock(), createElementBlock("span", _hoisted_4$p)),
+            ])) : (openBlock(), createElementBlock("span", _hoisted_3$s)),
             createVNode(SvgIcon, {
               name: fileIcon.value,
               size: 14
@@ -11032,15 +11170,15 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
             createBaseVNode("span", {
               class: normalizeClass(["item-name", { active: unref(state$2).activeFile === unref(fullPath) }])
             }, toDisplayString(__props.item.name), 3)
-          ], 46, _hoisted_2$t),
-          expanded.value && __props.item.isDir && children2.value.length > 0 ? (openBlock(), createElementBlock("div", _hoisted_5$o, [
+          ], 38),
+          expanded.value && __props.item.isDir && children2.value.length > 0 ? (openBlock(), createElementBlock("div", _hoisted_4$p, [
             (openBlock(true), createElementBlock(Fragment, null, renderList(children2.value, (child, ci2) => {
               return openBlock(), createBlock(_component_FileTreeItem, {
                 key: unref(fullPath) + "\\" + child.name + "_" + ci2,
                 item: child,
                 parentPath: unref(fullPath),
                 depth: __props.depth + 1,
-                onFileClick: _cache[0] || (_cache[0] = (p2) => emit2("fileClick", p2))
+                onFileClick: _cache[1] || (_cache[1] = (p2) => emit2("fileClick", p2))
               }, null, 8, ["item", "parentPath", "depth"]);
             }), 128))
           ])) : createCommentVNode("", true),
@@ -11052,7 +11190,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
             withDirectives(createBaseVNode("input", {
               ref_key: "renameInputRef",
               ref: renameInputRef,
-              "onUpdate:modelValue": _cache[1] || (_cache[1] = ($event) => renameValue.value = $event),
+              "onUpdate:modelValue": _cache[2] || (_cache[2] = ($event) => renameValue.value = $event),
               class: "rename-field",
               onKeyup: [
                 withKeys(confirmRename, ["enter"]),
@@ -11071,15 +11209,15 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       };
     }
   };
-  const FileTreeItem = /* @__PURE__ */ _export_sfc(_sfc_main$u, [["__scopeId", "data-v-126a4e3d"]]);
+  const FileTreeItem = /* @__PURE__ */ _export_sfc(_sfc_main$u, [["__scopeId", "data-v-5f98db98"]]);
   const _hoisted_1$s = { class: "file-explorer" };
   const _hoisted_2$s = { class: "explorer-toolbar" };
   const _hoisted_3$r = { class: "ws-section" };
   const _hoisted_4$o = ["onClick", "onContextmenu"];
   const _hoisted_5$n = { class: "ws-left" };
   const _hoisted_6$n = { class: "ws-name" };
-  const _hoisted_7$k = { class: "ws-right" };
-  const _hoisted_8$f = {
+  const _hoisted_7$l = { class: "ws-right" };
+  const _hoisted_8$g = {
     key: 0,
     class: "ws-notify",
     title: "有待处理"
@@ -11092,32 +11230,32 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     key: 0,
     class: "ws-empty"
   };
-  const _hoisted_11$e = { class: "project-section" };
-  const _hoisted_12$d = {
+  const _hoisted_11$f = { class: "project-section" };
+  const _hoisted_12$e = {
     key: 0,
     class: "proj-empty"
   };
-  const _hoisted_13$c = {
+  const _hoisted_13$d = {
     key: 2,
     class: "proj-empty"
   };
-  const _hoisted_14$c = {
+  const _hoisted_14$d = {
     class: "dialog-box",
     style: { "max-width": "420px" }
   };
-  const _hoisted_15$b = { class: "dialog-body" };
-  const _hoisted_16$a = { class: "input-row" };
-  const _hoisted_17$a = { class: "dialog-footer" };
-  const _hoisted_18$a = {
+  const _hoisted_15$c = { class: "dialog-body" };
+  const _hoisted_16$b = { class: "input-row" };
+  const _hoisted_17$b = { class: "dialog-footer" };
+  const _hoisted_18$b = {
     key: 0,
     class: "dlg-error"
   };
-  const _hoisted_19$a = ["disabled"];
-  const _hoisted_20$9 = { class: "dialog-box dir-browser-box" };
-  const _hoisted_21$8 = { class: "dialog-title" };
-  const _hoisted_22$8 = { class: "dir-browser" };
-  const _hoisted_23$6 = { class: "dir-breadcrumb" };
-  const _hoisted_24$5 = ["disabled"];
+  const _hoisted_19$b = ["disabled"];
+  const _hoisted_20$a = { class: "dialog-box dir-browser-box" };
+  const _hoisted_21$9 = { class: "dialog-title" };
+  const _hoisted_22$9 = { class: "dir-browser" };
+  const _hoisted_23$7 = { class: "dir-breadcrumb" };
+  const _hoisted_24$6 = ["disabled"];
   const _hoisted_25$5 = { class: "bc-path" };
   const _hoisted_26$5 = {
     key: 0,
@@ -11417,9 +11555,12 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         }
       }
       let _refreshingTree = false;
+      let _savedTreeScrollTop = 0;
       async function refreshAll() {
         if (_refreshingTree) return;
         _refreshingTree = true;
+        const container = document.querySelector(".project-section");
+        if (container) _savedTreeScrollTop = container.scrollTop;
         try {
           const health = await api.apiGet("/health");
           state$2.workspaceFolders = health.folders || [];
@@ -11436,6 +11577,12 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
           console.warn("刷新全部失败:", e3);
         } finally {
           _refreshingTree = false;
+          if (_savedTreeScrollTop > 0) {
+            nextTick(() => {
+              const c2 = document.querySelector(".project-section");
+              if (c2) c2.scrollTop = _savedTreeScrollTop;
+            });
+          }
         }
       }
       function openFile(path2) {
@@ -11533,8 +11680,8 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                   }),
                   createBaseVNode("span", _hoisted_6$n, toDisplayString(ws2.name), 1)
                 ]),
-                createBaseVNode("div", _hoisted_7$k, [
-                  ws2.notify ? (openBlock(), createElementBlock("span", _hoisted_8$f, "●")) : createCommentVNode("", true),
+                createBaseVNode("div", _hoisted_7$l, [
+                  ws2.notify ? (openBlock(), createElementBlock("span", _hoisted_8$g, "●")) : createCommentVNode("", true),
                   ws2.path === unref(state$2).workspaceRoot ? (openBlock(), createElementBlock("span", _hoisted_9$f, "当前")) : createCommentVNode("", true)
                 ])
               ], 42, _hoisted_4$o);
@@ -11550,8 +11697,8 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
           _cache[15] || (_cache[15] = createBaseVNode("div", { class: "ws-divider" }, [
             createBaseVNode("span", { class: "divider-label" }, "项目")
           ], -1)),
-          createBaseVNode("div", _hoisted_11$e, [
-            !unref(state$2).workspaceRoot ? (openBlock(), createElementBlock("div", _hoisted_12$d, "请先选择工作区")) : currentFolders.value.length > 0 ? (openBlock(true), createElementBlock(Fragment, { key: 1 }, renderList(currentFolders.value, (folder) => {
+          createBaseVNode("div", _hoisted_11$f, [
+            !unref(state$2).workspaceRoot ? (openBlock(), createElementBlock("div", _hoisted_12$e, "请先选择工作区")) : currentFolders.value.length > 0 ? (openBlock(true), createElementBlock(Fragment, { key: 1 }, renderList(currentFolders.value, (folder) => {
               return openBlock(), createBlock(FileTreeItem, {
                 key: folder,
                 item: { name: folder.split("\\").pop(), isDir: true, path: folder },
@@ -11560,7 +11707,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                 defaultExpanded: true,
                 onFileClick: openFile
               }, null, 8, ["item", "parentPath"]);
-            }), 128)) : (openBlock(), createElementBlock("div", _hoisted_13$c, [..._cache[11] || (_cache[11] = [
+            }), 128)) : (openBlock(), createElementBlock("div", _hoisted_13$d, [..._cache[11] || (_cache[11] = [
               createBaseVNode("span", null, "暂无项目，在工作区上右键添加", -1)
             ])]))
           ]),
@@ -11569,9 +11716,9 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
             class: "dialog-overlay",
             onClick: _cache[6] || (_cache[6] = withModifiers(($event) => showWorkspaceDialog.value = false, ["self"]))
           }, [
-            createBaseVNode("div", _hoisted_14$c, [
+            createBaseVNode("div", _hoisted_14$d, [
               _cache[14] || (_cache[14] = createBaseVNode("div", { class: "dialog-title" }, "新建工作区", -1)),
-              createBaseVNode("div", _hoisted_15$b, [
+              createBaseVNode("div", _hoisted_15$c, [
                 _cache[12] || (_cache[12] = createBaseVNode("label", null, "工作区名称", -1)),
                 withDirectives(createBaseVNode("input", {
                   "onUpdate:modelValue": _cache[2] || (_cache[2] = ($event) => newWsName.value = $event),
@@ -11582,7 +11729,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                   [vModelText, newWsName.value]
                 ]),
                 _cache[13] || (_cache[13] = createBaseVNode("label", null, "保存路径（可选）", -1)),
-                createBaseVNode("div", _hoisted_16$a, [
+                createBaseVNode("div", _hoisted_16$b, [
                   withDirectives(createBaseVNode("input", {
                     "onUpdate:modelValue": _cache[3] || (_cache[3] = ($event) => newWsPath.value = $event),
                     class: "dlg-input flex-1",
@@ -11596,8 +11743,8 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                   }, "浏览")
                 ])
               ]),
-              createBaseVNode("div", _hoisted_17$a, [
-                wsError.value ? (openBlock(), createElementBlock("span", _hoisted_18$a, toDisplayString(wsError.value), 1)) : createCommentVNode("", true),
+              createBaseVNode("div", _hoisted_17$b, [
+                wsError.value ? (openBlock(), createElementBlock("span", _hoisted_18$b, toDisplayString(wsError.value), 1)) : createCommentVNode("", true),
                 createBaseVNode("button", {
                   class: "dlg-btn",
                   onClick: _cache[5] || (_cache[5] = ($event) => showWorkspaceDialog.value = false)
@@ -11606,7 +11753,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                   class: "dlg-btn primary",
                   onClick: createWorkspace,
                   disabled: !newWsName.value.trim()
-                }, "创建", 8, _hoisted_19$a)
+                }, "创建", 8, _hoisted_19$b)
               ])
             ])
           ])) : createCommentVNode("", true),
@@ -11615,10 +11762,10 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
             class: "dialog-overlay",
             onClick: withModifiers(closeBrowse, ["self"])
           }, [
-            createBaseVNode("div", _hoisted_20$9, [
-              createBaseVNode("div", _hoisted_21$8, toDisplayString(browseTitle.value), 1),
-              createBaseVNode("div", _hoisted_22$8, [
-                createBaseVNode("div", _hoisted_23$6, [
+            createBaseVNode("div", _hoisted_20$a, [
+              createBaseVNode("div", _hoisted_21$9, toDisplayString(browseTitle.value), 1),
+              createBaseVNode("div", _hoisted_22$9, [
+                createBaseVNode("div", _hoisted_23$7, [
                   createBaseVNode("button", {
                     class: "bc-btn",
                     onClick: browseGoUp,
@@ -11629,7 +11776,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                       size: 14,
                       style: { "transform": "rotate(180deg)" }
                     })
-                  ], 8, _hoisted_24$5),
+                  ], 8, _hoisted_24$6),
                   createBaseVNode("span", _hoisted_25$5, toDisplayString(browsePath.value || "选择驱动器..."), 1)
                 ]),
                 browsePath.value === "" ? (openBlock(), createElementBlock("div", _hoisted_26$5, [
@@ -11695,38 +11842,106 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       };
     }
   };
-  const FileExplorer = /* @__PURE__ */ _export_sfc(_sfc_main$t, [["__scopeId", "data-v-8faa4f30"]]);
+  const FileExplorer = /* @__PURE__ */ _export_sfc(_sfc_main$t, [["__scopeId", "data-v-9ce3be28"]]);
   const _hoisted_1$r = { class: "search-panel" };
-  const _hoisted_2$r = { class: "search-box" };
-  const _hoisted_3$q = { class: "search-path" };
-  const _hoisted_4$n = {
+  const _hoisted_2$r = { class: "sp-mode-bar" };
+  const _hoisted_3$q = { class: "sp-field" };
+  const _hoisted_4$n = { class: "sp-input-wrap" };
+  const _hoisted_5$m = {
     key: 0,
-    class: "search-results"
+    class: "sp-field"
   };
-  const _hoisted_5$m = { class: "result-count" };
-  const _hoisted_6$m = ["onClick"];
-  const _hoisted_7$j = { class: "result-file" };
-  const _hoisted_8$e = { class: "result-line" };
-  const _hoisted_9$e = { class: "result-text" };
+  const _hoisted_6$m = { class: "sp-input-wrap" };
+  const _hoisted_7$k = ["disabled"];
+  const _hoisted_8$f = { class: "sp-path-row" };
+  const _hoisted_9$e = { class: "sp-options" };
   const _hoisted_10$e = {
+    class: "sp-opt",
+    title: "区分大小写"
+  };
+  const _hoisted_11$e = {
+    class: "sp-opt",
+    title: "全词匹配"
+  };
+  const _hoisted_12$d = {
+    class: "sp-opt",
+    title: "使用正则表达式"
+  };
+  const _hoisted_13$c = {
     key: 1,
-    class: "no-results"
+    class: "sp-results"
+  };
+  const _hoisted_14$c = { class: "sp-result-header" };
+  const _hoisted_15$b = { class: "sp-result-count" };
+  const _hoisted_16$a = ["onClick"];
+  const _hoisted_17$a = { class: "sp-file-path" };
+  const _hoisted_18$a = { class: "sp-file-count" };
+  const _hoisted_19$a = {
+    key: 0,
+    class: "sp-file-items"
+  };
+  const _hoisted_20$9 = ["onClick", "title"];
+  const _hoisted_21$8 = { class: "sp-result-line" };
+  const _hoisted_22$8 = ["innerHTML"];
+  const _hoisted_23$6 = {
+    key: 2,
+    class: "sp-no-results"
+  };
+  const _hoisted_24$5 = {
+    key: 3,
+    class: "sp-hint"
   };
   const _sfc_main$s = {
     __name: "SearchPanel",
     setup(__props) {
       const query = /* @__PURE__ */ ref("");
+      const replaceText = /* @__PURE__ */ ref("");
       const searchPath = /* @__PURE__ */ ref("");
       const searched = /* @__PURE__ */ ref(false);
-      inject$1("showSettings");
-      inject$1("showSystem");
-      inject$1("switchActivity");
+      const caseSensitive = /* @__PURE__ */ ref(false);
+      const wholeWord = /* @__PURE__ */ ref(false);
+      const useRegex = /* @__PURE__ */ ref(false);
+      const mode = /* @__PURE__ */ ref("search");
+      const replaceStatus = /* @__PURE__ */ ref(null);
+      const groupExpanded = /* @__PURE__ */ ref({});
+      const groupedResults = computed(() => {
+        const map3 = {};
+        for (const r2 of state$2.searchResults) {
+          if (!map3[r2.file]) {
+            map3[r2.file] = { file: r2.file, items: [], expanded: groupExpanded.value[r2.file] !== false };
+          }
+          map3[r2.file].items.push(r2);
+        }
+        const list = Object.values(map3);
+        for (const g2 of list) {
+          if (groupExpanded.value[g2.file] === void 0) groupExpanded.value[g2.file] = true;
+        }
+        return list;
+      });
+      function toggleGroup(file) {
+        groupExpanded.value[file] = !groupExpanded.value[file];
+      }
+      function highlightMatch(text2, q2) {
+        if (!text2 || !q2) return text2;
+        try {
+          const escaped = q2.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          const re2 = new RegExp("(" + escaped + ")", caseSensitive.value ? "g" : "gi");
+          return text2.replace(re2, '<mark class="sp-match">$1</mark>');
+        } catch {
+          return text2;
+        }
+      }
       const doSearch = async () => {
         if (!query.value.trim()) return;
         searched.value = true;
         state$2.searchResults = [];
+        replaceStatus.value = null;
         try {
-          const results = await api.apiGet("/fs/search", { q: query.value, path: searchPath.value || state$2.workspaceRoot });
+          const params = { q: query.value, path: searchPath.value || state$2.workspaceRoot };
+          if (caseSensitive.value) params.case_sensitive = "1";
+          if (wholeWord.value) params.whole_word = "1";
+          if (useRegex.value) params.regex = "1";
+          const results = await api.apiGet("/fs/search", params);
           state$2.searchResults = results || [];
         } catch (err) {
           state$2.searchResults = [];
@@ -11735,67 +11950,225 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       };
       const openResult = (result) => {
         const path2 = result.file;
-        const existing = state$2.openFiles.find((f2) => f2 === path2);
-        if (!existing) state$2.openFiles.push(path2);
+        if (!state$2.openFiles.includes(path2)) state$2.openFiles.push(path2);
         state$2.activeFile = path2;
         if (!state$2.fileContents[path2]) {
           api.apiGet("/fs/read", { path: path2 }).then((d2) => {
             state$2.fileContents[path2] = d2.content || "";
+            state$2.fileSavedContent[path2] = state$2.fileContents[path2];
             state$2.fileDirty[path2] = false;
           }).catch((e3) => console.warn("[搜索] 读取文件失败:", path2, e3));
         }
       };
+      const replaceAll2 = async () => {
+        if (!query.value.trim() || state$2.searchResults.length === 0) return;
+        replaceStatus.value = { type: "info", message: "正在替换..." };
+        const files = {};
+        for (const r2 of state$2.searchResults) {
+          if (!files[r2.file]) files[r2.file] = /* @__PURE__ */ new Set();
+          files[r2.file].add(r2.line);
+        }
+        let successCount = 0;
+        let failCount = 0;
+        const fileList = Object.keys(files);
+        for (const filePath of fileList) {
+          try {
+            const data2 = await api.apiGet("/fs/read", { path: filePath });
+            let content2 = data2.content || "";
+            let pattern = query.value;
+            if (!useRegex.value) pattern = pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            if (wholeWord.value) pattern = "\\b" + pattern + "\\b";
+            const flags = caseSensitive.value ? "g" : "gi";
+            const re2 = new RegExp(pattern, flags);
+            const newContent = content2.replace(re2, replaceText.value);
+            if (newContent === content2) continue;
+            await api.apiPost("/fs/write", { path: filePath, content: newContent });
+            const normalized = newContent.replace(/\r\n/g, "\n");
+            if (state$2.openFiles.includes(filePath)) {
+              state$2.fileContents[filePath] = normalized;
+              state$2.fileSavedContent[filePath] = normalized;
+              state$2.fileDirty[filePath] = false;
+            }
+            successCount++;
+          } catch (err) {
+            console.warn("[替换] 文件替换失败:", filePath, err);
+            failCount++;
+          }
+        }
+        await doSearch();
+        replaceStatus.value = {
+          type: failCount > 0 ? "warn" : "success",
+          message: failCount > 0 ? `完成：${successCount} 个文件已替换，${failCount} 个失败` : `✅ 全部完成：${successCount} 个文件已替换`
+        };
+        window.dispatchEvent(new CustomEvent("refresh-tree"));
+        setTimeout(() => {
+          replaceStatus.value = null;
+        }, 5e3);
+      };
       return (_ctx, _cache) => {
         return openBlock(), createElementBlock("div", _hoisted_1$r, [
           createBaseVNode("div", _hoisted_2$r, [
-            withDirectives(createBaseVNode("input", {
-              type: "text",
-              "onUpdate:modelValue": _cache[0] || (_cache[0] = ($event) => query.value = $event),
-              placeholder: "搜索文件内容...",
-              onKeydown: withKeys(doSearch, ["enter"]),
-              class: "search-input"
-            }, null, 544), [
-              [vModelText, query.value]
+            createBaseVNode("button", {
+              class: normalizeClass(["sp-mode-btn", { active: mode.value === "search" }]),
+              onClick: _cache[0] || (_cache[0] = ($event) => mode.value = "search")
+            }, "查找", 2),
+            createBaseVNode("button", {
+              class: normalizeClass(["sp-mode-btn", { active: mode.value === "replace" }]),
+              onClick: _cache[1] || (_cache[1] = ($event) => mode.value = "replace")
+            }, "替换", 2)
+          ]),
+          createBaseVNode("div", _hoisted_3$q, [
+            createBaseVNode("div", _hoisted_4$n, [
+              createVNode(SvgIcon, {
+                name: "search",
+                size: 13,
+                class: "sp-input-icon"
+              }),
+              withDirectives(createBaseVNode("input", {
+                type: "text",
+                "onUpdate:modelValue": _cache[2] || (_cache[2] = ($event) => query.value = $event),
+                placeholder: "搜索...",
+                onKeydown: withKeys(doSearch, ["enter"]),
+                class: "sp-input"
+              }, null, 544), [
+                [vModelText, query.value]
+              ])
             ]),
             createBaseVNode("button", {
               onClick: doSearch,
-              class: "search-btn"
-            }, [
-              createVNode(SvgIcon, {
-                name: "search",
-                size: 14
-              })
-            ])
+              class: "sp-go-btn"
+            }, "查找")
           ]),
-          createBaseVNode("div", _hoisted_3$q, [
+          mode.value === "replace" ? (openBlock(), createElementBlock("div", _hoisted_5$m, [
+            createBaseVNode("div", _hoisted_6$m, [
+              createVNode(SvgIcon, {
+                name: "edit",
+                size: 13,
+                class: "sp-input-icon"
+              }),
+              withDirectives(createBaseVNode("input", {
+                type: "text",
+                "onUpdate:modelValue": _cache[3] || (_cache[3] = ($event) => replaceText.value = $event),
+                placeholder: "替换为...",
+                onKeydown: withKeys(replaceAll2, ["enter"]),
+                class: "sp-input"
+              }, null, 544), [
+                [vModelText, replaceText.value]
+              ])
+            ]),
+            createBaseVNode("button", {
+              onClick: replaceAll2,
+              class: "sp-replace-btn",
+              disabled: !unref(state$2).searchResults.length || !query.value.trim()
+            }, "全部替换", 8, _hoisted_7$k)
+          ])) : createCommentVNode("", true),
+          createBaseVNode("div", _hoisted_8$f, [
             withDirectives(createBaseVNode("input", {
               type: "text",
-              "onUpdate:modelValue": _cache[1] || (_cache[1] = ($event) => searchPath.value = $event),
+              "onUpdate:modelValue": _cache[4] || (_cache[4] = ($event) => searchPath.value = $event),
               placeholder: "搜索路径（默认工作区）",
-              class: "path-input"
+              class: "sp-path-input"
             }, null, 512), [
               [vModelText, searchPath.value]
+            ]),
+            searchPath.value ? (openBlock(), createElementBlock("button", {
+              key: 0,
+              class: "sp-clear-btn",
+              onClick: _cache[5] || (_cache[5] = ($event) => searchPath.value = ""),
+              title: "清除路径"
+            }, "×")) : createCommentVNode("", true)
+          ]),
+          createBaseVNode("div", _hoisted_9$e, [
+            createBaseVNode("label", _hoisted_10$e, [
+              withDirectives(createBaseVNode("input", {
+                type: "checkbox",
+                "onUpdate:modelValue": _cache[6] || (_cache[6] = ($event) => caseSensitive.value = $event)
+              }, null, 512), [
+                [vModelCheckbox, caseSensitive.value]
+              ]),
+              _cache[9] || (_cache[9] = createBaseVNode("span", null, "Aa", -1))
+            ]),
+            createBaseVNode("label", _hoisted_11$e, [
+              withDirectives(createBaseVNode("input", {
+                type: "checkbox",
+                "onUpdate:modelValue": _cache[7] || (_cache[7] = ($event) => wholeWord.value = $event)
+              }, null, 512), [
+                [vModelCheckbox, wholeWord.value]
+              ]),
+              _cache[10] || (_cache[10] = createBaseVNode("span", null, "全词", -1))
+            ]),
+            createBaseVNode("label", _hoisted_12$d, [
+              withDirectives(createBaseVNode("input", {
+                type: "checkbox",
+                "onUpdate:modelValue": _cache[8] || (_cache[8] = ($event) => useRegex.value = $event)
+              }, null, 512), [
+                [vModelCheckbox, useRegex.value]
+              ]),
+              _cache[11] || (_cache[11] = createBaseVNode("span", null, "正则", -1))
             ])
           ]),
-          unref(state$2).searchResults.length > 0 ? (openBlock(), createElementBlock("div", _hoisted_4$n, [
-            createBaseVNode("div", _hoisted_5$m, toDisplayString(unref(state$2).searchResults.length) + " 个结果", 1),
-            (openBlock(true), createElementBlock(Fragment, null, renderList(unref(state$2).searchResults, (r2, i2) => {
+          unref(state$2).searchResults.length > 0 ? (openBlock(), createElementBlock("div", _hoisted_13$c, [
+            createBaseVNode("div", _hoisted_14$c, [
+              createBaseVNode("span", _hoisted_15$b, toDisplayString(unref(state$2).searchResults.length) + " 个文件匹配", 1),
+              mode.value === "replace" ? (openBlock(), createElementBlock("button", {
+                key: 0,
+                class: "sp-replace-all-sm",
+                onClick: replaceAll2
+              }, "全部替换")) : createCommentVNode("", true)
+            ]),
+            (openBlock(true), createElementBlock(Fragment, null, renderList(groupedResults.value, (group, gi2) => {
               return openBlock(), createElementBlock("div", {
-                key: i2,
-                class: "result-item",
-                onClick: ($event) => openResult(r2)
+                key: gi2,
+                class: "sp-file-group"
               }, [
-                createBaseVNode("span", _hoisted_7$j, toDisplayString(r2.file), 1),
-                createBaseVNode("span", _hoisted_8$e, toDisplayString(r2.line), 1),
-                createBaseVNode("span", _hoisted_9$e, toDisplayString(r2.text), 1)
-              ], 8, _hoisted_6$m);
+                createBaseVNode("div", {
+                  class: "sp-file-title",
+                  onClick: ($event) => toggleGroup(gi2)
+                }, [
+                  createVNode(SvgIcon, {
+                    name: group.expanded ? "chevron-down" : "chevron-right",
+                    size: 10
+                  }, null, 8, ["name"]),
+                  createBaseVNode("span", _hoisted_17$a, toDisplayString(group.file), 1),
+                  createBaseVNode("span", _hoisted_18$a, toDisplayString(group.items.length) + " 处", 1)
+                ], 8, _hoisted_16$a),
+                group.expanded ? (openBlock(), createElementBlock("div", _hoisted_19$a, [
+                  (openBlock(true), createElementBlock(Fragment, null, renderList(group.items, (r2, ri2) => {
+                    return openBlock(), createElementBlock("div", {
+                      key: ri2,
+                      class: "sp-result-row",
+                      onClick: ($event) => openResult(r2),
+                      title: r2.text
+                    }, [
+                      createBaseVNode("span", _hoisted_21$8, toDisplayString(r2.line), 1),
+                      createBaseVNode("span", {
+                        class: "sp-result-text",
+                        innerHTML: highlightMatch(r2.text, query.value)
+                      }, null, 8, _hoisted_22$8)
+                    ], 8, _hoisted_20$9);
+                  }), 128))
+                ])) : createCommentVNode("", true)
+              ]);
             }), 128))
-          ])) : searched.value ? (openBlock(), createElementBlock("div", _hoisted_10$e, "无结果")) : createCommentVNode("", true)
+          ])) : searched.value ? (openBlock(), createElementBlock("div", _hoisted_23$6, [
+            createVNode(SvgIcon, {
+              name: "search-off",
+              size: 20,
+              class: "sp-no-icon"
+            }),
+            _cache[12] || (_cache[12] = createBaseVNode("span", null, "未找到匹配内容", -1))
+          ])) : (openBlock(), createElementBlock("div", _hoisted_24$5, [..._cache[13] || (_cache[13] = [
+            createBaseVNode("span", null, "输入关键词后按 Enter 搜索", -1)
+          ])])),
+          replaceStatus.value ? (openBlock(), createElementBlock("div", {
+            key: 4,
+            class: normalizeClass(["sp-status", replaceStatus.value.type])
+          }, toDisplayString(replaceStatus.value.message), 3)) : createCommentVNode("", true)
         ]);
       };
     }
   };
-  const SearchPanel$1 = /* @__PURE__ */ _export_sfc(_sfc_main$s, [["__scopeId", "data-v-7cc474b9"]]);
+  const SearchPanel$1 = /* @__PURE__ */ _export_sfc(_sfc_main$s, [["__scopeId", "data-v-fb066a8f"]]);
   const _hoisted_1$q = { class: "modal-header" };
   const _hoisted_2$q = { class: "modal-title" };
   const _hoisted_3$p = { class: "modal-body" };
@@ -11862,12 +12235,12 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
   const _hoisted_4$m = { class: "git-repo-bar" };
   const _hoisted_5$l = ["value"];
   const _hoisted_6$l = { class: "branch-name" };
-  const _hoisted_7$i = {
+  const _hoisted_7$j = {
     key: 1,
     class: "ahead-badge",
     title: "领先上游"
   };
-  const _hoisted_8$d = {
+  const _hoisted_8$e = {
     key: 2,
     class: "behind-badge",
     title: "落后上游"
@@ -11962,9 +12335,9 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     class: "stash-empty"
   };
   const _hoisted_73$2 = { class: "overlay-panel ignore-panel" };
-  const _hoisted_74$1 = { class: "overlay-header" };
-  const _hoisted_75$1 = { class: "ignore-actions" };
-  const _hoisted_76$1 = { class: "detail-content" };
+  const _hoisted_74$2 = { class: "overlay-header" };
+  const _hoisted_75$2 = { class: "ignore-actions" };
+  const _hoisted_76$2 = { class: "detail-content" };
   const _hoisted_77$1 = { class: "detail-meta" };
   const _hoisted_78$1 = { class: "detail-diff" };
   const _hoisted_79$1 = {
@@ -12419,8 +12792,8 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                   size: 10
                 })
               ]),
-              ahead.value > 0 ? (openBlock(), createElementBlock("span", _hoisted_7$i, "↑" + toDisplayString(ahead.value), 1)) : createCommentVNode("", true),
-              behind.value > 0 ? (openBlock(), createElementBlock("span", _hoisted_8$d, "↓" + toDisplayString(behind.value), 1)) : createCommentVNode("", true),
+              ahead.value > 0 ? (openBlock(), createElementBlock("span", _hoisted_7$j, "↑" + toDisplayString(ahead.value), 1)) : createCommentVNode("", true),
+              behind.value > 0 ? (openBlock(), createElementBlock("span", _hoisted_8$e, "↓" + toDisplayString(behind.value), 1)) : createCommentVNode("", true),
               createBaseVNode("div", _hoisted_9$d, [
                 createBaseVNode("button", {
                   class: "icon-btn",
@@ -12944,7 +13317,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
               onClick: _cache[33] || (_cache[33] = withModifiers(($event) => showIgnoreEditor.value = false, ["self"]))
             }, [
               createBaseVNode("div", _hoisted_73$2, [
-                createBaseVNode("div", _hoisted_74$1, [
+                createBaseVNode("div", _hoisted_74$2, [
                   _cache[54] || (_cache[54] = createBaseVNode("span", null, ".gitignore", -1)),
                   createBaseVNode("button", {
                     class: "icon-btn",
@@ -12964,7 +13337,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                 }, null, 512), [
                   [vModelText, ignoreContent.value]
                 ]),
-                createBaseVNode("div", _hoisted_75$1, [
+                createBaseVNode("div", _hoisted_75$2, [
                   createBaseVNode("button", {
                     class: "git-btn",
                     onClick: _cache[32] || (_cache[32] = ($event) => showIgnoreEditor.value = false)
@@ -12991,7 +13364,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
             default: withCtx(() => {
               var _a3, _b2, _c3;
               return [
-                createBaseVNode("div", _hoisted_76$1, [
+                createBaseVNode("div", _hoisted_76$2, [
                   createBaseVNode("div", _hoisted_77$1, [
                     createBaseVNode("div", null, [
                       _cache[55] || (_cache[55] = createBaseVNode("strong", null, "作者：", -1)),
@@ -45103,26 +45476,125 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
             }
           })
         ];
+        let themeExt = null;
+        let syntaxExt = null;
         if (state$2.theme === "dark") {
-          extensions2.push(oneDark);
-        } else if (state$2.theme === "warm") {
-          extensions2.push(EditorView.theme({
-            "&": { backgroundColor: "#faf3e8", color: "#3d2c1e" },
-            ".cm-gutters": { backgroundColor: "#f5ece0", borderRight: "1px solid #d6c8b8" },
-            "&.cm-focused .cm-cursor": { borderLeftColor: "#b87333" }
-          }));
-        } else if (state$2.theme === "night") {
-          extensions2.push(EditorView.theme({
-            "&": { backgroundColor: "#12101a", color: "#d8d4e0" },
-            ".cm-gutters": { backgroundColor: "#1a1726", borderRight: "1px solid #2d2940" },
-            "&.cm-focused .cm-cursor": { borderLeftColor: "#9b8ec4" }
-          }));
-        } else {
-          extensions2.push(EditorView.theme({
+          themeExt = oneDark;
+          syntaxExt = syntaxHighlighting(HighlightStyle.define([]));
+        } else if (state$2.theme === "light") {
+          themeExt = EditorView.theme({
             "&": { backgroundColor: "#ffffff", color: "#1a1a2e" },
-            ".cm-gutters": { backgroundColor: "#f8f9fa", borderRight: "1px solid #dadce0" }
-          }));
+            ".cm-gutters": { backgroundColor: "#f8f9fa", borderRight: "1px solid #dadce0", color: "#6e7681" },
+            ".cm-activeLineGutter": { backgroundColor: "#e8eaed" },
+            ".cm-activeLine": { backgroundColor: "#f0f4ff" },
+            "&.cm-focused .cm-cursor": { borderLeftColor: "#1a73e8" },
+            ".cm-selectionBackground": { background: "#1a73e830 !important" },
+            ".cm-matchingBracket": { background: "#1a73e820", outline: "1px solid #1a73e840" }
+          });
+          syntaxExt = syntaxHighlighting(HighlightStyle.define([
+            { tag: tags$2.keyword, color: "#d73a49" },
+            { tag: [tags$2.definitionKeyword, tags$2.modifier], color: "#d73a49" },
+            { tag: tags$2.typeName, color: "#005cc5" },
+            { tag: tags$2.className, color: "#6f42c1" },
+            { tag: tags$2.function(tags$2.variableName), color: "#6f42c1" },
+            { tag: tags$2.function(tags$2.propertyName), color: "#6f42c1" },
+            { tag: tags$2.definition(tags$2.propertyName), color: "#005cc5" },
+            { tag: tags$2.definition(tags$2.typeName), color: "#6f42c1" },
+            { tag: tags$2.propertyName, color: "#005cc5" },
+            { tag: tags$2.attributeName, color: "#005cc5" },
+            { tag: tags$2.attributeValue, color: "#032f62" },
+            { tag: tags$2.number, color: "#005cc5" },
+            { tag: tags$2.string, color: "#032f62" },
+            { tag: tags$2.bool, color: "#005cc5" },
+            { tag: tags$2.regexp, color: "#032f62" },
+            { tag: tags$2.variableName, color: "#e36209" },
+            { tag: tags$2.comment, color: "#6a737d", fontStyle: "italic" },
+            { tag: tags$2.invalid, color: "#d73a49" },
+            { tag: tags$2.operator, color: "#d73a49" },
+            { tag: tags$2.bracket, color: "#1a1a2e" },
+            { tag: tags$2.paren, color: "#1a1a2e" },
+            { tag: tags$2.separator, color: "#1a1a2e" },
+            { tag: tags$2.link, color: "#032f62", textDecoration: "underline" },
+            { tag: tags$2.strong, fontWeight: "bold" },
+            { tag: tags$2.emphasis, fontStyle: "italic" },
+            { tag: tags$2.strikethrough, textDecoration: "line-through" },
+            { tag: tags$2.heading, color: "#005cc5", fontWeight: "bold" },
+            { tag: tags$2.processingInstruction, color: "#6a737d" },
+            { tag: tags$2.meta, color: "#6a737d" }
+          ]));
+        } else if (state$2.theme === "warm") {
+          themeExt = EditorView.theme({
+            "&": { backgroundColor: "#faf3e8", color: "#3d2c1e" },
+            ".cm-gutters": { backgroundColor: "#f5ece0", borderRight: "1px solid #d6c8b8", color: "#a09080" },
+            ".cm-activeLineGutter": { backgroundColor: "#e8dbcb" },
+            ".cm-activeLine": { backgroundColor: "#f0e8d8" },
+            "&.cm-focused .cm-cursor": { borderLeftColor: "#b87333" },
+            ".cm-selectionBackground": { background: "#b8733330 !important" },
+            ".cm-matchingBracket": { background: "#b8733320", outline: "1px solid #b8733340" }
+          });
+          syntaxExt = syntaxHighlighting(HighlightStyle.define([
+            { tag: tags$2.keyword, color: "#8b6f47" },
+            { tag: [tags$2.definitionKeyword, tags$2.modifier], color: "#8b6f47" },
+            { tag: tags$2.typeName, color: "#6b4c7a" },
+            { tag: tags$2.className, color: "#6b4c7a" },
+            { tag: tags$2.function(tags$2.variableName), color: "#8b5c3a" },
+            { tag: tags$2.function(tags$2.propertyName), color: "#8b5c3a" },
+            { tag: tags$2.definition(tags$2.propertyName), color: "#5a7a4a" },
+            { tag: tags$2.definition(tags$2.typeName), color: "#6b4c7a" },
+            { tag: tags$2.propertyName, color: "#5a7a4a" },
+            { tag: tags$2.attributeName, color: "#5a7a4a" },
+            { tag: tags$2.attributeValue, color: "#7a6a5a" },
+            { tag: tags$2.number, color: "#b87333" },
+            { tag: tags$2.string, color: "#7a5a3a" },
+            { tag: tags$2.bool, color: "#b87333" },
+            { tag: tags$2.regexp, color: "#7a5a3a" },
+            { tag: tags$2.variableName, color: "#3d2c1e" },
+            { tag: tags$2.comment, color: "#a09080", fontStyle: "italic" },
+            { tag: tags$2.invalid, color: "#c04040" },
+            { tag: tags$2.operator, color: "#8b6f47" },
+            { tag: tags$2.bracket, color: "#5a4a3a" },
+            { tag: tags$2.paren, color: "#5a4a3a" },
+            { tag: tags$2.link, color: "#7a5a3a", textDecoration: "underline" },
+            { tag: tags$2.heading, color: "#8b6f47", fontWeight: "bold" }
+          ]));
+        } else if (state$2.theme === "night") {
+          themeExt = EditorView.theme({
+            "&": { backgroundColor: "#12101a", color: "#d8d4e0" },
+            ".cm-gutters": { backgroundColor: "#1a1726", borderRight: "1px solid #2d2940", color: "#6a6680" },
+            ".cm-activeLineGutter": { backgroundColor: "#252235" },
+            ".cm-activeLine": { backgroundColor: "#1e1b30" },
+            "&.cm-focused .cm-cursor": { borderLeftColor: "#9b8ec4" },
+            ".cm-selectionBackground": { background: "#9b8ec430 !important" },
+            ".cm-matchingBracket": { background: "#9b8ec420", outline: "1px solid #9b8ec440" }
+          });
+          syntaxExt = syntaxHighlighting(HighlightStyle.define([
+            { tag: tags$2.keyword, color: "#c4b8e8" },
+            { tag: [tags$2.definitionKeyword, tags$2.modifier], color: "#c4b8e8" },
+            { tag: tags$2.typeName, color: "#8ab8d4" },
+            { tag: tags$2.className, color: "#b8add4" },
+            { tag: tags$2.function(tags$2.variableName), color: "#b8add4" },
+            { tag: tags$2.function(tags$2.propertyName), color: "#b8add4" },
+            { tag: tags$2.definition(tags$2.propertyName), color: "#8ab8d4" },
+            { tag: tags$2.definition(tags$2.typeName), color: "#b8add4" },
+            { tag: tags$2.propertyName, color: "#8ab8d4" },
+            { tag: tags$2.attributeName, color: "#8ab8d4" },
+            { tag: tags$2.attributeValue, color: "#a8b4c0" },
+            { tag: tags$2.number, color: "#b8add4" },
+            { tag: tags$2.string, color: "#a8b4c0" },
+            { tag: tags$2.bool, color: "#b8add4" },
+            { tag: tags$2.regexp, color: "#a8b4c0" },
+            { tag: tags$2.variableName, color: "#d8d4e0" },
+            { tag: tags$2.comment, color: "#6a6680", fontStyle: "italic" },
+            { tag: tags$2.invalid, color: "#d08080" },
+            { tag: tags$2.operator, color: "#c4b8e8" },
+            { tag: tags$2.bracket, color: "#8884a0" },
+            { tag: tags$2.paren, color: "#8884a0" },
+            { tag: tags$2.link, color: "#a8b4c0", textDecoration: "underline" },
+            { tag: tags$2.heading, color: "#c4b8e8", fontWeight: "bold" }
+          ]));
         }
+        if (themeExt) extensions2.push(themeExt);
+        if (syntaxExt) extensions2.push(syntaxExt);
         const langImpl = lang ? lang() : null;
         if (langImpl) extensions2.push(langImpl);
         if (props.readonly) extensions2.push(EditorView.editable.of(false));
@@ -45220,15 +45692,15 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       };
     }
   };
-  const CodeEditor = /* @__PURE__ */ _export_sfc(_sfc_main$o, [["__scopeId", "data-v-28065587"]]);
+  const CodeEditor = /* @__PURE__ */ _export_sfc(_sfc_main$o, [["__scopeId", "data-v-719d98b8"]]);
   const _hoisted_1$n = { class: "hex-viewer" };
   const _hoisted_2$n = { class: "hex-toolbar" };
   const _hoisted_3$m = { class: "hex-file-info" };
   const _hoisted_4$l = ["disabled"];
   const _hoisted_5$k = { class: "hex-pos" };
   const _hoisted_6$k = ["disabled"];
-  const _hoisted_7$h = { class: "hex-goto" };
-  const _hoisted_8$c = ["disabled"];
+  const _hoisted_7$i = { class: "hex-goto" };
+  const _hoisted_8$d = ["disabled"];
   const _hoisted_9$c = { class: "hex-body" };
   const _hoisted_10$c = {
     key: 0,
@@ -45362,7 +45834,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
               title: "下一页 (PageDown)"
             }, "▼", 8, _hoisted_6$k),
             _cache[3] || (_cache[3] = createBaseVNode("span", { class: "hex-sep" }, null, -1)),
-            createBaseVNode("label", _hoisted_7$h, [
+            createBaseVNode("label", _hoisted_7$i, [
               _cache[1] || (_cache[1] = createTextVNode(" 偏移: ", -1)),
               withDirectives(createBaseVNode("input", {
                 type: "text",
@@ -45385,7 +45857,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
               onClick: loadAll,
               disabled: loading.value,
               title: "加载全部"
-            }, "全部", 8, _hoisted_8$c)
+            }, "全部", 8, _hoisted_8$d)
           ]),
           createBaseVNode("div", _hoisted_9$c, [
             loading.value ? (openBlock(), createElementBlock("div", _hoisted_10$c, "加载中...")) : (openBlock(), createElementBlock("pre", _hoisted_11$c, [
@@ -45409,7 +45881,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     key: 1,
     class: "img-error"
   };
-  const _hoisted_7$g = ["src"];
+  const _hoisted_7$h = ["src"];
   const _sfc_main$m = {
     __name: "ImageViewer",
     props: {
@@ -45535,7 +46007,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
               onLoad: onImgLoad,
               onError: onImgError,
               alt: "预览"
-            }, null, 44, _hoisted_7$g))
+            }, null, 44, _hoisted_7$h))
           ], 544)
         ]);
       };
@@ -54283,7 +54755,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
       const { default: katex2 } = await __vitePreload(async () => {
         const { default: katex3 } = await Promise.resolve().then(() => katex$1);
         return { default: katex3 };
-      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
       const outputMode = config2.forceLegacyMathML || !isMathMLSupported() && config2.legacyMathML ? "htmlAndMathml" : "mathml";
       return text2.split(lineBreakRegex).map(
         (line2) => hasKatex(line2) ? `<div style="display: flex; align-items: center; justify-content: center; white-space: nowrap;">${line2}</div>` : `<div>${line2}</div>`
@@ -73695,16 +74167,16 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     registerLayoutLoaders([
       {
         name: "dagre",
-        loader: /* @__PURE__ */ __name$1(async () => await __vitePreload(() => Promise.resolve().then(() => dagreVKFMJZFB), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href), "loader")
+        loader: /* @__PURE__ */ __name$1(async () => await __vitePreload(() => Promise.resolve().then(() => dagreVKFMJZFB), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href), "loader")
       },
       {
         name: "swimlane",
-        loader: /* @__PURE__ */ __name$1(async () => await __vitePreload(() => Promise.resolve().then(() => swimlanes5IMT3BWC), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href), "loader")
+        loader: /* @__PURE__ */ __name$1(async () => await __vitePreload(() => Promise.resolve().then(() => swimlanes5IMT3BWC), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href), "loader")
       },
       ...[
         {
           name: "cose-bilkent",
-          loader: /* @__PURE__ */ __name$1(async () => await __vitePreload(() => Promise.resolve().then(() => coseBilkentJH36ORCC), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href), "loader")
+          loader: /* @__PURE__ */ __name$1(async () => await __vitePreload(() => Promise.resolve().then(() => coseBilkentJH36ORCC), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href), "loader")
         }
       ]
     ]);
@@ -74122,7 +74594,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => c4DiagramLMCZKHZV);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
     return { id, diagram: diagram2 };
   }, "loader");
   var plugin = {
@@ -74143,7 +74615,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => flowDiagram23GEKE2U);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
     return { id: id2, diagram: diagram2 };
   }, "loader");
   var plugin2 = {
@@ -74170,7 +74642,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => flowDiagram23GEKE2U);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
     return { id: id3, diagram: diagram2 };
   }, "loader");
   var plugin3 = {
@@ -74187,7 +74659,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => swimlanesDiagramG3AALYLV);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
     return { id: id4, diagram: diagram2 };
   }, "loader");
   var plugin4 = {
@@ -74204,7 +74676,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => erDiagramQ63AITRT);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
     return { id: id5, diagram: diagram2 };
   }, "loader");
   var plugin5 = {
@@ -74221,7 +74693,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => gitGraphDiagramIHSO6WYX);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
     return { id: id6, diagram: diagram2 };
   }, "loader");
   var plugin6 = {
@@ -74238,7 +74710,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => ganttDiagramNO4QXBWP);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
     return { id: id7, diagram: diagram2 };
   }, "loader");
   var plugin7 = {
@@ -74255,7 +74727,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => infoDiagramFWYZ7A6U);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
     return { id: id8, diagram: diagram2 };
   }, "loader");
   var info = {
@@ -74271,7 +74743,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => pieDiagramENE6RG2P);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
     return { id: id9, diagram: diagram2 };
   }, "loader");
   var pie = {
@@ -74287,7 +74759,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => quadrantDiagramABIIQ3AL);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
     return { id: id10, diagram: diagram2 };
   }, "loader");
   var plugin8 = {
@@ -74304,7 +74776,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => xychartDiagramFW5EYKEG);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
     return { id: id11, diagram: diagram2 };
   }, "loader");
   var plugin9 = {
@@ -74321,7 +74793,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => requirementDiagramTGXJPOKE);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
     return { id: id12, diagram: diagram2 };
   }, "loader");
   var plugin10 = {
@@ -74338,7 +74810,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => sequenceDiagramDBY2YBRQ);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
     return { id: id13, diagram: diagram2 };
   }, "loader");
   var plugin11 = {
@@ -74359,7 +74831,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => classDiagramOUVF2IWQ);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
     return { id: id14, diagram: diagram2 };
   }, "loader");
   var plugin12 = {
@@ -74380,7 +74852,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => classDiagramV2EOCWNBFH);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
     return { id: id15, diagram: diagram2 };
   }, "loader");
   var plugin13 = {
@@ -74401,7 +74873,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => stateDiagram2N3HPSRC);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
     return { id: id16, diagram: diagram2 };
   }, "loader");
   var plugin14 = {
@@ -74425,7 +74897,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => stateDiagramV26OUMAXLB);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
     return { id: id17, diagram: diagram2 };
   }, "loader");
   var plugin15 = {
@@ -74442,7 +74914,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => journeyDiagram5HDEW3XC);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
     return { id: id18, diagram: diagram2 };
   }, "loader");
   var plugin16 = {
@@ -74513,7 +74985,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => flowDiagram23GEKE2U);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
     return { id: id19, diagram: diagram2 };
   }, "loader");
   var plugin17 = {
@@ -74530,7 +75002,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => timelineDefinitionFHXFAJF6);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
     return { id: id20, diagram: diagram2 };
   }, "loader");
   var plugin18 = {
@@ -74547,7 +75019,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => mindmapDefinitionLN4V7U3C);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
     return { id: id21, diagram: diagram2 };
   }, "loader");
   var plugin19 = {
@@ -74564,7 +75036,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => kanbanDefinitionHUTT4EX6);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
     return { id: id22, diagram: diagram2 };
   }, "loader");
   var plugin20 = {
@@ -74581,7 +75053,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => sankeyDiagramHTMAVEWB);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
     return { id: id23, diagram: diagram2 };
   }, "loader");
   var plugin21 = {
@@ -74598,7 +75070,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => diagramNH7WQ7WH);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
     return { id: id24, diagram: diagram2 };
   }, "loader");
   var packet = {
@@ -74614,7 +75086,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => diagramWEI45ONY);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
     return { id: id25, diagram: diagram2 };
   }, "loader");
   var radar = {
@@ -74630,7 +75102,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => blockDiagram677ZJIJ3);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
     return { id: id26, diagram: diagram2 };
   }, "loader");
   var plugin22 = {
@@ -74647,7 +75119,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => diagramOA4YK3LP);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
     return { id: id27, diagram: diagram2 };
   }, "loader");
   var plugin23 = {
@@ -74664,7 +75136,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => architectureDiagramZJ3FMSHR);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
     return { id: id28, diagram: diagram2 };
   }, "loader");
   var architecture = {
@@ -74681,7 +75153,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => diagramFQU43EPY);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
     return { id: id29, diagram: diagram2 };
   }, "loader");
   var plugin24 = {
@@ -74698,7 +75170,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => ishikawaDiagramFXEZZL3T);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
     return { id: id30, diagram: diagram2 };
   }, "loader");
   var ishikawa = {
@@ -74714,7 +75186,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => vennDiagramL72KCM5P);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
     return { id: id31, diagram: diagram2 };
   }, "loader");
   var plugin25 = {
@@ -74731,7 +75203,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => diagramG47NLZAW);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
     return { id: id32, diagram: diagram2 };
   }, "loader");
   var treemap = {
@@ -74747,7 +75219,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => wardleyDiagramEHGQE667);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
     return { id: id33, diagram: diagram2 };
   }, "loader");
   var plugin26 = {
@@ -74764,7 +75236,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => cynefinDiagramTSTJHNR4);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
     return { id: id34, diagram: diagram2 };
   }, "loader");
   var cynefin = {
@@ -74780,7 +75252,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => railroadDiagramRFXS5EU6);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
     return { id: id35, diagram: diagram2 };
   }, "loader");
   var railroad = {
@@ -74796,7 +75268,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => ebnfDiagramCCIWWBDH);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
     return { id: id36, diagram: diagram2 };
   }, "loader");
   var railroadEbnf = {
@@ -74812,7 +75284,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => abnfDiagramVRR7QNED);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
     return { id: id37, diagram: diagram2 };
   }, "loader");
   var railroadAbnf = {
@@ -74828,7 +75300,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = await __vitePreload(async () => {
       const { diagram: diagram22 } = await Promise.resolve().then(() => pegDiagram2B236MQR);
       return { diagram: diagram22 };
-    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+    }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
     return { id: id38, diagram: diagram2 };
   }, "loader");
   var railroadPeg = {
@@ -75675,11 +76147,11 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
   const _hoisted_4$j = ["onClick"];
   const _hoisted_5$i = ["id"];
   const _hoisted_6$i = { class: "mermaid-src" };
-  const _hoisted_7$f = {
+  const _hoisted_7$g = {
     key: 1,
     class: "chart-error-msg"
   };
-  const _hoisted_8$b = { class: "chart-label" };
+  const _hoisted_8$c = { class: "chart-label" };
   const _hoisted_9$b = { class: "chart-icon" };
   const _hoisted_10$b = { class: "chart-title" };
   const _hoisted_11$b = { class: "chart-type-badge" };
@@ -76704,7 +77176,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                   class: "mermaid-container"
                 }, [
                   createBaseVNode("pre", _hoisted_6$i, toDisplayString(block2.code), 1)
-                ], 8, _hoisted_5$i)) : (openBlock(), createElementBlock("div", _hoisted_7$f, [
+                ], 8, _hoisted_5$i)) : (openBlock(), createElementBlock("div", _hoisted_7$g, [
                   createBaseVNode("pre", null, [
                     createBaseVNode("code", null, toDisplayString(block2.code), 1)
                   ]),
@@ -76714,7 +77186,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                 key: 2,
                 class: normalizeClass(["layout-block", "layout-style-" + block2.layoutStyle])
               }, [
-                createBaseVNode("div", _hoisted_8$b, [
+                createBaseVNode("div", _hoisted_8$c, [
                   createBaseVNode("span", _hoisted_9$b, toDisplayString(layoutIcon(block2.layoutStyle)), 1),
                   createBaseVNode("span", _hoisted_10$b, toDisplayString(block2.title), 1),
                   createBaseVNode("span", _hoisted_11$b, toDisplayString(layoutTypeLabel(block2.layoutStyle)), 1),
@@ -76777,8 +77249,8 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     key: 0,
     class: "dirty-mark"
   };
-  const _hoisted_7$e = ["onClick"];
-  const _hoisted_8$a = ["disabled"];
+  const _hoisted_7$f = ["onClick"];
+  const _hoisted_8$b = ["disabled"];
   const _hoisted_9$a = ["disabled"];
   const _hoisted_10$a = { class: "editor-body" };
   const _hoisted_11$a = {
@@ -77230,7 +77702,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                 createBaseVNode("span", {
                   class: "tab-close",
                   onClick: withModifiers(($event) => closeTab(file), ["stop"])
-                }, "×", 8, _hoisted_7$e)
+                }, "×", 8, _hoisted_7$f)
               ], 42, _hoisted_3$j);
             }), 128)),
             _cache[2] || (_cache[2] = createBaseVNode("span", { class: "tab-spacer" }, null, -1)),
@@ -77244,7 +77716,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                 name: "undo",
                 size: 12
               })
-            ], 8, _hoisted_8$a),
+            ], 8, _hoisted_8$b),
             createBaseVNode("button", {
               class: "tb-action",
               onClick: redoAction,
@@ -77418,7 +77890,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
   };
   const _hoisted_5$f = { class: "task-step-icon" };
   const _hoisted_6$f = { class: "task-step-text" };
-  const _hoisted_7$d = { class: "task-step-status" };
+  const _hoisted_7$e = { class: "task-step-status" };
   const _sfc_main$i = {
     __name: "TaskPanel",
     props: {
@@ -77486,7 +77958,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                   }))
                 ]),
                 createBaseVNode("span", _hoisted_6$f, toDisplayString(ti2 + 1) + ". " + toDisplayString(task.step || task.subject || task.description || "(无标题)"), 1),
-                createBaseVNode("span", _hoisted_7$d, toDisplayString(statusLabel(task.status)), 1)
+                createBaseVNode("span", _hoisted_7$e, toDisplayString(statusLabel(task.status)), 1)
               ], 2);
             }), 128))
           ])) : createCommentVNode("", true)
@@ -77503,7 +77975,9 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
   const _hoisted_3$g = { class: "approval-bar-info" };
   const _hoisted_4$f = { class: "approval-bar-tool" };
   const _hoisted_5$e = { class: "approval-bar-args" };
-  const _hoisted_6$e = { class: "approval-bar-actions" };
+  const _hoisted_6$e = ["placeholder"];
+  const _hoisted_7$d = { class: "approval-bar-actions" };
+  const _hoisted_8$a = ["title"];
   const _sfc_main$h = {
     __name: "ApprovalBar",
     props: {
@@ -77513,8 +77987,25 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
       parsedArgs: { type: Object, default: () => ({}) }
     },
     emits: ["resolve"],
-    setup(__props) {
+    setup(__props, { emit: __emit }) {
       const props = __props;
+      const emit2 = __emit;
+      const showReply = /* @__PURE__ */ ref(false);
+      const replyText = /* @__PURE__ */ ref("");
+      function resolve2(approved) {
+        emit2("resolve", { approved, reply: replyText.value.trim() });
+        replyText.value = "";
+        showReply.value = false;
+      }
+      function onReplyKeydown(e3) {
+        if (e3.key === "Enter" && !e3.shiftKey) {
+          e3.preventDefault();
+          resolve2(!e3.metaKey && !e3.ctrlKey);
+        }
+      }
+      const replyPlaceholder = computed(() => {
+        return "输入回复内容...（Enter 允许，Ctrl+Enter 拒绝）";
+      });
       const toolLabels = {
         "edit_file": "编辑文件",
         "multi_edit": "批量编辑文件",
@@ -77584,23 +78075,43 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
           ]),
           createBaseVNode("div", _hoisted_3$g, [
             createBaseVNode("span", _hoisted_4$f, toDisplayString(toolLabel.value), 1),
-            createBaseVNode("span", _hoisted_5$e, toDisplayString(structuredSummary.value), 1)
+            createBaseVNode("span", _hoisted_5$e, toDisplayString(structuredSummary.value), 1),
+            showReply.value ? withDirectives((openBlock(), createElementBlock("textarea", {
+              key: 0,
+              class: "approval-bar-reply",
+              "onUpdate:modelValue": _cache[0] || (_cache[0] = ($event) => replyText.value = $event),
+              placeholder: replyPlaceholder.value,
+              rows: "2",
+              onKeydown: onReplyKeydown
+            }, null, 40, _hoisted_6$e)), [
+              [vModelText, replyText.value]
+            ]) : createCommentVNode("", true)
           ]),
-          createBaseVNode("div", _hoisted_6$e, [
+          createBaseVNode("div", _hoisted_7$d, [
             createBaseVNode("button", {
               class: "approval-btn approval-btn-allow",
-              onClick: _cache[0] || (_cache[0] = ($event) => _ctx.$emit("resolve", true))
+              onClick: _cache[1] || (_cache[1] = ($event) => resolve2(true))
             }, "允许"),
             createBaseVNode("button", {
               class: "approval-btn approval-btn-deny",
-              onClick: _cache[1] || (_cache[1] = ($event) => _ctx.$emit("resolve", false))
-            }, "拒绝")
+              onClick: _cache[2] || (_cache[2] = ($event) => resolve2(false))
+            }, "拒绝"),
+            createBaseVNode("button", {
+              class: "approval-btn approval-btn-toggle",
+              onClick: _cache[3] || (_cache[3] = ($event) => showReply.value = !showReply.value),
+              title: showReply.value ? "收起回复" : "填写回复"
+            }, [
+              createVNode(SvgIcon, {
+                name: "message-square",
+                size: 12
+              })
+            ], 8, _hoisted_8$a)
           ])
         ])) : createCommentVNode("", true);
       };
     }
   };
-  const ApprovalBar = /* @__PURE__ */ _export_sfc(_sfc_main$h, [["__scopeId", "data-v-5db433d1"]]);
+  const ApprovalBar = /* @__PURE__ */ _export_sfc(_sfc_main$h, [["__scopeId", "data-v-9ce1dd89"]]);
   const _hoisted_1$g = { class: "conv-list" };
   const _hoisted_2$g = ["onClick"];
   const _hoisted_3$f = { class: "conv-title" };
@@ -78596,7 +79107,10 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
   const _hoisted_70$1 = { class: "input-bottom-bar" };
   const _hoisted_71$1 = { class: "ibb-btns" };
   const _hoisted_72$1 = ["title"];
-  const _hoisted_73$1 = ["disabled"];
+  const _hoisted_73$1 = { class: "rcp-section" };
+  const _hoisted_74$1 = { class: "rcp-section" };
+  const _hoisted_75$1 = { class: "rcp-actions" };
+  const _hoisted_76$1 = ["disabled"];
   const _sfc_main$d = {
     __name: "RightPanel",
     setup(__props) {
@@ -78617,6 +79131,9 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
       const convListWidth = /* @__PURE__ */ ref(250);
       const topSentinel = /* @__PURE__ */ ref(null);
       const reviewMode = /* @__PURE__ */ ref("auto");
+      const reviewConfigOpen = /* @__PURE__ */ ref(false);
+      const reviewBlacklistText = /* @__PURE__ */ ref("");
+      const reviewWhitelistText = /* @__PURE__ */ ref("");
       const reviewBtnTitle = computed(() => {
         const m2 = reviewMode.value;
         return m2 === "auto" ? "AI审核：Agent自行审批写操作" : m2 === "manual" ? "手动审批：每次操作需用户确认" : "关闭审核：全部放行，不经过任何审核";
@@ -78645,6 +79162,20 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
           state$2.settings["reviewMode"] = m2;
         });
       }
+      const saveReviewConfig = async () => {
+        var _a3, _b2;
+        const blacklist = reviewBlacklistText.value.split("\n").map((s2) => s2.trim()).filter(Boolean);
+        const whitelist = reviewWhitelistText.value.split("\n").map((s2) => s2.trim()).filter(Boolean);
+        state$2.settings["reviewBlacklist"] = blacklist;
+        state$2.settings["reviewWhitelist"] = whitelist;
+        try {
+          await api.apiPut("/settings?convId=" + encodeURIComponent(state$2.currentConvId), state$2.settings);
+          (_a3 = window.$toast) == null ? void 0 : _a3.call(window, "审核配置已保存", "success");
+          reviewConfigOpen.value = false;
+        } catch (e3) {
+          (_b2 = window.$toast) == null ? void 0 : _b2.call(window, "保存失败: " + (e3.message || e3), "error");
+        }
+      };
       const autoIterate = /* @__PURE__ */ ref(false);
       const autoCollapse = /* @__PURE__ */ ref(localStorage.getItem("autoCollapse") !== "false");
       const autonomous = /* @__PURE__ */ ref(false);
@@ -78670,7 +79201,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
         return oldestIdx !== void 0 && oldestIdx !== null && oldestIdx > 0;
       });
       const messageCombos = computed(() => {
-        const msgs = state$2.messages || [];
+        const msgs = [...state$2.messages || []].sort((a2, b2) => (a2._idx ?? 0) - (b2._idx ?? 0));
         const combos = [];
         let current = null;
         for (const msg of msgs) {
@@ -78896,6 +79427,35 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
         const text2 = inputText.value.trim();
         if (!text2 && !pendingAttachment.value) return;
         if (state$2.chatLoading) return;
+        state$2.chatLoading = true;
+        state$2.agentRunning = true;
+        if (!api.isWebSocketOpen()) {
+          console.log("[RP] sendMessage 等待 WS 连接...");
+          try {
+            await new Promise((resolve2, reject2) => {
+              let waited = 0;
+              const check = setInterval(() => {
+                waited += 200;
+                if (api.isWebSocketOpen()) {
+                  clearInterval(check);
+                  resolve2();
+                } else if (waited >= 8e3) {
+                  clearInterval(check);
+                  reject2(new Error("WebSocket 连接超时"));
+                }
+              }, 200);
+            });
+          } catch (err) {
+            state$2.chatLoading = false;
+            state$2.agentRunning = false;
+            console.warn("[RP] sendMessage WS等待失败:", err.message);
+            return;
+          }
+        }
+        if (!state$2.chatLoading || !state$2.agentRunning) {
+          console.log("[RP] sendMessage 等待期间已停止，中止发送");
+          return;
+        }
         if (!state$2.currentConvId) {
           try {
             const conv = await api.apiPost("/conversations", { title: "新对话" });
@@ -78933,8 +79493,6 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
         }
         state$2.loadingByConv[convId] = true;
         state$2.agentRunningByConv[convId] = true;
-        state$2.chatLoading = true;
-        state$2.agentRunning = true;
         if (state$2.workspaceRoot) {
           state$2.runningByWorkspace = {
             ...state$2.runningByWorkspace,
@@ -78942,15 +79500,15 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
           };
         }
         if (!state$2.chatSessionId) state$2.chatSessionId = "sess_" + Date.now();
-        const msgIdx = createAssistantPlaceholder(convId);
-        console.log("[RP] sendMessage conv=%s msgIdx=%d msgsLen=%d currentChatLoading=%s", convId, msgIdx, state$2.messagesByConv[convId].length, state$2.chatLoading);
-        startConvRuntime(convId, msgIdx, lastUserText || fullContent);
+        const msgKey = createAssistantPlaceholder(convId);
+        console.log("[RP] sendMessage conv=%s msgKey=%s msgsLen=%d currentChatLoading=%s", convId, msgKey, state$2.messagesByConv[convId].length, state$2.chatLoading);
+        startConvRuntime(convId, msgKey, lastUserText || fullContent);
         try {
           await api.chatStart(convId, fullContent, autonomous.value, state$2.workspaceRoot);
         } catch (err) {
           const msgs0 = state$2.messagesByConv[convId];
           if (msgs0) {
-            const m2 = msgs0[msgIdx];
+            const m2 = msgs0.find((x2) => x2._key === msgKey);
             if (m2) {
               m2._loading = false;
               pushSegment2(m2.segments, "content").content += "**[启动失败]** " + (err.message || err);
@@ -78970,6 +79528,20 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
           return;
         }
       };
+      const compactContext = async () => {
+        var _a3, _b2, _c3;
+        const convId = state$2.currentConvId;
+        if (!convId) {
+          (_a3 = window.$toast) == null ? void 0 : _a3.call(window, "没有活跃对话", "warning");
+          return;
+        }
+        try {
+          await api.chatCompact(convId);
+          (_b2 = window.$toast) == null ? void 0 : _b2.call(window, "上下文已压缩（历史消息已压缩，运行中 agent 将在下一轮生效）", "success");
+        } catch (e3) {
+          (_c3 = window.$toast) == null ? void 0 : _c3.call(window, "压缩请求失败: " + (e3.message || e3), "error");
+        }
+      };
       const stopChat = async () => {
         const convId = state$2.currentConvId;
         console.log("[RP] stopChat conv=%s runtimeExists=%s", convId, !!getConvRuntime(convId));
@@ -78979,12 +79551,13 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
         } catch {
         }
         const rt2 = getConvRuntime(convId);
-        const oldMsgIdx = rt2 ? rt2.msgIdx : -1;
+        const oldMsgKey = rt2 ? rt2.msgKey : "";
         resetConvRuntime(convId);
-        if (oldMsgIdx >= 0 && state$2.messagesByConv[convId]) {
+        if (oldMsgKey && state$2.messagesByConv[convId]) {
           const msgs = state$2.messagesByConv[convId];
-          if (oldMsgIdx < msgs.length && msgs[oldMsgIdx]._loading) {
-            msgs.splice(oldMsgIdx, 1);
+          const idx = msgs.findIndex((m2) => m2._key === oldMsgKey && m2._loading);
+          if (idx >= 0) {
+            msgs.splice(idx, 1);
             if (state$2.currentConvId === convId) {
               state$2.messages = msgs;
             }
@@ -79027,12 +79600,14 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
         }
       };
       const resolveApproval = async (approved) => {
+        const isApproved = typeof approved === "object" ? approved.approved : approved;
+        const reply = typeof approved === "object" ? approved.reply || "" : "";
         const convId = state$2.currentConvId;
         const a2 = state$2.approvalByConv[convId];
         if (!a2 || !a2.callId || !a2.waiting) return;
         a2.waiting = false;
         try {
-          await api.apiPost("/chat/approve", { convId, approved });
+          await api.apiPost("/chat/approve", { convId, approved: isApproved, reply });
         } catch {
           a2.waiting = true;
         }
@@ -79215,33 +79790,25 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
             nextTick(() => applyAutoCollapse());
             const rt2 = getConvRuntime(id39);
             if (rt2) {
-              let lastAssIdx = -1;
-              for (let i2 = loaded.length - 1; i2 >= 0; i2--) {
-                if (loaded[i2].role === "assistant") {
-                  lastAssIdx = i2;
-                  break;
-                }
-              }
-              if (lastAssIdx >= 0) {
-                rt2.msgIdx = lastAssIdx;
-                loaded[lastAssIdx]._loading = true;
-                console.log("[RP] switchConv 复用 assistant 消息 idx=%d totalMsgs=%d loadedMsgs=%d", lastAssIdx, state$2.messagesByConv[id39].length, loaded.length);
-              } else {
-                const loadingMsg = existingLoading || {
-                  role: "assistant",
-                  content: "",
-                  segments: [],
-                  toolCalls: [],
-                  _key: makeMsgKey2(),
-                  _time: (/* @__PURE__ */ new Date()).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
-                  _loading: true
-                };
-                loadingMsg._idx = loaded.length;
-                state$2.messagesByConv[id39].push(loadingMsg);
-                state$2.messages = state$2.messagesByConv[id39];
-                rt2.msgIdx = state$2.messagesByConv[id39].length - 1;
-                console.log("[RP] switchConv 无 assistant 消息，创建占位 msgIdx=%d", rt2.msgIdx);
-              }
+              const loadingKey = makeMsgKey2();
+              const loadingMsg = existingLoading || {
+                role: "assistant",
+                content: "",
+                segments: [],
+                toolCalls: [],
+                _key: loadingKey,
+                _time: (/* @__PURE__ */ new Date()).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
+                _loading: true
+              };
+              loadingMsg._idx = loaded.length;
+              state$2.messagesByConv[id39].push(loadingMsg);
+              state$2.messages = state$2.messagesByConv[id39];
+              rt2.msgKey = loadingKey;
+              console.log(
+                "[RP] switchConv runtime 已存在，创建新占位 key=%s loadedLen=%d",
+                loadingKey,
+                loaded.length
+              );
             }
           } catch {
             state$2.msgTotalByConv[id39] = 0;
@@ -79293,6 +79860,10 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
       };
       const autoNameConv = async (convId, content2) => {
         if (!convId || !content2) return;
+        const existing = state$2.conversations.find((c2) => c2.id === convId);
+        if (existing && existing.title && existing.title !== "新对话" && existing.title !== "") {
+          return;
+        }
         try {
           let title2 = content2.replace(/```[\s\S]*?```/g, "").replace(/[#*>`_~\[\]\(\)]/g, "").replace(/\s+/g, " ").replace(/^[\s,;:，；：、。.！!？?]+/, "").trim();
           if (title2.length > 30) title2 = title2.slice(0, 28) + "…";
@@ -79437,6 +80008,8 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
           autonomous.value = !!s2.autonomous;
           autoCollapse.value = s2.autoCollapse !== void 0 ? !!s2.autoCollapse : true;
           autoCommit.value = s2.autoCommit !== false;
+          reviewBlacklistText.value = (Array.isArray(s2.reviewBlacklist) ? s2.reviewBlacklist : []).join("\n");
+          reviewWhitelistText.value = (Array.isArray(s2.reviewWhitelist) ? s2.reviewWhitelist : []).join("\n");
         }
       }, { immediate: true });
       watch(() => state$2.workspaceRoot, (root3) => {
@@ -79592,7 +80165,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                 name: "bot",
                 size: 16
               }),
-              _cache[11] || (_cache[11] = createTextVNode(" 对话", -1))
+              _cache[16] || (_cache[16] = createTextVNode(" 对话", -1))
             ]),
             createBaseVNode("div", _hoisted_4$b, [
               createBaseVNode("button", {
@@ -79637,7 +80210,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                   }, null, 8, ["name"])
                 ]),
                 createBaseVNode("span", _hoisted_9$6, toDisplayString(currentPhase.value), 1),
-                _cache[12] || (_cache[12] = createBaseVNode("span", { class: "phase-dots" }, [
+                _cache[17] || (_cache[17] = createBaseVNode("span", { class: "phase-dots" }, [
                   createBaseVNode("span", { class: "pd1" }),
                   createBaseVNode("span", { class: "pd2" }),
                   createBaseVNode("span", { class: "pd3" })
@@ -79654,7 +80227,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                   class: "scroll-more-hint",
                   ref_key: "topSentinel",
                   ref: topSentinel
-                }, [..._cache[13] || (_cache[13] = [
+                }, [..._cache[18] || (_cache[18] = [
                   createBaseVNode("span", null, "加载更早消息...", -1)
                 ])], 512)) : createCommentVNode("", true),
                 createBaseVNode("div", _hoisted_10$6, [
@@ -79680,7 +80253,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                 name: "git-branch",
                                 size: 10
                               }),
-                              _cache[14] || (_cache[14] = createTextVNode(" 委派任务", -1))
+                              _cache[19] || (_cache[19] = createTextVNode(" 委派任务", -1))
                             ]),
                             createBaseVNode("span", _hoisted_16$4, toDisplayString(delegationAgent(combo.user)), 1)
                           ])) : isFeedback(combo.user) ? (openBlock(), createElementBlock("div", _hoisted_17$4, [
@@ -79689,7 +80262,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                 name: "message-square",
                                 size: 10
                               }),
-                              _cache[15] || (_cache[15] = createTextVNode(" 用户反馈", -1))
+                              _cache[20] || (_cache[20] = createTextVNode(" 用户反馈", -1))
                             ])
                           ])) : createCommentVNode("", true),
                           combo.user.content ? (openBlock(), createElementBlock("div", _hoisted_19$4, [
@@ -79708,7 +80281,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                 name: "undo",
                                 size: 11
                               }),
-                              _cache[16] || (_cache[16] = createTextVNode(" 回退 ", -1))
+                              _cache[21] || (_cache[21] = createTextVNode(" 回退", -1))
                             ], 8, _hoisted_22$3)
                           ])) : createCommentVNode("", true),
                           combo.user._time ? (openBlock(), createElementBlock("div", _hoisted_23$2, toDisplayString(combo.user._time), 1)) : createCommentVNode("", true)
@@ -79732,18 +80305,18 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                               class: "folded-summary",
                               onClick: ($event) => combo.assistant._folded = !combo.assistant._folded
                             }, [
-                              _cache[17] || (_cache[17] = createBaseVNode("span", { class: "folded-chevron" }, "▸", -1)),
+                              _cache[22] || (_cache[22] = createBaseVNode("span", { class: "folded-chevron" }, "▸", -1)),
                               createVNode(SvgIcon, {
                                 name: "list",
                                 size: 11
                               }),
-                              _cache[18] || (_cache[18] = createBaseVNode("span", { class: "folded-title" }, "完成摘要", -1)),
+                              _cache[23] || (_cache[23] = createBaseVNode("span", { class: "folded-title" }, "完成摘要", -1)),
                               createBaseVNode("span", _hoisted_28$2, toDisplayString(msgSummary(combo.assistant)), 1)
                             ], 8, _hoisted_27$2)) : createCommentVNode("", true),
                             !combo.assistant._folded ? (openBlock(true), createElementBlock(Fragment, { key: 1 }, renderList(combo.assistant.segments, (seg, si2) => {
                               return openBlock(), createElementBlock(Fragment, { key: si2 }, [
                                 seg.type === "thinking" ? (openBlock(), createElementBlock("div", _hoisted_29$2, [
-                                  _cache[20] || (_cache[20] = createBaseVNode("span", { class: "tl-dot tl-dot-thinking" }, null, -1)),
+                                  _cache[25] || (_cache[25] = createBaseVNode("span", { class: "tl-dot tl-dot-thinking" }, null, -1)),
                                   createBaseVNode("div", _hoisted_30$2, [
                                     !seg._collapsed ? (openBlock(), createElementBlock("div", _hoisted_31$2, toDisplayString(seg.content), 1)) : (openBlock(), createElementBlock("div", {
                                       key: 1,
@@ -79754,7 +80327,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                         name: "message-square",
                                         size: 12
                                       }),
-                                      _cache[19] || (_cache[19] = createTextVNode(" 思考…", -1))
+                                      _cache[24] || (_cache[24] = createTextVNode(" 思考…", -1))
                                     ], 8, _hoisted_32$2)),
                                     !seg._collapsed ? (openBlock(), createElementBlock("div", {
                                       key: 2,
@@ -79764,7 +80337,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                     }, "▲ 收起", 8, _hoisted_33$2)) : createCommentVNode("", true)
                                   ])
                                 ])) : seg.type === "tool_call" ? (openBlock(), createElementBlock("div", _hoisted_34$2, [
-                                  _cache[25] || (_cache[25] = createBaseVNode("span", { class: "tl-dot tl-dot-tool" }, null, -1)),
+                                  _cache[30] || (_cache[30] = createBaseVNode("span", { class: "tl-dot tl-dot-tool" }, null, -1)),
                                   createBaseVNode("div", _hoisted_35$2, [
                                     createBaseVNode("div", {
                                       class: "tl-tc-header",
@@ -79783,22 +80356,22 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                     seg._expanded ? (openBlock(), createElementBlock("div", _hoisted_41$2, [
                                       isTerminalTool(seg) ? (openBlock(), createElementBlock(Fragment, { key: 0 }, [
                                         createBaseVNode("div", _hoisted_42$2, [
-                                          _cache[21] || (_cache[21] = createBaseVNode("div", { class: "tl-tc-section-title" }, "命令", -1)),
+                                          _cache[26] || (_cache[26] = createBaseVNode("div", { class: "tl-tc-section-title" }, "命令", -1)),
                                           createBaseVNode("div", _hoisted_43$2, toDisplayString(formatTerminalCommand(seg)), 1)
                                         ]),
                                         seg.result ? (openBlock(), createElementBlock("div", _hoisted_44$2, [
-                                          _cache[22] || (_cache[22] = createBaseVNode("div", { class: "tl-tc-section-title" }, "输出", -1)),
+                                          _cache[27] || (_cache[27] = createBaseVNode("div", { class: "tl-tc-section-title" }, "输出", -1)),
                                           createBaseVNode("pre", _hoisted_45$2, toDisplayString(seg.result), 1)
                                         ])) : createCommentVNode("", true)
                                       ], 64)) : (openBlock(), createElementBlock(Fragment, { key: 1 }, [
                                         seg.argsRaw ? (openBlock(), createElementBlock("div", _hoisted_46$2, [
-                                          _cache[23] || (_cache[23] = createBaseVNode("div", { class: "tl-tc-section-title" }, "参数", -1)),
+                                          _cache[28] || (_cache[28] = createBaseVNode("div", { class: "tl-tc-section-title" }, "参数", -1)),
                                           createBaseVNode("pre", null, [
                                             createBaseVNode("code", null, toDisplayString(seg.argsRaw), 1)
                                           ])
                                         ])) : createCommentVNode("", true),
                                         seg.result ? (openBlock(), createElementBlock("div", _hoisted_47$2, [
-                                          _cache[24] || (_cache[24] = createBaseVNode("div", { class: "tl-tc-section-title" }, "结果", -1)),
+                                          _cache[29] || (_cache[29] = createBaseVNode("div", { class: "tl-tc-section-title" }, "结果", -1)),
                                           createBaseVNode("pre", null, [
                                             createBaseVNode("code", null, toDisplayString(seg.result), 1)
                                           ])
@@ -79807,7 +80380,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                     ])) : createCommentVNode("", true)
                                   ])
                                 ])) : seg.type === "ask_user" ? (openBlock(), createElementBlock("div", _hoisted_48$2, [
-                                  _cache[26] || (_cache[26] = createBaseVNode("span", { class: "tl-dot tl-dot-ask" }, null, -1)),
+                                  _cache[31] || (_cache[31] = createBaseVNode("span", { class: "tl-dot tl-dot-ask" }, null, -1)),
                                   createBaseVNode("div", _hoisted_49$2, [
                                     createVNode(AskUserCard, {
                                       question: seg.question,
@@ -79819,7 +80392,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                     }, null, 8, ["question", "ask-type", "options", "call-id", "answered", "onAnswer"])
                                   ])
                                 ])) : seg.type === "content" ? (openBlock(), createElementBlock("div", _hoisted_50$2, [
-                                  _cache[27] || (_cache[27] = createBaseVNode("span", { class: "tl-dot tl-dot-content" }, null, -1)),
+                                  _cache[32] || (_cache[32] = createBaseVNode("span", { class: "tl-dot tl-dot-content" }, null, -1)),
                                   createBaseVNode("div", _hoisted_51$2, [
                                     createVNode(MarkdownRenderer, {
                                       text: seg.content,
@@ -79839,11 +80412,11 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                               name: "chevron-up",
                               size: 12
                             }),
-                            _cache[28] || (_cache[28] = createBaseVNode("span", null, "折叠输出", -1))
+                            _cache[33] || (_cache[33] = createBaseVNode("span", null, "折叠输出", -1))
                           ], 8, _hoisted_52$2)) : createCommentVNode("", true),
                           !combo.assistant.segments || combo.assistant.segments.length === 0 ? (openBlock(), createElementBlock(Fragment, { key: 2 }, [
                             combo.assistant.content ? (openBlock(), createElementBlock("div", _hoisted_53$2, [
-                              _cache[29] || (_cache[29] = createBaseVNode("span", { class: "tl-dot tl-dot-content" }, null, -1)),
+                              _cache[34] || (_cache[34] = createBaseVNode("span", { class: "tl-dot tl-dot-content" }, null, -1)),
                               createBaseVNode("div", _hoisted_54$2, [
                                 createVNode(MarkdownRenderer, {
                                   text: combo.assistant.content,
@@ -79854,7 +80427,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                           ], 64)) : createCommentVNode("", true),
                           combo.assistant._time ? (openBlock(), createElementBlock("div", _hoisted_55$2, toDisplayString(combo.assistant._time), 1)) : createCommentVNode("", true)
                         ]),
-                        combo.assistant._loading ? (openBlock(), createElementBlock("div", _hoisted_56$2, [..._cache[30] || (_cache[30] = [
+                        combo.assistant._loading ? (openBlock(), createElementBlock("div", _hoisted_56$2, [..._cache[35] || (_cache[35] = [
                           createBaseVNode("span", { class: "dot" }, null, -1),
                           createBaseVNode("span", { class: "dot" }, null, -1),
                           createBaseVNode("span", { class: "dot" }, null, -1)
@@ -79863,7 +80436,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                     ], 64);
                   }), 128))
                 ]),
-                unref(state$2).chatLoading && unref(state$2).messages && unref(state$2).messages.length > 0 ? (openBlock(), createElementBlock("div", _hoisted_57$2, [..._cache[31] || (_cache[31] = [
+                unref(state$2).chatLoading && unref(state$2).messages && unref(state$2).messages.length > 0 ? (openBlock(), createElementBlock("div", _hoisted_57$2, [..._cache[36] || (_cache[36] = [
                   createBaseVNode("span", { class: "dot-pulse" }, null, -1),
                   createBaseVNode("span", null, "思考中...", -1)
                 ])])) : createCommentVNode("", true),
@@ -79874,8 +80447,8 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                       size: 32
                     })
                   ]),
-                  _cache[32] || (_cache[32] = createBaseVNode("div", { class: "chat-empty-text" }, "开始新的对话", -1)),
-                  _cache[33] || (_cache[33] = createBaseVNode("div", { class: "chat-empty-hint" }, "发送消息即可与 AI 助手对话", -1))
+                  _cache[37] || (_cache[37] = createBaseVNode("div", { class: "chat-empty-text" }, "开始新的对话", -1)),
+                  _cache[38] || (_cache[38] = createBaseVNode("div", { class: "chat-empty-hint" }, "发送消息即可与 AI 助手对话", -1))
                 ])) : createCommentVNode("", true),
                 showScrollDown.value ? (openBlock(), createElementBlock("div", {
                   key: 3,
@@ -79887,7 +80460,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                       name: "chevron-down",
                       size: 14
                     }),
-                    _cache[34] || (_cache[34] = createTextVNode(" 新消息", -1))
+                    _cache[39] || (_cache[39] = createTextVNode(" 新消息", -1))
                   ])
                 ], 2)) : createCommentVNode("", true)
               ], 544),
@@ -79995,31 +80568,83 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                         createTextVNode(" " + toDisplayString(reviewBtnLabel.value), 1)
                       ], 10, _hoisted_72$1),
                       createBaseVNode("span", {
+                        class: normalizeClass(["obtn obtn-review-config", { active: reviewConfigOpen.value }]),
+                        onClick: _cache[7] || (_cache[7] = ($event) => reviewConfigOpen.value = !reviewConfigOpen.value),
+                        title: "审核黑白名单配置"
+                      }, [
+                        createVNode(SvgIcon, {
+                          name: "settings",
+                          size: 12
+                        }),
+                        _cache[40] || (_cache[40] = createTextVNode(" 配置", -1))
+                      ], 2),
+                      reviewConfigOpen.value ? (openBlock(), createElementBlock("div", {
+                        key: 0,
+                        class: "review-config-popover",
+                        onClick: _cache[11] || (_cache[11] = withModifiers(() => {
+                        }, ["stop"]))
+                      }, [
+                        _cache[43] || (_cache[43] = createBaseVNode("div", { class: "rcp-header" }, "审核黑白名单配置", -1)),
+                        _cache[44] || (_cache[44] = createBaseVNode("div", { class: "rcp-desc" }, "每行一个工具名，支持部分匹配（如 edit_file 匹配 edit_file/multi_edit）", -1)),
+                        createBaseVNode("div", _hoisted_73$1, [
+                          _cache[41] || (_cache[41] = createBaseVNode("label", { class: "rcp-label" }, "黑名单（需审核的工具）", -1)),
+                          withDirectives(createBaseVNode("textarea", {
+                            class: "rcp-input",
+                            "onUpdate:modelValue": _cache[8] || (_cache[8] = ($event) => reviewBlacklistText.value = $event),
+                            rows: "3",
+                            placeholder: "edit_file\nwrite_file\ndelete_file"
+                          }, null, 512), [
+                            [vModelText, reviewBlacklistText.value]
+                          ])
+                        ]),
+                        createBaseVNode("div", _hoisted_74$1, [
+                          _cache[42] || (_cache[42] = createBaseVNode("label", { class: "rcp-label" }, "白名单（跳过审核的工具）", -1)),
+                          withDirectives(createBaseVNode("textarea", {
+                            class: "rcp-input",
+                            "onUpdate:modelValue": _cache[9] || (_cache[9] = ($event) => reviewWhitelistText.value = $event),
+                            rows: "3",
+                            placeholder: "read_file\nsearch_content\nweb_search"
+                          }, null, 512), [
+                            [vModelText, reviewWhitelistText.value]
+                          ])
+                        ]),
+                        createBaseVNode("div", _hoisted_75$1, [
+                          createBaseVNode("button", {
+                            class: "rcp-btn rcp-btn-save",
+                            onClick: saveReviewConfig
+                          }, "保存"),
+                          createBaseVNode("button", {
+                            class: "rcp-btn rcp-btn-close",
+                            onClick: _cache[10] || (_cache[10] = ($event) => reviewConfigOpen.value = false)
+                          }, "关闭")
+                        ])
+                      ])) : createCommentVNode("", true),
+                      createBaseVNode("span", {
                         class: normalizeClass(["obtn", { active: autoCollapse.value }]),
-                        onClick: _cache[7] || (_cache[7] = ($event) => toggleAuto("autoCollapse")),
+                        onClick: _cache[12] || (_cache[12] = ($event) => toggleAuto("autoCollapse")),
                         title: "自动折叠：新消息发出时折叠旧输出，显示完成摘要"
                       }, [
                         createVNode(SvgIcon, {
                           name: "list",
                           size: 12
                         }),
-                        _cache[35] || (_cache[35] = createTextVNode(" 折叠", -1))
+                        _cache[45] || (_cache[45] = createTextVNode(" 折叠", -1))
                       ], 2),
                       createBaseVNode("span", {
                         class: normalizeClass(["obtn", { active: autoCommit.value }]),
-                        onClick: _cache[8] || (_cache[8] = ($event) => toggleAuto("autoCommit")),
+                        onClick: _cache[13] || (_cache[13] = ($event) => toggleAuto("autoCommit")),
                         title: "自动 Git 提交：任务完成时自动 git add + commit"
                       }, [
                         createVNode(SvgIcon, {
                           name: "git-commit",
                           size: 12
                         }),
-                        _cache[36] || (_cache[36] = createTextVNode(" 提交", -1))
+                        _cache[46] || (_cache[46] = createTextVNode(" 提交", -1))
                       ], 2),
-                      _cache[38] || (_cache[38] = createBaseVNode("span", { class: "obtn-sep" }, null, -1)),
+                      _cache[49] || (_cache[49] = createBaseVNode("span", { class: "obtn-sep" }, null, -1)),
                       createBaseVNode("span", {
                         class: normalizeClass(["obtn", "obtn-agent", { active: autonomous.value }]),
-                        onClick: _cache[9] || (_cache[9] = ($event) => toggleAuto("autonomous")),
+                        onClick: _cache[14] || (_cache[14] = ($event) => toggleAuto("autonomous")),
                         title: "自主模式：开启=连续执行全部计划步骤，关闭=单次回复"
                       }, [
                         createVNode(SvgIcon, {
@@ -80027,8 +80652,20 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                           size: 12,
                           color: "#d4a74e"
                         }),
-                        _cache[37] || (_cache[37] = createTextVNode(" 自主", -1))
-                      ], 2)
+                        _cache[47] || (_cache[47] = createTextVNode(" 自主", -1))
+                      ], 2),
+                      _cache[50] || (_cache[50] = createBaseVNode("span", { class: "obtn-sep" }, null, -1)),
+                      createBaseVNode("span", {
+                        class: "obtn",
+                        onClick: compactContext,
+                        title: "主动压缩上下文：将早期消息压缩为摘要，减少 token 消耗"
+                      }, [
+                        createVNode(SvgIcon, {
+                          name: "minus",
+                          size: 12
+                        }),
+                        _cache[48] || (_cache[48] = createTextVNode(" 压缩", -1))
+                      ])
                     ]),
                     !unref(state$2).chatLoading ? (openBlock(), createElementBlock("button", {
                       key: 0,
@@ -80040,7 +80677,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                         name: "send-plane",
                         size: 16
                       })
-                    ], 8, _hoisted_73$1)) : (openBlock(), createElementBlock("button", {
+                    ], 8, _hoisted_76$1)) : (openBlock(), createElementBlock("button", {
                       key: 1,
                       class: "stop-btn",
                       onClick: stopChat
@@ -80056,7 +80693,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
             ]),
             showDebugLog.value ? (openBlock(), createBlock(DebugLogPanel, {
               key: 0,
-              onClose: _cache[10] || (_cache[10] = ($event) => showDebugLog.value = false)
+              onClose: _cache[15] || (_cache[15] = ($event) => showDebugLog.value = false)
             })) : (openBlock(), createBlock(ConvSidebar, {
               key: 1,
               conversations: unref(state$2).conversations,
@@ -80075,7 +80712,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
       };
     }
   };
-  const RightPanel = /* @__PURE__ */ _export_sfc(_sfc_main$d, [["__scopeId", "data-v-dabdcf21"]]);
+  const RightPanel = /* @__PURE__ */ _export_sfc(_sfc_main$d, [["__scopeId", "data-v-edcb01e2"]]);
   const _hoisted_1$c = { class: "status-bar" };
   const _hoisted_2$c = { class: "status-left" };
   const _hoisted_3$b = {
@@ -80132,6 +80769,11 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
       onMounted(async () => {
         const check = async () => {
           try {
+            const wsOk = api.isWebSocketOpen();
+            if (wsOk) {
+              connected.value = true;
+              return;
+            }
             const r2 = await fetch("/api/health");
             connected.value = r2.ok;
           } catch {
@@ -80139,12 +80781,22 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
           }
         };
         await check();
-        setInterval(check, 3e4);
+        setInterval(check, 5e3);
+        const onWsChange = (e3) => {
+          var _a3;
+          connected.value = ((_a3 = e3.detail) == null ? void 0 : _a3.connected) ?? false;
+        };
+        window.addEventListener("ws-connection-change", onWsChange);
+        window.__wsStatusCleanup = () => window.removeEventListener("ws-connection-change", onWsChange);
         await loadGitInfo();
         gitTimer = setInterval(loadGitInfo, 15e3);
       });
       onUnmounted(() => {
         if (gitTimer) clearInterval(gitTimer);
+        if (window.__wsStatusCleanup) {
+          window.__wsStatusCleanup();
+          delete window.__wsStatusCleanup;
+        }
       });
       return (_ctx, _cache) => {
         return openBlock(), createElementBlock("div", _hoisted_1$c, [
@@ -80202,7 +80854,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
       };
     }
   };
-  const StatusBar = /* @__PURE__ */ _export_sfc(_sfc_main$c, [["__scopeId", "data-v-b4714ce7"]]);
+  const StatusBar = /* @__PURE__ */ _export_sfc(_sfc_main$c, [["__scopeId", "data-v-026d43a1"]]);
   /**
    * Copyright (c) 2014-2024 The xterm.js authors. All rights reserved.
    * @license MIT
@@ -91695,7 +92347,7 @@ AI 会自动分解复杂任务为可追踪的子任务步骤，每步的执行�
   const shortcutsMd = "# 快捷键参考\r\n\r\nPairCode IDE 提供了丰富的快捷键，帮助你更高效地编写代码和管理项目。以下按功能分类列出所有可用的快捷键。\r\n\r\n---\r\n\r\n## 一、通用操作\r\n\r\n**控制 IDE 界面面板的显示与隐藏，快速切换工作布局。**\r\n\r\n| 快捷键 | 功能 | 适用范围 |\r\n|--------|------|----------|\r\n| Ctrl+B | 切换侧栏（文件浏览器）显示/隐藏 | 全局 |\r\n| Ctrl+\\` | 切换终端面板显示/隐藏 | 全局 |\r\n| Ctrl+K | 专注模式：隐藏所有面板，聚焦代码编辑区 | 全局 |\r\n| Ctrl+Shift+C | 切换对话面板显示/隐藏 | 全局 |\r\n| Escape | 关闭当前模态框或菜单 | 全局 |\r\n\r\n## 二、文件编辑\r\n\r\n**编辑器中常用的编辑操作，与主流编辑器保持一致。**\r\n\r\n| 快捷键 | 功能 | 适用范围 |\r\n|--------|------|----------|\r\n| Ctrl+S | 保存当前文件 | 编辑器 |\r\n| Ctrl+Z | 撤销操作 | 编辑器 |\r\n| Ctrl+Shift+Z / Ctrl+Y | 重做操作 | 编辑器 |\r\n| Ctrl+X | 剪切选中的内容 | 编辑器 |\r\n| Ctrl+C | 复制选中的内容 | 编辑器 |\r\n| Ctrl+V | 粘贴剪贴板内容 | 编辑器 |\r\n| Ctrl+A | 全选当前文件内容 | 编辑器 |\r\n| Ctrl+F | 在当前文件中搜索 | 编辑器 |\r\n| Ctrl+H | 在当前文件中查找替换 | 编辑器 |\r\n| Ctrl+P | 按文件名快速打开文件 | 编辑器 |\r\n\r\n## 三、导航与视图\r\n\r\n**在不同功能面板之间快速切换，无需鼠标操作。**\r\n\r\n| 快捷键 | 功能 | 适用范围 |\r\n|--------|------|----------|\r\n| Ctrl+Shift+E | 切换到文件浏览器 | 全局 |\r\n| Ctrl+Shift+F | 全局搜索（在工作区中搜内容） | 全局 |\r\n| Ctrl+Shift+T | 打开对话面板 | 全局 |\r\n| F2 | 重命名选中的文件或文件夹 | 文件树 |\r\n| Ctrl+Tab | 在打开的文件标签页之间切换 | 编辑器 |\r\n| Ctrl+W | 关闭当前文件标签页 | 编辑器 |\r\n\r\n## 四、对话面板\r\n\r\n**AI 对话输入区的快捷操作。**\r\n\r\n| 快捷键 | 功能 | 适用范围 |\r\n|--------|------|----------|\r\n| Enter | 发送消息给 AI | 对话面板 |\r\n| Shift+Enter | 换行（多行输入） | 对话面板 |\r\n| Ctrl+Up | 切换到上一条对话 | 对话面板 |\r\n| Ctrl+Down | 切换到下一条对话 | 对话面板 |\r\n\r\n## 五、终端\r\n\r\n**终端面板的操作快捷键。**\r\n\r\n| 快捷键 | 功能 | 适用范围 |\r\n|--------|------|----------|\r\n| Ctrl+\\` | 打开/关闭终端面板 | 全局 |\r\n| Ctrl+Shift+\\` | 新建终端标签页 | 终端 |\r\n| Ctrl+W | 关闭当前终端标签页 | 终端 |\r\n| Ctrl+C | 中断当前正在运行的命令 | 终端 |\r\n\r\n## 六、多标签页导航\r\n\r\n| 快捷键 | 功能 | 适用范围 |\r\n|--------|------|----------|\r\n| Ctrl+Tab | 切换到下一个文件标签页 | 编辑器 |\r\n| Ctrl+Shift+Tab | 切换到上一个文件标签页 | 编辑器 |\r\n| Ctrl+PageUp | 切换到上一个文件标签页 | 编辑器 |\r\n| Ctrl+PageDown | 切换到下一个文件标签页 | 编辑器 |\r\n| Ctrl+W | 关闭当前文件标签页 | 编辑器 |\r\n";
   const faqMd = '# 常见问题\n\n## PairCode IDE 是什么？\n\nPairCode IDE 是一款 AI 原生的纯 Web 集成开发环境。与传统 IDE 不同，你只需用浏览器打开，在对话面板中用自然语言描述需求，AI 就能理解你的意图，自动完成代码编写、文件操作、命令执行等工作——让编程从手工操作转变为对话驱动。\n\n## 需要安装桌面客户端吗？\n\n不需要。PairCode IDE 是纯 Web 应用，你只需启动后台服务，然后用浏览器（推荐 Chrome、Edge、Firefox）访问即可。所有界面在浏览器中渲染，无需安装任何桌面客户端。\n\n## AI 能做什么？\n\nAI 可以读写和编辑你的代码文件、在工作区中执行命令、搜索和浏览项目结构、管理 Git 版本控制、启动调试会话、处理图片和办公文档、搜索网络信息，还能截图验证网页效果。基本上，日常开发中你能做的事情，AI 都可以帮你完成。\n\n## 如何让 AI 执行命令？\n\n你可以在对话中直接告诉 AI 需要运行什么命令，例如"运行测试"或"启动项目"。AI 会自动在终端中执行并返回结果输出。涉及文件写入和命令执行的操作会先请求你的确认。\n\n## 文件保存在哪里？\n\n所有文件都保存在你本地的工作区目录中。PairCode IDE 直接读写你本地磁盘上的文件，不经过云端存储。你可以在文件浏览器中看到完整的项目目录结构，用系统的文件管理器也能找到它们。\n\n## 如何切换 AI 模型？\n\n在设置面板的"AI 模型"选项卡中，你可以选择不同的 AI 服务商和模型。支持接入 OpenAI、Claude 等多种主流模型后端。你可以为执行任务和制定规划分别配置不同的模型。\n\n## 如何安装更多技能？\n\n在技能市场中可以浏览和安装社区贡献的技能模板和 MCP 扩展。技能是可复用的工作流程模板，MCP 扩展可以给 AI 添加新的能力。打开市场面板，搜索你需要的功能，一键即可安装使用。\n\n## 对话历史会丢失吗？\n\n不会。每次对话都会自动保存在本地磁盘上，你可以随时在对话列表中查看历史记录、继续之前的对话或开启新话题。切换工作区时，各项目的对话会自动隔离，互不干扰。\n\n## 如何保护隐私？\n\n所有操作都在你的本地计算机上执行，代码和对话内容不会发送到外部服务器（AI 模型调用除外，你可以选择使用本地模型避免数据外出）。API 服务只监听本地回环地址，默认不对外暴露。文件操作限定在工作区范围内。\n\n## 页面刷新后数据还在吗？\n\n大部分数据都会保留：\n- **对话历史** — 自动持久化到磁盘，刷新后完整恢复\n- **打开的文件** — 刷新后自动重新打开\n- **工作区状态** — 侧栏位置、面板大小等布局信息保存在浏览器中\n- **设置** — 主题、AI 模型配置等设置持久化到磁盘\n\n## 编辑器里的代码没有高亮怎么办？\n\n编辑器会根据文件扩展名自动切换语言模式。如果文件扩展名不常见，代码高亮可能无法自动识别。建议确认文件扩展名是否被支持，或使用常见的扩展名保存文件。\n\n## 什么是自主模式？和普通对话有什么区别？\n\n**普通模式**：你发一条指令，AI 执行并回复，然后等待你下一条指令。\n\n**自主模式**：你交给 AI 一个复杂任务（如"修复所有编译错误"），AI 会自动分解任务、逐个执行、迭代验证，直到全部完成。你不需要逐条发指令，只需在关键节点确认即可。\n\n## 能让 AI 访问我的私有 API 吗？\n\n可以通过 MCP（模型上下文协议）扩展来实现。在设置中添加自定义 MCP 服务器，AI 就能通过它访问你的私有 API、数据库或内部服务。\n\n## 遇到问题怎么办？\n\n你可以查看帮助菜单中的文档中心，里面有功能介绍、API 文档、工具文档和快捷键参考等详细资料。如果问题仍然无法解决，可以在对话中向 AI 描述你遇到的问题，它会尽力协助排查。\n';
   const gettingStartedMd = '# 快速开始\n\n欢迎使用 PairCode IDE！以下指南将带你快速上手，从打开工作区到用 AI 写代码，只需几分钟。\n\n---\n\n## 打开 IDE\n\nPairCode IDE 是一个纯 Web 应用，启动后台服务后，直接在浏览器中访问对应地址即可使用。所有界面在浏览器中渲染，无需安装任何桌面客户端。\n\n> 建议使用 Chrome、Edge 或 Firefox 等现代浏览器获得最佳体验。\n\n---\n\n## 设置工作区\n\n工作区是 IDE 操作的基础——所有文件操作、AI 对话和命令执行都将在这个目录范围内进行。\n\n1. 点击左侧活动栏顶部的**文件图标**打开文件浏览器\n2. 在文件浏览器顶部输入你的项目文件夹的完整路径\n3. 按回车确认，IDE 会自动加载该目录下的所有文件和子目录\n\n你也可以同时添加多个文件夹到同一个工作区中，方便跨目录浏览和管理代码。\n\n---\n\n## 与 AI 对话\n\n右侧的**对话面板**是 PairCode IDE 的核心交互界面。你只需用自然语言描述需求，AI 就能理解并执行。\n\n直接在输入框中输入你的需求，例如：\n\n- "创建一个 Go 文件，实现一个返回 JSON 的 HTTP 服务"\n- "帮我优化这个函数，加上错误处理和参数校验"\n- "搜索项目中所有调用了 Post 的地方"\n- "运行项目中的所有测试，并告诉我哪些失败了"\n- "把我的改动提交到 Git"\n\n按 Enter 发送消息，Shift+Enter 换行。AI 会实时流式展示它的思考过程、工具调用和结果输出。\n\n### 常用对话技巧\n\n| 技巧 | 说明 |\n|------|------|\n| **明确具体** | 越具体，AI 理解越准确。如"写一个函数"不如"写一个读取 JSON 配置文件的函数" |\n| **分步沟通** | 复杂任务可以分步骤告诉 AI，先分析，再重构 |\n| **提供上下文** | 在对话中粘贴错误信息或代码片段，AI 能给出更精准的修复方案 |\n| **使用反馈** | 如果 AI 输出不满意，直接指出问题，AI 会调整方案重新尝试 |\n\n---\n\n## 编辑代码\n\nAI 生成的代码会直接写入到文件中。你也可以在编辑器中手动查看和修改代码：\n\n- **多标签页** — 同时打开多个文件，在标签栏切换\n- **语法高亮** — 支持 Go、TypeScript、Python、Rust、Java、Vue 等主流语言\n- **代码折叠** — 折叠函数和代码块，聚焦关键逻辑\n- **Ctrl+S** — 保存当前文件的修改\n\n你还可以在编辑器中查看二进制文件的十六进制内容，或直接预览图片文件。\n\n---\n\n## 运行与调试\n\n### 使用内置终端\n\n按 Ctrl+\\` 打开 IDE 底部的终端面板，可以直接在工作区目录下运行命令。支持多标签页，方便在不同任务间切换。\n\n### 让 AI 帮你运行\n\n你也可以直接在对话中告诉 AI："运行项目并告诉我结果"或"执行 npm test"。AI 会自动在终端中执行命令、读取输出，并根据结果决定下一步操作。\n\n---\n\n## 版本控制\n\nGit 操作完全融入 AI 对话流程。你用自然语言就能完成所有 Git 操作：\n\n- "查看当前仓库状态"\n- "暂存所有修改并提交"\n- "创建一个新分支并切换过去"\n- "从远程拉取最新代码"\n\n你也可以通过左侧 Git 面板查看文件变更的详细对比，逐行确认每次改动的具体内容。\n\n---\n\n## 个性化设置\n\n点击活动栏的**齿轮图标**打开设置面板，你可以：\n\n- **AI 模型** — 选择不同的 AI 服务商和模型\n- **外观主题** — 切换暗色、白色、暖色和暗夜紫四套主题\n- **工作区管理** — 查看和切换最近使用的工作区\n- **系统指令** — 自定义 AI 的行为指导原则\n\n---\n\n## 探索更多\n\nPairCode IDE 还有更多强大功能等待你探索。欢迎查阅帮助文档中的其他章节：\n\n- **功能介绍** — 了解所有功能模块的详细说明\n- **工具文档** — 查看 AI 可使用的全部内置能力\n- **快捷键参考** — 常用快捷键一览\n- **API 文档** — 后端 HTTP API 接口说明\n- **常见问题** — 常见问题与解答\n';
-  const changelogMd = '# 更新日志\r\n\r\n> 所有 PairCode IDE 的重要变更均记录在此文件中。\r\n\r\n---\r\n\r\n## 1.0.8 — 2026-07-17\r\n\r\n### 新增\r\n- **多项目工作区支持** — 系统提示自动遍历所有工作区根目录，读取各自 `.pair/project.md` 环境配置注入给 AI，跨项目协作时准确感知每个项目的编译方式、CGO 开关等信息\r\n- **CodeGraph 多项目全量建图** — `codegraph_build` 支持对所有工作区项目建图并合并到同一个知识图谱（`rebuild=true`），跨项目符号搜索成为可能\r\n- **阻塞命令自动拦截** — 新增 `isBlockingCommand` 检测，自动拦截 dev server、watch 模式、`go run .`、`npm run dev` 等长期进程命令，提示改用 `run_background`，避免阻塞 AI 循环\r\n\r\n### 改进\r\n- **审核放行逻辑优化** — `run_command` 阻塞命令不再自动放行，强制走 LLM 审核；`run_background` 保持安全命令自动放行\r\n- **工具描述优化** — `run_command` 描述明确禁止长期进程并列出典型误用场景；`run_background` 强调作为长期进程首选工具\r\n- **系统提示增强** — 「错误恢复」和「防止卡死」两处加入阻塞/后台区分铁律，降低误用 `run_command` 概率\r\n\r\n---\r\n\r\n## 1.0.7 — 2026-07-17\r\n\r\n### 修复\r\n- **修复刷新页面后 ask_user 提交造成额外气泡** — 页面刷新后 `switchConv` 复用历史消息中最后一条 assistant 消息接收后续 WS 事件，不再另建新占位，避免两个 assistant 气泡\r\n\r\n### 改进\r\n- 统一更新版本号至 1.0.7（前端 package.json、后端 main.go、打包脚本）\r\n\r\n---\r\n\r\n## 1.0.6 — 2026-07-17\r\n\r\n### 修复\r\n- **修复消息持久化比较口径不一致** — `PersistNewMessages` 中 `persistedCount` 使用 `countJSONLLines`（统计文件总行数含 System），与 `histNonSystemCount`（统计非 System 消息数）口径不同，导致含 tool_call 的 assistant 消息在工具执行前被误判为"已落盘"而跳过写入。阻塞工具（如 ask_user）的前端始终无响应。改用 `readJSONL` 精确统计非 System 消息数\r\n- **修复对话/任务/执行计划 API 空实现** — `GET /api/conversations/{id}` 缺 agent 运行状态，`GET /api/tasks` 和 `GET /api/taskplan` 原返回对话列表（完全错误的 stub），改为返回真实数据\r\n\r\n---\r\n\r\n## 1.0.5 — 2026-07-17\r\n\r\n### 改进\r\n- **消息持久化重构** — `PersistNewMessages` 改为全量覆盖写 JSONL，消除 diff 计算的竞态问题；`MessageStore` 新增 `ReplaceHistory` 支持历史压缩；`MergeLastAssistantRun` 移除，各轮次独立存储以保留 reasoning 完整时序\r\n\r\n### 修复\r\n- **修复 send on closed channel panic** — 移除三处 `go func` 在无监听者时向 channel 发送导致的崩溃\r\n- **修复 PersistNewMessages 上下文压缩后新消息丢失** — 全量替换模式确保压缩后的摘要消息不被覆盖\r\n- **修复自动提交仅提交主工作区** — `doAutoCommit` 遍历所有工作区执行 git add + commit\r\n- **修复 idx 空洞导致消息跳过持久化** — `PersistNewMessages` 内部不再跳过 System/User 消息，确保序号连续\r\n\r\n---\r\n\r\n## 1.0.4 — 2026-07-17\r\n\r\n### 新增\r\n- **技能状态三级配置** — 技能可设为「关闭 / 按需加载 / 始终激活」三种模式，灵活控制 AI 行为\r\n- **市场安装范围选择** — 安装 MCP 服务器或技能时，支持选择 user（全局）或 project（项目级）范围\r\n\r\n### 改进\r\n- **对话历史持久化增强** — 页面刷新后对话完整恢复，不再因浏览器关闭丢失上下文；后端全面接管消息状态管理，前端不再依赖本地缓存\r\n- **消息展示优化** — 连续同一角色的消息自动合并显示（如多个 assistant 回复合并为一条），阅读更流畅\r\n- **停止信号可靠性提升** — Agent 异常结束或用户主动停止时，前端能可靠收到停止信号并更新 UI 状态\r\n\r\n### 修复\r\n- 修复切换对话时 loading 状态卡死的问题（switchConv 提前放行占位消息）\r\n- 修复消息历史顺序错乱和思考链（reasoning_content）丢失的严重问题\r\n- 修复 MergeConsecutiveAssistants 跳过 RoleTool 消息导致工具调用结果不完整的问题\r\n\r\n---\r\n\r\n## 1.0.3 — 2026-07-17\r\n\r\n### 改进\r\n- **子进程窗口管理** — 所有后台子进程（Git 操作、BUG 检测编译/测试、Lua 工具执行、桥接命令）统一隐藏控制台窗口，避免黑框闪烁\r\n- **会话持久化** — OnBatchPersist 回调从"每 5 轮"改为"每轮迭代"写盘，降低异常丢失风险\r\n- **代码搜索提示修复** — codegraph 搜索无结果时正确显示查询内容而非空占位符\r\n\r\n### 修复\r\n- **PersistNewMessages idx 空洞 bug** — 修复因跳过 System/User 角色消息导致消息序号不连续、后续消息无法正确持久化的严重问题（db_store.go + db_adapter.go）\r\n\r\n---\r\n\r\n## 1.0.2 — 2026-07-16\r\n\r\n### 改进\r\n- **文档同步** — features.md 同步到最新版本，移除冗余的"版本信息与更新日志"章节\r\n\r\n---\r\n\r\n## 1.0.1 — 2026-07-11\r\n\r\n### 新增\r\n- **更新日志页面** — 帮助文档中新增更新日志页面，版本历史一目了然\r\n- **WebSocket 协议文档** — API 文档补充完整 WebSocket 事件类型与负载定义\r\n- **系统版本报告** — `/api/system/info` 现在返回 `version` 字段，前端"关于"面板同步显示\r\n\r\n### 改进\r\n- **API 文档全面重写** — 每个接口增加请求体 JSON Schema、响应示例和错误码说明，便于二次开发\r\n- **帮助文档重构** — 文档归入"文档中心"分类，导航更清晰\r\n\r\n---\r\n\r\n## 1.0.0 — 2026-07-01\r\n\r\n### 新增\r\n- **AI 对话编程** — 用自然语言驱动 AI 读写文件、执行命令、管理 Git\r\n- **自主 Agent 模式** — AI 自动分析项目、制定计划并执行多步骤任务\r\n- **代码编辑器** — 内置多标签页编辑器，支持语法高亮、代码折叠、十六进制查看\r\n- **文件管理** — 工作区目录树浏览、文件搜索、批量操作\r\n- **Git 版本控制** — 对话驱动的 Git 操作（状态查看、暂存、提交、分支管理）\r\n- **内置终端** — 浏览器中的终端面板，支持 AI 自动执行命令\r\n- **对话历史管理** — 自动保存、回溯与继续历史对话\r\n- **BUG 自动检测修复** — AI 扫描编译/测试问题并自动修复\r\n- **Skills / MCP 扩展** — 可复用的工作流模板和模型上下文协议扩展\r\n- **记忆系统** — AI 跨会话记住用户偏好和历史决策\r\n- **任务与规划管理** — 复杂任务分解为可追踪的子步骤\r\n- **Lua 自定义工具** — 通过 Lua 脚本创建自定义 AI 工具\r\n- **代码知识图谱** — 函数调用关系、类型层次、影响范围分析\r\n- **多模型支持** — 灵活切换 AI 模型后端（OpenAI / Claude 等）\r\n- **主题系统** — 四套预设主题（暗色、白色、暖色、暗夜紫）\r\n- **调试器** — 支持 Go 程序的断点、单步和变量查看\r\n- **网页验证工具** — 自动打开 URL、截图、分析页面效果\r\n- **办公文档处理** — 读取 Word / Excel / PDF 文件，支持 OCR\r\n\r\n### 技术架构\r\n- 后端使用 Go 语言，前端使用 Vue 3 + CodeMirror\r\n- WebSocket 实时推送 AI 事件流\r\n- 内嵌前端资源（go:embed），单二进制分发\r\n- 纯本地运行，所有 API 仅监听本地回环地址\r\n';
+  const changelogMd = '# 更新日志\r\n\r\n> 所有 PairCode IDE 的重要变更均记录在此文件中。\r\n\r\n---\r\n\r\n## 1.0.19 — 2026-07-17\r\n\r\n### 修复\r\n- **修复 Web 端文件树不显示** — `FileExplorer.vue` 的 `<script setup>` 编译后 JS 中存在变量暂时性死区（TDZ），导致 `setup()` 抛出 `Cannot access \'d\' before initialization`，文件树组件挂载失败。重建前端并重新编译 `companion.exe` 嵌入新版 dist 后修复\r\n- **修复后端 dist 嵌入路径不一致** — `cmd/companion/main.go` 通过 `//go:embed web-ui/dist` 引用 companion 目录下的副本，但此前构建脚本将 dist 输出到 `cmd/desktop/web-ui/dist/`，两者不同步导致嵌入的仍是旧版 JS。统一构建流程后将新版 dist 正确复制到 `cmd/companion/web-ui/dist/`\r\n\r\n### 改进\r\n- 统一更新版本号至 1.0.19（后端 main.go、两个前端的 package.json）\r\n\r\n---\r\n\r\n## 1.0.8 — 2026-07-17\r\n\r\n### 新增\r\n- **多项目工作区支持** — 系统提示自动遍历所有工作区根目录，读取各自 `.pair/project.md` 环境配置注入给 AI，跨项目协作时准确感知每个项目的编译方式、CGO 开关等信息\r\n- **CodeGraph 多项目全量建图** — `codegraph_build` 支持对所有工作区项目建图并合并到同一个知识图谱（`rebuild=true`），跨项目符号搜索成为可能\r\n- **阻塞命令自动拦截** — 新增 `isBlockingCommand` 检测，自动拦截 dev server、watch 模式、`go run .`、`npm run dev` 等长期进程命令，提示改用 `run_background`，避免阻塞 AI 循环\r\n\r\n### 改进\r\n- **审核放行逻辑优化** — `run_command` 阻塞命令不再自动放行，强制走 LLM 审核；`run_background` 保持安全命令自动放行\r\n- **工具描述优化** — `run_command` 描述明确禁止长期进程并列出典型误用场景；`run_background` 强调作为长期进程首选工具\r\n- **系统提示增强** — 「错误恢复」和「防止卡死」两处加入阻塞/后台区分铁律，降低误用 `run_command` 概率\r\n\r\n---\r\n\r\n## 1.0.7 — 2026-07-17\r\n\r\n### 修复\r\n- **修复刷新页面后 ask_user 提交造成额外气泡** — 页面刷新后 `switchConv` 复用历史消息中最后一条 assistant 消息接收后续 WS 事件，不再另建新占位，避免两个 assistant 气泡\r\n\r\n### 改进\r\n- 统一更新版本号至 1.0.7（前端 package.json、后端 main.go、打包脚本）\r\n\r\n---\r\n\r\n## 1.0.6 — 2026-07-17\r\n\r\n### 修复\r\n- **修复消息持久化比较口径不一致** — `PersistNewMessages` 中 `persistedCount` 使用 `countJSONLLines`（统计文件总行数含 System），与 `histNonSystemCount`（统计非 System 消息数）口径不同，导致含 tool_call 的 assistant 消息在工具执行前被误判为"已落盘"而跳过写入。阻塞工具（如 ask_user）的前端始终无响应。改用 `readJSONL` 精确统计非 System 消息数\r\n- **修复对话/任务/执行计划 API 空实现** — `GET /api/conversations/{id}` 缺 agent 运行状态，`GET /api/tasks` 和 `GET /api/taskplan` 原返回对话列表（完全错误的 stub），改为返回真实数据\r\n\r\n---\r\n\r\n## 1.0.5 — 2026-07-17\r\n\r\n### 改进\r\n- **消息持久化重构** — `PersistNewMessages` 改为全量覆盖写 JSONL，消除 diff 计算的竞态问题；`MessageStore` 新增 `ReplaceHistory` 支持历史压缩；`MergeLastAssistantRun` 移除，各轮次独立存储以保留 reasoning 完整时序\r\n\r\n### 修复\r\n- **修复 send on closed channel panic** — 移除三处 `go func` 在无监听者时向 channel 发送导致的崩溃\r\n- **修复 PersistNewMessages 上下文压缩后新消息丢失** — 全量替换模式确保压缩后的摘要消息不被覆盖\r\n- **修复自动提交仅提交主工作区** — `doAutoCommit` 遍历所有工作区执行 git add + commit\r\n- **修复 idx 空洞导致消息跳过持久化** — `PersistNewMessages` 内部不再跳过 System/User 消息，确保序号连续\r\n\r\n---\r\n\r\n## 1.0.4 — 2026-07-17\r\n\r\n### 新增\r\n- **技能状态三级配置** — 技能可设为「关闭 / 按需加载 / 始终激活」三种模式，灵活控制 AI 行为\r\n- **市场安装范围选择** — 安装 MCP 服务器或技能时，支持选择 user（全局）或 project（项目级）范围\r\n\r\n### 改进\r\n- **对话历史持久化增强** — 页面刷新后对话完整恢复，不再因浏览器关闭丢失上下文；后端全面接管消息状态管理，前端不再依赖本地缓存\r\n- **消息展示优化** — 连续同一角色的消息自动合并显示（如多个 assistant 回复合并为一条），阅读更流畅\r\n- **停止信号可靠性提升** — Agent 异常结束或用户主动停止时，前端能可靠收到停止信号并更新 UI 状态\r\n\r\n### 修复\r\n- 修复切换对话时 loading 状态卡死的问题（switchConv 提前放行占位消息）\r\n- 修复消息历史顺序错乱和思考链（reasoning_content）丢失的严重问题\r\n- 修复 MergeConsecutiveAssistants 跳过 RoleTool 消息导致工具调用结果不完整的问题\r\n\r\n---\r\n\r\n## 1.0.3 — 2026-07-17\r\n\r\n### 改进\r\n- **子进程窗口管理** — 所有后台子进程（Git 操作、BUG 检测编译/测试、Lua 工具执行、桥接命令）统一隐藏控制台窗口，避免黑框闪烁\r\n- **会话持久化** — OnBatchPersist 回调从"每 5 轮"改为"每轮迭代"写盘，降低异常丢失风险\r\n- **代码搜索提示修复** — codegraph 搜索无结果时正确显示查询内容而非空占位符\r\n\r\n### 修复\r\n- **PersistNewMessages idx 空洞 bug** — 修复因跳过 System/User 角色消息导致消息序号不连续、后续消息无法正确持久化的严重问题（db_store.go + db_adapter.go）\r\n\r\n---\r\n\r\n## 1.0.2 — 2026-07-16\r\n\r\n### 改进\r\n- **文档同步** — features.md 同步到最新版本，移除冗余的"版本信息与更新日志"章节\r\n\r\n---\r\n\r\n## 1.0.1 — 2026-07-11\r\n\r\n### 新增\r\n- **更新日志页面** — 帮助文档中新增更新日志页面，版本历史一目了然\r\n- **WebSocket 协议文档** — API 文档补充完整 WebSocket 事件类型与负载定义\r\n- **系统版本报告** — `/api/system/info` 现在返回 `version` 字段，前端"关于"面板同步显示\r\n\r\n### 改进\r\n- **API 文档全面重写** — 每个接口增加请求体 JSON Schema、响应示例和错误码说明，便于二次开发\r\n- **帮助文档重构** — 文档归入"文档中心"分类，导航更清晰\r\n\r\n---\r\n\r\n## 1.0.0 — 2026-07-01\r\n\r\n### 新增\r\n- **AI 对话编程** — 用自然语言驱动 AI 读写文件、执行命令、管理 Git\r\n- **自主 Agent 模式** — AI 自动分析项目、制定计划并执行多步骤任务\r\n- **代码编辑器** — 内置多标签页编辑器，支持语法高亮、代码折叠、十六进制查看\r\n- **文件管理** — 工作区目录树浏览、文件搜索、批量操作\r\n- **Git 版本控制** — 对话驱动的 Git 操作（状态查看、暂存、提交、分支管理）\r\n- **内置终端** — 浏览器中的终端面板，支持 AI 自动执行命令\r\n- **对话历史管理** — 自动保存、回溯与继续历史对话\r\n- **BUG 自动检测修复** — AI 扫描编译/测试问题并自动修复\r\n- **Skills / MCP 扩展** — 可复用的工作流模板和模型上下文协议扩展\r\n- **记忆系统** — AI 跨会话记住用户偏好和历史决策\r\n- **任务与规划管理** — 复杂任务分解为可追踪的子步骤\r\n- **Lua 自定义工具** — 通过 Lua 脚本创建自定义 AI 工具\r\n- **代码知识图谱** — 函数调用关系、类型层次、影响范围分析\r\n- **多模型支持** — 灵活切换 AI 模型后端（OpenAI / Claude 等）\r\n- **主题系统** — 四套预设主题（暗色、白色、暖色、暗夜紫）\r\n- **调试器** — 支持 Go 程序的断点、单步和变量查看\r\n- **网页验证工具** — 自动打开 URL、截图、分析页面效果\r\n- **办公文档处理** — 读取 Word / Excel / PDF 文件，支持 OCR\r\n\r\n### 技术架构\r\n- 后端使用 Go 语言，前端使用 Vue 3 + CodeMirror\r\n- WebSocket 实时推送 AI 事件流\r\n- 内嵌前端资源（go:embed），单二进制分发\r\n- 纯本地运行，所有 API 仅监听本地回环地址\r\n';
   const _hoisted_1$6 = { class: "modal-content help-modal" };
   const _hoisted_2$6 = { class: "modal-header" };
   const _hoisted_3$5 = { class: "header-actions" };
@@ -92324,6 +92976,7 @@ AI 会自动分解复杂任务为可追踪的子任务步骤，每步的执行�
     class: "main-area"
   };
   const _hoisted_7 = { class: "panel-content" };
+  const MIN_TREE_REFRESH_INTERVAL = 3e3;
   const _sfc_main$3 = {
     __name: "App",
     setup(__props) {
@@ -92484,6 +93137,7 @@ AI 会自动分解复杂任务为可追踪的子任务步骤，每步的执行�
           }
           await saveWsList();
           savePersistentState();
+          api.reconnectWebSocket();
         } catch (err) {
           console.error("切换工作区失败:", err);
         }
@@ -92620,6 +93274,8 @@ AI 会自动分解复杂任务为可追踪的子任务步骤，每步的执行�
         }
       };
       provide("loadFileTree", loadFileTree);
+      let _lastRefreshTime = 0;
+      let _savedTreeScrollTop = 0;
       onMounted(async () => {
         document.addEventListener("contextmenu", (e3) => {
           if (!e3.defaultPrevented) e3.preventDefault();
@@ -92679,13 +93335,36 @@ AI 会自动分解复杂任务为可追踪的子任务步骤，每步的执行�
         }
         await loadFileTree();
         const _onRefreshTree = () => {
+          const now2 = Date.now();
+          if (now2 - _lastRefreshTime < MIN_TREE_REFRESH_INTERVAL) return;
+          _lastRefreshTime = now2;
+          const scrollEl = document.querySelector(".project-section");
+          if (scrollEl) _savedTreeScrollTop = scrollEl.scrollTop;
           for (const path2 of Object.keys(state$2.fileContents)) {
-            if (!state$2.fileDirty[path2]) {
+            if (state$2.openFiles.includes(path2)) {
+              if (!state$2.fileDirty[path2]) {
+                api.apiGet("/fs/read", { path: path2 }).then((data2) => {
+                  const normalized = (data2.content || "").replace(/\r\n/g, "\n");
+                  state$2.fileContents[path2] = normalized;
+                  state$2.fileSavedContent[path2] = normalized;
+                  state$2.fileDirty[path2] = false;
+                }).catch(() => {
+                });
+              }
+            } else {
               delete state$2.fileContents[path2];
               delete state$2.fileSavedContent[path2];
+              delete state$2.fileDirty[path2];
             }
           }
-          loadFileTree();
+          loadFileTree().then(() => {
+            if (_savedTreeScrollTop > 0) {
+              nextTick(() => {
+                const c2 = document.querySelector(".project-section");
+                if (c2) c2.scrollTop = _savedTreeScrollTop;
+              });
+            }
+          });
         };
         const _onSwitchActivity = (e3) => {
           var _a3;
@@ -92719,7 +93398,17 @@ AI 会自动分解复杂任务为可追踪的子任务步骤，每步的执行�
         window.addEventListener("save-conversations", _onSaveConversations);
         window.addEventListener("open-workspace-dialog", _onOpenWorkspaceDialog);
         window.addEventListener("switch-workspace", _onSwitchWorkspace);
+        let _refreshTimer = setInterval(() => {
+          if (document.visibilityState === "visible") {
+            _lastRefreshTime = 0;
+            window.dispatchEvent(new CustomEvent("refresh-tree"));
+          }
+        }, 5e3);
         const _cleanupEvents = () => {
+          if (_refreshTimer) {
+            clearInterval(_refreshTimer);
+            _refreshTimer = null;
+          }
           window.removeEventListener("refresh-tree", _onRefreshTree);
           window.removeEventListener("switch-activity", _onSwitchActivity);
           window.removeEventListener("open-marketplace", _onOpenMarketplace);
@@ -92858,7 +93547,7 @@ AI 会自动分解复杂任务为可追踪的子任务步骤，每步的执行�
       };
     }
   };
-  const App = /* @__PURE__ */ _export_sfc(_sfc_main$3, [["__scopeId", "data-v-a0e96eee"]]);
+  const App = /* @__PURE__ */ _export_sfc(_sfc_main$3, [["__scopeId", "data-v-d7612b1a"]]);
   const PERSIST_KEY = "paircode-ide-state";
   const dialogState = /* @__PURE__ */ reactive({
     show: false,
@@ -92987,6 +93676,10 @@ AI 会自动分解复杂任务为可追踪的子任务步骤，每步的执行�
     settings: {},
     settingsLoaded: false,
     searchResults: [],
+    selectedFilePaths: [],
+    // 文件树多选路径列表
+    lastClickedFilePath: "",
+    // 文件树最近点击（Shift范围选择用）
     tasks: [],
     notificationCount: 0,
     theme: "dark",
@@ -113342,7 +114035,7 @@ AI 会自动分解复杂任务为可追踪的子任务步骤，每步的执行�
       const { captureNodeSizes: captureNodeSizes2 } = await __vitePreload(async () => {
         const { captureNodeSizes: captureNodeSizes3 } = await Promise.resolve().then(() => sizeCaptureX5ZJPWSS);
         return { captureNodeSizes: captureNodeSizes3 };
-      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
       captureNodeSizes2(element2, data4Layout);
     }
     return {
@@ -194682,7 +195375,7 @@ ${content2}`;
       const { createInfoServices: createInfoServices2 } = await __vitePreload(async () => {
         const { createInfoServices: createInfoServices22 } = await Promise.resolve().then(() => infoDKCQHKI2);
         return { createInfoServices: createInfoServices22 };
-      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
       const parser2 = createInfoServices2().Info.parser.LangiumParser;
       parsers.info = parser2;
     }, "info"),
@@ -194690,7 +195383,7 @@ ${content2}`;
       const { createPacketServices: createPacketServices2 } = await __vitePreload(async () => {
         const { createPacketServices: createPacketServices22 } = await Promise.resolve().then(() => packet7NZHBO7P);
         return { createPacketServices: createPacketServices22 };
-      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
       const parser2 = createPacketServices2().Packet.parser.LangiumParser;
       parsers.packet = parser2;
     }, "packet"),
@@ -194698,7 +195391,7 @@ ${content2}`;
       const { createPieServices: createPieServices2 } = await __vitePreload(async () => {
         const { createPieServices: createPieServices22 } = await Promise.resolve().then(() => pieRZYD4A2V);
         return { createPieServices: createPieServices22 };
-      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
       const parser2 = createPieServices2().Pie.parser.LangiumParser;
       parsers.pie = parser2;
     }, "pie"),
@@ -194706,7 +195399,7 @@ ${content2}`;
       const { createTreeViewServices: createTreeViewServices2 } = await __vitePreload(async () => {
         const { createTreeViewServices: createTreeViewServices22 } = await Promise.resolve().then(() => treeViewQDETBFTQ);
         return { createTreeViewServices: createTreeViewServices22 };
-      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
       const parser2 = createTreeViewServices2().TreeView.parser.LangiumParser;
       parsers.treeView = parser2;
     }, "treeView"),
@@ -194714,7 +195407,7 @@ ${content2}`;
       const { createArchitectureServices: createArchitectureServices2 } = await __vitePreload(async () => {
         const { createArchitectureServices: createArchitectureServices22 } = await Promise.resolve().then(() => architectureTIHT7OUA);
         return { createArchitectureServices: createArchitectureServices22 };
-      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
       const parser2 = createArchitectureServices2().Architecture.parser.LangiumParser;
       parsers.architecture = parser2;
     }, "architecture"),
@@ -194722,7 +195415,7 @@ ${content2}`;
       const { createGitGraphServices: createGitGraphServices2 } = await __vitePreload(async () => {
         const { createGitGraphServices: createGitGraphServices22 } = await Promise.resolve().then(() => gitGraphTEB2WS4Q);
         return { createGitGraphServices: createGitGraphServices22 };
-      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
       const parser2 = createGitGraphServices2().GitGraph.parser.LangiumParser;
       parsers.gitGraph = parser2;
     }, "gitGraph"),
@@ -194730,7 +195423,7 @@ ${content2}`;
       const { createEventModelingServices: createEventModelingServices2 } = await __vitePreload(async () => {
         const { createEventModelingServices: createEventModelingServices22 } = await Promise.resolve().then(() => eventmodeling45OFAUF4);
         return { createEventModelingServices: createEventModelingServices22 };
-      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
       const parser2 = createEventModelingServices2().EventModel.parser.LangiumParser;
       parsers.eventmodeling = parser2;
     }, "eventmodeling"),
@@ -194738,7 +195431,7 @@ ${content2}`;
       const { createRadarServices: createRadarServices2 } = await __vitePreload(async () => {
         const { createRadarServices: createRadarServices22 } = await Promise.resolve().then(() => radarI7S5WNFK);
         return { createRadarServices: createRadarServices22 };
-      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
       const parser2 = createRadarServices2().Radar.parser.LangiumParser;
       parsers.radar = parser2;
     }, "radar"),
@@ -194746,7 +195439,7 @@ ${content2}`;
       const { createRailroadServices: createRailroadServices2 } = await __vitePreload(async () => {
         const { createRailroadServices: createRailroadServices22 } = await Promise.resolve().then(() => railroad3IZDKUUU);
         return { createRailroadServices: createRailroadServices22 };
-      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
       const parser2 = createRailroadServices2().Railroad.parser.LangiumParser;
       parsers.railroad = parser2;
     }, "railroad"),
@@ -194754,7 +195447,7 @@ ${content2}`;
       const { createRailroadEbnfServices: createRailroadEbnfServices2 } = await __vitePreload(async () => {
         const { createRailroadEbnfServices: createRailroadEbnfServices22 } = await Promise.resolve().then(() => railroadEbnfEBAXGLYW);
         return { createRailroadEbnfServices: createRailroadEbnfServices22 };
-      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
       const parser2 = createRailroadEbnfServices2().RailroadEbnf.parser.LangiumParser;
       parsers.railroadEbnf = parser2;
     }, "railroadEbnf"),
@@ -194762,7 +195455,7 @@ ${content2}`;
       const { createRailroadAbnfServices: createRailroadAbnfServices2 } = await __vitePreload(async () => {
         const { createRailroadAbnfServices: createRailroadAbnfServices22 } = await Promise.resolve().then(() => railroadAbnfAHOZXSZD);
         return { createRailroadAbnfServices: createRailroadAbnfServices22 };
-      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
       const parser2 = createRailroadAbnfServices2().RailroadAbnf.parser.LangiumParser;
       parsers.railroadAbnf = parser2;
     }, "railroadAbnf"),
@@ -194770,7 +195463,7 @@ ${content2}`;
       const { createRailroadPegServices: createRailroadPegServices2 } = await __vitePreload(async () => {
         const { createRailroadPegServices: createRailroadPegServices22 } = await Promise.resolve().then(() => railroadPegLSFZ7HO6);
         return { createRailroadPegServices: createRailroadPegServices22 };
-      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
       const parser2 = createRailroadPegServices2().RailroadPeg.parser.LangiumParser;
       parsers.railroadPeg = parser2;
     }, "railroadPeg"),
@@ -194778,7 +195471,7 @@ ${content2}`;
       const { createTreemapServices: createTreemapServices2 } = await __vitePreload(async () => {
         const { createTreemapServices: createTreemapServices22 } = await Promise.resolve().then(() => treemap6X3UGDF4);
         return { createTreemapServices: createTreemapServices22 };
-      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
       const parser2 = createTreemapServices2().Treemap.parser.LangiumParser;
       parsers.treemap = parser2;
     }, "treemap"),
@@ -194786,7 +195479,7 @@ ${content2}`;
       const { createWardleyServices: createWardleyServices2 } = await __vitePreload(async () => {
         const { createWardleyServices: createWardleyServices22 } = await Promise.resolve().then(() => wardleyOPB4EBWU);
         return { createWardleyServices: createWardleyServices22 };
-      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
       const parser2 = createWardleyServices2().Wardley.parser.LangiumParser;
       parsers.wardley = parser2;
     }, "wardley"),
@@ -194794,7 +195487,7 @@ ${content2}`;
       const { createCynefinServices: createCynefinServices2 } = await __vitePreload(async () => {
         const { createCynefinServices: createCynefinServices22 } = await Promise.resolve().then(() => cynefinVYW2F7L2);
         return { createCynefinServices: createCynefinServices22 };
-      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9U1P-7U.js", document.baseURI).href);
+      }, false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-D32bixGD.js", document.baseURI).href);
       const parser2 = createCynefinServices2().Cynefin.parser.LangiumParser;
       parsers.cynefin = parser2;
     }, "cynefin")
