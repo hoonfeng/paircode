@@ -457,9 +457,13 @@ export function processStatus(payload) {
         console.log('[AE] processStatus 创建runtime+loading conv=%s key=%s msgsLen=%d', convId, key, msgs.length)
         msgs.push({
           role: 'assistant', content: '', segments: [], toolCalls: [],
-          _key: key, _idx: msgs.length,
+          _key: key,
+          // ★ 使用负数 _idx 避免与真实 API 消息冲突（真实消息 idx >= 0）
+          _idx: -Date.now(),
           _time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
           _loading: true,
+          // ★ 标记为 processStatus 创建的临时占位，switchConv merge 时会移除
+          _tempPlaceholder: true,
         })
         runtimes[convId] = { msgKey: key, finalContent: '', lastUserText: '' }
       } else {

@@ -374,6 +374,16 @@ onMounted(async () => {
     }
   } catch {}
 
+  // ★ 优先初始化 WebSocket：在对话列表加载之前建立连接，确保 status
+  //   消息到达时 messagesByConv 已就绪，且后续 switchConv 的 API 加载
+  //   不会替换掉 await 期间 WebSocket 写入的数据。
+  api.initWebSocket({
+    onStatus: (payload) => processStatus(payload),
+    onEvent: (convId, data) => processAgentEvent(convId, data),
+    onDone: (convId, data) => processAgentDone(convId, data),
+    onDisconnected: () => processAllDisconnected(),
+  })
+
   await loadWsList()
   if (state.workspaceRoot) {
     await loadConversationsForWorkspace(state.workspaceRoot)
@@ -390,15 +400,6 @@ onMounted(async () => {
       state.currentConvId = state.conversations[0].id
     }
   }
-
-
-  // 初始化全局 WebSocket：接收所有会话事件（跨工作区并行对话核心）
-  api.initWebSocket({
-    onStatus: (payload) => processStatus(payload),
-    onEvent: (convId, data) => processAgentEvent(convId, data),
-    onDone: (convId, data) => processAgentDone(convId, data),
-    onDisconnected: () => processAllDisconnected(),
-  })
 
   loadPersistentState()
   if (state.openFiles.length > 0) {

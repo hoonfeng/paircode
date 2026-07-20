@@ -939,13 +939,26 @@ const switchConv = async (id) => {
         loaded.filter(m=>m.role==='user').length,
         loaded.filter(m=>m.role==='assistant').length,
         loaded.some(m=>m._loading))
-      // ★ 在替换数组前保存已有的 loading 占位对象（可能已被 await 期间到达的
-      //   WebSocket events 修改过内容，直接丢失会丢掉首批输出）
-      const existingLoading = state.messagesByConv[id].find(m => m._loading)
-      state.messagesByConv[id] = loaded
-      state.messages = state.messagesByConv[id]
+      // ★ 修复竞态：merge 而非替换！保证 await 期间 WebSocket 写入的消息不被丢弃
+      const existingMsgs = state.messagesByConv[id] || []
+      // ★ 移除 processStatus 创建的临时 loading 占位（_tempPlaceholder），
+      //   它们只是 status 消息的占位符，API 返回真实数据后不再需要。
+      //   但保留运行时创建的 loading 占位（无 _tempPlaceholder 标记）。
+      const existingLoading = existingMsgs.find(m => m._loading && !m._tempPlaceholder)
+      const cleanedMsgs = existingMsgs.filter(m => !m._tempPlaceholder)
+      const existingIdxSet = new Set(cleanedMsgs.map(m => m._idx))
+      // 只追加 API 返回中本地不存在的消息（按 _idx 去重）
+      for (const m of loaded) {
+        if (!existingIdxSet.has(m._idx)) {
+          cleanedMsgs.push(m)
+          existingIdxSet.add(m._idx)
+        }
+      }
+      // 按 _idx 排序保持顺序
+      state.messagesByConv[id] = cleanedMsgs
+      state.messages = cleanedMsgs
       state.msgTotalByConv[id] = data.total || loaded.length
-      state.msgLoadedByConv[id] = loaded.length
+      state.msgLoadedByConv[id] = cleanedMsgs.length
       // 页面刷新后：如果折叠开关打开，对历史消息应用折叠状态
       nextTick(() => applyAutoCollapse())
       const rt = getConvRuntime(id)
@@ -958,14 +971,11 @@ const switchConv = async (id) => {
           _time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
           _loading: true,
         }
-        loadingMsg._idx = loaded.length
-        state.messagesByConv[id].push(loadingMsg)
-        state.messages = state.messagesByConv[id]
+        loadingMsg._idx = cleanedMsgs.length
         rt.msgKey = loadingKey
-        console.log('[RP] switchConv runtime 已存在，创建新占位 key=%s loadedLen=%d',
-          loadingKey, loaded.length)
+        console.log('[RP] switchConv runtime 已存在，创建新占位 key=%s mergedLen=%d',
+          loadingKey, cleanedMsgs.length)
       }
-
     } catch {
       state.msgTotalByConv[id] = 0
       state.msgLoadedByConv[id] = 0
@@ -1159,10 +1169,36 @@ watch(() => state.currentConvId, (id) => {
   }
 })
 
-// ── 对话消息全量替换（如首次加载/切换）时也重启观察器
-watch(() => state.messages, () => {
-  nextTick(() => startContentResizeObserver())
-}, { deep: false })
+  // ── 对话消息全量替换（如首次加载/切换）时也重启观察器
+  watch(() => state.messages, () => {
+    nextTick(() => startContentResizeObserver())
+  }, { deep: false })
+
+  // ── 检测 WS 连接恢复后，对当前对话重新拉取消息（修复断连期间消息丢失）
+  window.addEventListener('ws-connection-change', (e) => {
+    if (e.detail?.connected && state.currentConvId) {
+      const id = state.currentConvId
+      const msgs = state.messagesByConv[id]
+      // 断连重连后，如果消息数量和 API 返回不匹配，触发 reload
+      // 但只在用户没有正在发送消息时执行（avoid conflict with sendMessage）
+      if (!state.chatLoading && msgs && msgs.length > 0) {
+        // 检查最后一个消息是否有 loading 占位在等待
+        const lastLoading = msgs.find(m => m._loading)
+        if (lastLoading) {
+          // 有 loading 占位但重连了——后端 agent 可能已丢失状态，清除 loading
+          console.log('[RP] WS 重连后清除 dangling loading conv=%s key=%s', id, lastLoading._key)
+          const idx = msgs.indexOf(lastLoading)
+          if (idx >= 0) msgs.splice(idx, 1)
+          state.messages = msgs
+          state.loadingByConv[id] = false
+          state.agentRunningByConv[id] = false
+          state.chatLoading = false
+          state.agentRunning = false
+          resetConvRuntime(id)
+        }
+      }
+    }
+  })
 
 watch(() => state.settings, (s) => { if (s) { reviewMode.value = s.reviewMode || 'auto'; autoIterate.value = !!s.autoIterateOnRejection; autonomous.value = !!s.autonomous; autoCollapse.value = s.autoCollapse !== undefined ? !!s.autoCollapse : true; autoCommit.value = s.autoCommit !== false; reviewBlacklistText.value = (Array.isArray(s.reviewBlacklist) ? s.reviewBlacklist : []).join('\n'); reviewWhitelistText.value = (Array.isArray(s.reviewWhitelist) ? s.reviewWhitelist : []).join('\n'); } }, { immediate: true })
 
