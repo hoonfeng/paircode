@@ -183,7 +183,25 @@ function isWebSocketOpen() {
   return !!(wsSocket && wsSocket.readyState === WebSocket.OPEN)
 }
 
-// ─── 多会话并行：非阻塞启动 + WebSocket 事件流 ──────────────
+// 等待 WebSocket 连接就绪（用于发送消息前确保能接收 WS 事件）。
+// 若已连接立即返回 true；若正在连接则等待最多 timeout ms；
+// 若断开则触发重连并等待。返回是否就绪。
+async function waitForWebSocket(timeout = 3000) {
+  if (wsSocket && wsSocket.readyState === WebSocket.OPEN) return true
+  if (wsManuallyClosed) return false
+  // 如果断开或从未连接，触发连接
+  if (!wsSocket || wsSocket.readyState === WebSocket.CLOSED) {
+    wsReconnectCount = 0
+    doWsConnect()
+  }
+  // 等待 CONNECTING → OPEN
+  const deadline = Date.now() + timeout
+  while (Date.now() < deadline) {
+    if (wsSocket && wsSocket.readyState === WebSocket.OPEN) return true
+    await new Promise(r => setTimeout(r, 100))
+  }
+  return !!(wsSocket && wsSocket.readyState === WebSocket.OPEN)
+}
 
 // 非阻塞启动指定对话的 agent（后端返回 {ok, convId}）
 async function chatStart(convId, message, autonomous, workspaceRoot) {
@@ -294,4 +312,4 @@ async function savePhilosophy(data) {
   return apiPut('/philosophy', data)
 }
 
-export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, isWebSocketOpen, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatCompact, chatStop, getMessages, getMessagesCount, getModels, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, getPhilosophy, savePhilosophy }
+export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, isWebSocketOpen, waitForWebSocket, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatCompact, chatStop, getMessages, getMessagesCount, getModels, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, getPhilosophy, savePhilosophy }

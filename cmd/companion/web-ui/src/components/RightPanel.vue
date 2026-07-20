@@ -630,7 +630,26 @@ function applyAutoCollapse() {
 const sendMessage = async () => {
   const text = inputText.value.trim()
   if (!text && !pendingAttachment.value) return
-  if (state.chatLoading) return
+  if (state.chatLoading) { console.log('[RP] sendMessage 跳过: chatLoading 已为 true'); return }
+
+  // ★ 确保 WS 连接就绪（等待最多 3s，避免事件丢失）
+  const wsReady = await api.waitForWebSocket(3000)
+  if (!wsReady) {
+    window.$toast?.('连接未就绪，请稍后重试', 'warning')
+    console.warn('[RP] sendMessage WS 未就绪')
+    return
+  }
+
+  // ★ 清理当前对话中所有旧的 loading 占位（防止 processStatus 创建的残留）
+  if (state.messagesByConv[state.currentConvId]) {
+    const msgs = state.messagesByConv[state.currentConvId]
+    const cleaned = msgs.filter(m => !m._loading)
+    if (cleaned.length < msgs.length) {
+      console.log('[RP] sendMessage 清理旧 loading 占位: %d 个', msgs.length - cleaned.length)
+      state.messagesByConv[state.currentConvId] = cleaned
+      state.messages = [...cleaned]
+    }
+  }
 
   // ★ 立即锁定 loading 状态
   state.chatLoading = true; state.agentRunning = true
@@ -822,7 +841,7 @@ const rollbackTo = async (msgIdx) => {
   }
 }
 
-const onKeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }
+const onKeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!state.chatLoading) sendMessage() } }
 
 const scrollToBottom = () => {
   showScrollDown.value = false
