@@ -2226,6 +2226,14 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 	originalHistory := make([]agent.Message, len(history))
 	copy(originalHistory, history)
 
+	// ★★★ 会话连贯性上下文：主动注入任务进度、对话摘要、相关记忆、项目归属、工作区结构 ★★★
+	// 核心思想：主动注入 > 被动工具。Agent 不应依赖自己"想起来"去调用 memory_* 工具，
+	// 而应在每次对话恢复时由系统主动注入上下文，确保 Agent 知道"在干什么、干过什么"。
+	if resumeCtx := agent.BuildResumeContext(convID, message, history, agentMgr.Store(), core.Folders); resumeCtx != "" {
+		// 注入为系统提示的动态后缀（在 CACHE_BOUNDARY 之后，不影响 KV Cache 前缀）
+		sys += "\n\n" + resumeCtx
+	}
+
 	// ★ 历史精简：跨轮次加载时只保留最近一轮完整交互细节，
 	//   旧轮次压缩为 [用户消息, 助手最终报告]，丢弃中间 tool 输出。
 	//   大幅减少上下文体积，同时保持语义连续性。
