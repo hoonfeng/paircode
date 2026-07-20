@@ -1010,18 +1010,29 @@ const switchConv = async (id) => {
       nextTick(() => applyAutoCollapse())
       const rt = getConvRuntime(id)
       if (rt) {
-        // 当前 agent 仍在运行，创建新的 loading 占位（由后端 agent 使用）
-        const loadingKey = makeMsgKey()
-        const loadingMsg = existingLoading || {
-          role: 'assistant', content: '', segments: [], toolCalls: [],
-          _key: loadingKey,
-          _time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
-          _loading: true,
+        // 当前 agent 仍在运行，复用或创建 loading 占位
+        // ★ 必须保持 _key 与 rt.msgKey 一致，否则 processAgentEvent 的
+        //   findMsgByKey 找不到目标消息，导致 WS 事件丢失。
+        const existLoading = existingMsgs.find(m => m._loading && !m._tempPlaceholder)
+        if (existLoading) {
+          // 复用现有 loading 消息，确保 _key 与 rt.msgKey 一致
+          rt.msgKey = existLoading._key
+          existLoading._idx = cleanedMsgs.length
+          console.log('[RP] switchConv 复用 loading 占位 key=%s idx=%d', rt.msgKey, existLoading._idx)
+        } else {
+          const loadingKey = makeMsgKey()
+          rt.msgKey = loadingKey
+          const newLoading = {
+            role: 'assistant', content: '', segments: [], toolCalls: [],
+            _key: loadingKey,
+            _idx: cleanedMsgs.length,
+            _time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+            _loading: true,
+          }
+          mergedMsgs.push(newLoading)
+          console.log('[RP] switchConv 创建新 loading 占位 key=%s mergedLen=%d',
+            loadingKey, mergedMsgs.length)
         }
-        loadingMsg._idx = cleanedMsgs.length
-        rt.msgKey = loadingKey
-        console.log('[RP] switchConv runtime 已存在，创建新占位 key=%s mergedLen=%d',
-          loadingKey, cleanedMsgs.length)
       }
     } catch {
       state.msgTotalByConv[id] = 0
@@ -1212,12 +1223,14 @@ function stopContentResizeObserver() {
 
 // ── 新消息自动滚底（已移除 — 由 agent-events.js 的 scrollToBottom 统一控制）
 
-// ── 对话切换时：重启内容尺寸观察器 + 按需加载消息
+// ── 对话切换时：重启内容尺寸观察器
+// ★ 不再在此处调用 switchConv —— switchConv 已由以下入口直接调用：
+//   1. sidebar @switch-conversation="switchConv"
+//   2. onMounted 中的恢复检查
+//   3. App.vue 工作区切换后的事件
+// watch 中再调用会导致两段异步函数并发执行，state.messages 被互相覆盖。
 watch(() => state.currentConvId, (id) => {
   nextTick(() => startContentResizeObserver())
-  if (id && (!state.messagesByConv[id] || state.messagesByConv[id].length === 0)) {
-    switchConv(id)
-  }
 })
 
   // ── 对话消息全量替换（如首次加载/切换）时也重启观察器
