@@ -328,6 +328,9 @@ const hasMoreTop = computed(() => {
 // WS 并发写入不会打乱顺序）。
 // ★ 过滤掉 _tempPlaceholder 标记的临时占位（由 processStatus 创建，
 //   switchConv 中会清理，但兜底过滤防止残留导致配对错乱）。
+// ★ 合并连续 assistant 消息：历史加载时后端可能返回多条 assistant 消息
+//   （各 WS 事件阶段分别持久化），连续 assistant 应合并为同一条显示，
+//   避免用户看到分段气泡。
 const messageCombos = computed(() => {
   const msgs = [...(state.messages || [])]
     .filter(m => !m._tempPlaceholder)
@@ -339,10 +342,34 @@ const messageCombos = computed(() => {
       current = { user: msg, assistant: null }
       combos.push(current)
     } else if (msg.role === 'assistant') {
-      if (current && !current.assistant) {
+      if (current && current.assistant === null) {
+        // 正常配对：user → assistant
         current.assistant = msg
+      } else if (current && current.assistant !== null) {
+        // ★ 修复：连续 assistant 消息 → 合并到已有 assistant，不分新气泡
+        //   历史加载时后端返回多条 assistant 消息（各 WS 阶段分别持久化），
+        //   每条的 segments 各不相同。合并后展示在同一个气泡中。
+        const exist = current.assistant
+        // 合并新的 segments 到已有 segments（去重：避免 content 段重复）
+        if (msg.segments && msg.segments.length > 0) {
+          if (!exist.segments) exist.segments = []
+          for (const seg of msg.segments) {
+            // content 段追加到已有 content 末尾（而非重复创建新段）
+            if (seg.type === 'content' && seg.content) {
+              const lastContent = [...exist.segments].reverse().find(s => s.type === 'content')
+              if (lastContent && lastContent.content.endsWith(seg.content)) continue
+              exist.segments.push(seg)
+            } else {
+              exist.segments.push(seg)
+            }
+          }
+        }
+        // 合并 content 回填
+        if (msg.content && !exist.content) {
+          exist.content = msg.content
+        }
       } else {
-        // 没有前置 user 或 user 已有 assistant → 新起一个独立 assistant 气泡
+        // 没有前置 user → 新起一个独立 assistant 气泡
         current = { user: null, assistant: msg }
         combos.push(current)
       }
