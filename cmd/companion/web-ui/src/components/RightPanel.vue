@@ -812,17 +812,7 @@ const sendMessage = async () => {
   }
   // 事件流由 App.vue 全局 WebSocket 接收 → agent-events.js processAgentEvent/Done 处理
 }
-
-const compactContext = async () => {
-  const convId = state.currentConvId
-  if (!convId) { window.$toast?.('没有活跃对话', 'warning'); return }
-  try {
-    await api.chatCompact(convId)
-    window.$toast?.('上下文已压缩（历史消息已压缩，运行中 agent 将在下一轮生效）', 'success')
-  } catch (e) {
-    window.$toast?.('压缩请求失败: ' + (e.message || e), 'error')
-  }
-}
+// 压缩按钮已移除；上下文压缩由 agent 自主管理
 
 const stopChat = async () => {
   const convId = state.currentConvId
