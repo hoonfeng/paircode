@@ -118,6 +118,10 @@ type Loop struct {
 	finishResult   *string        // 退出信号（子 Loop：子 agent 结束时的最终内容）
 	commitMessage  string         // agent 通过 generate_commit_message 工具显式设置的提交信息
 
+	// ── 连续驳回追踪 ──
+	rejectionCount   int    // 连续被驳回次数，达 3 次自动停止
+	lastRejectedTool string // 上次被驳回的工具名
+
 	WorkspaceRoot string // 工作区根路径（用于 SaveTokenUsage 等工作区级持久化）
 	transferTarget string         // transfer_to_agent 目标名（非空=当前 Loop 应退出，控制权转移给目标 agent）
 	CompactRequested bool         // 外部设置后下轮迭代触发上下文压缩（供主动压缩 API 使用）
@@ -412,10 +416,26 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 						if rej == "" {
 							rej = "用户拒绝了此操作。请勿重试该操作；改用其他方式达成目标，或先向用户说明你为何需要它。"
 						}
+						// ★ 连续驳回追踪：同一工具连续驳回 3 次→自动停止
+						if tc.Function.Name == l.lastRejectedTool {
+							l.rejectionCount++
+						} else {
+							l.rejectionCount = 1
+							l.lastRejectedTool = tc.Function.Name
+						}
+						if l.rejectionCount >= 3 {
+							l.emit(Event{Type: EventError, Content: "操作 " + tc.Function.Name + " 已被连续驳回 3 次，自动停止"})
+							return msgs, errors.New("连续驳回 3 次，自动停止")
+						}
 						l.emit(Event{Type: EventToolResult, Tool: tc.Function.Name, Content: rej, CallID: tc.ID})
 						msgs = append(msgs, Message{Role: RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: rej})
-						l.trackCall(tc.Function.Name, tc.Function.Arguments, true) // 被拒也算一次未成、计入绕圈检测
+						l.trackCall(tc.Function.Name, tc.Function.Arguments, true)
 						continue
+					}
+					// 审批通过 → 重置驳回追踪
+					if tc.Function.Name == l.lastRejectedTool {
+						l.rejectionCount = 0
+						l.lastRejectedTool = ""
 					}
 				}
 			}

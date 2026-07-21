@@ -361,11 +361,15 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		}:
 		default:
 		}
+		// ★ 5 分钟超时：前端断连/页面关闭时不会永久阻塞 Loop goroutine
 		select {
 		case ar := <-sess.approvalCh:
 			return ar.Approved, ar.Reply
 		case <-actx.Done():
 			return false, "用户取消了操作"
+		case <-time.After(5 * time.Minute):
+			fmt.Printf("[session] 审批超时 conv=%s tool=%s\n", convID, tc.Function.Name)
+			return false, "审批超时（5 分钟），操作已自动拒绝"
 		}
 	}
 	// 审核模式由 Loop 内部自决，外部只需传进来
@@ -468,6 +472,9 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 					return strings.TrimSpace(answer), nil
 				case <-hctx.Done():
 					return "", hctx.Err()
+				case <-time.After(5 * time.Minute):
+					fmt.Printf("[session] ask_user 超时 conv=%s\n", convID)
+					return "", fmt.Errorf("等待用户回答超时（5 分钟）")
 				}
 			},
 		})
