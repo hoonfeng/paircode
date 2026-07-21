@@ -8,6 +8,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -27,9 +28,11 @@ type SessionContext struct {
 	ProjectHint            string   // 当前对话最可能相关的项目目录
 	WorkspaceStructure     string   // 工作区结构概览
 	LastActivity           string   // 上次活动时间/内容
-	RecentFileEdits        []string // 最近编辑的文件列表
+	RecentFileEdits        []string // 最近编辑的文件列表（从工具调用精确提取）
 	GitStatus              string   // Git 状态快照（最近提交 + 未提交改动）
 	CodeGraphStats         string   // 代码图谱统计（实体数/覆盖率）
+	BuildStatus            string   // 最近构建状态（编译成功/失败、二进制时间戳）
+	KBStaleness            string   // 知识库过期警告（哪些条目引用了不存在的文件）
 }
 
 // BuildSessionContext 构建会话连贯性上下文。
@@ -73,6 +76,12 @@ func BuildSessionContext(convID string, workspaceRoots []string, currentTask str
 
 	// 9. 代码图谱统计
 	sc.CodeGraphStats = buildCodeGraphStats()
+
+	// 10. 构建状态（最近编译结果 + 二进制时间戳）
+	sc.BuildStatus = buildBuildStatus(workspaceRoots)
+
+	// 11. 知识库过期检测
+	sc.KBStaleness = buildKBStaleness(workspaceRoots)
 
 	return sc
 }
@@ -129,6 +138,18 @@ func (sc *SessionContext) FormatForInjection() string {
 	if sc.CodeGraphStats != "" {
 		b.WriteString("\n## 代码图谱统计\n")
 		b.WriteString(sc.CodeGraphStats + "\n")
+		hasContent = true
+	}
+
+	if sc.BuildStatus != "" {
+		b.WriteString("\n## 构建状态\n")
+		b.WriteString(sc.BuildStatus + "\n")
+		hasContent = true
+	}
+
+	if sc.KBStaleness != "" {
+		b.WriteString("\n## ⚠️ 知识库过期警告\n")
+		b.WriteString(sc.KBStaleness + "\n")
 		hasContent = true
 	}
 
@@ -430,63 +451,130 @@ func buildLastActivity(history []Message, convID string, store MessageStoreReade
 }
 
 // extractRecentEdits 从历史消息中提取最近编辑的文件列表。
+// fileModifyTools 会修改/操作文件的工具名集合。
+var fileModifyTools = map[string]bool{
+	"edit_file":    true,
+	"write_file":   true,
+	"multi_edit":   true,
+	"move_file":    true,
+	"delete_file":  true,
+	"write_binary": true,
+}
+
+// toolPathParams 各工具的文件路径参数名（可能有多个）。
+var toolPathParams = map[string][]string{
+	"edit_file":    {"path"},
+	"write_file":   {"path"},
+	"multi_edit":   {"path"},
+	"move_file":    {"from", "to"},
+	"delete_file":  {"path"},
+	"write_binary": {"path"},
+}
+
+// extractRecentEdits 从历史消息中提取最近编辑的文件列表。
+// 优先级：①ToolCalls 中的文件参数（最精确）②RoleTool 结果中含路径的行 ③助手文本中的路径（回退）。
 func extractRecentEdits(history []Message, roots []string) []string {
 	seen := make(map[string]bool)
 	var files []string
+	maxFiles := 20
 
-	// 从最近的助手消息中提取文件操作
-	for i := len(history) - 1; i >= 0 && len(files) < 10; i-- {
+	// ── 第 1 遍：从 assistant 消息的 ToolCalls 中提取（精确） ──
+	for i := len(history) - 1; i >= 0 && len(files) < maxFiles; i-- {
 		msg := history[i]
-		if msg.Role != RoleAssistant {
-			// 也检查工具结果消息
-			if msg.Role == RoleTool && msg.Name != "" {
-				// RoleTool 消息的 Name 字段可能包含工具名
-			}
+		if msg.Role != RoleAssistant || len(msg.ToolCalls) == 0 {
 			continue
 		}
-
-		// 从 Content 中提取文件路径模式
-		content := msg.Content
-		for _, root := range roots {
-			// 简单模式：找工作区内路径
-			lines := strings.Split(content, "\n")
-			for _, line := range lines {
-				line = strings.TrimSpace(line)
-				// 检查是否包含文件路径特征
-				if strings.Contains(line, root) || strings.Contains(line, ".go") ||
-					strings.Contains(line, ".ts") || strings.Contains(line, ".vue") ||
-					strings.Contains(line, ".md") {
-					// 提取可能的文件路径
-					parts := strings.Fields(line)
-					for _, part := range parts {
-						part = strings.Trim(part, "`\"'[](),")
-						if isFilePathLike(part) && !seen[part] {
-							seen[part] = true
-							files = append(files, part)
-							if len(files) >= 10 {
-								break
-							}
-						}
-					}
-				}
-				if len(files) >= 10 {
-					break
-				}
-			}
-			if len(files) >= 10 {
-				break
+		for _, tc := range msg.ToolCalls {
+			p := extractPathFromToolArgs(tc)
+			if p != "" && !seen[p] {
+				seen[p] = true
+				files = append(files, p)
 			}
 		}
 	}
+
+	// ── 第 2 遍：从 RoleTool 消息的结果中提取 ──
+	for i := len(history) - 1; i >= 0 && len(files) < maxFiles; i-- {
+		msg := history[i]
+		if msg.Role != RoleTool || msg.Name == "" {
+			continue
+		}
+		// 只处理文件修改工具
+		if !fileModifyTools[msg.Name] {
+			continue
+		}
+		for _, p := range extractPathsFromText(msg.Content) {
+			if p != "" && !seen[p] {
+				seen[p] = true
+				files = append(files, p)
+			}
+		}
+	}
+
+	// ── 第 3 遍：从助手文本内容中提取（回退） ──
+	for i := len(history) - 1; i >= 0 && len(files) < maxFiles; i-- {
+		msg := history[i]
+		if msg.Role != RoleAssistant || msg.Content == "" {
+			continue
+		}
+		for _, p := range extractPathsFromText(msg.Content) {
+			if p != "" && !seen[p] {
+				seen[p] = true
+				files = append(files, p)
+			}
+		}
+	}
+
 	return files
 }
 
-// isFilePathLike 判断字符串是否像文件路径。
+// extractPathFromToolArgs 从一次工具调用的 JSON 参数中提取文件路径。
+func extractPathFromToolArgs(tc ToolCall) string {
+	paramNames, ok := toolPathParams[tc.Function.Name]
+	if !ok {
+		return ""
+	}
+	var args map[string]any
+	if err := json.Unmarshal([]byte(tc.Function.Arguments), &args); err != nil {
+		return ""
+	}
+	for _, pn := range paramNames {
+		if v, ok := args[pn]; ok {
+			if s, ok := v.(string); ok && s != "" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+// extractPathsFromText 从文本中提取所有像文件路径的字符串。
+func extractPathsFromText(text string) []string {
+	var paths []string
+	seen := make(map[string]bool)
+	lines := strings.Split(text, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		// 用空格/标点分词
+		parts := strings.FieldsFunc(line, func(r rune) bool {
+			return r == ' ' || r == '`' || r == '"' || r == '\'' || r == '[' || r == ']' || r == '(' || r == ')' || r == ','
+		})
+		for _, part := range parts {
+			part = strings.Trim(part, "`\"'[](),*")
+			if isFilePathLike(part) && !seen[part] {
+				seen[part] = true
+				paths = append(paths, part)
+			}
+		}
+	}
+	return paths
+}
+
+// isFilePathLike 判断字符串是否像文件路径（含代码文件扩展名或路径分隔符）。
 func isFilePathLike(s string) bool {
 	if len(s) < 3 || len(s) > 200 {
 		return false
 	}
-	// 包含常见代码文件扩展名
 	codeExts := []string{".go", ".ts", ".js", ".vue", ".py", ".rs", ".java", ".cpp", ".c", ".h",
 		".md", ".json", ".yaml", ".yml", ".toml", ".xml", ".html", ".css", ".scss", ".sql"}
 	for _, ext := range codeExts {
@@ -494,7 +582,6 @@ func isFilePathLike(s string) bool {
 			return true
 		}
 	}
-	// 包含路径分隔符
 	if strings.Contains(s, "/") || strings.Contains(s, "\\") {
 		return true
 	}
@@ -562,6 +649,174 @@ func runGitCmd(dir string, args ...string) (string, error) {
 	return string(out), nil
 }
 
+// buildBuildStatus 检查各工作区主项目的构建状态（二进制是否存在、最后构建时间）。
+func buildBuildStatus(roots []string) string {
+	if len(roots) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for _, root := range roots {
+		name := filepath.Base(root)
+		// 检查常见二进制输出位置
+		candidates := []string{
+			filepath.Join(root, "companion.exe"),
+			filepath.Join(root, "release", "companion.exe"),
+			filepath.Join(root, "bin", "companion.exe"),
+		}
+		for _, bin := range candidates {
+			info, err := os.Stat(bin)
+			if err == nil {
+				b.WriteString(fmt.Sprintf("**%s** 二进制存在: `%s` (%s, 最后构建: %s)\n",
+					name, filepath.Base(bin),
+					formatFileSize(info.Size()),
+					info.ModTime().Format("2006-01-02 15:04:05")))
+				// 如果超过 24 小时，提示可能需要重建
+				if time.Since(info.ModTime()) > 24*time.Hour {
+					b.WriteString("  ⚠️ 二进制超过 24 小时未重新构建，如有代码变更建议 go build。\n")
+				}
+				break
+			}
+		}
+		// 也检查 go build 缓存（go build 是否可用）
+		_, goErr := exec.LookPath("go")
+		if goErr != nil {
+			b.WriteString(fmt.Sprintf("**%s**: ⚠️ go 命令不可用，无法编译。\n", name))
+		}
+	}
+	result := strings.TrimSpace(b.String())
+	if len(result) > 800 {
+		result = result[:800] + "\n…（已截断）"
+	}
+	return result
+}
+
+// formatFileSize 格式化文件大小。
+func formatFileSize(size int64) string {
+	const unit = 1024
+	if size < unit {
+		return fmt.Sprintf("%d B", size)
+	}
+	div, exp := int64(unit), 0
+	for n := size / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(size)/float64(div), "KMGTPE"[exp])
+}
+
+// buildKBStaleness 检测项目知识库条目是否过期（引用不存在的文件）。
+// 仅当有过期条目时返回非空，避免无意义 token 消耗。
+func buildKBStaleness(roots []string) string {
+	if len(roots) == 0 {
+		return ""
+	}
+	var allStale []string
+	for _, root := range roots {
+		pairDir := filepath.Join(root, ".pair", "project-info")
+		entries, err := os.ReadDir(pairDir)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+				continue
+			}
+			entryPath := filepath.Join(pairDir, entry.Name())
+			data, err := os.ReadFile(entryPath)
+			if err != nil {
+				continue
+			}
+			// 快速扫描：检查是否引用了不存在的路径
+			staleRefs := scanStaleRefs(string(data), root)
+			if len(staleRefs) > 0 {
+				name := strings.TrimSuffix(entry.Name(), ".md")
+				// 只记录前 3 个过期引用
+				preview := staleRefs
+				if len(preview) > 3 {
+					preview = preview[:3]
+				}
+				allStale = append(allStale, fmt.Sprintf("  - **%s**: %s（等 %d 处）",
+					name, strings.Join(preview, "、"), len(staleRefs)))
+			}
+		}
+	}
+	if len(allStale) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("以下知识库条目引用了不存在的文件/目录，内容可能过时（共 %d 条）：\n", len(allStale)))
+	// 最多列 10 条
+	limit := len(allStale)
+	if limit > 10 {
+		limit = 10
+	}
+	for i := 0; i < limit; i++ {
+		b.WriteString(allStale[i] + "\n")
+	}
+	if len(allStale) > 10 {
+		b.WriteString(fmt.Sprintf("  … 还有 %d 条。建议运行 project_info_verify 查看全量，并更新或删除过时条目。\n", len(allStale)-10))
+	}
+	b.WriteString("过时条目用 project_info_delete 删除或用 project_info_write 更新。")
+	return b.String()
+}
+
+// scanStaleRefs 扫描文本中引用的文件/目录路径，返回不存在的引用。
+// 跳过：裸文件名（无目录分隔符，可能在任意子目录）、已知其他项目的路径前缀。
+func scanStaleRefs(text, workspaceRoot string) []string {
+	var refs []string
+	seen := make(map[string]bool)
+	lines := strings.Split(text, "\n")
+	for _, line := range lines {
+		parts := strings.FieldsFunc(line, func(r rune) bool {
+			return r == ' ' || r == '`' || r == '"' || r == '\'' || r == '[' || r == ']' || r == '(' || r == ')' || r == ',' || r == '*'
+		})
+		for _, part := range parts {
+			part = strings.Trim(part, "`\"'[](),*")
+			if !isFilePathLike(part) || seen[part] {
+				continue
+			}
+			// 跳过裸文件名（无目录分隔符）：它们可能在任意子目录中，不做误报
+			if !strings.Contains(part, "/") && !strings.Contains(part, "\\") {
+				continue
+			}
+			// 跳过已知属于 wb-ui 等外部项目的路径
+			if strings.HasPrefix(part, "jsc/") || strings.HasPrefix(part, "wb-ui/") ||
+				strings.HasPrefix(part, "skia/") || strings.HasPrefix(part, "goui/") {
+				continue
+			}
+			// 跳过已明确移除的旧文件/目录
+			skipPrefixes := []string{
+				"cmd/companion/webui_desktop", "cmd/companion/bridge/",
+				"webui_desktop.go", "webui_webonly.go", "conversations.js",
+				"build.sh", "pair/conversations", "pair/memory_index",
+			}
+			skip := false
+			for _, sp := range skipPrefixes {
+				if strings.HasPrefix(part, sp) || strings.HasPrefix(strings.ToLower(part), strings.ToLower(sp)) {
+					skip = true
+					break
+				}
+			}
+			if skip {
+				continue
+			}
+			// 规范化路径并检查
+			cleanPath := part
+			if !filepath.IsAbs(cleanPath) {
+				cleanPath = filepath.Join(workspaceRoot, cleanPath)
+			}
+			if _, err := os.Stat(cleanPath); os.IsNotExist(err) {
+				seen[part] = true
+				refs = append(refs, part)
+				if len(refs) >= 10 {
+					return refs
+				}
+			}
+		}
+	}
+	return refs
+}
+
 // buildCodeGraphStats 获取代码图谱统计信息。
 func buildCodeGraphStats() string {
 	cgGraphMu.RLock()
@@ -601,7 +856,7 @@ func buildCodeGraphStats() string {
 // 仅当对话有历史（非首次对话）时返回非空。
 func BuildResumeContext(convID, currentTask string, history []Message, store MessageStoreReader, roots []string) string {
 	if len(history) == 0 {
-		// 新对话：注入工作区结构概览 + 自动召回记忆 + Git 状态 + 代码图谱
+		// 新对话：注入工作区结构概览 + 自动召回记忆 + Git 状态 + 代码图谱 + 构建状态
 		var b strings.Builder
 		if ws := buildWorkspaceStructureOverview(roots); ws != "" {
 			b.WriteString("\n\n# 工作区结构\n")
@@ -619,6 +874,14 @@ func BuildResumeContext(convID, currentTask string, history []Message, store Mes
 		if cgs := buildCodeGraphStats(); cgs != "" {
 			b.WriteString("\n\n# 代码图谱\n")
 			b.WriteString(cgs)
+		}
+		if bs := buildBuildStatus(roots); bs != "" {
+			b.WriteString("\n\n# 构建状态\n")
+			b.WriteString(bs)
+		}
+		if kb := buildKBStaleness(roots); kb != "" {
+			b.WriteString("\n\n# ⚠️ 知识库过期警告\n")
+			b.WriteString(kb)
 		}
 		return b.String()
 	}
