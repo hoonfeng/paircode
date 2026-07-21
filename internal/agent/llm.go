@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -210,7 +211,17 @@ func (p *OpenAIProvider) client() *http.Client {
 	if p.Client != nil {
 		return p.Client
 	}
-	return &http.Client{Timeout: 120 * time.Second}
+	return &http.Client{
+		Transport: &http.Transport{
+			DialContext: (&net.Dialer{
+				Timeout:   30 * time.Second,
+				KeepAlive: 30 * time.Second,
+			}).DialContext,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ResponseHeaderTimeout: 60 * time.Second, // 服务器须在 60s 内返回响应头
+		},
+		Timeout: 600 * time.Second, // SSE 流式读取：10 分钟兜底，覆盖长推理场景
+	}
 }
 
 func (p *OpenAIProvider) Chat(ctx context.Context, messages []Message, tools []ToolDefinition, onChunk func(Chunk)) (Message, error) {
