@@ -26,13 +26,6 @@ type AppSettings struct {
 	ThinkingMode     string `json:"thinkingMode"`
 	MaxTokens        int    `json:"maxTokens"`
 	ContextMaxTokens int    `json:"contextMaxTokens"`
-	// 压缩模型
-	CompressEnabled      bool   `json:"compressEnabled"`
-	CompressProvider     string `json:"compressProvider"`
-	CompressAPIKey       string `json:"compressApiKey"`
-	CompressBaseURL      string `json:"compressBaseURL"`
-	CompressModel        string `json:"compressModel"`
-	CompressThinkingMode string `json:"compressThinkingMode"`
 	// 工作区
 	LastProject        string              `json:"lastProject"`
 	WorkspaceFolders   []string            `json:"workspaceFolders"`
@@ -127,9 +120,7 @@ func Default() AppSettings {
 		Provider: "deepseek", BaseURL: "https://api.deepseek.com/v1",
 		PlanModel: "deepseek-v4-pro", ExecuteModel: "deepseek-v4-flash", ReviewModel: "deepseek-v4-pro",
 		Temperature: "0.3", ThinkingMode: "thinking", MaxTokens: 131072, ContextMaxTokens: 64000,
-		CompressEnabled: true, CompressProvider: "deepseek", CompressBaseURL: "https://api.deepseek.com/v1",
-		CompressModel: "deepseek-v4-flash", CompressThinkingMode: "non-thinking",
-	MaxIterations: 50, MaxParallel: 3, ReviewRetries: 3, AutoIterate: true, RequireApproval: true, ReviewMode: "auto", AutoCommit: true, AutoCollapse: true, Benchmark: true, LuaTools: true,
+		MaxIterations: 50, MaxParallel: 3, ReviewRetries: 3, AutoIterate: true, RequireApproval: true, ReviewMode: "auto", AutoCommit: true, AutoCollapse: true, Benchmark: true, LuaTools: true,
 		DefaultShell: "auto", TermFontSize: 13, TermEncoding: "auto",
 		Theme: "dark", EditorFontSize: 14, TabSize: 2, FontFamily: "'Cascadia Code', 'Fira Code', Consolas, monospace",
 		PhilosophySelected: []string{"tao-te-ching", "huangdi-yinfu-jing", "sunzi-bingfa"},

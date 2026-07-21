@@ -200,9 +200,6 @@ func RenameProvider(oldName, newName string) error {
 	if Settings.Provider == oldName {
 		Settings.Provider = newName
 	}
-	if Settings.CompressProvider == oldName {
-		Settings.CompressProvider = newName
-	}
 	Save()
 	return SaveModelList()
 }

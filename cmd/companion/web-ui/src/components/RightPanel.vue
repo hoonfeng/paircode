@@ -350,7 +350,6 @@ const phaseProgress = computed(() => {
   const elapsed = (Date.now() - agentStart.value) / 1000
   return Math.min(Math.round((elapsed / maxSec) * 100), 95) // 高顶 95%
 })
-const currentPhase = computed(() => state.phaseByConv[state.currentConvId] || '')
 let phaseTimer = null
 
 // ── 滚动控制 ──

@@ -86,43 +86,6 @@
               </div>
             </div>
 
-            <div class="setting-group" style="margin-top:16px">
-              <div class="group-title">上下文压缩（压缩历史后减少 Token 消耗）</div>
-              <div class="setting-row">
-                <label>启用压缩</label>
-                <input type="checkbox" v-model="local.compressEnabled" />
-              </div>
-              <div class="setting-row">
-                <label>压缩服务商</label>
-                <select v-model="local.compressProvider" @change="onCompressProviderChange">
-                  <option value="" disabled>选择服务商</option>
-                  <option v-for="p in providers" :key="p" :value="p">{{ providerLabel(p) }}</option>
-                </select>
-              </div>
-              <div class="setting-row">
-                <label>压缩 API 地址</label>
-                <input type="text" v-model="local.compressBaseURL" placeholder="https://api.deepseek.com/v1" />
-              </div>
-              <div class="setting-row">
-                <label>压缩 API Key</label>
-                <input type="password" v-model="local.compressApiKey" placeholder="留空则复用主 Key" />
-              </div>
-              <div class="setting-row">
-                <label>压缩模型</label>
-                <select v-model="local.compressModel">
-                  <option value="" disabled>选择模型</option>
-                  <option v-for="m in compressModelsForProvider" :key="m" :value="m">{{ m }}</option>
-                </select>
-              </div>
-              <div class="setting-row">
-                <label>压缩思考模式</label>
-                <select v-model="local.compressThinkingMode" style="flex:1">
-                  <option value="non-thinking">非思考（推荐）</option>
-                  <option value="thinking">启用思考</option>
-                  <option value="">禁用</option>
-                </select>
-              </div>
-            </div>
           </div>
 
           <!-- ═══ Agent 行为 ═══ -->
@@ -411,16 +374,8 @@ const local = reactive({
   maxTokens: 16384,
   contextMaxTokens: 1000000,
   thinkingMode: 'thinking',
-  // 压缩
-  compressEnabled: false,
-  compressProvider: '',
-  compressBaseURL: '',
-  compressApiKey: '',
-  compressModel: '',
-  compressThinkingMode: 'non-thinking',
   planModelCustom: '',
   reviewModelCustom: '',
-  compressModelCustom: '',
   // Agent
   maxIterations: 50,
   maxParallel: 3,
@@ -467,11 +422,6 @@ const local = reactive({
 const modelsForProvider = computed(() => {
   if (!local.provider || !modelsMap.value[local.provider]) return []
   return modelsMap.value[local.provider]
-})
-
-const compressModelsForProvider = computed(() => {
-  if (!local.compressProvider || !modelsMap.value[local.compressProvider]) return []
-  return modelsMap.value[local.compressProvider]
 })
 
 // ─── 主题 ───
@@ -541,15 +491,6 @@ function onProviderChange() {
     if (!models.includes(local.executeModel)) local.executeModel = models[0]
     if (!models.includes(local.planModel)) local.planModel = models[0]
     if (!models.includes(local.reviewModel)) local.reviewModel = models[0]
-  }
-}
-
-function onCompressProviderChange() {
-  // 自动填充压缩服务商的 API 地址
-  local.compressBaseURL = getProviderBaseURL(local.compressProvider)
-  const models = modelsMap.value[local.compressProvider] || []
-  if (models.length > 0 && !models.includes(local.compressModel)) {
-    local.compressModel = models[0]
   }
 }
 
@@ -627,19 +568,6 @@ function loadSettings() {
   local.maxTokens = s.maxTokens || 16384
   local.contextMaxTokens = s.contextMaxTokens || 1000000
   local.thinkingMode = s.thinkingMode || 'thinking'
-  // 压缩
-  local.compressEnabled = !!s.compressEnabled
-  local.compressProvider = s.compressProvider || ''
-  local.compressBaseURL = s.compressBaseURL || ''
-  local.compressApiKey = s.compressApiKey || ''
-  local.compressModel = s.compressModel || ''
-  local.compressModelCustom = ''
-  const compressModels = modelsMap.value[local.compressProvider] || []
-  if (local.compressModel && compressModels.length > 0 && !compressModels.includes(local.compressModel) && local.compressModel !== 'custom') {
-    local.compressModelCustom = local.compressModel
-    local.compressModel = 'custom'
-  }
-  local.compressThinkingMode = s.compressThinkingMode || 'non-thinking'
   // Agent
   local.maxIterations = s.maxIterations || 50
   local.maxParallel = s.maxParallel || 3
@@ -709,13 +637,6 @@ const saveSettings = async () => {
       maxTokens: local.maxTokens,
       contextMaxTokens: local.contextMaxTokens,
       thinkingMode: local.thinkingMode,
-      // 压缩
-      compressEnabled: local.compressEnabled,
-      compressProvider: local.compressProvider,
-      compressBaseURL: local.compressBaseURL,
-      compressApiKey: local.compressApiKey,
-      compressModel: local.compressModel === 'custom' ? local.compressModelCustom : local.compressModel,
-      compressThinkingMode: local.compressThinkingMode,
       // Agent
       maxIterations: local.maxIterations,
       maxParallel: local.maxParallel,

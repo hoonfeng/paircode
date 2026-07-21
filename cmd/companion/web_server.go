@@ -2167,6 +2167,7 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 		agent.SkillSystemDir = sysDir
 	}
 	agent.SkillEnabled = core.Settings.SkillEnabledOverrides
+	agent.SkillStatusOverride = core.Settings.SkillStatusOverrides
 	// 初始化 MCP 配置路径（供 buildWebLoopOpts 内 mcppanel.LoadConfigs 使用）
 	agent.MCPUserConfigPath = filepath.Join(core.ConfigDir(), "mcp.json")
 	if root != "" {
