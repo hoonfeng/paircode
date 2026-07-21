@@ -48,8 +48,8 @@ type LoopOpts struct {
 	ReviewProvider Provider
 	// AutoCommit 任务完成时自动 git add + git commit。
 	AutoCommit bool
-	// PlanProvider 规划模型的 Provider（自主模式用）。非空时启动外层设计者 Loop（update_plan + delegate_task），
-	// 而非直接跑单层 Loop。桌面端/web端的行为统一。
+	// PlanProvider 规划模型的 Provider（自主模式用）。当 Autonomous=true 时，Loop 内部使用此
+	// Provider 执行规划阶段（update_plan），与主 Provider 区分以支持不同模型。
 	PlanProvider Provider
 }
 
@@ -442,7 +442,10 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 
 	sess.Loop = loop
 
-	sess.Loop = loop
+	// ★ 自主模式：注册规划工具（update_plan），普通模式不暴露
+	if opts.Autonomous && opts.Registry != nil {
+		RegisterPlanOnlyTools(opts.Registry)
+	}
 
 	// 注册 ask_user 工具：阻塞等用户回答（从 askCh 读）
 	// Register 同名覆盖，安全替换调用方可能已注册的旧版本。
