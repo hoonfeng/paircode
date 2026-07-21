@@ -1,5 +1,5 @@
 {
-  "version": "1.0.29",
+  "version": "1.0.30",
   "appName": "PairCode IDE",
   "description": "AI-Powered Code Companion",
   "company": "PairCode",
@@ -10,7 +10,7 @@
     "frontendDir": "cmd/companion/web-ui",
     "icon": "assets/icon.png",
     "mainPkg": "./cmd/companion",
-    "output": "companion.exe"
+    "output": "pair.exe"
   },
   "pipeline": [
     {
