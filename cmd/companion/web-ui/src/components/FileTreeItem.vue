@@ -192,6 +192,10 @@ async function showContextMenu(e) {
   const path = fullPath.value
   const name = props.item.name
 
+  // ── 多选检测：当前右键项在选中列表中且选中文件 ≥ 2 ──
+  const isMultiSelected = !isDir && state.selectedFilePaths.length > 1 && state.selectedFilePaths.includes(path)
+  const selCount = isMultiSelected ? state.selectedFilePaths.length : 0
+
   let menuItems = []
 
   if (isDir) {
@@ -231,7 +235,7 @@ async function showContextMenu(e) {
       { label: '粘贴', action: 'paste' },
       { separator: true },
       { label: '重命名', shortcut: 'F2', action: 'rename' },
-      { label: '删除', action: 'delete' },
+      { label: isMultiSelected ? `删除选中的 ${selCount} 个文件` : '删除', action: 'delete' },
       { separator: true },
       { label: '复制路径', icon: 'copy', action: 'copy-path' },
       { label: '复制相对路径', action: 'copy-rel-path' },
@@ -244,7 +248,7 @@ async function showContextMenu(e) {
 
   const result = await contextMenuRef.value.show({
     x: e.clientX, y: e.clientY,
-    title: name,
+    title: isMultiSelected ? `已选中 ${selCount} 个文件` : name,
     items: menuItems,
   })
 
@@ -268,7 +272,7 @@ async function showContextMenu(e) {
 
     // 文件操作
     case 'rename': startRename(); break
-    case 'delete': await deleteItem(); break
+    case 'delete': { if (isMultiSelected) { await deleteSelected() } else { await deleteItem() } break }
 
     // 路径复制
     case 'copy-path': copyPath(path); break
@@ -381,7 +385,7 @@ async function confirmRename() {
 }
 function cancelRename() { renaming.value = false }
 
-// ── 删除 ──
+// ── 删除（单个）──
 async function deleteItem() {
   if (!(await window.$confirm('确认删除 ' + (props.item.isDir ? '文件夹' : '文件') + ' "' + props.item.name + '" ？'))) return
   try {
@@ -394,6 +398,37 @@ async function deleteItem() {
     }
     await reloadChildren()
   } catch (err) { window.$toast('删除失败: ' + err.message, 'error') }
+}
+
+// ── 批量删除选中文件 ──
+async function deleteSelected() {
+  const paths = [...state.selectedFilePaths]
+  if (paths.length === 0) return
+  if (!(await window.$confirm(`确认删除选中的 ${paths.length} 个文件？`))) return
+  let ok = 0; let fail = 0
+  for (const fp of paths) {
+    try {
+      await api.apiPost('/fs/delete', { path: fp })
+      ok++
+      if (state.activeFile === fp) {
+        state.openFiles = state.openFiles.filter(f => f !== fp)
+        delete state.fileContents[fp]
+        delete state.fileDirty[fp]
+      }
+    } catch (err) {
+      fail++
+      console.warn(`[批量删除] 删除 ${fp} 失败:`, err)
+    }
+  }
+  state.activeFile = state.openFiles[state.openFiles.length - 1] || ''
+  state.selectedFilePaths.length = 0
+  if (fail === 0) {
+    window.$toast(`已删除 ${ok} 个文件`, 'success')
+  } else {
+    window.$toast(`删除完成: ${ok} 成功, ${fail} 失败`, 'error')
+  }
+  // 刷新父目录
+  await reloadChildren()
 }
 
 // ── 复制路径 ──
