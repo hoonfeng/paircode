@@ -19,6 +19,7 @@
     <div v-if="expanded && item.isDir && children.length > 0">
 <FileTreeItem v-for="(child, ci) in children" :key="fullPath + '\\' + child.name + '_' + ci"
               :item="child" :parentPath="fullPath" :depth="depth + 1"
+              :siblings="children" :siblingIndex="ci"
               @file-click="(p) => emit('fileClick', p)" />
     </div>
     <!-- 重命名输入框 -->
@@ -46,6 +47,8 @@ const props = defineProps({
   parentPath: { type: String, default: '' },
   depth: { type: Number, default: 0 },
   defaultExpanded: { type: Boolean, default: false },
+  siblings: { type: Array, default: () => [] },  // 兄弟节点列表（用于 Shift 范围选择）
+  siblingIndex: { type: Number, default: 0 },     // 在 siblings 中的索引
 })
 
 const emit = defineEmits(['fileClick'])
@@ -127,38 +130,54 @@ const handleClick = async (e) => {
     return
   }
 
-  // 文件：多选逻辑
+  // ── 文件：多选逻辑 ──
   if (e.ctrlKey || e.metaKey) {
-    // Ctrl+点击：切换选择
+    // Ctrl+点击：切换选择（追加/移除），更新锚点
     const idx = state.selectedFilePaths.indexOf(fullPath.value)
     if (idx >= 0) {
       state.selectedFilePaths.splice(idx, 1)
     } else {
       state.selectedFilePaths.push(fullPath.value)
     }
-    // 更新 lastClicked
     state.lastClickedFilePath = fullPath.value
   } else if (e.shiftKey && state.lastClickedFilePath) {
-    // Shift+点击：范围选择（需要父目录中所有文件列表，简化为选择当前到最后一个之间的所有已打开文件）
-    const lastIdx = state.openFiles.indexOf(state.lastClickedFilePath)
-    const curIdx = state.openFiles.indexOf(fullPath.value)
-    if (lastIdx >= 0 && curIdx >= 0) {
-      const start = Math.min(lastIdx, curIdx)
-      const end = Math.max(lastIdx, curIdx)
-      for (let i = start; i <= end; i++) {
-        const fp = state.openFiles[i]
-        if (fp && !state.selectedFilePaths.includes(fp)) {
-          state.selectedFilePaths.push(fp)
+    // Shift+点击：基于兄弟节点列表计算范围选择
+    const sibs = props.siblings
+    if (sibs && sibs.length > 0) {
+      // 构建兄弟节点的路径列表
+      const sibPaths = sibs.map(s => {
+        if (typeof s === 'string') return s
+        return s.path || (props.parentPath ? props.parentPath + '\\' + s.name : s.name)
+      })
+      const anchorIdx = sibPaths.indexOf(state.lastClickedFilePath)
+      const curIdx = sibPaths.indexOf(fullPath.value)
+      if (anchorIdx >= 0 && curIdx >= 0) {
+        // ★ 清除旧选择，重新设定范围
+        state.selectedFilePaths.length = 0
+        const start = Math.min(anchorIdx, curIdx)
+        const end = Math.max(anchorIdx, curIdx)
+        for (let i = start; i <= end; i++) {
+          const sp = sibPaths[i]
+          if (sp && sp !== fullPath.value) {
+            state.selectedFilePaths.push(sp)
+          }
         }
+        state.selectedFilePaths.push(fullPath.value)
+        // 不更新 lastClickedFilePath（保持锚点不变用于连续 Shift）
+      } else {
+        // 锚点不在同组兄弟中，只选当前
+        state.selectedFilePaths.length = 0
+        state.selectedFilePaths.push(fullPath.value)
+        state.lastClickedFilePath = fullPath.value
       }
     } else {
-      // 不在 openFiles 中，只选当前
-      if (!state.selectedFilePaths.includes(fullPath.value)) {
-        state.selectedFilePaths.push(fullPath.value)
-      }
+      // 无兄弟列表，只选当前
+      state.selectedFilePaths.length = 0
+      state.selectedFilePaths.push(fullPath.value)
+      state.lastClickedFilePath = fullPath.value
     }
   } else {
-    // 普通点击：清除多选，只选当前
+    // 普通点击：清除多选，只选当前，打开文件
     state.selectedFilePaths.length = 0
     state.selectedFilePaths.push(fullPath.value)
     state.lastClickedFilePath = fullPath.value

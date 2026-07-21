@@ -39,12 +39,14 @@
       <div v-if="!state.workspaceRoot" class="proj-empty">请先选择工作区</div>
       <template v-else-if="currentFolders.length > 0">
         <FileTreeItem
-          v-for="folder in currentFolders"
+          v-for="(folder, fi) in currentFolders"
           :key="folder"
           :item="{ name: folder.split('\\').pop(), isDir: true, path: folder }"
           :parentPath="folderParent(folder)"
           :depth="0"
           :defaultExpanded="true"
+          :siblings="currentFolders"
+          :siblingIndex="fi"
           @file-click="openFile"
         />
       </template>
