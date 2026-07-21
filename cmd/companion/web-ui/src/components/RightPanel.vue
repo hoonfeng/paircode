@@ -146,11 +146,11 @@
             <button><SvgIcon name="chevron-down" :size="14" /> 新消息</button>
           </div>
         </div>
-        <!-- 执行步骤面板（update_plan 传入，仅自主模式显示） -->
+        <!-- 执行计划面板（自主模式：plan 步骤展开含子任务树） -->
         <div class="plan-container" :class="{ 'plan-empty': currentPlan.length === 0 && currentTasks.length === 0 }">
-          <PlanPanel v-if="autonomous && currentPlan.length > 0" :plan="currentPlan" :expanded="planExpanded" @toggle="planExpanded = !planExpanded" />
-          <!-- 任务进度面板（update_tasks 追踪，普通 + 自主模式均显示） -->
-          <TaskPanel v-if="currentTasks.length > 0" :tasks="currentTasks" :expanded="tasksExpanded" @toggle="tasksExpanded = !tasksExpanded" />
+          <PlanPanel v-if="autonomous && currentPlan.length > 0" :plan="currentPlan" :tasks="currentTasks" :expanded="planExpanded" @toggle="planExpanded = !planExpanded" />
+          <!-- 任务进度面板（普通模式：扁平任务列表） -->
+          <TaskPanel v-if="!autonomous && currentTasks.length > 0" :tasks="currentTasks" :expanded="tasksExpanded" @toggle="tasksExpanded = !tasksExpanded" />
         </div>
         <!-- 输入区 -->
         <div class="chat-input-area" ref="chatInputAreaRef">
@@ -1227,6 +1227,7 @@ const switchConv = async (id) => {
     if (taskData && taskData.tasks && taskData.tasks.length > 0) {
       currentTasks.value = taskData.tasks.map(t => ({
         step: t.step || t.subject || '', status: t.status, _taskId: t.taskId,
+        planStepIndex: t.planStepIndex,
       }))
     } else { currentTasks.value = [] }
   } catch { currentTasks.value = [] }
@@ -1465,6 +1466,7 @@ onMounted(() => {
             step: t.step || t.subject || '',
             status: t.status,
             _taskId: t.taskId,
+            planStepIndex: t.planStepIndex,
           }))
         }
       } catch {}

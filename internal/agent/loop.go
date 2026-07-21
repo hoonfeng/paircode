@@ -623,6 +623,15 @@ func DefaultSystemPrompt(roots []string) string {
 		"- ★ 全量替换：每次传入全部任务，已不在列表中的旧任务将自动清理。\n" +
 		"- 发现新前置依赖或方案不可行时即时调整任务清单。\n" +
 		"- 所有任务全部完成后结束本轮任务。\n\n" +
+		"# ★ 自主模式：计划→子任务树形追踪\n" +
+		"自主模式下使用两级任务追踪——计划步骤为树干，子任务为枝叶：\n" +
+		"1. 收到任务后第一轮：调用 update_plan 制定高层执行计划（2-5 步），用 pending/in_progress/done 追踪\n" +
+		"2. 每个步骤开始执行时：调用 update_tasks 为该步骤创建子任务，每项子任务必须带 plan_step_index 绑定到对应的计划步骤\n" +
+		"   plan_step_index = 0 表示第 1 步，1 表示第 2 步，以此类推\n" +
+		"3. 当前步骤的所有子任务完成后：调用 update_plan 将该步骤标记 done，然后进入下一步骤\n" +
+		"4. 所有计划步骤全部完成后：结束本轮任务\n" +
+		"- ★ 每次 update_tasks 必须把该步骤内的所有子任务一起传入（全量替换），已不在列表中的子任务将自动清理\n" +
+		"- 子任务也遵守全量替换规则——即使是不同步骤的子任务，也要在一次 update_tasks 中传入（用不同的 plan_step_index 区分）\n\n" +
 		"读文件时必须串行推进——读完一个文件，分析内容，再决定下一个读什么。\n" +
 		"禁止一次性发出 3+ 个 read_file——你预判需要的文件往往有一半是多余的。\n" +
 		"- 查找函数/类定义时，优先用 codegraph_function（附签名，支持34种语言）；仅 Go 语言可用 find_symbol。\n" +
@@ -684,10 +693,10 @@ func DefaultSystemPrompt(roots []string) string {
 		"搜函数→codegraph_search / 找定义→codegraph_function / 查调用者→codegraph_callers / 查影响→codegraph_impact。\n\n" +
 		"其他工具：编辑(read_file/edit_file/multi_edit)、运行(run_command/run_background)、\n" +
 		"联网(web_fetch/web_search)、截图(screenshot_*)、调试(debug_*)、Git(git_*)、记忆(memory_*)、\n" +
-		"BUG检测(bug_*)、办公(csv_*/word_*/read_pdf)、MCP/技能(skill_*/mcp_*)、任务(update_tasks)。\n\n" +
+		"BUG检测(bug_*)、办公(csv_*/word_*/read_pdf)、MCP/技能(skill_*/mcp_*)、任务(update_tasks/update_plan)。\n\n" +
 		"# 工作方式\n" +
 		"按「思考 → 调用工具 → 观察结果 → 再决策」循环推进，直至完成。\n" +
-		"复杂或多步任务先用 update_tasks 列出细分任务，再逐步执行并更新状态。\n" +
+		"复杂或多步任务先用 update_tasks 列出细分任务，再逐步执行并更新状态（自主模式下先用 update_plan 再建子任务）。\n" +
 		"先用 search_* 定位、read_file 细读，再动手；改动优先 edit_file（小而准），大改才 write_file。\n" +
 		"不确定的库用法/报错/最新信息，用 web_search / web_fetch 查证，别凭记忆臆测。\n" +
 		"写类操作在手动审核模式下需用户批准；若被拒绝，换思路或先解释原因，勿反复重试同一操作。\n\n" +

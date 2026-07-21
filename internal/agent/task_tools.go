@@ -37,8 +37,8 @@ func registerTaskTools(r *Registry, root string) {
 	r.Register(&Tool{
 		Name: "update_tasks",
 		Description: "维护任务列表：传入完整任务清单（全量替换），系统自动持久化到磁盘。" +
-			"每项包含 subject（必填）、status（pending/in_progress/completed/cancelled）、description（可选）、dependencies（可选）。" +
-			"复杂任务应先用它列出计划，执行中随时更新某任务的状态（每次传全量整份清单）。",
+			"每项包含 subject（必填）、status（pending/in_progress/completed/cancelled）、description（可选）、dependencies（可选）、plan_step_index（可选，整数）。" +
+			"plan_step_index 用于在自主模式下将子任务绑定到 update_plan 的某个步骤（0=第1步，1=第2步…）。普通模式下忽略此字段。",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": props{
@@ -52,7 +52,8 @@ func registerTaskTools(r *Registry, root string) {
 							"subject":      strProp("任务标题，用祈使句（如\"修复登录超时\"）"),
 							"description":  strProp("详细描述（可选）：做什么、涉及哪些文件"),
 							"status":       map[string]any{"type": "string", "enum": []string{"pending", "in_progress", "completed", "cancelled"}, "description": "状态"},
-							"dependencies": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "依赖的任务 ID 列表（可选）"},
+							"dependencies":   map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "依赖的任务 ID 列表（可选）"},
+							"plan_step_index": map[string]any{"type": "integer", "description": "所属 plan 步骤索引（0 基；自主模式下绑定到 update_plan 的某步）"},
 						},
 						"required": []string{"subject", "status"},
 					},
@@ -83,6 +84,12 @@ func registerTaskTools(r *Registry, root string) {
 				}
 				if s := argStr(m, "status"); s != "" {
 					t.Status = TaskStatus(s)
+				}
+				if pis, ok := m["plan_step_index"]; ok {
+					if idx, ok2 := toFloat64(pis); ok2 {
+						pi := int(idx)
+						t.PlanStepIndex = &pi
+					}
 				}
 				newTasks = append(newTasks, t)
 			}
@@ -162,4 +169,17 @@ func strSliceArg(m map[string]any, key string) []string {
 		return deps
 	}
 	return nil
+}
+
+// toFloat64 将 any 值转为 float64（JSON 数字反序列化后默认 float64，也兼容 int64）。
+func toFloat64(v any) (float64, bool) {
+	switch n := v.(type) {
+	case float64:
+		return n, true
+	case int:
+		return float64(n), true
+	case int64:
+		return float64(n), true
+	}
+	return 0, false
 }

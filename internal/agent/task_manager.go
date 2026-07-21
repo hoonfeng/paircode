@@ -33,8 +33,9 @@ type Task struct {
 	Subject      string     `json:"subject"`
 	Description  string     `json:"description"`
 	Status       TaskStatus `json:"status"`
-	Dependencies []string   `json:"dependencies"`
-	ConvID       string     `json:"convId,omitempty"` // 所属对话 ID，为空时视为全局任务
+	Dependencies  []string   `json:"dependencies"`
+	PlanStepIndex *int       `json:"planStepIndex,omitempty"` // 所属 plan 步骤索引（0 基；自主模式用）
+	ConvID        string     `json:"convId,omitempty"`        // 所属对话 ID，为空时视为全局任务
 	CreatedAt    string     `json:"created_at"`
 	UpdatedAt    string     `json:"updated_at"`
 }
