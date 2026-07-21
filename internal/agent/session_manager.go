@@ -33,8 +33,10 @@ type LoopOpts struct {
 	History          []Message   // 初始历史（首次为空；续跑时传上一轮 History）。传入时可能已被 CondenseHistory 压缩。
 	HistoryOriginal  []Message   // 原始未压缩历史（与 History 对应，用于持久化而非 LLM 上下文）。
 	CompressedSummaries []string // 已持久化的压缩摘要（页面刷新后恢复）
-	Autonomous       bool        // 自主模式标志
-	WorkspaceRoot    string      // 工作区根路径（用于跨工作区并行对话的状态指示与隔离）
+	Autonomous            bool   // 自主模式标志
+	MaxAutonomousMinutes  int    // 自主模式时间预算（分钟，0=无限制）
+	CheckpointInterval    int    // 检查点间隔（迭代数，0=默认5）
+	WorkspaceRoot         string // 工作区根路径（用于跨工作区并行对话的状态指示与隔离）
 	// ReviewMode 审核模式："auto"=AI审核, "manual"=手动审批, "off"=全部放行。
 	// "auto"=Loop 内部 AI 审核把关写操作；"off"=全部放行（不经过任何审核）；"manual"=人工审批（前端弹窗）。
 	ReviewMode string
@@ -314,16 +316,18 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 
 	// 创建 Loop，挂载回调
 	loop := &Loop{
-		Provider:         opts.Provider,
-		Registry:         opts.Registry,
-		System:           opts.System,
-		MaxIterations:    opts.MaxIterations,
-		MaxContextTokens: opts.MaxContextTokens,
-		Compressor:       opts.Compressor,
-		Autonomous:       opts.Autonomous,
-		History:          CopyHistory(opts.History), // 自闭环模式：loop 自己管理持久历史
-		CompressedSummaries: opts.CompressedSummaries, // 恢复已持久化的压缩摘要
-		WorkspaceRoot:    opts.WorkspaceRoot, // 工作区根路径（用于 SaveTokenUsage 等工作区级持久化）
+		Provider:              opts.Provider,
+		Registry:              opts.Registry,
+		System:                opts.System,
+		MaxIterations:         opts.MaxIterations,
+		MaxContextTokens:      opts.MaxContextTokens,
+		Compressor:            opts.Compressor,
+		Autonomous:            opts.Autonomous,
+		maxAutonomousMinutes: opts.MaxAutonomousMinutes,
+		checkpointInterval:   opts.CheckpointInterval,
+		History:               CopyHistory(opts.History), // 自闭环模式：loop 自己管理持久历史
+		CompressedSummaries:   opts.CompressedSummaries,  // 恢复已持久化的压缩摘要
+		WorkspaceRoot:         opts.WorkspaceRoot,         // 工作区根路径
 	}
 
 	// ★ 恢复上一轮的执行日志（跨轮感知：无论自主还是非自主，新 Loop 都能知道之前每轮的分析/操作）

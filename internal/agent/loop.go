@@ -140,13 +140,32 @@ type Loop struct {
 	reviewer *Reviewer
 
 	// contentOnlyIters 连续 content-only（无 tool_call）轮数计数器。
+	// contentOnlyIters 连续 content-only（无 tool_call）轮数计数器。
 	// 防止 Agent 只输出文字导致自我循环。
 	contentOnlyIters int
 
-	// commitRecorded generate_commit_message 是否已被调用。
-	// 自主模式下用于判断：false=阶段完成需继续迭代，true=全部已完成可正常退出。
-	commitRecorded bool
+	// ── 自主模式长时任务（新架构） ──
 
+	// ephemeralMsgs 临时内部消息（不被持久化）。
+	// 存放系统注入的阶段提示、绕圈检测、内容循环提示等，仅在本次 LLM 调用时合并到上下文。
+	// 调用 buildCallContext 后自动清空，确保不会污染持久化历史。
+	ephemeralMsgs []Message
+
+	// autonomousStartTime 自主模式启动时间（用于时间预算检查）。
+	autonomousStartTime time.Time
+
+	// maxAutonomousMinutes 自主模式最大运行分钟数（0=无限制）。
+	maxAutonomousMinutes int
+
+	// milestoneCount 自主模式中已完成里程碑数（每次 content-only 无工具调用时递增）。
+	milestoneCount int
+
+	// checkpointInterval 检查点间隔（每 N 轮迭代保存一次 Loop 状态，用于崩溃恢复）。
+	// 0 表示不启用检查点（默认 5）。
+	checkpointInterval int
+
+	// iterSinceCheckpoint 自上次检查点以来的迭代次数。
+	iterSinceCheckpoint int
 	// History 跨 Run 调用的持久化对话消息（自闭环）。
 	// 设计意图：Agent 独立维护自己的消息历史，前端只发信号（当前用户消息文本）。
 	// 首次 Run 前为 nil；每次 Run 返回后更新为当轮完整 msgs。
@@ -245,9 +264,14 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 		msgs = append(msgs, Message{Role: RoleUser, Content: taskWithTs})
 	}
 
-	// ★ 启动时检查记忆/知识库过期引用，如发现则注入一条通知（避免 silent 误导）
+	// ★ 启动时检查记忆/知识库过期引用，如发现则注入为 ephemeralMsg（不持久化）
 	if staleMsg := AutoVerifyStale(); staleMsg != "" {
-		msgs = append(msgs, Message{Role: RoleUser, Content: staleMsg})
+		l.ephemeralMsgs = append(l.ephemeralMsgs, Message{Role: RoleUser, Content: staleMsg})
+	}
+
+	// ★ 自主模式：记录启动时间（用于时间预算检查）
+	if l.Autonomous && l.autonomousStartTime.IsZero() {
+		l.autonomousStartTime = time.Now()
 	}
 
 	tools := l.Registry.Definitions()
@@ -259,17 +283,11 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 
 		msgs = l.maybeCompact(ctx, msgs) // 超窗口阈值则把中段老消息压成摘要（见 compress.go）
 
-		// ── 将压缩摘要和（自主模式下）执行日志作为 user 消息注入历史 ──
-		// 不修改 msgs[0].Content（system 消息），避免破坏 LLM API KV Cache 前缀命中。
-		// 在 system 前缀后插入，使 Agent 看到摘要作为背景上下文而非最新指令。
+		// ── 将压缩摘要和（自主模式下）执行日志作为 ephemeralMsg 注入 ──
+		// 不被持久化，仅在本次 LLM 调用时作为背景上下文
 		if len(l.CompressedSummaries) > l.compressedSummariesInjected && len(msgs) > 0 && msgs[0].Role == RoleSystem {
 			if summaryMsg := l.buildInjectionMessage(); summaryMsg != "" {
-				prefix := prefixLen(msgs)
-				summary := Message{Role: RoleUser, Content: summaryMsg}
-				// 插入 system 之后、其余消息之前
-				tail := make([]Message, len(msgs)-prefix)
-				copy(tail, msgs[prefix:])
-				msgs = append(msgs[:prefix], append([]Message{summary}, tail...)...)
+				l.ephemeralMsgs = append(l.ephemeralMsgs, Message{Role: RoleUser, Content: summaryMsg})
 			}
 			l.compressedSummariesInjected = len(l.CompressedSummaries)
 		}
@@ -277,14 +295,28 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 		// ── 检查用户运行时反馈（补充/纠正）──
 		if l.OnFeedback != nil {
 			if fb := l.OnFeedback(); fb != "" {
-				fbMsg := Message{Role: RoleUser, Content: "【用户反馈】" + fb}
-				msgs = append(msgs, fbMsg)
+				l.ephemeralMsgs = append(l.ephemeralMsgs, Message{Role: RoleUser, Content: "【用户反馈】" + fb})
 				l.emit(Event{Type: EventNotice, Content: "收到用户反馈，Agent 将据此调整"})
 			}
 		}
 
-		// ── THINK：LLM 决策（流式 thinking/content 经事件外发）──
-		assistant, err := l.Provider.Chat(ctx, msgs, tools, func(c Chunk) {
+		// ★ 时间预算检查（自主模式长时任务）
+		if l.Autonomous && l.maxAutonomousMinutes > 0 {
+			elapsed := time.Since(l.autonomousStartTime)
+			if elapsed > time.Duration(l.maxAutonomousMinutes)*time.Minute {
+				l.ephemeralMsgs = append(l.ephemeralMsgs, Message{
+					Role: RoleUser,
+					Content: fmt.Sprintf(
+						"⚠️ 时间预算已超（已运行 %s，限额 %d 分钟）。请尽快完成任务并调用 finish_task。",
+						elapsed.Round(time.Minute).String(), l.maxAutonomousMinutes,
+					),
+				})
+			}
+		}
+
+		// ── THINK：LLM 决策（buildCallContext 合并 ephemeralMsgs，不被持久化）──
+		callMsgs := l.buildCallContext(msgs)
+		assistant, err := l.Provider.Chat(ctx, callMsgs, tools, func(c Chunk) {
 			if c.Reasoning != "" {
 				l.emit(Event{Type: EventThinking, Content: c.Reasoning})
 			}
@@ -296,7 +328,7 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 				// 发射 token 用量事件，供 UI 侧栏统计缓存命中/未命中
 				usage := *c.Usage
 				if usage.PromptBreakdown.SystemTokens == 0 { // 仅 Provider 未返回时估算
-					pb := EstimateBreakdown(msgs, l.Registry.Definitions(), usage.PromptTokens)
+					pb := EstimateBreakdown(callMsgs, l.Registry.Definitions(), usage.PromptTokens)
 					usage.PromptBreakdown = pb
 				}
 				l.emit(Event{Type: EventUsage, Usage: &usage})
@@ -396,10 +428,10 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 			msgs = append(msgs, Message{Role: RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: result})
 			l.trackCall(tc.Function.Name, tc.Function.Arguments, terr != nil || strings.HasPrefix(strings.TrimSpace(result), "Error:"))
 
-			// ★ 自主模式：检测 generate_commit_message 被调用 → 标记提交已记录
-			// 后续自然终止处据此判断是阶段完成（继续迭代）还是全部完成（正常退出）。
+			// ★ 自主模式：generate_commit_message 记录提交信息（供最终完成时使用）
+			// 不再用于区分阶段/完成，仅记录 commit message 字符串
 			if tc.Function.Name == "generate_commit_message" {
-				l.commitRecorded = true
+				l.commitMessage = result
 			}
 
 			// ★ finish_task：设置完成结果并退出循环
@@ -415,34 +447,33 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 		// 先同步 currentMsgs（包含 tool results），供 persist worker 获取完整历史
 		l.currentMsgs = msgs
 
-		// ★ 自然终止：模型首次无工具调用且有正文 → 视为任务完成
-		// 条件：contentOnlyIters==0（尚未触发 content-only 防护）+ 无 tool_call + 有正文
+		// ★ 自然终止：模型无工具调用且有正文
 		if l.contentOnlyIters == 0 && len(assistant.ToolCalls) == 0 && strings.TrimSpace(assistant.Content) != "" {
 			content := strings.TrimSpace(assistant.Content)
 
-			// ★ 自主模式阶段化继续：generate_commit_message 尚未调用 → 阶段完成，持久化后继续迭代
-			// 每完成一个计划后自动落盘，注入阶段报告消息，让 Agent 在同一 Loop 内继续推进下一阶段。
-			if l.Autonomous && !l.commitRecorded {
-				// 阶段持久化（确保每阶段消息落盘，页面刷新后可读取）
-				if l.OnBatchPersist != nil {
-					l.OnBatchPersist(msgs)
-				}
+			// ★ 自主模式：content-only = 里程碑，不是最终完成
+			// Agent 必须通过 finish_task 显式报告完成，否则继续迭代。
+			// 注入里程碑上下文到 ephemeralMsgs（不被持久化），让 Agent 继续推进。
+			if l.Autonomous {
+				l.milestoneCount++
 				summary := content
-				if len(summary) > 500 {
-					summary = summary[:500] + "…（已截断）"
+				if len(summary) > 300 {
+					summary = summary[:300] + "…"
 				}
-				continueMsg := fmt.Sprintf(
-					"【阶段任务完成】\n%s\n\n---\n以上为本阶段执行结果，已持久化保存。请根据以上结果继续推进：\n"+
-						"1. 如果还有未完成的计划项，请继续执行\n"+
-						"2. 如果全部计划项已完成，请调用 **generate_commit_message** 记录提交信息并输出最终总结",
-					summary,
+				milestoneMsg := fmt.Sprintf(
+					"【里程碑 %d】\n%s\n\n你已完成一个阶段性成果。请继续推进剩余计划：\n"+
+						"1. 检查 update_tasks 看还有哪些未完成项\n"+
+						"2. 如果全部计划项已完成，调用 finish_task 报告最终结果\n"+
+						"3. 如果需要调整计划，使用 update_tasks 更新任务列表",
+					l.milestoneCount, summary,
 				)
-				msgs = append(msgs, Message{Role: RoleUser, Content: continueMsg})
+				l.ephemeralMsgs = append(l.ephemeralMsgs, Message{Role: RoleUser, Content: milestoneMsg})
 				l.contentOnlyIters = 0
-				l.emit(Event{Type: EventNotice, Content: "阶段完成，Agent 将继续推进下一阶段"})
-				continue // 继续下一轮迭代，不退出 Loop
+				l.emit(Event{Type: EventNotice, Content: fmt.Sprintf("里程碑 %d 完成，Agent 继续推进", l.milestoneCount)})
+				continue
 			}
 
+			// 非自主模式：首次 content-only = 任务完成，正常退出
 			l.finishResult = &content
 			l.emit(Event{Type: EventDone, Content: content, DoneReason: "task_complete"})
 			return msgs, nil
@@ -455,9 +486,9 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 		if len(assistant.ToolCalls) == 0 && strings.TrimSpace(assistant.Content) != "" {
 			l.contentOnlyIters++
 			if l.contentOnlyIters == 3 {
-				nudge := "[系统提示] 你已经连续三轮只输出文字而没有调用任何工具。如果任务已完成，请直接输出最终报告（系统会自动检测完成）；如果还需要继续工作，请调用相应工具推进。"
+				nudge := "[系统提示] 你已经连续三轮只输出文字而没有调用任何工具。如果任务已完成，请调用 finish_task；如果还需要继续工作，请调用相应工具推进。"
 				l.emit(Event{Type: EventNotice, Content: nudge})
-				msgs = append(msgs, Message{Role: RoleUser, Content: nudge})
+				l.ephemeralMsgs = append(l.ephemeralMsgs, Message{Role: RoleUser, Content: nudge})
 			} else if l.contentOnlyIters >= 4 {
 				l.emit(Event{Type: EventNotice, Content: "检测到内容循环，自动结束"})
 				l.emit(Event{Type: EventDone, Content: strings.TrimSpace(assistant.Content), DoneReason: "content_loop"})
@@ -470,7 +501,7 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 		// 绕圈检测：同一操作反复失败/反复执行 → 注入「换思路」提示打破死循环（见 circling.go）。
 		if nudge := l.detectCircling(); nudge != "" {
 			l.emit(Event{Type: EventCircling, Content: "检测到重复操作/反复失败，已提示 Agent 换思路打破死循环"})
-			msgs = append(msgs, Message{Role: RoleUser, Content: nudge})
+			l.ephemeralMsgs = append(l.ephemeralMsgs, Message{Role: RoleUser, Content: nudge})
 			l.recentCalls = nil // 提示后清零，给新思路一个干净起点
 		}
 
@@ -496,6 +527,20 @@ func hasSystem(msgs []Message) bool {
 		}
 	}
 	return false
+}
+
+// buildCallContext 合并持久化消息和临时内部消息（ephemeralMsgs），
+// 返回完整的 LLM 调用上下文。调用后自动清空 ephemeralMsgs，
+// 确保内部消息不会被持久化。
+func (l *Loop) buildCallContext(msgs []Message) []Message {
+	if len(l.ephemeralMsgs) == 0 {
+		return msgs
+	}
+	result := make([]Message, len(msgs)+len(l.ephemeralMsgs))
+	copy(result, msgs)
+	copy(result[len(msgs):], l.ephemeralMsgs)
+	l.ephemeralMsgs = nil // 清空，确保不会重复注入
+	return result
 }
 
 // buildInjectionMessage 构建注入历史消息中的背景上下文。
