@@ -210,3 +210,86 @@ func TestLoopContextCancel(t *testing.T) {
 		t.Error("已取消的 ctx 应使 Run 返回错误")
 	}
 }
+
+// ── 新增组件单元测试 ──
+
+// TestCanParallelize 验证工具并行判断。
+func TestCanParallelize(t *testing.T) {
+	reg := NewRegistry()
+	reg.Register(&Tool{Name: "read", ReadOnly: true})
+	reg.Register(&Tool{Name: "search", ReadOnly: true})
+	reg.Register(&Tool{Name: "write", ReadOnly: false})
+
+	if canParallelize(nil, reg) { t.Error("空调用不应并行") }
+	if canParallelize([]ToolCall{{Function: FunctionCall{Name: "read"}}}, reg) { t.Error("单个调用不应并行") }
+	if !canParallelize([]ToolCall{
+		{Function: FunctionCall{Name: "read"}},
+		{Function: FunctionCall{Name: "search"}},
+	}, reg) { t.Error("两个只读工具应可并行") }
+	if canParallelize([]ToolCall{
+		{Function: FunctionCall{Name: "read"}},
+		{Function: FunctionCall{Name: "write"}},
+	}, reg) { t.Error("含写工具不应并行") }
+}
+
+// TestRejectTrack 验证驳回追踪：连续3次→停止。
+func TestRejectTrack(t *testing.T) {
+	rt := &rejectTrack{}
+	stop, _ := rt.record("write_file")
+	if stop { t.Error("首次驳回不应停止") }
+	stop, _ = rt.record("write_file")
+	if stop { t.Error("2次驳回不应停止") }
+	stop, reason := rt.record("write_file")
+	if !stop { t.Error("3次驳回应停止") }
+	if reason == "" { t.Error("停止时应给原因") }
+	// 切换工具→重置
+	stop, _ = rt.record("delete_file")
+	if stop { t.Error("不同工具应重置") }
+	if rt.count != 1 { t.Errorf("切换后 count=1: %d", rt.count) }
+	// resetIf
+	rt.resetIf("delete_file")
+	if rt.count != 0 { t.Error("resetIf 应清零") }
+}
+
+// TestToolError 验证统一错误类型。
+func TestToolError(t *testing.T) {
+	e := NewToolError("edit_file", "替换失败", WithRetryable(true), WithSuggestion("请用行号定位"), WithSeverity("warn"))
+	if !e.Retryable { t.Error("应可重试") }
+	if e.Severity != "warn" { t.Errorf("severity 应为 warn: %s", e.Severity) }
+	msg := e.Error()
+	if !strings.Contains(msg, "edit_file") || !strings.Contains(msg, "替换失败") || !strings.Contains(msg, "行号定位") {
+		t.Errorf("错误消息不完整: %s", msg)
+	}
+	e2 := NewToolError("run", "超时")
+	if e2.Severity != "error" { t.Errorf("默认 severity=error: %s", e2.Severity) }
+}
+
+// TestHookStore 验证多钩子优先级+短路+移除。
+func TestHookStore(t *testing.T) {
+	hs := NewHookStore()
+	var calls []string
+	hs.Add(&Hook{Name: "b2", Kind: HookBefore, Priority: 200, BeforeFn: func(ctx context.Context, n string, a map[string]any) (bool, string, error) {
+		calls = append(calls, "b2"); return true, "", nil
+	}})
+	hs.Add(&Hook{Name: "b1", Kind: HookBefore, Priority: 50, BeforeFn: func(ctx context.Context, n string, a map[string]any) (bool, string, error) {
+		calls = append(calls, "b1"); return true, "", nil
+	}})
+	hs.ExecuteBefore(context.Background(), "test", nil)
+	if len(calls) != 2 || calls[0] != "b1" || calls[1] != "b2" { t.Errorf("应 b1 先于 b2: %v", calls) }
+	// 短路
+	hs2 := NewHookStore()
+	hs2.Add(&Hook{Name: "s1", Kind: HookBefore, BeforeFn: func(ctx context.Context, n string, a map[string]any) (bool, string, error) {
+		return false, "blocked", nil
+	}})
+	var shortCalled bool
+	hs2.Add(&Hook{Name: "s2", Kind: HookBefore, BeforeFn: func(ctx context.Context, n string, a map[string]any) (bool, string, error) {
+		shortCalled = true; return true, "", nil
+	}})
+	proceed, override, _ := hs2.ExecuteBefore(context.Background(), "test", nil)
+	if proceed || override != "blocked" || shortCalled { t.Error("短路钩子应阻止后续") }
+	// Remove
+	hs.Remove("b1")
+	calls = nil
+	hs.ExecuteBefore(context.Background(), "test", nil)
+	if len(calls) != 1 || calls[0] != "b2" { t.Errorf("Remove b1 后仅 b2: %v", calls) }
+}
