@@ -249,7 +249,7 @@ func (eng *OrchestrationEngine) stepPlanning(ctx context.Context) bool {
 			eng.saveTaskPlan(fmt.Sprintf("plan_%s", time.Now().Format("20060102_150405")), planContent)
 
 			// 注入规划到任务文本
-			eng.missionTask = eng.missionTask + "\n\n（规划 Agent 已制定以下计划，请据此连续执行、用 update_plan 更新各步状态）：\n" + planStepsText(plan)
+			eng.missionTask = eng.missionTask + "\n\n（规划 Agent 已制定以下计划，请据此连续执行、用 update_tasks 追踪各步骤进度）：\n" + planStepsText(plan)
 		}
 	}
 

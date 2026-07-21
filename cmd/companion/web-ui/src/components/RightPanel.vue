@@ -146,10 +146,10 @@
             <button><SvgIcon name="chevron-down" :size="14" /> 新消息</button>
           </div>
         </div>
-        <!-- 执行步骤面板（update_plan 传入，由外层 AutonomousController 使用） -->
+        <!-- 执行步骤面板（update_plan 传入，仅自主模式显示） -->
         <div class="plan-container" :class="{ 'plan-empty': currentPlan.length === 0 && currentTasks.length === 0 }">
-          <PlanPanel v-if="currentPlan.length > 0" :plan="currentPlan" :expanded="planExpanded" @toggle="planExpanded = !planExpanded" />
-          <!-- 子任务进度面板（task_create/task_update 创建的子任务，由内层 Loop 使用） -->
+          <PlanPanel v-if="autonomous && currentPlan.length > 0" :plan="currentPlan" :expanded="planExpanded" @toggle="planExpanded = !planExpanded" />
+          <!-- 任务进度面板（update_tasks 追踪，普通 + 自主模式均显示） -->
           <TaskPanel v-if="currentTasks.length > 0" :tasks="currentTasks" :expanded="tasksExpanded" @toggle="tasksExpanded = !tasksExpanded" />
         </div>
         <!-- 输入区 -->

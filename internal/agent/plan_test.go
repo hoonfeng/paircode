@@ -10,6 +10,7 @@ import (
 func TestUpdatePlan(t *testing.T) {
 	r := NewRegistry()
 	RegisterDefaultTools(r, t.TempDir())
+	RegisterPlanOnlyTools(r) // update_plan 仅自主模式注册
 	tool, ok := r.Get("update_plan")
 	if !ok {
 		t.Fatal("update_plan 未注册")
