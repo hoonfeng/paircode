@@ -17,11 +17,14 @@ import (
 )
 
 const (
-	compactRatio         = 0.95 // 触发阈值：tokens/MaxContextTokens 超此即压缩（改为 0.95 避免过早压缩导致遗忘）
-	compactKeepRecent    = 16  // 恒留最近条数（复刻参考 keepCount=16）
-	compactMinDrop       = 2   // 中段可丢条数下限：太少不值得压
-	compactLLMSlice      = 40  // LLM 摘要喂入的末尾非 system 条数上限（复刻参考 slice(-40)）
-	compactCooldownTurns = 10  // 压缩后冷却轮数：期间不再压缩（改为 10 轮，大幅降低压缩频率）
+	compactRatio         = 0.95 // 重度压缩触发阈值
+	compactRatioEarly    = 0.60 // 预压缩触发阈值：60% 时做轻度压缩，避免到 95% 急刹
+	compactKeepRecent    = 16   // 恒留最近条数（复刻参考 keepCount=16）
+	compactKeepRecentEarly = 24 // 预压缩保留条数：比全量压缩更多，保持更多上下文
+	compactMinDrop       = 2    // 中段可丢条数下限：太少不值得压
+	compactLLMSlice      = 40   // LLM 摘要喂入的末尾非 system 条数上限（复刻参考 slice(-40)）
+	compactCooldownTurns = 10   // 压缩后冷却轮数：期间不再压缩（改为 10 轮，大幅降低压缩频率）
+	compactCooldownEarly = 3    // 预压缩后冷却：比全量压缩更短，允许快速再次尝试
 )
 
 // maybeCompact 若上下文超窗口阈值，把中段老消息压成摘要后存入 l.CompressedSummaries，
@@ -50,8 +53,14 @@ func (l *Loop) maybeCompact(ctx context.Context, msgs []Message) []Message {
 	if l.lastPromptTokens > tokens { // 取实测与估算较大者
 		tokens = l.lastPromptTokens
 	}
-	if float64(tokens) < compactRatio*float64(l.MaxContextTokens) {
-		return msgs // 未超阈值
+	// ★ 两档压缩：60% 预压缩（轻）+ 95% 全量压缩（重）
+	tokenRatio := float64(tokens) / float64(l.MaxContextTokens)
+	if tokenRatio < compactRatioEarly {
+		return msgs // 未超任何阈值
+	}
+	// 预压缩（60%-95%）：保留更多上下文，仅丢弃已完成轮次的工具结果细节
+	if tokenRatio < compactRatio {
+		return l.earlyCompact(msgs)
 	}
 	out, summary, dropped := l.compact(ctx, msgs)
 	if dropped <= 0 {
@@ -102,6 +111,34 @@ func (l *Loop) compact(ctx context.Context, msgs []Message) ([]Message, string, 
 	out = append(out, msgs[:prefix]...)
 	out = append(out, msgs[keepFrom:]...)
 	return out, summary, len(dropped)
+}
+
+// earlyCompact 预压缩：在 60% 阈值时做轻度压缩，只在消息中植入一条简洁摘要。
+// 保留 24 条最近消息，不修改原消息列表，仅注入 ephemeral 摘要让 Agent 感知早期上下文。
+// 冷却更短（3 轮），允许在持续增长时再次触发。
+func (l *Loop) earlyCompact(msgs []Message) []Message {
+	prefix := prefixLen(msgs)
+	earlyKeep := compactKeepRecentEarly
+	keepFrom := len(msgs) - earlyKeep
+	if keepFrom < prefix {
+		keepFrom = prefix
+	}
+	for keepFrom < len(msgs) && msgs[keepFrom].Role == RoleTool {
+		keepFrom++
+	}
+	dropped := msgs[prefix:keepFrom]
+	if len(dropped) < compactMinDrop {
+		return msgs
+	}
+	// 规则式简介（不用 LLM，节省 token）
+	summary := ruleSummarize(dropped)
+	l.CompressedSummaries = append(l.CompressedSummaries, summary)
+	if len(l.CompressedSummaries) > 3 {
+		l.CompressedSummaries = l.CompressedSummaries[len(l.CompressedSummaries)-3:]
+	}
+	l.compactCooldown = compactCooldownEarly
+	l.emit(Event{Type: EventCompacted, Content: fmt.Sprintf("上下文预压缩 · %d 条早期消息合并为背景摘要", len(dropped))})
+	return msgs // 不修改消息列表，摘要通过 ephemeral 注入
 }
 
 // summarize 把丢弃的中段消息压成一条摘要文本（带标记前缀）。

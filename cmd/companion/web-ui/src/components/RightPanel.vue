@@ -14,12 +14,15 @@
       <!-- 左侧：聊天消息 + 输入区 -->
       <div class="chat-area">
         <!-- 阶段指示器（自主模式多阶段切换） -->
-        <div v-if="currentPhase" class="phase-bar">
+        <div v-if="currentPhase || agentRunning" class="phase-bar">
           <span class="phase-icon"><SvgIcon :name="phaseIcon(currentPhase)" :size="14" /></span>
-          <span class="phase-text">{{ currentPhase }}</span>
-          <span class="phase-dots"><span class="pd1"></span><span class="pd2"></span><span class="pd3"></span></span>
+          <span class="phase-text">{{ currentPhase || '执行中…' }}</span>
+          <span class="phase-stats">
+            <span v-if="phaseToolCount > 0" class="phs-item"><SvgIcon name="zap" :size="10" /> {{ phaseToolCount }} 次调用</span>
+            <span v-if="phaseElapsed" class="phs-item"><SvgIcon name="clock" :size="10" /> {{ phaseElapsed }}</span>
+          </span>
+          <span class="phase-bar-track"><span class="phase-bar-fill" :style="{ width: phaseProgress + '%' }"></span></span>
         </div>
-        <!-- 消息区（滚动容器） -->
         <div class="chat-messages" ref="msgRef" @scroll="onScroll">
           <!-- 顶部加载更多提示 -->
           <div v-if="hasMoreTop" class="scroll-more-hint" ref="topSentinel">
@@ -304,10 +307,49 @@ function showNudge(text) {
 
 let pendingAskCallId = ''
 const currentPlan = ref([])
-const currentTasks = ref([])
-const planExpanded = ref(true)
-const tasksExpanded = ref(true)
 // 阶段指示器从全局 state.phaseByConv 读取（仅当前对话）
+const currentPhase = computed(() => state.phaseByConv[state.currentConvId] || '')
+
+// ★ 进度可视化：工具调用次数
+const phaseToolCount = computed(() => {
+  const msgs = state.messagesByConv[state.currentConvId]
+  if (!msgs) return 0
+  let count = 0
+  for (const m of msgs) {
+    if (m.segments) {
+      for (const s of m.segments) {
+        if (s.type === 'tool_call') count++
+      }
+    }
+  }
+  return count
+})
+
+// ★ 进度可视化：运行耗时
+const agentStart = ref(null)
+const phaseElapsed = ref('')
+let elapsedTimer = null
+watch(() => state.agentRunningByConv[state.currentConvId], (running) => {
+  if (running) {
+    agentStart.value = Date.now()
+    elapsedTimer = setInterval(() => {
+      const sec = Math.floor((Date.now() - agentStart.value) / 1000)
+      if (sec < 60) phaseElapsed.value = sec + 's'
+      else phaseElapsed.value = Math.floor(sec / 60) + 'm ' + (sec % 60) + 's'
+    }, 2000)
+  } else {
+    phaseElapsed.value = ''
+    if (elapsedTimer) { clearInterval(elapsedTimer); elapsedTimer = null }
+  }
+})
+
+// ★ 进度条：基于总耗时估算（长时任务最多 60 分钟）
+const phaseProgress = computed(() => {
+  if (!agentStart.value || !state.agentRunningByConv[state.currentConvId]) return 0
+  const maxSec = 60 * 60 // 60 分钟
+  const elapsed = (Date.now() - agentStart.value) / 1000
+  return Math.min(Math.round((elapsed / maxSec) * 100), 95) // 高顶 95%
+})
 const currentPhase = computed(() => state.phaseByConv[state.currentConvId] || '')
 let phaseTimer = null
 
@@ -1459,8 +1501,13 @@ onUnmounted(() => {
 .msg-loading-dots .dot:nth-child(3) { animation-delay: 0.4s; }
 @keyframes dotPulse { 0%, 60%, 100% { opacity: 0.3; transform: scale(0.8); } 30% { opacity: 1; transform: scale(1.2); } }
 .msg-loading-banner { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 8px; color: var(--text-muted); font-size: 12px; }
-.phase-bar { display: flex; align-items: center; gap: 6px; padding: 4px 12px; background: linear-gradient(90deg, rgba(212, 167, 78, 0.08), rgba(212, 167, 78, 0.02)); border-bottom: 1px solid rgba(212, 167, 78, 0.2); font-size: 12px; color: #d4a74e; flex-shrink: 0; }
-.chat-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; min-height: 200px; color: var(--text-muted); }
+.phase-bar { display: flex; align-items: center; gap: 6px; padding: 4px 12px; background: linear-gradient(90deg, rgba(212, 167, 78, 0.08), rgba(212, 167, 78, 0.02)); border-bottom: 1px solid rgba(212, 167, 78, 0.2); font-size: 12px; color: #d4a74e; flex-shrink: 0; flex-wrap: wrap; }
+.phase-icon { flex-shrink: 0; }
+.phase-text { font-weight: 600; }
+.phase-stats { display: flex; gap: 12px; margin-left: auto; }
+.phs-item { display: flex; align-items: center; gap: 3px; color: rgba(212, 167, 78, 0.6); font-size: 10px; }
+.phase-bar-track { width: 100%; height: 2px; background: rgba(212, 167, 78, 0.1); border-radius: 1px; margin-top: 2px; }
+.phase-bar-fill { height: 100%; background: #d4a74e; border-radius: 1px; transition: width 1s ease; }
 .folded-summary { display: flex; align-items: center; gap: 5px; padding: 5px 10px; background: var(--bg-primary); border: 1px solid var(--border-color); border-left: 3px solid var(--accent); border-radius: 6px; font-size: 12px; cursor: pointer; transition: background 0.15s, border-color 0.15s; }
 .folded-summary:hover { background: var(--bg-hover); border-color: var(--accent); }
 

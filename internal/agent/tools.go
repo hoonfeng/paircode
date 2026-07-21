@@ -149,9 +149,25 @@ func (r *Registry) Definitions() []ToolDefinition {
 	defs := make([]ToolDefinition, 0, len(r.order))
 	for _, name := range r.order {
 		t := r.tools[name]
+		desc := t.Description
+		// ★ 精简：截断超长描述到 ~100 字符，减少每次 LLM 调用的 token 消耗
+		if len(desc) > 120 {
+			// 在第一个句号或空格处截断
+			cut := strings.LastIndex(desc[:120], "。")
+			if cut < 60 {
+				cut = strings.LastIndex(desc[:120], "；")
+			}
+			if cut < 60 {
+				cut = len(desc[:100])
+				for cut > 60 && desc[cut] != ' ' && desc[cut] != ',' {
+					cut--
+				}
+			}
+			desc = strings.TrimSpace(desc[:cut])
+		}
 		defs = append(defs, ToolDefinition{
 			Type:     "function",
-			Function: FunctionDefinition{Name: t.Name, Description: t.Description, Parameters: t.Parameters},
+			Function: FunctionDefinition{Name: t.Name, Description: desc, Parameters: t.Parameters},
 		})
 	}
 	return defs

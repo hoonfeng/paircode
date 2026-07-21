@@ -365,6 +365,12 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 		}
 
 		// ── ACT + OBSERVE：依次执行工具，结果作 role=tool 消息回灌 ──
+
+		// ★ 并行优化：2+ 个只读工具时并发执行
+		if canParallelize(assistant.ToolCalls, l.Registry) {
+			msgs = l.executeToolsParallel(ctx, assistant.ToolCalls, msgs)
+		} else {
+
 		for _, tc := range assistant.ToolCalls {
 			l.emit(Event{Type: EventToolCall, Tool: tc.Function.Name, Args: tc.Function.Arguments, CallID: tc.ID})
 
@@ -461,8 +467,11 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 				l.emit(Event{Type: EventDone, Content: result, DoneReason: "finish_task"})
 				return msgs, nil
 			}
-
 		}
+		} // end else (serial tool execution)
+
+		// 先同步 currentMsgs（包含 tool results），供 persist worker 获取完整历史
+		l.currentMsgs = msgs
 
 		// 先同步 currentMsgs（包含 tool results），供 persist worker 获取完整历史
 		l.currentMsgs = msgs
