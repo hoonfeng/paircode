@@ -14,7 +14,7 @@ import (
 )
 
 // 编译版本号（由 packager 通过 -ldflags=-X main.version=<version> 注入）
-var version = "v1.1.1"
+var version = "v1.1.2"
 
 func main() {
 	// ★ 全局 panic recovery — 捕获所有未捕获的 panic，防止进程静默崩溃
