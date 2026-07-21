@@ -43,9 +43,10 @@ var webUIFiles embed.FS
 
 // webServer 是运行在 companion 内部的 HTTP 服务器。
 type webServer struct {
-	server *http.Server
-	port   int
-	mu     sync.Mutex
+	server    *http.Server
+	port      int
+	mu        sync.Mutex
+	eventRing *eventRing // 全局事件环形缓冲（断连回放用）
 }
 
 // agentMgr 全局会话管理器：管理并行 agent 会话（Start/Stop/Subscribe 等）。
@@ -103,7 +104,8 @@ func startWebUI(port int) {
 		return
 	}
 	ws = &webServer{
-		port: port,
+		port:      port,
+		eventRing: newEventRing(1000), // 缓存最近 1000 个全局事件用于断连回放
 	}
 	// 初始化 MessageStore（消息持久化的唯一权威），并迁移旧格式数据
 	// ★ 先找已有对话数据的工作区目录（排序变化后 core.Root() 可能指向了没有对话数据的目录）
