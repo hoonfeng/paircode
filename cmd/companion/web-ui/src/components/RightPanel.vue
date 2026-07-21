@@ -195,8 +195,6 @@
                 <span :class="['obtn', { active: autoCommit }]" @click="toggleAuto('autoCommit')" title="自动 Git 提交：任务完成时自动 git add + commit"><SvgIcon name="git-commit" :size="12" /> 提交</span>
                 <span class="obtn-sep"></span>
                 <span :class="['obtn', 'obtn-agent', { active: autonomous }]" @click="toggleAuto('autonomous')" title="自主模式：开启=连续执行全部计划步骤，关闭=单次回复"><SvgIcon name="cycle" :size="12" color="#d4a74e" /> 自主</span>
-                <span class="obtn-sep"></span>
-                <span class="obtn" @click="compactContext" title="主动压缩上下文：将早期消息压缩为摘要，减少 token 消耗"><SvgIcon name="minus" :size="12" /> 压缩</span>
               </div>
               <button v-if="!state.chatLoading" class="send-btn" @click="sendMessage" :disabled="!inputText.trim()"><SvgIcon name="send-plane" :size="16" /></button>
               <button v-else class="stop-btn" @click="stopChat"><SvgIcon name="stop-dot" :size="20" /></button>
@@ -308,10 +306,9 @@ function showNudge(text) {
 let pendingAskCallId = ''
 const currentPlan = ref([])
 const currentTasks = ref([])
-// 阶段指示器从全局 state.phaseByConv 读取（仅当前对话）
+const planExpanded = ref(false)
+const tasksExpanded = ref(false)
 const currentPhase = computed(() => state.phaseByConv[state.currentConvId] || '')
-
-// ★ 进度可视化：工具调用次数
 const phaseToolCount = computed(() => {
   const msgs = state.messagesByConv[state.currentConvId]
   if (!msgs) return 0
