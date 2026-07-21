@@ -176,17 +176,29 @@
                 <span class="obtn obtn-review-config" @click="reviewConfigOpen = !reviewConfigOpen" title="审核黑白名单配置" :class="{ active: reviewConfigOpen }"><SvgIcon name="settings" :size="12" /> 配置</span>
                 <!-- 审核配置弹窗 -->
                 <div v-if="reviewConfigOpen" class="review-config-popover" @click.stop>
-                  <div class="rcp-header">审核黑白名单配置</div>
-                  <div class="rcp-desc">每行一个工具名，支持部分匹配（如 edit_file 匹配 edit_file/multi_edit）</div>
-                  <div class="rcp-section">
-                    <label class="rcp-label">黑名单（需审核的工具）</label>
-                    <textarea class="rcp-input" v-model="reviewBlacklistText" rows="3" placeholder="edit_file&#10;write_file&#10;delete_file"></textarea>
+                  <div class="rcp-header">
+                    <span>审核配置</span>
+                    <span class="rcp-header-hint">点击工具切换：<span class="rcp-tag-dot rcp-dot-none"></span>默认 → <span class="rcp-tag-dot rcp-dot-black"></span>黑名单 → <span class="rcp-tag-dot rcp-dot-white"></span>白名单</span>
                   </div>
-                  <div class="rcp-section">
-                    <label class="rcp-label">白名单（跳过审核的工具）</label>
-                    <textarea class="rcp-input" v-model="reviewWhitelistText" rows="3" placeholder="read_file&#10;search_content&#10;web_search"></textarea>
+                  <div class="rcp-search"><input v-model="reviewSearchText" placeholder="搜索工具..." class="rcp-search-input" /></div>
+                  <div class="rcp-tools">
+                    <div v-for="cat in filteredReviewCategories" :key="cat.name" class="rcp-category">
+                      <div class="rcp-cat-header" @click="cat.expanded = !cat.expanded">
+                        <SvgIcon :name="cat.expanded ? 'chevron-down' : 'chevron-right'" :size="10" />
+                        <span>{{ cat.label }}</span>
+                        <span class="rcp-cat-count">{{ cat.tools.filter(t => getReviewToolState(t.name) !== 'none').length }}/{{ cat.tools.length }}</span>
+                      </div>
+                      <div v-if="cat.expanded" class="rcp-cat-tools">
+                        <div v-for="tool in cat.tools" :key="tool.name" :class="['rcp-tool-item', 'rcp-tool-' + getReviewToolState(tool.name)]" @click="cycleReviewTool(tool.name)">
+                          <span class="rcp-tool-name">{{ tool.label }}</span>
+                          <span class="rcp-tool-id">{{ tool.name }}</span>
+                          <span class="rcp-tool-tag">{{ reviewStateLabel(getReviewToolState(tool.name)) }}</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                   <div class="rcp-actions">
+                    <button class="rcp-btn rcp-btn-reset" @click="resetReviewConfig">重置</button>
                     <button class="rcp-btn rcp-btn-save" @click="saveReviewConfig">保存</button>
                     <button class="rcp-btn rcp-btn-close" @click="reviewConfigOpen = false">关闭</button>
                   </div>
@@ -242,8 +254,8 @@ const convListWidth = ref(250)
 const topSentinel = ref(null)
 const reviewMode = ref('auto')  // 'auto'=AI审核, 'manual'=人工审批, 'off'=全部放行
 const reviewConfigOpen = ref(false)
-const reviewBlacklistText = ref('')
-const reviewWhitelistText = ref('')
+const reviewSearchText = ref('')
+const reviewToolStates = ref({})
 const reviewBtnTitle = computed(() => {
   const m = reviewMode.value
   return m === 'auto' ? 'AI审核：Agent自行审批写操作' : m === 'manual' ? '手动审批：每次操作需用户确认' : '关闭审核：全部放行，不经过任何审核'
@@ -273,10 +285,14 @@ function cycleReviewMode() {
     state.settings['reviewMode'] = m
   })
 }
-// saveReviewConfig 保存审核黑白名单配置到后端。
+// saveReviewConfig 保存审核黑白名单配置到后端（从工具状态生成）
 const saveReviewConfig = async () => {
-  const blacklist = reviewBlacklistText.value.split('\n').map(s => s.trim()).filter(Boolean)
-  const whitelist = reviewWhitelistText.value.split('\n').map(s => s.trim()).filter(Boolean)
+  const blacklist = []
+  const whitelist = []
+  for (const [name, st] of Object.entries(reviewToolStates.value)) {
+    if (st === 'black') blacklist.push(name)
+    else if (st === 'white') whitelist.push(name)
+  }
   state.settings['reviewBlacklist'] = blacklist
   state.settings['reviewWhitelist'] = whitelist
   try {
@@ -287,6 +303,147 @@ const saveReviewConfig = async () => {
     window.$toast?.('保存失败: ' + (e.message || e), 'error')
   }
 }
+
+// 工具审核状态辅助
+function getReviewToolState(name) { return reviewToolStates.value[name] || 'none' }
+function reviewStateLabel(s) { return s === 'black' ? '黑名单' : s === 'white' ? '白名单' : '默认' }
+function cycleReviewTool(name) {
+  const cur = reviewToolStates.value[name] || 'none'
+  const next = cur === 'none' ? 'black' : cur === 'black' ? 'white' : 'none'
+  reviewToolStates.value = { ...reviewToolStates.value, [name]: next }
+}
+function resetReviewConfig() {
+  reviewToolStates.value = {}
+  reviewSearchText.value = ''
+}
+
+// 工具分类定义
+const reviewCategories = ref([
+  { name: 'file', label: '文件操作', expanded: false, tools: [
+    { name: 'read_file', label: '读取文件' }, { name: 'list_files', label: '列出目录' },
+    { name: 'search_content', label: '搜索内容' }, { name: 'search_files', label: '搜索文件' },
+    { name: 'write_file', label: '写入文件' }, { name: 'edit_file', label: '编辑文件' },
+    { name: 'multi_edit', label: '批量编辑' }, { name: 'move_file', label: '移动文件' },
+    { name: 'delete_file', label: '删除文件' }
+  ]},
+  { name: 'command', label: '命令执行', expanded: false, tools: [
+    { name: 'run_command', label: '执行命令' }, { name: 'run_background', label: '后台命令' },
+    { name: 'read_output', label: '读取输出' }, { name: 'kill_process', label: '停止进程' }
+  ]},
+  { name: 'git', label: 'Git 版本控制', expanded: false, tools: [
+    { name: 'git_status', label: 'Git状态' }, { name: 'git_diff', label: 'Git差异' },
+    { name: 'git_log', label: 'Git日志' }, { name: 'git_show', label: 'Git详情' },
+    { name: 'git_blame', label: '逐行追溯' }, { name: 'git_add', label: 'Git暂存' },
+    { name: 'git_commit', label: 'Git提交' }, { name: 'git_branch', label: 'Git分支' },
+    { name: 'git_checkout', label: 'Git检出' }, { name: 'git_stash', label: 'Git贮藏' }
+  ]},
+  { name: 'web', label: '网络与网页', expanded: false, tools: [
+    { name: 'web_fetch', label: '抓取网页' }, { name: 'web_search', label: '网络搜索' },
+    { name: 'web_debug', label: '网页验证' }
+  ]},
+  { name: 'screenshot', label: '截图', expanded: false, tools: [
+    { name: 'screenshot_desktop', label: '桌面截图' }, { name: 'screenshot_window', label: '窗口截图' },
+    { name: 'screenshot_area', label: '区域截图' }
+  ]},
+  { name: 'image', label: '图像分析', expanded: false, tools: [
+    { name: 'image_analyze', label: '图像分析' }, { name: 'image_ocr', label: '文字识别' }
+  ]},
+  { name: 'binary', label: '二进制分析', expanded: false, tools: [
+    { name: 'inspect_binary', label: '二进制概览' }, { name: 'write_binary', label: '写入二进制' },
+    { name: 'binary_strings', label: '提取字符串' }, { name: 'binary_find', label: '搜索字节' },
+    { name: 'binary_patch', label: '字节补丁' }, { name: 'binary_info', label: 'PE/ELF解析' },
+    { name: 'binary_hash', label: '文件哈希' }, { name: 'binary_entropy', label: '熵分析' }
+  ]},
+  { name: 'office', label: '办公文档', expanded: false, tools: [
+    { name: 'csv_read', label: '读取CSV' }, { name: 'csv_write', label: '写入CSV' },
+    { name: 'json_to_table', label: 'JSON转表格' }, { name: 'table_stats', label: '表格统计' },
+    { name: 'text_report', label: '代码统计' }, { name: 'word_read', label: '读取Word' },
+    { name: 'word_write', label: '生成Word' }, { name: 'read_xlsx', label: '读取Excel' },
+    { name: 'write_xlsx', label: '创建Excel' }, { name: 'read_pdf', label: '读取PDF' },
+    { name: 'markdown_to_html', label: 'MD转HTML' }
+  ]},
+  { name: 'codegraph', label: '代码知识图谱', expanded: false, tools: [
+    { name: 'codegraph_build', label: '构建图谱' }, { name: 'codegraph_stats', label: '图谱统计' },
+    { name: 'codegraph_function', label: '查找函数' }, { name: 'codegraph_class', label: '类型层次' },
+    { name: 'codegraph_callers', label: '调用者' }, { name: 'codegraph_callees', label: '被调用者' },
+    { name: 'codegraph_impact', label: '影响分析' }, { name: 'codegraph_search', label: '图谱搜索' },
+    { name: 'codegraph_git_history', label: '图谱历史' }, { name: 'codegraph_entity_history', label: '实体历史' },
+    { name: 'codegraph_file_structure', label: '文件结构' }, { name: 'codegraph_get_edit_context', label: '编辑上下文' },
+    { name: 'codegraph_find_related_tests', label: '关联测试' }, { name: 'codegraph_analyze_complexity', label: '复杂度分析' },
+    { name: 'codegraph_search_by_pattern', label: '模式搜索' }, { name: 'codegraph_trace_call_chain', label: '调用链追踪' },
+    { name: 'codegraph_find_dead_code', label: '死代码检测' }, { name: 'codegraph_module_architecture', label: '模块架构' },
+    { name: 'codegraph_find_entry_points', label: '入口点' }, { name: 'codegraph_find_hot_paths', label: '热路径' },
+    { name: 'codegraph_find_by_imports', label: '按导入查找' }, { name: 'codegraph_get_detailed_symbol', label: '符号详情' },
+    { name: 'codegraph_find_dead_imports', label: '死导入' }, { name: 'codegraph_search_by_error', label: '错误搜索' },
+    { name: 'codegraph_index_markdown', label: '索引文档' }, { name: 'codegraph_search_docs', label: '搜索文档' },
+    { name: 'codegraph_verify_design', label: '验证设计' }, { name: 'codegraph_pr_context', label: 'PR上下文' },
+    { name: 'codegraph_find_by_signature', label: '签名搜索' }, { name: 'codegraph_semantic_search', label: '语义搜索' },
+    { name: 'codegraph_explore', label: '代码探索' }
+  ]},
+  { name: 'debug', label: '调试器', expanded: false, tools: [
+    { name: 'debug_start', label: '启动调试' }, { name: 'debug_stop', label: '停止调试' },
+    { name: 'debug_breakpoint', label: '设置断点' }, { name: 'debug_continue', label: '继续执行' },
+    { name: 'debug_next', label: '单步跳过' }, { name: 'debug_step_in', label: '单步进入' },
+    { name: 'debug_step_out', label: '单步跳出' }, { name: 'debug_stack', label: '查看堆栈' },
+    { name: 'debug_variables', label: '查看变量' }, { name: 'debug_evaluate', label: '表达式求值' },
+    { name: 'debug_status', label: '调试状态' }
+  ]},
+  { name: 'knowledge', label: '项目知识库', expanded: false, tools: [
+    { name: 'project_info_write', label: '写入知识' }, { name: 'project_info_read', label: '读取知识' },
+    { name: 'project_info_list', label: '列出知识' }, { name: 'project_info_search', label: '搜索知识' },
+    { name: 'project_info_delete', label: '删除知识' }, { name: 'project_info_explore', label: '项目概览' },
+    { name: 'project_info_verify', label: '验证知识' }
+  ]},
+  { name: 'memory', label: '记忆系统', expanded: false, tools: [
+    { name: 'memory_write', label: '写入记忆' }, { name: 'memory_read', label: '读取记忆' },
+    { name: 'memory_search', label: '搜索记忆' }, { name: 'memory_list', label: '列出记忆' },
+    { name: 'memory_delete', label: '删除记忆' }, { name: 'memory_verify', label: '验证记忆' }
+  ]},
+  { name: 'symbol', label: '符号查找', expanded: false, tools: [
+    { name: 'find_symbol', label: '搜索符号' }, { name: 'list_exported_symbols', label: '导出符号' },
+    { name: 'get_file_dependencies', label: '文件依赖' }, { name: 'check_impact', label: '影响分析' },
+    { name: 'find_circular_deps', label: '循环依赖' }
+  ]},
+  { name: 'lsp', label: 'LSP 语言服务', expanded: false, tools: [
+    { name: 'lsp_definition', label: '跳转定义' }, { name: 'lsp_references', label: '查找引用' },
+    { name: 'lsp_hover', label: '类型信息' }, { name: 'lsp_diagnostics', label: '诊断信息' }
+  ]},
+  { name: 'bug', label: 'BUG 检测修复', expanded: false, tools: [
+    { name: 'bug_analyze', label: 'BUG分析' }, { name: 'bug_detect', label: 'BUG检测' },
+    { name: 'bug_fix', label: 'BUG修复' }
+  ]},
+  { name: 'task', label: '任务计划管理', expanded: false, tools: [
+    { name: 'update_plan', label: '更新计划' }, { name: 'update_tasks', label: '更新任务' },
+    { name: 'finish_task', label: '完成任务' }, { name: 'task_create', label: '创建子任务' },
+    { name: 'generate_commit_message', label: '生成提交信息' }
+  ]},
+  { name: 'extension', label: '扩展与市场', expanded: false, tools: [
+    { name: 'lua_tool_list', label: 'Lua工具列表' }, { name: 'lua_tool_create', label: '创建Lua工具' },
+    { name: 'lua_tool_update', label: '更新Lua工具' }, { name: 'lua_tool_delete', label: '删除Lua工具' },
+    { name: 'skill_list', label: '技能列表' }, { name: 'load_skill', label: '加载技能' },
+    { name: 'load_skill_resource', label: '加载技能资源' }, { name: 'skill_write', label: '写入技能' },
+    { name: 'skill_delete', label: '删除技能' }, { name: 'mcp_list', label: 'MCP列表' },
+    { name: 'mcp_add', label: '添加MCP' }, { name: 'mcp_remove', label: '移除MCP' },
+    { name: 'marketplace_search', label: '市场搜索' }, { name: 'marketplace_install', label: '市场安装' }
+  ]},
+  { name: 'history', label: '对话历史', expanded: false, tools: [
+    { name: 'history_search', label: '搜索历史' }, { name: 'history_list', label: '列出历史' },
+    { name: 'history_count', label: '历史计数' }, { name: 'ask_user', label: '询问用户' }
+  ]},
+  { name: 'other', label: '其他工具', expanded: false, tools: [
+    { name: 'go_build', label: 'Go构建' }, { name: 'go_run', label: 'Go运行' },
+    { name: 'run_test', label: '运行测试' }
+  ]}
+])
+const filteredReviewCategories = computed(() => {
+  const q = reviewSearchText.value.trim().toLowerCase()
+  if (!q) return reviewCategories.value
+  return reviewCategories.value.map(cat => ({
+    ...cat, expanded: true,
+    tools: cat.tools.filter(t => t.name.includes(q) || t.label.includes(q))
+  })).filter(cat => cat.tools.length > 0)
+})
+
 const autoIterate = ref(false)
 const autoCollapse = ref(localStorage.getItem('autoCollapse') !== 'false')
 const autonomous = ref(false)
@@ -1273,7 +1430,7 @@ watch(() => state.currentConvId, (id, oldId) => {
     }
   })
 
-watch(() => state.settings, (s) => { if (s) { reviewMode.value = s.reviewMode || 'auto'; autoIterate.value = !!s.autoIterateOnRejection; autonomous.value = !!s.autonomous; autoCollapse.value = s.autoCollapse !== undefined ? !!s.autoCollapse : true; autoCommit.value = s.autoCommit !== false; reviewBlacklistText.value = (Array.isArray(s.reviewBlacklist) ? s.reviewBlacklist : []).join('\n'); reviewWhitelistText.value = (Array.isArray(s.reviewWhitelist) ? s.reviewWhitelist : []).join('\n'); } }, { immediate: true })
+watch(() => state.settings, (s) => { if (s) { reviewMode.value = s.reviewMode || 'auto'; autoIterate.value = !!s.autoIterateOnRejection; autonomous.value = !!s.autonomous; autoCollapse.value = s.autoCollapse !== undefined ? !!s.autoCollapse : true; autoCommit.value = s.autoCommit !== false; reviewToolStates.value = {}; (Array.isArray(s.reviewBlacklist) ? s.reviewBlacklist : []).forEach(n => reviewToolStates.value[n] = 'black'); (Array.isArray(s.reviewWhitelist) ? s.reviewWhitelist : []).forEach(n => reviewToolStates.value[n] = 'white'); } }, { immediate: true })
 
 // ── 工作区切换时加载 Token 统计（onMounted 时 workspaceRoot 可能还未设）
 watch(() => state.workspaceRoot, (root) => {
@@ -1429,6 +1586,21 @@ onUnmounted(() => {
 .chat-messages { flex: 1; overflow-y: auto; padding: 8px 12px; min-height: 0; position: relative; overflow-anchor: none; }
 .msg-list-wrap { display: flex; flex-direction: column; gap: 12px; min-height: 100%; }
 .msg-item { display: flex; gap: 8px; align-items: flex-start; content-visibility: auto; contain-intrinsic-size: 60px; }
+
+/* 新对话空状态 */
+.chat-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: var(--text-muted);
+  position: absolute;
+  inset: 0;
+}
+.chat-empty-icon { margin-bottom: 16px; opacity: 0.2; }
+.chat-empty-text { font-size: 16px; font-weight: 500; margin-bottom: 6px; color: var(--text-secondary); }
+.chat-empty-hint { font-size: 13px; opacity: 0.7; }
 .msg-user { flex-direction: row-reverse; justify-content: flex-start; gap: 10px; }
 
 
@@ -1602,21 +1774,61 @@ onUnmounted(() => {
 .review-config-popover {
   position: absolute; z-index: 100;
   bottom: 100%; left: 0; margin-bottom: 4px;
-  width: 360px; max-width: 90vw;
+  width: 480px; max-width: 90vw; max-height: 75vh;
   background: var(--bg-primary); border: 1px solid var(--border-color);
-  border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.25);
-  padding: 12px; font-size: 12px;
+  border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,0.3);
+  padding: 0; font-size: 12px; display: flex; flex-direction: column; overflow: hidden;
 }
-.rcp-header { font-weight: 600; color: var(--text-primary); margin-bottom: 4px; font-size: 13px; }
-.rcp-desc { color: var(--text-muted); font-size: 10px; margin-bottom: 8px; }
-.rcp-section { margin-bottom: 8px; }
-.rcp-label { display: block; font-size: 11px; color: var(--text-secondary); margin-bottom: 2px; font-weight: 500; }
-.rcp-input { width: 100%; box-sizing: border-box; background: var(--input-bg); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); padding: 4px 6px; font-size: 11px; font-family: var(--font-code); resize: vertical; }
-.rcp-input::placeholder { color: var(--text-muted); font-size: 10px; }
-.rcp-actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: 4px; }
-.rcp-btn { padding: 4px 12px; border: none; border-radius: 3px; font-size: 11px; cursor: pointer; }
+.rcp-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 10px 12px; border-bottom: 1px solid var(--border-color);
+  font-weight: 600; font-size: 13px; color: var(--text-primary);
+}
+.rcp-header-hint { font-weight: 400; font-size: 10px; color: var(--text-muted); display: flex; align-items: center; gap: 4px; }
+.rcp-tag-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+.rcp-dot-none { background: var(--text-muted); opacity: 0.4; }
+.rcp-dot-black { background: #e05555; }
+.rcp-dot-white { background: #5bbc7a; }
+.rcp-search { padding: 6px 12px; border-bottom: 1px solid var(--border-color); }
+.rcp-search-input {
+  width: 100%; box-sizing: border-box; padding: 5px 8px;
+  background: var(--input-bg); border: 1px solid var(--border-color);
+  border-radius: 4px; color: var(--text-primary); font-size: 11px; outline: none;
+}
+.rcp-search-input:focus { border-color: var(--accent); }
+.rcp-tools { flex: 1; overflow-y: auto; padding: 4px 0; max-height: 55vh; }
+.rcp-category { border-bottom: 1px solid var(--border-color); }
+.rcp-category:last-child { border-bottom: none; }
+.rcp-cat-header {
+  display: flex; align-items: center; gap: 4px; padding: 6px 12px;
+  cursor: pointer; user-select: none; font-size: 11px; font-weight: 600;
+  color: var(--text-secondary); transition: background 0.1s;
+}
+.rcp-cat-header:hover { background: var(--bg-hover); }
+.rcp-cat-count { margin-left: auto; font-size: 10px; color: var(--text-muted); font-weight: 400; }
+.rcp-cat-tools { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 12px 8px; }
+.rcp-tool-item {
+  display: flex; align-items: center; gap: 4px; padding: 3px 7px;
+  border-radius: 4px; cursor: pointer; font-size: 11px;
+  border: 1px solid var(--border-color); transition: all 0.12s;
+  background: var(--bg-tertiary);
+}
+.rcp-tool-item:hover { border-color: var(--accent); background: var(--bg-hover); }
+.rcp-tool-name { color: var(--text-primary); font-weight: 500; white-space: nowrap; }
+.rcp-tool-id { color: var(--text-muted); font-size: 9px; font-family: var(--font-code); }
+.rcp-tool-tag { font-size: 9px; padding: 0 4px; border-radius: 2px; font-weight: 500; flex-shrink: 0; }
+.rcp-tool-none { opacity: 0.6; }
+.rcp-tool-none .rcp-tool-tag { display: none; }
+.rcp-tool-black { border-color: rgba(224, 85, 85, 0.4); background: rgba(224, 85, 85, 0.08); }
+.rcp-tool-black .rcp-tool-tag { background: #e05555; color: #fff; }
+.rcp-tool-white { border-color: rgba(91, 188, 122, 0.4); background: rgba(91, 188, 122, 0.08); }
+.rcp-tool-white .rcp-tool-tag { background: #5bbc7a; color: #fff; }
+.rcp-actions { display: flex; gap: 6px; justify-content: flex-end; padding: 8px 12px; border-top: 1px solid var(--border-color); }
+.rcp-btn { padding: 5px 14px; border: none; border-radius: 4px; font-size: 11px; cursor: pointer; transition: opacity 0.12s; }
+.rcp-btn:hover { opacity: 0.85; }
 .rcp-btn-save { background: var(--accent); color: #fff; }
 .rcp-btn-close { background: var(--bg-tertiary); color: var(--text-secondary); border: 1px solid var(--border-color); }
+.rcp-btn-reset { background: transparent; color: var(--text-muted); border: 1px solid var(--border-color); }
 
 .send-btn { background: var(--accent); color: #fff; padding: 6px 14px; border-radius: 4px; cursor: pointer; border: none; }
 .stop-btn { background: #c03; color: #fff; padding: 6px 14px; border-radius: 4px; cursor: pointer; border: none; }
