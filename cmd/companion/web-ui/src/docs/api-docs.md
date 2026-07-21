@@ -121,7 +121,7 @@ POST /api/fs/write
 | path | string | 是 | 文件路径（相对于工作区或绝对路径） |
 | content | string | 是 | 文件内容（覆盖写入，自动创建目录） |
 
-**响应：** 空对象 `{}`（200）。
+**响应：** `{"ok": true}`
 
 ---
 
@@ -174,7 +174,7 @@ POST /api/fs/rename
 | oldPath | string | 是 | 原路径 |
 | newPath | string | 是 | 新路径 |
 
-**响应：** `{"success": true}`
+**响应：** `{"ok": true}`
 
 ---
 
@@ -193,7 +193,7 @@ POST /api/fs/delete
 
 > ⚠️ 不可恢复，递归删除目录及其所有内容。
 
-**响应：** `{"success": true}`
+**响应：** `{"ok": true}`
 
 ---
 
@@ -210,7 +210,7 @@ POST /api/fs/mkdir
 }
 ```
 
-**响应：** `{"success": true}`
+**响应：** `{"ok": true}`
 
 ---
 
@@ -354,32 +354,70 @@ POST /api/workspace
 GET /api/settings
 ```
 
-**响应示例：**
+**响应：** 返回完整 `AppSettings` 对象（字段较多，按需取用）：
+
 ```json
 {
+  "provider": "deepseek",
+  "baseURL": "https://api.deepseek.com/v1",
   "apiKey": "sk-xxx",
-  "baseURL": "https://api.openai.com/v1",
-  "model": "gpt-4",
+  "planModel": "deepseek-v4-pro",
+  "executeModel": "deepseek-v4-flash",
+  "reviewModel": "deepseek-v4-pro",
+  "temperature": "0.3",
+  "thinkingMode": "thinking",
+  "maxTokens": 131072,
+  "contextMaxTokens": 64000,
+  "lastProject": "F:/projects/my-app",
+  "workspaceFolders": ["F:/projects/my-app"],
+  "recentProjects": ["F:/projects/app1"],
+  "reviewMode": "auto",
+  "reviewBlacklist": [],
+  "reviewWhitelist": [],
+  "autonomous": false,
+  "autoCollapse": true,
+  "maxIterations": 50,
+  "maxParallelAgents": 3,
+  "maxReviewRetries": 3,
+  "autoIterateOnRejection": true,
+  "requireHumanApprovalForDestructive": true,
+  "aiReview": false,
+  "autoCommit": true,
+  "luaTools": true,
+  "enableBenchmarking": true,
+  "systemInstructions": "",
+  "searxngUrl": "",
+  "ignoreDirs": [],
+  "defaultShell": "auto",
+  "termFontSize": 13,
+  "termEncoding": "auto",
   "theme": "dark",
-  "planModel": "claude-3-opus",
-  "autoReview": true,
-  "autoCommit": false,
-  "maxTokens": 4096,
-  "temperature": 0.7,
-  "thinkingMode": "non-thinking",
-  "recentWorkspaces": ["F:/projects/app1", "F:/projects/app2"]
+  "fontFamily": "'Cascadia Code', Consolas, monospace",
+  "editorFontSize": 14,
+  "tabSize": 2,
+  "wordWrap": false,
+  "hideMinimap": false,
+  "philosophyEnabled": false,
+  "philosophySelected": ["tao-te-ching", "huangdi-yinfu-jing", "sunzi-bingfa"],
+  "autoConnectMCP": true,
+  "skillEnabledOverrides": {},
+  "skillStatusOverrides": {},
+  "mcpEnabledOverrides": {},
+  "customProviders": []
 }
 ```
 
 ### 4.2 保存设置
 
 ```
-PUT /api/settings
+PUT /api/settings?convId={对话ID}
 ```
 
-**请求体：** 与 GET 返回格式相同，只需传入要修改的字段。
+**请求体：** 与 GET 返回格式相同，只需传入要修改的字段（增量合并，未传字段保持不变）。
 
-**响应：** `{"success": true}`
+**参数：** `convId` — 可选，当前对话 ID。当 `reviewMode` 字段变更时，实时更新该对话的 Loop 审核模式。
+
+**响应：** `{"ok": true}`
 
 ---
 
@@ -400,7 +438,7 @@ GET /api/system/info
   "goos": "windows",
   "workspace": "F:/projects/my-app",
   "folders": ["F:/projects/my-app"],
-  "version": "v1.0.0"
+  "version": "v1.1.2"
 }
 ```
 
@@ -424,14 +462,14 @@ POST /api/system/exec
 ```json
 {
   "command": "go build ./cmd/app",
-  "timeout": 30
+  "cwd": "F:/projects/my-app"
 }
 ```
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | command | string | 是 | 要执行的命令 |
-| timeout | number | 否 | 超时秒数（默认 30，最大 120） |
+| cwd | string | 否 | 工作目录（默认工作区根目录） |
 
 **响应示例：**
 ```json
@@ -524,13 +562,23 @@ POST /api/conversations
 
 **响应：** 返回创建的对话对象（同 GET 列表中的格式）。
 
-### 7.3 获取对话详情
+### 7.3 获取对话详情（含消息）
 
 ```
 GET /api/conversations/{convId}
 ```
 
-**响应：** 返回单个对话的元数据对象。
+**响应：** 返回该对话的最近 50 条消息：
+
+```json
+{
+  "messages": [
+    {"role": "user", "content": "帮我写一个 HTTP 服务", "createdAt": "2026-07-11T10:00:00Z"},
+    {"role": "assistant", "content": "好的，我来创建...", "createdAt": "2026-07-11T10:00:05Z"}
+  ],
+  "total": 42
+}
+```
 
 ### 7.4 更新对话
 
@@ -545,7 +593,7 @@ PUT /api/conversations/{convId}
 }
 ```
 
-**响应：** `{"success": true}`
+**响应：** `{"ok": true}`
 
 ### 7.5 删除对话
 
@@ -553,41 +601,32 @@ PUT /api/conversations/{convId}
 DELETE /api/conversations/{convId}
 ```
 
-**响应：** `{"success": true}`（同时删除该对话的所有消息）。
+**响应：** `{"ok": true}`（同时删除该对话的所有消息）。
 
-### 7.6 获取消息列表
+### 7.6 获取消息列表（分页）
 
 ```
-GET /api/conversations/{convId}/messages?limit={数量}&before={偏移}
+GET /api/conversations/{convId}/messages?limit={数量}&before={索引}
 ```
 
 **参数：**
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | limit | number | 否 | 返回消息条数（默认 50） |
-| before | number | 否 | 偏移量（跳过前 N 条，用于分页） |
+| before | number | 否 | 从消息索引 before 处开始往前加载（用于分页翻历史） |
 
-**响应示例：**
+**响应：**
 ```json
-[
-  {
-    "role": "user",
-    "content": "帮我写一个 HTTP 服务",
-    "createdAt": "2026-07-11T10:00:00Z"
-  },
-  {
-    "role": "assistant",
-    "content": "好的，我来创建一个简单的 HTTP 服务...",
-    "createdAt": "2026-07-11T10:00:05Z"
-  }
-]
+{
+  "messages": [
+    {"role": "user", "content": "第一条消息", "createdAt": "..."},
+    {"role": "assistant", "content": "回复", "createdAt": "..."}
+  ],
+  "total": 42
+}
 ```
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| role | string | `"user"` \| `"assistant"` \| `"system"` |
-| content | string | 消息内容 |
-| createdAt | string | 创建时间（ISO 8601） |
+> 连续的 assistant 消息会被合并（`MergeConsecutiveAssistants`）。
 
 ### 7.7 添加消息
 
@@ -602,6 +641,8 @@ POST /api/conversations/{convId}/messages
   "content": "继续上一个话题"
 }
 ```
+
+**响应：** `{"ok": true}`
 
 ### 7.8 消息总数
 
@@ -630,9 +671,9 @@ POST /api/chat/send
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| message | string | 是 | 用户消息内容（最长 50000 字符） |
+| message | string | 是 | 用户消息内容（最长 50000 字符，超出截断） |
 | sessionId | string | 否 | 会话 ID |
-| convId | string | 否 | 对话 ID（自动生成若留空） |
+| convId | string | 否 | 对话 ID（留空则自动生成 `conv_{时间戳}`） |
 | autonomous | boolean | 否 | 是否启用自主模式（默认 false） |
 | workspaceRoot | string | 否 | 工作区路径（默认当前工作区） |
 
@@ -647,12 +688,12 @@ AI 的回复不在此响应的 Body 中返回，而是通过 **WebSocket 实时�
 ### 7.10 停止 AI 响应
 
 ```
-POST /api/chat/stop?convId={会话ID}
+POST /api/chat/stop?convId={对话ID}
 ```
 
 **参数：** `convId` — 要停止的对话 ID。
 
-**响应：** `{"success": true}`
+**响应：** `{"ok": true}`
 
 ---
 
@@ -667,7 +708,7 @@ POST /api/chat/approve
 {
   "convId": "conv_xxx",
   "approved": true,
-  "feedback": "请把函数名改为驼峰命名法"
+  "reply": "请把函数名改为驼峰命名法"
 }
 ```
 
@@ -675,11 +716,13 @@ POST /api/chat/approve
 |------|------|------|------|
 | convId | string | 是 | 对话 ID |
 | approved | boolean | 是 | 批准（true）或拒绝（false） |
-| feedback | string | 否 | 拒绝时的反馈/纠正建议 |
+| reply | string | 否 | 拒绝时的反馈/纠正建议 |
+
+**响应：** `{"ok": true}`
 
 ---
 
-### 7.12 发送反馈
+### 7.12 发送运行时反馈
 
 ```
 POST /api/chat/feedback
@@ -689,16 +732,80 @@ POST /api/chat/feedback
 ```json
 {
   "convId": "conv_xxx",
-  "content": "请改用更简洁的实现方式"
+  "feedback": "请改用更简洁的实现方式"
 }
 ```
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | convId | string | 是 | 对话 ID |
-| content | string | 是 | 反馈/纠正内容 |
+| feedback | string | 是 | 反馈/纠正内容 |
 
-**工作原理：** 在 AI 下次 LLM 调用前，将反馈内容作为 `[User]` 消息注入本轮上下文，让 AI 在下一次回复中响应用户的补充或纠正。
+**工作原理：** 在 AI 下次 LLM 调用前，将反馈内容作为用户消息注入本轮上下文，让 AI 在下一次回复中响应用户的补充或纠正。
+
+---
+
+### 7.13 回答 ask_user 提问
+
+```
+POST /api/chat/answer
+```
+
+当 AI 通过 `ask_user` 工具向用户提问时，用此接口发送回答。
+
+**请求体：**
+```json
+{
+  "convId": "conv_xxx",
+  "answer": "用 POST 方法"
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| convId | string | 是 | 对话 ID |
+| answer | string | 是 | 用户的回答 |
+
+**响应：** `{"ok": true}`
+
+---
+
+### 7.14 回滚消息
+
+```
+POST /api/chat/rollback
+```
+
+回滚到指定用户消息之前的状态：恢复该消息关联的所有文件快照，并删除该消息之后的对话历史。
+
+**请求体：**
+```json
+{
+  "convId": "conv_xxx",
+  "msgIdx": 3
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| convId | string | 是 | 对话 ID |
+| msgIdx | number | 是 | 用户消息索引（0 基），回滚到此消息之前 |
+
+**响应：** `{"ok": true, "msgIdx": 3}`
+
+---
+
+### 7.15 压缩上下文
+
+```
+POST /api/chat/compact?convId={对话ID}
+```
+
+手动触发上下文压缩：将对话中间部分的老消息压缩为摘要，释放 token 预算。
+
+**参数：** `convId` — 对话 ID。
+
+**响应：** `{"ok": true}`
 
 ---
 
@@ -722,7 +829,7 @@ PUT /api/instructions?scope={作用域}
 
 **请求体：** 纯文本字符串（指令内容）。
 
-**响应：** `{"success": true}`
+**响应：** `{"ok": true}`
 
 ### 8.3 读取行为指导
 
@@ -740,58 +847,65 @@ PUT /api/philosophy
 
 **请求体：** 纯文本字符串。
 
-**响应：** `{"success": true}`
+**响应：** `{"ok": true}`
 
 ---
 
 ## 九、任务与规划
 
+> **注意：** 任务由 Agent 通过 `update_tasks` / `update_plan` 工具自主管理。以下 API 仅提供前端只读查询接口。
+
 ### 9.1 获取任务列表
 
 ```
-GET /api/tasks?convId={会话ID}
+GET /api/tasks?convId={对话ID}
 ```
+
+**参数：** `convId` — 可选，过滤指定对话的任务。
 
 **响应示例：**
 ```json
-[
-  {
-    "id": "task_1",
-    "subject": "创建 HTTP 服务文件",
-    "status": "completed",
-    "description": "在 src/server.go 创建 HTTP 服务"
-  },
-  {
-    "id": "task_2",
-    "subject": "添加路由处理",
-    "status": "in_progress"
-  }
-]
-```
-
-### 9.2 创建/更新任务
-
-```
-POST /api/tasks
-```
-
-**请求体：**
-```json
 {
-  "convId": "conv_xxx",
   "tasks": [
-    {"id": "task_1", "subject": "创建 HTTP 服务", "status": "in_progress"}
+    {
+      "step": "创建 HTTP 服务文件",
+      "status": "completed",
+      "taskId": "task_1",
+      "description": "在 src/server.go 创建 HTTP 服务",
+      "created_at": "2026-07-11T10:00:00Z"
+    }
   ]
 }
 ```
 
-### 9.3 读取任务规划
+> 任务数据持久化在工作区 `.pair/tasks/*.json`，由 Agent 的 `update_tasks` 工具写入。
+
+### 9.2 读取任务规划文档
 
 ```
 GET /api/taskplan?name={规划名}
 ```
 
-### 9.4 保存任务规划
+列出或读取 Markdown 格式的规划文档。
+
+**参数：** `name` — 可选，指定规划文档名（不含 `.md` 后缀）；省略则返回所有规划文档列表。
+
+**GET 响应（列出全部）：**
+```json
+[
+  {"name": "refactor-auth", "file": "F:/projects/.pair/tasks/refactor-auth.md"}
+]
+```
+
+**GET 响应（读单个）：**
+```json
+{
+  "name": "refactor-auth",
+  "content": "## 重构计划\n1. 提取认证中间件\n2. 添加 JWT 支持"
+}
+```
+
+### 9.3 追加/完成规划文档
 
 ```
 POST /api/taskplan
@@ -801,16 +915,18 @@ POST /api/taskplan
 ```json
 {
   "name": "refactor-auth",
-  "content": "## 重构计划\n1. 提取认证中间件\n2. 添加 JWT 支持",
+  "content": "- 完成 JWT 集成",
   "action": "append"
 }
 ```
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| name | string | 是 | 规划名称 |
-| content | string | 是 | 规划内容（Markdown） |
-| action | string | 否 | `"append"`（追加）\| `"create"`（创建）\| `"done"`（标记完成），默认 `"append"` |
+| name | string | 否 | 规划名称（省略则自动生成 `plan_日期时间`） |
+| content | string | 是 | 要追加的内容（Markdown） |
+| action | string | 否 | `"append"`（追加）或 `"complete"`（追加"[已完成] 时间戳"），默认 `"append"` |
+
+**响应：** `{"ok": true}`
 
 ---
 
@@ -818,7 +934,19 @@ POST /api/taskplan
 
 所有 Git API 均在**当前工作区目录**（或指定仓库路径）下执行。
 
-### 10.1 仓库状态
+### 10.1 初始化仓库
+
+```
+POST /api/git/init?path={目录路径}
+```
+
+**参数：** `path` — 目标目录（默认当前工作区）。
+
+**响应：** `{"output": "Initialized empty Git repository in ..."}`
+
+---
+
+### 10.2 仓库状态
 
 ```
 GET /api/git/status?path={仓库路径}
@@ -853,10 +981,10 @@ GET /api/git/status?path={仓库路径}
 | ahead | number | 领先远程的提交数 |
 | behind | number | 落后远程的提交数 |
 
-### 10.2 查看差异
+### 10.3 查看差异
 
 ```
-GET /api/git/diff?path={仓库路径}&file={文件路径}
+GET /api/git/diff?path={仓库路径}&file={文件路径}&staged={是否暂存}
 ```
 
 **参数：**
@@ -864,10 +992,11 @@ GET /api/git/diff?path={仓库路径}&file={文件路径}
 |------|------|------|------|
 | path | string | 否 | 仓库路径 |
 | file | string | 否 | 指定文件（省略则返回所有变更的 diff） |
+| staged | string | 否 | `"true"` = 只显示已暂存差异（--cached） |
 
 **响应：** 返回 diff 文本（字符串）。
 
-### 10.3 暂存文件
+### 10.4 暂存文件
 
 ```
 POST /api/git/add
@@ -884,11 +1013,11 @@ POST /api/git/add
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | path | string | 否 | 仓库路径（默认工作区） |
-| files | string[] | 否 | 要暂存的文件列表（省略则暂存全部） |
+| files | string[] | 否 | 要暂存的文件列表（省略则暂存全部 `-A`） |
 
-**响应：** `{"success": true}`
+**响应：** `{"ok": true}`
 
-### 10.4 取消暂存
+### 10.5 取消暂存
 
 ```
 POST /api/git/reset
@@ -896,7 +1025,9 @@ POST /api/git/reset
 
 **请求体：** 格式同 `git/add`。
 
-### 10.5 提交
+**响应：** `{"ok": true}`
+
+### 10.6 提交
 
 ```
 POST /api/git/commit
@@ -918,16 +1049,18 @@ POST /api/git/commit
 **响应：**
 ```json
 {
-  "success": true,
+  "ok": true,
   "hash": "a1b2c3d4e5f6..."
 }
 ```
 
-### 10.6 查看提交历史
+### 10.7 查看提交历史
 
 ```
 GET /api/git/log?path={仓库路径}&count={数量}&file={文件路径}
 ```
+
+> **别名：** `/api/git-log`（绕过部分浏览器广告拦截器对 `/api/git/log` 的误杀）。
 
 **参数：**
 | 参数 | 类型 | 必填 | 说明 |
@@ -948,7 +1081,7 @@ GET /api/git/log?path={仓库路径}&count={数量}&file={文件路径}
 ]
 ```
 
-### 10.7 分支管理
+### 10.8 分支管理
 
 ```
 POST /api/git/branch
@@ -961,9 +1094,9 @@ POST /api/git/branch
 | 列表 | `{"path":"...","action":"list"}` | 列出所有分支 |
 | 切换 | `{"path":"...","name":"feature-x","action":"checkout"}` | 切换分支 |
 
-**响应：** 列表操作返回 `["main", "feature-x", ...]`，其他返回 `{"success": true}`。
+**响应：** 列表操作返回 `["main", "feature-x", ...]`，其他返回 `{"ok": true}`。
 
-### 10.8 切换分支
+### 10.9 切换分支 / 恢复文件
 
 ```
 POST /api/git/checkout
@@ -983,7 +1116,9 @@ POST /api/git/checkout
 | branch | string | 按场景 | 切换到的分支名 |
 | file | string | 按场景 | 恢复指定文件到 HEAD（branch 和 file 二选一） |
 
-### 10.9 贮藏
+**响应：** `{"ok": true}`
+
+### 10.10 贮藏
 
 ```
 POST /api/git/stash
@@ -1001,10 +1136,12 @@ POST /api/git/stash
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | path | string | 否 | 仓库路径 |
-| action | string | 否 | `"push"`(贮藏,默认) \| `"pop"`(恢复) \| `"drop"`(丢弃) |
+| action | string | 否 | `"push"`(贮藏,默认) \| `"pop"`(恢复) \| `"apply"`(应用) \| `"drop"`(丢弃) |
 | message | string | 否 | 贮藏备注 |
 
-### 10.10 查看贮藏列表
+**响应：** `{"ok": true}`
+
+### 10.11 查看贮藏列表
 
 ```
 GET /api/git/stash-list?path={仓库路径}
@@ -1018,25 +1155,43 @@ GET /api/git/stash-list?path={仓库路径}
 ]
 ```
 
-### 10.11 添加忽略规则
+### 10.12 管理 `.gitignore`
 
 ```
-POST /api/git/ignore
+GET /api/git/ignore?path={仓库路径}
+POST /api/git/ignore?path={仓库路径}
 ```
 
-**请求体：**
+**GET 响应：** 返回当前 `.gitignore` 内容：
 ```json
 {
-  "path": "F:/projects/my-app",
-  "patterns": ["*.log", ".env", "build/"]
+  "content": "*.log\n.env\nbuild/",
+  "rules": ["*.log", ".env", "build/"]
+}
+```
+
+**POST 请求体（覆盖写入）：**
+```json
+{
+  "content": "*.log\n.env\nnode_modules/"
+}
+```
+
+**POST 请求体（追加一行）：**
+```json
+{
+  "append": "dist/"
 }
 ```
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| patterns | string[] | 是 | 要添加到 `.gitignore` 的规则列表 |
+| content | string | 按场景 | 完整覆盖 `.gitignore` 内容 |
+| append | string | 按场景 | 追加一行到 `.gitignore`（content 和 append 二选一） |
 
-### 10.12 丢弃修改
+**响应：** `{"ok": true}`
+
+### 10.13 丢弃修改
 
 ```
 POST /api/git/discard
@@ -1052,7 +1207,9 @@ POST /api/git/discard
 
 > ⚠️ 不可恢复！丢弃工作区未暂存的修改。
 
-### 10.13 推送
+**响应：** `{"ok": true}`
+
+### 10.14 推送
 
 ```
 POST /api/git/push
@@ -1072,33 +1229,48 @@ POST /api/git/push
 | remote | string | 否 | 远程名（默认 `"origin"`） |
 | branch | string | 否 | 分支名（默认当前分支） |
 
-### 10.14 拉取
+**响应：** `{"ok": true}`
+
+### 10.15 拉取
 
 ```
 POST /api/git/pull
 ```
 
-**请求体：**
-```json
-{
-  "path": "F:/projects/my-app",
-  "remote": "origin",
-  "branch": "main"
-}
-```
+**请求体：** 同 `git/push`。
 
-### 10.15 查看远程仓库
+**响应：** `{"ok": true}`
+
+### 10.16 远程仓库管理
 
 ```
 GET /api/git/remote?path={仓库路径}
+POST /api/git/remote?path={仓库路径}
 ```
 
-**响应示例：**
+**GET 响应示例：**
+```json
+[
+  {"name": "origin", "url": "https://github.com/user/repo.git"}
+]
+```
+
+**POST 请求体：**
 ```json
 {
-  "origin": "https://github.com/user/repo.git"
+  "name": "upstream",
+  "url": "https://github.com/other/repo.git",
+  "action": "add"
 }
 ```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| name | string | 是 | 远程名 |
+| url | string | 是 | 远程 URL |
+| action | string | 否 | `"add"`（添加）或 `"remove"`（删除），默认 `"add"` |
+
+**响应：** `{"ok": true}`
 
 ---
 
@@ -1125,12 +1297,43 @@ GET /api/skills/list
 ### 11.2 读取技能
 
 ```
-GET /api/skills/read?name={技能名}
+GET /api/skills/read?name={技能名}&level={层级}
 ```
+
+**参数：**
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| name | string | 是 | 技能名 |
+| level | string | 否 | `"system"`（全局）或 `"project"`（项目，默认） |
 
 **响应：** 返回技能的完整 Markdown 内容。
 
-### 11.3 删除技能
+### 11.3 保存/更新技能状态
+
+```
+POST /api/skills/save
+```
+
+**请求体：**
+```json
+{
+  "name": "code-review",
+  "level": "project",
+  "action": "set-status",
+  "status": "on"
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| name | string | 是 | 技能名 |
+| level | string | 否 | `"system"` / `"project"`（默认 project） |
+| action | string | 是 | 固定 `"set-status"` |
+| status | string | 是 | `"off"` \| `"on"` \| `"max"` |
+
+**响应：** `{"ok": true, "action": "set-status", "name": "code-review", "status": "on"}`
+
+### 11.4 删除技能
 
 ```
 POST /api/skills/delete
@@ -1143,7 +1346,7 @@ POST /api/skills/delete
 }
 ```
 
-**响应：** `{"success": true}`
+**响应：** `{"ok": true}`
 
 ---
 
@@ -1158,25 +1361,53 @@ GET /api/mcp/list?level={层级}
 **参数：**
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| level | string | 否 | 层级过滤（如 `"user"`、`"project"`） |
+| level | string | 否 | 层级过滤（`"user"`、`"project"`） |
 
-### 12.2 MCP 保存
+### 12.2 MCP 保存/管理
 
 ```
 POST /api/mcp/save
 ```
 
-**请求体：**
+统一管理 MCP 的添加、更新、删除和启用切换。
+
+**请求体（添加/更新）：**
 ```json
 {
   "name": "my-db",
   "command": "node",
   "args": ["mcp-server-db/index.js"],
-  "scope": "project"
+  "level": "project"
 }
 ```
 
-此接口同时支持新增、更新和删除（删除时传 `"action": "delete"`）。
+**请求体（删除）：**
+```json
+{
+  "action": "delete",
+  "name": "my-db",
+  "level": "project"
+}
+```
+
+**请求体（启用/禁用切换）：**
+```json
+{
+  "action": "toggle",
+  "name": "my-db",
+  "level": "project"
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| action | string | 否 | `"delete"`（删除）\| `"toggle"`（启用切换），省略则为新增/更新 |
+| name | string | 是 | MCP 名称 |
+| command | string | 新增时必填 | 启动命令 |
+| args | string[] | 否 | 命令参数 |
+| level | string | 否 | `"user"`（用户级）\| `"project"`（项目级），默认 user |
+
+**响应：** `{"ok": true, "action": "...", "name": "..."}`
 
 ---
 
@@ -1185,13 +1416,15 @@ POST /api/mcp/save
 ### 获取 Token 用量
 
 ```
-GET /api/tokens/stats?workspace={工作区}
+GET /api/tokens/stats?workspaceRoot={工作区路径}
 ```
+
+**参数：** `workspaceRoot` — 工作区路径（默认当前工作区）。
 
 **响应示例：**
 ```json
 {
-  "workspace": "F:/projects/my-app",
+  "workspaceRoot": "F:/projects/my-app",
   "promptTokens": 125000,
   "completionTokens": 45000,
   "totalTokens": 170000,
@@ -1266,13 +1499,15 @@ POST /api/marketplace/install
 | id | string | 是 | 扩展 ID |
 | scope | string | 否 | 安装范围（`"user"`、`"project"`） |
 
+**响应：** `{"ok": true}`
+
 ### 15.3 刷新市场缓存
 
 ```
 POST /api/marketplace/refresh
 ```
 
-**响应：** `{"success": true}`
+**响应：** `{"ok": true}`
 
 ---
 
@@ -1303,11 +1538,13 @@ GET /api/memory/list
 POST /api/memory/rebuild
 ```
 
+**响应：** `{"ok": true}`
+
 ---
 
 ## 十七、WebSocket 实时通信协议
 
-PairCode IDE 使用 **WebSocket** 替代传统 SSE，实现双向实时通信。支持两种 WebSocket 端点：
+PairCode IDE 使用 **WebSocket** 实现双向实时通信。
 
 ### 17.1 AI 事件推送
 
@@ -1357,12 +1594,12 @@ ws://127.0.0.1:{port}/ws
 |------|------|------|------|
 | type | string | 是 | 事件类型（见上表） |
 | content | string | 按场景 | thinking/content/error/final 时携带文本内容 |
-| tool | string | 按场景 | tool_call/tool_result 时携带工具名（如 `"read_file"`、`"edit_file"`） |
+| tool | string | 按场景 | tool_call/tool_result 时携带工具名 |
 | args | string | 按场景 | tool_call 时携带工具参数的 JSON 字符串 |
 | callId | string | 按场景 | 工具调用 ID，用于关联 tool_call → tool_result |
-| agentName | string | 按场景 | 事件来源 Agent 名。空串=主 Agent，非空=子 Agent（用于区分） |
-| usage | object | 按场景 | EventUsage 时携带 token 用量：`{promptTokens:N, completionTokens:N, totalTokens:N}` |
-| doneReason | string | 按场景 | EventDone 时携带完成原因（如 `"completed"`、`"stopped"`、`"error"`） |
+| agentName | string | 按场景 | 事件来源 Agent 名。空串=主 Agent，非空=子 Agent |
+| usage | object | 按场景 | usage 时携带：`{promptTokens:N, completionTokens:N, totalTokens:N}` |
+| doneReason | string | 按场景 | done 时携带完成原因（`"completed"`、`"stopped"`、`"error"`） |
 
 #### 典型事件序列
 
@@ -1443,14 +1680,14 @@ ws://127.0.0.1:{port}/api/terminal/ws
 | GET | `/api/system/info` | 系统信息+版本号 |
 | POST | `/api/system/exec` | 执行命令 |
 
-### 文件系统 (10 个)
+### 文件系统 (11 个)
 | 方法 | 端点 | 用途 |
 |------|------|------|
 | GET | `/api/fs/list` | 列出目录 |
 | GET | `/api/fs/read` | 读取文件 |
 | POST | `/api/fs/write` | 写入文件 |
 | GET | `/api/fs/search` | 搜索内容 |
-| POST | `/api/fs/rename` | 重命名 |
+| POST | `/api/fs/rename` | 重命名/移动 |
 | POST | `/api/fs/delete` | 删除 |
 | POST | `/api/fs/mkdir` | 创建目录 |
 | GET | `/api/fs/image` | 图片 Base64 |
@@ -1464,67 +1701,73 @@ ws://127.0.0.1:{port}/api/terminal/ws
 | GET/POST | `/api/workspace` | 工作区管理 |
 | GET/PUT | `/api/settings` | 设置管理 |
 
-### AI 对话 (6 个)
+### AI 对话 (9 个)
 | 方法 | 端点 | 用途 |
 |------|------|------|
 | POST | `/api/chat/send` | 发送消息给 AI |
 | POST | `/api/chat/stop` | 停止 AI 回复 |
 | POST | `/api/chat/approve` | 审批操作 |
-| POST | `/api/chat/feedback` | 发送反馈 |
+| POST | `/api/chat/feedback` | 发送运行时反馈 |
+| POST | `/api/chat/answer` | 回答 ask_user 提问 |
+| POST | `/api/chat/rollback` | 回滚到指定消息前 |
+| POST | `/api/chat/compact` | 手动压缩上下文 |
 | GET | `/api/models` | 可用模型列表 |
 
-### 对话管理 (7 个)
+### 对话管理 (8 个)
 | 方法 | 端点 | 用途 |
 |------|------|------|
 | GET | `/api/conversations` | 对话列表 |
 | POST | `/api/conversations` | 创建对话 |
-| GET | `/api/conversations/{id}` | 对话详情 |
+| GET | `/api/conversations/{id}` | 对话详情（含消息） |
 | PUT | `/api/conversations/{id}` | 更新对话 |
 | DELETE | `/api/conversations/{id}` | 删除对话 |
-| GET | `/api/conversations/{id}/messages` | 消息列表 |
+| GET | `/api/conversations/{id}/messages` | 消息列表（分页） |
 | POST | `/api/conversations/{id}/messages` | 添加消息 |
 | GET | `/api/conversations/{id}/messages/count` | 消息总数 |
 
-### Git (15 个)
+### Git (16 个)
 | 方法 | 端点 | 用途 |
 |------|------|------|
+| POST | `/api/git/init` | 初始化仓库 |
 | GET | `/api/git/status` | 仓库状态 |
 | GET | `/api/git/diff` | 查看差异 |
 | POST | `/api/git/add` | 暂存 |
 | POST | `/api/git/reset` | 取消暂存 |
 | POST | `/api/git/commit` | 提交 |
 | GET | `/api/git/log` | 提交历史 |
+| GET | `/api/git-log` | 提交历史（别名） |
 | POST | `/api/git/branch` | 分支管理 |
 | POST | `/api/git/checkout` | 切换分支/恢复文件 |
 | POST | `/api/git/stash` | 贮藏 |
 | GET | `/api/git/stash-list` | 贮藏列表 |
-| POST | `/api/git/ignore` | 添加忽略规则 |
+| GET/POST | `/api/git/ignore` | 管理 .gitignore |
 | POST | `/api/git/discard` | 丢弃修改 |
 | POST | `/api/git/push` | 推送 |
 | POST | `/api/git/pull` | 拉取 |
-| GET | `/api/git/remote` | 远程仓库地址 |
+| GET/POST | `/api/git/remote` | 远程仓库管理 |
 
 ### 扩展 & 系统
 | 方法 | 端点 | 用途 |
 |------|------|------|
 | GET | `/api/skills/list` | 技能列表 |
 | GET | `/api/skills/read` | 读取技能 |
+| POST | `/api/skills/save` | 保存/更新技能状态 |
 | POST | `/api/skills/delete` | 删除技能 |
 | GET | `/api/mcp/list` | MCP 列表 |
-| POST | `/api/mcp/save` | MCP 保存 |
+| POST | `/api/mcp/save` | MCP 保存/管理 |
 | GET | `/api/tokens/stats` | Token 统计 |
 | GET | `/api/debug/logs` | 调试日志列表 |
 | GET | `/api/debug/logs/{id}` | 调试日志详情 |
 | GET | `/api/memory/search` | 搜索记忆 |
 | GET | `/api/memory/list` | 记忆列表 |
-| POST | `/api/memory/rebuild` | 重建索引 |
+| POST | `/api/memory/rebuild` | 重建记忆索引 |
 | GET | `/api/marketplace/search` | 市场搜索 |
 | POST | `/api/marketplace/install` | 安装扩展 |
-| POST | `/api/marketplace/refresh` | 刷新缓存 |
+| POST | `/api/marketplace/refresh` | 刷新市场缓存 |
 | GET/PUT | `/api/instructions` | 指令管理 |
 | GET/PUT | `/api/philosophy` | 行为指导 |
-| GET/POST | `/api/tasks` | 任务管理 |
-| GET/POST | `/api/taskplan` | 规划管理 |
+| GET | `/api/tasks` | 任务列表（只读查询） |
+| GET/POST | `/api/taskplan` | 规划文档管理 |
 
 ---
 
