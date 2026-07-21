@@ -307,6 +307,7 @@ function showNudge(text) {
 
 let pendingAskCallId = ''
 const currentPlan = ref([])
+const currentTasks = ref([])
 // 阶段指示器从全局 state.phaseByConv 读取（仅当前对话）
 const currentPhase = computed(() => state.phaseByConv[state.currentConvId] || '')
 
