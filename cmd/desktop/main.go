@@ -1,5 +1,4 @@
 package main
-
 import (
 	"log"
 	"os"
@@ -10,16 +9,18 @@ import (
 	"wb-ui/app"
 	"wb-ui/webkit"
 )
-
 var prePolyfill = `(function(){
+// NOTE: Node/Element/HTMLElement/SVGElement/Comment/Text/DocumentFragment are
+// provided by wb-ui's registerDOMBindings. Do NOT redefine them here.
+// Only add polyfills for APIs wb-ui doesn't provide.
 EventTarget=function EventTarget(){};
 EventTarget.prototype.addEventListener=function(type,listener){if(!this._events)this._events={};if(!this._events[type])this._events[type]=[];this._events[type].push(listener)};
 EventTarget.prototype.removeEventListener=function(type,listener){if(!this._events||!this._events[type])return;var idx=this._events[type].indexOf(listener);if(idx>=0)this._events[type].splice(idx,1)};
 EventTarget.prototype.dispatchEvent=function(ev){if(!this._events||!this._events[ev.type])return true;var lst=this._events[ev.type].slice();for(var i=0;i<lst.length;i++){try{lst[i](ev)}catch(e){}}return !ev.defaultPrevented};
-Node=function Node(){};Node.prototype=Object.create(EventTarget.prototype);Node.prototype.constructor=Node;
-Element=function Element(){};Element.prototype=Object.create(Node.prototype);Element.prototype.constructor=Element;
-SVGElement=function SVGElement(){};SVGElement.prototype=Object.create(Element.prototype);SVGElement.prototype.constructor=SVGElement;
-HTMLElement=function HTMLElement(){};HTMLElement.prototype=Object.create(Element.prototype);HTMLElement.prototype.constructor=HTMLElement;
+// Note: wb-ui handles core DOM classes. These stubs are only for compatibility:
+if(typeof Node==='undefined'){Node=function Node(){};Node.prototype=Object.create(EventTarget.prototype)}
+if(typeof Element==='undefined'){Element=function Element(){};Element.prototype=Object.create(Node.prototype)}
+if(typeof SVGElement==='undefined'){SVGElement=function SVGElement(){};SVGElement.prototype=Object.create(Element.prototype)}
 HTMLUnknownElement=function HTMLUnknownElement(){};HTMLUnknownElement.prototype=Object.create(HTMLElement.prototype);HTMLUnknownElement.prototype.constructor=HTMLUnknownElement;
 Text=function Text(){};Text.prototype=Object.create(Node.prototype);Text.prototype.constructor=Text;
 Comment=function Comment(){};Comment.prototype=Object.create(Node.prototype);Comment.prototype.constructor=Comment;
@@ -152,12 +153,12 @@ func main() {
 	wv.EvalJS(`if(!Object.setPrototypeOf)Object.setPrototypeOf=function(o,p){o.__proto__=p;return o}`)
 	wv.EvalJS(prePolyfill)
 
-	htmlData, _ := os.ReadFile(distDir + "/index.html")
+	htmlData, err := os.ReadFile(distDir + "/index.html")
 	s := string(htmlData)
 	s = strings.Replace(s, `type="module"`, "", 1)
 	s = strings.ReplaceAll(s, `crossorigin`, "")
 	log.Printf("[LoadHTML] 开始加载, 大小=%d", len(s))
-	err := wv.LoadHTML(s)
+	err = wv.LoadHTML(s)
 	if err != nil {
 		log.Printf("[LoadHTML] 错误: %v", err)
 	} else {
@@ -169,11 +170,22 @@ func main() {
 
 	// Post-polyfill: more browser APIs
 	wv.EvalJS(postPolyfill)
+	// ── Init desktop bridge (Go handlers + JS bridge SDK) ──
+	// Must be after LoadHTML (JS runtime ready) and before Vue mount.
+	InitDesktopBridge(wv)
 
-	// Vue 组件的异步挂载需要多个 microtask 周期。连续重建 render tree
-	// 多次以捕获 Vue 注入的组件样式和 DOM 结构。
+	// Diagnostic: check DOM after load
+	wv.EvalJS(`(function(){
+		var app = document.getElementById('app');
+		console.log('[DIAG] getElementById("app")=' + (app ? app.id : 'null'));
+		var qs = document.querySelector('#app');
+		console.log('[DIAG] querySelector("#app")=' + (qs ? qs.id : 'null'));
+		var body = document.body;
+		console.log('[DIAG] body=' + (body ? body.tagName : 'null'));
+		console.log('[DIAG] body.firstChild=' + (body ? (body.firstChild ? body.firstChild.tagName : 'no-firstChild') : 'no-body'));
+	})()`)
+	// Vue-injected DOM and component styles.
 	for i := 0; i < 8; i++ {
-		wv.RebuildRenderTree()
 		wv.EnsureLayout()
 		time.Sleep(100 * time.Millisecond)
 	}
