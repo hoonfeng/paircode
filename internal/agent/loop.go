@@ -161,9 +161,6 @@ type Loop struct {
 	// maxAutonomousMinutes 自主模式最大运行分钟数（0=无限制）。
 	maxAutonomousMinutes int
 
-	// milestoneCount 自主模式中已完成里程碑数（每次 content-only 无工具调用时递增）。
-	milestoneCount int
-
 	// checkpointInterval 检查点间隔（每 N 轮迭代保存一次 Loop 状态，用于崩溃恢复）。
 	// 0 表示不启用检查点（默认 5）。
 	checkpointInterval int
@@ -311,7 +308,7 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 				l.ephemeralMsgs = append(l.ephemeralMsgs, Message{
 					Role: RoleUser,
 					Content: fmt.Sprintf(
-						"⚠️ 时间预算已超（已运行 %s，限额 %d 分钟）。请尽快完成任务并调用 finish_task。",
+						"⚠️ 时间预算已超（已运行 %s，限额 %d 分钟）。请自然总结成果，完成任务。",
 						elapsed.Round(time.Minute).String(), l.maxAutonomousMinutes,
 					),
 				})
@@ -460,8 +457,7 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 				l.commitMessage = result
 			}
 
-			// ★ finish_task：设置完成结果并退出循环
-			// Agent 调用此工具报告任务完成，Loop 立即退出不再继续迭代。
+		// ★ finish_task：子 agent 报告完成（主 Loop 中作兜底；正常完成靠自然输出）
 			if tc.Function.Name == "finish_task" {
 				l.finishResult = &result
 				l.emit(Event{Type: EventDone, Content: result, DoneReason: "finish_task"})
@@ -476,56 +472,28 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 		// 先同步 currentMsgs（包含 tool results），供 persist worker 获取完整历史
 		l.currentMsgs = msgs
 
-		// ★ 自然终止：模型无工具调用且有正文
-		if l.contentOnlyIters == 0 && len(assistant.ToolCalls) == 0 && strings.TrimSpace(assistant.Content) != "" {
-			content := strings.TrimSpace(assistant.Content)
+	// ★ 自然终止：模型无工具调用且有正文 → 任务完成
+	if l.contentOnlyIters == 0 && len(assistant.ToolCalls) == 0 && strings.TrimSpace(assistant.Content) != "" {
+		l.finishResult = &assistant.Content
+		l.emit(Event{Type: EventDone, Content: strings.TrimSpace(assistant.Content), DoneReason: "task_complete"})
+		return msgs, nil
+	}
 
-			// ★ 自主模式：content-only = 里程碑，不是最终完成
-			// Agent 必须通过 finish_task 显式报告完成，否则继续迭代。
-			// 注入里程碑上下文到 ephemeralMsgs（不被持久化），让 Agent 继续推进。
-			if l.Autonomous {
-				l.milestoneCount++
-				summary := content
-				if len(summary) > 300 {
-					summary = summary[:300] + "…"
-				}
-				milestoneMsg := fmt.Sprintf(
-					"【里程碑 %d】\n%s\n\n你已完成一个阶段性成果。请继续推进剩余计划：\n"+
-						"1. 检查 update_tasks 看还有哪些未完成项\n"+
-						"2. 如果全部计划项已完成，调用 finish_task 报告最终结果\n"+
-						"3. 如果需要调整计划，使用 update_tasks 更新任务列表",
-					l.milestoneCount, summary,
-				)
-				l.ephemeralMsgs = append(l.ephemeralMsgs, Message{Role: RoleUser, Content: milestoneMsg})
-				l.contentOnlyIters = 0
-				l.emit(Event{Type: EventNotice, Content: fmt.Sprintf("里程碑 %d 完成，Agent 继续推进", l.milestoneCount)})
-				continue
-			}
-
-			// 非自主模式：首次 content-only = 任务完成，正常退出
-			l.finishResult = &content
-			l.emit(Event{Type: EventDone, Content: content, DoneReason: "task_complete"})
+	// ★ content-only 防护：连续多轮只输出文字不调工具 → 死循环兜底
+	if len(assistant.ToolCalls) == 0 && strings.TrimSpace(assistant.Content) != "" {
+		l.contentOnlyIters++
+		if l.contentOnlyIters == 3 {
+			nudge := "[系统提示] 你已经连续三轮只输出文字而没有调用任何工具。如果任务已完成，直接自然总结；如还需继续，请调用工具推进。"
+			l.emit(Event{Type: EventNotice, Content: nudge})
+			l.ephemeralMsgs = append(l.ephemeralMsgs, Message{Role: RoleUser, Content: nudge})
+		} else if l.contentOnlyIters >= 4 {
+			l.emit(Event{Type: EventNotice, Content: "检测到内容循环，自动结束"})
+			l.emit(Event{Type: EventDone, Content: strings.TrimSpace(assistant.Content), DoneReason: "content_loop"})
 			return msgs, nil
 		}
-
-		// ★ content-only 防护：Agent 连续输出文字但不调用任何工具
-		// 说明 Agent 可能在自我循环，注入停止提示。
-		// 阈值放宽到 3 轮提示、4 轮结束——复杂任务可能需要多轮分析总结。
-		// 自然终止已优先处理首次 content-only，此处仅处理第 2 轮及以后的内容循环兜底。
-		if len(assistant.ToolCalls) == 0 && strings.TrimSpace(assistant.Content) != "" {
-			l.contentOnlyIters++
-			if l.contentOnlyIters == 3 {
-				nudge := "[系统提示] 你已经连续三轮只输出文字而没有调用任何工具。如果任务已完成，请调用 finish_task；如果还需要继续工作，请调用相应工具推进。"
-				l.emit(Event{Type: EventNotice, Content: nudge})
-				l.ephemeralMsgs = append(l.ephemeralMsgs, Message{Role: RoleUser, Content: nudge})
-			} else if l.contentOnlyIters >= 4 {
-				l.emit(Event{Type: EventNotice, Content: "检测到内容循环，自动结束"})
-				l.emit(Event{Type: EventDone, Content: strings.TrimSpace(assistant.Content), DoneReason: "content_loop"})
-				return msgs, nil
-			}
-		} else {
-			l.contentOnlyIters = 0
-		}
+	} else {
+		l.contentOnlyIters = 0
+	}
 		// 绕圈检测：同一操作反复失败/反复执行 → 注入「换思路」提示打破死循环（见 circling.go）。
 		// 绕圈检测：同一操作反复失败/反复执行 → 注入「换思路」提示打破死循环（见 circling.go）。
 		if nudge := l.detectCircling(); nudge != "" {
