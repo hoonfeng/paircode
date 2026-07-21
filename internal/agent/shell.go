@@ -8,7 +8,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -148,10 +150,21 @@ func registerShellTools(r *Registry, root string) {
 			if p == nil {
 				return "", fmt.Errorf("无此后台进程 id")
 			}
-			if p.cmd != nil && p.cmd.Process != nil {
-				p.cmd.Process.Kill()
-			}
-			return fmt.Sprintf("已停止 id=%d", id), nil
-		},
-	})
+		if p.cmd != nil && p.cmd.Process != nil {
+			killProcessTree(p.cmd.Process.Pid)
+		}
+		return fmt.Sprintf("已停止 id=%d", id), nil
+	},
+})
+}
+
+// killProcessTree 杀进程树（Windows: taskkill /T；Unix: 进程组 SIGKILL）。
+func killProcessTree(pid int) {
+	if err := exec.Command("taskkill", "/T", "/F", "/PID", strconv.Itoa(pid)).Run(); err == nil {
+		return
+	}
+	// Unix 兜底
+	if p, err := os.FindProcess(pid); err == nil {
+		p.Kill()
+	}
 }

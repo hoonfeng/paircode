@@ -206,6 +206,7 @@ func (r *Registry) Execute(ctx context.Context, name, argsJSON string) (string, 
 // RegisterDefaultTools 注册核心工具，全部限定在工作区 root 内（安全底线：禁访问工作区外）。
 // read_file / write_file / edit_file / list_files / run_command。
 func RegisterDefaultTools(r *Registry, root string) {
+	eh := newEditHistory() // ★ v2: 编辑行号偏移追踪器
 	r.Register(&Tool{
 		Name:        "read_file",
 		Description: "读取文件内容。path 为工作区内路径。可选 offset(起始行,1 基)+limit(行数)读片段；省略则读全文(超 2000 行只返回前 2000 行并提示用 offset/limit 翻页)。",
@@ -292,13 +293,14 @@ func RegisterDefaultTools(r *Registry, root string) {
 			if err != nil {
 				return "", err
 			}
-			SnapshotBeforeWriteWithTracking(root, p) // 修改前自动快照（关联到当前消息）
+			SnapshotBeforeWriteWithTracking(root, p)
 
-			data, err := os.ReadFile(p)
+			orig, err := os.ReadFile(p)
 			if err != nil {
 				return "", err
 			}
-			out, err := ApplyEdit(string(data), EditOptions{
+			origStr := string(orig)
+			newStr, err := ApplyEdit(origStr, EditOptions{
 				OldString: argStr(args, "old_string"),
 				NewString: argStr(args, "new_string"),
 				LineStart: argInt(args, "line_start", 0),
@@ -307,13 +309,28 @@ func RegisterDefaultTools(r *Registry, root string) {
 			if err != nil {
 				return "", err
 			}
-			if err := os.WriteFile(p, []byte(out), 0o644); err != nil {
+			if err := os.WriteFile(p, []byte(newStr), 0o644); err != nil {
 				return "", err
 			}
+			// ★ v2: 行号偏移追踪 + 编辑后上下文反馈
+			oldLC := countLines(origStr)
+			newLC := countLines(newStr)
+			delta := newLC - oldLC
+			ls := argInt(args, "line_start", 0)
+			le := argInt(args, "line_end", 0)
+			if ls <= 0 {
+				ls = 1
+			}
+			if le <= 0 {
+				le = ls
+			}
+			nl := countLines(argStr(args, "new_string"))
+			eh.record(fileEditRecord{Path: p, LineDelta: delta, EditEnd: ls + nl - 1})
+		editCtx := editContext(strings.Split(normalizeNewlines(newStr), "\n"), ls, le, nl, delta)
 			if FileChangeCallback != nil {
 				FileChangeCallback(argStr(args, "path"))
 			}
-			return "已编辑 " + argStr(args, "path"), nil
+		return fmt.Sprintf("已编辑 %s\n%s", argStr(args, "path"), editCtx), nil
 		},
 	})
 
@@ -349,7 +366,7 @@ func RegisterDefaultTools(r *Registry, root string) {
 			if err != nil {
 				return "", err
 			}
-			SnapshotBeforeWriteWithTracking(root, p) // 修改前自动快照（关联到当前消息）
+			SnapshotBeforeWriteWithTracking(root, p)
 			data, err := os.ReadFile(p)
 			if err != nil {
 				return "", err
@@ -358,7 +375,10 @@ func RegisterDefaultTools(r *Registry, root string) {
 			if len(edits) == 0 {
 				return "", fmt.Errorf("edits 不能为空")
 			}
+			origLC := countLines(string(data))
 			content := string(data)
+			totalDelta := 0
+			lastEditEnd := 0
 			for i, it := range edits {
 				m, ok := it.(map[string]any)
 				if !ok {
@@ -366,29 +386,43 @@ func RegisterDefaultTools(r *Registry, root string) {
 				}
 				old, _ := m["old_string"].(string)
 				neu, _ := m["new_string"].(string)
-				lineStart := argInt(m, "line_start", 0)
-				lineEnd := argInt(m, "line_end", 0)
-				if old == "" && lineStart <= 0 {
+				ls := argInt(m, "line_start", 0)
+				le := argInt(m, "line_end", 0)
+				if old == "" && ls <= 0 {
 					return "", fmt.Errorf("edits[%d] 必须提供 old_string 或 line_start", i)
+				}
+				// ★ v2: 自动补偿行号偏移
+				if ls > 0 && totalDelta != 0 && ls > lastEditEnd {
+					ls += totalDelta
+					if le > 0 {
+						le += totalDelta
+					}
 				}
 				out, err := ApplyEdit(content, EditOptions{
 					OldString: old,
 					NewString: neu,
-					LineStart: lineStart,
-					LineEnd:   lineEnd,
+					LineStart: ls,
+					LineEnd:   le,
 				})
 				if err != nil {
 					return "", fmt.Errorf("edits[%d] 应用失败: %w", i, err)
+				}
+				curDelta := countLines(out) - countLines(content)
+				totalDelta += curDelta
+				if ls > 0 {
+					lastEditEnd = ls + countLines(neu) - 1
 				}
 				content = out
 			}
 			if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
 				return "", err
 			}
+			newLC := countLines(content)
+			eh.record(fileEditRecord{Path: p, LineDelta: newLC - origLC, EditEnd: lastEditEnd})
 			if FileChangeCallback != nil {
 				FileChangeCallback(argStr(args, "path"))
 			}
-			return fmt.Sprintf("已对 %s 应用 %d 处编辑", argStr(args, "path"), len(edits)), nil
+			return fmt.Sprintf("已对 %s 应用 %d 处编辑（累计偏移 %+d 行）", argStr(args, "path"), len(edits), totalDelta), nil
 		},
 	})
 

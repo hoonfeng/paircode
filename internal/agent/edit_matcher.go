@@ -3,6 +3,7 @@ package agent
 import (
 	"fmt"
 	"strings"
+	"sync"
 )
 
 // ─── 文件编辑匹配器 ──────────────────────────────────────────
@@ -374,4 +375,79 @@ func diagnoseMultiple(content, old string) error {
 		}
 	}
 	return fmt.Errorf("old_string 出现 %d 次（不唯一），命中起始行号: %v。请提供更长上下文（多包含前后行）使其唯一，或改用 line_start/line_end 行号定位", len(positions), positions)
+}
+
+// ─── 行号偏移补偿与编辑历史（v2: 防连续编辑文件损坏）─────
+
+type fileEditRecord struct {
+	Path      string
+	LineDelta int
+	EditEnd   int
+}
+
+type editHistory struct {
+	mu      sync.Mutex
+	records []fileEditRecord
+}
+
+func newEditHistory() *editHistory { return &editHistory{} }
+
+func (h *editHistory) record(r fileEditRecord) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if len(h.records) >= 50 {
+		h.records = h.records[1:]
+	}
+	h.records = append(h.records, r)
+}
+
+func (h *editHistory) lastForFile(path string) *fileEditRecord {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for i := len(h.records) - 1; i >= 0; i-- {
+		if h.records[i].Path == path {
+			c := h.records[i]
+			return &c
+		}
+	}
+	return nil
+}
+
+func (h *editHistory) compensateLS(path string, ls int) (int, string) {
+	last := h.lastForFile(path)
+	if last == nil || last.LineDelta == 0 || ls <= last.EditEnd {
+		return ls, ""
+	}
+	ns := ls + last.LineDelta
+	return ns, fmt.Sprintf("（行号自动补偿 L%d→L%d，上次偏移 %+d）", ls, ns, last.LineDelta)
+}
+
+func editContext(lines []string, replStart, replEnd, newLineCount, lineDelta int) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "（%d 行。L%d-%d → %d 行，偏移 %+d）",
+		len(lines), replStart, replEnd, newLineCount, lineDelta)
+	cs := replStart - 1
+	if cs < 1 {
+		cs = 1
+	}
+	ce := cs + 3
+	if ce > len(lines) {
+		ce = len(lines)
+	}
+	b.WriteString("\n附近:")
+	for i := cs - 1; i < ce; i++ {
+		s := lines[i]
+		if len(s) > 100 {
+			s = s[:100] + "…"
+		}
+		fmt.Fprintf(&b, "\n  L%d: %s", i+1, s)
+	}
+	return b.String()
+}
+
+func countLines(s string) int {
+	if s == "" {
+		return 1
+	}
+	return strings.Count(s, "\n") + 1
 }
