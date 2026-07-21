@@ -1460,6 +1460,7 @@ onUnmounted(() => {
   margin: 2px 0;
   box-shadow: 0 1px 3px rgba(0,0,0,0.18);
   transition: box-shadow 0.15s ease, transform 0.1s ease;
+  position: relative;
 }
 .msg-user .bubble-user:hover {
   box-shadow: 0 2px 6px rgba(0,0,0,0.25);
@@ -1481,9 +1482,10 @@ onUnmounted(() => {
 .badge-feedback { background: rgba(251, 191, 36, 0.15); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.3); }
 .umh-agent { font-size: 11px; color: var(--text-muted); background: var(--bg-tertiary); padding: 1px 6px; border-radius: 3px; }
 .user-msg-placeholder { color: rgba(255,255,255,0.4); font-style: italic; font-size: 12px; }
-.rollback-area { display: flex; justify-content: flex-end; margin-top: 2px; }
-.rollback-btn { display: flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 3px; cursor: pointer; font-size: 11px; color: var(--text-muted); background: transparent; border: 1px solid transparent; user-select: none; }
-.rollback-btn:hover { color: #f48771; background: rgba(244, 135, 113, 0.1); border-color: rgba(244, 135, 113, 0.3); }
+.rollback-area { opacity: 0; transition: opacity 0.15s; position: absolute; right: -2px; top: -6px; z-index: 2; }
+.msg-item:hover .rollback-area { opacity: 1; }
+.rollback-btn { display: flex; align-items: center; gap: 2px; padding: 1px 6px; border-radius: 8px; cursor: pointer; font-size: 10px; color: rgba(255,255,255,0.6); background: rgba(0,0,0,0.2); border: none; user-select: none; }
+.rollback-btn:hover { color: #f48771; background: rgba(244, 135, 113, 0.25); }
 .msg-avatar { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .msg-user .msg-avatar { background: var(--accent); color: #fff; }
 .msg-assistant .msg-avatar { background: var(--bg-tertiary); color: var(--text-secondary); border: 1px solid var(--border-color); }
@@ -1523,14 +1525,14 @@ onUnmounted(() => {
 /* ── 时间线展示（替代旧 SubAgentBlock 卡片 + content-flow）── */
 .bubble-agent { position: relative; }
 .bubble-agent::before { content: ''; position: absolute; left: 8px; top: 0; bottom: 0; width: 2px; background: linear-gradient(180deg, var(--accent) 0%, var(--border-color) 100%); opacity: 0.4; border-radius: 1px; }
-.tl-item { display: flex; align-items: flex-start; gap: 0; padding: 2px 0; position: relative; }
-.tl-dot { position: absolute; left: 8px; top: 7px; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; border: 2px solid var(--border-color); background: var(--bg-primary); z-index: 1; box-shadow: 0 0 0 2px var(--bg-primary); }
+.tl-item { display: flex; align-items: flex-start; gap: 6px; padding: 2px 0; position: relative; }
+.tl-dot { width: 8px; height: 8px; min-width: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 5px; border: 2px solid var(--border-color); background: var(--bg-primary); z-index: 1; box-shadow: 0 0 0 2px var(--bg-primary); }
 .tl-dot-thinking { border-color: var(--accent); background: var(--accent-bg); box-shadow: 0 0 0 2px var(--bg-primary), 0 0 6px rgba(212,167,78,0.3); }
 .tl-dot-tool { border-color: #d4a74e; background: rgba(212,167,78,0.2); box-shadow: 0 0 0 2px var(--bg-primary), 0 0 6px rgba(212,167,78,0.2); }
 .tl-dot-ask { border-color: #c586c0; background: rgba(197,134,192,0.2); box-shadow: 0 0 0 2px var(--bg-primary), 0 0 6px rgba(197,134,192,0.2); }
 .tl-dot-content { border-color: #6a9955; background: rgba(106,153,85,0.2); box-shadow: 0 0 0 2px var(--bg-primary), 0 0 6px rgba(106,153,85,0.2); }
 .tl-dot-done { border-color: var(--accent); background: var(--accent); box-shadow: 0 0 0 2px var(--bg-primary), 0 0 6px rgba(126,184,218,0.4); }
-.tl-body { flex: 1; min-width: 0; font-size: 13px; line-height: 1.6; padding-left: 20px; }
+.tl-body { flex: 1; min-width: 0; font-size: 13px; line-height: 1.6; }
 /* ── 思考段：背景区分 + 左边框 + 改进滚动条 ── */
 .tl-think-body { position: relative; }
 .tl-thinking-text { color: var(--text-secondary); font-style: italic; white-space: pre-wrap; padding: 6px 10px; max-height: 300px; overflow-y: auto; background: var(--bg-tertiary); border-radius: 6px; border-left: 2px solid var(--accent); margin: 2px 0; }

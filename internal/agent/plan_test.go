@@ -22,7 +22,7 @@ func TestUpdatePlan(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, "3 步") || !strings.Contains(out, "1 完成") {
+	if !strings.Contains(out, "3 步") || !strings.Contains(out, "完成 1/3") {
 		t.Errorf("结果 = %q", out)
 	}
 	if _, err := r.Execute(context.Background(), "update_plan", `{"plan":[]}`); err == nil {

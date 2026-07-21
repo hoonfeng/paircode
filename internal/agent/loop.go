@@ -617,8 +617,9 @@ func DefaultSystemPrompt(roots []string) string {
 		"- 只有在充分理解代码现状后，才开始动手修改。宁可多花 2 轮调研，也不要在不了解全貌时动手。\n" +
 		"- ★ 禁止凭任务描述就臆测代码内容——你的记忆可能是旧版或错误的，必须以 read_file 看到的实际内容为准。\n\n" +
 		"# 任务追踪（核心机制）\n" +
-		"任何需要 3+ 步骤或多文件操作的任务，必须使用 update_tasks 追踪进度：\n" +
-		"- 收到任务后第一回合创建完整子任务清单，每项含 subject + status（pending/in_progress/completed）。\n" +
+		"任何需要 3+ 步骤或多文件操作的任务，必须先用 update_plan 制定执行计划（步骤清单），再用 update_tasks 追踪进度：\n" +
+		"- 收到任务后第一轮：调用 update_plan 列出完整执行计划（每项含 step + status），展示给用户。\n" +
+		"- 后续每轮：调用 update_tasks 创建完整子任务清单，每项含 subject + status（pending/in_progress/completed）。\n" +
 		"- 状态变化时重传整份清单（全量替换模式），系统自动持久化到磁盘。\n" +
 		"- ★ 全量替换：每次传入全部任务，已不在列表中的旧任务将自动清理。\n" +
 		"- 发现新前置依赖或方案不可行时即时调整计划。\n" +
