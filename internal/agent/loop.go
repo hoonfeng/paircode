@@ -457,7 +457,7 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 				l.commitMessage = result
 			}
 
-		// ★ finish_task：子 agent 报告完成（主 Loop 中作兜底；正常完成靠自然输出）
+			// ★ finish_task：子 agent 报告完成（主 Loop 中作兜底；正常完成靠自然输出）
 			if tc.Function.Name == "finish_task" {
 				l.finishResult = &result
 				l.emit(Event{Type: EventDone, Content: result, DoneReason: "finish_task"})
@@ -472,28 +472,28 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 		// 先同步 currentMsgs（包含 tool results），供 persist worker 获取完整历史
 		l.currentMsgs = msgs
 
-	// ★ 自然终止：模型无工具调用且有正文 → 任务完成
-	if l.contentOnlyIters == 0 && len(assistant.ToolCalls) == 0 && strings.TrimSpace(assistant.Content) != "" {
-		l.finishResult = &assistant.Content
-		l.emit(Event{Type: EventDone, Content: strings.TrimSpace(assistant.Content), DoneReason: "task_complete"})
-		return msgs, nil
-	}
-
-	// ★ content-only 防护：连续多轮只输出文字不调工具 → 死循环兜底
-	if len(assistant.ToolCalls) == 0 && strings.TrimSpace(assistant.Content) != "" {
-		l.contentOnlyIters++
-		if l.contentOnlyIters == 3 {
-			nudge := "[系统提示] 你已经连续三轮只输出文字而没有调用任何工具。如果任务已完成，直接自然总结；如还需继续，请调用工具推进。"
-			l.emit(Event{Type: EventNotice, Content: nudge})
-			l.ephemeralMsgs = append(l.ephemeralMsgs, Message{Role: RoleUser, Content: nudge})
-		} else if l.contentOnlyIters >= 4 {
-			l.emit(Event{Type: EventNotice, Content: "检测到内容循环，自动结束"})
-			l.emit(Event{Type: EventDone, Content: strings.TrimSpace(assistant.Content), DoneReason: "content_loop"})
+		// ★ 自然终止：模型无工具调用且有正文 → 任务完成
+		if l.contentOnlyIters == 0 && len(assistant.ToolCalls) == 0 && strings.TrimSpace(assistant.Content) != "" {
+			l.finishResult = &assistant.Content
+			l.emit(Event{Type: EventDone, Content: strings.TrimSpace(assistant.Content), DoneReason: "task_complete"})
 			return msgs, nil
 		}
-	} else {
-		l.contentOnlyIters = 0
-	}
+
+		// ★ content-only 防护：连续多轮只输出文字不调工具 → 死循环兜底
+		if len(assistant.ToolCalls) == 0 && strings.TrimSpace(assistant.Content) != "" {
+			l.contentOnlyIters++
+			if l.contentOnlyIters == 3 {
+				nudge := "[系统提示] 你已经连续三轮只输出文字而没有调用任何工具。如果任务已完成，直接自然总结；如还需继续，请调用工具推进。"
+				l.emit(Event{Type: EventNotice, Content: nudge})
+				l.ephemeralMsgs = append(l.ephemeralMsgs, Message{Role: RoleUser, Content: nudge})
+			} else if l.contentOnlyIters >= 4 {
+				l.emit(Event{Type: EventNotice, Content: "检测到内容循环，自动结束"})
+				l.emit(Event{Type: EventDone, Content: strings.TrimSpace(assistant.Content), DoneReason: "content_loop"})
+				return msgs, nil
+			}
+		} else {
+			l.contentOnlyIters = 0
+		}
 		// 绕圈检测：同一操作反复失败/反复执行 → 注入「换思路」提示打破死循环（见 circling.go）。
 		// 绕圈检测：同一操作反复失败/反复执行 → 注入「换思路」提示打破死循环（见 circling.go）。
 		if nudge := l.detectCircling(); nudge != "" {
