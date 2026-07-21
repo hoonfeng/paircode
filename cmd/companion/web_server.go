@@ -1036,11 +1036,12 @@ func (s *webServer) handleTasks(w http.ResponseWriter, r *http.Request) {
 		// 从 TaskManager 持久化目录 .pair/tasks/*.json 读取真实任务状态
 		convID := r.URL.Query().Get("convId")
 		type planStep struct {
-			Step        string `json:"step"`
-			Status      string `json:"status"`
-			TaskID      string `json:"taskId"`
-			Description string `json:"description"`
-			CreatedAt   string `json:"created_at"`
+			Step          string `json:"step"`
+			Status        string `json:"status"`
+			TaskID        string `json:"taskId"`
+			Description   string `json:"description"`
+			PlanStepIndex *int   `json:"planStepIndex,omitempty"`
+			CreatedAt     string `json:"created_at"`
 		}
 		tasksDir := filepath.Join(root, ".pair", "tasks")
 		entries, err := os.ReadDir(tasksDir)
@@ -1058,12 +1059,13 @@ func (s *webServer) handleTasks(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			var t struct {
-				ID          string `json:"id"`
-				Subject     string `json:"subject"`
-				Description string `json:"description"`
-				Status      string `json:"status"`
-				ConvID      string `json:"convId"`
-				CreatedAt   string `json:"created_at"`
+				ID            string `json:"id"`
+				Subject       string `json:"subject"`
+				Description   string `json:"description"`
+				Status        string `json:"status"`
+				ConvID        string `json:"convId"`
+				PlanStepIndex *int   `json:"planStepIndex"`
+				CreatedAt     string `json:"created_at"`
 			}
 			if err := json.Unmarshal(data, &t); err != nil {
 				continue
@@ -1073,11 +1075,12 @@ func (s *webServer) handleTasks(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			plan = append(plan, planStep{
-				Step:        t.Subject,
-				Status:      t.Status,
-				TaskID:      t.ID,
-				Description: t.Description,
-				CreatedAt:   t.CreatedAt,
+				Step:          t.Subject,
+				Status:        t.Status,
+				TaskID:        t.ID,
+				Description:   t.Description,
+				PlanStepIndex: t.PlanStepIndex,
+				CreatedAt:     t.CreatedAt,
 			})
 		}
 		// 按创建时间倒序排列（最新的在前）

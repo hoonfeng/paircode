@@ -193,7 +193,7 @@ export function processAgentEvent(convId, data) {
     } else if (toolName === 'task_create') {
       try {
         const args = data.args ? (typeof data.args === 'string' ? JSON.parse(data.args) : data.args) : {}
-        if (globalCtx.onTaskCreate) globalCtx.onTaskCreate({ step: args.subject || '(新建任务)', status: 'pending', callId: data.callId || data.callID || '', _taskId: null }, convId)
+        if (globalCtx.onTaskCreate) globalCtx.onTaskCreate({ step: args.subject || '(新建任务)', status: 'pending', callId: data.callId || data.callID || '', _taskId: null, planStepIndex: args.plan_step_index ?? null }, convId)
       } catch {}
       msg.segments.push({
         type: 'tool_call', name: toolName,
@@ -221,6 +221,7 @@ export function processAgentEvent(convId, data) {
             step: t.subject || t.description || '(无标题)',
             status: t.status || 'pending',
             _taskId: t.id || null,
+            planStepIndex: t.plan_step_index ?? null,
           }))
           globalCtx.onTaskReplace(tasks, convId)
         }
