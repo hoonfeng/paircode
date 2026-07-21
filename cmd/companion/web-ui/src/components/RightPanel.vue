@@ -1611,7 +1611,7 @@ onUnmounted(() => {
 /* 审核配置弹窗 */
 .review-config-popover {
   position: absolute; z-index: 100;
-  top: 100%; left: 0; margin-top: 4px;
+  bottom: 100%; left: 0; margin-bottom: 4px;
   width: 360px; max-width: 90vw;
   background: var(--bg-primary); border: 1px solid var(--border-color);
   border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.25);
