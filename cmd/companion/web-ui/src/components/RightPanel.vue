@@ -47,6 +47,12 @@
                     <MarkdownRenderer :text="cleanMsgContent(combo.user)" :theme="state.theme" />
                   </div>
                   <div v-else class="user-msg-placeholder">（空消息）</div>
+                  <div v-if="combo.user._attachments && combo.user._attachments.length > 0" class="user-attachments">
+                    <div v-for="(att, ai) in combo.user._attachments" :key="'att'+ai" class="att-tag" :class="'att-tag-' + att.type">
+                      <SvgIcon :name="att.type === 'image' ? 'image' : 'file'" :size="11" />
+                      <span class="att-tag-label">{{ att.label }}</span>
+                    </div>
+                  </div>
                   <div class="rollback-area" v-if="!state.chatLoading">
                     <button class="rollback-btn" @click="rollbackTo(combo.user._idx)" title="回到此消息前的状态"><SvgIcon name="undo" :size="11" /> 回退</button>
                   </div>
@@ -817,12 +823,16 @@ function isFeedback(msg) {
   return msg.role === 'user' && typeof msg.content === 'string' && msg.content.startsWith('【用户反馈】')
 }
 
-// cleanMsgContent 去除消息中的标记前缀，只展示纯内容。
+// cleanMsgContent 去除消息中的标记前缀和附件尾注，只展示纯内容。
 function cleanMsgContent(msg) {
   if (!msg.content) return ''
   return msg.content
     .replace(/^【任务委派 → \w+】\n*/, '')
     .replace(/^【用户反馈】/, '')
+    .replace(/\n*📎 附件: .+/s, '')
+    .replace(/\n*📎 代码引用: .+/s, '')
+    .replace(/\n*📎 目录: .+/s, '')
+    .replace(/\n*!\[图片\].+/s, '')
 }
 
 function collapsePreviousOutputs() {
@@ -900,14 +910,27 @@ const sendMessage = async () => {
 
   // ── ★ 创建用户消息 ──
   let fullContent = lastUserText
+  const attachments = [] // 结构化的附件列表（用于前端标签渲染）
   if (pendingAttachment.value) {
     const att = pendingAttachment.value
     if (att.type === 'image') {
-      fullContent += '\n\n---\n[图片附件] ' + (att.filename || '') + '\n' + (att.content || '').slice(0, 2000)
-    } else if (att.type === 'file') {
-      fullContent += '\n\n[参考文件] ' + att.path + '\n（如需查看文件内容，请使用 read_file 工具读取上述路径）'
-    } else if (att.type === 'code') {
-      fullContent += '\n\n[参考文件] ' + att.path + ':' + (att.lineStart || 1) + '-' + (att.lineEnd || 1) + '\n（如需查看代码，请使用 read_file 工具读取上述路径和行号）'
+      fullContent += '\n\n![图片](' + (att.content || '') + ')'
+      attachments.push({ type: 'image', path: att.filename || '', label: att.filename || '图片' })
+    } else if (att.type === 'selection') {
+      // 选中代码：将代码内容作为上下文尾注，路径为标签
+      fullContent += '\n\n📎 代码引用: `' + att.path + '` L' + (att.lineStart || 1) + '-' + (att.lineEnd || 1)
+      if (att.content) fullContent += '\n```\n' + att.content.slice(0, 3000) + '\n```'
+      attachments.push({ type: 'code', path: att.path, lineStart: att.lineStart, lineEnd: att.lineEnd,
+        label: (att.filename || att.path) + ':' + (att.lineStart || 1) + '-' + (att.lineEnd || 1) })
+    } else if (att.type === 'dir') {
+      // 目录引用：提示 agent 用 list_files 查看
+      fullContent += '\n\n📎 目录: `' + att.path + '`（请用 list_files 查看）'
+      attachments.push({ type: 'dir', path: att.path, label: att.filename || att.path.split(/[\\/]/).pop() || att.path })
+    } else {
+      // file / code: 仅传递路径引用，不内联内容（agent 通过 read_file 读取）
+      fullContent += '\n\n📎 附件: `' + att.path + '`（请用 read_file 读取）'
+      attachments.push({ type: att.type, path: att.path, filename: att.filename,
+        label: att.filename || att.path.split(/[\\/]/).pop() || att.path })
     }
   }
   inputText.value = ''; pendingAttachment.value = null
@@ -919,6 +942,7 @@ const sendMessage = async () => {
   for (const m of state.messagesByConv[convId]) { if ((m._idx ?? 0) >= nextIdx) nextIdx = (m._idx ?? 0) + 1 }
   const userMsg = {
     role: 'user', content: fullContent, segments: [], toolCalls: [],
+    _attachments: attachments.length > 0 ? attachments : undefined,
     _key: makeMsgKey(), _idx: nextIdx,
     _time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
   }
@@ -1369,6 +1393,30 @@ const handlePaste = (e) => {
       }
       return
     }
+  }
+  // ── 无文件粘贴：检测长文本 → 自动转为临时附件 ──
+  const plainText = e.clipboardData.getData('text/plain')
+  if (plainText && plainText.length > 2000) {
+    e.preventDefault()
+    createTempAttachment(plainText)
+  }
+}
+
+// ── 粘贴长文本：自动创建临时文件并设为附件 ──
+async function createTempAttachment(text) {
+  const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
+  const tempPath = (state.workspaceRoot || '') + '\\_temp'
+  try {
+    // 确保目录存在（用 mkdir，后端幂等处理）
+    await api.apiPost('/fs/mkdir', { path: tempPath })
+  } catch (_) { /* 目录可能已存在 */ }
+  const filePath = tempPath + '\\paste_' + ts + '.txt'
+  try {
+    await api.apiPost('/fs/write', { path: filePath, content: text })
+    pendingAttachment.value = { type: 'file', path: filePath, filename: 'paste_' + ts + '.txt' }
+    window.$toast('长文本已保存为临时附件: ' + filePath, 'info')
+  } catch (err) {
+    window.$toast('创建临时文件失败: ' + err.message, 'error')
   }
 }
 
@@ -1835,6 +1883,13 @@ onUnmounted(() => {
 .send-btn { background: var(--accent); color: #fff; padding: 6px 14px; border-radius: 4px; cursor: pointer; border: none; }
 .stop-btn { background: #c03; color: #fff; padding: 6px 14px; border-radius: 4px; cursor: pointer; border: none; }
 .attachment-badge { display: flex; align-items: center; gap: 6px; padding: 4px 8px; margin: 4px 0; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px; }
+
+/* ── 用户消息附件标签 ── */
+.user-attachments { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.att-tag { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 12px; font-size: 11px; cursor: default; }
+.att-tag-file, .att-tag-code, .att-tag-dir { background: rgba(0, 120, 212, 0.12); color: #4daafc; border: 1px solid rgba(0, 120, 212, 0.25); }
+.att-tag-image { background: rgba(0, 180, 120, 0.12); color: #4cc9a0; border: 1px solid rgba(0, 180, 120, 0.25); }
+.att-tag-label { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ── SubAgentBlock 内部样式已移除，替换为时间线展示 ── */
 .seg-content { line-height: 1.6; white-space: pre-wrap; word-break: break-word; }

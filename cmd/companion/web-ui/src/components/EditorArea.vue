@@ -330,9 +330,8 @@ function execCopy(text) { navigator.clipboard.writeText(text).catch(() => {}) }
 
 function addFileToChat(file) {
   const fileName = getName(file)
-  const content = state.fileContents[file] || ''
   window.dispatchEvent(new CustomEvent('add-to-chat', {
-    detail: { type: 'file', path: file, filename: fileName, content }
+    detail: { type: 'file', path: file, filename: fileName }
   }))
   state.rightPanelVisible = true
 }

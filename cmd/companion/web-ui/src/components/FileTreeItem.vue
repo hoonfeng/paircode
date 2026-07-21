@@ -474,34 +474,18 @@ async function removeFromWorkspace(path) {
   } catch (err) { window.$toast('移除失败: ' + err.message, 'error') }
 }
 
-// ── 添加到对话（发送文件内容 + 路径引用）──
+// ── 添加到对话（仅传路径引用，不内联文件内容）──
 async function addToChat(path, name, isDir) {
-  try {
-    let content = ''
-    if (isDir) {
-      content = '📁 目录引用: `' + path + '`\n（请使用 list_files 查看目录内容）'
-    } else {
-      // 先尝试从缓存读取文件内容
-      let fileContent = state.fileContents[path]
-      if (fileContent === undefined || fileContent === null) {
-        try {
-          const data = await api.apiGet('/fs/read', { path })
-          fileContent = data.content || ''
-        } catch {
-          fileContent = '（无法读取文件内容）'
-        }
-      }
-      const MAX_CHARS = 40000
-      if (fileContent.length > MAX_CHARS) {
-        fileContent = fileContent.slice(0, MAX_CHARS) + '\n…（文件过长，已截断）'
-      }
-      content = '📎 **`' + path + '`**\n\n```\n' + fileContent + '\n```'
-    }
+  if (isDir) {
     window.dispatchEvent(new CustomEvent('add-to-chat', {
-      detail: { type: 'file', path, filename: name, content }
+      detail: { type: 'dir', path, filename: name }
     }))
-    state.rightPanelVisible = true
-  } catch (err) { window.$toast('添加失败: ' + (err.message || err), 'error') }
+  } else {
+    window.dispatchEvent(new CustomEvent('add-to-chat', {
+      detail: { type: 'file', path, filename: name }
+    }))
+  }
+  state.rightPanelVisible = true
 }
 
 // ── 刷新子节点 ──
