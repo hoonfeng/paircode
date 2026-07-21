@@ -20,6 +20,7 @@ EventTarget.prototype.dispatchEvent=function(ev){if(!this._events||!this._events
 // Note: wb-ui handles core DOM classes. These stubs are only for compatibility:
 if(typeof Node==='undefined'){Node=function Node(){};Node.prototype=Object.create(EventTarget.prototype)}
 if(typeof Element==='undefined'){Element=function Element(){};Element.prototype=Object.create(Node.prototype)}
+if(typeof HTMLElement==='undefined'){HTMLElement=function HTMLElement(){};HTMLElement.prototype=Object.create(Element.prototype)}
 if(typeof SVGElement==='undefined'){SVGElement=function SVGElement(){};SVGElement.prototype=Object.create(Element.prototype)}
 HTMLUnknownElement=function HTMLUnknownElement(){};HTMLUnknownElement.prototype=Object.create(HTMLElement.prototype);HTMLUnknownElement.prototype.constructor=HTMLUnknownElement;
 Text=function Text(){};Text.prototype=Object.create(Node.prototype);Text.prototype.constructor=Text;
