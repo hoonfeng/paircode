@@ -55,29 +55,13 @@ func main() {
 	// ── Init desktop bridge (Go handlers + JS bridge SDK) ──
 	InitDesktopBridge(wv)
 
-	// Diagnostic: check DOM after load
-	wv.EvalJS(`(function(){
-		var app = document.getElementById('app');
-		console.log('[DIAG] getElementById("app")=' + (app ? app.id : 'null'));
-		var body = document.body;
-		console.log('[DIAG] body=' + (body ? body.tagName : 'null'));
-		try {
-			var fc = body.firstChild;
-			console.log('[DIAG] body.firstChild.type=' + typeof fc + ' val=' + fc);
-			if(fc) console.log('[DIAG] body.firstChild.tagName=' + fc.tagName);
-			else console.log('[DIAG] body.firstChild is null/undefined');
-		} catch(e) { console.log('[DIAG] body.firstChild error: '+e); }
-		var cn = body.childNodes;
-		console.log('[DIAG] body.childNodes.type=' + typeof cn + ' len=' + (cn ? cn.length : 'null'));
-	})()`)
-	// Vue-injected DOM and component styles.
 	for i := 0; i < 8; i++ {
 		wv.EnsureLayout()
 		time.Sleep(100 * time.Millisecond)
 	}
 	wv.RebuildRenderTree()
-	// Diagnostic: check if Vue rendered
-	wv.EvalJS(`(function(){var a=document.getElementById('app');console.log('[DIAG2] app.childElementCount='+(a?a.childElementCount:'null')+', innerHTML.len='+(a?a.innerHTML.length:'null'))})()`)
+	// Quick check: Vue mount succeeded?
+	wv.EvalJS(`(function(){var a=document.getElementById('app');if(a&&a.childElementCount>0)console.log('[VUE] OK, innerHTML.len='+a.innerHTML.length);else console.log('[VUE] ERR, app is empty')})()`)
 	if out := wv.ConsoleOutput(); out != "" {
 		log.Printf("[CONSOLE2]\n%s", out)
 	}
