@@ -9,7 +9,7 @@ import (
 	"wb-ui/app"
 	"wb-ui/webkit"
 )
-var prePolyfill ""
+var prePolyfill = ""
 
 func main() {
 	log.SetFlags(log.Ltime)
@@ -56,9 +56,6 @@ func main() {
 	if out := wv.ConsoleOutput(); out != "" {
 		log.Printf("[CONSOLE]\n%s", out)
 	}
-
-	// Post-polyfill: more browser APIs
-	wv.EvalJS(postPolyfill)
 	// ── Init desktop bridge (Go handlers + JS bridge SDK) ──
 	// Must be after LoadHTML (JS runtime ready) and before Vue mount.
 	InitDesktopBridge(wv)
