@@ -85,11 +85,18 @@ func main() {
 	wv.EvalJS(`(function(){
 		var app = document.getElementById('app');
 		console.log('[DIAG] getElementById("app")=' + (app ? app.id : 'null'));
-		var qs = document.querySelector('#app');
-		console.log('[DIAG] querySelector("#app")=' + (qs ? qs.id : 'null'));
 		var body = document.body;
 		console.log('[DIAG] body=' + (body ? body.tagName : 'null'));
-		console.log('[DIAG] body.firstChild=' + (body ? (body.firstChild ? body.firstChild.tagName : 'no-firstChild') : 'no-body'));
+		// Direct DOM check for body children
+		try {
+			var fc = body.firstChild;
+			console.log('[DIAG] body.firstChild.type=' + typeof fc + ' val=' + fc);
+			if(fc) console.log('[DIAG] body.firstChild.tagName=' + fc.tagName);
+			else console.log('[DIAG] body.firstChild is null/undefined');
+		} catch(e) { console.log('[DIAG] body.firstChild error: '+e); }
+		// Check childNodes
+		var cn = body.childNodes;
+		console.log('[DIAG] body.childNodes.type=' + typeof cn + ' len=' + (cn ? cn.length : 'null'));
 	})()`)
 	// Vue-injected DOM and component styles.
 	for i := 0; i < 8; i++ {
@@ -123,9 +130,9 @@ func setupLoaders(wv *webkit.WebView, distDir string) {
 			fr.ScriptLoader = func(src string) (string, error) {
 				data, err := os.ReadFile(filepath.Join(absDist, strings.TrimPrefix(strings.TrimPrefix(src, "file://"), "./")))
 				log.Printf("[SCRIPT] len=%d err=%v", len(data), err)
-				return string(data), nil
+				return string(data), err
 			}
-		fr.StyleSheetLoader = func(href string) (string, error) {
+			fr.StyleSheetLoader = func(href string) (string, error) {
 			data, _ := os.ReadFile(filepath.Join(absDist, strings.TrimPrefix(strings.TrimPrefix(href, "file://"), "./")))
 			// Remove Vue scoped [data-v-XXXXXXXX] selectors — wb-ui engine
 			// does not inject data-v attributes onto DOM elements at runtime.
