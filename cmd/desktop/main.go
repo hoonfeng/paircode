@@ -12,9 +12,11 @@ import (
 	"wb-ui/webkit"
 )
 
-// desktopDOMStubs provides DOM-specific APIs not yet in wb-ui core bindings.
-// Basic Web APIs (TextEncoder, crypto, setTimeout, navigator, fetch, ...) are
-// now injected by wb-ui's jsc.InjectBrowserEnv called from webkit.ensureJSRuntime.
+// desktopDOMStubs — 应用级临时桩，这些 API 应在 wb-ui 中逐步用 Go 代码实现：
+//   Event 系列    → bindings.RegisterDOMBindings（Go Constructor）
+//   Selection     → bindings
+//   MutationObserver / ResizeObserver → 新增 observe 包
+// 当前此处为 JS 桩，保持桌面端可运行。每项在未来应迁移到 wb-ui 引擎内部。
 var desktopDOMStubs = `if(typeof CustomEvent=='undefined')CustomEvent=function(t,e){this.type=t||'';for(var k in(e||{}))this[k]=e[k]}
 if(typeof ResizeObserver=='undefined')ResizeObserver=function(){this.observe=function(){};this.disconnect=function(){}}
 if(typeof MutationObserver=='undefined')MutationObserver=function(){this.observe=function(){};this.disconnect=function(){};this.takeRecords=function(){return[]}}
@@ -51,7 +53,6 @@ func main() {
 	_ = wv.JSInterpreter()
 
 	// Inject desktop-specific DOM stubs BEFORE LoadHTML.
-	// Basic Web APIs are handled by wb-ui's InjectBrowserEnv (called from ensureJSRuntime).
 	wv.EvalJS(desktopDOMStubs)
 
 	htmlData, err := os.ReadFile(distDir + "/index.html")
