@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"wb-ui/app"
+	"wb-ui/dom"
 	"wb-ui/rendering"
 	"wb-ui/webkit"
 )
@@ -103,6 +104,33 @@ func writeRenderDiagnostic(wv *webkit.WebView) {
 		log.Println("[DIAG] RenderView is nil")
 		return
 	}
+
+	// Debug: verify rp-body width right before the diagnostic dump.
+	func() {
+		var w2 func(ro rendering.RenderObject)
+		w2 = func(ro rendering.RenderObject) {
+			if ro == nil {
+				return
+			}
+			if n := ro.Node(); n != nil {
+				if el, ok := n.(*dom.Element); ok {
+					if cls := el.GetAttribute("class"); cls == "rp-body" {
+						lb := ro.LayoutBox()
+						fn := "nil"
+						if lb != nil {
+							fn = fmt.Sprintf("%.0fx%.0f", lb.Rect.Width, lb.Rect.Height)
+						}
+						fmt.Fprintf(os.Stderr, "[PREDUMP] cls=%s ro=%p lb=%p lb.rect=%s\n",
+							cls, ro, lb, fn)
+					}
+				}
+			}
+			for c := ro.FirstChild(); c != nil; c = c.NextSibling() {
+				w2(c)
+			}
+		}
+		w2(rv)
+	}()
 
 	f, err := os.Create("desktop_diag.log")
 	if err != nil {
