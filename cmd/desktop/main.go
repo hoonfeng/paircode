@@ -12,20 +12,9 @@ import (
 	"wb-ui/webkit"
 )
 
-// desktopDOMStubs — 应用级临时桩，这些 API 应在 wb-ui 中逐步用 Go 代码实现：
-//   Event 系列    → bindings.RegisterDOMBindings（Go Constructor）
-//   Selection     → bindings
-//   MutationObserver / ResizeObserver → 新增 observe 包
-// 当前此处为 JS 桩，保持桌面端可运行。每项在未来应迁移到 wb-ui 引擎内部。
-var desktopDOMStubs = `if(typeof CustomEvent=='undefined')CustomEvent=function(t,e){this.type=t||'';for(var k in(e||{}))this[k]=e[k]}
-if(typeof ResizeObserver=='undefined')ResizeObserver=function(){this.observe=function(){};this.disconnect=function(){}}
-if(typeof MutationObserver=='undefined')MutationObserver=function(){this.observe=function(){};this.disconnect=function(){};this.takeRecords=function(){return[]}}
-if(typeof Event=='undefined'){Event=function(t,e){this.type=t||'';for(var k in(e||{}))this[k]=e[k]};window.Event=Event}
-if(typeof KeyboardEvent=='undefined'){KeyboardEvent=function(t,e){Event.call(this,t,e||{});this.key=(e||{}).key||'';this.ctrlKey=false};KeyboardEvent.prototype=Object.create(Event.prototype)}
-if(typeof MouseEvent=='undefined'){MouseEvent=function(t,e){Event.call(this,t,e||{});this.clientX=0;this.clientY=0};MouseEvent.prototype=Object.create(Event.prototype)}
-if(typeof window.getSelection=='undefined')window.getSelection=function(){return{anchorNode:null,anchorOffset:0,focusNode:null,focusOffset:0,rangeCount:0,getRangeAt:function(){return null},addRange:function(){},removeAllRanges:function(){}}}
+// desktopDOMStubs — 临时桩（唯一待迁移：getSelection → bindings）
+var desktopDOMStubs = `if(typeof window.getSelection=='undefined')window.getSelection=function(){return{anchorNode:null,anchorOffset:0,focusNode:null,focusOffset:0,rangeCount:0,getRangeAt:function(){return null},addRange:function(){},removeAllRanges:function(){}}}
 `
-
 func main() {
 	log.SetFlags(log.Ltime)
 	log.Println("[Desktop] PairCode IDE 桌面版 v1.0.6-desktop")
