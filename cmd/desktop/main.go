@@ -191,7 +191,12 @@ func main() {
 		time.Sleep(100 * time.Millisecond)
 	}
 	wv.RebuildRenderTree()
-
+	// Diagnostic: check if Vue rendered
+	wv.EvalJS(`(function(){var a=document.getElementById('app');console.log('[DIAG2] app.childElementCount='+(a?a.childElementCount:'null')+', innerHTML.len='+(a?a.innerHTML.length:'null'))})()`)
+	if out := wv.ConsoleOutput(); out != "" {
+		log.Printf("[CONSOLE2]\n%s", out)
+	}
+	log.Println("[Desktop] window+render tree ready, creating host...")
 	log.Println("[Desktop] window+render tree ready, creating host...")
 
 	host, err := app.NewHost(wv, 1280, 800, "PairCode IDE")
