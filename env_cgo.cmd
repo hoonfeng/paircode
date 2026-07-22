@@ -1,0 +1,2 @@
+set CGO_ENABLED=1
+cmd

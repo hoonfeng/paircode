@@ -5,9 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
-	"time"
 
 	"wb-ui/app"
 	"wb-ui/rendering"
@@ -18,88 +16,73 @@ func main() {
 	log.SetFlags(log.Ltime)
 	log.Println("[Desktop] PairCode IDE 桌面版 v1.0.6-desktop")
 
-	wd, _ := os.Getwd()
-	distDir := filepath.Join(wd, "web-ui", "dist")
+	// Determine the dist directory: look for ../web-ui/dist relative to the binary.
+	binDir := filepath.Dir(os.Args[0])
+	distDir := filepath.Join(binDir, "web-ui", "dist")
+	altDist := filepath.Join(binDir, "..", "cmd", "desktop", "web-ui", "dist")
+	altDist2 := filepath.Join(binDir, "..", "..", "cmd", "desktop", "web-ui", "dist")
 	if _, err := os.Stat(distDir); os.IsNotExist(err) {
-		distDir = filepath.Join(wd, "cmd", "desktop", "web-ui", "dist")
-	}
-	if _, err := os.Stat(distDir); os.IsNotExist(err) {
-		distDir2 := filepath.Join(wd, "web-ui-minimal", "dist")
-		if _, err2 := os.Stat(distDir2); err2 == nil {
-			distDir = distDir2
+		if _, err2 := os.Stat(altDist); err2 == nil {
+			distDir = altDist
+		} else if _, err2 := os.Stat(altDist2); err2 == nil {
+			distDir = altDist2
 		} else {
-			distDir3 := filepath.Join(wd, "cmd", "desktop", "web-ui-minimal", "dist")
-			if _, err3 := os.Stat(distDir3); err3 == nil {
-				distDir = distDir3
-			}
+			absBin, _ := filepath.Abs(binDir)
+			log.Fatalf("[Desktop] cannot find web-ui/dist relative to binary at %s", absBin)
 		}
 	}
 	log.Printf("[Desktop] distDir: %s", distDir)
 
-	wv := webkit.NewWebView()
-	setupLoaders(wv, distDir)
-	_ = wv.JSInterpreter()
-
+	// Read index.html.
 	htmlData, err := os.ReadFile(distDir + "/index.html")
-	s := string(htmlData)
-	s = strings.Replace(s, `type="module"`, "", 1)
-	s = strings.ReplaceAll(s, `crossorigin`, "")
-	log.Printf("[LoadHTML] 开始加载, 大小=%d", len(s))
-	err = wv.LoadHTML(s)
 	if err != nil {
-		log.Printf("[LoadHTML] 错误: %v", err)
-	} else {
-		log.Printf("[LoadHTML] 加载成功")
+		log.Fatalf("[Desktop] cannot read index.html: %v", err)
 	}
-	if out := wv.ConsoleOutput(); out != "" {
-		log.Printf("[CONSOLE]\n%s", out)
-	}
+	htmlStr := string(htmlData)
+
+	// Create WebView.
+	wv := webkit.NewWebView()
+
+	// Register desktop bridge handlers.
 	InitDesktopBridge(wv)
 
-	for i := 0; i < 8; i++ {
-		wv.EnsureLayout()
-		time.Sleep(100 * time.Millisecond)
-	}
-	wv.RebuildRenderTree()
-	wv.EvalJS(`(function(){var a=document.getElementById('app');if(a&&a.childElementCount>0)console.log('[VUE] OK, innerHTML.len='+a.innerHTML.length);else console.log('[VUE] ERR, app is empty')})()`)
+	// Load the page.
+	wv.LoadHTML(htmlStr)
+
+	log.Println("[LoadHTML] 加载成功")
+
+	// Log any console output (look for Vue diagnostics from the app).
 	if out := wv.ConsoleOutput(); out != "" {
-		log.Printf("[CONSOLE2]\n%s", out)
+		log.Println("[CONSOLE]")
+		log.Println(out)
 	}
+
+	// Ensure layout + paint before creating the window.
+	wv.EnsureLayout()
+	writeRenderDiagnostic(wv)
 
 	log.Println("[Desktop] window+render tree ready, creating host...")
-	wv.EnsureLayout()
-	dumpRenderDiagnostic(wv)
 
+	// Create the app host (window). The host calls wv.EvalJS for the
+	// bridge-ready callback which may cause a second rebuild+layout.
 	host, err := app.NewHost(wv, 1280, 800, "PairCode IDE")
 	if err != nil {
-		log.Printf("[Desktop] NewHost error: %v", err)
-		return
+		log.Fatalf("[Desktop] 创建窗口失败: %v", err)
 	}
+
+	// After the host is created, layout once more so the window canvas is clean.
+	wv.EnsureLayout()
+	writeRenderDiagnostic(wv)
+
 	log.Println("[Desktop] 窗口已启动，开始事件循环...")
+
+	// Start the host event loop (blocking).
 	host.Run()
+
 	log.Println("[Desktop] 已退出。")
 }
 
-func setupLoaders(wv *webkit.WebView, distDir string) {
-	absDist, _ := filepath.Abs(distDir)
-	if mf := wv.MainFrame(); mf != nil {
-		if fr := mf.Frame(); fr != nil {
-			fr.ScriptLoader = func(src string) (string, error) {
-				data, err := os.ReadFile(filepath.Join(absDist, strings.TrimPrefix(strings.TrimPrefix(src, "file://"), "./")))
-				log.Printf("[SCRIPT] len=%d err=%v", len(data), err)
-				return string(data), err
-			}
-			fr.StyleSheetLoader = func(href string) (string, error) {
-				data, _ := os.ReadFile(filepath.Join(absDist, strings.TrimPrefix(strings.TrimPrefix(href, "file://"), "./")))
-				re := regexp.MustCompile(`\[data-v-[a-f0-9]+\]`)
-				cleaned := re.ReplaceAllString(string(data), "")
-				return cleaned, nil
-			}
-		}
-	}
-}
-
-func dumpRenderDiagnostic(wv *webkit.WebView) {
+func writeRenderDiagnostic(wv *webkit.WebView) {
 	rv := wv.RenderView()
 	if rv == nil {
 		log.Println("[DIAG] RenderView is nil")
@@ -118,8 +101,55 @@ func dumpRenderDiagnostic(wv *webkit.WebView) {
 	fmt.Fprintln(f, "=== RENDER TREE ===")
 	dumpRO(f, rv, 0)
 	fmt.Fprintln(f, "")
+	fmt.Fprintln(f, "=== ANOMALY ANALYSIS ===")
+	reportAnomalies(f, rv)
+	fmt.Fprintln(f, "")
+	fmt.Fprintln(f, "=== ANOMALY ANALYSIS ===")
+	reportAnomalies(f, rv)
+	fmt.Fprintln(f, "")
 	fmt.Fprintln(f, "=== DIAGNOSTIC COMPLETE ===")
 	log.Println("[DIAG] Wrote desktop_diag.log")
+}
+
+func reportAnomalies(f *os.File, ro rendering.RenderObject) {
+	type anomaly struct {
+		desc string
+		info string
+	}
+	var ans []anomaly
+	var walk func(ro rendering.RenderObject, depth int)
+	walk = func(ro rendering.RenderObject, depth int) {
+		lb := ro.LayoutBox()
+		if lb != nil {
+			name := ro.RenderName()
+			if lb.Rect.Y < -1 {
+				ans = append(ans, anomaly{"负 Y 坐标", fmt.Sprintf("%s y=%.0f", name, lb.Rect.Y)})
+			}
+			if lb.Rect.X < -1 {
+				ans = append(ans, anomaly{"负 X 坐标", fmt.Sprintf("%s x=%.0f", name, lb.Rect.X)})
+			}
+			if lb.Rect.X > 1280 {
+				ans = append(ans, anomaly{"越界 X > viewport", fmt.Sprintf("%s x=%.0f w=%.0f", name, lb.Rect.X, lb.Rect.Width)})
+			}
+			if lb.Rect.Width == 0 && ro.Style() != nil && ro.Style().Display != 0 {
+				cs := ro.Style()
+				if cs.BackgroundColor.A > 0 || cs.Width.Value > 0 {
+					ans = append(ans, anomaly{"零宽但有背景/宽度", fmt.Sprintf("%s w=0 bg=#%02x%02x%02x", name, cs.BackgroundColor.R, cs.BackgroundColor.G, cs.BackgroundColor.B)})
+				}
+			}
+		}
+		for c := ro.FirstChild(); c != nil; c = c.NextSibling() {
+			walk(c, depth+1)
+		}
+	}
+	walk(ro, 0)
+	if len(ans) == 0 {
+		fmt.Fprintln(f, "  无异常")
+		return
+	}
+	for _, a := range ans {
+		fmt.Fprintf(f, "  [%s] %s\n", a.desc, a.info)
+	}
 }
 
 func dumpRO(f *os.File, ro rendering.RenderObject, depth int) {
