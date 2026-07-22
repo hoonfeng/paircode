@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"wb-ui/app"
@@ -16,20 +17,16 @@ func main() {
 	log.SetFlags(log.Ltime)
 	log.Println("[Desktop] PairCode IDE 桌面版 v1.0.6-desktop")
 
-	// Determine the dist directory: look for ../web-ui/dist relative to the binary.
-	binDir := filepath.Dir(os.Args[0])
-	distDir := filepath.Join(binDir, "web-ui", "dist")
-	altDist := filepath.Join(binDir, "..", "cmd", "desktop", "web-ui", "dist")
-	altDist2 := filepath.Join(binDir, "..", "..", "cmd", "desktop", "web-ui", "dist")
+	// Determine the dist directory using absolute paths for reliable loading.
+	wd, _ := os.Getwd()
+	distDir := filepath.Join(wd, "cmd", "desktop", "web-ui", "dist")
 	if _, err := os.Stat(distDir); os.IsNotExist(err) {
-		if _, err2 := os.Stat(altDist); err2 == nil {
-			distDir = altDist
-		} else if _, err2 := os.Stat(altDist2); err2 == nil {
-			distDir = altDist2
-		} else {
-			absBin, _ := filepath.Abs(binDir)
-			log.Fatalf("[Desktop] cannot find web-ui/dist relative to binary at %s", absBin)
-		}
+		distDir = filepath.Join(wd, "web-ui", "dist")
+	}
+	if _, err := os.Stat(distDir); os.IsNotExist(err) {
+		absWd, _ := filepath.Abs(wd)
+		log.Fatalf("[Desktop] cannot find web-ui/dist (tried %s, %s)", distDir, filepath.Join(wd, "web-ui", "dist"))
+		log.Printf("[Desktop] working directory: %s", absWd)
 	}
 	log.Printf("[Desktop] distDir: %s", distDir)
 
@@ -40,49 +37,71 @@ func main() {
 	}
 	htmlStr := string(htmlData)
 
-	// Create WebView.
+	// Create WebView and setup loaders BEFORE loading HTML.
 	wv := webkit.NewWebView()
+	setupLoaders(wv, distDir)
+	_ = wv.JSInterpreter()
 
-	// Register desktop bridge handlers.
-	InitDesktopBridge(wv)
-
-	// Load the page.
 	wv.LoadHTML(htmlStr)
 
-	log.Println("[LoadHTML] 加载成功")
+	// Register desktop bridge handlers AFTER page load.
+	InitDesktopBridge(wv)
 
-	// Log any console output (look for Vue diagnostics from the app).
+	// Console output from Vue app boot.
 	if out := wv.ConsoleOutput(); out != "" {
 		log.Println("[CONSOLE]")
 		log.Println(out)
 	}
 
-	// Ensure layout + paint before creating the window.
+	log.Println("[LoadHTML] 加载成功")
+
 	wv.EnsureLayout()
+
 	writeRenderDiagnostic(wv)
 
 	log.Println("[Desktop] window+render tree ready, creating host...")
 
-	// Create the app host (window). The host calls wv.EvalJS for the
-	// bridge-ready callback which may cause a second rebuild+layout.
 	host, err := app.NewHost(wv, 1280, 800, "PairCode IDE")
 	if err != nil {
 		log.Fatalf("[Desktop] 创建窗口失败: %v", err)
 	}
 
-	// After the host is created, layout once more so the window canvas is clean.
 	wv.EnsureLayout()
 	writeRenderDiagnostic(wv)
 
 	log.Println("[Desktop] 窗口已启动，开始事件循环...")
-
-	// Start the host event loop (blocking).
 	host.Run()
-
 	log.Println("[Desktop] 已退出。")
 }
 
+func setupLoaders(wv *webkit.WebView, distDir string) {
+	absDist, _ := filepath.Abs(distDir)
+	if mf := wv.MainFrame(); mf != nil {
+		if fr := mf.Frame(); fr != nil {
+			fr.ScriptLoader = func(src string) (string, error) {
+				clean := strings.TrimPrefix(strings.TrimPrefix(src, "file://"), "./")
+				data, err := os.ReadFile(filepath.Join(absDist, clean))
+				log.Printf("[SCRIPT] src=%q len=%d err=%v", src, len(data), err)
+				return string(data), err
+			}
+			fr.StyleSheetLoader = func(href string) (string, error) {
+				clean := strings.TrimPrefix(strings.TrimPrefix(href, "file://"), "./")
+				data, err := os.ReadFile(filepath.Join(absDist, clean))
+				if err != nil {
+					return "", err
+				}
+				// Strip Vue scoped [data-v-...] selectors to make CSS match.
+				re := regexp.MustCompile(`\[data-v-[a-f0-9]+\]`)
+				cleaned := re.ReplaceAllString(string(data), "")
+				return cleaned, nil
+			}
+		}
+	}
+}
+
 func writeRenderDiagnostic(wv *webkit.WebView) {
+	// Read current render view WITHOUT rebuilding. We want the post-layout
+	// geometry, not a fresh un-laid-out tree.
 	rv := wv.RenderView()
 	if rv == nil {
 		log.Println("[DIAG] RenderView is nil")
@@ -100,9 +119,6 @@ func writeRenderDiagnostic(wv *webkit.WebView) {
 	fmt.Fprintln(f, "")
 	fmt.Fprintln(f, "=== RENDER TREE ===")
 	dumpRO(f, rv, 0)
-	fmt.Fprintln(f, "")
-	fmt.Fprintln(f, "=== ANOMALY ANALYSIS ===")
-	reportAnomalies(f, rv)
 	fmt.Fprintln(f, "")
 	fmt.Fprintln(f, "=== ANOMALY ANALYSIS ===")
 	reportAnomalies(f, rv)
