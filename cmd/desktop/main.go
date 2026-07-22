@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"wb-ui/app"
+	"wb-ui/rendering"
 	"wb-ui/webkit"
 )
 
@@ -52,7 +54,6 @@ func main() {
 	if out := wv.ConsoleOutput(); out != "" {
 		log.Printf("[CONSOLE]\n%s", out)
 	}
-	// ── Init desktop bridge (Go handlers + JS bridge SDK) ──
 	InitDesktopBridge(wv)
 
 	for i := 0; i < 8; i++ {
@@ -60,12 +61,14 @@ func main() {
 		time.Sleep(100 * time.Millisecond)
 	}
 	wv.RebuildRenderTree()
-	// Quick check: Vue mount succeeded?
 	wv.EvalJS(`(function(){var a=document.getElementById('app');if(a&&a.childElementCount>0)console.log('[VUE] OK, innerHTML.len='+a.innerHTML.length);else console.log('[VUE] ERR, app is empty')})()`)
 	if out := wv.ConsoleOutput(); out != "" {
 		log.Printf("[CONSOLE2]\n%s", out)
 	}
+
 	log.Println("[Desktop] window+render tree ready, creating host...")
+	wv.EnsureLayout()
+	dumpRenderDiagnostic(wv)
 
 	host, err := app.NewHost(wv, 1280, 800, "PairCode IDE")
 	if err != nil {
@@ -73,7 +76,6 @@ func main() {
 		return
 	}
 	log.Println("[Desktop] 窗口已启动，开始事件循环...")
-
 	host.Run()
 	log.Println("[Desktop] 已退出。")
 }
@@ -89,12 +91,67 @@ func setupLoaders(wv *webkit.WebView, distDir string) {
 			}
 			fr.StyleSheetLoader = func(href string) (string, error) {
 				data, _ := os.ReadFile(filepath.Join(absDist, strings.TrimPrefix(strings.TrimPrefix(href, "file://"), "./")))
-				// Remove Vue scoped [data-v-XXXXXXXX] selectors — wb-ui engine
-				// does not inject data-v attributes onto DOM elements at runtime.
 				re := regexp.MustCompile(`\[data-v-[a-f0-9]+\]`)
 				cleaned := re.ReplaceAllString(string(data), "")
 				return cleaned, nil
 			}
 		}
+	}
+}
+
+func dumpRenderDiagnostic(wv *webkit.WebView) {
+	rv := wv.RenderView()
+	if rv == nil {
+		log.Println("[DIAG] RenderView is nil")
+		return
+	}
+
+	f, err := os.Create("desktop_diag.log")
+	if err != nil {
+		log.Printf("[DIAG] Cannot create log: %v", err)
+		return
+	}
+	defer f.Close()
+
+	fmt.Fprintln(f, "=== DESKTOP RENDER DIAGNOSTIC ===")
+	fmt.Fprintln(f, "")
+	fmt.Fprintln(f, "=== RENDER TREE ===")
+	dumpRO(f, rv, 0)
+	fmt.Fprintln(f, "")
+	fmt.Fprintln(f, "=== DIAGNOSTIC COMPLETE ===")
+	log.Println("[DIAG] Wrote desktop_diag.log")
+}
+
+func dumpRO(f *os.File, ro rendering.RenderObject, depth int) {
+	if ro == nil {
+		return
+	}
+	prefix := strings.Repeat("  ", depth)
+	name := ro.RenderName()
+
+	cnt := 0
+	for c := ro.FirstChild(); c != nil; c = c.NextSibling() {
+		cnt++
+	}
+
+	cs := ro.Style()
+	lb := ro.LayoutBox()
+	if lb != nil {
+		bgStr := ""
+		dispStr := ""
+		if cs != nil {
+			if cs.BackgroundColor.A > 0 {
+				bgStr = fmt.Sprintf(" bg=#%02x%02x%02x", cs.BackgroundColor.R, cs.BackgroundColor.G, cs.BackgroundColor.B)
+			}
+			dispStr = fmt.Sprintf(" disp=%d", cs.Display)
+		}
+		fmt.Fprintf(f, "%s%s (%d ch) x=%.0f y=%.0f w=%.0f h=%.0f%s%s\n",
+			prefix, name, cnt, lb.Rect.X, lb.Rect.Y, lb.Rect.Width, lb.Rect.Height, dispStr, bgStr)
+	} else {
+		fmt.Fprintf(f, "%s%s (%d ch) [no layout]\n", prefix, name, cnt)
+	}
+
+	for c := ro.FirstChild(); c != nil; c = c.NextSibling() {
+		dumpRO(f, c, depth+1)
 	}
 }
