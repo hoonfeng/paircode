@@ -3,6 +3,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -110,10 +111,14 @@ func setupLoaders(wv *webkit.WebView, distDir string) {
 				log.Printf("[SCRIPT] len=%d err=%v", len(data), err)
 				return string(data), nil
 			}
-			fr.StyleSheetLoader = func(href string) (string, error) {
-				data, _ := os.ReadFile(filepath.Join(absDist, strings.TrimPrefix(strings.TrimPrefix(href, "file://"), "./")))
-				return string(data), nil
-			}
+		fr.StyleSheetLoader = func(href string) (string, error) {
+			data, _ := os.ReadFile(filepath.Join(absDist, strings.TrimPrefix(strings.TrimPrefix(href, "file://"), "./")))
+			// Remove Vue scoped [data-v-XXXXXXXX] selectors — wb-ui engine
+			// does not inject data-v attributes onto DOM elements at runtime.
+			re := regexp.MustCompile(`\[data-v-[a-f0-9]+\]`)
+			cleaned := re.ReplaceAllString(string(data), "")
+			return cleaned, nil
+		}
 		}
 	}
 }
