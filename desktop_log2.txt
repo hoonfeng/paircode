@@ -1,0 +1,28 @@
+13:34:48 [Desktop] PairCode IDE 桌面版 v1.0.6-desktop
+13:34:48 [Desktop] distDir: F:\syproject\gou-ide\cmd\desktop\web-ui\dist
+13:34:48 [LoadHTML] 开始加载, 大小=7950
+13:34:48 [SCRIPT] len=10010782 err=<nil>
+[SCRIPT] len=10010782 hasMount=false
+13:34:49 [LoadHTML] 加载成功
+13:34:49 [CONSOLE]
+map[]
+Warning: KaTeX doesn't work in quirks mode. Make sure your website has a suitable doctype.
+map[]
+WebSocket not available in desktop mode
+13:34:49 [Bridge] 初始化桌面端桥接...
+13:34:49 [Bridge] 完成, 已注册 18 个处理器
+13:34:50 [CONSOLE2]
+map[]
+Warning: KaTeX doesn't work in quirks mode. Make sure your website has a suitable doctype.
+map[]
+WebSocket not available in desktop mode
+[DIAG] getElementById("app")=app
+[DIAG] querySelector("#app")=app
+[DIAG] body=BODY
+[DIAG] body.firstChild=undefined
+[DIAG2] app.childElementCount=1, innerHTML.len=24895
+13:34:50 [Desktop] window+render tree ready, creating host...
+13:34:50 [Desktop] window+render tree ready, creating host...
+[fontmgr] loaded 11 font(s); default=true sans=true serif=true mono=true
+[fontmgr] loaded 496 system font(s) total
+13:34:52 [Desktop] 窗口已启动，开始事件循环...
