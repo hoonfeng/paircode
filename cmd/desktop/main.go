@@ -145,8 +145,17 @@ func dumpRO(f *os.File, ro rendering.RenderObject, depth int) {
 			}
 			dispStr = fmt.Sprintf(" disp=%d", cs.Display)
 		}
-		fmt.Fprintf(f, "%s%s (%d ch) x=%.0f y=%.0f w=%.0f h=%.0f%s%s\n",
+		fmt.Fprintf(f, "%s%s (%d ch) x=%.0f y=%.0f w=%.0f h=%.0f%s%s",
 			prefix, name, cnt, lb.Rect.X, lb.Rect.Y, lb.Rect.Width, lb.Rect.Height, dispStr, bgStr)
+		if rt, ok := ro.(*rendering.RenderText); ok {
+			segs := rt.Segments()
+			if len(segs) > 0 {
+				fmt.Fprintf(f, " segs=%d[W=%.0f H=%.0f]", len(segs), segs[0].Width, segs[0].Height)
+			} else {
+				fmt.Fprint(f, " segs=0")
+			}
+		}
+		fmt.Fprintln(f)
 	} else {
 		fmt.Fprintf(f, "%s%s (%d ch) [no layout]\n", prefix, name, cnt)
 	}
