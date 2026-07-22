@@ -9,7 +9,13 @@ import (
 	"wb-ui/app"
 	"wb-ui/webkit"
 )
-var prePolyfill = ""
+var prePolyfill = `if(typeof TextEncoder==='undefined'){TextEncoder=function(){this.encode=function(s){var arr=new Uint8Array(s.length);for(var i=0;i<s.length;i++)arr[i]=s.charCodeAt(i);return arr;}}}
+if(typeof TextDecoder==='undefined'){TextDecoder=function(){this.decode=function(arr){var s='';for(var i=0;i<arr.length;i++)s+=String.fromCharCode(arr[i]);return s;}}}
+if(typeof WebSocket==='undefined'){WebSocket=function(){console.warn('WebSocket not available in desktop mode')}}
+if(typeof crypto==='undefined'){crypto={getRandomValues:function(arr){for(var i=0;i<arr.length;i++)arr[i]=Math.floor(Math.random()*256)}}}
+if(typeof structuredClone==='undefined'){structuredClone=function(obj){return JSON.parse(JSON.stringify(obj))}}
+if(typeof fetch==='undefined'){fetch=function(){return Promise.reject(new Error('fetch not available in desktop mode'))}}
+`
 
 func main() {
 	log.SetFlags(log.Ltime)
