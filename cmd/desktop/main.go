@@ -125,6 +125,24 @@ func writeRenderDiagnostic(wv *webkit.WebView) {
 					}
 				}
 			}
+			// Also dump ALL nodes with w=0 and h>0
+			if lb := ro.LayoutBox(); lb != nil {
+				if lb.Rect.Width == 0 && lb.Rect.Height > 0 {
+					name := "?"
+					if n := ro.Node(); n != nil {
+						if el, ok := n.(*dom.Element); ok {
+							name = el.LocalName()
+							if cls := el.GetAttribute("class"); cls != "" {
+								name += "." + cls
+							}
+						} else {
+							name = n.NodeName()
+						}
+					}
+					fmt.Fprintf(os.Stderr, "[PREDUMP:w0] %s ro=%p lb=%p lb.rect=%.0fx%.0f (%.0f,%.0f)\n",
+						name, ro, lb, lb.Rect.Width, lb.Rect.Height, lb.Rect.X, lb.Rect.Y)
+				}
+			}
 			for c := ro.FirstChild(); c != nil; c = c.NextSibling() {
 				w2(c)
 			}
