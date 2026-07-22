@@ -12,9 +12,6 @@ import (
 	"wb-ui/webkit"
 )
 
-// desktopDOMStubs — 临时桩（唯一待迁移：getSelection → bindings）
-var desktopDOMStubs = `if(typeof window.getSelection=='undefined')window.getSelection=function(){return{anchorNode:null,anchorOffset:0,focusNode:null,focusOffset:0,rangeCount:0,getRangeAt:function(){return null},addRange:function(){},removeAllRanges:function(){}}}
-`
 func main() {
 	log.SetFlags(log.Ltime)
 	log.Println("[Desktop] PairCode IDE 桌面版 v1.0.6-desktop")
@@ -41,9 +38,6 @@ func main() {
 	setupLoaders(wv, distDir)
 	_ = wv.JSInterpreter()
 
-	// Inject desktop-specific DOM stubs BEFORE LoadHTML.
-	wv.EvalJS(desktopDOMStubs)
-
 	htmlData, err := os.ReadFile(distDir + "/index.html")
 	s := string(htmlData)
 	s = strings.Replace(s, `type="module"`, "", 1)
@@ -59,7 +53,6 @@ func main() {
 		log.Printf("[CONSOLE]\n%s", out)
 	}
 	// ── Init desktop bridge (Go handlers + JS bridge SDK) ──
-	// Must be after LoadHTML (JS runtime ready) and before Vue mount.
 	InitDesktopBridge(wv)
 
 	// Diagnostic: check DOM after load
@@ -88,7 +81,6 @@ func main() {
 	if out := wv.ConsoleOutput(); out != "" {
 		log.Printf("[CONSOLE2]\n%s", out)
 	}
-	log.Println("[Desktop] window+render tree ready, creating host...")
 	log.Println("[Desktop] window+render tree ready, creating host...")
 
 	host, err := app.NewHost(wv, 1280, 800, "PairCode IDE")
