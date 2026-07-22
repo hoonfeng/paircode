@@ -55,10 +55,6 @@ func main() {
 
 	log.Println("[LoadHTML] 加载成功")
 
-	wv.EnsureLayout()
-
-	writeRenderDiagnostic(wv)
-
 	log.Println("[Desktop] window+render tree ready, creating host...")
 
 	host, err := app.NewHost(wv, 1280, 800, "PairCode IDE")
@@ -151,6 +147,9 @@ func reportAnomalies(f *os.File, ro rendering.RenderObject) {
 				cs := ro.Style()
 				if cs.BackgroundColor.A > 0 || cs.Width.Value > 0 {
 					ans = append(ans, anomaly{"零宽但有背景/宽度", fmt.Sprintf("%s w=0 bg=#%02x%02x%02x", name, cs.BackgroundColor.R, cs.BackgroundColor.G, cs.BackgroundColor.B)})
+					// Debug: log the layout box pointer for cross-reference
+					fmt.Fprintf(os.Stderr, "[W0] %s p=%p w=%.0f h=%.0f x=%.0f y=%.0f\n",
+						name, lb, lb.Rect.Width, lb.Rect.Height, lb.Rect.X, lb.Rect.Y)
 				}
 			}
 		}
@@ -191,8 +190,8 @@ func dumpRO(f *os.File, ro rendering.RenderObject, depth int) {
 			}
 			dispStr = fmt.Sprintf(" disp=%d", cs.Display)
 		}
-		fmt.Fprintf(f, "%s%s (%d ch) x=%.0f y=%.0f w=%.0f h=%.0f%s%s",
-			prefix, name, cnt, lb.Rect.X, lb.Rect.Y, lb.Rect.Width, lb.Rect.Height, dispStr, bgStr)
+		fmt.Fprintf(f, "%s%s (%d ch) x=%.0f y=%.0f w=%.0f h=%.0f p=%p%s%s",
+			prefix, name, cnt, lb.Rect.X, lb.Rect.Y, lb.Rect.Width, lb.Rect.Height, lb, dispStr, bgStr)
 		if rt, ok := ro.(*rendering.RenderText); ok {
 			segs := rt.Segments()
 			if len(segs) > 0 {
