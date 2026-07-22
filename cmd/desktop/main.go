@@ -114,7 +114,7 @@ func writeRenderDiagnostic(wv *webkit.WebView) {
 			}
 			if n := ro.Node(); n != nil {
 				if el, ok := n.(*dom.Element); ok {
-					if cls := el.GetAttribute("class"); cls == "rp-body" {
+					if cls := el.GetAttribute("class"); cls == "rp-body" || cls == "right-panel" || cls == "file-explorer" {
 						lb := ro.LayoutBox()
 						fn := "nil"
 						if lb != nil {
