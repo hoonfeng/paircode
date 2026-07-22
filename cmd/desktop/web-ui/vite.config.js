@@ -17,6 +17,7 @@ export default defineConfig({
   build: {
     outDir: path.resolve(__dirname, 'dist'),
     emptyOutDir: true,
+    target: 'es2015',
     minify: false,
     assetsInlineLimit: 8192,
     cssCodeSplit: false,
