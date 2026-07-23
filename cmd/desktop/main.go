@@ -10,6 +10,7 @@ import (
 
 	"wb-ui/app"
 	"wb-ui/dom"
+	"wb-ui/layout"
 	"wb-ui/rendering"
 	"wb-ui/webkit"
 )
@@ -18,44 +19,36 @@ func main() {
 	log.SetFlags(log.Ltime)
 	log.Println("[Desktop] PairCode IDE 桌面版 v1.0.6-desktop")
 
-	// Determine the dist directory using absolute paths for reliable loading.
 	wd, _ := os.Getwd()
 	distDir := filepath.Join(wd, "cmd", "desktop", "web-ui", "dist")
 	if _, err := os.Stat(distDir); os.IsNotExist(err) {
 		distDir = filepath.Join(wd, "web-ui", "dist")
 	}
 	if _, err := os.Stat(distDir); os.IsNotExist(err) {
-		absWd, _ := filepath.Abs(wd)
-		log.Fatalf("[Desktop] cannot find web-ui/dist (tried %s, %s)", distDir, filepath.Join(wd, "web-ui", "dist"))
-		log.Printf("[Desktop] working directory: %s", absWd)
+		log.Fatalf("[Desktop] cannot find web-ui/dist")
 	}
 	log.Printf("[Desktop] distDir: %s", distDir)
 
-	// Read index.html.
 	htmlData, err := os.ReadFile(distDir + "/index.html")
 	if err != nil {
 		log.Fatalf("[Desktop] cannot read index.html: %v", err)
 	}
 	htmlStr := string(htmlData)
 
-	// Create WebView and setup loaders BEFORE loading HTML.
 	wv := webkit.NewWebView()
 	setupLoaders(wv, distDir)
 	_ = wv.JSInterpreter()
 
 	wv.LoadHTML(htmlStr)
 
-	// Register desktop bridge handlers AFTER page load.
 	InitDesktopBridge(wv)
 
-	// Console output from Vue app boot.
 	if out := wv.ConsoleOutput(); out != "" {
 		log.Println("[CONSOLE]")
 		log.Println(out)
 	}
 
 	log.Println("[LoadHTML] 加载成功")
-
 	log.Println("[Desktop] window+render tree ready, creating host...")
 
 	host, err := app.NewHost(wv, 1280, 800, "PairCode IDE")
@@ -87,7 +80,6 @@ func setupLoaders(wv *webkit.WebView, distDir string) {
 				if err != nil {
 					return "", err
 				}
-				// Strip Vue scoped [data-v-...] selectors to make CSS match.
 				re := regexp.MustCompile(`\[data-v-[a-f0-9]+\]`)
 				cleaned := re.ReplaceAllString(string(data), "")
 				return cleaned, nil
@@ -97,13 +89,12 @@ func setupLoaders(wv *webkit.WebView, distDir string) {
 }
 
 func writeRenderDiagnostic(wv *webkit.WebView) {
-	// Read current render view WITHOUT rebuilding. We want the post-layout
-	// geometry, not a fresh un-laid-out tree.
 	rv := wv.RenderView()
 	if rv == nil {
 		log.Println("[DIAG] RenderView is nil")
 		return
 	}
+	state := rv.LayoutState()
 
 	// Debug: verify rp-body width right before the diagnostic dump.
 	func() {
@@ -117,17 +108,18 @@ func writeRenderDiagnostic(wv *webkit.WebView) {
 					if cls := el.GetAttribute("class"); cls == "rp-body" || cls == "right-panel" || cls == "file-explorer" {
 						lb := ro.LayoutBox()
 						fn := "nil"
-						if lb != nil {
-							fn = fmt.Sprintf("%.0fx%.0f", lb.Rect.Width, lb.Rect.Height)
+						if lb != nil && state != nil {
+							g := state.GeometryForBox(lb)
+							fn = fmt.Sprintf("%.0fx%.0f", g.BorderBoxWidth(), g.BorderBoxHeight())
 						}
 						fmt.Fprintf(os.Stderr, "[PREDUMP] cls=%s ro=%p lb=%p lb.rect=%s\n",
 							cls, ro, lb, fn)
 					}
 				}
 			}
-			// Also dump ALL nodes with w=0 and h>0
-			if lb := ro.LayoutBox(); lb != nil {
-				if lb.Rect.Width == 0 && lb.Rect.Height > 0 {
+			if lb := ro.LayoutBox(); lb != nil && state != nil {
+				g := state.GeometryForBox(lb)
+				if g.BorderBoxWidth() == 0 && g.BorderBoxHeight() > 0 {
 					name := "?"
 					if n := ro.Node(); n != nil {
 						if el, ok := n.(*dom.Element); ok {
@@ -140,7 +132,7 @@ func writeRenderDiagnostic(wv *webkit.WebView) {
 						}
 					}
 					fmt.Fprintf(os.Stderr, "[PREDUMP:w0] %s ro=%p lb=%p lb.rect=%.0fx%.0f (%.0f,%.0f)\n",
-						name, ro, lb, lb.Rect.Width, lb.Rect.Height, lb.Rect.X, lb.Rect.Y)
+						name, ro, lb, g.BorderBoxWidth(), g.BorderBoxHeight(), g.Left(), g.Top())
 				}
 			}
 			for c := ro.FirstChild(); c != nil; c = c.NextSibling() {
@@ -160,16 +152,16 @@ func writeRenderDiagnostic(wv *webkit.WebView) {
 	fmt.Fprintln(f, "=== DESKTOP RENDER DIAGNOSTIC ===")
 	fmt.Fprintln(f, "")
 	fmt.Fprintln(f, "=== RENDER TREE ===")
-	dumpRO(f, rv, 0)
+	dumpRO(f, rv, 0, state)
 	fmt.Fprintln(f, "")
 	fmt.Fprintln(f, "=== ANOMALY ANALYSIS ===")
-	reportAnomalies(f, rv)
+	reportAnomalies(f, rv, state)
 	fmt.Fprintln(f, "")
 	fmt.Fprintln(f, "=== DIAGNOSTIC COMPLETE ===")
 	log.Println("[DIAG] Wrote desktop_diag.log")
 }
 
-func reportAnomalies(f *os.File, ro rendering.RenderObject) {
+func reportAnomalies(f *os.File, ro rendering.RenderObject, state *layout.LayoutState) {
 	type anomaly struct {
 		desc string
 		info string
@@ -178,24 +170,24 @@ func reportAnomalies(f *os.File, ro rendering.RenderObject) {
 	var walk func(ro rendering.RenderObject, depth int)
 	walk = func(ro rendering.RenderObject, depth int) {
 		lb := ro.LayoutBox()
-		if lb != nil {
+		if lb != nil && state != nil {
+			g := state.GeometryForBox(lb)
 			name := ro.RenderName()
-			if lb.Rect.Y < -1 {
-				ans = append(ans, anomaly{"负 Y 坐标", fmt.Sprintf("%s y=%.0f", name, lb.Rect.Y)})
+			if g.Top() < -1 {
+				ans = append(ans, anomaly{"负 Y 坐标", fmt.Sprintf("%s y=%.0f", name, g.Top())})
 			}
-			if lb.Rect.X < -1 {
-				ans = append(ans, anomaly{"负 X 坐标", fmt.Sprintf("%s x=%.0f", name, lb.Rect.X)})
+			if g.Left() < -1 {
+				ans = append(ans, anomaly{"负 X 坐标", fmt.Sprintf("%s x=%.0f", name, g.Left())})
 			}
-			if lb.Rect.X > 1280 {
-				ans = append(ans, anomaly{"越界 X > viewport", fmt.Sprintf("%s x=%.0f w=%.0f", name, lb.Rect.X, lb.Rect.Width)})
+			if g.Left() > 1280 {
+				ans = append(ans, anomaly{"越界 X > viewport", fmt.Sprintf("%s x=%.0f w=%.0f", name, g.Left(), g.BorderBoxWidth())})
 			}
-			if lb.Rect.Width == 0 && ro.Style() != nil && ro.Style().Display != 0 {
+			if g.BorderBoxWidth() == 0 && ro.Style() != nil && ro.Style().Display != 0 {
 				cs := ro.Style()
 				if cs.BackgroundColor.A > 0 || cs.Width.Value > 0 {
 					ans = append(ans, anomaly{"零宽但有背景/宽度", fmt.Sprintf("%s w=0 bg=#%02x%02x%02x", name, cs.BackgroundColor.R, cs.BackgroundColor.G, cs.BackgroundColor.B)})
-					// Debug: log the layout box pointer for cross-reference
 					fmt.Fprintf(os.Stderr, "[W0] %s p=%p w=%.0f h=%.0f x=%.0f y=%.0f\n",
-						name, lb, lb.Rect.Width, lb.Rect.Height, lb.Rect.X, lb.Rect.Y)
+						name, lb, g.BorderBoxWidth(), g.BorderBoxHeight(), g.Left(), g.Top())
 				}
 			}
 		}
@@ -213,7 +205,7 @@ func reportAnomalies(f *os.File, ro rendering.RenderObject) {
 	}
 }
 
-func dumpRO(f *os.File, ro rendering.RenderObject, depth int) {
+func dumpRO(f *os.File, ro rendering.RenderObject, depth int, state *layout.LayoutState) {
 	if ro == nil {
 		return
 	}
@@ -227,7 +219,8 @@ func dumpRO(f *os.File, ro rendering.RenderObject, depth int) {
 
 	cs := ro.Style()
 	lb := ro.LayoutBox()
-	if lb != nil {
+	if lb != nil && state != nil {
+		g := state.GeometryForBox(lb)
 		bgStr := ""
 		dispStr := ""
 		if cs != nil {
@@ -237,7 +230,7 @@ func dumpRO(f *os.File, ro rendering.RenderObject, depth int) {
 			dispStr = fmt.Sprintf(" disp=%d", cs.Display)
 		}
 		fmt.Fprintf(f, "%s%s (%d ch) x=%.0f y=%.0f w=%.0f h=%.0f p=%p%s%s",
-			prefix, name, cnt, lb.Rect.X, lb.Rect.Y, lb.Rect.Width, lb.Rect.Height, lb, dispStr, bgStr)
+			prefix, name, cnt, g.Left(), g.Top(), g.BorderBoxWidth(), g.BorderBoxHeight(), lb, dispStr, bgStr)
 		if rt, ok := ro.(*rendering.RenderText); ok {
 			segs := rt.Segments()
 			if len(segs) > 0 {
@@ -252,6 +245,6 @@ func dumpRO(f *os.File, ro rendering.RenderObject, depth int) {
 	}
 
 	for c := ro.FirstChild(); c != nil; c = c.NextSibling() {
-		dumpRO(f, c, depth+1)
+		dumpRO(f, c, depth+1, state)
 	}
 }
