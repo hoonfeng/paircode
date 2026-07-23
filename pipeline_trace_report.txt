@@ -1,0 +1,114 @@
+═══════════════════════════════════════════════
+  wb-ui Pipeline Trace Report
+═══════════════════════════════════════════════
+
+总节点数:          282
+RenderText:        53
+零宽节点:          47
+零高节点:          13
+负 Y 坐标:         0
+负 X 坐标:         0
+越界 X:            0
+巨量高度(>10万):   0
+文字w=0但段有值:   0
+有背景但w=0:       43
+匿名节点(0子0bg):  7
+最大合理高度:      802
+
+── 异常列表 ──────────────────────────────────
+🟠 zero-width-background: RenderBlockFlow bg=#000000 w=0 h=28
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#000000 w=0 h=28
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#f0f0f0 w=0 h=15
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#f0f0f0 w=0 h=15
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#f0f0f0 w=0 h=22
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#f0f0f0 w=0 h=22
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#161b22 w=0 h=748
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#000000 w=0 h=34
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#000000 w=0 h=17
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#000000 w=0 h=17
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#f0f0f0 w=0 h=17
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#f0f0f0 w=0 h=17
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#f0f0f0 w=0 h=17
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#000000 w=0 h=800
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#000000 w=0 h=800
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#000000 w=0 h=16
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#000000 w=0 h=159
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#000000 w=0 h=17
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#000000 w=0 h=21
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#000000 w=0 h=17
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#161b22 w=0 h=800
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#0d1117 w=0 h=802
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#000000 w=0 h=150
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#000000 w=0 h=800
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#000000 w=0 h=800
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#000000 w=0 h=800
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#21262d w=0 h=800
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#000000 w=0 h=800
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#000000 w=0 h=800
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#21262d w=0 h=800
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#000000 w=0 h=19
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#000000 w=0 h=33
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#000000 w=0 h=33
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#000000 w=0 h=19
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#30363d w=0 h=1
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#000000 w=0 h=36
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#21262d w=0 h=25
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#21262d w=0 h=25
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#000000 w=0 h=22
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#000000 w=0 h=22
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#000000 w=0 h=22
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#000000 w=0 h=22
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+🟠 zero-width-background: RenderBlockFlow bg=#000000 w=0 h=22
+    建议: LayoutBox width not set; check flex-grow/container width propagation
+
+── 关键组件坐标 ──────────────────────────────
+  [sidebar区域] x<50 y<50     x=0 y=0 w=1280 h=800 depth=1
+  [sidebar区域] x<50 y<50     x=0 y=0 w=1280 h=800 depth=2
+  [sidebar区域] x<50 y<50     x=0 y=0 w=1280 h=800 depth=3
+  [sidebar区域] x<50 y<50     x=0 y=0 w=1280 h=800 depth=4
+  [statusbar] y>750         x=0 y=778 w=1264 h=22 depth=5
+  [right-panel] x>950       x=953 y=30 w=327 h=748 depth=5
+
+报告已生成: ..\gou-ide\pipeline_trace_report.txt
