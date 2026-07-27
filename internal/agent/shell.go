@@ -10,9 +10,11 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 )
 
 // bgProc 一个后台进程：cmd + 带锁输出缓冲 + 结束状态。实现 io.Writer 供 exec 直接写。
@@ -61,6 +63,14 @@ func (bg *bgRegistry) start(command, dir string) (int, error) {
 
 	c := exec.Command("cmd", "/C", "chcp 65001 >nul & "+command)
 	c.Dir = dir
+	// ★ Windows：设置 CREATE_NEW_PROCESS_GROUP，防止子进程被杀时
+	// 发送 CTRL_BREAK_EVENT 到父进程组——该事件在 Go 中映射为 SIGTERM。
+	if runtime.GOOS == "windows" {
+		if c.SysProcAttr == nil {
+			c.SysProcAttr = &syscall.SysProcAttr{}
+		}
+		c.SysProcAttr.CreationFlags |= 0x00000008 // CREATE_NEW_PROCESS_GROUP
+	}
 	c.Stdout = p
 	c.Stderr = p
 	p.cmd = c

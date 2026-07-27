@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
+	"syscall"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -513,6 +515,15 @@ func RegisterDefaultTools(r *Registry, root string) {
 			// chcp 65001 统一 UTF-8 输出（避免中文乱码，同终端面板）。
 			c := exec.CommandContext(cctx, "cmd", "/C", "chcp 65001 >nul & "+command)
 			c.Dir = dir
+			// ★ Windows：设置 CREATE_NEW_PROCESS_GROUP，防止子进程超时被杀时
+			// 发送 CTRL_BREAK_EVENT 到父进程组——该事件在 Go 中映射为 SIGTERM，
+			// 会导致 companion.exe 的 main() signal.Notify 误判为退出信号而关闭。
+			if runtime.GOOS == "windows" {
+				if c.SysProcAttr == nil {
+					c.SysProcAttr = &syscall.SysProcAttr{}
+				}
+				c.SysProcAttr.CreationFlags |= 0x00000008 // CREATE_NEW_PROCESS_GROUP
+			}
 			out, err := c.CombinedOutput()
 			res := capOutput(string(out), 16000)
 			if cctx.Err() == context.DeadlineExceeded {
