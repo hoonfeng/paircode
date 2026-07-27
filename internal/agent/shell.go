@@ -7,6 +7,7 @@ package agent
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -112,6 +113,10 @@ func registerShellTools(r *Registry, root string) {
 			command := strings.TrimSpace(argStr(args, "command"))
 			if command == "" {
 				return "", fmt.Errorf("command 不能为空")
+			}
+			// ★ 自身项目安全检测：禁止杀死自身进程或直接运行 companion
+			if reason := isSelfHarmCommand(command, root); reason != "" {
+				return "", errors.New(reason)
 			}
 			dir := root
 			if cwd := argStr(args, "cwd"); cwd != "" {

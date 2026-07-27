@@ -503,6 +503,10 @@ func RegisterDefaultTools(r *Registry, root string) {
 			if strings.TrimSpace(command) == "" {
 				return "", fmt.Errorf("command 不能为空")
 			}
+			// ★ 自身项目安全检测：禁止杀死自身进程或直接运行 companion
+			if reason := isSelfHarmCommand(command, root); reason != "" {
+				return "", errors.New(reason)
+			}
 			dir := root
 			if cwd := argStr(args, "cwd"); cwd != "" {
 				var err error
@@ -813,6 +817,50 @@ func parentDirExists(root, full string) bool {
 	absParent := filepath.Join(root, parent)
 	fi, err := os.Stat(absParent)
 	return err == nil && fi.IsDir()
+}
+
+// isSelfHarmCommand 检测命令是否会伤害自身进程（companion 进程本身）。
+// 自身项目指包含 cmd/companion 目录的项目（即 companion 自身）。
+// 返回非空字符串表示阻止原因，空字符串表示安全。
+// 适用场景：agent 迭代自身代码后，LLM 可能尝试杀死旧进程或启动新实例导致自身崩溃。
+func isSelfHarmCommand(command, root string) string {
+	// 检查是否是 companion 项目根
+	companionDir := filepath.Join(root, "cmd", "companion")
+	if _, err := os.Stat(companionDir); os.IsNotExist(err) {
+		return "" // 不是自身项目，放行
+	}
+
+	lower := strings.ToLower(command)
+
+	// 1. 杀死自身进程（taskkill / kill / Stop-Process 等）
+	if strings.Contains(lower, "taskkill") {
+		if strings.Contains(lower, "companion") || strings.Contains(lower, "/pid") || strings.Contains(lower, "/im") {
+			return "⚠️ 禁止杀死自身进程：命令尝试终止 companion 进程，但当前 agent 正运行在 companion 中，杀死自己会导致所有后续动作无法执行。如欲验证修改效果，请使用 run_background 并设置不同端口（如 WEB_PORT=9091）。"
+		}
+	}
+	if strings.Contains(lower, "stop-process") && strings.Contains(lower, "companion") {
+		return "⚠️ 禁止杀死自身进程：命令尝试终止 companion 进程（当前 agent 自身）..."
+	}
+	if (strings.Contains(lower, " pkill ") || strings.Contains(lower, "killall ")) && strings.Contains(lower, "companion") {
+		return "⚠️ 禁止杀死自身进程..."
+	}
+
+	// 2. 直接运行 companion（端口冲突导致进程异常退出）
+	// 排除 "go run" 的编译过程（不在同一个 cmd /C 上下文中）
+	if lower == "companion.exe" || lower == "./companion.exe" || lower == "./companion" ||
+		lower == "start companion.exe" || lower == `start "" companion.exe` {
+		return "⚠️ 禁止直接运行 companion.exe：当前 agent 已在运行中（端口已被占用）。如需测试新版本，请用 run_background 并设置 WEB_PORT=9091 等不同端口。"
+	}
+
+	// 3. 在同一个命令中 build + run companion（常见 agent 自我迭代模式）
+	hasBuildCompanion := strings.Contains(lower, "go build") &&
+		(strings.Contains(lower, "./cmd/companion") || strings.Contains(lower, " cmd/companion"))
+	hasRunCompanion := strings.Contains(lower, "companion.exe") || strings.Contains(lower, " && .\\")
+	if hasBuildCompanion && hasRunCompanion {
+		return "⚠️ 禁止构建并运行自身项目：这会覆盖正在运行的二进制或导致端口冲突。如需测试，请用不同目录+不同端口（如 WEB_PORT=9091）。"
+	}
+
+	return ""
 }
 
 // isBlockingCommand 检测命令是否为长期进程（会阻塞 run_command 120s 超时）。
