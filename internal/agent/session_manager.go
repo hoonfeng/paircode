@@ -442,6 +442,26 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 
 	sess.Loop = loop
 
+	// ★ 自主模式：OnNextTask 回调（自然终止时自动注入下一阶段 follow-up）
+	if opts.Autonomous {
+		loop.OnNextTask = func() string {
+			// 从 TaskManager 获取当前对话的下一条待办任务
+			localRoot := opts.WorkspaceRoot
+			if localRoot == "" {
+				return ""
+			}
+			tm := UseTaskManager(localRoot)
+			tasks := tm.ListPendingTasks(convID)
+			if len(tasks) == 0 {
+				return ""
+			}
+			next := tasks[0]
+			msg := fmt.Sprintf("继续执行下一阶段任务。\n\n任务：**%s**\n描述：%s\n\n请先调用 update_plan 将此项标记为 in_progress，然后开始执行。完成后更新状态，再调用 generate_commit_message 提交。",
+				next.Subject, next.Description)
+			return msg
+		}
+	}
+
 	// ★ 自主模式：注册规划工具（update_plan），普通模式不暴露
 	if opts.Autonomous && opts.Registry != nil {
 		RegisterPlanOnlyTools(opts.Registry)

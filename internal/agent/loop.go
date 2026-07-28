@@ -86,6 +86,12 @@ type Loop struct {
 	// 宿主（web/UI）通过此回调将用户的实时反馈传递给 Loop。
 	OnFeedback func() string
 
+	// OnNextTask 自主模式下，当 agent 自然终止（无 tool_call + 有正文）且 follow-up 队列为空时，
+	// 回调返回下一阶段的任务描述。返回非空字符串则自动注入 follow-up 消息让 agent 继续执行；
+	// 返回 "" 表示无后续任务，正常退出。
+	// 宿主（session_manager）通过此回调从任务队列中 pop 下一条待办任务。
+	OnNextTask func() string
+
 	// OnBatchPersist 批量持久化回调（可空）。每轮迭代结束立即回调一次当前完整消息列表，
 	// 确保 tool_call 与 tool_result 配对完整写入磁盘。loop.Run 返回后 defer 中会额外调用
 	// 一次以确保最后一轮写盘（PersistNewMessages 内部 diff 去重，无重复写开销）。
@@ -562,11 +568,24 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 
 		// ★ 自然终止：模型无工具调用且有正文 → 任务完成
 		if l.contentOnlyIters == 0 && len(assistant.ToolCalls) == 0 && strings.TrimSpace(assistant.Content) != "" {
-			// 检查跟进队列：有消息则注入继续，无消息则正常退出
+			// ① 检查跟进队列：有消息则注入继续
 			if followUpMsgs := l.drainFollowUpQueue(); len(followUpMsgs) > 0 {
 				l.ephemeralMsgs = append(l.ephemeralMsgs, followUpMsgs...)
 				l.emit(Event{Type: EventNotice, Content: fmt.Sprintf("收到 %d 条跟进消息，继续处理", len(followUpMsgs))})
 				l.contentOnlyIters = 0 // 重置内容循环计数，给跟进消息充分响应机会
+			} else if l.Autonomous && l.OnNextTask != nil {
+				// ② 自主模式：从 OnNextTask 获取下一阶段任务，自动注入 follow-up 持续驱动
+				if nextTask := l.OnNextTask(); nextTask != "" {
+					l.followUpQueue = append(l.followUpQueue, Message{Role: RoleUser, Content: nextTask})
+					l.ephemeralMsgs = append(l.ephemeralMsgs, Message{Role: RoleUser, Content: nextTask})
+					l.emit(Event{Type: EventNotice, Content: fmt.Sprintf("进入下一阶段：%s", truncStr(nextTask, 80))})
+					l.contentOnlyIters = 0
+					l.LogEntry("system", "next_phase", "进入下一阶段："+truncStr(nextTask, 80))
+				} else {
+					l.finishResult = &assistant.Content
+					l.emit(Event{Type: EventDone, Content: strings.TrimSpace(assistant.Content), DoneReason: "task_complete"})
+					return msgs, nil
+				}
 			} else {
 				l.finishResult = &assistant.Content
 				l.emit(Event{Type: EventDone, Content: strings.TrimSpace(assistant.Content), DoneReason: "task_complete"})
@@ -662,6 +681,20 @@ func (l *Loop) buildInjectionMessage() string {
 			}
 			b.WriteString(logStr)
 		}
+
+		// ★ 自主模式系统提示：仅在自主模式下注入，说明两级追踪机制（不修改 msgs[0]，不破坏缓存前缀）
+		if b.Len() > 0 {
+			b.WriteString("\n\n")
+		}
+		b.WriteString("# ★ 自主模式：计划→子任务树形追踪\n")
+		b.WriteString("自主模式下使用两级任务追踪——计划步骤为树干，子任务为枝叶：\n")
+		b.WriteString("1. 收到任务后第一轮：调用 update_plan 制定高层执行计划（2-5 步），用 pending/in_progress/done 追踪\n")
+		b.WriteString("2. 每个步骤开始执行时：调用 update_tasks 为该步骤创建子任务，每项子任务必须带 plan_step_index 绑定到对应的计划步骤\n")
+		b.WriteString("   plan_step_index = 0 表示第 1 步，1 表示第 2 步，以此类推\n")
+		b.WriteString("3. 当前步骤的所有子任务完成后：调用 update_plan 将该步骤标记 done，然后进入下一步骤\n")
+		b.WriteString("4. 所有计划步骤全部完成后：结束本轮任务\n")
+		b.WriteString("- ★ 每次 update_tasks 必须把该步骤内的所有子任务一起传入（全量替换），已不在列表中的子任务将自动清理\n")
+		b.WriteString("- 子任务也遵守全量替换规则——即使是不同步骤的子任务，也要在一次 update_tasks 中传入（用不同的 plan_step_index 区分）\n")
 	}
 
 	return b.String()
@@ -718,17 +751,7 @@ func DefaultSystemPrompt(roots []string) string {
 		"- ★ 全量替换：每次传入全部任务，已不在列表中的旧任务将自动清理。\n" +
 		"- 发现新前置依赖或方案不可行时即时调整任务清单。\n" +
 		"- 所有任务全部完成后结束本轮任务。\n\n" +
-		"# ★ 自主模式：计划→子任务树形追踪\n" +
-		"自主模式下使用两级任务追踪——计划步骤为树干，子任务为枝叶：\n" +
-		"1. 收到任务后第一轮：调用 update_plan 制定高层执行计划（2-5 步），用 pending/in_progress/done 追踪\n" +
-		"2. 每个步骤开始执行时：调用 update_tasks 为该步骤创建子任务，每项子任务必须带 plan_step_index 绑定到对应的计划步骤\n" +
-		"   plan_step_index = 0 表示第 1 步，1 表示第 2 步，以此类推\n" +
-		"3. 当前步骤的所有子任务完成后：调用 update_plan 将该步骤标记 done，然后进入下一步骤\n" +
-		"4. 所有计划步骤全部完成后：结束本轮任务\n" +
-		"- ★ 每次 update_tasks 必须把该步骤内的所有子任务一起传入（全量替换），已不在列表中的子任务将自动清理\n" +
-		"- 子任务也遵守全量替换规则——即使是不同步骤的子任务，也要在一次 update_tasks 中传入（用不同的 plan_step_index 区分）\n\n" +
 		"读文件时必须串行推进——读完一个文件，分析内容，再决定下一个读什么。\n" +
-		"禁止一次性发出 3+ 个 read_file——你预判需要的文件往往有一半是多余的。\n" +
 		"- 查找函数/类定义时，优先用 codegraph_function（附签名，支持34种语言）；仅 Go 语言可用 find_symbol。\n" +
 		"- 了解文件对外接口时，优先用 get_file_symbols。\n" +
 		"- 查看 struct/interface 完整层次结构时，优先用 codegraph_class。\n" +
@@ -790,7 +813,7 @@ func DefaultSystemPrompt(roots []string) string {
 		"联网(web_fetch/web_search)、截图(screenshot_*)、调试(debug_*)、Git(git_*)、记忆(memory_*)、\n" +
 		"BUG检测(bug_*)、办公(csv_*/word_*/read_pdf)、MCP/技能(skill_*/mcp_*)、任务(update_tasks/update_plan)。\n\n" +
 		"# 工作方式\n" +
-		"按「思考 → 调用工具 → 观察结果 → 再决策」循环推进，直至完成。\n" +
+"BUG检测(bug_*)、办公(csv_*/word_*/read_pdf)、MCP/技能(skill_*/mcp_*)、任务(update_tasks)。\n" +
 		"复杂或多步任务先用 update_tasks 列出细分任务，再逐步执行并更新状态（自主模式下先用 update_plan 再建子任务）。\n" +
 		"先用 search_* 定位、read_file 细读，再动手；改动优先 edit_file（小而准），大改才 write_file。\n" +
 		"不确定的库用法/报错/最新信息，用 web_search / web_fetch 查证，别凭记忆臆测。\n" +
@@ -798,7 +821,7 @@ func DefaultSystemPrompt(roots []string) string {
 		"# 防止卡死\n" +
 		"- 不要连续 3 轮只输出分析文本而不调用任何工具。\n" +
 		"- 不确定时宁可声明完成并向用户汇报，让用户决定是否继续。\n" +
-		"- 不要在「让我再看看…」和「也许还需要…」之间反复循环。\n" +
+"复杂或多步任务先用 update_tasks 列出细分任务，再逐步执行并更新状态。\n" +
 		"- run_command 阻塞预防：长期进程用 run_background（后台不阻塞）。\n" +
 		"- 完成后输出 Markdown 总结：改了哪些文件、如何验证、遗留问题。" +
 		CacheBoundary

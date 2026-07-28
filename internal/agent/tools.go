@@ -124,6 +124,16 @@ func (r *Registry) SetToolEnabled(name string, enabled bool) {
 	}
 }
 
+// IsEnabled 返回工具是否已启用。
+func (r *Registry) IsEnabled(name string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if t, ok := r.tools[name]; ok {
+		return t.Enabled
+	}
+	return false
+}
+
 // EnabledDefinitions 导出已启用工具的定义（按注册顺序），传给 LLM 作 function-calling。
 // 只包含 Enabled=true 的工具。禁用工具不暴露给 LLM。
 // EnabledDefinitions 导出已启用工具的定义。
@@ -228,7 +238,36 @@ func (r *Registry) Subset(names []string) *Registry {
 	return out
 }
 
-// Definitions 导出全部工具定义（按注册顺序），传给 LLM 作 function-calling。
+// ToolMeta 工具的完整元信息（供前端 UI 展示）。
+type ToolMeta struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Category    string `json:"category"`
+	UsageGuide  string `json:"usageGuide"`
+	Enabled     bool   `json:"enabled"`
+	ReadOnly    bool   `json:"readOnly"`
+}
+
+// AllToolMeta 返回所有工具的元信息列表（含禁用工具），供前端 UI 展示工具开关列表。
+func (r *Registry) AllToolMeta() []ToolMeta {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	metas := make([]ToolMeta, 0, len(r.order))
+	for _, name := range r.order {
+		t := r.tools[name]
+		metas = append(metas, ToolMeta{
+			Name:        t.Name,
+			Description: t.Description,
+			ReadOnly:    t.ReadOnly,
+		})
+	}
+	return metas
+}
+
+
+
+// Definitions 导出已启用工具的定义（按注册顺序），传给 LLM 作 function-calling。
+// 只包含 Enabled=true 的工具。禁用工具不暴露给 LLM。
 func (r *Registry) Definitions() []ToolDefinition {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -242,9 +281,6 @@ func (r *Registry) Definitions() []ToolDefinition {
 		if len(desc) > 120 {
 			// 在第一个句号或空格处截断
 			cut := strings.LastIndex(desc[:120], "。")
-			if cut < 60 {
-				cut = strings.LastIndex(desc[:120], "；")
-			}
 			if cut < 60 {
 				cut = len(desc[:100])
 				for cut > 60 && desc[cut] != ' ' && desc[cut] != ',' {

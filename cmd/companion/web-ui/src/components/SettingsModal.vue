@@ -326,6 +326,35 @@
             </div>
           </div>
 
+          <!-- ═══ 工具开关 ═══ -->
+          <div v-if="activeTab === 'tools'">
+            <div class="setting-group">
+              <div class="group-title">工具开关</div>
+              <div class="setting-hint" style="margin-bottom:8px;color:var(--text-secondary);font-size:12px;">
+                禁用后该工具不会出现在 Agent 的工具列表中（需要重启对话才能生效）。
+              </div>
+              <div v-if="toolsLoading" style="padding:20px;text-align:center;color:var(--text-secondary);">加载中…</div>
+              <div v-else class="tools-list">
+                <div v-for="tool in filteredTools" :key="tool.name" class="tool-item">
+                  <div class="tool-info">
+                    <span class="tool-name">{{ tool.name }}</span>
+                    <span class="tool-desc">{{ tool.description }}</span>
+                  </div>
+                  <label class="tool-toggle" :title="tool.usageGuide">
+                    <input type="checkbox" v-model="tool.enabled" @change="onToolToggle(tool.name, tool.enabled)" />
+                    <span class="toggle-indicator" :class="{ on: tool.enabled }"></span>
+                  </label>
+                </div>
+              </div>
+              <div v-if="!toolsLoading && tools.length === 0" style="padding:20px;text-align:center;color:var(--text-secondary);">
+                暂无工具数据。请先在设置中选择工作区后重试。
+              </div>
+              <div style="margin-top:8px;font-size:12px;color:var(--text-secondary);">
+                共 {{ tools.length }} 个工具，已启用 {{ enabledCount }} 个
+              </div>
+            </div>
+          </div>
+
         </div>
       </div>
       <div class="modal-footer">
@@ -354,6 +383,7 @@ const tabs = [
   { id: 'appearance', label: '外观' },
   { id: 'instructions', label: '指令' },
   { id: 'philosophy', label: '思想' },
+  { id: 'tools', label: '工具' },
 ]
 
 const providers = ref([])
@@ -611,12 +641,49 @@ onMounted(async () => {
   await loadModels()
   await loadInstructions()
   await loadPhilosophy()
+  await loadTools()
   })
 
 watch(() => state.settingsLoaded, (v) => { if (v) loadSettings() })
 
 function reloadProjectInst() {
   loadInstructions()
+}
+
+// ─── 工具开关 ──────────────────────────────────
+const tools = ref([])
+const toolsLoading = ref(false)
+
+const filteredTools = computed(() => {
+  return tools.value
+})
+
+const enabledCount = computed(() => {
+  return tools.value.filter(t => t.enabled).length
+})
+
+async function loadTools() {
+  toolsLoading.value = true
+  try {
+    const items = await api.apiGet('/api/tools')
+    tools.value = items
+  } catch (e) {
+    console.error('加载工具列表失败', e)
+  } finally {
+    toolsLoading.value = false
+  }
+}
+
+async function onToolToggle(name, enabled) {
+  const toolMap = {}
+  for (const t of tools.value) {
+    toolMap[t.name] = t.enabled
+  }
+  try {
+    await api.apiPut('/api/tools/save', { tools: toolMap })
+  } catch (e) {
+    console.error('保存工具配置失败', e)
+  }
 }
 
 const resetForm = () => {
@@ -805,4 +872,18 @@ const saveSettings = async () => {
 .modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--border-color); }
 .btn-secondary { background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary); padding: 6px 16px; cursor: pointer; border-radius: 3px; }
 .btn-primary { background: var(--accent); border: none; color: #fff; padding: 6px 16px; cursor: pointer; border-radius: 3px; }
+
+/* ── 工具开关 ── */
+.tools-list { display: flex; flex-direction: column; gap: 4px; max-height: 400px; overflow-y: auto; }
+.tool-item { display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; border-radius: 4px; background: var(--bg-tertiary); }
+.tool-item:hover { background: var(--bg-hover); }
+.tool-info { flex: 1; min-width: 0; }
+.tool-name { font-size: 13px; font-weight: 600; color: var(--text-primary); font-family: var(--font-code, monospace); }
+.tool-desc { display: block; font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tool-toggle { position: relative; display: inline-flex; align-items: center; cursor: pointer; margin-left: 8px; flex-shrink: 0; }
+.tool-toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
+.toggle-indicator { width: 36px; height: 18px; border-radius: 10px; background: var(--border-color); transition: background 0.2s; position: relative; }
+.toggle-indicator::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: transform 0.2s; }
+.toggle-indicator.on { background: var(--accent); }
+.toggle-indicator.on::after { transform: translateX(18px); }
 </style>
