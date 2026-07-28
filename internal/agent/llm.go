@@ -349,6 +349,7 @@ func parseSSE(r io.Reader, onChunk func(Chunk)) (Message, error) {
 	toolAccum := map[int]*ToolCall{}
 	var toolOrder []int
 	var usage *Usage
+	var stopReason string // 最后一片的 finish_reason
 
 	for sc.Scan() {
 		line := strings.TrimRight(sc.Text(), "\r")
@@ -394,6 +395,10 @@ func parseSSE(r io.Reader, onChunk func(Chunk)) (Message, error) {
 			}
 			acc.Function.Arguments += tc.Function.Arguments
 		}
+		// 捕获 finish_reason（如 length=截断）
+		if frame.Choices[0].FinishReason != nil {
+			stopReason = *frame.Choices[0].FinishReason
+		}
 		if onChunk != nil && (d.Content != "" || d.Reasoning != "") {
 			onChunk(Chunk{Content: d.Content, Reasoning: d.Reasoning})
 		}
@@ -407,7 +412,7 @@ func parseSSE(r io.Reader, onChunk func(Chunk)) (Message, error) {
 		msg.ToolCalls = append(msg.ToolCalls, *toolAccum[idx])
 	}
 	if onChunk != nil {
-		onChunk(Chunk{Done: true, Usage: usage})
+		onChunk(Chunk{Done: true, Usage: usage, StopReason: stopReason})
 	}
 	return msg, nil
 }

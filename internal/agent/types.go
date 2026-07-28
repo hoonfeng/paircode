@@ -80,4 +80,5 @@ type Chunk struct {
 	ToolCalls []ToolCall
 	Done      bool
 	Usage     *Usage
+	StopReason string // 完成原因：stop/length/content_filter/null（仅 Done=true 时有值）
 }

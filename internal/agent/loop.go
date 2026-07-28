@@ -25,6 +25,7 @@ const (
 	EventContent    EventType = "content"     // LLM 正文增量
 	EventToolCall   EventType = "tool_call"   // 即将执行某工具
 	EventToolResult EventType = "tool_result" // 工具结果回来
+	EventToolUpdate EventType = "tool_update" // 工具执行中间结果（流式更新，供 UI 逐步展示）
 	EventFinal      EventType = "final"       // 任务完成（仅 delegate 单轮委托用；主 Loop 用 EventDone）
 	EventError      EventType = "error"       // 出错/止损
 	EventCompacted  EventType = "compacted"   // 上下文已压缩（中段老消息压成摘要；UI 显示一行素色提示）
@@ -57,6 +58,10 @@ type Event struct {
 	Usage   *Usage // EventUsage 时携带 API 返回的 token 用量
 	// AgentName 事件来源 Agent 名。空串 = 父/主 Agent；非空 = 子 Agent（供前端区分）。
 	AgentName string
+	// ToolCallID 工具调用 ID（工具相关事件时设置）。
+	ToolCallID string
+	// PartialResult 中间结果文本（仅 EventToolUpdate 时设置）。
+	PartialResult string
 	// DoneReason 完成原因（仅 EventDone 时设置）。
 	DoneReason string
 }
@@ -110,6 +115,13 @@ type Loop struct {
 	compactCooldown  int // 压缩后冷却剩余轮数（防每轮重复压缩，复刻参考 refreshCooldown）
 
 	recentCalls []toolSig // 最近若干次工具调用签名+成败（绕圈检测，见 circling.go）
+
+	// ── 消息队列（steer/followUp）──
+	// steerQueue 托管消息：在当前轮次完成后、下一轮 LLM 调用前注入上下文。
+	steerQueue []Message
+	// followUpQueue 跟进消息：在 agent 自然终止（无 tool call 且有正文）后注入，
+	// 让 agent 继续处理后续任务而不是立即退出。
+	followUpQueue []Message
 
 	// ── 多 agent 编排（阶段四，均可空；空=普通单 agent 模式）──
 	AgentTree      *AgentTree     // agent 编排树（delegate_task/delegate_single_turn 用）
@@ -179,6 +191,38 @@ func (l *Loop) emit(e Event) {
 	if l.OnEvent != nil {
 		l.OnEvent(e)
 	}
+}
+
+// Steer 托管一条消息：在当前轮次完成后、下一轮 LLM 调用前注入上下文。
+// 使用场景：用户在 agent 正在执行时输入补充指令，不打断当前工具执行。
+func (l *Loop) Steer(msg Message) {
+	l.steerQueue = append(l.steerQueue, msg)
+}
+
+// FollowUp 托管一条跟进消息：在 agent 自然终止（无 tool call 且有正文）后注入，
+// 让 agent 继续处理后续任务而不是立即退出。
+func (l *Loop) FollowUp(msg Message) {
+	l.followUpQueue = append(l.followUpQueue, msg)
+}
+
+// drainSteerQueue 清空并返回托管消息列表。
+func (l *Loop) drainSteerQueue() []Message {
+	if len(l.steerQueue) == 0 {
+		return nil
+	}
+	msgs := l.steerQueue
+	l.steerQueue = nil
+	return msgs
+}
+
+// drainFollowUpQueue 清空并返回跟进消息列表。
+func (l *Loop) drainFollowUpQueue() []Message {
+	if len(l.followUpQueue) == 0 {
+		return nil
+	}
+	msgs := l.followUpQueue
+	l.followUpQueue = nil
+	return msgs
 }
 
 // SetReviewMode 运行时更新审核模式（线程安全）。
@@ -277,9 +321,27 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 
 	tools := l.Registry.Definitions()
 
+	// ★ 流式更新：工具执行中间结果通过 Registry.OnToolUpdate 通知 Loop，由 emit 转发给 UI
+	if l.Registry.OnToolUpdate == nil {
+		l.Registry.OnToolUpdate = func(name, callID, partial string) {
+			l.emit(Event{
+				Type:          EventToolUpdate,
+				Tool:          name,
+				ToolCallID:    callID,
+				PartialResult: partial,
+			})
+		}
+	}
+
 	for iter := 0; iter < max; iter++ {
 		if err := ctx.Err(); err != nil {
 			return msgs, err // 外部取消
+		}
+
+		// ★ 托管消息注入：在每轮 LLM 调用前，将托管队列中的消息作为 ephemeral 消息注入
+		if steerMsgs := l.drainSteerQueue(); len(steerMsgs) > 0 {
+			l.ephemeralMsgs = append(l.ephemeralMsgs, steerMsgs...)
+			l.emit(Event{Type: EventNotice, Content: fmt.Sprintf("收到 %d 条托管消息，已注入上下文", len(steerMsgs))})
 		}
 
 		msgs = l.maybeCompact(ctx, msgs) // 超窗口阈值则把中段老消息压成摘要（见 compress.go）
@@ -317,7 +379,11 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 
 		// ── THINK：LLM 决策（buildCallContext 合并 ephemeralMsgs，不被持久化）──
 		callMsgs := l.buildCallContext(msgs)
+		var stopReason string
 		assistant, err := l.Provider.Chat(ctx, callMsgs, tools, func(c Chunk) {
+			if c.StopReason != "" {
+				stopReason = c.StopReason
+			}
 			if c.Reasoning != "" {
 				l.emit(Event{Type: EventThinking, Content: c.Reasoning})
 			}
@@ -363,10 +429,31 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 
 		// ── ACT + OBSERVE：依次执行工具，结果作 role=tool 消息回灌 ──
 
-		// ★ 并行优化：2+ 个只读工具时并发执行
-		if canParallelize(assistant.ToolCalls, l.Registry) {
-			msgs = l.executeToolsParallel(ctx, assistant.ToolCalls, msgs)
-		} else {
+		// ★ 截断保护：LLM 输出被 token 限制截断（stopReason=length）时，
+		//    所有 tool call 参数可能不完整（流式 JSON 被截断后虽然能 parse 但值缺失），
+		//    全部标记为错误，让 LLM 重新发出完整参数的 tool call。
+		truncated := stopReason == "length" && len(assistant.ToolCalls) > 0
+		if truncated {
+			for _, tc := range assistant.ToolCalls {
+				l.emit(Event{Type: EventToolCall, Tool: tc.Function.Name, Args: tc.Function.Arguments, CallID: tc.ID})
+				errMsg := fmt.Sprintf(
+					"Error: Tool call \"%s\" 未执行：LLM 响应被输出长度限制截断（stop_reason=length），参数可能不完整。请重新发出完整参数的 tool call。",
+					tc.Function.Name,
+				)
+				l.emit(Event{Type: EventToolResult, Tool: tc.Function.Name, Content: errMsg, CallID: tc.ID})
+				msgs = append(msgs, Message{Role: RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: errMsg})
+				l.trackCall(tc.Function.Name, tc.Function.Arguments, true)
+			}
+			l.currentMsgs = msgs
+		}
+
+		if !truncated {
+			var parMsgs []Message
+			var didParallel bool
+			parMsgs, didParallel = l.tryParallelExecute(ctx, assistant.ToolCalls, msgs)
+			if didParallel {
+				msgs = parMsgs
+			} else {
 
 		for _, tc := range assistant.ToolCalls {
 			l.emit(Event{Type: EventToolCall, Tool: tc.Function.Name, Args: tc.Function.Arguments, CallID: tc.ID})
@@ -465,6 +552,7 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 			}
 		}
 		} // end else (serial tool execution)
+		} // end if !truncated
 
 		// 先同步 currentMsgs（包含 tool results），供 persist worker 获取完整历史
 		l.currentMsgs = msgs
@@ -474,9 +562,16 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 
 		// ★ 自然终止：模型无工具调用且有正文 → 任务完成
 		if l.contentOnlyIters == 0 && len(assistant.ToolCalls) == 0 && strings.TrimSpace(assistant.Content) != "" {
-			l.finishResult = &assistant.Content
-			l.emit(Event{Type: EventDone, Content: strings.TrimSpace(assistant.Content), DoneReason: "task_complete"})
-			return msgs, nil
+			// 检查跟进队列：有消息则注入继续，无消息则正常退出
+			if followUpMsgs := l.drainFollowUpQueue(); len(followUpMsgs) > 0 {
+				l.ephemeralMsgs = append(l.ephemeralMsgs, followUpMsgs...)
+				l.emit(Event{Type: EventNotice, Content: fmt.Sprintf("收到 %d 条跟进消息，继续处理", len(followUpMsgs))})
+				l.contentOnlyIters = 0 // 重置内容循环计数，给跟进消息充分响应机会
+			} else {
+				l.finishResult = &assistant.Content
+				l.emit(Event{Type: EventDone, Content: strings.TrimSpace(assistant.Content), DoneReason: "task_complete"})
+				return msgs, nil
+			}
 		}
 
 		// ★ content-only 防护：连续多轮只输出文字不调工具 → 死循环兜底

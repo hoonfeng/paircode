@@ -64,6 +64,13 @@ type Registry struct {
 	BeforeTool  func(ctx context.Context, name string, args map[string]any) (proceed bool, override string, overrideErr error)
 	AfterTool   func(ctx context.Context, name string, args map[string]any, result string, err error, duration time.Duration)
 	OnToolError func(ctx context.Context, name string, args map[string]any, err error) (result string, replacedErr error)
+
+	// OnToolUpdate 工具执行期间流式更新回调（可选）。工具 handler 在执行过程中调用此钩子
+	// 推送中间结果（如 run_command 的逐行输出、read_file 的翻页进度）。
+	// callID 为工具调用 ID（空串表示非工具调用场景），partialResult 为当前累积的中间文本。
+	// 此钩子不替代最终结果，仅用于流式展示。handler 的返回值仍是正式结果。
+	OnToolUpdate func(name string, callID string, partialResult string)
+
 	CommitMessage string // agent 通过 generate_commit_message 工具显式设置的提交信息
 }
 
@@ -187,6 +194,7 @@ func (r *Registry) Copy() *Registry {
 		BeforeTool:  r.BeforeTool,
 		AfterTool:   r.AfterTool,
 		OnToolError: r.OnToolError,
+		OnToolUpdate: r.OnToolUpdate,
 	}
 	for n, t := range r.tools {
 		out.tools[n] = t
@@ -205,6 +213,7 @@ func (r *Registry) Subset(names []string) *Registry {
 		BeforeTool:  r.BeforeTool,
 		AfterTool:   r.AfterTool,
 		OnToolError: r.OnToolError,
+		OnToolUpdate: r.OnToolUpdate,
 	}
 	set := map[string]bool{}
 	for _, n := range names {
@@ -271,6 +280,12 @@ func (r *Registry) Execute(ctx context.Context, name, argsJSON string) (string, 
 		if !proceed {
 			return override, overrideErr
 		}
+	}
+	// 流式更新回调注入 Context
+	if r.OnToolUpdate != nil {
+		ctx = WithStreamCallback(ctx, func(name, callID, partial string) {
+			r.OnToolUpdate(name, callID, partial)
+		})
 	}
 	start := time.Now()
 	result, err := t.Handler(ctx, args)
@@ -762,6 +777,24 @@ func RegisterDefaultTools(r *Registry, root string) {
 			args["line_start"] = float64(lineNo)
 			return "", ErrRetry
 		}
+	}
+}
+
+// ─── 流式更新支持 ──────────────────────────────────────────────
+
+// streamUpdateKey 上下文键类型，避免 key 冲突。
+type streamUpdateKey struct{}
+
+// WithStreamCallback 在 context 中注入流式更新回调，供工具 handler 调用。
+func WithStreamCallback(ctx context.Context, fn func(name, callID, partial string)) context.Context {
+	return context.WithValue(ctx, streamUpdateKey{}, fn)
+}
+
+// StreamUpdate 从 context 中取出流式更新回调并调用（若存在）。
+// 工具 handler 在执行过程中调用此函数推送中间结果，不影响最终返回值。
+func StreamUpdate(ctx context.Context, name, callID, partial string) {
+	if fn, ok := ctx.Value(streamUpdateKey{}).(func(name, callID, partial string)); ok {
+		fn(name, callID, partial)
 	}
 }
 
