@@ -10,9 +10,11 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 )
 // bgProc 一个后台进程：cmd + 带锁输出缓冲 + 结束状态。实现 io.Writer 供 exec 直接写。
 type bgProc struct {
@@ -60,8 +62,13 @@ func (bg *bgRegistry) start(command, dir string) (int, error) {
 
 	c := exec.Command("cmd", "/C", "chcp 65001 >nul & "+command)
 	c.Dir = dir
-	// ★ 不再隔离进程组或隐藏窗口：用户需要看到命令执行过程。
-
+	// ★ 隐藏 cmd 窗口（不弹窗）但不隔离进程组，让子进程能被正常杀死。
+	if runtime.GOOS == "windows" {
+		if c.SysProcAttr == nil {
+			c.SysProcAttr = &syscall.SysProcAttr{}
+		}
+		c.SysProcAttr.HideWindow = true
+	}
 	c.Stdout = p
 	c.Stderr = p
 	p.cmd = c

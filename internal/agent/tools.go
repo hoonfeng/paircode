@@ -9,10 +9,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -590,7 +592,13 @@ func RegisterDefaultTools(r *Registry, root string) {
 			// chcp 65001 统一 UTF-8 输出（避免中文乱码，同终端面板）。
 			c := exec.CommandContext(cctx, "cmd", "/C", "chcp 65001 >nul & "+command)
 			c.Dir = dir
-			// ★ 不再设置 CREATE_NEW_PROCESS_GROUP 和 HideWindow：新建窗口是故意行为，用户需要看到命令执行过程。
+			// ★ 隐藏 cmd 窗口（不弹窗）但不隔离进程组，让子进程能被正常杀死。
+			if runtime.GOOS == "windows" {
+				if c.SysProcAttr == nil {
+					c.SysProcAttr = &syscall.SysProcAttr{}
+				}
+				c.SysProcAttr.HideWindow = true
+			}
 			out, err := c.CombinedOutput()
 			res := capOutput(string(out), 16000)
 			if cctx.Err() == context.DeadlineExceeded {
