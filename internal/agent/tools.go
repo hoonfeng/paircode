@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"runtime"
-	"syscall"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -579,10 +577,7 @@ func RegisterDefaultTools(r *Registry, root string) {
 			if strings.TrimSpace(command) == "" {
 				return "", fmt.Errorf("command 不能为空")
 			}
-			// ★ 自身项目安全检测：禁止杀死自身进程或直接运行 companion
-			if reason := isSelfHarmCommand(command, root); reason != "" {
-				return "", errors.New(reason)
-			}
+			// ★ 信号监听已移除：不再阻止杀死自身进程或运行 companion
 			dir := root
 			if cwd := argStr(args, "cwd"); cwd != "" {
 				var err error
@@ -595,16 +590,7 @@ func RegisterDefaultTools(r *Registry, root string) {
 			// chcp 65001 统一 UTF-8 输出（避免中文乱码，同终端面板）。
 			c := exec.CommandContext(cctx, "cmd", "/C", "chcp 65001 >nul & "+command)
 			c.Dir = dir
-			// ★ Windows：设置 CREATE_NEW_PROCESS_GROUP，防止子进程超时被杀时
-			// 发送 CTRL_BREAK_EVENT 到父进程组——该事件在 Go 中映射为 SIGTERM，
-			// 会导致 companion.exe 的 main() signal.Notify 误判为退出信号而关闭。
-			if runtime.GOOS == "windows" {
-				if c.SysProcAttr == nil {
-					c.SysProcAttr = &syscall.SysProcAttr{}
-				}
-			c.SysProcAttr.CreationFlags |= 0x00000008 // CREATE_NEW_PROCESS_GROUP
-			c.SysProcAttr.HideWindow = true
-			}
+			// ★ 不再设置 CREATE_NEW_PROCESS_GROUP 和 HideWindow：新建窗口是故意行为，用户需要看到命令执行过程。
 			out, err := c.CombinedOutput()
 			res := capOutput(string(out), 16000)
 			if cctx.Err() == context.DeadlineExceeded {
