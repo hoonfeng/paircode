@@ -526,7 +526,8 @@ func RegisterDefaultTools(r *Registry, root string) {
 				if c.SysProcAttr == nil {
 					c.SysProcAttr = &syscall.SysProcAttr{}
 				}
-				c.SysProcAttr.CreationFlags |= 0x00000008 // CREATE_NEW_PROCESS_GROUP
+			c.SysProcAttr.CreationFlags |= 0x00000008 // CREATE_NEW_PROCESS_GROUP
+			c.SysProcAttr.HideWindow = true
 			}
 			out, err := c.CombinedOutput()
 			res := capOutput(string(out), 16000)

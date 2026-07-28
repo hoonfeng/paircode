@@ -71,6 +71,7 @@ func (bg *bgRegistry) start(command, dir string) (int, error) {
 			c.SysProcAttr = &syscall.SysProcAttr{}
 		}
 		c.SysProcAttr.CreationFlags |= 0x00000008 // CREATE_NEW_PROCESS_GROUP
+		c.SysProcAttr.HideWindow = true
 	}
 	c.Stdout = p
 	c.Stderr = p
