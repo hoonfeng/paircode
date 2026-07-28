@@ -21,6 +21,7 @@ import (
 func registerCircularDepsTool(r *Registry, root string) {
 	r.Register(&Tool{
 		Name: "find_circular_deps",
+		UsageGuide: "检测 Go 项目中包级别的循环依赖（import 环）。项目变大后易出现循环导入导致编译失败，定期运行此工具可提前发现。仅限 Go 语言。比 go vet 更深入（输出完整环链）。",
 		Description: "检测 Go 项目中的循环依赖（包导入环）。" +
 			"扫描项目中所有 Go 文件的 import 语句，构建包级别依赖图，" +
 			"使用 DFS 算法检测循环依赖链（如 pkgA → pkgB → pkgC → pkgA）。" +

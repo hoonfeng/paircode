@@ -304,6 +304,7 @@ func RegisterDefaultTools(r *Registry, root string) {
 	eh := newEditHistory() // ★ v2: 编辑行号偏移追踪器
 	r.Register(&Tool{
 		Name:        "read_file",
+		UsageGuide:  "读取文件内容，限工作区内路径。大文件用 offset+limit 分页读取，避免撑爆上下文。二进制文件会自动拒绝读取，请改用 inspect_binary。比 os.ReadFile 更安全（路径越界拦截+二进制保护）。",
 		Description: "读取文件内容。path 为工作区内路径。可选 offset(起始行,1 基)+limit(行数)读片段；省略则读全文(超 2000 行只返回前 2000 行并提示用 offset/limit 翻页)。",
 		Parameters:  objSchema(props{"path": strProp("文件路径（工作区内）"), "offset": intProp("可选：起始行号(1 基)"), "limit": intProp("可选：读取行数")}, "path"),
 		ReadOnly:    true,
@@ -346,6 +347,7 @@ func RegisterDefaultTools(r *Registry, root string) {
 
 	r.Register(&Tool{
 		Name:             "write_file",
+		UsageGuide:       "写入文件，父目录自动创建。需审核批准。比 os.WriteFile 更安全（自动快照+路径越界拦截+变更回调）。如需追加内容请先用 read_file 读入再加上新内容后 write_file 覆盖。",
 		Description:      "把 content 完整写入 path（覆盖；父目录自动创建）。",
 		Parameters:       objSchema(props{"path": strProp("文件路径"), "content": strProp("完整文件内容")}, "path", "content"),
 		RequiresApproval: true,
@@ -371,6 +373,7 @@ func RegisterDefaultTools(r *Registry, root string) {
 
 	r.Register(&Tool{
 		Name: "edit_file",
+		UsageGuide: "把文件中唯一一处 old_string 替换为 new_string。内置智能匹配（CRLF 归一化+空白折叠）。匹配失败时优先用 line_start/line_end 行号定位（最可靠）。比手动 read+write 更精确（保留换行风格+行号偏移追踪+codegraph 自动注入）。仅用于小改动（≤5 行），大改动请用 write_file 写整段。",
 		Description: "把文件中唯一一处 old_string 替换为 new_string。" +
 			"匹配策略（自动）：精确→CRLF归一化（兼容 Windows \\r\\n 文件与 LLM 给的 \\n）→空白折叠（容忍缩进/行尾空白/tab与空格差异）；全部失败时返回带行号上下文的诊断。" +
 			"替代方案：用 line_start/line_end 行号定位整段替换（最可靠，old_string 可选作校验）。" +
@@ -431,6 +434,7 @@ func RegisterDefaultTools(r *Registry, root string) {
 
 	r.Register(&Tool{
 		Name: "multi_edit",
+		UsageGuide: "按顺序对一个文件应用多处替换。比多次 edit_file 更高效（原子提交：任一步失败全部回滚）。编辑项较多时用 multi_edit 替代多次 edit_file 调用。",
 		Description: "对一个文件按顺序应用多处替换（edits：每项 old_string→new_string 或 line_start/line_end 行号定位）。" +
 			"匹配策略同 edit_file（精确→CRLF归一化→空白折叠→诊断）。原子：任一步失败则全部不写。" +
 			"比多次 edit_file 高效。保留文件原换行风格。",
@@ -523,6 +527,7 @@ func RegisterDefaultTools(r *Registry, root string) {
 
 	r.Register(&Tool{
 		Name:        "list_files",
+		UsageGuide:  "列出工作区目录下的文件和子目录（目录排前）。比 run_command dir /s 更高效（跳过 .git/node_modules、结果结构化排序）。配合 pattern 按通配符过滤文件（如 *.go）。",
 		Description: "列出目录下的文件/子目录（目录在前）。path 省略则列工作区根；pattern 可选（如 *.go）。",
 		Parameters:  objSchema(props{"path": strProp("目录路径（省略=工作区根）"), "pattern": strProp("可选通配符过滤，如 *.go")}, ),
 		ReadOnly:    true,
@@ -571,6 +576,7 @@ func RegisterDefaultTools(r *Registry, root string) {
 	})
 	r.Register(&Tool{
 		Name:             "run_command",
+		UsageGuide:       "同步执行 shell 命令，120s 超时自动终止。适用于构建、编译、测试、文件查询等短命令。禁止用于长期进程（dev server/npm run dev/watch 模式）——请改用 run_background。比直接手动执行更安全（路径越界拦截+输出截断 16KB+UTF-8 编码统一）。",
 		Description:      "同步执行一条 shell 命令并返回输出。适用于构建、编译、测试、文件查询等短命令（几秒内完成）。\n禁止用于以下场景（会阻塞 agent）：启动 dev server、npm run dev、go run 启动服务、watch 模式、tcp 监听、任何需保持运行的进程。此类命令请改用 run_background。",
 		Parameters:       objSchema(props{"command": strProp("要执行的命令"), "cwd": strProp("可选工作目录（工作区内，省略=根）")}, "command"),
 		RequiresApproval: true,
@@ -612,6 +618,7 @@ func RegisterDefaultTools(r *Registry, root string) {
 
 	r.Register(&Tool{
 		Name:             "move_file",
+		UsageGuide:       "移动或重命名工作区内的文件/目录。目标父目录自动创建。需审核批准。覆盖 os.Rename 的限制（自动创建目标目录+路径越界拦截+变更通知）。",
 		Description:      "把文件/目录从 from 移动或重命名到 to（都在工作区内；目标父目录自动创建）。",
 		Parameters:       objSchema(props{"from": strProp("源路径"), "to": strProp("目标路径")}, "from", "to"),
 		RequiresApproval: true,
@@ -639,6 +646,7 @@ func RegisterDefaultTools(r *Registry, root string) {
 
 	r.Register(&Tool{
 		Name:             "delete_file",
+		UsageGuide:       "删除工作区内的文件（不可恢复，谨慎）。为安全不删目录（删除目录请用 run_command rmdir）。需审核批准。比直接 os.Remove 更安全（只删文件不删目录+路径越界拦截）。",
 		Description:      "删除一个文件（工作区内，不可恢复，谨慎）。为安全不删目录。",
 		Parameters:       objSchema(props{"path": strProp("要删除的文件路径")}, "path"),
 		RequiresApproval: true,

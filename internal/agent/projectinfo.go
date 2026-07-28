@@ -102,6 +102,7 @@ func registerProjectInfoTools(r *Registry, root string) {
 
 	r.Register(&Tool{
 		Name: "project_info_write",
+		UsageGuide: "写入/更新项目知识库条目，跨会话复用。路径用中文（如 概览 / 模块-渲染 / 决策-渲染架构）。读完关键文件后立即写入，积累项目的结构化理解。比记在脑子里可靠（持久化+跨会话可见）。",
 		Description: "写入/更新项目知识库的一篇（.pair/project-info/<路径>.md）——记录项目架构/模块职责/数据流/设计决策等结构化理解，" +
 			"跨会话复用、你和用户都能看。路径用中文（如 概览 / 模块-agent / 决策-渲染架构）。",
 		Parameters: objSchema(props{
@@ -130,6 +131,7 @@ func registerProjectInfoTools(r *Registry, root string) {
 
 	r.Register(&Tool{
 		Name:        "project_info_read",
+		UsageGuide:  "读取知识库某篇全文。渐进式披露：先 project_info_list 看总览，再用此工具读具体细则。比翻目录更方便（自动解析路径+内容格式化）。",
 		Description: "读取知识库某篇的全文（按路径，如 概览 / 模块-agent）。渐进式披露的细节层。",
 		Parameters:  objSchema(props{"path": strProp("条目路径，不含 .md")}, "path"),
 		ReadOnly:    true,
@@ -145,6 +147,7 @@ func registerProjectInfoTools(r *Registry, root string) {
 
 	r.Register(&Tool{
 		Name:        "project_info_list",
+		UsageGuide:  "列出知识库所有条目的总览（路径+标题+分级）。新项目先调此工具查看已有哪些文档，避免重复写入。",
 		Description: "列出知识库所有条目的【总览】（路径 + 标题 + 分级）。渐进式披露的总览层。",
 		Parameters:  objSchema(props{}),
 		ReadOnly:    true,
@@ -163,6 +166,7 @@ func registerProjectInfoTools(r *Registry, root string) {
 
 	r.Register(&Tool{
 		Name:        "project_info_search",
+		UsageGuide:  "按关键词搜索知识库（匹配路径/标题/正文）。想查某个模块/概念是否已有文档时优先用此工具。",
 		Description: "按关键词搜索知识库（匹配路径/标题/正文），返回命中条目。",
 		Parameters:  objSchema(props{"query": strProp("关键词")}, "query"),
 		ReadOnly:    true,
@@ -186,6 +190,7 @@ func registerProjectInfoTools(r *Registry, root string) {
 
 	r.Register(&Tool{
 		Name:        "project_info_delete",
+		UsageGuide:  "删除知识库某篇（按路径）。知识库条目过时/错误时用此工具清理。删除前建议先 project_info_read 确认。",
 		Description: "删除知识库某篇（按路径）。",
 		Parameters:  objSchema(props{"path": strProp("条目路径，不含 .md")}, "path"),
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
@@ -203,6 +208,7 @@ func registerProjectInfoTools(r *Registry, root string) {
 
 	r.Register(&Tool{
 		Name: "project_info_explore",
+		UsageGuide: "扫描项目目录结构概览——构建知识库的起点。新项目首次接触时先调此工具了解项目全貌，再用 read_file 读关键文件，最后 project_info_write 写入结构化理解。",
 		Description: "返回项目目录结构概览（根目录关键文件、顶层目录及文件数）——构建知识库的起点；" +
 			"据此用 read_file 读关键文件分析，再 project_info_write 写入 概览/模块-*/决策-*。",
 		Parameters: objSchema(props{}),

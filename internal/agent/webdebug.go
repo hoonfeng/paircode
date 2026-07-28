@@ -36,6 +36,7 @@ type consoleMessage struct {
 func registerWebDebugTool(r *Registry, root string) {
 	r.Register(&Tool{
 		Name: "web_debug",
+		UsageGuide: "一站式网页验证工具：在无头浏览器中打开 URL，检查控制台错误+截图。支持交互操作（click_selector/type_selector+type_text）、JS 求值（eval）、文字提取。前端改动验证首选工具，比手动打开浏览器检查更全自动化。",
 		Description: "一站式网页验证工具：在无头浏览器中打开 URL，捕获控制台错误/警告，" +
 			"可选输入文字、点击元素、执行 JS（eval 参数可返回页面文本用于文字提取），最后截图保存。" +
 			"用于验证前端改动是否正常工作（白屏、JS 异常、接口报错、样式错乱等）。" +

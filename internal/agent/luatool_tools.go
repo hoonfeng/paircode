@@ -24,6 +24,7 @@ func registerLuaToolTools(r *Registry, root string) {
 	// ── lua_tool_list ──
 	r.Register(&Tool{
 		Name:        "lua_tool_list",
+		UsageGuide:  "列出所有 Lua 自定义工具（.pair/tools/ 下的 .lua 脚本）。先查已有哪些自定义工具再决定是否需要新建。",
 		Description: "列出所有 Lua 自定义工具（工作区 .pair/tools/ 目录下的 .lua 脚本）。显示名称、描述和参数概要。",
 		Parameters:  objSchema(props{}),
 		ReadOnly:    true,
@@ -75,6 +76,7 @@ func registerLuaToolTools(r *Registry, root string) {
 	// ── lua_tool_create ──
 	r.Register(&Tool{
 		Name: "lua_tool_create",
+		UsageGuide: "创建新的 Lua 自定义工具。写入 .pair/tools/{name}.lua，下次消息即热加载生效。用于扩展 agent 能力（自定义脚本）。需审核批准。",
 		Description: "创建一个新的 Lua 自定义工具。写入 .pair/tools/{name}.lua，下次发送即热加载生效。" +
 			"沙箱仅开 string/table/math 库，无文件/系统访问，单次 10s 超时。脚本 run 函数可通过 agent.run_command({command=..., cwd=...}) 执行 shell 命令。",
 		Parameters: objSchema(props{
@@ -146,6 +148,7 @@ func registerLuaToolTools(r *Registry, root string) {
 	// ── lua_tool_update ──
 	r.Register(&Tool{
 		Name: "lua_tool_update",
+		UsageGuide: "更新现有 Lua 自定义工具。按 name 查找并更新其描述/参数/代码。需审核批准。",
 		Description: "更新现有 Lua 自定义工具。按 name 查找并更新指定字段（description/parameters/code），" +
 			"未提供的字段保持原值。不传 code 则保留原有代码体。",
 		Parameters: objSchema(props{
@@ -221,6 +224,7 @@ func registerLuaToolTools(r *Registry, root string) {
 	// ── lua_tool_delete ──
 	r.Register(&Tool{
 		Name:             "lua_tool_delete",
+		UsageGuide:       "删除一个 Lua 自定义工具。按 name 查找 .pair/tools/ 下对应 .lua 文件并删除。需审核批准。",
 		Description:      "删除一个 Lua 自定义工具。按 name 查找 .pair/tools/ 下对应的 .lua 文件并删除。此操作不可逆。",
 		Parameters:       objSchema(props{"name": strProp("要删除的工具名称")}, "name"),
 		RequiresApproval: true,

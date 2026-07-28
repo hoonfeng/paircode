@@ -102,6 +102,7 @@ func registerShellTools(r *Registry, root string) {
 
 	r.Register(&Tool{
 		Name: "run_background",
+		UsageGuide: "后台启动一条长命令，不阻塞 agent 循环。用于 dev server、npm run dev/watch 模式、调试服务、TCP 监听——这些场景只能用此工具，不可用 run_command。返回进程 id，之后用 read_output/kill_process 控制。比 run_command 更合适的长命令：run_background（不阻塞）+ read_output（分阶段读）+ kill_process（手动停止）。",
 		Description: "在后台启动一条长命令，不阻塞 agent 循环（推荐用于 dev server、watch 模式、调试服务等）。" +
 			"返回进程 id，随后用 read_output 读输出、kill_process 停止。" +
 			"如果命令会长期运行或保持监听状态，优先用此工具。短查询请用 run_command。",
@@ -129,6 +130,7 @@ func registerShellTools(r *Registry, root string) {
 
 	r.Register(&Tool{
 		Name:        "read_output",
+		UsageGuide:  "读取后台进程的累积输出与运行状态。需先用 run_background 启动进程获得 id。比直接看终端更方便（自动截断保护+状态标记运行中/已结束）。",
 		Description: "读取某后台进程（id）累积的输出与运行状态（运行中/已结束）。",
 		Parameters:  objSchema(props{"id": intProp("进程 id")}, "id"),
 		ReadOnly:    true,
@@ -151,6 +153,7 @@ func registerShellTools(r *Registry, root string) {
 
 	r.Register(&Tool{
 		Name:        "kill_process",
+		UsageGuide:  "停止某后台进程（仅限通过 run_background 启动的）。进程跑偏/卡死/已不需要时用此工具停止。比 taskkill / pid 更方便（通过 id 直接操作）。",
 		Description: "停止某后台进程（id）。只能杀死通过 run_background 启动的进程，无法操作外部进程。",
 		Parameters:  objSchema(props{"id": intProp("进程 id")}, "id"),
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {

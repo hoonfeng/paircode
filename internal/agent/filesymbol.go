@@ -27,6 +27,7 @@ func registerFileSymbolTools(r *Registry, root string) {
 
 	r.Register(&Tool{
 		Name: "list_exported_symbols",
+		UsageGuide: "列出 Go 项目中所有导出符号（首字母大写的函数/类型/接口/常量/变量）。按 kind 过滤类型、query 过滤名称。用于快速了解项目对外接口。比 codegraph_search 更基础（仅限 Go+纯静态分析）。",
 		Description: "列出项目中所有导出的符号（首字母大写的函数、类型、结构体、接口、常量、变量），" +
 			"通过静态分析扫描 Go 源文件，使用正则表达式提取导出符号定义。" +
 			"支持按名称过滤（query）和按符号类型过滤（kind）。" +
@@ -42,6 +43,7 @@ func registerFileSymbolTools(r *Registry, root string) {
 
 	r.Register(&Tool{
 		Name: "get_file_dependencies",
+		UsageGuide: "获取 Go 文件依赖关系（import 语句分析）：分类标准库/内部/外部依赖，并扫描反向引用者。修改文件前可先用此工具了解影响范围，配合 check_impact 使用。仅限 Go。",
 		Description: "获取指定 Go 文件的依赖关系：解析其 import 语句得到直接依赖，并扫描整个项目中导入其所在包的文件（反向依赖）。" +
 			"将依赖分类为标准库、项目内部依赖和外部依赖。注意：当前仅支持 Go 语言。",
 		Parameters: objSchema(props{
@@ -55,6 +57,7 @@ func registerFileSymbolTools(r *Registry, root string) {
 
 	r.Register(&Tool{
 		Name: "check_impact",
+		UsageGuide: "分析修改文件后的影响范围（递归 BFS 扫描反向依赖链）。修改关键文件前必用。输出按影响层级组织的树状结构。仅限 Go。比 codegraph_impact 更侧重文件级导入链，后者侧重函数级调用链。",
 		Description: "分析修改指定文件后的影响范围：递归遍历整个项目的依赖关系图（基于 BFS），" +
 			"找出所有直接和间接受该文件变更影响的文件（反向依赖链）。" +
 			"通过扫描 Go import 语句实现，无需语言服务器。输出按影响层级组织的树形结构。" +

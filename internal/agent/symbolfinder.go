@@ -24,6 +24,7 @@ import (
 func registerFindSymbolTool(r *Registry, root string) {
 	r.Register(&Tool{
 		Name: "find_symbol",
+		UsageGuide: "在 Go 项目中搜索符号（函数/类型/结构体/常量/变量等）的定义位置。支持精确匹配和子串匹配。scope 可限定包路径或文件路径。仅限 Go 语言。比 search_content 全文搜索更精确（基于 AST 解析）。搜符号优先用此工具而非 search_content。",
 		Description: "基于 Go AST 在项目中搜索符号（函数、类型、结构体、接口、常量、变量等）的定义位置。" +
 			"支持按名称搜索（精确匹配或子串匹配），可通过 scope 限定搜索范围为指定包路径或文件路径。" +
 			"返回每个匹配符号的文件路径、行号、符号类型和简短签名。" +

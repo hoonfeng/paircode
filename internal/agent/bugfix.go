@@ -349,6 +349,7 @@ func registerBugFixTools(r *Registry, root string) {
 	// bug_detect — 全量项目 BUG 检测
 	r.Register(&Tool{
 		Name: "bug_detect",
+		UsageGuide: "全量检测项目 BUG：自动运行 go vet → go build → go test，聚合所有错误。修改代码后验证无错误的推荐工具。比手动分别运行更高效（一站式检测）。",
 		Description: "全量检测项目中是否存在 BUG。自动运行 go vet → go build → go test，" +
 			"输出解析后的错误列表（含文件路径、行号、错误消息和代码上下文）。" +
 			"用于自动发现编译/测试/运行时的 BUG。集成在自主模式的编排循环中。",
@@ -367,6 +368,7 @@ func registerBugFixTools(r *Registry, root string) {
 	// bug_fix — 生成 BUG 修复任务（检测 + 生成修复提示）
 	r.Register(&Tool{
 		Name: "bug_fix",
+		UsageGuide: "自动检测并修复项目 BUG。运行编译/测试后定位错误，生成修复方案并 apply。max_attempts 控制最大尝试次数（默认 3）。注意：自动修复可能引入新问题，改完需验证。",
 		Description: "自动检测项目 BUG（编译/测试/运行时错误），生成详细的修复任务文本。" +
 			"返回包含错误位置、代码上下文和修复指南的完整修复任务。" +
 			"可用于自主模式中在 loop 之间自动检测并修复项目问题。",

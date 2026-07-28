@@ -20,6 +20,7 @@ import (
 func registerVerifyTools(r *Registry, root string) {
 	r.Register(&Tool{
 		Name: "memory_verify",
+		UsageGuide: "验证所有记忆条目引用的文件和目录是否仍然存在。过时记忆会误导 agent，建议定期运行。比手动检查更高效（自动解析引用路径并检测有效性）。",
 		Description: "验证所有记忆条目中引用的文件和目录是否仍然存在。" +
 			"如果条目引用了已不存在的文件，可能是过时信息，建议更新或删除。" +
 			"返回验证报告，包含每个过期条目的问题描述。",
@@ -32,6 +33,7 @@ func registerVerifyTools(r *Registry, root string) {
 
 	r.Register(&Tool{
 		Name: "project_info_verify",
+		UsageGuide: "验证知识库条目引用的文件和目录是否仍然存在。项目重构后文件移动可能导致旧引用失效，运行此工具可发现并清理过时条目。",
 		Description: "验证所有知识库条目中引用的文件和目录是否仍然存在。" +
 			"如果条目引用了已不存在的文件/目录，可能是过时信息，建议更新或删除。" +
 			"返回验证报告，包含每个过期条目的问题描述。",

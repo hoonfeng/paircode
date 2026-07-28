@@ -485,6 +485,7 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		// 注册本对话专属的 task_create：捕获 sess.ConvID 写入任务持久化记录
 		opts.Registry.Register(&Tool{
 			Name: "task_create",
+			UsageGuide: "创建子任务并追踪执行进度。复杂任务（3+ 步）必须拆解为子任务，每完成一项更新状态（in_progress→completed）。依赖项用 dependencies 参数关联。比手动记清单更可靠（持久化到磁盘+状态自动管理）。",
 			Description: "创建新的子任务。创建后必须立即执行该任务：先调用 task_update 标记为 in_progress 开始执行，" +
 				"执行完成后调用 task_update 标记为 completed 并说明结果。重复此流程直到所有子任务完成。",
 			Parameters: objSchema(props{

@@ -181,6 +181,7 @@ func registerCodeGraphTools(r *Registry, root string) {
 	// ── 1. codegraph_build — 构建/重建图谱 ──
 	r.Register(&Tool{
 		Name: "codegraph_build",
+		UsageGuide: "构建或重建代码知识图谱。项目代码变更后运行此工具让图谱保持最新。之后可用其他 codegraph_* 工具做符号级精确搜索。比全文搜索更精确（基于 AST 多语言解析）。",
 		Description: "构建或重建代码知识图谱。解析项目所有 Go 源文件，" +
 			"提取文件、包、函数、方法、结构体、接口、变量、常量等实体，" +
 			"以及包含、定义、调用、导入等关系。支持增量更新（只重新解析变更的文件）。" +
@@ -282,6 +283,7 @@ func registerCodeGraphTools(r *Registry, root string) {
 	// ── 2. codegraph_stats — 图谱统计 ──
 	r.Register(&Tool{
 		Name:        "codegraph_stats",
+		UsageGuide:  "查看代码知识图谱的统计信息（实体总数/关系总数/覆盖文件数）。快速了解项目规模和图谱覆盖度。",
 		Description: "查看代码知识图谱的统计信息：实体总数、关系总数、覆盖的文件数、包数、各类实体分布。",
 		Parameters:  objSchema(props{}),
 		ReadOnly:    true,
@@ -298,6 +300,7 @@ func registerCodeGraphTools(r *Registry, root string) {
 	// ── 3. codegraph_file_structure — 文件结构树 ──
 	r.Register(&Tool{
 		Name: "codegraph_file_structure",
+		UsageGuide: "获取指定文件的实体结构树（文件→函数/类型→方法/字段的层次）。比 list_files 更深入（了解文件内部组织）。",
 		Description: "获取指定文件的实体结构树（文件→函数/类型→方法/字段的层次结构）。" +
 			"用于理解文件内部的组织结构。",
 		Parameters: objSchema(props{
@@ -319,6 +322,7 @@ func registerCodeGraphTools(r *Registry, root string) {
 	// ── 4. codegraph_function — 函数定义定位 ──
 	r.Register(&Tool{
 		Name: "codegraph_function",
+		UsageGuide: "按名称查找函数/方法的定义位置，携带函数签名。支持包名.函数名、接收者.方法名。比 search_content 全文搜索更精确（基于 AST 直接定位）。搜函数定义首选此工具。",
 		Description: "按名称查找函数/方法的定义位置。支持函数名、包名.函数名、或接收者.方法名。" +
 			"返回文件路径、行号、签名等信息。",
 		Parameters: objSchema(props{
@@ -340,6 +344,7 @@ func registerCodeGraphTools(r *Registry, root string) {
 	// ── 5. codegraph_class — 类型层次 ──
 	r.Register(&Tool{
 		Name: "codegraph_class",
+		UsageGuide: "获取类型（struct/interface）的完整层次结构：字段、方法、嵌入类型。比 read_file 逐个文件翻更高效（聚合所有相关定义）。",
 		Description: "获取类型（struct/interface）的完整层次结构：字段、方法、嵌入类型。" +
 			"支持结构体名或接口名。",
 		Parameters: objSchema(props{
@@ -361,6 +366,7 @@ func registerCodeGraphTools(r *Registry, root string) {
 	// ── 6. codegraph_callers — 调用者查询 ──
 	r.Register(&Tool{
 		Name: "codegraph_callers",
+		UsageGuide: "查询哪些函数调用了指定的函数。修改函数签名/行为前必调此工具了解调用方，防止漏改。比 search_content 搜索引用更精确（基于调用图）。",
 		Description: "查询哪些函数调用了指定的函数/方法。用于理解函数被使用的情况。" +
 			"返回调用者的文件路径和行号。",
 		Parameters: objSchema(props{
@@ -382,6 +388,7 @@ func registerCodeGraphTools(r *Registry, root string) {
 	// ── 7. codegraph_callees — 被调用者查询 ──
 	r.Register(&Tool{
 		Name: "codegraph_callees",
+		UsageGuide: "查询指定函数内部调用了哪些函数。理解函数实现逻辑时用。比 read_file 手动翻更快（聚合被调函数列表）。",
 		Description: "查询指定的函数/方法调用了哪些其他函数。用于理解函数的内部调用情况。" +
 			"返回被调用者的名称和调用位置。",
 		Parameters: objSchema(props{
@@ -403,6 +410,7 @@ func registerCodeGraphTools(r *Registry, root string) {
 	// ── 8. codegraph_impact — 影响分析 ──
 	r.Register(&Tool{
 		Name: "codegraph_impact",
+		UsageGuide: "分析修改某函数/类型/文件后的影响范围（传递调用链）。修改核心代码前必调此工具。比 check_impact 更精确（函数级调用链而非文件级导入链）。",
 		Description: "分析修改某个函数/类型/文件后可能影响的范围。" +
 			"基于调用图进行可达性分析，返回受影响的文件、函数列表和传播路径。" +
 			"用于回答「修改这个函数会影响哪些地方？」",
@@ -427,6 +435,7 @@ func registerCodeGraphTools(r *Registry, root string) {
 	// ── 9. codegraph_search — 代码搜索 ──
 	r.Register(&Tool{
 		Name: "codegraph_search",
+		UsageGuide: "在代码知识图谱中搜索实体（函数/类型/变量/文件等）。scope 限定类型（function/type/variable/file）。搜函数/类型定义首选此工具，其次才是 search_content。比全文搜索精确一个数量级。",
 		Description: "在代码知识图谱中搜索实体（函数、类型、变量、文件等）。" +
 			"支持按名称搜索和按类型过滤。返回匹配实体的位置、签名和相关度评分。" +
 			"比 search_content 更精确，因为基于结构化理解而非纯文本匹配。",
@@ -460,6 +469,7 @@ func registerCodeGraphTools(r *Registry, root string) {
 	// ── 10. codegraph_git_history — Git 提交历史 ──
 	r.Register(&Tool{
 		Name: "codegraph_git_history",
+		UsageGuide: "查询 Git 提交历史并关联到代码实体。file 参数限定文件；count 控制条数。比 git_log 更丰富（关联实体变更信息）。",
 		Description: "查询 Git 提交历史，并关联到代码实体。可以查询最近提交、" +
 			"影响某个文件的提交，或者某个实体的变更历史。" +
 			"用于回答「这个函数是谁改的？」、「这个 bug 是哪次提交引入的？」",
@@ -501,6 +511,7 @@ func registerCodeGraphTools(r *Registry, root string) {
 	// ── 11. codegraph_entity_history — 实体变更历史 ──
 	r.Register(&Tool{
 		Name: "codegraph_entity_history",
+		UsageGuide: "查询指定代码实体的完整变更历史：谁在什么时候修改了它。比 git_blame 更友好（聚合到实体级别而非行级别）。",
 		Description: "查询指定代码实体的完整变更历史：谁在什么时候修改了它，" +
 			"以及对应的提交消息。实体可以是函数名、类型名或文件路径。",
 		Parameters: objSchema(props{
@@ -544,6 +555,7 @@ func registerCodeGraphTools(r *Registry, root string) {
 	// ── 12. codegraph_get_edit_context — 编辑上下文聚合 ──
 	r.Register(&Tool{
 		Name: "codegraph_get_edit_context",
+		UsageGuide: "获取修改某代码位置所需的完整上下文。调用 edit_file 前先用此工具获取周边代码，减少多次 read_file 的 token 消耗。",
 		Description: "获取修改某个代码位置所需的完整上下文。" +
 			"一次调用返回：符号源码、调用者列表、关联测试、近期 Git 历史、相关记忆。" +
 			"比分别调用多个工具更高效。参数 maxTokens 控制返回内容的 token 预算。",
@@ -587,6 +599,7 @@ func registerCodeGraphTools(r *Registry, root string) {
 	// ── 13. codegraph_find_related_tests — 测试发现 ──
 	r.Register(&Tool{
 		Name: "codegraph_find_related_tests",
+		UsageGuide: "查找与某函数关联的测试。按两种方式发现：（1）测试调用了目标函数 （2）测试名与目标名相近。改完函数后调此工具找到需要运行的测试。",
 		Description: "查找与指定函数/方法关联的测试。发现方式：" +
 			"（1）测试函数调用了目标函数；（2）命名约定匹配（TestXxx ↔ Xxx）。" +
 			"返回测试文件路径、行号和源码片段。",
@@ -609,6 +622,7 @@ func registerCodeGraphTools(r *Registry, root string) {
 	// ── 14. codegraph_analyze_complexity — 圈复杂度分析 ──
 	r.Register(&Tool{
 		Name: "codegraph_analyze_complexity",
+		UsageGuide: "测量代码圈复杂度，评估重构优先级。高复杂度函数优先重构。比人工评估更客观（基于控制流图计算）。",
 		Description: "测量代码圈复杂度，用于评估重构优先级。" +
 			"返回每个函数的复杂度评分（1=最低）、等级（A-E）和行数。" +
 			"复杂度 >10 建议考虑重构，>20 为高风险。file 指定文件分析单个文件，省略则分析所有函数。",
@@ -631,6 +645,7 @@ func registerCodeGraphTools(r *Registry, root string) {
 	// ── 15. codegraph_search_by_pattern — 正则模式搜索 ──
 	r.Register(&Tool{
 		Name: "codegraph_search_by_pattern",
+		UsageGuide: "用正则表达式在代码实体名、签名、文档注释中搜索。比 search_content 更结构化（只搜实体级元信息而非全文）。scope 可选 name/signature/docstring。",
 		Description: "用正则表达式在代码实体的名称、签名、文档注释中搜索。" +
 			"比 codegraph_search 更精确，支持 scope 过滤（name/signature/docstring/any）。" +
 			"支持按实体类型过滤（function/method/struct/interface/variable）。",
@@ -663,6 +678,7 @@ func registerCodeGraphTools(r *Registry, root string) {
 	// ── 16. codegraph_trace_call_chain — 调用链追踪 ──
 	r.Register(&Tool{
 		Name: "codegraph_trace_call_chain",
+		UsageGuide: "追踪函数调用链：callers（反向：谁调了我）、callees（正向：我调了谁）、both（双向）。比 codegraph_callers/callees 更灵活（支持多级深度追踪）。",
 		Description: "追踪函数/方法的调用链。" +
 			"支持 callers（反向追踪谁调用了它）、callees（正向追踪它调用了谁）、both（双向）。" +
 			"maxDepth 控制追踪深度（默认 5）。返回树形调用链。",
@@ -689,6 +705,7 @@ func registerCodeGraphTools(r *Registry, root string) {
 	// ── 17. codegraph_find_dead_code — 死代码检测 ──
 	r.Register(&Tool{
 		Name: "codegraph_find_dead_code",
+		UsageGuide: "检测项目中疑似未被调用的函数、类型、变量。定期运行清理死代码，保持项目整洁。",
 		Description: "检测项目中疑似没有被调用的函数、类型、变量。" +
 			"判定方式：函数无 incoming RelCalls 边 + 无其他引用。注意：Go 反射和接口分发可能误报，结果仅供参考。",
 		Parameters: objSchema(props{}),
@@ -707,6 +724,7 @@ func registerCodeGraphTools(r *Registry, root string) {
 	// ── 18. codegraph_module_architecture — 模块架构分析 ──
 	r.Register(&Tool{
 		Name: "codegraph_module_architecture",
+		UsageGuide: "获取某目录/模块的架构概览：文件列表+导出符号+导入关系。新接触一个目录时先用此工具了解整体结构。",
 		Description: "获取一个目录/模块的架构概览。" +
 			"返回：文件数、函数数、导出函数列表、类型列表、外部依赖、" +
 			"内部依赖、复杂度热点。用于快速理解一个模块的职责和结构。",

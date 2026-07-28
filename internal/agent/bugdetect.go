@@ -647,6 +647,7 @@ func registerBugDetectTools(r *Registry, root string) {
 	// bug_analyze — 分析构建/测试输出，提取错误位置
 	r.Register(&Tool{
 		Name: "bug_analyze",
+		UsageGuide: "分析构建/测试/运行输出，提取错误位置和代码上下文。配合 bug_detect 使用：先 bug_detect 全量检测，拿到输出后 bug_analyze 定位根因。比肉眼扫日志更快（结构化提取错误位置+行号）。",
 		Description: "分析构建/测试/运行输出，提取错误位置和代码上下文。接受 output（构建输出文本），" +
 			"output_type（build/test/run），返回解析后的错误列表（含文件路径、行号、消息和代码上下文）。" +
 			"由 Detector 在自动检测时调用，也可供 agent 手动分析构建日志。",

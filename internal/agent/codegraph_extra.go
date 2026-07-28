@@ -20,6 +20,7 @@ func registerExtraCodeGraphTools(r *Registry, root string) {
 		// ---- 19. codegraph_find_entry_points ----
 	r.Register(&Tool{
 		Name: "codegraph_find_entry_points", Description: "发现应用程序入口点和执行起点。",
+		UsageGuide: "发现应用程序入口点（main 函数、HTTP handler、CLI 命令）。新项目先调此工具了解从哪启动。",
 		Parameters: objSchema(props{"entryType": strProp("可选：main/http_handler/cli_command/all，默认 all"), "limit": intProp("可选：最大返回数（默认 50）")}),
 		ReadOnly: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
@@ -54,6 +55,7 @@ func registerExtraCodeGraphTools(r *Registry, root string) {
 	// ---- 20. codegraph_find_hot_paths ----
 	r.Register(&Tool{
 		Name: "codegraph_find_hot_paths", Description: "查找最常被调用的函数。",
+		UsageGuide: "查找最常被调用的函数（按调用者数量排序）。了解核心热点代码，优化优先考虑高频路径。",
 		Parameters: objSchema(props{"limit": intProp("可选：最大返回数（默认 20）")}),
 		ReadOnly: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
@@ -75,6 +77,7 @@ func registerExtraCodeGraphTools(r *Registry, root string) {
 	// ---- 21. codegraph_find_by_imports ----
 	r.Register(&Tool{
 		Name: "codegraph_find_by_imports", Description: "查找所有导入指定模块的文件。",
+		UsageGuide: "查找所有导入指定模块的文件。想了解某包被哪些文件引用时用。比 search_content 搜索 import 语句更精确（基于解析的 import 关系）。",
 		Parameters: objSchema(props{"moduleName": strProp("模块/包名"), "matchMode": strProp("可选：exact/prefix/contains/fuzzy，默认 contains"), "limit": intProp("可选：最大返回数（默认 50）")}, "moduleName"),
 		ReadOnly: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
@@ -103,6 +106,7 @@ func registerExtraCodeGraphTools(r *Registry, root string) {
 	// ---- 22. codegraph_get_detailed_symbol ----
 	r.Register(&Tool{
 		Name: "codegraph_get_detailed_symbol", Description: "获取符号详细上下文（源码+调用者+被调用者）。",
+		UsageGuide: "获取某符号的完整上下文：源码+调用者+被调用者。比分别调 codegraph_callers/callees 更省 token（一站式）。",
 		Parameters: objSchema(props{"query": strProp("符号名"), "includeSource": boolProp("可选：包含源码（默认 true）")}, "query"),
 		ReadOnly: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
@@ -139,6 +143,7 @@ func registerExtraCodeGraphTools(r *Registry, root string) {
 	// ---- 23. codegraph_find_dead_imports ----
 	r.Register(&Tool{
 		Name: "codegraph_find_dead_imports", Description: "查找已导入但从未使用的模块。",
+		UsageGuide: "查找已导入但从未使用的模块。改完代码后运行可发现残留 import。比 goimports 更灵活（指定文件或全量扫描）。",
 		Parameters: objSchema(props{"file": strProp("可选：指定文件"), "limit": intProp("可选：最大返回数（默认 50）")}),
 		ReadOnly: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
@@ -175,6 +180,7 @@ func registerExtraCodeGraphTools(r *Registry, root string) {
 	// ---- 24. codegraph_search_by_error ----
 	r.Register(&Tool{
 		Name: "codegraph_search_by_error", Description: "查找抛出或处理错误的函数。",
+		UsageGuide: "查找抛出或处理特定错误的函数。mode=throws 找谁抛了错误，catches 找谁处理了。错误分析定位根因时用。",
 		Parameters: objSchema(props{"mode": strProp("可选：throws/catches/any，默认 any"), "errorType": strProp("可选：错误类型过滤"), "limit": intProp("可选：最大返回数（默认 50）")}),
 		ReadOnly: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
@@ -206,6 +212,7 @@ func registerExtraCodeGraphTools(r *Registry, root string) {
 	// ---- 25. codegraph_index_markdown ----
 	r.Register(&Tool{
 		Name: "codegraph_index_markdown", Description: "索引 Markdown 文档，按标题分段。有 ONNX 则计算嵌入向量。",
+		UsageGuide: "索引 Markdown 文档到知识库。之后可用 codegraph_search_docs 语义搜索。新加文档后需重新索引才能搜到。",
 		Parameters: objSchema(props{"path": strProp("可选：文件路径；省略则扫描全部 .md 文件")}),
 		ReadOnly: false,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
@@ -238,6 +245,7 @@ func registerExtraCodeGraphTools(r *Registry, root string) {
 	// ---- 26. codegraph_search_docs ----
 	r.Register(&Tool{
 		Name: "codegraph_search_docs", Description: "搜索已索引文档。优先向量语义搜索，回退关键词。",
+		UsageGuide: "搜索已索引的 Markdown 文档。有 ONNX 时做语义搜索（理解意图），否则关键词回退。比全文搜索更智能。",
 		Parameters: objSchema(props{"query": strProp("搜索关键词"), "limit": intProp("可选：最大返回数（默认 5）")}, "query"),
 		ReadOnly: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
@@ -278,6 +286,7 @@ func registerExtraCodeGraphTools(r *Registry, root string) {
 	// ---- 27. codegraph_verify_design ----
 	r.Register(&Tool{
 		Name: "codegraph_verify_design", Description: "检查设计文档中的代码引用是否存在。",
+		UsageGuide: "检查设计文档中的代码引用是否仍然有效。重构后运行可发现过期的文档引用。",
 		Parameters: objSchema(props{"docFile": strProp("设计文档路径")}, "docFile"),
 		ReadOnly: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
@@ -300,6 +309,7 @@ func registerExtraCodeGraphTools(r *Registry, root string) {
 	// ---- 28. codegraph_pr_context ----
 	r.Register(&Tool{
 		Name: "codegraph_pr_context", Description: "分析分支变更影响范围。",
+		UsageGuide: "分析当前分支与 baseBranch 的变更影响范围。提交 PR 前运行可了解变更波及哪些文件/函数。",
 		Parameters: objSchema(props{"baseBranch": strProp("可选：基准分支（默认 main）")}),
 		ReadOnly: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
@@ -333,6 +343,7 @@ func registerExtraCodeGraphTools(r *Registry, root string) {
 // ── 29. codegraph_find_by_signature — 按签名查找函数 ──
 	r.Register(&Tool{
 		Name: "codegraph_find_by_signature",
+		UsageGuide: "按结构特征查找函数：参数个数/返回类型/名称模式。想找「接收 string 返回 error」的函数时用。比 search_content 更原子化（基于签名匹配）。",
 		Description: "按结构特征（参数数、返回类型、名称模式）查找函数。",
 		Parameters: objSchema(props{
 			"namePattern": strProp("可选：函数名通配模式，如 'get*'、'*Handler'"),
@@ -406,6 +417,7 @@ func registerExtraCodeGraphTools(r *Registry, root string) {
 	// ── 29.5. codegraph_semantic_search — 语义搜索代码 ──
 	r.Register(&Tool{
 		Name: "codegraph_semantic_search",
+		UsageGuide: "基于语义理解搜索代码（需 ONNX 嵌入模型）。支持自然语言查询如「读取配置文件」「处理 HTTP 请求」。比关键词搜索更智能。",
 		Description: "基于语义理解搜索代码（需 ONNX 嵌入模型）。支持自然语言查询，如「读取文件的函数」「处理错误的逻辑」。结果按语义相似度排序，比关键词搜索更准确。",
 		Parameters: objSchema(props{
 			"query":     strProp("自然语言查询，如「读取配置文件」「处理 HTTP 请求」"),
@@ -550,6 +562,7 @@ func registerExtraCodeGraphTools(r *Registry, root string) {
 	// ── 30. codegraph_explore — 自然语言→源码 ──
 	r.Register(&Tool{
 		Name: "codegraph_explore",
+		UsageGuide: "一站式代码理解工具。用自然语言或符号名探索代码，返回相关源码和位置。新接触项目时用此工具了解代码比逐个 read_file 更高效。",
 		Description: "一站式代码理解工具。用自然语言或符号名探索代码，返回相关源码和位置。分析代码的首选工具。",
 		Parameters: objSchema(props{"query": strProp("自然语言问题或符号名"), "maxFiles": intProp("可选：最大返回文件数（默认 8）")}, "query"),
 		ReadOnly: true,

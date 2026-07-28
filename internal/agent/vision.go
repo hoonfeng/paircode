@@ -31,6 +31,7 @@ func registerVisionTools(r *Registry, root string) {
 	// ── image_analyze ──
 	r.Register(&Tool{
 		Name: "image_analyze",
+		UsageGuide: "分析图片中的颜色分布、色块区域和基本图形。用于理解 UI 截图、图表、图像内容。比肉眼更快（自动聚类颜色+区域检测）。",
 		Description: "分析图片中的颜色分布、色块区域和基本图形。" +
 			"输入图片路径，返回按坐标块 (x1,y1)-(x2,y2) 描述的详细分析结果。" +
 			"支持 PNG / JPEG 格式。" +
@@ -64,6 +65,7 @@ func registerVisionTools(r *Registry, root string) {
 	// ── image_ocr ──
 	r.Register(&Tool{
 		Name: "image_ocr",
+		UsageGuide: "从图片中识别文字（OCR）。支持中英文混合识别。截图后识别界面上的文字内容用此工具。",
 		Description: "从图片中识别文字（OCR）。" +
 			"返回识别出的文字内容及其在图片中的坐标位置 (x1,y1)-(x2,y2)。" +
 			"支持项目内嵌的 Tesseract 便携版（无需安装），也支持系统已安装的 Tesseract。" +

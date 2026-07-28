@@ -25,6 +25,7 @@ func registerDebugTools(r *Registry, root string) {
 	// debug_start — 启动调试会话
 	r.Register(&Tool{
 		Name: "debug_start",
+		UsageGuide: "启动 Go 程序调试会话（依赖 dlv）。先启动调试，再设断点、单步执行、看变量。比手动启动 dlv 更方便（自动管理 DAP 连接+端口分配）。需审核批准。",
 		Description: "启动 Go 程序调试会话。需要安装 Delve（dlv）。" +
 			"program 为 Go 程序路径（如 './cmd/app'）。" +
 			"返回调试端口号。启动后可用其他 debug_* 工具控制调试。",
@@ -70,6 +71,7 @@ func registerDebugTools(r *Registry, root string) {
 	// debug_stop — 停止调试会话
 	r.Register(&Tool{
 		Name:        "debug_stop",
+		UsageGuide:  "停止当前调试会话。用完及时停止，释放端口和资源。",
 		Description: "停止当前调试会话，关闭 dlv 和 DAP 连接。",
 		Parameters:  objSchema(props{}),
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
@@ -103,6 +105,7 @@ func registerDebugTools(r *Registry, root string) {
 	// debug_breakpoint — 设置/清除断点
 	r.Register(&Tool{
 		Name: "debug_breakpoint",
+		UsageGuide: "在指定文件指定行设置断点。先 debug_start 启动调试，再设置断点。支持同时设多个断点（lines 数组）。清空 lines 数组=清除该文件所有断点。",
 		Description: "在指定文件的指定行设置断点。path 为源文件路径，lines 为行号数组。" +
 			"传空 lines 数组将清除该文件的所有断点。" +
 			"返回每个断点的验证状态（verified=true 表示断点设置成功）。",
@@ -153,6 +156,7 @@ func registerDebugTools(r *Registry, root string) {
 	// debug_continue — 继续执行
 	r.Register(&Tool{
 		Name: "debug_continue",
+		UsageGuide: "从暂停状态继续执行到下一个断点或程序退出。在变量查看/单步执行后继续运行。",
 		Description: "从暂停状态继续执行程序（直到下一个断点、异常或程序退出）。" +
 			"thread_id 可选，默认 1（主线程）。执行后进入运行状态。",
 		Parameters: objSchema(props{
@@ -174,6 +178,7 @@ func registerDebugTools(r *Registry, root string) {
 	// debug_next — 单步跳过（Step Over）
 	r.Register(&Tool{
 		Name: "debug_next",
+		UsageGuide: "单步跳过（Step Over）：执行当前行但不进入函数内部。用于快速跳过不关心的函数调用。",
 		Description: "单步跳过（Step Over）：执行当前行，如果当前行是函数调用则不进入函数内部。" +
 			"thread_id 可选，默认 1。",
 		Parameters: objSchema(props{
@@ -195,6 +200,7 @@ func registerDebugTools(r *Registry, root string) {
 	// debug_step_in — 单步进入（Step Into）
 	r.Register(&Tool{
 		Name: "debug_step_in",
+		UsageGuide: "单步进入（Step Into）：进入当前行调用的函数内部。想看函数内部逻辑时用。",
 		Description: "单步进入（Step Into）：如果当前行是函数调用，进入函数内部。" +
 			"thread_id 可选，默认 1。",
 		Parameters: objSchema(props{
@@ -216,6 +222,7 @@ func registerDebugTools(r *Registry, root string) {
 	// debug_step_out — 单步跳出（Step Out）
 	r.Register(&Tool{
 		Name: "debug_step_out",
+		UsageGuide: "单步跳出（Step Out）：执行到当前函数返回处。已进入某个函数想快速退出时用。",
 		Description: "单步跳出（Step Out）：执行到当前函数返回。" +
 			"thread_id 可选，默认 1。",
 		Parameters: objSchema(props{
@@ -237,6 +244,7 @@ func registerDebugTools(r *Registry, root string) {
 	// debug_stack — 查看调用栈
 	r.Register(&Tool{
 		Name: "debug_stack",
+		UsageGuide: "查看调用栈（levels 控制深度）。程序暂停后先看栈帧了解执行到哪了。比 delve CLI 更方便（自动格式化+帧编号）。",
 		Description: "查看指定线程的调用栈。" +
 			"thread_id 可选（默认 1），levels 可选（默认 20，最大 50）。" +
 			"返回栈帧列表（ID、函数名、文件、行号）。",
@@ -288,6 +296,7 @@ func registerDebugTools(r *Registry, root string) {
 	// debug_variables — 查看变量
 	r.Register(&Tool{
 		Name: "debug_variables",
+		UsageGuide: "查看暂停点的变量值。可指定栈帧 ID 看不同帧的变量。展开子变量需传入 variables_reference。调试核心逻辑时此工具必用。",
 		Description: "查看当前暂停点的变量值。可指定栈帧 ID 查看不同帧的变量。" +
 			"frame_id 可选（默认 0 = 当前帧，即栈顶）。" +
 			"返回变量名、类型、值的列表。复杂对象可通过 variables_reference 展开子变量。",
@@ -352,6 +361,7 @@ func registerDebugTools(r *Registry, root string) {
 	// debug_evaluate — 表达式求值
 	r.Register(&Tool{
 		Name: "debug_evaluate",
+		UsageGuide: "在暂停状态下求值表达式。可查看复杂变量内容、调用函数、计算条件。比 debug_variables 更灵活（支持任意表达式）。",
 		Description: "在调试暂停状态下求值表达式。可查看变量值、调用函数、计算表达式。" +
 			"expression 为要求值的表达式（如 'len(x)'、'fmt.Sprintf(\"%v\", s)'）。" +
 			"frame_id 可选（默认 0 = 当前帧）。返回表达式的结果值和类型。",
@@ -387,6 +397,7 @@ func registerDebugTools(r *Registry, root string) {
 	// debug_status — 调试会话状态
 	r.Register(&Tool{
 		Name:        "debug_status",
+		UsageGuide:  "查看当前调试会话状态（空闲/运行中/已暂停/已退出）及断点数量。快速检查调试器状态用。",
 		Description: "查看当前调试会话状态（空闲/运行中/已暂停/已退出）以及断点数量。",
 		Parameters:  objSchema(props{}),
 		ReadOnly:    true,

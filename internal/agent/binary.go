@@ -18,6 +18,7 @@ const maxReadFileSize = 10 << 20 // read_file 文本上限 10MB（更大用 offs
 func registerBinaryTools(r *Registry, root string) {
 	r.Register(&Tool{
 		Name: "inspect_binary",
+		UsageGuide: "分析二进制文件：大小 + 类型嗅探（magic bytes）+ hexdump 预览。二进制文件（图片/可执行/压缩包/字体等）只能用此工具，不可用 read_file（read_file 会拒绝含 NULL 字节的文件）。比直接读原始字节安全（预览有界不撑爆上下文）。",
 		Description: "分析二进制文件而不撑爆上下文：返回大小 + 嗅探类型（按 magic bytes）+ 指定区段的十六进制/ASCII 预览" +
 			"（hexdump 风格）。读图片/可执行/压缩包/字体等二进制用它，别用 read_file。",
 		Parameters: objSchema(props{
@@ -65,6 +66,7 @@ func registerBinaryTools(r *Registry, root string) {
 
 	r.Register(&Tool{
 		Name:             "write_binary",
+		UsageGuide:       "把 base64 编码的字节写入文件。用于写二进制内容（图片/字体/编译产物等）。需审核批准。比 write_file 更省 token（base64 比文本转义更紧凑）。",
 		Description:      "把 base64 编码的字节写入文件（path；覆盖；父目录自动创建）。用于写二进制内容。",
 		Parameters:       objSchema(props{"path": strProp("文件路径"), "base64": strProp("base64 编码的字节")}, "path", "base64"),
 		RequiresApproval: true,
