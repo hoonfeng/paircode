@@ -2185,7 +2185,12 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 		agentCfgs := make([]agent.MCPServerConfig, len(cfgs))
 		for i, c := range cfgs {
 			agentCfgs[i] = agent.MCPServerConfig{Name: c.Name, Command: c.Command, Args: c.Args, Env: c.Env}
-		}
+	}
+
+	// ★ 应用工作区工具配置（.pair/tools.json）
+	agent.LoadWorkspaceToolConfig(reg, root)
+
+	reloadWebLuaTools(reg, root)
 		agent.RegisterMCPServers(reg, agentCfgs)
 	}
 
@@ -2194,6 +2199,11 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 	agent.InitDebugLogger(root, 50)
 
 	sys := buildWebSystemPrompt()
+
+	// ★ 注入工具使用指南（引导 LLM 优先使用专用工具而非 run_command）
+	if guide := reg.UsageGuideText(); guide != "" {
+		sys += "\n\n" + guide
+	}
 
 
 	

@@ -37,11 +37,14 @@ type ToolHandler func(ctx context.Context, args map[string]any) (string, error)
 // Tool 一个已注册工具（名/描述/参数 Schema/执行体 + 元信息）。
 type Tool struct {
 	Name             string
-	Description      string
+	Description      string // 简短描述（传给 LLM function-calling）
+	UsageGuide       string // ★ 详细使用指导：何时用此工具、注意事项、对比 run_command 的优势
+	Category         string // ★ 工具分类：如 "code-search", "git", "file", "web", "debug", "build", "test"
 	Parameters       map[string]any // JSON Schema
 	Handler          ToolHandler
 	ReadOnly         bool // 只读（不改文件系统）——供并行/免审
 	RequiresApproval bool // 写类工具：需人工确认（UI 接入时用）
+	Enabled          bool // ★ 是否启用（默认 true；按工作区配置可关闭）
 }
 
 // Registry 工具注册表（并发安全）。
@@ -75,6 +78,9 @@ func (r *Registry) Register(t *Tool) {
 	if _, exists := r.tools[t.Name]; !exists {
 		r.order = append(r.order, t.Name)
 	}
+	if t.Enabled == false { // 未显式设置则默认启用
+		t.Enabled = true
+	}
 	r.tools[t.Name] = t
 }
 
@@ -100,6 +106,75 @@ func (r *Registry) Unregister(name string) {
 			break
 		}
 	}
+}
+
+// SetToolEnabled 启用或禁用指定工具（按工作区配置调用）。
+func (r *Registry) SetToolEnabled(name string, enabled bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if t, ok := r.tools[name]; ok {
+		t.Enabled = enabled
+	}
+}
+
+// EnabledDefinitions 导出已启用工具的定义（按注册顺序），传给 LLM 作 function-calling。
+// 只包含 Enabled=true 的工具。禁用工具不暴露给 LLM。
+// EnabledDefinitions 导出已启用工具的定义。
+// 已委托给 Definitions()，两者行为一致（Definitions 已默认过滤禁用工具）。
+func (r *Registry) EnabledDefinitions() []ToolDefinition {
+	return r.Definitions()
+}
+
+
+// UsageGuideText 生成工具使用指南文本（供注入系统提示使用）。
+// 按 Category 分组，展示每个已启用工具的 UsageGuide。
+func (r *Registry) UsageGuideText() string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	type guideEntry struct {
+		name     string
+		guide    string
+		category string
+	}
+	entries := make([]guideEntry, 0, len(r.order))
+	for _, name := range r.order {
+		t := r.tools[name]
+		if !t.Enabled || t.UsageGuide == "" {
+			continue
+		}
+		entries = append(entries, guideEntry{name, t.UsageGuide, t.Category})
+	}
+	if len(entries) == 0 {
+		return ""
+	}
+	// 按 Category 分组
+	groups := map[string][]guideEntry{}
+	var cats []string
+	catSet := map[string]bool{}
+	for _, e := range entries {
+		cat := e.category
+		if cat == "" {
+			cat = "其他"
+		}
+		if !catSet[cat] {
+			catSet[cat] = true
+			cats = append(cats, cat)
+		}
+		groups[cat] = append(groups[cat], e)
+	}
+	var b strings.Builder
+	b.WriteString("📋 工具使用指南（按分类，请优先使用专用工具而非 run_command）：\n\n")
+	for _, cat := range cats {
+		ents := groups[cat]
+		b.WriteString("### " + cat + "\n")
+		for _, e := range ents {
+			b.WriteString("- **" + e.name + "**：" + e.guide + "\n")
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString("💡 通用原则：当存在专用工具时，请优先使用专用工具而非 run_command。" +
+		"专用工具拥有更精确的参数校验、错误处理和输出格式化，结果更可靠。")
+	return b.String()
 }
 
 // Copy 深拷贝 Registry（含钩子引用）。子 Loop 用副本注册工具，避免污染父表。
@@ -151,8 +226,10 @@ func (r *Registry) Definitions() []ToolDefinition {
 	defs := make([]ToolDefinition, 0, len(r.order))
 	for _, name := range r.order {
 		t := r.tools[name]
+		if !t.Enabled {
+			continue // 禁用的工具不暴露给 LLM
+		}
 		desc := t.Description
-		// ★ 精简：截断超长描述到 ~100 字符，减少每次 LLM 调用的 token 消耗
 		if len(desc) > 120 {
 			// 在第一个句号或空格处截断
 			cut := strings.LastIndex(desc[:120], "。")
@@ -492,7 +569,6 @@ func RegisterDefaultTools(r *Registry, root string) {
 			return b.String(), nil
 		},
 	})
-
 	r.Register(&Tool{
 		Name:             "run_command",
 		Description:      "同步执行一条 shell 命令并返回输出。适用于构建、编译、测试、文件查询等短命令（几秒内完成）。\n禁止用于以下场景（会阻塞 agent）：启动 dev server、npm run dev、go run 启动服务、watch 模式、tcp 监听、任何需保持运行的进程。此类命令请改用 run_background。",

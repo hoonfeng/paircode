@@ -61,6 +61,8 @@ func registerSearchTools(r *Registry, root string) {
 		Description: "在工作区内按正则搜索文件内容，返回匹配的「相对路径:行号: 行文本」。" +
 			"pattern 为 RE2 正则；path 限定子目录（省略=根）；glob 按文件名过滤（如 *.go）；" +
 			"case_insensitive 忽略大小写；max_results 上限（默认 200）。自动跳过 .git/node_modules 等与二进制/超大文件。",
+		UsageGuide: "搜索文件内容（全文搜索）。比 run_command findstr/grep 更精确（跳过 .git/node_modules、自动处理编码、结果结构化）。搜索函数/类型定义请优先用 codegraph_search（基于 AST，更精确）。",
+		Category:   "代码搜索",
 		Parameters: objSchema(props{
 			"pattern":          strProp("RE2 正则表达式"),
 			"path":             strProp("限定子目录（省略=工作区根）"),
@@ -76,6 +78,7 @@ func registerSearchTools(r *Registry, root string) {
 		Description: "在工作区内按通配符递归查找文件，返回相对路径列表（已排序）。" +
 			"pattern 为通配符：不含 / 时匹配文件名（如 *.go、*config*），含 / 时匹配相对路径（如 internal/*/main.go）；" +
 			"path 限定子目录；language 可选按语言过滤；max_results 上限（默认 500）。跳过 .git/node_modules 等。",
+		UsageGuide: "按文件名/路径模式搜索文件。比 run_command dir /s 更高效。配合 language 参数可按语言过滤。",
 		Parameters: objSchema(props{
 			"pattern":     strProp("文件名/路径通配符，如 *.go"),
 			"path":        strProp("限定子目录（省略=工作区根）"),

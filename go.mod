@@ -13,12 +13,15 @@ require (
 	wb-ui.com/goja v0.0.0-00010101000000-000000000000 // indirect
 )
 
+require github.com/dop251/goja v0.0.0-20260719185829-0fc1d42c1dc9
+
 require (
-	github.com/dop251/goja v0.0.0-20260719185829-0fc1d42c1dc9 // indirect
+	github.com/dlclark/regexp2/v2 v2.5.2 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/go-gl/glfw/v3.3/glfw v0.0.0-20260406072232-3ac4aa2bb164 // indirect
+	github.com/go-gl/glfw/v3.3/glfw v0.0.0-20260707082822-2a407d02d01a // indirect
 	github.com/go-sourcemap/sourcemap v2.1.3+incompatible // indirect
 	github.com/google/jsonschema-go v0.4.3 // indirect
+	github.com/google/pprof v0.0.0-20250317173921-a4b03ec1a45e // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/hoonfeng/goskia v0.0.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
