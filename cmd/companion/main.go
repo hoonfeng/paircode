@@ -8,9 +8,7 @@ package main
 import (
 	"log"
 	"os"
-	"os/signal"
 	"runtime"
-	"syscall"
 )
 
 // 编译版本号（由 packager 通过 -ldflags=-X main.version=<version> 注入）
@@ -37,11 +35,7 @@ func main() {
 	if err := StartWebServer(port); err != nil {
 		log.Fatalf("[main] 启动失败: %v", err)
 	}
-	// 等待退出信号，收到后直接关闭
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-	<-sig
-	log.Println("[main] 收到退出信号，正在关闭...")
-	StopWebServer()
-	log.Println("[main] 已退出。")
+	log.Printf("[main] 已启动，请打开 http://localhost:%d", port)
+	// 永久阻塞，直到用户关闭命令窗口或 kill 进程
+	select {}
 }
