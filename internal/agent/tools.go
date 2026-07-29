@@ -35,6 +35,7 @@ var ErrRetry = errors.New("__retry__")
 type ToolHandler func(ctx context.Context, args map[string]any) (string, error)
 
 // Tool 一个已注册工具（名/描述/参数 Schema/执行体 + 元信息）。
+// Tool 一个已注册工具（名/描述/参数 Schema/执行体 + 元信息）。
 type Tool struct {
 	Name             string
 	Description      string // 简短描述（传给 LLM function-calling）
@@ -42,6 +43,7 @@ type Tool struct {
 	Category         string // ★ 工具分类：如 "code-search", "git", "file", "web", "debug", "build", "test"
 	Parameters       map[string]any // JSON Schema
 	Handler          ToolHandler
+	SystemTool       bool // ★ 系统内部工具（如历史搜索、委托任务等），不暴露给 LLM agent 选择，前端 UI 隐藏
 	ReadOnly         bool // 只读（不改文件系统）——供并行/免审
 	RequiresApproval bool // 写类工具：需人工确认（UI 接入时用）
 	Enabled          bool // ★ 是否启用（默认 true；按工作区配置可关闭）
@@ -246,6 +248,7 @@ type ToolMeta struct {
 	UsageGuide  string `json:"usageGuide"`
 	Enabled     bool   `json:"enabled"`
 	ReadOnly    bool   `json:"readOnly"`
+	SystemTool  bool   `json:"systemTool"`
 }
 
 // AllToolMeta 返回所有工具的元信息列表（含禁用工具），供前端 UI 展示工具开关列表。
@@ -262,6 +265,7 @@ func (r *Registry) AllToolMeta() []ToolMeta {
 			UsageGuide:  t.UsageGuide,
 			Enabled:     t.Enabled,
 			ReadOnly:    t.ReadOnly,
+		SystemTool:  t.SystemTool,
 		})
 	}
 	return metas

@@ -27,6 +27,7 @@ func RegisterDelegateTools(parent *Loop, tree *AgentTree) {
 
 	reg.Register(&Tool{
 		Name: "delegate_task",
+		SystemTool: true,
 		Description: "多轮委托：把任务交给子 agent 运行至完成。" +
 			"子 agent 看到完整父历史（缓存命中），其产出作为本工具结果回传。协调器用它分派子任务给专家 agent（planner/coder/reviewer 等）。",
 		Parameters: objSchema(props{
@@ -40,6 +41,7 @@ func RegisterDelegateTools(parent *Loop, tree *AgentTree) {
 
 	reg.Register(&Tool{
 		Name:        "delegate_single_turn",
+		SystemTool:   true,
 		Description: "单轮委托：让子 agent 只做 1 次 LLM 调用（不进多轮循环），结果直接返回。适合无需工具的简单子任务。",
 		Parameters: objSchema(props{
 			"agent_name": strProp("目标子 agent 名"),
@@ -52,6 +54,7 @@ func RegisterDelegateTools(parent *Loop, tree *AgentTree) {
 
 	reg.Register(&Tool{
 		Name:        "transfer_to_agent",
+		SystemTool:   true,
 		Description: "控制权转移：当前 agent 退出，目标 agent 接管同一对话历史。用于「该让 X agent 处理」的场景。",
 		Parameters:  objSchema(props{"agent_name": strProp("目标 agent 名")}, "agent_name"),
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {

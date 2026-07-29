@@ -170,6 +170,7 @@ func RegisterManagementTools(r *Registry, root string) {
 	// ── 已完成对话历史 ──
 	r.Register(&Tool{
 		Name: "history_search", Description: "按关键词搜索已完成对话的历史记录（标题/摘要/标签/关键点）。", ReadOnly: true,
+		SystemTool: true,
 		Parameters: mObjSchema(map[string]any{"query": mStrProp("搜索关键词")}),
 		Handler: func(_ context.Context, args map[string]any) (string, error) {
 			return searchHistoryText(mArgStr(args, "query")), nil
@@ -177,12 +178,12 @@ func RegisterManagementTools(r *Registry, root string) {
 	})
 	r.Register(&Tool{
 		Name: "history_list", Description: "列出所有已完成对话的历史记录（按完成时间倒序）。",
-		ReadOnly: true, Parameters: mObjSchema(map[string]any{}),
+		ReadOnly: true, SystemTool: true, Parameters: mObjSchema(map[string]any{}),
 		Handler: func(_ context.Context, _ map[string]any) (string, error) { return listHistoryText(), nil },
 	})
 	r.Register(&Tool{
 		Name: "history_count", Description: "查询已完成对话的历史记录总数。",
-		ReadOnly: true, Parameters: mObjSchema(map[string]any{}),
+		ReadOnly: true, SystemTool: true, Parameters: mObjSchema(map[string]any{}),
 		Handler: func(_ context.Context, _ map[string]any) (string, error) { return historyCountText(), nil },
 	})
 }

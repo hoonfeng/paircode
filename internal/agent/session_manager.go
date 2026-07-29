@@ -471,7 +471,8 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 	// Register 同名覆盖，安全替换调用方可能已注册的旧版本。
 	if opts.Registry != nil {
 		opts.Registry.Register(&Tool{
-			Name: "ask_user",
+			Name:        "ask_user",
+			SystemTool:  true,
 			Description: "向用户提问并等待回答（用于关键决策、歧义澄清，别滥用）。" +
 				"question 必填；type 可选(text/single/multi/single-with-input)，默认 text 纯文本输入；" +
 				"options 可选(选择类 question 的选项列表)。调用会阻塞直到用户回答。",
@@ -504,8 +505,9 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 
 		// 注册本对话专属的 task_create：捕获 sess.ConvID 写入任务持久化记录
 		opts.Registry.Register(&Tool{
-			Name: "task_create",
-			UsageGuide: "创建子任务并追踪执行进度。复杂任务（3+ 步）必须拆解为子任务，每完成一项更新状态（in_progress→completed）。依赖项用 dependencies 参数关联。比手动记清单更可靠（持久化到磁盘+状态自动管理）。",
+			Name:        "task_create",
+			SystemTool:  true,
+			UsageGuide:  "创建子任务并追踪执行进度。复杂任务（3+ 步）必须拆解为子任务，每完成一项更新状态（in_progress→completed）。依赖项用 dependencies 参数关联。比手动记清单更可靠（持久化到磁盘+状态自动管理）。",
 			Description: "创建新的子任务。创建后必须立即执行该任务：先调用 task_update 标记为 in_progress 开始执行，" +
 				"执行完成后调用 task_update 标记为 completed 并说明结果。重复此流程直到所有子任务完成。",
 			Parameters: objSchema(props{

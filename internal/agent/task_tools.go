@@ -36,6 +36,7 @@ func registerTaskTools(r *Registry, root string) {
 
 	r.Register(&Tool{
 		Name: "update_tasks",
+		SystemTool: true,
 		UsageGuide: "管理持久化任务列表（全量替换模式）。复杂任务（3+ 步）必须拆解为子任务并逐项追踪。每次传入完整清单，状态变化时重传整份。系统自动持久化到磁盘。plan_step_index 用于自主模式下绑定到 update_plan 的步骤。",
 		Description: "维护任务列表：传入完整任务清单（全量替换），系统自动持久化到磁盘。" +
 			"每项包含 subject（必填）、status（pending/in_progress/completed/cancelled）、description（可选）、dependencies（可选）、plan_step_index（可选，整数）。" +

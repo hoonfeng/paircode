@@ -369,16 +369,43 @@ const tcLoading = ref(false)
 const tcSwitchList = ref([])
 const tcCategoryExpanded = ref({})
 
+// 系统内部工具名列表（不应出现在工具开关/审核面板中）
+const systemToolNames = new Set([
+  'history_search', 'history_list', 'history_count',
+  'ask_user',
+  'delegate_task', 'delegate_single_turn', 'transfer_to_agent',
+  'update_plan', 'update_tasks', 'task_create',
+  'generate_commit_message', 'tool_stats'
+])
+
 const tcGroupedList = computed(() => {
+  // 从 reviewCategories 构建工具名→分类名的映射
+  const catMap = {}
+  for (const cat of reviewCategories.value) {
+    for (const tool of cat.tools) {
+      catMap[tool.name] = cat.label
+    }
+  }
   const map = {}
   for (const tool of tcSwitchList.value) {
-    const cat = tool.category || '未分类'
+    // 跳过系统内部工具
+    if (tool.systemTool || systemToolNames.has(tool.name)) continue
+    const cat = tool.category || catMap[tool.name] || '未分类'
     if (!map[cat]) {
       map[cat] = { category: cat, tools: [], expanded: tcCategoryExpanded.value[cat] !== false }
     }
     map[cat].tools.push(tool)
   }
-  return Object.values(map)
+  // 按 reviewCategories 的顺序排序
+  const catOrder = reviewCategories.value.map(c => c.label)
+  return Object.values(map).sort((a, b) => {
+    const ia = catOrder.indexOf(a.category)
+    const ib = catOrder.indexOf(b.category)
+    if (ia !== -1 && ib !== -1) return ia - ib
+    if (ia !== -1) return -1
+    if (ib !== -1) return 1
+    return 0
+  })
 })
 
 function toggleTcCategory(cat) {
@@ -530,9 +557,14 @@ const reviewCategories = ref([
   ]}
 ])
 const filteredReviewCategories = computed(() => {
+  // 先过滤掉系统内部工具
+  const filtered = reviewCategories.value.map(cat => ({
+    ...cat,
+    tools: cat.tools.filter(t => !systemToolNames.has(t.name))
+  })).filter(cat => cat.tools.length > 0)
   const q = reviewSearchText.value.trim().toLowerCase()
-  if (!q) return reviewCategories.value
-  return reviewCategories.value.map(cat => ({
+  if (!q) return filtered
+  return filtered.map(cat => ({
     ...cat, expanded: true,
     tools: cat.tools.filter(t => t.name.includes(q) || t.label.includes(q))
   })).filter(cat => cat.tools.length > 0)

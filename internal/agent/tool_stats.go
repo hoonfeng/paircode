@@ -248,6 +248,7 @@ func inferToolSource(name string) ToolSource {
 func registerToolStatsTool(r *Registry) {
 	r.Register(&Tool{
 		Name: "tool_stats",
+		SystemTool: true,
 		Description: "查看工具调用统计（成功率、调用次数）。" +
 			"按工具名聚合，显示每个工具的调用次数/成功数/失败数/成功率。" +
 			"可使用 min_calls 过滤低频工具，recent 查看最近调用记录。" +

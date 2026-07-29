@@ -182,7 +182,7 @@ func startWebUI(port int) {
 				memory.SetRoot(root)
 			}
 		}
-		log.Printf("[WebUI] 工作区文件夹已更新: %v", core.Folders)
+		
 	}
 	mux := http.NewServeMux()
 
