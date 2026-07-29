@@ -1,9 +1,12 @@
 <template>
-  <div class="code-editor-wrapper" ref="wrapperRef"></div>
+  <div class="code-editor-container">
+    <FindPanel ref="searchPanelRef" :view="view" @close="onSearchPanelClose" />
+    <div class="code-editor-wrapper" ref="wrapperRef"></div>
+  </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, watch, inject } from 'vue'
+import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import { EditorView, basicSetup } from 'codemirror'
 import { EditorState } from '@codemirror/state'
 import { syntaxHighlighting, HighlightStyle } from '@codemirror/language'
@@ -20,9 +23,10 @@ import { keymap } from '@codemirror/view'
 import { indentWithTab } from '@codemirror/commands'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { closeBrackets } from '@codemirror/autocomplete'
-import { highlightSelectionMatches } from '@codemirror/search'
+import { highlightSelectionMatches, search } from '@codemirror/search'
 import { state } from '../main.js'
 import api from '../api.js'
+import FindPanel from './FindPanel.vue'
 
 const props = defineProps({
   modelValue: { type: String, default: '' },
@@ -33,6 +37,7 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue', 'save', 'cursorPos', 'contextmenu-selection'])
 
 const wrapperRef = ref(null)
+const searchPanelRef = ref(null)
 let view = null
 
 function getLang(path) {
@@ -62,9 +67,29 @@ function createEditor() {
 
   const extensions = [
     basicSetup,
+    search(),               // 初始化搜索状态，不显示默认面板
     keymap.of([indentWithTab]),
     closeBrackets(),
     highlightSelectionMatches(),
+    // 拦截 Ctrl+F/H 显示自定义中文搜索面板
+    keymap.of([
+      {
+        key: 'Ctrl-f',
+        run: () => {
+          const selectedText = view ? view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to) : ''
+          searchPanelRef.value?.open(selectedText)
+          return true
+        },
+      },
+      {
+        key: 'Ctrl-h',
+        run: () => {
+          const selectedText = view ? view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to) : ''
+          searchPanelRef.value?.openReplace(selectedText)
+          return true
+        },
+      },
+    ]),
     EditorView.updateListener.of((update) => {
       if (update.docChanged) {
         emit('update:modelValue', update.state.doc.toString())
@@ -295,14 +320,25 @@ onBeforeUnmount(() => {
   }
 })
 
+// 搜索面板关闭时聚焦回编辑器
+function onSearchPanelClose() {
+  view?.focus()
+}
+
 defineExpose({
   getEditor: () => view,
   focus: () => view?.focus(),
   execSave: () => emit('save'),
+  openFind: (text) => searchPanelRef.value?.open(text),
 })
 </script>
 
 <style scoped>
+.code-editor-container {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+}
 .code-editor-wrapper {
   height: 100%;
   overflow: hidden;
@@ -342,5 +378,10 @@ defineExpose({
 .code-editor-wrapper :deep(.cm-matchingBracket) {
   background: var(--accent-bg);
   outline: 1px solid var(--accent);
+}
+
+/* 隐藏 CodeMirror 默认搜索面板 */
+:deep(.cm-panel.cm-search) {
+  display: none !important;
 }
 </style>
