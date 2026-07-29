@@ -48,10 +48,10 @@ func registerWebDebugTool(r *Registry, root string) {
 	r.Register(&Tool{
 		Name: "web_debug",
 		UsageGuide: "一站式网页验证工具：在无头浏览器中打开 URL，检查控制台错误+网络请求失败+截图。" +
-			"支持交互操作（click_selector/type_selector+type_text）、JS 求值（eval）、文字提取(text_extract)。" +
-			"前端改动验证首选工具，比手动打开浏览器检查更全自动化。",
+			"支持交互操作（click_selector/type_selector+type_text）、JS 求值（eval）、文字提取(text_extract)、" +
+			"元素查询(element_query)。前端改动验证首选工具，比手动打开浏览器检查更全自动化。",
 		Description: "一站式网页验证工具：在无头浏览器中打开 URL，捕获控制台错误/警告、" +
-			"网络请求失败（404/500/CORS）、DOM 结构概览、" +
+			"网络请求失败（404/500/CORS）、DOM 结构概览、元素查询（标签/样式/尺寸/可见性/属性）、" +
 			"可选输入文字、点击元素、执行 JS、提取页面可见文字，最后截图保存。" +
 			"用于验证前端改动是否正常工作（白屏、JS 异常、接口报错、样式错乱等）。" +
 			"截图保存到 screenshots/ 目录，返回文件路径可用 image_analyze 进一步分析。" +
@@ -64,6 +64,7 @@ func registerWebDebugTool(r *Registry, root string) {
 			"type_selector":   strProp("可选：要输入文字的 input/textarea 的 CSS 选择器"),
 			"type_text":       strProp("可选：要输入的文字内容（需配合 type_selector）"),
 			"text_extract":    boolProp("可选：提取页面可见纯文本内容（默认 false，内容过多时自动截断）"),
+			"element_query":   strProp("可选：CSS 选择器，查询匹配元素的详细信息（标签/类/样式/尺寸/可见性/属性/文本）"),
 			"eval":            strProp("可选：在页面上执行的 JavaScript 表达式（如 'document.title' 或 'JSON.stringify(window.appState)'）"),
 			"screenshot":      boolProp("可选：是否截图（默认 true）。截图保存到 screenshots/ 目录"),
 			"viewport_width":  intProp("可选：视口宽度（默认 1280）"),
@@ -81,6 +82,7 @@ func registerWebDebugTool(r *Registry, root string) {
 			typeText := argStr(args, "type_text")
 			evalJS := argStr(args, "eval")
 			extractText := argBoolDef(args, "text_extract", false)
+			elementQuery := argStr(args, "element_query")
 			takeScreenshot := argBoolDef(args, "screenshot", true)
 			vpWidth := argInt(args, "viewport_width", 1280)
 			vpHeight := argInt(args, "viewport_height", 900)
@@ -92,6 +94,7 @@ func registerWebDebugTool(r *Registry, root string) {
 				typeText:     typeText,
 				evalJS:       evalJS,
 				extractText:  extractText,
+				elementQuery: elementQuery,
 				screenshot:   takeScreenshot,
 				vpWidth:      vpWidth,
 				vpHeight:     vpHeight,
@@ -102,15 +105,16 @@ func registerWebDebugTool(r *Registry, root string) {
 
 // webDebugOpts 聚合 web_debug 的可选参数。
 type webDebugOpts struct {
-	waitMs      int
-	clickSel    string
-	typeSel     string
-	typeText    string
-	evalJS      string
-	extractText bool
-	screenshot  bool
-	vpWidth     int
-	vpHeight    int
+	waitMs       int
+	clickSel     string
+	typeSel      string
+	typeText     string
+	evalJS       string
+	extractText  bool
+	elementQuery string
+	screenshot   bool
+	vpWidth      int
+	vpHeight     int
 }
 
 // webDebugResult 聚合 web_debug 的运行结果。
@@ -122,6 +126,7 @@ type webDebugResult struct {
 	evalResult   string
 	pageText     string
 	domOverview  string
+	elementInfo  string
 	screenshot   string
 }
 
@@ -164,12 +169,17 @@ func webDebugRun(ctx context.Context, root, targetURL string, opts webDebugOpts)
 	page = page.Context(pageCtx)
 
 	res := webDebugResult{}
+	reqURLs := map[string]string{} // requestId → URL（用于关联失败请求）
 
 	// ── 启用网络域（捕获请求失败） ──
 	proto.NetworkEnable{}.Call(page)
 
 	// ── 捕获所有控制台消息 + 网络失败 ──
 	go page.EachEvent(
+		// 网络请求开始（记录 URL 供失败时关联）
+		func(e *proto.NetworkRequestWillBeSent) {
+			reqURLs[string(e.RequestID)] = e.Request.URL
+		},
 		// 所有 console 消息
 		func(e *proto.RuntimeConsoleAPICalled) {
 			text := consoleArgsText(e.Args)
@@ -205,8 +215,12 @@ func webDebugRun(ctx context.Context, root, targetURL string, opts webDebugOpts)
 			if e.Type != "" {
 				rType = string(e.Type)
 			}
+			url := reqURLs[string(e.RequestID)]
+			if url == "" {
+				url = string(e.RequestID) // 回退
+			}
 			res.networkFails = append(res.networkFails, networkFail{
-				URL:       string(e.RequestID), // 用 requestId 作为临时标识
+				URL:       url,
 				Type:      rType,
 				ErrorText: e.ErrorText,
 			})
@@ -301,6 +315,63 @@ func webDebugRun(ctx context.Context, root, targetURL string, opts webDebugOpts)
 		res.domOverview = extractStrField(domStr, "overview")
 	}
 
+	// ── 查询元素详细信息（可选） ──
+	if opts.elementQuery != "" {
+		jsQuery := fmt.Sprintf(`() => {
+			const sel = %q;
+			const els = document.querySelectorAll(sel);
+			if (!els || els.length === 0) return JSON.stringify({ error: "没有找到匹配「" + sel + "」的元素" });
+			const important = ['display','visibility','opacity','position','width','height',
+				'margin-top','margin-right','margin-bottom','margin-left',
+				'padding-top','padding-right','padding-bottom','padding-left',
+				'color','background-color','font-size','font-weight','text-align',
+				'z-index','overflow','overflow-x','overflow-y',
+				'top','left','right','bottom','transform','border-radius',
+				'box-shadow','cursor','pointer-events','user-select',
+				'grid-template','flex-direction','align-items','justify-content',
+				'white-space','text-overflow','line-height',
+				'max-height','min-height','max-width','min-width'];
+			const results = [];
+			const max = Math.min(els.length, 20);
+			for (let i = 0; i < max; i++) {
+				const el = els[i];
+				const cs = window.getComputedStyle(el);
+				const rect = el.getBoundingClientRect();
+				const info = {
+					index: i,
+					tag: el.tagName.toLowerCase(),
+					id: el.id || '',
+					classes: (el.className && typeof el.className === 'string') ? el.className.trim().split(/\s+/) : [],
+					visible: cs.display !== 'none' && cs.visibility !== 'hidden' && parseFloat(cs.opacity) > 0,
+					rect: { x: Math.round(rect.x), y: Math.round(rect.y), w: Math.round(rect.width), h: Math.round(rect.height) },
+					text: (el.innerText || '').trim().substring(0, 200),
+					children: el.children.length,
+					attrs: {},
+					styles: {}
+				};
+				// 提取关键属性
+				for (const a of ['href','src','alt','placeholder','value','type','name','disabled','readonly',
+					'aria-label','aria-hidden','data-testid','title','role','target','rel']) {
+					if (el.hasAttribute(a)) info.attrs[a] = el.getAttribute(a);
+				}
+				// 提取关键样式
+				for (const s of important) {
+					const v = cs.getPropertyValue(s);
+					if (v && v !== 'none' && v !== 'normal' && v !== '0px' && v !== 'auto' && v !== 'static') {
+						info.styles[s] = v;
+					}
+				}
+				results.push(info);
+			}
+			const extra = els.length > max ? ('\n（还有 ' + (els.length - max) + ' 个匹配元素未列出）') : '';
+			return JSON.stringify({ count: els.length, shown: results.length, elements: results }) + extra;
+		}`, opts.elementQuery)
+		elObj, err := page.Eval(jsQuery)
+		if err == nil {
+			res.elementInfo = elObj.Value.String()
+		}
+	}
+
 	// ── 提取页面可见文字（可选） ──
 	if opts.extractText {
 		textObj, err := page.Eval(`() => {
@@ -311,21 +382,6 @@ func webDebugRun(ctx context.Context, root, targetURL string, opts webDebugOpts)
 			res.pageText = textObj.Value.String()
 		}
 	}
-
-	// ── 补查最近失败的网络请求（通过 JS 从 Performance API 获取） ──
-	if len(res.networkFails) > 0 {
-		netObj, err := page.Eval(`() => {
-			// 通过 performance.getEntriesByType('resource') 获取失败请求
-			const entries = performance.getEntriesByType('resource') || [];
-			const fails = [];
-			// 也尝试读取全局 error 事件记录
-			return JSON.stringify({ count: entries.length });
-		}`)
-		if err == nil {
-			_ = netObj
-		}
-	}
-
 	// ── 执行自定义 JS ──
 	if opts.evalJS != "" {
 		// 【关键】rod 的 Eval 会把 JS 包成 function() { return (JS).apply(this, arguments) }
@@ -431,6 +487,16 @@ func buildWebDebugReport(res *webDebugResult, root, targetURL string) string {
 			result = result[:2000] + "\n…（已截断，共 " + fmt.Sprintf("%d", len(result)) + " 字符）"
 		}
 		b.WriteString(result + "\n")
+	}
+
+	// 元素查询结果
+	if res.elementInfo != "" {
+		b.WriteString("\n## 元素查询结果\n")
+		info := res.elementInfo
+		if len(info) > 3000 {
+			info = info[:3000] + "\n…（已截断，共 " + fmt.Sprintf("%d", len(info)) + " 字符）"
+		}
+		b.WriteString(info + "\n")
 	}
 
 	// 页面可见文字
