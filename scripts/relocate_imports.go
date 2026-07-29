@@ -13,7 +13,7 @@ var replacements = map[string]string{
 	`github.com/hoonfeng/paircode/internal/agent`:       `github.com/hoonfeng/paircode/internal/agent`,
 	`github.com/hoonfeng/paircode/internal/agenttools`:  `github.com/hoonfeng/paircode/internal/agenttools`,
 	`github.com/hoonfeng/paircode/internal/core`:        `github.com/hoonfeng/paircode/internal/core`,
-	`github.com/hoonfeng/paircode/internal/debugger`:    `github.com/hoonfeng/paircode/internal/debugger`,
+	// debugger 包已移除，被通用 debug_tools.go 替代
 	`github.com/hoonfeng/paircode/internal/hook`:        `github.com/hoonfeng/paircode/internal/hook`,
 	`github.com/hoonfeng/paircode/internal/codetypes`:   `github.com/hoonfeng/paircode/internal/codetypes`,
 	`github.com/hoonfeng/paircode/internal/uiapi`:       `github.com/hoonfeng/paircode/internal/uiapi`,

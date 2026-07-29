@@ -186,7 +186,7 @@ func TestRegistryDefinitions(t *testing.T) {
 		"git_status", "memory_write", "find_files_by_pattern", "find_symbol",
 		"get_file_symbols", "task_create",
 		"project_info_write", "project_info_read", "inspect_binary", "binary_strings",
-		"debug_start", "debug_stop", "debug_status",
+		"debug_inject_log", "debug_run_capture", "debug_evaluate_session",
 	}
 	have := map[string]bool{}
 	for _, d := range defs {

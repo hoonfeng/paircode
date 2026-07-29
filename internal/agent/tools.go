@@ -758,7 +758,7 @@ func RegisterDefaultTools(r *Registry, root string) {
 	registerProjectInfoTools(r, root)        // project_info_write/read/list/search/delete/explore（项目知识库，见 projectinfo.go）
 	registerBinaryTools(r, root)             // inspect_binary / write_binary（二进制读写，见 binary.go）
 	registerBinaryRETools(r, root)           // binary_strings/find/patch/info/hash/entropy（二进制正则，见 binary_re.go）
-	registerDebugTools(r, root)              // debug_start/stop/breakpoint/continue/next/step_in/step_out/stack/variables/evaluate/status（见 debugtools.go）
+	registerDebugTools(r, root)              // debug_inject_log/run_capture/analyze_output/parse_stack/cleanup_logs/watch/evaluate_session（见 debug_tools.go）
 	registerVisionTools(r, root)             // image_analyze / image_ocr（图像视觉分析，见 vision.go）
 	registerScreenshotTools(r, root)         // screenshot_desktop/window/area/webpage（截图工具，见 screenshot_tool.go）
 	registerWebDebugTool(r, root)            // web_debug（网页验证：控制台错误+截图+JS执行+交互+文字提取，见 webdebug.go）
