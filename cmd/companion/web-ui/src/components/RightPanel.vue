@@ -179,59 +179,67 @@
             <div class="input-bottom-bar">
               <div class="ibb-btns">
                 <span :class="['obtn', reviewBtnClass]" @click="cycleReviewMode" :title="reviewBtnTitle"><SvgIcon :name="reviewIconName" :size="12" /> {{ reviewBtnLabel }}</span>
-                <span class="obtn obtn-review-config" @click="reviewConfigOpen = !reviewConfigOpen" title="审核黑白名单配置" :class="{ active: reviewConfigOpen }"><SvgIcon name="settings" :size="12" /> 配置</span>
-                <!-- 审核配置弹窗 -->
-                <div v-if="reviewConfigOpen" class="review-config-popover" @click.stop>
-                  <div class="rcp-header">
-                    <span>审核配置</span>
-                    <span class="rcp-header-hint">点击工具切换：<span class="rcp-tag-dot rcp-dot-none"></span>默认 → <span class="rcp-tag-dot rcp-dot-black"></span>黑名单 → <span class="rcp-tag-dot rcp-dot-white"></span>白名单</span>
+                <span class="obtn obtn-review-config" @click="toolConfigOpen = !toolConfigOpen" title="工具配置：启用/禁用 + 审核黑白名单" :class="{ active: toolConfigOpen }"><SvgIcon name="settings" :size="12" /> 工具配置</span>
+                <!-- 工具配置弹窗（合并：启用开关 + 审核黑白名单） -->
+                <div v-if="toolConfigOpen" class="tool-config-popover" @click.stop>
+                  <!-- 标签页切换 -->
+                  <div class="tcp-tabs">
+                    <span :class="['tcp-tab', { active: tcActiveTab === 'switch' }]" @click="tcActiveTab = 'switch'">启用开关</span>
+                    <span :class="['tcp-tab', { active: tcActiveTab === 'review' }]" @click="tcActiveTab = 'review'">审核黑白名单</span>
                   </div>
-                  <div class="rcp-search"><input v-model="reviewSearchText" placeholder="搜索工具..." class="rcp-search-input" /></div>
-                  <div class="rcp-tools">
-                    <div v-for="cat in filteredReviewCategories" :key="cat.name" class="rcp-category">
-                      <div class="rcp-cat-header" @click="cat.expanded = !cat.expanded">
-                        <SvgIcon :name="cat.expanded ? 'chevron-down' : 'chevron-right'" :size="10" />
-                        <span>{{ cat.label }}</span>
-                        <span class="rcp-cat-count">{{ cat.tools.filter(t => getReviewToolState(t.name) !== 'none').length }}/{{ cat.tools.length }}</span>
+
+                  <!-- ═══ 启用开关 ═══ -->
+                  <div v-if="tcActiveTab === 'switch'" class="tcp-panel">
+                    <div class="rcp-header">
+                      <span>工具开关</span>
+                      <span class="rcp-header-hint">禁用后不暴露给 Agent（需重启对话生效）</span>
+                    </div>
+                    <div v-if="tcLoading" style="padding:20px;text-align:center;color:var(--text-secondary);font-size:12px;">加载中…</div>
+                    <div v-else-if="tcSwitchList.length === 0" style="padding:12px;text-align:center;color:var(--text-secondary);font-size:12px;">加载失败，请重试</div>
+                    <div v-else class="tcp-switch-list">
+                      <div v-for="tool in tcSwitchList" :key="tool.name" class="tcp-switch-item">
+                        <div class="tcp-switch-info">
+                          <span class="tcp-switch-name">{{ tool.name }}</span>
+                          <span class="tc-tag tc-tag-cat">{{ tool.category || '未分类' }}</span>
+                        </div>
+                        <label class="tool-switch-toggle" :title="tool.usageGuide">
+                          <input type="checkbox" v-model="tool.enabled" @change="onTcSwitchToggle" />
+                          <span class="toggle-indicator" :class="{ on: tool.enabled }"></span>
+                        </label>
                       </div>
-                      <div v-if="cat.expanded" class="rcp-cat-tools">
-                        <div v-for="tool in cat.tools" :key="tool.name" :class="['rcp-tool-item', 'rcp-tool-' + getReviewToolState(tool.name)]" @click="cycleReviewTool(tool.name)">
-                          <span class="rcp-tool-name">{{ tool.label }}</span>
-                          <span class="rcp-tool-id">{{ tool.name }}</span>
-                          <span class="rcp-tool-tag">{{ reviewStateLabel(getReviewToolState(tool.name)) }}</span>
+                    </div>
+                    <div class="tcp-footer">
+                      共 {{ tcSwitchList.length }} 个工具，已启用 {{ tcSwitchList.filter(t => t.enabled).length }} 个
+                    </div>
+                  </div>
+
+                  <!-- ═══ 审核黑白名单 ═══ -->
+                  <div v-if="tcActiveTab === 'review'" class="tcp-panel">
+                    <div class="rcp-header">
+                      <span>审核配置</span>
+                      <span class="rcp-header-hint">点击切换：<span class="rcp-tag-dot rcp-dot-none"></span>默认 → <span class="rcp-tag-dot rcp-dot-black"></span>黑名单 → <span class="rcp-tag-dot rcp-dot-white"></span>白名单</span>
+                    </div>
+                    <div class="rcp-search"><input v-model="reviewSearchText" placeholder="搜索工具..." class="rcp-search-input" /></div>
+                    <div class="tcp-review-list">
+                      <div v-for="cat in filteredReviewCategories" :key="cat.name" class="rcp-category">
+                        <div class="rcp-cat-header" @click="cat.expanded = !cat.expanded">
+                          <SvgIcon :name="cat.expanded ? 'chevron-down' : 'chevron-right'" :size="10" />
+                          <span>{{ cat.label }}</span>
+                          <span class="rcp-cat-count">{{ cat.tools.filter(t => getReviewToolState(t.name) !== 'none').length }}/{{ cat.tools.length }}</span>
+                        </div>
+                        <div v-if="cat.expanded" class="rcp-cat-tools">
+                          <div v-for="tool in cat.tools" :key="tool.name" :class="['rcp-tool-item', 'rcp-tool-' + getReviewToolState(tool.name)]" @click="cycleReviewTool(tool.name)">
+                            <span class="rcp-tool-name">{{ tool.label }}</span>
+                            <span class="rcp-tool-id">{{ tool.name }}</span>
+                            <span class="rcp-tool-tag">{{ reviewStateLabel(getReviewToolState(tool.name)) }}</span>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                  <div class="rcp-actions">
-                    <button class="rcp-btn rcp-btn-reset" @click="resetReviewConfig">重置</button>
-                    <button class="rcp-btn rcp-btn-save" @click="saveReviewConfig">保存</button>
-                    <button class="rcp-btn rcp-btn-close" @click="reviewConfigOpen = false">关闭</button>
-                  </div>
-                </div>
-                <span class="obtn obtn-tool-switch" @click="toolSwitchOpen = !toolSwitchOpen" title="工具开关：启用/禁用 Agent 可用的工具" :class="{ active: toolSwitchOpen }"><SvgIcon name="tool" :size="12" /> 工具</span>
-                <!-- 工具开关弹窗 -->
-                <div v-if="toolSwitchOpen" class="tool-switch-popover" @click.stop>
-                  <div class="rcp-header">
-                    <span>工具开关</span>
-                    <span class="rcp-header-hint">禁用后该工具不暴露给 Agent（需重启对话生效）</span>
-                  </div>
-                  <div v-if="toolSwitchLoading" style="padding:20px;text-align:center;color:var(--text-secondary);font-size:12px;">加载中…</div>
-                  <div v-else class="rcp-tools">
-                    <div v-if="toolSwitchList.length === 0" style="padding:12px;text-align:center;color:var(--text-secondary);font-size:12px;">加载工具列表失败，请重试</div>
-                    <div v-for="tool in toolSwitchList" :key="tool.name" class="tool-switch-item">
-                      <div class="tool-switch-info">
-                        <span class="tool-switch-name">{{ tool.name }}</span>
-                        <span class="tool-switch-cat">{{ tool.category || '' }}</span>
-                      </div>
-                      <label class="tool-switch-toggle" :title="tool.usageGuide">
-                        <input type="checkbox" v-model="tool.enabled" @change="onToolSwitchToggle(tool.name, tool.enabled)" />
-                        <span class="toggle-indicator" :class="{ on: tool.enabled }"></span>
-                      </label>
+                    <div class="tcp-footer tcp-footer-actions">
+                      <button class="rcp-btn rcp-btn-reset" @click="resetReviewConfig">重置</button>
+                      <button class="rcp-btn rcp-btn-save" @click="saveReviewConfig">保存</button>
                     </div>
-                  </div>
-                  <div style="padding:6px 12px;font-size:11px;color:var(--text-muted);border-top:1px solid var(--border-color);">
-                    共 {{ toolSwitchList.length }} 个工具，已启用 {{ toolSwitchList.filter(t => t.enabled).length }} 个
                   </div>
                 </div>
                 <span :class="['obtn', { active: autoCollapse }]" @click="toggleAuto('autoCollapse')" title="自动折叠：新消息发出时折叠旧输出，显示完成摘要"><SvgIcon name="list" :size="12" /> 折叠</span>
@@ -284,7 +292,6 @@ const inputHeight = ref(150)
 const convListWidth = ref(250)
 const topSentinel = ref(null)
 const reviewMode = ref('auto')  // 'auto'=AI审核, 'manual'=人工审批, 'off'=全部放行
-const reviewConfigOpen = ref(false)
 const reviewSearchText = ref('')
 const reviewToolStates = ref({})
 const reviewBtnTitle = computed(() => {
@@ -329,7 +336,7 @@ const saveReviewConfig = async () => {
   try {
     await api.apiPut('/settings?convId=' + encodeURIComponent(state.currentConvId), state.settings)
     window.$toast?.('审核配置已保存', 'success')
-    reviewConfigOpen.value = false
+    toolConfigOpen.value = false
   } catch (e) {
     window.$toast?.('保存失败: ' + (e.message || e), 'error')
   }
@@ -348,27 +355,27 @@ function resetReviewConfig() {
   reviewSearchText.value = ''
 }
 
-// ─── 工具开关 ──────────────────────────────────
-const toolSwitchOpen = ref(false)
-const toolSwitchList = ref([])
-const toolSwitchLoading = ref(false)
+// ─── 工具配置（合并：启用开关 + 审核黑白名单）───
+const toolConfigOpen = ref(false)
+const tcActiveTab = ref('switch')
+const tcLoading = ref(false)
+const tcSwitchList = ref([])
 
-async function loadToolSwitchList() {
-  if (toolSwitchList.value.length > 0) return
-  toolSwitchLoading.value = true
+async function loadTcSwitchList() {
+  tcLoading.value = true
   try {
     const items = await api.apiGet('/api/tools')
-    toolSwitchList.value = items
+    tcSwitchList.value = items
   } catch (e) {
     console.error('加载工具列表失败', e)
   } finally {
-    toolSwitchLoading.value = false
+    tcLoading.value = false
   }
 }
 
-async function onToolSwitchToggle(name, enabled) {
+async function onTcSwitchToggle() {
   const toolMap = {}
-  for (const t of toolSwitchList.value) {
+  for (const t of tcSwitchList.value) {
     toolMap[t.name] = t.enabled
   }
   try {
@@ -1548,7 +1555,7 @@ watch(() => state.workspaceRoot, (root) => {
 })
 
 // ── 工具开关弹窗打开时加载工具列表
-watch(toolSwitchOpen, (v) => { if (v) loadToolSwitchList() })
+watch(toolConfigOpen, (v) => { if (v) { tcActiveTab.value = 'switch'; loadTcSwitchList() } })
 
 const handleBeforeUnload = () => { if (state.currentConvId && state.messages.length > 0) { window.dispatchEvent(new Event('save-conversations')) } }
 
@@ -1878,35 +1885,39 @@ onUnmounted(() => {
 .obtn-review-config { color: var(--text-muted); background: var(--bg-tertiary); border-color: var(--border-color); }
 .obtn-review-config.active { color: var(--accent); background: rgba(212, 167, 78, 0.1); border-color: rgba(212, 167, 78, 0.3); }
 
-/* 审核/工具开关弹窗 */
-.tool-switch-popover {
+/* 工具配置弹窗（合并：启用开关 + 审核黑白名单） */
+.tool-config-popover {
   position: absolute; z-index: 100;
   bottom: 100%; left: 0; margin-bottom: 4px;
-  width: 480px; max-width: 90vw; max-height: 60vh;
+  width: 480px; max-width: 90vw; max-height: 65vh;
   background: var(--bg-primary); border: 1px solid var(--border-color);
   border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,0.3);
   padding: 0; font-size: 12px; display: flex; flex-direction: column; overflow: hidden;
 }
-.tool-switch-item {
+/* 标签页 */
+.tcp-tabs { display: flex; border-bottom: 1px solid var(--border-color); background: var(--bg-tertiary); }
+.tcp-tab { flex: 1; padding: 7px 0; text-align: center; font-size: 12px; font-weight: 500; color: var(--text-muted); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.12s; }
+.tcp-tab:hover { color: var(--text-primary); background: var(--bg-hover); }
+.tcp-tab.active { color: var(--text-primary); border-bottom-color: var(--accent); background: var(--bg-primary); }
+.tcp-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+/* 启用开关列表 */
+.tcp-switch-list { flex: 1; overflow-y: auto; padding: 2px 0; max-height: 40vh; }
+.tcp-switch-item {
   display: flex; align-items: center; justify-content: space-between;
   padding: 5px 12px; border-bottom: 1px solid var(--border-subtle, var(--border-color));
 }
-.tool-switch-item:last-child { border-bottom: none; }
-.tool-switch-item:hover { background: var(--bg-hover); }
-.tool-switch-info { display: flex; flex-direction: column; min-width: 0; flex: 1; }
-.tool-switch-name { font-size: 12px; font-weight: 600; color: var(--text-primary); font-family: var(--font-code, monospace); }
-.tool-switch-cat { font-size: 10px; color: var(--text-muted); }
-.tool-switch-toggle { position: relative; display: inline-flex; align-items: center; cursor: pointer; flex-shrink: 0; margin-left: 8px; }
+.tcp-switch-item:last-child { border-bottom: none; }
+.tcp-switch-item:hover { background: var(--bg-hover); }
+.tcp-switch-info { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1; }
+.tcp-switch-name { font-size: 12px; font-weight: 600; color: var(--text-primary); font-family: var(--font-code, monospace); }
+.tc-tag { font-size: 9px; padding: 1px 4px; border-radius: 3px; font-weight: 500; }
+.tc-tag-cat { background: var(--bg-tertiary); color: var(--text-muted); }
+.tool-switch-toggle { position: relative; display: inline-flex; align-items: center; cursor: pointer; flex-shrink: 0; }
 .tool-switch-toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
-.obtn-tool-switch.active { color: var(--accent); }
-
-.review-config-popover {
-  bottom: 100%; left: 0; margin-bottom: 4px;
-  width: 480px; max-width: 90vw; max-height: 75vh;
-  background: var(--bg-primary); border: 1px solid var(--border-color);
-  border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,0.3);
-  padding: 0; font-size: 12px; display: flex; flex-direction: column; overflow: hidden;
-}
+.tcp-footer { padding: 6px 12px; font-size: 11px; color: var(--text-muted); border-top: 1px solid var(--border-color); }
+.tcp-footer-actions { display: flex; gap: 6px; justify-content: flex-end; }
+/* 审核黑白名单列表 */
+.tcp-review-list { flex: 1; overflow-y: auto; max-height: 40vh; }
 .rcp-header {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   padding: 10px 12px; border-bottom: 1px solid var(--border-color);
