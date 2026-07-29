@@ -15,10 +15,16 @@ import (
 //	  "tools": {
 //	    "run_command": { "enabled": false },
 //	    "git_status":  { "enabled": true }
-//	  }
+//	  },
+//	  "reviewMode": "auto",
+//	  "reviewBlacklist": ["delete_file"],
+//	  "reviewWhitelist": ["read_file"]
 //	}
 type WorkspaceToolConfig struct {
-	Tools map[string]ToolConfigItem `json:"tools"`
+	Tools           map[string]ToolConfigItem `json:"tools"`
+	ReviewMode      string                    `json:"reviewMode,omitempty"`      // auto/manual/off
+	ReviewBlacklist []string                  `json:"reviewBlacklist,omitempty"`
+	ReviewWhitelist []string                  `json:"reviewWhitelist,omitempty"`
 }
 
 // ToolConfigItem 单个工具的配置
@@ -126,4 +132,67 @@ func initWorkspaceToolConfig(r *Registry, cfgPath string) {
 		return
 	}
 	log.Printf("[WorkspaceToolConfig] 已自动初始化 %s（%d 个工具）", cfgPath, len(metas))
+}
+
+// WorkspaceToolConfigPath 返回工作区工具配置文件的路径。
+func WorkspaceToolConfigPath(workspaceRoot string) string {
+	return filepath.Join(workspaceRoot, ".pair", "tools.json")
+}
+
+// readWorkspaceToolConfig 读取工作区配置文件的原始 JSON 内容。
+func readWorkspaceToolConfig(workspaceRoot string) ([]byte, error) {
+	return os.ReadFile(WorkspaceToolConfigPath(workspaceRoot))
+}
+
+// writeWorkspaceToolConfigRaw 将原始 JSON 写入工作区配置文件。
+func writeWorkspaceToolConfigRaw(workspaceRoot string, data []byte) error {
+	path := WorkspaceToolConfigPath(workspaceRoot)
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0644)
+}
+
+// LoadWorkspaceReviewConfig 从工作区加载审核配置（reviewMode / reviewBlacklist / reviewWhitelist）。
+func LoadWorkspaceReviewConfig(workspaceRoot string) (mode string, blacklist, whitelist []string) {
+	if workspaceRoot == "" {
+		return "auto", nil, nil
+	}
+	data, err := readWorkspaceToolConfig(workspaceRoot)
+	if err != nil {
+		return "auto", nil, nil
+	}
+	var cfg WorkspaceToolConfig
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return "auto", nil, nil
+	}
+	if cfg.ReviewMode == "" {
+		return "auto", cfg.ReviewBlacklist, cfg.ReviewWhitelist
+	}
+	return cfg.ReviewMode, cfg.ReviewBlacklist, cfg.ReviewWhitelist
+}
+
+// SaveWorkspaceReviewConfig 将审核配置保存到工作区工具配置文件。
+func SaveWorkspaceReviewConfig(workspaceRoot string, mode string, blacklist, whitelist []string) error {
+	if workspaceRoot == "" {
+		return nil
+	}
+	path := WorkspaceToolConfigPath(workspaceRoot)
+	data, err := os.ReadFile(path)
+	var cfg WorkspaceToolConfig
+	if err == nil {
+		json.Unmarshal(data, &cfg)
+	}
+	if cfg.Tools == nil {
+		cfg.Tools = make(map[string]ToolConfigItem)
+	}
+	cfg.ReviewMode = mode
+	cfg.ReviewBlacklist = blacklist
+	cfg.ReviewWhitelist = whitelist
+	out, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return err
+	}
+	return writeWorkspaceToolConfigRaw(workspaceRoot, out)
 }

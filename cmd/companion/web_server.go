@@ -214,6 +214,7 @@ func startWebUI(port int) {
 	mux.HandleFunc("/api/mcp/save", ws.handleMCPSave)
 	mux.HandleFunc("/api/tools", ws.handleTools)
 	mux.HandleFunc("/api/tools/save", ws.handleToolsSave)
+	mux.HandleFunc("/api/tools/review", ws.handleReviewConfig)
 	mux.HandleFunc("/api/skills/list", ws.handleSkillsList)
 	mux.HandleFunc("/api/skills/save", ws.handleSkillsSave)
 	mux.HandleFunc("/api/skills/read", ws.handleSkillsRead)
@@ -1815,6 +1816,41 @@ func (s *webServer) handleToolsSave(w http.ResponseWriter, r *http.Request) {
 	jsonResp(w, map[string]string{"status": "ok"})
 }
 
+// ─── Review Config HTTP API（工作区级审核配置）─────
+func (s *webServer) handleReviewConfig(w http.ResponseWriter, r *http.Request) {
+	root := core.Root()
+	if root == "" {
+		jsonErr(w, "未设置工作区")
+		return
+	}
+	switch r.Method {
+	case "GET":
+		mode, blacklist, whitelist := agent.LoadWorkspaceReviewConfig(root)
+		jsonResp(w, map[string]any{
+			"reviewMode":      mode,
+			"reviewBlacklist": blacklist,
+			"reviewWhitelist": whitelist,
+		})
+	case "PUT":
+		var req struct {
+			ReviewMode      string   `json:"reviewMode"`
+			ReviewBlacklist []string `json:"reviewBlacklist"`
+			ReviewWhitelist []string `json:"reviewWhitelist"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			jsonErr(w, "无效 JSON: "+err.Error())
+			return
+		}
+		if err := agent.SaveWorkspaceReviewConfig(root, req.ReviewMode, req.ReviewBlacklist, req.ReviewWhitelist); err != nil {
+			jsonErr(w, "保存失败: "+err.Error())
+			return
+		}
+		jsonResp(w, map[string]string{"status": "ok"})
+	default:
+		jsonErr(w, "仅 GET/PUT")
+	}
+}
+
 // ─── Skills HTTP API ──────────────────────────────────────
 func (s *webServer) handleSkillsList(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" {
@@ -2427,9 +2463,23 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 	opts := s.buildWebLoopOpts(req.ConvID, req.Message, req.Autonomous)
 	opts.WorkspaceRoot = req.WorkspaceRoot
 
+	// 先从全局设置取审核配置（默认值）
 	opts.ReviewMode = core.Settings.ReviewMode
 	opts.ReviewBlacklist = core.Settings.ReviewBlacklist
 	opts.ReviewWhitelist = core.Settings.ReviewWhitelist
+	// ★ 如果请求中指定了工作区根路径，从工作区配置覆盖审核配置
+	if req.WorkspaceRoot != "" {
+		wrMode, wrBlack, wrWhite := agent.LoadWorkspaceReviewConfig(req.WorkspaceRoot)
+		if wrMode != "" && wrMode != "auto" {
+			opts.ReviewMode = wrMode
+		}
+		if wrBlack != nil {
+			opts.ReviewBlacklist = wrBlack
+		}
+		if wrWhite != nil {
+			opts.ReviewWhitelist = wrWhite
+		}
+	}
 	if core.Settings.ReviewMode == "auto" && core.Settings.ReviewModel != "" {
 		pm := strings.TrimSpace(core.Settings.PlanModel)
 		base := strings.TrimSpace(core.Settings.BaseURL)

@@ -316,14 +316,11 @@ function cycleReviewMode() {
   const m = reviewMode.value
   const next = m === 'auto' ? 'manual' : m === 'manual' ? 'off' : 'auto'
   reviewMode.value = next
-  state.settings['reviewMode'] = next
-  api.apiPut('/settings?convId=' + encodeURIComponent(state.currentConvId), state.settings).catch(() => {
-    // 失败时回退
+  api.apiPut('/api/tools/review', { reviewMode: next }).catch(() => {
     reviewMode.value = m
-    state.settings['reviewMode'] = m
   })
 }
-// saveReviewConfig 保存审核黑白名单配置到后端（从工具状态生成）
+// saveReviewConfig 保存审核黑白名单配置到工作区配置（.pair/tools.json）
 const saveReviewConfig = async () => {
   const blacklist = []
   const whitelist = []
@@ -331,11 +328,13 @@ const saveReviewConfig = async () => {
     if (st === 'black') blacklist.push(name)
     else if (st === 'white') whitelist.push(name)
   }
-  state.settings['reviewBlacklist'] = blacklist
-  state.settings['reviewWhitelist'] = whitelist
   try {
-    await api.apiPut('/settings?convId=' + encodeURIComponent(state.currentConvId), state.settings)
-    window.$toast?.('审核配置已保存', 'success')
+    await api.apiPut('/api/tools/review', {
+      reviewMode: reviewMode.value,
+      reviewBlacklist: blacklist,
+      reviewWhitelist: whitelist,
+    })
+    window.$toast?.('审核配置已保存（工作区专属）', 'success')
     toolConfigOpen.value = false
   } catch (e) {
     window.$toast?.('保存失败: ' + (e.message || e), 'error')
@@ -1541,7 +1540,28 @@ watch(() => state.currentConvId, (id, oldId) => {
     }
   })
 
-watch(() => state.settings, (s) => { if (s) { reviewMode.value = s.reviewMode || 'auto'; autoIterate.value = !!s.autoIterateOnRejection; autonomous.value = !!s.autonomous; autoCollapse.value = s.autoCollapse !== undefined ? !!s.autoCollapse : true; autoCommit.value = s.autoCommit !== false; reviewToolStates.value = {}; (Array.isArray(s.reviewBlacklist) ? s.reviewBlacklist : []).forEach(n => reviewToolStates.value[n] = 'black'); (Array.isArray(s.reviewWhitelist) ? s.reviewWhitelist : []).forEach(n => reviewToolStates.value[n] = 'white'); } }, { immediate: true })
+watch(() => state.settings, (s) => { if (s) { autoIterate.value = !!s.autoIterateOnRejection; autonomous.value = !!s.autonomous; autoCollapse.value = s.autoCollapse !== undefined ? !!s.autoCollapse : true; autoCommit.value = s.autoCommit !== false; } }, { immediate: true })
+
+// ★ 从工作区配置加载审核配置（override 全局 settings）
+async function loadWorkspaceReviewConfig() {
+  try {
+    const rc = await api.apiGet('/api/tools/review')
+    if (rc) {
+      reviewMode.value = rc.reviewMode || 'auto'
+      reviewToolStates.value = {}
+      ;(Array.isArray(rc.reviewBlacklist) ? rc.reviewBlacklist : []).forEach(n => reviewToolStates.value[n] = 'black')
+      ;(Array.isArray(rc.reviewWhitelist) ? rc.reviewWhitelist : []).forEach(n => reviewToolStates.value[n] = 'white')
+    }
+  } catch (e) {
+    // 失败时回退到全局 settings
+    if (state.settings) {
+      reviewMode.value = state.settings.reviewMode || 'auto'
+      reviewToolStates.value = {}
+      ;(Array.isArray(state.settings.reviewBlacklist) ? state.settings.reviewBlacklist : []).forEach(n => reviewToolStates.value[n] = 'black')
+      ;(Array.isArray(state.settings.reviewWhitelist) ? state.settings.reviewWhitelist : []).forEach(n => reviewToolStates.value[n] = 'white')
+    }
+  }
+}
 
 // ── 工作区切换时加载 Token 统计（onMounted 时 workspaceRoot 可能还未设）
 watch(() => state.workspaceRoot, (root) => {
@@ -1551,6 +1571,7 @@ watch(() => state.workspaceRoot, (root) => {
       delete state.wsTokenStatsByWs['']
     }
     loadWsTokenStats()
+    loadWorkspaceReviewConfig()
   }
 })
 
@@ -1561,6 +1582,7 @@ const handleBeforeUnload = () => { if (state.currentConvId && state.messages.len
 
 onMounted(() => {
   loadWsTokenStats(); loadConvList(); scrollToBottom()
+  if (state.workspaceRoot && state.workspaceRoot !== '') loadWorkspaceReviewConfig()
 
   // 监听消息内容尺寸变化（流式输出时自动跟随滚底）
   nextTick(() => startContentResizeObserver())

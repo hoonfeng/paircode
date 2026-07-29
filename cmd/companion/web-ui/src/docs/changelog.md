@@ -8,7 +8,9 @@
 
 ### 新增
 - **run_command 后台化** — `run_command` 改用后台启动+轮询模式，不再阻塞 Agent 循环，可被上下文取消中断，超时后 LLM 可选择等待或继续
-- **工具配置合并为一个弹窗** — 「启用开关」和「审核黑白名单」合并在统一的「工具配置」弹窗中，标签页切换，避免歧义
+- **审核配置改为工作区级** — 审核黑白名单从全局 settings.json 迁移到工作区 .pair/tools.json，不同工作区可独立配置，避免动态工具（Lua）在不同工作区间混淆
+- **Lua 工具补齐 Tool 结构** — `buildLuaTool` 自动设置 UsageGuide/Category/Enabled 字段，与标准工具结构一致
+- **工具配置弹窗合并** — 「启用开关」和「审核黑白名单」合并为同一「工具配置」弹窗，标签页切换，避免歧义
 - **自主模式 Follow-up 持续驱动** — Agent 自然终止后，通过 `OnNextTask` 回调自动注入 follow-up 消息，无需手动触发「继续」
 - **流式更新机制** — Registry 新增 `OnToolUpdate` 回调，工具执行中间结果实时推送给前端
 - **工具 UsageGuide 全覆盖** — 全部 ~140 个工具添加 `UsageGuide` 使用指导，明确何时用、为何优于 `run_command`、常见误区

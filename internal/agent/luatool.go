@@ -120,6 +120,9 @@ func buildLuaTool(src, fileName string) (*Tool, error) {
 	return &Tool{
 		Name:             name,
 		Description:      strings.TrimSpace(desc + "（Lua 自定义工具）"),
+		UsageGuide:       fmt.Sprintf("自定义 Lua 工具「%s」，在 .pair/tools/ 下定义。自动从脚本元信息生成参数 Schema，用 `lua_tool_list` 查看所有可用工具。", name),
+		Category:         "lua-tool",
+		Enabled:          true,
 		Parameters:       params,
 		RequiresApproval: true, // 自定义脚本工具默认需审批（安全）
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
