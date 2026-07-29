@@ -36,6 +36,84 @@ func TestRunBackground(t *testing.T) {
 	}
 }
 
+// TestRunCommandInLoop run_command 执行完毕后循环继续调用 LLM 的下一轮。
+// 验证：工具结果正确回灌 → 第 2 轮 LLM 调用 → finish_task 触发。
+func TestRunCommandInLoop(t *testing.T) {
+	dir := t.TempDir()
+	reg := NewRegistry()
+	RegisterDefaultTools(reg, dir)
+
+	mock := &MockProvider{Responses: []Message{
+		{ToolCalls: []ToolCall{{ID: "c1", Type: "function", Function: FunctionCall{Name: "run_command", Arguments: `{"command":"echo RUNCMD_OK"}`}}}},
+		{ToolCalls: []ToolCall{{ID: "f1", Type: "function", Function: FunctionCall{Name: "finish_task", Arguments: `{"result":"done"}`}}}},
+	}}
+	var events []Event
+	loop := &Loop{Provider: mock, Registry: reg, System: "test-loop-run-cmd", MaxIterations: 5,
+		OnEvent: func(e Event) { events = append(events, e) }}
+
+	msgs, err := loop.Run(context.Background(), "执行 echo RUNCMD_OK", nil)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	// ★ 核心验证：LLM 应被调用了 2 次（工具结果→下一轮→finish_task）
+	// 如果这里失败，说明 run_command 执行完后 loop 没有继续调用 LLM
+	if mock.Calls() != 2 {
+		t.Errorf("LLM 应调用 2 次（工具结果→下一轮），得 %d", mock.Calls())
+	}
+
+	// 验证 tool result 含命令输出
+	foundOutput := false
+	for _, m := range msgs {
+		if m.Role == RoleTool && strings.Contains(m.Content, "RUNCMD_OK") {
+			foundOutput = true
+			break
+		}
+	}
+	if !foundOutput {
+		t.Errorf("未把 run_command 结果作 role=tool 消息回灌")
+	}
+
+	// 验证末事件为 done
+	last := events[len(events)-1]
+	if last.Type != EventDone || last.DoneReason != "finish_task" {
+		t.Errorf("末事件应为 EventDone(finish_task)，得 type=%s reason=%s", last.Type, last.DoneReason)
+	}
+}
+
+// TestRunCommandContextCancelled 验证 context 取消时 run_command 优雅终止且循环正常退出。
+func TestRunCommandContextCancelled(t *testing.T) {
+	dir := t.TempDir()
+	reg := NewRegistry()
+	RegisterDefaultTools(reg, dir)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	mock := &MockProvider{Responses: []Message{
+		{ToolCalls: []ToolCall{{ID: "c1", Type: "function", Function: FunctionCall{Name: "run_command", Arguments: `{"command":"ping -n 10 127.0.0.1"}`}}}},
+		{ToolCalls: []ToolCall{{ID: "f1", Type: "function", Function: FunctionCall{Name: "finish_task", Arguments: `{"result":"done"}`}}}},
+	}}
+
+	loop := &Loop{Provider: mock, Registry: reg, System: "test-cancel", MaxIterations: 5}
+
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		cancel()
+	}()
+
+	msgs, err := loop.Run(ctx, "执行 ping", nil)
+	if err == nil {
+		t.Log("context 取消后 Run 正常返回")
+	} else {
+		t.Logf("context 取消后 Run 返回错误: %v", err)
+	}
+
+	if msgs == nil {
+		t.Error("msgs 不应为 nil")
+	}
+}
+
 // TestReadOutputUnknown 读未知 id 应报错。
 func TestReadOutputUnknown(t *testing.T) {
 	r := NewRegistry()

@@ -14,6 +14,12 @@ import (
 // Start 启动调试会话：查找空闲端口，启动 dlv dap，建立连接并初始化。
 // ctx 用于控制超时。timeout 建议 30s（dlv 编译+启动耗时）。
 func (s *DebugSession) Start(ctx context.Context, program string) error {
+	return s.StartWithDir(ctx, program, "")
+}
+
+// StartWithDir 启动调试会话，可指定 dlv 工作目录。
+// cwd 为 dlv 的工作目录；空串表示使用当前进程工作目录。
+func (s *DebugSession) StartWithDir(ctx context.Context, program, cwd string) error {
 	s.mu.Lock()
 	if s.state != StateIdle {
 		s.mu.Unlock()
@@ -30,12 +36,13 @@ func (s *DebugSession) Start(ctx context.Context, program string) error {
 		return fmt.Errorf("分配端口失败: %w", err)
 	}
 
-	// 2. 启动 dlv dap
+	// 2. 启动 dlv dap（注意：dlv dap 不接受程序路径作为命令行参数，
+	// 程序路径通过后续 DAP launch 请求传入）
 	args := []string{"dap", "--listen", fmt.Sprintf("127.0.0.1:%d", port)}
-	if program != "" {
-		args = append(args, "--", program)
-	}
 	cmd := exec.CommandContext(ctx, s.dlvCmd, args...)
+	if cwd != "" {
+		cmd.Dir = cwd
+	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		s.setState(StateError)
@@ -138,7 +145,9 @@ func (s *DebugSession) Start(ctx context.Context, program string) error {
 
 	// 7. 发送 launch 请求
 	launchArgs := LaunchRequest{
+		Mode:        "debug",
 		Program:     program,
+		Cwd:         cwd,
 		StopOnEntry: false,
 	}
 	resp, err = conn.send("launch", launchArgs)

@@ -62,7 +62,8 @@ type InitializeRequest struct {
 
 // LaunchRequest DAP launch 请求参数（用于 dlv dap）。
 type LaunchRequest struct {
-	Program       string `json:"program"`
+	Mode          string   `json:"mode"`          // "debug" / "exec" / "test"
+	Program       string   `json:"program"`
 	Args          []string `json:"args,omitempty"`
 	Cwd           string `json:"cwd,omitempty"`
 	BuildFlags    string `json:"buildFlags,omitempty"`

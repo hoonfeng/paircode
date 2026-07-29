@@ -51,7 +51,7 @@ func registerDebugTools(r *Registry, root string) {
 			dCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
 			defer cancel()
 
-			if err := s.Start(dCtx, program); err != nil {
+			if err := s.StartWithDir(dCtx, program, root); err != nil {
 				return "", fmt.Errorf("启动调试会话失败: %w", err)
 			}
 
