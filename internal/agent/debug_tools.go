@@ -19,6 +19,7 @@ package agent
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -1219,7 +1220,156 @@ func (wp *watchProc) execute(changed []string) {
 	wp.mu.Unlock()
 }
 
-// ─── 7. debug_evaluate_session — 会话评分评估 ──────────
+// ─── 评分 Agent ────────────────────────────────────────────────
+// 用 LLM 做语义化评分，替代机械化的公式评分。不设置则回退到机械评分。
+
+var scoreAgentProvider Provider
+
+// SetScoreProvider 设置评分 Agent 使用的 LLM Provider。
+// 评分 Agent 是独立的小 Agent，用 LLM 语义化评估执行日志，从完成度/效率/可靠性/适应性四个维度评分。
+// 不设置或不可用时回退到机械公式评分（不浪费 token）。
+// 在 web_server.go 创建 Loop 后调用：agent.SetScoreProvider(provider)
+func SetScoreProvider(p Provider) {
+	scoreAgentProvider = p
+}
+
+// scoringResult JSON 格式的评分 Agent 输出。
+type scoringResult struct {
+	Analysis          string   `json:"analysis"`
+	CompletionScore   float64  `json:"completion_score"`
+	EfficiencyScore   float64  `json:"efficiency_score"`
+	ReliabilityScore  float64  `json:"reliability_score"`
+	AdaptabilityScore float64  `json:"adaptability_score"`
+	Suggestions       []string `json:"suggestions"`
+}
+
+// runScoreAgent 用 LLM 做语义化评分。构建评分 prompt → 调用 Provider.Chat → 解析 JSON。
+// 失败（网络/JSON 解析/超时）返回零值 SessionScore，调用方回退到机械评分。
+func runScoreAgent(ctx context.Context, p Provider, log *ExecutionLog, ts *ToolStatsRecorder, root string) SessionScore {
+	// 构建评分数据摘要
+	var sb strings.Builder
+	sb.WriteString("## 执行日志\n\n")
+	sb.WriteString("| 轮次 | Agent | 阶段 | 摘要 |\n")
+	sb.WriteString("|------|-------|------|------|\n")
+	for i, e := range log.Entries {
+		summary := e.Summary
+		if len(summary) > 120 {
+			summary = summary[:120] + "…"
+		}
+		summary = strings.ReplaceAll(summary, "|", "｜") // 避免破坏表格
+		fmt.Fprintf(&sb, "| %d | %s | %s | %s |\n", i+1, e.Agent, e.Phase, summary)
+	}
+
+	sb.WriteString("\n## 工具调用统计\n\n")
+	if ts != nil {
+		stats := ts.Summary(0)
+		if len(stats) > 0 {
+			sb.WriteString("| 工具名 | 调用次数 | 成功 | 失败 | 成功率 |\n")
+			sb.WriteString("|--------|---------|------|------|--------|\n")
+			for _, s := range stats {
+				rate := "0%"
+				if s.Calls > 0 {
+					rate = fmt.Sprintf("%.0f%%", float64(s.Success)/float64(s.Calls)*100)
+				}
+				fmt.Fprintf(&sb, "| %s | %d | %d | %d | %s |\n", s.Name, s.Calls, s.Success, s.Failures, rate)
+			}
+		}
+	}
+
+	logData := sb.String()
+
+	// 构建评分 Agent 的 system prompt
+	systemPrompt := `你是一个专业的 AI Agent 会话评估员。任务是评估一次 AI Agent 执行任务的表现。
+
+请根据以下执行日志和工具调用统计，从四个维度评分（0-100）：
+
+1. **完成度** (completion_score): 任务是否达成目标？是否自然结束或明确完成？
+2. **效率** (efficiency_score): 工具调用次数是否合理？轮次是否过多？有无冗余操作？
+3. **可靠性** (reliability_score): 工具调用成功率如何？错误率是否过高？
+4. **适应性** (adaptability_score): 遇到错误后能否有效恢复？有无重试行为？
+
+评分标准：
+- 90+ 优秀 | 80-89 良好 | 70-79 一般 | 60-69 需改进 | <60 差
+
+请输出**严格合法的 JSON**（不含 markdown 代码块标记，纯 JSON 对象），格式：
+{
+  "completion_score": 85,
+  "efficiency_score": 70,
+  "reliability_score": 90,
+  "adaptability_score": 65,
+  "analysis": "简短分析，描述总体表现",
+  "suggestions": ["改进建议1", "改进建议2"]
+}
+
+只输出 JSON，不要附带其他文字。`
+
+	// 调用 LLM
+	msgs := []Message{
+		{Role: RoleSystem, Content: systemPrompt},
+		{Role: RoleUser, Content: "请评估以下 agent 会话表现：\n\n" + logData},
+	}
+
+	// 评分用零工具注册表（评分不需要任何工具），用短超时防止长时间等待
+	scoreCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+
+	result, err := p.Chat(scoreCtx, msgs, nil, nil)
+	if err != nil {
+		return SessionScore{}
+	}
+
+	// 提取 JSON（清理可能的 markdown 包裹）
+	jsonStr := result.Content
+	jsonStr = strings.TrimSpace(jsonStr)
+	// 移除可能的 ```json ... ``` 包裹
+	if strings.HasPrefix(jsonStr, "```") {
+		jsonStr = strings.TrimPrefix(jsonStr, "```json")
+		jsonStr = strings.TrimPrefix(jsonStr, "```")
+		if idx := strings.LastIndex(jsonStr, "```"); idx >= 0 {
+			jsonStr = jsonStr[:idx]
+		}
+		jsonStr = strings.TrimSpace(jsonStr)
+	}
+
+	var sr scoringResult
+	if err := json.Unmarshal([]byte(jsonStr), &sr); err != nil {
+		return SessionScore{}
+	}
+
+	// 验证分值范围
+	clamp := func(v float64) float64 {
+		if v < 0 {
+			return 0
+		}
+		if v > 100 {
+			return 100
+		}
+		return v
+	}
+
+	s := SessionScore{
+		Rounds:            len(log.Entries),
+		CompletionScore:   clamp(sr.CompletionScore),
+		EfficiencyScore:   clamp(sr.EfficiencyScore),
+		ReliabilityScore:  clamp(sr.ReliabilityScore),
+		AdaptabilityScore: clamp(sr.AdaptabilityScore),
+	}
+	s.OverallScore = s.CompletionScore*0.35 + s.EfficiencyScore*0.20 +
+		s.ReliabilityScore*0.30 + s.AdaptabilityScore*0.15
+
+	// 填充基本统计
+	if ts != nil {
+		s.ToolStats = ts.Summary(0)
+		s.ToolCalls = ts.TotalCalls()
+		for _, st := range s.ToolStats {
+			s.ErrorCount += st.Failures
+		}
+	}
+	s.Completed = sr.CompletionScore >= 60
+	s.Suggestions = sr.Suggestions
+
+	return s
+}
 
 // SessionScore 会话评分结果。
 type SessionScore struct {
@@ -1238,6 +1388,7 @@ type SessionScore struct {
 	ReliabilityScore  float64 `json:"reliability_score"`  // 可靠性（工具成功率）
 	AdaptabilityScore float64 `json:"adaptability_score"` // 适应性（错误恢复率）
 	OverallScore      float64 `json:"overall_score"`      // 总分
+	Suggestions       []string `json:"suggestions"`       // 评分 Agent 给出的改进建议（空=用机械建议）
 }
 
 func registerEvaluateSession(r *Registry, root string) {
@@ -1274,8 +1425,15 @@ func registerEvaluateSession(r *Registry, root string) {
 			// 加载工具统计
 			ts := GetToolStats()
 
-			// 计算评分
-			score := evaluateSession(log, ts)
+			// 用评分 Agent 语义化评分（有 Provider 时）或回退机械评分
+			var score SessionScore
+			if scoreAgentProvider != nil {
+				score = runScoreAgent(ctx, scoreAgentProvider, log, ts, root)
+			}
+			// 若评分 Agent 返回空数据（失败/超时等），回退机械评分
+			if score.OverallScore == 0 && score.CompletionScore == 0 {
+				score = evaluateSession(log, ts)
+			}
 
 			// 格式化报告
 			var b strings.Builder
@@ -1330,7 +1488,12 @@ func registerEvaluateSession(r *Registry, root string) {
 
 			// 改进建议
 			b.WriteString("### 改进建议\n\n")
-			suggestions := generateSuggestions(score)
+			var suggestions []string
+			if len(score.Suggestions) > 0 {
+				suggestions = score.Suggestions // 评分 Agent 给出的语义化建议
+			} else {
+				suggestions = generateSuggestions(score) // 回退机械建议
+			}
 			if len(suggestions) > 0 {
 				for _, s := range suggestions {
 					fmt.Fprintf(&b, "- %s\n", s)
