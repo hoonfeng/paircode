@@ -209,6 +209,31 @@
                     <button class="rcp-btn rcp-btn-close" @click="reviewConfigOpen = false">关闭</button>
                   </div>
                 </div>
+                <span class="obtn obtn-tool-switch" @click="toolSwitchOpen = !toolSwitchOpen" title="工具开关：启用/禁用 Agent 可用的工具" :class="{ active: toolSwitchOpen }"><SvgIcon name="tool" :size="12" /> 工具</span>
+                <!-- 工具开关弹窗 -->
+                <div v-if="toolSwitchOpen" class="tool-switch-popover" @click.stop>
+                  <div class="rcp-header">
+                    <span>工具开关</span>
+                    <span class="rcp-header-hint">禁用后该工具不暴露给 Agent（需重启对话生效）</span>
+                  </div>
+                  <div v-if="toolSwitchLoading" style="padding:20px;text-align:center;color:var(--text-secondary);font-size:12px;">加载中…</div>
+                  <div v-else class="rcp-tools">
+                    <div v-if="toolSwitchList.length === 0" style="padding:12px;text-align:center;color:var(--text-secondary);font-size:12px;">加载工具列表失败，请重试</div>
+                    <div v-for="tool in toolSwitchList" :key="tool.name" class="tool-switch-item">
+                      <div class="tool-switch-info">
+                        <span class="tool-switch-name">{{ tool.name }}</span>
+                        <span class="tool-switch-cat">{{ tool.category || '' }}</span>
+                      </div>
+                      <label class="tool-switch-toggle" :title="tool.usageGuide">
+                        <input type="checkbox" v-model="tool.enabled" @change="onToolSwitchToggle(tool.name, tool.enabled)" />
+                        <span class="toggle-indicator" :class="{ on: tool.enabled }"></span>
+                      </label>
+                    </div>
+                  </div>
+                  <div style="padding:6px 12px;font-size:11px;color:var(--text-muted);border-top:1px solid var(--border-color);">
+                    共 {{ toolSwitchList.length }} 个工具，已启用 {{ toolSwitchList.filter(t => t.enabled).length }} 个
+                  </div>
+                </div>
                 <span :class="['obtn', { active: autoCollapse }]" @click="toggleAuto('autoCollapse')" title="自动折叠：新消息发出时折叠旧输出，显示完成摘要"><SvgIcon name="list" :size="12" /> 折叠</span>
                 <span :class="['obtn', { active: autoCommit }]" @click="toggleAuto('autoCommit')" title="自动 Git 提交：任务完成时自动 git add + commit"><SvgIcon name="git-commit" :size="12" /> 提交</span>
                 <span class="obtn-sep"></span>
@@ -321,6 +346,36 @@ function cycleReviewTool(name) {
 function resetReviewConfig() {
   reviewToolStates.value = {}
   reviewSearchText.value = ''
+}
+
+// ─── 工具开关 ──────────────────────────────────
+const toolSwitchOpen = ref(false)
+const toolSwitchList = ref([])
+const toolSwitchLoading = ref(false)
+
+async function loadToolSwitchList() {
+  if (toolSwitchList.value.length > 0) return
+  toolSwitchLoading.value = true
+  try {
+    const items = await api.apiGet('/api/tools')
+    toolSwitchList.value = items
+  } catch (e) {
+    console.error('加载工具列表失败', e)
+  } finally {
+    toolSwitchLoading.value = false
+  }
+}
+
+async function onToolSwitchToggle(name, enabled) {
+  const toolMap = {}
+  for (const t of toolSwitchList.value) {
+    toolMap[t.name] = t.enabled
+  }
+  try {
+    await api.apiPut('/api/tools/save', { tools: toolMap })
+  } catch (e) {
+    console.error('保存工具配置失败', e)
+  }
 }
 
 // 工具分类定义
@@ -1492,6 +1547,9 @@ watch(() => state.workspaceRoot, (root) => {
   }
 })
 
+// ── 工具开关弹窗打开时加载工具列表
+watch(toolSwitchOpen, (v) => { if (v) loadToolSwitchList() })
+
 const handleBeforeUnload = () => { if (state.currentConvId && state.messages.length > 0) { window.dispatchEvent(new Event('save-conversations')) } }
 
 onMounted(() => {
@@ -1820,9 +1878,29 @@ onUnmounted(() => {
 .obtn-review-config { color: var(--text-muted); background: var(--bg-tertiary); border-color: var(--border-color); }
 .obtn-review-config.active { color: var(--accent); background: rgba(212, 167, 78, 0.1); border-color: rgba(212, 167, 78, 0.3); }
 
-/* 审核配置弹窗 */
-.review-config-popover {
+/* 审核/工具开关弹窗 */
+.tool-switch-popover {
   position: absolute; z-index: 100;
+  bottom: 100%; left: 0; margin-bottom: 4px;
+  width: 480px; max-width: 90vw; max-height: 60vh;
+  background: var(--bg-primary); border: 1px solid var(--border-color);
+  border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,0.3);
+  padding: 0; font-size: 12px; display: flex; flex-direction: column; overflow: hidden;
+}
+.tool-switch-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 5px 12px; border-bottom: 1px solid var(--border-subtle, var(--border-color));
+}
+.tool-switch-item:last-child { border-bottom: none; }
+.tool-switch-item:hover { background: var(--bg-hover); }
+.tool-switch-info { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.tool-switch-name { font-size: 12px; font-weight: 600; color: var(--text-primary); font-family: var(--font-code, monospace); }
+.tool-switch-cat { font-size: 10px; color: var(--text-muted); }
+.tool-switch-toggle { position: relative; display: inline-flex; align-items: center; cursor: pointer; flex-shrink: 0; margin-left: 8px; }
+.tool-switch-toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
+.obtn-tool-switch.active { color: var(--accent); }
+
+.review-config-popover {
   bottom: 100%; left: 0; margin-bottom: 4px;
   width: 480px; max-width: 90vw; max-height: 75vh;
   background: var(--bg-primary); border: 1px solid var(--border-color);

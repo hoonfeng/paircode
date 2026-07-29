@@ -85,7 +85,6 @@
                 </select>
               </div>
             </div>
-
           </div>
 
           <!-- ═══ Agent 行为 ═══ -->
@@ -326,35 +325,6 @@
             </div>
           </div>
 
-          <!-- ═══ 工具开关 ═══ -->
-          <div v-if="activeTab === 'tools'">
-            <div class="setting-group">
-              <div class="group-title">工具开关</div>
-              <div class="setting-hint" style="margin-bottom:8px;color:var(--text-secondary);font-size:12px;">
-                禁用后该工具不会出现在 Agent 的工具列表中（需要重启对话才能生效）。
-              </div>
-              <div v-if="toolsLoading" style="padding:20px;text-align:center;color:var(--text-secondary);">加载中…</div>
-              <div v-else class="tools-list">
-                <div v-for="tool in filteredTools" :key="tool.name" class="tool-item">
-                  <div class="tool-info">
-                    <span class="tool-name">{{ tool.name }}</span>
-                    <span class="tool-desc">{{ tool.description }}</span>
-                  </div>
-                  <label class="tool-toggle" :title="tool.usageGuide">
-                    <input type="checkbox" v-model="tool.enabled" @change="onToolToggle(tool.name, tool.enabled)" />
-                    <span class="toggle-indicator" :class="{ on: tool.enabled }"></span>
-                  </label>
-                </div>
-              </div>
-              <div v-if="!toolsLoading && tools.length === 0" style="padding:20px;text-align:center;color:var(--text-secondary);">
-                暂无工具数据。请先在设置中选择工作区后重试。
-              </div>
-              <div style="margin-top:8px;font-size:12px;color:var(--text-secondary);">
-                共 {{ tools.length }} 个工具，已启用 {{ enabledCount }} 个
-              </div>
-            </div>
-          </div>
-
         </div>
       </div>
       <div class="modal-footer">
@@ -383,7 +353,6 @@ const tabs = [
   { id: 'appearance', label: '外观' },
   { id: 'instructions', label: '指令' },
   { id: 'philosophy', label: '思想' },
-  { id: 'tools', label: '工具' },
 ]
 
 const providers = ref([])
@@ -446,7 +415,8 @@ const local = reactive({
   philosophySelected: [],
   mainAgentPhilosophy: '',
   philosophyRoles: {},
-
+  // MCP
+  autoConnectMCP: true,
 })
 
 const modelsForProvider = computed(() => {
@@ -481,12 +451,10 @@ async function loadModels() {
     const data = await api.getModels()
     providers.value = data.providers || []
     modelsMap.value = data.models || {}
-    // 使用后端返回的默认 API 地址
     if (data.providerBaseURLs) {
       runtimeProviderBaseURLs = data.providerBaseURLs
     }
   } catch (e) {
-    // fallback
     providers.value = ['deepseek', 'openai', 'anthropic', 'openai-compatible']
     modelsMap.value = {
       deepseek: ['deepseek-r1', 'deepseek-v4-pro', 'deepseek-v4-flash'],
@@ -497,7 +465,6 @@ async function loadModels() {
   }
 }
 
-// ─── 服务商默认 API 地址（硬编码兜底，运行时优先用后端返回的值）───
 const defaultProviderBaseURLs = {
   deepseek: 'https://api.deepseek.com/v1',
   openai: 'https://api.openai.com/v1',
@@ -505,7 +472,6 @@ const defaultProviderBaseURLs = {
   'openai-compatible': '',
   custom: '',
 }
-// 运行时从后端获取的 providerBaseURLs（loadModels 时更新）
 let runtimeProviderBaseURLs = {}
 
 function getProviderBaseURL(provider) {
@@ -513,9 +479,7 @@ function getProviderBaseURL(provider) {
 }
 
 function onProviderChange() {
-  // 自动填充对应服务商的 API 地址
   local.baseURL = getProviderBaseURL(local.provider)
-  // 如果当前模型不在新服务商列表中，重置
   const models = modelsMap.value[local.provider] || []
   if (models.length > 0) {
     if (!models.includes(local.executeModel)) local.executeModel = models[0]
@@ -565,8 +529,6 @@ async function loadPhilosophy() {
   }
 }
 
-
-
 // ─── 加载设置到 local ───
 function loadSettings() {
   const s = state.settings
@@ -575,7 +537,6 @@ function loadSettings() {
   local.baseURL = s.baseURL || ''
   local.apiKey = s.apiKey || ''
   local.executeModel = s.executeModel || s.model || ''
-  // 检测自定义模型：如果模型名不在下拉列表中，标记为自定义并填入自定义输入框
   const execModels = modelsMap.value[local.provider] || []
   local.executeModelCustom = ''
   if (local.executeModel && execModels.length > 0 && !execModels.includes(local.executeModel) && local.executeModel !== 'custom') {
@@ -641,49 +602,12 @@ onMounted(async () => {
   await loadModels()
   await loadInstructions()
   await loadPhilosophy()
-  await loadTools()
-  })
+})
 
 watch(() => state.settingsLoaded, (v) => { if (v) loadSettings() })
 
 function reloadProjectInst() {
   loadInstructions()
-}
-
-// ─── 工具开关 ──────────────────────────────────
-const tools = ref([])
-const toolsLoading = ref(false)
-
-const filteredTools = computed(() => {
-  return tools.value
-})
-
-const enabledCount = computed(() => {
-  return tools.value.filter(t => t.enabled).length
-})
-
-async function loadTools() {
-  toolsLoading.value = true
-  try {
-    const items = await api.apiGet('/api/tools')
-    tools.value = items
-  } catch (e) {
-    console.error('加载工具列表失败', e)
-  } finally {
-    toolsLoading.value = false
-  }
-}
-
-async function onToolToggle(name, enabled) {
-  const toolMap = {}
-  for (const t of tools.value) {
-    toolMap[t.name] = t.enabled
-  }
-  try {
-    await api.apiPut('/api/tools/save', { tools: toolMap })
-  } catch (e) {
-    console.error('保存工具配置失败', e)
-  }
 }
 
 const resetForm = () => {
@@ -873,15 +797,6 @@ const saveSettings = async () => {
 .btn-secondary { background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary); padding: 6px 16px; cursor: pointer; border-radius: 3px; }
 .btn-primary { background: var(--accent); border: none; color: #fff; padding: 6px 16px; cursor: pointer; border-radius: 3px; }
 
-/* ── 工具开关 ── */
-.tools-list { display: flex; flex-direction: column; gap: 4px; max-height: 400px; overflow-y: auto; }
-.tool-item { display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; border-radius: 4px; background: var(--bg-tertiary); }
-.tool-item:hover { background: var(--bg-hover); }
-.tool-info { flex: 1; min-width: 0; }
-.tool-name { font-size: 13px; font-weight: 600; color: var(--text-primary); font-family: var(--font-code, monospace); }
-.tool-desc { display: block; font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tool-toggle { position: relative; display: inline-flex; align-items: center; cursor: pointer; margin-left: 8px; flex-shrink: 0; }
-.tool-toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
 .toggle-indicator { width: 36px; height: 18px; border-radius: 10px; background: var(--border-color); transition: background 0.2s; position: relative; }
 .toggle-indicator::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: transform 0.2s; }
 .toggle-indicator.on { background: var(--accent); }
