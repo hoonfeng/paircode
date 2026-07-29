@@ -2229,7 +2229,6 @@ func reloadWebLuaTools(reg *agent.Registry, root string) {
 // buildWebLoopOpts 构建 agent.LoopOpts（统一版本，平台差异通过 webCompressor 回调）。
 func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) agent.LoopOpts {
 	prov := buildWebProvider()
-	agent.SetScoreProvider(prov) // 注入评分 Agent Provider（nil 时回退机械评分）
 
 	root := core.Root()
 	agent.WorkspaceRoots = core.Folders
