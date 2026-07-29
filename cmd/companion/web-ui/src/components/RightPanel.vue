@@ -1604,7 +1604,7 @@ watch(() => state.settings, (s) => { if (s) { autoIterate.value = !!s.autoIterat
 // ★ 从工作区配置加载审核配置（override 全局 settings）
 async function loadWorkspaceReviewConfig() {
   try {
-    const rc = await api.apiGet('tools/review')
+    const rc = await api.apiGet('/tools/review')
     if (rc) {
       reviewMode.value = rc.reviewMode || 'auto'
       reviewToolStates.value = {}

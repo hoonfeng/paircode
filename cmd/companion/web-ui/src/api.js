@@ -3,6 +3,8 @@
 const BASE = '/api'
 
 function apiURL(path, params = {}) {
+  // 确保 path 以 / 开头，避免 BASE + path 拼成 /apitools（应为 /api/tools）
+  if (!path.startsWith('/')) path = '/' + path
   const u = new URL(BASE + path, location.origin)
   for (const [k, v] of Object.entries(params)) {
     if (v !== undefined && v !== null && v !== '') u.searchParams.set(k, v)
