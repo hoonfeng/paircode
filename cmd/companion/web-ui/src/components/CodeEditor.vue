@@ -8,7 +8,7 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import { EditorView, basicSetup } from 'codemirror'
-import { EditorState } from '@codemirror/state'
+import { EditorState, Prec } from '@codemirror/state'
 import { syntaxHighlighting, HighlightStyle } from '@codemirror/language'
 import { tags } from '@lezer/highlight'
 import { javascript } from '@codemirror/lang-javascript'
@@ -72,7 +72,7 @@ function createEditor() {
     closeBrackets(),
     highlightSelectionMatches(),
     // 拦截 Ctrl+F/H 显示自定义中文搜索面板
-    keymap.of([
+    Prec.high(keymap.of([
       {
         key: 'Ctrl-f',
         run: () => {
@@ -89,7 +89,7 @@ function createEditor() {
           return true
         },
       },
-    ]),
+    ])),
     EditorView.updateListener.of((update) => {
       if (update.docChanged) {
         emit('update:modelValue', update.state.doc.toString())

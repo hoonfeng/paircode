@@ -1,6 +1,7 @@
 <template>
   <div v-if="visible" class="find-panel" @keydown="onPanelKeydown">
     <div class="find-row">
+      <!-- 搜索图标 -->
       <svg class="fp-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/>
       </svg>
@@ -17,10 +18,30 @@
         main-field="true"
       />
       <span class="fp-count">{{ matchCount }}</span>
-      <button class="fp-btn" @click="onFindPrev" title="上一个 (Shift+Enter)">▲</button>
-      <button class="fp-btn" @click="onFindNext" title="下一个 (Enter)">▼</button>
-      <button class="fp-btn fp-toggle" :class="{ active: showReplace }" @click="toggleReplace" title="替换 (Ctrl+H)">↔</button>
-      <button class="fp-close" @click="onClose" title="关闭 (Esc)">×</button>
+      <!-- 上一个 -->
+      <button class="fp-btn" @click="onFindPrev" title="上一个 (Shift+Enter)">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="18 15 12 9 6 15"/>
+        </svg>
+      </button>
+      <!-- 下一个 -->
+      <button class="fp-btn" @click="onFindNext" title="下一个 (Enter)">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </button>
+      <!-- 切换替换 -->
+      <button class="fp-btn fp-toggle" :class="{ active: showReplace }" @click="toggleReplace" title="替换 (Ctrl+H)">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M16 5l3-3 3 3"/><path d="M19 2v7a4 4 0 0 1-4 4H5"/><path d="M8 16l-3 3 3 3"/><path d="M5 13v7a4 4 0 0 0 4 4h10"/>
+        </svg>
+      </button>
+      <!-- 关闭 -->
+      <button class="fp-close" @click="onClose" title="关闭 (Esc)">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+        </svg>
+      </button>
     </div>
     <div v-if="showReplace" class="replace-row">
       <svg class="fp-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
@@ -39,14 +60,26 @@
       <button class="fp-btn" @click="onReplaceAll" title="全部替换">全部替换</button>
     </div>
     <div class="fp-options">
-      <label class="fp-opt" :class="{ active: caseSensitive }">
-        <input type="checkbox" v-model="caseSensitive" @change="onSearchChange" /> Aa
+      <!-- 大小写敏感 -->
+      <label class="fp-opt" :class="{ active: caseSensitive }" title="大小写敏感">
+        <input type="checkbox" v-model="caseSensitive" @change="onSearchChange" />
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="4" y="4" width="16" height="16" rx="2"/><path d="m8 16 2-4m4 4-2-4m0 0L12 8l1 4"/><path d="m10 12h4"/>
+        </svg>
       </label>
-      <label class="fp-opt" :class="{ active: regexp }">
-        <input type="checkbox" v-model="regexp" @change="onSearchChange" /> .*
+      <!-- 正则表达式 -->
+      <label class="fp-opt" :class="{ active: regexp }" title="正则表达式">
+        <input type="checkbox" v-model="regexp" @change="onSearchChange" />
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 3v18"/><path d="M5 12h14"/><path d="M9 7l-4-4"/><path d="M15 7l4-4"/><path d="M9 17l-4 4"/><path d="M15 17l4 4"/>
+        </svg>
       </label>
-      <label class="fp-opt" :class="{ active: wholeWord }">
-        <input type="checkbox" v-model="wholeWord" @change="onSearchChange" /> 全词
+      <!-- 全词匹配 -->
+      <label class="fp-opt" :class="{ active: wholeWord }" title="全词匹配">
+        <input type="checkbox" v-model="wholeWord" @change="onSearchChange" />
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M4 8V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><path d="M8 12h8"/><path d="M10 9v6"/><path d="M14 9v6"/>
+        </svg>
       </label>
     </div>
   </div>
@@ -284,6 +317,9 @@ defineExpose({ open, openReplace, close: onClose })
 }
 
 .fp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: var(--bg-tertiary, #252535);
   border: 1px solid var(--border-color, #444);
   color: var(--text-secondary, #aaa);
@@ -313,10 +349,12 @@ defineExpose({ open, openReplace, close: onClose })
   border-color: var(--accent, #4a9eff);
 }
 .fp-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: none;
   border: none;
   color: var(--text-muted, #888);
-  font-size: 18px;
   cursor: pointer;
   padding: 0 4px;
   line-height: 1;
@@ -335,7 +373,7 @@ defineExpose({ open, openReplace, close: onClose })
 }
 
 .fp-opt {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 3px;
   font-size: 11px;
@@ -346,6 +384,7 @@ defineExpose({ open, openReplace, close: onClose })
   border: 1px solid transparent;
   transition: all 0.12s;
   user-select: none;
+  line-height: 1.4;
 }
 .fp-opt input {
   display: none;
