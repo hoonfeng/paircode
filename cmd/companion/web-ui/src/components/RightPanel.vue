@@ -316,7 +316,7 @@ function cycleReviewMode() {
   const m = reviewMode.value
   const next = m === 'auto' ? 'manual' : m === 'manual' ? 'off' : 'auto'
   reviewMode.value = next
-  api.apiPut('/api/tools/review', { reviewMode: next }).catch(() => {
+  api.apiPut('/tools/review', { reviewMode: next }).catch(() => {
     reviewMode.value = m
   })
 }
@@ -329,7 +329,7 @@ const saveReviewConfig = async () => {
     else if (st === 'white') whitelist.push(name)
   }
   try {
-    await api.apiPut('/api/tools/review', {
+    await api.apiPut('/tools/review', {
       reviewMode: reviewMode.value,
       reviewBlacklist: blacklist,
       reviewWhitelist: whitelist,
@@ -363,7 +363,7 @@ const tcSwitchList = ref([])
 async function loadTcSwitchList() {
   tcLoading.value = true
   try {
-    const items = await api.apiGet('/api/tools')
+    const items = await api.apiGet('/tools')
     tcSwitchList.value = items
   } catch (e) {
     console.error('加载工具列表失败', e)
@@ -378,7 +378,7 @@ async function onTcSwitchToggle() {
     toolMap[t.name] = t.enabled
   }
   try {
-    await api.apiPut('/api/tools/save', { tools: toolMap })
+    await api.apiPut('/tools/save', { tools: toolMap })
   } catch (e) {
     console.error('保存工具配置失败', e)
   }
