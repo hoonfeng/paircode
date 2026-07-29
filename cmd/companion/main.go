@@ -12,24 +12,35 @@ import (
 )
 
 // 编译版本号（由 packager 通过 -ldflags=-X main.version=<version> 注入）
-var version = "v1.1.2"
+// 也用于 /api/system/info 返回给前端 About 弹窗展示。
+var version = "v1.1.5"
+
+// getCwd 返回当前工作目录，失败时返回 "?"。
+func getCwd() string {
+	d, err := os.Getwd()
+	if err != nil {
+		return "?"
+	}
+	return d
+}
 
 func main() {
 	// ★ 全局 panic recovery — 捕获所有未捕获的 panic，防止进程静默崩溃
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("[FATAL] 未捕获的异常: %v", r)
-			// 输出完整堆栈
 			buf := make([]byte, 1<<16)
 			n := runtime.Stack(buf, false)
 			log.Printf("[FATAL] 堆栈:\n%s", buf[:n])
-			// 确保日志刷盘后再退出
 			log.Printf("[FATAL] 进程因未捕获异常终止")
 			os.Exit(1)
 		}
 	}()
 
 	port := InitCore()
+
+	log.Printf("[main] PairCode IDE %s 启动中 (%s, %s/%s)", version, runtime.Version(), runtime.GOOS, runtime.GOARCH)
+	log.Printf("[main] 工作目录: %s", getCwd())
 
 	log.Printf("[main] 正在启动 Web 服务器 (端口 %d)...", port)
 	if err := StartWebServer(port); err != nil {

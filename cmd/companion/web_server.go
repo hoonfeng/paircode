@@ -19,6 +19,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -909,13 +910,14 @@ func (s *webServer) handleSettings(w http.ResponseWriter, r *http.Request) {
 
 func (s *webServer) handleSysInfo(w http.ResponseWriter, r *http.Request) {
 	host, _ := os.Hostname()
-
 	cwd, _ := os.Getwd()
 	jsonResp(w, map[string]any{
 		"hostname":  host,
 		"cwd":       cwd,
 		"os":        "windows",
-		"goos":      "windows",
+		"goos":      runtime.GOOS,
+		"goarch":    runtime.GOARCH,
+		"goversion": runtime.Version(),
 		"workspace": core.Root(),
 		"folders":   core.Folders,
 		"version":   version,
