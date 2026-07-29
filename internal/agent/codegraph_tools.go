@@ -568,7 +568,13 @@ func registerCodeGraphTools(r *Registry, root string) {
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
 			filePath := argStr(args, "file")
 			line := argInt(args, "line", 1)
-			maxTokens := argInt(args, "max_tokens", 4000)
+			maxTokens := argInt(args, "maxTokens", 4000)
+			if maxTokens < 0 {
+				maxTokens = 0
+			}
+			if maxTokens > 16000 {
+				maxTokens = 16000 // 硬上限：防止返回内容过大撑爆 LLM 上下文
+			}
 
 			g, err := getCodeGraph(root)
 			if err != nil {

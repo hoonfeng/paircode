@@ -39,7 +39,7 @@ func (s *DebugSession) StartWithDir(ctx context.Context, program, cwd string) er
 	// 2. 启动 dlv dap（注意：dlv dap 不接受程序路径作为命令行参数，
 	// 程序路径通过后续 DAP launch 请求传入）
 	args := []string{"dap", "--listen", fmt.Sprintf("127.0.0.1:%d", port)}
-	cmd := exec.CommandContext(ctx, s.dlvCmd, args...)
+	cmd := exec.Command(s.dlvCmd, args...)
 	if cwd != "" {
 		cmd.Dir = cwd
 	}
@@ -162,6 +162,21 @@ func (s *DebugSession) StartWithDir(ctx context.Context, program, cwd string) er
 		conn.close()
 		s.setState(StateError)
 		return fmt.Errorf("DAP launch 返回错误: %s", resp.Message)
+	}
+
+	// 8. 发送 configurationDone 请求（DAP 协议自动
+	resp, err = conn.send("configurationDone", nil)
+	if err != nil {
+		cmd.Process.Kill()
+		conn.close()
+		s.setState(StateError)
+		return fmt.Errorf("DAP configurationDone 失败: %w", err)
+	}
+	if !resp.Success {
+		cmd.Process.Kill()
+		conn.close()
+		s.setState(StateError)
+		return fmt.Errorf("DAP configurationDone 返回错误: %s", resp.Message)
 	}
 
 	s.setState(StateRunning)
