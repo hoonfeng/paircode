@@ -4,6 +4,30 @@
 
 ---
 
+## 1.1.5 — 2026-07-29
+
+### 新增
+- **run_command 后台化** — `run_command` 改用后台启动+轮询模式，不再阻塞 Agent 循环，可被上下文取消中断，超时后 LLM 可选择等待或继续
+- **工具开关 UI 面板** — 设置面板新增「Agent」页签，每个工具显示启用/禁用开关，按工作区独立配置（`.pair/tools.json`），被禁用的工具不出现在 LLM 工具定义中
+- **自主模式 Follow-up 持续驱动** — Agent 自然终止后，通过 `OnNextTask` 回调自动注入 follow-up 消息，无需手动触发「继续」
+- **流式更新机制** — Registry 新增 `OnToolUpdate` 回调，工具执行中间结果实时推送给前端
+- **工具 UsageGuide 全覆盖** — 全部 ~140 个工具添加 `UsageGuide` 使用指导，明确何时用、为何优于 `run_command`、常见误区
+- **启动日志详细化** — 启动时输出版本号、Go 版本、平台架构、工作目录、各工作区文件夹路径
+
+### 改进
+- **工具体系升级**
+  - `Tool` 结构体新增 `UsageGuide`、`Category`、`Enabled` 字段
+  - `Registry` 新增 `EnabledDefinitions()` 按状态过滤工具定义
+  - 新增 `AllToolMeta()` API 供前端展示工具开关列表
+  - 工具使用指南文本动态注入系统提示，引导 LLM 优先使用专用工具
+- **窗口管理** — `run_command` / `run_background` 均设置 `HideWindow=true`，不再弹出 cmd 窗口
+- **信号监听移除** — main 函数移除信号监听，进程不会因子进程结束而自动退出
+
+### 修复
+- **debug_start 启动修复** — 拆解 `dlv dap` 启动流程，分别发送 Initialize 和 Launch 请求，兼容 dlv 最新版本
+
+---
+
 ## 1.1.2 — 2026-07-21
 
 ### 新增
