@@ -197,15 +197,23 @@
                     <div v-if="tcLoading" style="padding:20px;text-align:center;color:var(--text-secondary);font-size:12px;">加载中…</div>
                     <div v-else-if="tcSwitchList.length === 0" style="padding:12px;text-align:center;color:var(--text-secondary);font-size:12px;">加载失败，请重试</div>
                     <div v-else class="tcp-switch-list">
-                      <div v-for="tool in tcSwitchList" :key="tool.name" class="tcp-switch-item">
-                        <div class="tcp-switch-info">
-                          <span class="tcp-switch-name">{{ tool.name }}</span>
-                          <span class="tc-tag tc-tag-cat">{{ tool.category || '未分类' }}</span>
+                      <div v-for="cat in tcGroupedList" :key="cat.category" class="tcp-switch-category">
+                        <div class="tcp-cat-header" @click="toggleTcCategory(cat.category)">
+                          <SvgIcon :name="cat.expanded ? 'chevron-down' : 'chevron-right'" :size="10" />
+                          <span>{{ cat.category }}</span>
+                          <span class="tcp-cat-count">{{ cat.tools.filter(t => t.enabled).length }}/{{ cat.tools.length }}</span>
                         </div>
-                        <label class="tool-switch-toggle" :title="tool.usageGuide">
-                          <input type="checkbox" v-model="tool.enabled" @change="onTcSwitchToggle" />
-                          <span class="toggle-indicator" :class="{ on: tool.enabled }"></span>
-                        </label>
+                        <div v-if="cat.expanded" class="tcp-cat-tools">
+                          <div v-for="tool in cat.tools" :key="tool.name" class="tcp-switch-item">
+                            <div class="tcp-switch-info">
+                              <span class="tcp-switch-name">{{ tool.name }}</span>
+                            </div>
+                            <label class="tool-switch-toggle" :title="tool.usageGuide">
+                              <input type="checkbox" v-model="tool.enabled" @change="onTcSwitchToggle" />
+                              <span class="toggle-indicator" :class="{ on: tool.enabled }"></span>
+                            </label>
+                          </div>
+                        </div>
                       </div>
                     </div>
                     <div class="tcp-footer">
@@ -359,6 +367,25 @@ const toolConfigOpen = ref(false)
 const tcActiveTab = ref('switch')
 const tcLoading = ref(false)
 const tcSwitchList = ref([])
+const tcCategoryExpanded = ref({})
+
+const tcGroupedList = computed(() => {
+  const map = {}
+  for (const tool of tcSwitchList.value) {
+    const cat = tool.category || '未分类'
+    if (!map[cat]) {
+      map[cat] = { category: cat, tools: [], expanded: tcCategoryExpanded.value[cat] !== false }
+    }
+    map[cat].tools.push(tool)
+  }
+  return Object.values(map)
+})
+
+function toggleTcCategory(cat) {
+  const m = { ...tcCategoryExpanded.value }
+  m[cat] = m[cat] === undefined ? false : !m[cat]
+  tcCategoryExpanded.value = m
+}
 
 async function loadTcSwitchList() {
   tcLoading.value = true
@@ -1545,7 +1572,7 @@ watch(() => state.settings, (s) => { if (s) { autoIterate.value = !!s.autoIterat
 // ★ 从工作区配置加载审核配置（override 全局 settings）
 async function loadWorkspaceReviewConfig() {
   try {
-    const rc = await api.apiGet('/api/tools/review')
+    const rc = await api.apiGet('tools/review')
     if (rc) {
       reviewMode.value = rc.reviewMode || 'auto'
       reviewToolStates.value = {}
@@ -1936,6 +1963,29 @@ onUnmounted(() => {
 .tc-tag-cat { background: var(--bg-tertiary); color: var(--text-muted); }
 .tool-switch-toggle { position: relative; display: inline-flex; align-items: center; cursor: pointer; flex-shrink: 0; }
 .tool-switch-toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
+.toggle-indicator {
+  position: relative; width: 28px; height: 14px;
+  background: var(--bg-tertiary); border-radius: 7px;
+  transition: background 0.2s; border: 1px solid var(--border-color);
+  display: inline-block; box-sizing: border-box;
+}
+.toggle-indicator::after {
+  content: ''; position: absolute; top: 1px; left: 1px;
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--text-muted); transition: all 0.2s;
+}
+.toggle-indicator.on { background: var(--accent); border-color: var(--accent); }
+.toggle-indicator.on::after { left: 15px; background: #fff; }
+/* 工具开关分类分组 */
+.tcp-switch-category { border-bottom: 1px solid var(--border-subtle, var(--border-color)); }
+.tcp-cat-header {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 12px 6px 10px; cursor: pointer; font-weight: 600; font-size: 12px;
+  color: var(--text-primary); background: var(--bg-tertiary); user-select: none;
+}
+.tcp-cat-header:hover { background: var(--bg-hover); }
+.tcp-cat-count { font-weight: 400; font-size: 10px; color: var(--text-muted); margin-left: auto; }
+.tcp-cat-tools { /* container for tools under category */ }
 .tcp-footer { padding: 6px 12px; font-size: 11px; color: var(--text-muted); border-top: 1px solid var(--border-color); }
 .tcp-footer-actions { display: flex; gap: 6px; justify-content: flex-end; }
 /* 审核黑白名单列表 */
