@@ -316,7 +316,7 @@ func hSettings(w http.ResponseWriter, r *http.Request) {
 func hSysInfo(w http.ResponseWriter, r *http.Request) {
 	wd, _ := os.Getwd()
 	jsonStr(w, map[string]interface{}{
-		"platform": "windows (desktop)", "version": "1.1.5-desktop",
+		"platform": "windows (desktop)", "version": "1.1.6-desktop",
 		"cwd": wd, "goos": "windows",
 	})
 }

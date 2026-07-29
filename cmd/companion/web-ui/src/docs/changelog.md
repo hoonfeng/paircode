@@ -4,6 +4,20 @@
 
 ---
 
+## 1.1.6 — 2026-07-30
+
+### 修复
+- **修复编辑器 Ctrl+F 不生效** — CodeMirror `search()` 扩展注册的 `openSearchPanel` 与自定义搜索面板 keymap 冲突，使用 `Prec.high()` 确保自定义 handler 优先执行，Ctrl+F 正确唤出中文搜索面板
+- **搜索面板图标全部换为 SVG** — Unicode 字符（▲▼↔×）和文本标签（Aa ·\* 全词）全部替换为内联 SVG 图标，与界面风格统一
+- **修复前端 API 路径缺少前导斜杠导致 404** — `apiURL()` 拼接时对无前导斜杠的 path 自动补全，`/apitools/review` 修正为 `/api/tools/review`
+- **修复 codegraph 增量构建仍全量重写 SQLite** — `SQLiteStore.Save()` 在增量模式下调用的 `RemoveFileEntities` 清理旧数据，不再 `DELETE FROM` 全表
+
+### 改进
+- **编辑器中文搜索面板** — 新建 `FindPanel.vue` 组件，替换 CodeMirror 默认英文搜索面板，支持查找/替换/大小写敏感/正则/全词匹配
+- **codegraph 增量构建测试** — 新增 `TestSQLiteStoreIncrementalPreserves` 和 `TestSQLiteStoreIncrementalBuild` 验证增量构建与并行完整性
+
+---
+
 ## 1.1.5 — 2026-07-29
 
 ### 新增
