@@ -344,9 +344,9 @@ func (b *Builder) IncrementalBuild() (*BuildResult, error) {
 	result.EntitiesAdded = graph.Stats().EntityCount
 	result.RelationsAdded = graph.Stats().RelationCount
 
-	// 保存图谱和索引
+	// 保存图谱（增量保存：只写变更文件）和索引
 	if b.config.AutoSave {
-		if err := b.store.Save(graph); err != nil {
+		if err := b.store.SaveIncremental(graph, changedFiles); err != nil {
 			result.Errors = append(result.Errors, BuildError{
 				Message: fmt.Sprintf("保存图谱失败: %v", err),
 			})

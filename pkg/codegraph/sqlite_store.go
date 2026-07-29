@@ -32,7 +32,7 @@ func NewSQLiteStore(root string, db *sql.DB) *SQLiteStore {
 	}
 }
 
-// Save 将图谱增量写入 SQLite（全量：清表 → 逐文件 INSERT 实体 → INSERT 关系）。
+// Save 将图谱全量写入 SQLite（清表 → 逐文件 INSERT）。
 func (s *SQLiteStore) Save(g *Graph) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -95,6 +95,126 @@ func (s *SQLiteStore) Save(g *Graph) error {
 	defer relStmt.Close()
 
 	for _, r := range snapshot.Relations {
+		srcID, ok := entityMap[r.SourceID]
+		if !ok {
+			continue
+		}
+		tgtID, ok := entityMap[r.TargetID]
+		if !ok {
+			continue
+		}
+		relStmt.Exec(srcID, tgtID, string(r.Kind))
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("提交事务失败: %w", err)
+	}
+
+	s.cachedGraph = g
+	s.cachedAt = time.Now()
+	return nil
+}
+
+// SaveIncremental 增量保存：只删除并重新插入 changedFiles 中文件的实体和关系。
+// 不涉及的文件保持不动，避免全量 DELETE+INSERT 的性能开销。
+func (s *SQLiteStore) SaveIncremental(g *Graph, changedFiles []string) error {
+	if len(changedFiles) == 0 {
+		return s.Save(g)
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	snapshot := g.ToSnapshot()
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("开始事务失败: %w", err)
+	}
+	defer tx.Rollback()
+
+	// 1. 删除变更文件中的旧实体及关联关系
+	changedSet := make(map[string]bool, len(changedFiles))
+	for _, f := range changedFiles {
+		changedSet[f] = true
+		// 删除涉及该文件实体的关系
+		if _, err := tx.Exec(
+			`DELETE FROM code_relations WHERE source_id IN (SELECT id FROM code_entities WHERE file_path = ?) OR target_id IN (SELECT id FROM code_entities WHERE file_path = ?)`,
+			f, f,
+		); err != nil {
+			return fmt.Errorf("删除关系失败 (file=%s): %w", f, err)
+		}
+		// 删除该文件所有实体
+		if _, err := tx.Exec(`DELETE FROM code_entities WHERE file_path = ?`, f); err != nil {
+			return fmt.Errorf("删除实体失败 (file=%s): %w", f, err)
+		}
+	}
+
+	// 2. 收集变更文件的实体 ID 集合
+	changedEntityIDs := make(map[string]bool, len(changedFiles)*100)
+	for _, e := range snapshot.Entities {
+		if changedSet[e.FilePath] {
+			changedEntityIDs[e.ID] = true
+		}
+	}
+
+	// 3. 重新插入变更文件的实体
+	entStmt, err := tx.Prepare(
+		`INSERT INTO code_entities (kind, name, file_path, line, signature, package_name, module) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+	)
+	if err != nil {
+		return fmt.Errorf("准备实体插入失败: %w", err)
+	}
+	for _, e := range snapshot.Entities {
+		if !changedSet[e.FilePath] {
+			continue
+		}
+		fp := e.FilePath
+		kind := string(e.Kind)
+		sig := e.Signature
+		if sig == "" {
+			sig = e.FQN
+		}
+		pkgName := ""
+		if idx := lastDot(e.FQN); idx > 0 {
+			pkgName = e.FQN[:idx]
+		}
+		entStmt.Exec(kind, e.Name, fp, e.Line, sig, pkgName, "")
+	}
+	entStmt.Close()
+
+	// 4. 重建完整 entityID → rowid 映射（从数据库查询最新 rowid）
+	entityMap := make(map[string]int64, len(snapshot.Entities))
+	entRows, err := tx.Query(`SELECT id, kind, name, file_path, line FROM code_entities`)
+	if err != nil {
+		return fmt.Errorf("查询实体映射失败: %w", err)
+	}
+	for entRows.Next() {
+		var rowID int64
+		var kind, name, fp string
+		var line int
+		if err := entRows.Scan(&rowID, &kind, &name, &fp, &line); err != nil {
+			continue
+		}
+		entityID := fp + ":" + kind + ":" + name
+		entityMap[entityID] = rowID
+	}
+	entRows.Close()
+
+	// 5. 插入变更文件涉及的新的关系
+	relStmt, err := tx.Prepare(
+		`INSERT OR IGNORE INTO code_relations (source_id, target_id, kind) VALUES (?, ?, ?)`,
+	)
+	if err != nil {
+		return fmt.Errorf("准备关系插入失败: %w", err)
+	}
+	defer relStmt.Close()
+
+	for _, r := range snapshot.Relations {
+		// 只插入涉及变更文件实体的关系
+		if !changedEntityIDs[r.SourceID] && !changedEntityIDs[r.TargetID] {
+			continue
+		}
 		srcID, ok := entityMap[r.SourceID]
 		if !ok {
 			continue

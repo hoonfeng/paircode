@@ -62,6 +62,11 @@ func (s *Store) ensureDir() error {
 
 // ── 保存 ──────────────────────────────────────────────
 
+// SaveIncremental 增量保存：JSONStore 不支持增量，直接回退全量 Save。
+func (s *Store) SaveIncremental(g *Graph, changedFiles []string) error {
+	return s.Save(g)
+}
+
 // Save 将图谱保存到 JSON 文件。原子写入（写临时文件再重命名）。
 func (s *Store) Save(g *Graph) error {
 	s.mu.Lock()

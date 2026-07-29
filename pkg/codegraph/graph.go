@@ -57,6 +57,10 @@ const (
 // GraphStore 图谱持久化接口（JSON 和 SQLite 两种实现）。
 type GraphStore interface {
 	Save(g *Graph) error
+	// SaveIncremental 增量保存：只更新 changedFiles 中变更文件的实体和关系，
+	// 不涉及的文件保持不动。避免全量 DELETE+INSERT 的性能开销。
+	// 如果 changedFiles 为空或 nil，行为同 Save()（全量）。
+	SaveIncremental(g *Graph, changedFiles []string) error
 	Load() (*Graph, error)
 	SaveIndex(index map[string]time.Time) error
 	LoadIndex() (map[string]time.Time, error)
