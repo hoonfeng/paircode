@@ -1303,7 +1303,7 @@ func registerEvaluateSession(r *Registry, root string) {
 				score float64
 				desc  string
 			}{
-				{"🎯 完成度", score.CompletionScore, "任务是否完成、finish_task 是否被调用"},
+				{"🎯 完成度", score.CompletionScore, "任务是否完成、会话是否自然结束"},
 				{"⚡ 效率", score.EfficiencyScore, "工具调用数量是否合理、轮次是否过多"},
 				{"🔒 可靠性", score.ReliabilityScore, "工具调用成功率、错误率"},
 				{"🔄 适应性", score.AdaptabilityScore, "错误后的恢复能力、重试成功率"},
@@ -1362,7 +1362,7 @@ func evaluateSession(log *ExecutionLog, ts *ToolStatsRecorder) SessionScore {
 
 	for _, e := range log.Entries {
 		summary := strings.ToLower(e.Summary)
-		if strings.Contains(summary, "finish_task") || strings.Contains(summary, "任务完成") {
+		if strings.Contains(summary, "任务完成") || strings.Contains(summary, "generate_commit") {
 			hasFinishTask = true
 		}
 		if strings.Contains(summary, "error") || strings.Contains(summary, "失败") {
@@ -1499,7 +1499,7 @@ func generateSuggestions(s SessionScore) []string {
 	var suggestions []string
 
 	if !s.Completed {
-		suggestions = append(suggestions, "任务未完成。检查是否忘记调用 finish_task，或任务目标设置不合理。")
+		suggestions = append(suggestions, "任务未完成。检查任务目标、是否存在报错或卡死。")
 	}
 	if s.EfficiencyScore < 60 {
 		suggestions = append(suggestions, "工具调用过多/轮次过长。考虑用更少的工具调用完成任务，善用并行执行。")

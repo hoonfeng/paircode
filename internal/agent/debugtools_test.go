@@ -277,7 +277,7 @@ func TestSessionScore(t *testing.T) {
 		Entries: []ExecutionEntry{
 			{Round: 1, Agent: "outer", Phase: "analysis", Summary: "分析用户需求"},
 			{Round: 2, Agent: "outer", Phase: "execution", Summary: "执行 read_file"},
-			{Round: 3, Agent: "outer", Phase: "execution", Summary: "finish_task 任务完成"},
+			{Round: 3, Agent: "outer", Phase: "execution", Summary: "任务完成 generate_commit_message"},
 		},
 	}
 	score := evaluateSession(log, nil)
