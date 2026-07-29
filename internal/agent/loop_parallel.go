@@ -140,11 +140,6 @@ func (l *Loop) tryParallelExecute(ctx context.Context, calls []ToolCall, msgs []
 		l.emit(Event{Type: EventToolResult, Tool: tc.Function.Name, Content: output, CallID: tc.ID})
 		msgs = append(msgs, Message{Role: RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: output})
 		l.trackCall(tc.Function.Name, tc.Function.Arguments, r.err != nil || strings.HasPrefix(strings.TrimSpace(output), "Error:"))
-
-		if tc.Function.Name == "finish_task" {
-			l.finishResult = &output
-			l.emit(Event{Type: EventDone, Content: output, DoneReason: "finish_task"})
-		}
 		if tc.Function.Name == "generate_commit_message" {
 			l.commitMessage = output
 		}
@@ -185,10 +180,6 @@ func (l *Loop) executeReadOnlyParallel(ctx context.Context, calls []ToolCall, ms
 		msgs = append(msgs, Message{Role: RoleTool, ToolCallID: r.tc.ID, Name: r.tc.Function.Name, Content: output})
 		l.trackCall(r.tc.Function.Name, r.tc.Function.Arguments, r.err != nil || strings.HasPrefix(strings.TrimSpace(output), "Error:"))
 
-		if r.tc.Function.Name == "finish_task" {
-			l.finishResult = &output
-			l.emit(Event{Type: EventDone, Content: output, DoneReason: "finish_task"})
-		}
 		if r.tc.Function.Name == "generate_commit_message" {
 			l.commitMessage = output
 		}

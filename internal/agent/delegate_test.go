@@ -27,7 +27,7 @@ type recCall struct {
 }
 
 func (r *recordingProvider) Name() string { return "recording" }
-func (r *recordingProvider) Calls() int   { return r.calls }
+
 
 func (r *recordingProvider) Chat(_ context.Context, messages []Message, tools []ToolDefinition, onChunk func(Chunk)) (Message, error) {
 	// 记录副本（防 Run 后续修改底层数组影响断言）
@@ -73,12 +73,9 @@ func delegateSingleCall(id, agent, input string) ToolCall {
 	}}
 }
 
-// finishTaskMsg 构造一条 finish_task 工具调用的 assistant Message（直接作 responses 元素）。
-func finishTaskMsg(id, result string) Message {
-	return Message{ToolCalls: []ToolCall{{ID: id, Type: "function", Function: FunctionCall{
-		Name:      "finish_task",
-		Arguments: fmt.Sprintf(`{"result":%q}`, result),
-	}}}}
+// naturalFinishMsg 构造一条自然终止的 assistant Message（无工具调用，仅 Content）。
+func naturalFinishMsg(result string) Message {
+	return Message{Content: result}
 }
 
 func transferCall(id, agent string) ToolCall {
@@ -88,7 +85,7 @@ func transferCall(id, agent string) ToolCall {
 	}}
 }
 
-// TestDelegateTask_MultiTurn 父调 delegate_task → 子调 finish_task(计划A) → 父 finish_task。
+// TestDelegateTask_MultiTurn 父调 delegate_task → 子自然终止 → 父自然终止。
 // 断言：父最终消息含工具结果"计划A" + 子首次调用前缀与父首次调用一致(缓存命中) + 子 system 作追加 instruction。
 func TestDelegateTask_MultiTurn(t *testing.T) {
 	root := &SubAgent{Name: "coordinator"}
@@ -98,8 +95,8 @@ func TestDelegateTask_MultiTurn(t *testing.T) {
 	reg := NewRegistry()
 	rec := &recordingProvider{responses: []Message{
 		{ToolCalls: []ToolCall{delegateTaskCall("d1", "planner", "给计划")}},
-		finishTaskMsg("f1", "计划A"),
-		{ToolCalls: []ToolCall{{ID: "f2", Type: "function", Function: FunctionCall{Name: "finish_task", Arguments: `{"result":"计划完成"}`}}}},
+		naturalFinishMsg("计划A"),
+		naturalFinishMsg("全部完成"),
 	}}
 	parent := &Loop{
 		Provider:      rec,
@@ -115,8 +112,8 @@ func TestDelegateTask_MultiTurn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if rec.Calls() != 3 {
-		t.Fatalf("应 3 次 LLM 调用(父→子→父)，得 %d", rec.Calls())
+	if rec.calls != 3 {
+		t.Fatalf("应 3 次 LLM 调用(父→子→父)，得 %d", rec.calls)
 	}
 
 	// 父最终消息应含 delegate_task 的工具结果"计划A"
@@ -140,8 +137,8 @@ func TestDelegateTask_MultiTurn(t *testing.T) {
 		}
 	}
 
-	// 子 system 作追加 instruction：子调用第 3 条(user childTask)应含"你是规划专家"
-	childTaskMsg := rec.recorded[1].messages[2]
+	// 子 system 作追加 instruction：子调用第 4 条(user childTask)应含"你是规划专家"
+	childTaskMsg := rec.recorded[1].messages[3]
 	if !strings.Contains(childTaskMsg.Content, "你是规划专家") {
 		t.Errorf("子 task 应含子 system 指令，得 %q", childTaskMsg.Content)
 	}
@@ -160,7 +157,7 @@ func TestDelegateSingleTurn(t *testing.T) {
 	rec := &recordingProvider{responses: []Message{
 		{ToolCalls: []ToolCall{delegateSingleCall("d1", "calc", "1+1=?")}},
 		{Content: "2"}, // 子单轮：无工具调用 → 视作完成
-		{ToolCalls: []ToolCall{{ID: "f2", Type: "function", Function: FunctionCall{Name: "finish_task", Arguments: `{"result":"2"}`}}}},
+		naturalFinishMsg("2"),
 	}}
 	parent := &Loop{
 		Provider:      rec,
@@ -223,7 +220,7 @@ func TestTransferToAgent_NotFound(t *testing.T) {
 	reg := NewRegistry()
 	rec := &recordingProvider{responses: []Message{
 		{ToolCalls: []ToolCall{transferCall("t1", "ghost")}},
-		{ToolCalls: []ToolCall{{ID: "f2", Type: "function", Function: FunctionCall{Name: "finish_task", Arguments: `{"result":"已处理"}`}}}},
+		naturalFinishMsg("已处理"),
 	}}
 	parent := &Loop{Provider: rec, Registry: reg, MaxIterations: 5, AgentTree: tree, State: map[string]any{}}
 	RegisterDelegateTools(parent, tree)
@@ -257,8 +254,8 @@ func TestSharedState(t *testing.T) {
 	rec := &recordingProvider{responses: []Message{
 		{ToolCalls: []ToolCall{delegateTaskCall("d1", "worker", "读 secret")}},
 		{ToolCalls: []ToolCall{{ID: "g1", Type: "function", Function: FunctionCall{Name: "get_state", Arguments: `{}`}}}},
-		finishTaskMsg("f1", "已读取"),
-		{ToolCalls: []ToolCall{{ID: "f2", Type: "function", Function: FunctionCall{Name: "finish_task", Arguments: `{"result":"已读取"}`}}}},
+		naturalFinishMsg("已读取"),
+		naturalFinishMsg("已读取"),
 	}}
 	var events []Event
 	parent := &Loop{
@@ -287,7 +284,7 @@ func TestSharedState(t *testing.T) {
 	}
 }
 
-// TestToolWhitelist 子 agent Tools 白名单裁剪：子 Registry 只含白名单工具 + finish_task。
+// TestToolWhitelist 子 agent Tools 白名单裁剪：子 Registry 只含白名单工具。
 func TestToolWhitelist(t *testing.T) {
 	root := &SubAgent{Name: "coordinator"}
 	// worker 只允许 read_file
@@ -302,8 +299,8 @@ func TestToolWhitelist(t *testing.T) {
 
 	rec := &recordingProvider{responses: []Message{
 		{ToolCalls: []ToolCall{delegateTaskCall("d1", "worker", "干活")}},
-		finishTaskMsg("f1", "done"),
-		{ToolCalls: []ToolCall{{ID: "f2", Type: "function", Function: FunctionCall{Name: "finish_task", Arguments: `{"result":"done"}`}}}},
+		naturalFinishMsg("done"),
+		naturalFinishMsg("done"),
 	}}
 	parent := &Loop{
 		Provider:      rec,
@@ -317,10 +314,10 @@ func TestToolWhitelist(t *testing.T) {
 
 	if _, err := parent.Run(context.Background(), "开始", nil); err != nil {
 	}
-	if rec.Calls() < 2 {
-		t.Fatalf("应至少 2 次 LLM 调用，得 %d", rec.Calls())
+	if rec.calls < 2 {
+		t.Fatalf("应至少 2 次 LLM 调用，得 %d", rec.calls)
 	}
-	// recorded[1] = 子 agent 首次调用，其 tools 应只含 read_file + finish_task
+	// recorded[1] = 子 agent 首次调用，其 tools 应只含 read_file
 	childTools := rec.recorded[1].tools
 	has := func(name string) bool {
 		for _, td := range childTools {
@@ -332,9 +329,6 @@ func TestToolWhitelist(t *testing.T) {
 	}
 	if !has("read_file") {
 		t.Errorf("子工具应含白名单 read_file，tools=%+v", childTools)
-	}
-	if !has("finish_task") {
-		t.Errorf("子工具应含 finish_task，tools=%+v", childTools)
 	}
 	if has("write_file") {
 		t.Errorf("子工具不应含白名单外的 write_file，tools=%+v", childTools)
@@ -354,7 +348,7 @@ func TestDelegateTask_AgentNotFound(t *testing.T) {
 	reg := NewRegistry()
 	rec := &recordingProvider{responses: []Message{
 		{ToolCalls: []ToolCall{delegateTaskCall("d1", "ghost", "x")}},
-		{ToolCalls: []ToolCall{{ID: "f2", Type: "function", Function: FunctionCall{Name: "finish_task", Arguments: `{"result":"已处理"}`}}}},
+		naturalFinishMsg("已处理"),
 	}}
 	parent := &Loop{Provider: rec, Registry: reg, MaxIterations: 5, AgentTree: tree, State: map[string]any{}}
 	RegisterDelegateTools(parent, tree)

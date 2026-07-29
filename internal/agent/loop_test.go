@@ -23,7 +23,7 @@ func TestProjectRules(t *testing.T) {
 	}
 }
 
-// 端到端 TAOR：MockProvider 脚本「第1轮调 read_file → 第2轮调 finish_task」，
+// 端到端 TAOR：MockProvider 脚本「第1轮调 read_file → 第2轮自然终止」，
 // 验证 think→act→observe(结果回灌)→think→done 全链路。
 func TestLoopToolThenFinal(t *testing.T) {
 	dir := t.TempDir()
@@ -33,7 +33,7 @@ func TestLoopToolThenFinal(t *testing.T) {
 
 	mock := &MockProvider{Responses: []Message{
 		{ToolCalls: []ToolCall{{ID: "c1", Type: "function", Function: FunctionCall{Name: "read_file", Arguments: `{"path":"hello.txt"}`}}}},
-		{ToolCalls: []ToolCall{{ID: "f1", Type: "function", Function: FunctionCall{Name: "finish_task", Arguments: `{"result":"读到了 WORLD_123"}`}}}},
+		{Content: "读到了 WORLD_123"},
 	}}
 	var events []Event
 	loop := &Loop{Provider: mock, Registry: reg, System: "test", MaxIterations: 5,
@@ -58,10 +58,10 @@ func TestLoopToolThenFinal(t *testing.T) {
 		t.Error("未把 read_file 结果作 role=tool 消息回灌")
 	}
 
-	// 末事件应为 done（finish_task），且内容含 WORLD_123
+	// 末事件应为 done（task_complete），且内容含 WORLD_123
 	last := events[len(events)-1]
-	if last.Type != EventDone || last.DoneReason != "finish_task" || !strings.Contains(last.Content, "WORLD_123") {
-		t.Errorf("末事件应为 EventDone(finish_task)，得 %+v", last)
+	if last.Type != EventDone || last.DoneReason != "task_complete" || !strings.Contains(last.Content, "WORLD_123") {
+		t.Errorf("末事件应为 EventDone(task_complete)，得 %+v", last)
 	}
 
 	// 应广播过 tool_call(read_file) 与 tool_result(含结果) 事件
@@ -79,10 +79,10 @@ func TestLoopToolThenFinal(t *testing.T) {
 	}
 }
 
-// 调 finish_task 工具 → 立即退出，仅需 1 次 LLM 调用。
-func TestLoopFinishTaskExits(t *testing.T) {
+// 自然终止（无工具调用 + 正文内容）→ 立即退出，仅需 1 次 LLM 调用。
+func TestLoopNaturalFinish(t *testing.T) {
 	mock := &MockProvider{Responses: []Message{
-		{ToolCalls: []ToolCall{{ID: "f1", Type: "function", Function: FunctionCall{Name: "finish_task", Arguments: `{"result":"任务完成"}`}}}},
+		{Content: "任务完成"},
 	}}
 	loop := &Loop{Provider: mock, Registry: NewRegistry(), MaxIterations: 5}
 	if _, err := loop.Run(context.Background(), "完成", nil); err != nil {
@@ -93,7 +93,7 @@ func TestLoopFinishTaskExits(t *testing.T) {
 	}
 }
 
-// 永远调用工具、从不 finish_task → 在 MaxIterations 处止损。
+// 永远调用工具、从不自然终止 → 在 MaxIterations 处止损。
 type alwaysToolProvider struct{ n int }
 
 func (a *alwaysToolProvider) Name() string { return "always" }
@@ -126,14 +126,14 @@ func TestLoopMaxIterations(t *testing.T) {
 	}
 }
 
-// 审批拒绝：写类工具被 Approve 拒绝 → 不执行、不写盘，拒绝作观察回灌，最终调 finish_task 退出。
+// 审批拒绝：写类工具被 Approve 拒绝 → 不执行、不写盘，拒绝作观察回灌，最终自然终止退出。
 func TestLoopApprovalReject(t *testing.T) {
 	dir := t.TempDir()
 	reg := NewRegistry()
 	RegisterDefaultTools(reg, dir)
 	mock := &MockProvider{Responses: []Message{
 		{ToolCalls: []ToolCall{{ID: "w1", Type: "function", Function: FunctionCall{Name: "write_file", Arguments: `{"path":"out.txt","content":"DATA"}`}}}},
-		{ToolCalls: []ToolCall{{ID: "f1", Type: "function", Function: FunctionCall{Name: "finish_task", Arguments: `{"result":"放弃写文件"}`}}}},
+		{Content: "放弃写文件"},
 	}}
 	var approvedTools []string
 	loop := &Loop{Provider: mock, Registry: reg, MaxIterations: 5,
@@ -167,7 +167,7 @@ func TestLoopApprovalApprove(t *testing.T) {
 	RegisterDefaultTools(reg, dir)
 	mock := &MockProvider{Responses: []Message{
 		{ToolCalls: []ToolCall{{ID: "w1", Type: "function", Function: FunctionCall{Name: "write_file", Arguments: `{"path":"out.txt","content":"DATA"}`}}}},
-		{ToolCalls: []ToolCall{{ID: "f1", Type: "function", Function: FunctionCall{Name: "finish_task", Arguments: `{"result":"已写入文件"}`}}}},
+		{Content: "已写入文件"},
 	}}
 	loop := &Loop{Provider: mock, Registry: reg, MaxIterations: 5,
 		Approve: func(ctx context.Context, tc ToolCall) (bool, string) { return true, "" }}
@@ -187,7 +187,7 @@ func TestLoopApprovalSkipsReadOnly(t *testing.T) {
 	RegisterDefaultTools(reg, dir)
 	mock := &MockProvider{Responses: []Message{
 		{ToolCalls: []ToolCall{{ID: "r1", Type: "function", Function: FunctionCall{Name: "read_file", Arguments: `{"path":"x.txt"}`}}}},
-		{ToolCalls: []ToolCall{{ID: "f1", Type: "function", Function: FunctionCall{Name: "finish_task", Arguments: `{"result":"已读取文件"}`}}}},
+		{Content: "已读取文件"},
 	}}
 	called := false
 	loop := &Loop{Provider: mock, Registry: reg, MaxIterations: 5,
@@ -204,7 +204,7 @@ func TestLoopApprovalSkipsReadOnly(t *testing.T) {
 func TestLoopContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	mock := &MockProvider{Responses: []Message{{ToolCalls: []ToolCall{{ID: "f1", Type: "function", Function: FunctionCall{Name: "finish_task", Arguments: `{"result":"x"}`}}}}}}
+	mock := &MockProvider{Responses: []Message{{Content: "已取消"}}}
 	loop := &Loop{Provider: mock, Registry: NewRegistry(), MaxIterations: 5}
 	if _, err := loop.Run(ctx, "task", nil); err == nil {
 		t.Error("已取消的 ctx 应使 Run 返回错误")

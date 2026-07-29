@@ -8,7 +8,7 @@ package agent
 //   5.4  find_files_by_pattern glob ** 递归匹配（验证 glob.go 的 ** 语义）
 //   5.5  MCP go-sdk 端到端（进程内 server + 真实 LLM 调用 mcp.test.echo）
 //   5.6  Skills L1 注入 + L2 load_skill（用 config/skills/emoji-icons 真实技能）
-//   5.7  多 agent 委托（coordinator → coder，delegate_task + finish_task）
+//   5.7  多 agent 委托（coordinator → coder，delegate_task）
 
 import (
 	"context"
@@ -246,12 +246,12 @@ func TestLiveMultiAgent(t *testing.T) {
 	RegisterDefaultTools(reg, root)
 
 	// 编排树：coordinator（协调器）→ coder（编码者）
-	// coder 用工具白名单限定只能用 write_file/read_file（finish_task 由 runSubAgent 自动注册），
+	// coder 用工具白名单限定只能用 write_file/read_file，
 	// 避免继承 delegate_task 导致递归委托死循环。
 	tree := NewAgentTree(
 		&SubAgent{Name: "coordinator", Description: "协调器，分配任务给子 agent"},
 		&SubAgent{Name: "coder", Description: "编码者，创建文件",
-			System:  "你是编码专家，用 write_file 完成文件创建任务，完成后用 finish_task 工具报告结果。",
+			System:  "你是编码专家，用 write_file 完成文件创建任务，完成后报告结果。",
 			Tools:   []string{"write_file", "read_file"},
 			MaxIter: 6},
 	)

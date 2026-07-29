@@ -550,11 +550,9 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 				l.commitMessage = result
 			}
 
-			// ★ finish_task：子 agent 报告完成（主 Loop 中作兜底；正常完成靠自然输出）
-			if tc.Function.Name == "finish_task" {
-				l.finishResult = &result
-				l.emit(Event{Type: EventDone, Content: result, DoneReason: "finish_task"})
-				return msgs, nil
+			// 不再用于区分阶段/完成，仅记录 commit message 字符串
+			if tc.Function.Name == "generate_commit_message" {
+				l.commitMessage = result
 			}
 		}
 		} // end else (serial tool execution)

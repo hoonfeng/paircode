@@ -177,9 +177,6 @@ func summarizeToolResult(toolName, content string) string {
 		}
 		return "测试完成"
 	case "update_tasks":
-		return "更新了任务列表"
-	case "finish_task":
-		return "提交了完成结果"
 	case "web_debug":
 		return "已打开页面验证"
 	case "codegraph_search", "codegraph_function", "codegraph_impact":

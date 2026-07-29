@@ -190,10 +190,9 @@ func TestLoopRunCompacts(t *testing.T) {
 			ToolCalls: []ToolCall{{ID: "c" + strconv.Itoa(i), Type: "function",
 				Function: FunctionCall{Name: "echo", Arguments: "{\"x\":\"padding content to grow the running context window steadily\"}"}}}})
 	}
-	// 第 19 轮追加 finish_task — loop 退出。
+	// 第 19 轮自然终止 — loop 退出。
 	responses = append(responses, Message{Role: RoleAssistant,
-		ToolCalls: []ToolCall{{ID: "f1", Type: "function",
-			Function: FunctionCall{Name: "finish_task", Arguments: `{"result":"压缩测试完成"}`}}}})
+		Content: "压缩测试完成"})
 	var compacted, done int
 	l := &Loop{
 		Provider: &MockProvider{Responses: responses}, Registry: reg,

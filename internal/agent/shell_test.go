@@ -37,7 +37,7 @@ func TestRunBackground(t *testing.T) {
 }
 
 // TestRunCommandInLoop run_command 执行完毕后循环继续调用 LLM 的下一轮。
-// 验证：工具结果正确回灌 → 第 2 轮 LLM 调用 → finish_task 触发。
+// 验证：工具结果正确回灌 → 第 2 轮 LLM 自然终止。
 func TestRunCommandInLoop(t *testing.T) {
 	dir := t.TempDir()
 	reg := NewRegistry()
@@ -45,7 +45,7 @@ func TestRunCommandInLoop(t *testing.T) {
 
 	mock := &MockProvider{Responses: []Message{
 		{ToolCalls: []ToolCall{{ID: "c1", Type: "function", Function: FunctionCall{Name: "run_command", Arguments: `{"command":"echo RUNCMD_OK"}`}}}},
-		{ToolCalls: []ToolCall{{ID: "f1", Type: "function", Function: FunctionCall{Name: "finish_task", Arguments: `{"result":"done"}`}}}},
+		{Content: "done"},
 	}}
 	var events []Event
 	loop := &Loop{Provider: mock, Registry: reg, System: "test-loop-run-cmd", MaxIterations: 5,
@@ -56,7 +56,7 @@ func TestRunCommandInLoop(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 
-	// ★ 核心验证：LLM 应被调用了 2 次（工具结果→下一轮→finish_task）
+	// ★ 核心验证：LLM 应被调用了 2 次（工具结果→下一轮→自然终止）
 	// 如果这里失败，说明 run_command 执行完后 loop 没有继续调用 LLM
 	if mock.Calls() != 2 {
 		t.Errorf("LLM 应调用 2 次（工具结果→下一轮），得 %d", mock.Calls())
@@ -76,8 +76,8 @@ func TestRunCommandInLoop(t *testing.T) {
 
 	// 验证末事件为 done
 	last := events[len(events)-1]
-	if last.Type != EventDone || last.DoneReason != "finish_task" {
-		t.Errorf("末事件应为 EventDone(finish_task)，得 type=%s reason=%s", last.Type, last.DoneReason)
+	if last.Type != EventDone || last.DoneReason != "task_complete" {
+		t.Errorf("末事件应为 EventDone(task_complete)，得 type=%s reason=%s", last.Type, last.DoneReason)
 	}
 }
 
@@ -92,9 +92,8 @@ func TestRunCommandContextCancelled(t *testing.T) {
 
 	mock := &MockProvider{Responses: []Message{
 		{ToolCalls: []ToolCall{{ID: "c1", Type: "function", Function: FunctionCall{Name: "run_command", Arguments: `{"command":"ping -n 10 127.0.0.1"}`}}}},
-		{ToolCalls: []ToolCall{{ID: "f1", Type: "function", Function: FunctionCall{Name: "finish_task", Arguments: `{"result":"done"}`}}}},
+		{Content: "done"},
 	}}
-
 	loop := &Loop{Provider: mock, Registry: reg, System: "test-cancel", MaxIterations: 5}
 
 	go func() {
