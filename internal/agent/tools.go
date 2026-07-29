@@ -258,6 +258,9 @@ func (r *Registry) AllToolMeta() []ToolMeta {
 		metas = append(metas, ToolMeta{
 			Name:        t.Name,
 			Description: t.Description,
+			Category:    t.Category,
+			UsageGuide:  t.UsageGuide,
+			Enabled:     t.Enabled,
 			ReadOnly:    t.ReadOnly,
 		})
 	}

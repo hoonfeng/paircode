@@ -153,6 +153,21 @@ func startWebUI(port int) {
 	if root := core.Root(); root != "" {
 		agent.MCPProjectConfigPath = filepath.Join(root, ".pair", "mcp.json")
 	}
+
+	// ★ 启动时初始化参考注册表，供 /api/tools 查询工具列表（无需先启动对话）
+	if root := core.Root(); root != "" {
+		initReg := agent.NewRegistry()
+		agent.RegisterDefaultTools(initReg, root)
+		agent.RegisterCommitMessageTool(initReg)
+		agenttools.RegisterManagementTools(initReg, root)
+		// 自动初始化 .pair/tools.json（不存在则创建）
+		agent.LoadWorkspaceToolConfig(initReg, root)
+		lastRegMu.Lock()
+		lastReg = initReg
+		lastRegMu.Unlock()
+		log.Printf("[WebUI] 参考工具注册表已初始化（%d 个工具）", len(lastReg.AllToolMeta()))
+	}
+
 	// 工作区文件夹变更时同步到 agent 路径解析
 	core.OnSyncWorkspace = func(primaryChanged bool) {
 		agent.WorkspaceRoots = core.Folders
