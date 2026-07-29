@@ -6,15 +6,15 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
+
 	"path/filepath"
 	"regexp"
-	"runtime"
+
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
+
 	"time"
 )
 
@@ -353,6 +353,7 @@ func (r *Registry) Execute(ctx context.Context, name, argsJSON string) (string, 
 // read_file / write_file / edit_file / list_files / run_command。
 func RegisterDefaultTools(r *Registry, root string) {
 	eh := newEditHistory() // ★ v2: 编辑行号偏移追踪器
+	bg := &bgRegistry{procs: map[int]*bgProc{}} // 共享后台进程注册表
 	r.Register(&Tool{
 		Name:        "read_file",
 		UsageGuide:  "读取文件内容，限工作区内路径。大文件用 offset+limit 分页读取，避免撑爆上下文。二进制文件会自动拒绝读取，请改用 inspect_binary。比 os.ReadFile 更安全（路径越界拦截+二进制保护）。",
@@ -627,7 +628,7 @@ func RegisterDefaultTools(r *Registry, root string) {
 	})
 	r.Register(&Tool{
 		Name:             "run_command",
-		UsageGuide:       "同步执行 shell 命令，120s 超时自动终止。适用于构建、编译、测试、文件查询等短命令。禁止用于长期进程（dev server/npm run dev/watch 模式）——请改用 run_background。比直接手动执行更安全（路径越界拦截+输出截断 16KB+UTF-8 编码统一）。",
+		UsageGuide:       "同步执行 shell 命令，120s 超时自动终止（内部后台执行，不阻塞 agent）。适用于构建、编译、测试、文件查询等短命令。禁止用于长期进程（dev server/npm run dev/watch 模式）——请改用 run_background。比直接手动执行更安全（路径越界拦截+输出截断 16KB+UTF-8 编码统一）。",
 		Description:      "同步执行一条 shell 命令并返回输出。适用于构建、编译、测试、文件查询等短命令（几秒内完成）。\n禁止用于以下场景（会阻塞 agent）：启动 dev server、npm run dev、go run 启动服务、watch 模式、tcp 监听、任何需保持运行的进程。此类命令请改用 run_background。",
 		Parameters:       objSchema(props{"command": strProp("要执行的命令"), "cwd": strProp("可选工作目录（工作区内，省略=根）")}, "command"),
 		RequiresApproval: true,
@@ -636,7 +637,7 @@ func RegisterDefaultTools(r *Registry, root string) {
 			if strings.TrimSpace(command) == "" {
 				return "", fmt.Errorf("command 不能为空")
 			}
-			// ★ 信号监听已移除：不再阻止杀死自身进程或运行 companion
+			// ★ 通过 bg.start() 后台启动命令（不阻塞 loop），然后轮询等待完成。
 			dir := root
 			if cwd := argStr(args, "cwd"); cwd != "" {
 				var err error
@@ -644,26 +645,46 @@ func RegisterDefaultTools(r *Registry, root string) {
 					return "", err
 				}
 			}
-			cctx, cancel := context.WithTimeout(ctx, 120*time.Second)
-			defer cancel()
-			// chcp 65001 统一 UTF-8 输出（避免中文乱码，同终端面板）。
-			c := exec.CommandContext(cctx, "cmd", "/C", "chcp 65001 >nul & "+command)
-			c.Dir = dir
-			// ★ 隐藏 cmd 窗口（不弹窗）但不隔离进程组，让子进程能被正常杀死。
-			if runtime.GOOS == "windows" {
-				if c.SysProcAttr == nil {
-					c.SysProcAttr = &syscall.SysProcAttr{}
+			id, err := bg.start(command, dir)
+			if err != nil {
+				return "", err
+			}
+			p := bg.get(id)
+			if p == nil {
+				return "", fmt.Errorf("内部错误：后台进程创建后丢失")
+			}
+			// 轮询等待完成（带超时和 ctx 中断），不阻塞 loop 线程。
+			deadline := time.After(120 * time.Second)
+			ticker := time.NewTicker(100 * time.Millisecond)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					// 上下文取消时杀死子进程，防止残留
+					if p.cmd != nil && p.cmd.Process != nil {
+						killProcessTree(p.cmd.Process.Pid)
+					}
+					out, _, _ := p.snapshot()
+					return capOutput(out, 16000) + "\n[已中断: " + ctx.Err().Error() + "]", nil
+				case <-deadline:
+					killProcessTree(p.cmd.Process.Pid)
+					out, _, _ := p.snapshot()
+					return capOutput(out, 16000) + "\n[超时 120s 已终止]", nil
+				case <-ticker.C:
+					out, done, exitErr := p.snapshot()
+					if done {
+						res := capOutput(out, 16000)
+						if exitErr != "" {
+							res += "\n[退出: " + exitErr + "]"
+						}
+						// 清理已完成的进程记录
+						bg.mu.Lock()
+						delete(bg.procs, id)
+						bg.mu.Unlock()
+						return res, nil
+					}
 				}
-				c.SysProcAttr.HideWindow = true
 			}
-			out, err := c.CombinedOutput()
-			res := capOutput(string(out), 16000)
-			if cctx.Err() == context.DeadlineExceeded {
-				res += "\n[超时 120s 已终止]"
-			} else if err != nil {
-				res += "\n[退出: " + err.Error() + "]"
-			}
-			return res, nil
 		},
 	})
 
@@ -727,7 +748,7 @@ func RegisterDefaultTools(r *Registry, root string) {
 	registerGitTools(r, root)                 // git_status / git_diff / git_log / git_show / git_blame / git_add / ...（见 git.go）
 	registerWebTools(r)                       // web_fetch / web_search（联网，见 web.go）
 	// update_plan 仅在自主模式外层注册（RegisterPlanOnlyTools），非自主模式不暴露
-	registerShellTools(r, root)               // run_background / read_output / kill_process（后台命令，见 shell.go）
+	registerShellTools(r, bg, root)               // run_background / read_output / kill_process（后台命令，见 shell.go）
 	registerMemoryTools(r, root)              // memory_write/read/list/search（跨会话记忆，见 memory.go）
 	registerVerifyTools(r, root)              // memory_verify / project_info_verify（过期验证，见 verify_tools.go）
 	// find_files_by_pattern 已合并到 search_files（增加 language 参数），不再独立注册。

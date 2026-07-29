@@ -95,11 +95,8 @@ func (bg *bgRegistry) get(id int) *bgProc {
 	defer bg.mu.Unlock()
 	return bg.procs[id]
 }
-
-// registerShellTools 注册后台命令工具（3 个工具共享一份 bgRegistry）。
-func registerShellTools(r *Registry, root string) {
-	bg := &bgRegistry{procs: map[int]*bgProc{}}
-
+func registerShellTools(r *Registry, bg *bgRegistry, root string) {
+	// run_background / read_output / kill_process — 3 个后台命令工具共享同一份 bgRegistry。
 	r.Register(&Tool{
 		Name: "run_background",
 		UsageGuide: "后台启动一条长命令，不阻塞 agent 循环。用于 dev server、npm run dev/watch 模式、调试服务、TCP 监听——这些场景只能用此工具，不可用 run_command。返回进程 id，之后用 read_output/kill_process 控制。比 run_command 更合适的长命令：run_background（不阻塞）+ read_output（分阶段读）+ kill_process（手动停止）。",
