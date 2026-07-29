@@ -759,8 +759,7 @@ func RegisterDefaultTools(r *Registry, root string) {
 	registerMemoryTools(r, root)              // memory_write/read/list/search（跨会话记忆，见 memory.go）
 	registerVerifyTools(r, root)              // memory_verify / project_info_verify（过期验证，见 verify_tools.go）
 	// find_files_by_pattern 已合并到 search_files（增加 language 参数），不再独立注册。
-	registerFindSymbolTool(r, root)           // find_symbol（符号定位，见 symbolfinder.go）
-	registerFileSymbolTools(r, root)          // list_exported_symbols / get_file_dependencies / check_impact / find_circular_deps（见 filesymbol.go）
+	registerTaskTools(r, root)                // task_create/update/list/delete/summary（持久化任务追踪，见 task_tools.go）
 	registerTaskTools(r, root)                // task_create/update/list/delete/summary（持久化任务追踪，见 task_tools.go）
 	registerProjectInfoTools(r, root)        // project_info_write/read/list/search/delete/explore（项目知识库，见 projectinfo.go）
 	registerBinaryTools(r, root)             // inspect_binary / write_binary（二进制读写，见 binary.go）

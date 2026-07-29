@@ -133,6 +133,10 @@ func (s *SQLiteDB) migrate() error {
 			UNIQUE(source_id, target_id, kind)
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_relations_source ON code_relations(source_id)`,
+		`CREATE TABLE IF NOT EXISTS file_index (
+			file_path TEXT PRIMARY KEY,
+			mtime TEXT NOT NULL
+		)`,
 		`CREATE TABLE IF NOT EXISTS evals (
 			id TEXT PRIMARY KEY,
 			task TEXT DEFAULT '',

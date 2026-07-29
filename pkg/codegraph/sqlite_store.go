@@ -115,9 +115,34 @@ func (s *SQLiteStore) Save(g *Graph) error {
 	return nil
 }
 
-// SaveIndex 文件索引暂不存入 SQLite（全量构建时由 builder 层记录 mtime）。
+// SaveIndex 将文件索引写入 SQLite 的 file_index 表。
 func (s *SQLiteStore) SaveIndex(index map[string]time.Time) error {
-	return nil
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("开始事务失败: %w", err)
+	}
+	defer tx.Rollback()
+
+	// 清空旧索引
+	if _, err := tx.Exec(`DELETE FROM file_index`); err != nil {
+		return err
+	}
+
+	// 逐条插入
+	stmt, err := tx.Prepare(`INSERT INTO file_index (file_path, mtime) VALUES (?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for path, mt := range index {
+		stmt.Exec(path, mt.Format(time.RFC3339Nano))
+	}
+
+	return tx.Commit()
 }
 
 // Load 从 SQLite 读取全部实体和关系，重建 Graph。
@@ -218,9 +243,31 @@ func (s *SQLiteStore) Delete() error {
 	return nil
 }
 
-// LoadIndex 返回空索引（全量构建模式下不需要文件索引）。
+// LoadIndex 从 SQLite 的 file_index 表加载文件索引。
 func (s *SQLiteStore) LoadIndex() (map[string]time.Time, error) {
-	return make(map[string]time.Time), nil
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	index := make(map[string]time.Time)
+	rows, err := s.db.Query(`SELECT file_path, mtime FROM file_index`)
+	if err != nil {
+		// 表不存在或查询失败，返回空索引
+		return index, nil
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var filePath, mtimeStr string
+		if err := rows.Scan(&filePath, &mtimeStr); err != nil {
+			continue
+		}
+		mt, err := time.Parse(time.RFC3339Nano, mtimeStr)
+		if err != nil {
+			continue
+		}
+		index[filePath] = mt
+	}
+	return index, nil
 }
 
 // lastDot 返回字符串中最后一个 '.' 的位置（用于拆分 FQN）。

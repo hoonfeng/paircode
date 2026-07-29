@@ -104,7 +104,18 @@ func resetCodeGraph() {
 
 // needRebuild 轻量检测：检查是否有 .go 源文件比 graph.json 更新。
 // 只扫描主要源目录（cmd/ internal/ pkg/），不反序列化图谱文件。
+// 使用 SQLiteStore 时，检查 file_index 表是否有记录。
 func needRebuild(root string) bool {
+	// SQLiteStore 模式：检查 file_index 表是否有记录即可
+	if cgDB != nil {
+		var count int
+		err := cgDB.QueryRow(`SELECT COUNT(*) FROM file_index`).Scan(&count)
+		if err != nil || count == 0 {
+			return true // 需要初始构建
+		}
+		return false // 有索引，让 IncrementalBuild 内部检测变更
+	}
+
 	graphPath := filepath.Join(root, ".pair", "codegraph", "graph.json")
 	graphInfo, err := os.Stat(graphPath)
 	if err != nil {

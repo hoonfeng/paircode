@@ -112,8 +112,6 @@ func registerOuterExplorationTools(r *Registry, root string) {
 	// ── 搜索工具（search_content, search_files, find_files_by_pattern）──
 	registerSearchTools(r, root)
 
-	// ── 文件符号工具（find_symbol, get_file_symbols, 等）──
-	registerFileSymbolTools(r, root)
 
 	// ── 代码知识图谱只读工具（所有 codegraph 工具，不含 codegraph_build）──
 	r.Register(&Tool{
