@@ -33,6 +33,9 @@ config/models.json
 tmp/
 _temp/
 
+# Frontend dependencies (not committed)
+node_modules/
+
 # Reference code (not part of the build)
 _codegraph_ref/
 
