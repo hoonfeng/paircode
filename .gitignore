@@ -31,6 +31,7 @@ config/models.json
 
 # Temporary files
 tmp/
+_temp/
 
 # Reference code (not part of the build)
 _codegraph_ref/

@@ -1,15 +1,46 @@
 package agent
 
 import (
+	"image"
+	"image/color"
+	"image/png"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
 
+// makeTestPNG 生成一张 40x30 的测试图片（红/绿/蓝三分区），返回路径。
+func makeTestPNG(t *testing.T) string {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 40, 30))
+	// 左 1/3 红、中 1/3 绿、右 1/3 蓝
+	for y := 0; y < 30; y++ {
+		for x := 0; x < 40; x++ {
+			switch {
+			case x < 13:
+				img.Set(x, y, color.RGBA{255, 0, 0, 255})
+			case x < 27:
+				img.Set(x, y, color.RGBA{0, 255, 0, 255})
+			default:
+				img.Set(x, y, color.RGBA{0, 0, 255, 255})
+			}
+		}
+	}
+	path := filepath.Join(t.TempDir(), "test.png")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if err := png.Encode(f, img); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
 func TestAnalyzeImage(t *testing.T) {
-	// 使用项目根目录的图片做端到端测试
-	imgPath := filepath.Join("..", "..", "..", "1afd3ed5d7bc107f83241f13b15ead0c.jpg")
+	imgPath := makeTestPNG(t)
 	result, err := analyzeImage(imgPath, "high", 8)
 	if err != nil {
 		t.Fatalf("analyzeImage 失败: %v", err)
@@ -29,7 +60,7 @@ func TestAnalyzeImage(t *testing.T) {
 }
 
 func TestAnalyzeImageLowDetail(t *testing.T) {
-	imgPath := filepath.Join("..", "..", "..", "1afd3ed5d7bc107f83241f13b15ead0c.jpg")
+	imgPath := makeTestPNG(t)
 	result, err := analyzeImage(imgPath, "low", 5)
 	if err != nil {
 		t.Fatalf("analyzeImage (low) 失败: %v", err)

@@ -181,10 +181,13 @@ func TestRegistryDefinitions(t *testing.T) {
 		t.Errorf("read_file required = %v", req)
 	}
 	// 关键工具必须可见（覆盖各注册组）
+	// ★ 注：find_symbol/get_file_symbols → codegraph_search/codegraph_file_structure；
+	//   find_files_by_pattern → search_files（增加 language 参数）；
+	//   task_create → update_tasks。均已合并/更名，这里断言替代后的工具。
 	mustHave := []string{
 		"read_file", "write_file", "edit_file", "multi_edit", "list_files", "run_command",
-		"git_status", "memory_write", "find_files_by_pattern", "find_symbol",
-		"get_file_symbols", "task_create",
+		"git_status", "memory_write", "search_files", "search_content",
+		"update_tasks", "codegraph_search", "codegraph_file_structure",
 		"project_info_write", "project_info_read", "inspect_binary", "binary_strings",
 		"debug_inject_log", "debug_run_capture", "debug_evaluate_session",
 	}

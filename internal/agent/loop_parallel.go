@@ -8,41 +8,21 @@ import (
 
 // canParallelize 判断工具调用列表是否可以并行执行：
 // - 2+ 个且全都是 ReadOnly → 直接并行（最快路径，无需预检）
-// - 2+ 个且无写入冲突 → 预检（审批）后并行执行
+// - 含任何非只读/需审批工具 → 保守退回串行（写操作涉及文件冲突与审批顺序，并行有风险）
 func canParallelize(calls []ToolCall, reg *Registry) bool {
 	if len(calls) < 2 {
 		return false
 	}
-	// 全部 ReadOnly + 无需审批 → 直接并行（最快路径）
-	allReadOnly := true
 	for _, tc := range calls {
 		t, ok := reg.Get(tc.Function.Name)
 		if !ok {
 			return false
 		}
 		if !t.ReadOnly || t.RequiresApproval {
-			allReadOnly = false
-			break
+			return false // 含写/需审批工具 → 串行（保守安全）
 		}
 	}
-	if allReadOnly {
-		return true
-	}
-
-	// 非只读工具：需要审批预处理，且不能有文件写入冲突
-	// （同一文件不能同时被多个写工具操作）
-	targetFiles := make(map[string]string) // 文件路径 → 工具名
-	for _, tc := range calls {
-		t, ok := reg.Get(tc.Function.Name)
-		if !ok {
-			return false
-		}
-		// 有 RequiresApproval 的工具需要预检
-		if t.RequiresApproval {
-			continue // 审核通过后可并行执行（不同文件时安全）
-		}
-	}
-	return len(targetFiles) < len(calls) // 有冲突时退回串行
+	return true
 }
 
 // tryParallelExecute 尝试并行执行工具调用。

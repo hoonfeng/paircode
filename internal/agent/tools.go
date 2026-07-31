@@ -759,8 +759,7 @@ func RegisterDefaultTools(r *Registry, root string) {
 	registerMemoryTools(r, root)              // memory_write/read/list/search（跨会话记忆，见 memory.go）
 	registerVerifyTools(r, root)              // memory_verify / project_info_verify（过期验证，见 verify_tools.go）
 	// find_files_by_pattern 已合并到 search_files（增加 language 参数），不再独立注册。
-	registerTaskTools(r, root)                // task_create/update/list/delete/summary（持久化任务追踪，见 task_tools.go）
-	registerTaskTools(r, root)                // task_create/update/list/delete/summary（持久化任务追踪，见 task_tools.go）
+	registerTaskTools(r, root)                // update_tasks（全量替换式任务追踪，替代旧 task_create/update/list/delete/summary，见 task_tools.go）
 	registerProjectInfoTools(r, root)        // project_info_write/read/list/search/delete/explore（项目知识库，见 projectinfo.go）
 	registerBinaryTools(r, root)             // inspect_binary / write_binary（二进制读写，见 binary.go）
 	registerBinaryRETools(r, root)           // binary_strings/find/patch/info/hash/entropy（二进制正则，见 binary_re.go）
@@ -923,35 +922,40 @@ func resolvePath(root, p string) (string, error) {
 		return "", fmt.Errorf("path 不能为空")
 	}
 	full := p
+	// ★ 相对路径一律相对于 primary root 解析（读取/写入落点在 root 内），
+	//   避免落到进程 cwd（测试/多目录运行时 cwd ≠ 工作区根，会写错位置）。
+	if !filepath.IsAbs(full) {
+		full = filepath.Join(root, full)
+	}
 	full = filepath.Clean(full)
 
-	// 先查 primary root
-	rel, err := filepath.Rel(root, full)
-	if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		// 路径语法上属于 primary root → 确认真实存在于此
-		//（避免 `goui/main.go` 被拼成 `gou-ide/goui/main.go` 但实际应在 `../goui/`）
-		if pathExists(full) || parentDirExists(root, full) {
-			return full, nil
-		}
-		// 不存在于 primary root → 可能属于其他工作区根，继续查
-	}
-
-	// 再查其他工作区根目录（多根工作区支持）
+	// 归属检查：先查 primary root，再查其他工作区根（多根工作区支持）。
+	// 路径语法上属于某根 → 确认真实存在于此（避免 `goui/main.go` 被拼成
+	// `gou-ide/goui/main.go` 但实际应在 `../goui/`）。
+	roots := make([]string, 0, len(WorkspaceRoots)+1)
+	seen := map[string]bool{root: true}
+	roots = append(roots, root)
 	for _, wr := range WorkspaceRoots {
-		if wr == root {
-			continue
+		if !seen[wr] {
+			seen[wr] = true
+			roots = append(roots, wr)
 		}
-		rel, err := filepath.Rel(wr, full)
+	}
+	for _, r := range roots {
+		rel, err := filepath.Rel(r, full)
 		if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			// 路径语法上属于此工作区根 → 确认真实存在
-			if pathExists(full) || parentDirExists(wr, full) {
+			if pathExists(full) || parentDirExists(r, full) {
 				return full, nil
 			}
 		}
 	}
 
-	// 兜底：文件尚未在任何根下创建 → 默认用 primary root（新建文件归宿）
-	return full, nil
+	// 兜底：文件尚未在任何根下创建 → 默认用 primary root（新建文件归宿）。
+	// ★ 但必须确认 full 仍在 primary root 内（越界路径一律拒绝）。
+	if rel, err := filepath.Rel(root, full); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return full, nil
+	}
+	return "", fmt.Errorf("路径 %q 超出工作区范围（root: %s）", p, root)
 }
 // capOutput 截断过长输出（保头 3/4 + 尾 1/4），防工具结果撑爆上下文。
 func capOutput(s string, limit int) string {
