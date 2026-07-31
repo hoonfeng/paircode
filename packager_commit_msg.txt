@@ -1,7 +1,0 @@
-refactor: packager as configurable step engine
-
-- Rewrite as general-purpose step engine driven by packager.json
-- All pipeline steps defined in config with template variables
-- Platform filtering (os), error ignoring (ignoreError), env vars (env)
-- Two built-in step types: type=build-go, type=package
-- Upgraded packager.json format: vars + pipeline object array
