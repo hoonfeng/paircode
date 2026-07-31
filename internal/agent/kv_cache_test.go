@@ -22,9 +22,12 @@ func TestKVCachePrefixStability(t *testing.T) {
 	// ── 辅助函数：生成稳定的系统提示词（不含 time.Now()）──
 	stableSystem := DefaultSystemPrompt([]string{"/test/project"})
 
-	// 检查 CacheBoundary 是否存在于 DefaultSystemPrompt 中
-	if !strings.Contains(stableSystem, CacheBoundary) {
-		t.Error("DefaultSystemPrompt 应包含 CacheBoundary，已缺失！")
+	// 检查 CacheBoundary 由组装函数 ComposeSystemPrompt 统一添加（DefaultSystemPrompt 本身纯净，不含 boundary）
+	if CacheBoundary == "" || !strings.Contains(ComposeSystemPrompt(stableSystem, "dynamic"), CacheBoundary) {
+		t.Error("ComposeSystemPrompt 应包含 CacheBoundary！已缺失！")
+	}
+	if strings.Contains(stableSystem, CacheBoundary) {
+		t.Error("DefaultSystemPrompt 不应自带 CacheBoundary（应由 ComposeSystemPrompt 统一添加，避免双边界）")
 	}
 
 	// ── 场景 1：同次会话内，连续迭代的消息前缀稳定性 ──
@@ -85,9 +88,12 @@ func TestSystemPromptVariance(t *testing.T) {
 		t.Logf("DefaultSystemPrompt 两次调用结果一致 ✓ (len=%d)", len(sys1))
 	}
 
-	// 验证 CacheBoundary 存在
-	if !strings.Contains(sys1, CacheBoundary) {
-		t.Error("DefaultSystemPrompt 应包含 CacheBoundary")
+	// 验证组装后包含唯一 CacheBoundary（boundary 由 ComposeSystemPrompt 添加）
+	if !strings.Contains(ComposeSystemPrompt(sys1, "dyn"), CacheBoundary) {
+		t.Error("ComposeSystemPrompt 应包含 CacheBoundary")
+	}
+	if strings.Contains(sys1, CacheBoundary) {
+		t.Error("DefaultSystemPrompt 不应自带 CacheBoundary（由 ComposeSystemPrompt 统一添加）")
 	}
 }
 
@@ -199,20 +205,20 @@ func TestSerializedMessagesPrefix(t *testing.T) {
 
 	t.Logf("跨轮次序列化前缀稳定性验证通过 ✓")
 
-	// ★ 关键检查点：对比完整 JSON 序列化的前缀
+	// ★ 关键检查点：对比"前 len(第1轮) 条消息"的 JSON 序列化前缀
+	// 注意：不能直接对完整数组做字节前缀对比——JSON 数组的元素分隔符（逗号）会让
+	// 追加元素后的数组在相同位置多一个逗号，产生误导性的"前缀不匹配"（预存测试缺陷）。
+	// 正确的前缀定义：round2 的前 len(round1) 条消息序列化后应与 round1 完全一致。
 	lastR1JSON, _ := json.Marshal(lastRound1)
-	r2FirstJSON, _ := json.Marshal(round2First)
+	r2PrefixJSON, _ := json.Marshal(round2First[:len(lastRound1)])
 
-	if len(r2FirstJSON) >= len(lastR1JSON) {
-		prefixMatch := string(r2FirstJSON[:len(lastR1JSON)]) == string(lastR1JSON)
-		if !prefixMatch {
-			t.Errorf("★★★★ 严重：第2轮请求的 JSON 序列化前缀与第1轮不匹配！\n"+
-				"这会导致 LLM API 的 KV 缓存完全失效！\n"+
-				"第1轮 JSON len=%d, 第2轮 JSON len=%d",
-				len(lastR1JSON), len(r2FirstJSON))
-		} else {
-			t.Logf("跨轮次 JSON 序列化前缀完全匹配 ✓ (len=%d)", len(lastR1JSON))
-		}
+	if string(r2PrefixJSON) == string(lastR1JSON) {
+		t.Logf("跨轮次 JSON 序列化前缀完全匹配 ✓ (len=%d)", len(lastR1JSON))
+	} else {
+		t.Errorf("★★★★ 严重：第2轮请求的前缀消息 JSON 与第1轮不匹配！\n"+
+			"这会导致 LLM API 的 KV 缓存完全失效！\n"+
+			"第1轮 JSON len=%d, 第2轮前缀 JSON len=%d",
+			len(lastR1JSON), len(r2PrefixJSON))
 	}
 }
 

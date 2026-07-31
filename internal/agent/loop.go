@@ -310,7 +310,7 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 		// 末尾已有同内容用户消息，跳过，防持久化后重复
 	} else {
 		// 时间戳注入用户消息（而非系统提示词），避免破坏 KV Cache 前缀命中。
-		timestamp := time.Now().Format("2006-01-02 15:04:05 MST (UTC-07:00)")
+		timestamp := time.Now().Format("2006-01-02 15:04:05 MST -07:00") // -07:00 由 Go 按本地时区实际偏移填充，避免硬编码与真实时区不符
 		taskWithTs := task + "\n\n**消息时间**: " + timestamp
 		msgs = append(msgs, Message{Role: RoleUser, Content: taskWithTs})
 	}
@@ -821,8 +821,15 @@ func DefaultSystemPrompt(roots []string) string {
 		"- 不确定时宁可声明完成并向用户汇报，让用户决定是否继续。\n" +
 "复杂或多步任务先用 update_tasks 列出细分任务，再逐步执行并更新状态。\n" +
 		"- run_command 阻塞预防：长期进程用 run_background（后台不阻塞）。\n" +
-		"- 完成后输出 Markdown 总结：改了哪些文件、如何验证、遗留问题。" +
-		CacheBoundary
+		"- 完成后输出 Markdown 总结：改了哪些文件、如何验证、遗留问题。\n"
+}
+
+// ComposeSystemPrompt 组装完整 system prompt：静态前缀 + 唯一 CacheBoundary + 动态后缀。
+// ★ 唯一 boundary 由本函数统一添加——调用方（如 cmd/companion 的 buildWebSystemPrompt）
+// 必须通过本函数组装，避免重复追加导致双 CACHE_BOUNDARY、或把可变内容误放进静态前缀。
+// DefaultSystemPrompt 本身不再自带 boundary（纯净静态内容，供 ComposeSystemPrompt 拼接）。
+func ComposeSystemPrompt(static, dynamic string) string {
+	return static + CacheBoundary + dynamic
 }
 
 // ProjectRules 读工作区根的项目约定，拼成系统提示附加段供 agent 遵守：

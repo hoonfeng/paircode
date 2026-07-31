@@ -14,19 +14,26 @@ import (
 //   - 不再丢弃 tool_call/tool_result 信息（v1 最大的问题）
 
 // keepFullRounds 最近保留完整交互的轮次数。
-const keepFullRounds = 2
+// 提高该值可减少压缩触发频率（压缩会牺牲跨轮次 KV 缓存前缀，频率越低命中率越高）。
+const keepFullRounds = 3
 
 // CondenseHistory 将已完成的旧轮次压缩，保留最近 keepFullRounds 轮完整交互。
 //
 // 输出结构：
 //
-//	[system(如有)] + [压缩摘要 user msg] + [最近2轮完整保留]
+//	[system(如有)] + [最近N轮完整交互] + [压缩摘要 user msg] + [当前用户消息]
 //
 // 压缩摘要格式：
 //
 //	【历史对话摘要】
 //	轮次1: 用户说"..."，助手使用了 read_file, edit_file，结果：已修改配置
 //	轮次2: 用户说"..."，助手使用了 run_command，结果：构建成功
+//
+// ★ KV 缓存权衡说明：
+// 压缩（删除/替换中段消息）必然导致消息数组位置错位，跨轮次首请求的缓存前缀
+// 会从被压缩位置断裂（这是压缩与 KV 前缀的根本矛盾）。为尽量缓解：
+//  1. 摘要作为回顾性 user 消息放在最近轮次之后、当前用户消息之前（不占位置 2）；
+//  2. keepFullRounds 提高至 3，降低压缩触发频率。
 func CondenseHistory(msgs []Message) []Message {
 	if len(msgs) < 4 {
 		return msgs
@@ -123,14 +130,21 @@ func CondenseHistory(msgs []Message) []Message {
 		summary.WriteString("\n")
 	}
 
-	// 构建结果：system 前缀 + 压缩摘要 + 保留的完整轮次
+	// 构建结果：system 前缀 + 最近 keepFullRounds 轮完整原始消息 + 压缩摘要（回顾） + 当前用户消息
+	// ★ 摘要放在最近轮次之后、当前用户消息之前：不挤占消息数组位置 2，
+	//   且语义连贯（先看最近交互，再看历史回顾，最后是当前任务）。
 	out := make([]Message, 0, len(userIdx)+2)
 	// 保留 system 消息（如有）
 	out = append(out, msgs[:userIdx[0]]...)
-	// 注入压缩摘要
+	// 保留最近 keepFullRounds 轮完整交互（原始消息，保持位置对齐）
+	lastUserIdx := userIdx[len(userIdx)-1] // 最后一个 user 消息 = 当前任务
+	if lastCompressUserPos < lastUserIdx {
+		out = append(out, msgs[lastCompressUserPos:lastUserIdx]...)
+	}
+	// 压缩摘要：回顾性 user 消息，位于当前用户消息之前
 	out = append(out, Message{Role: RoleUser, Content: summary.String()})
-	// 保留最近 keepFullRounds 轮完整交互
-	out = append(out, msgs[lastCompressUserPos:]...)
+	// 当前用户消息（及之后，如有）
+	out = append(out, msgs[lastUserIdx:]...)
 
 	return out
 }

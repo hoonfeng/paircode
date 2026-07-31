@@ -2184,16 +2184,31 @@ func buildSystemStaticPrefix() string {
 	}
 	b.WriteString(roleprompts.PhilosophyPrompt())
 	b.WriteString(agent.SelfManagementPrompt())
-	// CACHE_BOUNDARY 分隔静态前缀与动态后缀
-	b.WriteString(agent.CacheBoundary)
+	// 注意：不在此追加 CacheBoundary——唯一 boundary 由 ComposeSystemPrompt 统一添加，
+	// 确保 SystemInstructions/Philosophy 等静态内容全部位于 boundary 之前（同一静态前缀内）。
 	systemStaticPrefixCache.key = k
 	systemStaticPrefixCache.prefix = b.String()
 	return systemStaticPrefixCache.prefix
 }
 
+// buildWebSystemDynamicCache 缓存 buildWebSystemDynamic 的输出（30s TTL）。
+// skills 列表/知识库/项目环境等低频变化，缓存避免每次 Loop 重建重复扫描文件系统，
+// 从而让 system 动态后缀在同一配置下保持稳定（减少 KV 缓存前缀断裂点漂移）。
+var buildWebSystemDynamicCache struct {
+	mu  sync.Mutex
+	ts  time.Time
+	val string
+}
+
 // buildWebSystemDynamic 构建 system prompt 动态后缀（CACHE_BOUNDARY 之后）。
-// 包括 skills、项目知识库、时间戳等会话特定内容。
+// 包括 skills、项目知识库、项目环境等会话特定内容。
 func buildWebSystemDynamic() string {
+	buildWebSystemDynamicCache.mu.Lock()
+	defer buildWebSystemDynamicCache.mu.Unlock()
+	if buildWebSystemDynamicCache.val != "" && time.Since(buildWebSystemDynamicCache.ts) < 30*time.Second {
+		return buildWebSystemDynamicCache.val
+	}
+
 	var b strings.Builder
 	root := core.Root()
 	b.WriteString(skills.Prompt())
@@ -2230,13 +2245,17 @@ func buildWebSystemDynamic() string {
 		}
 	}
 	// 时间戳已移至用户消息内（Loop.Run 中注入），保持系统提示词缓存前缀稳定。
-	return b.String()
+	val := b.String()
+	buildWebSystemDynamicCache.ts = time.Now()
+	buildWebSystemDynamicCache.val = val
+	return val
 }
 
 // buildWebSystemPrompt 构建完整系统提示词（桌面和 web 端共享）。
-// 使用 CACHE_BOUNDARY 分隔静态前缀与动态后缀，最大化 LLM KV Cache 命中率。
+// 使用唯一的 CACHE_BOUNDARY 分隔静态前缀与动态后缀，最大化 LLM KV Cache 命中率。
+// ★ 通过 ComposeSystemPrompt 统一添加 boundary，避免双边界/漏边界。
 func buildWebSystemPrompt() string {
-	return buildSystemStaticPrefix() + buildWebSystemDynamic()
+	return agent.ComposeSystemPrompt(buildSystemStaticPrefix(), buildWebSystemDynamic())
 }
 
 // buildWebProvider 构建 LLM Provider（桌面和 web 端共享）。

@@ -15,7 +15,21 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
+)
+
+// ── 会话连贯性上下文 TTL 缓存 ──────────────────────────────
+// BuildResumeContext 每次新对话都会重建 system 动态后缀（含记忆召回/Git 状态/任务进度等），
+// 同一对话连续轮次间的任何内容抖动都会让 KV 缓存前缀从 system 尾部断裂。
+// 这里对输出做短 TTL 缓存（同 convID+roots，60s 内复用），显著降低断裂频率。
+
+var (
+	resumeCtxCacheMu   sync.Mutex
+	resumeCtxCacheKey  string
+	resumeCtxCacheVal  string
+	resumeCtxCacheAt   time.Time
+	resumeCtxCacheTTL  = 60 * time.Second
 )
 
 // ── 会话连贯性上下文 ─────────────────────────────────────────
@@ -855,6 +869,18 @@ func buildCodeGraphStats() string {
 // 应在 buildWebSystemDynamic() 中调用，作为系统提示的动态后缀。
 // 仅当对话有历史（非首次对话）时返回非空。
 func BuildResumeContext(convID, currentTask string, history []Message, store MessageStoreReader, roots []string) string {
+	// ★ TTL 缓存：同一对话（convID+roots）在 TTL 内复用输出，
+	//   避免每轮新对话重建 system 动态后缀导致 KV 缓存前缀从尾部频繁断裂。
+	cacheKey := fmt.Sprintf("%s|%s", convID, strings.Join(roots, "|"))
+	resumeCtxCacheMu.Lock()
+	if resumeCtxCacheKey == cacheKey && time.Since(resumeCtxCacheAt) < resumeCtxCacheTTL {
+		val := resumeCtxCacheVal
+		resumeCtxCacheMu.Unlock()
+		return val
+	}
+	resumeCtxCacheMu.Unlock()
+
+	var result string
 	if len(history) == 0 {
 		// 新对话：注入工作区结构概览 + 自动召回记忆 + Git 状态 + 代码图谱 + 构建状态
 		var b strings.Builder
@@ -883,12 +909,20 @@ func BuildResumeContext(convID, currentTask string, history []Message, store Mes
 			b.WriteString("\n\n# ⚠️ 知识库过期警告\n")
 			b.WriteString(kb)
 		}
-		return b.String()
+		result = b.String()
+	} else {
+		// 有历史：完整注入会话连贯性上下文
+		sc := BuildSessionContext(convID, roots, currentTask, history, store)
+		result = sc.FormatForInjection()
 	}
 
-	// 有历史：完整注入会话连贯性上下文
-	sc := BuildSessionContext(convID, roots, currentTask, history, store)
-	return sc.FormatForInjection()
+	// 写缓存
+	resumeCtxCacheMu.Lock()
+	resumeCtxCacheKey = cacheKey
+	resumeCtxCacheVal = result
+	resumeCtxCacheAt = time.Now()
+	resumeCtxCacheMu.Unlock()
+	return result
 }
 
 // ── 类型定义 ────────────────────────────────────────────────
