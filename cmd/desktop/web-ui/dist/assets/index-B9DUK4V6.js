@@ -178,30 +178,30 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
     {
       path: "/",
       name: "home",
-      component: () => __vitePreload(() => Promise.resolve().then(() => ChatView$1), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href)
+      component: () => __vitePreload(() => Promise.resolve().then(() => ChatView$1), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href)
     },
     {
       path: "/workspace/:wsId",
       name: "workspace",
-      component: () => __vitePreload(() => Promise.resolve().then(() => ChatView$1), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href),
+      component: () => __vitePreload(() => Promise.resolve().then(() => ChatView$1), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href),
       props: true
     },
     {
       path: "/workspace/:wsId/chat/:convId",
       name: "conversation",
-      component: () => __vitePreload(() => Promise.resolve().then(() => ChatView$1), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href),
+      component: () => __vitePreload(() => Promise.resolve().then(() => ChatView$1), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href),
       props: true
     },
     {
       path: "/workspace/:wsId/plan/:planId",
       name: "plan",
-      component: () => __vitePreload(() => Promise.resolve().then(() => PlanView$1), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href),
+      component: () => __vitePreload(() => Promise.resolve().then(() => PlanView$1), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href),
       props: true
     },
     {
       path: "/tasks",
       name: "tasks",
-      component: () => __vitePreload(() => Promise.resolve().then(() => TaskBoard$1), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href)
+      component: () => __vitePreload(() => Promise.resolve().then(() => TaskBoard$1), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href)
     }
   ];
   const router = vueRouter.createRouter({
@@ -210,6 +210,7 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
   });
   const BASE = "/api";
   function apiURL(path2, params = {}) {
+    if (!path2.startsWith("/")) path2 = "/" + path2;
     const u2 = new URL(BASE + path2, location.origin);
     for (const [k2, v3] of Object.entries(params)) {
       if (v3 !== void 0 && v3 !== null && v3 !== "") u2.searchParams.set(k2, v3);
@@ -1027,19 +1028,19 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
     }
     return target;
   };
-  const _hoisted_1$x = { class: "menubar" };
-  const _hoisted_2$x = ["onClick", "onMouseenter"];
-  const _hoisted_3$w = {
+  const _hoisted_1$z = { class: "menubar" };
+  const _hoisted_2$y = ["onClick", "onMouseenter"];
+  const _hoisted_3$x = {
     key: 0,
     class: "menu-divider"
   };
-  const _hoisted_4$t = ["onClick"];
-  const _hoisted_5$q = { class: "menu-item-label" };
-  const _hoisted_6$p = {
+  const _hoisted_4$u = ["onClick"];
+  const _hoisted_5$r = { class: "menu-item-label" };
+  const _hoisted_6$q = {
     key: 0,
     class: "menu-item-shortcut"
   };
-  const _sfc_main$y = {
+  const _sfc_main$z = {
     __name: "MenuBar",
     setup(__props, { expose: __expose }) {
       const menus = [
@@ -1347,7 +1348,7 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
       vue.onMounted(() => document.addEventListener("click", handleDocClick));
       vue.onUnmounted(() => document.removeEventListener("click", handleDocClick));
       return (_ctx, _cache) => {
-        return vue.openBlock(), vue.createElementBlock("div", _hoisted_1$x, [
+        return vue.openBlock(), vue.createElementBlock("div", _hoisted_1$z, [
           (vue.openBlock(), vue.createElementBlock(vue.Fragment, null, vue.renderList(menus, (menu) => {
             return vue.createElementVNode("div", {
               key: menu.label,
@@ -1361,7 +1362,7 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
                 },
                 onClick: ($event) => toggleMenu($event, menu.label),
                 onMouseenter: ($event) => hoverMenu(menu.label)
-              }, vue.toDisplayString(menu.label), 41, _hoisted_2$x)
+              }, vue.toDisplayString(menu.label), 41, _hoisted_2$y)
             ]);
           }), 64)),
           openMenu.value ? (vue.openBlock(), vue.createElementBlock("div", {
@@ -1373,14 +1374,14 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
           }, [
             (vue.openBlock(true), vue.createElementBlock(vue.Fragment, null, vue.renderList(currentItems.value, (item, i2) => {
               return vue.openBlock(), vue.createElementBlock(vue.Fragment, { key: i2 }, [
-                item.divider ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_3$w)) : item.label ? (vue.openBlock(), vue.createElementBlock("div", {
+                item.divider ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_3$x)) : item.label ? (vue.openBlock(), vue.createElementBlock("div", {
                   key: 1,
                   class: vue.normalizeClass(["menu-item", { disabled: item.disabled }]),
                   onClick: ($event) => !item.disabled && execItem(item)
                 }, [
-                  vue.createElementVNode("span", _hoisted_5$q, vue.toDisplayString(item.label), 1),
-                  item.shortcut ? (vue.openBlock(), vue.createElementBlock("span", _hoisted_6$p, vue.toDisplayString(item.shortcut), 1)) : vue.createCommentVNode("", true)
-                ], 10, _hoisted_4$t)) : vue.createCommentVNode("", true)
+                  vue.createElementVNode("span", _hoisted_5$r, vue.toDisplayString(item.label), 1),
+                  item.shortcut ? (vue.openBlock(), vue.createElementBlock("span", _hoisted_6$q, vue.toDisplayString(item.shortcut), 1)) : vue.createCommentVNode("", true)
+                ], 10, _hoisted_4$u)) : vue.createCommentVNode("", true)
               ], 64);
             }), 128))
           ], 36)) : vue.createCommentVNode("", true)
@@ -1388,25 +1389,25 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
       };
     }
   };
-  const MenuBar = /* @__PURE__ */ _export_sfc(_sfc_main$y, [["__scopeId", "data-v-245f3b5c"]]);
-  const _hoisted_1$w = ["width", "height"];
-  const _hoisted_2$w = {
+  const MenuBar = /* @__PURE__ */ _export_sfc(_sfc_main$z, [["__scopeId", "data-v-245f3b5c"]]);
+  const _hoisted_1$y = ["width", "height"];
+  const _hoisted_2$x = {
     key: 0,
     d: "M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
   };
-  const _hoisted_3$v = {
+  const _hoisted_3$w = {
     key: 7,
     d: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
   };
-  const _hoisted_4$s = {
+  const _hoisted_4$t = {
     key: 10,
     points: "9 6 15 12 9 18"
   };
-  const _hoisted_5$p = {
+  const _hoisted_5$q = {
     key: 11,
     points: "6 9 12 15 18 9"
   };
-  const _hoisted_6$o = {
+  const _hoisted_6$p = {
     key: 30,
     d: "M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"
   };
@@ -1437,7 +1438,7 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
     key: 70,
     points: "15 6 9 12 15 18"
   };
-  const _sfc_main$x = {
+  const _sfc_main$y = {
     __name: "SvgIcon",
     props: {
       name: { type: String, required: true },
@@ -1456,7 +1457,7 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
           "stroke-linecap": "round",
           "stroke-linejoin": "round"
         }, [
-          __props.name === "folder" ? (vue.openBlock(), vue.createElementBlock("path", _hoisted_2$w)) : __props.name === "folder-open" ? (vue.openBlock(), vue.createElementBlock(vue.Fragment, { key: 1 }, [
+          __props.name === "folder" ? (vue.openBlock(), vue.createElementBlock("path", _hoisted_2$x)) : __props.name === "folder-open" ? (vue.openBlock(), vue.createElementBlock(vue.Fragment, { key: 1 }, [
             _cache[0] || (_cache[0] = vue.createElementVNode("path", { d: "M6 17l-3-9h18l-3 9H6z" }, null, -1)),
             _cache[1] || (_cache[1] = vue.createElementVNode("path", { d: "M4 8V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v3" }, null, -1))
           ], 64)) : __props.name === "file" ? (vue.openBlock(), vue.createElementBlock(vue.Fragment, { key: 2 }, [
@@ -1499,7 +1500,7 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
               x2: "20",
               y2: "19"
             }, null, -1))
-          ], 64)) : __props.name === "chat" ? (vue.openBlock(), vue.createElementBlock("path", _hoisted_3$v)) : __props.name === "settings" ? (vue.openBlock(), vue.createElementBlock(vue.Fragment, { key: 8 }, [
+          ], 64)) : __props.name === "chat" ? (vue.openBlock(), vue.createElementBlock("path", _hoisted_3$w)) : __props.name === "settings" ? (vue.openBlock(), vue.createElementBlock(vue.Fragment, { key: 8 }, [
             _cache[13] || (_cache[13] = vue.createElementVNode("circle", {
               cx: "12",
               cy: "12",
@@ -1509,7 +1510,7 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
           ], 64)) : __props.name === "home" ? (vue.openBlock(), vue.createElementBlock(vue.Fragment, { key: 9 }, [
             _cache[15] || (_cache[15] = vue.createElementVNode("path", { d: "M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" }, null, -1)),
             _cache[16] || (_cache[16] = vue.createElementVNode("polyline", { points: "9 22 9 12 15 12 15 22" }, null, -1))
-          ], 64)) : __props.name === "chevron-right" ? (vue.openBlock(), vue.createElementBlock("polyline", _hoisted_4$s)) : __props.name === "chevron-down" ? (vue.openBlock(), vue.createElementBlock("polyline", _hoisted_5$p)) : __props.name === "plus" ? (vue.openBlock(), vue.createElementBlock(vue.Fragment, { key: 12 }, [
+          ], 64)) : __props.name === "chevron-right" ? (vue.openBlock(), vue.createElementBlock("polyline", _hoisted_4$t)) : __props.name === "chevron-down" ? (vue.openBlock(), vue.createElementBlock("polyline", _hoisted_5$q)) : __props.name === "plus" ? (vue.openBlock(), vue.createElementBlock(vue.Fragment, { key: 12 }, [
             _cache[17] || (_cache[17] = vue.createElementVNode("line", {
               x1: "12",
               y1: "5",
@@ -1701,7 +1702,7 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
               r: "10",
               class: "stop-pulse-ring"
             }, null, -1))
-          ], 64)) : __props.name === "wrench" ? (vue.openBlock(), vue.createElementBlock("path", _hoisted_6$o)) : __props.name === "database" ? (vue.openBlock(), vue.createElementBlock(vue.Fragment, { key: 31 }, [
+          ], 64)) : __props.name === "wrench" ? (vue.openBlock(), vue.createElementBlock("path", _hoisted_6$p)) : __props.name === "database" ? (vue.openBlock(), vue.createElementBlock(vue.Fragment, { key: 31 }, [
             _cache[64] || (_cache[64] = vue.createElementVNode("ellipse", {
               cx: "12",
               cy: "5",
@@ -2010,16 +2011,16 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
               y2: "17"
             }, null, -1))
           ], 64))
-        ], 8, _hoisted_1$w);
+        ], 8, _hoisted_1$y);
       };
     }
   };
-  const SvgIcon = /* @__PURE__ */ _export_sfc(_sfc_main$x, [["__scopeId", "data-v-90f89230"]]);
-  const _hoisted_1$v = { class: "activity-bar" };
-  const _hoisted_2$v = { class: "activity-top" };
-  const _hoisted_3$u = ["title", "onClick"];
-  const _hoisted_4$r = { class: "activity-bottom" };
-  const _sfc_main$w = {
+  const SvgIcon = /* @__PURE__ */ _export_sfc(_sfc_main$y, [["__scopeId", "data-v-90f89230"]]);
+  const _hoisted_1$x = { class: "activity-bar" };
+  const _hoisted_2$w = { class: "activity-top" };
+  const _hoisted_3$v = ["title", "onClick"];
+  const _hoisted_4$s = { class: "activity-bottom" };
+  const _sfc_main$x = {
     __name: "ActivityBar",
     setup(__props) {
       const switchActivity = vue.inject("switchActivity");
@@ -2038,8 +2039,8 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
         switchActivity(id39);
       };
       return (_ctx, _cache) => {
-        return vue.openBlock(), vue.createElementBlock("div", _hoisted_1$v, [
-          vue.createElementVNode("div", _hoisted_2$v, [
+        return vue.openBlock(), vue.createElementBlock("div", _hoisted_1$x, [
+          vue.createElementVNode("div", _hoisted_2$w, [
             (vue.openBlock(), vue.createElementBlock(vue.Fragment, null, vue.renderList(items2, (item) => {
               return vue.createElementVNode("button", {
                 key: item.id,
@@ -2051,10 +2052,10 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
                   name: item.icon,
                   size: 18
                 }, null, 8, ["name"])
-              ], 10, _hoisted_3$u);
+              ], 10, _hoisted_3$v);
             }), 64))
           ]),
-          vue.createElementVNode("div", _hoisted_4$r, [
+          vue.createElementVNode("div", _hoisted_4$s, [
             vue.createElementVNode("button", {
               title: "设置",
               onClick: _cache[0] || (_cache[0] = ($event) => switchIt("settings"))
@@ -2069,22 +2070,22 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
       };
     }
   };
-  const ActivityBar = /* @__PURE__ */ _export_sfc(_sfc_main$w, [["__scopeId", "data-v-0cf4873d"]]);
-  const _hoisted_1$u = {
+  const ActivityBar = /* @__PURE__ */ _export_sfc(_sfc_main$x, [["__scopeId", "data-v-0cf4873d"]]);
+  const _hoisted_1$w = {
     key: 0,
     class: "ctx-title"
   };
-  const _hoisted_2$u = {
+  const _hoisted_2$v = {
     key: 0,
     class: "ctx-separator"
   };
-  const _hoisted_3$t = ["onClick"];
-  const _hoisted_4$q = { class: "ctx-label" };
-  const _hoisted_5$o = {
+  const _hoisted_3$u = ["onClick"];
+  const _hoisted_4$r = { class: "ctx-label" };
+  const _hoisted_5$p = {
     key: 1,
     class: "ctx-shortcut"
   };
-  const _sfc_main$v = {
+  const _sfc_main$w = {
     __name: "ContextMenu",
     setup(__props, { expose: __expose }) {
       const visible = vue.ref(false);
@@ -2144,10 +2145,10 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
               onContextmenu: _cache[0] || (_cache[0] = vue.withModifiers(() => {
               }, ["prevent"]))
             }, [
-              title2.value ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_1$u, vue.toDisplayString(title2.value), 1)) : vue.createCommentVNode("", true),
+              title2.value ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_1$w, vue.toDisplayString(title2.value), 1)) : vue.createCommentVNode("", true),
               (vue.openBlock(true), vue.createElementBlock(vue.Fragment, null, vue.renderList(items2.value, (item, i2) => {
                 return vue.openBlock(), vue.createElementBlock(vue.Fragment, { key: i2 }, [
-                  item.separator ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_2$u)) : (vue.openBlock(), vue.createElementBlock("div", {
+                  item.separator ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_2$v)) : (vue.openBlock(), vue.createElementBlock("div", {
                     key: 1,
                     class: vue.normalizeClass(["ctx-item", { disabled: item.disabled }]),
                     onClick: ($event) => onItemClick(item)
@@ -2158,9 +2159,9 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
                       size: 14,
                       class: "ctx-icon"
                     }, null, 8, ["name"])) : vue.createCommentVNode("", true),
-                    vue.createElementVNode("span", _hoisted_4$q, vue.toDisplayString(item.label), 1),
-                    item.shortcut ? (vue.openBlock(), vue.createElementBlock("span", _hoisted_5$o, vue.toDisplayString(item.shortcut), 1)) : vue.createCommentVNode("", true)
-                  ], 10, _hoisted_3$t))
+                    vue.createElementVNode("span", _hoisted_4$r, vue.toDisplayString(item.label), 1),
+                    item.shortcut ? (vue.openBlock(), vue.createElementBlock("span", _hoisted_5$p, vue.toDisplayString(item.shortcut), 1)) : vue.createCommentVNode("", true)
+                  ], 10, _hoisted_3$u))
                 ], 64);
               }), 128))
             ], 36)
@@ -2169,18 +2170,18 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
       };
     }
   };
-  const ContextMenu = /* @__PURE__ */ _export_sfc(_sfc_main$v, [["__scopeId", "data-v-dde82381"]]);
-  const _hoisted_1$t = { class: "file-tree-item" };
-  const _hoisted_2$t = {
+  const ContextMenu = /* @__PURE__ */ _export_sfc(_sfc_main$w, [["__scopeId", "data-v-dde82381"]]);
+  const _hoisted_1$v = { class: "file-tree-item" };
+  const _hoisted_2$u = {
     key: 0,
     class: "chevron-wrap"
   };
-  const _hoisted_3$s = {
+  const _hoisted_3$t = {
     key: 1,
     class: "chevron-placeholder"
   };
-  const _hoisted_4$p = { key: 0 };
-  const _sfc_main$u = {
+  const _hoisted_4$q = { key: 0 };
+  const _sfc_main$v = {
     __name: "FileTreeItem",
     props: {
       item: { type: Object, required: true },
@@ -2771,7 +2772,7 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
       });
       return (_ctx, _cache) => {
         const _component_FileTreeItem = vue.resolveComponent("FileTreeItem", true);
-        return vue.openBlock(), vue.createElementBlock("div", _hoisted_1$t, [
+        return vue.openBlock(), vue.createElementBlock("div", _hoisted_1$v, [
           vue.createElementVNode("div", {
             class: vue.normalizeClass(["item-row", { "drag-over": dragOver.value, "selected": isSelected.value }]),
             style: vue.normalizeStyle({ paddingLeft: __props.depth * 16 + "px" }),
@@ -2783,13 +2784,13 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
             onDragleave: onDragLeave,
             onDrop: vue.withModifiers(onDrop, ["prevent"])
           }, [
-            __props.item.isDir ? (vue.openBlock(), vue.createElementBlock("span", _hoisted_2$t, [
+            __props.item.isDir ? (vue.openBlock(), vue.createElementBlock("span", _hoisted_2$u, [
               vue.createVNode(SvgIcon, {
                 name: "chevron-right",
                 size: 10,
                 class: vue.normalizeClass(["chevron", { expanded: expanded.value }])
               }, null, 8, ["class"])
-            ])) : (vue.openBlock(), vue.createElementBlock("span", _hoisted_3$s)),
+            ])) : (vue.openBlock(), vue.createElementBlock("span", _hoisted_3$t)),
             vue.createVNode(SvgIcon, {
               name: fileIcon.value,
               size: 14
@@ -2798,7 +2799,7 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
               class: vue.normalizeClass(["item-name", { active: vue.unref(state$2).activeFile === vue.unref(fullPath) }])
             }, vue.toDisplayString(__props.item.name), 3)
           ], 38),
-          expanded.value && __props.item.isDir && children2.value.length > 0 ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_4$p, [
+          expanded.value && __props.item.isDir && children2.value.length > 0 ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_4$q, [
             (vue.openBlock(true), vue.createElementBlock(vue.Fragment, null, vue.renderList(children2.value, (child, ci2) => {
               return vue.openBlock(), vue.createBlock(_component_FileTreeItem, {
                 key: vue.unref(fullPath) + "\\" + child.name + "_" + ci2,
@@ -2838,13 +2839,13 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
       };
     }
   };
-  const FileTreeItem = /* @__PURE__ */ _export_sfc(_sfc_main$u, [["__scopeId", "data-v-98a570cb"]]);
-  const _hoisted_1$s = { class: "file-explorer" };
-  const _hoisted_2$s = { class: "explorer-toolbar" };
-  const _hoisted_3$r = { class: "ws-section" };
-  const _hoisted_4$o = ["onClick", "onContextmenu"];
-  const _hoisted_5$n = { class: "ws-left" };
-  const _hoisted_6$n = { class: "ws-name" };
+  const FileTreeItem = /* @__PURE__ */ _export_sfc(_sfc_main$v, [["__scopeId", "data-v-98a570cb"]]);
+  const _hoisted_1$u = { class: "file-explorer" };
+  const _hoisted_2$t = { class: "explorer-toolbar" };
+  const _hoisted_3$s = { class: "ws-section" };
+  const _hoisted_4$p = ["onClick", "onContextmenu"];
+  const _hoisted_5$o = { class: "ws-left" };
+  const _hoisted_6$o = { class: "ws-name" };
   const _hoisted_7$n = { class: "ws-right" };
   const _hoisted_8$i = {
     key: 0,
@@ -2908,7 +2909,7 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
     class: "dlg-error"
   };
   const _hoisted_35$6 = ["disabled"];
-  const _sfc_main$t = {
+  const _sfc_main$u = {
     __name: "FileExplorer",
     setup(__props) {
       const currentFolders = vue.computed(() => {
@@ -3292,8 +3293,8 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
         window.removeEventListener("refresh-workspace", refreshCurrentWs);
       });
       return (_ctx, _cache) => {
-        return vue.openBlock(), vue.createElementBlock("div", _hoisted_1$s, [
-          vue.createElementVNode("div", _hoisted_2$s, [
+        return vue.openBlock(), vue.createElementBlock("div", _hoisted_1$u, [
+          vue.createElementVNode("div", _hoisted_2$t, [
             _cache[8] || (_cache[8] = vue.createElementVNode("span", { class: "tb-title" }, "工作区", -1)),
             _cache[9] || (_cache[9] = vue.createElementVNode("span", { class: "tb-spacer" }, null, -1)),
             vue.createElementVNode("button", {
@@ -3317,7 +3318,7 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
               })
             ])
           ]),
-          vue.createElementVNode("div", _hoisted_3$r, [
+          vue.createElementVNode("div", _hoisted_3$s, [
             (vue.openBlock(true), vue.createElementBlock(vue.Fragment, null, vue.renderList(vue.unref(state$2).wsList, (ws2) => {
               return vue.openBlock(), vue.createElementBlock("div", {
                 key: ws2.path,
@@ -3325,19 +3326,19 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
                 onClick: ($event) => switchToWorkspace(ws2),
                 onContextmenu: vue.withModifiers(($event) => showWsContextMenu($event, ws2), ["prevent"])
               }, [
-                vue.createElementVNode("div", _hoisted_5$n, [
+                vue.createElementVNode("div", _hoisted_5$o, [
                   vue.createVNode(SvgIcon, {
                     name: "folder",
                     size: 14,
                     class: "ws-icon"
                   }),
-                  vue.createElementVNode("span", _hoisted_6$n, vue.toDisplayString(ws2.name), 1)
+                  vue.createElementVNode("span", _hoisted_6$o, vue.toDisplayString(ws2.name), 1)
                 ]),
                 vue.createElementVNode("div", _hoisted_7$n, [
                   ws2.notify ? (vue.openBlock(), vue.createElementBlock("span", _hoisted_8$i, "●")) : vue.createCommentVNode("", true),
                   ws2.path === vue.unref(state$2).workspaceRoot ? (vue.openBlock(), vue.createElementBlock("span", _hoisted_9$h, "当前")) : vue.createCommentVNode("", true)
                 ])
-              ], 42, _hoisted_4$o);
+              ], 42, _hoisted_4$p);
             }), 128)),
             vue.unref(state$2).wsList.length === 0 ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_10$h, [
               _cache[10] || (_cache[10] = vue.createElementVNode("span", null, "暂无工作区", -1)),
@@ -3497,16 +3498,16 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
       };
     }
   };
-  const FileExplorer = /* @__PURE__ */ _export_sfc(_sfc_main$t, [["__scopeId", "data-v-bee51e0d"]]);
-  const _hoisted_1$r = { class: "search-panel" };
-  const _hoisted_2$r = { class: "sp-mode-bar" };
-  const _hoisted_3$q = { class: "sp-field" };
-  const _hoisted_4$n = { class: "sp-input-wrap" };
-  const _hoisted_5$m = {
+  const FileExplorer = /* @__PURE__ */ _export_sfc(_sfc_main$u, [["__scopeId", "data-v-bee51e0d"]]);
+  const _hoisted_1$t = { class: "search-panel" };
+  const _hoisted_2$s = { class: "sp-mode-bar" };
+  const _hoisted_3$r = { class: "sp-field" };
+  const _hoisted_4$o = { class: "sp-input-wrap" };
+  const _hoisted_5$n = {
     key: 0,
     class: "sp-field"
   };
-  const _hoisted_6$m = { class: "sp-input-wrap" };
+  const _hoisted_6$n = { class: "sp-input-wrap" };
   const _hoisted_7$m = ["disabled"];
   const _hoisted_8$h = { class: "sp-path-row" };
   const _hoisted_9$g = { class: "sp-options" };
@@ -3546,7 +3547,7 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
     key: 3,
     class: "sp-hint"
   };
-  const _sfc_main$s = {
+  const _sfc_main$t = {
     __name: "SearchPanel",
     setup(__props) {
       const query = vue.ref("");
@@ -3661,8 +3662,8 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
         }, 5e3);
       });
       return (_ctx, _cache) => {
-        return vue.openBlock(), vue.createElementBlock("div", _hoisted_1$r, [
-          vue.createElementVNode("div", _hoisted_2$r, [
+        return vue.openBlock(), vue.createElementBlock("div", _hoisted_1$t, [
+          vue.createElementVNode("div", _hoisted_2$s, [
             vue.createElementVNode("button", {
               class: vue.normalizeClass(["sp-mode-btn", { active: mode.value === "search" }]),
               onClick: _cache[0] || (_cache[0] = ($event) => mode.value = "search")
@@ -3672,8 +3673,8 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
               onClick: _cache[1] || (_cache[1] = ($event) => mode.value = "replace")
             }, "替换", 2)
           ]),
-          vue.createElementVNode("div", _hoisted_3$q, [
-            vue.createElementVNode("div", _hoisted_4$n, [
+          vue.createElementVNode("div", _hoisted_3$r, [
+            vue.createElementVNode("div", _hoisted_4$o, [
               vue.createVNode(SvgIcon, {
                 name: "search",
                 size: 13,
@@ -3694,8 +3695,8 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
               class: "sp-go-btn"
             }, "查找")
           ]),
-          mode.value === "replace" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_5$m, [
-            vue.createElementVNode("div", _hoisted_6$m, [
+          mode.value === "replace" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_5$n, [
+            vue.createElementVNode("div", _hoisted_6$n, [
               vue.createVNode(SvgIcon, {
                 name: "edit",
                 size: 13,
@@ -3823,11 +3824,11 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
       };
     }
   };
-  const SearchPanel$1 = /* @__PURE__ */ _export_sfc(_sfc_main$s, [["__scopeId", "data-v-fb066a8f"]]);
-  const _hoisted_1$q = { class: "modal-header" };
-  const _hoisted_2$q = { class: "modal-title" };
-  const _hoisted_3$p = { class: "modal-body" };
-  const _sfc_main$r = {
+  const SearchPanel$1 = /* @__PURE__ */ _export_sfc(_sfc_main$t, [["__scopeId", "data-v-fb066a8f"]]);
+  const _hoisted_1$s = { class: "modal-header" };
+  const _hoisted_2$r = { class: "modal-title" };
+  const _hoisted_3$q = { class: "modal-body" };
+  const _sfc_main$s = {
     __name: "Modal",
     props: {
       maxWidth: { type: String, default: "480px" }
@@ -3852,8 +3853,8 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
               class: "modal-container",
               style: vue.normalizeStyle({ maxWidth: __props.maxWidth })
             }, [
-              vue.createElementVNode("div", _hoisted_1$q, [
-                vue.createElementVNode("span", _hoisted_2$q, [
+              vue.createElementVNode("div", _hoisted_1$s, [
+                vue.createElementVNode("span", _hoisted_2$r, [
                   vue.renderSlot(_ctx.$slots, "title", {}, () => [
                     _cache[2] || (_cache[2] = vue.createTextVNode("提示", -1))
                   ], true)
@@ -3868,7 +3869,7 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
                   })
                 ])
               ]),
-              vue.createElementVNode("div", _hoisted_3$p, [
+              vue.createElementVNode("div", _hoisted_3$q, [
                 vue.renderSlot(_ctx.$slots, "default", {}, void 0, true)
               ])
             ], 4)
@@ -3877,19 +3878,19 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
       };
     }
   };
-  const Modal = /* @__PURE__ */ _export_sfc(_sfc_main$r, [["__scopeId", "data-v-fce3d7ef"]]);
-  const _hoisted_1$p = { class: "git-panel" };
-  const _hoisted_2$p = {
+  const Modal = /* @__PURE__ */ _export_sfc(_sfc_main$s, [["__scopeId", "data-v-fce3d7ef"]]);
+  const _hoisted_1$r = { class: "git-panel" };
+  const _hoisted_2$q = {
     key: 0,
     class: "git-loading"
   };
-  const _hoisted_3$o = {
+  const _hoisted_3$p = {
     key: 1,
     class: "git-empty"
   };
-  const _hoisted_4$m = { class: "git-repo-bar" };
-  const _hoisted_5$l = ["value"];
-  const _hoisted_6$l = { class: "branch-name" };
+  const _hoisted_4$n = { class: "git-repo-bar" };
+  const _hoisted_5$m = ["value"];
+  const _hoisted_6$m = { class: "branch-name" };
   const _hoisted_7$l = {
     key: 1,
     class: "ahead-badge",
@@ -4006,7 +4007,7 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
     class: "form-actions",
     style: { "padding": "8px 16px" }
   };
-  const _sfc_main$q = {
+  const _sfc_main$r = {
     __name: "GitPanel",
     setup(__props) {
       const loading = vue.ref(false);
@@ -4436,15 +4437,15 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
         loadStatus();
       });
       return (_ctx, _cache) => {
-        return vue.openBlock(), vue.createElementBlock("div", _hoisted_1$p, [
-          loading.value && !hasData.value ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_2$p, [
+        return vue.openBlock(), vue.createElementBlock("div", _hoisted_1$r, [
+          loading.value && !hasData.value ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_2$q, [
             vue.createVNode(SvgIcon, {
               name: "refresh",
               size: 20,
               class: "spinner"
             }),
             _cache[39] || (_cache[39] = vue.createElementVNode("span", null, "加载 Git 状态...", -1))
-          ])) : !isRepo.value && hasData.value ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_3$o, [
+          ])) : !isRepo.value && hasData.value ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_3$p, [
             vue.createVNode(SvgIcon, {
               name: "source-control",
               size: 24,
@@ -4457,7 +4458,7 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
               onClick: initRepo
             }, "初始化仓库")
           ])) : isRepo.value ? (vue.openBlock(), vue.createElementBlock(vue.Fragment, { key: 2 }, [
-            vue.createElementVNode("div", _hoisted_4$m, [
+            vue.createElementVNode("div", _hoisted_4$n, [
               vue.createVNode(SvgIcon, {
                 name: "source-control",
                 size: 14,
@@ -4473,7 +4474,7 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
                   return vue.openBlock(), vue.createElementBlock("option", {
                     key: p2,
                     value: p2
-                  }, vue.toDisplayString(p2.split("\\").pop() || p2), 9, _hoisted_5$l);
+                  }, vue.toDisplayString(p2.split("\\").pop() || p2), 9, _hoisted_5$m);
                 }), 128))
               ], 544)), [
                 [vue.vModelSelect, gitProject.value]
@@ -4487,7 +4488,7 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
                   name: "git-branch",
                   size: 12
                 }),
-                vue.createElementVNode("span", _hoisted_6$l, vue.toDisplayString(currentBranch.value || "（无分支）"), 1),
+                vue.createElementVNode("span", _hoisted_6$m, vue.toDisplayString(currentBranch.value || "（无分支）"), 1),
                 vue.createVNode(SvgIcon, {
                   name: "chevron-down",
                   size: 10
@@ -5126,14 +5127,14 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
       };
     }
   };
-  const GitPanel = /* @__PURE__ */ _export_sfc(_sfc_main$q, [["__scopeId", "data-v-749a34aa"]]);
-  const _hoisted_1$o = { class: "sidebar-header" };
-  const _hoisted_2$o = { class: "sidebar-content" };
-  const _hoisted_3$n = {
+  const GitPanel = /* @__PURE__ */ _export_sfc(_sfc_main$r, [["__scopeId", "data-v-749a34aa"]]);
+  const _hoisted_1$q = { class: "sidebar-header" };
+  const _hoisted_2$p = { class: "sidebar-content" };
+  const _hoisted_3$o = {
     key: 3,
     class: "sidebar-placeholder"
   };
-  const _sfc_main$p = {
+  const _sfc_main$q = {
     __name: "Sidebar",
     setup(__props) {
       const sidebarWidth = vue.inject("sidebarWidth", vue.ref(280));
@@ -5173,11 +5174,11 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
           class: "sidebar",
           style: vue.normalizeStyle({ width: vue.unref(sidebarWidth) + "px" })
         }, [
-          vue.createElementVNode("div", _hoisted_1$o, [
+          vue.createElementVNode("div", _hoisted_1$q, [
             vue.createElementVNode("span", null, vue.toDisplayString(headerTitle.value), 1)
           ]),
-          vue.createElementVNode("div", _hoisted_2$o, [
-            vue.unref(state$2).activeActivity === "explorer" ? (vue.openBlock(), vue.createBlock(FileExplorer, { key: 0 })) : vue.unref(state$2).activeActivity === "search" ? (vue.openBlock(), vue.createBlock(SearchPanel$1, { key: 1 })) : vue.unref(state$2).activeActivity === "source" ? (vue.openBlock(), vue.createBlock(GitPanel, { key: 2 })) : (vue.openBlock(), vue.createElementBlock("div", _hoisted_3$n, [..._cache[0] || (_cache[0] = [
+          vue.createElementVNode("div", _hoisted_2$p, [
+            vue.unref(state$2).activeActivity === "explorer" ? (vue.openBlock(), vue.createBlock(FileExplorer, { key: 0 })) : vue.unref(state$2).activeActivity === "search" ? (vue.openBlock(), vue.createBlock(SearchPanel$1, { key: 1 })) : vue.unref(state$2).activeActivity === "source" ? (vue.openBlock(), vue.createBlock(GitPanel, { key: 2 })) : (vue.openBlock(), vue.createElementBlock("div", _hoisted_3$o, [..._cache[0] || (_cache[0] = [
               vue.createElementVNode("span", null, "面板加载中...", -1)
             ])]))
           ]),
@@ -5189,7 +5190,7 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
       };
     }
   };
-  const Sidebar = /* @__PURE__ */ _export_sfc(_sfc_main$p, [["__scopeId", "data-v-076f0a91"]]);
+  const Sidebar = /* @__PURE__ */ _export_sfc(_sfc_main$q, [["__scopeId", "data-v-076f0a91"]]);
   let rangeFrom = [], rangeTo = [];
   (() => {
     let numbers = "lc,34,7n,7,7b,19,,,,2,,2,,,20,b,1c,l,g,,2t,7,2,6,2,2,,4,z,,u,r,2j,b,1m,9,9,,o,4,,9,,3,,5,17,3,3b,f,,w,1j,,,,4,8,4,,3,7,a,2,t,,1m,,,,2,4,8,,9,,a,2,q,,2,2,1l,,4,2,4,2,2,3,3,,u,2,3,,b,2,1l,,4,5,,2,4,,k,2,m,6,,,1m,,,2,,4,8,,7,3,a,2,u,,1n,,,,c,,9,,14,,3,,1l,3,5,3,,4,7,2,b,2,t,,1m,,2,,2,,3,,5,2,7,2,b,2,s,2,1l,2,,,2,4,8,,9,,a,2,t,,20,,4,,2,3,,,8,,29,,2,7,c,8,2q,,2,9,b,6,22,2,r,,,,,,1j,e,,5,,2,5,b,,10,9,,2u,4,,6,,2,2,2,p,2,4,3,g,4,d,,2,2,6,,f,,jj,3,qa,3,t,3,t,2,u,2,1s,2,,7,8,,2,b,9,,19,3,3b,2,y,,3a,3,4,2,9,,6,3,63,2,2,,1m,,,7,,,,,2,8,6,a,2,,1c,h,1r,4,1c,7,,,5,,14,9,c,2,w,4,2,2,,3,1k,,,2,3,,,3,1m,8,2,2,48,3,,d,,7,4,,6,,3,2,5i,1m,,5,ek,,5f,x,2da,3,3x,,2o,w,fe,6,2x,2,n9w,4,,a,w,2,28,2,7k,,3,,4,,p,2,5,,47,2,q,i,d,,12,8,p,b,1a,3,1c,,2,4,2,2,13,,1v,6,2,2,2,2,c,,8,,1b,,1f,,,3,2,2,5,2,,,16,2,8,,6m,,2,,4,,fn4,,kh,g,g,g,a6,2,gt,,6a,,45,5,1ae,3,,2,5,4,14,3,4,,4l,2,fx,4,ar,2,49,b,4w,,1i,f,1k,3,1d,4,2,2,1x,3,10,5,,8,1q,,c,2,1g,9,a,4,2,,2n,3,2,,,2,6,,4g,,3,8,l,2,1l,2,,,,,m,,e,7,3,5,5f,8,2,3,,,n,,29,,2,6,,,2,,,2,,2,6j,,2,4,6,2,,2,r,2,2d,8,2,,,2,2y,,,,2,6,,,2t,3,2,4,,5,77,9,,2,6t,,a,2,,,4,,40,4,2,2,4,,w,a,14,6,2,4,8,,9,6,2,3,1a,d,,2,ba,7,,6,,,2a,m,2,7,,2,,2,3e,6,3,,,2,,7,,,20,2,3,,,,9n,2,f0b,5,1n,7,t4,,1r,4,29,,f5k,2,43q,,,3,4,5,8,8,2,7,u,4,44,3,1iz,1j,4,1e,8,,e,,m,5,,f,11s,7,,h,2,7,,2,,5,79,7,c5,4,15s,7,31,7,240,5,gx7k,2o,3k,6o".split(",").map((s2) => s2 ? parseInt(s2, 36) : 1);
@@ -25400,6 +25401,9 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
       });
     }
   });
+  function search(config2) {
+    return searchExtensions;
+  }
   class SearchQuery {
     /**
     Create a query object.
@@ -25623,6 +25627,10 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
     },
     provide: (f2) => showPanel.from(f2, (val) => val.panel)
   });
+  function getSearchQuery(state2) {
+    let curState = state2.field(searchState, false);
+    return curState ? curState.query.spec : defaultQuery(state2);
+  }
   class SearchState {
     constructor(query, panel) {
       this.query = query;
@@ -37097,6 +37105,355 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
     }
   ]);
   const oneDark = [oneDarkTheme, /* @__PURE__ */ syntaxHighlighting(oneDarkHighlightStyle)];
+  const _hoisted_1$p = { class: "find-row" };
+  const _hoisted_2$o = ["onKeydown"];
+  const _hoisted_3$n = { class: "fp-count" };
+  const _hoisted_4$m = {
+    key: 0,
+    class: "replace-row"
+  };
+  const _hoisted_5$l = ["onKeydown"];
+  const _hoisted_6$l = { class: "fp-options" };
+  const _sfc_main$p = {
+    __name: "FindPanel",
+    props: {
+      view: { type: Object, default: null }
+    },
+    emits: ["close"],
+    setup(__props, { expose: __expose, emit: __emit }) {
+      const props = __props;
+      const emit = __emit;
+      const visible = vue.ref(false);
+      const showReplace = vue.ref(false);
+      const searchText = vue.ref("");
+      const replaceText = vue.ref("");
+      const caseSensitive = vue.ref(false);
+      const regexp = vue.ref(false);
+      const wholeWord = vue.ref(false);
+      const matchCount = vue.ref("");
+      const findInput = vue.ref(null);
+      const replaceInput = vue.ref(null);
+      function applySearchQuery() {
+        if (!props.view) return;
+        const v3 = props.view;
+        const query = new SearchQuery({
+          search: searchText.value || "",
+          caseSensitive: caseSensitive.value,
+          regexp: regexp.value,
+          wholeWord: wholeWord.value,
+          replace: replaceText.value
+        });
+        v3.dispatch({ effects: setSearchQuery.of(query) });
+        updateMatchCount(v3);
+      }
+      function updateMatchCount(view) {
+        if (!view || !searchText.value) {
+          matchCount.value = "";
+          return;
+        }
+        const query = getSearchQuery(view.state);
+        if (!query.valid) {
+          matchCount.value = "—";
+          return;
+        }
+        try {
+          const cursor2 = query.getCursor(view.state);
+          let count2 = 0;
+          let current = 0;
+          const sel = view.state.selection.main;
+          while (!cursor2.next().done) {
+            count2++;
+            if (cursor2.value.from <= sel.from && cursor2.value.to >= sel.to) {
+              current = count2;
+            }
+          }
+          matchCount.value = count2 > 0 ? `${current}/${count2}` : "0/0";
+        } catch (e3) {
+          matchCount.value = "—";
+        }
+      }
+      function onSearchChange() {
+        applySearchQuery();
+      }
+      function onFindNext() {
+        if (!props.view || !searchText.value) return;
+        applySearchQuery();
+        findNext(props.view);
+        vue.nextTick(() => updateMatchCount(props.view));
+      }
+      function onFindPrev() {
+        if (!props.view || !searchText.value) return;
+        applySearchQuery();
+        findPrevious(props.view);
+        vue.nextTick(() => updateMatchCount(props.view));
+      }
+      function onReplaceNext() {
+        if (!props.view || !searchText.value) return;
+        applySearchQuery();
+        replaceNext(props.view);
+        vue.nextTick(() => updateMatchCount(props.view));
+      }
+      function onReplaceAll() {
+        if (!props.view || !searchText.value) return;
+        applySearchQuery();
+        replaceAll(props.view);
+        vue.nextTick(() => updateMatchCount(props.view));
+      }
+      function toggleReplace() {
+        showReplace.value = !showReplace.value;
+        if (showReplace.value) {
+          vue.nextTick(() => {
+            var _a3;
+            return (_a3 = replaceInput.value) == null ? void 0 : _a3.focus();
+          });
+        } else {
+          vue.nextTick(() => {
+            var _a3;
+            return (_a3 = findInput.value) == null ? void 0 : _a3.focus();
+          });
+        }
+      }
+      function onPanelKeydown(e3) {
+        if (e3.key === "Escape") {
+          e3.preventDefault();
+          e3.stopPropagation();
+          onClose();
+        }
+      }
+      function onClose() {
+        visible.value = false;
+        showReplace.value = false;
+        searchText.value = "";
+        replaceText.value = "";
+        if (props.view) {
+          const emptyQuery = new SearchQuery({ search: "" });
+          props.view.dispatch({ effects: setSearchQuery.of(emptyQuery) });
+          closeSearchPanel(props.view);
+          props.view.focus();
+        }
+        matchCount.value = "";
+        emit("close");
+      }
+      function open2(initialText) {
+        visible.value = true;
+        showReplace.value = false;
+        searchText.value = initialText || "";
+        replaceText.value = "";
+        caseSensitive.value = false;
+        regexp.value = false;
+        wholeWord.value = false;
+        vue.nextTick(() => {
+          var _a3, _b2;
+          (_a3 = findInput.value) == null ? void 0 : _a3.focus();
+          (_b2 = findInput.value) == null ? void 0 : _b2.select();
+          if (props.view && searchText.value) {
+            applySearchQuery();
+            findNext(props.view);
+          }
+        });
+      }
+      function openReplace(initialText) {
+        open2(initialText);
+        showReplace.value = true;
+        vue.nextTick(() => {
+          var _a3, _b2;
+          (_a3 = replaceInput.value) == null ? void 0 : _a3.focus();
+          (_b2 = replaceInput.value) == null ? void 0 : _b2.select();
+        });
+      }
+      vue.watch(() => props.view, (v3) => {
+        if (v3 && visible.value) {
+          vue.nextTick(() => updateMatchCount(v3));
+        }
+      });
+      __expose({ open: open2, openReplace, close: onClose });
+      return (_ctx, _cache) => {
+        return visible.value ? (vue.openBlock(), vue.createElementBlock("div", {
+          key: 0,
+          class: "find-panel",
+          onKeydown: onPanelKeydown
+        }, [
+          vue.createElementVNode("div", _hoisted_1$p, [
+            _cache[9] || (_cache[9] = vue.createElementVNode("svg", {
+              class: "fp-icon",
+              viewBox: "0 0 24 24",
+              width: "14",
+              height: "14",
+              fill: "none",
+              stroke: "currentColor",
+              "stroke-width": "2"
+            }, [
+              vue.createElementVNode("circle", {
+                cx: "11",
+                cy: "11",
+                r: "7"
+              }),
+              vue.createElementVNode("path", { d: "m21 21-4.35-4.35" })
+            ], -1)),
+            vue.withDirectives(vue.createElementVNode("input", {
+              ref_key: "findInput",
+              ref: findInput,
+              "onUpdate:modelValue": _cache[0] || (_cache[0] = ($event) => searchText.value = $event),
+              type: "text",
+              placeholder: "查找",
+              onInput: onSearchChange,
+              onKeydown: [
+                vue.withKeys(vue.withModifiers(onFindNext, ["prevent"]), ["enter"]),
+                vue.withKeys(vue.withModifiers(onFindPrev, ["shift", "prevent"]), ["enter"])
+              ],
+              class: "fp-input",
+              spellcheck: "false",
+              "main-field": "true"
+            }, null, 40, _hoisted_2$o), [
+              [vue.vModelText, searchText.value]
+            ]),
+            vue.createElementVNode("span", _hoisted_3$n, vue.toDisplayString(matchCount.value), 1),
+            vue.createElementVNode("button", {
+              class: "fp-btn",
+              onClick: onFindPrev,
+              title: "上一个 (Shift+Enter)"
+            }, [..._cache[5] || (_cache[5] = [
+              vue.createElementVNode("svg", {
+                viewBox: "0 0 24 24",
+                width: "14",
+                height: "14",
+                fill: "none",
+                stroke: "currentColor",
+                "stroke-width": "2"
+              }, [
+                vue.createElementVNode("polyline", { points: "18 15 12 9 6 15" })
+              ], -1)
+            ])]),
+            vue.createElementVNode("button", {
+              class: "fp-btn",
+              onClick: onFindNext,
+              title: "下一个 (Enter)"
+            }, [..._cache[6] || (_cache[6] = [
+              vue.createElementVNode("svg", {
+                viewBox: "0 0 24 24",
+                width: "14",
+                height: "14",
+                fill: "none",
+                stroke: "currentColor",
+                "stroke-width": "2"
+              }, [
+                vue.createElementVNode("polyline", { points: "6 9 12 15 18 9" })
+              ], -1)
+            ])]),
+            vue.createElementVNode("button", {
+              class: vue.normalizeClass(["fp-btn fp-toggle", { active: showReplace.value }]),
+              onClick: toggleReplace,
+              title: "替换 (Ctrl+H)"
+            }, [..._cache[7] || (_cache[7] = [
+              vue.createStaticVNode('<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" data-v-e72d436c><path d="M16 5l3-3 3 3" data-v-e72d436c></path><path d="M19 2v7a4 4 0 0 1-4 4H5" data-v-e72d436c></path><path d="M8 16l-3 3 3 3" data-v-e72d436c></path><path d="M5 13v7a4 4 0 0 0 4 4h10" data-v-e72d436c></path></svg>', 1)
+            ])], 2),
+            vue.createElementVNode("button", {
+              class: "fp-close",
+              onClick: onClose,
+              title: "关闭 (Esc)"
+            }, [..._cache[8] || (_cache[8] = [
+              vue.createElementVNode("svg", {
+                viewBox: "0 0 24 24",
+                width: "16",
+                height: "16",
+                fill: "none",
+                stroke: "currentColor",
+                "stroke-width": "2"
+              }, [
+                vue.createElementVNode("path", { d: "M18 6 6 18" }),
+                vue.createElementVNode("path", { d: "m6 6 12 12" })
+              ], -1)
+            ])])
+          ]),
+          showReplace.value ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_4$m, [
+            _cache[10] || (_cache[10] = vue.createStaticVNode('<svg class="fp-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" data-v-e72d436c><path d="M16 5l3-3 3 3" data-v-e72d436c></path><path d="M19 2v7a4 4 0 0 1-4 4H5" data-v-e72d436c></path><path d="M8 16l-3 3 3 3" data-v-e72d436c></path><path d="M5 13v7a4 4 0 0 0 4 4h10" data-v-e72d436c></path></svg>', 1)),
+            vue.withDirectives(vue.createElementVNode("input", {
+              ref_key: "replaceInput",
+              ref: replaceInput,
+              "onUpdate:modelValue": _cache[1] || (_cache[1] = ($event) => replaceText.value = $event),
+              type: "text",
+              placeholder: "替换",
+              onKeydown: vue.withKeys(vue.withModifiers(onReplaceNext, ["prevent"]), ["enter"]),
+              class: "fp-input",
+              spellcheck: "false"
+            }, null, 40, _hoisted_5$l), [
+              [vue.vModelText, replaceText.value]
+            ]),
+            vue.createElementVNode("button", {
+              class: "fp-btn fp-action",
+              onClick: onReplaceNext,
+              title: "替换下一个"
+            }, "替换"),
+            vue.createElementVNode("button", {
+              class: "fp-btn",
+              onClick: onReplaceAll,
+              title: "全部替换"
+            }, "全部替换")
+          ])) : vue.createCommentVNode("", true),
+          vue.createElementVNode("div", _hoisted_6$l, [
+            vue.createElementVNode("label", {
+              class: vue.normalizeClass(["fp-opt", { active: caseSensitive.value }]),
+              title: "大小写敏感"
+            }, [
+              vue.withDirectives(vue.createElementVNode("input", {
+                type: "checkbox",
+                "onUpdate:modelValue": _cache[2] || (_cache[2] = ($event) => caseSensitive.value = $event),
+                onChange: onSearchChange
+              }, null, 544), [
+                [vue.vModelCheckbox, caseSensitive.value]
+              ]),
+              _cache[11] || (_cache[11] = vue.createElementVNode("svg", {
+                viewBox: "0 0 24 24",
+                width: "13",
+                height: "13",
+                fill: "none",
+                stroke: "currentColor",
+                "stroke-width": "2"
+              }, [
+                vue.createElementVNode("rect", {
+                  x: "4",
+                  y: "4",
+                  width: "16",
+                  height: "16",
+                  rx: "2"
+                }),
+                vue.createElementVNode("path", { d: "m8 16 2-4m4 4-2-4m0 0L12 8l1 4" }),
+                vue.createElementVNode("path", { d: "m10 12h4" })
+              ], -1))
+            ], 2),
+            vue.createElementVNode("label", {
+              class: vue.normalizeClass(["fp-opt", { active: regexp.value }]),
+              title: "正则表达式"
+            }, [
+              vue.withDirectives(vue.createElementVNode("input", {
+                type: "checkbox",
+                "onUpdate:modelValue": _cache[3] || (_cache[3] = ($event) => regexp.value = $event),
+                onChange: onSearchChange
+              }, null, 544), [
+                [vue.vModelCheckbox, regexp.value]
+              ]),
+              _cache[12] || (_cache[12] = vue.createStaticVNode('<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" data-v-e72d436c><path d="M12 3v18" data-v-e72d436c></path><path d="M5 12h14" data-v-e72d436c></path><path d="M9 7l-4-4" data-v-e72d436c></path><path d="M15 7l4-4" data-v-e72d436c></path><path d="M9 17l-4 4" data-v-e72d436c></path><path d="M15 17l4 4" data-v-e72d436c></path></svg>', 1))
+            ], 2),
+            vue.createElementVNode("label", {
+              class: vue.normalizeClass(["fp-opt", { active: wholeWord.value }]),
+              title: "全词匹配"
+            }, [
+              vue.withDirectives(vue.createElementVNode("input", {
+                type: "checkbox",
+                "onUpdate:modelValue": _cache[4] || (_cache[4] = ($event) => wholeWord.value = $event),
+                onChange: onSearchChange
+              }, null, 544), [
+                [vue.vModelCheckbox, wholeWord.value]
+              ]),
+              _cache[13] || (_cache[13] = vue.createStaticVNode('<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" data-v-e72d436c><path d="M4 8V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2" data-v-e72d436c></path><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" data-v-e72d436c></path><path d="M8 12h8" data-v-e72d436c></path><path d="M10 9v6" data-v-e72d436c></path><path d="M14 9v6" data-v-e72d436c></path></svg>', 1))
+            ], 2)
+          ])
+        ], 32)) : vue.createCommentVNode("", true);
+      };
+    }
+  };
+  const FindPanel = /* @__PURE__ */ _export_sfc(_sfc_main$p, [["__scopeId", "data-v-e72d436c"]]);
+  const _hoisted_1$o = { class: "code-editor-container" };
   const _sfc_main$o = {
     __name: "CodeEditor",
     props: {
@@ -37109,6 +37466,7 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
       const props = __props;
       const emit = __emit;
       const wrapperRef = vue.ref(null);
+      const searchPanelRef = vue.ref(null);
       let view = null;
       function getLang(path2) {
         if (!path2) return null;
@@ -37159,9 +37517,32 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
         const lang = getLang(props.path);
         const extensions2 = [
           basicSetup,
+          search(),
+          // 初始化搜索状态，不显示默认面板
           keymap.of([indentWithTab]),
           closeBrackets(),
           highlightSelectionMatches(),
+          // 拦截 Ctrl+F/H 显示自定义中文搜索面板
+          Prec.high(keymap.of([
+            {
+              key: "Ctrl-f",
+              run: () => {
+                var _a4;
+                const selectedText = view ? view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to) : "";
+                (_a4 = searchPanelRef.value) == null ? void 0 : _a4.open(selectedText);
+                return true;
+              }
+            },
+            {
+              key: "Ctrl-h",
+              run: () => {
+                var _a4;
+                const selectedText = view ? view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to) : "";
+                (_a4 = searchPanelRef.value) == null ? void 0 : _a4.openReplace(selectedText);
+                return true;
+              }
+            }
+          ])),
           EditorView.updateListener.of((update2) => {
             if (update2.docChanged) {
               emit("update:modelValue", update2.state.doc.toString());
@@ -37375,21 +37756,36 @@ var __forAwait = (obj, it, method) => (it = obj[__knownSymbol("asyncIterator")])
           view = null;
         }
       });
+      function onSearchPanelClose() {
+        view == null ? void 0 : view.focus();
+      }
       __expose({
         getEditor: () => view,
         focus: () => view == null ? void 0 : view.focus(),
-        execSave: () => emit("save")
+        execSave: () => emit("save"),
+        openFind: (text2) => {
+          var _a3;
+          return (_a3 = searchPanelRef.value) == null ? void 0 : _a3.open(text2);
+        }
       });
       return (_ctx, _cache) => {
-        return vue.openBlock(), vue.createElementBlock("div", {
-          class: "code-editor-wrapper",
-          ref_key: "wrapperRef",
-          ref: wrapperRef
-        }, null, 512);
+        return vue.openBlock(), vue.createElementBlock("div", _hoisted_1$o, [
+          vue.createVNode(FindPanel, {
+            ref_key: "searchPanelRef",
+            ref: searchPanelRef,
+            view: vue.unref(view),
+            onClose: onSearchPanelClose
+          }, null, 8, ["view"]),
+          vue.createElementVNode("div", {
+            class: "code-editor-wrapper",
+            ref_key: "wrapperRef",
+            ref: wrapperRef
+          }, null, 512)
+        ]);
       };
     }
   };
-  const CodeEditor = /* @__PURE__ */ _export_sfc(_sfc_main$o, [["__scopeId", "data-v-719d98b8"]]);
+  const CodeEditor = /* @__PURE__ */ _export_sfc(_sfc_main$o, [["__scopeId", "data-v-b5f06523"]]);
   const _hoisted_1$n = { class: "hex-viewer" };
   const _hoisted_2$n = { class: "hex-toolbar" };
   const _hoisted_3$m = { class: "hex-file-info" };
@@ -46437,7 +46833,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
       const { default: katex2 } = yield __vitePreload(() => __async(null, null, function* () {
         const { default: katex3 } = yield Promise.resolve().then(() => katex$1);
         return { default: katex3 };
-      }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+      }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
       const outputMode = config2.forceLegacyMathML || !isMathMLSupported() && config2.legacyMathML ? "htmlAndMathml" : "mathml";
       return text2.split(lineBreakRegex).map(
         (line2) => hasKatex(line2) ? `<div style="display: flex; align-items: center; justify-content: center; white-space: nowrap;">${line2}</div>` : `<div>${line2}</div>`
@@ -66032,20 +66428,20 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
       {
         name: "dagre",
         loader: /* @__PURE__ */ __name$1(() => __async(null, null, function* () {
-          return yield __vitePreload(() => Promise.resolve().then(() => dagreVKFMJZFB), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+          return yield __vitePreload(() => Promise.resolve().then(() => dagreVKFMJZFB), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
         }), "loader")
       },
       {
         name: "swimlane",
         loader: /* @__PURE__ */ __name$1(() => __async(null, null, function* () {
-          return yield __vitePreload(() => Promise.resolve().then(() => swimlanes5IMT3BWC), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+          return yield __vitePreload(() => Promise.resolve().then(() => swimlanes5IMT3BWC), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
         }), "loader")
       },
       ...[
         {
           name: "cose-bilkent",
           loader: /* @__PURE__ */ __name$1(() => __async(null, null, function* () {
-            return yield __vitePreload(() => Promise.resolve().then(() => coseBilkentJH36ORCC), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+            return yield __vitePreload(() => Promise.resolve().then(() => coseBilkentJH36ORCC), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
           }), "loader")
         }
       ]
@@ -66464,7 +66860,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = yield __vitePreload(() => __async(null, null, function* () {
       const { diagram: diagram22 } = yield Promise.resolve().then(() => c4DiagramLMCZKHZV);
       return { diagram: diagram22 };
-    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
     return { id, diagram: diagram2 };
   }), "loader");
   var plugin = {
@@ -66485,7 +66881,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = yield __vitePreload(() => __async(null, null, function* () {
       const { diagram: diagram22 } = yield Promise.resolve().then(() => flowDiagram23GEKE2U);
       return { diagram: diagram22 };
-    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
     return { id: id2, diagram: diagram2 };
   }), "loader");
   var plugin2 = {
@@ -66512,7 +66908,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = yield __vitePreload(() => __async(null, null, function* () {
       const { diagram: diagram22 } = yield Promise.resolve().then(() => flowDiagram23GEKE2U);
       return { diagram: diagram22 };
-    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
     return { id: id3, diagram: diagram2 };
   }), "loader");
   var plugin3 = {
@@ -66529,7 +66925,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = yield __vitePreload(() => __async(null, null, function* () {
       const { diagram: diagram22 } = yield Promise.resolve().then(() => swimlanesDiagramG3AALYLV);
       return { diagram: diagram22 };
-    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
     return { id: id4, diagram: diagram2 };
   }), "loader");
   var plugin4 = {
@@ -66546,7 +66942,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = yield __vitePreload(() => __async(null, null, function* () {
       const { diagram: diagram22 } = yield Promise.resolve().then(() => erDiagramQ63AITRT);
       return { diagram: diagram22 };
-    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
     return { id: id5, diagram: diagram2 };
   }), "loader");
   var plugin5 = {
@@ -66563,7 +66959,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = yield __vitePreload(() => __async(null, null, function* () {
       const { diagram: diagram22 } = yield Promise.resolve().then(() => gitGraphDiagramIHSO6WYX);
       return { diagram: diagram22 };
-    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
     return { id: id6, diagram: diagram2 };
   }), "loader");
   var plugin6 = {
@@ -66580,7 +66976,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = yield __vitePreload(() => __async(null, null, function* () {
       const { diagram: diagram22 } = yield Promise.resolve().then(() => ganttDiagramNO4QXBWP);
       return { diagram: diagram22 };
-    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
     return { id: id7, diagram: diagram2 };
   }), "loader");
   var plugin7 = {
@@ -66597,7 +66993,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = yield __vitePreload(() => __async(null, null, function* () {
       const { diagram: diagram22 } = yield Promise.resolve().then(() => infoDiagramFWYZ7A6U);
       return { diagram: diagram22 };
-    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
     return { id: id8, diagram: diagram2 };
   }), "loader");
   var info = {
@@ -66613,7 +67009,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = yield __vitePreload(() => __async(null, null, function* () {
       const { diagram: diagram22 } = yield Promise.resolve().then(() => pieDiagramENE6RG2P);
       return { diagram: diagram22 };
-    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
     return { id: id9, diagram: diagram2 };
   }), "loader");
   var pie = {
@@ -66629,7 +67025,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = yield __vitePreload(() => __async(null, null, function* () {
       const { diagram: diagram22 } = yield Promise.resolve().then(() => quadrantDiagramABIIQ3AL);
       return { diagram: diagram22 };
-    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
     return { id: id10, diagram: diagram2 };
   }), "loader");
   var plugin8 = {
@@ -66646,7 +67042,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = yield __vitePreload(() => __async(null, null, function* () {
       const { diagram: diagram22 } = yield Promise.resolve().then(() => xychartDiagramFW5EYKEG);
       return { diagram: diagram22 };
-    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
     return { id: id11, diagram: diagram2 };
   }), "loader");
   var plugin9 = {
@@ -66663,7 +67059,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = yield __vitePreload(() => __async(null, null, function* () {
       const { diagram: diagram22 } = yield Promise.resolve().then(() => requirementDiagramTGXJPOKE);
       return { diagram: diagram22 };
-    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
     return { id: id12, diagram: diagram2 };
   }), "loader");
   var plugin10 = {
@@ -66680,7 +67076,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = yield __vitePreload(() => __async(null, null, function* () {
       const { diagram: diagram22 } = yield Promise.resolve().then(() => sequenceDiagramDBY2YBRQ);
       return { diagram: diagram22 };
-    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
     return { id: id13, diagram: diagram2 };
   }), "loader");
   var plugin11 = {
@@ -66701,7 +67097,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = yield __vitePreload(() => __async(null, null, function* () {
       const { diagram: diagram22 } = yield Promise.resolve().then(() => classDiagramOUVF2IWQ);
       return { diagram: diagram22 };
-    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
     return { id: id14, diagram: diagram2 };
   }), "loader");
   var plugin12 = {
@@ -66722,7 +67118,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = yield __vitePreload(() => __async(null, null, function* () {
       const { diagram: diagram22 } = yield Promise.resolve().then(() => classDiagramV2EOCWNBFH);
       return { diagram: diagram22 };
-    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
     return { id: id15, diagram: diagram2 };
   }), "loader");
   var plugin13 = {
@@ -66743,7 +67139,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = yield __vitePreload(() => __async(null, null, function* () {
       const { diagram: diagram22 } = yield Promise.resolve().then(() => stateDiagram2N3HPSRC);
       return { diagram: diagram22 };
-    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
     return { id: id16, diagram: diagram2 };
   }), "loader");
   var plugin14 = {
@@ -66767,7 +67163,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = yield __vitePreload(() => __async(null, null, function* () {
       const { diagram: diagram22 } = yield Promise.resolve().then(() => stateDiagramV26OUMAXLB);
       return { diagram: diagram22 };
-    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
     return { id: id17, diagram: diagram2 };
   }), "loader");
   var plugin15 = {
@@ -66784,7 +67180,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = yield __vitePreload(() => __async(null, null, function* () {
       const { diagram: diagram22 } = yield Promise.resolve().then(() => journeyDiagram5HDEW3XC);
       return { diagram: diagram22 };
-    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
     return { id: id18, diagram: diagram2 };
   }), "loader");
   var plugin16 = {
@@ -66855,7 +67251,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = yield __vitePreload(() => __async(null, null, function* () {
       const { diagram: diagram22 } = yield Promise.resolve().then(() => flowDiagram23GEKE2U);
       return { diagram: diagram22 };
-    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
     return { id: id19, diagram: diagram2 };
   }), "loader");
   var plugin17 = {
@@ -66872,7 +67268,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = yield __vitePreload(() => __async(null, null, function* () {
       const { diagram: diagram22 } = yield Promise.resolve().then(() => timelineDefinitionFHXFAJF6);
       return { diagram: diagram22 };
-    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
     return { id: id20, diagram: diagram2 };
   }), "loader");
   var plugin18 = {
@@ -66889,7 +67285,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = yield __vitePreload(() => __async(null, null, function* () {
       const { diagram: diagram22 } = yield Promise.resolve().then(() => mindmapDefinitionLN4V7U3C);
       return { diagram: diagram22 };
-    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
     return { id: id21, diagram: diagram2 };
   }), "loader");
   var plugin19 = {
@@ -66906,7 +67302,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = yield __vitePreload(() => __async(null, null, function* () {
       const { diagram: diagram22 } = yield Promise.resolve().then(() => kanbanDefinitionHUTT4EX6);
       return { diagram: diagram22 };
-    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
     return { id: id22, diagram: diagram2 };
   }), "loader");
   var plugin20 = {
@@ -66923,7 +67319,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = yield __vitePreload(() => __async(null, null, function* () {
       const { diagram: diagram22 } = yield Promise.resolve().then(() => sankeyDiagramHTMAVEWB);
       return { diagram: diagram22 };
-    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
     return { id: id23, diagram: diagram2 };
   }), "loader");
   var plugin21 = {
@@ -66940,7 +67336,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = yield __vitePreload(() => __async(null, null, function* () {
       const { diagram: diagram22 } = yield Promise.resolve().then(() => diagramNH7WQ7WH);
       return { diagram: diagram22 };
-    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
     return { id: id24, diagram: diagram2 };
   }), "loader");
   var packet = {
@@ -66956,7 +67352,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = yield __vitePreload(() => __async(null, null, function* () {
       const { diagram: diagram22 } = yield Promise.resolve().then(() => diagramWEI45ONY);
       return { diagram: diagram22 };
-    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
     return { id: id25, diagram: diagram2 };
   }), "loader");
   var radar = {
@@ -66972,7 +67368,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = yield __vitePreload(() => __async(null, null, function* () {
       const { diagram: diagram22 } = yield Promise.resolve().then(() => blockDiagram677ZJIJ3);
       return { diagram: diagram22 };
-    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
     return { id: id26, diagram: diagram2 };
   }), "loader");
   var plugin22 = {
@@ -66989,7 +67385,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = yield __vitePreload(() => __async(null, null, function* () {
       const { diagram: diagram22 } = yield Promise.resolve().then(() => diagramOA4YK3LP);
       return { diagram: diagram22 };
-    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
     return { id: id27, diagram: diagram2 };
   }), "loader");
   var plugin23 = {
@@ -67006,7 +67402,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = yield __vitePreload(() => __async(null, null, function* () {
       const { diagram: diagram22 } = yield Promise.resolve().then(() => architectureDiagramZJ3FMSHR);
       return { diagram: diagram22 };
-    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
     return { id: id28, diagram: diagram2 };
   }), "loader");
   var architecture = {
@@ -67023,7 +67419,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = yield __vitePreload(() => __async(null, null, function* () {
       const { diagram: diagram22 } = yield Promise.resolve().then(() => diagramFQU43EPY);
       return { diagram: diagram22 };
-    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
     return { id: id29, diagram: diagram2 };
   }), "loader");
   var plugin24 = {
@@ -67040,7 +67436,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = yield __vitePreload(() => __async(null, null, function* () {
       const { diagram: diagram22 } = yield Promise.resolve().then(() => ishikawaDiagramFXEZZL3T);
       return { diagram: diagram22 };
-    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
     return { id: id30, diagram: diagram2 };
   }), "loader");
   var ishikawa = {
@@ -67056,7 +67452,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = yield __vitePreload(() => __async(null, null, function* () {
       const { diagram: diagram22 } = yield Promise.resolve().then(() => vennDiagramL72KCM5P);
       return { diagram: diagram22 };
-    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
     return { id: id31, diagram: diagram2 };
   }), "loader");
   var plugin25 = {
@@ -67073,7 +67469,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = yield __vitePreload(() => __async(null, null, function* () {
       const { diagram: diagram22 } = yield Promise.resolve().then(() => diagramG47NLZAW);
       return { diagram: diagram22 };
-    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
     return { id: id32, diagram: diagram2 };
   }), "loader");
   var treemap = {
@@ -67089,7 +67485,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = yield __vitePreload(() => __async(null, null, function* () {
       const { diagram: diagram22 } = yield Promise.resolve().then(() => wardleyDiagramEHGQE667);
       return { diagram: diagram22 };
-    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
     return { id: id33, diagram: diagram2 };
   }), "loader");
   var plugin26 = {
@@ -67106,7 +67502,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = yield __vitePreload(() => __async(null, null, function* () {
       const { diagram: diagram22 } = yield Promise.resolve().then(() => cynefinDiagramTSTJHNR4);
       return { diagram: diagram22 };
-    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
     return { id: id34, diagram: diagram2 };
   }), "loader");
   var cynefin = {
@@ -67122,7 +67518,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = yield __vitePreload(() => __async(null, null, function* () {
       const { diagram: diagram22 } = yield Promise.resolve().then(() => railroadDiagramRFXS5EU6);
       return { diagram: diagram22 };
-    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
     return { id: id35, diagram: diagram2 };
   }), "loader");
   var railroad = {
@@ -67138,7 +67534,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = yield __vitePreload(() => __async(null, null, function* () {
       const { diagram: diagram22 } = yield Promise.resolve().then(() => ebnfDiagramCCIWWBDH);
       return { diagram: diagram22 };
-    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
     return { id: id36, diagram: diagram2 };
   }), "loader");
   var railroadEbnf = {
@@ -67154,7 +67550,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = yield __vitePreload(() => __async(null, null, function* () {
       const { diagram: diagram22 } = yield Promise.resolve().then(() => abnfDiagramVRR7QNED);
       return { diagram: diagram22 };
-    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
     return { id: id37, diagram: diagram2 };
   }), "loader");
   var railroadAbnf = {
@@ -67170,7 +67566,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
     const { diagram: diagram2 } = yield __vitePreload(() => __async(null, null, function* () {
       const { diagram: diagram22 } = yield Promise.resolve().then(() => pegDiagram2B236MQR);
       return { diagram: diagram22 };
-    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+    }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
     return { id: id38, diagram: diagram2 };
   }), "loader");
   var railroadPeg = {
@@ -71113,20 +71509,51 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
   const _hoisted_79$1 = { class: "input-bottom-bar" };
   const _hoisted_80$1 = { class: "ibb-btns" };
   const _hoisted_81$1 = ["title"];
-  const _hoisted_82$1 = { class: "rcp-search" };
-  const _hoisted_83$1 = { class: "rcp-tools" };
-  const _hoisted_84$1 = ["onClick"];
-  const _hoisted_85$1 = { class: "rcp-cat-count" };
+  const _hoisted_82$1 = { class: "tcp-tabs" };
+  const _hoisted_83$1 = {
+    key: 0,
+    class: "tcp-panel"
+  };
+  const _hoisted_84$1 = {
+    key: 0,
+    style: { "padding": "20px", "text-align": "center", "color": "var(--text-secondary)", "font-size": "12px" }
+  };
+  const _hoisted_85$1 = {
+    key: 1,
+    style: { "padding": "12px", "text-align": "center", "color": "var(--text-secondary)", "font-size": "12px" }
+  };
   const _hoisted_86$1 = {
+    key: 2,
+    class: "tcp-switch-list"
+  };
+  const _hoisted_87$1 = ["onClick"];
+  const _hoisted_88$1 = { class: "tcp-cat-count" };
+  const _hoisted_89 = {
+    key: 0,
+    class: "tcp-cat-tools"
+  };
+  const _hoisted_90 = { class: "tcp-switch-info" };
+  const _hoisted_91 = { class: "tcp-switch-name" };
+  const _hoisted_92 = ["title"];
+  const _hoisted_93 = ["onUpdate:modelValue"];
+  const _hoisted_94 = { class: "tcp-footer" };
+  const _hoisted_95 = {
+    key: 1,
+    class: "tcp-panel"
+  };
+  const _hoisted_96 = { class: "rcp-search" };
+  const _hoisted_97 = { class: "tcp-review-list" };
+  const _hoisted_98 = ["onClick"];
+  const _hoisted_99 = { class: "rcp-cat-count" };
+  const _hoisted_100 = {
     key: 0,
     class: "rcp-cat-tools"
   };
-  const _hoisted_87$1 = ["onClick"];
-  const _hoisted_88$1 = { class: "rcp-tool-name" };
-  const _hoisted_89 = { class: "rcp-tool-id" };
-  const _hoisted_90 = { class: "rcp-tool-tag" };
-  const _hoisted_91 = { class: "rcp-actions" };
-  const _hoisted_92 = ["disabled"];
+  const _hoisted_101 = ["onClick"];
+  const _hoisted_102 = { class: "rcp-tool-name" };
+  const _hoisted_103 = { class: "rcp-tool-id" };
+  const _hoisted_104 = { class: "rcp-tool-tag" };
+  const _hoisted_105 = ["disabled"];
   const _sfc_main$d = {
     __name: "RightPanel",
     setup(__props) {
@@ -71147,7 +71574,6 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
       const convListWidth = vue.ref(250);
       const topSentinel = vue.ref(null);
       const reviewMode = vue.ref("auto");
-      const reviewConfigOpen = vue.ref(false);
       const reviewSearchText = vue.ref("");
       const reviewToolStates = vue.ref({});
       const reviewBtnTitle = vue.computed(() => {
@@ -71172,10 +71598,8 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
         const m2 = reviewMode.value;
         const next2 = m2 === "auto" ? "manual" : m2 === "manual" ? "off" : "auto";
         reviewMode.value = next2;
-        state$2.settings["reviewMode"] = next2;
-        api.apiPut("/settings?convId=" + encodeURIComponent(state$2.currentConvId), state$2.settings).catch(() => {
+        api.apiPut("/tools/review", { reviewMode: next2 }).catch(() => {
           reviewMode.value = m2;
-          state$2.settings["reviewMode"] = m2;
         });
       }
       const saveReviewConfig = () => __async(null, null, function* () {
@@ -71186,12 +71610,14 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
           if (st2 === "black") blacklist.push(name2);
           else if (st2 === "white") whitelist.push(name2);
         }
-        state$2.settings["reviewBlacklist"] = blacklist;
-        state$2.settings["reviewWhitelist"] = whitelist;
         try {
-          yield api.apiPut("/settings?convId=" + encodeURIComponent(state$2.currentConvId), state$2.settings);
-          (_a3 = window.$toast) == null ? void 0 : _a3.call(window, "审核配置已保存", "success");
-          reviewConfigOpen.value = false;
+          yield api.apiPut("/tools/review", {
+            reviewMode: reviewMode.value,
+            reviewBlacklist: blacklist,
+            reviewWhitelist: whitelist
+          });
+          (_a3 = window.$toast) == null ? void 0 : _a3.call(window, "审核配置已保存（工作区专属）", "success");
+          toolConfigOpen.value = false;
         } catch (e3) {
           (_b2 = window.$toast) == null ? void 0 : _b2.call(window, "保存失败: " + (e3.message || e3), "error");
         }
@@ -71210,6 +71636,82 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
       function resetReviewConfig() {
         reviewToolStates.value = {};
         reviewSearchText.value = "";
+      }
+      const toolConfigOpen = vue.ref(false);
+      const tcActiveTab = vue.ref("switch");
+      const tcLoading = vue.ref(false);
+      const tcSwitchList = vue.ref([]);
+      const tcCategoryExpanded = vue.ref({});
+      const systemToolNames = /* @__PURE__ */ new Set([
+        "history_search",
+        "history_list",
+        "history_count",
+        "ask_user",
+        "delegate_task",
+        "delegate_single_turn",
+        "transfer_to_agent",
+        "update_plan",
+        "update_tasks",
+        "task_create",
+        "generate_commit_message",
+        "tool_stats"
+      ]);
+      const tcGroupedList = vue.computed(() => {
+        const catMap = {};
+        for (const cat of reviewCategories.value) {
+          for (const tool of cat.tools) {
+            catMap[tool.name] = cat.label;
+          }
+        }
+        const map3 = {};
+        for (const tool of tcSwitchList.value) {
+          if (tool.systemTool || systemToolNames.has(tool.name)) continue;
+          const cat = tool.category || catMap[tool.name] || "未分类";
+          if (!map3[cat]) {
+            map3[cat] = { category: cat, tools: [], expanded: tcCategoryExpanded.value[cat] !== false };
+          }
+          map3[cat].tools.push(tool);
+        }
+        const catOrder = reviewCategories.value.map((c2) => c2.label);
+        return Object.values(map3).sort((a2, b2) => {
+          const ia2 = catOrder.indexOf(a2.category);
+          const ib = catOrder.indexOf(b2.category);
+          if (ia2 !== -1 && ib !== -1) return ia2 - ib;
+          if (ia2 !== -1) return -1;
+          if (ib !== -1) return 1;
+          return 0;
+        });
+      });
+      function toggleTcCategory(cat) {
+        const m2 = __spreadValues({}, tcCategoryExpanded.value);
+        m2[cat] = m2[cat] === void 0 ? false : !m2[cat];
+        tcCategoryExpanded.value = m2;
+      }
+      function loadTcSwitchList() {
+        return __async(this, null, function* () {
+          tcLoading.value = true;
+          try {
+            const items2 = yield api.apiGet("/tools");
+            tcSwitchList.value = items2;
+          } catch (e3) {
+            console.error("加载工具列表失败", e3);
+          } finally {
+            tcLoading.value = false;
+          }
+        });
+      }
+      function onTcSwitchToggle() {
+        return __async(this, null, function* () {
+          const toolMap = {};
+          for (const t4 of tcSwitchList.value) {
+            toolMap[t4.name] = t4.enabled;
+          }
+          try {
+            yield api.apiPut("/tools/save", { tools: toolMap });
+          } catch (e3) {
+            console.error("保存工具配置失败", e3);
+          }
+        });
       }
       const reviewCategories = vue.ref([
         { name: "file", label: "文件操作", expanded: false, tools: [
@@ -71395,9 +71897,12 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
         ] }
       ]);
       const filteredReviewCategories = vue.computed(() => {
+        const filtered = reviewCategories.value.map((cat) => __spreadProps(__spreadValues({}, cat), {
+          tools: cat.tools.filter((t4) => !systemToolNames.has(t4.name))
+        })).filter((cat) => cat.tools.length > 0);
         const q2 = reviewSearchText.value.trim().toLowerCase();
-        if (!q2) return reviewCategories.value;
-        return reviewCategories.value.map((cat) => __spreadProps(__spreadValues({}, cat), {
+        if (!q2) return filtered;
+        return filtered.map((cat) => __spreadProps(__spreadValues({}, cat), {
           expanded: true,
           tools: cat.tools.filter((t4) => t4.name.includes(q2) || t4.label.includes(q2))
         })).filter((cat) => cat.tools.length > 0);
@@ -72362,22 +72867,45 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
       });
       vue.watch(() => state$2.settings, (s2) => {
         if (s2) {
-          reviewMode.value = s2.reviewMode || "auto";
           autoIterate.value = !!s2.autoIterateOnRejection;
           autonomous.value = !!s2.autonomous;
           autoCollapse.value = s2.autoCollapse !== void 0 ? !!s2.autoCollapse : true;
           autoCommit.value = s2.autoCommit !== false;
-          reviewToolStates.value = {};
-          (Array.isArray(s2.reviewBlacklist) ? s2.reviewBlacklist : []).forEach((n2) => reviewToolStates.value[n2] = "black");
-          (Array.isArray(s2.reviewWhitelist) ? s2.reviewWhitelist : []).forEach((n2) => reviewToolStates.value[n2] = "white");
         }
       }, { immediate: true });
+      function loadWorkspaceReviewConfig() {
+        return __async(this, null, function* () {
+          try {
+            const rc = yield api.apiGet("/tools/review");
+            if (rc) {
+              reviewMode.value = rc.reviewMode || "auto";
+              reviewToolStates.value = {};
+              (Array.isArray(rc.reviewBlacklist) ? rc.reviewBlacklist : []).forEach((n2) => reviewToolStates.value[n2] = "black");
+              (Array.isArray(rc.reviewWhitelist) ? rc.reviewWhitelist : []).forEach((n2) => reviewToolStates.value[n2] = "white");
+            }
+          } catch (e3) {
+            if (state$2.settings) {
+              reviewMode.value = state$2.settings.reviewMode || "auto";
+              reviewToolStates.value = {};
+              (Array.isArray(state$2.settings.reviewBlacklist) ? state$2.settings.reviewBlacklist : []).forEach((n2) => reviewToolStates.value[n2] = "black");
+              (Array.isArray(state$2.settings.reviewWhitelist) ? state$2.settings.reviewWhitelist : []).forEach((n2) => reviewToolStates.value[n2] = "white");
+            }
+          }
+        });
+      }
       vue.watch(() => state$2.workspaceRoot, (root3) => {
         if (root3 && root3 !== "") {
           if (state$2.wsTokenStatsByWs[""]) {
             delete state$2.wsTokenStatsByWs[""];
           }
           loadWsTokenStats();
+          loadWorkspaceReviewConfig();
+        }
+      });
+      vue.watch(toolConfigOpen, (v3) => {
+        if (v3) {
+          tcActiveTab.value = "switch";
+          loadTcSwitchList();
         }
       });
       const handleBeforeUnload = () => {
@@ -72389,6 +72917,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
         loadWsTokenStats();
         loadConvList();
         scrollToBottom();
+        if (state$2.workspaceRoot && state$2.workspaceRoot !== "") loadWorkspaceReviewConfig();
         vue.nextTick(() => startContentResizeObserver());
         vue.nextTick(() => updateInputPadding());
         vue.nextTick(() => __async(null, null, function* () {
@@ -72526,7 +73055,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                 name: "bot",
                 size: 16
               }),
-              _cache[15] || (_cache[15] = vue.createTextVNode(" 对话", -1))
+              _cache[16] || (_cache[16] = vue.createTextVNode(" 对话", -1))
             ]),
             vue.createElementVNode("div", _hoisted_4$b, [
               vue.createElementVNode("button", {
@@ -72605,7 +73134,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                   class: "scroll-more-hint",
                   ref_key: "topSentinel",
                   ref: topSentinel
-                }, [..._cache[16] || (_cache[16] = [
+                }, [..._cache[17] || (_cache[17] = [
                   vue.createElementVNode("span", null, "加载更早消息...", -1)
                 ])], 512)) : vue.createCommentVNode("", true),
                 vue.createElementVNode("div", _hoisted_14$6, [
@@ -72631,7 +73160,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                 name: "git-branch",
                                 size: 10
                               }),
-                              _cache[17] || (_cache[17] = vue.createTextVNode(" 委派任务", -1))
+                              _cache[18] || (_cache[18] = vue.createTextVNode(" 委派任务", -1))
                             ]),
                             vue.createElementVNode("span", _hoisted_20$5, vue.toDisplayString(delegationAgent(combo.user)), 1)
                           ])) : isFeedback2(combo.user) ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_21$4, [
@@ -72640,7 +73169,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                 name: "message-square",
                                 size: 10
                               }),
-                              _cache[18] || (_cache[18] = vue.createTextVNode(" 用户反馈", -1))
+                              _cache[19] || (_cache[19] = vue.createTextVNode(" 用户反馈", -1))
                             ])
                           ])) : vue.createCommentVNode("", true),
                           combo.user.content ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_23$3, [
@@ -72673,7 +73202,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                 name: "undo",
                                 size: 11
                               }),
-                              _cache[19] || (_cache[19] = vue.createTextVNode(" 回退", -1))
+                              _cache[20] || (_cache[20] = vue.createTextVNode(" 回退", -1))
                             ], 8, _hoisted_28$3)
                           ])) : vue.createCommentVNode("", true),
                           combo.user._time ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_29$3, vue.toDisplayString(combo.user._time), 1)) : vue.createCommentVNode("", true)
@@ -72702,7 +73231,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                     name: "message-square",
                                     size: 11
                                   }),
-                                  _cache[20] || (_cache[20] = vue.createTextVNode(" 用户反馈", -1))
+                                  _cache[21] || (_cache[21] = vue.createTextVNode(" 用户反馈", -1))
                                 ]),
                                 vue.createElementVNode("div", _hoisted_35$3, vue.toDisplayString(fb.content), 1)
                               ]);
@@ -72714,18 +73243,18 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                               class: "folded-summary",
                               onClick: ($event) => combo.assistant._folded = !combo.assistant._folded
                             }, [
-                              _cache[21] || (_cache[21] = vue.createElementVNode("span", { class: "folded-chevron" }, "▸", -1)),
+                              _cache[22] || (_cache[22] = vue.createElementVNode("span", { class: "folded-chevron" }, "▸", -1)),
                               vue.createVNode(SvgIcon, {
                                 name: "list",
                                 size: 11
                               }),
-                              _cache[22] || (_cache[22] = vue.createElementVNode("span", { class: "folded-title" }, "完成摘要", -1)),
+                              _cache[23] || (_cache[23] = vue.createElementVNode("span", { class: "folded-title" }, "完成摘要", -1)),
                               vue.createElementVNode("span", _hoisted_37$3, vue.toDisplayString(msgSummary2(combo.assistant)), 1)
                             ], 8, _hoisted_36$3)) : vue.createCommentVNode("", true),
                             !combo.assistant._folded ? (vue.openBlock(true), vue.createElementBlock(vue.Fragment, { key: 1 }, vue.renderList(combo.assistant.segments, (seg, si2) => {
                               return vue.openBlock(), vue.createElementBlock(vue.Fragment, { key: si2 }, [
                                 seg.type === "thinking" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_38$3, [
-                                  _cache[24] || (_cache[24] = vue.createElementVNode("span", { class: "tl-dot tl-dot-thinking" }, null, -1)),
+                                  _cache[25] || (_cache[25] = vue.createElementVNode("span", { class: "tl-dot tl-dot-thinking" }, null, -1)),
                                   vue.createElementVNode("div", _hoisted_39$3, [
                                     !seg._collapsed ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_40$3, vue.toDisplayString(seg.content), 1)) : (vue.openBlock(), vue.createElementBlock("div", {
                                       key: 1,
@@ -72736,7 +73265,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                         name: "message-square",
                                         size: 12
                                       }),
-                                      _cache[23] || (_cache[23] = vue.createTextVNode(" 思考…", -1))
+                                      _cache[24] || (_cache[24] = vue.createTextVNode(" 思考…", -1))
                                     ], 8, _hoisted_41$3)),
                                     !seg._collapsed ? (vue.openBlock(), vue.createElementBlock("div", {
                                       key: 2,
@@ -72746,7 +73275,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                     }, "▲ 收起", 8, _hoisted_42$3)) : vue.createCommentVNode("", true)
                                   ])
                                 ])) : seg.type === "tool_call" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_43$3, [
-                                  _cache[29] || (_cache[29] = vue.createElementVNode("span", { class: "tl-dot tl-dot-tool" }, null, -1)),
+                                  _cache[30] || (_cache[30] = vue.createElementVNode("span", { class: "tl-dot tl-dot-tool" }, null, -1)),
                                   vue.createElementVNode("div", _hoisted_44$3, [
                                     vue.createElementVNode("div", {
                                       class: "tl-tc-header",
@@ -72765,22 +73294,22 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                     seg._expanded ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_50$3, [
                                       isTerminalTool2(seg) ? (vue.openBlock(), vue.createElementBlock(vue.Fragment, { key: 0 }, [
                                         vue.createElementVNode("div", _hoisted_51$3, [
-                                          _cache[25] || (_cache[25] = vue.createElementVNode("div", { class: "tl-tc-section-title" }, "命令", -1)),
+                                          _cache[26] || (_cache[26] = vue.createElementVNode("div", { class: "tl-tc-section-title" }, "命令", -1)),
                                           vue.createElementVNode("div", _hoisted_52$3, vue.toDisplayString(formatTerminalCommand2(seg)), 1)
                                         ]),
                                         seg.result ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_53$3, [
-                                          _cache[26] || (_cache[26] = vue.createElementVNode("div", { class: "tl-tc-section-title" }, "输出", -1)),
+                                          _cache[27] || (_cache[27] = vue.createElementVNode("div", { class: "tl-tc-section-title" }, "输出", -1)),
                                           vue.createElementVNode("pre", _hoisted_54$3, vue.toDisplayString(seg.result), 1)
                                         ])) : vue.createCommentVNode("", true)
                                       ], 64)) : (vue.openBlock(), vue.createElementBlock(vue.Fragment, { key: 1 }, [
                                         seg.argsRaw ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_55$3, [
-                                          _cache[27] || (_cache[27] = vue.createElementVNode("div", { class: "tl-tc-section-title" }, "参数", -1)),
+                                          _cache[28] || (_cache[28] = vue.createElementVNode("div", { class: "tl-tc-section-title" }, "参数", -1)),
                                           vue.createElementVNode("pre", null, [
                                             vue.createElementVNode("code", null, vue.toDisplayString(seg.argsRaw), 1)
                                           ])
                                         ])) : vue.createCommentVNode("", true),
                                         seg.result ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_56$3, [
-                                          _cache[28] || (_cache[28] = vue.createElementVNode("div", { class: "tl-tc-section-title" }, "结果", -1)),
+                                          _cache[29] || (_cache[29] = vue.createElementVNode("div", { class: "tl-tc-section-title" }, "结果", -1)),
                                           vue.createElementVNode("pre", null, [
                                             vue.createElementVNode("code", null, vue.toDisplayString(seg.result), 1)
                                           ])
@@ -72789,7 +73318,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                     ])) : vue.createCommentVNode("", true)
                                   ])
                                 ])) : seg.type === "ask_user" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_57$2, [
-                                  _cache[30] || (_cache[30] = vue.createElementVNode("span", { class: "tl-dot tl-dot-ask" }, null, -1)),
+                                  _cache[31] || (_cache[31] = vue.createElementVNode("span", { class: "tl-dot tl-dot-ask" }, null, -1)),
                                   vue.createElementVNode("div", _hoisted_58$2, [
                                     vue.createVNode(AskUserCard, {
                                       question: seg.question,
@@ -72801,7 +73330,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                     }, null, 8, ["question", "ask-type", "options", "call-id", "answered", "onAnswer"])
                                   ])
                                 ])) : seg.type === "content" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_59$2, [
-                                  _cache[31] || (_cache[31] = vue.createElementVNode("span", { class: "tl-dot tl-dot-content" }, null, -1)),
+                                  _cache[32] || (_cache[32] = vue.createElementVNode("span", { class: "tl-dot tl-dot-content" }, null, -1)),
                                   vue.createElementVNode("div", _hoisted_60$2, [
                                     vue.createVNode(MarkdownRenderer, {
                                       text: seg.content,
@@ -72821,11 +73350,11 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                               name: "chevron-up",
                               size: 12
                             }),
-                            _cache[32] || (_cache[32] = vue.createElementVNode("span", null, "折叠输出", -1))
+                            _cache[33] || (_cache[33] = vue.createElementVNode("span", null, "折叠输出", -1))
                           ], 8, _hoisted_61$2)) : vue.createCommentVNode("", true),
                           !combo.assistant.segments || combo.assistant.segments.length === 0 ? (vue.openBlock(), vue.createElementBlock(vue.Fragment, { key: 3 }, [
                             combo.assistant.content ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_62$2, [
-                              _cache[33] || (_cache[33] = vue.createElementVNode("span", { class: "tl-dot tl-dot-content" }, null, -1)),
+                              _cache[34] || (_cache[34] = vue.createElementVNode("span", { class: "tl-dot tl-dot-content" }, null, -1)),
                               vue.createElementVNode("div", _hoisted_63$2, [
                                 vue.createVNode(MarkdownRenderer, {
                                   text: combo.assistant.content,
@@ -72836,7 +73365,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                           ], 64)) : vue.createCommentVNode("", true),
                           combo.assistant._time ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_64$2, vue.toDisplayString(combo.assistant._time), 1)) : vue.createCommentVNode("", true)
                         ]),
-                        combo.assistant._loading ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_65$2, [..._cache[34] || (_cache[34] = [
+                        combo.assistant._loading ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_65$2, [..._cache[35] || (_cache[35] = [
                           vue.createElementVNode("span", { class: "dot" }, null, -1),
                           vue.createElementVNode("span", { class: "dot" }, null, -1),
                           vue.createElementVNode("span", { class: "dot" }, null, -1)
@@ -72845,7 +73374,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                     ], 64);
                   }), 128))
                 ]),
-                vue.unref(state$2).chatLoading && vue.unref(state$2).messages && vue.unref(state$2).messages.length > 0 ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_66$2, [..._cache[35] || (_cache[35] = [
+                vue.unref(state$2).chatLoading && vue.unref(state$2).messages && vue.unref(state$2).messages.length > 0 ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_66$2, [..._cache[36] || (_cache[36] = [
                   vue.createElementVNode("span", { class: "dot-pulse" }, null, -1),
                   vue.createElementVNode("span", null, "思考中...", -1)
                 ])])) : vue.createCommentVNode("", true),
@@ -72856,8 +73385,8 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                       size: 32
                     })
                   ]),
-                  _cache[36] || (_cache[36] = vue.createElementVNode("div", { class: "chat-empty-text" }, "开始新的对话", -1)),
-                  _cache[37] || (_cache[37] = vue.createElementVNode("div", { class: "chat-empty-hint" }, "发送消息即可与 AI 助手对话", -1))
+                  _cache[37] || (_cache[37] = vue.createElementVNode("div", { class: "chat-empty-text" }, "开始新的对话", -1)),
+                  _cache[38] || (_cache[38] = vue.createElementVNode("div", { class: "chat-empty-hint" }, "发送消息即可与 AI 助手对话", -1))
                 ])) : vue.createCommentVNode("", true),
                 showScrollDown.value ? (vue.openBlock(), vue.createElementBlock("div", {
                   key: 3,
@@ -72869,7 +73398,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                       name: "chevron-down",
                       size: 14
                     }),
-                    _cache[38] || (_cache[38] = vue.createTextVNode(" 新消息", -1))
+                    _cache[39] || (_cache[39] = vue.createTextVNode(" 新消息", -1))
                   ])
                 ], 2)) : vue.createCommentVNode("", true)
               ], 544),
@@ -72978,106 +73507,168 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                         vue.createTextVNode(" " + vue.toDisplayString(reviewBtnLabel.value), 1)
                       ], 10, _hoisted_81$1),
                       vue.createElementVNode("span", {
-                        class: vue.normalizeClass(["obtn obtn-review-config", { active: reviewConfigOpen.value }]),
-                        onClick: _cache[7] || (_cache[7] = ($event) => reviewConfigOpen.value = !reviewConfigOpen.value),
-                        title: "审核黑白名单配置"
+                        class: vue.normalizeClass(["obtn obtn-review-config", { active: toolConfigOpen.value }]),
+                        onClick: _cache[7] || (_cache[7] = ($event) => toolConfigOpen.value = !toolConfigOpen.value),
+                        title: "工具配置：启用/禁用 + 审核黑白名单"
                       }, [
                         vue.createVNode(SvgIcon, {
                           name: "settings",
                           size: 12
                         }),
-                        _cache[39] || (_cache[39] = vue.createTextVNode(" 配置", -1))
+                        _cache[40] || (_cache[40] = vue.createTextVNode(" 工具配置", -1))
                       ], 2),
-                      reviewConfigOpen.value ? (vue.openBlock(), vue.createElementBlock("div", {
+                      toolConfigOpen.value ? (vue.openBlock(), vue.createElementBlock("div", {
                         key: 0,
-                        class: "review-config-popover",
-                        onClick: _cache[10] || (_cache[10] = vue.withModifiers(() => {
+                        class: "tool-config-popover",
+                        onClick: _cache[11] || (_cache[11] = vue.withModifiers(() => {
                         }, ["stop"]))
                       }, [
-                        _cache[40] || (_cache[40] = vue.createStaticVNode('<div class="rcp-header" data-v-bbabf906><span data-v-bbabf906>审核配置</span><span class="rcp-header-hint" data-v-bbabf906>点击工具切换：<span class="rcp-tag-dot rcp-dot-none" data-v-bbabf906></span>默认 → <span class="rcp-tag-dot rcp-dot-black" data-v-bbabf906></span>黑名单 → <span class="rcp-tag-dot rcp-dot-white" data-v-bbabf906></span>白名单</span></div>', 1)),
                         vue.createElementVNode("div", _hoisted_82$1, [
-                          vue.withDirectives(vue.createElementVNode("input", {
-                            "onUpdate:modelValue": _cache[8] || (_cache[8] = ($event) => reviewSearchText.value = $event),
-                            placeholder: "搜索工具...",
-                            class: "rcp-search-input"
-                          }, null, 512), [
-                            [vue.vModelText, reviewSearchText.value]
-                          ])
+                          vue.createElementVNode("span", {
+                            class: vue.normalizeClass(["tcp-tab", { active: tcActiveTab.value === "switch" }]),
+                            onClick: _cache[8] || (_cache[8] = ($event) => tcActiveTab.value = "switch")
+                          }, "启用开关", 2),
+                          vue.createElementVNode("span", {
+                            class: vue.normalizeClass(["tcp-tab", { active: tcActiveTab.value === "review" }]),
+                            onClick: _cache[9] || (_cache[9] = ($event) => tcActiveTab.value = "review")
+                          }, "审核黑白名单", 2)
                         ]),
-                        vue.createElementVNode("div", _hoisted_83$1, [
-                          (vue.openBlock(true), vue.createElementBlock(vue.Fragment, null, vue.renderList(filteredReviewCategories.value, (cat) => {
-                            return vue.openBlock(), vue.createElementBlock("div", {
-                              key: cat.name,
-                              class: "rcp-category"
-                            }, [
-                              vue.createElementVNode("div", {
-                                class: "rcp-cat-header",
-                                onClick: ($event) => cat.expanded = !cat.expanded
+                        tcActiveTab.value === "switch" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_83$1, [
+                          _cache[41] || (_cache[41] = vue.createElementVNode("div", { class: "rcp-header" }, [
+                            vue.createElementVNode("span", null, "工具开关"),
+                            vue.createElementVNode("span", { class: "rcp-header-hint" }, "禁用后不暴露给 Agent（需重启对话生效）")
+                          ], -1)),
+                          tcLoading.value ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_84$1, "加载中…")) : tcSwitchList.value.length === 0 ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_85$1, "加载失败，请重试")) : (vue.openBlock(), vue.createElementBlock("div", _hoisted_86$1, [
+                            (vue.openBlock(true), vue.createElementBlock(vue.Fragment, null, vue.renderList(tcGroupedList.value, (cat) => {
+                              return vue.openBlock(), vue.createElementBlock("div", {
+                                key: cat.category,
+                                class: "tcp-switch-category"
                               }, [
-                                vue.createVNode(SvgIcon, {
-                                  name: cat.expanded ? "chevron-down" : "chevron-right",
-                                  size: 10
-                                }, null, 8, ["name"]),
-                                vue.createElementVNode("span", null, vue.toDisplayString(cat.label), 1),
-                                vue.createElementVNode("span", _hoisted_85$1, vue.toDisplayString(cat.tools.filter((t4) => getReviewToolState(t4.name) !== "none").length) + "/" + vue.toDisplayString(cat.tools.length), 1)
-                              ], 8, _hoisted_84$1),
-                              cat.expanded ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_86$1, [
-                                (vue.openBlock(true), vue.createElementBlock(vue.Fragment, null, vue.renderList(cat.tools, (tool) => {
-                                  return vue.openBlock(), vue.createElementBlock("div", {
-                                    key: tool.name,
-                                    class: vue.normalizeClass(["rcp-tool-item", "rcp-tool-" + getReviewToolState(tool.name)]),
-                                    onClick: ($event) => cycleReviewTool(tool.name)
-                                  }, [
-                                    vue.createElementVNode("span", _hoisted_88$1, vue.toDisplayString(tool.label), 1),
-                                    vue.createElementVNode("span", _hoisted_89, vue.toDisplayString(tool.name), 1),
-                                    vue.createElementVNode("span", _hoisted_90, vue.toDisplayString(reviewStateLabel(getReviewToolState(tool.name))), 1)
-                                  ], 10, _hoisted_87$1);
-                                }), 128))
-                              ])) : vue.createCommentVNode("", true)
-                            ]);
-                          }), 128))
-                        ]),
-                        vue.createElementVNode("div", _hoisted_91, [
-                          vue.createElementVNode("button", {
-                            class: "rcp-btn rcp-btn-reset",
-                            onClick: resetReviewConfig
-                          }, "重置"),
-                          vue.createElementVNode("button", {
-                            class: "rcp-btn rcp-btn-save",
-                            onClick: saveReviewConfig
-                          }, "保存"),
-                          vue.createElementVNode("button", {
-                            class: "rcp-btn rcp-btn-close",
-                            onClick: _cache[9] || (_cache[9] = ($event) => reviewConfigOpen.value = false)
-                          }, "关闭")
-                        ])
+                                vue.createElementVNode("div", {
+                                  class: "tcp-cat-header",
+                                  onClick: ($event) => toggleTcCategory(cat.category)
+                                }, [
+                                  vue.createVNode(SvgIcon, {
+                                    name: cat.expanded ? "chevron-down" : "chevron-right",
+                                    size: 10
+                                  }, null, 8, ["name"]),
+                                  vue.createElementVNode("span", null, vue.toDisplayString(cat.category), 1),
+                                  vue.createElementVNode("span", _hoisted_88$1, vue.toDisplayString(cat.tools.filter((t4) => t4.enabled).length) + "/" + vue.toDisplayString(cat.tools.length), 1)
+                                ], 8, _hoisted_87$1),
+                                cat.expanded ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_89, [
+                                  (vue.openBlock(true), vue.createElementBlock(vue.Fragment, null, vue.renderList(cat.tools, (tool) => {
+                                    return vue.openBlock(), vue.createElementBlock("div", {
+                                      key: tool.name,
+                                      class: "tcp-switch-item"
+                                    }, [
+                                      vue.createElementVNode("div", _hoisted_90, [
+                                        vue.createElementVNode("span", _hoisted_91, vue.toDisplayString(tool.name), 1)
+                                      ]),
+                                      vue.createElementVNode("label", {
+                                        class: "tool-switch-toggle",
+                                        title: tool.usageGuide
+                                      }, [
+                                        vue.withDirectives(vue.createElementVNode("input", {
+                                          type: "checkbox",
+                                          "onUpdate:modelValue": ($event) => tool.enabled = $event,
+                                          onChange: onTcSwitchToggle
+                                        }, null, 40, _hoisted_93), [
+                                          [vue.vModelCheckbox, tool.enabled]
+                                        ]),
+                                        vue.createElementVNode("span", {
+                                          class: vue.normalizeClass(["toggle-indicator", { on: tool.enabled }])
+                                        }, null, 2)
+                                      ], 8, _hoisted_92)
+                                    ]);
+                                  }), 128))
+                                ])) : vue.createCommentVNode("", true)
+                              ]);
+                            }), 128))
+                          ])),
+                          vue.createElementVNode("div", _hoisted_94, " 共 " + vue.toDisplayString(tcSwitchList.value.length) + " 个工具，已启用 " + vue.toDisplayString(tcSwitchList.value.filter((t4) => t4.enabled).length) + " 个 ", 1)
+                        ])) : vue.createCommentVNode("", true),
+                        tcActiveTab.value === "review" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_95, [
+                          _cache[42] || (_cache[42] = vue.createStaticVNode('<div class="rcp-header" data-v-1aba76c4><span data-v-1aba76c4>审核配置</span><span class="rcp-header-hint" data-v-1aba76c4>点击切换：<span class="rcp-tag-dot rcp-dot-none" data-v-1aba76c4></span>默认 → <span class="rcp-tag-dot rcp-dot-black" data-v-1aba76c4></span>黑名单 → <span class="rcp-tag-dot rcp-dot-white" data-v-1aba76c4></span>白名单</span></div>', 1)),
+                          vue.createElementVNode("div", _hoisted_96, [
+                            vue.withDirectives(vue.createElementVNode("input", {
+                              "onUpdate:modelValue": _cache[10] || (_cache[10] = ($event) => reviewSearchText.value = $event),
+                              placeholder: "搜索工具...",
+                              class: "rcp-search-input"
+                            }, null, 512), [
+                              [vue.vModelText, reviewSearchText.value]
+                            ])
+                          ]),
+                          vue.createElementVNode("div", _hoisted_97, [
+                            (vue.openBlock(true), vue.createElementBlock(vue.Fragment, null, vue.renderList(filteredReviewCategories.value, (cat) => {
+                              return vue.openBlock(), vue.createElementBlock("div", {
+                                key: cat.name,
+                                class: "rcp-category"
+                              }, [
+                                vue.createElementVNode("div", {
+                                  class: "rcp-cat-header",
+                                  onClick: ($event) => cat.expanded = !cat.expanded
+                                }, [
+                                  vue.createVNode(SvgIcon, {
+                                    name: cat.expanded ? "chevron-down" : "chevron-right",
+                                    size: 10
+                                  }, null, 8, ["name"]),
+                                  vue.createElementVNode("span", null, vue.toDisplayString(cat.label), 1),
+                                  vue.createElementVNode("span", _hoisted_99, vue.toDisplayString(cat.tools.filter((t4) => getReviewToolState(t4.name) !== "none").length) + "/" + vue.toDisplayString(cat.tools.length), 1)
+                                ], 8, _hoisted_98),
+                                cat.expanded ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_100, [
+                                  (vue.openBlock(true), vue.createElementBlock(vue.Fragment, null, vue.renderList(cat.tools, (tool) => {
+                                    return vue.openBlock(), vue.createElementBlock("div", {
+                                      key: tool.name,
+                                      class: vue.normalizeClass(["rcp-tool-item", "rcp-tool-" + getReviewToolState(tool.name)]),
+                                      onClick: ($event) => cycleReviewTool(tool.name)
+                                    }, [
+                                      vue.createElementVNode("span", _hoisted_102, vue.toDisplayString(tool.label), 1),
+                                      vue.createElementVNode("span", _hoisted_103, vue.toDisplayString(tool.name), 1),
+                                      vue.createElementVNode("span", _hoisted_104, vue.toDisplayString(reviewStateLabel(getReviewToolState(tool.name))), 1)
+                                    ], 10, _hoisted_101);
+                                  }), 128))
+                                ])) : vue.createCommentVNode("", true)
+                              ]);
+                            }), 128))
+                          ]),
+                          vue.createElementVNode("div", { class: "tcp-footer tcp-footer-actions" }, [
+                            vue.createElementVNode("button", {
+                              class: "rcp-btn rcp-btn-reset",
+                              onClick: resetReviewConfig
+                            }, "重置"),
+                            vue.createElementVNode("button", {
+                              class: "rcp-btn rcp-btn-save",
+                              onClick: saveReviewConfig
+                            }, "保存")
+                          ])
+                        ])) : vue.createCommentVNode("", true)
                       ])) : vue.createCommentVNode("", true),
                       vue.createElementVNode("span", {
                         class: vue.normalizeClass(["obtn", { active: autoCollapse.value }]),
-                        onClick: _cache[11] || (_cache[11] = ($event) => toggleAuto("autoCollapse")),
+                        onClick: _cache[12] || (_cache[12] = ($event) => toggleAuto("autoCollapse")),
                         title: "自动折叠：新消息发出时折叠旧输出，显示完成摘要"
                       }, [
                         vue.createVNode(SvgIcon, {
                           name: "list",
                           size: 12
                         }),
-                        _cache[41] || (_cache[41] = vue.createTextVNode(" 折叠", -1))
+                        _cache[43] || (_cache[43] = vue.createTextVNode(" 折叠", -1))
                       ], 2),
                       vue.createElementVNode("span", {
                         class: vue.normalizeClass(["obtn", { active: autoCommit.value }]),
-                        onClick: _cache[12] || (_cache[12] = ($event) => toggleAuto("autoCommit")),
+                        onClick: _cache[13] || (_cache[13] = ($event) => toggleAuto("autoCommit")),
                         title: "自动 Git 提交：任务完成时自动 git add + commit"
                       }, [
                         vue.createVNode(SvgIcon, {
                           name: "git-commit",
                           size: 12
                         }),
-                        _cache[42] || (_cache[42] = vue.createTextVNode(" 提交", -1))
+                        _cache[44] || (_cache[44] = vue.createTextVNode(" 提交", -1))
                       ], 2),
-                      _cache[44] || (_cache[44] = vue.createElementVNode("span", { class: "obtn-sep" }, null, -1)),
+                      _cache[46] || (_cache[46] = vue.createElementVNode("span", { class: "obtn-sep" }, null, -1)),
                       vue.createElementVNode("span", {
                         class: vue.normalizeClass(["obtn", "obtn-agent", { active: autonomous.value }]),
-                        onClick: _cache[13] || (_cache[13] = ($event) => toggleAuto("autonomous")),
+                        onClick: _cache[14] || (_cache[14] = ($event) => toggleAuto("autonomous")),
                         title: "自主模式：开启=连续执行全部计划步骤，关闭=单次回复"
                       }, [
                         vue.createVNode(SvgIcon, {
@@ -73085,7 +73676,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                           size: 12,
                           color: "#d4a74e"
                         }),
-                        _cache[43] || (_cache[43] = vue.createTextVNode(" 自主", -1))
+                        _cache[45] || (_cache[45] = vue.createTextVNode(" 自主", -1))
                       ], 2)
                     ]),
                     !vue.unref(state$2).chatLoading ? (vue.openBlock(), vue.createElementBlock("button", {
@@ -73098,7 +73689,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                         name: "send-plane",
                         size: 16
                       })
-                    ], 8, _hoisted_92)) : (vue.openBlock(), vue.createElementBlock("button", {
+                    ], 8, _hoisted_105)) : (vue.openBlock(), vue.createElementBlock("button", {
                       key: 1,
                       class: "stop-btn",
                       onClick: stopChat
@@ -73114,7 +73705,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
             ]),
             showDebugLog.value ? (vue.openBlock(), vue.createBlock(DebugLogPanel, {
               key: 0,
-              onClose: _cache[14] || (_cache[14] = ($event) => showDebugLog.value = false)
+              onClose: _cache[15] || (_cache[15] = ($event) => showDebugLog.value = false)
             })) : (vue.openBlock(), vue.createBlock(ConvSidebar, {
               key: 1,
               conversations: vue.unref(state$2).conversations,
@@ -73133,7 +73724,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
       };
     }
   };
-  const RightPanel = /* @__PURE__ */ _export_sfc(_sfc_main$d, [["__scopeId", "data-v-bbabf906"]]);
+  const RightPanel = /* @__PURE__ */ _export_sfc(_sfc_main$d, [["__scopeId", "data-v-1aba76c4"]]);
   const _hoisted_1$c = { class: "status-bar" };
   const _hoisted_2$c = { class: "status-left" };
   const _hoisted_3$b = {
@@ -82578,7 +83169,9 @@ WARNING: This link could potentially be dangerous`)) {
         philosophyEnabled: false,
         philosophySelected: [],
         mainAgentPhilosophy: "",
-        philosophyRoles: {}
+        philosophyRoles: {},
+        // MCP
+        autoConnectMCP: true
       });
       const modelsForProvider = vue.computed(() => {
         if (!local.provider || !modelsMap.value[local.provider]) return [];
@@ -83587,7 +84180,7 @@ WARNING: This link could potentially be dangerous`)) {
       };
     }
   };
-  const SettingsModal = /* @__PURE__ */ _export_sfc(_sfc_main$a, [["__scopeId", "data-v-63c88419"]]);
+  const SettingsModal = /* @__PURE__ */ _export_sfc(_sfc_main$a, [["__scopeId", "data-v-669559fa"]]);
   const _hoisted_1$9 = { class: "modal-content sys-modal" };
   const _hoisted_2$9 = { class: "modal-header" };
   const _hoisted_3$8 = { class: "modal-body" };
@@ -84760,7 +85353,7 @@ AI 会自动分解复杂任务为可追踪的子任务步骤，每步的执行�
   const shortcutsMd = "# 快捷键参考\r\n\r\nPairCode IDE 提供了丰富的快捷键，帮助你更高效地编写代码和管理项目。以下按功能分类列出所有可用的快捷键。\r\n\r\n---\r\n\r\n## 一、通用操作\r\n\r\n**控制 IDE 界面面板的显示与隐藏，快速切换工作布局。**\r\n\r\n| 快捷键 | 功能 | 适用范围 |\r\n|--------|------|----------|\r\n| Ctrl+B | 切换侧栏（文件浏览器）显示/隐藏 | 全局 |\r\n| Ctrl+\\` | 切换终端面板显示/隐藏 | 全局 |\r\n| Ctrl+K | 专注模式：隐藏所有面板，聚焦代码编辑区 | 全局 |\r\n| Ctrl+Shift+C | 切换对话面板显示/隐藏 | 全局 |\r\n| Escape | 关闭当前模态框或菜单 | 全局 |\r\n\r\n## 二、文件编辑\r\n\r\n**编辑器中常用的编辑操作，与主流编辑器保持一致。**\r\n\r\n| 快捷键 | 功能 | 适用范围 |\r\n|--------|------|----------|\r\n| Ctrl+S | 保存当前文件 | 编辑器 |\r\n| Ctrl+Z | 撤销操作 | 编辑器 |\r\n| Ctrl+Shift+Z / Ctrl+Y | 重做操作 | 编辑器 |\r\n| Ctrl+X | 剪切选中的内容 | 编辑器 |\r\n| Ctrl+C | 复制选中的内容 | 编辑器 |\r\n| Ctrl+V | 粘贴剪贴板内容 | 编辑器 |\r\n| Ctrl+A | 全选当前文件内容 | 编辑器 |\r\n| Ctrl+F | 在当前文件中搜索 | 编辑器 |\r\n| Ctrl+H | 在当前文件中查找替换 | 编辑器 |\r\n| Ctrl+P | 按文件名快速打开文件 | 编辑器 |\r\n\r\n## 三、导航与视图\r\n\r\n**在不同功能面板之间快速切换，无需鼠标操作。**\r\n\r\n| 快捷键 | 功能 | 适用范围 |\r\n|--------|------|----------|\r\n| Ctrl+Shift+E | 切换到文件浏览器 | 全局 |\r\n| Ctrl+Shift+F | 全局搜索（在工作区中搜内容） | 全局 |\r\n| Ctrl+Shift+T | 打开对话面板 | 全局 |\r\n| F2 | 重命名选中的文件或文件夹 | 文件树 |\r\n| Ctrl+Tab | 在打开的文件标签页之间切换 | 编辑器 |\r\n| Ctrl+W | 关闭当前文件标签页 | 编辑器 |\r\n\r\n## 四、对话面板\r\n\r\n**AI 对话输入区的快捷操作。**\r\n\r\n| 快捷键 | 功能 | 适用范围 |\r\n|--------|------|----------|\r\n| Enter | 发送消息给 AI | 对话面板 |\r\n| Shift+Enter | 换行（多行输入） | 对话面板 |\r\n| Ctrl+Up | 切换到上一条对话 | 对话面板 |\r\n| Ctrl+Down | 切换到下一条对话 | 对话面板 |\r\n\r\n## 五、终端\r\n\r\n**终端面板的操作快捷键。**\r\n\r\n| 快捷键 | 功能 | 适用范围 |\r\n|--------|------|----------|\r\n| Ctrl+\\` | 打开/关闭终端面板 | 全局 |\r\n| Ctrl+Shift+\\` | 新建终端标签页 | 终端 |\r\n| Ctrl+W | 关闭当前终端标签页 | 终端 |\r\n| Ctrl+C | 中断当前正在运行的命令 | 终端 |\r\n\r\n## 六、多标签页导航\r\n\r\n| 快捷键 | 功能 | 适用范围 |\r\n|--------|------|----------|\r\n| Ctrl+Tab | 切换到下一个文件标签页 | 编辑器 |\r\n| Ctrl+Shift+Tab | 切换到上一个文件标签页 | 编辑器 |\r\n| Ctrl+PageUp | 切换到上一个文件标签页 | 编辑器 |\r\n| Ctrl+PageDown | 切换到下一个文件标签页 | 编辑器 |\r\n| Ctrl+W | 关闭当前文件标签页 | 编辑器 |\r\n";
   const faqMd = '# 常见问题\n\n## PairCode IDE 是什么？\n\nPairCode IDE 是一款 AI 原生的纯 Web 集成开发环境。与传统 IDE 不同，你只需用浏览器打开，在对话面板中用自然语言描述需求，AI 就能理解你的意图，自动完成代码编写、文件操作、命令执行等工作——让编程从手工操作转变为对话驱动。\n\n## 需要安装桌面客户端吗？\n\n不需要。PairCode IDE 是纯 Web 应用，你只需启动后台服务，然后用浏览器（推荐 Chrome、Edge、Firefox）访问即可。所有界面在浏览器中渲染，无需安装任何桌面客户端。\n\n## AI 能做什么？\n\nAI 可以读写和编辑你的代码文件、在工作区中执行命令、搜索和浏览项目结构、管理 Git 版本控制、启动调试会话、处理图片和办公文档、搜索网络信息，还能截图验证网页效果。基本上，日常开发中你能做的事情，AI 都可以帮你完成。\n\n## 如何让 AI 执行命令？\n\n你可以在对话中直接告诉 AI 需要运行什么命令，例如"运行测试"或"启动项目"。AI 会自动在终端中执行并返回结果输出。涉及文件写入和命令执行的操作会先请求你的确认。\n\n## 文件保存在哪里？\n\n所有文件都保存在你本地的工作区目录中。PairCode IDE 直接读写你本地磁盘上的文件，不经过云端存储。你可以在文件浏览器中看到完整的项目目录结构，用系统的文件管理器也能找到它们。\n\n## 如何切换 AI 模型？\n\n在设置面板的"AI 模型"选项卡中，你可以选择不同的 AI 服务商和模型。支持接入 OpenAI、Claude 等多种主流模型后端。你可以为执行任务和制定规划分别配置不同的模型。\n\n## 如何安装更多技能？\n\n在技能市场中可以浏览和安装社区贡献的技能模板和 MCP 扩展。技能是可复用的工作流程模板，MCP 扩展可以给 AI 添加新的能力。打开市场面板，搜索你需要的功能，一键即可安装使用。\n\n## 对话历史会丢失吗？\n\n不会。每次对话都会自动保存在本地磁盘上，你可以随时在对话列表中查看历史记录、继续之前的对话或开启新话题。切换工作区时，各项目的对话会自动隔离，互不干扰。\n\n## 如何保护隐私？\n\n所有操作都在你的本地计算机上执行，代码和对话内容不会发送到外部服务器（AI 模型调用除外，你可以选择使用本地模型避免数据外出）。API 服务只监听本地回环地址，默认不对外暴露。文件操作限定在工作区范围内。\n\n## 页面刷新后数据还在吗？\n\n大部分数据都会保留：\n- **对话历史** — 自动持久化到磁盘，刷新后完整恢复\n- **打开的文件** — 刷新后自动重新打开\n- **工作区状态** — 侧栏位置、面板大小等布局信息保存在浏览器中\n- **设置** — 主题、AI 模型配置等设置持久化到磁盘\n\n## 编辑器里的代码没有高亮怎么办？\n\n编辑器会根据文件扩展名自动切换语言模式。如果文件扩展名不常见，代码高亮可能无法自动识别。建议确认文件扩展名是否被支持，或使用常见的扩展名保存文件。\n\n## 什么是自主模式？和普通对话有什么区别？\n\n**普通模式**：你发一条指令，AI 执行并回复，然后等待你下一条指令。\n\n**自主模式**：你交给 AI 一个复杂任务（如"修复所有编译错误"），AI 会自动分解任务、逐个执行、迭代验证，直到全部完成。你不需要逐条发指令，只需在关键节点确认即可。\n\n## 能让 AI 访问我的私有 API 吗？\n\n可以通过 MCP（模型上下文协议）扩展来实现。在设置中添加自定义 MCP 服务器，AI 就能通过它访问你的私有 API、数据库或内部服务。\n\n## 遇到问题怎么办？\n\n你可以查看帮助菜单中的文档中心，里面有功能介绍、API 文档、工具文档和快捷键参考等详细资料。如果问题仍然无法解决，可以在对话中向 AI 描述你遇到的问题，它会尽力协助排查。\n';
   const gettingStartedMd = '# 快速开始\n\n欢迎使用 PairCode IDE！以下指南将带你快速上手，从打开工作区到用 AI 写代码，只需几分钟。\n\n---\n\n## 打开 IDE\n\nPairCode IDE 是一个纯 Web 应用，启动后台服务后，直接在浏览器中访问对应地址即可使用。所有界面在浏览器中渲染，无需安装任何桌面客户端。\n\n> 建议使用 Chrome、Edge 或 Firefox 等现代浏览器获得最佳体验。\n\n---\n\n## 设置工作区\n\n工作区是 IDE 操作的基础——所有文件操作、AI 对话和命令执行都将在这个目录范围内进行。\n\n1. 点击左侧活动栏顶部的**文件图标**打开文件浏览器\n2. 在文件浏览器顶部输入你的项目文件夹的完整路径\n3. 按回车确认，IDE 会自动加载该目录下的所有文件和子目录\n\n你也可以同时添加多个文件夹到同一个工作区中，方便跨目录浏览和管理代码。\n\n---\n\n## 与 AI 对话\n\n右侧的**对话面板**是 PairCode IDE 的核心交互界面。你只需用自然语言描述需求，AI 就能理解并执行。\n\n直接在输入框中输入你的需求，例如：\n\n- "创建一个 Go 文件，实现一个返回 JSON 的 HTTP 服务"\n- "帮我优化这个函数，加上错误处理和参数校验"\n- "搜索项目中所有调用了 Post 的地方"\n- "运行项目中的所有测试，并告诉我哪些失败了"\n- "把我的改动提交到 Git"\n\n按 Enter 发送消息，Shift+Enter 换行。AI 会实时流式展示它的思考过程、工具调用和结果输出。\n\n### 常用对话技巧\n\n| 技巧 | 说明 |\n|------|------|\n| **明确具体** | 越具体，AI 理解越准确。如"写一个函数"不如"写一个读取 JSON 配置文件的函数" |\n| **分步沟通** | 复杂任务可以分步骤告诉 AI，先分析，再重构 |\n| **提供上下文** | 在对话中粘贴错误信息或代码片段，AI 能给出更精准的修复方案 |\n| **使用反馈** | 如果 AI 输出不满意，直接指出问题，AI 会调整方案重新尝试 |\n\n---\n\n## 编辑代码\n\nAI 生成的代码会直接写入到文件中。你也可以在编辑器中手动查看和修改代码：\n\n- **多标签页** — 同时打开多个文件，在标签栏切换\n- **语法高亮** — 支持 Go、TypeScript、Python、Rust、Java、Vue 等主流语言\n- **代码折叠** — 折叠函数和代码块，聚焦关键逻辑\n- **Ctrl+S** — 保存当前文件的修改\n\n你还可以在编辑器中查看二进制文件的十六进制内容，或直接预览图片文件。\n\n---\n\n## 运行与调试\n\n### 使用内置终端\n\n按 Ctrl+\\` 打开 IDE 底部的终端面板，可以直接在工作区目录下运行命令。支持多标签页，方便在不同任务间切换。\n\n### 让 AI 帮你运行\n\n你也可以直接在对话中告诉 AI："运行项目并告诉我结果"或"执行 npm test"。AI 会自动在终端中执行命令、读取输出，并根据结果决定下一步操作。\n\n---\n\n## 版本控制\n\nGit 操作完全融入 AI 对话流程。你用自然语言就能完成所有 Git 操作：\n\n- "查看当前仓库状态"\n- "暂存所有修改并提交"\n- "创建一个新分支并切换过去"\n- "从远程拉取最新代码"\n\n你也可以通过左侧 Git 面板查看文件变更的详细对比，逐行确认每次改动的具体内容。\n\n---\n\n## 个性化设置\n\n点击活动栏的**齿轮图标**打开设置面板，你可以：\n\n- **AI 模型** — 选择不同的 AI 服务商和模型\n- **外观主题** — 切换暗色、白色、暖色和暗夜紫四套主题\n- **工作区管理** — 查看和切换最近使用的工作区\n- **系统指令** — 自定义 AI 的行为指导原则\n\n---\n\n## 探索更多\n\nPairCode IDE 还有更多强大功能等待你探索。欢迎查阅帮助文档中的其他章节：\n\n- **功能介绍** — 了解所有功能模块的详细说明\n- **工具文档** — 查看 AI 可使用的全部内置能力\n- **快捷键参考** — 常用快捷键一览\n- **API 文档** — 后端 HTTP API 接口说明\n- **常见问题** — 常见问题与解答\n';
-  const changelogMd = '# 更新日志\r\n\r\n> 所有 PairCode IDE 的重要变更均记录在此文件中。\r\n\r\n---\r\n\r\n## 1.1.2 — 2026-07-21\r\n\r\n### 新增\r\n- **附件标签化** — 消息中的文件/代码/图片附件不再嵌入正文，改为独立药丸形标签显示在用户消息文字下方，视觉更清爽\r\n- **粘贴长文本自动转临时附件** — 输入框粘贴超过 2000 字符的文本时，自动写入 `_temp/` 目录并作为附件挂载，避免大段代码/日志撑爆输入区\r\n\r\n### 改进\r\n- `addToChat` 瘦身：文件添加到对话不再预读文件内容（40KB 截断已无意义），仅传递路径引用\r\n- 目录引用新增 `type:dir` 支持，提示 agent 使用 `list_files` 查看\r\n- 选中代码添加对话现在保留代码内容尾注供 agent 直接参考（截断 3000 字）\r\n\r\n### 修复\r\n- 文件树 Shift/Ctrl 多选逻辑修复：范围选择改为基于同级节点列表，清除后重新选中\r\n\r\n---\r\n\r\n## 1.1.1 — 2026-07-21\r\n\r\n### 新增\r\n- **审核配置界面重设计** — 从纯文本输入改为工具卡片式交互：所有工具按类别分组（文件操作、命令执行、Git、网络、截图、图像、二进制、办公文档、CodeGraph、调试器、知识库、记忆、LSP、BUG检测、任务管理、扩展市场等），每个工具显示中文名称，点击切换三态（默认 → 黑名单 → 白名单），支持搜索过滤，配置更直观高效\r\n\r\n### 修复\r\n- **修复新对话空状态提示位置偏移** — "开始新的对话，发送消息即可与 AI 助手对话"提示及图标从左下角偏移修正为居中显示\r\n\r\n### 改进\r\n- 版本号统一升级至 1.1.1（前端 package.json、后端 main.go、打包配置）\r\n\r\n---\r\n\r\n## 1.1.0 — 2026-07-20\r\n\r\n### 新增\r\n- **自主模式原生终止** — 去掉 `finish_task` 强制结束机制，Agent 自然输出后直接结束循环，交互更流畅\r\n- **Agent 性能优化（P0-P3 五轮）** — eventRing 环形缓冲器减少内存分配、进度可视化（阶段指示器+工具调用计数+耗时）、工具描述精简减少 Token 消耗、并行工具执行机制、预压缩上下文避免截断\r\n- **会话连贯性增强** — 新对话开始时自动注入 Git 变更感知、代码图谱统计、工作区结构概览，Agent 无需从零分析项目\r\n\r\n### 改进\r\n- **ChatView 重构** — 消息渲染管线全面优化，新增交互超时保护、审核驳回追踪、折叠/展开状态持久化\r\n- **审核配置 UI 优化** — 弹窗改为向上弹出（bottom:100%），防止被视口底部裁切\r\n- **编辑工具 v2 升级** — 更精确的符号级定位，减少行号偏移问题\r\n- **kill_process 增强** — 改为杀进程树，彻底清理子进程\r\n- **自主模式架构重构** — ephemeralMsgs 隔离内层消息，长时压缩精准保留推理上下文\r\n\r\n### 修复\r\n- 修复 `planExpanded` / `tasksExpanded` / `currentPhase` 重复声明导致的运行时崩溃\r\n- 修复 `currentTasks` 未声明导致前端 `undefined.length` 崩溃\r\n- 修复自然终止代码缩进丢失导致逻辑在循环外不执行\r\n\r\n---\r\n\r\n## 1.0.20 — 2026-07-18\r\n\r\n### 修复\r\n- **修复消息排序** — `_idx` 统一取 `max(existing)+1`，解决历史消息加载后序号错乱\r\n- **修复用户反馈消息合并** — 用户反馈正确合并到 agent 输出气泡中，不再产生额外用户消息气泡\r\n- **修复消息发送双占位竞态** — `switchConv` 复用历史消息中最后一条 assistant 消息接收后续 WS 事件，避免两个 assistant 气泡\r\n- **修复 WS 连接与历史加载竞态** — `processStatus` 事件正确处理连接状态转换\r\n\r\n### 改进\r\n- 审核配置弹窗改为向上弹出（`bottom:100%`），防止被视口底部裁切\r\n- 移除压缩按钮，简化 UI\r\n\r\n---\r\n\r\n## 1.0.19 — 2026-07-17\r\n\r\n### 修复\r\n- **修复 Web 端文件树不显示** — `FileExplorer.vue` 的 `<script setup>` 编译后 JS 中存在变量暂时性死区（TDZ），导致 `setup()` 抛出 `Cannot access \'d\' before initialization`，文件树组件挂载失败。重建前端并重新编译 `companion.exe` 嵌入新版 dist 后修复\r\n- **修复后端 dist 嵌入路径不一致** — `cmd/companion/main.go` 通过 `//go:embed web-ui/dist` 引用 companion 目录下的副本，但此前构建脚本将 dist 输出到 `cmd/desktop/web-ui/dist/`，两者不同步导致嵌入的仍是旧版 JS。统一构建流程后将新版 dist 正确复制到 `cmd/companion/web-ui/dist/`\r\n\r\n### 改进\r\n- 统一更新版本号至 1.0.19（后端 main.go、两个前端的 package.json）\r\n\r\n---\r\n\r\n## 1.0.8 — 2026-07-17\r\n\r\n### 新增\r\n- **多项目工作区支持** — 系统提示自动遍历所有工作区根目录，读取各自 `.pair/project.md` 环境配置注入给 AI，跨项目协作时准确感知每个项目的编译方式、CGO 开关等信息\r\n- **CodeGraph 多项目全量建图** — `codegraph_build` 支持对所有工作区项目建图并合并到同一个知识图谱（`rebuild=true`），跨项目符号搜索成为可能\r\n- **阻塞命令自动拦截** — 新增 `isBlockingCommand` 检测，自动拦截 dev server、watch 模式、`go run .`、`npm run dev` 等长期进程命令，提示改用 `run_background`，避免阻塞 AI 循环\r\n\r\n### 改进\r\n- **审核放行逻辑优化** — `run_command` 阻塞命令不再自动放行，强制走 LLM 审核；`run_background` 保持安全命令自动放行\r\n- **工具描述优化** — `run_command` 描述明确禁止长期进程并列出典型误用场景；`run_background` 强调作为长期进程首选工具\r\n- **系统提示增强** — 「错误恢复」和「防止卡死」两处加入阻塞/后台区分铁律，降低误用 `run_command` 概率\r\n\r\n---\r\n\r\n## 1.0.7 — 2026-07-17\r\n\r\n### 修复\r\n- **修复刷新页面后 ask_user 提交造成额外气泡** — 页面刷新后 `switchConv` 复用历史消息中最后一条 assistant 消息接收后续 WS 事件，不再另建新占位，避免两个 assistant 气泡\r\n\r\n### 改进\r\n- 统一更新版本号至 1.0.7（前端 package.json、后端 main.go、打包脚本）\r\n\r\n---\r\n\r\n## 1.0.6 — 2026-07-17\r\n\r\n### 修复\r\n- **修复消息持久化比较口径不一致** — `PersistNewMessages` 中 `persistedCount` 使用 `countJSONLLines`（统计文件总行数含 System），与 `histNonSystemCount`（统计非 System 消息数）口径不同，导致含 tool_call 的 assistant 消息在工具执行前被误判为"已落盘"而跳过写入。阻塞工具（如 ask_user）的前端始终无响应。改用 `readJSONL` 精确统计非 System 消息数\r\n- **修复对话/任务/执行计划 API 空实现** — `GET /api/conversations/{id}` 缺 agent 运行状态，`GET /api/tasks` 和 `GET /api/taskplan` 原返回对话列表（完全错误的 stub），改为返回真实数据\r\n\r\n---\r\n\r\n## 1.0.5 — 2026-07-17\r\n\r\n### 改进\r\n- **消息持久化重构** — `PersistNewMessages` 改为全量覆盖写 JSONL，消除 diff 计算的竞态问题；`MessageStore` 新增 `ReplaceHistory` 支持历史压缩；`MergeLastAssistantRun` 移除，各轮次独立存储以保留 reasoning 完整时序\r\n\r\n### 修复\r\n- **修复 send on closed channel panic** — 移除三处 `go func` 在无监听者时向 channel 发送导致的崩溃\r\n- **修复 PersistNewMessages 上下文压缩后新消息丢失** — 全量替换模式确保压缩后的摘要消息不被覆盖\r\n- **修复自动提交仅提交主工作区** — `doAutoCommit` 遍历所有工作区执行 git add + commit\r\n- **修复 idx 空洞导致消息跳过持久化** — `PersistNewMessages` 内部不再跳过 System/User 消息，确保序号连续\r\n\r\n---\r\n\r\n## 1.0.4 — 2026-07-17\r\n\r\n### 新增\r\n- **技能状态三级配置** — 技能可设为「关闭 / 按需加载 / 始终激活」三种模式，灵活控制 AI 行为\r\n- **市场安装范围选择** — 安装 MCP 服务器或技能时，支持选择 user（全局）或 project（项目级）范围\r\n\r\n### 改进\r\n- **对话历史持久化增强** — 页面刷新后对话完整恢复，不再因浏览器关闭丢失上下文；后端全面接管消息状态管理，前端不再依赖本地缓存\r\n- **消息展示优化** — 连续同一角色的消息自动合并显示（如多个 assistant 回复合并为一条），阅读更流畅\r\n- **停止信号可靠性提升** — Agent 异常结束或用户主动停止时，前端能可靠收到停止信号并更新 UI 状态\r\n\r\n### 修复\r\n- 修复切换对话时 loading 状态卡死的问题（switchConv 提前放行占位消息）\r\n- 修复消息历史顺序错乱和思考链（reasoning_content）丢失的严重问题\r\n- 修复 MergeConsecutiveAssistants 跳过 RoleTool 消息导致工具调用结果不完整的问题\r\n\r\n---\r\n\r\n## 1.0.3 — 2026-07-17\r\n\r\n### 改进\r\n- **子进程窗口管理** — 所有后台子进程（Git 操作、BUG 检测编译/测试、Lua 工具执行、桥接命令）统一隐藏控制台窗口，避免黑框闪烁\r\n- **会话持久化** — OnBatchPersist 回调从"每 5 轮"改为"每轮迭代"写盘，降低异常丢失风险\r\n- **代码搜索提示修复** — codegraph 搜索无结果时正确显示查询内容而非空占位符\r\n\r\n### 修复\r\n- **PersistNewMessages idx 空洞 bug** — 修复因跳过 System/User 角色消息导致消息序号不连续、后续消息无法正确持久化的严重问题（db_store.go + db_adapter.go）\r\n\r\n---\r\n\r\n## 1.0.2 — 2026-07-16\r\n\r\n### 改进\r\n- **文档同步** — features.md 同步到最新版本，移除冗余的"版本信息与更新日志"章节\r\n\r\n---\r\n\r\n## 1.0.1 — 2026-07-11\r\n\r\n### 新增\r\n- **更新日志页面** — 帮助文档中新增更新日志页面，版本历史一目了然\r\n- **WebSocket 协议文档** — API 文档补充完整 WebSocket 事件类型与负载定义\r\n- **系统版本报告** — `/api/system/info` 现在返回 `version` 字段，前端"关于"面板同步显示\r\n\r\n### 改进\r\n- **API 文档全面重写** — 每个接口增加请求体 JSON Schema、响应示例和错误码说明，便于二次开发\r\n- **帮助文档重构** — 文档归入"文档中心"分类，导航更清晰\r\n\r\n---\r\n\r\n## 1.0.0 — 2026-07-01\r\n\r\n### 新增\r\n- **AI 对话编程** — 用自然语言驱动 AI 读写文件、执行命令、管理 Git\r\n- **自主 Agent 模式** — AI 自动分析项目、制定计划并执行多步骤任务\r\n- **代码编辑器** — 内置多标签页编辑器，支持语法高亮、代码折叠、十六进制查看\r\n- **文件管理** — 工作区目录树浏览、文件搜索、批量操作\r\n- **Git 版本控制** — 对话驱动的 Git 操作（状态查看、暂存、提交、分支管理）\r\n- **内置终端** — 浏览器中的终端面板，支持 AI 自动执行命令\r\n- **对话历史管理** — 自动保存、回溯与继续历史对话\r\n- **BUG 自动检测修复** — AI 扫描编译/测试问题并自动修复\r\n- **Skills / MCP 扩展** — 可复用的工作流模板和模型上下文协议扩展\r\n- **记忆系统** — AI 跨会话记住用户偏好和历史决策\r\n- **任务与规划管理** — 复杂任务分解为可追踪的子步骤\r\n- **Lua 自定义工具** — 通过 Lua 脚本创建自定义 AI 工具\r\n- **代码知识图谱** — 函数调用关系、类型层次、影响范围分析\r\n- **多模型支持** — 灵活切换 AI 模型后端（OpenAI / Claude 等）\r\n- **主题系统** — 四套预设主题（暗色、白色、暖色、暗夜紫）\r\n- **调试器** — 支持 Go 程序的断点、单步和变量查看\r\n- **网页验证工具** — 自动打开 URL、截图、分析页面效果\r\n- **办公文档处理** — 读取 Word / Excel / PDF 文件，支持 OCR\r\n\r\n### 技术架构\r\n- 后端使用 Go 语言，前端使用 Vue 3 + CodeMirror\r\n- WebSocket 实时推送 AI 事件流\r\n- 内嵌前端资源（go:embed），单二进制分发\r\n- 纯本地运行，所有 API 仅监听本地回环地址\r\n';
+  const changelogMd = '# 更新日志\r\n\r\n> 所有 PairCode IDE 的重要变更均记录在此文件中。\r\n\r\n---\r\n\r\n## 1.1.6 — 2026-07-30\r\n\r\n### 修复\r\n- **修复编辑器 Ctrl+F 不生效** — CodeMirror `search()` 扩展注册的 `openSearchPanel` 与自定义搜索面板 keymap 冲突，使用 `Prec.high()` 确保自定义 handler 优先执行，Ctrl+F 正确唤出中文搜索面板\r\n- **搜索面板图标全部换为 SVG** — Unicode 字符（▲▼↔×）和文本标签（Aa ·\\* 全词）全部替换为内联 SVG 图标，与界面风格统一\r\n- **修复前端 API 路径缺少前导斜杠导致 404** — `apiURL()` 拼接时对无前导斜杠的 path 自动补全，`/apitools/review` 修正为 `/api/tools/review`\r\n- **修复 codegraph 增量构建仍全量重写 SQLite** — `SQLiteStore.Save()` 在增量模式下调用的 `RemoveFileEntities` 清理旧数据，不再 `DELETE FROM` 全表\r\n\r\n### 改进\r\n- **编辑器中文搜索面板** — 新建 `FindPanel.vue` 组件，替换 CodeMirror 默认英文搜索面板，支持查找/替换/大小写敏感/正则/全词匹配\r\n- **codegraph 增量构建测试** — 新增 `TestSQLiteStoreIncrementalPreserves` 和 `TestSQLiteStoreIncrementalBuild` 验证增量构建与并行完整性\r\n\r\n---\r\n\r\n## 1.1.5 — 2026-07-29\r\n\r\n### 新增\r\n- **run_command 后台化** — `run_command` 改用后台启动+轮询模式，不再阻塞 Agent 循环，可被上下文取消中断，超时后 LLM 可选择等待或继续\r\n- **审核配置改为工作区级** — 审核黑白名单从全局 settings.json 迁移到工作区 .pair/tools.json，不同工作区可独立配置，避免动态工具（Lua）在不同工作区间混淆\r\n- **Lua 工具补齐 Tool 结构** — `buildLuaTool` 自动设置 UsageGuide/Category/Enabled 字段，与标准工具结构一致\r\n- **工具配置弹窗合并** — 「启用开关」和「审核黑白名单」合并为同一「工具配置」弹窗，标签页切换，避免歧义\r\n- **自主模式 Follow-up 持续驱动** — Agent 自然终止后，通过 `OnNextTask` 回调自动注入 follow-up 消息，无需手动触发「继续」\r\n- **流式更新机制** — Registry 新增 `OnToolUpdate` 回调，工具执行中间结果实时推送给前端\r\n- **工具 UsageGuide 全覆盖** — 全部 ~140 个工具添加 `UsageGuide` 使用指导，明确何时用、为何优于 `run_command`、常见误区\r\n- **启动日志详细化** — 启动时输出版本号、Go 版本、平台架构、工作目录、各工作区文件夹路径\r\n\r\n### 改进\r\n- **工具体系升级**\r\n  - `Tool` 结构体新增 `UsageGuide`、`Category`、`Enabled` 字段\r\n  - `Registry` 新增 `EnabledDefinitions()` 按状态过滤工具定义\r\n  - 新增 `AllToolMeta()` API 供前端展示工具开关列表\r\n  - 工具使用指南文本动态注入系统提示，引导 LLM 优先使用专用工具\r\n- **窗口管理** — `run_command` / `run_background` 均设置 `HideWindow=true`，不再弹出 cmd 窗口\r\n- **信号监听移除** — main 函数移除信号监听，进程不会因子进程结束而自动退出\r\n\r\n### 修复\r\n- **debug_start 启动修复** — 拆解 `dlv dap` 启动流程，分别发送 Initialize 和 Launch 请求，兼容 dlv 最新版本\r\n\r\n---\r\n\r\n## 1.1.2 — 2026-07-21\r\n\r\n### 新增\r\n- **附件标签化** — 消息中的文件/代码/图片附件不再嵌入正文，改为独立药丸形标签显示在用户消息文字下方，视觉更清爽\r\n- **粘贴长文本自动转临时附件** — 输入框粘贴超过 2000 字符的文本时，自动写入 `_temp/` 目录并作为附件挂载，避免大段代码/日志撑爆输入区\r\n\r\n### 改进\r\n- `addToChat` 瘦身：文件添加到对话不再预读文件内容（40KB 截断已无意义），仅传递路径引用\r\n- 目录引用新增 `type:dir` 支持，提示 agent 使用 `list_files` 查看\r\n- 选中代码添加对话现在保留代码内容尾注供 agent 直接参考（截断 3000 字）\r\n\r\n### 修复\r\n- 文件树 Shift/Ctrl 多选逻辑修复：范围选择改为基于同级节点列表，清除后重新选中\r\n\r\n---\r\n\r\n## 1.1.1 — 2026-07-21\r\n\r\n### 新增\r\n- **审核配置界面重设计** — 从纯文本输入改为工具卡片式交互：所有工具按类别分组（文件操作、命令执行、Git、网络、截图、图像、二进制、办公文档、CodeGraph、调试器、知识库、记忆、LSP、BUG检测、任务管理、扩展市场等），每个工具显示中文名称，点击切换三态（默认 → 黑名单 → 白名单），支持搜索过滤，配置更直观高效\r\n\r\n### 修复\r\n- **修复新对话空状态提示位置偏移** — "开始新的对话，发送消息即可与 AI 助手对话"提示及图标从左下角偏移修正为居中显示\r\n\r\n### 改进\r\n- 版本号统一升级至 1.1.1（前端 package.json、后端 main.go、打包配置）\r\n\r\n---\r\n\r\n## 1.1.0 — 2026-07-20\r\n\r\n### 新增\r\n- **自主模式原生终止** — 去掉 `finish_task` 强制结束机制，Agent 自然输出后直接结束循环，交互更流畅\r\n- **Agent 性能优化（P0-P3 五轮）** — eventRing 环形缓冲器减少内存分配、进度可视化（阶段指示器+工具调用计数+耗时）、工具描述精简减少 Token 消耗、并行工具执行机制、预压缩上下文避免截断\r\n- **会话连贯性增强** — 新对话开始时自动注入 Git 变更感知、代码图谱统计、工作区结构概览，Agent 无需从零分析项目\r\n\r\n### 改进\r\n- **ChatView 重构** — 消息渲染管线全面优化，新增交互超时保护、审核驳回追踪、折叠/展开状态持久化\r\n- **审核配置 UI 优化** — 弹窗改为向上弹出（bottom:100%），防止被视口底部裁切\r\n- **编辑工具 v2 升级** — 更精确的符号级定位，减少行号偏移问题\r\n- **kill_process 增强** — 改为杀进程树，彻底清理子进程\r\n- **自主模式架构重构** — ephemeralMsgs 隔离内层消息，长时压缩精准保留推理上下文\r\n\r\n### 修复\r\n- 修复 `planExpanded` / `tasksExpanded` / `currentPhase` 重复声明导致的运行时崩溃\r\n- 修复 `currentTasks` 未声明导致前端 `undefined.length` 崩溃\r\n- 修复自然终止代码缩进丢失导致逻辑在循环外不执行\r\n\r\n---\r\n\r\n## 1.0.20 — 2026-07-18\r\n\r\n### 修复\r\n- **修复消息排序** — `_idx` 统一取 `max(existing)+1`，解决历史消息加载后序号错乱\r\n- **修复用户反馈消息合并** — 用户反馈正确合并到 agent 输出气泡中，不再产生额外用户消息气泡\r\n- **修复消息发送双占位竞态** — `switchConv` 复用历史消息中最后一条 assistant 消息接收后续 WS 事件，避免两个 assistant 气泡\r\n- **修复 WS 连接与历史加载竞态** — `processStatus` 事件正确处理连接状态转换\r\n\r\n### 改进\r\n- 审核配置弹窗改为向上弹出（`bottom:100%`），防止被视口底部裁切\r\n- 移除压缩按钮，简化 UI\r\n\r\n---\r\n\r\n## 1.0.19 — 2026-07-17\r\n\r\n### 修复\r\n- **修复 Web 端文件树不显示** — `FileExplorer.vue` 的 `<script setup>` 编译后 JS 中存在变量暂时性死区（TDZ），导致 `setup()` 抛出 `Cannot access \'d\' before initialization`，文件树组件挂载失败。重建前端并重新编译 `companion.exe` 嵌入新版 dist 后修复\r\n- **修复后端 dist 嵌入路径不一致** — `cmd/companion/main.go` 通过 `//go:embed web-ui/dist` 引用 companion 目录下的副本，但此前构建脚本将 dist 输出到 `cmd/desktop/web-ui/dist/`，两者不同步导致嵌入的仍是旧版 JS。统一构建流程后将新版 dist 正确复制到 `cmd/companion/web-ui/dist/`\r\n\r\n### 改进\r\n- 统一更新版本号至 1.0.19（后端 main.go、两个前端的 package.json）\r\n\r\n---\r\n\r\n## 1.0.8 — 2026-07-17\r\n\r\n### 新增\r\n- **多项目工作区支持** — 系统提示自动遍历所有工作区根目录，读取各自 `.pair/project.md` 环境配置注入给 AI，跨项目协作时准确感知每个项目的编译方式、CGO 开关等信息\r\n- **CodeGraph 多项目全量建图** — `codegraph_build` 支持对所有工作区项目建图并合并到同一个知识图谱（`rebuild=true`），跨项目符号搜索成为可能\r\n- **阻塞命令自动拦截** — 新增 `isBlockingCommand` 检测，自动拦截 dev server、watch 模式、`go run .`、`npm run dev` 等长期进程命令，提示改用 `run_background`，避免阻塞 AI 循环\r\n\r\n### 改进\r\n- **审核放行逻辑优化** — `run_command` 阻塞命令不再自动放行，强制走 LLM 审核；`run_background` 保持安全命令自动放行\r\n- **工具描述优化** — `run_command` 描述明确禁止长期进程并列出典型误用场景；`run_background` 强调作为长期进程首选工具\r\n- **系统提示增强** — 「错误恢复」和「防止卡死」两处加入阻塞/后台区分铁律，降低误用 `run_command` 概率\r\n\r\n---\r\n\r\n## 1.0.7 — 2026-07-17\r\n\r\n### 修复\r\n- **修复刷新页面后 ask_user 提交造成额外气泡** — 页面刷新后 `switchConv` 复用历史消息中最后一条 assistant 消息接收后续 WS 事件，不再另建新占位，避免两个 assistant 气泡\r\n\r\n### 改进\r\n- 统一更新版本号至 1.0.7（前端 package.json、后端 main.go、打包脚本）\r\n\r\n---\r\n\r\n## 1.0.6 — 2026-07-17\r\n\r\n### 修复\r\n- **修复消息持久化比较口径不一致** — `PersistNewMessages` 中 `persistedCount` 使用 `countJSONLLines`（统计文件总行数含 System），与 `histNonSystemCount`（统计非 System 消息数）口径不同，导致含 tool_call 的 assistant 消息在工具执行前被误判为"已落盘"而跳过写入。阻塞工具（如 ask_user）的前端始终无响应。改用 `readJSONL` 精确统计非 System 消息数\r\n- **修复对话/任务/执行计划 API 空实现** — `GET /api/conversations/{id}` 缺 agent 运行状态，`GET /api/tasks` 和 `GET /api/taskplan` 原返回对话列表（完全错误的 stub），改为返回真实数据\r\n\r\n---\r\n\r\n## 1.0.5 — 2026-07-17\r\n\r\n### 改进\r\n- **消息持久化重构** — `PersistNewMessages` 改为全量覆盖写 JSONL，消除 diff 计算的竞态问题；`MessageStore` 新增 `ReplaceHistory` 支持历史压缩；`MergeLastAssistantRun` 移除，各轮次独立存储以保留 reasoning 完整时序\r\n\r\n### 修复\r\n- **修复 send on closed channel panic** — 移除三处 `go func` 在无监听者时向 channel 发送导致的崩溃\r\n- **修复 PersistNewMessages 上下文压缩后新消息丢失** — 全量替换模式确保压缩后的摘要消息不被覆盖\r\n- **修复自动提交仅提交主工作区** — `doAutoCommit` 遍历所有工作区执行 git add + commit\r\n- **修复 idx 空洞导致消息跳过持久化** — `PersistNewMessages` 内部不再跳过 System/User 消息，确保序号连续\r\n\r\n---\r\n\r\n## 1.0.4 — 2026-07-17\r\n\r\n### 新增\r\n- **技能状态三级配置** — 技能可设为「关闭 / 按需加载 / 始终激活」三种模式，灵活控制 AI 行为\r\n- **市场安装范围选择** — 安装 MCP 服务器或技能时，支持选择 user（全局）或 project（项目级）范围\r\n\r\n### 改进\r\n- **对话历史持久化增强** — 页面刷新后对话完整恢复，不再因浏览器关闭丢失上下文；后端全面接管消息状态管理，前端不再依赖本地缓存\r\n- **消息展示优化** — 连续同一角色的消息自动合并显示（如多个 assistant 回复合并为一条），阅读更流畅\r\n- **停止信号可靠性提升** — Agent 异常结束或用户主动停止时，前端能可靠收到停止信号并更新 UI 状态\r\n\r\n### 修复\r\n- 修复切换对话时 loading 状态卡死的问题（switchConv 提前放行占位消息）\r\n- 修复消息历史顺序错乱和思考链（reasoning_content）丢失的严重问题\r\n- 修复 MergeConsecutiveAssistants 跳过 RoleTool 消息导致工具调用结果不完整的问题\r\n\r\n---\r\n\r\n## 1.0.3 — 2026-07-17\r\n\r\n### 改进\r\n- **子进程窗口管理** — 所有后台子进程（Git 操作、BUG 检测编译/测试、Lua 工具执行、桥接命令）统一隐藏控制台窗口，避免黑框闪烁\r\n- **会话持久化** — OnBatchPersist 回调从"每 5 轮"改为"每轮迭代"写盘，降低异常丢失风险\r\n- **代码搜索提示修复** — codegraph 搜索无结果时正确显示查询内容而非空占位符\r\n\r\n### 修复\r\n- **PersistNewMessages idx 空洞 bug** — 修复因跳过 System/User 角色消息导致消息序号不连续、后续消息无法正确持久化的严重问题（db_store.go + db_adapter.go）\r\n\r\n---\r\n\r\n## 1.0.2 — 2026-07-16\r\n\r\n### 改进\r\n- **文档同步** — features.md 同步到最新版本，移除冗余的"版本信息与更新日志"章节\r\n\r\n---\r\n\r\n## 1.0.1 — 2026-07-11\r\n\r\n### 新增\r\n- **更新日志页面** — 帮助文档中新增更新日志页面，版本历史一目了然\r\n- **WebSocket 协议文档** — API 文档补充完整 WebSocket 事件类型与负载定义\r\n- **系统版本报告** — `/api/system/info` 现在返回 `version` 字段，前端"关于"面板同步显示\r\n\r\n### 改进\r\n- **API 文档全面重写** — 每个接口增加请求体 JSON Schema、响应示例和错误码说明，便于二次开发\r\n- **帮助文档重构** — 文档归入"文档中心"分类，导航更清晰\r\n\r\n---\r\n\r\n## 1.0.0 — 2026-07-01\r\n\r\n### 新增\r\n- **AI 对话编程** — 用自然语言驱动 AI 读写文件、执行命令、管理 Git\r\n- **自主 Agent 模式** — AI 自动分析项目、制定计划并执行多步骤任务\r\n- **代码编辑器** — 内置多标签页编辑器，支持语法高亮、代码折叠、十六进制查看\r\n- **文件管理** — 工作区目录树浏览、文件搜索、批量操作\r\n- **Git 版本控制** — 对话驱动的 Git 操作（状态查看、暂存、提交、分支管理）\r\n- **内置终端** — 浏览器中的终端面板，支持 AI 自动执行命令\r\n- **对话历史管理** — 自动保存、回溯与继续历史对话\r\n- **BUG 自动检测修复** — AI 扫描编译/测试问题并自动修复\r\n- **Skills / MCP 扩展** — 可复用的工作流模板和模型上下文协议扩展\r\n- **记忆系统** — AI 跨会话记住用户偏好和历史决策\r\n- **任务与规划管理** — 复杂任务分解为可追踪的子步骤\r\n- **Lua 自定义工具** — 通过 Lua 脚本创建自定义 AI 工具\r\n- **代码知识图谱** — 函数调用关系、类型层次、影响范围分析\r\n- **多模型支持** — 灵活切换 AI 模型后端（OpenAI / Claude 等）\r\n- **主题系统** — 四套预设主题（暗色、白色、暖色、暗夜紫）\r\n- **调试器** — 支持 Go 程序的断点、单步和变量查看\r\n- **网页验证工具** — 自动打开 URL、截图、分析页面效果\r\n- **办公文档处理** — 读取 Word / Excel / PDF 文件，支持 OCR\r\n\r\n### 技术架构\r\n- 后端使用 Go 语言，前端使用 Vue 3 + CodeMirror\r\n- WebSocket 实时推送 AI 事件流\r\n- 内嵌前端资源（go:embed），单二进制分发\r\n- 纯本地运行，所有 API 仅监听本地回环地址\r\n';
   const _hoisted_1$6 = { class: "modal-content help-modal" };
   const _hoisted_2$6 = { class: "modal-header" };
   const _hoisted_3$5 = { class: "header-actions" };
@@ -107129,7 +107722,7 @@ AI 会自动分解复杂任务为可追踪的子任务步骤，每步的执行�
         const { captureNodeSizes: captureNodeSizes2 } = yield __vitePreload(() => __async(null, null, function* () {
           const { captureNodeSizes: captureNodeSizes3 } = yield Promise.resolve().then(() => sizeCaptureX5ZJPWSS);
           return { captureNodeSizes: captureNodeSizes3 };
-        }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+        }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
         captureNodeSizes2(element2, data4Layout);
       }
       return {
@@ -188733,7 +189326,7 @@ ${content2}`;
       const { createInfoServices: createInfoServices2 } = yield __vitePreload(() => __async(null, null, function* () {
         const { createInfoServices: createInfoServices22 } = yield Promise.resolve().then(() => infoDKCQHKI2);
         return { createInfoServices: createInfoServices22 };
-      }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+      }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
       const parser2 = createInfoServices2().Info.parser.LangiumParser;
       parsers.info = parser2;
     }), "info"),
@@ -188741,7 +189334,7 @@ ${content2}`;
       const { createPacketServices: createPacketServices2 } = yield __vitePreload(() => __async(null, null, function* () {
         const { createPacketServices: createPacketServices22 } = yield Promise.resolve().then(() => packet7NZHBO7P);
         return { createPacketServices: createPacketServices22 };
-      }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+      }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
       const parser2 = createPacketServices2().Packet.parser.LangiumParser;
       parsers.packet = parser2;
     }), "packet"),
@@ -188749,7 +189342,7 @@ ${content2}`;
       const { createPieServices: createPieServices2 } = yield __vitePreload(() => __async(null, null, function* () {
         const { createPieServices: createPieServices22 } = yield Promise.resolve().then(() => pieRZYD4A2V);
         return { createPieServices: createPieServices22 };
-      }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+      }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
       const parser2 = createPieServices2().Pie.parser.LangiumParser;
       parsers.pie = parser2;
     }), "pie"),
@@ -188757,7 +189350,7 @@ ${content2}`;
       const { createTreeViewServices: createTreeViewServices2 } = yield __vitePreload(() => __async(null, null, function* () {
         const { createTreeViewServices: createTreeViewServices22 } = yield Promise.resolve().then(() => treeViewQDETBFTQ);
         return { createTreeViewServices: createTreeViewServices22 };
-      }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+      }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
       const parser2 = createTreeViewServices2().TreeView.parser.LangiumParser;
       parsers.treeView = parser2;
     }), "treeView"),
@@ -188765,7 +189358,7 @@ ${content2}`;
       const { createArchitectureServices: createArchitectureServices2 } = yield __vitePreload(() => __async(null, null, function* () {
         const { createArchitectureServices: createArchitectureServices22 } = yield Promise.resolve().then(() => architectureTIHT7OUA);
         return { createArchitectureServices: createArchitectureServices22 };
-      }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+      }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
       const parser2 = createArchitectureServices2().Architecture.parser.LangiumParser;
       parsers.architecture = parser2;
     }), "architecture"),
@@ -188773,7 +189366,7 @@ ${content2}`;
       const { createGitGraphServices: createGitGraphServices2 } = yield __vitePreload(() => __async(null, null, function* () {
         const { createGitGraphServices: createGitGraphServices22 } = yield Promise.resolve().then(() => gitGraphTEB2WS4Q);
         return { createGitGraphServices: createGitGraphServices22 };
-      }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+      }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
       const parser2 = createGitGraphServices2().GitGraph.parser.LangiumParser;
       parsers.gitGraph = parser2;
     }), "gitGraph"),
@@ -188781,7 +189374,7 @@ ${content2}`;
       const { createEventModelingServices: createEventModelingServices2 } = yield __vitePreload(() => __async(null, null, function* () {
         const { createEventModelingServices: createEventModelingServices22 } = yield Promise.resolve().then(() => eventmodeling45OFAUF4);
         return { createEventModelingServices: createEventModelingServices22 };
-      }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+      }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
       const parser2 = createEventModelingServices2().EventModel.parser.LangiumParser;
       parsers.eventmodeling = parser2;
     }), "eventmodeling"),
@@ -188789,7 +189382,7 @@ ${content2}`;
       const { createRadarServices: createRadarServices2 } = yield __vitePreload(() => __async(null, null, function* () {
         const { createRadarServices: createRadarServices22 } = yield Promise.resolve().then(() => radarI7S5WNFK);
         return { createRadarServices: createRadarServices22 };
-      }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+      }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
       const parser2 = createRadarServices2().Radar.parser.LangiumParser;
       parsers.radar = parser2;
     }), "radar"),
@@ -188797,7 +189390,7 @@ ${content2}`;
       const { createRailroadServices: createRailroadServices2 } = yield __vitePreload(() => __async(null, null, function* () {
         const { createRailroadServices: createRailroadServices22 } = yield Promise.resolve().then(() => railroad3IZDKUUU);
         return { createRailroadServices: createRailroadServices22 };
-      }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+      }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
       const parser2 = createRailroadServices2().Railroad.parser.LangiumParser;
       parsers.railroad = parser2;
     }), "railroad"),
@@ -188805,7 +189398,7 @@ ${content2}`;
       const { createRailroadEbnfServices: createRailroadEbnfServices2 } = yield __vitePreload(() => __async(null, null, function* () {
         const { createRailroadEbnfServices: createRailroadEbnfServices22 } = yield Promise.resolve().then(() => railroadEbnfEBAXGLYW);
         return { createRailroadEbnfServices: createRailroadEbnfServices22 };
-      }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+      }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
       const parser2 = createRailroadEbnfServices2().RailroadEbnf.parser.LangiumParser;
       parsers.railroadEbnf = parser2;
     }), "railroadEbnf"),
@@ -188813,7 +189406,7 @@ ${content2}`;
       const { createRailroadAbnfServices: createRailroadAbnfServices2 } = yield __vitePreload(() => __async(null, null, function* () {
         const { createRailroadAbnfServices: createRailroadAbnfServices22 } = yield Promise.resolve().then(() => railroadAbnfAHOZXSZD);
         return { createRailroadAbnfServices: createRailroadAbnfServices22 };
-      }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+      }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
       const parser2 = createRailroadAbnfServices2().RailroadAbnf.parser.LangiumParser;
       parsers.railroadAbnf = parser2;
     }), "railroadAbnf"),
@@ -188821,7 +189414,7 @@ ${content2}`;
       const { createRailroadPegServices: createRailroadPegServices2 } = yield __vitePreload(() => __async(null, null, function* () {
         const { createRailroadPegServices: createRailroadPegServices22 } = yield Promise.resolve().then(() => railroadPegLSFZ7HO6);
         return { createRailroadPegServices: createRailroadPegServices22 };
-      }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+      }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
       const parser2 = createRailroadPegServices2().RailroadPeg.parser.LangiumParser;
       parsers.railroadPeg = parser2;
     }), "railroadPeg"),
@@ -188829,7 +189422,7 @@ ${content2}`;
       const { createTreemapServices: createTreemapServices2 } = yield __vitePreload(() => __async(null, null, function* () {
         const { createTreemapServices: createTreemapServices22 } = yield Promise.resolve().then(() => treemap6X3UGDF4);
         return { createTreemapServices: createTreemapServices22 };
-      }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+      }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
       const parser2 = createTreemapServices2().Treemap.parser.LangiumParser;
       parsers.treemap = parser2;
     }), "treemap"),
@@ -188837,7 +189430,7 @@ ${content2}`;
       const { createWardleyServices: createWardleyServices2 } = yield __vitePreload(() => __async(null, null, function* () {
         const { createWardleyServices: createWardleyServices22 } = yield Promise.resolve().then(() => wardleyOPB4EBWU);
         return { createWardleyServices: createWardleyServices22 };
-      }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+      }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
       const parser2 = createWardleyServices2().Wardley.parser.LangiumParser;
       parsers.wardley = parser2;
     }), "wardley"),
@@ -188845,7 +189438,7 @@ ${content2}`;
       const { createCynefinServices: createCynefinServices2 } = yield __vitePreload(() => __async(null, null, function* () {
         const { createCynefinServices: createCynefinServices22 } = yield Promise.resolve().then(() => cynefinVYW2F7L2);
         return { createCynefinServices: createCynefinServices22 };
-      }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-CGIwA2uZ.js", document.baseURI).href);
+      }), false ? __VITE_PRELOAD__ : void 0, _documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === "SCRIPT" && _documentCurrentScript.src || new URL("assets/index-B9DUK4V6.js", document.baseURI).href);
       const parser2 = createCynefinServices2().Cynefin.parser.LangiumParser;
       parsers.cynefin = parser2;
     }), "cynefin")

@@ -38,7 +38,7 @@ func setupLoaders(wv *webkit.WebView, distDir string) {
 func main() {
 	log.SetFlags(0)
 	wd, _ := os.Getwd()
-	distDir := filepath.Join(wd, "cmd", "desktop", "web-ui", "dist")
+	distDir := filepath.Join(wd, "cmd", "companion", "web-ui", "dist")
 	htmlData, _ := os.ReadFile(distDir + "/index.html")
 
 	wv := webkit.NewWebView()

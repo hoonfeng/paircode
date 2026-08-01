@@ -18,7 +18,7 @@ import (
 func main() {
 	log.SetFlags(0)
 	wd, _ := os.Getwd()
-	distDir := filepath.Join(wd, "cmd", "desktop", "web-ui", "dist")
+	distDir := filepath.Join(wd, "cmd", "companion", "web-ui", "dist")
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

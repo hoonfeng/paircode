@@ -1,5 +1,5 @@
-// Command desktop_overflow finds render objects whose bottom edge exceeds the
-// viewport height (800) in the desktop Vue app.
+// Command btn_geo dumps the chat-input button row geometry (ibb-btns,
+// send-btn, input-bottom-bar, input-wrapper) from the companion frontend.
 package main
 
 import (
@@ -47,29 +47,39 @@ func main() {
 	setupLoaders(wv, distDir)
 	wv.Resize(1280, 800)
 	_ = wv.LoadHTML(string(htmlData))
+	wv.RebuildRenderTree()
 	wv.EnsureLayout()
-
 	rv := wv.RenderView()
-	state := rv.LayoutState()
-	fmt.Println("=== OBJECTS OVERFLOWING VIEWPORT (bottom > 800) ===")
+
+	fmt.Println("=== CHAT INPUT BUTTON ROW ===")
 	var walk func(o rendering.RenderObject)
 	walk = func(o rendering.RenderObject) {
-		if o.Node() != nil {
-			lb := o.LayoutBox()
-			if lb != nil && state != nil {
-				g := state.GeometryForBox(lb)
-				var ov string
-				if st := lb.Style(); st != nil {
-					ov = st.OverflowX.String() + "/" + st.OverflowY.String()
-				}
-				if strings.Contains(clsOf(o), "conv-sidebar") || strings.Contains(clsOf(o), "conv-stats") || strings.Contains(clsOf(o), "conv-list") {
-					fmt.Printf("  [ov] %-24s xy=(%.0f,%.0f) wh=(%.0f,%.0f) overflow=%s\n",
-						clsOf(o)[:min(30, len(clsOf(o)))], g.Left(), g.Top(), g.BorderBoxWidth(), g.BorderBoxHeight(), ov)
-				}
-				bottom := g.Top() + g.BorderBoxHeight()
-				if bottom > 800 {
-					fmt.Printf("  %s.%s xy=(%.0f,%.0f) wh=(%.0f,%.0f) bottom=%.0f ov=%s\n",
-						tagOf(o), clsOf(o)[:min(30, len(clsOf(o)))], g.Left(), g.Top(), g.BorderBoxWidth(), g.BorderBoxHeight(), bottom, ov)
+		if el, ok := o.Node().(*dom.Element); ok {
+			cls := el.GetAttribute("class")
+			if strings.Contains(cls, "chat-input-area") || strings.Contains(cls, "input-wrapper") ||
+				strings.Contains(cls, "input-bottom-bar") || strings.Contains(cls, "ibb-btns") ||
+				strings.Contains(cls, "send-btn") || strings.Contains(cls, "stop-btn") ||
+				strings.Contains(cls, "obtn") || strings.Contains(cls, "chat-input") {
+				x, y, w, h, ok2 := rendering.BoxGeometry(o)
+				if ok2 {
+					txt := ""
+					if t := el.TextContent(); t != "" {
+						txt = strings.TrimSpace(t)
+						if len(txt) > 14 {
+							txt = txt[:14]
+						}
+					}
+					// Box model via layout state
+					lb := o.LayoutBox()
+					if lb != nil {
+						if g := rv.LayoutState().GeometryForBox(lb); g != nil {
+							fmt.Printf("  .%s xy=(%.0f,%.0f) wh=(%.0f,%.0f) m=(%.0f,%.0f,%.0f,%.0f) p=(%.0f,%.0f,%.0f,%.0f) b=(%.0f,%.0f,%.0f,%.0f) text=%q\n",
+								cls, x, y, w, h,
+								g.MarginBefore(), g.MarginAfter(), g.MarginStart(), g.MarginEnd(),
+								g.PaddingTop(), g.PaddingRight(), g.PaddingBottom(), g.PaddingLeft(),
+								g.BorderTop(), g.BorderRight(), g.BorderBottom(), g.BorderLeft(), txt)
+						}
+					}
 				}
 			}
 		}
@@ -78,25 +88,4 @@ func main() {
 		}
 	}
 	walk(rv)
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func clsOf(o rendering.RenderObject) string {
-	if el, ok := o.Node().(*dom.Element); ok {
-		return el.GetAttribute("class")
-	}
-	return ""
-}
-
-func tagOf(o rendering.RenderObject) string {
-	if el, ok := o.Node().(*dom.Element); ok {
-		return el.LocalName()
-	}
-	return "?"
 }

@@ -41,7 +41,7 @@ func setupLoaders(wv *webkit.WebView, distDir string) {
 func main() {
 	log.SetFlags(log.Ltime)
 	wd, _ := os.Getwd()
-	distDir := filepath.Join(wd, "cmd", "desktop", "web-ui", "dist")
+	distDir := filepath.Join(wd, "cmd", "companion", "web-ui", "dist")
 	htmlData, err := os.ReadFile(distDir + "/index.html")
 	if err != nil {
 		log.Fatalf("read index.html: %v", err)

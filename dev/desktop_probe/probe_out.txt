@@ -1,0 +1,226 @@
+14:38:30 HTML: 7775 bytes, distDir=F:\syproject\gou-ide\cmd\companion\web-ui\dist
+[styleProxy] Set("width", "280px") tag=DIV id= → "width:280px"
+[styleProxy] Set("height", "180px") tag=DIV id= → "height:180px"
+[styleProxy] Set("height", "150px") tag=TEXTAREA id= → "height:150px"
+[styleProxy] Set("transition", "stroke-dasharray 0.3s") tag=CIRCLE id= → "transition:stroke-dasharray 0.3s"
+[styleProxy] Set("width", "0%") tag=DIV id= → "width:0%"
+[styleProxy] Set("width", "250px") tag=DIV id= → "width:250px"
+[styleProxy] Set("width", "855px") tag=DIV id= → "width:855px"
+14:38:30 [CONSOLE] map[]
+14:38:31 [flex] applyPositions row container=&{{0x1790737c2c0 1 0x179072440b0 0x1790737c210 <nil> 0x1790737cd10 0x1790737c370 0x1790737ca50 map[click:[0x1790dbaec18]]} div [data-v-c17845b9 class] map[class:titlebar data-v-c17845b9:] false false false} justify="flex-start" cw=1280.0 gap=0.0 items=4
+14:38:31 [flex] item mainPos=0.0 bw(est)=48.0 ms=48.0 gap=0.0
+14:38:31 [flex] applyPositions row container=&{{0x1790737c370 1 0x179072440b0 0x1790737c2c0 <nil> 0x1790737c790 0x1790737c420 0x1790737c420 map[]} div [data-v-c17845b9 class] map[class:app-logo data-v-c17845b9:] false false false} justify="center" cw=48.0 gap=0.0 items=1
+14:38:31 [flex] item mainPos=15.0 bw(est)=18.0 ms=18.0 gap=0.0
+14:38:31 [flex] applyPositions row container=&{{0x1790737c2c0 1 0x179072440b0 0x1790737c210 <nil> 0x1790737cd10 0x1790737c370 0x1790737ca50 map[click:[0x1790dbaec18]]} div [data-v-c17845b9 class] map[class:titlebar data-v-c17845b9:] false false false} justify="flex-start" cw=1280.0 gap=0.0 items=4
+14:38:31 [flex] item mainPos=48.0 bw(est)=36.8 ms=36.8 gap=0.0
+14:38:31 [flex] applyPositions row container=&{{0x1790737c790 1 0x179072440b0 0x1790737c2c0 0x1790737c370 0x1790737c9a0 0x1790dac0fc0 0x1790dac1290 map[]} div [data-v-245f3b5c data-v-c17845b9 class] map[class:menubar data-v-245f3b5c: data-v-c17845b9:] false false false} justify="flex-start" cw=36.8 gap=0.0 items=1
+14:38:31 [flex] item mainPos=48.0 bw(est)=36.8 ms=36.8 gap=0.0
+14:38:31 [flex] applyPositions row container=&{{0x1790737c8f0 1 0x179072440b0 0x1790737c840 <nil> <nil> 0x1790dac10e0 0x1790dac10e0 map[click:[0x1790dbae078] mouseenter:[0x1790dbae090]]} button [data-v-245f3b5c class] map[class:menu-btn data-v-245f3b5c:] false false false} justify="flex-start" cw=16.8 gap=0.0 items=1
+14:38:31 [flex] item mainPos=58.0 bw(est)=16.8 ms=16.8 gap=0.0
+14:38:31 [flex] applyPositions row container=&{{0x1790737c2c0 1 0x179072440b0 0x1790737c210 <nil> 0x1790737cd10 0x1790737c370 0x1790737ca50 map[click:[0x1790dbaec18]]} div [data-v-c17845b9 class] map[class:titlebar data-v-c17845b9:] false false false} justify="flex-start" cw=1280.0 gap=0.0 items=4
+14:38:31 [flex] item mainPos=84.8 bw(est)=1193.2 ms=1193.2 gap=0.0
+14:38:31 [flex] applyPositions row container=&{{0x1790737c2c0 1 0x179072440b0 0x1790737c210 <nil> 0x1790737cd10 0x1790737c370 0x1790737ca50 map[click:[0x1790dbaec18]]} div [data-v-c17845b9 class] map[class:titlebar data-v-c17845b9:] false false false} justify="flex-start" cw=1280.0 gap=0.0 items=4
+14:38:31 [flex] item mainPos=1278.0 bw(est)=8.0 ms=2.0 gap=0.0
+14:38:31 [flex] applyPositions row container=&{{0x1790737ce70 1 0x179072440b0 0x1790737cdc0 0x1790dac17a0 0x1790737d290 0x1790737d130 0x1790737d130 map[click:[0x1790dc06498]]} button [data-v-0cf4873d class title] map[class:active data-v-0cf4873d: title:文件浏览器] false false false} justify="center" cw=40.0 gap=0.0 items=1
+14:38:31 [flex] item mainPos=16.0 bw(est)=18.0 ms=18.0 gap=0.0
+14:38:31 [flex] applyPositions row container=&{{0x1790737d290 1 0x179072440b0 0x1790737cdc0 0x1790737ce70 0x1790737d760 0x1790737d550 0x1790737d550 map[click:[0x1790dc077b8]]} button [data-v-0cf4873d class title] map[class: data-v-0cf4873d: title:搜索] false false false} justify="center" cw=40.0 gap=0.0 items=1
+14:38:31 [flex] item mainPos=16.0 bw(est)=18.0 ms=18.0 gap=0.0
+14:38:31 [flex] applyPositions row container=&{{0x1790737d760 1 0x179072440b0 0x1790737cdc0 0x1790737d290 0x1790737dd90 0x1790737da20 0x1790737da20 map[click:[0x1790dc495a8]]} button [data-v-0cf4873d class title] map[class: data-v-0cf4873d: title:源代码管理] false false false} justify="center" cw=40.0 gap=0.0 items=1
+14:38:31 [flex] item mainPos=16.0 bw(est)=18.0 ms=18.0 gap=0.0
+14:38:31 [flex] applyPositions row container=&{{0x1790737dd90 1 0x179072440b0 0x1790737cdc0 0x1790737d760 0x179073e44d0 0x179073e4160 0x179073e4160 map[click:[0x1790dc97488]]} button [data-v-0cf4873d class title] map[class: data-v-0cf4873d: title:市场] false false false} justify="center" cw=40.0 gap=0.0 items=1
+14:38:31 [flex] item mainPos=16.0 bw(est)=18.0 ms=18.0 gap=0.0
+14:38:31 [flex] applyPositions row container=&{{0x179073e44d0 1 0x179072440b0 0x1790737cdc0 0x1790737dd90 0x1790dac1830 0x179073e4bb0 0x179073e4bb0 map[click:[0x1790bb3a2e8]]} button [data-v-0cf4873d class title] map[class:highlight data-v-0cf4873d: title:对话] false false false} justify="center" cw=40.0 gap=0.0 items=1
+14:38:31 [flex] item mainPos=16.0 bw(est)=18.0 ms=18.0 gap=0.0
+14:38:31 [flex] applyPositions row container=&{{0x179073e4e70 1 0x179072440b0 0x179073e4dc0 <nil> <nil> 0x179073e5130 0x179073e5130 map[click:[0x1790bb3ba10]]} button [data-v-0cf4873d title] map[data-v-0cf4873d: title:设置] false false false} justify="center" cw=40.0 gap=0.0 items=1
+14:38:31 [flex] item mainPos=16.0 bw(est)=18.0 ms=18.0 gap=0.0
+14:38:31 [flex] applyPositions row container=&{{0x179073e5600 1 0x179072440b0 0x179073e5550 <nil> 0x179073e5760 0x179073e56b0 0x179073e56b0 map[]} div [data-v-076f0a91 class] map[class:sidebar-header data-v-076f0a91:] false false false} justify="flex-start" cw=254.0 gap=0.0 items=1
+14:38:31 [flex] item mainPos=60.0 bw(est)=35.5 ms=35.5 gap=0.0
+14:38:31 [flex] applyPositions row container=&{{0x179073e5ad0 1 0x179072440b0 0x179073e5a20 <nil> 0x179074aa840 0x179073e5b80 0x179074aa2c0 map[]} div [data-v-bee51e0d class] map[class:explorer-toolbar data-v-bee51e0d:] false false false} justify="flex-start" cw=262.0 gap=2.0 items=4
+14:38:31 [flex] item mainPos=56.0 bw(est)=21.3 ms=21.3 gap=2.0
+14:38:31 [flex] applyPositions row container=&{{0x179073e5ad0 1 0x179072440b0 0x179073e5a20 <nil> 0x179074aa840 0x179073e5b80 0x179074aa2c0 map[]} div [data-v-bee51e0d class] map[class:explorer-toolbar data-v-bee51e0d:] false false false} justify="flex-start" cw=262.0 gap=2.0 items=4
+14:38:31 [flex] item mainPos=79.3 bw(est)=212.7 ms=212.7 gap=2.0
+14:38:31 [flex] applyPositions row container=&{{0x179073e5ad0 1 0x179072440b0 0x179073e5a20 <nil> 0x179074aa840 0x179073e5b80 0x179074aa2c0 map[]} div [data-v-bee51e0d class] map[class:explorer-toolbar data-v-bee51e0d:] false false false} justify="flex-start" cw=262.0 gap=2.0 items=4
+14:38:31 [flex] item mainPos=294.0 bw(est)=14.0 ms=14.0 gap=2.0
+14:38:31 [flex] applyPositions row container=&{{0x179073e5ce0 1 0x179072440b0 0x179073e5ad0 0x179073e5c30 0x179074aa2c0 0x179074aa0b0 0x179074aa0b0 map[click:[0x1790b7b1170]]} button [data-v-bee51e0d class title] map[class:tb-btn data-v-bee51e0d: title:新建工作区] false false false} justify="flex-start" cw=0.0 gap=0.0 items=1
+14:38:31 [flex] item mainPos=301.0 bw(est)=14.0 ms=14.0 gap=0.0
+14:38:31 [flex] applyPositions row container=&{{0x179073e5ad0 1 0x179072440b0 0x179073e5a20 <nil> 0x179074aa840 0x179073e5b80 0x179074aa2c0 map[]} div [data-v-bee51e0d class] map[class:explorer-toolbar data-v-bee51e0d:] false false false} justify="flex-start" cw=262.0 gap=2.0 items=4
+14:38:31 [flex] item mainPos=310.0 bw(est)=14.0 ms=14.0 gap=2.0
+14:38:31 [flex] applyPositions row container=&{{0x179074aa2c0 1 0x179072440b0 0x179073e5ad0 0x179073e5ce0 <nil> 0x179074aa630 0x179074aa630 map[click:[0x1790b8a0510]]} button [data-v-bee51e0d class title] map[class:tb-btn data-v-bee51e0d: title:刷新] false false false} justify="flex-start" cw=0.0 gap=0.0 items=1
+14:38:31 [flex] item mainPos=317.0 bw(est)=14.0 ms=14.0 gap=0.0
+14:38:31 [flex] applyPositions row container=&{{0x179074aa8f0 1 0x179072440b0 0x179074aa840 0x1790dbb0090 <nil> 0x179074aa9a0 0x179074aaa50 map[]} div [data-v-bee51e0d class] map[class:ws-empty data-v-bee51e0d:] false false false} justify="center" cw=258.0 gap=6.0 items=2
+14:38:31 [flex] item mainPos=149.9 bw(est)=38.7 ms=38.7 gap=6.0
+14:38:31 [flex] applyPositions row container=&{{0x179074aa8f0 1 0x179072440b0 0x179074aa840 0x1790dbb0090 <nil> 0x179074aa9a0 0x179074aaa50 map[]} div [data-v-bee51e0d class] map[class:ws-empty data-v-bee51e0d:] false false false} justify="center" cw=258.0 gap=6.0 items=2
+14:38:31 [flex] item mainPos=194.6 bw(est)=35.5 ms=35.5 gap=6.0
+14:38:31 [flex] applyPositions row container=&{{0x179074aabb0 1 0x179072440b0 0x179073e5a20 0x179074aa840 0x179074aad10 0x179074aac60 0x179074aac60 map[]} div [data-v-bee51e0d class] map[class:ws-divider data-v-bee51e0d:] false false false} justify="flex-start" cw=262.0 gap=0.0 items=1
+14:38:31 [flex] item mainPos=56.0 bw(est)=28.9 ms=28.9 gap=0.0
+14:38:31 [flex] applyPositions row container=&{{0x17907fde630 1 0x179072440b0 0x17907fde580 <nil> 0x1790b8362c0 0x1790dc08cf0 0x17907fdf130 map[]} div [data-v-8e9c3f6c class] map[class:term-tabs data-v-8e9c3f6c:] false false false} justify="flex-start" cw=98.0 gap=0.0 items=4
+14:38:31 [flex] item mainPos=327.0 bw(est)=17.0 ms=17.0 gap=0.0
+14:38:31 [flex] applyPositions row container=&{{0x17907fde6e0 1 0x179072440b0 0x17907fde630 0x1790dc08d80 0x17907fdebb0 0x17907fde9a0 0x17907fde9a0 map[click:[0x1790c58dd88]]} button [data-v-8e9c3f6c class title] map[class:term-tab new-tab data-v-8e9c3f6c: title:新建终端] false false false} justify="flex-start" cw=0.0 gap=4.0 items=1
+14:38:31 [flex] item mainPos=335.0 bw(est)=12.0 ms=12.0 gap=4.0
+14:38:31 [flex] applyPositions row container=&{{0x17907fde630 1 0x179072440b0 0x17907fde580 <nil> 0x1790b8362c0 0x1790dc08cf0 0x17907fdf130 map[]} div [data-v-8e9c3f6c class] map[class:term-tabs data-v-8e9c3f6c:] false false false} justify="flex-start" cw=98.0 gap=0.0 items=4
+14:38:31 [flex] item mainPos=344.0 bw(est)=10.0 ms=10.0 gap=0.0
+14:38:31 [flex] applyPositions row container=&{{0x17907fde630 1 0x179072440b0 0x17907fde580 <nil> 0x1790b8362c0 0x1790dc08cf0 0x17907fdf130 map[]} div [data-v-8e9c3f6c class] map[class:term-tabs data-v-8e9c3f6c:] false false false} justify="flex-start" cw=98.0 gap=0.0 items=4
+14:38:31 [flex] item mainPos=354.0 bw(est)=54.0 ms=54.0 gap=0.0
+14:38:31 [flex] applyPositions row container=&{{0x17907fde630 1 0x179072440b0 0x17907fde580 <nil> 0x1790b8362c0 0x1790dc08cf0 0x17907fdf130 map[]} div [data-v-8e9c3f6c class] map[class:term-tabs data-v-8e9c3f6c:] false false false} justify="flex-start" cw=98.0 gap=0.0 items=4
+14:38:31 [flex] item mainPos=408.0 bw(est)=17.0 ms=17.0 gap=0.0
+14:38:31 [flex] applyPositions row container=&{{0x17907fdf130 1 0x179072440b0 0x17907fde630 0x17907fdefd0 <nil> 0x1790b8360b0 0x1790b8360b0 map[click:[0x1790c764d68]]} button [data-v-8e9c3f6c class title] map[class:term-tab term-panel-close data-v-8e9c3f6c: title:关闭终端面板] false false false} justify="flex-start" cw=0.0 gap=4.0 items=1
+14:38:31 [flex] item mainPos=416.0 bw(est)=12.0 ms=12.0 gap=4.0
+14:38:31 [flex] applyPositions row container=&{{0x1790b8362c0 1 0x179072440b0 0x17907fde580 0x17907fde630 <nil> 0x1790b836370 0x1790b836370 map[]} div [data-v-8e9c3f6c class] map[class:term-empty data-v-8e9c3f6c:] false false false} justify="center" cw=98.0 gap=0.0 items=1
+14:38:31 [flex] item mainPos=343.2 bw(est)=65.6 ms=65.6 gap=0.0
+14:38:31 [flex] applyPositions row container=&{{0x1790b8364d0 1 0x179072440b0 0x1790737c210 0x179074ab340 0x179082f2fd0 0x1790b836580 0x1790ba18840 map[]} div [data-v-c17845b9 class style] map[class:right-container data-v-c17845b9: style:width:855px] false false false} justify="flex-start" cw=855.0 gap=0.0 items=2
+14:38:31 [flex] item mainPos=425.0 bw(est)=4.0 ms=4.0 gap=0.0
+14:38:31 [flex] applyPositions row container=&{{0x1790b8364d0 1 0x179072440b0 0x1790737c210 0x179074ab340 0x179082f2fd0 0x1790b836580 0x1790ba18840 map[]} div [data-v-c17845b9 class style] map[class:right-container data-v-c17845b9: style:width:855px] false false false} justify="flex-start" cw=855.0 gap=0.0 items=2
+14:38:31 [flex] item mainPos=429.0 bw(est)=851.0 ms=851.0 gap=0.0
+14:38:31 [flex] applyPositions row container=&{{0x1790ba188f0 1 0x179072440b0 0x1790ba18840 <nil> 0x1790bb0e580 0x1790ba189a0 0x1790ba18c60 map[]} div [data-v-1aba76c4 class] map[class:rp-header data-v-1aba76c4:] false false false} justify="space-between" cw=827.0 gap=754.2 items=2
+14:38:31 [flex] item mainPos=441.0 bw(est)=22.8 ms=22.8 gap=754.2
+14:38:31 [flex] applyPositions row container=&{{0x1790ba189a0 1 0x179072440b0 0x1790ba188f0 <nil> 0x1790ba18c60 0x1790bb0e000 0x1790dc9ebd0 map[]} span [data-v-1aba76c4 class] map[class:rp-header-title data-v-1aba76c4:] false false false} justify="flex-start" cw=22.8 gap=6.0 items=2
+14:38:31 [flex] item mainPos=441.0 bw(est)=16.0 ms=16.0 gap=6.0
+14:38:31 [flex] applyPositions row container=&{{0x1790ba189a0 1 0x179072440b0 0x1790ba188f0 <nil> 0x1790ba18c60 0x1790bb0e000 0x1790dc9ebd0 map[]} span [data-v-1aba76c4 class] map[class:rp-header-title data-v-1aba76c4:] false false false} justify="flex-start" cw=22.8 gap=6.0 items=2
+14:38:31 [flex] item mainPos=463.0 bw(est)=6.8 ms=6.8 gap=6.0
+14:38:31 [flex] applyPositions row container=&{{0x1790ba188f0 1 0x179072440b0 0x1790ba18840 <nil> 0x1790bb0e580 0x1790ba189a0 0x1790ba18c60 map[]} div [data-v-1aba76c4 class] map[class:rp-header data-v-1aba76c4:] false false false} justify="space-between" cw=827.0 gap=754.2 items=2
+14:38:31 [flex] item mainPos=1218.0 bw(est)=50.0 ms=50.0 gap=754.2
+14:38:31 [flex] applyPositions row container=&{{0x1790ba18c60 1 0x179072440b0 0x1790ba188f0 0x1790ba189a0 <nil> 0x1790ba18d10 0x1790ba19ad0 map[]} div [data-v-1aba76c4 class] map[class:rp-header-actions data-v-1aba76c4:] false false false} justify="flex-start" cw=50.0 gap=4.0 items=3
+14:38:31 [flex] item mainPos=1218.0 bw(est)=14.0 ms=14.0 gap=4.0
+14:38:31 [flex] applyPositions row container=&{{0x1790ba18d10 1 0x179072440b0 0x1790ba18c60 <nil> 0x1790ba19290 0x1790ba18fd0 0x1790ba18fd0 map[click:[0x1790c998f18]]} button [data-v-1aba76c4 class title] map[class:rp-btn data-v-1aba76c4: title:新对话] false false false} justify="flex-start" cw=0.0 gap=0.0 items=1
+14:38:31 [flex] item mainPos=1225.0 bw(est)=14.0 ms=14.0 gap=0.0
+14:38:31 [flex] applyPositions row container=&{{0x1790ba18c60 1 0x179072440b0 0x1790ba188f0 0x1790ba189a0 <nil> 0x1790ba18d10 0x1790ba19ad0 map[]} div [data-v-1aba76c4 class] map[class:rp-header-actions data-v-1aba76c4:] false false false} justify="flex-start" cw=50.0 gap=4.0 items=3
+14:38:31 [flex] item mainPos=1236.0 bw(est)=14.0 ms=14.0 gap=4.0
+14:38:31 [flex] applyPositions row container=&{{0x1790ba19290 1 0x179072440b0 0x1790ba18c60 0x1790ba18d10 0x1790ba19ad0 0x1790ba19550 0x1790ba19550 map[click:[0x1790c959aa0]]} button [data-v-1aba76c4 class title] map[class:rp-btn data-v-1aba76c4: title:Debug 日志] false false false} justify="flex-start" cw=0.0 gap=0.0 items=1
+14:38:31 [flex] item mainPos=1243.0 bw(est)=14.0 ms=14.0 gap=0.0
+14:38:31 [flex] applyPositions row container=&{{0x1790ba18c60 1 0x179072440b0 0x1790ba188f0 0x1790ba189a0 <nil> 0x1790ba18d10 0x1790ba19ad0 map[]} div [data-v-1aba76c4 class] map[class:rp-header-actions data-v-1aba76c4:] false false false} justify="flex-start" cw=50.0 gap=4.0 items=3
+14:38:31 [flex] item mainPos=1254.0 bw(est)=14.0 ms=14.0 gap=4.0
+14:38:31 [flex] applyPositions row container=&{{0x1790ba19ad0 1 0x179072440b0 0x1790ba18c60 0x1790ba19290 <nil> 0x1790ba19d90 0x1790ba19d90 map[click:[0x1790dd1d110]]} button [data-v-1aba76c4 class title] map[class:rp-btn data-v-1aba76c4: title:关闭] false false false} justify="flex-start" cw=0.0 gap=0.0 items=1
+14:38:31 [flex] item mainPos=1261.0 bw(est)=14.0 ms=14.0 gap=0.0
+14:38:31 [flex] applyPositions row container=&{{0x1790bb0e580 1 0x179072440b0 0x1790ba18840 0x1790ba188f0 <nil> 0x1790bb0e630 0x17909581a20 map[]} div [data-v-1aba76c4 class] map[class:rp-body data-v-1aba76c4:] false false false} justify="flex-start" cw=851.0 gap=0.0 items=2
+14:38:31 [flex] item mainPos=429.0 bw(est)=601.0 ms=601.0 gap=0.0
+14:38:31 [flex] applyPositions row container=&{{0x1790bb0f550 1 0x179072440b0 0x1790bb0f3f0 0x1790bb0f4a0 <nil> 0x1790bb0f600 0x17909580420 map[]} div [data-v-1aba76c4 class] map[class:input-bottom-bar data-v-1aba76c4:] false false false} justify="space-between" cw=559.0 gap=330.8 items=2
+14:38:31 [flex] item mainPos=450.0 bw(est)=200.2 ms=200.2 gap=330.8
+14:38:31 [flex] applyPositions row container=&{{0x1790bb0f600 1 0x179072440b0 0x1790bb0f550 <nil> 0x17909580420 0x1790bb0f6b0 0x1790b837970 map[]} div [data-v-1aba76c4 class] map[class:ibb-btns data-v-1aba76c4:] false false false} justify="flex-start" cw=200.2 gap=2.0 items=6
+14:38:31 [flex] item mainPos=450.0 bw(est)=35.2 ms=35.2 gap=2.0
+14:38:31 [flex] applyPositions row container=&{{0x1790bb0f6b0 1 0x179072440b0 0x1790bb0f600 <nil> 0x1790bb0fad0 0x1790bb0f970 0x1790cfa4a20 map[click:[0x1790da5bc38]]} span [data-v-1aba76c4 class title] map[class:obtn obtn-review-auto data-v-1aba76c4: title:AI审核：Agent自行审批写操作] false false false} justify="flex-start" cw=17.2 gap=3.0 items=2
+14:38:31 [flex] item mainPos=459.0 bw(est)=12.0 ms=12.0 gap=3.0
+14:38:31 [flex] applyPositions row container=&{{0x1790bb0f6b0 1 0x179072440b0 0x1790bb0f600 <nil> 0x1790bb0fad0 0x1790bb0f970 0x1790cfa4a20 map[click:[0x1790da5bc38]]} span [data-v-1aba76c4 class title] map[class:obtn obtn-review-auto data-v-1aba76c4: title:AI审核：Agent自行审批写操作] false false false} justify="flex-start" cw=17.2 gap=3.0 items=2
+14:38:31 [flex] item mainPos=474.0 bw(est)=5.2 ms=5.2 gap=3.0
+14:38:31 [flex] applyPositions row container=&{{0x1790bb0f600 1 0x179072440b0 0x1790bb0f550 <nil> 0x17909580420 0x1790bb0f6b0 0x1790b837970 map[]} div [data-v-1aba76c4 class] map[class:ibb-btns data-v-1aba76c4:] false false false} justify="flex-start" cw=200.2 gap=2.0 items=6
+14:38:31 [flex] item mainPos=487.2 bw(est)=49.4 ms=49.4 gap=2.0
+14:38:31 [flex] applyPositions row container=&{{0x1790bb0fad0 1 0x179072440b0 0x1790bb0f600 0x1790bb0f6b0 0x1790cfa4fc0 0x1790bb0fd90 0x1790cfa4ea0 map[click:[0x179115135a8]]} span [data-v-1aba76c4 class title] map[class:obtn obtn-review-config data-v-1aba76c4: title:工具配置：启用/禁用 + 审核黑白名单] false false false} justify="flex-start" cw=31.4 gap=3.0 items=2
+14:38:31 [flex] item mainPos=496.2 bw(est)=12.0 ms=12.0 gap=3.0
+14:38:31 [flex] applyPositions row container=&{{0x1790bb0fad0 1 0x179072440b0 0x1790bb0f600 0x1790bb0f6b0 0x1790cfa4fc0 0x1790bb0fd90 0x1790cfa4ea0 map[click:[0x179115135a8]]} span [data-v-1aba76c4 class title] map[class:obtn obtn-review-config data-v-1aba76c4: title:工具配置：启用/禁用 + 审核黑白名单] false false false} justify="flex-start" cw=31.4 gap=3.0 items=2
+14:38:31 [flex] item mainPos=511.2 bw(est)=19.4 ms=19.4 gap=3.0
+14:38:31 [flex] applyPositions row container=&{{0x1790bb0f600 1 0x179072440b0 0x1790bb0f550 <nil> 0x17909580420 0x1790bb0f6b0 0x1790b837970 map[]} div [data-v-1aba76c4 class] map[class:ibb-btns data-v-1aba76c4:] false false false} justify="flex-start" cw=200.2 gap=2.0 items=6
+14:38:31 [flex] item mainPos=538.6 bw(est)=35.2 ms=35.2 gap=2.0
+14:38:31 [flex] applyPositions row container=&{{0x1790b836a50 1 0x179072440b0 0x1790bb0f600 0x1790cfa4fc0 0x1790b837290 0x1790b836d10 0x1790cfa5440 map[click:[0x179115ecdb0]]} span [data-v-1aba76c4 class title] map[class:obtn active data-v-1aba76c4: title:自动折叠：新消息发出时折叠旧输出，显示完成摘要] false false false} justify="flex-start" cw=17.2 gap=3.0 items=2
+14:38:31 [flex] item mainPos=547.6 bw(est)=12.0 ms=12.0 gap=3.0
+14:38:31 [flex] applyPositions row container=&{{0x1790b836a50 1 0x179072440b0 0x1790bb0f600 0x1790cfa4fc0 0x1790b837290 0x1790b836d10 0x1790cfa5440 map[click:[0x179115ecdb0]]} span [data-v-1aba76c4 class title] map[class:obtn active data-v-1aba76c4: title:自动折叠：新消息发出时折叠旧输出，显示完成摘要] false false false} justify="flex-start" cw=17.2 gap=3.0 items=2
+14:38:31 [flex] item mainPos=562.6 bw(est)=5.2 ms=5.2 gap=3.0
+14:38:31 [flex] applyPositions row container=&{{0x1790bb0f600 1 0x179072440b0 0x1790bb0f550 <nil> 0x17909580420 0x1790bb0f6b0 0x1790b837970 map[]} div [data-v-1aba76c4 class] map[class:ibb-btns data-v-1aba76c4:] false false false} justify="flex-start" cw=200.2 gap=2.0 items=6
+14:38:31 [flex] item mainPos=575.8 bw(est)=35.2 ms=35.2 gap=2.0
+14:38:31 [flex] applyPositions row container=&{{0x1790b837290 1 0x179072440b0 0x1790bb0f600 0x1790b836a50 0x1790b8378c0 0x1790b837550 0x1790cfa58c0 map[click:[0x17911638df8]]} span [data-v-1aba76c4 class title] map[class:obtn active data-v-1aba76c4: title:自动 Git 提交：任务完成时自动 git add + commit] false false false} justify="flex-start" cw=17.2 gap=3.0 items=2
+14:38:31 [flex] item mainPos=584.8 bw(est)=12.0 ms=12.0 gap=3.0
+14:38:31 [flex] applyPositions row container=&{{0x1790b837290 1 0x179072440b0 0x1790bb0f600 0x1790b836a50 0x1790b8378c0 0x1790b837550 0x1790cfa58c0 map[click:[0x17911638df8]]} span [data-v-1aba76c4 class title] map[class:obtn active data-v-1aba76c4: title:自动 Git 提交：任务完成时自动 git add + commit] false false false} justify="flex-start" cw=17.2 gap=3.0 items=2
+14:38:31 [flex] item mainPos=599.8 bw(est)=5.2 ms=5.2 gap=3.0
+14:38:31 [flex] applyPositions row container=&{{0x1790bb0f600 1 0x179072440b0 0x1790bb0f550 <nil> 0x17909580420 0x1790bb0f6b0 0x1790b837970 map[]} div [data-v-1aba76c4 class] map[class:ibb-btns data-v-1aba76c4:] false false false} justify="flex-start" cw=200.2 gap=2.0 items=6
+14:38:31 [flex] item mainPos=613.0 bw(est)=0.0 ms=0.0 gap=2.0
+14:38:31 [flex] applyPositions row container=&{{0x1790bb0f600 1 0x179072440b0 0x1790bb0f550 <nil> 0x17909580420 0x1790bb0f6b0 0x1790b837970 map[]} div [data-v-1aba76c4 class] map[class:ibb-btns data-v-1aba76c4:] false false false} justify="flex-start" cw=200.2 gap=2.0 items=6
+14:38:31 [flex] item mainPos=615.0 bw(est)=35.2 ms=35.2 gap=2.0
+14:38:31 [flex] applyPositions row container=&{{0x1790b837970 1 0x179072440b0 0x1790bb0f600 0x1790b8378c0 <nil> 0x1790b837c30 0x1790cfa5d40 map[click:[0x17911795488]]} span [data-v-1aba76c4 class title] map[class:obtn obtn-agent data-v-1aba76c4: title:自主模式：开启=连续执行全部计划步骤，关闭=单次回复] false false false} justify="flex-start" cw=17.2 gap=3.0 items=2
+14:38:31 [flex] item mainPos=624.0 bw(est)=12.0 ms=12.0 gap=3.0
+14:38:31 [flex] applyPositions row container=&{{0x1790b837970 1 0x179072440b0 0x1790bb0f600 0x1790b8378c0 <nil> 0x1790b837c30 0x1790cfa5d40 map[click:[0x17911795488]]} span [data-v-1aba76c4 class title] map[class:obtn obtn-agent data-v-1aba76c4: title:自主模式：开启=连续执行全部计划步骤，关闭=单次回复] false false false} justify="flex-start" cw=17.2 gap=3.0 items=2
+14:38:31 [flex] item mainPos=639.0 bw(est)=5.2 ms=5.2 gap=3.0
+14:38:31 [flex] applyPositions row container=&{{0x1790bb0f550 1 0x179072440b0 0x1790bb0f3f0 0x1790bb0f4a0 <nil> 0x1790bb0f600 0x17909580420 map[]} div [data-v-1aba76c4 class] map[class:input-bottom-bar data-v-1aba76c4:] false false false} justify="space-between" cw=559.0 gap=330.8 items=2
+14:38:31 [flex] item mainPos=981.0 bw(est)=28.0 ms=28.0 gap=330.8
+14:38:31 [flex] applyPositions row container=&{{0x1790bb0e580 1 0x179072440b0 0x1790ba18840 0x1790ba188f0 <nil> 0x1790bb0e630 0x17909581a20 map[]} div [data-v-1aba76c4 class] map[class:rp-body data-v-1aba76c4:] false false false} justify="flex-start" cw=851.0 gap=0.0 items=2
+14:38:31 [flex] item mainPos=1030.0 bw(est)=250.0 ms=250.0 gap=0.0
+14:38:31 [flex] applyPositions row container=&{{0x17909581c30 1 0x179072440b0 0x17909581a20 <nil> 0x17908278000 0x17909581e40 0x17909581e40 map[]} div [data-v-8a6e65c2 class] map[class:conv-sidebar-header data-v-8a6e65c2:] false false false} justify="space-between" cw=229.0 gap=0.0 items=1
+14:38:31 [flex] item mainPos=1041.0 bw(est)=15.5 ms=15.5 gap=0.0
+14:38:31 [flex] applyPositions row container=&{{0x17908278210 1 0x179072440b0 0x17908278160 <nil> 0x17908279ad0 0x179082782c0 0x17908279a20 map[click:[0x1790ca55e90]]} div [data-v-8a6e65c2 class] map[class:conv-stats-header data-v-8a6e65c2:] false false false} justify="flex-start" cw=233.0 gap=4.0 items=4
+14:38:31 [flex] item mainPos=1039.0 bw(est)=10.0 ms=10.0 gap=4.0
+14:38:31 [flex] applyPositions row container=&{{0x17908278210 1 0x179072440b0 0x17908278160 <nil> 0x17908279ad0 0x179082782c0 0x17908279a20 map[click:[0x1790ca55e90]]} div [data-v-8a6e65c2 class] map[class:conv-stats-header data-v-8a6e65c2:] false false false} justify="flex-start" cw=233.0 gap=4.0 items=4
+14:38:31 [flex] item mainPos=1053.0 bw(est)=11.0 ms=11.0 gap=4.0
+14:38:31 [flex] applyPositions row container=&{{0x17908278210 1 0x179072440b0 0x17908278160 <nil> 0x17908279ad0 0x179082782c0 0x17908279a20 map[click:[0x1790ca55e90]]} div [data-v-8a6e65c2 class] map[class:conv-stats-header data-v-8a6e65c2:] false false false} justify="flex-start" cw=233.0 gap=4.0 items=4
+14:38:31 [flex] item mainPos=1068.0 bw(est)=46.9 ms=46.9 gap=4.0
+14:38:31 [flex] applyPositions row container=&{{0x17908278210 1 0x179072440b0 0x17908278160 <nil> 0x17908279ad0 0x179082782c0 0x17908279a20 map[click:[0x1790ca55e90]]} div [data-v-8a6e65c2 class] map[class:conv-stats-header data-v-8a6e65c2:] false false false} justify="flex-start" cw=233.0 gap=4.0 items=4
+14:38:31 [flex] item mainPos=1277.1 bw(est)=6.9 ms=6.9 gap=4.0
+14:38:31 [flex] applyPositions row container=&{{0x17908279ad0 1 0x179072440b0 0x17908278160 0x17908278210 <nil> 0x17908279e40 0x179148d0fd0 map[]} div [data-v-8a6e65c2 class] map[class:conv-stats-body data-v-8a6e65c2:] false false false} justify="flex-start" cw=233.0 gap=8.0 items=2
+14:38:31 [flex] item mainPos=1039.0 bw(est)=96.0 ms=96.0 gap=8.0
+14:38:31 [flex] applyPositions row container=&{{0x17908279e40 1 0x179072440b0 0x17908279ad0 <nil> 0x179148d0fd0 0x179148d0370 0x179148d09a0 map[]} div [data-v-8a6e65c2 class] map[class:cache-ring-wrap data-v-8a6e65c2:] false false false} justify="center" cw=96.0 gap=0.0 items=1
+14:38:31 [flex] item mainPos=1039.0 bw(est)=96.0 ms=96.0 gap=0.0
+14:38:31 [flex] applyPositions row container=&{{0x17908279ad0 1 0x179072440b0 0x17908278160 0x17908278210 <nil> 0x17908279e40 0x179148d0fd0 map[]} div [data-v-8a6e65c2 class] map[class:conv-stats-body data-v-8a6e65c2:] false false false} justify="flex-start" cw=233.0 gap=8.0 items=2
+14:38:31 [flex] item mainPos=1143.0 bw(est)=137.0 ms=137.0 gap=8.0
+14:38:31 [flex] applyPositions row container=&{{0x179148d11e0 1 0x179072440b0 0x179148d0fd0 <nil> 0x179148d1760 0x179148d13f0 0x179148d1600 map[]} div [data-v-8a6e65c2 class] map[class:cs-row data-v-8a6e65c2:] false false false} justify="space-between" cw=137.0 gap=116.1 items=2
+14:38:31 [flex] item mainPos=1143.0 bw(est)=14.2 ms=14.2 gap=116.1
+14:38:31 [flex] applyPositions row container=&{{0x179148d11e0 1 0x179072440b0 0x179148d0fd0 <nil> 0x179148d1760 0x179148d13f0 0x179148d1600 map[]} div [data-v-8a6e65c2 class] map[class:cs-row data-v-8a6e65c2:] false false false} justify="space-between" cw=137.0 gap=116.1 items=2
+14:38:31 [flex] item mainPos=1273.3 bw(est)=6.7 ms=6.7 gap=116.1
+14:38:31 [flex] applyPositions row container=&{{0x179148d1760 1 0x179072440b0 0x179148d0fd0 0x179148d11e0 0x179148d1d90 0x179148d1970 0x179148d1b80 map[]} div [data-v-8a6e65c2 class] map[class:cs-row data-v-8a6e65c2:] false false false} justify="space-between" cw=137.0 gap=92.3 items=2
+14:38:31 [flex] item mainPos=1143.0 bw(est)=38.1 ms=38.1 gap=92.3
+14:38:31 [flex] applyPositions row container=&{{0x179148d1760 1 0x179072440b0 0x179148d0fd0 0x179148d11e0 0x179148d1d90 0x179148d1970 0x179148d1b80 map[]} div [data-v-8a6e65c2 class] map[class:cs-row data-v-8a6e65c2:] false false false} justify="space-between" cw=137.0 gap=92.3 items=2
+14:38:31 [flex] item mainPos=1273.3 bw(est)=6.7 ms=6.7 gap=92.3
+14:38:31 [flex] applyPositions row container=&{{0x179148d1d90 1 0x179072440b0 0x179148d0fd0 0x179148d1760 0x1791190f970 0x17912768370 0x17912769760 map[]} div [data-v-8a6e65c2 class] map[class:cs-row data-v-8a6e65c2:] false false false} justify="space-between" cw=137.0 gap=85.2 items=2
+14:38:31 [flex] item mainPos=1143.0 bw(est)=45.2 ms=45.2 gap=85.2
+14:38:31 [flex] applyPositions row container=&{{0x179148d1d90 1 0x179072440b0 0x179148d0fd0 0x179148d1760 0x1791190f970 0x17912768370 0x17912769760 map[]} div [data-v-8a6e65c2 class] map[class:cs-row data-v-8a6e65c2:] false false false} justify="space-between" cw=137.0 gap=85.2 items=2
+14:38:31 [flex] item mainPos=1273.3 bw(est)=6.7 ms=6.7 gap=85.2
+14:38:31 [flex] applyPositions row container=&{{0x1791190f970 1 0x179072440b0 0x179148d0fd0 0x179148d1d90 0x179121dc840 0x1791190fce0 0x179115fc630 map[]} div [data-v-8a6e65c2 class] map[class:cs-row data-v-8a6e65c2:] false false false} justify="space-between" cw=137.0 gap=116.1 items=2
+14:38:31 [flex] item mainPos=1143.0 bw(est)=14.2 ms=14.2 gap=116.1
+14:38:31 [flex] applyPositions row container=&{{0x1791190f970 1 0x179072440b0 0x179148d0fd0 0x179148d1d90 0x179121dc840 0x1791190fce0 0x179115fc630 map[]} div [data-v-8a6e65c2 class] map[class:cs-row data-v-8a6e65c2:] false false false} justify="space-between" cw=137.0 gap=116.1 items=2
+14:38:31 [flex] item mainPos=1273.3 bw(est)=6.7 ms=6.7 gap=116.1
+14:38:31 [flex] applyPositions row container=&{{0x17912f3ed10 1 0x179072440b0 0x179148d0fd0 0x179121dc840 <nil> 0x17912f3fce0 0x17912fd8a50 map[]} div [data-v-8a6e65c2 class] map[class:cs-row cs-total data-v-8a6e65c2:] false false false} justify="space-between" cw=137.0 gap=84.4 items=2
+14:38:31 [flex] item mainPos=1143.0 bw(est)=44.5 ms=44.5 gap=84.4
+14:38:31 [flex] applyPositions row container=&{{0x17912f3ed10 1 0x179072440b0 0x179148d0fd0 0x179121dc840 <nil> 0x17912f3fce0 0x17912fd8a50 map[]} div [data-v-8a6e65c2 class] map[class:cs-row cs-total data-v-8a6e65c2:] false false false} justify="space-between" cw=137.0 gap=84.4 items=2
+14:38:31 [flex] item mainPos=1271.9 bw(est)=8.1 ms=8.1 gap=84.4
+14:38:31 [flex] applyPositions row container=&{{0x1791302ea50 1 0x179072440b0 0x17912fd9ce0 <nil> 0x179072babb0 0x17913478bb0 0x179072ba9a0 map[click:[0x1790cb71c68]]} div [data-v-8a6e65c2 class] map[class:conv-stats-header data-v-8a6e65c2:] false false false} justify="flex-start" cw=233.0 gap=4.0 items=4
+14:38:31 [flex] item mainPos=1039.0 bw(est)=10.0 ms=10.0 gap=4.0
+14:38:31 [flex] applyPositions row container=&{{0x1791302ea50 1 0x179072440b0 0x17912fd9ce0 <nil> 0x179072babb0 0x17913478bb0 0x179072ba9a0 map[click:[0x1790cb71c68]]} div [data-v-8a6e65c2 class] map[class:conv-stats-header data-v-8a6e65c2:] false false false} justify="flex-start" cw=233.0 gap=4.0 items=4
+14:38:31 [flex] item mainPos=1053.0 bw(est)=11.0 ms=11.0 gap=4.0
+14:38:31 [flex] applyPositions row container=&{{0x1791302ea50 1 0x179072440b0 0x17912fd9ce0 <nil> 0x179072babb0 0x17913478bb0 0x179072ba9a0 map[click:[0x1790cb71c68]]} div [data-v-8a6e65c2 class] map[class:conv-stats-header data-v-8a6e65c2:] false false false} justify="flex-start" cw=233.0 gap=4.0 items=4
+14:38:31 [flex] item mainPos=1068.0 bw(est)=21.3 ms=21.3 gap=4.0
+14:38:31 [flex] applyPositions row container=&{{0x1791302ea50 1 0x179072440b0 0x17912fd9ce0 <nil> 0x179072babb0 0x17913478bb0 0x179072ba9a0 map[click:[0x1790cb71c68]]} div [data-v-8a6e65c2 class] map[class:conv-stats-header data-v-8a6e65c2:] false false false} justify="flex-start" cw=233.0 gap=4.0 items=4
+14:38:31 [flex] item mainPos=1268.6 bw(est)=15.4 ms=15.4 gap=4.0
+14:38:31 [flex] applyPositions row container=&{{0x179074abc30 1 0x179072440b0 0x179072badc0 0x179072bb290 <nil> 0x17907fde000 0x17907fdef20 map[]} div [data-v-8a6e65c2 class] map[class:ctx-bar-labels data-v-8a6e65c2:] false false false} justify="space-between" cw=233.0 gap=170.0 items=2
+14:38:31 [flex] item mainPos=1039.0 bw(est)=23.2 ms=23.2 gap=170.0
+14:38:31 [flex] applyPositions row container=&{{0x179074abc30 1 0x179072440b0 0x179072badc0 0x179072bb290 <nil> 0x17907fde000 0x17907fdef20 map[]} div [data-v-8a6e65c2 class] map[class:ctx-bar-labels data-v-8a6e65c2:] false false false} justify="space-between" cw=233.0 gap=170.0 items=2
+14:38:31 [flex] item mainPos=1232.3 bw(est)=39.7 ms=39.7 gap=170.0
+14:38:31 [flex] applyPositions row container=&{{0x17907fdf810 1 0x179072440b0 0x17907fdf760 <nil> 0x17907fdfa20 0x17907fdf8c0 0x17907fdf970 map[]} div [data-v-8a6e65c2 class] map[class:ctx-row data-v-8a6e65c2:] false false false} justify="space-between" cw=233.0 gap=153.8 items=2
+14:38:31 [flex] item mainPos=1039.0 bw(est)=35.5 ms=35.5 gap=153.8
+14:38:31 [flex] applyPositions row container=&{{0x17907fdf810 1 0x179072440b0 0x17907fdf760 <nil> 0x17907fdfa20 0x17907fdf8c0 0x17907fdf970 map[]} div [data-v-8a6e65c2 class] map[class:ctx-row data-v-8a6e65c2:] false false false} justify="space-between" cw=233.0 gap=153.8 items=2
+14:38:31 [flex] item mainPos=1228.3 bw(est)=43.7 ms=43.7 gap=153.8
+14:38:31 [flex] applyPositions row container=&{{0x17907fdfa20 1 0x179072440b0 0x17907fdf760 0x17907fdf810 0x17907fdfc30 0x17907fdfad0 0x17907fdfb80 map[]} div [data-v-8a6e65c2 class] map[class:ctx-row data-v-8a6e65c2:] false false false} justify="space-between" cw=233.0 gap=187.9 items=2
+14:38:31 [flex] item mainPos=1039.0 bw(est)=28.4 ms=28.4 gap=187.9
+14:38:31 [flex] applyPositions row container=&{{0x17907fdfa20 1 0x179072440b0 0x17907fdf760 0x17907fdf810 0x17907fdfc30 0x17907fdfad0 0x17907fdfb80 map[]} div [data-v-8a6e65c2 class] map[class:ctx-row data-v-8a6e65c2:] false false false} justify="space-between" cw=233.0 gap=187.9 items=2
+14:38:31 [flex] item mainPos=1255.3 bw(est)=16.7 ms=16.7 gap=187.9
+14:38:31 [flex] applyPositions row container=&{{0x17907fdfc30 1 0x179072440b0 0x17907fdf760 0x17907fdfa20 <nil> 0x17907fdfce0 0x17907fdfd90 map[]} div [data-v-8a6e65c2 class] map[class:ctx-row data-v-8a6e65c2:] false false false} justify="space-between" cw=233.0 gap=179.1 items=2
+14:38:31 [flex] item mainPos=1039.0 bw(est)=28.4 ms=28.4 gap=179.1
+14:38:31 [flex] applyPositions row container=&{{0x17907fdfc30 1 0x179072440b0 0x17907fdf760 0x17907fdfa20 <nil> 0x17907fdfce0 0x17907fdfd90 map[]} div [data-v-8a6e65c2 class] map[class:ctx-row data-v-8a6e65c2:] false false false} justify="space-between" cw=233.0 gap=179.1 items=2
+14:38:31 [flex] item mainPos=1246.5 bw(est)=25.5 ms=25.5 gap=179.1
+14:38:31 [flex] applyPositions row container=&{{0x179082f2210 1 0x179072440b0 0x179072babb0 0x17907fdfe40 <nil> 0x179082f22c0 0x179082f28f0 map[]} div [data-v-8a6e65c2 class] map[class:conv-footer-actions data-v-8a6e65c2:] false false false} justify="flex-start" cw=213.0 gap=2.0 items=2
+14:38:31 [flex] item mainPos=1049.0 bw(est)=106.5 ms=106.5 gap=2.0
+14:38:31 [flex] applyPositions row container=&{{0x179082f22c0 1 0x179072440b0 0x179082f2210 <nil> 0x179082f28f0 0x179082f2580 0x1790a058990 map[click:[0x1790cca08e8]]} button [data-v-8a6e65c2 class title] map[class:conv-footer-btn data-v-8a6e65c2: title:市场（安装 MCP/技能）] false false false} justify="center" cw=88.5 gap=4.0 items=2
+14:38:31 [flex] item mainPos=1090.8 bw(est)=10.0 ms=10.0 gap=4.0
+14:38:31 [flex] applyPositions row container=&{{0x179082f22c0 1 0x179072440b0 0x179082f2210 <nil> 0x179082f28f0 0x179082f2580 0x1790a058990 map[click:[0x1790cca08e8]]} button [data-v-8a6e65c2 class title] map[class:conv-footer-btn data-v-8a6e65c2: title:市场（安装 MCP/技能）] false false false} justify="center" cw=88.5 gap=4.0 items=2
+14:38:31 [flex] item mainPos=1104.8 bw(est)=12.9 ms=12.9 gap=4.0
+14:38:31 [flex] applyPositions row container=&{{0x179082f2210 1 0x179072440b0 0x179072babb0 0x17907fdfe40 <nil> 0x179082f22c0 0x179082f28f0 map[]} div [data-v-8a6e65c2 class] map[class:conv-footer-actions data-v-8a6e65c2:] false false false} justify="flex-start" cw=213.0 gap=2.0 items=2
+14:38:31 [flex] item mainPos=1157.5 bw(est)=106.5 ms=106.5 gap=2.0
+14:38:31 [flex] applyPositions row container=&{{0x179082f28f0 1 0x179072440b0 0x179082f2210 0x179082f22c0 <nil> 0x179082f2bb0 0x1790a059320 map[click:[0x1790cca1c20]]} button [data-v-8a6e65c2 class title] map[class:conv-footer-btn data-v-8a6e65c2: title:设置（管理已安装技能）] false false false} justify="center" cw=88.5 gap=4.0 items=2
+14:38:31 [flex] item mainPos=1199.3 bw(est)=10.0 ms=10.0 gap=4.0
+14:38:31 [flex] applyPositions row container=&{{0x179082f28f0 1 0x179072440b0 0x179082f2210 0x179082f22c0 <nil> 0x179082f2bb0 0x1790a059320 map[click:[0x1790cca1c20]]} button [data-v-8a6e65c2 class title] map[class:conv-footer-btn data-v-8a6e65c2: title:设置（管理已安装技能）] false false false} justify="center" cw=88.5 gap=4.0 items=2
+14:38:31 [flex] item mainPos=1213.3 bw(est)=12.9 ms=12.9 gap=4.0
+14:38:31 [flex] applyPositions row container=&{{0x179082f2fd0 1 0x179072440b0 0x1790737c210 0x1790b8364d0 0x1790a059c20 0x179082f3080 0x179082f31e0 map[]} div [data-v-026d43a1 data-v-c17845b9 class] map[class:status-bar data-v-026d43a1: data-v-c17845b9:] false false false} justify="space-between" cw=1264.0 gap=1187.5 items=2
+14:38:31 [flex] item mainPos=8.0 bw(est)=21.3 ms=21.3 gap=1187.5
+14:38:31 [flex] applyPositions row container=&{{0x179082f3080 1 0x179072440b0 0x179082f2fd0 <nil> 0x179082f31e0 0x179082f3130 0x1790a059830 map[]} div [data-v-026d43a1 class] map[class:status-left data-v-026d43a1:] false false false} justify="flex-start" cw=21.3 gap=8.0 items=1
+14:38:31 [flex] item mainPos=8.0 bw(est)=21.3 ms=21.3 gap=8.0
+14:38:31 [flex] applyPositions row container=&{{0x179082f3130 1 0x179072440b0 0x179082f3080 <nil> 0x1790a0597a0 0x1790a059680 0x1790a059680 map[]} span [data-v-026d43a1 class] map[class:status-item data-v-026d43a1:] false false false} justify="flex-start" cw=21.3 gap=4.0 items=1
+14:38:31 [flex] item mainPos=8.0 bw(est)=21.3 ms=21.3 gap=4.0
+14:38:31 [flex] applyPositions row container=&{{0x179082f2fd0 1 0x179072440b0 0x1790737c210 0x1790b8364d0 0x1790a059c20 0x179082f3080 0x179082f31e0 map[]} div [data-v-026d43a1 data-v-c17845b9 class] map[class:status-bar data-v-026d43a1: data-v-c17845b9:] false false false} justify="space-between" cw=1264.0 gap=1187.5 items=2
+14:38:31 [flex] item mainPos=1216.8 bw(est)=55.2 ms=55.2 gap=1187.5
+14:38:31 [flex] applyPositions row container=&{{0x179082f31e0 1 0x179072440b0 0x179082f2fd0 0x179082f3080 <nil> 0x1790a0598c0 0x179082f3340 map[]} div [data-v-026d43a1 class] map[class:status-right data-v-026d43a1:] false false false} justify="flex-start" cw=55.2 gap=8.0 items=2
+14:38:31 [flex] item mainPos=1216.8 bw(est)=29.0 ms=29.0 gap=8.0
+14:38:31 [flex] applyPositions row container=&{{0x179082f3290 1 0x179072440b0 0x179082f31e0 0x1790a0599e0 0x179082f3340 0x1790a059a70 0x1790a059a70 map[]} span [data-v-026d43a1 class] map[class:status-item data-v-026d43a1:] false false false} justify="flex-start" cw=29.0 gap=4.0 items=1
+14:38:31 [flex] item mainPos=1216.8 bw(est)=29.0 ms=29.0 gap=4.0
+14:38:31 [flex] applyPositions row container=&{{0x179082f31e0 1 0x179072440b0 0x179082f2fd0 0x179082f3080 <nil> 0x1790a0598c0 0x179082f3340 map[]} div [data-v-026d43a1 class] map[class:status-right data-v-026d43a1:] false false false} justify="flex-start" cw=55.2 gap=8.0 items=2
+14:38:31 [flex] item mainPos=1253.8 bw(est)=18.2 ms=18.2 gap=8.0
+14:38:31 [flex] applyPositions row container=&{{0x179082f3340 1 0x179072440b0 0x179082f31e0 0x179082f3290 <nil> 0x179082f33f0 0x1790a059b90 map[]} span [data-v-026d43a1 class] map[class:status-item data-v-026d43a1:] false false false} justify="flex-start" cw=18.2 gap=4.0 items=2
+14:38:31 [flex] item mainPos=1253.8 bw(est)=6.6 ms=6.6 gap=4.0
+14:38:31 [flex] applyPositions row container=&{{0x179082f3340 1 0x179072440b0 0x179082f31e0 0x179082f3290 <nil> 0x179082f33f0 0x1790a059b90 map[]} span [data-v-026d43a1 class] map[class:status-item data-v-026d43a1:] false false false} justify="flex-start" cw=18.2 gap=4.0 items=2
+14:38:31 [flex] item mainPos=1264.4 bw(est)=11.6 ms=11.6 gap=4.0
+14:38:31 [scroll] updateContentSize: maxX=1286 maxY=829 rvType=*rendering.RenderView
+14:38:31 [PROBE] after LoadHTML: document=true renderView=true
+14:38:31 rendered 1280x800 → F:\syproject\gou-ide\dev\desktop_probe\desktop.png

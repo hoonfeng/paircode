@@ -1,0 +1,1 @@
+Select-String -Path dev\desktop_probe\probe_out.txt -Pattern 'gap=2\.0' -SimpleMatch | ForEach-Object { .Line.Trim() }

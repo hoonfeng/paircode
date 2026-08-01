@@ -8,6 +8,18 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     assetsInlineLimit: 8192,
+    // wb-ui's JS engine (goja-based JSC) cannot parse minified code
+    // reliably — keep the bundle readable so the desktop renderer can
+    // execute the real companion frontend.
+    minify: false,
+    rollupOptions: {
+      output: {
+        // Single IIFE bundle (no dynamic-import chunks, no ES module
+        // statements) — required for the wb-ui JS engine.
+        format: 'iife',
+        inlineDynamicImports: true,
+      },
+    },
   },
   server: {
     port: 5173,

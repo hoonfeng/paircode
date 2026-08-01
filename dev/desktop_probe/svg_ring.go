@@ -44,7 +44,7 @@ func main() {
 	wd, _ := os.Getwd()
 
 	// 1. Inspect cache-ring SVG content in wb-ui.
-	distDir := filepath.Join(wd, "cmd", "desktop", "web-ui", "dist")
+	distDir := filepath.Join(wd, "cmd", "companion", "web-ui", "dist")
 	htmlData, _ := os.ReadFile(distDir + "/index.html")
 	wv := webkit.NewWebView()
 	setupLoaders(wv, distDir)
