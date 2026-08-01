@@ -13,6 +13,8 @@ import (
 	"regexp"
 	"strings"
 
+	"wb-ui/layout"
+	"wb-ui/platform/graphics"
 	"wb-ui/webkit"
 )
 
@@ -47,6 +49,24 @@ func main() {
 		log.Fatalf("read index.html: %v", err)
 	}
 	log.Printf("HTML: %d bytes, distDir=%s", len(htmlData), distDir)
+
+	// Mirror host.go: initialize the FontManager (Microsoft YaHei default)
+	// so CJK measurement matches painting. Without it, skia falls back to a
+	// bare Arial whose glyph coverage differs per character, producing
+	// inconsistent widths (e.g. 会话 12px/char but 创建 5px/char).
+	if graphics.GetFontManager() == nil {
+		_ = graphics.InitFontManager("")
+		if mgr := graphics.GetFontManager(); mgr != nil {
+			mgr.LoadSystemFonts()
+		}
+	}
+	layout.MeasureTextFunc = func(family string, size float64, weight int, style, text string) float64 {
+		return graphics.MeasureText(graphics.Font{Family: family, Size: size, Weight: weight, Style: style}, text)
+	}
+	layout.FontMetricsFunc = func(family string, size float64, weight int, style string) (float64, float64, float64) {
+		f := graphics.Font{Family: family, Size: size, Weight: weight, Style: style}
+		return graphics.GlobalFontAscent(f), graphics.GlobalFontDescent(f), graphics.GlobalFontLineGap(f)
+	}
 
 	wv := webkit.NewWebView()
 	setupLoaders(wv, distDir)
