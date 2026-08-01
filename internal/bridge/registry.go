@@ -56,33 +56,39 @@ func (r *Registry) Register(method, pattern string, handler HandlerFunc) {
 }
 
 // Dispatch 根据 method + path 匹配并执行 Handler。
-// 匹配策略：先精确匹配 path，再尝试最长前缀匹配。
+// 匹配策略：先精确匹配 path，再尝试最长前缀匹配（处理 /api/conversations/{id}/messages 等带参数路径）。
 // 返回 true 表示已处理；false 表示无匹配 handler。
 func (r *Registry) Dispatch(method, path string, w http.ResponseWriter, req *http.Request) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
+	method = strings.ToUpper(method)
+
 	// 1. 精确匹配
 	if handlers, ok := r.index[path]; ok {
-		if h, ok := handlers[strings.ToUpper(method)]; ok {
+		if h, ok := handlers[method]; ok {
 			h(w, req)
 			return true
 		}
 	}
 
-	// 2. 前缀匹配（处理 /api/conversations/{id}/messages 等带参数的路径）
-	//    从最长路径开始匹配
+	// 2. 前缀匹配：从最长 pattern 开始，选与 path 匹配的最长前缀。
+	//    例如 path=/api/conversations/conv_1/messages 匹配 pattern=/api/conversations/。
+	best := ""
 	for pattern, handlers := range r.index {
-		if strings.HasPrefix(path, pattern) || strings.HasPrefix(pattern, path) {
-			// 较长的 pattern 优先匹配
+		// 跳过精确注册项（已在上一步处理），只匹配带尾斜杠或通配的前缀模式
+		if !strings.HasSuffix(pattern, "/") && !strings.HasSuffix(pattern, "*") {
 			continue
 		}
-		if strings.HasPrefix(path, pattern) {
-			if h, ok := handlers[strings.ToUpper(method)]; ok {
-				h(w, req)
-				return true
+		if strings.HasPrefix(path, pattern) && len(pattern) > len(best) {
+			if _, ok := handlers[method]; ok {
+				best = pattern
 			}
 		}
+	}
+	if best != "" {
+		r.index[best][method](w, req)
+		return true
 	}
 
 	return false

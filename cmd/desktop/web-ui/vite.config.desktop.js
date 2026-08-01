@@ -38,6 +38,16 @@ export default defineConfig({
           fs.copyFileSync(path.join(moduleDir, src), path.join(libsDir, dest))
           console.log(`  copied: ${src} → dist/libs/${dest}`)
         }
+        // Post-process index.html: wb-ui jsc does NOT support ES modules, so
+        // turn the app bundle's <script type="module"> into a plain <script>.
+        // The bundle is built as IIFE (see rollupOptions.output.format), so
+        // it runs fine as a classic script loaded in order after the libs.
+        const indexPath = path.resolve(__dirname, 'dist', 'index.html')
+        let html = fs.readFileSync(indexPath, 'utf8')
+        html = html.replace('<script type="module" crossorigin', '<script')
+        html = html.replace('<script type="module"', '<script')
+        fs.writeFileSync(indexPath, html)
+        console.log('  post-processed index.html: module script → classic script')
       }
     }
   ],

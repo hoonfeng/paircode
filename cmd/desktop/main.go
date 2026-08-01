@@ -39,9 +39,12 @@ func main() {
 	setupLoaders(wv, distDir)
 	_ = wv.JSInterpreter()
 
-	wv.LoadHTML(htmlStr)
-
+	// ★ 先初始化桥接（core 加载 + 真实 handler 注册 + fetch 拦截注入），
+	//   再加载页面——页面 script 执行时 desktopBridge / go.bridge_call
+	//   已就绪，/api/* 请求才能被拦截到本地 Go handler。
 	InitDesktopBridge(wv)
+
+	wv.LoadHTML(htmlStr)
 
 	if out := wv.ConsoleOutput(); out != "" {
 		log.Println("[CONSOLE]")
