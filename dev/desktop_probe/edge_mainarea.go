@@ -1,10 +1,11 @@
-// Command edge_mainarea measures the main-area width in Edge (reference) for
-// the Vue desktop app, to compare with wb-ui's 98px.
+// Command edge_mainarea renders the companion frontend in Edge and crops the
+// main-area (x327-425, y30-600) to compare with wb-ui.
 package main
 
 import (
-	"encoding/json"
 	"fmt"
+	"image"
+	"image/png"
 	"log"
 	"net"
 	"net/http"
@@ -14,6 +15,18 @@ import (
 	"strings"
 	"time"
 )
+
+func edgePath() string {
+	for _, p := range []string{
+		`C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`,
+		`C:\Program Files\Microsoft\Edge\Application\msedge.exe`,
+	} {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return ""
+}
 
 func main() {
 	log.SetFlags(0)
@@ -29,71 +42,51 @@ func main() {
 	defer srv.Close()
 	port := ln.Addr().(*net.TCPAddr).Port
 
-	// Write a probe JS into a temp file served from dist.
-	probe := `
-<script>
-window.addEventListener('load', function() {
-	setTimeout(function() {
-		var ma = document.querySelector('.main-area');
-		var rp = document.querySelector('.right-panel');
-		var welcome = document.querySelector('.welcome-text');
-		var welcomeSub = document.querySelector('.welcome-sub');
-		var wt = welcome ? welcome.getBoundingClientRect() : null;
-		var ws = welcomeSub ? welcomeSub.getBoundingClientRect() : null;
-		var out = {
-			mainArea: ma ? {x: ma.getBoundingClientRect().x, w: ma.getBoundingClientRect().width, h: ma.getBoundingClientRect().height} : null,
-			rightPanel: rp ? {x: rp.getBoundingClientRect().x, w: rp.getBoundingClientRect().width} : null,
-			welcomeText: wt ? {x: wt.x, y: wt.y, w: wt.width, h: wt.height} : null,
-			welcomeSub: ws ? {x: ws.x, y: ws.y, w: ws.width, h: ws.height} : null
-		};
-		document.title = 'WBMAINAREA:' + JSON.stringify(out);
-	}, 3000);
-});
-</script>
-`
-	probePath := filepath.Join(distDir, "probe_mainarea.html")
-	html, _ := os.ReadFile(filepath.Join(distDir, "index.html"))
-	htmlStr := string(html)
-	htmlStr = strings.Replace(htmlStr, "</head>", probe+"</head>", 1)
-	os.WriteFile(probePath, []byte(htmlStr), 0o644)
-	defer os.Remove(probePath)
-
-	edge := "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe"
-	url := fmt.Sprintf("http://127.0.0.1:%d/probe_mainarea.html", port)
+	edge := edgePath()
+	edgeOut := filepath.Join(wd, "dev", "desktop_probe", "cmp_edge.png")
+	url := fmt.Sprintf("http://127.0.0.1:%d/index.html", port)
 	cmd := exec.Command(edge,
 		"--headless", "--disable-gpu", "--no-sandbox", "--hide-scrollbars",
 		"--force-device-scale-factor=1", "--window-size=1280,800",
-		"--virtual-time-budget=8000",
-		"--dump-dom", url)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		log.Fatalf("edge: %v", err)
+		"--virtual-time-budget=8000", "--screenshot="+edgeOut,
+		url)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		log.Printf("edge: %v %s", err, out)
 	}
-	// Find the WBMAINAREA title.
-	s := string(out)
-	idx := strings.Index(s, "WBMAINAREA:")
-	if idx < 0 {
-		fmt.Println("no WBMAINAREA in output, first 500 chars:")
-		fmt.Println(s[:min(500, len(s))])
-		return
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		if _, err := os.Stat(edgeOut); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			log.Fatal("timeout")
+		}
+		time.Sleep(500 * time.Millisecond)
 	}
-	end := strings.Index(s[idx:], "<")
-	if end < 0 {
-		end = len(s) - idx
-	}
-	payload := s[idx+len("WBMAINAREA:"): idx+end]
-	fmt.Println("EDGE MAIN-AREA:", payload)
-	var m map[string]interface{}
-	if err := json.Unmarshal([]byte(payload), &m); err == nil {
-		b, _ := json.MarshalIndent(m, "", "  ")
-		fmt.Println(string(b))
-	}
-	time.Sleep(500 * time.Millisecond)
-}
+	time.Sleep(1500 * time.Millisecond)
 
-func min(a, b int) int {
-	if a < b {
-		return a
+	f, _ := os.Open(edgeOut)
+	img, err := png.Decode(f)
+	f.Close()
+	if err != nil {
+		log.Fatal(err)
 	}
-	return b
+	// main-area: x327-430, y30-600
+	sub := image.NewRGBA(image.Rect(0, 0, 103, 570))
+	ink := 0
+	for y := 0; y < 570; y++ {
+		for x := 0; x < 103; x++ {
+			c := img.At(327+x, 30+y)
+			r, g, b, _ := c.RGBA()
+			sub.Set(x, y, c)
+			if r < 30000 && g < 30000 && b < 30000 {
+				ink++
+			}
+		}
+	}
+	fo, _ := os.Create(wd + "\\dev\\desktop_probe\\mainarea_edge.png")
+	png.Encode(fo, sub)
+	fo.Close()
+	fmt.Printf("main-area edge ink=%d (of %d)\n", ink, 103*570)
+	_ = strings.ReplaceAll
 }

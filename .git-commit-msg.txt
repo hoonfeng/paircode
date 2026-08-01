@@ -1,1 +1,1 @@
-chore: remove debug log artifacts from desktop probes
+chore: cleanup transient border/sidebar probes + artifacts

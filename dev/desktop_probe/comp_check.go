@@ -1,18 +1,16 @@
-// Command comp_check renders the desktop app and reports ink coverage for
-// specific components: welcome-logo (emoji), send-btn icon, obtn icons,
-// select arrow — to spot components that fail to draw.
+// Command comp_check dumps geometry of sidebar/explorer/chat-empty internals.
 package main
 
 import (
 	"fmt"
-	"image"
-	"image/color"
 	"log"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 
+	"wb-ui/dom"
+	"wb-ui/rendering"
 	"wb-ui/webkit"
 )
 
@@ -50,44 +48,34 @@ func main() {
 	_ = wv.LoadHTML(string(htmlData))
 	wv.RebuildRenderTree()
 	wv.EnsureLayout()
-	raw, err := wv.Render()
-	if err != nil {
-		log.Fatal(err)
-	}
-	w, h := wv.Width(), wv.Height()
-	img := image.NewRGBA(image.Rect(0, 0, w, h))
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
-			off := (y*w + x) * 4
-			if off+3 < len(raw) {
-				img.SetRGBA(x, y, colorRGBA(raw[off], raw[off+1], raw[off+2], raw[off+3]))
-			}
-		}
-	}
+	rv := wv.RenderView()
 
-	// Count ink (non-background) pixels in component boxes (from geo output).
-	regions := []struct {
-		name          string
-		x0, y0, x1, y1 int
-	}{
-		{"welcome-logo (emoji)", 327, 261, 425, 325},
-		{"send-btn icon", 995, 740, 1011, 756},
-		{"obtn review-auto", 450, 736, 488, 760},
-		{"conv-stats chevron", 1039, 392, 1049, 405},
-		{"chat-empty-icon", 730, 153, 762, 185},
-	}
-	for _, r := range regions {
-		ink := 0
-		for y := r.y0; y < r.y1; y++ {
-			for x := r.x0; x < r.x1; x++ {
-				c := img.RGBAAt(x, y)
-				if c.A > 0 && !(c.R > 230 && c.G > 230 && c.B > 230) {
-					ink++
+	fmt.Println("=== SIDEBAR / EXPLORER / CHAT EMPTY INTERNALS ===")
+	var walk func(o rendering.RenderObject)
+	walk = func(o rendering.RenderObject) {
+		if el, ok := o.Node().(*dom.Element); ok {
+			cls := el.GetAttribute("class")
+			if strings.Contains(cls, "ws-") || strings.Contains(cls, "explorer") ||
+				strings.Contains(cls, "file-") || strings.Contains(cls, "welcome") ||
+				strings.Contains(cls, "chat-empty") || strings.Contains(cls, "tree") ||
+				strings.Contains(cls, "folder") || strings.Contains(cls, "item") ||
+				strings.Contains(cls, "explorer-") {
+				x, y, w, h, ok2 := rendering.BoxGeometry(o)
+				if ok2 && w > 0 && h > 0 {
+					txt := ""
+					if t := el.TextContent(); t != "" {
+						txt = strings.TrimSpace(t)
+						if len(txt) > 18 {
+							txt = txt[:18]
+						}
+					}
+					fmt.Printf("  .%s xy=(%.0f,%.0f) wh=(%.0f,%.0f) text=%q\n", cls, x, y, w, h, txt)
 				}
 			}
 		}
-		fmt.Printf("[%s] ink=%d (region %dx%d)\n", r.name, ink, r.x1-r.x0, r.y1-r.y0)
+		for c := o.FirstChild(); c != nil; c = c.NextSibling() {
+			walk(c)
+		}
 	}
+	walk(rv)
 }
-
-func colorRGBA(r, g, b, a uint8) color.RGBA { return color.RGBA{R: r, G: g, B: b, A: a} }
