@@ -57,6 +57,9 @@ func main() {
 	if out := wv.ConsoleOutput(); out != "" {
 		log.Printf("[CONSOLE] %s", out)
 	}
+	// Mirror host.go: after JS mounts Vue, rebuild so runtime styles (Vue
+	// scoped CSS from the dist stylesheet) are collected and applied.
+	wv.RebuildRenderTree()
 	wv.EnsureLayout()
 	log.Printf("[PROBE] after LoadHTML: document=%v renderView=%v", wv.Document() != nil, wv.RenderView() != nil)
 
