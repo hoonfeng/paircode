@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>wb-ui 交互测试面板</title>
+<style>
+  :root {
+    --bg: #1a1b26;
+    --bg2: #24283b;
+    --bg3: #2f334d;
+    --fg: #c0caf5;
+    --fg2: #9aa5ce;
+    --accent: #4ecca3;
+    --accent2: #2ac3de;
+    --border: #3b4261;
+    --danger: #f7768e;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+    font-size: 14px;
+    padding: 24px;
+  }
+  h1 { font-size: 18px; margin-bottom: 4px; }
+  .sub { color: var(--fg2); font-size: 12px; margin-bottom: 20px; }
+
+  .panel {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  .panel-title {
+    font-size: 12px; font-weight: 600; color: var(--fg2);
+    text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px;
+  }
+  .row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
+  .label { font-size: 12px; color: var(--fg2); min-width: 90px; }
+
+  /* ── 主按钮（蓝色）── */
+  .btn-primary {
+    background: var(--accent2);
+    color: #fff; border: none; border-radius: 4px;
+    padding: 6px 16px; font-size: 13px; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    min-height: 30px;
+  }
+  .btn-primary:hover { background: #38b8d6; }
+  .btn-primary:active { background: #1f9ab8; }
+
+  /* ── 绿色按钮 ── */
+  .btn-green {
+    background: var(--accent);
+    color: #063; border: none; border-radius: 4px;
+    padding: 6px 16px; font-size: 13px; cursor: pointer;
+    min-height: 30px;
+  }
+  .btn-green:hover { background: #3db98f; }
+
+  /* ── 危险按钮 ── */
+  .btn-danger {
+    background: transparent; color: var(--danger);
+    border: 1px solid var(--danger); border-radius: 4px;
+    padding: 5px 14px; font-size: 12px; cursor: pointer;
+  }
+  .btn-danger:hover { background: rgba(247,118,142,0.12); }
+
+  /* ── 输入框 ── */
+  .input {
+    background: var(--bg3); color: var(--fg);
+    border: 1px solid var(--border); border-radius: 4px;
+    padding: 6px 10px; font-size: 13px; font-family: Consolas, monospace;
+    min-width: 200px;
+  }
+  .input:focus { outline: 2px solid var(--accent2); border-color: transparent; }
+
+  /* ── 多行输入 ── */
+  .textarea {
+    background: var(--bg3); color: var(--fg);
+    border: 1px solid var(--border); border-radius: 4px;
+    padding: 8px 10px; font-size: 13px; font-family: Consolas, monospace;
+    width: 340px; height: 96px; resize: none; white-space: pre;
+    line-height: 1.5;
+  }
+  .textarea:focus { outline: 2px solid var(--accent2); border-color: transparent; }
+
+  /* ── 开关 ── */
+  .switch {
+    display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+    font-size: 12px; color: var(--fg2);
+  }
+  .switch input { display: none; }
+  .switch .track {
+    width: 34px; height: 18px; border-radius: 9px;
+    background: var(--bg3); border: 1px solid var(--border);
+    position: relative; transition: background 0.2s;
+  }
+  .switch .track::after {
+    content: ""; position: absolute; top: 2px; left: 2px;
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--fg2); transition: left 0.2s, background 0.2s;
+  }
+  .switch input:checked + .track { background: var(--accent); border-color: var(--accent); }
+  .switch input:checked + .track::after { left: 18px; background: #fff; }
+
+  /* ── 标签页 ── */
+  .tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 10px; }
+  .tab {
+    background: none; border: none; color: var(--fg2);
+    padding: 6px 14px; font-size: 12px; cursor: pointer;
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* ── 列表 ── */
+  .list-item {
+    padding: 8px 10px; border-radius: 4px; cursor: pointer;
+    font-size: 13px; display: flex; justify-content: space-between;
+  }
+  .list-item:hover { background: var(--bg3); }
+  .list-item.selected { background: rgba(78,204,163,0.15); color: var(--accent); }
+
+  /* ── 进度条 ── */
+  .progress { width: 200px; height: 8px; border-radius: 4px; background: var(--bg3); overflow: hidden; }
+  .progress .fill { height: 100%; width: 60%; background: var(--accent); border-radius: 4px; }
+
+  /* ── 弹窗 ── */
+  .dialog-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+    display: flex; align-items: center; justify-content: center; z-index: 50;
+  }
+  .dialog-box {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 20px; min-width: 320px;
+  }
+  .dialog-title { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+  .dialog-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+</style>
+</head>
+<body>
+  <h1>wb-ui 交互测试面板</h1>
+  <div class="sub">按钮 · 输入框 · 多行光标 · 开关 · 标签页 · 弹窗</div>
+
+  <div class="panel">
+    <div class="panel-title">① 按钮（点击测试）</div>
+    <div class="row">
+      <span class="label">普通按钮</span>
+      <button class="btn-primary" id="btn-primary">新建工作区</button>
+      <button class="btn-green" id="btn-green">创建终端</button>
+      <button class="btn-danger" id="btn-danger">删除</button>
+    </div>
+    <div class="row">
+      <span class="label">点击反馈</span>
+      <span id="click-result" style="font-size:12px;color:var(--fg2)">（点击上面的按钮）</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">② 输入框（点击光标位置）</div>
+    <div class="row">
+      <span class="label">单行</span>
+      <input class="input" id="input-single" value="hello wb-ui 你好">
+    </div>
+    <div class="row">
+      <span class="label">多行</span>
+      <textarea class="textarea" id="input-multi">第一行文字 alpha beta
+第二行文字 gamma delta
+第三行文字 中文测试</textarea>
+    </div>
+    <div class="row">
+      <span class="label">提示</span>
+      <span style="font-size:12px;color:var(--fg2)">点击多行输入框的每一行，光标应落在点击处</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">③ 开关 / 复选框</div>
+    <div class="row">
+      <label class="switch"><input type="checkbox" id="switch-1"><span class="track"></span>自动审核</label>
+      <label class="switch"><input type="checkbox" id="switch-2"><span class="track"></span>自动运行</label>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">④ 标签页</div>
+    <div class="tabs" id="tabs">
+      <button class="tab active" data-tab="0">终端</button>
+      <button class="tab" data-tab="1">输出</button>
+      <button class="tab" data-tab="2">问题</button>
+    </div>
+    <div id="tab-content" style="font-size:13px;color:var(--fg2)">标签页 0 内容</div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">⑤ 列表</div>
+    <div class="list-item" data-idx="0">文件 A<span style="color:var(--fg2)">12ms</span></div>
+    <div class="list-item" data-idx="1">文件 B<span style="color:var(--fg2)">34ms</span></div>
+    <div class="list-item" data-idx="2">文件 C<span style="color:var(--fg2)">56ms</span></div>
+  </div>
+
+  <div class="dialog-overlay" id="dialog" style="display:none">
+    <div class="dialog-box">
+      <div class="dialog-title" id="dialog-title">新建工作区</div>
+      <input class="input" id="dialog-input" style="width:100%" value="">
+      <div class="dialog-btns">
+        <button class="btn-danger" id="dialog-cancel">取消</button>
+        <button class="btn-primary" id="dialog-ok">确定</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  var result = document.getElementById('click-result');
+
+  document.getElementById('btn-primary').addEventListener('click', function() {
+    result.textContent = '点击了「新建工作区」' + new Date().toLocaleTimeString();
+    document.getElementById('dialog').style.display = 'flex';
+  });
+  document.getElementById('btn-green').addEventListener('click', function() {
+    result.textContent = '点击了「创建终端」';
+  });
+  document.getElementById('btn-danger').addEventListener('click', function() {
+    result.textContent = '点击了「删除」';
+  });
+
+  document.getElementById('dialog-cancel').addEventListener('click', function() {
+    document.getElementById('dialog').style.display = 'none';
+  });
+  document.getElementById('dialog-ok').addEventListener('click', function() {
+    document.getElementById('dialog').style.display = 'none';
+    result.textContent = '已创建: ' + document.getElementById('dialog-input').value;
+  });
+
+  var tabs = document.querySelectorAll('.tab');
+  tabs.forEach(function(tab) {
+    tab.addEventListener('click', function() {
+      tabs.forEach(function(t) { t.className = 'tab'; });
+      tab.className = 'tab active';
+      document.getElementById('tab-content').textContent = '标签页 ' + tab.getAttribute('data-tab') + ' 内容';
+    });
+  });
+
+  var items = document.querySelectorAll('.list-item');
+  items.forEach(function(it) {
+    it.addEventListener('click', function() {
+      items.forEach(function(i) { i.className = 'list-item'; });
+      it.className = 'list-item selected';
+      result.textContent = '选择了 ' + it.textContent.trim().slice(0, 6);
+    });
+  });
+
+  var sw1 = document.getElementById('switch-1');
+  sw1.addEventListener('change', function() {
+    result.textContent = '自动审核: ' + (sw1.checked ? '开' : '关');
+  });
+  var sw2 = document.getElementById('switch-2');
+  sw2.addEventListener('change', function() {
+    result.textContent = '自动运行: ' + (sw2.checked ? '开' : '关');
+  });
+</script>
+</body>
+</html>
