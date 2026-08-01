@@ -1,1 +1,1 @@
-chore: region band probe updates (edge_compare region diffs)
+chore: probe image updates after svg enhancements
