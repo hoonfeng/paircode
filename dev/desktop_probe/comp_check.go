@@ -1,4 +1,4 @@
-// Command comp_check dumps geometry of sidebar/explorer/chat-empty internals.
+// Command comp_check dumps geometry of chat-area internals with box model.
 package main
 
 import (
@@ -49,28 +49,33 @@ func main() {
 	wv.RebuildRenderTree()
 	wv.EnsureLayout()
 	rv := wv.RenderView()
+	st := rv.LayoutState()
 
-	fmt.Println("=== SIDEBAR / EXPLORER / CHAT EMPTY INTERNALS ===")
+	fmt.Println("=== CHAT-AREA BOX MODEL ===")
 	var walk func(o rendering.RenderObject)
 	walk = func(o rendering.RenderObject) {
 		if el, ok := o.Node().(*dom.Element); ok {
 			cls := el.GetAttribute("class")
-			if strings.Contains(cls, "ws-") || strings.Contains(cls, "explorer") ||
-				strings.Contains(cls, "file-") || strings.Contains(cls, "welcome") ||
-				strings.Contains(cls, "chat-empty") || strings.Contains(cls, "tree") ||
-				strings.Contains(cls, "folder") || strings.Contains(cls, "item") ||
-				strings.Contains(cls, "explorer-") {
-				x, y, w, h, ok2 := rendering.BoxGeometry(o)
-				if ok2 && w > 0 && h > 0 {
-					txt := ""
-					if t := el.TextContent(); t != "" {
-						txt = strings.TrimSpace(t)
-						if len(txt) > 18 {
-							txt = txt[:18]
-						}
-					}
-					fmt.Printf("  .%s xy=(%.0f,%.0f) wh=(%.0f,%.0f) text=%q\n", cls, x, y, w, h, txt)
+			if strings.Contains(cls, "chat-area") || strings.Contains(cls, "chat-messages") ||
+				strings.Contains(cls, "chat-input-area") || strings.Contains(cls, "chat-empty") {
+				lb := o.LayoutBox()
+				if lb == nil {
+					return
 				}
+				g := st.GeometryForBox(lb)
+				if g == nil {
+					return
+				}
+				cs := o.Style()
+				grow, shrink := -1.0, -1.0
+				if cs != nil {
+					grow, shrink = cs.FlexGrow, cs.FlexShrink
+				}
+				fmt.Printf("  .%s xy=(%.0f,%.0f) cw=%.0f ch=%.0f bbw=%.0f bbh=%.0f grow=%v shrink=%v\n",
+					cls, g.Left(), g.Top(),
+					g.ContentWidth(), g.ContentHeight(),
+					g.BorderBoxWidth(), g.BorderBoxHeight(),
+					grow, shrink)
 			}
 		}
 		for c := o.FirstChild(); c != nil; c = c.NextSibling() {

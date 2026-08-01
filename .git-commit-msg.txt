@@ -1,1 +1,1 @@
-chore: cleanup transient border/sidebar probes + artifacts
+chore: region band probe updates (edge_compare region diffs)
