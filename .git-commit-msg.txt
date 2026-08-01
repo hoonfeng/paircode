@@ -1,1 +1,1 @@
-chore: probe image updates after svg enhancements
+chore: probe image updates after svg arc/implicit-command fixes
