@@ -75,23 +75,44 @@ func main() {
 	ideSetupLoaders(wv, distDir)
 	_ = wv.JSInterpreter()
 
-	// ★ 桌面环境标记：companion 前端默认走 /api/* fetch；无桥接时 fetch 会
-	//   失败——注入占位 fetch 让 /api/* 返回空 JSON，组件仍能渲染初始状态。
+	// ★ 桌面环境标记：模拟 /api/* 返回工作区 + 文件数据，让文件树渲染
+	//   （真实用户场景：三个滚动条、item 点击、文本省略）。
 	webkit.BeforePageScripts = func(rt *jsc.Interpreter) {
 		rt.RunJS(`(function(){
 			window.__DESKTOP_MODE__ = true;
-			if (!window.__origFetch) {
-				window.__origFetch = window.fetch;
-				window.fetch = function(url, opts) {
-					var u = String(url);
-					if (u.indexOf('/api/') === 0) {
-						return Promise.resolve(new Response('{"ok":true,"data":[]}', {
-							status: 200, headers: {'Content-Type':'application/json'}
-						}));
-					}
-					return window.__origFetch.apply(window, arguments);
-				};
+			window.__origFetch = window.fetch;
+			function makeResp(obj) {
+				return Promise.resolve({
+					ok: true, status: 200, statusText: 'OK',
+					json: function() { return Promise.resolve(obj); },
+					text: function() { return Promise.resolve(JSON.stringify(obj)); }
+				});
 			}
+			window.fetch = function(url, opts) {
+				var u = String(url);
+				if (u.indexOf('/api/health') === 0) {
+					return makeResp({status: 'ok', workspace: 'F:\\syproject\\gou-ide', folders: ['F:\\syproject\\gou-ide']});
+				}
+				if (u.indexOf('/api/fs/list') === 0) {
+					var entries = [
+						{name: 'cmd', isDir: true, size: 0},
+						{name: 'go.mod', isDir: false, size: 100},
+						{name: 'internal', isDir: true, size: 0},
+						{name: 'pkg', isDir: true, size: 0},
+						{name: 'companion.exe', isDir: false, size: 300},
+						{name: 'config', isDir: true, size: 0},
+						{name: 'main_very_long_file_name_for_testing.txt', isDir: false, size: 10}
+					];
+					return makeResp(entries);
+				}
+				if (u.indexOf('/api/settings') === 0) {
+					return makeResp({ok: true, recentProjects: ['F:\\syproject\\gou-ide'], workspaceFolderLists: {}});
+				}
+				if (u.indexOf('/api/') === 0) {
+					return makeResp({ok: true, data: []});
+				}
+				return window.__origFetch.apply(window, arguments);
+			};
 		})()`)
 	}
 
