@@ -108,6 +108,20 @@ func main() {
 	}
 	ag := state.GeometryForBox(after.LayoutBox())
 	fmt.Printf("::after thumb: x=%.0f y=%.0f w=%.0f h=%.0f\n", ag.Left(), ag.Top(), ag.BorderBoxWidth(), ag.BorderBoxHeight())
+	// 调试：伪元素样式与定位属性
+	if pcs := after.Style(); pcs != nil {
+		fmt.Printf("  pseudo style: position=%d left=%q top=%q width=%q height=%q\n",
+			pcs.Position, pcs.Properties["left"], pcs.Properties["top"],
+			pcs.Properties["width"], pcs.Properties["height"])
+		if lb := after.LayoutBox(); lb != nil {
+			if p := lb.Parent(); p != nil && p.Style() != nil {
+				ps := p.Style()
+				fmt.Printf("  containing block style: position=%d left=%q top=%q width=%q height=%q\n",
+					ps.Position, ps.Properties["left"], ps.Properties["top"],
+					ps.Properties["width"], ps.Properties["height"])
+			}
+		}
+	}
 	if ag.BorderBoxWidth() < 10 || ag.BorderBoxHeight() < 10 {
 		fmt.Printf("FAIL: thumb too small (%fx%f), expected ~12x12\n", ag.BorderBoxWidth(), ag.BorderBoxHeight())
 		os.Exit(1)
