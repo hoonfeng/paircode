@@ -165,6 +165,10 @@
       <input class="input" id="input-single" value="hello wb-ui 你好">
     </div>
     <div class="row">
+      <span class="label">实时值</span>
+      <span id="input-single-v" style="font-size:12px;color:var(--fg2);font-family:Consolas,monospace;word-break:break-all">hello wb-ui 你好</span>
+    </div>
+    <div class="row">
       <span class="label">多行</span>
       <textarea class="textarea" id="input-multi">第一行文字 alpha beta
 第二行文字 gamma delta
@@ -172,7 +176,7 @@
     </div>
     <div class="row">
       <span class="label">提示</span>
-      <span style="font-size:12px;color:var(--fg2)">点击多行输入框的每一行，光标应落在点击处</span>
+      <span style="font-size:12px;color:var(--fg2)">点击输入框后输入，字符应落在点击处；不点击直接输入应落在末尾。上方「实时值」会显示当前内容。</span>
     </div>
   </div>
 
@@ -260,6 +264,17 @@
   sw2.addEventListener('change', function() {
     result.textContent = '自动运行: ' + (sw2.checked ? '开' : '关');
   });
+
+  // ── 实时值显示：输入/组合更新时把当前 value 显示在页面上 ──
+  function showInputValue() {
+    var i = document.getElementById('input-single');
+    var s = document.getElementById('input-single-v');
+    if (i && s) s.textContent = i.value;
+  }
+  document.getElementById('input-single').addEventListener('input', showInputValue);
+  document.getElementById('input-single').addEventListener('compositionupdate', showInputValue);
+  document.getElementById('input-multi').addEventListener('input', showInputValue);
+  document.getElementById('input-multi').addEventListener('compositionupdate', showInputValue);
 </script>
 </body>
 </html>
