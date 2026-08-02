@@ -75,6 +75,9 @@ func hexColor(c style.Color) string {
 	if c.A == 0 {
 		return ""
 	}
+	if c.A < 255 {
+		return fmt.Sprintf("rgba(%d,%d,%d,%.2f)", c.R, c.G, c.B, float64(c.A)/255)
+	}
 	return fmt.Sprintf("#%02x%02x%02x", c.R, c.G, c.B)
 }
 
