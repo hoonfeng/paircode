@@ -27,7 +27,7 @@ func main() {
 	if _, err := os.Stat(edge); err != nil {
 		edge = `C:\Program Files\Microsoft\Edge\Application\msedge.exe`
 	}
-	url := "http://127.0.0.1:9094/ide_ref.html"
+	url := "http://127.0.0.1:9095/ide_ref.html"
 	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, edge,
