@@ -166,6 +166,9 @@ func main() {
 		st := o.Style()
 		if st != nil {
 			n.Display = displayName(st.Display)
+			if st.FlexDirection != "" {
+				n.Display += " " + st.FlexDirection
+			}
 			n.Color = hexColor(st.Color)
 			n.BG = hexColor(st.BackgroundColor)
 			if st.FontSize.Value > 0 {
