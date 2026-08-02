@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8" />
+<title>IDE REFERENCE COLLECTOR</title>
+<script>
+// Reference collector: loads the real IDE in an iframe, waits for Vue to
+// mount, then serializes the COMPLETE element tree (tag/id/class + border-box
+// geometry + key computed styles) into document.title for Edge --dump-dom.
+(function(){
+  var LIMIT = 4000; // max elements
+  function cssColor(v){ return (v||'').replace(/\s+/g,''); }
+  function elInfo(el, depth, idx, n){
+    if (!el || n.count >= LIMIT) return null;
+    n.count++;
+    var r = el.getBoundingClientRect();
+    var cs = null;
+    try { cs = window.getComputedStyle(el); } catch(e) {}
+    var info = {
+      tag: el.tagName ? el.tagName.toLowerCase() : el.nodeName,
+      id: el.id || '', cls: typeof el.className === 'string' ? el.className : '',
+      x: Math.round(r.left*10)/10, y: Math.round(r.top*10)/10,
+      w: Math.round(r.width*10)/10, h: Math.round(r.height*10)/10,
+      depth: depth, idx: idx
+    };
+    if (cs) {
+      info.disp = cs.display;
+      info.col = cssColor(cs.color);
+      info.bg = cssColor(cs.backgroundColor);
+      info.fs = cs.fontSize;
+    }
+    if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') info.val = el.value;
+    if (el.tagName === 'INPUT' && (el.type === 'checkbox' || el.type === 'radio')) info.checked = el.checked ? 'checked' : '';
+    var children = [];
+    var i = 0;
+    for (var c = el.firstElementChild; c; c = c.nextElementSibling) {
+      var ci = elInfo(c, depth+1, i, n); i++;
+      if (ci) children.push(ci);
+    }
+    if (children.length === 0 && el.childNodes && el.childNodes.length === 1 && el.firstChild && el.firstChild.nodeType === 3) {
+      var t = (el.firstChild.nodeValue || '').trim();
+      if (t.length > 20) t = t.slice(0,20)+'…';
+      if (t) info.text = t;
+    }
+    info.children = children;
+    return info;
+  }
+  window.__collect = function(){
+    var f = document.getElementById('ideframe');
+    if (!f || !f.contentDocument) { document.title = 'TREE:ERR_NO_IFRAME'; return; }
+    var doc = f.contentDocument;
+    var root = elInfo(doc.documentElement, 0, 0, {count:0});
+    if (!root) { document.title = 'TREE:ERR_EMPTY'; return; }
+    document.title = 'TREE:' + JSON.stringify(root);
+  };
+  window.onload = function(){
+    // poll until Vue mounts (#app has children) then collect
+    var tries = 0;
+    var iv = setInterval(function(){
+      tries++;
+      try {
+        var f = document.getElementById('ideframe');
+        var app = f && f.contentDocument && f.contentDocument.getElementById('app');
+        if (app && app.children.length > 0) {
+          clearInterval(iv);
+          setTimeout(window.__collect, 800);
+        } else if (tries > 40) {
+          clearInterval(iv);
+          setTimeout(window.__collect, 800);
+        }
+      } catch(e) { if (tries > 40) { clearInterval(iv); document.title='TREE:ERR:'+e.message; } }
+    }, 250);
+  };
+})();
+</script>
+</head>
+<body style="margin:0">
+<iframe id="ideframe" src="./dist/index.html" width="1280" height="800" style="border:none;width:1280px;height:800px"></iframe>
+</body>
+</html>
