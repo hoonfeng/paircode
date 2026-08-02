@@ -5,10 +5,13 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
+	"wb-ui/bindings"
 	"wb-ui/bridge"
 	"wb-ui/jsc"
 	"wb-ui/webkit"
@@ -71,6 +74,14 @@ func InitDesktopBridge(wv *webkit.WebView) {
 	})
 
 	bridge.InjectAll(rt)
+
+	// ★ localStorage 文件持久化：前端 UI 状态（主题/打开文件等）重启不丢失。
+	//   web 端浏览器 localStorage 天然持久；desktop 内存版重启丢状态，
+	//   这里注入 JSON 文件后端（.pair/ui-state.json）对齐浏览器语义。
+	if root := core.Root(); root != "" {
+		bindings.SetLocalStoragePersist(newFileLocalStorage(filepath.Join(root, ".pair", "ui-state.json")))
+		log.Printf("[Bridge] localStorage 持久化: %s", filepath.Join(root, ".pair", "ui-state.json"))
+	}
 
 	// ★ window 对象在 LoadHTML 内部（RegisterDOMBindings）才创建，
 	//   因此 fetch 拦截等 JS 注入必须通过 BeforePageScripts 钩子
@@ -484,4 +495,53 @@ func errResp(status int, msg string) string {
 func okResp(status int, body string) string {
 	b, _ := json.Marshal(map[string]interface{}{"status": status, "body": body})
 	return string(b)
+}
+
+// ─── localStorage 文件持久化后端 ───────────────────────────
+
+// fileLocalStorage 实现 bindings.LocalStoragePersist：JSON 文件后端。
+// 文件格式：{"key":"value",...}；启动时全量载入，写操作同步落盘。
+type fileLocalStorage struct {
+	path  string
+	mu    sync.Mutex
+	cache map[string]string
+}
+
+func newFileLocalStorage(path string) *fileLocalStorage {
+	fl := &fileLocalStorage{path: path}
+	if data, err := os.ReadFile(path); err == nil {
+		var m map[string]string
+		if json.Unmarshal(data, &m) == nil {
+			fl.cache = m
+			return fl
+		}
+	}
+	fl.cache = map[string]string{}
+	return fl
+}
+
+func (f *fileLocalStorage) Load() map[string]string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make(map[string]string, len(f.cache))
+	for k, v := range f.cache {
+		out[k] = v
+	}
+	return out
+}
+
+func (f *fileLocalStorage) Save(key, value string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if value == "" {
+		delete(f.cache, key)
+	} else {
+		f.cache[key] = value
+	}
+	if err := os.MkdirAll(filepath.Dir(f.path), 0o755); err != nil {
+		return
+	}
+	if data, err := json.Marshal(f.cache); err == nil {
+		os.WriteFile(f.path, data, 0o644)
+	}
 }
