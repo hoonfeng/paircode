@@ -71,8 +71,14 @@ func treeSetupLoaders(wv *webkit.WebView, distDir string) {
 	}
 }
 
-func hexColor(c style.Color) string {
-	if c.A == 0 {
+func lengthPx2(l style.Length) float64 {
+	if l.Unit == "px" {
+		return l.Value
+	}
+	return 0
+}
+
+func hexColor(c style.Color) string {	if c.A == 0 {
 		return ""
 	}
 	if c.A < 255 {
@@ -175,6 +181,19 @@ func main() {
 			n.BG = hexColor(st.BackgroundColor)
 			if st.FontSize.Value > 0 {
 				n.FontSz = fmt.Sprintf("%.1f", st.FontSize.Value)
+			}
+			// 滚动容器标记（overflow:auto/scroll）
+			if st.OverflowX != style.OverflowVisible || st.OverflowY != style.OverflowVisible {
+				cw, ch := float64(0), float64(0)
+				vw, vh := float64(0), float64(0)
+				if rb, ok := o.(*rendering.RenderBox); ok {
+					cw, ch = rv.BoxContentSize(rb)
+					pb := rb.PaddingBoxRect()
+					vw = pb.Width - lengthPx2(st.PaddingLeft) - lengthPx2(st.PaddingRight)
+					vh = pb.Height - lengthPx2(st.PaddingTop) - lengthPx2(st.PaddingBottom)
+				}
+				n.Display += fmt.Sprintf(" [ovf x%d y%d content=%.0fx%.0f view=%.0fx%.0f]",
+					st.OverflowX, st.OverflowY, cw, ch, vw, vh)
 			}
 		}
 		if nn := o.Node(); nn != nil {
