@@ -16,7 +16,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	"wb-ui/dom"
@@ -65,8 +64,8 @@ func treeSetupLoaders(wv *webkit.WebView, distDir string) {
 				if err != nil {
 					return "", err
 				}
-				re := regexp.MustCompile(`\[data-v-[a-f0-9]+\]`)
-				return re.ReplaceAllString(string(data), ""), nil
+				// Keep Vue scoped [data-v-...] selectors: DOM carries data-v attrs.
+				return string(data), nil
 			}
 		}
 	}

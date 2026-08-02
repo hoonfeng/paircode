@@ -48,8 +48,8 @@ func main() {
 				if err != nil {
 					return "", err
 				}
-				re := regexp.MustCompile(`\[data-v-[a-f0-9]+\]`)
-				return re.ReplaceAllString(string(data), ""), nil
+				// Keep Vue scoped [data-v-...] selectors: DOM carries data-v attrs.
+				return string(data), nil
 			}
 		}
 	}
@@ -118,6 +118,14 @@ func main() {
 		`(document.querySelector('#app')||{}).__vue_app__ ? 'HAS_APP' : 'NO_APP'`,
 		`(function(){var n=document.querySelector('#app')._vnode; return n ? JSON.stringify({scopeId:n.scopeId, type:(n.type&&n.type.__scopeId)||null}) : 'NO_VNODE';})()`,
 		`'data-v setAttribute count: ' + (window.__dvLog||0)`,
+		// Vue 3.5.39 组件实例与 vnode scopeId 深度检查
+		`(function(){var app=document.querySelector('#app').__vue_app__; var inst=app._instance; if(!inst) return 'NO_INST'; return JSON.stringify({typeScopeId: inst.type && inst.type.__scopeId, vnodeScopeId: inst.vnode && inst.vnode.scopeId, subTreeScopeId: inst.subTree ? inst.subTree.scopeId : null});})()`,
+		`(function(){var app=document.querySelector('#app').__vue_app__; var st=app._instance && app._instance.subTree; if(!st) return 'NO_SUBTREE'; var out=[]; (function walk(n,d){ if(d>3) return; if(n&&n.el&&n.el.getAttribute) { var dv=n.el.getAttribute('data-v-c17845b9'); out.push(d+':'+(n.type&&n.type.__scopeId||n.type&&n.type.name||'elm')+'='+(dv===''?'OK':JSON.stringify(dv))); } if(n&&n.children){ if(Array.isArray(n.children)) n.children.forEach(function(c){walk(c,d+1)}); else walk(n.children,d+1);} if(n&&n.dynamicChildren) n.dynamicChildren.forEach(function(c){walk(c,d)}); })(st,0); return JSON.stringify(out.slice(0,10));})()`,
+		// 通过 _vnode.component 访问组件树
+		`(function(){var v=document.querySelector('#app')._vnode; var c=v.component; if(!c) return 'NO_COMP'; return JSON.stringify({typeScopeId: c.type&&c.type.__scopeId, subTree: c.subTree ? (c.subTree.type&&c.subTree.type.__scopeId||String(c.subTree.type)).slice(0,30) : null, subTreeScopeId: c.subTree?c.subTree.scopeId:null});})()`,
+		`(function(){var v=document.querySelector('#app')._vnode; var c=v.component; if(!c||!c.subTree) return 'NO_SUBTREE'; var found=[]; (function walk(n,d){ if(d>8||found.length>5) return; var sid=n.type&&n.type.__scopeId||''; if(sid){ var dv=n.el&&n.el.getAttribute?n.el.getAttribute(sid):'no-el'; found.push(sid.slice(0,16)+'->'+(dv===''?'OK':String(dv))); } if(n.children){ if(Array.isArray(n.children)) n.children.forEach(function(x){walk(x,d+1)}); else if(n.children.component) walk(n.children,d+1); else walk(n.children,d+1);} if(n.dynamicChildren) n.dynamicChildren.forEach(function(x){walk(x,d)}); })(c.subTree,0); return JSON.stringify(found);})()`,
+		// 找 RightPanel 组件实例，查 subTree.scopeId 与 plan-container vnode scopeId
+		`(function(){var v=document.querySelector('#app')._vnode; var out={}; (function walk(n,d){ if(d>10||out.rp) return; if(n.component && n.component.type && n.component.type.__scopeId==='data-v-1aba76c4'){ var rp=n.component; out.rpFound=true; out.rpSubTreeScopeId=rp.subTree?rp.subTree.scopeId:null; var pc=[]; (function w2(x,dd){ if(dd>4||pc.length>3) return; if(x&&x.el&&x.el.getAttribute&&x.el.className&&String(x.el.className).indexOf('plan-container')>=0){ pc.push({scopeId:x.scopeId, dv: x.el.getAttribute('data-v-1aba76c4')}); } if(x&&x.children){ if(Array.isArray(x.children)) x.children.forEach(function(y){w2(y,dd+1)}); else w2(x.children,dd+1);} if(x&&x.dynamicChildren) x.dynamicChildren.forEach(function(y){w2(y,dd)}); })(rp.subTree,0); out.planVnodes=pc; } if(n.component) walk(n.component.subTree,d+1); if(n.children){ if(Array.isArray(n.children)) n.children.forEach(function(x){walk(x,d+1)}); else walk(n.children,d+1);} if(n.dynamicChildren) n.dynamicChildren.forEach(function(x){walk(x,d)}); })(v,0); return JSON.stringify(out);})()`,
 	}
 	for _, c := range checks {
 		v, err := rt.RunJS(c)
