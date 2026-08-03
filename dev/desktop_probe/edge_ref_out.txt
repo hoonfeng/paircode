@@ -1,2 +1,0 @@
-=== Edge 完整元素树 dump → F:\syproject\gou-ide\dev\desktop_probe\ide_tree_edge.json (887329 bytes) ===
-=== Edge 关键容器几何 ===
