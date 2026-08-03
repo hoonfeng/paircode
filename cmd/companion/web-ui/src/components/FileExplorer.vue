@@ -143,7 +143,12 @@ const currentFolders = computed(() => {
   // 从 wsList 中找到当前工作区
   const cur = state.wsList.find(w => w.path === state.workspaceRoot)
   if (cur && cur.folders && cur.folders.length > 0) {
-    return [...new Set(cur.folders.filter(Boolean))]
+    // 合并 wsList 的 folders 与 workspaceFolders（并集）——wsList 的
+    // workspaceFolderLists 可能因历史原因漏掉某些文件夹（如 goskia），
+    // workspaceFolders（/api/workspace 返回的完整列表）兜底补齐，保证
+    // 与浏览器 fallback 路径行为一致。
+    const merged = [...cur.folders, ...state.workspaceFolders].filter(Boolean)
+    return [...new Set(merged)]
   }
   if (state.workspaceFolders.length > 0) return [...new Set(state.workspaceFolders.filter(Boolean))]
   return [state.workspaceRoot]
