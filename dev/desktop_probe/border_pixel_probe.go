@@ -5,7 +5,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 
 	"wb-ui/dom"
 	"wb-ui/platform/graphics"
@@ -48,12 +47,6 @@ func main() {
 	info := rendering.NewPaintInfo(canvas, rendering.Rect{X: 0, Y: 0, Width: 300, Height: 200})
 	rendering.PaintBackground(box, info)
 	rendering.PaintBorder(box, info)
-
-	pix := canvas.Pixels()
-	out := make([]byte, 0, len(pix))
-	out = append(out, pix...)
-	os.WriteFile("tmp/border_px_wb.rgba", out, 0o644)
-	fmt.Println("saved tmp/border_px_wb.rgba 300x200")
 
 	fmt.Println("=== wb-ui 左上角 (x=95..130, y=95..145) ===")
 	for yy := 95; yy < 145; yy++ {
