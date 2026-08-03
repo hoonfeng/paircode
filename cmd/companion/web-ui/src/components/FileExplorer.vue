@@ -77,7 +77,9 @@
     </div>
 
     <!-- ===== 目录浏览对话框 ===== -->
-    <div v-if="browseVisible" class="dialog-overlay" @click.self="closeBrowse">
+    <!-- ★ browse-overlay 标识供桌面端手动 display 控制（goja 环境 Vue patch 的
+         container 计算失败导致 v-if 关闭不移除 DOM，render 执行但 DOM 不更新） -->
+    <div v-if="browseVisible" class="dialog-overlay browse-overlay" @click.self="closeBrowse">
       <div class="dialog-box dir-browser-box">
         <div class="dialog-title">{{ browseTitle }}</div>
         <div class="dir-browser">
@@ -354,10 +356,22 @@ function openBrowseDialog(mode) {
   browsePath.value = ''
   browseSelected.value = ''
   browseEntries.value = []
+  // ★ goja workaround：Vue patch 的 container 计算失败导致 v-if 渲染不一致，
+  //   手动确保 overlay 可见（打开时 overlay 由 Vue 添加，若 patch 失败则强制显示）
+  const ov = document.querySelector('.browse-overlay')
+  if (ov && ov.style) ov.style.display = ''
   api.apiGet('/fs/drives').then(d => { browseDrives.value = d || [] }).catch(() => {})
 }
 
-function closeBrowse() { browseVisible.value = false; browseError.value = '' }
+function closeBrowse() {
+  browseVisible.value = false
+  browseError.value = ''
+  // ★ goja workaround：Vue patch 的 container 计算失败导致 v-if 关闭不移除 DOM
+  //   （render 执行但 patch 未应用）。手动 display:none 隐藏，wb-ui 渲染树
+  //   重建时 display:none 的盒子不参与绘制 → 浮窗消失。
+  const ov = document.querySelector('.browse-overlay')
+  if (ov && ov.style) ov.style.display = 'none'
+}
 
 function browseSelect(entry) {
   if (!entry.isDir) return
