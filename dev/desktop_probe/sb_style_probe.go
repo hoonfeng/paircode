@@ -79,14 +79,32 @@ func main() {
 			if strings.Contains(cn, "git-sections") || strings.Contains(cn, "history-list") ||
 				strings.Contains(cn, "project-section") || strings.Contains(cn, "ws-section") {
 				if st := o.Style(); st != nil {
-					lb := o.LayoutBox()
 					g := ""
-					if lb != nil && rv.LayoutState() != nil {
-						gg := rv.LayoutState().GeometryForBox(lb)
-						g = fmt.Sprintf("x=%.0f y=%.0f w=%.0f h=%.0f", gg.Left(), gg.Top(), gg.BorderBoxWidth(), gg.BorderBoxHeight())
+					webkit := "default"
+					var rb *rendering.RenderBox
+					switch v := o.(type) {
+					case *rendering.RenderBox:
+						rb = v
+					case *rendering.RenderBlock:
+						rb = &v.RenderBox
+					case *rendering.RenderBlockFlow:
+						rb = &v.RenderBlock.RenderBox
 					}
-					fmt.Printf("[sb] %s %s scrollbar-width=%q webkit-w=%q thumb-c=%q track-c=%q radius=%q ovfY=%d\n",
-						cn, g,
+					if rb != nil {
+						w := st.GetProperty("-webkit-scrollbar-width")
+						if w != "" || st.GetProperty("-webkit-scrollbar-thumb-color") != "" ||
+							st.GetProperty("-webkit-scrollbar-track-color") != "" {
+							webkit = "webkit-custom"
+						}
+						if vm := rendering.VerticalScrollbarMetrics(rv, rb); vm.OK {
+							pb := rb.PaddingBoxRect()
+							g = fmt.Sprintf("x=%.0f y=%.0f w=%.0f h=%.0f track=%.0f thumb=%.0f maxScroll=%.0f",
+								pb.X, pb.Y, pb.Width, pb.Height,
+								vm.TrackLen, vm.ThumbLen, vm.MaxScroll)
+						}
+					}
+					fmt.Printf("[sb] %s %s mode=%s scrollbar-width=%q webkit-w=%q thumb-c=%q track-c=%q radius=%q ovfY=%d\n",
+						cn, g, webkit,
 						st.GetProperty("scrollbar-width"),
 						st.GetProperty("-webkit-scrollbar-width"),
 						st.GetProperty("-webkit-scrollbar-thumb-color"),
