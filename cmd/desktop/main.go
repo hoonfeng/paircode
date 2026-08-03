@@ -13,6 +13,8 @@ import (
 	"wb-ui/layout"
 	"wb-ui/rendering"
 	"wb-ui/webkit"
+
+	"github.com/hoonfeng/paircode/internal/desktopbridge"
 )
 
 func main() {
@@ -20,7 +22,13 @@ func main() {
 	log.Println("[Desktop] PairCode IDE 桌面版 v1.0.6-desktop")
 
 	wd, _ := os.Getwd()
-	distDir := filepath.Join(wd, "cmd", "desktop", "web-ui", "dist")
+	// ★ 与 web 端（9090）加载同一份前端：优先 cmd/companion/web-ui/dist，
+	//   回退旧桌面构建 cmd/desktop/web-ui/dist / web-ui/dist。
+	//   这样桌面端与浏览器（http://localhost:9090）渲染完全一致的前端。
+	distDir := filepath.Join(wd, "cmd", "companion", "web-ui", "dist")
+	if _, err := os.Stat(distDir); os.IsNotExist(err) {
+		distDir = filepath.Join(wd, "cmd", "desktop", "web-ui", "dist")
+	}
 	if _, err := os.Stat(distDir); os.IsNotExist(err) {
 		distDir = filepath.Join(wd, "web-ui", "dist")
 	}
@@ -42,7 +50,7 @@ func main() {
 	// ★ 先初始化桥接（core 加载 + 真实 handler 注册 + fetch 拦截注入），
 	//   再加载页面——页面 script 执行时 desktopBridge / go.bridge_call
 	//   已就绪，/api/* 请求才能被拦截到本地 Go handler。
-	InitDesktopBridge(wv)
+	desktopbridge.Init(wv)
 
 	wv.LoadHTML(htmlStr)
 

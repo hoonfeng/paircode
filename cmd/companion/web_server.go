@@ -42,6 +42,9 @@ import (
 //go:embed web-ui/dist
 var webUIFiles embed.FS
 
+//go:embed web-ui/ide_ref.html
+var ideRefFile embed.FS
+
 // webServer 是运行在 companion 内部的 HTTP 服务器。
 type webServer struct {
 	server    *http.Server
@@ -265,6 +268,14 @@ func startWebUI(port int) {
 		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 		w.Header().Set("Pragma", "no-cache")
 		w.Header().Set("Expires", "0")
+		// ide_ref.html：调试参照收集器（Edge headless 访问 9090 加载真实前端）。
+		if r.URL.Path == "/ide_ref.html" || r.URL.Path == "/ide_ref" {
+			if data, err := ideRefFile.ReadFile("web-ui/ide_ref.html"); err == nil {
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				w.Write(data)
+				return
+			}
+		}
 		fileServer.ServeHTTP(w, r)
 	}))
 

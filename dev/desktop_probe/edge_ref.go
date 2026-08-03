@@ -27,7 +27,12 @@ func main() {
 	if _, err := os.Stat(edge); err != nil {
 		edge = `C:\Program Files\Microsoft\Edge\Application\msedge.exe`
 	}
-	url := "http://127.0.0.1:9095/ide_ref.html"
+	// 端口可用环境变量覆盖（默认 9096；9090 是正在运行的 companion，不动它）。
+	port := os.Getenv("EDGE_REF_PORT")
+	if port == "" {
+		port = "9096"
+	}
+	url := "http://localhost:" + port + "/ide_ref.html"
 	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, edge,
