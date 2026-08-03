@@ -83,6 +83,21 @@ func main() {
 	for i := 0; i < 8; i++ {
 		_, _ = wv.JSInterpreter().RunJS(`new Promise(function(res){ setTimeout(res, 500); })`)
 	}
+	// ★ 数据层验证：直接 fetch /api/settings 看 desktopbridge 返回（日志确认，不用截图）
+	_, _ = wv.JSInterpreter().RunJS(`
+		fetch('/api/settings').then(function(r){ return r.json(); }).then(function(d){
+			console.log('[PROBE/settings] ' + JSON.stringify(d).slice(0, 400));
+		}).catch(function(e){ console.log('[PROBE/settings ERR] ' + (e && e.message || e)); });
+		fetch('/api/health').then(function(r){ return r.json(); }).then(function(d){
+			console.log('[PROBE/health] ' + JSON.stringify(d).slice(0, 300));
+		}).catch(function(e){ console.log('[PROBE/health ERR] ' + (e && e.message || e)); });
+	`)
+	_, _ = wv.JSInterpreter().RunJS(`new Promise(function(res){ setTimeout(res, 800); })`)
+	// 打印前端 console（含 [PROBE/...] 数据层验证输出）
+	if out := wv.ConsoleOutput(); out != "" {
+		fmt.Println("[CONSOLE]")
+		fmt.Println(out)
+	}
 	wv.RebuildRenderTree()
 	wv.EnsureLayout()
 	rv := wv.RenderView()

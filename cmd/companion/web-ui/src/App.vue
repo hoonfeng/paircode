@@ -152,11 +152,19 @@ provide('saveWsList', saveWsList)
 provide('switchWorkspace', switchWorkspace)
 
 async function loadWsList() {
+  console.log('[DBG] loadWsList START')
   // 从后端 /api/settings 拉取工作区列表（recentProjects），保证与后端一致
+  // 后端返回结构：{settings: core.Settings, loaded} —— recentProjects 在 settings.settings 下。
+  // ★ wb-ui(goja) 对 reactive 数组的 push/方法 触发不了下游组件渲染（Vue 3.5
+  //   数组 instrument 兼容问题），改用整体赋值（整体赋值走 set trap，与
+  //   workspaceFolders 赋值同路径，能触发 FileExplorer 的 v-for/v-if 更新）。
   wsList.length = 0
+  let loadedItems = []
   try {
-    const settings = await api.apiGet('/settings')
+    const resp = await api.apiGet('/settings')
+    const settings = resp.settings || resp
     const projects = settings.recentProjects || []
+    console.log('[DBG] loadWsList rp=' + JSON.stringify(projects).slice(0, 200))
     const folderLists = settings.workspaceFolderLists || {}
     const seen = new Set()
     for (const p of projects) {
@@ -164,7 +172,7 @@ async function loadWsList() {
       seen.add(p)
       // 从 workspaceFolderLists 恢复文件夹列表，没有则默认为 [p]
       const folders = folderLists[p]?.length > 0 ? [...folderLists[p]] : [p]
-      wsList.push(reactive({
+      loadedItems.push(reactive({
         path: p,
         name: p.split(/[\\/]/).filter(Boolean).pop() || p,
         folders: p === state.workspaceRoot && state.workspaceFolders?.length > 0
@@ -173,21 +181,25 @@ async function loadWsList() {
         notify: false,
       }))
     }
-  } catch {}
-  if (state.workspaceRoot && !wsList.find(w => w.path === state.workspaceRoot)) {
-    wsList.push(reactive({
+  } catch (e) { console.log('[DBG] loadWsList ERR ' + (e && e.message || e)) }
+  if (state.workspaceRoot && !loadedItems.find(w => w.path === state.workspaceRoot)) {
+    loadedItems.push(reactive({
       path: state.workspaceRoot,
       name: state.workspaceRoot.split(/[\\/]/).filter(Boolean).pop() || state.workspaceRoot,
       folders: state.workspaceFolders?.length > 0 ? [...state.workspaceFolders] : [state.workspaceRoot],
       notify: false,
     }))
   }
+  // 整体赋值：替换 state.wsList 引用，触发 FileExplorer 依赖。
+  state.wsList = loadedItems
+  console.log('[DBG] loadWsList END count=' + state.wsList.length)
 }
 
 async function saveWsList() {
   // 同步工作区列表到后端 settings
   try {
-    const settings = await api.apiGet('/settings')
+    const resp = await api.apiGet('/settings')
+    const settings = resp.settings || resp
     settings.recentProjects = wsList.slice(0, 20).map(w => w.path).filter(Boolean)
     // 持久化每工作区的文件夹列表
     settings.workspaceFolderLists = settings.workspaceFolderLists || {}
@@ -196,7 +208,8 @@ async function saveWsList() {
         settings.workspaceFolderLists[ws.path] = [...ws.folders]
       }
     }
-    await api.apiPut('/settings', settings)
+    // 保持后端契约：PUT body = {settings: core.AppSettings}
+    await api.apiPut('/settings', { settings })
   } catch {}
 }
 
@@ -363,12 +376,14 @@ onMounted(async () => {
       ? state.workspaceRoot.split('\\').filter(Boolean).pop() || state.workspaceRoot
       : '未设置工作区'
     document.title = 'PairCode IDE - ' + state.workspaceName
-  } catch {}
+    console.log('[DBG] onMounted health root=' + state.workspaceRoot + ' folders=' + (state.workspaceFolders||[]).length)
+  } catch (e) { console.log('[DBG] onMounted health ERR ' + (e && e.message || e)) }
 
   try {
     const settings = await api.apiGet('/settings')
     state.settings = settings
     state.settingsLoaded = true
+    console.log('[DBG] onMounted settings keys=' + JSON.stringify(Object.keys(settings)))
     if (settings.theme && ['dark', 'light', 'warm', 'night'].includes(settings.theme)) {
       applyTheme(settings.theme)
     }
