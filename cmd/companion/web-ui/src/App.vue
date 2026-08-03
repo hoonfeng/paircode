@@ -168,6 +168,24 @@ try {
       _items.push(reactive({ path: _p, name: _p.split(/[\\/]/).filter(Boolean).pop() || _p, folders: _fl, notify: false }))
     }
     if (_items.length > 0) state.wsList = _items
+
+    // ★ desktop(goja) workaround（同上）：conversations 数组整体赋值
+    //   （state.conversations = list）同样触发不了 v-for 渲染。在 mount
+    //   前同步预取 health + conversations（go.bridge_call 同步返回），
+    //   mount 时渲染函数首次执行就读到数据 → ConvSidebar 正常渲染。
+    //   web 环境无 go.bridge_call，跳过（走 onMounted 异步加载）。
+    try {
+      const _h = JSON.parse(go.bridge_call('GET', '/api/health', '', ''))
+      const _health = JSON.parse(_h.body || '{}')
+      if (_health.workspace) {
+        state.workspaceRoot = _health.workspace
+        state.workspaceFolders = _health.folders || []
+        state.workspaceName = _health.workspace.split('\\').filter(Boolean).pop() || _health.workspace
+        const _c = JSON.parse(go.bridge_call('GET', '/api/conversations?workspace=' + encodeURIComponent(_health.workspace), '', ''))
+        const _list = JSON.parse(_c.body || '[]')
+        if (Array.isArray(_list) && _list.length > 0) state.conversations = _list
+      }
+    } catch {}
   }
 } catch {}
 

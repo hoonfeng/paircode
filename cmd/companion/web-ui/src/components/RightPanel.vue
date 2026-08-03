@@ -263,7 +263,7 @@
       </div>
       <!-- 右侧：Debug日志面板 / 会话列表 -->
       <DebugLogPanel v-if="showDebugLog" @close="showDebugLog = false" />
-      <ConvSidebar v-else :conversations="state.conversations" :current-conv-id="state.currentConvId" :loading-by-conv="state.loadingByConv" :ws-token-stats="wsTokenStats" :conv-ctx-stats="convCtxStats" :ctx-max-tokens-val="state.settings.contextMaxTokens || 1000000" :width="convListWidth" @new-conversation="newConversation" @switch-conversation="switchConv" @delete-conversation="deleteConv" />
+      <ConvSidebar v-else :conversations="convList" :current-conv-id="state.currentConvId" :loading-by-conv="state.loadingByConv" :ws-token-stats="wsTokenStats" :conv-ctx-stats="convCtxStats" :ctx-max-tokens-val="state.settings.contextMaxTokens || 1000000" :width="convListWidth" @new-conversation="newConversation" @switch-conversation="switchConv" @delete-conversation="deleteConv" />
     </div>
   </div>
 </template>
@@ -298,6 +298,12 @@ function updateInputPadding() {
 }
 const inputHeight = ref(150)
 const convListWidth = ref(250)
+// ★ wb-ui(goja) workaround：state.conversations 数组整体赋值（loadConvList
+//   里 state.conversations = list）触发不了 prop 响应式更新——直接传
+//   state.conversations 时 ConvSidebar 拿到的是旧引用/空数组。改用
+//   computed 包装：渲染时实时求值 state.conversations（与 FileExplorer 的
+//   currentFolders 同一模式），首次渲染即读到预取/加载的数据。
+const convList = computed(() => state.conversations)
 const topSentinel = ref(null)
 const reviewMode = ref('auto')  // 'auto'=AI审核, 'manual'=人工审批, 'off'=全部放行
 const reviewSearchText = ref('')

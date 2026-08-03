@@ -63,21 +63,28 @@
     document.title = 'TREE:' + JSON.stringify(root);
   };
   window.onload = function(){
-    // poll until Vue mounts (#app has children) then collect
+    // poll until Vue mounts (#app has children) then collect. fs/list is
+    // async (4 roots + subdirs), so wait generously for the tree to settle —
+    // collecting too early yields a truncated file tree vs wb-ui.
     var tries = 0;
+    var stableTries = 0;
     var iv = setInterval(function(){
       tries++;
       try {
         var f = document.getElementById('ideframe');
         var app = f && f.contentDocument && f.contentDocument.getElementById('app');
         if (app && app.children.length > 0) {
+          stableTries++;
+          // Wait 2.5s after mount for all /api/fs/list fetches to finish.
+          if (stableTries >= 10) {
+            clearInterval(iv);
+            setTimeout(window.__collect, 1500);
+          }
+        } else if (tries > 80) {
           clearInterval(iv);
-          setTimeout(window.__collect, 800);
-        } else if (tries > 40) {
-          clearInterval(iv);
-          setTimeout(window.__collect, 800);
+          setTimeout(window.__collect, 1500);
         }
-      } catch(e) { if (tries > 40) { clearInterval(iv); document.title='TREE:ERR:'+e.message; } }
+      } catch(e) { if (tries > 80) { clearInterval(iv); document.title='TREE:ERR:'+e.message; } }
     }, 250);
   };
 })();

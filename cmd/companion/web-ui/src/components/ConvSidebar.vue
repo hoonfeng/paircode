@@ -4,7 +4,7 @@
       <span>会话</span>
     </div>
     <div class="conv-list">
-      <div v-for="conv in conversations" :key="conv.id"
+      <div v-for="conv in localConvs" :key="conv.id"
            :class="['conv-item', { active: conv.id === currentConvId }]"
            @click="$emit('switch-conversation', conv.id)">
         <div class="conv-title">{{ conv.title }}</div>
@@ -18,7 +18,7 @@
         </div>
         <button class="conv-del" @click.stop="$emit('delete-conversation', conv.id)" title="删除对话">×</button>
       </div>
-      <div v-if="conversations.length === 0" class="conv-empty">暂无对话</div>
+      <div v-if="localConvs.length === 0" class="conv-empty">暂无对话</div>
     </div>
 
     <!-- Token 统计面板 -->
@@ -141,7 +141,7 @@
 </template>
 
 <script setup>
-import { ref, computed, inject } from 'vue'
+import { ref, computed, inject, watch } from 'vue'
 import SvgIcon from './SvgIcon.vue'
 
 const showMarketplace = inject('showMarketplace', null)
@@ -176,6 +176,16 @@ const props = defineProps({
 })
 
 defineEmits(['new-conversation', 'switch-conversation', 'delete-conversation'])
+
+// ★ wb-ui(goja) workaround：父组件 state.conversations 整体赋值
+//   （state.conversations = list）触发不了 v-for 的渲染 effect（Vue 3 的
+//   v-for 依赖数组内部 length/indices，整体赋值 set 属性不触发）。watch
+//   在 goja 里正常触发（显式依赖），这里把 prop 复制到本地 ref——ref 的
+//   set 能触发 v-for 重新渲染。
+const localConvs = ref([])
+watch(() => props.conversations, (v) => {
+  localConvs.value = Array.isArray(v) ? v.slice() : []
+}, { immediate: true, deep: true })
 
 const convStatsExpanded = ref(true)
 const ctxStatsExpanded = ref(true)

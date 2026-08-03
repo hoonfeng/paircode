@@ -153,18 +153,29 @@ func injectJSBridge(rt *jsc.Interpreter) {
 
 		window.fetch = function(url, options) {
 			var u = (typeof url === 'string') ? url : (url && url.url) || String(url);
-			var isApi = u === '/api' || u.indexOf('/api/') === 0;
+			// ★ Normalize absolute URLs (api.js builds full URLs via
+			// new URL('/api/...', location.origin)): strip the origin so
+			// /api/* requests are intercepted locally instead of going over
+			// the network (goja's native fetch truncates/loses long JSON).
+			var nu = u;
+			if (nu.indexOf('://') >= 0) {
+				try {
+					var _u = new URL(nu);
+					nu = _u.pathname + (nu.indexOf('?') >= 0 ? nu.substring(nu.indexOf('?')) : '');
+				} catch (e) {}
+			}
+			var isApi = nu === '/api' || nu.indexOf('/api/') === 0;
 			if (!isApi) {
 				if (_fetch) return _fetch(url, options);
 				return Promise.reject(new Error('desktop: fetch not available for ' + u));
 			}
 			var method = (options && options.method) || 'GET';
 			var body = (options && options.body) || '';
-			var qIdx = u.indexOf('?');
-			var path = qIdx >= 0 ? u.substring(0, qIdx) : u;
+			var qIdx = nu.indexOf('?');
+			var path = qIdx >= 0 ? nu.substring(0, qIdx) : nu;
 			var params = {};
 			if (qIdx >= 0) {
-				var qs = u.substring(qIdx + 1);
+				var qs = nu.substring(qIdx + 1);
 				qs.split('&').forEach(function(pair) {
 					var kv = pair.split('=');
 					if (kv[0]) {
@@ -475,8 +486,14 @@ func handleBridgeCall(method, path, bodyJSON, paramsJSON string) string {
 		}
 	}
 	vw := &virtRW{headers: http.Header{}, body: strings.Builder{}, status: 200}
-	if !bridgeRegistry.Dispatch(method, path, vw, httpReq) {
-		return errResp(404, "no route: "+method+" "+path)
+	// ★ Dispatch 用纯路径匹配（路由注册无 query）——前端 go.bridge_call 可能
+	// 传带 query 的 path（如 /api/conversations?workspace=...），须先剥离。
+	dispatchPath := path
+	if qIdx := strings.IndexByte(dispatchPath, '?'); qIdx >= 0 {
+		dispatchPath = dispatchPath[:qIdx]
+	}
+	if !bridgeRegistry.Dispatch(method, dispatchPath, vw, httpReq) {
+		return errResp(404, "no route: "+method+" "+dispatchPath)
 	}
 	return okResp(vw.status, vw.body.String())
 }
