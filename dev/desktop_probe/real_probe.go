@@ -192,6 +192,113 @@ func main() {
 	os.WriteFile(filepath.Join("dev", "desktop_probe", "real_tree_wb.json"), jsonOut, 0o644)
 	printTree(root, 0)
 	fmt.Printf("\n[real_probe] tree nodes=%d saved=real_tree_wb.json\n", countNodes(root))
+
+	// ★ HitTest 探针：点击 ws-item 的文字/icon/空白区域，看命中差异（事件响应异常排查）
+	probeHitTest(rv)
+	probeScrollbar(rv)
+}
+
+// probeScrollbar dumps BoxContentSize vs viewport for scrollable containers.
+func probeScrollbar(rv *rendering.RenderView) {
+	state := rv.LayoutState()
+	var walk func(o rendering.RenderObject)
+	walk = func(o rendering.RenderObject) {
+		if o == nil {
+			return
+		}
+		if el, ok := o.Node().(*dom.Element); ok {
+			cn := el.GetAttribute("class")
+			if strings.Contains(cn, "ws-section") || strings.Contains(cn, "project-section") ||
+				strings.Contains(cn, "sidebar-content") || strings.Contains(cn, "file-explorer") {
+				var rb *rendering.RenderBox
+				switch v := o.(type) {
+				case *rendering.RenderBox:
+					rb = v
+				case *rendering.RenderBlock:
+					rb = &v.RenderBox
+				case *rendering.RenderBlockFlow:
+					rb = &v.RenderBlock.RenderBox
+				}
+				if rb != nil && rb.Style() != nil && state != nil {
+					st := rb.Style()
+					cw, ch := rv.BoxContentSize(rb)
+					pb := rb.PaddingBoxRect()
+					fmt.Printf("[scroll-probe] %s x=%.0f y=%.0f w=%.0f h=%.0f content=%.1fx%.1f view=%.0fx%.0f ovfY=%d needsV=%v\n",
+						cn, pb.X, pb.Y, pb.Width, pb.Height, cw, ch, pb.Width, pb.Height,
+						st.OverflowY, st.OverflowY == style.OverflowAuto && ch > pb.Height)
+				}
+			}
+		}
+		for c := o.FirstChild(); c != nil; c = c.NextSibling() {
+			walk(c)
+		}
+	}
+	walk(rendering.RenderObject(rv))
+}
+
+// probeHitTest dumps ws-item geometry and hit-tests its text/icon/blank zones.
+func probeHitTest(rv *rendering.RenderView) {
+	// 找第一个 ws-item 的几何（通过渲染树）
+	var wsItemX, wsItemY, wsItemW, wsItemH float64
+	var wsNameX, wsNameY, wsNameW, wsNameH float64
+	var iconX, iconY, iconW, iconH float64
+	var findWs func(o rendering.RenderObject)
+	findWs = func(o rendering.RenderObject) {
+		if o == nil {
+			return
+		}
+		if el, ok := o.Node().(*dom.Element); ok {
+			cn := el.GetAttribute("class")
+			lb := o.LayoutBox()
+			if lb != nil && rv.LayoutState() != nil {
+				g := rv.LayoutState().GeometryForBox(lb)
+				x, y, w, h := g.Left(), g.Top(), g.BorderBoxWidth(), g.BorderBoxHeight()
+				switch {
+				case strings.Contains(cn, "ws-item") && wsItemW == 0:
+					wsItemX, wsItemY, wsItemW, wsItemH = x, y, w, h
+					fmt.Printf("[ws-item] x=%.0f y=%.0f w=%.0f h=%.0f\n", x, y, w, h)
+				case strings.Contains(cn, "ws-name") && wsNameW == 0:
+					wsNameX, wsNameY, wsNameW, wsNameH = x, y, w, h
+					fmt.Printf("[ws-name] x=%.0f y=%.0f w=%.0f h=%.0f\n", x, y, w, h)
+				case strings.Contains(cn, "svg-icon") && iconW == 0:
+					iconX, iconY, iconW, iconH = x, y, w, h
+					fmt.Printf("[svg-icon] x=%.0f y=%.0f w=%.0f h=%.0f\n", x, y, w, h)
+				}
+			}
+		}
+		for c := o.FirstChild(); c != nil; c = c.NextSibling() {
+			findWs(c)
+		}
+	}
+	findWs(rendering.RenderObject(rv))
+
+	if wsItemW == 0 {
+		fmt.Println("[hit] no ws-item found")
+		return
+	}
+	// 点击点：文字中心 / icon 中心 / ws-item 空白（右上角）
+	pts := map[string][2]float64{}
+	if wsNameW > 0 {
+		pts["ws-name(text)"] = [2]float64{wsNameX + wsNameW/2, wsNameY + wsNameH/2}
+	}
+	if iconW > 0 {
+		pts["svg-icon"] = [2]float64{iconX + iconW/2, iconY + iconH/2}
+	}
+	pts["ws-item blank(right)"] = [2]float64{wsItemX + wsItemW - 6, wsItemY + wsItemH/2}
+	pts["ws-item center"] = [2]float64{wsItemX + wsItemW/2, wsItemY + wsItemH/2}
+	for name, pt := range pts {
+		hit := rendering.HitTest(rv, pt[0], pt[1], "")
+		hitOnClick := rendering.HitTest(rv, pt[0], pt[1], "onclick")
+		h := "nil"
+		c := "nil"
+		if hit != nil {
+			h = hit.LocalName() + "." + hit.GetAttribute("class")
+		}
+		if hitOnClick != nil {
+			c = hitOnClick.LocalName() + "." + hitOnClick.GetAttribute("class")
+		}
+		fmt.Printf("[hit] %-22s pt=(%.0f,%.0f) deepest=%s onclick=%s\n", name, pt[0], pt[1], h, c)
+	}
 }
 
 func setupLoaders(wv *webkit.WebView, distDir string) {
