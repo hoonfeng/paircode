@@ -147,24 +147,45 @@ provide('sidebarWidth', sidebarWidth)
 if (!state.wsList) state.wsList = reactive([])
 const wsList = state.wsList
 
+// ★ desktop(goja) workaround：Vue 渲染 effect 对整体赋值数组（state.wsList = ...）
+//   的 set 不触发（watch 触发但 v-for/v-if 不更新）。解决：在组件 mount 前
+//   同步预取 wsList（desktop 环境 go.bridge_call 同步返回），mount 时渲染函数
+//   首次执行就读到 5 项 → v-for 正常渲染。web 环境无 go.bridge_call，跳过，
+//   走 onMounted 的 loadWsList（浏览器响应式正常）。
+try {
+  if (typeof go !== 'undefined' && go.bridge_call && typeof window !== 'undefined' && window.__DESKTOP_MODE__) {
+    const _r = go.bridge_call('GET', '/api/settings', '', '')
+    const _parsed = JSON.parse(_r)
+    const _settings = _parsed.body ? JSON.parse(_parsed.body).settings : {}
+    const _projects = (_settings && _settings.recentProjects) || []
+    const _folders = (_settings && _settings.workspaceFolderLists) || {}
+    const _seen = new Set()
+    const _items = []
+    for (const _p of _projects) {
+      if (!_p || _seen.has(_p)) continue
+      _seen.add(_p)
+      const _fl = (_folders[_p] && _folders[_p].length > 0) ? [..._folders[_p]] : [_p]
+      _items.push(reactive({ path: _p, name: _p.split(/[\\/]/).filter(Boolean).pop() || _p, folders: _fl, notify: false }))
+    }
+    if (_items.length > 0) state.wsList = _items
+  }
+} catch {}
+
 provide('wsList', wsList)
 provide('saveWsList', saveWsList)
 provide('switchWorkspace', switchWorkspace)
 
 async function loadWsList() {
-  console.log('[DBG] loadWsList START')
   // 从后端 /api/settings 拉取工作区列表（recentProjects），保证与后端一致
   // 后端返回结构：{settings: core.Settings, loaded} —— recentProjects 在 settings.settings 下。
-  // ★ wb-ui(goja) 对 reactive 数组的 push/方法 触发不了下游组件渲染（Vue 3.5
-  //   数组 instrument 兼容问题），改用整体赋值（整体赋值走 set trap，与
-  //   workspaceFolders 赋值同路径，能触发 FileExplorer 的 v-for/v-if 更新）。
+  // ★ wb-ui(goja) 对 reactive 数组的整体赋值触发不了下游组件渲染（渲染 effect 依赖不收集），
+  //   已由 setup 顶层同步预取解决（mount 前填充）。这里仍保持数据同步（web 端正常响应式）。
   wsList.length = 0
   let loadedItems = []
   try {
     const resp = await api.apiGet('/settings')
     const settings = resp.settings || resp
     const projects = settings.recentProjects || []
-    console.log('[DBG] loadWsList rp=' + JSON.stringify(projects).slice(0, 200))
     const folderLists = settings.workspaceFolderLists || {}
     const seen = new Set()
     for (const p of projects) {
@@ -181,7 +202,7 @@ async function loadWsList() {
         notify: false,
       }))
     }
-  } catch (e) { console.log('[DBG] loadWsList ERR ' + (e && e.message || e)) }
+  } catch {}
   if (state.workspaceRoot && !loadedItems.find(w => w.path === state.workspaceRoot)) {
     loadedItems.push(reactive({
       path: state.workspaceRoot,
@@ -190,9 +211,8 @@ async function loadWsList() {
       notify: false,
     }))
   }
-  // 整体赋值：替换 state.wsList 引用，触发 FileExplorer 依赖。
+  // 整体赋值：替换 state.wsList 引用，保持数据与后端一致（desktop 下 DOM 已由 mount 预取渲染）。
   state.wsList = loadedItems
-  console.log('[DBG] loadWsList END count=' + state.wsList.length)
 }
 
 async function saveWsList() {
@@ -376,14 +396,12 @@ onMounted(async () => {
       ? state.workspaceRoot.split('\\').filter(Boolean).pop() || state.workspaceRoot
       : '未设置工作区'
     document.title = 'PairCode IDE - ' + state.workspaceName
-    console.log('[DBG] onMounted health root=' + state.workspaceRoot + ' folders=' + (state.workspaceFolders||[]).length)
-  } catch (e) { console.log('[DBG] onMounted health ERR ' + (e && e.message || e)) }
+  } catch {}
 
   try {
     const settings = await api.apiGet('/settings')
     state.settings = settings
     state.settingsLoaded = true
-    console.log('[DBG] onMounted settings keys=' + JSON.stringify(Object.keys(settings)))
     if (settings.theme && ['dark', 'light', 'warm', 'night'].includes(settings.theme)) {
       applyTheme(settings.theme)
     }

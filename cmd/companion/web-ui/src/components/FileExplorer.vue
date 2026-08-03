@@ -10,7 +10,7 @@
 
     <!-- ── 上方：工作区列表 ── -->
     <div class="ws-section">
-      <div v-for="ws in state.wsList" :key="ws.path"
+      <div v-for="ws in wsItems" :key="ws.path"
            :class="['ws-item', { 'ws-active': ws.path === state.workspaceRoot }]"
            @click="switchToWorkspace(ws)"
            @contextmenu.prevent="showWsContextMenu($event, ws)">
@@ -23,7 +23,7 @@
           <span v-if="ws.path === state.workspaceRoot" class="ws-badge">当前</span>
         </div>
       </div>
-      <div v-if="state.wsList.length === 0" class="ws-empty">
+      <div v-if="wsItems.length === 0" class="ws-empty">
         <span>暂无工作区</span>
         <button class="ws-create-btn" @click="showWorkspaceDialog = true">创建</button>
       </div>
@@ -123,6 +123,11 @@ import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { state } from '../main.js'
 import api from '../api.js'
 import FileTreeItem from './FileTreeItem.vue'
+
+// ★ desktop(goja) workaround：渲染 effect 对整体赋值数组的 set 不收集依赖（v-for/v-if 不更新）。
+//   App.vue setup 顶层已同步预取 wsList（mount 前），首次渲染即读到 5 项；此处用 computed
+//   包装保持模板引用一致（后续若数据变化也走同一链路）。
+const wsItems = computed(() => state.wsList)
 import SvgIcon from './SvgIcon.vue'
 import ContextMenu from './ContextMenu.vue'
 
