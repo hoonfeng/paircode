@@ -286,7 +286,11 @@ const compOtherPct = computed(() => ((props.convCtxStats.otherTokens / compTotal
 .conv-list {
   flex: 1 1 auto;
   overflow-y: auto;
-  padding: 4px 0;
+  /* ★ 右侧 padding 8px：wb-ui 滚动条为 overlay（不占内容空间），
+     conv-item 默认延伸至容器右缘会盖住滚动条（选中/悬停背景）。
+     加 padding-right 后 item 右缘退到滚动条左侧，与 Edge 一致
+     （Edge 滚动条占 8px 内容空间，item 右缘同样距滚动条 12px）。 */
+  padding: 4px 8px 4px 0;
   min-height: 0;
 }
 .conv-item {
