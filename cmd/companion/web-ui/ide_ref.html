@@ -28,6 +28,15 @@
       info.col = cssColor(cs.color);
       info.bg = cssColor(cs.backgroundColor);
       info.fs = cs.fontSize;
+      // Scroll containers: collect scroll extents so wb-ui's BoxContentSize
+      // can be compared against the real browser scrollHeight/scrollWidth.
+      if (cs.overflowY === 'auto' || cs.overflowY === 'scroll' ||
+          cs.overflowX === 'auto' || cs.overflowX === 'scroll') {
+        info.scrollH = el.scrollHeight;
+        info.scrollW = el.scrollWidth;
+        info.clientH = el.clientHeight;
+        info.clientW = el.clientWidth;
+      }
     }
     if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') info.val = el.value;
     if (el.tagName === 'INPUT' && (el.type === 'checkbox' || el.type === 'radio')) info.checked = el.checked ? 'checked' : '';
