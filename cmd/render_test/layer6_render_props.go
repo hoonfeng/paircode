@@ -9,7 +9,7 @@ func runLayer6RenderProps() {
 		Width:  100, Height: 100,
 		HTML:   `<div style="width:80px;height:80px;background:red;opacity:0.5;"></div>`,
 		Checks: []PixelCheck{
-			check("opacity=0.5的红色(值不变，整体alpha层叠)", 10, 10, 255, 0, 0, 255),
+			check("opacity=0.5的红色(黑背景混合)", 10, 10, 127, 0, 0, 255), // premultiplied+黑背景
 		},
 	})
 
@@ -19,7 +19,7 @@ func runLayer6RenderProps() {
 		Width:  100, Height: 100,
 		HTML:   `<div style="width:80px;height:80px;background:red;visibility:hidden;"></div>`,
 		Checks: []PixelCheck{
-			check("hidden不可见", 10, 10, 0, 0, 0, 255), // body 背景
+			check("hidden不可见", 10, 10, 0, 0, 0, 255), // body 黑背景（元素隐藏后露出）
 		},
 	})
 
@@ -29,7 +29,7 @@ func runLayer6RenderProps() {
 		Width:  100, Height: 100,
 		HTML:   `<div style="width:80px;height:80px;background:red;display:none;"></div>`,
 		Checks: []PixelCheck{
-			check("none不可见", 10, 10, 0, 0, 0, 255),
+			check("none不可见", 10, 10, 0, 0, 0, 0), // display:none → body 内容高度 0，区域透明
 		},
 	})
 
@@ -39,8 +39,8 @@ func runLayer6RenderProps() {
 		Width:  100, Height: 100,
 		HTML:   `<div style="width:50px;height:50px;overflow:hidden;background:red;"><div style="width:100px;height:100px;background:blue;"></div></div>`,
 		Checks: []PixelCheck{
-			check("overflow隐藏后只显示红色", 10, 10, 255, 0, 0, 255),
-			check("溢出部分不可见", 60, 10, 0, 0, 0, 255),
+			check("overflow隐藏后子元素蓝色", 10, 10, 0, 0, 255, 255), // 容器内被子元素蓝色覆盖
+			check("溢出部分不可见", 60, 10, 0, 0, 0, 255), // 容器 8..58 外 body 黑背景
 		},
 	})
 
@@ -92,7 +92,7 @@ func runLayer6RenderProps() {
 		         <div style="width:100px;height:100px;background:red;"></div>
 		       </div>`,
 		Checks: []PixelCheck{
-			check("flex居中红色", 100, 100, 255, 0, 0, 255),
+			check("flex居中红色", 110, 110, 255, 0, 0, 255), // 容器 8..308 居中 100px → 108..208
 		},
 	})
 }

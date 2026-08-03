@@ -10,7 +10,7 @@ func runLayer2SizingPosition() {
 		HTML:   `<div style="width:150px;height:100px;background:red;"></div>`,
 		Checks: []PixelCheck{
 			check("红色区域可见", 10, 10, 255, 0, 0, 255),
-			check("超出高度透明", 10, 110, 0, 0, 0, 255), // body 背景
+			check("超出高度透明", 10, 110, 0, 0, 0, 0), // body 外（div 高 100+margin8=108），canvas 透明
 		},
 	})
 
@@ -21,7 +21,7 @@ func runLayer2SizingPosition() {
 		HTML:   `<div style="width:50%;height:100%;background:red;"></div>`,
 		Checks: []PixelCheck{
 			check("50%宽度红色", 10, 10, 255, 0, 0, 255),
-			check("超出50%的部分透明", 110, 10, 0, 0, 0, 255),
+			check("超出50%的部分透明", 110, 10, 0, 0, 0, 255), // 50%宽=100px → 8..108，110 在 body 内黑背景
 		},
 	})
 
@@ -42,7 +42,7 @@ func runLayer2SizingPosition() {
 		HTML:   `<div style="width:500px;max-width:100px;height:50px;background:red;"></div>`,
 		Checks: []PixelCheck{
 			check("max-width 限制为 100px", 10, 10, 255, 0, 0, 255),
-			check("超出100px的部分透明", 110, 10, 0, 0, 0, 255),
+			check("超出100px的部分透明", 110, 10, 0, 0, 0, 255), // div 8..108，110 在 body 内黑背景
 		},
 	})
 
@@ -52,8 +52,8 @@ func runLayer2SizingPosition() {
 		Width:  200, Height: 200,
 		HTML:   `<div style="width:100px;height:100px;background:red;position:relative;top:30px;left:30px;"></div>`,
 		Checks: []PixelCheck{
-			check("relative偏移后位置", 35, 35, 255, 0, 0, 255),
-			check("原始位置透明", 5, 5, 0, 0, 0, 255),
+			check("relative偏移后位置", 40, 40, 255, 0, 0, 255), // body margin 8 + top30/left30 → 38..138
+			check("原始位置透明", 5, 5, 0, 0, 0, 0), // body margin 外，canvas 透明
 		},
 	})
 
@@ -63,7 +63,7 @@ func runLayer2SizingPosition() {
 		Width:  200, Height: 200,
 		HTML:   `<div style="position:relative;width:200px;height:200px;background:#333;"><div style="position:absolute;top:50px;left:50px;width:50px;height:50px;background:red;"></div></div>`,
 		Checks: []PixelCheck{
-			check("absolute 定位 50,50", 55, 55, 255, 0, 0, 255),
+			check("absolute 定位 50,50", 65, 65, 255, 0, 0, 255), // 外层 8..208，内层 absolute top50 left50 → 58..108
 			check("absolute 外透明", 45, 45, 51, 51, 51, 255), // #333 背景
 		},
 	})

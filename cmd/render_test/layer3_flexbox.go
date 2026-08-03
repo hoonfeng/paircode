@@ -54,7 +54,7 @@ func runLayer3Flexbox() {
 		         <div style="width:80px;height:80px;background:blue;"></div>
 		       </div>`,
 		Checks: []PixelCheck{
-			check("space-between左红色", 5, 10, 255, 0, 0, 255),
+			check("space-between左红色", 10, 10, 255, 0, 0, 255), // body margin 8px：子项 8..88
 			check("space-between右蓝色", 315, 10, 0, 0, 255, 255),
 		},
 	})
@@ -67,7 +67,7 @@ func runLayer3Flexbox() {
 		         <div style="width:80px;height:80px;background:red;"></div>
 		       </div>`,
 		Checks: []PixelCheck{
-			check("垂直居中红色(y≈60)", 10, 65, 255, 0, 0, 255),
+			check("垂直居中红色(y≈70)", 10, 70, 255, 0, 0, 255), // 容器 8..208 居中 80px → 68..148
 		},
 	})
 
@@ -82,7 +82,7 @@ func runLayer3Flexbox() {
 		       </div>`,
 		Checks: []PixelCheck{
 			check("第1行红色", 10, 10, 255, 0, 0, 255),
-			check("第2行蓝色(换行)", 10, 95, 0, 0, 255, 255),
+			check("第2行蓝色(换行)", 10, 100, 0, 0, 255, 255), // 容器 8..158，换行后第2行 y=88+12=100 附近
 		},
 	})
 
@@ -110,8 +110,8 @@ func runLayer3Flexbox() {
 		       </div>`,
 		Checks: []PixelCheck{
 			check("gap后红色在x=0", 10, 10, 255, 0, 0, 255),
-			check("gap区域透明(x=90~110)", 100, 10, 0, 0, 0, 255),
-			check("gap后蓝色在x=110", 115, 10, 0, 0, 255, 255),
+			check("gap区域透明(x=90~110)", 100, 10, 0, 0, 0, 255), // gap 在 body 内黑背景
+			check("gap后蓝色在x=110", 120, 10, 0, 0, 255, 255), // 蓝 div 118..198（8+80+gap30）
 		},
 	})
 
@@ -137,7 +137,7 @@ func runLayer3Flexbox() {
 		         <div style="width:80px;height:80px;background:blue;align-self:flex-end;"></div>
 		       </div>`,
 		Checks: []PixelCheck{
-			check("align-self底部对齐(y≈120)", 10, 125, 0, 0, 255, 255),
+			check("align-self底部对齐(y≈130)", 10, 130, 0, 0, 255, 255), // 容器 8..208，flex-end → 128..208
 		},
 	})
 
@@ -150,8 +150,8 @@ func runLayer3Flexbox() {
 		         <div style="width:80px;height:80px;background:blue;"></div>
 		       </div>`,
 		Checks: []PixelCheck{
-			check("row-reverse蓝色在左侧", 115, 10, 0, 0, 255, 255),
-			check("row-reverse红色在右侧", 210, 10, 255, 0, 0, 255),
+			check("row-reverse蓝色在左侧", 160, 10, 0, 0, 255, 255), // 容器 8..308，row-reverse：蓝 148..228
+			check("row-reverse红色在右侧", 240, 10, 255, 0, 0, 255), // 红 228..308
 		},
 	})
 }

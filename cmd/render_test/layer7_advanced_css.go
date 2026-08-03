@@ -10,7 +10,7 @@ func runLayer7AdvancedCSS() {
 		HTML:   `<div style="width:calc(100px + 50px);height:50px;background:red;"></div>`,
 		Checks: []PixelCheck{
 			check("calc后宽度150px", 10, 10, 255, 0, 0, 255),
-			check("calc外透明(超出150px)", 155, 10, 0, 0, 0, 255),
+			check("calc外透明(超出150px)", 165, 10, 0, 0, 0, 255), // div 8..158，165 在 body 内黑背景
 		},
 	})
 
@@ -35,7 +35,7 @@ func runLayer7AdvancedCSS() {
 	})
 
 	// === T7.4: @media 媒体查询 width ===
-	// 注意：webkit 默认 800x600，所以 min-width:500px 应匹配
+	// viewport 宽 200（Width:200）：min-width:500px 不匹配，max-width:400px 匹配 → 蓝色
 	runTest(TestCase{
 		Name:   "T7.4 @media min-width",
 		Width:  200, Height: 100,
@@ -46,7 +46,7 @@ func runLayer7AdvancedCSS() {
 		         <div class="box" style="width:80px;height:80px;"></div>
 		       </body></html>`,
 		Checks: []PixelCheck{
-			check("800px>=500px 应匹配红色", 10, 10, 255, 0, 0, 255),
+			check("200px<400px 应匹配蓝色", 10, 10, 0, 0, 255, 255),
 		},
 	})
 

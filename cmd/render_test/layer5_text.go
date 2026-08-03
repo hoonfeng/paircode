@@ -9,7 +9,7 @@ func runLayer5Text() {
 		Width:  200, Height: 100,
 		HTML:   `<div style="font-size:20px;color:red;">Hello</div>`,
 		Checks: []PixelCheck{
-			check("文字颜色红色", 10, 10, 255, 0, 0, 255),
+			checkRegion("文字颜色红色", 0, 0, 80, 40, 255, 0, 0, 255), // 区域内存在纯红文字像素
 		},
 	})
 
@@ -19,7 +19,7 @@ func runLayer5Text() {
 		Width:  300, Height: 100,
 		HTML:   `<div style="text-align:center;width:300px;background:#eee;color:red;">Center</div>`,
 		Checks: []PixelCheck{
-			check("文字红色", 10, 10, 255, 0, 0, 255),
+			checkRegion("文字红色", 120, 0, 80, 40, 255, 0, 0, 255), // 居中文字区域存在纯红
 		},
 	})
 
@@ -29,7 +29,7 @@ func runLayer5Text() {
 		Width:  200, Height: 100,
 		HTML:   `<div style="text-decoration:underline;color:red;">Underline</div>`,
 		Checks: []PixelCheck{
-			check("文字颜色红色", 10, 10, 255, 0, 0, 255),
+			checkRegion("文字颜色红色", 0, 0, 100, 40, 255, 0, 0, 255), // 文字+下划线区域存在纯红
 		},
 	})
 
@@ -39,7 +39,7 @@ func runLayer5Text() {
 		Width:  200, Height: 100,
 		HTML:   `<div style="line-height:2;color:red;">Text</div>`,
 		Checks: []PixelCheck{
-			check("文字颜色红色", 10, 10, 255, 0, 0, 255),
+			checkRegion("文字颜色红色", 0, 0, 80, 50, 255, 0, 0, 255), // line-height 2 文字区域存在纯红
 		},
 	})
 
@@ -49,7 +49,7 @@ func runLayer5Text() {
 		Width:  50, Height: 50,
 		HTML:   `<div style="white-space:nowrap;color:red;">Long text that should not wrap</div>`,
 		Checks: []PixelCheck{
-			check("文字颜色红色", 10, 10, 255, 0, 0, 255),
+			checkRegion("文字颜色红色", 0, 0, 50, 40, 255, 0, 0, 255), // nowrap 文字区域存在纯红
 		},
 	})
 }

@@ -29,9 +29,9 @@ func runLayer8ComplexLayout() {
 		         <div style="width:100px;height:80px;background:red;"></div>
 		       </div>`,
 		Checks: []PixelCheck{
-			check("蓝色边框", 22, 22, 0, 0, 255, 255),
-			check("#ddd padding区域", 28, 28, 221, 221, 221, 255),
-			check("内部红色", 38, 38, 255, 0, 0, 255),
+			check("蓝色边框", 30, 30, 0, 0, 255, 255), // body margin8+margin20=28 起点，border 28..33
+			check("#ddd padding区域", 38, 38, 221, 221, 221, 255), // padding 33..43
+			check("内部红色", 46, 46, 255, 0, 0, 255), // 子 div 43 起
 		},
 	})
 
@@ -43,7 +43,7 @@ func runLayer8ComplexLayout() {
 		         <div style="position:absolute;top:20px;right:20px;width:50px;height:50px;background:red;"></div>
 		       </div>`,
 		Checks: []PixelCheck{
-			check("右上红色定位", 235, 25, 255, 0, 0, 255),
+			check("右上红色定位", 240, 30, 255, 0, 0, 255), // 外层 8..308，absolute top20 right20 → 238..288 × 28..78
 		},
 	})
 
@@ -57,7 +57,7 @@ func runLayer8ComplexLayout() {
 		         </div>
 		       </div>`,
 		Checks: []PixelCheck{
-			check("多级居中红色", 125, 75, 255, 0, 0, 255),
+			check("多级居中红色", 135, 85, 255, 0, 0, 255), // 内层 83..233 × 58..158，红 133..183 × 83..133
 		},
 	})
 
@@ -106,10 +106,11 @@ func runLayer8ComplexLayout() {
 		         </div>
 		         <div style="flex:1;background:#1e1e1e;"></div>
 		       </div>`,
+
 		Checks: []PixelCheck{
 			check("侧边栏 #2c2c2c", 10, 10, 44, 44, 44, 255),
-			check("蓝色图标 #0078d4", 15, 12, 0, 120, 212, 255),
-			check("灰色图标 #555", 15, 52, 85, 85, 85, 255),
+			check("蓝色图标 #0078d4", 20, 20, 0, 120, 212, 255), // 侧边栏 8..58，图标 18..48 × 18..48（padding-top 10）
+			check("灰色图标 #555", 20, 60, 85, 85, 85, 255),      // 图标2 margin-top 8 → 56..86
 			check("内容区 #1e1e1e", 60, 10, 30, 30, 30, 255),
 		},
 	})
@@ -124,9 +125,9 @@ func runLayer8ComplexLayout() {
 		         <div style="position:absolute;top:10px;left:10px;width:80px;height:80px;background:green;z-index:3;"></div>
 		       </div>`,
 		Checks: []PixelCheck{
-			check("z-index:3绿色在最上", 15, 15, 0, 255, 0, 255),
+			check("z-index:3绿色在最上", 20, 20, 0, 255, 0, 255), // 绿 top10 left10 → 18..98（body margin 8）
 			check("z-index:2红色在中间层(被绿色盖住部分)", 25, 25, 0, 255, 0, 255),
-			check("z-index:1蓝色在最下层", 50, 50, 0, 0, 255, 255),
+			check("z-index:3绿色盖住蓝色(50,50)", 50, 50, 0, 255, 0, 255), // 蓝 z1 在 48..128，但绿 z3 覆盖
 		},
 	})
 }

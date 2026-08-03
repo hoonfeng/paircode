@@ -26,6 +26,10 @@ type PixelCheck struct {
 	X, Y       int
 	R, G, B, A uint8
 	Label      string
+	// Region 模式下在 (X,Y)-(X+W,Y+H) 区域内查找完全匹配像素（任一命中即通过）。
+	// 用于文本等字形/抗锯齿像素位置不稳定的断言。
+	Region bool
+	W, H   int
 }
 
 var allResults []TestResult
@@ -72,7 +76,10 @@ func runTest(tc TestCase) {
 
 	html := tc.HTML
 	if !strings.Contains(html, "<html") {
-		html = `<html><head><meta charset="utf-8"></head><body>` + html + `</body></html>`
+		// 统一 body 黑背景：让「背景」断言明确且可预测（原期望 0,0,0,255），
+		// 半透明颜色在黑色背景上的混合 = premultiplied 值（如 rgba(255,0,0,.5)
+		// → (127,0,0,255)）。浏览器 body 默认白，此处用黑使期望可计算。
+		html = `<html><head><meta charset="utf-8"></head><body style="background:#000">` + html + `</body></html>`
 	}
 
 	err := wv.LoadHTML(html)
@@ -102,6 +109,33 @@ func runTest(tc TestCase) {
 	}
 
 	for _, c := range tc.Checks {
+		if c.Region {
+			// 区域内任意像素完全匹配（r/g/b/a 相等）即通过——文本字形
+			// 笔画内存在纯色像素，边缘抗锯齿像素不参与比较。
+			found := false
+			for ry := c.Y; ry < c.Y+c.H && ry < tc.Height && !found; ry++ {
+				for rx := c.X; rx < c.X+c.W && rx < tc.Width; rx++ {
+					ri := (ry*tc.Width + rx) * 4
+					if ri+3 >= len(pixels) {
+						continue
+					}
+					if pixels[ri] == c.R && pixels[ri+1] == c.G &&
+						pixels[ri+2] == c.B && pixels[ri+3] == c.A {
+						found = true
+						break
+					}
+				}
+			}
+			if !found {
+				allResults = append(allResults, TestResult{
+					Name: tc.Name, Passed: false,
+					Detail: fmt.Sprintf("  [%s] 区域(%d,%d)+%dx%d 内未找到 rgba(%d,%d,%d,%d)",
+						c.Label, c.X, c.Y, c.W, c.H, c.R, c.G, c.B, c.A),
+				})
+				return
+			}
+			continue
+		}
 		idx := (c.Y*tc.Width + c.X) * 4
 		if idx+3 >= len(pixels) {
 			allResults = append(allResults, TestResult{
@@ -128,6 +162,12 @@ func runTest(tc TestCase) {
 
 func check(label string, x, y, r, g, b, a int) PixelCheck {
 	return PixelCheck{X: x, Y: y, R: uint8(r), G: uint8(g), B: uint8(b), A: uint8(a), Label: label}
+}
+
+// checkRegion 在区域 (x,y)-(x+w,y+h) 内查找完全匹配像素（任一命中即通过）。
+func checkRegion(label string, x, y, w, h, r, g, b, a int) PixelCheck {
+	return PixelCheck{X: x, Y: y, R: uint8(r), G: uint8(g), B: uint8(b), A: uint8(a), Label: label,
+		Region: true, W: w, H: h}
 }
 
 func printSummary() {

@@ -32,7 +32,7 @@ func runLayer1ColorAndBox() {
 		Name:   "T1.4 rgba() 透明度",
 		Width:  100, Height: 100,
 		HTML:   `<div style="width:80px;height:80px;background:rgba(255,0,0,0.5);"></div>`,
-		Checks: []PixelCheck{check("rgba半透明", 10, 10, 255, 0, 0, 128)},
+		Checks: []PixelCheck{check("rgba半透明", 10, 10, 127, 0, 0, 255)}, // 黑背景上 premultiplied
 	})
 
 	// === T1.5: hsl() 颜色 ===
@@ -48,7 +48,7 @@ func runLayer1ColorAndBox() {
 		Name:   "T1.6 hsla() 颜色",
 		Width:  100, Height: 100,
 		HTML:   `<div style="width:80px;height:80px;background:hsla(240,100%,50%,0.7);"></div>`,
-		Checks: []PixelCheck{check("hsla蓝色半透明", 10, 10, 0, 0, 255, 179)},
+		Checks: []PixelCheck{check("hsla蓝色半透明", 10, 10, 0, 0, 178, 255)}, // 黑背景上 premultiplied (255×0.7)
 	})
 
 	// === T1.7: named color ===
@@ -64,7 +64,7 @@ func runLayer1ColorAndBox() {
 		Name:   "T1.8 transparent",
 		Width:  100, Height: 100,
 		HTML:   `<div style="width:80px;height:80px;background:transparent;border:1px solid red;"></div>`,
-		Checks: []PixelCheck{check("transparent背景", 10, 10, 0, 0, 0, 0)},
+		Checks: []PixelCheck{check("transparent背景", 10, 10, 0, 0, 0, 255)}, // body 黑背景可见
 	})
 
 	// === T1.9: background shorthand ===
@@ -83,7 +83,7 @@ func runLayer1ColorAndBox() {
 		       <div style="width:100px;height:100px;background:blue;margin-top:20px;"></div>`,
 		Checks: []PixelCheck{
 			check("第一个div红色", 10, 10, 255, 0, 0, 255),
-			check("margin间隙(背景色)", 10, 105, 0, 0, 0, 255), // body 默认白色背景，但这里我们使用 body 背景
+			check("margin间隙(黑色背景)", 10, 115, 0, 0, 0, 255), // body margin 8px：红 div 8..108，蓝 div 从 128 起
 		},
 	})
 
@@ -105,8 +105,8 @@ func runLayer1ColorAndBox() {
 		Width:  200, Height: 200,
 		HTML:   `<div style="width:100px;height:100px;background:red;border:5px solid blue;"></div>`,
 		Checks: []PixelCheck{
-			check("蓝色边框", 2, 2, 0, 0, 255, 255),
-			check("红色内容区", 10, 10, 255, 0, 0, 255),
+			check("蓝色边框", 10, 10, 0, 0, 255, 255), // body margin 8px：border 8..13
+			check("红色内容区", 20, 20, 255, 0, 0, 255),
 		},
 	})
 
@@ -126,8 +126,8 @@ func runLayer1ColorAndBox() {
 		Width:  200, Height: 200,
 		HTML:   `<div style="width:100px;height:100px;background:red;border:10px solid blue;box-sizing:border-box;"></div>`,
 		Checks: []PixelCheck{
-			check("蓝色边框", 5, 5, 0, 0, 255, 255),
-			check("红色内容区缩进", 15, 15, 255, 0, 0, 255),
+			check("蓝色边框", 15, 15, 0, 0, 255, 255), // body margin 8px：border 8..18
+			check("红色内容区缩进", 25, 25, 255, 0, 0, 255),
 		},
 	})
 }
