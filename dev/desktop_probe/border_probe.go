@@ -1,5 +1,4 @@
-// 探针：用 wb-ui 渲染真实前端，检查对话列表 active conv-item 的
-// 左边框（蓝色竖线）顶端是否圆角（圆角外像素 alpha 明显低于中段）。
+// 探针：检查 active conv-item 的完整四边像素，确认只有左边框（蓝色竖线）。
 // 用法：go run dev/desktop_probe/border_probe.go
 package main
 
@@ -18,6 +17,7 @@ import (
 
 	"github.com/hoonfeng/paircode/internal/desktopbridge"
 )
+
 func main() {
 	log.SetFlags(log.Ltime)
 	wd, _ := os.Getwd()
@@ -58,7 +58,6 @@ func main() {
 	}
 	state := rv.LayoutState()
 
-	// 找 active conv-item 的 LayoutBox（通过布局树遍历）
 	var activeBox layout.Box
 	var walk func(o rendering.RenderObject)
 	walk = func(o rendering.RenderObject) {
@@ -87,39 +86,97 @@ func main() {
 	w, h := g.BorderBoxWidth(), g.BorderBoxHeight()
 	fmt.Printf("[border-probe] active conv-item x=%.1f y=%.1f w=%.1f h=%.1f\n", x, y, w, h)
 
-	// Paint 到离屏 canvas（1280x800）
 	canvas := graphics.NewCanvas(1280, 800)
 	defer canvas.Release()
 	rendering.Paint(rv, canvas, rendering.Rect{X: 0, Y: 0, Width: 1280, Height: 800})
 
-	// 左边框区域：x=x..x+2（2px 边框），检查顶端圆角
-	bx := int(x) + 1 // 边框中心像素
-	topY := int(y)
-	midY := int(y) + int(h)/2
-	botY := int(y) + int(h) - 1
+	// ★ 保存 conv-item 区域为原始 RGBA 字节（供 Python 对比 Edge）
+	// 区域：x=x-2 .. x+12, y=y-4 .. y+h+4（含竖线与背景）
+	sx0, sy0 := int(x)-2, int(y)-4
+	sx1, sy1 := int(x)+14, int(y)+int(h)+6
+	pix := canvas.Pixels()
+	// Pixels() 返回 1280*800*4 的 RGBA
+	out := make([]byte, 0, (sx1-sx0)*(sy1-sy0)*4)
+	for yy := sy0; yy < sy1; yy++ {
+		for xx := sx0; xx < sx1; xx++ {
+			idx := (yy*1280 + xx) * 4
+			if idx+3 < len(pix) {
+				out = append(out, pix[idx], pix[idx+1], pix[idx+2], pix[idx+3])
+			}
+		}
+	}
+	os.WriteFile("tmp/conv_item_wb.rgba", out, 0o644)
+	fmt.Printf("[border-probe] saved tmp/conv_item_wb.rgba (%dx%d)\n", sx1-sx0, sy1-sy0)
 
-	tp := canvas.PixelAt(bx, topY)
-	mp := canvas.PixelAt(bx, midY)
-	bp := canvas.PixelAt(bx, botY)
-	fmt.Printf("[border-probe] left border: top(%d,%d)=%+v mid(%d,%d)=%+v bot(%d,%d)=%+v\n",
-		bx, topY, tp, bx, midY, mp, bx, botY, bp)
+	isBlue := func(c graphics.Color) bool { return c.B >= 150 && c.B > c.R+40 && c.A >= 150 }
+	isNonBg := func(c graphics.Color) bool {
+		// 非 item 背景色（--bg-active #1f2b3d / 面板背景 #21262d）的像素
+		return c.A > 100 && !(c.R > 25 && c.R < 45 && c.G > 35 && c.G < 55 && c.B > 55 && c.B < 80)
+	}
 
-	// 判定：中段应为饱和蓝（#58a6ff 风格：B 高、R 低）；顶端圆角外不应是
-	// 饱和蓝（应是背景色/淡蓝渐变）；底部圆角同理。
-	isBlue := func(c graphics.Color) bool { return c.B >= 200 && c.R < 160 && c.A >= 200 }
-	if !isBlue(mp) {
-		fmt.Println("[border-probe] FAIL: mid border not saturated blue")
-		os.Exit(1)
+	// 四边扫描：
+	// 左边缘 x=x, 右边缘 x+w-1, 上边缘 y, 下边缘 y+h-1
+	ix, iy := int(x), int(y)
+	iw, ih := int(w), int(h)
+	fmt.Printf("[border-probe] scanning edges: left x=%d, right x=%d, top y=%d, bottom y=%d\n", ix, ix+iw-1, iy, iy+ih-1)
+
+	fmt.Println("[border-probe] LEFT edge (x=", ix, "..", ix+1, "):")
+	for yy := iy; yy <= iy+ih-1; yy++ {
+		row := fmt.Sprintf("  y=%3d:", yy)
+		for xx := ix; xx <= ix+1; xx++ {
+			px := canvas.PixelAt(xx, yy)
+			if isBlue(px) {
+				row += " B"
+			} else if isNonBg(px) {
+				row += " ?"
+			} else {
+				row += " ."
+			}
+		}
+		fmt.Println(row)
 	}
-	if isBlue(tp) {
-		fmt.Println("[border-probe] FAIL: top corner NOT rounded (still saturated blue)")
-		os.Exit(1)
+
+	fmt.Println("[border-probe] RIGHT edge (x=", ix+iw-2, "..", ix+iw-1, "):")
+	for yy := iy; yy <= iy+ih-1; yy++ {
+		px1 := canvas.PixelAt(ix+iw-2, yy)
+		px2 := canvas.PixelAt(ix+iw-1, yy)
+		mark := "."
+		if isNonBg(px1) || isNonBg(px2) {
+			mark = "?"
+		}
+		if isBlue(px1) || isBlue(px2) {
+			mark = "B"
+		}
+		fmt.Printf("  y=%3d: %s\n", yy, mark)
 	}
-	if isBlue(bp) {
-		fmt.Println("[border-probe] FAIL: bottom corner NOT rounded (still saturated blue)")
-		os.Exit(1)
+
+	fmt.Println("[border-probe] TOP edge (y=", iy, "..", iy+1, "):")
+	for xx := ix; xx <= ix+iw-1; xx++ {
+		px1 := canvas.PixelAt(xx, iy)
+		px2 := canvas.PixelAt(xx, iy+1)
+		mark := "."
+		if isNonBg(px1) || isNonBg(px2) {
+			mark = "?"
+		}
+		if isBlue(px1) || isBlue(px2) {
+			mark = "B"
+		}
+		fmt.Printf("  x=%3d: %s\n", xx, mark)
 	}
-	fmt.Println("[border-probe] PASS: left border rounded at both ends (top/bottom not saturated), mid blue")
+
+	fmt.Println("[border-probe] BOTTOM edge (y=", iy+ih-2, "..", iy+ih-1, "):")
+	for xx := ix; xx <= ix+iw-1; xx++ {
+		px1 := canvas.PixelAt(xx, iy+ih-2)
+		px2 := canvas.PixelAt(xx, iy+ih-1)
+		mark := "."
+		if isNonBg(px1) || isNonBg(px2) {
+			mark = "?"
+		}
+		if isBlue(px1) || isBlue(px2) {
+			mark = "B"
+		}
+		fmt.Printf("  x=%3d: %s\n", xx, mark)
+	}
 }
 
 func setupLoaders(wv *webkit.WebView, distDir string) {
