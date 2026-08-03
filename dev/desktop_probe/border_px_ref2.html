@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; }
+  body { background: #ffffff; }
+  #t {
+    position: absolute;
+    left: 100px; top: 100px;
+    width: 100px; height: 40px;
+    border-left: 2px solid #58a6ff;
+    border-radius: 6px;
+    background: #1f2b3d;
+  }
+</style>
+<script>
+window.onload = function() {
+  var r = document.getElementById('t').getBoundingClientRect();
+  document.title = 'RECT:' + JSON.stringify({l:r.left,t:r.top,w:r.width,h:r.height});
+};
+</script>
+</head>
+<body>
+  <div id="t"></div>
+</body>
+</html>
