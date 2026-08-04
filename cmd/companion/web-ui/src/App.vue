@@ -401,6 +401,10 @@ const MIN_TREE_REFRESH_INTERVAL = 3000
 let _savedTreeScrollTop = 0
 
 onMounted(async () => {
+  // ★ 先恢复 UI 布局偏好（视图/面板/主题），再做任何可能触发
+  //    savePersistentState 的操作（applyTheme 等）。否则默认值
+  //    explorer 会被先写入 localStorage，覆盖用户上次的 chat 视图。
+  loadPersistentState()
   document.addEventListener('contextmenu', (e) => {
     if (!e.defaultPrevented) e.preventDefault()
   }, false)
@@ -453,7 +457,6 @@ onMounted(async () => {
     })
   }, 200)
 
-  loadPersistentState()
   if (state.openFiles.length > 0) {
     for (const fp of state.openFiles) {
       try {
