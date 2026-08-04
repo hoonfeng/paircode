@@ -51,9 +51,6 @@ type LoopOpts struct {
 	// PlanProvider 规划模型的 Provider（自主模式用）。当 Autonomous=true 时，Loop 内部使用此
 	// Provider 执行规划阶段（update_plan），与主 Provider 区分以支持不同模型。
 	PlanProvider Provider
-	// DiffusionThink 模型扩散生成思想开关与参数（实验特性，默认关闭）。
-	// 开启后任务首轮 LLM 调用前做「发散 N 候选 → 收敛单一计划」策略预演（见 diffusion_think.go）。
-	DiffusionThink DiffusionThinkOpts
 }
 
 // GlobalEvent 是全局订阅者收到的事件：携带 convID 用于前端路由。
@@ -331,7 +328,6 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		History:               CopyHistory(opts.History), // 自闭环模式：loop 自己管理持久历史
 		CompressedSummaries:   opts.CompressedSummaries,  // 恢复已持久化的压缩摘要
 		WorkspaceRoot:         opts.WorkspaceRoot,         // 工作区根路径
-		DiffusionThink:        opts.DiffusionThink,        // 扩散思考（实验特性，默认关闭）
 	}
 
 	// ★ 恢复上一轮的执行日志（跨轮感知：无论自主还是非自主，新 Loop 都能知道之前每轮的分析/操作）

@@ -110,7 +110,8 @@ func searchContentHandler(root string) ToolHandler {
 		glob := strings.TrimSpace(argStr(args, "glob"))
 		max := clampInt(argInt(args, "max_results", 200), 200, 1, 2000)
 
-		var b strings.Builder
+		var lines []string
+		fileHits := map[string]int{} // 相对路径 → 命中数（供结果统计）
 		count := 0
 		truncated := false
 		walkErr := filepath.WalkDir(base, func(p string, d fs.DirEntry, werr error) error {
@@ -141,7 +142,8 @@ func searchContentHandler(root string) ToolHandler {
 			rel := relSlash(root, p)
 			for i, line := range strings.Split(string(data), "\n") {
 				if re.MatchString(line) {
-					fmt.Fprintf(&b, "%s:%d: %s\n", rel, i+1, trimLine(line))
+					lines = append(lines, fmt.Sprintf("%s:%d: %s", rel, i+1, trimLine(line)))
+					fileHits[rel]++
 					if count++; count >= max {
 						truncated = true
 						return fs.SkipAll
@@ -154,7 +156,13 @@ func searchContentHandler(root string) ToolHandler {
 			return "", ctx.Err()
 		}
 		if count == 0 {
-			return "（未找到匹配）", nil
+			return "（未找到匹配）\n提示：无结果≠不存在，建议补搜：① 换关键词/同义词 ② 加 (?i) 忽略大小写 ③ 换 path/glob 范围 ④ 检查正则写法。不要就此断言不存在。", nil
+		}
+		var b strings.Builder
+		fmt.Fprintf(&b, "（命中 %d 处，覆盖 %d 个文件）\n", count, len(fileHits))
+		for _, l := range lines {
+			b.WriteString(l)
+			b.WriteByte('\n')
 		}
 		res := b.String()
 		if truncated {
@@ -215,12 +223,12 @@ func searchFilesHandler(root string) ToolHandler {
 			return "", ctx.Err()
 		}
 		if len(matches) == 0 {
-			return "（未找到匹配文件）", nil
+			return "（未找到匹配文件）\n提示：无结果≠不存在，建议补搜：① 换文件名通配（如 *关键字*）② 换 path 范围 ③ 换 language 过滤 ④ 改用 search_content 搜内容。不要就此断言不存在。", nil
 		}
 		sort.Strings(matches)
-		res := strings.Join(matches, "\n")
+		res := fmt.Sprintf("（找到 %d 个文件）\n", len(matches)) + strings.Join(matches, "\n")
 		if truncated {
-			res += fmt.Sprintf("\n[已达上限 %d 个]", max)
+			res += fmt.Sprintf("\n[已达上限 %d 个，可能还有更多——可缩小 path 或加 language 过滤]", max)
 		}
 		return capOutput(res, 16000), nil
 	}

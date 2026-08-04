@@ -2447,9 +2447,6 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 		HistoryOriginal:  originalHistory,  // 原始版：供持久化使用，防止压缩版写回历史记录
 		CompressedSummaries: summaries,
 		Autonomous:       autonomous,
-		DiffusionThink: agent.DiffusionThinkOpts{
-			Enabled: core.Settings.DiffusionThink,
-		},
 	}
 }
 

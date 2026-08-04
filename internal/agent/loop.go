@@ -161,13 +161,6 @@ type Loop struct {
 
 	reviewer *Reviewer
 
-	// ── 模型扩散生成思想（Diffusion of Thought，实验特性，默认关闭）──
-	// DiffusionThink.Enabled=true 时，任务首轮 LLM 调用前执行「发散 N 候选 → 收敛单一计划」
-	// 的策略预演（见 diffusion_think.go），收敛计划注入首轮 callMsgs（冷缓存不破坏前缀）。
-	DiffusionThink DiffusionThinkOpts
-	// DiffuseStats 最近一次扩散思考的指标采集（实验对比用；未触发时为 nil）。
-	DiffuseStats *DiffuseStats
-
 	// contentOnlyIters 连续 content-only（无 tool_call）轮数计数器。
 	// contentOnlyIters 连续 content-only（无 tool_call）轮数计数器。
 	// 防止 Agent 只输出文字导致自我循环。
@@ -392,22 +385,6 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 
 		// ── THINK：LLM 决策（buildCallContext 合并 ephemeralMsgs，不被持久化）──
 		callMsgs := l.buildCallContext(msgs)
-
-		// ★ 模型扩散生成思想：任务首轮 LLM 调用前执行发散-收敛策略预演（见 diffusion_think.go）
-		// 仅 iter==0 触发：首轮是冷缓存（无 KV 前缀可命中），注入不损失缓存收益；
-		// 后续迭代保持前缀稳定。失败/解析异常自动退回原逻辑（不注入）。
-		if iter == 0 && l.DiffusionThink.Enabled {
-			if injected, stats := l.diffuseThink(ctx, task, callMsgs, tools); injected != nil {
-				callMsgs = injected
-				l.DiffuseStats = stats
-				if stats.Triggered {
-					l.emit(Event{Type: EventNotice, Content: fmt.Sprintf("🧠 扩散思考：%d 个候选方案 → 收敛出行动计划（发散 %d + 收敛 %d tokens，%.1fs）",
-						stats.Candidates, stats.DivergenceTokens, stats.ConvergenceTokens, float64(stats.DurationMs)/1000)})
-				} else {
-					l.emit(Event{Type: EventNotice, Content: "🧠 扩散思考未触发（发散/收敛失败，退回常规决策）"})
-				}
-			}
-		}
 
 		var stopReason string
 		assistant, err := l.Provider.Chat(ctx, callMsgs, tools, func(c Chunk) {
@@ -797,6 +774,17 @@ func DefaultSystemPrompt(roots []string) string {
 		"- 对于不熟悉的库/框架用法，用 web_search 查证最新文档，别凭记忆臆测 API。\n" +
 		"- 只有在充分理解代码现状后，才开始动手修改。宁可多花 2 轮调研，也不要在不了解全貌时动手。\n" +
 		"- ★ 禁止凭任务描述就臆测代码内容——你的记忆可能是旧版或错误的，必须以 read_file 看到的实际内容为准。\n\n" +
+		"# 🔍 搜索纪律（搜索是迭代过程——搜一次就收场是错误示范）\n" +
+		"- 一次搜索可能不完整：结果有行数上限、区分大小写、只匹配单一 pattern/通配。\n" +
+		"  看到「命中 N 处」「已达上限」「未找到匹配」时，先判断是否覆盖完整，再决定是否补搜。\n" +
+		"- 未找到 ≠ 不存在：先换关键词/同义词、加 (?i) 忽略大小写、换 path/glob 范围、\n" +
+		"  换工具（search_files ↔ search_content ↔ codegraph_search）再搜，不要就此断言不存在。\n" +
+		"- 多关键词覆盖：复杂查找（调用链、多文件引用、跨模块影响）要分多次搜索不同关键词\n" +
+		"  （函数名、结构体名、相关缩写等），并汇总各次结果，避免单次搜索漏项。\n" +
+		"- 搜到目标后必须 read_file 打开源码验证：搜索行只是单行预览（截断 200 字符），\n" +
+		"  不能凭搜索行文本断言结论；涉及修改前必须读完整上下文。\n" +
+		"- 涉及影响面（谁调用/谁引用/改动波及）时，用 codegraph_callers / codegraph_impact /\n" +
+		"  lsp_references 查全，避免漏改调用方。\n\n" +
 		"# 任务追踪（核心机制）\n" +
 		"任何需要 3+ 步骤或多文件操作的任务，必须用 update_tasks 创建任务清单并追踪进度：\n" +
 		"- 收到任务后第一轮：调用 update_tasks 列出完整任务清单（每项含 subject + status），展示给用户。\n" +
