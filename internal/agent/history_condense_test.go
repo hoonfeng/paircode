@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -219,6 +220,62 @@ func TestCondenseHistoryNoNestedSummary(t *testing.T) {
 	// 总量不超过上限
 	if len([]rune(summaryText)) > maxCondensedChars+50 {
 		t.Errorf("摘要超过总量上限：%d > %d", len([]rune(summaryText)), maxCondensedChars+50)
+	}
+}
+
+// TestCondenseHistoryLongFullRound 最近 1 轮消息数超上限时：
+// 更早的迭代子链合并为摘要，尾部保留 maxFullRoundMsgs 条关键迭代，
+// 且不产生孤立 tool 结果（split 越过 RoleTool）。
+func TestCondenseHistoryLongFullRound(t *testing.T) {
+	var msgs []Message
+	msgs = append(msgs, Message{Role: RoleSystem, Content: "sys"})
+	// 3 轮旧历史（第1轮完整、第2轮半压缩），第 3 轮超长（60 条迭代）
+	msgs = append(msgs, Message{Role: RoleUser, Content: "任务1"})
+	msgs = append(msgs, Message{Role: RoleAssistant, Content: "完成1"})
+	msgs = append(msgs, Message{Role: RoleUser, Content: "任务2"})
+	msgs = append(msgs, Message{Role: RoleAssistant, Content: "完成2"})
+	msgs = append(msgs, Message{Role: RoleUser, Content: "任务3"})
+	for i := 0; i < 30; i++ {
+		id := "c3_" + strconv.Itoa(i)
+		msgs = append(msgs,
+			Message{Role: RoleAssistant, Content: "分析", ToolCalls: []ToolCall{{ID: id, Function: FunctionCall{Name: "read_file", Arguments: `{"path":"a.go"}`}}}},
+			Message{Role: RoleTool, ToolCallID: id, Name: "read_file", Content: "内容 " + strconv.Itoa(i)},
+		)
+	}
+	msgs = append(msgs, Message{Role: RoleAssistant, Content: "完成3"})
+	msgs = append(msgs, Message{Role: RoleUser, Content: "任务4"})
+
+	out := CondenseHistory(msgs)
+
+	// 1. 尾部应保留最近 maxFullRoundMsgs 条迭代（含"完成3"助手消息）
+	joined := ""
+	for _, m := range out {
+		joined += m.Content + "|"
+	}
+	if !strings.Contains(joined, "完成3") {
+		t.Error("最近 1 轮的助手结论应保留")
+	}
+	// 2. 无孤立 tool 结果：不存在 RoleTool 消息后紧跟 user 消息（即 tool 结果必须有配对）
+	for i := 0; i < len(out); i++ {
+		if out[i].Role == RoleTool {
+			if i+1 < len(out) && out[i+1].Role == RoleUser {
+				t.Errorf("孤立 tool 结果（位置 %d 后紧跟 user）：%q", i, out[i+1].Content)
+			}
+		}
+	}
+	// 3. 输出消息数应小于原始（60 条迭代被合并压缩）
+	if len(out) >= len(msgs) {
+		t.Errorf("超长轮应被压缩：%d → %d", len(msgs), len(out))
+	}
+	// 4. 摘要存在
+	found := false
+	for _, m := range out {
+		if m.Role == RoleUser && strings.Contains(m.Content, "历史对话摘要") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("输出应含压缩摘要")
 	}
 }
 

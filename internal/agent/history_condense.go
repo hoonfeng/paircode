@@ -28,6 +28,10 @@ const (
 	// oldSummaryMaxChars 已存在的旧摘要合并进新摘要时的截断上限。
 	// 旧摘要本身可能已接近上限，合并时优先保留新轮次内容（旧摘要只截断保留开头）。
 	oldSummaryMaxChars = 600
+	// maxFullRoundMsgs 完整保留轮的消息数上限。
+	// 最近 1 轮若超过此数（极端自主长跑），更早的迭代子链合并为一行摘要，
+	// 只保留尾部关键迭代——防止单轮超长上下文拖垮下一轮注入体积。
+	maxFullRoundMsgs = 30
 )
 
 // CondenseHistory 将已完成的旧轮次压缩：最近 1 轮完整保留、倒数第 2 轮半压缩、
@@ -88,8 +92,22 @@ func CondenseHistory(msgs []Message) []Message {
 		out = append(out, condenseRoundSemi(msgs, semiStart, fullStart)...)
 	}
 	// 最近 1 轮完整交互（原始消息，保持位置对齐）
+	// ★ 消息数上限：超长轮（极端自主长跑）更早的迭代子链合并为一行摘要，
+	//   只保留尾部 maxFullRoundMsgs 条关键迭代，防止单轮超长上下文拖垮下一轮。
 	if fullStart < lastUserIdx {
-		out = append(out, msgs[fullStart:lastUserIdx]...)
+		if fullLen := lastUserIdx - fullStart; fullLen > maxFullRoundMsgs {
+			split := lastUserIdx - maxFullRoundMsgs
+			// split 后移越过孤立的 tool 结果（其配对 assistant 落在合并段内）
+			for split < lastUserIdx && msgs[split].Role == RoleTool {
+				split++
+			}
+			if split > fullStart {
+				out = append(out, condenseRoundSemi(msgs, fullStart, split)...)
+			}
+			out = append(out, msgs[split:lastUserIdx]...)
+		} else {
+			out = append(out, msgs[fullStart:lastUserIdx]...)
+		}
 	}
 	// 压缩摘要：回顾性 user 消息，位于当前用户消息之前
 	out = append(out, Message{Role: RoleUser, Content: summary})
