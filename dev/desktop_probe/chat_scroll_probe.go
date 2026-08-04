@@ -113,6 +113,11 @@ func main() {
 	_ = wv.JSInterpreter()
 	desktopbridge.Init(wv)
 	wv.LoadHTML(string(htmlData))
+	// ★ 与 desktop 完全一致：desktop 用 NewHost(wv, 1280, 800)（LoadHTML 后 Resize）。
+	//   不 Resize 的话视口是默认 800x600，flex 布局/消息宽度/滚动容器高度全不同，
+	//   测出的布局不是 desktop 的真实布局。
+	wv.Resize(1280, 800)
+	log.Printf("viewport after Resize = %dx%d", wv.Width(), wv.Height())
 	for i := 0; i < 20; i++ {
 		_, _ = wv.JSInterpreter().RunJS(`new Promise(function(res){ setTimeout(res, 500); })`)
 	}
