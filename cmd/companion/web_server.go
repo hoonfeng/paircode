@@ -1830,9 +1830,18 @@ func (s *webServer) handleToolsSave(w http.ResponseWriter, r *http.Request) {
 	lastRegMu.RLock()
 	reg := lastReg
 	lastRegMu.RUnlock()
-	if reg != nil {
-		agent.LoadWorkspaceToolConfig(reg, root)
+	if reg == nil {
+		// lastReg 尚未初始化（启动时 root 为空 / 从未 run 过）→ 重建参考注册表，
+		// 保证 GET /tools 有数据、保存的开关立即反映。
+		reg = agent.NewRegistry()
+		agent.RegisterDefaultTools(reg, root)
+		agent.RegisterCommitMessageTool(reg)
+		agenttools.RegisterManagementTools(reg, root)
+		lastRegMu.Lock()
+		lastReg = reg
+		lastRegMu.Unlock()
 	}
+	agent.LoadWorkspaceToolConfig(reg, root)
 
 	jsonResp(w, map[string]string{"status": "ok"})
 }
@@ -2345,14 +2354,13 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 		agentCfgs := make([]agent.MCPServerConfig, len(cfgs))
 		for i, c := range cfgs {
 			agentCfgs[i] = agent.MCPServerConfig{Name: c.Name, Command: c.Command, Args: c.Args, Env: c.Env}
+		}
+		agent.RegisterMCPServers(reg, agentCfgs)
 	}
 
 	// ★ 应用工作区工具配置（.pair/tools.json）
+	// 必须在 if 块外无条件执行：即使 MCP 配置为空，工具开关/审核配置也要生效。
 	agent.LoadWorkspaceToolConfig(reg, root)
-
-	reloadWebLuaTools(reg, root)
-		agent.RegisterMCPServers(reg, agentCfgs)
-	}
 
 	reloadWebLuaTools(reg, root)
 	agent.SetCodeGraphDB(agentMgr.RawDB())
