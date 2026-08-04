@@ -11,6 +11,9 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
 	"log"
 	"os"
 	"path/filepath"
@@ -73,6 +76,7 @@ func main() {
 
 	wv := webkit.NewWebView()
 	setupLoaders(wv, distDir)
+	wv.Resize(1280, 800)
 	_ = wv.JSInterpreter()
 
 	// ★ 与 cmd/desktop 完全相同的桥接初始化（真实 handler + fetch 拦截）。
@@ -192,6 +196,31 @@ func main() {
 	os.WriteFile(filepath.Join("dev", "desktop_probe", "real_tree_wb.json"), jsonOut, 0o644)
 	printTree(root, 0)
 	fmt.Printf("\n[real_probe] tree nodes=%d saved=real_tree_wb.json\n", countNodes(root))
+
+	// Render to PNG for pixel verification of the real IDE (context bar
+	// gradient stripes, rounded comp-bar, etc).
+	if pngBytes, err := wv.Render(); err != nil {
+		log.Printf("Render: %v", err)
+	} else {
+		w, h := wv.Width(), wv.Height()
+		img := image.NewRGBA(image.Rect(0, 0, w, h))
+		for y := 0; y < h; y++ {
+			for x := 0; x < w; x++ {
+				off := (y*w + x) * 4
+				if off+3 < len(pngBytes) {
+					img.SetRGBA(x, y, color.RGBA{R: pngBytes[off], G: pngBytes[off+1], B: pngBytes[off+2], A: pngBytes[off+3]})
+				}
+			}
+		}
+		out := filepath.Join("dev", "desktop_probe", "real_desktop.png")
+		f, err := os.Create(out)
+		if err == nil {
+			if err := png.Encode(f, img); err == nil {
+				fmt.Printf("[real_probe] rendered %dx%d → %s\n", w, h, out)
+			}
+			f.Close()
+		}
+	}
 
 	// ★ HitTest 探针：点击 ws-item 的文字/icon/空白区域，看命中差异（事件响应异常排查）
 	probeHitTest(rv)
