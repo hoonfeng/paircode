@@ -1803,8 +1803,18 @@ func (s *webServer) handleToolsSave(w http.ResponseWriter, r *http.Request) {
 	}
 	cfgPath := filepath.Join(root, ".pair", "tools.json")
 
-	// 构建配置对象
+	// ★ 读取现有配置并合并：只更新 Tools，保留 reviewMode/reviewBlacklist/reviewWhitelist，
+	//   避免保存工具开关时把审核配置覆盖丢失（此前新建 cfg 直接覆盖 → 审核配置不持久化）。
 	cfg := agent.WorkspaceToolConfig{Tools: map[string]agent.ToolConfigItem{}}
+	if data, err := os.ReadFile(cfgPath); err == nil {
+		var existing agent.WorkspaceToolConfig
+		if err := json.Unmarshal(data, &existing); err == nil {
+			cfg = existing
+		}
+	}
+	if cfg.Tools == nil {
+		cfg.Tools = make(map[string]agent.ToolConfigItem, len(req.Tools))
+	}
 	for name, enabled := range req.Tools {
 		e := enabled
 		cfg.Tools[name] = agent.ToolConfigItem{Enabled: &e}

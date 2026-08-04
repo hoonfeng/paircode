@@ -26,14 +26,19 @@ import (
 
 // ── 注册 ───────────────────────────────────────────────────
 
-// registerVisionTools 注册 image_analyze 和 image_ocr 工具。
+// registerVisionTools 注册 image_analyze、image_ocr 和 image_probe 工具。
 func registerVisionTools(r *Registry, root string) {
+	registerProbeTool(r, root) // image_probe：像素级精确扫描（见 vision_probe.go）
 	// ── image_analyze ──
 	r.Register(&Tool{
 		Name: "image_analyze",
-		UsageGuide: "分析图片中的颜色分布、色块区域和基本图形。用于理解 UI 截图、图表、图像内容。比肉眼更快（自动聚类颜色+区域检测）。",
+		UsageGuide: "分析图片中的颜色分布、色块区域和基本图形。用于理解 UI 截图、图表、图像内容。比肉眼更快（自动聚类颜色+区域检测）。" +
+			"⚠ 注意：颜色量化与区域检测是启发式算法，UI 细节（细边框、渐变、阴影、小图标）可能检测不准。" +
+			"定位 UI bug 时：色块坐标仅作参考，请结合截图人工核对，或针对具体坐标用像素级验证方式确认，不要仅凭分析结果断定布局错误。",
 		Description: "分析图片中的颜色分布、色块区域和基本图形。" +
 			"输入图片路径，返回按坐标块 (x1,y1)-(x2,y2) 描述的详细分析结果。" +
+			"⚠ 自动检测为启发式结果：细边框/渐变/阴影/小图标/抗锯齿边缘等细节可能检测不准，" +
+			"返回的色块坐标与图形分类仅供参考，不得作为 UI 布局正确性的决定性证据。" +
 			"支持 PNG / JPEG 格式。" +
 			"可用于分析 UI 界面布局、色块区域、颜色构成、图形检测等视觉分析任务。",
 		Parameters: objSchema(props{
@@ -65,9 +70,14 @@ func registerVisionTools(r *Registry, root string) {
 	// ── image_ocr ──
 	r.Register(&Tool{
 		Name: "image_ocr",
-		UsageGuide: "从图片中识别文字（OCR）。支持中英文混合识别。截图后识别界面上的文字内容用此工具。",
+		UsageGuide: "从图片中识别文字（OCR）。支持中英文混合识别。截图后识别界面上的文字内容用此工具。" +
+			"⚠ 注意：OCR 结果可能有误（尤其小字号/低对比度/深色主题），输出含每行置信度。" +
+			"识别 UI 文本时请重点看置信度高的行；关键信息如按钮文案、报错内容，若置信度低或不确定，" +
+			"应重新截图放大后再识别，或用其他方式交叉验证（如查看对应源码/HTML），不要直接采信低置信度结果。",
 		Description: "从图片中识别文字（OCR）。" +
-			"返回识别出的文字内容及其在图片中的坐标位置 (x1,y1)-(x2,y2)。" +
+			"返回识别出的文字内容、坐标位置 (x1,y1)-(x2,y2) 及置信度。" +
+			"⚠ 识别能力有限：小字号、低对比度、深色主题、抗锯齿文字等场景错误率较高，" +
+			"输出会标注每行置信度，置信度 <60 的结果仅供参考，不得作为确定性结论。" +
 			"支持项目内嵌的 Tesseract 便携版（无需安装），也支持系统已安装的 Tesseract。" +
 			"支持 PNG / JPEG 格式。" +
 			"可用 lang 参数指定语言，如 \"chi_sim+eng\"（中英文混合）、\"eng\"（仅英文）。",
@@ -282,6 +292,9 @@ func analyzeImage(path, detail string, maxColors int) (string, error) {
 	fmt.Fprintf(&b, "- 主要颜色数: %d\n", len(colors))
 	fmt.Fprintf(&b, "- 检测到色块: %d 个\n", len(blocks))
 	fmt.Fprintf(&b, "- 主色调: %s\n", dominantColorDesc(colors))
+	b.WriteString("\n> ⚠ 自动检测为启发式结果（颜色量化 + 连通域分析），细边框/渐变/阴影/小图标可能检测不准。\n")
+	b.WriteString("> 色块坐标与图形分类仅供参考；定位 UI bug 时请结合截图人工核对，或用像素级方式验证具体坐标，\n")
+	b.WriteString("> 不要仅凭本分析结果断定布局/颜色错误。\n")
 	if detail == "low" {
 		b.WriteString("\n> 提示：设置 detail=\"high\" 可查看详细的色块区域坐标和图形检测。\n")
 	}
@@ -890,11 +903,15 @@ func ocrImage(root, path, lang string, detail bool) (string, error) {
 	fmt.Fprintf(&b, "| 语言 | %s |\n", lang)
 	fmt.Fprintf(&b, "| 识别文字数 | %d |\n", len(texts))
 	b.WriteString("\n")
+	// ★ 可靠性提示：OCR 能力有限，置信度低的行不得作为确定性结论
+	b.WriteString("> ⚠ OCR 识别能力有限，小字号/低对比度/深色主题下错误率高。\n")
+	b.WriteString("> 置信度列 <60 的行标为「⚠ 低」，仅供参考——涉及关键信息（按钮文案/报错内容等）\n")
+	b.WriteString("> 若置信度低或与预期不符，请重新截图放大或改用其他方式交叉验证，不要直接采信。\n\n")
 
 	if detail {
-		b.WriteString("━━━ 文字详情（含坐标）━━━\n\n")
-		b.WriteString("| 序号 | 坐标块 | 文字内容 |\n")
-		b.WriteString("|------|--------|----------|\n")
+		b.WriteString("━━━ 文字详情（含坐标与置信度）━━━\n\n")
+		b.WriteString("| 序号 | 坐标块 | 置信度 | 文字内容 |\n")
+		b.WriteString("|------|--------|--------|----------|\n")
 		for i, t := range texts {
 			// 转义 | 避免表格错乱
 			content := strings.ReplaceAll(t.Text, "|", "｜")
@@ -902,8 +919,15 @@ func ocrImage(root, path, lang string, detail bool) (string, error) {
 			if len(content) > 60 {
 				content = content[:60] + "..."
 			}
-			fmt.Fprintf(&b, "| %d | `(%d,%d)-(%d,%d)` | %s |\n",
-				i+1, t.X1, t.Y1, t.X2, t.Y2, content)
+			conf := "—"
+			if t.Conf >= 0 {
+				conf = fmt.Sprintf("%d", t.Conf)
+				if t.Conf < 60 {
+					conf += " ⚠低"
+				}
+			}
+			fmt.Fprintf(&b, "| %d | `(%d,%d)-(%d,%d)` | %s | %s |\n",
+				i+1, t.X1, t.Y1, t.X2, t.Y2, conf, content)
 		}
 		b.WriteString("\n")
 	} else {
@@ -919,11 +943,29 @@ func ocrImage(root, path, lang string, detail bool) (string, error) {
 	// 汇总统计
 	b.WriteString("━━━ 统计 ━━━\n\n")
 	totalChars := 0
+	lowConf := 0
+	confSum := 0
+	confCount := 0
 	for _, t := range texts {
 		totalChars += len([]rune(t.Text))
+		if t.Conf >= 0 {
+			confSum += t.Conf
+			confCount++
+			if t.Conf < 60 {
+				lowConf++
+			}
+		}
 	}
 	fmt.Fprintf(&b, "- 文字块数: %d\n", len(texts))
 	fmt.Fprintf(&b, "- 总字符数: %d\n", totalChars)
+	if confCount > 0 {
+		avgConf := confSum / confCount
+		fmt.Fprintf(&b, "- 平均置信度: %d\n", avgConf)
+		fmt.Fprintf(&b, "- 低置信度行（<60）: %d / %d\n", lowConf, confCount)
+		if avgConf < 70 || lowConf > confCount/2 {
+			b.WriteString("- ⚠ 整体置信度偏低，识别结果不可靠——请重新截图（放大文字/提高对比度）后再识别。\n")
+		}
+	}
 
 	return b.String(), nil
 }

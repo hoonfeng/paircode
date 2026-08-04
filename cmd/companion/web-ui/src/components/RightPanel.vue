@@ -194,16 +194,17 @@
                       <span>工具开关</span>
                       <span class="rcp-header-hint">禁用后不暴露给 Agent（需重启对话生效）</span>
                     </div>
+                    <div class="rcp-search"><input v-model="tcSearchText" placeholder="搜索工具（名称/用途）..." class="rcp-search-input" /></div>
                     <div v-if="tcLoading" style="padding:20px;text-align:center;color:var(--text-secondary);font-size:12px;">加载中…</div>
                     <div v-else-if="tcSwitchList.length === 0" style="padding:12px;text-align:center;color:var(--text-secondary);font-size:12px;">加载失败，请重试</div>
                     <div v-else class="tcp-switch-list">
                       <div v-for="cat in tcGroupedList" :key="cat.category" class="tcp-switch-category">
                         <div class="tcp-cat-header" @click="toggleTcCategory(cat.category)">
-                          <SvgIcon :name="cat.expanded ? 'chevron-down' : 'chevron-right'" :size="10" />
+                          <SvgIcon :name="(cat.expanded || tcSearchText) ? 'chevron-down' : 'chevron-right'" :size="10" />
                           <span>{{ cat.category }}</span>
                           <span class="tcp-cat-count">{{ cat.tools.filter(t => t.enabled).length }}/{{ cat.tools.length }}</span>
                         </div>
-                        <div v-if="cat.expanded" class="tcp-cat-tools">
+                        <div v-if="cat.expanded || tcSearchText" class="tcp-cat-tools">
                           <div v-for="tool in cat.tools" :key="tool.name" class="tcp-switch-item">
                             <div class="tcp-switch-info">
                               <span class="tcp-switch-name">{{ tool.name }}</span>
@@ -226,16 +227,20 @@
                     <div class="rcp-header">
                       <span>审核配置</span>
                       <span class="rcp-header-hint">点击切换：<span class="rcp-tag-dot rcp-dot-none"></span>默认 → <span class="rcp-tag-dot rcp-dot-black"></span>黑名单 → <span class="rcp-tag-dot rcp-dot-white"></span>白名单</span>
+                      <span class="rcp-header-actions">
+                        <button class="rcp-btn-mini" @click="expandAllReviewCats(true)">全部展开</button>
+                        <button class="rcp-btn-mini" @click="expandAllReviewCats(false)">全部收起</button>
+                      </span>
                     </div>
                     <div class="rcp-search"><input v-model="reviewSearchText" placeholder="搜索工具..." class="rcp-search-input" /></div>
                     <div class="tcp-review-list">
                       <div v-for="cat in filteredReviewCategories" :key="cat.name" class="rcp-category">
-                        <div class="rcp-cat-header" @click="cat.expanded = !cat.expanded">
-                          <SvgIcon :name="cat.expanded ? 'chevron-down' : 'chevron-right'" :size="10" />
+                        <div class="rcp-cat-header" @click="toggleReviewCat(cat.name)">
+                          <SvgIcon :name="isReviewCatOpen(cat.name) ? 'chevron-down' : 'chevron-right'" :size="10" />
                           <span>{{ cat.label }}</span>
                           <span class="rcp-cat-count">{{ cat.tools.filter(t => getReviewToolState(t.name) !== 'none').length }}/{{ cat.tools.length }}</span>
                         </div>
-                        <div v-if="cat.expanded" class="rcp-cat-tools">
+                        <div v-if="isReviewCatOpen(cat.name) || reviewSearchText" class="rcp-cat-tools">
                           <div v-for="tool in cat.tools" :key="tool.name" :class="['rcp-tool-item', 'rcp-tool-' + getReviewToolState(tool.name)]" @click="cycleReviewTool(tool.name)">
                             <span class="rcp-tool-name">{{ tool.label }}</span>
                             <span class="rcp-tool-id">{{ tool.name }}</span>
@@ -308,6 +313,20 @@ const topSentinel = ref(null)
 const reviewMode = ref('auto')  // 'auto'=AI审核, 'manual'=人工审批, 'off'=全部放行
 const reviewSearchText = ref('')
 const reviewToolStates = ref({})
+// ★ 审核分类展开状态：独立响应式对象（此前内嵌在 computed 浅拷贝中，点击修改不触发更新 → 分类不可展开）。
+//   初始全部折叠；展开/收起通过 toggleReviewCat 修改此处，computed 只做过滤不拷贝状态。
+const reviewCatExpanded = reactive({})
+function toggleReviewCat(name) {
+  reviewCatExpanded[name] = !isReviewCatOpen(name)
+}
+function isReviewCatOpen(name) {
+  return reviewCatExpanded[name] !== false
+}
+function expandAllReviewCats(expand) {
+  for (const cat of reviewCategories.value) {
+    reviewCatExpanded[cat.name] = expand
+  }
+}
 const reviewBtnTitle = computed(() => {
   const m = reviewMode.value
   return m === 'auto' ? 'AI审核：Agent自行审批写操作' : m === 'manual' ? '手动审批：每次操作需用户确认' : '关闭审核：全部放行，不经过任何审核'
@@ -371,6 +390,7 @@ function resetReviewConfig() {
 // ─── 工具配置（合并：启用开关 + 审核黑白名单）───
 const toolConfigOpen = ref(false)
 const tcActiveTab = ref('switch')
+const tcSearchText = ref('')
 const tcLoading = ref(false)
 const tcSwitchList = ref([])
 const tcCategoryExpanded = ref({})
@@ -392,10 +412,16 @@ const tcGroupedList = computed(() => {
       catMap[tool.name] = cat.label
     }
   }
+  const q = tcSearchText.value.trim().toLowerCase()
   const map = {}
   for (const tool of tcSwitchList.value) {
     // 跳过系统内部工具
     if (tool.systemTool || systemToolNames.has(tool.name)) continue
+    // 搜索过滤：匹配工具名或用途指南（usageGuide）
+    if (q) {
+      const hay = (tool.name + ' ' + (tool.usageGuide || '') + ' ' + (tool.description || '')).toLowerCase()
+      if (!hay.includes(q)) continue
+    }
     const cat = tool.category || catMap[tool.name] || '未分类'
     if (!map[cat]) {
       map[cat] = { category: cat, tools: [], expanded: tcCategoryExpanded.value[cat] !== false }
@@ -571,7 +597,7 @@ const filteredReviewCategories = computed(() => {
   const q = reviewSearchText.value.trim().toLowerCase()
   if (!q) return filtered
   return filtered.map(cat => ({
-    ...cat, expanded: true,
+    ...cat,
     tools: cat.tools.filter(t => t.name.includes(q) || t.label.includes(q))
   })).filter(cat => cat.tools.length > 0)
 })
@@ -2039,6 +2065,14 @@ onUnmounted(() => {
 .rcp-dot-black { background: #e05555; }
 .rcp-dot-white { background: #5bbc7a; }
 .rcp-search { padding: 6px 12px; border-bottom: 1px solid var(--border-color); }
+.rcp-header { display: flex; align-items: center; gap: 6px; }
+.rcp-header-actions { margin-left: auto; display: flex; gap: 4px; }
+.rcp-btn-mini {
+  padding: 2px 7px; border: 1px solid var(--border-color); border-radius: 3px;
+  background: var(--bg-tertiary); color: var(--text-secondary);
+  font-size: 10px; cursor: pointer; white-space: nowrap; transition: all 0.12s;
+}
+.rcp-btn-mini:hover { border-color: var(--accent); color: var(--accent); background: var(--bg-hover); }
 .rcp-search-input {
   width: 100%; box-sizing: border-box; padding: 5px 8px;
   background: var(--input-bg); border: 1px solid var(--border-color);
