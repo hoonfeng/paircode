@@ -44,6 +44,7 @@ type AppSettings struct {
 	RequireApproval    bool   `json:"requireHumanApprovalForDestructive"`
 	AIReview           bool   `json:"aiReview"`
 	AutoCommit         bool   `json:"autoCommit"`
+	DiffusionThink     bool   `json:"diffusionThink"` // 模型扩散生成思想（实验特性，默认关）
 	LuaTools           bool   `json:"luaTools"`
 	Benchmark          bool   `json:"enableBenchmarking"`
 	SystemInstructions string `json:"systemInstructions"`

@@ -161,6 +161,13 @@ type Loop struct {
 
 	reviewer *Reviewer
 
+	// ── 模型扩散生成思想（Diffusion of Thought，实验特性，默认关闭）──
+	// DiffusionThink.Enabled=true 时，任务首轮 LLM 调用前执行「发散 N 候选 → 收敛单一计划」
+	// 的策略预演（见 diffusion_think.go），收敛计划注入首轮 callMsgs（冷缓存不破坏前缀）。
+	DiffusionThink DiffusionThinkOpts
+	// DiffuseStats 最近一次扩散思考的指标采集（实验对比用；未触发时为 nil）。
+	DiffuseStats *DiffuseStats
+
 	// contentOnlyIters 连续 content-only（无 tool_call）轮数计数器。
 	// contentOnlyIters 连续 content-only（无 tool_call）轮数计数器。
 	// 防止 Agent 只输出文字导致自我循环。
@@ -385,6 +392,23 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 
 		// ── THINK：LLM 决策（buildCallContext 合并 ephemeralMsgs，不被持久化）──
 		callMsgs := l.buildCallContext(msgs)
+
+		// ★ 模型扩散生成思想：任务首轮 LLM 调用前执行发散-收敛策略预演（见 diffusion_think.go）
+		// 仅 iter==0 触发：首轮是冷缓存（无 KV 前缀可命中），注入不损失缓存收益；
+		// 后续迭代保持前缀稳定。失败/解析异常自动退回原逻辑（不注入）。
+		if iter == 0 && l.DiffusionThink.Enabled {
+			if injected, stats := l.diffuseThink(ctx, task, callMsgs, tools); injected != nil {
+				callMsgs = injected
+				l.DiffuseStats = stats
+				if stats.Triggered {
+					l.emit(Event{Type: EventNotice, Content: fmt.Sprintf("🧠 扩散思考：%d 个候选方案 → 收敛出行动计划（发散 %d + 收敛 %d tokens，%.1fs）",
+						stats.Candidates, stats.DivergenceTokens, stats.ConvergenceTokens, float64(stats.DurationMs)/1000)})
+				} else {
+					l.emit(Event{Type: EventNotice, Content: "🧠 扩散思考未触发（发散/收敛失败，退回常规决策）"})
+				}
+			}
+		}
+
 		var stopReason string
 		assistant, err := l.Provider.Chat(ctx, callMsgs, tools, func(c Chunk) {
 			if c.StopReason != "" {
