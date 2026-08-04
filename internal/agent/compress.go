@@ -17,8 +17,13 @@ import (
 )
 
 const (
-	compactRatio         = 0.95 // 重度压缩触发阈值
-	compactRatioEarly    = 0.60 // 预压缩触发阈值：60% 时做轻度压缩，避免到 95% 急刹
+	compactRatio         = 0.90 // 重度压缩触发阈值：90% 时全量压缩（避免到 95% 急刹）
+	compactRatioEarly    = 0.45 // 预压缩触发阈值：45% 时做轻度压缩，让 Agent 更早感知早期上下文
+	// compactHardFloor 绝对硬地板：配置窗口超大（>此值）时，相对阈值形同虚设
+	// （如 contextMaxTokens=100 万 → 45% 需 45 万 token 才触发，对话几乎永不压缩，
+	//   导致历史全量注入、token 快速膨胀）。token 绝对量达到硬地板即强制全量压缩，
+	//   无论窗口多大都保证单次注入有上限。
+	compactHardFloor     = 120000
 	compactKeepRecent    = 16   // 恒留最近条数（复刻参考 keepCount=16）
 	compactKeepRecentEarly = 24 // 预压缩保留条数：比全量压缩更多，保持更多上下文
 	compactMinDrop       = 2    // 中段可丢条数下限：太少不值得压
@@ -55,6 +60,11 @@ func (l *Loop) maybeCompact(ctx context.Context, msgs []Message) []Message {
 	}
 	// ★ 两档压缩：60% 预压缩（轻）+ 95% 全量压缩（重）
 	tokenRatio := float64(tokens) / float64(l.MaxContextTokens)
+	// ★ 绝对硬地板兜底：超大窗口配置下相对阈值形同虚设，
+	//   token 绝对量达硬地板即强制走全量压缩分支，防止历史无限膨胀。
+	if l.MaxContextTokens > compactHardFloor && tokens >= compactHardFloor {
+		tokenRatio = compactRatio
+	}
 	if tokenRatio < compactRatioEarly {
 		return msgs // 未超任何阈值
 	}

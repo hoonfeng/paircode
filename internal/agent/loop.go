@@ -638,18 +638,49 @@ func hasSystem(msgs []Message) bool {
 	return false
 }
 
+// maxToolResultChars 单条工具结果注入 LLM 的最大字符数（rune）。
+// 超长结果（read_file 全文、run_command 大输出等）只保留首尾关键部分，
+// 大幅降低历史注入体积；原始内容仍完整持久化（msgs 不动，UI 展示无损）。
+const maxToolResultChars = 9000
+
 // buildCallContext 合并持久化消息和临时内部消息（ephemeralMsgs），
 // 返回完整的 LLM 调用上下文。调用后自动清空 ephemeralMsgs，
 // 确保内部消息不会被持久化。
+// ★ 同时生成「工具结果瘦身副本」：超长 RoleTool 内容只保留首尾（见 trimToolResult），
+//   不修改原始 msgs——持久化历史与 UI 展示仍为完整内容。
 func (l *Loop) buildCallContext(msgs []Message) []Message {
-	if len(l.ephemeralMsgs) == 0 {
-		return msgs
+	result := make([]Message, 0, len(msgs)+len(l.ephemeralMsgs))
+	for _, m := range msgs {
+		result = append(result, l.trimToolResult(m))
 	}
-	result := make([]Message, len(msgs)+len(l.ephemeralMsgs))
-	copy(result, msgs)
-	copy(result[len(msgs):], l.ephemeralMsgs)
+	result = append(result, l.ephemeralMsgs...)
 	l.ephemeralMsgs = nil // 清空，确保不会重复注入
 	return result
+}
+
+// trimToolResult 对超长工具结果生成 LLM 视图瘦身副本：保留开头 + 结尾关键部分，
+// 中间省略并附截断提示。同一消息每次瘦身结果相同 → 不影响缓存前缀稳定性。
+func (l *Loop) trimToolResult(m Message) Message {
+	if m.Role != RoleTool {
+		return m
+	}
+	content := strings.TrimSpace(m.Content)
+	runes := []rune(content)
+	if len(runes) <= maxToolResultChars {
+		return m
+	}
+	// 保留开头 60% + 结尾 30%（合计约 90% 阈值长度），中间省略
+	head := maxToolResultChars * 3 / 5
+	tail := maxToolResultChars * 3 / 10
+	if head+tail >= len(runes) {
+		head = len(runes) * 2 / 3
+		tail = len(runes) - head
+	}
+	trimmed := string(runes[:head]) +
+		"\n\n…[内容过长已截断：原始 " + fmt.Sprint(len(runes)) + " 字符，仅保留首尾；如需完整内容请用针对性工具/命令获取]…\n\n" +
+		string(runes[len(runes)-tail:])
+	m.Content = trimmed
+	return m
 }
 
 // buildInjectionMessage 构建注入历史消息中的背景上下文。

@@ -95,3 +95,155 @@ func TestCondenseHistoryNoCompress(t *testing.T) {
 		}
 	}
 }
+
+// TestCondenseHistorySemiCompress 验证倒数第 2 轮「半压缩」：
+// 用户消息 + 助手正文保留，工具调用子链合并为一行摘要（RoleTool 不保留），
+// 且消息配对完整（不产生孤立 tool_calls / 孤立 tool 结果）。
+func TestCondenseHistorySemiCompress(t *testing.T) {
+	// 5 轮：任务1/2/3 压缩，任务4 半压缩，任务5 完整，任务6 当前
+	msgs := []Message{
+		{Role: RoleSystem, Content: "sys"},
+		{Role: RoleUser, Content: "任务1"},
+		{Role: RoleAssistant, Content: "完成1"},
+		{Role: RoleUser, Content: "任务2"},
+		{Role: RoleAssistant, Content: "完成2"},
+		{Role: RoleUser, Content: "任务3"},
+		{Role: RoleAssistant, Content: "完成3"},
+		{Role: RoleUser, Content: "任务4"},
+		{Role: RoleAssistant, Content: "分析4", ToolCalls: []ToolCall{
+			{ID: "c4a", Function: FunctionCall{Name: "read_file", Arguments: `{"path":"a.go"}`}},
+			{ID: "c4b", Function: FunctionCall{Name: "run_command", Arguments: `{"command":"go build"}`}},
+		}},
+		{Role: RoleTool, ToolCallID: "c4a", Name: "read_file", Content: "r4a 内容很长"},
+		{Role: RoleTool, ToolCallID: "c4b", Name: "run_command", Content: "r4b"},
+		{Role: RoleAssistant, Content: "完成4"},
+		{Role: RoleUser, Content: "任务5"},
+		{Role: RoleAssistant, Content: "完成5"},
+		{Role: RoleUser, Content: "任务6"},
+	}
+
+	out := CondenseHistory(msgs)
+
+	// 1. 半压缩轮：用户消息 "任务4" 保留
+	found := false
+	for _, m := range out {
+		if m.Role == RoleUser && strings.Contains(m.Content, "任务4") && !strings.Contains(m.Content, "历史对话摘要") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("半压缩轮的用户消息（任务4）应保留")
+	}
+
+	// 2. 工具调用子链合并：助手正文 + 工具摘要行存在
+	foundToolSummary := false
+	for _, m := range out {
+		if m.Role == RoleAssistant && strings.Contains(m.Content, "分析4") && strings.Contains(m.Content, "read_file") && strings.Contains(m.Content, "run_command") {
+			foundToolSummary = true
+		}
+	}
+	if !foundToolSummary {
+		t.Error("半压缩轮应保留助手正文并合并工具调用摘要")
+	}
+
+	// 3. 工具结果不保留（半压缩轮的 RoleTool 消失）
+	for _, m := range out {
+		if m.Role == RoleTool && strings.Contains(m.Content, "r4a") {
+			t.Error("半压缩轮的工具结果不应保留")
+		}
+	}
+
+	// 4. 消息配对完整：不存在带 ToolCalls 的 assistant 后无对应 tool 结果（孤立）
+	//    半压缩后 tool_calls 已移除，无需额外校验孤立 tool 结果——上一条已覆盖。
+	//    但完整保留轮（任务5）仍应有完整配对。
+	completeRoundOK := false
+	for i := 0; i < len(out); i++ {
+		if out[i].Role == RoleUser && strings.Contains(out[i].Content, "任务5") {
+			completeRoundOK = true // 任务5 的原始消息存在
+		}
+	}
+	if !completeRoundOK {
+		t.Error("最近一轮完整交互（任务5）应保留")
+	}
+
+	// 5. 摘要中不含半压缩轮（任务4 不进入压缩摘要）
+	for _, m := range out {
+		if m.Role == RoleUser && strings.Contains(m.Content, "历史对话摘要") {
+			if strings.Contains(m.Content, "任务4") {
+				t.Error("半压缩轮不应进入压缩摘要")
+			}
+		}
+	}
+}
+
+// TestCondenseHistoryNoNestedSummary 验证摘要防嵌套：
+// 输入已含【历史对话摘要】消息时，新摘要以「前序摘要」合并旧摘要（截断），
+// 不把旧摘要当普通轮次递归压缩、不无限膨胀。
+func TestCondenseHistoryNoNestedSummary(t *testing.T) {
+	oldSummary := "【历史对话摘要】\n**轮次 1**：用户「旧目标」→ 使用了 read_file → 完成"
+	msgs := []Message{
+		{Role: RoleSystem, Content: "sys"},
+		{Role: RoleUser, Content: oldSummary}, // 上一轮压缩产生的摘要消息
+		{Role: RoleUser, Content: "任务1"},
+		{Role: RoleAssistant, Content: "完成1"},
+		{Role: RoleUser, Content: "任务2"},
+		{Role: RoleAssistant, Content: "完成2"},
+		{Role: RoleUser, Content: "任务3"},
+		{Role: RoleAssistant, Content: "完成3"},
+		{Role: RoleUser, Content: "任务4"},
+		{Role: RoleAssistant, Content: "完成4"},
+		{Role: RoleUser, Content: "任务5"},
+		{Role: RoleAssistant, Content: "完成5"},
+		{Role: RoleUser, Content: "任务6"},
+	}
+
+	out := CondenseHistory(msgs)
+
+	var summaryText string
+	for _, m := range out {
+		if m.Role == RoleUser && strings.Contains(m.Content, "历史对话摘要") {
+			summaryText = m.Content
+		}
+	}
+	if summaryText == "" {
+		t.Fatal("输出应包含摘要消息")
+	}
+	// 旧摘要内容（旧目标）保留在合并后的摘要中
+	if !strings.Contains(summaryText, "旧目标") {
+		t.Error("旧摘要内容应合并进新摘要（前序摘要）")
+	}
+	// 摘要不应把旧摘要当普通轮次重复包装（如出现"轮次 1"且其内容只是旧摘要文本）
+	if strings.Count(summaryText, "**轮次") > 4 {
+		t.Error("摘要不应递归压缩旧摘要导致轮次条目膨胀")
+	}
+	// 总量不超过上限
+	if len([]rune(summaryText)) > maxCondensedChars+50 {
+		t.Errorf("摘要超过总量上限：%d > %d", len([]rune(summaryText)), maxCondensedChars+50)
+	}
+}
+
+// TestCondenseHistorySummaryLimit 验证摘要总量上限：轮次极多时摘要不无限膨胀。
+func TestCondenseHistorySummaryLimit(t *testing.T) {
+	var msgs []Message
+	msgs = append(msgs, Message{Role: RoleSystem, Content: "sys"})
+	// 12 轮历史 + 当前消息（keepFullRounds=2 → 压缩 10 轮）
+	for i := 1; i <= 13; i++ {
+		msgs = append(msgs, Message{Role: RoleUser, Content: "任务" + strings.Repeat("内容", 50)})
+		msgs = append(msgs, Message{Role: RoleAssistant, Content: "完成" + strings.Repeat("详细结果", 30)})
+	}
+
+	out := CondenseHistory(msgs)
+	var summaryText string
+	for _, m := range out {
+		if m.Role == RoleUser && strings.Contains(m.Content, "历史对话摘要") {
+			summaryText = m.Content
+		}
+	}
+	if summaryText == "" {
+		t.Fatal("输出应包含摘要消息")
+	}
+	if len([]rune(summaryText)) > maxCondensedChars+100 {
+		t.Errorf("摘要超过总量上限：%d > %d", len([]rune(summaryText)), maxCondensedChars+100)
+	}
+}
+

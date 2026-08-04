@@ -176,6 +176,41 @@ func TestMaybeCompactTrigger(t *testing.T) {
 	}
 }
 
+// TestMaybeCompactHardFloor 超大窗口配置（100 万 token）下相对阈值形同虚设：
+// token 绝对量达到 compactHardFloor 时强制全量压缩。
+func TestMaybeCompactHardFloor(t *testing.T) {
+	// 构造约 13 万 token 的对话（超过 compactHardFloor=120000）
+	msgs := []Message{
+		{Role: RoleSystem, Content: "你是助手。"},
+		{Role: RoleUser, Content: "任务"},
+	}
+	for i := 0; i < 60; i++ {
+		id := "c" + strconv.Itoa(i)
+		msgs = append(msgs,
+			Message{Role: RoleAssistant, Content: strings.Repeat("分析", 100),
+				ToolCalls: []ToolCall{{ID: id, Function: FunctionCall{Name: "read_file", Arguments: `{"path":"a.go"}`}}}},
+			Message{Role: RoleTool, ToolCallID: id, Name: "read_file", Content: strings.Repeat("文件内容", 500)},
+		)
+	}
+	// 估算应超过硬地板
+	if got := estimateTokens(msgs); got < compactHardFloor {
+		t.Fatalf("测试数据应超硬地板：%d < %d", got, compactHardFloor)
+	}
+
+	// 超大窗口：相对阈值永不触发，但硬地板应强制压缩
+	l := &Loop{MaxContextTokens: 1000000}
+	out := l.maybeCompact(context.Background(), msgs)
+	if len(out) >= len(msgs) {
+		t.Error("超大窗口 + 超硬地板应压缩")
+	}
+	if len(l.CompressedSummaries) == 0 {
+		t.Error("压缩后应生成摘要")
+	}
+	if l.compactCooldown <= 0 {
+		t.Error("压缩后应进入冷却")
+	}
+}
+
 // TestLoopRunCompacts 端到端：低窗口 + 多轮工具循环 → loop 跑通且至少压缩一次。
 func TestLoopRunCompacts(t *testing.T) {
 	reg := NewRegistry()
@@ -214,5 +249,75 @@ func TestLoopRunCompacts(t *testing.T) {
 	}
 	if done == 0 {
 		t.Error("loop 应正常完成（EventDone）")
+	}
+}
+
+// TestTrimToolResult 工具结果瘦身：超长 RoleTool 内容只保留首尾，原始 msgs 不动。
+func TestTrimToolResult(t *testing.T) {
+	l := &Loop{}
+
+	// 1. 短内容不截断
+	short := Message{Role: RoleTool, ToolCallID: "c1", Name: "read_file", Content: "短结果"}
+	if got := l.trimToolResult(short); got.Content != "短结果" {
+		t.Errorf("短内容不应截断：%q", got.Content)
+	}
+
+	// 2. 超长内容截断：保留开头与结尾，中间省略标记
+	longContent := strings.Repeat("甲", 4000) + "中间关键内容" + strings.Repeat("乙", 4000) // 8004 rune > 9000? 不够
+	longContent = strings.Repeat("甲", 6000) + "中间关键内容" + strings.Repeat("乙", 6000)   // 12005 rune
+	long := Message{Role: RoleTool, ToolCallID: "c2", Name: "run_command", Content: longContent}
+	got := l.trimToolResult(long)
+	if len([]rune(got.Content)) >= len([]rune(longContent)) {
+		t.Errorf("超长内容应被截断：%d → %d", len([]rune(longContent)), len([]rune(got.Content)))
+	}
+	if !strings.Contains(got.Content, "已截断") {
+		t.Error("截断应含提示标记")
+	}
+	if !strings.Contains(got.Content, "甲") || !strings.Contains(got.Content, "乙") {
+		t.Error("截断应保留开头与结尾关键内容")
+	}
+	// 3. 非 tool 消息（user/assistant/system）不处理
+	for _, m := range []Message{
+		{Role: RoleUser, Content: longContent},
+		{Role: RoleAssistant, Content: longContent},
+		{Role: RoleSystem, Content: longContent},
+	} {
+		if got := l.trimToolResult(m); got.Content != longContent {
+			t.Error("非 tool 消息不应被截断")
+		}
+	}
+}
+
+// TestBuildCallContextTrimTool 验证 buildCallContext 生成瘦身副本且不改原始 msgs
+// （持久化历史与 UI 展示无损）。
+func TestBuildCallContextTrimTool(t *testing.T) {
+	l := &Loop{}
+	longContent := strings.Repeat("数据", 5000) // 15000 rune
+	msgs := []Message{
+		{Role: RoleSystem, Content: "sys"},
+		{Role: RoleUser, Content: "任务"},
+		{Role: RoleTool, ToolCallID: "c1", Name: "read_file", Content: longContent},
+	}
+	l.ephemeralMsgs = []Message{{Role: RoleUser, Content: "【背景】早期摘要"}}
+
+	out := l.buildCallContext(msgs)
+	if len(out) != len(msgs)+1 {
+		t.Fatalf("输出应含 ephemeral：%d", len(out))
+	}
+	// 原始 msgs 不被修改（持久化/UI 无损）
+	if msgs[2].Content != longContent {
+		t.Error("原始 msgs 的工具结果不应被修改")
+	}
+	// LLM 视图为瘦身副本
+	if out[2].Content == longContent || len([]rune(out[2].Content)) >= len([]rune(longContent)) {
+		t.Error("LLM 视图应使用瘦身副本")
+	}
+	// ephemeral 消息（摘要）保留且不截断
+	if out[3].Content != "【背景】早期摘要" {
+		t.Error("ephemeral 摘要消息应原样保留")
+	}
+	// 调用后 ephemeralMsgs 清空
+	if len(l.ephemeralMsgs) != 0 {
+		t.Error("buildCallContext 应清空 ephemeralMsgs")
 	}
 }

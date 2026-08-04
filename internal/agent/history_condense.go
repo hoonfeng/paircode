@@ -7,21 +7,35 @@ import (
 
 // history_condense.go — 历史消息精简：跨轮次加载时将旧轮次压缩为结构化摘要。
 //
-// 设计原则（v2）：
-//   - 最近 2 轮完整保留（保留完整工具调用链，Agent 需要知道最近干了什么）
+// 设计原则（v3）：
+//   - 最近 1 轮完整保留（保留完整工具调用链，Agent 需要知道最近干了什么）
+//   - 倒数第 2 轮「半压缩」：用户消息 + 助手正文保留，工具调用子链合并为一行摘要
+//     （工具输出是体积大头，半压缩后该轮体积骤降，但语义连续性不丢）
 //   - 更早的轮次压缩为结构化摘要：用户请求 + 使用的工具 + 最终结果
 //   - 摘要保留工具名和执行摘要，Agent 据此知道"之前用了哪些工具、做了什么操作"
 //   - 不再丢弃 tool_call/tool_result 信息（v1 最大的问题）
+//   - 防摘要嵌套：已存在的【历史对话摘要】消息整体并入新摘要（截断），不再被当普通轮次递归压缩
+//   - 摘要总量上限：防止对话无限拉长后摘要本身膨胀
 
-// keepFullRounds 最近保留完整交互的轮次数。
-// 提高该值可减少压缩触发频率（压缩会牺牲跨轮次 KV 缓存前缀，频率越低命中率越高）。
-const keepFullRounds = 3
+const (
+	// keepFullRounds 最近完整保留的轮次数（完整工具调用链）。
+	keepFullRounds = 1
+	// keepSemiRounds 倒数第 2 层半压缩的轮次数（工具调用子链合并为一行摘要）。
+	keepSemiRounds = 1
+	// maxCondensedChars 压缩摘要总量上限（rune）。
+	// 超过后停止追加新轮次条目，保证摘要本身不膨胀。
+	maxCondensedChars = 1500
+	// oldSummaryMaxChars 已存在的旧摘要合并进新摘要时的截断上限。
+	// 旧摘要本身可能已接近上限，合并时优先保留新轮次内容（旧摘要只截断保留开头）。
+	oldSummaryMaxChars = 600
+)
 
-// CondenseHistory 将已完成的旧轮次压缩，保留最近 keepFullRounds 轮完整交互。
+// CondenseHistory 将已完成的旧轮次压缩：最近 1 轮完整保留、倒数第 2 轮半压缩、
+// 更早轮次压缩为结构化摘要。
 //
 // 输出结构：
 //
-//	[system(如有)] + [最近N轮完整交互] + [压缩摘要 user msg] + [当前用户消息]
+//	[system(如有)] + [半压缩轮] + [最近1轮完整交互] + [压缩摘要 user msg] + [当前用户消息]
 //
 // 压缩摘要格式：
 //
@@ -33,7 +47,7 @@ const keepFullRounds = 3
 // 压缩（删除/替换中段消息）必然导致消息数组位置错位，跨轮次首请求的缓存前缀
 // 会从被压缩位置断裂（这是压缩与 KV 前缀的根本矛盾）。为尽量缓解：
 //  1. 摘要作为回顾性 user 消息放在最近轮次之后、当前用户消息之前（不占位置 2）；
-//  2. keepFullRounds 提高至 3，降低压缩触发频率。
+//  2. 完整保留轮控制在 1 轮 + 半压缩 1 轮，降低保留体积的同时不让压缩频率失控。
 func CondenseHistory(msgs []Message) []Message {
 	if len(msgs) < 4 {
 		return msgs
@@ -46,21 +60,55 @@ func CondenseHistory(msgs []Message) []Message {
 			userIdx = append(userIdx, i)
 		}
 	}
-	totalRounds := len(userIdx)
-	if totalRounds <= keepFullRounds {
-		return msgs // 轮次不足，无需精简
+	totalRounds := len(userIdx) // 含最后一条 user 消息（当前任务）
+	keepRounds := keepFullRounds + keepSemiRounds
+	if totalRounds-1 <= keepRounds {
+		return msgs // 历史轮次不足（保留轮 + 当前消息），无需精简
 	}
 
-	// 需要压缩的轮次：从第 0 轮到第 (totalRounds - keepFullRounds - 1) 轮
-	compressEnd := totalRounds - keepFullRounds
-	lastCompressUserPos := userIdx[compressEnd] // 最后一个需要压缩轮次的 user 消息位置
+	// 分层边界（最后一条 user = 当前消息，不参与压缩/保留轮）：
+	//   摘要轮 = userIdx[0 .. compressEnd)
+	//   半压缩轮 = userIdx[compressEnd]（倒数第 2 层）
+	//   完整轮 = userIdx[compressEnd+keepSemiRounds]（最近 1 轮）
+	//   当前消息 = userIdx[totalRounds-1]
+	compressEnd := totalRounds - keepRounds - 1
+	semiStart := userIdx[compressEnd]
+	fullStart := userIdx[compressEnd+keepSemiRounds]
+	lastUserIdx := userIdx[totalRounds-1]
 
-	// 构建压缩摘要
+	// 构建压缩摘要（只含摘要轮，不含半压缩/完整轮）
+	summary := buildCondensedSummary(msgs, userIdx, compressEnd)
+
+	// 构建结果：system 前缀 + 半压缩轮 + 最近 1 轮完整原始消息 + 压缩摘要（回顾） + 当前用户消息
+	out := make([]Message, 0, len(userIdx)+2)
+	// 保留 system 消息（如有）
+	out = append(out, msgs[:userIdx[0]]...)
+	// 半压缩轮：工具调用子链合并为一行摘要，其余保留
+	if keepSemiRounds > 0 && semiStart < fullStart {
+		out = append(out, condenseRoundSemi(msgs, semiStart, fullStart)...)
+	}
+	// 最近 1 轮完整交互（原始消息，保持位置对齐）
+	if fullStart < lastUserIdx {
+		out = append(out, msgs[fullStart:lastUserIdx]...)
+	}
+	// 压缩摘要：回顾性 user 消息，位于当前用户消息之前
+	out = append(out, Message{Role: RoleUser, Content: summary})
+	// 当前用户消息（及之后，如有）
+	out = append(out, msgs[lastUserIdx:]...)
+
+	return out
+}
+
+// buildCondensedSummary 构建压缩摘要文本（仅含 [0, compressEnd) 的轮次）。
+// 旧摘要消息（以【历史对话摘要】开头）整体并入（截断），不当作普通轮次递归压缩；
+// 其余轮次逐条构建，受 maxCondensedChars 总量上限约束。
+func buildCondensedSummary(msgs []Message, userIdx []int, compressEnd int) string {
 	var summary strings.Builder
 	summary.WriteString("【历史对话摘要】\n")
-	summary.WriteString("> 以下为更早轮次的摘要（最近 " + fmt.Sprint(keepFullRounds) + " 轮完整保留在下方）。\n")
+	summary.WriteString("> 以下为更早轮次的摘要（最近 " + fmt.Sprint(keepFullRounds+keepSemiRounds) + " 轮完整/半完整保留在下方）。\n")
 	summary.WriteString("> Agent 应据此了解之前的操作，避免重复工作。\n\n")
 
+	chars := 0
 	for t := 0; t < compressEnd; t++ {
 		start := userIdx[t]
 		end := len(msgs) // 默认到末尾
@@ -68,7 +116,6 @@ func CondenseHistory(msgs []Message) []Message {
 			end = userIdx[t+1]
 		}
 
-		roundNum := t + 1
 		userText := ""
 		var tools []string
 		var toolResults []string
@@ -99,53 +146,93 @@ func CondenseHistory(msgs []Message) []Message {
 			}
 		}
 
+		// ★ 防摘要嵌套：旧摘要消息不当作普通轮次，整体并入（截断）
+		if strings.HasPrefix(userText, "【历史对话摘要】") {
+			if chars < maxCondensedChars {
+				old := truncateRunes(userText, oldSummaryMaxChars)
+				summary.WriteString("**前序摘要**：" + old + "\n\n")
+				chars += len([]rune(old)) + 16
+			}
+			continue
+		}
+
 		// 构建本轮摘要
-		summary.WriteString(fmt.Sprintf("**轮次 %d**：", roundNum))
+		var round strings.Builder
+		round.WriteString(fmt.Sprintf("**轮次 %d**：", t+1))
 		if userText != "" {
-			summary.WriteString(fmt.Sprintf(" 用户「%s」", truncateRunes(userText, 150)))
+			round.WriteString(fmt.Sprintf(" 用户「%s」", truncateRunes(userText, 150)))
 		}
 
 		if len(tools) > 0 {
 			// 去重工具名
 			seen := make(map[string]bool)
 			var uniqueTools []string
-			for _, t := range tools {
-				if !seen[t] {
-					seen[t] = true
-					uniqueTools = append(uniqueTools, t)
+			for _, name := range tools {
+				if !seen[name] {
+					seen[name] = true
+					uniqueTools = append(uniqueTools, name)
 				}
 			}
-			summary.WriteString(fmt.Sprintf(" → 使用了 %s", strings.Join(uniqueTools, ", ")))
+			round.WriteString(fmt.Sprintf(" → 使用了 %s", strings.Join(uniqueTools, ", ")))
 		}
 
+		// 工具结果只保留最多 2 条，避免摘要膨胀
+		if len(toolResults) > 2 {
+			toolResults = toolResults[:2]
+		}
 		if len(toolResults) > 0 {
-			summary.WriteString("（" + strings.Join(toolResults, "；") + "）")
+			round.WriteString("（" + strings.Join(toolResults, "；") + "）")
 		}
 
 		if assistantFinal != "" {
 			final := truncateRunes(assistantFinal, 200)
-			summary.WriteString(fmt.Sprintf(" → %s", final))
+			round.WriteString(fmt.Sprintf(" → %s", final))
 		}
 
-		summary.WriteString("\n")
+		round.WriteString("\n")
+		roundText := round.String()
+		if chars+len([]rune(roundText)) > maxCondensedChars {
+			break // 摘要已到上限，不再追加
+		}
+		summary.WriteString(roundText)
+		chars += len([]rune(roundText))
 	}
+	return summary.String()
+}
 
-	// 构建结果：system 前缀 + 最近 keepFullRounds 轮完整原始消息 + 压缩摘要（回顾） + 当前用户消息
-	// ★ 摘要放在最近轮次之后、当前用户消息之前：不挤占消息数组位置 2，
-	//   且语义连贯（先看最近交互，再看历史回顾，最后是当前任务）。
-	out := make([]Message, 0, len(userIdx)+2)
-	// 保留 system 消息（如有）
-	out = append(out, msgs[:userIdx[0]]...)
-	// 保留最近 keepFullRounds 轮完整交互（原始消息，保持位置对齐）
-	lastUserIdx := userIdx[len(userIdx)-1] // 最后一个 user 消息 = 当前任务
-	if lastCompressUserPos < lastUserIdx {
-		out = append(out, msgs[lastCompressUserPos:lastUserIdx]...)
+// condenseRoundSemi 半压缩一轮：保留用户消息与助手正文，
+// 把「助手 tool_calls + 对应 tool 结果」子链整体合并为一行摘要。
+// ★ 子链整体替换（而非删除 tool 结果保留 tool_calls）——保证消息配对完整，
+//   不会产生孤立 tool 结果 / 未配对 tool_calls（OpenAI 规范要求）。
+func condenseRoundSemi(msgs []Message, start, end int) []Message {
+	out := make([]Message, 0, end-start)
+	i := start
+	for i < end {
+		m := msgs[i]
+		if m.Role == RoleAssistant && len(m.ToolCalls) > 0 {
+			// 工具调用子链：收集工具名，并找到其后连续的 tool 结果（配对）
+			toolNames := make([]string, 0, len(m.ToolCalls))
+			for _, tc := range m.ToolCalls {
+				toolNames = append(toolNames, tc.Function.Name)
+			}
+			j := i + 1
+			for j < end && msgs[j].Role == RoleTool {
+				j++
+			}
+			toolSummary := "（工具调用 " + strings.Join(toolNames, ", ") + "）"
+			content := strings.TrimSpace(m.Content)
+			if content == "" {
+				content = toolSummary
+			} else {
+				content = truncateRunes(content, 500) + "\n" + toolSummary
+			}
+			out = append(out, Message{Role: RoleAssistant, Content: content})
+			i = j
+			continue
+		}
+		out = append(out, m)
+		i++
 	}
-	// 压缩摘要：回顾性 user 消息，位于当前用户消息之前
-	out = append(out, Message{Role: RoleUser, Content: summary.String()})
-	// 当前用户消息（及之后，如有）
-	out = append(out, msgs[lastUserIdx:]...)
-
 	return out
 }
 
