@@ -252,6 +252,10 @@ func HandleConversationByID(w http.ResponseWriter, r *http.Request) {
 	if len(parts) >= 2 {
 		sub = parts[1]
 	}
+	if AgentMgr == nil {
+		jsonErr(w, "会话管理器未初始化")
+		return
+	}
 	store := AgentMgr.Store()
 	if store == nil {
 		jsonErr(w, "消息存储未初始化")
@@ -292,6 +296,37 @@ func HandleConversationByID(w http.ResponseWriter, r *http.Request) {
 			}
 			msgs = agent.MergeConsecutiveAssistants(msgs)
 			jsonResp(w, map[string]any{"messages": msgs, "total": total})
+		case "token-stats":
+			meta, err := store.GetConversation(id)
+			if err != nil {
+				jsonErr(w, err.Error())
+				return
+			}
+			if meta == nil || meta.CtxStats == nil {
+				jsonResp(w, map[string]any{
+					"promptTokens": 0, "completionTokens": 0, "totalTokens": 0,
+					"cacheHitTokens": 0, "cacheMissTokens": 0,
+				})
+				return
+			}
+			cs := meta.CtxStats
+			m := map[string]any{
+				"promptTokens":     cs.PromptTokens,
+				"completionTokens": cs.CompletionTokens,
+				"totalTokens":      cs.TotalTokens,
+				"cacheHitTokens":   cs.PromptCacheHitTokens,
+				"cacheMissTokens":  cs.PromptCacheMissTokens,
+			}
+			if cs.PromptBreakdown.SystemTokens > 0 || cs.PromptBreakdown.SkillsTokens > 0 ||
+				cs.PromptBreakdown.MCPTokens > 0 || cs.PromptBreakdown.ToolTokens > 0 {
+				m["systemTokens"] = cs.SystemTokens
+				m["skillsTokens"] = cs.SkillsTokens
+				m["mcpTokens"] = cs.MCPTokens
+				m["toolTokens"] = cs.ToolTokens
+				m["historyTokens"] = cs.HistoryTokens
+				m["otherTokens"] = cs.OtherTokens
+			}
+			jsonResp(w, m)
 		default:
 			meta, err := store.GetConversation(id)
 			if err != nil {
@@ -326,7 +361,9 @@ func HandleConversationByID(w http.ResponseWriter, r *http.Request) {
 			jsonResp(w, resp)
 		}
 	case "PUT":
-		var req struct{ Title string `json:"title"` }
+		var req struct {
+			Title string `json:"title"`
+		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			jsonErr(w, err.Error())
 			return
@@ -430,31 +467,77 @@ func HandleModels(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func HandleInstructions(w http.ResponseWriter, r *http.Request)      { jsonResp(w, "") }
-func HandleInstructionsPut(w http.ResponseWriter, r *http.Request)   { jsonResp(w, map[string]string{"status": "ok"}) }
-func HandlePhilosophy(w http.ResponseWriter, r *http.Request)        { jsonResp(w, "") }
-func HandlePhilosophyPut(w http.ResponseWriter, r *http.Request)     { jsonResp(w, map[string]string{"status": "ok"}) }
+func HandleInstructions(w http.ResponseWriter, r *http.Request) { jsonResp(w, "") }
+func HandleInstructionsPut(w http.ResponseWriter, r *http.Request) {
+	jsonResp(w, map[string]string{"status": "ok"})
+}
+func HandlePhilosophy(w http.ResponseWriter, r *http.Request) { jsonResp(w, "") }
+func HandlePhilosophyPut(w http.ResponseWriter, r *http.Request) {
+	jsonResp(w, map[string]string{"status": "ok"})
+}
 
 // ─── MCP / Skills ────────────────────────────────────────
 
-func HandleMCPList(w http.ResponseWriter, r *http.Request)   { jsonResp(w, []string{}) }
-func HandleMCPSave(w http.ResponseWriter, r *http.Request)   { jsonResp(w, map[string]string{"status": "ok"}) }
-func HandleSkillsList(w http.ResponseWriter, r *http.Request)   { jsonResp(w, []string{}) }
-func HandleSkillsRead(w http.ResponseWriter, r *http.Request)   { jsonResp(w, "") }
-func HandleSkillsSave(w http.ResponseWriter, r *http.Request)   { jsonResp(w, map[string]string{"status": "ok"}) }
-func HandleSkillsDelete(w http.ResponseWriter, r *http.Request) { jsonResp(w, map[string]string{"status": "ok"}) }
+func HandleMCPList(w http.ResponseWriter, r *http.Request) { jsonResp(w, []string{}) }
+func HandleMCPSave(w http.ResponseWriter, r *http.Request) {
+	jsonResp(w, map[string]string{"status": "ok"})
+}
+func HandleSkillsList(w http.ResponseWriter, r *http.Request) { jsonResp(w, []string{}) }
+func HandleSkillsRead(w http.ResponseWriter, r *http.Request) { jsonResp(w, "") }
+func HandleSkillsSave(w http.ResponseWriter, r *http.Request) {
+	jsonResp(w, map[string]string{"status": "ok"})
+}
+func HandleSkillsDelete(w http.ResponseWriter, r *http.Request) {
+	jsonResp(w, map[string]string{"status": "ok"})
+}
 
 // ─── Token / Debug ───────────────────────────────────────
 
-func HandleTokensStats(w http.ResponseWriter, r *http.Request)  { jsonResp(w, map[string]any{}) }
+// HandleTokensStats 返回工作区级 token 统计（agent 自闭环持久化数据，
+// 与 web 端 web_server.go handleTokensStats 同源：.pair/token-stats.json）。
+func HandleTokensStats(w http.ResponseWriter, r *http.Request) {
+	wsRoot := r.URL.Query().Get("workspaceRoot")
+	if wsRoot == "" {
+		wsRoot = core.Root()
+	}
+	stats := agent.ReadTokenStatsForRoot(wsRoot)
+	if stats == nil {
+		jsonResp(w, map[string]any{
+			"promptTokens": 0, "completionTokens": 0, "totalTokens": 0,
+			"cacheHitTokens": 0, "cacheMissTokens": 0,
+			"systemTokens": 0, "skillsTokens": 0, "mcpTokens": 0,
+			"toolTokens": 0, "historyTokens": 0, "otherTokens": 0,
+		})
+		return
+	}
+	jsonResp(w, map[string]any{
+		"promptTokens":     stats.PromptTokens,
+		"completionTokens": stats.CompletionTokens,
+		"totalTokens":      stats.TotalTokens,
+		"cacheHitTokens":   stats.CacheHitTokens,
+		"cacheMissTokens":  stats.CacheMissTokens,
+		"systemTokens":     stats.SystemTokens,
+		"skillsTokens":     stats.SkillsTokens,
+		"mcpTokens":        stats.MCPTokens,
+		"toolTokens":       stats.ToolTokens,
+		"historyTokens":    stats.HistoryTokens,
+		"otherTokens":      stats.OtherTokens,
+	})
+}
 func HandleDebugLogs(w http.ResponseWriter, r *http.Request)    { jsonResp(w, []string{}) }
 func HandleDebugLogByID(w http.ResponseWriter, r *http.Request) { jsonResp(w, "") }
 
 // ─── 市场 / 记忆 ─────────────────────────────────────────
 
-func HandleMarketplaceSearch(w http.ResponseWriter, r *http.Request)  { jsonResp(w, []string{}) }
-func HandleMarketplaceInstall(w http.ResponseWriter, r *http.Request) { jsonResp(w, map[string]string{"status": "ok"}) }
-func HandleMarketplaceRefresh(w http.ResponseWriter, r *http.Request) { jsonResp(w, map[string]string{"status": "ok"}) }
-func HandleMemorySearch(w http.ResponseWriter, r *http.Request)  { jsonResp(w, []string{}) }
-func HandleMemoryList(w http.ResponseWriter, r *http.Request)    { jsonResp(w, []string{}) }
-func HandleMemoryRebuild(w http.ResponseWriter, r *http.Request) { jsonResp(w, map[string]string{"status": "ok"}) }
+func HandleMarketplaceSearch(w http.ResponseWriter, r *http.Request) { jsonResp(w, []string{}) }
+func HandleMarketplaceInstall(w http.ResponseWriter, r *http.Request) {
+	jsonResp(w, map[string]string{"status": "ok"})
+}
+func HandleMarketplaceRefresh(w http.ResponseWriter, r *http.Request) {
+	jsonResp(w, map[string]string{"status": "ok"})
+}
+func HandleMemorySearch(w http.ResponseWriter, r *http.Request) { jsonResp(w, []string{}) }
+func HandleMemoryList(w http.ResponseWriter, r *http.Request)   { jsonResp(w, []string{}) }
+func HandleMemoryRebuild(w http.ResponseWriter, r *http.Request) {
+	jsonResp(w, map[string]string{"status": "ok"})
+}
