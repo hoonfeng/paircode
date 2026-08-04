@@ -125,17 +125,17 @@
             <span v-if="convCtxStats.otherTokens > 0" class="comp-leg-item"><span class="leg-dot comp-other-dot"></span>其他 {{ shortTokens(convCtxStats.otherTokens) }}</span>
           </div>
         </div>
-
-        <!-- ═══ 底部快捷入口 ═══ -->
-        <div class="conv-footer-actions">
-          <button class="conv-footer-btn" @click="openMarketplace" title="市场（安装 MCP/技能）">
-            <SvgIcon name="package" :size="10" /> 市场
-          </button>
-          <button class="conv-footer-btn" @click="openSettings" title="设置（管理已安装技能）">
-            <SvgIcon name="settings" :size="10" /> 设置
-          </button>
-        </div>
       </div>
+    </div>
+
+    <!-- ═══ 底部快捷入口（始终可见，不随统计面板折叠）═══ -->
+    <div class="conv-footer-actions">
+      <button class="conv-footer-btn" @click="openMarketplace" title="市场（安装 MCP/技能）">
+        <SvgIcon name="package" :size="10" /> 市场
+      </button>
+      <button class="conv-footer-btn" @click="openSettings" title="设置（管理已安装技能）">
+        <SvgIcon name="settings" :size="10" /> 设置
+      </button>
     </div>
   </div>
 </template>
@@ -187,8 +187,9 @@ watch(() => props.conversations, (v) => {
   localConvs.value = Array.isArray(v) ? v.slice() : []
 }, { immediate: true, deep: true })
 
-const convStatsExpanded = ref(true)
-const ctxStatsExpanded = ref(true)
+// 默认折叠统计面板（避免挤压会话列表与底部按钮；点击 header 可展开）
+const convStatsExpanded = ref(false)
+const ctxStatsExpanded = ref(false)
 
 function toggleTokens() { convStatsExpanded.value = !convStatsExpanded.value }
 function toggleCtx() { ctxStatsExpanded.value = !ctxStatsExpanded.value }

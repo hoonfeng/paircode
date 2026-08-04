@@ -456,6 +456,15 @@ defineExpose({ scrollToBottom })
   border: 1px solid var(--border-color, #333);
   border-bottom-left-radius: 3px;
 }
+/* MarkdownRenderer v-html 注入内容兜底（scoped 不覆盖注入元素，用 :deep 穿透）：
+   pre 长行换行、超长词断行、img/table 不超框 */
+.msg-bubble :deep(pre) { white-space: pre-wrap; word-break: break-word; overflow-wrap: break-word; max-width: 100%; overflow-x: auto; margin: 4px 0; }
+.msg-bubble :deep(p) { margin: 4px 0; overflow-wrap: break-word; word-break: break-word; }
+.msg-bubble :deep(p:first-child) { margin-top: 0; }
+.msg-bubble :deep(p:last-child) { margin-bottom: 0; }
+.msg-bubble :deep(li) { overflow-wrap: break-word; word-break: break-word; }
+.msg-bubble :deep(img) { max-width: 100%; height: auto; }
+.msg-bubble :deep(table) { max-width: 100%; }
 
 .user-msg-content p { margin: 0; }
 .user-msg-placeholder { color: rgba(255,255,255,0.5); font-style: italic; }

@@ -1921,6 +1921,15 @@ onUnmounted(() => {
 .tl-dot-content { border-color: #6a9955; background: rgba(106,153,85,0.2); box-shadow: 0 0 0 2px var(--bg-primary), 0 0 6px rgba(106,153,85,0.2); }
 .tl-dot-done { border-color: var(--accent); background: var(--accent); box-shadow: 0 0 0 2px var(--bg-primary), 0 0 6px rgba(126,184,218,0.4); }
 .tl-body { flex: 1; min-width: 0; font-size: 13px; line-height: 1.6; }
+/* MarkdownRenderer v-html 注入内容兜底（scoped 不覆盖注入元素，用 :deep 穿透）：
+   pre 长行换行、超长词断行、img/table 不超框 */
+.tl-body :deep(pre) { white-space: pre-wrap; word-break: break-word; overflow-wrap: break-word; max-width: 100%; overflow-x: auto; margin: 4px 0; }
+.tl-body :deep(p) { margin: 4px 0; overflow-wrap: break-word; word-break: break-word; }
+.tl-body :deep(p:first-child) { margin-top: 0; }
+.tl-body :deep(p:last-child) { margin-bottom: 0; }
+.tl-body :deep(li) { overflow-wrap: break-word; word-break: break-word; }
+.tl-body :deep(img) { max-width: 100%; height: auto; }
+.tl-body :deep(table) { max-width: 100%; }
 /* ── 思考段：背景区分 + 左边框 + 改进滚动条 ── */
 .tl-think-body { position: relative; }
 .tl-thinking-text { color: var(--text-secondary); font-style: italic; white-space: pre-wrap; padding: 6px 10px; max-height: 300px; overflow-y: auto; background: var(--bg-tertiary); border-radius: 6px; border-left: 2px solid var(--accent); margin: 2px 0; }
