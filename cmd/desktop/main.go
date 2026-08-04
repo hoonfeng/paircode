@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"wb-ui/app"
@@ -63,20 +62,10 @@ func main() {
 	log.Println("[LoadHTML] 加载成功")
 	log.Println("[Desktop] window+render tree ready, creating host...")
 
-	// ★ DPR 超采样开关：WB_DPR=2 时桌面端以 2 倍分辨率 CPU 光栅化再缩放
-	//   上屏（文本更平滑；矢量圆角/渐变数学同构无改善，SSAA 局限见 webview.go）。
-	dpr := 1
-	if v := os.Getenv("WB_DPR"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 1 {
-			dpr = n
-		}
-	}
-	host, err := app.NewHostWithDPR(wv, 1280, 800, "PairCode IDE", dpr)
+	// 标准 Host：Skia 原生抗锯齿绘制，无需 DPR 超采样（SSAA 已移除）。
+	host, err := app.NewHost(wv, 1280, 800, "PairCode IDE")
 	if err != nil {
 		log.Fatalf("[Desktop] 创建窗口失败: %v", err)
-	}
-	if dpr > 1 {
-		log.Printf("[Desktop] DPR 超采样已启用: %dx (CPU 光栅化 %dx → 缩放上屏)", dpr, dpr)
 	}
 
 	wv.EnsureLayout()
