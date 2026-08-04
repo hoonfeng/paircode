@@ -97,6 +97,22 @@ func main() {
 		}).catch(function(e){ console.log('[PROBE/health ERR] ' + (e && e.message || e)); });
 	`)
 	_, _ = wv.JSInterpreter().RunJS(`new Promise(function(res){ setTimeout(res, 800); })`)
+	// ★ 圆角诊断注入（可选，WB_DIAG_INJECT=1 开启）：comp-bar 背景改红、
+	//   首 seg 改绿，验证圆角形状。默认关闭——注入会污染 real_tree_wb.json
+	//   的 BG 字段，破坏与 Edge 的像素/数据对比。
+	if os.Getenv("WB_DIAG_INJECT") != "" {
+		_, _ = wv.JSInterpreter().RunJS(`
+			var el = document.querySelector('.comp-bar');
+			if (el) {
+				el.style.background = '#ff0000';
+				el.style.borderColor = '#00ff00';
+				var seg = el.firstElementChild;
+				if (seg) { seg.style.background = '#0000ff'; }
+				console.log('[PROBE/diag] comp-bar injected red bg + green border + blue seg');
+			}
+		`)
+		_, _ = wv.JSInterpreter().RunJS(`new Promise(function(res){ setTimeout(res, 300); })`)
+	}
 	// 打印前端 console（含 [PROBE/...] 数据层验证输出）
 	if out := wv.ConsoleOutput(); out != "" {
 		fmt.Println("[CONSOLE]")
