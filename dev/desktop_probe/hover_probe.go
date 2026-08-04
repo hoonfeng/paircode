@@ -78,13 +78,9 @@ func hoverProbeMain() {
 	segsBefore := dumpSegs(rv, state)
 	fmt.Printf("[hover] BEFORE:\n%s", segsBefore)
 
-	// 2) 模拟 hover：找第一个【非 active】conv-item（.conv-item:hover 规则不依赖 .active）
-	target := findNonActive(rv, "conv-item")
-	hoverCls := "conv-item"
-	if target == nil {
-		target = findClass(rv, "comp-bar-seg")
-		hoverCls = "comp-bar-seg"
-	}
+	// 2) 模拟 hover comp-bar-seg（用户报告的场景）
+	target := findClass(rv, "comp-bar-seg")
+	hoverCls := "comp-bar-seg"
 	if target == nil {
 		log.Fatal("hover target not found")
 	}
