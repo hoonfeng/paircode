@@ -526,9 +526,9 @@ const compOtherPct = computed(() => ((props.convCtxStats.otherTokens / compTotal
 /* ── 构成占比横条 ── */
 .comp-bar-wrap { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--border-color); }
 .comp-bar-title { font-size: 10px; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.3px; }
-.comp-bar { display: flex; height: 10px; background: var(--bg-primary); border-radius: 5px; overflow: hidden; border: 1px solid var(--border-color); }
+.comp-bar { display: flex; height: 12px; background: var(--bg-primary); border-radius: 6px; overflow: hidden; border: 1px solid var(--border-color); }
 .comp-bar-seg { height: 100%; transition: width 0.3s ease; min-width: 2px; }
-.comp-system { background: var(--accent); opacity: 0.7; }
+.comp-system { background: var(--accent); }
 .comp-skills { background: #6a9955; }
 .comp-mcp { background: #c586c0; }
 .comp-tool { background: var(--accent-light); }
@@ -537,7 +537,7 @@ const compOtherPct = computed(() => ((props.convCtxStats.otherTokens / compTotal
 .comp-legend { display: flex; flex-wrap: wrap; gap: 4px 8px; margin-top: 5px; font-size: 10px; color: var(--text-muted); }
 .comp-leg-item { display: flex; align-items: center; gap: 3px; }
 .leg-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-.comp-system-dot { background: var(--accent); opacity: 0.7; }
+.comp-system-dot { background: var(--accent); }
 .comp-skills-dot { background: #6a9955; }
 .comp-mcp-dot { background: #c586c0; }
 .comp-tool-dot { background: var(--accent-light); }
