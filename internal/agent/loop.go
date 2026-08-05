@@ -339,6 +339,14 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 		}
 	}
 
+	// ★ 上下文压缩（仅 Run 开始时执行一次，兜底处理超大历史）：
+	//   跨 run 历史已在加载时经 CondenseHistory 压缩，此处再按窗口阈值检查一次，
+	//   确保即使历史未压缩 / 配置窗口较小也不会撑爆上下文。
+	//   run 内迭代不再自动压缩——早期工具输出（read_file / run_command / search 结果）
+	//   是 LLM 后续轮次引用的关键上下文，run 内压缩会把中段细节丢弃成摘要，
+	//   导致 LLM 失忆、理解力下降（2026-08-05 排查结论）。
+	msgs = l.maybeCompact(ctx, msgs)
+
 	for iter := 0; iter < max; iter++ {
 		if err := ctx.Err(); err != nil {
 			return msgs, err // 外部取消
@@ -350,7 +358,11 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 			l.emit(Event{Type: EventNotice, Content: fmt.Sprintf("收到 %d 条托管消息，已注入上下文", len(steerMsgs))})
 		}
 
-		msgs = l.maybeCompact(ctx, msgs) // 超窗口阈值则把中段老消息压成摘要（见 compress.go）
+		// ★ run 内自动压缩已关闭：自动阈值压缩仅在 Run 开始时执行一次（见上）。
+		//   此处仅响应前端手动压缩按钮（CompactRequested），保留用户主动压缩能力。
+		if l.CompactRequested {
+			msgs = l.maybeCompact(ctx, msgs)
+		}
 
 		// ── 将压缩摘要和（自主模式下）执行日志作为 ephemeralMsg 注入 ──
 		// 不被持久化，仅在本次 LLM 调用时作为背景上下文

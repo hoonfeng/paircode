@@ -211,8 +211,9 @@ func TestMaybeCompactHardFloor(t *testing.T) {
 	}
 }
 
-// TestLoopRunCompacts 端到端：低窗口 + 多轮工具循环 → loop 跑通且至少压缩一次。
-func TestLoopRunCompacts(t *testing.T) {
+// TestLoopRunNoAutoCompact 端到端：低窗口 + 多轮工具循环 → run 内不再自动压缩
+// （2026-08-05：run 内压缩已关闭，早期工具输出是 LLM 后续引用的关键上下文，压缩会丢细节导致失忆）。
+func TestLoopRunNoAutoCompact(t *testing.T) {
 	reg := NewRegistry()
 	reg.Register(&Tool{
 		Name: "echo", Description: "echo", ReadOnly: true,
@@ -244,8 +245,8 @@ func TestLoopRunCompacts(t *testing.T) {
 	if _, err := l.Run(context.Background(), "干活", nil); err != nil {
 		t.Fatal(err)
 	}
-	if compacted == 0 {
-		t.Error("多轮长上下文应至少压缩一次")
+	if compacted != 0 {
+		t.Error("run 内不应自动压缩（run 内压缩已关闭，防中段上下文被摘要丢弃）")
 	}
 	if done == 0 {
 		t.Error("loop 应正常完成（EventDone）")
