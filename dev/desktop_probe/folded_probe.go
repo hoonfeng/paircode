@@ -191,23 +191,29 @@ func main() {
 	wv.Resize(1280, 800)
 	_ = wv.JSInterpreter()
 	desktopbridge.Init(wv)
-	// 注入 data-v 属性探针：记录 setAttribute/removeAttribute 对 data-v-* 的调用
+	// 注入 data-v 属性探针：记录 setAttribute/removeAttribute 对 data-v-* 的调用。
+	// 探针 patch Element.prototype.setAttribute（标准 DOM 设计，方法在 prototype 上），
+	// 所有实例（HTML/SVG/Element）经原型链共享，hook 可捕获 Vue 的 data-v 属性写入。
 	probeJS := `<script>
 (function(){
-  var orig = Element.prototype.setAttribute;
   window.__attrLog = [];
   window.__probeLoaded = true;
-  // wb-ui 的 setAttribute 绑定在实例上而非 prototype，hook 仍可捕获大部分调用；
-  // 同时记录 removeAttribute，用于验证 scoped 样式 data-v-* 属性是否写入 DOM。
-  Element.prototype.setAttribute = function(n, v){
-    if (String(n).indexOf('data-v-') === 0) window.__attrLog.push('SET ' + this.tagName + '.' + String(this.className||'') + ' ' + n);
-    return orig.apply(this, arguments);
-  };
-  var origR = Element.prototype.removeAttribute;
-  Element.prototype.removeAttribute = function(n){
-    if (String(n).indexOf('data-v-') === 0) window.__attrLog.push('DEL ' + this.tagName + '.' + String(this.className||'') + ' ' + n);
-    return origR.apply(this, arguments);
-  };
+  window.__probeErr = [];
+  try {
+    var orig = Element.prototype.setAttribute;
+    window.__origSA = String(orig);
+    Element.prototype.setAttribute = function(n, v){
+      if (String(n).indexOf('data-v-') === 0) window.__attrLog.push('SET ' + this.tagName + '.' + String(this.className||'') + ' ' + n);
+      return orig.apply(this, arguments);
+    };
+  } catch(e) { window.__probeErr.push('SA:' + String(e && e.message || e)); }
+  try {
+    var origR = Element.prototype.removeAttribute;
+    Element.prototype.removeAttribute = function(n){
+      if (String(n).indexOf('data-v-') === 0) window.__attrLog.push('DEL ' + this.tagName + '.' + String(this.className||'') + ' ' + n);
+      return origR.apply(this, arguments);
+    };
+  } catch(e) { window.__probeErr.push('RA:' + String(e && e.message || e)); }
 })();
 </script>`
 	htmlStr := strings.Replace(string(htmlData), "<script type=\"module\"", probeJS+"\n<script type=\"module\"", 1)
@@ -395,10 +401,34 @@ func main() {
 	fmt.Printf("[folded] match-diag: %s\n", iv.ToString())
 
 	// ── 诊断 1.7：data-v 属性 set 日志（ChatView scopeId 是否被写入 DOM）──
+	// hook 活性检测：探针 patch Element.prototype.setAttribute 后，手动调用
+	// 应被捕获；同时检查 Vue 元素的方法来源（自有 vs 原型链）。
 	iv, _ = wv.JSInterpreter().RunJS(`(function(){
 		var log = window.__attrLog || [];
 		var ids = ['data-v-cdb19c8e','data-v-245f3b5c','data-v-90f89230','data-v-b0465242'];
-		var out = {probeLoaded: window.__probeLoaded === true, total: log.length};
+		var out = {probeLoaded: window.__probeLoaded === true, total: log.length, probeErr: window.__probeErr || []};
+		out.hookAlive = /data-v-hooktest|attrLog/.test(String(Element.prototype.setAttribute));
+		out.origSAkind = String(window.__origSA).slice(0, 60);
+		out.hookSAkind = String(Element.prototype.setAttribute).slice(0, 60);
+		// hook 活性：直接调一次，验证探针 hook 是否仍在 prototype 上生效
+		var t = document.createElement('probe-check');
+		t.setAttribute('data-v-hooktest', '');
+		out.totalAfterManual = (window.__attrLog || []).length;
+		out.manualTail = (window.__attrLog || []).slice(-2);
+		// Vue 元素（带 data-v-90f89230）的方法来源
+		try {
+			var ve = document.querySelector('[data-v-90f89230]');
+			if (ve) {
+				out.vueEl = {
+					tag: ve.tagName,
+					ownSA: ve.hasOwnProperty('setAttribute'),
+					saIsProto: ve.setAttribute === Element.prototype.setAttribute,
+					protoType: typeof Element.prototype.setAttribute
+				};
+			} else {
+				out.vueEl = null;
+			}
+		} catch(e) { out.vueElErr = String(e); }
 		out.byId = {};
 		ids.forEach(function(id){ out.byId[id] = log.filter(function(e){ return e.indexOf(id) >= 0; }).slice(0, 8); });
 		out.sample = log.slice(0, 30);
