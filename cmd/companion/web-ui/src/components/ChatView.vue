@@ -178,6 +178,7 @@ const agentRunning = computed(() => state.agentRunningByConv[convId.value] || fa
 const msgRef = ref(null)
 const inputRef = ref(null)
 const showScrollDown = ref(false)
+const loadingMoreTop = ref(false)
 
 // 消息数据
 const msgs = computed(() => {
@@ -326,6 +327,54 @@ function scrollToBottom() {
   })
 }
 
+// 向前分页加载更早消息：prepend 到数组并维护滚动位置
+async function loadMoreMessages() {
+  const id = convId.value
+  if (!id) return
+  const cur = msgs.value
+  if (!cur || cur.length === 0) return
+  if (cur[0]._noMoreAbove) return
+  const oldestIdx = cur[0]._idx
+  if (oldestIdx === undefined || oldestIdx === null || oldestIdx <= 0) return
+  loadingMoreTop.value = true
+  const oldScrollHeight = msgRef.value ? msgRef.value.scrollHeight : 0
+  const oldScrollTop = msgRef.value ? msgRef.value.scrollTop : 0
+  try {
+    const data = await api.getMessages(id, { before: oldestIdx, limit: 50 })
+    const older = (data.messages || [])
+      .filter(m => (m.message?.role || m.role) !== 'tool')
+      .map((m, i) => ({
+        role: m.message?.role || m.role || '',
+        content: m.message?.content || m.content || '',
+        segments: (m.segments || []).map(seg => {
+          if (seg.type === 'ask_user') seg._answered = !!seg.answer
+          return seg
+        }),
+        _key: 'msg_' + Date.now() + '_older_' + i,
+        _idx: m.idx,
+        _time: m.timestamp || '',
+      }))
+    if (older.length > 0) {
+      const mergedBefore = mergeConsecutiveAssistant([...older, ...cur])
+      state.messagesByConv[id] = mergedBefore
+      state.msgLoadedByConv[id] = (state.msgLoadedByConv[id] || 0) + older.length
+      // 补偿滚动位置：保持当前视口内容不动（新增的 older 消息在顶部）
+      nextTick(() => {
+        if (msgRef.value) {
+          msgRef.value.scrollTop = oldScrollTop + (msgRef.value.scrollHeight - oldScrollHeight)
+        }
+      })
+    } else {
+      // 无更早消息：标记防止重复请求
+      cur[0]._noMoreAbove = true
+    }
+  } catch (e) {
+    console.warn('ChatView: 加载更早消息失败', e)
+  } finally {
+    loadingMoreTop.value = false
+  }
+}
+
 function onScroll() {
   if (!msgRef.value) return
   const el = msgRef.value
@@ -334,6 +383,10 @@ function onScroll() {
   if (!nearBottom) scrollLocked = true
   if (nearBottom) { scrollLocked = false; showScrollDown.value = false }
   else showScrollDown.value = true
+  // 顶部懒加载：scrollTop < 100 且还有更早消息可加载
+  if (el.scrollTop < threshold && !loadingMoreTop.value) {
+    loadMoreMessages()
+  }
 }
 
 onMounted(() => {
