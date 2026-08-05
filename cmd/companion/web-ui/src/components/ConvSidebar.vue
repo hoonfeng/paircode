@@ -24,7 +24,8 @@
     <!-- Token 统计面板 -->
     <div class="conv-stats cs-tokens">
       <div class="conv-stats-header" @click="toggleTokens">
-        <span class="conv-stats-chevron">{{ convStatsExpanded ? '▾' : '▸' }}</span>
+        <svg v-if="!convStatsExpanded" class="conv-stats-chevron" viewBox="0 0 8 8" width="9" height="9" fill="currentColor" aria-hidden="true"><path d="M2.6 1.2 L6.8 4 L2.6 6.8 Z"/></svg>
+        <svg v-else class="conv-stats-chevron" viewBox="0 0 8 8" width="9" height="9" fill="currentColor" aria-hidden="true"><path d="M1.2 2.6 L4 6.8 L6.8 2.6 Z"/></svg>
         <SvgIcon name="code" :size="11" />
         <span>Token 统计</span>
         <span class="conv-stats-total">{{ shortTokens(wsTokenStats.totalTokens) }}</span>
@@ -71,7 +72,8 @@
     <!-- 上下文窗口 + 构成占比 -->
     <div class="conv-stats cs-context">
       <div class="conv-stats-header" @click="toggleCtx">
-        <span class="conv-stats-chevron">{{ ctxStatsExpanded ? '▾' : '▸' }}</span>
+        <svg v-if="!ctxStatsExpanded" class="conv-stats-chevron" viewBox="0 0 8 8" width="9" height="9" fill="currentColor" aria-hidden="true"><path d="M2.6 1.2 L6.8 4 L2.6 6.8 Z"/></svg>
+        <svg v-else class="conv-stats-chevron" viewBox="0 0 8 8" width="9" height="9" fill="currentColor" aria-hidden="true"><path d="M1.2 2.6 L4 6.8 L6.8 2.6 Z"/></svg>
         <SvgIcon name="layers" :size="11" />
         <span>上下文</span>
         <span class="conv-stats-pct">{{ ctxUsagePct }}%</span>
@@ -410,7 +412,7 @@ const compOtherPct = computed(() => ((props.convCtxStats.otherTokens / compTotal
   cursor: pointer;
 }
 .conv-stats-header:hover { background: var(--bg-hover); }
-.conv-stats-chevron { font-size: 10px; color: var(--text-muted); width: 10px; text-align: center; }
+.conv-stats-chevron { color: var(--text-muted); width: 10px; flex-shrink: 0; display: block; }
 .conv-stats-total {
   margin-left: auto;
   font-family: var(--font-code);

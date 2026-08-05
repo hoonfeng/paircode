@@ -1,7 +1,8 @@
 <template>
   <div v-if="plan.length > 0" class="plan-panel" :class="{ collapsed: !expanded, 'all-done': allDone }">
     <div class="plan-header" @click="$emit('toggle')">
-      <span class="plan-chevron">{{ expanded ? '▾' : '▸' }}</span>
+      <svg v-if="!expanded" class="plan-chevron" viewBox="0 0 8 8" width="9" height="9" fill="currentColor" aria-hidden="true"><path d="M2.6 1.2 L6.8 4 L2.6 6.8 Z"/></svg>
+      <svg v-else class="plan-chevron" viewBox="0 0 8 8" width="9" height="9" fill="currentColor" aria-hidden="true"><path d="M1.2 2.6 L4 6.8 L6.8 2.6 Z"/></svg>
       <SvgIcon name="list" :size="12" />
       <span class="plan-title">执行计划</span>
       <span class="plan-progress">{{ doneCount }}/{{ plan.length }}</span>
@@ -12,7 +13,8 @@
     <div v-if="expanded" class="plan-body">
       <div v-for="(step, si) in plan" :key="si" class="plan-step-group">
         <div class="plan-step" :class="'step-' + step.status" @click="toggleStep(si)">
-          <span class="step-chevron">{{ expandedSteps.has(si) ? '▾' : '▸' }}</span>
+          <svg v-if="!expandedSteps.has(si)" class="step-chevron" viewBox="0 0 8 8" width="8" height="8" fill="currentColor" aria-hidden="true"><path d="M2.6 1.2 L6.8 4 L2.6 6.8 Z"/></svg>
+          <svg v-else class="step-chevron" viewBox="0 0 8 8" width="8" height="8" fill="currentColor" aria-hidden="true"><path d="M1.2 2.6 L4 6.8 L6.8 2.6 Z"/></svg>
           <span class="step-icon">
             <SvgIcon v-if="step.status === 'done' || step.status === 'completed'" name="check" :size="12" class="icon-done" />
             <SvgIcon v-else-if="step.status === 'in_progress'" name="cycle" :size="12" class="icon-in-progress" />
@@ -121,7 +123,7 @@ function cleanText(raw) {
   font-size: 12px; color: var(--text-secondary);
 }
 .plan-header:hover { background: var(--bg-active); }
-.plan-chevron { width: 10px; text-align: center; font-size: 10px; }
+.plan-chevron { width: 10px; flex-shrink: 0; display: block; color: var(--text-muted); }
 .plan-title { font-weight: 600; flex: 1; color: var(--text-primary); }
 .plan-progress { font-variant-numeric: tabular-nums; margin-right: 4px; }
 .plan-bar {
@@ -135,7 +137,7 @@ function cleanText(raw) {
 .plan-step.step-done { opacity: 0.7; }
 .plan-step.step-completed { opacity: 0.7; }
 .plan-step.step-in_progress { background: var(--bg-active); }
-.step-chevron { width: 10px; text-align: center; font-size: 10px; flex-shrink: 0; color: var(--text-muted); }
+.step-chevron { width: 10px; flex-shrink: 0; display: block; color: var(--text-muted); }
 .step-icon { flex-shrink: 0; width: 14px; text-align: center; line-height: 1.4; display: flex; align-items: center; justify-content: center; }
 .step-text { color: var(--text-primary); line-height: 1.4; word-break: break-word; flex: 1; min-width: 0; }
 .step-sub-progress { flex-shrink: 0; font-size: 10px; color: var(--text-muted); font-variant-numeric: tabular-nums; }

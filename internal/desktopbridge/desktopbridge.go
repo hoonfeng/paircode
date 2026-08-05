@@ -112,10 +112,14 @@ func registerHandlers() {
 //   - window.desktopBridge（sdk.js 直调通道，兼容保留）
 //   - window.fetch 拦截：/api/* 请求转发到 go.bridge_call（本地 Go handler），其余放行
 //   - window.WebSocket stub：/ws 连接不实际建连，消息由 Go 端 EvalJS 推送
+//
+// ★ panel-only（只加载右侧面板）不再在此注入：那是独立测试程序
+//   （dev/desktop_probe/folded_probe.go 等）的需求，由调用方经
+//   webkit.BeforePageScripts 自行注入 window.__DESKTOP_PANEL_MODE__ = true；
+//   cmd/desktop 主程序保持完整 IDE 布局。
 func injectJSBridge(rt *jsc.Interpreter) {
 	rt.RunJS(`(function(){
 		window.__DESKTOP_MODE__ = true;
-		window.__DESKTOP_PANEL_MODE__ = true;
 		window.desktopBridge = {
 			call: function(method, path, bodyJSON, paramsJSON) {
 				try {

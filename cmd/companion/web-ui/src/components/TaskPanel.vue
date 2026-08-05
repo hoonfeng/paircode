@@ -1,7 +1,8 @@
 <template>
   <div class="task-panel" :class="{ collapsed: !expanded }">
     <div class="task-header" @click="$emit('toggle')">
-      <span class="task-chevron">{{ expanded ? '▾' : '▸' }}</span>
+      <svg v-if="!expanded" class="task-chevron" viewBox="0 0 8 8" width="9" height="9" fill="currentColor" aria-hidden="true"><path d="M2.6 1.2 L6.8 4 L2.6 6.8 Z"/></svg>
+      <svg v-else class="task-chevron" viewBox="0 0 8 8" width="9" height="9" fill="currentColor" aria-hidden="true"><path d="M1.2 2.6 L4 6.8 L6.8 2.6 Z"/></svg>
       <SvgIcon name="list" :size="12" />
       <span class="task-title">任务进度</span>
       <span class="task-progress">{{ doneCount }}/{{ tasks.length }}</span>
@@ -65,7 +66,7 @@ function statusLabel(s) {
   font-size: 12px; color: var(--text-secondary);
 }
 .task-header:hover { background: var(--bg-active); }
-.task-chevron { width: 10px; text-align: center; font-size: 10px; }
+.task-chevron { width: 10px; flex-shrink: 0; display: block; color: var(--text-muted); }
 .task-title { font-weight: 600; flex: 1; color: var(--text-primary); }
 .task-progress { font-variant-numeric: tabular-nums; margin-right: 4px; font-size: 11px; }
 .task-bar {

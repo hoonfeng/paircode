@@ -3,7 +3,7 @@
     <template v-if="mode === 'minimal'">
       <div class="sab-minimal" @click="expandFromMinimal" title="展开查看（仅工作模式，内容已累积）">
         <span class="sab-dot"></span>
-        <span class="sab-minimal-hint">▸</span>
+        <svg class="sab-minimal-hint" viewBox="0 0 8 8" width="8" height="8" fill="currentColor" aria-hidden="true"><path d="M2.6 1.2 L6.8 4 L2.6 6.8 Z"/></svg>
         <span v-if="hasContent" class="sab-minimal-pulse"></span>
       </div>
     </template>
@@ -11,7 +11,8 @@
     <template v-else>
       <div class="sab-header" @click="toggleCollapse">
         <span class="sab-dot"></span>
-        <span class="sab-chevron">{{ mode === 'expanded' ? '▾' : '▸' }}</span>
+        <svg v-if="mode !== 'expanded'" class="sab-chevron" viewBox="0 0 8 8" width="9" height="9" fill="currentColor" aria-hidden="true"><path d="M2.6 1.2 L6.8 4 L2.6 6.8 Z"/></svg>
+        <svg v-else class="sab-chevron" viewBox="0 0 8 8" width="9" height="9" fill="currentColor" aria-hidden="true"><path d="M1.2 2.6 L4 6.8 L6.8 2.6 Z"/></svg>
         <SvgIcon v-if="icon" :name="icon" :size="12" class="sab-icon" />
         <span class="sab-label">{{ label }}</span>
         <button class="sab-mode-btn" @click.stop="toggleMinimal" title="仅工作模式（隐藏内容，agent 继续运行）">
@@ -128,7 +129,7 @@ defineExpose({ checkContent, toggleMinimal, expandFromMinimal })
   0%,100% { opacity: 0.6; box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 30%, transparent); }
   50% { opacity: 1; box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 20%, transparent); }
 }
-.sab-chevron { font-size: 9px; color: var(--text-muted); width: 8px; text-align: center; flex-shrink: 0; }
+.sab-chevron { color: var(--text-muted); width: 8px; flex-shrink: 0; display: block; }
 .sab-icon { flex-shrink: 0; color: var(--text-secondary); }
 .sab-label { font-size: 12px; font-weight: 500; color: var(--text-primary); font-family: var(--font-code); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 40px; }
 .sab-type-thinking .sab-label, .sab-type-content .sab-label { font-family: var(--font-ui); font-weight: 600; }
@@ -140,7 +141,7 @@ defineExpose({ checkContent, toggleMinimal, expandFromMinimal })
 .sab-minimal .sab-dot { width: 10px; height: 10px; }
 .sab-minimal:hover { opacity: 1; }
 .sab-minimal:not(:hover) .sab-minimal-hint { opacity: 0; }
-.sab-minimal-hint { font-size: 8px; color: var(--text-muted); margin-left: 2px; transition: opacity 0.15s; opacity: 0.6; }
+.sab-minimal-hint { color: var(--text-muted); margin-left: 2px; transition: opacity 0.15s; opacity: 0.6; display: block; }
 .sab-minimal-pulse { position: absolute; left: 3px; top: 0; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); opacity: 0.4; animation: sabMinPulse 1.5s infinite; }
 @keyframes sabMinPulse { 0%,100% { transform: scale(1); opacity: 0.4; } 50% { transform: scale(1.8); opacity: 0; } }
 
