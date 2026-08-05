@@ -115,6 +115,7 @@ func registerHandlers() {
 func injectJSBridge(rt *jsc.Interpreter) {
 	rt.RunJS(`(function(){
 		window.__DESKTOP_MODE__ = true;
+		window.__DESKTOP_PANEL_MODE__ = true;
 		window.desktopBridge = {
 			call: function(method, path, bodyJSON, paramsJSON) {
 				try {

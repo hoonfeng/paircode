@@ -103,6 +103,23 @@ body { font-family: var(--font-ui); font-size: var(--font-size-base); background
 .tl-dot-ask { background: #fbbf24; }
 .tl-body { flex: 1; min-width: 0; }
 
+/* 提问用户段（与 RightPanel.vue AskUserCard 视觉对齐） */
+.tl-ask-body { font-size: 12px; }
+.ask-card {
+  border: 1px solid rgba(251,191,36,0.4); border-radius: 8px; padding: 10px 12px;
+  background: rgba(251,191,36,0.06); max-width: 100%; min-width: 0;
+}
+.ask-question { font-size: 13px; color: var(--text-primary); margin-bottom: 8px; white-space: pre-wrap; }
+.ask-options { display: flex; flex-direction: column; gap: 6px; }
+.ask-option {
+  display: flex; align-items: center; gap: 6px; padding: 6px 10px;
+  border: 1px solid var(--border-color); border-radius: 6px; cursor: default;
+  color: var(--text-secondary); font-size: 12px;
+}
+.ask-option:hover { background: rgba(251,191,36,0.08); }
+.ask-opt-radio { color: #fbbf24; flex-shrink: 0; }
+.ask-answered { margin-top: 8px; font-size: 11px; color: #34d399; }
+
 /* 思考段 */
 .tl-think-body { font-size: 12px; color: var(--text-muted, #888); border-left: 2px solid rgba(167,139,250,0.3); padding-left: 8px; }
 .tl-thinking-text { white-space: pre-wrap; }
@@ -232,6 +249,21 @@ body { font-family: var(--font-ui); font-size: var(--font-size-base); background
                           <div v-if="seg.argsRaw" class="tl-tc-section"><div class="tl-tc-section-title">参数</div><pre><code>{{ seg.argsRaw }}</code></pre></div>
                           <div v-if="seg.result" class="tl-tc-section"><div class="tl-tc-section-title">结果</div><pre><code>{{ seg.result }}</code></pre></div>
                         </template>
+                      </div>
+                    </div>
+                  </div>
+                  <!-- 提问用户（与 RightPanel.vue 的 AskUserCard 对齐） -->
+                  <div v-else-if="seg.type === 'ask_user'" class="tl-item">
+                    <span class="tl-dot tl-dot-ask"></span>
+                    <div class="tl-body tl-ask-body">
+                      <div class="ask-card">
+                        <div class="ask-question">{{ seg.question }}</div>
+                        <div v-if="seg.options && seg.options.length" class="ask-options">
+                          <div v-for="(opt, oi) in seg.options" :key="oi" class="ask-option">
+                            <span class="ask-opt-radio">{{ seg.askType === 'multi' ? '☐' : '○' }}</span>{{ opt }}
+                          </div>
+                        </div>
+                        <div v-if="seg.answered" class="ask-answered">已回答</div>
                       </div>
                     </div>
                   </div>

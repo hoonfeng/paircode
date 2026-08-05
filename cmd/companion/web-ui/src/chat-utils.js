@@ -1,5 +1,5 @@
 // chat-utils.js: 聊天消息渲染共享工具
-// 供 RightPanel.vue 和 ChatView.vue 共用
+// 供 RightPanel.vue 使用（ChatView.vue 已废弃删除）
 
 import { computed } from 'vue'
 

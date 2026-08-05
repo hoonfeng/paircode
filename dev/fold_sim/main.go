@@ -37,7 +37,7 @@ func setupLoaders(wv *webkit.WebView, dir string) {
 
 func main() {
 	log.SetFlags(log.Ltime)
-	convPath := flag.String("conv", "", "历史对话 jsonl 路径（注入 window.__CONV_JSONL__，real_data.js 解析生成 REAL_COMBOS；省略则用内置手工数据）")
+	convPath := flag.String("conv", "", "历史对话 jsonl 路径（注入 window.__CONV_JSONL__，real_data.js 解析生成 REAL_COMBOS；省略则自动取 .pair/conversations 下最新 jsonl）")
 	flag.Parse()
 	log.Println("[fold_sim] agent 输出收缩状态模拟窗口")
 
@@ -65,8 +65,35 @@ func main() {
 	}
 
 	// -conv 指定历史对话 jsonl：注入 window.__CONV_JSONL__，由 real_data.js 解析生成 REAL_COMBOS
-	if *convPath != "" {
-		raw, rerr := os.ReadFile(*convPath)
+	// 未指定时自动取 .pair/conversations 下最新的非 archived jsonl（保证首屏展示真实会话数据）
+	resolvedConv := *convPath
+	if resolvedConv == "" {
+		convDir := filepath.Join(wd, ".pair", "conversations")
+		matches, gerr := filepath.Glob(filepath.Join(convDir, "conv_*.jsonl"))
+		if gerr == nil {
+			var newest string
+			var newestTime time.Time
+			for _, m := range matches {
+				if strings.HasSuffix(m, ".archived.jsonl") {
+					continue
+				}
+				st, serr := os.Stat(m)
+				if serr != nil {
+					continue
+				}
+				if st.ModTime().After(newestTime) {
+					newestTime = st.ModTime()
+					newest = m
+				}
+			}
+			if newest != "" {
+				resolvedConv = newest
+				log.Printf("[fold_sim] 自动选择最新会话: %s", filepath.Base(newest))
+			}
+		}
+	}
+	if resolvedConv != "" {
+		raw, rerr := os.ReadFile(resolvedConv)
 		if rerr != nil {
 			log.Printf("[fold_sim] 读取 jsonl 失败（回退内置数据）: %v", rerr)
 		} else {
@@ -76,7 +103,7 @@ func main() {
 			} else {
 				inject := "<script>window.__CONV_JSONL__ = " + string(jsLiteral) + ";</script>"
 				htmlData = []byte(strings.Replace(string(htmlData), `<script src="./real_data.js"></script>`, inject+"\n"+`<script src="./real_data.js"></script>`, 1))
-				log.Printf("[fold_sim] 已注入 jsonl: %s（%d bytes）", *convPath, len(raw))
+				log.Printf("[fold_sim] 已注入 jsonl: %s（%d bytes）", resolvedConv, len(raw))
 			}
 		}
 	}

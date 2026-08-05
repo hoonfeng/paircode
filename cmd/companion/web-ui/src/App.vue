@@ -1,7 +1,7 @@
 <template>
-  <div class="app-root">
-    <!-- 标题栏 + 菜单栏 -->
-    <div class="titlebar" @click="closeAllMenus">
+  <div class="app-root" :class="{ 'panel-only': panelMode }">
+    <!-- 标题栏 + 菜单栏（panel 模式下隐藏） -->
+    <div v-if="!panelMode" class="titlebar" @click="closeAllMenus">
       <div class="app-logo">
         <img :src="logoUrl" class="logo-img" alt="PairCode" />
       </div>
@@ -15,10 +15,10 @@
       </div>
     </div>
 
-    <!-- 内容区域 -->
-    <ActivityBar />
-    <Sidebar v-if="state.sidebarVisible" />
-    <div v-if="!state.focusMode" class="main-area">
+    <!-- 内容区域（panel 模式下隐藏） -->
+    <ActivityBar v-if="!panelMode" />
+    <Sidebar v-if="!panelMode && state.sidebarVisible" />
+    <div v-if="!panelMode && !state.focusMode" class="main-area">
       <EditorArea />
       <div class="bottom-panel" v-if="state.bottomPanelVisible"
            :style="{ height: bottomPanelHeight + 'px' }">
@@ -29,16 +29,16 @@
       </div>
     </div>
 
-    <!-- 右侧容器 -->
-    <div v-if="state.rightPanelVisible" class="right-container"
-         :class="{ 'focus-mode': state.focusMode }"
-         :style="state.focusMode ? {} : { width: (rightPanelWidth + 4 + 1 + 250) + 'px' }">
-      <div class="right-panel-resizer" @mousedown.prevent="startRightResize"></div>
-      <RightPanel />
+    <!-- 右侧容器（panel 模式占满全屏） -->
+    <div v-if="state.rightPanelVisible || panelMode" class="right-container"
+         :class="{ 'focus-mode': state.focusMode, 'panel-only': panelMode }"
+         :style="(state.focusMode || panelMode) ? {} : { width: (rightPanelWidth + 4 + 1 + 250) + 'px' }">
+      <div v-if="!panelMode" class="right-panel-resizer" @mousedown.prevent="startRightResize"></div>
+      <RightPanel :panel-mode="panelMode" />
     </div>
 
-    <!-- 状态栏 -->
-    <StatusBar />
+    <!-- 状态栏（panel 模式下隐藏） -->
+    <StatusBar v-if="!panelMode" />
 
     <!-- 模态框 -->
     <SettingsModal v-if="showSettings" @close="showSettings = false" />
@@ -56,6 +56,10 @@ import { ref, reactive, computed, watch, onMounted, onUnmounted, provide, nextTi
 import { state, savePersistentState, loadPersistentState, applyTheme } from './main.js'
 import api from './api.js'
 import { processAgentEvent, processAgentDone, processStatus, getConvCtxStats } from './agent-events.js'
+
+// ★ 桌面端面板独立模式：desktopbridge 注入 window.__DESKTOP_PANEL_MODE__，
+//   此时只渲染右侧面板（消息展示）占满全屏，隐藏 IDE 其他区域。
+const panelMode = typeof window !== 'undefined' && window.__DESKTOP_PANEL_MODE__ === true
 
 import MenuBar from './components/MenuBar.vue'
 import ActivityBar from './components/ActivityBar.vue'
@@ -590,6 +594,17 @@ watch(() => state.openFiles.length, schedulePersist)
   overflow: hidden;
   font-family: var(--font-ui);
 }
+/* ★ 桌面端面板独立模式：只渲染右侧面板，占满整个窗口 */
+.app-root.panel-only {
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+}
+.app-root.panel-only .right-container {
+  grid-column: 1; grid-row: 1;
+  width: 100% !important;
+  height: 100%;
+}
+.app-root.panel-only .right-panel-resizer { display: none; }
 .titlebar {
   grid-column: 1 / -1; grid-row: 1;
   display: flex; align-items: center; height: 30px;

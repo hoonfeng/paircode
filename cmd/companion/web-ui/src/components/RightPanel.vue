@@ -6,7 +6,7 @@
       <div class="rp-header-actions">
         <button class="rp-btn" @click="newConversation" title="新对话"><SvgIcon name="plus" :size="14" /></button>
         <button class="rp-btn" @click="showDebugLog = !showDebugLog" title="Debug 日志"><SvgIcon name="bug" :size="14" /></button>
-        <button class="rp-btn" @click="toggleRight" title="关闭"><SvgIcon name="close" :size="14" /></button>
+        <button v-if="!panelMode" class="rp-btn" @click="toggleRight" title="关闭"><SvgIcon name="close" :size="14" /></button>
       </div>
     </div>
 
@@ -290,6 +290,8 @@ import DebugLogPanel from './DebugLogPanel.vue'
 
 const showDebugLog = ref(false)
 
+const props = defineProps({ panelMode: { type: Boolean, default: false } })
+const panelMode = computed(() => !!props.panelMode)
 const rightPanelWidth = inject('rightPanelWidth')
 const toggleRight = () => { state.rightPanelVisible = false }
 const inputText = ref('')
