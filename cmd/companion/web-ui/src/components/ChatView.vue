@@ -521,13 +521,16 @@ defineExpose({ scrollToBottom })
   border-radius: 6px;
   cursor: pointer;
   font-size: 12px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 .tl-tc-header:hover { background: rgba(96,165,250,0.14); }
-.tl-tc-chevron { font-size: 10px; color: #60a5fa; }
+.tl-tc-chevron { font-size: 10px; color: #60a5fa; flex-shrink: 0; }
 .tl-tc-icon { flex-shrink: 0; }
-.tl-tc-name { font-weight: 600; }
-.tl-tc-param { color: var(--text-muted, #888); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tl-tc-summary { color: #34d399; margin-left: auto; font-size: 11px; }
+.tl-tc-name { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 1; }
+.tl-tc-param { color: var(--text-muted, #888); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex-shrink: 1; }
+.tl-tc-summary { color: #34d399; margin-left: auto; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex-shrink: 1; }
 .tl-tc-detail {
   background: var(--bg-primary, #1e1e1e);
   border: 1px solid var(--border-color, #333);
