@@ -1188,8 +1188,17 @@ func (s *MessageStore) ListConversations(workspaceRoot string) ([]ConversationMe
 	}
 
 	out := make([]ConversationMeta, 0, len(metas))
+	// ★ 路径归一化匹配：历史数据中 Windows 路径存在单/双反斜杠混写
+	//   （如 F:\syproject\gou-ide vs F:\\syproject\gou-ide），精确匹配会漏掉。
+	//   filepath.Clean + EqualFold（Windows 路径不区分大小写）统一比较。
+	normRoot := strings.TrimSpace(filepath.Clean(workspaceRoot))
 	for _, m := range metas {
-		if m.WorkspaceRoot == workspaceRoot || m.WorkspaceRoot == "" {
+		if m.WorkspaceRoot == "" {
+			out = append(out, m)
+			continue
+		}
+		norm := strings.TrimSpace(filepath.Clean(m.WorkspaceRoot))
+		if norm == normRoot || strings.EqualFold(norm, normRoot) {
 			out = append(out, m)
 		}
 	}

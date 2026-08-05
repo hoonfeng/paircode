@@ -133,6 +133,9 @@ export const state = reactive({
   focusMode: false,
 })
 
+// ★ 调试探针入口：暴露全局 store，供 wb-ui probe 直接读取状态层
+if (typeof window !== 'undefined') window.__state = state
+
 // ─── 字体加载映射（所有主题统一用 Inter + JetBrains Mono）───
 const FONT_CONFIG = {
   dark: {
