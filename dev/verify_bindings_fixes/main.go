@@ -8,6 +8,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"wb-ui/webkit"
 )
@@ -122,6 +123,31 @@ func main() {
 	wv.LoadHTML(html2)
 	ev, _ = wv.EvalJS(`getComputedStyle(document.getElementById('x')).getPropertyValue('color')`)
 	verdict(check("!important 高于 inline", ev.ToString(), "blue"))
+
+	// ── 遗留 1：样式表指纹缓存（动态注入 style 后正确失效） ──
+	fmt.Println("[4] 样式表缓存 + 动态注入")
+	wv.LoadHTML(`<!DOCTYPE html><html><body><div id="c1" class="cached"></div></body></html>`)
+	ev, _ = wv.EvalJS(`getComputedStyle(document.getElementById('c1')).getPropertyValue('--x')`)
+	verdict(check("注入前 --x（空）", ev.ToString(), ""))
+	wv.EvalJS(`var st=document.createElement('style'); st.textContent='.cached { --x: #abc; color: rgb(1,2,3); }'; document.head.appendChild(st);`)
+	ev, _ = wv.EvalJS(`getComputedStyle(document.getElementById('c1')).getPropertyValue('--x')`)
+	verdict(check("注入后 --x 生效（缓存失效）", ev.ToString(), "#abc"))
+	ev, _ = wv.EvalJS(`getComputedStyle(document.getElementById('c1')).getPropertyValue('color')`)
+	// 引擎 token 序列化带空格（rgb( 1 , 2 , 3 )），值语义正确即可
+	verdict(check("注入后 color 生效", strings.ReplaceAll(ev.ToString(), " ", ""), "rgb(1,2,3)"))
+
+	// ── 遗留 2：指针能力动态化 ──
+	fmt.Println("[5] 指针能力动态化")
+	wv.SetPointerCapabilities("none", "coarse")
+	ev, _ = wv.EvalJS(`matchMedia('(hover: none)').matches`)
+	verdict(check("hover:none", ev.ToString(), "true"))
+	ev, _ = wv.EvalJS(`matchMedia('(pointer: coarse)').matches`)
+	verdict(check("pointer:coarse", ev.ToString(), "true"))
+	ev, _ = wv.EvalJS(`matchMedia('(hover: hover)').matches`)
+	verdict(check("hover:hover（应为 false）", ev.ToString(), "false"))
+	wv.SetPointerCapabilities("hover", "fine")
+	ev, _ = wv.EvalJS(`matchMedia('(pointer: fine)').matches`)
+	verdict(check("恢复 fine 后 fine.matches", ev.ToString(), "true"))
 
 	fmt.Printf("\n结果：%d 通过，%d 失败\n", passed, failed)
 	if failed > 0 {
