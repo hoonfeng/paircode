@@ -1,4 +1,6 @@
 // 验证 wb-ui HTML 解析器对属性值含 && 的处理
+//go:build ignore
+
 package main
 
 import (

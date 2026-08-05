@@ -4,6 +4,8 @@
 package main
 
 import (
+	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -35,6 +37,8 @@ func setupLoaders(wv *webkit.WebView, dir string) {
 
 func main() {
 	log.SetFlags(log.Ltime)
+	convPath := flag.String("conv", "", "历史对话 jsonl 路径（注入 window.__CONV_JSONL__，real_data.js 解析生成 REAL_COMBOS；省略则用内置手工数据）")
+	flag.Parse()
 	log.Println("[fold_sim] agent 输出收缩状态模拟窗口")
 
 	wd, _ := os.Getwd()
@@ -58,6 +62,23 @@ func main() {
 	htmlData, err := os.ReadFile(filepath.Join(dir, "fold_sim.html"))
 	if err != nil {
 		log.Fatalf("[fold_sim] read fold_sim.html: %v", err)
+	}
+
+	// -conv 指定历史对话 jsonl：注入 window.__CONV_JSONL__，由 real_data.js 解析生成 REAL_COMBOS
+	if *convPath != "" {
+		raw, rerr := os.ReadFile(*convPath)
+		if rerr != nil {
+			log.Printf("[fold_sim] 读取 jsonl 失败（回退内置数据）: %v", rerr)
+		} else {
+			jsLiteral, jerr := json.Marshal(string(raw))
+			if jerr != nil {
+				log.Printf("[fold_sim] 序列化 jsonl 失败（回退内置数据）: %v", jerr)
+			} else {
+				inject := "<script>window.__CONV_JSONL__ = " + string(jsLiteral) + ";</script>"
+				htmlData = []byte(strings.Replace(string(htmlData), `<script src="./real_data.js"></script>`, inject+"\n"+`<script src="./real_data.js"></script>`, 1))
+				log.Printf("[fold_sim] 已注入 jsonl: %s（%d bytes）", *convPath, len(raw))
+			}
+		}
 	}
 	log.Printf("[fold_sim] HTML: %d bytes", len(htmlData))
 

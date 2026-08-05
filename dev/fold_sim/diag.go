@@ -1,4 +1,6 @@
 // 诊断 fold_sim 全黑问题：LoadHTML 后检查 console 错误、Vue 是否 mount、DOM/渲染树状态。
+//go:build ignore
+
 package main
 
 import (

@@ -272,6 +272,7 @@ body { font-family: var(--font-ui); font-size: var(--font-size-base); background
 </div>
 
 <script src="./vue.global.prod.js"></script>
+<script src="./real_data.js"></script>
 <script>
 // ============ chat-utils.js 逻辑（复制，保证内容与真实一致） ============
 function safeParse(json) {
@@ -351,7 +352,9 @@ var SvgIcon = {
 var app = Vue.createApp({
   data: function () {
     return {
-      combos: [
+      combos: (window.REAL_COMBOS && window.REAL_COMBOS.length)
+        ? window.REAL_COMBOS        // 真实会话数据（real_data.js）
+        : [                          // 手工模拟数据（兜底）
         // ── ① 收缩状态 1：整条消息折叠（_folded=true）→ 显示「完成摘要」条 ──
         {
           user: { content: '帮我看一下登录页为什么在窄屏下布局错乱', _time: '10:01' },
