@@ -73,7 +73,7 @@
                   <!-- Agent 分段渲染（兼容 WS 流式更新通过 pushSegment 写入 segments） -->
                   <template v-if="combo.assistant.segments && combo.assistant.segments.length > 0">
                     <div v-if="combo.assistant._folded" class="folded-summary" @click="combo.assistant._folded = !combo.assistant._folded">
-                      <span class="folded-chevron">▸</span>
+                      <svg class="folded-chevron" viewBox="0 0 8 8" width="9" height="9" fill="currentColor" aria-hidden="true"><path d="M2.6 1.2 L6.8 4 L2.6 6.8 Z"/></svg>
                       <SvgIcon name="list" :size="11" />
                       <span class="folded-title">完成摘要</span>
                       <span class="folded-desc">{{ msgSummary(combo.assistant) }}</span>
@@ -92,7 +92,8 @@
                           <span class="tl-dot tl-dot-tool"></span>
                           <div class="tl-body tl-tool">
                             <div class="tl-tc-header" @click="seg._expanded = !seg._expanded">
-                              <span class="tl-tc-chevron">{{ seg._expanded ? '▾' : '▸' }}</span>
+                              <svg v-if="!seg._expanded" class="tl-tc-chevron" viewBox="0 0 8 8" width="8" height="8" fill="currentColor" aria-hidden="true"><path d="M2.6 1.2 L6.8 4 L2.6 6.8 Z"/></svg>
+                              <svg v-else class="tl-tc-chevron" viewBox="0 0 8 8" width="8" height="8" fill="currentColor" aria-hidden="true"><path d="M1.2 2.6 L4 6.8 L6.8 2.6 Z"/></svg>
                               <SvgIcon :name="toolMeta(seg).icon" :size="11" class="tl-tc-icon" />
                               <span class="tl-tc-name">{{ toolMeta(seg).title }}</span>
                               <span v-if="toolMeta(seg).detail" class="tl-tc-param">{{ toolMeta(seg).detail }}</span>
@@ -1899,8 +1900,15 @@ onUnmounted(() => {
 .phs-item { display: flex; align-items: center; gap: 3px; color: rgba(212, 167, 78, 0.6); font-size: 10px; }
 .phase-bar-track { width: 100%; height: 2px; background: rgba(212, 167, 78, 0.1); border-radius: 1px; margin-top: 2px; }
 .phase-bar-fill { height: 100%; background: #d4a74e; border-radius: 1px; transition: width 1s ease; }
-.folded-summary { display: flex; align-items: center; gap: 5px; padding: 5px 10px; background: var(--bg-primary); border: 1px solid var(--border-color); border-left: 3px solid var(--accent); border-radius: 6px; font-size: 12px; cursor: pointer; transition: background 0.15s, border-color 0.15s; }
+.folded-summary { display: flex; align-items: center; gap: 5px; padding: 5px 10px; background: var(--bg-primary); border: 1px solid var(--border-color); border-left: 3px solid var(--accent); border-radius: 6px; font-size: 12px; cursor: pointer; transition: background 0.15s, border-color 0.15s; overflow: hidden; }
 .folded-summary:hover { background: var(--bg-hover); border-color: var(--accent); }
+.folded-chevron { flex-shrink: 0; color: var(--text-muted); display: block; }
+/* ★ 折叠摘要条必须给子项加 flex 约束：title 固定不折行、desc 占剩余空间
+     超长 ellipsis 截断——否则裸 span 按内容自适应宽度，agent 输出（摘要
+     文本变长）会导致折叠条宽度膨胀、布局跳动（无操作时也影响渲染），
+     窄容器下还会挤压"完成摘要"标题异常折行（Edge 每行两字）。 */
+.folded-title { flex-shrink: 0; white-space: nowrap; color: var(--text-primary); font-weight: 500; }
+.folded-desc { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); }
 
 /* ── 折叠按钮（展开后使用） ── */
 .msg-fold-btn {
@@ -1931,7 +1939,7 @@ onUnmounted(() => {
 .tl-thinking-collapsed { color: var(--text-muted); font-style: italic; font-size: 12px; cursor: pointer; padding: 2px 0; }
 .tl-tc-header { display: flex; align-items: center; gap: 4px; cursor: pointer; padding: 4px 8px; user-select: none; border-radius: 4px; transition: background 0.15s; }
 .tl-tc-header:hover { background: var(--bg-hover); }
-.tl-tc-chevron { font-size: 9px; color: var(--text-muted); width: 8px; text-align: center; flex-shrink: 0; transition: transform 0.15s; }
+.tl-tc-chevron { color: var(--text-muted); width: 8px; flex-shrink: 0; display: block; }
 .tl-tc-icon { flex-shrink: 0; color: var(--text-secondary); }
 .tl-tc-name { font-size: 12px; font-weight: 500; color: var(--text-primary); font-family: var(--font-code); flex-shrink: 0; }
 .tl-tc-param { font-size: 11px; color: var(--accent-light); margin-left: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; font-family: var(--font-code); }

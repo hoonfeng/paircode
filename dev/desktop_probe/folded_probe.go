@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"wb-ui/dom"
+	"wb-ui/jsc"
 	"wb-ui/layout"
 	"wb-ui/platform/graphics"
 	"wb-ui/rendering"
@@ -191,6 +192,11 @@ func main() {
 	wv.Resize(1280, 800)
 	_ = wv.JSInterpreter()
 	desktopbridge.Init(wv)
+	// ★ 独立面板模式：desktopbridge 已恢复完整 IDE，本测试程序自行注入
+	//   panel-only 标志（在页面脚本执行前），只加载右侧面板做折叠条验证。
+	webkit.BeforePageScripts = func(rt *jsc.Interpreter) {
+		rt.RunJS(`window.__DESKTOP_PANEL_MODE__ = true;`)
+	}
 	// 注入 data-v 属性探针：记录 setAttribute/removeAttribute 对 data-v-* 的调用。
 	// 探针 patch Element.prototype.setAttribute（标准 DOM 设计，方法在 prototype 上），
 	// 所有实例（HTML/SVG/Element）经原型链共享，hook 可捕获 Vue 的 data-v 属性写入。
