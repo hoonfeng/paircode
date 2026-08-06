@@ -132,6 +132,11 @@ func main() {
 		}
 		objCount := countObjects(rendering.RenderObject(rv))
 
+		// ★ consume the full-viewport dirty left by EnsureLayout (a real host
+		// paints every frame and clears it); afterwards MarkDirty() regions
+		// are genuinely local.
+		rendering.Paint(rv, cv, rendering.Rect{X: 0, Y: 0, Width: float64(W), Height: float64(H)})
+
 		// --- HitTest: 60 random points, median-ish avg ---
 		rng := rand.New(rand.NewSource(42))
 		t0 := time.Now()
@@ -211,6 +216,12 @@ func main() {
 		rebuildT := time.Since(t0)
 
 		// --- Paint (dirty-rect local repaint) ---
+		if n == 100 {
+			sx0, sy0 := rv.ScrollOffset()
+			fmt.Printf("[paint-diag] n=%d dirty=%v dirtyRect=%.0f,%.0f %.0fx%.0f scrollOffsets=%d pageScroll=(%.0f,%.0f)\n",
+				n, rv.IsDirty(), rv.GetDirtyRect().X, rv.GetDirtyRect().Y, rv.GetDirtyRect().Width, rv.GetDirtyRect().Height,
+				rv.ScrollOffsetCount(), sx0, sy0)
+		}
 		t0 = time.Now()
 		rendering.Paint(rv, cv, rendering.Rect{X: 0, Y: 0, Width: float64(W), Height: float64(H)})
 		paintT := time.Since(t0)
