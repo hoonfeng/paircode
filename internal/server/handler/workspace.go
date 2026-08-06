@@ -113,6 +113,30 @@ func HandleWorkspacePost(w http.ResponseWriter, r *http.Request) {
 		}
 		jsonResp(w, map[string]any{"ok": true, "folders": core.Folders})
 
+	case "switch":
+		// 切换主工作区（前端 FileExplorer 切换工作区列表项发 action:"switch"，
+		// root=新主根，folders=附加文件夹；此前缺失此 case 落入 default 报
+		// "未知操作: switch" → 前端 apiPost 抛异常 → 点击切换无效果）。
+		if req.Root == "" {
+			jsonErr(w, "需要 root 参数")
+			return
+		}
+		newFolders := []string{req.Root}
+		for _, f := range req.Folders {
+			if f != "" && f != req.Root {
+				newFolders = append(newFolders, f)
+			}
+		}
+		core.Folders = newFolders
+		core.Settings.LastProject = req.Root
+		core.Settings.WorkspaceFolders = append([]string{}, newFolders...)
+		core.Loaded = true
+		core.Save()
+		if core.OnSyncWorkspace != nil {
+			core.OnSyncWorkspace(true)
+		}
+		jsonResp(w, map[string]any{"ok": true, "root": req.Root, "folders": newFolders})
+
 	case "open":
 		if req.Root == "" {
 			jsonErr(w, "需要 root 参数")
