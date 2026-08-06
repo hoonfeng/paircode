@@ -210,6 +210,102 @@ func runJS4(wv *webkit.WebView, script string) string {
 	return v.ToString()
 }
 
+// diagEditorClip 诊断编辑器滚动容器的裁剪链路：
+//   - cm-scroller / cm-content 的 render box：overflow、padding-box、scroll offset
+//   - 层树中 cm-* 相关 layer 的 CalculateRects clip
+// 用于验证「cm-scroller(overflow:auto) 是否裁剪 cm-content 溢出内容」。
+func diagEditorClip(wv *webkit.WebView) {
+	fr := wv.MainFrame()
+	if fr == nil {
+		return
+	}
+	f := fr.Frame()
+	if f == nil {
+		return
+	}
+	rv := f.RenderView()
+	if rv == nil {
+		return
+	}
+	// 1) 渲染树中找 cm-scroller / cm-content 的 render box
+	var scBox, coBox *rendering.RenderBox
+	var walkRB func(ro rendering.RenderObject)
+	walkRB = func(ro rendering.RenderObject) {
+		if ro == nil {
+			return
+		}
+		if rb, ok := ro.(*rendering.RenderBox); ok && rb.Style() != nil {
+			if n := rb.Node(); n != nil {
+				if el, ok := n.(*dom.Element); ok {
+					cls := el.GetAttribute("class")
+					if strings.Contains(cls, "cm-scroller") && scBox == nil {
+						scBox = rb
+					}
+					if strings.Contains(cls, "cm-content") && coBox == nil {
+						coBox = rb
+					}
+				}
+			}
+		}
+		for c := ro.FirstChild(); c != nil; c = c.NextSibling() {
+			walkRB(c)
+		}
+	}
+	walkRB(rendering.RenderObject(rv))
+	report := func(tag string, b *rendering.RenderBox) {
+		if b == nil {
+			fmt.Printf("[CLIP] %s: NOT FOUND\n", tag)
+			return
+		}
+		st := b.Style()
+		ox, oy := -1, -1
+		if st != nil {
+			ox, oy = int(st.OverflowX), int(st.OverflowY)
+		}
+		pb := b.PaddingBoxRect()
+		sx, sy := 0.0, 0.0
+		if rv != nil {
+			sx, sy = rv.BoxScrollOffset(b)
+		}
+		fmt.Printf("[CLIP] %s box=(%.0f,%.0f %.0fx%.0f) pb=(%.0f,%.0f %.0fx%.0f) ovf=(%d,%d) scroll=(%.0f,%.0f)\n",
+			tag, b.X(), b.Y(), b.Width(), b.Height(), pb.X, pb.Y, pb.Width, pb.Height, ox, oy, sx, sy)
+	}
+	report("cm-scroller", scBox)
+	report("cm-content", coBox)
+	// 2) 层树中找 cm-scroller 相关 layer，打印 CalculateRects clip
+	rootL := rv.RootLayer()
+	var dumpL func(l *rendering.RenderLayer, depth int)
+	dumpL = func(l *rendering.RenderLayer, depth int) {
+		if l == nil || l.Owner() == nil {
+			return
+		}
+		name := "?"
+		if n := l.Owner().Node(); n != nil {
+			if el, ok := n.(*dom.Element); ok {
+				name = el.LocalName() + "." + el.GetAttribute("class")
+			}
+		}
+		if strings.Contains(name, "cm-") || strings.Contains(name, "editor-") || strings.Contains(name, "main-area") ||
+			strings.Contains(name, "right-") || strings.Contains(name, "chat-") || strings.Contains(name, "conv-") ||
+			strings.Contains(name, "rp-") || strings.Contains(name, "input-") || strings.Contains(name, "bottom-") ||
+			strings.Contains(name, "msg") || strings.Contains(name, "term-") || strings.Contains(name, "comp-") ||
+			strings.Contains(name, "tool-") || strings.Contains(name, "obtn") || strings.Contains(name, "send-") {
+			_, clip := l.CalculateRects()
+			rb := l.Owner()
+			var bx, by, bw, bh float64
+			if rbx, ok := rb.(*rendering.RenderBox); ok {
+				bx, by, bw, bh = rbx.X(), rbx.Y(), rbx.Width(), rbx.Height()
+			}
+			fmt.Printf("[LAYER] %s%s box=(%.0f,%.0f %.0fx%.0f) clip=(%.0f,%.0f %.0fx%.0f)\n",
+				strings.Repeat("  ", depth), name, bx, by, bw, bh, clip.X, clip.Y, clip.Width, clip.Height)
+		}
+		for c := l.FirstChild(); c != nil; c = c.NextSibling() {
+			dumpL(c, depth+1)
+		}
+	}
+	dumpL(rootL, 0)
+}
+
 func pngEncode(width, height int, rgba []byte) []byte {
 	img := image.NewRGBA(image.Rect(0, 0, width, height))
 	copy(img.Pix, rgba)
@@ -636,6 +732,7 @@ func main() {
 	fmt.Println(runJS4(wv, lineGeoJS))
 
 	diagEditorBox(wv)
+	diagEditorClip(wv)
 
 	// 3. 编辑器区域整体几何 + 父链 + 样式注入诊断
 	log.Printf("editorGeo: %s", runJS4(wv, editorGeoJS))
