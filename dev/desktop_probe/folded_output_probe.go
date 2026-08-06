@@ -24,6 +24,7 @@ import (
 	"wb-ui/layout"
 	"wb-ui/platform/graphics"
 	"wb-ui/rendering"
+	"wb-ui/style"
 	"wb-ui/webkit"
 
 	"github.com/hoonfeng/paircode/internal/desktopbridge"
@@ -100,7 +101,19 @@ func dumpFoldedTree(wv *webkit.WebView, tag string) {
 			g := rv.LayoutState().GeometryForBox(lb)
 			lbInfo = fmt.Sprintf(" rect=(%.1f,%.1f %.1fx%.1f) right=%.1f", g.Left(), g.Top(), g.BorderBoxWidth(), g.BorderBoxHeight(), g.Left()+g.BorderBoxWidth())
 		}
-		fmt.Printf("[foldout] %*s%s %q%s\n", depth*2, "", fmt.Sprintf("%T", o), cn, lbInfo)
+		stInfo := ""
+		if el, ok := o.Node().(*dom.Element); ok && strings.Contains(el.GetAttribute("class"), "folded") {
+			if so, ok2 := o.(interface {
+				Style() *style.ComputedStyle
+			}); ok2 {
+				if st := so.Style(); st != nil {
+					stInfo = fmt.Sprintf(" borderL=%.1f/%s/%v borderT=%.1f bg=%v r=%.1f",
+						st.BorderLeftWidth.Value, st.BorderLeftStyle, st.BorderColor("left"),
+						st.BorderTopWidth.Value, st.BackgroundColor, st.BorderRadius.Value)
+				}
+			}
+		}
+		fmt.Printf("[foldout] %*s%s %q%s%s\n", depth*2, "", fmt.Sprintf("%T", o), cn, lbInfo, stInfo)
 		for c := o.FirstChild(); c != nil; c = c.NextSibling() {
 			walk(c, depth+1)
 		}

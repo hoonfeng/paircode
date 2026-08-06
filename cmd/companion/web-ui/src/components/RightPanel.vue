@@ -1900,15 +1900,11 @@ onUnmounted(() => {
 .phs-item { display: flex; align-items: center; gap: 3px; color: rgba(212, 167, 78, 0.6); font-size: 10px; }
 .phase-bar-track { width: 100%; height: 2px; background: rgba(212, 167, 78, 0.1); border-radius: 1px; margin-top: 2px; }
 .phase-bar-fill { height: 100%; background: #d4a74e; border-radius: 1px; transition: width 1s ease; }
-.folded-summary { display: flex; align-items: center; gap: 5px; padding: 5px 10px; background: var(--bg-primary); border: 1px solid var(--border-color); border-left: 3px solid var(--accent); border-radius: 6px; font-size: 12px; cursor: pointer; transition: background 0.15s, border-color 0.15s; overflow: hidden; }
+.folded-summary { display: flex; align-items: center; gap: 5px; padding: 5px 10px; background: var(--bg-primary); border: 1px solid var(--border-color); border-left: 3px solid var(--accent); border-radius: 6px; font-size: 12px; cursor: pointer; transition: background 0.15s, border-color 0.15s; }
 .folded-summary:hover { background: var(--bg-hover); border-color: var(--accent); }
 .folded-chevron { flex-shrink: 0; color: var(--text-muted); display: block; }
-/* ★ 折叠摘要条必须给子项加 flex 约束：title 固定不折行、desc 占剩余空间
-     超长 ellipsis 截断——否则裸 span 按内容自适应宽度，agent 输出（摘要
-     文本变长）会导致折叠条宽度膨胀、布局跳动（无操作时也影响渲染），
-     窄容器下还会挤压"完成摘要"标题异常折行（Edge 每行两字）。 */
-.folded-title { flex-shrink: 0; white-space: nowrap; color: var(--text-primary); font-weight: 500; }
-.folded-desc { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); }
+.folded-title { color: var(--text-primary); font-weight: 500; }
+.folded-desc { color: var(--text-muted); }
 
 /* ── 折叠按钮（展开后使用） ── */
 .msg-fold-btn {
