@@ -12,6 +12,9 @@
 | 表象 | 根因（wb-ui 引擎） | 修复 |
 |---|---|---|
 | 编辑区打开文件空白/半渲染 | CodeMirror 6 初始化抛错：`document.getSelection()` → `document.hasFocus()` → `dom.attributes.length` 三个 DOM API 缺失，`new EditorView()` 中途异常，Vue 挂载中断 | bindings/dom.go：getSelection 幂等分支补挂；hasFocus 扫描 focused 元素；Element.attributes 返回 NamedNodeMap |
+| 打开文件编辑器布局错乱（cm-editor 0x0、内容画到编辑器外） | **布局引擎 Lookup 函数缺 TrimSpace**：CSS 值 `display:"flex "`（带尾随空格）→ `LookupDisplayType("flex ")` 不匹配 → default **inline** → cm-editor 行内布局塌缩。5 个 Lookup（display/position/white-space/overflow/text-overflow）全部受影响；bindings 侧 trim 了所以 JS getComputedStyle 正常（flex），布局侧 inline——两套不一致的根因 | style/computedstyle.go：5 个 Lookup 函数统一 `strings.TrimSpace(s)`。验证：cm-editor display=flex、position=relative、540.2 高正常布局 |
+| 访问 `el.parentElement`/`el.children`/MutationObserver target 触发 Go panic | **typed nil 陷阱**：`ParentElement()` 返回 `(*dom.Element)(nil)` 赋给 `dom.Node` 接口后 `n == nil` 为 false → `wrapElement(nil)` → `makeDataset(nil)` panic → 渲染中断 | bindings/dom.go：nodeAccFn/arrElem/arrNode/nodeToJS 加 isNilNode/isNilEl typed-nil 检查；mutationRecordToJS 的 Target 强断言改 ok 模式 |
+| 编辑输入字符破坏 CM6 结构（行 div 全部消失） | `setFocusedElementValue` 对 contenteditable 执行 `SetTextContent(全文)` → 抹掉 .cm-line/高亮 span；CM6 的 input 处理发现文本未变（全文替换文本相同）不重建结构 → 布局永久破坏 | bindings.InsertTextAtSelection（Selection range 处插文本节点）+ host.go：contenteditable 走光标插入 + input 事件；setFocusedElementValue 对 contenteditable 拒绝全文替换 |
 | markdown 文本字体/颜色异常、乱码 | `getComputedStyle` 返回 `var(--font-code)` 字面量（级联 map 不解析 var()，自定义属性不继承） | bindings/dom.go：computedStyleFor 末尾 resolveVarInComputed + substituteVars（从 :root 收集 -- 变量替换） |
 | 历史对话只加载最后 1 个 run | 滚轮/滚动条只更新引擎内偏移，不派发 `scroll` DOM 事件 → Vue @scroll 懒加载永不触发 | app/host.go：Host.dispatchScrollEvent 全路径派发（滚轮插值/滚动条/键盘） |
 | 工作区切换慢（vs 浏览器） | ① DOM 事件派发走 goja `Call` 不 flush microtask，固定 120ms sleep 驱动 ② RebuildRenderTree 全量重建 + style 全量重扫 | ① host.go 智能等待（PendingTasks 排空即退）② frame.go style 指纹缓存跳过重扫（324→124ms） |
