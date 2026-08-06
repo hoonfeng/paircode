@@ -54,6 +54,24 @@ func main() {
 
 	wv.LoadHTML(htmlStr)
 
+	// ★ 错误捕获 hook：把 JS 运行时错误记录到 window.__errs，
+	//   WB_SNAP 布局快照的 errs 字段由此拿到（打开文件时若有 JS 异常，
+	//   时间线上会清晰呈现）。
+	if interp := wv.JSInterpreter(); interp != nil {
+		_, _ = interp.RunJS(`window.__errs = [];
+window.addEventListener('error', function(e){ window.__errs.push('error: ' + (e && (e.message || e.type))); }, true);
+window.addEventListener('unhandledrejection', function(e){ window.__errs.push('rejection: ' + ((e && e.reason && e.reason.message) || String(e))); }, true);
+var _ce = console.error;
+console.error = function(){
+  window.__errs.push('console.error: ' + Array.prototype.slice.call(arguments).map(function(a){
+    var m = typeof a === 'string' ? a : ((a && a.message) || String(a));
+    if (a && a.stack) m += ' | STACK: ' + String(a.stack).split('\n').slice(0, 6).join(' <- ');
+    return m;
+  }).join(' | ').slice(0, 500));
+  return _ce.apply(console, arguments);
+};`)
+	}
+
 	if out := wv.ConsoleOutput(); out != "" {
 		log.Println("[CONSOLE]")
 		log.Println(out)

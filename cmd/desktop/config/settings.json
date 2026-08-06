@@ -1,0 +1,109 @@
+{
+  "provider": "deepseek",
+  "baseURL": "https://api.deepseek.com/v1",
+  "apiKey": "sk-56cfcb644ed146409ffb5051128ac923",
+  "model": "deepseek-v4-flash",
+  "planModel": "deepseek-v4-flash",
+  "executeModel": "deepseek-v4-flash",
+  "reviewModel": "deepseek-v4-flash",
+  "temperature": "0.3",
+  "thinkingMode": "thinking",
+  "maxTokens": 131072,
+  "contextMaxTokens": 1000000,
+  "lastProject": "F:\\\\syproject\\wb-ui",
+  "workspaceFolders": [
+    "F:\\\\syproject\\wb-ui",
+    "F:\\\\syproject\\ref",
+    "F:\\\\syproject\\goskia"
+  ],
+  "workspaceFolderLists": {
+    "F:\\\\syproject\\gou-ide": [
+      "F:\\\\syproject\\gou-ide",
+      "F:\\\\syproject\\wb-ui",
+      "F:\\\\syproject\\ref"
+    ],
+    "F:\\\\syproject\\wb-ui": [
+      "F:\\\\syproject\\wb-ui",
+      "F:\\\\syproject\\ref",
+      "F:\\\\syproject\\goskia"
+    ],
+    "F:\\\\syproject\\数据采集标注\u0026agent": [
+      "F:\\\\syproject\\数据采集标注\u0026agent"
+    ],
+    "F:\\syproject\\GWui": [
+      "F:\\syproject\\GWui"
+    ],
+    "F:\\syproject\\goui": [
+      "F:\\syproject\\goui"
+    ]
+  },
+  "recentProjects": [
+    "F:\\syproject\\gou-ide",
+    "F:\\\\syproject\\gou-ide",
+    "F:\\\\syproject\\wb-ui",
+    "F:\\\\syproject\\数据采集标注\u0026agent",
+    "F:\\syproject\\GWui",
+    "F:\\\\syproject\\图文视频agent"
+  ],
+  "reviewMode": "off",
+  "reviewBlacklist": null,
+  "reviewWhitelist": null,
+  "autonomous": false,
+  "autoCollapse": true,
+  "maxIterations": 500,
+  "maxParallelAgents": 3,
+  "maxReviewRetries": 9,
+  "autoIterateOnRejection": true,
+  "requireHumanApprovalForDestructive": false,
+  "aiReview": false,
+  "autoCommit": true,
+  "luaTools": true,
+  "enableBenchmarking": false,
+  "systemInstructions": "",
+  "searxngUrl": "http://192.168.2.216:8080/",
+  "ignoreDirs": [],
+  "defaultShell": "auto",
+  "termFontSize": 14,
+  "termEncoding": "auto",
+  "theme": "dark",
+  "fontFamily": "'Cascadia Code', 'Fira Code', Consolas, monospace",
+  "editorFontSize": 14,
+  "editorFontBold": false,
+  "editorFontItalic": false,
+  "editorFontUnderline": false,
+  "uiFontFamily": "Cascadia Code",
+  "uiFontBold": false,
+  "uiFontItalic": false,
+  "uiFontUnderline": false,
+  "hideMinimap": false,
+  "tabSize": 2,
+  "wordWrap": false,
+  "philosophyEnabled": false,
+  "philosophySelected": [
+    "tao-te-ching",
+    "huangdi-yinfu-jing",
+    "sunzi-bingfa"
+  ],
+  "philosophyRoles": {},
+  "autoConnectMCP": true,
+  "mcpEnabledOverrides": {
+    "system::filesystem": false,
+    "user::context7": false,
+    "user::playwright": false
+  },
+  "skillEnabledOverrides": {
+    "project::jsc-engine-fix-workflow": false,
+    "project::jsc-translate-pipeline": false,
+    "project::jsc-translator": false,
+    "project::wb-ui-pipeline-debug": false
+  },
+  "skillStatusOverrides": {
+    "project::jsc-engine-fix-workflow": "off",
+    "project::jsc-translate-pipeline": "off",
+    "project::jsc-translator": "off",
+    "project::wb-ui-pipeline-debug": "off",
+    "project::wbui-webkit-rewrite": "max",
+    "system::emoji-icons": "max"
+  },
+  "customProviders": null
+}
