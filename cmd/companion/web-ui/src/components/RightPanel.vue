@@ -799,6 +799,11 @@ const loadMoreMessages = async () => {
       state.messagesByConv[id] = mergedBefore
       state.messages = mergedBefore
       state.msgLoadedByConv[id] = (state.msgLoadedByConv[id] || 0) + older.length
+      // ★ 对新增的 older 消息应用折叠默认值（thinking 折叠 / tool_call 折叠 / 完成摘要），
+      //   与 switchConv 首次加载的 applyAutoCollapse 行为一致——否则滚动加载的历史消息
+      //   因 seg._collapsed===undefined 被模板 `!seg._collapsed` 判为展开，全文/全部工具行
+      //   铺开且撑破显示区域（浏览器短对话首次加载即覆盖全部消息无感知，长对话滚动必现）
+      applyAutoCollapse()
       // 补偿滚动位置：保持当前视口内容不动（新增的 older 消息在顶部）
       nextTick(() => {
         if (msgRef.value) {
