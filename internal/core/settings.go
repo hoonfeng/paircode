@@ -86,11 +86,17 @@ var (
 )
 
 // ConfigDir 全局配置目录：安装目录（exe 所在）下的 config/ 子区。
+// ★ exe 位于 bin/ 子目录时（如 bin/desktop.exe）回退到上级目录的 config/，
+//   与根目录运行（companion.exe → ./config）共用同一份配置——否则桌面版
+//   会读到 bin/config/settings.json 旧配置（工作区列表不全，只显示一个）。
 func ConfigDir() string {
 	if exe, err := os.Executable(); err == nil {
 		dir := filepath.Dir(exe)
 		low := strings.ToLower(dir)
 		if !strings.Contains(low, "go-build") && !strings.Contains(low, `\temp\`) && !strings.Contains(low, "/tmp/") {
+			if strings.EqualFold(filepath.Base(dir), "bin") {
+				return filepath.Join(filepath.Dir(dir), "config")
+			}
 			return filepath.Join(dir, "config")
 		}
 	}

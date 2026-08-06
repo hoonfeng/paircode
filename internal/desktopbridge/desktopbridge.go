@@ -31,6 +31,10 @@ import (
 var bridgeRegistry = pairBridge.NewRegistry()
 var bridgeSessionManager = agent.NewSessionManager()
 
+// isWsSwitchProbe 临时调试开关：打印每个 bridge_call 的耗时（工作区切换性能定位）。
+// 通过环境变量 WS_SWITCH_TIMING=1 开启，默认关闭不影响正常运行。
+var isWsSwitchProbe = os.Getenv("WS_SWITCH_TIMING") == "1"
+
 // Init 初始化桌面端桥接：
 //  1. 加载核心配置（core.Load + LoadLastProject），对齐 web 端
 //  2. 初始化消息存储（JSONL + SQLite + persist worker）
@@ -472,6 +476,7 @@ func buildDesktopSystemDynamic(root string) string {
 // ─── bridge call dispatch ──────────────────────────────────
 
 func handleBridgeCall(method, path, bodyJSON, paramsJSON string) string {
+	bcT0 := time.Now()
 	bodyReader := strings.NewReader(bodyJSON)
 	httpReq, err := http.NewRequest(method, path, bodyReader)
 	if err != nil {
@@ -499,6 +504,9 @@ func handleBridgeCall(method, path, bodyJSON, paramsJSON string) string {
 	}
 	if !bridgeRegistry.Dispatch(method, dispatchPath, vw, httpReq) {
 		return errResp(404, "no route: "+method+" "+dispatchPath)
+	}
+	if isWsSwitchProbe { // 调试：WS_SWITCH_TIMING=1 时打印每个 bridge_call 耗时
+		log.Printf("[BridgeTiming] %s %s => %dms", method, dispatchPath, time.Since(bcT0).Milliseconds())
 	}
 	return okResp(vw.status, vw.body.String())
 }
