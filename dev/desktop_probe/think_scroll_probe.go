@@ -193,9 +193,112 @@ func main() {
 	fmt.Printf("[ts] DOM: %s\n", runJSTS(wv, `(function(){
 		return JSON.stringify({
 			thinkText: document.querySelectorAll('.tl-thinking-text').length,
-			chatH: (function(){ var e = document.querySelector('.chat-messages'); return e ? {ch: e.clientHeight, sh: e.scrollHeight} : null; })()
+			chatH: (function(){ var e = document.querySelector('.chat-messages'); return e ? {ch: e.clientHeight, sh: e.scrollHeight} : null; })(),
+			chatArea: (function(){ var e = document.querySelector('.chat-area'); return e ? {ch: e.clientHeight, sh: e.scrollHeight} : null; })(),
+			body: (function(){ var e = document.querySelector('.rp-body'); return e ? {ch: e.clientHeight} : null; })(),
+			panel: (function(){ var e = document.querySelector('.right-panel'); return e ? {ch: e.clientHeight, sh: e.scrollHeight} : null; })(),
+			resumeBanner: (function(){ var e = document.querySelector('.resume-banner'); return e ? {ch: e.clientHeight} : null; })(),
+			resumeText: (function(){ var e = document.querySelector('.resume-text'); return e ? {ch: e.clientHeight, w: e.getBoundingClientRect().width} : null; })()
 		});
 	})()`))
+	fmt.Printf("[ts] 引擎几何: %s\n", func() string {
+		rv := wv.RenderView()
+		if rv == nil {
+			return "no rv"
+		}
+		doc := wv.Document()
+		// 定位 resume-banner 和 resume-text
+		var bannerEl *dom.Element
+		var target *dom.Element
+		var find func(n dom.Node)
+		find = func(n dom.Node) {
+			if bannerEl != nil && target != nil {
+				return
+			}
+			if e, ok := n.(*dom.Element); ok {
+				cn := e.GetAttribute("class")
+				if bannerEl == nil && strings.Contains(cn, "resume-banner") {
+					bannerEl = e
+				}
+				if target == nil && strings.Contains(cn, "resume-text") {
+					target = e
+				}
+			}
+			for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+				find(c)
+			}
+		}
+		find(dom.Node(doc))
+		if target == nil {
+			return "no resume-text"
+		}
+		box := rv.FindRenderBoxForNode(target)
+		if box == nil {
+			return "box nil"
+		}
+		pb := box.PaddingBoxRect()
+		st := box.Style()
+		if st == nil {
+			return "style nil"
+		}
+		// banner 信息
+		binfo := "no banner"
+		domInfo := ""
+		if bannerEl != nil {
+			if bb := rv.FindRenderBoxForNode(bannerEl); bb != nil && bb.Style() != nil {
+				binfo = fmt.Sprintf("banner display=%d flexDir=%v flexWrap=%v pbH=%.0f", bb.Style().Display, bb.Style().FlexDirection, bb.Style().FlexWrap, bb.PaddingBoxRect().Height)
+			}
+			// dump DOM 子节点
+			var kids []string
+			var dumpKids func(n dom.Node, d int)
+			dumpKids = func(n dom.Node, d int) {
+				if len(kids) > 12 {
+					return
+				}
+				for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+					if e, ok := c.(*dom.Element); ok {
+						kids = append(kids, fmt.Sprintf("%s<%s class=%q>", strings.Repeat(" ", d*2), e.LocalName(), e.GetAttribute("class")))
+					} else if t, ok := c.(*dom.Text); ok {
+						txt := t.Data()
+						if len(txt) > 10 {
+							txt = txt[:10]
+						}
+						kids = append(kids, fmt.Sprintf("%stext=%q", strings.Repeat(" ", d*2), txt))
+					}
+					dumpKids(c, d+1)
+				}
+			}
+			dumpKids(dom.Node(bannerEl), 1)
+			domInfo = "kids=" + strings.Join(kids, ";")
+		}
+		// layout 树中 resume-text 的类型
+		// 样式明细
+		styleInfo := fmt.Sprintf("display=%d flexGrow=%.0f flexShrink=%.0f flexBasis=%v whiteSpace=%d ovfWrap=%q wordBreak=%q width=%v",
+			st.Display, st.FlexGrow, st.FlexShrink, st.FlexBasis, st.WhiteSpace, st.GetProperty("overflow-wrap"), st.GetProperty("word-break"), st.Width)
+		// dump 文本段
+		var segs []rendering.InlineTextBox
+		var walk func(o rendering.RenderObject)
+		walk = func(o rendering.RenderObject) {
+			if rt, ok := o.(*rendering.RenderText); ok {
+				segs = append(segs, rt.Segments()...)
+			}
+			for c := o.FirstChild(); c != nil; c = c.NextSibling() {
+				walk(c)
+			}
+		}
+		walk(box)
+		segStr := ""
+		if len(segs) > 0 {
+			segStr = fmt.Sprintf("n=%d firstY=%.0f lastY=%.0f firstLineY=%.0f", len(segs), segs[0].Y, segs[len(segs)-1].Y, segs[0].LineY)
+			if len(segs) > 1 {
+				segStr += fmt.Sprintf(" lineYs=%v", []float64{segs[0].LineY, segs[1].LineY, segs[2].LineY})
+			}
+		} else {
+			segStr = "no segs"
+		}
+		return fmt.Sprintf("%s %s %s pb=(%.0f,%.0f %.0fx%.0f) %s",
+			binfo, styleInfo, domInfo, pb.X, pb.Y, pb.Width, pb.Height, segStr)
+	}())
 
 	// dump .tl-thinking-text 引擎级几何 + 滚动状态
 	fmt.Printf("[ts] 引擎: %s\n", func() string {
@@ -228,19 +331,46 @@ func main() {
 		if box == nil {
 			return "box nil"
 		}
-		state := rv.LayoutState()
-		_ = state
-		pb := box.PaddingBoxRect()
-		tw, th := rv.BoxContentSize(box)
-		sx, sy := rv.BoxScrollOffset(box)
-		vm := rendering.VerticalScrollbarMetrics(rv, box)
-		ws := "?"
-		if st := box.Style(); st != nil {
-			ws = fmt.Sprintf("ovfY=%d", st.OverflowY)
+		// dump 子树 render 对象 + 文字段
+		var dumpTree func(ro rendering.RenderObject, depth int, sb *strings.Builder)
+		dumpTree = func(ro rendering.RenderObject, depth int, sb *strings.Builder) {
+			indent := strings.Repeat("  ", depth)
+			switch v := ro.(type) {
+			case *rendering.RenderText:
+				segs := v.Segments()
+				if len(segs) > 0 {
+					seg := segs[0]
+					sub := v.OriginalText()
+					rs := []rune(sub)
+					if len(rs) > 24 {
+						sub = string(rs[:24])
+					}
+					fmt.Fprintf(sb, "%sRenderText seg=(%.0f,%.0f w%.0f h%.0f) n=%d %q\n", indent, seg.X, seg.Y, seg.Width, seg.Height, len(segs), sub)
+				} else {
+					sub := v.OriginalText()
+					rs := []rune(sub)
+					if len(rs) > 24 {
+						sub = string(rs[:24])
+					}
+					fmt.Fprintf(sb, "%sRenderText (no segs) %q\n", indent, sub)
+				}
+			case *rendering.RenderBox:
+				el, _ := ro.Node().(*dom.Element)
+				cn := ""
+				if el != nil {
+					cn = el.GetAttribute("class")
+				}
+				fmt.Fprintf(sb, "%sBox %s xy=(%.0f,%.0f) wh=(%.0f,%.0f)\n", indent, cn, v.X(), v.Y(), v.Width(), v.Height())
+			default:
+				fmt.Fprintf(sb, "%s%s\n", indent, ro.RenderName())
+			}
+			for c := ro.FirstChild(); c != nil; c = c.NextSibling() {
+				dumpTree(c, depth+1, sb)
+			}
 		}
-		return fmt.Sprintf("pb=(%.0f,%.0f %.0fx%.0f) content=%.0fx%.0f scroll=(%.0f,%.0f) %s vscroll={OK:%v trackLen=%.0f thumbLen=%.0f maxScroll=%.0f viewH=%.0f totalH=%.0f}",
-			pb.X, pb.Y, pb.Width, pb.Height, tw, th, sx, sy, ws,
-			vm.OK, vm.TrackLen, vm.ThumbLen, vm.MaxScroll, vm.ViewLen, vm.TotalLen)
+		var sb strings.Builder
+		dumpTree(box, 0, &sb)
+		return sb.String()
 	}())
 
 	// JS 侧几何（几何桥）
@@ -251,6 +381,11 @@ func main() {
 	})()`))
 
 	// 渲染当前（scrollTop=0）
+	fmt.Printf("[ts] s0滚动状态: %s\n", runJSTS(wv, `(function(){
+		var c = document.querySelector('.chat-messages');
+		var t = document.querySelector('.tl-thinking-text');
+		return JSON.stringify({chatTop: c ? c.scrollTop : null, thinkTop: t ? t.scrollTop : null, thinkRect: t ? (function(){ var r = t.getBoundingClientRect(); return {top: r.top, bottom: r.bottom}; })() : null});
+	})()`))
 	renderTS(wv, "think_scroll_s0.png")
 
 	// 设 scrollTop=100，渲染 + dump
@@ -295,9 +430,28 @@ func main() {
 		if box == nil {
 			return "box nil"
 		}
+		pb := box.PaddingBoxRect()
 		sx, sy := rv.BoxScrollOffset(box)
-		vm := rendering.VerticalScrollbarMetrics(rv, box)
-		return fmt.Sprintf("scroll=(%.0f,%.0f) vscroll={OK:%v trackLen=%.0f thumbLen=%.0f maxScroll=%.0f}", sx, sy, vm.OK, vm.TrackLen, vm.ThumbLen, vm.MaxScroll)
+		// 找第一个 RenderText 的段坐标（完整递归）
+		segInfo := "no text"
+		var findSeg func(ro rendering.RenderObject) bool
+		findSeg = func(ro rendering.RenderObject) bool {
+			if rt, ok := ro.(*rendering.RenderText); ok {
+				segs := rt.Segments()
+				if len(segs) > 0 {
+					segInfo = fmt.Sprintf("seg=(%.0f,%.0f) n=%d", segs[0].X, segs[0].Y, len(segs))
+					return true
+				}
+			}
+			for c := ro.FirstChild(); c != nil; c = c.NextSibling() {
+				if findSeg(c) {
+					return true
+				}
+			}
+			return false
+		}
+		findSeg(box)
+		return fmt.Sprintf("pb=(%.0f,%.0f) scroll=(%.0f,%.0f) %s", pb.X, pb.Y, sx, sy, segInfo)
 	}())
 	renderTS(wv, "think_scroll_s100.png")
 
