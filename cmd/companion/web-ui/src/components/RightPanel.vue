@@ -821,6 +821,28 @@ const loadMoreMessages = async () => {
   }
 }
 
+// fillViewport 按空间加载：初始加载内容不足视口时自动加载更早消息填满可视区域
+// （浏览器行为：视口高则多加载，而非固定 limit=50 原始行 → 折叠后只显示最后一轮）。
+// 依赖引擎几何桥（clientHeight/scrollHeight 真实值）；内容不足时循环 loadMoreMessages
+// 直到填满、无更早消息或达到轮次上限（防极端长对话无限循环）。
+const fillViewport = async () => {
+  if (!autoCollapse.value) return
+  const el = msgRef.value
+  if (!el) return
+  for (let guard = 0; guard < 8; guard++) {
+    if (el.scrollHeight > el.clientHeight + 10) break // 已填满视口
+    const msgs = state.messagesByConv[state.currentConvId]
+    if (!msgs || msgs.length === 0) break
+    if (msgs[0]._noMoreAbove) break
+    const before = msgs.length
+    await loadMoreMessages()
+    await nextTick()
+    const after = state.messagesByConv[state.currentConvId]
+    if (!after || after.length === before) break // 无新消息
+  }
+  forceScrollToBottom()
+}
+
 // ── 段模式（兼容旧版）──
 function segMode(seg) {
   if (seg._mode) return seg._mode
@@ -1421,6 +1443,9 @@ const switchConv = async (id) => {
   currentPlan.value = planMsgs.length > 0 ? rebuildPlanFromMessages(planMsgs) : []
   planExpanded.value = currentPlan.value.length > 0
   applyAutoCollapse()
+  // ★ 按空间加载：初始内容不足视口时自动加载更早消息（浏览器行为），
+  //   引擎几何桥修复后 clientHeight/scrollHeight 为真实值，fillViewport 可判断。
+  await fillViewport()
   forceScrollToBottom()
   } finally {
     _loadingConvs.delete(id)

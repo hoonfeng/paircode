@@ -15,9 +15,11 @@ import (
 	"strings"
 	"time"
 
+	"wb-ui/dom"
 	"wb-ui/jsc"
 	"wb-ui/layout"
 	"wb-ui/platform/graphics"
+	"wb-ui/rendering"
 	"wb-ui/webkit"
 
 	"github.com/hoonfeng/paircode/internal/desktopbridge"
@@ -179,6 +181,307 @@ func main() {
 
 	before := runJSF(wv, foldStatsJS)
 	fmt.Printf("[sfold] switchConv 后 BEFORE: %s\n", before)
+
+	// ── 诊断1：初始加载空间——内容是否填满视口（区分 box 未找到 vs metrics 为 0） ──
+	fmt.Printf("[sfold] 空间: %s\n", runJSF(wv, `(function(){
+		var el = document.querySelector('.chat-messages');
+		if (!el) return 'no el';
+		return JSON.stringify({clientH: el.clientHeight, scrollH: el.scrollHeight, scrollTop: el.scrollTop, offsetH: el.offsetHeight, offsetW: el.offsetWidth, scrollW: el.scrollWidth, tag: el.tagName, cls: (el.className||'').slice(0,30)});
+	})()`))
+
+	// ── 诊断1c：JS 树 vs Go 树同一性判别（JS 侧打标记，Go 侧查） ──
+	fmt.Printf("[sfold] 标记注入: %s\n", runJSF(wv, `(function(){
+		var el = document.querySelector('.chat-messages');
+		if (!el) return 'no el';
+		el.setAttribute('data-probe-mark', 'yes');
+		el.__probeProbe = 42;
+		return 'marked tag=' + el.tagName + ' childCount=' + el.childElementCount;
+	})()`))
+	func() {
+		doc := wv.Document()
+		if doc == nil {
+			fmt.Printf("[sfold] Go查标记: no doc\n")
+			return
+		}
+		foundMark := false
+		var walkDOM func(n dom.Node)
+		walkDOM = func(n dom.Node) {
+			if foundMark {
+				return
+			}
+			if e, ok := n.(*dom.Element); ok {
+				if e.GetAttribute("data-probe-mark") == "yes" {
+					foundMark = true
+					return
+				}
+			}
+			for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+				walkDOM(c)
+			}
+		}
+		walkDOM(dom.Node(doc))
+		fmt.Printf("[sfold] Go查标记: foundMark=%v\n", foundMark)
+	}()
+
+	// ── 诊断1b：Go 侧直接查 FindRenderBoxForNode(.chat-messages) + 滚动 metrics ──
+	func() {
+		rv := wv.RenderView()
+		if rv == nil {
+			fmt.Printf("[sfold] Go侧: no rv\n")
+			return
+		}
+		doc := wv.Document()
+		if doc == nil {
+			fmt.Printf("[sfold] Go侧: no doc\n")
+			return
+		}
+		var chatEl *dom.Element
+		var walkDOM func(n dom.Node)
+		walkDOM = func(n dom.Node) {
+			if chatEl != nil {
+				return
+			}
+			if e, ok := n.(*dom.Element); ok {
+				if strings.Contains(e.GetAttribute("class"), "chat-messages") {
+					chatEl = e
+					return
+				}
+			}
+			for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+				walkDOM(c)
+			}
+		}
+		walkDOM(dom.Node(doc))
+		if chatEl == nil {
+			fmt.Printf("[sfold] Go侧: .chat-messages DOM 未找到\n")
+			return
+		}
+		box := rv.FindRenderBoxForNode(chatEl)
+		if box == nil {
+			fmt.Printf("[sfold] Go侧: FindRenderBoxForNode 返回 nil (class=%q)\n", chatEl.GetAttribute("class"))
+			return
+		}
+		pb := box.PaddingBoxRect()
+		tw, th := rv.BoxContentSize(box)
+		vm := rendering.VerticalScrollbarMetrics(rv, box)
+		fmt.Printf("[sfold] Go侧: box找到 pb=%.1fx%.1f content=%.1fx%.1f vscroll=%v\n", pb.Width, pb.Height, tw, th, vm.OK)
+	}()
+
+	// ── 诊断2b：真实 hit-test 路径——点击 folded-summary 中心，检查命中元素是否在折叠摘要内 ──
+	func() {
+		rv := wv.RenderView()
+		if rv == nil {
+			fmt.Printf("[sfold] hit-test: no rv\n")
+			return
+		}
+		state := rv.LayoutState()
+		var fsBox layout.Box
+		var walkFindFS func(o rendering.RenderObject)
+		walkFindFS = func(o rendering.RenderObject) {
+			if o == nil || fsBox != nil {
+				return
+			}
+			if el, ok := o.Node().(*dom.Element); ok {
+				if strings.Contains(el.GetAttribute("class"), "folded-summary") {
+					fsBox = o.LayoutBox()
+					return
+				}
+			}
+			for c := o.FirstChild(); c != nil; c = c.NextSibling() {
+				walkFindFS(c)
+			}
+		}
+		walkFindFS(rendering.RenderObject(rv))
+		if fsBox == nil {
+			fmt.Printf("[sfold] hit-test: no folded-summary box\n")
+			return
+		}
+		g := state.GeometryForBox(fsBox)
+		cx := g.Left() + g.BorderBoxWidth()/2
+		cy := g.Top() + g.BorderBoxHeight()/2
+		hit := rendering.HitTest(rv, cx, cy, "")
+		if hit == nil {
+			fmt.Printf("[sfold] hit-test: nil at (%.0f,%.0f)\n", cx, cy)
+			return
+		}
+		cls := hit.GetAttribute("class")
+		// 检查 hit 是否在 folded-summary 祖先链内
+		inChain := false
+		for n := dom.Node(hit); n != nil; n = n.ParentNode() {
+			if e, ok := n.(*dom.Element); ok && strings.Contains(e.GetAttribute("class"), "folded-summary") {
+				inChain = true
+				break
+			}
+		}
+		fmt.Printf("[sfold] hit-test: fs=(%.0f,%.0f) hitClass=%q inFSChain=%v tag=%s\n", cx, cy, cls, inChain, hit.LocalName())
+		// 真实路径：对命中元素派发 click（冒泡），检查状态
+		if inChain {
+			hit.DispatchEvent(dom.NewMouseEvent(dom.EventClick, true, true, false))
+			waitJSF(wv, 400)
+			runJobsF(wv)
+			wv.RebuildRenderTree()
+			wv.EnsureLayout()
+			runJobsF(wv)
+			st := runJSF(wv, `(function(){
+				var st = window.__state;
+				var msgs = st.messagesByConv[st.currentConvId] || [];
+				var idx = window.__diagIdx;
+				var m = null;
+				for (var i = 0; i < msgs.length; i++) { if (String(msgs[i]._idx) === String(idx)) { m = msgs[i]; break; } }
+				return JSON.stringify({folded: m ? !!m._folded : null});
+			})()`)
+			fmt.Printf("[sfold] hit-test 派发后: %s\n", st)
+		}
+	}()
+
+	// ── 诊断2：点击折叠摘要能否展开（用 data-idx 精确定位消息对象） ──
+	fmt.Printf("[sfold] 点击前: %s\n", runJSF(wv, `(function(){
+		var fs = document.querySelector('.folded-summary');
+		if (!fs) return 'no fs';
+		var item = fs.closest('.msg-item');
+		var idx = item ? item.getAttribute('data-idx') : null;
+		return JSON.stringify({fsExists: !!fs, idx: idx});
+	})()`))
+	runJSF(wv, `(function(){
+		var fs = document.querySelector('.folded-summary');
+		if (fs) {
+			var item = fs.closest('.msg-item');
+			window.__diagIdx = item ? item.getAttribute('data-idx') : null;
+			fs.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true}));
+			return 'clicked fs';
+		}
+		return 'no fs';
+	})()`)
+	waitJSF(wv, 500)
+	runJobsF(wv)
+	wv.RebuildRenderTree()
+	wv.EnsureLayout()
+	runJobsF(wv)
+	fmt.Printf("[sfold] 点击后: %s\n", runJSF(wv, `(function(){
+		var st = window.__state;
+		var msgs = st.messagesByConv[st.currentConvId] || [];
+		var idx = window.__diagIdx;
+		var m = null;
+		for (var i = 0; i < msgs.length; i++) { if (String(msgs[i]._idx) === String(idx)) { m = msgs[i]; break; } }
+		var fs = document.querySelector('.folded-summary');
+		return JSON.stringify({idx: idx, found: !!m, folded: m ? !!m._folded : null, fsStillExists: !!fs, tlItems: document.querySelectorAll('.tl-item').length, thinkCollapsed: document.querySelectorAll('.tl-thinking-collapsed').length, tcHeader: document.querySelectorAll('.tl-tc-header').length});
+	})()`))
+
+	// ── 诊断2b：点击 thinking 折叠「思考…」→ 应展开（_collapsed false） ──
+	runJSF(wv, `(function(){
+		var tc = document.querySelector('.tl-thinking-collapsed');
+		if (tc) { tc.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true})); return 'clicked thinking'; }
+		return 'no thinking';
+	})()`)
+	waitJSF(wv, 400)
+	runJobsF(wv)
+	wv.RebuildRenderTree()
+	wv.EnsureLayout()
+	runJobsF(wv)
+	fmt.Printf("[sfold] 点thinking后: %s\n", runJSF(wv, `(function(){
+		var st = window.__state;
+		var msgs = st.messagesByConv[st.currentConvId] || [];
+		var idx = window.__diagIdx;
+		var m = null;
+		for (var i = 0; i < msgs.length; i++) { if (String(msgs[i]._idx) === String(idx)) { m = msgs[i]; break; } }
+		var think = null;
+		if (m) { for (var j = 0; j < m.segments.length; j++) { if (m.segments[j].type === 'thinking') { think = m.segments[j]; break; } } }
+		return JSON.stringify({thinkCollapsed: think ? think._collapsed : null, thinkTextShown: !!document.querySelector('.tl-thinking-text'), thinkCollapsedLeft: document.querySelectorAll('.tl-thinking-collapsed').length});
+	})()`))
+
+	// ── 诊断2c：点击 tool_call header → 应展开详情（_expanded true） ──
+	runJSF(wv, `(function(){
+		var hd = document.querySelector('.tl-tc-header');
+		if (hd) { hd.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true})); return 'clicked tc'; }
+		return 'no tc header';
+	})()`)
+	waitJSF(wv, 400)
+	runJobsF(wv)
+	wv.RebuildRenderTree()
+	wv.EnsureLayout()
+	runJobsF(wv)
+	fmt.Printf("[sfold] 点tool后: %s\n", runJSF(wv, `(function(){
+		var st = window.__state;
+		var msgs = st.messagesByConv[st.currentConvId] || [];
+		var idx = window.__diagIdx;
+		var m = null;
+		for (var i = 0; i < msgs.length; i++) { if (String(msgs[i]._idx) === String(idx)) { m = msgs[i]; break; } }
+		var tc = null;
+		if (m) { for (var j = 0; j < m.segments.length; j++) { if (m.segments[j].type === 'tool_call') { tc = m.segments[j]; break; } } }
+		return JSON.stringify({tcExpanded: tc ? !!tc._expanded : null, tcDetailShown: !!document.querySelector('.tl-tc-detail'), tcDetailCount: document.querySelectorAll('.tl-tc-detail').length});
+	})()`))
+
+	// ── 诊断3：引擎级几何——tl-tc-header / folded-summary / chat-messages 实际布局高度 ──
+	fmt.Printf("[sfold] 引擎几何: %s\n", func() string {
+		rv := wv.RenderView()
+		if rv == nil {
+			return "no render view"
+		}
+		state := rv.LayoutState()
+		var sb strings.Builder
+		count := 0
+		var walk func(o rendering.RenderObject, depth int)
+		walk = func(o rendering.RenderObject, depth int) {
+			if o == nil || count >= 8 {
+				return
+			}
+			if el, ok := o.Node().(*dom.Element); ok {
+				cls := el.GetAttribute("class")
+				if strings.Contains(cls, "tl-tc-header") || strings.Contains(cls, "tl-tc-param") || strings.Contains(cls, "tl-tc-name") || strings.Contains(cls, "folded-summary") {
+					g := state.GeometryForBox(o.LayoutBox())
+					ws := "?"
+					if st := o.LayoutBox().Style(); st != nil {
+						ws = fmt.Sprintf("%d", st.WhiteSpace)
+					}
+					fmt.Fprintf(&sb, "%s{h=%.1f,w=%.1f,ws=%s} ", cls, g.BorderBoxHeight(), g.BorderBoxWidth(), ws)
+					count++
+				}
+			}
+			for c := o.FirstChild(); c != nil; c = c.NextSibling() {
+				walk(c, depth+1)
+			}
+		}
+		walk(rendering.RenderObject(rv), 0)
+		return sb.String()
+	}())
+
+	// ── 诊断3b：扫描所有 tl-tc-param——找出折行实例并 dump 文本 ──
+	fmt.Printf("[sfold] param扫描: %s\n", func() string {
+		rv := wv.RenderView()
+		if rv == nil {
+			return "no rv"
+		}
+		state := rv.LayoutState()
+		var sb strings.Builder
+		var walk func(o rendering.RenderObject)
+		walk = func(o rendering.RenderObject) {
+			if o == nil {
+				return
+			}
+			if el, ok := o.Node().(*dom.Element); ok {
+				cls := el.GetAttribute("class")
+				if strings.Contains(cls, "tl-tc-param") {
+					g := state.GeometryForBox(o.LayoutBox())
+					ws := "?"
+					if st := o.LayoutBox().Style(); st != nil {
+						ws = fmt.Sprintf("%d", st.WhiteSpace)
+					}
+					h := g.BorderBoxHeight()
+					txt := el.TextContent()
+					if len(txt) > 60 {
+						txt = txt[:60]
+					}
+					txt = strings.ReplaceAll(txt, "\n", "\\n")
+					fmt.Fprintf(&sb, "[h=%.1f ws=%s] %q | ", h, ws, txt)
+				}
+			}
+			for c := o.FirstChild(); c != nil; c = c.NextSibling() {
+				walk(c)
+			}
+		}
+		walk(rendering.RenderObject(rv))
+		return sb.String()
+	}())
 
 	// DOM 层：展开的 thinking 文本 vs 折叠的"思考…"
 	fmt.Printf("[sfold] DOM: %s\n", runJSF(wv, `(function(){
