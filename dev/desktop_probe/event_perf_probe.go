@@ -10,6 +10,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"runtime/pprof"
 	"strings"
 	"time"
 
@@ -223,7 +224,20 @@ func main() {
 				rv.ScrollOffsetCount(), sx0, sy0)
 		}
 		t0 = time.Now()
+		scBefore := cv.SaveCount()
+		if n == 200 {
+			f, _ := os.Create("paint_cpu.pprof")
+			pprof.StartCPUProfile(f)
+		}
 		rendering.Paint(rv, cv, rendering.Rect{X: 0, Y: 0, Width: float64(W), Height: float64(H)})
+		if n == 200 {
+			pprof.StopCPUProfile()
+			log.Printf("[pprof] paint_cpu.pprof written")
+		}
+		scAfter := cv.SaveCount()
+		if scAfter != scBefore {
+			log.Printf("[saveleak] n=%d SaveCount %d → %d (leak %d)", n, scBefore, scAfter, scAfter-scBefore)
+		}
 		paintT := time.Since(t0)
 
 		// restore hover off via fast path (clean for next iteration)
