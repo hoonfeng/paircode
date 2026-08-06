@@ -723,6 +723,7 @@ const currentConvInterrupted = computed(() => {
 })
 // 一键继续：在输入框填充"继续"指令并直接发送（完全复用 sendMessage 链路）
 const continueTask = () => {
+  const convId = state.currentConvId
   if (!convId || state.chatLoading) return
   inputText.value = '请继续完成上次未完成的任务。请先回顾当前上下文中的进度与遗留问题（含执行日志与任务列表），然后继续推进直到任务完成。'
   nextTick(() => { sendMessage() })
