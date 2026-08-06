@@ -687,8 +687,9 @@ const approvalState = computed(() => state.approvalByConv[state.currentConvId] |
 // ★ currentConvInterrupted：当前对话是否"未完成可继续"。
 // 两种来源：
 //   1. 后端标记：ConversationMeta.interrupted（异常中断/LLM API 错误/用户停止后由 SessionManager 写盘）
-//   2. 启发式兜底：进程崩溃等来不及写标记的场景，检查最后一条 assistant 是否
-//      有未配对的 tool_call（有 tool_call 但无 tool_result）或错误结尾
+//   2. 启发式兜底：进程崩溃、旧版后端等来不及写标记的场景，检查最后一条 assistant 消息
+//      是否停在"中间态"——以工具调用或工具结果结尾（无论 result 是否已回填），
+//      而不是以最终回答（content 段）收尾
 const currentConvInterrupted = computed(() => {
   const convId = state.currentConvId
   if (!convId) return false
@@ -697,7 +698,7 @@ const currentConvInterrupted = computed(() => {
   // 1. 后端标记
   const conv = state.conversations.find(c => c.id === convId)
   if (conv && conv.interrupted) return true
-  // 2. 启发式兜底
+  // 2. 启发式兜底（tool 消息在加载时已过滤，只保留 assistant/user）
   const msgs = state.messagesByConv[convId]
   if (!msgs || msgs.length === 0) return false
   for (let i = msgs.length - 1; i >= 0; i--) {
@@ -707,19 +708,21 @@ const currentConvInterrupted = computed(() => {
     const segs = m.segments || []
     if (segs.length === 0) return false
     const lastSeg = segs[segs.length - 1]
-    // 有未配对结果的工具调用 → 中断（如进程崩溃、LLM 中途失败）
+    // ① 未返回结果的工具调用 → 中断（进程崩溃、LLM 中途失败）
     if (lastSeg.type === 'tool_call' && !lastSeg.result) return true
-    // 错误结尾 → 中断
+    // ② 以工具调用/工具结果结尾（result 已回填，但后续没有最终回答 content 段）→ 中断
+    //    （token 额度用完/LLM 报错：agent 在工具结果返回后、生成最终回答前被打断）
+    if (lastSeg.type === 'tool_call' || lastSeg.type === 'tool_result') return true
+    // ③ 错误结尾 → 中断
     if (lastSeg.type === 'content' && typeof lastSeg.content === 'string'
         && lastSeg.content.includes('**[错误]**')) return true
+    // 正常完成：以最终回答（content 段）收尾
     return false
   }
   return false
 })
-
 // 一键继续：在输入框填充"继续"指令并直接发送（完全复用 sendMessage 链路）
 const continueTask = () => {
-  const convId = state.currentConvId
   if (!convId || state.chatLoading) return
   inputText.value = '请继续完成上次未完成的任务。请先回顾当前上下文中的进度与遗留问题（含执行日志与任务列表），然后继续推进直到任务完成。'
   nextTick(() => { sendMessage() })
