@@ -13,6 +13,7 @@
             <span class="conv-running-dot"></span>
             <span class="conv-running-text">运行中</span>
           </span>
+          <span v-else-if="conv.interrupted" class="conv-interrupted-tag" title="上次任务未完成，点击后可直接继续">⚠️ 未完成</span>
           <span class="conv-msg-count">{{ conv.msgCount || 0 }}</span>
           <span class="conv-time">{{ conv.updatedAt ? formatConvTime(conv.updatedAt) : '' }}</span>
         </div>
@@ -352,6 +353,23 @@ const compOtherPct = computed(() => ((props.convCtxStats.otherTokens / compTotal
 }
 .conv-running-text {
   font-weight: 500;
+}
+.conv-interrupted-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: rgba(232, 172, 82, 0.16);
+  color: #e8ac52;
+  font-size: 9px;
+  line-height: 16px;
+  font-weight: 500;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.conv-interrupted-tag:hover {
+  background: rgba(232, 172, 82, 0.3);
 }
 @keyframes conv-pulse {
   0%, 100% { opacity: 0.4; transform: scale(0.8); }

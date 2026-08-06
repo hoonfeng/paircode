@@ -49,6 +49,9 @@ type ConversationMeta struct {
 	Summary       string `json:"summary,omitempty"`
 	SummaryAt     string `json:"summaryAt,omitempty"`
 	CtxStats      *Usage  `json:"ctxStats,omitempty"`
+	// Interrupted 标记该对话上次运行是否异常中断（LLM API 错误/panic/崩溃等非用户停止）。
+	// 前端据此展示"未完成，可继续"引导，用户在原对话继续即可恢复上下文与任务进度。
+	Interrupted bool `json:"interrupted,omitempty"`
 }
 
 // MessageStore 对话消息持久化的唯一权威。
@@ -1289,6 +1292,33 @@ func (s *MessageStore) SetCtxStats(convID string, stats *Usage) error {
 		}
 	}
 	return nil
+}
+
+// SetInterrupted 更新对话的异常中断标记（不更新 UpdatedAt，避免影响列表排序）。
+// 会话异常终止（LLM API 错误/panic/进程崩溃等非用户停止）时置 true；
+// 正常完成、用户停止或用户重新发起继续时置 false。
+// 前端据此在对话列表与输入区展示"未完成，可继续"引导。
+func (s *MessageStore) SetInterrupted(convID string, interrupted bool) error {
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
+
+	metas, err := s.loadIndex()
+	if err != nil {
+		return fmt.Errorf("SetInterrupted: 读取 index 失败: %w", err)
+	}
+
+	for i := range metas {
+		if metas[i].ID == convID {
+			if metas[i].Interrupted != interrupted {
+				metas[i].Interrupted = interrupted
+				if err := s.saveIndex(metas); err != nil {
+					return fmt.Errorf("SetInterrupted: 写入 index 失败: %w", err)
+				}
+			}
+			return nil
+		}
+	}
+	return nil // 不存在则无操作
 }
 
 // ── 自动归档 ──

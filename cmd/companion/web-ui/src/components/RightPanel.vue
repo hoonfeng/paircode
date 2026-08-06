@@ -161,6 +161,14 @@
         </div>
         <!-- 输入区 -->
         <div class="chat-input-area" ref="chatInputAreaRef">
+          <!-- ★ 未完成任务提示条：上次运行异常中断/未完成时显示，一键继续 -->
+          <div v-if="currentConvInterrupted" class="resume-banner">
+            <span class="resume-icon">⚠️</span>
+            <span class="resume-text">上次任务未完成，本对话上下文与进度已保留，可直接继续</span>
+            <button class="resume-btn" @click="continueTask" title="沿用本对话上下文继续执行未完成任务">
+              <SvgIcon name="refresh" :size="11" /> 继续任务
+            </button>
+          </div>
           <ApprovalBar v-if="approvalState.waiting" :waiting="approvalState.waiting" :tool="approvalState.tool" :args="approvalState.args" :parsedArgs="approvalState.parsedArgs" @resolve="resolveApproval" />
           <!-- 运行时反馈条（Agent 执行中可补充纠正） -->
           <div v-if="state.chatLoading" class="feedback-bar">
@@ -675,6 +683,47 @@ const showScrollDown = ref(false)
 
 // ── 审批状态从全局 state.approvalByConv 读取（仅当前对话）──
 const approvalState = computed(() => state.approvalByConv[state.currentConvId] || { callId: '', tool: '', args: '', parsedArgs: {}, waiting: false })
+
+// ★ currentConvInterrupted：当前对话是否"未完成可继续"。
+// 两种来源：
+//   1. 后端标记：ConversationMeta.interrupted（异常中断/LLM API 错误/用户停止后由 SessionManager 写盘）
+//   2. 启发式兜底：进程崩溃等来不及写标记的场景，检查最后一条 assistant 是否
+//      有未配对的 tool_call（有 tool_call 但无 tool_result）或错误结尾
+const currentConvInterrupted = computed(() => {
+  const convId = state.currentConvId
+  if (!convId) return false
+  // 运行中的对话不视为中断
+  if (state.agentRunningByConv[convId] || state.loadingByConv[convId]) return false
+  // 1. 后端标记
+  const conv = state.conversations.find(c => c.id === convId)
+  if (conv && conv.interrupted) return true
+  // 2. 启发式兜底
+  const msgs = state.messagesByConv[convId]
+  if (!msgs || msgs.length === 0) return false
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const m = msgs[i]
+    if (m.role !== 'assistant') continue
+    if (m._loading) return false
+    const segs = m.segments || []
+    if (segs.length === 0) return false
+    const lastSeg = segs[segs.length - 1]
+    // 有未配对结果的工具调用 → 中断（如进程崩溃、LLM 中途失败）
+    if (lastSeg.type === 'tool_call' && !lastSeg.result) return true
+    // 错误结尾 → 中断
+    if (lastSeg.type === 'content' && typeof lastSeg.content === 'string'
+        && lastSeg.content.includes('**[错误]**')) return true
+    return false
+  }
+  return false
+})
+
+// 一键继续：在输入框填充"继续"指令并直接发送（完全复用 sendMessage 链路）
+const continueTask = () => {
+  const convId = state.currentConvId
+  if (!convId || state.chatLoading) return
+  inputText.value = '请继续完成上次未完成的任务。请先回顾当前上下文中的进度与遗留问题（含执行日志与任务列表），然后继续推进直到任务完成。'
+  nextTick(() => { sendMessage() })
+}
 const hasMoreTop = computed(() => {
   const id = state.currentConvId
   const msgs = state.messagesByConv[id]
@@ -2019,6 +2068,27 @@ onUnmounted(() => {
 
 /* ── 输入区 ── */
 .chat-input-area { display: flex; flex-direction: column; flex-shrink: 0; padding: 0 8px 8px 8px; background: var(--bg-secondary); }
+/* ★ 未完成任务提示条 */
+.resume-banner {
+  display: flex; align-items: center; gap: 8px;
+  margin: 0 0 6px 0; padding: 6px 10px;
+  background: rgba(232, 172, 82, 0.12);
+  border: 1px solid rgba(232, 172, 82, 0.35);
+  border-radius: 6px;
+  font-size: 12px; color: #e8ac52;
+}
+.resume-icon { flex-shrink: 0; font-size: 13px; }
+.resume-text { flex: 1; line-height: 1.4; }
+.resume-btn {
+  flex-shrink: 0;
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 10px; border-radius: 4px;
+  background: rgba(232, 172, 82, 0.25);
+  border: 1px solid rgba(232, 172, 82, 0.5);
+  color: #f0c674; font-size: 11px; font-weight: 500;
+  cursor: pointer; white-space: nowrap;
+}
+.resume-btn:hover { background: rgba(232, 172, 82, 0.4); }
 .input-resizer { position: absolute; top: -8px; left: 0; right: 0; height: 12px; cursor: ns-resize; z-index: 10; }
 .input-wrapper { background: var(--input-bg); border: 1px solid var(--border-color); border-radius: 8px; }
 .chat-input { display: block; width: 100%; background: transparent; border: none; color: var(--text-primary); padding: 14px 16px 14px 16px; border-radius: 0; font-size: 14px; resize: none; outline: none; min-height: 80px; font-family: inherit; line-height: 1.6; box-sizing: border-box; }

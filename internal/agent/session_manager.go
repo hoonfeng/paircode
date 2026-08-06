@@ -293,6 +293,14 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 			if createErr := m.store.CreateConversation(convID, title, opts.WorkspaceRoot); createErr != nil {
 				fmt.Printf("[session] 创建对话 %s 元数据失败: %v\n", convID, createErr)
 			}
+		} else {
+			// ★ 用户在本对话继续发送消息 → 清除历史中断标记，
+			//   表示上一轮的中断正在被继续处理（前端据此隐藏"未完成"提示）。
+			if existing.Interrupted {
+				if clrErr := m.store.SetInterrupted(convID, false); clrErr != nil {
+					fmt.Printf("[session] 清除对话 %s 中断标记失败: %v\n", convID, clrErr)
+				}
+			}
 		}
 	}
 
@@ -576,6 +584,9 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 
 	// Loop.Run goroutine：结束后标记 Running=false、更新 History、关闭 Events。
 	go func() {
+		// ★ 捕获 store 快照（避免并发读 m.store；SetWorkspaceRoot 仅在启动期调用）
+		store := m.store
+		interrupted := false // 会话结束时的中断状态（defer 中据此写回持久化标记）
 		defer func() {
 			// panic recovery：确保会话状态和事件通道始终被清理
 			if r := recover(); r != nil {
@@ -587,9 +598,17 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 				default:
 				}
 				sess.History = loop.History
+				interrupted = true // panic → 异常中断
 			}
 			// 更新 History（loop.Run 的 defer 已更新 loop.History，同步到 session）
 			sess.History = loop.History
+			// ★ 持久化中断状态：异常/用户停止 → interrupted=true（任务未完成，前端显示"可继续"），
+			//   正常完成（err==nil）→ false。此标记写入 index.json，跨进程重启保留。
+			if store != nil {
+				if setErr := store.SetInterrupted(convID, interrupted); setErr != nil {
+					fmt.Printf("[session] SetInterrupted 失败 conv=%s err=%v\n", convID, setErr)
+				}
+			}
 			// 标记结束
 			m.mu.Lock()
 			sess.Running = false
@@ -614,6 +633,11 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 			msgs, err = loop.Run(runCtx, task, nil)
 		}
 		sess.History = msgs
+		// ★ 记录会话结束方式：err != nil（LLM API 错误/panic/ctx 取消含用户停止）
+		//   → 任务未正常完成，标记为"可继续"；正常完成（err==nil）→ 保持 false。
+		if err != nil {
+			interrupted = true
+		}
 
 		// ★ 持久化执行日志到磁盘（无论自主还是非自主，保证下轮能感知本轮分析和操作）
 		if opts.WorkspaceRoot != "" {

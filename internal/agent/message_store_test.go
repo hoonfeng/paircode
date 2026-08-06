@@ -511,6 +511,115 @@ func TestMessageStore_SetCtxStats(t *testing.T) {
 	}
 }
 
+// TestMessageStore_SetInterrupted 测试异常中断标记的写入/清除/持久化。
+func TestMessageStore_SetInterrupted(t *testing.T) {
+	root := t.TempDir()
+	store := NewMessageStore(root)
+
+	if err := store.CreateConversation("conv1", "测试", "/ws"); err != nil {
+		t.Fatalf("CreateConversation: %v", err)
+	}
+
+	// 初始应无中断标记
+	meta, err := store.GetConversation("conv1")
+	if err != nil {
+		t.Fatalf("GetConversation: %v", err)
+	}
+	if meta.Interrupted {
+		t.Error("新建对话 Interrupted 应为 false")
+	}
+
+	// 标记中断
+	if err := store.SetInterrupted("conv1", true); err != nil {
+		t.Fatalf("SetInterrupted(true): %v", err)
+	}
+	meta2, err := store.GetConversation("conv1")
+	if err != nil {
+		t.Fatalf("GetConversation: %v", err)
+	}
+	if !meta2.Interrupted {
+		t.Error("SetInterrupted(true) 后 Interrupted 应为 true")
+	}
+
+	// 清除中断（继续对话）
+	if err := store.SetInterrupted("conv1", false); err != nil {
+		t.Fatalf("SetInterrupted(false): %v", err)
+	}
+	meta3, err := store.GetConversation("conv1")
+	if err != nil {
+		t.Fatalf("GetConversation: %v", err)
+	}
+	if meta3.Interrupted {
+		t.Error("SetInterrupted(false) 后 Interrupted 应为 false")
+	}
+
+	// 列表也应反映标记（持久化验证：新建 store 重新读取）
+	store2 := NewMessageStore(root)
+	if err := store2.SetInterrupted("conv1", true); err != nil {
+		t.Fatalf("store2 SetInterrupted(true): %v", err)
+	}
+	metas, err := store2.ListConversations("/ws")
+	if err != nil {
+		t.Fatalf("ListConversations: %v", err)
+	}
+	found := false
+	for _, m := range metas {
+		if m.ID == "conv1" {
+			found = m.Interrupted
+			break
+		}
+	}
+	if !found {
+		t.Error("ListConversations 应返回 interrupted=true 的对话")
+	}
+
+	// 不存在的对话无操作不报错
+	if err := store.SetInterrupted("no_such_conv", true); err != nil {
+		t.Errorf("SetInterrupted 不存在的对话应无操作: %v", err)
+	}
+}
+
+// TestPersistKeepsInterrupted 验证 PersistNewMessages 等常规写操作不会抹掉
+// interrupted 标记（loadIndex→saveIndex 全量写回必须保留该字段，否则前端
+// "未完成可继续"提示会在下一轮消息落盘后消失）。
+func TestPersistKeepsInterrupted(t *testing.T) {
+	root := t.TempDir()
+	store := NewMessageStore(root)
+
+	if err := store.CreateConversation("conv1", "测试", "/ws"); err != nil {
+		t.Fatalf("CreateConversation: %v", err)
+	}
+	if err := store.SetInterrupted("conv1", true); err != nil {
+		t.Fatalf("SetInterrupted: %v", err)
+	}
+
+	// 模拟会话落盘：追加几条消息（触发 PersistNewMessages 写 index.json）
+	hist := []Message{
+		{Role: RoleUser, Content: "任务开始"},
+		{Role: RoleAssistant, Content: "分析中...", Reasoning: "思考"},
+		{Role: RoleUser, Content: "继续"},
+	}
+	if err := store.PersistNewMessages("conv1", hist); err != nil {
+		t.Fatalf("PersistNewMessages: %v", err)
+	}
+
+	// 再模拟 UpdateTitle / SetCtxStats（都走 loadIndex→saveIndex）
+	if err := store.UpdateTitle("conv1", "新标题"); err != nil {
+		t.Fatalf("UpdateTitle: %v", err)
+	}
+	if err := store.SetCtxStats("conv1", &Usage{PromptTokens: 10}); err != nil {
+		t.Fatalf("SetCtxStats: %v", err)
+	}
+
+	meta, err := store.GetConversation("conv1")
+	if err != nil {
+		t.Fatalf("GetConversation: %v", err)
+	}
+	if !meta.Interrupted {
+		t.Error("PersistNewMessages/UpdateTitle/SetCtxStats 后 interrupted 标记应保留")
+	}
+}
+
 // TestMessageStore_MigrateFromLegacy 测试从旧格式迁移（有 history_cache）。
 func TestMessageStore_MigrateFromLegacy(t *testing.T) {
 	root := t.TempDir()

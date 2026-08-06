@@ -107,8 +107,10 @@ export function processAgentEvent(convId, data) {
       console.log('[AE] processAgentEvent 自动恢复 runtime conv=%s key=%s type=%s', convId, lastLoading._key, data.type)
       rt = { msgKey: lastLoading._key, finalContent: '', lastUserText: '' }
       runtimes[convId] = rt
-    } else if (data.type === 'content' || data.type === 'thinking' || data.type === 'done') {
-      // 内容类事件没有 runtime 也无 loading 消息时，创建新 assistant 占位
+    } else if (data.type === 'content' || data.type === 'thinking' || data.type === 'done' || data.type === 'error') {
+      // 内容类/错误类事件没有 runtime 也无 loading 消息时，创建新 assistant 占位。
+      // ★ error 事件必须在此分支：否则异常中断（LLM API 错误/panic）时若 runtime 丢失
+      //   （页面刷新后/事件乱序），错误被静默丢弃 → 用户看到 agent 无故停止且无任何提示。
       console.log('[AE] processAgentEvent 创建临时占位 conv=%s type=%s', convId, data.type)
       const key = makeMsgKey()
       let phNextIdx = msgs.length
@@ -281,8 +283,34 @@ export function processAgentEvent(convId, data) {
       waiting: true,
     }
   } else if (data.type === 'error') {
+    const errText = (data.content || '').trim()
     const seg = pushSegment(msg.segments, 'content')
-    seg.content += '**[错误]** ' + (data.content || '')
+    seg.content += '**[错误]** ' + errText
+    // 附带"可继续"引导：异常中断后可直接在本对话继续，不丢失进度
+    seg.content += '\n\n> ⚠️ 本次任务未完成。可直接在下方输入继续（沿用本对话上下文），或点击对话列表中的该项恢复。'
+    // ★ 后端异常/停止时只发 EventError 不发 EventDone，必须在此清理 loading 状态，
+    //   否则对话永久显示"运行中"、输入框保持 disabled，用户无法继续对话。
+    msg._loading = false
+    state.loadingByConv[convId] = false
+    state.agentRunningByConv[convId] = false
+    if (isCurrent) {
+      state.chatLoading = false
+      state.agentRunning = false
+      if (globalCtx.onPhaseEnd) globalCtx.onPhaseEnd(convId)
+    }
+    // 同步对话列表的运行标记（刷新侧边栏"运行中"指示）
+    // ★ 本地更新该对话的 interrupted 标记，使侧边栏立即可见"⚠️ 未完成"（无需等刷新）
+    const localConv = state.conversations.find(c => c.id === convId)
+    if (localConv) localConv.interrupted = true
+    window.dispatchEvent(new Event('save-conversations'))
+    if (globalCtx.loadWsTokenStats) globalCtx.loadWsTokenStats()
+    delete runtimes[convId]
+    // ★ 不再执行后面的 scrollToBottom/state.messages 同步（直接返回）
+    if (isCurrent) {
+      state.messages = msgs
+      if (globalCtx.scrollToBottom) globalCtx.scrollToBottom(convId)
+    }
+    return
   } else if (data.type === 'usage' && data.usage) {
     const u = data.usage
     // wsTokenStats 从 API /api/tokens/stats 加载（工作区级累积），不被 per-call 值覆盖
@@ -449,7 +477,12 @@ export function processAgentDisconnect(convId, errMsg) {
     if (msg) {
       msg._loading = false
       pushSegment(msg.segments, 'content').content += '**[连接中断]** ' + errMsg
+      pushSegment(msg.segments, 'content').content += '\n\n> ⚠️ 本次任务未完成。后端恢复后可继续本对话（进度已保存）。'
     }
+    // ★ 连接中断（后端异常/网络断开）同样视为"未完成可继续"
+    const localConv = state.conversations.find(c => c.id === convId)
+    if (localConv) localConv.interrupted = true
+    window.dispatchEvent(new Event('save-conversations'))
   }
   // 注意：不重置 agentRunningByConv，因为后端 agent 可能仍在运行
   // 重连后会通过 status 消息同步真实状态
@@ -472,6 +505,7 @@ export function processAllDisconnected() {
         msg._loading = false
         if (!msg.content) msg.content = ''
         pushSegment(msg.segments, 'content').content += '**[连接中断]** 后端进程已关闭，请重新发送消息。'
+        pushSegment(msg.segments, 'content').content += '\n\n> ⚠️ 本次任务未完成。重启后端后在本对话继续即可（进度已保存）。'
       } else {
         // 清理所有 _loading 标记
         for (const m of msgs) {
@@ -484,9 +518,15 @@ export function processAllDisconnected() {
         if (m._loading) m._loading = false
       }
     }
+    // ★ 进程关闭 → 本对话视为"未完成可继续"（后端重启后同 convID 继续）
+    const localConv = state.conversations.find(c => c.id === convId)
+    if (localConv) localConv.interrupted = true
     state.agentRunningByConv[convId] = false
     state.loadingByConv[convId] = false
     delete runtimes[convId]
+  }
+  if (Object.keys(state.agentRunningByConv).length > 0) {
+    window.dispatchEvent(new Event('save-conversations'))
   }
   state.chatLoading = false
   state.agentRunning = false
