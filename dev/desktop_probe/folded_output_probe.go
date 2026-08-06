@@ -377,6 +377,7 @@ func main() {
 	wv.RebuildRenderTree()
 	wv.EnsureLayout()
 	dumpFoldedO(wv, "W600")
+	dumpFoldedTree(wv, "W600-TREE")
 	renderPNGO(wv, filepath.Join(wd, "dev", "desktop_probe", "foldout_w600.png"))
 
 	// ── 超长摘要：验证 ellipsis 截断（不膨胀、不折行）──
