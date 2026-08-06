@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 
 	"wb-ui/app"
@@ -20,6 +21,19 @@ import (
 func main() {
 	log.SetFlags(log.Ltime)
 	log.Println("[Desktop] PairCode IDE 桌面版 v1.0.6-desktop")
+
+	// ★ 崩溃捕获：任何 panic 都写堆栈到 _desktop_panic.log（含所有 goroutine），
+	//   方便实机复现"打开文件崩溃"时拿到完整现场。
+	defer func() {
+		if r := recover(); r != nil {
+			buf := make([]byte, 1<<20)
+			n := runtime.Stack(buf, true)
+			msg := fmt.Sprintf("=== PANIC %v ===\n%s\n", r, buf[:n])
+			_ = os.WriteFile("_desktop_panic.log", []byte(msg), 0644)
+			log.Printf("[Desktop] PANIC: %v\n%s", r, buf[:n])
+			os.Exit(1)
+		}
+	}()
 
 	wd, _ := os.Getwd()
 	// ★ 与 web 端（9090）加载同一份前端：优先 cmd/companion/web-ui/dist，
