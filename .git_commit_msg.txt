@@ -1,0 +1,27 @@
+chore(probe): 清理 dev/desktop_probe 历史调试产物，保留一套可用的
+
+dev/desktop_probe 积累了 400+ 历史排查临时文件（.go probe、.py 脚本、
+.png 截图、.txt/.log 输出、.ps1、.exe 等），多数为一次性调试工具，
+且多个文件各自定义 main 导致目录无法整体编译（go vet main redeclared），
+容易对项目结构产生错误理解。按「保留一套」原则清理：
+
+删除 253 个历史产物（git rm）：
+- 过时 probe：bridge_probe / conv_list_probe / ws_switch_probe（依赖已删除
+  的 go.bridge_call 旧链路）、think_scroll / scroll_fold / folded /
+  border_pixel / caret / ellipsis / gpu_* / focus_* 等 80+ 个
+- 全部 .py 诊断脚本（grep_* / find_* / cmp_* / edge_* / _*.py）
+- 全部截图（.png/.bmp）、日志（.txt/.log）、配置（config/）
+
+保留 12 个（唯一一套）：
+- 元素树对比管道：real_probe.go / edge_ref.go / cmp_real.py
+  （cmp_real.py 原为未跟踪文件，误删后按两树结构重建）
+- 渲染/验证：main.go（无桥接整页渲染）、settings_probe.go（面板诊断）、
+  conv_render_probe.go（对话列表）、history_scroll_probe.go（滚动懒加载）、
+  scroll_bottom_probe.go（跳底）
+- 文档：BORDER_PIXEL_TEST.md / JS链排查说明.md
+- 管道基线：ide_tree_edge.json / real_tree_wb.json
+
+验证：
+- 7 个保留 .go 均单独 go build 通过（须 go run 指定文件，不能整体编译目录）
+- cmp_real.py 可运行（wb=2430 / edge=2269 节点，输出几何/样式差异）
+- .pair/project.md 已记录保留清单
