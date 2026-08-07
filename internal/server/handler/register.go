@@ -70,6 +70,12 @@ func RegisterAll(r *Router) {
 	r.Handle("GET", "/api/philosophy", HandlePhilosophy)
 	r.Handle("PUT", "/api/philosophy", HandlePhilosophyPut)
 
+	// 工具配置（启用开关 + 审核黑白名单）
+	r.Handle("GET", "/api/tools", HandleTools)
+	r.Handle("PUT", "/api/tools/save", HandleToolsSave)
+	r.Handle("GET", "/api/tools/review", HandleReviewConfig)
+	r.Handle("PUT", "/api/tools/review", HandleReviewConfig)
+
 	// MCP / Skills
 	r.Handle("GET", "/api/mcp/list", HandleMCPList)
 	r.Handle("POST", "/api/mcp/save", HandleMCPSave)

@@ -64,6 +64,19 @@ func Init(wv *webkit.WebView) {
 		log.Printf("[Bridge] 消息存储已初始化于: %s", root)
 	}
 
+	// ★ 启动时初始化参考工具注册表（对齐 web 端 startWebUI），
+	// 供 /api/tools 查询工具列表与状态——桌面端此前缺失这三个路由，
+	// 工具配置弹窗 GET /tools → 404 → 「加载失败，请重试」。
+	if root := core.Root(); root != "" {
+		initReg := agent.NewRegistry()
+		agent.RegisterDefaultTools(initReg, root)
+		agent.RegisterCommitMessageTool(initReg)
+		agenttools.RegisterManagementTools(initReg, root)
+		agent.LoadWorkspaceToolConfig(initReg, root)
+		handler.SetToolsRegistry(initReg)
+		log.Printf("[Bridge] 参考工具注册表已初始化（%d 个工具）", len(initReg.AllToolMeta()))
+	}
+
 	registerHandlers()
 
 	bridge.Register("/bridge/call", func(args []jsc.JSValue) (jsc.JSValue, error) {
@@ -361,9 +374,14 @@ func buildDesktopLoopOpts(convID, message string, autonomous bool) agent.LoopOpt
 		}
 		agent.RegisterMCPServers(reg, agentCfgs)
 	}
+	// ★ 应用工作区工具配置（.pair/tools.json）：对齐 web 端 buildWebLoopOpts，
+	// 无条件执行（MCP 为空时工具开关/审核配置也要生效）。
+	agent.LoadWorkspaceToolConfig(reg, root)
 	agent.LoadLuaTools(reg, filepath.Join(root, ".pair", "tools"))
 	agent.SetCodeGraphDB(bridgeSessionManager.RawDB())
 	agent.InitDebugLogger(root, 50)
+	// ★ 保存注册表引用，供 /api/tools 查询工具列表与状态（桌面端 tools API）
+	handler.SetToolsRegistry(reg)
 
 	sys := agent.ComposeSystemPrompt(
 		buildDesktopSystemStatic(),
