@@ -79,20 +79,6 @@ func Init(wv *webkit.WebView) {
 
 	registerHandlers()
 
-	bridge.Register("/bridge/call", func(args []jsc.JSValue) (jsc.JSValue, error) {
-		if len(args) < 3 {
-			return jsc.StringValue(`{"status":400,"body":"{\"error\":\"param missing\"}"}`), nil
-		}
-		method := args[0].ToString()
-		path := args[1].ToString()
-		bodyJSON := args[2].ToString()
-		paramsJSON := ""
-		if len(args) > 3 {
-			paramsJSON = args[3].ToString()
-		}
-		return jsc.StringValue(handleBridgeCall(method, path, bodyJSON, paramsJSON)), nil
-	})
-
 	bridge.InjectAll(rt)
 
 	// ★ localStorage 文件持久化：前端 UI 状态（主题/打开文件等）重启不丢失。
@@ -115,20 +101,35 @@ func Init(wv *webkit.WebView) {
 	log.Printf("[Bridge] 完成, 已注册 %d 个处理器", len(bridgeRegistry.AllRoutes()))
 }
 
-// registerHandlers 注册全部真实 handler 到 bridgeRegistry。
-// 与 web 端 cmd/companion 共用 internal/server/handler 的实现（fs/workspace/git/chat/conversations/tokens...）。
+// registerHandlers 注册全部真实 handler：
+//  1. 注册到内部 bridgeRegistry（保留，供 web 模式 /api/* 与 debug 共用）
+//  2. ★ 转注册到 wb-ui 原生 bridge（bridge.RegisterHTTP）：前端 fetch('/api/xxx')
+//     被 wb-ui 的 page.RegisterFetch / SDK 拦截后**直接调 Go handler**——不再走
+//     JS 拦截器 + go.bridge_call 统包 + 虚拟 HTTP 分发，实现真正两层交互。
 func registerHandlers() {
 	handler.AgentMgr = bridgeSessionManager
 	handler.BuildLoopOpts = buildDesktopLoopOpts
 	router := handler.NewRouter(nil, bridgeRegistry)
 	handler.RegisterAll(router)
+
+	// 转注册：method + pattern + http.HandlerFunc 直接注册到 wb-ui bridge。
+	// wb-ui 侧 dispatchHTTP 会把 fetch 的 url/options 装配成 *http.Request 再
+	// 调 handler，Go 侧无需任何自定义请求/响应解析。
+	for _, r := range bridgeRegistry.AllRoutes() {
+		bridge.RegisterHTTP(r.Method, r.Pattern, http.HandlerFunc(r.Handler))
+	}
+	log.Printf("[Bridge] 已转注册 %d 条路由到 wb-ui bridge（两层直调）", len(bridgeRegistry.AllRoutes()))
 }
 
 // injectJSBridge 注入桌面端 JS 环境：
 //   - window.__DESKTOP_MODE__ = true（前端 SDK 检测开关）
 //   - window.desktopBridge（sdk.js 直调通道，兼容保留）
-//   - window.fetch 拦截：/api/* 请求转发到 go.bridge_call（本地 Go handler），其余放行
 //   - window.WebSocket stub：/ws 连接不实际建连，消息由 Go 端 EvalJS 推送
+//
+// ★ fetch 拦截**不再由这里注入**：/api/* → 本地 Go handler 由 wb-ui 原生
+//   bridge（page.RegisterFetch / bridge.RegisterHTTP 两层直调）承担，前端
+//   fetch('/api/xxx') 直接被引擎拦截并调用注册的 Go handler，无需任何 JS
+//   包装层。这里只保留前端运行必需的环境标记与 WebSocket stub。
 //
 // ★ panel-only（只加载右侧面板）不再在此注入：那是独立测试程序
 //   （dev/desktop_probe/folded_probe.go 等）的需求，由调用方经
@@ -139,82 +140,18 @@ func injectJSBridge(rt *jsc.Interpreter) {
 		window.__DESKTOP_MODE__ = true;
 		window.desktopBridge = {
 			call: function(method, path, bodyJSON, paramsJSON) {
+				// 兼容保留：直接调用 wb-ui 原生 fetch 拦截路径。
 				try {
-					var r = go.bridge_call(method, path||'', bodyJSON||'', paramsJSON||'');
-					return Promise.resolve(r);
+					var u = '/api' + (path.indexOf('/') === 0 ? path : '/' + path);
+					var opts = { method: method || 'GET' };
+					if (bodyJSON) { opts.body = bodyJSON; }
+					return fetch(u, opts).then(function(r){ return r.text(); });
 				} catch(e) {
 					return Promise.reject('[Bridge] ' + (e.message||e));
 				}
 			},
 			onAgentEvent: null,
 			onStatus: null
-		};
-
-		// ── fetch 拦截：/api/* → 本地 Go handler（desktopBridge 语义） ──
-		var _fetch = window.fetch;
-
-		function desktopResponse(body, status) {
-			var st = status || 200;
-			return {
-				ok: st >= 200 && st < 300,
-				status: st,
-				statusText: st === 200 ? 'OK' : ('HTTP ' + st),
-				url: '',
-				json: function() {
-					return Promise.resolve().then(function() {
-						if (!body) return null;
-						return JSON.parse(body);
-					});
-				},
-				text: function() {
-					return Promise.resolve(body || '');
-				},
-				headers: {}
-			};
-		}
-
-		window.fetch = function(url, options) {
-			var u = (typeof url === 'string') ? url : (url && url.url) || String(url);
-			// ★ Normalize absolute URLs (api.js builds full URLs via
-			// new URL('/api/...', location.origin)): strip the origin so
-			// /api/* requests are intercepted locally instead of going over
-			// the network (goja's native fetch truncates/loses long JSON).
-			var nu = u;
-			if (nu.indexOf('://') >= 0) {
-				try {
-					var _u = new URL(nu);
-					nu = _u.pathname + (nu.indexOf('?') >= 0 ? nu.substring(nu.indexOf('?')) : '');
-				} catch (e) {}
-			}
-			var isApi = nu === '/api' || nu.indexOf('/api/') === 0;
-			if (!isApi) {
-				if (_fetch) return _fetch(url, options);
-				return Promise.reject(new Error('desktop: fetch not available for ' + u));
-			}
-			var method = (options && options.method) || 'GET';
-			var body = (options && options.body) || '';
-			var qIdx = nu.indexOf('?');
-			var path = qIdx >= 0 ? nu.substring(0, qIdx) : nu;
-			var params = {};
-			if (qIdx >= 0) {
-				var qs = nu.substring(qIdx + 1);
-				qs.split('&').forEach(function(pair) {
-					var kv = pair.split('=');
-					if (kv[0]) {
-						var k = kv[0], v = kv.length > 1 ? kv[1] : '';
-						try { k = decodeURIComponent(k); } catch(e) {}
-						try { v = decodeURIComponent(v); } catch(e) {}
-						params[k] = v;
-					}
-				});
-			}
-			try {
-				var r = go.bridge_call(method, path, body || '', JSON.stringify(params));
-				var parsed = JSON.parse(r); // {status, body}
-				return Promise.resolve(desktopResponse(parsed.body, parsed.status));
-			} catch(e) {
-				return Promise.reject(new Error('[Bridge] ' + (e.message || e)));
-			}
 		};
 
 		// ── WebSocket stub：不实际建连，onmessage 由 Go 端 EvalJS 推送 ──
@@ -489,63 +426,6 @@ func buildDesktopSystemDynamic(root string) string {
 		}
 	}
 	return b.String()
-}
-
-// ─── bridge call dispatch ──────────────────────────────────
-
-func handleBridgeCall(method, path, bodyJSON, paramsJSON string) string {
-	bcT0 := time.Now()
-	bodyReader := strings.NewReader(bodyJSON)
-	httpReq, err := http.NewRequest(method, path, bodyReader)
-	if err != nil {
-		return errResp(400, "req failed: "+err.Error())
-	}
-	if bodyJSON != "" {
-		httpReq.Header.Set("Content-Type", "application/json")
-	}
-	if paramsJSON != "" {
-		var params map[string]string
-		if json.Unmarshal([]byte(paramsJSON), &params) == nil {
-			q := httpReq.URL.Query()
-			for k, v := range params {
-				q.Set(k, v)
-			}
-			httpReq.URL.RawQuery = q.Encode()
-		}
-	}
-	vw := &virtRW{headers: http.Header{}, body: strings.Builder{}, status: 200}
-	// ★ Dispatch 用纯路径匹配（路由注册无 query）——前端 go.bridge_call 可能
-	// 传带 query 的 path（如 /api/conversations?workspace=...），须先剥离。
-	dispatchPath := path
-	if qIdx := strings.IndexByte(dispatchPath, '?'); qIdx >= 0 {
-		dispatchPath = dispatchPath[:qIdx]
-	}
-	if !bridgeRegistry.Dispatch(method, dispatchPath, vw, httpReq) {
-		return errResp(404, "no route: "+method+" "+dispatchPath)
-	}
-	if isWsSwitchProbe { // 调试：WS_SWITCH_TIMING=1 时打印每个 bridge_call 耗时
-		log.Printf("[BridgeTiming] %s %s => %dms", method, dispatchPath, time.Since(bcT0).Milliseconds())
-	}
-	return okResp(vw.status, vw.body.String())
-}
-
-type virtRW struct {
-	headers http.Header
-	body    strings.Builder
-	status  int
-}
-
-func (v *virtRW) Header() http.Header         { return v.headers }
-func (v *virtRW) Write(b []byte) (int, error) { return v.body.Write(b) }
-func (v *virtRW) WriteHeader(s int)            { v.status = s }
-
-func errResp(status int, msg string) string {
-	b, _ := json.Marshal(map[string]interface{}{"status": status, "body": `{"error":"` + msg + `"}`})
-	return string(b)
-}
-func okResp(status int, body string) string {
-	b, _ := json.Marshal(map[string]interface{}{"status": status, "body": body})
-	return string(b)
 }
 
 // ─── localStorage 文件持久化后端 ───────────────────────────
