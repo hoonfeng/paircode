@@ -129,6 +129,11 @@ type Loop struct {
 	// 让 agent 继续处理后续任务而不是立即退出。
 	followUpQueue []Message
 
+	// InheritedPrefixLen 继承自父 Loop 的 history 前缀条数（delegate 子 Loop 设置）。
+	// 子 Loop 首次 LLM 调用的 messages 前缀须与父上一次调用逐字节一致（prompt cache 命中），
+	// 故历史用户消息标注（MarkHistoryUserMessages）跳过前 N 条不修改。0 = 非子 Loop，全量标注。
+	InheritedPrefixLen int
+
 	// ── 多 agent 编排（阶段四，均可空；空=普通单 agent 模式）──
 	AgentTree      *AgentTree     // agent 编排树（delegate_task/delegate_single_turn 用）
 	State          map[string]any // 跨 agent 共享状态（子 Loop 继承父引用，避免塞进 messages 撑爆上下文）
@@ -346,6 +351,14 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 	//   是 LLM 后续轮次引用的关键上下文，run 内压缩会把中段细节丢弃成摘要，
 	//   导致 LLM 失忆、理解力下降（2026-08-05 排查结论）。
 	msgs = l.maybeCompact(ctx, msgs)
+
+	// ★ 历史轮次用户消息标注：多轮对话中历史 user 消息与当前任务同为 RoleUser，
+	//   不标注会让 LLM 把旧轮次用户消息误认为「本次提交的信息」（理解污染）。
+	//   给除最后一条（当前任务）外的所有用户消息加【历史轮次】前缀。
+	//   仅作用于 LLM 上下文（内存副本），不写回 store（持久化用原始历史）。
+	//   skipPrefix=InheritedPrefixLen：delegate 子 Loop 继承的父 msgs 前缀原样保留
+	//   （KV Cache 前缀一致要求逐字节相同），不重新标注。
+	MarkHistoryUserMessages(msgs, l.InheritedPrefixLen)
 
 	for iter := 0; iter < max; iter++ {
 		if err := ctx.Err(); err != nil {

@@ -141,6 +141,10 @@ func runSubAgent(ctx context.Context, parent *Loop, tree *AgentTree, name, task 
 	// 将委派消息追加到子 history，使子 agent 首次调用时它作为「用户最新消息」
 	history = append(history, delegationMsg)
 
+	// ★ 继承前缀豁免：子 history 全部来自父 msgs（+委托消息），
+	//   Loop.Run 的历史用户消息标注须跳过这部分，保持子首次 LLM 调用前缀与父逐字节一致（prompt cache 命中）。
+	child.InheritedPrefixLen = len(history)
+
 	childMsgs, err := child.Run(ctx, childTask, history)
 	if err != nil && !errors.Is(err, ErrMaxIterations) {
 		return "", err

@@ -1,5 +1,7 @@
 package agent
 
+import "strings"
+
 // BuildHistory 从消息列表构建 LLM 上下文（供 loop.Run 作为 history 参数）。
 //
 // 消息列表的最后一条应是当前用户消息——调用方通常在追加当前消息到存储后调用本函数。
@@ -32,4 +34,44 @@ func CopyHistory(hist []Message) []Message {
 	out := make([]Message, len(hist))
 	copy(out, hist)
 	return out
+}
+
+// historyUserMarker 历史轮次用户消息标注前缀。
+// 同一对话线程内发起新轮次时，历史轮次的用户消息与当前任务都是 RoleUser，
+// 不加标注时 LLM 容易把旧轮次的用户消息误认为「本次提交的信息」，造成理解污染。
+const historyUserMarker = "【历史轮次消息·非当前任务】\n"
+
+// MarkHistoryUserMessages 给消息列表中除最后一条用户消息（=当前任务）外的
+// 所有用户消息加历史轮次标注，使 Agent 明确区分「历史轮次消息」与「本次提交的任务」。
+//
+// skipPrefix：跳过前 N 条消息不标注（不检查内容）。用于 delegate 子 Loop——
+// 子 Loop 继承父 msgs 作 history 前缀（KV Cache 前缀一致要求逐字节相同），
+// 父 msgs 已由父 Loop 标注过（或当前任务保持未标注），子 Loop 不得再改动。
+//
+// 幂等：已有标注的消息不重复加前缀（防止跨 Run 复用 msgs 时前缀嵌套）。
+// 只作用于 LLM 上下文副本，不写回持久化历史（持久化走原始消息，UI 展示无损）。
+func MarkHistoryUserMessages(msgs []Message, skipPrefix int) {
+	if len(msgs) < 2 {
+		return
+	}
+	// 最后一条 RoleUser 即当前任务，不标注
+	lastUser := -1
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].Role == RoleUser {
+			lastUser = i
+			break
+		}
+	}
+	if lastUser < 0 {
+		return
+	}
+	for i := range msgs {
+		if i < skipPrefix || i == lastUser || msgs[i].Role != RoleUser {
+			continue
+		}
+		if strings.HasPrefix(msgs[i].Content, historyUserMarker) {
+			continue // 已标注（幂等）
+		}
+		msgs[i].Content = historyUserMarker + msgs[i].Content
+	}
 }
