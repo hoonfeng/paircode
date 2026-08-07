@@ -68,6 +68,16 @@ func main() {
 
 	wv.LoadHTML(htmlStr)
 
+	// ★ Go 主动调 JS（wb-ui CallFunction）：演示宿主直调页面全局函数。
+	// __desktopNotify（desktopbridge 注入，BeforePageScripts 内定义）在
+	// 页面脚本执行前已就绪——LoadHTML 返回后即可调用。业务侧可在任意
+	// Go 事件点（agent done、进度推送、状态变化）以同一模式驱动前端。
+	if v, err := wv.CallFunction("__desktopNotify", "PairCode IDE", "桌面端已就绪 — Go 主动调用 JS"); err != nil {
+		log.Printf("[Desktop] CallFunction: %v", err)
+	} else {
+		log.Printf("[Desktop] CallFunction → %s", v.ToString())
+	}
+
 	// ★ 错误捕获 hook：把 JS 运行时错误记录到 window.__errs，
 	//   WB_SNAP 布局快照的 errs 字段由此拿到（打开文件时若有 JS 异常，
 	//   时间线上会清晰呈现）。

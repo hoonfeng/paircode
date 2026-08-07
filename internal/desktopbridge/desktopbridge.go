@@ -195,6 +195,26 @@ func injectJSBridge(rt *jsc.Interpreter) {
 				self.onmessage({data: JSON.stringify({type: 'status', runningConvs: payload.runningConvs, runningByWorkspace: payload.runningByWorkspace})});
 			}
 		};
+
+		// ── Go 主动调 JS 的演示/接入点（wb-ui CallFunction）──
+		// window.__desktopNotify(title, msg)：宿主（Go）侧经
+		// wv.CallFunction("__desktopNotify", ...) 直调前端，弹一个纯 DOM
+		// toast（不依赖 Vue，顺带验证引擎的 DOM 增删 + 定时器能力）。
+		// 业务接入可按同一模式暴露任意全局函数（如通知中心、状态栏刷新、
+		// 进度上报），Go 侧在事件点 CallFunction 驱动。
+		window.__desktopNotify = function(title, msg) {
+			try {
+				var el = document.createElement('div');
+				el.setAttribute('data-notify', '1');
+				el.style.cssText = 'position:fixed;right:16px;bottom:16px;background:rgba(30,30,30,0.95);color:#fff;padding:10px 14px;border-radius:8px;font-size:12px;z-index:9999;max-width:340px;box-shadow:0 4px 16px rgba(0,0,0,.35);font-family:sans-serif;line-height:1.5';
+				el.textContent = title + ': ' + msg;
+				document.body.appendChild(el);
+				setTimeout(function(){ if (el.parentNode) el.parentNode.removeChild(el); }, 4000);
+				return 'notified';
+			} catch(e) {
+				return 'notify-failed: ' + (e && e.message || e);
+			}
+		};
 	})()`)
 }
 
