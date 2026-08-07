@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { font-family: "Segoe UI", sans-serif; padding: 20px; }
+  h3 { margin: 20px 0 8px; font-size: 14px; color: #333; }
+  select { width: 220px; font-size: 14px; margin-bottom: 12px; }
+  .row { display: flex; align-items: center; gap: 16px; }
+  .lbl { font-size: 13px; color: #888; }
+</style>
+</head>
+<body>
+<h3>select appearance:auto（浏览器标准）</h3>
+<div class="row">
+  <select id="s1">
+    <option>gpt-4o</option>
+    <option>claude-sonnet-4</option>
+    <option>deepseek-v3</option>
+    <option>qwen-max</option>
+  </select>
+  <span class="lbl">s1 高=<span id="h1"></span></span>
+</div>
+<div class="row">
+  <select id="s2" style="height:32px">
+    <option>bash</option>
+    <option>powershell</option>
+  </select>
+  <span class="lbl">s2(32px)</span>
+</div>
+<h3>arrow svg 参照（Chromium kHTMLSelectArrow）</h3>
+<svg width="16" height="16" viewBox="0 0 16 16"><path d="M4 6 L8 10 L12 6" fill="none" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+<span class="lbl">M4 6 L8 10 L12 6 stroke=black w=1.5 round</span>
+<script>
+  document.title = 'SELECT-REF:' + JSON.stringify({
+    s1: (function(){ var r = s1.getBoundingClientRect(); var cs = getComputedStyle(s1);
+      return { x: r.x, y: r.y, w: r.width, h: r.height, border: cs.border, bg: cs.backgroundColor,
+               color: cs.color, padRight: cs.paddingRight, app: cs.appearance };
+    })(),
+    s2: (function(){ var r = s2.getBoundingClientRect(); var cs = getComputedStyle(s2);
+      return { x: r.x, y: r.y, w: r.width, h: r.height, border: cs.border, bg: cs.backgroundColor,
+               color: cs.color, padRight: cs.paddingRight, app: cs.appearance };
+    })()
+  });
+  h1.textContent = Math.round(s1.getBoundingClientRect().height) + 'px';
+</script>
+</body>
+</html>
