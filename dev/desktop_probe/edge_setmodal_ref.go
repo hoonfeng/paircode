@@ -1,6 +1,6 @@
-// Command edge_modal_ref launches Edge headless on ide_ref_modal.html to
-// collect the REAL browser's modal geometry (settings modal + toolcfg popover).
-// 增强版：更长的 virtual-time-budget + 输出原始 title 诊断。
+// Command edge_setmodal_ref launches Edge headless on ide_ref_setmodal.html
+// (standalone settings-modal replica) to collect the REAL browser's modal
+// geometry for comparison against wb-ui.
 package main
 
 import (
@@ -22,12 +22,12 @@ func main() {
 	if port == "" {
 		port = "9097"
 	}
-	url := "http://localhost:" + port + "/ide_ref_modal.html"
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	url := "http://localhost:" + port + "/ide_ref_setmodal.html"
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, edge,
 		"--headless", "--disable-gpu", "--no-sandbox",
-		"--window-size=1280,800", "--virtual-time-budget=30000",
+		"--window-size=1280,800", "--virtual-time-budget=12000",
 		"--dump-dom", url)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -38,21 +38,18 @@ func main() {
 	}
 	payload := extract(strings.Join([]string{stdout.String(), stderr.String()}, "\n"))
 	if payload == "" {
-		// 诊断：输出 title
 		s := stdout.String()
 		lt := strings.Index(s, "<title>")
 		if lt >= 0 {
 			rest := s[lt+7:]
 			gt := strings.Index(rest, "</title>")
 			if gt >= 0 {
-				fmt.Println("title =", rest[:gt])
+				fmt.Println("title =", rest[:gt][:200])
 			}
-		} else {
-			fmt.Println("no title tag; stdout len =", len(s))
 		}
 		os.Exit(1)
 	}
-	fmt.Println("=== Edge 真实浏览器 modal 几何 ===")
+	fmt.Println("=== Edge 设置面板 modal 几何（浏览器标准）===")
 	fmt.Println(payload)
 }
 
@@ -67,7 +64,7 @@ func extract(s string) string {
 		return ""
 	}
 	t := rest[:gt]
-	if strings.HasPrefix(t, "MODAL:") {
+	if strings.HasPrefix(t, "SETMODAL-REF:") {
 		return t
 	}
 	return ""

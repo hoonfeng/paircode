@@ -46,6 +46,15 @@ var webUIFiles embed.FS
 //go:embed web-ui/ide_ref.html
 var ideRefFile embed.FS
 
+//go:embed web-ui/ide_ref_select.html
+var ideRefSelectFile embed.FS
+
+//go:embed web-ui/ide_ref_modal.html
+var ideRefModalFile embed.FS
+
+//go:embed web-ui/ide_ref_setmodal.html
+var ideRefSetModalFile embed.FS
+
 // webServer 是运行在 companion 内部的 HTTP 服务器。
 type webServer struct {
 	server    *http.Server
@@ -266,6 +275,30 @@ func startWebUI(port int) {
 		// ide_ref.html：调试参照收集器（Edge headless 访问 9090 加载真实前端）。
 		if r.URL.Path == "/ide_ref.html" || r.URL.Path == "/ide_ref" {
 			if data, err := ideRefFile.ReadFile("web-ui/ide_ref.html"); err == nil {
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				w.Write(data)
+				return
+			}
+		}
+		// ide_ref_select.html：select 下拉箭头浏览器标准参照（Edge headless）。
+		if r.URL.Path == "/ide_ref_select.html" {
+			if data, err := ideRefSelectFile.ReadFile("web-ui/ide_ref_select.html"); err == nil {
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				w.Write(data)
+				return
+			}
+		}
+		// ide_ref_modal.html：设置/工具弹窗 modal 几何浏览器参照（Edge headless）。
+		if r.URL.Path == "/ide_ref_modal.html" {
+			if data, err := ideRefModalFile.ReadFile("web-ui/ide_ref_modal.html"); err == nil {
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				w.Write(data)
+				return
+			}
+		}
+		// ide_ref_setmodal.html：设置面板独立参照（复刻 SettingsModal 样式，Edge 量几何）。
+		if r.URL.Path == "/ide_ref_setmodal.html" {
+			if data, err := ideRefSetModalFile.ReadFile("web-ui/ide_ref_setmodal.html"); err == nil {
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
 				w.Write(data)
 				return

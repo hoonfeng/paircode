@@ -110,15 +110,50 @@ func main() {
 		var out = {};
 		var ov = document.querySelector('.settings-modal');
 		out.modal = ov ? rect(ov) : null;
+		// 细分：header/body/footer/settings-body/tabs 容器
+		var h = document.querySelector('.settings-modal .modal-header');
+		var b = document.querySelector('.settings-modal .modal-body');
+		var f = document.querySelector('.settings-modal .modal-footer');
+		var sb = document.querySelector('.settings-modal .settings-body');
+		var tabsBox = document.querySelector('.settings-modal .settings-tabs');
+		out.header = h ? rect(h) : null;
+		out.body = b ? rect(b) : null;
+		out.footer = f ? rect(f) : null;
+		out.settingsBody = sb ? rect(sb) : null;
+		out.tabsBox = tabsBox ? rect(tabsBox) : null;
+		out.settingsBodyScrollH = sb ? sb.scrollHeight : null;
+		out.settingsBodyClientH = sb ? sb.clientHeight : null;
 		out.tabs = [];
 		var btns = document.querySelectorAll('.settings-tabs button');
 		for (var i=0;i<btns.length;i++) {
-			var b = btns[i];
-			out.tabs.push({label: b.textContent.trim(), active: b.className.indexOf('active')>=0, rect: rect(b)});
+			var b2 = btns[i];
+			out.tabs.push({label: b2.textContent.trim(), active: b2.className.indexOf('active')>=0, rect: rect(b2)});
 		}
 		out.rows = document.querySelectorAll('.setting-row').length;
 		out.groups = document.querySelectorAll('.setting-group').length;
-		// 第一个 group 的 rows 布局
+		out.allRows = [];
+		var rows2 = document.querySelectorAll('.setting-row');
+		for (var i=0;i<rows2.length;i++) {
+			var r = rows2[i];
+			var label = r.querySelector('label');
+			var input = r.querySelector('input, select');
+			out.allRows.push({
+				i: i,
+				label: label ? label.textContent.trim().slice(0,8) : null,
+				labelY: label ? Math.round(label.getBoundingClientRect().top) : null,
+				inputY: input ? Math.round(input.getBoundingClientRect().top) : null,
+				inputH: input ? Math.round(input.getBoundingClientRect().height) : null,
+				rowY: Math.round(r.getBoundingClientRect().top),
+				rowH: Math.round(r.getBoundingClientRect().height)
+			});
+		}
+		out.groupTitles = [];
+		var gts = document.querySelectorAll('.group-title');
+		for (var i=0;i<gts.length;i++) {
+			out.groupTitles.push({text: gts[i].textContent.trim().slice(0,10),
+				y: Math.round(gts[i].getBoundingClientRect().top),
+				h: Math.round(gts[i].getBoundingClientRect().height)});
+		}
 		out.firstRows = [];
 		var rows = document.querySelectorAll('.setting-row');
 		for (var i=0;i<rows.length && i<4;i++) {
