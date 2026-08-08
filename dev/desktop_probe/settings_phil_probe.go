@@ -348,6 +348,45 @@ func main() {
 		}
 	}
 
+	fmt.Println("=== 滚动条让位验证（resize 手柄可拖拽）===")
+	{
+		// 子 agent textarea（rows=2）内容 3 行 → 有垂直滚动条。浏览器中
+		// resize 手柄区让位滚动条 track（右下角 15px 可拖拽）；此前滚动条
+		// 矩形覆盖手柄区 → Press 命中滚动条 → resize 拖拽永远无法启动。
+		// HitTestScrollbar 在手柄中心点应返回 nil（已让位）。
+		idx := spJs(wv, `(function(){
+			var n = document.querySelectorAll('.settings-modal textarea');
+			for (var i=0;i<n.length;i++){
+				if (n[i].scrollHeight > n[i].clientHeight) return i;
+			}
+			return -1;
+		})()`)
+		var taEl *dom.Element
+		if idx != "-1" {
+			var n int
+			fmt.Sscanf(idx, "%d", &n)
+			all := wv.Document().GetElementsByTagName("textarea")
+			if n >= 0 && n < len(all) {
+				taEl = all[n]
+			}
+		}
+		if taEl != nil {
+			b := wv.RenderView().FindRenderBoxForNode(taEl)
+			if b != nil {
+				hx := b.X() + b.Width() - 5  // 手柄中心（右缘内 5px）
+				hy := b.Y() + b.Height() - 5 // 手柄中心（底缘内 5px）
+				hit := rendering.HitTestScrollbar(wv.RenderView(), hx, hy)
+				if hit == nil {
+					fmt.Printf("  有溢出 textarea 手柄中心 (%.0f,%.0f) 滚动条已让位 → 可拖拽 ✓\n", hx, hy)
+				} else {
+					fmt.Printf("  ✗ 手柄中心 (%.0f,%.0f) 仍命中滚动条（IsCorner=%v）→ 拖拽被拦截\n", hx, hy, hit.IsCorner)
+				}
+			}
+		} else {
+			fmt.Println("  （未找到溢出 textarea，跳过）")
+		}
+	}
+
 	fmt.Println("=== textarea 内部滚动状态 ===")
 	{
 		// 子角色 textarea rows=2（44px 视口），内容 3 行 → 应内部溢出可滚
@@ -416,6 +455,30 @@ func main() {
 	})()`)
 	fmt.Println("  设置 scrollTop=400 后:", st)
 	scrolled, _ := wv.Render()
+	// ★ 滚动后视口矩形换算：BoxViewportRect 应把 layout 坐标减掉
+	// settings-body 的滚动偏移（否则 resize 手柄命中在滚动后对不上
+	// 鼠标位置 → 「按下不能拖动」）。
+	{
+		doc := wv.Document()
+		taEl := doc.GetElementsByTagName("textarea")
+		if len(taEl) >= 3 {
+			b := wv.RenderView().FindRenderBoxForNode(taEl[2])
+			if b != nil {
+				vx, vy, vw, vh := rendering.BoxViewportRect(wv.RenderView(), b)
+				dy := b.Y() - vy
+				fmt.Printf("  textarea[2] layout y=%.0f → 视口 y=%.0f (减滚动 %.0fpx，期望≈scrollTop-越界部分)\n",
+					b.Y(), vy, dy)
+				if dy > 200 {
+					fmt.Printf("  → 视口换算生效：滚动后手柄命中坐标与鼠标一致 ✓\n")
+				} else {
+					fmt.Printf("  → 视口换算异常（dy=%.0f）\n", dy)
+				}
+				_ = vx
+				_ = vw
+				_ = vh
+			}
+		}
+	}
 	// 滚动后 textarea[3]（原 y=462）应画到 y≈158（-304）；检查像素
 	for _, pt := range [][2]int{{410, 170}, {700, 175}, {410, 475}, {700, 480}} {
 		off := (pt[1]*1280 + pt[0]) * 4
