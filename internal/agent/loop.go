@@ -48,6 +48,13 @@ const (
 // 参考：Claude Code 的 SYSTEM_PROMPT_DYNAMIC_BOUNDARY、DeepSeek 上下文缓存。
 const CacheBoundary = "\n\n<!--- CACHE_BOUNDARY --->\n\n"
 
+// backgroundCtxMarker 背景上下文消息标记前缀。
+// 注入到 ephemeral 消息的背景信息（历史摘要/执行日志/记忆知识库过期检查等）以此开头，
+// buildCallContext 据此将其插入到「当前任务（最后一条 user 消息）」之前：
+// 若背景信息追加在任务之后，LLM 会把最新一条 user 消息（如历史摘要）误认为当前输入，
+// 导致只核对历史而不执行任务（2026-08-08 排查结论）。
+const backgroundCtxMarker = "【背景上下文·非当前任务】\n"
+
 // Event 一条循环事件。
 type Event struct {
 	Type    EventType
@@ -322,7 +329,7 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 
 	// ★ 启动时检查记忆/知识库过期引用，如发现则注入为 ephemeralMsg（不持久化）
 	if staleMsg := AutoVerifyStale(); staleMsg != "" {
-		l.ephemeralMsgs = append(l.ephemeralMsgs, Message{Role: RoleUser, Content: staleMsg})
+		l.ephemeralMsgs = append(l.ephemeralMsgs, Message{Role: RoleUser, Content: backgroundCtxMarker + staleMsg})
 	}
 
 	// ★ 自主模式：记录启动时间（用于时间预算检查）
@@ -675,11 +682,52 @@ const maxToolResultChars = 9000
 // ★ 同时生成「工具结果瘦身副本」：超长 RoleTool 内容只保留首尾（见 trimToolResult），
 //   不修改原始 msgs——持久化历史与 UI 展示仍为完整内容。
 func (l *Loop) buildCallContext(msgs []Message) []Message {
-	result := make([]Message, 0, len(msgs)+len(l.ephemeralMsgs))
-	for _, m := range msgs {
-		result = append(result, l.trimToolResult(m))
+	// ★ 拆分 ephemeral 为「背景」与「即时」两类：
+	//   背景（历史摘要/执行日志/记忆知识库过期检查，以 backgroundCtxMarker 开头）
+	//     → 插入到当前任务（最后一条 user 消息）之前；
+	//   即时（用户反馈/时间预算/绕圈提示/下一步任务）→ 追加在末尾（它们是最新指令）。
+	//   若背景追加在任务之后，LLM 会把「历史摘要」误认为最新输入，只核对历史不执行任务。
+	var bg, rest []Message
+	for _, m := range l.ephemeralMsgs {
+		if strings.HasPrefix(m.Content, backgroundCtxMarker) {
+			bg = append(bg, m)
+		} else {
+			rest = append(rest, m)
+		}
 	}
-	result = append(result, l.ephemeralMsgs...)
+	result := make([]Message, 0, len(msgs)+len(l.ephemeralMsgs))
+	if len(bg) > 0 {
+		// 定位背景插入点：正常情况 = 最后一条 user（当前任务）之前；
+		// msgs 无 user（异常兜底）= 第一条非 system 之前（背景紧跟 system，绝不落末尾）。
+		lastUser := -1
+		for i := len(msgs) - 1; i >= 0; i-- {
+			if msgs[i].Role == RoleUser {
+				lastUser = i
+				break
+			}
+		}
+		insertAt := lastUser
+		if insertAt < 0 {
+			insertAt = 0
+			for insertAt < len(msgs) && msgs[insertAt].Role == RoleSystem {
+				insertAt++
+			}
+		}
+		for i, m := range msgs {
+			if i == insertAt {
+				result = append(result, bg...)
+			}
+			result = append(result, l.trimToolResult(m))
+		}
+		if insertAt >= len(msgs) { // 极异常（msgs 全 system/空）：背景放最末兜底
+			result = append(result, bg...)
+		}
+	} else {
+		for _, m := range msgs {
+			result = append(result, l.trimToolResult(m))
+		}
+	}
+	result = append(result, rest...)
 	l.ephemeralMsgs = nil // 清空，确保不会重复注入
 	return result
 }
@@ -714,11 +762,14 @@ func (l *Loop) trimToolResult(m Message) Message {
 // 不修改 system message（msgs[0]），不破坏 KV Cache 前缀。
 func (l *Loop) buildInjectionMessage() string {
 	var b strings.Builder
+	// ★ 统一加背景标记：供 buildCallContext 识别并插入到当前任务之前
+	b.WriteString(backgroundCtxMarker)
 
 	// 历史摘要（上下文压缩后产生）
 	if len(l.CompressedSummaries) > 0 {
 		b.WriteString("# 上下文已压缩——历史摘要\n\n")
-		b.WriteString("> 以下为之前轮次的消息摘要，Agent 应据此感知已完成的历史上下文。\n> 请勿重复执行摘要中已包含的任务。\n\n")
+		b.WriteString("> 以下为之前轮次的消息摘要，Agent 应据此感知已完成的历史上下文。\n> 请勿重复执行摘要中已包含的任务。\n")
+		b.WriteString("> ★ 本条是历史背景信息，并非当前任务——当前任务请以最后一条用户消息为准。\n\n")
 		for i, s := range l.CompressedSummaries {
 			if i > 0 {
 				b.WriteString("\n\n---\n\n")

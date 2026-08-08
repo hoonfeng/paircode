@@ -322,3 +322,74 @@ func TestBuildCallContextTrimTool(t *testing.T) {
 		t.Error("buildCallContext 应清空 ephemeralMsgs")
 	}
 }
+
+// TestBuildCallContextBackgroundBeforeTask 验证：背景类 ephemeral 消息
+// （历史摘要/执行日志/过期检查，带 backgroundCtxMarker 前缀）必须插入到
+// 当前任务（最后一条 user 消息）之前，不能追加在任务之后——
+// 否则 LLM 会把「历史摘要」误认为最新输入，只核对历史不执行任务。
+func TestBuildCallContextBackgroundBeforeTask(t *testing.T) {
+	l := &Loop{}
+	msgs := []Message{
+		{Role: RoleSystem, Content: "sys"},
+		{Role: RoleUser, Content: "旧任务1"},
+		{Role: RoleAssistant, Content: "旧回复"},
+		{Role: RoleUser, Content: "当前任务"},
+	}
+	// 背景摘要（带标记）+ 即时指令（用户反馈，不带标记）
+	l.ephemeralMsgs = []Message{
+		{Role: RoleUser, Content: backgroundCtxMarker + "# 上下文已压缩——历史摘要\n..."},
+		{Role: RoleUser, Content: "【用户反馈】请调整方案"},
+	}
+	out := l.buildCallContext(msgs)
+	if len(out) != 6 {
+		t.Fatalf("输出应含 6 条：%d", len(out))
+	}
+	// 顺序断言：system, 旧任务, 旧回复, 背景摘要, 当前任务, 用户反馈
+	if !strings.Contains(out[3].Content, "上下文已压缩") {
+		t.Errorf("背景摘要应插在任务之前（位置 3），实际 out[3]=%q", out[3].Content)
+	}
+	if out[4].Content != "当前任务" {
+		t.Errorf("当前任务应位于背景之后（位置 4），实际 out[4]=%q", out[4].Content)
+	}
+	if out[5].Content != "【用户反馈】请调整方案" {
+		t.Errorf("即时消息应保持在末尾（位置 5），实际 out[5]=%q", out[5].Content)
+	}
+	// 最后一条 user 必须是当前任务（或即时指令），不能是历史摘要
+	lastUser := out[len(out)-1]
+	if lastUser.Role == RoleUser && strings.Contains(lastUser.Content, "上下文已压缩") {
+		t.Error("历史摘要不得成为最后一条 user 消息")
+	}
+}
+
+// TestBuildCallContextBackgroundNoUser 验证：msgs 无 user 消息（异常场景）时，
+// 背景消息兜底放 system 之后而不是丢在末尾造成混淆。
+func TestBuildCallContextBackgroundNoUser(t *testing.T) {
+	l := &Loop{}
+	msgs := []Message{
+		{Role: RoleSystem, Content: "sys"},
+		{Role: RoleAssistant, Content: "只有助手回复"},
+	}
+	l.ephemeralMsgs = []Message{
+		{Role: RoleUser, Content: backgroundCtxMarker + "# 上下文已压缩——历史摘要"},
+	}
+	out := l.buildCallContext(msgs)
+	if len(out) != 3 {
+		t.Fatalf("输出应含 3 条：%d", len(out))
+	}
+	if !strings.Contains(out[1].Content, "上下文已压缩") {
+		t.Errorf("无 user 时背景应兜底放 system 之后（位置 1），实际 out[1]=%q", out[1].Content)
+	}
+}
+
+// TestBuildInjectionMessageHasMarker 验证 buildInjectionMessage 输出带背景标记前缀，
+// 保证 buildCallContext 能将其识别为背景并插到任务之前。
+func TestBuildInjectionMessageHasMarker(t *testing.T) {
+	loop := &Loop{CompressedSummaries: []string{"[压缩摘要] xxx"}}
+	out := loop.buildInjectionMessage()
+	if !strings.HasPrefix(out, backgroundCtxMarker) {
+		t.Errorf("buildInjectionMessage 应以 backgroundCtxMarker 开头，实际前缀=%q", out[:min(len(out), 20)])
+	}
+	if !strings.Contains(out, "并非当前任务") {
+		t.Error("摘要引导语应明确提示非当前任务")
+	}
+}
