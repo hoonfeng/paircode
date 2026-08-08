@@ -127,6 +127,22 @@ func main() {
 	v2 := h.MockRangeMove(p25)
 	fmt.Printf("[range] drag → 25%% x=%.0f → value=%s (want 0.5)\n", p25, v2)
 
+	// 2.5 长小数验证：拖到 33% → val=0.66 → step=0.1 吸附 0.7。
+	//    期望 "0.7"（1 位小数），绝不出 "0.7000000000000001"。
+	p33 := left + box.Width()*0.33
+	v25 := h.MockRangeMove(p33)
+	dp := strings.IndexByte(v25, '.')
+	decLen := 0
+	if dp >= 0 {
+		decLen = len(v25) - dp - 1
+	}
+	fmt.Printf("[range] drag → 33%% x=%.0f → value=%q (want \"0.7\") 小数位=%d\n", p33, v25, decLen)
+	if decLen > 1 {
+		fmt.Printf("[range] ★ 长小数 BUG：%q\n", v25)
+	} else {
+		fmt.Println("[range] 值格式干净 ✓")
+	}
+
 	// 3. Move 到 90% → 期望 1.8
 	p90 := left + box.Width()*0.90
 	v3 := h.MockRangeMove(p90)
@@ -254,40 +270,69 @@ func main() {
 		fmt.Printf("[geo] ★ track/fill 高度异常 (track %d / fill %d)\n", trackH, fillH)
 	}
 
-	// hover：MockMouseMove 到 thumb 上，像素验证 thumb 变暗
-	// （Chromium 深色主题 hover 变暗 ~15% 混黑）
-	// 先渲染 hover 前帧
+	// ── hover 分开验证（浏览器语义，用户实测 Chromium 深色主题）──
+	//   A. hover 到条（fill 段非圆）→ 只蓝条 fill 变暗 (0,99,216)，
+	//      圆 thumb 不变 (0,117,255)
+	//   B. hover 到圆（thumb 内）→ 圆 thumb 变暗 (0,99,216)（整体）
+	//   C. 移出 hover → 全部恢复
+	// 渲染 hover 前帧
 	px := func(x, y float64) string {
 		r, g, b, a := pxAt(int(x), int(y))
 		return fmt.Sprintf("(%d,%d,%d,%d)", r, g, b, a)
 	}
-	// thumb 圆心（半径 7，取圆心右侧 4px 避开正中心可能的光晕）
+	// thumb 圆心右侧 4px（半径 7 内，避开可能的光晕）
 	thumbC := thumbX + 4
+	// fill 段内、远离 thumb 的点（frac=0.9，fill 覆盖 0..90%，45% 处非圆内）
+	fillX := left + box.Width()*0.45
 	fmt.Printf("[thumb-normal] (%d,%d) rgba=%s 期望 (0,117,255)\n", int(thumbC), int(thumbY), px(thumbC, thumbY))
+	fmt.Printf("[fill-normal]   (%d,%d) rgba=%s 期望 (0,117,255)\n", int(fillX), int(thumbY), px(fillX, thumbY))
 
-	hit := h.MockMouseMove(wv, thumbX, thumbY)
-	if hit == nil {
-		fmt.Println("[hover] HitTest MISS on thumb")
+	// A. hover 到 fill 段（非圆）
+	hitA := h.MockMouseMove(wv, fillX, thumbY)
+	if hitA == nil {
+		fmt.Println("[hover-A] HitTest MISS on fill")
 	} else {
-		fmt.Printf("[hover] hit=%s.%s (hovered=%v)\n", hit.LocalName(), hit.GetAttribute("type"), hit.IsHovered())
-		// 再走一次完整渲染流程拿到 hover 高亮帧
 		wv.RebuildRenderTree()
 		wv.EnsureLayout()
 		pngBytes, err = wv.Render()
 		if err != nil {
 			log.Fatalf("render: %v", err)
 		}
-		fmt.Printf("[thumb-hover] (%d,%d) rgba=%s 期望变暗 (0,99,216)±2\n", int(thumbC), int(thumbY), px(thumbC, thumbY))
-		// 移出 hover → 恢复
-		h.MockMouseMove(wv, 100, 100)
-		wv.RebuildRenderTree()
-		wv.EnsureLayout()
-		pngBytes, err = wv.Render()
-		if err != nil {
-			log.Fatalf("render: %v", err)
-		}
-		fmt.Printf("[thumb-out] (%d,%d) rgba=%s 期望恢复 (0,117,255)\n", int(thumbC), int(thumbY), px(thumbC, thumbY))
+		fillColA := px(fillX, thumbY)
+		thumbColA := px(thumbC, thumbY)
+		fmt.Printf("[hover-A fill]  (%d,%d) rgba=%s 期望变暗 (0,99,216)±2\n", int(fillX), int(thumbY), fillColA)
+		fmt.Printf("[hover-A thumb] (%d,%d) rgba=%s 期望不变 (0,117,255)\n", int(thumbC), int(thumbY), thumbColA)
 	}
+
+	// B. hover 到圆（thumb 圆心）
+	hitB := h.MockMouseMove(wv, thumbX, thumbY)
+	curRV := wv.RenderView()
+	cx, cy := curRV.CursorPos()
+	fmt.Printf("[hover-B] cursor=(%.0f,%.0f) thumb=(%.0f,%.0f) hit=%v\n", cx, cy, thumbX, thumbY, hitB)
+	if hitB == nil {
+		fmt.Println("[hover-B] HitTest MISS on thumb")
+	} else {
+		wv.RebuildRenderTree()
+		wv.EnsureLayout()
+		pngBytes, err = wv.Render()
+		if err != nil {
+			log.Fatalf("render: %v", err)
+		}
+		thumbColB := px(thumbC, thumbY)
+		fillColB := px(fillX, thumbY)
+		fmt.Printf("[hover-B thumb] (%d,%d) rgba=%s 期望变暗 (0,99,216)±2\n", int(thumbC), int(thumbY), thumbColB)
+		fmt.Printf("[hover-B fill]  (%d,%d) rgba=%s 期望变暗 (0,99,216)±2\n", int(fillX), int(thumbY), fillColB)
+	}
+
+	// C. 移出 hover → 恢复
+	h.MockMouseMove(wv, 100, 100)
+	wv.RebuildRenderTree()
+	wv.EnsureLayout()
+	pngBytes, err = wv.Render()
+	if err != nil {
+		log.Fatalf("render: %v", err)
+	}
+	fmt.Printf("[thumb-out] (%d,%d) rgba=%s 期望恢复 (0,117,255)\n", int(thumbC), int(thumbY), px(thumbC, thumbY))
 	fmt.Println("DONE")
 }
 
