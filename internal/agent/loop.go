@@ -120,9 +120,10 @@ type Loop struct {
 	// 而是在循环迭代中通过 buildInjectionMessage 构建并作为 user 消息插入历史。
 	CompressedSummaries []string
 
-	// compressedSummariesInjected 已注入系统提示的摘要数量。
-	// 用于避免每次迭代都重新注入（仅在新增摘要时更新 msgs[0]）。
-	compressedSummariesInjected int
+	// staleMsg Run 启动时记忆/知识库过期检查结果（固定内容）。
+	// 存字段而非每次调用扫描：VerifyAll 检查文件系统有成本，且内容须跨迭代稳定
+	// 以保持 KV Cache 前缀一致（由 buildCallContext 每次迭代注入到当前任务之前）。
+	staleMsg string
 
 	lastPromptTokens int // 上一轮 API 实测 prompt_tokens（驱动压缩阈值，比纯估算可信）
 	compactCooldown  int // 压缩后冷却剩余轮数（防每轮重复压缩，复刻参考 refreshCooldown）
@@ -327,10 +328,8 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 		msgs = append(msgs, Message{Role: RoleUser, Content: taskWithTs})
 	}
 
-	// ★ 启动时检查记忆/知识库过期引用，如发现则注入为 ephemeralMsg（不持久化）
-	if staleMsg := AutoVerifyStale(); staleMsg != "" {
-		l.ephemeralMsgs = append(l.ephemeralMsgs, Message{Role: RoleUser, Content: backgroundCtxMarker + staleMsg})
-	}
+	// ★ 启动时检查记忆/知识库过期引用（固定内容存字段，由 buildCallContext 每次迭代注入到任务之前）
+	l.staleMsg = AutoVerifyStale()
 
 	// ★ 自主模式：记录启动时间（用于时间预算检查）
 	if l.Autonomous && l.autonomousStartTime.IsZero() {
@@ -384,14 +383,8 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 			msgs = l.maybeCompact(ctx, msgs)
 		}
 
-		// ── 将压缩摘要和（自主模式下）执行日志作为 ephemeralMsg 注入 ──
-		// 不被持久化，仅在本次 LLM 调用时作为背景上下文
-		if len(l.CompressedSummaries) > l.compressedSummariesInjected && len(msgs) > 0 && msgs[0].Role == RoleSystem {
-			if summaryMsg := l.buildInjectionMessage(); summaryMsg != "" {
-				l.ephemeralMsgs = append(l.ephemeralMsgs, Message{Role: RoleUser, Content: summaryMsg})
-			}
-			l.compressedSummariesInjected = len(l.CompressedSummaries)
-		}
+		// ── 压缩摘要/执行日志背景由 buildCallContext 统一构建并每次迭代注入 ──
+		// （固定内容插到当前任务之前保持 KV 前缀稳定；动态日志追加末尾，见 buildCallContext）
 
 		// ── 检查用户运行时反馈（补充/纠正）──
 		if l.OnFeedback != nil {
@@ -682,12 +675,22 @@ const maxToolResultChars = 9000
 // ★ 同时生成「工具结果瘦身副本」：超长 RoleTool 内容只保留首尾（见 trimToolResult），
 //   不修改原始 msgs——持久化历史与 UI 展示仍为完整内容。
 func (l *Loop) buildCallContext(msgs []Message) []Message {
-	// ★ 拆分 ephemeral 为「背景」与「即时」两类：
-	//   背景（历史摘要/执行日志/记忆知识库过期检查，以 backgroundCtxMarker 开头）
-	//     → 插入到当前任务（最后一条 user 消息）之前；
-	//   即时（用户反馈/时间预算/绕圈提示/下一步任务）→ 追加在末尾（它们是最新指令）。
-	//   若背景追加在任务之后，LLM 会把「历史摘要」误认为最新输入，只核对历史不执行任务。
-	var bg, rest []Message
+	// ★ 背景块（固定内容，每次迭代注入相同 → KV 前缀稳定）：
+	//   记忆/知识库过期检查（l.staleMsg）+ 历史摘要/自主模式提示（buildInjectionMessage）
+	//   + 防御性收集外部注入的带 backgroundCtxMarker 的 ephemeral 消息。
+	//   全部插入到「当前任务（最后一条 user 消息）」之前——
+	//   若背景追加在任务之后，LLM 会把「历史摘要」误认为最新输入，只核对历史不执行任务；
+	//   若背景只注入一次，第二次迭代前缀会在背景处断裂（损失缓存命中）。
+	// ★ 动态内容（执行日志 buildLogBlock）与即时消息（用户反馈/时间预算/绕圈提示）追加末尾：
+	//   随迭代增长放在末尾不影响前缀命中。
+	var bg []Message
+	if l.staleMsg != "" {
+		bg = append(bg, Message{Role: RoleUser, Content: backgroundCtxMarker + l.staleMsg})
+	}
+	if msg := l.buildInjectionMessage(); msg != "" {
+		bg = append(bg, Message{Role: RoleUser, Content: msg})
+	}
+	rest := make([]Message, 0, len(l.ephemeralMsgs)+1)
 	for _, m := range l.ephemeralMsgs {
 		if strings.HasPrefix(m.Content, backgroundCtxMarker) {
 			bg = append(bg, m)
@@ -695,7 +698,11 @@ func (l *Loop) buildCallContext(msgs []Message) []Message {
 			rest = append(rest, m)
 		}
 	}
-	result := make([]Message, 0, len(msgs)+len(l.ephemeralMsgs))
+	if logStr := l.buildLogBlock(); logStr != "" {
+		rest = append(rest, Message{Role: RoleUser, Content: logStr})
+	}
+
+	result := make([]Message, 0, len(msgs)+len(bg)+len(rest))
 	if len(bg) > 0 {
 		// 定位背景插入点：正常情况 = 最后一条 user（当前任务）之前；
 		// msgs 无 user（异常兜底）= 第一条非 system 之前（背景紧跟 system，绝不落末尾）。
@@ -757,13 +764,12 @@ func (l *Loop) trimToolResult(m Message) Message {
 	return m
 }
 
-// buildInjectionMessage 构建注入历史消息中的背景上下文。
-// 包含：压缩摘要（上下文压缩后产生）+ 自主模式下的执行日志。
-// 不修改 system message（msgs[0]），不破坏 KV Cache 前缀。
+// buildInjectionMessage 构建「固定背景块」：历史摘要 + 自主模式两级追踪提示。
+// 内容在两次压缩之间保持稳定（CompressedSummaries 与提示均固定），
+// 由 buildCallContext 每次迭代注入到当前任务之前——位置与内容均稳定，不破坏 KV Cache 前缀。
+// 执行日志动态增长，见 buildLogBlock（追加在末尾，不占固定位置）。
 func (l *Loop) buildInjectionMessage() string {
 	var b strings.Builder
-	// ★ 统一加背景标记：供 buildCallContext 识别并插入到当前任务之前
-	b.WriteString(backgroundCtxMarker)
 
 	// 历史摘要（上下文压缩后产生）
 	if len(l.CompressedSummaries) > 0 {
@@ -778,17 +784,8 @@ func (l *Loop) buildInjectionMessage() string {
 		}
 	}
 
-	// ★ 执行日志：记录各轮的分析与操作，不受上下文压缩影响
-	// 仅在自主模式注入——非自主模式下执行日志与消息历史冗余。
+	// ★ 自主模式系统提示：说明两级追踪机制（固定内容，随背景块每次迭代注入）
 	if l.Autonomous {
-		if logStr := l.FormatExecutionLog(); logStr != "" {
-			if b.Len() > 0 {
-				b.WriteString("\n\n")
-			}
-			b.WriteString(logStr)
-		}
-
-		// ★ 自主模式系统提示：仅在自主模式下注入，说明两级追踪机制（不修改 msgs[0]，不破坏缓存前缀）
 		if b.Len() > 0 {
 			b.WriteString("\n\n")
 		}
@@ -803,7 +800,24 @@ func (l *Loop) buildInjectionMessage() string {
 		b.WriteString("- 子任务也遵守全量替换规则——即使是不同步骤的子任务，也要在一次 update_tasks 中传入（用不同的 plan_step_index 区分）\n")
 	}
 
-	return b.String()
+	if b.Len() == 0 {
+		return "" // 无实质内容（无摘要且非自主）不注入
+	}
+	return backgroundCtxMarker + b.String()
+}
+
+// buildLogBlock 构建执行日志（动态增长，追加在消息末尾）。
+// 日志随迭代增长，不能放固定位置（每次变化会破坏 KV 前缀）；
+// 追加在末尾时前缀仍命中到当前任务，日志变化只影响末尾新增段。
+func (l *Loop) buildLogBlock() string {
+	if !l.Autonomous {
+		return ""
+	}
+	logStr := l.FormatExecutionLog()
+	if logStr == "" {
+		return ""
+	}
+	return backgroundCtxMarker + logStr
 }
 
 

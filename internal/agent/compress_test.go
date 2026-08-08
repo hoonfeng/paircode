@@ -392,4 +392,49 @@ func TestBuildInjectionMessageHasMarker(t *testing.T) {
 	if !strings.Contains(out, "并非当前任务") {
 		t.Error("摘要引导语应明确提示非当前任务")
 	}
+	// 无摘要且非自主模式 → 无实质内容，不注入
+	if empty := (&Loop{}).buildInjectionMessage(); empty != "" {
+		t.Errorf("无摘要且非自主时不应注入背景块，实际=%q", empty)
+	}
+}
+
+// TestBuildCallContextStableAcrossCalls 验证：背景块（过期检查/摘要）每次迭代注入
+// **相同内容且位置固定**（当前任务之前），使 iter1/iter2 的消息前缀完全一致——
+// 这是 KV Cache 前缀命中的前提：若背景只在第一次迭代注入，第二次迭代前缀会在
+// 背景处断裂，损失后续所有迭代对首轮缓存（历史大头）的复用。
+func TestBuildCallContextStableAcrossCalls(t *testing.T) {
+	l := &Loop{
+		staleMsg:            "⚠️ 检测到 3 条可能过期的记忆/知识库条目",
+		CompressedSummaries: []string{"[上下文已压缩 — LLM 摘要] 轮次1 完成"},
+	}
+	msgs := []Message{
+		{Role: RoleSystem, Content: "sys"},
+		{Role: RoleUser, Content: "旧任务1"},
+		{Role: RoleAssistant, Content: "旧回复"},
+		{Role: RoleUser, Content: "当前任务"},
+	}
+	call1 := l.buildCallContext(msgs)
+	// 模拟 iter1 后追加 assistant tool_call + tool 结果
+	msgs = append(msgs,
+		Message{Role: RoleAssistant, Content: "", ToolCalls: []ToolCall{{ID: "c1", Type: "function", Function: FunctionCall{Name: "read_file", Arguments: `{"path":"a.go"}`}}}},
+		Message{Role: RoleTool, ToolCallID: "c1", Content: "ok"},
+	)
+	call2 := l.buildCallContext(msgs)
+
+	if len(call2) < len(call1) {
+		t.Fatalf("iter2 消息数(%d)少于 iter1(%d)，前缀不完整", len(call2), len(call1))
+	}
+	for j := range call1 {
+		if call2[j].Role != call1[j].Role || call2[j].Content != call1[j].Content {
+			t.Errorf("iter1/iter2 前缀断裂！位置 %d:\n  iter1: role=%q content=%q\n  iter2: role=%q content=%q",
+				j, call1[j].Role, truncStr(call1[j].Content, 40), call2[j].Role, truncStr(call2[j].Content, 40))
+		}
+	}
+	// 背景（过期检查+摘要）应插在 task 前且每次相同
+	if !strings.Contains(call1[3].Content, "过期") {
+		t.Errorf("背景应含过期检查且在 task 前，实际 call1[3]=%q", call1[3].Content)
+	}
+	if !strings.Contains(call2[3].Content, "过期") {
+		t.Errorf("iter2 背景仍应含过期检查（每次注入），实际 call2[3]=%q", call2[3].Content)
+	}
 }
