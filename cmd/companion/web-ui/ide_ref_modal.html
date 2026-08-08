@@ -9,7 +9,14 @@
 // containers' geometry + scroll metrics into document.title for Edge
 // --dump-dom. Purpose: compare wb-ui's modal sizing (flex column auto-height
 // + scroll) against the real browser.
+// ?tab=instructions / ?tab=philosophy 切换到对应 tab 收集（默认 ai）。
 (function(){
+  var qs = {};
+  location.search.replace(/^\?/, '').split('&').forEach(function(p){
+    var kv = p.split('='); if (kv[0]) qs[kv[0]] = decodeURIComponent(kv[1] || '');
+  });
+  var wantedTab = qs.tab || 'ai';
+  var TAB_IDX = {ai:0, agent:1, editor:2, terminal:3, appearance:4, instructions:5, philosophy:6};
   function elInfo(el){
     if (!el) return null;
     var r = el.getBoundingClientRect();
@@ -27,7 +34,6 @@
       info.flex = cs.flex;
       info.maxH = cs.maxHeight;
     }
-    // scroll metrics
     info.scrollH = el.scrollHeight;
     info.clientH = el.clientHeight;
     info.scrollTop = el.scrollTop;
@@ -38,15 +44,17 @@
       var f = document.getElementById('ideframe');
       var doc = f.contentDocument;
       var out = {
+        tab: wantedTab,
         modal: elInfo(doc.querySelector('.modal-content')),
         modalBody: elInfo(doc.querySelector('.modal-body')),
         settingsBody: elInfo(doc.querySelector('.settings-body')),
         settingsTabs: elInfo(doc.querySelector('.settings-tabs')),
         modalFooter: elInfo(doc.querySelector('.modal-footer')),
-        tabs: Array.prototype.slice.call(doc.querySelectorAll('.settings-tabs button')).slice(0,5).map(elInfo)
+        tabs: Array.prototype.slice.call(doc.querySelectorAll('.settings-tabs button')).slice(0,5).map(elInfo),
+        textareas: Array.prototype.slice.call(doc.querySelectorAll('.inst-textarea')).map(elInfo)
       };
-      // labels + inputs geometry for content check
-      out.labels = Array.prototype.slice.call(doc.querySelectorAll('.settings-body label')).slice(0,12).map(elInfo);
+      var pcb = doc.querySelector('.settings-modal .setting-group input[type="checkbox"]');
+      out.philCheck = pcb ? pcb.checked : null;
       document.title = 'MODAL:' + JSON.stringify(out);
     } catch(e) {
       document.title = 'MODAL:ERR:' + e.message;
@@ -71,10 +79,37 @@
               var m = doc.querySelector('.modal-content');
               if (m && t2 > 8) {
                 clearInterval(iv2);
-                setTimeout(collect, 1200);
+                setTimeout(function(){
+                  // 切到目标 tab
+                  if (wantedTab !== 'ai' && doc.querySelectorAll('.settings-tabs button').length > TAB_IDX[wantedTab]) {
+                    doc.querySelectorAll('.settings-tabs button')[TAB_IDX[wantedTab]].click();
+                    if (wantedTab === 'philosophy') {
+                      var cb = doc.querySelector('.settings-modal .setting-group input[type="checkbox"]');
+                      if (cb) {
+                        cb.checked = true;
+                        cb.dispatchEvent(new doc.defaultView.Event('change', {bubbles:true}));
+                        cb.dispatchEvent(new doc.defaultView.Event('input', {bubbles:true}));
+                      }
+                    }
+                  }
+                  setTimeout(collect, 1500);
+                }, 800);
               } else if (t2 > 40) {
                 clearInterval(iv2);
-                setTimeout(collect, 800);
+                setTimeout(function(){
+                  if (wantedTab !== 'ai' && doc.querySelectorAll('.settings-tabs button').length > TAB_IDX[wantedTab]) {
+                    doc.querySelectorAll('.settings-tabs button')[TAB_IDX[wantedTab]].click();
+                    if (wantedTab === 'philosophy') {
+                      var cb = doc.querySelector('.settings-modal .setting-group input[type="checkbox"]');
+                      if (cb) {
+                        cb.checked = true;
+                        cb.dispatchEvent(new doc.defaultView.Event('change', {bubbles:true}));
+                        cb.dispatchEvent(new doc.defaultView.Event('input', {bubbles:true}));
+                      }
+                    }
+                  }
+                  setTimeout(collect, 1000);
+                }, 800);
               }
             }, 300);
           }, 600);

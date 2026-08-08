@@ -22,7 +22,11 @@ func main() {
 	if port == "" {
 		port = "9097"
 	}
-	url := "http://localhost:" + port + "/ide_ref_modal.html"
+	tab := os.Getenv("EDGE_REF_TAB")
+	if tab == "" {
+		tab = "ai"
+	}
+	url := "http://localhost:" + port + "/ide_ref_modal.html?tab=" + tab
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, edge,
