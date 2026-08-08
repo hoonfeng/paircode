@@ -167,7 +167,13 @@ func main() {
 	var prevPtr string
 	mismatch := 0
 	for i := 0; i < frames; i++ {
-		// 真实主循环时序：重建 dirty 渲染树（style height 变更生效）→ 布局
+		dy := 10.0 * float64(i+1)
+		expectH := startH + dy
+		// ★ 真实主循环时序：Move 在帧首处理（写入 style + MarkDirty），
+		// 本帧 Rebuild/EnsureLayout 后采样即生效（事件→布局→绘制）。
+		// 之前 Move 放帧末导致采样滞后一帧（恒差 10px 误判为取整偏差）。
+		h.MockEventCursorMove(wv, handleX, startY+dy)
+		runJobs(wv)
 		wv.RebuildRenderTree()
 		wv.EnsureLayout()
 		rv = wv.RenderView()
@@ -182,13 +188,8 @@ func main() {
 			rebuilt = " ★REBUILT"
 		}
 		prevPtr = ptr
-		dy := 10.0 * float64(i+1)
-		expectH := startH + dy
 		actualH := box.Height()
 		styleH := ta.GetAttribute("style")
-		// 帧末注入真实 move 事件（resize 拖拽分支）
-		h.MockEventCursorMove(wv, handleX, startY+dy)
-		runJobs(wv)
 		ok := "OK"
 		if abs(actualH-expectH) > 1.5 {
 			ok = "✗ MISMATCH"
@@ -215,6 +216,47 @@ func main() {
 	fmt.Printf("[resize] release: finalH=%.1f expect=%.1f style=%q %s\n",
 		finalH, expectFinal, ta.GetAttribute("style"),
 		map[bool]string{true: "OK（保持）", false: "✗ 回弹"}[abs(finalH-expectFinal) <= 1.5])
+
+	// ★ 向上拖场景（用户反馈「网上直接不跟随 松开才重绘到正确位置」）：
+	// 从 finalH 起每帧 move -10px Y，期望 boxH 每帧 -10px 跟手缩小。
+	fmt.Printf("\n[resize] 向上拖模拟（每帧 move -10px Y，检查缩小跟手）\n")
+	h.MockTextareaResizePress(ta, rv, finalH)
+	upStartH := finalH
+	upMismatch := 0
+	prevPtr = ""
+	for i := 0; i < frames; i++ {
+		dy := -10.0 * float64(i+1)
+		expectH := upStartH + dy
+		// ★ Move 帧首（同下拖）：先写 style 再布局，本帧采样即生效。
+		// move 的 Y 基于本次 press 的 startY（finalH）。
+		h.MockEventCursorMove(wv, handleX, finalH+dy)
+		runJobs(wv)
+		wv.RebuildRenderTree()
+		wv.EnsureLayout()
+		rv = wv.RenderView()
+		box = rv.FindRenderBoxForNode(ta)
+		if box == nil {
+			fmt.Printf("[up %02d] NO BOX\n", i)
+			continue
+		}
+		ptr := fmt.Sprintf("%p", box)
+		rebuilt := ""
+		if prevPtr != "" && prevPtr != ptr {
+			rebuilt = " ★REBUILT"
+		}
+		prevPtr = ptr
+		actualH := box.Height()
+		styleH := ta.GetAttribute("style")
+		ok := "OK"
+		if abs(actualH-expectH) > 1.5 {
+			ok = "✗ MISMATCH"
+			upMismatch++
+		}
+		fmt.Printf("[up %02d] boxH=%.1f expect=%.1f dy=%+0.f style=%q %s%s\n",
+			i, actualH, expectH, dy, styleH, ok, rebuilt)
+	}
+	fmt.Printf("[resize] 向上拖 mismatch=%d/%d\n", upMismatch, frames)
+	h.MockTextareaResizeRelease()
 
 	// min-height clamp 验证：向下拖 < 60px 应被夹住
 	// （.inst-textarea min-height:60px）
