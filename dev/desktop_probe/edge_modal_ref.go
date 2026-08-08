@@ -30,7 +30,8 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, edge,
-		"--headless", "--disable-gpu", "--no-sandbox",
+		"--headless=new", "--disable-gpu", "--no-sandbox",
+		"--user-data-dir="+os.TempDir()+`\edge_ref_profile`,
 		"--window-size=1280,800", "--virtual-time-budget=30000",
 		"--dump-dom", url)
 	var stdout, stderr bytes.Buffer
