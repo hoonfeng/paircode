@@ -213,10 +213,49 @@ func main() {
 	}
 	_ = popupEl
 
+	// ── hover 验证：模拟鼠标移到 option 2（index 1，非选中）──
+	// 浏览器标准：option:hover 应有高亮背景（--bg-hover）。走真实
+	// 交互路径 MockMouseMove（HitTest → SetHovered → hoverStyleFastPath，
+	// 与 EventCursorMove 一致，不重建渲染树）。
+	hoverPX, hoverPY := 640.0, 300.0 // popup 内 option 2 行中心（popup at 525,264 行高24）
+	hoverEl := h.MockMouseMove(wv, hoverPX, hoverPY)
+	if hoverEl != nil {
+		fmt.Printf("[hover] mock-move → (%.0f,%.0f) hit=%s.%s\n", hoverPX, hoverPY, hoverEl.LocalName(), hoverEl.ClassName())
+	} else {
+		fmt.Printf("[hover] mock-move → (%.0f,%.0f) hit=<nil>\n", hoverPX, hoverPY)
+	}
+	pngBytes, err := wv.Render()
+	if err != nil {
+		log.Fatalf("render: %v", err)
+	}
+	off := (int(hoverPY)*wv.Width() + int(hoverPX)) * 4
+	if off+3 < len(pngBytes) {
+		fmt.Printf("[hover-px] (%d,%d) rgba=(%d,%d,%d,%d) 期望 #1c2333(--bg-hover)\n",
+			int(hoverPX), int(hoverPY), pngBytes[off], pngBytes[off+1], pngBytes[off+2], pngBytes[off+3])
+	}
+	// 同时扫 hover 行左侧（无文字处）与相邻非 hover 行对比
+	for _, p := range [][2]int{{int(hoverPX) + 40, int(hoverPY)}, {int(hoverPX) + 40, int(hoverPY) + 24}} {
+		o := (p[1]*wv.Width() + p[0]) * 4
+		if o+3 < len(pngBytes) {
+			fmt.Printf("[hover-px] (%d,%d) rgba=(%d,%d,%d,%d)\n", p[0], p[1], pngBytes[o], pngBytes[o+1], pngBytes[o+2], pngBytes[o+3])
+		}
+	}
+	// 移出 hover → 背景应还原为 popup 深色
+	h.MockMouseMove(wv, 100, 100)
+	pngBytes, err = wv.Render()
+	if err != nil {
+		log.Fatalf("render: %v", err)
+	}
+	o := (int(hoverPY)*wv.Width() + int(hoverPX)) * 4
+	if o+3 < len(pngBytes) {
+		fmt.Printf("[hover-out] (%d,%d) rgba=(%d,%d,%d,%d) 期望还原 #161b22(--bg-secondary)\n",
+			int(hoverPX), int(hoverPY), pngBytes[o], pngBytes[o+1], pngBytes[o+2], pngBytes[o+3])
+	}
+
 	// 渲染截图 + 像素扫描：确认 popup（主题深色背景）在 modal 之上可见
 	wv.RebuildRenderTree()
 	wv.EnsureLayout()
-	pngBytes, err := wv.Render()
+	pngBytes, err = wv.Render()
 	if err != nil {
 		log.Fatalf("render: %v", err)
 	}

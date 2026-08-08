@@ -188,6 +188,36 @@
       background: var(--accent);
       color: #fff;
     }
+
+    /* ── select 下拉浮层（host.go 动态创建，须非 scoped 才能匹配）──
+       浏览器标准：option 布局/hover/选中/禁用态全部由样式表驱动，
+       不用内联 style（内联优先级高于外部规则会阻挡 :hover 切换）。 */
+    .select-popup-option {
+      display: block;
+      height: 24px;
+      line-height: 24px;
+      padding: 0 8px;
+      font-size: 14px;
+      color: var(--text-primary);
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .select-popup-option:hover {
+      background: var(--bg-hover);
+    }
+    .select-popup-option-selected {
+      background: var(--accent-bg);
+    }
+    .select-popup-option-selected:hover {
+      background: var(--bg-active);
+    }
+    .select-popup-option-disabled {
+      color: var(--text-muted);
+    }
+    .select-popup-option-disabled:hover {
+      background: transparent;
+    }
     input, textarea, select, button {
       font-family: inherit;
     }
