@@ -51,7 +51,7 @@ func main() {
 	}
 
 	html := `<!DOCTYPE html><html><head><style>
-		body { margin:0; padding:20px; font-family:"Segoe UI", sans-serif; background:#fff; }
+		body { margin:0; padding:20px; font-family:"Segoe UI", sans-serif; background:#3a3f44; }
 		select { width:220px; height:32px; font-size:14px; margin-bottom:8px; }
 	</style></head><body>
 		<select id="svc">
@@ -126,8 +126,21 @@ func main() {
 		log.Fatalf("render: %v", err)
 	}
 	fmt.Printf("[render] bytes=%d nonzero=%d\n", len(pngBytes), countNonzero(pngBytes))
-	// dump 几个像素样本
-	for _, p := range [][2]int{{30, 30}, {30, 60}, {100, 60}, {210, 40}, {5, 5}} {
+	// dump 几个像素样本（页面深色 #3a3f44，popup 应白色 #ffffff）
+	// popup 位置：select(20,20) h32 → popup top=52, 5*24+4=124 高 → y 52..176
+	// option 行：y 53..77(1) 77..101(2) 101..125(3) 125..149(4) 149..173(5)
+	for _, p := range [][2]int{
+		{5, 5},          // 页面深色背景（padding 内）
+		{230, 60},       // option1 行内右侧（选中项 → 240 灰）
+		{230, 90},       // option2 行内右侧（OpenAI 非选中 → 应白色 255）
+		{230, 114},      // option3 行内右侧（qwen 非选中 → 应白色 255）
+		{230, 138},      // option4 行内右侧（disabled → 应白色 255）
+		{230, 162},      // option5 行内右侧（claude 非选中 → 应白色 255）
+		{100, 174},      // popup 底部 4px 空隙 → 应为白色 #ffffff
+		{210, 40},       // select 框内（y 21..49）→ 白色
+		{300, 150},      // popup 外页面 → 深色 #3a3f44（当前透明=画布背景缺失）
+		{300, 300},      // 页面下部 → 深色
+	} {
 		off := (p[1]*wv.Width() + p[0]) * 4
 		if off+3 < len(pngBytes) {
 			fmt.Printf("[px] (%d,%d) rgba=(%d,%d,%d,%d)\n", p[0], p[1], pngBytes[off], pngBytes[off+1], pngBytes[off+2], pngBytes[off+3])
