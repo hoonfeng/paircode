@@ -425,7 +425,9 @@ onMounted(async () => {
   } catch {}
 
   try {
-    const settings = await api.apiGet('/settings')
+    const resp = await api.apiGet('/settings')
+    // 后端返回 {settings: core.Settings, loaded} 包装结构，解包后使用
+    const settings = resp.settings || resp
     state.settings = settings
     state.settingsLoaded = true
     if (settings.theme && ['dark', 'light', 'warm', 'night'].includes(settings.theme)) {

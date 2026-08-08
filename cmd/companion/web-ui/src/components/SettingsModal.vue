@@ -596,9 +596,15 @@ function loadSettings() {
 }
 
 // ─── 初始化 ───
+// ★ setup 顶层同步预取：组件创建时 state.settingsLoaded 往往已为 true
+//   （App.vue onMounted 已 fetch 完成），在首次渲染前填充 local 可让
+//   input/select 的 v-model 初值即为真实设置值，避免「打开面板显示默认值」。
+//   onMounted 里异步修改 reactive 的 local 在 wb-ui 引擎中可能不触发组件
+//   重渲染（Vue scheduler 微任务未被驱动），故必须在渲染前同步赋值。
+if (state.settingsLoaded) loadSettings()
+
 onMounted(async () => {
   wsRoot.value = state.workspaceRoot || ''
-  if (state.settingsLoaded) loadSettings()
   await loadModels()
   await loadInstructions()
   await loadPhilosophy()
