@@ -64,6 +64,41 @@ func hscroll(rv *rendering.RenderView, el *dom.Element, name string) {
 		name, box.Width(), m.TotalLen, m.MaxScroll, sx, flag)
 }
 
+// scanHScroll 遍历整个渲染树，找出所有存在水平滚动条的容器
+// （任何层级的隐藏水平溢出都能被发现，不限于已知 class）。
+func scanHScroll(rv *rendering.RenderView) int {
+	count := 0
+	root := rendering.RenderObject(rv)
+	for obj := root; obj != nil; obj = obj.NextInPreOrder() {
+		if obj == nil || !obj.IsBox() {
+			continue
+		}
+		box, ok := obj.(*rendering.RenderBox)
+		if !ok {
+			continue
+		}
+		m := rendering.HorizontalScrollbarMetrics(rv, box)
+		if m.OK && m.MaxScroll > 0 {
+			count++
+			cls, id, tag := "", "", ""
+			if n := box.Node(); n != nil {
+				if el, ok := n.(*dom.Element); ok {
+					cls = el.ClassName()
+					id = el.GetId()
+					tag = el.LocalName()
+				}
+			}
+			sx, _ := rv.BoxScrollOffset(box)
+			fmt.Printf("  ★ HSCROLL tag=%-8s class=%-40q id=%q view=%.0f total=%.0f maxSx=%.0f sx=%.0f\n",
+				tag, cls, id, box.Width(), m.TotalLen, m.MaxScroll, sx)
+		}
+	}
+	if count == 0 {
+		fmt.Println("  (全树无水平滚动条)")
+	}
+	return count
+}
+
 func main() {
 	log.SetFlags(log.Ltime)
 	wd, _ := os.Getwd()
@@ -192,8 +227,9 @@ func main() {
 	_ = h.MockRangePress(rangeEl, rv, left+rbox.Width()*0.75)
 	wv.RebuildRenderTree()
 	wv.EnsureLayout()
-	runJobs(wv)
 	fmt.Println("[1] Press 75% → value=" + rangeEl.GetAttribute("value"))
+	scanHScroll(rv)
+	hscroll(rv, sb, "settings-body")
 	hscroll(rv, sb, "settings-body")
 	hscroll(rv, mb, "modal-body")
 	hscroll(rv, mc, "modal-content")
@@ -201,8 +237,9 @@ func main() {
 
 	// 2. Move 拖到 90% → value=1.8（>0.8 触发 ⚠️ hint 出现）
 	_ = h.MockRangeMove(left + rbox.Width()*0.90)
-	wv.RebuildRenderTree()
-	wv.EnsureLayout()
+	fmt.Println("[2] Move 90% → value=" + rangeEl.GetAttribute("value"))
+	scanHScroll(rv)
+	hscroll(rv, sb, "settings-body")
 	runJobs(wv)
 	fmt.Println("[2] Move 90% → value=" + rangeEl.GetAttribute("value"))
 	hscroll(rv, sb, "settings-body")
@@ -210,8 +247,9 @@ func main() {
 	hscroll(rv, mc, "modal-content")
 	fmt.Println("[2] DOM: " + domW())
 
-	// 3. 拖动把鼠标移出 range 到右侧远处（模拟拖出）
-	_ = h.MockRangeMove(left + rbox.Width()*2.0)
+	fmt.Println("[3] Move 200% → value=" + rangeEl.GetAttribute("value"))
+	scanHScroll(rv)
+	hscroll(rv, sb, "settings-body")
 	wv.RebuildRenderTree()
 	wv.EnsureLayout()
 	runJobs(wv)
@@ -222,8 +260,9 @@ func main() {
 	fmt.Println("[3] DOM: " + domW())
 
 	// 3.5 拖动中鼠标移出 range（hover 到设置面板其他区域）——真实拖动
-	//     鼠标必然划过其他元素，验证 hover 快速路径不引入水平溢出
-	h.MockMouseMove(wv, left+rbox.Width()+120, rbox.AbsoluteY()+rbox.Height()+60)
+	fmt.Println("[3.5] 拖动中 hover 移出 range（仍按住）")
+	scanHScroll(rv)
+	hscroll(rv, sb, "settings-body")
 	wv.RebuildRenderTree()
 	wv.EnsureLayout()
 	runJobs(wv)
@@ -233,8 +272,9 @@ func main() {
 	hscroll(rv, mc, "modal-content")
 	fmt.Println("[3.5] DOM: " + domW())
 
-	// 4. 释放
-	_ = h.MockRangeRelease()
+	fmt.Println("[4] Release → value=" + rangeEl.GetAttribute("value"))
+	scanHScroll(rv)
+	hscroll(rv, sb, "settings-body")
 	wv.RebuildRenderTree()
 	wv.EnsureLayout()
 	runJobs(wv)

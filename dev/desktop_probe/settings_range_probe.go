@@ -154,21 +154,114 @@ func main() {
 	thumbY := box.AbsoluteY() + box.Height()/2
 	fmt.Printf("[range] thumb at (%.0f,%.0f) value=%s\n", thumbX, thumbY, cur)
 
-	// hover：MockMouseMove 到 thumb 上，像素验证 thumb 变亮
-	// （Chromium 深色主题 hover 亮化 ~16% 混白）
-	// 先渲染 hover 前帧
+	// 几何像素测量：thumb 直径（期望 14px）与 track 高度（期望 6px）
 	pngBytes, err := wv.Render()
 	if err != nil {
 		log.Fatalf("render: %v", err)
 	}
-	px := func(x, y float64) string {
-		o := (int(y)*wv.Width() + int(x)) * 4
+	pxAt := func(x, y int) (int, int, int, int) {
+		o := (y*wv.Width() + x) * 4
 		if o+3 < len(pngBytes) {
-			return fmt.Sprintf("(%d,%d,%d,%d)", pngBytes[o], pngBytes[o+1], pngBytes[o+2], pngBytes[o+3])
+			return int(pngBytes[o]), int(pngBytes[o+1]), int(pngBytes[o+2]), int(pngBytes[o+3])
 		}
-		return "OOB"
+		return -1, -1, -1, -1
 	}
-	// thumb 圆心（半径 h*0.5≈10.5，取圆心右侧 4px 避开正中心可能的光晕）
+	isBlue := func(r, g, b int) bool { return b > 180 && r < 80 && g < 170 && b > r+60 }
+	isGrey := func(r, g, b int) bool { return r >= 228 && r <= 248 && g >= 228 && g <= 248 && b >= 228 && b <= 248 && abs(r-g) < 4 && abs(g-b) < 4 }
+	// thumb 垂直直径：thumbX 列连续 blue 行数
+	tx := int(thumbX)
+	ty := int(thumbY)
+	tTop, tBot := ty, ty
+	for tTop > 0 {
+		r, g, b, _ := pxAt(tx, tTop-1)
+		if isBlue(r, g, b) {
+			tTop--
+		} else {
+			break
+		}
+	}
+	for tBot < wv.Height()-1 {
+		r, g, b, _ := pxAt(tx, tBot+1)
+		if isBlue(r, g, b) {
+			tBot++
+		} else {
+			break
+		}
+	}
+	thumbD := tBot - tTop + 1
+	// track 高度：thumb 右侧（thumbX+12，已过 thumb）扫 grey 行数
+	gx := tx + 12
+	gTop, gBot := ty, ty
+	for gTop > 0 {
+		r, g, b, _ := pxAt(gx, gTop-1)
+		if isGrey(r, g, b) {
+			gTop--
+		} else {
+			break
+		}
+	}
+	for gBot < wv.Height()-1 {
+		r, g, b, _ := pxAt(gx, gBot+1)
+		if isGrey(r, g, b) {
+			gBot++
+		} else {
+			break
+		}
+	}
+	trackH := gBot - gTop + 1
+	// fill 段高度：track 起点（left+10）扫 blue 行数
+	fx := int(left) + 10
+	fTop, fBot := ty, ty
+	for fTop > 0 {
+		r, g, b, _ := pxAt(fx, fTop-1)
+		if isBlue(r, g, b) {
+			fTop--
+		} else {
+			break
+		}
+	}
+	for fBot < wv.Height()-1 {
+		r, g, b, _ := pxAt(fx, fBot+1)
+		if isBlue(r, g, b) {
+			fBot++
+		} else {
+			break
+		}
+	}
+	fillH := fBot - fTop + 1
+	// thumb 水平直径：thumb 右侧边缘半径×2（thumbX 左侧被 fill 蓝色污染，
+	// 只能测右半径：从圆心向右到第一个非 blue 像素）
+	rT := tx
+	for rT < wv.Width()-1 {
+		r, g, b, _ := pxAt(rT+1, ty)
+		if isBlue(r, g, b) {
+			rT++
+		} else {
+			break
+		}
+	}
+	thumbW := (rT - tx) * 2
+	fmt.Printf("[geo] thumb 直径 %dpx (期望 14)  track 高 %dpx (期望 6)  fill 高 %dpx (期望 6)\n",
+		thumbD, trackH, fillH)
+	if abs(thumbD-14) <= 2 && abs(thumbW-14) <= 2 {
+		fmt.Printf("[geo] thumb 垂直 %d / 水平 %d 均≈14 ✓\n", thumbD, thumbW)
+	} else {
+		fmt.Printf("[geo] ★ thumb 尺寸异常 (垂直 %d / 水平 %d)\n", thumbD, thumbW)
+	}
+	if abs(trackH-6) <= 2 && abs(fillH-6) <= 2 {
+		fmt.Printf("[geo] track %d / fill %d 均≈6 ✓\n", trackH, fillH)
+	} else {
+		fmt.Printf("[geo] ★ track/fill 高度异常 (track %d / fill %d)\n", trackH, fillH)
+	}
+
+	// hover：MockMouseMove 到 thumb 上，像素验证 thumb 变暗
+	// （Chromium 深色主题 hover 变暗 ~15% 混黑）
+	// 先渲染 hover 前帧
+	px := func(x, y float64) string {
+		r, g, b, a := pxAt(int(x), int(y))
+		return fmt.Sprintf("(%d,%d,%d,%d)", r, g, b, a)
+	}
+	// thumb 圆心（半径 7，取圆心右侧 4px 避开正中心可能的光晕）
 	thumbC := thumbX + 4
 	fmt.Printf("[thumb-normal] (%d,%d) rgba=%s 期望 (0,117,255)\n", int(thumbC), int(thumbY), px(thumbC, thumbY))
 
@@ -184,7 +277,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("render: %v", err)
 		}
-		fmt.Printf("[thumb-hover] (%d,%d) rgba=%s 期望变亮 (41,140,255)±\n", int(thumbC), int(thumbY), px(thumbC, thumbY))
+		fmt.Printf("[thumb-hover] (%d,%d) rgba=%s 期望变暗 (0,99,216)±2\n", int(thumbC), int(thumbY), px(thumbC, thumbY))
 		// 移出 hover → 恢复
 		h.MockMouseMove(wv, 100, 100)
 		wv.RebuildRenderTree()
@@ -196,6 +289,13 @@ func main() {
 		fmt.Printf("[thumb-out] (%d,%d) rgba=%s 期望恢复 (0,117,255)\n", int(thumbC), int(thumbY), px(thumbC, thumbY))
 	}
 	fmt.Println("DONE")
+}
+
+func abs(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
 }
 
 func runJobs(wv *webkit.WebView) {
