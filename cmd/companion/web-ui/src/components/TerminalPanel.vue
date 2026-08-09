@@ -45,7 +45,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, watch, inject } from 'vue'
 import { state } from '../main.js'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
@@ -60,6 +60,28 @@ const activeTermIdx = ref(-1)
 const termRefs = reactive({})
 let termCounter = 0
 let resizeObserver = null
+
+// ── 面板高度 watch 兜底（确定性修复：不依赖 ResizeObserver） ──
+// App.vue provide('bottomPanelHeight')。面板拉伸（拖 panel-resizer）→
+// bottomPanelHeight 变化 → 这里收到通知 → 等 Vue patch + 引擎布局稳定后
+// 重新 fit 活动终端。即使 RO 回调因引擎时序/布局传导未触发，终端也会
+// 跟随面板高度重算 rows（与浏览器对齐）。
+const bottomPanelHeight = inject('bottomPanelHeight', null)
+let panelResizeTimer = null
+if (bottomPanelHeight) {
+  watch(bottomPanelHeight, () => {
+    if (panelResizeTimer) clearTimeout(panelResizeTimer)
+    // 等 Vue patch + 引擎布局（GetElementBoxRect 强刷布局）稳定
+    panelResizeTimer = setTimeout(() => {
+      const term = terminals.value[activeTermIdx.value]
+      if (!term || !term.fitAddon || !term.xterm) return
+      try {
+        term.fitAddon.fit()
+        if (term.ws) term.ws.resize(term.xterm.cols, term.xterm.rows)
+      } catch {}
+    }, 80)
+  })
+}
 
 // ── Shell 类型选择（持久化到 localStorage） ──
 const defaultShell = ref(localStorage.getItem('term-default-shell') || 'cmd')
