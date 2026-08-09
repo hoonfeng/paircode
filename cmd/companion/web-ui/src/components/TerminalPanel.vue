@@ -71,16 +71,55 @@ let panelResizeTimer = null
 if (bottomPanelHeight) {
   watch(bottomPanelHeight, () => {
     if (panelResizeTimer) clearTimeout(panelResizeTimer)
-    // 等 Vue patch + 引擎布局（GetElementBoxRect 强刷布局）稳定
+    // 等 Vue patch + 引擎布局稳定后 fit。★ 引擎布局 dirty 传播在
+    // 面板高度变化后可能需多帧才让 .term-xterm-wrap（absolute）拿到
+    // 新高度——fit 一次可能读到旧值（rows 不变）。fitWithRetry 在
+    // fit 后核对 rows 与容器是否匹配，不匹配则 150ms 重试（最多 40
+    // 次 ≈ 6s），布局最终稳定后必成功（与浏览器对齐）。
     panelResizeTimer = setTimeout(() => {
-      const term = terminals.value[activeTermIdx.value]
-      if (!term || !term.fitAddon || !term.xterm) return
-      try {
-        term.fitAddon.fit()
-        if (term.ws) term.ws.resize(term.xterm.cols, term.xterm.rows)
-      } catch {}
+      fitWithRetry(terminals.value[activeTermIdx.value], 40)
     }, 80)
   })
+}
+
+// ★ fit 重试兜底：wb-ui 引擎（desktop）在面板/容器尺寸变化后，布局的
+// dirty 传播可能延迟多帧才更新 absolute 容器高度（.term-xterm-wrap
+// top:0 bottom:0 → 高度 = 父内容区高度）。fitAddon.fit() 读
+// getComputedStyle(wrap).height 可能长期拿到旧值（引擎 computed style
+// 兜底读渲染树 box，而 box 高度在增量布局后未更新）→ rows 不重算。
+// 这里 fit 后用 getBoundingClientRect（box 缺失时强制重建渲染树，能拿
+// 到最新几何）核对 rows，不匹配则手动按实际几何 resize + 延迟重试，
+// 直到布局稳定后 rows 与容器匹配（与浏览器对齐）。
+function fitWithRetry(term, remaining) {
+  if (!term || !term.fitAddon || !term.xterm) return
+  try {
+    // 首选 fitAddon.fit()（浏览器/布局已稳定时一次成功）
+    term.fitAddon.fit()
+    const wrap = term.xterm.element ? term.xterm.element.parentElement : null
+    if (wrap) {
+      const wr = wrap.getBoundingClientRect()
+      if (wr && wr.height > 0) {
+        const dims = term.xterm._core && term.xterm._core._renderService && term.xterm._core._renderService.dimensions
+        const cellW = dims && dims.css ? dims.css.cell.width : 7.146788990825688
+        const cellH = dims && dims.css ? dims.css.cell.height : 15
+        const padV = 8 // .xterm padding 4px*2（上下）
+        const padH = 8
+        const expectCols = Math.max(1, Math.floor((wr.width - padH) / cellW))
+        const expectRows = Math.max(1, Math.floor((wr.height - padV) / cellH))
+        if ((term.xterm.cols !== expectCols || term.xterm.rows !== expectRows) && remaining > 0) {
+          // fit 读到旧布局值 → 手动按实际几何 resize
+          if (term.xterm.cols !== expectCols || term.xterm.rows !== expectRows) {
+            term.xterm.resize(expectCols, expectRows)
+          }
+          if (term.xterm.rows !== expectRows || term.xterm.cols !== expectCols) {
+            setTimeout(() => fitWithRetry(term, remaining - 1), 150)
+            return
+          }
+        }
+      }
+    }
+    if (term.ws) term.ws.resize(term.xterm.cols, term.xterm.rows)
+  } catch (e) {}
 }
 
 // ── Shell 类型选择（持久化到 localStorage） ──
@@ -351,11 +390,13 @@ function setTermRef(idx, el) {
       if (term.ws && term.ws.readyState === 1) {
         term.ws.resize(term.xterm.cols, term.xterm.rows)
       }
-    } catch {}
+    } catch (e) {}
 
     // 如果该终端是当前活动终端，添加 ResizeObserver 监听
     if (idx === activeTermIdx.value) {
-      observeActiveTerm(term.domEl, term)
+      try {
+        observeActiveTerm(term.domEl, term)
+      } catch (e) {}
     }
   }, 80)
 }
@@ -368,14 +409,7 @@ function observeActiveTerm(el, term) {
   resizeObserver = new ResizeObserver(() => {
     if (resizeTimer) clearTimeout(resizeTimer)
     resizeTimer = setTimeout(() => {
-      if (term && term.fitAddon && term.xterm) {
-        try {
-          term.fitAddon.fit()
-          if (term.ws) {
-            term.ws.resize(term.xterm.cols, term.xterm.rows)
-          }
-        } catch {}
-      }
+      fitWithRetry(term, 20)
     }, 100)
   })
 
