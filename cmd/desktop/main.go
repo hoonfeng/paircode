@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"time"
 
 	"wb-ui/app"
 	"wb-ui/dom"
@@ -112,6 +113,34 @@ console.error = function(){
 
 	wv.EnsureLayout()
 	writeRenderDiagnostic(wv)
+
+	// ★ 注册 DumpRTCallback：Host.needsResizeDump 置位时（resize 后 / 终端
+	// 自动化诊断 case）重新 dump 当前渲染树——启动时的 dump 早于 PTY 输出，
+	// 看不到 xterm rows 动态内容。写带时间戳的文件（desktop_diag.log 可能
+	// 被其他进程/残留实例占用导致 os.Create 失败）。
+	app.DumpRTCallback = func(rv *rendering.RenderView) {
+		if rv == nil {
+			return
+		}
+		st := rv.LayoutState()
+		if st == nil {
+			return
+		}
+		f, err := os.Create(fmt.Sprintf("desktop_diag_%s.log", time.Now().Format("150405")))
+		if err != nil {
+			return
+		}
+		defer f.Close()
+		fmt.Fprintln(f, "=== DESKTOP RENDER DIAGNOSTIC (re-dump) ===")
+		fmt.Fprintln(f, "")
+		fmt.Fprintln(f, "=== RENDER TREE ===")
+		dumpRO(f, rv, 0, st)
+		fmt.Fprintln(f, "")
+		fmt.Fprintln(f, "=== ANOMALY ANALYSIS ===")
+		reportAnomalies(f, rv, st)
+		fmt.Fprintln(f, "")
+		fmt.Fprintln(f, "=== DIAGNOSTIC COMPLETE ===")
+	}
 
 	// ★ 每帧回调：主循环消费外部队列的 JS 推送（终端 PTY 输出、agent
 	// 事件）——goja 非线程安全，所有跨 goroutine 的 RunJS 必须在此
@@ -280,7 +309,22 @@ func dumpRO(f *os.File, ro rendering.RenderObject, depth int, state *layout.Layo
 
 	cs := ro.Style()
 	lb := ro.LayoutBox()
-	if lb != nil && state != nil {
+	if rt, ok := ro.(*rendering.RenderText); ok {
+		// RenderText 没有独立 layout box（WebKit 语义：几何在
+		// InlineTextBox segments 里，由 inline formatting context 生成）。
+		// 用 layoutBox 判断会误报 [no layout]——必须直接看 segs。
+		segs := rt.Segments()
+		txt := rt.OriginalText()
+		if len(txt) > 12 {
+			txt = txt[:12] + "..."
+		}
+		if len(segs) > 0 {
+			fmt.Fprintf(f, "%sRenderText segs=%d first=(x=%.0f,y=%.0f w=%.0f h=%.0f) text=%q\n",
+				prefix, len(segs), segs[0].X, segs[0].Y, segs[0].Width, segs[0].Height, txt)
+		} else {
+			fmt.Fprintf(f, "%sRenderText segs=0 text=%q [no inline layout]\n", prefix, txt)
+		}
+	} else if lb != nil && state != nil {
 		g := state.GeometryForBox(lb)
 		bgStr := ""
 		dispStr := ""
@@ -292,14 +336,6 @@ func dumpRO(f *os.File, ro rendering.RenderObject, depth int, state *layout.Layo
 		}
 		fmt.Fprintf(f, "%s%s (%d ch) x=%.0f y=%.0f w=%.0f h=%.0f p=%p%s%s",
 			prefix, name, cnt, g.Left(), g.Top(), g.BorderBoxWidth(), g.BorderBoxHeight(), lb, dispStr, bgStr)
-		if rt, ok := ro.(*rendering.RenderText); ok {
-			segs := rt.Segments()
-			if len(segs) > 0 {
-				fmt.Fprintf(f, " segs=%d[W=%.0f H=%.0f]", len(segs), segs[0].Width, segs[0].Height)
-			} else {
-				fmt.Fprint(f, " segs=0")
-			}
-		}
 		fmt.Fprintln(f)
 	} else {
 		fmt.Fprintf(f, "%s%s (%d ch) [no layout]\n", prefix, name, cnt)

@@ -300,19 +300,27 @@ function setTermRef(idx, el) {
   if (term.domEl === el) return
   term.domEl = el
 
-  // 创建 xterm 实例
-  const { terminal, fitAddon } = createXtermInstance(el)
-  term.xterm = terminal
-  term.fitAddon = fitAddon
+  // ★ 延迟创建 xterm：wb-ui 引擎（desktop）在 Vue mount 瞬间布局未稳定，
+  //   此时 xterm 用 offsetHeight 测量字符尺寸会得到 NaN/0 → 缓存 NaN →
+  //   style.height="NaNpx" → 行高异常、终端内容画到视口外（空白）。
+  //   延迟 80ms 等主循环完成布局后再创建，测量即正常。
+  //   （浏览器无此问题：DOM 插入后同步 reflow 可得真实尺寸。）
+  setTimeout(() => {
+    if (!term.domEl || term.xterm) return
+    // 创建 xterm 实例
+    const { terminal, fitAddon } = createXtermInstance(term.domEl)
+    term.xterm = terminal
+    term.fitAddon = fitAddon
 
-  // 创建 WebSocket 连接
-  const ws = createWebSocket(term, terminal, fitAddon)
-  term.ws = ws
+    // 创建 WebSocket 连接
+    const ws = createWebSocket(term, terminal, fitAddon)
+    term.ws = ws
 
-  // 如果该终端是当前活动终端，添加 ResizeObserver 监听
-  if (idx === activeTermIdx.value) {
-    observeActiveTerm(el, term)
-  }
+    // 如果该终端是当前活动终端，添加 ResizeObserver 监听
+    if (idx === activeTermIdx.value) {
+      observeActiveTerm(term.domEl, term)
+    }
+  }, 80)
 }
 
 // ── 监听活动终端的尺寸变化 ──
@@ -499,6 +507,12 @@ watch(() => state.theme, () => {
 .terminal-panel .xterm-viewport {
   overflow-y: auto !important;
   scrollbar-width: thin;
+}
+/* ★ wb-ui 引擎对 xterm DOM renderer 字符 span 的 height:100% 解析异常
+   （100% 用了父宽度 572px 当高度）→ 每列 span 高 572 垂直堆叠 → 终端
+   多列错位。强制 height auto（内容高 15px）恢复浏览器式行内排列。 */
+.terminal-panel .xterm-rows div span {
+  height: auto !important;
 }
 .terminal-panel .xterm-screen {
   width: 100% !important;

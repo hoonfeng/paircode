@@ -116,7 +116,11 @@ function onHelpOpenAbout() {
 function loadPanelSize() {
   try {
     const d = JSON.parse(localStorage.getItem('paircode-panel-size') || '{}')
-    if (d.rpw) rightPanelWidth.value = d.rpw
+    // ★ 右侧面板宽度上限 520：desktop 1280 窗口下 600 宽（含 255 附加
+    //    = 855px）会把 main-area（grid 1fr）挤压到 ~97px → 终端/xterm
+    //    挤成 98px 窄条（终端只显示 w 的根因）。cap 后右侧最多
+    //    520+255=775px，保证主区 ≥ ~350px。
+    if (d.rpw) rightPanelWidth.value = Math.min(parseFloat(d.rpw) || 380, 520)
     if (d.bph) bottomPanelHeight.value = d.bph
   } catch {}
   // 恢复侧栏宽度
@@ -135,7 +139,8 @@ function savePanelSize() {
 loadPanelSize()
 
 const bottomPanelHeight = ref(180)
-const rightPanelWidth = ref(600)
+// ★ 默认 380（原 600）：1280 窗口下 600 右面板挤压 main-area 至 97px
+const rightPanelWidth = ref(380)
 const sidebarWidth = ref(280)
 
 provide('showSettings', showSettings)
