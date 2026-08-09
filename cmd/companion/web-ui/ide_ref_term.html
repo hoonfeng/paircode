@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8" />
+<title>TERM REFERENCE COLLECTOR</title>
+<link rel="stylesheet" href="./node_modules/@xterm/xterm/css/xterm.css" />
+<script src="./node_modules/@xterm/xterm/lib/xterm.js"></script>
+<script>
+// Reference collector for the terminal: renders FIXED cmd-like content
+// (banner + prompt + dir output + Chinese) through xterm.js with the DOM
+// renderer (same as wb-ui desktop mode), then serializes the terminal DOM
+// tree (geometry + computed styles) into document.title for Edge --dump-dom.
+(function(){
+  var LIMIT = 6000;
+  function cssColor(v){ return (v||'').replace(/\s+/g,''); }
+  function elInfo(el, depth, idx, n){
+    if (!el || n.count >= LIMIT) return null;
+    n.count++;
+    var r = el.getBoundingClientRect();
+    var cs = null;
+    try { cs = window.getComputedStyle(el); } catch(e) {}
+    var info = {
+      tag: el.tagName ? el.tagName.toLowerCase() : el.nodeName,
+      id: el.id || '', cls: typeof el.className === 'string' ? el.className : '',
+      x: Math.round(r.left*10)/10, y: Math.round(r.top*10)/10,
+      w: Math.round(r.width*10)/10, h: Math.round(r.height*10)/10,
+      depth: depth, idx: idx
+    };
+    if (cs) {
+      info.disp = cs.display;
+      info.col = cssColor(cs.color);
+      info.bg = cssColor(cs.backgroundColor);
+      info.fs = cs.fontSize;
+      info.lh = cs.lineHeight;
+    }
+    var children = [];
+    var i = 0;
+    for (var c = el.firstElementChild; c; c = c.nextElementSibling) {
+      var ci = elInfo(c, depth+1, i, n); i++;
+      if (ci) children.push(ci);
+    }
+    if (children.length === 0 && el.childNodes && el.childNodes.length === 1 && el.firstChild && el.firstChild.nodeType === 3) {
+      var t = (el.firstChild.nodeValue || '').trim();
+      if (t.length > 20) t = t.slice(0,20)+'…';
+      if (t) info.text = t;
+    }
+    info.children = children;
+    return info;
+  }
+  window.onload = function(){
+    var host = document.getElementById('term-host');
+    var term = null;
+    try {
+      term = new window.Terminal({
+        cursorBlink: false,
+        cursorStyle: 'bar',
+        fontSize: 13,
+        fontFamily: "'Consolas', 'Cascadia Code', 'JetBrains Mono', monospace",
+        rows: 10,
+        cols: 80,
+        scrollback: 50,
+        convertEol: true,
+        rendererType: 'dom'
+      });
+      term.open(host);
+      window.__term = term;  // 供 term_probe 诊断
+      // ★ 浏览器语义：真实 TerminalPanel 中 fitAddon.fit() 根据容器尺寸
+      // 计算 cols/rows，与初始 80x24 不同 → resize 改变尺寸 →
+      // _afterResize → CharSizeService 重新测量。wb-ui 里 open 时字体/
+      // 布局可能未就绪导致首次测量错误（cell 8x16），此 resize 模拟 fit
+      // 的尺寸变化，触发重测得到真实 7.15x15。
+      var c0 = term.cols, r0 = term.rows;
+      term.resize(c0 + 1, r0 - 1);
+      term.resize(c0, r0);
+      console.log('[TERM] open ok, host children=' + host.children.length);
+    } catch (e) {
+      console.log('[TERM] OPEN FAIL: ' + (e && e.stack || e));
+      return;
+    }
+    // 固定内容：与真实 cmd 终端一致（banner + prompt + dir 输出 + 中文）
+    term.write('\r\nMicrosoft Windows [版本 10.0.26200.8875]\r\n');
+    term.write('(c) Microsoft Corporation。保留所有权利。\r\n');
+    term.write('\x1b[1;32mC:\\proj\x1b[0m> dir\r\n');
+    term.write(' 驱动器 C 中的卷没有标签。\r\n');
+    term.write(' 卷的序列号是 1234-ABCD\r\n\r\n');
+    term.write('  F:\\syproject\\gou-ide 的目录\r\n\r\n');
+    term.write('2026/08/10  10:00  <DIR>          cmd\r\n');
+    term.write('2026/08/10  10:00  <DIR>          internal\r\n');
+    term.write('F:\\syproject\\gou-ide> ');
+    // 等待 xterm DOM 渲染完成（rows 有内容）
+    var tries = 0;
+    var iv = setInterval(function(){
+      tries++;
+      var rows = host.querySelector('.xterm-rows');
+      if ((rows && rows.children.length >= 8) || tries > 40) {
+        clearInterval(iv);
+        setTimeout(function(){
+          var root = elInfo(host, 0, 0, {count:0});
+          document.title = 'TREE:' + JSON.stringify(root);
+        }, 800);
+      }
+    }, 250);
+  };
+})();
+</script>
+</head>
+<body style="margin:0">
+<div id="term-host" style="position:fixed;left:0;top:0;width:960px;height:280px;background:#0d1117;padding:4px;"></div>
+</body>
+</html>
