@@ -236,9 +236,11 @@ func main() {
 		expectH := upStartH + dy
 		// ★ Move 帧首（同下拖）：先写 style 再布局，本帧采样即生效。
 		// move 的 Y 基于本次 press 的 startY（finalH）。
+		// ★★ 增量路径（真实窗口主循环）：不 RebuildRenderTree，只走
+		// Move 内部 RebuildStyleForElement + EnsureLayout——复现用户
+		// 真实场景「向上缩不跟手、松开才更新」。
 		h.MockEventCursorMove(wv, handleX, finalH+dy)
 		runJobs(wv)
-		wv.RebuildRenderTree()
 		wv.EnsureLayout()
 		rv = wv.RenderView()
 		box = rv.FindRenderBoxForNode(ta)
@@ -279,7 +281,147 @@ func main() {
 			box.Height(), map[bool]string{true: "OK clamp 生效", false: "✗ 未 clamp"}[abs(box.Height()-60) <= 1.5])
 	}
 	h.MockTextareaResizeRelease()
+
+	// ★ 思想 tab 向上拖（用户反馈场景）
+	thinkTabUpDrag(wv, h)
 	fmt.Println("\n[resize] done")
+}
+
+// 附加场景：思想 tab 向上拖（用户反馈「思想里的 textarea 往上拖不跟手、
+// 松开才更新」）。切到「思想」tab + 开启哲学注入 → 找 .inst-textarea →
+// 增量路径向上拖 10 帧，观察 boxH 是否跟随。
+func thinkTabUpDrag(wv *webkit.WebView, h *app.Host) {
+	js(wv, `(function(){
+		var btns = document.querySelectorAll('.settings-tabs button');
+		for (var i=0;i<btns.length;i++){
+			if (btns[i].textContent.indexOf('思想') >= 0) {
+				var ev = new Event('click', {bubbles:true}); btns[i].dispatchEvent(ev); break;
+			}
+		}
+	})()`)
+	_, _ = wv.JSInterpreter().RunJS(`new Promise(function(res){ setTimeout(res, 300); })`)
+	time.Sleep(400 * time.Millisecond)
+	runJobs(wv)
+	wv.RebuildRenderTree()
+	wv.EnsureLayout()
+	runJobs(wv)
+	fmt.Println("[think] after tab switch:", js(wv, `(function(){
+		var tabs = document.querySelectorAll('.settings-tabs button');
+		var info = [];
+		for (var i=0;i<tabs.length;i++){ info.push(tabs[i].textContent + ':' + (tabs[i].className||'')); }
+		var grp = document.querySelector('.group-title');
+		return 'tabs=[' + info.join('|') + '] first-group=' + (grp ? grp.textContent : 'none') + ' textareas=' + document.querySelectorAll('textarea').length;
+	})()`))
+	// 若思想 tab 无 textarea（哲学未启用）才开启思想注入
+	hasTA := js(wv, `document.querySelectorAll('textarea.inst-textarea').length`)
+	if hasTA == "0" {
+		js(wv, `(function(){
+			var rows = document.querySelectorAll('.setting-row');
+			for (var i=0;i<rows.length;i++){
+				var lbl = rows[i].querySelector('label');
+				if (lbl && lbl.textContent.indexOf('启用思想注入') >= 0) {
+					var cb = rows[i].querySelector('input[type="checkbox"]');
+					if (cb) {
+						if (!cb.checked) {
+							// Vue v-model 监听 change：click() 不派发 change，
+							// 手动设置 checked + 派发 change 事件。
+							cb.checked = true;
+							cb.dispatchEvent(new Event('change', {bubbles:true}));
+						}
+					}
+					break;
+				}
+			}
+		})()`)
+		_, _ = wv.JSInterpreter().RunJS(`new Promise(function(res){ setTimeout(res, 300); })`)
+		time.Sleep(400 * time.Millisecond)
+		runJobs(wv)
+		wv.RebuildRenderTree()
+		wv.EnsureLayout()
+		runJobs(wv)
+	}
+	wv.RebuildRenderTree()
+	wv.EnsureLayout()
+
+	doc := wv.Document()
+	rv := wv.RenderView()
+	var ta *dom.Element
+	for _, el := range doc.GetElementsByTagName("textarea") {
+		cls := el.GetAttribute("class")
+		fmt.Printf("[think] textarea class=%q placeholder=%q\n", cls, el.GetAttribute("placeholder"))
+		if strings.Contains(cls, "inst-textarea") {
+			ta = el
+			break
+		}
+	}
+	if ta == nil {
+		fmt.Println("[think] NO .inst-textarea in philosophy tab")
+		return
+	}
+	box := rv.FindRenderBoxForNode(ta)
+	if box == nil {
+		fmt.Println("[think] NO RenderBox")
+		return
+	}
+	bx, by, bw, bh := rendering.BoxViewportRect(rv, box)
+	// 记录空内容初始高度
+	emptyH := bh
+	fmt.Printf("[think] 空内容初始 boxH=%.1f\n", emptyH)
+	// 填入多行内容（textarea 高度浏览器语义由 rows 决定、不随内容撑高）
+	js(wv, `(function(){
+		var t = document.querySelector('textarea.inst-textarea');
+		t.value = '第一行\n第二行\n第三行\n第四行\n第五行\n第六行\n第七行';
+		t.dispatchEvent(new Event('input', {bubbles:true}));
+	})()`)
+	_, _ = wv.JSInterpreter().RunJS(`new Promise(function(res){ setTimeout(res, 200); })`)
+	time.Sleep(300 * time.Millisecond)
+	runJobs(wv)
+	wv.RebuildRenderTree()
+	wv.EnsureLayout()
+	runJobs(wv)
+	rv = wv.RenderView()
+	box = rv.FindRenderBoxForNode(ta)
+	if box != nil {
+		fmt.Printf("[think] 填 7 行内容后 boxH=%.1f（浏览器语义应≈rows 高度不变）\n", box.Height())
+	}
+	// settings-body 滚动状态
+	scrollInfo := js(wv, `(function(){
+		var sb = document.querySelector('.settings-body');
+		if (!sb) return 'no-settings-body';
+		return 'scrollH=' + sb.scrollHeight + ' clientH=' + sb.clientHeight + ' scrollTop=' + sb.scrollTop;
+	})()`)
+	fmt.Printf("[think] textarea viewport=(%.0f,%.0f) %.0fx%.0f styleH=%q | %s\n",
+		bx, by, bw, bh, ta.GetAttribute("style"), scrollInfo)
+	handleY := by + bh - 5
+	startH := bh
+	h.MockTextareaResizePress(ta, rv, handleY)
+	fmt.Printf("[think] press handle at (%.0f,%.0f) startH=%.1f → 向上拖 10 帧（增量路径）\n", bx+bw-5, handleY, startH)
+	mismatch := 0
+	for i := 0; i < 10; i++ {
+		dy := -10.0 * float64(i+1)
+		expectH := startH + dy
+		// ★ raw 写入后：style 保留 raw 值，布局层 min-height:60px clamp
+		expectH = maxF(expectH, 60)
+		h.MockEventCursorMove(wv, bx+bw-5, handleY+dy)
+		runJobs(wv)
+		wv.EnsureLayout()
+		rv = wv.RenderView()
+		box = rv.FindRenderBoxForNode(ta)
+		if box == nil {
+			fmt.Printf("[think %02d] NO BOX\n", i)
+			continue
+		}
+		actualH := box.Height()
+		ok := "OK"
+		if abs(actualH-expectH) > 1.5 {
+			ok = "✗ MISMATCH"
+			mismatch++
+		}
+		fmt.Printf("[think %02d] boxH=%.1f expect=%.1f dy=%+0.f style=%q %s\n",
+			i, actualH, expectH, dy, ta.GetAttribute("style"), ok)
+	}
+	fmt.Printf("[think] 向上拖 mismatch=%d/10（min-height:60 应保持 60，style 写 raw）\n", mismatch)
+	h.MockTextareaResizeRelease()
 }
 
 // ── 通用小工具（与 drag_repaint_probe 一致）──
@@ -306,4 +448,11 @@ func abs(v float64) float64 {
 		return -v
 	}
 	return v
+}
+
+func maxF(a, b float64) float64 {
+	if a > b {
+		return a
+	}
+	return b
 }
