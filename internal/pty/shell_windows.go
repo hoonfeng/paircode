@@ -27,8 +27,13 @@ func detectShellsUncached() []Shell {
 	//   - CMD:  /K chcp 65001>nul（>nul 吞掉 chcp 回显，不污染首行）
 	//   - PowerShell: [Console]::OutputEncoding=UTF8（PS5.1 控制台输出编码）
 	//   - Git Bash: 原生 UTF-8，无需处理
+	// ★ banner 补充：cmd 的 stdout 是 ConPTY 匿名管道（非控制台句柄）时，
+	//   启动 banner（Microsoft Windows [版本...] + 版权行）不输出（cmd 的
+	//   banner 走控制台专用路径，管道下静默丢弃，实测真实终端/浏览器参照
+	//   均如此）。为对齐真实 cmd 体验，用 ver（动态输出版本行）+ echo 版权行
+	//   在 chcp 之后手动补打（chcp 在 banner 前执行避免切换代码页清屏干扰）。
 	out := []Shell{{Name: "CMD", Path: "cmd",
-		Args: []string{"/q", "/d", "/K", "chcp 65001>nul"}}} // cmd 总在
+		Args: []string{"/q", "/d", "/K", "chcp 65001>nul & echo. & ver & echo (c) Microsoft Corporation。保留所有权利。 & echo."}}} // cmd 总在
 	if p, err := exec.LookPath("powershell"); err == nil {
 		out = append(out, Shell{Name: "PowerShell", Path: p,
 			Args: []string{"-NoLogo", "-NoProfile", "-NoExit", "-Command", "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8"}})
