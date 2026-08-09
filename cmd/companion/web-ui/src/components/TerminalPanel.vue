@@ -321,22 +321,15 @@ function setTermRef(idx, el) {
     const ws = createWebSocket(term, terminal, fitAddon)
     term.ws = ws
 
-    // ★ 多档延迟 fit：引擎（wb-ui desktop）布局/渲染异步完成，单次
-    // fitAddon.fit() 在容器高度未就绪时静默失败（proposeDimensions 返回
-    // null → xterm 保持 80x24 超出容器 → 底部内容/光标被裁剪不可见）。
-    // 200/800/2000ms 各重试一次（幂等：fit 只在 rows/cols 变化时 resize）。
-    ;[200, 800, 2000].forEach(ms => {
-      setTimeout(() => {
-        if (term.fitAddon && term.xterm && term.domEl) {
-          try {
-            term.fitAddon.fit()
-            if (term.ws && term.ws.readyState === 1) {
-              term.ws.resize(term.xterm.cols, term.xterm.rows)
-            }
-          } catch {}
-        }
-      }, ms)
-    })
+    // ★ 创建后立即 fit（引擎已修复：getComputedStyle 未声明 padding 返回
+    // "0px" + canvas 精确测量 → fit 一次即得正确 cols/rows，不再需要
+    // 200/800/2000ms 多档重试——重试让终端启动最坏等 2 秒才显示正确列数）。
+    try {
+      term.fitAddon.fit()
+      if (term.ws && term.ws.readyState === 1) {
+        term.ws.resize(term.xterm.cols, term.xterm.rows)
+      }
+    } catch {}
 
     // 如果该终端是当前活动终端，添加 ResizeObserver 监听
     if (idx === activeTermIdx.value) {

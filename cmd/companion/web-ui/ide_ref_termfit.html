@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8" />
+<title>TERM FIT COLLECTOR</title>
+<link rel="stylesheet" href="./node_modules/@xterm/xterm/css/xterm.css" />
+<script src="./node_modules/@xterm/xterm/lib/xterm.js"></script>
+<script src="./node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
+<script>
+(function(){
+  var d = document.createElement('div');
+  d.id = 'fitdbg';
+  d.textContent = 'FitAddon=' + typeof window.FitAddon + ' Terminal=' + typeof window.Terminal + ' mod=' + (typeof module) + ' exp=' + (typeof exports);
+  document.body.appendChild(d);
+})();
+</script>
+<script>
+// Reference collector for terminal WIDTH: mimics real TerminalPanel flow
+// (open + fitAddon.fit() immediately), then writes long lines and records
+// cols/rows/cell size/line widths to document.title for Edge --dump-dom.
+(function(){
+  var LIMIT = 4000;
+  function cssColor(v){ return (v||'').replace(/\s+/g,''); }
+  function elInfo(el, depth, idx, n){
+    if (!el || n.count >= LIMIT) return null;
+    n.count++;
+    var r = el.getBoundingClientRect();
+    var cs = null;
+    try { cs = window.getComputedStyle(el); } catch(e) {}
+    var info = {
+      tag: el.tagName ? el.tagName.toLowerCase() : el.nodeName,
+      id: el.id || '', cls: typeof el.className === 'string' ? el.className : '',
+      x: Math.round(r.left*10)/10, y: Math.round(r.top*10)/10,
+      w: Math.round(r.width*10)/10, h: Math.round(r.height*10)/10,
+      depth: depth, idx: idx
+    };
+    if (cs) {
+      info.disp = cs.display;
+      info.col = cssColor(cs.color);
+      info.bg = cssColor(cs.backgroundColor);
+      info.fs = cs.fontSize;
+      info.lh = cs.lineHeight;
+    }
+    var children = [];
+    var i = 0;
+    for (var c = el.firstElementChild; c; c = c.nextElementSibling) {
+      var ci = elInfo(c, depth+1, i, n); i++;
+      if (ci) children.push(ci);
+    }
+    if (children.length === 0 && el.childNodes && el.childNodes.length === 1 && el.firstChild && el.firstChild.nodeType === 3) {
+      var t = (el.firstChild.nodeValue || '').trim();
+      if (t.length > 20) t = t.slice(0,20)+'…';
+      if (t) info.text = t;
+    }
+    info.children = children;
+    return info;
+  }
+  window.onload = function(){
+    var host = document.getElementById('term-host');
+    var term = null, fit = null;
+    try {
+      term = new window.Terminal({
+        cursorBlink: false, cursorStyle: 'bar',
+        fontSize: 13,
+        fontFamily: "'Consolas', 'Cascadia Code', 'JetBrains Mono', monospace",
+        cols: 80, rows: 24, scrollback: 200,
+        convertEol: true, rendererType: 'dom'
+      });
+      window.__term = term;
+      var FitCtor = window.FitAddon && (window.FitAddon.FitAddon || window.FitAddon);
+      fit = new FitCtor();
+      term.loadAddon(fit);
+      term.open(host);
+      // ★ 真实 TerminalPanel 流程：open 后立即 fit（只一次）
+      (function(){
+        var cs = window.getComputedStyle(host);
+        console.log('[FIT] gcs host w=' + cs.getPropertyValue('width') +
+          ' h=' + cs.getPropertyValue('height') +
+          ' pw=' + cs.width + ' ph=' + cs.height +
+          ' padR=' + cs.getPropertyValue('padding-right') + ' padL=' + cs.getPropertyValue('padding-left') +
+          ' padT=' + cs.getPropertyValue('padding-top') + ' padB=' + cs.getPropertyValue('padding-bottom'));
+        var csx = window.getComputedStyle(term.element);
+        console.log('[FIT] gcs xterm w=' + csx.getPropertyValue('width') + ' h=' + csx.getPropertyValue('height'));
+        var el = term.element.parentElement;
+        console.log('[FIT] parent=' + (el && el.tagName) + ' rect=' + (el ? Math.round(el.getBoundingClientRect().width*10)/10 : 'none'));
+      })();
+      console.log('[FIT] pre-fit dims=' + (term._core._renderService && term._core._renderService.dimensions ?
+        term._core._renderService.dimensions.css.cell.width + 'x' + term._core._renderService.dimensions.css.cell.height : 'null'));
+      try { console.log('[FIT] propose=' + JSON.stringify(fit.proposeDimensions())); } catch(pe) { console.log('[FIT] propose err: ' + pe.message); }
+      fit.fit();
+      window.__fit = fit;
+      console.log('[FIT] after open+fit: cols=' + term.cols + ' rows=' + term.rows +
+        ' dims=' + (term._core._renderService && term._core._renderService.dimensions ?
+        term._core._renderService.dimensions.css.cell.width + 'x' + term._core._renderService.dimensions.css.cell.height : 'null'));
+    } catch (e) {
+      console.log('[FIT] FAIL: ' + (e && e.stack || e));
+      document.title = 'TREE:' + JSON.stringify({err:String(e&&e.stack||e), dbg:'FitAddon='+typeof window.FitAddon+' Terminal='+typeof window.Terminal+' mod='+typeof module+' exp='+typeof exports});
+      return;
+    }
+    // 写入不同长度行验证输出宽度
+    var line80 = '', line100 = '', line120 = '', line160 = '';
+    for (var i = 0; i < 80; i++) line80 += 'A';
+    for (i = 0; i < 100; i++) line100 += 'B';
+    for (i = 0; i < 120; i++) line120 += 'C';
+    for (i = 0; i < 160; i++) line160 += 'D';
+    term.write(line80 + '\r\n' + line100 + '\r\n' + line120 + '\r\n' + line160 + '\r\n');
+    // 等待渲染完成
+    var tries = 0;
+    var iv = setInterval(function(){
+      tries++;
+      var rows = host.querySelector('.xterm-rows');
+      if ((rows && rows.children.length >= 4) || tries > 50) {
+        clearInterval(iv);
+        setTimeout(function(){
+          var root = elInfo(host, 0, 0, {count:0});
+          // 附加 cols/rows/cell 诊断
+          try {
+            var core = term._core;
+            var dims = core && core._renderService && core._renderService.dimensions;
+            root.__diag = {
+              cols: term.cols, rows: term.rows,
+              cssCellW: dims && dims.css.cell.width,
+              cssCellH: dims && dims.css.cell.height,
+              charW: term.charMeasure && term.charMeasure.width,
+              hostW: host.getBoundingClientRect().width,
+              hostH: host.getBoundingClientRect().height,
+              screenW: (rows && rows.getBoundingClientRect().width) || 0
+            };
+          } catch(e2) { root.__diag = {err:String(e2)}; }
+          document.title = 'TREE:' + JSON.stringify(root);
+        }, 900);
+      }
+    }, 250);
+  };
+})();
+</script>
+</head>
+<body style="margin:0">
+<!-- 容器模拟真实终端面板：固定 800px 宽、160px 高，padding 4px -->
+<div id="term-host" style="position:fixed;left:0;top:0;width:800px;height:160px;background:#0d1117;padding:4px;box-sizing:content-box;"></div>
+</body>
+</html>
