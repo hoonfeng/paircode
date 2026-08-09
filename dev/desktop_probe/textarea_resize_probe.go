@@ -169,12 +169,19 @@ func main() {
 	for i := 0; i < frames; i++ {
 		dy := 10.0 * float64(i+1)
 		expectH := startH + dy
-		// ★ 真实主循环时序：Move 在帧首处理（写入 style + MarkDirty），
-		// 本帧 Rebuild/EnsureLayout 后采样即生效（事件→布局→绘制）。
-		// 之前 Move 放帧末导致采样滞后一帧（恒差 10px 误判为取整偏差）。
+		// ★ 真实主循环时序：Move 在帧首处理（内部增量 RebuildStyleForElement
+		// 写 style + 标记布局，不再全量 RebuildRenderTree），本帧 EnsureLayout
+		// 后采样即生效（事件→布局→绘制）。
+		// ★ 第 5 帧后插入一次显式 RebuildRenderTree：模拟真实主循环中其他
+		// DOM 变更（hover/DOM 修改）触发的重建——验证重建后 RV 按 DOM 节点
+		// 解析不跳变、高度延续（旧的 resizeDragRV 过期场景回归）。
+		if i == 5 {
+			wv.RebuildRenderTree()
+			wv.EnsureLayout()
+			rv = wv.RenderView()
+		}
 		h.MockEventCursorMove(wv, handleX, startY+dy)
 		runJobs(wv)
-		wv.RebuildRenderTree()
 		wv.EnsureLayout()
 		rv = wv.RenderView()
 		box = rv.FindRenderBoxForNode(ta)
