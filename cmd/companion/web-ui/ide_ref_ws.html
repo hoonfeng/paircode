@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8" /></head>
+<body>
+<div id="pre-test" style="width:200px;height:50px;white-space:pre;font-size:13px;font-family:Consolas;">
+  aa  bb  cc
+dd   ee
+</div>
+<div id="normal-test" style="width:200px;height:50px;white-space:normal;font-size:13px;font-family:Consolas;">
+  aa  bb  cc
+dd   ee
+</div>
+<script>
+window.onload = function(){
+  var out = [];
+  ['pre-test','normal-test'].forEach(function(id){
+    var el = document.getElementById(id);
+    var cs = window.getComputedStyle(el);
+    out.push(id + ' whiteSpace=' + cs.whiteSpace + ' scrollH=' + el.scrollHeight + ' clientH=' + el.clientHeight);
+    // 子文本节点数量
+    var t = el.firstChild;
+    out.push('  textNode=' + (t ? JSON.stringify(t.nodeValue) : 'null'));
+  });
+  var r = document.createElement('div');
+  r.id = 'RESULT';
+  r.textContent = out.join(' | ');
+  document.body.appendChild(r);
+  document.title = 'TREE:' + JSON.stringify({tag:'#doc', children:[{tag:'#result', text: out.join(' | ')}]});
+};
+</script>
+</body></html>
