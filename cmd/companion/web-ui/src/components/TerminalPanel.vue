@@ -111,7 +111,10 @@ function createXtermInstance(domEl) {
   const isDesktopMode = typeof window !== 'undefined' && !!window.__DESKTOP_MODE__
   const terminal = new Terminal({
     cursorBlink: true,
-    cursorStyle: 'bar',
+    // ★ 光标样式：浏览器终端（xterm 默认）是 block 光标，其闪烁动画改
+    // background-color（wb-ui 引擎动画系统支持 → 正常闪烁）。此前配
+    // cursorStyle:'bar' 的闪烁动画用 box-shadow（引擎不驱动 → 光标静止
+    // 不闪），且 bar 光晕在终端里看起来像「输入框边框」。
     fontSize: 13,
     fontFamily: "'Consolas', 'Cascadia Code', 'JetBrains Mono', monospace",
     theme: getXtermTheme(),
@@ -315,6 +318,23 @@ function setTermRef(idx, el) {
     // 创建 WebSocket 连接
     const ws = createWebSocket(term, terminal, fitAddon)
     term.ws = ws
+
+    // ★ 多档延迟 fit：引擎（wb-ui desktop）布局/渲染异步完成，单次
+    // fitAddon.fit() 在容器高度未就绪时静默失败（proposeDimensions 返回
+    // null → xterm 保持 80x24 超出容器 → 底部内容/光标被裁剪不可见）。
+    // 200/800/2000ms 各重试一次（幂等：fit 只在 rows/cols 变化时 resize）。
+    ;[200, 800, 2000].forEach(ms => {
+      setTimeout(() => {
+        if (term.fitAddon && term.xterm && term.domEl) {
+          try {
+            term.fitAddon.fit()
+            if (term.ws && term.ws.readyState === 1) {
+              term.ws.resize(term.xterm.cols, term.xterm.rows)
+            }
+          } catch {}
+        }
+      }, ms)
+    })
 
     // 如果该终端是当前活动终端，添加 ResizeObserver 监听
     if (idx === activeTermIdx.value) {
