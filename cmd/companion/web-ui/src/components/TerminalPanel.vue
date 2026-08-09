@@ -108,6 +108,7 @@ function getXtermTheme() {
 
 // ── 创建 xterm 实例 ──
 function createXtermInstance(domEl) {
+  const isDesktopMode = typeof window !== 'undefined' && !!window.__DESKTOP_MODE__
   const terminal = new Terminal({
     cursorBlink: true,
     cursorStyle: 'bar',
@@ -119,6 +120,10 @@ function createXtermInstance(domEl) {
     rows: 24,
     scrollback: 5000,
     convertEol: true,
+    // ★ desktop（wb-ui 引擎）无 HTMLCanvasElement → xterm canvas 渲染器
+    // 无法创建；DOM 渲染器（纯 div/span）是 xterm 官方选项，浏览器标准
+    // 语义一致。web 版保持默认 canvas 渲染（性能更好）。
+    rendererType: isDesktopMode ? 'dom' : 'auto',
   })
 
   const fitAddon = new FitAddon()
@@ -126,6 +131,8 @@ function createXtermInstance(domEl) {
 
   terminal.open(domEl)
   fitAddon.fit()
+  // ★ 调试：暴露实例供 WB_TERM_TEST 检查 buffer/渲染状态
+  window.__lastTerm = terminal
 
   return { terminal, fitAddon }
 }
@@ -167,15 +174,25 @@ function createWebSocket(termState, xtermInstance, fitAddon) {
     }
 
     socket.onmessage = (ev) => {
-      // 二进制帧 = PTY 输出
-      if (ev.data instanceof Blob) {
+      window.__termRecv = (window.__termRecv || 0) + 1
+      window.__termRecvLast = (typeof ev.data === 'string') ? ev.data.slice(0, 40) : String(ev.data).slice(0, 40)
+      // 二进制帧 = PTY 输出（浏览器 Blob）
+      if (typeof Blob !== 'undefined' && ev.data instanceof Blob) {
         ev.data.arrayBuffer().then(buf => {
           const uint8 = new Uint8Array(buf)
           xtermInstance.write(uint8)
         })
         return
       }
-      // 文本帧 = JSON 控制消息
+      // ★ desktop（wb-ui 引擎）：无 Blob 构造器，PTY 输出以字符串
+      // 推送（含 VT 转义序列，xterm.write 直接渲染）。控制消息
+      // （ready/error/closed）由 desktop 桥接通过 onopen/onerror/onclose
+      // 表达，不推送 JSON。
+      if (typeof ev.data === 'string') {
+        xtermInstance.write(ev.data)
+        return
+      }
+      // 文本帧 = JSON 控制消息（浏览器模式兜底）
       try {
         const data = JSON.parse(ev.data)
         if (data.type === 'ready') {

@@ -113,6 +113,13 @@ console.error = function(){
 	wv.EnsureLayout()
 	writeRenderDiagnostic(wv)
 
+	// ★ 每帧回调：主循环消费外部队列的 JS 推送（终端 PTY 输出、agent
+	// 事件）——goja 非线程安全，所有跨 goroutine 的 RunJS 必须在此
+	// 主线程执行。
+	host.OnFrame = func() {
+		desktopbridge.DrainMainQueue(wv)
+	}
+
 	log.Println("[Desktop] 窗口已启动，开始事件循环...")
 	host.Run()
 	log.Println("[Desktop] 已退出。")

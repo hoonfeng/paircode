@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"wb-ui/bindings"
@@ -23,6 +24,7 @@ import (
 	"github.com/hoonfeng/paircode/internal/agenttools"
 	pairBridge "github.com/hoonfeng/paircode/internal/bridge"
 	"github.com/hoonfeng/paircode/internal/core"
+	"github.com/hoonfeng/paircode/internal/pty"
 	"github.com/hoonfeng/paircode/internal/server/handler"
 	mcppanel "github.com/hoonfeng/paircode/internal/ui/mcp"
 	"github.com/hoonfeng/paircode/internal/ui/skills"
@@ -80,6 +82,12 @@ func Init(wv *webkit.WebView) {
 	registerHandlers()
 
 	bridge.InjectAll(rt)
+
+	// ★ 终端 PTY 桥接：前端 TerminalPanel 的 WebSocket('/api/terminal/ws')
+	// 经 stub 转接 → Go 侧真实 ConPTY 会话（复用 companion 的 internal/pty）。
+	// 键盘输入/控制消息经 __desktopTerminalSend 进来，PTY 输出经
+	// evalJSOnDesktop 推到 __desktopTerminals[id].onmessage。
+	registerTerminalBridge(wv, rt)
 
 	// ★ localStorage 文件持久化：前端 UI 状态（主题/打开文件等）重启不丢失。
 	//   web 端浏览器 localStorage 天然持久；desktop 内存版重启丢状态，
@@ -155,7 +163,11 @@ func injectJSBridge(rt *jsc.Interpreter) {
 		};
 
 		// ── WebSocket stub：不实际建连，onmessage 由 Go 端 EvalJS 推送 ──
-		window.__desktopWS = null;
+		window.__desktopWS = null;      // 兼容别名（历史）
+		window.__desktopAgentWS = null; // ★ agent 事件专用通道（固定实例，
+		                                //   不受终端 WS 影响——终端 WS 在
+		                                //   agent WS 之后创建会覆盖旧通道）
+		window.__desktopTerminals = {}; // 终端会话表：id → WebSocket 实例
 		window.WebSocket = function(url) {
 			this.url = url;
 			this.readyState = 0; // CONNECTING
@@ -164,7 +176,22 @@ func injectJSBridge(rt *jsc.Interpreter) {
 			this.protocol = '';
 			this.binaryType = 'blob';
 			var self = this;
+			this.__isTerminal = url.indexOf('/api/terminal/ws') >= 0;
+			if (this.__isTerminal) {
+				// ── 终端连接：Go 侧建立真实 PTY 桥接会话 ──
+				// 会话在 __desktopTerminalOpen 中创建（等 init 消息后启动
+				// shell），输出经 __desktopTerminals[id].onmessage 推送。
+				this.__termId = window.__desktopTerminalOpen(url);
+				window.__desktopTerminals[this.__termId] = this;
+				setTimeout(function() {
+					self.readyState = 1; // OPEN
+					if (typeof self.onopen === 'function') self.onopen({});
+				}, 0);
+				return;
+			}
+			// ── 普通 WS（agent 事件等）：stub 自动 OPEN，注册为 agent 通道 ──
 			window.__desktopWS = this;
+			window.__desktopAgentWS = this;
 			setTimeout(function() {
 				self.readyState = 1; // OPEN
 				if (typeof self.onopen === 'function') self.onopen({});
@@ -175,12 +202,28 @@ func injectJSBridge(rt *jsc.Interpreter) {
 		window.WebSocket.CLOSING = 2;
 		window.WebSocket.CLOSED = 3;
 		window.WebSocket.prototype.send = function(data) {
-			// 桌面模式下忽略 send（前端心跳等），Go 端不接收
+			if (this.__isTerminal && typeof window.__desktopTerminalSend === 'function') {
+				// 终端输入：Uint8Array（TextEncoder 键盘输入）→ 字节字符串；
+				// 或 JSON 字符串（init/resize/close 控制消息）
+				var s;
+				if (data && typeof data === 'object' && typeof data.length === 'number' && !(typeof data === 'string')) {
+					s = '';
+					for (var i = 0; i < data.length; i++) s += String.fromCharCode(data[i]);
+				} else {
+					s = String(data);
+				}
+				window.__desktopTerminalSend(this.__termId, s);
+				return;
+			}
+			// 桌面模式忽略非终端 send（心跳等）
 		};
 		window.WebSocket.prototype.close = function() {
 			var self = this;
 			if (self.readyState === 3) return;
 			self.readyState = 3;
+			if (self.__isTerminal && typeof window.__desktopTerminalSend === 'function') {
+				window.__desktopTerminalSend(self.__termId, JSON.stringify({type:'close'}));
+			}
 			if (typeof self.onclose === 'function') self.onclose({code: 1000, reason: 'desktop'});
 		};
 		window.WebSocket.prototype.dispatchMessage = function(data) {
@@ -249,8 +292,9 @@ func forwardAgentEvents(wv *webkit.WebView) {
 			if (window.desktopBridge && typeof window.desktopBridge.onStatus === 'function') {
 				window.desktopBridge.onStatus(JSON.stringify(p));
 			}
-			if (window.__desktopWS && typeof window.__desktopWS.dispatchStatus === 'function') {
-				window.__desktopWS.dispatchStatus(p);
+			var ag = window.__desktopAgentWS || window.__desktopWS;
+			if (ag && typeof ag.dispatchStatus === 'function') {
+				ag.dispatchStatus(p);
 			}
 		})()`)
 	}
@@ -258,15 +302,17 @@ func forwardAgentEvents(wv *webkit.WebView) {
 	for ge := range ch {
 		data, _ := json.Marshal(ge.Event)
 		convID := ge.ConvID
-		evalJSOnDesktop(wv, `(function(){
+		// ★ 主线程执行（goja 非线程安全）：投递队列，Host.OnFrame drain。
+		enqueueJS(`(function(){
 			var convId = `+convJSON(convID)+`;
 			var data = `+string(data)+`;
 			if (window.desktopBridge && typeof window.desktopBridge.onAgentEvent === 'function') {
 				try { window.desktopBridge.onAgentEvent(convId, JSON.stringify(data)); } catch(e) {}
 			}
-			if (window.__desktopWS && typeof window.__desktopWS.dispatchMessage === 'function') {
+			var ag = window.__desktopAgentWS || window.__desktopWS;
+			if (ag && typeof ag.dispatchMessage === 'function') {
 				try {
-					window.__desktopWS.dispatchMessage(JSON.stringify({convId: convId, type: data.type, content: data.content, tool: data.tool, args: data.args, callId: data.callId, doneReason: data.doneReason}));
+					ag.dispatchMessage(JSON.stringify({convId: convId, type: data.type, content: data.content, tool: data.tool, args: data.args, callId: data.callId, doneReason: data.doneReason}));
 				} catch(e) {}
 			}
 		})()`)
@@ -280,6 +326,32 @@ func forwardAgentEvents(wv *webkit.WebView) {
 func convJSON(s string) string {
 	b, _ := json.Marshal(s)
 	return string(b)
+}
+
+// ─── 主线程 JS 推送队列 ─────────────────────────────────────
+// goja 非线程安全：任何 goroutine（PTY 读循环、agent 事件推送）都不能
+// 直接 RunJS，必须把 JS 片段投递到 mainQueue，由 Host 主循环每帧
+// （OnFrame → DrainMainQueue）在主线程执行。队列满时丢弃（避免阻塞
+// PTY 读循环，输出流式本来允许丢帧）。
+var mainQueue = make(chan string, 4096)
+
+func enqueueJS(js string) {
+	select {
+	case mainQueue <- js:
+	default:
+	}
+}
+
+// DrainMainQueue 在主线程执行所有待推送 JS 片段（Host.OnFrame 调用）。
+func DrainMainQueue(wv *webkit.WebView) {
+	for {
+		select {
+		case js := <-mainQueue:
+			evalJSOnDesktop(wv, js)
+		default:
+			return
+		}
+	}
 }
 
 // evalJSOnDesktop 在 WebView 的 JS 解释器上执行 JS。
@@ -494,5 +566,197 @@ func (f *fileLocalStorage) Save(key, value string) {
 	}
 	if data, err := json.Marshal(f.cache); err == nil {
 		os.WriteFile(f.path, data, 0o644)
+	}
+}
+
+// ─── 桌面终端 PTY 桥接 ─────────────────────────────────────────
+// 前端 TerminalPanel 用 new WebSocket('/api/terminal/ws') 连接后端 PTY。
+// 桌面端 WebSocket 是 stub（不真实建连），这里把终端 WS 桥接到真实
+// ConPTY 会话：
+//
+//	前端 stub（WebSocket 构造器） URL 含 /api/terminal/ws →
+//	    __desktopTerminalOpen(url) → Go 创建会话占位（返回 termId）
+//	前端 socket.send(JSON init) → __desktopTerminalSend(termId, data)
+//	    → Go 解析 init{shell,cwd,cols,rows} → pty.Start 启动 shell
+//	PTY 输出（VT 字节流）→ Go 读循环 → evalJSOnDesktop 推
+//	    __desktopTerminals[termId].onmessage({data: 字符串})
+//	键盘输入（Uint8Array→字节字符串）→ __desktopTerminalSend → pty.Write
+//	前端 socket.send(JSON resize/close) → pty.Resize / pty.Close
+
+var (
+	termSeq    int64
+	termSessMu sync.Mutex
+	termSess   = map[string]*desktopTerm{}
+)
+
+type desktopTerm struct {
+	termID string
+	wv     *webkit.WebView
+	mu     sync.Mutex
+	p      pty.PTY
+	closed bool
+}
+
+// registerTerminalBridge 注册 Go native 函数（__desktopTerminalOpen /
+// __desktopTerminalSend），供前端 WebSocket stub 转接终端 I/O。
+func registerTerminalBridge(wv *webkit.WebView, rt *jsc.Interpreter) {
+	if rt == nil {
+		return
+	}
+	gobj := rt.GlobalObject()
+	gobj.Set("__desktopTerminalOpen", jsc.FunctionValue(jsc.NewNativeFunction("__desktopTerminalOpen",
+		func(in *jsc.Interpreter, thisVal jsc.JSValue, args []jsc.JSValue) jsc.JSValue {
+			id := fmt.Sprintf("t%d", atomic.AddInt64(&termSeq, 1))
+			termSessMu.Lock()
+			termSess[id] = &desktopTerm{termID: id, wv: wv}
+			termSessMu.Unlock()
+			return jsc.StringValue(id)
+		}, 1)))
+	gobj.Set("__desktopTerminalSend", jsc.FunctionValue(jsc.NewNativeFunction("__desktopTerminalSend",
+		func(in *jsc.Interpreter, thisVal jsc.JSValue, args []jsc.JSValue) jsc.JSValue {
+			if len(args) < 2 {
+				return jsc.Undefined()
+			}
+			id := args[0].ToString()
+			data := args[1].ToString()
+			handleTerminalMessage(id, data)
+			return jsc.Undefined()
+		}, 2)))
+}
+
+// handleTerminalMessage 处理来自前端 stub 的终端消息：JSON 控制消息
+// （init/resize/close）或原始键盘输入（字节字符串，每个 rune ∈ 0..255）。
+func handleTerminalMessage(id, data string) {
+	termSessMu.Lock()
+	t := termSess[id]
+	termSessMu.Unlock()
+	if t == nil {
+		return
+	}
+	// ★ JSON 控制消息判断用 trim 后的字符串；键盘输入必须保留原始
+	// 字节（含 \r\n 回车等控制字符），不能 trim 后写入。
+	trimmed := strings.TrimSpace(data)
+	if strings.HasPrefix(trimmed, "{") {
+		var msg struct {
+			Type  string `json:"type"`
+			Shell string `json:"shell"`
+			Cwd   string `json:"cwd"`
+			Cols  int    `json:"cols"`
+			Rows  int    `json:"rows"`
+		}
+		if json.Unmarshal([]byte(trimmed), &msg) == nil {
+			switch msg.Type {
+			case "init":
+				t.start(msg.Shell, msg.Cwd, msg.Cols, msg.Rows)
+			case "resize":
+				t.resize(msg.Cols, msg.Rows)
+			case "close":
+				t.close()
+			}
+			return
+		}
+	}
+	// 键盘/原始输入：原样写入（含 \r\n 回车等控制字节）。
+	t.write([]byte(data))
+}
+
+// start 按 init 消息启动 PTY 会话，并启动输出读循环。
+func (t *desktopTerm) start(shellName, cwd string, cols, rows int) {
+	t.mu.Lock()
+	if t.closed || t.p != nil {
+		t.mu.Unlock()
+		return
+	}
+	t.mu.Unlock()
+
+	sh := pty.ShellByName(shellName)
+	if cols < 2 {
+		cols = 80
+	}
+	if rows < 2 {
+		rows = 24
+	}
+	p, err := pty.Start(sh, cwd, cols, rows)
+	if err != nil {
+		log.Printf("[Terminal] PTY 启动失败: %v", err)
+		evalJSOnDesktop(t.wv, `(function(){
+			var ws = window.__desktopTerminals && window.__desktopTerminals[`+convJSON(t.termID)+`];
+			if (ws && typeof ws.onerror === 'function') ws.onerror({message: 'PTY 启动失败'});
+		})()`)
+		return
+	}
+	t.mu.Lock()
+	if t.closed {
+		t.mu.Unlock()
+		p.Close()
+		return
+	}
+	t.p = p
+	t.mu.Unlock()
+
+	go t.readLoop(p)
+}
+
+// readLoop 持续读取 PTY 输出并推送到前端对应终端实例的 onmessage。
+func (t *desktopTerm) readLoop(p pty.PTY) {
+	buf := make([]byte, 4096)
+	for {
+		n, err := p.Read(buf)
+		if n > 0 {
+			chunk := string(buf[:n])
+			if os.Getenv("WB_TERM_DEBUG") != "" {
+				log.Printf("[term-io] OUT %d bytes: %x", n, buf[:n])
+			}
+			// ★ 主线程执行（goja 非线程安全）：投递到 mainQueue，
+			// Host.OnFrame → DrainMainQueue 在主循环 RunJS。
+			enqueueJS(`(function(){
+				var ws = window.__desktopTerminals && window.__desktopTerminals[` + convJSON(t.termID) + `];
+				if (ws && typeof ws.onmessage === 'function') ws.onmessage({data: ` + convJSON(chunk) + `});
+			})()`)
+		}
+		if err != nil {
+			break
+		}
+	}
+	t.close()
+}
+
+func (t *desktopTerm) write(data []byte) {
+	t.mu.Lock()
+	p := t.p
+	t.mu.Unlock()
+	if p == nil {
+		return
+	}
+	_, _ = p.Write(data)
+}
+
+func (t *desktopTerm) resize(cols, rows int) {
+	t.mu.Lock()
+	p := t.p
+	t.mu.Unlock()
+	if p == nil || cols < 2 || rows < 2 {
+		return
+	}
+	_ = p.Resize(cols, rows)
+}
+
+func (t *desktopTerm) close() {
+	t.mu.Lock()
+	if t.closed {
+		t.mu.Unlock()
+		return
+	}
+	t.closed = true
+	p := t.p
+	t.p = nil
+	t.mu.Unlock()
+
+	termSessMu.Lock()
+	delete(termSess, t.termID)
+	termSessMu.Unlock()
+
+	if p != nil {
+		_ = p.Close()
 	}
 }
