@@ -569,7 +569,12 @@ watch(() => state.theme, () => {
 .term-tabs {
   display: flex; align-items: stretch; background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color); flex-shrink: 0; overflow-x: auto;
-  min-height: 28px;
+  /* ★ 高度对齐用户浏览器（真实 Edge 9090）：Edge 环境字体行高较大，
+     tab 内容自然撑到 33px → xterm 容器 147px → 内容底部间隙 15px。
+     引擎字体行高较小（内容 25px），min-height 28 只撑到 28 → xterm
+     容器 151px → 间隙 19px（比用户浏览器大 4px）。统一 min-height
+     33px 使引擎渲染 = 用户浏览器（tab 33px、间隙 15px）。 */
+  min-height: 33px;
 }
 .term-tab {
   display: flex; align-items: center; gap: 4px; padding: 4px 10px;
