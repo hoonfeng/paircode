@@ -22,12 +22,20 @@ func DetectShells() []Shell {
 }
 
 func detectShellsUncached() []Shell {
-	out := []Shell{{Name: "CMD", Path: "cmd", Args: nil}} // cmd 总在
+	// ★ UTF-8 代码页：Windows cmd 默认 GBK(cp936) 输出，xterm 按 UTF-8 解码
+	// → 中文乱码。启动时注入 UTF-8（浏览器终端/Windows Terminal 标准）：
+	//   - CMD:  /K chcp 65001>nul（>nul 吞掉 chcp 回显，不污染首行）
+	//   - PowerShell: [Console]::OutputEncoding=UTF8（PS5.1 控制台输出编码）
+	//   - Git Bash: 原生 UTF-8，无需处理
+	out := []Shell{{Name: "CMD", Path: "cmd",
+		Args: []string{"/q", "/d", "/K", "chcp 65001>nul"}}} // cmd 总在
 	if p, err := exec.LookPath("powershell"); err == nil {
-		out = append(out, Shell{Name: "PowerShell", Path: p, Args: []string{"-NoLogo", "-NoProfile"}})
+		out = append(out, Shell{Name: "PowerShell", Path: p,
+			Args: []string{"-NoLogo", "-NoProfile", "-NoExit", "-Command", "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8"}})
 	}
 	if p, err := exec.LookPath("pwsh"); err == nil { // PowerShell 7+
-		out = append(out, Shell{Name: "PowerShell 7", Path: p, Args: []string{"-NoLogo", "-NoProfile"}})
+		out = append(out, Shell{Name: "PowerShell 7", Path: p,
+			Args: []string{"-NoLogo", "-NoProfile", "-NoExit", "-Command", "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8"}})
 	}
 	if p, err := exec.LookPath("bash"); err == nil { // Git Bash / WSL bash
 		out = append(out, Shell{Name: "Git Bash", Path: p, Args: []string{"-i"}})

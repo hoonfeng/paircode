@@ -542,7 +542,12 @@ watch(() => state.theme, () => {
 /* ★ bar 光标（浏览器标准竖线）：xterm 的 blink_bar 动画用 box-shadow
    （wb-ui 引擎不驱动 → 光标静止）。覆盖为 background-color 闪烁 +
    2px 竖线——引擎动画系统支持 background-color → 正常闪烁，视觉与
-   浏览器终端一致（1 字符宽竖线、随字符闪烁）。 */
+   浏览器终端一致（1 字符宽竖线、随字符闪烁）。
+   ★ keyframes 用平台式（0/49.9% 蓝 + 50/100% 透明）：引擎对 CSS
+   timing-function 的 step-end 按线性处理（不支持步骤语义），若 keyframes
+   只写 0%/100% 蓝 + 50% 透明 → 线性插值 → 光标「渐隐渐现」（不干脆）。
+   平台式使两段关键帧内插值恒值、只在 50% 瞬间跳变 → 干脆开关切换，
+   与浏览器 step-end 视觉效果一致。 */
 .terminal-panel .xterm-cursor.xterm-cursor-bar {
   box-shadow: none !important;
   background-color: #58a6ff !important;
@@ -550,8 +555,8 @@ watch(() => state.theme, () => {
   animation: wb-term-bar-blink 1s step-end infinite !important;
 }
 @keyframes wb-term-bar-blink {
-  0%, 100% { background-color: #58a6ff; }
-  50% { background-color: transparent; }
+  0%, 49.9% { background-color: #58a6ff; }
+  50%, 100% { background-color: transparent; }
 }
 </style>
 
