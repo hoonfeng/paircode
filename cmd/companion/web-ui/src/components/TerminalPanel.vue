@@ -111,10 +111,12 @@ function createXtermInstance(domEl) {
   const isDesktopMode = typeof window !== 'undefined' && !!window.__DESKTOP_MODE__
   const terminal = new Terminal({
     cursorBlink: true,
-    // ★ 光标样式：浏览器终端（xterm 默认）是 block 光标，其闪烁动画改
-    // background-color（wb-ui 引擎动画系统支持 → 正常闪烁）。此前配
-    // cursorStyle:'bar' 的闪烁动画用 box-shadow（引擎不驱动 → 光标静止
-    // 不闪），且 bar 光晕在终端里看起来像「输入框边框」。
+    // ★ 光标样式：浏览器终端（Edge 实测）是竖线光标（bar），用户要求
+    // 与浏览器对齐。xterm bar 光标的闪烁动画默认用 box-shadow（引擎
+    // 动画系统不驱动 → 静止不闪），因此在下方注入 .xterm-cursor-bar
+    // 的覆盖样式（background-color 闪烁 + width:2px 竖线），引擎动画
+    // 系统支持 background-color → 正常闪烁，视觉与浏览器一致。
+    cursorStyle: 'bar',
     fontSize: 13,
     fontFamily: "'Consolas', 'Cascadia Code', 'JetBrains Mono', monospace",
     theme: getXtermTheme(),
@@ -536,6 +538,20 @@ watch(() => state.theme, () => {
 }
 .terminal-panel .xterm-screen {
   width: 100% !important;
+}
+/* ★ bar 光标（浏览器标准竖线）：xterm 的 blink_bar 动画用 box-shadow
+   （wb-ui 引擎不驱动 → 光标静止）。覆盖为 background-color 闪烁 +
+   2px 竖线——引擎动画系统支持 background-color → 正常闪烁，视觉与
+   浏览器终端一致（1 字符宽竖线、随字符闪烁）。 */
+.terminal-panel .xterm-cursor.xterm-cursor-bar {
+  box-shadow: none !important;
+  background-color: #58a6ff !important;
+  width: 2px !important;
+  animation: wb-term-bar-blink 1s step-end infinite !important;
+}
+@keyframes wb-term-bar-blink {
+  0%, 100% { background-color: #58a6ff; }
+  50% { background-color: transparent; }
 }
 </style>
 
