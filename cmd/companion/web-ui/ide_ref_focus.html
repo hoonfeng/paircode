@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { margin: 0; font: 13px Consolas, monospace; background: #000; color: #ccc; }
+  /* 模拟 xterm DOM renderer 结构 */
+  .xterm-rows > div { position: relative; height: 15px; line-height: normal; white-space: nowrap; }
+  .xterm-rows span { display: inline-block; position: absolute; top: 0; white-space: pre; }
+</style>
+</head>
+<body>
+<div class="xterm-rows">
+  <div class="xterm-row"><span data-i="0" style="width: 21.44px;">&nbsp;&nbsp;&nbsp;</span><span data-i="1">abc</span></div>
+  <div class="xterm-row"><span data-i="2">abc</span><span data-i="3" style="width: 14.29px;">&nbsp;&nbsp;</span></div>
+  <div class="xterm-row"><span data-i="4" style="width: 7.147px;">&nbsp;</span><span data-i="5">xyz</span></div>
+</div>
+<button id="btn">focus</button>
+<script>
+window.__dump = function(){
+  var out = [];
+  var spans = document.querySelectorAll('.xterm-row span');
+  for (var i = 0; i < spans.length; i++) {
+    var s = spans[i];
+    var r = s.getBoundingClientRect();
+    var sw = s.offsetWidth || 0;
+    var cs = getComputedStyle(s).width;
+    out.push(s.getAttribute('data-i') + ':rect=' + (Math.round(r.width*1000)/1000) +
+             ':off=' + sw + ':css=' + cs + ':l=' + Math.round(r.left*1000)/1000);
+  }
+  return out.join('|');
+};
+// xterm blur 行为：refresh 重建行 span（重新设置 style.width）
+window.__rebuildRow = function(rowIdx){
+  var rows = document.querySelectorAll('.xterm-row');
+  var row = rows[rowIdx];
+  var html = row.innerHTML;
+  row.innerHTML = html; // 重建 span（引擎重新布局）
+  return window.__dump();
+};
+</script>
+</body>
+</html>

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"runtime/pprof"
 	"strings"
 	"time"
 
@@ -22,6 +23,21 @@ import (
 func main() {
 	log.SetFlags(log.Ltime)
 	log.Println("[Desktop] PairCode IDE 桌面版 v1.0.6-desktop")
+
+	// ★ WB_CPU_PROF=1：启动段（loadHTML + Vue mount + 终端初始化）Go CPU
+	// profile，分析 goja VM 执行热点（优化终端启动慢）。3s 后自动停止。
+	if os.Getenv("WB_CPU_PROF") != "" {
+		f, err := os.Create("desktop_cpu.prof")
+		if err == nil {
+			_ = pprof.StartCPUProfile(f)
+			go func() {
+				time.Sleep(3 * time.Second)
+				pprof.StopCPUProfile()
+				f.Close()
+				log.Println("[CPU-PROF] stopped → desktop_cpu.prof")
+			}()
+		}
+	}
 
 	// ★ 崩溃捕获：任何 panic 都写堆栈到 _desktop_panic.log（含所有 goroutine），
 	//   方便实机复现"打开文件崩溃"时拿到完整现场。
@@ -162,11 +178,21 @@ console.error = function(){
 }
 
 // diagTerm 查询终端 buffer 内容与行 span 渲染位置（WB_TERM_DIAG 诊断）。
+// ★ round 循环驱动 focus/blur：round%3==0 初始、==1 聚焦、==2 失焦，
+// 对比三个状态下行 span 宽度是否一致（「聚焦/失焦空格间距不一致」排查）。
 func diagTerm(wv *webkit.WebView, round int) {
 	if interp := wv.JSInterpreter(); interp != nil {
+		// ★ round 不能走 Sprintf 注入（js 里 round % 3 的 % 会冲突），
+		// 先用 window.__diagRound 传值。
+		_, _ = interp.RunJS(fmt.Sprintf("window.__diagRound = %d", round))
 		js := `(function(){
+			var round = window.__diagRound || 0;
 			var t = window.__lastTerm;
 			if (!t || !t.buffer || !t.buffer.active) return 'no-term';
+			var focusState = t.element ? t.element.classList.contains('focus') : null;
+			// round 驱动 focus/blur 切换（每 90 帧 ≈1.5s 一次）
+			if (round % 3 === 1) { try { if (t.focus) t.focus(); } catch(e){} }
+			if (round % 3 === 2) { try { if (t.blur) t.blur(); } catch(e){} }
 			var lines = [];
 			var n = Math.min(t.buffer.active.length, 12);
 			for (var i = 0; i < n; i++) {
@@ -174,13 +200,20 @@ func diagTerm(wv *webkit.WebView, round int) {
 				lines.push((ln ? ln.translateToString(true) : '<null>'));
 			}
 			var rowsEl = t.element && t.element.querySelector('.xterm-rows');
-			var rects = [];
+			var rows = [];
 			if (rowsEl) {
 				var kids = rowsEl.children;
 				var nn = Math.min(kids.length, 6);
 				for (var j = 0; j < nn; j++) {
 					var r = kids[j].getBoundingClientRect();
-					rects.push(Math.round(r.top) + ':' + Math.round(r.height));
+					var spans = [];
+					var sk = kids[j].children;
+					for (var s2 = 0; s2 < (sk ? sk.length : 0) && s2 < 40; s2++) {
+						var kr = sk[s2].getBoundingClientRect();
+						spans.push((sk[s2].textContent || '').slice(0,12) + ':' + Math.round(kr.width*1000)/1000 + '@' + Math.round(kr.left*1000)/1000);
+					}
+					rows.push({top: Math.round(r.top*10)/10, h: Math.round(r.height*1000)/1000,
+					           text: (kids[j].textContent || '').slice(0, 40), spans: spans});
 				}
 			}
 			var xe = t.element;
@@ -188,6 +221,7 @@ func diagTerm(wv *webkit.WebView, round int) {
 			var pad = xe ? getComputedStyle(xe).padding : '';
 			var c = t._core ? (t._core._renderService && t._core._renderService.dimensions) : null;
 			return JSON.stringify({
+				round: round, focus: focusState,
 				rows: t.rows, cols: t.cols,
 				xterm: xr ? {top: Math.round(xr.top), h: Math.round(xr.height), w: Math.round(xr.width)} : null,
 				pad: pad,
@@ -195,9 +229,9 @@ func diagTerm(wv *webkit.WebView, round int) {
 				cellW: c ? c.css.cell.width : null,
 				viewportTop: t.buffer.active.viewportY,
 				lines: lines,
-				rowRects: rects
+				rowsInfo: rows
 			});
-		})()`
+})()`
 		if v, err := interp.RunJS(js); err == nil {
 			log.Printf("[TERM-DIAG %d] %s", round, v.ToString())
 		} else {

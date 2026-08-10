@@ -387,6 +387,12 @@ function setTermRef(idx, el) {
     // 200/800/2000ms 多档重试——重试让终端启动最坏等 2 秒才显示正确列数）。
     try {
       term.fitAddon.fit()
+      // ★ 全量 refresh：xterm open 时首测 cellW 可能错误（引擎字体/布局
+      // 未完全就绪 → 首次 measure fallback 8px/cell），初始加载的信息
+      // （banner/prompt）若按旧 cellW 渲染，与聚焦重测后的行（7.146px）
+      // 空格间距不一致。fit 已触发 resize→重测→重建，此处再显式全量
+      // 刷新当前视口，保证初始行与后续行用同一 cellW（与浏览器对齐）。
+      try { terminal.refresh(0, terminal.rows - 1) } catch (e) {}
       if (term.ws && term.ws.readyState === 1) {
         term.ws.resize(term.xterm.cols, term.xterm.rows)
       }
@@ -438,6 +444,10 @@ function switchTerm(idx) {
     // 激活后重新 fit
     if (term.fitAddon) {
       try { term.fitAddon.fit() } catch {}
+    }
+    // ★ 全量刷新当前视口（保证行 span 用最新 cellW，初始信息与聚焦后一致）
+    if (term.xterm) {
+      try { term.xterm.refresh(0, term.xterm.rows - 1) } catch {}
     }
 
     // 自动聚焦 xterm，用户可直接输入
@@ -600,7 +610,7 @@ watch(() => state.theme, () => {
 .terminal-panel .xterm-cursor.xterm-cursor-bar {
   box-shadow: none !important;
   background-color: #58a6ff !important;
-  width: 2px !important;
+  width: 1px !important;
   animation: wb-term-bar-blink 1s step-end infinite !important;
 }
 @keyframes wb-term-bar-blink {
