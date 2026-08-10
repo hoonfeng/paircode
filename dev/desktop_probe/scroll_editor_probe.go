@@ -170,10 +170,88 @@ func main() {
 
 	// ① 初始（未滚动）
 	dumpGutters("init")
+	// ★ 行3 中文注释的 RenderText segment dump（中英对齐异常排查）
+	{
+		rv := wv.RenderView()
+		if rv != nil {
+			var walk func(ro rendering.RenderObject, depth int)
+			walk = func(ro rendering.RenderObject, depth int) {
+				if ro == nil {
+					return
+				}
+				if rt, ok := ro.(*rendering.RenderText); ok {
+					txt := rt.Text()
+					if len(txt) > 0 && strings.Contains(txt, "函数") && !strings.Contains(txt, "fn2") {
+						runes := []rune(txt)
+						var segs []string
+						for _, s := range rt.Segments() {
+							var sub string
+							if s.Start >= 0 && s.Start < len(runes) {
+								end := s.Start + s.Len
+								if end > len(runes) {
+									end = len(runes)
+								}
+								sub = string(runes[s.Start:end])
+							}
+							segs = append(segs, fmt.Sprintf("%q@%.0f w%.1f", sub, s.X, s.Width))
+						}
+						fmt.Printf("[line3] text=%q segs=[%s]\n", txt, strings.Join(segs, " "))
+					}
+					for c := ro.FirstChild(); c != nil; c = c.NextSibling() {
+						walk(c, depth+1)
+					}
+					return
+				}
+				for c := ro.FirstChild(); c != nil; c = c.NextSibling() {
+					walk(c, depth+1)
+				}
+			}
+			walk(rv, 0)
+		}
+	}
 	wv.RebuildRenderTree()
 	wv.EnsureLayout()
 	fmt.Println("[shot0] 初始截图")
 	shot(wv, wd, "edit_scroll0.png")
+	// ★ 重建后再次 dump line3（对比重建前后 segment 是否漂移）
+	{
+		rv2 := wv.RenderView()
+		if rv2 != nil {
+			var walk2 func(ro rendering.RenderObject)
+			walk2 = func(ro rendering.RenderObject) {
+				if ro == nil {
+					return
+				}
+				if rt, ok := ro.(*rendering.RenderText); ok {
+					txt := rt.Text()
+					if len(txt) > 0 && strings.Contains(txt, "函数") && !strings.Contains(txt, "fn2") {
+						runes := []rune(txt)
+						var segs []string
+						for _, s := range rt.Segments() {
+							var sub string
+							if s.Start >= 0 && s.Start < len(runes) {
+								end := s.Start + s.Len
+								if end > len(runes) {
+									end = len(runes)
+								}
+								sub = string(runes[s.Start:end])
+							}
+							segs = append(segs, fmt.Sprintf("%q@%.0f", sub, s.X))
+						}
+						fmt.Printf("[line3b] text=%q segs=[%s]\n", txt, strings.Join(segs, " "))
+					}
+					for c := ro.FirstChild(); c != nil; c = c.NextSibling() {
+						walk2(c)
+					}
+					return
+				}
+				for c := ro.FirstChild(); c != nil; c = c.NextSibling() {
+					walk2(c)
+				}
+			}
+			walk2(rv2)
+		}
+	}
 
 	// ② 滚动 400px（JS scrollTop + 手动派发 scroll 事件——浏览器里赋值即派发）
 	js(wv, `(function(){
