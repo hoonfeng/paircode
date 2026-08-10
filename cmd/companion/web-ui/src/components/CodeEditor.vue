@@ -8,7 +8,7 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import { EditorView, basicSetup } from 'codemirror'
-import { EditorState, Prec } from '@codemirror/state'
+import { EditorState, Transaction, Prec } from '@codemirror/state'
 import { syntaxHighlighting, HighlightStyle } from '@codemirror/language'
 import { tags } from '@lezer/highlight'
 import { javascript } from '@codemirror/lang-javascript'
@@ -281,6 +281,40 @@ function createEditor() {
 
 onMounted(() => {
   createEditor()
+  // ★ wb-ui 引擎兼容：CM6 的 HeightOracle 行高探测依赖 createRange/
+  // observer.ignore/forceFlush/getClientRects/defaultView/Window 等 DOM API
+  // + rAF 时序，wb-ui 已补齐 API 但 measure 在引擎里的首轮触发仍可能
+  // 停在默认 lineHeight=14（行号栏按 14px/行步进而内容 ~18.2px 错位）。
+  // 挂载后用一个真实行块高度校准 oracle——浏览器里 CM6 自测正常（值相等
+  // 不覆盖，零副作用）；引擎里 measure 未更新时兜底对齐行号与内容。
+  setTimeout(() => {
+    if (view && view.contentDOM && view.viewState) {
+      try {
+        // ★ 兼容层校准（仅引擎内生效）：CM6 在 wb-ui 引擎里首次 measure
+        // 因构造时序（Vue onMounted 微任务 vs 渲染树下一帧重建）落空，
+        // HeightOracle 停留默认 lineHeight=14 → 行号 14px/行 vs 内容
+        // ~18.2px 逐行错位。用真实行块高度校准 oracle 并强制 heightMap
+        // 全量重算（全文档替换 remote 事务，不进 undo）。浏览器里 CM6
+        // 自测正常（值相等不覆盖，零副作用）。
+        const tile = view.contentDOM.firstChild
+        if (tile) {
+          const h = tile.getBoundingClientRect().height
+          if (h > 0 && Math.abs(view.defaultLineHeight - h) > 0.3) {
+            const oracle = view.viewState.heightOracle
+            oracle.lineHeight = h
+            oracle.textHeight = h
+            oracle.heightSamples = {}
+            const docStr = view.state.doc.toString()
+            view.dispatch({
+              changes: { from: 0, to: view.state.doc.length, insert: docStr },
+              annotations: Transaction.remote
+            })
+            view.requestMeasure()
+          }
+        }
+      } catch (e) { /* 兼容层失败不影响编辑器 */ }
+    }
+  }, 100)
 })
 
 watch(() => props.path, () => {
