@@ -21,7 +21,7 @@ import (
 	"strings"
 	"time"
 
-	"wb-ui/bindings"
+	"wb-ui/app"
 	"wb-ui/dom"
 	"wb-ui/jsc"
 	"wb-ui/layout"
@@ -238,7 +238,9 @@ func add(a, b int) int {
 		return out.join(' | ');
 	})()`))
 
-	// ② 设置 DOM Selection：定位到第一行文本第 8 字符处
+	// ② 设置 DOM Selection：★ 真实 CM6 路径用 getSelection().collapse(node, off)
+	// （CM6 点击/光标移动写 selection 的方式），而非手动 addRange——验证
+	// collapse 同步 sstate.ranges（InsertTextAtSelection 依赖）。
 	fmt.Println("[sel] " + js(wv, `(function(){
 		var co = document.querySelector('.cm-content');
 		var line = co.querySelector('.cm-line');
@@ -248,25 +250,26 @@ func add(a, b int) int {
 		while (node && node.nodeType !== 3) { node = node.firstChild; }
 		if (!node) return 'no text node, firstChildType=' + txt.nodeType + ' tag=' + (txt.tagName || '');
 		var s = window.getSelection();
-		s.removeAllRanges();
-		var rng = document.createRange();
-		rng.setStart(node, 8);
-		rng.setEnd(node, 8);
-		s.addRange(rng);
-		return 'rangeCount=' + s.rangeCount + ' anchor=' + (s.anchorNode ? s.anchorNode.nodeName : 'null') + '/' + s.anchorOffset + ' len=' + node.nodeValue.length;
+		s.collapse(node, 8);
+		var r0 = null;
+		try { r0 = s.getRangeAt(0); } catch(e) { return 'getRangeAt err: ' + e.message; }
+		return 'rangeCount=' + s.rangeCount + ' anchor=' + (s.anchorNode ? s.anchorNode.nodeName : 'null') + '/' + s.anchorOffset +
+			' range0=' + (r0 && r0.startContainer ? r0.startContainer.nodeName : 'null') + '/' + (r0 ? r0.startOffset : '?') + ' len=' + node.nodeValue.length;
 	})()`))
 
-	// ③ Go 侧 InsertTextAtSelection（等价 host EventChar 的 contenteditable 分支）
-	ok := bindings.InsertTextAtSelection("ZZ")
-	fmt.Printf("[insert] InsertTextAtSelection='ZZ' → %v\n", ok)
-
-	// ④ 派发 input 事件（host EventChar 分支后续动作）
-	if cmEl, err := findContentEditable(wv); err == nil {
-		cmEl.DispatchEvent(dom.NewInputEvent("insertText", "ZZ", false))
-		fmt.Println("[input] dispatched input → cm-content")
-	} else {
-		fmt.Println("[input] no cm-content: " + err.Error())
+	// ③ ★ 真实键盘链路：FocusElement 设置 imeFocusedEl（点击聚焦）→
+	// MockKeyChar 走 handleCharInput（processEvents 的 EventChar 分支同一实现）
+	// → contenteditable 分支 InsertTextAtSelection → input 事件。
+	host := app.NewHostForTest(wv, 1280, 800)
+	cmEl, err := findContentEditable(wv)
+	if err != nil {
+		log.Fatalf("no cm-content: %v", err)
 	}
+	host.MockFocus(cmEl)
+	fmt.Printf("[focus] contenteditable=%q\n", cmEl.GetAttribute("contenteditable"))
+	host.MockKeyChar('Z')
+	host.MockKeyChar('Z')
+	fmt.Println("[keys] MockKeyChar('Z')×2 → handleCharInput")
 	// ⑤ 等 MutationObserver → CM6 readDOMChange
 	runJobs(wv)
 	time.Sleep(150 * time.Millisecond)
