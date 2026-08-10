@@ -145,13 +145,65 @@ console.error = function(){
 	// ★ 每帧回调：主循环消费外部队列的 JS 推送（终端 PTY 输出、agent
 	// 事件）——goja 非线程安全，所有跨 goroutine 的 RunJS 必须在此
 	// 主线程执行。
+	// ★ WB_TERM_DIAG=1：每 90 帧查询终端 buffer 内容 + 行 span 渲染
+	// 位置（诊断「初始文本不从顶部开始」——前 2 行为空是内容还是渲染）。
+	termDiagFrame := 0
 	host.OnFrame = func() {
 		desktopbridge.DrainMainQueue(wv)
+		if os.Getenv("WB_TERM_DIAG") != "" && termDiagFrame%90 == 0 {
+			diagTerm(wv, termDiagFrame/90)
+		}
+		termDiagFrame++
 	}
 
 	log.Println("[Desktop] 窗口已启动，开始事件循环...")
 	host.Run()
 	log.Println("[Desktop] 已退出。")
+}
+
+// diagTerm 查询终端 buffer 内容与行 span 渲染位置（WB_TERM_DIAG 诊断）。
+func diagTerm(wv *webkit.WebView, round int) {
+	if interp := wv.JSInterpreter(); interp != nil {
+		js := `(function(){
+			var t = window.__lastTerm;
+			if (!t || !t.buffer || !t.buffer.active) return 'no-term';
+			var lines = [];
+			var n = Math.min(t.buffer.active.length, 12);
+			for (var i = 0; i < n; i++) {
+				var ln = t.buffer.active.getLine(i);
+				lines.push((ln ? ln.translateToString(true) : '<null>'));
+			}
+			var rowsEl = t.element && t.element.querySelector('.xterm-rows');
+			var rects = [];
+			if (rowsEl) {
+				var kids = rowsEl.children;
+				var nn = Math.min(kids.length, 6);
+				for (var j = 0; j < nn; j++) {
+					var r = kids[j].getBoundingClientRect();
+					rects.push(Math.round(r.top) + ':' + Math.round(r.height));
+				}
+			}
+			var xe = t.element;
+			var xr = xe ? xe.getBoundingClientRect() : null;
+			var pad = xe ? getComputedStyle(xe).padding : '';
+			var c = t._core ? (t._core._renderService && t._core._renderService.dimensions) : null;
+			return JSON.stringify({
+				rows: t.rows, cols: t.cols,
+				xterm: xr ? {top: Math.round(xr.top), h: Math.round(xr.height), w: Math.round(xr.width)} : null,
+				pad: pad,
+				cellH: c ? c.css.cell.height : null,
+				cellW: c ? c.css.cell.width : null,
+				viewportTop: t.buffer.active.viewportY,
+				lines: lines,
+				rowRects: rects
+			});
+		})()`
+		if v, err := interp.RunJS(js); err == nil {
+			log.Printf("[TERM-DIAG %d] %s", round, v.ToString())
+		} else {
+			log.Printf("[TERM-DIAG %d] err: %v", round, err)
+		}
+	}
 }
 
 func setupLoaders(wv *webkit.WebView, distDir string) {

@@ -32,8 +32,14 @@ func detectShellsUncached() []Shell {
 	//   banner 走控制台专用路径，管道下静默丢弃，实测真实终端/浏览器参照
 	//   均如此）。为对齐真实 cmd 体验，用 ver（动态输出版本行）+ echo 版权行
 	//   在 chcp 之后手动补打（chcp 在 banner 前执行避免切换代码页清屏干扰）。
+	// ★ ★ 行 0 对齐（2026-08-10）：ConPTY 下 cmd /K 会把命令输出定位到
+	//   \x1b[3;1H（第 3 行），而 banner 又走控制台专用路径被丢弃 → 补打的
+	//   版本信息落在第 3 行，终端顶部空 2 行（用户实测「初始文本不从顶部
+	//   开始」）。修复：chcp 后加 cls（ConPTY 下输出 \x1b[2J\x1b[H 清屏+
+	//   光标回家），把后续 ver/版权从行 0 开始输出——与真实 cmd 窗口一致
+	//   （banner 第 1 行、版权第 2 行、空行第 3 行、提示符第 4 行）。
 	out := []Shell{{Name: "CMD", Path: "cmd",
-		Args: []string{"/q", "/d", "/K", "chcp 65001>nul & echo. & ver & echo (c) Microsoft Corporation。保留所有权利。 & echo."}}} // cmd 总在
+		Args: []string{"/q", "/d", "/K", "chcp 65001>nul & cls & for /f \"delims=\" %i in ('ver') do echo %i & echo (c) Microsoft Corporation。保留所有权利。"}}} // cmd 总在
 	if p, err := exec.LookPath("powershell"); err == nil {
 		out = append(out, Shell{Name: "PowerShell", Path: p,
 			Args: []string{"-NoLogo", "-NoProfile", "-NoExit", "-Command", "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8"}})
