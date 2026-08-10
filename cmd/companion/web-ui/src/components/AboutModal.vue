@@ -282,6 +282,10 @@ onMounted(async () => {
   border-radius: 4px;
   cursor: pointer;
   font-size: 13px;
+  /* ★ nowrap：按钮文字永不折行（wb-ui 引擎中 content 恰等于文字宽时
+     会误折行竖排——AboutModal 关闭按钮变两行的根因；浏览器中同样
+     推荐按钮 nowrap，无副作用） */
+  white-space: nowrap;
 }
 .btn-secondary:hover { background: var(--bg-hover); }
 </style>

@@ -166,6 +166,30 @@ func main() {
 	wait(wv, 300)
 	fmt.Println("  " + dropdownState(wv))
 
+	// ── 4.5 dropdown 细节（divider/各项 rect，对比浏览器）──
+	fmt.Println("[4.5] dropdown 细节:")
+	fmt.Println("  " + js(wv, `(function(){
+		var out = {};
+		var dd = document.querySelector('.menu-dropdown');
+		out.dropdownRect = dd ? rect(dd) : null;
+		out.ddPadTop = dd ? cs(dd).paddingTop : null;
+		out.ddPadBot = dd ? cs(dd).paddingBottom : null;
+		var items = document.querySelectorAll('.menu-dropdown .menu-item');
+		out.items = [];
+		for (var i=0;i<items.length;i++) {
+			var it = items[i];
+			out.items.push({label: it.textContent.trim().slice(0,6), rect: rect(it), mt: cs(it).marginTop, mb: cs(it).marginBottom, lh: cs(it).lineHeight});
+		}
+		var dv = document.querySelectorAll('.menu-dropdown .menu-divider');
+		out.dividers = [];
+		for (var i=0;i<dv.length;i++) {
+			out.dividers.push({rect: rect(dv[i]), mt: cs(dv[i]).marginTop, mb: cs(dv[i]).marginBottom});
+		}
+		return JSON.stringify(out);
+		function rect(el){ var r = el.getBoundingClientRect(); return {x:Math.round(r.left), y:Math.round(r.top), w:Math.round(r.width), h:Math.round(r.height)}; }
+		function cs(el){ return getComputedStyle(el); }
+	})()`))
+
 	// ── 5. 点击「功能介绍」菜单项 → HelpModal ──
 	fmt.Println("[5] 点击功能介绍菜单项后 HelpModal:")
 	fmt.Println("  " + js(wv, `(function(){
@@ -197,7 +221,166 @@ func main() {
 		function cs(el){ return getComputedStyle(el); }
 	})()`))
 
-	// ── 6. console 错误 ──
+	// ── 7. AboutModal 关闭按钮（点 HelpModal 头部「关于」）──
+	fmt.Println("[7] AboutModal 关闭按钮:")
+	fmt.Println("  " + js(wv, `(function(){
+		var ab = document.querySelector('.btn-about');
+		var out = {aboutBtn: !!ab};
+		if (ab) ab.dispatchEvent(new MouseEvent('click', {bubbles:true, cancelable:true}));
+		return JSON.stringify(out);
+	})()`))
+	wait(wv, 400)
+	// ★ 完整渲染循环后再测（真实桌面端是 RebuildRenderTree + EnsureLayout 后绘制）
+	wv.RebuildRenderTree()
+	wv.EnsureLayout()
+	runJobs(wv)
+		fmt.Println("  " + js(wv, `(function(){
+			var out = {};
+			var m = document.querySelector('.about-modal');
+			out.aboutModal = m ? rect(m) : null;
+			var f = document.querySelector('.about-modal .modal-footer');
+			out.footer = f ? rect(f) : null;
+			var btns = document.querySelectorAll('.about-modal .modal-footer button');
+			out.buttons = [];
+			for (var i=0;i<btns.length;i++) {
+				var b = btns[i];
+				out.buttons.push({cls: b.className, text: b.textContent.trim(), rect: rect(b),
+					ws: cs(b).whiteSpace, disp: cs(b).display, flexShrink: cs(b).flexShrink,
+					minW: cs(b).minWidth, w: cs(b).width, lh: cs(b).lineHeight, fs: cs(b).fontSize,
+					fam: cs(b).fontFamily, boxSizing: cs(b).boxSizing, clientW: b.clientWidth});
+			}
+			// 关闭按钮文字是否换行：取按钮文本节点数
+			var closeBtn = document.querySelector('.about-modal .modal-footer .btn-secondary');
+			out.closeTextNodes = closeBtn ? closeBtn.childNodes.length : null;
+			return JSON.stringify(out);
+			function rect(el){ var r = el.getBoundingClientRect(); return {x:Math.round(r.left), y:Math.round(r.top), w:Math.round(r.width), h:Math.round(r.height)}; }
+			function cs(el){ return getComputedStyle(el); }
+		})()`))
+
+		// ── 7.5 AboutModal 关闭按钮布局几何 dump ──
+		rv3 := wv.RenderView()
+		st3 := rv3.LayoutState()
+		var walkRO3 func(ro rendering.RenderObject)
+		walkRO3 = func(ro rendering.RenderObject) {
+			if ro == nil {
+				return
+			}
+			if n := ro.Node(); n != nil {
+				if el, ok := n.(*dom.Element); ok && strings.Contains(el.GetAttribute("class"), "btn-secondary") {
+					lb := ro.LayoutBox()
+					if lb != nil && st3 != nil {
+						g := st3.GeometryForBox(lb)
+						fmt.Printf("  about-btn-secondary: box=(%.1f,%.1f %.1fx%.1f) content=(%.1f,%.1f %.2fx%.2f) padL=%.1f padR=%.1f padT=%.1f padB=%.1f\n",
+							g.Left(), g.Top(), g.BorderBoxWidth(), g.BorderBoxHeight(),
+							g.ContentBoxLeft(), g.ContentBoxTop(), g.ContentWidth(), g.ContentHeight(),
+							g.PaddingLeft(), g.PaddingRight(), g.PaddingTop(), g.PaddingBottom())
+					}
+					// dump 按钮第一个子节点（匿名 wrapper）几何
+					if c := ro.FirstChild(); c != nil {
+						if clb := c.LayoutBox(); clb != nil && st3 != nil {
+							cg := st3.GeometryForBox(clb)
+							fmt.Printf("  about-btn-wrapper: box=(%.1f,%.1f %.1fx%.1f) content=(%.1f,%.1f %.2fx%.2f) name=%s\n",
+								cg.Left(), cg.Top(), cg.BorderBoxWidth(), cg.BorderBoxHeight(),
+								cg.ContentBoxLeft(), cg.ContentBoxTop(), cg.ContentWidth(), cg.ContentHeight(),
+								c.RenderName())
+						}
+					}
+				}
+			}
+			for c := ro.FirstChild(); c != nil; c = c.NextSibling() {
+				walkRO3(c)
+			}
+		}
+		walkRO3(rv3)
+
+	// ── 8. 动态按钮实验：无 flex 压缩环境下的按钮文字换行 ──
+	fmt.Println("[8] 动态按钮实验（普通流中 '关闭' 按钮）:")
+	fmt.Println("  " + js(wv, `(function(){
+		var host = document.createElement('div');
+		host.style.cssText = 'position:fixed;left:10px;top:700px;z-index:99999;background:#333';
+		host.innerHTML = '<button id="tbtn" style="padding:7px 16px;font-size:13px">关闭</button>';
+		document.body.appendChild(host);
+		var b = document.getElementById('tbtn');
+		var r = b.getBoundingClientRect();
+		var cs2 = getComputedStyle(b);
+		return JSON.stringify({rect: {x:Math.round(r.left),y:Math.round(r.top),w:Math.round(r.width),h:Math.round(r.height)},
+			whiteSpace: cs2.whiteSpace, disp: cs2.display, padL: cs2.paddingLeft, padR: cs2.paddingRight, fs: cs2.fontSize});
+	})()`))
+	wait(wv, 300)
+
+	// ── 8.5 模拟 footer flex 容器实验 ──
+	fmt.Println("[8.5] 模拟 footer flex 容器:")
+	fmt.Println("  " + js(wv, `(function(){
+		var f = document.createElement('div');
+		f.id = 'testfooter';
+		f.style.cssText = 'position:fixed;left:10px;top:620px;width:880px;display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:12px 20px;background:#333;z-index:99999;box-sizing:border-box';
+		f.innerHTML = '<button id="tb1" style="display:flex;align-items:center;gap:6px;padding:7px 16px;font-size:13px">查看帮助文档</button>' +
+			'<button id="tb2" style="padding:7px 16px;font-size:13px">关闭</button>';
+		document.body.appendChild(f);
+		function R(id){ var el = document.getElementById(id); var r = el.getBoundingClientRect(); return {x:Math.round(r.left),y:Math.round(r.top),w:Math.round(r.width),h:Math.round(r.height)}; }
+		var out = {footer: R('testfooter'), b1: R('tb1'), b2: R('tb2')};
+		// b2 内文字是否折行：对比按钮高度
+		out.b2TextLines = Math.round(R('tb2').h / 32);
+		// b2 内容区宽度：clientWidth(内容+padding, 不含border) - padding
+		var b2 = document.getElementById('tb2');
+		var csB2 = getComputedStyle(b2);
+		out.b2clientW = b2.clientWidth;
+		out.b2offsetW = b2.offsetWidth;
+		out.b2padL = csB2.paddingLeft;
+		out.b2padR = csB2.paddingRight;
+		out.b2contentW = b2.clientWidth - parseFloat(csB2.paddingLeft) - parseFloat(csB2.paddingRight);
+		// 显式 white-space:nowrap 对比
+		b2.style.whiteSpace = 'nowrap';
+		// 强制重新布局后测量（nowrap 是否修复）
+		var r2 = b2.getBoundingClientRect();
+		out.b2nowrap = {w:Math.round(r2.width), h:Math.round(r2.height)};
+		// span 实测文字宽度（13px 字体）
+		var s = document.createElement('span');
+		s.style.cssText = 'position:fixed;left:10px;top:570px;font-size:13px;background:#444;z-index:99999';
+		s.textContent = '关闭';
+		document.body.appendChild(s);
+		var sr = s.getBoundingClientRect();
+		out.closeTextW = Math.round(sr.width * 10) / 10;
+		var s2 = document.createElement('span');
+		s2.style.cssText = 'position:fixed;left:10px;top:550px;font-size:13px;z-index:99999';
+		s2.textContent = '关';
+		document.body.appendChild(s2);
+		out.charW = Math.round(s2.getBoundingClientRect().width * 10) / 10;
+		return JSON.stringify(out);
+	})()`))
+	wait(wv, 300)
+
+	// ── 8.6 tb2 布局几何 dump ──
+	wv.RebuildRenderTree()
+	wv.EnsureLayout()
+	runJobs(wv)
+	fmt.Println("[8.6] tb2 布局几何:")
+	rv2 := wv.RenderView()
+	st2 := rv2.LayoutState()
+	var walkRO func(ro rendering.RenderObject)
+	walkRO = func(ro rendering.RenderObject) {
+		if ro == nil {
+			return
+		}
+		if n := ro.Node(); n != nil {
+			if el, ok := n.(*dom.Element); ok && el.GetAttribute("id") == "tb2" {
+				lb := ro.LayoutBox()
+				if lb != nil && st2 != nil {
+					g := st2.GeometryForBox(lb)
+					fmt.Printf("  tb2: box=(%.1f,%.1f %.1fx%.1f) content=(%.1f,%.1f %.1fx%.1f) padL=%.1f padR=%.1f padT=%.1f padB=%.1f\n",
+						g.Left(), g.Top(), g.BorderBoxWidth(), g.BorderBoxHeight(),
+						g.ContentBoxLeft(), g.ContentBoxTop(), g.ContentWidth(), g.ContentHeight(),
+						g.PaddingLeft(), g.PaddingRight(), g.PaddingTop(), g.PaddingBottom())
+				} else {
+					fmt.Printf("  tb2: no layout box\n")
+				}
+			}
+		}
+		for c := ro.FirstChild(); c != nil; c = c.NextSibling() {
+			walkRO(c)
+		}
+	}
+	walkRO(rv2)
 	fmt.Println("[6] console 错误:")
 	cout := wv.ConsoleOutput()
 	lines := strings.Split(cout, "\n")
@@ -213,4 +396,12 @@ func main() {
 		}
 	}
 	fmt.Println("  [console] total lines:", len(lines))
+
+	// ── 9. 文字宽度测量（13px，各字体）──
+	fmt.Println("[9] 文字宽度测量（13px）:")
+	for _, fam := range []string{"", "Segoe UI", "Microsoft YaHei", "SimSun", "sans-serif"} {
+		w2 := layout.MeasureTextFunc(fam, 13, 400, "", "关闭")
+		w1 := layout.MeasureTextFunc(fam, 13, 400, "", "关")
+		fmt.Printf("  fam=%-18q 关闭=%.2f 关=%.2f\n", fam, w2, w1)
+	}
 }
