@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { background: #000; margin: 0; }
+  /* 模拟 xterm DOM renderer 结构：.xterm-rows 行 div + absolute inline-block span */
+  .xterm-rows {
+    position: absolute; left: 0; top: 4px;
+    font: 13px Consolas, monospace; line-height: normal; color: #fff;
+  }
+  .xterm-rows > div { position: relative; height: 15px; line-height: normal; white-space: nowrap; }
+  .xterm-rows span { display: inline-block; position: absolute; top: 0; }
+  .marker { position: absolute; left: 0; width: 300px; height: 1px; background: #f00; }
+</style>
+</head>
+<body>
+<div class="xterm-rows">
+  <div><span style="left:0">ABC</span><span style="left:48px">DEF</span></div>
+  <div><span style="left:0">中文</span><span style="left:48px">123</span></div>
+  <div><span style="left:0">Hello World</span></div>
+</div>
+<div class="marker" style="top:4px"></div>
+<div class="marker" style="top:19px"></div>
+<div class="marker" style="top:34px"></div>
+<script>
+  document.title = 'XTERM-CELL-REF:' + JSON.stringify({
+    rows: (function(){
+      var d = document.querySelector('.xterm-rows');
+      var r = d.getBoundingClientRect();
+      var cs = getComputedStyle(d);
+      return { x: r.x, y: r.y, lh: cs.lineHeight, fs: cs.fontSize, f: cs.fontFamily };
+    })(),
+    divs: (function(){
+      return Array.prototype.slice.call(document.querySelectorAll('.xterm-rows > div')).map(function(div){
+        var r = div.getBoundingClientRect();
+        var cs = getComputedStyle(div);
+        return { y: r.y, h: r.height, lh: cs.lineHeight };
+      });
+    })(),
+    spans: (function(){
+      return Array.prototype.slice.call(document.querySelectorAll('.xterm-rows span')).slice(0,4).map(function(s){
+        var r = s.getBoundingClientRect();
+        var cs = getComputedStyle(s);
+        return { t: s.textContent, y: r.y, h: r.height, lh: cs.lineHeight, disp: cs.display, pos: cs.position };
+      });
+    })()
+  });
+</script>
+</body>
+</html>
