@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { margin: 0; background: #fff; }
+</style>
+</head>
+<body>
+<div id="ed"></div>
+<script type="importmap">
+{
+  "imports": {
+    "codemirror": "./node_modules/codemirror/dist/index.js",
+    "@codemirror/state": "./node_modules/@codemirror/state/dist/index.js",
+    "@codemirror/view": "./node_modules/@codemirror/view/dist/index.js",
+    "@codemirror/language": "./node_modules/@codemirror/language/dist/index.js",
+    "@codemirror/commands": "./node_modules/@codemirror/commands/dist/index.js",
+    "@codemirror/search": "./node_modules/@codemirror/search/dist/index.js",
+    "@codemirror/autocomplete": "./node_modules/@codemirror/autocomplete/dist/index.js",
+    "@codemirror/lint": "./node_modules/@codemirror/lint/dist/index.js",
+    "@lezer/common": "./node_modules/@lezer/common/dist/index.js",
+    "@lezer/highlight": "./node_modules/@lezer/highlight/dist/index.js",
+    "@lezer/lr": "./node_modules/@lezer/lr/dist/index.js",
+    "style-mod": "./node_modules/style-mod/dist/style-mod.js",
+    "crelt": "./node_modules/crelt/index.js",
+    "w3c-keyname": "./node_modules/w3c-keyname/index.js",
+    "@marijn/find-cluster-break": "./node_modules/@marijn/find-cluster-break/dist/index.js"
+  }
+}
+</script>
+<script type="module">
+import { basicSetup } from './node_modules/codemirror/dist/index.js';
+import { EditorView } from './node_modules/@codemirror/view/dist/index.js';
+import { EditorState } from './node_modules/@codemirror/state/dist/index.js';
+
+const doc = [
+  'package main', '',
+  'import "fmt"', '',
+  '// main is the entry point.',
+  'func main() {',
+  '\tfmt.Println("hello")',
+  '\tfor i := 0; i < 10; i++ {',
+  '\t\tfmt.Println(i)',
+  '\t}',
+  '}',
+  '',
+  'func add(a, b int) int {',
+  '\treturn a + b',
+  '}',
+  '',
+  'func sub(a, b int) int {',
+  '\treturn a - b',
+  '}',
+  '',
+  'func mul(a, b int) int {',
+  '\treturn a * b',
+  '}',
+  '',
+  'func div(a, b int) int {',
+  '\treturn a / b',
+  '}',
+  '',
+  'func square(x int) int {',
+  '\treturn x * x',
+  '}',
+  '',
+  'func cube(x int) int {',
+  '\treturn x * x * x',
+  '}',
+  '',
+  'func fib(n int) int {',
+  '\tif n <= 1 {',
+  '\t\treturn n',
+  '\t}',
+  '\treturn fib(n-1) + fib(n-2)',
+  '}',
+  ''
+].join('\n');
+
+new EditorView({
+  state: EditorState.create({ doc, extensions: [basicSetup] }),
+  parent: document.getElementById('ed'),
+});
+</script>
+</body>
+</html>
