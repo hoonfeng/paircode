@@ -348,6 +348,89 @@ func add(a, b int) int {
 			' range0=' + (r0 && r0.startContainer ? r0.startContainer.nodeName : 'null') + '/' + (r0 ? r0.startOffset : '?') + ' len=' + node.nodeValue.length;
 	})()`))
 
+	// ②b ★ DOM API 支持矩阵：CM6 初始化后检查关键浏览器 API 是否绑定、
+	// 行为是否标准（用户反馈"有多少 dom 没有绑定/属性没有支持"）。
+	fmt.Println("[api] " + js(wv, `(function(){
+		var out = [];
+		var mk = function(n, fn){ try { out.push(n + '=' + fn()); } catch(e){ out.push(n + '=ERR:' + e.message); } };
+		var s = window.getSelection();
+		mk('sel.collapse', function(){ return typeof s.collapse; });
+		mk('sel.setBaseAndExtent', function(){ return typeof s.setBaseAndExtent; });
+		mk('sel.extend', function(){ return typeof s.extend; });
+		mk('sel.removeAllRanges', function(){ return typeof s.removeAllRanges; });
+		mk('sel.modify', function(){ return typeof s.modify; });
+		var r = document.createRange();
+		mk('range.setStart', function(){ return typeof r.setStart; });
+		mk('range.setEnd', function(){ return typeof r.setEnd; });
+		mk('range.getClientRects', function(){ return typeof r.getClientRects; });
+		mk('range.getBoundingClientRect', function(){ return typeof r.getBoundingClientRect; });
+		mk('range.cloneRange', function(){ return typeof r.cloneRange; });
+		mk('range.cloneContents', function(){ return typeof r.cloneContents; });
+		mk('range.commonAncestorContainer', function(){ return r.commonAncestorContainer ? r.commonAncestorContainer.nodeName : 'null'; });
+		mk('range.cacAfterSet', function(){ var r2 = document.createRange(); r2.setStart(document.body.firstChild, 0); r2.setEnd(document.body.firstChild, 1); var c = r2.commonAncestorContainer; return c ? c.nodeName : 'null'; });
+		mk('range.cacSelCollapse', function(){ var s2 = window.getSelection(); s2.collapse(document.body.firstChild, 0); var rr = s2.getRangeAt(0); var c = rr.commonAncestorContainer; return c ? c.nodeName : 'null'; });
+		mk('node.contains', function(){ return typeof document.body.contains; });
+		mk('node.compareDocumentPosition', function(){ return typeof document.body.compareDocumentPosition; });
+		mk('node.getRootNode', function(){ return typeof document.body.getRootNode; });
+		mk('node.isConnected', function(){ return document.body.isConnected; });
+		mk('el.matches', function(){ return typeof document.body.matches; });
+		mk('el.closest', function(){ return typeof document.body.closest; });
+		mk('el.getBoundingClientRect', function(){ return typeof document.body.getBoundingClientRect; });
+		mk('el.getClientRects', function(){ return typeof document.body.getClientRects; });
+		mk('el.scrollIntoView', function(){ return typeof document.body.scrollIntoView; });
+		mk('el.dataset', function(){ var d = document.body.dataset; return d ? Object.prototype.toString.call(d) : 'null'; });
+		mk('el.className', function(){ return typeof document.body.className; });
+		mk('el.classList', function(){ return document.body.classList ? 'obj' : 'null'; });
+		mk('el.getAttribute', function(){ return typeof document.body.getAttribute; });
+		mk('el.attributes', function(){ return document.body.attributes ? 'obj:' + document.body.attributes.length : 'null'; });
+		mk('doc.createTreeWalker', function(){ return typeof document.createTreeWalker; });
+		mk('doc.createNodeIterator', function(){ return typeof document.createNodeIterator; });
+		mk('doc.createElement', function(){ return typeof document.createElement; });
+		mk('doc.createTextNode', function(){ return typeof document.createTextNode; });
+		mk('doc.createRange', function(){ return typeof document.createRange; });
+		mk('doc.elementFromPoint', function(){ return typeof document.elementFromPoint; });
+		mk('doc.querySelector', function(){ return typeof document.querySelector; });
+		mk('doc.querySelectorAll', function(){ return typeof document.querySelectorAll; });
+		mk('doc.getElementsByClassName', function(){ return typeof document.getElementsByClassName; });
+		mk('doc.documentElement', function(){ return document.documentElement ? document.documentElement.tagName : 'null'; });
+		mk('doc.body', function(){ return document.body ? document.body.tagName : 'null'; });
+		mk('MutationObserver', function(){ return typeof MutationObserver; });
+		mk('IntersectionObserver', function(){ return typeof IntersectionObserver; });
+		mk('ResizeObserver', function(){ return typeof ResizeObserver; });
+		mk('requestAnimationFrame', function(){ return typeof requestAnimationFrame; });
+		mk('NodeFilter', function(){ return typeof NodeFilter; });
+		mk('getComputedStyle', function(){ return typeof getComputedStyle; });
+		mk('gCS.cssVar', function(){ var cs = getComputedStyle(document.querySelector('.cm-content')); return cs.getPropertyValue('--cm-font-family') || cs.getPropertyValue('--cm-background') || '(none)'; });
+		mk('kb.key', function(){ var k = new KeyboardEvent('keydown', {key:'a', code:'KeyA'}); return k.key + '/' + k.code; });
+		mk('kb.keyCode', function(){ var k = new KeyboardEvent('keydown', {keyCode: 13}); return k.keyCode; });
+		mk('me.clientXY', function(){ var m = new MouseEvent('mousedown', {clientX: 5, clientY: 6}); return m.clientX + ',' + m.clientY; });
+		mk('ev.stopPropagation', function(){ return typeof (new Event('x')).stopPropagation; });
+		mk('ev.preventDefault', function(){ return typeof (new Event('x')).preventDefault; });
+		mk('ev.composedPath', function(){ return typeof (new Event('x')).composedPath; });
+		mk('text.textContent', function(){ var t = document.createTextNode('ab'); return t.textContent + ' len=' + t.length; });
+		mk('text.data', function(){ var t = document.createTextNode('cd'); return t.data; });
+		mk('text.splitText', function(){ return typeof document.createTextNode('xy').splitText; });
+		mk('el.textContent', function(){ var d = document.createElement('div'); d.textContent = 'hi'; return d.textContent; });
+		mk('el.innerHTML', function(){ var d = document.createElement('div'); d.innerHTML = '<b>x</b>'; return d.innerHTML; });
+		mk('el.insertBefore', function(){ return typeof document.body.insertBefore; });
+		mk('el.appendChild', function(){ return typeof document.body.appendChild; });
+		mk('el.removeChild', function(){ return typeof document.body.removeChild; });
+		mk('el.replaceChildren', function(){ return typeof document.body.replaceChildren; });
+		mk('el.style.setProperty', function(){ return typeof document.body.style.setProperty; });
+		mk('el.style.cssText', function(){ return typeof document.body.style.cssText; });
+		mk('el.scrollTop', function(){ return typeof document.body.scrollTop; });
+		mk('el.scrollLeft', function(){ return typeof document.body.scrollLeft; });
+		mk('el.scrollHeight', function(){ return typeof document.body.scrollHeight; });
+		mk('el.clientHeight', function(){ return typeof document.body.clientHeight; });
+		mk('win.innerW/H', function(){ return window.innerWidth + 'x' + window.innerHeight; });
+		mk('win.devicePixelRatio', function(){ return window.devicePixelRatio; });
+		mk('win.scrollTo', function(){ return typeof window.scrollTo; });
+		mk('win.getSelection', function(){ return typeof window.getSelection; });
+		mk('addEventListener', function(){ return typeof document.addEventListener; });
+		mk('removeEventListener', function(){ return typeof document.removeEventListener; });
+		return out.join(' | ');
+	})()`))
+
 	// ③ ★ 真实键盘链路：FocusElement 设置 imeFocusedEl（点击聚焦）→
 	// MockKeyChar 走 handleCharInput（processEvents 的 EventChar 分支同一实现）
 	// → contenteditable 分支 InsertTextAtSelection → input 事件。
