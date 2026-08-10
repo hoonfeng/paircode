@@ -26,10 +26,77 @@ import (
 	"wb-ui/jsc"
 	"wb-ui/layout"
 	"wb-ui/platform/graphics"
+	"wb-ui/rendering"
 	"wb-ui/webkit"
 
 	"github.com/hoonfeng/paircode/internal/desktopbridge"
 )
+
+// dumpGutterTree 遍历渲染树，打印 .cm-gutters 子树（含 gutter 元素文本与几何）。
+func dumpGutterTree(wv *webkit.WebView) {
+	dumpSubtree(wv, "cm-gutters", "=== gutter render tree ===")
+}
+
+// dumpSubtree 遍历渲染树，打印指定 class 的子树。
+func dumpSubtree(wv *webkit.WebView, clsFilter, title string) {
+	rv := wv.RenderView()
+	if rv == nil {
+		fmt.Println("[rtree] no RenderView")
+		return
+	}
+	fmt.Println("[rtree] " + title)
+	var walk func(ro rendering.RenderObject, depth int, inGutter bool)
+	walk = func(ro rendering.RenderObject, depth int, inGutter bool) {
+		if ro == nil {
+			return
+		}
+		var cls, txt string
+		if el, ok := ro.Node().(*dom.Element); ok {
+			cls = el.ClassName()
+		}
+		if rt, ok := ro.(*rendering.RenderText); ok {
+			txt = rt.Text()
+		}
+		if strings.Contains(cls, clsFilter) {
+			inGutter = true
+		}
+		var x, y, w, h float64
+		if lb := ro.LayoutBox(); lb != nil {
+			if ls := rv.LayoutState(); ls != nil {
+				g := ls.GeometryForBox(lb)
+				x, y, w, h = g.Left(), g.Top(), g.BorderBoxWidth(), g.BorderBoxHeight()
+			}
+		}
+		if inGutter {
+			kind := ro.RenderName()
+			if _, ok := ro.(*rendering.RenderText); ok {
+				kind = "RenderText"
+			}
+			styleInfo := ""
+			if cs := ro.Style(); cs != nil {
+				styleInfo = fmt.Sprintf(" styleH=%v styleLH=%v disp=%v pos=%v", cs.Height, cs.LineHeight, cs.Display, cs.Position)
+			}
+			nodeInfo := ""
+			if ro.Node() != nil {
+				if el, ok := ro.Node().(*dom.Element); ok {
+					nodeInfo = " <" + el.LocalName() + ">"
+				} else {
+					nodeInfo = " [#text]"
+				}
+			}
+			if txt != "" {
+				fmt.Printf("[rtree] %*s%s text=%q (%.1f,%.1f) %.1fx%.1f%s%s\n", depth*2, "", kind, txt, x, y, w, h, styleInfo, nodeInfo)
+			} else {
+				fmt.Printf("[rtree] %*s%s cls=%q (%.1f,%.1f) %.1fx%.1f%s%s\n", depth*2, "", kind, cls, x, y, w, h, styleInfo, nodeInfo)
+			}
+		}
+		for c := ro.FirstChild(); c != nil; c = c.NextSibling() {
+			walk(c, depth+1, inGutter)
+		}
+	}
+	walk(rv, 0, false)
+	fmt.Println("[rtree] === end ===")
+}
 
 func runJobs(wv *webkit.WebView) {
 	for i := 0; i < 8; i++ {
@@ -235,6 +302,30 @@ func add(a, b int) int {
 			out.push('gutters=[' + gd.join(',') + ']');
 		}
 		}
+		// ★ dump 所有 gutter 元素：文本 + top + width + style.top（定位诊断）
+		var gd2 = [];
+		if (g) {
+			var ge2 = g.querySelectorAll('.cm-gutterElement');
+			for (var i = 0; i < ge2.length; i++) {
+				var r2 = ge2[i].getBoundingClientRect();
+				var st2 = ge2[i].style && ge2[i].style.top;
+				var sh2 = ge2[i].style && ge2[i].style.height;
+				var sm2 = ge2[i].style && ge2[i].style.marginTop;
+				gd2.push('[' + i + ']"' + ge2[i].textContent + '"@' + r2.top.toFixed(1) + 'h' + r2.height.toFixed(1) + 'w' + r2.width.toFixed(1) + 'st=' + st2 + ' sh=' + sh2 + ' sm=' + sm2);
+			}
+			out.push('ALLGUTTER=' + gd2.join('|'));
+		}
+		// ★ 空行 cm-line 的高度（br 布局）
+		var lines2 = co.querySelectorAll('.cm-line');
+		var empty = [];
+		for (var i = 0; i < lines2.length; i++) {
+			if (lines2[i].textContent.length === 0) {
+				var er = lines2[i].getBoundingClientRect();
+				var ebr = lines2[i].querySelector('br');
+				empty.push('L' + (i + 1) + ' h=' + er.height.toFixed(1) + ' br=' + (ebr ? ebr.getBoundingClientRect().height.toFixed(1) : 'none'));
+			}
+		}
+		out.push('EMPTYLINES=' + empty.join('|'));
 		return out.join(' | ');
 	})()`))
 
@@ -260,6 +351,12 @@ func add(a, b int) int {
 	// ③ ★ 真实键盘链路：FocusElement 设置 imeFocusedEl（点击聚焦）→
 	// MockKeyChar 走 handleCharInput（processEvents 的 EventChar 分支同一实现）
 	// → contenteditable 分支 InsertTextAtSelection → input 事件。
+	// ★ 输入前渲染树 dump（对比输入后 gutter 高度是否被 CM6 重置）
+	fmt.Println("[prekey] === render tree before keys ===")
+	wv.RebuildRenderTree()
+	wv.EnsureLayout()
+	dumpGutterTree(wv)
+	dumpSubtree(wv, "cm-line", "=== cm-line render tree (prekey) ===")
 	host := app.NewHostForTest(wv, 1280, 800)
 	cmEl, err := findContentEditable(wv)
 	if err != nil {
@@ -304,6 +401,37 @@ func add(a, b int) int {
 	// ⑦ 渲染截图
 	wv.RebuildRenderTree()
 	wv.EnsureLayout()
+	dumpGutterTree(wv)
+	// ★ 第二次重建：验证 ComputedStyle 缓存是否失效（首次用旧值 0px）
+	wv.RebuildRenderTree()
+	wv.EnsureLayout()
+	fmt.Println("[rtree2] === second rebuild ===")
+	dumpGutterTree(wv)
+
+	// ⑧ 滚动测试：设置 scroller.scrollTop → CM6 虚拟化重渲染行号
+	js(wv, `(function(){
+		var sc = document.querySelector('.cm-scroller');
+		if (sc) { sc.scrollTop = 100; return 'scrolled-' + sc.scrollTop; }
+		return 'no-scroller';
+	})()`)
+	runJobs(wv)
+	time.Sleep(150 * time.Millisecond)
+	runJobs(wv)
+	fmt.Println("[scroll] " + js(wv, `(function(){
+		var out = [];
+		var g = document.querySelector('.cm-gutters');
+		if (!g) return 'no-gutters';
+		var ge = g.querySelectorAll('.cm-gutterElement');
+		var sc = document.querySelector('.cm-scroller');
+		out.push('st=' + (sc ? sc.scrollTop.toFixed(0) : '?'));
+		var arr = [];
+		for (var i = 0; i < ge.length && i < 8; i++) {
+			var r = ge[i].getBoundingClientRect();
+			arr.push(ge[i].textContent + '@' + r.top.toFixed(0));
+		}
+		out.push(arr.join('|'));
+		return out.join(' ');
+	})()`))
 	pngBytes, err := wv.Render()
 	if err != nil {
 		log.Fatalf("render: %v", err)

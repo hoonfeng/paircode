@@ -7,9 +7,14 @@
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
-import { EditorView, basicSetup } from 'codemirror'
+import { EditorView } from 'codemirror'
 import { EditorState, Transaction, Prec } from '@codemirror/state'
-import { syntaxHighlighting, HighlightStyle } from '@codemirror/language'
+import { syntaxHighlighting, HighlightStyle, foldGutter, indentOnInput, defaultHighlightStyle, bracketMatching, foldKeymap } from '@codemirror/language'
+import { history, defaultKeymap, historyKeymap } from '@codemirror/commands'
+import { closeBrackets, autocompletion, closeBracketsKeymap, completionKeymap } from '@codemirror/autocomplete'
+import { highlightSelectionMatches, search, searchKeymap } from '@codemirror/search'
+import { lintKeymap } from '@codemirror/lint'
+import { lineNumbers, highlightActiveLineGutter, highlightSpecialChars, drawSelection, dropCursor, rectangularSelection, crosshairCursor, highlightActiveLine, keymap } from '@codemirror/view'
 import { tags } from '@lezer/highlight'
 import { javascript } from '@codemirror/lang-javascript'
 import { python } from '@codemirror/lang-python'
@@ -19,11 +24,8 @@ import { json } from '@codemirror/lang-json'
 import { markdown } from '@codemirror/lang-markdown'
 import { xml } from '@codemirror/lang-xml'
 import { sql } from '@codemirror/lang-sql'
-import { keymap } from '@codemirror/view'
 import { indentWithTab } from '@codemirror/commands'
 import { oneDark } from '@codemirror/theme-one-dark'
-import { closeBrackets } from '@codemirror/autocomplete'
-import { highlightSelectionMatches, search } from '@codemirror/search'
 import { state } from '../main.js'
 import api from '../api.js'
 import FindPanel from './FindPanel.vue'
@@ -66,7 +68,36 @@ function createEditor() {
   const lang = getLang(props.path)
 
   const extensions = [
-    basicSetup,
+    // ★ 手动拼 basicSetup（codemirror 6.0.2 源码照搬），其中默认
+    // foldGutter() 替换为 foldGutter({openText:'▾', closedText:'▸'})——
+    // 默认 openText '⌄'(U+2304) 在系统符号字体无真字形，wb-ui 渲染成
+    // 豆腐块矩形；▾(U+25BE)/▸(U+25B8) 在 Segoe UI Symbol 有真字形。
+    lineNumbers(),
+    highlightActiveLineGutter(),
+    highlightSpecialChars(),
+    history(),
+    foldGutter({ openText: '▾', closedText: '▸' }),
+    drawSelection(),
+    dropCursor(),
+    EditorState.allowMultipleSelections.of(true),
+    indentOnInput(),
+    syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+    bracketMatching(),
+    closeBrackets(),
+    autocompletion(),
+    rectangularSelection(),
+    crosshairCursor(),
+    highlightActiveLine(),
+    highlightSelectionMatches(),
+    keymap.of([
+      ...closeBracketsKeymap,
+      ...defaultKeymap,
+      ...searchKeymap,
+      ...historyKeymap,
+      ...foldKeymap,
+      ...completionKeymap,
+      ...lintKeymap,
+    ]),
     search(),               // 初始化搜索状态，不显示默认面板
     keymap.of([indentWithTab]),
     closeBrackets(),

@@ -21,7 +21,14 @@ func main() {
 	if port == "" {
 		port = "9097"
 	}
-	url := "http://localhost:" + port + "/cm6_ref.html"
+	// 优先 http；若 EDGE_REF_FILE 非空则用 file://（绕开代理/网络问题）
+	fileURL := os.Getenv("EDGE_REF_FILE")
+	var url string
+	if fileURL != "" {
+		url = "file:///" + fileURL
+	} else {
+		url = "http://127.0.0.1:" + port + "/cm6_ref.html"
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, edge,
@@ -41,13 +48,24 @@ func main() {
 	start := bytes.Index([]byte(out), []byte("cm-gutterElement"))
 	if start < 0 {
 		fmt.Println("no gutterElement in dump; total", len(out))
+		fmt.Println("HEAD:", out[:min(len(out), 3000)])
 		os.Exit(1)
 	}
+	var seg string
 	// 找 .cm-editor 主体
 	i := bytes.Index([]byte(out), []byte("cm-editor"))
 	if i < 0 {
 		i = 0
 	}
-	seg := out[i : i+6000]
+	if i+6000 > len(out) {
+		seg = out[i:]
+	} else {
+		seg = out[i : i+6000]
+	}
+	// 打印 title（CM6 是否执行）
+	ti := bytes.Index([]byte(out), []byte("<title>"))
+	if ti >= 0 {
+		fmt.Println("TITLE:", out[ti:ti+200])
+	}
 	fmt.Println(seg)
 }
