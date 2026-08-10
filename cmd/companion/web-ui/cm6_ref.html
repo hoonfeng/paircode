@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <style>
   body { margin: 0; background: #fff; }
+  #ed { width: 420px; height: 340px; }
 </style>
 </head>
 <body>
@@ -38,7 +39,8 @@ const doc = [
   'package main', '',
   'import "fmt"', '',
   '// main is the entry point.',
-  'func main() {',
+  '# hash comment test',
+  'func main() {',,
   '\tfmt.Println("hello")',
   '\tfor i := 0; i < 10; i++ {',
   '\t\tfmt.Println(i)',
@@ -82,6 +84,71 @@ new EditorView({
   state: EditorState.create({ doc, extensions: [basicSetup] }),
   parent: document.getElementById('ed'),
 });
+
+// ── 几何测量：写入 document.title（--dump-dom 提取）──
+function dump() {
+  const out = [];
+  const g = document.querySelector('.cm-gutters');
+  if (g) { const r = g.getBoundingClientRect(); out.push('guttersW=' + r.width.toFixed(1) + ' x=' + r.left.toFixed(1)); }
+  const ln = document.querySelector('.cm-lineNumbers');
+  if (ln) {
+    const r = ln.getBoundingClientRect(); out.push('lineNumbersW=' + r.width.toFixed(1));
+    const cs = getComputedStyle(ln);
+    out.push('lnPad=' + cs.paddingLeft + '/' + cs.paddingRight + ' minW=' + cs.minWidth + ' ff=' + cs.fontFamily + ' fs=' + cs.fontSize);
+  }
+  const ge = document.querySelectorAll('.cm-gutterElement');
+  if (ge.length) {
+    const r0 = ge[0].getBoundingClientRect();
+    out.push('ge0H=' + r0.height.toFixed(1) + ' w=' + r0.width.toFixed(1));
+    const cs0 = getComputedStyle(ge[0]);
+    out.push('ge0Pad=' + cs0.paddingLeft + '/' + cs0.paddingRight + ' minW=' + cs0.minWidth + ' ta=' + cs0.textAlign);
+    out.push('ge0Text=[' + ge[0].textContent + ']');
+    const ys = [];
+    for (let i = 0; i < 6 && i < ge.length; i++) ys.push(ge[i].getBoundingClientRect().top.toFixed(1));
+    out.push('geYs=' + ys.join(','));
+  }
+  const co = document.querySelector('.cm-content');
+  if (co) { const r = co.getBoundingClientRect(); out.push('contentX=' + r.left.toFixed(1) + ' w=' + r.width.toFixed(1)); }
+  const lines = co.querySelectorAll('.cm-line');
+  out.push('lines=' + lines.length);
+  const hashLine = Array.from(lines).find(l => l.textContent.indexOf('#') >= 0);
+  if (hashLine) {
+    const r = hashLine.getBoundingClientRect();
+    out.push('hashLineY=' + r.top.toFixed(1) + ' h=' + r.height.toFixed(1));
+    const txt = hashLine.textContent;
+    const idx = txt.indexOf('#');
+    out.push('hashLineText=[' + txt + '] idx=' + idx);
+    try {
+      const walker = document.createTreeWalker(hashLine, NodeFilter.SHOW_TEXT);
+      let off = 0, target = null;
+      while (walker.nextNode()) {
+        const n = walker.currentNode;
+        if (off + n.nodeValue.length > idx) { target = n; off = idx - off; break; }
+        off += n.nodeValue.length;
+      }
+      if (target) {
+        const rng = document.createRange();
+        rng.setStart(target, off); rng.setEnd(target, off + 1);
+        const rc = rng.getClientRects();
+        if (rc && rc.length) out.push('hashCharX=' + rc[0].left.toFixed(1));
+        // 空格（# 后）宽度
+        const rs = document.createRange();
+        rs.setStart(target, off + 1); rs.setEnd(target, off + 2);
+        const rcs = rs.getClientRects();
+        if (rcs && rcs.length) out.push('spaceW=' + rcs[0].width.toFixed(1));
+      }
+    } catch (e) { out.push('charErr=' + e.message); }
+  }
+  const first = lines[0];
+  if (first) {
+    const r = first.getBoundingClientRect();
+    out.push('line0Y=' + r.top.toFixed(1) + ' h=' + r.height.toFixed(1));
+    out.push('line0Text=[' + first.textContent + ']');
+  }
+  document.title = 'CM6-REF:' + out.join('|');
+}
+setTimeout(dump, 300);
+setTimeout(dump, 1500);
 </script>
 </body>
 </html>

@@ -254,6 +254,9 @@ function createEditor() {
     parent: wrapperRef.value,
   })
 
+  // ★ 调试探针：暴露 CM6 view（probe 验证编辑链路 state 同步；真实运行无害）
+  if (typeof window !== 'undefined') window.__editorView = view
+
   // 监听编辑器区域的右键事件 — 无论有无选中都发射
   wrapperRef.value.addEventListener('contextmenu', (e) => {
     if (!view) return
