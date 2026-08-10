@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"runtime/debug"
 	"runtime/pprof"
 	"strings"
 	"time"
@@ -21,6 +22,10 @@ import (
 )
 
 func main() {
+	// ★ 全局异常捕获：traceback=all（panic 时输出所有 goroutine 堆栈），
+	// 配合下方 defer recover 与 watchJSErrors，任何 Go/JS 异常都落到
+	// _desktop_errors.log + 控制台，不再静默。
+	debug.SetTraceback("all")
 	log.SetFlags(log.Ltime)
 	log.Println("[Desktop] PairCode IDE 桌面版 v1.0.6-desktop")
 
@@ -48,6 +53,7 @@ func main() {
 			msg := fmt.Sprintf("=== PANIC %v ===\n%s\n", r, buf[:n])
 			_ = os.WriteFile("_desktop_panic.log", []byte(msg), 0644)
 			log.Printf("[Desktop] PANIC: %v\n%s", r, buf[:n])
+			appendErrLog("PANIC", msg)
 			os.Exit(1)
 		}
 	}()
@@ -164,10 +170,18 @@ console.error = function(){
 	// ★ WB_TERM_DIAG=1：每 90 帧查询终端 buffer 内容 + 行 span 渲染
 	// 位置（诊断「初始文本不从顶部开始」——前 2 行为空是内容还是渲染）。
 	termDiagFrame := 0
+	errWatchFrame, lastErrsCount, lastConsoleLen = 0, 0, 0
 	host.OnFrame = func() {
 		desktopbridge.DrainMainQueue(wv)
 		if os.Getenv("WB_TERM_DIAG") != "" && termDiagFrame%90 == 0 {
 			diagTerm(wv, termDiagFrame/90)
+		}
+		// ★ 全局异常捕获并抛出：每 60 帧（≈1s）增量转储 JS 运行时错误
+		// （window.__errs）与 console 输出到控制台 + _desktop_errors.log。
+		// goja 非线程安全，RunJS 必须在此主线程执行，故不做独立 goroutine。
+		errWatchFrame++
+		if errWatchFrame%60 == 0 {
+			watchJSErrors(wv)
 		}
 		termDiagFrame++
 	}
@@ -379,6 +393,57 @@ func reportAnomalies(f *os.File, ro rendering.RenderObject, state *layout.Layout
 	for _, a := range ans {
 		fmt.Fprintf(f, "  [%s] %s\n", a.desc, a.info)
 	}
+}
+
+// ★ 全局异常捕获并抛出：增量转储 JS 运行时错误与 console 输出。
+// window.__errs 由 LoadHTML 后注入的 hook（error / unhandledrejection /
+// console.error）持续收集；console buffer 由 jsc.BufferLogger 持续累积
+// （String() 返回全量、不清空），用长度差取增量——此前只在 LoadHTML 后
+// 读一次 ConsoleOutput()，运行期的 JS 异常全被静默吞掉（「齿轮绘制异常 /
+// 打不开文件」等无法定位）。
+var (
+	errWatchFrame  int
+	lastErrsCount  int
+	lastConsoleLen int
+)
+
+func watchJSErrors(wv *webkit.WebView) {
+	interp := wv.JSInterpreter()
+	if interp == nil {
+		return
+	}
+	// 1) window.__errs 增量（JS error / unhandledrejection / console.error）
+	if v, err := interp.RunJS(`(window.__errs ? window.__errs.length : 0)`); err == nil {
+		n := int(v.ToNumber())
+		if n > lastErrsCount {
+			if ev, err := interp.RunJS(fmt.Sprintf("window.__errs.slice(%d).join('\\n')", lastErrsCount)); err == nil {
+				text := ev.ToString()
+				log.Printf("[JS-ERROR] %s", text)
+				appendErrLog("JS-ERROR", text)
+			}
+			lastErrsCount = n
+		}
+	}
+	// 2) console buffer 增量（console.log / warn / error 全部输出）
+	out := wv.ConsoleOutput()
+	if len(out) > lastConsoleLen {
+		seg := out[lastConsoleLen:]
+		log.Printf("[CONSOLE] %s", seg)
+		appendErrLog("CONSOLE", seg)
+		lastConsoleLen = len(out)
+	}
+}
+
+// appendErrLog 追加统一错误日志 _desktop_errors.log（带时间戳与分类），
+// 与 _desktop_panic.log（panic 专用）互补——非 panic 的 JS/渲染错误
+// 也全部落盘，实机复现后直接翻这一个文件。
+func appendErrLog(kind, msg string) {
+	f, err := os.OpenFile("_desktop_errors.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	fmt.Fprintf(f, "=== [%s] %s ===\n%s\n", kind, time.Now().Format("2006-01-02 15:04:05"), msg)
 }
 
 func dumpRO(f *os.File, ro rendering.RenderObject, depth int, state *layout.LayoutState) {
