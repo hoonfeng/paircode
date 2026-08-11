@@ -407,29 +407,31 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		// 直接用 msgs 持久化会写回压缩版、丢失原始消息结构。
 		// 正确做法：原始历史 + 新增尾部 = 持久化版本。
 		originalHist := opts.HistoryOriginal
-		condensedHist := opts.History
 		loop.OnBatchPersist = func(msgs []Message) {
-			// 重组：原始历史（未压缩）+ 本轮新增消息（msgs 尾部）
-			condensedLen := len(condensedHist)
+			// ★ 重组：原始历史（未压缩）+ 本轮新增消息 = 持久化版本。
+			// msgs 结构：[system(可能), ...历史, 当前用户消息, ...本轮新增(assistant/tool)]
+			// 锚点：最后一条 RoleUser = 当前任务（Run 保证存在）。
+			//   tail = 最后一条 user 之后的所有消息（本轮新增）。
+			// ⚠️ 不能再用「condensedLen 固定偏移」定位 tail：
+			//   Run 开头的 maybeCompact（compact 分支，历史 token 超阈值）会压缩 msgs、
+			//   删除中段历史 → len(msgs) 可能 < condensedLen → 旧逻辑误走兜底把压缩版
+			//   写回 store，原始历史被覆盖、assistant 消息丢失（表现为 user 后直接 tool）。
+			//   lastUser 锚点与历史长度无关，压缩/未压缩均正确。
 			var combined []Message
-			if condensedLen > 0 && len(msgs) >= condensedLen {
-				// ★ msgs 进入 Loop.Run 后结构为:
-				//   [system(可能), ...condensedHist, user_task(可能,去重后), ...newMessages]
-				// 原代码 msgs[condensedLen:] 未考虑 system 占据索引 0，
-				// 实际取到了 condensedHist 尾部（含最后一条用户消息），而 originalHist
-				// 已有该用户消息，导致 combined 中用户消息重复。
-				sysOffset := 0
-				if len(msgs) > condensedLen && msgs[0].Role == RoleSystem {
-					sysOffset = 1
+			lastUserIdx := -1
+			for i := len(msgs) - 1; i >= 0; i-- {
+				if msgs[i].Role == RoleUser {
+					lastUserIdx = i
+					break
 				}
-				newTailStart := condensedLen + sysOffset
-				combined = make([]Message, 0, len(originalHist)+len(msgs)-newTailStart)
+			}
+			if lastUserIdx >= 0 {
+				tail := msgs[lastUserIdx+1:]
+				combined = make([]Message, 0, len(originalHist)+len(tail))
 				combined = append(combined, originalHist...)
-				if newTailStart < len(msgs) {
-					combined = append(combined, msgs[newTailStart:]...)
-				}
+				combined = append(combined, tail...)
 			} else {
-				// 兜底（无压缩场景）：直接用 msgs
+				// 兜底（异常：msgs 无 user 消息）：直接用 msgs
 				combined = msgs
 			}
 			err := store.PersistNewMessages(convID, combined)
