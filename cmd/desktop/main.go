@@ -315,6 +315,11 @@ func probeEditor(wv *webkit.WebView) {
 	} else {
 		log.Printf("[Probe] 读取 _layout_snap.log 失败: %v（需 WB_SNAP=1）", err)
 	}
+	// ★ 延长驻留：给 WB_DUMP_PNG_DELAY（如 18s）机会在「编辑器文字已
+	// 渲染」后 dump GPU 窗口（dump 一次即止，delay 短于保存阶段会拿到
+	// 未渲染文字的帧）。软件 PNG（上面 8 张）在 21s 前后完成，GPU dump
+	// 需等 CM6 viewport 更新文字后才可比对背景/光标像素。
+	time.Sleep(10 * time.Second)
 	if _, err := os.Stat("_canvas_dump.png"); err == nil {
 		log.Printf("[Probe] 窗口 PNG: _canvas_dump.png")
 	}
