@@ -103,7 +103,12 @@ func main() {
 	var sb strings.Builder
 	sb.WriteString("package main\n\n")
 	for i := 1; i <= 110; i++ {
-		sb.WriteString(fmt.Sprintf("// 函数 fn%d 处理中文注释测试\n", i))
+		if i == 3 {
+			// 行 3：中文+括号混排（用户报告「括号和文字对不齐」的验证行）
+			sb.WriteString("// 测试函数 fn3(括号x) 返回 (a+b) 中文\n")
+		} else {
+			sb.WriteString(fmt.Sprintf("// 函数 fn%d 处理中文注释测试\n", i))
+		}
 		sb.WriteString(fmt.Sprintf("func fn%d(a, b int) int {\n", i))
 		sb.WriteString(fmt.Sprintf("\t// 第 %d 个函数，返回值 a+b\n", i))
 		sb.WriteString("\treturn a + b\n}\n\n")
