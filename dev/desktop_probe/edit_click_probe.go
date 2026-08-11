@@ -8,6 +8,9 @@ package main
 
 import (
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
 	"log"
 	"os"
 	"path/filepath"
@@ -18,6 +21,7 @@ import (
 	"wb-ui/dom"
 	"wb-ui/layout"
 	"wb-ui/platform/graphics"
+	"wb-ui/rendering"
 	"wb-ui/webkit"
 )
 
@@ -152,7 +156,45 @@ func add(a, b int) int {
 	runJobs(wv)
 	time.Sleep(50 * time.Millisecond)
 	runJobs(wv)
+	// ②b 几何 dump：行 1 结构 + span/text 的 rect + activeLine + cursor
+	fmt.Println("[geom] " + js(wv, `(function(){
+		var out = [];
+		var co = document.querySelector('.cm-content');
+		var l1 = co ? co.querySelectorAll('.cm-line')[0] : null;
+		if (!l1) return 'no-line';
+		var lr = l1.getBoundingClientRect();
+		out.push('line1=(' + lr.top.toFixed(1) + ' h=' + lr.height.toFixed(1) + ')');
+		var kids = l1.children;
+		out.push('kids=' + kids.length);
+		for (var i = 0; i < kids.length && i < 6; i++) {
+			var k = kids[i];
+			var kr = k.getBoundingClientRect();
+			out.push(i + ':<' + k.tagName.toLowerCase() + '.' + (k.className||'').split(' ')[0] + '> y=' + kr.top.toFixed(1) + ' h=' + kr.height.toFixed(1));
+		}
+		var al = document.querySelector('.cm-activeLine');
+		if (al) { var ar = al.getBoundingClientRect(); out.push('activeLine=(' + ar.top.toFixed(1) + ' h=' + ar.height.toFixed(1) + ')'); }
+		var cu = document.querySelector('.cm-cursor');
+		if (cu) {
+			var cur = cu.getBoundingClientRect();
+			var ccs = getComputedStyle(cu);
+			out.push('cursor=(' + cur.left.toFixed(1) + ',' + cur.top.toFixed(1) + ' ' + cur.width.toFixed(1) + 'x' + cur.height.toFixed(1) + ') disp=' + ccs.display + ' pos=' + ccs.position + ' borderL=' + ccs.borderLeft + ' color=' + ccs.color + ' vis=' + ccs.visibility + ' anim=' + (cu.style.animationName || ccs.animationName || '') + ' opacity=' + ccs.opacity);
+			var layer = cu.parentElement;
+			if (layer) {
+				var lcs = getComputedStyle(layer);
+				out.push('cursorLayer=(' + layer.className + ') disp=' + lcs.display + ' pos=' + lcs.position + ' vis=' + lcs.visibility + ' top=' + lcs.top + ' left=' + lcs.left + ' right=' + lcs.right + ' bottom=' + lcs.bottom + ' w=' + lcs.width + ' h=' + lcs.height + ' ovf=' + lcs.overflow + ' inset=' + (layer.style.inset || '') + ' cssText=' + (layer.getAttribute('style') || '').slice(0, 120));
+			}
+		} else out.push('cursor=NOT-FOUND');
+		var fd = document.querySelectorAll('.cm-foldGutter .cm-gutterElement, .cm-foldGutter');
+		out.push('foldGutter=' + fd.length);
+		var fe = document.querySelector('.cm-foldGutter .cm-gutterElement');
+		if (fe) {
+			var fer = fe.getBoundingClientRect();
+			out.push('foldEl=(' + fer.width.toFixed(1) + 'x' + fer.height.toFixed(1) + ') vis=' + getComputedStyle(fe).visibility + ' txt=[' + (fe.textContent||'').slice(0,4) + ']');
+		}
+		return out.join(' | ');
+	})()`))
 
+	// ③ 检查 CM6 同步后的 DOM selection（sstate.ranges）
 	// ③ 检查 CM6 同步后的 DOM selection（sstate.ranges）
 	fmt.Println("[sel] " + js(wv, `(function(){
 		var s = window.getSelection();
@@ -229,6 +271,103 @@ func add(a, b int) int {
 		}
 		return out.join(' | ');
 	})()`))
+
+	// ⑤b Go 侧：dump cursor/cursorLayer 的渲染树 box
+	dumpBox := func(name, cls string) {
+		if mf := wv.MainFrame(); mf != nil {
+			if fr := mf.Frame(); fr != nil {
+				if doc := fr.Document(); doc != nil {
+					els := doc.GetElementsByClassName(cls)
+					if len(els) == 0 {
+						fmt.Printf("[%s-box] NOT-FOUND\n", name)
+						return
+					}
+					el := els[0]
+					if rv := wv.RenderView(); rv != nil {
+						ro := rv.FindRenderObjectForNode(el)
+						if ro == nil {
+							fmt.Printf("[%s-box] no-render-object\n", name)
+							return
+						}
+						// 父链：cursor 应挂在 cursorLayer 下
+						chain := ""
+						for p := ro.Parent(); p != nil && len(chain) < 200; p = p.Parent() {
+							nm := "?"
+							if n2 := p.Node(); n2 != nil {
+								if e2, ok := n2.(*dom.Element); ok {
+									nm = e2.ClassName()
+								}
+							}
+							chain += " <- " + nm
+						}
+						fmt.Printf("[%s-box] parentChain=%s\n", name, chain)
+						if b, ok := ro.(interface{ AsRenderBox() *rendering.RenderBox }); ok {
+							if bb := b.AsRenderBox(); bb != nil {
+								fmt.Printf("[%s-box] (%v,%v %vx%v) visible=%v disp=%v vis=%v\n", name, bb.X(), bb.Y(), bb.Width(), bb.Height(), bb.IsVisible(), bb.Style().Display, bb.Style().Visibility)
+								return
+							}
+						}
+						fmt.Printf("[%s-box] renderobj type=%T (inline?)\n", name, ro)
+					}
+				}
+			}
+		}
+	}
+	dumpBox("cursor", "cm-cursor")
+	dumpBox("cursorLayer", "cm-cursorLayer")
+	dumpBox("activeLine", "cm-activeLine")
+
+	// ⑤c 触发渲染（paint）——验证 cursor 是否被 PaintBorder 绘制
+	if pngBytes, err := wv.Render(); err != nil {
+		fmt.Println("[render] err:", err)
+	} else {
+		fmt.Println("[render] ok bytes=" + fmt.Sprint(len(pngBytes)))
+		wd2, _ := os.Getwd()
+		outf, ferr := os.Create(filepath.Join(wd2, "dev", "desktop_probe", "click_probe.png"))
+		if ferr == nil {
+			img := image.NewRGBA(image.Rect(0, 0, wv.Width(), wv.Height()))
+			for y := 0; y < wv.Height(); y++ {
+				for x := 0; x < wv.Width(); x++ {
+					off := (y*wv.Width() + x) * 4
+					if off+3 < len(pngBytes) {
+						img.SetRGBA(x, y, color.RGBA{R: pngBytes[off], G: pngBytes[off+1], B: pngBytes[off+2], A: pngBytes[off+3]})
+					}
+				}
+			}
+			_ = png.Encode(outf, img)
+			outf.Close()
+			fmt.Println("[render] saved click_probe.png")
+		}
+	}
+
+	// ⑤c layer 树：找 cursor/cursorLayer 的 layer
+	if rv := wv.RenderView(); rv != nil {
+		var findLayer func(l *rendering.RenderLayer, depth int)
+		findLayer = func(l *rendering.RenderLayer, depth int) {
+			if l == nil || depth > 60 {
+				return
+			}
+			if o := l.Owner(); o != nil {
+				if n := o.Node(); n != nil {
+					if el, ok := n.(*dom.Element); ok {
+						if el.HasClassName("cm-cursor") || el.HasClassName("cm-cursorLayer") {
+							nm := "other"
+							if el.HasClassName("cm-cursor") {
+								nm = "cursor"
+							} else {
+								nm = "cursorLayer"
+							}
+							fmt.Printf("[layer] %s depth=%d\n", nm, depth)
+						}
+					}
+				}
+			}
+			for c := l.FirstChild(); c != nil; c = c.NextSibling() {
+				findLayer(c, depth+1)
+			}
+		}
+		findLayer(rv.RootLayer(), 0)
+	}
 }
 
 func findContentEditable(wv *webkit.WebView) (*dom.Element, error) {
