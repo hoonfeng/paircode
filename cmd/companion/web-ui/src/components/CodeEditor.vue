@@ -278,10 +278,11 @@ function createEditor() {
       EditorView.theme({
         '&': { fontSize: fontSize + 'px' },
         '.cm-scroller': { fontFamily: "'JetBrains Mono','Fira Code','Cascadia Code','Consolas',monospace" },
-        // ★ 折叠箭头（∨/› 文本字符）缩小：默认继承 13px 字号在行号 gutter
-        // 里过大；缩到 8px 接近原生 select 下拉箭头（V 形 chevron，
-        // wb-ui paintSelectArrow：~6px 宽 7px 高 stroke 2px）的视觉尺寸。
-        '.cm-foldGutter .cm-gutterElement': { fontSize: '8px', lineHeight: '18.2px' },
+        // ★ 折叠箭头（∨/› 文本字符）缩小：13px 时 › 宽 7.2px/∨ 宽 10.2px
+        // 在 12.2px 宽的行号 gutter 列里显得过大；缩到 8px 后 ∨≈6.3px、
+        // ›≈4.4px，接近原生 select 下拉箭头（wb-ui paintSelectArrow：
+        // ~6px 宽 7px 高 stroke 2px 的 V 形 chevron）的视觉尺寸。
+        '.cm-foldGutter .cm-gutterElement': { fontSize: '8px' },
       }),
     ],
   })

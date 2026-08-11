@@ -303,7 +303,8 @@ func add(a, b int) int {
 						fmt.Printf("[%s-box] parentChain=%s\n", name, chain)
 						if b, ok := ro.(interface{ AsRenderBox() *rendering.RenderBox }); ok {
 							if bb := b.AsRenderBox(); bb != nil {
-								fmt.Printf("[%s-box] (%v,%v %vx%v) visible=%v disp=%v vis=%v\n", name, bb.X(), bb.Y(), bb.Width(), bb.Height(), bb.IsVisible(), bb.Style().Display, bb.Style().Visibility)
+								blc := bb.Style().BorderLeftColor
+								fmt.Printf("[%s-box] (%v,%v %vx%v) visible=%v disp=%v vis=%v borderLColor=%v\n", name, bb.X(), bb.Y(), bb.Width(), bb.Height(), bb.IsVisible(), bb.Style().Display, bb.Style().Visibility, blc)
 								return
 							}
 						}
