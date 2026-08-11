@@ -69,14 +69,16 @@ function createEditor() {
 
   const extensions = [
     // ★ 手动拼 basicSetup（codemirror 6.0.2 源码照搬），其中默认
-    // foldGutter() 替换为 foldGutter({openText:'▾', closedText:'▸'})——
-    // 默认 openText '⌄'(U+2304) 在系统符号字体无真字形，wb-ui 渲染成
-    // 豆腐块矩形；▾(U+25BE)/▸(U+25B8) 在 Segoe UI Symbol 有真字形。
+    // foldGutter() 替换为 foldGutter({openText:'∨', closedText:'›'})——
+    // 浏览器默认 openText '⌄'(U+2304) 在 wb-ui 系统符号字体是 notdef
+    // （豆腐块矩形）；▾(U+25BE)/▸(U+25B8) 是实心三角（用户要求箭头风格，
+    // 与浏览器参照的箭头一致）。∨(U+2228 逻辑或=V 形向下)/›(U+203A 右尖
+    // 引号=V 形右) 在 Consolas/Segoe UI Symbol 均有真字形，视觉为线框箭头。
     lineNumbers(),
     highlightActiveLineGutter(),
     highlightSpecialChars(),
     history(),
-    foldGutter({ openText: '▾', closedText: '▸' }),
+    foldGutter({ openText: '∨', closedText: '›' }),
     drawSelection(),
     dropCursor(),
     EditorState.allowMultipleSelections.of(true),
