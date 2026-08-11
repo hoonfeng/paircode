@@ -1,0 +1,1288 @@
+[fontmgr] read dir  failed: open : The system cannot find the file specified.
+[fontmgr] loaded 496 system font(s) total
+20:15:26 [Bridge] 初始化桌面端桥接...
+20:15:26 [Bridge] 未发现已有配置，将使用默认设置。
+20:15:26 [Bridge] 工作区: 未打开文件夹 (0 个文件夹)
+20:15:26 [Bridge] API 已配置: false
+20:15:26 [Bridge] 已转注册 69 条路由到 wb-ui bridge（两层直调）
+20:15:26 [Bridge] 完成, 已注册 69 个处理器
+[init] st=0 sh=12075 ch=538 evt=0 viewport=0-506 oracleLH=18.20 scrollDOM=cm-scroller st=0 obsInt=true obsActive=true vpEvt=? manM=? vpMan=? pv=-4-534 cRect=60-12135 ih=800 iw=1280 first10: "999"@60h16|"1"@64h18|"2"@82h18|"3"@100h18|"4"@119h18|"5"@137h18|"6"@155h18|"7"@173h18|"8"@191h18|"9"@210h18 last: "∨"@555 elCount=44
+[line3] text="// 函数 fn1 处理中文注释测试" segs=["//"@378 w15.6 " "@393 w7.8 "函"@409 w13.0 "数"@422 w13.0 " "@435 w7.8 "fn1"@450 w23.4 " "@474 w7.8 "处"@489 w13.0 "理"@502 w13.0 "中"@515 w13.0 "文"@528 w13.0 "注"@541 w13.0 "释"@554 w13.0 "测"@567 w13.0 "试"@580 w13.0]
+[line3] text="// 第 1 个函数，返回值 a+b" segs=["//"@409 w15.6 " "@424 w7.8 "第"@440 w13.0 " "@453 w7.8 "1"@469 w7.8 " "@476 w7.8 "个"@492 w13.0 "函"@505 w13.0 "数"@518 w13.0 "，"@531 w13.0 "返"@544 w13.0 "回"@557 w13.0 "值"@570 w13.0 " "@583 w7.8 "a+b"@599 w23.4]
+[line3] text="// 第 2 个函数，返回值 a+b" segs=["//"@409 w15.6 " "@424 w7.8 "第"@440 w13.0 " "@453 w7.8 "2"@469 w7.8 " "@476 w7.8 "个"@492 w13.0 "函"@505 w13.0 "数"@518 w13.0 "，"@531 w13.0 "返"@544 w13.0 "回"@557 w13.0 "值"@570 w13.0 " "@583 w7.8 "a+b"@599 w23.4]
+[line3] text="// 测试函数 fn3(括号x) 返回 (a+b) 中文" segs=["//"@378 w15.6 " "@393 w7.8 "测"@409 w13.0 "试"@422 w13.0 "函"@435 w13.0 "数"@448 w13.0 " "@461 w7.8 "fn3("@476 w31.2 "括"@508 w13.0 "号"@521 w13.0 "x)"@534 w15.6 " "@549 w7.8 "返"@565 w13.0 "回"@578 w13.0 " "@591 w7.8 "(a+b)"@606 w39.0 " "@645 w7.8 "中"@661 w13.0 "文"@674 w13.0]
+[line3] text="// 第 3 个函数，返回值 a+b" segs=["//"@409 w15.6 " "@424 w7.8 "第"@440 w13.0 " "@453 w7.8 "3"@469 w7.8 " "@476 w7.8 "个"@492 w13.0 "函"@505 w13.0 "数"@518 w13.0 "，"@531 w13.0 "返"@544 w13.0 "回"@557 w13.0 "值"@570 w13.0 " "@583 w7.8 "a+b"@599 w23.4]
+[line3] text="// 函数 fn4 处理中文注释测试" segs=["//"@378 w15.6 " "@393 w7.8 "函"@409 w13.0 "数"@422 w13.0 " "@435 w7.8 "fn4"@450 w23.4 " "@474 w7.8 "处"@489 w13.0 "理"@502 w13.0 "中"@515 w13.0 "文"@528 w13.0 "注"@541 w13.0 "释"@554 w13.0 "测"@567 w13.0 "试"@580 w13.0]
+[line3] text="// 第 4 个函数，返回值 a+b" segs=["//"@409 w15.6 " "@424 w7.8 "第"@440 w13.0 " "@453 w7.8 "4"@469 w7.8 " "@476 w7.8 "个"@492 w13.0 "函"@505 w13.0 "数"@518 w13.0 "，"@531 w13.0 "返"@544 w13.0 "回"@557 w13.0 "值"@570 w13.0 " "@583 w7.8 "a+b"@599 w23.4]
+[line3] text="// 函数 fn5 处理中文注释测试" segs=["//"@378 w15.6 " "@393 w7.8 "函"@409 w13.0 "数"@422 w13.0 " "@435 w7.8 "fn5"@450 w23.4 " "@474 w7.8 "处"@489 w13.0 "理"@502 w13.0 "中"@515 w13.0 "文"@528 w13.0 "注"@541 w13.0 "释"@554 w13.0 "测"@567 w13.0 "试"@580 w13.0]
+[line3] text="// 第 5 个函数，返回值 a+b" segs=["//"@409 w15.6 " "@424 w7.8 "第"@440 w13.0 " "@453 w7.8 "5"@469 w7.8 " "@476 w7.8 "个"@492 w13.0 "函"@505 w13.0 "数"@518 w13.0 "，"@531 w13.0 "返"@544 w13.0 "回"@557 w13.0 "值"@570 w13.0 " "@583 w7.8 "a+b"@599 w23.4]
+[line3] text="// 函数 fn6 处理中文注释测试" segs=["//"@378 w15.6 " "@393 w7.8 "函"@409 w13.0 "数"@422 w13.0 " "@435 w7.8 "fn6"@450 w23.4 " "@474 w7.8 "处"@489 w13.0 "理"@502 w13.0 "中"@515 w13.0 "文"@528 w13.0 "注"@541 w13.0 "释"@554 w13.0 "测"@567 w13.0 "试"@580 w13.0]
+[line3] text="// 第 6 个函数，返回值 a+b" segs=["//"@409 w15.6 " "@424 w7.8 "第"@440 w13.0 " "@453 w7.8 "6"@469 w7.8 " "@476 w7.8 "个"@492 w13.0 "函"@505 w13.0 "数"@518 w13.0 "，"@531 w13.0 "返"@544 w13.0 "回"@557 w13.0 "值"@570 w13.0 " "@583 w7.8 "a+b"@599 w23.4]
+[shot0] 初始截图
+20:15:33 [paint-call] rect=0,0 1280x800 dirty=true
+20:15:33 [layer-ctm] RenderView ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] HTML.theme-dark ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] BODY.theme-dark ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.app-root ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.menu-group ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [gutter-draw] "帮助" @(58,7) segs=2 vis="visible" colA=255 color=(139,148,158) font=("Inter\", system-ui, -apple-system, sans-serif",13.0,"400","normal")
+20:15:33 [layer-ctm] DIV.title-center ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.main-area ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.editor-area ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.editor-tabs ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] SPAN.tab-name ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [gutter-draw] "/workspace/long.go" @(353,37) segs=1 vis="visible" colA=255 color=(230,237,243) font=("Inter\", system-ui, -apple-system, sans-serif",12.0,"400","normal")
+20:15:33 [layer-ctm] SPAN.tab-close ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.editor-body ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.editor-wrapper ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.code-editor-container ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.code-editor-wrapper ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.cm-editor ͼ1 ͼ3 ͼ4 ͼo ͼ15 ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.cm-announced ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.cm-scroller ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.cm-layer cm-selectionLayer ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.cm-layer cm-layer-above cm-cursorLayer ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.cm-gutters cm-gutters-before ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.cm-gutter cm-lineNumbers ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [gutter-draw] "999" @(332,62) segs=1 vis="hidden" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw] "1" @(348,66) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw-canvas] "1" @(348,73) ctm=ty:0.0 → device(348,73)
+20:15:33 [gutter-after] "1" devY=73 y=63 pixel=#161b22
+20:15:33 [gutter-after] "1" devY=73 y=66 pixel=#1c2333
+20:15:33 [gutter-after] "1" devY=73 y=69 pixel=#1c2333
+20:15:33 [gutter-mtx] "1" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:33 [gutter-raw] "1" @(347,73) pixel=#1c2333 col=#6e7681
+20:15:33 [gutter-draw] "2" @(348,84) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw-canvas] "2" @(348,91) ctm=ty:0.0 → device(348,91)
+20:15:33 [gutter-after] "2" devY=91 y=81 pixel=#1c2333
+20:15:33 [gutter-after] "2" devY=91 y=84 pixel=#161b22
+20:15:33 [gutter-after] "2" devY=91 y=87 pixel=#161b22
+20:15:33 [gutter-mtx] "2" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:33 [gutter-raw] "2" @(347,91) pixel=#161b22 col=#6e7681
+20:15:33 [gutter-draw] "3" @(348,102) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw-canvas] "3" @(348,110) ctm=ty:0.0 → device(348,110)
+20:15:33 [gutter-after] "3" devY=110 y=99 pixel=#161b22
+20:15:33 [gutter-after] "3" devY=110 y=102 pixel=#161b22
+20:15:33 [gutter-after] "3" devY=110 y=105 pixel=#161b22
+20:15:33 [gutter-mtx] "3" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:33 [gutter-raw] "3" @(347,109) pixel=#161b22 col=#6e7681
+20:15:33 [gutter-draw] "4" @(348,120) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw-canvas] "4" @(348,128) ctm=ty:0.0 → device(348,128)
+20:15:33 [gutter-mtx] "4" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:33 [gutter-raw] "4" @(347,127) pixel=#161b22 col=#6e7681
+20:15:33 [gutter-draw] "5" @(348,139) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw-canvas] "5" @(348,146) ctm=ty:0.0 → device(348,146)
+20:15:33 [gutter-mtx] "5" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:33 [gutter-raw] "5" @(347,145) pixel=#6e7681 col=#6e7681
+20:15:33 [gutter-draw] "6" @(348,157) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw-canvas] "6" @(348,164) ctm=ty:0.0 → device(348,164)
+20:15:33 [gutter-mtx] "6" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:33 [gutter-raw] "6" @(347,164) pixel=#373d45 col=#6e7681
+20:15:33 [gutter-draw] "7" @(348,175) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw-canvas] "7" @(348,182) ctm=ty:0.0 → device(348,182)
+20:15:33 [gutter-mtx] "7" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:33 [gutter-raw] "7" @(347,182) pixel=#161b22 col=#6e7681
+20:15:33 [gutter-draw] "8" @(348,193) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw-canvas] "8" @(348,201) ctm=ty:0.0 → device(348,201)
+20:15:33 [gutter-mtx] "8" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:33 [gutter-raw] "8" @(347,200) pixel=#424851 col=#6e7681
+20:15:33 [gutter-draw] "9" @(348,211) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw-canvas] "9" @(348,219) ctm=ty:0.0 → device(348,219)
+20:15:33 [gutter-mtx] "9" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:33 [gutter-raw] "9" @(347,218) pixel=#2c3139 col=#6e7681
+20:15:33 [gutter-draw] "10" @(340,230) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw-canvas] "10" @(340,237) ctm=ty:0.0 → device(340,237)
+20:15:33 [gutter-mtx] "10" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:33 [gutter-raw] "10" @(339,236) pixel=#161b22 col=#6e7681
+20:15:33 [gutter-draw] "11" @(340,248) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw-canvas] "11" @(340,255) ctm=ty:0.0 → device(340,255)
+20:15:33 [gutter-mtx] "11" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:33 [gutter-raw] "11" @(339,255) pixel=#6e7681 col=#6e7681
+20:15:33 [gutter-draw] "12" @(340,266) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw-canvas] "12" @(340,273) ctm=ty:0.0 → device(340,273)
+20:15:33 [gutter-mtx] "12" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:33 [gutter-raw] "12" @(339,273) pixel=#6e7681 col=#6e7681
+20:15:33 [gutter-draw] "13" @(340,284) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw-canvas] "13" @(340,292) ctm=ty:0.0 → device(340,292)
+20:15:33 [gutter-mtx] "13" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:33 [gutter-raw] "13" @(339,291) pixel=#161b22 col=#6e7681
+20:15:33 [gutter-draw] "14" @(340,302) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw-canvas] "14" @(340,310) ctm=ty:0.0 → device(340,310)
+20:15:33 [gutter-mtx] "14" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:33 [gutter-raw] "14" @(339,309) pixel=#161b22 col=#6e7681
+20:15:33 [gutter-draw] "15" @(340,321) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw-canvas] "15" @(340,328) ctm=ty:0.0 → device(340,328)
+20:15:33 [gutter-mtx] "15" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:33 [gutter-raw] "15" @(339,327) pixel=#161b22 col=#6e7681
+20:15:33 [gutter-draw] "16" @(340,339) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw-canvas] "16" @(340,346) ctm=ty:0.0 → device(340,346)
+20:15:33 [gutter-mtx] "16" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:33 [gutter-raw] "16" @(339,346) pixel=#6e7681 col=#6e7681
+20:15:33 [gutter-draw] "17" @(340,357) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw-canvas] "17" @(340,364) ctm=ty:0.0 → device(340,364)
+20:15:33 [gutter-mtx] "17" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:33 [gutter-raw] "17" @(339,364) pixel=#6e7681 col=#6e7681
+20:15:33 [gutter-draw] "18" @(340,375) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw-canvas] "18" @(340,383) ctm=ty:0.0 → device(340,383)
+20:15:33 [gutter-mtx] "18" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:33 [gutter-raw] "18" @(339,382) pixel=#161b22 col=#6e7681
+20:15:33 [gutter-draw] "19" @(340,393) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw-canvas] "19" @(340,401) ctm=ty:0.0 → device(340,401)
+20:15:33 [gutter-mtx] "19" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:33 [gutter-raw] "19" @(339,400) pixel=#161b22 col=#6e7681
+20:15:33 [gutter-draw] "20" @(340,412) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw-canvas] "20" @(340,419) ctm=ty:0.0 → device(340,419)
+20:15:33 [gutter-mtx] "20" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:33 [gutter-raw] "20" @(339,418) pixel=#21262e col=#6e7681
+20:15:33 [gutter-draw] "21" @(340,430) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw-canvas] "21" @(340,437) ctm=ty:0.0 → device(340,437)
+20:15:33 [gutter-mtx] "21" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:33 [gutter-raw] "21" @(339,437) pixel=#6e7681 col=#6e7681
+20:15:33 [gutter-draw] "22" @(340,448) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw-canvas] "22" @(340,455) ctm=ty:0.0 → device(340,455)
+20:15:33 [gutter-mtx] "22" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:33 [gutter-raw] "22" @(339,455) pixel=#6e7681 col=#6e7681
+20:15:33 [gutter-draw] "23" @(340,466) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw-canvas] "23" @(340,474) ctm=ty:0.0 → device(340,474)
+20:15:33 [gutter-mtx] "23" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:33 [gutter-raw] "23" @(339,473) pixel=#21262e col=#6e7681
+20:15:33 [gutter-draw] "24" @(340,484) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw-canvas] "24" @(340,492) ctm=ty:0.0 → device(340,492)
+20:15:33 [gutter-mtx] "24" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:33 [gutter-raw] "24" @(339,491) pixel=#21262e col=#6e7681
+20:15:33 [gutter-draw] "25" @(340,503) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw-canvas] "25" @(340,510) ctm=ty:0.0 → device(340,510)
+20:15:33 [gutter-mtx] "25" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:33 [gutter-raw] "25" @(339,509) pixel=#21262e col=#6e7681
+20:15:33 [gutter-draw] "26" @(340,521) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw-canvas] "26" @(340,528) ctm=ty:0.0 → device(340,528)
+20:15:33 [gutter-mtx] "26" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:33 [gutter-raw] "26" @(339,528) pixel=#6e7681 col=#6e7681
+20:15:33 [gutter-draw] "27" @(340,539) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw-canvas] "27" @(340,546) ctm=ty:0.0 → device(340,546)
+20:15:33 [gutter-mtx] "27" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:33 [gutter-raw] "27" @(339,546) pixel=#6e7681 col=#6e7681
+20:15:33 [gutter-draw] "28" @(340,557) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw-canvas] "28" @(340,565) ctm=ty:0.0 → device(340,565)
+20:15:33 [gutter-mtx] "28" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:33 [gutter-raw] "28" @(339,564) pixel=#21262e col=#6e7681
+20:15:33 [gutter-draw] "29" @(340,575) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw-canvas] "29" @(340,583) ctm=ty:0.0 → device(340,583)
+20:15:33 [gutter-mtx] "29" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:33 [gutter-raw] "29" @(339,582) pixel=#21262e col=#6e7681
+20:15:33 [gutter-draw] "30" @(340,594) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw-canvas] "30" @(340,601) ctm=ty:0.0 → device(340,601)
+20:15:33 [gutter-mtx] "30" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:33 [gutter-raw] "30" @(339,600) pixel=#21262e col=#6e7681
+20:15:33 [gutter-draw] "31" @(340,612) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw-canvas] "31" @(340,619) ctm=ty:0.0 → device(340,619)
+20:15:33 [gutter-mtx] "31" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:33 [gutter-raw] "31" @(339,619) pixel=#0d1117 col=#6e7681
+20:15:33 [gutter-draw] "32" @(340,630) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw-canvas] "32" @(340,637) ctm=ty:0.0 → device(340,637)
+20:15:33 [gutter-mtx] "32" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:33 [gutter-raw] "32" @(339,637) pixel=#0d1117 col=#6e7681
+20:15:33 [gutter-draw] "33" @(340,648) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw-canvas] "33" @(340,656) ctm=ty:0.0 → device(340,656)
+20:15:33 [gutter-mtx] "33" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:33 [gutter-raw] "33" @(339,655) pixel=#0d1117 col=#6e7681
+20:15:33 [gutter-draw] "34" @(340,666) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw-canvas] "34" @(340,674) ctm=ty:0.0 → device(340,674)
+20:15:33 [gutter-mtx] "34" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:33 [gutter-raw] "34" @(339,673) pixel=#0d1117 col=#6e7681
+20:15:33 [gutter-draw] "35" @(340,685) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw-canvas] "35" @(340,692) ctm=ty:0.0 → device(340,692)
+20:15:33 [gutter-mtx] "35" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:33 [gutter-raw] "35" @(339,691) pixel=#0d1117 col=#6e7681
+20:15:33 [gutter-draw] "36" @(340,703) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw-canvas] "36" @(340,710) ctm=ty:0.0 → device(340,710)
+20:15:33 [gutter-mtx] "36" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:33 [gutter-raw] "36" @(339,710) pixel=#0d1117 col=#6e7681
+20:15:33 [layer-ctm] DIV.cm-gutter cm-foldGutter ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [gutter-draw] "›" @(359,65) segs=1 vis="hidden" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw] "∨" @(359,124) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw] "∨" @(359,233) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw] "∨" @(359,342) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw] "∨" @(359,451) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [gutter-draw] "∨" @(359,561) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:33 [layer-ctm] DIV.bottom-panel ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.panel-content ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.term-tabs ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [gutter-draw] "终端 1" @(353,608) segs=3 vis="visible" colA=255 color=(230,237,243) font=("Inter\", system-ui, -apple-system, sans-serif",12.0,"400","normal")
+20:15:33 [layer-ctm] SPAN.term-tab-close ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] BUTTON.term-tab term-panel-close ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.term-content ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.term-xterm-wrap ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.xterm xterm-dom-renderer-owner-1 terminal ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.xterm-viewport ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.xterm-scrollable-element  ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.xterm-screen ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.xterm-selection ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.xterm-helpers ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] TEXTAREA.xterm-helper-textarea ctm_ty=0.0 hasClip=false scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] SPAN.xterm-char-measure-element ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] SPAN.xterm-char-measure-element ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] SPAN.xterm-char-measure-element ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] SPAN.xterm-char-measure-element ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.invisible scrollbar horizontal ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.slider ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.invisible scrollbar vertical ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.slider ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.panel-resizer ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.right-container ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.right-panel ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.rp-body ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.chat-area ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.chat-messages ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.chat-empty ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.chat-empty-icon ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.chat-empty-hint ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.ibb-btns ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.input-resizer ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.conv-sidebar ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.conv-list ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.cache-ring-wrap ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.cache-ring-label ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.ctx-bar ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.comp-bar ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] SPAN.status-item ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [gutter-draw] "未加载" @(8,782) segs=3 vis="visible" colA=255 color=(255,255,255) font=("Inter\", system-ui, -apple-system, sans-serif",11.0,"400","normal")
+20:15:33 [layer-ctm] SPAN.status-item ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] SPAN.status-item ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] SPAN.status-item ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] SPAN.status-item connected ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.sidebar ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [gutter-draw] "文件浏览器" @(60,39) segs=5 vis="visible" colA=255 color=(139,148,158) font=("Inter\", system-ui, -apple-system, sans-serif",11.0,"400","normal")
+20:15:33 [layer-ctm] DIV.sidebar-content ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [gutter-draw] "工作区" @(56,69) segs=3 vis="visible" colA=255 color=(110,118,129) font=("Inter\", system-ui, -apple-system, sans-serif",11.0,"600","normal")
+20:15:33 [gutter-draw] "项目" @(177,169) segs=2 vis="visible" colA=255 color=(110,118,129) font=("Inter\", system-ui, -apple-system, sans-serif",10.0,"600","normal")
+20:15:33 [layer-ctm] DIV.ws-section ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [gutter-draw] "暂无工作区" @(132,120) segs=5 vis="visible" colA=255 color=(110,118,129) font=("Inter\", system-ui, -apple-system, sans-serif",12.0,"400","normal")
+20:15:33 [gutter-draw] "创建" @(208,113) segs=2 vis="visible" colA=255 color=(0,0,0) font=("Inter\", system-ui, -apple-system, sans-serif",12.0,"400","normal")
+20:15:33 [layer-ctm] DIV.project-section ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [gutter-draw] "请先选择工作区" @(145,211) segs=7 vis="visible" colA=255 color=(110,118,129) font=("Inter\", system-ui, -apple-system, sans-serif",12.0,"400","normal")
+20:15:33 [layer-ctm] DIV.sidebar-resizer ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:33 [layer-ctm] DIV.toast-container ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+[line3b] text="// 函数 fn1 处理中文注释测试" segs=["//"@378 " "@393 "函"@409 "数"@422 " "@435 "fn1"@450 " "@474 "处"@489 "理"@502 "中"@515 "文"@528 "注"@541 "释"@554 "测"@567 "试"@580]
+[line3b] text="// 第 1 个函数，返回值 a+b" segs=["//"@409 " "@424 "第"@440 " "@453 "1"@469 " "@476 "个"@492 "函"@505 "数"@518 "，"@531 "返"@544 "回"@557 "值"@570 " "@583 "a+b"@599]
+[line3b] text="// 第 2 个函数，返回值 a+b" segs=["//"@409 " "@424 "第"@440 " "@453 "2"@469 " "@476 "个"@492 "函"@505 "数"@518 "，"@531 "返"@544 "回"@557 "值"@570 " "@583 "a+b"@599]
+[line3b] text="// 测试函数 fn3(括号x) 返回 (a+b) 中文" segs=["//"@378 " "@393 "测"@409 "试"@422 "函"@435 "数"@448 " "@461 "fn3("@476 "括"@508 "号"@521 "x)"@534 " "@549 "返"@565 "回"@578 " "@591 "(a+b)"@606 " "@645 "中"@661 "文"@674]
+[line3b] text="// 第 3 个函数，返回值 a+b" segs=["//"@409 " "@424 "第"@440 " "@453 "3"@469 " "@476 "个"@492 "函"@505 "数"@518 "，"@531 "返"@544 "回"@557 "值"@570 " "@583 "a+b"@599]
+[line3b] text="// 函数 fn4 处理中文注释测试" segs=["//"@378 " "@393 "函"@409 "数"@422 " "@435 "fn4"@450 " "@474 "处"@489 "理"@502 "中"@515 "文"@528 "注"@541 "释"@554 "测"@567 "试"@580]
+[line3b] text="// 第 4 个函数，返回值 a+b" segs=["//"@409 " "@424 "第"@440 " "@453 "4"@469 " "@476 "个"@492 "函"@505 "数"@518 "，"@531 "返"@544 "回"@557 "值"@570 " "@583 "a+b"@599]
+[line3b] text="// 函数 fn5 处理中文注释测试" segs=["//"@378 " "@393 "函"@409 "数"@422 " "@435 "fn5"@450 " "@474 "处"@489 "理"@502 "中"@515 "文"@528 "注"@541 "释"@554 "测"@567 "试"@580]
+[line3b] text="// 第 5 个函数，返回值 a+b" segs=["//"@409 " "@424 "第"@440 " "@453 "5"@469 " "@476 "个"@492 "函"@505 "数"@518 "，"@531 "返"@544 "回"@557 "值"@570 " "@583 "a+b"@599]
+[line3b] text="// 函数 fn6 处理中文注释测试" segs=["//"@378 " "@393 "函"@409 "数"@422 " "@435 "fn6"@450 " "@474 "处"@489 "理"@502 "中"@515 "文"@528 "注"@541 "释"@554 "测"@567 "试"@580]
+[line3b] text="// 第 6 个函数，返回值 a+b" segs=["//"@409 " "@424 "第"@440 " "@453 "6"@469 " "@476 "个"@492 "函"@505 "数"@518 "，"@531 "返"@544 "回"@557 "值"@570 " "@583 "a+b"@599]
+[go] scroller box offset=(0,400) name=RenderBox
+[go] content parent chain: RenderBlockFlow@cm-scroller(0,0) → RenderBlockFlow@cm-editor ͼ1 ͼ3 ͼ4 ͼo ͼ15(0,0) → RenderBlockFlow@code-editor-wrapper(0,0) → RenderBlockFlow@code-editor-container(0,0) → RenderBlockFlow@editor-wrapper(0,0) → RenderBlockFlow@editor-body(0,0) → RenderBlockFlow@editor-area(0,0) → RenderBlockFlow@main-area(0,0) → RenderBlockFlow@app-root(0,0) → RenderBlockFlow@(0,0) → RenderBlockFlow@theme-dark(0,0) → RenderBlockFlow@theme-dark(0,0) → RenderView@?(0,0)
+[go] same=true sbOff=(0,400) parOff=(0,0) cnt=1
+[scrolled400] st=400 sh=12075 ch=538 evt=2 viewport=0-1087 oracleLH=18.20 scrollDOM=cm-scroller st=400 obsInt=true obsActive=true vpEvt=0-1087 manM=ok vpMan=0-1087 pv=396-934 cRect=-340-11735 ih=800 iw=1280 first10: "999"@-340h16|"1"@-336h18|"2"@-318h18|"3"@-300h18|"4"@-281h18|"5"@-263h18|"6"@-245h18|"7"@-227h18|"8"@-209h18|"9"@-190h18 last: "∨"@1029 elCount=95
+[shot1] 滚动后截图（无 rebuild）
+20:15:35 [paint-call] rect=0,0 1280x800 dirty=true
+20:15:35 [layer-ctm] RenderView ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] HTML.theme-dark ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] BODY.theme-dark ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.app-root ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.menu-group ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [gutter-draw] "帮助" @(58,7) segs=2 vis="visible" colA=255 color=(139,148,158) font=("Inter\", system-ui, -apple-system, sans-serif",13.0,"400","normal")
+20:15:35 [layer-ctm] DIV.title-center ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.main-area ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.editor-area ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.editor-tabs ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] SPAN.tab-name ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [gutter-draw] "/workspace/long.go" @(353,37) segs=1 vis="visible" colA=255 color=(230,237,243) font=("Inter\", system-ui, -apple-system, sans-serif",12.0,"400","normal")
+20:15:35 [layer-ctm] SPAN.tab-close ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.editor-body ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.editor-wrapper ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.code-editor-container ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.code-editor-wrapper ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.cm-editor ͼ1 ͼ3 ͼ4 ͼo ͼ15 ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.cm-announced ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.cm-scroller ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [scroll-tr] layer=DIV.cm-scroller off=(0,400) translate(-0,-400)
+20:15:35 [layer-ctm] DIV.cm-layer cm-selectionLayer ctm_ty=0.0 hasClip=true scrollT=(0.0,400.0)
+20:15:35 [layer-ctm] DIV.cm-layer cm-layer-above cm-cursorLayer ctm_ty=0.0 hasClip=true scrollT=(0.0,400.0)
+20:15:35 [layer-ctm] DIV.cm-gutters cm-gutters-before ctm_ty=0.0 hasClip=true scrollT=(0.0,400.0)
+20:15:35 [layer-ctm] DIV.cm-gutter cm-lineNumbers ctm_ty=0.0 hasClip=true scrollT=(0.0,400.0)
+20:15:35 [gutter-draw] "999" @(332,62) segs=1 vis="hidden" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw] "1" @(348,66) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "1" @(348,73) ctm=ty:0.0 → device(348,73)
+20:15:35 [gutter-after] "1" devY=73 y=63 pixel=#161b22
+20:15:35 [gutter-after] "1" devY=73 y=66 pixel=#161b22
+20:15:35 [gutter-after] "1" devY=73 y=69 pixel=#161b22
+20:15:35 [gutter-mtx] "1" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "1" @(347,73) pixel=#161b22 col=#6e7681
+20:15:35 [gutter-draw] "2" @(348,84) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "2" @(348,91) ctm=ty:0.0 → device(348,91)
+20:15:35 [gutter-after] "2" devY=91 y=81 pixel=#161b22
+20:15:35 [gutter-after] "2" devY=91 y=84 pixel=#161b22
+20:15:35 [gutter-after] "2" devY=91 y=87 pixel=#161b22
+20:15:35 [gutter-mtx] "2" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "2" @(347,91) pixel=#161b22 col=#6e7681
+20:15:35 [gutter-draw] "3" @(348,102) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "3" @(348,110) ctm=ty:0.0 → device(348,110)
+20:15:35 [gutter-after] "3" devY=110 y=99 pixel=#161b22
+20:15:35 [gutter-after] "3" devY=110 y=102 pixel=#161b22
+20:15:35 [gutter-after] "3" devY=110 y=105 pixel=#161b22
+20:15:35 [gutter-mtx] "3" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "3" @(347,109) pixel=#161b22 col=#6e7681
+20:15:35 [gutter-draw] "4" @(348,120) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "4" @(348,128) ctm=ty:0.0 → device(348,128)
+20:15:35 [gutter-mtx] "4" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "4" @(347,127) pixel=#161b22 col=#6e7681
+20:15:35 [gutter-draw] "5" @(348,139) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "5" @(348,146) ctm=ty:0.0 → device(348,146)
+20:15:35 [gutter-mtx] "5" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "5" @(347,145) pixel=#161b22 col=#6e7681
+20:15:35 [gutter-draw] "6" @(348,157) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "6" @(348,164) ctm=ty:0.0 → device(348,164)
+20:15:35 [gutter-mtx] "6" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "6" @(347,164) pixel=#161b22 col=#6e7681
+20:15:35 [gutter-draw] "7" @(348,175) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "7" @(348,182) ctm=ty:0.0 → device(348,182)
+20:15:35 [gutter-mtx] "7" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "7" @(347,182) pixel=#161b22 col=#6e7681
+20:15:35 [gutter-draw] "8" @(348,193) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "8" @(348,201) ctm=ty:0.0 → device(348,201)
+20:15:35 [gutter-mtx] "8" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "8" @(347,200) pixel=#161b22 col=#6e7681
+20:15:35 [gutter-draw] "9" @(348,211) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "9" @(348,219) ctm=ty:0.0 → device(348,219)
+20:15:35 [gutter-mtx] "9" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "9" @(347,218) pixel=#161b22 col=#6e7681
+20:15:35 [gutter-draw] "10" @(340,230) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "10" @(340,237) ctm=ty:0.0 → device(340,237)
+20:15:35 [gutter-mtx] "10" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "10" @(339,236) pixel=#161b22 col=#6e7681
+20:15:35 [gutter-draw] "11" @(340,248) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "11" @(340,255) ctm=ty:0.0 → device(340,255)
+20:15:35 [gutter-mtx] "11" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "11" @(339,255) pixel=#161b22 col=#6e7681
+20:15:35 [gutter-draw] "12" @(340,266) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "12" @(340,273) ctm=ty:0.0 → device(340,273)
+20:15:35 [gutter-mtx] "12" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "12" @(339,273) pixel=#161b22 col=#6e7681
+20:15:35 [gutter-draw] "13" @(340,284) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "13" @(340,292) ctm=ty:0.0 → device(340,292)
+20:15:35 [gutter-mtx] "13" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "13" @(339,291) pixel=#161b22 col=#6e7681
+20:15:35 [gutter-draw] "14" @(340,302) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "14" @(340,310) ctm=ty:0.0 → device(340,310)
+20:15:35 [gutter-mtx] "14" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "14" @(339,309) pixel=#161b22 col=#6e7681
+20:15:35 [gutter-draw] "15" @(340,321) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "15" @(340,328) ctm=ty:0.0 → device(340,328)
+20:15:35 [gutter-mtx] "15" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "15" @(339,327) pixel=#161b22 col=#6e7681
+20:15:35 [gutter-draw] "16" @(340,339) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "16" @(340,346) ctm=ty:0.0 → device(340,346)
+20:15:35 [gutter-mtx] "16" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "16" @(339,346) pixel=#161b22 col=#6e7681
+20:15:35 [gutter-draw] "17" @(340,357) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "17" @(340,364) ctm=ty:0.0 → device(340,364)
+20:15:35 [gutter-mtx] "17" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "17" @(339,364) pixel=#161b22 col=#6e7681
+20:15:35 [gutter-draw] "18" @(340,375) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "18" @(340,383) ctm=ty:0.0 → device(340,383)
+20:15:35 [gutter-mtx] "18" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "18" @(339,382) pixel=#161b22 col=#6e7681
+20:15:35 [gutter-draw] "19" @(340,393) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "19" @(340,401) ctm=ty:0.0 → device(340,401)
+20:15:35 [gutter-mtx] "19" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "19" @(339,400) pixel=#161b22 col=#6e7681
+20:15:35 [gutter-draw] "20" @(340,412) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "20" @(340,419) ctm=ty:0.0 → device(340,419)
+20:15:35 [gutter-mtx] "20" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "20" @(339,418) pixel=#161b22 col=#6e7681
+20:15:35 [gutter-draw] "21" @(340,430) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "21" @(340,437) ctm=ty:0.0 → device(340,437)
+20:15:35 [gutter-mtx] "21" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "21" @(339,437) pixel=#161b22 col=#6e7681
+20:15:35 [gutter-draw] "22" @(340,448) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "22" @(340,455) ctm=ty:0.0 → device(340,455)
+20:15:35 [gutter-mtx] "22" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "22" @(339,455) pixel=#161b22 col=#6e7681
+20:15:35 [gutter-draw] "23" @(340,466) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "23" @(340,474) ctm=ty:0.0 → device(340,474)
+20:15:35 [gutter-mtx] "23" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "23" @(339,473) pixel=#161b22 col=#6e7681
+20:15:35 [gutter-draw] "24" @(340,484) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "24" @(340,492) ctm=ty:0.0 → device(340,492)
+20:15:35 [gutter-mtx] "24" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "24" @(339,491) pixel=#161b22 col=#6e7681
+20:15:35 [gutter-draw] "25" @(340,503) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "25" @(340,510) ctm=ty:0.0 → device(340,510)
+20:15:35 [gutter-mtx] "25" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "25" @(339,509) pixel=#161b22 col=#6e7681
+20:15:35 [gutter-draw] "26" @(340,521) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "26" @(340,528) ctm=ty:0.0 → device(340,528)
+20:15:35 [gutter-mtx] "26" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "26" @(339,528) pixel=#161b22 col=#6e7681
+20:15:35 [gutter-draw] "27" @(340,539) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "27" @(340,546) ctm=ty:0.0 → device(340,546)
+20:15:35 [gutter-mtx] "27" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "27" @(339,546) pixel=#161b22 col=#6e7681
+20:15:35 [gutter-draw] "28" @(340,557) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "28" @(340,565) ctm=ty:0.0 → device(340,565)
+20:15:35 [gutter-mtx] "28" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "28" @(339,564) pixel=#161b22 col=#6e7681
+20:15:35 [gutter-draw] "29" @(340,575) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "29" @(340,583) ctm=ty:0.0 → device(340,583)
+20:15:35 [gutter-mtx] "29" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "29" @(339,582) pixel=#161b22 col=#6e7681
+20:15:35 [gutter-draw] "30" @(340,594) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "30" @(340,601) ctm=ty:0.0 → device(340,601)
+20:15:35 [gutter-mtx] "30" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "30" @(339,600) pixel=#161b22 col=#6e7681
+20:15:35 [gutter-draw] "31" @(340,612) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "31" @(340,619) ctm=ty:0.0 → device(340,619)
+20:15:35 [gutter-mtx] "31" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "31" @(339,619) pixel=#0d1117 col=#6e7681
+20:15:35 [gutter-draw] "32" @(340,630) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "32" @(340,637) ctm=ty:0.0 → device(340,637)
+20:15:35 [gutter-mtx] "32" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "32" @(339,637) pixel=#0d1117 col=#6e7681
+20:15:35 [gutter-draw] "33" @(340,648) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "33" @(340,656) ctm=ty:0.0 → device(340,656)
+20:15:35 [gutter-mtx] "33" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "33" @(339,655) pixel=#0d1117 col=#6e7681
+20:15:35 [gutter-draw] "34" @(340,666) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "34" @(340,674) ctm=ty:0.0 → device(340,674)
+20:15:35 [gutter-mtx] "34" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "34" @(339,673) pixel=#0d1117 col=#6e7681
+20:15:35 [gutter-draw] "35" @(340,685) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "35" @(340,692) ctm=ty:0.0 → device(340,692)
+20:15:35 [gutter-mtx] "35" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "35" @(339,691) pixel=#0d1117 col=#6e7681
+20:15:35 [gutter-draw] "36" @(340,703) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "36" @(340,710) ctm=ty:0.0 → device(340,710)
+20:15:35 [gutter-mtx] "36" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "36" @(339,710) pixel=#0d1117 col=#6e7681
+20:15:35 [gutter-draw] "37" @(340,721) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "37" @(340,728) ctm=ty:0.0 → device(340,728)
+20:15:35 [gutter-mtx] "37" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "37" @(339,728) pixel=#0d1117 col=#6e7681
+20:15:35 [gutter-draw] "38" @(340,739) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "38" @(340,747) ctm=ty:0.0 → device(340,747)
+20:15:35 [gutter-mtx] "38" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "38" @(339,746) pixel=#0d1117 col=#6e7681
+20:15:35 [gutter-draw] "39" @(340,757) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "39" @(340,765) ctm=ty:0.0 → device(340,765)
+20:15:35 [gutter-mtx] "39" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "39" @(339,764) pixel=#0d1117 col=#6e7681
+20:15:35 [gutter-draw] "40" @(340,776) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "40" @(340,783) ctm=ty:0.0 → device(340,783)
+20:15:35 [gutter-mtx] "40" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "40" @(339,782) pixel=#0d1117 col=#6e7681
+20:15:35 [gutter-draw] "41" @(340,794) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "41" @(340,801) ctm=ty:0.0 → device(340,801)
+20:15:35 [gutter-mtx] "41" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "41" @(339,801) pixel=#58a6ff col=#6e7681
+20:15:35 [gutter-draw] "42" @(340,812) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "42" @(340,819) ctm=ty:0.0 → device(340,819)
+20:15:35 [gutter-mtx] "42" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "42" @(339,819) pixel=#000000 col=#6e7681
+20:15:35 [gutter-draw] "43" @(340,830) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "43" @(340,838) ctm=ty:0.0 → device(340,838)
+20:15:35 [gutter-mtx] "43" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "43" @(339,837) pixel=#000000 col=#6e7681
+20:15:35 [gutter-draw] "44" @(340,848) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "44" @(340,856) ctm=ty:0.0 → device(340,856)
+20:15:35 [gutter-mtx] "44" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "44" @(339,855) pixel=#000000 col=#6e7681
+20:15:35 [gutter-draw] "45" @(340,867) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "45" @(340,874) ctm=ty:0.0 → device(340,874)
+20:15:35 [gutter-mtx] "45" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "45" @(339,873) pixel=#000000 col=#6e7681
+20:15:35 [gutter-draw] "46" @(340,885) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "46" @(340,892) ctm=ty:0.0 → device(340,892)
+20:15:35 [gutter-mtx] "46" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "46" @(339,892) pixel=#000000 col=#6e7681
+20:15:35 [gutter-draw] "47" @(340,903) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "47" @(340,910) ctm=ty:0.0 → device(340,910)
+20:15:35 [gutter-mtx] "47" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "47" @(339,910) pixel=#000000 col=#6e7681
+20:15:35 [gutter-draw] "48" @(340,921) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "48" @(340,929) ctm=ty:0.0 → device(340,929)
+20:15:35 [gutter-mtx] "48" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "48" @(339,928) pixel=#000000 col=#6e7681
+20:15:35 [gutter-draw] "49" @(340,939) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "49" @(340,947) ctm=ty:0.0 → device(340,947)
+20:15:35 [gutter-mtx] "49" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "49" @(339,946) pixel=#000000 col=#6e7681
+20:15:35 [gutter-draw] "50" @(340,958) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "50" @(340,965) ctm=ty:0.0 → device(340,965)
+20:15:35 [gutter-mtx] "50" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "50" @(339,964) pixel=#000000 col=#6e7681
+20:15:35 [gutter-draw] "51" @(340,976) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "51" @(340,983) ctm=ty:0.0 → device(340,983)
+20:15:35 [gutter-mtx] "51" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "51" @(339,983) pixel=#000000 col=#6e7681
+20:15:35 [gutter-draw] "52" @(340,994) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "52" @(340,1001) ctm=ty:0.0 → device(340,1001)
+20:15:35 [gutter-mtx] "52" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "52" @(339,1001) pixel=#000000 col=#6e7681
+20:15:35 [gutter-draw] "53" @(340,1012) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "53" @(340,1020) ctm=ty:0.0 → device(340,1020)
+20:15:35 [gutter-mtx] "53" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "53" @(339,1019) pixel=#000000 col=#6e7681
+20:15:35 [gutter-draw] "54" @(340,1030) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "54" @(340,1038) ctm=ty:0.0 → device(340,1038)
+20:15:35 [gutter-mtx] "54" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "54" @(339,1037) pixel=#000000 col=#6e7681
+20:15:35 [gutter-draw] "55" @(340,1049) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "55" @(340,1056) ctm=ty:0.0 → device(340,1056)
+20:15:35 [gutter-mtx] "55" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "55" @(339,1055) pixel=#000000 col=#6e7681
+20:15:35 [gutter-draw] "56" @(340,1067) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "56" @(340,1074) ctm=ty:0.0 → device(340,1074)
+20:15:35 [gutter-mtx] "56" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "56" @(339,1074) pixel=#000000 col=#6e7681
+20:15:35 [gutter-draw] "57" @(340,1085) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "57" @(340,1092) ctm=ty:0.0 → device(340,1092)
+20:15:35 [gutter-mtx] "57" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "57" @(339,1092) pixel=#000000 col=#6e7681
+20:15:35 [gutter-draw] "58" @(340,1103) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "58" @(340,1111) ctm=ty:0.0 → device(340,1111)
+20:15:35 [gutter-mtx] "58" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "58" @(339,1110) pixel=#000000 col=#6e7681
+20:15:35 [gutter-draw] "59" @(340,1121) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "59" @(340,1129) ctm=ty:0.0 → device(340,1129)
+20:15:35 [gutter-mtx] "59" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "59" @(339,1128) pixel=#000000 col=#6e7681
+20:15:35 [gutter-draw] "60" @(340,1140) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "60" @(340,1147) ctm=ty:0.0 → device(340,1147)
+20:15:35 [gutter-mtx] "60" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "60" @(339,1146) pixel=#000000 col=#6e7681
+20:15:35 [gutter-draw] "61" @(340,1158) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "61" @(340,1165) ctm=ty:0.0 → device(340,1165)
+20:15:35 [gutter-mtx] "61" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "61" @(339,1165) pixel=#000000 col=#6e7681
+20:15:35 [gutter-draw] "62" @(340,1176) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "62" @(340,1183) ctm=ty:0.0 → device(340,1183)
+20:15:35 [gutter-mtx] "62" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "62" @(339,1183) pixel=#000000 col=#6e7681
+20:15:35 [gutter-draw] "63" @(340,1194) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "63" @(340,1202) ctm=ty:0.0 → device(340,1202)
+20:15:35 [gutter-mtx] "63" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "63" @(339,1201) pixel=#000000 col=#6e7681
+20:15:35 [gutter-draw] "64" @(340,1212) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "64" @(340,1220) ctm=ty:0.0 → device(340,1220)
+20:15:35 [gutter-mtx] "64" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "64" @(339,1219) pixel=#000000 col=#6e7681
+20:15:35 [gutter-draw] "65" @(340,1231) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "65" @(340,1238) ctm=ty:0.0 → device(340,1238)
+20:15:35 [gutter-mtx] "65" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "65" @(339,1237) pixel=#000000 col=#6e7681
+20:15:35 [gutter-draw] "66" @(340,1249) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "66" @(340,1256) ctm=ty:0.0 → device(340,1256)
+20:15:35 [gutter-mtx] "66" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "66" @(339,1256) pixel=#000000 col=#6e7681
+20:15:35 [gutter-draw] "67" @(340,1267) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "67" @(340,1274) ctm=ty:0.0 → device(340,1274)
+20:15:35 [gutter-mtx] "67" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "67" @(339,1274) pixel=#000000 col=#6e7681
+20:15:35 [gutter-draw] "68" @(340,1285) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "68" @(340,1293) ctm=ty:0.0 → device(340,1293)
+20:15:35 [gutter-mtx] "68" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "68" @(339,1292) pixel=#000000 col=#6e7681
+20:15:35 [gutter-draw] "69" @(340,1303) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "69" @(340,1311) ctm=ty:0.0 → device(340,1311)
+20:15:35 [gutter-mtx] "69" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "69" @(339,1310) pixel=#000000 col=#6e7681
+20:15:35 [gutter-draw] "70" @(340,1322) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "70" @(340,1329) ctm=ty:0.0 → device(340,1329)
+20:15:35 [gutter-mtx] "70" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "70" @(339,1328) pixel=#000000 col=#6e7681
+20:15:35 [gutter-draw] "71" @(340,1340) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "71" @(340,1347) ctm=ty:0.0 → device(340,1347)
+20:15:35 [gutter-mtx] "71" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "71" @(339,1347) pixel=#000000 col=#6e7681
+20:15:35 [gutter-draw] "72" @(340,1358) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "72" @(340,1365) ctm=ty:0.0 → device(340,1365)
+20:15:35 [gutter-mtx] "72" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "72" @(339,1365) pixel=#000000 col=#6e7681
+20:15:35 [gutter-draw] "73" @(340,1376) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "73" @(340,1384) ctm=ty:0.0 → device(340,1384)
+20:15:35 [gutter-mtx] "73" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "73" @(339,1383) pixel=#000000 col=#6e7681
+20:15:35 [gutter-draw] "74" @(340,1394) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "74" @(340,1402) ctm=ty:0.0 → device(340,1402)
+20:15:35 [gutter-mtx] "74" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "74" @(339,1401) pixel=#000000 col=#6e7681
+20:15:35 [gutter-draw] "75" @(340,1413) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "75" @(340,1420) ctm=ty:0.0 → device(340,1420)
+20:15:35 [gutter-mtx] "75" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "75" @(339,1419) pixel=#000000 col=#6e7681
+20:15:35 [gutter-draw] "76" @(340,1431) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "76" @(340,1438) ctm=ty:0.0 → device(340,1438)
+20:15:35 [gutter-mtx] "76" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "76" @(339,1438) pixel=#000000 col=#6e7681
+20:15:35 [gutter-draw] "77" @(340,1449) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "77" @(340,1456) ctm=ty:0.0 → device(340,1456)
+20:15:35 [gutter-mtx] "77" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "77" @(339,1456) pixel=#000000 col=#6e7681
+20:15:35 [gutter-draw] "78" @(340,1467) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "78" @(340,1475) ctm=ty:0.0 → device(340,1475)
+20:15:35 [gutter-mtx] "78" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "78" @(339,1474) pixel=#000000 col=#6e7681
+20:15:35 [gutter-draw] "79" @(340,1485) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw-canvas] "79" @(340,1493) ctm=ty:0.0 → device(340,1493)
+20:15:35 [gutter-mtx] "79" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:35 [gutter-raw] "79" @(339,1492) pixel=#000000 col=#6e7681
+20:15:35 [layer-ctm] DIV.cm-gutter cm-foldGutter ctm_ty=0.0 hasClip=true scrollT=(0.0,400.0)
+20:15:35 [gutter-draw] "›" @(359,65) segs=1 vis="hidden" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw] "∨" @(359,124) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw] "∨" @(359,233) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw] "∨" @(359,342) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw] "∨" @(359,451) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw] "∨" @(359,561) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw] "∨" @(359,670) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw] "∨" @(359,779) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw] "∨" @(359,888) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw] "∨" @(359,997) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw] "∨" @(359,1107) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw] "∨" @(359,1216) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw] "∨" @(359,1325) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [gutter-draw] "∨" @(359,1434) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:35 [layer-ctm] DIV.bottom-panel ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.panel-content ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.term-tabs ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [gutter-draw] "终端 1" @(353,608) segs=3 vis="visible" colA=255 color=(230,237,243) font=("Inter\", system-ui, -apple-system, sans-serif",12.0,"400","normal")
+20:15:35 [layer-ctm] SPAN.term-tab-close ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] BUTTON.term-tab term-panel-close ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.term-content ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.term-xterm-wrap ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.xterm xterm-dom-renderer-owner-1 terminal ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.xterm-viewport ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.xterm-scrollable-element  ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.xterm-screen ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.xterm-selection ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.xterm-helpers ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] TEXTAREA.xterm-helper-textarea ctm_ty=0.0 hasClip=false scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] SPAN.xterm-char-measure-element ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] SPAN.xterm-char-measure-element ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] SPAN.xterm-char-measure-element ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] SPAN.xterm-char-measure-element ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.invisible scrollbar horizontal ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.slider ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.invisible scrollbar vertical ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.slider ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.panel-resizer ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.right-container ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.right-panel ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.rp-body ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.chat-area ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.chat-messages ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.chat-empty ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.chat-empty-icon ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.chat-empty-hint ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.ibb-btns ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.input-resizer ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.conv-sidebar ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.conv-list ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.cache-ring-wrap ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.cache-ring-label ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.ctx-bar ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.comp-bar ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] SPAN.status-item ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [gutter-draw] "未加载" @(8,782) segs=3 vis="visible" colA=255 color=(255,255,255) font=("Inter\", system-ui, -apple-system, sans-serif",11.0,"400","normal")
+20:15:35 [layer-ctm] SPAN.status-item ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] SPAN.status-item ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] SPAN.status-item ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] SPAN.status-item connected ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.sidebar ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [gutter-draw] "文件浏览器" @(60,39) segs=5 vis="visible" colA=255 color=(139,148,158) font=("Inter\", system-ui, -apple-system, sans-serif",11.0,"400","normal")
+20:15:35 [layer-ctm] DIV.sidebar-content ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [gutter-draw] "工作区" @(56,69) segs=3 vis="visible" colA=255 color=(110,118,129) font=("Inter\", system-ui, -apple-system, sans-serif",11.0,"600","normal")
+20:15:35 [gutter-draw] "项目" @(177,169) segs=2 vis="visible" colA=255 color=(110,118,129) font=("Inter\", system-ui, -apple-system, sans-serif",10.0,"600","normal")
+20:15:35 [layer-ctm] DIV.ws-section ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [gutter-draw] "暂无工作区" @(132,120) segs=5 vis="visible" colA=255 color=(110,118,129) font=("Inter\", system-ui, -apple-system, sans-serif",12.0,"400","normal")
+20:15:35 [gutter-draw] "创建" @(208,113) segs=2 vis="visible" colA=255 color=(0,0,0) font=("Inter\", system-ui, -apple-system, sans-serif",12.0,"400","normal")
+20:15:35 [layer-ctm] DIV.project-section ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [gutter-draw] "请先选择工作区" @(145,211) segs=7 vis="visible" colA=255 color=(110,118,129) font=("Inter\", system-ui, -apple-system, sans-serif",12.0,"400","normal")
+20:15:35 [layer-ctm] DIV.sidebar-resizer ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:35 [layer-ctm] DIV.toast-container ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+[scrolled1200] st=1200 sh=12075 ch=538 evt=4 viewport=510-1696 oracleLH=18.20 scrollDOM=cm-scroller st=1200 obsInt=true obsActive=true vpEvt=0-1087 manM=ok vpMan=0-1087 pv=1196-1734 cRect=-1140-10935 ih=800 iw=1280 first10: "999"@-1140h16|"39"@-444h18|"40"@-426h18|"41"@-408h18|"42"@-390h18|"43"@-372h18|"44"@-353h18|"45"@-335h18|"46"@-317h18|"47"@-299h18 last: "∨"@993 elCount=101
+[g2] pre-shot IsDirty=true HasBoxScroll=true offsetCount=1 scrollY=0
+[shot2] 滚动1200截图（rebuild）
+20:15:36 [paint-call] rect=0,0 1280x800 dirty=true
+20:15:36 [layer-ctm] RenderView ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] HTML.theme-dark ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] BODY.theme-dark ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.app-root ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.menu-group ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [gutter-draw] "帮助" @(58,7) segs=2 vis="visible" colA=255 color=(139,148,158) font=("Inter\", system-ui, -apple-system, sans-serif",13.0,"400","normal")
+20:15:36 [layer-ctm] DIV.title-center ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.main-area ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.editor-area ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.editor-tabs ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] SPAN.tab-name ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [gutter-draw] "/workspace/long.go" @(353,37) segs=1 vis="visible" colA=255 color=(230,237,243) font=("Inter\", system-ui, -apple-system, sans-serif",12.0,"400","normal")
+20:15:36 [layer-ctm] SPAN.tab-close ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.editor-body ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.editor-wrapper ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.code-editor-container ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.code-editor-wrapper ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.cm-editor ͼ1 ͼ3 ͼ4 ͼo ͼ15 ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.cm-announced ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.cm-scroller ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [scroll-tr] layer=DIV.cm-scroller off=(0,1200) translate(-0,-1200)
+20:15:36 [layer-ctm] DIV.cm-layer cm-selectionLayer ctm_ty=0.0 hasClip=true scrollT=(0.0,1200.0)
+20:15:36 [layer-ctm] DIV.cm-layer cm-layer-above cm-cursorLayer ctm_ty=0.0 hasClip=true scrollT=(0.0,1200.0)
+20:15:36 [layer-ctm] DIV.cm-gutters cm-gutters-before ctm_ty=0.0 hasClip=true scrollT=(0.0,1200.0)
+20:15:36 [layer-ctm] DIV.cm-gutter cm-lineNumbers ctm_ty=0.0 hasClip=true scrollT=(0.0,1200.0)
+20:15:36 [gutter-draw] "999" @(332,62) segs=1 vis="hidden" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw] "39" @(340,757) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "39" @(340,765) ctm=ty:0.0 → device(340,765)
+20:15:36 [gutter-mtx] "39" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "39" @(339,764) pixel=#0d1117 col=#6e7681
+20:15:36 [gutter-draw] "40" @(327,776) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "40" @(327,783) ctm=ty:0.0 → device(327,783)
+20:15:36 [gutter-mtx] "40" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "40" @(327,782) pixel=#0d1117 col=#6e7681
+20:15:36 [gutter-draw] "41" @(327,794) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "41" @(327,801) ctm=ty:0.0 → device(327,801)
+20:15:36 [gutter-mtx] "41" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "41" @(327,801) pixel=#58a6ff col=#6e7681
+20:15:36 [gutter-draw] "42" @(327,812) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "42" @(327,819) ctm=ty:0.0 → device(327,819)
+20:15:36 [gutter-mtx] "42" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "42" @(327,819) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "43" @(327,830) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "43" @(327,838) ctm=ty:0.0 → device(327,838)
+20:15:36 [gutter-mtx] "43" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "43" @(327,837) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "44" @(327,848) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "44" @(327,856) ctm=ty:0.0 → device(327,856)
+20:15:36 [gutter-mtx] "44" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "44" @(327,855) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "45" @(327,867) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "45" @(327,874) ctm=ty:0.0 → device(327,874)
+20:15:36 [gutter-mtx] "45" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "45" @(327,873) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "46" @(327,885) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "46" @(327,892) ctm=ty:0.0 → device(327,892)
+20:15:36 [gutter-mtx] "46" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "46" @(327,892) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "47" @(327,903) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "47" @(327,910) ctm=ty:0.0 → device(327,910)
+20:15:36 [gutter-mtx] "47" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "47" @(327,910) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "48" @(327,921) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "48" @(327,929) ctm=ty:0.0 → device(327,929)
+20:15:36 [gutter-mtx] "48" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "48" @(327,928) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "49" @(327,939) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "49" @(327,947) ctm=ty:0.0 → device(327,947)
+20:15:36 [gutter-mtx] "49" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "49" @(327,946) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "50" @(327,958) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "50" @(327,965) ctm=ty:0.0 → device(327,965)
+20:15:36 [gutter-mtx] "50" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "50" @(327,964) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "51" @(327,976) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "51" @(327,983) ctm=ty:0.0 → device(327,983)
+20:15:36 [gutter-mtx] "51" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "51" @(327,983) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "52" @(327,994) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "52" @(327,1001) ctm=ty:0.0 → device(327,1001)
+20:15:36 [gutter-mtx] "52" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "52" @(327,1001) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "53" @(327,1012) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "53" @(327,1020) ctm=ty:0.0 → device(327,1020)
+20:15:36 [gutter-mtx] "53" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "53" @(327,1019) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "54" @(327,1030) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "54" @(327,1038) ctm=ty:0.0 → device(327,1038)
+20:15:36 [gutter-mtx] "54" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "54" @(327,1037) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "55" @(327,1049) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "55" @(327,1056) ctm=ty:0.0 → device(327,1056)
+20:15:36 [gutter-mtx] "55" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "55" @(327,1055) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "56" @(327,1067) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "56" @(327,1074) ctm=ty:0.0 → device(327,1074)
+20:15:36 [gutter-mtx] "56" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "56" @(327,1074) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "57" @(327,1085) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "57" @(327,1092) ctm=ty:0.0 → device(327,1092)
+20:15:36 [gutter-mtx] "57" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "57" @(327,1092) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "58" @(327,1103) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "58" @(327,1111) ctm=ty:0.0 → device(327,1111)
+20:15:36 [gutter-mtx] "58" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "58" @(327,1110) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "59" @(327,1121) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "59" @(327,1129) ctm=ty:0.0 → device(327,1129)
+20:15:36 [gutter-mtx] "59" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "59" @(327,1128) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "60" @(327,1140) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "60" @(327,1147) ctm=ty:0.0 → device(327,1147)
+20:15:36 [gutter-mtx] "60" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "60" @(327,1146) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "61" @(327,1158) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "61" @(327,1165) ctm=ty:0.0 → device(327,1165)
+20:15:36 [gutter-mtx] "61" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "61" @(327,1165) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "62" @(327,1176) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "62" @(327,1183) ctm=ty:0.0 → device(327,1183)
+20:15:36 [gutter-mtx] "62" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "62" @(327,1183) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "63" @(327,1194) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "63" @(327,1202) ctm=ty:0.0 → device(327,1202)
+20:15:36 [gutter-mtx] "63" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "63" @(327,1201) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "64" @(340,1212) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "64" @(340,1220) ctm=ty:0.0 → device(340,1220)
+20:15:36 [gutter-mtx] "64" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "64" @(339,1219) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "65" @(340,1231) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "65" @(340,1238) ctm=ty:0.0 → device(340,1238)
+20:15:36 [gutter-mtx] "65" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "65" @(339,1237) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "66" @(340,1249) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "66" @(340,1256) ctm=ty:0.0 → device(340,1256)
+20:15:36 [gutter-mtx] "66" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "66" @(339,1256) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "67" @(340,1267) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "67" @(340,1274) ctm=ty:0.0 → device(340,1274)
+20:15:36 [gutter-mtx] "67" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "67" @(339,1274) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "68" @(340,1285) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "68" @(340,1293) ctm=ty:0.0 → device(340,1293)
+20:15:36 [gutter-mtx] "68" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "68" @(339,1292) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "69" @(340,1303) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "69" @(340,1311) ctm=ty:0.0 → device(340,1311)
+20:15:36 [gutter-mtx] "69" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "69" @(339,1310) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "70" @(340,1322) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "70" @(340,1329) ctm=ty:0.0 → device(340,1329)
+20:15:36 [gutter-mtx] "70" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "70" @(339,1328) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "71" @(340,1340) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "71" @(340,1347) ctm=ty:0.0 → device(340,1347)
+20:15:36 [gutter-mtx] "71" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "71" @(339,1347) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "72" @(340,1358) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "72" @(340,1365) ctm=ty:0.0 → device(340,1365)
+20:15:36 [gutter-mtx] "72" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "72" @(339,1365) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "73" @(340,1376) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "73" @(340,1384) ctm=ty:0.0 → device(340,1384)
+20:15:36 [gutter-mtx] "73" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "73" @(339,1383) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "74" @(340,1394) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "74" @(340,1402) ctm=ty:0.0 → device(340,1402)
+20:15:36 [gutter-mtx] "74" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "74" @(339,1401) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "75" @(340,1413) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "75" @(340,1420) ctm=ty:0.0 → device(340,1420)
+20:15:36 [gutter-mtx] "75" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "75" @(339,1419) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "76" @(340,1431) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "76" @(340,1438) ctm=ty:0.0 → device(340,1438)
+20:15:36 [gutter-mtx] "76" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "76" @(339,1438) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "77" @(340,1449) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "77" @(340,1456) ctm=ty:0.0 → device(340,1456)
+20:15:36 [gutter-mtx] "77" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "77" @(339,1456) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "78" @(340,1467) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "78" @(340,1475) ctm=ty:0.0 → device(340,1475)
+20:15:36 [gutter-mtx] "78" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "78" @(339,1474) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "79" @(340,1485) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "79" @(340,1493) ctm=ty:0.0 → device(340,1493)
+20:15:36 [gutter-mtx] "79" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "79" @(339,1492) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "80" @(340,1504) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "80" @(340,1511) ctm=ty:0.0 → device(340,1511)
+20:15:36 [gutter-mtx] "80" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "80" @(339,1510) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "81" @(340,1522) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "81" @(340,1529) ctm=ty:0.0 → device(340,1529)
+20:15:36 [gutter-mtx] "81" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "81" @(339,1529) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "82" @(340,1540) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "82" @(340,1547) ctm=ty:0.0 → device(340,1547)
+20:15:36 [gutter-mtx] "82" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "82" @(339,1547) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "83" @(340,1558) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "83" @(340,1566) ctm=ty:0.0 → device(340,1566)
+20:15:36 [gutter-mtx] "83" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "83" @(339,1565) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "84" @(340,1576) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "84" @(340,1584) ctm=ty:0.0 → device(340,1584)
+20:15:36 [gutter-mtx] "84" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "84" @(339,1583) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "85" @(340,1595) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "85" @(340,1602) ctm=ty:0.0 → device(340,1602)
+20:15:36 [gutter-mtx] "85" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "85" @(339,1601) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "86" @(340,1613) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "86" @(340,1620) ctm=ty:0.0 → device(340,1620)
+20:15:36 [gutter-mtx] "86" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "86" @(339,1620) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "87" @(340,1631) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "87" @(340,1638) ctm=ty:0.0 → device(340,1638)
+20:15:36 [gutter-mtx] "87" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "87" @(339,1638) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "88" @(340,1649) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "88" @(340,1657) ctm=ty:0.0 → device(340,1657)
+20:15:36 [gutter-mtx] "88" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "88" @(339,1656) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "89" @(340,1667) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "89" @(340,1675) ctm=ty:0.0 → device(340,1675)
+20:15:36 [gutter-mtx] "89" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "89" @(339,1674) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "90" @(340,1686) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "90" @(340,1693) ctm=ty:0.0 → device(340,1693)
+20:15:36 [gutter-mtx] "90" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "90" @(339,1692) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "91" @(340,1704) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "91" @(340,1711) ctm=ty:0.0 → device(340,1711)
+20:15:36 [gutter-mtx] "91" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "91" @(339,1711) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "92" @(340,1722) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "92" @(340,1729) ctm=ty:0.0 → device(340,1729)
+20:15:36 [gutter-mtx] "92" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "92" @(339,1729) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "93" @(340,1740) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "93" @(340,1748) ctm=ty:0.0 → device(340,1748)
+20:15:36 [gutter-mtx] "93" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "93" @(339,1747) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "94" @(340,1758) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "94" @(340,1766) ctm=ty:0.0 → device(340,1766)
+20:15:36 [gutter-mtx] "94" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "94" @(339,1765) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "95" @(340,1777) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "95" @(340,1784) ctm=ty:0.0 → device(340,1784)
+20:15:36 [gutter-mtx] "95" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "95" @(339,1783) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "96" @(340,1795) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "96" @(340,1802) ctm=ty:0.0 → device(340,1802)
+20:15:36 [gutter-mtx] "96" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "96" @(339,1802) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "97" @(340,1813) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "97" @(340,1820) ctm=ty:0.0 → device(340,1820)
+20:15:36 [gutter-mtx] "97" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "97" @(339,1820) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "98" @(340,1831) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "98" @(340,1839) ctm=ty:0.0 → device(340,1839)
+20:15:36 [gutter-mtx] "98" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "98" @(339,1838) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "99" @(340,1849) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "99" @(340,1857) ctm=ty:0.0 → device(340,1857)
+20:15:36 [gutter-mtx] "99" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "99" @(339,1856) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "100" @(332,1868) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "100" @(332,1875) ctm=ty:0.0 → device(332,1875)
+20:15:36 [gutter-mtx] "100" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "100" @(332,1874) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "101" @(332,1886) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "101" @(332,1893) ctm=ty:0.0 → device(332,1893)
+20:15:36 [gutter-mtx] "101" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "101" @(332,1893) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "102" @(332,1904) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "102" @(332,1911) ctm=ty:0.0 → device(332,1911)
+20:15:36 [gutter-mtx] "102" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "102" @(332,1911) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "103" @(332,1922) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "103" @(332,1930) ctm=ty:0.0 → device(332,1930)
+20:15:36 [gutter-mtx] "103" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "103" @(332,1929) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "104" @(332,1940) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "104" @(332,1948) ctm=ty:0.0 → device(332,1948)
+20:15:36 [gutter-mtx] "104" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "104" @(332,1947) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "105" @(332,1959) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "105" @(332,1966) ctm=ty:0.0 → device(332,1966)
+20:15:36 [gutter-mtx] "105" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "105" @(332,1965) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "106" @(332,1977) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "106" @(332,1984) ctm=ty:0.0 → device(332,1984)
+20:15:36 [gutter-mtx] "106" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "106" @(332,1984) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "107" @(332,1995) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "107" @(332,2002) ctm=ty:0.0 → device(332,2002)
+20:15:36 [gutter-mtx] "107" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "107" @(332,2002) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "108" @(332,2013) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "108" @(332,2021) ctm=ty:0.0 → device(332,2021)
+20:15:36 [gutter-mtx] "108" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "108" @(332,2020) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "109" @(332,2031) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "109" @(332,2039) ctm=ty:0.0 → device(332,2039)
+20:15:36 [gutter-mtx] "109" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "109" @(332,2038) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "110" @(332,2050) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "110" @(332,2057) ctm=ty:0.0 → device(332,2057)
+20:15:36 [gutter-mtx] "110" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "110" @(332,2056) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "111" @(332,2068) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "111" @(332,2075) ctm=ty:0.0 → device(332,2075)
+20:15:36 [gutter-mtx] "111" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "111" @(332,2075) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "112" @(332,2086) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "112" @(332,2093) ctm=ty:0.0 → device(332,2093)
+20:15:36 [gutter-mtx] "112" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "112" @(332,2093) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "113" @(332,2104) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "113" @(332,2112) ctm=ty:0.0 → device(332,2112)
+20:15:36 [gutter-mtx] "113" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "113" @(332,2111) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "114" @(332,2122) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "114" @(332,2130) ctm=ty:0.0 → device(332,2130)
+20:15:36 [gutter-mtx] "114" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "114" @(332,2129) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "115" @(332,2141) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "115" @(332,2148) ctm=ty:0.0 → device(332,2148)
+20:15:36 [gutter-mtx] "115" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "115" @(332,2147) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "116" @(332,2159) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "116" @(332,2166) ctm=ty:0.0 → device(332,2166)
+20:15:36 [gutter-mtx] "116" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "116" @(332,2166) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "117" @(332,2177) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "117" @(332,2184) ctm=ty:0.0 → device(332,2184)
+20:15:36 [gutter-mtx] "117" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "117" @(332,2184) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "118" @(332,2195) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "118" @(332,2203) ctm=ty:0.0 → device(332,2203)
+20:15:36 [gutter-mtx] "118" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "118" @(332,2202) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "119" @(332,2213) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "119" @(332,2221) ctm=ty:0.0 → device(332,2221)
+20:15:36 [gutter-mtx] "119" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "119" @(332,2220) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "120" @(332,2232) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "120" @(332,2239) ctm=ty:0.0 → device(332,2239)
+20:15:36 [gutter-mtx] "120" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "120" @(332,2238) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "121" @(332,2250) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "121" @(332,2257) ctm=ty:0.0 → device(332,2257)
+20:15:36 [gutter-mtx] "121" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "121" @(332,2257) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "122" @(332,2268) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "122" @(332,2275) ctm=ty:0.0 → device(332,2275)
+20:15:36 [gutter-mtx] "122" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "122" @(332,2275) pixel=#000000 col=#6e7681
+20:15:36 [gutter-draw] "123" @(332,2286) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw-canvas] "123" @(332,2294) ctm=ty:0.0 → device(332,2294)
+20:15:36 [gutter-mtx] "123" scaleX=1.00 skewY=0.00 ty=0.00 clip=(327,60,32x538) ok=true
+20:15:36 [gutter-raw] "123" @(332,2293) pixel=#000000 col=#6e7681
+20:15:36 [layer-ctm] DIV.cm-gutter cm-foldGutter ctm_ty=0.0 hasClip=true scrollT=(0.0,1200.0)
+20:15:36 [gutter-draw] "›" @(359,65) segs=1 vis="hidden" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw] "∨" @(359,779) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw] "∨" @(359,888) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw] "∨" @(359,997) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw] "∨" @(359,1107) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw] "∨" @(359,1216) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw] "∨" @(359,1325) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw] "∨" @(359,1434) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw] "∨" @(359,1543) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw] "∨" @(359,1653) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw] "∨" @(359,1762) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw] "∨" @(359,1871) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw] "∨" @(359,1980) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw] "∨" @(359,2089) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [gutter-draw] "∨" @(359,2199) segs=1 vis="visible" colA=255 color=(110,118,129) font=("JetBrains Mono\", \"Cascadia Code\", \"Fira Code\", monospace",13.0,"400","normal")
+20:15:36 [layer-ctm] DIV.bottom-panel ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.panel-content ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.term-tabs ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [gutter-draw] "终端 1" @(353,608) segs=3 vis="visible" colA=255 color=(230,237,243) font=("Inter\", system-ui, -apple-system, sans-serif",12.0,"400","normal")
+20:15:36 [layer-ctm] SPAN.term-tab-close ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] BUTTON.term-tab term-panel-close ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.term-content ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.term-xterm-wrap ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.xterm xterm-dom-renderer-owner-1 terminal ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.xterm-viewport ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.xterm-scrollable-element  ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.xterm-screen ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.xterm-selection ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.xterm-helpers ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] TEXTAREA.xterm-helper-textarea ctm_ty=0.0 hasClip=false scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] SPAN.xterm-char-measure-element ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] SPAN.xterm-char-measure-element ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] SPAN.xterm-char-measure-element ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] SPAN.xterm-char-measure-element ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.invisible scrollbar horizontal ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.slider ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.invisible scrollbar vertical ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.slider ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.panel-resizer ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.right-container ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.right-panel ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.rp-body ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.chat-area ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.chat-messages ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.chat-empty ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.chat-empty-icon ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.chat-empty-hint ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.ibb-btns ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.input-resizer ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.conv-sidebar ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.conv-list ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.cache-ring-wrap ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.cache-ring-label ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.ctx-bar ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.comp-bar ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] SPAN.status-item ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [gutter-draw] "未加载" @(8,782) segs=3 vis="visible" colA=255 color=(255,255,255) font=("Inter\", system-ui, -apple-system, sans-serif",11.0,"400","normal")
+20:15:36 [layer-ctm] SPAN.status-item ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] SPAN.status-item ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] SPAN.status-item ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] SPAN.status-item connected ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.sidebar ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [gutter-draw] "文件浏览器" @(60,39) segs=5 vis="visible" colA=255 color=(139,148,158) font=("Inter\", system-ui, -apple-system, sans-serif",11.0,"400","normal")
+20:15:36 [layer-ctm] DIV.sidebar-content ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [gutter-draw] "工作区" @(56,69) segs=3 vis="visible" colA=255 color=(110,118,129) font=("Inter\", system-ui, -apple-system, sans-serif",11.0,"600","normal")
+20:15:36 [gutter-draw] "项目" @(177,169) segs=2 vis="visible" colA=255 color=(110,118,129) font=("Inter\", system-ui, -apple-system, sans-serif",10.0,"600","normal")
+20:15:36 [layer-ctm] DIV.ws-section ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [gutter-draw] "暂无工作区" @(132,120) segs=5 vis="visible" colA=255 color=(110,118,129) font=("Inter\", system-ui, -apple-system, sans-serif",12.0,"400","normal")
+20:15:36 [gutter-draw] "创建" @(208,113) segs=2 vis="visible" colA=255 color=(0,0,0) font=("Inter\", system-ui, -apple-system, sans-serif",12.0,"400","normal")
+20:15:36 [layer-ctm] DIV.project-section ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [gutter-draw] "请先选择工作区" @(145,211) segs=7 vis="visible" colA=255 color=(110,118,129) font=("Inter\", system-ui, -apple-system, sans-serif",12.0,"400","normal")
+20:15:36 [layer-ctm] DIV.sidebar-resizer ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+20:15:36 [layer-ctm] DIV.toast-container ctm_ty=0.0 hasClip=true scrollT=(0.0,0.0)
+[g2t] "999" @(332,62) segs=1
+[g2t] "39" @(340,757) segs=1
+[g2t] "40" @(327,776) segs=1
+[g2t] "41" @(327,794) segs=1
+[g2t] "42" @(327,812) segs=1
+[g2t] "43" @(327,830) segs=1
+[g2t] "44" @(327,848) segs=1
+[g2t] "45" @(327,867) segs=1
+[g2t] "46" @(327,885) segs=1
+[g2t] "47" @(327,903) segs=1
+[g2t] "48" @(327,921) segs=1
+[g2t] "49" @(327,939) segs=1
+[g2t] "50" @(327,958) segs=1
+[g2t] "51" @(327,976) segs=1
+[g2t] "52" @(327,994) segs=1
+[g2t] "53" @(327,1012) segs=1
+[g2t] "54" @(327,1030) segs=1
+[g2t] "55" @(327,1049) segs=1
+[g2t] "56" @(327,1067) segs=1
+[g2t] "57" @(327,1085) segs=1
+[g2t] "58" @(327,1103) segs=1
+[g2t] "59" @(327,1121) segs=1
+[g2t] "60" @(327,1140) segs=1
+[g2t] "61" @(327,1158) segs=1
+[g2t] "62" @(327,1176) segs=1
+[g2t] "63" @(327,1194) segs=1
+[g2t] "64" @(340,1212) segs=1
+[g2t] "65" @(340,1231) segs=1
+[g2t] "66" @(340,1249) segs=1
+[g2t] "67" @(340,1267) segs=1
+[g2t] "68" @(340,1285) segs=1
+[g2t] "69" @(340,1303) segs=1
+[g2t] "70" @(340,1322) segs=1
+[g2t] "71" @(340,1340) segs=1
+[g2t] "72" @(340,1358) segs=1
+[g2t] "73" @(340,1376) segs=1
+[g2t] "74" @(340,1394) segs=1
+[g2t] "75" @(340,1413) segs=1
+[g2t] "76" @(340,1431) segs=1
+[g2t] "77" @(340,1449) segs=1
+[g2t] "78" @(340,1467) segs=1
+[g2t] "79" @(340,1485) segs=1
+[g2t] "80" @(340,1504) segs=1
+[g2t] "81" @(340,1522) segs=1
+[g2t] "82" @(340,1540) segs=1
+[g2t] "83" @(340,1558) segs=1
+[g2t] "84" @(340,1576) segs=1
+[g2t] "85" @(340,1595) segs=1
+[g2t] "86" @(340,1613) segs=1
+[g2t] "87" @(340,1631) segs=1
+[g2t] "88" @(340,1649) segs=1
+[g2t] "89" @(340,1667) segs=1
+[g2t] "90" @(340,1686) segs=1
+[g2t] "91" @(340,1704) segs=1
+[g2t] "92" @(340,1722) segs=1
+[g2t] "93" @(340,1740) segs=1
+[g2t] "94" @(340,1758) segs=1
+[g2t] "95" @(340,1777) segs=1
+[g2t] "96" @(340,1795) segs=1
+[g2t] "97" @(340,1813) segs=1
+[g2t] "98" @(340,1831) segs=1
+[g2t] "99" @(340,1849) segs=1
+[g2t] "100" @(332,1868) segs=1
+[g2t] "101" @(332,1886) segs=1
+[g2t] "102" @(332,1904) segs=1
+[g2t] "103" @(332,1922) segs=1
+[g2t] "104" @(332,1940) segs=1
+[g2t] "105" @(332,1959) segs=1
+[g2t] "106" @(332,1977) segs=1
+[g2t] "107" @(332,1995) segs=1
+[g2t] "108" @(332,2013) segs=1
+[g2t] "109" @(332,2031) segs=1
+[g2t] "110" @(332,2050) segs=1
+[g2t] "111" @(332,2068) segs=1
+[g2t] "112" @(332,2086) segs=1
+[g2t] "113" @(332,2104) segs=1
+[g2t] "114" @(332,2122) segs=1
+[g2t] "115" @(332,2141) segs=1
+[g2t] "116" @(332,2159) segs=1
+[g2t] "117" @(332,2177) segs=1
+[g2t] "118" @(332,2195) segs=1
+[g2t] "119" @(332,2213) segs=1
+[g2t] "120" @(332,2232) segs=1
+[g2t] "121" @(332,2250) segs=1
+[g2t] "122" @(332,2268) segs=1
+[g2t] "123" @(332,2286) segs=1
+[g2t] "›" @(359,65) segs=1
+[g2t] "∨" @(359,779) segs=1
+[g2t] "∨" @(359,888) segs=1
+[g2t] "∨" @(359,997) segs=1
+[g2t] "∨" @(359,1107) segs=1
+[g2t] "∨" @(359,1216) segs=1
+[g2t] "∨" @(359,1325) segs=1
+[g2t] "∨" @(359,1434) segs=1
+[g2t] "∨" @(359,1543) segs=1
+[g2t] "∨" @(359,1653) segs=1
+[g2t] "∨" @(359,1762) segs=1
+[g2t] "∨" @(359,1871) segs=1
+[g2t] "∨" @(359,1980) segs=1
+[g2t] "∨" @(359,2089) segs=1
+[g2t] "∨" @(359,2199) segs=1
+[g2] gutter 内对象数=336 RenderText=439
+[g2] scroller BoxScrollOffset=(0,1200) after-rebuild
+[g2] cm-gutters DOM 数=1
+[g2] gutter box found: RenderBox (327,60) 45x12075
+[g2] cm-content box found: RenderBox (372,60)
+[g3] childCount=2|col0=[cm-gutter cm-lineNumbers] els=86|  "999"@-1140|  "39"@-444|  "40"@-426|col1=[cm-gutter cm-foldGutter] els=15|  "›"@-1140|  "∨"@-426|  "∨"@-317|gutters[minH]=12074.599999999997px offH=12075 rectH=12075 disp=flex h=100%|gutters[parent]=cm-scroller rectH=538 disp=flex
+DONE
