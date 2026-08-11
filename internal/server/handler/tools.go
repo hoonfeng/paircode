@@ -105,7 +105,7 @@ func HandleToolsSave(w http.ResponseWriter, r *http.Request) {
 		agenttools.RegisterManagementTools(reg, root)
 		SetToolsRegistry(reg)
 	}
-	agent.LoadWorkspaceToolConfig(reg, root)
+	agent.LoadAllWorkspaceToolConfigs(reg, root)
 
 	jsonResp(w, map[string]string{"status": "ok"})
 }

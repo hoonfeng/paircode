@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -45,7 +46,13 @@ func (p *bgProc) snapshot() (out string, done bool, exitErr string) {
 	return p.buf.String(), p.done, p.exitErr
 }
 
-// bgRegistry 后台进程注册表（并发安全；每个 Registry 一份，跨 agent 轮次存活）。
+// bgRegistry 后台进程注册表（并发安全；全局单例 globalBG，跨 agent 轮次存活）。
+// ★ globalBG 必须为包级单例：Registry 在每次发消息/每轮对话都会重建（web_server.go
+//   buildWebLoopOpts 调 RegisterDefaultTools 新建 Registry），若 bgRegistry 随之重建，
+//   上一轮 run_background 启动的进程（含已结束进程的输出缓冲）将在下一轮丢失——
+//   read_output 读不到、kill_process 找不到 id。提升为全局后进程与输出跨轮保留。
+var globalBG = &bgRegistry{procs: map[int]*bgProc{}}
+
 type bgRegistry struct {
 	mu    sync.Mutex
 	procs map[int]*bgProc
@@ -58,6 +65,7 @@ func (bg *bgRegistry) start(command, dir string) (int, error) {
 	id := bg.next
 	p := &bgProc{}
 	bg.procs[id] = p
+	bg.cleanupLocked() // 顺带清理超龄已完成记录（防长时间运行内存泄漏）
 	bg.mu.Unlock()
 
 	c := exec.Command("cmd", "/C", "chcp 65001 >nul & "+command)
@@ -95,6 +103,32 @@ func (bg *bgRegistry) get(id int) *bgProc {
 	defer bg.mu.Unlock()
 	return bg.procs[id]
 }
+
+// cleanupLocked 清理已完成且超龄的进程记录（调用方须持有 bg.mu）。
+// 仅保留最近 keepDone 个已结束进程（其输出缓冲仍可读），运行中的永不清理。
+func (bg *bgRegistry) cleanupLocked() {
+	const keepDone = 24
+	var doneIDs []int
+	for id, p := range bg.procs {
+		if p == nil {
+			continue
+		}
+		p.mu.Lock()
+		done := p.done
+		p.mu.Unlock()
+		if done {
+			doneIDs = append(doneIDs, id)
+		}
+	}
+	if len(doneIDs) <= keepDone {
+		return
+	}
+	sort.Ints(doneIDs)
+	for _, id := range doneIDs[:len(doneIDs)-keepDone] {
+		delete(bg.procs, id)
+	}
+}
+
 func registerShellTools(r *Registry, bg *bgRegistry, root string) {
 	// run_background / read_output / kill_process — 3 个后台命令工具共享同一份 bgRegistry。
 	r.Register(&Tool{
@@ -159,12 +193,13 @@ func registerShellTools(r *Registry, bg *bgRegistry, root string) {
 			if p == nil {
 				return "", fmt.Errorf("无此后台进程 id")
 			}
-		if p.cmd != nil && p.cmd.Process != nil {
-			killProcessTree(p.cmd.Process.Pid)
-		}
-		return fmt.Sprintf("已停止 id=%d", id), nil
-	},
-})
+			// 已结束的进程也允许调用（kill 幂等，用于收尾确认）
+			if p.cmd != nil && p.cmd.Process != nil {
+				killProcessTree(p.cmd.Process.Pid)
+			}
+			return fmt.Sprintf("已停止 id=%d", id), nil
+		},
+	})
 }
 
 // killProcessTree 杀进程树（Windows: taskkill /T；Unix: 进程组 SIGKILL）。

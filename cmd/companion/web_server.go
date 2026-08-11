@@ -169,8 +169,10 @@ func startWebUI(port int) {
 		agent.RegisterDefaultTools(initReg, root)
 		agent.RegisterCommitMessageTool(initReg)
 		agenttools.RegisterManagementTools(initReg, root)
-		// 自动初始化 .pair/tools.json（不存在则创建）
-		agent.LoadWorkspaceToolConfig(initReg, root)
+		// 自动初始化 .pair/tools.json（不存在则创建）；多项目配置一并应用
+		agent.LoadAllWorkspaceToolConfigs(initReg, root)
+		// 参考注册表也加载 Lua 自定义工具（多项目），保证 /api/tools 工具面板可见
+		reloadWebLuaTools(initReg, root)
 		handler.SetToolsRegistry(initReg)
 		log.Printf("[WebUI] 参考工具注册表已初始化（%d 个工具）", len(initReg.AllToolMeta()))
 	}
@@ -2231,12 +2233,12 @@ func countStates(states []*agent.ExecutionState, status agent.ExecStatus) int {
 	return n
 }
 
-// reloadWebLuaTools 加载工作区 .pair/tools/*.lua 自定义工具。
+// reloadWebLuaTools 加载工作区所有项目的 .pair/tools/*.lua 自定义工具。
 func reloadWebLuaTools(reg *agent.Registry, root string) {
 	if !core.Settings.LuaTools {
 		return
 	}
-	agent.LoadLuaTools(reg, filepath.Join(root, ".pair", "tools"))
+	agent.LoadAllProjectLuaTools(reg, root)
 }
 
 // buildWebLoopOpts 构建 agent.LoopOpts（统一版本，平台差异通过 webCompressor 回调）。
@@ -2271,9 +2273,9 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 		agent.RegisterMCPServers(reg, agentCfgs)
 	}
 
-	// ★ 应用工作区工具配置（.pair/tools.json）
+	// ★ 应用工作区工具配置（.pair/tools.json，多项目：每个项目自己的配置都生效）
 	// 必须在 if 块外无条件执行：即使 MCP 配置为空，工具开关/审核配置也要生效。
-	agent.LoadWorkspaceToolConfig(reg, root)
+	agent.LoadAllWorkspaceToolConfigs(reg, root)
 
 	reloadWebLuaTools(reg, root)
 	agent.SetCodeGraphDB(agentMgr.RawDB())

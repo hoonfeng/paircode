@@ -4,12 +4,14 @@ package agent
 
 import (
 	"context"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
 )
 
 // TestRunBackground 后台启动 echo → 轮询 read_output 至结束 → 输出含 echo 内容。
+// ★ id 断言放宽：bgRegistry 为全局单例（跨轮次存活），同一进程内测试顺序不同 id 可能非 1。
 func TestRunBackground(t *testing.T) {
 	r := NewRegistry()
 	RegisterDefaultTools(r, t.TempDir())
@@ -19,13 +21,15 @@ func TestRunBackground(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, "id=1") {
-		t.Fatalf("应返回 id=1，得 %q", out)
+	m := regexp.MustCompile(`id=(\d+)`).FindStringSubmatch(out)
+	if m == nil {
+		t.Fatalf("应返回进程 id，得 %q", out)
 	}
+	idArg := `{"id":` + m[1] + `}`
 
 	var ro string
 	for i := 0; i < 200; i++ { // 轮询至结束（echo 很快）
-		ro, _ = r.Execute(ctx, "read_output", `{"id":1}`)
+		ro, _ = r.Execute(ctx, "read_output", idArg)
 		if strings.Contains(ro, "已结束") {
 			break
 		}

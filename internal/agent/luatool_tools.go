@@ -19,16 +19,21 @@ import (
 )
 
 func registerLuaToolTools(r *Registry, root string) {
-	toolsDir := filepath.Join(root, ".pair", "tools")
+	// ★ 多项目支持：toolsDir 在每个 Handler 内按 project 参数动态解析（resolveLuaToolsDir），
+	//   默认主项目（root），可指定工作区其他项目（项目名或路径）。
 
 	// ── lua_tool_list ──
 	r.Register(&Tool{
 		Name:        "lua_tool_list",
 		UsageGuide:  "列出所有 Lua 自定义工具（.pair/tools/ 下的 .lua 脚本）。先查已有哪些自定义工具再决定是否需要新建。",
-		Description: "列出所有 Lua 自定义工具（工作区 .pair/tools/ 目录下的 .lua 脚本）。显示名称、描述和参数概要。",
-		Parameters:  objSchema(props{}),
+		Description: "列出所有 Lua 自定义工具（工作区 .pair/tools/ 目录下的 .lua 脚本）。显示名称、描述和参数概要。可用 project 参数查看指定项目（多项目工作区）。",
+		Parameters:  objSchema(props{"project": strProp("可选：目标项目（工作区根目录名或路径，默认主项目）")}),
 		ReadOnly:    true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			toolsDir, err := resolveLuaToolsDir(root, argStr(args, "project"))
+			if err != nil {
+				return "", err
+			}
 			entries, err := os.ReadDir(toolsDir)
 			if err != nil {
 				if os.IsNotExist(err) {
@@ -84,9 +89,14 @@ func registerLuaToolTools(r *Registry, root string) {
 			"description": strProp("工具描述，说明功能和用法，如 \"统计文本字数\"。由 agent 推断并填写"),
 			"parameters":  strProp("参数 JSON Schema，JSON 对象字符串，如 {\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"文本\"}},\"required\":[\"text\"]}。由 agent 根据任务需求推断，无参数则省略。"),
 			"code":        strProp("run 函数的 Lua 代码（不含 function(args) 外层包装）。通过 args.参数名 访问参数，return 结果字符串。可调用 agent.run_command({command=...}) 执行 shell。"),
+			"project":     strProp("可选：目标项目（工作区根目录名或路径，默认主项目）"),
 		}, "name", "description", "code"),
 		RequiresApproval: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			toolsDir, err := resolveLuaToolsDir(root, argStr(args, "project"))
+			if err != nil {
+				return "", err
+			}
 			name := argStr(args, "name")
 			desc := argStr(args, "description")
 			code := argStr(args, "code")
@@ -156,9 +166,14 @@ func registerLuaToolTools(r *Registry, root string) {
 			"description": strProp("可选：新的描述"),
 			"parameters":  strProp("可选：新的 JSON Schema 字符串"),
 			"code":        strProp("可选：新的 run 函数 Lua 代码体（不含 function(args) 包装），不传则保留原有代码"),
+			"project":     strProp("可选：目标项目（工作区根目录名或路径，默认主项目）"),
 		}, "name"),
 		RequiresApproval: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			toolsDir, err := resolveLuaToolsDir(root, argStr(args, "project"))
+			if err != nil {
+				return "", err
+			}
 			name := argStr(args, "name")
 			if name == "" {
 				return "", fmt.Errorf("name 不能为空")
@@ -226,9 +241,13 @@ func registerLuaToolTools(r *Registry, root string) {
 		Name:             "lua_tool_delete",
 		UsageGuide:       "删除一个 Lua 自定义工具。按 name 查找 .pair/tools/ 下对应 .lua 文件并删除。需审核批准。",
 		Description:      "删除一个 Lua 自定义工具。按 name 查找 .pair/tools/ 下对应的 .lua 文件并删除。此操作不可逆。",
-		Parameters:       objSchema(props{"name": strProp("要删除的工具名称")}, "name"),
+		Parameters:       objSchema(props{"name": strProp("要删除的工具名称"), "project": strProp("可选：目标项目（工作区根目录名或路径，默认主项目）")}, "name"),
 		RequiresApproval: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			toolsDir, err := resolveLuaToolsDir(root, argStr(args, "project"))
+			if err != nil {
+				return "", err
+			}
 			name := argStr(args, "name")
 			if name == "" {
 				return "", fmt.Errorf("name 不能为空")
@@ -250,6 +269,46 @@ func registerLuaToolTools(r *Registry, root string) {
 }
 
 // ─── 辅助 ──────────────────────────────────────────────────
+
+// resolveLuaToolsDir 解析 Lua 工具目录：project 为空 → 主项目 .pair/tools；
+// project 为工作区某根目录路径或其 basename（项目名）→ 该项目 .pair/tools；未匹配 → 报错。
+func resolveLuaToolsDir(primaryRoot, project string) (string, error) {
+	if strings.TrimSpace(project) == "" {
+		return filepath.Join(primaryRoot, ".pair", "tools"), nil
+	}
+	proj := filepath.Clean(project)
+	roots := orderedRoots(primaryRoot)
+	// 绝对路径 / 相对 primary 的路径 → 直接匹配根目录
+	for _, wr := range roots {
+		if samePath(wr, proj) || strings.EqualFold(filepath.Base(wr), proj) {
+			return filepath.Join(wr, ".pair", "tools"), nil
+		}
+	}
+	if !filepath.IsAbs(proj) {
+		full := filepath.Join(primaryRoot, proj)
+		for _, wr := range roots {
+			if samePath(wr, full) {
+				return filepath.Join(wr, ".pair", "tools"), nil
+			}
+		}
+	}
+	return "", fmt.Errorf("未找到项目 %q（工作区根目录：%v）。project 应为工作区根目录名（如 wb-ui）或完整路径。",
+		project, workspaceRootNames(primaryRoot))
+}
+
+// workspaceRootNames 返回工作区各根目录的 basename 列表（错误提示用）。
+func workspaceRootNames(primaryRoot string) []string {
+	var names []string
+	for _, wr := range orderedRoots(primaryRoot) {
+		names = append(names, filepath.Base(wr))
+	}
+	return names
+}
+
+// samePath 比较两个路径是否指向同一位置（Windows 不区分大小写）。
+func samePath(a, b string) bool {
+	return strings.EqualFold(filepath.Clean(a), filepath.Clean(b))
+}
 
 // sanitizeLuaName 将工具名 sanitize 为安全的文件名（小写字母数字下划线）。
 func sanitizeLuaName(name string) string {

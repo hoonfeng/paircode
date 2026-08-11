@@ -341,9 +341,7 @@ func main() {
 		}
 	}
 	dumpGutters("scrolled400")
-	wv.RebuildRenderTree()
-	wv.EnsureLayout()
-	fmt.Println("[shot1] 滚动后截图")
+	fmt.Println("[shot1] 滚动后截图（无 rebuild）")
 	shot(wv, wd, "edit_scroll1.png")
 
 	// ③ 滚动到中部（1200px）
@@ -360,10 +358,115 @@ func main() {
 	time.Sleep(200 * time.Millisecond)
 	runJobs(wv)
 	dumpGutters("scrolled1200")
+	// ★ paint 状态：dirty check 是否启用（决定 walk 剪枝）
+	if rv := wv.RenderView(); rv != nil {
+		fmt.Printf("[g2] pre-shot IsDirty=%v HasBoxScroll=%v offsetCount=%d scrollY=%.0f\n",
+			rv.IsDirty(), rv.HasBoxScrollOffset(), rv.ScrollOffsetCount(), func() float64 {
+				_, sy := rv.ScrollOffset()
+				return sy
+			}())
+	}
 	wv.RebuildRenderTree()
 	wv.EnsureLayout()
-	fmt.Println("[shot2] 滚动1200截图")
+	fmt.Println("[shot2] 滚动1200截图（rebuild）")
 	shot(wv, wd, "edit_scroll2.png")
+
+	// ★ 滚动 1200 后渲染树 gutter 元素 dump（行号元素实际位置）
+	{
+		rv := wv.RenderView()
+		if rv != nil {
+			found := 0
+			textCount := 0
+			var walk func(ro rendering.RenderObject, depth int, inGutter bool)
+			walk = func(ro rendering.RenderObject, depth int, inGutter bool) {
+				if ro == nil {
+					return
+				}
+				var cls, txt string
+				if el, ok := ro.Node().(*dom.Element); ok {
+					cls = el.ClassName()
+				}
+				if rt, ok := ro.(*rendering.RenderText); ok {
+					txt = rt.Text()
+					textCount++
+				}
+				if strings.Contains(cls, "cm-gutters") {
+					inGutter = true
+				}
+				if inGutter {
+					found++
+					if rt, ok := ro.(*rendering.RenderText); ok && txt != "" {
+						var x, y float64
+						nseg := 0
+						if segs := rt.Segments(); len(segs) > 0 {
+							x, y = segs[0].X, segs[0].Y
+							nseg = len(segs)
+						}
+						fmt.Printf("[g2t] %q @(%.0f,%.0f) segs=%d\n", txt, x, y, nseg)
+					}
+				}
+				for c := ro.FirstChild(); c != nil; c = c.NextSibling() {
+					walk(c, depth+1, inGutter)
+				}
+			}
+			walk(rv, 0, false)
+			fmt.Printf("[g2] gutter 内对象数=%d RenderText=%d\n", found, textCount)
+		}
+		// ★ 验证：重建后 scroller 的 BoxScrollOffset 是否保留（painter 平移依据）
+		if fr := wv.MainFrame().Frame(); fr != nil {
+			if doc := fr.Document(); doc != nil {
+				els := doc.GetElementsByClassName("cm-scroller")
+				if len(els) > 0 {
+					if sb := rv.FindRenderBoxForNode(els[0]); sb != nil {
+						ox, oy := rv.BoxScrollOffset(sb)
+						fmt.Printf("[g2] scroller BoxScrollOffset=(%.0f,%.0f) after-rebuild\n", ox, oy)
+					} else {
+						fmt.Println("[g2] scroller box NOT FOUND after rebuild")
+					}
+				}
+				// ★ gutter DOM 存在性 vs 渲染树
+				gs := doc.GetElementsByClassName("cm-gutters")
+				fmt.Printf("[g2] cm-gutters DOM 数=%d\n", len(gs))
+				for _, g := range gs {
+					gb := rv.FindRenderBoxForNode(g)
+					if gb != nil {
+						fmt.Printf("[g2] gutter box found: %s (%.0f,%.0f) %.0fx%.0f\n",
+							gb.RenderName(), gb.X(), gb.Y(), gb.Width(), gb.Height())
+					} else {
+						fmt.Println("[g2] gutter box NOT in render tree")
+					}
+				}
+				// 内容行 DOM vs 渲染树
+				cs := doc.GetElementsByClassName("cm-content")
+				for _, c := range cs {
+					cb := rv.FindRenderBoxForNode(c)
+					if cb != nil {
+						fmt.Printf("[g2] cm-content box found: %s (%.0f,%.0f)\n",
+							cb.RenderName(), cb.X(), cb.Y())
+					} else {
+						fmt.Println("[g2] cm-content box NOT in render tree")
+					}
+				}
+			}
+		}
+		// ★ JS dump 全部 gutter 元素（文本 + rect + 父列）
+		fmt.Println("[g3] " + js(wv, `(function(){
+			var g = document.querySelector('.cm-gutters');
+			if (!g) return 'no-gutters';
+			var out = [];
+			out.push('childCount=' + g.children.length);
+			for (var c = 0; c < g.children.length; c++) {
+				var col = g.children[c];
+				var els = col.querySelectorAll('.cm-gutterElement');
+				out.push('col' + c + '=[' + col.className + '] els=' + els.length);
+				for (var i = 0; i < els.length && i < 3; i++) {
+					var r = els[i].getBoundingClientRect();
+					out.push('  "' + els[i].textContent + '"@' + r.top.toFixed(0));
+				}
+			}
+			return out.join('|');
+		})()`))
+	}
 	fmt.Println("DONE")
 }
 

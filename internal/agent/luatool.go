@@ -59,6 +59,22 @@ func LoadLuaTools(r *Registry, dir string) []string {
 	return loaded
 }
 
+// LoadAllProjectLuaTools 加载工作区【所有项目】的 .pair/tools/*.lua 自定义工具。
+// 多项目支持：每个项目目录下可放自己的 .pair/tools/*.lua，agent 应能感知并使用。
+// 加载顺序：先其他项目、后 primary（primary 同名工具覆盖其他项目，优先级最高）。
+// 返回成功注册的工具名（含来源项目标注，便于排查同名冲突）。
+func LoadAllProjectLuaTools(r *Registry, primaryRoot string) []string {
+	roots := orderedRoots(primaryRoot)
+	var loaded []string
+	for _, rootDir := range roots {
+		names := LoadLuaTools(r, filepath.Join(rootDir, ".pair", "tools"))
+		for _, n := range names {
+			loaded = append(loaded, filepath.Base(rootDir)+"/"+n)
+		}
+	}
+	return loaded
+}
+
 // newSandboxLua 建受限 Lua 状态：base/string/table/math/coroutine + 安全 os 子集。
 // 禁用：io、debug、package、以及 os 库中的危险函数。
 func newSandboxLua() *lua.LState {

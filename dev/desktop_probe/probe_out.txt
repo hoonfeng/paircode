@@ -1,0 +1,519 @@
+[fontmgr] read dir  failed: open : The system cannot find the file specified.
+[fontmgr] loaded 496 system font(s) total
+00:58:19 [Bridge] 初始化桌面端桥接...
+00:58:19 [Bridge] 工作区: 工作区 (3 个文件夹) (3 个文件夹)
+00:58:19 [Bridge] API 已配置: true
+00:58:19 [Bridge] 消息存储已初始化于: F:\\syproject\gou-ide
+00:58:19 [WorkspaceToolConfig] 工具 codegraph_trace_call_chain -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 git_checkout -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 read_file -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 markdown_to_html -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 read_pdf -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 update_tasks -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 word_read -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 bug_fix -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 codegraph_entity_history -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 codegraph_search -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 project_info_explore -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 bug_analyze -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 codegraph_file_structure -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 codegraph_find_by_imports -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 codegraph_find_related_tests -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 run_command -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 web_fetch -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 ask_user -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 debug_cleanup_logs -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 json_to_table -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 lua_tool_update -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 codegraph_callers -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 lua_tool_delete -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 run_test -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 web_debug -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 binary_strings -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 git_blame -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 history_count -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 lua_tool_create -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 mcp_add -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 word_write -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 memory_delete -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 codegraph_git_history -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 codegraph_module_architecture -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 delete_file -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 git_branch -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 history_search -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 load_skill -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 memory_verify -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 skill_delete -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 codegraph_semantic_search -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 csv_read -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 git_log -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 memory_search -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 text_report -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 write_file -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 debug_watch -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 binary_hash -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 codegraph_verify_design -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 go_build -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 skill_write -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 binary_entropy -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 binary_info -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 codegraph_find_by_signature -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 git_commit -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 git_status -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 image_probe -> 禁用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 marketplace_search -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 codegraph_build -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 codegraph_find_dead_code -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 git_diff -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 history_list -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 memory_write -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 project_info_write -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 skill_list -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 write_binary -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 codegraph_stats -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 debug_parse_stack -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 edit_file -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 git_stash -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 inspect_binary -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 git_show -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 lsp_hover -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 project_info_delete -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 codegraph_get_detailed_symbol -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 image_ocr -> 禁用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 mcp_list -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 move_file -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 generate_commit_message -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 mcp_remove -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 read_output -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 task_create -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 debug_evaluate_session -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 binary_patch -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 codegraph_find_entry_points -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 go_run -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 list_files -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 memory_list -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 debug_inject_log -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 codegraph_explore -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 codegraph_impact -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 codegraph_function -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 debug_analyze_output -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 lsp_definition -> 禁用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 read_xlsx -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 write_xlsx -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 binary_find -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 codegraph_pr_context -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 kill_process -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 project_info_read -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 screenshot_window -> 禁用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 search_files -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 codegraph_index_markdown -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 project_info_list -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 run_background -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 codegraph_find_hot_paths -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 codegraph_search_by_pattern -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 csv_write -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 lua_tool_list -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 codegraph_analyze_complexity -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 image_analyze -> 禁用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 load_skill_resource -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 multi_edit -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 debug_run_capture -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 screenshot_desktop -> 禁用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 codegraph_callees -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 search_content -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 web_search -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 project_info_search -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 project_info_verify -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 fix_flex_autoheight -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 codegraph_find_dead_imports -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 marketplace_install -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 memory_read -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 codegraph_search_by_error -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 screenshot_area -> 禁用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 table_stats -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 git_add -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 lsp_diagnostics -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 bug_detect -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 codegraph_get_edit_context -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 lsp_references -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 codegraph_class -> 启用（工作区配置）
+00:58:19 [WorkspaceToolConfig] 工具 codegraph_search_docs -> 启用（工作区配置）
+00:58:19 [Bridge] 参考工具注册表已初始化（128 个工具）
+00:58:19 [Bridge] 已转注册 69 条路由到 wb-ui bridge（两层直调）
+00:58:19 [Bridge] localStorage 持久化: F:\syproject\gou-ide\.pair\ui-state.json
+00:58:19 [Bridge] 完成, 已注册 69 个处理器
+[init] lines=14 | line1text=[package main] | guttersW=32.4 x=327.0 | gutterEls=19 firstH=16.7 | ge0Pad=undefined/undefined minW=20px ta=right mt=0 | ge0Text=[99] w=22.3 | geYs=60.0,64.0,82.2,100.4,118.6,136.8 | lineNumbersW=22.3 | lnPad=undefined/undefined minW=undefined ff=undefined fs=undefined | scrollerX=327.0 w=318.0 | hashLineY=227.8 h=18.2 | hashLineText=[# hash comment test] | hashCharX=365.4 | line0Y=64.0 h=18.2 | line0Pad(pv)=6px/0 dir=false | contentPad(pv)=4px/4px | gutters=[cm-gutter cm-lineNumbers=22.3,cm-gutter cm-foldGutter=9.1,foldEl0: w=9.1 text=[▸] ff=,foldSpan: w=0.0 text=[▸]] | ALLGUTTER=[0]"99"@60.0h16.7w22.3st= sh=0px sm=|[1]"1"@64.0h18.2w22.3st= sh=18.200000000000003px sm=4px|[2]"2"@82.2h18.2w22.3st= sh=18.200000000000003px sm=|[3]"3"@100.4h18.2w22.3st= sh=18.200000000000003px sm=|[4]"4"@118.6h18.2w22.3st= sh=18.200000000000003px sm=|[5]"5"@136.8h18.2w22.3st= sh=18.19999999999999px sm=|[6]"6"@155.0h18.2w22.3st= sh=18.19999999999999px sm=|[7]"7"@173.2h18.2w22.3st= sh=18.19999999999999px sm=|[8]"8"@191.4h18.2w22.3st= sh=18.19999999999999px sm=|[9]"9"@209.6h18.2w22.3st= sh=18.19999999999999px sm=|[10]"10"@227.8h18.2w22.3st= sh=18.19999999999999px sm=|[11]"11"@246.0h18.2w22.3st= sh=18.19999999999999px sm=|[12]"12"@264.2h18.2w22.3st= sh=18.19999999999999px sm=|[13]"13"@282.4h18.2w22.3st= sh=18.19999999999999px sm=|[14]"14"@300.6h18.2w22.3st= sh=18.19999999999999px sm=|[15]"▸"@60.0h0.0w9.1st= sh=0px sm=|[16]""@64.0h18.2w9.1st= sh=18.200000000000003px sm=4px|[17]"▾"@155.0h18.2w9.1st= sh=18.19999999999999px sm=72.8px|[18]"▾"@246.0h18.2w9.1st= sh=18.19999999999999px sm=72.79999999999995px | EMPTYLINES=L2 h=18.2 br=0.0|L4 h=18.2 br=0.0|L9 h=18.2 br=0.0|L14 h=18.2 br=0.0
+[sel] rangeCount=1 anchor=#text/8 range0=#text/8 len=8
+[api] sel.collapse=function | sel.setBaseAndExtent=function | sel.extend=function | sel.removeAllRanges=function | sel.modify=undefined | range.setStart=function | range.setEnd=function | range.getClientRects=function | range.getBoundingClientRect=function | range.cloneRange=function | range.cloneContents=undefined | range.commonAncestorContainer=null | range.cacAfterSet=#text | range.cacSelCollapse=#text | node.contains=function | node.compareDocumentPosition=function | node.getRootNode=function | node.isConnected=function wb-ui/jsc.(*Interpreter).wrapNativeFunc.func1() { [native code] } | el.matches=function | el.closest=function | el.getBoundingClientRect=function | el.getClientRects=function | el.scrollIntoView=function | el.dataset=[object Object] | el.className=string | el.classList=obj | el.getAttribute=function | el.attributes=obj:1 | doc.createTreeWalker=function | doc.createNodeIterator=undefined | doc.createElement=function | doc.createTextNode=function | doc.createRange=function | doc.elementFromPoint=undefined | doc.querySelector=function | doc.querySelectorAll=function | doc.getElementsByClassName=function | doc.documentElement=HTML | doc.body=BODY | MutationObserver=function | IntersectionObserver=function | ResizeObserver=function | requestAnimationFrame=function | NodeFilter=object | getComputedStyle=function | gCS.cssVar=(none) | kb.key=a/KeyA | kb.keyCode=13 | me.clientXY=5,6 | ev.stopPropagation=function | ev.preventDefault=function | ev.composedPath=function | text.textContent=ab len=2 | text.data=cd | text.splitText=function | el.textContent=hi | el.innerHTML=<b>x</b> | el.insertBefore=function | el.appendChild=function | el.removeChild=function | el.replaceChildren=function | el.style.setProperty=function | el.style.cssText=string | el.scrollTop=number | el.scrollLeft=number | el.scrollHeight=number | el.clientHeight=number | win.innerW/H=1280x800 | win.devicePixelRatio=1 | win.scrollTo=undefined | win.getSelection=function | addEventListener=function | removeEventListener=function
+[prekey] === render tree before keys ===
+[rtree] === gutter render tree ===
+[rtree]                           RenderBlockFlow cls="cm-gutters cm-gutters-before" (327.0,60.0) 32.4x538.0 styleH=100% styleLH=1.4 disp=flex pos=4 <div>
+[rtree]                             RenderBlockFlow cls="cm-gutter cm-lineNumbers" (327.0,60.0) 22.3x538.0 styleH=0 styleLH=1.4 disp=flex pos=0 <div>
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,60.0) 22.3x0.0 styleH=0px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,60.0) 14.3x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="99" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement cm-activeLineGutter" (327.0,64.0) 22.3x18.2 styleH=18.200000000000003px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,64.0) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="1" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,82.2) 22.3x18.2 styleH=18.200000000000003px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,82.2) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="2" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,100.4) 22.3x18.2 styleH=18.200000000000003px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,100.4) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="3" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,118.6) 22.3x18.2 styleH=18.200000000000003px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,118.6) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="4" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,136.8) 22.3x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,136.8) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="5" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,155.0) 22.3x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,155.0) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="6" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,173.2) 22.3x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,173.2) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="7" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,191.4) 22.3x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,191.4) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="8" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,209.6) 22.3x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,209.6) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="9" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,227.8) 22.3x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,227.8) 14.3x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="10" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,246.0) 22.3x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,246.0) 14.3x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="11" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,264.2) 22.3x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,264.2) 14.3x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="12" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,282.4) 22.3x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,282.4) 14.3x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="13" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,300.6) 22.3x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,300.6) 14.3x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="14" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                             RenderBlockFlow cls="cm-gutter cm-foldGutter" (349.3,60.0) 9.1x538.0 styleH=0 styleLH=1.4 disp=flex pos=0 <div>
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (349.3,60.0) 9.1x0.0 styleH=0px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (349.3,60.0) 9.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderInline cls="" (349.3,61.5) 9.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0 <span>
+[rtree]                                     RenderBlockFlow cls="" (350.3,63.0) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                       RenderText text="▸" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement cm-activeLineGutter" (349.3,64.0) 9.1x18.2 styleH=18.200000000000003px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (349.3,155.0) 9.1x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (349.3,155.0) 9.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderInline cls="" (349.3,156.5) 9.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0 <span>
+[rtree]                                     RenderBlockFlow cls="" (350.3,158.0) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                       RenderText text="▾" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (349.3,246.0) 9.1x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (349.3,246.0) 9.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderInline cls="" (349.3,247.5) 9.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0 <span>
+[rtree]                                     RenderBlockFlow cls="" (350.3,249.0) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                       RenderText text="▾" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree] === end ===
+[rtree] === cm-line render tree (prekey) ===
+[rtree]                             RenderBlockFlow cls="cm-gutter cm-lineNumbers" (327.0,60.0) 22.3x538.0 styleH=0 styleLH=1.4 disp=flex pos=0 <div>
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,60.0) 22.3x0.0 styleH=0px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,60.0) 14.3x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="99" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement cm-activeLineGutter" (327.0,64.0) 22.3x18.2 styleH=18.200000000000003px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,64.0) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="1" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,82.2) 22.3x18.2 styleH=18.200000000000003px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,82.2) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="2" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,100.4) 22.3x18.2 styleH=18.200000000000003px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,100.4) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="3" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,118.6) 22.3x18.2 styleH=18.200000000000003px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,118.6) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="4" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,136.8) 22.3x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,136.8) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="5" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,155.0) 22.3x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,155.0) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="6" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,173.2) 22.3x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,173.2) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="7" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,191.4) 22.3x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,191.4) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="8" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,209.6) 22.3x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,209.6) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="9" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,227.8) 22.3x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,227.8) 14.3x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="10" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,246.0) 22.3x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,246.0) 14.3x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="11" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,264.2) 22.3x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,264.2) 14.3x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="12" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,282.4) 22.3x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,282.4) 14.3x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="13" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,300.6) 22.3x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,300.6) 14.3x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="14" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                             RenderBlockFlow cls="cm-line cm-activeLine" (359.4,64.0) 285.6x18.2 styleH=0 styleLH=1.4 disp=block pos=0 <div>
+[rtree]                               RenderBlockFlow cls="" (365.4,64.0) 85.8x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                 RenderInline cls="ͼq" (365.4,65.5) 57.2x18.2 styleH=0 styleLH=1.4 disp=inline pos=0 <span>
+[rtree]                                   RenderBlockFlow cls="" (365.4,67.0) 57.2x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                     RenderText text="package " (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                                 RenderInline cls="ͼq" (422.6,65.5) 28.6x18.2 styleH=0 styleLH=1.4 disp=inline pos=0 <span>
+[rtree]                                   RenderBlockFlow cls="" (422.6,67.0) 28.6x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                     RenderText text="main" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                             RenderBlockFlow cls="cm-line" (359.4,82.2) 285.6x18.2 styleH=0 styleLH=1.4 disp=block pos=0 <div>
+[rtree]                               RenderBlockFlow cls="" (365.4,82.2) 277.6x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                 RenderInline cls="" (365.4,83.7) 277.6x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 <br>
+[rtree]                             RenderBlockFlow cls="cm-line" (359.4,100.4) 285.6x18.2 styleH=0 styleLH=1.4 disp=block pos=0 <div>
+[rtree]                               RenderBlockFlow cls="" (365.4,100.4) 85.8x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                 RenderInline cls="ͼp" (365.4,101.9) 42.9x18.2 styleH=0 styleLH=1.4 disp=inline pos=0 <span>
+[rtree]                                   RenderBlockFlow cls="" (365.4,103.4) 42.9x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                     RenderText text="import" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                                 RenderText text=" " (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                                 RenderInline cls="ͼ13" (415.5,101.9) 35.7x18.2 styleH=0 styleLH=1.4 disp=inline pos=0 <span>
+[rtree]                                   RenderBlockFlow cls="" (415.5,103.4) 35.7x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                     RenderText text="\"fmt\"" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                             RenderBlockFlow cls="cm-line" (359.4,118.6) 285.6x18.2 styleH=0 styleLH=1.4 disp=block pos=0 <div>
+[rtree]                               RenderBlockFlow cls="" (365.4,118.6) 277.6x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                 RenderInline cls="" (365.4,120.1) 277.6x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 <br>
+[rtree]                             RenderBlockFlow cls="cm-line" (359.4,136.8) 285.6x18.2 styleH=0 styleLH=1.4 disp=block pos=0 <div>
+[rtree]                               RenderBlockFlow cls="" (365.4,136.8) 228.7x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                 RenderInline cls="ͼw" (365.4,138.3) 228.7x18.2 styleH=0 styleLH=1.4 disp=inline pos=0 <span>
+[rtree]                                   RenderBlockFlow cls="" (365.4,139.8) 228.7x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                     RenderText text="// main is the entry point." (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                             RenderBlockFlow cls="cm-line" (359.4,155.0) 285.6x18.2 styleH=0 styleLH=1.4 disp=block pos=0 <div>
+[rtree]                               RenderBlockFlow cls="" (365.4,155.0) 100.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                 RenderInline cls="ͼq" (365.4,156.5) 35.7x18.2 styleH=0 styleLH=1.4 disp=inline pos=0 <span>
+[rtree]                                   RenderBlockFlow cls="" (365.4,158.0) 35.7x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                     RenderText text="func " (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                                 RenderInline cls="ͼr" (401.2,156.5) 28.6x18.2 styleH=0 styleLH=1.4 disp=inline pos=0 <span>
+[rtree]                                   RenderBlockFlow cls="" (401.2,158.0) 28.6x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                     RenderText text="main" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                                 RenderText text="() {" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                             RenderBlockFlow cls="cm-line" (359.4,173.2) 285.6x18.2 styleH=0 styleLH=1.4 disp=block pos=0 <div>
+[rtree]                               RenderBlockFlow cls="" (365.4,173.2) 171.5x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                 RenderInline cls="ͼq" (394.0,174.7) 21.4x18.2 styleH=0 styleLH=1.4 disp=inline pos=0 <span>
+[rtree]                                   RenderBlockFlow cls="" (394.0,176.2) 21.4x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                     RenderText text="fmt" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                                 RenderInline cls="ͼv" (415.5,174.7) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0 <span>
+[rtree]                                   RenderBlockFlow cls="" (415.5,176.2) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                     RenderText text="." (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                                 RenderInline cls="ͼq" (422.6,174.7) 50.0x18.2 styleH=0 styleLH=1.4 disp=inline pos=0 <span>
+[rtree]                                   RenderBlockFlow cls="" (422.6,176.2) 50.0x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                     RenderText text="Println" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                                 RenderText text="(" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                                 RenderInline cls="ͼ13" (479.8,174.7) 50.0x18.2 styleH=0 styleLH=1.4 disp=inline pos=0 <span>
+[rtree]                                   RenderBlockFlow cls="" (479.8,176.2) 50.0x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                     RenderText text="\"hello\"" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                                 RenderText text=")" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                             RenderBlockFlow cls="cm-line" (359.4,191.4) 285.6x18.2 styleH=0 styleLH=1.4 disp=block pos=0 <div>
+[rtree]                               RenderBlockFlow cls="" (365.4,191.4) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                 RenderText text="}" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                             RenderBlockFlow cls="cm-line" (359.4,209.6) 285.6x18.2 styleH=0 styleLH=1.4 disp=block pos=0 <div>
+[rtree]                               RenderBlockFlow cls="" (365.4,209.6) 277.6x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                 RenderInline cls="" (365.4,211.1) 277.6x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 <br>
+[rtree]                             RenderBlockFlow cls="cm-line" (359.4,227.8) 285.6x18.2 styleH=0 styleLH=1.4 disp=block pos=0 <div>
+[rtree]                               RenderBlockFlow cls="" (365.4,227.8) 135.8x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                 RenderText text="# " (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                                 RenderInline cls="ͼq" (379.7,229.3) 35.7x18.2 styleH=0 styleLH=1.4 disp=inline pos=0 <span>
+[rtree]                                   RenderBlockFlow cls="" (379.7,230.8) 35.7x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                     RenderText text="hash " (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                                 RenderInline cls="ͼq" (415.5,229.3) 57.2x18.2 styleH=0 styleLH=1.4 disp=inline pos=0 <span>
+[rtree]                                   RenderBlockFlow cls="" (415.5,230.8) 57.2x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                     RenderText text="comment " (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                                 RenderInline cls="ͼq" (472.7,229.3) 28.6x18.2 styleH=0 styleLH=1.4 disp=inline pos=0 <span>
+[rtree]                                   RenderBlockFlow cls="" (472.7,230.8) 28.6x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                     RenderText text="test" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                             RenderBlockFlow cls="cm-line" (359.4,246.0) 285.6x18.2 styleH=0 styleLH=1.4 disp=block pos=0 <div>
+[rtree]                               RenderBlockFlow cls="" (365.4,246.0) 171.5x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                 RenderInline cls="ͼq" (365.4,247.5) 35.7x18.2 styleH=0 styleLH=1.4 disp=inline pos=0 <span>
+[rtree]                                   RenderBlockFlow cls="" (365.4,249.0) 35.7x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                     RenderText text="func " (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                                 RenderInline cls="ͼr" (401.2,247.5) 21.4x18.2 styleH=0 styleLH=1.4 disp=inline pos=0 <span>
+[rtree]                                   RenderBlockFlow cls="" (401.2,249.0) 21.4x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                     RenderText text="add" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                                 RenderText text="(" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                                 RenderInline cls="ͼq" (429.8,247.5) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0 <span>
+[rtree]                                   RenderBlockFlow cls="" (429.8,249.0) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                     RenderText text="a" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                                 RenderInline cls="ͼt" (436.9,247.5) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0 <span>
+[rtree]                                   RenderBlockFlow cls="" (436.9,249.0) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                     RenderText text="," (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                                 RenderText text=" " (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                                 RenderInline cls="ͼq" (451.2,247.5) 14.3x18.2 styleH=0 styleLH=1.4 disp=inline pos=0 <span>
+[rtree]                                   RenderBlockFlow cls="" (451.2,249.0) 14.3x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                     RenderText text="b " (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                                 RenderText text="int) " (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                                 RenderInline cls="ͼq" (501.2,247.5) 28.6x18.2 styleH=0 styleLH=1.4 disp=inline pos=0 <span>
+[rtree]                                   RenderBlockFlow cls="" (501.2,249.0) 28.6x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                     RenderText text="int " (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                                 RenderText text="{" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                             RenderBlockFlow cls="cm-line" (359.4,264.2) 285.6x18.2 styleH=0 styleLH=1.4 disp=block pos=0 <div>
+[rtree]                               RenderBlockFlow cls="" (365.4,264.2) 114.4x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                 RenderInline cls="ͼp" (394.0,265.7) 42.9x18.2 styleH=0 styleLH=1.4 disp=inline pos=0 <span>
+[rtree]                                   RenderBlockFlow cls="" (394.0,267.2) 42.9x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                     RenderText text="return" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                                 RenderText text=" " (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                                 RenderInline cls="ͼq" (444.1,265.7) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0 <span>
+[rtree]                                   RenderBlockFlow cls="" (444.1,267.2) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                     RenderText text="a" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                                 RenderText text=" " (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                                 RenderInline cls="ͼv" (458.4,265.7) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0 <span>
+[rtree]                                   RenderBlockFlow cls="" (458.4,267.2) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                     RenderText text="+" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                                 RenderText text=" " (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                                 RenderInline cls="ͼq" (472.7,265.7) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0 <span>
+[rtree]                                   RenderBlockFlow cls="" (472.7,267.2) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                     RenderText text="b" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                             RenderBlockFlow cls="cm-line" (359.4,282.4) 285.6x18.2 styleH=0 styleLH=1.4 disp=block pos=0 <div>
+[rtree]                               RenderBlockFlow cls="" (365.4,282.4) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                 RenderText text="}" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                             RenderBlockFlow cls="cm-line" (359.4,300.6) 285.6x18.2 styleH=0 styleLH=1.4 disp=block pos=0 <div>
+[rtree]                               RenderBlockFlow cls="" (365.4,300.6) 277.6x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                 RenderInline cls="" (365.4,302.1) 277.6x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 <br>
+[rtree] === end ===
+[focus] contenteditable="true"
+[keys] MockKeyChar('Z')×2 → handleCharInput
+[after] lines=14 | line1text=[package main] | hasZZ=false | textLen=143 | STATE=package main\n\nimport "fmt"\n\n// main is t | stateHasZZ=false | stateLen=156 | undoErr=Cannot read property 'canUndo' of undefined
+[rtree] === gutter render tree ===
+[rtree]                           RenderBlockFlow cls="cm-gutters cm-gutters-before" (327.0,860.0) 32.4x538.0 styleH=100% styleLH=1.4 disp=flex pos=4 <div>
+[rtree]                             RenderBlockFlow cls="cm-gutter cm-lineNumbers" (327.0,860.0) 22.3x538.0 styleH=0 styleLH=1.4 disp=flex pos=0 <div>
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,860.0) 22.3x0.0 styleH=0px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,860.0) 14.3x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="99" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement cm-activeLineGutter" (327.0,864.0) 22.3x18.2 styleH=18.200000000000003px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,864.0) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="1" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,882.2) 22.3x18.2 styleH=18.200000000000003px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,882.2) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="2" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,900.4) 22.3x18.2 styleH=18.200000000000003px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,900.4) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="3" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,918.6) 22.3x18.2 styleH=18.200000000000003px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,918.6) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="4" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,936.8) 22.3x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,936.8) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="5" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,955.0) 22.3x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,955.0) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="6" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,973.2) 22.3x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,973.2) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="7" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,991.4) 22.3x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,991.4) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="8" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,1009.6) 22.3x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,1009.6) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="9" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,1027.8) 22.3x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,1027.8) 14.3x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="10" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,1046.0) 22.3x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,1046.0) 14.3x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="11" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,1064.2) 22.3x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,1064.2) 14.3x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="12" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,1082.4) 22.3x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,1082.4) 14.3x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="13" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,1100.6) 22.3x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,1100.6) 14.3x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="14" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                             RenderBlockFlow cls="cm-gutter cm-foldGutter" (349.3,860.0) 9.1x538.0 styleH=0 styleLH=1.4 disp=flex pos=0 <div>
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (349.3,860.0) 9.1x0.0 styleH=0px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (349.3,860.0) 9.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderInline cls="" (349.3,861.5) 9.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0 <span>
+[rtree]                                     RenderBlockFlow cls="" (350.3,863.0) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                       RenderText text="▸" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement cm-activeLineGutter" (349.3,864.0) 9.1x18.2 styleH=18.200000000000003px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (349.3,955.0) 9.1x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (349.3,955.0) 9.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderInline cls="" (349.3,956.5) 9.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0 <span>
+[rtree]                                     RenderBlockFlow cls="" (350.3,958.0) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                       RenderText text="▾" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (349.3,1046.0) 9.1x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (349.3,1046.0) 9.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderInline cls="" (349.3,1047.5) 9.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0 <span>
+[rtree]                                     RenderBlockFlow cls="" (350.3,1049.0) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                       RenderText text="▾" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree] === end ===
+[rtree2] === second rebuild ===
+[rtree] === gutter render tree ===
+[rtree]                           RenderBlockFlow cls="cm-gutters cm-gutters-before" (327.0,860.0) 32.4x538.0 styleH=100% styleLH=1.4 disp=flex pos=4 <div>
+[rtree]                             RenderBlockFlow cls="cm-gutter cm-lineNumbers" (327.0,860.0) 22.3x538.0 styleH=0 styleLH=1.4 disp=flex pos=0 <div>
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,860.0) 22.3x0.0 styleH=0px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,860.0) 14.3x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="99" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement cm-activeLineGutter" (327.0,864.0) 22.3x18.2 styleH=18.200000000000003px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,864.0) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="1" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,882.2) 22.3x18.2 styleH=18.200000000000003px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,882.2) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="2" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,900.4) 22.3x18.2 styleH=18.200000000000003px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,900.4) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="3" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,918.6) 22.3x18.2 styleH=18.200000000000003px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,918.6) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="4" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,936.8) 22.3x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,936.8) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="5" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,955.0) 22.3x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,955.0) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="6" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,973.2) 22.3x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,973.2) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="7" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,991.4) 22.3x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,991.4) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="8" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,1009.6) 22.3x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,1009.6) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="9" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,1027.8) 22.3x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,1027.8) 14.3x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="10" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,1046.0) 22.3x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,1046.0) 14.3x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="11" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,1064.2) 22.3x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,1064.2) 14.3x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="12" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,1082.4) 22.3x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,1082.4) 14.3x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="13" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (327.0,1100.6) 22.3x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (332.0,1100.6) 14.3x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderText text="14" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                             RenderBlockFlow cls="cm-gutter cm-foldGutter" (349.3,860.0) 9.1x538.0 styleH=0 styleLH=1.4 disp=flex pos=0 <div>
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (349.3,860.0) 9.1x0.0 styleH=0px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (349.3,860.0) 9.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderInline cls="" (349.3,861.5) 9.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0 <span>
+[rtree]                                     RenderBlockFlow cls="" (350.3,863.0) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                       RenderText text="▸" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement cm-activeLineGutter" (349.3,864.0) 9.1x18.2 styleH=18.200000000000003px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (349.3,955.0) 9.1x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (349.3,955.0) 9.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderInline cls="" (349.3,956.5) 9.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0 <span>
+[rtree]                                     RenderBlockFlow cls="" (350.3,958.0) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                       RenderText text="▾" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree]                               RenderBlockFlow cls="cm-gutterElement" (349.3,1046.0) 9.1x18.2 styleH=18.19999999999999px styleLH=1.4 disp=block pos=0 <div>
+[rtree]                                 RenderBlockFlow cls="" (349.3,1046.0) 9.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                   RenderInline cls="" (349.3,1047.5) 9.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0 <span>
+[rtree]                                     RenderBlockFlow cls="" (350.3,1049.0) 7.1x18.2 styleH=0 styleLH=1.4 disp=inline pos=0
+[rtree]                                       RenderText text="▾" (0.0,0.0) 0.0x0.0 styleH=0 styleLH=1.4 disp=inline pos=0 [#text]
+[rtree] === end ===
+[scroll] st=0 99@860|1@864|2@882|3@900|4@919|5@937|6@955|7@973
+[shot] → dev/desktop_probe/edit_probe.png
+DONE

@@ -360,7 +360,7 @@ func (r *Registry) Execute(ctx context.Context, name, argsJSON string) (string, 
 // read_file / write_file / edit_file / list_files / run_command。
 func RegisterDefaultTools(r *Registry, root string) {
 	eh := newEditHistory() // ★ v2: 编辑行号偏移追踪器
-	bg := &bgRegistry{procs: map[int]*bgProc{}} // 共享后台进程注册表
+	bg := globalBG          // ★ 全局共享后台进程注册表（跨轮次/跨 Registry 存活，见 shell.go 顶部注释）
 	r.Register(&Tool{
 		Name:        "read_file",
 		UsageGuide:  "读取文件内容，限工作区内路径。大文件用 offset+limit 分页读取，避免撑爆上下文。二进制文件会自动拒绝读取，请改用 inspect_binary。比 os.ReadFile 更安全（路径越界拦截+二进制保护）。",
@@ -913,6 +913,21 @@ func argStrSlice(args map[string]any, key string) []string {
 		}
 	}
 	return out
+}
+
+// orderedRoots 返回工作区所有根目录，primaryRoot 排最后（供"后加载覆盖"场景使用：
+// 同名工具/配置以 primary 项目为准）。
+func orderedRoots(primaryRoot string) []string {
+	roots := make([]string, 0, len(WorkspaceRoots)+1)
+	seen := map[string]bool{primaryRoot: true}
+	for _, wr := range WorkspaceRoots {
+		if wr != primaryRoot && !seen[wr] {
+			seen[wr] = true
+			roots = append(roots, wr)
+		}
+	}
+	roots = append(roots, primaryRoot)
+	return roots
 }
 
 // resolvePath 把相对/绝对路径解析为工作区内的绝对路径，越界则报错（安全底线）。

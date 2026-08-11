@@ -32,6 +32,48 @@ type ToolConfigItem struct {
 	Enabled *bool `json:"enabled,omitempty"` // nil=不覆盖，true/false=强制启用/禁用
 }
 
+// LoadAllWorkspaceToolConfigs 应用工作区【所有项目】的 .pair/tools.json 工具配置。
+// 多项目支持：每个项目目录下可放自己的 .pair/tools.json，agent 应感知并应用。
+// 应用顺序：先其他项目、后 primary（primary 的开关/审核配置优先级最高）。
+// primary 项目文件缺失时保持自动初始化（LoadWorkspaceToolConfig 原行为）；
+// 其他项目文件不存在则跳过（不擅自为别的项目创建配置文件）。
+func LoadAllWorkspaceToolConfigs(r *Registry, primaryRoot string) {
+	if primaryRoot == "" {
+		return
+	}
+	for _, rootDir := range orderedRoots(primaryRoot) {
+		if rootDir == primaryRoot {
+			LoadWorkspaceToolConfig(r, primaryRoot)
+		} else {
+			applyExistingToolConfig(r, rootDir)
+		}
+	}
+}
+
+// applyExistingToolConfig 只应用已存在的 .pair/tools.json（不存在则静默跳过，不自动创建）。
+func applyExistingToolConfig(r *Registry, projectRoot string) {
+	cfgPath := filepath.Join(projectRoot, ".pair", "tools.json")
+	data, err := os.ReadFile(cfgPath)
+	if err != nil {
+		return // 不存在或读取失败 → 跳过
+	}
+	var cfg WorkspaceToolConfig
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		log.Printf("[WorkspaceToolConfig] 解析失败 %s: %v", cfgPath, err)
+		return
+	}
+	for name, item := range cfg.Tools {
+		if item.Enabled != nil {
+			r.SetToolEnabled(name, *item.Enabled)
+			status := "启用"
+			if !*item.Enabled {
+				status = "禁用"
+			}
+			log.Printf("[WorkspaceToolConfig] 工具 %s -> %s（项目配置 %s）", name, status, projectRoot)
+		}
+	}
+}
+
 // LoadWorkspaceToolConfig 从工作区加载工具配置文件并应用到 Registry。
 // 配置文件路径：{workspaceRoot}/.pair/tools.json
 // 行为：
