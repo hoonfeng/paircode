@@ -464,6 +464,14 @@ func main() {
 					out.push('  "' + els[i].textContent + '"@' + r.top.toFixed(0));
 				}
 			}
+			// ★ 诊断：.cm-gutters 的 minHeight / offsetHeight / rect
+			var gh = document.querySelector('.cm-gutters');
+			if (gh) {
+				var gs = getComputedStyle(gh);
+				out.push('gutters[minH]=' + (gs.minHeight||'?') + ' offH=' + gh.offsetHeight + ' rectH=' + gh.getBoundingClientRect().height.toFixed(0) + ' disp=' + (gs.display||'?') + ' h=' + (gs.height||'?'));
+				var gp = gh.parentElement;
+				if (gp) out.push('gutters[parent]=' + gp.className + ' rectH=' + gp.getBoundingClientRect().height.toFixed(0) + ' disp=' + getComputedStyle(gp).display);
+			}
 			return out.join('|');
 		})()`))
 	}
