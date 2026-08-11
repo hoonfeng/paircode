@@ -2,10 +2,12 @@
 package agent
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -815,4 +817,115 @@ func TestMessageStore_MigrateFromLegacy_NoHistoryCache(t *testing.T) {
 	}
 
 	// history_cache.json 不存在时不报错（已在上方调用无错误验证）
+}
+
+// TestMessageStore_CheckAndArchive 验证自动归档：超过阈值后最早消息移入 .archived.jsonl，
+// 主文件第一条为 role=user 的【历史归档】摘要（而非孤立 assistant——避免 LLM 上下文污染）。
+func TestMessageStore_CheckAndArchive(t *testing.T) {
+	root := t.TempDir()
+	store := NewMessageStore(root)
+	if err := store.CreateConversation("conv_arch", "归档测试", "/ws"); err != nil {
+		t.Fatalf("CreateConversation: %v", err)
+	}
+
+	// 追加 ArchiveThreshold 条消息（第 500 条触发 AppendMessage 内的自动归档）
+	total := ArchiveThreshold // 500
+	for i := 0; i < total; i++ {
+		content := fmt.Sprintf("消息 %d", i)
+		role := RoleUser
+		if i%2 == 1 {
+			role = RoleAssistant
+		}
+		if err := store.AppendMessage("conv_arch", Message{Role: role, Content: content},
+			[]Segment{{Type: "content", Content: content}}); err != nil {
+			t.Fatalf("AppendMessage[%d]: %v", i, err)
+		}
+	}
+
+	// 归档后主文件 = 摘要 + 保留最新 1/4（125 条）
+	expectKeep := ArchiveThreshold / ArchiveRatio // 125
+	expectTotal := expectKeep + 1                 // 摘要占 idx=0
+
+	msgs, err := store.ReadAll("conv_arch")
+	if err != nil {
+		t.Fatalf("ReadAll: %v", err)
+	}
+	if len(msgs) != expectTotal {
+		t.Fatalf("归档后主文件应 %d 条（摘要+%d 保留）, got %d", expectTotal, expectKeep, len(msgs))
+	}
+
+	t.Run("首条为 user 角色归档摘要", func(t *testing.T) {
+		first := msgs[0]
+		if first.Message.Role != RoleUser {
+			t.Errorf("摘要 Role 应为 RoleUser（避免孤立 assistant）, got %q", first.Message.Role)
+		}
+		if !strings.Contains(first.Message.Content, "【历史归档】") {
+			t.Errorf("摘要内容应含【历史归档】, got %q", first.Message.Content)
+		}
+		if first.Idx != 0 {
+			t.Errorf("摘要 Idx 应为 0, got %d", first.Idx)
+		}
+	})
+
+	t.Run("保留消息为最新且 Idx 连续", func(t *testing.T) {
+		// 最早保留的消息 = 消息 (total-keep)
+		firstKeep := ArchiveThreshold - expectKeep // 375
+		for i, m := range msgs {
+			if m.Idx != i {
+				t.Errorf("Idx 应连续 %d, got %d", i, m.Idx)
+			}
+		}
+		if msgs[1].Message.Content != fmt.Sprintf("消息 %d", firstKeep) {
+			t.Errorf("第一条保留消息应为 消息 %d, got %q", firstKeep, msgs[1].Message.Content)
+		}
+		last := msgs[len(msgs)-1]
+		if last.Message.Content != fmt.Sprintf("消息 %d", ArchiveThreshold-1) {
+			t.Errorf("最后一条应为 消息 %d, got %q", ArchiveThreshold-1, last.Message.Content)
+		}
+	})
+
+	t.Run("归档文件包含全部最早消息", func(t *testing.T) {
+		archivedPath := store.convFilePath("conv_arch") + ArchivedFileSuffix
+		raw, err := os.ReadFile(archivedPath)
+		if err != nil {
+			t.Fatalf("读取归档文件: %v", err)
+		}
+		expectArchived := ArchiveThreshold - expectKeep // 375
+		if lines := strings.Count(string(raw), "\n"); lines != expectArchived {
+			t.Errorf("归档文件应有 %d 条, got %d", expectArchived, lines)
+		}
+	})
+
+	t.Run("persistedCount 与主文件一致", func(t *testing.T) {
+		if n := store.GetPersistedCount("conv_arch"); n != expectTotal {
+			t.Errorf("GetPersistedCount 应为 %d, got %d", expectTotal, n)
+		}
+	})
+
+	t.Run("LoadAll 首条为 user 摘要（LLM 上下文无孤立 assistant）", func(t *testing.T) {
+		all, err := store.LoadAll("conv_arch")
+		if err != nil {
+			t.Fatalf("LoadAll: %v", err)
+		}
+		if len(all) != expectTotal {
+			t.Fatalf("LoadAll 应 %d 条, got %d", expectTotal, len(all))
+		}
+		if all[0].Role != RoleUser {
+			t.Errorf("LoadAll 首条 Role 应为 user, got %q", all[0].Role)
+		}
+	})
+
+	t.Run("归档后继续追加不立即再次归档", func(t *testing.T) {
+		if err := store.AppendMessage("conv_arch", Message{Role: RoleUser, Content: "归档后消息"},
+			[]Segment{{Type: "content", Content: "归档后消息"}}); err != nil {
+			t.Fatalf("AppendMessage: %v", err)
+		}
+		msgs, err := store.ReadAll("conv_arch")
+		if err != nil {
+			t.Fatalf("ReadAll: %v", err)
+		}
+		if len(msgs) != expectTotal+1 {
+			t.Errorf("归档后追加应 %d 条, got %d", expectTotal+1, len(msgs))
+		}
+	})
 }

@@ -547,6 +547,11 @@ func (s *MessageStore) AppendMessage(convID string, msg Message, segments []Segm
 
 	// 检查是否需要归档
 	if count+1 >= ArchiveThreshold {
+		// ★ 必须先关闭写句柄：checkAndArchive 会用 Rename 原子替换主文件，
+		//   Windows 不允许重命名被打开的文件（f 由本函数 OpenFile 持有，
+		//   defer f.Close() 要到函数返回才执行，此时仍占用 → Rename 必失败、
+		//   错误被 _ 吞掉导致归档静默失效）。
+		_ = f.Close()
 		_ = s.checkAndArchive(convID)
 	}
 
@@ -1390,12 +1395,18 @@ func (s *MessageStore) checkAndArchive(convID string) error {
 	}
 	mainEncoder := json.NewEncoder(tf)
 
-	// 写入归档摘要消息作为第一条（使前端能看到归档记录）
+	// 写入归档摘要消息作为第一条（使前端能看到归档记录）。
+	// ★ Role 必须用 RoleUser 而非 RoleAssistant：摘要是系统生成的说明，不是 agent 的回复，
+	//   以孤立 assistant 消息排在对话开头会让 LLM 上下文出现无 user 配对的 assistant
+	//   （部分 API 拒绝以 assistant 开头，且 LLM 会误认为「自己说过的话」）。
+	//   用 RoleUser + 【历史归档】标注与背景块（backgroundCtxMarker 同款 user 注入模式）一致，
+	//   LLM 可将其理解为「早期历史被归档的说明」；run 内 MarkHistoryUserMessages 会再标注
+	//   【历史轮次消息·非当前任务】前缀，与历史 user 同等对待，不会污染当前任务识别。
 	summaryMsg := StoredMessage{
 		Idx:       0,
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 		Message: Message{
-			Role:    RoleAssistant,
+			Role:    RoleUser,
 			Content: summary,
 		},
 		Segments: []Segment{{
@@ -1420,10 +1431,20 @@ func (s *MessageStore) checkAndArchive(convID string) error {
 	}
 	tf.Close()
 
-	// 原子替换
+	// ★ 原子替换（Windows 不允许 Rename 覆盖已有文件，用三步法：
+	//   1. Rename main → main.bak（备份旧文件）
+	//   2. Rename tmp → main（新文件就位）
+	//   3. Remove main.bak（新文件确认无误后删备份）
+	//   与 PersistNewMessages 崩溃安全替换一致；若 1-2 间崩溃，LoadAll 可从 .bak 恢复。
+	bakPath := mainPath + ".bak"
+	os.Rename(mainPath, bakPath) // 备份旧文件（不存在时忽略错误）
 	if err := os.Rename(tmpPath, mainPath); err != nil {
+		// 替换失败：尝试恢复备份
+		os.Rename(bakPath, mainPath)
+		os.Remove(tmpPath)
 		return fmt.Errorf("替换主文件: %w", err)
 	}
+	os.Remove(bakPath)
 
 	// 更新持久化计数
 	s.pcMu.Lock()
@@ -1471,7 +1492,7 @@ func (s *MessageStore) generateArchiveSummary(convID string, msgs []StoredMessag
 		}
 	}
 
-	summary := fmt.Sprintf("[归档] **历史归档**（共 %d 条消息：用户 %d 条、助手 %d 条、工具调用 %d 次）",
+	summary := fmt.Sprintf("【历史归档】**历史归档**（共 %d 条消息：用户 %d 条、助手 %d 条、工具调用 %d 次）",
 		len(msgs), userMsgs, assistantMsgs, toolCalls+toolResults)
 	if firstUserMsg != "" {
 		summary += fmt.Sprintf("\n最早对话主题：%s", firstUserMsg)
