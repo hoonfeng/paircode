@@ -186,9 +186,140 @@ console.error = function(){
 		termDiagFrame++
 	}
 
+	// ★ --probe-editor：自动化编辑器诊断模式——真实桌面全链路（桥接 + 前端 +
+	// 渲染循环）下自动打开文件并聚焦编辑器，配合 WB_SNAP=1（组件绘制日志
+	// _layout_snap.log）与 WB_DUMP_PNG=1/WB_DUMP_PNG_FRAME（真实窗口 PNG）
+	// 反查「光标/背景是否绘制、绘制在哪」（组件绘制日志反向跟踪）。
+	// 用法: set WB_SNAP=1 && set WB_DUMP_PNG=1 && set WB_DUMP_PNG_FRAME=420 && desktop.exe --probe-editor
+	if hasArg("--probe-editor") {
+		go probeEditor(wv)
+	}
+
 	log.Println("[Desktop] 窗口已启动，开始事件循环...")
 	host.Run()
 	log.Println("[Desktop] 已退出。")
+}
+
+// hasArg 检查命令行参数。
+func hasArg(name string) bool {
+	for _, a := range os.Args {
+		if a == name {
+			return true
+		}
+	}
+	return false
+}
+
+// probeEditor 自动化编辑器诊断：走 desktopbridge.PushMainJS 把 JS 投递到
+// 主循环队列（goja 非线程安全，不能直接从 goroutine RunJS）。时序：
+//   1) 注入 window.__state 打开测试文件（CodeEditor 挂载 + 行 1 内容）
+//   2) 注入点击 .cm-content（mousedown detail:1 → CM6 聚焦 → 光标显示）
+//   3) 等待渲染若干帧（WB_SNAP 每 600ms 记录 [paint] 组件绘制）
+//   4) 收集 _layout_snap.log → _probe_editor_snap.log，退出
+func probeEditor(wv *webkit.WebView) {
+	log.Println("[Probe] --probe-editor: 等待页面加载...")
+	time.Sleep(4 * time.Second)
+	openJS := `(function(){
+		var st = window.__state;
+		if (!st) return 'no-state';
+		var p = 'F:\\\\syproject\\wb-ui\\renderpipeline.go';
+		if (!st.openFiles.includes(p)) st.openFiles.push(p);
+		st.activeFile = p;
+		var c = 'package rendering\n\n// ---- probe-editor 测试文件 ----\n\ntype T struct{}\n\nfunc main() {\n\tfmt.Println("hello")\n}\n';
+		st.fileContents[p] = c;
+		st.fileSavedContent[p] = c;
+		st.fileDirty[p] = false;
+		return 'opened:' + st.activeFile;
+	})()`
+	desktopbridge.PushMainJS(openJS)
+	log.Println("[Probe] 已投递打开文件脚本")
+	time.Sleep(3 * time.Second)
+	focusJS := `(function(){
+		// ★ 模拟真实鼠标命中：用户点击命中行内子元素（.cm-line 下的文字），
+		// mousedown 需冒泡到 .cm-content 才会触发 CM6 的 focus——与 probe
+		// 之前直接点 cm-content（目标即 handler 所在元素）不同。
+		var line = document.querySelector('.cm-line') || document.querySelector('.cm-content');
+		if (!line) return 'no-line';
+		var r = line.getBoundingClientRect();
+		var x = r.left + 5, y = r.top + 9;   // 行内（非行首，命中文字/span 区域）
+		line.dispatchEvent(new MouseEvent('mousedown', {bubbles:true, cancelable:true, detail:1, clientX:x, clientY:y}));
+		line.dispatchEvent(new MouseEvent('mouseup', {bubbles:true, cancelable:true, detail:1, clientX:x, clientY:y}));
+		line.dispatchEvent(new MouseEvent('click', {bubbles:true, cancelable:true, detail:1, clientX:x, clientY:y}));
+		var ed = document.querySelector('.cm-editor');
+		window.__focusProbe = ed ? ed.classList.contains('cm-focused') : false;
+		console.log('FOCUS-PROBE cm-focused=' + window.__focusProbe);
+		// ★ dump 含 .cm-cursor 的完整 CSS 规则（从 <style> 元素文本找）
+		try {
+			var found = [];
+			var sts = document.querySelectorAll('style');
+			for (var si2 = 0; si2 < sts.length; si2++) {
+				var txt = sts[si2].textContent || '';
+				var re = /[^{}]*\.cm-cursor[^{}]*\{[^}]*\}/g;
+				var m;
+				while ((m = re.exec(txt)) !== null) {
+					found.push(m[0].replace(/\s+/g, ' ').slice(-160));
+				}
+			}
+			console.log('CURSOR-RULES ' + found.join(' || '));
+		} catch (e) { console.log('CURSOR-RULES ERR ' + e); }
+		// ★ 查询光标 DOM 几何/显示状态（判断是否在视口内、display 是否 block）
+		var cu = document.querySelector('.cm-cursor');
+		var cr = cu ? cu.getBoundingClientRect() : null;
+		var ccs = cu ? getComputedStyle(cu) : null;
+		console.log('CURSOR-PROBE rect=' + (cr ? '{' + cr.left + ',' + cr.top + ',' + cr.width + 'x' + cr.height + '}' : 'null')
+			+ ' display=' + (ccs ? ccs.display : 'null') + ' cls=' + (cu ? cu.className : 'null')
+			+ ' scrollerTop=' + (document.querySelector('.cm-scroller') ? document.querySelector('.cm-scroller').scrollTop : 'null'));
+		// ★ 查询选区内容（蓝色块可能=选中文本）
+		var sel = window.getSelection ? window.getSelection().toString() : '';
+		console.log('SEL-PROBE len=' + sel.length + ' txt=' + sel.slice(0, 40).replace(/\n/g, '\\n'));
+		// ★ 查询 CM6 state 光标位置（head）——点击后光标是否跳到文档末尾
+		var v = window.__editorView;
+		var head = v ? v.state.selection.main.head : -1;
+		var docLen = v ? v.state.doc.length : -1;
+		console.log('HEAD-PROBE head=' + head + ' docLen=' + docLen + ' doc=' + (v ? JSON.stringify(v.state.doc.toString().slice(0, 60)) : 'null'));
+		return 'clicked line, cm-focused=' + window.__focusProbe;
+	})()`
+	desktopbridge.PushMainJS(focusJS)
+	log.Println("[Probe] 已投递聚焦编辑器脚本")
+	// ★ 聚焦后延迟再查一次最终状态（几何桥/布局收敛后光标是否仍 rect=0、
+	// 滚动是否异常）——区分「点击瞬间未同步」与「最终布局错误」。
+	time.Sleep(3 * time.Second)
+	finalJS := `(function(){
+		var cu = document.querySelector('.cm-cursor');
+		var cr = cu ? cu.getBoundingClientRect() : null;
+		var v = window.__editorView;
+		var sc = document.querySelector('.cm-scroller');
+		console.log('FINAL-PROBE cursor=' + (cr ? '{' + cr.left + ',' + cr.top + ',' + cr.width + 'x' + cr.height + '}' : 'null')
+			+ ' scrollerTop=' + (sc ? sc.scrollTop : 'null')
+			+ ' head=' + (v ? v.state.selection.main.head : -1)
+			+ ' cm-focused=' + (document.querySelector('.cm-editor') ? document.querySelector('.cm-editor').classList.contains('cm-focused') : false));
+		return 'final';
+	})()`
+	desktopbridge.PushMainJS(finalJS)
+	time.Sleep(2 * time.Second)
+	// 手动渲染多帧保存 PNG（覆盖光标闪烁相位——1200ms 周期 50% 隐藏，
+	// 至少一张含光标）。wv.Render() 是纯 Go paint（不动 JS），与主循环
+	// 并发读渲染树绘制，输出独立 PNG（几何与窗口一致）。
+	for i := 0; i < 8; i++ {
+		if pngBytes, err := wv.Render(); err == nil {
+			_ = os.WriteFile(fmt.Sprintf("_probe_editor_%d.png", i), pngBytes, 0644)
+			log.Printf("[Probe] 已保存 _probe_editor_%d.png (%d 字节)", i, len(pngBytes))
+		} else {
+			log.Printf("[Probe] Render %d err: %v", i, err)
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	if data, err := os.ReadFile("_layout_snap.log"); err == nil {
+		_ = os.WriteFile("_probe_editor_snap.log", data, 0644)
+		log.Printf("[Probe] 已收集 _layout_snap.log → _probe_editor_snap.log (%d 字节)", len(data))
+	} else {
+		log.Printf("[Probe] 读取 _layout_snap.log 失败: %v（需 WB_SNAP=1）", err)
+	}
+	if _, err := os.Stat("_canvas_dump.png"); err == nil {
+		log.Printf("[Probe] 窗口 PNG: _canvas_dump.png")
+	}
+	log.Println("[Probe] 完成，退出")
+	os.Exit(0)
 }
 
 // diagTerm 查询终端 buffer 内容与行 span 渲染位置（WB_TERM_DIAG 诊断）。

@@ -344,6 +344,13 @@ func enqueueJS(js string) {
 	}
 }
 
+// PushMainJS 把一段 JS 投递到主循环队列，由 Host.OnFrame →
+// DrainMainQueue 在主线程（goja 安全）执行。供 desktop 诊断/自动化
+// probe（如 --probe-editor）跨 goroutine 安全注入脚本。
+func PushMainJS(js string) {
+	enqueueJS(js)
+}
+
 // DrainMainQueue 在主线程执行所有待推送 JS 片段（Host.OnFrame 调用）。
 func DrainMainQueue(wv *webkit.WebView) {
 	for {
