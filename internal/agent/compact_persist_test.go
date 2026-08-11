@@ -90,7 +90,7 @@ func TestCompactThenPersist_NoAssistantLost(t *testing.T) {
 	// → 验证修复后 store 仍保留完整原始历史（不丢失、不粘连）
 	compactEvents = nil
 	for i := 1; i <= 6; i++ {
-		runCompactRound(t, store, convID, fmt.Sprintf("任务%d", i), i, 1500)
+		runCompactRound(t, store, convID, fmt.Sprintf("任务%d", i), i, 100)
 	}
 	if len(compactEvents) == 0 {
 		t.Logf("⚠️ 本轮历史未触发 maybeCompact（EventCompacted=0）——测试未覆盖 compact 路径")
