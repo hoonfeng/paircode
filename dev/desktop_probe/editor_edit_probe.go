@@ -368,7 +368,7 @@ func add(a, b int) int {
 		mk('range.cloneContents', function(){ return typeof r.cloneContents; });
 		mk('range.commonAncestorContainer', function(){ return r.commonAncestorContainer ? r.commonAncestorContainer.nodeName : 'null'; });
 		mk('range.cacAfterSet', function(){ var r2 = document.createRange(); r2.setStart(document.body.firstChild, 0); r2.setEnd(document.body.firstChild, 1); var c = r2.commonAncestorContainer; return c ? c.nodeName : 'null'; });
-		mk('range.cacSelCollapse', function(){ var s2 = window.getSelection(); s2.collapse(document.body.firstChild, 0); var rr = s2.getRangeAt(0); var c = rr.commonAncestorContainer; return c ? c.nodeName : 'null'; });
+		mk('range.cacSelCollapse', function(){ return 'skip(collapse-pollutes-selection)'; });
 		mk('node.contains', function(){ return typeof document.body.contains; });
 		mk('node.compareDocumentPosition', function(){ return typeof document.body.compareDocumentPosition; });
 		mk('node.getRootNode', function(){ return typeof document.body.getRootNode; });
@@ -440,6 +440,8 @@ func add(a, b int) int {
 	wv.EnsureLayout()
 	dumpGutterTree(wv)
 	dumpSubtree(wv, "cm-line", "=== cm-line render tree (prekey) ===")
+	// ★ 真实点击链路诊断已在排查中移除（inline segment 坐标 + MouseEvent
+	// detail 已修复）；输入链路从 MockFocus 开始。
 	host := app.NewHostForTest(wv, 1280, 800)
 	cmEl, err := findContentEditable(wv)
 	if err != nil {
