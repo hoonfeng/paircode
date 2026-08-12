@@ -225,7 +225,7 @@ func probeEditor(wv *webkit.WebView) {
 		var p = 'F:\\\\syproject\\wb-ui\\renderpipeline.go';
 		if (!st.openFiles.includes(p)) st.openFiles.push(p);
 		st.activeFile = p;
-		var c = 'package rendering\n\n// ---- probe-editor 测试文件 ----\n\ntype T struct{}\n\nfunc main() {\n    fmt.Println("a   b")  // 缩进+连续空格\n}\n';
+		var c = 'package rendering\n\n// ---- probe-editor 测试文件 ----\n\ntype T struct{}\n\nfunc main() {\n    fmt.Println("a   b")  // 缩进+连续空格\n}\n// 下面填充到 60 行让 .cm-scroller 可以滚动（验证光标滚动跟随）\n' + '// padding line 10\n'.repeat(50);
 		st.fileContents[p] = c;
 		st.fileSavedContent[p] = c;
 		st.fileDirty[p] = false;
@@ -422,6 +422,61 @@ func probeEditor(wv *webkit.WebView) {
 	})()`
 	desktopbridge.PushMainJS(spaceJS)
 	log.Println("[Probe] 已投递空格点击采样脚本")
+
+	// ★ SCROLL-CURSOR-PROBE：验证「滚动后光标跟随内容」——先把光标
+	// 放到较深位置（head 20），再滚动 .cm-scroller，对比滚动前后
+	// 光标 getBoundingClientRect().top（屏幕坐标）。光标若不跟随 = 用
+	// 内容绝对坐标绘制且漏容器 scroll offset 补偿（固定屏幕坐标 bug）。
+	time.Sleep(1 * time.Second)
+	scrollJS := `(function(){
+		var v = window.__editorView;
+		var sc = document.querySelector('.cm-scroller');
+		var out = [];
+		// 1) 把光标放到第 50 行（视口外，行 60 的 pad 行）
+		try {
+			var ln = v.state.doc.line(Math.min(v.state.doc.lines, 50));
+			v.dispatch({selection: {anchor: ln.from + 2, head: ln.from + 2}});
+		} catch(e) { out.push('sethead-ERR:' + e.message); }
+		// 2) 滚动前采样（等 300ms 让 measure/布局收敛）
+		setTimeout(function(){
+			var sc2 = document.querySelector('.cm-scroller');
+			var cu2 = document.querySelector('.cm-cursor');
+			var b1 = cu2 ? cu2.getBoundingClientRect() : null;
+			out.push('BEFORE st=' + (sc2 ? sc2.scrollTop : 'null') + ' caretTop=' + (b1 ? Math.round(b1.top) : 'null') + ' caretLeft=' + (b1 ? Math.round(b1.left) : 'null'));
+			// 3) 滚动 200px（内容长 60 行，可滚动范围足够）
+			if (sc2) sc2.scrollTop = (sc2.scrollTop || 0) + 200;
+			setTimeout(function(){
+				var sc3 = document.querySelector('.cm-scroller');
+				var cu3 = document.querySelector('.cm-cursor');
+				var b2 = cu3 ? cu3.getBoundingClientRect() : null;
+				out.push('AFTER st=' + (sc3 ? sc3.scrollTop : 'null') + ' caretTop=' + (b2 ? Math.round(b2.top) : 'null') + ' caretLeft=' + (b2 ? Math.round(b2.left) : 'null'));
+			// 4) 参照元素 rect：cm-content（滚动内容容器）、首个 cm-line
+			var cc = document.querySelector('.cm-content');
+			var l1 = document.querySelector('.cm-line');
+			var rcc = cc ? cc.getBoundingClientRect() : null;
+			var rl1 = l1 ? l1.getBoundingClientRect() : null;
+			out.push('CONTENT-rect=' + (rcc ? Math.round(rcc.top) + ',' + Math.round(rcc.left) : 'null')
+				+ ' LINE1-rect=' + (rl1 ? Math.round(rl1.top) + ',' + Math.round(rl1.left) : 'null'));
+			// 5) 光标 DOM 祖先链（class 名）——定位光标不在 .cm-scroller 内的原因
+			var cu4 = document.querySelector('.cm-cursor');
+			if (cu4) {
+				var chain = [];
+				var p = cu4;
+				while (p && chain.length < 8) {
+					chain.push(p.tagName + '.' + (p.className || '').split(' ').slice(0,3).join('.'));
+					p = p.parentNode;
+				}
+				out.push('CURSOR-DOM-CHAIN ' + chain.join(' → '));
+			}
+			// 6) .cm-scroller 存在性 + scrollTop
+			out.push('SCROLLER-EL ' + (sc3 ? sc3.tagName + '.' + sc3.className + ' st=' + sc3.scrollTop : 'null'));
+			console.log('SCROLL-CURSOR-PROBE ' + out.join(' | '));
+			}, 400);
+		}, 300);
+		return 'scroll-cursor-probe scheduled';
+	})()`
+	desktopbridge.PushMainJS(scrollJS)
+	log.Println("[Probe] 已投递滚动光标采样脚本")
 
 	// ★ 聚焦后延迟再查一次最终状态（几何桥/布局收敛后光标是否仍 rect=0、
 	// 滚动是否异常）——区分「点击瞬间未同步」与「最终布局错误」。
