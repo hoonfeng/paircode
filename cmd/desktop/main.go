@@ -225,7 +225,7 @@ func probeEditor(wv *webkit.WebView) {
 		var p = 'F:\\\\syproject\\wb-ui\\renderpipeline.go';
 		if (!st.openFiles.includes(p)) st.openFiles.push(p);
 		st.activeFile = p;
-		var c = 'package rendering\n\n// ---- probe-editor 测试文件 ----\n\ntype T struct{}\n\nfunc main() {\n\tfmt.Println("hello")\n}\n';
+		var c = 'package rendering\n\n// ---- probe-editor 测试文件 ----\n\ntype T struct{}\n\nfunc main() {\n    fmt.Println("a   b")  // 缩进+连续空格\n}\n';
 		st.fileContents[p] = c;
 		st.fileSavedContent[p] = c;
 		st.fileDirty[p] = false;
@@ -327,6 +327,102 @@ func probeEditor(wv *webkit.WebView) {
 	})()`
 	desktopbridge.PushMainJS(focusJS)
 	log.Println("[Probe] 已投递聚焦编辑器脚本")
+	// ★ SPACE-PROBE：点击「空格多」的行（行 8：4 空格缩进 + "a   b" 连续空格 +
+	// 注释前 2 空格），逐字符 coordsAtPos 采样 + 连续空格处点击——复现「涉及
+	// 空格多的点击错位」。
+	spaceJS := `(function(){
+		var v = window.__editorView;
+		var lines = document.querySelectorAll('.cm-line');
+		// 行 8 = lines[7]（测试文件第 8 行：缩进+连续空格）
+		var l8 = lines[7] || lines[1];
+		if (!l8 || !v) return 'no-line8';
+		var r = l8.getBoundingClientRect();
+		var txt = (l8.textContent || '').replace(/\u00a0/g, ' ');
+		var y = r.top + 9;
+		var res = [];
+		// ★ 逐字符 coordsAtPos：输出每个字符的期望 x（CM6 数据侧）
+		var from = -1, tgt = '';
+		for (var li = 1; li <= v.state.doc.lines; li++) {
+			var lt = v.state.doc.line(li).text;
+			if (lt.indexOf('fmt.Println') >= 0) { from = v.state.doc.line(li).from; tgt = lt; break; }
+		}
+		var coords = [];
+		for (var i = 0; i < Math.min(tgt.length, 45); i++) {
+			var c = null;
+			try { c = v.coordsAtPos(from + i, -1); } catch(e) {}
+			coords.push(i + ':' + tgt.charAt(i) + '=' + (c ? Math.round(c.left - r.left) : '?'));
+		}
+		console.log('SPACE-COORDS line8="' + tgt + '" | ' + coords.join(' '));
+		// ★ 逐字符手动 Range.getClientRects（rangeRect 路径）：对比 coordsAtPos
+		// ——定位是 coordsAtPos（tile 结构）错还是 rangeRect（几何测量）错
+		var rg = [];
+		for (var i = 0; i < Math.min(tgt.length, 45); i++) {
+			var rr = null;
+			try {
+				var rn = document.createRange();
+				// 定位到行内第 i 个字符：用 coordsAtPos 拿字符 rect 逆推不行——
+				// 直接用 docView 的字符 DOM。改用逐字符 textRange 采样：
+				var ln2 = v.state.doc.line(from);
+				// 用 CM6 内部 docView 的字符 tile 采样太深，这里只输出
+				// coordsAtPos 正负两侧，判断错乱集中在「字符起点」
+				var cA = null, cB = null;
+				try { cA = v.coordsAtPos(from + i, -1); } catch(e) {}
+				try { cB = v.coordsAtPos(from + i, 1); } catch(e) {}
+				rg.push(i + ':' + tgt.charAt(i) + '=(' + (cA ? Math.round(cA.left - r.left) : '?') + ',' + (cB ? Math.round(cB.left - r.left) : '?') + ')');
+			} catch(e) { rg.push(i + ':ERR'); }
+		}
+		console.log('SPACE-RANGE line8 | ' + rg.join(' '));
+		// ★ dump 行 8 的 DOM 结构：span 划分（CM6 按 DOM 文本节点建 tile）
+		var dom8 = l8 ? l8.innerHTML.replace(/</g, '<') : '';
+		console.log('SPACE-DOM line8 html=' + dom8.slice(0, 400));
+		// ★ 每个 text node 的 textContent + getBoundingClientRect left
+		var tn = [];
+		if (l8) {
+			var walk = document.createTreeWalker(l8, NodeFilter.SHOW_TEXT, null);
+			var cur;
+			while (cur = walk.nextNode()) {
+				var pr = cur.parentNode.getBoundingClientRect();
+				tn.push('"' + cur.nodeValue.replace(/\n/g, '\\n') + '"@' + Math.round(pr.left - r.left));
+			}
+		}
+		console.log('SPACE-TEXTNODES ' + tn.join(' | '));
+		// ★ 对每个 text node 的第 1 个字符构造 Range.getClientRects（rangeRect
+		// 路径=Fast 缓存）——对比 getBoundingClientRect（forceLayout 路径）：
+		// 定位 coordsAtPos 错乱是「span 首字符 rangeRect 返回行首旧值」
+		var rc = [];
+		if (l8) {
+			var walk2 = document.createTreeWalker(l8, NodeFilter.SHOW_TEXT, null);
+			var cur2;
+			while (cur2 = walk2.nextNode()) {
+				var rr = null;
+				try {
+					var rn = document.createRange();
+					rn.setStart(cur2, 0);
+					rn.setEnd(cur2, Math.min(1, cur2.nodeValue.length));
+					var rs = rn.getClientRects();
+					if (rs && rs.length) rr = Math.round(rs[0].left - r.left);
+				} catch(e) { rr = 'ERR'; }
+				rc.push('"' + cur2.nodeValue.slice(0, 6) + '"→' + rr);
+			}
+		}
+		console.log('SPACE-RANGE-FIRST ' + rc.join(' | '));
+		// ★ 在连续空格中点点击（字符 4-7 缩进尾部、"a   b" 的 3 空格处），
+		// 对比 posAtCoords 与期望字符索引
+		var xs = [2, 6, 10, 14, 18, 22, 26, 30, 34, 38, 42, 46, 50, 54];
+		var res2 = [];
+		for (var i = 0; i < xs.length; i++) {
+			var x = r.left + xs[i];
+			var pos = null;
+			try { pos = v.posAtCoords({x: x, y: y}); } catch(e) { pos = 'ERR'; }
+			var idx = (typeof pos == 'number') ? pos - from : pos;
+			res2.push(xs[i] + 'px→' + idx);
+		}
+		console.log('SPACE-PROBE line8="' + txt + '" lineLeft=' + r.left + ' | ' + res2.join(' | '));
+		return 'space-probe done';
+	})()`
+	desktopbridge.PushMainJS(spaceJS)
+	log.Println("[Probe] 已投递空格点击采样脚本")
+
 	// ★ 聚焦后延迟再查一次最终状态（几何桥/布局收敛后光标是否仍 rect=0、
 	// 滚动是否异常）——区分「点击瞬间未同步」与「最终布局错误」。
 	time.Sleep(3 * time.Second)
