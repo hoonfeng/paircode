@@ -241,7 +241,10 @@ func probeEditor(wv *webkit.WebView) {
 		var line = document.querySelector('.cm-line') || document.querySelector('.cm-content');
 		if (!line) return 'no-line';
 		var r = line.getBoundingClientRect();
-		var x = r.left + 5, y = r.top + 9;   // 行内（非行首，命中文字/span 区域）
+		var content = document.querySelector('.cm-content');
+		var cr = content ? content.getBoundingClientRect() : null;
+		var x = r.left + 100, y = r.top + 9;   // 行内明确字符位置（第 ~12 字符）
+		console.log('CLICK-PROBE line.left=' + r.left + ' content.left=' + (cr ? cr.left : 'null') + ' clickX=' + x);
 		line.dispatchEvent(new MouseEvent('mousedown', {bubbles:true, cancelable:true, detail:1, clientX:x, clientY:y}));
 		line.dispatchEvent(new MouseEvent('mouseup', {bubbles:true, cancelable:true, detail:1, clientX:x, clientY:y}));
 		line.dispatchEvent(new MouseEvent('click', {bubbles:true, cancelable:true, detail:1, clientX:x, clientY:y}));
@@ -264,11 +267,14 @@ func probeEditor(wv *webkit.WebView) {
 		} catch (e) { console.log('CURSOR-RULES ERR ' + e); }
 		// ★ 查询光标 DOM 几何/显示状态（判断是否在视口内、display 是否 block）
 		var cu = document.querySelector('.cm-cursor');
-		var cr = cu ? cu.getBoundingClientRect() : null;
+		var cr2 = cu ? cu.getBoundingClientRect() : null;
 		var ccs = cu ? getComputedStyle(cu) : null;
-		console.log('CURSOR-PROBE rect=' + (cr ? '{' + cr.left + ',' + cr.top + ',' + cr.width + 'x' + cr.height + '}' : 'null')
+		console.log('CURSOR-PROBE rect=' + (cr2 ? '{' + cr2.left + ',' + cr2.top + ',' + cr2.width + 'x' + cr2.height + '}' : 'null')
 			+ ' display=' + (ccs ? ccs.display : 'null') + ' cls=' + (cu ? cu.className : 'null')
-			+ ' scrollerTop=' + (document.querySelector('.cm-scroller') ? document.querySelector('.cm-scroller').scrollTop : 'null'));
+			+ ' scrollerTop=' + (document.querySelector('.cm-scroller') ? document.querySelector('.cm-scroller').scrollTop : 'null')
+			+ ' styleLeft=' + (cu ? cu.style.left : 'null')
+			+ ' styleAttr=' + (cu ? (cu.getAttribute('style')||'').slice(0,60) : 'null')
+			+ ' clickX=' + x + ' lineLeft=' + r.left);
 		// ★ 查询选区内容（蓝色块可能=选中文本）
 		var sel = window.getSelection ? window.getSelection().toString() : '';
 		console.log('SEL-PROBE len=' + sel.length + ' txt=' + sel.slice(0, 40).replace(/\n/g, '\\n'));
@@ -277,6 +283,46 @@ func probeEditor(wv *webkit.WebView) {
 		var head = v ? v.state.selection.main.head : -1;
 		var docLen = v ? v.state.doc.length : -1;
 		console.log('HEAD-PROBE head=' + head + ' docLen=' + docLen + ' doc=' + (v ? JSON.stringify(v.state.doc.toString().slice(0, 60)) : 'null'));
+		// ★ 时序采样：点击后光标 DOM style.left 的更新延迟（CM6 点击后
+		// 只 requestMeasure，光标位置在下一帧 rAF measure 后才写 DOM。
+		// 浏览器 <1 帧；若 wb-ui 延迟几百 ms = 用户看到「光标停在点击
+		// 点左边」。setTimeout 走宏任务（下一帧 processEventLoop 执行）。
+		var sampleN = 0;
+		(function sample() {
+			sampleN++;
+			var cu = document.querySelector('.cm-cursor');
+			var sl = cu ? cu.style.left : 'null';
+			console.log('TICK-PROBE n=' + sampleN + ' styleLeft=' + sl);
+			if (sampleN < 3) setTimeout(sample, 80);
+		})();
+		// ★ 第二次点击（字符 ~27，line.left+200）：测非首次点击的
+		// 更新延迟 + 偏差是否随位置线性增长（换算尺寸 vs 固定偏移）。
+		setTimeout(function(){
+			var l2 = document.querySelector('.cm-line');
+			var r2 = l2 ? l2.getBoundingClientRect() : null;
+			var x2 = (r2 ? r2.left : 358.5) + 200, y2 = (r2 ? r2.top : 64) + 9;
+			var v2 = window.__editorView;
+			// ★ 直接问 CM6：posAtCoords 对 (x2,y2) 的解析结果（不经
+			// dispatchEvent）——区分「CM6 数据错」vs「事件链错」。
+			var direct = null;
+			try { direct = v2 ? v2.posAtCoords({x: x2, y: y2}) : null; } catch(e) { direct = 'ERR:' + e.message; }
+			var c17 = null, c27 = null;
+			try { c17 = v2 ? v2.coordsAtPos(17) : null; } catch(e) {}
+			try { c27 = v2 ? v2.coordsAtPos(27) : null; } catch(e) {}
+			console.log('DIRECT-PROBE clickX=' + x2 + ' posAtCoords=' + direct
+				+ ' c17=' + (c17 ? c17.left : 'null') + ' c27=' + (c27 ? c27.left : 'null'));
+			l2.dispatchEvent(new MouseEvent('mousedown', {bubbles:true, cancelable:true, detail:1, clientX:x2, clientY:y2}));
+			l2.dispatchEvent(new MouseEvent('mouseup', {bubbles:true, cancelable:true, detail:1, clientX:x2, clientY:y2}));
+			l2.dispatchEvent(new MouseEvent('click', {bubbles:true, cancelable:true, detail:1, clientX:x2, clientY:y2}));
+			console.log('CLICK2-PROBE clickX=' + x2 + ' head=' + (v2 ? v2.state.selection.main.head : -1));
+			var n2 = 0;
+			(function s2() {
+				n2++;
+				var c2 = document.querySelector('.cm-cursor');
+				console.log('TICK2-PROBE n=' + n2 + ' styleLeft=' + (c2 ? c2.style.left : 'null'));
+				if (n2 < 3) setTimeout(s2, 80);
+			})();
+		}, 500);
 		return 'clicked line, cm-focused=' + window.__focusProbe;
 	})()`
 	desktopbridge.PushMainJS(focusJS)
@@ -289,10 +335,13 @@ func probeEditor(wv *webkit.WebView) {
 		var cr = cu ? cu.getBoundingClientRect() : null;
 		var v = window.__editorView;
 		var sc = document.querySelector('.cm-scroller');
+		var cu2 = document.querySelector('.cm-cursor');
 		console.log('FINAL-PROBE cursor=' + (cr ? '{' + cr.left + ',' + cr.top + ',' + cr.width + 'x' + cr.height + '}' : 'null')
 			+ ' scrollerTop=' + (sc ? sc.scrollTop : 'null')
 			+ ' head=' + (v ? v.state.selection.main.head : -1)
-			+ ' cm-focused=' + (document.querySelector('.cm-editor') ? document.querySelector('.cm-editor').classList.contains('cm-focused') : false));
+			+ ' cm-focused=' + (document.querySelector('.cm-editor') ? document.querySelector('.cm-editor').classList.contains('cm-focused') : false)
+			+ ' styleLeft=' + (cu2 ? cu2.style.left : 'null')
+			+ ' styleAttr=' + (cu2 ? (cu2.getAttribute('style')||'').slice(0,60) : 'null'));
 		return 'final';
 	})()`
 	desktopbridge.PushMainJS(finalJS)
