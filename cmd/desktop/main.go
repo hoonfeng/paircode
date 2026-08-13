@@ -145,6 +145,12 @@ console.error = function(){
 	}
 
 	wv.EnsureLayout()
+	// ★ WB_GEOM_DUMP=1：dump 关键布局元素几何（clientHeight/scrollHeight/
+	// offsetHeight/offsetTop），定位「对话高度/对话列表高度计算不正确」
+	// 导致 token 统计/聊天输入不可见（22 秒加载伴随症状）。
+	if os.Getenv("WB_GEOM_DUMP") != "" {
+		dumpKeyGeometry(wv)
+	}
 	writeRenderDiagnostic(wv)
 
 	// ★ 注册 DumpRTCallback：Host.needsResizeDump 置位时（resize 后 / 终端
@@ -623,6 +629,41 @@ func setupLoaders(wv *webkit.WebView, distDir string) {
 			}
 		}
 	}
+}
+
+// dumpKeyGeometry 通过 JS 查询关键布局元素的几何，定位高度计算错误。
+// 输出 clientHeight（可视高）/scrollHeight（内容高）/offsetHeight（含边框高）/
+// offsetTop（相对 offsetParent）/getBoundingClientRect（相对视口）。
+func dumpKeyGeometry(wv *webkit.WebView) {
+	interp := wv.JSInterpreter()
+	if interp == nil {
+		log.Println("[GEOM] JSInterpreter nil")
+		return
+	}
+	js := `(function(){
+	  function g(sel){
+	    var el = document.querySelector(sel);
+	    if(!el){ return sel + '=NOT_FOUND'; }
+	    var r = '?x?';
+	    try { if(el.getBoundingClientRect){ var rr = el.getBoundingClientRect(); r = Math.round(rr.width) + 'x' + Math.round(rr.height) + '@' + Math.round(rr.top); } } catch(e){}
+	    return sel + ' clientH=' + el.clientHeight + ' scrollH=' + el.scrollHeight
+	      + ' offsetH=' + el.offsetHeight + ' offsetTop=' + el.offsetTop
+	      + ' rect=' + r + ' scrollTop=' + el.scrollTop;
+	  }
+	  return [
+	    'viewH=' + window.innerHeight + ' viewW=' + window.innerWidth,
+	    g('.right-panel'), g('.rp-body'), g('.chat-area'),
+	    g('.chat-messages'), g('.msg-list-wrap'),
+	    g('.chat-input-area'), g('.chat-input'),
+	    g('.conv-sidebar'), g('.conv-list')
+	  ].join('\n');
+	})()`
+	v, err := interp.RunJS(js)
+	if err != nil {
+		log.Printf("[GEOM] RunJS err: %v", err)
+		return
+	}
+	log.Printf("[GEOM] 关键元素几何:\n%s", v.ToString())
 }
 
 func writeRenderDiagnostic(wv *webkit.WebView) {
