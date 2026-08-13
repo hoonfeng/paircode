@@ -126,7 +126,21 @@ func registerHandlers() {
 	// wb-ui 侧 dispatchHTTP 会把 fetch 的 url/options 装配成 *http.Request 再
 	// 调 handler，Go 侧无需任何自定义请求/响应解析。
 	for _, r := range bridgeRegistry.AllRoutes() {
-		bridge.RegisterHTTP(r.Method, r.Pattern, http.HandlerFunc(r.Handler))
+		h := http.HandlerFunc(r.Handler)
+		if isWsSwitchProbe {
+			// ★ WS_SWITCH_TIMING=1：打印每个耗时 >5ms 的 handler 调用，
+			//   定位「启动 22 秒」里同步 bridge_call（/api/settings、/api/health、
+			//   /api/conversations 等）的慢 handler。
+			pattern := r.Pattern
+			h = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				t0 := time.Now()
+				r.Handler(w, req)
+				if d := time.Since(t0); d > 5*time.Millisecond {
+					log.Printf("[WS-TIMING] %s %s = %.2fms", req.Method, pattern, float64(d.Microseconds())/1000)
+				}
+			})
+		}
+		bridge.RegisterHTTP(r.Method, r.Pattern, h)
 	}
 	log.Printf("[Bridge] 已转注册 %d 条路由到 wb-ui bridge（两层直调）", len(bridgeRegistry.AllRoutes()))
 }
