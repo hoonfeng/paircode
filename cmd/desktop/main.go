@@ -30,13 +30,20 @@ func main() {
 	log.Println("[Desktop] PairCode IDE 桌面版 v1.0.6-desktop")
 
 	// ★ WB_CPU_PROF=1：启动段（loadHTML + Vue mount + 终端初始化）Go CPU
-	// profile，分析 goja VM 执行热点（优化终端启动慢）。3s 后自动停止。
+	// profile，分析 goja VM 执行热点（优化终端启动慢）。默认 3s 后自动停止，
+	// WB_CPU_PROF_SECS 可覆盖时长（如 60s 覆盖完整 Vue mount 执行）。
 	if os.Getenv("WB_CPU_PROF") != "" {
+		secs := 3
+		if v := os.Getenv("WB_CPU_PROF_SECS"); v != "" {
+			if n, err := fmt.Sscanf(v, "%d", &secs); err != nil || n != 1 || secs <= 0 {
+				secs = 3
+			}
+		}
 		f, err := os.Create("desktop_cpu.prof")
 		if err == nil {
 			_ = pprof.StartCPUProfile(f)
 			go func() {
-				time.Sleep(3 * time.Second)
+				time.Sleep(time.Duration(secs) * time.Second)
 				pprof.StopCPUProfile()
 				f.Close()
 				log.Println("[CPU-PROF] stopped → desktop_cpu.prof")
