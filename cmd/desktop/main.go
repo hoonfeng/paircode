@@ -94,7 +94,11 @@ func main() {
 	// ★ 先初始化桥接（core 加载 + 真实 handler 注册 + fetch 拦截注入），
 	//   再加载页面——页面 script 执行时 desktopBridge / go.bridge_call
 	//   已就绪，/api/* 请求才能被拦截到本地 Go handler。
-	desktopbridge.Init(wv)
+	if os.Getenv("WB_NO_BRIDGE") == "" {
+		desktopbridge.Init(wv)
+	} else {
+		log.Println("[Desktop] WB_NO_BRIDGE=1：跳过 desktopbridge.Init（对照实验）")
+	}
 
 	wv.LoadHTML(htmlStr)
 
