@@ -17,6 +17,8 @@
 // 增强循环的边界语义，不改动持久化格式与前端事件协议。
 package agent
 
+import "fmt"
+
 // TurnEndReason 一轮 turn（一次 Run 调用）的结束原因，结构化枚举。
 // 对应 deepseek-harness 的 TurnEndReason：completed / max-tokens / aborted / error / blocked。
 // 扩展了 gou-ide 特有的 content-loop（内容循环兜底）与 max-iterations（迭代上限）。
@@ -66,27 +68,42 @@ func (l *Loop) openTurn() {
 	l.StepNo = 0
 	l.hadMaxTokens = false
 	l.CancelCause = AgentCancelCause{}
+	l.emit(Event{Type: EventNotice, Content: fmt.Sprintf("[turn/%d/start] 开始第 %d 轮对话", l.TurnNo, l.TurnNo)})
 }
 
 // beginStep 进入本轮 turn 的下一个 step（一次 LLM 调用 + 工具执行）。
 // 对应 deepseek-harness step/start。
 func (l *Loop) beginStep() {
 	l.StepNo++
+	l.emit(Event{Type: EventNotice, Content: fmt.Sprintf("[step/%d.%d/start] 模型调用 #%d", l.TurnNo, l.StepNo, l.StepNo)})
+}
+
+// endStep 收尾一个 step：记录本次 step 的工具执行结果概要。
+// 对应 deepseek-harness step/end。每轮迭代工具执行完成后调用一次。
+func (l *Loop) endStep(summary string) {
+	if summary != "" {
+		l.emit(Event{Type: EventNotice, Content: fmt.Sprintf("[step/%d.%d/end] %s", l.TurnNo, l.StepNo, summary)})
+	} else {
+		l.emit(Event{Type: EventNotice, Content: fmt.Sprintf("[step/%d.%d/end]", l.TurnNo, l.StepNo)})
+	}
 }
 
 // endTurn 收尾一轮 turn：记录结构化结束原因（无显式设置时按 err/ctx 推断）。
 // 对应 deepseek-harness turn/end 事件。defer 中调用一次即可。
 func (l *Loop) endTurn(err error, ctxDone bool) {
-	if l.LastTurnReason != "" {
-		return // 已在具体 return 点显式设置，不覆盖
-	}
-	switch {
-	case ctxDone:
-		l.LastTurnReason = TurnAborted
-	case err != nil:
-		l.LastTurnReason = TurnError
-	default:
-		l.LastTurnReason = TurnCompleted
+	if l.LastTurnReason == "" {
+		switch {
+		case ctxDone:
+			l.LastTurnReason = TurnAborted
+		case err != nil:
+			l.LastTurnReason = TurnError
+		default:
+			l.LastTurnReason = TurnCompleted
+		}
+		// 推断路径（未显式设置原因，即无 EventDone 发出）：补发 turn/end notice。
+		// 显式设置路径（completed/blocked/content-loop 等）原因已由 EventDone 携带，
+		// 不再重复发 notice，避免事件流末尾出现非 done 事件干扰断言。
+		l.emit(Event{Type: EventNotice, Content: fmt.Sprintf("[turn/%d/end] 原因=%s", l.TurnNo, l.LastTurnReason)})
 	}
 }
 

@@ -90,12 +90,12 @@ function safeParse(json) {
 export function toolMeta(seg) {
   const name = seg.name || ''
   const args = safeParse(seg.argsRaw)
-  if (/^read_file\b/.test(name)) return { icon: 'file-text', title: '读取文件', detail: args.path || '', summary: '已读取' }
-  if (/^write_file\b/.test(name)) return { icon: 'file-plus', title: '写入文件', detail: args.path || '', summary: '已写入' }
-  if (/^edit_file|multi_edit\b/.test(name)) return { icon: 'edit', title: '编辑文件', detail: args.path || '', summary: '已编辑' }
-  if (/^run_command\b/.test(name)) return { icon: 'terminal', title: '执行命令', detail: '$ ' + (args.command || '').slice(0, 60), summary: '已完成' }
+  if (/^read_file\b|^read\b/.test(name)) return { icon: 'file-text', title: '读取文件', detail: args.path || '', summary: '已读取' }
+  if (/^write_file\b|^write\b/.test(name)) return { icon: 'file-plus', title: '写入文件', detail: args.path || '', summary: '已写入' }
+  if (/^edit_file\b|^edit\b|multi_edit\b|^str_replace_editor\b/.test(name)) return { icon: 'edit', title: '编辑文件', detail: args.path || '', summary: '已编辑' }
+  if (/^run_command\b|^bash\b|^run_code\b/.test(name)) return { icon: 'terminal', title: '执行命令', detail: '$ ' + (args.command || args.code || '').slice(0, 60), summary: '已完成' }
   if (/^run_test\b/.test(name)) return { icon: 'check', title: '运行测试', detail: args.package_path || '', summary: '已完成' }
-  if (/^search_content|search_files|find_symbol\b/.test(name)) return { icon: 'search', title: '搜索', detail: (args.pattern || args.symbol || '').slice(0, 60), summary: '已搜索' }
+  if (/^search_content\b|^search_files\b|find_symbol\b|^grep\b|^glob\b/.test(name)) return { icon: 'search', title: '搜索', detail: (args.pattern || args.symbol || '').slice(0, 60), summary: '已搜索' }
   if (/^web_search|web_fetch|web_debug\b/.test(name)) return { icon: 'globe', title: '网络', detail: (args.query || args.url || '').slice(0, 60), summary: '已完成' }
   if (/^git_\b/.test(name)) return { icon: 'source-control', title: 'Git', detail: args.file || '', summary: '已完成' }
   if (/^go_build|go_run|bug_detect|bug_fix\b/.test(name)) return { icon: 'terminal', title: name, detail: args.path || '', summary: '已完成' }

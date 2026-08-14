@@ -167,6 +167,7 @@ func startWebUI(port int) {
 	if root := core.Root(); root != "" {
 		initReg := agent.NewRegistry()
 		agent.RegisterDefaultTools(initReg, root)
+		agent.RegisterHarnessTools(initReg, root)
 		agent.RegisterCommitMessageTool(initReg)
 		agenttools.RegisterManagementTools(initReg, root)
 		// 自动初始化 .pair/tools.json（不存在则创建）；多项目配置一并应用
@@ -2262,6 +2263,7 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 	}
 	reg := agent.NewRegistry()
 	agent.RegisterDefaultTools(reg, root)
+	agent.RegisterHarnessTools(reg, root)
 	agent.RegisterCommitMessageTool(reg)
 
 	agenttools.RegisterManagementTools(reg, root)

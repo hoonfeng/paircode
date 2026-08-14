@@ -253,19 +253,21 @@ func (l *Loop) emit(e Event) {
 	}
 }
 
-// Steer 托管一条消息：在当前轮次完成后、下一轮 LLM 调用前注入上下文。
-// 使用场景：用户在 agent 正在执行时输入补充指令，不打断当前工具执行。
+// Steer 托管一条消息：在当前 step 完成后、下一 step LLM 调用前注入上下文。
+// 对应 deepseek-harness Inbox 的 next-step 队列（steer 唤醒）：不打断当前工具执行，
+// 在当前 step 边界处消费。使用场景：用户在 agent 正在执行时输入补充指令。
 func (l *Loop) Steer(msg Message) {
 	l.steerQueue = append(l.steerQueue, msg)
 }
 
-// FollowUp 托管一条跟进消息：在 agent 自然终止（无 tool call 且有正文）后注入，
+// FollowUp 托管一条跟进消息：在当前 turn 自然终止（无 tool call 且有正文）后注入，
 // 让 agent 继续处理后续任务而不是立即退出。
+// 对应 deepseek-harness Inbox 的 next-turn 队列（followup 唤醒）：只在 turn 边界消费。
 func (l *Loop) FollowUp(msg Message) {
 	l.followUpQueue = append(l.followUpQueue, msg)
 }
 
-// drainSteerQueue 清空并返回托管消息列表。
+// drainSteerQueue 清空并返回托管消息列表（step 边界消费，对齐 next-step）。
 func (l *Loop) drainSteerQueue() []Message {
 	if len(l.steerQueue) == 0 {
 		return nil
@@ -275,7 +277,7 @@ func (l *Loop) drainSteerQueue() []Message {
 	return msgs
 }
 
-// drainFollowUpQueue 清空并返回跟进消息列表。
+// drainFollowUpQueue 清空并返回跟进消息列表（turn 边界消费，对齐 next-turn）。
 func (l *Loop) drainFollowUpQueue() []Message {
 	if len(l.followUpQueue) == 0 {
 		return nil
@@ -651,11 +653,6 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 			if tc.Function.Name == "generate_commit_message" {
 				l.commitMessage = result
 			}
-
-			// 不再用于区分阶段/完成，仅记录 commit message 字符串
-			if tc.Function.Name == "generate_commit_message" {
-				l.commitMessage = result
-			}
 		}
 		} // end else (serial tool execution)
 		} // end if !truncated
@@ -663,8 +660,13 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 		// 先同步 currentMsgs（包含 tool results），供 persist worker 获取完整历史
 		l.currentMsgs = msgs
 
-		// 先同步 currentMsgs（包含 tool results），供 persist worker 获取完整历史
-		l.currentMsgs = msgs
+		// agentloop：step/end——本轮 step 收尾（LLM 调用 + 工具执行已完成）。
+		// 对应 deepseek-harness step/end 事件；统计本轮工具调用数供前端/日志展示。
+		if len(assistant.ToolCalls) > 0 {
+			l.endStep(fmt.Sprintf("执行 %d 个工具调用", len(assistant.ToolCalls)))
+		} else {
+			l.endStep("")
+		}
 
 		// ★ 自然终止：模型无工具调用且有正文 → 任务完成
 		if l.contentOnlyIters == 0 && len(assistant.ToolCalls) == 0 && strings.TrimSpace(assistant.Content) != "" {
