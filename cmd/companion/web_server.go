@@ -174,6 +174,10 @@ func startWebUI(port int) {
 		agent.LoadAllWorkspaceToolConfigs(initReg, root)
 		// 参考注册表也加载 Lua 自定义工具（多项目），保证 /api/tools 工具面板可见
 		reloadWebLuaTools(initReg, root)
+		// ★ harness 对齐：暂时移除 pair 独有工具（WB_FULL_TOOLS=1 恢复全量）
+		if n := agent.ApplyHarnessToolFilter(initReg); n > 0 {
+			log.Printf("[WebUI] harness 对齐模式：移除 %d 个 pair 独有工具（WB_FULL_TOOLS=1 恢复全量）", n)
+		}
 		handler.SetToolsRegistry(initReg)
 		log.Printf("[WebUI] 参考工具注册表已初始化（%d 个工具）", len(initReg.AllToolMeta()))
 	}
@@ -2280,6 +2284,8 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 	agent.LoadAllWorkspaceToolConfigs(reg, root)
 
 	reloadWebLuaTools(reg, root)
+	// ★ harness 对齐：暂时移除 pair 独有工具（WB_FULL_TOOLS=1 恢复全量）
+	agent.ApplyHarnessToolFilter(reg)
 	agent.SetCodeGraphDB(agentMgr.RawDB())
 	agent.InitDebugLogger(root, 50)
 
