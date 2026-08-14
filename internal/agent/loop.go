@@ -71,6 +71,14 @@ type Event struct {
 	PartialResult string
 	// DoneReason 完成原因（仅 EventDone 时设置）。
 	DoneReason string
+	// Turn 事件所属 turn 序号（agentloop：一次 Run = 一个 turn，从 1 开始）。
+	// 0 表示 Loop 尚未打开 turn（emit 时自动回填 l.TurnNo）。
+	Turn int
+	// Step 事件所属 step 序号（每次 LLM 调用 + 工具执行 = 一个 step）。
+	Step int
+	// TurnReason 结构化 turn 结束原因（仅 EventDone 时设置，见 agentloop.go）。
+	// 与 DoneReason 并存：DoneReason 保持兼容值（task_complete），TurnReason 为枚举值。
+	TurnReason string
 }
 
 
@@ -204,9 +212,33 @@ type Loop struct {
 	// Run 的 history 参数传 nil 时自动使用此持久化历史——前端无需自行构建/传递历史。
 	// 传非 nil history 时仍保持向后兼容。
 	History []Message
+
+	// ── agentloop（deepseek-harness 风格 turn/step 双层循环，见 agentloop.go）──
+	// TurnNo 当前 turn 序号（一次 Run = 一个 turn，openTurn 递增）。
+	TurnNo int
+	// StepNo 当前 step 序号（每次 LLM 调用 + 工具执行 = 一个 step，turn 内递增）。
+	StepNo int
+	// LastTurnReason 最近一次 turn 的结束原因（结构化枚举，Run 返回后有效）。
+	LastTurnReason TurnEndReason
+	// hadMaxTokens 本轮 turn 是否曾触发 max-tokens（sticky：后续正常 step 不降级结果）。
+	hadMaxTokens bool
+	// PreStep 可选的 step 前拦截钩子（对应 agent/pre-step 瀑布）。
+	// 每次 LLM 调用前、消息组装完成后调用；可改写进入模型的输入（返回 rewritten）或
+	// 拒绝整个 turn（reject=true → turn 以 blocked 结束，跳过本次 LLM 调用）。
+	// nil = 直通（默认）。
+	PreStep func(ctx context.Context, callMsgs []Message, turn, step int) (rewritten []Message, reject bool, err error)
+	// CancelCause 本轮 turn 被取消的原因（ctx 取消时由 Run 设置，见 agentloop.go）。
+	CancelCause AgentCancelCause
 }
 
 func (l *Loop) emit(e Event) {
+	// agentloop：自动回填事件所属 turn/step（未显式设置时）。
+	if e.Turn == 0 {
+		e.Turn = l.TurnNo
+	}
+	if e.Step == 0 {
+		e.Step = l.StepNo
+	}
 	if l.OnEvent != nil {
 		l.OnEvent(e)
 	}
@@ -295,6 +327,9 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 	if history == nil {
 		history = l.History
 	}
+	// agentloop：打开一轮新 turn（一次 Run = 一个 turn）。
+	l.openTurn()
+
 	// 统一持久化出口：每次 Run 返回后更新 l.History（不论调用方是否传了 history）
 	defer func() {
 		l.History = msgs
@@ -302,6 +337,8 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 		if l.OnBatchPersist != nil && msgs != nil {
 			l.OnBatchPersist(msgs)
 		}
+		// agentloop：turn 收尾（未显式设置结束原因时按 err/ctx 推断）
+		l.endTurn(err, ctx.Err() != nil)
 	}()
 
 	// 深复制 history，避免下层 append 污染原切片
@@ -367,7 +404,12 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 	MarkHistoryUserMessages(msgs, l.InheritedPrefixLen)
 
 	for iter := 0; iter < max; iter++ {
+		// agentloop：进入下一个 step（每次迭代 = 一次 LLM 调用 + 工具执行）
+		l.beginStep()
 		if err := ctx.Err(); err != nil {
+			// agentloop：外部取消 → turn 以 aborted 结束并记录取消原因
+			l.CancelCause = AgentCancelCause{Kind: CancelByContext, Reason: err.Error()}
+			l.LastTurnReason = TurnAborted
 			return msgs, err // 外部取消
 		}
 
@@ -411,6 +453,25 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 		// ── THINK：LLM 决策（buildCallContext 合并 ephemeralMsgs，不被持久化）──
 		callMsgs := l.buildCallContext(msgs)
 
+		// agentloop：pre-step 拦截钩子（对应 agent/pre-step 瀑布）。
+		// 可改写进入模型的输入；reject=true 则本轮 turn 以 blocked 结束，不调用 LLM。
+		if l.PreStep != nil {
+			rewritten, reject, perr := l.PreStep(ctx, callMsgs, l.TurnNo, l.StepNo)
+			if perr != nil {
+				l.emit(Event{Type: EventError, Content: "pre-step 拦截失败: " + perr.Error()})
+				l.LastTurnReason = TurnError
+				return msgs, perr
+			}
+			if reject {
+				l.LastTurnReason = TurnBlocked
+				l.emit(Event{Type: EventDone, Content: "", DoneReason: "blocked", TurnReason: string(TurnBlocked)})
+				return msgs, nil
+			}
+			if rewritten != nil {
+				callMsgs = rewritten
+			}
+		}
+
 		var stopReason string
 		assistant, err := l.Provider.Chat(ctx, callMsgs, tools, func(c Chunk) {
 			if c.StopReason != "" {
@@ -441,6 +502,7 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 		})
 		if err != nil {
 			l.emit(Event{Type: EventError, Content: err.Error()})
+			l.LastTurnReason = TurnError
 			return msgs, err
 		}
         msgs = append(msgs, assistant)
@@ -465,6 +527,10 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 		//    所有 tool call 参数可能不完整（流式 JSON 被截断后虽然能 parse 但值缺失），
 		//    全部标记为错误，让 LLM 重新发出完整参数的 tool call。
 		truncated := stopReason == "length" && len(assistant.ToolCalls) > 0
+		if truncated {
+			// agentloop：max-tokens sticky——turn 内任一 step 触顶，最终结束原因不得降级为 completed
+			l.hadMaxTokens = true
+		}
 		if truncated {
 			for _, tc := range assistant.ToolCalls {
 				l.emit(Event{Type: EventToolCall, Tool: tc.Function.Name, Args: tc.Function.Arguments, CallID: tc.ID})
@@ -547,6 +613,7 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 						}
 						if l.rejectionCount >= 3 {
 							l.emit(Event{Type: EventError, Content: "操作 " + tc.Function.Name + " 已被连续驳回 3 次，自动停止"})
+							l.LastTurnReason = TurnBlocked
 							return msgs, errors.New("连续驳回 3 次，自动停止")
 						}
 						l.emit(Event{Type: EventToolResult, Tool: tc.Function.Name, Content: rej, CallID: tc.ID})
@@ -607,12 +674,14 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 					l.LogEntry("system", "next_phase", "进入下一阶段："+truncStr(nextTask, 80))
 				} else {
 					l.finishResult = &assistant.Content
-					l.emit(Event{Type: EventDone, Content: strings.TrimSpace(assistant.Content), DoneReason: "task_complete"})
+					l.LastTurnReason = l.turnStickyReason(TurnCompleted)
+					l.emit(Event{Type: EventDone, Content: strings.TrimSpace(assistant.Content), DoneReason: "task_complete", TurnReason: string(l.LastTurnReason)})
 					return msgs, nil
 				}
 			} else {
 				l.finishResult = &assistant.Content
-				l.emit(Event{Type: EventDone, Content: strings.TrimSpace(assistant.Content), DoneReason: "task_complete"})
+				l.LastTurnReason = l.turnStickyReason(TurnCompleted)
+				l.emit(Event{Type: EventDone, Content: strings.TrimSpace(assistant.Content), DoneReason: "task_complete", TurnReason: string(l.LastTurnReason)})
 				return msgs, nil
 			}
 		}
@@ -626,7 +695,8 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 				l.ephemeralMsgs = append(l.ephemeralMsgs, Message{Role: RoleUser, Content: nudge})
 			} else if l.contentOnlyIters >= 4 {
 				l.emit(Event{Type: EventNotice, Content: "检测到内容循环，自动结束"})
-				l.emit(Event{Type: EventDone, Content: strings.TrimSpace(assistant.Content), DoneReason: "content_loop"})
+				l.LastTurnReason = TurnContentLoop
+				l.emit(Event{Type: EventDone, Content: strings.TrimSpace(assistant.Content), DoneReason: "content_loop", TurnReason: string(TurnContentLoop)})
 				return msgs, nil
 			}
 		} else {
@@ -651,6 +721,7 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 			l.OnBatchPersist(msgs)
 		}
 	}
+	l.LastTurnReason = TurnMaxIterations
 	l.emit(Event{Type: EventError, Content: ErrMaxIterations.Error()})
 	return msgs, ErrMaxIterations
 }
