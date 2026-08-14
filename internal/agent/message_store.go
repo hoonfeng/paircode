@@ -1,6 +1,6 @@
-// MessageStore — 历史遗留的 JSONL 存储实现（已弃用）。
-// 自迁移至 SQLite 后不再作为活动存储，保留用于旧数据迁移兼容。
-// 活动存储见 DBAdapter (db_adapter.go) / DBStore (db_store.go).
+// MessageStore — 对话消息持久化的活动实现（每对话一个 JSONL 文件 + index.json 元数据）。
+// 落盘单位为带事件语义标注的 StoredMessage（EventType/Turn/Step，见下方类型定义），
+// 使 JSONL 具备可重建的 turn/step 事件流结构（对齐 deepseek-harness session event 思路）。
 package agent
 
 import (
@@ -36,6 +36,91 @@ type StoredMessage struct {
 	Message   Message   `json:"message"`   // 完整 agent.Message
 	Segments  []Segment `json:"segments"`  // 前端展示用 segments
 	Timestamp string    `json:"timestamp"` // 写入时间 RFC3339
+
+	// ── 事件语义标注（对齐 deepseek-harness session event 词汇，2026-08-15）──
+	// 落盘单位仍是 Message（兼容前端协议），但每条消息附事件元数据，
+	// 使 JSONL 从「纯消息数组」升级为「带 turn/step 结构的事件流」，
+	// 可重建 deepseek 式 surface 投影（user/message、assistant/message、tool/result）。
+	// EventType 事件类型（surface 三类，见 EventType* 常量）。
+	// 旧数据（本字段为空）读取时按 Message.Role 推导。
+	EventType string `json:"eventType,omitempty"`
+	// Turn 所属轮次（1 基；agentloop 语义：一次 Run = 一个 turn，落盘 user 消息递增）。
+	// 0 = 旧数据未标注。
+	Turn int `json:"turn,omitempty"`
+	// Step 所属步骤（1 基；agentloop 语义：每次 LLM 调用 + 工具执行 = 一个 step，
+	// 落盘 assistant 消息递增，其后 tool/result 归并同 step）。0 = 旧数据未标注。
+	Step int `json:"step,omitempty"`
+}
+
+// 事件类型常量（对齐 deepseek-harness session event 词汇的 surface 子集；
+// turn/end、assistant/chunk 等非 surface 事件不单独落盘——消息流本身即
+// surface 投影，turn/step 结构由 Turn/Step 字段重建）。
+const (
+	// EventTypeUserMessage 用户消息（对应 session event user/message）。
+	EventTypeUserMessage = "user/message"
+	// EventTypeAssistantMessage 助手消息（含 tool-call 块，对应 assistant/message）。
+	EventTypeAssistantMessage = "assistant/message"
+	// EventTypeToolResult 工具结果（对应 tool/result）。
+	EventTypeToolResult = "tool/result"
+)
+
+// deriveEventType 按消息角色推导事件类型（对齐 deepseek-harness surface 投影规则：
+// 只有 user/message、assistant/message、tool/result 三类进入模型可见消息；
+// system 不落盘、其余角色不投影）。
+func deriveEventType(m Message) string {
+	switch m.Role {
+	case RoleUser:
+		return EventTypeUserMessage
+	case RoleAssistant:
+		return EventTypeAssistantMessage
+	case RoleTool:
+		return EventTypeToolResult
+	default:
+		return ""
+	}
+}
+
+// turnStepFor 按消息序列推导每条消息的 (turn, step) 标注（与输入等长的 [turn,step] 数组）。
+// 对齐 agentloop / deepseek-harness 语义：
+//   - 一次 Run = 一个 turn：落盘的 user 消息（每轮任务消息）递增 turn，并重置 step；
+//   - 每次 LLM 调用 + 工具执行 = 一个 step：assistant 消息递增 step；
+//   - tool/result 归并到前一条 assistant 的 step（不递增）。
+//
+// 注：nudge/背景注入等 ephemeral 消息不落盘，故落盘序列中 user 消息 = 每轮一个，
+// turn 计数与实际对话轮次一致。
+func turnStepFor(msgs []Message) [][2]int {
+	out := make([][2]int, len(msgs))
+	turn, step := 0, 0
+	for i, m := range msgs {
+		switch m.Role {
+		case RoleUser:
+			turn++
+			step = 0
+		case RoleAssistant:
+			step++
+		}
+		out[i] = [2]int{turn, step}
+	}
+	return out
+}
+
+// annotateStoredEvents 给 stored 列表原地填充事件语义标注：
+//   - EventType：按角色推导（deriveEventType，surface 三类）；
+//   - Turn/Step：按消息序列推导（turnStepFor，重建 turn/step 事件流结构）。
+func annotateStoredEvents(stored []StoredMessage) {
+	if len(stored) == 0 {
+		return
+	}
+	msgs := make([]Message, len(stored))
+	for i := range stored {
+		msgs[i] = stored[i].Message
+	}
+	notes := turnStepFor(msgs)
+	for i := range stored {
+		stored[i].EventType = deriveEventType(stored[i].Message)
+		stored[i].Turn = notes[i][0]
+		stored[i].Step = notes[i][1]
+	}
 }
 
 // ConversationMeta 对话元数据（存于 index.json）。
@@ -487,6 +572,9 @@ func (s *MessageStore) AppendMessage(convID string, msg Message, segments []Segm
 		Message:   msg,
 		Segments:  segments,
 		Timestamp: now,
+		// 事件类型按角色推导；Turn/Step 单条追加时无法得知上下文
+		// （后续 PersistNewMessages 全量重写会补齐标注）——读取侧按 Role 回退即可。
+		EventType: deriveEventType(msg),
 	}
 
 	// JSON 编码 + 追加一行
@@ -605,6 +693,11 @@ func (s *MessageStore) PersistNewMessages(convID string, hist []Message) error {
 	for i := range stored {
 		stored[i].Idx = i
 	}
+
+	// ★ 事件语义标注：EventType + Turn/Step（对齐 deepseek-harness surface 投影）。
+	// 规则见 turnStepFor/annotateStoredEvents——纯从消息序列推导，无需 Loop 传递状态，
+	// 使 JSONL 具备可重建的 turn/step 事件流结构。
+	annotateStoredEvents(stored)
 
 	tmpPath := s.convFilePath(convID) + ".tmp"
 	out, err := os.Create(tmpPath)

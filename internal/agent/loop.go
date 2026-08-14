@@ -55,6 +55,15 @@ const CacheBoundary = "\n\n<!--- CACHE_BOUNDARY --->\n\n"
 // 导致只核对历史而不执行任务（2026-08-08 排查结论）。
 const backgroundCtxMarker = "【背景上下文·非当前任务】\n"
 
+// systemReminderFrame 把背景内容包进系统提醒框架（对齐 deepseek-harness
+// agent-instructions 的 <system-reminder> 注入格式）。背景信息注入为 user-role
+// ephemeral 消息（不持久化），框架让模型明确区分「背景信息」与「当前任务」，
+// 避免把历史摘要/执行日志等误当作待执行输入。
+func systemReminderFrame(kind, body string) string {
+	return "<system-reminder>\n以下为" + kind + "（背景信息，非当前任务，仅作参考，请勿当作待执行任务）：\n\n" +
+		body + "\n</system-reminder>"
+}
+
 // Event 一条循环事件。
 type Event struct {
 	Type    EventType
@@ -756,7 +765,7 @@ func (l *Loop) buildCallContext(msgs []Message) []Message {
 	//   随迭代增长放在末尾不影响前缀命中。
 	var bg []Message
 	if l.staleMsg != "" {
-		bg = append(bg, Message{Role: RoleUser, Content: backgroundCtxMarker + l.staleMsg})
+		bg = append(bg, Message{Role: RoleUser, Content: backgroundCtxMarker + systemReminderFrame("状态提示（记忆/知识库过期检查）", l.staleMsg)})
 	}
 	if msg := l.buildInjectionMessage(); msg != "" {
 		bg = append(bg, Message{Role: RoleUser, Content: msg})
@@ -874,7 +883,7 @@ func (l *Loop) buildInjectionMessage() string {
 	if b.Len() == 0 {
 		return "" // 无实质内容（无摘要且非自主）不注入
 	}
-	return backgroundCtxMarker + b.String()
+	return backgroundCtxMarker + systemReminderFrame("会话上下文摘要与自主模式提示", b.String())
 }
 
 // buildLogBlock 构建执行日志（动态增长，追加在消息末尾）。
@@ -888,7 +897,7 @@ func (l *Loop) buildLogBlock() string {
 	if logStr == "" {
 		return ""
 	}
-	return backgroundCtxMarker + logStr
+	return backgroundCtxMarker + systemReminderFrame("执行日志", logStr)
 }
 
 
