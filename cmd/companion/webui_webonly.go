@@ -27,6 +27,7 @@ func registerExtraHandlers(mux *http.ServeMux, s *webServer) {
 	mux.HandleFunc("/api/chat/compact", s.handleChatCompact)
 	mux.HandleFunc("/api/marketplace/search", s.handleMarketplaceSearch)
 	mux.HandleFunc("/api/marketplace/install", s.handleMarketplaceInstall)
+	mux.HandleFunc("/api/marketplace/uninstall", s.handleMarketplaceUninstall)
 	mux.HandleFunc("/api/marketplace/refresh", s.handleMarketplaceRefresh)
 	mux.HandleFunc("/api/memory/search", s.handleMemorySearch)
 	mux.HandleFunc("/api/memory/list", s.handleMemoryList)

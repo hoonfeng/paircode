@@ -283,8 +283,9 @@ func Search(query, kind string) []RegistryEntry {
 	// 1. 本地搜索（委托 agent 内置注册表）
 	local := agent.MarketSearch(query, kind)
 
-	// 2. 没有查询关键词时只返回本地
-	if query == "" {
+	// 2. 没有查询关键词时只返回本地（MCP/技能）；
+	//    插件市场无关键词时也实时搜 npm（返回热门 cordis 插件）
+	if query == "" && kind != "plugin" {
 		return local
 	}
 
@@ -293,7 +294,7 @@ func Search(query, kind string) []RegistryEntry {
 		entries []RegistryEntry
 		kind    string
 	}
-	ch := make(chan apiResult, 2)
+	ch := make(chan apiResult, 3)
 
 	go func() {
 		if kind == "" || kind == "mcp" {
@@ -309,15 +310,24 @@ func Search(query, kind string) []RegistryEntry {
 			ch <- apiResult{nil, "skill"}
 		}
 	}()
+	go func() {
+		if kind == "" || kind == "plugin" {
+			ch <- apiResult{searchNPMPlugins(query), "plugin"}
+		} else {
+			ch <- apiResult{nil, "plugin"}
+		}
+	}()
 
-	var mcpResults, skillResults []RegistryEntry
-	for i := 0; i < 2; i++ {
+	var mcpResults, skillResults, pluginResults []RegistryEntry
+	for i := 0; i < 3; i++ {
 		r := <-ch
 		switch r.kind {
 		case "mcp":
 			mcpResults = r.entries
 		case "skill":
 			skillResults = r.entries
+		case "plugin":
+			pluginResults = r.entries
 		}
 	}
 
@@ -333,6 +343,12 @@ func Search(query, kind string) []RegistryEntry {
 		}
 	}
 	for _, e := range skillResults {
+		if !seen[e.ID] {
+			seen[e.ID] = true
+			local = append(local, e)
+		}
+	}
+	for _, e := range pluginResults {
 		if !seen[e.ID] {
 			seen[e.ID] = true
 			local = append(local, e)
@@ -356,6 +372,78 @@ const (
 	apiSearchTimeout = 8 * time.Second
 	maxAPISearch     = 20
 )
+
+// searchNPMPlugins 搜索 npm 上的 cordis 插件（参考项目 deepseek-harness 的
+// 插件市场形态：cordis 插件发布在 npm）。query 空 → 热门 cordis 插件。
+// 过滤：名字含 plugin/cordis 且非框架本体（@cordisjs/core、cordis）。
+func searchNPMPlugins(query string) []RegistryEntry {
+	q := strings.TrimSpace(query)
+	if q == "" {
+		q = "cordis plugin"
+	} else {
+		q = q + " cordis"
+	}
+	searchQ := url.QueryEscape(q)
+	apiURL := "https://registry.npmjs.org/-/v1/search?text=" + searchQ + "&size=" + fmt.Sprintf("%d", maxAPISearch)
+
+	client := &http.Client{Timeout: apiSearchTimeout}
+	resp, err := client.Get(apiURL)
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil
+	}
+
+	var result struct {
+		Objects []struct {
+			Package struct {
+				Name        string   `json:"name"`
+				Description string   `json:"description"`
+				Version     string   `json:"version"`
+				Keywords    []string `json:"keywords"`
+				Links       struct {
+					Npm      string `json:"npm"`
+					Homepage string `json:"homepage"`
+				} `json:"links"`
+			} `json:"package"`
+			Score struct {
+				Final float64 `json:"final"`
+			} `json:"score"`
+		} `json:"objects"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil
+	}
+
+	var entries []RegistryEntry
+	for _, obj := range result.Objects {
+		pkg := obj.Package
+		low := strings.ToLower(pkg.Name)
+		// 排除框架本体
+		if low == "cordis" || low == "@cordisjs/core" || low == "@cordisjs/plugin-loader" {
+			continue
+		}
+		// 插件判定：名字含 plugin 或描述标注 cordis 插件
+		if !strings.Contains(low, "plugin") && !strings.Contains(strings.ToLower(pkg.Description), "cordis") {
+			continue
+		}
+		name := pkg.Name
+		if parts := strings.SplitN(name, "/", 2); len(parts) == 2 {
+			name = parts[1]
+		}
+		entries = append(entries, RegistryEntry{
+			ID:          pkg.Name,
+			Kind:        "plugin",
+			Name:        name,
+			Description: pkg.Description,
+			Tags:        append([]string{"plugin", "cordis"}, pkg.Keywords...),
+			Source:      "npm:" + pkg.Name + "@" + pkg.Version,
+		})
+	}
+	return entries
+}
 
 func searchNPM(query string) []RegistryEntry {
 	if query == "" {

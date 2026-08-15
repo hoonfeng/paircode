@@ -8,6 +8,7 @@ package agent
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 // ─── 安装 ───
@@ -41,6 +42,10 @@ func MarketInstallEntry(entry MarketEntry, auto bool, scope ...string) (string, 
 	case "skill":
 		return marketInstallSkill(entry, auto)
 	case "plugin":
+		// npm/cordis 插件（Source=npm:<pkg>）走 npm 市场安装；否则为内置工具集
+		if strings.HasPrefix(entry.Source, "npm:") {
+			return marketInstallNPMPlugin(entry, auto)
+		}
 		return marketInstallPlugin(entry, auto, s)
 	default:
 		return "", fmt.Errorf("未知条目类型: %s", entry.Kind)
@@ -161,7 +166,8 @@ func marketInstallSkill(entry MarketEntry, auto bool) (string, error) {
 func MarketIsInstalled(id string) bool {
 	entry := MarketFind(id)
 	if entry == nil {
-		return false
+		// 不在内置注册表 → 可能是 npm 插件（ID=包名）
+		return npmPluginInstalled(id)
 	}
 	switch entry.Kind {
 	case "mcp":
@@ -183,6 +189,60 @@ func MarketIsInstalled(id string) bool {
 			}
 		}
 		return false
+	case "plugin":
+		if strings.HasPrefix(entry.Source, "npm:") {
+			return npmPluginInstalled(id)
+		}
+		// 内置工具集：ID = "plugin-" + 工具集名
+		name := strings.TrimPrefix(id, "plugin-")
+		projectRoot := primaryWorkspaceRoot()
+		for _, scope := range []toolsetScope{toolsetGlobal, toolsetProject} {
+			for _, ts := range listToolsets(projectRoot, scope) {
+				if ts.Name == name {
+					return true
+				}
+			}
+		}
+		return false
 	}
 	return false
+}
+
+// MarketUninstall 按 kind 卸载市场条目（MCP/技能/插件工具集）。
+// npm 插件请用 UninstallNPMPlugin（或直接调 MarketUninstall 传 source 前缀由调用方分发）。
+func MarketUninstall(id, kind string) (string, error) {
+	switch kind {
+	case "mcp":
+		err := MCPDelete(MCPLevelUser, id)
+		if err != nil && !strings.Contains(err.Error(), "not exist") {
+			return "", err
+		}
+		_ = MCPDelete(MCPLevelProject, id) // 项目级一并清理（容错）
+		return "已卸载 MCP 服务器 " + id, nil
+	case "skill":
+		if err := DeleteSkill(SkillProjectDir, id); err != nil {
+			return "", err
+		}
+		return "已卸载技能 " + id, nil
+	case "plugin":
+		// 工具集：ID = "plugin-" + 工具集名
+		name := strings.TrimPrefix(id, "plugin-")
+		projectRoot := primaryWorkspaceRoot()
+		for _, scope := range []toolsetScope{toolsetGlobal, toolsetProject} {
+			if err := removeToolset(projectRoot, scope, name); err == nil {
+				level := "全局"
+				if scope == toolsetProject {
+					level = "工作区"
+				}
+				return fmt.Sprintf("已卸载工具集「%s」（%s）", name, level), nil
+			}
+		}
+		return "", fmt.Errorf("工具集 %s 未找到", name)
+	}
+	return "", fmt.Errorf("未知类型 %s", kind)
+}
+
+// UninstallNPMPlugin 卸载 npm 插件（导出，供 web_server /marketplace/uninstall 用）。
+func UninstallNPMPlugin(pkg string) error {
+	return uninstallNPMPlugin(pkg)
 }

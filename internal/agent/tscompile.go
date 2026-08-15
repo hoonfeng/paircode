@@ -12,8 +12,11 @@ package agent
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/evanw/esbuild/pkg/api"
 )
@@ -78,10 +81,11 @@ func detectPluginLanguage(src, language string) string {
 }
 
 // compilePluginSource 按语言编译插件源码，返回可直接交给 goja 的 JS。
-// dir 非空且源码含 import 时走多文件 bundle（相对导入内联，非相对包 mock）。
+// dir 非空且源码含 ESM 语法（import/export）时走多文件 bundle
+// （相对导入内联，非相对包 mock；export default 转 IIFE）。
 func compilePluginSource(src, language, sourceName, dir string) (string, error) {
 	lang := detectPluginLanguage(src, language)
-	if dir != "" && hasImports(src) {
+	if dir != "" && needsBundle(src) {
 		return compileTSBundle(src, sourceName, dir, lang)
 	}
 	switch lang {
@@ -100,6 +104,15 @@ func hasImports(src string) bool {
 	return importRe.MatchString(src)
 }
 
+// esmStmtRe 匹配 ESM 顶层语句（import / export）——任一存在都需 bundle
+// 转 IIFE（否则 export 残留 goja 语法错误）。
+var esmStmtRe = regexp.MustCompile(`(?m)^\s*(import\s|export\s)`)
+
+// needsBundle 判断源码是否含 ESM 语法（import 或 export）。
+func needsBundle(src string) bool {
+	return esmStmtRe.MatchString(src)
+}
+
 // dynPluginGlobalName bundle 产物挂载的全局名（IIFE globalName）。
 const dynPluginGlobalName = "__dynPlugin"
 
@@ -107,13 +120,127 @@ const dynPluginGlobalName = "__dynPlugin"
 // （@deepseek-ai/cordis、schemastery 等 harness 生态包）mock 成空模块。
 // 插件代码对这些包的使用几乎都是类型标注（esbuild 自动擦除）或
 // 经注入 ctx 访问，运行期不需要真实实现。
-func mockPackageOnResolve(args api.OnResolveArgs) (api.OnResolveResult, error) {
-	return api.OnResolveResult{Path: "mock-empty.ts", Namespace: "mock-pkg"}, nil
+//
+// ★ 命名导入兼容：空模块只有 default export，`import { x } from 'pkg'`
+// 会报 No matching export。此处按 importer 源码提取命名导入清单，
+// 为每个被导入名生成 `export const x = undefined`，保证编译通过
+// （运行期访问这些 API 会得到 undefined，由插件自行兜底）。
+func mockPackageOnResolve(src, dir, sourceName string) func(api.OnResolveArgs) (api.OnResolveResult, error) {
+	// 预提取主源码（stdin 无真实文件，importer 是虚拟路径读不到）
+	preset := extractAllImportNamesFromSource(src)
+	return func(args api.OnResolveArgs) (api.OnResolveResult, error) {
+		var names []string
+		if m, ok := preset[args.Path]; ok {
+			names = m
+		}
+		// 相对导入文件里的包导入：importer 是 dir 下的真实文件，可读
+		if real := filepath.Join(dir, args.Importer); real != sourceName {
+			if st, err := os.Stat(real); err == nil && !st.IsDir() {
+				names = mergeStringSlice(names, extractImportNames(real, args.Path))
+			}
+		}
+		if len(names) > 0 {
+			mockMu.Lock()
+			mockNames[args.Path] = mergeStringSlice(mockNames[args.Path], names)
+			mockMu.Unlock()
+		}
+		return api.OnResolveResult{Path: "mock-" + args.Path, Namespace: "mock-pkg"}, nil
+	}
+}
+
+func mergeStringSlice(a, b []string) []string {
+	out := append([]string(nil), a...)
+	seen := map[string]bool{}
+	for _, n := range a {
+		seen[n] = true
+	}
+	for _, n := range b {
+		if !seen[n] {
+			seen[n] = true
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 func mockPackageOnLoad(args api.OnLoadArgs) (api.OnLoadResult, error) {
-	contents := "export default {};\n"
-	return api.OnLoadResult{Contents: &contents, Loader: api.LoaderTS}, nil
+	pkg := strings.TrimPrefix(args.Path, "mock-")
+	mockMu.RLock()
+	names := append([]string(nil), mockNames[pkg]...)
+	mockMu.RUnlock()
+	var sb strings.Builder
+	sb.WriteString("export default {};\n")
+	for _, n := range names {
+		sb.WriteString("export const " + n + " = undefined;\n")
+	}
+	contents := sb.String()
+	return api.OnLoadResult{Contents: &contents, Loader: api.LoaderJS}, nil
+}
+
+// mockNames 记录各 mock 包被命名导入的导出名（跨 OnResolve 调用合并）。
+var (
+	mockNames = map[string][]string{}
+	mockMu    sync.RWMutex
+)
+
+// importFromRe 匹配 `import { a, b as c } from 'pkg'` / `import x, { y } from 'pkg'` /
+// `import * as ns from 'pkg'` / `import d from 'pkg'`（type-only 在循环内跳过）。
+var importFromRe = regexp.MustCompile(`(?m)^\s*import\s+(?:type\s+)?(?:\{([^}]*)\}|\*\s+as\s+(\w+)|(\w+)(?:\s*,\s*\{([^}]*)\})?)\s*from\s*['"]([^'"]+)['"]`)
+
+// extractAllImportNamesFromSource 从整段源码预提取所有非相对导入的命名清单。
+func extractAllImportNamesFromSource(src string) map[string][]string {
+	out := map[string][]string{}
+	for _, m := range importFromRe.FindAllStringSubmatch(src, -1) {
+		// type-only import（esbuild 自动擦除，无需 mock）
+		head := strings.TrimSpace(m[0])
+		if strings.HasPrefix(head, "import type") || strings.HasPrefix(head, "import\ttype") {
+			continue
+		}
+		pkg := m[5]
+		if pkg == "" || strings.HasPrefix(pkg, ".") {
+			continue
+		}
+		add := func(name string) {
+			if name == "" || name == "default" {
+				return
+			}
+			if !sliceContains(out[pkg], name) {
+				out[pkg] = append(out[pkg], name)
+			}
+		}
+		add(m[2]) // namespace
+		add(m[3]) // default 名
+		for _, part := range strings.Split(m[1]+","+m[4], ",") {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			name := strings.TrimSpace(strings.SplitN(part, " as ", 2)[0])
+			add(name)
+		}
+	}
+	return out
+}
+
+func sliceContains(list []string, s string) bool {
+	for _, v := range list {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
+// extractImportNames 从 importer 源码提取对 pkg 的命名导入清单。
+func extractImportNames(importer, pkg string) []string {
+	if importer == "" {
+		return nil
+	}
+	b, err := os.ReadFile(importer)
+	if err != nil {
+		return nil
+	}
+	return extractAllImportNamesFromSource(string(b))[pkg]
 }
 
 // compileTSBundle 编译含 import 的插件源码：esbuild Build(stdin) + bundle，
@@ -121,6 +248,10 @@ func mockPackageOnLoad(args api.OnLoadArgs) (api.OnLoadResult, error) {
 // 输出 IIFE（挂 globalName）追加 `return __dynPlugin.default;`，
 // 使插件必须 `export default` 导出插件对象（对齐 harness 插件形态）。
 func compileTSBundle(src, sourceName, dir, lang string) (string, error) {
+	// 每次构建前清空 mock 命名表（包级全局，防上次构建残留）
+	mockMu.Lock()
+	mockNames = map[string][]string{}
+	mockMu.Unlock()
 	loader := api.LoaderJS
 	if lang == "ts" {
 		loader = api.LoaderTS
@@ -142,7 +273,7 @@ func compileTSBundle(src, sourceName, dir, lang string) (string, error) {
 		Plugins: []api.Plugin{{
 			Name: "mock-packages",
 			Setup: func(b api.PluginBuild) {
-				b.OnResolve(api.OnResolveOptions{Filter: `^[^./]`}, mockPackageOnResolve)
+				b.OnResolve(api.OnResolveOptions{Filter: `^[^./]`}, mockPackageOnResolve(src, dir, sourceName))
 				b.OnLoad(api.OnLoadOptions{Filter: `.*`, Namespace: "mock-pkg"}, mockPackageOnLoad)
 			},
 		}},

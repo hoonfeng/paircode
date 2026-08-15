@@ -2694,6 +2694,7 @@ func (s *webServer) handleMarketplaceSearch(w http.ResponseWriter, r *http.Reque
 		Tags        []string `json:"tags"`
 		Command     string   `json:"command"`
 		Args        []string `json:"args"`
+		Source      string   `json:"source"`
 		Installed   bool     `json:"installed"`
 	}
 	out := make([]resultItem, 0, len(results))
@@ -2701,7 +2702,7 @@ func (s *webServer) handleMarketplaceSearch(w http.ResponseWriter, r *http.Reque
 		out = append(out, resultItem{
 			ID: e.ID, Kind: e.Kind, Name: e.Name,
 			Description: e.Description, Tags: e.Tags,
-			Command: e.Command, Args: e.Args,
+			Command: e.Command, Args: e.Args, Source: e.Source,
 			Installed: marketplacepanel.IsInstalled(e.ID),
 		})
 	}
@@ -2714,11 +2715,13 @@ func (s *webServer) handleMarketplaceInstall(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	var req struct {
-		ID      string   `json:"id"`
-		Kind    string   `json:"kind"`
-		Command string   `json:"command"`
-		Args    []string `json:"args"`
-		Scope   string   `json:"scope"` // "user" 或 "project"，默认 "user"
+		ID          string   `json:"id"`
+		Kind        string   `json:"kind"`
+		Command     string   `json:"command"`
+		Args        []string `json:"args"`
+		Scope       string   `json:"scope"`  // "user" 或 "project"，默认 "user"
+		Source      string   `json:"source"` // npm 插件：Source="npm:<pkg>@<ver>"
+		Description string   `json:"description"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonErr(w, err.Error())
@@ -2733,14 +2736,56 @@ func (s *webServer) handleMarketplaceInstall(w http.ResponseWriter, r *http.Requ
 	}
 	var msg string
 	var err error
-	if req.Command != "" {
+	// npm 插件（搜索结果带 source=npm:...）或带 command 的 MCP → 走完整条目安装
+	if req.Command != "" || strings.HasPrefix(req.Source, "npm:") {
 		entry := marketplacepanel.RegistryEntry{
 			ID: req.ID, Kind: req.Kind,
 			Command: req.Command, Args: req.Args,
+			Source: req.Source, Description: req.Description,
 		}
 		msg, err = marketplacepanel.InstallEntry(entry, false, req.Scope)
 	} else {
 		msg, err = marketplacepanel.InstallScoped(req.ID, false, req.Scope)
+	}
+	if err != nil {
+		jsonErr(w, err.Error())
+		return
+	}
+	jsonResp(w, map[string]any{"ok": true, "message": msg})
+}
+
+// handleMarketplaceUninstall 卸载市场条目（MCP/技能/插件工具集/npm 插件）。
+func (s *webServer) handleMarketplaceUninstall(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		jsonErr(w, "仅 POST")
+		return
+	}
+	var req struct {
+		ID     string `json:"id"`
+		Kind   string `json:"kind"`
+		Source string `json:"source"` // npm 插件：Source="npm:<pkg>"
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonErr(w, err.Error())
+		return
+	}
+	if req.ID == "" {
+		jsonErr(w, "id 必填")
+		return
+	}
+	var msg string
+	var err error
+	if strings.HasPrefix(req.Source, "npm:") {
+		pkg := strings.TrimPrefix(req.Source, "npm:")
+		if i := strings.Index(pkg, "@"); i > 0 {
+			pkg = pkg[:i] // 去掉版本后缀（scoped 包名 @scope/pkg 的 @ 在首位不误伤）
+		}
+		err = agent.UninstallNPMPlugin(pkg)
+		if err == nil {
+			msg = "已卸载 npm 插件 " + pkg
+		}
+	} else {
+		msg, err = agent.MarketUninstall(req.ID, req.Kind)
 	}
 	if err != nil {
 		jsonErr(w, err.Error())

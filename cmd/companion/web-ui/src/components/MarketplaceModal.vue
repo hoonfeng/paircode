@@ -16,7 +16,7 @@
         <!-- 搜索栏（非「已安装」tab 显示） -->
         <div v-if="tab !== 'installed'" class="market-search">
           <div class="search-icon"><SvgIcon name="search" :size="14" /></div>
-          <input v-model="query" placeholder="搜索 MCP 服务器或技能…" @input="debounceSearch" class="search-input" />
+          <input v-model="query" placeholder="搜索 MCP / 技能 / npm 插件…" @input="debounceSearch" class="search-input" />
           <button v-if="query" class="search-clear" @click="query='';doSearch()">×</button>
           <button class="market-refresh-btn" @click="refreshRemote" :disabled="refreshing" :title="refreshTip">
             <SvgIcon :name="refreshing ? 'cycle' : 'refresh'" :size="14" />
@@ -393,11 +393,13 @@ async function installItem(item, scope) {
       kind: item.kind || '',
       command: item.command || '',
       args: item.args || [],
+      source: item.source || '',
+      description: item.description || '',
     }
     if (item.kind === 'mcp') {
       body.scope = scope || 'user'
     } else if (item.kind === 'plugin') {
-      body.scope = 'project' // 插件/工具集默认装到工作区 .pair/toolsets/
+      body.scope = 'project' // 插件/工具集默认装到工作区（npm 插件 → .pair/cordis.patch.json）
     }
     const result = await api.apiPost('/marketplace/install', body)
     item.installed = true
@@ -424,7 +426,11 @@ async function toggleMCP(item) {
 async function uninstallItem(item) {
   error.value = ''
   try {
-    if (item.kind === 'mcp') {
+    const isNpm = (item.source || '').startsWith('npm:')
+    if (isNpm) {
+      // npm 插件：统一卸载接口（patch 移除 + 宿主卸载）
+      await api.apiPost('/marketplace/uninstall', { id: item.id, kind: 'plugin', source: item.source })
+    } else if (item.kind === 'mcp') {
       await api.saveMcpItem({ action: 'delete', name: item.id, level: 'user' })
     } else if (item.kind === 'skill') {
       await api.deleteSkill(item.id)

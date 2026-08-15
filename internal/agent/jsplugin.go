@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -780,6 +781,27 @@ func newJSSandbox(id string) (*goja.Runtime, *goja.Object) {
 		consoleObj.Set(m, logFn)
 	}
 	vm.Set("console", consoleObj)
+
+	// process shim（npm cordis 插件常用 node 全局；只读常用字段，危险操作禁用）
+	processObj := vm.NewObject()
+	envObj := vm.NewObject()
+	for _, kv := range os.Environ() {
+		if i := strings.IndexByte(kv, '='); i > 0 {
+			envObj.Set(kv[:i], kv[i+1:])
+		}
+	}
+	processObj.Set("env", envObj)
+	processObj.Set("platform", runtime.GOOS)
+	processObj.Set("arch", runtime.GOARCH)
+	processObj.Set("version", "v22.0.0") // 兼容占位（沙箱非 node 运行时）
+	processObj.Set("cwd", func(call goja.FunctionCall) goja.Value {
+		wd, _ := os.Getwd()
+		return vm.ToValue(wd)
+	})
+	processObj.Set("exit", func(call goja.FunctionCall) goja.Value {
+		panic(vm.NewTypeError("process.exit is not available in the dynamic package sandbox — let the plugin return normally"))
+	})
+	vm.Set("process", processObj)
 
 	// btoa / atob
 	vm.Set("btoa", func(call goja.FunctionCall) goja.Value {
