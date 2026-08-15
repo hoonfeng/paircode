@@ -576,7 +576,8 @@ async function loadToolsets() {
   tsRefreshing.value = true
   try {
     const list = await api.apiGet('/toolsets')
-    toolsets.value = Array.isArray(list) ? list : []
+    // 内置工具包 builtin 在插件面板「内置工具」区块管理，文件树工具集列表不重复展示
+    toolsets.value = Array.isArray(list) ? list.filter(t => t.scope !== 'builtin') : []
   } catch (e) {
     console.warn('[toolset] 加载失败', e)
   } finally {

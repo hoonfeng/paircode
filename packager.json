@@ -114,6 +114,12 @@
         "optional": true,
         "recursive": true
       },
+            {
+        "src": "bin/bash",
+        "dst": "bin/bash",
+        "optional": true,
+        "recursive": true
+      },
       {
         "src": "bin/config/models.json",
         "dst": "bin/config/models.json",

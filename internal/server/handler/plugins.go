@@ -367,3 +367,61 @@ func pluginRecordSummary(rec agent.PluginRecord) map[string]any {
 		"defId":     rec.DefID,
 	}
 }
+
+// HandleBuiltinPlugins GET/POST /api/plugins/builtin：内置工具包（被过滤的 pair
+// 独有工具按内置插件组管理——「放进插件面板」的载体）。
+//   - GET：返回内置工具包完整信息（分组 + 工具 + 启用状态 + 已加入分组 + 强制全部后状态）
+//   - POST：切换分组开关 {group, enabled:true|false}（加入工作区/移出），
+//     或强制全部加入 {forceAll:true}（所有内置组一次性启用）
+func HandleBuiltinPlugins(w http.ResponseWriter, r *http.Request) {
+	ph, ok := getPluginHost()
+	if !ok {
+		jsonErr(w, "插件系统未初始化")
+		return
+	}
+	root := workspaceRoot()
+	if root == "" {
+		jsonErr(w, "工作区未就绪")
+		return
+	}
+	reg := (*agent.Registry)(nil)
+	if ph.Context() != nil {
+		reg = ph.Context().Tools
+	}
+	if r.Method == "GET" {
+		jsonResp(w, agent.BuiltinToolsetInfoPublic(reg, ph, root))
+		return
+	}
+	if r.Method != "POST" {
+		jsonErr(w, "仅 GET/POST")
+		return
+	}
+	var req struct {
+		Group    string `json:"group"`
+		Enabled  *bool  `json:"enabled"`
+		ForceAll bool   `json:"forceAll"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonErr(w, "请求体解析失败: "+err.Error())
+		return
+	}
+	if req.ForceAll {
+		msg, err := agent.EnableAllBuiltinPublic(ph, root)
+		if err != nil {
+			jsonErr(w, err.Error())
+			return
+		}
+		jsonResp(w, map[string]any{"ok": true, "message": msg})
+		return
+	}
+	if req.Group == "" || req.Enabled == nil {
+		jsonErr(w, "需要 group + enabled，或 forceAll=true")
+		return
+	}
+	msg, err := agent.SetBuiltinGroupEnabledPublic(ph, root, req.Group, *req.Enabled)
+	if err != nil {
+		jsonErr(w, err.Error())
+		return
+	}
+	jsonResp(w, map[string]any{"ok": true, "message": msg})
+}

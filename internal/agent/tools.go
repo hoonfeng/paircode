@@ -85,14 +85,19 @@ func NewRegistry() *Registry {
 	return &Registry{tools: map[string]*Tool{}}
 }
 // Register 注册一个工具（同名覆盖，顺序不变）。
+// ★ 同名覆盖时保留原启用状态：重复注册（如 RegisterDefaultTools 与
+//   RegisterBuiltinPlugins 对同一批内置工具双注册）不得清除 harness 过滤/
+//   工具集禁用状态（Enabled=false 保持 false）。首次注册默认启用。
 func (r *Registry) Register(t *Tool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if _, exists := r.tools[t.Name]; !exists {
+	if old, exists := r.tools[t.Name]; exists {
+		t.Enabled = old.Enabled // 覆盖：保留原启用状态
+	} else {
+		if !t.Enabled { // 未显式设置则默认启用
+			t.Enabled = true
+		}
 		r.order = append(r.order, t.Name)
-	}
-	if t.Enabled == false { // 未显式设置则默认启用
-		t.Enabled = true
 	}
 	r.tools[t.Name] = t
 }
@@ -154,6 +159,20 @@ func (r *Registry) Names() []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return append([]string(nil), r.order...)
+}
+
+// EnabledNames 已启用工具名（注册顺序；禁用工具不返回）。
+// 供 run_code 沙箱注入等场景——禁用工具不得暴露（防绕过过滤）。
+func (r *Registry) EnabledNames() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]string, 0, len(r.order))
+	for _, name := range r.order {
+		if t := r.tools[name]; t != nil && t.Enabled {
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 // UsageGuideText 生成工具使用指南文本（供注入系统提示使用）。
@@ -321,6 +340,11 @@ func (r *Registry) Execute(ctx context.Context, name, argsJSON string) (string, 
 	t, ok := r.Get(name)
 	if !ok {
 		return "", fmt.Errorf("未知工具: %s", name)
+	}
+	if !t.Enabled {
+		// 禁用工具：对齐原「未注册」的不可见语义——agent 不应调用（Definitions 已过滤），
+		// 但模型幻觉/手动调用仍可能到达这里，明确报错防绕过。
+		return "", fmt.Errorf("工具 %s 已禁用（未加入工作区工具集；可用 toolset_edit add_builtin 或工具集面板启用）", name)
 	}
 	args := map[string]any{}
 	if s := strings.TrimSpace(argsJSON); s != "" {

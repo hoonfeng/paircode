@@ -952,7 +952,8 @@ const AIIdentityAwareness = "# AI 身份认知（铁律：你不是会偷懒的�
 
 // harnessSystemPrompt 精简版系统提示词（harness 对齐模式默认）。
 // 只描述保留工具 + 对话协议，删除 codegraph/记忆/技能/调试/办公等
-// 已被 ApplyHarnessToolFilter 移除的 pair 独有工具说明。
+// 被 ApplyHarnessToolFilter 禁用的 pair 独有工具说明（工具仍在注册表、
+// 前端可见；需要时可经内置工具集 builtin 分组开关/强制全部恢复）。
 func harnessSystemPrompt(roots []string) string {
 	_, rootInfo := workspaceRoots(roots)
 	return "你是 Pair CodeAgent，运行在用户的本地开发环境中。使用中文思考和回复。\n\n" +

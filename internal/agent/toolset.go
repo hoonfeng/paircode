@@ -49,8 +49,16 @@ type Toolset struct {
 type ToolsetPlugin struct {
 	Name    string `json:"name"`
 	Purpose string `json:"purpose"`
-	Code    string `json:"code"`           // host 半：async 函数体（return { name, apply(ctx) }）
-	Client  string `json:"client,omitempty"` // client 半：(ui) => void
+	Code    string `json:"code,omitempty"`     // host 半：async 函数体（return { name, apply(ctx) }）
+	Client  string `json:"client,omitempty"`   // client 半：(ui) => void
+	// ★ 内置工具包条目（无 Code）：引用宿主内置 Go 工具组（core/git/codegraph/… 或
+	//   system/plugin-mgmt/toolset-mgmt）。装载=对 Tools 清单内已注册工具
+	//   SetToolEnabled(true)（工具对 agent 可见）；卸载=恢复默认状态
+	//   （ToolDefaultEnabled——harness 保留清单内保持启用，其余禁用）。
+	//   这是「被过滤工具进插件面板」的载体：内置组默认不加入工作区，
+	//   用户/agent 用 toolset_edit add_builtin 选择加入，add_builtin_all 强制全部。
+	Builtin string   `json:"builtin,omitempty"` // 内置分组名（如 "core" / "system"）
+	Tools   []string `json:"tools,omitempty"`   // 内置条目：本组宿主内置工具名清单（快照）
 	// DisabledTools 插件保留、但被手动摘除的工具（toolset_edit rm_tool）。
 	// 装载后应用：Registry.SetToolEnabled(false) → agent 工具列表不可见；
 	// 工具仍注册在案（可逆，重新 edit 可恢复）。
@@ -94,6 +102,8 @@ type ToolsetMeta struct {
 }
 
 // listToolsets 列出指定作用域全部工具集元信息（按名排序）。
+// ★ 跳过 builtin.json：内置工具集（builtin）是虚拟展示（见 listAllToolsets），
+//   固化文件只是「已加入分组」的持久化载体，不作为普通工具集列在列表中。
 func listToolsets(projectRoot string, scope toolsetScope) []ToolsetMeta {
 	dir := toolsetDir(projectRoot, scope)
 	entries, err := os.ReadDir(dir)
@@ -104,6 +114,9 @@ func listToolsets(projectRoot string, scope toolsetScope) []ToolsetMeta {
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
 			continue
+		}
+		if strings.TrimSuffix(e.Name(), ".json") == builtinToolsetName {
+			continue // 内置工具集虚拟展示
 		}
 		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
 		if err != nil {
@@ -123,25 +136,34 @@ func listToolsets(projectRoot string, scope toolsetScope) []ToolsetMeta {
 	return out
 }
 
-// listAllToolsets 列出工作区 + 全局全部工具集（全局在前，工作区同名覆盖标记）。
+// listAllToolsets 列出工作区 + 全局全部工具集（全局在前，工作区同名覆盖标记），
+// 末尾注入虚拟内置工具集 builtin（scope=builtin，不落盘；组数=内置分组数）。
 // 安装目录与工作区相同时（开发环境常见）目录去重，避免重复显示。
 func listAllToolsets(projectRoot string) []ToolsetMeta {
 	globalDir := toolsetDir(projectRoot, toolsetGlobal)
 	projectDir := toolsetDir(projectRoot, toolsetProject)
 	merged := listToolsets(projectRoot, toolsetGlobal)
-	if filepath.Clean(globalDir) == filepath.Clean(projectDir) {
-		return merged
-	}
-	seen := map[string]bool{}
-	for _, g := range merged {
-		seen[g.Name] = true
-	}
-	for _, p := range listToolsets(projectRoot, toolsetProject) {
-		if seen[p.Name] {
-			p.Name += "（工作区覆盖）"
+	if filepath.Clean(globalDir) != filepath.Clean(projectDir) {
+		seen := map[string]bool{}
+		for _, g := range merged {
+			seen[g.Name] = true
 		}
-		merged = append(merged, p)
+		for _, p := range listToolsets(projectRoot, toolsetProject) {
+			if seen[p.Name] {
+				p.Name += "（工作区覆盖）"
+			}
+			merged = append(merged, p)
+		}
 	}
+	// ★ 虚拟内置工具集（组数 = 内置分组数；ph 未装配时 0）
+	groupCount := 0
+	if ph := GetGlobalPluginHost(); ph != nil && ph.Context() != nil {
+		groupCount = len(BuiltinGroupsOf(ph.Context().Tools, ph))
+	}
+	merged = append(merged, ToolsetMeta{
+		Name: builtinToolsetName, Description: "内置工具包（core/git/codegraph/…；默认不加入，分组开关加入或强制全部）",
+		Scope: string(builtinToolsetScope), PluginCount: groupCount,
+	})
 	return merged
 }
 
@@ -230,6 +252,8 @@ func removeToolset(projectRoot string, scope toolsetScope, name string) error {
 
 // LoadAllToolsets 装载工作区 + 全局全部工具集（启动时调用；失败不致命）。
 // 先全局后工作区（工作区同名覆盖全局，最后装载生效）。
+// ★ 内置工具集 builtin.json（listToolsets 虚拟展示跳过，需单独装载——
+//   否则用户加入的内置分组重启后不生效）。
 func LoadAllToolsets(ph *PluginHost, projectRoot string) {
 	if ph == nil || projectRoot == "" {
 		return
@@ -245,6 +269,14 @@ func LoadAllToolsets(ph *PluginHost, projectRoot string) {
 				log.Printf("[toolset] %s 装载失败: %v", meta.Name, err)
 				continue
 			}
+			loaded++
+		}
+	}
+	// 内置工具包（用户/agent 选择加入的分组）
+	if ts, err := loadToolset(projectRoot, toolsetProject, builtinToolsetName); err == nil {
+		if err := installToolset(ph, ts); err != nil {
+			log.Printf("[toolset] builtin 内置工具包装载失败: %v", err)
+		} else {
 			loaded++
 		}
 	}
@@ -459,9 +491,35 @@ func InstallToolsetPublic(ph *PluginHost, ts *Toolset) error {
 	return installToolset(ph, ts)
 }
 
+// UnloadToolsetPublic 卸载工具集全部条目（内置条目恢复默认，JS 插件 Unload+Undefine）。
+func UnloadToolsetPublic(ph *PluginHost, ts *Toolset) {
+	UnloadToolsetPlugins(ph, ts)
+}
+
 // RemoveToolsetPublic 删除工具集。
 func RemoveToolsetPublic(root, scope, name string) error {
 	return removeToolset(root, toolsetScope(scope), name)
+}
+
+// ─── 内置工具集公共封装（handler REST / 前端面板直调）──────
+
+// BuiltinToolsetNamePublic 内置工具集名（虚拟，scope=builtin）。
+func BuiltinToolsetNamePublic() string { return builtinToolsetName }
+
+// BuiltinToolsetInfoPublic 内置工具包完整信息（分组+工具+启用状态+已加入分组）。
+func BuiltinToolsetInfoPublic(reg *Registry, ph *PluginHost, root string) *BuiltinToolsetInfo {
+	return BuiltinToolsetInfoOf(reg, ph, root)
+}
+
+// SetBuiltinGroupEnabledPublic 内置分组开关（enabled=true 加入工作区并启用组内工具；
+// false 移出恢复默认过滤）。返回操作结果文本。
+func SetBuiltinGroupEnabledPublic(ph *PluginHost, root, groupName string, enabled bool) (string, error) {
+	return SetBuiltinGroupEnabled(ph, root, groupName, enabled)
+}
+
+// EnableAllBuiltinPublic 强制全部内置工具组加入工作区。
+func EnableAllBuiltinPublic(ph *PluginHost, root string) (string, error) {
+	return EnableAllBuiltin(ph, root)
 }
 
 // countAllToolsetPlugins 统计全部工具集插件数（列表摘要用）。
@@ -490,10 +548,46 @@ func installToolset(ph *PluginHost, ts *Toolset) error {
 	return nil
 }
 
-// applyToolsetPlugin 装载单个工具集插件：定义（define 预检）→ 装载（apply 注册工具）
-// → 应用 DisabledTools（工具级摘除：Registry.SetToolEnabled(false)，agent 不可见）。
-// 重名插件先卸载再重定义（升级/覆盖场景）。toolset_edit 增删单插件时复用。
+// UnloadToolsetPlugins 卸载工具集全部条目（rm_plugin/remove/覆盖重建前调用）：
+// 内置条目恢复默认过滤状态，JS 插件 Unload+Undefine。公共导出（handler 层复用）。
+func UnloadToolsetPlugins(ph *PluginHost, ts *Toolset) {
+	if ph == nil || ts == nil {
+		return
+	}
+	for i := range ts.Plugins {
+		unloadToolsetPlugin(ph, &ts.Plugins[i])
+	}
+}
+
+// applyToolsetPlugin 装载单个工具集条目：
+//   - JS 插件条目（Code 非空）：定义（define 预检）→ 装载（apply 注册工具）
+//     → 应用 DisabledTools（工具级摘除：Registry.SetToolEnabled(false)，agent 不可见）。
+//     重名插件先卸载再重定义（升级/覆盖场景）。toolset_edit 增删单插件时复用。
+//   - 内置工具包条目（Builtin 非空，无 Code）：对 Tools 清单内已注册工具
+//     SetToolEnabled(true)（启用——工具对 agent 可见）→ 应用 DisabledTools。
 func applyToolsetPlugin(ph *PluginHost, p *ToolsetPlugin) error {
+	// ── 内置工具包条目：无 JS 代码，装载=启用组内工具 ──
+	if p.Builtin != "" && strings.TrimSpace(p.Code) == "" {
+		if ph.Context() != nil && ph.Context().Tools != nil {
+			for _, tn := range p.Tools {
+				if tn == "" {
+					continue
+				}
+				if _, ok := ph.Context().Tools.Get(tn); ok {
+					ph.Context().Tools.SetToolEnabled(tn, true)
+				}
+			}
+			for _, tn := range p.DisabledTools {
+				if tn == "" {
+					continue
+				}
+				if _, ok := ph.Context().Tools.Get(tn); ok {
+					ph.Context().Tools.SetToolEnabled(tn, false)
+				}
+			}
+		}
+		return nil
+	}
 	if strings.TrimSpace(p.Code) == "" {
 		return nil
 	}
@@ -520,4 +614,36 @@ func applyToolsetPlugin(ph *PluginHost, p *ToolsetPlugin) error {
 		}
 	}
 	return nil
+}
+
+// unloadToolsetPlugin 卸载单个工具集条目（rm_plugin / remove / 覆盖重装时调用）：
+//   - 内置工具包条目（Builtin 非空）：不卸载插件（无 JS 插件），而是把组内工具
+//     恢复默认状态（ToolDefaultEnabled：harness 保留清单内保持启用，其余禁用）——
+//     工具从「已加入」回到「被过滤」。
+//   - JS 插件条目：正常 Unload（回收工具/事件/系统提示）+ Undefine。
+// 幂等：插件未运行 / 工具未注册时无操作。
+func unloadToolsetPlugin(ph *PluginHost, p *ToolsetPlugin) {
+	if ph == nil || p == nil {
+		return
+	}
+	if p.Builtin != "" && strings.TrimSpace(p.Code) == "" {
+		if ph.Context() != nil && ph.Context().Tools != nil {
+			for _, tn := range p.Tools {
+				if tn == "" {
+					continue
+				}
+				if _, ok := ph.Context().Tools.Get(tn); ok {
+					ph.Context().Tools.SetToolEnabled(tn, ToolDefaultEnabled(tn))
+				}
+			}
+		}
+		return
+	}
+	if p.Name == "" {
+		return
+	}
+	if _, ok := ph.Get(p.Name); ok {
+		_ = ph.Unload(p.Name)
+		_ = ph.Undefine(p.Name)
+	}
 }

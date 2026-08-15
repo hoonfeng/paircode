@@ -42,24 +42,48 @@ func TestApplyHarnessToolFilter_RemovesPairTools(t *testing.T) {
 	before := len(reg.AllToolMeta())
 	n := ApplyHarnessToolFilter(reg, nil)
 	if n != before-len(HarnessAlignedToolNames) {
-		t.Errorf("应移除 %d 个工具，实际移除 %d（注册 %d / 保留 %d）", before-len(HarnessAlignedToolNames), n, before, len(HarnessAlignedToolNames))
+		t.Errorf("应禁用 %d 个工具，实际禁用 %d（注册 %d / 保留 %d）", before-len(HarnessAlignedToolNames), n, before, len(HarnessAlignedToolNames))
 	}
-	// harness 工具保留
+	// harness 工具保留且启用
 	for name := range HarnessAlignedToolNames {
 		if _, ok := reg.Get(name); !ok {
 			t.Errorf("保留清单工具 %s 被误删", name)
 		}
+		if !reg.IsEnabled(name) {
+			t.Errorf("保留清单工具 %s 应保持启用", name)
+		}
 	}
-	// pair 独有工具全部移除
+	// pair 独有工具保留在注册表但被禁用（agent 不可见，前端可见可恢复）
 	for _, name := range []string{"read_file", "write_file", "codegraph_search", "memory_read",
 		"project_info_write", "git_diff", "debug_inject_log", "binary_hash", "csv_read", "web_debug",
 		"go_build", "fix_flex_autoheight"} {
-		if _, ok := reg.Get(name); ok {
-			t.Errorf("pair 独有工具 %s 未被移除", name)
+		tool, ok := reg.Get(name)
+		if !ok {
+			t.Errorf("pair 独有工具 %s 应从注册表保留（禁用而非删除，内置工具集可恢复）", name)
+			continue
+		}
+		if tool.Enabled {
+			t.Errorf("pair 独有工具 %s 应被禁用（agent 不可见）", name)
 		}
 	}
-	if got := len(reg.AllToolMeta()); got != len(HarnessAlignedToolNames) {
-		t.Errorf("过滤后应剩 %d 个工具，实际 %d", len(HarnessAlignedToolNames), got)
+	// 全部工具仍在注册表（前端 /api/tools 可见），但 Definitions 只导出启用项
+	if got := len(reg.AllToolMeta()); got != before {
+		t.Errorf("禁用后注册表工具数不应变化，before=%d after=%d", before, got)
+	}
+	if defs := reg.Definitions(); len(defs) != len(HarnessAlignedToolNames) {
+		t.Errorf("Definitions 应只导出 %d 个启用工具（agent 可调用），实际 %d", len(HarnessAlignedToolNames), len(defs))
+	}
+	// 禁用工具调用被拦截
+	if _, err := reg.Execute(context.Background(), "codegraph_search", "{}"); err == nil {
+		t.Error("禁用工具 codegraph_search 调用应被拦截")
+	}
+	// 恢复（内置工具集加入场景）：SetToolEnabled(true) → agent 可见
+	reg.SetToolEnabled("codegraph_search", true)
+	if !reg.IsEnabled("codegraph_search") {
+		t.Error("SetToolEnabled(true) 应恢复工具（内置工具集加入语义）")
+	}
+	if defs := reg.Definitions(); len(defs) != len(HarnessAlignedToolNames)+1 {
+		t.Errorf("恢复后 Definitions 应多 1 个（codegraph_search），实际 %d", len(defs))
 	}
 }
 
@@ -81,13 +105,17 @@ func TestApplyHarnessToolFilter_FullToolsKeepsAll(t *testing.T) {
 func TestApplyHarnessToolFilter_Idempotent(t *testing.T) {
 	t.Setenv("WB_FULL_TOOLS", "")
 	reg := mkHarnessReg()
+	before := len(reg.AllToolMeta())
 	first := ApplyHarnessToolFilter(reg, nil)
 	second := ApplyHarnessToolFilter(reg, nil)
 	if second != 0 {
-		t.Errorf("第二次过滤应移除 0 个（幂等），实际 %d（第一次 %d）", second, first)
+		t.Errorf("第二次过滤应禁用 0 个（幂等），实际 %d（第一次 %d）", second, first)
 	}
-	if got := len(reg.AllToolMeta()); got != len(HarnessAlignedToolNames) {
-		t.Errorf("幂等后应剩 %d 个工具，实际 %d", len(HarnessAlignedToolNames), got)
+	if got := len(reg.AllToolMeta()); got != before {
+		t.Errorf("幂等后工具数不应变化，before=%d after=%d", before, got)
+	}
+	if defs := reg.Definitions(); len(defs) != len(HarnessAlignedToolNames) {
+		t.Errorf("幂等后 Definitions 应剩 %d 个启用工具，实际 %d", len(HarnessAlignedToolNames), len(defs))
 	}
 }
 

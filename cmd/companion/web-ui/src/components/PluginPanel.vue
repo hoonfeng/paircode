@@ -82,6 +82,35 @@
       <div ref="clientPanelEl" class="pp-client-body"></div>
     </div>
 
+    <!-- 内置工具（被过滤的 pair 独有工具按内置插件组管理——放进插件面板） -->
+    <div class="pp-builtin">
+      <div class="pp-builtin-head">
+        <span class="pp-builtin-title"><SvgIcon name="package" :size="13" /> 内置工具 <span class="pp-builtin-sub">{{ builtinInfo ? builtinInfo.enabledTotal + '/' + builtinInfo.toolTotal + ' 启用' : '' }}</span></span>
+        <div class="pp-builtin-actions">
+          <label class="pp-check" title="强制全部内置工具组加入工作区（所有被过滤工具对 agent 可见）">
+            <input type="checkbox" :checked="builtinForceAll" @change="forceAllBuiltin" />
+            <span>强制全部</span>
+          </label>
+          <button class="pp-icon-btn" @click="loadBuiltin" title="刷新内置工具状态"><SvgIcon name="refresh" :size="11" :class="{ spinning: builtinLoading }" /></button>
+        </div>
+      </div>
+      <div v-if="builtinLoading && !builtinInfo" class="pp-loading"><SvgIcon name="refresh" :size="12" class="spinner" /><span>加载…</span></div>
+      <div v-else-if="builtinInfo && builtinInfo.groups.length" class="pp-builtin-groups">
+        <div v-for="g in builtinInfo.groups" :key="g.name" class="pp-builtin-group">
+          <div class="pp-builtin-grow">
+            <span class="pp-builtin-gname" :class="{ off: !g.Enabled && !g.Partial }">{{ g.title }}</span>
+            <span class="pp-builtin-gdesc" :title="g.desc">{{ g.desc }}</span>
+            <span class="pp-builtin-gtools">{{ g.tools.length }} 工具<template v-if="g.Partial">（部分）</template></span>
+          </div>
+          <label class="pp-switch" :title="g.Enabled ? '组内工具全部对 agent 可见；点击移出（恢复默认过滤）' : '加入工作区：组内工具全部对 agent 可见'">
+            <input type="checkbox" :checked="g.Enabled" @change="toggleBuiltinGroup(g)" />
+            <span class="pp-switch-track"></span>
+          </label>
+        </div>
+      </div>
+      <div v-else class="pp-builtin-empty">内置工具包未加载（启动后自动可用）</div>
+    </div>
+
     <!-- 插件列表 -->
     <div class="pp-list">
       <div v-if="loading && plugins.length === 0" class="pp-loading">
@@ -153,10 +182,59 @@ const addPluginName = ref('')
 
 const newForm = reactive({ purpose: '', code: '', client: '', language: '', run: true })
 
+// ─── 内置工具（被过滤工具按内置插件组管理——插件面板开关）──
+const builtinInfo = ref(null)
+const builtinLoading = ref(false)
+const builtinForceAll = ref(false)
+
+async function loadBuiltin() {
+  builtinLoading.value = true
+  try {
+    builtinInfo.value = await api.builtinPlugins()
+    builtinForceAll.value = !!(builtinInfo.value && builtinInfo.value.joined && builtinInfo.value.joined.length === (builtinInfo.value.groups || []).length && builtinInfo.value.joined.length > 0)
+  } catch (e) {
+    builtinInfo.value = null
+  } finally {
+    builtinLoading.value = false
+  }
+}
+
+async function toggleBuiltinGroup(g) {
+  const target = !g.Enabled
+  try {
+    const res = await api.builtinPlugins({ group: g.name, enabled: target })
+    window.$toast && window.$toast((res && res.message) || (target ? '已加入' : '已移出') + ' ' + g.name, 'info')
+  } catch (e) {
+    window.$toast && window.$toast(e.message || '操作失败', 'error')
+  }
+  await loadBuiltin()
+  await refresh()
+}
+
+async function forceAllBuiltin(ev) {
+  const target = !!ev.target.checked
+  if (!target) {
+    // 关闭强制全部：保持当前状态（仅提示如何单个移出）
+    window.$toast && window.$toast('已取消强制全部（保持当前启用状态；可在工具集面板 builtin 分组逐个移出）', 'info')
+    loadBuiltin()
+    return
+  }
+  try {
+    const res = await api.builtinPlugins({ forceAll: true })
+    window.$toast && window.$toast((res && res.message) || '已强制全部加入', 'info')
+  } catch (e) {
+    window.$toast && window.$toast(e.message || '操作失败', 'error')
+  }
+  await loadBuiltin()
+  await refresh()
+}
+
 // ─── 工具集管理（插件化：add_plugin / rm_plugin / rm_tool / enable_tool）──
 async function loadToolsets() {
   try {
-    toolsetMetas.value = (await api.getToolsets()) || []
+    const list = (await api.getToolsets()) || []
+    // 内置工具包 builtin 在插件面板顶部「内置工具」区块管理，工具集下拉不重复展示
+    toolsetMetas.value = list.filter(t => t.scope !== 'builtin')
   } catch (e) {
     toolsetMetas.value = []
   }
@@ -334,6 +412,7 @@ onMounted(() => {
   setPanelMount(onPanelsChanged)
   startPolling()
   refresh()
+  loadBuiltin()
 })
 
 onUnmounted(() => {
@@ -577,3 +656,52 @@ onUnmounted(() => {
 .pp-ts-add select { flex: 1; }
 .pp-ts-empty { font-size: 11px; color: var(--text-muted); padding: 4px 0; }
 .pp-icon-btn.active { color: var(--accent-light); background: var(--bg-hover); }
+
+/* ─── 内置工具（被过滤工具按内置插件组管理） ─── */
+.pp-builtin {
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  padding: 6px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex-shrink: 0;
+  max-height: 34%;
+  overflow: auto;
+}
+.pp-builtin-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.pp-builtin-title { display: flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; color: var(--text-primary); }
+.pp-builtin-sub { font-weight: 400; color: var(--text-muted); font-size: 10px; }
+.pp-builtin-actions { display: flex; align-items: center; gap: 6px; }
+.pp-builtin-groups { display: flex; flex-direction: column; gap: 3px; }
+.pp-builtin-group {
+  display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  border: 1px solid var(--border-color); border-radius: 4px;
+  background: var(--bg-primary); padding: 3px 8px;
+}
+.pp-builtin-grow { display: flex; align-items: baseline; gap: 6px; min-width: 0; flex: 1; }
+.pp-builtin-gname { font-size: 11px; font-weight: 600; color: var(--text-primary); white-space: nowrap; }
+.pp-builtin-gname.off { color: var(--text-muted); opacity: .6; }
+.pp-builtin-gdesc { font-size: 10px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.pp-builtin-gtools { font-size: 10px; color: var(--text-secondary); white-space: nowrap; }
+.pp-builtin-empty { font-size: 10px; color: var(--text-muted); padding: 2px 0; }
+
+/* 开关（pp-switch） */
+.pp-switch { position: relative; display: inline-flex; align-items: center; cursor: pointer; flex-shrink: 0; }
+.pp-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.pp-switch-track {
+  width: 26px; height: 14px;
+  background: var(--border-color);
+  border-radius: 7px;
+  transition: background .15s;
+  position: relative;
+}
+.pp-switch-track::after {
+  content: '';
+  position: absolute; top: 2px; left: 2px;
+  width: 10px; height: 10px;
+  background: #fff; border-radius: 50%;
+  transition: transform .15s;
+}
+.pp-switch input:checked + .pp-switch-track { background: var(--accent); }
+.pp-switch input:checked + .pp-switch-track::after { transform: translateX(12px); }

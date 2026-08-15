@@ -68,12 +68,7 @@ func RegisterToolsetTools(r *Registry, root string, ph *PluginHost) {
 			}
 			// 旧插件（同名工具集装载过的）先卸载，避免残留
 			if ts, err := loadToolset(projectDir, "", name); err == nil {
-				for _, p := range ts.Plugins {
-					if _, ok := ph.Get(p.Name); ok {
-						_ = ph.Unload(p.Name)
-						_ = ph.Undefine(p.Name)
-					}
-				}
+				UnloadToolsetPlugins(ph, ts)
 			}
 			ts, err := BuildToolset(ph, projectDir, name, mArgStr(args, "description"), mArgStr(args, "requirement"))
 			if err != nil {
@@ -103,18 +98,23 @@ func RegisterToolsetTools(r *Registry, root string, ph *PluginHost) {
 			"② rm_plugin 从工具集移除插件（其注册的全部工具一并卸载）；\n" +
 			"③ rm_tool 摘除插件下单个工具（插件保留、工具对 agent 不可见，enable_tool 可恢复）；\n" +
 			"④ enable_tool 恢复被摘除的工具。\n" +
+			"★ 内置工具包（name=builtin）：被过滤的 pair 独有工具按内置插件组（core/git/codegraph/memory/…）" +
+			"管理——add_builtin {builtin_group=组名} 选择加入（组内工具全部对 agent 可见并固化 .pair/toolsets/builtin.json）；" +
+			"add_builtin_all 强制全部内置组加入（开关）；rm_plugin {plugin_name=builtin:组名} 移出（恢复默认过滤）；" +
+			"rm_tool/enable_tool 摘除/恢复组内单个工具。\n" +
 			"操作即时热装载（装卸对应插件）并回写固化 .pair/toolsets/{name}.json（重启自动装配保持）。" +
 			"用 toolset_show 查看工具集现有插件。",
 		RequiresApproval: true,
 		Parameters: mObjSchema(map[string]any{
-			"name":         mStrProp("工具集名（必填）"),
-			"scope":        mStrProp("project/global（默认自动：先工作区再全局）"),
-			"action":       mStrProp("add_plugin / rm_plugin / rm_tool / enable_tool（必填）"),
-			"plugin_name":  mStrProp("插件名（add/rm 均需）"),
-			"from_toolset": mStrProp("add_plugin 时从其他工具集拷贝插件（不填=从宿主已定义插件找）"),
-			"tool":         mStrProp("rm_tool / enable_tool 时的工具名"),
-			"plugin_json":  mStrProp("add_plugin 直接给插件 JSON：{\"name\":\"…\",\"purpose\":\"…\",\"code\":\"…\",\"client\":\"…\"}"),
-			"overwrite":    mStrProp("add_plugin 遇重名时 true=覆盖重装（先删旧），false=报错（默认）"),
+			"name":          mStrProp("工具集名（必填；builtin=内置工具包）"),
+			"scope":         mStrProp("project/global（默认自动：先工作区再全局；builtin 固定工作区）"),
+			"action":        mStrProp("add_plugin / rm_plugin / rm_tool / enable_tool / add_builtin / add_builtin_all（必填）"),
+			"plugin_name":   mStrProp("插件名（add/rm 均需；内置组用 builtin:组名）"),
+			"builtin_group": mStrProp("add_builtin 时的内置分组名（core/git/codegraph/…；toolset_show builtin 查看）"),
+			"from_toolset":  mStrProp("add_plugin 时从其他工具集拷贝插件（不填=从宿主已定义插件找）"),
+			"tool":          mStrProp("rm_tool / enable_tool 时的工具名"),
+			"plugin_json":   mStrProp("add_plugin 直接给插件 JSON：{\"name\":\"…\",\"purpose\":\"…\",\"code\":\"…\",\"client\":\"…\"}"),
+			"overwrite":     mStrProp("add_plugin 遇重名时 true=覆盖重装（先删旧），false=报错（默认）"),
 		}),
 		Handler: func(_ context.Context, args map[string]any) (string, error) {
 			return toolsetEdit(ph, root, args)
@@ -136,12 +136,18 @@ func RegisterToolsetTools(r *Registry, root string, ph *PluginHost) {
 			b.WriteString("## 工具集\n")
 			for _, m := range metas {
 				scope := "工作区"
-				if m.Scope == "global" {
+				switch m.Scope {
+				case "global":
 					scope = "全局"
+				case "builtin":
+					scope = "内置"
 				}
-				fmt.Fprintf(&b, "- **%s** [%s]（%s，%d 个插件）\n", m.Name, scope, m.Description, m.PluginCount)
+				fmt.Fprintf(&b, "- **%s** [%s]（%s，%d 个%s）\n", m.Name, scope, m.Description, m.PluginCount,
+					boolStr(m.Scope == "builtin", "分组", "插件"))
 			}
-			b.WriteString("\ntoolset_show {name} 查看详情；toolset_build 构建/更新；toolset_export 导出。")
+			b.WriteString("\ntoolset_show {name} 查看详情；toolset_build 构建/更新；toolset_export 导出。\n" +
+				"内置工具集 builtin：被过滤的 pair 独有工具分组（core/git/codegraph/…），默认不加入；\n" +
+				"toolset_edit {name=builtin, action=add_builtin, builtin_group=组名} 选择加入，add_builtin_all 强制全部。")
 			return b.String(), nil
 		},
 	})
@@ -149,13 +155,41 @@ func RegisterToolsetTools(r *Registry, root string, ph *PluginHost) {
 	// ── toolset_show：查看工具集详情 ──
 	r.Register(&Tool{
 		Name:        "toolset_show",
-		Description: "查看工具集详情：插件清单（名称/用途）、来源作用域、版本。",
+		Description: "查看工具集详情：插件清单（名称/用途）、来源作用域、版本。name=builtin 查看内置工具包分组（含工具启用状态）。",
 		ReadOnly:    true,
 		Parameters: mObjSchema(map[string]any{
-			"name": mStrProp("工具集名"),
+			"name": mStrProp("工具集名（builtin=内置工具包）"),
 		}, "name"),
 		Handler: func(_ context.Context, args map[string]any) (string, error) {
 			name := mArgStr(args, "name")
+			if name == builtinToolsetName {
+				// ★ 内置工具集：虚拟派生展示（分组 + 工具 + 启用状态 + 已加入标记）
+				ph := GetGlobalPluginHost()
+				reg := (*Registry)(nil)
+				if ph != nil && ph.Context() != nil {
+					reg = ph.Context().Tools
+				}
+				info := BuiltinToolsetInfoOf(reg, ph, root)
+				var b strings.Builder
+				fmt.Fprintf(&b, "## 内置工具集 builtin（%d 组 / %d 工具，已启用 %d）\n", len(info.Groups), info.ToolTotal, info.EnabledTotal)
+				b.WriteString("默认不加入工作区（组内工具对 agent 不可见）；选择加入后固化 .pair/toolsets/builtin.json。\n")
+				b.WriteString("已加入分组: " + boolStr(len(info.Joined) > 0, "["+strings.Join(info.Joined, ", ")+"]", "（无）") + "\n\n")
+				for _, g := range info.Groups {
+					mark := boolStr(g.Enabled, "●已启用", boolStr(g.Partial, "◐部分", "○已过滤"))
+					fmt.Fprintf(&b, "### %s [%s]（%d 工具）\n%s\n", g.Name, mark, len(g.Tools), g.Desc)
+					var names []string
+					for _, t := range g.Tools {
+						s := t.Name
+						if !t.Enabled {
+							s += "（过滤）"
+						}
+						names = append(names, s)
+					}
+					fmt.Fprintf(&b, "  %s\n\n", strings.Join(names, " "))
+				}
+				b.WriteString("加入: toolset_edit {name=builtin, action=add_builtin, builtin_group=组名}；强制全部: action=add_builtin_all；移出: action=rm_plugin, plugin_name=builtin:组名")
+				return b.String(), nil
+			}
 			ts, err := loadToolset(root, "", name)
 			if err != nil {
 				return "", err
@@ -271,14 +305,17 @@ func RegisterToolsetTools(r *Registry, root string, ph *PluginHost) {
 	// ── toolset_remove：删除工具集 ──
 	r.Register(&Tool{
 		Name:             "toolset_remove",
-		Description:      "删除工具集（scope 指定删除作用域；缺省两个作用域同名都删）。已装载插件同步卸载。",
+		Description:      "删除工具集（scope 指定删除作用域；缺省两个作用域同名都删）。已装载插件同步卸载。内置工具集 builtin 不可删除（用 toolset_edit 分组移出）。",
 		RequiresApproval: true,
 		Parameters: mObjSchema(map[string]any{
-			"name":  mStrProp("工具集名"),
+			"name":  mStrProp("工具集名（builtin 不可删除）"),
 			"scope": mStrProp("project/global/缺省（都删）"),
 		}, "name"),
 		Handler: func(_ context.Context, args map[string]any) (string, error) {
 			name := mArgStr(args, "name")
+			if name == builtinToolsetName {
+				return "", fmt.Errorf("内置工具集 builtin 不可删除；用 toolset_edit {name=builtin, action=rm_plugin, plugin_name=builtin:组名} 分组移出，或 add_builtin_all 强制全部加入")
+			}
 			var scope toolsetScope
 			switch mArgStr(args, "scope") {
 			case "project":
@@ -286,14 +323,9 @@ func RegisterToolsetTools(r *Registry, root string, ph *PluginHost) {
 			case "global":
 				scope = toolsetGlobal
 			}
-			// 先卸载已装载插件
+			// 先卸载已装载插件/恢复内置条目
 			if ts, err := loadToolset(root, scope, name); err == nil {
-				for _, p := range ts.Plugins {
-					if _, ok := ph.Get(p.Name); ok {
-						_ = ph.Unload(p.Name)
-						_ = ph.Undefine(p.Name)
-					}
-				}
+				UnloadToolsetPlugins(ph, ts)
 			}
 			if err := removeToolset(root, scope, name); err != nil {
 				return "", err
@@ -438,10 +470,7 @@ func toolsetEditRmPlugin(ph *PluginHost, root string, scope toolsetScope, ts *To
 	if idx < 0 {
 		return "", fmt.Errorf("工具集 %q 中没有插件 %q（toolset_show 查看现有插件）", ts.Name, pn)
 	}
-	if _, ok := ph.Get(pn); ok {
-		_ = ph.Unload(pn)
-		_ = ph.Undefine(pn)
-	}
+	unloadToolsetPlugin(ph, &ts.Plugins[idx])
 	ts.Plugins = append(ts.Plugins[:idx], ts.Plugins[idx+1:]...)
 	if err := saveToolset(root, scope, ts); err != nil {
 		return "", err
@@ -542,8 +571,35 @@ func toolsetEdit(ph *PluginHost, root string, args map[string]any) (string, erro
 	}
 	action := mArgStr(args, "action")
 	if action == "" {
-		return "", fmt.Errorf("需要 action：add_plugin / rm_plugin / rm_tool / enable_tool")
+		return "", fmt.Errorf("需要 action：add_plugin / rm_plugin / rm_tool / enable_tool / add_builtin / add_builtin_all")
 	}
+
+	// ★ 内置工具集（builtin）特殊通道：add_builtin（加入一组）/ add_builtin_all（强制全部）
+	if name == builtinToolsetName {
+		switch action {
+		case "add_builtin":
+			gn := strings.TrimSpace(mArgStr(args, "builtin_group"))
+			if gn == "" {
+				return "", fmt.Errorf("add_builtin 需要 builtin_group（内置分组名；toolset_show builtin 查看分组）")
+			}
+			return SetBuiltinGroupEnabled(ph, root, gn, true)
+		case "add_builtin_all":
+			return EnableAllBuiltin(ph, root)
+		case "rm_plugin":
+			pn := strings.TrimSpace(mArgStr(args, "plugin_name"))
+			gn := strings.TrimPrefix(pn, "builtin:")
+			if gn == "" || gn == pn {
+				return "", fmt.Errorf("移除内置分组请用 plugin_name=builtin:组名（toolset_show builtin 查看分组）")
+			}
+			return SetBuiltinGroupEnabled(ph, root, gn, false)
+		case "rm_tool", "enable_tool":
+			// 内置条目工具级摘除/恢复（操作 builtin.json 中对应条目）
+			return toolsetEditBuiltinTool(ph, root, args, action)
+		default:
+			return "", fmt.Errorf("内置工具集不支持 action %q（add_builtin/add_builtin_all/rm_plugin/rm_tool/enable_tool）", action)
+		}
+	}
+
 	// 解析作用域（空=自动：工作区优先）
 	var scope toolsetScope
 	switch mArgStr(args, "scope") {
@@ -573,9 +629,72 @@ func toolsetEdit(ph *PluginHost, root string, args map[string]any) (string, erro
 		return toolsetEditRmTool(ph, root, resolved, ts, args)
 	case "enable_tool":
 		return toolsetEditEnableTool(ph, root, resolved, ts, args)
+	case "add_builtin", "add_builtin_all":
+		return "", fmt.Errorf("内置分组加入请用 name=builtin（toolset_edit {name=builtin, action=%s}）", action)
 	default:
-		return "", fmt.Errorf("未知 action %q（add_plugin/rm_plugin/rm_tool/enable_tool）", action)
+		return "", fmt.Errorf("未知 action %q（add_plugin/rm_plugin/rm_tool/enable_tool/add_builtin/add_builtin_all）", action)
 	}
+}
+
+// toolsetEditBuiltinTool 内置工具集条目的工具级摘除/恢复（rm_tool/enable_tool）。
+// 直接修改 .pair/toolsets/builtin.json 中对应内置条目的 DisabledTools 并热应用。
+func toolsetEditBuiltinTool(ph *PluginHost, root string, args map[string]any, action string) (string, error) {
+	pn := strings.TrimSpace(mArgStr(args, "plugin_name"))
+	tool := strings.TrimSpace(mArgStr(args, "tool"))
+	gn := strings.TrimPrefix(pn, "builtin:")
+	if gn == "" || gn == pn || tool == "" {
+		return "", fmt.Errorf("需要 plugin_name=builtin:组名 与 tool（工具名）")
+	}
+	ts, err := loadToolset(root, toolsetProject, builtinToolsetName)
+	if err != nil {
+		return "", err
+	}
+	idx := -1
+	for i := range ts.Plugins {
+		if ts.Plugins[i].Builtin == gn {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return "", fmt.Errorf("内置组 %q 未加入工作区（toolset_edit {name=builtin, action=add_builtin, builtin_group=%s} 先加入）", gn, gn)
+	}
+	p := &ts.Plugins[idx]
+	if action == "enable_tool" {
+		// 从摘除清单移除 + 启用
+		removed := false
+		for i, t := range p.DisabledTools {
+			if t == tool {
+				p.DisabledTools = append(p.DisabledTools[:i], p.DisabledTools[i+1:]...)
+				removed = true
+				break
+			}
+		}
+		if !removed {
+			return fmt.Sprintf("工具 %q 不在内置组 %q 的摘除清单中（无需恢复）", tool, gn), nil
+		}
+		if ph.Context() != nil && ph.Context().Tools != nil {
+			ph.Context().Tools.SetToolEnabled(tool, true)
+		}
+	} else {
+		// 摘除（去重）
+		for _, t := range p.DisabledTools {
+			if t == tool {
+				return fmt.Sprintf("工具 %q 已在内置组 %q 的摘除清单中", tool, gn), nil
+			}
+		}
+		p.DisabledTools = append(p.DisabledTools, tool)
+		if ph.Context() != nil && ph.Context().Tools != nil {
+			ph.Context().Tools.SetToolEnabled(tool, false)
+		}
+	}
+	if err := saveToolset(root, toolsetProject, ts); err != nil {
+		return "", err
+	}
+	if action == "enable_tool" {
+		return fmt.Sprintf("✅ 工具 %q 已恢复（内置组 %q 的工具重新对 agent 可见）", tool, gn), nil
+	}
+	return fmt.Sprintf("✅ 工具 %q 已从内置组 %q 摘除（组保留，工具对 agent 不可见；enable_tool 可恢复）", tool, gn), nil
 }
 
 // EditToolsetPublic 工具集手动编辑（公开导出，web_server/前端面板直调）。

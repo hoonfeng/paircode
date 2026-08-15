@@ -3,16 +3,17 @@
 // 注意：这里只给出提示文字，对应工具的注册由调用方负责。
 //
 // ★ harness 对齐（2026-08-15）：本文件引用的工具（skill_*/mcp_*/marketplace_*/
-// memory_*/project_info_*/lua_tool_*）已被 ApplyHarnessToolFilter 从注册表移除。
-// 在 harness 对齐模式下（默认）这些段落返回空串，避免提示 LLM 调用不存在的工具；
-// WB_FULL_TOOLS=1 恢复全量工具时返回原文。
+// memory_*/project_info_*/lua_tool_*）已被 ApplyHarnessToolFilter 禁用
+// （Enabled=false——工具仍在注册表、前端可见，agent 不可调用；内置工具集
+// builtin 分组开关/强制全部可恢复）。在 harness 对齐模式下（默认）这些段落
+// 返回空串，避免提示 LLM 调用不可用的工具；WB_FULL_TOOLS=1 恢复全量工具时返回原文。
 
 package agent
 
 import "fmt"
 
 // SelfManagementPrompt 返回"自管理与扩展"段落的系统提示文本。
-// harness 对齐模式下返回空（skill_*/mcp_*/marketplace_* 工具已被移除）。
+// harness 对齐模式下返回空（skill_*/mcp_*/marketplace_* 工具已被禁用）。
 func SelfManagementPrompt() string {
 	if HarnessOnlyTools() {
 		return ""
@@ -34,7 +35,7 @@ func SelfManagementPrompt() string {
 }
 
 // LuaToolsPrompt 返回"自定义工具（Lua）"段落的系统提示文本。
-// harness 对齐模式下返回空（lua_tool_* 工具已被移除）。
+// harness 对齐模式下返回空（lua_tool_* 工具已被禁用）。
 func LuaToolsPrompt() string {
 	if HarnessOnlyTools() {
 		return ""
@@ -49,7 +50,7 @@ func LuaToolsPrompt() string {
 
 // LongTermMemoryPrompt 返回"长时记忆检索"段落的系统提示文本。
 // ★ v3：强化为主动指令。告知 Agent 系统已主动注入了什么，以及当注入不足时该做什么。
-// harness 对齐模式下返回空（memory_*/project_info_* 工具已被移除）。
+// harness 对齐模式下返回空（memory_*/project_info_* 工具已被禁用）。
 func LongTermMemoryPrompt() string {
 	if HarnessOnlyTools() {
 		return ""

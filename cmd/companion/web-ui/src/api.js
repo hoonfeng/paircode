@@ -314,13 +314,21 @@ async function savePhilosophy(data) {
   return apiPut('/philosophy', data)
 }
 
-export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, isWebSocketOpen, waitForWebSocket, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatCompact, chatStop, getMessages, getMessagesCount, getModels, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, getPhilosophy, savePhilosophy, listPlugins, getPluginDetail, pluginAction, definePlugin, pluginEmit, pluginClientEvents, pluginClientState, pluginInvoke, pluginClientFailure, getToolsets, toolsetEdit }
+export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, isWebSocketOpen, waitForWebSocket, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatCompact, chatStop, getMessages, getMessagesCount, getModels, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, getPhilosophy, savePhilosophy, listPlugins, getPluginDetail, pluginAction, definePlugin, pluginEmit, pluginClientEvents, pluginClientState, pluginInvoke, pluginClientFailure, builtinPlugins, getToolsets, toolsetEdit }
 
 // ─── 插件（管理 + 使用 + host/client 事件桥）──────────────
 
 // listPlugins 插件列表（含状态/工具/服务/client 有无，不含源码）。
 async function listPlugins() {
   return apiGet('/plugins')
+}
+
+// builtinPlugins 内置工具包（被过滤工具按内置插件组管理——插件面板开关）：
+// GET 返回 {groups, joined, toolTotal, enabledTotal}；
+// POST 切换分组 {group, enabled} 或强制全部 {forceAll:true}。
+async function builtinPlugins(data) {
+  if (data) return apiPost('/plugins/builtin', data)
+  return apiGet('/plugins/builtin')
 }
 
 // getPluginDetail 单插件详情（?id= 插件名或 dyn id，含 client 半源码）。

@@ -1226,6 +1226,12 @@ func (h *PluginHost) Inspect() []PluginRecord {
 			}
 		}
 		rec.Tools = append([]string(nil), h.pluginTools[name]...)
+		// ★ 内置 Go 插件：工具经 Registry.Register 直接注册（不经 addPluginTool，
+		//   pluginTools 为空）——补静态派生工具清单，cordis_inspect/插件面板可见
+		//   （agent「通过插件列表看见被过滤工具」的通道）。
+		if len(rec.Tools) == 0 && isBuiltinPluginName(name) {
+			rec.Tools = append([]string(nil), builtinPluginToolGroups()[name]...)
+		}
 		for _, s := range h.pluginSections[name] {
 			rec.Sections = append(rec.Sections, s.Name)
 		}
@@ -1275,6 +1281,9 @@ func (h *PluginHost) InspectDetail(name string) *PluginRecord {
 			}
 		}
 		rec.Tools = append([]string(nil), h.pluginTools[n]...)
+		if len(rec.Tools) == 0 && isBuiltinPluginName(n) {
+			rec.Tools = append([]string(nil), builtinPluginToolGroups()[n]...)
+		}
 		for _, s := range h.pluginSections[n] {
 			rec.Sections = append(rec.Sections, s.Name)
 		}
@@ -1332,6 +1341,37 @@ func (h *PluginHost) addPluginTool(plugin, tool string) {
 	h.mu.Lock()
 	h.pluginTools[plugin] = append(h.pluginTools[plugin], tool)
 	h.mu.Unlock()
+}
+
+// PluginToolsByPlugin 插件名 → 该插件注册的工具名清单（快照；含内置 Go 插件
+// 与 JS 动态插件）。内置工具集分组（BuiltinToolsetOf）用它取各内置插件组工具。
+func (h *PluginHost) PluginToolsByPlugin() map[string][]string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	out := make(map[string][]string, len(h.pluginTools))
+	for k, v := range h.pluginTools {
+		out[k] = append([]string(nil), v...)
+	}
+	return out
+}
+
+// PluginToolOwners 工具名 → 归属插件（快照；toolOwner 反向表）。
+func (h *PluginHost) PluginToolOwners() map[string]string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	out := make(map[string]string, len(h.toolOwner))
+	for k, v := range h.toolOwner {
+		out[k] = v
+	}
+	return out
+}
+
+// HasPluginTool 判断工具是否已由某插件注册（claimTool 预检用）。
+func (h *PluginHost) HasPluginTool(tool string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	_, taken := h.toolOwner[tool]
+	return taken
 }
 
 func (h *PluginHost) addPluginSection(plugin string, s *PromptSection) {

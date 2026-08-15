@@ -444,7 +444,7 @@ func runCodeNested(ctx context.Context, r *Registry, code string) (string, error
 	vm.Set("console", console)
 
 	tools := vm.NewObject()
-	for _, name := range r.Names() {
+	for _, name := range r.EnabledNames() { // 只注入启用工具（禁用工具不得在沙箱暴露）
 		if name == "run_code" { // 防递归
 			continue
 		}

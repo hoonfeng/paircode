@@ -31,7 +31,8 @@ func workspaceRoot() string {
 	return ""
 }
 
-// HandleToolsetsList GET /api/toolsets：工具集列表；?name= 返回该工具集完整详情（含插件）。
+// HandleToolsetsList GET /api/toolsets：工具集列表；?name= 返回该工具集完整详情
+// （含插件）。name=builtin 返回内置工具包详情（分组+工具+启用状态+已加入分组）。
 func HandleToolsetsList(w http.ResponseWriter, r *http.Request) {
 	root := workspaceRoot()
 	if root == "" {
@@ -39,6 +40,19 @@ func HandleToolsetsList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if name := r.URL.Query().Get("name"); name != "" {
+		if name == agent.BuiltinToolsetNamePublic() {
+			ph, ok := getPluginHost()
+			if !ok {
+				jsonErr(w, "插件系统未初始化")
+				return
+			}
+			reg := (*agent.Registry)(nil)
+			if ph.Context() != nil {
+				reg = ph.Context().Tools
+			}
+			jsonResp(w, agent.BuiltinToolsetInfoPublic(reg, ph, root))
+			return
+		}
 		ts, err := agent.LoadToolsetPublic(root, "", name)
 		if err != nil {
 			jsonErr(w, err.Error())
@@ -105,14 +119,9 @@ func HandleToolsetBuild(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	// 旧插件先卸载
+	// 旧插件先卸载（内置条目恢复默认）
 	if ts, err := agent.LoadToolsetPublic(projectDir, "", name); err == nil {
-		for _, p := range ts.Plugins {
-			if _, ok := ph.Get(p.Name); ok {
-				_ = ph.Unload(p.Name)
-				_ = ph.Undefine(p.Name)
-			}
-		}
+		agent.UnloadToolsetPublic(ph, ts)
 	}
 	ts, err := agent.BuildToolset(ph, projectDir, name, req.Description, req.Requirement)
 	if err != nil {
@@ -240,14 +249,13 @@ func HandleToolsetRemove(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, "缺少 name")
 		return
 	}
-	// 卸载已装载插件
+	if req.Name == agent.BuiltinToolsetNamePublic() {
+		jsonErr(w, "内置工具集 builtin 不可删除；用工具集面板分组开关移出，或「强制全部加入」")
+		return
+	}
+	// 卸载已装载插件（内置条目恢复默认）
 	if ts, err := agent.LoadToolsetPublic(root, req.Scope, req.Name); err == nil {
-		for _, p := range ts.Plugins {
-			if _, ok := ph.Get(p.Name); ok {
-				_ = ph.Unload(p.Name)
-				_ = ph.Undefine(p.Name)
-			}
-		}
+		agent.UnloadToolsetPublic(ph, ts)
 	}
 	if err := agent.RemoveToolsetPublic(root, req.Scope, req.Name); err != nil {
 		jsonErr(w, err.Error())
@@ -286,20 +294,22 @@ func HandleToolsetEdit(w http.ResponseWriter, r *http.Request) {
 		Tool        string `json:"tool"`
 		PluginJSON  string `json:"plugin_json"`
 		Overwrite   string `json:"overwrite"`
+		BuiltinGroup string `json:"builtin_group"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonErr(w, "请求体解析失败: "+err.Error())
 		return
 	}
 	args := map[string]any{
-		"name":         req.Name,
-		"scope":        req.Scope,
-		"action":       req.Action,
-		"plugin_name":  req.PluginName,
-		"from_toolset": req.FromToolset,
-		"tool":         req.Tool,
-		"plugin_json":  req.PluginJSON,
-		"overwrite":    req.Overwrite,
+		"name":          req.Name,
+		"scope":         req.Scope,
+		"action":        req.Action,
+		"plugin_name":   req.PluginName,
+		"from_toolset":  req.FromToolset,
+		"tool":          req.Tool,
+		"plugin_json":   req.PluginJSON,
+		"overwrite":     req.Overwrite,
+		"builtin_group": req.BuiltinGroup,
 	}
 	msg, err := agent.EditToolsetPublic(ph, root, args)
 	if err != nil {

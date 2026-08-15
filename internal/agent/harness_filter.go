@@ -1,17 +1,23 @@
 package agent
 
-// harness_filter.go — 对齐 deepseek-harness 工具注册（暂时移除 pair 独有工具）
+// harness_filter.go — 对齐 deepseek-harness 工具注册（暂时禁用 pair 独有工具）
 //
 // 背景：自举迭代（用 agent 开发 agent）要求 agent 暴露给 LLM 的工具集与
 // deepseek-harness 对齐。默认进入 harness 对齐模式——只保留 harness 工具集
 // + 对话协议基础设施，其余 pair 独有工具（codegraph_*/memory_*/project_info_*/
-// git_*/debug_*/binary_*/office 等 130+ 个）暂时从注册表移除。
+// git_*/debug_*/binary_*/office 等 130+ 个）从注册表禁用（Enabled=false，不删除——
+// 前端可见可管理，agent 不可见；内置工具集 builtin 可一键恢复）。
 //
 // ★ 开关：环境变量 WB_FULL_TOOLS=1 恢复全量工具集（关闭过滤）。
 // ★ 幂等：可重复调用（工具开关现由工具集 toolset_edit 管理，无 .pair/tools.json
 //   依赖；历史注释中的 LoadAllWorkspaceToolConfigs 顺序约束已随旧机制删除）。
 
-import "os"
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+)
 
 // HarnessOnlyTools 判断是否处于 harness 对齐模式（默认开启，WB_FULL_TOOLS=1 关闭）。
 func HarnessOnlyTools() bool {
@@ -60,21 +66,91 @@ var HarnessAlignedToolNames = map[string]bool{
 	"toolset_edit":   true,
 }
 
-// ApplyHarnessToolFilter 从注册表移除不在保留清单内的工具（pair 独有工具），
-// 返回移除数量。开关关闭（WB_FULL_TOOLS=1）时不做任何事，返回 0。
-// ★ exempt 回调：返回 true 的工具豁免过滤（插件注册的工具——插件是内容，
+// ApplyHarnessToolFilter 把不在保留清单内的工具（pair 独有工具）设为禁用
+// （Enabled=false），返回禁用数量。开关关闭（WB_FULL_TOOLS=1）时不做任何事，返回 0。
+//
+// ★ 语义（2026-08-16 重构）：从「Unregister 删除」改为「SetToolEnabled(false) 禁用」——
+//   工具保留在注册表（前端 /api/tools 可见、可管理），但 Definitions() 只导出启用工具
+//   → agent 不可见；Execute 拦截禁用工具调用。恢复 = SetToolEnabled(true)（可逆）。
+//   这为「内置工具集（builtin）」铺路：被过滤工具以内置插件组形态进插件面板，
+//   用户选择加入（启用）或强制全部加入，无需重新注册。
+// ★ exempt 回调：返回 true 的工具豁免过滤（保持启用；插件注册的工具——插件是内容，
 //   非 pair 独有编码能力；goja 插件工具与 Node 桥工具都经 PluginHost 注册）。
-// 使用 Unregister 反向过滤（而非 Subset 重建），保留钩子/CommitMessage 等注册表字段。
+// 使用 SetToolEnabled 而非 Unregister，保留钩子/CommitMessage 等注册表字段。
 func ApplyHarnessToolFilter(r *Registry, exempt func(string) bool) int {
 	if !HarnessOnlyTools() {
 		return 0
 	}
-	removed := 0
+	disabled := 0
 	for _, m := range r.AllToolMeta() {
 		if !HarnessAlignedToolNames[m.Name] && (exempt == nil || !exempt(m.Name)) {
-			r.Unregister(m.Name)
-			removed++
+			if m.Enabled { // 只统计「启用→禁用」（幂等：已禁用的不再计数）
+				disabled++
+			}
+			r.SetToolEnabled(m.Name, false)
 		}
 	}
-	return removed
+	return disabled
+}
+
+// ToolDefaultEnabled 工具默认启用状态（harness 对齐模式：仅保留清单内启用；
+// WB_FULL_TOOLS=1 全量模式：全部启用）。
+func ToolDefaultEnabled(name string) bool {
+	if !HarnessOnlyTools() {
+		return true
+	}
+	return HarnessAlignedToolNames[name]
+}
+
+// ApplyToolsetBuiltinState 把工作区工具集中「内置工具包条目」（builtin.json 等）
+// 记录的启用状态应用到目标注册表（会话级 reg 独立实例，需显式应用）：
+// 对每个 Builtin 条目的 Tools 清单中已注册工具 SetToolEnabled(true)，
+// 并应用 DisabledTools（工具级摘除）。
+// 幂等；无内置条目时不做事。
+func ApplyToolsetBuiltinState(r *Registry, root string) {
+	if r == nil || root == "" {
+		return
+	}
+	// 遍历全部工具集（含 builtin.json——listToolsets 会跳过它，这里直接列文件）
+	for _, scope := range []toolsetScope{toolsetProject, toolsetGlobal} {
+		dir := toolsetDir(root, scope)
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+				continue
+			}
+			data, err := os.ReadFile(filepath.Join(dir, e.Name()))
+			if err != nil {
+				continue
+			}
+			var ts Toolset
+			if err := json.Unmarshal(data, &ts); err != nil || ts.Name == "" {
+				continue
+			}
+			for _, p := range ts.Plugins {
+				if p.Builtin == "" {
+					continue
+				}
+				for _, tn := range p.Tools {
+					if tn == "" {
+						continue
+					}
+					if _, ok := r.Get(tn); ok {
+						r.SetToolEnabled(tn, true)
+					}
+				}
+				for _, tn := range p.DisabledTools {
+					if tn == "" {
+						continue
+					}
+					if _, ok := r.Get(tn); ok {
+						r.SetToolEnabled(tn, false)
+					}
+				}
+			}
+		}
+	}
 }
