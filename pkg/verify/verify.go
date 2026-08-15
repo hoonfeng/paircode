@@ -99,6 +99,14 @@ func (v *Verifier) checkEntry(title, content string, keyPoints []string) []strin
 		text += "\n" + kp
 	}
 
+	// ★ 历史记录类条目豁免文件存在性检查：修复记录/排查记录引用的是当时
+	//   存在的文件，之后被清理/重构是正常现象，记录本身（决策过程）仍有价值；
+	//   误报会刷屏会话上下文（曾有 150+ 条假警告）。仅对「当前指引类」条目
+	//   （模块/决策/架构/工作流/重写方案等）做存在性校验——那些才会误导 Agent。
+	if isHistoricalRecord(title) {
+		return issues
+	}
+
 	// 1. 检查 Go 文件路径引用（如 path/file.go, pkg/foo/bar.go）
 	fileRefs := extractFileRefs(text)
 	for _, ref := range fileRefs {
@@ -124,6 +132,22 @@ func (v *Verifier) checkEntry(title, content string, keyPoints []string) []strin
 	return issues
 }
 
+// isHistoricalRecord 判断标题是否属于历史记录类（修复/排查/改造/决策等过程记录）。
+// 这些条目是「发生了什么」的历史事实，引用文件的存在性随时间自然失效，
+// 不应视为过期。采用包含匹配（标题可能以文件名前缀开头，如 "agentloop 改造记录"）。
+func isHistoricalRecord(title string) bool {
+	for _, kw := range []string{
+		"修复记录", "修复：", "修复", "排查记录", "历史", "评估报告", "异常报告",
+		"性能", "体检", "验证", "冒烟", "升级",
+		"改造记录", "实施记录", "重写方案", "决策", "方案", "设计",
+	} {
+		if strings.Contains(title, kw) {
+			return true
+		}
+	}
+	return false
+}
+
 // ── 文件引用提取 ──────────────────────────────────────
 
 var (
@@ -142,8 +166,12 @@ var (
 		`scripts/[a-zA-Z0-9_/-]+` +
 		`)\b`)
 
-	// fullPathRE 匹配含文件扩展名的完整相对路径
-	fullPathRE = regexp.MustCompile(`(?:\.\.?/)?[a-zA-Z0-9_/-]+\.(?:go|ts|vue|js|json|yaml|xml|md|css|html|rs|py|java|rb|php|swift|kt|dart|lua|sh|sql)`)
+	// fullPathRE 匹配含路径分隔符的相对路径（至少一层目录 + 文件扩展名）。
+	// ★ 2026-08-15：要求至少含一个 `/`——排除裸文件名（知识库口语化引用
+	//   "painter.go"、"host.go" 大量存在，当作路径检查全是误报）；
+	//   也排除纯语言名被拆（如 tree-sitter 语言表 "js" 被误拆为 js/.js）。
+	//   尾部 \b 防止长扩展名被短扩展名截断（.json 被 js 交替截成 .js）。
+	fullPathRE = regexp.MustCompile(`(?:\w+/)[\w./-]*\.(?:go|ts|vue|jsx|json|yaml|xml|markdown|md|css|html|rs|py|java|rb|php|swift|kt|dart|lua|sh|sql|js)\b`)
 )
 
 // extractFileRefs 从文本中提取可能的文件路径引用。
@@ -151,9 +179,20 @@ func extractFileRefs(text string) []string {
 	seen := map[string]bool{}
 	var refs []string
 
-	for _, m := range fullPathRE.FindAllString(text, -1) {
+	for _, loc := range fullPathRE.FindAllStringIndex(text, -1) {
+		m := text[loc[0]:loc[1]]
 		// 排除明显不是文件路径的匹配（如版本号 "1.0.7"、URL、import 路径）
 		if looksLikeVersion(m) || looksLikeURL(m) || looksLikeImport(m) {
+			continue
+		}
+		// ★ 排除 .pair/ 元数据目录引用：条目常用「{workspace}/.pair/xxx」描述
+		//   设计路径（模板而非真实文件），且正则会拆掉前导点（.pair/ → pair/）
+		if strings.HasPrefix(m, "pair/") || strings.HasPrefix(m, ".pair/") {
+			continue
+		}
+		// ★ 排除点扩展名序列（语言扩展名表）：`.js/.jsx/.mjs/.ts/.tsx` 会拆出
+		//   `js/.jsx/...`——若匹配串前一个字符是 `.`，说明源文本是点扩展名列表
+		if loc[0] > 0 && text[loc[0]-1] == '.' {
 			continue
 		}
 		clean := filepath.ToSlash(filepath.Clean(m))
@@ -169,7 +208,14 @@ func extractFileRefs(text string) []string {
 func extractDirRefs(text string) []string {
 	seen := map[string]bool{}
 	var refs []string
-	for _, m := range dirPathRE.FindAllString(text, -1) {
+	for _, loc := range dirPathRE.FindAllStringIndex(text, -1) {
+		m := text[loc[0]:loc[1]]
+		// ★ 排除实际是文件路径的匹配：`internal/agent/vision.go` 会被 dirPathRE
+		//   拆出 `internal/agent/vision`（.go 不在字符类内）——若目录引用后紧跟
+		//   扩展名（.go/.ts/...），说明它是文件路径前缀，跳过
+		if loc[1] < len(text) && text[loc[1]] == '.' {
+			continue
+		}
 		clean := filepath.ToSlash(filepath.Clean(m))
 		if !seen[clean] {
 			seen[clean] = true
