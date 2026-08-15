@@ -238,11 +238,19 @@ func listMemories(dir, filter string) string {
 }
 
 func registerMemoryTools(r *Registry, root string) {
-	dir := memoryDir(root)
+	// memDirFromArgs 解析 project 参数 → 目标项目记忆目录（缺省 = 主项目）。
+	// 多项目工作区中 memory 按项目隔离（.pair/memory/ 在各项目根下）。
+	memDirFromArgs := func(args map[string]any) (string, error) {
+		projRoot, err := projRootFromArgs(root, args)
+		if err != nil {
+			return "", err
+		}
+		return memoryDir(projRoot), nil
+	}
 
 	r.Register(&Tool{
 		Name: "memory_write",
-		UsageGuide: "写入或更新一条持久记忆（跨会话保留）。先 memory_search 查有无相关记忆，有则读旧→融合→同名更新，别反复新建造成碎片化。用于记录用户偏好、项目决策、修复方案等。需审核批准。",
+		UsageGuide: "写入或更新一条持久记忆（跨会话保留）。先 memory_search 查有无相关记忆，有则读旧→融合→同名更新，别反复新建造成碎片化。用于记录用户偏好、项目决策、修复方案等。需审核批准。多项目工作区可用 project 参数指定目标项目。",
 		Description: "写入或【更新】一条持久记忆（跨会话保留在 .pair/memory/）。**先 memory_search/list 查有无相关记忆——" +
 			"有则用其同名覆盖来更新（先 memory_read 读旧的、融合后写回），别为同一主题反复新建、造成碎片化**。" +
 			"name 唯一标识；type: user(用户偏好)/feedback(纠正与确认的做法)/project(项目决策约束)/reference(外部资源指针)；description 一句话摘要；content 正文。",
@@ -251,9 +259,14 @@ func registerMemoryTools(r *Registry, root string) {
 			"type":        strProp("user/feedback/project/reference"),
 			"description": strProp("一句话摘要"),
 			"content":     strProp("正文"),
+			"project":     projectSchemaProp(),
 		}, "name", "description", "content"),
 		RequiresApproval: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			dir, err := memDirFromArgs(args)
+			if err != nil {
+				return "", err
+			}
 			name := safeMemName(argStr(args, "name"))
 			if name == "" {
 				return "", fmt.Errorf("name 不能为空")
@@ -290,9 +303,13 @@ func registerMemoryTools(r *Registry, root string) {
 		Name:             "memory_delete",
 		UsageGuide:       "删除一条过时/错误的记忆。保持记忆库精简。需审核批准。删除前建议先 memory_read 确认是该条。",
 		Description:      "删除一条过时/错误的记忆（按 name）。保持记忆库精简准确，别让过时信息长期误导。",
-		Parameters:       objSchema(props{"name": strProp("记忆名")}, "name"),
+		Parameters:       objSchema(props{"name": strProp("记忆名"), "project": projectSchemaProp()}, "name"),
 		RequiresApproval: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			dir, err := memDirFromArgs(args)
+			if err != nil {
+				return "", err
+			}
 			name := safeMemName(argStr(args, "name"))
 			path := filepath.Join(dir, name+".md")
 			if _, err := os.Stat(path); err != nil {
@@ -310,9 +327,13 @@ func registerMemoryTools(r *Registry, root string) {
 		Name:        "memory_read",
 		UsageGuide:  "按 name 读一条记忆全文。渐进式披露：先 memory_list 看总览，再用此工具读具体细则。比直接读 .pair/memory/ 文件更方便（自动解析 YAML front-matter）。",
 		Description: "按 name 读取一条记忆的全文。",
-		Parameters:  objSchema(props{"name": strProp("记忆名")}, "name"),
+		Parameters:  objSchema(props{"name": strProp("记忆名"), "project": projectSchemaProp()}, "name"),
 		ReadOnly:    true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			dir, err := memDirFromArgs(args)
+			if err != nil {
+				return "", err
+			}
 			name := safeMemName(argStr(args, "name"))
 			data, err := os.ReadFile(filepath.Join(dir, name+".md"))
 			if err != nil {
@@ -326,9 +347,13 @@ func registerMemoryTools(r *Registry, root string) {
 		Name:        "memory_list",
 		UsageGuide:  "列出所有记忆的总览（名+摘要）。先调此工具看有什么记忆，再决定用 memory_read 读哪条。比 run_command dir .pair/memory 更友好（渐进式披露+自动维护索引）。",
 		Description: "列出所有记忆的【总览】（名 + 摘要，渐进式披露的总览层）；要某条细则用 memory_read 读全文。",
-		Parameters:  objSchema(props{}),
+		Parameters:  objSchema(props{"project": projectSchemaProp()}),
 		ReadOnly:    true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			dir, err := memDirFromArgs(args)
+			if err != nil {
+				return "", err
+			}
 			if c := genMemIndex(dir); c != "" {
 				return c, nil
 			}
@@ -340,9 +365,13 @@ func registerMemoryTools(r *Registry, root string) {
 		Name:        "memory_search",
 		UsageGuide:  "按关键词搜索记忆（匹配名/摘要/正文）。要查某个主题是否已有记忆时优先用此工具，比 memory_list 遍历更高效。",
 		Description: "按关键词搜索记忆（匹配名/摘要/正文），返回命中条目的名+摘要。",
-		Parameters:  objSchema(props{"query": strProp("关键词")}, "query"),
+		Parameters:  objSchema(props{"query": strProp("关键词"), "project": projectSchemaProp()}, "query"),
 		ReadOnly:    true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			dir, err := memDirFromArgs(args)
+			if err != nil {
+				return "", err
+			}
 			q := strings.TrimSpace(argStr(args, "query"))
 			if q == "" {
 				return "", fmt.Errorf("query 不能为空")

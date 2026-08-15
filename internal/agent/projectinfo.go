@@ -98,18 +98,31 @@ func ProjectKnowledge(root string, maxChars int) string {
 // registerProjectInfoTools 注册项目知识库工具（write/read/list/search/delete/explore）。
 // 写类不需审批（用户触发探索时 Agent 自主逐模块写入，复刻参考 requiresApproval:false）。
 func registerProjectInfoTools(r *Registry, root string) {
-	dir := projectInfoDir(root)
+	// infoDirFromArgs 解析 project 参数 → 目标项目知识库目录（缺省 = 主项目）。
+	// 多项目工作区中知识库按项目隔离（.pair/project-info/ 在各项目根下）。
+	infoDirFromArgs := func(args map[string]any) (string, error) {
+		projRoot, err := projRootFromArgs(root, args)
+		if err != nil {
+			return "", err
+		}
+		return projectInfoDir(projRoot), nil
+	}
 
 	r.Register(&Tool{
 		Name: "project_info_write",
-		UsageGuide: "写入/更新项目知识库条目，跨会话复用。路径用中文（如 概览 / 模块-渲染 / 决策-渲染架构）。读完关键文件后立即写入，积累项目的结构化理解。比记在脑子里可靠（持久化+跨会话可见）。",
+		UsageGuide: "写入/更新项目知识库条目，跨会话复用。路径用中文（如 概览 / 模块-渲染 / 决策-渲染架构）。读完关键文件后立即写入，积累项目的结构化理解。比记在脑子里可靠（持久化+跨会话可见）。多项目工作区可用 project 参数指定目标项目。",
 		Description: "写入/更新项目知识库的一篇（.pair/project-info/<路径>.md）——记录项目架构/模块职责/数据流/设计决策等结构化理解，" +
 			"跨会话复用、你和用户都能看。路径用中文（如 概览 / 模块-agent / 决策-渲染架构）。",
 		Parameters: objSchema(props{
 			"path":    strProp("条目路径（中文，如 概览 / 模块-agent），不含 .md；用 / 可嵌套为细节篇"),
 			"content": strProp("Markdown 正文（首行用 # 标题）"),
+			"project": projectSchemaProp(),
 		}, "path", "content"),
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			dir, err := infoDirFromArgs(args)
+			if err != nil {
+				return "", err
+			}
 			rel := safeInfoPath(argStr(args, "path"))
 			if rel == "" {
 				return "", fmt.Errorf("path 不能为空")
@@ -133,9 +146,13 @@ func registerProjectInfoTools(r *Registry, root string) {
 		Name:        "project_info_read",
 		UsageGuide:  "读取知识库某篇全文。渐进式披露：先 project_info_list 看总览，再用此工具读具体细则。比翻目录更方便（自动解析路径+内容格式化）。",
 		Description: "读取知识库某篇的全文（按路径，如 概览 / 模块-agent）。渐进式披露的细节层。",
-		Parameters:  objSchema(props{"path": strProp("条目路径，不含 .md")}, "path"),
+		Parameters:  objSchema(props{"path": strProp("条目路径，不含 .md"), "project": projectSchemaProp()}, "path"),
 		ReadOnly:    true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			dir, err := infoDirFromArgs(args)
+			if err != nil {
+				return "", err
+			}
 			rel := safeInfoPath(argStr(args, "path"))
 			data, err := os.ReadFile(infoFilePath(dir, rel))
 			if err != nil {
@@ -149,9 +166,13 @@ func registerProjectInfoTools(r *Registry, root string) {
 		Name:        "project_info_list",
 		UsageGuide:  "列出知识库所有条目的总览（路径+标题+分级）。新项目先调此工具查看已有哪些文档，避免重复写入。",
 		Description: "列出知识库所有条目的【总览】（路径 + 标题 + 分级）。渐进式披露的总览层。",
-		Parameters:  objSchema(props{}),
+		Parameters:  objSchema(props{"project": projectSchemaProp()}),
 		ReadOnly:    true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			dir, err := infoDirFromArgs(args)
+			if err != nil {
+				return "", err
+			}
 			entries := scanInfoEntries(dir)
 			if len(entries) == 0 {
 				return "（知识库为空。用 project_info_explore 起步、project_info_write 写入，或菜单「探索项目知识库」。）", nil
@@ -168,9 +189,13 @@ func registerProjectInfoTools(r *Registry, root string) {
 		Name:        "project_info_search",
 		UsageGuide:  "按关键词搜索知识库（匹配路径/标题/正文）。想查某个模块/概念是否已有文档时优先用此工具。",
 		Description: "按关键词搜索知识库（匹配路径/标题/正文），返回命中条目。",
-		Parameters:  objSchema(props{"query": strProp("关键词")}, "query"),
+		Parameters:  objSchema(props{"query": strProp("关键词"), "project": projectSchemaProp()}, "query"),
 		ReadOnly:    true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			dir, err := infoDirFromArgs(args)
+			if err != nil {
+				return "", err
+			}
 			q := strings.ToLower(strings.TrimSpace(argStr(args, "query")))
 			if q == "" {
 				return "", fmt.Errorf("query 不能为空")
@@ -192,8 +217,12 @@ func registerProjectInfoTools(r *Registry, root string) {
 		Name:        "project_info_delete",
 		UsageGuide:  "删除知识库某篇（按路径）。知识库条目过时/错误时用此工具清理。删除前建议先 project_info_read 确认。",
 		Description: "删除知识库某篇（按路径）。",
-		Parameters:  objSchema(props{"path": strProp("条目路径，不含 .md")}, "path"),
+		Parameters:  objSchema(props{"path": strProp("条目路径，不含 .md"), "project": projectSchemaProp()}, "path"),
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			dir, err := infoDirFromArgs(args)
+			if err != nil {
+				return "", err
+			}
 			rel := safeInfoPath(argStr(args, "path"))
 			fp := infoFilePath(dir, rel)
 			if _, err := os.Stat(fp); err != nil {

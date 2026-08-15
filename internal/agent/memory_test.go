@@ -38,6 +38,52 @@ func TestMemoryTools(t *testing.T) {
 	}
 }
 
+// TestMemoryProjectParam 多项目工作区：memory 工具 project 参数路由到对应项目根，
+// 记忆按项目隔离（写入 projB 的读不到主项目里，反之亦然）。
+func TestMemoryProjectParam(t *testing.T) {
+	primary := t.TempDir()
+	projB := t.TempDir()
+	old := WorkspaceRoots
+	WorkspaceRoots = []string{primary, projB}
+	defer func() { WorkspaceRoots = old }()
+
+	reg := NewRegistry()
+	RegisterDefaultTools(reg, primary)
+	ctx := context.Background()
+
+	// 写入主项目记忆
+	if _, err := reg.Execute(ctx, "memory_write",
+		`{"name":"主项目记忆","type":"project","description":"主项目","content":"在主项目根"}`); err != nil {
+		t.Fatalf("memory_write(主项目): %v", err)
+	}
+	// 写入 projB 记忆（project 参数指定）
+	if _, err := reg.Execute(ctx, "memory_write",
+		`{"name":"B项目记忆","type":"project","description":"B项目","content":"在B项目根","project":"`+
+			filepath.Base(projB)+`"}`); err != nil {
+		t.Fatalf("memory_write(projB): %v", err)
+	}
+
+	// 主项目视角：只见主项目记忆
+	if list, _ := reg.Execute(ctx, "memory_list", `{}`); strings.Contains(list, "B项目记忆") {
+		t.Errorf("主项目 memory_list 不应见 B 项目记忆：\n%s", list)
+	}
+	// B 项目视角：只见 B 项目记忆
+	listB, err := reg.Execute(ctx, "memory_list", `{"project":"`+filepath.Base(projB)+`"}`)
+	if err != nil {
+		t.Fatalf("memory_list(projB): %v", err)
+	}
+	if !strings.Contains(listB, "B项目记忆") || strings.Contains(listB, "主项目记忆") {
+		t.Errorf("B 项目 memory_list 应只见 B 项目记忆：\n%s", listB)
+	}
+	// 物理隔离验证：projB/.pair/memory 存在且不含主项目文件
+	if _, err := os.Stat(filepath.Join(projB, ".pair", "memory", "B项目记忆.md")); err != nil {
+		t.Errorf("projB 记忆文件应存在: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(projB, ".pair", "memory", "主项目记忆.md")); err == nil {
+		t.Error("主项目记忆不应出现在 projB 目录")
+	}
+}
+
 // TestMemoryUpdateNotDuplicate 同名→更新（非新建）；新名+相关内容→提示已有相关记忆（防碎片化）。
 func TestMemoryUpdateNotDuplicate(t *testing.T) {
 	dir := t.TempDir()
