@@ -145,6 +145,13 @@ func (r *Registry) EnabledDefinitions() []ToolDefinition {
 }
 
 
+// Names 全部已注册工具名（注册顺序；含禁用工具）。
+func (r *Registry) Names() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return append([]string(nil), r.order...)
+}
+
 // UsageGuideText 生成工具使用指南文本（供注入系统提示使用）。
 // 按 Category 分组，展示每个已启用工具的 UsageGuide。
 func (r *Registry) UsageGuideText() string {

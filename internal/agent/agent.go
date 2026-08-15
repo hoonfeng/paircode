@@ -73,6 +73,7 @@ type AgentBase struct {
 	Registry      *Registry
 	Store         ConversationStore
 	ExecutionPlan *ExecutionManager
+	Plugins       *PluginHost // 插件宿主（对齐 harness 一切皆插件）
 
 	mu      sync.Mutex
 	running bool
@@ -129,6 +130,12 @@ func (a *AgentBase) Init() error {
 	// 3. 初始化工具注册表
 	registry := NewRegistry()
 	RegisterDefaultTools(registry, root)
+
+	// 3.5 初始化插件宿主（对齐 harness「一切皆插件」）+ cordis 动态插件工具
+	ph := NewPluginHost(registry, store, root)
+	RegisterCordisTools(registry, ph)
+	registerBuiltinPlugins(ph)
+	a.Plugins = ph
 
 	// 4. 初始化会话管理器
 	sm := NewSessionManager()
