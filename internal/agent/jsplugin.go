@@ -60,8 +60,10 @@ type jsPluginAdapter struct {
 	mu       sync.Mutex
 	handlers map[string]func(args any) (any, error) // harness.handle 注册的方法
 
-	timersMu sync.Mutex
-	timers   []func() // 活动 timer 的取消函数（Unload 时统一清理）
+	timersMu  sync.Mutex
+	timers    []func() // 活动 timer 的取消函数（Unload 时统一清理）
+	cleanupsMu sync.Mutex
+	cleanups  []func() // 其他 JS 侧资源撤销函数（如 ctx.provide 的服务撤销）
 }
 
 // withLock 在 VM 执行锁保护下运行 fn：timer 回调、事件回调、工具 execute
@@ -91,6 +93,28 @@ func (p *jsPluginAdapter) stopTimers() {
 	}
 }
 
+// addCleanup 登记一个 JS 侧资源撤销函数（如 ctx.provide 的服务撤销）。
+func (p *jsPluginAdapter) addCleanup(fn func()) {
+	p.cleanupsMu.Lock()
+	defer p.cleanupsMu.Unlock()
+	p.cleanups = append(p.cleanups, fn)
+}
+
+// cleanupJS 插件卸载时回收全部 JS 侧资源：timer + 服务撤销 + 其他清理。
+func (p *jsPluginAdapter) cleanupJS() {
+	p.stopTimers()
+	p.cleanupsMu.Lock()
+	fns := p.cleanups
+	p.cleanups = nil
+	p.cleanupsMu.Unlock()
+	for _, fn := range fns {
+		func() {
+			defer func() { _ = recover() }()
+			fn()
+		}()
+	}
+}
+
 // Name 实现 Plugin。
 func (p *jsPluginAdapter) Name() string { return p.def.name }
 
@@ -100,8 +124,8 @@ func (p *jsPluginAdapter) Apply(pc *PluginContext) error {
 	if err != nil {
 		return err
 	}
-	// 插件卸载时清理活动 timer（防 goroutine/ticker 泄漏）
-	pc.Effect(func() { p.stopTimers() })
+	// 插件卸载时清理活动 timer + JS 侧资源（防 goroutine/ticker/服务泄漏）
+	pc.Effect(func() { p.cleanupJS() })
 	_, callErr := p.applyFn(goja.Undefined(), ctxObj)
 	if callErr != nil {
 		return fmt.Errorf("JS 插件 %s apply 执行失败: %v", p.def.name, jsErrorText(callErr))
@@ -142,7 +166,7 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 			p.def.provides = append(p.def.provides, name)
 		}
 		p.mu.Unlock()
-		_ = cancel
+		p.addCleanup(cancel) // 卸载时撤销服务
 		return goja.Undefined()
 	})
 	ctxObj.Set("on", func(call goja.FunctionCall) goja.Value {

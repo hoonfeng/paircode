@@ -5,6 +5,8 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -600,8 +602,147 @@ export function helper(n: string): string { return greet(n) }`
 	}
 }
 
-// ─── AgentBase.Init 冒烟 ─────────────────────────────────
+// ─── 自举闭环端到端（cordis_define → cordis_run → 工具/事件/timer/服务）─────
 
+// TestBootstrapEndToEnd 模型视角的全链路：多文件 TS 插件（import 相对模块 +
+// ctx.provide 服务 + ctx.on 事件 + ctx.timeout 定时器 + ctx.tools.register 工具 +
+// harness.handle 方法）经 cordis_define 登记 → cordis_run 装载 → 各能力逐项验证
+// → cordis_stop 回收。这是自举链路的完整闭环：用 agent 的 cordis 工具集
+// 动态注册新能力并驱动。
+func TestBootstrapEndToEnd(t *testing.T) {
+	dir := t.TempDir()
+	// 多文件源码：util.ts 辅助模块 + plugin.ts（相对 import）
+	if err := os.WriteFile(filepath.Join(dir, "util.ts"),
+		[]byte(`export function greet(n: string): string { return 'boot-greet ' + n }`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	pluginSrc := `
+import { greet } from './util'
+let lastEvent: string = 'none'
+let timerFired: boolean = false
+export default {
+  name: 'boot-plugin',
+  apply(ctx: any) {
+    ctx.provide('bootValue', 'hello-service')
+    ctx.on('boot:ping', (payload: any) => { lastEvent = String(payload) })
+    ctx.timeout(() => { timerFired = true }, 50)
+    harness.handle('getState', () => ({ lastEvent, timerFired }))
+    ctx.tools.register({
+      name: 'boot_hello',
+      description: 'bootstrap plugin tool',
+      execute: (args: { who?: string }) => ({ output: greet(args?.who ?? 'world') })
+    })
+  }
+}`
+
+	reg := NewRegistry()
+	host := NewPluginHost(reg, nil, dir)
+	RegisterCordisTools(reg, host, dir)
+	ctx := context.Background()
+
+	// ① cordis_define：登记多文件 TS 插件（dir 指定源码目录）
+	defOut, err := reg.Execute(ctx, "cordis_define",
+		`{"code":`+strconv.Quote(pluginSrc)+`,"language":"ts","dir":`+strconv.Quote(dir)+`,"purpose":"自举闭环 e2e"}`)
+	if err != nil {
+		t.Fatalf("cordis_define: %v", err)
+	}
+	if !strings.Contains(defOut, "dyn-") {
+		t.Fatalf("cordis_define 应返回 dyn id，实际: %s", defOut)
+	}
+	m := regexp.MustCompile(`dyn-\d+`).FindString(defOut)
+	if m == "" {
+		t.Fatalf("无法从输出提取 dyn id: %s", defOut)
+	}
+	id := m
+
+	// ② cordis_run：装载（apply 注册工具/服务/事件/timer）
+	if _, err := reg.Execute(ctx, "cordis_run", `{"id":"`+id+`"}`); err != nil {
+		t.Fatalf("cordis_run: %v", err)
+	}
+	if host.State("boot-plugin") != PluginRunning {
+		t.Fatalf("boot-plugin 应 running")
+	}
+
+	plug, ok := host.Get("boot-plugin")
+	if !ok {
+		t.Fatalf("boot-plugin 未注册")
+	}
+	adapter, ok := plug.(*jsPluginAdapter)
+	if !ok {
+		t.Fatalf("boot-plugin 应为 jsPluginAdapter")
+	}
+
+	// ③ 初始状态（timer 未触发、事件未到）
+	got, err := adapter.Invoke("getState", nil)
+	if err != nil {
+		t.Fatalf("getState 初始: %v", err)
+	}
+	st, ok := got.(map[string]any)
+	if !ok {
+		t.Fatalf("getState 应为对象，实际 %T", got)
+	}
+	if st["lastEvent"] != "none" || st["timerFired"] != false {
+		t.Fatalf("初始状态不符: %v", st)
+	}
+
+	// ④ 服务可用（ctx.provide）
+	if v := host.Context().Get("bootValue"); v != "hello-service" {
+		t.Fatalf("bootValue 服务 = %v, want hello-service", v)
+	}
+
+	// ⑤ 事件触发（ctx.on + EventBus.Emit，回调跨 goroutine 经执行锁）
+	host.EventBus().Emit("boot:ping", "pong")
+
+	// ⑥ 插件注册的工具可调用（模型视角）
+	out, err := reg.Execute(ctx, "boot_hello", `{"who":"e2e"}`)
+	if err != nil {
+		t.Fatalf("boot_hello: %v", err)
+	}
+	if !strings.Contains(out, "boot-greet e2e") {
+		t.Fatalf("boot_hello 输出 = %q", out)
+	}
+
+	// ⑦ 等待 timer 触发 + 事件回调生效（50ms + 缓冲）
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		got, err = adapter.Invoke("getState", nil)
+		if err == nil {
+			st, _ = got.(map[string]any)
+			if st != nil && st["lastEvent"] == "pong" && st["timerFired"] == true {
+				break
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("事件/timer 未生效: %v (err=%v)", st, err)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	// ⑧ cordis_stop：回收贡献（插件工具消失、服务移除、timer 清理）
+	if _, err := reg.Execute(ctx, "cordis_stop", `{"id":"`+id+`"}`); err != nil {
+		t.Fatalf("cordis_stop: %v", err)
+	}
+	if host.State("boot-plugin") != PluginStopped {
+		t.Fatalf("boot-plugin 应 stopped")
+	}
+	if _, err := reg.Execute(ctx, "boot_hello", `{}`); err == nil {
+		t.Error("cordis_stop 后插件工具应已回收")
+	}
+	if v := host.Context().Get("bootValue"); v != nil {
+		t.Errorf("cordis_stop 后服务应移除，实际 %v", v)
+	}
+
+	// ⑨ cordis_inspect 报告可见
+	report, err := reg.Execute(ctx, "cordis_inspect", `{}`)
+	if err != nil {
+		t.Fatalf("cordis_inspect: %v", err)
+	}
+	if !strings.Contains(report, "boot-plugin") {
+		t.Errorf("cordis_inspect 应含 boot-plugin：\n%s", report)
+	}
+}
+
+// TestAgentBaseInitPlugins 冒烟测试（AgentBase.Init 装配 cordis 工具）。
 func TestAgentBaseInitPlugins(t *testing.T) {
 	dir := t.TempDir()
 	base := NewAgentBase(AgentConfig{WorkspaceRoot: dir})
