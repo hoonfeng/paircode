@@ -94,4 +94,8 @@ func RegisterBuiltinPlugins(h *PluginHost) {
 			_ = fmt.Errorf("内置插件 %s 装配失败: %w", spec.name, err)
 		}
 	}
+	// ★ 工具集构建模板插件（toolset_build 的动态组合数据源，本身可被市场/用户扩展）
+	if err := h.Use(registerToolsetTemplates()); err != nil {
+		_ = fmt.Errorf("内置工具集模板插件装配失败: %w", err)
+	}
 }

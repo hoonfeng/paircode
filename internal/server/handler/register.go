@@ -108,4 +108,11 @@ func RegisterAll(r *Router) {
 	r.Handle("GET", "/api/plugins/client-events", HandlePluginClientEvents)
 	r.Handle("POST", "/api/plugins/client-state", HandlePluginClientState)
 	r.Handle("GET", "/api/plugins/client-state", HandlePluginClientState)
+
+	// 工具集（动态构建/固化/导出/导入）
+	r.Handle("GET", "/api/toolsets", HandleToolsetsList)
+	r.Handle("POST", "/api/toolsets/build", HandleToolsetBuild)
+	r.Handle("GET", "/api/toolsets/export", HandleToolsetExport)
+	r.Handle("POST", "/api/toolsets/import", HandleToolsetImport)
+	r.Handle("POST", "/api/toolsets/remove", HandleToolsetRemove)
 }

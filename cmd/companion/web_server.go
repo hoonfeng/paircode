@@ -187,10 +187,14 @@ func startWebUI(port int) {
 		ph := agent.NewPluginHost(initReg, agentMgr.Store(), root)
 		agent.RegisterCordisTools(initReg, ph, root)
 		agent.RegisterBuiltinPlugins(ph)
+		agent.RegisterToolsetTools(initReg, root, ph)
+		// ★ 启动自动装载工具集（.pair/toolsets/ + 全局）
+		agent.LoadAllToolsets(ph, root)
 		if err := ph.LoadCordisPatch(filepath.Join(root, ".pair", "cordis.patch.json")); err != nil {
 			log.Printf("[WebUI] cordis.patch.json 装配失败（不阻塞启动）: %v", err)
 		}
 		handler.SetPluginHost(ph)
+		agent.SetGlobalPluginHost(ph)
 		log.Printf("[WebUI] 全局插件宿主已初始化（%d 个插件）", len(ph.List()))
 	}
 	}
@@ -258,6 +262,11 @@ func startWebUI(port int) {
 	mux.HandleFunc("/api/plugins/event", handler.HandlePluginEvent)
 	mux.HandleFunc("/api/plugins/client-events", handler.HandlePluginClientEvents)
 	mux.HandleFunc("/api/plugins/client-state", handler.HandlePluginClientState)
+	mux.HandleFunc("/api/toolsets", handler.HandleToolsetsList)
+	mux.HandleFunc("/api/toolsets/build", handler.HandleToolsetBuild)
+	mux.HandleFunc("/api/toolsets/export", handler.HandleToolsetExport)
+	mux.HandleFunc("/api/toolsets/import", handler.HandleToolsetImport)
+	mux.HandleFunc("/api/toolsets/remove", handler.HandleToolsetRemove)
 
 	// ── Git API 路由 ──
 	mux.HandleFunc("/api/git/status", ws.handleGitStatus)
@@ -2295,6 +2304,8 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 	// ★ 插件系统：全局 PluginHost 的 cordis_* 工具（浏览器插件面板同源）
 	if ph := handler.GetPluginHost(); ph != nil {
 		agent.RegisterCordisTools(reg, ph, root)
+		// ★ 工具集管理工具（toolset_build/list/export/import…，与插件宿主同源）
+		agent.RegisterToolsetTools(reg, root, ph)
 	}
 	if cfgs := mcppanel.LoadConfigs(); len(cfgs) > 0 {
 		agentCfgs := make([]agent.MCPServerConfig, len(cfgs))

@@ -354,6 +354,10 @@ type PluginHost struct {
 	// 浏览器 client 半运行时上报快照（client inspect provider 的数据源）
 	clientStateMu sync.RWMutex
 	clientState   ClientRuntimeSnapshot
+
+	// 工具集模板注册表（toolset_build 动态组合；模板本身插件化，可被市场/用户扩展）
+	templatesMu sync.RWMutex
+	templates   map[string]*ToolsetTemplate
 }
 
 // NewPluginHost 创建插件宿主。
@@ -367,6 +371,7 @@ func NewPluginHost(registry *Registry, store ConversationStore, root string) *Pl
 		pluginTools:    map[string][]string{},
 		pluginSections: map[string][]*PromptSection{},
 		toolOwner:      map[string]string{},
+		templates:      map[string]*ToolsetTemplate{},
 	}
 	h.ctx = &PluginContext{
 		host:          h,
@@ -383,6 +388,26 @@ func NewPluginHost(registry *Registry, store ConversationStore, root string) *Pl
 }
 
 // ─── host→client 事件桥 ──────────────────────────────────
+
+// 全局 PluginHost 引用（市场安装插件/工具集装载用；web 与 AgentBase 初始化时设置）。
+var (
+	globalPHMu sync.RWMutex
+	globalPH   *PluginHost
+)
+
+// SetGlobalPluginHost 设置全局插件宿主（web_server / AgentBase.Init 调用）。
+func SetGlobalPluginHost(ph *PluginHost) {
+	globalPHMu.Lock()
+	globalPH = ph
+	globalPHMu.Unlock()
+}
+
+// GetGlobalPluginHost 取全局插件宿主（未设置返回 nil）。
+func GetGlobalPluginHost() *PluginHost {
+	globalPHMu.RLock()
+	defer globalPHMu.RUnlock()
+	return globalPH
+}
 
 // ClientEvent 一条转发给浏览器的插件事件（seq 单调递增，轮询游标用）。
 type ClientEvent struct {
@@ -471,6 +496,49 @@ func (h *PluginHost) EmitHostEvent(name string, payload any) {
 
 // Context 返回宿主根上下文（服务共享）。
 func (h *PluginHost) Context() *PluginContext { return h.ctx }
+
+// ─── 工具集模板注册表（toolset_build 动态组合的数据源）──────
+
+// RegisterTemplate 注册一个工具集构建模板（插件化：模板可由任意插件提供，
+// 内置 toolset-tpl-core 提供通用模板，市场/用户插件可注册专属模板）。
+func (h *PluginHost) RegisterTemplate(t *ToolsetTemplate) error {
+	if t == nil || t.ID == "" {
+		return fmt.Errorf("模板 id 不能为空")
+	}
+	h.templatesMu.Lock()
+	if h.templates == nil {
+		h.templates = map[string]*ToolsetTemplate{}
+	}
+	h.templates[t.ID] = t
+	h.templatesMu.Unlock()
+	return nil
+}
+
+// Templates 返回全部已注册模板（按 id 排序）。
+func (h *PluginHost) Templates() []*ToolsetTemplate {
+	h.templatesMu.RLock()
+	defer h.templatesMu.RUnlock()
+	out := make([]*ToolsetTemplate, 0, len(h.templates))
+	for _, t := range h.templates {
+		out = append(out, t)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
+}
+
+// Template 按 id 取模板。
+func (h *PluginHost) Template(id string) *ToolsetTemplate {
+	h.templatesMu.RLock()
+	defer h.templatesMu.RUnlock()
+	return h.templates[id]
+}
+
+// RemoveTemplate 移除模板（插件卸载时清理）。
+func (h *PluginHost) RemoveTemplate(id string) {
+	h.templatesMu.Lock()
+	delete(h.templates, id)
+	h.templatesMu.Unlock()
+}
 
 // EventBus 返回共享事件总线。
 func (h *PluginHost) EventBus() *EventBus { return h.ctx.Events }

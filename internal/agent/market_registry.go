@@ -233,6 +233,23 @@ var BuiltinRegistry = []MarketEntry{
 			"# 性能优化\n\n## 原则\n1. 先测量再优化：使用 pprof / benchstat 分析热点\n2. 避免过早优化：先写出正确的代码，再优化瓶颈\n3. 关注 N+1 问题：批量操作远优于逐条处理\n\n## Go 特有优化\n- 使用 sync.Pool 减少高频对象分配\n- 大 map 用 int key 代替 string key\n- 预分配 slice 容量（make([]T, 0, n)）\n- 使用 strings.Builder 代替 += 拼接\n- 避免 fmt.Sprintf 在高频路径中",
 		),
 	},
+	// ═══════════════════════════════════════
+	// 插件工具集（Content = toolset 发布 JSON，toolset_export 格式）
+	// ═══════════════════════════════════════
+	{
+		ID: "plugin-go-dev", Kind: "plugin", Name: "Go 项目开发工具集",
+		Description: "Go 项目构建/测试/运行 + Git 工作流 + 代码质量（gofmt/clippy）工具集",
+		Tags:        []string{"plugin", "toolset", "go"},
+		Source:      "builtin:toolset",
+		Content: `{"schemaVersion":"1.0","kind":"toolset","toolset":{"name":"go-dev","description":"Go 项目开发工具集（构建/测试/Git/代码质量）","plugins":[{"name":"go-dev-project-helper","purpose":"Go 构建/测试/运行命令助手","code":"return {\n  name: 'go-dev-project-helper',\n  inject: ['bash'],\n  apply(ctx) {\n    const root = ctx.app.workspaceRoot;\n    ctx.tools.register({\n      name: 'project_build',\n      description: '构建当前项目（go build ./...）',\n      parameters: { type: 'object', properties: {} },\n      execute: async () => { const r = await ctx.bash.exec('go build ./...', root); return r.error ? ('构建失败:\\n' + r.error) : ('构建成功\\n' + r.output); }\n    });\n    ctx.tools.register({\n      name: 'project_test',\n      description: '运行测试（go test ./...）',\n      parameters: { type: 'object', properties: {} },\n      execute: async () => { const r = await ctx.bash.exec('go test ./...', root); return r.error ? ('测试失败:\\n' + r.error) : ('测试通过\\n' + r.output); }\n    });\n  }\n};"},{"name":"git-flow","purpose":"Git 工作流辅助","code":"return {\n  name: 'git-flow',\n  inject: ['bash'],\n  apply(ctx) {\n    const root = ctx.app.workspaceRoot;\n    ctx.tools.register({\n      name: 'git_commit_check',\n      description: '检查提交就绪状态',\n      parameters: { type: 'object', properties: {} },\n      execute: async () => {\n        const s = await ctx.bash.exec('git status --short', root);\n        const d = await ctx.bash.exec('git diff --stat', root);\n        return '## 状态\\n' + (s.output || '(干净)') + '\\n## 变更\\n' + (d.output || '(无)');\n      }\n    });\n  }\n};"}]}}`,
+	},
+	{
+		ID: "plugin-web-dev", Kind: "plugin", Name: "Web 前端开发工具集",
+		Description: "Web 项目构建/运行 + HTTP 接口调试 + 数据概览工具集",
+		Tags:        []string{"plugin", "toolset", "web"},
+		Source:      "builtin:toolset",
+		Content: `{"schemaVersion":"1.0","kind":"toolset","toolset":{"name":"web-dev","description":"Web 前端开发工具集（构建/接口调试）","plugins":[{"name":"web-dev-project-helper","purpose":"构建/运行命令助手","code":"return {\n  name: 'web-dev-project-helper',\n  inject: ['bash'],\n  apply(ctx) {\n    const root = ctx.app.workspaceRoot;\n    ctx.tools.register({\n      name: 'project_build',\n      description: '构建项目（npm run build）',\n      parameters: { type: 'object', properties: {} },\n      execute: async () => { const r = await ctx.bash.exec('npm run build', root); return r.error ? ('构建失败:\\n' + r.error) : ('构建成功\\n' + r.output); }\n    });\n  }\n};"},{"name":"web-api","purpose":"HTTP 接口调试","code":"return {\n  name: 'web-api',\n  inject: ['web', 'bash'],\n  apply(ctx) {\n    ctx.tools.register({\n      name: 'http_request',\n      description: '发送 HTTP 请求调试接口（GET）',\n      parameters: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] },\n      execute: async (args) => { const r = await ctx.web.fetch(args.url); return JSON.stringify({ ok: r.ok, status: r.status, text: (r.text || '').slice(0, 2000) }); }\n    });\n  }\n};"}]}}`,
+	},
 }
 
 // makeMarketSkillContent 构造 SKILL.md 格式的技能内容（带 frontmatter）。

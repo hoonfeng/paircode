@@ -383,6 +383,52 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 	})
 	ctxObj.Set("systemPrompt", sysObj)
 
+	// ctx.toolset.registerTemplate({id, title, match?, generate?})：注册工具集构建
+	// 模板（插件化：市场/用户插件可提供专属模板，toolset_build 动态组合）。
+	// match(profile) 判定适用；generate(profile, requirement) 返回插件定义数组
+	// [{name, purpose, code, client?}]。
+	toolsetObj := vm.NewObject()
+	toolsetObj.Set("registerTemplate", func(call goja.FunctionCall) goja.Value {
+		arg := call.Argument(0)
+		if arg == nil || goja.IsUndefined(arg) || goja.IsNull(arg) {
+			panic(vm.NewTypeError("ctx.toolset.registerTemplate: 需要一个模板对象"))
+		}
+		obj := arg.ToObject(vm)
+		id := obj.Get("id").String()
+		title := ""
+		if t := obj.Get("title"); t != nil {
+			title = t.String()
+		}
+		if id == "" {
+			panic(vm.NewTypeError("ctx.toolset: 模板 id 不能为空"))
+		}
+		tpl := &ToolsetTemplate{ID: id, Title: title}
+		// match/generate 可选（缺省全匹配/空生成）
+		if m := obj.Get("match"); m != nil && !goja.IsUndefined(m) && !goja.IsNull(m) {
+			if fn, ok := goja.AssertFunction(m); ok {
+				tpl.jsMatch = fn
+				tpl.jsVM = vm
+			}
+		}
+		if g := obj.Get("generate"); g != nil && !goja.IsUndefined(g) && !goja.IsNull(g) {
+			if fn, ok := goja.AssertFunction(g); ok {
+				tpl.jsGenerate = fn
+				tpl.jsVM = vm
+			}
+		}
+		if tpl.jsGenerate == nil {
+			panic(vm.NewTypeError("ctx.toolset: 模板需要 generate(profile, requirement) 函数"))
+		}
+		tpl.jsLock = p.withLock
+		if err := p.host.RegisterTemplate(tpl); err != nil {
+			panic(vm.NewGoError(err))
+		}
+		// 插件卸载时移除模板
+		p.addCleanup(func() { p.host.RemoveTemplate(id) })
+		return goja.Undefined()
+	})
+	ctxObj.Set("toolset", toolsetObj)
+
 	// ctx.app：宿主基本信息（可选）
 	appObj := vm.NewObject()
 	appObj.Set("workspaceRoot", pc.WorkspaceRoot)

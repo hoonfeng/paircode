@@ -7,6 +7,7 @@
           <button :class="{ active: tab === 'all' }" @click="tab='all';doSearch()">全部</button>
           <button :class="{ active: tab === 'mcp' }" @click="tab='mcp';doSearch()">MCP</button>
           <button :class="{ active: tab === 'skill' }" @click="tab='skill';doSearch()">技能</button>
+          <button :class="{ active: tab === 'plugin' }" @click="tab='plugin';doSearch()">插件/工具集</button>
           <button :class="{ active: tab === 'installed' }" @click="tab='installed';loadInstalled()">已安装</button>
         </div>
         <button class="modal-close" @click="$emit('close')">×</button>
@@ -141,13 +142,13 @@
         <div v-else class="market-list" ref="listRef">
           <div v-for="item in items" :key="item.id" class="market-item">
             <div class="mi-icon" :class="'icon-' + item.kind">
-              <SvgIcon :name="item.kind === 'skill' ? 'code' : 'package'" :size="20" />
+              <SvgIcon :name="item.kind === 'plugin' ? 'puzzle' : (item.kind === 'skill' ? 'code' : 'package')" :size="20" />
             </div>
             <div class="mi-body">
               <div class="mi-name">{{ item.name }}</div>
               <div class="mi-desc">{{ item.description }}</div>
               <div class="mi-meta">
-                <span class="mi-type" :class="'type-' + item.kind">{{ item.kind === 'mcp' ? 'MCP' : '技能' }}</span>
+                <span class="mi-type" :class="'type-' + item.kind">{{ item.kind === 'mcp' ? 'MCP' : item.kind === 'plugin' ? '插件' : '技能' }}</span>
                 <span v-if="item.tags" class="mi-tags">
                   <span v-for="tag in item.tags" :key="tag" class="mi-tag">{{ tag }}</span>
                 </span>
@@ -395,6 +396,8 @@ async function installItem(item, scope) {
     }
     if (item.kind === 'mcp') {
       body.scope = scope || 'user'
+    } else if (item.kind === 'plugin') {
+      body.scope = 'project' // 插件/工具集默认装到工作区 .pair/toolsets/
     }
     const result = await api.apiPost('/marketplace/install', body)
     item.installed = true
@@ -425,6 +428,8 @@ async function uninstallItem(item) {
       await api.saveMcpItem({ action: 'delete', name: item.id, level: 'user' })
     } else if (item.kind === 'skill') {
       await api.deleteSkill(item.id)
+    } else if (item.kind === 'plugin') {
+      await api.apiPost('/toolsets/remove', { name: item.id.replace(/^plugin-/, ''), scope: 'project' })
     }
     item.installed = false
     window.$toast?.('已卸载: ' + item.name, 'success')

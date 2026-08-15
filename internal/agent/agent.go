@@ -135,6 +135,10 @@ func (a *AgentBase) Init() error {
 	ph := NewPluginHost(registry, store, root)
 	RegisterCordisTools(registry, ph, root)
 	RegisterBuiltinPlugins(ph)
+	// ★ 工具集管理工具 + 启动自动装载（.pair/toolsets/ + 全局）
+	RegisterToolsetTools(registry, root, ph)
+	LoadAllToolsets(ph, root)
+	SetGlobalPluginHost(ph)
 	a.Plugins = ph
 
 	// 3.6 装配静态插件（.pair/cordis.patch.json，跨重启存续；条目失败不致命，

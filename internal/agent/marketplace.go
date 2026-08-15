@@ -6,6 +6,7 @@
 package agent
 
 import (
+	"encoding/json"
 	"fmt"
 )
 
@@ -26,7 +27,7 @@ func MarketInstallScoped(id string, auto bool, scope ...string) (string, error) 
 	return MarketInstallEntry(*entry, auto, s)
 }
 
-// MarketInstallEntry 直接从 MarketEntry 安装 MCP 或技能（不查注册表）。
+// MarketInstallEntry 直接从 MarketEntry 安装 MCP、技能或插件（不查注册表）。
 // 适用于前端搜索结果已包含 command/args 的场景。
 // scope 可选 "user"（默认）或 "project"。
 func MarketInstallEntry(entry MarketEntry, auto bool, scope ...string) (string, error) {
@@ -39,9 +40,65 @@ func MarketInstallEntry(entry MarketEntry, auto bool, scope ...string) (string, 
 		return marketInstallMCP(entry, auto, s)
 	case "skill":
 		return marketInstallSkill(entry, auto)
+	case "plugin":
+		return marketInstallPlugin(entry, auto, s)
 	default:
 		return "", fmt.Errorf("未知条目类型: %s", entry.Kind)
 	}
+}
+
+// marketInstallPlugin 安装插件/工具集：Content 为 toolset 发布 JSON
+// （toolset_export 格式：{kind:"toolset", toolset:{...}}）。
+// scope=project → 固化到工作区 .pair/toolsets/；user → 全局。立即装载（全局宿主）。
+func marketInstallPlugin(entry MarketEntry, auto bool, scope string) (string, error) {
+	var pub ToolsetPublish
+	if err := json.Unmarshal([]byte(entry.Content), &pub); err != nil {
+		return "", fmt.Errorf("插件条目 %s 内容不是有效发布 JSON: %w", entry.ID, err)
+	}
+	ts := &pub.Toolset
+	if ts.Name == "" || len(ts.Plugins) == 0 {
+		return "", fmt.Errorf("插件条目 %s 缺 name/plugins", entry.ID)
+	}
+	// 目标作用域
+	projectRoot := ""
+	if scope == "project" {
+		if ph := GetGlobalPluginHost(); ph != nil && ph.Context() != nil && ph.Context().WorkspaceRoot != "" {
+			projectRoot = ph.Context().WorkspaceRoot
+		} else {
+			projectRoot = primaryWorkspaceRoot()
+		}
+	}
+	tsScope := toolsetGlobal
+	if scope == "project" {
+		tsScope = toolsetProject
+	}
+	if err := saveToolset(projectRoot, tsScope, ts); err != nil {
+		return "", fmt.Errorf("固化工具集失败: %w", err)
+	}
+	// 立即装载（全局宿主存在时）；失败回滚固化文件，避免状态不一致
+	if ph := GetGlobalPluginHost(); ph != nil {
+		if err := installToolset(ph, ts); err != nil {
+			_ = removeToolset(projectRoot, tsScope, ts.Name)
+			return "", fmt.Errorf("工具集装载失败已回滚（未固化）: %w", err)
+		}
+	}
+	level := "全局"
+	if scope == "project" {
+		level = "工作区"
+	}
+	msg := fmt.Sprintf("✅ 已安装插件工具集「%s」（%s，%d 个插件）", ts.Name, level, len(ts.Plugins))
+	if !auto {
+		msg += "。已立即装载可用。"
+	}
+	return msg, nil
+}
+
+// primaryWorkspaceRoot 取主工作区根（WorkspaceRoots[0] 或全局根）。
+func primaryWorkspaceRoot() string {
+	if len(WorkspaceRoots) > 0 {
+		return WorkspaceRoots[0]
+	}
+	return ""
 }
 
 // marketInstallMCP 内部安装 MCP 服务器到指定层级配置。
