@@ -82,34 +82,62 @@
       <div ref="clientPanelEl" class="pp-client-body"></div>
     </div>
 
-    <!-- 内置工具（被过滤的 pair 独有工具按内置插件组管理；文件浏览器工具集区同源展示） -->
+    <!-- 内置工具（全部内置工具：分组 + 工具级开关 + 搜索；文件浏览器工具集区同源展示） -->
     <div class="pp-builtin">
       <div class="pp-builtin-head" @click="builtinOpen = !builtinOpen" title="点击折叠/展开">
         <span class="pp-builtin-title"><SvgIcon name="package" :size="13" /> 内置工具 <span class="pp-builtin-sub">{{ builtinInfo ? builtinInfo.enabledTotal + '/' + builtinInfo.toolTotal + ' 启用' : '' }}</span></span>
         <div class="pp-builtin-actions" @click.stop>
+          <input v-model="builtinQuery" class="pp-input pp-builtin-search" placeholder="搜索工具…" />
           <label class="pp-check" title="强制全部内置工具组加入工作区（所有被过滤工具对 agent 可见）">
             <input type="checkbox" :checked="builtinForceAll" @change="forceAllBuiltin" />
             <span>强制全部</span>
           </label>
           <button class="pp-icon-btn" @click="loadBuiltin" title="刷新内置工具状态"><SvgIcon name="refresh" :size="11" :class="{ spinning: builtinLoading }" /></button>
-          </div>
-          <SvgIcon name="chevron-right" :size="11" class="pp-chevron" :class="{ open: builtinOpen }" />
         </div>
-      <div v-if="builtinOpen && builtinLoading && !builtinInfo" class="pp-loading"><SvgIcon name="refresh" :size="12" class="spinner" /><span>加载…</span></div>
-      <div v-else-if="builtinOpen && builtinInfo && builtinInfo.groups.length" class="pp-builtin-groups">
-        <div v-for="g in builtinInfo.groups" :key="g.name" class="pp-builtin-group">
-          <div class="pp-builtin-grow">
-            <span class="pp-builtin-gname" :class="{ off: !g.enabled && !g.partial }">{{ g.title }}</span>
-            <span class="pp-builtin-gdesc" :title="g.desc">{{ g.desc }}</span>
-            <span class="pp-builtin-gtools">{{ g.tools.length }} 工具<template v-if="g.partial">（部分）</template></span>
-          </div>
-          <label class="pp-switch" :title="g.enabled ? '组内工具全部对 agent 可见；点击移出（恢复默认过滤）' : '加入工作区：组内工具全部对 agent 可见'">
-            <input type="checkbox" :checked="g.enabled" @change="toggleBuiltinGroup(g)" />
-            <span class="pp-switch-track"></span>
-          </label>
-        </div>
+        <SvgIcon name="chevron-right" :size="11" class="pp-chevron" :class="{ open: builtinOpen }" />
       </div>
-      <div v-else-if="builtinOpen" class="pp-builtin-empty">内置工具包未加载（启动后自动可用）</div>
+      <div v-if="builtinOpen && builtinLoading && !builtinInfo" class="pp-loading"><SvgIcon name="refresh" :size="12" class="spinner" /><span>加载…</span></div>
+      <template v-else-if="builtinOpen && builtinInfo">
+        <!-- 搜索模式：扁平工具列表（跨组） -->
+        <div v-if="builtinQuery.trim()" class="pp-builtin-tools">
+          <div v-for="t in filteredBuiltinTools" :key="t.name" class="pp-builtin-tool">
+            <span class="pp-builtin-tgroup">{{ t.group }}</span>
+            <span class="pp-builtin-tname" :class="{ off: !t.enabled }" :title="t.desc">{{ t.name }}</span>
+            <span class="pp-builtin-tdesc">{{ t.desc }}</span>
+            <label class="pp-switch" :title="t.enabled ? '对 agent 可见；点击移除（恢复默认过滤）' : '加入 agent 可用'">
+              <input type="checkbox" :checked="t.enabled" @change="toggleBuiltinTool(t)" />
+              <span class="pp-switch-track"></span>
+            </label>
+          </div>
+          <div v-if="!filteredBuiltinTools.length" class="pp-builtin-empty">无匹配工具</div>
+        </div>
+        <!-- 分组模式：组折叠 + 组内工具行 -->
+        <div v-else-if="builtinInfo.groups.length" class="pp-builtin-groups">
+          <div v-for="g in builtinInfo.groups" :key="g.name" class="pp-builtin-group">
+            <div class="pp-builtin-group-head" @click="builtinGroupOpen[g.name] = !builtinGroupOpen[g.name]">
+              <SvgIcon name="chevron-right" :size="10" class="pp-chevron pp-group-chevron" :class="{ open: builtinGroupOpen[g.name] }" />
+              <span class="pp-builtin-gname" :class="{ off: !g.enabled && !g.partial }">{{ g.title }}</span>
+              <span class="pp-builtin-gtools">{{ g.tools.length }} 工具<template v-if="g.partial">（部分）</template></span>
+              <span class="pp-builtin-gdesc" :title="g.desc">{{ g.desc }}</span>
+              <label class="pp-switch" @click.stop :title="g.enabled ? '组内工具全部对 agent 可见；点击移出（恢复默认过滤）' : '加入工作区：组内工具全部对 agent 可见'">
+                <input type="checkbox" :checked="g.enabled" @change="toggleBuiltinGroup(g)" />
+                <span class="pp-switch-track"></span>
+              </label>
+            </div>
+            <div v-if="builtinGroupOpen[g.name]" class="pp-builtin-tools">
+              <div v-for="t in g.tools" :key="t.name" class="pp-builtin-tool">
+                <span class="pp-builtin-tname" :class="{ off: !t.enabled }" :title="t.desc">{{ t.name }}</span>
+                <span class="pp-builtin-tdesc">{{ t.desc }}</span>
+                <label class="pp-switch" :title="t.enabled ? '对 agent 可见；点击移除（恢复默认过滤）' : '加入 agent 可用'">
+                  <input type="checkbox" :checked="t.enabled" @change="toggleBuiltinTool(t)" />
+                  <span class="pp-switch-track"></span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div v-else class="pp-builtin-empty">内置工具包未加载（启动后自动可用）</div>
+      </template>
     </div>
 
     <!-- 插件列表 -->
@@ -205,6 +233,40 @@ async function toggleBuiltinGroup(g) {
   try {
     const res = await api.builtinPlugins({ group: g.name, enabled: target })
     window.$toast && window.$toast((res && res.message) || (target ? '已加入' : '已移出') + ' ' + g.name, 'info')
+  } catch (e) {
+    window.$toast && window.$toast(e.message || '操作失败', 'error')
+  }
+  await loadBuiltin()
+  await refresh()
+
+}
+
+// ─── 内置工具：工具级视图 + 搜索 ───
+const builtinQuery = ref('')
+const builtinGroupOpen = reactive({}) // 分组展开状态（默认全折叠）
+
+// 扁平工具列表（跨组，搜索用）
+const flatBuiltinTools = computed(() => {
+  if (!builtinInfo.value) return []
+  const out = []
+  for (const g of builtinInfo.value.groups || []) {
+    for (const t of g.tools) out.push({ ...t, group: g.name })
+  }
+  return out
+})
+const filteredBuiltinTools = computed(() => {
+  const q = builtinQuery.value.trim().toLowerCase()
+  if (!q) return []
+  return flatBuiltinTools.value.filter(t =>
+    (t.name + ' ' + (t.desc || '') + ' ' + t.group).toLowerCase().includes(q))
+})
+
+// 工具级开关（手动添加/移除指定工具；与文件浏览器工具集区同源：/api/plugins/builtin {tool,enabled}）
+async function toggleBuiltinTool(t) {
+  const target = !t.enabled
+  try {
+    const res = await api.builtinPlugins({ tool: t.name, enabled: target })
+    window.$toast && window.$toast((res && res.message) || (target ? '已加入' : '已移除') + ' ' + t.name, 'info')
   } catch (e) {
     window.$toast && window.$toast(e.message || '操作失败', 'error')
   }
@@ -687,6 +749,28 @@ onUnmounted(() => {
 .pp-builtin-gdesc { font-size: 10px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
 .pp-builtin-gtools { font-size: 10px; color: var(--text-secondary); white-space: nowrap; }
 .pp-builtin-empty { font-size: 10px; color: var(--text-muted); padding: 2px 0; }
+
+/* 内置工具：工具级视图 + 搜索 */
+.pp-builtin-search { width: 110px; font-size: 11px; padding: 2px 6px; flex-shrink: 0; }
+.pp-builtin-group-head { display: flex; align-items: center; gap: 6px; padding: 2px 0; cursor: pointer; }
+.pp-builtin-group-head:hover .pp-builtin-gname { color: var(--accent-light); }
+.pp-group-chevron { color: var(--text-muted); flex-shrink: 0; }
+.pp-builtin-tools { display: flex; flex-direction: column; gap: 1px; margin-top: 2px; }
+.pp-builtin-tool {
+  display: flex; align-items: center; gap: 6px; padding: 2px 6px; border-radius: 3px;
+  font-size: 11px;
+}
+.pp-builtin-tool:hover { background: var(--bg-primary); }
+.pp-builtin-tgroup {
+  font-size: 8px; padding: 0 4px; border-radius: 3px; flex-shrink: 0;
+  background: rgba(97, 175, 239, .15); color: #61afef; font-family: var(--font-code);
+}
+.pp-builtin-tname {
+  font-family: var(--font-code); color: var(--text-primary);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 55%;
+}
+.pp-builtin-tname.off { color: var(--text-muted); opacity: .6; }
+.pp-builtin-tdesc { font-size: 10px; color: var(--text-muted); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* 开关（pp-switch） */
 .pp-switch { position: relative; display: inline-flex; align-items: center; cursor: pointer; flex-shrink: 0; }

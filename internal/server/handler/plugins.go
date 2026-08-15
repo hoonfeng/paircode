@@ -371,7 +371,8 @@ func pluginRecordSummary(rec agent.PluginRecord) map[string]any {
 // HandleBuiltinPlugins GET/POST /api/plugins/builtin：内置工具包（被过滤的 pair
 // 独有工具按内置插件组管理——「放进插件面板」的载体）。
 //   - GET：返回内置工具包完整信息（分组 + 工具 + 启用状态 + 已加入分组 + 强制全部后状态）
-//   - POST：切换分组开关 {group, enabled:true|false}（加入工作区/移出），
+//   - POST：工具级开关 {tool, enabled:true|false}（手动添加/移除指定工具），
+//     或分组开关 {group, enabled:true|false}（加入工作区/移出），
 //     或强制全部加入 {forceAll:true}（所有内置组一次性启用）
 func HandleBuiltinPlugins(w http.ResponseWriter, r *http.Request) {
 	ph, ok := getPluginHost()
@@ -398,6 +399,7 @@ func HandleBuiltinPlugins(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		Group    string `json:"group"`
+		Tool     string `json:"tool"`
 		Enabled  *bool  `json:"enabled"`
 		ForceAll bool   `json:"forceAll"`
 	}
@@ -414,8 +416,21 @@ func HandleBuiltinPlugins(w http.ResponseWriter, r *http.Request) {
 		jsonResp(w, map[string]any{"ok": true, "message": msg})
 		return
 	}
+	if req.Tool != "" {
+		if req.Enabled == nil {
+			jsonErr(w, "需要 tool + enabled")
+			return
+		}
+		msg, err := agent.SetBuiltinToolEnabledPublic(ph, root, req.Tool, *req.Enabled)
+		if err != nil {
+			jsonErr(w, err.Error())
+			return
+		}
+		jsonResp(w, map[string]any{"ok": true, "message": msg})
+		return
+	}
 	if req.Group == "" || req.Enabled == nil {
-		jsonErr(w, "需要 group + enabled，或 forceAll=true")
+		jsonErr(w, "需要 tool/group + enabled，或 forceAll=true")
 		return
 	}
 	msg, err := agent.SetBuiltinGroupEnabledPublic(ph, root, req.Group, *req.Enabled)

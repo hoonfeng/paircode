@@ -522,6 +522,11 @@ func EnableAllBuiltinPublic(ph *PluginHost, root string) (string, error) {
 	return EnableAllBuiltin(ph, root)
 }
 
+// SetBuiltinToolEnabledPublic 内置工具级开关（工具列表/手动添加指定工具）。
+func SetBuiltinToolEnabledPublic(ph *PluginHost, root, tool string, enabled bool) (string, error) {
+	return SetBuiltinToolEnabled(ph, root, tool, enabled)
+}
+
 // countAllToolsetPlugins 统计全部工具集插件数（列表摘要用）。
 func countAllToolsetPlugins(projectRoot string) int {
 	n := 0
