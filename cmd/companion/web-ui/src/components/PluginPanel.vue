@@ -91,13 +91,22 @@
       <div v-for="g in slotGroups" :key="g.slotId" class="pp-slot-row">
         <div class="pp-slot-info">
           <span class="pp-slot-id">{{ g.slotId }}</span>
+          <span class="pp-slot-kind">{{ g.kind === 'list' ? '叠加' : '替换' }}</span>
           <span class="pp-slot-owner" :class="{ builtin: !g.owner }">{{ g.owner ? g.owner : '内置组件' }}</span>
         </div>
-        <select class="pp-input pp-slot-select" :value="g.owner" @change="switchSlot(g.slotId, $event.target.value)"
+        <!-- single 槽位：下拉切换占用者；list 槽位：勾选叠加（全部渲染） -->
+        <select v-if="g.kind !== 'list'" class="pp-input pp-slot-select" :value="g.owner" @change="switchSlot(g.slotId, $event.target.value)"
                 :title="'切换 ' + g.slotId + ' 区域的渲染者'">
           <option value="">内置组件（默认）</option>
           <option v-for="c in g.candidates" :key="c.pluginName" :value="c.pluginName">{{ c.pluginName }} · {{ c.title }}</option>
         </select>
+        <div v-else class="pp-slot-list">
+          <label v-for="c in g.candidates" :key="c.pluginName" class="pp-slot-list-item">
+            <input type="checkbox" :checked="overlayActive(g.slotId, c.pluginName)" @change="toggleOverlay(g.slotId, c.pluginName, $event.target.checked)" />
+            <span>{{ c.pluginName }} · {{ c.title }}</span>
+          </label>
+          <span v-if="!g.candidates.length" class="pp-slot-empty">（无叠加条目）</span>
+        </div>
       </div>
     </div>
 
@@ -211,7 +220,7 @@
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import api from '../api.js'
 import SvgIcon from './SvgIcon.vue'
-import { clientPanels, clientSlots, syncClientHalves, unloadClientHalf, startPolling, stopPolling, setPanelMount, setSlotMount, getUIFor, getSlotCandidates, getSlotOwner, setSlotOwner } from '../plugin-runtime.js'
+import { clientPanels, clientSlots, syncClientHalves, unloadClientHalf, startPolling, stopPolling, setPanelMount, setSlotMount, getUIFor, getSlotCandidates, getSlotOwner, setSlotOwner, emitSlotChanged, isOverlayActive, setOverlayActive } from '../plugin-runtime.js'
 
 const plugins = ref([])
 const loading = ref(false)
@@ -485,12 +494,16 @@ let slotUnsub = null
 
 function refreshSlots() {
   const ids = [...new Set(clientSlots.map(s => s.slotId))]
-  slotGroups.value = ids.map(id => ({
-    slotId: id,
-    owner: getSlotOwner(id),
-    candidates: getSlotCandidates(id),
-  }))
+  slotGroups.value = ids.map(id => {
+    const candidates = getSlotCandidates(id)
+    const kind = candidates[0] && candidates[0].kind === 'list' ? 'list' : 'single'
+    return { slotId: id, kind, owner: getSlotOwner(id), candidates }
+  })
 }
+
+// list 槽位（叠加）：勾选 = 该条目参与渲染（localStorage 持久化）
+function overlayActive(slotId, pluginName) { return isOverlayActive(slotId, pluginName) }
+function toggleOverlay(slotId, pluginName, on) { setOverlayActive(slotId, pluginName, on) }
 
 function switchSlot(slotId, pluginName) {
   setSlotOwner(slotId, pluginName || '')
@@ -614,6 +627,11 @@ onUnmounted(() => {
 }
 .pp-slot-owner { font-size: 10px; color: var(--accent); }
 .pp-slot-owner.builtin { color: var(--text-muted); }
+.pp-slot-kind { font-size: 9px; color: var(--text-muted); background: var(--bg-input, var(--bg-elevated)); border: 1px solid var(--border-color); border-radius: 3px; padding: 0 4px; align-self: flex-start; }
+.pp-slot-list { display: flex; flex-direction: column; gap: 2px; align-items: flex-end; flex-shrink: 0; }
+.pp-slot-list-item { display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--text-secondary); cursor: pointer; max-width: 220px; }
+.pp-slot-list-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pp-slot-empty { font-size: 10px; color: var(--text-muted); }
 .pp-slot-select {
   width: 160px; font-size: 11px; padding: 2px 4px;
   background: var(--bg-input, var(--bg-elevated)); color: var(--text-primary);

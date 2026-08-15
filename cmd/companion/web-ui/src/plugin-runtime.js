@@ -59,10 +59,20 @@ export function setSlotMount(fn) {
     if (i >= 0) slotMountFns.splice(i, 1)
   }
 }
-function emitSlotChanged() {
+export function emitSlotChanged() {
   for (const fn of slotMountFns) {
     try { fn(clientSlots) } catch (e) { console.warn('[slot] 通知失败', e) }
   }
+}
+
+// list 型槽位（叠加）条目激活状态：勾选 = 参与渲染（localStorage 持久化，跨刷新保留）。
+function overlayKey(slotId, pluginName) { return 'slotOverlay:' + slotId + ':' + pluginName }
+export function isOverlayActive(slotId, pluginName) {
+  try { return localStorage.getItem(overlayKey(slotId, pluginName)) === '1' } catch (e) { return false }
+}
+export function setOverlayActive(slotId, pluginName, on) {
+  try { localStorage.setItem(overlayKey(slotId, pluginName), on ? '1' : '0') } catch (e) { /* 忽略 */ }
+  emitSlotChanged() // 通知宿主重渲染 overlay 槽位
 }
 
 // getSlotCandidates 某槽位的全部候选（占用者）。
@@ -88,6 +98,13 @@ export function getSlotUI(slotId) {
   const s = clientSlots.find(x => x.slotId === slotId && x.pluginName === owner)
   if (!s || typeof s.render !== 'function') return null
   return { render: s.render, ui: getUIFor(owner), pluginName: owner }
+}
+
+// getSlotUIList 取 list 型槽位（叠加）的全部占用者渲染信息数组（kind='list'）。
+export function getSlotUIList(slotId) {
+  return clientSlots
+    .filter(s => s.slotId === slotId && s.kind === 'list' && typeof s.render === 'function')
+    .map(s => ({ render: s.render, ui: getUIFor(s.pluginName), pluginName: s.pluginName }))
 }
 
 // setPanelMount 供 PluginPanel 注入「渲染 client 面板」的回调。
@@ -176,9 +193,11 @@ function makeUI(inst) {
         },
       }
     },
-    // 注册 UI 槽位占用（Slot 系统：替换宿主预定义界面区域，如 'statusbar'）。
-    // 同插件重复注册同槽位 → 替换。宿主按 getSlotOwner 决定激活哪个占用者，
-    // 激活后调 render(el, ui)；render 可返回 cleanup 函数（宿主下次重渲染前调用）。
+    // 注册 UI 槽位占用（Slot 系统：替换宿主预定义界面区域，如 'statusbar'/'chat'；
+    // kind='list' 槽位为叠加型——多个占用者同时渲染，如 'overlay' 浮动层）。
+    // 同插件重复注册同槽位 → 替换。single 槽位宿主按 getSlotOwner 决定激活哪个
+    // 占用者；list 槽位宿主渲染全部占用者。激活后调 render(el, ui)；render 可
+    // 返回 cleanup 函数（宿主下次重渲染前调用）。
     registerSlot(spec) {
       if (!spec || !spec.slotId || !spec.title) {
         console.warn('[plugin] registerSlot 需要 {slotId, title, render?}')
@@ -189,6 +208,7 @@ function makeUI(inst) {
         slotId: spec.slotId,
         pluginName: inst.name,
         title: spec.title,
+        kind: spec.kind === 'list' ? 'list' : 'single',
         render: typeof spec.render === 'function' ? spec.render : null,
         defId: inst.defId,
       }
@@ -417,5 +437,6 @@ export default {
   loadClientHalf, unloadClientHalf, syncClientHalves,
   startPolling, stopPolling, dispatchHostEvent,
   getInstances, setPanelMount, clientPanels,
-  clientSlots, setSlotMount, getSlotCandidates, getSlotOwner, setSlotOwner, getSlotUI,
+  clientSlots, setSlotMount, getSlotCandidates, getSlotOwner, setSlotOwner, getSlotUI, getSlotUIList,
+  emitSlotChanged, isOverlayActive, setOverlayActive,
 }

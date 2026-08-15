@@ -18,7 +18,9 @@
     <!-- 内容区域（panel 模式下隐藏） -->
     <ActivityBar v-if="!panelMode" />
     <!-- ★ 文件资源侧边栏默认打开：专注模式（focusMode）只隐藏编辑器，侧边栏仍显示（由 sidebarVisible 独立控制） -->
-    <Sidebar v-if="!panelMode && state.sidebarVisible" />
+    <!-- ★ sidebar 槽位（Slot 系统）：插件注册 sidebar 槽位并激活后，左侧栏由插件渲染（UI 可更换） -->
+    <Sidebar v-if="!panelMode && state.sidebarVisible && !sidebarSlotOwner" />
+    <div v-else-if="!panelMode && state.sidebarVisible && sidebarSlotOwner" ref="sidebarSlotEl" class="plugin-slot-host plugin-slot-sidebar"></div>
     <div v-if="!panelMode && !state.focusMode" class="main-area">
       <EditorArea />
       <div class="bottom-panel" v-if="state.bottomPanelVisible"
@@ -52,6 +54,8 @@
     <HelpModal v-if="showHelp" @close="showHelp = false" @openAbout="onHelpOpenAbout" :initialDoc="helpDocTarget" />
     <AboutModal v-if="showAbout" @close="showAbout = false" @openHelp="onAboutOpenHelp" />
     <GlobalDialogs />
+    <!-- ★ overlay 槽位（Slot 系统，list 型）：插件注册的浮动层条目叠加渲染（badge/toast/status pill 等） -->
+    <div ref="overlaySlotEl" class="plugin-overlay-host"></div>
   </div>
 </template>
 
@@ -60,7 +64,7 @@ import { ref, reactive, computed, watch, onMounted, onUnmounted, provide, nextTi
 import { state, savePersistentState, loadPersistentState, applyTheme } from './main.js'
 import api from './api.js'
 import { processAgentEvent, processAgentDone, processStatus, getConvCtxStats } from './agent-events.js'
-import { getSlotUI, getSlotOwner, setSlotMount } from './plugin-runtime.js'
+import { getSlotUI, getSlotUIList, getSlotOwner, setSlotMount, isOverlayActive } from './plugin-runtime.js'
 
 // ★ 桌面端面板独立模式：desktopbridge 注入 window.__DESKTOP_PANEL_MODE__，
 //   此时只渲染右侧面板（消息展示）占满全屏，隐藏 IDE 其他区域。
@@ -578,6 +582,9 @@ onUnmounted(() => {
   if (persistTimer) { clearTimeout(persistTimer); persistTimer = null }
   if (slotUnsub) { slotUnsub(); slotUnsub = null }
   if (typeof slotCleanup === 'function') { try { slotCleanup() } catch (e) {} slotCleanup = null }
+  if (typeof sidebarCleanup === 'function') { try { sidebarCleanup() } catch (e) {} sidebarCleanup = null }
+  for (const c of overlayCleanups) { try { c() } catch (e) {} }
+  overlayCleanups.length = 0
   api.closeWebSocket()
 })
 
@@ -608,7 +615,61 @@ function onSlotChanged() {
   // 无论切回内置还是换插件，先清理旧插件渲染
   if (typeof slotCleanup === 'function') { try { slotCleanup() } catch (e) {} slotCleanup = null }
   slotOwner.value = getSlotOwner('statusbar')
-  nextTick(() => { if (slotOwner.value) renderStatusBarSlot() })
+  nextTick(() => {
+    if (slotOwner.value) renderStatusBarSlot()
+    renderSidebarSlot()
+    renderOverlaySlot()
+  })
+}
+
+// ─── sidebar 槽位：插件可替换左侧文件栏（Slot 系统）──
+const sidebarSlotOwner = ref('')
+const sidebarSlotEl = ref(null)
+let sidebarCleanup = null
+
+function renderSidebarSlot() {
+  const host = sidebarSlotEl.value
+  sidebarSlotOwner.value = getSlotOwner('sidebar')
+  if (!host) return
+  if (typeof sidebarCleanup === 'function') { try { sidebarCleanup() } catch (e) {} sidebarCleanup = null }
+  host.innerHTML = ''
+  if (!sidebarSlotOwner.value) return
+  const s = getSlotUI('sidebar')
+  if (s && typeof s.render === 'function') {
+    try {
+      const ret = s.render(host, s.ui)
+      if (typeof ret === 'function') sidebarCleanup = ret
+    } catch (e) {
+      console.warn('[slot] sidebar 渲染失败', e)
+      host.innerHTML = '<div style="padding:8px;font-size:12px;color:var(--text-muted)">插件侧栏渲染失败</div>'
+    }
+  }
+}
+
+// ─── overlay 槽位（list 型）：插件浮动层条目叠加渲染 ──
+const overlaySlotEl = ref(null)
+const overlayCleanups = []
+
+function renderOverlaySlot() {
+  const host = overlaySlotEl.value
+  if (!host) return
+  for (const c of overlayCleanups) { try { c() } catch (e) {} }
+  overlayCleanups.length = 0
+  host.innerHTML = ''
+  for (const s of getSlotUIList('overlay')) {
+    if (!isOverlayActive('overlay', s.pluginName)) continue // 仅渲染勾选激活的条目
+    const item = document.createElement('div')
+    item.className = 'plugin-overlay-item'
+    item.dataset.plugin = s.pluginName
+    host.appendChild(item)
+    try {
+      const ret = s.render(item, s.ui)
+      if (typeof ret === 'function') overlayCleanups.push(ret)
+    } catch (e) {
+      console.warn('[slot] overlay 渲染失败', e)
+      item.innerHTML = '<span style="color:var(--text-muted);font-size:11px;">插件浮动层渲染失败</span>'
+    }
+  }
 }
 
 state.notificationCount = 0
@@ -705,6 +766,11 @@ watch(() => state.openFiles.length, schedulePersist)
 .app-statusbar-host { grid-column: 1 / -1; grid-row: 3; z-index: 30; height: 22px; }
 .plugin-slot-host { height: 100%; overflow: hidden; }
 .plugin-slot-statusbar { background: var(--accent); }
+/* sidebar 槽位：插件渲染的左侧栏与内置 Sidebar 同尺寸 */
+.plugin-slot-sidebar { height: 100%; overflow: hidden; }
+/* overlay 槽位（list 型）：浮动层，条目叠加（badge/toast/status pill），不挡交互 */
+.plugin-overlay-host { position: fixed; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 9999; }
+.plugin-overlay-item { pointer-events: auto; }
 .bottom-panel {
   position: relative; background: var(--bg-secondary);
   border-top: 1px solid var(--border-color);

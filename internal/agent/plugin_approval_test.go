@@ -55,7 +55,7 @@ func TestClientApprovalDynamic(t *testing.T) {
 
 	// 已批准 → 不再触发（批准覆盖后续版本）
 	def1 := mustDef(t, host, id1)
-	host.MarkClientApproved(def1.pluginId)
+	host.MarkClientApproved(def1.name)
 	if runTool.DynamicApproval(tc1) {
 		t.Fatal("已批准插件再次 run 不应再触发审批")
 	}
@@ -81,7 +81,7 @@ func TestClientApprovalGateLoop(t *testing.T) {
 	if err != nil {
 		t.Fatalf("define: %v", err)
 	}
-	pluginID := mustDef(t, host, id).pluginId
+	pluginID := mustDef(t, host, id).name
 
 	// ── 拒绝场景：Approve 返回 false → cordis_run 不执行 → 不批准 ──
 	mockRej := &MockProvider{Responses: []Message{
@@ -143,7 +143,7 @@ func TestClientApprovalPersist(t *testing.T) {
 	if err != nil {
 		t.Fatalf("define: %v", err)
 	}
-	pluginID := mustDef(t, host, id).pluginId
+	pluginID := mustDef(t, host, id).name
 
 	if host.IsClientApproved(pluginID) {
 		t.Fatal("初始不应已批准")
@@ -157,7 +157,7 @@ func TestClientApprovalPersist(t *testing.T) {
 		t.Fatalf("批准文件应存在: %v", err)
 	}
 	if !strings.Contains(string(data), pluginID) {
-		t.Fatalf("批准文件应含 pluginId %s: %s", pluginID, data)
+		t.Fatalf("批准文件应含插件名 %s: %s", pluginID, data)
 	}
 
 	// 重建宿主 → 批准恢复
@@ -184,7 +184,7 @@ func TestClientApprovalInspect(t *testing.T) {
 	if err != nil {
 		t.Fatalf("define: %v", err)
 	}
-	pluginID := mustDef(t, host, id).pluginId
+	pluginID := mustDef(t, host, id).name
 	// 装载（正式路径经 cordis_run 审批门；此处直接 Load 验证 inspect 字段显示）
 	if err := host.LoadJSDynamic(mustDef(t, host, id)); err != nil {
 		t.Fatalf("run: %v", err)

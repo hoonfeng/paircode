@@ -118,6 +118,7 @@ type jsPluginDef struct {
 	inject     []string       // 插件声明的硬依赖服务（apply 前校验宿主是否提供）
 	config     map[string]any // 插件配置（cordis_run 传入，apply(ctx, config) 第二参）
 	isFunc     bool           // 函数形态插件（export 为 (ctx, config) => void）
+	scope      string         // 生效作用域："global"=全局（跨工作区，UI 类插件；存 <installDir>/.pair/toolsets/dynamic.json）；""/"project"=项目工具集（默认，按工作区加载）
 	createdAt  time.Time
 
 	// ★ 状态机与运行诊断（对齐 harness CordisRunStatus + CordisRunDiagnostic）
@@ -1678,6 +1679,7 @@ func (h *PluginHost) DefineJSCodeVersioned(code, language, purpose, dir, clientC
 		id:         id,
 		pluginId:   stable,
 		packageId:  pkgID,
+		name:       extractJSPluginName(js), // ★ 静态提取（审批键 name 需 define 时可用；装载时按实际对象再解析）
 		purpose:    purpose,
 		code:       js, // 存转译后的 JS（运行时 goja 直接执行）
 		clientCode: clientCode,

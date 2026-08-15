@@ -43,15 +43,16 @@ func RegisterCordisTools(registry *Registry, host *PluginHost, root string) {
 
 	registry.Register(&Tool{
 		Name:        "cordis_define",
-		Description: "登记一个 JS/TS 动态插件定义（语法预检，不运行）。★ 创建前建议 cordis_inspect 检查已有插件/工具（同名插件或工具会导致冲突——define 后自动检测并提示）。★ 登记后自动同步到工作区工具集 dynamic（.pair/toolsets/dynamic.json，重启自动装配、前端插件面板可见可管理），cordis_run 装载后工具对 agent 可用。code 是 async 函数体（host 半，宿主进程内运行），支持两种形态：① 对象形态 return { name, apply(ctx, config), inject? }；② 函数形态 return (ctx, config) => void（cordis 生态惯例，函数名作插件名）。apply 中可用 ctx.tools.register 注册工具、ctx.systemPrompt.section 贡献提示、ctx.on 监听事件、ctx.provide 提供服务；inject: ['fs','web','bash','logger','timer',...] 声明硬依赖（宿主缺失时插件进入 waiting，服务出现后自动激活；可选服务用 ctx.get(name) 判 undefined）。可选 client 参数提供浏览器半代码（UI 侧运行，web 界面插件面板装载）：形态 (ui) => void，ui 提供 on/emit/registerPanel/http 等浏览器侧服务。TS 源码（含 interface/type 注解）由内置编译器自动转译。★ 版本化：pluginId 非空时向已有插件追加新版本（对齐 harness define existing append）；缺省=新建插件。返回 dyn id（精确版本）供 cordis_run/stop/undefine 使用。",
+		Description: "登记一个 JS/TS 动态插件定义（语法预检，不运行）。★ 创建前建议 cordis_inspect 检查已有插件/工具（同名插件或工具会导致冲突——define 后自动检测并提示）。★ 登记后自动同步到插件工具集 dynamic（重启自动装配、前端插件面板可见可管理），cordis_run 装载后工具对 agent 可用。★ 作用域 scope：含 client 半的 UI 类插件默认 global（跨工作区全局生效，存 <安装目录>/.pair/toolsets/dynamic.json，不按项目隔离）；纯 host 工具插件默认 project（工作区 .pair/toolsets/dynamic.json，按项目加载）。code 是 async 函数体（host 半，宿主进程内运行），支持两种形态：① 对象形态 return { name, apply(ctx, config), inject? }；② 函数形态 return (ctx, config) => void（cordis 生态惯例，函数名作插件名）。apply 中可用 ctx.tools.register 注册工具、ctx.systemPrompt.section 贡献提示、ctx.on 监听事件、ctx.provide 提供服务；inject: ['fs','web','bash','logger','timer',...] 声明硬依赖（宿主缺失时插件进入 waiting，服务出现后自动激活；可选服务用 ctx.get(name) 判 undefined）。可选 client 参数提供浏览器半代码（UI 侧运行，web 界面插件面板装载）：形态 (ui) => void，ui 提供 on/emit/registerPanel/http 等浏览器侧服务。TS 源码（含 interface/type 注解）由内置编译器自动转译。★ 版本化：pluginId 非空时向已有插件追加新版本（对齐 harness define existing append）；缺省=新建插件。返回 dyn id（精确版本）供 cordis_run/stop/undefine 使用。",
 		Category:    "system",
 		Parameters: objSchema(map[string]any{
 			"code":     strProp("插件 host 半代码（JS 或 TS，async 函数体，return { name, apply(ctx, config), inject? } 或 return (ctx, config) => void）。可访问全局：ctx/harness/console/btoa/atob/TextEncoder/TextDecoder/CordisApi（内置真 cordis 运行时，new CordisApi.api.Context() 建 cordis app 跑生态插件协作）；inject 声明后 ctx.fs/web/bash/logger/timer 可用。"),
-			"client":   strProp("可选：插件 client 半代码（浏览器端执行，web 界面插件面板装载）。形态 (ui) => void：ui.on(event, fn) 收 host 事件（ui:/client: 前缀）、ui.emit(event, payload) 发事件回 host（host: 前缀给 host 插件消费）、ui.invoke(plugin, method, args?) 远程调用 host 半 ctx.registerClientMethod 注册的方法（invoke RPC）、ui.reportFailure(phase, message) 失败上报（render/guard/boot，Agent inspect 可查）、ui.registerPanel({id,title,icon,render,props}) 注册自定义面板（render(el, ui)，el 为容器 DOM，ui 为当前沙箱对象）、ui.http.get/post 调后端 API。缺省=纯 host 插件。"),
+			"client":   strProp("可选：插件 client 半代码（浏览器端执行，web 界面插件面板装载）。形态 (ui) => void：ui.on(event, fn) 收 host 事件（ui:/client: 前缀）、ui.emit(event, payload) 发事件回 host（host: 前缀给 host 插件消费）、ui.invoke(plugin, method, args?) 远程调用 host 半 ctx.registerClientMethod 注册的方法（invoke RPC）、ui.reportFailure(phase, message) 失败上报（render/guard/boot，Agent inspect 可查）、ui.registerPanel({id,title,icon,render,props}) 注册自定义面板（render(el, ui)，el 为容器 DOM，ui 为当前沙箱对象）、ui.http.get/post 调后端 API。★ 含 client 半 = UI 类插件，自动 global 作用域（跨工作区生效）。"),
 			"language": strProp("可选：源码语言 \"js\" | \"ts\"，默认自动探测（含 interface/type 注解/类型标注视为 ts）。"),
 			"purpose":  strProp("可选：插件用途说明。"),
 			"pluginId": strProp("可选：已有插件的稳定 id（cordis_define 首次返回的 dyn-<n> 即稳定身份）。非空=向该插件追加新版本（existing append）；缺省=新建插件。追加版本后 cordis_run 传 pluginId 装载最新版。"),
 			"dir":      strProp("可选：源码目录（解析相对 import 的多文件插件）。缺省=单文件模式（不解析 import）。"),
+			"scope":    strProp("可选：生效作用域 \"global\"=全局（跨工作区，UI 类插件默认）|\"project\"=项目（默认，纯工具插件）。含 client 半时自动 global。"),
 		}, "code"),
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
 			code := argStr(args, "code")
@@ -62,6 +63,7 @@ func RegisterCordisTools(registry *Registry, host *PluginHost, root string) {
 			language := argStr(args, "language")
 			clientCode := argStr(args, "client")
 			pluginId := strings.TrimSpace(argStr(args, "pluginId"))
+			scope := strings.TrimSpace(argStr(args, "scope"))
 			dir := ""
 			if d := strings.TrimSpace(argStr(args, "dir")); d != "" {
 				resolved, err := resolvePathFor(root, args, d)
@@ -102,11 +104,15 @@ func RegisterCordisTools(registry *Registry, host *PluginHost, root string) {
 					}
 				}
 			}
-			// 动态插件实时固化到工作区工具集（.pair/toolsets/dynamic.json，跨重启存续；
-			// cordis_define 只登记不装载，cordis_run 后工具可用，重启自动装配）
+			// 动态插件实时固化到插件工具集（跨重启存续；cordis_define 只登记不装载，
+			// cordis_run 后工具可用，重启自动装配）。★ 作用域：含 client 半的 UI 类
+			// 插件自动 global（全局生效，不进项目工具集）；scope 显式指定 global/project。
 			syncMsg := ""
 			if dir == "" { // 多文件 bundle 插件不固化（代码依赖 dir 相对 import）
-				if msg, serr := syncDynamicPluginToToolset(root, def, pname); serr != nil {
+				if scope == "" && strings.TrimSpace(clientCode) != "" {
+					scope = "global" // UI 类插件默认全局
+				}
+				if msg, serr := syncDynamicPluginToToolset(root, def, pname, scope); serr != nil {
 					log.Printf("[cordis] 同步动态插件到工具集失败: %v", serr)
 				} else {
 					syncMsg = msg
@@ -1024,15 +1030,18 @@ func extractJSPluginName(jsCode string) string {
 	return ""
 }
 
-// dynamicToolsetName agent 动态插件工具集名（.pair/toolsets/dynamic.json）。
-// cordis_define 登记后实时固化到工作区工具集——前端插件面板可见、可管理，
+// dynamicToolsetName agent 动态插件工具集名（dynamic.json）。
+// cordis_define 登记后实时固化到插件工具集——前端插件面板可见、可管理，
 // 重启自动装配（agent 动态创建的工具跨会话存续）。
+// ★ 作用域：scope="global" → <安装目录>/.pair/toolsets/dynamic.json（跨工作区，
+//    UI 类插件全局生效）；scope 空/"project" → 工作区 .pair/toolsets/dynamic.json。
 const dynamicToolsetName = "dynamic"
 
-// syncDynamicPluginToToolset 把 cordis_define 登记的动态插件固化到工作区
-// 工具集 dynamic.json（同名条目更新 code/版本，否则追加）。只固化不装载
+// syncDynamicPluginToToolset 把 cordis_define 登记的动态插件固化到插件工具集
+// dynamic.json（同名条目更新 code/版本，否则追加）。只固化不装载
 // （cordis_define 语义：登记）；cordis_run 装载后工具可用，重启自动装配。
-func syncDynamicPluginToToolset(root string, def *jsPluginDef, name string) (string, error) {
+// scope 为空时按 project 处理。
+func syncDynamicPluginToToolset(root string, def *jsPluginDef, name, scope string) (string, error) {
 	if def == nil || root == "" {
 		return "", os.ErrInvalid
 	}
@@ -1040,9 +1049,13 @@ func syncDynamicPluginToToolset(root string, def *jsPluginDef, name string) (str
 	if entryName == "" {
 		entryName = def.id // 匿名插件：以 dyn id 为条目名
 	}
-	ts, err := loadToolset(root, toolsetProject, dynamicToolsetName)
+	targetScope := toolsetProject
+	if scope == "global" {
+		targetScope = toolsetGlobal
+	}
+	ts, err := loadToolset(root, targetScope, dynamicToolsetName)
 	if err != nil {
-		ts = &Toolset{Name: dynamicToolsetName, Description: "agent 动态创建的工具插件（cordis_define 自动同步，可 rm_plugin 移除）"}
+		ts = &Toolset{Name: dynamicToolsetName, Description: "agent 动态创建的插件（cordis_define 自动同步，可 rm_plugin 移除）"}
 	}
 	found := false
 	for i := range ts.Plugins {
@@ -1062,8 +1075,11 @@ func syncDynamicPluginToToolset(root string, def *jsPluginDef, name string) (str
 			Client:  def.clientCode,
 		})
 	}
-	if err := saveToolset(root, toolsetProject, ts); err != nil {
+	if err := saveToolset(root, targetScope, ts); err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("已同步到工作区工具集 %s（.pair/toolsets/dynamic.json；重启自动装配，cordis_inspect/toolset_show dynamic 查看）", dynamicToolsetName), nil
+	if targetScope == toolsetGlobal {
+		return fmt.Sprintf("已同步到全局插件工具集 dynamic（跨工作区生效；安装目录 .pair/toolsets/dynamic.json，重启自动装配，cordis_inspect/toolset_show dynamic 查看）"), nil
+	}
+	return fmt.Sprintf("已同步到工作区插件工具集 dynamic（.pair/toolsets/dynamic.json；重启自动装配，cordis_inspect/toolset_show dynamic 查看）"), nil
 }

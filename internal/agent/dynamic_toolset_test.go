@@ -20,7 +20,7 @@ func TestExtractJSPluginName(t *testing.T) {
 func TestSyncDynamicPluginToToolset(t *testing.T) {
 	root := t.TempDir()
 	def := &jsPluginDef{id: "dyn-99", name: "hello", purpose: "测试插件", code: `return { name: 'hello', apply(ctx) {} };`}
-	msg, err := syncDynamicPluginToToolset(root, def, "hello")
+	msg, err := syncDynamicPluginToToolset(root, def, "hello", "")
 	if err != nil {
 		t.Fatalf("同步失败: %v", err)
 	}
@@ -33,7 +33,7 @@ func TestSyncDynamicPluginToToolset(t *testing.T) {
 	}
 	// 同名更新（版本追加场景）
 	def2 := &jsPluginDef{id: "dyn-100", name: "hello", purpose: "更新版", code: `return { name: 'hello', apply(ctx) {} };`}
-	if _, err := syncDynamicPluginToToolset(root, def2, "hello"); err != nil {
+	if _, err := syncDynamicPluginToToolset(root, def2, "hello", ""); err != nil {
 		t.Fatalf("更新同步失败: %v", err)
 	}
 	ts, _ = loadToolset(root, toolsetProject, dynamicToolsetName)

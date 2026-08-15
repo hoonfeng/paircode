@@ -124,8 +124,8 @@ func TestJSDynamicPluginFullLifecycle(t *testing.T) {
 	if !ok {
 		t.Fatalf("定义未登记")
 	}
-	if def.name != "" { // 未装载时 name 未定
-		t.Fatalf("定义时 name 应为空, got %q", def.name)
+	if def.name != "demo-js" { // ★ define 时静态提取插件名（审批键 name 需 define 时可用）
+		t.Fatalf("定义时 name 应为静态提取的插件名, got %q", def.name)
 	}
 
 	// 2. run（装载 + apply）
