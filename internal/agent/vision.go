@@ -1,18 +1,22 @@
-// vision.go 图像视觉分析工具：图色分析 + OCR。
+// vision.go 图像视觉分析工具：图色分析 + OCR + 图片读取。
 //
-// 提供两个工具：
+// 提供三个工具：
+//   - read_image：读取图片并返回 base64 内容与元信息（对齐 harness tool-fs）
 //   - image_analyze：分析图片中的颜色分布、色块区域和图形，按坐标块格式输出
 //   - image_ocr：从图片中识别文字（OCR），返回文字内容及其坐标位置
 //
-// 图像格式支持：PNG / JPEG（使用 Go 标准库 image 包）
+// 图像格式支持：PNG / JPEG / GIF（使用 Go 标准库 image 包）
 // OCR 依赖：系统安装的 Tesseract OCR（https://github.com/tesseract-ocr/tesseract）
 
 package agent
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"image"
+	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
 	"math"
@@ -26,9 +30,54 @@ import (
 
 // ── 注册 ───────────────────────────────────────────────────
 
-// registerVisionTools 注册 image_analyze、image_ocr 和 image_probe 工具。
+// registerVisionTools 注册 read_image、image_analyze、image_ocr 和 image_probe 工具。
 func registerVisionTools(r *Registry, root string) {
 	registerProbeTool(r, root) // image_probe：像素级精确扫描（见 vision_probe.go）
+
+	// ── read_image（对齐 harness tool-fs）──
+	// 读取图片 → 元信息 + base64。模型为视觉模态时可直接理解；否则结合 image_analyze/image_ocr。
+	r.Register(&Tool{
+		Name: "read_image",
+		UsageGuide: "读取图片文件，返回宽高/格式元信息 + base64 内容。视觉模态的模型可直接理解图片内容；" +
+			"否则配合 image_analyze（颜色/色块分析）、image_ocr（文字识别）使用。支持 PNG/JPEG/GIF（≤2MB）。",
+		Description: "读取图片（PNG/JPEG/GIF）返回 { path, width, height, mediaType, bytes(base64) }。" +
+			"对齐 harness tool-fs read_image；gou-ide 无 attachment 服务，base64 内联返回。图片 >2MB 或非支持格式明确报错。",
+		Parameters: objSchema(props{"file_path": strProp("图片路径（工作区内）")}, "file_path"),
+		ReadOnly:   true,
+		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			p, err := resolvePath(root, argStr(args, "file_path"))
+			if err != nil {
+				return "", err
+			}
+			data, err := os.ReadFile(p)
+			if err != nil {
+				return "", err
+			}
+			const maxImageBytes = 2 << 20
+			if len(data) > maxImageBytes {
+				return "", fmt.Errorf("图片过大（%d 字节 > %d），请压缩后重试或改用 image_analyze/image_ocr", len(data), maxImageBytes)
+			}
+			mime := ""
+			switch {
+			case len(data) >= 8 && string(data[:8]) == "\x89PNG\r\n\x1a\n":
+				mime = "image/png"
+			case len(data) >= 3 && data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF:
+				mime = "image/jpeg"
+			case len(data) >= 6 && (string(data[:6]) == "GIF87a" || string(data[:6]) == "GIF89a"):
+				mime = "image/gif"
+			default:
+				return "", fmt.Errorf("不支持的图片格式（仅 PNG/JPEG/GIF；WebP 需要 x/image 依赖）")
+			}
+			img, _, err := image.Decode(bytes.NewReader(data))
+			if err != nil {
+				return "", fmt.Errorf("图片解码失败：%v", err)
+			}
+			b := img.Bounds()
+			return fmt.Sprintf("image: %s\n- path: %s\n- width: %d\n- height: %d\n- mediaType: %s\n- bytes(base64): %s",
+				filepath.Base(p), p, b.Dx(), b.Dy(), mime, base64.StdEncoding.EncodeToString(data)), nil
+		},
+	})
+
 	// ── image_analyze ──
 	r.Register(&Tool{
 		Name: "image_analyze",

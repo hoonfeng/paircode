@@ -118,6 +118,13 @@ type PromptSection struct {
 	Text  string
 }
 
+// PromptVariable 提示词变量（对齐 harness ctx.systemPrompt.variable）：
+// 段文本中 {{name}} 引用，组装时求值；Provider 返回 "" 表示本次无值（替换为空）。
+type PromptVariable struct {
+	Name     string
+	Provider func() string
+}
+
 // ─── Plugin ───────────────────────────────────────────────
 
 // Plugin 对齐 Cordis 插件形态：{ name, apply(ctx) }。
@@ -267,6 +274,14 @@ func (c *PluginContext) AddSystemPromptSection(s *PromptSection) {
 	c.host.addPluginSection(c.plugin, s)
 }
 
+// AddSystemPromptVariable 注册提示词变量（ctx.systemPrompt.variable；{{name}} 组装时求值）。
+func (c *PluginContext) AddSystemPromptVariable(v *PromptVariable) {
+	if v == nil || strings.TrimSpace(v.Name) == "" {
+		return
+	}
+	c.host.addPluginVariable(c.plugin, v)
+}
+
 // cleanup 执行本插件的全部清理回调（Unload 时由 PluginHost 调用）。
 func (c *PluginContext) cleanup() {
 	for _, l := range c.listeners {
@@ -341,6 +356,7 @@ type PluginHost struct {
 	// 插件贡献回收表
 	pluginTools    map[string][]string
 	pluginSections map[string][]*PromptSection
+	pluginVars     map[string][]*PromptVariable
 	contexts       map[string]*PluginContext // 每插件 apply 时的上下文（Unload 时 cleanup）
 
 	// 工具名 → 归属插件（同名冲突检测：插件不能静默覆盖宿主/他人工具）
@@ -370,6 +386,7 @@ func NewPluginHost(registry *Registry, store ConversationStore, root string) *Pl
 		defs:           map[string]*jsPluginDef{},
 		pluginTools:    map[string][]string{},
 		pluginSections: map[string][]*PromptSection{},
+		pluginVars:     map[string][]*PromptVariable{},
 		toolOwner:      map[string]string{},
 		templates:      map[string]*ToolsetTemplate{},
 	}
@@ -673,6 +690,7 @@ func (h *PluginHost) Unload(name string) error {
 	}
 	delete(h.pluginTools, name)
 	delete(h.pluginSections, name)
+	delete(h.pluginVars, name)
 	pc := h.contexts[name]
 	delete(h.contexts, name)
 	h.mu.Unlock()
@@ -817,6 +835,23 @@ func (h *PluginHost) Sections() []*PromptSection {
 		return all[i].Name < all[j].Name
 	})
 	return all
+}
+
+// Variables 全部插件注册的提示词变量（组装时求值；对齐 harness systemPrompt.variable）。
+func (h *PluginHost) Variables() []*PromptVariable {
+	h.mu.RLock()
+	var all []*PromptVariable
+	for _, vs := range h.pluginVars {
+		all = append(all, vs...)
+	}
+	h.mu.RUnlock()
+	return all
+}
+
+func (h *PluginHost) addPluginVariable(plugin string, v *PromptVariable) {
+	h.mu.Lock()
+	h.pluginVars[plugin] = append(h.pluginVars[plugin], v)
+	h.mu.Unlock()
 }
 
 func (h *PluginHost) addPluginTool(plugin, tool string) {

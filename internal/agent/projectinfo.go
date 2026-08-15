@@ -83,16 +83,20 @@ func firstHeading(md, fallback string) string {
 }
 
 // scanInfoEntries 递归扫描知识库目录（.md），返回各条目（路径/标题/分级/正文）。
-// 附加源：工作区 .agents/notes/ 参考决策树存在时并入（路径前缀 notes/，只读兼容模型幻觉路径）。
+// 附加源：工作区 .agents/notes/ 参考决策树存在时并入（路径前缀 notes/，兼容模型幻觉路径）。
+// skip 为非 nil 时对每个候选条目调用：返回 true 表示跳过（去重：notes/ 已镜像到树的条目不重复列）。
 func scanInfoEntries(dir string) []infoEntry {
 	var out []infoEntry
-	scanDir := func(base, prefix string) {
+	scanDir := func(base, prefix string, skip func(string) bool) {
 		filepath.WalkDir(base, func(p string, d fs.DirEntry, err error) error {
 			if err != nil || d.IsDir() || !strings.HasSuffix(p, ".md") {
 				return nil
 			}
 			rel, _ := filepath.Rel(base, p)
 			rel = filepath.ToSlash(strings.TrimSuffix(rel, ".md"))
+			if skip != nil && skip(rel) {
+				return nil
+			}
 			if prefix != "" {
 				rel = prefix + "/" + rel
 			}
@@ -101,14 +105,54 @@ func scanInfoEntries(dir string) []infoEntry {
 			return nil
 		})
 	}
-	scanDir(dir, "")
+	scanDir(dir, "", nil)
 	rootDir := filepath.Dir(filepath.Dir(dir)) // .pair/project-info → 项目根
 	notes := agentsNotesDir(rootDir)
 	if notes != dir {
-		scanDir(notes, "notes")
+		scanDir(notes, "notes", func(nrel string) bool {
+			br, ok := notesToBranchRel(nrel)
+			if !ok {
+				return false
+			}
+			_, err := os.Stat(infoFilePath(dir, br)) // 树中已有镜像副本 → 跳过，避免重复
+			return err == nil
+		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
 	return out
+}
+
+// notesToBranchRel 把参考项目决策树路径（.agents/notes/ 相对路径）映射到知识库树分支路径。
+// 模型后训练含参考项目数据会幻觉 notes 路径（implemented/architecture、implemented/feature、
+// implemented/process、decision…）；project_info_write 写入 notes/ 前缀路径时自动归入树分支，
+// 保证知识库仍是完整树。输入可带 notes/ 前缀（工具 path 参数）或纯相对（扫描去重用）。
+// 映射：implemented/architecture→架构、implemented/feature→实现、implemented/decision→设计思想、
+// decision→设计思想、其余 implemented/*→关键点、其余→实现；取末段为文件名。
+func notesToBranchRel(n string) (string, bool) {
+	n = strings.TrimPrefix(strings.TrimPrefix(n, "notes/"), "/")
+	if n == "" {
+		return "", false
+	}
+	segs := strings.Split(n, "/")
+	leaf := segs[len(segs)-1]
+	var branch string
+	switch {
+	case len(segs) >= 2 && segs[0] == "implemented" && segs[1] == "architecture":
+		branch = "架构"
+	case len(segs) >= 2 && segs[0] == "implemented" && (segs[1] == "decision" || segs[1] == "decisions"):
+		branch = "设计思想"
+	case len(segs) >= 2 && segs[0] == "implemented" && segs[1] == "feature":
+		branch = "实现"
+	case len(segs) >= 2 && segs[0] == "implemented":
+		branch = "关键点" // process / 其他实施记录 → 修复记录
+	case segs[0] == "decision" || segs[0] == "decisions":
+		branch = "设计思想"
+	case len(segs) >= 2 && segs[0] == "inbox":
+		branch = "实现"
+	default:
+		branch = "实现"
+	}
+	return branch + "/" + leaf, true
 }
 
 // infoTree 构建知识库条目树（分支=目录，叶子=条目），返回缩进树文本。
@@ -213,9 +257,9 @@ func registerProjectInfoTools(r *Registry, root string) {
 
 	r.Register(&Tool{
 		Name: "project_info_write",
-		UsageGuide: "写入/更新项目知识库条目，跨会话复用。★知识库是树：顶层分支 = 目标/架构/实现/关键点/设计思想（根为 概览）——路径带分支前缀（如 架构/模块-agent / 设计思想/决策-渲染架构）。读完关键文件后立即写入，积累项目的结构化理解。比记在脑子里可靠（持久化+跨会话可见）。多项目工作区可用 project 参数指定目标项目。",
+		UsageGuide: "写入/更新项目知识库条目，跨会话复用。★知识库是树：顶层分支 = 目标/架构/实现/关键点/设计思想（根为 概览）——路径带分支前缀（如 架构/模块-agent / 设计思想/决策-渲染架构）。也可用参考项目风格路径 notes/implemented/architecture/x（自动归入树分支 架构/x 并镜像 .agents/notes/）。读完关键文件后立即写入，积累项目的结构化理解。比记在脑子里可靠（持久化+跨会话可见）。多项目工作区可用 project 参数指定目标项目。",
 		Description: "写入/更新项目知识库的一篇（.pair/project-info/<路径>.md）——记录项目架构/模块职责/数据流/设计决策等结构化理解，" +
-			"跨会话复用、你和用户都能看。★树形路径：顶层分支 目标/架构/实现/关键点/设计思想，根条目用 概览（如 架构/模块-agent / 设计思想/决策-渲染架构）。",
+			"跨会话复用、你和用户都能看。★树形路径：顶层分支 目标/架构/实现/关键点/设计思想，根条目用 概览（如 架构/模块-agent / 设计思想/决策-渲染架构）；兼容参考项目 notes/ 前缀路径（自动映射分支+镜像 .agents/notes/）。",
 		Parameters: objSchema(props{
 			"path":    strProp("条目路径（中文，带顶层分支前缀：目标/架构/实现/关键点/设计思想，如 架构/模块-agent），不含 .md；用 / 嵌套为细节篇"),
 			"content": strProp("Markdown 正文（首行用 # 标题）"),
@@ -230,7 +274,17 @@ func registerProjectInfoTools(r *Registry, root string) {
 			if rel == "" {
 				return "", fmt.Errorf("path 不能为空")
 			}
-			fp := infoFilePath(dir, rel)
+			// ★notes/ 前缀兼容：模型后训练会幻觉 .agents/notes/implemented/… 路径，
+			// 写入时自动归入树分支（如 notes/implemented/architecture/x → 架构/x），
+			// 并镜像一份到 .agents/notes/ 原路径（参考工具链/read 可读到）。
+			branchRel, mirrorRel := rel, ""
+			if strings.HasPrefix(rel, "notes/") {
+				if br, ok := notesToBranchRel(rel); ok {
+					branchRel = br
+				}
+				mirrorRel = strings.TrimPrefix(rel, "notes/")
+			}
+			fp := infoFilePath(dir, branchRel)
 			if err := os.MkdirAll(filepath.Dir(fp), 0o755); err != nil {
 				return "", err
 			}
@@ -238,18 +292,31 @@ func registerProjectInfoTools(r *Registry, root string) {
 			if err := os.WriteFile(fp, []byte(argStr(args, "content")), 0o644); err != nil {
 				return "", err
 			}
-			head := rel
-			if i := strings.IndexByte(rel, '/'); i > 0 {
-				head = rel[:i]
+			if mirrorRel != "" { // 镜像：.agents/notes/<原相对路径>.md
+				nfp := infoFilePath(agentsNotesDir(filepath.Dir(filepath.Dir(dir))), mirrorRel)
+				if err := os.MkdirAll(filepath.Dir(nfp), 0o755); err != nil {
+					return "", err
+				}
+				if err := os.WriteFile(nfp, []byte(argStr(args, "content")), 0o644); err != nil {
+					return "", err
+				}
+			}
+			head := branchRel
+			if i := strings.IndexByte(head, '/'); i > 0 {
+				head = head[:i]
 			}
 			hint := ""
-			if head != "概览" && !isInfoBranch(head) {
-				hint = "（提示：知识库是树，建议用顶层分支 目标/架构/实现/关键点/设计思想 开头，如 架构/" + rel + "）"
+			if !strings.HasPrefix(rel, "notes/") && head != "概览" && !isInfoBranch(head) {
+				hint = "（提示：知识库是树，建议用顶层分支 目标/架构/实现/关键点/设计思想 开头，如 架构/" + branchRel + "）"
 			}
+			verb := "已写入知识库"
 			if statErr == nil {
-				return "已更新知识库：" + rel + hint, nil
+				verb = "已更新知识库"
 			}
-			return "已写入知识库：" + rel + hint, nil
+			if mirrorRel != "" {
+				return verb + "：" + branchRel + "（notes/ 参考路径已镜像 .agents/notes/" + mirrorRel + "）", nil
+			}
+			return verb + "：" + branchRel + hint, nil
 		},
 	})
 

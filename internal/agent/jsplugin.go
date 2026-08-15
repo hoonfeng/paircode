@@ -381,6 +381,37 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 		pc.AddSystemPromptSection(sec)
 		return goja.Undefined()
 	})
+	// ctx.systemPrompt.variable({name, provider})：注册 {{name}} 提示词变量（组装时求值）
+	sysObj.Set("variable", func(call goja.FunctionCall) goja.Value {
+		arg := call.Argument(0)
+		if arg == nil || goja.IsUndefined(arg) || goja.IsNull(arg) {
+			panic(vm.NewTypeError("ctx.systemPrompt.variable: 需要一个对象 {name, provider}"))
+		}
+		obj := arg.ToObject(vm)
+		name := obj.Get("name").String()
+		if name == "" {
+			panic(vm.NewTypeError("ctx.systemPrompt.variable: name 不能为空"))
+		}
+		provFn, ok := goja.AssertFunction(obj.Get("provider"))
+		if !ok {
+			panic(vm.NewTypeError("ctx.systemPrompt.variable: provider 必须是函数"))
+		}
+		pc.AddSystemPromptVariable(&PromptVariable{
+			Name: name,
+			Provider: func() string {
+				defer func() {
+					if r := recover(); r != nil { // JS provider 抛错 → 本次无值
+					}
+				}()
+				v, err := provFn(goja.Undefined())
+				if err != nil || v == nil {
+					return ""
+				}
+				return v.String()
+			},
+		})
+		return goja.Undefined()
+	})
 	ctxObj.Set("systemPrompt", sysObj)
 
 	// ctx.toolset.registerTemplate({id, title, match?, generate?})：注册工具集构建

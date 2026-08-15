@@ -29,12 +29,15 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
+
+	"wb-ui/goja"
 )
 
 // RegisterHarnessTools 注册 deepseek-harness 命名的核心工具集。
@@ -357,15 +360,18 @@ func displayPath(root, p string) string {
 
 // registerRunCode 注册 run_code 工具：执行一段代码（对齐 harness Code Mode）。
 // Go 侧简化版：把 code 写入临时文件，按语言执行并返回 stdout/stderr。
-// 不嵌套工具调用（harness 的嵌套调度在自举阶段再补）。
+// ★node 语言含 tools. 调用时走 goja 宿主内嵌套工具调度（见 runCodeNested）。
 func registerRunCode(r *Registry, root string) {
 	r.Register(&Tool{
 		Name: "run_code",
 		Description: "执行一段代码并返回输出（对齐 deepseek-harness run_code / Code Mode）。" +
 			"参数：code（必填，要执行的程序体）、language（可选，auto/go/python/node，默认 auto 按内容探测）、" +
-			"description（可选，简短说明）。仅返回程序的 stdout/stderr 与退出状态。",
+			"description（可选，简短说明）。仅返回程序的 stdout/stderr 与退出状态。" +
+			"★嵌套工具调度：language=node 且代码内用 tools.xxx(args) 调用已注册工具（如 tools.read({path:'a.go'})），" +
+			"在宿主内执行并逐条记录工具调用结果（对齐 Code Mode 嵌套调度）；不写 tools. 则走外部 node 进程。",
 		UsageGuide: "harness 标准代码执行工具：快速验证算法/处理数据/调用本地库，不用写临时文件。" +
-			"与 bash 的区别：run_code 直接执行代码片段（自动建临时文件），bash 执行 shell 命令。",
+			"与 bash 的区别：run_code 直接执行代码片段（自动建临时文件），bash 执行 shell 命令。" +
+			"node 语言可在代码里 tools.read/tools.grep 等嵌套调用注册表工具，批量处理文件再汇总输出。",
 		Category: "执行",
 		Parameters: objSchema(props{
 			"code":        strProp("要执行的代码（必填）"),
@@ -380,6 +386,11 @@ func registerRunCode(r *Registry, root string) {
 			lang := argStr(args, "language")
 			if lang == "" || lang == "auto" {
 				lang = detectCodeLang(code)
+			}
+			// ★嵌套工具调度（对齐 harness Code Mode）：JS 代码内可 `tools.xxx(args)`
+			// 调用注册表工具，goja 宿主内执行；每个子调度记录日志，仅精选结果返回。
+			if lang == "node" && strings.Contains(code, "tools.") {
+				return runCodeNested(ctx, r, code)
 			}
 			return runCodeSnippet(ctx, root, lang, code)
 		},
@@ -402,6 +413,95 @@ func detectCodeLang(code string) string {
 	default:
 		return "go" // 默认 Go（项目主语言，自举迭代最常用）
 	}
+}
+
+// runCodeNested 嵌套工具调度：JS 代码在 goja 宿主内执行，暴露 tools 命名空间
+// （每个已注册工具 → Registry.Execute），对齐 harness Code Mode 的嵌套调度：
+// 「程序调用注册表工具；每个子调度记录日志，仅外层精选结果进入模型历史」。
+// console.log 捕获为程序输出；tools.xxx 调用逐条记录（结果截断，防刷屏）。
+// run_code 自身不绑定（防无限递归）。
+func runCodeNested(ctx context.Context, r *Registry, code string) (string, error) {
+	vm := goja.New()
+	var logBuf, callBuf strings.Builder
+
+	console := vm.NewObject()
+	console.Set("log", func(call goja.FunctionCall) goja.Value {
+		parts := make([]string, 0, len(call.Arguments))
+		for _, a := range call.Arguments {
+			parts = append(parts, fmt.Sprintf("%v", a.Export()))
+		}
+		logBuf.WriteString(strings.Join(parts, " ") + "\n")
+		return goja.Undefined()
+	})
+	console.Set("error", func(call goja.FunctionCall) goja.Value {
+		parts := make([]string, 0, len(call.Arguments))
+		for _, a := range call.Arguments {
+			parts = append(parts, fmt.Sprintf("%v", a.Export()))
+		}
+		logBuf.WriteString("error: " + strings.Join(parts, " ") + "\n")
+		return goja.Undefined()
+	})
+	vm.Set("console", console)
+
+	tools := vm.NewObject()
+	for _, name := range r.Names() {
+		if name == "run_code" { // 防递归
+			continue
+		}
+		name := name
+		tools.Set(name, func(call goja.FunctionCall) goja.Value {
+			var argsJSON string
+			switch len(call.Arguments) {
+			case 0:
+				argsJSON = "{}"
+			case 1:
+				data, err := json.Marshal(call.Arguments[0].Export())
+				if err != nil {
+					callBuf.WriteString(fmt.Sprintf("tools.%s => 参数序列化失败: %v\n", name, err))
+					return vm.ToValue("")
+				}
+				argsJSON = string(data)
+			default:
+				var arr []any
+				for _, a := range call.Arguments {
+					arr = append(arr, a.Export())
+				}
+				data, _ := json.Marshal(arr)
+				argsJSON = string(data)
+			}
+			res, err := r.Execute(ctx, name, argsJSON)
+			if err != nil {
+				callBuf.WriteString(fmt.Sprintf("tools.%s(%s) => 错误: %v\n", name, argsJSON, err))
+				return vm.ToValue("")
+			}
+			callBuf.WriteString(fmt.Sprintf("tools.%s(%s) => %s\n", name, argsJSON, capOutput(res, 500)))
+			return vm.ToValue(res)
+		})
+	}
+	vm.Set("tools", tools)
+
+	runErr := runJSWithTimeout(vm, 30*time.Second, func() error {
+		_, err := vm.RunString(code)
+		return err
+	})
+
+	var b strings.Builder
+	if callBuf.Len() > 0 {
+		b.WriteString("[嵌套工具调用]\n" + callBuf.String())
+	}
+	if logBuf.Len() > 0 {
+		b.WriteString("[程序输出]\n" + logBuf.String())
+	}
+	if runErr != nil {
+		if callBuf.Len() > 0 || logBuf.Len() > 0 {
+			b.WriteString("[执行错误] ")
+		}
+		b.WriteString(runErr.Error() + "\n")
+	}
+	if b.Len() == 0 {
+		return "（程序无输出）", nil
+	}
+	return capOutput(b.String(), 16000), nil
 }
 
 // runCodeSnippet 执行代码片段：写临时文件 → 运行 → 清理。

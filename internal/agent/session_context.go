@@ -584,6 +584,61 @@ func extractPathsFromText(text string) []string {
 	return paths
 }
 
+// hasCJK 判断字符串是否含中文字符（中文自然语言短语不是文件路径）。
+func hasCJK(s string) bool {
+	for _, r := range s {
+		if r >= '\u4e00' && r <= '\u9fff' {
+			return true
+		}
+	}
+	return false
+}
+
+// isTechnicalPhrase 判断是否为技术名词复合短语（≥2 段纯字母数字，如 HTML/CSS/JS、
+// Proxy/Generator、from/to、WebCore/WebKit）——真实文件引用末段必带扩展名或符号，
+// 纯字母数字 2 段以上多为文档列举的技术栈/术语，跳过防误报（漏报优于误报）。
+func isTechnicalPhrase(s string) bool {
+	if !strings.Contains(s, "/") {
+		return false
+	}
+	segs := strings.Split(s, "/")
+	if len(segs) < 2 {
+		return false
+	}
+	for _, seg := range segs {
+		if seg == "" {
+			return false
+		}
+		for _, r := range seg {
+			if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9') {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// isAPIPhrase 判断是否为 API/对象名短语（含 . 但末段无代码扩展名）：
+// EventTarget.AddEventListener/DispatchEvent、.pair/project-info 等。
+// 文件级检测要求末段带代码扩展名（page/frame.go 保留、EventTarget… 跳过）。
+func isAPIPhrase(s string) bool {
+	if !strings.Contains(s, ".") {
+		return false
+	}
+	segs := strings.Split(s, "/")
+	last := segs[len(segs)-1]
+	for _, ext := range codeFileExts {
+		if strings.HasSuffix(strings.ToLower(last), ext) {
+			return false // 末段带扩展名 → 真文件引用
+		}
+	}
+	return true
+}
+
+// codeFileExts 代码文件扩展名（isFilePathLike 同源，避免重复声明）。
+var codeFileExts = []string{".go", ".ts", ".js", ".vue", ".py", ".rs", ".java", ".cpp", ".c", ".h",
+	".md", ".json", ".yaml", ".yml", ".toml", ".xml", ".html", ".css", ".scss", ".sql"}
+
 // isFilePathLike 判断字符串是否像文件路径（含代码文件扩展名或路径分隔符）。
 func isFilePathLike(s string) bool {
 	if len(s) < 3 || len(s) > 200 {
@@ -775,14 +830,19 @@ func buildKBStaleness(roots []string) string {
 }
 
 // scanStaleRefs 扫描文本中引用的文件/目录路径，返回不存在的引用。
-// 跳过：裸文件名（无目录分隔符，可能在任意子目录）、已知其他项目的路径前缀。
+// 跳过：裸文件名（无目录分隔符，可能在任意子目录）、已知其他项目的路径前缀、
+// 自然语言/技术名词短语（含中文、≥3 段纯字母数字复合如 HTML/CSS/JS、glob 通配符）。
 func scanStaleRefs(text, workspaceRoot string) []string {
 	var refs []string
 	seen := make(map[string]bool)
 	lines := strings.Split(text, "\n")
 	for _, line := range lines {
 		parts := strings.FieldsFunc(line, func(r rune) bool {
-			return r == ' ' || r == '`' || r == '"' || r == '\'' || r == '[' || r == ']' || r == '(' || r == ')' || r == ',' || r == '*'
+			// ASCII 空白/引号/括号/逗号/星号 + 中文标点（防止「page/frame.go（不存在）」粘连）
+			return r == ' ' || r == '`' || r == '"' || r == '\'' || r == '[' || r == ']' ||
+				r == '(' || r == ')' || r == ',' || r == '*' ||
+				r == '\u3000' || r == '\uff08' || r == '\uff09' || r == '\u3001' ||
+				r == '\uff0c' || r == '\uff1a' || r == '\u3010' || r == '\u3011'
 		})
 		for _, part := range parts {
 			part = strings.Trim(part, "`\"'[](),*")
@@ -793,16 +853,34 @@ func scanStaleRefs(text, workspaceRoot string) []string {
 			if !strings.Contains(part, "/") && !strings.Contains(part, "\\") {
 				continue
 			}
+			// 自然语言/技术名词短语不是文件路径（防误报）：
+			//   - 含中文：知识库中文文案中的「项目目标/愿景/里程碑」「架构/模块-x」等
+			//   - glob 通配（* ?）：模式不是具体路径
+			//   - 尾斜杠：目录引用痕迹（loader/、editor/、cache/）——目录级引用误报率
+			//     远高于价值（术语常带尾斜杠），放弃目录检测、只保留文件级检测
+			//   - ≥2 段纯字母数字复合：HTML/CSS/JS、Proxy/Generator、from/to、WebCore/WebKit
+			//   - 含 . 但末段无代码扩展名：API 名（EventTarget.AddEventListener/DispatchEvent、
+			//     .pair/project-info 目录）——文件级检测要求末段带扩展名
+			if hasCJK(part) || strings.ContainsAny(part, "*?") ||
+				strings.HasSuffix(part, "/") || strings.HasSuffix(part, "\\") ||
+				isTechnicalPhrase(part) || isAPIPhrase(part) ||
+				strings.HasSuffix(strings.ToLower(part), ".h") { // C/C++ 头文件：Go 工作区不可能有，必为对标文档参考
+				continue
+			}
 			// 跳过已知属于 wb-ui 等外部项目的路径
 			if strings.HasPrefix(part, "jsc/") || strings.HasPrefix(part, "wb-ui/") ||
 				strings.HasPrefix(part, "skia/") || strings.HasPrefix(part, "goui/") {
 				continue
 			}
-			// 跳过已明确移除的旧文件/目录
+			// 跳过已明确移除的旧文件/目录 + 外部参考项目路径
+			// （loader/cache/、platform/network/ 等是 WebKit C++ 参考架构路径，不是本工作区文件）
 			skipPrefixes := []string{
 				"cmd/companion/webui_desktop", "cmd/companion/bridge/",
 				"webui_desktop.go", "webui_webonly.go", "conversations.js",
 				"build.sh", "pair/conversations", "pair/memory_index",
+				"loader/cache", "loader/", "cache/",
+				"platform/network", "platform/graphics", "platform/text",
+				"WebCore/", "WebKit/Source",
 			}
 			skip := false
 			for _, sp := range skipPrefixes {

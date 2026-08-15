@@ -2234,8 +2234,16 @@ func buildWebSystemDynamic() string {
 // buildWebSystemPrompt 构建完整系统提示词（桌面和 web 端共享）。
 // 使用唯一的 CACHE_BOUNDARY 分隔静态前缀与动态后缀，最大化 LLM KV Cache 命中率。
 // ★ 通过 ComposeSystemPrompt 统一添加 boundary，避免双边界/漏边界。
+// ★ 插件贡献的系统提示段/变量（对齐 harness system-prompt 注册中心）并入动态侧：
+//   插件段随加载/卸载变化，放 boundary 后避免破坏静态前缀 KV 缓存。
 func buildWebSystemPrompt() string {
-	return agent.ComposeSystemPrompt(buildSystemStaticPrefix(), buildWebSystemDynamic())
+	dynamic := buildWebSystemDynamic()
+	if ph := handler.GetPluginHost(); ph != nil {
+		if secs, err := agent.PluginPromptSections(ph); err == nil && secs != "" {
+			dynamic += "\n\n# 插件系统提示（由插件贡献，遵循各自段内规则）\n" + secs
+		}
+	}
+	return agent.ComposeSystemPrompt(buildSystemStaticPrefix(), dynamic)
 }
 
 // buildWebProvider 构建 LLM Provider（桌面和 web 端共享）。
