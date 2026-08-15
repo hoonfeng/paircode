@@ -138,3 +138,82 @@ func TestPersonaSection(t *testing.T) {
 		t.Errorf("无 persona 贡献时应返回 nil")
 	}
 }
+
+// TestRulesSection 插件 rules 槽位（对齐 harness deployment:rules）：
+// ① RulesSection() 返回插件贡献的 rules 段；
+// ② PluginPromptSections 排除 rules 段（不重复注入动态侧）；
+// ③ DefaultSystemPromptWithOverrides 用插件 rules 替换默认规则段、身份/工作区保留；
+// ④ persona+rules 组合替换互不干扰；
+// ⑤ 全空时与默认提示逐字节一致。
+func TestRulesSection(t *testing.T) {
+	root := t.TempDir()
+	reg := NewRegistry()
+	RegisterDefaultTools(reg, root)
+	host := NewPluginHost(reg, nil, root)
+
+	// 插件贡献 rules 段 + persona 段 + 普通段
+	host.ctx.AddSystemPromptSection(&PromptSection{Name: RULES_SECTION, Order: 100, Text: "## 定制行为准则\n- 只改必要文件。\n- 改后必须 gofmt。"})
+	host.ctx.AddSystemPromptSection(&PromptSection{Name: PERSONA_SECTION, Order: 0, Text: "你是 Mini-Coder。"})
+	host.ctx.AddSystemPromptSection(&PromptSection{Name: "plugin-extra", Order: 300, Text: "额外：用中文回复。"})
+
+	// ① RulesSection 命中
+	rs := host.RulesSection()
+	if rs == nil {
+		t.Fatal("RulesSection() 应返回插件 rules 段")
+	}
+	if !strings.Contains(rs.Text, "定制行为准则") {
+		t.Errorf("rules 段内容不符：%q", rs.Text)
+	}
+
+	// ② 动态侧排除 persona+rules 段，普通段保留
+	dyn, err := PluginPromptSections(host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(dyn, "定制行为准则") || strings.Contains(dyn, "Mini-Coder") {
+		t.Errorf("PluginPromptSections 不应包含 persona/rules 槽位段（已静态替换）：%q", dyn)
+	}
+	if !strings.Contains(dyn, "用中文回复") {
+		t.Errorf("普通插件段应正常输出：%q", dyn)
+	}
+
+	// ③ rules 单独替换：身份/工作区保留，默认规则段被替换
+	only := DefaultSystemPromptWithOverrides([]string{root}, "", rs.Text)
+	if !strings.Contains(only, "Pair CodeAgent") {
+		t.Errorf("仅换 rules 时 persona 应保留：%q", only)
+	}
+	if !strings.Contains(only, "# 工作区") {
+		t.Errorf("工作区段应保留：%q", only)
+	}
+	if !strings.Contains(only, "定制行为准则") {
+		t.Errorf("替换后应含插件 rules：%q", only)
+	}
+	if strings.Contains(only, "第一铁律") || strings.Contains(only, "# 核心规则") {
+		t.Errorf("默认规则段应被替换掉（不应含第一铁律/核心规则）：\n%s", only)
+	}
+
+	// ④ persona+rules 组合：身份与准则都被替换
+	both := DefaultSystemPromptWithOverrides([]string{root}, "你是 Full-Coder。", rs.Text)
+	if !strings.Contains(both, "Full-Coder") {
+		t.Errorf("组合时 persona 应替换：%q", both)
+	}
+	if !strings.Contains(both, "定制行为准则") {
+		t.Errorf("组合时 rules 应替换：%q", both)
+	}
+	if strings.Contains(both, "Pair CodeAgent") || strings.Contains(both, "第一铁律") {
+		t.Errorf("组合时默认 persona/规则段都应被替换：\n%s", both)
+	}
+	if !strings.Contains(both, "# 工作区") {
+		t.Errorf("组合时工作区段应保留：%q", both)
+	}
+
+	// ⑤ 全空 → 逐字节一致
+	if got := DefaultSystemPromptWithOverrides([]string{root}, "", ""); got != DefaultSystemPrompt([]string{root}) {
+		t.Errorf("全空 overrides 应与默认提示逐字节一致")
+	}
+	// 无 rules 贡献 → RulesSection nil
+	host2 := NewPluginHost(NewRegistry(), nil, root)
+	if host2.RulesSection() != nil {
+		t.Errorf("无 rules 贡献时应返回 nil")
+	}
+}

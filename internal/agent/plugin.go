@@ -1338,6 +1338,23 @@ func (h *PluginHost) PersonaSection() *PromptSection {
 	return nil
 }
 
+// RulesSection 插件贡献的行为准则槽位段（name==RULES_SECTION）。
+// 返回第一个命中者；无则返回 nil。
+// 组装系统提示时，若此段非空，用它**替换**默认规则段（# 工作区之后的
+// 第一铁律/核心规则/调研/搜索/错误恢复/修改纪律等全部行为准则段）。
+func (h *PluginHost) RulesSection() *PromptSection {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for _, secs := range h.pluginSections {
+		for _, s := range secs {
+			if s != nil && s.Name == RULES_SECTION && strings.TrimSpace(s.Text) != "" {
+				return s
+			}
+		}
+	}
+	return nil
+}
+
 // Variables 全部插件注册的提示词变量（组装时求值；对齐 harness systemPrompt.variable）。
 func (h *PluginHost) Variables() []*PromptVariable {
 	h.mu.RLock()

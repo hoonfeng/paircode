@@ -964,22 +964,55 @@ func DefaultSystemPrompt(roots []string) string {
 
 // DefaultSystemPromptWithPersona 同 DefaultSystemPrompt，但将默认 persona 段
 // 替换为插件贡献的 persona 文本（对齐 harness system-prompt 的 persona 槽位）。
-// persona 为空时等价 DefaultSystemPrompt。
-// 实现：默认 persona 段 = 完整默认提示中「# 工作区」之前的身份段
-// （"你是 Pair CodeAgent…" + AI 身份认知），插件 persona 整体替换该段，
-// 后续核心规则/工具引导等段保留（对齐 harness：persona 槽位只换身份，不删规则）。
+// persona 为空时等价 DefaultSystemPrompt。等价 DefaultSystemPromptWithOverrides(roots, persona, "")。
 func DefaultSystemPromptWithPersona(roots []string, persona string) string {
+	return DefaultSystemPromptWithOverrides(roots, persona, "")
+}
+
+// DefaultSystemPromptWithOverrides 同 DefaultSystemPrompt，但可替换两个槽位
+// （对齐 harness system-prompt 的可替换 section 语义）：
+//   - persona：默认 persona 段 = 完整默认提示中「# 工作区」之前的身份段
+//     （"你是 Pair CodeAgent…" + AI 身份认知），插件 persona 整体替换该段，
+//     后续核心规则/工具引导等段保留（persona 槽位只换身份，不删规则）。
+//   - rules：默认规则段 = 「# 工作区」之后的全部行为准则
+//     （第一铁律/核心规则/调研/搜索/错误恢复/修改纪律/工作方式/插件管理等），
+//     插件 rules 整体替换该段（rules 槽位换行为准则，身份/工作区保留）。
+// 两者独立可组合：persona 换人格、rules 换准则，工作区/静态前缀其余部分不变。
+// 任一为空则该槽位用默认值。全部为空时与 DefaultSystemPrompt 输出逐字节一致。
+func DefaultSystemPromptWithOverrides(roots []string, persona, rules string) string {
 	base := DefaultSystemPrompt(roots)
 	persona = strings.TrimSpace(persona)
-	if persona == "" {
+	rules = strings.TrimSpace(rules)
+	if persona == "" && rules == "" {
 		return base
 	}
-	// 找到 "# 工作区" 段起始，替换其之前的内容为插件 persona（保留换行衔接）
-	if idx := strings.Index(base, "\n# 工作区\n"); idx >= 0 {
-		return persona + base[idx:]
+	// 定位两个槽位边界：# 工作区 段前 = persona 段；之后 = rules 段。
+	wsIdx := strings.Index(base, "\n# 工作区\n")
+	if wsIdx < 0 {
+		// 异常情况：找不到工作区段，按原逻辑仅 persona 前置
+		if persona != "" {
+			return persona + "\n\n" + base
+		}
+		return base
 	}
-	// 找不到工作区段（异常情况）：persona 直接前置
-	return persona + "\n\n" + base
+	head := base[:wsIdx] // persona 段（默认）
+	tail := base[wsIdx:] // # 工作区 及之后的 rules 段（默认）
+	if persona != "" {
+		head = persona
+	}
+	if rules != "" {
+		// 找到工作区段内的规则起点（"# 工作区\n...\n\n" 之后的第一个 ##/# 标题）
+		rulesStart := strings.Index(tail, "\n## ")
+		if rulesStart < 0 {
+			rulesStart = strings.Index(tail, "\n# ")
+		}
+		if rulesStart >= 0 {
+			tail = tail[:rulesStart] + "\n\n" + rules
+		} else {
+			tail = tail + "\n\n" + rules
+		}
+	}
+	return head + tail
 }
 
 // workspaceRoots 计算工作区根信息（精简版/完整版共用）。
