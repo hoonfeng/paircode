@@ -8,8 +8,8 @@ package agent
 // git_*/debug_*/binary_*/office 等 130+ 个）暂时从注册表移除。
 //
 // ★ 开关：环境变量 WB_FULL_TOOLS=1 恢复全量工具集（关闭过滤）。
-// ★ 幂等：可重复调用；必须在 LoadAllWorkspaceToolConfigs（.pair/tools.json）
-//   之后调用——先应用工作区开关，再整体移除 pair 独有工具。
+// ★ 幂等：可重复调用（工具开关现由工具集 toolset_edit 管理，无 .pair/tools.json
+//   依赖；历史注释中的 LoadAllWorkspaceToolConfigs 顺序约束已随旧机制删除）。
 
 import "os"
 

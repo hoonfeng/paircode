@@ -1,19 +1,18 @@
-// 工具配置共享 handler：/api/tools、/api/tools/save、/api/tools/review
+// 工具配置共享 handler：/api/tools（工具列表）、/api/tools/review（审核配置）。
 // web 端（cmd/companion）与桌面端（internal/desktopbridge）共用。
 // 工具注册表由各端构建 LoopOpts 时经 SetToolsRegistry 注入，
 // 避免两端各自维护 lastReg（此前 web 端独有、桌面端 404 → 工具配置弹窗
 // 显示「加载失败，请重试」）。
+// ★ 旧版 PUT /api/tools/save（工具开关写 .pair/tools.json）已随「工具集（插件化）
+// 手动管理」机制删除：工具启用/禁用由 toolset_edit（DisabledTools）管理。
 package handler
 
 import (
 	"encoding/json"
 	"net/http"
-	"os"
-	"path/filepath"
 	"sync"
 
 	"github.com/hoonfeng/paircode/internal/agent"
-	"github.com/hoonfeng/paircode/internal/agenttools"
 	"github.com/hoonfeng/paircode/internal/core"
 )
 
@@ -46,68 +45,6 @@ func HandleTools(w http.ResponseWriter, r *http.Request) {
 	}
 	metas := reg.AllToolMeta()
 	jsonResp(w, metas)
-}
-
-// HandleToolsSave PUT /api/tools/save：保存工具开关到 .pair/tools.json 并立即生效。
-func HandleToolsSave(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "PUT" {
-		jsonErr(w, "仅 PUT")
-		return
-	}
-	var req struct {
-		Tools map[string]bool `json:"tools"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonErr(w, "无效 JSON: "+err.Error())
-		return
-	}
-
-	root := core.Root()
-	if root == "" {
-		jsonErr(w, "未设置工作区")
-		return
-	}
-	cfgPath := filepath.Join(root, ".pair", "tools.json")
-
-	// 读取现有配置并合并：只更新 Tools，保留 reviewMode/reviewBlacklist/reviewWhitelist，
-	// 避免保存工具开关时把审核配置覆盖丢失。
-	cfg := agent.WorkspaceToolConfig{Tools: map[string]agent.ToolConfigItem{}}
-	if data, err := os.ReadFile(cfgPath); err == nil {
-		var existing agent.WorkspaceToolConfig
-		if err := json.Unmarshal(data, &existing); err == nil {
-			cfg = existing
-		}
-	}
-	if cfg.Tools == nil {
-		cfg.Tools = make(map[string]agent.ToolConfigItem, len(req.Tools))
-	}
-	for name, enabled := range req.Tools {
-		e := enabled
-		cfg.Tools[name] = agent.ToolConfigItem{Enabled: &e}
-	}
-
-	data, _ := json.MarshalIndent(cfg, "", "  ")
-	if err := os.WriteFile(cfgPath, data, 0644); err != nil {
-		jsonErr(w, "写入失败: "+err.Error())
-		return
-	}
-
-	// 立即应用到当前注册表
-	ToolsRegistryMu.RLock()
-	reg := ToolsRegistry
-	ToolsRegistryMu.RUnlock()
-	if reg == nil {
-		// 注册表尚未初始化（启动时 root 为空 / 从未 run 过）→ 重建参考注册表，
-		// 保证 GET /tools 有数据、保存的开关立即反映。
-		reg = agent.NewRegistry()
-		agent.RegisterDefaultTools(reg, root)
-		agent.RegisterCommitMessageTool(reg)
-		agenttools.RegisterManagementTools(reg, root)
-		SetToolsRegistry(reg)
-	}
-	agent.LoadAllWorkspaceToolConfigs(reg, root)
-
-	jsonResp(w, map[string]string{"status": "ok"})
 }
 
 // HandleReviewConfig GET/PUT /api/tools/review：工作区级审核配置（模式 + 黑白名单）。

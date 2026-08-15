@@ -72,7 +72,6 @@ func RegisterAll(r *Router) {
 
 	// 工具配置（启用开关 + 审核黑白名单）
 	r.Handle("GET", "/api/tools", HandleTools)
-	r.Handle("PUT", "/api/tools/save", HandleToolsSave)
 	r.Handle("GET", "/api/tools/review", HandleReviewConfig)
 	r.Handle("PUT", "/api/tools/review", HandleReviewConfig)
 

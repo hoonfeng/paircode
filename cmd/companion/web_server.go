@@ -170,8 +170,6 @@ func startWebUI(port int) {
 		agent.RegisterHarnessTools(initReg, root)
 		agent.RegisterCommitMessageTool(initReg)
 		agenttools.RegisterManagementTools(initReg, root)
-		// 自动初始化 .pair/tools.json（不存在则创建）；多项目配置一并应用
-		agent.LoadAllWorkspaceToolConfigs(initReg, root)
 		// 参考注册表也加载 Lua 自定义工具（多项目），保证 /api/tools 工具面板可见
 		reloadWebLuaTools(initReg, root)
 		// ★ harness 对齐：暂时移除 pair 独有工具（WB_FULL_TOOLS=1 恢复全量）
@@ -245,7 +243,6 @@ func startWebUI(port int) {
 	mux.HandleFunc("/api/mcp/list", ws.handleMCPList)
 	mux.HandleFunc("/api/mcp/save", ws.handleMCPSave)
 	mux.HandleFunc("/api/tools", handler.HandleTools)
-	mux.HandleFunc("/api/tools/save", handler.HandleToolsSave)
 	mux.HandleFunc("/api/tools/review", handler.HandleReviewConfig)
 	mux.HandleFunc("/api/skills/list", ws.handleSkillsList)
 	mux.HandleFunc("/api/skills/save", ws.handleSkillsSave)
@@ -2324,10 +2321,6 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 		}
 		agent.RegisterMCPServers(reg, agentCfgs)
 	}
-
-	// ★ 应用工作区工具配置（.pair/tools.json，多项目：每个项目自己的配置都生效）
-	// 必须在 if 块外无条件执行：即使 MCP 配置为空，工具开关/审核配置也要生效。
-	agent.LoadAllWorkspaceToolConfigs(reg, root)
 
 	reloadWebLuaTools(reg, root)
 	// ★ harness 对齐：暂时移除 pair 独有工具（WB_FULL_TOOLS=1 恢复全量）；
