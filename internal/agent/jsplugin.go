@@ -59,6 +59,36 @@ type jsPluginAdapter struct {
 
 	mu       sync.Mutex
 	handlers map[string]func(args any) (any, error) // harness.handle 注册的方法
+
+	timersMu sync.Mutex
+	timers   []func() // 活动 timer 的取消函数（Unload 时统一清理）
+}
+
+// withLock 在 VM 执行锁保护下运行 fn：timer 回调、事件回调、工具 execute
+// 等可能从其他 goroutine 进入 JS 的入口必须经此调用（goja 非并发安全，
+// 见 wb-ui/goja Runtime.Lock/Unlock）。
+func (p *jsPluginAdapter) withLock(fn func()) {
+	p.vm.Lock()
+	defer p.vm.Unlock()
+	fn()
+}
+
+// addTimer 登记一个 timer 取消函数（stopTimers 统一清理）。
+func (p *jsPluginAdapter) addTimer(cancel func()) {
+	p.timersMu.Lock()
+	defer p.timersMu.Unlock()
+	p.timers = append(p.timers, cancel)
+}
+
+// stopTimers 取消全部活动 timer（插件卸载时调用，防泄漏）。
+func (p *jsPluginAdapter) stopTimers() {
+	p.timersMu.Lock()
+	timers := p.timers
+	p.timers = nil
+	p.timersMu.Unlock()
+	for _, c := range timers {
+		c()
+	}
 }
 
 // Name 实现 Plugin。
@@ -70,6 +100,8 @@ func (p *jsPluginAdapter) Apply(pc *PluginContext) error {
 	if err != nil {
 		return err
 	}
+	// 插件卸载时清理活动 timer（防 goroutine/ticker 泄漏）
+	pc.Effect(func() { p.stopTimers() })
 	_, callErr := p.applyFn(goja.Undefined(), ctxObj)
 	if callErr != nil {
 		return fmt.Errorf("JS 插件 %s apply 执行失败: %v", p.def.name, jsErrorText(callErr))
@@ -121,7 +153,15 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 			panic(vm.NewTypeError("ctx.on: 第二参数必须是函数"))
 		}
 		cancel := pc.On(evt, func(payload any) {
-			_, _ = fn(goja.Undefined(), vm.ToValue(payload))
+			// 事件可能在任意 goroutine 触发 → 执行锁保护
+			p.withLock(func() {
+				defer func() {
+					if r := recover(); r != nil {
+						log.Printf("[js-plugin:%s] 事件 %s 回调异常: %v", p.def.id, evt, r)
+					}
+				}()
+				_, _ = fn(goja.Undefined(), vm.ToValue(payload))
+			})
 		})
 		_ = cancel
 		return goja.Undefined()
@@ -138,10 +178,75 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 		return goja.Undefined()
 	})
 
+	// ctx.timeout(fn, ms) / ctx.interval(fn, ms)：受控定时器（沙箱纪律：
+	// 不暴露全局 setTimeout，定时能力经 ctx 提供）。回调在 VM 执行锁保护下
+	// 运行（与主执行流互斥）。返回取消函数；插件卸载时统一清理。
+	// 回调抛错不崩 goroutine（recover 吞掉并 console.error）。
+	jsTimer := func(repeat bool) func(call goja.FunctionCall) goja.Value {
+		return func(call goja.FunctionCall) goja.Value {
+			fnVal := call.Argument(0)
+			fn, ok := goja.AssertFunction(fnVal)
+			if !ok {
+				panic(vm.NewTypeError("ctx.timeout/interval: 第一参数必须是函数"))
+			}
+			ms := call.Argument(1).ToInteger()
+			if ms < 0 {
+				ms = 0
+			}
+			d := time.Duration(ms) * time.Millisecond
+			fire := func() {
+				p.withLock(func() {
+					defer func() {
+						if r := recover(); r != nil {
+							log.Printf("[js-plugin:%s] timer 回调异常: %v", p.def.id, r)
+						}
+					}()
+					_, _ = fn(goja.Undefined())
+				})
+			}
+			var cancel func()
+			if repeat {
+				ticker := time.NewTicker(d)
+				stop := make(chan struct{})
+				done := make(chan struct{})
+				cancel = func() {
+					select {
+					case <-stop:
+					default:
+						close(stop)
+					}
+				}
+				p.addTimer(cancel)
+				go func() {
+					defer close(done)
+					for {
+						select {
+						case <-stop:
+							ticker.Stop()
+							return
+						case <-ticker.C:
+							fire()
+						}
+					}
+				}()
+			} else {
+				t := time.AfterFunc(d, fire)
+				cancel = func() { t.Stop() }
+				p.addTimer(cancel)
+			}
+			return vm.ToValue(func(call goja.FunctionCall) goja.Value {
+				cancel()
+				return goja.Undefined()
+			})
+		}
+	}
+	ctxObj.Set("timeout", jsTimer(false))
+	ctxObj.Set("interval", jsTimer(true))
+
 	// ctx.tools.register(toolDef)
 	toolsObj := vm.NewObject()
 	toolsObj.Set("register", func(call goja.FunctionCall) goja.Value {
-		tool, tErr := jsToolToGo(vm, call.Argument(0))
+		tool, tErr := jsToolToGo(vm, call.Argument(0), p.withLock)
 		if tErr != nil {
 			panic(vm.NewGoError(tErr))
 		}
@@ -355,13 +460,13 @@ func injectHarness(vm *goja.Runtime, adapter *jsPluginAdapter, pc *PluginContext
 	harnessObj := vm.NewObject()
 	harnessObj.Set("defineTool", func(call goja.FunctionCall) goja.Value {
 		// 预检工具定义可转换（不注册）；返回原对象
-		if _, err := jsToolToGo(vm, call.Argument(0)); err != nil {
+		if _, err := jsToolToGo(vm, call.Argument(0), adapter.withLock); err != nil {
 			panic(vm.NewGoError(err))
 		}
 		return call.Argument(0)
 	})
 	harnessObj.Set("registerTool", func(call goja.FunctionCall) goja.Value {
-		tool, err := jsToolToGo(vm, call.Argument(0))
+		tool, err := jsToolToGo(vm, call.Argument(0), adapter.withLock)
 		if err != nil {
 			panic(vm.NewGoError(err))
 		}
@@ -381,9 +486,19 @@ func injectHarness(vm *goja.Runtime, adapter *jsPluginAdapter, pc *PluginContext
 		}
 		adapter.mu.Lock()
 		adapter.handlers[method] = func(args any) (any, error) {
-			res, err := fn(goja.Undefined(), vm.ToValue(args))
-			if err != nil {
-				return nil, err
+			var res goja.Value
+			var hErr error
+			// Invoke 可能来自任意 goroutine → 执行锁保护
+			adapter.withLock(func() {
+				defer func() {
+					if r := recover(); r != nil {
+						hErr = fmt.Errorf("handler %s 异常: %v", method, r)
+					}
+				}()
+				res, hErr = fn(goja.Undefined(), vm.ToValue(args))
+			})
+			if hErr != nil {
+				return nil, hErr
 			}
 			return res.Export(), nil
 		}
@@ -398,7 +513,7 @@ func injectHarness(vm *goja.Runtime, adapter *jsPluginAdapter, pc *PluginContext
 
 // jsToolToGo 把 JS 工具定义对象转成 *Tool。
 // 支持 execute: (args) => result | Promise<result>（result 可为 {text} 或任意 JSON 值）。
-func jsToolToGo(vm *goja.Runtime, v goja.Value) (*Tool, error) {
+func jsToolToGo(vm *goja.Runtime, v goja.Value, lockFn func(func())) (*Tool, error) {
 	if v == nil || goja.IsUndefined(v) || goja.IsNull(v) {
 		return nil, fmt.Errorf("工具定义为空")
 	}
@@ -427,11 +542,22 @@ func jsToolToGo(vm *goja.Runtime, v goja.Value) (*Tool, error) {
 	}
 
 	handler := func(ctx context.Context, args map[string]any) (string, error) {
-		res, err := execFn(goja.Undefined(), vm.ToValue(args))
-		if err != nil {
-			return "", fmt.Errorf("JS 工具 %s 执行失败: %v", name.String(), jsErrorText(err))
+		var out string
+		var hErr error
+		run := func() {
+			res, err := execFn(goja.Undefined(), vm.ToValue(args))
+			if err != nil {
+				hErr = fmt.Errorf("JS 工具 %s 执行失败: %v", name.String(), jsErrorText(err))
+				return
+			}
+			out, hErr = jsResultToText(vm, res)
 		}
-		return jsResultToText(vm, res)
+		if lockFn != nil {
+			lockFn(run)
+		} else {
+			run()
+		}
+		return out, hErr
 	}
 
 	return &Tool{

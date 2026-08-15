@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // ─── PluginHost 基本 ───────────────────────────────────────
@@ -343,6 +344,147 @@ func TestTSCompileError(t *testing.T) {
 }
 
 // ─── 多文件 TS 插件（bundle）──────────────────────────────
+
+// ─── JS 插件 timer 服务（ctx.timeout/interval + 跨 goroutine 锁）─────────
+
+// TestJSTimerService ctx.timeout 一次性定时器：回调跨 goroutine 触发，
+// 经 VM 执行锁保护，Invoke 可读到回调后状态。
+func TestJSTimerService(t *testing.T) {
+	reg := NewRegistry()
+	host := NewPluginHost(reg, nil, `C:\ws`)
+	id, err := host.DefineJS(`let state = 'initial'
+return {
+  name: 'js-timer',
+  apply(ctx) {
+    harness.handle('getState', () => state)
+    ctx.timeout(() => { state = 'after-timer' }, 60)
+  }
+}`, "timer-demo")
+	if err != nil {
+		t.Fatalf("DefineJS: %v", err)
+	}
+	def, _ := host.GetJSDef(id)
+	if err := host.LoadJSDynamic(def); err != nil {
+		t.Fatal(err)
+	}
+	plug, ok := host.Get("js-timer")
+	if !ok {
+		t.Fatalf("js-timer 未注册")
+	}
+	adapter, ok := plug.(*jsPluginAdapter)
+	if !ok {
+		t.Fatalf("js-timer 应为 jsPluginAdapter")
+	}
+	// 初始状态
+	got, err := adapter.Invoke("getState", nil)
+	if err != nil || got != "initial" {
+		t.Fatalf("初始 state = %v, err=%v", got, err)
+	}
+	// 等待 timeout 触发（60ms + 缓冲）
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		got, err = adapter.Invoke("getState", nil)
+		if err == nil && got == "after-timer" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timeout 未触发: state=%v err=%v", got, err)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	// 卸载应无 panic（timer 清理）
+	if err := host.Unload("js-timer"); err != nil {
+		t.Fatalf("Unload: %v", err)
+	}
+}
+
+// TestJSIntervalAndCancel ctx.interval 周期定时器 + cancel 停止。
+func TestJSIntervalAndCancel(t *testing.T) {
+	reg := NewRegistry()
+	host := NewPluginHost(reg, nil, `C:\ws`)
+	id, err := host.DefineJS(`let n = 0
+return {
+  name: 'js-intv',
+  apply(ctx) {
+    const cancel = ctx.interval(() => { n++ }, 20)
+    harness.handle('count', () => n)
+    harness.handle('stop', () => { cancel(); return 'stopped' })
+  }
+}`, "interval-demo")
+	if err != nil {
+		t.Fatalf("DefineJS: %v", err)
+	}
+	def, _ := host.GetJSDef(id)
+	if err := host.LoadJSDynamic(def); err != nil {
+		t.Fatal(err)
+	}
+	plug, _ := host.Get("js-intv")
+	adapter, ok := plug.(*jsPluginAdapter)
+	if !ok {
+		t.Fatalf("js-intv 应为 jsPluginAdapter")
+	}
+
+	count := func() int {
+		v, err := adapter.Invoke("count", nil)
+		if err != nil {
+			return -1
+		}
+		switch n := v.(type) {
+		case float64:
+			return int(n)
+		case int64:
+			return int(n)
+		case int:
+			return n
+		}
+		return -2
+	}
+	// 等待计数增长
+	deadline := time.Now().Add(2 * time.Second)
+	for count() < 1 {
+		if time.Now().After(deadline) {
+			t.Fatalf("interval 未触发, count=%d", count())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	// 停止
+	if _, err := adapter.Invoke("stop", nil); err != nil {
+		t.Fatalf("stop: %v", err)
+	}
+	before := count()
+	time.Sleep(100 * time.Millisecond)
+	after := count()
+	if after != before {
+		t.Fatalf("cancel 后计数仍增长: before=%d after=%d", before, after)
+	}
+	_ = host.Unload("js-intv")
+}
+
+// TestJSTimerErrorIsolation timer 回调抛错不崩宿主（recover 吞掉）。
+func TestJSTimerErrorIsolation(t *testing.T) {
+	reg := NewRegistry()
+	host := NewPluginHost(reg, nil, `C:\ws`)
+	id, err := host.DefineJS(`return {
+  name: 'js-timer-err',
+  apply(ctx) {
+    ctx.timeout(() => { throw new Error('timer boom') }, 30)
+  }
+}`, "timer-err")
+	if err != nil {
+		t.Fatalf("DefineJS: %v", err)
+	}
+	def, _ := host.GetJSDef(id)
+	if err := host.LoadJSDynamic(def); err != nil {
+		t.Fatal(err)
+	}
+	// 等 timer 触发（抛错应被 recover）
+	time.Sleep(200 * time.Millisecond)
+	// 宿主仍可用：再装载一个工具类操作
+	if host.State("js-timer-err") != PluginRunning {
+		t.Fatalf("插件应仍 running")
+	}
+	_ = host.Unload("js-timer-err")
+}
 
 // TestTSMultiFilePlugin 验证多文件 TS 插件：相对 import（./util）内联打包、
 // 非相对包 import（@deepseek-ai/cordis）mock 成空模块、export default 导出插件。
