@@ -5,7 +5,9 @@
 //   client 半形态：(ui) => void
 //     ui.on(event, fn)            收 host → 浏览器事件（ui:/client: 前缀）
 //     ui.emit(event, payload)     发事件回 host（host: 前缀给 host 插件消费）
-//     ui.registerPanel({id,title,icon,render}) 注册自定义面板（渲染进插件面板 client 区）
+//     ui.invoke(plugin, method, args?)  远程调用 host 半注册方法（D11 invoke RPC）
+//     ui.reportFailure(phase, message)  client 半失败上报（render/guard/boot）
+//     ui.registerPanel({id,title,icon,render,props}) 注册自定义面板（渲染进插件面板 client 区）
 //     ui.http.get(path)/post(path, body)       受限后端 API 调用
 //     ui.log(...)                 日志（控制台）
 //
@@ -13,9 +15,11 @@
 //   host → 浏览器：EventBus 里 ui:/client: 前缀事件入 host 队列，本模块每 2s
 //                 轮询 /api/plugins/client-events 取增量，分发给各 client 半的 on 监听器。
 //   浏览器 → host：ui.emit 调 POST /api/plugins/event（host 插件 ctx.on('host:xxx') 消费）。
+//   invoke RPC：ui.invoke 调 POST /api/plugins/invoke（host 半 ctx.registerClientMethod 注册）。
 //
-// 面板渲染：client 半注册的面板显示在插件面板的「客户端面板」区；render(el) 在
-// 挂载时调用，el 为容器 DOM 元素（可自由操作 DOM）。
+// 面板渲染：client 半注册的面板显示在插件面板的「客户端面板」区；render(el, ui) 在
+// 挂载时调用，el 为容器 DOM 元素（可自由操作 DOM），ui 为当前 client 半的沙箱对象。
+// props 声明面板数据契约（轻量 Slot：{field: type}，宿主可注入外部数据）。
 // ═══════════════════════════════════════════════════════════════
 
 import api from './api.js'
@@ -77,6 +81,21 @@ function makeUI(inst) {
         console.warn('[plugin] emit 失败', event, e)
       }
     },
+    // D11 invoke RPC：远程调用 host 半注册的方法（ctx.registerClientMethod）。
+    // 返回 {ok, value} 或 {ok:false, error}；插件可再 await 值。
+    async invoke(plugin, method, args) {
+      const res = await api.pluginInvoke(plugin, method, args)
+      if (!res || !res.ok) {
+        throw new Error((res && res.error) || 'invoke 失败: ' + method)
+      }
+      return res.value
+    },
+    // D11 失败上报：client 半 render/guard/boot 失败 → 后端记诊断，Agent 经
+    // cordis_inspect 发现修复（不中断 host 半运行）。
+    reportFailure(phase, message) {
+      const ph = (phase === 'guard' || phase === 'boot') ? phase : 'render'
+      api.pluginClientFailure(inst.name, ph, String(message || 'unknown error')).catch(() => {})
+    },
     // 注册自定义面板（显示在插件面板 client 区）
     registerPanel(spec) {
       if (!spec || !spec.id || !spec.title) {
@@ -89,6 +108,8 @@ function makeUI(inst) {
         title: spec.title,
         icon: spec.icon || 'sparkles',
         render: typeof spec.render === 'function' ? spec.render : null,
+        // 轻量 Slot：props 声明面板数据契约（{field: type}），宿主/其他插件可注入
+        props: spec.props && typeof spec.props === 'object' ? { ...spec.props } : null,
         pluginName: inst.name,
       }
       if (existing >= 0) clientPanels[existing] = panel
@@ -137,13 +158,17 @@ export function loadClientHalf(source) {
     events: [],
     onHandlers: new Map(),
   }
+  // 缓存沙箱 ui（供面板渲染 render(el, ui) 取用）
+  inst.ui = makeUI(inst)
   try {
-    fn(makeUI(inst))
+    fn(inst.ui)
   } catch (e) {
     console.warn('[plugin] client 半执行错误', source.name, e)
     inst.status = 'error'
     inst.error = String(e && e.message || e)
     instances.push(inst)
+    // D11 失败上报：boot 阶段执行错误 → 后端记诊断（Agent inspect 修复）
+    api.pluginClientFailure(source.name, 'boot', inst.error).catch(() => {})
     emitPanelChanged()
     return inst
   }
@@ -279,6 +304,13 @@ export function stopPolling() {
 // getInstances 运行中的 client 半实例（供面板展示）。
 export function getInstances() {
   return instances.map(x => ({ name: x.name, defId: x.defId, source: x.source }))
+}
+
+// getUIFor 按插件名取 client 半的沙箱 ui 对象（面板渲染 render(el, ui) 用；
+// 未装载返回 undefined）。ui 含 on/emit/invoke/reportFailure/registerPanel/http/log。
+export function getUIFor(pluginName) {
+  const inst = instances.find(x => x.name === pluginName)
+  return inst ? inst.ui : undefined
 }
 
 export default {

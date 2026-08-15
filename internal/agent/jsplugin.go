@@ -410,6 +410,25 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 	})
 	ctxObj.Set("tools", toolsObj)
 
+	// ctx.registerClientMethod(method, fn)：host 半暴露方法给浏览器 client 半
+	// 远程调用（D11 invoke RPC；对齐 harness @Remote('invoke') 的方法注册面）。
+	// 与 harness.handle 共用存储，但语义显式面向 client 半；浏览器侧经
+	// ui.invoke(plugin, method, args) 调用。
+	ctxObj.Set("registerClientMethod", func(call goja.FunctionCall) goja.Value {
+		method := call.Argument(0).String()
+		if method == "" {
+			panic(vm.NewTypeError("ctx.registerClientMethod: 方法名不能为空"))
+		}
+		fnVal := call.Argument(1)
+		fn, ok := goja.AssertFunction(fnVal)
+		if !ok {
+			panic(vm.NewTypeError("ctx.registerClientMethod: 第二参数必须是函数"))
+		}
+		registerJSHandler(vm, p, method, fn)
+		p.def.addDiag(fmt.Sprintf("注册 client 方法 %s", method))
+		return goja.Undefined()
+	})
+
 	// ctx.systemPrompt.section({name, order, text})
 	sysObj := vm.NewObject()
 	sysObj.Set("section", func(call goja.FunctionCall) goja.Value {
@@ -1114,39 +1133,49 @@ func injectHarness(vm *goja.Runtime, adapter *jsPluginAdapter, pc *PluginContext
 	})
 	harnessObj.Set("handle", func(call goja.FunctionCall) goja.Value {
 		method := call.Argument(0).String()
+		if method == "" {
+			panic(vm.NewTypeError("harness.handle: 方法名不能为空"))
+		}
 		fnVal := call.Argument(1)
 		fn, ok := goja.AssertFunction(fnVal)
 		if !ok {
 			panic(vm.NewTypeError("harness.handle: 第二参数必须是函数"))
 		}
-		adapter.mu.Lock()
-		adapter.handlers[method] = func(args any) (any, error) {
-			var res goja.Value
-			var hErr error
-			// Invoke 可能来自任意 goroutine → 执行锁保护
-			adapter.withLock(func() {
-				if e := runJSWithTimeout(adapter.vm, jsHandlerTimeout, func() error {
-					r, err := fn(goja.Undefined(), vm.ToValue(args))
-					res = r
-					return err
-				}); e != nil {
-					if isJSTimeout(e) {
-						hErr = fmt.Errorf("handler %s 执行超时（疑似死循环，已强制中断）", method)
-					} else {
-						hErr = fmt.Errorf("handler %s 异常: %v", method, jsErrorText(e))
-					}
-				}
-			})
-			if hErr != nil {
-				return nil, hErr
-			}
-			return res.Export(), nil
-		}
-		adapter.mu.Unlock()
+		registerJSHandler(vm, adapter, method, fn)
 		return goja.Undefined()
 	})
 	vm.Set("harness", harnessObj)
 	return harnessObj
+}
+
+// registerJSHandler 把 JS 函数注册为 host 侧处理器（harness.handle /
+// ctx.registerClientMethod 共用存储）。浏览器 client 半可经 InvokeClientMethod
+// 远程调用（invoke RPC）；Agent 侧经 harness 调用。
+func registerJSHandler(vm *goja.Runtime, p *jsPluginAdapter, method string, fn goja.Callable) {
+	p.mu.Lock()
+	p.handlers[method] = func(args any) (any, error) {
+		var res goja.Value
+		var hErr error
+		// Invoke 可能来自任意 goroutine → 执行锁保护
+		p.withLock(func() {
+			if e := runJSWithTimeout(p.vm, jsHandlerTimeout, func() error {
+				r, err := fn(goja.Undefined(), vm.ToValue(args))
+				res = r
+				return err
+			}); e != nil {
+				if isJSTimeout(e) {
+					hErr = fmt.Errorf("handler %s 执行超时（疑似死循环，已强制中断）", method)
+				} else {
+					hErr = fmt.Errorf("handler %s 异常: %v", method, jsErrorText(e))
+				}
+			}
+		})
+		if hErr != nil {
+			return nil, hErr
+		}
+		return res.Export(), nil
+	}
+	p.mu.Unlock()
 }
 
 // ─── JS 工具定义 → Go Tool 桥 ─────────────────────────────

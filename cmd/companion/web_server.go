@@ -260,6 +260,8 @@ func startWebUI(port int) {
 	mux.HandleFunc("/api/plugins/action", handler.HandlePluginAction)
 	mux.HandleFunc("/api/plugins/define", handler.HandlePluginDefine)
 	mux.HandleFunc("/api/plugins/event", handler.HandlePluginEvent)
+	mux.HandleFunc("/api/plugins/invoke", handler.HandlePluginInvoke)
+	mux.HandleFunc("/api/plugins/client-failure", handler.HandlePluginClientFailure)
 	mux.HandleFunc("/api/plugins/client-events", handler.HandlePluginClientEvents)
 	mux.HandleFunc("/api/plugins/client-state", handler.HandlePluginClientState)
 	mux.HandleFunc("/api/toolsets", handler.HandleToolsetsList)

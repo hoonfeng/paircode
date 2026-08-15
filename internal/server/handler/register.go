@@ -105,6 +105,8 @@ func RegisterAll(r *Router) {
 	r.Handle("POST", "/api/plugins/action", HandlePluginAction)
 	r.Handle("POST", "/api/plugins/define", HandlePluginDefine)
 	r.Handle("POST", "/api/plugins/event", HandlePluginEvent)
+	r.Handle("POST", "/api/plugins/invoke", HandlePluginInvoke)
+	r.Handle("POST", "/api/plugins/client-failure", HandlePluginClientFailure)
 	r.Handle("GET", "/api/plugins/client-events", HandlePluginClientEvents)
 	r.Handle("POST", "/api/plugins/client-state", HandlePluginClientState)
 	r.Handle("GET", "/api/plugins/client-state", HandlePluginClientState)

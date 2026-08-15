@@ -282,6 +282,74 @@ func HandlePluginClientState(w http.ResponseWriter, r *http.Request) {
 	jsonErr(w, "仅 POST/GET")
 }
 
+// HandlePluginInvoke POST /api/plugins/invoke：浏览器 client 半远程调用 host 半
+// 注册的方法（D11 invoke RPC；对齐 harness @Remote('invoke')）。
+// body: { plugin, method, args }；返回 { ok, value? } 或 { ok:false, error }。
+func HandlePluginInvoke(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		jsonErr(w, "仅 POST")
+		return
+	}
+	ph, ok := getPluginHost()
+	if !ok {
+		jsonErr(w, "插件系统未初始化")
+		return
+	}
+	var req struct {
+		Plugin string `json:"plugin"`
+		Method string `json:"method"`
+		Args   any    `json:"args"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonErr(w, "请求体解析失败: "+err.Error())
+		return
+	}
+	if strings.TrimSpace(req.Plugin) == "" || strings.TrimSpace(req.Method) == "" {
+		jsonErr(w, "缺少 plugin/method")
+		return
+	}
+	value, err := ph.InvokeClientMethod(req.Plugin, req.Method, req.Args)
+	if err != nil {
+		jsonResp(w, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	jsonResp(w, map[string]any{"ok": true, "value": value})
+}
+
+// HandlePluginClientFailure POST /api/plugins/client-failure：浏览器 client 半
+// 失败上报（渲染/守卫/启动阶段；对齐 harness reportRenderFailure/
+// reportClientGuardFailure）。记入定义诊断，Agent 经 cordis_inspect 发现修复。
+// body: { plugin, phase: render|guard|boot, message }。
+func HandlePluginClientFailure(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		jsonErr(w, "仅 POST")
+		return
+	}
+	ph, ok := getPluginHost()
+	if !ok {
+		jsonErr(w, "插件系统未初始化")
+		return
+	}
+	var req struct {
+		Plugin  string `json:"plugin"`
+		Phase   string `json:"phase"`
+		Message string `json:"message"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonErr(w, "请求体解析失败: "+err.Error())
+		return
+	}
+	if strings.TrimSpace(req.Plugin) == "" {
+		jsonErr(w, "缺少 plugin")
+		return
+	}
+	if err := ph.ReportClientFailure(req.Plugin, req.Phase, req.Message); err != nil {
+		jsonErr(w, err.Error())
+		return
+	}
+	jsonResp(w, map[string]any{"ok": true})
+}
+
 // pluginRecordSummary 插件记录 → 前端摘要（隐藏超长 client 源码，仅保留有无标记）。
 func pluginRecordSummary(rec agent.PluginRecord) map[string]any {
 	return map[string]any{

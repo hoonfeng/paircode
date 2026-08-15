@@ -3,6 +3,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -456,6 +457,180 @@ func TestClientStateTTL(t *testing.T) {
 	out, err := cordisInspectQuery(host, "client", "plugin", "listPlugin", nil)
 	if err != nil || !strings.Contains(out, "浏览器未连接") {
 		t.Fatalf("过期后应提示未连接: %v\n%s", err, out)
+	}
+}
+
+// TestInspectProviderRegistry D12 注册表扩展性：
+//   - 第三方可 RegisterInspectProvider 注册自定义 provider（host/client 平台）
+//   - cordisInspectQuery 路由到自定义 provider 的方法
+//   - 同 ID 覆盖内置 provider
+//   - 非法 platform/未注册 provider/未知 method 报错
+func TestInspectProviderRegistry(t *testing.T) {
+	host := NewPluginHost(NewRegistry(), nil, "")
+	// 内置 provider 已注册（host: service/tool/event/plugin；client: plugin/event/service/tool）
+	if got := host.InspectProviders("host"); len(got) != 4 {
+		t.Fatalf("host 平台应 4 个内置 provider: %v", got)
+	}
+	if got := host.InspectProviders("client"); len(got) != 4 {
+		t.Fatalf("client 平台应 4 个内置 provider: %v", got)
+	}
+
+	// ① 第三方注册自定义 provider（host 平台，健康诊断）
+	err := host.RegisterInspectProvider("host", &InspectProvider{
+		ID: "health", Description: "宿主健康诊断（第三方注册示例）",
+		Methods: map[string]InspectMethod{
+			"ping": {Name: "ping", Description: "连通性探测", Query: func(_ *PluginHost, input map[string]any) (string, error) {
+				return "pong input=" + fmt.Sprint(input), nil
+			}},
+			"metrics": {Name: "metrics", Description: "指标", Query: func(h *PluginHost, _ map[string]any) (string, error) {
+				return fmt.Sprintf("plugins=%d defs=%d", len(h.plugins), len(h.defs)), nil
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("注册第三方 provider: %v", err)
+	}
+	out, err := cordisInspectQuery(host, "host", "health", "ping", map[string]any{"v": 1})
+	if err != nil || !strings.Contains(out, "pong") {
+		t.Fatalf("health.ping: %v\n%s", err, out)
+	}
+	out, err = cordisInspectQuery(host, "host", "health", "metrics", nil)
+	if err != nil || !strings.Contains(out, "plugins=0") {
+		t.Fatalf("health.metrics: %v\n%s", err, out)
+	}
+
+	// ② client 平台第三方 provider
+	if err := host.RegisterInspectProvider("client", &InspectProvider{
+		ID: "gadget", Description: "客户端小工具",
+		Methods: map[string]InspectMethod{
+			"probe": {Name: "probe", Description: "探针", Query: func(_ *PluginHost, _ map[string]any) (string, error) {
+				return "gadget probe ok", nil
+			}},
+		},
+	}); err != nil {
+		t.Fatalf("注册 client provider: %v", err)
+	}
+	out, err = cordisInspectQuery(host, "client", "gadget", "probe", nil)
+	if err != nil || !strings.Contains(out, "gadget probe") {
+		t.Fatalf("gadget.probe: %v\n%s", err, out)
+	}
+
+	// ③ 同 ID 覆盖内置（host/tool 换成自定义实现）
+	if err := host.RegisterInspectProvider("host", &InspectProvider{
+		ID: "tool", Description: "覆盖版工具表",
+		Methods: map[string]InspectMethod{
+			"listtool": {Name: "listTool", Description: "覆盖版", Query: func(_ *PluginHost, _ map[string]any) (string, error) {
+				return "CUSTOM TOOL LIST", nil
+			}},
+		},
+	}); err != nil {
+		t.Fatalf("覆盖内置 provider: %v", err)
+	}
+	out, err = cordisInspectQuery(host, "host", "tool", "listTool", nil)
+	if err != nil || !strings.Contains(out, "CUSTOM TOOL LIST") {
+		t.Fatalf("覆盖后应走自定义实现: %v\n%s", err, out)
+	}
+
+	// ④ 非法参数
+	if _, err := cordisInspectQuery(host, "mars", "x", "y", nil); err == nil {
+		t.Fatal("非法 platform 应报错")
+	}
+	if _, err := cordisInspectQuery(host, "host", "nope", "x", nil); err == nil {
+		t.Fatal("未注册 provider 应报错")
+	}
+	if _, err := cordisInspectQuery(host, "host", "health", "nope", nil); err == nil {
+		t.Fatal("未知 method 应报错")
+	}
+	// 注册参数校验
+	if err := host.RegisterInspectProvider("host", nil); err == nil {
+		t.Fatal("nil provider 应报错")
+	}
+	if err := host.RegisterInspectProvider("", &InspectProvider{ID: "", Methods: map[string]InspectMethod{}}); err == nil {
+		t.Fatal("空 ID 应报错")
+	}
+}
+
+// TestClientInvokeRPC D11 invoke RPC 闭环：
+// host 半 ctx.registerClientMethod 注册方法 → InvokeClientMethod 远程调用
+// （参数传入/结果返回/异常/未注册/未运行语义）。
+func TestClientInvokeRPC(t *testing.T) {
+	host := NewPluginHost(NewRegistry(), nil, `C:\ws`)
+	id, err := host.DefineJS(`
+return {
+  name: 'invoke-demo',
+  apply(ctx) {
+    ctx.registerClientMethod('echo', (args) => ({ echoed: args.text, n: (args.n || 0) * 2 }))
+    ctx.registerClientMethod('boom', () => { throw new Error('explode') })
+  }
+}`, "invoke demo")
+	if err != nil {
+		t.Fatalf("define: %v", err)
+	}
+	if err := host.LoadJSDynamic(mustDef(t, host, id)); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	// ① 正常调用：参数传入 + 结果返回
+	out, err := host.InvokeClientMethod("invoke-demo", "echo", map[string]any{"text": "hi", "n": 3})
+	if err != nil {
+		t.Fatalf("echo: %v", err)
+	}
+	m, _ := out.(map[string]any)
+	if m["echoed"] != "hi" || m["n"] != int64(6) {
+		t.Fatalf("echo 结果异常: %#v", out)
+	}
+	// ② 处理器抛错 → 返回错误（含诊断记录）
+	if _, err := host.InvokeClientMethod("invoke-demo", "boom", nil); err == nil || !strings.Contains(err.Error(), "explode") {
+		t.Fatalf("boom 应报错: %v", err)
+	}
+	// ③ 未注册方法
+	if _, err := host.InvokeClientMethod("invoke-demo", "nope", nil); err == nil || !strings.Contains(err.Error(), "未注册") {
+		t.Fatalf("未注册方法应报错: %v", err)
+	}
+	// ④ 插件未运行
+	if err := host.Unload("invoke-demo"); err != nil {
+		t.Fatalf("unload: %v", err)
+	}
+	if _, err := host.InvokeClientMethod("invoke-demo", "echo", nil); err == nil || !strings.Contains(err.Error(), "未在运行") {
+		t.Fatalf("未运行应报错: %v", err)
+	}
+	// ⑤ inspect 可见注册的方法（diag）
+	rep, _ := cordisInspectReport(host, "invoke-demo", "")
+	if !strings.Contains(rep, "client 方法 echo") {
+		t.Fatalf("diag 应含注册记录: %s", rep)
+	}
+}
+
+// TestClientFailureReport D11 失败上报闭环：浏览器 client 半 render/guard
+// 失败 → ReportClientFailure → 定义诊断可见（Agent inspect 发现修复）。
+func TestClientFailureReport(t *testing.T) {
+	host := NewPluginHost(NewRegistry(), nil, "")
+	id, err := host.DefineJS(`return { name: 'crash-ui', apply(ctx) {} }`, "crash ui")
+	if err != nil {
+		t.Fatalf("define: %v", err)
+	}
+	if err := host.LoadJSDynamic(mustDef(t, host, id)); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	// 上报 render 失败
+	if err := host.ReportClientFailure("crash-ui", "render", "TypeError: el is null"); err != nil {
+		t.Fatalf("report: %v", err)
+	}
+	// inspect 可见
+	rep, err := cordisInspectReport(host, "crash-ui", "")
+	if err != nil || !strings.Contains(rep, "TypeError: el is null") {
+		t.Fatalf("inspect 应含失败信息: %v\n%s", err, rep)
+	}
+	// guard 阶段
+	if err := host.ReportClientFailure("crash-ui", "guard", "forbidden access"); err != nil {
+		t.Fatalf("report guard: %v", err)
+	}
+	rep, _ = cordisInspectReport(host, "crash-ui", "")
+	if !strings.Contains(rep, "guard 失败") {
+		t.Fatalf("inspect 应含 guard 失败: %s", rep)
+	}
+	// 未知插件
+	if err := host.ReportClientFailure("ghost", "render", "x"); err == nil {
+		t.Fatal("未知插件应报错")
 	}
 }
 

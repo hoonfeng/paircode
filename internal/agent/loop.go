@@ -1044,6 +1044,14 @@ func harnessSystemPrompt(roots []string) string {
 		"    （完整文件内容、大数组等）——只回摘要或引用；\n" +
 		"  · 生命周期可逆：stop/undefine 前先 cordis_inspect 确认影响（贡献的工具/服务会被回收）；\n" +
 		"    插件应自带清理（ctx.effect/on 返回的 cancel），停用后不留残留。\n" +
+		"- client 半（浏览器 UI）：插件可在 cordis_define 带 client 参数定义浏览器侧半代码\n" +
+		"  （形态 (ui) => void：ui.on/emit 双向事件、ui.invoke(plugin, method, args) 远程调用 host 半\n" +
+		"  方法、ui.registerPanel 注册面板）。host 半用 ctx.registerClientMethod(method, fn) 暴露方法\n" +
+		"  给浏览器调用；client 半 render/guard/boot 失败会上报到定义诊断（cordis_inspect 可见），\n" +
+		"  修复后 cordis_define pluginId=xxx 追加版本重新装载。\n" +
+		"- inspect 协议（cordis_inspect_query platform/provider/method）：host 平台查宿主\n" +
+		"  （service/tool/event/plugin 四 provider），client 平台查浏览器（plugin/event），\n" +
+		"  第三方可注册自定义 provider 扩展诊断接口。\n" +
 		"- 用户消息中以 @dyn-1 这类形式引用插件时，系统会自动注入该插件的上下文（版本/状态/指引）。\n"
 }
 

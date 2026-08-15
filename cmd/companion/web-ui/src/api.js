@@ -314,7 +314,7 @@ async function savePhilosophy(data) {
   return apiPut('/philosophy', data)
 }
 
-export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, isWebSocketOpen, waitForWebSocket, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatCompact, chatStop, getMessages, getMessagesCount, getModels, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, getPhilosophy, savePhilosophy, listPlugins, getPluginDetail, pluginAction, definePlugin, pluginEmit, pluginClientEvents, pluginClientState }
+export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, isWebSocketOpen, waitForWebSocket, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatCompact, chatStop, getMessages, getMessagesCount, getModels, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, getPhilosophy, savePhilosophy, listPlugins, getPluginDetail, pluginAction, definePlugin, pluginEmit, pluginClientEvents, pluginClientState, pluginInvoke, pluginClientFailure }
 
 // ─── 插件（管理 + 使用 + host/client 事件桥）──────────────
 
@@ -352,4 +352,15 @@ async function pluginClientEvents(since) {
 async function pluginClientState(snapshot) {
   if (snapshot) return apiPost('/plugins/client-state', snapshot)
   return apiGet('/plugins/client-state')
+}
+
+// pluginInvoke 浏览器 client 半远程调用 host 半注册方法（D11 invoke RPC）。
+// {plugin, method, args} → {ok, value} 或 {ok:false, error}。
+async function pluginInvoke(plugin, method, args) {
+  return apiPost('/plugins/invoke', { plugin, method, args: args === undefined ? null : args })
+}
+
+// pluginClientFailure 上报 client 半失败（render/guard/boot 阶段；供 Agent inspect 修复）。
+async function pluginClientFailure(plugin, phase, message) {
+  return apiPost('/plugins/client-failure', { plugin, phase, message })
 }

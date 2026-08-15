@@ -45,7 +45,7 @@ func RegisterCordisTools(registry *Registry, host *PluginHost, root string) {
 		Category:    "system",
 		Parameters: objSchema(map[string]any{
 			"code":     strProp("插件 host 半代码（JS 或 TS，async 函数体，return { name, apply(ctx, config), inject? } 或 return (ctx, config) => void）。可访问全局：ctx/harness/console/btoa/atob/TextEncoder/TextDecoder/CordisApi（内置真 cordis 运行时，new CordisApi.api.Context() 建 cordis app 跑生态插件协作）；inject 声明后 ctx.fs/web/bash/logger/timer 可用。"),
-			"client":   strProp("可选：插件 client 半代码（浏览器端执行，web 界面插件面板装载）。形态 (ui) => void：ui.on(event, fn) 收 host 事件（ui:/client: 前缀）、ui.emit(event, payload) 发事件回 host（host: 前缀给 host 插件消费）、ui.registerPanel({id,title,icon,render}) 注册自定义面板、ui.http.get/post 调后端 API。缺省=纯 host 插件。"),
+			"client":   strProp("可选：插件 client 半代码（浏览器端执行，web 界面插件面板装载）。形态 (ui) => void：ui.on(event, fn) 收 host 事件（ui:/client: 前缀）、ui.emit(event, payload) 发事件回 host（host: 前缀给 host 插件消费）、ui.invoke(plugin, method, args?) 远程调用 host 半 ctx.registerClientMethod 注册的方法（invoke RPC）、ui.reportFailure(phase, message) 失败上报（render/guard/boot，Agent inspect 可查）、ui.registerPanel({id,title,icon,render,props}) 注册自定义面板（render(el, ui)，el 为容器 DOM，ui 为当前沙箱对象）、ui.http.get/post 调后端 API。缺省=纯 host 插件。"),
 			"language": strProp("可选：源码语言 \"js\" | \"ts\"，默认自动探测（含 interface/type 注解/类型标注视为 ts）。"),
 			"purpose":  strProp("可选：插件用途说明。"),
 			"pluginId": strProp("可选：已有插件的稳定 id（cordis_define 首次返回的 dyn-<n> 即稳定身份）。非空=向该插件追加新版本（existing append）；缺省=新建插件。追加版本后 cordis_run 传 pluginId 装载最新版。"),
@@ -201,39 +201,234 @@ func cordisInspectQuery(host *PluginHost, platform, provider, method string, inp
 	platform = strings.ToLower(strings.TrimSpace(platform))
 	provider = strings.ToLower(strings.TrimSpace(provider))
 	method = strings.ToLower(strings.TrimSpace(method))
-	switch platform {
-	case "host":
-		return cordisHostQuery(host, provider, method, input)
-	case "client":
-		return cordisClientQuery(host, provider, method, input)
-	default:
-		return "", fmt.Errorf("platform 必须是 host 或 client，收到 %q", platform)
+	if host == nil {
+		return "", fmt.Errorf("插件宿主未初始化")
 	}
+	p := host.InspectProviderLookup(platform, provider)
+	if p == nil {
+		known := host.InspectProviders(platform)
+		if len(known) == 0 {
+			return "", fmt.Errorf("platform 必须是 host 或 client，收到 %q", platform)
+		}
+		return "", fmt.Errorf("provider 必须是 %s，收到 %q", strings.Join(known, "|"), provider)
+	}
+	mth, ok := p.Methods[method]
+	if !ok {
+		var names []string
+		for n := range p.Methods {
+			names = append(names, n)
+		}
+		sort.Strings(names)
+		return "", fmt.Errorf("%s 平台方法必须是 %s，收到 %q", provider, strings.Join(names, "|"), method)
+	}
+	return mth.Query(host, input)
 }
 
-// cordisClientQuery client 平台查询（数据源：浏览器 plugin-runtime 上报快照）。
-func cordisClientQuery(host *PluginHost, provider, method string, input map[string]any) (string, error) {
-	snap := host.ClientState()
-	var sb strings.Builder
-	offline := !snap.Connected
-	header := "## Client runtime（浏览器插件 client 半，实时上报）\n"
-	if offline {
-		header += "⚠️ 浏览器未连接（页面未打开或 30s 内未上报）——以下为宿主侧装载清单兜底：\n"
-	}
-	sb.WriteString(header)
-	name := ""
-	if v, ok := input["name"].(string); ok {
-		name = strings.TrimSpace(v)
-	}
-	now := time.Now().Unix()
-	if snap.Connected && now-snap.ReportedAt <= clientStateTTL {
-		fmt.Fprintf(&sb, "- 上报时间：%s 前（%d 秒前）\n", humanDur(now-snap.ReportedAt), now-snap.ReportedAt)
-	}
+// registerBuiltinInspectProviders 注册内置 inspect provider（对齐 harness 的
+// hostInspectProviders/clientInspectProviders；NewPluginHost 调用）。
+// host 平台：service/tool/event/plugin（宿主侧真实状态）；
+// client 平台：plugin/event/service/tool（浏览器 plugin-runtime 上报快照）。
+func registerBuiltinInspectProviders(h *PluginHost) {
+	// ── host/service：服务目录 + 精确契约 ──
+	h.RegisterInspectProvider("host", &InspectProvider{ID: "service", Description: "Host 服务目录与精确契约", Methods: map[string]InspectMethod{
+		"listservice": {Name: "listService", Description: "服务目录（签名一览）", Query: func(h *PluginHost, _ map[string]any) (string, error) {
+			var sb strings.Builder
+			sb.WriteString("## Service 目录（签名一览；getService {name} 取精确契约）\n")
+			static := []struct{ name, api string }{
+				{"fs", "readFile/writeFile/appendFile/exists/readdir/stat/mkdir/rm（工作区受限）"},
+				{"web", "fetch(url)→{ok,status,text}（GET，60s 超时，4MB 上限）"},
+				{"bash", "exec(cmd,cwd?)→{output,error}（120s 超时）"},
+				{"logger", "logger(scope)→{log,info,warn,debug,error}"},
+				{"timer", "timeout(fn,ms)/interval(fn,ms)→cancel"},
+				{"tools", "register({name,description,parameters,execute})/list()"},
+				{"events", "on(name,fn)/emit(name,payload)"},
+				{"app", "workspaceRoot"},
+				{"workspaceRoot", "工作区根路径"},
+				{"store", "会话存储"},
+			}
+			for _, s := range static {
+				fmt.Fprintf(&sb, "- **%s**：%s\n", s.name, s.api)
+			}
+			var dyn []string
+			h.ctx.servicesMu.RLock()
+			for n := range h.ctx.services {
+				dyn = append(dyn, n)
+			}
+			h.ctx.servicesMu.RUnlock()
+			sort.Strings(dyn)
+			if len(dyn) > 0 {
+				sb.WriteString("\n## Dynamic services（ctx.provide/ctx.get）\n")
+				for _, n := range dyn {
+					fmt.Fprintf(&sb, "- %s\n", n)
+				}
+			}
+			return sb.String(), nil
+		}},
+		"list": {Name: "list", Description: "服务目录别名", Query: func(h *PluginHost, _ map[string]any) (string, error) {
+			p := h.InspectProviderLookup("host", "service")
+			return p.Methods["listservice"].Query(h, nil)
+		}},
+		"getservice": {Name: "getService", Description: "单个服务精确契约", Query: func(h *PluginHost, input map[string]any) (string, error) {
+			name := ""
+			if v, ok := input["name"].(string); ok {
+				name = v
+			}
+			if name == "" {
+				return "", fmt.Errorf("getService 需要 input={name}（如 {name:\"fs\"}）")
+			}
+			return cordisServiceContract(h, name), nil
+		}},
+		"get": {Name: "get", Description: "getService 别名", Query: func(h *PluginHost, input map[string]any) (string, error) {
+			p := h.InspectProviderLookup("host", "service")
+			return p.Methods["getservice"].Query(h, input)
+		}},
+	}})
+	// ── host/tool：工具注册表 + 完整 schema ──
+	h.RegisterInspectProvider("host", &InspectProvider{ID: "tool", Description: "Host 工具注册表", Methods: map[string]InspectMethod{
+		"listtool": {Name: "listTool", Description: "工具列表", Query: func(h *PluginHost, _ map[string]any) (string, error) {
+			var sb strings.Builder
+			sb.WriteString("## Tools（host 注册表；getTool {name} 取完整 schema）\n")
+			for _, m := range h.ctx.Tools.AllToolMeta() {
+				fmt.Fprintf(&sb, "- **%s**：%s\n", m.Name, firstLine(m.Description))
+			}
+			return sb.String(), nil
+		}},
+		"list": {Name: "list", Description: "listTool 别名", Query: func(h *PluginHost, _ map[string]any) (string, error) {
+			p := h.InspectProviderLookup("host", "tool")
+			return p.Methods["listtool"].Query(h, nil)
+		}},
+		"gettool": {Name: "getTool", Description: "单个工具完整 schema", Query: func(h *PluginHost, input map[string]any) (string, error) {
+			name := ""
+			if v, ok := input["name"].(string); ok {
+				name = v
+			}
+			if name == "" {
+				return "", fmt.Errorf("getTool 需要 input={name}")
+			}
+			for _, m := range h.ctx.Tools.AllToolMeta() {
+				if m.Name == name {
+					b, _ := json.MarshalIndent(m, "", "  ")
+					return string(b), nil
+				}
+			}
+			return "", fmt.Errorf("工具 %q 不存在", name)
+		}},
+		"get": {Name: "get", Description: "getTool 别名", Query: func(h *PluginHost, input map[string]any) (string, error) {
+			p := h.InspectProviderLookup("host", "tool")
+			return p.Methods["gettool"].Query(h, input)
+		}},
+	}})
+	// ── host/event：事件目录 + 详情 ──
+	h.RegisterInspectProvider("host", &InspectProvider{ID: "event", Description: "Host 事件目录", Methods: map[string]InspectMethod{
+		"listevent": {Name: "listEvent", Description: "事件列表", Query: func(h *PluginHost, _ map[string]any) (string, error) {
+			var sb strings.Builder
+			names := h.EventBus().EventNames()
+			sb.WriteString("## Events（当前已注册事件；getEvent {name} 取详情）\n")
+			if len(names) == 0 {
+				sb.WriteString("（无事件）\n")
+			}
+			for _, n := range names {
+				fmt.Fprintf(&sb, "- %s（%d 监听器）\n", n, h.EventBus().ListenerCount(n))
+			}
+			return sb.String(), nil
+		}},
+		"list": {Name: "list", Description: "listEvent 别名", Query: func(h *PluginHost, _ map[string]any) (string, error) {
+			p := h.InspectProviderLookup("host", "event")
+			return p.Methods["listevent"].Query(h, nil)
+		}},
+		"getevent": {Name: "getEvent", Description: "单个事件详情", Query: func(h *PluginHost, input map[string]any) (string, error) {
+			name := ""
+			if v, ok := input["name"].(string); ok {
+				name = v
+			}
+			if name == "" {
+				return "", fmt.Errorf("getEvent 需要 input={name}")
+			}
+			var sb strings.Builder
+			fmt.Fprintf(&sb, "## Event %s\n- 监听器数: %d\n", name, h.EventBus().ListenerCount(name))
+			sb.WriteString("- 约定：ui:/client: 前缀事件会转发浏览器 client 半；host: 前缀由浏览器发回宿主。\n")
+			return sb.String(), nil
+		}},
+		"get": {Name: "get", Description: "getEvent 别名", Query: func(h *PluginHost, input map[string]any) (string, error) {
+			p := h.InspectProviderLookup("host", "event")
+			return p.Methods["getevent"].Query(h, input)
+		}},
+	}})
+	// ── host/plugin：插件目录 + 详情 ──
+	h.RegisterInspectProvider("host", &InspectProvider{ID: "plugin", Description: "Host 插件目录", Methods: map[string]InspectMethod{
+		"listplugin": {Name: "listPlugin", Description: "插件列表", Query: func(h *PluginHost, _ map[string]any) (string, error) {
+			var sb strings.Builder
+			sb.WriteString("## Plugins\n")
+			for _, r := range h.Inspect() {
+				fmt.Fprintf(&sb, "- %s [%s] %s", r.Name, r.Source, r.State)
+				if len(r.Tools) > 0 {
+					fmt.Fprintf(&sb, " tools=%s", strings.Join(r.Tools, ","))
+				}
+				if r.HasClient {
+					sb.WriteString(" client=yes")
+				}
+				sb.WriteString("\n")
+			}
+			return sb.String(), nil
+		}},
+		"list": {Name: "list", Description: "listPlugin 别名", Query: func(h *PluginHost, _ map[string]any) (string, error) {
+			p := h.InspectProviderLookup("host", "plugin")
+			return p.Methods["listplugin"].Query(h, nil)
+		}},
+		"getplugin": {Name: "getPlugin", Description: "单个插件详情", Query: func(h *PluginHost, input map[string]any) (string, error) {
+			name := ""
+			if v, ok := input["name"].(string); ok {
+				name = v
+			}
+			if name == "" {
+				return "", fmt.Errorf("getPlugin 需要 input={name}")
+			}
+			rec := h.InspectDetail(name)
+			if rec == nil {
+				return "", fmt.Errorf("插件 %q 不存在", name)
+			}
+			return renderPluginRecord(*rec), nil
+		}},
+		"get": {Name: "get", Description: "getPlugin 别名", Query: func(h *PluginHost, input map[string]any) (string, error) {
+			p := h.InspectProviderLookup("host", "plugin")
+			return p.Methods["getplugin"].Query(h, input)
+		}},
+	}})
+	// ── client 平台：浏览器 client 半实时状态（plugin-runtime 上报快照）──
+	registerClientInspectProviders(h)
+}
 
-	switch provider {
-	case "plugin":
-		switch method {
-		case "listplugin", "list":
+// clientRuntimeHeader client 平台查询的统一头（含离线提示与上报时间）。
+func clientRuntimeHeader(snap ClientRuntimeSnapshot) string {
+	var sb strings.Builder
+	sb.WriteString("## Client runtime（浏览器插件 client 半，实时上报）\n")
+	if !snap.Connected {
+		sb.WriteString("⚠️ 浏览器未连接（页面未打开或 30s 内未上报）——以下为宿主侧装载清单兜底：\n")
+	} else {
+		now := time.Now().Unix()
+		if now-snap.ReportedAt <= clientStateTTL {
+			fmt.Fprintf(&sb, "- 上报时间：%s 前（%d 秒前）\n", humanDur(now-snap.ReportedAt), now-snap.ReportedAt)
+		}
+	}
+	return sb.String()
+}
+
+// clientInputName 提取 input.name（getPlugin/getService 等公共参数）。
+func clientInputName(input map[string]any) string {
+	if v, ok := input["name"].(string); ok {
+		return strings.TrimSpace(v)
+	}
+	return ""
+}
+
+// registerClientInspectProviders client 平台内置 provider（数据源：浏览器上报快照）。
+func registerClientInspectProviders(h *PluginHost) {
+	// ── client/plugin：浏览器 client 半插件清单（离线给宿主侧兜底）──
+	h.RegisterInspectProvider("client", &InspectProvider{ID: "plugin", Description: "Client 半插件清单", Methods: map[string]InspectMethod{
+		"listplugin": {Name: "listPlugin", Description: "浏览器装载的 client 半列表", Query: func(h *PluginHost, _ map[string]any) (string, error) {
+			snap := h.ClientState()
+			var sb strings.Builder
+			sb.WriteString(clientRuntimeHeader(snap))
 			if snap.Connected {
 				if len(snap.Plugins) == 0 {
 					sb.WriteString("（浏览器已连接，但无 client 半装载）\n")
@@ -249,7 +444,7 @@ func cordisClientQuery(host *PluginHost, provider, method string, input map[stri
 				return sb.String(), nil
 			}
 			// 离线兜底：宿主侧含 client 半的插件清单
-			recs := host.Inspect()
+			recs := h.Inspect()
 			n := 0
 			for _, r := range recs {
 				if r.HasClient {
@@ -261,10 +456,19 @@ func cordisClientQuery(host *PluginHost, provider, method string, input map[stri
 				sb.WriteString("（无含 client 半的插件）\n")
 			}
 			return sb.String(), nil
-		case "getplugin", "get":
+		}},
+		"list": {Name: "list", Description: "listPlugin 别名", Query: func(h *PluginHost, _ map[string]any) (string, error) {
+			p := h.InspectProviderLookup("client", "plugin")
+			return p.Methods["listplugin"].Query(h, nil)
+		}},
+		"getplugin": {Name: "getPlugin", Description: "单个 client 半详情", Query: func(h *PluginHost, input map[string]any) (string, error) {
+			snap := h.ClientState()
+			name := clientInputName(input)
 			if name == "" {
 				return "", fmt.Errorf("getPlugin 需要 input={name}（client 半插件名）")
 			}
+			var sb strings.Builder
+			sb.WriteString(clientRuntimeHeader(snap))
 			for _, p := range snap.Plugins {
 				if p.Name == name {
 					status := "loaded"
@@ -287,13 +491,19 @@ func cordisClientQuery(host *PluginHost, provider, method string, input map[stri
 					return sb.String(), nil
 				}
 			}
-			return "", fmt.Errorf("浏览器 client 半中未找到 %q（离线则参考宿主侧：%v）", name, hostHasClientHalf(host, name))
-		default:
-			return "", fmt.Errorf("plugin 平台方法必须是 listPlugin|getPlugin，收到 %q", method)
-		}
-	case "event":
-		switch method {
-		case "listevent", "list":
+			return "", fmt.Errorf("浏览器 client 半中未找到 %q（离线则参考宿主侧：%v）", name, hostHasClientHalf(h, name))
+		}},
+		"get": {Name: "get", Description: "getPlugin 别名", Query: func(h *PluginHost, input map[string]any) (string, error) {
+			p := h.InspectProviderLookup("client", "plugin")
+			return p.Methods["getplugin"].Query(h, input)
+		}},
+	}})
+	// ── client/event：浏览器侧事件监听目录 ──
+	h.RegisterInspectProvider("client", &InspectProvider{ID: "event", Description: "Client 半事件监听目录", Methods: map[string]InspectMethod{
+		"listevent": {Name: "listEvent", Description: "client 半注册的事件监听", Query: func(h *PluginHost, _ map[string]any) (string, error) {
+			snap := h.ClientState()
+			var sb strings.Builder
+			sb.WriteString(clientRuntimeHeader(snap))
 			if !snap.Connected || len(snap.Plugins) == 0 {
 				sb.WriteString("（浏览器未连接或无 client 半——无 client 侧事件监听可查）\n")
 				return sb.String(), nil
@@ -311,19 +521,29 @@ func cordisClientQuery(host *PluginHost, provider, method string, input map[stri
 				sb.WriteString("（client 半均未注册事件监听）\n")
 			}
 			return sb.String(), nil
-		default:
-			return "", fmt.Errorf("event 平台方法必须是 listEvent，收到 %q", method)
-		}
-	case "service":
-		// client 侧服务（http 路由等）暂未上报——给摘要
-		sb.WriteString("client 半服务（ui.http 路由/数据源）尚未纳入上报协议；可用 event/plugin 平台查询面板与事件。\n")
-		return sb.String(), nil
-	case "tool":
-		sb.WriteString("client 半工具（浏览器侧能力）尚未纳入上报协议；插件工具统一经 host 侧注册。\n")
-		return sb.String(), nil
-	default:
-		return "", fmt.Errorf("provider 必须是 service|tool|event|plugin，收到 %q", provider)
-	}
+		}},
+		"list": {Name: "list", Description: "listEvent 别名", Query: func(h *PluginHost, _ map[string]any) (string, error) {
+			p := h.InspectProviderLookup("client", "event")
+			return p.Methods["listevent"].Query(h, nil)
+		}},
+	}})
+	// ── client/service / client/tool：暂未纳入上报协议（提示性占位）──
+	h.RegisterInspectProvider("client", &InspectProvider{ID: "service", Description: "Client 半服务（暂未上报）", Methods: map[string]InspectMethod{
+		"listservice": {Name: "listService", Description: "client 半服务目录", Query: func(_ *PluginHost, _ map[string]any) (string, error) {
+			return "client 半服务（ui.http 路由/数据源）尚未纳入上报协议；可用 event/plugin 平台查询面板与事件。\n", nil
+		}},
+		"list": {Name: "list", Description: "listService 别名", Query: func(_ *PluginHost, _ map[string]any) (string, error) {
+			return "client 半服务（ui.http 路由/数据源）尚未纳入上报协议；可用 event/plugin 平台查询面板与事件。\n", nil
+		}},
+	}})
+	h.RegisterInspectProvider("client", &InspectProvider{ID: "tool", Description: "Client 半工具（暂未上报）", Methods: map[string]InspectMethod{
+		"listtool": {Name: "listTool", Description: "client 半工具列表", Query: func(_ *PluginHost, _ map[string]any) (string, error) {
+			return "client 半工具（浏览器侧能力）尚未纳入上报协议；插件工具统一经 host 侧注册。\n", nil
+		}},
+		"list": {Name: "list", Description: "listTool 别名", Query: func(_ *PluginHost, _ map[string]any) (string, error) {
+			return "client 半工具（浏览器侧能力）尚未纳入上报协议；插件工具统一经 host 侧注册。\n", nil
+		}},
+	}})
 }
 
 // hostHasClientHalf 宿主侧是否含指定 client 半插件（离线兜底提示）。
@@ -342,145 +562,6 @@ func humanDur(sec int64) string {
 		return fmt.Sprintf("%d 秒", sec)
 	}
 	return fmt.Sprintf("%d 分钟 %d 秒", sec/60, sec%60)
-}
-
-// cordisHostQuery host 平台查询。
-func cordisHostQuery(host *PluginHost, provider, method string, input map[string]any) (string, error) {
-	var sb strings.Builder
-	switch provider {
-	case "service":
-		switch method {
-		case "listservice", "list":
-			sb.WriteString("## Service 目录（签名一览；getService {name} 取精确契约）\n")
-			static := []struct{ name, api string }{
-				{"fs", "readFile/writeFile/appendFile/exists/readdir/stat/mkdir/rm（工作区受限）"},
-				{"web", "fetch(url)→{ok,status,text}（GET，60s 超时，4MB 上限）"},
-				{"bash", "exec(cmd,cwd?)→{output,error}（120s 超时）"},
-				{"logger", "logger(scope)→{log,info,warn,debug,error}"},
-				{"timer", "timeout(fn,ms)/interval(fn,ms)→cancel"},
-				{"tools", "register({name,description,parameters,execute})/list()"},
-				{"events", "on(name,fn)/emit(name,payload)"},
-				{"app", "workspaceRoot"},
-				{"workspaceRoot", "工作区根路径"},
-				{"store", "会话存储"},
-			}
-			for _, s := range static {
-				fmt.Fprintf(&sb, "- **%s**：%s\n", s.name, s.api)
-			}
-			var dyn []string
-			host.ctx.servicesMu.RLock()
-			for n := range host.ctx.services {
-				dyn = append(dyn, n)
-			}
-			host.ctx.servicesMu.RUnlock()
-			sort.Strings(dyn)
-			if len(dyn) > 0 {
-				sb.WriteString("\n## Dynamic services（ctx.provide/ctx.get）\n")
-				for _, n := range dyn {
-					fmt.Fprintf(&sb, "- %s\n", n)
-				}
-			}
-			return sb.String(), nil
-		case "getservice", "get":
-			name := ""
-			if v, ok := input["name"].(string); ok {
-				name = v
-			}
-			if name == "" {
-				return "", fmt.Errorf("getService 需要 input={name}（如 {name:\"fs\"}）")
-			}
-			return cordisServiceContract(host, name), nil
-		default:
-			return "", fmt.Errorf("service 平台方法必须是 listService|getService，收到 %q", method)
-		}
-	case "tool":
-		meta := host.ctx.Tools.AllToolMeta()
-		switch method {
-		case "listtool", "list":
-			sb.WriteString("## Tools（host 注册表；getTool {name} 取完整 schema）\n")
-			for _, m := range meta {
-				fmt.Fprintf(&sb, "- **%s**：%s\n", m.Name, firstLine(m.Description))
-			}
-			return sb.String(), nil
-		case "gettool", "get":
-			name := ""
-			if v, ok := input["name"].(string); ok {
-				name = v
-			}
-			if name == "" {
-				return "", fmt.Errorf("getTool 需要 input={name}")
-			}
-			for _, m := range meta {
-				if m.Name == name {
-					b, _ := json.MarshalIndent(m, "", "  ")
-					return string(b), nil
-				}
-			}
-			return "", fmt.Errorf("工具 %q 不存在", name)
-		default:
-			return "", fmt.Errorf("tool 平台方法必须是 listTool|getTool，收到 %q", method)
-		}
-	case "event":
-		switch method {
-		case "listevent", "list":
-			names := host.EventBus().EventNames()
-			sb.WriteString("## Events（当前已注册事件；getEvent {name} 取详情）\n")
-			if len(names) == 0 {
-				sb.WriteString("（无事件）\n")
-			}
-			for _, n := range names {
-				fmt.Fprintf(&sb, "- %s（%d 监听器）\n", n, host.EventBus().ListenerCount(n))
-			}
-			return sb.String(), nil
-		case "getevent", "get":
-			name := ""
-			if v, ok := input["name"].(string); ok {
-				name = v
-			}
-			if name == "" {
-				return "", fmt.Errorf("getEvent 需要 input={name}")
-			}
-			n := host.EventBus().ListenerCount(name)
-			sb.WriteString(fmt.Sprintf("## Event %s\n- 监听器数: %d\n", name, n))
-			sb.WriteString("- 约定：ui:/client: 前缀事件会转发浏览器 client 半；host: 前缀由浏览器发回宿主。\n")
-			return sb.String(), nil
-		default:
-			return "", fmt.Errorf("event 平台方法必须是 listEvent|getEvent，收到 %q", method)
-		}
-	case "plugin":
-		switch method {
-		case "listplugin", "list":
-			sb.WriteString("## Plugins\n")
-			for _, r := range host.Inspect() {
-				fmt.Fprintf(&sb, "- %s [%s] %s", r.Name, r.Source, r.State)
-				if len(r.Tools) > 0 {
-					fmt.Fprintf(&sb, " tools=%s", strings.Join(r.Tools, ","))
-				}
-				if r.HasClient {
-					sb.WriteString(" client=yes")
-				}
-				sb.WriteString("\n")
-			}
-			return sb.String(), nil
-		case "getplugin", "get":
-			name := ""
-			if v, ok := input["name"].(string); ok {
-				name = v
-			}
-			if name == "" {
-				return "", fmt.Errorf("getPlugin 需要 input={name}")
-			}
-			rec := host.InspectDetail(name)
-			if rec == nil {
-				return "", fmt.Errorf("插件 %q 不存在", name)
-			}
-			return renderPluginRecord(*rec), nil
-		default:
-			return "", fmt.Errorf("plugin 平台方法必须是 listPlugin|getPlugin，收到 %q", method)
-		}
-	default:
-		return "", fmt.Errorf("provider 必须是 service|tool|event|plugin，收到 %q", provider)
-	}
 }
 
 // cordisServiceContract 单个服务精确契约。

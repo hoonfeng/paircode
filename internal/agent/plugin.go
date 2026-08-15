@@ -407,6 +407,178 @@ type PluginHost struct {
 	// 工具集模板注册表（toolset_build 动态组合；模板本身插件化，可被市场/用户扩展）
 	templatesMu sync.RWMutex
 	templates   map[string]*ToolsetTemplate
+
+	// ★ inspect provider 注册表（对齐 harness hostInspectProviders/clientInspectProviders）：
+	//   platform → providerID → InspectProvider。cordisInspectQuery 走注册表路由，
+	//   第三方（内置代码/Go 插件）可 RegisterInspectProvider 扩展自定义诊断接口。
+	inspectMu sync.RWMutex
+	inspect   map[string]map[string]*InspectProvider
+}
+
+// InspectMethod 一个 inspect provider 方法（对齐参考 manifest.methods 的单个条目）。
+type InspectMethod struct {
+	Name        string // 方法名（小写，如 "listService"/"getService"）
+	Description string
+	// Query 实现查询；host 为插件宿主，input 为工具输入参数。
+	Query func(h *PluginHost, input map[string]any) (string, error)
+}
+
+// InspectProvider 一个 inspect provider（对齐参考 manifest+query）：
+// ID=provider 名（service/tool/event/plugin/...），Methods=方法表。
+type InspectProvider struct {
+	ID          string
+	Description string
+	Methods     map[string]InspectMethod
+}
+
+// RegisterInspectProvider 注册 inspect provider。
+// platform：host（宿主侧）/ client（浏览器 client 半侧）；已存在同 ID 则整体覆盖。
+func (h *PluginHost) RegisterInspectProvider(platform string, p *InspectProvider) error {
+	platform = strings.ToLower(strings.TrimSpace(platform))
+	if platform != "host" && platform != "client" {
+		return fmt.Errorf("inspect provider 平台必须是 host 或 client，收到 %q", platform)
+	}
+	if p == nil || strings.TrimSpace(p.ID) == "" {
+		return fmt.Errorf("inspect provider ID 不能为空")
+	}
+	p.ID = strings.ToLower(strings.TrimSpace(p.ID))
+	h.inspectMu.Lock()
+	defer h.inspectMu.Unlock()
+	if h.inspect == nil {
+		h.inspect = map[string]map[string]*InspectProvider{}
+	}
+	if h.inspect[platform] == nil {
+		h.inspect[platform] = map[string]*InspectProvider{}
+	}
+	h.inspect[platform][p.ID] = p
+	return nil
+}
+
+// InspectProviderLookup 查询已注册的 inspect provider（未注册返回 nil）。
+func (h *PluginHost) InspectProviderLookup(platform, provider string) *InspectProvider {
+	platform = strings.ToLower(strings.TrimSpace(platform))
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	h.inspectMu.RLock()
+	defer h.inspectMu.RUnlock()
+	if h.inspect == nil {
+		return nil
+	}
+	if pm := h.inspect[platform]; pm != nil {
+		return pm[provider]
+	}
+	return nil
+}
+
+// InspectPlatforms 列出已注册的 inspect 平台（host/client）。
+func (h *PluginHost) InspectPlatforms() []string {
+	h.inspectMu.RLock()
+	defer h.inspectMu.RUnlock()
+	var out []string
+	for p := range h.inspect {
+		out = append(out, p)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// InspectProviders 列出某平台已注册的 provider ID（排序）。
+func (h *PluginHost) InspectProviders(platform string) []string {
+	h.inspectMu.RLock()
+	defer h.inspectMu.RUnlock()
+	var out []string
+	for id := range h.inspect[platform] {
+		out = append(out, id)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// ─── D11：client 半 → host 半 调用链（invoke RPC + 失败上报）───
+
+// InvokeClientMethod 浏览器 client 半远程调用 host 半注册的方法（对齐 harness
+// @Remote('invoke')）。plugin 可为插件名或 defId；method 为 harness.handle /
+// ctx 注册的处理器名；args 为 JSON 参数。返回 (结果, 错误)；错误语义：
+//   - 插件未运行（未找到 running 实例）
+//   - 方法未注册（handlers 中不存在）
+//   - 处理器执行异常/超时
+func (h *PluginHost) InvokeClientMethod(plugin, method string, args any) (any, error) {
+	h.mu.RLock()
+	adapter := h.findRunningJSAdapter(plugin)
+	h.mu.RUnlock()
+	if adapter == nil {
+		return nil, fmt.Errorf("插件 %q 未在运行（无法 invoke %s）", plugin, method)
+	}
+	adapter.mu.Lock()
+	fn, ok := adapter.handlers[method]
+	adapter.mu.Unlock()
+	if !ok {
+		return nil, fmt.Errorf("插件 %q 未注册 host 方法 %q（可用 harness.handle 或 ctx.registerClientMethod 注册）", plugin, method)
+	}
+	out, err := fn(args)
+	if err != nil {
+		// 对齐 harness steerHostHandlerFailure：记诊断供 Agent 修复
+		adapter.def.addDiag(fmt.Sprintf("client invoke %s 失败: %v", method, err))
+		return nil, err
+	}
+	return out, nil
+}
+
+// findRunningJSAdapter 按插件名或 defId 找运行中的 JS 插件适配器（h.mu 读锁外调用）。
+func (h *PluginHost) findRunningJSAdapter(nameOrID string) *jsPluginAdapter {
+	// 直接按名字/defId 匹配运行中插件
+	if p, ok := h.plugins[nameOrID]; ok {
+		if a, ok := p.(*jsPluginAdapter); ok && a.def.status == PluginRunning {
+			return a
+		}
+	}
+	// 按插件名匹配（defs 里 name；注册键 = 插件名）
+	for _, d := range h.defs {
+		if d.name == nameOrID && d.status == PluginRunning {
+			if p, ok := h.plugins[d.name]; ok {
+				if a, ok := p.(*jsPluginAdapter); ok {
+					return a
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// ReportClientFailure 浏览器 client 半失败上报（对齐 harness
+// reportRenderFailure/reportClientGuardFailure）：记入定义诊断，供 Agent
+// 经 cordis_inspect 发现并修复。不改变插件运行状态（host 半不受影响）。
+func (h *PluginHost) ReportClientFailure(plugin, phase, message string) error {
+	if plugin == "" {
+		return fmt.Errorf("plugin 不能为空")
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	d := h.findDefByNameOrID(plugin)
+	if d == nil {
+		return fmt.Errorf("插件 %q 未定义", plugin)
+	}
+	phaseText := "render"
+	if phase == "guard" {
+		phaseText = "guard"
+	} else if phase == "boot" {
+		phaseText = "boot"
+	}
+	d.lastError = fmt.Sprintf("client 半 %s 失败: %s", phaseText, message)
+	d.addDiag(fmt.Sprintf("client 半 %s 失败: %s", phaseText, message))
+	return nil
+}
+
+// findDefByNameOrID 按插件名或 defId 找定义（h.mu 锁内调用）。
+func (h *PluginHost) findDefByNameOrID(nameOrID string) *jsPluginDef {
+	if d, ok := h.defs[nameOrID]; ok {
+		return d
+	}
+	for _, d := range h.defs {
+		if d.name == nameOrID {
+			return d
+		}
+	}
+	return nil
 }
 
 // NewPluginHost 创建插件宿主。
@@ -436,6 +608,8 @@ func NewPluginHost(registry *Registry, store ConversationStore, root string) *Pl
 	h.contexts = map[string]*PluginContext{}
 	// host→client 事件桥：ui:/client: 前缀事件自动进入 client 事件队列
 	h.ctx.Events.SetClientHook(func(name string, payload any) { h.PushClientEvent(name, payload) })
+	// 内置 inspect provider（host: service/tool/event/plugin；client: plugin/event/service/tool）
+	registerBuiltinInspectProviders(h)
 	return h
 }
 
@@ -728,6 +902,10 @@ func (h *PluginHost) Unload(name string) error {
 	delete(h.pluginVars, name)
 	pc := h.contexts[name]
 	delete(h.contexts, name)
+	// JS 动态插件：定义状态复位（与宿主状态表一致；版本链不再显示 running）
+	if adapter, ok := h.plugins[name].(*jsPluginAdapter); ok {
+		adapter.def.setStatus(PluginStopped, nil)
+	}
 	h.mu.Unlock()
 	if pc != nil {
 		pc.cleanup() // 触发 effects + 取消 listeners

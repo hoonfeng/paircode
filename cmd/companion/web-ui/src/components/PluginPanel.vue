@@ -135,7 +135,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import api from '../api.js'
 import SvgIcon from './SvgIcon.vue'
-import { clientPanels, syncClientHalves, unloadClientHalf, startPolling, stopPolling, setPanelMount } from '../plugin-runtime.js'
+import { clientPanels, syncClientHalves, unloadClientHalf, startPolling, stopPolling, setPanelMount, getUIFor } from '../plugin-runtime.js'
 
 const plugins = ref([])
 const loading = ref(false)
@@ -249,7 +249,8 @@ async function renderActivePanel() {
   const panel = clientPanels.find(p => p.id === activePanelId.value)
   if (panel && panel.render) {
     try {
-      panel.render(el)
+      // render(el, ui)：ui 为该 client 半的沙箱对象（invoke/emit/on 等）
+      panel.render(el, getUIFor(panel.pluginName))
     } catch (e) {
       console.warn('[plugin] 面板渲染错误', panel.id, e)
       el.innerHTML = '<div style="color:var(--text-muted);padding:8px;font-size:12px">面板渲染失败</div>'
