@@ -31,7 +31,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"wb-ui.com/goja"
+	"wb-ui/goja"
 )
 
 // ─── JS 插件定义 ───────────────────────────────────────────
