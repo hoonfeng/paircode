@@ -322,21 +322,13 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		feedbackCh:    make(chan string, 5),
 	}
 
-	// 创建 Loop，挂载回调
-	loop := &Loop{
-		Provider:              opts.Provider,
-		Registry:              opts.Registry,
-		System:                opts.System,
-		MaxIterations:         opts.MaxIterations,
-		MaxContextTokens:      opts.MaxContextTokens,
-		Compressor:            opts.Compressor,
-		Autonomous:            opts.Autonomous,
-		maxAutonomousMinutes: opts.MaxAutonomousMinutes,
-		checkpointInterval:   opts.CheckpointInterval,
-		History:               CopyHistory(opts.History), // 自闭环模式：loop 自己管理持久历史
-		CompressedSummaries:   opts.CompressedSummaries,  // 恢复已持久化的压缩摘要
-		WorkspaceRoot:         opts.WorkspaceRoot,         // 工作区根路径
+	// 创建 Loop（★ 走全局 LoopFactory：插件装配器可覆盖参数/实现），挂载回调
+	loopHandle, loopErr := CreateLoop(opts)
+	if loopErr != nil {
+		cancel()
+		return fmt.Errorf("创建 agent 循环失败: %w", loopErr)
 	}
+	loop := loopHandle.Loop()
 
 	// ★ 恢复上一轮的执行日志（跨轮感知：无论自主还是非自主，新 Loop 都能知道之前每轮的分析/操作）
 	if opts.WorkspaceRoot != "" {

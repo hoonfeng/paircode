@@ -433,6 +433,28 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 	})
 	ctxObj.Set("tools", toolsObj)
 
+	// ctx.loopFactory.register(apply)：注册 agent 循环装配器（对齐 harness setFactory 单槽位）。
+	// apply(opts) → overrides | null：
+	//   opts = { system, maxIterations, maxContextTokens, autonomous,
+	//            maxAutonomousMinutes, checkpointInterval, workspaceRoot, reviewMode }
+	//   返回同形状对象时非空字段覆盖默认装配参数（如追加提示词/调迭代上限/切换审核模式）；
+	//   返回 null/undefined 表示不改动。注册即替换全局 LoopFactory 单槽位（后注册覆盖先注册），
+	//   插件卸载时自动还原默认工厂。真正替换循环内核留给宿主 Go 代码（ReplaceLoopFactory）。
+	loopFactoryObj := vm.NewObject()
+	loopFactoryObj.Set("register", func(call goja.FunctionCall) goja.Value {
+		applyVal := call.Argument(0)
+		applyFn, ok := goja.AssertFunction(applyVal)
+		if !ok {
+			panic(vm.NewTypeError("ctx.loopFactory.register: 参数必须是函数 apply(opts) → overrides"))
+		}
+		bridge := &jsLoopFactoryBridge{vm: vm, apply: applyFn, plugin: p}
+		restore := ReplaceLoopFactory(bridge)
+		p.addCleanup(restore)
+		p.def.addDiag("注册 agent 循环装配器（LoopFactory 单槽位，卸载自动还原）")
+		return goja.Undefined()
+	})
+	ctxObj.Set("loopFactory", loopFactoryObj)
+
 	// ctx.registerClientMethod(method, fn)：host 半暴露方法给浏览器 client 半
 	// 远程调用（D11 invoke RPC；对齐 harness @Remote('invoke') 的方法注册面）。
 	// 与 harness.handle 共用存储，但语义显式面向 client 半；浏览器侧经

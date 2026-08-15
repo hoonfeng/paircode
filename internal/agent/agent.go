@@ -205,8 +205,8 @@ func (a *AgentBase) Run(ctx context.Context) error {
 		close(a.done)
 	}()
 
-	// 直接创建并运行 Loop（自闭环模式）
-	loop := &Loop{
+	// 直接创建并运行 Loop（自闭环模式；★ 走全局 LoopFactory：插件装配器可覆盖参数/实现）
+	loopOpts := LoopOpts{
 		Provider:         a.Config.Provider,
 		Registry:         a.Registry,
 		System:           a.Config.SystemPrompt,
@@ -215,8 +215,19 @@ func (a *AgentBase) Run(ctx context.Context) error {
 		Compressor:       a.Config.Compressor,
 		Autonomous:       a.Config.Autonomous,
 		WorkspaceRoot:    a.Config.WorkspaceRoot,
-		OnEvent:          a.Config.OnEvent,
-		OnFeedback:       a.Config.OnFeedback,
+		ReviewMode:       a.Config.ReviewMode,
+		ReviewProvider:   a.Config.ReviewProvider,
+	}
+	loopHandle, loopErr := CreateLoop(loopOpts)
+	if loopErr != nil {
+		return fmt.Errorf("创建 agent 循环失败: %w", loopErr)
+	}
+	loop := loopHandle.Loop()
+	if a.Config.OnEvent != nil {
+		loop.OnEvent = a.Config.OnEvent
+	}
+	if a.Config.OnFeedback != nil {
+		loop.OnFeedback = a.Config.OnFeedback
 	}
 
 	_, err := loop.Run(ctx, "", nil)
