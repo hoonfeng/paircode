@@ -827,11 +827,11 @@ return injFn`, "fn inject")
 	}
 }
 
-// TestJSPluginInjectValidation inject 声明：缺失服务 → 明确报错（含可用服务清单
-// 与 ctx.get 引导）；声明存在服务 → 装载成功。
+// TestJSPluginInjectValidation inject 声明（D3 等待语义）：缺失服务 → 进入 waiting
+// （不报错，waitingFor 记录缺失服务）；服务出现后自动激活。声明存在服务 → 装载成功。
 func TestJSPluginInjectValidation(t *testing.T) {
 	host := NewPluginHost(NewRegistry(), nil, `C:\ws`)
-	// ① 声明不存在的服务 → 报错并引导
+	// ① 声明不存在的服务 → 进入 waiting（不报错；等待服务出现）
 	id, _ := host.DefineJS(`
 return {
   name: 'inj-bad',
@@ -840,13 +840,37 @@ return {
 }`, "inj")
 	def, _ := host.GetJSDef(id)
 	err := host.LoadJSDynamic(def)
-	if err == nil {
-		t.Fatalf("inject 缺失应报错")
+	if err != nil {
+		t.Fatalf("inject 缺失应进入 waiting 而非报错: %v", err)
 	}
-	if !strings.Contains(err.Error(), "database") || !strings.Contains(err.Error(), "ctx.get") {
-		t.Fatalf("报错应含缺失服务与 ctx.get 引导, got %v", err)
+	if def.status != PluginWaiting {
+		t.Fatalf("def 应 waiting, got %s", def.status)
 	}
-	// ② 声明 fs（宿主提供）→ 装载成功且 ctx.fs 注入
+	if !strInSlice(def.waitingFor, "database") {
+		t.Fatalf("waitingFor 应含 database, got %v", def.waitingFor)
+	}
+	if host.State("inj-bad") == PluginRunning {
+		t.Fatalf("waiting 中不应 running")
+	}
+	// ② 其他插件提供 database 服务 → waiting 插件自动激活（D3 自动重试）
+	providerID, _ := host.DefineJS(`
+return {
+  name: 'db-provider',
+  apply(ctx) {
+    ctx.provide('database', { connect() { return 'connected' } })
+  }
+}`, "db-provider")
+	pdef, _ := host.GetJSDef(providerID)
+	if err := host.LoadJSDynamic(pdef); err != nil {
+		t.Fatalf("provider 装载失败: %v", err)
+	}
+	if host.State("inj-bad") != PluginRunning {
+		t.Fatalf("database 提供后 inj-bad 应自动激活 running, got %s", host.State("inj-bad"))
+	}
+	if def.status != PluginRunning {
+		t.Fatalf("def 应 running, got %s", def.status)
+	}
+	// ③ 声明 fs（宿主提供）→ 装载成功且 ctx.fs 注入
 	id2, _ := host.DefineJS(`
 return {
   name: 'inj-ok',

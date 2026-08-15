@@ -27,26 +27,28 @@ import (
 func RegisterCordisTools(registry *Registry, host *PluginHost, root string) {
 	registry.Register(&Tool{
 		Name:        "cordis_inspect",
-		Description: "查看当前进程的插件运行时：全部插件/JS 动态插件定义及其状态、贡献的工具、提供的服务。插件 = { name, apply(ctx) }，JS 动态插件用 cordis_define 定义、cordis_run 装载。",
+		Description: "查看当前进程的插件运行时（三层自检，对齐 harness cordis_inspect_self）：① 无 id → 摘要（插件/动态包列表，含版本数与 waiting 提示）；② id=pluginId 或 dyn id → 版本链（当前活动版本 + 各版本状态）；③ id + version=vN → 指定版本源码与完整运行诊断（diag/lastError）。插件 = { name, apply(ctx) }，JS 动态插件用 cordis_define 定义、cordis_run 装载。",
 		Category:    "system",
 		ReadOnly:    true,
 		Parameters: objSchema(map[string]any{
-			"id": strProp("可选：精确插件名或 dyn id（如 dyn-1）。省略则报告全部。"),
+			"id":      strProp("可选：精确插件名、dyn id（如 dyn-1）或 pluginId（稳定身份）。省略则报告全部（L1 摘要）。"),
+			"version": strProp("可选：配合 id 指定版本号（如 v2）查看该版本源码+诊断（L3）。缺省=版本链概览（L2）。"),
 		}),
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
-			return cordisInspectReport(host, argStr(args, "id"))
+			return cordisInspectReport(host, argStr(args, "id"), argStr(args, "version"))
 		},
 	})
 
 	registry.Register(&Tool{
 		Name:        "cordis_define",
-		Description: "登记一个 JS/TS 动态插件定义（语法预检，不运行）。code 是 async 函数体（host 半，宿主进程内运行），支持两种形态：① 对象形态 return { name, apply(ctx, config), inject? }；② 函数形态 return (ctx, config) => void（cordis 生态惯例，函数名作插件名）。apply 中可用 ctx.tools.register 注册工具、ctx.systemPrompt.section 贡献提示、ctx.on 监听事件、ctx.provide 提供服务；inject: ['fs','web','bash','logger','timer',...] 声明硬依赖（宿主缺失会明确报错）。可选 client 参数提供浏览器半代码（UI 侧运行，web 界面插件面板装载）：形态 (ui) => void，ui 提供 on/emit/registerPanel/http 等浏览器侧服务。TS 源码（含 interface/type 注解）由内置编译器自动转译。返回 dyn id 供 cordis_run/stop/undefine 使用。",
+		Description: "登记一个 JS/TS 动态插件定义（语法预检，不运行）。code 是 async 函数体（host 半，宿主进程内运行），支持两种形态：① 对象形态 return { name, apply(ctx, config), inject? }；② 函数形态 return (ctx, config) => void（cordis 生态惯例，函数名作插件名）。apply 中可用 ctx.tools.register 注册工具、ctx.systemPrompt.section 贡献提示、ctx.on 监听事件、ctx.provide 提供服务；inject: ['fs','web','bash','logger','timer',...] 声明硬依赖（宿主缺失时插件进入 waiting，服务出现后自动激活；可选服务用 ctx.get(name) 判 undefined）。可选 client 参数提供浏览器半代码（UI 侧运行，web 界面插件面板装载）：形态 (ui) => void，ui 提供 on/emit/registerPanel/http 等浏览器侧服务。TS 源码（含 interface/type 注解）由内置编译器自动转译。★ 版本化：pluginId 非空时向已有插件追加新版本（对齐 harness define existing append）；缺省=新建插件。返回 dyn id（精确版本）供 cordis_run/stop/undefine 使用。",
 		Category:    "system",
 		Parameters: objSchema(map[string]any{
 			"code":     strProp("插件 host 半代码（JS 或 TS，async 函数体，return { name, apply(ctx, config), inject? } 或 return (ctx, config) => void）。可访问全局：ctx/harness/console/btoa/atob/TextEncoder/TextDecoder/CordisApi（内置真 cordis 运行时，new CordisApi.api.Context() 建 cordis app 跑生态插件协作）；inject 声明后 ctx.fs/web/bash/logger/timer 可用。"),
 			"client":   strProp("可选：插件 client 半代码（浏览器端执行，web 界面插件面板装载）。形态 (ui) => void：ui.on(event, fn) 收 host 事件（ui:/client: 前缀）、ui.emit(event, payload) 发事件回 host（host: 前缀给 host 插件消费）、ui.registerPanel({id,title,icon,render}) 注册自定义面板、ui.http.get/post 调后端 API。缺省=纯 host 插件。"),
 			"language": strProp("可选：源码语言 \"js\" | \"ts\"，默认自动探测（含 interface/type 注解/类型标注视为 ts）。"),
 			"purpose":  strProp("可选：插件用途说明。"),
+			"pluginId": strProp("可选：已有插件的稳定 id（cordis_define 首次返回的 dyn-<n> 即稳定身份）。非空=向该插件追加新版本（existing append）；缺省=新建插件。追加版本后 cordis_run 传 pluginId 装载最新版。"),
 			"dir":      strProp("可选：源码目录（解析相对 import 的多文件插件）。缺省=单文件模式（不解析 import）。"),
 		}, "code"),
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
@@ -57,6 +59,7 @@ func RegisterCordisTools(registry *Registry, host *PluginHost, root string) {
 			purpose := argStr(args, "purpose")
 			language := argStr(args, "language")
 			clientCode := argStr(args, "client")
+			pluginId := strings.TrimSpace(argStr(args, "pluginId"))
 			dir := ""
 			if d := strings.TrimSpace(argStr(args, "dir")); d != "" {
 				resolved, err := resolvePathFor(root, args, d)
@@ -65,7 +68,7 @@ func RegisterCordisTools(registry *Registry, host *PluginHost, root string) {
 				}
 				dir = resolved
 			}
-			id, err := host.DefineJSCodeFull(code, language, purpose, dir, clientCode)
+			id, err := host.DefineJSCodeVersioned(code, language, purpose, dir, clientCode, pluginId)
 			if err != nil {
 				return "", err
 			}
@@ -76,23 +79,29 @@ func RegisterCordisTools(registry *Registry, host *PluginHost, root string) {
 			if strings.TrimSpace(clientCode) != "" {
 				extra += "，含 client 半（浏览器 UI）"
 			}
-			return fmt.Sprintf("已登记 %s（语言 %s，purpose: %s%s）。用 cordis_run id=%s 装载。", id, detectPluginLanguage(code, language), purpose, extra, id), nil
+			def, _ := host.GetJSDef(id)
+			mode := "新建插件"
+			if pluginId != "" {
+				mode = "向 " + pluginId + " 追加版本"
+			}
+			return fmt.Sprintf("已登记 %s（%s，version=%s 语言 %s，purpose: %s%s）。用 cordis_run id=%s 或 id=%s 装载。",
+				id, mode, def.version, detectPluginLanguage(code, language), purpose, extra, id, def.pluginId), nil
 		},
 	})
 
 	registry.Register(&Tool{
 		Name:        "cordis_run",
-		Description: "装载一个已登记的 JS 动态插件（cordis_define 的 id）：在 goja 沙箱中求值并执行 apply(ctx, config)。可选 config 透传为 apply 第二参（插件配置）。正在运行的插件重复 run 会重新装载（no-op 或重放）。",
+		Description: "装载一个已登记的 JS 动态插件（cordis_define 的 id 或 pluginId）：在 goja 沙箱中求值并执行 apply(ctx, config)。可选 config 透传为 apply 第二参（插件配置）。id 可传精确 dyn id（指定版本）或 pluginId（最新版本）；已运行的插件重复 run 会先卸载旧实例再装载新版本（restart 语义，对齐 harness run mode=run）。inject 声明服务缺失时插件进入 waiting（服务出现后自动激活，可用 cordis_inspect 查看）。",
 		Category:    "system",
 		Parameters: objSchema(map[string]any{
-			"id":     strProp("cordis_define 返回的 dyn id（如 dyn-1）。"),
+			"id":     strProp("cordis_define 返回的 dyn id（如 dyn-1，精确版本）或 pluginId（稳定身份=首次 dyn id，装载最新版本）。"),
 			"config": strProp("可选：插件配置 JSON 对象（透传给 apply(ctx, config) 第二参）。"),
 		}, "id"),
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
 			id := argStr(args, "id")
-			def, ok := host.GetJSDef(id)
-			if !ok {
-				return "", fmt.Errorf("插件定义不存在: %s（定义只活在进程内存，跨重启不存续）", id)
+			def, err := host.resolveJSDef(id)
+			if err != nil {
+				return "", err
 			}
 			if cfgStr := strings.TrimSpace(argStr(args, "config")); cfgStr != "" {
 				var cfg map[string]any
@@ -104,7 +113,12 @@ func RegisterCordisTools(registry *Registry, host *PluginHost, root string) {
 			if err := host.LoadJSDynamic(def); err != nil {
 				return "", err
 			}
-			return fmt.Sprintf("插件 %s (%s) 已装载并运行。可用 cordis_inspect id=%s 查看。", def.name, id, id), nil
+			// 等待语义：装载成功但插件进入 waiting（inject 缺服务）
+			if def.status == PluginWaiting {
+				return fmt.Sprintf("插件 %s (%s v%s) 已进入 waiting：inject 声明 %v 中宿主未提供 %v。服务出现后将自动激活；可用 cordis_inspect id=%s 查看。",
+					def.name, def.id, def.version, def.inject, def.waitingFor, def.pluginId), nil
+			}
+			return fmt.Sprintf("插件 %s (%s v%s) 已装载并运行。可用 cordis_inspect id=%s 查看。", def.name, def.id, def.version, def.pluginId), nil
 		},
 	})
 
@@ -559,36 +573,54 @@ func (h *PluginHost) resolvePluginName(idOrName string) (string, error) {
 	return "", fmt.Errorf("未找到插件 %q", idOrName)
 }
 
-// cordisInspectReport 生成插件运行时报告。
-func cordisInspectReport(host *PluginHost, filter string) (string, error) {
+// cordisInspectReport 生成插件运行时报告（三层自检，对齐 harness cordis_inspect_self）：
+//   L1 摘要：filter 为空 → 插件列表 + 动态包列表（含版本数）+ waiting 提示
+//   L2 版本：filter=pluginId/dyn id/插件名（无 version）→ 该插件版本链 + 运行状态 + 诊断摘要
+//   L3 源码：filter 指向定义且带 version → 指定版本源码 + 完整诊断
+func cordisInspectReport(host *PluginHost, filter, version string) (string, error) {
 	var sb strings.Builder
 	recs := host.Inspect()
 	defs := host.JSDefs()
 
 	if filter != "" {
-		// 精确查询：插件或 JS 定义
+		// ── 精确查询：插件或 JS 定义（L2/L3）──
 		for _, r := range recs {
 			if r.Name == filter {
 				sb.WriteString(renderPluginRecord(r))
+				// 若该插件有 JS 定义 → 附版本链（L2）
+				if d := host.DefByPluginOrName(filter); d != nil {
+					sb.WriteString("\n" + renderVersionChain(host, d.pluginId, version))
+				}
 				return sb.String(), nil
 			}
 		}
 		for _, d := range defs {
-			if d.id == filter {
-				sb.WriteString(renderJSDefDetail(d))
+			if d.id == filter || d.pluginId == filter {
+				if version != "" {
+					// L3：指定版本源码 + 完整诊断
+					for _, dv := range host.PluginVersions(d.pluginId) {
+						if dv.version == version {
+							sb.WriteString(renderJSDefDetail(dv))
+							return sb.String(), nil
+						}
+					}
+					return "", fmt.Errorf("插件 %s 没有版本 %s（已有: %s）", filter, version, host.PluginVersionNames(d.pluginId))
+				}
+				sb.WriteString(renderVersionChain(host, d.pluginId, ""))
 				return sb.String(), nil
 			}
 		}
-		return "", fmt.Errorf("未找到插件/定义 %q（定义只活在进程内存）", filter)
+		return "", fmt.Errorf("未找到插件/定义 %q（定义只活在进程内存；插件名或 dyn id 均可）", filter)
 	}
 
-	// 宽泛报告
-	sb.WriteString("## Plugins\n")
-	if len(recs) == 0 {
-		sb.WriteString("（无插件）\n")
-	}
+	// ── L1 摘要 ──
+	sb.WriteString("## Plugins（运行中）\n")
+	n := 0
 	for _, r := range recs {
-		sb.WriteString(fmt.Sprintf("- %s [%s] %s", r.Name, r.Source, r.State))
+		if r.State != "running" {
+			continue
+		}
+		sb.WriteString(fmt.Sprintf("- %s [%s]", r.Name, r.Source))
 		if len(r.Tools) > 0 {
 			sb.WriteString(fmt.Sprintf(" tools=%s", strings.Join(r.Tools, ",")))
 		}
@@ -596,20 +628,109 @@ func cordisInspectReport(host *PluginHost, filter string) (string, error) {
 			sb.WriteString(fmt.Sprintf(" provides=%s", strings.Join(r.Provides, ",")))
 		}
 		sb.WriteString("\n")
+		n++
+	}
+	if n == 0 {
+		sb.WriteString("（无运行中插件）\n")
 	}
 
-	sb.WriteString("\n## Dynamic Packages\n")
+	sb.WriteString("\n## Dynamic Packages（JS 插件定义，按 pluginId 分组）\n")
 	if len(defs) == 0 {
 		sb.WriteString("（无 JS 动态插件定义）\n")
 	}
+	// 按 pluginId 分组（去重）展示
+	seen := map[string]bool{}
 	for _, d := range defs {
-		state := "defined"
-		if _, ok := host.Get(d.name); ok && host.State(d.name) == PluginRunning {
-			state = "running"
+		if seen[d.pluginId] {
+			continue
 		}
-		sb.WriteString(fmt.Sprintf("- %s %s (%s) %s purpose=%s\n", d.id, d.name, state, d.version, d.purpose))
+		seen[d.pluginId] = true
+		state := d.status.String()
+		chain := host.PluginVersions(d.pluginId)
+		verNote := ""
+		if len(chain) > 1 {
+			verNote = fmt.Sprintf("（%d 版本，最新 %s）", len(chain), chain[len(chain)-1].version)
+		}
+		extra := ""
+		if d.status == PluginWaiting && len(d.waitingFor) > 0 {
+			extra = fmt.Sprintf(" ⏳ waiting 缺服务: %v", d.waitingFor)
+		}
+		if d.status == PluginFailed || d.status == PluginRejected {
+			extra = fmt.Sprintf(" ❌ %s: %s", d.status, truncateStr(d.lastError, 80))
+		}
+		sb.WriteString(fmt.Sprintf("- %s %s [%s] %s%s%s\n", d.pluginId, d.name, state, d.version, verNote, extra))
 	}
+
+	// waiting 汇总提示
+	if wd := host.waitingDefs(); len(wd) > 0 {
+		sb.WriteString("\n## Waiting（inject 服务未就绪，自动激活中）\n")
+		for _, d := range wd {
+			sb.WriteString(fmt.Sprintf("- %s (%s) 缺服务: %v\n", d.pluginId, d.name, d.waitingFor))
+		}
+	}
+	sb.WriteString("\n详情：cordis_inspect id=<pluginId 或 dyn id>；源码：cordis_inspect id=<pluginId> version=<版本号>。\n")
 	return sb.String(), nil
+}
+
+// DefByPluginOrName 按插件名或稳定 id 找 JS 定义（Inspect 补充用）。
+func (h *PluginHost) DefByPluginOrName(name string) *jsPluginDef {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for _, d := range h.defs {
+		if d.pluginId == name || d.name == name {
+			return d
+		}
+	}
+	return nil
+}
+
+// PluginVersionNames 某 pluginId 的版本号列表（逗号分隔）。
+func (h *PluginHost) PluginVersionNames(pluginId string) string {
+	chain := h.PluginVersions(pluginId)
+	names := make([]string, 0, len(chain))
+	for _, d := range chain {
+		names = append(names, d.version)
+	}
+	return strings.Join(names, ", ")
+}
+
+// renderVersionChain 渲染版本链（L2：版本指针 + package 摘要）。
+func renderVersionChain(host *PluginHost, pluginId, wantVersion string) string {
+	chain := host.PluginVersions(pluginId)
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("## %s（%d 版本）\n", pluginId, len(chain)))
+	// 当前活动版本（运行中的）
+	active := ""
+	for _, d := range chain {
+		if d.status == PluginRunning {
+			active = d.version
+			break
+		}
+	}
+	sb.WriteString(fmt.Sprintf("- pluginId: %s\n", pluginId))
+	if active != "" {
+		sb.WriteString(fmt.Sprintf("- current: %s（运行中）\n", active))
+	} else {
+		sb.WriteString("- current: （无运行中版本）\n")
+	}
+	sb.WriteString("- versions:\n")
+	for _, d := range chain {
+		mark := " "
+		if d.version == active {
+			mark = "▶"
+		}
+		extra := ""
+		if d.status == PluginWaiting {
+			extra = fmt.Sprintf(" waiting 缺服务: %v", d.waitingFor)
+		} else if d.status == PluginFailed || d.status == PluginRejected {
+			extra = fmt.Sprintf(" %s: %s", d.status, truncateStr(d.lastError, 60))
+		}
+		fmt.Fprintf(&sb, "  %s %s %s [%s] %s%s\n", mark, d.version, d.id, d.status, d.createdAt.Format("01-02 15:04"), extra)
+	}
+	if wantVersion == "" {
+		sb.WriteString("\n源码与诊断：cordis_inspect id=" + pluginId + " version=<版本号>\n")
+	}
+	return sb.String()
 }
 
 // renderPluginRecord 渲染单个插件详情。
@@ -617,8 +738,26 @@ func renderPluginRecord(r PluginRecord) string {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("## %s\n", r.Name))
 	sb.WriteString(fmt.Sprintf("- source: %s\n- state: %s\n", r.Source, r.State))
+	if r.PluginID != "" {
+		sb.WriteString(fmt.Sprintf("- pluginId: %s（dyn id: %s, pkg: %s）\n", r.PluginID, r.DefID, r.PkgID))
+	}
 	if r.Version != "" {
 		sb.WriteString(fmt.Sprintf("- version: %s\n", r.Version))
+	}
+	if r.Versions > 1 {
+		sb.WriteString(fmt.Sprintf("- 累计版本: %d\n", r.Versions))
+	}
+	if len(r.WaitingFor) > 0 {
+		sb.WriteString(fmt.Sprintf("- waitingFor: %s\n", strings.Join(r.WaitingFor, ", ")))
+	}
+	if r.LastError != "" {
+		sb.WriteString(fmt.Sprintf("- lastError: %s\n", truncateStr(r.LastError, 200)))
+	}
+	if len(r.Diag) > 0 {
+		sb.WriteString("- diag:\n")
+		for _, line := range r.Diag {
+			sb.WriteString(fmt.Sprintf("  %s\n", line))
+		}
 	}
 	if len(r.Provides) > 0 {
 		sb.WriteString(fmt.Sprintf("- provides: %s\n", strings.Join(r.Provides, ", ")))
@@ -632,16 +771,16 @@ func renderPluginRecord(r PluginRecord) string {
 	return sb.String()
 }
 
-// renderJSDefDetail 渲染 JS 定义详情（含代码预览）。
+// renderJSDefDetail 渲染 JS 定义详情（L3 源码层：含代码预览与完整诊断）。
 func renderJSDefDetail(d *jsPluginDef) string {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("## %s\n", d.id))
+	sb.WriteString(fmt.Sprintf("## %s（%s）\n", d.id, d.version))
 	form := "对象形态"
 	if d.isFunc {
 		form = "函数形态"
 	}
-	sb.WriteString(fmt.Sprintf("- name: %s\n- purpose: %s\n- version: %s\n- form: %s\n- createdAt: %s\n",
-		d.name, d.purpose, d.version, form, d.createdAt.Format(time.RFC3339)))
+	sb.WriteString(fmt.Sprintf("- name: %s\n- pluginId: %s\n- pkg: %s\n- purpose: %s\n- status: %s\n- form: %s\n- createdAt: %s\n",
+		d.name, d.pluginId, d.packageId, d.purpose, d.status, form, d.createdAt.Format(time.RFC3339)))
 	if len(d.inject) > 0 {
 		sb.WriteString(fmt.Sprintf("- inject: %s\n", strings.Join(d.inject, ", ")))
 	}
@@ -653,9 +792,21 @@ func renderJSDefDetail(d *jsPluginDef) string {
 	if len(d.provides) > 0 {
 		sb.WriteString(fmt.Sprintf("- provides: %s\n", strings.Join(d.provides, ", ")))
 	}
+	if len(d.waitingFor) > 0 {
+		sb.WriteString(fmt.Sprintf("- waitingFor: %s\n", strings.Join(d.waitingFor, ", ")))
+	}
+	if d.lastError != "" {
+		sb.WriteString(fmt.Sprintf("- lastError: %s\n", d.lastError))
+	}
+	if len(d.diag) > 0 {
+		sb.WriteString("- diag:\n")
+		for _, line := range d.diag {
+			sb.WriteString(fmt.Sprintf("  %s\n", line))
+		}
+	}
 	preview := d.code
-	if len(preview) > 800 {
-		preview = preview[:800] + "\n…（截断）"
+	if len(preview) > 1200 {
+		preview = preview[:1200] + "\n…（截断）"
 	}
 	sb.WriteString("\n```js\n" + preview + "\n```\n")
 	return sb.String()

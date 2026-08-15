@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -47,6 +48,7 @@ type SessionContext struct {
 	CodeGraphStats         string   // 代码图谱统计（实体数/覆盖率）
 	BuildStatus            string   // 最近构建状态（编译成功/失败、二进制时间戳）
 	KBStaleness            string   // 知识库过期警告（哪些条目引用了不存在的文件）
+	PluginReferences       string   // @pluginId 引用上下文（用户消息中 @ 引用的 JS 动态插件）
 }
 
 // BuildSessionContext 构建会话连贯性上下文。
@@ -96,6 +98,9 @@ func BuildSessionContext(convID string, workspaceRoots []string, currentTask str
 
 	// 11. 知识库过期检测
 	sc.KBStaleness = buildKBStaleness(workspaceRoots)
+
+	// 12. @pluginId 引用（对齐 harness：扫 user 消息 @([a-z]{3,6}-\d+) 注入插件上下文）
+	sc.PluginReferences = buildPluginReferences(history)
 
 	return sc
 }
@@ -164,6 +169,12 @@ func (sc *SessionContext) FormatForInjection() string {
 	if sc.KBStaleness != "" {
 		b.WriteString("\n## ⚠️ 知识库过期警告\n")
 		b.WriteString(sc.KBStaleness + "\n")
+		hasContent = true
+	}
+
+	if sc.PluginReferences != "" {
+		b.WriteString("\n## 用户引用的插件（@pluginId）\n")
+		b.WriteString(sc.PluginReferences + "\n")
 		hasContent = true
 	}
 
@@ -1011,6 +1022,61 @@ func BuildResumeContext(convID, currentTask string, history []Message, store Mes
 type MessageStoreReader interface {
 	GetConversation(convID string) (*ConversationMeta, error)
 	LoadAll(convID string) ([]Message, error)
+}
+
+// ── @pluginId 引用注入（D2：对齐 harness referencedPluginIds）────
+
+// pluginRefPattern 匹配用户消息中的 @pluginId 引用：@后接 3-6 位小写字母
+// + 连字符 + 数字（dyn-1 / git-3 / tool-12 等）。
+var pluginRefPattern = regexp.MustCompile(`@([a-z]{3,6}-\d+)`)
+
+// buildPluginReferences 扫描历史 user 消息中的 @pluginId 引用，
+// 为每个引用的 JS 动态插件注入上下文块（reference JSON + 操作指引）。
+// 无引用或宿主未初始化（无全局 PluginHost）→ 返回空串。
+func buildPluginReferences(history []Message) string {
+	ph := GetGlobalPluginHost()
+	if ph == nil {
+		return ""
+	}
+	seen := map[string]bool{}
+	var refs []*jsPluginDef
+	for _, m := range history {
+		if m.Role != RoleUser {
+			continue
+		}
+		for _, match := range pluginRefPattern.FindAllStringSubmatch(m.Content, -1) {
+			id := match[1]
+			if seen[id] {
+				continue
+			}
+			seen[id] = true
+			if def, err := ph.resolveJSDef(id); err == nil {
+				refs = append(refs, def)
+			}
+		}
+	}
+	if len(refs) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for i, d := range refs {
+		if i > 0 {
+			b.WriteString("\n")
+		}
+		b.WriteString("<cordis_dynamic_plugin_context>\n")
+		state := d.status.String()
+		if d.status == PluginWaiting && len(d.waitingFor) > 0 {
+			state = fmt.Sprintf("waiting（缺服务: %v）", d.waitingFor)
+		}
+		fmt.Fprintf(&b, "reference: {\"pluginId\": %q, \"name\": %q, \"version\": %q, \"state\": %q, \"pkg\": %q, \"versions\": %d, \"purpose\": %q}\n",
+			d.pluginId, d.name, d.version, state, d.packageId, len(ph.PluginVersions(d.pluginId)), d.purpose)
+		b.WriteString("用户引用了该插件。继续推进前先了解其当前实现：\n")
+		b.WriteString("1. cordis_inspect id=" + d.pluginId + " 查看版本链与运行状态；\n")
+		b.WriteString("2. cordis_inspect id=" + d.pluginId + " version=" + d.version + " 读源码与诊断（不要凭记忆臆测代码）；\n")
+		b.WriteString("3. 需要修改：cordis_define pluginId=" + d.pluginId + " 追加新版本 → cordis_run id=" + d.pluginId + " 装载更新。\n")
+		b.WriteString("</cordis_dynamic_plugin_context>")
+	}
+	return b.String()
 }
 
 // formatTimeAgo 格式化相对时间。

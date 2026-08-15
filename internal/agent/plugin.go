@@ -21,6 +21,7 @@ package agent
 
 import (
 	"fmt"
+	"log"
 	"reflect"
 	"sort"
 	"strings"
@@ -299,18 +300,37 @@ func (c *PluginContext) cleanup() {
 
 // ─── PluginState / PluginRecord ──────────────────────────
 
-// PluginState 插件运行状态。
+// PluginState 插件运行状态（对齐 harness CordisRunStatus 的进程内简化 6 态）：
+//   running   正在运行（apply 已执行）
+//   stopped   已停止（定义保留，可再 run）
+//   waiting   等待服务（inject 声明的服务未就绪，服务出现后自动激活）
+//   rejected  装载被拒绝（求值/形态/schema 错误——定义期即可发现的问题）
+//   failed    apply 失败（已执行但运行期报错）
+//   cancelled 已取消（undefine 或用户中止）
 type PluginState int
 
 // PluginState 取值。
 const (
 	PluginStopped PluginState = iota
 	PluginRunning
+	PluginWaiting
+	PluginRejected
+	PluginFailed
+	PluginCancelled
 )
 
 func (s PluginState) String() string {
-	if s == PluginRunning {
+	switch s {
+	case PluginRunning:
 		return "running"
+	case PluginWaiting:
+		return "waiting"
+	case PluginRejected:
+		return "rejected"
+	case PluginFailed:
+		return "failed"
+	case PluginCancelled:
+		return "cancelled"
 	}
 	return "stopped"
 }
@@ -337,6 +357,12 @@ type PluginRecord struct {
 	HasClient  bool         `json:"hasClient,omitempty"`   // 是否有 client 半（浏览器端）
 	ClientCode string       `json:"clientCode,omitempty"`  // client 半源码（供浏览器装载；列表接口可能省略）
 	DefID      string       `json:"defId,omitempty"`       // JS 动态插件定义 id（dyn-<n>）
+	PluginID   string       `json:"pluginId,omitempty"`    // 稳定插件身份（跨版本；默认=首次定义 id）
+	PkgID      string       `json:"pkgId,omitempty"`       // 当前版本 package id（pkg-<n>，不可变）
+	Versions   int          `json:"versions,omitempty"`    // 该插件累计版本数（含历史）
+	WaitingFor []string     `json:"waitingFor,omitempty"`  // state=waiting 时缺的服务
+	LastError  string       `json:"lastError,omitempty"`   // 最近一次装载失败原因（诊断）
+	Diag       []string     `json:"diag,omitempty"`        // 运行诊断（阶段记录，最新在后）
 }
 
 // ─── PluginHost ───────────────────────────────────────────
@@ -352,6 +378,13 @@ type PluginHost struct {
 
 	// JS 动态插件定义（cordis_define 登记，cordis_run 装载）
 	defs map[string]*jsPluginDef
+
+	// ★ 版本化 package 模型（对齐 harness registry）：
+	//   pluginId（稳定身份）→ 版本链（package 列表，最新在尾）。define 时
+	//   传 pluginId=existing 追加版本；cordis_run 传 pluginId 解析到最新版本。
+	pluginVersions map[string][]*jsPluginDef
+	// 等待中的定义（inject 声明服务缺失 → waiting；服务提供后自动重试激活）
+	waiting map[string]*jsPluginDef
 
 	// 插件贡献回收表
 	pluginTools    map[string][]string
@@ -384,6 +417,8 @@ func NewPluginHost(registry *Registry, store ConversationStore, root string) *Pl
 		states:         map[string]PluginState{},
 		sources:        map[string]PluginSource{},
 		defs:           map[string]*jsPluginDef{},
+		pluginVersions: map[string][]*jsPluginDef{},
+		waiting:        map[string]*jsPluginDef{},
 		pluginTools:    map[string][]string{},
 		pluginSections: map[string][]*PromptSection{},
 		pluginVars:     map[string][]*PromptVariable{},
@@ -733,6 +768,97 @@ func (h *PluginHost) Get(name string) (Plugin, bool) {
 	return p, ok
 }
 
+// ─── inject 等待语义（D3：对齐 harness lifecycle 的 waiting）──────
+
+// waitForServices 把 def 登记为等待状态（inject 声明服务缺失时调用）。
+// 插件进入 waiting：不装载、不 apply；服务出现后经 retryWaiting 自动激活。
+func (h *PluginHost) waitForServices(def *jsPluginDef, missing []string) {
+	h.mu.Lock()
+	h.waiting[def.id] = def
+	h.mu.Unlock()
+	def.setStatus(PluginWaiting, missing)
+}
+
+// RetryWaiting 在服务提供后尝试激活全部等待该服务的插件（ctx.provide 触发）。
+func (h *PluginHost) retryWaiting(serviceName string) {
+	h.mu.Lock()
+	var retry []*jsPluginDef
+	for id, def := range h.waiting {
+		if strInSlice(def.waitingFor, serviceName) {
+			retry = append(retry, def)
+			delete(h.waiting, id)
+		}
+	}
+	h.mu.Unlock()
+	for _, def := range retry {
+		if err := h.LoadJSDynamic(def); err != nil {
+			// 重试失败：若非等待类错误，记录诊断并回到可重试状态
+			log.Printf("[cordis-waiting] 插件 %s 服务 %s 就绪后重试装载失败: %v", def.id, serviceName, err)
+		}
+	}
+}
+
+// resolveJSDef 把 cordis_run/stop/undefine 的 id 解析为 JS 定义：
+//   - 精确 dyn id（pkg-xxx 的 def）→ 该版本
+//   - pluginId（稳定身份）→ 版本链最新版
+//   - 插件名 → 匹配该名插件的最新版本
+func (h *PluginHost) resolveJSDef(idOrName string) (*jsPluginDef, error) {
+	if def, ok := h.GetJSDef(idOrName); ok {
+		return def, nil
+	}
+	h.mu.RLock()
+	if chain := h.pluginVersions[idOrName]; len(chain) > 0 {
+		d := chain[len(chain)-1]
+		h.mu.RUnlock()
+		return d, nil
+	}
+	h.mu.RUnlock()
+	// 按插件名匹配（同名插件取最新版本）
+	h.mu.RLock()
+	var best *jsPluginDef
+	for _, d := range h.defs {
+		if d.name == idOrName && (best == nil || d.createdAt.After(best.createdAt)) {
+			best = d
+		}
+	}
+	h.mu.RUnlock()
+	if best != nil {
+		return best, nil
+	}
+	return nil, fmt.Errorf("插件定义不存在: %s（定义只活在进程内存，跨重启不存续）", idOrName)
+}
+
+// PluginVersions 返回某 pluginId 的版本链（最新在尾；不存在返回 nil）。
+func (h *PluginHost) PluginVersions(pluginId string) []*jsPluginDef {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return append([]*jsPluginDef(nil), h.pluginVersions[pluginId]...)
+}
+
+// PluginIds 全部已知 pluginId（含单版本插件）。
+func (h *PluginHost) PluginIds() []string {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	ids := make([]string, 0, len(h.pluginVersions))
+	for id := range h.pluginVersions {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+// waitingDefs 全部等待中的定义（排序；供 cordis_inspect 报告）。
+func (h *PluginHost) waitingDefs() []*jsPluginDef {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	out := make([]*jsPluginDef, 0, len(h.waiting))
+	for _, d := range h.waiting {
+		out = append(out, d)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].id < out[j].id })
+	return out
+}
+
 // State 返回插件状态。
 func (h *PluginHost) State(name string) PluginState {
 	h.mu.RLock()
@@ -766,6 +892,19 @@ func (h *PluginHost) Inspect() []PluginRecord {
 				rec.HasClient = strings.TrimSpace(d.clientCode) != ""
 				rec.ClientCode = d.clientCode
 				rec.DefID = d.id
+				rec.PluginID = d.pluginId
+				rec.PkgID = d.packageId
+				if chain := h.pluginVersions[d.pluginId]; len(chain) > 0 {
+					rec.Versions = len(chain)
+				} else {
+					rec.Versions = 1
+				}
+				rec.WaitingFor = d.waitingFor
+				rec.LastError = d.lastError
+				rec.Diag = d.diag
+				if d.status == PluginWaiting {
+					rec.State = "waiting"
+				}
 			}
 		}
 		rec.Tools = append([]string(nil), h.pluginTools[name]...)
@@ -798,6 +937,19 @@ func (h *PluginHost) InspectDetail(name string) *PluginRecord {
 				rec.HasClient = strings.TrimSpace(d.clientCode) != ""
 				rec.ClientCode = d.clientCode
 				rec.DefID = d.id
+				rec.PluginID = d.pluginId
+				rec.PkgID = d.packageId
+				if chain := h.pluginVersions[d.pluginId]; len(chain) > 0 {
+					rec.Versions = len(chain)
+				} else {
+					rec.Versions = 1
+				}
+				rec.WaitingFor = d.waitingFor
+				rec.LastError = d.lastError
+				rec.Diag = d.diag
+				if d.status == PluginWaiting {
+					rec.State = "waiting"
+				}
 			}
 		}
 		rec.Tools = append([]string(nil), h.pluginTools[n]...)

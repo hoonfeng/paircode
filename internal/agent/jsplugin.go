@@ -99,19 +99,51 @@ func isJSTimeout(err error) bool {
 // ─── JS 插件定义 ───────────────────────────────────────────
 
 // jsPluginDef 一个 JS 动态插件定义（cordis_define 登记；进程内存，不落盘）。
+//
+// ★ 版本化 package 模型（对齐 harness registry.ts）：pluginId 是稳定插件身份
+// （跨版本不变，默认=首次定义的 dyn id），packageId 是本次定义（不可变）；
+// 同一插件多次 define → 同一 pluginId 下追加版本（pluginVersions 链）。
 type jsPluginDef struct {
-	id         string         // dyn-<n>
+	id         string         // dyn-<n>（package 精确 id，defs map 的 key）
+	pluginId   string         // 稳定插件身份（跨版本；默认 = id）
+	packageId  string         // pkg-<n>（本次定义不可变版本标识）
 	lang       string         // 源码语言 "js" | "ts"（登记时探测/指定；code 存转译后 JS）
 	name       string         // 插件名（默认取代码返回的 name；函数形态取函数名或 id）
 	purpose    string         // 用途说明
 	code       string         // host 半代码（async 函数体，return 插件对象/函数）
 	clientCode string         // client 半代码（浏览器端执行；可为空=纯 host 插件）
-	version    string         // "dyn-<n>"
+	version    string         // 版本号（v1/v2/…；默认 = 首次定义 v1）
 	provides   []string       // 提供服务的键（插件运行时从 ctx.provide 收集）
 	inject     []string       // 插件声明的硬依赖服务（apply 前校验宿主是否提供）
 	config     map[string]any // 插件配置（cordis_run 传入，apply(ctx, config) 第二参）
 	isFunc     bool           // 函数形态插件（export 为 (ctx, config) => void）
 	createdAt  time.Time
+
+	// ★ 状态机与运行诊断（对齐 harness CordisRunStatus + CordisRunDiagnostic）
+	status     PluginState // stopped/running/waiting/rejected/failed/cancelled
+	waitingFor []string    // status=waiting 时缺的服务清单
+	lastError  string      // 最近一次装载失败原因
+	diag       []string    // 运行诊断（阶段记录，最新在后）
+}
+
+// setStatus 更新定义状态（线程安全；h.mu 保护）。
+func (d *jsPluginDef) setStatus(s PluginState, waitingFor []string) {
+	if d == nil {
+		return
+	}
+	d.status = s
+	d.waitingFor = waitingFor
+}
+
+// addDiag 追加一条运行诊断（线程安全；h.mu 保护）。
+func (d *jsPluginDef) addDiag(line string) {
+	if d == nil {
+		return
+	}
+	d.diag = append(d.diag, line)
+	if len(d.diag) > 20 {
+		d.diag = d.diag[len(d.diag)-20:]
+	}
 }
 
 // Name 插件名（公开访问；jsPluginDef 字段私有）。
@@ -247,6 +279,8 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 		}
 		p.mu.Unlock()
 		p.addCleanup(cancel) // 卸载时撤销服务
+		// ★ D3：新服务出现 → 激活等待该服务的插件（inject 等待语义）
+		p.host.retryWaiting(name)
 		return goja.Undefined()
 	})
 	ctxObj.Set("on", func(call goja.FunctionCall) goja.Value {
@@ -870,11 +904,20 @@ func (h *PluginHost) LoadJSDynamic(def *jsPluginDef) error {
 	if def == nil || strings.TrimSpace(def.code) == "" {
 		return fmt.Errorf("插件 %s: 代码为空", def.id)
 	}
+	// 重置运行诊断起点（保留历史 diag 但标记新装载阶段）
+	def.addDiag(fmt.Sprintf("[%s] run 开始（pluginId=%s pkg=%s）", time.Now().Format("15:04:05"), def.pluginId, def.packageId))
+
 	vm, _ := newJSSandbox(def.id)
 	obj, err := evalJSPlugin(vm, def.code, def.id)
 	if err != nil {
+		def.addDiag("求值失败: " + err.Error())
+		def.lastError = err.Error()
+		h.mu.Lock()
+		def.setStatus(PluginRejected, nil)
+		h.mu.Unlock()
 		return err
 	}
+	def.addDiag("求值通过")
 
 	var applyFn goja.Callable
 	name := ""
@@ -914,10 +957,14 @@ func (h *PluginHost) LoadJSDynamic(def *jsPluginDef) error {
 			}
 		}
 	}
-	// ★ 校验硬依赖：声明过的服务宿主必须提供；缺失明确报错引导
-	//（对齐 harness：inject 是硬依赖会等待；可选服务请用 ctx.get(name) 判 undefined）
-	if err := h.checkInjects(def); err != nil {
-		return err
+	// ★ 硬依赖校验（D3 等待语义，对齐 harness lifecycle）：
+	//   inject 声明的服务缺失 → 插件进入 waiting（不装载、不 apply），
+	//   服务出现后经 retryWaiting 自动激活；可选服务请用 ctx.get(name) 判 undefined。
+	if missing := h.missingServices(def); len(missing) > 0 {
+		def.addDiag(fmt.Sprintf("inject 等待: %v（可用服务: %v）", missing, h.availableServices()))
+		def.name = name
+		h.waitForServices(def, missing)
+		return nil // 等待不是错误：返回成功，由调用方检查 def.status 提示等待
 	}
 
 	def.name = name
@@ -933,18 +980,65 @@ func (h *PluginHost) LoadJSDynamic(def *jsPluginDef) error {
 		handlers: map[string]func(args any) (any, error){},
 	}
 
+	// ★ D8 restart 语义（对齐 harness run mode=run）：同名插件已注册/运行 →
+	// 先卸载旧实例并清出注册表，再装载新版本（不再报同名冲突）。
+	h.mu.Lock()
+	oldName := ""
+	if _, exists := h.plugins[name]; exists {
+		oldName = name
+	}
+	h.mu.Unlock()
+	if oldName != "" {
+		if err := h.Unload(oldName); err != nil {
+			def.lastError = err.Error()
+			return err
+		}
+		h.mu.Lock()
+		// 旧实例对应定义状态复位（版本链中其他版本不再 running）
+		if oldAdapter, ok := h.plugins[oldName].(*jsPluginAdapter); ok {
+			oldAdapter.def.setStatus(PluginStopped, nil)
+		}
+		delete(h.plugins, oldName)
+		delete(h.sources, oldName)
+		for i, n := range h.order {
+			if n == oldName {
+				h.order = append(h.order[:i], h.order[i+1:]...)
+				break
+			}
+		}
+		h.mu.Unlock()
+		def.addDiag(fmt.Sprintf("restart：旧实例 %s 已卸载，装载新版本", oldName))
+	}
+
 	// 登记 + 装载
 	if err := h.Register(adapter, PluginSourceJS); err != nil {
+		def.lastError = err.Error()
+		h.mu.Lock()
+		def.setStatus(PluginRejected, nil)
+		h.mu.Unlock()
 		return err
 	}
-	return h.Load(name)
+	if err := h.Load(name); err != nil {
+		def.addDiag("apply 失败: " + err.Error())
+		def.lastError = err.Error()
+		h.mu.Lock()
+		def.setStatus(PluginFailed, nil)
+		h.mu.Unlock()
+		return err
+	}
+	def.addDiag("apply 通过，运行中")
+	h.mu.Lock()
+	def.setStatus(PluginRunning, nil)
+	h.mu.Unlock()
+	return nil
 }
 
 // ─── inject 硬依赖校验 ────────────────────────────────────
 
-// checkInjects 校验插件声明的 inject 硬依赖：宿主必须提供服务。
-// 对齐 harness 语义：inject 是硬依赖；可选服务用 ctx.get(name) 并判 undefined。
-func (h *PluginHost) checkInjects(def *jsPluginDef) error {
+// missingServices 返回 inject 声明但宿主未提供的服务（空=可装载）。
+// 对齐 harness 语义：inject 是硬依赖但会等待（waiting），不是直接拒绝；
+// 可选服务用 ctx.get(name) 并判 undefined。
+func (h *PluginHost) missingServices(def *jsPluginDef) []string {
 	if len(def.inject) == 0 {
 		return nil
 	}
@@ -954,6 +1048,13 @@ func (h *PluginHost) checkInjects(def *jsPluginDef) error {
 			missing = append(missing, s)
 		}
 	}
+	return missing
+}
+
+// checkInjects 校验插件声明的 inject 硬依赖（保留：报错式引导，供诊断展示）。
+// 返回等待语义的完整报错（含可用服务清单）。
+func (h *PluginHost) checkInjects(def *jsPluginDef) error {
+	missing := h.missingServices(def)
 	if len(missing) == 0 {
 		return nil
 	}
@@ -1128,11 +1229,74 @@ func normalizeToolSchema(params map[string]any) map[string]any {
 	return params
 }
 
-// validateToolSchema 定义期校验插件工具参数 schema（轻量：type 合法性 + 结构要点）。
+// validateToolSchema 定义期校验插件工具参数 schema（轻量：type 合法性 + 结构要点 +
+// realm 安全：整棵可 JSON 序列化、拒绝外部 $ref 与原型污染键）。
 // 不合法返回 error——cordis_define/registerTool 提前暴露，避免运行期才崩。
+// （对齐 harness guard.ts：schema type 白名单 + cloneJson 无损克隆；goja 单 realm
+//   天然豁免跨 realm instanceof，此处补序列化与引用边界。）
 func validateToolSchema(params map[string]any) error {
 	if params == nil {
 		return nil
+	}
+	// ① 整棵可 JSON 序列化（防函数/循环引用/不可导出值混入 → LLM 端崩溃）
+	if _, err := json.Marshal(params); err != nil {
+		return fmt.Errorf("schema 含不可序列化值（函数/循环引用？）: %v", err)
+	}
+	// ② 原型污染键检测（__proto__/constructor.prototype 等）
+	var polluteErr error
+	var polluteWalk func(m map[string]any, depth int)
+	polluteWalk = func(m map[string]any, depth int) {
+		if polluteErr != nil || depth > 10 {
+			return
+		}
+		for k, v := range m {
+			if k == "__proto__" || k == "prototype" || strings.Contains(k, "constructor") {
+				polluteErr = fmt.Errorf("schema 含可疑键 %q（原型污染防护）", k)
+				return
+			}
+			if sm, ok := v.(map[string]any); ok {
+				polluteWalk(sm, depth+1)
+			}
+			if arr, ok := v.([]any); ok {
+				for _, e := range arr {
+					if sm, ok := e.(map[string]any); ok {
+						polluteWalk(sm, depth+1)
+					}
+				}
+			}
+		}
+	}
+	polluteWalk(params, 0)
+	if polluteErr != nil {
+		return polluteErr
+	}
+	// ③ 外部 $ref 拒绝（只允许 #/ 内部引用，防 file:// http:// 等逃逸）
+	var refErr error
+	var refWalk func(m map[string]any, depth int)
+	refWalk = func(m map[string]any, depth int) {
+		if refErr != nil || depth > 10 {
+			return
+		}
+		if ref, ok := m["$ref"].(string); ok && ref != "" && !strings.HasPrefix(ref, "#/") {
+			refErr = fmt.Errorf("$ref 只允许 #/ 内部引用，收到 %q", ref)
+			return
+		}
+		for _, v := range m {
+			if sm, ok := v.(map[string]any); ok {
+				refWalk(sm, depth+1)
+			}
+			if arr, ok := v.([]any); ok {
+				for _, e := range arr {
+					if sm, ok := e.(map[string]any); ok {
+						refWalk(sm, depth+1)
+					}
+				}
+			}
+		}
+	}
+	refWalk(params, 0)
+	if refErr != nil {
+		return refErr
 	}
 	if t, ok := params["type"]; ok {
 		switch tv := t.(type) {
@@ -1388,7 +1552,15 @@ func (h *PluginHost) DefineJSCodeDir(code, language, purpose, dir string) (strin
 // clientCode 是浏览器端执行的插件代码（可为空=纯 host 插件）：
 // 形态 (ui) => void，ui 提供 on/emit/registerPanel/http 等浏览器侧服务
 // （契约见 cmd/companion/web-ui/src/plugin-runtime.js）。
+// 返回新分配的 dyn id（新插件）或最新版本 dyn id（existing 追加）。
 func (h *PluginHost) DefineJSCodeFull(code, language, purpose, dir, clientCode string) (string, error) {
+	return h.DefineJSCodeVersioned(code, language, purpose, dir, clientCode, "")
+}
+
+// DefineJSCodeVersioned 版本化登记：pluginId 为空 → 新建插件（分配稳定 pluginId）；
+// pluginId 非空 → existing 模式：向该插件追加一个版本（对齐 harness define existing append）。
+// 返回 def.id（dyn-n，精确版本 id）；cordis_run 传 pluginId 或该 id 均可装载。
+func (h *PluginHost) DefineJSCodeVersioned(code, language, purpose, dir, clientCode, pluginId string) (string, error) {
 	if strings.TrimSpace(code) == "" {
 		return "", fmt.Errorf("插件代码为空")
 	}
@@ -1407,18 +1579,36 @@ func (h *PluginHost) DefineJSCodeFull(code, language, purpose, dir, clientCode s
 			return "", fmt.Errorf("插件 client 半语法错误: %v", jsErrorText(err))
 		}
 	}
-	id := fmt.Sprintf("dyn-%d", dynSeq.Add(1))
+	seq := dynSeq.Add(1)
+	id := fmt.Sprintf("dyn-%d", seq)
+	pkgID := fmt.Sprintf("pkg-%d", seq)
+
+	h.mu.Lock()
+	var verNo int
+	stable := id // 默认：新插件，pluginId = 自身 dyn id
+	if strings.TrimSpace(pluginId) != "" {
+		chain := h.pluginVersions[pluginId]
+		if len(chain) == 0 {
+			h.mu.Unlock()
+			return "", fmt.Errorf("插件 %s 不存在，无法追加版本（首次 define 请不传 pluginId）", pluginId)
+		}
+		stable = pluginId // existing：复用稳定身份
+		verNo = len(chain)
+	}
 	def := &jsPluginDef{
 		id:         id,
+		pluginId:   stable,
+		packageId:  pkgID,
 		purpose:    purpose,
 		code:       js, // 存转译后的 JS（运行时 goja 直接执行）
 		clientCode: clientCode,
 		lang:       lang,
-		version:    id,
+		version:    fmt.Sprintf("v%d", verNo+1),
+		status:     PluginStopped,
 		createdAt:  time.Now(),
 	}
-	h.mu.Lock()
 	h.defs[id] = def
+	h.pluginVersions[stable] = append(h.pluginVersions[stable], def)
 	h.mu.Unlock()
 	return id, nil
 }
@@ -1432,16 +1622,28 @@ func (h *PluginHost) GetJSDef(id string) (*jsPluginDef, bool) {
 }
 
 // RemoveJSDef 删除 JS 定义（cordis_undefine 用；先停再删）。
+// 删除整个 pluginId 的全部版本（版本化模型：undefine 按稳定身份清链）。
 func (h *PluginHost) RemoveJSDef(id string) error {
 	h.mu.RLock()
 	def, ok := h.defs[id]
 	h.mu.RUnlock()
 	if !ok {
-		return fmt.Errorf("插件定义不存在: %s", id)
+		// 支持传 pluginId：解析到最新版本
+		resolved, err := h.resolveJSDef(id)
+		if err != nil {
+			return err
+		}
+		def = resolved
 	}
 	_ = h.Unload(def.name)
 	h.mu.Lock()
-	delete(h.defs, id)
+	// 删除该 pluginId 版本链上的全部 defs
+	for _, d := range h.pluginVersions[def.pluginId] {
+		delete(h.defs, d.id)
+	}
+	delete(h.pluginVersions, def.pluginId)
+	delete(h.waiting, def.id)
+	def.setStatus(PluginCancelled, nil)
 	h.mu.Unlock()
 	return nil
 }

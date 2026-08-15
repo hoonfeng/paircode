@@ -1017,20 +1017,34 @@ func harnessSystemPrompt(roots []string) string {
 		"  ② 函数 (ctx, config) => void（cordis 生态惯例，函数名作插件名）。链路：\n" +
 		"  cordis_define 登记（语法预检）→ cordis_run 装载（apply 注册工具，可选 config 透传第二参）→\n" +
 		"  cordis_stop 停止并回收其贡献 → cordis_undefine 忘掉定义；cordis_inspect 查看全部插件/定义/贡献归属。\n" +
+		"- 版本化：cordis_define 首次返回 dyn-<n> 即稳定 pluginId；修改插件用 pluginId 追加新版本\n" +
+		"  （cordis_define pluginId=xxx）→ cordis_run id=xxx 装载最新版（restart 语义：运行中插件自动\n" +
+		"  先停旧实例再装载新版）。cordis_inspect id=xxx 看版本链，id=xxx version=vN 看某版源码+诊断。\n" +
 		"- 插件 ctx 能力：ctx.tools.register 注册工具、ctx.on 订阅事件、ctx.effect 注册清理回调、\n" +
 		"  ctx.provide 提供服务、ctx.timeout/ctx.interval 定时器（定时/事件/工具回调跨 goroutine 安全）。\n" +
 		"- 内置 cordis 运行时：沙箱全局 CordisApi（@cordisjs/core bundle），插件代码可直接\n" +
 		"  new CordisApi.api.Context() 建真 cordis app，跑 cordis 生态多插件协作（app.plugin 挂插件、\n" +
 		"  app.start() 触发 ready、ctx.set/get 服务——cordis 3 用 set 而非 provide，provide 已废弃取不到）。\n" +
 		"  Node API（require/setTimeout/fetch 等）沙箱中不可用，调用即抛错误引导走 ctx 服务。\n" +
-		"- 服务依赖：inject: ['fs','web','bash','logger','timer'] 声明硬依赖（宿主缺失会明确报错，\n" +
-		"  可选服务请用 ctx.get(name) 判 undefined；写插件前先用 cordis_service_list 查询可用服务与签名）。\n" +
-		"  声明后可用：ctx.fs（工作区内文件读写/存在/列出/stat）、\n" +
-		"  ctx.web.fetch（HTTP GET → {ok,status,text}）、ctx.bash.exec（shell 命令 → {output,error}）、\n" +
-		"  ctx.logger(scope)（带插件标签日志）、ctx.timer（timeout/interval）。\n" +
+		"- 服务依赖与等待：inject: ['fs','web','bash','logger','timer'] 声明硬依赖。宿主缺失时插件\n" +
+		"  进入 waiting（不是报错），服务出现后自动激活——可选服务请用 ctx.get(name) 判 undefined；\n" +
+		"  写插件前先用 cordis_service_list 查询可用服务与签名。声明后可用：ctx.fs（工作区内文件\n" +
+		"  读写/存在/列出/stat）、ctx.web.fetch（HTTP GET → {ok,status,text}）、\n" +
+		"  ctx.bash.exec（shell 命令 → {output,error}）、ctx.logger(scope)（带插件标签日志）、\n" +
+		"  ctx.timer（timeout/interval）。\n" +
 		"- 工具同名冲突会被拒绝（不能覆盖宿主或他人插件工具）；.pair/cordis.patch.json 可装配\n" +
 		"  跨重启存续的静态插件。\n" +
-		"- 需要重复使用的能力优先沉淀为插件工具（一次定义，多会话复用）。\n"
+		"- 需要重复使用的能力优先沉淀为插件工具（一次定义，多会话复用）。\n" +
+		"- 插件开发规范（对齐 harness cordis-plugin-development）：\n" +
+		"  · 写插件前先 cordis_service_list / cordis_inspect_query 查精确签名，不要臆测 API；\n" +
+		"  · 失败修复流程：cordis_run 失败 → cordis_inspect id=xxx 看 diag/lastError 定位阶段\n" +
+		"    （求值/apply）→ 修源码 → cordis_define pluginId=xxx 追加版本 → cordis_run 装载，\n" +
+		"    不静默重建新插件（保持同一稳定 pluginId）；\n" +
+		"  · 数据纪律：工具结果有体积上限，插件返回/日志不要序列化大体积 live data\n" +
+		"    （完整文件内容、大数组等）——只回摘要或引用；\n" +
+		"  · 生命周期可逆：stop/undefine 前先 cordis_inspect 确认影响（贡献的工具/服务会被回收）；\n" +
+		"    插件应自带清理（ctx.effect/on 返回的 cancel），停用后不留残留。\n" +
+		"- 用户消息中以 @dyn-1 这类形式引用插件时，系统会自动注入该插件的上下文（版本/状态/指引）。\n"
 }
 
 // fullSystemPrompt 完整版系统提示词（WB_FULL_TOOLS=1 恢复全量工具时使用）。

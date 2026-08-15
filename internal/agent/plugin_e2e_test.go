@@ -204,6 +204,189 @@ func TestCordisInspectQuery(t *testing.T) {
 	}
 }
 
+// TestPluginVersioningE2E 版本化 package 模型（D1+D8）端到端：
+// define v1 → run → define append v2 → run（restart）→ 版本链 2 版本 →
+// run 指定旧版本（回滚）→ undefine 清链。
+func TestPluginVersioningE2E(t *testing.T) {
+	host := NewPluginHost(NewRegistry(), nil, `C:\ws`)
+	// v1：工具返回 v1 标记
+	id1, err := host.DefineJS(`
+return {
+  name: 'ver-demo',
+  apply(ctx) {
+    ctx.tools.register({ name: 'ver_probe', description: 'ver', execute: () => ({ text: 'v1' }) })
+  }
+}`, "ver-demo v1")
+	if err != nil {
+		t.Fatalf("define v1: %v", err)
+	}
+	def1 := mustDef(t, host, id1)
+	if def1.pluginId != id1 {
+		t.Fatalf("首次 define 的 pluginId 应为自身 id: %s", def1.pluginId)
+	}
+	if def1.version != "v1" {
+		t.Fatalf("首版 version 应为 v1: %s", def1.version)
+	}
+	if err := host.LoadJSDynamic(def1); err != nil {
+		t.Fatalf("run v1: %v", err)
+	}
+	if host.State("ver-demo") != PluginRunning {
+		t.Fatalf("ver-demo 应 running")
+	}
+
+	// v2：existing append（同一 pluginId）
+	id2, err := host.DefineJSCodeVersioned(`
+return {
+  name: 'ver-demo',
+  apply(ctx) {
+    ctx.tools.register({ name: 'ver_probe', description: 'ver', execute: () => ({ text: 'v2' }) })
+  }
+}`, "", "ver-demo v2", "", "", id1)
+	if err != nil {
+		t.Fatalf("define v2: %v", err)
+	}
+	def2 := mustDef(t, host, id2)
+	if def2.pluginId != id1 {
+		t.Fatalf("append 版本 pluginId 应复用 %s: %s", id1, def2.pluginId)
+	}
+	if def2.version != "v2" {
+		t.Fatalf("v2 version 应为 v2: %s", def2.version)
+	}
+	chain := host.PluginVersions(id1)
+	if len(chain) != 2 {
+		t.Fatalf("版本链应为 2 个: %d", len(chain))
+	}
+
+	// restart：run v2 时 ver-demo 已在运行 → 自动卸载旧实例再装载（D8）
+	if err := host.LoadJSDynamic(def2); err != nil {
+		t.Fatalf("run v2 (restart): %v", err)
+	}
+	if def2.status != PluginRunning {
+		t.Fatalf("v2 应 running, got %s", def2.status)
+	}
+	if def1.status == PluginRunning {
+		t.Fatalf("v1 应被卸载, got %s", def1.status)
+	}
+	// 验证生效的是 v2（工具 execute 返回 v2）
+	tool, ok := host.ctx.Tools.Get("ver_probe")
+	if !ok {
+		t.Fatal("ver_probe 应存在")
+	}
+	out, err := tool.Handler(context.Background(), map[string]any{})
+	if err != nil || out != "v2" {
+		t.Fatalf("v2 工具应返回 v2: %q err=%v", out, err)
+	}
+
+	// 回滚：run 指定旧版本 dyn id → 重新装载 v1
+	if err := host.LoadJSDynamic(def1); err != nil {
+		t.Fatalf("回滚到 v1: %v", err)
+	}
+	tool, ok = host.ctx.Tools.Get("ver_probe")
+	if !ok {
+		t.Fatal("回滚后 ver_probe 应存在")
+	}
+	out, err = tool.Handler(context.Background(), map[string]any{})
+	if err != nil || out != "v1" {
+		t.Fatalf("回滚后工具应返回 v1: %q err=%v", out, err)
+	}
+
+	// inspect 三层：L2 版本链（含 v1/v2）
+	rep2, err := cordisInspectReport(host, id1, "")
+	if err != nil || !strings.Contains(rep2, "2 版本") {
+		t.Fatalf("L2 版本链应含 2 版本: %v\n%s", err, rep2)
+	}
+	// L3 源码层
+	rep3, err := cordisInspectReport(host, id1, "v2")
+	if err != nil || !strings.Contains(rep3, "ver-demo v2") {
+		t.Fatalf("L3 源码层: %v\n%s", err, rep3)
+	}
+	// L1 摘要
+	rep1, err := cordisInspectReport(host, "", "")
+	if err != nil || !strings.Contains(rep1, "ver-demo") {
+		t.Fatalf("L1 摘要应含 ver-demo: %v", err)
+	}
+
+	// undefine 清整个版本链
+	if err := host.RemoveJSDef(id1); err != nil {
+		t.Fatalf("undefine: %v", err)
+	}
+	if len(host.PluginVersions(id1)) != 0 {
+		t.Fatalf("undefine 后版本链应清空")
+	}
+	if _, ok := host.GetJSDef(id2); ok {
+		t.Fatal("undefine 后 v2 定义应删除")
+	}
+}
+
+// TestPluginReferenceInjection @pluginId 引用注入（D2）：
+// 用户消息 @dyn-1 → buildPluginReferences 渲染 <cordis_dynamic_plugin_context>。
+func TestPluginReferenceInjection(t *testing.T) {
+	// 临时设置全局宿主（测试用；用完还原）
+	prev := GetGlobalPluginHost()
+	defer SetGlobalPluginHost(prev)
+
+	host := NewPluginHost(NewRegistry(), nil, `C:\ws`)
+	SetGlobalPluginHost(host)
+	id, _ := host.DefineJS(`
+return { name: 'ref-demo', apply(ctx) { ctx.tools.register({ name: 'ref_probe', description: 'ref', execute: () => ({text:'ok'}) }) } }`, "ref demo")
+	mustDef(t, host, id)
+	if err := host.LoadJSDynamic(mustDef(t, host, id)); err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	history := []Message{
+		{Role: RoleUser, Content: "帮我看看 @" + id + " 这个插件"},
+		{Role: RoleAssistant, Content: "好的"},
+	}
+	out := buildPluginReferences(history)
+	if !strings.Contains(out, "<cordis_dynamic_plugin_context>") {
+		t.Fatalf("应注入插件上下文: %s", out)
+	}
+	if !strings.Contains(out, `"pluginId": "`+id+`"`) {
+		t.Fatalf("引用应含 pluginId: %s", out)
+	}
+	if !strings.Contains(out, "cordis_inspect") {
+		t.Fatalf("指引应含 cordis_inspect: %s", out)
+	}
+	// 无引用 → 空
+	if buildPluginReferences([]Message{{Role: RoleUser, Content: "今天天气不错"}}) != "" {
+		t.Fatal("无引用应返回空串")
+	}
+	// 未定义 id → 忽略（不注入）
+	if buildPluginReferences([]Message{{Role: RoleUser, Content: "@zzz-99 是什么"}}) != "" {
+		t.Fatal("未定义 id 应忽略")
+	}
+}
+
+// TestToolSchemaRealmGuard schema 安全防护（D10）：外部 $ref/原型污染键/不可序列化拒绝。
+func TestToolSchemaRealmGuard(t *testing.T) {
+	// 外部 $ref 拒绝
+	err := validateToolSchema(map[string]any{"type": "object", "$ref": "file:///etc/passwd"})
+	if err == nil || !strings.Contains(err.Error(), "$ref") {
+		t.Fatalf("外部 $ref 应拒绝: %v", err)
+	}
+	// 内部 $ref 允许（#/ 前缀）
+	if err := validateToolSchema(map[string]any{"type": "object", "$ref": "#/$defs/x"}); err != nil {
+		t.Fatalf("内部 $ref 应允许: %v", err)
+	}
+	// 原型污染键拒绝
+	err = validateToolSchema(map[string]any{"type": "object", "properties": map[string]any{"__proto__": map[string]any{"type": "string"}}})
+	if err == nil || !strings.Contains(err.Error(), "__proto__") {
+		t.Fatalf("原型污染键应拒绝: %v", err)
+	}
+	// 不可序列化拒绝（函数混入）
+	bad := map[string]any{"type": "object", "properties": map[string]any{"x": map[string]any{"type": "string"}}}
+	bad["fn"] = func() {}
+	err = validateToolSchema(bad)
+	if err == nil || !strings.Contains(err.Error(), "序列化") {
+		t.Fatalf("不可序列化应拒绝: %v", err)
+	}
+	// 合法 schema 通过
+	if err := validateToolSchema(map[string]any{"type": "object", "properties": map[string]any{"n": map[string]any{"type": "integer"}}}); err != nil {
+		t.Fatalf("合法 schema 应通过: %v", err)
+	}
+}
+
 // TestClientInspectSnapshot 浏览器上报快照 → client 平台真实状态查询。
 func TestClientInspectSnapshot(t *testing.T) {
 	host := NewPluginHost(NewRegistry(), nil, "")
