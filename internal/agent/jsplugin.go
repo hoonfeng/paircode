@@ -116,10 +116,10 @@ type jsPluginAdapter struct {
 	mu       sync.Mutex
 	handlers map[string]func(args any) (any, error) // harness.handle 注册的方法
 
-	timersMu  sync.Mutex
-	timers    []func() // 活动 timer 的取消函数（Unload 时统一清理）
+	timersMu   sync.Mutex
+	timers     []func() // 活动 timer 的取消函数（Unload 时统一清理）
 	cleanupsMu sync.Mutex
-	cleanups  []func() // 其他 JS 侧资源撤销函数（如 ctx.provide 的服务撤销）
+	cleanups   []func() // 其他 JS 侧资源撤销函数（如 ctx.provide 的服务撤销）
 }
 
 // withLock 在 VM 执行锁保护下运行 fn：timer 回调、事件回调、工具 execute
@@ -736,6 +736,24 @@ func newJSSandbox(id string) (*goja.Runtime, *goja.Object) {
 	})
 	if _, err := vm.RunString(textCodecPolyfill); err != nil {
 		log.Printf("[plugin_js] TextEncoder polyfill 失败: %v", err)
+	}
+
+	// Node API trap（对齐 harness NODE_API_REDIRECTS）：require/setTimeout/fetch 等
+	// 在沙箱中不可用，调用即抛教学错误，引导走 ctx 服务（与 harness 沙箱纪律一致）。
+	nodeAPI := map[string]string{
+		"require":       "Node modules are unavailable. Use the cordis services on ctx instead — e.g. ctx.fs for files, ctx.web for HTTP, ctx.bash for processes; query cordis_inspect_query for available services.",
+		"setTimeout":    "Node timers are unavailable. Use ctx.timeout(callback, delay) instead (cordis timer service).",
+		"setInterval":   "Node timers are unavailable. Use ctx.interval(callback, delay) instead (cordis timer service).",
+		"setImmediate":  "Node timers are unavailable. Use ctx.timeout(callback, 0) instead (cordis timer service).",
+		"clearTimeout":  "Node timers are unavailable. ctx.timeout / ctx.interval return dispose functions that clear the timer.",
+		"clearInterval": "Node timers are unavailable. ctx.timeout / ctx.interval return dispose functions that clear the timer.",
+		"fetch":         "Network access goes through the cordis web service — use ctx.web instead (query cordis_inspect_query for its methods).",
+	}
+	for name, redirect := range nodeAPI {
+		n, r := name, redirect
+		vm.Set(n, func(call goja.FunctionCall) goja.Value {
+			panic(vm.NewTypeError("%s is not available in the dynamic package sandbox — %s", n, r))
+		})
 	}
 
 	// __resolve 回调（求值结果交接点）：把 JS 值转成 Go 对象

@@ -3,6 +3,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -1237,5 +1238,38 @@ func TestLoadCordisPatch(t *testing.T) {
 	}
 	if err := host.LoadCordisPatch(bad); err == nil {
 		t.Fatalf("坏 JSON 应报错")
+	}
+}
+
+// TestJSNodeAPITraps 对齐 harness NODE_API_REDIRECTS：require/setTimeout/fetch 等
+// Node API 在沙箱中不可用，调用即抛教学错误引导走 ctx 服务。
+func TestJSNodeAPITraps(t *testing.T) {
+	cases := []struct {
+		call, wantHint string
+	}{
+		{"require('fs')", "Node modules are unavailable"},
+		{"setTimeout(() => {}, 100)", "ctx.timeout"},
+		{"setInterval(() => {}, 100)", "ctx.interval"},
+		{"fetch('https://x')", "ctx.web"},
+	}
+	for _, c := range cases {
+		reg := NewRegistry()
+		host := NewPluginHost(reg, nil, `C:\ws`)
+		code := fmt.Sprintf(`return { name: 'trap-test', apply(ctx) { %s } }`, c.call)
+		id, err := host.DefineJS(code, "trap")
+		if err != nil {
+			t.Fatalf("[%s] DefineJS: %v", c.call, err)
+		}
+		def, _ := host.GetJSDef(id)
+		err = host.LoadJSDynamic(def)
+		if err == nil {
+			t.Fatalf("[%s] 应抛错（Node API trap）", c.call)
+		}
+		if !strings.Contains(err.Error(), c.wantHint) {
+			t.Fatalf("[%s] 错误 %q 应包含引导 %q", c.call, err.Error(), c.wantHint)
+		}
+		if host.State("trap-test") != PluginStopped {
+			t.Fatalf("[%s] 插件应 stopped（apply 失败未装载）", c.call)
+		}
 	}
 }
