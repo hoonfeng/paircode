@@ -172,7 +172,7 @@ func startWebUI(port int) {
 		agenttools.RegisterManagementTools(initReg, root)
 		// 参考注册表也加载 Lua 自定义工具（多项目），保证 /api/tools 工具面板可见
 		reloadWebLuaTools(initReg, root)
-		// ★ harness 对齐：暂时禁用 pair 独有工具（WB_FULL_TOOLS=1 恢复全量）；
+		// ★ harness 对齐（默认关闭——全量工具集；WB_HARNESS=1 开启时精简 pair 独有工具）；
 		//   被禁用工具保留在注册表（前端可见可管理），内置工具集 builtin 可一键恢复
 		if n := agent.ApplyHarnessToolFilter(initReg, nil); n > 0 {
 			log.Printf("[WebUI] harness 对齐模式：禁用 %d 个 pair 独有工具（WB_FULL_TOOLS=1 恢复全量；工具集面板 builtin 分组开关启用）", n)
@@ -263,6 +263,7 @@ func startWebUI(port int) {
 	mux.HandleFunc("/api/plugins/client-events", handler.HandlePluginClientEvents)
 	mux.HandleFunc("/api/plugins/client-state", handler.HandlePluginClientState)
 	mux.HandleFunc("/api/plugins/builtin", handler.HandleBuiltinPlugins)
+	mux.HandleFunc("/api/plugins/tool", handler.HandlePluginToolToggle)
 	mux.HandleFunc("/api/toolsets", handler.HandleToolsetsList)
 	mux.HandleFunc("/api/toolsets/build", handler.HandleToolsetBuild)
 	mux.HandleFunc("/api/toolsets/export", handler.HandleToolsetExport)
@@ -2325,7 +2326,7 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 	}
 
 	reloadWebLuaTools(reg, root)
-	// ★ harness 对齐：暂时禁用 pair 独有工具（WB_FULL_TOOLS=1 恢复全量）；
+	// ★ harness 对齐（默认关闭——全量工具集；WB_HARNESS=1 开启时精简 pair 独有工具）；
 	//   插件注册的工具豁免（插件是内容，非 pair 独有编码能力）
 	var pluginHost *agent.PluginHost
 	agent.ApplyHarnessToolFilter(reg, func(name string) bool {

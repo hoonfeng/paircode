@@ -110,15 +110,11 @@
         <!-- 分组模式：组折叠 + 组内工具行 -->
         <div v-else-if="builtinInfo.groups.length" class="pp-builtin-groups">
           <div v-for="g in builtinInfo.groups" :key="g.name" class="pp-builtin-group">
-            <div class="pp-builtin-group-head" @click="builtinGroupOpen[g.name] = !builtinGroupOpen[g.name]">
+            <div class="pp-builtin-group-head" @click="builtinGroupOpen[g.name] = !builtinGroupOpen[g.name]" :title="'点击' + (builtinGroupOpen[g.name] ? '收起' : '展开') + '组内工具（工具级开关控制 agent 可见性）'">
               <SvgIcon name="chevron-right" :size="10" class="pp-chevron pp-group-chevron" :class="{ open: builtinGroupOpen[g.name] }" />
               <span class="pp-builtin-gname" :class="{ off: !g.enabled && !g.partial }">{{ g.title }}</span>
               <span class="pp-builtin-gtools">{{ g.tools.length }} 工具<template v-if="g.partial">（部分）</template></span>
               <span class="pp-builtin-gdesc" :title="g.desc">{{ g.desc }}</span>
-              <label class="pp-switch" @click.stop :title="g.enabled ? '组内工具全部对 agent 可见；点击移出（恢复默认过滤）' : '加入工作区：组内工具全部对 agent 可见'">
-                <input type="checkbox" :checked="g.enabled" @change="toggleBuiltinGroup(g)" />
-                <span class="pp-switch-track"></span>
-              </label>
             </div>
             <div v-if="builtinGroupOpen[g.name]" class="pp-builtin-tools">
               <div v-for="t in g.tools" :key="t.name" class="pp-builtin-tool">
@@ -163,7 +159,16 @@
             <div v-if="p.defId" class="pp-d-line">定义: {{ p.defId }}<span v-if="p.version"> · {{ p.version }}</span></div>
             <div v-if="p.provides && p.provides.length" class="pp-d-line">服务: {{ p.provides.join(', ') }}</div>
             <div v-if="p.sections && p.sections.length" class="pp-d-line">提示片段: {{ p.sections.join(', ') }}</div>
-            <div v-if="p.tools && p.tools.length" class="pp-d-line">工具: {{ p.tools.join(', ') }}</div>
+            <div v-if="p.tools && p.tools.length" class="pp-d-tools">
+              <div class="pp-d-tools-title">工具（{{ p.tools.length }}）· 开关控制 agent 可见性</div>
+              <div v-for="t in p.tools" :key="t" class="pp-d-tool">
+                <span class="pp-d-tname" :title="t">{{ t }}</span>
+                <label class="pp-switch" :title="pluginToolOn(p, t) ? '对 agent 可见；点击禁用（不影响插件运行）' : '对 agent 不可见；点击启用'">
+                  <input type="checkbox" :checked="pluginToolOn(p, t)" @change="togglePluginTool(p, t)" />
+                  <span class="pp-switch-track"></span>
+                </label>
+              </div>
+            </div>
             <div v-if="p.clientCode" class="pp-d-code">
               <div class="pp-d-code-head">
               <span>client 半源码</span>
@@ -172,8 +177,8 @@
             <pre>{{ p.clientCode }}</pre>
           </div>
           <div class="pp-d-actions">
-            <button v-if="p.state === 'running'" class="pp-btn" @click="doAction(p, 'stop')">停止</button>
-            <button v-else class="pp-btn primary" @click="doAction(p, 'start')">启动</button>
+            <button v-if="p.state === 'running'" class="pp-btn" title="停止整个插件（其全部工具对 agent 不可见）；单工具请用上方工具开关" @click="doAction(p, 'stop')">停止插件</button>
+            <button v-else class="pp-btn primary" @click="doAction(p, 'start')">启动插件</button>
             <button v-if="p.source === 'js'" class="pp-btn danger" @click="doAction(p, 'undefine')">删除定义</button>
           </div>
         </div>
@@ -222,19 +227,6 @@ async function loadBuiltin() {
   } finally {
     builtinLoading.value = false
   }
-}
-
-async function toggleBuiltinGroup(g) {
-  const target = !g.enabled
-  try {
-    const res = await api.builtinPlugins({ group: g.name, enabled: target })
-    window.$toast && window.$toast((res && res.message) || (target ? '已加入' : '已移出') + ' ' + g.name, 'info')
-  } catch (e) {
-    window.$toast && window.$toast(e.message || '操作失败', 'error')
-  }
-  await loadBuiltin()
-  await refresh()
-
 }
 
 // ─── 内置工具：工具级视图 + 搜索 ───
@@ -367,6 +359,23 @@ async function toggleDetail(p) {
       const d = await api.getPluginDetail(p.name)
       if (d) Object.assign(p, d)
     } catch (e) {}
+  }
+}
+
+// ─── 插件详情：单个工具开关（agent 可见性；不影响插件运行）──────────
+function pluginToolOn(p, t) {
+  return !(p.toolStates && p.toolStates[t] === false)
+}
+
+async function togglePluginTool(p, t) {
+  const target = !pluginToolOn(p, t)
+  try {
+    const res = await api.pluginToolToggle(t, target)
+    window.$toast && window.$toast((res && res.message) || (target ? '已启用' : '已禁用') + ' ' + t, 'info')
+    if (!p.toolStates) p.toolStates = {}
+    p.toolStates[t] = target
+  } catch (e) {
+    window.$toast && window.$toast(e.message || '操作失败', 'error')
   }
 }
 
@@ -613,6 +622,11 @@ onUnmounted(() => {
 .pp-detail { padding: 4px 10px 10px 24px; background: var(--bg-tertiary); }
 .pp-d-purpose { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
 .pp-d-line { font-size: 11px; color: var(--text-muted); margin: 2px 0; word-break: break-all; }
+.pp-d-tools { display: flex; flex-direction: column; gap: 1px; margin: 4px 0; padding: 4px 6px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); }
+.pp-d-tools-title { font-size: 10px; color: var(--text-muted); margin-bottom: 2px; }
+.pp-d-tool { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 1px 2px; border-radius: 3px; }
+.pp-d-tool:hover { background: var(--bg-secondary); }
+.pp-d-tname { font-family: var(--font-code); font-size: 11px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pp-d-code {
   margin-top: 6px;
   border: 1px solid var(--border-color);
@@ -717,7 +731,7 @@ onUnmounted(() => {
 .pp-builtin-actions { display: flex; align-items: center; gap: 6px; }
 .pp-builtin-groups { display: flex; flex-direction: column; gap: 3px; }
 .pp-builtin-group {
-  display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  display: flex; flex-direction: column; align-items: stretch; gap: 2px;
   border: 1px solid var(--border-color); border-radius: 4px;
   background: var(--bg-primary); padding: 3px 8px;
 }

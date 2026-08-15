@@ -314,7 +314,7 @@ async function savePhilosophy(data) {
   return apiPut('/philosophy', data)
 }
 
-export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, isWebSocketOpen, waitForWebSocket, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatCompact, chatStop, getMessages, getMessagesCount, getModels, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, getPhilosophy, savePhilosophy, listPlugins, getPluginDetail, pluginAction, definePlugin, pluginEmit, pluginClientEvents, pluginClientState, pluginInvoke, pluginClientFailure, builtinPlugins, getToolsets, toolsetEdit }
+export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, isWebSocketOpen, waitForWebSocket, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatCompact, chatStop, getMessages, getMessagesCount, getModels, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, getPhilosophy, savePhilosophy, listPlugins, getPluginDetail, pluginAction, definePlugin, pluginEmit, pluginClientEvents, pluginClientState, pluginInvoke, pluginClientFailure, builtinPlugins, pluginToolToggle, getToolsets, toolsetEdit }
 
 // ─── 插件（管理 + 使用 + host/client 事件桥）──────────────
 
@@ -329,6 +329,11 @@ async function listPlugins() {
 async function builtinPlugins(data) {
   if (data) return apiPost('/plugins/builtin', data)
   return apiGet('/plugins/builtin')
+}
+
+// pluginToolToggle 通用工具级开关（任意已注册工具，agent 可见性）：{tool, enabled}。
+async function pluginToolToggle(tool, enabled) {
+  return apiPost('/plugins/tool', { tool, enabled })
 }
 
 // getPluginDetail 单插件详情（?id= 插件名或 dyn id，含 client 半源码）。

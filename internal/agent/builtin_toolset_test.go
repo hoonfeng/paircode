@@ -95,6 +95,7 @@ func TestBuiltinGroupsOf(t *testing.T) {
 		}
 	}
 	// harness 模式：被过滤组（codegraph）工具应 Enabled=false
+	t.Setenv("WB_HARNESS", "1")
 	ApplyHarnessToolFilter(reg, nil)
 	groups = BuiltinGroupsOf(reg, ph)
 	for _, g := range groups {
@@ -111,6 +112,7 @@ func TestBuiltinGroupsOf(t *testing.T) {
 func TestSetBuiltinGroupEnabled_JoinAndLeave(t *testing.T) {
 	ph, root := mkBuiltinHost(t)
 	reg := ph.Context().Tools
+	t.Setenv("WB_HARNESS", "1")
 	ApplyHarnessToolFilter(reg, nil)
 
 	// 加入 codegraph 组 → 组内工具全部启用 + 固化 builtin.json
@@ -149,6 +151,7 @@ func TestSetBuiltinGroupEnabled_JoinAndLeave(t *testing.T) {
 func TestEnableAllBuiltin(t *testing.T) {
 	ph, root := mkBuiltinHost(t)
 	reg := ph.Context().Tools
+	t.Setenv("WB_HARNESS", "1")
 	ApplyHarnessToolFilter(reg, nil)
 	if reg.IsEnabled("codegraph_search") {
 		t.Fatal("前置：codegraph_search 应被过滤禁用")
@@ -178,6 +181,7 @@ func TestEnableAllBuiltin(t *testing.T) {
 func TestApplyToolsetBuiltinState(t *testing.T) {
 	ph, root := mkBuiltinHost(t)
 	reg := ph.Context().Tools
+	t.Setenv("WB_HARNESS", "1")
 	ApplyHarnessToolFilter(reg, nil)
 	if _, err := SetBuiltinGroupEnabled(ph, root, "memory", true); err != nil {
 		t.Fatalf("加入 memory 失败: %v", err)

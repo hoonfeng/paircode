@@ -63,9 +63,13 @@ func HandlePlugins(w http.ResponseWriter, r *http.Request) {
 	}
 	recs := ph.Inspect()
 	// 列表接口省略 client 半源码（详情接口按需取）
+	var reg *agent.Registry
+	if ph.Context() != nil {
+		reg = ph.Context().Tools
+	}
 	out := make([]map[string]any, 0, len(recs))
 	for _, rec := range recs {
-		out = append(out, pluginRecordSummary(rec))
+		out = append(out, pluginRecordSummary(rec, reg))
 	}
 	jsonResp(w, out)
 }
@@ -96,7 +100,11 @@ func HandlePluginDetail(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, "插件不存在: "+name)
 		return
 	}
-	jsonResp(w, pluginRecordSummary(*rec))
+	var reg *agent.Registry
+	if ph.Context() != nil {
+		reg = ph.Context().Tools
+	}
+	jsonResp(w, pluginRecordSummary(*rec, reg))
 }
 
 // HandlePluginAction POST /api/plugins/action：启停/删除插件。
@@ -351,21 +359,74 @@ func HandlePluginClientFailure(w http.ResponseWriter, r *http.Request) {
 }
 
 // pluginRecordSummary 插件记录 → 前端摘要（隐藏超长 client 源码，仅保留有无标记）。
-func pluginRecordSummary(rec agent.PluginRecord) map[string]any {
-	return map[string]any{
-		"name":      rec.Name,
-		"source":    rec.Source,
-		"state":     rec.State,
-		"provides":  rec.Provides,
-		"tools":     rec.Tools,
-		"sections":  rec.Sections,
-		"version":   rec.Version,
-		"purpose":   rec.Purpose,
-		"hasClient": rec.HasClient,
-		"clientCode": rec.ClientCode,
-		"clientApproved": rec.ClientApproved,
-		"defId":     rec.DefID,
+// reg 用于查询每个工具的启用状态（agent 可见性）；nil 时工具视为默认启用。
+func pluginRecordSummary(rec agent.PluginRecord, reg *agent.Registry) map[string]any {
+	toolStates := map[string]bool{}
+	for _, t := range rec.Tools {
+		if reg != nil {
+			toolStates[t] = reg.IsEnabled(t)
+		} else {
+			toolStates[t] = true
+		}
 	}
+	return map[string]any{
+		"name":          rec.Name,
+		"source":        rec.Source,
+		"state":         rec.State,
+		"provides":      rec.Provides,
+		"tools":         rec.Tools,
+		"toolStates":    toolStates,
+		"sections":      rec.Sections,
+		"version":       rec.Version,
+		"purpose":       rec.Purpose,
+		"hasClient":     rec.HasClient,
+		"clientCode":    rec.ClientCode,
+		"clientApproved": rec.ClientApproved,
+		"defId":         rec.DefID,
+	}
+}
+
+// HandlePluginToolToggle POST /api/plugins/tool：通用工具级开关（任意已注册工具，
+// 含内置工具与插件工具）。body: { tool, enabled:true|false } →
+// Registry.SetToolEnabled（agent 可见性，运行时生效）。插件详情工具列表的
+// 单个工具开关走此接口（区别于 /api/plugins/builtin 的内置工具包持久化开关）。
+func HandlePluginToolToggle(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		jsonErr(w, "仅 POST")
+		return
+	}
+	ph, ok := getPluginHost()
+	if !ok {
+		jsonErr(w, "插件系统未初始化")
+		return
+	}
+	if ph.Context() == nil {
+		jsonErr(w, "工具注册表未就绪")
+		return
+	}
+	var req struct {
+		Tool    string `json:"tool"`
+		Enabled *bool  `json:"enabled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonErr(w, "请求体解析失败: "+err.Error())
+		return
+	}
+	if req.Tool == "" || req.Enabled == nil {
+		jsonErr(w, "需要 tool + enabled")
+		return
+	}
+	reg := ph.Context().Tools
+	if _, ok := reg.Get(req.Tool); !ok {
+		jsonErr(w, "工具不存在: "+req.Tool)
+		return
+	}
+	reg.SetToolEnabled(req.Tool, *req.Enabled)
+	state := "已启用"
+	if !*req.Enabled {
+		state = "已禁用"
+	}
+	jsonResp(w, map[string]any{"ok": true, "message": state + " " + req.Tool})
 }
 
 // HandleBuiltinPlugins GET/POST /api/plugins/builtin：内置工具包（被过滤的 pair

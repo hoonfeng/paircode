@@ -1,14 +1,16 @@
 package agent
 
-// harness_filter.go — 对齐 deepseek-harness 工具注册（暂时禁用 pair 独有工具）
+// harness_filter.go — 对齐 deepseek-harness 工具注册（可选精简 pair 独有工具）
 //
 // 背景：自举迭代（用 agent 开发 agent）要求 agent 暴露给 LLM 的工具集与
-// deepseek-harness 对齐。默认进入 harness 对齐模式——只保留 harness 工具集
+// deepseek-harness 对齐。提供 harness 对齐模式——只保留 harness 工具集
 // + 对话协议基础设施，其余 pair 独有工具（codegraph_*/memory_*/project_info_*/
 // git_*/debug_*/binary_*/office 等 130+ 个）从注册表禁用（Enabled=false，不删除——
 // 前端可见可管理，agent 不可见；内置工具集 builtin 可一键恢复）。
 //
-// ★ 开关：环境变量 WB_FULL_TOOLS=1 恢复全量工具集（关闭过滤）。
+// ★ 开关（2026-08-16 反转默认）：默认**全量工具集**（插件面板工具默认全勾、
+//   全部对 agent 可见——产品默认形态）；需要 harness 对齐精简时显式
+//   `WB_HARNESS=1` 开启；旧开关兼容：`WB_FULL_TOOLS=1` 强制全量（关闭过滤）。
 // ★ 幂等：可重复调用（工具开关现由工具集 toolset_edit 管理，无 .pair/tools.json
 //   依赖；历史注释中的 LoadAllWorkspaceToolConfigs 顺序约束已随旧机制删除）。
 
@@ -19,9 +21,18 @@ import (
 	"strings"
 )
 
-// HarnessOnlyTools 判断是否处于 harness 对齐模式（默认开启，WB_FULL_TOOLS=1 关闭）。
+// HarnessOnlyTools 判断是否处于 harness 对齐模式。
+// ★ 默认关闭（全量工具集——插件面板工具默认全勾，全部对 agent 可见）；
+//   `WB_HARNESS=1` 显式开启（对齐 deepseek-harness 精简工具集）；
+//   旧开关兼容：`WB_FULL_TOOLS=1` 强制全量（关闭过滤）。
 func HarnessOnlyTools() bool {
-	return os.Getenv("WB_FULL_TOOLS") == ""
+	if os.Getenv("WB_HARNESS") == "1" {
+		return true
+	}
+	if os.Getenv("WB_FULL_TOOLS") == "1" {
+		return false
+	}
+	return false
 }
 
 // HarnessAlignedToolNames 保留清单（过滤时仅保留以下工具）：
@@ -67,7 +78,7 @@ var HarnessAlignedToolNames = map[string]bool{
 }
 
 // ApplyHarnessToolFilter 把不在保留清单内的工具（pair 独有工具）设为禁用
-// （Enabled=false），返回禁用数量。开关关闭（WB_FULL_TOOLS=1）时不做任何事，返回 0。
+// （Enabled=false），返回禁用数量。开关关闭（默认全量 / WB_FULL_TOOLS=1）时不做任何事，返回 0。
 //
 // ★ 语义（2026-08-16 重构）：从「Unregister 删除」改为「SetToolEnabled(false) 禁用」——
 //   工具保留在注册表（前端 /api/tools 可见、可管理），但 Definitions() 只导出启用工具
@@ -93,8 +104,8 @@ func ApplyHarnessToolFilter(r *Registry, exempt func(string) bool) int {
 	return disabled
 }
 
-// ToolDefaultEnabled 工具默认启用状态（harness 对齐模式：仅保留清单内启用；
-// WB_FULL_TOOLS=1 全量模式：全部启用）。
+// ToolDefaultEnabled 工具默认启用状态（harness 对齐模式 WB_HARNESS=1：仅保留清单内启用；
+// 默认全量模式：全部启用）。
 func ToolDefaultEnabled(name string) bool {
 	if !HarnessOnlyTools() {
 		return true

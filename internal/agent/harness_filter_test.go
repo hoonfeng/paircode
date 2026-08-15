@@ -37,7 +37,7 @@ func mkHarnessReg() *Registry {
 }
 
 func TestApplyHarnessToolFilter_RemovesPairTools(t *testing.T) {
-	t.Setenv("WB_FULL_TOOLS", "")
+	t.Setenv("WB_HARNESS", "1")
 	reg := mkHarnessReg()
 	before := len(reg.AllToolMeta())
 	n := ApplyHarnessToolFilter(reg, nil)
@@ -103,7 +103,7 @@ func TestApplyHarnessToolFilter_FullToolsKeepsAll(t *testing.T) {
 }
 
 func TestApplyHarnessToolFilter_Idempotent(t *testing.T) {
-	t.Setenv("WB_FULL_TOOLS", "")
+	t.Setenv("WB_HARNESS", "1")
 	reg := mkHarnessReg()
 	before := len(reg.AllToolMeta())
 	first := ApplyHarnessToolFilter(reg, nil)
@@ -120,7 +120,7 @@ func TestApplyHarnessToolFilter_Idempotent(t *testing.T) {
 }
 
 func TestApplyHarnessToolFilter_KeepsHooks(t *testing.T) {
-	t.Setenv("WB_FULL_TOOLS", "")
+	t.Setenv("WB_HARNESS", "1")
 	reg := mkHarnessReg()
 	called := false
 	reg.BeforeTool = func(_ context.Context, _ string, _ map[string]any) (bool, string, error) {
@@ -140,13 +140,21 @@ func TestApplyHarnessToolFilter_KeepsHooks(t *testing.T) {
 }
 
 func TestHarnessOnlyTools_Default(t *testing.T) {
+	// ★ 2026-08-16 反转默认：默认全量工具集（插件面板默认全勾，对 agent 可见），
+	//   harness 对齐模式需显式 WB_HARNESS=1 开启
 	t.Setenv("WB_FULL_TOOLS", "")
-	if !HarnessOnlyTools() {
-		t.Error("默认（未设 WB_FULL_TOOLS）应处于 harness 对齐模式")
+	t.Setenv("WB_HARNESS", "")
+	if HarnessOnlyTools() {
+		t.Error("默认（未设任何开关）应处于全量工具模式（harness 对齐默认关闭）")
 	}
 	t.Setenv("WB_FULL_TOOLS", "1")
 	if HarnessOnlyTools() {
-		t.Error("WB_FULL_TOOLS=1 应关闭 harness 对齐模式")
+		t.Error("WB_FULL_TOOLS=1 应强制全量模式")
+	}
+	t.Setenv("WB_FULL_TOOLS", "")
+	t.Setenv("WB_HARNESS", "1")
+	if !HarnessOnlyTools() {
+		t.Error("WB_HARNESS=1 应开启 harness 对齐模式")
 	}
 }
 
@@ -161,7 +169,7 @@ var trimmedPromptBannedTools = []string{
 }
 
 func TestPromptTrimmedInHarnessMode(t *testing.T) {
-	t.Setenv("WB_FULL_TOOLS", "")
+	t.Setenv("WB_HARNESS", "1")
 	roots := []string{"/test/project"}
 
 	// 自管理/记忆/Lua 三段在 harness 模式下应裁剪为空（引用工具已被移除）
@@ -205,6 +213,7 @@ func TestPromptFullInFullToolsMode(t *testing.T) {
 	// 完整版提示词长度应显著大于精简版（保留 pair 工具说明）
 	full := DefaultSystemPrompt(roots)
 	t.Setenv("WB_FULL_TOOLS", "")
+	t.Setenv("WB_HARNESS", "1")
 	trimmed := DefaultSystemPrompt(roots)
 	if len(full) <= len(trimmed) {
 		t.Errorf("完整版提示词应比精简版长：full=%d trimmed=%d", len(full), len(trimmed))
