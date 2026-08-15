@@ -25,6 +25,18 @@ import (
 // promptVarRe 匹配 {{name}} 完整组（name 内不含 { }，防嵌套）。
 var promptVarRe = regexp.MustCompile(`\{\{([^{}]+)\}\}`)
 
+// ── 系统提示槽位约定（对齐 deepseek-harness dsh-system-prompt）──
+// harness 用固定 section name/order 约定可替换槽位：
+//   PERSONA_SECTION  = "deployment:persona"（部署人格槽位，order=0）
+//   PERSONA_ORDER    = 0：persona 段（首个读取段；插件贡献同名段可整体替换默认 persona）
+//   HARNESS_IDENTITY = -100：harness 身份段（本实现并入默认 persona 文本，不单独暴露）
+// 插件若以 name==PERSONA_SECTION 贡献段，组装时**替换**默认 persona 段
+// （而非追加），对齐 harness「persona slot 可被 agent preset 替换」语义。
+const (
+	PERSONA_SECTION = "deployment:persona"
+	PERSONA_ORDER   = 0
+)
+
 // PromptRegistry 系统提示词组装注册表。
 type PromptRegistry struct {
 	mu        sync.Mutex
@@ -170,13 +182,20 @@ func uniqueStrings(in []string) []string {
 }
 
 // PluginPromptSections 把插件贡献的系统提示段 + 变量组装为文本段（对齐 harness system-prompt 组装）。
+// persona 槽位段（name==PERSONA_SECTION）不在此处输出——它已在静态侧由
+// DefaultSystemPromptWithPersona 整体替换 persona，此处跳过避免重复注入。
 // 无插件段时返回 ""（零影响）。供 web_server/AgentBase 在构建 system prompt 时调用。
 func PluginPromptSections(host *PluginHost) (string, error) {
 	if host == nil {
 		return "", nil
 	}
 	reg := NewPromptRegistry()
-	reg.AddPluginSections(host.Sections())
+	for _, s := range host.Sections() {
+		if s == nil || s.Name == PERSONA_SECTION || strings.TrimSpace(s.Text) == "" {
+			continue
+		}
+		reg.Section(s.Name, s.Order, s.Text)
+	}
 	for _, v := range host.Variables() {
 		prov := v.Provider
 		reg.Variable(v.Name, func() string {

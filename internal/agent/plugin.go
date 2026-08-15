@@ -1322,6 +1322,22 @@ func (h *PluginHost) Sections() []*PromptSection {
 	return all
 }
 
+// PersonaSection 插件贡献的 persona 槽位段（name==PERSONA_SECTION）。
+// 返回第一个命中者（多插件同名时按注册序取先者）；无则返回 nil。
+// 组装系统提示时，若此段非空，用它**替换**默认 persona 段（对齐 harness persona slot）。
+func (h *PluginHost) PersonaSection() *PromptSection {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for _, secs := range h.pluginSections {
+		for _, s := range secs {
+			if s != nil && s.Name == PERSONA_SECTION && strings.TrimSpace(s.Text) != "" {
+				return s
+			}
+		}
+	}
+	return nil
+}
+
 // Variables 全部插件注册的提示词变量（组装时求值；对齐 harness systemPrompt.variable）。
 func (h *PluginHost) Variables() []*PromptVariable {
 	h.mu.RLock()

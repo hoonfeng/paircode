@@ -187,9 +187,6 @@ func (a *AgentBase) Init() error {
 // Run 启动 Agent 主循环（阻塞）。
 // 创建一个 Loop 实例直接运行，直到任务完成或 ctx 取消。
 // 这是自闭环模式：Agent 独立运行，不依赖 Web/UI 层。
-//
-// 在自主模式下，启动外层设计者 Loop（update_plan + delegate_task），
-// 内层执行 Loop 拥有完整工具集。
 func (a *AgentBase) Run(ctx context.Context) error {
 	a.mu.Lock()
 	if a.running {

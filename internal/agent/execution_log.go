@@ -1,6 +1,6 @@
 package agent
 
-// 执行日志 — 自主模式下，外层 agent 的各轮分析/决策/结果的结构化日志。
+// 执行日志 — 自主模式下，agent 的各轮分析/决策/结果的结构化日志。
 // 存储在 Loop.State["executionLog"]，与消息历史隔离，不受上下文压缩影响。
 // 每轮 LLM 调用前注入系统提示的【执行日志】段。
 
@@ -66,7 +66,7 @@ func (l *Loop) LogEntry(agent, phase, summary string) {
 	}
 }
 
-// LogAnalysis 便捷方法：记录外层 agent 的一轮分析内容。
+// LogAnalysis 便捷方法：记录 agent 的一轮分析内容。
 // content 是 assistant 返回的纯分析文本（不含工具调用部分）。
 func (l *Loop) LogAnalysis(content string) {
 	if content == "" {
@@ -74,18 +74,6 @@ func (l *Loop) LogAnalysis(content string) {
 	}
 	summary := l.condense(content)
 	l.LogEntry("outer", "analysis", summary)
-}
-
-// LogDelegation 便捷方法：记录一次委托给子 agent。
-func (l *Loop) LogDelegation(agentName, task string) {
-	summary := l.condense(task)
-	l.LogEntry(agentName, "delegation", summary)
-}
-
-// LogResult 便捷方法：记录子 agent 的执行结果。
-func (l *Loop) LogResult(agentName, result string) {
-	summary := l.condense(result)
-	l.LogEntry(agentName, "execution", summary)
 }
 
 // FormatExecutionLog 格式化执行日志为可读文本，用于注入系统提示。

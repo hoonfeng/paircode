@@ -122,8 +122,8 @@ type Loop struct {
 	// 一次以确保最后一轮写盘（PersistNewMessages 内部 diff 去重，无重复写开销）。
 	OnBatchPersist func(msgs []Message)
 
-	// OnMessagePersist 单条消息强制持久化（可空）。用于 delegate_task 等场景：
-	// 委托前将外层助手消息刷盘，并将委派任务作为用户消息独立存储，使前端看到清晰的层次。
+	// OnMessagePersist 单条消息强制持久化（可空）。用于需要将单条消息独立落盘的场景
+	// （如将委派任务/关键消息作为独立用户消息存储，使前端看到清晰的层次）。
 	OnMessagePersist func(msg Message) error
 
 	// ── 上下文压缩（可空；复刻参考 context/manager.ts，见 compress.go）──
@@ -160,21 +160,19 @@ type Loop struct {
 	// 保持 KV Cache 前缀逐字节一致；标注已移除（对齐 harness），该字段仅向后兼容保留。
 	InheritedPrefixLen int
 
-	// ── 多 agent 编排（阶段四，均可空；空=普通单 agent 模式）──
-	AgentTree      *AgentTree     // agent 编排树（delegate_task/delegate_single_turn 用）
-	State          map[string]any // 跨 agent 共享状态（子 Loop 继承父引用，避免塞进 messages 撑爆上下文）
-	currentMsgs    []Message      // Run 期间当前消息列表（供 delegate handler 读父历史，保缓存前缀命中）
-	finishResult   *string        // 退出信号（子 Loop：子 agent 结束时的最终内容）
-	commitMessage  string         // agent 通过 generate_commit_message 工具显式设置的提交信息
+	// ── 状态与元数据 ──
+	State         map[string]any // 跨 Run 共享状态（如 executionLog 恢复，避免塞进 messages 撑爆上下文）
+	currentMsgs   []Message      // Run 期间当前消息列表（供 persist worker 获取完整历史）
+	finishResult  *string        // 退出信号（自然终止时的最终内容）
+	commitMessage string         // agent 通过 generate_commit_message 工具显式设置的提交信息
 
 	// ── 连续驳回追踪 ──
 	rejectionCount   int    // 连续被驳回次数，达 3 次自动停止
 	lastRejectedTool string // 上次被驳回的工具名
 
 	WorkspaceRoot string // 工作区根路径（用于 SaveTokenUsage 等工作区级持久化）
-	transferTarget string         // transfer_to_agent 目标名（非空=当前 Loop 应退出，控制权转移给目标 agent）
 	CompactRequested bool         // 外部设置后下轮迭代触发上下文压缩（供主动压缩 API 使用）
-	Autonomous     bool           // 自主模式标志（供并行子 agent 继承）
+	Autonomous     bool           // 自主模式标志（单 Loop 阶段化循环）
 
 	mu sync.Mutex // 保护 ReviewMode 的并发读写（SetReviewMode/getReviewMode）
 
@@ -402,7 +400,7 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 	msgs = append(msgs, hist...)
 	// 防重复用户消息：hist（来自 store.LoadAll）末尾可能已有一条内容相同的 RoleUser
 	// （由 handleChatSend 写入 store 后再 LoadAll 取回）。仅当内容一致时才跳过追加，
-	// 避免子 agent（delegate_task）的 history 末尾是父 agent 的用户消息但任务不同时被误跳过。
+	// 避免复用历史时末尾是用户消息但任务不同被误跳过。
 	if len(msgs) > 0 && msgs[len(msgs)-1].Role == RoleUser && msgs[len(msgs)-1].Content == task {
 		// 末尾已有同内容用户消息，跳过，防持久化后重复
 	} else {
@@ -567,7 +565,7 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 			return msgs, err
 		}
         msgs = append(msgs, assistant)
-		l.currentMsgs = msgs // 同步：供 delegate handler 读父历史（含本轮 assistant；handler 剥离末尾未配对 tool_call 保前缀稳定）
+		l.currentMsgs = msgs // 同步当前消息列表，供 persist worker 获取完整历史
 
 		// ★ 在工具执行前立即持久化 assistant 消息（含 thinking + tool_calls），
 		//   确保 ask_user 等阻塞工具不会导致本轮 assistant 输出丢失。
@@ -576,8 +574,8 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 			l.OnBatchPersist(msgs)
 		}
 
-		// ★ 记录执行日志：当 assistant 有分析内容且有工具调用时（即将执行委托/操作前）
-		// 外层 agent 的分析和决策，在 delegate_task 之前可见
+		// ★ 记录执行日志：当 assistant 有分析内容且有工具调用时（即将执行操作前）
+		// 记录本轮的分析和决策，供跨轮感知
 		if strings.TrimSpace(assistant.Content) != "" && len(assistant.ToolCalls) > 0 {
 			l.LogAnalysis(assistant.Content)
 		}
@@ -771,11 +769,6 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 			l.recentCalls = nil // 提示后清零，给新思路一个干净起点
 		}
 
-		// transfer_to_agent：当前 agent 退出，控制权转移给目标 agent（由调用方接管同一 []Message）。
-		if l.transferTarget != "" {
-			return msgs, nil
-		}
-
 		// ★ 每轮迭代结束立即持久化，确保 tool_call 与 tool_result 配对完整写入磁盘。
 		//   即使进程崩溃，最多丢失当前正在执行的这一轮，之前的所有轮次消息完好。
 		if l.OnBatchPersist != nil {
@@ -967,6 +960,26 @@ func DefaultSystemPrompt(roots []string) string {
 		return harnessSystemPrompt(roots)
 	}
 	return fullSystemPrompt(roots)
+}
+
+// DefaultSystemPromptWithPersona 同 DefaultSystemPrompt，但将默认 persona 段
+// 替换为插件贡献的 persona 文本（对齐 harness system-prompt 的 persona 槽位）。
+// persona 为空时等价 DefaultSystemPrompt。
+// 实现：默认 persona 段 = 完整默认提示中「# 工作区」之前的身份段
+// （"你是 Pair CodeAgent…" + AI 身份认知），插件 persona 整体替换该段，
+// 后续核心规则/工具引导等段保留（对齐 harness：persona 槽位只换身份，不删规则）。
+func DefaultSystemPromptWithPersona(roots []string, persona string) string {
+	base := DefaultSystemPrompt(roots)
+	persona = strings.TrimSpace(persona)
+	if persona == "" {
+		return base
+	}
+	// 找到 "# 工作区" 段起始，替换其之前的内容为插件 persona（保留换行衔接）
+	if idx := strings.Index(base, "\n# 工作区\n"); idx >= 0 {
+		return persona + base[idx:]
+	}
+	// 找不到工作区段（异常情况）：persona 直接前置
+	return persona + "\n\n" + base
 }
 
 // workspaceRoots 计算工作区根信息（精简版/完整版共用）。

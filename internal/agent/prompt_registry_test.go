@@ -80,3 +80,61 @@ func TestPluginPromptSections(t *testing.T) {
 		t.Errorf("nil host 应返回空串：%q", gotNil)
 	}
 }
+
+// TestPersonaSection 插件 persona 槽位（对齐 harness deployment:persona）：
+// ① PersonaSection() 返回插件贡献的 persona 段；
+// ② PluginPromptSections 排除 persona 段（不重复注入动态侧）；
+// ③ DefaultSystemPromptWithPersona 用插件 persona 替换默认身份段、规则段保留。
+func TestPersonaSection(t *testing.T) {
+	root := t.TempDir()
+	reg := NewRegistry()
+	RegisterDefaultTools(reg, root)
+	host := NewPluginHost(reg, nil, root)
+
+	// 插件贡献 persona 段 + 普通段
+	host.ctx.AddSystemPromptSection(&PromptSection{Name: PERSONA_SECTION, Order: 0, Text: "你是 Mini-Coder，专注 Go 重构。\n不闲聊。"})
+	host.ctx.AddSystemPromptSection(&PromptSection{Name: "plugin-rules", Order: 200, Text: "规则：改后必须 gofmt。"})
+
+	// ① PersonaSection 命中
+	ps := host.PersonaSection()
+	if ps == nil {
+		t.Fatal("PersonaSection() 应返回插件 persona 段")
+	}
+	if !strings.Contains(ps.Text, "Mini-Coder") {
+		t.Errorf("persona 段内容不符：%q", ps.Text)
+	}
+
+	// ② 动态侧排除 persona 段
+	dyn, err := PluginPromptSections(host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(dyn, "Mini-Coder") {
+		t.Errorf("PluginPromptSections 不应包含 persona 段（已静态替换）：%q", dyn)
+	}
+	if !strings.Contains(dyn, "gofmt") {
+		t.Errorf("普通插件段应正常输出：%q", dyn)
+	}
+
+	// ③ 默认 persona 被替换、规则段保留
+	full := DefaultSystemPromptWithPersona([]string{root}, ps.Text)
+	if !strings.Contains(full, "Mini-Coder") {
+		t.Errorf("替换后应含插件 persona：%q", full)
+	}
+	if strings.Contains(full, "Pair CodeAgent") {
+		t.Errorf("默认 persona 应被替换掉：%q", full)
+	}
+	if !strings.Contains(full, "# 工作区") || !strings.Contains(full, "# 核心规则") {
+		t.Errorf("工作区/规则段应保留：\n%s", full)
+	}
+
+	// 空 persona → 等价默认
+	if got := DefaultSystemPromptWithPersona([]string{root}, ""); got != DefaultSystemPrompt([]string{root}) {
+		t.Errorf("空 persona 应等价默认提示")
+	}
+	// 无 persona 贡献 → PersonaSection nil
+	host2 := NewPluginHost(NewRegistry(), nil, root)
+	if host2.PersonaSection() != nil {
+		t.Errorf("无 persona 贡献时应返回 nil")
+	}
+}

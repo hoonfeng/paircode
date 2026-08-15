@@ -2229,7 +2229,15 @@ func buildSystemStaticPrefix() string {
 		return systemStaticPrefixCache.prefix
 	}
 	var b strings.Builder
-	b.WriteString(agent.DefaultSystemPrompt(core.Folders)) // 工作区路径基本固定，放 system prompt 静态前缀可最大化 KV Cache 命中
+	// ★ persona 槽位（对齐 harness）：若插件贡献了 name==deployment:persona 的系统提示段，
+	//   用它整体替换默认 persona（"你是 Pair CodeAgent…"身份段），规则/工具引导段保留。
+	persona := ""
+	if ph := handler.GetPluginHost(); ph != nil {
+		if sec := ph.PersonaSection(); sec != nil {
+			persona = sec.Text
+		}
+	}
+	b.WriteString(agent.DefaultSystemPromptWithPersona(core.Folders, persona)) // 工作区路径基本固定，放 system prompt 静态前缀可最大化 KV Cache 命中
 	if si := strings.TrimSpace(core.Settings.SystemInstructions); si != "" {
 		b.WriteString("\n\n# 系统级指令（务必遵守）\n" + si)
 	}

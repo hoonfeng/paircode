@@ -189,10 +189,8 @@ func SegmentsFromMessage(msg Message, hist []Message, idx int) []Segment {
 	}
 	for _, tc := range msg.ToolCalls {
 		name := tc.Function.Name
-		// ★ 委托工具不生成 tool_call segment——委派任务会作为独立用户消息持久化
-		if name == "delegate_task" || name == "delegate_single_turn" || name == "transfer_to_agent" {
-			continue
-		}
+		// ★ 委托工具（已随多角色模型移除 2026-08-16）不再生成 tool_call segment——
+		//   保留 ask_user 等交互式工具的 segment 逻辑
 		if name == "ask_user" {
 			// ★ ask_user 生成独立交互式 segment
 			question, askType, options := parseAskArgs(tc.Function.Arguments)

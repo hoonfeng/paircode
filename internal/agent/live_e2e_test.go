@@ -235,55 +235,5 @@ func TestLiveSkills(t *testing.T) {
 }
 
 // ─── 5.7 多 agent 委托 ──
-
-func TestLiveMultiAgent(t *testing.T) {
-	key := liveKey()
-	if key == "" {
-		t.Skip("未设 DEEPSEEK_KEY，跳过真机测试")
-	}
-	root := t.TempDir()
-	reg := NewRegistry()
-	RegisterDefaultTools(reg, root)
-
-	// 编排树：coordinator（协调器）→ coder（编码者）
-	// coder 用工具白名单限定只能用 write_file/read_file，
-	// 避免继承 delegate_task 导致递归委托死循环。
-	tree := NewAgentTree(
-		&SubAgent{Name: "coordinator", Description: "协调器，分配任务给子 agent"},
-		&SubAgent{Name: "coder", Description: "编码者，创建文件",
-			System:  "你是编码专家，用 write_file 完成文件创建任务，完成后报告结果。",
-			Tools:   []string{"write_file", "read_file"},
-			MaxIter: 6},
-	)
-
-	prov := &OpenAIProvider{BaseURL: "https://api.deepseek.com/v1", APIKey: key, Model: "deepseek-chat", Temperature: 0}
-	var ev []string
-	loop := &Loop{
-		Provider: prov, Registry: reg, System: DefaultSystemPrompt([]string{root}), MaxIterations: 15,
-		AgentTree: tree, State: map[string]any{},
-		OnEvent: func(e Event) {
-			if e.Tool != "" {
-				ev = append(ev, e.Tool)
-			}
-		},
-	}
-	RegisterDelegateTools(loop, tree)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
-	defer cancel()
-	task := "用 delegate_task 委托 'coder' 子 agent 在工作区创建文件 done.txt，内容为 'delegated ok'。等子 agent 完成后输出 完成。"
-	if _, err := loop.Run(ctx, task, nil); err != nil {
-		t.Fatalf("loop.Run 出错: %v（工具: %v）", err, ev)
-	}
-	joined := strings.Join(ev, " ")
-	if !strings.Contains(joined, "delegate_task") {
-		t.Errorf("LLM 未调用 delegate_task，工具序列: %v", ev)
-	}
-	data, rerr := os.ReadFile(filepath.Join(root, "done.txt"))
-	if rerr != nil {
-		t.Errorf("done.txt 未被创建: %v（工具: %v）", rerr, ev)
-	} else if !strings.Contains(string(data), "delegated") {
-		t.Errorf("done.txt 内容不符: %q", string(data))
-	}
-	t.Logf("✓ 多 agent 委托真机通过；done.txt=%q；工具: %v", string(data), ev)
-}
+// （已移除 2026-08-16：多角色（外层设计者+delegate 子 agent）按参考项目
+//  单 Agent 模型删除，本真机用例一并移除——单 agent 已覆盖全部能力。）
