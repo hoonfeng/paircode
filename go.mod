@@ -46,5 +46,5 @@ require (
 replace (
 	github.com/hoonfeng/goskia => ../goskia
 	wb-ui => ../wb-ui
-	wb-ui.com/goja => ../wb-ui/goja
+	wb-ui.com/goja => ./internal/goja
 )
