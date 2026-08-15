@@ -192,6 +192,10 @@ type Loop struct {
 
 	reviewer *Reviewer
 
+	// loopSvc 一切皆插件：本 Run 期间注册到全局插件宿主的 loop 服务（Run 结束置 nil）。
+	// 插件 ctx.get('loop') 查询状态/请求暂停停止；并行 Run 时指向最近启动的 Loop。
+	loopSvc *LoopService
+
 	// contentOnlyIters 连续 content-only（无 tool_call）轮数计数器。
 	// contentOnlyIters 连续 content-only（无 tool_call）轮数计数器。
 	// 防止 Agent 只输出文字导致自我循环。
@@ -251,6 +255,10 @@ func (l *Loop) emit(e Event) {
 	}
 	if l.OnEvent != nil {
 		l.OnEvent(e)
+	}
+	// ★ loop 服务快照同步（插件 ctx.get('loop') 的 getState 数据源）。
+	if l.loopSvc != nil {
+		l.loopSvc.noteEvent(e)
 	}
 	// ★ 一切皆插件：loop 事件桥——广播到全局插件 EventBus（loop:<type> 事件名），
 	//   插件 ctx.on('loop:thinking' / 'loop:tool_call' / 'loop:done' …) 可监听扩展
@@ -358,6 +366,15 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 	// agentloop：打开一轮新 turn（一次 Run = 一个 turn）。
 	l.openTurn()
 
+	// ★ 一切皆插件：loop 服务面——Run 期间注册 ctx.provide('loop')，
+	//   插件 ctx.get('loop') 可查询状态/请求暂停停止；Run 结束自动撤销。
+	//   （并行 Run 时服务指向最近启动的 Loop；未运行期间 get 返回 nil。）
+	if ph := GetGlobalPluginHost(); ph != nil && ph.Context() != nil {
+		l.loopSvc = newLoopService(l)
+		cancelProvide := ph.Context().Provide("loop", l.loopSvc)
+		defer cancelProvide()
+	}
+
 	// 统一持久化出口：每次 Run 返回后更新 l.History（不论调用方是否传了 history）
 	defer func() {
 		l.History = msgs
@@ -367,6 +384,8 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 		}
 		// agentloop：turn 收尾（未显式设置结束原因时按 err/ctx 推断）
 		l.endTurn(err, ctx.Err() != nil)
+		// loop 服务撤销（Run 结束，插件侧 ctx.get('loop') 恢复 nil）
+		l.loopSvc = nil
 	}()
 
 	// 深复制 history，避免下层 append 污染原切片
@@ -432,6 +451,22 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 	for iter := 0; iter < max; iter++ {
 		// agentloop：进入下一个 step（每次迭代 = 一次 LLM 调用 + 工具执行）
 		l.beginStep()
+
+		// ★ 一切皆插件：loop 服务——暂停/停止请求在每轮迭代开始处生效
+		//   （阻塞中的 LLM 调用不受影响；暂停等待可被 ctx 取消唤醒）。
+		if l.loopSvc != nil {
+			if !l.loopSvc.waitIfPaused(ctx) {
+				if reason := l.loopSvc.shouldStop(); reason != "" {
+					l.CancelCause = AgentCancelCause{Kind: CancelByPlugin, Reason: reason}
+					l.LastTurnReason = TurnAborted
+					return msgs, loopStopError(reason)
+				}
+				l.CancelCause = AgentCancelCause{Kind: CancelByContext, Reason: ctx.Err().Error()}
+				l.LastTurnReason = TurnAborted
+				return msgs, ctx.Err() // 暂停等待期间被外部取消
+			}
+		}
+
 		if err := ctx.Err(); err != nil {
 			// agentloop：外部取消 → turn 以 aborted 结束并记录取消原因
 			l.CancelCause = AgentCancelCause{Kind: CancelByContext, Reason: err.Error()}

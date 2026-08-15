@@ -59,6 +59,7 @@ const (
 	CancelByHook    = "hook"     // 钩子/审核拦截
 	CancelByDispose = "disposed" // agent 生命周期销毁
 	CancelByContext = "context"  // Go context 取消（gou-ide 特有映射）
+	CancelByPlugin  = "plugin"   // 插件请求停止（ctx.get('loop').requestStop()，一切皆插件）
 )
 
 // openTurn 打开一轮新 turn（一次 Run 调用）。重置 step 计数与 sticky 状态。
