@@ -25,11 +25,13 @@ package agent
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 )
 
 // builtinToolsetName 内置工具集名（虚拟展示 + builtin.json 固化文件名）。
@@ -60,6 +62,7 @@ type BuiltinGroupInfo struct {
 	Tools   []BuiltinToolInfo `json:"tools"`   // 工具清单（含启用状态）
 	Enabled bool              `json:"enabled"` // 组是否全部启用（全部工具对 agent 可见）
 	Partial bool              `json:"partial"` // 部分启用（部分工具可见）
+	Joined  bool              `json:"joined"`  // 组是否已加入工作区（固化在 builtin.json）
 }
 
 // BuiltinToolsetInfo 内置工具集完整信息（/api/toolsets?name=builtin 返回）。
@@ -68,8 +71,9 @@ type BuiltinToolsetInfo struct {
 	Scope    string             `json:"scope"` // "builtin"
 	Desc     string             `json:"desc"`
 	Groups   []BuiltinGroupInfo `json:"groups"`
-	Joined   []string           `json:"joined"`   // 已加入工作区（固化在 builtin.json）的分组名
-	ToolTotal int               `json:"toolTotal"` // 全部内置工具数
+	Joined   []string           `json:"joined"`      // 已加入工作区（固化在 builtin.json）的分组名
+	ManualTools []string        `json:"manualTools"` // 手动添加的工具（builtin.json _manual 条目）
+	ToolTotal int               `json:"toolTotal"`   // 全部内置工具数
 	EnabledTotal int            `json:"enabledTotal"` // 当前启用（agent 可见）的内置工具数
 }
 
@@ -317,15 +321,99 @@ func builtinJoinedGroups(root string) []string {
 	return out
 }
 
+// EnsureDefaultBuiltinToolset 确保工作区存在内置工具集固化文件（.pair/toolsets/builtin.json）：
+// 不存在时自动创建「dsh 极简核心」默认工具集（与 deepseek-harness 极简模式对齐——
+// 几个核心工具默认捞入工作区，其余工具留在插件面板池子按需勾选）。
+// 幂等：文件已存在（用户/agent 管理过）则不动。启动装配（LoadAllToolsets 前）调用。
+func EnsureDefaultBuiltinToolset(root string) error {
+	if root == "" {
+		return nil
+	}
+	path := toolsetPath(root, toolsetProject, builtinToolsetName)
+	if _, err := os.Stat(path); err == nil {
+		return nil
+	}
+	ts := defaultBuiltinToolset()
+	if err := saveToolset(root, toolsetProject, ts); err != nil {
+		return err
+	}
+	log.Printf("[toolset] 已自动创建默认内置工具集（dsh 极简核心，%d 组条目）: %s", len(ts.Plugins), path)
+	return nil
+}
+
+// defaultBuiltinToolset 默认内置工具集内容：dsh 极简模式核心工具。
+// 工具名分布：system（harness 命名 read/write/edit/glob/grep/bash/str_replace_editor/run_code）、
+// fs-search（search_files/search_content）、web（web_fetch/web_search）、
+// shell（run_background/kill_process/read_output）、vision（read_image，dsh tool-fs 图片读取）。
+func defaultBuiltinToolset() *Toolset {
+	return &Toolset{
+		Name:        builtinToolsetName,
+		Description: "内置工具包——dsh 极简核心已捞入工作区（插件面板为池子，此处为捞出的工具；其余工具在插件面板按需勾选）",
+		Version:     "1.0.0",
+		CreatedAt:   time.Now().Format(time.RFC3339),
+		Plugins: []ToolsetPlugin{
+			{
+				Name:    "builtin:system",
+				Purpose: "system：dsh 极简核心（harness 命名 read/write/edit/glob/grep/bash/str_replace_editor/run_code）",
+				Builtin: "system",
+				Tools:   []string{"read", "write", "edit", "glob", "grep", "bash", "str_replace_editor", "run_code"},
+			},
+			{
+				Name:    "builtin:fs-search",
+				Purpose: "fs-search：文件搜索（search_files/search_content）",
+				Builtin: "fs-search",
+				Tools:   []string{"search_files", "search_content"},
+			},
+			{
+				Name:    "builtin:web",
+				Purpose: "web：网络工具（web_fetch/web_search）",
+				Builtin: "web",
+				Tools:   []string{"web_fetch", "web_search"},
+			},
+			{
+				Name:    "builtin:shell",
+				Purpose: "shell：后台进程（run_background/kill_process/read_output）",
+				Builtin: "shell",
+				Tools:   []string{"run_background", "kill_process", "read_output"},
+			},
+			{
+				Name:    "builtin:vision",
+				Purpose: "vision：read_image（dsh tool-fs 含图片读取）",
+				Builtin: "vision",
+				Tools:   []string{"read_image"},
+			},
+		},
+	}
+}
+
 // BuiltinToolsetInfoOf 派生内置工具集完整信息（列表/详情 API 用）。
 func BuiltinToolsetInfoOf(reg *Registry, ph *PluginHost, root string) *BuiltinToolsetInfo {
 	groups := BuiltinGroupsOf(reg, ph)
+	joined := builtinJoinedGroups(root)
+	joinedSet := map[string]bool{}
+	for _, n := range joined {
+		joinedSet[n] = true
+	}
+	for i := range groups {
+		if joinedSet[groups[i].Name] {
+			groups[i].Joined = true
+		}
+	}
 	info := &BuiltinToolsetInfo{
 		Name:  builtinToolsetName,
 		Scope: "builtin",
 		Desc:  "内置工具包（默认不加入工作区；分组开关加入，add_builtin_all 强制全部）",
 		Groups: groups,
-		Joined: builtinJoinedGroups(root),
+		Joined: joined,
+	}
+	// _manual 手动条目工具（工具级添加，固化 builtin.json）
+	if ts, err := loadToolset(root, toolsetProject, builtinToolsetName); err == nil {
+		for _, p := range ts.Plugins {
+			if p.Builtin == manualBuiltinGroup {
+				info.ManualTools = append([]string{}, p.Tools...)
+				break
+			}
+		}
 	}
 	for _, g := range groups {
 		info.ToolTotal += len(g.Tools)

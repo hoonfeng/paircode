@@ -60,58 +60,58 @@
       <div class="ts-header" @click="toggleTs" title="工具集（工作区内，可折叠）">
         <SvgIcon name="package" :size="12" class="ts-header-icon" />
         <span class="divider-label ts-label">工具集</span>
-          <span class="ts-count">{{ agentTs.enabledTotal }} 可用</span>
+          <span class="ts-count">{{ tsMetas.length }} 工具集</span>
         <span class="ts-spacer"></span>
         <button class="ts-mini-btn" @click.stop="loadToolsets" title="刷新工具集"><SvgIcon name="refresh" :size="11" :class="{ spinning: tsRefreshing }" /></button>
-        <button class="ts-mini-btn" @click.stop="tsBuildOpen = !tsBuildOpen" title="动态构建工具集"><SvgIcon name="plus" :size="12" /></button>
+        <button class="ts-mini-btn" @click.stop="tsAddOpen = !tsAddOpen" title="添加工具到工作区工具集（固化 .pair/toolsets/builtin.json）"><SvgIcon name="plus" :size="12" /></button>
         <SvgIcon name="chevron-right" :size="11" class="ts-chevron" :class="{ open: tsOpen }" />
       </div>
       <div v-if="tsOpen" class="ts-body">
-        <!-- 构建表单 -->
-        <div v-if="tsBuildOpen" class="ts-build">
-          <div class="ts-build-title">动态构建（分析项目 → 模板组合插件 → 固化 .pair/toolsets/）</div>
-          <input v-model="tsForm.name" placeholder="工具集名（如 web-dev；默认 default）" class="ts-input" />
-          <input v-model="tsForm.description" placeholder="用途描述（可选）" class="ts-input" />
-          <input v-model="tsForm.requirement" placeholder="要求（可选）：如「Web 前端脚手架 + 接口调试」" class="ts-input" />
-          <div class="ts-build-foot">
-            <label class="ts-check"><input type="checkbox" v-model="tsForm.overwrite" /> 覆盖同名</label>
-            <button class="ts-btn primary" :disabled="tsBuilding" @click="buildToolset">
-              {{ tsBuilding ? '构建中…' : '构建并固化' }}
-            </button>
+        <!-- 添加工具（从插件面板池子捞入工作区工具集，固化 .pair/toolsets/builtin.json） -->
+        <div v-if="tsAddOpen" class="ts-build">
+          <div class="ts-build-title">添加工具到工作区工具集（固化 builtin.json；插件面板为池子，勾选=运行时可见）</div>
+          <input v-model="tsAddSearch" placeholder="搜索工具名…" class="ts-input" />
+          <div class="ts-add-list">
+            <div v-for="g in builtinGroups" :key="g.name" class="ts-add-group">
+              <div class="ts-add-group-title">
+                <span>{{ g.name }}</span>
+                <span class="ts-tool-desc">{{ filterTools(g.tools).length }}/{{ g.tools.length }} 工具</span>
+              </div>
+              <div v-for="t in filterTools(g.tools)" :key="t.name" class="ts-add-tool" :title="t.desc">
+                <span class="ts-add-tool-name">{{ t.name }}</span>
+                <button class="ts-btn mini" :class="{ added: joinedTools[t.name] }" @click="toggleToolsetTool(t)">
+                  {{ joinedTools[t.name] ? '✓ 已加入' : '＋ 添加' }}
+                </button>
+              </div>
+            </div>
           </div>
           <div v-if="tsMsg" class="ts-msg" :class="{ err: tsMsgErr }">{{ tsMsg }}</div>
         </div>
-        <!-- 列表 -->
-          <!-- Agent 可用工具（加入进来的工具；工具集 = agent 可用的工具集合） -->
-          <div class="ts-toolbar">
-            <span class="ts-toolbar-title">可用工具 <span class="ts-toolbar-count">{{ agentTs.enabledTotal }}</span></span>
-            <button class="ts-btn primary" @click="addToolOpen = !addToolOpen">{{ addToolOpen ? '收起' : '+ 添加工具' }}</button>
+        <!-- 工作区工具集列表（.pair/toolsets/*.json；工具集 = agent 可用工具集合） -->
+        <div class="ts-toolbar">
+          <span class="ts-toolbar-title">工作区工具集 <span class="ts-toolbar-count">{{ tsMetas.length }}</span></span>
+        </div>
+        <div v-if="tsMetas.length" class="ts-tools">
+          <div v-for="ts in tsMetas" :key="ts.name" class="ts-tool-row ts-ts-row" @click="toggleTsDetail(ts.name)" :title="'展开/收起：' + ts.name">
+            <span class="ts-tool-group">{{ ts.scope === 'global' ? '全局' : '工作区' }}</span>
+            <span class="ts-tool-name" :title="ts.description || ts.name">{{ ts.name }}</span>
+            <span class="ts-tool-desc">{{ ts.pluginCount }} 插件</span>
+            <SvgIcon name="chevron-right" :size="10" class="ts-chevron" :class="{ open: tsOpenDetail[ts.name] }" />
           </div>
-          <!-- 添加工具面板：搜索全部内置工具 → 点击加入 agent 可用 -->
-          <div v-if="addToolOpen" class="ts-add-panel">
-            <input v-model="addToolQuery" class="ts-input" placeholder="搜索全部内置工具（名称/描述/组）…" />
-            <div class="ts-add-list">
-              <div v-for="t in addToolCandidates" :key="t.name" class="ts-add-row" @click="toggleAgentTool(t, true)" :title="'加入 agent 可用：' + t.name">
-                <span class="ts-tool-group">{{ t.group }}</span>
-                <span class="ts-tool-name">{{ t.name }}</span>
-                <span class="ts-tool-desc">{{ t.desc }}</span>
-                <span class="ts-add-plus">＋</span>
-              </div>
-              <div v-if="!addToolCandidates.length" class="ts-empty">无待添加工具（已全部启用或搜索无匹配）</div>
-            </div>
+        </div>
+        <div v-else-if="!tsRefreshing" class="ts-empty"><span>暂无工具集。点「＋」添加工具到工作区工具集。</span></div>
+        <!-- 展开：工具集详情（插件/分组 + 工具数） -->
+        <div v-if="tsDetail" class="ts-detail">
+          <div class="ts-detail-title">{{ tsDetail.name }}<span class="ts-detail-count">{{ (tsDetail.plugins || []).length || (tsDetail.groups || []).length }} 条目</span></div>
+          <div v-for="pl in (tsDetail.plugins || [])" :key="pl.name" class="ts-detail-plugin">
+            <span class="ts-tool-group">{{ pl.name }}</span>
+            <span class="ts-tool-desc">{{ (pl.tools || []).length }} 工具</span>
           </div>
-          <!-- 当前 agent 可用工具清单 -->
-          <div v-if="enabledAgentTools.length" class="ts-tools">
-            <div v-for="t in enabledAgentTools" :key="t.name" class="ts-tool-row">
-              <span class="ts-tool-group">{{ t.group }}</span>
-              <span class="ts-tool-name" :title="t.desc">{{ t.name }}</span>
-              <span class="ts-tool-desc">{{ t.desc }}</span>
-              <button class="ts-btn danger ts-remove-btn" @click="toggleAgentTool(t, false)" title="移除（恢复默认过滤）"><SvgIcon name="x" :size="10" /> 移除</button>
-            </div>
+          <div v-for="g in (tsDetail.groups || [])" :key="g.name" class="ts-detail-plugin">
+            <span class="ts-tool-group">{{ g.name }}<span v-if="g.joined" class="ts-joined-badge">已加入</span></span>
+            <span class="ts-tool-desc">{{ (g.tools || []).length }} 工具</span>
           </div>
-          <div v-else-if="!tsRefreshing" class="ts-empty">
-            <span>暂无可用工具。点「+ 添加工具」从内置工具包选择。</span>
-          </div>
+        </div>
       </div>
     </div>
 
@@ -570,26 +570,50 @@ async function loadFileContent(path) {
   }
 }
 
-// ── 工具集（卷帘 section：与文件树同区；工具集 = agent 可用的工具集合） ──
-const agentTs = ref({ groups: [], toolTotal: 0, enabledTotal: 0 })
+// ── 工具集（卷帘 section：与文件树同区；工作区工具集 = .pair/toolsets/*.json） ──
+const tsMetas = ref([])
+const tsDetail = ref(null)
+const tsOpenDetail = reactive({})
 const tsRefreshing = ref(false)
-const tsBuilding = ref(false)
-const tsBuildOpen = ref(false)
+const tsAddOpen = ref(false)
+const tsAddSearch = ref('')
 const tsMsg = ref('')
 const tsMsgErr = ref(false)
-const tsForm = reactive({ name: '', description: '', requirement: '', overwrite: false })
+const builtinInfo = ref(null)   // GET /api/plugins/builtin：{groups, joined, manualTools, toolTotal, enabledTotal}
 const tsOpen = ref(true) // 卷帘默认展开
 try {
   const saved = localStorage.getItem('paircode-ts-open')
   if (saved !== null) tsOpen.value = saved === '1'
 } catch {}
 
-// 加载内置工具包（全部工具 + 启用状态），扁平化出「agent 可用工具」清单
+// 已捞入工作区工具集的工具名集合（joined 组的组工具 + _manual 手动条目工具）
+const joinedTools = computed(() => {
+  const set = {}
+  const joined = new Set(builtinInfo.value?.joined || [])
+  for (const g of builtinInfo.value?.groups || []) {
+    if (joined.has(g.name)) for (const t of g.tools) set[t.name] = true
+  }
+  for (const tn of builtinInfo.value?.manualTools || []) set[tn] = true
+  return set
+})
+
+// 添加工具面板的组列表（全部内置分组）
+const builtinGroups = computed(() => builtinInfo.value?.groups || [])
+
+// 搜索过滤（工具名模糊匹配）
+function filterTools(tools) {
+  const q = tsAddSearch.value.trim().toLowerCase()
+  if (!q) return tools
+  return tools.filter(t => t.name.toLowerCase().includes(q))
+}
+
+// 加载工作区工具集列表（.pair/toolsets/*.json）与内置工具包信息（池子）
 async function loadToolsets() {
   tsRefreshing.value = true
   try {
-    const d = await api.apiGet('/plugins/builtin')
-    agentTs.value = d && d.groups ? d : { groups: [], toolTotal: 0, enabledTotal: 0 }
+    const list = (await api.getToolsets()) || []
+    tsMetas.value = list.filter(t => t.scope !== 'builtin')
+    await loadBuiltin()
   } catch (e) {
     console.warn('[toolset] 加载失败', e)
   } finally {
@@ -597,65 +621,40 @@ async function loadToolsets() {
   }
 }
 
-// agent 当前可用（启用）的工具
-const enabledAgentTools = computed(() => {
-  const out = []
-  for (const g of agentTs.value.groups || []) {
-    for (const t of g.tools) if (t.enabled) out.push({ ...t, group: g.name })
-  }
-  return out
-})
-
-// 添加工具面板：全部内置工具（排除已启用）→ 搜索过滤
-const addToolOpen = ref(false)
-const addToolQuery = ref('')
-const addToolCandidates = computed(() => {
-  const q = addToolQuery.value.trim().toLowerCase()
-  const out = []
-  for (const g of agentTs.value.groups || []) {
-    for (const t of g.tools) {
-      if (t.enabled) continue
-      if (q && !((t.name + ' ' + (t.desc || '') + ' ' + g.name).toLowerCase().includes(q))) continue
-      out.push({ ...t, group: g.name })
-    }
-  }
-  return out
-})
-
-// 工具级开关（手动添加/移除指定工具；与插件面板同源：/api/plugins/builtin {tool,enabled}）
-async function toggleAgentTool(t, enabled) {
+async function loadBuiltin() {
   try {
-    const res = await api.apiPost('/plugins/builtin', { tool: t.name, enabled })
-    window.$toast?.((res && res.message) || (enabled ? '已加入' : '已移除') + ' ' + t.name, 'info')
+    builtinInfo.value = await api.builtinPlugins()
   } catch (e) {
-    window.$toast?.('操作失败: ' + (e.message || e), 'error')
+    console.warn('[toolset] 内置工具包加载失败', e)
   }
-  await loadToolsets()
 }
 
-async function buildToolset() {
-  tsBuilding.value = true
-  tsMsg.value = ''
-  tsMsgErr.value = false
+// 添加/移除工具（持久化：POST /api/plugins/builtin {tool, enabled} → 固化 builtin.json _manual 条目）
+async function toggleToolsetTool(t) {
   try {
-    const res = await api.apiPost('/toolsets/build', {
-      name: tsForm.name,
-      description: tsForm.description,
-      requirement: tsForm.requirement,
-      overwrite: tsForm.overwrite,
-    })
-    tsMsg.value = `已构建并固化「${res.name}」（${res.pluginCount} 个插件）`
-    tsForm.name = ''
-    tsForm.description = ''
-    tsForm.requirement = ''
-    tsForm.overwrite = false
-    tsBuildOpen.value = false
-    await loadToolsets()
+    const enabled = !joinedTools.value[t.name]
+    const res = await api.builtinPlugins({ tool: t.name, enabled })
+    tsMsg.value = res?.message || (enabled ? '已添加' : '已移除') + ' ' + t.name
+    tsMsgErr.value = false
+    await loadBuiltin()
   } catch (err) {
     tsMsgErr.value = true
-    tsMsg.value = '构建失败: ' + (err.message || err)
-  } finally {
-    tsBuilding.value = false
+    tsMsg.value = '操作失败: ' + (err.message || err)
+  }
+}
+
+// 展开/收起工具集详情（插件 + 工具数）
+async function toggleTsDetail(name) {
+  if (tsOpenDetail[name]) {
+    tsOpenDetail[name] = false
+    tsDetail.value = null
+    return
+  }
+  tsOpenDetail[name] = true
+  try {
+    tsDetail.value = await api.getToolsets(name)
+  } catch (e) {
+    window.$toast?.('加载工具集详情失败: ' + (e.message || e), 'error')
   }
 }
 
@@ -799,6 +798,7 @@ onUnmounted(() => {
 }
 .ts-tool-chip.off { text-decoration: line-through; opacity: .45; }
 .ts-detail-prow { display: flex; align-items: center; gap: 6px; }
+.ts-joined-badge { margin-left: 6px; font-size: 9px; padding: 0 5px; border-radius: 8px; background: var(--accent-bg); color: var(--accent); border: 1px solid var(--accent); }
 .ts-detail-pname { font-size: 10px; font-weight: 600; word-break: break-all; }
 .ts-detail-pbuiltin { font-size: 8px; color: var(--accent-light); border: 1px solid var(--accent); border-radius: 3px; padding: 0 3px; flex-shrink: 0; }
 .ts-detail-ppurpose { font-size: 9px; color: var(--text-muted); }
@@ -841,6 +841,16 @@ onUnmounted(() => {
 }
 .ts-input:focus { border-color: var(--accent); outline: none; }
 .ts-build-foot { display: flex; align-items: center; gap: 6px; }
+/* 添加工具面板（从插件面板池子捞入工作区工具集） */
+.ts-add-list { max-height: 240px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; border: 1px solid var(--border-color); border-radius: 4px; padding: 4px; background: var(--bg-secondary); }
+.ts-add-group { display: flex; flex-direction: column; gap: 2px; }
+.ts-add-group-title { display: flex; align-items: center; justify-content: space-between; font-size: 10px; font-weight: 600; color: var(--text-secondary); padding: 2px 2px 0; border-bottom: 1px dashed var(--border-color); }
+.ts-add-tool { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 2px 4px; border-radius: 3px; }
+.ts-add-tool:hover { background: var(--bg-hover); }
+.ts-add-tool-name { font-size: 11px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ts-btn.mini { font-size: 10px; padding: 1px 8px; border: 1px solid var(--border-color); border-radius: 8px; background: none; color: var(--text-secondary); cursor: pointer; flex-shrink: 0; }
+.ts-btn.mini:hover { background: var(--bg-hover); color: var(--accent); }
+.ts-btn.mini.added { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
 .ts-check { display: flex; align-items: center; gap: 3px; font-size: 10px; color: var(--text-secondary); white-space: nowrap; }
 .ts-btn {
   background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-secondary);
@@ -879,6 +889,12 @@ onUnmounted(() => {
 .ts-add-row:hover { border-color: var(--accent); background: var(--bg-hover); }
 .ts-add-plus { color: var(--accent-light); font-weight: 700; flex-shrink: 0; }
 .ts-tools { display: flex; flex-direction: column; gap: 2px; }
+.ts-ts-row { cursor: pointer; }
+.ts-ts-row:hover { border-color: var(--accent); }
+.ts-detail { border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-tertiary); padding: 4px; display: flex; flex-direction: column; gap: 2px; }
+.ts-detail-title { font-size: 10px; font-weight: 600; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; padding: 2px 4px; }
+.ts-detail-count { font-size: 9px; background: var(--bg-primary); color: var(--text-muted); border-radius: 8px; padding: 0 6px; line-height: 14px; }
+.ts-detail-plugin { display: flex; align-items: center; gap: 6px; padding: 2px 4px; }
 .ts-tool-row {
   display: flex; align-items: center; gap: 6px; padding: 3px 6px;
   border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary);

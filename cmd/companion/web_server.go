@@ -187,6 +187,8 @@ func startWebUI(port int) {
 		agent.RegisterCordisTools(initReg, ph, root)
 		agent.RegisterBuiltinPlugins(ph)
 		agent.RegisterToolsetTools(initReg, root, ph)
+		// ★ 自动创建默认内置工具集（builtin.json 缺失时：dsh 极简核心捞入工作区）
+		agent.EnsureDefaultBuiltinToolset(root)
 		// ★ 启动自动装载工具集（.pair/toolsets/ + 全局）
 		agent.LoadAllToolsets(ph, root)
 		if err := ph.LoadCordisPatch(filepath.Join(root, ".pair", "cordis.patch.json")); err != nil {

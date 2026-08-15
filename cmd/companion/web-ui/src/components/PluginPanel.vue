@@ -268,12 +268,14 @@ const filteredBuiltinTools = computed(() => {
     (t.name + ' ' + (t.desc || '') + ' ' + t.group).toLowerCase().includes(q))
 })
 
-// 工具级开关（手动添加/移除指定工具；与文件浏览器工具集区同源：/api/plugins/builtin {tool,enabled}）
+// 工具级开关（agent 可见性——内存态，走 /api/plugins/tool；不固化工作区工具集。
+// 内置工具包=过滤落点：默认全量可见（全勾），取消勾选=临时过滤；持久化加入
+// 请用工具集机制 toolset_edit add_builtin（固化 .pair/toolsets/*.json））
 async function toggleBuiltinTool(t) {
   const target = !t.enabled
   try {
-    const res = await api.builtinPlugins({ tool: t.name, enabled: target })
-    window.$toast && window.$toast((res && res.message) || (target ? '已加入' : '已移除') + ' ' + t.name, 'info')
+    const res = await api.pluginToolToggle(t.name, target)
+    window.$toast && window.$toast((res && res.message) || (target ? '已启用' : '已禁用') + ' ' + t.name, 'info')
   } catch (e) {
     window.$toast && window.$toast(e.message || '操作失败', 'error')
   }
