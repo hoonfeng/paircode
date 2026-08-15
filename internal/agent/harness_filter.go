@@ -122,44 +122,42 @@ func ApplyToolsetBuiltinState(r *Registry, root string) {
 	if r == nil || root == "" {
 		return
 	}
-	// 遍历全部工具集（含 builtin.json——listToolsets 会跳过它，这里直接列文件）
-	for _, scope := range []toolsetScope{toolsetProject, toolsetGlobal} {
-		dir := toolsetDir(root, scope)
-		entries, err := os.ReadDir(dir)
+	// 遍历全部工作区工具集（含 builtin.json——listToolsets 会跳过它，这里直接列文件）
+	dir := toolsetDir(root, toolsetProject)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
 		if err != nil {
 			continue
 		}
-		for _, e := range entries {
-			if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+		var ts Toolset
+		if err := json.Unmarshal(data, &ts); err != nil || ts.Name == "" {
+			continue
+		}
+		for _, p := range ts.Plugins {
+			if p.Builtin == "" {
 				continue
 			}
-			data, err := os.ReadFile(filepath.Join(dir, e.Name()))
-			if err != nil {
-				continue
-			}
-			var ts Toolset
-			if err := json.Unmarshal(data, &ts); err != nil || ts.Name == "" {
-				continue
-			}
-			for _, p := range ts.Plugins {
-				if p.Builtin == "" {
+			for _, tn := range p.Tools {
+				if tn == "" {
 					continue
 				}
-				for _, tn := range p.Tools {
-					if tn == "" {
-						continue
-					}
-					if _, ok := r.Get(tn); ok {
-						r.SetToolEnabled(tn, true)
-					}
+				if _, ok := r.Get(tn); ok {
+					r.SetToolEnabled(tn, true)
 				}
-				for _, tn := range p.DisabledTools {
-					if tn == "" {
-						continue
-					}
-					if _, ok := r.Get(tn); ok {
-						r.SetToolEnabled(tn, false)
-					}
+			}
+			for _, tn := range p.DisabledTools {
+				if tn == "" {
+					continue
+				}
+				if _, ok := r.Get(tn); ok {
+					r.SetToolEnabled(tn, false)
 				}
 			}
 		}

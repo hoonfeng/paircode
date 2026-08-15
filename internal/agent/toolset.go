@@ -51,6 +51,11 @@ type ToolsetPlugin struct {
 	Purpose string `json:"purpose"`
 	Code    string `json:"code,omitempty"`     // host 半：async 函数体（return { name, apply(ctx) }）
 	Client  string `json:"client,omitempty"`   // client 半：(ui) => void
+	// Scope 插件生效作用域（cordis 动态插件条目）："global"=全局插件（UI 类，
+	// 跨工作区生效，存程序目录）/""或"project"=项目插件。★ 存储统一在程序目录
+	// <InstallDir>/.pair/plugins/（插件是程序的扩展，不属于工作区）；
+	// scope 仅用于记录与前端徽标。
+	Scope string `json:"scope,omitempty"`
 	// ★ 内置工具包条目（无 Code）：引用宿主内置 Go 工具组（core/git/codegraph/… 或
 	//   system/plugin-mgmt/toolset-mgmt）。装载=对 Tools 清单内已注册工具
 	//   SetToolEnabled(true)（工具对 agent 可见）；卸载=恢复默认状态
@@ -72,14 +77,11 @@ type toolsetScope string
 
 const (
 	toolsetProject toolsetScope = "project" // 工作区 .pair/toolsets/
-	toolsetGlobal  toolsetScope = "global"  // 安装目录 .pair/toolsets/
 )
 
-// toolsetDir 返回指定作用域的工具集目录。
+// toolsetDir 返回工具集目录（★ 工具集是工作区级概念——没有「全局工具集」；
+// 全局生效的是插件（UI 类），存 <InstallDir>/.pair/plugins/，见 LoadGlobalPlugins）。
 func toolsetDir(projectRoot string, scope toolsetScope) string {
-	if scope == toolsetGlobal {
-		return filepath.Join(core.InstallDir(), ".pair", "toolsets")
-	}
 	return filepath.Join(projectRoot, ".pair", "toolsets")
 }
 
@@ -136,25 +138,10 @@ func listToolsets(projectRoot string, scope toolsetScope) []ToolsetMeta {
 	return out
 }
 
-// listAllToolsets 列出工作区 + 全局全部工具集（全局在前，工作区同名覆盖标记），
-// 末尾注入虚拟内置工具集 builtin（scope=builtin，不落盘；组数=内置分组数）。
-// 安装目录与工作区相同时（开发环境常见）目录去重，避免重复显示。
+// listAllToolsets 列出工作区全部工具集 + 末尾注入虚拟内置工具集 builtin
+// （scope=builtin，不落盘；组数=内置分组数）。
 func listAllToolsets(projectRoot string) []ToolsetMeta {
-	globalDir := toolsetDir(projectRoot, toolsetGlobal)
-	projectDir := toolsetDir(projectRoot, toolsetProject)
-	merged := listToolsets(projectRoot, toolsetGlobal)
-	if filepath.Clean(globalDir) != filepath.Clean(projectDir) {
-		seen := map[string]bool{}
-		for _, g := range merged {
-			seen[g.Name] = true
-		}
-		for _, p := range listToolsets(projectRoot, toolsetProject) {
-			if seen[p.Name] {
-				p.Name += "（工作区覆盖）"
-			}
-			merged = append(merged, p)
-		}
-	}
+	merged := listToolsets(projectRoot, toolsetProject)
 	// ★ 虚拟内置工具集（组数 = 内置分组数；ph 未装配时 0）
 	groupCount := 0
 	if ph := GetGlobalPluginHost(); ph != nil && ph.Context() != nil {
@@ -174,10 +161,9 @@ func loadToolset(projectRoot string, scope toolsetScope, name string) (*Toolset,
 	}
 	paths := []string{}
 	if scope != "" {
-		paths = append(paths, toolsetPath(projectRoot, scope, name))
+		paths = append(paths, toolsetPath(projectRoot, toolsetProject, name))
 	} else {
 		paths = append(paths, toolsetPath(projectRoot, toolsetProject, name))
-		paths = append(paths, toolsetPath(projectRoot, toolsetGlobal, name))
 	}
 	for _, p := range paths {
 		data, err := os.ReadFile(p)
@@ -190,7 +176,7 @@ func loadToolset(projectRoot string, scope toolsetScope, name string) (*Toolset,
 		}
 		return &ts, nil
 	}
-	return nil, fmt.Errorf("工具集 %q 未找到（工作区与全局均无）", name)
+	return nil, fmt.Errorf("工具集 %q 未找到", name)
 }
 
 // saveToolset 固化工具集到指定作用域（原子写：tmp + rename）。
@@ -227,50 +213,35 @@ func saveToolset(projectRoot string, scope toolsetScope, ts *Toolset) error {
 	return nil
 }
 
-// removeToolset 删除工具集文件（scope 为空时两个作用域都删）。
+// removeToolset 删除工具集文件（工具集仅工作区级）。
 func removeToolset(projectRoot string, scope toolsetScope, name string) error {
 	if name == "" {
 		return fmt.Errorf("工具集名不能为空")
 	}
-	if scope != "" {
-		return os.Remove(toolsetPath(projectRoot, scope, name))
-	}
-	var errs []string
-	for _, s := range []toolsetScope{toolsetProject, toolsetGlobal} {
-		p := toolsetPath(projectRoot, s, name)
-		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
-			errs = append(errs, err.Error())
-		}
-	}
-	if len(errs) > 0 {
-		return fmt.Errorf("删除工具集 %s 失败: %s", name, strings.Join(errs, "; "))
-	}
-	return nil
+	return os.Remove(toolsetPath(projectRoot, toolsetProject, name))
 }
 
 // ─── 装载（启动时自动装配 + 构建后装载）──────────────────
 
-// LoadAllToolsets 装载工作区 + 全局全部工具集（启动时调用；失败不致命）。
-// 先全局后工作区（工作区同名覆盖全局，最后装载生效）。
+// LoadAllToolsets 装载工作区全部工具集（启动时调用；失败不致命）。
 // ★ 内置工具集 builtin.json（listToolsets 虚拟展示跳过，需单独装载——
 //   否则用户加入的内置分组重启后不生效）。
+// ★ 全局插件（UI 类跨工作区）独立于工具集：见 LoadGlobalPlugins（不进工具集列表）。
 func LoadAllToolsets(ph *PluginHost, projectRoot string) {
 	if ph == nil || projectRoot == "" {
 		return
 	}
 	loaded := 0
-	for _, scope := range []toolsetScope{toolsetGlobal, toolsetProject} {
-		for _, meta := range listToolsets(projectRoot, scope) {
-			ts, err := loadToolset(projectRoot, scope, meta.Name)
-			if err != nil {
-				continue
-			}
-			if err := installToolset(ph, ts); err != nil {
-				log.Printf("[toolset] %s 装载失败: %v", meta.Name, err)
-				continue
-			}
-			loaded++
+	for _, meta := range listToolsets(projectRoot, toolsetProject) {
+		ts, err := loadToolset(projectRoot, toolsetProject, meta.Name)
+		if err != nil {
+			continue
 		}
+		if err := installToolset(ph, ts); err != nil {
+			log.Printf("[toolset] %s 装载失败: %v", meta.Name, err)
+			continue
+		}
+		loaded++
 	}
 	// 内置工具包（用户/agent 选择加入的分组）
 	if ts, err := loadToolset(projectRoot, toolsetProject, builtinToolsetName); err == nil {
@@ -280,9 +251,157 @@ func LoadAllToolsets(ph *PluginHost, projectRoot string) {
 			loaded++
 		}
 	}
+	// 全局插件（UI 类跨工作区生效；不属于任何工具集）
+	if n := LoadGlobalPlugins(ph); n > 0 {
+		loaded += n
+	}
 	if loaded > 0 {
 		log.Printf("[toolset] 已装载 %d 个工具集（%d 个插件）", loaded, countAllToolsetPlugins(projectRoot))
 	}
+}
+
+// ─── 全局插件（独立于工具集）────────────────────────────
+
+// ★ 设计：没有「全局工具集」——工具集是工作区级概念。全局生效的是插件
+//   （UI 类插件，含 client 半，跨工作区装载），存 <InstallDir>/.pair/plugins/，
+//   每个插件一个「插件包」目录（package.json + 源码），启动时单独装配，
+//   不属于任何工具集（工具集列表/管理不显示）。
+func globalPluginsDir() string {
+	return filepath.Join(core.InstallDir(), ".pair", "plugins")
+}
+
+// GlobalPluginsPath 全局插件目录路径。
+func GlobalPluginsPath() string {
+	return globalPluginsDir()
+}
+
+// GlobalPluginPackage 全局插件包描述（<name>/package.json）。
+type GlobalPluginPackage struct {
+	Name    string `json:"name"`              // 插件名（包目录名）
+	Purpose string `json:"purpose,omitempty"` // 用途说明
+	Version string `json:"version"`           // 版本
+	Scope   string `json:"scope,omitempty"`   // "global"（UI 类跨工作区）/ "project"
+	Type    string `json:"type"`              // "plugin"
+	Main    string `json:"main"`              // host 半源码文件（index.js）
+	Client  string `json:"client,omitempty"`  // client 半源码文件（client.js，可选）
+}
+
+// LoadGlobalPlugins 装配全部全局插件包（启动时调用；失败不致命）。返回成功装载数。
+// ★ 插件包形态：<InstallDir>/.pair/plugins/<name>/package.json + 源码文件。
+func LoadGlobalPlugins(ph *PluginHost) int {
+	if ph == nil {
+		return 0
+	}
+	entries, err := os.ReadDir(globalPluginsDir())
+	if err != nil {
+		return 0
+	}
+	n := 0
+	for _, e := range entries {
+		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") || e.Name() == "node_modules" {
+			continue
+		}
+		if err := applyGlobalPluginDir(ph, filepath.Join(globalPluginsDir(), e.Name())); err != nil {
+			log.Printf("[global-plugin] %s 装载失败: %v", e.Name(), err)
+			continue
+		}
+		n++
+	}
+	return n
+}
+
+// applyGlobalPluginDir 装载一个全局插件包目录（读 package.json + 源码 → define+load）。
+func applyGlobalPluginDir(ph *PluginHost, pkgDir string) error {
+	data, err := os.ReadFile(filepath.Join(pkgDir, "package.json"))
+	if err != nil {
+		return fmt.Errorf("缺 package.json: %w", err)
+	}
+	var pkg GlobalPluginPackage
+	if err := json.Unmarshal(data, &pkg); err != nil || pkg.Name == "" || pkg.Main == "" {
+		return fmt.Errorf("package.json 无效（缺 name/main）")
+	}
+	hostCode, err := os.ReadFile(filepath.Join(pkgDir, pkg.Main))
+	if err != nil {
+		return fmt.Errorf("host 源码读取失败: %w", err)
+	}
+	clientCode := ""
+	if pkg.Client != "" {
+		if cb, err := os.ReadFile(filepath.Join(pkgDir, pkg.Client)); err == nil {
+			clientCode = string(cb)
+		}
+	}
+	return applyGlobalPlugin(ph, &ToolsetPlugin{
+		Name: pkg.Name, Purpose: pkg.Purpose,
+		Code: string(hostCode), Client: clientCode, Scope: pkg.Scope,
+	})
+}
+
+// applyGlobalPlugin 装载单个全局插件（定义 + 装载；scope 从 package.json 恢复）。
+func applyGlobalPlugin(ph *PluginHost, p *ToolsetPlugin) error {
+	if p == nil || strings.TrimSpace(p.Code) == "" {
+		return nil
+	}
+	// 已存在同名插件：先卸载再重定义（升级/覆盖场景）
+	if _, ok := ph.Get(p.Name); ok {
+		_ = ph.Unload(p.Name)
+		_ = ph.Undefine(p.Name)
+	}
+	id, err := ph.DefineJSCodeFull(p.Code, "", p.Purpose, "", p.Client)
+	if err != nil {
+		return err
+	}
+	def, _ := ph.GetJSDef(id)
+	if def != nil {
+		def.scope = p.Scope
+		if def.scope == "" {
+			def.scope = "project"
+		}
+	}
+	if err := ph.LoadJSDynamic(def); err != nil {
+		return err
+	}
+	return nil
+}
+
+// syncGlobalPlugin 把插件固化为插件包目录（同名更新/追加；★ 插件=包，不是 json）。
+// 结构：<InstallDir>/.pair/plugins/<name>/package.json + index.js（host 半）
+// + client.js（有 client 半时）。
+func syncGlobalPlugin(entry ToolsetPlugin) error {
+	if entry.Name == "" || strings.TrimSpace(entry.Code) == "" {
+		return fmt.Errorf("全局插件缺 name/code")
+	}
+	dir := filepath.Join(globalPluginsDir(), entry.Name)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	pkg := GlobalPluginPackage{
+		Name: entry.Name, Purpose: entry.Purpose, Version: "1.0.0",
+		Scope: entry.Scope, Type: "plugin", Main: "index.js",
+	}
+	if pkg.Scope == "" {
+		pkg.Scope = "project"
+	}
+	// host 半源码
+	if err := os.WriteFile(filepath.Join(dir, "index.js"), []byte(entry.Code), 0644); err != nil {
+		return err
+	}
+	// client 半源码（有 client 半时写 client.js 并在 package.json 声明）
+	if strings.TrimSpace(entry.Client) != "" {
+		pkg.Client = "client.js"
+		if err := os.WriteFile(filepath.Join(dir, "client.js"), []byte(entry.Client), 0644); err != nil {
+			return err
+		}
+	}
+	data, err := json.MarshalIndent(pkg, "", "  ")
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(dir, "package.json")
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }
 
 // ─── 动态构建（模板驱动）─────────────────────────────────
@@ -469,9 +588,13 @@ func LoadToolsetPublic(root, scope, name string) (*Toolset, error) {
 	return loadToolset(root, toolsetScope(scope), name)
 }
 
-// SaveToolsetPublic 固化工具集。
+// SaveToolsetPublic 固化工具集（★ 仅工作区级：scope 非空且≠project 时拒绝——
+// 没有「全局工具集」，全局生效的是插件，见 GlobalPluginsPath）。
 func SaveToolsetPublic(root, scope string, ts *Toolset) error {
-	return saveToolset(root, toolsetScope(scope), ts)
+	if scope != "" && scope != "project" {
+		return fmt.Errorf("工具集仅工作区级（没有全局工具集）；scope 只支持 project")
+	}
+	return saveToolset(root, toolsetProject, ts)
 }
 
 // ParseToolsetPublish 解析发布 JSON → 工具集。
@@ -496,9 +619,12 @@ func UnloadToolsetPublic(ph *PluginHost, ts *Toolset) {
 	UnloadToolsetPlugins(ph, ts)
 }
 
-// RemoveToolsetPublic 删除工具集。
+// RemoveToolsetPublic 删除工具集（★ 仅工作区级）。
 func RemoveToolsetPublic(root, scope, name string) error {
-	return removeToolset(root, toolsetScope(scope), name)
+	if scope != "" && scope != "project" {
+		return fmt.Errorf("工具集仅工作区级（没有全局工具集）；scope 只支持 project")
+	}
+	return removeToolset(root, toolsetProject, name)
 }
 
 // ─── 内置工具集公共封装（handler REST / 前端面板直调）──────

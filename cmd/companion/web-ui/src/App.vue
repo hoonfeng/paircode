@@ -425,6 +425,29 @@ onMounted(async () => {
   //    savePersistentState 的操作（applyTheme 等）。否则默认值
   //    explorer 会被先写入 localStorage，覆盖用户上次的 chat 视图。
   loadPersistentState()
+
+  // ★ 全局装载 client 半（UI 槽位/面板不依赖插件面板组件挂载——
+  //    否则不打开插件面板时 UI 插件永不生效）。必须在 onMounted 最前执行
+  //    （不依赖 health/settings/conversations 等后续 await——它们可能挂起
+  //    导致这里的装载被无限推迟）。
+  ;(async () => {
+    try {
+      const list = (await api.listPlugins()) || []
+      for (const p of list) {
+        if (p.hasClient && !p.clientCode) {
+          try {
+            const d = await api.getPluginDetail(p.name)
+            if (d && d.clientCode) p.clientCode = d.clientCode
+          } catch (e) {}
+        }
+      }
+      await syncClientHalves(list)
+      startPolling() // 事件轮询全局启动（host→client 事件分发）
+    } catch (e) {
+      console.warn('[slot] 全局 client 半装载失败', e)
+    }
+  })()
+
   document.addEventListener('contextmenu', (e) => {
     if (!e.defaultPrevented) e.preventDefault()
   }, false)
@@ -570,26 +593,6 @@ onMounted(async () => {
     window.removeEventListener('switch-workspace', _onSwitchWorkspace)
   }
   window._cleanupAppEvents = _cleanupEvents
-
-  // ★ 全局装载 client 半（UI 槽位/面板不依赖插件面板组件挂载——
-  //    否则不打开插件面板时 UI 插件永不生效）
-  ;(async () => {
-    try {
-      const list = (await api.listPlugins()) || []
-      for (const p of list) {
-        if (p.hasClient && !p.clientCode) {
-          try {
-            const d = await api.getPluginDetail(p.name)
-            if (d && d.clientCode) p.clientCode = d.clientCode
-          } catch (e) {}
-        }
-      }
-      await syncClientHalves(list)
-      startPolling() // 事件轮询全局启动（host→client 事件分发）
-    } catch (e) {
-      console.warn('[slot] 全局 client 半装载失败', e)
-    }
-  })()
 
   // UI 槽位订阅（statusbar 可被插件替换）
   slotUnsub = setSlotMount(onSlotChanged)

@@ -372,6 +372,7 @@ func pluginRecordSummary(rec agent.PluginRecord, reg *agent.Registry) map[string
 	return map[string]any{
 		"name":          rec.Name,
 		"source":        rec.Source,
+		"scope":         rec.Scope,
 		"state":         rec.State,
 		"provides":      rec.Provides,
 		"tools":         rec.Tools,

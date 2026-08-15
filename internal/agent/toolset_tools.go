@@ -60,10 +60,8 @@ func RegisterToolsetTools(r *Registry, root string, ph *PluginHost) {
 			overwrite := mArgStr(args, "overwrite") == "true"
 			// 已固化检查（不覆盖时拒绝重建）
 			if !overwrite {
-				for _, scope := range []toolsetScope{toolsetProject, toolsetGlobal} {
-					if _, err := os.Stat(toolsetPath(projectDir, scope, name)); err == nil {
-						return "", fmt.Errorf("工具集 %q 已固化（%s）；如需重建请加 overwrite=true", name, scope)
-					}
+				if _, err := os.Stat(toolsetPath(projectDir, toolsetProject, name)); err == nil {
+					return "", fmt.Errorf("工具集 %q 已固化；如需重建请加 overwrite=true", name)
 				}
 			}
 			// 旧插件（同名工具集装载过的）先卸载，避免残留
@@ -124,7 +122,7 @@ func RegisterToolsetTools(r *Registry, root string, ph *PluginHost) {
 	// ── toolset_list：列出工具集 ──
 	r.Register(&Tool{
 		Name:        "toolset_list",
-		Description: "列出工作区与全局全部工具集（名称/用途/插件数/来源）。",
+		Description: "列出工作区全部工具集（名称/用途/插件数/来源；工具集仅工作区级，无全局工具集）。",
 		ReadOnly:    true,
 		Parameters:  mObjSchema(map[string]any{}),
 		Handler: func(_ context.Context, _ map[string]any) (string, error) {
@@ -194,16 +192,9 @@ func RegisterToolsetTools(r *Registry, root string, ph *PluginHost) {
 			if err != nil {
 				return "", err
 			}
-			scope := "工作区"
-			if _, gerr := os.Stat(toolsetPath(root, toolsetGlobal, name)); gerr == nil {
-				scope = "全局"
-				if _, perr := os.Stat(toolsetPath(root, toolsetProject, name)); perr == nil {
-					scope = "工作区（覆盖全局）"
-				}
-			}
 			var b strings.Builder
-			fmt.Fprintf(&b, "## 工具集 %s\n- 用途: %s\n- 项目: %s\n- 版本: %s\n- 来源: %s\n- 创建: %s\n\n## 插件\n",
-				ts.Name, ts.Description, ts.Project, ts.Version, scope, ts.CreatedAt)
+			fmt.Fprintf(&b, "## 工具集 %s\n- 用途: %s\n- 项目: %s\n- 版本: %s\n- 来源: 工作区\n- 创建: %s\n\n## 插件\n",
+				ts.Name, ts.Description, ts.Project, ts.Version, "工作区", ts.CreatedAt)
 			for _, p := range ts.Plugins {
 				fmt.Fprintf(&b, "- **%s**：%s%s\n", p.Name, p.Purpose, boolStr(p.Client != "", "（含 client 半）", ""))
 			}
@@ -287,18 +278,17 @@ func RegisterToolsetTools(r *Registry, root string, ph *PluginHost) {
 			if ts.Name == "" || len(ts.Plugins) == 0 {
 				return "", fmt.Errorf("导入内容不是有效工具集（缺 name/plugins）")
 			}
-			scope := toolsetProject
+			// ★ 工具集仅工作区级（没有全局工具集）；scope=user 拒绝
 			if mArgStr(args, "scope") == "user" {
-				scope = toolsetGlobal
+				return "", fmt.Errorf("工具集仅工作区级（没有全局工具集）；导入 scope 只支持 project。全局生效的是插件（UI 类），用 cordis_define scope=global 创建")
 			}
-			if err := saveToolset(root, scope, ts); err != nil {
+			if err := saveToolset(root, toolsetProject, ts); err != nil {
 				return "", err
 			}
 			if err := installToolset(ph, ts); err != nil {
 				return "", fmt.Errorf("工具集已固化但装载失败: %w", err)
 			}
-			return fmt.Sprintf("✅ 工具集 %q 已导入（%s）并装载（%d 个插件）",
-				ts.Name, map[toolsetScope]string{toolsetProject: "工作区", toolsetGlobal: "全局"}[scope], len(ts.Plugins)), nil
+			return fmt.Sprintf("✅ 工具集 %q 已导入（工作区）并装载（%d 个插件）", ts.Name, len(ts.Plugins)), nil
 		},
 	})
 
@@ -309,25 +299,21 @@ func RegisterToolsetTools(r *Registry, root string, ph *PluginHost) {
 		RequiresApproval: true,
 		Parameters: mObjSchema(map[string]any{
 			"name":  mStrProp("工具集名（builtin 不可删除）"),
-			"scope": mStrProp("project/global/缺省（都删）"),
+			"scope": mStrProp("project（仅工作区级；没有全局工具集）"),
 		}, "name"),
 		Handler: func(_ context.Context, args map[string]any) (string, error) {
 			name := mArgStr(args, "name")
 			if name == builtinToolsetName {
 				return "", fmt.Errorf("内置工具集 builtin 不可删除；用 toolset_edit {name=builtin, action=rm_plugin, plugin_name=builtin:组名} 分组移出，或 add_builtin_all 强制全部加入")
 			}
-			var scope toolsetScope
-			switch mArgStr(args, "scope") {
-			case "project":
-				scope = toolsetProject
-			case "global":
-				scope = toolsetGlobal
+			if mArgStr(args, "scope") == "global" {
+				return "", fmt.Errorf("工具集仅工作区级（没有全局工具集）；全局生效的是插件（UI 类），用 cordis_define scope=global 管理")
 			}
 			// 先卸载已装载插件/恢复内置条目
-			if ts, err := loadToolset(root, scope, name); err == nil {
+			if ts, err := loadToolset(root, toolsetProject, name); err == nil {
 				UnloadToolsetPlugins(ph, ts)
 			}
-			if err := removeToolset(root, scope, name); err != nil {
+			if err := removeToolset(root, toolsetProject, name); err != nil {
 				return "", err
 			}
 			return fmt.Sprintf("已删除工具集 %q（插件已卸载）", name), nil
@@ -600,26 +586,15 @@ func toolsetEdit(ph *PluginHost, root string, args map[string]any) (string, erro
 		}
 	}
 
-	// 解析作用域（空=自动：工作区优先）
-	var scope toolsetScope
-	switch mArgStr(args, "scope") {
-	case "project":
-		scope = toolsetProject
-	case "global":
-		scope = toolsetGlobal
+	// ★ 工具集仅工作区级（没有全局工具集）
+	if mArgStr(args, "scope") == "global" {
+		return "", fmt.Errorf("工具集仅工作区级（没有全局工具集）；全局生效的是插件（UI 类），用 cordis_define scope=global 管理")
 	}
-	resolved := scope
-	if resolved == "" {
-		if _, err := os.Stat(toolsetPath(root, toolsetProject, name)); err == nil {
-			resolved = toolsetProject
-		} else {
-			resolved = toolsetGlobal
-		}
-	}
-	ts, err := loadToolset(root, resolved, name)
+	ts, err := loadToolset(root, toolsetProject, name)
 	if err != nil {
 		return "", err
 	}
+	resolved := toolsetProject
 	switch action {
 	case "add_plugin":
 		return toolsetEditAddPlugin(ph, root, resolved, ts, args)

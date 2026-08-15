@@ -382,6 +382,7 @@ const (
 type PluginRecord struct {
 	Name       string       `json:"name"`
 	Source     PluginSource `json:"source"`
+	Scope      string       `json:"scope,omitempty"` // 生效作用域（JS 动态插件）："global"=全局插件（UI 类，跨工作区）/""或"project"=项目
 	State      string       `json:"state"`
 	Provides   []string     `json:"provides,omitempty"`
 	Tools      []string     `json:"tools,omitempty"`
@@ -1200,6 +1201,7 @@ func (h *PluginHost) Inspect() []PluginRecord {
 		}
 		if h.sources[name] == PluginSourceJS {
 			if d := h.defByNameLocked(name); d != nil {
+				rec.Scope = d.scope
 				rec.Version = d.version
 				rec.Provides = d.provides
 				rec.Purpose = d.purpose

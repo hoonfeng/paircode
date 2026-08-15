@@ -180,6 +180,7 @@
           <span class="pp-state" :class="p.state === 'running' ? 'on' : 'off'"></span>
           <span class="pp-name" :title="p.purpose || p.name">{{ p.name }}</span>
           <span class="pp-src" :class="p.source">{{ p.source }}</span>
+          <span v-if="p.scope === 'global'" class="pp-badge" title="全局插件：跨工作区生效（UI 类），不属于任何工具集">全局</span>
           <span v-if="p.hasClient && p.clientApproved" class="pp-badge" title="含 client 半（浏览器 UI，已批准装载）">UI</span>
           <span v-else-if="p.hasClient && p.state === 'running'" class="pp-badge pp-badge-warn" title="client 半待激活批准：在对话中用 cordis_run 装载该插件触发审批">UI 待批准</span>
           <span v-else-if="p.hasClient" class="pp-badge" title="含 client 半（浏览器 UI；装载后需批准）">UI</span>

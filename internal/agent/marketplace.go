@@ -73,10 +73,7 @@ func marketInstallPlugin(entry MarketEntry, auto bool, scope string) (string, er
 			projectRoot = primaryWorkspaceRoot()
 		}
 	}
-	tsScope := toolsetGlobal
-	if scope == "project" {
-		tsScope = toolsetProject
-	}
+	tsScope := toolsetProject // ★ 工具集仅工作区级（没有全局工具集）
 	if err := saveToolset(projectRoot, tsScope, ts); err != nil {
 		return "", fmt.Errorf("固化工具集失败: %w", err)
 	}
@@ -196,11 +193,9 @@ func MarketIsInstalled(id string) bool {
 		// 内置工具集：ID = "plugin-" + 工具集名
 		name := strings.TrimPrefix(id, "plugin-")
 		projectRoot := primaryWorkspaceRoot()
-		for _, scope := range []toolsetScope{toolsetGlobal, toolsetProject} {
-			for _, ts := range listToolsets(projectRoot, scope) {
-				if ts.Name == name {
-					return true
-				}
+		for _, ts := range listToolsets(projectRoot, toolsetProject) {
+			if ts.Name == name {
+				return true
 			}
 		}
 		return false
@@ -225,17 +220,11 @@ func MarketUninstall(id, kind string) (string, error) {
 		}
 		return "已卸载技能 " + id, nil
 	case "plugin":
-		// 工具集：ID = "plugin-" + 工具集名
+		// 工具集：ID = "plugin-" + 工具集名（★ 仅工作区级）
 		name := strings.TrimPrefix(id, "plugin-")
 		projectRoot := primaryWorkspaceRoot()
-		for _, scope := range []toolsetScope{toolsetGlobal, toolsetProject} {
-			if err := removeToolset(projectRoot, scope, name); err == nil {
-				level := "全局"
-				if scope == toolsetProject {
-					level = "工作区"
-				}
-				return fmt.Sprintf("已卸载工具集「%s」（%s）", name, level), nil
-			}
+		if err := removeToolset(projectRoot, toolsetProject, name); err == nil {
+			return fmt.Sprintf("已卸载工具集「%s」（工作区）", name), nil
 		}
 		return "", fmt.Errorf("工具集 %s 未找到", name)
 	}

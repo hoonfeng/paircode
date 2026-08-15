@@ -261,7 +261,9 @@ export function loadClientHalf(source) {
     //   必须包装为 return (code)(ui) 立即调用——否则 new Function 只是创建
     //   箭头函数而不执行，registerSlot 静默失效（status=loaded 但槽位为空，
     //   UI 插件看起来「没生效」）。多语句/自执行形态代码原样执行。
-    const t = code.trim()
+    // ★ 先剥离开头的行注释/块注释（代码可能以多行注释开头，注释会破坏函数
+    //   形态检测——只剥一行不够，要剥全部前置注释）。
+    const t = code.trim().replace(/^(?:\s*(?:\/\/[^\r\n]*|\/\*[\s\S]*?\*\/)\r?\n?)+/, '').trim()
     const isFnExpr = /^\(?\s*(async\s+)?(\(?\s*ui\s*\)?\s*=>|function\s*\()/.test(t)
     fn = new Function('ui', '"use strict";\n' + (isFnExpr ? 'return (' + code + ')(ui)' : code))
   } catch (e) {
@@ -459,4 +461,15 @@ export default {
   getInstances, setPanelMount, clientPanels,
   clientSlots, setSlotMount, getSlotCandidates, getSlotOwner, setSlotOwner, getSlotUI, getSlotUIList,
   emitSlotChanged, isOverlayActive, setOverlayActive,
+}
+
+// ★ 调试/验证暴露（生产保留，无害）：window.__pluginRuntime 供浏览器控制台
+// 与自动化（web_debug）检查 client 半装载/槽位注册实时状态。
+if (typeof window !== 'undefined') {
+  window.__pluginRuntime = {
+    instances: () => instances.map(i => ({ name: i.name, status: i.status, error: i.error || '' })),
+    clientSlots: () => clientSlots.map(s => ({ slotId: s.slotId, pluginName: s.pluginName, title: s.title, hasRender: typeof s.render === 'function' })),
+    clientPanels: () => clientPanels.map(p => ({ id: p.id, pluginName: p.pluginName })),
+    getSlotOwner,
+  }
 }

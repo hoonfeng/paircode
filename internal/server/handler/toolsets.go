@@ -112,11 +112,9 @@ func HandleToolsetBuild(w http.ResponseWriter, r *http.Request) {
 	}
 	// 已固化检查（不覆盖时拒绝）
 	if !req.Overwrite {
-		for _, scope := range []string{"project", "global"} {
-			if _, err := os.Stat(agent.ToolsetPath(projectDir, scope, name)); err == nil {
-				jsonErr(w, "工具集 "+name+" 已固化（"+scope+"）；如需重建请勾选覆盖")
-				return
-			}
+		if _, err := os.Stat(agent.ToolsetPath(projectDir, "project", name)); err == nil {
+			jsonErr(w, "工具集 "+name+" 已固化；如需重建请勾选覆盖")
+			return
 		}
 	}
 	// 旧插件先卸载（内置条目恢复默认）
@@ -208,7 +206,8 @@ func HandleToolsetImport(w http.ResponseWriter, r *http.Request) {
 	}
 	scope := "project"
 	if req.Scope == "user" {
-		scope = "global"
+		jsonErr(w, "工具集仅工作区级（没有全局工具集）；导入 scope 只支持 project。全局生效的是插件（UI 类），用对话 cordis_define scope=global 创建")
+		return
 	}
 	if err := agent.SaveToolsetPublic(root, scope, ts); err != nil {
 		jsonErr(w, err.Error())

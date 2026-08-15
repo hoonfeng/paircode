@@ -118,7 +118,7 @@ type jsPluginDef struct {
 	inject     []string       // 插件声明的硬依赖服务（apply 前校验宿主是否提供）
 	config     map[string]any // 插件配置（cordis_run 传入，apply(ctx, config) 第二参）
 	isFunc     bool           // 函数形态插件（export 为 (ctx, config) => void）
-	scope      string         // 生效作用域："global"=全局（跨工作区，UI 类插件；存 <installDir>/.pair/toolsets/dynamic.json）；""/"project"=项目工具集（默认，按工作区加载）
+	scope      string         // 生效作用域："global"=全局插件（UI 类，跨工作区；存 <InstallDir>/.pair/plugins/dynamic.json，独立于工具集）；""/"project"=项目插件（工作区工具集 dynamic，按工作区加载）
 	createdAt  time.Time
 
 	// ★ 状态机与运行诊断（对齐 harness CordisRunStatus + CordisRunDiagnostic）
