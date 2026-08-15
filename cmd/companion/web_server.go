@@ -175,7 +175,7 @@ func startWebUI(port int) {
 		// 参考注册表也加载 Lua 自定义工具（多项目），保证 /api/tools 工具面板可见
 		reloadWebLuaTools(initReg, root)
 		// ★ harness 对齐：暂时移除 pair 独有工具（WB_FULL_TOOLS=1 恢复全量）
-		if n := agent.ApplyHarnessToolFilter(initReg); n > 0 {
+		if n := agent.ApplyHarnessToolFilter(initReg, nil); n > 0 {
 			log.Printf("[WebUI] harness 对齐模式：移除 %d 个 pair 独有工具（WB_FULL_TOOLS=1 恢复全量）", n)
 		}
 		handler.SetToolsRegistry(initReg)
@@ -2330,8 +2330,22 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 	agent.LoadAllWorkspaceToolConfigs(reg, root)
 
 	reloadWebLuaTools(reg, root)
-	// ★ harness 对齐：暂时移除 pair 独有工具（WB_FULL_TOOLS=1 恢复全量）
-	agent.ApplyHarnessToolFilter(reg)
+	// ★ harness 对齐：暂时移除 pair 独有工具（WB_FULL_TOOLS=1 恢复全量）；
+	//   插件注册的工具豁免（插件是内容，非 pair 独有编码能力）
+	var pluginHost *agent.PluginHost
+	agent.ApplyHarnessToolFilter(reg, func(name string) bool {
+		if ph := handler.GetPluginHost(); ph != nil {
+			pluginHost = ph
+			return ph.IsPluginTool(name)
+		}
+		return false
+	})
+	// ★ 合并插件注册的业务工具（Node 桥工具 + goja 插件 ctx.tools.register）：
+	//   reg 是本次会话新建，需把插件宿主中插件注册的工具同步进来，
+	//   agent 才能直接 function-call 调用（如 Node 桥插件的 hello_bridge）。
+	if pluginHost != nil {
+		agent.MergePluginTools(reg, pluginHost)
+	}
 	agent.SetCodeGraphDB(agentMgr.RawDB())
 	agent.InitDebugLogger(root, 50)
 

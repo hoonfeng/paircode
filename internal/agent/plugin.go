@@ -270,6 +270,37 @@ func (h *PluginHost) claimTool(plugin, toolName string) error {
 	return nil
 }
 
+// IsPluginTool 判断工具是否由插件注册（宿主工具豁免 harness 对齐过滤——
+// 插件注册的工具是「内容」而非 pair 独有编码能力）。
+func (h *PluginHost) IsPluginTool(name string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	_, taken := h.toolOwner[name]
+	return taken
+}
+
+// MergePluginTools 把插件宿主中由插件注册的业务工具合并进目标注册表
+// （会话级 reg 独立新建，需同步插件工具——Node 桥工具 + goja 插件
+// ctx.tools.register；同名冲突跳过，避免覆盖会话工具）。
+func MergePluginTools(reg *Registry, ph *PluginHost) {
+	if ph == nil {
+		return
+	}
+	for _, meta := range ph.Context().Tools.AllToolMeta() {
+		if !ph.IsPluginTool(meta.Name) {
+			continue
+		}
+		t, ok := ph.Context().Tools.Get(meta.Name)
+		if !ok {
+			continue
+		}
+		if _, exists := reg.Get(meta.Name); exists {
+			continue // 会话已注册同名工具，不覆盖
+		}
+		reg.Register(t)
+	}
+}
+
 // AddSystemPromptSection 贡献系统提示片段（ctx.systemPrompt.section）。
 func (c *PluginContext) AddSystemPromptSection(s *PromptSection) {
 	if s == nil {

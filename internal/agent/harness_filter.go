@@ -51,14 +51,16 @@ var HarnessAlignedToolNames = map[string]bool{
 
 // ApplyHarnessToolFilter 从注册表移除不在保留清单内的工具（pair 独有工具），
 // 返回移除数量。开关关闭（WB_FULL_TOOLS=1）时不做任何事，返回 0。
+// ★ exempt 回调：返回 true 的工具豁免过滤（插件注册的工具——插件是内容，
+//   非 pair 独有编码能力；goja 插件工具与 Node 桥工具都经 PluginHost 注册）。
 // 使用 Unregister 反向过滤（而非 Subset 重建），保留钩子/CommitMessage 等注册表字段。
-func ApplyHarnessToolFilter(r *Registry) int {
+func ApplyHarnessToolFilter(r *Registry, exempt func(string) bool) int {
 	if !HarnessOnlyTools() {
 		return 0
 	}
 	removed := 0
 	for _, m := range r.AllToolMeta() {
-		if !HarnessAlignedToolNames[m.Name] {
+		if !HarnessAlignedToolNames[m.Name] && (exempt == nil || !exempt(m.Name)) {
 			r.Unregister(m.Name)
 			removed++
 		}

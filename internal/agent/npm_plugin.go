@@ -28,7 +28,7 @@ import (
 var npmRegistryBase = "https://registry.npmjs.org"
 
 // npmFetchTimeout npm 拉取超时（下载 tarball 可能较慢）。
-var npmFetchTimeout = 60 * time.Second
+var npmFetchTimeout = 120 * time.Second
 
 // npmHTTPClient 共享客户端：放宽 TLS 握手超时（慢网络下 Go 默认 10s 不够）。
 var npmHTTPClient = &http.Client{
@@ -300,6 +300,15 @@ func marketInstallNPMPlugin(entry MarketEntry, auto bool) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// 需真实 node 环境（npm 依赖或 cordis4）→ 走 Node 桥；
+	// 否则 goja 沙箱（快、无需 node）。
+	if nodePluginNeedsNode(manifest) {
+		msg, err := marketInstallNPMPluginNode(info, dir, auto)
+		if err != nil {
+			return "", err
+		}
+		return msg, nil
+	}
 	defer os.RemoveAll(dir)
 
 	mainFile := npmPackageMain(manifest)
@@ -360,14 +369,32 @@ func marketInstallNPMPlugin(entry MarketEntry, auto bool) (string, error) {
 // uninstallNPMPlugin 卸载 npm 插件：从 patch 移除 + 从宿主卸载/移除定义。
 func uninstallNPMPlugin(pkg string) error {
 	projectRoot := npmPluginProjectRoot()
+	var runtime string
 	if projectRoot != "" {
 		patchPath := filepath.Join(projectRoot, ".pair", "cordis.patch.json")
+		doc, err := readCordisPatch(patchPath)
+		if err != nil {
+			return err
+		}
+		// 识别 runtime 类型（node 桥插件 vs goja 插件）
+		for _, p := range doc.Plugins {
+			src, _ := p.Config["npm"].(string)
+			if src == pkg || strings.HasPrefix(src, pkg+"@") {
+				runtime, _ = p.Config["runtime"].(string)
+			}
+		}
 		removed, err := removePatchNPMPlugin(patchPath, pkg)
 		if err != nil {
 			return err
 		}
 		if !removed {
 			return fmt.Errorf("未在 cordis.patch.json 中找到插件 %s", pkg)
+		}
+	}
+	if runtime == "node" {
+		// Node 桥插件：plugins.json 移除 + 重启桥 + 清理源码目录
+		if err := uninstallNodePlugin(pkg); err != nil {
+			return err
 		}
 	}
 	// 宿主卸载：遍历 defs，config.npm 匹配的卸载并移除定义

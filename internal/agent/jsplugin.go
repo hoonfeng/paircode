@@ -1735,11 +1735,16 @@ func (h *PluginHost) LoadCordisPatch(path string) error {
 			Config   map[string]any `json:"config"`
 		} `json:"plugins"`
 	}
+	needNodeBridge := false
 	if err := json.Unmarshal(b, &doc); err != nil {
 		return fmt.Errorf("cordis patch 解析失败: %v", err)
 	}
 	for i, p := range doc.Plugins {
 		if strings.TrimSpace(p.Code) == "" {
+			// Node 桥型插件（依赖 npm 生态）：启动时由 Node 桥装载
+			if rt, _ := p.Config["runtime"].(string); rt == "node" {
+				needNodeBridge = true
+			}
 			continue
 		}
 		id, err := h.DefineJSCodeDir(p.Code, p.Language, p.Purpose, "")
@@ -1756,6 +1761,12 @@ func (h *PluginHost) LoadCordisPatch(path string) error {
 			continue
 		}
 		log.Printf("[cordis-patch] 插件 %s (%s) 已装配", def.name, id)
+	}
+	// Node 桥型插件：启动 Node 桥（真实 node 环境执行 npm 依赖插件）
+	if needNodeBridge {
+		if _, err := ensureNodeBridge(h, nodeBridgeDir()); err != nil {
+			log.Printf("[cordis-patch] Node 桥启动失败: %v", err)
+		}
 	}
 	return nil
 }

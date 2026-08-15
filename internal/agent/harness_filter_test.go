@@ -36,7 +36,7 @@ func TestApplyHarnessToolFilter_RemovesPairTools(t *testing.T) {
 	t.Setenv("WB_FULL_TOOLS", "")
 	reg := mkHarnessReg()
 	before := len(reg.AllToolMeta())
-	n := ApplyHarnessToolFilter(reg)
+	n := ApplyHarnessToolFilter(reg, nil)
 	if n != before-len(HarnessAlignedToolNames) {
 		t.Errorf("应移除 %d 个工具，实际移除 %d（注册 %d / 保留 %d）", before-len(HarnessAlignedToolNames), n, before, len(HarnessAlignedToolNames))
 	}
@@ -63,7 +63,7 @@ func TestApplyHarnessToolFilter_FullToolsKeepsAll(t *testing.T) {
 	t.Setenv("WB_FULL_TOOLS", "1")
 	reg := mkHarnessReg()
 	before := len(reg.AllToolMeta())
-	if n := ApplyHarnessToolFilter(reg); n != 0 {
+	if n := ApplyHarnessToolFilter(reg, nil); n != 0 {
 		t.Errorf("WB_FULL_TOOLS=1 时不应移除任何工具，实际移除 %d", n)
 	}
 	if got := len(reg.AllToolMeta()); got != before {
@@ -77,8 +77,8 @@ func TestApplyHarnessToolFilter_FullToolsKeepsAll(t *testing.T) {
 func TestApplyHarnessToolFilter_Idempotent(t *testing.T) {
 	t.Setenv("WB_FULL_TOOLS", "")
 	reg := mkHarnessReg()
-	first := ApplyHarnessToolFilter(reg)
-	second := ApplyHarnessToolFilter(reg)
+	first := ApplyHarnessToolFilter(reg, nil)
+	second := ApplyHarnessToolFilter(reg, nil)
 	if second != 0 {
 		t.Errorf("第二次过滤应移除 0 个（幂等），实际 %d（第一次 %d）", second, first)
 	}
@@ -95,7 +95,7 @@ func TestApplyHarnessToolFilter_KeepsHooks(t *testing.T) {
 		called = true
 		return true, "", nil
 	}
-	ApplyHarnessToolFilter(reg)
+	ApplyHarnessToolFilter(reg, nil)
 	if reg.BeforeTool == nil {
 		t.Fatal("过滤后 BeforeTool 钩子应保留")
 	}
