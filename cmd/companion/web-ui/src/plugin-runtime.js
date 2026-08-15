@@ -41,7 +41,7 @@ let panelMountFn = null
 
 // ─── UI 槽位注册表（Slot 系统：插件可替换的预定义界面区域）───
 // slots: [{ slotId, pluginName, title, render, defId }]
-// 宿主预定义 slotId：'statusbar'（底部状态栏）。
+// 宿主预定义 slotId：'statusbar'（底部状态栏）、'chat'（对话面板，RightPanel rp-body 整区）。
 // 占用者选择（getSlotOwner/setSlotOwner）持久化 localStorage；
 // owner = '' 表示使用内置组件。
 export const clientSlots = []

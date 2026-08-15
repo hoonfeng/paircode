@@ -159,7 +159,7 @@ func RegisterCordisTools(registry *Registry, host *PluginHost, root string) {
 			if err != nil {
 				return false
 			}
-			return strings.TrimSpace(def.clientCode) != "" && !host.IsClientApproved(def.pluginId)
+			return strings.TrimSpace(def.clientCode) != "" && !host.IsClientApproved(def.name)
 		},
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
 			id := argStr(args, "id")
@@ -179,10 +179,11 @@ func RegisterCordisTools(registry *Registry, host *PluginHost, root string) {
 			}
 			// ★ client 半激活批准：带 client 半的插件首次装载必须经审批门（本工具
 			//   DynamicApproval 判定）；工具能执行到这里 = 已过审批（manual 人工批准 /
-			//   auto AI 审核 / off 全部放行）→ 记录批准（键=稳定 pluginId，覆盖后续
-			//   版本），浏览器 client 半方可装载（对齐 harness approvedClientPackages）。
+			//   auto AI 审核 / off 全部放行）→ 记录批准（键=插件名 name，跨进程/跨版本
+			//   稳定，覆盖该插件后续版本），浏览器 client 半方可装载（对齐 harness
+			//   approvedClientPackages）。
 			if strings.TrimSpace(def.clientCode) != "" {
-				host.MarkClientApproved(def.pluginId)
+				host.MarkClientApproved(def.name)
 			}
 			// 等待语义：装载成功但插件进入 waiting（inject 缺服务）
 			if def.status == PluginWaiting {
@@ -820,7 +821,7 @@ func cordisInspectReport(host *PluginHost, filter, version string) (string, erro
 		}
 		// client 半激活批准状态（浏览器仅装载已批准；cordis_run 触发审批门）
 		if strings.TrimSpace(d.clientCode) != "" {
-			if host.IsClientApproved(d.pluginId) {
+			if host.IsClientApproved(d.name) {
 				extra += " client=已批准"
 			} else {
 				extra += " client=待批准(cordis_run 触发审批)"

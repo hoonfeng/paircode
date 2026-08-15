@@ -13,6 +13,9 @@
     </div>
 
     <div class="rp-body">
+      <!-- ★ chat 槽位（Slot 系统）：插件注册 chat 槽位并激活后，整个对话面板由插件渲染（UI 可更换） -->
+      <div v-if="chatSlotOwner" ref="chatSlotEl" class="plugin-slot-host plugin-slot-chat"></div>
+      <template v-else>
       <!-- 左侧：聊天消息 + 输入区 -->
       <div class="chat-area">
         <!-- 阶段指示器（自主模式多阶段切换） -->
@@ -204,6 +207,7 @@
       <!-- 右侧：Debug日志面板 / 会话列表 -->
       <DebugLogPanel v-if="showDebugLog" @close="showDebugLog = false" />
       <ConvSidebar v-else :conversations="convList" :current-conv-id="state.currentConvId" :loading-by-conv="state.loadingByConv" :ws-token-stats="wsTokenStats" :conv-ctx-stats="convCtxStats" :ctx-max-tokens-val="state.settings.contextMaxTokens || 1000000" :width="convListWidth" @new-conversation="newConversation" @switch-conversation="switchConv" @delete-conversation="deleteConv" />
+      </template>
     </div>
   </div>
 </template>
@@ -213,6 +217,7 @@ import { ref, computed, inject, onMounted, onUnmounted, nextTick, watch } from '
 import { state } from '../main.js'
 import api from '../api.js'
 import { setGlobalCtx, startConvRuntime, resetConvRuntime, createAssistantPlaceholder, getConvRuntime, getConvCtxStats, resetConvCtxStats } from '../agent-events.js'
+import { getSlotUI, getSlotOwner, setSlotMount } from '../plugin-runtime.js'
 import SvgIcon from './SvgIcon.vue'
 import PlanPanel from './PlanPanel.vue'
 import TaskPanel from './TaskPanel.vue'
@@ -1416,9 +1421,42 @@ watch(() => state.workspaceRoot, (root) => {
 
 const handleBeforeUnload = () => { if (state.currentConvId && state.messages.length > 0) { window.dispatchEvent(new Event('save-conversations')) } }
 
+// ─── chat 槽位（Slot 系统）：插件注册 chat 槽位并激活后，整个对话面板由插件渲染 ──
+const chatSlotOwner = ref('')
+const chatSlotEl = ref(null)
+let chatSlotCleanup = null
+let chatSlotUnsub = null
+
+function renderChatSlot() {
+  const host = chatSlotEl.value
+  if (!host) return
+  if (typeof chatSlotCleanup === 'function') { try { chatSlotCleanup() } catch (e) {} chatSlotCleanup = null }
+  host.innerHTML = ''
+  const s = getSlotUI('chat')
+  if (s && typeof s.render === 'function') {
+    try {
+      const ret = s.render(host, s.ui)
+      if (typeof ret === 'function') chatSlotCleanup = ret
+    } catch (e) {
+      console.warn('[slot] chat 渲染失败', e)
+      host.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text-muted)">插件对话面板渲染失败</div>'
+    }
+  }
+}
+
+function onChatSlotChanged() {
+  if (typeof chatSlotCleanup === 'function') { try { chatSlotCleanup() } catch (e) {} chatSlotCleanup = null }
+  chatSlotOwner.value = getSlotOwner('chat')
+  nextTick(() => { if (chatSlotOwner.value) renderChatSlot() })
+}
+
 onMounted(() => {
   loadWsTokenStats(); loadConvList(); scrollToBottom()
   if (state.workspaceRoot && state.workspaceRoot !== '') loadWorkspaceReviewConfig()
+
+  // chat 槽位订阅（插件可替换对话面板）
+  chatSlotUnsub = setSlotMount(onChatSlotChanged)
+  onChatSlotChanged()
 
   // 监听消息内容尺寸变化（流式输出时自动跟随滚底）
   nextTick(() => startContentResizeObserver())
@@ -1541,6 +1579,8 @@ onUnmounted(() => {
   if (nudgeTimer) { clearTimeout(nudgeTimer); nudgeTimer = null }
   stopContentResizeObserver()
   if (inputOverlayObserver) { inputOverlayObserver.disconnect(); inputOverlayObserver = null }
+  if (chatSlotUnsub) { chatSlotUnsub(); chatSlotUnsub = null }
+  if (typeof chatSlotCleanup === 'function') { try { chatSlotCleanup() } catch (e) {} chatSlotCleanup = null }
   // 不关闭 WebSocket（由 App.vue 管理生命周期）；不清理 subscriptions（已移除 SSE 订阅模式）
   document.removeEventListener('mousemove', onInputResizeMove); document.removeEventListener('mouseup', stopInputResize)
   window.removeEventListener('beforeunload', handleBeforeUnload)
@@ -1850,4 +1890,6 @@ onUnmounted(() => {
 .plan-container .plan-panel {
   margin: 0 0 4px 0;
 }
+/* chat 槽位：插件渲染的对话面板占满 rp-body */
+.plugin-slot-chat { flex: 1; min-height: 0; display: flex; overflow: hidden; }
 </style>

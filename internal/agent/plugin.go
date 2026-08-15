@@ -667,8 +667,8 @@ func NewPluginHost(registry *Registry, store ConversationStore, root string) *Pl
 // 对齐 harness「per Plugin, human-approved Client activation」：cordis_run 装载
 // 带 client 半的插件时，若该插件 client 半尚未批准，工具调用自动进现有审批门
 // （ReviewMode manual=人工审批条 / auto=AI 审核 / off=放行）；工具执行成功
-// （=已过审批门）后 MarkClientApproved 记录。批准键 = 插件稳定身份 pluginId
-// （跨版本稳定，覆盖该插件后续版本）。
+// （=已过审批门）后 MarkClientApproved 记录。批准键 = 插件名 name（跨进程/跨版本
+// 稳定——进程内 dyn-n 序号随装配顺序漂移，不能作持久化键；覆盖该插件后续版本）。
 
 // approvedFilePath .pair/cordis-approved.json 的绝对路径。
 func (h *PluginHost) approvedFilePath() string {
@@ -1221,7 +1221,7 @@ func (h *PluginHost) Inspect() []PluginRecord {
 				}
 				// client 半激活批准状态（浏览器仅装载已批准；cordis_run 经审批门后批准）
 				if rec.HasClient {
-					rec.ClientApproved = h.IsClientApproved(d.pluginId)
+					rec.ClientApproved = h.IsClientApproved(d.name)
 				}
 			}
 		}
@@ -1276,7 +1276,7 @@ func (h *PluginHost) InspectDetail(name string) *PluginRecord {
 				}
 				// client 半激活批准状态（浏览器仅装载已批准；cordis_run 经审批门后批准）
 				if rec.HasClient {
-					rec.ClientApproved = h.IsClientApproved(d.pluginId)
+					rec.ClientApproved = h.IsClientApproved(d.name)
 				}
 			}
 		}
