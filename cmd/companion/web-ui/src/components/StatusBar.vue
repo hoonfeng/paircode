@@ -25,10 +25,6 @@
       </span>
       <span class="status-item" v-if="state.openFiles.length > 0">Ln {{ state.cursorLine }}, Col {{ state.cursorCol }}</span>
       <span class="status-item">UTF-8</span>
-      <span class="status-item" :class="{ connected }">
-        <span class="status-dot" :class="{ on: connected }"></span>
-        {{ connected ? '已连接' : '断开' }}
-      </span>
     </div>
   </div>
 </template>
@@ -40,7 +36,6 @@ import SvgIcon from './SvgIcon.vue'
 import api from '../api.js'
 import { mountListSlot } from '../plugin-runtime.js'
 
-const connected = ref(false)
 const gitBranch = ref('')
 const gitChanges = ref(0)
 const statusItemsEl = ref(null)
@@ -77,23 +72,10 @@ function switchToGit() {
 }
 
 onMounted(async () => {
-  // statusbar-items 槽位（list 型）：状态栏内细粒度叠加
+  // statusbar-items 槽位（list 型）：状态栏内细粒度叠加。
+  // ★ 连接状态指示已迁移为磁盘插件 ui-statusbar-conn（.pair/plugins/），
+  //   不再内置——前端经 /api/plugins 装载 client 半后由插件渲染。
   statusItemsUnsub = mountListSlot(statusItemsEl, 'statusbar-items')
-  const check = async () => {
-    try {
-      const wsOk = api.isWebSocketOpen()
-      if (wsOk) { connected.value = true; return }
-      const r = await fetch('/api/health')
-      connected.value = r.ok
-    } catch { connected.value = false }
-  }
-  await check()
-  // 缩短检测间隔，更快反映 WS 断连状态
-  setInterval(check, 5000)
-  // Listen for WS connection changes via custom event from App.vue
-  const onWsChange = (e) => { connected.value = e.detail?.connected ?? false }
-  window.addEventListener('ws-connection-change', onWsChange)
-  window.__wsStatusCleanup = () => window.removeEventListener('ws-connection-change', onWsChange)
   // Load git info
   await loadGitInfo()
   gitTimer = setInterval(loadGitInfo, 15000)
@@ -102,7 +84,6 @@ onMounted(async () => {
 onUnmounted(() => {
   if (gitTimer) clearInterval(gitTimer)
   if (statusItemsUnsub) { statusItemsUnsub(); statusItemsUnsub = null }
-  if (window.__wsStatusCleanup) { window.__wsStatusCleanup(); delete window.__wsStatusCleanup }
 })
 </script>
 
@@ -138,9 +119,4 @@ onUnmounted(() => {
 .status-item:hover { opacity: 1; }
 .git-branch-item, .git-status-icons { cursor: pointer; }
 .git-branch-item:hover, .git-status-icons:hover { text-decoration: underline; }
-.status-dot {
-  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
-  background: rgba(255,255,255,0.4);
-}
-.status-dot.on { background: var(--status-text); }
 </style>
