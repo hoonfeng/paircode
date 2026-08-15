@@ -82,6 +82,25 @@
       <div ref="clientPanelEl" class="pp-client-body"></div>
     </div>
 
+    <!-- UI 槽位区（Slot 系统：client 半注册的可替换界面区域，如底部状态栏） -->
+    <div v-if="slotGroups.length > 0" class="pp-slots">
+      <div class="pp-slots-head">
+        <span class="pp-slots-title"><SvgIcon name="layers" :size="13" /> UI 槽位</span>
+        <span class="pp-slots-sub">插件可替换的界面区域</span>
+      </div>
+      <div v-for="g in slotGroups" :key="g.slotId" class="pp-slot-row">
+        <div class="pp-slot-info">
+          <span class="pp-slot-id">{{ g.slotId }}</span>
+          <span class="pp-slot-owner" :class="{ builtin: !g.owner }">{{ g.owner ? g.owner : '内置组件' }}</span>
+        </div>
+        <select class="pp-input pp-slot-select" :value="g.owner" @change="switchSlot(g.slotId, $event.target.value)"
+                :title="'切换 ' + g.slotId + ' 区域的渲染者'">
+          <option value="">内置组件（默认）</option>
+          <option v-for="c in g.candidates" :key="c.pluginName" :value="c.pluginName">{{ c.pluginName }} · {{ c.title }}</option>
+        </select>
+      </div>
+    </div>
+
     <!-- 内置工具（全部内置工具：分组 + 工具级开关 + 搜索；文件浏览器工具集区同源展示） -->
     <div class="pp-builtin">
       <div class="pp-builtin-head" @click="builtinOpen = !builtinOpen" :title="builtinOpen ? '点击收起' : '点击展开工具列表'">
@@ -192,7 +211,7 @@
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import api from '../api.js'
 import SvgIcon from './SvgIcon.vue'
-import { clientPanels, syncClientHalves, unloadClientHalf, startPolling, stopPolling, setPanelMount, getUIFor } from '../plugin-runtime.js'
+import { clientPanels, clientSlots, syncClientHalves, unloadClientHalf, startPolling, stopPolling, setPanelMount, setSlotMount, getUIFor, getSlotCandidates, getSlotOwner, setSlotOwner } from '../plugin-runtime.js'
 
 const plugins = ref([])
 const loading = ref(false)
@@ -458,8 +477,27 @@ function onPanelsChanged(panels) {
   renderActivePanel()
 }
 
+// ─── UI 槽位管理（Slot 系统）────────────────────────────────
+const slotGroups = ref([])
+let slotUnsub = null
+
+function refreshSlots() {
+  const ids = [...new Set(clientSlots.map(s => s.slotId))]
+  slotGroups.value = ids.map(id => ({
+    slotId: id,
+    owner: getSlotOwner(id),
+    candidates: getSlotCandidates(id),
+  }))
+}
+
+function switchSlot(slotId, pluginName) {
+  setSlotOwner(slotId, pluginName || '')
+  refreshSlots()
+}
+
 onMounted(() => {
   setPanelMount(onPanelsChanged)
+  slotUnsub = setSlotMount(refreshSlots)
   startPolling()
   refresh()
   loadBuiltin()
@@ -468,6 +506,7 @@ onMounted(() => {
 onUnmounted(() => {
   stopPolling()
   setPanelMount(null)
+  if (slotUnsub) { slotUnsub(); slotUnsub = null }
 })
 </script>
 
@@ -545,6 +584,38 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   max-height: 40%;
+}
+/* UI 槽位区（Slot 系统） */
+.pp-slots {
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 30%;
+  overflow-y: auto;
+}
+.pp-slots-head {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; color: var(--text-primary); font-weight: 600;
+}
+.pp-slots-sub { font-weight: 400; font-size: 10px; color: var(--text-muted); }
+.pp-slot-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  background: var(--bg-hover); border-radius: 4px; padding: 4px 8px;
+}
+.pp-slot-info { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.pp-slot-id {
+  font-family: var(--font-mono, monospace); font-size: 11px; color: var(--text-primary);
+  text-transform: uppercase; letter-spacing: 0.3px;
+}
+.pp-slot-owner { font-size: 10px; color: var(--accent); }
+.pp-slot-owner.builtin { color: var(--text-muted); }
+.pp-slot-select {
+  width: 160px; font-size: 11px; padding: 2px 4px;
+  background: var(--bg-input, var(--bg-elevated)); color: var(--text-primary);
+  border: 1px solid var(--border-color); border-radius: 3px; flex-shrink: 0;
 }
 .pp-client-tabs {
   display: flex;

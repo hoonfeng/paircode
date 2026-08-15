@@ -39,6 +39,57 @@ export const clientPanels = []
 // 面板容器元素注册（PluginPanel 挂载后调用）
 let panelMountFn = null
 
+// ─── UI 槽位注册表（Slot 系统：插件可替换的预定义界面区域）───
+// slots: [{ slotId, pluginName, title, render, defId }]
+// 宿主预定义 slotId：'statusbar'（底部状态栏）。
+// 占用者选择（getSlotOwner/setSlotOwner）持久化 localStorage；
+// owner = '' 表示使用内置组件。
+export const clientSlots = []
+const slotOwnerKey = (id) => 'paircode-slot-' + id
+// 槽位变化监听（支持多个订阅者：App 状态栏容器 + 插件面板管理区）
+let slotMountFns = []
+
+// setSlotMount 订阅槽位变化（返回取消函数；fn 立即收到当前槽位表）。
+export function setSlotMount(fn) {
+  if (!fn) { slotMountFns = []; return () => {} }
+  slotMountFns.push(fn)
+  try { fn(clientSlots) } catch (e) { console.warn('[slot] 初始通知失败', e) }
+  return () => {
+    const i = slotMountFns.indexOf(fn)
+    if (i >= 0) slotMountFns.splice(i, 1)
+  }
+}
+function emitSlotChanged() {
+  for (const fn of slotMountFns) {
+    try { fn(clientSlots) } catch (e) { console.warn('[slot] 通知失败', e) }
+  }
+}
+
+// getSlotCandidates 某槽位的全部候选（占用者）。
+export function getSlotCandidates(slotId) {
+  return clientSlots.filter(s => s.slotId === slotId)
+}
+// getSlotOwner 当前激活占用者（'' = 内置组件）。
+export function getSlotOwner(slotId) {
+  let v = ''
+  try { v = localStorage.getItem(slotOwnerKey(slotId)) || '' } catch (e) { /* 忽略 */ }
+  if (v && !clientSlots.some(s => s.slotId === slotId && s.pluginName === v)) v = ''
+  return v
+}
+// setSlotOwner 切换占用者（'' = 恢复内置）。
+export function setSlotOwner(slotId, pluginName) {
+  try { localStorage.setItem(slotOwnerKey(slotId), pluginName || '') } catch (e) { /* 忽略 */ }
+  emitSlotChanged()
+}
+// getSlotUI 取激活占用者的渲染信息 {render, ui, pluginName}；无激活返回 null。
+export function getSlotUI(slotId) {
+  const owner = getSlotOwner(slotId)
+  if (!owner) return null
+  const s = clientSlots.find(x => x.slotId === slotId && x.pluginName === owner)
+  if (!s || typeof s.render !== 'function') return null
+  return { render: s.render, ui: getUIFor(owner), pluginName: owner }
+}
+
 // setPanelMount 供 PluginPanel 注入「渲染 client 面板」的回调。
 // 回调签名 (panels) => void，面板列表变化时触发。
 export function setPanelMount(fn) {
@@ -125,6 +176,33 @@ function makeUI(inst) {
         },
       }
     },
+    // 注册 UI 槽位占用（Slot 系统：替换宿主预定义界面区域，如 'statusbar'）。
+    // 同插件重复注册同槽位 → 替换。宿主按 getSlotOwner 决定激活哪个占用者，
+    // 激活后调 render(el, ui)；render 可返回 cleanup 函数（宿主下次重渲染前调用）。
+    registerSlot(spec) {
+      if (!spec || !spec.slotId || !spec.title) {
+        console.warn('[plugin] registerSlot 需要 {slotId, title, render?}')
+        return
+      }
+      const idx = clientSlots.findIndex(s => s.slotId === spec.slotId && s.pluginName === inst.name)
+      const slot = {
+        slotId: spec.slotId,
+        pluginName: inst.name,
+        title: spec.title,
+        render: typeof spec.render === 'function' ? spec.render : null,
+        defId: inst.defId,
+      }
+      if (idx >= 0) clientSlots[idx] = slot
+      else clientSlots.push(slot)
+      emitSlotChanged()
+      return {
+        update() { emitSlotChanged() },
+        remove() {
+          const i = clientSlots.findIndex(s => s.slotId === spec.slotId && s.pluginName === inst.name)
+          if (i >= 0) { clientSlots.splice(i, 1); emitSlotChanged() }
+        },
+      }
+    },
     // 受限后端 API（相对路径）
     http: {
       get: (path, params) => api.apiGet(path, params),
@@ -170,11 +248,13 @@ export function loadClientHalf(source) {
     // D11 失败上报：boot 阶段执行错误 → 后端记诊断（Agent inspect 修复）
     api.pluginClientFailure(source.name, 'boot', inst.error).catch(() => {})
     emitPanelChanged()
+    emitSlotChanged()
     return inst
   }
   instances.push(inst)
-  // 重新装载时同步一次面板
+  // 重新装载时同步一次面板与槽位
   emitPanelChanged()
+  emitSlotChanged()
   return inst
 }
 
@@ -190,7 +270,14 @@ export function unloadClientHalf(nameOrDefId) {
         clientPanels.splice(j, 1)
       }
     }
+    // 移除该插件注册的槽位占用
+    for (let j = clientSlots.length - 1; j >= 0; j--) {
+      if (clientSlots[j].pluginName === name) {
+        clientSlots.splice(j, 1)
+      }
+    }
     emitPanelChanged()
+    emitSlotChanged()
   }
   reportState()
 }
@@ -229,7 +316,14 @@ export async function syncClientHalves(plugins) {
       clientPanels.splice(j, 1)
     }
   }
+  // 清理孤儿槽位注册
+  for (let j = clientSlots.length - 1; j >= 0; j--) {
+    if (!liveNames.has(clientSlots[j].pluginName)) {
+      clientSlots.splice(j, 1)
+    }
+  }
   emitPanelChanged()
+  emitSlotChanged()
   reportState()
 }
 
@@ -283,8 +377,11 @@ export function buildSnapshot() {
   for (const p of plugins) {
     const mine = clientPanels.filter(cp => cp.pluginName === p.name).map(cp => cp.id)
     if (mine.length) p.panels = mine
+    const mineSlots = clientSlots.filter(cs => cs.pluginName === p.name).map(cs => cs.slotId)
+    if (mineSlots.length) p.slots = mineSlots
   }
-  return { plugins, ...(panels.length ? { panels } : {}) }
+  const slots = clientSlots.map(s => s.slotId)
+  return { plugins, ...(panels.length ? { panels } : {}), ...(slots.length ? { slots } : {}) }
 }
 
 // reportState 上报快照（节流：轮询周期内自动去重，无需独立节流）。
@@ -320,4 +417,5 @@ export default {
   loadClientHalf, unloadClientHalf, syncClientHalves,
   startPolling, stopPolling, dispatchHostEvent,
   getInstances, setPanelMount, clientPanels,
+  clientSlots, setSlotMount, getSlotCandidates, getSlotOwner, setSlotOwner, getSlotUI,
 }

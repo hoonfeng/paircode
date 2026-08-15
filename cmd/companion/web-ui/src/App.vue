@@ -38,8 +38,11 @@
       <RightPanel :panel-mode="panelMode" />
     </div>
 
-    <!-- 状态栏（panel 模式下隐藏） -->
-    <StatusBar v-if="!panelMode" />
+    <!-- 状态栏（panel 模式下隐藏）：默认内置 StatusBar；插件注册 statusbar 槽位并激活后由插件渲染（UI 可更换） -->
+    <div v-if="!panelMode" class="app-statusbar-host">
+      <StatusBar v-if="!slotOwner" />
+      <div v-else ref="slotStatusBarEl" class="plugin-slot-host plugin-slot-statusbar"></div>
+    </div>
 
     <!-- 模态框 -->
     <SettingsModal v-if="showSettings" @close="showSettings = false" />
@@ -57,6 +60,7 @@ import { ref, reactive, computed, watch, onMounted, onUnmounted, provide, nextTi
 import { state, savePersistentState, loadPersistentState, applyTheme } from './main.js'
 import api from './api.js'
 import { processAgentEvent, processAgentDone, processStatus, getConvCtxStats } from './agent-events.js'
+import { getSlotUI, getSlotOwner, setSlotMount } from './plugin-runtime.js'
 
 // ★ 桌面端面板独立模式：desktopbridge 注入 window.__DESKTOP_PANEL_MODE__，
 //   此时只渲染右侧面板（消息展示）占满全屏，隐藏 IDE 其他区域。
@@ -562,14 +566,50 @@ onMounted(async () => {
     window.removeEventListener('switch-workspace', _onSwitchWorkspace)
   }
   window._cleanupAppEvents = _cleanupEvents
+
+  // UI 槽位订阅（statusbar 可被插件替换）
+  slotUnsub = setSlotMount(onSlotChanged)
+  onSlotChanged()
 })
 
 onUnmounted(() => {
   document.removeEventListener('keydown', handleKeydown)
   if (window._cleanupAppEvents) { window._cleanupAppEvents(); delete window._cleanupAppEvents }
   if (persistTimer) { clearTimeout(persistTimer); persistTimer = null }
+  if (slotUnsub) { slotUnsub(); slotUnsub = null }
+  if (typeof slotCleanup === 'function') { try { slotCleanup() } catch (e) {} slotCleanup = null }
   api.closeWebSocket()
 })
+
+// ─── UI 槽位（statusbar）：插件可替换底部状态栏（Slot 系统）──
+const slotOwner = ref('')
+const slotStatusBarEl = ref(null)
+let slotCleanup = null
+let slotUnsub = null
+
+function renderStatusBarSlot() {
+  const host = slotStatusBarEl.value
+  if (!host) return
+  if (typeof slotCleanup === 'function') { try { slotCleanup() } catch (e) {} slotCleanup = null }
+  host.innerHTML = ''
+  const s = getSlotUI('statusbar')
+  if (s && typeof s.render === 'function') {
+    try {
+      const ret = s.render(host, s.ui)
+      if (typeof ret === 'function') slotCleanup = ret
+    } catch (e) {
+      console.warn('[slot] statusbar 渲染失败', e)
+      host.innerHTML = '<div style="padding:2px 8px;font-size:11px;color:var(--text-muted)">插件状态栏渲染失败</div>'
+    }
+  }
+}
+
+function onSlotChanged() {
+  // 无论切回内置还是换插件，先清理旧插件渲染
+  if (typeof slotCleanup === 'function') { try { slotCleanup() } catch (e) {} slotCleanup = null }
+  slotOwner.value = getSlotOwner('statusbar')
+  nextTick(() => { if (slotOwner.value) renderStatusBarSlot() })
+}
 
 state.notificationCount = 0
 state.workspaceName = state.workspaceName || ''
@@ -661,6 +701,10 @@ watch(() => state.openFiles.length, schedulePersist)
 }
 .right-panel-resizer:hover { background: var(--accent); }
 .status-bar { grid-column: 1 / -1; grid-row: 3; z-index: 30; }
+/* UI 槽位宿主：状态栏区域可被插件替换（Slot 系统） */
+.app-statusbar-host { grid-column: 1 / -1; grid-row: 3; z-index: 30; height: 22px; }
+.plugin-slot-host { height: 100%; overflow: hidden; }
+.plugin-slot-statusbar { background: var(--accent); }
 .bottom-panel {
   position: relative; background: var(--bg-secondary);
   border-top: 1px solid var(--border-color);
