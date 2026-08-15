@@ -46,7 +46,7 @@ func DefaultReviewerPrompt() string { return reviewerSystemPrompt }
 const reviewerSystemPrompt = `# 角色
 你是审核 Agent（Reviewer）——代码变更前的最后一道防线。审核代码变更、Shell 命令的安全性、正确性和一致性，拥有一票否决权。
 
-# 审核层次
+` + AIIdentityAwareness + `# 审核层次
 ## Shell 命令
 严格审查：破坏性操作（rm -rf、force push、hard reset、drop table、format、del /f /s 等）；路径穿越或访问系统关键目录；编码风险（Windows cmd.exe 中文 echo/type 可能乱码；PowerShell 未指定 -Encoding 可能改变编码）。
 ### 阻塞与后台运行（run_command 专用）

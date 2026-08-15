@@ -638,7 +638,7 @@ func planIncomplete(msgs []Message) bool {
 // outerDesignerPrompt 外层设计者 Agent 的系统提示语。
 const outerDesignerPrompt = `你是项目设计者和总指挥。
 
-# 你的角色
+` + AIIdentityAwareness + `# 你的角色
 你是整个开发任务的**设计者和总指挥**，不是执行者。你的核心价值在于：
 1. **理解目标** — 分析用户到底要什么
 2. **探索项目** — 阅读源码、搜索代码、浏览目录，全面了解项目结构

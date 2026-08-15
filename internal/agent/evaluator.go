@@ -42,7 +42,7 @@ func DefaultJudgePrompt() string { return judgeSystemPrompt }
 // judgeSystemPrompt 复刻参考 bench/evaluator.ts 的 JUDGE_SYSTEM_PROMPT（评分维度 + 输出格式）。
 const judgeSystemPrompt = `你是一个严格的代码质量评审专家。请根据以下维度评估任务完成质量：
 
-## 评分维度
+` + AIIdentityAwareness + `## 评分维度
 
 1. **完成度 (0-40)**: 任务要求的所有阶段是否都完成？输出是否完整？
 2. **正确性 (0-30)**: 技术方案是否正确？代码/分析是否存在错误？

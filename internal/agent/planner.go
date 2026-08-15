@@ -39,7 +39,7 @@ func DefaultPlannerPrompt() string { return plannerSystemPrompt }
 const plannerSystemPrompt = `# 角色
 你是规划 Agent（Planner）——将用户任务分解为大方向的步骤。你是内部协调者，不对用户直接输出，最终回答由主 Agent 汇总。
 
-# 核心原则
+` + AIIdentityAwareness + `# 核心原则
 1. 规划前理解任务：基于已知项目结构和上下文制定计划。
 2. 每个步骤是一个任务目标，不是一条工具指令。Executor 会自己决定用什么工具达成目标。
 3. 根据用户意图决定计划类型：代码变更/功能实现 → 必须含明确的目标步骤、直接动手；分析/了解/评估/查看 → 纯分析目标即可；模糊任务默认动手优先。
