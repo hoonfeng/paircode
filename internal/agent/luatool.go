@@ -189,7 +189,7 @@ func runLuaTool(ctx context.Context, src string, args map[string]any) (string, e
 			c.Dir = cwdStr
 		}
 		out, err := c.CombinedOutput()
-		result := string(out)
+		result := decodeCmdOutput(out)
 		if err != nil {
 			result += "\n[退出: " + err.Error() + "]"
 		}

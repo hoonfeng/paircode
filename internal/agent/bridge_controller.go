@@ -321,7 +321,7 @@ func (bc *BridgeController) ExecCommand(ctx context.Context, command, cwd string
 	c.Dir = dir
 	c.Dir = dir
 	out, err := c.CombinedOutput()
-	result := string(out)
+	result := decodeCmdOutput(out)
 	if cctx.Err() == context.DeadlineExceeded {
 		result += "\n[超时 " + timeout.String() + " 已终止]"
 	}

@@ -43,7 +43,7 @@ func RegisterCordisTools(registry *Registry, host *PluginHost, root string) {
 		Description: "登记一个 JS/TS 动态插件定义（语法预检，不运行）。code 是 async 函数体（host 半，宿主进程内运行），支持两种形态：① 对象形态 return { name, apply(ctx, config), inject? }；② 函数形态 return (ctx, config) => void（cordis 生态惯例，函数名作插件名）。apply 中可用 ctx.tools.register 注册工具、ctx.systemPrompt.section 贡献提示、ctx.on 监听事件、ctx.provide 提供服务；inject: ['fs','web','bash','logger','timer',...] 声明硬依赖（宿主缺失会明确报错）。可选 client 参数提供浏览器半代码（UI 侧运行，web 界面插件面板装载）：形态 (ui) => void，ui 提供 on/emit/registerPanel/http 等浏览器侧服务。TS 源码（含 interface/type 注解）由内置编译器自动转译。返回 dyn id 供 cordis_run/stop/undefine 使用。",
 		Category:    "system",
 		Parameters: objSchema(map[string]any{
-			"code":     strProp("插件 host 半代码（JS 或 TS，async 函数体，return { name, apply(ctx, config), inject? } 或 return (ctx, config) => void）。可访问全局：ctx/harness/console/btoa/atob/TextEncoder/TextDecoder；inject 声明后 ctx.fs/web/bash/logger/timer 可用。"),
+			"code":     strProp("插件 host 半代码（JS 或 TS，async 函数体，return { name, apply(ctx, config), inject? } 或 return (ctx, config) => void）。可访问全局：ctx/harness/console/btoa/atob/TextEncoder/TextDecoder/CordisApi（内置真 cordis 运行时，new CordisApi.api.Context() 建 cordis app 跑生态插件协作）；inject 声明后 ctx.fs/web/bash/logger/timer 可用。"),
 			"client":   strProp("可选：插件 client 半代码（浏览器端执行，web 界面插件面板装载）。形态 (ui) => void：ui.on(event, fn) 收 host 事件（ui:/client: 前缀）、ui.emit(event, payload) 发事件回 host（host: 前缀给 host 插件消费）、ui.registerPanel({id,title,icon,render}) 注册自定义面板、ui.http.get/post 调后端 API。缺省=纯 host 插件。"),
 			"language": strProp("可选：源码语言 \"js\" | \"ts\"，默认自动探测（含 interface/type 注解/类型标注视为 ts）。"),
 			"purpose":  strProp("可选：插件用途说明。"),

@@ -43,7 +43,8 @@ func (p *bgProc) Write(b []byte) (int, error) {
 func (p *bgProc) snapshot() (out string, done bool, exitErr string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return p.buf.String(), p.done, p.exitErr
+	// 编码探测：子进程输出可能是 GBK（Windows 旧工具无视 chcp），UTF-8 优先、GBK 兜底
+	return decodeCmdOutput(p.buf.Bytes()), p.done, p.exitErr
 }
 
 // bgRegistry 后台进程注册表（并发安全；全局单例 globalBG，跨 agent 轮次存活）。

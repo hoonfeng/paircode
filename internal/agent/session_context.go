@@ -715,7 +715,7 @@ func runGitCmd(dir string, args ...string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return string(out), nil
+	return decodeCmdOutput(out), nil
 }
 
 // buildBuildStatus 检查各工作区主项目的构建状态（二进制是否存在、最后构建时间）。

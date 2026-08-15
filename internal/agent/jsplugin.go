@@ -8,6 +8,7 @@
 //       ctx     → get / provide / on / effect / tools.register / systemPrompt.section
 //       harness → defineTool / registerTool / handle
 //       console / btoa / atob / TextEncoder / TextDecoder
+//       CordisApi → 内置真 cordis 运行时（@cordisjs/core bundle）：new CordisApi.api.Context()
 //   - require / setTimeout 等 Node API 不存在（对齐 harness 的沙箱纪律，
 //     需要时经 ctx 服务；第一版不提供 timer，后续可按需补 ctx.timeout）。
 //   - 求值通过注入 __resolve 回调 + `(async () => {...})().then(v=>__resolve(v))`
@@ -21,6 +22,7 @@ package agent
 
 import (
 	"context"
+	_ "embed"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -35,6 +37,17 @@ import (
 
 	"wb-ui/goja"
 )
+
+// ─── 内置 cordis 运行时（CordisApi 全局）────────────────────
+
+// cordisBundleJS @cordisjs/core 3.18.1 经 esbuild bundle 的 IIFE 单文件
+// （--platform=neutral，无 require/process/Buffer）。沙箱执行后全局挂 CordisApi：
+// 插件代码可直接 `new CordisApi.api.Context()` 建真 cordis app，跑 cordis 生态
+// 多插件协作（app.plugin/ctx.set/get 服务/ctx.on 事件）。重建方法见
+// .pair/project-info/关键点/修复记录-cordis核心goja验证+trap对齐2026-08-15.md。
+//
+//go:embed assets/cordis.bundle.js
+var cordisBundleJS string
 
 // ─── JS 执行超时防护（goja Interrupt）─────────────────────
 
@@ -754,6 +767,13 @@ func newJSSandbox(id string) (*goja.Runtime, *goja.Object) {
 		vm.Set(n, func(call goja.FunctionCall) goja.Value {
 			panic(vm.NewTypeError("%s is not available in the dynamic package sandbox — %s", n, r))
 		})
+	}
+
+	// 内置 cordis 运行时：执行 bundle 后全局挂 CordisApi（真 cordis Context），
+	// 插件代码可 new CordisApi.api.Context() 建 cordis app 跑生态插件协作。
+	// 失败不致命：log 警告，沙箱其余能力不受影响。
+	if _, err := vm.RunString(cordisBundleJS); err != nil {
+		log.Printf("[plugin_js] cordis bundle 装载失败（CordisApi 不可用）: %v", err)
 	}
 
 	// __resolve 回调（求值结果交接点）：把 JS 值转成 Go 对象

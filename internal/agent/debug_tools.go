@@ -392,7 +392,7 @@ func registerRunCapture(r *Registry, root string) {
 				}
 			}
 
-			outputStr := string(output)
+			outputStr := decodeCmdOutput(output)
 			if len(outputStr) > 50000 {
 				outputStr = outputStr[:50000] + "\n... [输出截断，共 " + strconv.Itoa(len(output)) + " 字节]"
 			}
@@ -1204,8 +1204,9 @@ func (wp *watchProc) execute(changed []string) {
 	}
 	if len(output) > 0 {
 		b.WriteString("```\n")
-		b.WriteString(string(output))
-		if !strings.HasSuffix(string(output), "\n") {
+		out := decodeCmdOutput(output)
+		b.WriteString(out)
+		if !strings.HasSuffix(out, "\n") {
 			b.WriteString("\n")
 		}
 		b.WriteString("```\n")

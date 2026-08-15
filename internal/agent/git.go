@@ -279,7 +279,7 @@ func runGit(ctx context.Context, dir string, args ...string) (string, error) {
 	c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	c.Dir = dir
 	out, err := c.CombinedOutput()
-	res := capOutput(string(out), 16000)
+	res := capOutput(decodeCmdOutput(out), 16000)
 	if cctx.Err() == context.DeadlineExceeded {
 		return res + "\n[git 超时 30s 已终止]", nil
 	}

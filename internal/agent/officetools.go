@@ -1800,7 +1800,7 @@ func pdfPageToOCR(root, pdfPath string, pages []int) (string, error) {
 
 			cmd := exec.Command(renderTool, args...)
 			if out, err := cmd.CombinedOutput(); err != nil {
-				return "", fmt.Errorf("pdftoppm 渲染失败: %s\n输出: %s", err, string(out))
+				return "", fmt.Errorf("pdftoppm 渲染失败: %s\n输出: %s", err, decodeCmdOutput(out))
 			}
 
 			// pdftoppm 输出为 page-1.png, page-2.png 格式
@@ -1828,7 +1828,7 @@ func pdfPageToOCR(root, pdfPath string, pages []int) (string, error) {
 			}
 			cmd := exec.Command(renderTool, args...)
 			if out, err := cmd.CombinedOutput(); err != nil {
-				return "", fmt.Errorf("mutool 渲染失败: %s\n输出: %s", err, string(out))
+				return "", fmt.Errorf("mutool 渲染失败: %s\n输出: %s", err, decodeCmdOutput(out))
 			}
 			pngPath = outPath
 		}
@@ -1874,11 +1874,11 @@ func callTesseractOCR(tesseractPath, tessdataDir, imgPath string) (string, error
 	output, err := cmd.Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			return "", fmt.Errorf("Tesseract 执行失败: %s\nstderr: %s", err, string(exitErr.Stderr))
+			return "", fmt.Errorf("Tesseract 执行失败: %s\nstderr: %s", err, decodeCmdOutput(exitErr.Stderr))
 		}
 		return "", fmt.Errorf("Tesseract 执行失败: %w", err)
 	}
-	return strings.TrimSpace(string(output)), nil
+	return strings.TrimSpace(decodeCmdOutput(output)), nil
 }
 
 // extractPDFText 从 PDF 原始字符串中提取文本（简单解析器，支持纯文本 PDF）。

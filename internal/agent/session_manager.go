@@ -1167,7 +1167,7 @@ func doAutoCommit(primaryRoot, task, result, commitMsg string) {
 		add := exec.Command("git", "add", "-A")
 		add.Dir = root
 		if out, err := add.CombinedOutput(); err != nil {
-			fmt.Printf("[auto-commit] git add 失败 (%s): %v\n%s\n", root, err, string(out))
+			fmt.Printf("[auto-commit] git add 失败 (%s): %v\n%s\n", root, err, decodeCmdOutput(out))
 			continue
 		}
 
@@ -1177,7 +1177,7 @@ func doAutoCommit(primaryRoot, task, result, commitMsg string) {
 			"commit", "-m", "auto: "+msg)
 		commit.Dir = root
 		if out, err := commit.CombinedOutput(); err != nil {
-			errStr := string(out)
+			errStr := decodeCmdOutput(out)
 			if strings.Contains(errStr, "nothing to commit") {
 				exec.Command("git", "reset", "HEAD").Run()
 				continue

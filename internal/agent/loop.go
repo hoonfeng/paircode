@@ -1019,6 +1019,10 @@ func harnessSystemPrompt(roots []string) string {
 		"  cordis_stop 停止并回收其贡献 → cordis_undefine 忘掉定义；cordis_inspect 查看全部插件/定义/贡献归属。\n" +
 		"- 插件 ctx 能力：ctx.tools.register 注册工具、ctx.on 订阅事件、ctx.effect 注册清理回调、\n" +
 		"  ctx.provide 提供服务、ctx.timeout/ctx.interval 定时器（定时/事件/工具回调跨 goroutine 安全）。\n" +
+		"- 内置 cordis 运行时：沙箱全局 CordisApi（@cordisjs/core bundle），插件代码可直接\n" +
+		"  new CordisApi.api.Context() 建真 cordis app，跑 cordis 生态多插件协作（app.plugin 挂插件、\n" +
+		"  app.start() 触发 ready、ctx.set/get 服务——cordis 3 用 set 而非 provide，provide 已废弃取不到）。\n" +
+		"  Node API（require/setTimeout/fetch 等）沙箱中不可用，调用即抛错误引导走 ctx 服务。\n" +
 		"- 服务依赖：inject: ['fs','web','bash','logger','timer'] 声明硬依赖（宿主缺失会明确报错，\n" +
 		"  可选服务请用 ctx.get(name) 判 undefined；写插件前先用 cordis_service_list 查询可用服务与签名）。\n" +
 		"  声明后可用：ctx.fs（工作区内文件读写/存在/列出/stat）、\n" +

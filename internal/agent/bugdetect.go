@@ -427,7 +427,7 @@ func runGoVet(root string) string {
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	cmd.Dir = root
 	out, _ := cmd.CombinedOutput()
-	return strings.TrimSpace(string(out))
+	return strings.TrimSpace(decodeCmdOutput(out))
 }
 
 // runGoBuild 执行 go build -tags webonly ./cmd/companion，返回输出（空=成功）。
@@ -438,7 +438,7 @@ func runGoBuild(root string) string {
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	cmd.Dir = root
 	out, _ := cmd.CombinedOutput()
-	return strings.TrimSpace(string(out))
+	return strings.TrimSpace(decodeCmdOutput(out))
 }
 
 // runGoTest 执行 go test ./cmd/companion/agent，返回输出（空=成功）。
@@ -449,7 +449,7 @@ func runGoTest(root string) string {
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	cmd.Dir = root
 	out, _ := cmd.CombinedOutput()
-	output := strings.TrimSpace(string(out))
+	output := strings.TrimSpace(decodeCmdOutput(out))
 	// 仅当有 FAIL 或 panic 时才返回输出（只关注失败）
 	if strings.Contains(output, "FAIL") || strings.Contains(output, "panic:") {
 		return output
