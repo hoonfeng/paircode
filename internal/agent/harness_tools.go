@@ -513,25 +513,30 @@ func runCodeSnippet(ctx context.Context, root, lang, code string) (string, error
 	defer os.RemoveAll(tmp)
 
 	var file, cmd string
+	// shellPath：Windows 反斜杠转正斜杠（bash 下 \ 是转义符会损坏路径；正斜杠 Windows 程序均接受），
+	// 再加引号防空格路径。
+	shellPath := func(p string) string {
+		return `"` + strings.ReplaceAll(p, "\\", "/") + `"`
+	}
 	switch lang {
 	case "go":
 		file = filepath.Join(tmp, "main.go")
 		if err := os.WriteFile(file, []byte(code), 0o644); err != nil {
 			return "", err
 		}
-		cmd = "go run " + file
+		cmd = "go run " + shellPath(file)
 	case "python":
 		file = filepath.Join(tmp, "main.py")
 		if err := os.WriteFile(file, []byte(code), 0o644); err != nil {
 			return "", err
 		}
-		cmd = "python " + file
+		cmd = "python " + shellPath(file)
 	case "node":
 		file = filepath.Join(tmp, "main.js")
 		if err := os.WriteFile(file, []byte(code), 0o644); err != nil {
 			return "", err
 		}
-		cmd = "node " + file
+		cmd = "node " + shellPath(file)
 	default:
 		return "", fmt.Errorf("不支持的语言 %q（可用 go/python/node）", lang)
 	}

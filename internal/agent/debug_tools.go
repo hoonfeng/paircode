@@ -365,9 +365,9 @@ func registerRunCapture(r *Registry, root string) {
 			if timeoutSec > 0 {
 				var ctx2 context.Context
 				ctx2, cancel = context.WithTimeout(ctx, time.Duration(timeoutSec)*time.Second)
-				c = exec.CommandContext(ctx2, "cmd", "/C", "chcp 65001 >nul & "+command)
+				c = newShellCommandContext(ctx2, command)
 			} else {
-				c = exec.Command("cmd", "/C", "chcp 65001 >nul & "+command)
+				c = newShellCommand(command)
 				cancel = func() {}
 			}
 			if cancel != nil {
@@ -1191,7 +1191,7 @@ func (wp *watchProc) execute(changed []string) {
 	// 执行命令
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(wp.timeout)*time.Second)
 	defer cancel()
-	c := exec.CommandContext(ctx, "cmd", "/C", "chcp 65001 >nul & "+wp.command)
+	c := newShellCommandContext(ctx, wp.command)
 	c.Dir = wp.root
 
 	startTime := time.Now()

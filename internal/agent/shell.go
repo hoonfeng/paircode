@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strconv"
@@ -17,6 +18,85 @@ import (
 	"sync"
 	"syscall"
 )
+
+// ── 内置 bash 执行（Git Bash 资源，随 release 分发）──
+// 优先使用项目自带的内置 bash（bin/bash/usr/bin/bash.exe）：
+//   - POSIX 语法 + UTF-8 输出，LLM 一次成功率远高于 cmd/PowerShell（引号/&/编码坑少）；
+//   - 回退链：内置 bash → 系统 Git Bash → PATH 中的 bash → cmd（原逻辑兜底）。
+var (
+	detectedBashOnce sync.Once
+	detectedBashPath string
+	detectedMsysBin  string
+)
+
+// bashCandidate 计算 exe 同目录内置 bash 候选路径。
+func bashCandidate(exePath string) string {
+	return filepath.Join(filepath.Dir(exePath), "bin", "bash", "usr", "bin", "bash.exe")
+}
+
+// detectBash 探测可用 bash，返回 bash 可执行文件路径与其 msys bin 目录（PATH 前缀用）。
+func detectBash() (bashPath, msysBin string) {
+	detectedBashOnce.Do(func() {
+		// 1. 内置资源：exe 同目录 bin/bash/usr/bin/bash.exe
+		if exe, err := os.Executable(); err == nil {
+			cand := bashCandidate(exe)
+			if st, err := os.Stat(cand); err == nil && !st.IsDir() {
+				detectedBashPath = cand
+				detectedMsysBin = filepath.Dir(cand)
+				// 确保 msys 根 /tmp 存在（bash 找不到会打 stderr 警告）
+				os.MkdirAll(filepath.Join(filepath.Dir(filepath.Dir(cand)), "tmp"), 0o755)
+				return
+			}
+		}
+		// 2. 系统 Git Bash（回退）
+		for _, cand := range []string{
+			`C:\Program Files\Git\usr\bin\bash.exe`,
+			`C:\Program Files (x86)\Git\usr\bin\bash.exe`,
+		} {
+			if st, err := os.Stat(cand); err == nil && !st.IsDir() {
+				detectedBashPath = cand
+				detectedMsysBin = filepath.Dir(cand)
+				return
+			}
+		}
+		// 3. PATH 中的 bash（msys2/WSL 等，最后兜底）
+		if p, err := exec.LookPath("bash"); err == nil {
+			detectedBashPath = p
+		}
+	})
+	return detectedBashPath, detectedMsysBin
+}
+
+// newShellCommand 构造 shell 命令：
+//   - bash 可用 → bash -c（POSIX 语法 + UTF-8，msys bin 前置 PATH 使 ls/grep 等可用）
+//   - 否则 → cmd /C chcp 65001 + 命令（原逻辑兜底）
+func newShellCommand(command string) *exec.Cmd {
+	if bashPath, msysBin := detectBash(); bashPath != "" {
+		c := exec.Command(bashPath, "-c", command)
+		applyBashEnv(c, msysBin)
+		return c
+	}
+	return exec.Command("cmd", "/C", "chcp 65001 >nul & "+command)
+}
+
+// newShellCommandContext 带 ctx 的版本（超时/取消）。
+func newShellCommandContext(ctx context.Context, command string) *exec.Cmd {
+	if bashPath, msysBin := detectBash(); bashPath != "" {
+		c := exec.CommandContext(ctx, bashPath, "-c", command)
+		applyBashEnv(c, msysBin)
+		return c
+	}
+	return exec.CommandContext(ctx, "cmd", "/C", "chcp 65001 >nul & "+command)
+}
+
+// applyBashEnv msys bin 前置 PATH：非登录 shell 不读 /etc/profile，须显式补 PATH
+// 才能用 ls/cat/grep 等 msys 工具（Windows 程序 git/go/python 已在原 PATH 中）。
+func applyBashEnv(c *exec.Cmd, msysBin string) {
+	if msysBin == "" {
+		return
+	}
+	c.Env = append(os.Environ(), "PATH="+msysBin+";"+os.Getenv("PATH"))
+}
 // bgProc 一个后台进程：cmd + 带锁输出缓冲 + 结束状态。实现 io.Writer 供 exec 直接写。
 type bgProc struct {
 	cmd     *exec.Cmd
@@ -69,7 +149,7 @@ func (bg *bgRegistry) start(command, dir string) (int, error) {
 	bg.cleanupLocked() // 顺带清理超龄已完成记录（防长时间运行内存泄漏）
 	bg.mu.Unlock()
 
-	c := exec.Command("cmd", "/C", "chcp 65001 >nul & "+command)
+	c := newShellCommand(command)
 	c.Dir = dir
 	// ★ 隐藏 cmd 窗口（不弹窗）但不隔离进程组，让子进程能被正常杀死。
 	if runtime.GOOS == "windows" {

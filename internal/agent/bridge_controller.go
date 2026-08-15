@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -316,9 +315,8 @@ func (bc *BridgeController) ExecCommand(ctx context.Context, command, cwd string
 
 	cctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	c := exec.CommandContext(cctx, "cmd", "/C", "chcp 65001 >nul & "+command)
+	c := newShellCommandContext(cctx, command)
 	c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-	c.Dir = dir
 	c.Dir = dir
 	out, err := c.CombinedOutput()
 	result := decodeCmdOutput(out)

@@ -24,7 +24,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -183,7 +182,7 @@ func runLuaTool(ctx context.Context, src string, args map[string]any) (string, e
 			L.Push(lua.LString("错误: command 参数不能为空"))
 			return 1
 		}
-		c := exec.CommandContext(cctx, "cmd", "/C", "chcp 65001 >nul & "+cmdStr)
+		c := newShellCommandContext(cctx, cmdStr)
 		c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 		if cwdStr != "" {
 			c.Dir = cwdStr

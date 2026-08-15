@@ -44,7 +44,10 @@ release/companion.exe
 cmd/companion/config/
 
 # Build artifacts
-bin/
+bin/*
+!bin/bash/
+!bin/bash/**/*.exe
+!bin/bash/**/*.dll
 release/
 
 # Node build outputs
