@@ -607,7 +607,7 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 				}
 			}
 			if approveFn != nil {
-				if tool, ok := l.Registry.Get(tc.Function.Name); ok && tool.RequiresApproval {
+				if tool, ok := l.Registry.Get(tc.Function.Name); ok && (tool.RequiresApproval || (tool.DynamicApproval != nil && tool.DynamicApproval(tc))) {
 					if approved, feedback := approveFn(ctx, tc); !approved {
 						rej := strings.TrimSpace(feedback)
 						if rej == "" {
@@ -1049,6 +1049,11 @@ func harnessSystemPrompt(roots []string) string {
 		"  方法、ui.registerPanel 注册面板）。host 半用 ctx.registerClientMethod(method, fn) 暴露方法\n" +
 		"  给浏览器调用；client 半 render/guard/boot 失败会上报到定义诊断（cordis_inspect 可见），\n" +
 		"  修复后 cordis_define pluginId=xxx 追加版本重新装载。\n" +
+		"- ★ client 激活审批：cordis_run 装载带 client 半的插件时自动进现有审批门（manual=人工\n" +
+		"  审批 / auto=AI 审核 / off=放行；批准覆盖该插件后续版本）。浏览器仅装载已批准的\n" +
+		"  client 半——cordis_run 返回后若面板显示「UI 待批准」或 cordis_inspect 显示\n" +
+		"  client=待批准，说明插件带 client 半且未批准：等待审批通过后 client 半自动装载；\n" +
+		"  拒绝则 client 半不激活（host 半不受影响）。审批记录持久化 .pair/cordis-approved.json。\n" +
 		"- inspect 协议（cordis_inspect_query platform/provider/method）：host 平台查宿主\n" +
 		"  （service/tool/event/plugin 四 provider），client 平台查浏览器（plugin/event），\n" +
 		"  第三方可注册自定义 provider 扩展诊断接口。\n" +

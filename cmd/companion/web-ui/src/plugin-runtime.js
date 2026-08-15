@@ -195,12 +195,15 @@ export function unloadClientHalf(nameOrDefId) {
   reportState()
 }
 
-// syncClientHalves 与后端插件列表对齐：装载新出现的 client 半，卸载已消失的。
+// syncClientHalves 与后端插件列表对齐：装载已批准的新 client 半，卸载已消失的。
+// ★ client 激活审批：仅装载 clientApproved=true 的插件（后端 cordis_run 经
+//   现有审批门后标记批准；未批准=hasClient && !clientApproved 显示「待批准」，
+//   Agent 侧 cordis_run 触发审批，前端轮询/刷新后自动装载）。
 export async function syncClientHalves(plugins) {
   if (!plugins || !Array.isArray(plugins)) return
   const active = new Set()
   for (const p of plugins) {
-    if (p.hasClient && p.state === 'running' && p.clientCode) {
+    if (p.hasClient && p.state === 'running' && p.clientApproved && p.clientCode) {
       active.add(p.name)
       const exists = instances.find(inst => inst.name === p.name)
       // error 实例重试装载（可能是瞬时执行错误）

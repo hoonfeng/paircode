@@ -20,8 +20,11 @@
 package agent
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
@@ -356,6 +359,9 @@ type PluginRecord struct {
 	Purpose    string       `json:"purpose,omitempty"`     // 用途说明（JS 动态插件）
 	HasClient  bool         `json:"hasClient,omitempty"`   // 是否有 client 半（浏览器端）
 	ClientCode string       `json:"clientCode,omitempty"`  // client 半源码（供浏览器装载；列表接口可能省略）
+	// ClientApproved client 半是否已获激活批准（cordis_run 经审批门后为 true；
+	// 浏览器仅装载已批准的 client 半）
+	ClientApproved bool `json:"clientApproved,omitempty"`
 	DefID      string       `json:"defId,omitempty"`       // JS 动态插件定义 id（dyn-<n>）
 	PluginID   string       `json:"pluginId,omitempty"`    // 稳定插件身份（跨版本；默认=首次定义 id）
 	PkgID      string       `json:"pkgId,omitempty"`       // 当前版本 package id（pkg-<n>，不可变）
@@ -413,6 +419,15 @@ type PluginHost struct {
 	//   第三方（内置代码/Go 插件）可 RegisterInspectProvider 扩展自定义诊断接口。
 	inspectMu sync.RWMutex
 	inspect   map[string]map[string]*InspectProvider
+
+	// ★ client 半激活批准（per-plugin，批准覆盖后续版本；对齐 harness
+	//   approvedClientPackages）：cordis_run 装载带 client 半的插件时经
+	//   现有审批门（ReviewMode manual=人工审批 / auto=AI审核 / off=放行），
+	//   通过后 MarkClientApproved 记录；浏览器 client 半仅装载已批准插件。
+	//   持久化到 <root>/.pair/cordis-approved.json（跨重启存续）。
+	approveMu       sync.RWMutex
+	approvedClients map[string]bool
+	root            string // 工作区根（持久化 approved 列表用）
 }
 
 // InspectMethod 一个 inspect provider 方法（对齐参考 manifest.methods 的单个条目）。
@@ -596,6 +611,8 @@ func NewPluginHost(registry *Registry, store ConversationStore, root string) *Pl
 		pluginVars:     map[string][]*PromptVariable{},
 		toolOwner:      map[string]string{},
 		templates:      map[string]*ToolsetTemplate{},
+		approvedClients: map[string]bool{},
+		root:           root,
 	}
 	h.ctx = &PluginContext{
 		host:          h,
@@ -610,7 +627,92 @@ func NewPluginHost(registry *Registry, store ConversationStore, root string) *Pl
 	h.ctx.Events.SetClientHook(func(name string, payload any) { h.PushClientEvent(name, payload) })
 	// 内置 inspect provider（host: service/tool/event/plugin；client: plugin/event/service/tool）
 	registerBuiltinInspectProviders(h)
+	// 恢复跨重启的 client 半批准记录（.pair/cordis-approved.json；文件缺失/损坏不致命）
+	h.loadApprovedClients()
 	return h
+}
+
+// ─── client 半激活批准 ────────────────────────────────────
+// 对齐 harness「per Plugin, human-approved Client activation」：cordis_run 装载
+// 带 client 半的插件时，若该插件 client 半尚未批准，工具调用自动进现有审批门
+// （ReviewMode manual=人工审批条 / auto=AI 审核 / off=放行）；工具执行成功
+// （=已过审批门）后 MarkClientApproved 记录。批准键 = 插件稳定身份 pluginId
+// （跨版本稳定，覆盖该插件后续版本）。
+
+// approvedFilePath .pair/cordis-approved.json 的绝对路径。
+func (h *PluginHost) approvedFilePath() string {
+	if h.root == "" {
+		return ""
+	}
+	return filepath.Join(h.root, ".pair", "cordis-approved.json")
+}
+
+// loadApprovedClients 从 .pair/cordis-approved.json 恢复批准记录（缺文件/坏 JSON 静默）。
+func (h *PluginHost) loadApprovedClients() {
+	p := h.approvedFilePath()
+	if p == "" {
+		return
+	}
+	data, err := os.ReadFile(p)
+	if err != nil {
+		return
+	}
+	var names []string
+	if err := json.Unmarshal(data, &names); err != nil {
+		return
+	}
+	h.approveMu.Lock()
+	for _, n := range names {
+		if n != "" {
+			h.approvedClients[n] = true
+		}
+	}
+	h.approveMu.Unlock()
+}
+
+// saveApprovedClients 持久化批准记录（失败静默——批准生效以内存为准，重启后重批即可）。
+func (h *PluginHost) saveApprovedClients() {
+	p := h.approvedFilePath()
+	if p == "" {
+		return
+	}
+	h.approveMu.RLock()
+	names := make([]string, 0, len(h.approvedClients))
+	for n := range h.approvedClients {
+		names = append(names, n)
+	}
+	h.approveMu.RUnlock()
+	data, err := json.MarshalIndent(names, "", "  ")
+	if err != nil {
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		return
+	}
+	_ = os.WriteFile(p, data, 0o644)
+}
+
+// IsClientApproved 该插件（稳定身份 pluginId）的 client 半是否已获激活批准
+// （批准覆盖后续版本）。
+func (h *PluginHost) IsClientApproved(pluginID string) bool {
+	if pluginID == "" {
+		return false
+	}
+	h.approveMu.RLock()
+	defer h.approveMu.RUnlock()
+	return h.approvedClients[pluginID]
+}
+
+// MarkClientApproved 批准插件 client 半激活（cordis_run 经审批门执行成功后调用，
+// 传插件稳定身份 pluginId），并持久化到 .pair/cordis-approved.json。
+func (h *PluginHost) MarkClientApproved(pluginID string) {
+	if pluginID == "" {
+		return
+	}
+	h.approveMu.Lock()
+	h.approvedClients[pluginID] = true
+	h.approveMu.Unlock()
+	h.saveApprovedClients()
 }
 
 // ─── host→client 事件桥 ──────────────────────────────────
@@ -1083,6 +1185,10 @@ func (h *PluginHost) Inspect() []PluginRecord {
 				if d.status == PluginWaiting {
 					rec.State = "waiting"
 				}
+				// client 半激活批准状态（浏览器仅装载已批准；cordis_run 经审批门后批准）
+				if rec.HasClient {
+					rec.ClientApproved = h.IsClientApproved(d.pluginId)
+				}
 			}
 		}
 		rec.Tools = append([]string(nil), h.pluginTools[name]...)
@@ -1127,6 +1233,10 @@ func (h *PluginHost) InspectDetail(name string) *PluginRecord {
 				rec.Diag = d.diag
 				if d.status == PluginWaiting {
 					rec.State = "waiting"
+				}
+				// client 半激活批准状态（浏览器仅装载已批准；cordis_run 经审批门后批准）
+				if rec.HasClient {
+					rec.ClientApproved = h.IsClientApproved(d.pluginId)
 				}
 			}
 		}

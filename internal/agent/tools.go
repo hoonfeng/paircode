@@ -46,7 +46,11 @@ type Tool struct {
 	SystemTool       bool // ★ 系统内部工具（如历史搜索、委托任务等），不暴露给 LLM agent 选择，前端 UI 隐藏
 	ReadOnly         bool // 只读（不改文件系统）——供并行/免审
 	RequiresApproval bool // 写类工具：需人工确认（UI 接入时用）
-	Enabled          bool // ★ 是否启用（默认 true；按工作区配置可关闭）
+	// DynamicApproval 动态审批判定（可选）：返回 true 时本次调用需走审批门
+	// （与 RequiresApproval 为「或」关系；approveFn 为 nil 的放行路径不触发）。
+	// 用于按参数/状态动态决定是否拦截，如插件 client 半激活首次装载需人工批准。
+	DynamicApproval func(tc ToolCall) bool
+	Enabled         bool // ★ 是否启用（默认 true；按工作区配置可关闭）
 }
 
 // Registry 工具注册表（并发安全）。

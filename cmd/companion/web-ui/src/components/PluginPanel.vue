@@ -57,7 +57,9 @@
           <span class="pp-state" :class="p.state === 'running' ? 'on' : 'off'"></span>
           <span class="pp-name" :title="p.purpose || p.name">{{ p.name }}</span>
           <span class="pp-src" :class="p.source">{{ p.source }}</span>
-          <span v-if="p.hasClient" class="pp-badge" title="含 client 半（浏览器 UI）">UI</span>
+          <span v-if="p.hasClient && p.clientApproved" class="pp-badge" title="含 client 半（浏览器 UI，已批准装载）">UI</span>
+          <span v-else-if="p.hasClient && p.state === 'running'" class="pp-badge pp-badge-warn" title="client 半待激活批准：在对话中用 cordis_run 装载该插件触发审批">UI 待批准</span>
+          <span v-else-if="p.hasClient" class="pp-badge" title="含 client 半（浏览器 UI；装载后需批准）">UI</span>
           <span v-if="p.tools && p.tools.length" class="pp-count" :title="p.tools.join(', ')">{{ p.tools.length }} 工具</span>
           <SvgIcon name="chevron-right" :size="12" class="pp-chevron" :class="{ open: expanded[p.name] }" />
         </div>
@@ -487,6 +489,10 @@ onUnmounted(() => {
   font-size: 9px; padding: 1px 5px; border-radius: 3px;
   background: rgba(198, 120, 221, .15); color: #c678dd;
   flex-shrink: 0;
+}
+.pp-badge-warn {
+  background: rgba(229, 192, 123, .18); color: #e5c07b;
+  cursor: help;
 }
 .pp-count { font-size: 10px; color: var(--text-muted); flex-shrink: 0; }
 .pp-chevron { transition: transform .15s; flex-shrink: 0; }
