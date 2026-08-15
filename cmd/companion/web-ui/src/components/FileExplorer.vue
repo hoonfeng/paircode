@@ -55,6 +55,54 @@
       </div>
     </div>
 
+    <!-- ── 工具集（卷帘：与文件树同区，工作区 .pair/toolsets/） ── -->
+    <div class="ts-divider">
+      <div class="ts-header" @click="toggleTs" title="工具集（工作区内，可折叠）">
+        <SvgIcon name="package" :size="12" class="ts-header-icon" />
+        <span class="divider-label ts-label">工具集</span>
+        <span v-if="toolsets.length" class="ts-count">{{ toolsets.length }}</span>
+        <span class="ts-spacer"></span>
+        <button class="ts-mini-btn" @click.stop="loadToolsets" title="刷新工具集"><SvgIcon name="refresh" :size="11" :class="{ spinning: tsRefreshing }" /></button>
+        <button class="ts-mini-btn" @click.stop="tsBuildOpen = !tsBuildOpen" title="动态构建工具集"><SvgIcon name="plus" :size="12" /></button>
+        <SvgIcon name="chevron-right" :size="11" class="ts-chevron" :class="{ open: tsOpen }" />
+      </div>
+      <div v-if="tsOpen" class="ts-body">
+        <!-- 构建表单 -->
+        <div v-if="tsBuildOpen" class="ts-build">
+          <div class="ts-build-title">动态构建（分析项目 → 模板组合插件 → 固化 .pair/toolsets/）</div>
+          <input v-model="tsForm.name" placeholder="工具集名（如 web-dev；默认 default）" class="ts-input" />
+          <input v-model="tsForm.description" placeholder="用途描述（可选）" class="ts-input" />
+          <input v-model="tsForm.requirement" placeholder="要求（可选）：如「Web 前端脚手架 + 接口调试」" class="ts-input" />
+          <div class="ts-build-foot">
+            <label class="ts-check"><input type="checkbox" v-model="tsForm.overwrite" /> 覆盖同名</label>
+            <button class="ts-btn primary" :disabled="tsBuilding" @click="buildToolset">
+              {{ tsBuilding ? '构建中…' : '构建并固化' }}
+            </button>
+          </div>
+          <div v-if="tsMsg" class="ts-msg" :class="{ err: tsMsgErr }">{{ tsMsg }}</div>
+        </div>
+        <!-- 列表 -->
+        <div v-if="toolsets.length" class="ts-list">
+          <div v-for="ts in toolsets" :key="ts.name + '-' + ts.scope" class="ts-item">
+            <div class="ts-item-head">
+              <span class="ts-item-dot" :class="ts.scope === 'global' ? 'g' : ''"></span>
+              <span class="ts-item-name" :title="ts.description">{{ ts.name }}</span>
+              <span class="ts-item-scope">{{ ts.scope === 'global' ? '全局' : '工作区' }}</span>
+              <span class="ts-item-count">{{ ts.pluginCount }} 插件</span>
+            </div>
+            <div v-if="ts.description" class="ts-item-desc">{{ ts.description }}</div>
+            <div class="ts-item-actions">
+              <button class="ts-btn" @click="exportToolset(ts)">导出</button>
+              <button class="ts-btn danger" @click="removeToolset(ts)">删除</button>
+            </div>
+          </div>
+        </div>
+        <div v-else-if="!tsRefreshing" class="ts-empty">
+          <span>暂无工具集。点 + 动态构建，或到市场安装插件工具集。</span>
+        </div>
+      </div>
+    </div>
+
     <!-- ===== 新建工作区对话框 ===== -->
     <div v-if="showWorkspaceDialog" class="dialog-overlay" @click.self="showWorkspaceDialog = false">
       <div class="dialog-box" style="max-width:420px">
@@ -119,7 +167,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, reactive } from 'vue'
 import { state } from '../main.js'
 import api from '../api.js'
 import FileTreeItem from './FileTreeItem.vue'
@@ -510,10 +558,89 @@ async function loadFileContent(path) {
   }
 }
 
+// ── 工具集（卷帘 section：与文件树同区，工作区 .pair/toolsets/） ──
+const toolsets = ref([])
+const tsRefreshing = ref(false)
+const tsBuilding = ref(false)
+const tsBuildOpen = ref(false)
+const tsMsg = ref('')
+const tsMsgErr = ref(false)
+const tsForm = reactive({ name: '', description: '', requirement: '', overwrite: false })
+const tsOpen = ref(true) // 卷帘默认展开
+try {
+  const saved = localStorage.getItem('paircode-ts-open')
+  if (saved !== null) tsOpen.value = saved === '1'
+} catch {}
+
+async function loadToolsets() {
+  tsRefreshing.value = true
+  try {
+    const list = await api.apiGet('/toolsets')
+    toolsets.value = Array.isArray(list) ? list : []
+  } catch (e) {
+    console.warn('[toolset] 加载失败', e)
+  } finally {
+    tsRefreshing.value = false
+  }
+}
+
+async function buildToolset() {
+  tsBuilding.value = true
+  tsMsg.value = ''
+  tsMsgErr.value = false
+  try {
+    const res = await api.apiPost('/toolsets/build', {
+      name: tsForm.name,
+      description: tsForm.description,
+      requirement: tsForm.requirement,
+      overwrite: tsForm.overwrite,
+    })
+    tsMsg.value = `已构建并固化「${res.name}」（${res.pluginCount} 个插件）`
+    tsForm.name = ''
+    tsForm.description = ''
+    tsForm.requirement = ''
+    tsForm.overwrite = false
+    tsBuildOpen.value = false
+    await loadToolsets()
+  } catch (err) {
+    tsMsgErr.value = true
+    tsMsg.value = '构建失败: ' + (err.message || err)
+  } finally {
+    tsBuilding.value = false
+  }
+}
+
+function exportToolset(ts) {
+  // 下载发布 JSON（可提交 GitHub 发布市场 / toolset_import 导入）
+  const a = document.createElement('a')
+  a.href = `/api/toolsets/export?name=${encodeURIComponent(ts.name)}`
+  a.download = ts.name + '.toolset.json'
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+}
+
+async function removeToolset(ts) {
+  if (!window.confirm(`删除工具集「${ts.name}」（${ts.scope}）？已装载插件将卸载。`)) return
+  try {
+    await api.apiPost('/toolsets/remove', { name: ts.name, scope: ts.scope === 'global' ? 'global' : 'project' })
+    window.$toast?.('已删除工具集 ' + ts.name, 'success')
+    await loadToolsets()
+  } catch (err) {
+    window.$toast?.('删除失败: ' + (err.message || err), 'error')
+  }
+}
+
+function toggleTs() {
+  tsOpen.value = !tsOpen.value
+  try { localStorage.setItem('paircode-ts-open', tsOpen.value ? '1' : '0') } catch {}
+}
+
 // ── 生命周期 ──
 onMounted(() => {
   window.addEventListener('refresh-tree', refreshAll)
   window.addEventListener('refresh-workspace', refreshCurrentWs)
+  loadToolsets()
 })
 onUnmounted(() => {
   window.removeEventListener('refresh-tree', refreshAll)
@@ -609,6 +736,61 @@ onUnmounted(() => {
   cursor: pointer; font-size: 11px; flex: 1; justify-content: center;
 }
 .pa-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+/* ── 工具集（卷帘 section：与文件树同区） ── */
+.ts-divider { border-top: 1px solid var(--border-color); flex-shrink: 0; }
+.ts-header {
+  display: flex; align-items: center; gap: 5px;
+  padding: 5px 8px; cursor: pointer; user-select: none;
+}
+.ts-header:hover { background: var(--bg-hover); }
+.ts-header-icon { color: var(--text-muted); flex-shrink: 0; }
+.ts-label { padding: 0; text-transform: none; letter-spacing: 0; font-size: 11px; }
+.ts-count {
+  font-size: 9px; background: var(--bg-tertiary); color: var(--text-muted);
+  border-radius: 8px; padding: 0 6px; line-height: 14px;
+}
+.ts-spacer { flex: 1; }
+.ts-mini-btn {
+  background: none; border: none; cursor: pointer; color: var(--text-muted);
+  padding: 1px 3px; border-radius: 3px; display: flex; align-items: center;
+}
+.ts-mini-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.ts-chevron { transition: transform .15s; color: var(--text-muted); flex-shrink: 0; }
+.ts-chevron.open { transform: rotate(90deg); }
+.ts-body { padding: 0 8px 8px; display: flex; flex-direction: column; gap: 6px; }
+.ts-build { border: 1px solid var(--border-color); border-radius: 4px; padding: 6px; background: var(--bg-tertiary); display: flex; flex-direction: column; gap: 4px; }
+.ts-build-title { font-size: 10px; color: var(--text-secondary); }
+.ts-input {
+  background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-primary);
+  border-radius: 3px; padding: 3px 6px; font-size: 11px; width: 100%; box-sizing: border-box;
+}
+.ts-input:focus { border-color: var(--accent); outline: none; }
+.ts-build-foot { display: flex; align-items: center; gap: 6px; }
+.ts-check { display: flex; align-items: center; gap: 3px; font-size: 10px; color: var(--text-secondary); white-space: nowrap; }
+.ts-btn {
+  background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-secondary);
+  border-radius: 3px; padding: 2px 8px; font-size: 10px; cursor: pointer;
+}
+.ts-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.ts-btn.primary { border-color: var(--accent); color: var(--accent-light); }
+.ts-btn.danger { border-color: #e06c75; color: #e06c75; }
+.ts-btn:disabled { opacity: .5; cursor: not-allowed; }
+.ts-msg { font-size: 10px; color: var(--accent-light); word-break: break-all; }
+.ts-msg.err { color: #e06c75; }
+.ts-list { display: flex; flex-direction: column; gap: 4px; }
+.ts-item { border: 1px solid var(--border-color); border-radius: 4px; padding: 5px 6px; background: var(--bg-primary); }
+.ts-item-head { display: flex; align-items: center; gap: 5px; }
+.ts-item-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); opacity: .4; flex-shrink: 0; }
+.ts-item-dot.g { background: #4caf50; opacity: 1; }
+.ts-item-name { flex: 1; font-weight: 500; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ts-item-scope { font-size: 9px; color: var(--text-muted); border: 1px solid var(--border-color); border-radius: 3px; padding: 0 4px; flex-shrink: 0; }
+.ts-item-count { font-size: 10px; color: var(--text-muted); flex-shrink: 0; }
+.ts-item-desc { font-size: 10px; color: var(--text-muted); margin-top: 2px; line-height: 1.4; }
+.ts-item-actions { display: flex; gap: 4px; margin-top: 4px; }
+.ts-empty { padding: 10px 4px; text-align: center; color: var(--text-muted); font-size: 11px; }
+.spinning { animation: ts-spin 1s linear infinite; }
+@keyframes ts-spin { to { transform: rotate(360deg); } }
 
 /* ── 对话框样式（复用） ── */
 .dialog-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; display: flex; align-items: center; justify-content: center; }

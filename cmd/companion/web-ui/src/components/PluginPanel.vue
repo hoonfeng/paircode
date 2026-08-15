@@ -85,51 +85,6 @@
       </div>
     </div>
 
-    <!-- 工具集（动态构建/固化/导出/导入） -->
-    <div class="pp-toolsets">
-      <div class="pp-ts-header">
-        <span class="pp-ts-title"><SvgIcon name="package" :size="13" /> 工具集</span>
-        <div class="pp-ts-actions">
-          <button class="pp-icon-btn" @click="loadToolsets" title="刷新工具集"><SvgIcon name="refresh" :size="12" :class="{ spinning: tsRefreshing }" /></button>
-          <button class="pp-icon-btn" @click="showTsBuild = !showTsBuild" title="构建工具集"><SvgIcon name="plus" :size="13" /></button>
-        </div>
-      </div>
-
-      <!-- 构建表单 -->
-      <div v-if="showTsBuild" class="pp-ts-build">
-        <div class="pp-ts-build-title">动态构建工具集（分析项目 → 模板组合生成插件 → 固化到 .pair/toolsets/）</div>
-        <input v-model="tsForm.name" placeholder="工具集名（如 web-dev；默认 default）" class="pp-input" />
-        <input v-model="tsForm.description" placeholder="用途描述（可选）" class="pp-input" />
-        <input v-model="tsForm.requirement" placeholder="要求（可选）：如「Web 前端脚手架 + 接口调试」" class="pp-input" />
-        <div class="pp-ts-build-foot">
-          <label class="pp-check"><input type="checkbox" v-model="tsForm.overwrite" /> 覆盖已固化同名工具集</label>
-          <button class="pp-btn primary" :disabled="tsBuilding" @click="buildToolset">
-            {{ tsBuilding ? '构建中…' : '构建并固化' }}
-          </button>
-        </div>
-        <div v-if="tsMsg" class="pp-new-msg" :class="{ err: tsMsgErr }">{{ tsMsg }}</div>
-      </div>
-
-      <!-- 工具集列表 -->
-      <div v-if="toolsets.length" class="pp-ts-list">
-        <div v-for="ts in toolsets" :key="ts.name + '-' + ts.scope" class="pp-ts-item">
-          <div class="pp-ts-item-row">
-            <span class="pp-state" :class="ts.scope === 'global' ? 'on' : ''"></span>
-            <span class="pp-name" :title="ts.description">{{ ts.name }}</span>
-            <span class="pp-src">{{ ts.scope === 'global' ? '全局' : '工作区' }}</span>
-            <span class="pp-count">{{ ts.pluginCount }} 插件</span>
-          </div>
-          <div class="pp-ts-item-desc">{{ ts.description }}</div>
-          <div class="pp-ts-item-actions">
-            <button class="pp-btn" @click="exportToolset(ts)">导出</button>
-            <button class="pp-btn danger" @click="removeToolset(ts)">删除</button>
-          </div>
-        </div>
-      </div>
-      <div v-else-if="!tsRefreshing" class="pp-ts-empty">
-        暂无工具集。点 + 构建（分析项目自动组合插件），或到市场安装插件工具集。
-      </div>
-    </div>
   </div>
 </template>
 
@@ -272,78 +227,8 @@ onMounted(() => {
   setPanelMount(onPanelsChanged)
   startPolling()
   refresh()
-  loadToolsets()
 })
 
-// ─── 工具集管理 ─────────────────────────────────────────────
-const toolsets = ref([])
-const tsRefreshing = ref(false)
-const tsBuilding = ref(false)
-const showTsBuild = ref(false)
-const tsMsg = ref('')
-const tsMsgErr = ref(false)
-const tsForm = reactive({ name: '', description: '', requirement: '', overwrite: false })
-
-async function loadToolsets() {
-  tsRefreshing.value = true
-  try {
-    const list = await api.apiGet('/toolsets')
-    toolsets.value = Array.isArray(list) ? list : []
-  } catch (e) {
-    console.warn('[toolset] 加载失败', e)
-  } finally {
-    tsRefreshing.value = false
-  }
-}
-
-async function buildToolset() {
-  tsBuilding.value = true
-  tsMsg.value = ''
-  tsMsgErr.value = false
-  try {
-    const res = await api.apiPost('/toolsets/build', {
-      name: tsForm.name,
-      description: tsForm.description,
-      requirement: tsForm.requirement,
-      overwrite: tsForm.overwrite,
-    })
-    tsMsg.value = `已构建并固化「${res.name}」（${res.pluginCount} 个插件）`
-    tsForm.name = ''
-    tsForm.description = ''
-    tsForm.requirement = ''
-    tsForm.overwrite = false
-    showTsBuild.value = false
-    await loadToolsets()
-    await refresh() // 插件列表同步（工具集插件已装载）
-  } catch (err) {
-    tsMsgErr.value = true
-    tsMsg.value = '构建失败: ' + (err.message || err)
-  } finally {
-    tsBuilding.value = false
-  }
-}
-
-function exportToolset(ts) {
-  // 下载发布 JSON（可提交 GitHub 发布市场 / toolset_import 导入）
-  const a = document.createElement('a')
-  a.href = `/api/toolsets/export?name=${encodeURIComponent(ts.name)}`
-  a.download = ts.name + '.toolset.json'
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-}
-
-async function removeToolset(ts) {
-  if (!window.confirm(`删除工具集「${ts.name}」（${ts.scope}）？已装载插件将卸载。`)) return
-  try {
-    await api.apiPost('/toolsets/remove', { name: ts.name, scope: ts.scope === 'global' ? 'global' : 'project' })
-    window.$toast?.('已删除工具集 ' + ts.name, 'success')
-    await loadToolsets()
-    await refresh()
-  } catch (err) {
-    window.$toast?.('删除失败: ' + (err.message || err), 'error')
-  }
-}
 onUnmounted(() => {
   stopPolling()
   setPanelMount(null)
