@@ -1011,7 +1011,16 @@ func harnessSystemPrompt(roots []string) string {
 		"- 不要连续 3 轮只输出分析文本而不调用任何工具。\n" +
 		"- 不确定时宁可声明完成并向用户汇报，让用户决定是否继续。\n" +
 		"- 命令阻塞预防：长时间运行/服务类命令用 bash 后台执行（& 或 nohup），不要阻塞等待。\n" +
-		"- 完成后输出 Markdown 总结：改了哪些文件、如何验证、遗留问题。\n"
+		"- 完成后输出 Markdown 总结：改了哪些文件、如何验证、遗留问题。\n\n" +
+		"# 插件管理（cordis_* 工具）\n" +
+		"- 本环境支持动态插件：插件 = { name, apply(ctx) } 的 JS 代码（goja 沙箱执行），\n" +
+		"  可注册新工具、监听事件、提供定时器。链路：cordis_define 登记（语法预检）→\n" +
+		"  cordis_run 装载（apply 注册工具）→ cordis_stop 停止并回收其贡献 →\n" +
+		"  cordis_undefine 忘掉定义；cordis_inspect 查看全部插件/定义/贡献归属。\n" +
+		"- 插件 apply(ctx) 可用的 ctx 能力：ctx.tools.register 注册工具、ctx.on 订阅事件、\n" +
+		"  ctx.effect 注册清理回调、ctx.provide 提供服务、ctx.timeout/ctx.interval 定时器\n" +
+		"  （定时/事件/工具回调均跨 goroutine 安全，goja 执行锁保护）。\n" +
+		"- 需要重复使用的能力优先沉淀为插件工具（一次定义，多会话复用）。\n"
 }
 
 // fullSystemPrompt 完整版系统提示词（WB_FULL_TOOLS=1 恢复全量工具时使用）。

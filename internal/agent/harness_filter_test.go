@@ -19,6 +19,10 @@ func mkHarnessReg() *Registry {
 	for _, n := range []string{"update_tasks", "ask_user", "generate_commit_message"} {
 		reg.Register(&Tool{Name: n, Handler: noopHandler, SystemTool: true})
 	}
+	// 插件管理工具集（cordis_*，自举链路保留）
+	for _, n := range []string{"cordis_inspect", "cordis_define", "cordis_run", "cordis_stop", "cordis_undefine"} {
+		reg.Register(&Tool{Name: n, Handler: noopHandler, SystemTool: true})
+	}
 	// pair 独有工具（应被移除）
 	for _, n := range []string{"read_file", "write_file", "edit_file", "multi_edit", "list_files", "run_command",
 		"codegraph_search", "memory_read", "project_info_write", "git_diff", "debug_inject_log",
@@ -147,7 +151,7 @@ func TestPromptTrimmedInHarnessMode(t *testing.T) {
 		}
 	}
 	// 协议描述保留
-	for _, keep := range []string{"update_tasks", "generate_commit_message", "read", "edit", "write", "bash", "web_search"} {
+	for _, keep := range []string{"update_tasks", "generate_commit_message", "read", "edit", "write", "bash", "web_search", "cordis_define", "cordis_run"} {
 		if !strings.Contains(p, keep) {
 			t.Errorf("harness 精简提示词缺失协议/保留工具描述 %q", keep)
 		}

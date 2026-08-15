@@ -25,6 +25,9 @@ func HarnessOnlyTools() bool {
 //  ② 对话协议基础设施：update_tasks（任务追踪，前端任务面板依赖）、
 //     ask_user（提问）、generate_commit_message（完成标记，Loop 读取 CommitMessage）——
 //     属循环协议而非 pair 独有编码能力，保留以维持 agent 循环契约。
+//  ③ 插件管理工具集（cordis_*）：插件即工具的登记/装载/停止/回收/查看——
+//     自举链路关键能力（用 agent 开发 agent 时需能动态注册新工具），
+//     与 harness 的 "tools are plugins" 哲学一致，保留。
 var HarnessAlignedToolNames = map[string]bool{
 	// harness 原生工具集
 	"read": true, "write": true, "edit": true,
@@ -37,6 +40,12 @@ var HarnessAlignedToolNames = map[string]bool{
 	"update_tasks":           true,
 	"ask_user":               true,
 	"generate_commit_message": true,
+	// 插件管理（cordis_*）：登记/装载/停止/回收/查看 JS 动态插件
+	"cordis_inspect":  true,
+	"cordis_define":   true,
+	"cordis_run":      true,
+	"cordis_stop":     true,
+	"cordis_undefine": true,
 }
 
 // ApplyHarnessToolFilter 从注册表移除不在保留清单内的工具（pair 独有工具），
