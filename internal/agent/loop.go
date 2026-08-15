@@ -1013,13 +1013,16 @@ func harnessSystemPrompt(roots []string) string {
 		"- 命令阻塞预防：长时间运行/服务类命令用 bash 后台执行（& 或 nohup），不要阻塞等待。\n" +
 		"- 完成后输出 Markdown 总结：改了哪些文件、如何验证、遗留问题。\n\n" +
 		"# 插件管理（cordis_* 工具）\n" +
-		"- 本环境支持动态插件：插件 = { name, apply(ctx) } 的 JS 代码（goja 沙箱执行），\n" +
-		"  可注册新工具、监听事件、提供定时器。链路：cordis_define 登记（语法预检）→\n" +
-		"  cordis_run 装载（apply 注册工具）→ cordis_stop 停止并回收其贡献 →\n" +
-		"  cordis_undefine 忘掉定义；cordis_inspect 查看全部插件/定义/贡献归属。\n" +
-		"- 插件 apply(ctx) 可用的 ctx 能力：ctx.tools.register 注册工具、ctx.on 订阅事件、\n" +
-		"  ctx.effect 注册清理回调、ctx.provide 提供服务、ctx.timeout/ctx.interval 定时器\n" +
-		"  （定时/事件/工具回调均跨 goroutine 安全，goja 执行锁保护）。\n" +
+		"- 本环境支持动态插件（goja 沙箱执行），两种形态：① 对象 { name, apply(ctx, config), inject? }；\n" +
+		"  ② 函数 (ctx, config) => void（cordis 生态惯例，函数名作插件名）。链路：\n" +
+		"  cordis_define 登记（语法预检）→ cordis_run 装载（apply 注册工具，可选 config 透传第二参）→\n" +
+		"  cordis_stop 停止并回收其贡献 → cordis_undefine 忘掉定义；cordis_inspect 查看全部插件/定义/贡献归属。\n" +
+		"- 插件 ctx 能力：ctx.tools.register 注册工具、ctx.on 订阅事件、ctx.effect 注册清理回调、\n" +
+		"  ctx.provide 提供服务、ctx.timeout/ctx.interval 定时器（定时/事件/工具回调跨 goroutine 安全）。\n" +
+		"- 服务依赖：inject: ['fs','web','bash','logger','timer'] 声明硬依赖（宿主缺失会明确报错，\n" +
+		"  可选服务请用 ctx.get(name) 判 undefined）。声明后可用：ctx.fs（工作区内文件读写/存在/列出/stat）、\n" +
+		"  ctx.web.fetch（HTTP GET → {ok,status,text}）、ctx.bash.exec（shell 命令 → {output,error}）、\n" +
+		"  ctx.logger(scope)（带插件标签日志）、ctx.timer（timeout/interval）。\n" +
 		"- 需要重复使用的能力优先沉淀为插件工具（一次定义，多会话复用）。\n"
 }
 

@@ -777,3 +777,187 @@ func TestAgentBaseInitPlugins(t *testing.T) {
 		t.Fatalf("workspaceRoot = %v, want %v", v, dir)
 	}
 }
+
+// ─── P0：函数形态插件 + config + inject 服务（对齐 harness 生态）────────────
+
+// TestJSFunctionFormPlugin cordis 生态函数形态插件（单文件）：
+// return (ctx, config) => void；函数名作插件名；config 透传 apply 第二参。
+func TestJSFunctionFormPlugin(t *testing.T) {
+	reg := NewRegistry()
+	host := NewPluginHost(reg, nil, `C:\ws`)
+	id, err := host.DefineJS(`
+return function myFnPlugin(ctx, config) {
+  ctx.tools.register({
+    name: 'fn_greet',
+    description: 'function-form plugin tool',
+    parameters: { type: 'object', properties: {} },
+    execute: () => ({ text: 'fn plugin, cfg=' + (config ? config.greeting : 'none') })
+  })
+}`, "func form")
+	if err != nil {
+		t.Fatalf("DefineJS: %v", err)
+	}
+	def, _ := host.GetJSDef(id)
+	def.config = map[string]any{"greeting": "hi"}
+	if err := host.LoadJSDynamic(def); err != nil {
+		t.Fatalf("LoadJSDynamic: %v", err)
+	}
+	if host.State("myFnPlugin") != PluginRunning {
+		t.Fatalf("函数插件名应为 myFnPlugin, got %v", host.State("myFnPlugin"))
+	}
+	out, err := reg.Execute(context.Background(), "fn_greet", `{}`)
+	if err != nil {
+		t.Fatalf("fn_greet: %v", err)
+	}
+	if !strings.Contains(out, "cfg=hi") {
+		t.Fatalf("config 未透传, out=%q", out)
+	}
+	// 函数形态插件也支持 fn.inject 静态属性
+	id2, _ := host.DefineJS(`
+function injFn(ctx) { ctx.tools.register({ name: 'fn_inj_ok', description: 'inj', execute: () => ({ text: 'inj-ok' }) }) }
+injFn.inject = ['logger']
+return injFn`, "fn inject")
+	def2, _ := host.GetJSDef(id2)
+	if err := host.LoadJSDynamic(def2); err != nil {
+		t.Fatalf("fn.inject 声明应支持: %v", err)
+	}
+	if host.State("injFn") != PluginRunning {
+		t.Fatalf("injFn 应 running")
+	}
+}
+
+// TestJSPluginInjectValidation inject 声明：缺失服务 → 明确报错（含可用服务清单
+// 与 ctx.get 引导）；声明存在服务 → 装载成功。
+func TestJSPluginInjectValidation(t *testing.T) {
+	host := NewPluginHost(NewRegistry(), nil, `C:\ws`)
+	// ① 声明不存在的服务 → 报错并引导
+	id, _ := host.DefineJS(`
+return {
+  name: 'inj-bad',
+  inject: ['database'],
+  apply(ctx) {}
+}`, "inj")
+	def, _ := host.GetJSDef(id)
+	err := host.LoadJSDynamic(def)
+	if err == nil {
+		t.Fatalf("inject 缺失应报错")
+	}
+	if !strings.Contains(err.Error(), "database") || !strings.Contains(err.Error(), "ctx.get") {
+		t.Fatalf("报错应含缺失服务与 ctx.get 引导, got %v", err)
+	}
+	// ② 声明 fs（宿主提供）→ 装载成功且 ctx.fs 注入
+	id2, _ := host.DefineJS(`
+return {
+  name: 'inj-ok',
+  inject: ['fs'],
+  apply(ctx) {
+    if (typeof ctx.fs === 'undefined' || ctx.fs === null) throw new Error('fs 未注入')
+  }
+}`, "inj-ok")
+	def2, _ := host.GetJSDef(id2)
+	if err := host.LoadJSDynamic(def2); err != nil {
+		t.Fatalf("inject fs 应成功: %v", err)
+	}
+	if host.State("inj-ok") != PluginRunning {
+		t.Fatalf("inj-ok 应 running")
+	}
+}
+
+// TestJSPluginCtxFSService ctx.fs 服务：读写/追加/存在/列出 + 越界拦截。
+func TestJSPluginCtxFSService(t *testing.T) {
+	root := t.TempDir()
+	reg := NewRegistry()
+	host := NewPluginHost(reg, nil, root)
+	id, err := host.DefineJS(`
+return {
+  name: 'fs-plugin',
+  inject: ['fs'],
+  apply(ctx) {
+    ctx.fs.mkdir('notes', true)
+    ctx.fs.writeFile('notes/hello.txt', 'hello from plugin')
+    const content = ctx.fs.readFile('notes/hello.txt')
+    if (content !== 'hello from plugin') throw new Error('readFile mismatch: ' + content)
+    if (!ctx.fs.exists('notes/hello.txt')) throw new Error('exists should be true')
+    ctx.fs.appendFile('notes/hello.txt', '!')
+    if (ctx.fs.readFile('notes/hello.txt') !== 'hello from plugin!') throw new Error('appendFile mismatch')
+    const entries = ctx.fs.readdir('notes')
+    if (entries.length !== 1 || entries[0] !== 'hello.txt') throw new Error('readdir mismatch: ' + JSON.stringify(entries))
+    const st = ctx.fs.stat('notes/hello.txt')
+    if (!st || st.size <= 0 || st.isDir) throw new Error('stat mismatch: ' + JSON.stringify(st))
+    ctx.tools.register({
+      name: 'fs_probe',
+      description: 'fs plugin ok',
+      parameters: { type: 'object', properties: {} },
+      execute: () => ({ text: 'fs-ok' })
+    })
+  }
+}`, "fs svc")
+	if err != nil {
+		t.Fatalf("DefineJS: %v", err)
+	}
+	def, _ := host.GetJSDef(id)
+	if err := host.LoadJSDynamic(def); err != nil {
+		t.Fatalf("LoadJSDynamic: %v", err)
+	}
+	out, err := reg.Execute(context.Background(), "fs_probe", `{}`)
+	if err != nil || !strings.Contains(out, "fs-ok") {
+		t.Fatalf("fs_probe: out=%q err=%v", out, err)
+	}
+	// 落盘验证
+	if b, err := os.ReadFile(filepath.Join(root, "notes", "hello.txt")); err != nil || string(b) != "hello from plugin!" {
+		t.Fatalf("落盘内容 = %q err=%v", b, err)
+	}
+	// 越界写入被拦截（apply 内 try/catch 捕获，插件仍装载成功）
+	id2, _ := host.DefineJS(`
+return {
+  name: 'fs-escape',
+  inject: ['fs'],
+  apply(ctx) {
+    try {
+      ctx.fs.writeFile('C:/Windows/evil.txt', 'x')
+      throw new Error('escape-not-blocked')
+    } catch (e) {
+      if (String(e).includes('escape-not-blocked')) throw e
+    }
+  }
+}`, "escape")
+	def2, _ := host.GetJSDef(id2)
+	if err := host.LoadJSDynamic(def2); err != nil {
+		t.Fatalf("越界应被拦截且插件装载成功: %v", err)
+	}
+}
+
+// TestJSPluginCtxBashLogger ctx.bash.exec 与 ctx.logger 服务冒烟。
+func TestJSPluginCtxBashLogger(t *testing.T) {
+	root := t.TempDir()
+	reg := NewRegistry()
+	host := NewPluginHost(reg, nil, root)
+	id, err := host.DefineJS(`
+return {
+  name: 'bash-logger-plugin',
+  inject: ['bash', 'logger'],
+  apply(ctx) {
+    const log = ctx.logger('demo')
+    log.info('plugin booting')
+    const res = ctx.bash.exec('echo plugin-bash-ok')
+    if (!res.output.includes('plugin-bash-ok')) throw new Error('bash exec mismatch: ' + JSON.stringify(res))
+    ctx.tools.register({
+      name: 'bash_probe',
+      description: 'bash plugin ok',
+      parameters: { type: 'object', properties: {} },
+      execute: () => ({ text: 'bash-ok' })
+    })
+  }
+}`, "bash+logger")
+	if err != nil {
+		t.Fatalf("DefineJS: %v", err)
+	}
+	def, _ := host.GetJSDef(id)
+	if err := host.LoadJSDynamic(def); err != nil {
+		t.Fatalf("LoadJSDynamic: %v", err)
+	}
+	out, err := reg.Execute(context.Background(), "bash_probe", `{}`)
+	if err != nil || !strings.Contains(out, "bash-ok") {
+		t.Fatalf("bash_probe: out=%q err=%v", out, err)
+	}
+}

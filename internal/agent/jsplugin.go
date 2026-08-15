@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -38,13 +39,16 @@ import (
 
 // jsPluginDef 一个 JS 动态插件定义（cordis_define 登记；进程内存，不落盘）。
 type jsPluginDef struct {
-	id        string    // dyn-<n>
-	lang      string    // 源码语言 "js" | "ts"（登记时探测/指定；code 存转译后 JS）
-	name      string    // 插件名（默认取代码返回的 name）
-	purpose   string    // 用途说明
-	code      string    // host 半代码（async 函数体，return 插件对象）
-	version   string    // "dyn-<n>"
-	provides  []string  // 提供服务的键（插件运行时从 ctx.provide 收集）
+	id        string         // dyn-<n>
+	lang      string         // 源码语言 "js" | "ts"（登记时探测/指定；code 存转译后 JS）
+	name      string         // 插件名（默认取代码返回的 name；函数形态取函数名或 id）
+	purpose   string         // 用途说明
+	code      string         // host 半代码（async 函数体，return 插件对象/函数）
+	version   string         // "dyn-<n>"
+	provides  []string       // 提供服务的键（插件运行时从 ctx.provide 收集）
+	inject    []string       // 插件声明的硬依赖服务（apply 前校验宿主是否提供）
+	config    map[string]any // 插件配置（cordis_run 传入，apply(ctx, config) 第二参）
+	isFunc    bool           // 函数形态插件（export 为 (ctx, config) => void）
 	createdAt time.Time
 }
 
@@ -118,7 +122,7 @@ func (p *jsPluginAdapter) cleanupJS() {
 // Name 实现 Plugin。
 func (p *jsPluginAdapter) Name() string { return p.def.name }
 
-// Apply 实现 Plugin：创建绑定本插件上下文的 ctx 沙箱对象，调用 JS apply。
+// Apply 实现 Plugin：创建绑定本插件上下文的 ctx 沙箱对象，调用 JS apply(ctx, config)。
 func (p *jsPluginAdapter) Apply(pc *PluginContext) error {
 	ctxObj, err := p.buildContextObject(pc)
 	if err != nil {
@@ -126,7 +130,12 @@ func (p *jsPluginAdapter) Apply(pc *PluginContext) error {
 	}
 	// 插件卸载时清理活动 timer + JS 侧资源（防 goroutine/ticker/服务泄漏）
 	pc.Effect(func() { p.cleanupJS() })
-	_, callErr := p.applyFn(goja.Undefined(), ctxObj)
+	// apply(ctx, config)：config 为 cordis_run 传入的插件配置（无则 undefined）
+	configVal := goja.Undefined()
+	if p.def.config != nil {
+		configVal = p.vm.ToValue(p.def.config)
+	}
+	_, callErr := p.applyFn(goja.Undefined(), ctxObj, configVal)
 	if callErr != nil {
 		return fmt.Errorf("JS 插件 %s apply 执行失败: %v", p.def.name, jsErrorText(callErr))
 	}
@@ -308,7 +317,231 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 	appObj.Set("workspaceRoot", pc.WorkspaceRoot)
 	ctxObj.Set("app", appObj)
 
+	// ★ 按 inject 声明注入服务属性（对齐 harness：只读声明过的服务，
+	//   可选服务用 ctx.get(name) 判 undefined；未声明即访问为 undefined）
+	for _, s := range p.def.inject {
+		switch s {
+		case "fs":
+			ctxObj.Set("fs", p.buildFSService(pc))
+		case "web":
+			ctxObj.Set("web", p.buildWebService(pc))
+		case "bash":
+			ctxObj.Set("bash", p.buildBashService(pc))
+		case "logger":
+			ctxObj.Set("logger", p.buildLoggerService())
+		case "timer":
+			ctxObj.Set("timer", p.buildTimerService(ctxObj))
+		}
+	}
+
 	return ctxObj, nil
+}
+
+// ─── ctx 服务实现（inject 声明后按属性可用） ──────────────
+
+// buildFSService 受限文件服务（ctx.fs）：读写限定在工作区根内
+// （resolvePath 越界拦截）。方法同步实现——await 同步值直接通过，
+// cordis 插件写法 `await ctx.fs.readFile(...)` 兼容。
+func (p *jsPluginAdapter) buildFSService(pc *PluginContext) goja.Value {
+	vm := p.vm
+	root := pc.WorkspaceRoot
+	resolve := func(path string) (string, error) {
+		if root == "" {
+			return "", fmt.Errorf("ctx.fs: 工作区根为空，无法解析路径 %q", path)
+		}
+		return resolvePath(root, path)
+	}
+	fs := vm.NewObject()
+	fs.Set("readFile", func(call goja.FunctionCall) goja.Value {
+		full, err := resolve(call.Argument(0).String())
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		b, err := os.ReadFile(full)
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return vm.ToValue(string(b))
+	})
+	fs.Set("writeFile", func(call goja.FunctionCall) goja.Value {
+		full, err := resolve(call.Argument(0).String())
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		if err := os.WriteFile(full, []byte(call.Argument(1).String()), 0o644); err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return goja.Undefined()
+	})
+	fs.Set("appendFile", func(call goja.FunctionCall) goja.Value {
+		full, err := resolve(call.Argument(0).String())
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		f, err := os.OpenFile(full, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		if _, err := f.WriteString(call.Argument(1).String()); err != nil {
+			f.Close()
+			panic(vm.NewGoError(err))
+		}
+		f.Close()
+		return goja.Undefined()
+	})
+	fs.Set("exists", func(call goja.FunctionCall) goja.Value {
+		full, err := resolve(call.Argument(0).String())
+		if err != nil {
+			return vm.ToValue(false) // 越界视为不存在
+		}
+		return vm.ToValue(pathExists(full))
+	})
+	fs.Set("readdir", func(call goja.FunctionCall) goja.Value {
+		full, err := resolve(call.Argument(0).String())
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		entries, err := os.ReadDir(full)
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		names := make([]string, 0, len(entries))
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		return vm.ToValue(names)
+	})
+	fs.Set("stat", func(call goja.FunctionCall) goja.Value {
+		full, err := resolve(call.Argument(0).String())
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		fi, err := os.Stat(full)
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return vm.ToValue(map[string]any{
+			"name":  fi.Name(),
+			"size":  fi.Size(),
+			"isDir": fi.IsDir(),
+			"mtime": fi.ModTime().Format(time.RFC3339),
+		})
+	})
+	fs.Set("mkdir", func(call goja.FunctionCall) goja.Value {
+		full, err := resolve(call.Argument(0).String())
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		recursive := call.Argument(1).ToBoolean()
+		if recursive {
+			err = os.MkdirAll(full, 0o755)
+		} else {
+			err = os.Mkdir(full, 0o755)
+		}
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return goja.Undefined()
+	})
+	fs.Set("rm", func(call goja.FunctionCall) goja.Value {
+		full, err := resolve(call.Argument(0).String())
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		recursive := call.Argument(1).ToBoolean()
+		if recursive {
+			err = os.RemoveAll(full)
+		} else {
+			err = os.Remove(full)
+		}
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return goja.Undefined()
+	})
+	return vm.ToValue(fs)
+}
+
+// buildWebService HTTP 服务（ctx.web.fetch）：GET 抓取 URL，
+// 返回 { ok, status, text }（60s 超时，最大 4MB）。
+func (p *jsPluginAdapter) buildWebService(pc *PluginContext) goja.Value {
+	vm := p.vm
+	web := vm.NewObject()
+	web.Set("fetch", func(call goja.FunctionCall) goja.Value {
+		url := call.Argument(0).String()
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		body, status, err := httpGetBytes(ctx, url, 4<<20)
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return vm.ToValue(map[string]any{
+			"ok":     status >= 200 && status < 300,
+			"status": status,
+			"text":   string(body),
+		})
+	})
+	return vm.ToValue(web)
+}
+
+// buildBashService 进程服务（ctx.bash.exec）：执行 shell 命令
+// （复用 runShellWithTimeout：120s 超时 + 输出截断），返回 { output, error }。
+// 第二参可选 cwd（相对工作区根解析）。
+func (p *jsPluginAdapter) buildBashService(pc *PluginContext) goja.Value {
+	vm := p.vm
+	bsh := vm.NewObject()
+	bsh.Set("exec", func(call goja.FunctionCall) goja.Value {
+		cmd := call.Argument(0).String()
+		dir := pc.WorkspaceRoot
+		// 第二参可选 cwd：undefined/null/空串时保持工作区根
+		if d := call.Argument(1); d != nil && !goja.IsUndefined(d) && !goja.IsNull(d) && d.String() != "" {
+			if resolved, err := resolvePath(pc.WorkspaceRoot, d.String()); err == nil {
+				dir = resolved
+			}
+		}
+		out, exitErr := runShellWithTimeout(context.Background(), cmd, dir)
+		res := map[string]any{"output": out}
+		if exitErr != "" {
+			res["error"] = exitErr
+		}
+		return vm.ToValue(res)
+	})
+	return vm.ToValue(bsh)
+}
+
+// buildLoggerService 日志服务（ctx.logger(scope)）：cordis 语义，
+// 返回带 scope 的 logger（log/info/warn/debug/error），写透宿主 stdout。
+func (p *jsPluginAdapter) buildLoggerService() goja.Value {
+	vm := p.vm
+	loggerFn := func(call goja.FunctionCall) goja.Value {
+		scope := call.Argument(0).String()
+		tag := fmt.Sprintf("[js-plugin:%s:%s]", p.def.id, scope)
+		l := vm.NewObject()
+		mk := func(level string) func(goja.FunctionCall) goja.Value {
+			return func(call goja.FunctionCall) goja.Value {
+				parts := make([]string, len(call.Arguments))
+				for i, a := range call.Arguments {
+					parts[i] = jsConsoleArg(a)
+				}
+				log.Printf("%s %s", tag, strings.Join(parts, " "))
+				return goja.Undefined()
+			}
+		}
+		for _, m := range []string{"log", "info", "warn", "debug", "error"} {
+			l.Set(m, mk(m))
+		}
+		return l
+	}
+	return vm.ToValue(loggerFn)
+}
+
+// buildTimerService 定时器服务（ctx.timer）：复用 ctx.timeout/ctx.interval。
+func (p *jsPluginAdapter) buildTimerService(ctxObj *goja.Object) goja.Value {
+	vm := p.vm
+	t := vm.NewObject()
+	t.Set("timeout", ctxObj.Get("timeout"))
+	t.Set("interval", ctxObj.Get("interval"))
+	return vm.ToValue(t)
 }
 
 // ─── 沙箱创建与求值 ────────────────────────────────────────
@@ -435,6 +668,12 @@ func evalJSPlugin(vm *goja.Runtime, code, id string) (*goja.Object, error) {
 
 // LoadJSDynamic 求值并装载一个 JS 动态插件（对齐 cordis_run 的 host 半）。
 // def 由 cordis_define 登记；装载后插件立即 apply（注册工具等）。
+//
+// ★ 插件形态（对齐 harness isPlugin，兼容 cordis 生态）：
+//   - 对象形态：return { name, apply(ctx, config), inject?: [...] }（apply 必须）
+//   - 函数形态：return (ctx, config) => void —— cordis 生态惯例
+//     （module.exports = function(ctx, config) {}）；函数名作插件名，匿名用 def.id；
+//     也支持 fn.inject = [...] 静态属性声明硬依赖。
 func (h *PluginHost) LoadJSDynamic(def *jsPluginDef) error {
 	if def == nil || strings.TrimSpace(def.code) == "" {
 		return fmt.Errorf("插件 %s: 代码为空", def.id)
@@ -445,17 +684,50 @@ func (h *PluginHost) LoadJSDynamic(def *jsPluginDef) error {
 		return err
 	}
 
-	nameVal := obj.Get("name")
-	applyVal := obj.Get("apply")
-	if nameVal == nil || nameVal.String() == "" {
-		return fmt.Errorf("插件 %s: 缺少 name 字段（必须 return { name, apply(ctx) }）", def.id)
-	}
-	applyFn, ok := goja.AssertFunction(applyVal)
-	if !ok {
-		return fmt.Errorf("插件 %s: apply 必须是函数", def.id)
+	var applyFn goja.Callable
+	name := ""
+	if fn, ok := goja.AssertFunction(obj); ok {
+		// 函数形态插件
+		applyFn = fn
+		def.isFunc = true
+		if nv := obj.Get("name"); nv != nil && nv.String() != "" {
+			name = nv.String()
+		} else if def.name != "" {
+			name = def.name
+		} else {
+			name = def.id // 匿名函数插件名 = dyn id
+		}
+	} else {
+		// 对象形态插件
+		nameVal := obj.Get("name")
+		applyVal := obj.Get("apply")
+		if nameVal == nil || nameVal.String() == "" {
+			return fmt.Errorf("插件 %s: 缺少 name 字段（对象形态必须 return { name, apply(ctx, config) }；或直接 return 函数 (ctx, config) => void）", def.id)
+		}
+		applyFn, ok = goja.AssertFunction(applyVal)
+		if !ok {
+			return fmt.Errorf("插件 %s: apply 必须是函数", def.id)
+		}
+		name = nameVal.String()
 	}
 
-	name := nameVal.String()
+	// inject 声明解析（对象/函数形态统一读 obj.inject 属性）
+	if inj := obj.Get("inject"); inj != nil && !goja.IsUndefined(inj) && !goja.IsNull(inj) {
+		if arr, ok := inj.Export().([]any); ok {
+			def.inject = def.inject[:0]
+			for _, it := range arr {
+				if s, ok := it.(string); ok && s != "" {
+					def.inject = append(def.inject, s)
+				}
+			}
+		}
+	}
+	// ★ 校验硬依赖：声明过的服务宿主必须提供；缺失明确报错引导
+	//（对齐 harness：inject 是硬依赖会等待；可选服务请用 ctx.get(name) 判 undefined）
+	if err := h.checkInjects(def); err != nil {
+		return err
+	}
+
 	def.name = name
 	if def.version == "" {
 		def.version = def.id
@@ -474,6 +746,49 @@ func (h *PluginHost) LoadJSDynamic(def *jsPluginDef) error {
 		return err
 	}
 	return h.Load(name)
+}
+
+// ─── inject 硬依赖校验 ────────────────────────────────────
+
+// checkInjects 校验插件声明的 inject 硬依赖：宿主必须提供服务。
+// 对齐 harness 语义：inject 是硬依赖；可选服务用 ctx.get(name) 并判 undefined。
+func (h *PluginHost) checkInjects(def *jsPluginDef) error {
+	if len(def.inject) == 0 {
+		return nil
+	}
+	var missing []string
+	for _, s := range def.inject {
+		if !h.hasService(s) {
+			missing = append(missing, s)
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	return fmt.Errorf(
+		"插件 %s 声明了 inject: %v，但宿主未提供服务: %v。可用服务: %v。可选服务请改用 ctx.get(%q) 并判 undefined",
+		def.id, def.inject, missing, h.availableServices(), missing[0])
+}
+
+// hasService 判断宿主是否提供某服务（静态服务键 + 动态 ctx.provide 服务）。
+func (h *PluginHost) hasService(name string) bool {
+	switch name {
+	case "fs", "web", "bash", "logger", "timer", "tools", "events", "store", "app", "workspaceRoot":
+		return true
+	}
+	return h.ctx.Get(name) != nil
+}
+
+// availableServices 宿主可用服务清单（供报错引导/文档展示）。
+func (h *PluginHost) availableServices() []string {
+	names := []string{"fs", "web", "bash", "logger", "timer", "tools", "events", "store", "app", "workspaceRoot"}
+	h.ctx.servicesMu.RLock()
+	for n := range h.ctx.services {
+		names = append(names, n)
+	}
+	h.ctx.servicesMu.RUnlock()
+	sort.Strings(names)
+	return names
 }
 
 // ─── harness 全局注入 ─────────────────────────────────────

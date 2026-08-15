@@ -15,6 +15,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -38,10 +39,10 @@ func RegisterCordisTools(registry *Registry, host *PluginHost, root string) {
 
 	registry.Register(&Tool{
 		Name:        "cordis_define",
-		Description: "登记一个 JS/TS 动态插件定义（语法预检，不运行）。code 是 async 函数体：return { name, apply(ctx) }，apply(ctx) 中可用 ctx.tools.register 注册工具、ctx.systemPrompt.section 贡献提示、ctx.on 监听事件、ctx.provide 提供服务。TS 源码（含 interface/type 注解）由内置编译器自动转译，也可用 language 显式指定。返回 dyn id 供 cordis_run/stop/undefine 使用。",
+		Description: "登记一个 JS/TS 动态插件定义（语法预检，不运行）。code 是 async 函数体，支持两种形态：① 对象形态 return { name, apply(ctx, config), inject? }；② 函数形态 return (ctx, config) => void（cordis 生态惯例，函数名作插件名）。apply 中可用 ctx.tools.register 注册工具、ctx.systemPrompt.section 贡献提示、ctx.on 监听事件、ctx.provide 提供服务；inject: ['fs','web','bash','logger','timer',...] 声明硬依赖（宿主缺失会明确报错）。TS 源码（含 interface/type 注解）由内置编译器自动转译。返回 dyn id 供 cordis_run/stop/undefine 使用。",
 		Category:    "system",
 		Parameters: objSchema(map[string]any{
-			"code":     strProp("插件 host 半代码（JS 或 TS，async 函数体，return { name, apply(ctx) }）。可访问全局：ctx/harness/console/btoa/atob/TextEncoder/TextDecoder。"),
+			"code":     strProp("插件 host 半代码（JS 或 TS，async 函数体，return { name, apply(ctx, config), inject? } 或 return (ctx, config) => void）。可访问全局：ctx/harness/console/btoa/atob/TextEncoder/TextDecoder；inject 声明后 ctx.fs/web/bash/logger/timer 可用。"),
 			"language": strProp("可选：源码语言 \"js\" | \"ts\"，默认自动探测（含 interface/type 注解/类型标注视为 ts）。"),
 			"purpose":  strProp("可选：插件用途说明。"),
 			"dir":      strProp("可选：源码目录（解析相对 import 的多文件插件）。缺省=单文件模式（不解析 import）。"),
@@ -75,16 +76,24 @@ func RegisterCordisTools(registry *Registry, host *PluginHost, root string) {
 
 	registry.Register(&Tool{
 		Name:        "cordis_run",
-		Description: "装载一个已登记的 JS 动态插件（cordis_define 的 id）：在 goja 沙箱中求值并执行 apply(ctx)。正在运行的插件重复 run 会重新装载（no-op 或重放）。",
+		Description: "装载一个已登记的 JS 动态插件（cordis_define 的 id）：在 goja 沙箱中求值并执行 apply(ctx, config)。可选 config 透传为 apply 第二参（插件配置）。正在运行的插件重复 run 会重新装载（no-op 或重放）。",
 		Category:    "system",
 		Parameters: objSchema(map[string]any{
-			"id": strProp("cordis_define 返回的 dyn id（如 dyn-1）。"),
+			"id":     strProp("cordis_define 返回的 dyn id（如 dyn-1）。"),
+			"config": strProp("可选：插件配置 JSON 对象（透传给 apply(ctx, config) 第二参）。"),
 		}, "id"),
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
 			id := argStr(args, "id")
 			def, ok := host.GetJSDef(id)
 			if !ok {
 				return "", fmt.Errorf("插件定义不存在: %s（定义只活在进程内存，跨重启不存续）", id)
+			}
+			if cfgStr := strings.TrimSpace(argStr(args, "config")); cfgStr != "" {
+				var cfg map[string]any
+				if err := json.Unmarshal([]byte(cfgStr), &cfg); err != nil {
+					return "", fmt.Errorf("config 不是合法 JSON 对象: %v", err)
+				}
+				def.config = cfg
 			}
 			if err := host.LoadJSDynamic(def); err != nil {
 				return "", err
@@ -220,8 +229,20 @@ func renderPluginRecord(r PluginRecord) string {
 func renderJSDefDetail(d *jsPluginDef) string {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("## %s\n", d.id))
-	sb.WriteString(fmt.Sprintf("- name: %s\n- purpose: %s\n- version: %s\n- createdAt: %s\n",
-		d.name, d.purpose, d.version, d.createdAt.Format(time.RFC3339)))
+	form := "对象形态"
+	if d.isFunc {
+		form = "函数形态"
+	}
+	sb.WriteString(fmt.Sprintf("- name: %s\n- purpose: %s\n- version: %s\n- form: %s\n- createdAt: %s\n",
+		d.name, d.purpose, d.version, form, d.createdAt.Format(time.RFC3339)))
+	if len(d.inject) > 0 {
+		sb.WriteString(fmt.Sprintf("- inject: %s\n", strings.Join(d.inject, ", ")))
+	}
+	if len(d.config) > 0 {
+		if b, err := json.Marshal(d.config); err == nil {
+			sb.WriteString(fmt.Sprintf("- config: %s\n", string(b)))
+		}
+	}
 	if len(d.provides) > 0 {
 		sb.WriteString(fmt.Sprintf("- provides: %s\n", strings.Join(d.provides, ", ")))
 	}
