@@ -1114,9 +1114,9 @@ func (h *PluginHost) retryWaiting(serviceName string) {
 //   - pluginId（稳定身份）→ 版本链最新版
 //   - 插件名 → 匹配该名插件的最新版本
 func (h *PluginHost) resolveJSDef(idOrName string) (*jsPluginDef, error) {
-	if def, ok := h.GetJSDef(idOrName); ok {
-		return def, nil
-	}
+	// ★ pluginId（稳定身份）优先解析到最新版本（对齐 cordis_run 语义）：
+	//   注意 pluginId 恒等于首次 dyn id（如 dyn-1），而该 id 同时也是 v1 的精确 id——
+	//   必须先查 pluginVersions 链，否则追加版本后传 pluginId 会错误命中旧版本 v1。
 	h.mu.RLock()
 	if chain := h.pluginVersions[idOrName]; len(chain) > 0 {
 		d := chain[len(chain)-1]
@@ -1124,6 +1124,9 @@ func (h *PluginHost) resolveJSDef(idOrName string) (*jsPluginDef, error) {
 		return d, nil
 	}
 	h.mu.RUnlock()
+	if def, ok := h.GetJSDef(idOrName); ok {
+		return def, nil
+	}
 	// 按插件名匹配（同名插件取最新版本）
 	h.mu.RLock()
 	var best *jsPluginDef

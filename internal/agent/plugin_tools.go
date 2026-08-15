@@ -140,10 +140,18 @@ func RegisterCordisTools(registry *Registry, host *PluginHost, root string) {
 			}
 			// 等待语义：装载成功但插件进入 waiting（inject 缺服务）
 			if def.status == PluginWaiting {
-				return fmt.Sprintf("插件 %s (%s v%s) 已进入 waiting：inject 声明 %v 中宿主未提供 %v。服务出现后将自动激活；可用 cordis_inspect id=%s 查看。",
-					def.name, def.id, def.version, def.inject, def.waitingFor, def.pluginId), nil
+				msg := fmt.Sprintf("插件 %s (%s v%s) 已进入 waiting：inject 声明 %v 中宿主未提供 %v。服务出现后将自动激活；可用 cordis_inspect id=%s 查看。",
+					def.name, def.id, def.version, def.inject, def.waitingFor, def.pluginId)
+				if c := def.ConsoleText(); c != "" {
+					msg += "\n\n插件 console 输出：\n" + truncRunesAgent(c, 2000)
+				}
+				return msg, nil
 			}
-			return fmt.Sprintf("插件 %s (%s v%s) 已装载并运行。可用 cordis_inspect id=%s 查看。", def.name, def.id, def.version, def.pluginId), nil
+			msg := fmt.Sprintf("插件 %s (%s v%s) 已装载并运行。可用 cordis_inspect id=%s 查看。", def.name, def.id, def.version, def.pluginId)
+			if c := def.ConsoleText(); c != "" {
+				msg += "\n\n插件 console 输出：\n" + truncRunesAgent(c, 2000)
+			}
+			return msg, nil
 		},
 	})
 

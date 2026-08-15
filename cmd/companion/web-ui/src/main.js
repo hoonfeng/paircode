@@ -130,7 +130,7 @@ export const state = reactive({
   tasks: [],
   notificationCount: 0,
   theme: 'dark',
-  focusMode: true, // ★ 编辑/终端让位：默认 agent 主体模式（对话面板占满；活动栏/ Ctrl+K 可切回 IDE）
+  focusMode: true, // ★ 默认专注模式：仅隐藏编辑器（对话面板占满），文件资源侧边栏仍显示；Ctrl+K 可切换
 })
 
 // ★ 调试探针入口：暴露全局 store，供 wb-ui probe 直接读取状态层

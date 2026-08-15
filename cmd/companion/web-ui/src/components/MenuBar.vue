@@ -117,7 +117,7 @@ const execItem = async (item) => {
   if (a === 'focus-mode') {
     state.focusMode = !state.focusMode
     if (state.focusMode) {
-      state.sidebarVisible = false
+      // ★ 专注模式只隐藏编辑器（main-area）；文件资源侧边栏保留（sidebarVisible 独立控制）
       state.bottomPanelVisible = false
     }
     return

@@ -17,7 +17,8 @@
 
     <!-- 内容区域（panel 模式下隐藏） -->
     <ActivityBar v-if="!panelMode" />
-    <Sidebar v-if="!panelMode && state.sidebarVisible && !state.focusMode" />
+    <!-- ★ 文件资源侧边栏默认打开：专注模式（focusMode）只隐藏编辑器，侧边栏仍显示（由 sidebarVisible 独立控制） -->
+    <Sidebar v-if="!panelMode && state.sidebarVisible" />
     <div v-if="!panelMode && !state.focusMode" class="main-area">
       <EditorArea />
       <div class="bottom-panel" v-if="state.bottomPanelVisible"
@@ -329,8 +330,8 @@ const switchActivity = (id) => {
   if (id === 'system') { showSystem.value = true; return }
   if (id === 'chat') { state.rightPanelVisible = !state.rightPanelVisible; return }
   if (id === 'marketplace') { showMarketplace.value = true; return }
-    // ★ 编辑/终端让位：切换到 IDE 侧栏（文件/搜索/Git/插件）时自动退出专注模式
-    state.focusMode = false
+    // ★ 专注模式（默认）下切换活动栏面板不退出专注：侧边栏由 sidebarVisible 独立控制，
+    //   编辑器仅在用户主动退出专注（Ctrl+K / 专注按钮 / 视图菜单）时显示
     if (state.activeActivity === id) {
     state.sidebarVisible = !state.sidebarVisible
   } else {
@@ -653,7 +654,8 @@ watch(() => state.openFiles.length, schedulePersist)
   grid-column: 4; grid-row: 2;
   display: flex; flex-direction: row; overflow: hidden; position: relative;
 }
-.right-container.focus-mode { grid-column: 2 / -1; }
+/* ★ 专注模式：编辑器（main-area 列 3）隐藏，对话面板从列 3 占满——文件侧边栏（列 2）仍显示 */
+.right-container.focus-mode { grid-column: 3 / -1; }
 .right-panel-resizer {
   width: 4px; cursor: ew-resize; background: transparent; flex-shrink: 0; z-index: 10;
 }

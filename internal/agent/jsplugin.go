@@ -125,6 +125,7 @@ type jsPluginDef struct {
 	waitingFor []string    // status=waiting 时缺的服务清单
 	lastError  string      // 最近一次装载失败原因
 	diag       []string    // 运行诊断（阶段记录，最新在后）
+	console    []string    // 本次装载的 console 输出（log/info/warn/debug/error；cordis_run 返回时附加）
 }
 
 // setStatus 更新定义状态（线程安全；h.mu 保护）。
@@ -145,6 +146,26 @@ func (d *jsPluginDef) addDiag(line string) {
 	if len(d.diag) > 20 {
 		d.diag = d.diag[len(d.diag)-20:]
 	}
+}
+
+// addConsole 追加一条插件 console 输出（本次装载捕获；上限 30 条防刷屏）。
+// 宿主 stdout 流对模型不可见，必须捕获进 def.console 供 cordis_run 返回展示。
+func (d *jsPluginDef) addConsole(line string) {
+	if d == nil {
+		return
+	}
+	d.console = append(d.console, line)
+	if len(d.console) > 30 {
+		d.console = d.console[len(d.console)-30:]
+	}
+}
+
+// ConsoleText 插件本次装载的 console 输出文本（空=无输出；供 cordis_run 返回附加）。
+func (d *jsPluginDef) ConsoleText() string {
+	if d == nil || len(d.console) == 0 {
+		return ""
+	}
+	return strings.Join(d.console, "\n")
 }
 
 // Name 插件名（公开访问；jsPluginDef 字段私有）。
@@ -763,18 +784,24 @@ func (p *jsPluginAdapter) buildTimerService(ctxObj *goja.Object) goja.Value {
 
 // newJSSandbox 创建插件沙箱：注入 console/btoa/atob/TextEncoder/TextDecoder
 // 与 __resolve 回调。返回 runtime 与 resolve 回调（goja 值 → 插件对象导出）。
-func newJSSandbox(id string) (*goja.Runtime, *goja.Object) {
+// def 非空时 console 输出同步捕获进 def.console（宿主 stdout 流对模型不可见，
+// 需经 cordis_run 返回展示；见 def.addConsole / ConsoleText）。
+func newJSSandbox(def *jsPluginDef) (*goja.Runtime, *goja.Object) {
 	vm := goja.New()
 
-	// console（对齐 harness：带包名 tag，写透到宿主 stdout）
-	tag := fmt.Sprintf("[js-plugin:%s]", id)
+	// console（对齐 harness：带包名 tag，写透到宿主 stdout + 捕获进 def.console）
+	tag := fmt.Sprintf("[js-plugin:%s]", def.id)
 	consoleObj := vm.NewObject()
 	logFn := func(call goja.FunctionCall) goja.Value {
 		parts := make([]string, len(call.Arguments))
 		for i, a := range call.Arguments {
 			parts[i] = jsConsoleArg(a)
 		}
-		log.Printf("%s %s", tag, strings.Join(parts, " "))
+		line := strings.Join(parts, " ")
+		log.Printf("%s %s", tag, line)
+		if def != nil {
+			def.addConsole(line)
+		}
 		return goja.Undefined()
 	}
 	for _, m := range []string{"log", "info", "warn", "debug", "error"} {
@@ -947,8 +974,9 @@ func (h *PluginHost) LoadJSDynamic(def *jsPluginDef) error {
 	}
 	// 重置运行诊断起点（保留历史 diag 但标记新装载阶段）
 	def.addDiag(fmt.Sprintf("[%s] run 开始（pluginId=%s pkg=%s）", time.Now().Format("15:04:05"), def.pluginId, def.packageId))
+	def.console = nil // 每次 run 独立捕获 console 输出
 
-	vm, _ := newJSSandbox(def.id)
+	vm, _ := newJSSandbox(def)
 	obj, err := evalJSPlugin(vm, def.code, def.id)
 	if err != nil {
 		def.addDiag("求值失败: " + err.Error())
