@@ -225,6 +225,25 @@
 </head>
 <body>
   <div id="app"></div>
+  <!-- ★ 全局诊断：捕获早期 JS 错误（写 localStorage，eval 可读；console 重定向保留堆栈） -->
+  <script>
+    (function () {
+      window.__pageErrors = [];
+      window.addEventListener('error', function (e) {
+        try { window.__pageErrors.push(String(e.message || e.error || 'unknown')) } catch (_) {}
+      });
+      window.addEventListener('unhandledrejection', function (e) {
+        try { window.__pageErrors.push('rejection: ' + String(e.reason && e.reason.message || e.reason)) } catch (_) {}
+      });
+      // Vue 3 渲染错误会走 app.config.errorHandler → 无则 console.error；这里兜底记录
+      var _ce = console.error.bind(console);
+      console.error = function () {
+        var args = Array.prototype.slice.call(arguments);
+        try { window.__pageErrors.push(args.map(function (x) { return (x && x.message) ? x.message : String(x) }).join(' | ')) } catch (_) {}
+        _ce.apply(null, args);
+      };
+    })();
+  </script>
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>

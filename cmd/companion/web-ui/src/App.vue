@@ -1,29 +1,37 @@
 <template>
   <div class="app-root" :class="{ 'panel-only': panelMode }">
-    <!-- 标题栏 + 菜单栏（panel 模式下隐藏） -->
-    <div v-if="!panelMode" class="titlebar" @click="closeAllMenus">
-      <div class="app-logo">
-        <img :src="logoUrl" class="logo-img" alt="PairCode" />
+    <!-- ═══ titlebar 槽位（single）：插件注册 titlebar 槽位并激活后整条替换标题栏
+         （含 logo/菜单/标题），内置标题栏内的 titlebar-right 叠加槽位随内置隐藏 ═══ -->
+    <template v-if="!panelMode">
+      <div v-if="!titlebarSlot.owner.value" class="titlebar" @click="closeAllMenus">
+        <div class="app-logo">
+          <img :src="logoUrl" class="logo-img" alt="PairCode" />
+        </div>
+        <MenuBar ref="menuBarRef" />
+        <div class="title-center">{{ state.workspaceName }}</div>
+        <div class="title-right">
+          <button v-if="wsList.length > 1" class="ws-quick-btn"
+                  @click="showQuickSwitcher = !showQuickSwitcher" title="快速切换工作区">
+            <SvgIcon name="folder" :size="14" />
+          </button>
+          <!-- ★ titlebar-right 槽位（list 型）：标题栏右侧细粒度叠加（插件加小按钮/状态） -->
+          <div ref="titlebarRightEl" class="plugin-slot-host plugin-slot-titlebar"></div>
+        </div>
       </div>
-      <MenuBar ref="menuBarRef" />
-      <div class="title-center">{{ state.workspaceName }}</div>
-      <div class="title-right">
-        <button v-if="wsList.length > 1" class="ws-quick-btn"
-                @click="showQuickSwitcher = !showQuickSwitcher" title="快速切换工作区">
-          <SvgIcon name="folder" :size="14" />
-        </button>
-        <!-- ★ titlebar-right 槽位（list 型）：标题栏右侧细粒度叠加（插件加小按钮/状态） -->
-        <div ref="titlebarSlotEl" class="plugin-slot-host plugin-slot-titlebar"></div>
-      </div>
-    </div>
+      <div v-else :ref="titlebarSlot.hostRef" class="plugin-slot-host plugin-slot-titlebar plugin-area-titlebar"></div>
+    </template>
 
-    <!-- 内容区域（panel 模式下隐藏） -->
-    <ActivityBar v-if="!panelMode" />
-    <!-- ★ 文件资源侧边栏默认打开：专注模式（focusMode）只隐藏编辑器，侧边栏仍显示（由 sidebarVisible 独立控制） -->
+    <!-- ═══ activitybar 槽位（single）：插件可整条替换活动栏竖列；内置活动栏内
+         的 activitybar 叠加槽位随内置隐藏（叠加图标仅在内置 ActivityBar 内渲染）═══ -->
+    <ActivityBar v-if="!panelMode && !activitybarSlot.owner.value" />
+    <div v-else-if="!panelMode" :ref="activitybarSlot.hostRef" class="plugin-slot-host plugin-slot-activitybar plugin-area-activitybar"></div>
+
     <!-- ★ sidebar 槽位（Slot 系统）：插件注册 sidebar 槽位并激活后，左侧栏由插件渲染（UI 可更换） -->
-    <Sidebar v-if="!panelMode && state.sidebarVisible && !sidebarSlotOwner" />
-    <div v-else-if="!panelMode && state.sidebarVisible && sidebarSlotOwner" ref="sidebarSlotEl" class="plugin-slot-host plugin-slot-sidebar"></div>
-    <div v-if="!panelMode && !state.focusMode" class="main-area">
+    <Sidebar v-if="!panelMode && state.sidebarVisible && !sidebarSlot.owner.value" />
+    <div v-else-if="!panelMode && state.sidebarVisible" :ref="sidebarSlot.hostRef" class="plugin-slot-host plugin-slot-sidebar plugin-area-sidebar"></div>
+
+    <!-- ═══ editor 槽位（single）：插件可整块替换主编辑区（EditorArea + 底部终端面板）═══ -->
+    <div v-if="!panelMode && !editorSlot.owner.value && !state.focusMode" class="main-area">
       <EditorArea />
       <div class="bottom-panel" v-if="state.bottomPanelVisible"
            :style="{ height: bottomPanelHeight + 'px' }">
@@ -33,19 +41,23 @@
         <div class="panel-resizer" @mousedown.prevent="startBottomResize"></div>
       </div>
     </div>
+    <div v-else-if="!panelMode && editorSlot.owner.value" :ref="editorSlot.hostRef"
+         class="plugin-slot-host plugin-slot-editor main-area"></div>
 
-    <!-- 右侧容器（panel 模式占满全屏） -->
-    <div v-if="state.rightPanelVisible || panelMode" class="right-container"
+    <!-- ═══ right-panel 槽位（single）：插件可整块替换右侧容器（含对话面板外壳）═══ -->
+    <div v-if="(state.rightPanelVisible || panelMode) && !rightPanelSlot.owner.value" class="right-container"
          :class="{ 'focus-mode': state.focusMode, 'panel-only': panelMode }"
          :style="(state.focusMode || panelMode) ? {} : { width: (rightPanelWidth + 4 + 1 + 250) + 'px' }">
         <div v-if="!panelMode && !state.focusMode" class="right-panel-resizer" @mousedown.prevent="startRightResize"></div>
       <RightPanel :panel-mode="panelMode" />
     </div>
+    <div v-else-if="(state.rightPanelVisible || panelMode) && rightPanelSlot.owner.value"
+         :ref="rightPanelSlot.hostRef" class="plugin-slot-host plugin-slot-right-panel right-container"></div>
 
     <!-- 状态栏（panel 模式下隐藏）：默认内置 StatusBar；插件注册 statusbar 槽位并激活后由插件渲染（UI 可更换） -->
     <div v-if="!panelMode" class="app-statusbar-host">
-      <StatusBar v-if="!slotOwner" />
-      <div v-else ref="slotStatusBarEl" class="plugin-slot-host plugin-slot-statusbar"></div>
+      <StatusBar v-if="!statusbarSlot.owner.value" />
+      <div v-else :ref="statusbarSlot.hostRef" class="plugin-slot-host plugin-slot-statusbar"></div>
     </div>
 
     <!-- 模态框 -->
@@ -60,13 +72,12 @@
     <div ref="overlaySlotEl" class="plugin-overlay-host"></div>
   </div>
 </template>
-
 <script setup>
 import { ref, reactive, computed, watch, onMounted, onUnmounted, provide, nextTick } from 'vue'
 import { state, savePersistentState, loadPersistentState, applyTheme } from './main.js'
 import api from './api.js'
 import { processAgentEvent, processAgentDone, processStatus, getConvCtxStats } from './agent-events.js'
-import { getSlotUI, getSlotUIList, getSlotOwner, setSlotMount, isOverlayActive, syncClientHalves, startPolling, mountListSlot } from './plugin-runtime.js'
+import { useSingleSlot, isOverlayActive, syncClientHalves, startPolling, mountListSlot } from './plugin-runtime.js'
 
 // ★ 桌面端面板独立模式：desktopbridge 注入 window.__DESKTOP_PANEL_MODE__，
 //   此时只渲染右侧面板（消息展示）占满全屏，隐藏 IDE 其他区域。
@@ -596,112 +607,45 @@ onMounted(async () => {
   }
   window._cleanupAppEvents = _cleanupEvents
 
-  // UI 槽位订阅（statusbar 可被插件替换）
-  slotUnsub = setSlotMount(onSlotChanged)
-  onSlotChanged()
-
-  // titlebar-right 槽位（list 型）：标题栏右侧细粒度叠加
-  titlebarUnsub = mountListSlot(titlebarSlotEl, 'titlebar-right')
+  // ═══ UI 槽位装配（Slot 系统）：6 个替换型槽位 + 2 个叠加型槽位 ═══
+  titlebarSlot.start()
+  activitybarSlot.start()
+  sidebarSlot.start()
+  editorSlot.start()
+  rightPanelSlot.start()
+  statusbarSlot.start()
+  titlebarRightUnsub = mountListSlot(titlebarRightEl, 'titlebar-right')
+  overlayUnsub = mountListSlot(overlaySlotEl, 'overlay', { isActive: n => isOverlayActive('overlay', n) })
 })
 
 onUnmounted(() => {
   document.removeEventListener('keydown', handleKeydown)
   if (window._cleanupAppEvents) { window._cleanupAppEvents(); delete window._cleanupAppEvents }
   if (persistTimer) { clearTimeout(persistTimer); persistTimer = null }
-  if (slotUnsub) { slotUnsub(); slotUnsub = null }
-  if (titlebarUnsub) { titlebarUnsub(); titlebarUnsub = null }
-  if (typeof slotCleanup === 'function') { try { slotCleanup() } catch (e) {} slotCleanup = null }
-  if (typeof sidebarCleanup === 'function') { try { sidebarCleanup() } catch (e) {} sidebarCleanup = null }
-  for (const c of overlayCleanups) { try { c() } catch (e) {} }
-  overlayCleanups.length = 0
+  titlebarSlot.stop(); activitybarSlot.stop(); sidebarSlot.stop()
+  editorSlot.stop(); rightPanelSlot.stop(); statusbarSlot.stop()
+  if (titlebarRightUnsub) { titlebarRightUnsub(); titlebarRightUnsub = null }
+  if (overlayUnsub) { overlayUnsub(); overlayUnsub = null }
   api.closeWebSocket()
 })
 
 // ─── UI 槽位（statusbar）：插件可替换底部状态栏（Slot 系统）──
-const slotOwner = ref('')
-const slotStatusBarEl = ref(null)
-const titlebarSlotEl = ref(null)
-let titlebarUnsub = null
-let slotCleanup = null
-let slotUnsub = null
-
-function renderStatusBarSlot() {
-  const host = slotStatusBarEl.value
-  if (!host) return
-  if (typeof slotCleanup === 'function') { try { slotCleanup() } catch (e) {} slotCleanup = null }
-  host.innerHTML = ''
-  const s = getSlotUI('statusbar')
-  if (s && typeof s.render === 'function') {
-    try {
-      const ret = s.render(host, s.ui)
-      if (typeof ret === 'function') slotCleanup = ret
-    } catch (e) {
-      console.warn('[slot] statusbar 渲染失败', e)
-      host.innerHTML = '<div style="padding:2px 8px;font-size:11px;color:var(--text-muted)">插件状态栏渲染失败</div>'
-    }
-  }
-}
-
-function onSlotChanged() {
-  // 无论切回内置还是换插件，先清理旧插件渲染
-  if (typeof slotCleanup === 'function') { try { slotCleanup() } catch (e) {} slotCleanup = null }
-  slotOwner.value = getSlotOwner('statusbar')
-  nextTick(() => {
-    if (slotOwner.value) renderStatusBarSlot()
-    renderSidebarSlot()
-    renderOverlaySlot()
-  })
-}
-
-// ─── sidebar 槽位：插件可替换左侧文件栏（Slot 系统）──
-const sidebarSlotOwner = ref('')
-const sidebarSlotEl = ref(null)
-let sidebarCleanup = null
-
-function renderSidebarSlot() {
-  const host = sidebarSlotEl.value
-  sidebarSlotOwner.value = getSlotOwner('sidebar')
-  if (!host) return
-  if (typeof sidebarCleanup === 'function') { try { sidebarCleanup() } catch (e) {} sidebarCleanup = null }
-  host.innerHTML = ''
-  if (!sidebarSlotOwner.value) return
-  const s = getSlotUI('sidebar')
-  if (s && typeof s.render === 'function') {
-    try {
-      const ret = s.render(host, s.ui)
-      if (typeof ret === 'function') sidebarCleanup = ret
-    } catch (e) {
-      console.warn('[slot] sidebar 渲染失败', e)
-      host.innerHTML = '<div style="padding:8px;font-size:12px;color:var(--text-muted)">插件侧栏渲染失败</div>'
-    }
-  }
-}
-
-// ─── overlay 槽位（list 型）：插件浮动层条目叠加渲染 ──
+// ═══ UI 槽位装配（Slot 系统）════════════════════════════════════
+// useSingleSlot：替换型槽位装配组合函数——owner 变化时模板 v-if/v-else 自动
+// 切换（内置组件 ↔ 插件渲染），start()/stop() 在 onMounted/onUnmounted 调用。
+// ★ titlebar/activitybar/editor/right-panel 为整区替换槽位：插件注册后即可
+//   整条/整块替换对应区域（配合 demo-shell 可整套自绘 UI）。
+const titlebarSlot = useSingleSlot('titlebar')
+const activitybarSlot = useSingleSlot('activitybar')
+const sidebarSlot = useSingleSlot('sidebar')
+const editorSlot = useSingleSlot('editor')
+const rightPanelSlot = useSingleSlot('right-panel')
+const statusbarSlot = useSingleSlot('statusbar')
+const titlebarRightEl = ref(null)
 const overlaySlotEl = ref(null)
-const overlayCleanups = []
+let titlebarRightUnsub = null
+let overlayUnsub = null
 
-function renderOverlaySlot() {
-  const host = overlaySlotEl.value
-  if (!host) return
-  for (const c of overlayCleanups) { try { c() } catch (e) {} }
-  overlayCleanups.length = 0
-  host.innerHTML = ''
-  for (const s of getSlotUIList('overlay')) {
-    if (!isOverlayActive('overlay', s.pluginName)) continue // 仅渲染勾选激活的条目
-    const item = document.createElement('div')
-    item.className = 'plugin-overlay-item'
-    item.dataset.plugin = s.pluginName
-    host.appendChild(item)
-    try {
-      const ret = s.render(item, s.ui)
-      if (typeof ret === 'function') overlayCleanups.push(ret)
-    } catch (e) {
-      console.warn('[slot] overlay 渲染失败', e)
-      item.innerHTML = '<span style="color:var(--text-muted);font-size:11px;">插件浮动层渲染失败</span>'
-    }
-  }
-}
 
 state.notificationCount = 0
 state.workspaceName = state.workspaceName || ''
@@ -801,6 +745,10 @@ watch(() => state.openFiles.length, schedulePersist)
 .plugin-slot-sidebar { height: 100%; overflow: hidden; }
 /* titlebar-right 槽位：标题栏右侧按钮区，与内置按钮同一行 */
 .plugin-slot-titlebar { display: flex; align-items: center; gap: 4px; height: auto; }
+/* 整区替换槽位（single）宿主：与内置区域同 grid 位置/尺寸（titlebar 整条/activitybar 整列/sidebar 整栏） */
+.plugin-area-titlebar { grid-column: 1 / -1; grid-row: 1; height: 30px; }
+.plugin-area-activitybar { grid-column: 1; grid-row: 2; width: 48px; }
+.plugin-area-sidebar { grid-column: 2; grid-row: 2; height: 100%; }
 /* overlay 槽位（list 型）：浮动层，条目叠加（badge/toast/status pill），不挡交互 */
 .plugin-overlay-host { position: fixed; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 9999; }
 .plugin-overlay-item { pointer-events: auto; }

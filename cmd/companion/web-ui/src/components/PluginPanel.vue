@@ -92,7 +92,7 @@
         <span class="pp-slots-title"><SvgIcon name="layers" :size="13" /> UI 槽位</span>
         <span class="pp-slots-sub">插件可替换的界面区域</span>
       </div>
-      <div v-for="g in slotGroups" :key="g.slotId" class="pp-slot-row">
+      <div v-for="g in slotGroups" :key="g.slotId + '::' + g.kind" class="pp-slot-row">
         <div class="pp-slot-info">
           <span class="pp-slot-id">{{ g.slotId }}</span>
           <span class="pp-slot-kind">{{ g.kind === 'list' ? '叠加' : '替换' }}</span>
@@ -530,11 +530,13 @@ const slotGroups = ref([])
 let slotUnsub = null
 
 function refreshSlots() {
-  const ids = [...new Set(clientSlots.map(s => s.slotId))]
-  slotGroups.value = ids.map(id => {
-    const candidates = getSlotCandidates(id)
-    const kind = candidates[0] && candidates[0].kind === 'list' ? 'list' : 'single'
-    return { slotId: id, kind, owner: getSlotOwner(id), candidates }
+  // ★ 按 (slotId, kind) 分组：同一区域可同时有 single 替换与 list 叠加占用
+  //   （如 activitybar），两类控件（下拉/勾选）互不干扰。
+  const keys = [...new Set(clientSlots.map(s => s.slotId + '::' + s.kind))]
+  slotGroups.value = keys.map(k => {
+    const [slotId, kind] = k.split('::')
+    const candidates = getSlotCandidates(slotId).filter(c => c.kind === kind)
+    return { slotId, kind, owner: getSlotOwner(slotId), candidates }
   })
 }
 

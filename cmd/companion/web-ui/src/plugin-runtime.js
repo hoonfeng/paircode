@@ -23,19 +23,26 @@
 //
 // ★ 宿主预定义 UI 槽位（slotId，插件用 ui.registerSlot({slotId,...}) 注册占用）：
 //   ── 替换型（single，宿主区域整体由插件渲染，面板里下拉切换占用者）──
-//     statusbar  底部状态栏整栏（App 底部）
-//     sidebar    左侧文件栏整栏（App 左侧）
-//     chat       对话面板整区（RightPanel rp-body，含消息+输入区）
+//     titlebar     标题栏整条（含 logo/菜单/标题，App 顶部）
+//     activitybar  活动栏整条竖列（App 左侧竖条）
+//     sidebar      左侧文件栏整栏（App 左侧）
+//     editor       主编辑区整块（App 中部：编辑器 tab + 代码 + 底部终端面板）
+//     right-panel  右侧容器整块（App 右侧：含对话面板/外壳）
+//     chat         对话面板整区（RightPanel rp-body，含消息+输入区）
+//     statusbar    底部状态栏整栏（App 底部）
 //   ── 叠加型（list，宿主容器内每个占用者渲染一个小条目，面板里勾选激活）──
 //     overlay          浮动层（fixed 全屏，不挡交互，badge/toast）
-//     titlebar-right   标题栏右侧按钮区（App 标题栏，工作区切换按钮旁）
+//     titlebar-right   标题栏右侧按钮区（App 内置标题栏，工作区切换按钮旁）
 //     activitybar      活动栏图标列（ActivityBar 顶部，图标+tooltip 入口）
 //     editor-toolbar   编辑器标签栏尾部（undo/redo 按钮旁）
 //     chat-tools       对话输入区上方工具条（发送按钮上方一行快捷工具）
 //     statusbar-items  内置状态栏内叠加条目（左侧信息与右侧信息之间）
+//   ★ 同一 slotId 可同时存在 single 与 list 两类占用（如 activitybar）：
+//     机制按 kind 分流（getSlotOwner 只管 single，getSlotUIList 只管 list）。
 // ═══════════════════════════════════════════════════════════════
 
 import api from './api.js'
+import { ref, nextTick } from 'vue'
 
 // ─── 运行中的 client 半实例 ──────────────────────────────────
 // instances: [{ name, defId, source, status, error?, onHandlers: Map<event, [fn]> }]
@@ -98,17 +105,19 @@ export function getSlotCandidates(slotId) {
   return clientSlots.filter(s => s.slotId === slotId)
 }
 // getSlotOwner 当前激活占用者（'' = 内置组件）。
+// ★ 只考虑 single 型（kind!=='list'）：叠加型走 isOverlayActive 独立激活，
+//   不会被误设为替换 owner（否则 getSlotUI 查不到 → 空容器）。
 export function getSlotOwner(slotId) {
   let v = ''
   try { v = localStorage.getItem(slotOwnerKey(slotId)) || '' } catch (e) { /* 忽略 */ }
-  if (v && !clientSlots.some(s => s.slotId === slotId && s.pluginName === v)) v = ''
+  if (v && !clientSlots.some(s => s.slotId === slotId && s.kind !== 'list' && s.pluginName === v)) v = ''
   if (v) return v
-  // ★ 从未显式选择：仅一个候选时自动激活（对齐参考项目「注册槽位=替换」语义；
+  // ★ 从未显式选择：仅一个 single 候选时自动激活（对齐参考项目「注册槽位=替换」语义；
   //   用户在面板选过「内置组件」后存了 ''，走 localStorage 命中，不再自动激活）
   let neverChosen = true
   try { neverChosen = localStorage.getItem(slotOwnerKey(slotId)) === null } catch (e) { /* 忽略 */ }
   if (neverChosen) {
-    const cands = clientSlots.filter(s => s.slotId === slotId && typeof s.render === 'function')
+    const cands = clientSlots.filter(s => s.slotId === slotId && s.kind !== 'list' && typeof s.render === 'function')
     if (cands.length === 1) return cands[0].pluginName
   }
   return ''
@@ -165,6 +174,67 @@ export function mountListSlot(hostRef, slotId, opts = {}) {
     }
   }
   return setSlotMount(() => { render() })
+}
+
+// useSingleSlot 单槽位（替换型 single）装配组合函数——收敛宿主组件的装配样板。
+// 宿主组件模板（v-if 内置 / v-else 插件容器）：
+//   <内置 v-if="!slot.owner" />
+//   <div v-else ref="slot.hostRef" class="plugin-slot-host plugin-slot-<id>"></div>
+// 组件 onMounted 调 start()（订阅槽位变化 + 首次渲染），onUnmounted 调 stop()（退订+清理）。
+// owner 变化时宿主 v-if 自动切换，nextTick 后渲染插件内容到 hostRef 容器。
+export function useSingleSlot(slotId) {
+  const owner = ref('')
+  const hostRef = ref(null)
+  let cleanup = null
+  let unsub = null
+  let started = false
+
+  function render() {
+    const host = hostRef.value
+    if (!host) return
+    if (typeof cleanup === 'function') { try { cleanup() } catch (e) {} cleanup = null }
+    host.innerHTML = ''
+    const s = getSlotUI(slotId)
+    if (s && typeof s.render === 'function') {
+      try {
+        const ret = s.render(host, s.ui)
+        if (typeof ret === 'function') cleanup = ret
+      } catch (e) {
+        console.warn('[slot] ' + slotId + ' 渲染失败', e)
+        host.innerHTML = '<div style="padding:8px;font-size:12px;color:var(--text-muted)">插件「' + slotId + '」渲染失败</div>'
+      }
+    }
+  }
+
+  function refresh() {
+    const prev = owner.value
+    owner.value = getSlotOwner(slotId)
+    if (owner.value !== prev && typeof cleanup === 'function') {
+      // 占用者变化（含切回内置）：先清理旧插件渲染
+      try { cleanup() } catch (e) {} cleanup = null
+    }
+    nextTick(() => { if (owner.value) render() })
+  }
+
+  return {
+    owner,
+    hostRef,
+    // ★ setup 顶层同步调用：初始化 owner（避免首帧先 mount 内置组件再切插件
+    //   分支——复杂组件（CM6 编辑器等）的「mount 后立即卸载」会触发错误）。
+    //   在组件 setup 里 useSingleSlot(...) 后立即调用。
+    init() { owner.value = getSlotOwner(slotId) },
+    start() {
+      if (started) return
+      started = true
+      refresh()
+      unsub = setSlotMount(refresh)
+    },
+    stop() {
+      started = false
+      if (unsub) { unsub(); unsub = null }
+      if (typeof cleanup === 'function') { try { cleanup() } catch (e) {} cleanup = null }
+    },
+  }
 }
 
 // setPanelMount 供 PluginPanel 注入「渲染 client 面板」的回调。
