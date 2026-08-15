@@ -1493,8 +1493,8 @@ func (s *MessageStore) checkAndArchive(convID string) error {
 	//   以孤立 assistant 消息排在对话开头会让 LLM 上下文出现无 user 配对的 assistant
 	//   （部分 API 拒绝以 assistant 开头，且 LLM 会误认为「自己说过的话」）。
 	//   用 RoleUser + 【历史归档】标注与背景块（backgroundCtxMarker 同款 user 注入模式）一致，
-	//   LLM 可将其理解为「早期历史被归档的说明」；run 内 MarkHistoryUserMessages 会再标注
-	//   【历史轮次消息·非当前任务】前缀，与历史 user 同等对待，不会污染当前任务识别。
+	//   LLM 可将其理解为「早期历史被归档的说明」；系统提示多轮规则会把它当历史轮次处理
+	//   （最后一条 user 消息才是当前任务），不会污染当前任务识别。
 	summaryMsg := StoredMessage{
 		Idx:       0,
 		Timestamp: time.Now().UTC().Format(time.RFC3339),

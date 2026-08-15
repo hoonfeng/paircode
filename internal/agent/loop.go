@@ -155,8 +155,8 @@ type Loop struct {
 	followUpQueue []Message
 
 	// InheritedPrefixLen 继承自父 Loop 的 history 前缀条数（delegate 子 Loop 设置）。
-	// 子 Loop 首次 LLM 调用的 messages 前缀须与父上一次调用逐字节一致（prompt cache 命中），
-	// 故历史用户消息标注（MarkHistoryUserMessages）跳过前 N 条不修改。0 = 非子 Loop，全量标注。
+	// 【已废弃 2026-08-15】原用于历史用户消息标注（MarkHistoryUserMessages）跳过前 N 条
+	// 保持 KV Cache 前缀逐字节一致；标注已移除（对齐 harness），该字段仅向后兼容保留。
 	InheritedPrefixLen int
 
 	// ── 多 agent 编排（阶段四，均可空；空=普通单 agent 模式）──
@@ -370,10 +370,10 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 	if len(msgs) > 0 && msgs[len(msgs)-1].Role == RoleUser && msgs[len(msgs)-1].Content == task {
 		// 末尾已有同内容用户消息，跳过，防持久化后重复
 	} else {
-		// 时间戳注入用户消息（而非系统提示词），避免破坏 KV Cache 前缀命中。
-		timestamp := time.Now().Format("2006-01-02 15:04:05 MST -07:00") // -07:00 由 Go 按本地时区实际偏移填充，避免硬编码与真实时区不符
-		taskWithTs := task + "\n\n**消息时间**: " + timestamp
-		msgs = append(msgs, Message{Role: RoleUser, Content: taskWithTs})
+		// 当前任务消息原样注入（对齐 harness：不附加时间戳等动态内容——
+		// 消息内容 = 用户真实输入，事件元数据里的时间不进 LLM 消息流；
+		// 同时避免同一消息随轮次成为历史后携带动态后缀被摘要/传播）。
+		msgs = append(msgs, Message{Role: RoleUser, Content: task})
 	}
 
 	// ★ 启动时检查记忆/知识库过期引用（固定内容存字段，由 buildCallContext 每次迭代注入到任务之前）
@@ -406,13 +406,11 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 	//   导致 LLM 失忆、理解力下降（2026-08-05 排查结论）。
 	msgs = l.maybeCompact(ctx, msgs)
 
-	// ★ 历史轮次用户消息标注：多轮对话中历史 user 消息与当前任务同为 RoleUser，
-	//   不标注会让 LLM 把旧轮次用户消息误认为「本次提交的信息」（理解污染）。
-	//   给除最后一条（当前任务）外的所有用户消息加【历史轮次】前缀。
-	//   仅作用于 LLM 上下文（内存副本），不写回 store（持久化用原始历史）。
-	//   skipPrefix=InheritedPrefixLen：delegate 子 Loop 继承的父 msgs 前缀原样保留
-	//   （KV Cache 前缀一致要求逐字节相同），不重新标注。
-	MarkHistoryUserMessages(msgs, l.InheritedPrefixLen)
+	// ★ 历史轮次用户消息标注已移除（2026-08-15 对齐 harness）：
+	//   harness 不往消息正文注入前缀文本——历史轮次与当前任务同为 RoleUser，
+	//   靠「最后一条 user 消息 = 当前任务」的消息结构 + 系统提示规则区分
+	//   （见 harnessSystemPrompt/fullSystemPrompt 的多轮规则段），
+	//   避免内容污染（模型看到的历史 user 消息 = 用户真实输入，无注入文本）。
 
 	for iter := 0; iter < max; iter++ {
 		// agentloop：进入下一个 step（每次迭代 = 一次 LLM 调用 + 工具执行）
@@ -958,6 +956,11 @@ func harnessSystemPrompt(roots []string) string {
 		"  避免后续对话反复探测同一问题浪费 token。\n" +
 		"- 【完成标记】任务完成时调用 generate_commit_message 记录提交信息，然后输出最终完成总结。" +
 			" 切勿在正文中输出 [FINAL] 等标记。系统自动检测到无工具调用+有正文时视为完成。\n\n" +
+		"# 多轮对话（历史轮次识别）\n" +
+		"同一对话线程可连续发起多轮任务：历史轮次与当前任务都是「用户」角色消息。\n" +
+		"- 消息列表中最后一条用户消息 = 当前任务；其余用户消息均为历史轮次，仅作上下文参考。\n" +
+		"- 禁止把历史轮次的用户消息当作新任务执行；若当前任务与历史轮次相关，\n" +
+		"  应引用历史内容继续推进，而不是重做或误判为两次独立请求。\n\n" +
 		"# ★ 调研优先（强制——违反必出错）\n" +
 		"收到任务后，第一回合必须先收集资料、理解上下文，再动手改代码：\n" +
 		"- 先用 read/glob/grep 定位相关文件和函数，搞清楚代码结构和调用关系。\n" +
@@ -1033,6 +1036,11 @@ func fullSystemPrompt(roots []string) string {
 		"  避免后续对话反复探测同一问题浪费 token。\n" +
 		"- 【完成标记】任务完成时调用 generate_commit_message 记录提交信息，然后输出最终完成总结。" +
 			" 切勿在正文中输出 [FINAL] 等标记。系统自动检测到无工具调用+有正文时视为完成。\n\n" +
+		"# 多轮对话（历史轮次识别）\n" +
+		"同一对话线程可连续发起多轮任务：历史轮次与当前任务都是「用户」角色消息。\n" +
+		"- 消息列表中最后一条用户消息 = 当前任务；其余用户消息均为历史轮次，仅作上下文参考。\n" +
+		"- 禁止把历史轮次的用户消息当作新任务执行；若当前任务与历史轮次相关，\n" +
+		"  应引用历史内容继续推进，而不是重做或误判为两次独立请求。\n\n" +
 		"# ★ 调研优先（强制——违反必出错）\n" +
 		"收到任务后，第一回合必须先收集资料、理解上下文，再动手改代码：\n" +
 		"- 先用 search_content / search_files / codegraph_search / find_symbol 定位相关文件和函数，搞清楚代码结构和调用关系（搜函数/类型名优先用 codegraph_search，更精确）。\n" +

@@ -10,7 +10,8 @@ package agent
 //
 // 验证目标（用户报告的问题）：
 //   1. 每轮 LLM 视角（buildCallContext 输出）中，当前用户任务必须是最后一条 user 消息，
-//      且不带【历史轮次】标注——绝不能被当成「第一条消息的延续」。
+//      且内容为原始输入（对齐 harness：无【历史轮次】前缀、无时间戳附加）——
+//      绝不能被当成「第一条消息的延续」。
 //   2. 最近轮次的 agent 工作内容（assistant 正文/工具链）在 LLM 视角可见。
 //   3. 持久化后 store 中消息不重复、顺序正确（OnBatchPersist 重组无错）。
 
@@ -139,8 +140,8 @@ func TestMultiRound_CurrentTaskIsLastUser(t *testing.T) {
 		if !strings.Contains(last.Content, expectTask) {
 			t.Errorf("第%d轮 LLM 视角最后一条 user 不是当前任务 %q，得 %q（被当成了旧消息延续）", c.round, expectTask, last.Content)
 		}
-		if strings.HasPrefix(last.Content, historyUserMarker) {
-			t.Errorf("第%d轮当前任务不应带【历史轮次】标注：%q", c.round, last.Content)
+		if last.Content != expectTask {
+			t.Errorf("第%d轮当前任务应原样注入（无前缀/无时间戳附加），得 %q", c.round, last.Content)
 		}
 		// 最近一轮 agent 工作内容（上一轮 assistant 回复）必须可见
 		if c.round >= 2 {
