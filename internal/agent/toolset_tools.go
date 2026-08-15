@@ -29,6 +29,7 @@ func RegisterToolsetTools(r *Registry, root string, ph *PluginHost) {
 			"组合匹配的工具集模板生成插件 → 定义装载（插件化）→ 固化到 .pair/toolsets/{name}.json。" +
 			"★ LLM 参与分析：读 README/文件结构判断项目要实现的目的，输出真实构建/测试/运行/lint 命令" +
 			"与推荐工具类别（不按语言固化命令；LLM 未配置或失败自动回退静态特征分析）。" +
+			"★ LLM 检测模板覆盖不到的项目专属能力缺口时，现场生成专属插件代码并入工具集（define 预检，失败剔除并提示）。" +
 			"无工具集配置时首次构建用；有则显式调用可更新（overwrite=true 覆盖已固化版本）。" +
 			"可用 toolset_list 查看现有工具集，toolset_export 导出（导入全局/发布市场）。",
 		RequiresApproval: true,

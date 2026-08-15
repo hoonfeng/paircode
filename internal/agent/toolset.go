@@ -311,6 +311,28 @@ func BuildToolset(ph *PluginHost, projectDir, name, description, requirement str
 		plugins = append(plugins, gs...)
 		used = append(used, t.ID)
 	}
+	// ★ LLM 现场生成的项目专属插件并入（模板覆盖不到的能力缺口；对齐 deepseek-harness
+	// 「模型所写插件」模式——注册时即校验：define 预检失败剔除并给指导性错误信息，
+	// 不因单个 LLM 插件问题阻塞整个工具集）。
+	if intent != nil && len(intent.CustomPlugins) > 0 {
+		have := map[string]bool{}
+		for _, e := range plugins {
+			have[e.Name] = true
+		}
+		for _, cp := range intent.CustomPlugins {
+			if have[cp.Name] {
+				log.Printf("[toolset] customPlugin %s 与模板产物重名，跳过", cp.Name)
+				continue
+			}
+			if _, err := ph.DefineJSCodeFull(cp.Code, "", cp.Purpose, "", ""); err != nil {
+				log.Printf("[toolset] customPlugin %s 预检失败已剔除: %v（插件需为纯 JS：return { name, inject, apply(ctx) }，工具经 ctx.tools.register 注册）", cp.Name, err)
+				continue
+			}
+			plugins = append(plugins, ToolsetPlugin{Name: cp.Name, Purpose: cp.Purpose, Code: cp.Code})
+			have[cp.Name] = true
+			log.Printf("[toolset] 并入 LLM 现场生成插件: %s（%s）", cp.Name, cp.Purpose)
+		}
+	}
 	if len(plugins) == 0 {
 		msg := "没有工具集模板适用于该项目"
 		if len(tplErrs) > 0 {

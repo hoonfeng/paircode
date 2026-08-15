@@ -747,7 +747,7 @@ func pluginSafeName(s string) string {
 			b.WriteRune('-')
 		}
 	}
-	name := b.String()
+	name := strings.ToLower(b.String())
 	name = strings.Trim(name, "-")
 	if name == "" {
 		return "toolset-helper"

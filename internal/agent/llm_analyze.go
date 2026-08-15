@@ -36,8 +36,19 @@ type ProjectIntent struct {
 	RunCmd          string   `json:"runCmd"`          // 运行/启动命令
 	LintCmd         string   `json:"lintCmd"`         // lint/检查命令（如 npx eslint . / ruff check .；无则空）
 	FormatCmd       string   `json:"formatCmd"`       // 格式化命令（无则空）
-	RecommendedTags []string `json:"recommendedTags"` // 推荐工具类别（ToolsetIntentTags 子集）
-	Notes           string   `json:"notes"`           // 补充说明（透传模板 generate 裁剪插件）
+	RecommendedTags []string       `json:"recommendedTags"` // 推荐工具类别（ToolsetIntentTags 子集）
+	Notes           string         `json:"notes"`           // 补充说明（透传模板 generate 裁剪插件）
+	CustomPlugins   []CustomPlugin `json:"customPlugins"`   // LLM 现场生成的项目专属插件（模板覆盖不到的能力缺口）
+}
+
+// CustomPlugin LLM 现场生成的项目专属插件：工具集模板组合覆盖不到的能力缺口
+// （如 OpenAPI 校验、Protobuf 编译、数据库迁移等特殊栈），由 LLM 分析项目后
+// 直接写出插件代码并入工具集（对齐 deepseek-harness「模型所写插件」模式：
+// 注册时即校验——BuildToolset 会对 code 做 define 预检，失败剔除并给指导性错误）。
+type CustomPlugin struct {
+	Name    string `json:"name"`    // 插件名（小写字母/数字/-/_）
+	Purpose string `json:"purpose"` // 用途一句话（工具集清单展示）
+	Code    string `json:"code"`    // 插件代码：return { name, inject:[...], apply(ctx){...} }（纯 JS）
 }
 
 // applyToProfile 把 LLM 分析出的命令合入项目特征（生成器据此生成精确工具；
@@ -127,6 +138,21 @@ func parseProjectIntent(content string) (*ProjectIntent, error) {
 		}
 	}
 	intent.RecommendedTags = tags
+	// 清洗 customPlugins：name 规范化、code 非空、去重（保留第一个）
+	seenP := map[string]bool{}
+	var cps []CustomPlugin
+	for _, cp := range intent.CustomPlugins {
+		if strings.TrimSpace(cp.Code) == "" {
+			continue
+		}
+		name := pluginSafeName(cp.Name)
+		if name == "" || seenP[name] {
+			continue
+		}
+		seenP[name] = true
+		cps = append(cps, CustomPlugin{Name: name, Purpose: strings.TrimSpace(cp.Purpose), Code: cp.Code})
+	}
+	intent.CustomPlugins = cps
 	return &intent, nil
 }
 
@@ -294,9 +320,51 @@ func buildIntentPrompt(projectDir string, p *ProjectProfile, requirement string)
   "lintCmd": "代码检查命令（如 npx eslint . / ruff check . / golangci-lint run；没有则空串）",
   "formatCmd": "代码格式化命令（如 npx prettier --write . / ruff format .；没有则空串）",
   "recommendedTags": ["从以下类别中选择 2~6 个：` + strings.Join(ToolsetIntentTags, " / ") + `"],
-  "notes": "针对项目目的，说明 agent 开发时需要哪些具体工具能力（30~80 字，中文）"
+  "notes": "针对项目目的，说明 agent 开发时需要哪些具体工具能力（30~80 字，中文）",
+  "customPlugins": [
+    {
+      "name": "项目专属插件名（小写字母/数字/中划线，如 openapi-gen）",
+      "purpose": "用途一句话（20 字内，中文）",
+      "code": "插件代码，见下方格式"
+    }
+  ]
 }
 命令必须来自项目实际（README/配置文件/文件结构），不要臆造；recommendedTags 只能使用上面给出的类别词，不能自造。
+
+## customPlugins 生成规则（只在必要时写，宁缺毋滥）
+
+模板已覆盖 build/test/git/lint/api/data/docs 等通用能力，**不要为这些写插件**。
+只有检测到模板覆盖不到的**项目专属能力缺口**（如 OpenAPI 生成校验、Protobuf 编译、数据库迁移、
+特殊格式转换、项目特有脚本封装等）时才写，最多 2 个。
+
+插件代码格式（纯 JS，禁止 import/require/TS 语法；async 函数体）：
+
+~~~js
+return {
+  name: '插件名',
+  inject: ['bash', 'fs'],            // 按需声明：bash(命令) / fs(文件) / web(HTTP) / logger / timer
+  apply(ctx) {
+    ctx.tools.register({
+      name: '工具名',
+      description: '一句话说明做什么、参数怎么用',
+      parameters: {
+        type: 'object',
+        properties: { 参数名: { type: 'string', description: '说明' } },
+        required: ['参数名']
+      },
+      execute: async (args) => {
+        // 可调用 ctx.bash.exec('命令', '工作区根目录') → {output, error}
+        // ctx.fs.read(path) / ctx.fs.write(path, content) / ctx.fs.exists(path) / ctx.fs.list(dir) / ctx.fs.stat(path)
+        // ctx.web.fetch(url) → {ok, status, text}
+        return '结果文本';
+      }
+    });
+  }
+};
+~~~
+
+要点：参数 schema 完整（name/description/parameters.required 齐全）；execute 返回字符串；
+只在 execute 内部用 async 服务调用，apply 同步注册即可；一个插件可注册 1~2 个紧密相关工具。
 `)
 	return b.String()
 }
