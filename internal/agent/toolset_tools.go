@@ -25,15 +25,17 @@ func RegisterToolsetTools(r *Registry, root string, ph *PluginHost) {
 	// ── toolset_build：动态构建/更新工具集 ──
 	r.Register(&Tool{
 		Name: "toolset_build",
-		Description: "动态构建工作区工具集：分析项目特征（语言/框架/依赖/入口）+ 要求 → " +
+		Description: "动态构建工作区工具集：分析项目（语言/框架/文件结构 + ★LLM 理解项目实际目的）→ " +
 			"组合匹配的工具集模板生成插件 → 定义装载（插件化）→ 固化到 .pair/toolsets/{name}.json。" +
+			"★ LLM 参与分析：读 README/文件结构判断项目要实现的目的，输出真实构建/测试/运行/lint 命令" +
+			"与推荐工具类别（不按语言固化命令；LLM 未配置或失败自动回退静态特征分析）。" +
 			"无工具集配置时首次构建用；有则显式调用可更新（overwrite=true 覆盖已固化版本）。" +
 			"可用 toolset_list 查看现有工具集，toolset_export 导出（导入全局/发布市场）。",
 		RequiresApproval: true,
 		Parameters: mObjSchema(map[string]any{
 			"name":        mStrProp("工具集名（默认 default；与现有同名时按 overwrite 决定是否覆盖）"),
-			"description": mStrProp("工具集用途描述（可选）"),
-			"requirement": mStrProp("要求描述：期望工具集覆盖的能力（如「Web 前端脚手架 + 接口调试」）"),
+			"description": mStrProp("工具集用途描述（可选，优先于 LLM 分析出的项目目的）"),
+			"requirement": mStrProp("要求描述：期望工具集覆盖的能力（如「Web 前端脚手架 + 接口调试」），LLM 分析时参考"),
 			"project":     mStrProp("目标项目目录（默认主工作区；多项目可指定 basename 或路径）"),
 			"overwrite":   mStrProp("已存在同名固化工具集时 true=覆盖并重建，false=报错（默认 false）"),
 		}),

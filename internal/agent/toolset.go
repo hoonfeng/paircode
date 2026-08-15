@@ -20,6 +20,7 @@
 package agent
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -264,14 +265,42 @@ func BuildToolset(ph *PluginHost, projectDir, name, description, requirement str
 		name = "default"
 	}
 	profile := analyzeProject(projectDir)
+
+	// ★ LLM 项目意图分析（可选）：理解项目「实际要实现的目的」并推荐工具类别。
+	// 无 provider / 调用失败 / 解析失败 → 回退纯静态分析，不影响主流程。
+	var intent *ProjectIntent
+	if prov := toolsetLLMProvider(); prov != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		it, err := llmAnalyzeProject(ctx, prov, projectDir, profile, requirement)
+		cancel()
+		if err != nil {
+			log.Printf("[toolset] LLM 项目分析跳过（回退静态特征）: %v", err)
+		} else if it != nil {
+			intent = it
+			log.Printf("[toolset] LLM 项目分析: %q（推荐 %v）", it.Purpose, it.RecommendedTags)
+		}
+	}
+
 	var plugins []ToolsetPlugin
 	var used []string
 	var tplErrs []string
+	genReq := requirement
+	if intent != nil && strings.TrimSpace(intent.Notes) != "" {
+		genReq = strings.TrimSpace(intent.Notes + " " + requirement)
+	}
+	// 生成 profile：LLM 分析出的真实命令合入（无 LLM 时保持静态探测结果）
+	genProfile := *profile
+	if intent != nil {
+		intent.applyToProfile(&genProfile)
+	}
 	for _, t := range ph.Templates() {
 		if !t.matches(profile) {
-			continue
+			// 静态特征未命中 → 意图标签补充命中（如 LLM 识别出 API 项目）
+			if !t.matchesIntent(intent) {
+				continue
+			}
 		}
-		gs, err := t.generate(profile, requirement)
+		gs, err := t.generate(&genProfile, genReq)
 		if err != nil {
 			tplErrs = append(tplErrs, fmt.Sprintf("%s: %v", t.ID, err))
 			continue
@@ -291,7 +320,11 @@ func BuildToolset(ph *PluginHost, projectDir, name, description, requirement str
 	}
 	desc := strings.TrimSpace(description)
 	if desc == "" {
-		desc = fmt.Sprintf("为项目 %s 动态构建的工具集（模板: %s）", profile.Name, strings.Join(used, ", "))
+		if intent != nil && strings.TrimSpace(intent.Purpose) != "" {
+			desc = intent.Purpose // LLM 理解的项目目的作为工具集描述
+		} else {
+			desc = fmt.Sprintf("为项目 %s 动态构建的工具集（模板: %s）", profile.Name, strings.Join(used, ", "))
+		}
 	}
 	ts := &Toolset{
 		Name:        name,

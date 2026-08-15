@@ -34,6 +34,11 @@ type ToolsetTemplate struct {
 	ID    string // 唯一 id（如 toolset.tpl.project-helper）
 	Title string // 展示名
 
+	// Tags 模板适用场景标签（语言无关，如 build/test/git/lint/api/data）。
+	// 与 LLM 项目意图推荐（ProjectIntent.RecommendedTags）做意图匹配：
+	// 静态特征未命中但意图标签命中时，模板仍强制加入组合。
+	Tags []string
+
 	// Go 模板：直接提供 Match/Generate 函数。
 	Match    func(profile *ProjectProfile) bool
 	Generate func(profile *ProjectProfile, requirement string) ([]ToolsetPlugin, error)
@@ -44,6 +49,21 @@ type ToolsetTemplate struct {
 	jsGenerate goja.Callable
 	jsVM       *goja.Runtime
 	jsLock     func(func()) // 沙箱执行锁（与插件主执行流互斥）
+}
+
+// matchesIntent 意图标签是否命中模板场景（静态特征未命中时的补充判定）。
+func (t *ToolsetTemplate) matchesIntent(intent *ProjectIntent) bool {
+	if intent == nil || len(t.Tags) == 0 {
+		return false
+	}
+	for _, it := range intent.RecommendedTags {
+		for _, tt := range t.Tags {
+			if strings.EqualFold(it, tt) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // profileToMap 把 ProjectProfile 转成 json tag 字段的 map（JS 模板收到
@@ -173,6 +193,8 @@ type ProjectProfile struct {
 	BuildCmd   string   `json:"buildCmd"`
 	TestCmd    string   `json:"testCmd"`
 	RunCmd     string   `json:"runCmd"`
+	LintCmd    string   `json:"lintCmd"`    // 通常由 LLM 分析给出（不按语言固化）
+	FormatCmd  string   `json:"formatCmd"`  // 通常由 LLM 分析给出
 	HasDocker  bool     `json:"hasDocker"`
 	HasDBData  bool     `json:"hasDBData"` // csv/json/db/sqlite 数据文件
 	HasAPI     bool     `json:"hasAPI"`    // api 目录/路由文件
@@ -224,25 +246,36 @@ func analyzeProject(projectDir string) *ProjectProfile {
 		return false
 	}
 
-	// 语言检测
+	// 语言检测（★只收集事实，不从语言推导命令——项目语言不可预知，
+	// 构建/测试/运行命令只来自：① 真实文件探测（Makefile/package.json scripts）
+	// ② LLM 项目意图分析（llmAnalyzeProject）。无命令时生成器跳过对应工具。）
 	if hasFile("go.mod") {
 		p.Langs = append(p.Langs, "go")
-		p.BuildCmd = "go build ./..."
-		p.TestCmd = "go test ./..."
-		p.RunCmd = "go run ."
 	}
 	if hasFile("package.json") {
 		p.Langs = append(p.Langs, "node")
-		p.BuildCmd = "npm run build"
-		p.TestCmd = "npm test"
-		p.RunCmd = "npm run dev"
-		// 框架检测（读 dependencies）
+		// 命令探测：真实 scripts（语言无关，看项目自己怎么声明）
 		if data, err := os.ReadFile(filepath.Join(projectDir, "package.json")); err == nil {
 			var pkg struct {
+				Scripts         map[string]string `json:"scripts"`
 				Dependencies    map[string]string `json:"dependencies"`
 				DevDependencies map[string]string `json:"devDependencies"`
 			}
 			if json.Unmarshal(data, &pkg) == nil {
+				if s, ok := pkg.Scripts["build"]; ok {
+					p.BuildCmd = "npm run build" // 以 npm 为标准入口（scripts.build 存在）
+					_ = s
+				}
+				if s, ok := pkg.Scripts["test"]; ok {
+					p.TestCmd = "npm test"
+					_ = s
+				}
+				for _, k := range []string{"dev", "start"} {
+					if _, ok := pkg.Scripts[k]; ok {
+						p.RunCmd = "npm run " + k
+						break
+					}
+				}
 				merge := func(m map[string]string) {
 					for k := range m {
 						lk := strings.ToLower(k)
@@ -261,9 +294,6 @@ func analyzeProject(projectDir string) *ProjectProfile {
 	}
 	if hasFile("pyproject.toml", "requirements.txt", "setup.py", "Pipfile") {
 		p.Langs = append(p.Langs, "python")
-		p.BuildCmd = "python -m build"
-		p.TestCmd = "python -m pytest"
-		p.RunCmd = "python main.py"
 		if hasFile("pyproject.toml") {
 			if data, err := os.ReadFile(filepath.Join(projectDir, "pyproject.toml")); err == nil {
 				low := strings.ToLower(string(data))
@@ -277,23 +307,15 @@ func analyzeProject(projectDir string) *ProjectProfile {
 	}
 	if hasFile("Cargo.toml") {
 		p.Langs = append(p.Langs, "rust")
-		p.BuildCmd = "cargo build"
-		p.TestCmd = "cargo test"
-		p.RunCmd = "cargo run"
 	}
 	if hasFile("pom.xml", "build.gradle", "build.gradle.kts") {
 		p.Langs = append(p.Langs, "java")
-		p.BuildCmd = "mvn compile"
-		p.TestCmd = "mvn test"
-		p.RunCmd = "mvn spring-boot:run"
 	}
 	if hasFile("CMakeLists.txt") {
 		p.Langs = append(p.Langs, "cpp")
-		p.BuildCmd = "cmake --build build"
-		p.TestCmd = "ctest"
-		p.RunCmd = "./build/app"
 	}
-	if hasFile("Makefile") && p.BuildCmd == "" {
+	// 命令探测：真实文件（语言无关）
+	if hasFile("Makefile", "makefile") && p.BuildCmd == "" {
 		p.BuildCmd = "make"
 		p.TestCmd = "make test"
 	}
@@ -361,6 +383,7 @@ func registerToolsetTemplates() *GoPlugin {
 			// 1. 项目助手：构建/测试/运行（按语言生成命令）
 			_ = ph.RegisterTemplate(&ToolsetTemplate{
 				ID: "toolset.tpl.project-helper", Title: "项目构建/测试/运行助手",
+				Tags: []string{"build", "test", "run"},
 				Match: func(p *ProjectProfile) bool { return len(p.Langs) > 0 },
 				Generate: func(p *ProjectProfile, req string) ([]ToolsetPlugin, error) {
 					return genProjectHelper(p), nil
@@ -369,14 +392,16 @@ func registerToolsetTemplates() *GoPlugin {
 			// 2. Git 工作流辅助
 			_ = ph.RegisterTemplate(&ToolsetTemplate{
 				ID: "toolset.tpl.git-flow", Title: "Git 工作流辅助（提交检查/分支摘要）",
+				Tags: []string{"git"},
 				Match: func(p *ProjectProfile) bool { return true },
 				Generate: func(p *ProjectProfile, req string) ([]ToolsetPlugin, error) {
 					return genGitFlow(), nil
 				},
 			})
-			// 3. 代码质量：lint/格式化
+			// 3. 代码质量：lint/格式化（按语言生成命令）
 			_ = ph.RegisterTemplate(&ToolsetTemplate{
 				ID: "toolset.tpl.code-quality", Title: "代码质量（lint/格式化）",
+				Tags: []string{"lint", "code-quality"},
 				Match: func(p *ProjectProfile) bool { return len(p.Langs) > 0 },
 				Generate: func(p *ProjectProfile, req string) ([]ToolsetPlugin, error) {
 					return genCodeQuality(p), nil
@@ -385,6 +410,7 @@ func registerToolsetTemplates() *GoPlugin {
 			// 4. HTTP 接口调试（web 项目命中）
 			_ = ph.RegisterTemplate(&ToolsetTemplate{
 				ID: "toolset.tpl.web-api", Title: "HTTP 接口调试",
+				Tags: []string{"api", "http"},
 				Match: func(p *ProjectProfile) bool { return p.HasAPI || len(p.Frameworks) > 0 },
 				Generate: func(p *ProjectProfile, req string) ([]ToolsetPlugin, error) {
 					return genWebAPI(p), nil
@@ -393,6 +419,7 @@ func registerToolsetTemplates() *GoPlugin {
 			// 5. 数据文件概览（数据项目命中）
 			_ = ph.RegisterTemplate(&ToolsetTemplate{
 				ID: "toolset.tpl.data-inspect", Title: "数据文件概览（csv/json/sqlite）",
+				Tags: []string{"data"},
 				Match: func(p *ProjectProfile) bool { return p.HasDBData },
 				Generate: func(p *ProjectProfile, req string) ([]ToolsetPlugin, error) {
 					return genDataInspect(p), nil
@@ -425,69 +452,88 @@ func toolPrefix(p *ProjectProfile) string {
 
 // genProjectHelper 生成项目构建/测试/运行助手插件。
 // 工具名带项目短名前缀（如 gouide_build），避免多个工具集工具名冲突。
+// ★ 命令来自真实探测或 LLM 分析（profile 字段）；命令缺失时不生成对应工具
+//   （不按语言固化命令——项目语言不可预知）。_profile 工具始终生成。
 func genProjectHelper(p *ProjectProfile) []ToolsetPlugin {
 	buildCmd := p.BuildCmd
-	if buildCmd == "" {
-		buildCmd = "make"
-	}
 	testCmd := p.TestCmd
-	if testCmd == "" {
-		testCmd = "make test"
-	}
 	runCmd := p.RunCmd
-	if runCmd == "" {
-		runCmd = "echo 未检测到运行命令"
-	}
 	langs := strings.Join(p.Langs, "/")
+	if langs == "" {
+		langs = "未知"
+	}
 	pre := toolPrefix(p)
-	code := `return {
+	var code strings.Builder
+	code.WriteString(`return {
   name: '` + pluginSafeName(p.Name+"-project-helper") + `',
   inject: ['bash'],
   apply(ctx) {
     const root = ctx.app.workspaceRoot;
-    ctx.tools.register({
-      name: '` + pre + `_build',
-      description: '构建当前项目（` + buildCmd + `）。',
+`)
+	if buildCmd != "" {
+		fmt.Fprintf(&code, `    ctx.tools.register({
+      name: '%s_build',
+      description: '构建当前项目（%s）。',
       parameters: { type: 'object', properties: {} },
       execute: async () => {
-        const r = await ctx.bash.exec('` + buildCmd + `', root);
-        return r.error ? ('构建失败:\n' + r.error) : ('构建成功\n' + r.output);
+        const r = await ctx.bash.exec('%s', root);
+        return r.error ? ('构建失败:\\n' + r.error) : ('构建成功\\n' + r.output);
       }
     });
-    ctx.tools.register({
-      name: '` + pre + `_test',
-      description: '运行项目测试（` + testCmd + `）。',
+`, pre, buildCmd, buildCmd)
+	}
+	if testCmd != "" {
+		fmt.Fprintf(&code, `    ctx.tools.register({
+      name: '%s_test',
+      description: '运行项目测试（%s）。',
       parameters: { type: 'object', properties: {} },
       execute: async () => {
-        const r = await ctx.bash.exec('` + testCmd + `', root);
-        return r.error ? ('测试失败:\n' + r.error) : ('测试通过\n' + r.output);
+        const r = await ctx.bash.exec('%s', root);
+        return r.error ? ('测试失败:\\n' + r.error) : ('测试通过\\n' + r.output);
       }
     });
-    ctx.tools.register({
-      name: '` + pre + `_run',
-      description: '启动/运行当前项目（` + runCmd + `）。',
+`, pre, testCmd, testCmd)
+	}
+	if runCmd != "" {
+		fmt.Fprintf(&code, `    ctx.tools.register({
+      name: '%s_run',
+      description: '启动/运行当前项目（%s）。',
       parameters: { type: 'object', properties: {} },
       execute: async () => {
-        const r = await ctx.bash.exec('` + runCmd + `', root);
-        return r.error ? ('运行失败:\n' + r.error) : ('运行输出:\n' + r.output);
+        const r = await ctx.bash.exec('%s', root);
+        return r.error ? ('运行失败:\\n' + r.error) : ('运行输出:\\n' + r.output);
       }
     });
-    ctx.tools.register({
-      name: '` + pre + `_profile',
-      description: '输出当前项目类型（语言/框架/构建测试运行命令），帮助 agent 选择正确命令。',
+`, pre, runCmd, runCmd)
+	}
+	fmt.Fprintf(&code, `    ctx.tools.register({
+      name: '%s_profile',
+      description: '输出当前项目特征（语言/框架/构建测试运行命令），帮助 agent 选择正确命令。',
       parameters: { type: 'object', properties: {} },
       execute: async () => {
-        return '语言: ` + langs + `\n构建: ` + buildCmd + `\n测试: ` + testCmd + `\n运行: ` + runCmd + `';
+        return '语言: %s\\n构建: %s\\n测试: %s\\n运行: %s';
       }
     });
   }
-};`
+};`, pre, langs, buildCmdOrNone(buildCmd), testCmdOrNone(testCmd), runCmdOrNone(runCmd))
 	return []ToolsetPlugin{{
 		Name:    pluginSafeName(p.Name + "-project-helper"),
 		Purpose: "项目构建/测试/运行命令助手（" + langs + "）",
-		Code:    code,
+		Code:    code.String(),
 	}}
 }
+
+// cmdOrNone 命令占位（JS 字符串安全）。
+func cmdOrNone(cmd string) string {
+	if cmd == "" {
+		return "（未探测到）"
+	}
+	return cmd
+}
+
+func buildCmdOrNone(c string) string { return cmdOrNone(c) }
+func testCmdOrNone(c string) string  { return cmdOrNone(c) }
+func runCmdOrNone(c string) string   { return cmdOrNone(c) }
 
 // genGitFlow 生成 Git 工作流辅助插件。
 func genGitFlow() []ToolsetPlugin {
@@ -533,51 +579,51 @@ func genGitFlow() []ToolsetPlugin {
 }
 
 // genCodeQuality 生成代码质量插件（按语言选 lint/格式化命令）。
+// genCodeQuality 生成代码质量插件（lint/格式化）。
+// ★ 命令来自 LLM 分析或真实探测（profile.LintCmd/FormatCmd），不按语言固化——
+//   无命令时返回 nil（不生成该插件）。
 func genCodeQuality(p *ProjectProfile) []ToolsetPlugin {
-	lintCmd, fmtCmd := "", ""
-	switch {
-	case p.HasLang("go"):
-		lintCmd, fmtCmd = "gofmt -l .", "gofmt -w ."
-	case p.HasLang("node"):
-		lintCmd, fmtCmd = "npx eslint .", "npx prettier --write ."
-	case p.HasLang("python"):
-		lintCmd, fmtCmd = "python -m ruff check .", "python -m ruff format ."
-	case p.HasLang("rust"):
-		lintCmd, fmtCmd = "cargo clippy", "cargo fmt"
-	case p.HasLang("java"):
-		lintCmd, fmtCmd = "mvn checkstyle:check", "mvn formatter:format"
-	default:
-		lintCmd, fmtCmd = "echo 未检测到 lint 工具", "echo 未检测到格式化工具"
+	lintCmd, fmtCmd := strings.TrimSpace(p.LintCmd), strings.TrimSpace(p.FormatCmd)
+	if lintCmd == "" && fmtCmd == "" {
+		return nil
 	}
-	code := `return {
+	var code strings.Builder
+	code.WriteString(`return {
   name: 'code-quality',
   inject: ['bash'],
   apply(ctx) {
     const root = ctx.app.workspaceRoot;
-    ctx.tools.register({
+`)
+	if lintCmd != "" {
+		fmt.Fprintf(&code, `    ctx.tools.register({
       name: 'lint_project',
-      description: '运行代码检查（` + lintCmd + `）。',
+      description: '运行代码检查（%s）。',
       parameters: { type: 'object', properties: {} },
       execute: async () => {
-        const r = await ctx.bash.exec('` + lintCmd + `', root);
-        return r.error ? ('lint 失败:\n' + r.error) : ('lint 结果:\n' + (r.output || '(无问题)'));
+        const r = await ctx.bash.exec('%s', root);
+        return r.error ? ('lint 失败:\\n' + r.error) : ('lint 结果:\\n' + (r.output || '(无问题)'));
       }
     });
-    ctx.tools.register({
+`, lintCmd, lintCmd)
+	}
+	if fmtCmd != "" {
+		fmt.Fprintf(&code, `    ctx.tools.register({
       name: 'format_project',
-      description: '格式化代码（` + fmtCmd + `）。需谨慎使用（会修改文件）。',
+      description: '格式化代码（%s）。需谨慎使用（会修改文件）。',
       parameters: { type: 'object', properties: {} },
       execute: async () => {
-        const r = await ctx.bash.exec('` + fmtCmd + `', root);
-        return r.error ? ('格式化失败:\n' + r.error) : ('格式化完成\n' + r.output);
+        const r = await ctx.bash.exec('%s', root);
+        return r.error ? ('格式化失败:\\n' + r.error) : ('格式化完成\\n' + r.output);
       }
     });
-  }
-};`
+`, fmtCmd, fmtCmd)
+	}
+	code.WriteString(`  }
+};`)
 	return []ToolsetPlugin{{
 		Name:    "code-quality",
 		Purpose: "代码质量（lint/格式化）",
-		Code:    code,
+		Code:    code.String(),
 	}}
 }
 
