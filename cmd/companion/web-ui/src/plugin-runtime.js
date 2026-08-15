@@ -20,6 +20,19 @@
 // 面板渲染：client 半注册的面板显示在插件面板的「客户端面板」区；render(el, ui) 在
 // 挂载时调用，el 为容器 DOM 元素（可自由操作 DOM），ui 为当前 client 半的沙箱对象。
 // props 声明面板数据契约（轻量 Slot：{field: type}，宿主可注入外部数据）。
+//
+// ★ 宿主预定义 UI 槽位（slotId，插件用 ui.registerSlot({slotId,...}) 注册占用）：
+//   ── 替换型（single，宿主区域整体由插件渲染，面板里下拉切换占用者）──
+//     statusbar  底部状态栏整栏（App 底部）
+//     sidebar    左侧文件栏整栏（App 左侧）
+//     chat       对话面板整区（RightPanel rp-body，含消息+输入区）
+//   ── 叠加型（list，宿主容器内每个占用者渲染一个小条目，面板里勾选激活）──
+//     overlay          浮动层（fixed 全屏，不挡交互，badge/toast）
+//     titlebar-right   标题栏右侧按钮区（App 标题栏，工作区切换按钮旁）
+//     activitybar      活动栏图标列（ActivityBar 顶部，图标+tooltip 入口）
+//     editor-toolbar   编辑器标签栏尾部（undo/redo 按钮旁）
+//     chat-tools       对话输入区上方工具条（发送按钮上方一行快捷工具）
+//     statusbar-items  内置状态栏内叠加条目（左侧信息与右侧信息之间）
 // ═══════════════════════════════════════════════════════════════
 
 import api from './api.js'
@@ -119,6 +132,39 @@ export function getSlotUIList(slotId) {
   return clientSlots
     .filter(s => s.slotId === slotId && s.kind === 'list' && typeof s.render === 'function')
     .map(s => ({ render: s.render, ui: getUIFor(s.pluginName), pluginName: s.pluginName }))
+}
+
+// mountListSlot 挂载 list 型槽位宿主（细粒度叠加注入通用入口）。
+// hostRef：Vue ref（.value 为容器 DOM）；slotId：宿主预定义槽位 id；
+// opts.isActive(pluginName) 可选过滤（默认全部激活，同 overlay 语义）。
+// 每个占用者渲染进独立 div（class=plugin-slot-item plugin-slot-<id>-item, data-plugin=名）；
+// render 返回的 cleanup 在重渲染前调用。返回取消订阅函数（组件卸载前调用）。
+export function mountListSlot(hostRef, slotId, opts = {}) {
+  const cleanups = new Map()
+  function render() {
+    const host = hostRef && hostRef.value
+    if (!host) return
+    for (const [name, c] of cleanups) {
+      try { c() } catch (e) { console.warn('[slot] ' + name + ' cleanup 失败', e) }
+    }
+    cleanups.clear()
+    host.innerHTML = ''
+    for (const s of getSlotUIList(slotId)) {
+      if (opts.isActive && !opts.isActive(s.pluginName)) continue
+      const item = document.createElement('div')
+      item.className = 'plugin-slot-item plugin-slot-' + slotId + '-item'
+      item.dataset.plugin = s.pluginName
+      host.appendChild(item)
+      try {
+        const ret = s.render(item, s.ui)
+        if (typeof ret === 'function') cleanups.set(s.pluginName, ret)
+      } catch (e) {
+        console.warn('[slot] ' + slotId + ' 渲染失败', e)
+        item.innerHTML = '<span style="color:var(--text-muted);font-size:11px">插件条目渲染失败</span>'
+      }
+    }
+  }
+  return setSlotMount(() => { render() })
 }
 
 // setPanelMount 供 PluginPanel 注入「渲染 client 面板」的回调。
@@ -460,7 +506,7 @@ export default {
   startPolling, stopPolling, dispatchHostEvent,
   getInstances, setPanelMount, clientPanels,
   clientSlots, setSlotMount, getSlotCandidates, getSlotOwner, setSlotOwner, getSlotUI, getSlotUIList,
-  emitSlotChanged, isOverlayActive, setOverlayActive,
+  emitSlotChanged, isOverlayActive, setOverlayActive, mountListSlot,
 }
 
 // ★ 调试/验证暴露（生产保留，无害）：window.__pluginRuntime 供浏览器控制台

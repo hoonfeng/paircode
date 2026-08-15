@@ -12,6 +12,8 @@
                 @click="showQuickSwitcher = !showQuickSwitcher" title="快速切换工作区">
           <SvgIcon name="folder" :size="14" />
         </button>
+        <!-- ★ titlebar-right 槽位（list 型）：标题栏右侧细粒度叠加（插件加小按钮/状态） -->
+        <div ref="titlebarSlotEl" class="plugin-slot-host plugin-slot-titlebar"></div>
       </div>
     </div>
 
@@ -64,7 +66,7 @@ import { ref, reactive, computed, watch, onMounted, onUnmounted, provide, nextTi
 import { state, savePersistentState, loadPersistentState, applyTheme } from './main.js'
 import api from './api.js'
 import { processAgentEvent, processAgentDone, processStatus, getConvCtxStats } from './agent-events.js'
-import { getSlotUI, getSlotUIList, getSlotOwner, setSlotMount, isOverlayActive, syncClientHalves, startPolling } from './plugin-runtime.js'
+import { getSlotUI, getSlotUIList, getSlotOwner, setSlotMount, isOverlayActive, syncClientHalves, startPolling, mountListSlot } from './plugin-runtime.js'
 
 // ★ 桌面端面板独立模式：desktopbridge 注入 window.__DESKTOP_PANEL_MODE__，
 //   此时只渲染右侧面板（消息展示）占满全屏，隐藏 IDE 其他区域。
@@ -597,6 +599,9 @@ onMounted(async () => {
   // UI 槽位订阅（statusbar 可被插件替换）
   slotUnsub = setSlotMount(onSlotChanged)
   onSlotChanged()
+
+  // titlebar-right 槽位（list 型）：标题栏右侧细粒度叠加
+  titlebarUnsub = mountListSlot(titlebarSlotEl, 'titlebar-right')
 })
 
 onUnmounted(() => {
@@ -604,6 +609,7 @@ onUnmounted(() => {
   if (window._cleanupAppEvents) { window._cleanupAppEvents(); delete window._cleanupAppEvents }
   if (persistTimer) { clearTimeout(persistTimer); persistTimer = null }
   if (slotUnsub) { slotUnsub(); slotUnsub = null }
+  if (titlebarUnsub) { titlebarUnsub(); titlebarUnsub = null }
   if (typeof slotCleanup === 'function') { try { slotCleanup() } catch (e) {} slotCleanup = null }
   if (typeof sidebarCleanup === 'function') { try { sidebarCleanup() } catch (e) {} sidebarCleanup = null }
   for (const c of overlayCleanups) { try { c() } catch (e) {} }
@@ -614,6 +620,8 @@ onUnmounted(() => {
 // ─── UI 槽位（statusbar）：插件可替换底部状态栏（Slot 系统）──
 const slotOwner = ref('')
 const slotStatusBarEl = ref(null)
+const titlebarSlotEl = ref(null)
+let titlebarUnsub = null
 let slotCleanup = null
 let slotUnsub = null
 
@@ -791,6 +799,8 @@ watch(() => state.openFiles.length, schedulePersist)
 .plugin-slot-statusbar { background: var(--accent); }
 /* sidebar 槽位：插件渲染的左侧栏与内置 Sidebar 同尺寸 */
 .plugin-slot-sidebar { height: 100%; overflow: hidden; }
+/* titlebar-right 槽位：标题栏右侧按钮区，与内置按钮同一行 */
+.plugin-slot-titlebar { display: flex; align-items: center; gap: 4px; height: auto; }
 /* overlay 槽位（list 型）：浮动层，条目叠加（badge/toast/status pill），不挡交互 */
 .plugin-overlay-host { position: fixed; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 9999; }
 .plugin-overlay-item { pointer-events: auto; }

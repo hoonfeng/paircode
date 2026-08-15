@@ -13,6 +13,8 @@
         <span class="tab-close" @click.stop="closeTab(file)">×</span>
       </button>
       <span class="tab-spacer"></span>
+      <!-- ★ editor-toolbar 槽位（list 型）：编辑器标签栏尾部细粒度叠加（插件加操作按钮） -->
+      <div ref="editorToolbarEl" class="plugin-slot-host plugin-slot-editor-toolbar"></div>
       <button class="tb-action" @click="undoAction" title="撤消 (Ctrl+Z)" :disabled="!state.activeFile"><SvgIcon name="undo" :size="12" /></button>
       <button class="tb-action" @click="redoAction" title="重做 (Ctrl+Y)" :disabled="!state.activeFile"><SvgIcon name="redo" :size="12" /></button>
     </div>
@@ -87,10 +89,13 @@ import HexViewer from './HexViewer.vue'
 import ImageViewer from './ImageViewer.vue'
 import MarkdownRenderer from './MarkdownRenderer.vue'
 import ContextMenu from './ContextMenu.vue'
+import { mountListSlot } from '../plugin-runtime.js'
 
 const editorRef = ref(null)
 const tabContextMenu = ref(null)
 const editorCtxMenu = ref(null)
+const editorToolbarEl = ref(null)
+let editorToolbarUnsub = null
 const mdPreview = ref(true)  // markdown 文件默认预览模式
 let contextFile = ''
 
@@ -396,8 +401,15 @@ const redoAction = () => {
   view.dispatch({ effects: redo(view) })
 }
 
-onMounted(() => { document.addEventListener('keydown', handleKeydown) })
-onUnmounted(() => { document.removeEventListener('keydown', handleKeydown) })
+onMounted(() => {
+  document.addEventListener('keydown', handleKeydown)
+  // editor-toolbar 槽位（list 型）：标签栏尾部细粒度叠加
+  editorToolbarUnsub = mountListSlot(editorToolbarEl, 'editor-toolbar')
+})
+onUnmounted(() => {
+  document.removeEventListener('keydown', handleKeydown)
+  if (editorToolbarUnsub) { editorToolbarUnsub(); editorToolbarUnsub = null }
+})
 </script>
 
 <style scoped>
@@ -418,6 +430,17 @@ onUnmounted(() => { document.removeEventListener('keydown', handleKeydown) })
 }
 .editor-tabs button:hover { color: var(--text-primary); }
 .tab-spacer { flex: 1; }
+/* editor-toolbar 槽位（list 型）：与 tb-action 同一行，不撑满高度 */
+.plugin-slot-editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: auto;
+}
+.plugin-slot-editor-toolbar .plugin-slot-item {
+  display: flex;
+  align-items: center;
+}
 .tb-action {
   background: none; border: none; color: var(--text-muted); padding: 2px 6px;
   cursor: pointer; display: flex; align-items: center; border-radius: 3px; margin: 0 1px;

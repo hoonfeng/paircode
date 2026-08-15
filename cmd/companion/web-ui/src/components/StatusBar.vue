@@ -16,6 +16,8 @@
         {{ gitChanges }}
       </span>
     </div>
+    <!-- ★ statusbar-items 槽位（list 型）：内置状态栏内细粒度叠加条目（插件加小状态/快捷入口） -->
+    <div ref="statusItemsEl" class="plugin-slot-host plugin-slot-status-items"></div>
     <div class="status-right">
       <span class="status-item" v-if="state.activeFile">
         <SvgIcon name="file-code" :size="12" />
@@ -36,10 +38,13 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { state } from '../main.js'
 import SvgIcon from './SvgIcon.vue'
 import api from '../api.js'
+import { mountListSlot } from '../plugin-runtime.js'
 
 const connected = ref(false)
 const gitBranch = ref('')
 const gitChanges = ref(0)
+const statusItemsEl = ref(null)
+let statusItemsUnsub = null
 let gitTimer = null
 
 const displayPath = computed(() => {
@@ -72,6 +77,8 @@ function switchToGit() {
 }
 
 onMounted(async () => {
+  // statusbar-items 槽位（list 型）：状态栏内细粒度叠加
+  statusItemsUnsub = mountListSlot(statusItemsEl, 'statusbar-items')
   const check = async () => {
     try {
       const wsOk = api.isWebSocketOpen()
@@ -94,6 +101,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   if (gitTimer) clearInterval(gitTimer)
+  if (statusItemsUnsub) { statusItemsUnsub(); statusItemsUnsub = null }
   if (window.__wsStatusCleanup) { window.__wsStatusCleanup(); delete window.__wsStatusCleanup }
 })
 </script>
@@ -110,6 +118,22 @@ onUnmounted(() => {
   color: var(--status-text);
 }
 .status-left, .status-right { display: flex; align-items: center; gap: 8px; }
+/* statusbar-items 槽位（list 型）：状态栏中间叠加区，与左右信息同行 */
+.plugin-slot-status-items {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: auto;
+  margin: 0 auto;
+}
+.plugin-slot-status-items .plugin-slot-item {
+  display: flex;
+  align-items: center;
+  opacity: 0.9;
+  font-size: 11px;
+  gap: 4px;
+}
+.plugin-slot-status-items .plugin-slot-item:hover { opacity: 1; }
 .status-item { opacity: 0.9; display: flex; align-items: center; gap: 4px; }
 .status-item:hover { opacity: 1; }
 .git-branch-item, .git-status-icons { cursor: pointer; }

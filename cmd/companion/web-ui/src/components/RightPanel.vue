@@ -166,6 +166,8 @@
         </div>
         <!-- 输入区 -->
         <div class="chat-input-area" ref="chatInputAreaRef">
+          <!-- ★ chat-tools 槽位（list 型）：输入区上方工具条，插件可叠加快捷按钮（@文件/常用命令/图片等） -->
+          <div ref="chatToolsEl" class="plugin-slot-host plugin-slot-chat-tools"></div>
           <!-- ★ 未完成任务提示条：上次运行异常中断/未完成时显示，一键继续 -->
           <div v-if="currentConvInterrupted" class="resume-banner">
             <span class="resume-icon">⚠️</span>
@@ -217,7 +219,7 @@ import { ref, computed, inject, onMounted, onUnmounted, nextTick, watch } from '
 import { state } from '../main.js'
 import api from '../api.js'
 import { setGlobalCtx, startConvRuntime, resetConvRuntime, createAssistantPlaceholder, getConvRuntime, getConvCtxStats, resetConvCtxStats } from '../agent-events.js'
-import { getSlotUI, getSlotOwner, setSlotMount } from '../plugin-runtime.js'
+import { getSlotUI, getSlotOwner, setSlotMount, mountListSlot } from '../plugin-runtime.js'
 import SvgIcon from './SvgIcon.vue'
 import PlanPanel from './PlanPanel.vue'
 import TaskPanel from './TaskPanel.vue'
@@ -243,6 +245,8 @@ const feedbackText = ref('')
 const msgRef = ref(null)
 const inputRef = ref(null)
 const chatInputAreaRef = ref(null)
+const chatToolsEl = ref(null)
+let chatToolsUnsub = null
 // 按钮已移至 textarea 外部下方（.input-bottom-bar），无需动态 padding
 function updateInputPadding() {
   if (inputHeight.value < 80) inputHeight.value = 80
@@ -1458,6 +1462,9 @@ onMounted(() => {
   chatSlotUnsub = setSlotMount(onChatSlotChanged)
   onChatSlotChanged()
 
+  // chat-tools 槽位（list 型）：输入区上方工具条细粒度叠加
+  chatToolsUnsub = mountListSlot(chatToolsEl, 'chat-tools')
+
   // 监听消息内容尺寸变化（流式输出时自动跟随滚底）
   nextTick(() => startContentResizeObserver())
 
@@ -1580,6 +1587,7 @@ onUnmounted(() => {
   stopContentResizeObserver()
   if (inputOverlayObserver) { inputOverlayObserver.disconnect(); inputOverlayObserver = null }
   if (chatSlotUnsub) { chatSlotUnsub(); chatSlotUnsub = null }
+  if (chatToolsUnsub) { chatToolsUnsub(); chatToolsUnsub = null }
   if (typeof chatSlotCleanup === 'function') { try { chatSlotCleanup() } catch (e) {} chatSlotCleanup = null }
   // 不关闭 WebSocket（由 App.vue 管理生命周期）；不清理 subscriptions（已移除 SSE 订阅模式）
   document.removeEventListener('mousemove', onInputResizeMove); document.removeEventListener('mouseup', stopInputResize)
@@ -1771,6 +1779,19 @@ onUnmounted(() => {
 
 /* ── 输入区 ── */
 .chat-input-area { display: flex; flex-direction: column; flex-shrink: 0; padding: 0 8px 8px 8px; background: var(--bg-secondary); }
+/* chat-tools 槽位（list 型）：输入区上方工具条，细粒度叠加不撑满 */
+.plugin-slot-chat-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: auto;
+  min-height: 0;
+  padding: 2px 0;
+}
+.plugin-slot-chat-tools .plugin-slot-item {
+  display: flex;
+  align-items: center;
+}
 /* ★ 未完成任务提示条 */
 .resume-banner {
   display: flex; align-items: center; gap: 8px;
