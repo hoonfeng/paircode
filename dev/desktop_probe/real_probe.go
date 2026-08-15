@@ -6,6 +6,8 @@
 // http://localhost:9090.
 //
 // Output: dev/desktop_probe/real_tree_wb.json + stdout tree
+//go:build ignore
+
 package main
 
 import (

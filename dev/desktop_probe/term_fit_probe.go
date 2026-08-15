@@ -11,6 +11,8 @@
 //
 // Output: dev/desktop_probe/termfit_tree_wb.json + [FITDIAG] diagnostics
 // Run: go run ./dev/desktop_probe/term_fit_probe.go
+//go:build ignore
+
 package main
 
 import (

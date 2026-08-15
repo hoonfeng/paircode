@@ -1,5 +1,7 @@
 // Command edge_range_shot captures Edge headless screenshot of ide_ref_range.html
 // for pixel-level comparison of the native range slider (track/thumb) vs wb-ui.
+//go:build ignore
+
 package main
 
 import (

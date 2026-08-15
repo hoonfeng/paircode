@@ -8,6 +8,8 @@
 // → FitAddon.fit() never re-runs → terminal stays at initial cols/rows.
 //
 // Run: go run ./dev/desktop_probe/abs_resize_probe.go
+//go:build ignore
+
 package main
 
 import (

@@ -1,6 +1,8 @@
 // Command edge_setmodal_ref launches Edge headless on ide_ref_setmodal.html
 // (standalone settings-modal replica) to collect the REAL browser's modal
 // geometry for comparison against wb-ui.
+//go:build ignore
+
 package main
 
 import (

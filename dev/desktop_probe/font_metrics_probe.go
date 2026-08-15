@@ -1,5 +1,7 @@
 // Command font_metrics_probe 打印 wb-ui 引擎对 Consolas 13px 的
 // ascent/descent/lineGap，对照浏览器（CSS hhea）的期望值。
+//go:build ignore
+
 package main
 
 import (

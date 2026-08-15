@@ -2,6 +2,8 @@
 //   MockKeyChar（handleCharInput）→ JS 微任务（CM6 readDOMChange）
 //   → RebuildRenderTree → EnsureLayout → Render(paint)
 // 输出每阶段耗时分布，定位「事件响应极慢」的瓶颈。
+//go:build ignore
+
 package main
 
 import (

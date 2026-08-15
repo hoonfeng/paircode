@@ -2,6 +2,8 @@
 // engine and writes a PNG, so the vertical position of Chinese glyphs
 // inside line boxes can be pixel-compared against Edge's screenshot
 // (cjk_edge_shot.png) with the same analysis script.
+//go:build ignore
+
 package main
 
 import (

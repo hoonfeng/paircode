@@ -1,3 +1,5 @@
+//go:build ignore
+
 package main
 
 // Command proxy_probe 验证 wb-ui jsc 引擎中 JS Proxy 的支持情况

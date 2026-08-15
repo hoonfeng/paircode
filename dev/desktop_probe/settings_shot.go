@@ -1,6 +1,8 @@
 // Command settings_shot 加载真实 dist，打开设置面板与工具配置弹窗，
 // 在每个关键阶段输出 PNG 截图（settings_main.png / settings_panel.png /
 // settings_toolcfg.png），用于肉眼/ASCII 检查视觉布局。
+//go:build ignore
+
 package main
 
 import (

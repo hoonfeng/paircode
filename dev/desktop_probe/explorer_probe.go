@@ -1,5 +1,7 @@
 // Command explorer_probe: 加载 desktop IDE（web-ui/dist）并输出文件浏览器
 // 区域内所有 RenderText 的 segments 几何与内容，用于诊断「那一栏文字显示异常」。
+//go:build ignore
+
 package main
 
 import (

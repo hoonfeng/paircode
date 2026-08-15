@@ -2,6 +2,8 @@
 //   1. 打开设置面板，检查 settings-body / modal-body / modal-content 的水平滚动
 //   2. 模拟 Press+Move 拖动温度 range（含 value 越过 0.8 触发 ⚠️ hint）
 //   3. 每步用 HorizontalScrollbarMetrics.MaxScroll 检测水平滚动条是否出现
+//go:build ignore
+
 package main
 
 import (

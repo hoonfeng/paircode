@@ -4,6 +4,8 @@
 //   → runJobs（CM6 measure + updateSelection 同步 DOM selection）
 //   → 检查 getSelection().getRangeAt(0)（sstate.ranges）
 //   → MockKeyChar → 检查 DOM/state 是否出现字符
+//go:build ignore
+
 package main
 
 import (

@@ -2,6 +2,8 @@
 // to quantify the ink height of '(' 'x' 'a' '{' 'n' ')' — verifying whether
 // parens render full-height (12px) vs x-height (8px) like in browsers.
 // Run: go run ./dev/desktop_probe/paren_probe.go
+//go:build ignore
+
 package main
 
 import (

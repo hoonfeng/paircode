@@ -1,3 +1,5 @@
+//go:build ignore
+
 package main
 
 // Command settings_fetch_probe 直接测 fetch('/api/settings') 异步结果 + location.origin + URL 构造

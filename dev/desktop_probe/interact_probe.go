@@ -1,3 +1,5 @@
+//go:build ignore
+
 package main
 
 // Command interact_probe 验证设置面板中表单控件的交互：

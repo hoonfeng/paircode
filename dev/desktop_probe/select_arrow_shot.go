@@ -1,6 +1,8 @@
 // Command select_arrow_shot renders a native <select> via wb-ui's form-control
 // painter into a canvas, then dumps the arrow-region pixels as ASCII so the
 // chevron shape can be compared against the Edge reference (edge_select_shot.png).
+//go:build ignore
+
 package main
 
 import (

@@ -1,3 +1,5 @@
+//go:build ignore
+
 package main
 
 // Command range_h_probe 输出 wb-ui 中 range input 的实际布局尺寸

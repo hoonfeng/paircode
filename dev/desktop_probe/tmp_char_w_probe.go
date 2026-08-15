@@ -2,6 +2,8 @@
 // 渲染宽度（JetBrains Mono 13px），对比浏览器（Edge 参照）验证行号栏/
 // foldGutter 宽度差异来源。
 // 运行: set CGO_ENABLED=1 && go run ./dev/desktop_probe/tmp_char_w_probe.go
+//go:build ignore
+
 package main
 
 import (

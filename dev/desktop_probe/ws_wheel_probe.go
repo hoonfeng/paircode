@@ -1,5 +1,7 @@
 // Command ws_wheel_probe verifies DOM wheel event dispatch/listen chain
 // in wb-ui: addEventListener('wheel') → dispatchEvent → listener fires?
+//go:build ignore
+
 package main
 
 import (

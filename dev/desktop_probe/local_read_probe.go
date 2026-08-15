@@ -1,3 +1,5 @@
+//go:build ignore
+
 package main
 
 // Command local_read_probe 通过 Vue vnode 组件实例读取 SettingsModal 的 local 状态，

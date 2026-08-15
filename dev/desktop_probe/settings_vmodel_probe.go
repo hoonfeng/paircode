@@ -1,3 +1,5 @@
+//go:build ignore
+
 package main
 
 // Command settings_vmodel_probe 验证 SettingsModal 中 v-model 对 input.value 的更新：

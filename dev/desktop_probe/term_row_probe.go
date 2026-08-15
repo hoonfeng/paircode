@@ -1,6 +1,8 @@
 // Command term_row_probe 加载真实 dist，等待终端创建（xterm DOM renderer），
 // 查询首行文本位置/行高/行间距，输出 PNG 截图与 JSON 诊断，
 // 用于对照浏览器（Edge 参照）的终端行渲染。
+//go:build ignore
+
 package main
 
 import (

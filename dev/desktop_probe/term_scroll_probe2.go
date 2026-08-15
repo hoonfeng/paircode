@@ -2,6 +2,8 @@
 // 1. open terminal, write many lines (scrollback > viewport)
 // 2. dispatch a wheel event on the terminal DOM
 // 3. check the scrollable-element's scrollTop / slider position moved
+//go:build ignore
+
 package main
 
 import (

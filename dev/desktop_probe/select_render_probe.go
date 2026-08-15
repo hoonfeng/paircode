@@ -2,6 +2,8 @@
 // engine and writes a PNG at the same 640x420 size as Edge's screenshot
 // (edge_select_shot.png), so the native <select> text position/width can
 // be pixel-compared against the real browser.
+//go:build ignore
+
 package main
 
 import (

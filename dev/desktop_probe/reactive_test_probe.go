@@ -1,3 +1,5 @@
+//go:build ignore
+
 package main
 
 // Command reactive_test_probe 直接在 wb-ui 引擎中测试 Vue 3 reactive 的依赖追踪：

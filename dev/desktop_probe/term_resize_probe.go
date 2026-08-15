@@ -14,6 +14,8 @@
 // for the debounced fit(), and reports whether rows/cols were recomputed.
 //
 // Run: go run ./dev/desktop_probe/term_resize_probe.go
+//go:build ignore
+
 package main
 
 import (

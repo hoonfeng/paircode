@@ -2,6 +2,8 @@
 // to capture the real browser's rendering of an xterm-style DOM renderer
 // structure (absolute inline-block spans inside 15px row divs) — the text
 // baseline/vertical position inside each cell is the browser ground truth.
+//go:build ignore
+
 package main
 
 import (

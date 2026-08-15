@@ -1,6 +1,8 @@
 // Command edge_cm6_ref: Edge headless dump the minimal CM6 page's gutter DOM
 // structure (spacer/行号元素几何), as the browser baseline for wb-ui's CM6
 // rendering comparison.
+//go:build ignore
+
 package main
 
 import (

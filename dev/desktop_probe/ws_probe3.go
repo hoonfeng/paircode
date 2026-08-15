@@ -1,5 +1,7 @@
 // Command ws_probe3 loads ide_ref_ws.html and dumps text segments via
 // RenderObject tree (same traversal as term_probe), to verify white-space:pre.
+//go:build ignore
+
 package main
 
 import (

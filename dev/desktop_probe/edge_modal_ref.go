@@ -1,6 +1,8 @@
 // Command edge_modal_ref launches Edge headless on ide_ref_modal.html to
 // collect the REAL browser's modal geometry (settings modal + toolcfg popover).
 // 增强版：更长的 virtual-time-budget + 输出原始 title 诊断。
+//go:build ignore
+
 package main
 
 import (

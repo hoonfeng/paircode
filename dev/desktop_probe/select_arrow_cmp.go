@@ -1,5 +1,7 @@
 // Command select_arrow_cmp renders a native <select> (220x20) on white bg
 // and dumps arrow pixels with Edge's exact black-core rule (RGB<80).
+//go:build ignore
+
 package main
 
 import (

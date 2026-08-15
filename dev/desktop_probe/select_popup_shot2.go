@@ -1,5 +1,7 @@
 // Command select_popup_shot2 在真实设置面板中点击服务商 select，检查
 // popup 打开位置（应在 select 底部下方）与 option 渲染，并截图对比。
+//go:build ignore
+
 package main
 
 import (

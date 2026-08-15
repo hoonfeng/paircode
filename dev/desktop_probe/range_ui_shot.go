@@ -1,5 +1,7 @@
 // Command range_ui_shot 渲染独立 range 页面（对照 ide_ref_range.html），
 // 输出 PNG 供像素对比 wb-ui 滑块 vs Edge 标准。
+//go:build ignore
+
 package main
 
 import (

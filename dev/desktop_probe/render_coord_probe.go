@@ -2,6 +2,8 @@
 // （settings-modal/modal-header/modal-body/settings-tabs/settings-body/
 //  tab button/label/input）在渲染树 frame（相对坐标）与布局树
 // BoxGeometry 中的位置，以及父链，用于定位「DOM rect 与像素渲染错位」。
+//go:build ignore
+
 package main
 
 import (

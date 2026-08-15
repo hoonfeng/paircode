@@ -11,6 +11,8 @@
 // user-reported issue: "terminal panel resized but terminal stays initial".
 //
 // Run: go run ./dev/desktop_probe/term_panel_resize_probe.go
+//go:build ignore
+
 package main
 
 import (

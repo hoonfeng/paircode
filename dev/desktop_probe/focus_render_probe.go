@@ -1,6 +1,8 @@
 // Command focus_render_probe: 验证引擎对「明确 style.width 的 inline-block
 // span」（xterm DOM renderer 空格 span）的布局是否保持 JS 设定宽度，以及
 // 聚焦/reflow 前后是否一致——排查「终端聚焦/失焦空格间距不一致」。
+//go:build ignore
+
 package main
 
 import (

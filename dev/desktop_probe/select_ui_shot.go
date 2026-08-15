@@ -1,5 +1,7 @@
 // Command select_ui_shot 打开设置面板（含多个 <select> 下拉），截取整个
 // 面板渲染 PNG，并定位各 select 元素的位置——用于与 Edge 原生渲染逐像素对照。
+//go:build ignore
+
 package main
 
 import (

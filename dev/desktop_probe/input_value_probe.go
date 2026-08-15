@@ -1,3 +1,5 @@
+//go:build ignore
+
 package main
 
 // Command input_value_probe 精确验证：

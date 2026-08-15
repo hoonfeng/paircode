@@ -6,6 +6,8 @@
 //   5. 点击菜单项「功能介绍」→ .help-modal 是否渲染（marked 解析是否报错）
 //   6. 输出 console 错误
 // 用法：go run ./dev/desktop_probe/help_probe.go
+//go:build ignore
+
 package main
 
 import (

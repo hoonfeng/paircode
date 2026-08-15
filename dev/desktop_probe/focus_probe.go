@@ -1,6 +1,8 @@
 // Command focus_probe: 在真实 dist（完整 Vue 应用 + xterm）中写入带空格
 // 文本，对比 初始 / blur() / focus() 三个状态下每行 span 的宽度与行几何
 // ——排查「终端聚焦/失焦空格间距不一致」。
+//go:build ignore
+
 package main
 
 import (

@@ -1,3 +1,5 @@
+//go:build ignore
+
 package main
 
 // Command settings_fetch2_probe 获取 fetch('/api/settings') 的完整响应细节（status+body）

@@ -2,6 +2,8 @@
 //   1. App.vue setup 顶层同步预取（go.bridge_call）是否填充 state.conversations
 //   2. ConvSidebar 是否渲染出会话列表 DOM
 // 定位「对话列表加载异常 现在空的」：数据链路正常（17 会话），问题可能在前端渲染。
+//go:build ignore
+
 package main
 
 import (

@@ -7,6 +7,8 @@
 //   - 整帧合计
 // 输出 avg/max/p95，定位瓶颈阶段（重建 vs 布局 vs JS）。
 // 用法: set CGO_ENABLED=1 && go run ./dev/desktop_probe/perf_drag_probe.go
+//go:build ignore
+
 package main
 
 import (

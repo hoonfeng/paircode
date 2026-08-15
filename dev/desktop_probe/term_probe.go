@@ -8,6 +8,8 @@
 // Output: dev/desktop_probe/term_tree_wb.json + stdout tree
 //
 // Run: go run ./dev/desktop_probe/term_probe.go
+//go:build ignore
+
 package main
 
 import (

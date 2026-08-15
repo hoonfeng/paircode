@@ -1,5 +1,7 @@
 // Command edge_range_ref launches Edge headless on ide_ref_range.html to
 // collect the REAL browser's range-input geometry for comparison vs wb-ui.
+//go:build ignore
+
 package main
 
 import (

@@ -1,3 +1,5 @@
+//go:build ignore
+
 package main
 
 // Command settings_mount_probe 验证 SettingsModal onMounted 是否执行：

@@ -1,3 +1,5 @@
+//go:build ignore
+
 package main
 
 // Command settings_bridge_probe 检查 wb-ui bridge 中 /api/settings 注册的路由 method，

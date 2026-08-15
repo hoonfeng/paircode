@@ -1,6 +1,8 @@
 // Command edge_select_ref launches Edge headless on ide_ref_select.html to
 // capture the REAL browser's native <select> rendering (arrow shape, colors,
 // geometry) for comparison against wb-ui.
+//go:build ignore
+
 package main
 
 import (

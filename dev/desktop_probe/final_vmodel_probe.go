@@ -1,3 +1,5 @@
+//go:build ignore
+
 package main
 
 // Command final_vmodel_probe 终极验证：

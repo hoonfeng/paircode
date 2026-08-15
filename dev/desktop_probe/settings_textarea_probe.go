@@ -1,3 +1,5 @@
+//go:build ignore
+
 package main
 
 // Command settings_textarea_probe 验证「指令」「思想」tab 的 textarea 尺寸：

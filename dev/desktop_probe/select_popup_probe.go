@@ -1,5 +1,7 @@
 // select_popup_probe 验证 <select> 下拉 popup：点击 select 打开浮层、
 // 点击 option 选择并派发 change、点击外部关闭。
+//go:build ignore
+
 package main
 
 import (

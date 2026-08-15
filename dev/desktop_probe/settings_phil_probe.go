@@ -1,3 +1,5 @@
+//go:build ignore
+
 package main
 
 // Command settings_phil_probe 验证「思想」tab 完整渲染（7 子角色）下的

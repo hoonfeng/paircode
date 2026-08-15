@@ -1,3 +1,5 @@
+//go:build ignore
+
 package main
 
 // Command settings_data_probe 验证 /api/settings 数据加载链路：

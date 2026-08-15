@@ -1,6 +1,8 @@
 // Command select_popup_shot3 在真实设置面板中验证 select popup 打开位置：
 // 点击服务商 select（#1）后，popup 应从其底部（y=236+27=263）下方展开，
 // 不覆盖组件本身。
+//go:build ignore
+
 package main
 
 import (

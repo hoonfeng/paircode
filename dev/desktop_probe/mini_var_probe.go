@@ -1,4 +1,6 @@
 // Command mini_var_probe 最小复现 var(--a, var(--b)) 嵌套 fallback 解析。
+//go:build ignore
+
 package main
 
 import (

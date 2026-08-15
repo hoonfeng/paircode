@@ -1,3 +1,5 @@
+//go:build ignore
+
 package main
 
 // Command watch_probe 验证：

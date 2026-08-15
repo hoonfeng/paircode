@@ -1,4 +1,6 @@
 // Command toolcfg_probe 打开工具配置弹窗，查询弹窗各滚动容器几何
+//go:build ignore
+
 package main
 
 import (

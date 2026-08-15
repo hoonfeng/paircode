@@ -13,6 +13,8 @@
 //
 // Output: [MEASURE] diagnostics lines
 // Run: go run ./dev/desktop_probe/char_measure_probe.go
+//go:build ignore
+
 package main
 
 import (

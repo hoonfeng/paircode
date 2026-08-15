@@ -1,3 +1,5 @@
+//go:build ignore
+
 package main
 
 // Command settings_load_probe 定位 loadSettings 未生效的根因：

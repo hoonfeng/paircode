@@ -1,4 +1,6 @@
 // Command arrow_scan 系统扫描 stroke/V 高参数，输出与 Edge 参照最匹配的组合。
+//go:build ignore
+
 package main
 
 import (

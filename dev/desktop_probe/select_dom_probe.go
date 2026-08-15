@@ -1,3 +1,5 @@
+//go:build ignore
+
 package main
 
 // Command select_dom_probe 检查 select 的 DOM 结构（childNodes / innerHTML）

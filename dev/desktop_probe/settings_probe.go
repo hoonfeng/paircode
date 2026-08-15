@@ -2,6 +2,8 @@
 //   1. 打开设置面板（点击 activity-bar 设置按钮）→ 输出 modal/tabs/rows 的 DOM 诊断
 //   2. 打开工具配置弹窗（点击 RightPanel 工具配置按钮）→ 输出 popover 诊断
 // 与浏览器（9090 web_debug element_query）对比定位「设置面板/工具配置展示异常」。
+//go:build ignore
+
 package main
 
 import (

@@ -1,5 +1,7 @@
 // Command edge_cm6_title: Edge headless 加载 cm6_ref.html，提取 <title>CM6-REF:</title>
 // 里的几何基准数据（gutter/行号宽度、# 注释字符 x 偏移），作为 wb-ui 的浏览器基准。
+//go:build ignore
+
 package main
 
 import (

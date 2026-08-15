@@ -5,6 +5,8 @@
 // Usage:
 //   1. python -m http.server 9097   (in cmd/companion/web-ui)
 //   2. go run ./dev/desktop_probe/edge_cjk_ref.go
+//go:build ignore
+
 package main
 
 import (

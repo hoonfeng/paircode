@@ -4,6 +4,8 @@
 //     （模拟用户已启用思想注入——Edge 参照无需再靠 headless 勾选 checkbox）
 // 用法：go run ./dev/desktop_probe/mock_api_server.go （默认 9097）
 //   然后 EDGE_REF_TAB=philosophy go run ./dev/desktop_probe/edge_modal_ref.go
+//go:build ignore
+
 package main
 
 import (

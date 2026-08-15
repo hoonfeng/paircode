@@ -1,3 +1,5 @@
+//go:build ignore
+
 package main
 
 // Command comp_inst_probe 通过 _vnode 链查找 SettingsModal 组件实例，读取 setupState.local

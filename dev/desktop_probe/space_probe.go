@@ -1,6 +1,8 @@
 // Command space_probe 加载真实 dist，向终端写入带空格文本，检查
 // xterm DOM span 结构（空格如何表示）与每个可见字符的像素位置，
 // 用于定位「空格间距」问题（空格宽度 vs 字符宽度、连续空格折叠）。
+//go:build ignore
+
 package main
 
 import (

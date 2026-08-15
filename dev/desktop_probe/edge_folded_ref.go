@@ -1,3 +1,5 @@
+//go:build ignore
+
 package main
 
 // edge_folded_ref: Edge headless 渲染 folded-summary 最小结构（340px 视口），

@@ -1,5 +1,7 @@
 // Command modal_scroll_probe 打开设置面板，查询 settings-body 的滚动几何
 // 与 overflow 状态，定位「内容显示不全+不能滚动」。
+//go:build ignore
+
 package main
 
 import (

@@ -1,6 +1,8 @@
 // Command cjk_metrics_probe 测量中文字体（微软雅黑/宋体）的垂直度量，
 // 确定 CJK 字形顶距 baseline 的距离——painter 用它定位 baseline 使
 // CJK 字形顶贴行 box 顶（浏览器行为）。
+//go:build ignore
+
 package main
 
 import (

@@ -1,6 +1,8 @@
 // Command term_scroll_probe loads the terminal reference page, writes extra
 // scrollback lines, then checks viewport scrollTop/scrollHeight and performs
 // a scroll to verify xterm scrolling works (browser parity).
+//go:build ignore
+
 package main
 
 import (

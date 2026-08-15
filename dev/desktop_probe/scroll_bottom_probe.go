@@ -4,6 +4,8 @@
 //   3. 模拟前端 scrollToBottom（el.scrollTop = el.scrollHeight）
 //   4. 检查 scrollTop 是否被钳制到 MaxScroll（totalH - viewH）→ 跳底是否生效
 //   5. 引擎侧 BoxScrollOffset 对比（scrollTop setter → SetBoxScrollOffset）
+//go:build ignore
+
 package main
 
 import (

@@ -2,6 +2,8 @@
 // 通过 window.__state 注入打开一个 40+ 行的 Go 文件，渲染后 dump
 // .cm-editor/.cm-gutters/.cm-lineNumbers/.cm-gutterElement/.cm-activeLine*
 // 的几何与 computed 背景，并保存 PNG 供像素对比。
+//go:build ignore
+
 package main
 
 import (

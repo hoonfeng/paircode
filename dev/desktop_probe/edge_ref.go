@@ -7,6 +7,8 @@
 //   (cd cmd/companion/web-ui && python -m http.server 9093)
 //
 // Run: go run ./dev/desktop_probe/edge_ref.go
+//go:build ignore
+
 package main
 
 import (

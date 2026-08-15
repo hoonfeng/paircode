@@ -4,6 +4,8 @@
 //   3. MockRangeMove 拖到 25% → value 实时更新 0.5（input 事件）
 //   4. MockRangeRelease → 派发 change，最终值 0.5
 //   5. hover 像素：thumb 正常 vs hover 变亮对比
+//go:build ignore
+
 package main
 
 import (

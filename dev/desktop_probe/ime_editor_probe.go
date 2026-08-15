@@ -2,6 +2,8 @@
 //   DOM Selection 定位 → applyIMEEvents 组合（compositionupdate）+ 提交（char）
 //   → 检查文本插入位置（是否光标处/光标后）与 CM6 state 同步。
 // 目标：复现用户报告「IME 文本插入到光标前（不是往后排）」。
+//go:build ignore
+
 package main
 
 import (

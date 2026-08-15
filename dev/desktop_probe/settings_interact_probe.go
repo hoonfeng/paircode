@@ -2,6 +2,8 @@
 //   1. 用 handleSelectClick 打开第一个 select 的 popup → 检查浮层渲染
 //   2. 用 HitTest 命中浮层 option → MockSelectOptionAt 选择 → 值变化 + change 事件
 //   3. checkbox 走 host 层 toggle（直接调 Host 的 toggle 路径）
+//go:build ignore
+
 package main
 
 import (

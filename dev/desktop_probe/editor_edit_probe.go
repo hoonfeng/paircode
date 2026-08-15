@@ -8,6 +8,8 @@
 //   4. 插入后 DOM 是否出现字符、CM6 是否同步（.cm-line 文本）
 //   5. gutter 宽度 dump（行号栏宽度对比用）
 //   6. PNG 截图
+//go:build ignore
+
 package main
 
 import (

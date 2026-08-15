@@ -1,6 +1,8 @@
 // Command xtermcell_render_probe renders ide_ref_xtermcell.html through
 // wb-ui's engine at 400x80 (same size as Edge's screenshot), so the text
 // baseline inside xterm-style absolute spans can be pixel-compared.
+//go:build ignore
+
 package main
 
 import (

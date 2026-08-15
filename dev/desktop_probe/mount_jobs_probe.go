@@ -1,3 +1,5 @@
+//go:build ignore
+
 package main
 
 // Command mount_jobs_probe 验证：打开面板后多次 RunJobs 是否能触发 input 更新。

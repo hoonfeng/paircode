@@ -1,6 +1,8 @@
 // Command edge_measure_ref captures Edge headless measurement results of
 // text widths (space / ASCII / CJK) in Consolas 13px, to compare with
 // wb-ui engine measureText (space=7.8 vs A=7.147 vs cjk=13).
+//go:build ignore
+
 package main
 
 import (

@@ -1,5 +1,7 @@
 // Command select_popup_shot 验证 <select> 下拉 popup：打开 popup 后截图，
 // 对比 Edge 原生下拉的位置/样式。同时验证 select 框内显示 option 文本。
+//go:build ignore
+
 package main
 
 import (

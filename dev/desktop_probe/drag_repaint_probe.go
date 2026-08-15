@@ -7,6 +7,8 @@
 // 输出每帧 needPaint 与 thumb 位置，验证:
 //   A. 拖动中每帧 needPaint=true（不重绘假设不成立）
 //   B. thumb 像素位置随鼠标实时推进（值变化当帧生效，非延迟到释放）
+//go:build ignore
+
 package main
 
 import (

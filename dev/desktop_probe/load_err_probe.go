@@ -1,3 +1,5 @@
+//go:build ignore
+
 package main
 
 // Command load_err_probe 打开设置面板后打印全部 console 输出（含错误），

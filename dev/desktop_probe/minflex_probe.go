@@ -1,4 +1,6 @@
 // Command minflex_probe: 最小化复现 sidebar-header height:32px 在 flex column 中失效的问题
+//go:build ignore
+
 package main
 
 import (

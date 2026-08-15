@@ -5,6 +5,8 @@
 //      （tool 消息占配额 → 过滤后 ≈1 个 run）
 //   4. 模拟引擎修复：向 .chat-messages 派发 scroll 事件（等价 Host.dispatchScrollEvent）
 //   5. 验证前端 onScroll → loadMoreMessages 向上翻页 → 更早 run 被加载
+//go:build ignore
+
 package main
 
 import (

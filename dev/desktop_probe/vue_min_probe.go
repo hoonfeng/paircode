@@ -1,3 +1,5 @@
+//go:build ignore
+
 package main
 
 // Command vue_min_probe 最小 Vue 复现：创建独立 Vue 应用（带 v-model input），

@@ -2,6 +2,8 @@
 // （用户报告「滚动时初始超出区域的行号都没有绘制」）。
 // 流程：加载 120 行文档（含中文行）→ 初始行号 → scrollTop=400 滚动
 // → CM6 虚拟化重渲染 → dump 行号 + 截图。
+//go:build ignore
+
 package main
 
 import (

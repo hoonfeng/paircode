@@ -12,6 +12,8 @@
 //   B. 渲染树重建后（RV 快照过期场景）高度计算不跳变
 //   C. min-height clamp 生效（向下拖到 <60px 被夹住）
 //   D. 释放后高度保持（style height 生效，不再回弹）
+//go:build ignore
+
 package main
 
 import (

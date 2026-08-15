@@ -1,3 +1,5 @@
+//go:build ignore
+
 package main
 
 // Command vmodel_reverse_probe 反向验证 input 的 v-model 绑定是否活着：

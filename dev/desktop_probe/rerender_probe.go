@@ -1,3 +1,5 @@
+//go:build ignore
+
 package main
 
 // Command rerender_probe 手动触发组件重渲染，验证：

@@ -1,3 +1,5 @@
+//go:build ignore
+
 package main
 
 // Command composing_probe 验证 input 元素的 composing 状态：
