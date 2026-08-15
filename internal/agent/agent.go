@@ -133,7 +133,7 @@ func (a *AgentBase) Init() error {
 
 	// 3.5 初始化插件宿主（对齐 harness「一切皆插件」）+ cordis 动态插件工具
 	ph := NewPluginHost(registry, store, root)
-	RegisterCordisTools(registry, ph)
+	RegisterCordisTools(registry, ph, root)
 	registerBuiltinPlugins(ph)
 	a.Plugins = ph
 

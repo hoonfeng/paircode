@@ -21,8 +21,8 @@ import (
 )
 
 // RegisterCordisTools 注册 cordis_* 动态插件管理工具。
-// 由 AgentBase.Init 调用；host 为插件宿主。
-func RegisterCordisTools(registry *Registry, host *PluginHost) {
+// 由 AgentBase.Init 调用；host 为插件宿主，root 为工作区根（dir 参数解析基准）。
+func RegisterCordisTools(registry *Registry, host *PluginHost, root string) {
 	registry.Register(&Tool{
 		Name:        "cordis_inspect",
 		Description: "查看当前进程的插件运行时：全部插件/JS 动态插件定义及其状态、贡献的工具、提供的服务。插件 = { name, apply(ctx) }，JS 动态插件用 cordis_define 定义、cordis_run 装载。",
@@ -44,6 +44,7 @@ func RegisterCordisTools(registry *Registry, host *PluginHost) {
 			"code":     strProp("插件 host 半代码（JS 或 TS，async 函数体，return { name, apply(ctx) }）。可访问全局：ctx/harness/console/btoa/atob/TextEncoder/TextDecoder。"),
 			"language": strProp("可选：源码语言 \"js\" | \"ts\"，默认自动探测（含 interface/type 注解/类型标注视为 ts）。"),
 			"purpose":  strProp("可选：插件用途说明。"),
+			"dir":      strProp("可选：源码目录（解析相对 import 的多文件插件）。缺省=单文件模式（不解析 import）。"),
 		}, "code"),
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
 			code := argStr(args, "code")
@@ -52,11 +53,23 @@ func RegisterCordisTools(registry *Registry, host *PluginHost) {
 			}
 			purpose := argStr(args, "purpose")
 			language := argStr(args, "language")
-			id, err := host.DefineJSCode(code, language, purpose)
+			dir := ""
+			if d := strings.TrimSpace(argStr(args, "dir")); d != "" {
+				resolved, err := resolvePathFor(root, args, d)
+				if err != nil {
+					return "", err
+				}
+				dir = resolved
+			}
+			id, err := host.DefineJSCodeDir(code, language, purpose, dir)
 			if err != nil {
 				return "", err
 			}
-			return fmt.Sprintf("已登记 %s（语言 %s，purpose: %s）。用 cordis_run id=%s 装载。", id, detectPluginLanguage(code, language), purpose, id), nil
+			extra := ""
+			if dir != "" {
+				extra = "，多文件 bundle（dir=" + dir + "）"
+			}
+			return fmt.Sprintf("已登记 %s（语言 %s，purpose: %s%s）。用 cordis_run id=%s 装载。", id, detectPluginLanguage(code, language), purpose, extra, id), nil
 		},
 	})
 

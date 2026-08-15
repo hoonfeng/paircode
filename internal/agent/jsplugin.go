@@ -285,7 +285,7 @@ func evalJSPlugin(vm *goja.Runtime, code, id string) (*goja.Object, error) {
 		if o, ok := v.(*goja.Object); ok {
 			resolved = o
 		} else {
-			resolveErr = fmt.Errorf("插件求值未返回对象（得到 %s）", v.ExportType().String())
+			resolveErr = fmt.Errorf("插件求值未返回对象（得到 %v）", v)
 		}
 		return goja.Undefined()
 	})
@@ -581,11 +581,18 @@ func (h *PluginHost) DefineJS(code, purpose string) (string, error) {
 // DefineJSCode 登记动态插件定义，language 显式指定源码语言：
 // "js" | "ts" | ""（自动探测）。TS 源码经内置 esbuild 编译器转译后再预检。
 func (h *PluginHost) DefineJSCode(code, language, purpose string) (string, error) {
+	return h.DefineJSCodeDir(code, language, purpose, "")
+}
+
+// DefineJSCodeDir 同 DefineJSCode，额外支持多文件 bundle：
+// dir 非空时，含 import 的源码按 dir 解析相对导入（esbuild Build 内联打包，
+// 非相对包导入 mock 空模块），插件需 export default 导出插件对象。
+func (h *PluginHost) DefineJSCodeDir(code, language, purpose, dir string) (string, error) {
 	if strings.TrimSpace(code) == "" {
 		return "", fmt.Errorf("插件代码为空")
 	}
 	lang := detectPluginLanguage(code, language)
-	js, err := compilePluginSource(code, lang, "cordis-dyn.ts")
+	js, err := compilePluginSource(code, lang, "cordis-dyn.ts", dir)
 	if err != nil {
 		return "", fmt.Errorf("插件编译失败: %v", err)
 	}

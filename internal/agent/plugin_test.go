@@ -3,6 +3,8 @@ package agent
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -337,6 +339,122 @@ func TestTSCompileError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "编译") {
 		t.Fatalf("错误信息应含编译提示, got %v", err)
+	}
+}
+
+// ─── 多文件 TS 插件（bundle）──────────────────────────────
+
+// TestTSMultiFilePlugin 验证多文件 TS 插件：相对 import（./util）内联打包、
+// 非相对包 import（@deepseek-ai/cordis）mock 成空模块、export default 导出插件。
+// 对象导出形态：export default { name, apply(ctx) }。
+func TestTSMultiFilePlugin(t *testing.T) {
+	dir := t.TempDir()
+	// 目录里放一个被插件 import 的辅助模块（util.ts）
+	utilPath := filepath.Join(dir, "util.ts")
+	if err := os.WriteFile(utilPath, []byte(`export function greet(n: string): string { return 'ts-multi hi ' + n }`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// 插件源码：相对导入 util + harness 生态包 import（仅类型用途，bundle 后擦除/mock）
+	pluginSrc := `
+import { greet } from './util'
+import type { Context } from '@deepseek-ai/cordis'
+interface PluginArgs { who?: string }
+const who = (ctx: any): string => ctx?.who ?? 'world'
+export default {
+  name: 'ts-multi',
+  apply(ctx: Context) {
+    ctx.tools.register({
+      name: 'ts_multi_hello',
+      description: 'multi-file ts plugin demo',
+      execute: (args: PluginArgs) => ({ output: greet(args?.who ?? who(ctx)) })
+    })
+  }
+}`
+	reg := NewRegistry()
+	host := NewPluginHost(reg, nil, dir)
+	id, err := host.DefineJSCodeDir(pluginSrc, "ts", "multi-file demo", dir)
+	if err != nil {
+		t.Fatalf("DefineJSCodeDir(多文件 TS): %v", err)
+	}
+	def, ok := host.GetJSDef(id)
+	if !ok {
+		t.Fatalf("定义未登记")
+	}
+	if err := host.LoadJSDynamic(def); err != nil {
+		t.Fatalf("LoadJSDynamic(多文件): %v", err)
+	}
+	if host.State("ts-multi") != PluginRunning {
+		t.Fatalf("ts-multi 应 running")
+	}
+	out, err := reg.Execute(context.Background(), "ts_multi_hello", `{"who":"multifile"}`)
+	if err != nil {
+		t.Fatalf("ts_multi_hello: %v", err)
+	}
+	if !strings.Contains(out, "ts-multi hi multifile") {
+		t.Fatalf("输出 = %q", out)
+	}
+}
+
+// TestTSMultiFileFunctionForm harness 生态惯例形态：export default function(ctx)
+// 直接作为插件 apply（bundle 包装成 {name, apply}）。
+func TestTSMultiFileFunctionForm(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "util.ts"), []byte(`export const tag = (n: string): string => 'fn-form ' + n`), 0o644)
+	pluginSrc := `
+import { tag } from './util'
+export default function (ctx: any) {
+  ctx.tools.register({
+    name: 'ts_fn_hello',
+    description: 'function form plugin',
+    execute: (args: { who?: string }) => ({ output: tag(args?.who ?? 'world') })
+  })
+}`
+	reg := NewRegistry()
+	host := NewPluginHost(reg, nil, dir)
+	id, err := host.DefineJSCodeDir(pluginSrc, "ts", "fn-form", dir)
+	if err != nil {
+		t.Fatalf("DefineJSCodeDir: %v", err)
+	}
+	def, _ := host.GetJSDef(id)
+	if err := host.LoadJSDynamic(def); err != nil {
+		t.Fatalf("LoadJSDynamic: %v", err)
+	}
+	if host.State(def.name) != PluginRunning {
+		t.Fatalf("%s 应 running", def.name)
+	}
+	out, err := reg.Execute(context.Background(), "ts_fn_hello", `{"who":"F"}`)
+	if err != nil {
+		t.Fatalf("ts_fn_hello: %v", err)
+	}
+	if !strings.Contains(out, "fn-form F") {
+		t.Fatalf("输出 = %q", out)
+	}
+}
+
+// TestTSMultiFileNoDefault 多文件 bundle 但缺 export default → 运行时报错提示。
+func TestTSMultiFileNoDefault(t *testing.T) {
+	dir := t.TempDir()
+	reg := NewRegistry()
+	host := NewPluginHost(reg, nil, dir)
+	// 有 import 但只 export 命名函数（无 default）
+	src := `
+import { greet } from './util'
+export function helper(n: string): string { return greet(n) }`
+	utilPath := filepath.Join(dir, "util.ts")
+	_ = os.WriteFile(utilPath, []byte(`export function greet(n: string): string { return 'g ' + n }`), 0o644)
+
+	id, err := host.DefineJSCodeDir(src, "ts", "no-default", dir)
+	if err != nil {
+		t.Fatalf("定义应成功（bundle 编译期不检查 default）: %v", err)
+	}
+	def, _ := host.GetJSDef(id)
+	err = host.LoadJSDynamic(def)
+	if err == nil {
+		t.Fatalf("缺 export default 运行时应报错")
+	}
+	if !strings.Contains(err.Error(), "undefined") {
+		t.Fatalf("错误应指向 default undefined, got %v", err)
 	}
 }
 
