@@ -364,18 +364,24 @@ func (r *Registry) Execute(ctx context.Context, name, argsJSON string) (string, 
 // ─── 核心工具集 ──────────────────────────────────────────────
 
 // RegisterDefaultTools 注册核心工具，全部限定在工作区 root 内（安全底线：禁访问工作区外）。
-// read_file / write_file / edit_file / list_files / run_command。
+// 由内置插件规格统一分发（对齐 harness「一切皆插件」，见 builtin_plugins.go）。
 func RegisterDefaultTools(r *Registry, root string) {
-	eh := newEditHistory() // ★ v2: 编辑行号偏移追踪器
-	bg := globalBG          // ★ 全局共享后台进程注册表（跨轮次/跨 Registry 存活，见 shell.go 顶部注释）
+	for _, s := range builtinPluginSpecs(root) {
+		s.apply(&PluginContext{Tools: r})
+	}
+}
+
+// registerCoreTools 注册核心工具（read_file / write_file / edit_file / multi_edit /
+// run_command / move_file / delete_file，core 内置插件）。
+func registerCoreTools(r *Registry, root string, eh *editHistory, bg *bgRegistry) {
 	r.Register(&Tool{
 		Name:        "read_file",
 		UsageGuide:  "读取文件内容，限工作区内路径。大文件用 offset+limit 分页读取，避免撑爆上下文。二进制文件会自动拒绝读取，请改用 inspect_binary。比 os.ReadFile 更安全（路径越界拦截+二进制保护）。",
 		Description: "读取文件内容。path 为工作区内路径。可选 offset(起始行,1 基)+limit(行数)读片段；省略则读全文(超 2000 行只返回前 2000 行并提示用 offset/limit 翻页)。",
-		Parameters:  objSchema(props{"path": strProp("文件路径（工作区内）"), "offset": intProp("可选：起始行号(1 基)"), "limit": intProp("可选：读取行数")}, "path"),
+		Parameters:  objSchema(props{"path": strProp("文件路径（工作区内）"), "offset": intProp("可选：起始行号(1 基)"), "limit": intProp("可选：读取行数"), "project": projectSchemaProp(), }, "path"),
 		ReadOnly:    true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
-			p, err := resolvePath(root, argStr(args, "path"))
+			p, err := resolvePathFor(root, args, argStr(args, "path"))
 			if err != nil {
 				return "", err
 			}
@@ -415,10 +421,10 @@ func RegisterDefaultTools(r *Registry, root string) {
 		Name:             "write_file",
 		UsageGuide:       "写入文件，父目录自动创建。需审核批准。比 os.WriteFile 更安全（自动快照+路径越界拦截+变更回调）。如需追加内容请先用 read_file 读入再加上新内容后 write_file 覆盖。",
 		Description:      "把 content 完整写入 path（覆盖；父目录自动创建）。",
-		Parameters:       objSchema(props{"path": strProp("文件路径"), "content": strProp("完整文件内容")}, "path", "content"),
+		Parameters:       objSchema(props{"path": strProp("文件路径"), "content": strProp("完整文件内容"), "project": projectSchemaProp(), }, "path", "content"),
 		RequiresApproval: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
-			p, err := resolvePath(root, argStr(args, "path"))
+			p, err := resolvePathFor(root, args, argStr(args, "path"))
 			if err != nil {
 				return "", err
 			}
@@ -450,10 +456,11 @@ func RegisterDefaultTools(r *Registry, root string) {
 			"new_string": strProp("替换后的新文"),
 			"line_start": intProp("可选：1 基起始行号，>0 时启用行号定位模式（与 old_string 二选一或并用）"),
 			"line_end":   intProp("可选：1 基结束行号（含）；省略或 < line_start 时只替换 line_start 一行"),
+			"project":    projectSchemaProp(),
 		}, "path", "new_string"),
 		RequiresApproval: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
-			p, err := resolvePath(root, argStr(args, "path"))
+			p, err := resolvePathFor(root, args, argStr(args, "path"))
 			if err != nil {
 				return "", err
 			}
@@ -507,7 +514,8 @@ func RegisterDefaultTools(r *Registry, root string) {
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": props{
-				"path": strProp("文件路径"),
+				"path":    strProp("文件路径"),
+				"project": projectSchemaProp(),
 				"edits": map[string]any{
 					"type":        "array",
 					"description": "按顺序应用的替换列表",
@@ -527,7 +535,7 @@ func RegisterDefaultTools(r *Registry, root string) {
 		},
 		RequiresApproval: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
-			p, err := resolvePath(root, argStr(args, "path"))
+			p, err := resolvePathFor(root, args, argStr(args, "path"))
 			if err != nil {
 				return "", err
 			}
@@ -602,7 +610,7 @@ func RegisterDefaultTools(r *Registry, root string) {
 			p := root
 			if rel != "" {
 				var err error
-				if p, err = resolvePath(root, rel); err != nil {
+				if p, err = resolvePathFor(root, args, rel); err != nil {
 					return "", err
 				}
 			}
@@ -644,7 +652,7 @@ func RegisterDefaultTools(r *Registry, root string) {
 		Name:             "run_command",
 		UsageGuide:       "同步执行 shell 命令，120s 超时自动终止（内部后台执行，不阻塞 agent）。适用于构建、编译、测试、文件查询等短命令。禁止用于长期进程（dev server/npm run dev/watch 模式）——请改用 run_background。比直接手动执行更安全（路径越界拦截+输出截断 16KB+UTF-8 编码统一）。",
 		Description:      "同步执行一条 shell 命令并返回输出。适用于构建、编译、测试、文件查询等短命令（几秒内完成）。\n禁止用于以下场景（会阻塞 agent）：启动 dev server、npm run dev、go run 启动服务、watch 模式、tcp 监听、任何需保持运行的进程。此类命令请改用 run_background。",
-		Parameters:       objSchema(props{"command": strProp("要执行的命令"), "cwd": strProp("可选工作目录（工作区内，省略=根）")}, "command"),
+		Parameters:       objSchema(props{"command": strProp("要执行的命令"), "cwd": strProp("可选工作目录（工作区内，省略=根）"), "project": projectSchemaProp(), }, "command"),
 		RequiresApproval: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
 			command := argStr(args, "command")
@@ -655,7 +663,7 @@ func RegisterDefaultTools(r *Registry, root string) {
 			dir := root
 			if cwd := argStr(args, "cwd"); cwd != "" {
 				var err error
-				if dir, err = resolvePath(root, cwd); err != nil {
+				if dir, err = resolvePathFor(root, args, cwd); err != nil {
 					return "", err
 				}
 			}
@@ -706,14 +714,14 @@ func RegisterDefaultTools(r *Registry, root string) {
 		Name:             "move_file",
 		UsageGuide:       "移动或重命名工作区内的文件/目录。目标父目录自动创建。需审核批准。覆盖 os.Rename 的限制（自动创建目标目录+路径越界拦截+变更通知）。",
 		Description:      "把文件/目录从 from 移动或重命名到 to（都在工作区内；目标父目录自动创建）。",
-		Parameters:       objSchema(props{"from": strProp("源路径"), "to": strProp("目标路径")}, "from", "to"),
+		Parameters:       objSchema(props{"from": strProp("源路径"), "to": strProp("目标路径"), "project": projectSchemaProp(), }, "from", "to"),
 		RequiresApproval: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
-			from, err := resolvePath(root, argStr(args, "from"))
+			from, err := resolvePathFor(root, args, argStr(args, "from"))
 			if err != nil {
 				return "", err
 			}
-			to, err := resolvePath(root, argStr(args, "to"))
+			to, err := resolvePathFor(root, args, argStr(args, "to"))
 			if err != nil {
 				return "", err
 			}
@@ -734,10 +742,10 @@ func RegisterDefaultTools(r *Registry, root string) {
 		Name:             "delete_file",
 		UsageGuide:       "删除工作区内的文件（不可恢复，谨慎）。为安全不删目录（删除目录请用 run_command rmdir）。需审核批准。比直接 os.Remove 更安全（只删文件不删目录+路径越界拦截）。",
 		Description:      "删除一个文件（工作区内，不可恢复，谨慎）。为安全不删目录。",
-		Parameters:       objSchema(props{"path": strProp("要删除的文件路径")}, "path"),
+		Parameters:       objSchema(props{"path": strProp("要删除的文件路径"), "project": projectSchemaProp(), }, "path"),
 		RequiresApproval: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
-			p, err := resolvePath(root, argStr(args, "path"))
+			p, err := resolvePathFor(root, args, argStr(args, "path"))
 			if err != nil {
 				return "", err
 			}
@@ -758,25 +766,6 @@ func RegisterDefaultTools(r *Registry, root string) {
 		},
 	})
 
-	registerSearchTools(r, root)              // search_content / search_files（见 search.go）
-	registerGitTools(r, root)                 // git_status / git_diff / git_log / git_show / git_blame / git_add / ...（见 git.go）
-	registerWebTools(r)                       // web_fetch / web_search（联网，见 web.go）
-	// update_plan 仅在自主模式外层注册（RegisterPlanOnlyTools），非自主模式不暴露
-	registerShellTools(r, bg, root)               // run_background / read_output / kill_process（后台命令，见 shell.go）
-	registerMemoryTools(r, root)              // memory_write/read/list/search（跨会话记忆，见 memory.go）
-	registerVerifyTools(r, root)              // memory_verify / project_info_verify（过期验证，见 verify_tools.go）
-	// find_files_by_pattern 已合并到 search_files（增加 language 参数），不再独立注册。
-	registerTaskTools(r, root)                // update_tasks（全量替换式任务追踪，替代旧 task_create/update/list/delete/summary，见 task_tools.go）
-	registerProjectInfoTools(r, root)        // project_info_write/read/list/search/delete/explore（项目知识库，见 projectinfo.go）
-	registerBinaryTools(r, root)             // inspect_binary / write_binary（二进制读写，见 binary.go）
-	registerBinaryRETools(r, root)           // binary_strings/find/patch/info/hash/entropy（二进制正则，见 binary_re.go）
-	registerDebugTools(r, root)              // debug_inject_log/run_capture/analyze_output/parse_stack/cleanup_logs/watch/evaluate_session（见 debug_tools.go）
-	registerVisionTools(r, root)             // image_analyze / image_ocr（图像视觉分析，见 vision.go）
-	registerScreenshotTools(r, root)         // screenshot_desktop/window/area/webpage（截图工具，见 screenshot_tool.go）
-	registerWebDebugTool(r, root)            // web_debug（网页验证：控制台错误+截图+JS执行+交互+文字提取，见 webdebug.go）
-	RegisterBugTools(r, root)                // bug_detect / bug_analyze / bug_fix（BUG 自动检测与修复，见 bugdetect.go + bugfix.go）
-	registerOfficeTools(r, root)             // csv_read / csv_write / json_to_table / table_stats / text_report / word_read（见 officetools.go）
-	registerLSPTools(r, root)              // lsp_definition / lsp_references / lsp_hover / lsp_diagnostics（见 lsptools.go）
 	registerCodeGraphTools(r, root)          // codegraph_build / codegraph_search / codegraph_impact / ...（代码知识图谱，见 codegraph_tools.go + pkg/codegraph）
 	registerExtraCodeGraphTools(r, root)     // codegraph_find_by_signature / codegraph_explore（额外工具，见 codegraph_extra.go）
 	registerLuaToolTools(r, root)            // lua_tool_list/create/update/delete（Lua 自定义工具管理，见 luatool_tools.go）

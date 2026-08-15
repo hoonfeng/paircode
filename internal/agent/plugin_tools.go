@@ -38,11 +38,12 @@ func RegisterCordisTools(registry *Registry, host *PluginHost) {
 
 	registry.Register(&Tool{
 		Name:        "cordis_define",
-		Description: "登记一个 JS 动态插件定义（语法预检，不运行）。code 是 async 函数体：return { name, apply(ctx) }，apply(ctx) 中可用 ctx.tools.register 注册工具、ctx.systemPrompt.section 贡献提示、ctx.on 监听事件、ctx.provide 提供服务。返回 dyn id 供 cordis_run/stop/undefine 使用。",
+		Description: "登记一个 JS/TS 动态插件定义（语法预检，不运行）。code 是 async 函数体：return { name, apply(ctx) }，apply(ctx) 中可用 ctx.tools.register 注册工具、ctx.systemPrompt.section 贡献提示、ctx.on 监听事件、ctx.provide 提供服务。TS 源码（含 interface/type 注解）由内置编译器自动转译，也可用 language 显式指定。返回 dyn id 供 cordis_run/stop/undefine 使用。",
 		Category:    "system",
 		Parameters: objSchema(map[string]any{
-			"code":    strProp("插件 host 半代码（JS/ES 语法，async 函数体，return { name, apply(ctx) }）。可访问全局：ctx/harness/console/btoa/atob/TextEncoder/TextDecoder。"),
-			"purpose": strProp("可选：插件用途说明。"),
+			"code":     strProp("插件 host 半代码（JS 或 TS，async 函数体，return { name, apply(ctx) }）。可访问全局：ctx/harness/console/btoa/atob/TextEncoder/TextDecoder。"),
+			"language": strProp("可选：源码语言 \"js\" | \"ts\"，默认自动探测（含 interface/type 注解/类型标注视为 ts）。"),
+			"purpose":  strProp("可选：插件用途说明。"),
 		}, "code"),
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
 			code := argStr(args, "code")
@@ -50,11 +51,12 @@ func RegisterCordisTools(registry *Registry, host *PluginHost) {
 				return "", fmt.Errorf("code 不能为空")
 			}
 			purpose := argStr(args, "purpose")
-			id, err := host.DefineJS(code, purpose)
+			language := argStr(args, "language")
+			id, err := host.DefineJSCode(code, language, purpose)
 			if err != nil {
 				return "", err
 			}
-			return fmt.Sprintf("已登记 %s（purpose: %s）。用 cordis_run id=%s 装载。", id, purpose, id), nil
+			return fmt.Sprintf("已登记 %s（语言 %s，purpose: %s）。用 cordis_run id=%s 装载。", id, detectPluginLanguage(code, language), purpose, id), nil
 		},
 	})
 

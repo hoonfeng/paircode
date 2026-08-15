@@ -272,28 +272,13 @@ func registerLuaToolTools(r *Registry, root string) {
 
 // resolveLuaToolsDir 解析 Lua 工具目录：project 为空 → 主项目 .pair/tools；
 // project 为工作区某根目录路径或其 basename（项目名）→ 该项目 .pair/tools；未匹配 → 报错。
+// （统一走 resolveProjectRoot 的多项目路由，见 multiproject.go）
 func resolveLuaToolsDir(primaryRoot, project string) (string, error) {
-	if strings.TrimSpace(project) == "" {
-		return filepath.Join(primaryRoot, ".pair", "tools"), nil
+	projRoot, err := resolveProjectRoot(primaryRoot, project)
+	if err != nil {
+		return "", err
 	}
-	proj := filepath.Clean(project)
-	roots := orderedRoots(primaryRoot)
-	// 绝对路径 / 相对 primary 的路径 → 直接匹配根目录
-	for _, wr := range roots {
-		if samePath(wr, proj) || strings.EqualFold(filepath.Base(wr), proj) {
-			return filepath.Join(wr, ".pair", "tools"), nil
-		}
-	}
-	if !filepath.IsAbs(proj) {
-		full := filepath.Join(primaryRoot, proj)
-		for _, wr := range roots {
-			if samePath(wr, full) {
-				return filepath.Join(wr, ".pair", "tools"), nil
-			}
-		}
-	}
-	return "", fmt.Errorf("未找到项目 %q（工作区根目录：%v）。project 应为工作区根目录名（如 wb-ui）或完整路径。",
-		project, workspaceRootNames(primaryRoot))
+	return filepath.Join(projRoot, ".pair", "tools"), nil
 }
 
 // workspaceRootNames 返回工作区各根目录的 basename 列表（错误提示用）。

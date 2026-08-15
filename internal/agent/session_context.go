@@ -833,10 +833,12 @@ func scanStaleRefs(text, workspaceRoot string) []string {
 
 // buildCodeGraphStats 获取代码图谱统计信息。
 func buildCodeGraphStats() string {
-	cgGraphMu.RLock()
-	g := cgGraph
-	cgGraphMu.RUnlock()
-	if g == nil {
+	root := WorkspaceRoots[0]
+	if root == "" {
+		return ""
+	}
+	g, err := getCodeGraph(root)
+	if err != nil || g == nil {
 		return ""
 	}
 	stats := g.Stats()

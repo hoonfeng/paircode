@@ -18,10 +18,14 @@ func registerGitTools(r *Registry, root string) {
 		Name:        "git_status",
 		UsageGuide:  "查看工作区 git 状态（分支+已修改/暂存/未跟踪文件）。比 run_command git status 更简洁（porcelain 紧凑格式+自动判断工作区干净）。先调用此工具了解当前变更再决定下一步。",
 		Description: "查看 git 工作区状态（当前分支 + 已修改/暂存/未跟踪文件，porcelain 紧凑格式）。",
-		Parameters:  objSchema(props{}),
+		Parameters:  objSchema(props{"project": projectSchemaProp(), }),
 		ReadOnly:    true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
-			out, err := runGit(ctx, root, "status", "--porcelain=v1", "--branch")
+			projRoot, err := projRootFromArgs(root, args)
+			if err != nil {
+				return "", err
+			}
+			out, err := runGit(ctx, projRoot, "status", "--porcelain=v1", "--branch")
 			if err != nil {
 				return "", err
 			}
@@ -40,11 +44,16 @@ func registerGitTools(r *Registry, root string) {
 		UsageGuide:  "查看工作区未暂存改动（或 staged=true 看已暂存改动）。file 参数可限定单个文件。比 run_command git diff 更智能（无改动时自动返回「无改动」而非空输出）。",
 		Description: "查看 git 改动。file 可选（限定单个文件）；staged=true 看已暂存(--cached)的改动，否则看工作区未暂存改动。",
 		Parameters: objSchema(props{
+			"project": projectSchemaProp(),
 			"file":   strProp("可选：限定单个文件路径"),
 			"staged": boolProp("看已暂存(--cached)改动，默认看未暂存"),
 		}),
 		ReadOnly: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			projRoot, err := projRootFromArgs(root, args)
+			if err != nil {
+				return "", err
+			}
 			gitArgs := []string{"diff"}
 			if argBool(args, "staged") {
 				gitArgs = append(gitArgs, "--cached")
@@ -52,7 +61,7 @@ func registerGitTools(r *Registry, root string) {
 			if f := strings.TrimSpace(argStr(args, "file")); f != "" {
 				gitArgs = append(gitArgs, "--", f)
 			}
-			out, err := runGit(ctx, root, gitArgs...)
+			out, err := runGit(ctx, projRoot, gitArgs...)
 			if err != nil {
 				return "", err
 			}
@@ -73,12 +82,16 @@ func registerGitTools(r *Registry, root string) {
 		}),
 		ReadOnly: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			projRoot, err := projRootFromArgs(root, args)
+			if err != nil {
+				return "", err
+			}
 			count := clampInt(argInt(args, "count", 15), 15, 1, 200)
 			gitArgs := []string{"log", "--oneline", "-n", strconv.Itoa(count)}
 			if f := strings.TrimSpace(argStr(args, "file")); f != "" {
 				gitArgs = append(gitArgs, "--", f)
 			}
-			out, err := runGit(ctx, root, gitArgs...)
+			out, err := runGit(ctx, projRoot, gitArgs...)
 			if err != nil {
 				return "", err
 			}
@@ -91,14 +104,18 @@ func registerGitTools(r *Registry, root string) {
 		Name:        "git_show",
 		UsageGuide:  "查看某次提交的详情与改动。默认 HEAD（最新一次）。比 run_command git show 更安全（自动处理空参数+带 --stat 统计）。",
 		Description: "查看某次提交的详情与改动。commit=提交哈希或引用（默认 HEAD）。",
-		Parameters:  objSchema(props{"commit": strProp("提交哈希/引用，默认 HEAD")}),
+		Parameters:  objSchema(props{"commit": strProp("提交哈希/引用，默认 HEAD"), "project": projectSchemaProp(), }),
 		ReadOnly:    true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			projRoot, err := projRootFromArgs(root, args)
+			if err != nil {
+				return "", err
+			}
 			commit := strings.TrimSpace(argStr(args, "commit"))
 			if commit == "" {
 				commit = "HEAD"
 			}
-			return runGit(ctx, root, "show", "--stat", commit)
+			return runGit(ctx, projRoot, "show", "--stat", commit)
 		},
 	})
 
@@ -106,9 +123,13 @@ func registerGitTools(r *Registry, root string) {
 		Name:        "git_blame",
 		UsageGuide:  "逐行查看某文件每行的最后修改提交和作者。用 start/end 限定行范围避免输出过多。比 run_command git blame 更方便（自动处理行范围参数格式）。",
 		Description: "逐行查看某文件每行的最后修改提交/作者。file 必填；可选 start/end 限定行范围。",
-		Parameters:  objSchema(props{"file": strProp("文件路径"), "start": intProp("起始行"), "end": intProp("结束行")}, "file"),
+		Parameters:  objSchema(props{"file": strProp("文件路径"), "start": intProp("起始行"), "end": intProp("结束行"), "project": projectSchemaProp(), }, "file"),
 		ReadOnly:    true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			projRoot, err := projRootFromArgs(root, args)
+			if err != nil {
+				return "", err
+			}
 			file := strings.TrimSpace(argStr(args, "file"))
 			if file == "" {
 				return "", fmt.Errorf("file 不能为空")
@@ -117,7 +138,7 @@ func registerGitTools(r *Registry, root string) {
 			if s, e := argInt(args, "start", 0), argInt(args, "end", 0); s > 0 && e >= s {
 				ga = append(ga, "-L", fmt.Sprintf("%d,%d", s, e))
 			}
-			return runGit(ctx, root, append(ga, "--", file)...)
+			return runGit(ctx, projRoot, append(ga, "--", file)...)
 		},
 	})
 
@@ -126,16 +147,20 @@ func registerGitTools(r *Registry, root string) {
 		Name:             "git_add",
 		UsageGuide:       "把文件加入暂存区（准备提交）。files 为路径列表；省略则暂存全部改动(-A)。需审核批准。比 run_command git add 更安全（参数自动组装+路径越界拦截）。",
 		Description:      "把文件加入暂存区。files 为路径列表；省略则暂存全部改动(-A)。",
-		Parameters:       objSchema(props{"files": map[string]any{"type": "array", "description": "文件路径列表（省略=全部）", "items": map[string]any{"type": "string"}}}),
+		Parameters:       objSchema(props{"files": map[string]any{"type": "array", "description": "文件路径列表（省略=全部）", "items": map[string]any{"type": "string"}}, "project": projectSchemaProp()}),
 		RequiresApproval: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			projRoot, err := projRootFromArgs(root, args)
+			if err != nil {
+				return "", err
+			}
 			gitArgs := []string{"add"}
 			if files := argStrSlice(args, "files"); len(files) > 0 {
 				gitArgs = append(append(gitArgs, "--"), files...)
 			} else {
 				gitArgs = append(gitArgs, "-A")
 			}
-			out, err := runGit(ctx, root, gitArgs...)
+			out, err := runGit(ctx, projRoot, gitArgs...)
 			if err != nil {
 				return "", err
 			}
@@ -147,9 +172,13 @@ func registerGitTools(r *Registry, root string) {
 		Name:             "git_commit",
 		UsageGuide:       "提交已暂存的改动。message 必填；all=true 先暂存已跟踪文件再提交(-a)。需审核批准。比 run_command git commit 更安全（message 为空自动拒绝）。",
 		Description:      "提交已暂存的改动。message 必填；all=true 先暂存所有已跟踪文件改动再提交(-a)。",
-		Parameters:       objSchema(props{"message": strProp("提交信息"), "all": boolProp("先 -a 暂存已跟踪改动")}, "message"),
+		Parameters:       objSchema(props{"message": strProp("提交信息"), "all": boolProp("先 -a 暂存已跟踪改动"), "project": projectSchemaProp(), }, "message"),
 		RequiresApproval: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			projRoot, err := projRootFromArgs(root, args)
+			if err != nil {
+				return "", err
+			}
 			msg := strings.TrimSpace(argStr(args, "message"))
 			if msg == "" {
 				return "", fmt.Errorf("message 不能为空")
@@ -158,7 +187,7 @@ func registerGitTools(r *Registry, root string) {
 			if argBool(args, "all") {
 				gitArgs = append(gitArgs, "-a")
 			}
-			return runGit(ctx, root, gitArgs...)
+			return runGit(ctx, projRoot, gitArgs...)
 		},
 	})
 
@@ -166,19 +195,23 @@ func registerGitTools(r *Registry, root string) {
 		Name:             "git_branch",
 		UsageGuide:       "分支操作：无 name 列出全部分支；name+checkout=true 创建并切换；name+delete=true 删除。比 run_command git branch 更智能（自动处理三种操作模式的参数差异）。",
 		Description:      "分支操作。无 name=列出全部分支；name+checkout=true 创建并切换；name+delete=true 删除；仅 name=创建。",
-		Parameters:       objSchema(props{"name": strProp("分支名（创建/删除时）"), "checkout": boolProp("创建后切换过去"), "delete": boolProp("删除该分支")}),
+		Parameters:       objSchema(props{"name": strProp("分支名（创建/删除时）"), "checkout": boolProp("创建后切换过去"), "delete": boolProp("删除该分支"), "project": projectSchemaProp(), }),
 		RequiresApproval: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			projRoot, err := projRootFromArgs(root, args)
+			if err != nil {
+				return "", err
+			}
 			name := strings.TrimSpace(argStr(args, "name"))
 			switch {
 			case name == "":
-				return runGit(ctx, root, "branch", "--all")
+				return runGit(ctx, projRoot, "branch", "--all")
 			case argBool(args, "delete"):
-				return runGit(ctx, root, "branch", "-D", name)
+				return runGit(ctx, projRoot, "branch", "-D", name)
 			case argBool(args, "checkout"):
-				return runGit(ctx, root, "checkout", "-b", name)
+				return runGit(ctx, projRoot, "checkout", "-b", name)
 			default:
-				return runGit(ctx, root, "branch", name)
+				return runGit(ctx, projRoot, "branch", name)
 			}
 		},
 	})
@@ -187,17 +220,21 @@ func registerGitTools(r *Registry, root string) {
 		Name:             "git_checkout",
 		UsageGuide:       "切换分支或恢复文件到 HEAD。file=true 时 target 为文件路径（丢弃其改动，危险！）。比 run_command git checkout 更安全（分支/文件模式自动判断+参数校验）。",
 		Description:      "切换分支，或把文件恢复到 HEAD。target=分支名(切换)；file=true 时 target 为文件路径(丢弃其改动，危险)。",
-		Parameters:       objSchema(props{"target": strProp("分支名或文件路径"), "file": boolProp("target 是文件(恢复/丢弃改动)")}, "target"),
+		Parameters:       objSchema(props{"target": strProp("分支名或文件路径"), "file": boolProp("target 是文件(恢复/丢弃改动)"), "project": projectSchemaProp(), }, "target"),
 		RequiresApproval: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			projRoot, err := projRootFromArgs(root, args)
+			if err != nil {
+				return "", err
+			}
 			target := strings.TrimSpace(argStr(args, "target"))
 			if target == "" {
 				return "", fmt.Errorf("target 不能为空")
 			}
 			if argBool(args, "file") {
-				return runGit(ctx, root, "checkout", "--", target)
+				return runGit(ctx, projRoot, "checkout", "--", target)
 			}
-			return runGit(ctx, root, "checkout", target)
+			return runGit(ctx, projRoot, "checkout", target)
 		},
 	})
 
@@ -205,9 +242,13 @@ func registerGitTools(r *Registry, root string) {
 		Name:             "git_stash",
 		UsageGuide:       "贮藏/恢复工作区改动。action=push(默认贮藏)/pop(弹出恢复)/list(列出)/drop(丢弃)。比 run_command git stash 更方便（自动处理 action+message 组合）。",
 		Description:      "贮藏工作区改动。action：push(默认,贮藏) / pop(弹出恢复) / list(列出) / drop(丢弃最近一条)。",
-		Parameters:       objSchema(props{"action": strProp("push/pop/list/drop，默认 push"), "message": strProp("push 时的备注")}),
+		Parameters:       objSchema(props{"action": strProp("push/pop/list/drop，默认 push"), "message": strProp("push 时的备注"), "project": projectSchemaProp(), }),
 		RequiresApproval: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			projRoot, err := projRootFromArgs(root, args)
+			if err != nil {
+				return "", err
+			}
 			action := strings.TrimSpace(argStr(args, "action"))
 			if action == "" {
 				action = "push"
@@ -218,9 +259,9 @@ func registerGitTools(r *Registry, root string) {
 				if m := strings.TrimSpace(argStr(args, "message")); m != "" {
 					ga = append(ga, "-m", m)
 				}
-				return runGit(ctx, root, ga...)
+				return runGit(ctx, projRoot, ga...)
 			case "pop", "list", "drop":
-				return runGit(ctx, root, "stash", action)
+				return runGit(ctx, projRoot, "stash", action)
 			default:
 				return "", fmt.Errorf("未知 action: %s（push/pop/list/drop）", action)
 			}

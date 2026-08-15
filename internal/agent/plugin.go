@@ -525,16 +525,3 @@ func (h *PluginHost) addPluginSection(plugin string, s *PromptSection) {
 	h.pluginSections[plugin] = append(h.pluginSections[plugin], s)
 	h.mu.Unlock()
 }
-
-// registerBuiltinPlugins 注册内置 Go 插件（「一切皆插件」的底座示范）。
-// 后续功能模块可在此以插件形式装配；第三方宿主也可自行 Use()。
-func registerBuiltinPlugins(h *PluginHost) {
-	// sysinfo：提供 workspaceRoot 等服务（演示 ctx.provide/get 机制）。
-	_ = h.Use(&GoPlugin{
-		NameField: "sysinfo",
-		ApplyFn: func(ctx *PluginContext) error {
-			ctx.Provide("workspaceRoot", ctx.WorkspaceRoot)
-			return nil
-		},
-	})
-}

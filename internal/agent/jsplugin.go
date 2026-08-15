@@ -39,6 +39,7 @@ import (
 // jsPluginDef 一个 JS 动态插件定义（cordis_define 登记；进程内存，不落盘）。
 type jsPluginDef struct {
 	id        string    // dyn-<n>
+	lang      string    // 源码语言 "js" | "ts"（登记时探测/指定；code 存转译后 JS）
 	name      string    // 插件名（默认取代码返回的 name）
 	purpose   string    // 用途说明
 	code      string    // host 半代码（async 函数体，return 插件对象）
@@ -572,20 +573,32 @@ func toInt64(v any) int64 {
 var dynSeq atomic.Uint64
 
 // DefineJS 登记一个 JS 动态插件定义（cordis_define；不装载）。
-// 返回分配的 dyn id。
+// 返回分配的 dyn id。源码语言自动探测（TS 类型注解会经内置编译器转译）。
 func (h *PluginHost) DefineJS(code, purpose string) (string, error) {
+	return h.DefineJSCode(code, "", purpose)
+}
+
+// DefineJSCode 登记动态插件定义，language 显式指定源码语言：
+// "js" | "ts" | ""（自动探测）。TS 源码经内置 esbuild 编译器转译后再预检。
+func (h *PluginHost) DefineJSCode(code, language, purpose string) (string, error) {
 	if strings.TrimSpace(code) == "" {
 		return "", fmt.Errorf("插件代码为空")
 	}
+	lang := detectPluginLanguage(code, language)
+	js, err := compilePluginSource(code, lang, "cordis-dyn.ts")
+	if err != nil {
+		return "", fmt.Errorf("插件编译失败: %v", err)
+	}
 	// 语法预检：compile-only（对齐 harness precheckCode）
-	if _, err := goja.Compile("cordis-dyn.js", "(async () => {\n"+code+"\n})()", false); err != nil {
+	if _, err := goja.Compile("cordis-dyn.js", "(async () => {\n"+js+"\n})()", false); err != nil {
 		return "", fmt.Errorf("插件语法错误: %v", jsErrorText(err))
 	}
 	id := fmt.Sprintf("dyn-%d", dynSeq.Add(1))
 	def := &jsPluginDef{
 		id:        id,
 		purpose:   purpose,
-		code:      code,
+		code:      js, // 存转译后的 JS（运行时 goja 直接执行）
+		lang:      lang,
 		version:   id,
 		createdAt: time.Now(),
 	}

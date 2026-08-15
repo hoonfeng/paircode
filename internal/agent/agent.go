@@ -163,6 +163,7 @@ func (a *AgentBase) Init() error {
 
 	// 8. 设置 CodeGraph DB
 	SetCodeGraphDB(sm.RawDB())
+	SetCodeGraphRoot(root) // 共享 DB 归属主项目（多项目时其他项目用独立 JSONStore）
 
 	// 9. 初始化执行状态管理器
 	InitExecStateManager(root)

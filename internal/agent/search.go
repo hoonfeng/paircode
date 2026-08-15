@@ -69,6 +69,7 @@ func registerSearchTools(r *Registry, root string) {
 			"glob":             strProp("文件名通配过滤，如 *.go"),
 			"case_insensitive": boolProp("忽略大小写"),
 			"max_results":      intProp("结果行数上限（默认 200）"),
+			"project":          projectSchemaProp(),
 		}, "pattern"),
 		ReadOnly: true,
 		Handler:  searchContentHandler(root),
@@ -84,6 +85,7 @@ func registerSearchTools(r *Registry, root string) {
 			"path":        strProp("限定子目录（省略=工作区根）"),
 			"language":    strProp("可选：按语言过滤，如 \"go\"、\"typescript\"、\"python\""),
 			"max_results": intProp("结果上限（默认 500）"),
+			"project":    projectSchemaProp(),
 		}, "pattern"),
 		ReadOnly: true,
 		Handler:  searchFilesHandler(root),
@@ -91,6 +93,10 @@ func registerSearchTools(r *Registry, root string) {
 }
 func searchContentHandler(root string) ToolHandler {
 	return func(ctx context.Context, args map[string]any) (string, error) {
+		projRoot, err := projRootFromArgs(root, args)
+		if err != nil {
+			return "", err
+		}
 		pattern := strings.TrimSpace(argStr(args, "pattern"))
 		if pattern == "" {
 			return "", fmt.Errorf("pattern 不能为空")
@@ -103,7 +109,7 @@ func searchContentHandler(root string) ToolHandler {
 		if err != nil {
 			return "", fmt.Errorf("正则编译失败: %w", err)
 		}
-		base, err := searchRoot(root, argStr(args, "path"))
+		base, err := searchRoot(projRoot, argStr(args, "path"))
 		if err != nil {
 			return "", err
 		}
@@ -128,7 +134,7 @@ func searchContentHandler(root string) ToolHandler {
 				return nil
 			}
 			if glob != "" {
-				if !matchGlobFilter(glob, d.Name(), relSlash(root, p)) {
+				if !matchGlobFilter(glob, d.Name(), relSlash(projRoot, p)) {
 					return nil
 				}
 			}
@@ -139,7 +145,7 @@ func searchContentHandler(root string) ToolHandler {
 			if e != nil || isBinary(data) {
 				return nil
 			}
-			rel := relSlash(root, p)
+			rel := relSlash(projRoot, p)
 			for i, line := range strings.Split(string(data), "\n") {
 				if re.MatchString(line) {
 					lines = append(lines, fmt.Sprintf("%s:%d: %s", rel, i+1, trimLine(line)))
@@ -174,11 +180,15 @@ func searchContentHandler(root string) ToolHandler {
 
 func searchFilesHandler(root string) ToolHandler {
 	return func(ctx context.Context, args map[string]any) (string, error) {
+		projRoot, err := projRootFromArgs(root, args)
+		if err != nil {
+			return "", err
+		}
 		pattern := strings.TrimSpace(argStr(args, "pattern"))
 		if pattern == "" {
 			return "", fmt.Errorf("pattern 不能为空")
 		}
-		base, err := searchRoot(root, argStr(args, "path"))
+		base, err := searchRoot(projRoot, argStr(args, "path"))
 		if err != nil {
 			return "", err
 		}
@@ -210,8 +220,8 @@ func searchFilesHandler(root string) ToolHandler {
 					return nil
 				}
 			}
-			if matchFile(pattern, d.Name(), relSlash(root, p)) {
-				matches = append(matches, relSlash(root, p))
+			if matchFile(pattern, d.Name(), relSlash(projRoot, p)) {
+				matches = append(matches, relSlash(projRoot, p))
 				if len(matches) >= max {
 					truncated = true
 					return fs.SkipAll

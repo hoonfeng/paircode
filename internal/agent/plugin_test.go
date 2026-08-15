@@ -22,10 +22,19 @@ func TestPluginHostBasic(t *testing.T) {
 	if v := host.Context().Get("workspaceRoot"); v != `C:\ws` {
 		t.Fatalf("workspaceRoot 服务 = %v, want C:\\ws", v)
 	}
-	// Inspect 报告
+	// Inspect 报告：sysinfo + 21 个内置功能插件
 	recs := host.Inspect()
-	if len(recs) != 1 || recs[0].Name != "sysinfo" {
-		t.Fatalf("Inspect = %+v, want [sysinfo]", recs)
+	if len(recs) < 22 {
+		t.Fatalf("Inspect 应含 22 个插件, got %d: %+v", len(recs), recs)
+	}
+	foundSys := false
+	for _, r := range recs {
+		if r.Name == "sysinfo" {
+			foundSys = true
+		}
+	}
+	if !foundSys {
+		t.Fatalf("sysinfo 插件缺失: %+v", recs)
 	}
 	// Unload 回收
 	if err := host.Unload("sysinfo"); err != nil {
@@ -241,6 +250,93 @@ return {
 	_, err := reg.Execute(context.Background(), "err_tool", `{}`)
 	if err == nil || !strings.Contains(err.Error(), "boom") {
 		t.Fatalf("错误工具应返回 error, got %v", err)
+	}
+}
+
+// ─── TS 动态插件（内置编译器）────────────────────────────
+
+const demoTSPlugin = `
+interface ToolArgs { who?: string }
+interface PluginCtx {
+  tools: { register(t: any): void }
+  provide(name: string, value: any): void
+}
+const greet = (args: ToolArgs): string => 'ts hello ' + (args.who ?? 'world')
+
+return {
+  name: 'ts-demo',
+  apply(ctx: PluginCtx) {
+    ctx.provide('tsDemoService', { lang: 'ts' })
+    ctx.tools.register({
+      name: 'ts_hello',
+      description: 'TS 插件工具',
+      parameters: { type: 'object', properties: { who: { type: 'string' } } },
+      execute: (args: ToolArgs) => ({ text: greet(args) })
+    })
+  }
+}`
+
+func TestTSDynamicPlugin(t *testing.T) {
+	reg := NewRegistry()
+	host := NewPluginHost(reg, nil, `C:\ws`)
+
+	// 自动探测：TS 注解 → 内置编译转译
+	id, err := host.DefineJS(demoTSPlugin, "ts demo")
+	if err != nil {
+		t.Fatalf("DefineJS(TS): %v", err)
+	}
+	def, ok := host.GetJSDef(id)
+	if !ok {
+		t.Fatalf("定义未登记")
+	}
+	if def.lang != "ts" {
+		t.Fatalf("语言应探测为 ts, got %q", def.lang)
+	}
+	if err := host.LoadJSDynamic(def); err != nil {
+		t.Fatalf("LoadJSDynamic(TS): %v", err)
+	}
+	if host.State("ts-demo") != PluginRunning {
+		t.Fatalf("ts-demo 应 running")
+	}
+	out, err := reg.Execute(context.Background(), "ts_hello", `{"who":"TS"}`)
+	if err != nil {
+		t.Fatalf("ts_hello: %v", err)
+	}
+	if !strings.Contains(out, "ts hello TS") {
+		t.Fatalf("ts_hello 输出 = %q", out)
+	}
+	if v := host.Context().Get("tsDemoService"); v == nil {
+		t.Fatalf("tsDemoService 服务未提供")
+	}
+}
+
+func TestTSDynamicPluginLanguageParam(t *testing.T) {
+	host := NewPluginHost(NewRegistry(), nil, "")
+	// 显式 language=ts 强制转译
+	id, err := host.DefineJSCode(demoTSPlugin, "ts", "explicit")
+	if err != nil {
+		t.Fatalf("DefineJSCode(ts): %v", err)
+	}
+	def, _ := host.GetJSDef(id)
+	if def.lang != "ts" {
+		t.Fatalf("显式 ts 应记录 lang=ts")
+	}
+	// 显式 language=js：TS 语法不被转译 → goja 语法错误
+	_, err = host.DefineJSCode(`interface A { x: string } return { name: 'a', apply() {} }`, "js", "js-forced")
+	if err == nil {
+		t.Fatalf("强制 js 下含 interface 的代码应语法报错")
+	}
+}
+
+func TestTSCompileError(t *testing.T) {
+	host := NewPluginHost(NewRegistry(), nil, "")
+	// TS 语法错误 → 编译错误信息含行号
+	_, err := host.DefineJSCode(`interface A { x: string } return { name: 'a', apply(ctx: A) { xxx }`, "ts", "bad")
+	if err == nil {
+		t.Fatalf("TS 编译错误应被拒绝")
+	}
+	if !strings.Contains(err.Error(), "编译") {
+		t.Fatalf("错误信息应含编译提示, got %v", err)
 	}
 }
 

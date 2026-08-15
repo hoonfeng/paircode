@@ -191,6 +191,7 @@ func startWebUI(port int) {
 			if root != "" {
 				agentMgr.SetWorkspaceRoot(root)
 				agent.SetCodeGraphDB(agentMgr.RawDB())
+				agent.SetCodeGraphRoot(root)
 				agent.SkillProjectDir = filepath.Join(root, ".pair", "skills")
 				agent.MCPProjectConfigPath = filepath.Join(root, ".pair", "mcp.json")
 				memory.SetRoot(root)
