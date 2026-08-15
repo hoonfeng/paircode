@@ -82,33 +82,34 @@
       <div ref="clientPanelEl" class="pp-client-body"></div>
     </div>
 
-    <!-- 内置工具（被过滤的 pair 独有工具按内置插件组管理——放进插件面板） -->
+    <!-- 内置工具（被过滤的 pair 独有工具按内置插件组管理；文件浏览器工具集区同源展示） -->
     <div class="pp-builtin">
-      <div class="pp-builtin-head">
+      <div class="pp-builtin-head" @click="builtinOpen = !builtinOpen" title="点击折叠/展开">
         <span class="pp-builtin-title"><SvgIcon name="package" :size="13" /> 内置工具 <span class="pp-builtin-sub">{{ builtinInfo ? builtinInfo.enabledTotal + '/' + builtinInfo.toolTotal + ' 启用' : '' }}</span></span>
-        <div class="pp-builtin-actions">
+        <div class="pp-builtin-actions" @click.stop>
           <label class="pp-check" title="强制全部内置工具组加入工作区（所有被过滤工具对 agent 可见）">
             <input type="checkbox" :checked="builtinForceAll" @change="forceAllBuiltin" />
             <span>强制全部</span>
           </label>
           <button class="pp-icon-btn" @click="loadBuiltin" title="刷新内置工具状态"><SvgIcon name="refresh" :size="11" :class="{ spinning: builtinLoading }" /></button>
+          </div>
+          <SvgIcon name="chevron-right" :size="11" class="pp-chevron" :class="{ open: builtinOpen }" />
         </div>
-      </div>
-      <div v-if="builtinLoading && !builtinInfo" class="pp-loading"><SvgIcon name="refresh" :size="12" class="spinner" /><span>加载…</span></div>
-      <div v-else-if="builtinInfo && builtinInfo.groups.length" class="pp-builtin-groups">
+      <div v-if="builtinOpen && builtinLoading && !builtinInfo" class="pp-loading"><SvgIcon name="refresh" :size="12" class="spinner" /><span>加载…</span></div>
+      <div v-else-if="builtinOpen && builtinInfo && builtinInfo.groups.length" class="pp-builtin-groups">
         <div v-for="g in builtinInfo.groups" :key="g.name" class="pp-builtin-group">
           <div class="pp-builtin-grow">
-            <span class="pp-builtin-gname" :class="{ off: !g.Enabled && !g.Partial }">{{ g.title }}</span>
+            <span class="pp-builtin-gname" :class="{ off: !g.enabled && !g.partial }">{{ g.title }}</span>
             <span class="pp-builtin-gdesc" :title="g.desc">{{ g.desc }}</span>
-            <span class="pp-builtin-gtools">{{ g.tools.length }} 工具<template v-if="g.Partial">（部分）</template></span>
+            <span class="pp-builtin-gtools">{{ g.tools.length }} 工具<template v-if="g.partial">（部分）</template></span>
           </div>
-          <label class="pp-switch" :title="g.Enabled ? '组内工具全部对 agent 可见；点击移出（恢复默认过滤）' : '加入工作区：组内工具全部对 agent 可见'">
-            <input type="checkbox" :checked="g.Enabled" @change="toggleBuiltinGroup(g)" />
+          <label class="pp-switch" :title="g.enabled ? '组内工具全部对 agent 可见；点击移出（恢复默认过滤）' : '加入工作区：组内工具全部对 agent 可见'">
+            <input type="checkbox" :checked="g.enabled" @change="toggleBuiltinGroup(g)" />
             <span class="pp-switch-track"></span>
           </label>
         </div>
       </div>
-      <div v-else class="pp-builtin-empty">内置工具包未加载（启动后自动可用）</div>
+      <div v-else-if="builtinOpen" class="pp-builtin-empty">内置工具包未加载（启动后自动可用）</div>
     </div>
 
     <!-- 插件列表 -->
@@ -130,16 +131,16 @@
           <span v-else-if="p.hasClient && p.state === 'running'" class="pp-badge pp-badge-warn" title="client 半待激活批准：在对话中用 cordis_run 装载该插件触发审批">UI 待批准</span>
           <span v-else-if="p.hasClient" class="pp-badge" title="含 client 半（浏览器 UI；装载后需批准）">UI</span>
           <span v-if="p.tools && p.tools.length" class="pp-count" :title="p.tools.join(', ')">{{ p.tools.length }} 工具</span>
-          <SvgIcon name="chevron-right" :size="12" class="pp-chevron" :class="{ open: expanded[p.name] }" />
-        </div>
-        <div v-if="expanded[p.name]" class="pp-detail">
-          <div v-if="p.purpose" class="pp-d-purpose">{{ p.purpose }}</div>
-          <div v-if="p.defId" class="pp-d-line">定义: {{ p.defId }}<span v-if="p.version"> · {{ p.version }}</span></div>
-          <div v-if="p.provides && p.provides.length" class="pp-d-line">服务: {{ p.provides.join(', ') }}</div>
-          <div v-if="p.sections && p.sections.length" class="pp-d-line">提示片段: {{ p.sections.join(', ') }}</div>
-          <div v-if="p.tools && p.tools.length" class="pp-d-line">工具: {{ p.tools.join(', ') }}</div>
-          <div v-if="p.clientCode" class="pp-d-code">
-            <div class="pp-d-code-head">
+            <SvgIcon name="chevron-right" :size="12" class="pp-chevron" :class="{ open: expanded[p.name] }" />
+          </div>
+          <div v-if="expanded[p.name]" class="pp-detail">
+            <div v-if="p.purpose" class="pp-d-purpose">{{ p.purpose }}</div>
+            <div v-if="p.defId" class="pp-d-line">定义: {{ p.defId }}<span v-if="p.version"> · {{ p.version }}</span></div>
+            <div v-if="p.provides && p.provides.length" class="pp-d-line">服务: {{ p.provides.join(', ') }}</div>
+            <div v-if="p.sections && p.sections.length" class="pp-d-line">提示片段: {{ p.sections.join(', ') }}</div>
+            <div v-if="p.tools && p.tools.length" class="pp-d-line">工具: {{ p.tools.join(', ') }}</div>
+            <div v-if="p.clientCode" class="pp-d-code">
+              <div class="pp-d-code-head">
               <span>client 半源码</span>
               <button class="pp-icon-btn" @click="copyText(p.clientCode)" title="复制"><SvgIcon name="copy" :size="11" /></button>
             </div>
@@ -200,7 +201,7 @@ async function loadBuiltin() {
 }
 
 async function toggleBuiltinGroup(g) {
-  const target = !g.Enabled
+  const target = !g.enabled
   try {
     const res = await api.builtinPlugins({ group: g.name, enabled: target })
     window.$toast && window.$toast((res && res.message) || (target ? '已加入' : '已移出') + ' ' + g.name, 'info')
@@ -669,7 +670,8 @@ onUnmounted(() => {
   max-height: 34%;
   overflow: auto;
 }
-.pp-builtin-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.pp-builtin-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; cursor: pointer; user-select: none; }
+.pp-builtin-head .pp-builtin-actions { cursor: default; }
 .pp-builtin-title { display: flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; color: var(--text-primary); }
 .pp-builtin-sub { font-weight: 400; color: var(--text-muted); font-size: 10px; }
 .pp-builtin-actions { display: flex; align-items: center; gap: 6px; }

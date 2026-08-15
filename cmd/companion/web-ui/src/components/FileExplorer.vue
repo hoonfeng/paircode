@@ -83,19 +83,57 @@
         </div>
         <!-- 列表 -->
         <div v-if="toolsets.length" class="ts-list">
-          <div v-for="ts in toolsets" :key="ts.name + '-' + ts.scope" class="ts-item">
-            <div class="ts-item-head">
-              <span class="ts-item-dot" :class="ts.scope === 'global' ? 'g' : ''"></span>
-              <span class="ts-item-name" :title="ts.description">{{ ts.name }}</span>
-              <span class="ts-item-scope">{{ ts.scope === 'global' ? '全局' : '工作区' }}</span>
-              <span class="ts-item-count">{{ ts.pluginCount }} 插件</span>
+            <div v-for="ts in toolsets" :key="ts.name + '-' + ts.scope" class="ts-item">
+              <div class="ts-item-head" @click="toggleTsDetail(ts)" :title="ts.scope === 'builtin' ? '内置工具包（点击展开分组与工具）' : '点击展开查看插件与工具'">
+                <span class="ts-item-dot" :class="ts.scope === 'global' ? 'g' : ''"></span>
+                <span class="ts-item-name" :title="ts.description">{{ ts.name }}</span>
+                <span class="ts-item-scope" :class="ts.scope === 'builtin' ? 'b' : ''">{{ ts.scope === 'builtin' ? '内置' : (ts.scope === 'global' ? '全局' : '工作区') }}</span>
+                <span class="ts-item-count">{{ ts.scope === 'builtin' ? ts.pluginCount + ' 组' : ts.pluginCount + ' 插件' }}</span>
+                <SvgIcon name="chevron-right" :size="11" class="ts-chevron" :class="{ open: tsDetailOpen[tsKey(ts)] }" />
+              </div>
+              <div v-if="ts.description" class="ts-item-desc">{{ ts.description }}</div>
+              <!-- 详情（点击展开）：内置工具包=分组+工具+开关；普通工具集=插件+工具 -->
+              <div v-if="tsDetailOpen[tsKey(ts)]" class="ts-item-detail">
+                <div v-if="tsDetailLoading[tsKey(ts)]" class="ts-detail-loading">加载…</div>
+                <template v-else-if="tsDetail[tsKey(ts)]">
+                  <!-- builtin：分组 + 工具清单 + 启用开关 -->
+                  <div v-if="ts.scope === 'builtin'" class="ts-detail-groups">
+                    <div v-for="g in tsDetail[tsKey(ts)].groups" :key="g.name" class="ts-detail-group">
+                      <div class="ts-detail-grow">
+                        <span class="ts-detail-gname" :class="{ off: !g.enabled && !g.partial }">{{ g.title }}</span>
+                        <span class="ts-detail-gtools">{{ g.tools.length }} 工具<template v-if="g.partial">（部分）</template></span>
+                      </div>
+                      <label class="ts-switch" :title="g.enabled ? '组内工具全部对 agent 可见；点击移出（恢复默认过滤）' : '加入工作区：组内工具全部对 agent 可见'">
+                        <input type="checkbox" :checked="g.enabled" @change="toggleTsGroup(ts, g)" />
+                        <span class="ts-switch-track"></span>
+                      </label>
+                      <div v-if="g.tools.length" class="ts-detail-tools">
+                        <span v-for="t in g.tools" :key="t.name" class="ts-tool-chip" :class="{ off: !t.enabled }">{{ t.name }}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <!-- 普通工具集：插件清单 + 工具 -->
+                  <div v-else class="ts-detail-plugins">
+                    <div v-for="pl in tsDetail[tsKey(ts)].plugins" :key="pl.name" class="ts-detail-plugin">
+                      <div class="ts-detail-prow">
+                        <span class="ts-detail-pname">{{ pl.name }}</span>
+                        <span v-if="pl.builtin" class="ts-detail-pbuiltin">内置组</span>
+                      </div>
+                      <div v-if="pl.purpose" class="ts-detail-ppurpose">{{ pl.purpose }}</div>
+                      <div v-if="pl.tools && pl.tools.length" class="ts-detail-tools">
+                        <span v-for="t in pl.tools" :key="t" class="ts-tool-chip" :class="{ off: (pl.disabledTools || []).includes(t) }">{{ t }}</span>
+                      </div>
+                      <div v-else class="ts-detail-muted">（插件运行时注册工具）</div>
+                    </div>
+                  </div>
+                </template>
+                <div v-else class="ts-detail-loading err">加载失败</div>
+              </div>
+              <div class="ts-item-actions">
+                <button class="ts-btn" @click="exportToolset(ts)">导出</button>
+                <button v-if="ts.scope !== 'builtin'" class="ts-btn danger" @click="removeToolset(ts)">删除</button>
+              </div>
             </div>
-            <div v-if="ts.description" class="ts-item-desc">{{ ts.description }}</div>
-            <div class="ts-item-actions">
-              <button class="ts-btn" @click="exportToolset(ts)">导出</button>
-              <button class="ts-btn danger" @click="removeToolset(ts)">删除</button>
-            </div>
-          </div>
         </div>
         <div v-else-if="!tsRefreshing" class="ts-empty">
           <span>暂无工具集。点 + 动态构建，或到市场安装插件工具集。</span>
@@ -576,8 +614,8 @@ async function loadToolsets() {
   tsRefreshing.value = true
   try {
     const list = await api.apiGet('/toolsets')
-    // 内置工具包 builtin 在插件面板「内置工具」区块管理，文件树工具集列表不重复展示
-    toolsets.value = Array.isArray(list) ? list.filter(t => t.scope !== 'builtin') : []
+      // 全部工具集（含虚拟内置工具包 builtin：scope=builtin，点击展开查看分组+工具+开关）
+      toolsets.value = Array.isArray(list) ? list : []
   } catch (e) {
     console.warn('[toolset] 加载失败', e)
   } finally {
@@ -630,6 +668,43 @@ async function removeToolset(ts) {
   } catch (err) {
     window.$toast?.('删除失败: ' + (err.message || err), 'error')
   }
+}
+
+// 工具集详情（点击展开：builtin=分组+工具+开关；普通=插件+工具）
+const tsDetail = reactive({})
+const tsDetailOpen = reactive({})
+const tsDetailLoading = reactive({})
+
+function tsKey(ts) { return ts.name + '-' + ts.scope }
+
+async function toggleTsDetail(ts) {
+  const k = tsKey(ts)
+  tsDetailOpen[k] = !tsDetailOpen[k]
+  if (tsDetailOpen[k] && tsDetail[k] === undefined) {
+    tsDetailLoading[k] = true
+    try {
+      tsDetail[k] = await api.apiGet('/toolsets?name=' + encodeURIComponent(ts.name))
+    } catch (e) {
+      tsDetail[k] = null
+    } finally {
+      tsDetailLoading[k] = false
+    }
+  }
+}
+
+// 内置分组开关（文件浏览器工具集区操作；与插件面板同源：/api/plugins/builtin）
+async function toggleTsGroup(ts, g) {
+  const target = !g.enabled
+  try {
+    const res = await api.apiPost('/plugins/builtin', { group: g.name, enabled: target })
+    window.$toast?.((res && res.message) || (target ? '已加入' : '已移出') + ' ' + g.name, 'info')
+  } catch (e) {
+    window.$toast?.('操作失败: ' + (e.message || e), 'error')
+  }
+  // 刷新详情 + 列表（保持展开）
+  const k = tsKey(ts)
+  try { tsDetail[k] = await api.apiGet('/toolsets?name=' + encodeURIComponent(ts.name)) } catch (e) {}
+  loadToolsets()
 }
 
 function toggleTs() {
@@ -744,6 +819,52 @@ onUnmounted(() => {
   display: flex; align-items: center; gap: 5px;
   padding: 5px 8px; cursor: pointer; user-select: none;
 }
+
+.ts-item-head { cursor: pointer; }
+.ts-item-scope.b { border-color: var(--accent); color: var(--accent-light); }
+.ts-item-detail {
+  border-top: 1px dashed var(--border-color);
+  margin-top: 4px; padding-top: 4px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.ts-detail-loading { font-size: 10px; color: var(--text-muted); padding: 2px 0; }
+.ts-detail-loading.err { color: #e06c75; }
+.ts-detail-groups, .ts-detail-plugins { display: flex; flex-direction: column; gap: 4px; }
+.ts-detail-group, .ts-detail-plugin {
+  border: 1px solid var(--border-color); border-radius: 4px; padding: 4px 6px;
+  background: var(--bg-tertiary); display: flex; flex-direction: column; gap: 3px;
+}
+.ts-detail-grow { display: flex; align-items: baseline; gap: 6px; }
+.ts-detail-gname { font-size: 10px; font-weight: 600; }
+.ts-detail-gname.off { color: var(--text-muted); opacity: .6; }
+.ts-detail-gtools { font-size: 9px; color: var(--text-muted); }
+.ts-detail-tools { display: flex; flex-wrap: wrap; gap: 3px; }
+.ts-tool-chip {
+  font-size: 9px; padding: 0 5px; border-radius: 3px;
+  background: var(--bg-primary); border: 1px solid var(--border-color);
+  color: var(--text-secondary); font-family: var(--font-code);
+  white-space: nowrap;
+}
+.ts-tool-chip.off { text-decoration: line-through; opacity: .45; }
+.ts-detail-prow { display: flex; align-items: center; gap: 6px; }
+.ts-detail-pname { font-size: 10px; font-weight: 600; word-break: break-all; }
+.ts-detail-pbuiltin { font-size: 8px; color: var(--accent-light); border: 1px solid var(--accent); border-radius: 3px; padding: 0 3px; flex-shrink: 0; }
+.ts-detail-ppurpose { font-size: 9px; color: var(--text-muted); }
+.ts-detail-muted { font-size: 9px; color: var(--text-muted); }
+.ts-switch { position: relative; display: inline-flex; align-items: center; cursor: pointer; flex-shrink: 0; align-self: flex-start; }
+.ts-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.ts-switch-track {
+  width: 24px; height: 13px; background: var(--border-color); border-radius: 7px;
+  transition: background .15s; position: relative;
+}
+.ts-switch-track::after {
+  content: ''; position: absolute; top: 2px; left: 2px;
+  width: 9px; height: 9px; background: #fff; border-radius: 50%;
+  transition: transform .15s;
+}
+.ts-switch input:checked + .ts-switch-track { background: var(--accent); }
+.ts-switch input:checked + .ts-switch-track::after { transform: translateX(11px); }
+
 .ts-header:hover { background: var(--bg-hover); }
 .ts-header-icon { color: var(--text-muted); flex-shrink: 0; }
 .ts-label { padding: 0; text-transform: none; letter-spacing: 0; font-size: 11px; }
