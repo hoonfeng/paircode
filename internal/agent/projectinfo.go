@@ -19,6 +19,32 @@ import (
 
 func projectInfoDir(root string) string { return filepath.Join(root, ".pair", "project-info") }
 
+// partsOf 取条目路径末段（文件名段）。
+func partsOf(rel string) string {
+	if i := strings.LastIndexByte(rel, '/'); i >= 0 {
+		return rel[i+1:]
+	}
+	return rel
+}
+
+// infoBranches 知识库顶层分支（树形分叉）：目标/架构/实现/关键点/设计思想。
+// 概览.md 为根条目（不属于分支）。新条目应归入某分支，便于人浏览理解。
+var infoBranches = []string{"目标", "架构", "实现", "关键点", "设计思想"}
+
+// isInfoBranch 判断顶层路径段是否为合法知识库分支。
+func isInfoBranch(head string) bool {
+	for _, b := range infoBranches {
+		if head == b {
+			return true
+		}
+	}
+	return false
+}
+
+// agentsNotesDir 参考项目决策树目录（.agents/notes/）——模型后训练含参考项目数据，
+// 会幻觉该路径；存在时作为知识库只读附加源（条目路径前缀 notes/）。
+func agentsNotesDir(root string) string { return filepath.Join(root, ".agents", "notes") }
+
 // safeInfoPath 规范化条目路径：去 .md、清理、禁路径穿越（..、绝对路径），允许 / 嵌套。
 func safeInfoPath(p string) string {
 	p = strings.TrimSuffix(strings.TrimSpace(p), ".md")
@@ -29,13 +55,16 @@ func safeInfoPath(p string) string {
 
 func infoFilePath(dir, rel string) string { return filepath.Join(dir, filepath.FromSlash(rel)+".md") }
 
-// infoLevel 按路径分级：概览(overview/概览) 始终加载；顶层其余=模块(自动加载)；嵌套(带/)=细节(按需读)。
+// infoLevel 按路径分级（树形知识库）：
+//   overview = 根条目（概览.md，唯一，自动全量加载）
+//   module   = 1 层（分支/条目，如 架构/模块-agent）——自动加载标题摘要
+//   detail   = 2+ 层（分支/子类/条目）——按需读（渐进式披露）
 func infoLevel(rel string) string {
 	low := strings.ToLower(rel)
 	switch {
 	case low == "overview" || rel == "概览" || rel == "项目概览":
 		return "overview"
-	case strings.Contains(rel, "/"):
+	case strings.Count(rel, "/") >= 2:
 		return "detail"
 	default:
 		return "module"
@@ -54,44 +83,118 @@ func firstHeading(md, fallback string) string {
 }
 
 // scanInfoEntries 递归扫描知识库目录（.md），返回各条目（路径/标题/分级/正文）。
+// 附加源：工作区 .agents/notes/ 参考决策树存在时并入（路径前缀 notes/，只读兼容模型幻觉路径）。
 func scanInfoEntries(dir string) []infoEntry {
 	var out []infoEntry
-	filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !strings.HasSuffix(p, ".md") {
+	scanDir := func(base, prefix string) {
+		filepath.WalkDir(base, func(p string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() || !strings.HasSuffix(p, ".md") {
+				return nil
+			}
+			rel, _ := filepath.Rel(base, p)
+			rel = filepath.ToSlash(strings.TrimSuffix(rel, ".md"))
+			if prefix != "" {
+				rel = prefix + "/" + rel
+			}
+			data, _ := os.ReadFile(p)
+			out = append(out, infoEntry{Path: rel, Title: firstHeading(string(data), rel), Level: infoLevel(rel), Content: string(data)})
 			return nil
-		}
-		rel, _ := filepath.Rel(dir, p)
-		rel = filepath.ToSlash(strings.TrimSuffix(rel, ".md"))
-		data, _ := os.ReadFile(p)
-		out = append(out, infoEntry{Path: rel, Title: firstHeading(string(data), rel), Level: infoLevel(rel), Content: string(data)})
-		return nil
-	})
+		})
+	}
+	scanDir(dir, "")
+	rootDir := filepath.Dir(filepath.Dir(dir)) // .pair/project-info → 项目根
+	notes := agentsNotesDir(rootDir)
+	if notes != dir {
+		scanDir(notes, "notes")
+	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
 	return out
 }
 
-// ProjectKnowledge 自动加载知识库概览注入 Agent 上下文：概览篇给正文 + 其余篇列目录（渐进式披露，
-// 细则用 project_info_read 读）。预算 maxChars。无知识库→""。
+// infoTree 构建知识库条目树（分支=目录，叶子=条目），返回缩进树文本。
+// showLevel 时叶子带分级标记。条目按路径排序保证确定性。
+// 叶子显示「标题（路径末段）」（末段与标题不同时），树形分支给出完整路径上下文。
+func infoTree(entries []infoEntry, showLevel bool) string {
+	type node struct {
+		name     string
+		children map[string]*node
+		entry    *infoEntry
+	}
+	root := &node{children: map[string]*node{}}
+	for i := range entries {
+		e := &entries[i]
+		parts := strings.Split(e.Path, "/")
+		cur := root
+		for _, seg := range parts[:len(parts)-1] {
+			nxt, ok := cur.children[seg]
+			if !ok {
+				nxt = &node{name: seg, children: map[string]*node{}}
+				cur.children[seg] = nxt
+			}
+			cur = nxt
+		}
+		leaf := parts[len(parts)-1]
+		n, ok := cur.children[leaf]
+		if !ok {
+			n = &node{name: leaf, children: map[string]*node{}}
+			cur.children[leaf] = n
+		}
+		n.entry = e
+	}
+	var b strings.Builder
+	var walk func(n *node, prefix string)
+	walk = func(n *node, prefix string) {
+		keys := make([]string, 0, len(n.children))
+		for k := range n.children {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for i, k := range keys {
+			ch := n.children[k]
+			last := i == len(keys)-1
+			conn := "├── "
+			nextPrefix := prefix + "│   "
+			if last {
+				conn = "└── "
+				nextPrefix = prefix + "    "
+			}
+			if ch.entry != nil {
+				mark := ""
+				if showLevel {
+					mark = " [" + ch.entry.Level + "]"
+				}
+				title := ch.entry.Title
+				if leaf := partsOf(ch.entry.Path); leaf != "" && leaf != title {
+					title += "（" + leaf + "）"
+				}
+				b.WriteString(prefix + conn + title + mark + "\n")
+			} else {
+				b.WriteString(prefix + conn + k + "/\n")
+			}
+			walk(ch, nextPrefix)
+		}
+	}
+	walk(root, "")
+	return b.String()
+}
+
+// ProjectKnowledge 自动加载知识库概览注入 Agent 上下文：概览篇给正文 + 其余篇树形目录
+// （渐进式披露，细则用 project_info_read 读）。预算 maxChars。无知识库→""。
 func ProjectKnowledge(root string, maxChars int) string {
 	entries := scanInfoEntries(projectInfoDir(root))
 	if len(entries) == 0 {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString("\n\n# 项目知识库（自动加载）\n本项目的结构化理解；需要某篇细则用 project_info_read 读全文。\n")
+	b.WriteString("\n\n# 项目知识库（自动加载）\n本项目的结构化理解树：概览/目标/架构/实现/关键点/设计思想；细则用 project_info_read 读全文。\n")
 	for _, e := range entries { // 概览篇给正文
 		if e.Level == "overview" {
 			b.WriteString("\n" + truncRunesAgent(strings.TrimSpace(e.Content), 1400) + "\n")
 			break
 		}
 	}
-	b.WriteString("\n## 知识库目录\n")
-	for _, e := range entries {
-		if e.Level == "overview" {
-			continue
-		}
-		b.WriteString("- [" + e.Title + "](" + e.Path + ")\n")
-	}
+	b.WriteString("\n## 知识库目录（树）\n")
+	b.WriteString(infoTree(entries, false))
 	return truncRunesAgent(b.String(), maxChars)
 }
 
@@ -110,11 +213,11 @@ func registerProjectInfoTools(r *Registry, root string) {
 
 	r.Register(&Tool{
 		Name: "project_info_write",
-		UsageGuide: "写入/更新项目知识库条目，跨会话复用。路径用中文（如 概览 / 模块-渲染 / 决策-渲染架构）。读完关键文件后立即写入，积累项目的结构化理解。比记在脑子里可靠（持久化+跨会话可见）。多项目工作区可用 project 参数指定目标项目。",
+		UsageGuide: "写入/更新项目知识库条目，跨会话复用。★知识库是树：顶层分支 = 目标/架构/实现/关键点/设计思想（根为 概览）——路径带分支前缀（如 架构/模块-agent / 设计思想/决策-渲染架构）。读完关键文件后立即写入，积累项目的结构化理解。比记在脑子里可靠（持久化+跨会话可见）。多项目工作区可用 project 参数指定目标项目。",
 		Description: "写入/更新项目知识库的一篇（.pair/project-info/<路径>.md）——记录项目架构/模块职责/数据流/设计决策等结构化理解，" +
-			"跨会话复用、你和用户都能看。路径用中文（如 概览 / 模块-agent / 决策-渲染架构）。",
+			"跨会话复用、你和用户都能看。★树形路径：顶层分支 目标/架构/实现/关键点/设计思想，根条目用 概览（如 架构/模块-agent / 设计思想/决策-渲染架构）。",
 		Parameters: objSchema(props{
-			"path":    strProp("条目路径（中文，如 概览 / 模块-agent），不含 .md；用 / 可嵌套为细节篇"),
+			"path":    strProp("条目路径（中文，带顶层分支前缀：目标/架构/实现/关键点/设计思想，如 架构/模块-agent），不含 .md；用 / 嵌套为细节篇"),
 			"content": strProp("Markdown 正文（首行用 # 标题）"),
 			"project": projectSchemaProp(),
 		}, "path", "content"),
@@ -135,10 +238,18 @@ func registerProjectInfoTools(r *Registry, root string) {
 			if err := os.WriteFile(fp, []byte(argStr(args, "content")), 0o644); err != nil {
 				return "", err
 			}
-			if statErr == nil {
-				return "已更新知识库：" + rel, nil
+			head := rel
+			if i := strings.IndexByte(rel, '/'); i > 0 {
+				head = rel[:i]
 			}
-			return "已写入知识库：" + rel, nil
+			hint := ""
+			if head != "概览" && !isInfoBranch(head) {
+				hint = "（提示：知识库是树，建议用顶层分支 目标/架构/实现/关键点/设计思想 开头，如 架构/" + rel + "）"
+			}
+			if statErr == nil {
+				return "已更新知识库：" + rel + hint, nil
+			}
+			return "已写入知识库：" + rel + hint, nil
 		},
 	})
 
@@ -177,11 +288,26 @@ func registerProjectInfoTools(r *Registry, root string) {
 			if len(entries) == 0 {
 				return "（知识库为空。用 project_info_explore 起步、project_info_write 写入，或菜单「探索项目知识库」。）", nil
 			}
-			var b strings.Builder
-			for _, e := range entries {
-				fmt.Fprintf(&b, "- [%s] %s（%s）\n", e.Level, e.Title, e.Path)
+			return infoTree(entries, true), nil
+		},
+	})
+
+	r.Register(&Tool{
+		Name: "project_info_tree",
+		UsageGuide: "查看知识库完整树形结构（分支/子类/条目缩进树）。比 project_info_list 更直观：先看树定位条目，再 project_info_read 读全文。",
+		Description: "返回知识库完整树形结构（缩进树：目标/架构/实现/关键点/设计思想 分支 + 条目）。人可读的树形导航。",
+		Parameters:  objSchema(props{"project": projectSchemaProp()}),
+		ReadOnly:    true,
+		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			dir, err := infoDirFromArgs(args)
+			if err != nil {
+				return "", err
 			}
-			return b.String(), nil
+			entries := scanInfoEntries(dir)
+			if len(entries) == 0 {
+				return "（知识库为空）", nil
+			}
+			return "# 项目知识库（树）\n" + infoTree(entries, false), nil
 		},
 	})
 

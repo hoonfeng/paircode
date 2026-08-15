@@ -1166,14 +1166,23 @@ func ComposeSystemPrompt(static, dynamic string) string {
 }
 
 // ProjectRules 读工作区根的项目约定，拼成系统提示附加段供 agent 遵守：
-// 项目文档（AGENTS.md / CLAUDE.md 取首个）+ 用户在设置「指令」tab 写的 .pair/rules.md（两者都注入）。
-// 都没有则返回空串。每份内容超长截断。
+// ★分层项目文档（参考 deepseek-harness 约定，模型后训练含参考数据会幻觉这些路径）：
+//   根 AGENTS.md/CLAUDE.md（取首个，根约定）+ docs/AGENTS.md（文档标准层）+
+//   .agents/AGENTS.md（决策/流程规则层）——全部存在则全部注入（各标来源，各自截断）。
+// 另注入用户在设置「指令」tab 写的 .pair/rules.md。都没有则返回空串。
 func ProjectRules(root string) string {
 	var b strings.Builder
-	for _, name := range []string{"AGENTS.md", "CLAUDE.md"} { // 项目文档取首个
-		if s := readCapped(root, name); s != "" {
-			b.WriteString("\n\n# 项目约定（来自 " + name + "，务必遵守）\n" + s)
-			break
+	if s := readCapped(root, "CLAUDE.md"); s != "" { // 兼容 Claude 风格（根约定）
+		b.WriteString("\n\n# 项目约定（来自 CLAUDE.md，务必遵守）\n" + s)
+	}
+	layers := []struct{ path, label string }{
+		{"AGENTS.md", "根约定"},
+		{"docs/AGENTS.md", "文档标准"},
+		{".agents/AGENTS.md", "Agent 流程规则"},
+	}
+	for _, l := range layers {
+		if s := readCapped(root, l.path); s != "" {
+			b.WriteString("\n\n# 项目约定（来自 " + l.path + " ·" + l.label + "，务必遵守）\n" + s)
 		}
 	}
 	if s := readCapped(root, ".pair/rules.md"); s != "" { // 设置「指令」tab 写的（随项目存 .pair/）

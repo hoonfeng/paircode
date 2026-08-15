@@ -562,10 +562,10 @@ const reviewCategories = ref([
     { name: 'debug_status', label: '调试状态' }
   ]},
   { name: 'knowledge', label: '项目知识库', expanded: false, tools: [
-    { name: 'project_info_write', label: '写入知识' }, { name: 'project_info_read', label: '读取知识' },
-    { name: 'project_info_list', label: '列出知识' }, { name: 'project_info_search', label: '搜索知识' },
-    { name: 'project_info_delete', label: '删除知识' }, { name: 'project_info_explore', label: '项目概览' },
-    { name: 'project_info_verify', label: '验证知识' }
+    { name: 'project_info_tree', label: '知识树' }, { name: 'project_info_write', label: '写入知识' },
+    { name: 'project_info_read', label: '读取知识' }, { name: 'project_info_list', label: '列出知识' },
+    { name: 'project_info_search', label: '搜索知识' }, { name: 'project_info_delete', label: '删除知识' },
+    { name: 'project_info_explore', label: '项目概览' }, { name: 'project_info_verify', label: '验证知识' }
   ]},
   { name: 'memory', label: '记忆系统', expanded: false, tools: [
     { name: 'memory_write', label: '写入记忆' }, { name: 'memory_read', label: '读取记忆' },
