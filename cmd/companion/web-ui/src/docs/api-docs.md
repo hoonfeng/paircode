@@ -1542,7 +1542,43 @@ POST /api/memory/rebuild
 
 ---
 
-## 十七、WebSocket 实时通信协议
+## 十七、插件与工具集管理
+
+PairCode IDE 的工具系统全部插件化（一切皆插件）。插件（plugin）是工具的最小可复用单元，工具集（toolset）是按项目需求组合的命名插件包。相关 API：
+
+### 17.1 插件管理
+
+```
+GET   /api/plugins            # 列出已注册插件（含工具归属）
+GET   /api/plugins/detail     # 插件详情
+POST  /api/plugins/define     # 定义 JS/TS 插件
+POST  /api/plugins/action     # 插件动作（run/stop/inspect 等）
+POST  /api/plugins/event      # 插件事件
+GET   /api/plugins/client-state   # host/client 双半客户端状态
+POST  /api/plugins/client-events  # 客户端事件
+```
+
+### 17.2 工具集管理
+
+```
+GET   /api/toolsets           # 列出工具集
+POST  /api/toolsets/build     # 动态构建工具集（按项目+需求组合插件）
+GET   /api/toolsets/export    # 导出工具集 JSON
+POST  /api/toolsets/import    # 导入工具集（project/user 范围）
+POST  /api/toolsets/remove    # 移除工具集
+```
+
+### 17.3 工具配置
+
+```
+GET   /api/tools              # 工具清单（含启用/审核状态）
+POST  /api/tools/save         # 保存工具配置
+POST  /api/tools/review       # 审核配置
+```
+
+---
+
+## 十八、WebSocket 实时通信协议
 
 PairCode IDE 使用 **WebSocket** 实现双向实时通信。
 
@@ -1768,6 +1804,25 @@ ws://127.0.0.1:{port}/api/terminal/ws
 | GET/PUT | `/api/philosophy` | 行为指导 |
 | GET | `/api/tasks` | 任务列表（只读查询） |
 | GET/POST | `/api/taskplan` | 规划文档管理 |
+
+### 插件 & 工具集
+| 方法 | 端点 | 用途 |
+|------|------|------|
+| GET | `/api/plugins` | 插件列表（含工具归属） |
+| GET | `/api/plugins/detail` | 插件详情 |
+| POST | `/api/plugins/define` | 定义 JS/TS 插件 |
+| POST | `/api/plugins/action` | 插件动作（run/stop/inspect） |
+| POST | `/api/plugins/event` | 插件事件 |
+| GET | `/api/plugins/client-state` | host/client 客户端状态 |
+| POST | `/api/plugins/client-events` | 客户端事件 |
+| GET | `/api/toolsets` | 工具集列表 |
+| POST | `/api/toolsets/build` | 动态构建工具集 |
+| GET | `/api/toolsets/export` | 导出工具集 JSON |
+| POST | `/api/toolsets/import` | 导入工具集 |
+| POST | `/api/toolsets/remove` | 移除工具集 |
+| GET | `/api/tools` | 工具清单 |
+| POST | `/api/tools/save` | 保存工具配置 |
+| POST | `/api/tools/review` | 审核配置 |
 
 ---
 

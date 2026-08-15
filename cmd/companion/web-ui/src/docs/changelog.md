@@ -4,6 +4,47 @@
 
 ---
 
+## 1.2.1 — 2026-08-15
+
+### 新增
+- **按 deepseek-harness 设计重写 Agent 核心** — 双层循环（turn/step 边界事件、inbox 双队列对齐 next-step/next-turn），消息组装与落盘对齐 harness（agentloop 编号 ↔ 消息序列推导），系统提示精简为 harness 模式（`WB_FULL_TOOLS=1` 恢复全量工具）
+- **一切皆插件** — Go 插件框架 + goja JS 动态插件，goja 运行时完全内置（双仓库去除 replace），JS 插件沙箱支持 timer 服务（ctx.timeout/interval）与跨 goroutine 执行锁
+- **内置 TS 编译器** — esbuild 纯 Go 转译（无 CGO/npm 依赖），TS 插件可直接加载（`cordis_define` 支持 js/ts/自动探测），多文件 TS bundle（Build stdin + mock 包）
+- **工具全插件化** — 21 个内置功能插件（core/fs/git/web/shell/memory/task/project-info/codegraph/debug/vision/office/lsp 等），`cordis_inspect` 可见工具归属插件，Unload 可回收整组
+- **多项目支持** — 工具 project 参数路由（文件类/搜索/Git 全套），codegraph 按项目独立建图与查询（非主项目用各自 JSONStore，天然隔离），memory/project-info 工具显式 project 参数化
+- **工具集生态** — 模板插件化动态构建（`toolset_build` 按项目+需求自动组合工具并固化到工作区）、固化/导出/导入/市场发布（plugin 类型）、LLM 项目意图分析（语言无关，不固化任何语言模板）
+- **插件生态 P0-P2** — 函数形态 + `apply(ctx, config)` + inject 服务 + VM 超时防护 + schema 校验 + 插件管理 UI（host/client 双半）+ client inspect provider
+- **项目知识库树形化** — 树分支组织（目标/架构/实现/关键点/设计思想）+ AGENTS.md 分层 + .agents 路径兼容
+- **历史注入对齐 harness** — 删除【历史轮次】前缀标注与 task 时间戳，系统提示补充多轮对话规则
+- **ask_user 选项内输入** — 支持 single / multi / single-with-input / text 四态交互，修复参数名混淆导致选项不出现的问题
+- **遗留五件套** — notes 写入同步 + read_image 工具 + run_code 嵌套 + prompt 注册中心 + 知识库过期检查修复
+
+### 修复
+- **移除未完成注入** — TOOL_OUTCOME_UNKNOWN / interrupted 机制移除，无 result 的 tool_call 以空占位维持配对契约，不再向模型注入「中断/未完成」语义
+- **知识库过期验证误报** — 152 条假警告清零，159 条全绿
+
+---
+
+## 1.1.8 — 2026-08-11
+
+### 新增
+- **OCR / 图色识别能力** — 图片文字识别（中英文混合）与颜色分布分析，工具配置持久化 + 前端工具面板（2026-08-04）
+- **对话历史注入膨胀三层压缩** — 固定背景 / 动态日志 / 长时压缩三层方案，控制上下文体积（2026-08-04）
+- **异常中断后继续未完成对话** — 中断后可直接继续，不丢上下文（2026-08-06）
+- **后台进程跨轮存活** — run_background 进程不再因每轮重建注册表而丢失（全局单例 bgRegistry）（2026-08-11）
+- **多项目工具** — Lua 工具 / 工具配置按项目加载 + project 参数路由（2026-08-11）
+- **背景摘要注入位置修复** — 压缩摘要固定在 task 前注入（前缀稳定），动态日志追加末尾，KV 缓存零损失优化（2026-08-08）
+
+### 修复
+- 关闭 run 内自动压缩，改由外层时机控制（2026-08-05）
+- 历史消息配对错乱 — 用户消息重复存储导致 tool 配对错乱（lastUser 锚点重组）
+- 历史消息分段导致多气泡 — 连续 assistant 消息合并显示
+- 多轮对话 user 后 tool 粘连 + OnBatchPersist 偏移 — 压缩后固定偏移失效，改 lastUser 锚点重组
+- 归档双 bug — ①Windows 归档静默失效（句柄未关闭 + os.Rename 不能覆盖）→ 显式 Close + 三步法原子替换；②归档摘要孤立 assistant 消息污染 LLM 上下文 → 改 role=user +【历史归档】标注
+- 多根路径解析 Bug — 优先匹配文件实际存在的根目录
+
+---
+
 ## 1.1.6 — 2026-07-30
 
 ### 修复

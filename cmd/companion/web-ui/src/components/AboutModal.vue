@@ -35,9 +35,11 @@
               <span class="tech-badge">Go</span>
               <span class="tech-badge">Vue 3</span>
               <span class="tech-badge">WebSocket</span>
-              <span class="tech-badge">MCP</span>
               <span class="tech-badge">CodeMirror</span>
-              <span class="tech-badge">REST API</span>
+              <span class="tech-badge">插件化工具</span>
+              <span class="tech-badge">TS 编译器</span>
+              <span class="tech-badge">MCP</span>
+              <span class="tech-badge">CodeGraph</span>
               <span class="tech-badge">DAP</span>
             </div>
           </div>
