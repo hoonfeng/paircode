@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -110,5 +111,69 @@ func TestHarnessOnlyTools_Default(t *testing.T) {
 	t.Setenv("WB_FULL_TOOLS", "1")
 	if HarnessOnlyTools() {
 		t.Error("WB_FULL_TOOLS=1 应关闭 harness 对齐模式")
+	}
+}
+
+// 被移除的 pair 独有工具名（harness 精简提示词中不应出现）。
+var trimmedPromptBannedTools = []string{
+	"codegraph", "memory_", "project_info", "history_", "git_", "debug_", "binary_",
+	"csv_", "word_", "xlsx", "read_pdf", "lsp_", "skill_", "mcp_", "lua_tool",
+	"marketplace", "web_debug", "bug_", "screenshot", "multi_edit", "list_files",
+	"run_background", "update_plan", "read_file", "edit_file", "write_file", "run_command",
+	"search_content", "search_files", "find_symbol", "go_build", "go_run", "run_test",
+	"fix_flex_autoheight", "image_",
+}
+
+func TestPromptTrimmedInHarnessMode(t *testing.T) {
+	t.Setenv("WB_FULL_TOOLS", "")
+	roots := []string{"/test/project"}
+
+	// 自管理/记忆/Lua 三段在 harness 模式下应裁剪为空（引用工具已被移除）
+	if s := SelfManagementPrompt(); s != "" {
+		t.Errorf("harness 模式 SelfManagementPrompt 应为空，实际: %.80s…", s)
+	}
+	if s := LuaToolsPrompt(); s != "" {
+		t.Errorf("harness 模式 LuaToolsPrompt 应为空，实际: %.80s…", s)
+	}
+	if s := LongTermMemoryPrompt(); s != "" {
+		t.Errorf("harness 模式 LongTermMemoryPrompt 应为空，实际: %.80s…", s)
+	}
+
+	// 精简提示词不应引用被移除工具
+	p := DefaultSystemPrompt(roots)
+	for _, banned := range trimmedPromptBannedTools {
+		if strings.Contains(p, banned) {
+			t.Errorf("harness 精简提示词仍引用被移除工具名 %q", banned)
+		}
+	}
+	// 协议描述保留
+	for _, keep := range []string{"update_tasks", "generate_commit_message", "read", "edit", "write", "bash", "web_search"} {
+		if !strings.Contains(p, keep) {
+			t.Errorf("harness 精简提示词缺失协议/保留工具描述 %q", keep)
+		}
+	}
+}
+
+func TestPromptFullInFullToolsMode(t *testing.T) {
+	t.Setenv("WB_FULL_TOOLS", "1")
+	roots := []string{"/test/project"}
+	if s := SelfManagementPrompt(); s == "" {
+		t.Error("WB_FULL_TOOLS=1 时 SelfManagementPrompt 不应为空")
+	}
+	if s := LuaToolsPrompt(); s == "" {
+		t.Error("WB_FULL_TOOLS=1 时 LuaToolsPrompt 不应为空")
+	}
+	if s := LongTermMemoryPrompt(); s == "" {
+		t.Error("WB_FULL_TOOLS=1 时 LongTermMemoryPrompt 不应为空")
+	}
+	// 完整版提示词长度应显著大于精简版（保留 pair 工具说明）
+	full := DefaultSystemPrompt(roots)
+	t.Setenv("WB_FULL_TOOLS", "")
+	trimmed := DefaultSystemPrompt(roots)
+	if len(full) <= len(trimmed) {
+		t.Errorf("完整版提示词应比精简版长：full=%d trimmed=%d", len(full), len(trimmed))
+	}
+	if !strings.Contains(full, "codegraph") {
+		t.Error("WB_FULL_TOOLS=1 完整版提示词应包含 codegraph 说明")
 	}
 }
