@@ -159,7 +159,10 @@ func sanitizeToolPairing(msgs []Message) []Message {
 	return out
 }
 
-const interruptedToolResult = "[no result: the previous turn was interrupted before this tool call completed]"
+// interruptedToolResult 作为缺失 tool result 的占位（维持 OpenAI 兼容 API 的配对契约：
+// tool_call 后必须有对应 role=tool 消息）。内容为空——不再向模型注入「未完成/中断」
+// 提示（历史教训：该提示会干扰模型判断、诱导核对/重试），空结果即「无信息」。
+const interruptedToolResult = ""
 
 // pairToolResults 将 tool call 与 tool result 配对。
 // 优先按 ToolCall.ID 匹配；ID 不全或重复则按顺序匹配。

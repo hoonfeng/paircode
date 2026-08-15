@@ -59,8 +59,9 @@ type Request struct {
 	ThinkingMode   string // non-thinking / thinking / thinking_max; "" = no override
 }
 
-// interruptedToolResult stands in for a tool result that never landed.
-const interruptedToolResult = "[no result: the previous turn was interrupted before this tool call completed]"
+// interruptedToolResult 占位空串：维持 tool-call 配对契约（assistant tool_calls
+// 必须后跟 tool 消息），但不向模型注入「未完成/中断」提示文本（避免干扰判断）。
+const interruptedToolResult = ""
 
 // SanitizeToolPairing repairs a history so it satisfies the tool-call contract
 // that OpenAI-compatible APIs enforce: every assistant tool_calls entry must be

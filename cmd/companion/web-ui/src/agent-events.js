@@ -170,7 +170,7 @@ export function processAgentEvent(convId, data) {
       try {
         const args = typeof data.args === 'string' ? JSON.parse(data.args) : data.args
         question = args.question || '（无问题内容）'
-        askType = args.askType || 'text'
+        askType = args.askType || args.type || 'text' // 容错：部分模型生成 type 而非 askType
         if (Array.isArray(args.options)) {
           options = args.options
         }

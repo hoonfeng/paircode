@@ -2374,10 +2374,9 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 			}
 		}
 	}
-	// ★ 崩溃/中断恢复：对齐 deepseek-harness TOOL_OUTCOME_UNKNOWN 语义——
-	// 保留未完成 assistant（思考链），为缺结果的 tool_call 合成「结果未知」提示，
-	// 而不是删除尾部（TrimInterruptedHistory 旧行为），避免丢失历史连贯性。
-	history = agent.RepairInterruptedHistory(history)
+	// ★ 中断/未完成的 tool_call 不再注入「结果未知」提示（历史教训：TOOL_OUTCOME_UNKNOWN
+	// 长文本会干扰模型判断、诱导核对/重试）。API 配对契约由 sanitizeToolPairing 兜底：
+	// 缺结果的 tool_call 自动补空串占位（格式完整、内容零干扰）。
 
 	// ★ 保存原始（未压缩）历史，供持久化使用——压缩版只给 LLM 上下文，不写回历史记录
 	originalHistory := make([]agent.Message, len(history))

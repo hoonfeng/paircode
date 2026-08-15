@@ -253,97 +253,6 @@ func TrimInterruptedHistory(history []Message) []Message {
 	return history
 }
 
-// interruptedToolOutcome 工具结果未知提示（对齐 deepseek-harness 崩溃恢复语义：
-// durable call 无 result → TOOL_OUTCOME_UNKNOWN，让模型核对而非盲目重试）。
-// 只读/幂等操作可重试；有副作用操作先验证或询问用户。
-const interruptedToolOutcome = "[系统提示：上次运行中断] 此工具调用的结果未知（TOOL_OUTCOME_UNKNOWN）——" +
-	"进程可能在执行中断开，调用是否生效无法确认。请核对：对只读/幂等操作可安全重试；" +
-	"对有副作用（写文件/提交/删除等）的操作请先验证当前状态或询问用户，不要盲目重试。"
-
-// hasToolResult 检查 history[fromIdx+1:] 中是否存在 callID 的 tool/result。
-func hasToolResult(history []Message, fromIdx int, callID string) bool {
-	for j := fromIdx + 1; j < len(history); j++ {
-		if history[j].Role == RoleTool && history[j].ToolCallID == callID {
-			return true
-		}
-	}
-	return false
-}
-
-// keepUntilNextUser 截断到 fromIdx（不含），但保留其后到结尾的 user 消息。
-func keepUntilNextUser(history []Message, fromIdx int) []Message {
-	result := make([]Message, 0, fromIdx+4)
-	result = append(result, history[:fromIdx]...)
-	for j := fromIdx + 1; j < len(history); j++ {
-		if history[j].Role == RoleUser {
-			result = append(result, history[j])
-		}
-	}
-	return result
-}
-
-// RepairInterruptedHistory 修复因中断（用户停止/崩溃/API 错误）而未完成的对话历史，
-// 对齐 deepseek-harness 的崩溃恢复语义（TOOL_OUTCOME_UNKNOWN，而非删除尾部）：
-//   - 保留中断的 assistant 消息（思考链不丢——含工具调用的轮次后续请求必须回传
-//     reasoning_content，删除会让模型丢失历史连贯性）；
-//   - 为每个「有 tool_call 但缺 tool/result」的调用合成一条 tool/result 提示消息
-//     （结果未知），使消息序列完整（tool_call 后必有 tool_result，不触发 API 格式错误），
-//     并引导模型核对/验证而非盲目重试；
-//   - 空 assistant 消息（无正文无 tool_call）删除（无价值）；
-//   - 后续的 user 消息（预写入的新任务）保留。
-//
-// 合成的 tool/result 会随 OnBatchPersist 写回存储（durably closes 中断 turn），
-// 与 deepseek「crash-repair results append without rewriting earlier history」一致。
-func RepairInterruptedHistory(history []Message) []Message {
-	if len(history) == 0 {
-		return history
-	}
-	// 从末尾向前找最后一条 assistant 消息
-	for i := len(history) - 1; i >= 0; i-- {
-		if history[i].Role == RoleAssistant {
-			// 最后一条 assistant 有正文且无 tool_call → 自然完成，原样保留
-			if strings.TrimSpace(history[i].Content) != "" && len(history[i].ToolCalls) == 0 {
-				return history
-			}
-			// 空 assistant（无正文无 tool_call）：该条及之后的孤立消息无价值，截断
-			if len(history[i].ToolCalls) == 0 {
-				return keepUntilNextUser(history, i)
-			}
-			// 有 tool_call：检查每个调用是否有匹配的 tool/result
-			hasAllResults := true
-			for _, tc := range history[i].ToolCalls {
-				if !hasToolResult(history, i, tc.ID) {
-					hasAllResults = false
-					break
-				}
-			}
-			if hasAllResults {
-				return history // 所有调用都有结果 → 正常完成
-			}
-			// 中断：保留未完成 assistant（含思考链），为缺结果的调用合成提示，
-			// 再保留后续 user 消息（新任务），丢弃其间的孤立 tool/assistant。
-			result := make([]Message, 0, i+1+len(history[i].ToolCalls)+4)
-			result = append(result, history[:i+1]...)
-			for _, tc := range history[i].ToolCalls {
-				if !hasToolResult(history, i, tc.ID) {
-					result = append(result, Message{
-						Role:       RoleTool,
-						ToolCallID: tc.ID,
-						Content:    interruptedToolOutcome,
-					})
-				}
-			}
-			for j := i + 1; j < len(history); j++ {
-				if history[j].Role == RoleUser {
-					result = append(result, history[j])
-				}
-			}
-			return result
-		}
-	}
-	return history
-}
-
 // ErrSessionNotRunning 会话未在运行（向已结束的会话发交互信号）。
 var ErrSessionNotRunning = errors.New("会话未在运行")
 
@@ -575,8 +484,8 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 			Name:        "ask_user",
 			SystemTool:  true,
 			Description: "向用户提问并等待回答（用于关键决策、歧义澄清，别滥用）。" +
-				"question 必填；type 可选(text/single/multi/single-with-input)，默认 text 纯文本输入；" +
-				"options 可选(选择类 question 的选项列表)。调用会阻塞直到用户回答。",
+				"question 必填；askType 可选(text/single/multi/single-with-input)，默认 text 纯文本输入；" +
+				"options 可选(选择类 question 的选项列表；single-with-input 时用户可另选或自定义输入)。调用会阻塞直到用户回答。",
 			Parameters: map[string]any{
 				"type": "object",
 				"properties": map[string]any{

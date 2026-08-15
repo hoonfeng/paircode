@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"strings"
 	"testing"
 )
 
@@ -88,89 +87,3 @@ func TestPersistNewMessages_EventAnnotation(t *testing.T) {
 	}
 }
 
-// ── 崩溃恢复修复（对齐 TOOL_OUTCOME_UNKNOWN）─────────────────────
-
-// TestRepairInterruptedHistory_ToolUnknown 验证：中断的 assistant（有 tool_call
-// 缺 result）被保留，缺结果的调用合成「结果未知」提示，消息序列完整。
-func TestRepairInterruptedHistory_ToolUnknown(t *testing.T) {
-	hist := []Message{
-		{Role: RoleUser, Content: "任务"},
-		{Role: RoleAssistant, Content: "已调用工具", ToolCalls: []ToolCall{
-			{ID: "c1", Function: FunctionCall{Name: "write_file"}},
-			{ID: "c2", Function: FunctionCall{Name: "read_file"}},
-		}},
-		{Role: RoleTool, ToolCallID: "c1", Content: "写入成功"},
-		// c2 无 result → 中断
-	}
-	out := RepairInterruptedHistory(hist)
-	if len(out) != 3 {
-		t.Fatalf("len = %d, want 3（assistant 保留 + c2 合成 result）", len(out))
-	}
-	// assistant 保留（思考链不丢）
-	if out[1].Role != RoleAssistant {
-		t.Errorf("assistant 应保留: %+v", out[1])
-	}
-	// c2 合成 tool/result（TOOL_OUTCOME_UNKNOWN 语义）
-	if out[2].Role != RoleTool || out[2].ToolCallID != "c2" {
-		t.Fatalf("应合成 c2 的 tool/result: %+v", out[2])
-	}
-	if !strings.Contains(out[2].Content, "TOOL_OUTCOME_UNKNOWN") {
-		t.Errorf("合成 result 应含结果未知提示，实际=%q", out[2].Content)
-	}
-	// 完整 result 的 c1 不重复合成
-	for _, m := range out {
-		if m.Role == RoleTool && m.ToolCallID == "c1" && m.Content != "写入成功" {
-			t.Errorf("c1 的原始 result 不应被覆盖: %+v", m)
-		}
-	}
-}
-
-// TestRepairInterruptedHistory_KeepNextUser 验证：中断后预写入的新用户消息保留。
-func TestRepairInterruptedHistory_KeepNextUser(t *testing.T) {
-	hist := []Message{
-		{Role: RoleUser, Content: "任务1"},
-		{Role: RoleAssistant, Content: "", ToolCalls: []ToolCall{{ID: "c1", Function: FunctionCall{Name: "read_file"}}}},
-		{Role: RoleTool, ToolCallID: "c1", Content: "中途中断，c1 无后续"},
-		{Role: RoleUser, Content: "继续（新任务）"},
-	}
-	out := RepairInterruptedHistory(hist)
-	// 最后一条 assistant（无 tool_call 的空回复）不在此场景——这里最后是 user
-	// 场景：末尾 user → 前面 assistant 有 tool_call 无 result → 修复
-	if len(out) < 3 {
-		t.Fatalf("修复后应保留新任务，len=%d", len(out))
-	}
-	last := out[len(out)-1]
-	if last.Role != RoleUser || last.Content != "继续（新任务）" {
-		t.Errorf("新任务应保留在末尾: %+v", last)
-	}
-}
-
-// TestRepairInterruptedHistory_NaturalComplete 验证：自然完成的对话原样保留。
-func TestRepairInterruptedHistory_NaturalComplete(t *testing.T) {
-	hist := []Message{
-		{Role: RoleUser, Content: "任务"},
-		{Role: RoleAssistant, Content: "直接回答，无工具"},
-	}
-	out := RepairInterruptedHistory(hist)
-	if len(out) != 2 {
-		t.Fatalf("自然完成不应改动: %+v", out)
-	}
-}
-
-// TestRepairInterruptedHistory_EmptyAssistant 验证：空 assistant（无正文无 tool_call）
-// 及其后的孤立消息被截断，但后续 user 保留。
-func TestRepairInterruptedHistory_EmptyAssistant(t *testing.T) {
-	hist := []Message{
-		{Role: RoleUser, Content: "任务"},
-		{Role: RoleAssistant, Content: "正常回复"},
-		{Role: RoleAssistant, Content: ""}, // 空回合（中断残留）
-		{Role: RoleUser, Content: "新任务"},
-	}
-	out := RepairInterruptedHistory(hist)
-	if len(out) != 3 {
-		t.Fatalf("应截断空 assistant 并保留新任务，len=%d", len(out))
-	}
-	if out[2].Content != "新任务" {
-		t.Errorf("新任务应保留在末尾: %+v", out[2])
-	}
-}

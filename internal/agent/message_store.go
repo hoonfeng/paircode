@@ -306,6 +306,12 @@ func parseAskArgs(argsRaw string) (question, askType string, options []string) {
 	}
 	askType, _ = raw["askType"].(string)
 	if askType == "" {
+		// 容错：部分模型按描述生成 type 而非 askType
+		if v, ok := raw["type"].(string); ok {
+			askType = v
+		}
+	}
+	if askType == "" {
 		askType = "text"
 	}
 	if opts, ok := raw["options"].([]any); ok {
