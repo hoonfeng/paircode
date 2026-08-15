@@ -84,14 +84,10 @@
 
     <!-- 内置工具（全部内置工具：分组 + 工具级开关 + 搜索；文件浏览器工具集区同源展示） -->
     <div class="pp-builtin">
-      <div class="pp-builtin-head" @click="builtinOpen = !builtinOpen" title="点击折叠/展开">
-        <span class="pp-builtin-title"><SvgIcon name="package" :size="13" /> 内置工具 <span class="pp-builtin-sub">{{ builtinInfo ? builtinInfo.enabledTotal + '/' + builtinInfo.toolTotal + ' 启用' : '' }}</span></span>
+      <div class="pp-builtin-head" @click="builtinOpen = !builtinOpen" :title="builtinOpen ? '点击收起' : '点击展开工具列表'">
+        <span class="pp-builtin-title"><SvgIcon name="package" :size="13" /> 内置工具 <span class="pp-builtin-sub">{{ builtinInfo ? builtinInfo.enabledTotal + ' 启用' : '' }}</span></span>
         <div class="pp-builtin-actions" @click.stop>
           <input v-model="builtinQuery" class="pp-input pp-builtin-search" placeholder="搜索工具…" />
-          <label class="pp-check" title="强制全部内置工具组加入工作区（所有被过滤工具对 agent 可见）">
-            <input type="checkbox" :checked="builtinForceAll" @change="forceAllBuiltin" />
-            <span>强制全部</span>
-          </label>
           <button class="pp-icon-btn" @click="loadBuiltin" title="刷新内置工具状态"><SvgIcon name="refresh" :size="11" :class="{ spinning: builtinLoading }" /></button>
         </div>
         <SvgIcon name="chevron-right" :size="11" class="pp-chevron" :class="{ open: builtinOpen }" />
@@ -126,6 +122,7 @@
             </div>
             <div v-if="builtinGroupOpen[g.name]" class="pp-builtin-tools">
               <div v-for="t in g.tools" :key="t.name" class="pp-builtin-tool">
+                <span class="pp-builtin-tgroup">{{ g.name }}</span>
                 <span class="pp-builtin-tname" :class="{ off: !t.enabled }" :title="t.desc">{{ t.name }}</span>
                 <span class="pp-builtin-tdesc">{{ t.desc }}</span>
                 <label class="pp-switch" :title="t.enabled ? '对 agent 可见；点击移除（恢复默认过滤）' : '加入 agent 可用'">
@@ -214,13 +211,12 @@ const newForm = reactive({ purpose: '', code: '', client: '', language: '', run:
 // ─── 内置工具（被过滤工具按内置插件组管理——插件面板开关）──
 const builtinInfo = ref(null)
 const builtinLoading = ref(false)
-const builtinForceAll = ref(false)
+const builtinOpen = ref(false) // 内置工具区默认收起：点击头部「内置工具 N 启用」展开工具列表
 
 async function loadBuiltin() {
   builtinLoading.value = true
   try {
     builtinInfo.value = await api.builtinPlugins()
-    builtinForceAll.value = !!(builtinInfo.value && builtinInfo.value.joined && builtinInfo.value.joined.length === (builtinInfo.value.groups || []).length && builtinInfo.value.joined.length > 0)
   } catch (e) {
     builtinInfo.value = null
   } finally {
@@ -267,24 +263,6 @@ async function toggleBuiltinTool(t) {
   try {
     const res = await api.builtinPlugins({ tool: t.name, enabled: target })
     window.$toast && window.$toast((res && res.message) || (target ? '已加入' : '已移除') + ' ' + t.name, 'info')
-  } catch (e) {
-    window.$toast && window.$toast(e.message || '操作失败', 'error')
-  }
-  await loadBuiltin()
-  await refresh()
-}
-
-async function forceAllBuiltin(ev) {
-  const target = !!ev.target.checked
-  if (!target) {
-    // 关闭强制全部：保持当前状态（仅提示如何单个移出）
-    window.$toast && window.$toast('已取消强制全部（保持当前启用状态；可在工具集面板 builtin 分组逐个移出）', 'info')
-    loadBuiltin()
-    return
-  }
-  try {
-    const res = await api.builtinPlugins({ forceAll: true })
-    window.$toast && window.$toast((res && res.message) || '已强制全部加入', 'info')
   } catch (e) {
     window.$toast && window.$toast(e.message || '操作失败', 'error')
   }

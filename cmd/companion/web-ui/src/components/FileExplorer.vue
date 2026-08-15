@@ -60,7 +60,7 @@
       <div class="ts-header" @click="toggleTs" title="工具集（工作区内，可折叠）">
         <SvgIcon name="package" :size="12" class="ts-header-icon" />
         <span class="divider-label ts-label">工具集</span>
-          <span class="ts-count">{{ agentTs.enabledTotal }}/{{ agentTs.toolTotal }}</span>
+          <span class="ts-count">{{ agentTs.enabledTotal }} 可用</span>
         <span class="ts-spacer"></span>
         <button class="ts-mini-btn" @click.stop="loadToolsets" title="刷新工具集"><SvgIcon name="refresh" :size="11" :class="{ spinning: tsRefreshing }" /></button>
         <button class="ts-mini-btn" @click.stop="tsBuildOpen = !tsBuildOpen" title="动态构建工具集"><SvgIcon name="plus" :size="12" /></button>
@@ -84,7 +84,7 @@
         <!-- 列表 -->
           <!-- Agent 可用工具（加入进来的工具；工具集 = agent 可用的工具集合） -->
           <div class="ts-toolbar">
-            <span class="ts-toolbar-title">可用工具 <span class="ts-toolbar-count">{{ agentTs.enabledTotal }}/{{ agentTs.toolTotal }}</span></span>
+            <span class="ts-toolbar-title">可用工具 <span class="ts-toolbar-count">{{ agentTs.enabledTotal }}</span></span>
             <button class="ts-btn primary" @click="addToolOpen = !addToolOpen">{{ addToolOpen ? '收起' : '+ 添加工具' }}</button>
           </div>
           <!-- 添加工具面板：搜索全部内置工具 → 点击加入 agent 可用 -->
@@ -106,11 +106,11 @@
               <span class="ts-tool-group">{{ t.group }}</span>
               <span class="ts-tool-name" :title="t.desc">{{ t.name }}</span>
               <span class="ts-tool-desc">{{ t.desc }}</span>
-              <button class="ts-mini-btn" @click="toggleAgentTool(t, false)" title="移除（恢复默认过滤）"><SvgIcon name="x" :size="10" /></button>
+              <button class="ts-btn danger ts-remove-btn" @click="toggleAgentTool(t, false)" title="移除（恢复默认过滤）"><SvgIcon name="x" :size="10" /> 移除</button>
             </div>
           </div>
           <div v-else-if="!tsRefreshing" class="ts-empty">
-            <span>暂无可用工具。点「+ 添加工具」从内置工具包（{{ agentTs.toolTotal }} 个）选择。</span>
+            <span>暂无可用工具。点「+ 添加工具」从内置工具包选择。</span>
           </div>
       </div>
     </div>
@@ -849,6 +849,8 @@ onUnmounted(() => {
 .ts-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
 .ts-btn.primary { border-color: var(--accent); color: var(--accent-light); }
 .ts-btn.danger { border-color: #e06c75; color: #e06c75; }
+.ts-btn.danger:hover { background: rgba(224, 108, 117, .12); color: #e06c75; }
+.ts-remove-btn { flex-shrink: 0; display: flex; align-items: center; gap: 2px; padding: 1px 7px; font-size: 10px; }
 .ts-btn:disabled { opacity: .5; cursor: not-allowed; }
 .ts-msg { font-size: 10px; color: var(--accent-light); word-break: break-all; }
 .ts-msg.err { color: #e06c75; }
