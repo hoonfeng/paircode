@@ -25,6 +25,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 )
 
 // ─── EventBus ─────────────────────────────────────────────
@@ -349,6 +350,10 @@ type PluginHost struct {
 	clientMu       sync.Mutex
 	clientEvents   []ClientEvent
 	clientEventSeq int64 // 下一条事件的全局序号
+
+	// 浏览器 client 半运行时上报快照（client inspect provider 的数据源）
+	clientStateMu sync.RWMutex
+	clientState   ClientRuntimeSnapshot
 }
 
 // NewPluginHost 创建插件宿主。
@@ -415,6 +420,47 @@ func (h *PluginHost) ClientEventsSince(seq int64) ([]ClientEvent, int64) {
 	}
 	return out, 0
 }
+
+// ClientPluginSnapshot 浏览器侧一个 client 半的运行状态（浏览器 plugin-runtime 上报）。
+type ClientPluginSnapshot struct {
+	Name    string   `json:"name"`
+	Status  string   `json:"status"`             // loaded | error
+	Panels  []string `json:"panels,omitempty"`   // 注册的面板 id
+	Events  []string `json:"events,omitempty"`   // 监听的事件名（ui.on）
+	Version string   `json:"version,omitempty"`  // client 半版本（同 host 定义版本）
+	Error   string   `json:"error,omitempty"`    // 装载失败原因
+}
+
+// ClientRuntimeSnapshot 浏览器 client 半运行时整体快照（浏览器周期上报）。
+type ClientRuntimeSnapshot struct {
+	Connected  bool                   `json:"connected"`   // 页面在线且上报过
+	ReportedAt int64                  `json:"reportedAt"`  // 本次上报时间（Unix 秒）
+	Plugins    []ClientPluginSnapshot `json:"plugins"`
+	Panels     []string               `json:"panels,omitempty"` // 全部已注册面板 id 汇总
+}
+
+// SetClientState 浏览器上报 client 半运行时快照。
+func (h *PluginHost) SetClientState(snap ClientRuntimeSnapshot) {
+	snap.Connected = true
+	snap.ReportedAt = time.Now().Unix()
+	h.clientStateMu.Lock()
+	h.clientState = snap
+	h.clientStateMu.Unlock()
+}
+
+// ClientState 读取浏览器上报快照；超过 clientStateTTL 未上报视为离线。
+func (h *PluginHost) ClientState() ClientRuntimeSnapshot {
+	h.clientStateMu.RLock()
+	snap := h.clientState
+	h.clientStateMu.RUnlock()
+	if snap.ReportedAt > 0 && time.Now().Unix()-snap.ReportedAt > clientStateTTL {
+		snap.Connected = false
+	}
+	return snap
+}
+
+// clientStateTTL 快照过期秒数（页面关闭/断线后视为离线）。
+const clientStateTTL = 30
 
 // EmitHostEvent 由外部（浏览器 client→host 事件桥）把事件发回 EventBus 广播。
 // 浏览器侧约定：client→host 事件用 "host:" 前缀（不会被 ui:/client: 转发规则

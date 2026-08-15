@@ -257,6 +257,7 @@ func startWebUI(port int) {
 	mux.HandleFunc("/api/plugins/define", handler.HandlePluginDefine)
 	mux.HandleFunc("/api/plugins/event", handler.HandlePluginEvent)
 	mux.HandleFunc("/api/plugins/client-events", handler.HandlePluginClientEvents)
+	mux.HandleFunc("/api/plugins/client-state", handler.HandlePluginClientState)
 
 	// ── Git API 路由 ──
 	mux.HandleFunc("/api/git/status", ws.handleGitStatus)

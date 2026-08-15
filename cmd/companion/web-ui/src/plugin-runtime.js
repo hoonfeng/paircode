@@ -21,7 +21,7 @@
 import api from './api.js'
 
 // ─── 运行中的 client 半实例 ──────────────────────────────────
-// instances: [{ name, defId, source, onHandlers: Map<event, [fn]> }]
+// instances: [{ name, defId, source, status, error?, onHandlers: Map<event, [fn]> }]
 const instances = []
 
 // ─── 事件轮询状态 ────────────────────────────────────────────
@@ -56,10 +56,17 @@ function makeUI(inst) {
       if (typeof fn !== 'function') return
       if (!inst.onHandlers.has(event)) inst.onHandlers.set(event, [])
       inst.onHandlers.get(event).push(fn)
+      // 登记事件监听（上报快照用）
+      if (!inst.events.includes(event)) inst.events.push(event)
       return () => {
         const arr = inst.onHandlers.get(event) || []
         const i = arr.indexOf(fn)
         if (i >= 0) arr.splice(i, 1)
+        if ((inst.onHandlers.get(event) || []).length === 0) {
+          inst.onHandlers.delete(event)
+          const ei = inst.events.indexOf(event)
+          if (ei >= 0) inst.events.splice(ei, 1)
+        }
       }
     },
     // 发事件回 host（host: 前缀约定；host 插件 ctx.on 消费）
@@ -126,13 +133,19 @@ export function loadClientHalf(source) {
     name: source.name,
     defId: source.defId,
     source: source.source || 'js',
+    status: 'loaded',
+    events: [],
     onHandlers: new Map(),
   }
   try {
     fn(makeUI(inst))
   } catch (e) {
     console.warn('[plugin] client 半执行错误', source.name, e)
-    return null
+    inst.status = 'error'
+    inst.error = String(e && e.message || e)
+    instances.push(inst)
+    emitPanelChanged()
+    return inst
   }
   instances.push(inst)
   // 重新装载时同步一次面板
@@ -154,6 +167,7 @@ export function unloadClientHalf(nameOrDefId) {
     }
     emitPanelChanged()
   }
+  reportState()
 }
 
 // syncClientHalves 与后端插件列表对齐：装载新出现的 client 半，卸载已消失的。
@@ -164,7 +178,12 @@ export async function syncClientHalves(plugins) {
     if (p.hasClient && p.state === 'running' && p.clientCode) {
       active.add(p.name)
       const exists = instances.find(inst => inst.name === p.name)
-      if (!exists) {
+      // error 实例重试装载（可能是瞬时执行错误）
+      if (!exists || exists.status === 'error') {
+        if (exists) {
+          const ei = instances.indexOf(exists)
+          if (ei >= 0) instances.splice(ei, 1)
+        }
         loadClientHalf({ name: p.name, defId: p.defId, clientCode: p.clientCode })
       }
     }
@@ -183,6 +202,7 @@ export async function syncClientHalves(plugins) {
     }
   }
   emitPanelChanged()
+  reportState()
 }
 
 // ─── host → 浏览器事件轮询 ──────────────────────────────────
@@ -202,7 +222,7 @@ function dispatchHostEvent(ev) {
   }
 }
 
-// startPolling 启动事件轮询（每 2s 一次）。
+// startPolling 启动事件轮询（每 2s 一次）；顺带上报 client 半运行快照。
 export function startPolling() {
   if (pollTimer) return
   pollTimer = setInterval(async () => {
@@ -215,7 +235,37 @@ export function startPolling() {
     } catch (e) {
       // 静默：后端未就绪时跳过
     }
+    reportState()
   }, pollInterval)
+}
+
+// ─── client 半运行快照上报（client inspect provider 数据源）──
+
+// buildSnapshot 汇总当前 client 半实例 → ClientRuntimeSnapshot。
+export function buildSnapshot() {
+  const panels = clientPanels.map(p => p.id)
+  const plugins = instances.map(inst => ({
+    name: inst.name,
+    status: inst.status,
+    version: inst.defId || '',
+    ...(inst.error ? { error: inst.error } : {}),
+    ...(inst.events && inst.events.length ? { events: [...inst.events] } : {}),
+  }))
+  // 面板归属并入对应插件
+  for (const p of plugins) {
+    const mine = clientPanels.filter(cp => cp.pluginName === p.name).map(cp => cp.id)
+    if (mine.length) p.panels = mine
+  }
+  return { plugins, ...(panels.length ? { panels } : {}) }
+}
+
+// reportState 上报快照（节流：轮询周期内自动去重，无需独立节流）。
+export async function reportState() {
+  try {
+    await api.pluginClientState(buildSnapshot())
+  } catch (e) {
+    // 静默：后端未就绪
+  }
 }
 
 // stopPolling 停止轮询。

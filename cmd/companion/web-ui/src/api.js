@@ -314,7 +314,7 @@ async function savePhilosophy(data) {
   return apiPut('/philosophy', data)
 }
 
-export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, isWebSocketOpen, waitForWebSocket, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatCompact, chatStop, getMessages, getMessagesCount, getModels, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, getPhilosophy, savePhilosophy, listPlugins, getPluginDetail, pluginAction, definePlugin, pluginEmit, pluginClientEvents }
+export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, isWebSocketOpen, waitForWebSocket, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatCompact, chatStop, getMessages, getMessagesCount, getModels, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, getPhilosophy, savePhilosophy, listPlugins, getPluginDetail, pluginAction, definePlugin, pluginEmit, pluginClientEvents, pluginClientState }
 
 // ─── 插件（管理 + 使用 + host/client 事件桥）──────────────
 
@@ -346,4 +346,10 @@ async function pluginEmit(event, payload) {
 // pluginClientEvents host → 浏览器事件轮询（since=seq）。
 async function pluginClientEvents(since) {
   return apiGet('/plugins/client-events', { since })
+}
+
+// pluginClientState 浏览器上报/读取 client 半运行快照（client inspect provider 数据源）。
+async function pluginClientState(snapshot) {
+  if (snapshot) return apiPost('/plugins/client-state', snapshot)
+  return apiGet('/plugins/client-state')
 }

@@ -7,6 +7,7 @@
 //   - POST /api/plugins/define      直接定义 JS 动态插件（{purpose, code, client?, language?}）
 //   - POST /api/plugins/event       浏览器 client 半 → host 事件桥（{event, payload}）
 //   - GET  /api/plugins/client-events  host → 浏览器轮询（?since=seq，返回增量事件）
+//   - POST/GET /api/plugins/client-state 浏览器上报 client 半快照 / 宿主读取（inspect 数据源）
 //
 // PluginHost 由各端（web_server / desktop）在启动时经 SetPluginHost 注入；
 // 未注入（无插件系统）时列表返回空、写操作明确报错。
@@ -247,6 +248,38 @@ func HandlePluginClientEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	events, lastSeq := ph.ClientEventsSince(since)
 	jsonResp(w, map[string]any{"events": events, "lastSeq": lastSeq})
+}
+
+// HandlePluginClientState POST /api/plugins/client-state：浏览器 plugin-runtime
+// 周期上报 client 半运行快照（client inspect provider 的数据源）。
+// GET：宿主/agent 侧读取最新快照（调试用）。
+func HandlePluginClientState(w http.ResponseWriter, r *http.Request) {
+	ph, ok := getPluginHost()
+	if !ok {
+		jsonErr(w, "插件系统未初始化")
+		return
+	}
+	if r.Method == "POST" {
+		var snap agent.ClientRuntimeSnapshot
+		if err := json.NewDecoder(r.Body).Decode(&snap); err != nil {
+			jsonErr(w, "快照解析失败: "+err.Error())
+			return
+		}
+		if snap.Plugins == nil {
+			snap.Plugins = []agent.ClientPluginSnapshot{}
+		}
+		if snap.Panels == nil {
+			snap.Panels = []string{}
+		}
+		ph.SetClientState(snap)
+		jsonResp(w, map[string]any{"ok": true})
+		return
+	}
+	if r.Method == "GET" {
+		jsonResp(w, ph.ClientState())
+		return
+	}
+	jsonErr(w, "仅 POST/GET")
 }
 
 // pluginRecordSummary 插件记录 → 前端摘要（隐藏超长 client 源码，仅保留有无标记）。

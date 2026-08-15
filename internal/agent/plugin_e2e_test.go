@@ -5,6 +5,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestJSPluginClientHalf define 带 client 半：语法预检 + 存储 + InspectDetail 返回。
@@ -186,10 +187,13 @@ func TestCordisInspectQuery(t *testing.T) {
 	if err != nil || !strings.Contains(out, "sysinfo") {
 		t.Fatalf("getPlugin: %v\n%s", err, out)
 	}
-	// client 平台（无 client 半时给摘要）
+	// client 平台（无上报快照时给离线兜底摘要）
 	out, err = cordisInspectQuery(host, "client", "plugin", "listPlugin", nil)
 	if err != nil || !strings.Contains(out, "Client runtime") {
 		t.Fatalf("client 平台: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "浏览器未连接") {
+		t.Fatalf("未上报时应提示浏览器未连接: %s", out)
 	}
 	// 非法 provider/method 报错
 	if _, err := cordisInspectQuery(host, "host", "bogus", "x", nil); err == nil {
@@ -197,6 +201,78 @@ func TestCordisInspectQuery(t *testing.T) {
 	}
 	if _, err := cordisInspectQuery(host, "mars", "service", "list", nil); err == nil {
 		t.Fatal("非法 platform 应报错")
+	}
+}
+
+// TestClientInspectSnapshot 浏览器上报快照 → client 平台真实状态查询。
+func TestClientInspectSnapshot(t *testing.T) {
+	host := NewPluginHost(NewRegistry(), nil, "")
+	// 未上报：离线
+	out, err := cordisInspectQuery(host, "client", "plugin", "listPlugin", nil)
+	if err != nil || !strings.Contains(out, "浏览器未连接") {
+		t.Fatalf("未上报应离线: %v\n%s", err, out)
+	}
+	// 上报快照（模拟浏览器 plugin-runtime）
+	host.SetClientState(ClientRuntimeSnapshot{
+		Plugins: []ClientPluginSnapshot{
+			{Name: "hello-panel", Status: "loaded", Panels: []string{"hello-panel"}, Events: []string{"ui:pong"}, Version: "dyn-1"},
+			{Name: "broken", Status: "error", Error: "TypeError: x is not a function"},
+		},
+		Panels: []string{"hello-panel"},
+	})
+	// listPlugin：真实状态（loaded/error + 面板/事件计数）
+	out, err = cordisInspectQuery(host, "client", "plugin", "listPlugin", nil)
+	if err != nil || !strings.Contains(out, "hello-panel") || !strings.Contains(out, "broken") {
+		t.Fatalf("listPlugin: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "panels=1 events=1") {
+		t.Fatalf("listPlugin 应含面板/事件计数: %s", out)
+	}
+	if !strings.Contains(out, "error: TypeError") {
+		t.Fatalf("listPlugin 应含错误状态: %s", out)
+	}
+	// getPlugin：单插件详情（面板/事件清单）
+	out, err = cordisInspectQuery(host, "client", "plugin", "getPlugin", map[string]any{"name": "hello-panel"})
+	if err != nil || !strings.Contains(out, "hello-panel") || !strings.Contains(out, "ui:pong") || !strings.Contains(out, "面板") {
+		t.Fatalf("getPlugin: %v\n%s", err, out)
+	}
+	// getPlugin 未知名字报错
+	if _, err := cordisInspectQuery(host, "client", "plugin", "getPlugin", map[string]any{"name": "nope"}); err == nil {
+		t.Fatal("未知 client 半应报错")
+	}
+	// event listEvent：全部事件 + 归属
+	out, err = cordisInspectQuery(host, "client", "event", "listEvent", nil)
+	if err != nil || !strings.Contains(out, "ui:pong") || !strings.Contains(out, "hello-panel") {
+		t.Fatalf("listEvent: %v\n%s", err, out)
+	}
+	// 非法 provider/method
+	if _, err := cordisInspectQuery(host, "client", "tool", "listTool", nil); err != nil {
+		t.Fatalf("client tool 平台应给摘要而非报错: %v", err)
+	}
+	if _, err := cordisInspectQuery(host, "client", "event", "getEvent", nil); err == nil {
+		t.Fatal("event 平台非法 method 应报错")
+	}
+}
+
+// TestClientStateTTL 快照过期视为离线。
+func TestClientStateTTL(t *testing.T) {
+	host := NewPluginHost(NewRegistry(), nil, "")
+	host.SetClientState(ClientRuntimeSnapshot{
+		Plugins: []ClientPluginSnapshot{{Name: "p1", Status: "loaded"}},
+	})
+	if snap := host.ClientState(); !snap.Connected {
+		t.Fatal("刚上报应 connected")
+	}
+	// 伪造过期时间
+	host.clientStateMu.Lock()
+	host.clientState.ReportedAt = time.Now().Unix() - clientStateTTL - 5
+	host.clientStateMu.Unlock()
+	if snap := host.ClientState(); snap.Connected {
+		t.Fatal("超时未上报应离线")
+	}
+	out, err := cordisInspectQuery(host, "client", "plugin", "listPlugin", nil)
+	if err != nil || !strings.Contains(out, "浏览器未连接") {
+		t.Fatalf("过期后应提示未连接: %v\n%s", err, out)
 	}
 }
 

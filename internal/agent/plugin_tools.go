@@ -181,8 +181,8 @@ func RegisterCordisTools(registry *Registry, host *PluginHost, root string) {
 }
 
 // cordisInspectQuery 执行精确协议查询（cordis_inspect_query 实现）。
-// platform=client 时返回浏览器侧运行时摘要（由 web-ui 插件面板通过 REST 提供，
-// 宿主侧只能给出 client 半装载清单；真实页面状态需浏览器自身上报）。
+// platform=client 时读取浏览器 plugin-runtime 周期上报的快照（真实页面状态），
+// 未上报/过期视为离线并给宿主侧装载清单兜底。
 func cordisInspectQuery(host *PluginHost, platform, provider, method string, input map[string]any) (string, error) {
 	platform = strings.ToLower(strings.TrimSpace(platform))
 	provider = strings.ToLower(strings.TrimSpace(provider))
@@ -191,25 +191,143 @@ func cordisInspectQuery(host *PluginHost, platform, provider, method string, inp
 	case "host":
 		return cordisHostQuery(host, provider, method, input)
 	case "client":
-		// 浏览器侧摘要：列出所有含 client 半的插件
-		var sb strings.Builder
-		sb.WriteString("## Client runtime（浏览器侧插件 client 半）\n")
-		recs := host.Inspect()
-		n := 0
-		for _, r := range recs {
-			if r.HasClient {
-				fmt.Fprintf(&sb, "- %s [%s] %s client=%s\n", r.Name, r.Source, r.State, r.DefID)
-				n++
-			}
-		}
-		if n == 0 {
-			sb.WriteString("（无含 client 半的插件）\n")
-		}
-		sb.WriteString("\n说明：client 半由 web 界面插件面板装载并在浏览器内运行；页面已连接时状态见 UI 插件面板，宿主无法直接读取页面状态。")
-		return sb.String(), nil
+		return cordisClientQuery(host, provider, method, input)
 	default:
 		return "", fmt.Errorf("platform 必须是 host 或 client，收到 %q", platform)
 	}
+}
+
+// cordisClientQuery client 平台查询（数据源：浏览器 plugin-runtime 上报快照）。
+func cordisClientQuery(host *PluginHost, provider, method string, input map[string]any) (string, error) {
+	snap := host.ClientState()
+	var sb strings.Builder
+	offline := !snap.Connected
+	header := "## Client runtime（浏览器插件 client 半，实时上报）\n"
+	if offline {
+		header += "⚠️ 浏览器未连接（页面未打开或 30s 内未上报）——以下为宿主侧装载清单兜底：\n"
+	}
+	sb.WriteString(header)
+	name := ""
+	if v, ok := input["name"].(string); ok {
+		name = strings.TrimSpace(v)
+	}
+	now := time.Now().Unix()
+	if snap.Connected && now-snap.ReportedAt <= clientStateTTL {
+		fmt.Fprintf(&sb, "- 上报时间：%s 前（%d 秒前）\n", humanDur(now-snap.ReportedAt), now-snap.ReportedAt)
+	}
+
+	switch provider {
+	case "plugin":
+		switch method {
+		case "listplugin", "list":
+			if snap.Connected {
+				if len(snap.Plugins) == 0 {
+					sb.WriteString("（浏览器已连接，但无 client 半装载）\n")
+				}
+				for _, p := range snap.Plugins {
+					mark := "loaded"
+					if p.Status == "error" {
+						mark = "error: " + p.Error
+					}
+					fmt.Fprintf(&sb, "- **%s** [%s] panels=%d events=%d version=%s\n",
+						p.Name, mark, len(p.Panels), len(p.Events), p.Version)
+				}
+				return sb.String(), nil
+			}
+			// 离线兜底：宿主侧含 client 半的插件清单
+			recs := host.Inspect()
+			n := 0
+			for _, r := range recs {
+				if r.HasClient {
+					fmt.Fprintf(&sb, "- %s [%s] %s client=%s\n", r.Name, r.Source, r.State, r.DefID)
+					n++
+				}
+			}
+			if n == 0 {
+				sb.WriteString("（无含 client 半的插件）\n")
+			}
+			return sb.String(), nil
+		case "getplugin", "get":
+			if name == "" {
+				return "", fmt.Errorf("getPlugin 需要 input={name}（client 半插件名）")
+			}
+			for _, p := range snap.Plugins {
+				if p.Name == name {
+					status := "loaded"
+					if p.Status == "error" {
+						status = "error: " + p.Error
+					}
+					fmt.Fprintf(&sb, "- **%s** [%s] version=%s\n", p.Name, status, p.Version)
+					if len(p.Panels) > 0 {
+						sb.WriteString("  - 面板：\n")
+						for _, pid := range p.Panels {
+							fmt.Fprintf(&sb, "    - %s\n", pid)
+						}
+					}
+					if len(p.Events) > 0 {
+						sb.WriteString("  - 监听事件：\n")
+						for _, ev := range p.Events {
+							fmt.Fprintf(&sb, "    - %s\n", ev)
+						}
+					}
+					return sb.String(), nil
+				}
+			}
+			return "", fmt.Errorf("浏览器 client 半中未找到 %q（离线则参考宿主侧：%v）", name, hostHasClientHalf(host, name))
+		default:
+			return "", fmt.Errorf("plugin 平台方法必须是 listPlugin|getPlugin，收到 %q", method)
+		}
+	case "event":
+		switch method {
+		case "listevent", "list":
+			if !snap.Connected || len(snap.Plugins) == 0 {
+				sb.WriteString("（浏览器未连接或无 client 半——无 client 侧事件监听可查）\n")
+				return sb.String(), nil
+			}
+			seen := map[string]bool{}
+			for _, p := range snap.Plugins {
+				for _, ev := range p.Events {
+					if !seen[ev] {
+						fmt.Fprintf(&sb, "- %s（%s）\n", ev, p.Name)
+						seen[ev] = true
+					}
+				}
+			}
+			if len(seen) == 0 {
+				sb.WriteString("（client 半均未注册事件监听）\n")
+			}
+			return sb.String(), nil
+		default:
+			return "", fmt.Errorf("event 平台方法必须是 listEvent，收到 %q", method)
+		}
+	case "service":
+		// client 侧服务（http 路由等）暂未上报——给摘要
+		sb.WriteString("client 半服务（ui.http 路由/数据源）尚未纳入上报协议；可用 event/plugin 平台查询面板与事件。\n")
+		return sb.String(), nil
+	case "tool":
+		sb.WriteString("client 半工具（浏览器侧能力）尚未纳入上报协议；插件工具统一经 host 侧注册。\n")
+		return sb.String(), nil
+	default:
+		return "", fmt.Errorf("provider 必须是 service|tool|event|plugin，收到 %q", provider)
+	}
+}
+
+// hostHasClientHalf 宿主侧是否含指定 client 半插件（离线兜底提示）。
+func hostHasClientHalf(host *PluginHost, name string) bool {
+	for _, r := range host.Inspect() {
+		if r.HasClient && r.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// humanDur 秒 → 人类可读时长（如 "3 秒"、"1 分钟 5 秒"）。
+func humanDur(sec int64) string {
+	if sec < 60 {
+		return fmt.Sprintf("%d 秒", sec)
+	}
+	return fmt.Sprintf("%d 分钟 %d 秒", sec/60, sec%60)
 }
 
 // cordisHostQuery host 平台查询。
