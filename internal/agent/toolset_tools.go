@@ -93,6 +93,34 @@ func RegisterToolsetTools(r *Registry, root string, ph *PluginHost) {
 		},
 	})
 
+	// ── toolset_edit：手动编辑工具集（插件化思路：加插件/删插件/摘工具/恢复工具）──
+	r.Register(&Tool{
+		Name: "toolset_edit",
+		Description: "手动编辑工具集（插件化思路）：\n" +
+			"① add_plugin 向工具集添加插件——来源：宿主已定义 JS 动态插件（cordis_define 定义、" +
+			".pair/cordis.patch.json 装配、npm 市场安装的都在宿主 defs 中）、其他工具集（from_toolset）、" +
+			"或 plugin_json 直接给插件定义；\n" +
+			"② rm_plugin 从工具集移除插件（其注册的全部工具一并卸载）；\n" +
+			"③ rm_tool 摘除插件下单个工具（插件保留、工具对 agent 不可见，enable_tool 可恢复）；\n" +
+			"④ enable_tool 恢复被摘除的工具。\n" +
+			"操作即时热装载（装卸对应插件）并回写固化 .pair/toolsets/{name}.json（重启自动装配保持）。" +
+			"用 toolset_show 查看工具集现有插件。",
+		RequiresApproval: true,
+		Parameters: mObjSchema(map[string]any{
+			"name":         mStrProp("工具集名（必填）"),
+			"scope":        mStrProp("project/global（默认自动：先工作区再全局）"),
+			"action":       mStrProp("add_plugin / rm_plugin / rm_tool / enable_tool（必填）"),
+			"plugin_name":  mStrProp("插件名（add/rm 均需）"),
+			"from_toolset": mStrProp("add_plugin 时从其他工具集拷贝插件（不填=从宿主已定义插件找）"),
+			"tool":         mStrProp("rm_tool / enable_tool 时的工具名"),
+			"plugin_json":  mStrProp("add_plugin 直接给插件 JSON：{\"name\":\"…\",\"purpose\":\"…\",\"code\":\"…\",\"client\":\"…\"}"),
+			"overwrite":    mStrProp("add_plugin 遇重名时 true=覆盖重装（先删旧），false=报错（默认）"),
+		}),
+		Handler: func(_ context.Context, args map[string]any) (string, error) {
+			return toolsetEdit(ph, root, args)
+		},
+	})
+
 	// ── toolset_list：列出工具集 ──
 	r.Register(&Tool{
 		Name:        "toolset_list",
@@ -316,4 +344,242 @@ func resolveWorkspaceProject(primaryRoot, project string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("未找到项目 %q（当前工作区: %s）", project, primaryRoot)
+}
+
+// ─── toolset_edit 各 action 实现 ───────────────────────────
+
+// toolsetEditAddPlugin 向工具集添加插件（来源：宿主 defs / 其他工具集 / plugin_json）。
+func toolsetEditAddPlugin(ph *PluginHost, root string, scope toolsetScope, ts *Toolset, args map[string]any) (string, error) {
+	pn := strings.TrimSpace(mArgStr(args, "plugin_name"))
+	pj := mArgStr(args, "plugin_json")
+	var src ToolsetPlugin
+	switch {
+	case pj != "":
+		if err := json.Unmarshal([]byte(pj), &src); err != nil {
+			return "", fmt.Errorf("plugin_json 解析失败: %v", err)
+		}
+		if src.Name == "" || strings.TrimSpace(src.Code) == "" {
+			return "", fmt.Errorf("plugin_json 需含 name 与 code（可含 purpose/client）")
+		}
+	case pn != "":
+		from := mArgStr(args, "from_toolset")
+		if from != "" {
+			other, err := loadToolset(root, "", from)
+			if err != nil {
+				return "", err
+			}
+			found := false
+			for _, p := range other.Plugins {
+				if p.Name == pn {
+					src = p
+					found = true
+					break
+				}
+			}
+			if !found {
+				return "", fmt.Errorf("工具集 %q 中没有插件 %q（toolset_show %s 查看）", from, pn, from)
+			}
+		} else {
+			// 宿主 defs：cordis_define 定义 / .pair/cordis.patch.json 装配 / npm 安装的都在
+			found := false
+			for _, d := range ph.JSDefs() {
+				if d.Name() == pn || d.id == pn {
+					src = ToolsetPlugin{Name: d.Name(), Purpose: d.purpose, Code: d.code, Client: d.clientCode}
+					found = true
+					break
+				}
+			}
+			if !found {
+				return "", fmt.Errorf("宿主未定义插件 %q（可用 cordis_define 定义、npm 市场安装，或 from_toolset/plugin_json 提供）", pn)
+			}
+		}
+	default:
+		return "", fmt.Errorf("add_plugin 需要 plugin_name（宿主/其他工具集来源）或 plugin_json（直接给定义）")
+	}
+	// 重名处理
+	for i, p := range ts.Plugins {
+		if p.Name == src.Name {
+			if mArgStr(args, "overwrite") != "true" {
+				return "", fmt.Errorf("工具集已有插件 %q；overwrite=true 覆盖重装或先 rm_plugin", src.Name)
+			}
+			if _, ok := ph.Get(src.Name); ok {
+				_ = ph.Unload(src.Name)
+				_ = ph.Undefine(src.Name)
+			}
+			ts.Plugins = append(ts.Plugins[:i], ts.Plugins[i+1:]...)
+			break
+		}
+	}
+	// 预检装载（失败不写入固化文件，避免状态不一致）
+	if err := applyToolsetPlugin(ph, &src); err != nil {
+		return "", fmt.Errorf("插件装载失败（未写入工具集）: %w", err)
+	}
+	ts.Plugins = append(ts.Plugins, src)
+	if err := saveToolset(root, scope, ts); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("✅ 插件 %q 已加入工具集 %q（%s）并装载。工具集现有 %d 个插件。",
+		src.Name, ts.Name, scope, len(ts.Plugins)), nil
+}
+
+// toolsetEditRmPlugin 从工具集移除插件（卸载其注册的全部工具）。
+func toolsetEditRmPlugin(ph *PluginHost, root string, scope toolsetScope, ts *Toolset, args map[string]any) (string, error) {
+	pn := strings.TrimSpace(mArgStr(args, "plugin_name"))
+	if pn == "" {
+		return "", fmt.Errorf("rm_plugin 需要 plugin_name")
+	}
+	idx := -1
+	for i, p := range ts.Plugins {
+		if p.Name == pn {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return "", fmt.Errorf("工具集 %q 中没有插件 %q（toolset_show 查看现有插件）", ts.Name, pn)
+	}
+	if _, ok := ph.Get(pn); ok {
+		_ = ph.Unload(pn)
+		_ = ph.Undefine(pn)
+	}
+	ts.Plugins = append(ts.Plugins[:idx], ts.Plugins[idx+1:]...)
+	if err := saveToolset(root, scope, ts); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("✅ 插件 %q 已从工具集 %q 移除（工具已卸载）。剩余 %d 个插件。",
+		pn, ts.Name, len(ts.Plugins)), nil
+}
+
+// toolsetEditRmTool 摘除插件下单个工具（插件保留；工具禁用 → agent 不可见）。
+func toolsetEditRmTool(ph *PluginHost, root string, scope toolsetScope, ts *Toolset, args map[string]any) (string, error) {
+	pn := strings.TrimSpace(mArgStr(args, "plugin_name"))
+	tool := strings.TrimSpace(mArgStr(args, "tool"))
+	if pn == "" || tool == "" {
+		return "", fmt.Errorf("rm_tool 需要 plugin_name 与 tool")
+	}
+	idx := -1
+	for i, p := range ts.Plugins {
+		if p.Name == pn {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return "", fmt.Errorf("工具集 %q 中没有插件 %q", ts.Name, pn)
+	}
+	p := &ts.Plugins[idx]
+	// 去重加入禁用清单
+	for _, t := range p.DisabledTools {
+		if t == tool {
+			return fmt.Sprintf("工具 %q 已在插件 %q 的摘除清单中", tool, pn), nil
+		}
+	}
+	// 工具存在性提示（不阻塞：插件未运行时工具本就不注册，记录后下次装载生效）
+	registered := false
+	if ph.Context() != nil && ph.Context().Tools != nil {
+		if _, ok := ph.Context().Tools.Get(tool); ok {
+			registered = true
+		}
+	}
+	if !registered {
+		return "", fmt.Errorf("工具 %q 当前未注册（插件可能未运行或工具名有误；插件面板/工具集详情可查该插件工具列表）", tool)
+	}
+	p.DisabledTools = append(p.DisabledTools, tool)
+	// 重装载该插件（apply 重新注册 → 应用新禁用清单）
+	if err := applyToolsetPlugin(ph, p); err != nil {
+		return "", fmt.Errorf("重装载失败（未写入工具集）: %w", err)
+	}
+	if err := saveToolset(root, scope, ts); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("✅ 工具 %q 已从插件 %q 摘除（插件保留，工具对 agent 不可见；enable_tool 可恢复）", tool, pn), nil
+}
+
+// toolsetEditEnableTool 恢复被摘除的工具。
+func toolsetEditEnableTool(ph *PluginHost, root string, scope toolsetScope, ts *Toolset, args map[string]any) (string, error) {
+	pn := strings.TrimSpace(mArgStr(args, "plugin_name"))
+	tool := strings.TrimSpace(mArgStr(args, "tool"))
+	if pn == "" || tool == "" {
+		return "", fmt.Errorf("enable_tool 需要 plugin_name 与 tool")
+	}
+	idx := -1
+	for i, p := range ts.Plugins {
+		if p.Name == pn {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return "", fmt.Errorf("工具集 %q 中没有插件 %q", ts.Name, pn)
+	}
+	p := &ts.Plugins[idx]
+	removed := false
+	for i, t := range p.DisabledTools {
+		if t == tool {
+			p.DisabledTools = append(p.DisabledTools[:i], p.DisabledTools[i+1:]...)
+			removed = true
+			break
+		}
+	}
+	if !removed {
+		return fmt.Sprintf("工具 %q 不在插件 %q 的摘除清单中（无需恢复）", tool, pn), nil
+	}
+	// 恢复启用（若注册在案）
+	if ph.Context() != nil && ph.Context().Tools != nil {
+		ph.Context().Tools.SetToolEnabled(tool, true)
+	}
+	if err := saveToolset(root, scope, ts); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("✅ 工具 %q 已恢复（插件 %q 的工具重新对 agent 可见）", tool, pn), nil
+}
+
+// toolsetEdit 工具集手动编辑核心逻辑（toolset_edit 工具与 /api/toolsets/edit 共用）。
+func toolsetEdit(ph *PluginHost, root string, args map[string]any) (string, error) {
+	name := strings.TrimSpace(mArgStr(args, "name"))
+	if name == "" {
+		return "", fmt.Errorf("需要 name（工具集名）")
+	}
+	action := mArgStr(args, "action")
+	if action == "" {
+		return "", fmt.Errorf("需要 action：add_plugin / rm_plugin / rm_tool / enable_tool")
+	}
+	// 解析作用域（空=自动：工作区优先）
+	var scope toolsetScope
+	switch mArgStr(args, "scope") {
+	case "project":
+		scope = toolsetProject
+	case "global":
+		scope = toolsetGlobal
+	}
+	resolved := scope
+	if resolved == "" {
+		if _, err := os.Stat(toolsetPath(root, toolsetProject, name)); err == nil {
+			resolved = toolsetProject
+		} else {
+			resolved = toolsetGlobal
+		}
+	}
+	ts, err := loadToolset(root, resolved, name)
+	if err != nil {
+		return "", err
+	}
+	switch action {
+	case "add_plugin":
+		return toolsetEditAddPlugin(ph, root, resolved, ts, args)
+	case "rm_plugin":
+		return toolsetEditRmPlugin(ph, root, resolved, ts, args)
+	case "rm_tool":
+		return toolsetEditRmTool(ph, root, resolved, ts, args)
+	case "enable_tool":
+		return toolsetEditEnableTool(ph, root, resolved, ts, args)
+	default:
+		return "", fmt.Errorf("未知 action %q（add_plugin/rm_plugin/rm_tool/enable_tool）", action)
+	}
+}
+
+// EditToolsetPublic 工具集手动编辑（公开导出，web_server/前端面板直调）。
+// args 与 toolset_edit 工具参数一致：name/scope/action/plugin_name/from_toolset/tool/plugin_json/overwrite。
+func EditToolsetPublic(ph *PluginHost, root string, args map[string]any) (string, error) {
+	return toolsetEdit(ph, root, args)
 }

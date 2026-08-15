@@ -31,11 +31,20 @@ func workspaceRoot() string {
 	return ""
 }
 
-// HandleToolsetsList GET /api/toolsets：工具集列表。
+// HandleToolsetsList GET /api/toolsets：工具集列表；?name= 返回该工具集完整详情（含插件）。
 func HandleToolsetsList(w http.ResponseWriter, r *http.Request) {
 	root := workspaceRoot()
 	if root == "" {
 		jsonResp(w, []any{})
+		return
+	}
+	if name := r.URL.Query().Get("name"); name != "" {
+		ts, err := agent.LoadToolsetPublic(root, "", name)
+		if err != nil {
+			jsonErr(w, err.Error())
+			return
+		}
+		jsonResp(w, ts)
 		return
 	}
 	jsonResp(w, agent.ListAllToolsetsPublic(root))
@@ -249,3 +258,53 @@ func HandleToolsetRemove(w http.ResponseWriter, r *http.Request) {
 
 // filepath 引用（ResolveWorkspaceProject 相对路径解析用）。
 var _ = filepath.Join
+
+// HandleToolsetEdit POST /api/toolsets/edit：手动编辑工具集（插件化思路）。
+// body: { name, scope?, action, plugin_name?, from_toolset?, tool?, plugin_json?, overwrite? }
+// action: add_plugin / rm_plugin / rm_tool / enable_tool。
+func HandleToolsetEdit(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		jsonErr(w, "仅 POST")
+		return
+	}
+	ph, ok := getPluginHost()
+	if !ok {
+		jsonErr(w, "插件系统未初始化")
+		return
+	}
+	root := workspaceRoot()
+	if root == "" {
+		jsonErr(w, "工作区未就绪")
+		return
+	}
+	var req struct {
+		Name        string `json:"name"`
+		Scope       string `json:"scope"`
+		Action      string `json:"action"`
+		PluginName  string `json:"plugin_name"`
+		FromToolset string `json:"from_toolset"`
+		Tool        string `json:"tool"`
+		PluginJSON  string `json:"plugin_json"`
+		Overwrite   string `json:"overwrite"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonErr(w, "请求体解析失败: "+err.Error())
+		return
+	}
+	args := map[string]any{
+		"name":         req.Name,
+		"scope":        req.Scope,
+		"action":       req.Action,
+		"plugin_name":  req.PluginName,
+		"from_toolset": req.FromToolset,
+		"tool":         req.Tool,
+		"plugin_json":  req.PluginJSON,
+		"overwrite":    req.Overwrite,
+	}
+	msg, err := agent.EditToolsetPublic(ph, root, args)
+	if err != nil {
+		jsonErr(w, err.Error())
+		return
+	}
+	jsonResp(w, map[string]any{"ok": true, "message": msg})
+}

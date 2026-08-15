@@ -234,3 +234,132 @@ func importToolsetJSON(ph *PluginHost, projectRoot, content, scope string) error
 type jsonErr struct{ msg string }
 
 func (e *jsonErr) Error() string { return e.msg }
+
+// TestToolsetEdit 工具集手动编辑（插件化思路）：add_plugin / rm_tool / enable_tool / rm_plugin。
+func TestToolsetEdit(t *testing.T) {
+	project := mkToolsetGoProject(t)
+	reg := NewRegistry()
+	host := NewPluginHost(reg, nil, project)
+	RegisterBuiltinPlugins(host)
+
+	// 1. 造初始工具集（含插件 p1-base）并固化+装载
+	p1Code := `return {
+  name: 'p1-base',
+  apply(ctx) {
+    ctx.tools.register({ name: 'p1_tool', description: 'p1 工具', parameters: { type: 'object', properties: {} }, execute: async () => 'p1' })
+  }
+}`
+	ts := &Toolset{
+		Name: "edit-demo",
+		Plugins: []ToolsetPlugin{
+			{Name: "p1-base", Purpose: "基础插件", Code: p1Code},
+		},
+	}
+	if err := saveToolset(project, toolsetProject, ts); err != nil {
+		t.Fatalf("saveToolset: %v", err)
+	}
+	if err := installToolset(host, ts); err != nil {
+		t.Fatalf("installToolset: %v", err)
+	}
+	if _, ok := reg.Get("p1_tool"); !ok {
+		t.Fatal("p1_tool 应已注册")
+	}
+
+	// 2. 宿主定义一个 JS 动态插件 p2-ext（含两个工具）
+	p2Code := `return {
+  name: 'p2-ext',
+  apply(ctx) {
+    ctx.tools.register({ name: 'p2_tool_a', description: 'p2 a', parameters: { type: 'object', properties: {} }, execute: async () => 'a' })
+    ctx.tools.register({ name: 'p2_tool_b', description: 'p2 b', parameters: { type: 'object', properties: {} }, execute: async () => 'b' })
+  }
+}`
+	defID, err := host.DefineJSCodeFull(p2Code, "", "扩展插件", "", "")
+	if err != nil {
+		t.Fatalf("DefineJSCodeFull: %v", err)
+	}
+	def, _ := host.GetJSDef(defID)
+	if err := host.LoadJSDynamic(def); err != nil {
+		t.Fatalf("LoadJSDynamic: %v", err)
+	}
+	if _, ok := reg.Get("p2_tool_a"); !ok {
+		t.Fatal("p2_tool_a 应已注册")
+	}
+
+	// 3. add_plugin：把宿主插件 p2-ext 收编进工具集（即时装载 + 回写 JSON）
+	msg, err := toolsetEdit(host, project, map[string]any{"name": "edit-demo", "action": "add_plugin", "plugin_name": "p2-ext"})
+	if err != nil {
+		t.Fatalf("add_plugin: %v", err)
+	}
+	if !strings.Contains(msg, "p2-ext") {
+		t.Fatalf("消息应含 p2-ext: %s", msg)
+	}
+	ts2, err := loadToolset(project, toolsetProject, "edit-demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ts2.Plugins) != 2 {
+		t.Fatalf("插件数应为 2: %d", len(ts2.Plugins))
+	}
+	data, _ := os.ReadFile(filepath.Join(project, ".pair", "toolsets", "edit-demo.json"))
+	if !strings.Contains(string(data), "p2-ext") {
+		t.Fatal("固化 JSON 应含 p2-ext")
+	}
+
+	// 4. 重名 add：默认拒绝；overwrite=true 覆盖
+	if _, err := toolsetEdit(host, project, map[string]any{"name": "edit-demo", "action": "add_plugin", "plugin_name": "p2-ext"}); err == nil {
+		t.Fatal("重名 add 应报错")
+	}
+	if _, err := toolsetEdit(host, project, map[string]any{"name": "edit-demo", "action": "add_plugin", "plugin_name": "p2-ext", "overwrite": "true"}); err != nil {
+		t.Fatalf("overwrite add: %v", err)
+	}
+
+	// 5. rm_tool：摘除 p2_tool_b（插件保留、工具对 agent 不可见）
+	if _, err := toolsetEdit(host, project, map[string]any{"name": "edit-demo", "action": "rm_tool", "plugin_name": "p2-ext", "tool": "p2_tool_b"}); err != nil {
+		t.Fatalf("rm_tool: %v", err)
+	}
+	ts3, _ := loadToolset(project, toolsetProject, "edit-demo")
+	foundP2 := false
+	for i := range ts3.Plugins {
+		if ts3.Plugins[i].Name == "p2-ext" {
+			foundP2 = true
+			if len(ts3.Plugins[i].DisabledTools) != 1 || ts3.Plugins[i].DisabledTools[0] != "p2_tool_b" {
+				t.Fatalf("DisabledTools 应为 [p2_tool_b]: %v", ts3.Plugins[i].DisabledTools)
+			}
+		}
+	}
+	if !foundP2 {
+		t.Fatal("p2-ext 应保留在工具集")
+	}
+	if reg.IsEnabled("p2_tool_b") {
+		t.Fatal("p2_tool_b 应被禁用")
+	}
+	if !reg.IsEnabled("p2_tool_a") {
+		t.Fatal("p2_tool_a 应仍启用")
+	}
+
+	// 6. enable_tool：恢复
+	if _, err := toolsetEdit(host, project, map[string]any{"name": "edit-demo", "action": "enable_tool", "plugin_name": "p2-ext", "tool": "p2_tool_b"}); err != nil {
+		t.Fatalf("enable_tool: %v", err)
+	}
+	if !reg.IsEnabled("p2_tool_b") {
+		t.Fatal("p2_tool_b 应恢复启用")
+	}
+	ts4, _ := loadToolset(project, toolsetProject, "edit-demo")
+	for i := range ts4.Plugins {
+		if ts4.Plugins[i].Name == "p2-ext" && len(ts4.Plugins[i].DisabledTools) != 0 {
+			t.Fatalf("DisabledTools 应清空: %v", ts4.Plugins[i].DisabledTools)
+		}
+	}
+
+	// 7. rm_plugin：移除 p1-base（工具一并卸载）
+	if _, err := toolsetEdit(host, project, map[string]any{"name": "edit-demo", "action": "rm_plugin", "plugin_name": "p1-base"}); err != nil {
+		t.Fatalf("rm_plugin: %v", err)
+	}
+	ts5, _ := loadToolset(project, toolsetProject, "edit-demo")
+	if len(ts5.Plugins) != 1 || ts5.Plugins[0].Name != "p2-ext" {
+		t.Fatalf("移除后应只剩 p2-ext: %v", ts5.Plugins)
+	}
+	if _, ok := reg.Get("p1_tool"); ok {
+		t.Fatal("p1_tool 应已卸载")
+	}
+}

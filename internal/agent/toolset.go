@@ -51,6 +51,10 @@ type ToolsetPlugin struct {
 	Purpose string `json:"purpose"`
 	Code    string `json:"code"`           // host 半：async 函数体（return { name, apply(ctx) }）
 	Client  string `json:"client,omitempty"` // client 半：(ui) => void
+	// DisabledTools 插件保留、但被手动摘除的工具（toolset_edit rm_tool）。
+	// 装载后应用：Registry.SetToolEnabled(false) → agent 工具列表不可见；
+	// 工具仍注册在案（可逆，重新 edit 可恢复）。
+	DisabledTools []string `json:"disabledTools,omitempty"`
 }
 
 // ─── 目录解析 ─────────────────────────────────────────────
@@ -476,27 +480,44 @@ func countAllToolsetPlugins(projectRoot string) int {
 func installToolset(ph *PluginHost, ts *Toolset) error {
 	var errs []string
 	for _, p := range ts.Plugins {
-		if strings.TrimSpace(p.Code) == "" {
-			continue
-		}
-		// 已存在同名插件：先卸载再重定义（升级/覆盖场景）
-		if _, ok := ph.Get(p.Name); ok {
-			_ = ph.Unload(p.Name)
-			_ = ph.Undefine(p.Name) // 删除 plugins 注册（defs 按 id 存，孤儿条目无碍）
-		}
-		id, err := ph.DefineJSCodeFull(p.Code, "", p.Purpose, "", p.Client)
-		if err != nil {
+		if err := applyToolsetPlugin(ph, &p); err != nil {
 			errs = append(errs, fmt.Sprintf("%s: %v", p.Name, err))
-			continue
-		}
-		def, _ := ph.GetJSDef(id)
-		if err := ph.LoadJSDynamic(def); err != nil {
-			errs = append(errs, fmt.Sprintf("%s: %v", p.Name, err))
-			continue
 		}
 	}
 	if len(errs) > 0 {
 		return fmt.Errorf("%s", strings.Join(errs, "; "))
+	}
+	return nil
+}
+
+// applyToolsetPlugin 装载单个工具集插件：定义（define 预检）→ 装载（apply 注册工具）
+// → 应用 DisabledTools（工具级摘除：Registry.SetToolEnabled(false)，agent 不可见）。
+// 重名插件先卸载再重定义（升级/覆盖场景）。toolset_edit 增删单插件时复用。
+func applyToolsetPlugin(ph *PluginHost, p *ToolsetPlugin) error {
+	if strings.TrimSpace(p.Code) == "" {
+		return nil
+	}
+	// 已存在同名插件：先卸载再重定义（升级/覆盖场景）
+	if _, ok := ph.Get(p.Name); ok {
+		_ = ph.Unload(p.Name)
+		_ = ph.Undefine(p.Name) // 删除 plugins 注册（defs 按 id 存，孤儿条目无碍）
+	}
+	id, err := ph.DefineJSCodeFull(p.Code, "", p.Purpose, "", p.Client)
+	if err != nil {
+		return err
+	}
+	def, _ := ph.GetJSDef(id)
+	if err := ph.LoadJSDynamic(def); err != nil {
+		return err
+	}
+	// 应用工具级摘除（插件保留、指定工具禁用 → agent 不可见）
+	for _, tn := range p.DisabledTools {
+		if tn == "" {
+			continue
+		}
+		if ph.Context() != nil && ph.Context().Tools != nil {
+			ph.Context().Tools.SetToolEnabled(tn, false)
+		}
 	}
 	return nil
 }

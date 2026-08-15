@@ -117,4 +117,5 @@ func RegisterAll(r *Router) {
 	r.Handle("GET", "/api/toolsets/export", HandleToolsetExport)
 	r.Handle("POST", "/api/toolsets/import", HandleToolsetImport)
 	r.Handle("POST", "/api/toolsets/remove", HandleToolsetRemove)
+	r.Handle("POST", "/api/toolsets/edit", HandleToolsetEdit)
 }

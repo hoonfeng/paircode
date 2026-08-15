@@ -24,7 +24,7 @@ func mkHarnessReg() *Registry {
 		reg.Register(&Tool{Name: n, Handler: noopHandler, SystemTool: true})
 	}
 	// 工具集管理（toolset_*，agent 自主创建/管理工具集，保留）
-	for _, n := range []string{"toolset_build", "toolset_list", "toolset_show", "toolset_export", "toolset_import", "toolset_remove"} {
+	for _, n := range []string{"toolset_build", "toolset_list", "toolset_show", "toolset_export", "toolset_import", "toolset_remove", "toolset_edit"} {
 		reg.Register(&Tool{Name: n, Handler: noopHandler, SystemTool: true})
 	}
 	// pair 独有工具（应被移除）

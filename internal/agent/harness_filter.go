@@ -57,6 +57,7 @@ var HarnessAlignedToolNames = map[string]bool{
 	"toolset_export": true,
 	"toolset_import": true,
 	"toolset_remove": true,
+	"toolset_edit":   true,
 }
 
 // ApplyHarnessToolFilter 从注册表移除不在保留清单内的工具（pair 独有工具），

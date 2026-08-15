@@ -314,7 +314,7 @@ async function savePhilosophy(data) {
   return apiPut('/philosophy', data)
 }
 
-export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, isWebSocketOpen, waitForWebSocket, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatCompact, chatStop, getMessages, getMessagesCount, getModels, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, getPhilosophy, savePhilosophy, listPlugins, getPluginDetail, pluginAction, definePlugin, pluginEmit, pluginClientEvents, pluginClientState, pluginInvoke, pluginClientFailure }
+export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, isWebSocketOpen, waitForWebSocket, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatCompact, chatStop, getMessages, getMessagesCount, getModels, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, getPhilosophy, savePhilosophy, listPlugins, getPluginDetail, pluginAction, definePlugin, pluginEmit, pluginClientEvents, pluginClientState, pluginInvoke, pluginClientFailure, getToolsets, toolsetEdit }
 
 // ─── 插件（管理 + 使用 + host/client 事件桥）──────────────
 
@@ -363,4 +363,17 @@ async function pluginInvoke(plugin, method, args) {
 // pluginClientFailure 上报 client 半失败（render/guard/boot 阶段；供 Agent inspect 修复）。
 async function pluginClientFailure(plugin, phase, message) {
   return apiPost('/plugins/client-failure', { plugin, phase, message })
+}
+
+// ─── 工具集（手动管理：插件化思路）──────────────────────
+
+// getToolsets 工具集列表；传 name 返回该工具集完整详情（含插件与 disabledTools）。
+async function getToolsets(name) {
+  return name ? apiGet('/toolsets', { name }) : apiGet('/toolsets')
+}
+
+// toolsetEdit 手动编辑工具集：{name, scope?, action, plugin_name?, from_toolset?, tool?, plugin_json?, overwrite?}
+// action: add_plugin / rm_plugin / rm_tool / enable_tool。
+async function toolsetEdit(data) {
+  return apiPost('/toolsets/edit', data)
 }
