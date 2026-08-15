@@ -80,6 +80,49 @@ func nodePluginNeedsNode(manifest map[string]any) bool {
 	return false
 }
 
+// ── 原生依赖（C/C++ 编译）提示 ─────────────────────────────
+// 部分 npm 包依赖原生模块（node-gyp 编译）。多数自带 prebuilt 二进制
+// （npm 直接可装）；无 prebuilt 时需本机 C++ 编译环境。
+// 检测命中时安装不阻塞，仅在结果里给出「需装什么 / 开源替代」提示。
+var nativeDepHints = map[string]string{
+	"better-sqlite3": "better-sqlite3 自带 prebuilt 二进制（npm 直接安装）；源码编译需 VS Build Tools(C++) + Python 3，或改用纯 JS 替代 sql.js / @sqlite.org/sqlite-wasm",
+	"sharp":          "sharp 自带 prebuilt（libvips），npm 可直接安装；如需纯 JS 替代可用 @resvg/resvg-js / jimp",
+	"canvas":         "node-canvas 需预装 GTK/Cairo（Windows: GTK runtime）或 VS Build Tools；纯 JS 替代：@napi-rs/canvas（prebuilt）",
+	"sqlite3":        "sqlite3 自带 prebuilt；源码编译需 VS Build Tools + Python；替代 better-sqlite3（prebuilt）",
+	"bcrypt":         "bcrypt 自带 prebuilt；替代 bcryptjs（纯 JS）",
+	"node-sass":      "node-sass 已废弃，官方建议 dart-sass（纯 JS sass 包）；源码编译需 VS Build Tools + Python",
+	"fsevents":       "fsevents 仅 macOS 需要，Windows/Linux 可安全忽略（可选依赖）",
+	"robotjs":        "robotjs 需 VS Build Tools + Python 编译（无 prebuilt）；替代 nut-js（纯 JS，Windows）",
+	"serialport":     "serialport 自带 prebuilt；源码编译需 VS Build Tools + Python",
+	"usb":            "usb 自带 prebuilt；源码编译需 VS Build Tools + Python",
+	"leveldown":      "leveldown 自带 prebuilt；替代 classic-level（prebuilt）",
+	"puppeteer":      "puppeteer 依赖 Chromium（安装时下载）；需联网；替代 playwright（自带浏览器）",
+	"playwright":     "playwright 需下载浏览器（npx playwright install）；纯 JS 替代：无（需真实浏览器）",
+	"keyboard":       "keyboard 需 VS Build Tools 编译（Windows hook）；替代 robotjs",
+	"nut-js":         "nut-js 纯 JS（Windows）无需编译，可直接安装",
+	"opencv4nodejs":  "opencv4nodejs 需本机 OpenCV + VS Build Tools；替代 @u4/opencv4nodejs（prebuilt）或纯 JS jimp",
+	"sharp-libvips":  "sharp 依赖（通常 prebuilt，无需手动安装）",
+	"ref":            "ref 需编译；替代 ref-napi（prebuilt）",
+	"ref-napi":       "ref-napi 自带 prebuilt；源码编译需 VS Build Tools + Python",
+	"ioredis":        "ioredis 纯 JS 无需编译",
+	"iconv-lite":     "iconv-lite 纯 JS 无需编译",
+}
+
+// nativeDepHint 检查插件 manifest 依赖中是否含原生模块，返回提示（空=无）。
+func nativeDepHint(manifest map[string]any) string {
+	hit := []string{}
+	deps, _ := manifest["dependencies"].(map[string]any)
+	for name := range deps {
+		if h, ok := nativeDepHints[name]; ok {
+			hit = append(hit, "· "+name+"："+h)
+		}
+	}
+	if len(hit) == 0 {
+		return ""
+	}
+	return "\n📦 原生模块提示：" + strings.Join(hit, "\n")
+}
+
 // marketInstallNPMPluginNode Node 桥安装路径：
 // 源码落盘 + npm install + plugins.json 记录 + 重启桥装载。
 func marketInstallNPMPluginNode(info *npmPackageInfo, srcDir string, auto bool) (string, error) {
@@ -155,7 +198,9 @@ func marketInstallNPMPluginNode(info *npmPackageInfo, srcDir string, auto bool) 
 			}
 		}
 	}
-	return fmt.Sprintf("✅ 已安装 npm 插件「%s」v%s（Node 运行时桥，真实 node 环境执行 npm 依赖）", pkg, ver), nil
+	// 原生依赖提示（不阻塞安装）
+	hint := nativeDepHint(info.Manifest)
+	return fmt.Sprintf("✅ 已安装 npm 插件「%s」v%s（Node 运行时桥，真实 node 环境执行 npm 依赖）%s", pkg, ver, hint), nil
 }
 
 // npmInstallPlugin 在桥目录执行 npm install（Windows 用 npm.cmd）。

@@ -59,11 +59,85 @@ function svc(svcName, method, args, timeoutMs = 90000) {
 }
 
 // ── 工具注册表 ──
-const tools = new Map(); // name → def（含 handler/run 执行函数）
+const tools = new Map(); // name → def（含 handler/run 执行函数；__svc 为服务型调用）
+
+// ── 服务型插件工具暴露 ──
+// 插件经 ctx.provide(name, obj) 提供服务对象（如 cordis-plugin-android 的
+// ctx.provide('android', bridge)）——服务对象的方法就是可调用能力。
+// 把每个方法暴露为一个工具 <service>_<method>，agent 可直接 function-call。
+function sanitizeToolName(s) {
+  return String(s).replace(/[^a-zA-Z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+}
+function paramNames(fn) {
+  let src;
+  try { src = Function.prototype.toString.call(fn); } catch (_) { return []; }
+  const m = src.match(/^[\s\S]*?\(\s*([^)]*)\)/);
+  if (!m) return [];
+  return m[1].split(',').map((s) => s.trim().split(/[=:]/)[0]).filter(Boolean);
+}
+function ownMethods(obj) {
+  const names = new Set();
+  let cur = obj;
+  while (cur && cur !== Object.prototype && cur !== Function.prototype) {
+    for (const n of Object.getOwnPropertyNames(cur)) {
+      if (n === 'constructor') continue;
+      try {
+        if (typeof obj[n] === 'function') names.add(n);
+      } catch (_) {}
+    }
+    cur = Object.getPrototypeOf(cur);
+  }
+  return [...names];
+}
+function exposeService(plugin, serviceName, obj) {
+  const base = sanitizeToolName(serviceName);
+  for (const method of ownMethods(obj)) {
+    const tname = sanitizeToolName(`${base}_${method}`);
+    if (!tname) continue;
+    const names = paramNames(obj[method]);
+    const parameters = {
+      type: 'object',
+      properties: Object.fromEntries(names.map((n) => [n, { type: 'string', description: `参数 ${n}` }])),
+      additionalProperties: true,
+    };
+    const def = {
+      name: tname,
+      description: `插件服务 ${serviceName}.${method}()（插件 ctx.provide('${serviceName}') 暴露）${names.length ? '，参数：' + names.join(', ') : ''}`,
+      parameters,
+      category: 'plugin-service',
+      __svc: { obj, method, names },
+    };
+    tools.set(tname, def); // 同服务名多插件：后 provide 覆盖（与 cordis 语义一致）
+    send({
+      t: 'tool', plugin,
+      def: {
+        name: tname,
+        description: def.description,
+        parameters,
+        category: 'plugin-service',
+      },
+    });
+  }
+}
 
 // decorateCtx 给插件 apply 的 ctx 挂 harness 门面（对齐 deepseek-harness
 // host-runner）：tools.register / fs / web / bash / workspaceRoot。
 function decorateCtx(ctx, plugin) {
+  // 拦截 ctx.provide：服务型插件（无 tools.register）也能被 agent 调用
+  const origProvide = typeof ctx.provide === 'function' ? ctx.provide.bind(ctx) : null;
+  if (origProvide) {
+    ctx.provide = (name, obj, ...rest) => {
+      const r = origProvide(name, obj, ...rest);
+      try {
+        if (obj && (typeof obj === 'object' || typeof obj === 'function')) {
+          exposeService(plugin, name, obj);
+        }
+      } catch (e) {
+        console.warn(`[bridge] 服务 ${name} 工具暴露失败:`, (e && e.message) || e);
+      }
+      return r;
+    };
+  }
   ctx.tools = {
     register(def) {
       if (!def || typeof def.name !== 'string' || !def.name) throw new Error('tool 缺少 name');
@@ -107,12 +181,35 @@ function decorateCtx(ctx, plugin) {
 async function invokeTool(toolName, args) {
   const def = tools.get(toolName);
   if (!def) throw new Error(`桥接工具不存在: ${toolName}`);
+  // 服务型调用（ctx.provide 暴露）：按参数名展开调用服务方法
+  if (def.__svc) {
+    const { obj, method, names } = def.__svc;
+    let result;
+    if (names.length > 0) {
+      result = obj[method](...names.map((n) => (args || {})[n]));
+    } else {
+      result = obj[method]();
+    }
+    if (result && typeof result.then === 'function') result = await result;
+    return stringifyResult(result);
+  }
   const fn = def.handler || def.run || def.fn || def.execute || def.call;
   if (typeof fn !== 'function') throw new Error(`工具 ${toolName} 没有可执行函数`);
   const result = await fn(args || {});
+  return stringifyResult(result);
+}
+
+// stringifyResult 结果序列化（>2MB 截断防协议撑爆；截图类 base64 提示落盘）。
+function stringifyResult(result) {
   if (typeof result === 'string') return result;
   if (result === undefined || result === null) return '';
-  return JSON.stringify(result);
+  let s;
+  try { s = JSON.stringify(result); } catch (_) { s = String(result); }
+  if (s.length > 2 * 1024 * 1024) {
+    console.warn('[bridge] 工具结果过大（' + s.length + ' 字符）已截断——大图建议经 ctx.fs 写入文件');
+    return s.slice(0, 2 * 1024 * 1024) + '\n...[结果过大已截断]';
+  }
+  return s;
 }
 
 // ── 插件装载（真实 cordis 运行时）──

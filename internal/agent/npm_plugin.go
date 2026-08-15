@@ -63,7 +63,8 @@ type npmPackageInfo struct {
 	Dist    struct {
 		Tarball string `json:"tarball"`
 	} `json:"dist"`
-	Description string `json:"description"`
+	Description string         `json:"description"`
+	Manifest    map[string]any `json:"-"`
 }
 
 // fetchNPMInfo 查询 npm registry 获取包 latest 信息。
@@ -303,6 +304,7 @@ func marketInstallNPMPlugin(entry MarketEntry, auto bool) (string, error) {
 	// 需真实 node 环境（npm 依赖或 cordis4）→ 走 Node 桥；
 	// 否则 goja 沙箱（快、无需 node）。
 	if nodePluginNeedsNode(manifest) {
+		info.Manifest = manifest // 原生依赖提示用
 		msg, err := marketInstallNPMPluginNode(info, dir, auto)
 		if err != nil {
 			return "", err
