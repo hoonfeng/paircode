@@ -23,6 +23,10 @@ func mkHarnessReg() *Registry {
 	for _, n := range []string{"cordis_inspect", "cordis_define", "cordis_run", "cordis_stop", "cordis_undefine", "cordis_service_list"} {
 		reg.Register(&Tool{Name: n, Handler: noopHandler, SystemTool: true})
 	}
+	// 工具集管理（toolset_*，agent 自主创建/管理工具集，保留）
+	for _, n := range []string{"toolset_build", "toolset_list", "toolset_show", "toolset_export", "toolset_import", "toolset_remove"} {
+		reg.Register(&Tool{Name: n, Handler: noopHandler, SystemTool: true})
+	}
 	// pair 独有工具（应被移除）
 	for _, n := range []string{"read_file", "write_file", "edit_file", "multi_edit", "list_files", "run_command",
 		"codegraph_search", "memory_read", "project_info_write", "git_diff", "debug_inject_log",

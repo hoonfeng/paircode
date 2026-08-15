@@ -1057,7 +1057,16 @@ func harnessSystemPrompt(roots []string) string {
 		"- inspect 协议（cordis_inspect_query platform/provider/method）：host 平台查宿主\n" +
 		"  （service/tool/event/plugin 四 provider），client 平台查浏览器（plugin/event），\n" +
 		"  第三方可注册自定义 provider 扩展诊断接口。\n" +
-		"- 用户消息中以 @dyn-1 这类形式引用插件时，系统会自动注入该插件的上下文（版本/状态/指引）。\n"
+		"- 用户消息中以 @dyn-1 这类形式引用插件时，系统会自动注入该插件的上下文（版本/状态/指引）。\n" +
+		"# 工具集管理（toolset_*，agent 自主创建）\n" +
+		"- 工具集 = 为项目/需求组合的插件包（固化 .pair/toolsets/*.json，启动自动装载）。\n" +
+		"  ★ 创建由 agent 自主决策：接手项目/任务发现缺少合适工具集时，主动用\n" +
+		"  toolset_build 分析项目（语言/框架/文件结构 + LLM 理解项目目的）→ 模板组合生成插件\n" +
+		"  → 装载并固化。已存在时 toolset_list 查看、toolset_show 看详情、overwrite=true 重建。\n" +
+		"- toolset_export 导出可移植 JSON（分享/发布市场）；toolset_import 导入（用户提供的发布 JSON）；\n" +
+		"  toolset_remove 删除（scope=project|user）。工具集即插件，与 cordis_* 同属插件生态能力。\n" +
+		"- 用户也可手动创建（前端文件树「工具集」区点 + 动态构建 / 粘贴导入 / 放置 JSON），\n" +
+		"  两种途径并存；agent 端以 toolset_build 自主创建为主。\n"
 }
 
 // fullSystemPrompt 完整版系统提示词（WB_FULL_TOOLS=1 恢复全量工具时使用）。
@@ -1185,7 +1194,23 @@ func fullSystemPrompt(roots []string) string {
 		"- 不确定时宁可声明完成并向用户汇报，让用户决定是否继续。\n" +
 "复杂或多步任务先用 update_tasks 列出细分任务，再逐步执行并更新状态。\n" +
 		"- run_command 阻塞预防：长期进程用 run_background（后台不阻塞）。\n" +
-		"- 完成后输出 Markdown 总结：改了哪些文件、如何验证、遗留问题。\n"
+		"- 完成后输出 Markdown 总结：改了哪些文件、如何验证、遗留问题。\n\n" +
+		"# 插件管理（cordis_* 工具）\n" +
+		"- 本环境支持动态插件（goja 沙箱 + Node 桥双路径），两种形态：① 对象 { name, apply(ctx, config), inject? }；\n" +
+		"  ② 函数 (ctx, config) => void。链路：cordis_define 登记 → cordis_run 装载（apply 注册工具/服务）→\n" +
+		"  cordis_stop 停止回收 → cordis_undefine 忘掉定义；cordis_inspect 查看插件/定义/贡献归属。\n" +
+		"- 服务型插件（ctx.provide 提供能力对象）自动暴露为 <service>_<method> 工具，agent 可直接调用；\n" +
+		"  npm 插件走 Node 桥真实运行（需 node + npm；缺原生依赖时安装会给出提示与替代方案）。\n" +
+		"- 写插件前先 cordis_service_list 查精确签名；失败修复用 cordis_define pluginId=xxx 追加版本再 cordis_run。\n\n" +
+		"# 工具集管理（toolset_*，agent 自主创建）\n" +
+		"- 工具集 = 为项目/需求组合的插件包（固化 .pair/toolsets/*.json，启动自动装载）。\n" +
+		"  ★ 创建由 agent 自主决策：接手项目/任务发现缺少合适工具集时，主动用\n" +
+		"  toolset_build 分析项目（语言/框架/文件结构 + LLM 理解项目目的）→ 模板组合生成插件\n" +
+		"  → 装载并固化。已存在时 toolset_list 查看、toolset_show 看详情、overwrite=true 重建。\n" +
+		"- toolset_export 导出可移植 JSON（分享/发布市场）；toolset_import 导入（用户提供的发布 JSON）；\n" +
+		"  toolset_remove 删除（scope=project|user）。工具集即插件，与 cordis_* 同属插件生态能力。\n" +
+		"- 用户也可手动创建（前端文件树「工具集」区点 + 动态构建 / 粘贴导入 / 放置 JSON），\n" +
+		"  两种途径并存；agent 端以 toolset_build 自主创建为主。\n"
 }
 
 // ComposeSystemPrompt 组装完整 system prompt：静态前缀 + 唯一 CacheBoundary + 动态后缀。

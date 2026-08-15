@@ -28,6 +28,9 @@ func HarnessOnlyTools() bool {
 //  ③ 插件管理工具集（cordis_*）：插件即工具的登记/装载/停止/回收/查看——
 //     自举链路关键能力（用 agent 开发 agent 时需能动态注册新工具），
 //     与 harness 的 "tools are plugins" 哲学一致，保留。
+//  ④ 工具集管理（toolset_*）：工具集=插件组合的固化单元（.pair/toolsets/*.json）。
+//     与 cordis_* 同级保留——agent 需能自主构建/查看/导出/管理工具集
+//     （需求：工具集由 agent 自主创建，而非仅前端手动创建）。
 var HarnessAlignedToolNames = map[string]bool{
 	// harness 原生工具集
 	"read": true, "write": true, "edit": true,
@@ -47,6 +50,13 @@ var HarnessAlignedToolNames = map[string]bool{
 	"cordis_stop":          true,
 	"cordis_undefine":      true,
 	"cordis_service_list":  true,
+	// 工具集管理（toolset_*）：工具集=插件组合的固化单元，agent 自主构建/查看/导出/管理
+	"toolset_build":  true,
+	"toolset_list":   true,
+	"toolset_show":   true,
+	"toolset_export": true,
+	"toolset_import": true,
+	"toolset_remove": true,
 }
 
 // ApplyHarnessToolFilter 从注册表移除不在保留清单内的工具（pair 独有工具），
