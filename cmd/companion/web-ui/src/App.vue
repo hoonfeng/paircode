@@ -64,7 +64,7 @@ import { ref, reactive, computed, watch, onMounted, onUnmounted, provide, nextTi
 import { state, savePersistentState, loadPersistentState, applyTheme } from './main.js'
 import api from './api.js'
 import { processAgentEvent, processAgentDone, processStatus, getConvCtxStats } from './agent-events.js'
-import { getSlotUI, getSlotUIList, getSlotOwner, setSlotMount, isOverlayActive } from './plugin-runtime.js'
+import { getSlotUI, getSlotUIList, getSlotOwner, setSlotMount, isOverlayActive, syncClientHalves, startPolling } from './plugin-runtime.js'
 
 // ★ 桌面端面板独立模式：desktopbridge 注入 window.__DESKTOP_PANEL_MODE__，
 //   此时只渲染右侧面板（消息展示）占满全屏，隐藏 IDE 其他区域。
@@ -570,6 +570,26 @@ onMounted(async () => {
     window.removeEventListener('switch-workspace', _onSwitchWorkspace)
   }
   window._cleanupAppEvents = _cleanupEvents
+
+  // ★ 全局装载 client 半（UI 槽位/面板不依赖插件面板组件挂载——
+  //    否则不打开插件面板时 UI 插件永不生效）
+  ;(async () => {
+    try {
+      const list = (await api.listPlugins()) || []
+      for (const p of list) {
+        if (p.hasClient && !p.clientCode) {
+          try {
+            const d = await api.getPluginDetail(p.name)
+            if (d && d.clientCode) p.clientCode = d.clientCode
+          } catch (e) {}
+        }
+      }
+      await syncClientHalves(list)
+      startPolling() // 事件轮询全局启动（host→client 事件分发）
+    } catch (e) {
+      console.warn('[slot] 全局 client 半装载失败', e)
+    }
+  })()
 
   // UI 槽位订阅（statusbar 可被插件替换）
   slotUnsub = setSlotMount(onSlotChanged)

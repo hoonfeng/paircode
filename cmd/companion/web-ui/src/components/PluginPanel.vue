@@ -15,7 +15,10 @@
       <div class="pp-ts-head">
         <select v-model="tsName" class="pp-input pp-lang" @change="loadToolsetDetail">
           <option value="">选择工具集…</option>
-          <option v-for="t in toolsetMetas" :key="t.name" :value="t.name">{{ t.name }}（{{ t.pluginCount }} 插件{{ t.scope === 'global' ? '·全局' : '' }}）</option>
+          <optgroup label="工作区工具集（本项目）">
+            <option v-for="t in toolsetMetas.filter(x => x.scope !== 'builtin')" :key="t.name" :value="t.name">{{ t.name }}（{{ t.pluginCount }} 插件）</option>
+            <option v-for="t in toolsetMetas.filter(x => x.scope === 'builtin')" :key="t.name" :value="t.name">{{ t.name }}（{{ t.pluginCount }} 插件·内置默认）</option>
+          </optgroup>
         </select>
         <button class="pp-btn" @click="loadToolsets">刷新</button>
       </div>
@@ -27,7 +30,8 @@
         <div v-for="pl in tsDetail.plugins" :key="pl.name" class="pp-ts-plugin">
           <div class="pp-ts-prow">
             <span class="pp-ts-pname">{{ pl.name }}</span>
-            <button class="pp-btn danger" @click="edit({ action: 'rm_plugin', plugin_name: pl.name })">移出工具集</button>
+            <button v-if="tsDetail.scope !== 'builtin'" class="pp-btn danger" @click="edit({ action: 'rm_plugin', plugin_name: pl.name })">移出工具集</button>
+            <span v-else class="pp-ts-muted">内置</span>
           </div>
           <div v-if="pl.purpose" class="pp-ts-purpose">{{ pl.purpose }}</div>
           <div v-if="pluginToolsOf(pl.name).length" class="pp-ts-tools">
@@ -180,7 +184,14 @@
           <span v-else-if="p.hasClient && p.state === 'running'" class="pp-badge pp-badge-warn" title="client 半待激活批准：在对话中用 cordis_run 装载该插件触发审批">UI 待批准</span>
           <span v-else-if="p.hasClient" class="pp-badge" title="含 client 半（浏览器 UI；装载后需批准）">UI</span>
           <span v-if="p.tools && p.tools.length" class="pp-count" :title="p.tools.join(', ')">{{ p.tools.length }} 工具</span>
-            <SvgIcon name="chevron-right" :size="12" class="pp-chevron" :class="{ open: expanded[p.name] }" />
+          <template v-if="p.hasClient && p.clientApproved && uiSlotsOf(p.name).length">
+            <span class="pp-ui-label" :class="{ on: uiPluginActive(p.name) }">{{ uiPluginActive(p.name) ? 'UI 已启用' : 'UI 未启用' }}</span>
+            <label class="pp-switch" :title="uiPluginActive(p.name) ? '停用该插件的 UI（恢复内置界面）' : '启用该插件的 UI（替换对应界面区域）'">
+              <input type="checkbox" :checked="uiPluginActive(p.name)" @change="toggleUiPlugin(p, $event.target.checked)" @click.stop />
+              <span class="pp-switch-track"></span>
+            </label>
+          </template>
+          <SvgIcon name="chevron-right" :size="12" class="pp-chevron" :class="{ open: expanded[p.name] }" />
           </div>
           <div v-if="expanded[p.name]" class="pp-detail">
             <div v-if="p.purpose" class="pp-d-purpose">{{ p.purpose }}</div>
@@ -296,8 +307,9 @@ async function toggleBuiltinTool(t) {
 async function loadToolsets() {
   try {
     const list = (await api.getToolsets()) || []
-    // 内置工具包 builtin 在插件面板顶部「内置工具」区块管理，工具集下拉不重复展示
-    toolsetMetas.value = list.filter(t => t.scope !== 'builtin')
+    // ★ 工具集管理只显示工作区（project）工具集 + 内置默认工具包（builtin）；
+    //    全局工具集（global，UI 插件等跨项目插件）不在此展示——自动装载、无需管理。
+    toolsetMetas.value = list.filter(t => t.scope !== 'global')
   } catch (e) {
     toolsetMetas.value = []
   }
@@ -407,6 +419,30 @@ async function togglePluginTool(p, t) {
   } catch (e) {
     window.$toast && window.$toast(e.message || '操作失败', 'error')
   }
+}
+
+// ─── UI 插件启用开关（Slot 系统）：勾选=激活该插件注册的全部槽位 ──
+//  single 槽位（statusbar/chat/sidebar）：激活=设为该槽位占用者，停用=恢复内置；
+//  list 槽位（overlay）：激活=勾选叠加显示，停用=隐藏。
+function uiSlotsOf(pname) {
+  return clientSlots.filter(s => s.pluginName === pname)
+}
+function uiPluginActive(pname) {
+  const slots = uiSlotsOf(pname)
+  if (!slots.length) return false
+  return slots.some(s => {
+    if (s.kind === 'list') return isOverlayActive(s.slotId, s.pluginName)
+    return getSlotOwner(s.slotId) === s.pluginName
+  })
+}
+function toggleUiPlugin(p, on) {
+  const slots = uiSlotsOf(p.name)
+  for (const s of slots) {
+    if (s.kind === 'list') setOverlayActive(s.slotId, s.pluginName, on)
+    else setSlotOwner(s.slotId, on ? s.pluginName : '')
+  }
+  window.$toast && window.$toast(on ? '已启用 ' + p.name + ' 的 UI（' + slots.map(s => s.slotId).join(', ') + '）' : '已停用 ' + p.name + ' 的 UI（恢复内置界面）', 'info')
+  emitSlotChanged()
 }
 
 // ─── 操作 ────────────────────────────────────────────────────
@@ -707,6 +743,8 @@ onUnmounted(() => {
   cursor: help;
 }
 .pp-count { font-size: 10px; color: var(--text-muted); flex-shrink: 0; }
+.pp-ui-label { font-size: 10px; color: var(--text-muted); flex-shrink: 0; }
+.pp-ui-label.on { color: var(--accent, #4c9aff); }
 .pp-chevron { transition: transform .15s; flex-shrink: 0; }
 .pp-chevron.open { transform: rotate(90deg); }
 

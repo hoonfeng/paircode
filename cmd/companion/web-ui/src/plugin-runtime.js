@@ -66,9 +66,14 @@ export function emitSlotChanged() {
 }
 
 // list 型槽位（叠加）条目激活状态：勾选 = 参与渲染（localStorage 持久化，跨刷新保留）。
+// ★ 未显式设置 = 默认激活（注册即显示，对齐参考项目 shell.overlay 语义）。
 function overlayKey(slotId, pluginName) { return 'slotOverlay:' + slotId + ':' + pluginName }
 export function isOverlayActive(slotId, pluginName) {
-  try { return localStorage.getItem(overlayKey(slotId, pluginName)) === '1' } catch (e) { return false }
+  try {
+    const v = localStorage.getItem(overlayKey(slotId, pluginName))
+    if (v === null) return true // 从未设置：默认激活
+    return v === '1'
+  } catch (e) { return false }
 }
 export function setOverlayActive(slotId, pluginName, on) {
   try { localStorage.setItem(overlayKey(slotId, pluginName), on ? '1' : '0') } catch (e) { /* 忽略 */ }
@@ -84,7 +89,16 @@ export function getSlotOwner(slotId) {
   let v = ''
   try { v = localStorage.getItem(slotOwnerKey(slotId)) || '' } catch (e) { /* 忽略 */ }
   if (v && !clientSlots.some(s => s.slotId === slotId && s.pluginName === v)) v = ''
-  return v
+  if (v) return v
+  // ★ 从未显式选择：仅一个候选时自动激活（对齐参考项目「注册槽位=替换」语义；
+  //   用户在面板选过「内置组件」后存了 ''，走 localStorage 命中，不再自动激活）
+  let neverChosen = true
+  try { neverChosen = localStorage.getItem(slotOwnerKey(slotId)) === null } catch (e) { /* 忽略 */ }
+  if (neverChosen) {
+    const cands = clientSlots.filter(s => s.slotId === slotId && typeof s.render === 'function')
+    if (cands.length === 1) return cands[0].pluginName
+  }
+  return ''
 }
 // setSlotOwner 切换占用者（'' = 恢复内置）。
 export function setSlotOwner(slotId, pluginName) {
@@ -243,7 +257,13 @@ export function loadClientHalf(source) {
   // 语法预检（后端已预检，这里兜底）
   let fn
   try {
-    fn = new Function('ui', '"use strict";\n' + code)
+    // ★ client 半是「函数」形态（(ui) => {...} / function(ui) {...}）：
+    //   必须包装为 return (code)(ui) 立即调用——否则 new Function 只是创建
+    //   箭头函数而不执行，registerSlot 静默失效（status=loaded 但槽位为空，
+    //   UI 插件看起来「没生效」）。多语句/自执行形态代码原样执行。
+    const t = code.trim()
+    const isFnExpr = /^\(?\s*(async\s+)?(\(?\s*ui\s*\)?\s*=>|function\s*\()/.test(t)
+    fn = new Function('ui', '"use strict";\n' + (isFnExpr ? 'return (' + code + ')(ui)' : code))
   } catch (e) {
     console.warn('[plugin] client 半语法错误', source.name, e)
     return null
