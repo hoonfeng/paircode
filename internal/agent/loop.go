@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -250,6 +251,22 @@ func (l *Loop) emit(e Event) {
 	}
 	if l.OnEvent != nil {
 		l.OnEvent(e)
+	}
+	// ★ 一切皆插件：loop 事件桥——广播到全局插件 EventBus（loop:<type> 事件名），
+	//   插件 ctx.on('loop:thinking' / 'loop:tool_call' / 'loop:done' …) 可监听扩展
+	//   循环行为（统计/审计/通知/拦截上报），对齐参考项目 agent-loop 插件包的可扩展面。
+	//   ★ 监听器在锁外同步执行：插件监听器 panic 不能波及核心循环（recover 隔离）。
+	if ph := GetGlobalPluginHost(); ph != nil {
+		if eb := ph.EventBus(); eb != nil && eb.ListenerCount("loop:"+string(e.Type)) > 0 {
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						log.Printf("[loop] 插件监听 loop:%s panic 已隔离: %v", e.Type, r)
+					}
+				}()
+				eb.Emit("loop:"+string(e.Type), e)
+			}()
+		}
 	}
 }
 

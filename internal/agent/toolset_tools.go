@@ -193,7 +193,7 @@ func RegisterToolsetTools(r *Registry, root string, ph *PluginHost) {
 				return "", err
 			}
 			var b strings.Builder
-			fmt.Fprintf(&b, "## 工具集 %s\n- 用途: %s\n- 项目: %s\n- 版本: %s\n- 来源: 工作区\n- 创建: %s\n\n## 插件\n",
+			fmt.Fprintf(&b, "## 工具集 %s\n- 用途: %s\n- 项目: %s\n- 版本: %s\n- 来源: %s\n- 创建: %s\n\n## 插件\n",
 				ts.Name, ts.Description, ts.Project, ts.Version, "工作区", ts.CreatedAt)
 			for _, p := range ts.Plugins {
 				fmt.Fprintf(&b, "- **%s**：%s%s\n", p.Name, p.Purpose, boolStr(p.Client != "", "（含 client 半）", ""))

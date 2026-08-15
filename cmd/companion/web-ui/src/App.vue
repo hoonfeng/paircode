@@ -77,7 +77,17 @@ import { ref, reactive, computed, watch, onMounted, onUnmounted, provide, nextTi
 import { state, savePersistentState, loadPersistentState, applyTheme } from './main.js'
 import api from './api.js'
 import { processAgentEvent, processAgentDone, processStatus, getConvCtxStats } from './agent-events.js'
-import { useSingleSlot, isOverlayActive, syncClientHalves, startPolling, mountListSlot } from './plugin-runtime.js'
+import { useSingleSlot, isOverlayActive, syncClientHalves, startPolling, mountListSlot, registerBuiltinSlot } from './plugin-runtime.js'
+
+// ★ 一切皆插件：内置 UI 区域注册进槽位注册表（内置默认实现），装配视图与插件占用统一。
+//   插件覆盖任一区域 = 插件占用优先于内置（面板「UI 槽位」区可查看/切换）。
+registerBuiltinSlot('titlebar', { title: '标题栏（含 logo/菜单/标题）', desc: '内置默认：内置标题栏布局' })
+registerBuiltinSlot('activitybar', { title: '活动栏（左侧竖条）', desc: '内置默认：内置活动栏组件' })
+registerBuiltinSlot('sidebar', { title: '左侧栏（文件/搜索/Git）', desc: '内置默认：内置 Sidebar 组件' })
+registerBuiltinSlot('editor', { title: '主编辑区（编辑器+终端）', desc: '内置默认：EditorArea + 底部终端面板' })
+registerBuiltinSlot('right-panel', { title: '右侧容器（对话外壳）', desc: '内置默认：RightPanel + 右侧容器' })
+registerBuiltinSlot('statusbar', { title: '状态栏（底部）', desc: '内置默认：内置 StatusBar 组件' })
+registerBuiltinSlot('chat', { title: '对话面板（rp-body 区）', desc: '内置默认：RightPanel 内对话+输入区' })
 
 // ★ 桌面端面板独立模式：desktopbridge 注入 window.__DESKTOP_PANEL_MODE__，
 //   此时只渲染右侧面板（消息展示）占满全屏，隐藏 IDE 其他区域。

@@ -1,6 +1,10 @@
 package agent
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestExtractJSPluginName(t *testing.T) {
 	cases := map[string]string{
@@ -24,24 +28,16 @@ func TestSyncDynamicPluginToToolset(t *testing.T) {
 	if err != nil {
 		t.Fatalf("同步失败: %v", err)
 	}
-	if !strContains(msg, "dynamic") {
-		t.Errorf("返回信息应含 dynamic，实际 %s", msg)
+	// ★ 2026-08-15 重构：动态插件同步到全局插件包（<InstallDir>/.pair/plugins/），不再写工具集。
+	if !strContains(msg, "插件包") {
+		t.Errorf("返回信息应含「插件包」，实际 %s", msg)
 	}
-	ts, err := loadToolset(root, toolsetProject, dynamicToolsetName)
-	if err != nil || len(ts.Plugins) != 1 || ts.Plugins[0].Name != "hello" {
-		t.Fatalf("工具集 dynamic 应有 hello 条目: %+v err=%v", ts, err)
-	}
+	// 清理测试产物（同步目标为全局插件包目录，测试后删除避免污染安装目录）
+	t.Cleanup(func() { _ = os.RemoveAll(filepath.Join(GlobalPluginsPath(), "hello")) })
 	// 同名更新（版本追加场景）
 	def2 := &jsPluginDef{id: "dyn-100", name: "hello", purpose: "更新版", code: `return { name: 'hello', apply(ctx) {} };`}
 	if _, err := syncDynamicPluginToToolset(root, def2, "hello", ""); err != nil {
 		t.Fatalf("更新同步失败: %v", err)
-	}
-	ts, _ = loadToolset(root, toolsetProject, dynamicToolsetName)
-	if len(ts.Plugins) != 1 {
-		t.Errorf("更新后应仍 1 个条目（覆盖），实际 %d", len(ts.Plugins))
-	}
-	if ts.Plugins[0].Purpose != "更新版" {
-		t.Errorf("条目 purpose 应更新，实际 %q", ts.Plugins[0].Purpose)
 	}
 }
 

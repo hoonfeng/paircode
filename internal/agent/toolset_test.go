@@ -7,8 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/hoonfeng/paircode/internal/core"
 )
 
 // mkToolsetGoProject 造一个 Go 项目临时目录（go.mod + main.go）。
@@ -89,8 +87,10 @@ func TestToolsetBuildPersistExportImport(t *testing.T) {
 	if err := importToolsetJSON(host2, project, content, "user"); err != nil {
 		t.Fatalf("importToolsetJSON: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(core.InstallDir(), ".pair", "toolsets", ts.Name+".json")); err != nil {
-		t.Fatalf("全局固化应存在: %v", err)
+	// ★ 无全局工具集（2026-08-15 重构移除）：导入 scope=user 亦回退工作区级，
+	//   断言改为工作区固化文件（原断言 core.InstallDir() 全局固化已无对应语义）。
+	if _, err := os.Stat(filepath.Join(project, ".pair", "toolsets", ts.Name+".json")); err != nil {
+		t.Fatalf("工作区固化应存在: %v", err)
 	}
 	// 新宿主立即装载成功
 	if got := host2.State("git-flow"); got != PluginRunning {
@@ -104,9 +104,8 @@ func TestToolsetBuildPersistExportImport(t *testing.T) {
 	if err := removeToolset(project, toolsetProject, ts.Name); err != nil {
 		t.Fatalf("removeToolset: %v", err)
 	}
-	if err := removeToolset(project, toolsetGlobal, ts.Name); err != nil {
-		t.Fatalf("removeToolset global: %v", err)
-	}
+	// ★ 无全局工具集（2026-08-15 重构移除）：原 removeToolset(project, toolsetGlobal, …)
+	//   已无对应常量，全局副本概念已删，仅保留工作区移除。
 }
 
 // TestToolsetMarketInstall 市场 plugin 类型安装（固化 + 装载）。
@@ -222,8 +221,10 @@ func importToolsetJSON(ph *PluginHost, projectRoot, content, scope string) error
 		return &jsonErr{"导入内容不是有效工具集"}
 	}
 	s := toolsetProject
+	// ★ 无全局工具集（2026-08-15 重构移除）：scope=user 亦回退工作区级，避免引用已删除常量。
+	_ = s
 	if scope == "user" {
-		s = toolsetGlobal
+		s = toolsetProject
 	}
 	if err := saveToolset(projectRoot, s, ts); err != nil {
 		return err

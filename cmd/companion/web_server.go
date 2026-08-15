@@ -55,6 +55,63 @@ var ideRefModalFile embed.FS
 //go:embed web-ui/ide_ref_setmodal.html
 var ideRefSetModalFile embed.FS
 
+// resolveWebDir 解析外部前端目录（磁盘优先，不重新编译改 UI）：
+//  1. WEB_DIR 环境变量（显式指定，如开发时指向 web-ui/dist）
+//  2. exe 旁 web/ 目录（存在则用；不存在则首次从 embed 解压产物）
+//  3. 都不可用返回 ""（使用内嵌资源）
+// ★ 用户改 UI 的路径：改 web-ui/src → npm run build → 拷贝/覆盖到外部目录 → 重启生效，
+//   无需重新编译 Go；或直接编辑外部目录下的产物文件（index.html / assets/*.js）后重启。
+func resolveWebDir() string {
+	if dir := strings.TrimSpace(os.Getenv("WEB_DIR")); dir != "" {
+		if st, err := os.Stat(dir); err == nil && st.IsDir() {
+			return dir
+		}
+		log.Printf("[WebUI] WEB_DIR=%s 不存在，回退内嵌资源", dir)
+		return ""
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	dir := filepath.Join(filepath.Dir(exe), "web")
+	if st, err := os.Stat(dir); err == nil && st.IsDir() {
+		return dir
+	}
+	// 首次启动：从 embed 解压前端产物到 exe 旁 web/，之后用户可直接改该目录。
+	subFS, err := fs.Sub(webUIFiles, "web-ui/dist")
+	if err != nil {
+		return ""
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return ""
+	}
+	ok := true
+	_ = fs.WalkDir(subFS, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dir, filepath.FromSlash(path))
+		if d.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+		data, rerr := fs.ReadFile(subFS, path)
+		if rerr != nil {
+			ok = false
+			return rerr
+		}
+		if werr := os.WriteFile(target, data, 0o644); werr != nil {
+			ok = false
+			return werr
+		}
+		return nil
+	})
+	if ok {
+		return dir
+	}
+	_ = os.RemoveAll(dir)
+	return ""
+}
+
 // webServer 是运行在 companion 内部的 HTTP 服务器。
 type webServer struct {
 	server    *http.Server
@@ -302,12 +359,22 @@ func startWebUI(port int) {
 	go agent.PromptCacheWarmer.WarmUp(buildWebSystemPrompt)
 
 	// ── 静态文件 ──
-	subFS, err := fs.Sub(webUIFiles, "web-ui/dist")
-	if err != nil {
-		log.Printf("[WebUI] 内嵌资源加载失败: %v", err)
-		return
+	// ★ 一切皆插件：前端产物支持磁盘优先（WEB_DIR 环境变量 > exe 旁 web/ 目录），
+	//   fallback 内嵌（//go:embed web-ui/dist）。
+	//   用户改 UI 无需重新编译：npm run build 产物拷到 web/（或直接改 web/ 下产物）→ 重启生效。
+	webDir := resolveWebDir()
+	var fileServer http.Handler
+	if webDir != "" {
+		log.Printf("[WebUI] 使用外部前端目录: %s（改 UI 无需重新编译，重启生效）", webDir)
+		fileServer = http.FileServer(http.Dir(webDir))
+	} else {
+		subFS, err := fs.Sub(webUIFiles, "web-ui/dist")
+		if err != nil {
+			log.Printf("[WebUI] 内嵌资源加载失败: %v", err)
+			return
+		}
+		fileServer = http.FileServer(http.FS(subFS))
 	}
-	fileServer := http.FileServer(http.FS(subFS))
 	// 禁止浏览器缓存前端文件（避免 Edge 等浏览器加载旧版本 JS/CSS）
 	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")

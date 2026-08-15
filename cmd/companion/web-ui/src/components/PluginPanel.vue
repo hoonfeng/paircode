@@ -96,12 +96,12 @@
         <div class="pp-slot-info">
           <span class="pp-slot-id">{{ g.slotId }}</span>
           <span class="pp-slot-kind">{{ g.kind === 'list' ? '叠加' : '替换' }}</span>
-          <span class="pp-slot-owner" :class="{ builtin: !g.owner }">{{ g.owner ? g.owner : '内置组件' }}</span>
+          <span class="pp-slot-owner" :class="{ builtin: !g.owner }">{{ g.owner ? g.owner : (g.builtin ? '内置组件' : '（无宿主）') }}</span>
         </div>
-        <!-- single 槽位：下拉切换占用者；list 槽位：勾选叠加（全部渲染） -->
+        <!-- single 槽位：下拉切换占用者（内置默认 / 插件占用者） -->
         <select v-if="g.kind !== 'list'" class="pp-input pp-slot-select" :value="g.owner" @change="switchSlot(g.slotId, $event.target.value)"
                 :title="'切换 ' + g.slotId + ' 区域的渲染者'">
-          <option value="">内置组件（默认）</option>
+          <option value="">{{ g.builtin ? '内置组件（默认）' : '（未占用）' }}</option>
           <option v-for="c in g.candidates" :key="c.pluginName" :value="c.pluginName">{{ c.pluginName }} · {{ c.title }}</option>
         </select>
         <div v-else class="pp-slot-list">
@@ -232,7 +232,7 @@
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import api from '../api.js'
 import SvgIcon from './SvgIcon.vue'
-import { clientPanels, clientSlots, syncClientHalves, unloadClientHalf, startPolling, stopPolling, setPanelMount, setSlotMount, getUIFor, getSlotCandidates, getSlotOwner, setSlotOwner, emitSlotChanged, isOverlayActive, setOverlayActive } from '../plugin-runtime.js'
+import { clientPanels, clientSlots, syncClientHalves, unloadClientHalf, startPolling, stopPolling, setPanelMount, setSlotMount, getUIFor, getSlotCandidates, getSlotOwner, setSlotOwner, emitSlotChanged, isOverlayActive, setOverlayActive, getBuiltinSlots } from '../plugin-runtime.js'
 
 const plugins = ref([])
 const loading = ref(false)
@@ -525,18 +525,25 @@ function onPanelsChanged(panels) {
   renderActivePanel()
 }
 
-// ─── UI 槽位管理（Slot 系统）────────────────────────────────
+// ─── UI 槽位管理（Slot 系统：内置区域 + 插件占用统一装配视图）────────────────
 const slotGroups = ref([])
 let slotUnsub = null
 
 function refreshSlots() {
   // ★ 按 (slotId, kind) 分组：同一区域可同时有 single 替换与 list 叠加占用
   //   （如 activitybar），两类控件（下拉/勾选）互不干扰。
-  const keys = [...new Set(clientSlots.map(s => s.slotId + '::' + s.kind))]
+  // ★ 一切皆插件：内置区域（builtinSlotDefs）也纳入装配视图——每行显示
+  //   「内置默认 / 插件占用者」，插件注册槽位后出现在下拉可切换。
+  const builtins = getBuiltinSlots()
+  const keys = [...new Set([
+    ...builtins.map(s => s.slotId + '::' + s.kind),
+    ...clientSlots.map(s => s.slotId + '::' + s.kind),
+  ])]
   slotGroups.value = keys.map(k => {
     const [slotId, kind] = k.split('::')
     const candidates = getSlotCandidates(slotId).filter(c => c.kind === kind)
-    return { slotId, kind, owner: getSlotOwner(slotId), candidates }
+    const builtinDef = builtins.find(b => b.slotId === slotId && b.kind === kind)
+    return { slotId, kind, owner: getSlotOwner(slotId), candidates, builtin: builtinDef || null }
   })
 }
 
