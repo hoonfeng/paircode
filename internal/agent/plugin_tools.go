@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 )
@@ -122,6 +123,17 @@ func RegisterCordisTools(registry *Registry, host *PluginHost, root string) {
 	})
 
 	registry.Register(&Tool{
+		Name:        "cordis_service_list",
+		Description: "列出宿主可用服务及其方法签名（写插件时先查询：inject 声明硬依赖 / ctx.get(name) 读可选服务）。静态服务（fs/web/bash/logger/timer/tools/events）声明后按 ctx.xxx 属性访问；动态服务（ctx.provide）用 ctx.get 读取。",
+		Category:    "system",
+		ReadOnly:    true,
+		Parameters:  objSchema(map[string]any{}),
+		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			return cordisServiceList(host), nil
+		},
+	})
+
+	registry.Register(&Tool{
 		Name:        "cordis_undefine",
 		Description: "删除一个 JS 动态插件定义：先停止（若在运行），再忘掉它。定义消失后 cordis_run 不再可用。",
 		Category:    "system",
@@ -136,6 +148,47 @@ func RegisterCordisTools(registry *Registry, host *PluginHost, root string) {
 			return fmt.Sprintf("已删除插件定义 %s。", id), nil
 		},
 	})
+}
+
+// cordisServiceList 渲染宿主可用服务目录（cordis_service_list）。
+func cordisServiceList(host *PluginHost) string {
+	var sb strings.Builder
+	sb.WriteString("## Services（inject 声明后按 ctx.xxx 访问；可选服务用 ctx.get(name) 判 undefined）\n")
+	static := []struct {
+		name string
+		api  string
+	}{
+		{"fs", "工作区受限文件服务（越界拦截）：readFile(path)→string / writeFile(path, content) / appendFile(path, content) / exists(path)→bool / readdir(path)→[]string / stat(path)→{name,size,isDir,mtime} / mkdir(path, recursive?) / rm(path, recursive?)"},
+		{"web", "HTTP 服务：fetch(url)→{ok, status, text}（GET，60s 超时，4MB 上限）"},
+		{"bash", "shell 命令：exec(cmd, cwd?)→{output, error}（120s 超时，cwd 相对工作区根）"},
+		{"logger", "日志：logger(scope)→{log, info, warn, debug, error}（带插件标签写透宿主 stdout）"},
+		{"timer", "定时器：timeout(fn, ms) / interval(fn, ms)→取消函数（卸载自动清理）"},
+		{"tools", "工具注册：register({name, description, parameters, execute}) / list()"},
+		{"events", "事件：on(name, fn) / emit(name, payload)"},
+		{"app", "宿主信息：workspaceRoot"},
+		{"workspaceRoot", "工作区根路径（字符串）"},
+		{"store", "会话存储（ConversationStore）"},
+	}
+	for _, s := range static {
+		fmt.Fprintf(&sb, "- **%s**：%s\n", s.name, s.api)
+	}
+	// 动态服务（ctx.provide / ctx.get）
+	var dyn []string
+	host.ctx.servicesMu.RLock()
+	for n := range host.ctx.services {
+		dyn = append(dyn, n)
+	}
+	host.ctx.servicesMu.RUnlock()
+	sort.Strings(dyn)
+	if len(dyn) > 0 {
+		sb.WriteString("\n## Dynamic services（ctx.provide 注册，ctx.get(name) 读取）\n")
+		for _, n := range dyn {
+			fmt.Fprintf(&sb, "- %s\n", n)
+		}
+	} else {
+		sb.WriteString("\n（当前无动态服务）\n")
+	}
+	return sb.String()
 }
 
 // resolvePluginName 把 dyn id 或插件名解析为插件名。

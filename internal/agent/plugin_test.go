@@ -961,3 +961,281 @@ return {
 		t.Fatalf("bash_probe: out=%q err=%v", out, err)
 	}
 }
+
+// ─── P1：VM 同步超时防护 ─────────────────────────────────
+
+// TestJSTimeoutProtection 死循环插件（求值/apply/工具 execute）被 goja
+// Interrupt 强制中断：进程不卡死、错误信息明确、超时后 VM 可继续使用。
+func TestJSTimeoutProtection(t *testing.T) {
+	// 调小超时加快测试（同包测试串行，无并发竞争）
+	oldTool := jsToolTimeout
+	oldEval := jsEvalTimeout
+	oldApply := jsApplyTimeout
+	jsToolTimeout = 500 * time.Millisecond
+	jsEvalTimeout = 500 * time.Millisecond
+	jsApplyTimeout = 500 * time.Millisecond
+	defer func() {
+		jsToolTimeout = oldTool
+		jsEvalTimeout = oldEval
+		jsApplyTimeout = oldApply
+	}()
+
+	// ① 求值死循环：DefineJS 仅编译（不执行），LoadJSDynamic 求值时死循环 → 超时中断
+	host := NewPluginHost(NewRegistry(), nil, `C:\ws`)
+	id, err := host.DefineJS(`while (true) {}`, "infinite eval")
+	if err != nil {
+		t.Fatalf("DefineJS（仅编译）应通过: %v", err)
+	}
+	def, _ := host.GetJSDef(id)
+	start := time.Now()
+	err = host.LoadJSDynamic(def)
+	if err == nil {
+		t.Fatalf("死循环求值应报错")
+	}
+	if !strings.Contains(err.Error(), "求值超时") {
+		t.Fatalf("应提示求值超时, got %v", err)
+	}
+	if time.Since(start) > 20*time.Second {
+		t.Fatalf("超时中断耗时过长: %v", time.Since(start))
+	}
+
+	// ② apply 死循环
+	id2, _ := host.DefineJS(`return { name: 'apply-hang', apply() { while (true) {} } }`, "apply hang")
+	def2, _ := host.GetJSDef(id2)
+	err = host.LoadJSDynamic(def2)
+	if err == nil || !strings.Contains(err.Error(), "apply 执行超时") {
+		t.Fatalf("apply 死循环应报超时, got %v", err)
+	}
+
+	// ③ 工具 execute 死循环
+	reg := NewRegistry()
+	host2 := NewPluginHost(reg, nil, `C:\ws`)
+	id3, _ := host2.DefineJS(`
+return {
+  name: 'tool-hang',
+  apply(ctx) {
+    ctx.tools.register({
+      name: 'hang_tool',
+      description: 'infinite loop',
+      execute: () => { while (true) {} }
+    })
+  }
+}`, "tool hang")
+	def3, _ := host2.GetJSDef(id3)
+	if err := host2.LoadJSDynamic(def3); err != nil {
+		t.Fatalf("装载: %v", err)
+	}
+	start = time.Now()
+	_, err = reg.Execute(context.Background(), "hang_tool", `{}`)
+	if err == nil || !strings.Contains(err.Error(), "执行超时") {
+		t.Fatalf("工具死循环应报超时, got %v", err)
+	}
+	if time.Since(start) > 20*time.Second {
+		t.Fatalf("工具超时中断耗时过长: %v", time.Since(start))
+	}
+
+	// ④ 超时后 VM/进程仍健康：再装载正常插件 + 执行工具（ClearInterrupt 已清 flag）
+	id4, _ := host2.DefineJS(`
+return {
+  name: 'after-timeout',
+  apply(ctx) { ctx.tools.register({ name: 'ok_after', description: 'ok', execute: () => ({ text: 'alive' }) }) }
+}`, "after")
+	def4, _ := host2.GetJSDef(id4)
+	if err := host2.LoadJSDynamic(def4); err != nil {
+		t.Fatalf("超时后新插件装载失败（VM 状态污染）: %v", err)
+	}
+	out, err := reg.Execute(context.Background(), "ok_after", `{}`)
+	if err != nil || !strings.Contains(out, "alive") {
+		t.Fatalf("超时后工具执行异常: out=%q err=%v", out, err)
+	}
+}
+
+// ─── P1：工具 schema 规范化（'json' type / $ref / 定义期校验）──────────────
+
+// TestJSToolSchemaNormalization 工具 schema：'json' type → 移除（任意值）；
+// $ref → 内联解析；非法 type → 定义期（apply）明确报错。
+func TestJSToolSchemaNormalization(t *testing.T) {
+	reg := NewRegistry()
+	host := NewPluginHost(reg, nil, `C:\ws`)
+	id, err := host.DefineJS(`
+return {
+  name: 'schema-plugin',
+  apply(ctx) {
+    ctx.tools.register({
+      name: 'schema_tool',
+      description: 'schema normalized tool',
+      parameters: {
+        type: 'object',
+        properties: {
+          payload: { type: 'json' },
+          user: { $ref: '#/$defs/user' }
+        },
+        $defs: {
+          user: { type: 'object', properties: { id: { type: 'integer' } } }
+        }
+      },
+      execute: (args) => ({ text: 'schema-ok' })
+    })
+  }
+}`, "schema")
+	if err != nil {
+		t.Fatalf("DefineJS: %v", err)
+	}
+	def, _ := host.GetJSDef(id)
+	if err := host.LoadJSDynamic(def); err != nil {
+		t.Fatalf("LoadJSDynamic: %v", err)
+	}
+	tool, ok := reg.Get("schema_tool")
+	if !ok {
+		t.Fatalf("schema_tool 未注册")
+	}
+	props := tool.Parameters["properties"].(map[string]any)
+	payload, _ := props["payload"].(map[string]any)
+	if _, hasType := payload["type"]; hasType {
+		t.Fatalf("payload 的 'json' type 应被移除, got %v", payload)
+	}
+	user, _ := props["user"].(map[string]any)
+	if _, hasRef := user["$ref"]; hasRef {
+		t.Fatalf("user 的 $ref 应被内联, got %v", user)
+	}
+	if user["type"] != "object" {
+		t.Fatalf("user 内联后应有 type=object, got %v", user)
+	}
+	// 工具可正常执行
+	out, err := reg.Execute(context.Background(), "schema_tool", `{}`)
+	if err != nil || !strings.Contains(out, "schema-ok") {
+		t.Fatalf("schema_tool: out=%q err=%v", out, err)
+	}
+
+	// ② 非法 type → apply 期（registerTool）明确报错
+	id2, _ := host.DefineJS(`
+return {
+  name: 'bad-schema',
+  apply(ctx) {
+    ctx.tools.register({
+      name: 'bad_tool',
+      description: 'bad',
+      parameters: { type: 'wat', properties: {} },
+      execute: () => ({ text: 'x' })
+    })
+  }
+}`, "bad schema")
+	def2, _ := host.GetJSDef(id2)
+	err = host.LoadJSDynamic(def2)
+	if err == nil || !strings.Contains(err.Error(), "schema 非法") {
+		t.Fatalf("非法 type 应定义期报错, got %v", err)
+	}
+}
+
+// ─── P2：同名冲突 + 服务目录 + patch 装配 ────────────────
+
+// TestJSPluginToolNameConflict 插件工具同名冲突：宿主已有工具/其他插件工具
+// 不能被静默覆盖；Unload 后归属释放，可再次注册。
+func TestJSPluginToolNameConflict(t *testing.T) {
+	reg := NewRegistry()
+	host := NewPluginHost(reg, nil, `C:\ws`)
+	// ① 覆盖宿主已有工具名 → 明确报错
+	reg.Register(&Tool{Name: "host_tool", Description: "host", Handler: func(ctx context.Context, args map[string]any) (string, error) { return "", nil }})
+	id, _ := host.DefineJS(`
+return {
+  name: 'conflict-1',
+  apply(ctx) {
+    ctx.tools.register({ name: 'host_tool', description: 'clash', execute: () => ({ text: 'x' }) })
+  }
+}`, "conflict1")
+	def, _ := host.GetJSDef(id)
+	err := host.LoadJSDynamic(def)
+	if err == nil || !strings.Contains(err.Error(), "宿主内置") {
+		t.Fatalf("覆盖宿主工具应报错, got %v", err)
+	}
+	// ② 两插件注册同名工具 → 第二个报错（含占用方与处理建议）
+	load := func(name, toolName string) error {
+		pid, _ := host.DefineJS(`
+return {
+  name: '`+name+`',
+  apply(ctx) {
+    ctx.tools.register({ name: '`+toolName+`', description: 'x', execute: () => ({ text: 'x' }) })
+  }
+}`, name)
+		d, _ := host.GetJSDef(pid)
+		return host.LoadJSDynamic(d)
+	}
+	if err := load("plugin-a", "shared_tool"); err != nil {
+		t.Fatalf("plugin-a 注册应成功: %v", err)
+	}
+	err = load("plugin-b", "shared_tool")
+	if err == nil || !strings.Contains(err.Error(), "已被插件 plugin-a 注册") {
+		t.Fatalf("plugin-b 同名应报错, got %v", err)
+	}
+	// ③ Unload plugin-a 后归属释放 → plugin-c 可注册同名
+	if err := host.Unload("plugin-a"); err != nil {
+		t.Fatal(err)
+	}
+	if err := load("plugin-c", "shared_tool"); err != nil {
+		t.Fatalf("Unload 后应可再注册: %v", err)
+	}
+}
+
+// TestCordisServiceList 服务目录工具：静态服务清单 + 动态服务（ctx.provide）。
+func TestCordisServiceList(t *testing.T) {
+	reg := NewRegistry()
+	host := NewPluginHost(reg, nil, `C:\ws`)
+	RegisterCordisTools(reg, host, `C:\ws`)
+	// 提供动态服务后目录应列出
+	pc := host.Context()
+	cancel := pc.Provide("demoService", map[string]any{"ok": true})
+	defer cancel()
+	out, err := reg.Execute(context.Background(), "cordis_service_list", `{}`)
+	if err != nil {
+		t.Fatalf("cordis_service_list: %v", err)
+	}
+	for _, want := range []string{"fs", "web", "bash", "logger", "timer", "demoService"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("服务目录缺 %s:\n%s", want, out)
+		}
+	}
+}
+
+// TestLoadCordisPatch cordis.patch.json 静态装配：文件不存在正常返回；
+// 合法条目装载（config 透传）；坏 JSON 报错。
+func TestLoadCordisPatch(t *testing.T) {
+	dir := t.TempDir()
+	reg := NewRegistry()
+	host := NewPluginHost(reg, nil, dir)
+	// 文件不存在 → nil
+	if err := host.LoadCordisPatch(filepath.Join(dir, "nope.json")); err != nil {
+		t.Fatalf("无装配文件应返回 nil: %v", err)
+	}
+	// 合法装配
+	patch := filepath.Join(dir, "cordis.patch.json")
+	content := `{
+  "plugins": [
+    {
+      "purpose": "patch demo",
+      "config": { "who": "patch" },
+      "code": "return { name: 'patch-plugin', apply(ctx, config) { ctx.tools.register({ name: 'patch_hi', description: 'patch', execute: () => ({ text: 'hi ' + (config ? config.who : 'x') }) }) } }"
+    }
+  ]
+}`
+	if err := os.WriteFile(patch, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := host.LoadCordisPatch(patch); err != nil {
+		t.Fatalf("LoadCordisPatch: %v", err)
+	}
+	if host.State("patch-plugin") != PluginRunning {
+		t.Fatalf("patch-plugin 应 running")
+	}
+	out, err := reg.Execute(context.Background(), "patch_hi", `{}`)
+	if err != nil || !strings.Contains(out, "hi patch") {
+		t.Fatalf("patch_hi: out=%q err=%v", out, err)
+	}
+	// 坏 JSON → 报错
+	bad := filepath.Join(dir, "bad.json")
+	if err := os.WriteFile(bad, []byte("{not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := host.LoadCordisPatch(bad); err == nil {
+		t.Fatalf("坏 JSON 应报错")
+	}
+}

@@ -23,6 +23,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -34,6 +35,53 @@ import (
 
 	"wb-ui/goja"
 )
+
+// ─── JS 执行超时防护（goja Interrupt）─────────────────────
+
+// JS 执行超时值：防插件死循环卡死进程（goja RunString/函数调用在 JS 代码
+// 内可被 Interrupt 强制中断；原生 Go 调用如 ctx.fs/web/bash 自身带超时）。
+// var 而非 const：测试中可调小验证超时路径。
+var (
+	jsEvalTimeout     = 5 * time.Second  // 插件代码求值（RunString）
+	jsApplyTimeout    = 5 * time.Second  // apply(ctx, config)
+	jsToolTimeout     = 30 * time.Second // 工具 execute
+	jsHandlerTimeout  = 10 * time.Second // harness.handle 方法
+	jsCallbackTimeout = 5 * time.Second  // 事件/timer 回调
+)
+
+// jsTimeoutErr VM 执行超时标记（vm.Interrupt 携带值）。
+var jsTimeoutErr = errors.New("JS 执行超时（疑似死循环，已强制中断）")
+
+// runJSWithTimeout 在 vm 上带超时执行同步 JS 调用 fn。
+// 超时经 vm.Interrupt 在 JS 指令边界强制中断（返回 *goja.InterruptedError，
+// Value() == jsTimeoutErr）。线程安全：Interrupt 可从其他 goroutine 调用。
+// fn 正常返回后清除 interrupt flag，避免与超时 goroutine 竞争污染下一次调用。
+func runJSWithTimeout(vm *goja.Runtime, timeout time.Duration, fn func() error) error {
+	if timeout <= 0 {
+		return fn()
+	}
+	stopped := make(chan struct{})
+	go func() {
+		select {
+		case <-time.After(timeout):
+			vm.Interrupt(jsTimeoutErr)
+		case <-stopped:
+		}
+	}()
+	err := fn()
+	close(stopped)
+	vm.ClearInterrupt() // 竞态消除：JS 结束后 goroutine 若已置位 interrupt flag，清除之
+	return err
+}
+
+// isJSTimeout 判断 err 是否为 runJSWithTimeout 的超时中断。
+func isJSTimeout(err error) bool {
+	var ie *goja.InterruptedError
+	if errors.As(err, &ie) {
+		return ie.Value() == jsTimeoutErr
+	}
+	return errors.Is(err, jsTimeoutErr)
+}
 
 // ─── JS 插件定义 ───────────────────────────────────────────
 
@@ -135,9 +183,15 @@ func (p *jsPluginAdapter) Apply(pc *PluginContext) error {
 	if p.def.config != nil {
 		configVal = p.vm.ToValue(p.def.config)
 	}
-	_, callErr := p.applyFn(goja.Undefined(), ctxObj, configVal)
-	if callErr != nil {
-		return fmt.Errorf("JS 插件 %s apply 执行失败: %v", p.def.name, jsErrorText(callErr))
+	applyErr := runJSWithTimeout(p.vm, jsApplyTimeout, func() error {
+		_, err := p.applyFn(goja.Undefined(), ctxObj, configVal)
+		return err
+	})
+	if applyErr != nil {
+		if isJSTimeout(applyErr) {
+			return fmt.Errorf("JS 插件 %s apply 执行超时（%.0fs，疑似死循环，已强制中断）", p.def.name, jsApplyTimeout.Seconds())
+		}
+		return fmt.Errorf("JS 插件 %s apply 执行失败: %v", p.def.name, jsErrorText(applyErr))
 	}
 	return nil
 }
@@ -188,12 +242,12 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 		cancel := pc.On(evt, func(payload any) {
 			// 事件可能在任意 goroutine 触发 → 执行锁保护
 			p.withLock(func() {
-				defer func() {
-					if r := recover(); r != nil {
-						log.Printf("[js-plugin:%s] 事件 %s 回调异常: %v", p.def.id, evt, r)
-					}
-				}()
-				_, _ = fn(goja.Undefined(), vm.ToValue(payload))
+				if err := runJSWithTimeout(p.vm, jsCallbackTimeout, func() error {
+					_, err := fn(goja.Undefined(), vm.ToValue(payload))
+					return err
+				}); err != nil {
+					log.Printf("[js-plugin:%s] 事件 %s 回调异常: %v", p.def.id, evt, err)
+				}
 			})
 		})
 		_ = cancel
@@ -229,12 +283,12 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 			d := time.Duration(ms) * time.Millisecond
 			fire := func() {
 				p.withLock(func() {
-					defer func() {
-						if r := recover(); r != nil {
-							log.Printf("[js-plugin:%s] timer 回调异常: %v", p.def.id, r)
-						}
-					}()
-					_, _ = fn(goja.Undefined())
+					if err := runJSWithTimeout(p.vm, jsCallbackTimeout, func() error {
+						_, err := fn(goja.Undefined())
+						return err
+					}); err != nil {
+						log.Printf("[js-plugin:%s] timer 回调异常: %v", p.def.id, err)
+					}
 				})
 			}
 			var cancel func()
@@ -283,7 +337,9 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 		if tErr != nil {
 			panic(vm.NewGoError(tErr))
 		}
-		pc.RegisterTool(tool)
+		if rErr := pc.RegisterTool(tool); rErr != nil {
+			panic(vm.NewGoError(rErr))
+		}
 		return goja.Undefined()
 	})
 	toolsObj.Set("list", func(call goja.FunctionCall) goja.Value {
@@ -653,7 +709,13 @@ func evalJSPlugin(vm *goja.Runtime, code, id string) (*goja.Object, error) {
 	})
 
 	src := "(async () => {\n" + code + "\n})().then(__resolve, e => __resolve({ __error: String(e) }))"
-	if _, err := vm.RunString(src); err != nil {
+	if err := runJSWithTimeout(vm, jsEvalTimeout, func() error {
+		_, err := vm.RunString(src)
+		return err
+	}); err != nil {
+		if isJSTimeout(err) {
+			return nil, fmt.Errorf("插件 %s 求值超时（%.0fs，疑似死循环，已强制中断）", id, jsEvalTimeout.Seconds())
+		}
 		return nil, fmt.Errorf("插件 %s 语法错误: %v", id, jsErrorText(err))
 	}
 	<-done // 微任务已同步 drain，通道即时关闭
@@ -810,9 +872,12 @@ func injectHarness(vm *goja.Runtime, adapter *jsPluginAdapter, pc *PluginContext
 			panic(vm.NewGoError(err))
 		}
 		if pc != nil {
-			pc.RegisterTool(tool)
+			err = pc.RegisterTool(tool)
 		} else {
-			adapter.host.Context().RegisterTool(tool)
+			err = adapter.host.Context().RegisterTool(tool)
+		}
+		if err != nil {
+			panic(vm.NewGoError(err))
 		}
 		return goja.Undefined()
 	})
@@ -829,12 +894,17 @@ func injectHarness(vm *goja.Runtime, adapter *jsPluginAdapter, pc *PluginContext
 			var hErr error
 			// Invoke 可能来自任意 goroutine → 执行锁保护
 			adapter.withLock(func() {
-				defer func() {
-					if r := recover(); r != nil {
-						hErr = fmt.Errorf("handler %s 异常: %v", method, r)
+				if e := runJSWithTimeout(adapter.vm, jsHandlerTimeout, func() error {
+					r, err := fn(goja.Undefined(), vm.ToValue(args))
+					res = r
+					return err
+				}); e != nil {
+					if isJSTimeout(e) {
+						hErr = fmt.Errorf("handler %s 执行超时（疑似死循环，已强制中断）", method)
+					} else {
+						hErr = fmt.Errorf("handler %s 异常: %v", method, jsErrorText(e))
 					}
-				}()
-				res, hErr = fn(goja.Undefined(), vm.ToValue(args))
+				}
 			})
 			if hErr != nil {
 				return nil, hErr
@@ -849,6 +919,120 @@ func injectHarness(vm *goja.Runtime, adapter *jsPluginAdapter, pc *PluginContext
 }
 
 // ─── JS 工具定义 → Go Tool 桥 ─────────────────────────────
+
+// jsSchemaValidTypes JSON Schema 合法 type（含 harness 扩展 'json'）。
+var jsSchemaValidTypes = map[string]bool{
+	"string": true, "number": true, "integer": true, "boolean": true,
+	"object": true, "array": true, "null": true, "json": true,
+}
+
+// normalizeToolSchema 规范化插件工具参数 schema（不修改入参，返回新 map）：
+//   - type: 'json'（harness 扩展，非标准 JSON Schema type）→ 移除 type（=任意值，
+//     避免 LLM function-calling 端误读）
+//   - $ref: '#/$defs/x' / '#/definitions/x' → 从同 schema 定义表内联解析（深度受限）；
+//     无法解析的 $ref → 移除（避免 LLM 端收到悬空引用）
+func normalizeToolSchema(params map[string]any) map[string]any {
+	if params == nil {
+		return nil
+	}
+	defs := map[string]any{}
+	if d, ok := params["$defs"].(map[string]any); ok {
+		for k, v := range d {
+			defs[k] = v
+		}
+	}
+	if d, ok := params["definitions"].(map[string]any); ok {
+		for k, v := range d {
+			defs[k] = v
+		}
+	}
+	seen := map[string]bool{}
+	var walk func(m map[string]any, depth int)
+	walk = func(m map[string]any, depth int) {
+		if depth > 8 {
+			return
+		}
+		if ref, ok := m["$ref"].(string); ok && ref != "" {
+			if strings.HasPrefix(ref, "#/$defs/") || strings.HasPrefix(ref, "#/definitions/") {
+				key := strings.TrimPrefix(strings.TrimPrefix(ref, "#/$defs/"), "#/definitions/")
+				key = strings.ReplaceAll(key, "~1", "/")
+				key = strings.ReplaceAll(key, "~0", "~")
+				if sub, ok := defs[key]; ok {
+					if sm, ok := sub.(map[string]any); ok && !seen[key] {
+						seen[key] = true
+						walk(sm, depth+1)
+						delete(m, "$ref")
+						for k, v := range sm {
+							m[k] = v
+						}
+						return
+					}
+				}
+			}
+			delete(m, "$ref") // 无法解析的 $ref：移除
+		}
+		if t, ok := m["type"].(string); ok && t == "json" {
+			delete(m, "type") // 'json' → 任意值
+		}
+		if props, ok := m["properties"].(map[string]any); ok {
+			for _, p := range props {
+				if pm, ok := p.(map[string]any); ok {
+					walk(pm, depth+1)
+				}
+			}
+		}
+		if items, ok := m["items"].(map[string]any); ok {
+			walk(items, depth+1)
+		}
+		for _, key := range []string{"allOf", "anyOf", "oneOf"} {
+			if arr, ok := m[key].([]any); ok {
+				for _, b := range arr {
+					if bm, ok := b.(map[string]any); ok {
+						walk(bm, depth+1)
+					}
+				}
+			}
+		}
+	}
+	walk(params, 0)
+	return params
+}
+
+// validateToolSchema 定义期校验插件工具参数 schema（轻量：type 合法性 + 结构要点）。
+// 不合法返回 error——cordis_define/registerTool 提前暴露，避免运行期才崩。
+func validateToolSchema(params map[string]any) error {
+	if params == nil {
+		return nil
+	}
+	if t, ok := params["type"]; ok {
+		switch tv := t.(type) {
+		case string:
+			if !jsSchemaValidTypes[tv] {
+				return fmt.Errorf("type %q 非法（合法: string/number/integer/boolean/object/array/null/json）", tv)
+			}
+		case []any:
+			for _, e := range tv {
+				s, ok := e.(string)
+				if !ok || !jsSchemaValidTypes[s] {
+					return fmt.Errorf("type 数组含非法值 %v", e)
+				}
+			}
+		default:
+			return fmt.Errorf("type 必须是字符串或数组, got %T", t)
+		}
+	}
+	if props, ok := params["properties"]; ok {
+		if _, ok := props.(map[string]any); !ok {
+			return fmt.Errorf("properties 必须是对象")
+		}
+	}
+	if _, ok := params["items"]; ok {
+		if t, _ := params["type"].(string); t != "array" {
+			return fmt.Errorf("items 仅在 type=array 时允许")
+		}
+	}
+	return nil
+}
 
 // jsToolToGo 把 JS 工具定义对象转成 *Tool。
 // 支持 execute: (args) => result | Promise<result>（result 可为 {text} 或任意 JSON 值）。
@@ -871,6 +1055,11 @@ func jsToolToGo(vm *goja.Runtime, v goja.Value, lockFn func(func())) (*Tool, err
 			params = m
 		}
 	}
+	// P1: schema 规范化 + 定义期校验（'json' type → 任意值；$ref 内联；非法结构提前报错）
+	if err := validateToolSchema(params); err != nil {
+		return nil, fmt.Errorf("工具 %s 参数 schema 非法: %v", name.String(), err)
+	}
+	params = normalizeToolSchema(params)
 	execVal := obj.Get("execute")
 	if execVal == nil || goja.IsUndefined(execVal) || goja.IsNull(execVal) {
 		return nil, fmt.Errorf("工具 %s 缺少 execute 函数", name.String())
@@ -884,9 +1073,18 @@ func jsToolToGo(vm *goja.Runtime, v goja.Value, lockFn func(func())) (*Tool, err
 		var out string
 		var hErr error
 		run := func() {
-			res, err := execFn(goja.Undefined(), vm.ToValue(args))
-			if err != nil {
-				hErr = fmt.Errorf("JS 工具 %s 执行失败: %v", name.String(), jsErrorText(err))
+			var res goja.Value
+			execErr := runJSWithTimeout(vm, jsToolTimeout, func() error {
+				r, err := execFn(goja.Undefined(), vm.ToValue(args))
+				res = r
+				return err
+			})
+			if execErr != nil {
+				if isJSTimeout(execErr) {
+					hErr = fmt.Errorf("JS 工具 %s 执行超时（%.0fs，疑似死循环，已强制中断）", name.String(), jsToolTimeout.Seconds())
+				} else {
+					hErr = fmt.Errorf("JS 工具 %s 执行失败: %v", name.String(), jsErrorText(execErr))
+				}
 				return
 			}
 			out, hErr = jsResultToText(vm, res)
@@ -1113,4 +1311,53 @@ func (h *PluginHost) JSDefs() []*jsPluginDef {
 	}
 	sort.Slice(defs, func(i, j int) bool { return defs[i].id < defs[j].id })
 	return defs
+}
+
+// ─── 静态插件装配（cordis.patch.json，P2）──────────────────
+
+// LoadCordisPatch 从 JSON 文件装配静态插件（跨重启存续，对齐 harness
+// cordis.yml 的叶子装配入口，简化为零依赖 JSON）：
+//
+//	{ "plugins": [ { "code": "...", "language": "js|ts", "purpose": "...", "config": {...} } ] }
+//
+// 文件不存在 → 正常返回（无装配）；条目失败不致命（log 警告，继续后续条目）。
+func (h *PluginHost) LoadCordisPatch(path string) error {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil // 无装配文件 = 正常
+		}
+		return err
+	}
+	var doc struct {
+		Plugins []struct {
+			Code     string         `json:"code"`
+			Language string         `json:"language"`
+			Purpose  string         `json:"purpose"`
+			Config   map[string]any `json:"config"`
+		} `json:"plugins"`
+	}
+	if err := json.Unmarshal(b, &doc); err != nil {
+		return fmt.Errorf("cordis patch 解析失败: %v", err)
+	}
+	for i, p := range doc.Plugins {
+		if strings.TrimSpace(p.Code) == "" {
+			continue
+		}
+		id, err := h.DefineJSCodeDir(p.Code, p.Language, p.Purpose, "")
+		if err != nil {
+			log.Printf("[cordis-patch] 第 %d 个插件登记失败: %v", i+1, err)
+			continue
+		}
+		def, _ := h.GetJSDef(id)
+		if p.Config != nil {
+			def.config = p.Config
+		}
+		if err := h.LoadJSDynamic(def); err != nil {
+			log.Printf("[cordis-patch] 插件 %s 装载失败: %v", id, err)
+			continue
+		}
+		log.Printf("[cordis-patch] 插件 %s (%s) 已装配", def.name, id)
+	}
+	return nil
 }

@@ -1020,9 +1020,12 @@ func harnessSystemPrompt(roots []string) string {
 		"- 插件 ctx 能力：ctx.tools.register 注册工具、ctx.on 订阅事件、ctx.effect 注册清理回调、\n" +
 		"  ctx.provide 提供服务、ctx.timeout/ctx.interval 定时器（定时/事件/工具回调跨 goroutine 安全）。\n" +
 		"- 服务依赖：inject: ['fs','web','bash','logger','timer'] 声明硬依赖（宿主缺失会明确报错，\n" +
-		"  可选服务请用 ctx.get(name) 判 undefined）。声明后可用：ctx.fs（工作区内文件读写/存在/列出/stat）、\n" +
+		"  可选服务请用 ctx.get(name) 判 undefined；写插件前先用 cordis_service_list 查询可用服务与签名）。\n" +
+		"  声明后可用：ctx.fs（工作区内文件读写/存在/列出/stat）、\n" +
 		"  ctx.web.fetch（HTTP GET → {ok,status,text}）、ctx.bash.exec（shell 命令 → {output,error}）、\n" +
 		"  ctx.logger(scope)（带插件标签日志）、ctx.timer（timeout/interval）。\n" +
+		"- 工具同名冲突会被拒绝（不能覆盖宿主或他人插件工具）；.pair/cordis.patch.json 可装配\n" +
+		"  跨重启存续的静态插件。\n" +
 		"- 需要重复使用的能力优先沉淀为插件工具（一次定义，多会话复用）。\n"
 }
 

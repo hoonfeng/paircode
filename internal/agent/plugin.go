@@ -209,12 +209,37 @@ func (c *PluginContext) Effect(fn func()) {
 }
 
 // RegisterTool 注册工具（ctx.tools.register），记入本插件名下以便 Unload 回收。
-func (c *PluginContext) RegisterTool(t *Tool) {
+// ★ 同名冲突检测（P2）：插件不能静默覆盖宿主内置工具或其他插件的工具；
+//   冲突返回明确错误（含占用方与处理建议）。
+func (c *PluginContext) RegisterTool(t *Tool) error {
 	if t == nil || t.Name == "" {
-		return
+		return fmt.Errorf("工具名为空")
+	}
+	if err := c.host.claimTool(c.plugin, t.Name); err != nil {
+		return err
 	}
 	c.host.addPluginTool(c.plugin, t.Name)
 	c.Tools.Register(t)
+	return nil
+}
+
+// claimTool 登记工具归属：同名工具已被其他插件/宿主占用 → 报错（防静默覆盖）。
+// 宿主内置工具（Registry 已有但无插件归属）视为宿主占用。
+func (h *PluginHost) claimTool(plugin, toolName string) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	owner, taken := h.toolOwner[toolName]
+	if taken && owner != plugin {
+		return fmt.Errorf("工具 %q 已被插件 %s 注册，插件 %s 不能覆盖。请换工具名，或先 cordis_stop %s 再注册",
+			toolName, owner, plugin, owner)
+	}
+	if !taken {
+		if _, exists := h.ctx.Tools.Get(toolName); exists {
+			return fmt.Errorf("工具 %q 是宿主内置/已占用工具，插件 %s 不能覆盖。请换工具名", toolName, plugin)
+		}
+	}
+	h.toolOwner[toolName] = plugin
+	return nil
 }
 
 // AddSystemPromptSection 贡献系统提示片段（ctx.systemPrompt.section）。
@@ -296,6 +321,9 @@ type PluginHost struct {
 	pluginTools    map[string][]string
 	pluginSections map[string][]*PromptSection
 	contexts       map[string]*PluginContext // 每插件 apply 时的上下文（Unload 时 cleanup）
+
+	// 工具名 → 归属插件（同名冲突检测：插件不能静默覆盖宿主/他人工具）
+	toolOwner map[string]string
 }
 
 // NewPluginHost 创建插件宿主。
@@ -308,6 +336,7 @@ func NewPluginHost(registry *Registry, store ConversationStore, root string) *Pl
 		defs:           map[string]*jsPluginDef{},
 		pluginTools:    map[string][]string{},
 		pluginSections: map[string][]*PromptSection{},
+		toolOwner:      map[string]string{},
 	}
 	h.ctx = &PluginContext{
 		host:          h,
@@ -411,6 +440,9 @@ func (h *PluginHost) Unload(name string) error {
 	// 回收贡献
 	h.mu.Lock()
 	for _, tn := range h.pluginTools[name] {
+		if h.toolOwner[tn] == name {
+			delete(h.toolOwner, tn) // 释放工具归属
+		}
 		h.ctx.Tools.Unregister(tn)
 	}
 	delete(h.pluginTools, name)

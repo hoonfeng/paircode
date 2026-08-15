@@ -137,6 +137,12 @@ func (a *AgentBase) Init() error {
 	registerBuiltinPlugins(ph)
 	a.Plugins = ph
 
+	// 3.6 装配静态插件（.pair/cordis.patch.json，跨重启存续；条目失败不致命，
+	//     文件解析失败致命——配置坏了需要用户修复）
+	if err := ph.LoadCordisPatch(filepath.Join(pairDir, "cordis.patch.json")); err != nil {
+		return fmt.Errorf("AgentBase: 装配 cordis.patch.json 失败: %w", err)
+	}
+
 	// 4. 初始化会话管理器
 	sm := NewSessionManager()
 	sm.SetWorkspaceRoot(root)

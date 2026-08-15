@@ -20,7 +20,7 @@ func mkHarnessReg() *Registry {
 		reg.Register(&Tool{Name: n, Handler: noopHandler, SystemTool: true})
 	}
 	// 插件管理工具集（cordis_*，自举链路保留）
-	for _, n := range []string{"cordis_inspect", "cordis_define", "cordis_run", "cordis_stop", "cordis_undefine"} {
+	for _, n := range []string{"cordis_inspect", "cordis_define", "cordis_run", "cordis_stop", "cordis_undefine", "cordis_service_list"} {
 		reg.Register(&Tool{Name: n, Handler: noopHandler, SystemTool: true})
 	}
 	// pair 独有工具（应被移除）

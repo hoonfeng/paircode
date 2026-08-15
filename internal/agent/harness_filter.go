@@ -41,11 +41,12 @@ var HarnessAlignedToolNames = map[string]bool{
 	"ask_user":               true,
 	"generate_commit_message": true,
 	// 插件管理（cordis_*）：登记/装载/停止/回收/查看 JS 动态插件
-	"cordis_inspect":  true,
-	"cordis_define":   true,
-	"cordis_run":      true,
-	"cordis_stop":     true,
-	"cordis_undefine": true,
+	"cordis_inspect":       true,
+	"cordis_define":        true,
+	"cordis_run":           true,
+	"cordis_stop":          true,
+	"cordis_undefine":      true,
+	"cordis_service_list":  true,
 }
 
 // ApplyHarnessToolFilter 从注册表移除不在保留清单内的工具（pair 独有工具），
