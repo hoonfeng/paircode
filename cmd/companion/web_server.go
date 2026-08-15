@@ -180,6 +180,19 @@ func startWebUI(port int) {
 		}
 		handler.SetToolsRegistry(initReg)
 		log.Printf("[WebUI] 参考工具注册表已初始化（%d 个工具）", len(initReg.AllToolMeta()))
+
+	// ★ 全局插件宿主：web 模式唯一的 PluginHost（浏览器插件面板 + cordis 工具共用）。
+	//   与 AgentBase.Init 对齐：NewPluginHost + RegisterCordisTools + 内置插件 + cordis.patch.json。
+	if root := core.Root(); root != "" {
+		ph := agent.NewPluginHost(initReg, agentMgr.Store(), root)
+		agent.RegisterCordisTools(initReg, ph, root)
+		agent.RegisterBuiltinPlugins(ph)
+		if err := ph.LoadCordisPatch(filepath.Join(root, ".pair", "cordis.patch.json")); err != nil {
+			log.Printf("[WebUI] cordis.patch.json 装配失败（不阻塞启动）: %v", err)
+		}
+		handler.SetPluginHost(ph)
+		log.Printf("[WebUI] 全局插件宿主已初始化（%d 个插件）", len(ph.List()))
+	}
 	}
 
 	// 工作区文件夹变更时同步到 agent 路径解析
@@ -238,6 +251,12 @@ func startWebUI(port int) {
 	mux.HandleFunc("/api/tokens/stats", ws.handleTokensStats)
 	mux.HandleFunc("/api/debug/logs", ws.handleDebugLogs)
 	mux.HandleFunc("/api/debug/logs/", ws.handleDebugLogByID)
+	mux.HandleFunc("/api/plugins", handler.HandlePlugins)
+	mux.HandleFunc("/api/plugins/detail", handler.HandlePluginDetail)
+	mux.HandleFunc("/api/plugins/action", handler.HandlePluginAction)
+	mux.HandleFunc("/api/plugins/define", handler.HandlePluginDefine)
+	mux.HandleFunc("/api/plugins/event", handler.HandlePluginEvent)
+	mux.HandleFunc("/api/plugins/client-events", handler.HandlePluginClientEvents)
 
 	// ── Git API 路由 ──
 	mux.HandleFunc("/api/git/status", ws.handleGitStatus)
@@ -2272,6 +2291,10 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 	agent.RegisterCommitMessageTool(reg)
 
 	agenttools.RegisterManagementTools(reg, root)
+	// ★ 插件系统：全局 PluginHost 的 cordis_* 工具（浏览器插件面板同源）
+	if ph := handler.GetPluginHost(); ph != nil {
+		agent.RegisterCordisTools(reg, ph, root)
+	}
 	if cfgs := mcppanel.LoadConfigs(); len(cfgs) > 0 {
 		agentCfgs := make([]agent.MCPServerConfig, len(cfgs))
 		for i, c := range cfgs {

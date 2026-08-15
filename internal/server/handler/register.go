@@ -98,4 +98,12 @@ func RegisterAll(r *Router) {
 	r.Handle("GET", "/api/memory/search", HandleMemorySearch)
 	r.Handle("GET", "/api/memory/list", HandleMemoryList)
 	r.Handle("POST", "/api/memory/rebuild", HandleMemoryRebuild)
+
+	// 插件（管理 + 使用 + host/client 事件桥）
+	r.Handle("GET", "/api/plugins", HandlePlugins)
+	r.Handle("GET", "/api/plugins/detail", HandlePluginDetail)
+	r.Handle("POST", "/api/plugins/action", HandlePluginAction)
+	r.Handle("POST", "/api/plugins/define", HandlePluginDefine)
+	r.Handle("POST", "/api/plugins/event", HandlePluginEvent)
+	r.Handle("GET", "/api/plugins/client-events", HandlePluginClientEvents)
 }

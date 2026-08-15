@@ -17,7 +17,7 @@ import (
 func TestPluginHostBasic(t *testing.T) {
 	reg := NewRegistry()
 	host := NewPluginHost(reg, nil, `C:\ws`)
-	registerBuiltinPlugins(host)
+	RegisterBuiltinPlugins(host)
 
 	// sysinfo 插件已 Use（Running）
 	if host.State("sysinfo") != PluginRunning {

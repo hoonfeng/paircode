@@ -7,6 +7,7 @@
       <FileExplorer v-if="state.activeActivity === 'explorer'" />
       <SearchPanel v-else-if="state.activeActivity === 'search'" />
       <GitPanel v-else-if="state.activeActivity === 'source'" />
+      <PluginPanel v-else-if="state.activeActivity === 'plugins'" />
       <div v-else class="sidebar-placeholder">
         <span>面板加载中...</span>
       </div>
@@ -22,11 +23,12 @@ import { state } from '../main.js'
 import FileExplorer from './FileExplorer.vue'
 import SearchPanel from './SearchPanel.vue'
 import GitPanel from './GitPanel.vue'
+import PluginPanel from './PluginPanel.vue'
 
 const sidebarWidth = inject('sidebarWidth', ref(280))
 
 const headerTitle = computed(() => {
-  const titles = { explorer: '文件浏览器', search: '搜索', source: '源代码管理' }
+  const titles = { explorer: '文件浏览器', search: '搜索', source: '源代码管理', plugins: '插件' }
   return titles[state.activeActivity] || ''
 })
 

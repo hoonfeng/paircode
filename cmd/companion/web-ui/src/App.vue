@@ -17,7 +17,7 @@
 
     <!-- 内容区域（panel 模式下隐藏） -->
     <ActivityBar v-if="!panelMode" />
-    <Sidebar v-if="!panelMode && state.sidebarVisible" />
+    <Sidebar v-if="!panelMode && state.sidebarVisible && !state.focusMode" />
     <div v-if="!panelMode && !state.focusMode" class="main-area">
       <EditorArea />
       <div class="bottom-panel" v-if="state.bottomPanelVisible"
@@ -33,7 +33,7 @@
     <div v-if="state.rightPanelVisible || panelMode" class="right-container"
          :class="{ 'focus-mode': state.focusMode, 'panel-only': panelMode }"
          :style="(state.focusMode || panelMode) ? {} : { width: (rightPanelWidth + 4 + 1 + 250) + 'px' }">
-      <div v-if="!panelMode" class="right-panel-resizer" @mousedown.prevent="startRightResize"></div>
+        <div v-if="!panelMode && !state.focusMode" class="right-panel-resizer" @mousedown.prevent="startRightResize"></div>
       <RightPanel :panel-mode="panelMode" />
     </div>
 
@@ -329,7 +329,9 @@ const switchActivity = (id) => {
   if (id === 'system') { showSystem.value = true; return }
   if (id === 'chat') { state.rightPanelVisible = !state.rightPanelVisible; return }
   if (id === 'marketplace') { showMarketplace.value = true; return }
-  if (state.activeActivity === id) {
+    // ★ 编辑/终端让位：切换到 IDE 侧栏（文件/搜索/Git/插件）时自动退出专注模式
+    state.focusMode = false
+    if (state.activeActivity === id) {
     state.sidebarVisible = !state.sidebarVisible
   } else {
     state.activeActivity = id
@@ -651,7 +653,7 @@ watch(() => state.openFiles.length, schedulePersist)
   grid-column: 4; grid-row: 2;
   display: flex; flex-direction: row; overflow: hidden; position: relative;
 }
-.right-container.focus-mode { grid-column: 3 / -1; }
+.right-container.focus-mode { grid-column: 2 / -1; }
 .right-panel-resizer {
   width: 4px; cursor: ew-resize; background: transparent; flex-shrink: 0; z-index: 10;
 }

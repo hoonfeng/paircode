@@ -108,9 +108,9 @@ const execItem = async (item) => {
   const a = item.action
 
   // ── 视图操作 ──
-  if (a === 'view-explorer') { state.activeActivity = 'explorer'; state.sidebarVisible = true; return }
-  if (a === 'view-search') { state.activeActivity = 'search'; state.sidebarVisible = true; return }
-  if (a === 'view-git') { state.activeActivity = 'source'; state.sidebarVisible = true; return }
+  if (a === 'view-explorer') { state.focusMode = false; state.activeActivity = 'explorer'; state.sidebarVisible = true; return }
+  if (a === 'view-search') { state.focusMode = false; state.activeActivity = 'search'; state.sidebarVisible = true; return }
+  if (a === 'view-git') { state.focusMode = false; state.activeActivity = 'source'; state.sidebarVisible = true; return }
   if (a === 'toggle-sidebar') { state.sidebarVisible = !state.sidebarVisible; return }
   if (a === 'toggle-terminal') { state.bottomPanelVisible = !state.bottomPanelVisible; state.bottomPanelTab = 'terminal'; return }
   if (a === 'toggle-right') { state.rightPanelVisible = !state.rightPanelVisible; return }

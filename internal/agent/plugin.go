@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"strings"
 	"sync"
 )
 
@@ -33,13 +34,23 @@ type EventListener func(payload any)
 
 // EventBus 进程内事件总线（对齐 Cordis ctx.on / ctx.emit）。
 type EventBus struct {
-	mu        sync.RWMutex
-	listeners map[string][]EventListener
+	mu         sync.RWMutex
+	listeners  map[string][]EventListener
+	clientHook func(name string, payload any) // 可选：事件转发到浏览器（插件 client 半消费）
 }
 
 // NewEventBus 创建事件总线。
 func NewEventBus() *EventBus {
 	return &EventBus{listeners: map[string][]EventListener{}}
+}
+
+// SetClientHook 设置浏览器转发钩子（host→client 事件桥）。
+// 由 PluginHost 在创建根上下文时注入：事件经此钩子进入 client 事件队列，
+// 浏览器侧插件 client 半轮询 /api/plugins/client-events 消费。
+func (b *EventBus) SetClientHook(fn func(name string, payload any)) {
+	b.mu.Lock()
+	b.clientHook = fn
+	b.mu.Unlock()
 }
 
 // On 注册监听器，返回取消函数（插件停止时由 PluginContext 统一收集调用）。
@@ -62,12 +73,17 @@ func (b *EventBus) On(name string, fn EventListener) func() {
 }
 
 // Emit 广播事件（监听器在锁外调用，支持重入/并发）。
+// 同时把事件经 clientHook 转发给浏览器（若设置且事件名以 ui:/client: 前缀开头）。
 func (b *EventBus) Emit(name string, payload any) {
 	b.mu.RLock()
 	ls := append([]EventListener(nil), b.listeners[name]...)
+	hook := b.clientHook
 	b.mu.RUnlock()
 	for _, l := range ls {
 		l(payload)
+	}
+	if hook != nil && (strings.HasPrefix(name, "ui:") || strings.HasPrefix(name, "client:")) {
+		hook(name, payload)
 	}
 }
 
@@ -294,13 +310,17 @@ const (
 
 // PluginRecord 插件记录（cordis_inspect 报告用）。
 type PluginRecord struct {
-	Name     string       `json:"name"`
-	Source   PluginSource `json:"source"`
-	State    string       `json:"state"`
-	Provides []string     `json:"provides,omitempty"`
-	Tools    []string     `json:"tools,omitempty"`
-	Sections []string     `json:"sections,omitempty"`
-	Version  string       `json:"version,omitempty"`
+	Name       string       `json:"name"`
+	Source     PluginSource `json:"source"`
+	State      string       `json:"state"`
+	Provides   []string     `json:"provides,omitempty"`
+	Tools      []string     `json:"tools,omitempty"`
+	Sections   []string     `json:"sections,omitempty"`
+	Version    string       `json:"version,omitempty"`
+	Purpose    string       `json:"purpose,omitempty"`     // 用途说明（JS 动态插件）
+	HasClient  bool         `json:"hasClient,omitempty"`   // 是否有 client 半（浏览器端）
+	ClientCode string       `json:"clientCode,omitempty"`  // client 半源码（供浏览器装载；列表接口可能省略）
+	DefID      string       `json:"defId,omitempty"`       // JS 动态插件定义 id（dyn-<n>）
 }
 
 // ─── PluginHost ───────────────────────────────────────────
@@ -324,6 +344,11 @@ type PluginHost struct {
 
 	// 工具名 → 归属插件（同名冲突检测：插件不能静默覆盖宿主/他人工具）
 	toolOwner map[string]string
+
+	// host→client 事件桥（浏览器插件 client 半消费）
+	clientMu       sync.Mutex
+	clientEvents   []ClientEvent
+	clientEventSeq int64 // 下一条事件的全局序号
 }
 
 // NewPluginHost 创建插件宿主。
@@ -347,7 +372,55 @@ func NewPluginHost(registry *Registry, store ConversationStore, root string) *Pl
 		services:      map[string]any{},
 	}
 	h.contexts = map[string]*PluginContext{}
+	// host→client 事件桥：ui:/client: 前缀事件自动进入 client 事件队列
+	h.ctx.Events.SetClientHook(func(name string, payload any) { h.PushClientEvent(name, payload) })
 	return h
+}
+
+// ─── host→client 事件桥 ──────────────────────────────────
+
+// ClientEvent 一条转发给浏览器的插件事件（seq 单调递增，轮询游标用）。
+type ClientEvent struct {
+	Seq     int64  `json:"seq"`
+	Name    string `json:"name"`
+	Payload any    `json:"payload,omitempty"`
+}
+
+// PushClientEvent 入队一条 client 事件（上限 500 条，超限丢弃最旧）。
+func (h *PluginHost) PushClientEvent(name string, payload any) {
+	h.clientMu.Lock()
+	defer h.clientMu.Unlock()
+	h.clientEventSeq++
+	ev := ClientEvent{Seq: h.clientEventSeq, Name: name, Payload: payload}
+	if len(h.clientEvents) >= 500 {
+		h.clientEvents = append(h.clientEvents[1:], ev)
+	} else {
+		h.clientEvents = append(h.clientEvents, ev)
+	}
+}
+
+// ClientEventsSince 返回 seq 之后（不含 seq）的全部 client 事件。
+// seq<=0 表示从最早一条开始（首次轮询）。返回的 LastSeq 供下次轮询使用。
+func (h *PluginHost) ClientEventsSince(seq int64) ([]ClientEvent, int64) {
+	h.clientMu.Lock()
+	defer h.clientMu.Unlock()
+	out := make([]ClientEvent, 0, 8)
+	for _, ev := range h.clientEvents {
+		if ev.Seq > seq {
+			out = append(out, ev)
+		}
+	}
+	if len(h.clientEvents) > 0 {
+		return out, h.clientEvents[len(h.clientEvents)-1].Seq
+	}
+	return out, 0
+}
+
+// EmitHostEvent 由外部（浏览器 client→host 事件桥）把事件发回 EventBus 广播。
+// 浏览器侧约定：client→host 事件用 "host:" 前缀（不会被 ui:/client: 转发规则
+// 环回浏览器）；host 插件用 ctx.on('host:xxx') 消费。
+func (h *PluginHost) EmitHostEvent(name string, payload any) {
+	h.ctx.Events.Emit(name, payload)
 }
 
 // Context 返回宿主根上下文（服务共享）。
@@ -420,6 +493,45 @@ func (h *PluginHost) Load(name string) error {
 		return fmt.Errorf("plugin %q apply 失败: %w", name, err)
 	}
 	return nil
+}
+
+// Reload 重新装载插件（先停止回收贡献，再重新 apply；未运行则直接装载）。
+// JS 动态插件会按其定义重放（host 半代码重新求值执行）。
+func (h *PluginHost) Reload(name string) error {
+	h.mu.Lock()
+	p, ok := h.plugins[name]
+	if !ok {
+		h.mu.Unlock()
+		return fmt.Errorf("plugin: 未注册 %q", name)
+	}
+	wasRunning := h.states[name] == PluginRunning
+	h.mu.Unlock()
+	if wasRunning {
+		if err := h.Unload(name); err != nil {
+			return err
+		}
+	}
+	// JS 动态插件：先从注册表移除旧 adapter（Unload 保留 plugins 条目，
+	// 而 LoadJSDynamic 会重新 Register，同名会冲突），再按定义重放。
+	if adapter, ok := p.(*jsPluginAdapter); ok {
+		h.mu.Lock()
+		delete(h.plugins, name)
+		delete(h.sources, name)
+		for i, n := range h.order {
+			if n == name {
+				h.order = append(h.order[:i], h.order[i+1:]...)
+				break
+			}
+		}
+		h.mu.Unlock()
+		return h.LoadJSDynamic(adapter.def)
+	}
+	return h.Load(name)
+}
+
+// ResolvePluginName 把 dyn id 或插件名解析为插件名（浏览器 REST 用）。
+func (h *PluginHost) ResolvePluginName(idOrName string) (string, error) {
+	return h.resolvePluginName(idOrName)
 }
 
 // Unload 停止插件并回收其全部贡献（工具/片段/监听器/清理回调）。
@@ -515,9 +627,13 @@ func (h *PluginHost) Inspect() []PluginRecord {
 			State:  h.states[name].String(),
 		}
 		if h.sources[name] == PluginSourceJS {
-			if d, ok := h.defs[name]; ok {
+			if d := h.defByNameLocked(name); d != nil {
 				rec.Version = d.version
 				rec.Provides = d.provides
+				rec.Purpose = d.purpose
+				rec.HasClient = strings.TrimSpace(d.clientCode) != ""
+				rec.ClientCode = d.clientCode
+				rec.DefID = d.id
 			}
 		}
 		rec.Tools = append([]string(nil), h.pluginTools[name]...)
@@ -527,6 +643,49 @@ func (h *PluginHost) Inspect() []PluginRecord {
 		recs = append(recs, rec)
 	}
 	return recs
+}
+
+// InspectDetail 单个插件详情（含 client 半源码；不存在返回 nil）。
+func (h *PluginHost) InspectDetail(name string) *PluginRecord {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for _, n := range h.order {
+		if n != name {
+			continue
+		}
+		rec := PluginRecord{
+			Name:   n,
+			Source: h.sources[n],
+			State:  h.states[n].String(),
+		}
+		if h.sources[n] == PluginSourceJS {
+			if d := h.defByNameLocked(n); d != nil {
+				rec.Version = d.version
+				rec.Provides = d.provides
+				rec.Purpose = d.purpose
+				rec.HasClient = strings.TrimSpace(d.clientCode) != ""
+				rec.ClientCode = d.clientCode
+				rec.DefID = d.id
+			}
+		}
+		rec.Tools = append([]string(nil), h.pluginTools[n]...)
+		for _, s := range h.pluginSections[n] {
+			rec.Sections = append(rec.Sections, s.Name)
+		}
+		return &rec
+	}
+	return nil
+}
+
+// defByNameLocked 按插件名找 JS 定义（defs 按 id 存储，需要遍历匹配 name）。
+// ★ 调用方必须已持有 h.mu 读锁（避免 RWMutex 递归读锁死锁）。
+func (h *PluginHost) defByNameLocked(name string) *jsPluginDef {
+	for _, d := range h.defs {
+		if d.name == name {
+			return d
+		}
+	}
+	return nil
 }
 
 // Sections 全部插件贡献的系统提示片段（按 Order 排序；供系统提示组装）。

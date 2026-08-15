@@ -314,4 +314,36 @@ async function savePhilosophy(data) {
   return apiPut('/philosophy', data)
 }
 
-export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, isWebSocketOpen, waitForWebSocket, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatCompact, chatStop, getMessages, getMessagesCount, getModels, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, getPhilosophy, savePhilosophy }
+export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, isWebSocketOpen, waitForWebSocket, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatCompact, chatStop, getMessages, getMessagesCount, getModels, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, getPhilosophy, savePhilosophy, listPlugins, getPluginDetail, pluginAction, definePlugin, pluginEmit, pluginClientEvents }
+
+// ─── 插件（管理 + 使用 + host/client 事件桥）──────────────
+
+// listPlugins 插件列表（含状态/工具/服务/client 有无，不含源码）。
+async function listPlugins() {
+  return apiGet('/plugins')
+}
+
+// getPluginDetail 单插件详情（?id= 插件名或 dyn id，含 client 半源码）。
+async function getPluginDetail(id) {
+  return apiGet('/plugins/detail', { id })
+}
+
+// pluginAction 启停/删除：action = start|stop|undefine。
+async function pluginAction(id, action) {
+  return apiPost('/plugins/action', { id, action })
+}
+
+// definePlugin 直接定义 JS 动态插件：{purpose, code, client?, language?, run?}。
+async function definePlugin(data) {
+  return apiPost('/plugins/define', data)
+}
+
+// pluginEmit 浏览器 client 半 → host 事件桥（{event, payload}）。
+async function pluginEmit(event, payload) {
+  return apiPost('/plugins/event', { event, payload })
+}
+
+// pluginClientEvents host → 浏览器事件轮询（since=seq）。
+async function pluginClientEvents(since) {
+  return apiGet('/plugins/client-events', { since })
+}

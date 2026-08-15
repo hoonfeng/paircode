@@ -6,6 +6,9 @@
       <div class="rp-header-actions">
         <button class="rp-btn" @click="newConversation" title="新对话"><SvgIcon name="plus" :size="14" /></button>
         <button class="rp-btn" @click="showDebugLog = !showDebugLog" title="Debug 日志"><SvgIcon name="bug" :size="14" /></button>
+        <button v-if="!panelMode" class="rp-btn" @click="toggleFocus" :title="state.focusMode ? '退出专注（显示编辑器/终端）' : '专注对话（隐藏编辑器/终端）'">
+          <SvgIcon :name="state.focusMode ? 'eye-off' : 'eye'" :size="14" />
+        </button>
         <button v-if="!panelMode" class="rp-btn" @click="toggleRight" title="关闭"><SvgIcon name="close" :size="14" /></button>
       </div>
     </div>
@@ -303,6 +306,12 @@ const props = defineProps({ panelMode: { type: Boolean, default: false } })
 const panelMode = computed(() => !!props.panelMode)
 const rightPanelWidth = inject('rightPanelWidth')
 const toggleRight = () => { state.rightPanelVisible = false }
+// 专注对话切换（编辑/终端让位）：进入时隐藏侧栏与主区，对话面板占满
+const toggleFocus = () => {
+  state.focusMode = !state.focusMode
+  if (state.focusMode) state.sidebarVisible = false
+  else state.sidebarVisible = true
+}
 const inputText = ref('')
 const feedbackText = ref('')
 const msgRef = ref(null)

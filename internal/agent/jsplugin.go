@@ -87,18 +87,22 @@ func isJSTimeout(err error) bool {
 
 // jsPluginDef 一个 JS 动态插件定义（cordis_define 登记；进程内存，不落盘）。
 type jsPluginDef struct {
-	id        string         // dyn-<n>
-	lang      string         // 源码语言 "js" | "ts"（登记时探测/指定；code 存转译后 JS）
-	name      string         // 插件名（默认取代码返回的 name；函数形态取函数名或 id）
-	purpose   string         // 用途说明
-	code      string         // host 半代码（async 函数体，return 插件对象/函数）
-	version   string         // "dyn-<n>"
-	provides  []string       // 提供服务的键（插件运行时从 ctx.provide 收集）
-	inject    []string       // 插件声明的硬依赖服务（apply 前校验宿主是否提供）
-	config    map[string]any // 插件配置（cordis_run 传入，apply(ctx, config) 第二参）
-	isFunc    bool           // 函数形态插件（export 为 (ctx, config) => void）
-	createdAt time.Time
+	id         string         // dyn-<n>
+	lang       string         // 源码语言 "js" | "ts"（登记时探测/指定；code 存转译后 JS）
+	name       string         // 插件名（默认取代码返回的 name；函数形态取函数名或 id）
+	purpose    string         // 用途说明
+	code       string         // host 半代码（async 函数体，return 插件对象/函数）
+	clientCode string         // client 半代码（浏览器端执行；可为空=纯 host 插件）
+	version    string         // "dyn-<n>"
+	provides   []string       // 提供服务的键（插件运行时从 ctx.provide 收集）
+	inject     []string       // 插件声明的硬依赖服务（apply 前校验宿主是否提供）
+	config     map[string]any // 插件配置（cordis_run 传入，apply(ctx, config) 第二参）
+	isFunc     bool           // 函数形态插件（export 为 (ctx, config) => void）
+	createdAt  time.Time
 }
+
+// Name 插件名（公开访问；jsPluginDef 字段私有）。
+func (d *jsPluginDef) Name() string { return d.name }
 
 // ─── JS 插件适配器 ─────────────────────────────────────────
 
@@ -262,6 +266,17 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 		pc.Effect(func() {
 			_, _ = fn(goja.Undefined())
 		})
+		return goja.Undefined()
+	})
+	// ctx.emit(name, payload)：广播事件（对齐 cordis ctx.emit）。
+	// ui:/client: 前缀事件经宿主事件总线自动转发浏览器 client 半。
+	ctxObj.Set("emit", func(call goja.FunctionCall) goja.Value {
+		name := call.Argument(0).String()
+		var payload any
+		if !goja.IsUndefined(call.Argument(1)) && !goja.IsNull(call.Argument(1)) {
+			payload = call.Argument(1).Export()
+		}
+		pc.Emit(name, payload)
 		return goja.Undefined()
 	})
 
@@ -1251,6 +1266,14 @@ func (h *PluginHost) DefineJSCode(code, language, purpose string) (string, error
 // dir 非空时，含 import 的源码按 dir 解析相对导入（esbuild Build 内联打包，
 // 非相对包导入 mock 空模块），插件需 export default 导出插件对象。
 func (h *PluginHost) DefineJSCodeDir(code, language, purpose, dir string) (string, error) {
+	return h.DefineJSCodeFull(code, language, purpose, dir, "")
+}
+
+// DefineJSCodeFull 登记动态插件定义（完整签名：host 半 + 可选 client 半 + 多文件 dir）。
+// clientCode 是浏览器端执行的插件代码（可为空=纯 host 插件）：
+// 形态 (ui) => void，ui 提供 on/emit/registerPanel/http 等浏览器侧服务
+// （契约见 cmd/companion/web-ui/src/plugin-runtime.js）。
+func (h *PluginHost) DefineJSCodeFull(code, language, purpose, dir, clientCode string) (string, error) {
 	if strings.TrimSpace(code) == "" {
 		return "", fmt.Errorf("插件代码为空")
 	}
@@ -1263,14 +1286,21 @@ func (h *PluginHost) DefineJSCodeDir(code, language, purpose, dir string) (strin
 	if _, err := goja.Compile("cordis-dyn.js", "(async () => {\n"+js+"\n})()", false); err != nil {
 		return "", fmt.Errorf("插件语法错误: %v", jsErrorText(err))
 	}
+	// client 半语法预检（浏览器端用 new Function 求值；此处仅验证语法）
+	if strings.TrimSpace(clientCode) != "" {
+		if _, err := goja.Compile("cordis-client.js", "("+clientCode+")", false); err != nil {
+			return "", fmt.Errorf("插件 client 半语法错误: %v", jsErrorText(err))
+		}
+	}
 	id := fmt.Sprintf("dyn-%d", dynSeq.Add(1))
 	def := &jsPluginDef{
-		id:        id,
-		purpose:   purpose,
-		code:      js, // 存转译后的 JS（运行时 goja 直接执行）
-		lang:      lang,
-		version:   id,
-		createdAt: time.Now(),
+		id:         id,
+		purpose:    purpose,
+		code:       js, // 存转译后的 JS（运行时 goja 直接执行）
+		clientCode: clientCode,
+		lang:       lang,
+		version:    id,
+		createdAt:  time.Now(),
 	}
 	h.mu.Lock()
 	h.defs[id] = def

@@ -71,9 +71,9 @@ func builtinPluginSpecs(root string) []builtinPluginSpec {
 	}
 }
 
-// registerBuiltinPlugins 把全部内置插件经 PluginHost 装配（AgentBase.Init 调用）。
+// RegisterBuiltinPlugins 把全部内置插件经 PluginHost 装配（AgentBase.Init 与 web 模式共用）。
 // 之后 cordis_inspect 可查看插件→工具归属；停止某插件可回收其工具。
-func registerBuiltinPlugins(h *PluginHost) {
+func RegisterBuiltinPlugins(h *PluginHost) {
 	_ = h.Use(&GoPlugin{
 		NameField: "sysinfo",
 		ApplyFn: func(ctx *PluginContext) error {
