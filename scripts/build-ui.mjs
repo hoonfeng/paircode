@@ -21,7 +21,10 @@ import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, '..')
-const uiRoot = path.join(repoRoot, 'cmd/companion/web-ui')
+// ★ 前端源码位于插件目录（2026-08-16 迁移：cmd/companion/web-ui 源码 →
+//   .pair/plugins/ui-app-src/，用户可改；node_modules 为 junction 指向
+//   cmd/companion/web-ui/node_modules）
+const uiRoot = path.join(repoRoot, '.pair/plugins/ui-app-src')
 const require = createRequire(path.join(uiRoot, 'package.json'))
 const { build } = require('vite')
 const vuePlugin = require('@vitejs/plugin-vue').default

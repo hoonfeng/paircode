@@ -1,9 +1,10 @@
 // ═══════════════════════════════════════════════════════════════
 // tool-binary-re — 二进制正则（binary_strings/find/patch/info/hash/entropy）
 //
-// 生成来源（2026-08-16）：内置 Go 工具组 → 磁盘外置插件（tool_plugin_gen.go
-// 自动生成，schema 完整外置拷贝）。api 声明在插件，execute 调 ctx.hostTool
-// 复用宿主 Go 执行器（对齐 harness seam：编排在插件、能力在宿主）。
+// ★ 二进制插件（独立实现）：api 声明 + 调度在插件（JS），执行在插件目录下的
+//   独立二进制 bin/tool-binary-re.exe（cmd/plugins/tool-binary-re/main.go，
+//   纯 stdlib 编译产物，源码与资源均位于本插件目录——插件自包含，用户可改
+//   源码重新编译即更换实现）。
 // 工具清单：binary_strings、binary_find、binary_patch、binary_info、binary_hash、binary_entropy
 // ═══════════════════════════════════════════════════════════════
 const tools = [
@@ -165,7 +166,7 @@ return {
         requiresApproval: t.requiresApproval,
         systemTool: t.systemTool,
         parameters: t.parameters,
-        execute: (args) => ctx.hostTool.exec(t.name, args || {}),
+        execute: (args) => ctx.binary.exec(t.name, args || {}),
       })
     }
   },

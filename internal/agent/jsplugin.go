@@ -21,6 +21,7 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	_ "embed"
 	"encoding/base64"
@@ -29,6 +30,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
@@ -129,6 +132,7 @@ type jsPluginDef struct {
 	config     map[string]any // 插件配置（cordis_run 传入，apply(ctx, config) 第二参）
 	isFunc     bool           // 函数形态插件（export 为 (ctx, config) => void）
 	scope      string         // 生效作用域："global"=全局插件（UI 类，跨工作区；存 <InstallDir>/.pair/plugins/dynamic.json，独立于工具集）；""/"project"=项目插件（工作区工具集 dynamic，按工作区加载）
+	dir        string         // ★ 插件目录（磁盘插件包：<InstallDir>/.pair/plugins/<name>/；cordis_define dir 参数）；ctx.binary 服务据此定位 bin/<name>.exe 与 assets/
 	createdAt  time.Time
 
 	// ★ 状态机与运行诊断（对齐 harness CordisRunStatus + CordisRunDiagnostic）
@@ -489,6 +493,82 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 		return vm.ToValue(HostToolNames())
 	})
 	ctxObj.Set("hostTool", hostToolObj)
+
+	// ctx.binary — 独立插件二进制服务（★ 依赖 Go 内核的工具独立成插件目录下的
+	// 单独二进制项目，主程序只做框架调度）。协议：
+	//   ctx.binary.exec(tool, args[, opts]) → text
+	//     stdin  JSON {tool, args, root} → stdout JSON {ok, text} | {ok:false, error}
+	//     二进制约定：<插件目录>/bin/<插件名>.exe（Windows；其它平台无后缀）
+	//     资源约定：<插件目录>/assets/（ctx.binary.dir() 返回插件目录，JS 可拼接）
+	//   ctx.binary.dir() → 插件目录绝对路径
+	// 未声明插件目录（非磁盘插件）时抛错。
+	binaryObj := vm.NewObject()
+	binaryObj.Set("dir", func(call goja.FunctionCall) goja.Value {
+		if p.def.dir == "" {
+			panic(vm.NewTypeError("ctx.binary.dir: 插件目录未知（仅磁盘插件包可用；cordis_define 可传 dir 参数声明源码目录）"))
+		}
+		return vm.ToValue(p.def.dir)
+	})
+	binaryObj.Set("exec", func(call goja.FunctionCall) goja.Value {
+		if p.def.dir == "" {
+			panic(vm.NewTypeError("ctx.binary.exec: 插件目录未知（仅磁盘插件包可用；cordis_define 可传 dir 参数声明源码目录）"))
+		}
+		tool := call.Argument(0).String()
+		if tool == "" {
+			panic(vm.NewTypeError("ctx.binary.exec: 工具名不能为空"))
+		}
+		args := map[string]any{}
+		if a := call.Argument(1); !goja.IsUndefined(a) && !goja.IsNull(a) {
+			if m, ok := a.Export().(map[string]any); ok {
+				args = m
+			}
+		}
+		timeout := 60 * time.Second
+		if o := call.Argument(2); !goja.IsUndefined(o) && !goja.IsNull(o) {
+			if om, ok := o.Export().(map[string]any); ok {
+				if t, ok := om["timeout"]; ok {
+					if ms, ok := t.(float64); ok && ms > 0 {
+						timeout = time.Duration(ms) * time.Millisecond
+					}
+				}
+			}
+		}
+		exeName := p.def.name
+		if runtime.GOOS == "windows" {
+			exeName += ".exe"
+		}
+		exePath := filepath.Join(p.def.dir, "bin", exeName)
+		if _, err := os.Stat(exePath); err != nil {
+			panic(vm.NewGoError(fmt.Errorf("ctx.binary.exec: 插件二进制不存在 %s（编译：go build -o %s ./cmd/plugins/<name>）", exePath, exePath)))
+		}
+		reqJSON, _ := json.Marshal(map[string]any{"tool": tool, "args": args, "root": pc.WorkspaceRoot})
+		ctxTO, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		cmd := exec.CommandContext(ctxTO, exePath)
+		cmd.Stdin = strings.NewReader(string(reqJSON))
+		var outBuf, errBuf bytes.Buffer
+		cmd.Stdout = &outBuf
+		cmd.Stderr = &errBuf
+		if err := cmd.Run(); err != nil {
+			if ctxTO.Err() == context.DeadlineExceeded {
+				panic(vm.NewGoError(fmt.Errorf("ctx.binary.exec: %s 执行超时（%.0fs）", tool, timeout.Seconds())))
+			}
+			panic(vm.NewGoError(fmt.Errorf("ctx.binary.exec: %s 执行失败: %v（stderr: %s）", tool, err, strings.TrimSpace(errBuf.String()))))
+		}
+		var resp struct {
+			OK    bool   `json:"ok"`
+			Text  string `json:"text"`
+			Error string `json:"error"`
+		}
+		if err := json.Unmarshal(outBuf.Bytes(), &resp); err != nil {
+			panic(vm.NewGoError(fmt.Errorf("ctx.binary.exec: %s 响应解析失败: %v（输出: %.200s）", tool, err, outBuf.String())))
+		}
+		if !resp.OK {
+			panic(vm.NewGoError(fmt.Errorf("ctx.binary.%s: %s", tool, resp.Error)))
+		}
+		return vm.ToValue(map[string]any{"text": resp.Text})
+	})
+	ctxObj.Set("binary", binaryObj)
 
 	// ctx.process：后台进程服务（run_background/read_output/kill_process 的能力面）。
 	// globalBG 为全局单例（跨 agent 轮次存活）；cwd 相对工作区根解析（越界拦截）。

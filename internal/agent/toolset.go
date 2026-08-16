@@ -51,6 +51,7 @@ type ToolsetPlugin struct {
 	Purpose string `json:"purpose"`
 	Code    string `json:"code,omitempty"`     // host 半：async 函数体（return { name, apply(ctx) }）
 	Client  string `json:"client,omitempty"`   // client 半：(ui) => void
+	Dir     string `json:"-"`                  // ★ 插件目录（磁盘插件包装载时注入，供 ctx.binary 定位 bin/assets）
 	// Scope 插件生效作用域（cordis 动态插件条目）："global"=全局插件（UI 类，
 	// 跨工作区生效，存程序目录）/""或"project"=项目插件。★ 存储统一在程序目录
 	// <InstallDir>/.pair/plugins/（插件是程序的扩展，不属于工作区）；
@@ -301,6 +302,11 @@ func LoadGlobalPlugins(ph *PluginHost) int {
 		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") || e.Name() == "node_modules" {
 			continue
 		}
+		// ★ 源码包目录约定：<name>-src 是插件源码（如 ui-app-src 前端 Vite 工程），
+		//   不是可装载插件包——跳过（用户可改源码后重新构建进插件包/assets）。
+		if strings.HasSuffix(e.Name(), "-src") {
+			continue
+		}
 		if err := applyGlobalPluginDir(ph, filepath.Join(globalPluginsDir(), e.Name())); err != nil {
 			log.Printf("[global-plugin] %s 装载失败: %v", e.Name(), err)
 			continue
@@ -333,6 +339,7 @@ func applyGlobalPluginDir(ph *PluginHost, pkgDir string) error {
 	return applyGlobalPlugin(ph, &ToolsetPlugin{
 		Name: pkg.Name, Purpose: pkg.Purpose,
 		Code: string(hostCode), Client: clientCode, Scope: pkg.Scope,
+		Dir: pkgDir,
 	})
 }
 
@@ -356,6 +363,7 @@ func applyGlobalPlugin(ph *PluginHost, p *ToolsetPlugin) error {
 		if def.scope == "" {
 			def.scope = "project"
 		}
+		def.dir = p.Dir // ★ 插件目录（ctx.binary 据此定位 bin/<name>.exe 与 assets/）
 	}
 	if err := ph.LoadJSDynamic(def); err != nil {
 		return err

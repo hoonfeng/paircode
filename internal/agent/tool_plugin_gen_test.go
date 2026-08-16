@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -85,5 +86,80 @@ func TestGeneratedPluginPackagesComplete(t *testing.T) {
 		if _, err := os.Stat(pkg); err != nil {
 			t.Errorf("%s 缺 package.json（装载器会跳过）: %v", e.Name(), err)
 		}
+	}
+}
+
+// TestBinaryPluginExec 验证「二进制插件」全链路：磁盘插件 JS 壳（api 声明 +
+// ctx.binary.exec 调度）→ 宿主 ctx.binary 服务 → 插件目录 bin/ 下独立二进制
+// （stdin/stdout JSON 协议）→ 工具执行结果返回。
+// ★ 插件目录自包含：源码（index.js + 独立二进制项目 cmd/plugins/tool-binary-re/）
+//   与二进制（bin/tool-binary-re.exe）均在 .pair/plugins/tool-binary-re/ 内，
+//   用户改源码重编译即更换实现，无需改主程序。
+func TestBinaryPluginExec(t *testing.T) {
+	repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("定位仓库根失败: %v", err)
+	}
+	pluginDir := filepath.Join(repoRoot, ".pair", "plugins", "tool-binary-re")
+	exePath := filepath.Join(pluginDir, "bin", "tool-binary-re.exe")
+	if _, err := os.Stat(exePath); err != nil {
+		t.Skipf("独立二进制未编译（go build -o %s ./cmd/plugins/tool-binary-re）: %v", exePath, err)
+	}
+	code, err := os.ReadFile(filepath.Join(pluginDir, "index.js"))
+	if err != nil {
+		t.Fatalf("读插件源码失败: %v", err)
+	}
+
+	reg := NewRegistry()
+	host := NewPluginHost(reg, nil, repoRoot)
+	RegisterBuiltinPlugins(host)
+
+	id, err := host.DefineJSCodeFull(string(code), "js", "binary 插件装载测试", "", "")
+	if err != nil {
+		t.Fatalf("define 失败: %v", err)
+	}
+	def, _ := host.GetJSDef(id)
+	if def == nil {
+		t.Fatalf("定义 %s 不存在", id)
+	}
+	def.dir = pluginDir // ★ 磁盘插件装载时由 applyGlobalPluginDir 注入（测试手动等价）
+	if err := host.LoadJSDynamic(def); err != nil {
+		t.Fatalf("装载失败: %v", err)
+	}
+
+	// ① execute 走 ctx.binary（插件 JS 已从 hostTool 切换为 binary.exec）
+	tool, ok := reg.Get("binary_hash")
+	if !ok {
+		t.Fatal("binary_hash 未注册（插件接管失败）")
+	}
+	out, err := tool.Handler(context.Background(), map[string]any{"path": exePath})
+	if err != nil {
+		t.Fatalf("binary_hash 执行失败: %v", err)
+	}
+	if !strings.Contains(out, "MD5：") || !strings.Contains(out, "SHA256：") {
+		t.Fatalf("binary_hash 输出异常: %.200s", out)
+	}
+
+	// ② 错误路径走协议 error 分支
+	if _, err := tool.Handler(context.Background(), map[string]any{"path": "不存在的文件.bin"}); err == nil {
+		t.Fatal("非法路径应报错")
+	}
+
+	// ③ 只读工具全链路（binary_entropy）
+	ent, ok := reg.Get("binary_entropy")
+	if !ok {
+		t.Fatal("binary_entropy 未注册")
+	}
+	out2, err := ent.Handler(context.Background(), map[string]any{"path": exePath, "chunk_size": 65536})
+	if err != nil {
+		t.Fatalf("binary_entropy 执行失败: %v", err)
+	}
+	if !strings.Contains(out2, "整体熵") {
+		t.Fatalf("binary_entropy 输出异常: %.200s", out2)
+	}
+
+	// ④ 插件目录服务可见（ctx.binary.dir）
+	if def.dir == "" {
+		t.Fatal("def.dir 未注入（ctx.binary 依赖它定位二进制）")
 	}
 }
