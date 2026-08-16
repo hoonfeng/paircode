@@ -49,6 +49,15 @@ const (
 // 参考：Claude Code 的 SYSTEM_PROMPT_DYNAMIC_BOUNDARY、DeepSeek 上下文缓存。
 const CacheBoundary = "\n\n<!--- CACHE_BOUNDARY --->\n\n"
 
+// ── 缓存诊断全局状态（WB_CACHE_DIAG=1 启用）──
+// prevShape 跨 Loop/Run 共享：多轮对话（每次 Run 新建 Loop）间比较前缀形状，
+// 定位导致 provider 缓存断裂的 system/tools 变化点。
+var (
+	cacheDiagStateMu sync.Mutex
+	cacheDiagPrev    PrefixShape
+	cacheDiagSession sessionCache // 进程级累计命中/未命中（诊断输出用）
+)
+
 // backgroundCtxMarker 背景上下文消息标记前缀。
 // 注入到 ephemeral 消息的背景信息（历史摘要/执行日志/记忆知识库过期检查等）以此开头，
 // buildCallContext 据此将其插入到「当前任务（最后一条 user 消息）」之前：
@@ -145,6 +154,10 @@ type Loop struct {
 
 	lastPromptTokens int // 上一轮 API 实测 prompt_tokens（驱动压缩阈值，比纯估算可信）
 	compactCooldown  int // 压缩后冷却剩余轮数（防每轮重复压缩，复刻参考 refreshCooldown）
+
+	// cacheDiagOn 缓存诊断开关（WB_CACHE_DIAG=1 启用；前缀形状/累计状态为包级全局，
+	// 跨 Loop/Run 共享，见 cacheDiagPrev/cacheDiagSession）。
+	cacheDiagOn bool
 
 	recentCalls []toolSig // 最近若干次工具调用签名+成败（绕圈检测，见 circling.go）
 
@@ -364,6 +377,9 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 	// agentloop：打开一轮新 turn（一次 Run = 一个 turn）。
 	l.openTurn()
 
+	// ★ 缓存诊断开关（WB_CACHE_DIAG=1 时输出前缀形状/命中率到 stderr，用于定位缓存断裂）
+	l.cacheDiagOn = os.Getenv("WB_CACHE_DIAG") == "1"
+
 	// ★ 一切皆插件：loop 服务面——Run 期间注册 ctx.provide('loop')，
 	//   插件 ctx.get('loop') 可查询状态/请求暂停停止；Run 结束自动撤销。
 	//   （并行 Run 时服务指向最近启动的 Loop；未运行期间 get 返回 nil。）
@@ -531,6 +547,12 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 			}
 		}
 
+		// ★ 缓存诊断：LLM 调用前快照前缀形状（system prompt + 工具定义），
+		//   与上一轮比较输出变化原因——用于定位缓存断裂（前缀变动 → provider 缓存失效）
+		if l.cacheDiagOn {
+			l.emitCacheShape(callMsgs, tools)
+		}
+
 		var stopReason string
 		assistant, err := l.Provider.Chat(ctx, callMsgs, tools, func(c Chunk) {
 			if c.StopReason != "" {
@@ -551,6 +573,10 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 					usage.PromptBreakdown = pb
 				}
 				l.emit(Event{Type: EventUsage, Usage: &usage})
+				// ★ 缓存诊断：记录命中/未命中 + 会话累计命中率
+				if l.cacheDiagOn {
+					l.emitCacheUsage(&usage)
+				}
 				// agent 自闭环：持久化上下文统计到磁盘（供页面刷新后恢复）
 				if l.WorkspaceRoot != "" {
 					SaveTokenUsageForRoot(l.WorkspaceRoot, &usage)
@@ -793,6 +819,61 @@ func hasSystem(msgs []Message) bool {
 // 超长结果（read_file 全文、run_command 大输出等）只保留首尾关键部分，
 // 大幅降低历史注入体积；原始内容仍完整持久化（msgs 不动，UI 展示无损）。
 const maxToolResultChars = 9000
+
+// ─── 缓存诊断（WB_CACHE_DIAG=1 启用，输出到 stderr）──
+
+// emitCacheShape 快照本轮前缀形状（system prompt + 工具定义）并与上一轮比较，
+// 输出前缀稳定性诊断：变化时给出原因（system/tools），稳定时输出哈希供人工对比。
+// 跨 Loop/Run 共享 prevShape：多轮对话间也能定位缓存断裂点。
+func (l *Loop) emitCacheShape(callMsgs []Message, tools []ToolDefinition) {
+	cur := CaptureShape(systemPromptFromMsgs(callMsgs), tools)
+	tag := fmt.Sprintf("[cache-diag] turn=%d step=%d", l.TurnNo, l.StepNo)
+	cacheDiagStateMu.Lock()
+	prev := cacheDiagPrev
+	cacheDiagPrev = cur
+	cacheDiagStateMu.Unlock()
+	if prev.PrefixHash == "" {
+		log.Printf("%s 首轮前缀 shape system=%s tools=%s tools_n=%d", tag, cur.SystemHash, cur.ToolsHash, len(tools))
+	} else {
+		diag := CompareShape(prev, cur)
+		if diag.PrefixChanged {
+			log.Printf("%s ★前缀变化 reasons=[%s] system=%s->%s tools=%s->%s（→ provider 缓存断裂）",
+				tag, strings.Join(diag.ChangeReasons, ","),
+				prev.SystemHash, diag.SystemHash,
+				prev.ToolsHash, diag.ToolsHash)
+		} else {
+			log.Printf("%s 前缀稳定 system=%s tools=%s tools_n=%d", tag, diag.SystemHash, diag.ToolsHash, len(tools))
+		}
+	}
+}
+
+// emitCacheUsage 记录本轮缓存命中/未命中与会话累计命中率。
+func (l *Loop) emitCacheUsage(u *Usage) {
+	hit, miss := u.PromptCacheHitTokens, u.PromptCacheMissTokens
+	cacheDiagSession.record(hit, miss)
+	sh, sm := cacheDiagSession.Snapshot()
+	rate := 0.0
+	if denom := hit + miss; denom > 0 {
+		rate = float64(hit) * 100 / float64(denom)
+	}
+	srate := 0.0
+	if denom := sh + sm; denom > 0 {
+		srate = float64(sh) * 100 / float64(denom)
+	}
+	log.Printf("[cache-diag] usage turn=%d step=%d prompt=%d hit=%d miss=%d 本轮率=%.1f%% | 累计 hit=%d miss=%d 累计率=%.1f%%",
+		l.TurnNo, l.StepNo, u.PromptTokens, hit, miss, rate, sh, sm, srate)
+}
+
+// systemPromptFromMsgs 提取消息列表中的 system prompt（第一条 RoleSystem）。
+// 快照用：前缀 = system prompt + 工具定义，历史消息天然是前缀增长（不算断裂）。
+func systemPromptFromMsgs(msgs []Message) string {
+	for _, m := range msgs {
+		if m.Role == RoleSystem {
+			return m.Content
+		}
+	}
+	return ""
+}
 
 // buildCallContext 合并持久化消息和临时内部消息（ephemeralMsgs），
 // 返回完整的 LLM 调用上下文。调用后自动清空 ephemeralMsgs，
