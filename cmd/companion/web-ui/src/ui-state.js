@@ -136,7 +136,7 @@ export const state = reactive({
   tasks: [],
   notificationCount: 0,
   theme: 'dark',
-  focusMode: true, // ★ 默认专注模式：仅隐藏编辑器（对话面板占满），文件资源侧边栏仍显示；Ctrl+K 可切换
+  focusMode: false, // ★ 默认非专注：编辑器+对话区并排（右侧宽度可拖拽调整）；Ctrl+K 切换专注（隐藏编辑器）
 })
 
 // ─── 全局 UI 面板状态（跨区域共享，替代 App.vue provide/inject）───
@@ -277,7 +277,8 @@ export function savePersistentState() {
       bottomPanelVisible: state.bottomPanelVisible,
       bottomPanelTab: state.bottomPanelTab,
       theme: state.theme,
-      focusMode: state.focusMode,
+      // focusMode 不持久化：专注模式是临时视图状态（Ctrl+K），跨会话记住
+      // 会导致用户浏览器残留 true 时每次打开都隐藏编辑器（历史坑）。
     }
     localStorage.setItem(PERSIST_KEY, JSON.stringify(data))
   } catch (e) {
@@ -307,7 +308,9 @@ export function loadPersistentState() {
         applyTheme(data.theme)
       }
     }
-    if (typeof data.focusMode === 'boolean') state.focusMode = data.focusMode
+    // ★ focusMode 不恢复（见 savePersistentState）：旧 localStorage 可能残留
+    //   focusMode:true（默认专注时期保存），恢复会导致编辑器被永久隐藏。
+    //   专注模式仅内存态（Ctrl+K 切换），每次加载默认 false。
 
     // ★ 不再从 localStorage 恢复 currentConvId，改为从后端 API 列表自动选中
 

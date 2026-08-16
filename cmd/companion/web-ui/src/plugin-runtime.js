@@ -149,6 +149,10 @@ export function getSlotOwner(slotId) {
     neverChosen = true
     v = ''
   }
+  // ★ 空串持久化（用户选过「内置组件」存 ''）同样回退：壳是纯骨架，任何区域
+  //   都没有内置组件实现（slot-empty 仅为占位提示），'' 渲染 = 永远空态。
+  //   → 视为未选择，唯一候选自动激活。（Edge 用户遇到的正是 '' 残留。）
+  if (!v) neverChosen = true
   if (v) return v
   // ★ 从未显式选择（或持久选择失效）：仅一个 single 候选时自动激活（对齐参考项目
   //   「注册槽位=替换」语义；用户显式选过「内置组件」存 '' 时保留其选择，不自动激活）

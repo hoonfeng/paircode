@@ -155,6 +155,9 @@ onUnmounted(() => {
 .right-container.focus-mode { grid-column: 3 / -1; }
 .app-statusbar-host { grid-column: 1 / -1; grid-row: 3; z-index: 30; height: 22px; }
 .plugin-slot-host { height: 100%; overflow: hidden; }
+/* ★ 插件渲染的子元素必须撑满宿主（bundle 根 auto 宽度不随宿主 grid 拉伸——
+   focus-mode 下宿主被 grid 拉到 3/-1 全宽，子元素保持内容宽 → 右侧大片空余） */
+.plugin-slot-host.right-container > * { width: 100%; min-width: 0; }
 /* modals 槽位：fixed 全屏浮层容器（不占 grid 格） */
 .modals-host { position: fixed; inset: 0; z-index: 200; pointer-events: none; }
 .modals-host > * { pointer-events: auto; }
