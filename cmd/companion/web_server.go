@@ -2336,11 +2336,16 @@ func buildWebSystemDynamic() string {
 				envSec.WriteString(projEnv)
 			}
 		}
-		log.Printf("[cache-diag] dynamic 段 hash skills=%s(%d) memory=%s(%d) rules=%s(%d) knowledge=%s(%d) env=%s total=%s len=%d skills_head=%q",
+		log.Printf("[cache-diag] dynamic 段 hash skills=%s(%d) memory=%s(%d) rules=%s(%d) knowledge=%s(%d) env=%s total=%s len=%d",
 			secHash(skillsSec), len(skillsSec), secHash(memorySec), len(memorySec),
 			secHash(rulesSec), len(rulesSec), secHash(knowledgeSec), len(knowledgeSec),
-			secHash(envSec.String()), secHash(val), len(val),
-			truncateStr(skillsSec, 160))
+			secHash(envSec.String()), secHash(val), len(val))
+		// 技能行级哈希：定位列表变化的具体技能
+		for _, skillLine := range strings.Split(skillsSec, "\n") {
+			if strings.HasPrefix(skillLine, "- ") {
+				log.Printf("[cache-diag]   skill %s len=%d", secHash(skillLine), len(skillLine))
+			}
+		}
 	}
 	return val
 }
