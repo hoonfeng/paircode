@@ -3423,7 +3423,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
       };
     }
   };
-  const ToolsetTransfer = /* @__PURE__ */ _export_sfc(_sfc_main$6, [["__scopeId", "data-v-fc6ee85a"]]);
+  const ToolsetTransfer = /* @__PURE__ */ _export_sfc(_sfc_main$6, [["__scopeId", "data-v-90cc752f"]]);
   const _hoisted_1$5 = { class: "file-explorer" };
   const _hoisted_2$5 = { class: "explorer-toolbar" };
   const _hoisted_3$5 = { class: "ws-section" };

@@ -286,10 +286,17 @@ function close() { emit('close') }
 .dialog-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
 
 .ts-transfer-box { width: 780px; max-width: 92vw; }
-.ts-transfer-body { display: flex; gap: 10px; min-height: 320px; max-height: 60vh; }
+/* ★ 滚动约束：body 固定高度区（min→max 取实际），col 必须允许收缩（min-height: 0），
+   list 内部滚动——否则 flex 子项默认 min-height:auto 被内容撑破，列表不滚动而是挤压 */
+.ts-transfer-body {
+  display: flex; gap: 10px;
+  height: min(60vh, 560px);
+  min-height: 320px;
+}
 /* 左右列 = 独立面板卡片 */
 .ts-transfer-col {
   flex: 1; display: flex; flex-direction: column; min-width: 0;
+  min-height: 0; /* ★ 允许 flex 收缩，配合 list 滚动 */
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: 8px;
@@ -314,18 +321,24 @@ function close() { emit('close') }
 .ts-col-hint { font-size: 9px; color: var(--text-muted); }
 .ts-col-head-actions { margin-left: auto; display: flex; align-items: center; }
 .ts-transfer-list {
-  flex: 1; overflow: auto; padding: 6px;
-  display: flex; flex-direction: column; gap: 6px;
+  flex: 1; min-height: 0; /* ★ 允许收缩 → 溢出滚动 */
+  overflow-y: auto; overflow-x: hidden;
+  padding: 6px;
+  display: flex; flex-direction: column; gap: 8px;
+  scrollbar-gutter: stable;
 }
+.ts-transfer-list::-webkit-scrollbar { width: 8px; }
+.ts-transfer-list::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; }
 .ts-transfer-group {
   border: 1px solid var(--border-color);
   border-radius: 6px;
   background: var(--bg-tertiary);
   overflow: hidden;
+  flex-shrink: 0;
 }
 .ts-transfer-group-head {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 4px 8px 4px 10px; gap: 6px;
+  padding: 6px 8px 6px 10px; gap: 6px;
   background: color-mix(in srgb, var(--accent) 7%, var(--bg-secondary));
   border-left: 2px solid var(--accent);
 }
@@ -336,7 +349,7 @@ function close() { emit('close') }
   font-size: 11px; color: var(--text-primary); cursor: pointer;
 }
 .ts-transfer-check input[type='checkbox'] { accent-color: var(--accent); margin: 0; }
-.ts-transfer-tool { padding: 3px 10px 3px 18px; font-family: var(--font-code); transition: background .1s; }
+.ts-transfer-tool { padding: 4px 10px 4px 18px; font-family: var(--font-code); transition: background .1s; }
 .ts-transfer-tool:hover { background: var(--bg-hover); }
 .ts-transfer-tool:has(input:checked) { background: var(--accent-bg); }
 .ts-transfer-ops { display: flex; flex-direction: column; justify-content: center; gap: 10px; flex-shrink: 0; }
