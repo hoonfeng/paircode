@@ -75,6 +75,28 @@ type BuiltinToolsetInfo struct {
 	ManualTools []string        `json:"manualTools"` // 手动添加的工具（builtin.json _manual 条目）
 	ToolTotal int               `json:"toolTotal"`   // 全部内置工具数
 	EnabledTotal int            `json:"enabledTotal"` // 当前启用（agent 可见）的内置工具数
+	// WorkspaceToolsets 工作区工具集（project scope）装配信息——toolset_edit /
+	// toolset_build 等对工作区工具集（default 等）的增删改即时反映在此
+	// （插件/工具/摘除工具）。★ 修复：/api/plugins/builtin 不再固定——
+	// 工作区工具集的动态变化（如单独加入某插件工具）可在本字段看到。
+	WorkspaceToolsets []WorkspaceToolsetInfo `json:"workspaceToolsets"`
+}
+
+// WorkspaceToolsetInfo 工作区工具集简要信息（/api/plugins/builtin 附加返回，
+// 不含插件代码，避免响应臃肿）。
+type WorkspaceToolsetInfo struct {
+	Name        string               `json:"name"`
+	Description string               `json:"description"`
+	Plugins     []WorkspacePluginInfo `json:"plugins"`
+}
+
+// WorkspacePluginInfo 工作区工具集内一个插件（工具 + 摘除工具）。
+type WorkspacePluginInfo struct {
+	Name          string   `json:"name"`
+	Purpose       string   `json:"purpose"`
+	Builtin       string   `json:"builtin,omitempty"` // 内置分组名（引用内置组时非空）
+	Tools         []string `json:"tools,omitempty"`
+	DisabledTools []string `json:"disabledTools,omitempty"`
 }
 
 // ─── 分组派生 ──────────────────────────────────────────────
@@ -439,6 +461,27 @@ func BuiltinToolsetInfoOf(reg *Registry, ph *PluginHost, root string) *BuiltinTo
 			if t.Enabled {
 				info.EnabledTotal++
 			}
+		}
+	}
+	// 工作区工具集（project scope）：让接口即时反映 toolset_edit / toolset_build
+	// 对工具集的动态修改（如单独加入某插件工具）。listToolsets 已跳过 builtin.json。
+	if root != "" {
+		for _, m := range listToolsets(root, toolsetProject) {
+			ts, err := loadToolset(root, toolsetProject, m.Name)
+			if err != nil || ts == nil {
+				continue
+			}
+			wi := WorkspaceToolsetInfo{Name: ts.Name, Description: ts.Description}
+			for _, p := range ts.Plugins {
+				wi.Plugins = append(wi.Plugins, WorkspacePluginInfo{
+					Name:          p.Name,
+					Purpose:       p.Purpose,
+					Builtin:       p.Builtin,
+					Tools:         append([]string(nil), p.Tools...),
+					DisabledTools: append([]string(nil), p.DisabledTools...),
+				})
+			}
+			info.WorkspaceToolsets = append(info.WorkspaceToolsets, wi)
 		}
 	}
 	return info
