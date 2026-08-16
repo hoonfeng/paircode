@@ -76,24 +76,10 @@ let panelMountFn = null
 export const clientSlots = __registry.clientSlots
 const slotOwnerKey = (id) => 'paircode-slot-' + id
 
-// ─── 内置槽位注册表（一切皆插件：内置 UI 区域 = 内置默认实现，与插件占用统一装配）───
-// builtinSlotDefs: { slotId: { slotId, title, desc, kind, builtin:true } }
-// ★ 宿主模板直挂内置组件（titlebar/activitybar/sidebar/editor/right-panel/statusbar/chat），
-//   装配视图与插件占用统一：面板展示内置区域清单 + 覆盖者，插件占用优先于内置。
-//   外部 JS（插件 client 半 / 用户自定义脚本）可调用 registerBuiltinSlot 覆盖注册表项，
-//   无需重新编译（注册表是运行时 JS 数据结构）。
-const builtinSlotDefs = {}
-// registerBuiltinSlot 注册内置区域定义（宿主启动时调用）。
-// def: { slotId, title, desc?, kind?('single'|'list', 默认 single) }
-export function registerBuiltinSlot(slotId, def) {
-  builtinSlotDefs[slotId] = { slotId, kind: def.kind || 'single', builtin: true, title: def.title || slotId, desc: def.desc || '' }
-}
-// getBuiltinSlots 全部内置区域定义（插件面板装配视图用）。
-export function getBuiltinSlots() { return Object.values(builtinSlotDefs) }
-// getSlotImplInfo 某槽位当前装配信息：owner='' 内置默认 / 插件占用者名。
-export function getSlotImplInfo(slotId) {
-  return { slotId, owner: getSlotOwner(slotId), builtin: !!builtinSlotDefs[slotId] }
-}
+// ★ 一切皆插件（2026-08-16）：UI 槽位完全由磁盘插件 client 半注册（clientSlots），
+//   壳不再硬编码内置槽位注册表（原 builtinSlotDefs / registerBuiltinSlot /
+//   getBuiltinSlots / getSlotImplInfo 已随 ShellApp 预注册移除——插件面板装配
+//   视图只展示插件注册的槽位与占用者）。
 // 槽位变化监听（支持多个订阅者：App 状态栏容器 + 插件面板管理区）
 let slotMountFns = []
 

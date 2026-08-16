@@ -6994,16 +6994,11 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
       const slotGroups = vue.ref([]);
       let slotUnsub = null;
       function refreshSlots() {
-        const builtins = pluginRuntime_js.getBuiltinSlots();
-        const keys = [.../* @__PURE__ */ new Set([
-          ...builtins.map((s) => s.slotId + "::" + s.kind),
-          ...pluginRuntime_js.clientSlots.map((s) => s.slotId + "::" + s.kind)
-        ])];
+        const keys = [...new Set(pluginRuntime_js.clientSlots.map((s) => s.slotId + "::" + s.kind))];
         slotGroups.value = keys.map((k) => {
           const [slotId, kind] = k.split("::");
           const candidates = pluginRuntime_js.getSlotCandidates(slotId).filter((c) => c.kind === kind);
-          const builtinDef = builtins.find((b) => b.slotId === slotId && b.kind === kind);
-          return { slotId, kind, owner: pluginRuntime_js.getSlotOwner(slotId), candidates, builtin: builtinDef || null };
+          return { slotId, kind, owner: pluginRuntime_js.getSlotOwner(slotId), candidates, builtin: null };
         });
       }
       function overlayActive(slotId, pluginName) {
@@ -7850,7 +7845,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
       };
     }
   };
-  const PluginPanel = /* @__PURE__ */ _export_sfc(_sfc_main$1, [["__scopeId", "data-v-d3abd174"]]);
+  const PluginPanel = /* @__PURE__ */ _export_sfc(_sfc_main$1, [["__scopeId", "data-v-2edc992e"]]);
   const _hoisted_1 = { class: "sidebar-header" };
   const _hoisted_2 = { class: "sidebar-content" };
   const _hoisted_3 = {

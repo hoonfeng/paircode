@@ -37887,8 +37887,11 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
         document.addEventListener("mouseup", stopRightResize);
       };
       const onRightMove = (e3) => {
+        var _a2;
         if (!dragging) return;
-        uiState_js.rightPanelWidth.value = Math.max(160, Math.min(400, startW + (startX2 - e3.clientX)));
+        const sidebarW = ((_a2 = document.querySelector(".plugin-area-sidebar")) == null ? void 0 : _a2.getBoundingClientRect().width) ?? 0;
+        const maxW = window.innerWidth - 48 - sidebarW - 340 - TOTAL_EXTRA;
+        uiState_js.rightPanelWidth.value = Math.min(Math.max(0, startW + (startX2 - e3.clientX)), maxW);
         syncRightWidth();
       };
       const stopRightResize = () => {
@@ -37925,7 +37928,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
       };
     }
   };
-  const UiRightPanel2 = /* @__PURE__ */ _export_sfc(_sfc_main, [["__scopeId", "data-v-d4b1dae6"]]);
+  const UiRightPanel2 = /* @__PURE__ */ _export_sfc(_sfc_main, [["__scopeId", "data-v-b77ee50a"]]);
   function mount(el) {
     const app = vue.createApp(UiRightPanel2);
     app.mount(el);

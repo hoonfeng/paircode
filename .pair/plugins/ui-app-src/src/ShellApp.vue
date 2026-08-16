@@ -82,7 +82,7 @@
 
 <script setup>
 import { onMounted, onUnmounted, ref } from 'vue'
-import { useSingleSlot, syncClientHalves, startPolling, stopPolling, registerBuiltinSlot, loadAssemblyFile } from './plugin-runtime.js'
+import { useSingleSlot, syncClientHalves, startPolling, stopPolling, loadAssemblyFile } from './plugin-runtime.js'
 import { state } from './ui-state.js'
 import api from './api.js'
 import { initAppGlobals, cleanupAppGlobals, desktopPrefetch, loadWsList } from './app-actions.js'
@@ -92,16 +92,6 @@ import PluginPanel from './components/PluginPanel.vue'
 //   此时只渲染右侧面板占满全屏，隐藏 IDE 其他区域。
 const panelMode = typeof window !== 'undefined' && window.__DESKTOP_PANEL_MODE__ === true
 const pluginsOpen = ref(false) // 壳级逃生口：插件面板浮动层开关
-
-// ★ 一切皆插件：壳注册 8 个内置槽位定义（插件面板装配视图可见；占用统一）。
-registerBuiltinSlot('titlebar', { title: '标题栏（含 logo/菜单/标题）', desc: '默认实现：ui-titlebar 插件' })
-registerBuiltinSlot('activitybar', { title: '活动栏（左侧竖条）', desc: '默认实现：ui-activitybar 插件' })
-registerBuiltinSlot('sidebar', { title: '左侧栏（文件/搜索/Git）', desc: '默认实现：ui-sidebar 插件' })
-registerBuiltinSlot('editor', { title: '主编辑区（编辑器+终端）', desc: '默认实现：ui-editor 插件' })
-registerBuiltinSlot('right-panel', { title: '右侧容器（对话外壳）', desc: '默认实现：ui-right-panel 插件' })
-registerBuiltinSlot('statusbar', { title: '状态栏（底部）', desc: '默认实现：ui-statusbar 插件' })
-registerBuiltinSlot('chat', { title: '对话面板（rp-body 区）', desc: 'ui-right-panel 内对话+输入区' })
-registerBuiltinSlot('modals', { title: '全局模态框/浮动层', desc: '默认实现：ui-modals 插件' })
 
 const slots = {
   titlebar: useSingleSlot('titlebar'),

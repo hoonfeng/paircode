@@ -173,11 +173,14 @@ export const sidebarWidth = ref(280)
 export function loadPanelSize() {
   try {
     const d = JSON.parse(localStorage.getItem('paircode-panel-size') || '{}')
-    // ★ 右侧面板宽度 clamp [160,400]（与 UiRightPanel 拖拽 clamp 一致）：
-    //   右侧总宽 = rpw + ConvSidebar(200) + resizer/border(5) = 365~605px，
-    //   1280 窗口编辑器 ≥ 587px。
-    //   旧残留 rpw 可能 520+（右侧 775px 挤压编辑器到 ~177px 的历史坑）。
-    if (d.rpw) rightPanelWidth.value = Math.max(160, Math.min(parseFloat(d.rpw) || 320, 400))
+    // ★ 不限位（2026-08-16 用户要求）：恢复保存值，只做防呆（负值/NaN → 0），
+    //   上限 = 布局物理边界（编辑器保底 340，树折叠假设；树展开时溢出可拖拽修正）。
+    //   旧残留 rpw 可能 520+（右侧 775px 挤压编辑器的历史坑）——此处不再硬限 400，
+    //   布局 minmax(340px,1fr) 兜底。
+    if (d.rpw) {
+      const v = parseFloat(d.rpw)
+      rightPanelWidth.value = Number.isFinite(v) ? Math.max(0, Math.min(v, window.innerWidth - 593)) : 320
+    }
     if (d.bph) bottomPanelHeight.value = Math.max(120, Math.min(parseFloat(d.bph) || 180, 500))
   } catch {}
   try {

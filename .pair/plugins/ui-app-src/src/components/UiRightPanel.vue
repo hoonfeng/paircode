@@ -35,11 +35,13 @@ const startRightResize = (e) => {
 }
 const onRightMove = (e) => {
   if (!dragging) return
-  // ★ 下限 160：聊天区最小可用宽度（右侧总宽 = 160+205 = 365px，
-  //   1280 窗口编辑器 ≥ 587px）。上限 400：右侧总宽 ≤ 605px（400+205），
-  //   1280 窗口编辑器 ≥ 347px。
-  //   拖拽到 900（旧值）→ 右侧 1105px → 编辑器被挤到负值/溢出。
-  rightPanelWidth.value = Math.max(160, Math.min(400, startW + (startX - e.clientX)))
+  // ★ 不限位（2026-08-16 用户要求）：不再设 160/400 硬坎，只保留两个物理边界——
+  //   下限 0：聊天区可拖到 0（右侧仍显示对话列表 200px，resizer 在容器左缘可拖回）；
+  //   上限 = 当前布局允许的极限：编辑器列 ≥ 340（grid minmax(340px,1fr) 硬保护），
+  //   即 rpw ≤ winW - activitybar(48) - sidebar(树宽) - 编辑器(340) - 对话列表(205)。
+  const sidebarW = document.querySelector('.plugin-area-sidebar')?.getBoundingClientRect().width ?? 0
+  const maxW = window.innerWidth - 48 - sidebarW - 340 - TOTAL_EXTRA
+  rightPanelWidth.value = Math.min(Math.max(0, startW + (startX - e.clientX)), maxW)
   syncRightWidth()
 }
 const stopRightResize = () => {

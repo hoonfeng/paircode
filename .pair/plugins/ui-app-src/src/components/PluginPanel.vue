@@ -199,7 +199,7 @@
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import api from '../api.js'
 import SvgIcon from './SvgIcon.vue'
-import { clientPanels, clientSlots, syncClientHalves, unloadClientHalf, startPolling, stopPolling, setPanelMount, setSlotMount, getUIFor, getSlotCandidates, getSlotOwner, setSlotOwner, emitSlotChanged, isOverlayActive, setOverlayActive, isPluginUIEnabled, setPluginUIEnabled, getBuiltinSlots } from '../plugin-runtime.js'
+import { clientPanels, clientSlots, syncClientHalves, unloadClientHalf, startPolling, stopPolling, setPanelMount, setSlotMount, getUIFor, getSlotCandidates, getSlotOwner, setSlotOwner, emitSlotChanged, isOverlayActive, setOverlayActive, isPluginUIEnabled, setPluginUIEnabled } from '../plugin-runtime.js'
 
 const plugins = ref([])
 const loading = ref(false)
@@ -491,18 +491,14 @@ let slotUnsub = null
 function refreshSlots() {
   // ★ 按 (slotId, kind) 分组：同一区域可同时有 single 替换与 list 叠加占用
   //   （如 activitybar），两类控件（下拉/勾选）互不干扰。
-  // ★ 一切皆插件：内置区域（builtinSlotDefs）也纳入装配视图——每行显示
-  //   「内置默认 / 插件占用者」，插件注册槽位后出现在下拉可切换。
-  const builtins = getBuiltinSlots()
-  const keys = [...new Set([
-    ...builtins.map(s => s.slotId + '::' + s.kind),
-    ...clientSlots.map(s => s.slotId + '::' + s.kind),
-  ])]
+  // ★ 一切皆插件（2026-08-16）：槽位完全由磁盘插件 client 半注册
+  //   （clientSlots）；壳不再硬编码内置槽位（registerBuiltinSlot 已移除），
+  //   面板只展示插件注册的槽位与占用者。
+  const keys = [...new Set(clientSlots.map(s => s.slotId + '::' + s.kind))]
   slotGroups.value = keys.map(k => {
     const [slotId, kind] = k.split('::')
     const candidates = getSlotCandidates(slotId).filter(c => c.kind === kind)
-    const builtinDef = builtins.find(b => b.slotId === slotId && b.kind === kind)
-    return { slotId, kind, owner: getSlotOwner(slotId), candidates, builtin: builtinDef || null }
+    return { slotId, kind, owner: getSlotOwner(slotId), candidates, builtin: null }
   })
 }
 
