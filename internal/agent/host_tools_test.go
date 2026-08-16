@@ -56,9 +56,13 @@ return {
 	if _, ok := HostToolMeta("tool_stats"); !ok {
 		t.Fatal("tool_stats 宿主执行器未存档")
 	}
-	// 未被接管的 task_create 不应在 hostExecutors（会话级工具，不在宿主框架注册）
-	if _, ok := HostToolMeta("task_create"); ok {
-		t.Fatal("task_create 未被接管不应存档")
+	// task_create 会话桥路由版已存档（2026-08-16：会话桥机制——插件工具经
+	// _convID 路由回会话；无桥注入时执行报错而非静默）
+	if _, ok := HostToolMeta("task_create"); !ok {
+		t.Fatal("task_create 会话桥路由执行器未存档（SetSessionBridge 应已调用 archiveSessionTools）")
+	}
+	if _, err := ExecuteHostTool("task_create", map[string]any{"subject": "t", "description": "d"}); err == nil {
+		t.Fatal("task_create 无会话桥注入时应报错（防静默失效）")
 	}
 	if _, ok := reg.Get("task_create"); ok {
 		t.Fatal("task_create 不应在宿主框架 Registry（会话级注册）")

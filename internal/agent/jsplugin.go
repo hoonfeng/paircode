@@ -2104,9 +2104,21 @@ func jsToolToGo(vm *goja.Runtime, v goja.Value, lockFn func(func())) (*Tool, err
 		var out string
 		var hErr error
 		run := func() {
+			// ★ 会话标识注入：Loop ctx 链携带 convID 时，复制 args 并注入
+			//   `_convID` 内部键（不污染原 args——AfterTool 观察/统计用原值）。
+			//   插件工具 execute 内可读 args._convID 经 ctx.hostTool 路由回宿主
+			//   （ask_user/task_create 会话桥；其余工具可忽略）。无会话则原样。
+			injected := args
+			if convID := SessionConvID(ctx); convID != "" {
+				injected = make(map[string]any, len(args)+1)
+				for k, v := range args {
+					injected[k] = v
+				}
+				injected["_convID"] = convID
+			}
 			var res goja.Value
 			execErr := runJSWithTimeout(vm, jsToolTimeout, func() error {
-				r, err := execFn(goja.Undefined(), vm.ToValue(args))
+				r, err := execFn(goja.Undefined(), vm.ToValue(injected))
 				res = r
 				return err
 			})

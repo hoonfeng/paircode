@@ -24,19 +24,19 @@ type Compressor = Provider
 // LoopOpts 创建 Loop 所需的全部参数（供 SessionManager.Start 使用）。
 // 把原本散落在 web 层的 Loop 构造逻辑收敛到一处，便于并行会话统一创建。
 type LoopOpts struct {
-	Provider         Provider    // LLM 提供方
-	Registry         *Registry   // 工具注册表（Start 会在此注册 ask_user 工具）
-	System           string      // 系统提示词
-	MaxIterations    int         // 最大迭代数（<=0 时 Loop 内部默认 30）
-	MaxContextTokens int         // 上下文 token 上限（>0 启用压缩）
-	Compressor       Compressor  // 上下文压缩器（可空）
-	History          []Message   // 初始历史（首次为空；续跑时传上一轮 History）。传入时可能已被 CondenseHistory 压缩。
-	HistoryOriginal  []Message   // 原始未压缩历史（与 History 对应，用于持久化而非 LLM 上下文）。
-	CompressedSummaries []string // 已持久化的压缩摘要（页面刷新后恢复）
-	Autonomous            bool   // 自主模式标志
-	MaxAutonomousMinutes  int    // 自主模式时间预算（分钟，0=无限制）
-	CheckpointInterval    int    // 检查点间隔（迭代数，0=默认5）
-	WorkspaceRoot         string // 工作区根路径（用于跨工作区并行对话的状态指示与隔离）
+	Provider             Provider   // LLM 提供方
+	Registry             *Registry  // 工具注册表（Start 会在此注册 ask_user 工具）
+	System               string     // 系统提示词
+	MaxIterations        int        // 最大迭代数（<=0 时 Loop 内部默认 30）
+	MaxContextTokens     int        // 上下文 token 上限（>0 启用压缩）
+	Compressor           Compressor // 上下文压缩器（可空）
+	History              []Message  // 初始历史（首次为空；续跑时传上一轮 History）。传入时可能已被 CondenseHistory 压缩。
+	HistoryOriginal      []Message  // 原始未压缩历史（与 History 对应，用于持久化而非 LLM 上下文）。
+	CompressedSummaries  []string   // 已持久化的压缩摘要（页面刷新后恢复）
+	Autonomous           bool       // 自主模式标志
+	MaxAutonomousMinutes int        // 自主模式时间预算（分钟，0=无限制）
+	CheckpointInterval   int        // 检查点间隔（迭代数，0=默认5）
+	WorkspaceRoot        string     // 工作区根路径（用于跨工作区并行对话的状态指示与隔离）
 	// ReviewMode 审核模式："auto"=AI审核, "manual"=手动审批, "off"=全部放行。
 	// "auto"=Loop 内部 AI 审核把关写操作；"off"=全部放行（不经过任何审核）；"manual"=人工审批（前端弹窗）。
 	ReviewMode string
@@ -59,6 +59,7 @@ type GlobalEvent struct {
 	ConvID string
 	Event  Event
 }
+
 // ApprovalResult 审批结果（由用户通过前端 ApprovalBar 提交）。
 type ApprovalResult struct {
 	Approved bool
@@ -82,9 +83,9 @@ type Session struct {
 	StartedAt     time.Time
 
 	// 交互通道（从 web 层 webAgentSession 迁移）
-	askCh      chan string // ask_user 工具阻塞等用户回答
-	approvalCh chan ApprovalResult   // Approve 钩子阻塞等用户裁决
-	feedbackCh chan string // OnFeedback 每轮 LLM 调用前检查
+	askCh      chan string         // ask_user 工具阻塞等用户回答
+	approvalCh chan ApprovalResult // Approve 钩子阻塞等用户裁决
+	feedbackCh chan string         // OnFeedback 每轮 LLM 调用前检查
 
 	// 订阅者 fan-out：多个 SSE 客户端可订阅同一会话事件
 	subscribers []chan Event
@@ -308,6 +309,10 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 	// 避免 handleChatSend 的 defer setupCancel() 级联取消 runCtx，
 	// 导致 Loop 尚未开始就 ctx.Err() != nil 直接返回）。
 	runCtx, cancel := context.WithCancel(context.Background())
+	// ★ 会话标识注入 ctx 链：Loop.Run → Registry.Execute 同源 ctx，
+	//   JS 插件工具包装时可提取 convID（_convID 注入），ask_user/task_create
+	//   经会话桥按 convID 路由（多会话并发不串）。
+	runCtx = WithSessionConvID(runCtx, convID)
 
 	sess := &Session{
 		ConvID:        convID,
@@ -471,66 +476,70 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 
 	// 注册 ask_user 工具：阻塞等用户回答（从 askCh 读）
 	// Register 同名覆盖，安全替换调用方可能已注册的旧版本。
+	// ★ 条件化：磁盘插件（tool-system）已注册同名工具（hostTool 路由版）时
+	//   不再注册会话级版本——插件接管 agent 可见面，执行经 _convID 路由回本会话。
+	//   插件未装载/停用时回退本版本（行为与旧版一致）。
 	if opts.Registry != nil {
-		opts.Registry.Register(&Tool{
-			Name:        "ask_user",
-			SystemTool:  true,
-			Description: "向用户提问并等待回答（用于关键决策、歧义澄清，别滥用）。" +
-				"question 必填；askType 可选(text/single/multi/single-with-input)，默认 text 纯文本输入；" +
-				"options 可选(选择类 question 的选项列表；single-with-input 时用户可另选或自定义输入)。调用会阻塞直到用户回答。",
-			Parameters: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"question": map[string]any{"type": "string", "description": "向用户提出的问题"},
-					"askType":   map[string]any{"type": "string", "enum": []string{"text", "single", "multi", "single-with-input"}, "description": "提问类型：text(纯文本)/single(单选)/multi(多选)/single-with-input(单选+自由输入)"},
-					"options":   map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "选择类问题用：可选项列表"},
+		if _, exists := opts.Registry.Get("ask_user"); !exists {
+			opts.Registry.Register(&Tool{
+				Name:       "ask_user",
+				SystemTool: true,
+				Description: "向用户提问并等待回答（用于关键决策、歧义澄清，别滥用）。" +
+					"question 必填；askType 可选(text/single/multi/single-with-input)，默认 text 纯文本输入；" +
+					"options 可选(选择类 question 的选项列表；single-with-input 时用户可另选或自定义输入)。调用会阻塞直到用户回答。",
+				Parameters: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"question": map[string]any{"type": "string", "description": "向用户提出的问题"},
+						"askType":  map[string]any{"type": "string", "enum": []string{"text", "single", "multi", "single-with-input"}, "description": "提问类型：text(纯文本)/single(单选)/multi(多选)/single-with-input(单选+自由输入)"},
+						"options":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "选择类问题用：可选项列表"},
+					},
+					"required": []string{"question"},
 				},
-				"required": []string{"question"},
-			},
-			RequiresApproval: false,
-			Handler: func(hctx context.Context, args map[string]any) (string, error) {
-				question, _ := args["question"].(string)
-				if question == "" {
-					question = "（无问题内容）"
-				}
-				select {
-				case answer := <-sess.askCh:
-					return strings.TrimSpace(answer), nil
-				case <-hctx.Done():
-					return "", hctx.Err()
-				case <-time.After(5 * time.Minute):
-					fmt.Printf("[session] ask_user 超时 conv=%s\n", convID)
-					return "", fmt.Errorf("等待用户回答超时（5 分钟）")
-				}
-			},
-		})
+				RequiresApproval: false,
+				Handler: func(hctx context.Context, args map[string]any) (string, error) {
+					question, _ := args["question"].(string)
+					if question == "" {
+						question = "（无问题内容）"
+					}
+					select {
+					case answer := <-sess.askCh:
+						return strings.TrimSpace(answer), nil
+					case <-hctx.Done():
+						return "", hctx.Err()
+					case <-time.After(5 * time.Minute):
+						fmt.Printf("[session] ask_user 超时 conv=%s\n", convID)
+						return "", fmt.Errorf("等待用户回答超时（5 分钟）")
+					}
+				},
+			})
 
-		// 注册本对话专属的 task_create：捕获 sess.ConvID 写入任务持久化记录
-		opts.Registry.Register(&Tool{
-			Name:        "task_create",
-			SystemTool:  true,
-			UsageGuide:  "创建子任务并追踪执行进度。复杂任务（3+ 步）必须拆解为子任务，每完成一项更新状态（in_progress→completed）。依赖项用 dependencies 参数关联。比手动记清单更可靠（持久化到磁盘+状态自动管理）。",
-			Description: "创建新的子任务。创建后必须立即执行该任务：先调用 task_update 标记为 in_progress 开始执行，" +
-				"执行完成后调用 task_update 标记为 completed 并说明结果。重复此流程直到所有子任务完成。",
-			Parameters: objSchema(props{
-				"subject":      strProp("任务标题，用祈使句（如\"修复登录超时\"）"),
-				"description":  strProp("详细描述：做什么、涉及哪些文件。不要包含文件原始内容，只写摘要。"),
-				"dependencies": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "依赖的任务 ID 列表"},
-			}, "subject", "description"),
-			Handler: func(hctx context.Context, args map[string]any) (string, error) {
-				subject := argStr(args, "subject")
-				desc := argStr(args, "description")
-				deps := argStrSlice(args, "dependencies")
-				root := sess.WorkspaceRoot
-				if root == "" {
-					root = ""
-				}
-				tm := UseTaskManager(root)
-				task := tm.Create(subject, desc, deps, sess.ConvID)
-				return fmt.Sprintf("✅ 已创建任务 [%s] %s\n> %s\n\n状态: ⏳ 待执行\nID: `%s`", task.ID, task.Subject, task.Description, task.ID), nil
-			},
-		})
-
+			// 注册本对话专属的 task_create：捕获 sess.ConvID 写入任务持久化记录
+			opts.Registry.Register(&Tool{
+				Name:       "task_create",
+				SystemTool: true,
+				UsageGuide: "创建子任务并追踪执行进度。复杂任务（3+ 步）必须拆解为子任务，每完成一项更新状态（in_progress→completed）。依赖项用 dependencies 参数关联。比手动记清单更可靠（持久化到磁盘+状态自动管理）。",
+				Description: "创建新的子任务。创建后必须立即执行该任务：先调用 task_update 标记为 in_progress 开始执行，" +
+					"执行完成后调用 task_update 标记为 completed 并说明结果。重复此流程直到所有子任务完成。",
+				Parameters: objSchema(props{
+					"subject":      strProp("任务标题，用祈使句（如\"修复登录超时\"）"),
+					"description":  strProp("详细描述：做什么、涉及哪些文件。不要包含文件原始内容，只写摘要。"),
+					"dependencies": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "依赖的任务 ID 列表"},
+				}, "subject", "description"),
+				Handler: func(hctx context.Context, args map[string]any) (string, error) {
+					subject := argStr(args, "subject")
+					desc := argStr(args, "description")
+					deps := argStrSlice(args, "dependencies")
+					root := sess.WorkspaceRoot
+					if root == "" {
+						root = ""
+					}
+					tm := UseTaskManager(root)
+					task := tm.Create(subject, desc, deps, sess.ConvID)
+					return fmt.Sprintf("✅ 已创建任务 [%s] %s\n> %s\n\n状态: ⏳ 待执行\nID: `%s`", task.ID, task.Subject, task.Description, task.ID), nil
+				},
+			})
+		}
 	}
 
 	// 存入 map（覆盖已结束的旧会话），并做已结束会话上限淘汰
@@ -951,6 +960,7 @@ func (m *SessionManager) GetCurrentHistoryRaw(convID string) []Message {
 	}
 	return nil
 }
+
 // 页面刷新后恢复时使用。会话不存在或 Loop 尚未开始返回 nil。
 func (m *SessionManager) GetCurrentCompressedSummaries(convID string) []string {
 	m.mu.RLock()
@@ -995,6 +1005,40 @@ func (m *SessionManager) SendAnswer(convID string, answer string) error {
 	default:
 		return errors.New("回答通道已满（可能已有待处理回答）")
 	}
+}
+
+// WaitAnswer 按 convID 等待用户回答（ask_user 会话桥路由入口）。
+// 与 SendAnswer 配对：前端 /api/answer → SendAnswer → askCh → 本方法返回。
+// 会话不存在/未运行报错；ctx 取消或 5 分钟超时返回错误（不永久阻塞）。
+func (m *SessionManager) WaitAnswer(ctx context.Context, convID string) (string, error) {
+	m.mu.RLock()
+	sess, ok := m.sessions[convID]
+	m.mu.RUnlock()
+	if !ok {
+		return "", ErrSessionNotFound
+	}
+	if !sess.Running {
+		return "", ErrSessionNotRunning
+	}
+	select {
+	case answer := <-sess.askCh:
+		return strings.TrimSpace(answer), nil
+	case <-ctx.Done():
+		return "", ctx.Err()
+	case <-time.After(5 * time.Minute):
+		fmt.Printf("[session] ask_user 超时 conv=%s\n", convID)
+		return "", fmt.Errorf("等待用户回答超时（5 分钟）")
+	}
+}
+
+// GetSessionWorkspaceRoot 取会话工作区根（task_create 持久化路由用；无会话返回空串）。
+func (m *SessionManager) GetSessionWorkspaceRoot(convID string) string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if s, ok := m.sessions[convID]; ok {
+		return s.WorkspaceRoot
+	}
+	return ""
 }
 
 // Approve 向指定会话发送审批结果。

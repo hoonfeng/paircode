@@ -377,6 +377,70 @@ const tools = [
       "type": "object"
     },
     "systemTool": true
+  },
+  {
+    "name": "ask_user",
+    "description": "向用户提问并等待回答（用于关键决策、歧义澄清，别滥用）。question 必填；askType 可选(text/single/multi/single-with-input)，默认 text 纯文本输入；options 可选(选择类 question 的选项列表；single-with-input 时用户可另选或自定义输入)。调用会阻塞直到用户回答。",
+    "parameters": {
+      "properties": {
+        "askType": {
+          "description": "提问类型：text(纯文本)/single(单选)/multi(多选)/single-with-input(单选+自由输入)",
+          "enum": [
+            "text",
+            "single",
+            "multi",
+            "single-with-input"
+          ],
+          "type": "string"
+        },
+        "options": {
+          "description": "选择类问题用：可选项列表",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "question": {
+          "description": "向用户提出的问题",
+          "type": "string"
+        }
+      },
+      "required": [
+        "question"
+      ],
+      "type": "object"
+    },
+    "systemTool": true
+  },
+  {
+    "name": "task_create",
+    "description": "创建新的子任务。创建后必须立即执行该任务：先调用 task_update 标记为 in_progress 开始执行，执行完成后调用 task_update 标记为 completed 并说明结果。重复此流程直到所有子任务完成。",
+    "parameters": {
+      "properties": {
+        "dependencies": {
+          "description": "依赖的任务 ID 列表",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "description": {
+          "description": "详细描述：做什么、涉及哪些文件。不要包含文件原始内容，只写摘要。",
+          "type": "string"
+        },
+        "subject": {
+          "description": "任务标题，用祈使句（如\"修复登录超时\"）",
+          "type": "string"
+        }
+      },
+      "required": [
+        "subject",
+        "description"
+      ],
+      "type": "object"
+    },
+    "systemTool": true,
+    "usageGuide": "创建子任务并追踪执行进度。复杂任务（3+ 步）必须拆解为子任务，每完成一项更新状态（in_progress→completed）。依赖项用 dependencies 参数关联。比手动记清单更可靠（持久化到磁盘+状态自动管理）。"
   }
 ];
 

@@ -191,6 +191,17 @@ func startWebUI(port int) {
 	if root != "" {
 		agentMgr.SetWorkspaceRoot(root)
 		agent.SetCodeGraphDB(agentMgr.RawDB())
+		// ★ 会话桥注入（ask_user/task_create 插件化路由）：插件工具经
+		//   ctx.hostTool.exec('ask_user'/'task_create') + _convID 路由回本会话，
+		//   多会话并发按 convID 精确路由（WaitAnswer 读会话 askCh / 工作区查询）。
+		agent.SetSessionBridge(&agent.SessionBridge{
+			WaitAnswer: func(ctx context.Context, convID string) (string, error) {
+				return agentMgr.WaitAnswer(ctx, convID)
+			},
+			GetWorkspaceRoot: func(convID string) string {
+				return agentMgr.GetSessionWorkspaceRoot(convID)
+			},
+		})
 		// 迁移旧 conversations.json + history_cache.json 到新格式
 		convPath := filepath.Join(root, ".pair", "conversations.json")
 		hcPath := filepath.Join(root, ".pair", "history_cache.json")
