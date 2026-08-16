@@ -250,7 +250,7 @@ function updateInputPadding() {
   if (inputHeight.value < 80) inputHeight.value = 80
 }
 const inputHeight = ref(150)
-const convListWidth = ref(200)
+const convListWidth = ref(250)
 // ★ wb-ui(goja) workaround：state.conversations 数组整体赋值（loadConvList
 //   里 state.conversations = list）触发不了 prop 响应式更新——直接传
 //   state.conversations 时 ConvSidebar 拿到的是旧引用/空数组。改用

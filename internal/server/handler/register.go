@@ -58,6 +58,8 @@ func RegisterAll(r *Router) {
 	r.Handle("GET", "/api/conversations", HandleConversations)
 	r.Handle("POST", "/api/conversations", HandleConversationCreate)
 	r.Handle("GET", "/api/conversations/", HandleConversationByID)
+	r.Handle("PUT", "/api/conversations/", HandleConversationByID)
+	r.Handle("DELETE", "/api/conversations/", HandleConversationByID)
 
 	// Tasks / Plan
 	r.Handle("GET", "/api/tasks", HandleTasks)

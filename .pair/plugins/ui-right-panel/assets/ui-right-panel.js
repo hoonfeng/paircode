@@ -35586,7 +35586,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
         if (inputHeight.value < 80) inputHeight.value = 80;
       }
       const inputHeight = vue.ref(150);
-      const convListWidth = vue.ref(200);
+      const convListWidth = vue.ref(250);
       const convList = vue.computed(() => uiState_js.state.conversations);
       const topSentinel = vue.ref(null);
       const reviewMode = vue.ref("auto");
@@ -37842,7 +37842,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
       };
     }
   };
-  const RightPanel = /* @__PURE__ */ _export_sfc(_sfc_main$1, [["__scopeId", "data-v-e180339f"]]);
+  const RightPanel = /* @__PURE__ */ _export_sfc(_sfc_main$1, [["__scopeId", "data-v-b26ab304"]]);
   const TOTAL_EXTRA = 4 + 1 + 200;
   const _sfc_main = {
     __name: "UiRightPanel",

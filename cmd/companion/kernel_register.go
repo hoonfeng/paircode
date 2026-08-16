@@ -60,7 +60,7 @@ func registerKernelAPIs(s *webServer) {
 
 	// ── 对话列表 / 消息 ──
 	_ = agent.KernelAPIRegister("conversations", "GET,POST", "/api/conversations", "会话列表/新建", s.handleConversations)
-	_ = agent.KernelAPIRegister("conversations.byID", "GET", "/api/conversations/*", "会话详情（前缀）", s.handleConversationByID)
+	_ = agent.KernelAPIRegister("conversations.byID", "GET,PUT,DELETE", "/api/conversations/*", "会话详情/重命名/删除（前缀）", s.handleConversationByID)
 
 	// ── Tasks / Plan ──
 	_ = agent.KernelAPIRegister("tasks", "GET", "/api/tasks", "任务列表", s.handleTasks)
