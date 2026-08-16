@@ -1,4 +1,4 @@
-//go:build ignore
+//go:build toolsgen
 
 // ═══════════════════════════════════════════════════════════════
 // tool_plugin_gen — 磁盘工具插件生成器入口（go run ./dev/tool_plugin_gen）

@@ -63,15 +63,24 @@ func genToolGroups() []genToolGroup {
 		{"tool-lsp", "LSP 代码导航（lsp_definition/references/hover/diagnostics）", registerLSPTools, nil, "self"},
 		{"tool-codegraph", "代码知识图谱（codegraph_build/search/impact/…）", registerCodeGraphTools, nil, "self"},
 		{"tool-codegraph-extra", "图谱扩展（codegraph_find_by_signature/explore）", registerExtraCodeGraphTools, nil, "self"},
-		// tool-system：SystemTool 内部工具（ask_user/task_create 会话专属不可外置）
-		{"tool-system", "系统内部工具（update_tasks/update_plan/tool_stats/history_search/history_list/history_count）——SystemTool 同样可更换",
+		// tool-system：SystemTool 内部工具 + Skills/MCP/市场/提交信息
+		// （ask_user/task_create 会话专属不可外置）
+		{"tool-system", "系统内部工具（SystemTool + Skills/MCP/市场/提交信息：update_tasks/update_plan/tool_stats/history_*/skill_*/mcp_*/marketplace_*/generate_commit_message）——全部可更换",
 			func(r *Registry, root string) {
 				RegisterManagementTools(r, root)
 				registerPlanTool(r)
 				registerToolStatsTool(r)
 				registerTaskTools(r, root)
+				RegisterCommitMessageTool(r)
 			},
-			[]string{"update_tasks", "update_plan", "tool_stats", "history_search", "history_list", "history_count"},
+			[]string{
+				"update_tasks", "update_plan", "tool_stats",
+				"history_search", "history_list", "history_count",
+				"skill_list", "load_skill", "load_skill_resource", "skill_write", "skill_delete",
+				"mcp_list", "mcp_add", "mcp_remove",
+				"marketplace_search", "marketplace_install",
+				"generate_commit_message",
+			},
 			"",
 		},
 	}

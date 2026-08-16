@@ -2,7 +2,7 @@
 // tool-git — Git 操作（git_status/diff/log/show/blame/add/commit/…）
 //
 // 生成来源（2026-08-16）：内置 Go 工具组 → 磁盘外置插件（tool_plugin_gen.go
-// 自动生成，schema 完整外置拷贝）。api 声明在插件，execute 调 ctx.binary 复用统一宿主二进制（.pair/plugins/tool-binary/bin/，源码 cmd/plugins/tool-binary/，承载全部内置工具组实现）。
+// 自动生成，schema 完整外置拷贝）。api 声明在插件，execute 调 ctx.binary 复用本插件目录 bin/ 下的独立二进制（源码 cmd/plugins/<name>/，改实现重编译即更换）。
 // 工具清单：git_status、git_diff、git_log、git_show、git_blame、git_add、git_commit、git_branch、git_checkout、git_stash
 // ═══════════════════════════════════════════════════════════════
 const tools = [

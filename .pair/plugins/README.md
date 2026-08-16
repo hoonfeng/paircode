@@ -192,3 +192,12 @@ go run -tags toolsgen ./dev/tool_plugin_gen   # 幂等：已有插件不覆盖�
   autonomous/maxAutonomousMinutes/checkpointInterval/reviewMode/autoCommit/
   reviewBlacklist/reviewWhitelist；停用插件自动还原默认工厂（Loop 不受影响）。
   （快照字段实现：internal/agent/jsplugin_loopfactory.go）
+- **`tool-system/`**（2026-08-16 扩容）：系统内部工具 17 个——SystemTool 组
+  （update_tasks/update_plan/tool_stats/history_search/history_list/history_count）
+  + Skills（skill_list/load_skill/load_skill_resource/skill_write/skill_delete）
+  + MCP（mcp_list/mcp_add/mcp_remove）+ 市场（marketplace_search/
+  marketplace_install）+ 提交信息（generate_commit_message）。execute 全走
+  `ctx.hostTool.exec`（宿主 Go 执行器：编排在插件、能力在宿主）。生成器
+  tool_plugin_gen.go 的 tool-system 组白名单同步维护（含 11 个新工具），
+  `go run -tags toolsgen ./dev/tool_plugin_gen` 重跑不丢失。ask_user/
+  task_create 会话专属保留宿主（SessionManager 会话绑定）。
