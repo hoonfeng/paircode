@@ -42,6 +42,9 @@ const stopBottomResize = () => {
 .main-area {
   grid-column: 3; grid-row: 2;
   display: flex; flex-direction: column; min-width: 0; overflow: hidden;
+  /* ★ bundle 根必须撑满宿主（plugin-slot-host 748px），否则 flex 高度 =
+     内容高度 → 编辑区/终端下方大段空余（历史坑：520 vs 748 → 228px 空白） */
+  height: 100%;
 }
 .main-area > :first-child { flex: 1; }
 .bottom-panel {

@@ -69,6 +69,9 @@ function stopResize() {
   flex-direction: column;
   overflow: hidden;
   position: relative;
+  /* ★ bundle 根撑满宿主：无 height:100% 时高度=内容（FileExplorer 1216px
+     溢出窗口 → 工具集被裁到窗口外；短面板 → 底部空余）。 */
+  height: 100%;
 }
 .sidebar-header {
   height: 32px;
