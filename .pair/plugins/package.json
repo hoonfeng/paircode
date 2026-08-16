@@ -2,7 +2,7 @@
   "name": "paircode-plugins",
   "private": true,
   "version": "1.3.0",
-  "description": "PairCode 插件体系发布包：全部磁盘插件（agentloop/core-api/tool-*/ui-*/web-api）+ UI 源码工程（ui-app-src）+ 依赖模型清单（config/models.json）",
+  "description": "PairCode 插件体系发布包：全部磁盘插件（agentloop/core-api/tool-*/ui-*/web-api）+ UI 源码工程（项目根 ui-app/）+ 依赖模型清单（config/models.json）",
   "keywords": [
     "paircode",
     "plugins",
@@ -15,7 +15,7 @@
   },
   "scripts": {
     "build": "node ../../scripts/build-ui.mjs",
-    "build:shell": "cd ui-app-src && npm run build",
+    "build:shell": "cd ../../plugins-src/ui-app && npm run build",
     "pack": "npm pack --pack-destination ../../release",
     "version:bump": "npm version --no-git-tag-version"
   },
@@ -52,7 +52,6 @@
     "ui-statusbar",
     "ui-statusbar-conn",
     "ui-titlebar",
-    "ui-app-src",
     "config/models.json",
     "config/settings.template.json"
   ],

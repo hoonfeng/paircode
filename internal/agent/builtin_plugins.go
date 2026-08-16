@@ -5,7 +5,7 @@
 //   - 内置 20 组（core/git/codegraph/…）的实现已迁移为磁盘插件
 //     （.pair/plugins/tool-*，JS 原生化或独立插件二进制），宿主进程
 //     不再注册——builtinPluginSpecs 保留仅作「二进制实现库的组规格」，
-//     供独立插件二进制（cmd/plugins/tool-*/，经 pkg/toolbin）按组注册。
+//     供独立插件二进制（plugins-src/plugins/tool-*/，经 pkg/toolbin）按组注册。
 //   - 宿主只注册框架协议工具（RegisterHostFrameworkTools）：SystemTool
 //     （update_tasks/update_plan/tool_stats/history_*）会话绑定，供
 //     tool-system 插件 hostTool 承载（同名接管时 ArchiveHostTool 存档）。
@@ -17,7 +17,7 @@
 //     不可启停、不出现在插件列表/Inspect 中，插件列表只含真实可管理的插件。
 //
 // 双入口共享同一份规格（builtinPluginSpecs）：
-//   - 独立二进制：RegisterToolGroups(r, root, "git") 按组注册（cmd/plugins/*）
+//   - 独立二进制：RegisterToolGroups(r, root, "git") 按组注册（plugins-src/plugins/*）
 //   - 宿主框架：RegisterHostFrameworkTools（只注册 SystemTool 组）
 // ═══════════════════════════════════════════════════════════════
 
@@ -31,7 +31,7 @@ type builtinPluginSpec struct {
 }
 
 // builtinPluginSpecs 内置插件规格全表（顺序即装配顺序，core 最先）。
-// ★ 仅作二进制实现库的组规格（cmd/plugins/tool-*/ 经 RegisterToolGroups
+// ★ 仅作二进制实现库的组规格（plugins-src/plugins/tool-*/ 经 RegisterToolGroups
 //   按组注册）——宿主进程不再 apply 本表。
 func builtinPluginSpecs(root string) []builtinPluginSpec {
 	eh := newEditHistory() // ★ v2: 编辑行号偏移追踪器
@@ -79,7 +79,7 @@ func builtinPluginSpecs(root string) []builtinPluginSpec {
 }
 
 // RegisterToolGroups 按组注册内置工具（groups 为空 = 全部）。供独立插件二进制
-// （cmd/plugins/tool-*/，经 pkg/toolbin）与测试/示例使用——宿主进程不调用。
+// （plugins-src/plugins/tool-*/，经 pkg/toolbin）与测试/示例使用——宿主进程不调用。
 func RegisterToolGroups(r *Registry, root string, groups ...string) {
 	want := map[string]bool{}
 	for _, g := range groups {

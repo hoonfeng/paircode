@@ -2,7 +2,7 @@
 // tool-codegraph — 代码知识图谱（codegraph_build/search/impact/…）
 //
 // 生成来源（2026-08-16）：内置 Go 工具组 → 磁盘外置插件（tool_plugin_gen.go
-// 自动生成，schema 完整外置拷贝）。api 声明在插件，execute 调 ctx.binary 复用本插件目录 bin/ 下的独立二进制（源码 cmd/plugins/<name>/，改实现重编译即更换）。
+// 自动生成，schema 完整外置拷贝）。api 声明在插件，execute 调 ctx.binary 复用本插件目录 bin/ 下的独立二进制（源码 plugins-src/plugins/<name>/，改实现重编译即更换）。
 // 工具清单：codegraph_build、codegraph_stats、codegraph_file_structure、codegraph_function、codegraph_class、codegraph_callers、codegraph_callees、codegraph_impact、codegraph_search、codegraph_git_history、codegraph_entity_history、codegraph_get_edit_context、codegraph_find_related_tests、codegraph_analyze_complexity、codegraph_search_by_pattern、codegraph_trace_call_chain、codegraph_find_dead_code、codegraph_module_architecture
 // ═══════════════════════════════════════════════════════════════
 const tools = [

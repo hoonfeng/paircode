@@ -2,7 +2,7 @@
 // tool-project-info — 项目知识库（project_info_write/read/list/search/delete/explore）
 //
 // 生成来源（2026-08-16）：内置 Go 工具组 → 磁盘外置插件（tool_plugin_gen.go
-// 自动生成，schema 完整外置拷贝）。api 声明在插件，execute 调 ctx.binary 复用本插件目录 bin/ 下的独立二进制（源码 cmd/plugins/<name>/，改实现重编译即更换）。
+// 自动生成，schema 完整外置拷贝）。api 声明在插件，execute 调 ctx.binary 复用本插件目录 bin/ 下的独立二进制（源码 plugins-src/plugins/<name>/，改实现重编译即更换）。
 // 工具清单：project_info_write、project_info_read、project_info_list、project_info_tree、project_info_search、project_info_delete、project_info_explore
 // ═══════════════════════════════════════════════════════════════
 const tools = [

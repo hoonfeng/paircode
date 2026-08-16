@@ -27,7 +27,7 @@
     {
       "name": "build-ui-shell",
       "command": "npm run build",
-      "dir": ".pair/plugins/ui-app-src",
+      "dir": "plugins-src/ui-app",
       "ignoreError": false
     },
     {
@@ -171,9 +171,22 @@
         "recursive": true
       },
       {
+        "src": "plugins-src",
+        "dst": "plugins-src",
+        "recursive": true,
+        "exclude": [
+          "node_modules"
+        ]
+      },
+      {
         "src": "config/models",
         "dst": "models",
         "optional": true,
+        "recursive": true
+      },
+      {
+        "src": ".pair/assets/runtime/web",
+        "dst": ".pair/assets/runtime/web",
         "recursive": true
       }
     ]

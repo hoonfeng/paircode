@@ -38,7 +38,7 @@ type genToolGroup struct {
 	// binary 指定 execute 调度形态（2026-08-16 第三轮：全部独立二进制）：
 	//   ""     → ctx.hostTool.exec（宿主内执行器，会话/宿主状态依赖——tool-system）
 	//   "self" → ctx.binary.exec（本插件目录 bin/<插件名>.exe，独立二进制；
-	//            源码 cmd/plugins/tool-<组>/，import agent 复用内置组实现）
+	//            源码 plugins-src/plugins/tool-<组>/，import agent 复用内置组实现）
 	binary string
 }
 
@@ -156,10 +156,10 @@ func buildPluginJS(g genToolGroup, defs []genToolDef) (string, error) {
 	switch g.binary {
 	case "self":
 		execLine = "execute: (args) => ctx.binary.exec(t.name, args || {}),"
-		execDoc = "execute 调 ctx.binary 复用本插件目录 bin/ 下的独立二进制（源码 cmd/plugins/<name>/，改实现重编译即更换）。"
+		execDoc = "execute 调 ctx.binary 复用本插件目录 bin/ 下的独立二进制（源码 plugins-src/plugins/<name>/，改实现重编译即更换）。"
 	case "tool-binary":
 		execLine = "execute: (args) => ctx.binary.exec(t.name, args || {}, {bin: 'tool-binary'}),"
-		execDoc = "execute 调 ctx.binary 复用统一宿主二进制（.pair/plugins/tool-binary/bin/，源码 cmd/plugins/tool-binary/，承载全部内置工具组实现）。"
+		execDoc = "execute 调 ctx.binary 复用统一宿主二进制（.pair/plugins/tool-binary/bin/，源码 plugins-src/plugins/tool-binary/，承载全部内置工具组实现）。"
 	}
 	fmt.Fprintf(&b, "// 自动生成，schema 完整外置拷贝）。api 声明在插件，%s\n", execDoc)
 	fmt.Fprintf(&b, "// 工具清单：%s\n", strings.Join(names, "、"))

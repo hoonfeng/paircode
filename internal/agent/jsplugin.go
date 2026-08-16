@@ -562,7 +562,7 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 			exePath = filepath.Join(p.def.dir, "bin", exeName)
 		}
 		if _, err := os.Stat(exePath); err != nil {
-			panic(vm.NewGoError(fmt.Errorf("ctx.binary.exec: 插件二进制不存在 %s（编译：go build -o %s ./cmd/plugins/<name>）", exePath, exePath)))
+			panic(vm.NewGoError(fmt.Errorf("ctx.binary.exec: 插件二进制不存在 %s（编译：go build -o %s ./plugins-src/plugins/<name>）", exePath, exePath)))
 		}
 		reqJSON, _ := json.Marshal(map[string]any{"tool": tool, "args": args, "root": pc.WorkspaceRoot})
 		ctxTO, cancel := context.WithTimeout(context.Background(), timeout)

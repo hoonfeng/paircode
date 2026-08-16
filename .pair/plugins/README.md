@@ -9,8 +9,8 @@
 | 形态 | 路径 | 说明 |
 |---|---|---|
 | 插件包（可装载） | `<name>/package.json + index.js[+client.js]` | 启动扫描装载（LoadGlobalPlugins）；index.js = host 半（api 声明 + 调度），client.js = 浏览器半（UI 渲染） |
-| 源码包（不可装载） | `<name>-src/` | ★ 插件**源码**（前端 Vite 工程、工具实现源码等）。装载器按 `-src` 后缀跳过；用户改源码 → 重新构建 → 产物进插件包/assets |
-| 独立二进制 | `<name>/bin/<name>.exe` | ★ 依赖 Go 内核的工具独立成**单独二进制项目**（源码在 `cmd/plugins/<name>/`），产物放本插件目录 bin/——插件自包含，改源码重编译即更换实现 |
+| 源码包（不可装载） | `<name>-src/` | ★ 插件**源码**。装载器按 `-src` 后缀跳过；用户改源码 → 重新构建 → 产物进插件包/assets |
+| 独立二进制 | `<name>/bin/<name>.exe` | ★ 依赖 Go 内核的工具独立成**单独二进制项目**（源码在 `plugins-src/plugins/<name>/`），产物放本插件目录 bin/——插件自包含，改源码重编译即更换实现 |
 | 加载资源 | `<name>/assets/` | 二进制/JS 运行所需资源（字体、模板、索引数据等），随插件目录分发 |
 
 ## 二进制插件协议（宿主 ctx.binary 服务）
@@ -108,7 +108,7 @@ cordis_* / toolset_* / history_* 等）**保持宿主实现**——它们绑定�
 - 二进制内可用 `os.Executable()` 定位自身目录 → 上级即插件目录（读 assets/）
 - 超时默认 60s（opts.timeout 毫秒可覆盖）
 - 示例：`.pair/plugins/tool-binary/`（8 个二进制工具，含逆向分析）——协议实现
-  参考 `cmd/plugins/tool-binary/main.go`
+  参考 `plugins-src/plugins/tool-binary/main.go`
 
 ## 独立插件二进制（每插件一个 exe，2026-08-16 第四轮）
 
@@ -116,12 +116,12 @@ cordis_* / toolset_* / history_* 等）**保持宿主实现**——它们绑定�
 debug/vision/screenshot/web-debug/bug/office/lsp/codegraph/codegraph-extra/
 search/web 等 17 组）**各自一个独立二进制**承载实现：
 
-- 源码：`cmd/plugins/<name>/main.go` + `cmd/plugins/<name>/impl/`（**自持本组
+- 源码：`plugins-src/plugins/<name>/main.go` + `plugins-src/plugins/<name>/impl/`（**自持本组
   实现，不 import internal/agent**）→ 产物 `<插件目录>/bin/<name>.exe`
 - 各组插件 JS 的 execute 统一 `ctx.binary.exec(t.name, args)`（缺省 bin=插件名
   → 定位本插件目录 bin/ 下的 exe；`opts.bin` 跨插件共用仅历史形态，已无引用）
-- **改实现**：改 `cmd/plugins/<name>/impl/*.go` → `go build -o
-  .pair/plugins/<name>/bin/<name>.exe ./cmd/plugins/<name>` → 重启 → 本组生效
+- **改实现**：改 `plugins-src/plugins/<name>/impl/*.go` → `go build -o
+  .pair/plugins/<name>/bin/<name>.exe ./plugins-src/plugins/<name>` → 重启 → 本组生效
   （主程序 exe 无需重编译）
 - tool-binary 只是其中普通一员（承载 binary 组 inspect_binary/write_binary/
   binary_strings/find/patch/info/hash/entropy 8 个工具，2026-08-16 并入
@@ -147,7 +147,7 @@ search/web 等 17 组）**各自一个独立二进制**承载实现：
    `execute: (args) => result`），用 `ctx.fs` / `ctx.bash` / `ctx.web` 等
    宿主服务实现逻辑——纯 JS 可改，无需重新编译。
 3. **独立二进制**：依赖 Go 内核/系统能力（PE 解析、哈希、文档转换、索引等）
-   → 独立 Go 项目 `cmd/plugins/<name>/` → 编译产物进 `<插件包>/bin/`
+   → 独立 Go 项目 `plugins-src/plugins/<name>/` → 编译产物进 `<插件包>/bin/`
    → JS 壳 `ctx.binary.exec` 调度。改二进制源码 → `go build` → 重启生效。
 
 ## 修改指南（用户自助）
@@ -156,23 +156,23 @@ search/web 等 17 组）**各自一个独立二进制**承载实现：
 ```bash
 # ① 改实现（JS 壳 or 独立二进制源码）
 vim .pair/plugins/tool-binary/index.js              # 改 api/调度
-vim cmd/plugins/tool-binary/impl/binary.go          # 改真实实现（读/写）
-vim cmd/plugins/tool-binary/impl/binary_re.go       # 改真实实现（逆向分析）
+vim plugins-src/plugins/tool-binary/impl/binary.go          # 改真实实现（读/写）
+vim plugins-src/plugins/tool-binary/impl/binary_re.go       # 改真实实现（逆向分析）
 # ② 重新编译二进制（改了 impl 时）
-go build -o .pair/plugins/tool-binary/bin/tool-binary.exe ./cmd/plugins/tool-binary
+go build -o .pair/plugins/tool-binary/bin/tool-binary.exe ./plugins-src/plugins/tool-binary
 # ③ 重启 companion → 生效
 ```
 
 ### 改前端 UI
 ```bash
-# 源码位于 .pair/plugins/ui-app-src/（Vue3 + Vite；node_modules 为 junction
+# 源码位于项目根 plugins-src/ui-app/（2026-08-17 迁移：不再放 .pair 内；Vue3 + Vite；node_modules 为 junction
 # 指向 cmd/companion/web-ui/node_modules，勿删）
 # ① 改组件/壳
-vim .pair/plugins/ui-app-src/src/components/*.vue
+vim plugins-src/ui-app/src/components/*.vue
 # ② 构建 7 个 UI 区域插件包（产物 → .pair/plugins/ui-*/assets/）
 node scripts/build-ui.mjs
 # ③ 构建壳（产物 → .pair/assets/runtime/web/，宿主外部优先加载）
-cd .pair/plugins/ui-app-src && node_modules/.bin/vite build
+cd plugins-src/ui-app && node_modules/.bin/vite build
 # ④ 重启 companion → 生效
 ```
 
@@ -226,7 +226,7 @@ go run -tags toolsgen ./dev/tool_plugin_gen   # 幂等：已有插件不覆盖�
 
 ### UI 代码专门目录
 
-- **`ui-app-src/`** —— UI **源码专门目录**（壳 ShellApp + 7 个区域入口
+- **`plugins-src/ui-app/`**（项目根，2026-08-17 从 .pair 迁出）—— UI **源码专门目录**（壳 ShellApp + 7 个区域入口
   ui-main-*.js + 60+ Vue 组件 + docs 文档）。Vite 工程（vite.config.js +
   package.json），`npm run build` 产壳到 `.pair/assets/runtime/web/`；
   `node scripts/build-ui.mjs` 产 7 个区域包到 `ui-<region>/assets/`。
@@ -241,7 +241,7 @@ go run -tags toolsgen ./dev/tool_plugin_gen   # 幂等：已有插件不覆盖�
 ```bash
 # 构建 7 个区域 UI 插件包（ui-<region>/assets/）
 npm run build
-# 构建壳（ui-app-src → .pair/assets/runtime/web/）
+# 构建壳（plugins-src/ui-app/ → .pair/assets/runtime/web/）
 npm run build:shell
 # 打包发布（npm pack → release/PairCode-plugins-<version>.tgz）
 npm run pack
@@ -250,7 +250,7 @@ npm run version:bump -- 1.4.0
 ```
 
 - **files 字段**：全部 33 个插件目录（agentloop/core-api/tool-*/ui-*/web-api）
-  + UI 源码工程（ui-app-src）+ 模型依赖清单（config/models.json +
+  + UI 源码工程（plugins-src/ui-app/）+ 模型依赖清单（config/models.json +
   config/settings.template.json）+ README.md —— 即「插件 + 插件代码 + 依赖
   模型」整体入包。
 - **依赖声明**：dependencies 覆盖 UI 运行时依赖（vue/codemirror/xterm/

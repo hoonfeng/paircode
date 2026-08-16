@@ -310,7 +310,7 @@ func LoadGlobalPlugins(ph *PluginHost) int {
 		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") || e.Name() == "node_modules" {
 			continue
 		}
-		// ★ 源码包目录约定：<name>-src 是插件源码（如 ui-app-src 前端 Vite 工程），
+		// ★ 源码包目录约定：<name>-src 是插件源码（UI 源码工程在项目根 ui-app/，不进 .pair），
 		//   不是可装载插件包——跳过（用户可改源码后重新构建进插件包/assets）。
 		if strings.HasSuffix(e.Name(), "-src") {
 			continue

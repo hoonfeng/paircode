@@ -1,0 +1,368 @@
+package impl
+
+// 搜索/导航工具：search_content（正则内容搜索，grep 风格）+ search_files（通配符查找文件）。
+// 复刻参考源 src/agent 的 search_content / search_files。两者只读、免审批、限定工作区内，
+// 自动跳过 .git/node_modules 等目录与二进制/超大文件（防把 LLM 上下文撑爆）。
+
+import (
+	"context"
+	"fmt"
+	. "github.com/hoonfeng/paircode/plugins-src/plugins/tool-search/toolbin"
+	"io/fs"
+	"os"
+	"path"
+	"path/filepath"
+	"regexp"
+	"sort"
+	"strings"
+)
+
+const (
+	maxSearchFileSize = 10 << 20 // 10MB：超过则跳过（不读进内存搜索）
+	searchSniffBytes  = 8000     // 二进制嗅探：读前 N 字节查空字节
+)
+
+// defaultSkipDirs 内置基线：搜索/探索时跳过的依赖库/模块库/构建产物/缓存/VCS 目录（跨生态，全包共用）。
+// 仍可显式把 path 指进某个被跳目录来搜它（跳过只作用于自动递归下降，不挡显式起点）。
+// 用户可经 SetExtraSkipDirs 追加（全局设置 + 项目级，companion 注入）。
+var defaultSkipDirs = map[string]bool{
+	// VCS / 编辑器
+	".git": true, ".svn": true, ".hg": true, ".idea": true, ".vscode": true,
+	// 依赖库 / 模块库
+	"node_modules": true, "bower_components": true, "jspm_packages": true, "vendor": true, "Pods": true,
+	"venv": true, ".venv": true, "__pycache__": true, ".pytest_cache": true, ".mypy_cache": true, ".tox": true,
+	// 构建产物
+	"dist": true, "build": true, "out": true, "target": true,
+	".next": true, ".nuxt": true, ".svelte-kit": true, ".output": true,
+	// 缓存 / 覆盖率 / 基建
+	".gradle": true, ".cache": true, ".turbo": true, "coverage": true, ".nyc_output": true, ".terraform": true,
+	// 本项目自身数据 / 备份
+	".pair": true, "源码备份": true,
+}
+
+// extraSkipDirs 用户配置的额外忽略目录（全局设置 + 项目级 .pair/ignore，由 companion 合并后注入）。
+var extraSkipDirs = map[string]bool{}
+
+// SetExtraSkipDirs 设置额外忽略目录名（覆盖上次）。companion 合并 全局+项目 配置后调用。
+func SetExtraSkipDirs(dirs []string) {
+	m := make(map[string]bool, len(dirs))
+	for _, d := range dirs {
+		if d = strings.TrimSpace(d); d != "" {
+			m[d] = true
+		}
+	}
+	extraSkipDirs = m
+}
+
+// isSkipDir 该目录名是否跳过（内置基线 ∪ 用户额外）。
+func isSkipDir(name string) bool { return defaultSkipDirs[name] || extraSkipDirs[name] }
+
+func Register(r *Registry, root string) {
+	r.Register(&Tool{
+		Name: "search_content",
+		Description: "在工作区内按正则搜索文件内容，返回匹配的「相对路径:行号: 行文本」。" +
+			"pattern 为 RE2 正则；path 限定子目录（省略=根）；glob 按文件名过滤（如 *.go）；" +
+			"case_insensitive 忽略大小写；max_results 上限（默认 200）。自动跳过 .git/node_modules 等与二进制/超大文件。",
+		UsageGuide: "搜索文件内容（全文搜索）。比 run_command findstr/grep 更精确（跳过 .git/node_modules、自动处理编码、结果结构化）。搜索函数/类型定义请优先用 codegraph_search（基于 AST，更精确）。",
+		Category:   "代码搜索",
+		Parameters: ObjSchema(Props{
+			"pattern":          StrProp("RE2 正则表达式"),
+			"path":             StrProp("限定子目录（省略=工作区根）"),
+			"glob":             StrProp("文件名通配过滤，如 *.go"),
+			"case_insensitive": BoolProp("忽略大小写"),
+			"max_results":      IntProp("结果行数上限（默认 200）"),
+			"project":          ProjectSchemaProp(),
+		}, "pattern"),
+		ReadOnly: true,
+		Handler:  searchContentHandler(root),
+	})
+	r.Register(&Tool{
+		Name: "search_files",
+		Description: "在工作区内按通配符递归查找文件，返回相对路径列表（已排序）。" +
+			"pattern 为通配符：不含 / 时匹配文件名（如 *.go、*config*），含 / 时匹配相对路径（如 internal/*/main.go）；" +
+			"path 限定子目录；language 可选按语言过滤；max_results 上限（默认 500）。跳过 .git/node_modules 等。",
+		UsageGuide: "按文件名/路径模式搜索文件。比 run_command dir /s 更高效。配合 language 参数可按语言过滤。",
+		Parameters: ObjSchema(Props{
+			"pattern":     StrProp("文件名/路径通配符，如 *.go"),
+			"path":        StrProp("限定子目录（省略=工作区根）"),
+			"language":    StrProp("可选：按语言过滤，如 \"go\"、\"typescript\"、\"python\""),
+			"max_results": IntProp("结果上限（默认 500）"),
+			"project":     ProjectSchemaProp(),
+		}, "pattern"),
+		ReadOnly: true,
+		Handler:  searchFilesHandler(root),
+	})
+}
+func searchContentHandler(root string) ToolHandler {
+	return func(ctx context.Context, args map[string]any) (string, error) {
+		projRoot, err := ProjRootFromArgs(root, args)
+		if err != nil {
+			return "", err
+		}
+		pattern := strings.TrimSpace(ArgStr(args, "pattern"))
+		if pattern == "" {
+			return "", fmt.Errorf("pattern 不能为空")
+		}
+		prefix := ""
+		if ArgBool(args, "case_insensitive") {
+			prefix = "(?i)"
+		}
+		re, err := regexp.Compile(prefix + pattern)
+		if err != nil {
+			return "", fmt.Errorf("正则编译失败: %w", err)
+		}
+		base, err := searchRoot(projRoot, ArgStr(args, "path"))
+		if err != nil {
+			return "", err
+		}
+		glob := strings.TrimSpace(ArgStr(args, "glob"))
+		max := ClampInt(ArgInt(args, "max_results", 200), 200, 1, 2000)
+
+		var lines []string
+		fileHits := map[string]int{} // 相对路径 → 命中数（供结果统计）
+		count := 0
+		truncated := false
+		walkErr := filepath.WalkDir(base, func(p string, d fs.DirEntry, werr error) error {
+			if werr != nil {
+				return nil // 跳过无法访问的项
+			}
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			if d.IsDir() {
+				if p != base && isSkipDir(d.Name()) {
+					return fs.SkipDir
+				}
+				return nil
+			}
+			if glob != "" {
+				if !matchGlobFilter(glob, d.Name(), relSlash(projRoot, p)) {
+					return nil
+				}
+			}
+			if info, e := d.Info(); e == nil && info.Size() > maxSearchFileSize {
+				return nil
+			}
+			data, e := os.ReadFile(p)
+			if e != nil || isBinary(data) {
+				return nil
+			}
+			rel := relSlash(projRoot, p)
+			for i, line := range strings.Split(string(data), "\n") {
+				if re.MatchString(line) {
+					lines = append(lines, fmt.Sprintf("%s:%d: %s", rel, i+1, trimLine(line)))
+					fileHits[rel]++
+					if count++; count >= max {
+						truncated = true
+						return fs.SkipAll
+					}
+				}
+			}
+			return nil
+		})
+		if walkErr != nil && ctx.Err() != nil {
+			return "", ctx.Err()
+		}
+		if count == 0 {
+			return "（未找到匹配）\n提示：无结果≠不存在，建议补搜：① 换关键词/同义词 ② 加 (?i) 忽略大小写 ③ 换 path/glob 范围 ④ 检查正则写法。不要就此断言不存在。", nil
+		}
+		var b strings.Builder
+		fmt.Fprintf(&b, "（命中 %d 处，覆盖 %d 个文件）\n", count, len(fileHits))
+		for _, l := range lines {
+			b.WriteString(l)
+			b.WriteByte('\n')
+		}
+		res := b.String()
+		if truncated {
+			res += fmt.Sprintf("[已达上限 %d 条，可能还有更多匹配——请缩小 pattern 或 path]\n", max)
+		}
+		return CapOutput(res, 16000), nil
+	}
+}
+
+func searchFilesHandler(root string) ToolHandler {
+	return func(ctx context.Context, args map[string]any) (string, error) {
+		projRoot, err := ProjRootFromArgs(root, args)
+		if err != nil {
+			return "", err
+		}
+		pattern := strings.TrimSpace(ArgStr(args, "pattern"))
+		if pattern == "" {
+			return "", fmt.Errorf("pattern 不能为空")
+		}
+		base, err := searchRoot(projRoot, ArgStr(args, "path"))
+		if err != nil {
+			return "", err
+		}
+		max := ClampInt(ArgInt(args, "max_results", 500), 500, 1, 5000)
+		langFilter := strings.TrimSpace(ArgStr(args, "language"))
+
+		var matches []string
+		truncated := false
+		walkErr := filepath.WalkDir(base, func(p string, d fs.DirEntry, werr error) error {
+			if werr != nil {
+				return nil
+			}
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			if d.IsDir() {
+				if p != base && isSkipDir(d.Name()) {
+					return fs.SkipDir
+				}
+				return nil
+			}
+			if langFilter != "" {
+				ext := strings.ToLower(filepath.Ext(p))
+				detectedLang := extLangMap[ext]
+				if detectedLang == "" {
+					detectedLang = strings.TrimPrefix(ext, ".")
+				}
+				if !strings.EqualFold(detectedLang, langFilter) {
+					return nil
+				}
+			}
+			if matchFile(pattern, d.Name(), relSlash(projRoot, p)) {
+				matches = append(matches, relSlash(projRoot, p))
+				if len(matches) >= max {
+					truncated = true
+					return fs.SkipAll
+				}
+			}
+			return nil
+		})
+		if walkErr != nil && ctx.Err() != nil {
+			return "", ctx.Err()
+		}
+		if len(matches) == 0 {
+			return "（未找到匹配文件）\n提示：无结果≠不存在，建议补搜：① 换文件名通配（如 *关键字*）② 换 path 范围 ③ 换 language 过滤 ④ 改用 search_content 搜内容。不要就此断言不存在。", nil
+		}
+		sort.Strings(matches)
+		res := fmt.Sprintf("（找到 %d 个文件）\n", len(matches)) + strings.Join(matches, "\n")
+		if truncated {
+			res += fmt.Sprintf("\n[已达上限 %d 个，可能还有更多——可缩小 path 或加 language 过滤]", max)
+		}
+		return CapOutput(res, 16000), nil
+	}
+}
+
+// ─── 辅助 ────────────────────────────────────────────────────
+
+// searchRoot 解析搜索起点目录（省略=工作区根，限定工作区内）。
+func searchRoot(root, rel string) (string, error) {
+	if strings.TrimSpace(rel) == "" {
+		return root, nil
+	}
+	return ResolvePath(root, rel)
+}
+
+// matchFile 通配匹配（支持 ** 递归）：pattern 含 / 或 ** 时按相对路径匹配，否则按文件名匹配。
+func matchFile(pattern, base, rel string) bool {
+	return matchGlobFilter(pattern, base, rel)
+}
+
+// relSlash 取相对工作区根的 slash 路径（给 LLM 看的稳定相对路径）。
+func relSlash(root, p string) string {
+	rel, err := filepath.Rel(root, p)
+	if err != nil {
+		return filepath.ToSlash(p)
+	}
+	return filepath.ToSlash(rel)
+}
+
+// isBinary 嗅探前若干字节是否含空字节（含=视作二进制，跳过文本搜索）。
+func isBinary(data []byte) bool {
+	n := min(len(data), searchSniffBytes)
+	for i := range n {
+		if data[i] == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// trimLine 去首尾空白并按 rune 截断过长行（结果行预览，避免单行撑爆）。
+func trimLine(s string) string {
+	s = strings.TrimSpace(s)
+	if r := []rune(s); len(r) > 200 {
+		return string(r[:200]) + "…"
+	}
+	return s
+}
+
+// matchGlob 支持 ** 的 glob 匹配。pattern 和 name 均为 slash 风格路径。
+//   - **/*.go     匹配 a.go、foo/a.go、foo/bar/a.go
+//   - src/**      匹配 src/a.go、src/foo/a.go
+//   - src/**/auth* 匹配 src/auth.go、src/foo/auth.go
+//   - *.go        仅匹配当前层 a.go（不含 / 时仅单层）
+func matchGlob(pattern, name string) bool {
+	pat := filepath.ToSlash(pattern)
+	nm := filepath.ToSlash(name)
+	return globMatchSegments(strings.Split(pat, "/"), strings.Split(nm, "/"))
+}
+
+// globMatchSegments 递归匹配已按 / 分割的路径段。
+//   - patSeg[i]=="**" 时吃掉 0..len(nameSeg) 个段，剩余 pattern 递归匹配剩余 name。
+//   - 其它段用 path.Match 做单层匹配（支持 * 和 ?，不含 /）。
+func globMatchSegments(patSeg, nameSeg []string) bool {
+	for len(patSeg) > 0 {
+		if patSeg[0] == "**" {
+			// ** 是最后一段：吃掉所有剩余 name 段
+			if len(patSeg) == 1 {
+				return true
+			}
+			// 尝试 ** 匹配 0..len(nameSeg) 个段
+			for j := 0; j <= len(nameSeg); j++ {
+				if globMatchSegments(patSeg[1:], nameSeg[j:]) {
+					return true
+				}
+			}
+			return false
+		}
+		if len(nameSeg) == 0 {
+			return false
+		}
+		ok, err := path.Match(patSeg[0], nameSeg[0])
+		if err != nil || !ok {
+			return false
+		}
+		patSeg = patSeg[1:]
+		nameSeg = nameSeg[1:]
+	}
+	// pattern 耗尽，name 也须耗尽才完全匹配
+	return len(nameSeg) == 0
+}
+
+// matchGlobFilter 工具层 glob 过滤：pattern 含 / 或 ** 时按相对路径匹配，否则按文件名匹配。
+// 语义：纯文件名模式（如 *.go）匹配任意深度的同名文件；路径模式（如 src/**/*.go）匹配相对路径。
+func matchGlobFilter(pattern, base, rel string) bool {
+	pat := filepath.ToSlash(pattern)
+	if strings.Contains(pat, "/") || strings.Contains(pat, "**") {
+		return matchGlob(pat, rel)
+	}
+	return matchGlob(pat, base)
+}
+
+// extLangMap 常见文件扩展名→语言名映射。
+var extLangMap = map[string]string{
+	".go": "go", ".ts": "typescript", ".tsx": "typescript",
+	".js": "javascript", ".jsx": "javascript", ".mjs": "javascript", ".cjs": "javascript",
+	".py": "python", ".rs": "rust", ".java": "java", ".kt": "kotlin",
+	".swift": "swift", ".c": "c", ".h": "c", ".cpp": "cpp", ".cc": "cpp", ".cxx": "cpp", ".hpp": "cpp",
+	".cs": "csharp", ".rb": "ruby", ".php": "php", ".lua": "lua",
+	".sh": "shell", ".bash": "shell", ".zsh": "shell", ".ps1": "powershell",
+	".yaml": "yaml", ".yml": "yaml", ".json": "json", ".toml": "toml",
+	".xml": "xml", ".html": "html", ".css": "css", ".scss": "scss", ".less": "less",
+	".sql": "sql", ".md": "markdown",
+	".dart": "dart", ".ex": "elixir", ".exs": "elixir",
+	".erl": "erlang", ".hs": "haskell", ".scala": "scala",
+	".zig": "zig", ".svelte": "svelte", ".vue": "vue",
+}
+
+// skipDirsForFindFiles 递归扫描时跳过的目录。
+var skipDirsForFindFiles = map[string]bool{
+	".git": true, ".svn": true, ".hg": true, ".idea": true, ".vscode": true,
+	"node_modules": true, "vendor": true, "__pycache__": true, ".venv": true, "venv": true,
+	"dist": true, "build": true, "out": true, "target": true, ".next": true, ".nuxt": true,
+	".cache": true, ".pair": true, "coverage": true, ".terraform": true,
+}

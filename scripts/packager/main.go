@@ -63,10 +63,11 @@ type DistConfig struct {
 }
 
 type DistEntry struct {
-	Src       string `json:"src"`
-	Dst       string `json:"dst"`
-	Optional  bool   `json:"optional,omitempty"`
-	Recursive bool   `json:"recursive,omitempty"`
+	Src       string   `json:"src"`
+	Dst       string   `json:"dst"`
+	Optional  bool     `json:"optional,omitempty"`
+	Recursive bool     `json:"recursive,omitempty"`
+	Exclude   []string `json:"exclude,omitempty"` // 相对 Src 的路径（目录/文件），递归拷贝时跳过
 }
 
 type StripSecretsConfig struct {
@@ -300,11 +301,36 @@ func execPackage(root string, cfg *PackagerConfig, vars *Vars) error {
 		if entry.Recursive {
 			filepath.Walk(srcPath, func(path string, info os.FileInfo, err error) error {
 				if err != nil {
-					return err
+					// 目录读取失败（如 junction 目标异常）跳过该路径，不中断整体拷贝
+					if info != nil && info.IsDir() {
+						return filepath.SkipDir
+					}
+					return nil
+				}
+				// ★ 任意层级 node_modules（依赖目录/junction）一律不打包
+				if info.Name() == "node_modules" {
+					if info.IsDir() {
+						return filepath.SkipDir
+					}
+					return nil
+				}
+				// ★ 符号链接/junction 不复制（Windows junction 无文件内容，
+				//   copyFile 会失败并中断整个 Walk）
+				if info.Mode()&os.ModeSymlink != 0 {
+					return nil
 				}
 				rel, _ := filepath.Rel(srcPath, path)
 				if rel == "." {
 					return nil
+				}
+				// exclude：匹配的目录整体跳过（不创建、不进入），文件跳过
+				for _, ex := range entry.Exclude {
+					if rel == ex || strings.HasPrefix(rel, ex+string(filepath.Separator)) {
+						if info.IsDir() {
+							return filepath.SkipDir
+						}
+						return nil
+					}
 				}
 				target := filepath.Join(dstPath, rel)
 				if info.IsDir() {

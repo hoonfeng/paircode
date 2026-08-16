@@ -3,7 +3,7 @@
 //   binary_strings/find/patch/info/hash/entropy）
 //
 // 生成来源（2026-08-16）：内置 Go 工具组 → 磁盘外置插件（tool_plugin_gen.go
-// 自动生成，schema 完整外置拷贝）。api 声明在插件，execute 调 ctx.binary 复用本插件目录 bin/ 下的独立二进制（源码 cmd/plugins/<name>/，改实现重编译即更换）。
+// 自动生成，schema 完整外置拷贝）。api 声明在插件，execute 调 ctx.binary 复用本插件目录 bin/ 下的独立二进制（源码 plugins-src/plugins/<name>/，改实现重编译即更换）。
 // 2026-08-16：与 tool-binary-re 合并（逆向分析 6 工具并入本插件，删除独立插件）。
 // 工具清单：inspect_binary、write_binary、binary_strings、binary_find、binary_patch、binary_info、binary_hash、binary_entropy
 // ═══════════════════════════════════════════════════════════════
