@@ -57,7 +57,7 @@
 
     <!-- ── 工具集（卷帘：与文件树同区，工作区 .pair/toolsets/） ── -->
     <div class="ts-divider">
-      <div class="ts-header" @click="toggleTs" title="工具集（工作区内，可折叠）">
+      <div class="ts-header" :class="{ open: tsOpen }" @click="toggleTs" title="工具集（工作区内，可折叠）">
         <SvgIcon name="package" :size="12" class="ts-header-icon" />
         <span class="divider-label ts-label">工具集</span>
         <span class="ts-spacer"></span>
@@ -756,40 +756,83 @@ onUnmounted(() => {
 .ts-header {
   display: flex; align-items: center; gap: 5px;
   padding: 5px 8px; cursor: pointer; user-select: none;
+  transition: background .12s;
 }
 .ts-header:hover { background: var(--bg-hover); }
-.ts-header-icon { color: var(--text-muted); flex-shrink: 0; }
+.ts-header.open { background: var(--bg-hover); }
+.ts-header-icon { color: var(--text-muted); flex-shrink: 0; transition: color .12s; }
+.ts-header.open .ts-header-icon { color: var(--accent); }
 .ts-label { padding: 0; text-transform: none; letter-spacing: 0; font-size: 11px; }
 .ts-spacer { flex: 1; }
 .ts-chevron { transition: transform .15s; color: var(--text-muted); flex-shrink: 0; }
 .ts-chevron.open { transform: rotate(90deg); }
 .ts-body { padding: 0 8px 8px; display: flex; flex-direction: column; gap: 6px; }
-.ts-build { border: 1px solid var(--border-color); border-radius: 4px; padding: 6px; background: var(--bg-tertiary); display: flex; flex-direction: column; gap: 4px; }
-.ts-build-title { font-size: 10px; color: var(--text-secondary); }
+.ts-build {
+  border: 1px solid var(--border-color); border-radius: 6px; padding: 6px;
+  background: var(--bg-tertiary); display: flex; flex-direction: column; gap: 5px;
+}
+.ts-build-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.ts-build-title {
+  font-size: 10px; font-weight: 700; color: var(--accent-light);
+  letter-spacing: .4px; display: flex; align-items: center; gap: 5px;
+}
+.ts-build-title::before {
+  content: ''; width: 3px; height: 10px; border-radius: 2px; background: var(--accent);
+}
+.ts-build-head .ts-btn.mini {
+  border-color: var(--accent); color: var(--accent-light); background: var(--accent-bg);
+}
+.ts-build-head .ts-btn.mini:hover {
+  background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--accent-light);
+}
 .ts-input {
   background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-primary);
-  border-radius: 3px; padding: 3px 6px; font-size: 11px; width: 100%; box-sizing: border-box;
+  border-radius: 4px; padding: 3px 8px; font-size: 11px; width: 100%; box-sizing: border-box;
+  transition: border-color .12s, box-shadow .12s;
 }
-.ts-input:focus { border-color: var(--accent); outline: none; }
+.ts-input:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 2px var(--focus-ring); }
+.ts-input::placeholder { color: var(--text-muted); }
 .ts-build-foot { display: flex; align-items: center; gap: 6px; }
-.ts-add-list { max-height: 240px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; border: 1px solid var(--border-color); border-radius: 4px; padding: 4px; background: var(--bg-secondary); }
-.ts-add-group { display: flex; flex-direction: column; gap: 2px; }
-.ts-add-group-title { display: flex; align-items: center; justify-content: space-between; font-size: 10px; font-weight: 600; color: var(--text-secondary); padding: 2px 2px 0; border-bottom: 1px dashed var(--border-color); }
-.ts-add-tool { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 2px 4px; border-radius: 3px; }
+.ts-add-list {
+  max-height: 240px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px;
+  border: 1px solid var(--border-color); border-radius: 6px; padding: 4px; background: var(--bg-secondary);
+}
+.ts-add-group { display: flex; flex-direction: column; gap: 1px; }
+.ts-add-group-title {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 10px; font-weight: 600; color: var(--accent-light);
+  padding: 3px 4px;
+  border-left: 2px solid var(--accent);
+  border-bottom: 1px dashed var(--border-color);
+  margin-bottom: 1px;
+}
+.ts-add-tool {
+  display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  padding: 2px 4px 2px 10px; border-radius: 4px; transition: background .1s;
+}
 .ts-add-tool:hover { background: var(--bg-hover); }
-.ts-add-tool-name { font-size: 11px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ts-btn.mini { font-size: 10px; padding: 1px 8px; border: 1px solid var(--border-color); border-radius: 8px; background: none; color: var(--text-secondary); cursor: pointer; flex-shrink: 0; }
+.ts-add-tool-name {
+  font-size: 11px; color: var(--text-primary); font-family: var(--font-code);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ts-add-tool .ts-btn.mini { opacity: .55; }
+.ts-add-tool:hover .ts-btn.mini { opacity: 1; }
+.ts-btn.mini {
+  font-size: 10px; padding: 1px 8px; border: 1px solid var(--border-color);
+  border-radius: 10px; background: none; color: var(--text-secondary);
+  cursor: pointer; flex-shrink: 0; transition: all .12s;
+}
 .ts-btn.mini:hover { background: var(--bg-hover); color: var(--accent); }
 .ts-btn.mini.added { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
 .ts-check { display: flex; align-items: center; gap: 3px; font-size: 10px; color: var(--text-secondary); white-space: nowrap; }
 .ts-btn {
   background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-secondary);
-  border-radius: 3px; padding: 2px 8px; font-size: 10px; cursor: pointer;
+  border-radius: 4px; padding: 2px 8px; font-size: 10px; cursor: pointer; transition: all .12s;
 }
 .ts-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
 .ts-btn.primary { border-color: var(--accent); color: var(--accent-light); }
-.ts-btn.danger { border-color: #e06c75; color: #e06c75; }
-.ts-btn.danger:hover { background: rgba(224, 108, 117, .12); color: #e06c75; }
+.ts-btn.danger { border-color: rgba(224,108,117,.5); color: #e06c75; }
+.ts-btn.danger:hover { background: rgba(224,108,117,.12); color: #e06c75; }
 .ts-remove-btn { flex-shrink: 0; display: flex; align-items: center; gap: 2px; padding: 1px 7px; font-size: 10px; }
 .ts-btn:disabled { opacity: .5; cursor: not-allowed; }
 .ts-msg { font-size: 10px; color: var(--accent-light); word-break: break-all; }

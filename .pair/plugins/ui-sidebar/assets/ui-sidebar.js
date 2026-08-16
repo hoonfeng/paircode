@@ -2917,48 +2917,50 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
   };
   const FileTreeItem = /* @__PURE__ */ _export_sfc(_sfc_main$7, [["__scopeId", "data-v-493c29a3"]]);
   const _hoisted_1$6 = { class: "dialog-box ts-transfer-box" };
-  const _hoisted_2$6 = { class: "ts-transfer-body" };
-  const _hoisted_3$6 = { class: "ts-transfer-col" };
-  const _hoisted_4$4 = { class: "ts-transfer-list" };
-  const _hoisted_5$4 = { class: "ts-transfer-group-head" };
-  const _hoisted_6$4 = { class: "ts-transfer-check" };
-  const _hoisted_7$4 = ["checked", "onChange"];
-  const _hoisted_8$4 = { class: "ts-transfer-group-name" };
-  const _hoisted_9$4 = { class: "ts-tool-desc" };
-  const _hoisted_10$4 = ["onClick"];
-  const _hoisted_11$4 = ["title"];
-  const _hoisted_12$4 = ["checked", "onChange"];
-  const _hoisted_13$4 = {
+  const _hoisted_2$6 = { class: "dialog-title" };
+  const _hoisted_3$6 = { class: "dialog-title-main" };
+  const _hoisted_4$4 = { class: "ts-transfer-body" };
+  const _hoisted_5$4 = { class: "ts-transfer-col" };
+  const _hoisted_6$4 = { class: "ts-transfer-list" };
+  const _hoisted_7$4 = { class: "ts-transfer-group-head" };
+  const _hoisted_8$4 = { class: "ts-transfer-check" };
+  const _hoisted_9$4 = ["checked", "onChange"];
+  const _hoisted_10$4 = { class: "ts-transfer-group-name" };
+  const _hoisted_11$4 = { class: "ts-tool-desc" };
+  const _hoisted_12$4 = ["onClick"];
+  const _hoisted_13$4 = ["title"];
+  const _hoisted_14$4 = ["checked", "onChange"];
+  const _hoisted_15$4 = {
     key: 0,
     class: "ts-empty"
   };
-  const _hoisted_14$4 = { class: "ts-transfer-ops" };
-  const _hoisted_15$4 = ["disabled"];
-  const _hoisted_16$4 = ["disabled"];
-  const _hoisted_17$4 = { class: "ts-transfer-col" };
-  const _hoisted_18$4 = { class: "ts-transfer-list" };
-  const _hoisted_19$4 = { class: "ts-transfer-group-head" };
-  const _hoisted_20$4 = { class: "ts-transfer-check" };
-  const _hoisted_21$4 = ["checked", "onChange"];
-  const _hoisted_22$4 = { class: "ts-transfer-group-name" };
-  const _hoisted_23$4 = { class: "ts-tool-desc" };
-  const _hoisted_24$4 = ["onClick"];
-  const _hoisted_25$3 = ["title"];
-  const _hoisted_26$3 = ["checked", "onChange"];
-  const _hoisted_27$3 = {
+  const _hoisted_16$4 = { class: "ts-transfer-ops" };
+  const _hoisted_17$4 = ["disabled"];
+  const _hoisted_18$4 = ["disabled"];
+  const _hoisted_19$4 = { class: "ts-transfer-col" };
+  const _hoisted_20$4 = { class: "ts-transfer-list" };
+  const _hoisted_21$4 = { class: "ts-transfer-group-head" };
+  const _hoisted_22$4 = { class: "ts-transfer-check" };
+  const _hoisted_23$4 = ["checked", "onChange"];
+  const _hoisted_24$4 = { class: "ts-transfer-group-name" };
+  const _hoisted_25$3 = { class: "ts-tool-desc" };
+  const _hoisted_26$3 = ["onClick"];
+  const _hoisted_27$3 = ["title"];
+  const _hoisted_28$3 = ["checked", "onChange"];
+  const _hoisted_29$3 = {
     key: 0,
     class: "ts-transfer-group"
   };
-  const _hoisted_28$3 = { class: "ts-transfer-group-head" };
-  const _hoisted_29$3 = { class: "ts-transfer-check" };
-  const _hoisted_30$3 = ["checked"];
-  const _hoisted_31$3 = { class: "ts-tool-desc" };
-  const _hoisted_32$3 = ["checked", "onChange"];
-  const _hoisted_33$3 = {
+  const _hoisted_30$3 = { class: "ts-transfer-group-head" };
+  const _hoisted_31$3 = { class: "ts-transfer-check" };
+  const _hoisted_32$3 = ["checked"];
+  const _hoisted_33$3 = { class: "ts-tool-desc" };
+  const _hoisted_34$3 = ["checked", "onChange"];
+  const _hoisted_35$3 = {
     key: 1,
     class: "ts-empty"
   };
-  const _hoisted_34$3 = {
+  const _hoisted_36$3 = {
     key: 0,
     class: "ts-msg"
   };
@@ -2981,60 +2983,59 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
       const joinedGroups = vue.computed(() => {
         return props.groups.filter((g) => isJoinedGroup(g)).map((g) => ({ ...g, tools: g.tools }));
       });
+      const manualTools = vue.computed(() => props.manualTools);
       const leftSelected = vue.reactive({});
       const rightSelected = vue.reactive({});
-      const anyLeftSelected = vue.computed(() => Object.keys(leftSelected).some((k) => leftSelected[k]));
-      const anyRightSelected = vue.computed(() => Object.keys(rightSelected).some((k) => rightSelected[k]));
       const busy = vue.ref(false);
       const msg = vue.ref("");
       const msgErr = vue.ref(false);
-      function selectAllLeft() {
-        const all = leftGroups.value.every((g) => g.tools.every((t) => leftSelected[t.name]));
-        for (const g of leftGroups.value) for (const t of g.tools) leftSelected[t.name] = !all;
+      const anyLeftSelected = vue.computed(() => Object.values(leftSelected).some(Boolean));
+      const anyRightSelected = vue.computed(() => Object.values(rightSelected).some(Boolean));
+      function groupAllChecked(g, left) {
+        const sel = left ? leftSelected : rightSelected;
+        return g.tools.length > 0 && g.tools.every((t) => sel[t.name || t]);
       }
-      function selectAllRight() {
-        const all = joinedGroups.value.every((g) => g.tools.every((t) => rightSelected[t.name])) && props.manualTools.every((t) => rightSelected[t]);
-        for (const g of joinedGroups.value) for (const t of g.tools) rightSelected[t.name] = !all;
-        for (const t of props.manualTools) rightSelected[t] = !all;
+      function toggleGroup(g, left) {
+        const sel = left ? leftSelected : rightSelected;
+        const target = !groupAllChecked(g, left);
+        for (const t of g.tools) sel[t.name || t] = target;
       }
-      function toggleSelect(name, isLeft) {
-        const sel = isLeft ? leftSelected : rightSelected;
+      function toggleSelect(name, left) {
+        const sel = left ? leftSelected : rightSelected;
         sel[name] = !sel[name];
       }
-      function groupAllChecked(g, isLeft) {
-        return g.tools.length > 0 && g.tools.every((t) => (isLeft ? leftSelected : rightSelected)[t.name]);
+      function selectAllLeft() {
+        const target = !leftGroups.value.every((g) => groupAllChecked(g, true));
+        for (const g of leftGroups.value) {
+          for (const t of g.tools) leftSelected[t.name] = target;
+        }
       }
-      function toggleGroup(g, isLeft) {
-        const all = groupAllChecked(g, isLeft);
-        const sel = isLeft ? leftSelected : rightSelected;
-        for (const t of g.tools) sel[t.name] = !all;
+      function selectAllRight() {
+        const groups = [...joinedGroups.value, ...manualTools.value.length ? [{ tools: manualTools.value }] : []];
+        const target = !groups.every((g) => groupAllChecked(g, false));
+        for (const g of groups) {
+          for (const t of g.tools) rightSelected[t.name || t] = target;
+        }
       }
-      function show(m, err) {
-        msg.value = m;
-        msgErr.value = !!err;
-      }
+      let once = null;
       async function callOnce(fn) {
+        if (once) return;
+        once = true;
         busy.value = true;
         try {
-          const res = await fn();
-          if (res && res.message) show(res.message);
+          await fn();
+          msg.value = "";
+          msgErr.value = false;
         } catch (e) {
-          show(e.message || String(e), true);
+          msg.value = String(e && e.message || e);
+          msgErr.value = true;
+        } finally {
           busy.value = false;
-          throw e;
+          once = null;
         }
-        busy.value = false;
-      }
-      function addGroup(g) {
-        callOnce(() => api.builtinPlugins({ group: g.name, enabled: true })).then(() => emit("changed")).catch(() => {
-        });
-      }
-      function removeGroup(g) {
-        callOnce(() => api.builtinPlugins({ group: g.name, enabled: false })).then(() => emit("changed")).catch(() => {
-        });
       }
       async function addSelected() {
-        const names = leftGroups.value.flatMap((g) => g.tools).filter((t) => leftSelected[t.name]).map((t) => t.name);
+        const names = leftGroups.value.flatMap((g) => g.tools).map((t) => t.name).filter((n) => leftSelected[n]);
         try {
           for (const n of names) await callOnce(() => api.builtinPlugins({ tool: n, enabled: true }));
           emit("changed");
@@ -3042,9 +3043,23 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
         }
       }
       async function removeSelected() {
-        const names = [...joinedGroups.value.flatMap((g) => g.tools).map((t) => t.name), ...props.manualTools].filter((n) => rightSelected[n]);
+        const names = [...joinedGroups.value.flatMap((g) => g.tools), ...manualTools.value].map((n) => typeof n === "string" ? n : n.name).filter((n) => rightSelected[n]);
         try {
           for (const n of names) await callOnce(() => api.builtinPlugins({ tool: n, enabled: false }));
+          emit("changed");
+        } catch (e) {
+        }
+      }
+      async function addGroup(g) {
+        try {
+          for (const t of g.tools) await callOnce(() => api.builtinPlugins({ tool: t.name, enabled: true }));
+          emit("changed");
+        } catch (e) {
+        }
+      }
+      async function removeGroup(g) {
+        try {
+          for (const t of g.tools) await callOnce(() => api.builtinPlugins({ tool: t.name, enabled: false }));
           emit("changed");
         } catch (e) {
         }
@@ -3062,6 +3077,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
         emit("close");
       }
       return (_ctx, _cache) => {
+        const _component_SvgIcon = vue.resolveComponent("SvgIcon");
         return vue.openBlock(), vue.createElementBlock(
           vue.Fragment,
           null,
@@ -3072,30 +3088,52 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
               onClick: vue.withModifiers(close, ["self"])
             }, [
               vue.createElementVNode("div", _hoisted_1$6, [
-                _cache[4] || (_cache[4] = vue.createElementVNode(
-                  "div",
-                  { class: "dialog-title" },
-                  "管理工作区工具集（builtin）",
-                  -1
-                  /* CACHED */
-                )),
                 vue.createElementVNode("div", _hoisted_2$6, [
+                  vue.createElementVNode("span", _hoisted_3$6, [
+                    vue.createVNode(_component_SvgIcon, {
+                      name: "package",
+                      size: 14
+                    }),
+                    _cache[1] || (_cache[1] = vue.createTextVNode(
+                      " 管理工作区工具集",
+                      -1
+                      /* CACHED */
+                    ))
+                  ]),
+                  _cache[2] || (_cache[2] = vue.createElementVNode(
+                    "span",
+                    { class: "dialog-title-sub" },
+                    "builtin · 勾选工具后批量加入 / 移出",
+                    -1
+                    /* CACHED */
+                  ))
+                ]),
+                vue.createElementVNode("div", _hoisted_4$4, [
                   vue.createCommentVNode(" 左：未加入 "),
-                  vue.createElementVNode("div", _hoisted_3$6, [
+                  vue.createElementVNode("div", _hoisted_5$4, [
                     vue.createElementVNode("div", { class: "ts-transfer-col-head" }, [
-                      _cache[1] || (_cache[1] = vue.createElementVNode(
+                      _cache[3] || (_cache[3] = vue.createElementVNode(
                         "span",
-                        null,
+                        { class: "ts-col-title" },
                         "未加入",
                         -1
                         /* CACHED */
                       )),
-                      vue.createElementVNode("button", {
-                        class: "ts-btn mini",
-                        onClick: selectAllLeft
-                      }, "全选")
+                      _cache[4] || (_cache[4] = vue.createElementVNode(
+                        "span",
+                        { class: "ts-col-hint" },
+                        "勾选后 → 加入",
+                        -1
+                        /* CACHED */
+                      )),
+                      vue.createElementVNode("span", { class: "ts-col-head-actions" }, [
+                        vue.createElementVNode("button", {
+                          class: "ts-btn mini",
+                          onClick: selectAllLeft
+                        }, "全选")
+                      ])
                     ]),
-                    vue.createElementVNode("div", _hoisted_4$4, [
+                    vue.createElementVNode("div", _hoisted_6$4, [
                       (vue.openBlock(true), vue.createElementBlock(
                         vue.Fragment,
                         null,
@@ -3104,23 +3142,23 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                             key: g.name,
                             class: "ts-transfer-group"
                           }, [
-                            vue.createElementVNode("div", _hoisted_5$4, [
-                              vue.createElementVNode("label", _hoisted_6$4, [
+                            vue.createElementVNode("div", _hoisted_7$4, [
+                              vue.createElementVNode("label", _hoisted_8$4, [
                                 vue.createElementVNode("input", {
                                   type: "checkbox",
                                   checked: groupAllChecked(g, true),
                                   onChange: ($event) => toggleGroup(g, true)
-                                }, null, 40, _hoisted_7$4),
+                                }, null, 40, _hoisted_9$4),
                                 vue.createElementVNode(
                                   "span",
-                                  _hoisted_8$4,
+                                  _hoisted_10$4,
                                   vue.toDisplayString(g.name),
                                   1
                                   /* TEXT */
                                 ),
                                 vue.createElementVNode(
                                   "span",
-                                  _hoisted_9$4,
+                                  _hoisted_11$4,
                                   vue.toDisplayString(g.tools.length) + " 工具",
                                   1
                                   /* TEXT */
@@ -3129,7 +3167,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                               vue.createElementVNode("button", {
                                 class: "ts-btn mini",
                                 onClick: ($event) => addGroup(g)
-                              }, "整组加入", 8, _hoisted_10$4)
+                              }, "整组加入", 8, _hoisted_12$4)
                             ]),
                             (vue.openBlock(true), vue.createElementBlock(
                               vue.Fragment,
@@ -3144,7 +3182,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                                     type: "checkbox",
                                     checked: leftSelected[t.name],
                                     onChange: ($event) => toggleSelect(t.name, true)
-                                  }, null, 40, _hoisted_12$4),
+                                  }, null, 40, _hoisted_14$4),
                                   vue.createElementVNode(
                                     "span",
                                     null,
@@ -3152,7 +3190,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                                     1
                                     /* TEXT */
                                   )
-                                ], 8, _hoisted_11$4);
+                                ], 8, _hoisted_13$4);
                               }),
                               128
                               /* KEYED_FRAGMENT */
@@ -3162,40 +3200,49 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                         128
                         /* KEYED_FRAGMENT */
                       )),
-                      !leftGroups.value.length ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_13$4, "全部已加入")) : vue.createCommentVNode("v-if", true)
+                      !leftGroups.value.length ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_15$4, "全部已加入")) : vue.createCommentVNode("v-if", true)
                     ])
                   ]),
                   vue.createCommentVNode(" 中间操作列 "),
-                  vue.createElementVNode("div", _hoisted_14$4, [
+                  vue.createElementVNode("div", _hoisted_16$4, [
                     vue.createElementVNode("button", {
-                      class: "ts-btn",
+                      class: "ts-btn primary",
                       onClick: addSelected,
                       disabled: !anyLeftSelected.value,
                       title: "把选中的工具加入工作区工具集"
-                    }, "→ 加入", 8, _hoisted_15$4),
+                    }, "加入 →", 8, _hoisted_17$4),
                     vue.createElementVNode("button", {
-                      class: "ts-btn",
+                      class: "ts-btn danger",
                       onClick: removeSelected,
                       disabled: !anyRightSelected.value,
                       title: "把选中的工具移出工作区工具集"
-                    }, "← 移出", 8, _hoisted_16$4)
+                    }, "← 移出", 8, _hoisted_18$4)
                   ]),
                   vue.createCommentVNode(" 右：已加入 "),
-                  vue.createElementVNode("div", _hoisted_17$4, [
+                  vue.createElementVNode("div", _hoisted_19$4, [
                     vue.createElementVNode("div", { class: "ts-transfer-col-head" }, [
-                      _cache[2] || (_cache[2] = vue.createElementVNode(
+                      _cache[5] || (_cache[5] = vue.createElementVNode(
                         "span",
-                        null,
+                        { class: "ts-col-title" },
                         "已加入",
                         -1
                         /* CACHED */
                       )),
-                      vue.createElementVNode("button", {
-                        class: "ts-btn mini",
-                        onClick: selectAllRight
-                      }, "全选")
+                      _cache[6] || (_cache[6] = vue.createElementVNode(
+                        "span",
+                        { class: "ts-col-hint" },
+                        "勾选后 ← 移出",
+                        -1
+                        /* CACHED */
+                      )),
+                      vue.createElementVNode("span", { class: "ts-col-head-actions" }, [
+                        vue.createElementVNode("button", {
+                          class: "ts-btn mini",
+                          onClick: selectAllRight
+                        }, "全选")
+                      ])
                     ]),
-                    vue.createElementVNode("div", _hoisted_18$4, [
+                    vue.createElementVNode("div", _hoisted_20$4, [
                       (vue.openBlock(true), vue.createElementBlock(
                         vue.Fragment,
                         null,
@@ -3204,23 +3251,23 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                             key: g.name,
                             class: "ts-transfer-group"
                           }, [
-                            vue.createElementVNode("div", _hoisted_19$4, [
-                              vue.createElementVNode("label", _hoisted_20$4, [
+                            vue.createElementVNode("div", _hoisted_21$4, [
+                              vue.createElementVNode("label", _hoisted_22$4, [
                                 vue.createElementVNode("input", {
                                   type: "checkbox",
                                   checked: groupAllChecked(g, false),
                                   onChange: ($event) => toggleGroup(g, false)
-                                }, null, 40, _hoisted_21$4),
+                                }, null, 40, _hoisted_23$4),
                                 vue.createElementVNode(
                                   "span",
-                                  _hoisted_22$4,
+                                  _hoisted_24$4,
                                   vue.toDisplayString(g.name),
                                   1
                                   /* TEXT */
                                 ),
                                 vue.createElementVNode(
                                   "span",
-                                  _hoisted_23$4,
+                                  _hoisted_25$3,
                                   vue.toDisplayString(g.tools.length) + " 工具",
                                   1
                                   /* TEXT */
@@ -3229,7 +3276,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                               vue.createElementVNode("button", {
                                 class: "ts-btn mini danger",
                                 onClick: ($event) => removeGroup(g)
-                              }, "整组移出", 8, _hoisted_24$4)
+                              }, "整组移出", 8, _hoisted_26$3)
                             ]),
                             (vue.openBlock(true), vue.createElementBlock(
                               vue.Fragment,
@@ -3244,7 +3291,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                                     type: "checkbox",
                                     checked: rightSelected[t.name],
                                     onChange: ($event) => toggleSelect(t.name, false)
-                                  }, null, 40, _hoisted_26$3),
+                                  }, null, 40, _hoisted_28$3),
                                   vue.createElementVNode(
                                     "span",
                                     null,
@@ -3252,7 +3299,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                                     1
                                     /* TEXT */
                                   )
-                                ], 8, _hoisted_25$3);
+                                ], 8, _hoisted_27$3);
                               }),
                               128
                               /* KEYED_FRAGMENT */
@@ -3262,15 +3309,15 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                         128
                         /* KEYED_FRAGMENT */
                       )),
-                      __props.manualTools.length ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_27$3, [
-                        vue.createElementVNode("div", _hoisted_28$3, [
-                          vue.createElementVNode("label", _hoisted_29$3, [
+                      manualTools.value.length ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_29$3, [
+                        vue.createElementVNode("div", _hoisted_30$3, [
+                          vue.createElementVNode("label", _hoisted_31$3, [
                             vue.createElementVNode("input", {
                               type: "checkbox",
-                              checked: groupAllChecked({ tools: __props.manualTools }, false),
-                              onChange: _cache[0] || (_cache[0] = ($event) => toggleGroup({ tools: __props.manualTools }, false))
-                            }, null, 40, _hoisted_30$3),
-                            _cache[3] || (_cache[3] = vue.createElementVNode(
+                              checked: groupAllChecked({ tools: manualTools.value }, false),
+                              onChange: _cache[0] || (_cache[0] = ($event) => toggleGroup({ tools: manualTools.value }, false))
+                            }, null, 40, _hoisted_32$3),
+                            _cache[7] || (_cache[7] = vue.createElementVNode(
                               "span",
                               { class: "ts-transfer-group-name" },
                               "_manual（手动）",
@@ -3279,8 +3326,8 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                             )),
                             vue.createElementVNode(
                               "span",
-                              _hoisted_31$3,
-                              vue.toDisplayString(__props.manualTools.length) + " 工具",
+                              _hoisted_33$3,
+                              vue.toDisplayString(manualTools.value.length) + " 工具",
                               1
                               /* TEXT */
                             )
@@ -3293,7 +3340,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                         (vue.openBlock(true), vue.createElementBlock(
                           vue.Fragment,
                           null,
-                          vue.renderList(__props.manualTools, (t) => {
+                          vue.renderList(manualTools.value, (t) => {
                             return vue.openBlock(), vue.createElementBlock("label", {
                               key: t,
                               class: "ts-transfer-check ts-transfer-tool"
@@ -3302,7 +3349,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                                 type: "checkbox",
                                 checked: rightSelected[t],
                                 onChange: ($event) => toggleSelect(t, false)
-                              }, null, 40, _hoisted_32$3),
+                              }, null, 40, _hoisted_34$3),
                               vue.createElementVNode(
                                 "span",
                                 null,
@@ -3316,11 +3363,11 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                           /* KEYED_FRAGMENT */
                         ))
                       ])) : vue.createCommentVNode("v-if", true),
-                      !joinedGroups.value.length && !__props.manualTools.length ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_33$3, "暂无已加入工具")) : vue.createCommentVNode("v-if", true)
+                      !joinedGroups.value.length && !manualTools.value.length ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_35$3, "暂无已加入工具")) : vue.createCommentVNode("v-if", true)
                     ])
                   ])
                 ]),
-                busy.value ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_34$3, "操作中…")) : vue.createCommentVNode("v-if", true),
+                busy.value ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_36$3, "操作中…")) : vue.createCommentVNode("v-if", true),
                 msg.value ? (vue.openBlock(), vue.createElementBlock(
                   "div",
                   {
@@ -3333,7 +3380,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                 )) : vue.createCommentVNode("v-if", true),
                 vue.createElementVNode("div", { class: "dialog-footer" }, [
                   vue.createElementVNode("button", {
-                    class: "ts-btn",
+                    class: "ts-btn ghost",
                     onClick: close
                   }, "关闭")
                 ])
@@ -3346,7 +3393,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
       };
     }
   };
-  const ToolsetTransfer = /* @__PURE__ */ _export_sfc(_sfc_main$6, [["__scopeId", "data-v-93464384"]]);
+  const ToolsetTransfer = /* @__PURE__ */ _export_sfc(_sfc_main$6, [["__scopeId", "data-v-20919f19"]]);
   const _hoisted_1$5 = { class: "file-explorer" };
   const _hoisted_2$5 = { class: "explorer-toolbar" };
   const _hoisted_3$5 = { class: "ws-section" };
@@ -4011,36 +4058,42 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
           ]),
           vue.createCommentVNode(" ── 工具集（卷帘：与文件树同区，工作区 .pair/toolsets/） ── "),
           vue.createElementVNode("div", _hoisted_14$3, [
-            vue.createElementVNode("div", {
-              class: "ts-header",
-              onClick: toggleTs,
-              title: "工具集（工作区内，可折叠）"
-            }, [
-              vue.createVNode(SvgIcon, {
-                name: "package",
-                size: 12,
-                class: "ts-header-icon"
-              }),
-              _cache[14] || (_cache[14] = vue.createElementVNode(
-                "span",
-                { class: "divider-label ts-label" },
-                "工具集",
-                -1
-                /* CACHED */
-              )),
-              _cache[15] || (_cache[15] = vue.createElementVNode(
-                "span",
-                { class: "ts-spacer" },
-                null,
-                -1
-                /* CACHED */
-              )),
-              vue.createVNode(SvgIcon, {
-                name: "chevron-right",
-                size: 11,
-                class: vue.normalizeClass(["ts-chevron", { open: tsOpen.value }])
-              }, null, 8, ["class"])
-            ]),
+            vue.createElementVNode(
+              "div",
+              {
+                class: vue.normalizeClass(["ts-header", { open: tsOpen.value }]),
+                onClick: toggleTs,
+                title: "工具集（工作区内，可折叠）"
+              },
+              [
+                vue.createVNode(SvgIcon, {
+                  name: "package",
+                  size: 12,
+                  class: "ts-header-icon"
+                }),
+                _cache[14] || (_cache[14] = vue.createElementVNode(
+                  "span",
+                  { class: "divider-label ts-label" },
+                  "工具集",
+                  -1
+                  /* CACHED */
+                )),
+                _cache[15] || (_cache[15] = vue.createElementVNode(
+                  "span",
+                  { class: "ts-spacer" },
+                  null,
+                  -1
+                  /* CACHED */
+                )),
+                vue.createVNode(SvgIcon, {
+                  name: "chevron-right",
+                  size: 11,
+                  class: vue.normalizeClass(["ts-chevron", { open: tsOpen.value }])
+                }, null, 8, ["class"])
+              ],
+              2
+              /* CLASS */
+            ),
             tsOpen.value ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_15$3, [
               vue.createCommentVNode(" 工作区工具集（builtin 已加入内容：可移出） "),
               vue.createElementVNode("div", _hoisted_16$3, [
@@ -4405,7 +4458,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
       };
     }
   };
-  const FileExplorer = /* @__PURE__ */ _export_sfc(_sfc_main$5, [["__scopeId", "data-v-dd4c7981"]]);
+  const FileExplorer = /* @__PURE__ */ _export_sfc(_sfc_main$5, [["__scopeId", "data-v-6dfdb6d2"]]);
   const _hoisted_1$4 = { class: "search-panel" };
   const _hoisted_2$4 = { class: "sp-mode-bar" };
   const _hoisted_3$4 = { class: "sp-field" };
@@ -7797,7 +7850,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
       };
     }
   };
-  const PluginPanel = /* @__PURE__ */ _export_sfc(_sfc_main$1, [["__scopeId", "data-v-776b41c1"]]);
+  const PluginPanel = /* @__PURE__ */ _export_sfc(_sfc_main$1, [["__scopeId", "data-v-d3abd174"]]);
   const _hoisted_1 = { class: "sidebar-header" };
   const _hoisted_2 = { class: "sidebar-content" };
   const _hoisted_3 = {

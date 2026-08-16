@@ -17,6 +17,7 @@
        主题 1: 暗色科技风 (Dark Tech)
        ───────────────────────────────────────────────────── */
     :root, .theme-dark {
+      color-scheme: dark;
       --bg-primary: #0d1117;
       --bg-secondary: #161b22;
       --bg-tertiary: #21262d;
@@ -57,6 +58,7 @@
        主题 2: 白色简约风 (White Minimal)
        ───────────────────────────────────────────────────── */
     .theme-light {
+      color-scheme: light;
       --bg-primary: #ffffff;
       --bg-secondary: #f8f9fa;
       --bg-tertiary: #f0f1f3;
@@ -97,6 +99,7 @@
        主题 3: 暖色温暖风 (Warm Cozy)
        ───────────────────────────────────────────────────── */
     .theme-warm {
+      color-scheme: light;
       --bg-primary: #faf3e8;
       --bg-secondary: #f5ece0;
       --bg-tertiary: #efe4d4;
@@ -137,6 +140,7 @@
        主题 4: 暗夜紫 (Night Purple)
        ───────────────────────────────────────────────────── */
     .theme-night {
+      color-scheme: dark;
       --bg-primary: #12101a;
       --bg-secondary: #1a1726;
       --bg-tertiary: #221f30;
@@ -221,6 +225,26 @@
     input, textarea, select, button {
       font-family: inherit;
     }
+    /* ── select 全局主题化：闭合态统一 + 原生下拉浮层随 color-scheme 变暗（Chromium） ── */
+    select {
+      background-color: var(--input-bg, var(--bg-primary));
+      color: var(--text-primary);
+      border: 1px solid var(--border-color);
+      border-radius: var(--border-radius);
+      cursor: pointer;
+    }
+    select:hover { border-color: var(--text-muted); }
+    select:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--focus-ring);
+    }
+    select option {
+      background-color: var(--bg-secondary);
+      color: var(--text-primary);
+    }
+    select option:checked { background-color: var(--accent-bg); }
+    select:disabled { opacity: .5; cursor: not-allowed; }
   </style>
   <script type="module" crossorigin src="./assets/index-CrzpNXyK.js"></script>
 </head>

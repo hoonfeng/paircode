@@ -2,13 +2,19 @@
   <!-- 工作区工具集（builtin）穿梭框：左=未加入，右=已加入，勾选批量加入/移出 -->
   <div class="dialog-overlay" @click.self="close">
     <div class="dialog-box ts-transfer-box">
-      <div class="dialog-title">管理工作区工具集（builtin）</div>
+      <div class="dialog-title">
+        <span class="dialog-title-main"><SvgIcon name="package" :size="14" /> 管理工作区工具集</span>
+        <span class="dialog-title-sub">builtin · 勾选工具后批量加入 / 移出</span>
+      </div>
       <div class="ts-transfer-body">
         <!-- 左：未加入 -->
         <div class="ts-transfer-col">
           <div class="ts-transfer-col-head">
-            <span>未加入</span>
-            <button class="ts-btn mini" @click="selectAllLeft">全选</button>
+            <span class="ts-col-title">未加入</span>
+            <span class="ts-col-hint">勾选后 → 加入</span>
+            <span class="ts-col-head-actions">
+              <button class="ts-btn mini" @click="selectAllLeft">全选</button>
+            </span>
           </div>
           <div class="ts-transfer-list">
             <div v-for="g in leftGroups" :key="g.name" class="ts-transfer-group">
@@ -30,14 +36,17 @@
         </div>
         <!-- 中间操作列 -->
         <div class="ts-transfer-ops">
-          <button class="ts-btn" @click="addSelected" :disabled="!anyLeftSelected" title="把选中的工具加入工作区工具集">→ 加入</button>
-          <button class="ts-btn" @click="removeSelected" :disabled="!anyRightSelected" title="把选中的工具移出工作区工具集">← 移出</button>
+          <button class="ts-btn primary" @click="addSelected" :disabled="!anyLeftSelected" title="把选中的工具加入工作区工具集">加入 →</button>
+          <button class="ts-btn danger" @click="removeSelected" :disabled="!anyRightSelected" title="把选中的工具移出工作区工具集">← 移出</button>
         </div>
         <!-- 右：已加入 -->
         <div class="ts-transfer-col">
           <div class="ts-transfer-col-head">
-            <span>已加入</span>
-            <button class="ts-btn mini" @click="selectAllRight">全选</button>
+            <span class="ts-col-title">已加入</span>
+            <span class="ts-col-hint">勾选后 ← 移出</span>
+            <span class="ts-col-head-actions">
+              <button class="ts-btn mini" @click="selectAllRight">全选</button>
+            </span>
           </div>
           <div class="ts-transfer-list">
             <div v-for="g in joinedGroups" :key="g.name" class="ts-transfer-group">
@@ -75,7 +84,7 @@
       <div v-if="busy" class="ts-msg">操作中…</div>
       <div v-if="msg" class="ts-msg" :class="{ err: msgErr }">{{ msg }}</div>
       <div class="dialog-footer">
-        <button class="ts-btn" @click="close">关闭</button>
+        <button class="ts-btn ghost" @click="close">关闭</button>
       </div>
     </div>
   </div>
@@ -112,72 +121,87 @@ const joinedGroups = computed(() => {
     .filter(g => isJoinedGroup(g))
     .map(g => ({ ...g, tools: g.tools }))
 })
+const manualTools = computed(() => props.manualTools)
 
 const leftSelected = reactive({})
 const rightSelected = reactive({})
-const anyLeftSelected = computed(() => Object.keys(leftSelected).some(k => leftSelected[k]))
-const anyRightSelected = computed(() => Object.keys(rightSelected).some(k => rightSelected[k]))
-
 const busy = ref(false)
 const msg = ref('')
 const msgErr = ref(false)
 
-function selectAllLeft() {
-  const all = leftGroups.value.every(g => g.tools.every(t => leftSelected[t.name]))
-  for (const g of leftGroups.value) for (const t of g.tools) leftSelected[t.name] = !all
+const anyLeftSelected = computed(() => Object.values(leftSelected).some(Boolean))
+const anyRightSelected = computed(() => Object.values(rightSelected).some(Boolean))
+
+function groupAllChecked(g, left) {
+  const sel = left ? leftSelected : rightSelected
+  return g.tools.length > 0 && g.tools.every(t => sel[t.name || t])
 }
-function selectAllRight() {
-  const all = joinedGroups.value.every(g => g.tools.every(t => rightSelected[t.name]))
-    && props.manualTools.every(t => rightSelected[t])
-  for (const g of joinedGroups.value) for (const t of g.tools) rightSelected[t.name] = !all
-  for (const t of props.manualTools) rightSelected[t] = !all
+function toggleGroup(g, left) {
+  const sel = left ? leftSelected : rightSelected
+  const target = !groupAllChecked(g, left)
+  for (const t of g.tools) sel[t.name || t] = target
 }
-function toggleSelect(name, isLeft) {
-  const sel = isLeft ? leftSelected : rightSelected
+function toggleSelect(name, left) {
+  const sel = left ? leftSelected : rightSelected
   sel[name] = !sel[name]
 }
-function groupAllChecked(g, isLeft) {
-  return g.tools.length > 0 && g.tools.every(t => (isLeft ? leftSelected : rightSelected)[t.name])
+function selectAllLeft() {
+  const target = !leftGroups.value.every(g => groupAllChecked(g, true))
+  for (const g of leftGroups.value) {
+    for (const t of g.tools) leftSelected[t.name] = target
+  }
 }
-function toggleGroup(g, isLeft) {
-  const all = groupAllChecked(g, isLeft)
-  const sel = isLeft ? leftSelected : rightSelected
-  for (const t of g.tools) sel[t.name] = !all
+function selectAllRight() {
+  const groups = [...joinedGroups.value, ...(manualTools.value.length ? [{ tools: manualTools.value }] : [])]
+  const target = !groups.every(g => groupAllChecked(g, false))
+  for (const g of groups) {
+    for (const t of g.tools) rightSelected[t.name || t] = target
+  }
 }
 
-function show(m, err) { msg.value = m; msgErr.value = !!err }
-
+let once = null
 async function callOnce(fn) {
+  if (once) return
+  once = true
   busy.value = true
   try {
-    const res = await fn()
-    if (res && res.message) show(res.message)
+    await fn()
+    msg.value = ''; msgErr.value = false
   } catch (e) {
-    show(e.message || String(e), true)
-    busy.value = false
-    throw e
+    msg.value = String(e && e.message || e); msgErr.value = true
+  } finally {
+    busy.value = false; once = null
   }
-  busy.value = false
 }
 
-function addGroup(g) {
-  callOnce(() => api.builtinPlugins({ group: g.name, enabled: true })).then(() => emit('changed')).catch(() => {})
-}
-function removeGroup(g) {
-  callOnce(() => api.builtinPlugins({ group: g.name, enabled: false })).then(() => emit('changed')).catch(() => {})
-}
 async function addSelected() {
-  const names = leftGroups.value.flatMap(g => g.tools).filter(t => leftSelected[t.name]).map(t => t.name)
+  const names = leftGroups.value
+    .flatMap(g => g.tools)
+    .map(t => t.name)
+    .filter(n => leftSelected[n])
   try {
     for (const n of names) await callOnce(() => api.builtinPlugins({ tool: n, enabled: true }))
     emit('changed')
   } catch (e) { /* callOnce 已上报 */ }
 }
 async function removeSelected() {
-  const names = [...joinedGroups.value.flatMap(g => g.tools).map(t => t.name), ...props.manualTools]
+  const names = [...joinedGroups.value.flatMap(g => g.tools), ...manualTools.value]
+    .map(n => typeof n === 'string' ? n : n.name)
     .filter(n => rightSelected[n])
   try {
     for (const n of names) await callOnce(() => api.builtinPlugins({ tool: n, enabled: false }))
+    emit('changed')
+  } catch (e) { /* callOnce 已上报 */ }
+}
+async function addGroup(g) {
+  try {
+    for (const t of g.tools) await callOnce(() => api.builtinPlugins({ tool: t.name, enabled: true }))
+    emit('changed')
+  } catch (e) { /* callOnce 已上报 */ }
+}
+async function removeGroup(g) {
+  try {
+    for (const t of g.tools) await callOnce(() => api.builtinPlugins({ tool: t.name, enabled: false }))
     emit('changed')
   } catch (e) { /* callOnce 已上报 */ }
 }
@@ -195,30 +219,117 @@ function close() { emit('close') }
 
 <style scoped>
 /* ── 弹窗遮罩/盒子（独立组件自带，不能依赖父组件 scoped 样式） ── */
-.dialog-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; display: flex; align-items: center; justify-content: center; }
-.dialog-box { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--border-radius-lg); padding: 16px 20px; min-width: 320px; max-width: 600px; width: 90%; box-shadow: var(--shadow-md); }
-.dialog-title { font-size: 15px; font-weight: 600; margin-bottom: 12px; color: var(--text-primary); display: flex; align-items: center; justify-content: space-between; }
+.dialog-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(1, 4, 9, 0.62);
+  backdrop-filter: blur(3px);
+  display: flex; align-items: center; justify-content: center;
+}
+.dialog-box {
+  position: relative;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 18px 20px 14px;
+  min-width: 320px; max-width: 600px; width: 90%;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.5), 0 2px 8px rgba(0,0,0,0.3);
+  overflow: hidden;
+}
+/* 顶部 accent 高亮渐变条 */
+.dialog-box::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-light) 55%, transparent);
+}
+.dialog-title {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 14px; font-weight: 600; color: var(--text-primary);
+  margin-bottom: 12px; padding-top: 2px;
+}
+.dialog-title-main { display: flex; align-items: center; gap: 6px; }
+.dialog-title-main svg { color: var(--accent); }
+.dialog-title-sub { font-size: 10px; font-weight: 400; color: var(--text-muted); margin-left: auto; }
 .dialog-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
 
 .ts-transfer-box { width: 780px; max-width: 92vw; }
-.ts-transfer-body { display: flex; gap: 8px; min-height: 320px; max-height: 60vh; }
-.ts-transfer-col { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-.ts-transfer-col-head {
-  display: flex; align-items: center; justify-content: space-between;
-  font-size: 11px; font-weight: 600; color: var(--text-secondary);
-  padding: 4px 6px; border-bottom: 1px solid var(--border-color);
+.ts-transfer-body { display: flex; gap: 10px; min-height: 320px; max-height: 60vh; }
+/* 左右列 = 独立面板卡片 */
+.ts-transfer-col {
+  flex: 1; display: flex; flex-direction: column; min-width: 0;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  overflow: hidden;
 }
-.ts-transfer-list { flex: 1; overflow: auto; padding: 4px; display: flex; flex-direction: column; gap: 4px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-tertiary); }
-.ts-transfer-group { border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); overflow: hidden; }
+.ts-transfer-col-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+.ts-col-title {
+  font-size: 11px; font-weight: 700; color: var(--text-primary);
+  letter-spacing: 0.5px;
+  display: flex; align-items: center; gap: 6px;
+}
+.ts-col-title::before {
+  content: ''; width: 3px; height: 11px; border-radius: 2px;
+  background: var(--accent);
+}
+.ts-col-hint { font-size: 9px; color: var(--text-muted); }
+.ts-col-head-actions { margin-left: auto; display: flex; align-items: center; }
+.ts-transfer-list {
+  flex: 1; overflow: auto; padding: 6px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.ts-transfer-group {
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-tertiary);
+  overflow: hidden;
+}
 .ts-transfer-group-head {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 3px 6px; background: var(--bg-hover); gap: 4px;
+  padding: 4px 8px 4px 10px; gap: 6px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-secondary));
+  border-left: 2px solid var(--accent);
 }
-.ts-transfer-group-name { font-size: 11px; font-weight: 600; color: var(--accent); }
-.ts-transfer-check { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-primary); cursor: pointer; }
-.ts-transfer-tool { padding: 2px 8px 2px 14px; font-family: var(--font-code); }
+.ts-transfer-group-name { font-size: 11px; font-weight: 600; color: var(--accent-light); }
+.ts-tool-desc { font-size: 9px; color: var(--text-muted); font-weight: 400; margin-left: 2px; }
+.ts-transfer-check {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 11px; color: var(--text-primary); cursor: pointer;
+}
+.ts-transfer-check input[type='checkbox'] { accent-color: var(--accent); margin: 0; }
+.ts-transfer-tool { padding: 3px 10px 3px 18px; font-family: var(--font-code); transition: background .1s; }
 .ts-transfer-tool:hover { background: var(--bg-hover); }
-.ts-transfer-ops { display: flex; flex-direction: column; justify-content: center; gap: 8px; flex-shrink: 0; }
+.ts-transfer-tool:has(input:checked) { background: var(--accent-bg); }
+.ts-transfer-ops { display: flex; flex-direction: column; justify-content: center; gap: 10px; flex-shrink: 0; }
 .ts-msg { padding: 6px 8px; font-size: 11px; color: var(--text-secondary); }
-.ts-msg.err { color: #e06c75; }
+.ts-msg.err { color: #f47067; }
+
+/* 按钮体系：基础 / mini / primary（accent 实心）/ danger / ghost */
+.ts-btn {
+  background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-secondary);
+  border-radius: 5px; padding: 4px 12px; font-size: 11px; cursor: pointer;
+  transition: all .12s;
+}
+.ts-btn:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--text-muted); }
+.ts-btn:disabled { opacity: .45; cursor: not-allowed; }
+.ts-btn.mini { font-size: 10px; padding: 1px 8px; border-radius: 10px; }
+.ts-btn.mini:hover { color: var(--accent-light); border-color: var(--accent); background: var(--accent-bg); }
+.ts-btn.mini.danger { color: #f47067; border-color: rgba(244,112,103,.4); }
+.ts-btn.mini.danger:hover { background: rgba(244,112,103,.12); border-color: #f47067; color: #f47067; }
+.ts-btn.primary {
+  background: var(--accent); border-color: var(--accent);
+  color: #0d1117; font-weight: 600;
+}
+.ts-btn.primary:hover { background: var(--accent-light); border-color: var(--accent-light); color: #0d1117; }
+.ts-btn.primary:disabled { background: color-mix(in srgb, var(--accent) 40%, transparent); border-color: transparent; color: rgba(13,17,23,.5); }
+.ts-btn.danger {
+  background: transparent; border-color: rgba(244,112,103,.5); color: #f47067;
+}
+.ts-btn.danger:hover { background: rgba(244,112,103,.12); border-color: #f47067; color: #f47067; }
+.ts-btn.ghost { background: transparent; }
+.ts-empty { padding: 14px 4px; text-align: center; color: var(--text-muted); font-size: 11px; }
 </style>

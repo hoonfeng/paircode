@@ -611,7 +611,7 @@ onUnmounted(() => {
   padding: 6px 8px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
   max-height: 30%;
   overflow-y: auto;
 }
@@ -619,39 +619,52 @@ onUnmounted(() => {
   display: flex; align-items: center; gap: 6px;
   font-size: 11px; color: var(--text-primary); font-weight: 600;
 }
+.pp-slots-head svg { color: var(--accent); }
 .pp-slots-sub { font-weight: 400; font-size: 10px; color: var(--text-muted); }
 .pp-slot-row {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  background: var(--bg-hover); border-radius: 4px; padding: 4px 8px;
-  transition: background .12s;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-left: 2px solid var(--accent);
+  border-radius: 6px; padding: 5px 8px;
+  transition: border-color .12s, background .12s;
 }
-.pp-slot-row:hover { background: var(--bg-input, var(--bg-elevated)); }
+.pp-slot-row:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border-color));
+  background: var(--bg-hover);
+}
 .pp-slot-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.pp-slot-title-row { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.pp-slot-title-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .pp-slot-id {
-  font-family: var(--font-mono, monospace); font-size: 11px; color: var(--text-primary);
-  text-transform: uppercase; letter-spacing: 0.3px;
+  font-family: var(--font-mono, monospace); font-size: 11px; color: var(--accent-light);
+  text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;
 }
 .pp-slot-owner { font-size: 10px; color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px; }
 .pp-slot-owner.builtin { color: var(--text-muted); }
 .pp-slot-kind {
-  font-size: 9px; border-radius: 3px; padding: 0 4px; align-self: flex-start;
-  line-height: 14px; flex-shrink: 0;
+  font-size: 9px; border-radius: 4px; padding: 0 5px; align-self: flex-start;
+  line-height: 15px; flex-shrink: 0; font-weight: 600; letter-spacing: .3px;
 }
-.pp-slot-kind.kind-single { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); }
-.pp-slot-kind.kind-list { color: #2e7d32; background: color-mix(in srgb, #2e7d32 10%, transparent); border: 1px solid color-mix(in srgb, #2e7d32 30%, transparent); }
-.pp-slot-list { display: flex; flex-direction: column; gap: 2px; align-items: flex-end; flex-shrink: 0; }
-.pp-slot-list-item { display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--text-secondary); cursor: pointer; max-width: 220px; }
-.pp-slot-list-item:hover { color: var(--text-primary); }
+.pp-slot-kind.kind-single { color: var(--accent-light); background: color-mix(in srgb, var(--accent) 14%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+.pp-slot-kind.kind-list { color: #3fb950; background: rgba(63, 185, 80, .10); border: 1px solid rgba(63, 185, 80, .30); }
+.pp-slot-list { display: flex; flex-direction: column; gap: 3px; align-items: flex-end; flex-shrink: 0; }
+.pp-slot-list-item {
+  display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--text-secondary);
+  cursor: pointer; max-width: 220px; padding: 1px 4px; border-radius: 4px;
+  transition: background .1s, color .1s;
+}
+.pp-slot-list-item:hover { color: var(--text-primary); background: var(--bg-hover); }
+.pp-slot-list-item input[type='checkbox'] { accent-color: var(--accent); margin: 0; }
 .pp-slot-list-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pp-slot-empty { font-size: 10px; color: var(--text-muted); }
 .pp-slot-select {
-  width: 160px; font-size: 11px; padding: 2px 4px;
-  background: var(--bg-input, var(--bg-elevated)); color: var(--text-primary);
-  border: 1px solid var(--border-color); border-radius: 3px; flex-shrink: 0;
-  cursor: pointer;
+  width: 170px; font-size: 11px; padding: 3px 6px;
+  background: var(--bg-secondary); color: var(--text-primary);
+  border: 1px solid var(--border-color); border-radius: 5px; flex-shrink: 0;
+  cursor: pointer; transition: border-color .12s, box-shadow .12s;
 }
 .pp-slot-select:hover { border-color: var(--accent); }
+.pp-slot-select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--focus-ring); }
 .pp-client-tabs {
   display: flex;
   gap: 2px;
