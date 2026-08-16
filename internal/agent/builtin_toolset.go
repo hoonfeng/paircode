@@ -649,9 +649,11 @@ func SetBuiltinToolEnabled(ph *PluginHost, root, toolName string, enabled bool) 
 		return "✅ 工具 " + toolName + " 已加入 agent 可用（手动工具）。固化 .pair/toolsets/builtin.json", nil
 	}
 
-	// 禁用：恢复默认过滤 + 持久化差集
+	// 禁用：强制移出 agent 可用集合（SetToolEnabled(false)）+ 持久化差集
+	// （2026-08-16：原为恢复 ToolDefaultEnabled——默认全量模式下=全 true，
+	//   移出后工具仍可见，前端「移出」无效。改为强制禁用，重启后差集保持一致。）
 	if reg != nil {
-		reg.SetToolEnabled(toolName, ToolDefaultEnabled(toolName))
+		reg.SetToolEnabled(toolName, false)
 	}
 	for i := range ts.Plugins {
 		if ts.Plugins[i].Builtin == manualBuiltinGroup {
@@ -680,12 +682,12 @@ func SetBuiltinToolEnabled(ph *PluginHost, root, toolName string, enabled bool) 
 	}
 	if len(ts.Plugins) == 0 {
 		_ = os.Remove(toolsetPath(root, toolsetProject, builtinToolsetName))
-		return "✅ 工具 " + toolName + " 已从 agent 可用移除（恢复默认过滤状态）", nil
+		return "✅ 工具 " + toolName + " 已移出 agent 可用集合（工作区工具集）", nil
 	}
 	if err := saveToolset(root, toolsetProject, ts); err != nil {
 		return "", err
 	}
-	return "✅ 工具 " + toolName + " 已从 agent 可用移除（恢复默认过滤状态）。固化 .pair/toolsets/builtin.json", nil
+	return "✅ 工具 " + toolName + " 已移出 agent 可用集合（工作区工具集）。固化 .pair/toolsets/builtin.json", nil
 }
 
 // removeToolName 从字符串切片移除指定元素（无则不动）。
