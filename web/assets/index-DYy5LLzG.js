@@ -11638,17 +11638,17 @@
   }
   function getSlotOwner(slotId) {
     let v = "";
-    try {
-      v = localStorage.getItem(slotOwnerKey(slotId)) || "";
-    } catch (e) {
-    }
-    if (v && !clientSlots.some((s) => s.slotId === slotId && s.kind !== "list" && s.pluginName === v)) v = "";
-    if (v) return v;
     let neverChosen = true;
     try {
+      v = localStorage.getItem(slotOwnerKey(slotId)) || "";
       neverChosen = localStorage.getItem(slotOwnerKey(slotId)) === null;
     } catch (e) {
     }
+    if (v && !clientSlots.some((s) => s.slotId === slotId && s.kind !== "list" && s.pluginName === v)) {
+      neverChosen = true;
+      v = "";
+    }
+    if (v) return v;
     if (neverChosen) {
       const cands = clientSlots.filter((s) => s.slotId === slotId && s.kind !== "list" && typeof s.render === "function");
       if (cands.length === 1) return cands[0].pluginName;
