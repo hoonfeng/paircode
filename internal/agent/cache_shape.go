@@ -16,10 +16,11 @@ import (
 // provider-side prompt-cache reuse. Comparing snapshots across turns
 // lets us explain *why* a cache miss happened.
 type PrefixShape struct {
-	SystemHash  string // 静态前缀（CacheBoundary 之前）——影响 provider 缓存
-	DynamicHash string // 动态后缀（CacheBoundary 之后）——变化不影响前缀缓存
-	ToolsHash   string
-	PrefixHash  string
+	SystemHash   string // 静态前缀（CacheBoundary 之前）——影响 provider 缓存
+	DynamicHash  string // 动态后缀（CacheBoundary 之后）——变化不影响前缀缓存
+	ToolsHash    string // 归一化（排序后）工具定义哈希
+	ToolsRawHash string // 原始顺序工具定义哈希（诊断工具顺序稳定性）
+	PrefixHash   string
 }
 
 // CacheDiagnostics reports what changed between two LLM calls' prefixes.
@@ -52,12 +53,14 @@ func splitAtBoundary(p string) (static, dynamic string) {
 func CaptureShape(systemPrompt string, toolDefs []ToolDefinition) PrefixShape {
 	normalized := normalizeToolDefs(toolDefs)
 	toolsJSON, _ := json.Marshal(normalized)
+	rawJSON, _ := json.Marshal(toolDefs)
 	static, dynamic := splitAtBoundary(systemPrompt)
 	return PrefixShape{
-		SystemHash:  shortHash(static),
-		DynamicHash: shortHash(dynamic),
-		ToolsHash:   shortHash(string(toolsJSON)),
-		PrefixHash:  shortHash(map[string]interface{}{
+		SystemHash:   shortHash(static),
+		DynamicHash:  shortHash(dynamic),
+		ToolsHash:    shortHash(string(toolsJSON)),
+		ToolsRawHash: shortHash(string(rawJSON)),
+		PrefixHash:   shortHash(map[string]interface{}{
 			"system":  static,
 			"dynamic": dynamic,
 			"tools":   string(toolsJSON),

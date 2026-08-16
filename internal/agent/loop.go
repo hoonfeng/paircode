@@ -833,7 +833,7 @@ func (l *Loop) emitCacheShape(callMsgs []Message, tools []ToolDefinition) {
 	cacheDiagPrev = cur
 	cacheDiagStateMu.Unlock()
 	if prev.PrefixHash == "" {
-		log.Printf("%s 首轮前缀 shape system=%s dynamic=%s tools=%s tools_n=%d", tag, cur.SystemHash, cur.DynamicHash, cur.ToolsHash, len(tools))
+		log.Printf("%s 首轮前缀 shape system=%s dynamic=%s tools=%s tools_raw=%s tools_n=%d", tag, cur.SystemHash, cur.DynamicHash, cur.ToolsHash, cur.ToolsRawHash, len(tools))
 	} else {
 		diag := CompareShape(prev, cur)
 		switch {
@@ -843,10 +843,10 @@ func (l *Loop) emitCacheShape(callMsgs []Message, tools []ToolDefinition) {
 				prev.SystemHash, diag.SystemHash,
 				prev.ToolsHash, diag.ToolsHash)
 		case diag.DynamicChanged:
-			log.Printf("%s 动态后缀变化（不影响缓存）system=%s dynamic=%s tools=%s tools_n=%d",
-				tag, diag.SystemHash, diag.DynamicHash, diag.ToolsHash, len(tools))
+			log.Printf("%s 动态后缀变化（不影响缓存）system=%s dynamic=%s tools=%s tools_raw=%s tools_n=%d",
+				tag, diag.SystemHash, diag.DynamicHash, diag.ToolsHash, cur.ToolsRawHash, len(tools))
 		default:
-			log.Printf("%s 前缀稳定 system=%s tools=%s tools_n=%d", tag, diag.SystemHash, diag.ToolsHash, len(tools))
+			log.Printf("%s 前缀稳定 system=%s tools=%s tools_raw=%s tools_n=%d", tag, diag.SystemHash, diag.ToolsHash, cur.ToolsRawHash, len(tools))
 		}
 	}
 }
