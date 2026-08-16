@@ -143,6 +143,9 @@ func (b *nodeBridge) registerToolsTo(ph *PluginHost) {
 		if err := ph.Context().RegisterTool(t); err != nil {
 			log.Printf("[node-bridge] 补注册工具 %s 到新宿主失败: %v", t.Name, err)
 		}
+		// ★ 2026-08-17：装载 ≠ agent 可用——Node 桥插件工具同样受工作区工具集
+		//   可见性收敛（不在工具集白名单 → 对 agent 隐藏，cordis/前端仍可见）。
+		ph.hideToolIfNotInToolset(t.Name)
 	}
 }
 
@@ -324,6 +327,9 @@ func (b *nodeBridge) handleToolMsg(plugin string, defRaw json.RawMessage) {
 	if err := ph.Context().RegisterTool(tool); err != nil {
 		log.Printf("[node-bridge] 注册工具 %s 失败: %v", def.Name, err)
 	}
+	// ★ 2026-08-17：装载 ≠ agent 可用——Node 桥插件工具同样受工作区工具集
+	//   可见性收敛（不在工具集白名单 → 对 agent 隐藏，cordis/前端仍可见）。
+	ph.hideToolIfNotInToolset(def.Name)
 }
 
 // invokeTool 调用 Node 侧插件工具（发送 invoke 消息并等待结果）。

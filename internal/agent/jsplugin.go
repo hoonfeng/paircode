@@ -1844,6 +1844,10 @@ func (h *PluginHost) LoadJSDynamic(def *jsPluginDef) error {
 	h.mu.Lock()
 	def.setStatus(PluginRunning, nil)
 	h.mu.Unlock()
+	// ★ 2026-08-17：装载 ≠ agent 可用——非工作区工具集插件的工具默认对 agent 隐藏
+	//   （cordis/前端仍可见可管理；toolset_edit add_plugin 加入工具集后可见）。
+	//   工具集插件（applyToolsetPlugin 装载）的工具在白名单内，不受影响。
+	h.applyPluginToolVisibility(name)
 	return nil
 }
 
