@@ -49,7 +49,7 @@ const tools = [
 
 return {
   name: 'tool-web',
-  purpose: '网络工具（web_fetch/web_search）——迁移自内置 registerWebTools；web_fetch JS 实现、web_search 宿主执行器',
+  purpose: '网络工具（web_fetch/web_search）——迁移自内置 registerWebTools；web_fetch JS 实现（ctx.web.fetch）、web_search 统一宿主二进制',
   apply(ctx) {
     for (const t of tools) {
       const isFetch = t.name === 'web_fetch'
@@ -60,7 +60,7 @@ return {
         category: t.category,
         readOnly: t.readOnly,
         parameters: t.parameters,
-        execute: (args) => (isFetch ? webFetch(ctx, args || {}) : ctx.hostTool.exec(t.name, args || {})),
+        execute: (args) => (isFetch ? webFetch(ctx, args || {}) : ctx.binary.exec(t.name, args || {}, {bin: 'tool-binary'})),
       })
     }
     // 日志已省略（logger 需 inject 声明）

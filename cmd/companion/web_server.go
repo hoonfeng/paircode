@@ -453,7 +453,7 @@ func startWebUI(port int) {
 
 	ws.server = &http.Server{
 		Addr:    fmt.Sprintf(":%d", port),
-		Handler: corsMiddleware(agent.ExtRouteMiddleware(mux)),
+		Handler: corsMiddleware(agent.ExtSSEMiddleware(agent.ExtRouteMiddleware(mux))),
 	}
 
 	go func() {

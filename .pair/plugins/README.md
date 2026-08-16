@@ -31,6 +31,13 @@ JS 插件 execute → ctx.binary.exec(tool, args[, {timeout}]) → text
   - 返回 unregister 函数；插件卸载自动注销；重复 (method, path) 注册报错
   - 插件路由在宿主 mux 之前拦截：命中走插件、未命中走内置 /api/* 与静态文件
   - 实现：internal/agent/ext_routes.go（ExtRouteMiddleware）+ jsplugin.go ctx.http
+- `ctx.sse.register(path, fn)` → 注册 SSE 实时推送端点（事件通道插件化）：
+  - `fn(emit, params) → cleanup`：连接建立时在 VM 锁内调用一次（可 await）；
+    `emit(event, payload)` 推送事件（payload JSON 序列化，跨调用可保存复用，
+    连接断开后抛错）；返回值（函数）为 cleanup，连接断开时调用
+  - 返回 unregister 函数；插件卸载自动注销；重复 path 注册报错
+  - 实现：internal/agent/ext_sse.go（ExtSSEMiddleware）+ jsplugin.go ctx.sse；
+    浏览器/外部用 EventSource/curl 消费（text/event-stream，逐事件 Flush）
 - `ctx.binary.exec(tool, args, {bin})` → opts.bin 指定**其它插件目录的二进制**
   （跨插件共用统一二进制；如各工具组 JS `{bin:"tool-binary"}` 指向统一宿主
   二进制，无需各自编译）

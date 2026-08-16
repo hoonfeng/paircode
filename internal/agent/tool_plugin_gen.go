@@ -55,7 +55,7 @@ func genToolGroups() []genToolGroup {
 		{"tool-project-info", "项目知识库（project_info_write/read/list/search/delete/explore）", registerProjectInfoTools, nil, "tool-binary"},
 		{"tool-binary", "二进制读写（inspect_binary/write_binary）", registerBinaryTools, nil, "tool-binary"},
 		{"tool-binary-re", "二进制正则（binary_strings/find/patch/info/hash/entropy）", registerBinaryRETools, nil, "self"},
-		{"tool-debug", "调试工具（debug_inject_log/run_capture/analyze_output/parse_stack/cleanup_logs/watch/evaluate_session）", registerDebugTools, nil, ""},
+		{"tool-debug", "调试工具（debug_inject_log/run_capture/analyze_output/parse_stack/cleanup_logs/watch/evaluate_session）", registerDebugTools, nil, "tool-binary"},
 		{"tool-vision", "图像视觉（image_analyze/image_ocr）", registerVisionTools, nil, "tool-binary"},
 		{"tool-screenshot", "截图（screenshot_desktop/window/area/webpage）", registerScreenshotTools, nil, "tool-binary"},
 		{"tool-web-debug", "网页验证（web_debug）", registerWebDebugTool, nil, "tool-binary"},

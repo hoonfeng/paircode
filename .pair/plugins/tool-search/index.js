@@ -2,8 +2,8 @@
 // tool-search — 搜索工具（search_content/search_files）
 //
 // 迁移来源（2026-08-16）：内置 registerSearchTools（internal/agent/search.go）
-// → 磁盘外置插件。宿主 Go 搜索实现（编码探测/跳过 .git/node_modules/超大
-// 文件）经 ctx.hostTool 复用（二进制方案）；api 声明在本插件。
+// → 磁盘外置插件。2026-08-16 二进制定位：execute 调 ctx.binary 复用统一
+// 宿主二进制（fs-search 组在 RegisterDefaultTools，编码探测/跳过目录在 Go 实现）。
 // ═══════════════════════════════════════════════════════════════
 const tools = [
   {
@@ -47,7 +47,7 @@ const tools = [
 
 return {
   name: 'tool-search',
-  purpose: '搜索工具（search_content/search_files）——迁移自内置 registerSearchTools，api 声明在插件、执行走宿主执行器',
+  purpose: '搜索工具（search_content/search_files）——迁移自内置 registerSearchTools，api 声明在插件、执行走统一宿主二进制（fs-search 组）',
   apply(ctx) {
     for (const t of tools) {
       ctx.tools.register({
@@ -57,7 +57,7 @@ return {
         category: t.category,
         readOnly: t.readOnly,
         parameters: t.parameters,
-        execute: (args) => ctx.hostTool.exec(t.name, args || {}),
+        execute: (args) => ctx.binary.exec(t.name, args || {}, {bin: 'tool-binary'}),
       })
     }
     // 日志已省略（logger 需 inject 声明）

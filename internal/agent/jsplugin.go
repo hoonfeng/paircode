@@ -878,6 +878,8 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 			ctxObj.Set("web", p.buildWebService(pc))
 		case "bash":
 			ctxObj.Set("bash", p.buildBashService(pc))
+		case "sse":
+			ctxObj.Set("sse", p.buildSSEService(pc))
 		case "logger":
 			ctxObj.Set("logger", p.buildLoggerService())
 		case "timer":
@@ -1010,6 +1012,20 @@ func (p *jsPluginAdapter) buildFSService(pc *PluginContext) goja.Value {
 		}
 		return goja.Undefined()
 	})
+	fs.Set("rename", func(call goja.FunctionCall) goja.Value {
+		from, err := resolve(call.Argument(0).String())
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		to, err := resolve(call.Argument(1).String())
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		if err := os.Rename(from, to); err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return goja.Undefined()
+	})
 	return vm.ToValue(fs)
 }
 
@@ -1060,10 +1076,86 @@ func (p *jsPluginAdapter) buildBashService(pc *PluginContext) goja.Value {
 	return vm.ToValue(bsh)
 }
 
+// buildSSEService 事件推送服务（ctx.sse）：注册 SSE 实时推送端点。
+// 对齐 harness webServer 的事件流形态——插件可向浏览器/外部客户端推送
+// 事件流（进度、日志、通知等），宿主统一管理连接生命周期。
+//
+// JS 用法（inject 声明 'sse'）：
+//   const unregister = ctx.sse.register('/api/ext/stream', (emit, params) => {
+//     emit('hello', { ts: Date.now() })            // 建立时先推一条
+//     push = emit                                  // 保存供外部触发
+//     return () => { push = null }                 // 断连清理（可选）
+//   })
+// emit(event, payload)：payload 会被 JSON 序列化；连接断开后调用抛错。
+// handler 在连接建立时于 VM 锁内调用一次（可 await）；返回 cleanup。
+func (p *jsPluginAdapter) buildSSEService(pc *PluginContext) goja.Value {
+	vm := p.vm
+	sse := vm.NewObject()
+	sse.Set("register", func(call goja.FunctionCall) goja.Value {
+		path := call.Argument(0).String()
+		if path == "" {
+			panic(vm.NewGoError(fmt.Errorf("ctx.sse.register: path 不能为空")))
+		}
+		handlerFn, ok := goja.AssertFunction(call.Argument(1))
+		if !ok {
+			panic(vm.NewGoError(fmt.Errorf("ctx.sse.register: 第二个参数必须是函数 (emit, params) => cleanup")))
+		}
+		// 宿主 Go 侧 SSEHandler（在 SSE 连接 goroutine 中执行）
+		goH := func(params map[string]string, emit func(event string, payload any) error, done <-chan struct{}) func() {
+			// JS 侧 emit：跨 goroutine 可调（进 VM 锁；连接断开抛错）
+			jsEmit := func(call goja.FunctionCall) goja.Value {
+				event := call.Argument(0).String()
+				var payload any
+				if a := call.Argument(1); a != nil && !goja.IsUndefined(a) && !goja.IsNull(a) {
+					payload = a.Export()
+				}
+				if err := emit(event, payload); err != nil {
+					panic(vm.NewGoError(err))
+				}
+				return goja.Undefined()
+			}
+			jsEmitFn := vm.ToValue(jsEmit)
+			// handler 在 VM 锁内调用一次（同步语义，可 await）
+			var cleanupFn func()
+			p.withLock(func() {
+				ret, err := handlerFn(goja.Undefined(), jsEmitFn, vm.ToValue(params))
+				if err != nil {
+					fmt.Printf("[js-plugin:%s] ctx.sse %s handler 执行失败: %s\n", p.def.id, path, jsErrorText(err))
+					return
+				}
+				if ret != nil && !goja.IsUndefined(ret) && !goja.IsNull(ret) {
+					if retObj, isObj := ret.(*goja.Object); isObj {
+						if cf, isFn := goja.AssertFunction(retObj); isFn {
+							cleanupFn = func() {
+								p.withLock(func() { _, _ = cf(goja.Undefined()) })
+							}
+							return
+						}
+					}
+					// 非函数返回值：drain Promise（async handler）
+					_, _ = jsResultToText(vm, ret)
+				}
+			})
+			return cleanupFn
+		}
+		disposer, err := RegisterExtSSE(path, goH)
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		// 返回 unregister 函数；插件卸载经 addCleanup 自动注销
+		unreg := func(call goja.FunctionCall) goja.Value {
+			disposer()
+			return goja.Undefined()
+		}
+		p.addCleanup(disposer)
+		return vm.ToValue(unreg)
+	})
+	return vm.ToValue(sse)
+}
+
 // buildLoggerService 日志服务（ctx.logger(scope)）：cordis 语义，
 // 返回带 scope 的 logger（log/info/warn/debug/error），写透宿主 stdout。
-func (p *jsPluginAdapter) buildLoggerService() goja.Value {
-	vm := p.vm
+func (p *jsPluginAdapter) buildLoggerService() goja.Value {	vm := p.vm
 	loggerFn := func(call goja.FunctionCall) goja.Value {
 		scope := call.Argument(0).String()
 		tag := fmt.Sprintf("[js-plugin:%s:%s]", p.def.id, scope)
@@ -1450,7 +1542,7 @@ func (h *PluginHost) checkInjects(def *jsPluginDef) error {
 // hasService 判断宿主是否提供某服务（静态服务键 + 动态 ctx.provide 服务）。
 func (h *PluginHost) hasService(name string) bool {
 	switch name {
-	case "fs", "web", "bash", "logger", "timer", "tools", "events", "store", "app", "workspaceRoot":
+	case "fs", "web", "bash", "sse", "logger", "timer", "tools", "events", "store", "app", "workspaceRoot":
 		return true
 	}
 	return h.ctx.Get(name) != nil
@@ -1458,7 +1550,7 @@ func (h *PluginHost) hasService(name string) bool {
 
 // availableServices 宿主可用服务清单（供报错引导/文档展示）。
 func (h *PluginHost) availableServices() []string {
-	names := []string{"fs", "web", "bash", "logger", "timer", "tools", "events", "store", "app", "workspaceRoot"}
+	names := []string{"fs", "web", "bash", "sse", "logger", "timer", "tools", "events", "store", "app", "workspaceRoot"}
 	h.ctx.servicesMu.RLock()
 	for n := range h.ctx.services {
 		names = append(names, n)
