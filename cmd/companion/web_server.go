@@ -2340,10 +2340,14 @@ func buildWebSystemDynamic() string {
 			secHash(skillsSec), len(skillsSec), secHash(memorySec), len(memorySec),
 			secHash(rulesSec), len(rulesSec), secHash(knowledgeSec), len(knowledgeSec),
 			secHash(envSec.String()), secHash(val), len(val))
-		// 技能行级哈希：定位列表变化的具体技能
+		// 技能行级：定位列表变化的具体技能（行格式 "- 名字：描述"）
 		for _, skillLine := range strings.Split(skillsSec, "\n") {
 			if strings.HasPrefix(skillLine, "- ") {
-				log.Printf("[cache-diag]   skill %s len=%d", secHash(skillLine), len(skillLine))
+				name := skillLine[2:]
+				if i := strings.Index(name, "："); i > 0 {
+					name = name[:i]
+				}
+				log.Printf("[cache-diag]   skill %q len=%d", name, len(skillLine))
 			}
 		}
 	}
