@@ -298,7 +298,7 @@ return {
         requiresApproval: t.requiresApproval,
         systemTool: t.systemTool,
         parameters: t.parameters,
-        execute: (args) => ctx.binary.exec(t.name, args || {}, {bin: 'tool-binary'}),
+        execute: (args) => ctx.binary.exec(t.name, args || {}),
       })
     }
   },

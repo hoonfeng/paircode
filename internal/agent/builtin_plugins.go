@@ -1,13 +1,18 @@
 // ═══════════════════════════════════════════════════════════════
 // builtin_plugins.go — 内置插件装配（对齐 harness「一切皆插件」）
 //
-// 现有功能组（文件/搜索/Git/Web/记忆/任务/图谱…）全部以内置 Go 插件形态
-// 装配：每个插件 { name, apply(ctx) }，apply 里经 ctx.Tools 注册一组工具。
+// ★ 2026-08-16 第三轮：宿主不再承载工具实现。
+//   - 内置 20 组（core/git/codegraph/…）的实现已迁移为磁盘插件
+//     （.pair/plugins/tool-*，JS 原生化或独立插件二进制），宿主进程
+//     不再注册——builtinPluginSpecs 保留仅作「二进制实现库的组规格」，
+//     供独立插件二进制（cmd/plugins/tool-*/，经 pkg/toolbin）按组注册。
+//   - 宿主只注册框架协议工具（RegisterHostFrameworkTools）：SystemTool
+//     （update_tasks/update_plan/tool_stats/history_*）会话绑定，供
+//     tool-system 插件 hostTool 承载（同名接管时 ArchiveHostTool 存档）。
 //
 // 双入口共享同一份规格（builtinPluginSpecs）：
-//   - AgentBase.Init → registerBuiltinPlugins(ph)：经 PluginHost.Use 装配，
-//     cordis_inspect 可见插件→工具归属，Unload 可回收
-//   - RegisterDefaultTools(r, root)（测试/独立宿主）：直接 apply 到 Registry
+//   - 独立二进制：RegisterToolGroups(r, root, "git") 按组注册（cmd/plugins/*）
+//   - 宿主框架：RegisterHostFrameworkTools（只注册 SystemTool 组）
 // ═══════════════════════════════════════════════════════════════
 
 package agent
@@ -22,6 +27,8 @@ type builtinPluginSpec struct {
 }
 
 // builtinPluginSpecs 内置插件规格全表（顺序即装配顺序，core 最先）。
+// ★ 仅作二进制实现库的组规格（cmd/plugins/tool-*/ 经 RegisterToolGroups
+//   按组注册）——宿主进程不再 apply 本表。
 func builtinPluginSpecs(root string) []builtinPluginSpec {
 	eh := newEditHistory() // ★ v2: 编辑行号偏移追踪器
 	bg := globalBG         // ★ 全局共享后台进程注册表（跨轮次/跨 Registry 存活，见 shell.go）
@@ -69,8 +76,43 @@ func builtinPluginSpecs(root string) []builtinPluginSpec {
 	}
 }
 
-// RegisterBuiltinPlugins 把全部内置插件经 PluginHost 装配（AgentBase.Init 与 web 模式共用）。
-// 之后 cordis_inspect 可查看插件→工具归属；停止某插件可回收其工具。
+// RegisterToolGroups 按组注册内置工具（groups 为空 = 全部）。供独立插件二进制
+// （cmd/plugins/tool-*/，经 pkg/toolbin）与测试/示例使用——宿主进程不调用。
+func RegisterToolGroups(r *Registry, root string, groups ...string) {
+	want := map[string]bool{}
+	for _, g := range groups {
+		want[g] = true
+	}
+	for _, s := range builtinPluginSpecs(root) {
+		if len(want) > 0 && !want[s.name] {
+			continue
+		}
+		s.apply(&PluginContext{Tools: r})
+	}
+}
+
+// RegisterDefaultTools 注册全部内置工具组（独立宿主/测试/示例用）。
+// ★ 宿主进程（AgentBase.Init / web_server / desktopbridge）不再调用——
+//   改用 RegisterHostFrameworkTools（工具实现已全部迁移磁盘插件）。
+func RegisterDefaultTools(r *Registry, root string) {
+	RegisterToolGroups(r, root)
+}
+
+// RegisterHostFrameworkTools 宿主框架协议工具注册（会话绑定 SystemTool）。
+// 宿主进程（AgentBase.Init / web_server / desktopbridge）唯一的内置注册：
+// update_tasks/update_plan/tool_stats/history_*——tool-system 磁盘插件
+// hostTool 承载（同名接管时 ArchiveHostTool 存档 Go 实现供 ctx.hostTool）。
+func RegisterHostFrameworkTools(r *Registry, root string) {
+	RegisterManagementTools(r, root) // history_search/list/count 等
+	registerPlanTool(r)              // update_plan
+	registerToolStatsTool(r)         // tool_stats
+	registerTaskTools(r, root)       // update_tasks（会话绑定 TaskManager）
+}
+
+// RegisterBuiltinPlugins 装配宿主框架插件（AgentBase.Init 与 web 模式共用）。
+// ★ 内置 20 组不再经 PluginHost 装配（实现已迁移磁盘插件）；仅保留：
+//   - sysinfo：Provide workspaceRoot（宿主能力服务）
+//   - toolset-tpl-core：工具集构建模板插件（toolset_build 数据源）
 func RegisterBuiltinPlugins(h *PluginHost) {
 	_ = h.Use(&GoPlugin{
 		NameField: "sysinfo",
@@ -79,19 +121,6 @@ func RegisterBuiltinPlugins(h *PluginHost) {
 			return nil
 		},
 	})
-	for _, s := range builtinPluginSpecs(h.ctx.WorkspaceRoot) {
-		spec := s // 闭包捕获
-		if err := h.Use(&GoPlugin{
-			NameField: spec.name,
-			ApplyFn: func(ctx *PluginContext) error {
-				spec.apply(ctx)
-				return nil
-			},
-		}); err != nil {
-			// 同名插件冲突（理论上内置名唯一）——记录但不中断装配
-			_ = fmt.Errorf("内置插件 %s 装配失败: %w", spec.name, err)
-		}
-	}
 	// ★ 工具集构建模板插件（toolset_build 的动态组合数据源，本身可被市场/用户扩展）
 	if err := h.Use(registerToolsetTemplates()); err != nil {
 		_ = fmt.Errorf("内置工具集模板插件装配失败: %w", err)

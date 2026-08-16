@@ -28,10 +28,11 @@ func TestPluginHostBasic(t *testing.T) {
 	if v := host.Context().Get("workspaceRoot"); v != `C:\ws` {
 		t.Fatalf("workspaceRoot 服务 = %v, want C:\\ws", v)
 	}
-	// Inspect 报告：sysinfo + 21 个内置功能插件
+	// Inspect 报告：框架插件（sysinfo + toolset-tpl-core）——内置 20 组已迁移
+	// 磁盘插件（.pair/plugins/tool-*），宿主不再装配
 	recs := host.Inspect()
-	if len(recs) < 22 {
-		t.Fatalf("Inspect 应含 22 个插件, got %d: %+v", len(recs), recs)
+	if len(recs) != 2 {
+		t.Fatalf("Inspect 应含 2 个框架插件, got %d: %+v", len(recs), recs)
 	}
 	foundSys := false
 	for _, r := range recs {

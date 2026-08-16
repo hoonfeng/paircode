@@ -223,7 +223,7 @@ function runCommand(ctx, args) {
 // run_code：统一二进制承载（tool-binary 注册了 run_code——node+tools.xxx
 // 嵌套 goja 调度 + 外部进程执行，二进制进程内自持 goja 运行时）
 function runCode(ctx, args) {
-  const opts = { bin: 'tool-binary', timeout: 120000 }
+  const opts = { timeout: 120000 }
   return ctx.binary.exec('run_code', args || {}, opts).text
 }
 

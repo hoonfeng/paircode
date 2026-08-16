@@ -21,7 +21,6 @@ import (
 	"wb-ui/webkit"
 
 	"github.com/hoonfeng/paircode/internal/agent"
-	"github.com/hoonfeng/paircode/internal/agenttools"
 	pairBridge "github.com/hoonfeng/paircode/internal/bridge"
 	"github.com/hoonfeng/paircode/internal/core"
 	"github.com/hoonfeng/paircode/internal/pty"
@@ -71,9 +70,8 @@ func Init(wv *webkit.WebView) {
 	// 工具配置弹窗 GET /tools → 404 → 「加载失败，请重试」。
 	if root := core.Root(); root != "" {
 		initReg := agent.NewRegistry()
-		agent.RegisterDefaultTools(initReg, root)
+		agent.RegisterHostFrameworkTools(initReg, root)
 		agent.RegisterCommitMessageTool(initReg)
-		agenttools.RegisterManagementTools(initReg, root)
 		// 参考注册表也加载管理工具（多项目），保证 /api/tools 工具面板可见
 		handler.SetToolsRegistry(initReg)
 		log.Printf("[Bridge] 参考工具注册表已初始化（%d 个工具）", len(initReg.AllToolMeta()))
@@ -414,9 +412,8 @@ func buildDesktopLoopOpts(convID, message string, autonomous bool) agent.LoopOpt
 	}
 
 	reg := agent.NewRegistry()
-	agent.RegisterDefaultTools(reg, root)
+	agent.RegisterHostFrameworkTools(reg, root)
 	agent.RegisterCommitMessageTool(reg)
-	agenttools.RegisterManagementTools(reg, root)
 	if cfgs := mcppanel.LoadConfigs(); len(cfgs) > 0 {
 		agentCfgs := make([]agent.MCPServerConfig, len(cfgs))
 		for i, c := range cfgs {

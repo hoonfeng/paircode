@@ -72,10 +72,17 @@ func TestBuiltinGroupsOf(t *testing.T) {
 			t.Errorf("分组 %s 无工具", g.Name)
 		}
 	}
-	// 核心分组存在
-	for _, want := range []string{"core", "git", "codegraph", "plugin-mgmt", "toolset-mgmt", "system"} {
+	// 核心分组存在（★ 2026-08-16 第三轮：内置 20 组迁移磁盘插件，不再展示——
+	// 只保留管理分组 plugin-mgmt/toolset-mgmt/system + 已加入的内置组）
+	for _, want := range []string{"plugin-mgmt", "toolset-mgmt", "system"} {
 		if !names[want] {
 			t.Errorf("缺少分组 %s（实际 %v）", want, keysOf(names))
+		}
+	}
+	// 已迁移磁盘插件的内置组不应再静态派生（避免与插件面板重复展示）
+	for _, gone := range []string{"core", "git", "codegraph", "fs-search", "web"} {
+		if names[gone] {
+			t.Errorf("内置组 %s 不应再展示（已迁移磁盘插件）", gone)
 		}
 	}
 	// plugin-mgmt 含 cordis_define

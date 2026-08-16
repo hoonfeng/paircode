@@ -27,7 +27,6 @@ import (
 	"time"
 
 	"github.com/hoonfeng/paircode/internal/agent"
-	"github.com/hoonfeng/paircode/internal/agenttools"
 	"github.com/hoonfeng/paircode/internal/core"
 	"github.com/hoonfeng/paircode/internal/server/handler"
 	marketplacepanel "github.com/hoonfeng/paircode/internal/ui/marketplace"
@@ -229,10 +228,9 @@ func startWebUI(port int) {
 	// ★ 启动时初始化参考注册表，供 /api/tools 查询工具列表（无需先启动对话）
 	if root := core.Root(); root != "" {
 		initReg := agent.NewRegistry()
-		agent.RegisterDefaultTools(initReg, root)
+		agent.RegisterHostFrameworkTools(initReg, root)
 		agent.RegisterHarnessTools(initReg, root)
 		agent.RegisterCommitMessageTool(initReg)
-		agenttools.RegisterManagementTools(initReg, root)
 		// ★ harness 对齐（默认关闭——全量工具集；WB_HARNESS=1 开启时精简 pair 独有工具）；
 		//   被禁用工具保留在注册表（前端可见可管理），内置工具集 builtin 可一键恢复
 		if n := agent.ApplyHarnessToolFilter(initReg, nil); n > 0 {
@@ -2413,11 +2411,9 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 		agent.MCPProjectConfigPath = filepath.Join(root, ".pair", "mcp.json")
 	}
 	reg := agent.NewRegistry()
-	agent.RegisterDefaultTools(reg, root)
+	agent.RegisterHostFrameworkTools(reg, root)
 	agent.RegisterHarnessTools(reg, root)
 	agent.RegisterCommitMessageTool(reg)
-
-	agenttools.RegisterManagementTools(reg, root)
 	// ★ 插件系统：全局 PluginHost 的 cordis_* 工具（浏览器插件面板同源）
 	if ph := handler.GetPluginHost(); ph != nil {
 		agent.RegisterCordisTools(reg, ph, root)

@@ -190,10 +190,11 @@ func isToolsetMgmtTool(name string) bool {
 	return strings.HasPrefix(name, "toolset_")
 }
 
-// BuiltinGroupsOf 派生全部内置分组（含工具与启用状态）。
+// BuiltinGroupsOf 派生内置分组（含工具与启用状态）。
 // reg 为工具注册表（通常 ph.Context().Tools）；ph 提供 JS 插件工具归属（排除用）。
 // 分组构成：
-//  1. 内置插件组（builtinPluginMetas）：工具 = builtinPluginToolGroups()（静态派生）
+//  1. 已加入工作区的内置组（builtin.json 条目；未加入的不再展示——工具已全部
+//     由磁盘插件 .pair/plugins/tool-* 承载，插件面板可见可管理）
 //  2. plugin-mgmt：cordis_* 工具
 //  3. toolset-mgmt：toolset_* 工具
 //  4. system：其余无插件归属的宿主工具
@@ -204,15 +205,31 @@ func BuiltinGroupsOf(reg *Registry, ph *PluginHost) []BuiltinGroupInfo {
 	var groups []BuiltinGroupInfo
 	covered := map[string]bool{} // 已归组工具名
 
-	// 1. 内置插件组（仅取有工具注册的组）
-	groupsByPlugin := builtinPluginToolGroups()
-	for _, m := range builtinPluginMetas() {
-		tools := groupsByPlugin[m.name]
+	// 1. 已加入工作区的内置组（builtin.json 固化条目 → 工具清单）。
+	//    ★ 2026-08-16 第三轮：不再从 builtinPluginSpecs 静态派生全部内置组
+	//      （宿主不再注册内置工具，静态清单会与磁盘插件重复展示）
+	joinedEntries := map[string][]string{}
+	if ph != nil && ph.Context() != nil && ph.Context().WorkspaceRoot != "" {
+		if ts, err := loadToolset(ph.Context().WorkspaceRoot, toolsetProject, builtinToolsetName); err == nil {
+			for _, p := range ts.Plugins {
+				if p.Builtin != "" && p.Builtin != manualBuiltinGroup {
+					joinedEntries[p.Builtin] = append([]string(nil), p.Tools...)
+				}
+			}
+		}
+	}
+	var joinedNames []string
+	for n := range joinedEntries {
+		joinedNames = append(joinedNames, n)
+	}
+	sort.Strings(joinedNames)
+	for _, name := range joinedNames {
+		tools := joinedEntries[name]
 		if len(tools) == 0 {
-			continue // 插件未注册工具（如 codegraph-extra 无可用工具时）
+			continue
 		}
 		sort.Strings(tools)
-		g := BuiltinGroupInfo{Name: m.name, Title: m.name, Desc: m.desc, Source: "builtin"}
+		g := BuiltinGroupInfo{Name: name, Title: name, Desc: builtinGroupDesc(name), Source: "builtin"}
 		all := true
 		anyOn := false
 		for _, tn := range tools {
@@ -394,7 +411,9 @@ func BuiltinToolsetInfoOf(reg *Registry, ph *PluginHost, root string) *BuiltinTo
 		joinedSet[n] = true
 	}
 	for i := range groups {
-		if joinedSet[groups[i].Name] {
+		// ★ Joined 只标记内置组（Source="builtin"）——管理组（plugin-mgmt/
+		// toolset-mgmt/system）组名可能与内置组同名（如 system），不能误标
+		if groups[i].Source == "builtin" && joinedSet[groups[i].Name] {
 			groups[i].Joined = true
 		}
 	}
@@ -445,6 +464,7 @@ func BuiltinToolsetOf(reg *Registry, ph *PluginHost) *Toolset {
 // builtinEntryOfGroup 从内置分组生成工具集条目（含组内工具快照）。
 // 数据源统一走 BuiltinGroupsOf（分组派生单一入口），避免规则重复。
 func builtinEntryOfGroup(reg *Registry, ph *PluginHost, groupName string) (*ToolsetPlugin, error) {
+	// ① 已展示组（已加入/管理组）
 	for _, g := range BuiltinGroupsOf(reg, ph) {
 		if g.Name != groupName {
 			continue
@@ -460,6 +480,17 @@ func builtinEntryOfGroup(reg *Registry, ph *PluginHost, groupName string) (*Tool
 		if len(entry.Tools) == 0 {
 			return nil, os.ErrNotExist // 组无工具
 		}
+		return entry, nil
+	}
+	// ② ★ 未展示的内置组（迁移磁盘插件后前端不再展示，但加入操作仍可用）：
+	//    从组规格静态派生工具清单（builtinPluginSpecs，仅作实现库组规格）
+	if tools := builtinPluginToolGroups()[groupName]; len(tools) > 0 {
+		entry := &ToolsetPlugin{
+			Name:    "builtin:" + groupName,
+			Purpose: builtinGroupDesc(groupName),
+			Builtin: groupName,
+		}
+		entry.Tools = append(entry.Tools, tools...)
 		return entry, nil
 	}
 	return nil, os.ErrNotExist

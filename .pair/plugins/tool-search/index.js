@@ -57,7 +57,7 @@ return {
         category: t.category,
         readOnly: t.readOnly,
         parameters: t.parameters,
-        execute: (args) => ctx.binary.exec(t.name, args || {}, {bin: 'tool-binary'}),
+        execute: (args) => ctx.binary.exec(t.name, args || {}),
       })
     }
     // 日志已省略（logger 需 inject 声明）

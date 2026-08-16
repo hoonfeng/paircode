@@ -391,16 +391,9 @@ func (r *Registry) Execute(ctx context.Context, name, argsJSON string) (string, 
 
 // ─── 核心工具集 ──────────────────────────────────────────────
 
-// RegisterDefaultTools 注册核心工具，全部限定在工作区 root 内（安全底线：禁访问工作区外）。
-// 由内置插件规格统一分发（对齐 harness「一切皆插件」，见 builtin_plugins.go）。
-func RegisterDefaultTools(r *Registry, root string) {
-	for _, s := range builtinPluginSpecs(root) {
-		s.apply(&PluginContext{Tools: r})
-	}
-}
-
-// registerCoreTools 注册核心工具（read_file / write_file / edit_file / multi_edit /
-// run_command / move_file / delete_file，core 内置插件）。
+// RegisterDefaultTools 注册全部内置工具组（独立宿主/测试/示例用；由内置插件
+// 规格统一分发，见 builtin_plugins.go）。★ 宿主进程不调用——改用
+// RegisterHostFrameworkTools（工具实现已迁移磁盘插件 .pair/plugins/tool-*）。
 func registerCoreTools(r *Registry, root string, eh *editHistory, bg *bgRegistry) {
 	r.Register(&Tool{
 		Name:        "read_file",

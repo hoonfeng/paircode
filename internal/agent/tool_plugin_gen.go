@@ -34,11 +34,10 @@ type genToolGroup struct {
 	desc   string // 插件用途（purpose/头注释）
 	apply  func(r *Registry, root string) // 组注册函数
 	names  []string // 可选白名单：只挑选这些工具（nil=全部非 SystemTool 工具）
-	// binary 指定 execute 调度形态（2026-08-16 二进制插件机制）：
-	//   ""        → ctx.hostTool.exec（宿主内执行器，会话/宿主状态依赖）
-	//   "self"    → ctx.binary.exec（本插件目录 bin/<插件名>.exe，独立实现）
-	//   "tool-binary" → ctx.binary.exec {bin:"tool-binary"}（统一宿主二进制，
-	//                  import agent 复用内置组实现，改实现重编译该二进制即可）
+	// binary 指定 execute 调度形态（2026-08-16 第三轮：全部独立二进制）：
+	//   ""     → ctx.hostTool.exec（宿主内执行器，会话/宿主状态依赖——tool-system）
+	//   "self" → ctx.binary.exec（本插件目录 bin/<插件名>.exe，独立二进制；
+	//            源码 cmd/plugins/tool-<组>/，import agent 复用内置组实现）
 	binary string
 }
 
@@ -49,21 +48,21 @@ type genToolGroup struct {
 // ask_user/task_create 为会话级注册（依赖 askCh/ConvID），不可外置。
 func genToolGroups() []genToolGroup {
 	return []genToolGroup{
-		{"tool-git", "Git 操作（git_status/diff/log/show/blame/add/commit/…）", registerGitTools, nil, "tool-binary"},
-		{"tool-memory", "跨会话记忆（memory_write/read/list/search）", registerMemoryTools, nil, "tool-binary"},
-		{"tool-verify", "知识库过期验证（memory_verify/project_info_verify）", registerVerifyTools, nil, "tool-binary"},
-		{"tool-project-info", "项目知识库（project_info_write/read/list/search/delete/explore）", registerProjectInfoTools, nil, "tool-binary"},
-		{"tool-binary", "二进制读写（inspect_binary/write_binary）", registerBinaryTools, nil, "tool-binary"},
+		{"tool-git", "Git 操作（git_status/diff/log/show/blame/add/commit/…）", registerGitTools, nil, "self"},
+		{"tool-memory", "跨会话记忆（memory_write/read/list/search）", registerMemoryTools, nil, "self"},
+		{"tool-verify", "知识库过期验证（memory_verify/project_info_verify）", registerVerifyTools, nil, "self"},
+		{"tool-project-info", "项目知识库（project_info_write/read/list/search/delete/explore）", registerProjectInfoTools, nil, "self"},
+		{"tool-binary", "二进制读写（inspect_binary/write_binary）", registerBinaryTools, nil, "self"},
 		{"tool-binary-re", "二进制正则（binary_strings/find/patch/info/hash/entropy）", registerBinaryRETools, nil, "self"},
-		{"tool-debug", "调试工具（debug_inject_log/run_capture/analyze_output/parse_stack/cleanup_logs/watch/evaluate_session）", registerDebugTools, nil, "tool-binary"},
-		{"tool-vision", "图像视觉（image_analyze/image_ocr）", registerVisionTools, nil, "tool-binary"},
-		{"tool-screenshot", "截图（screenshot_desktop/window/area/webpage）", registerScreenshotTools, nil, "tool-binary"},
-		{"tool-web-debug", "网页验证（web_debug）", registerWebDebugTool, nil, "tool-binary"},
-		{"tool-bug", "BUG 检测与修复（bug_detect/bug_analyze/bug_fix）", RegisterBugTools, nil, "tool-binary"},
-		{"tool-office", "办公文档（csv_read/csv_write/json_to_table/table_stats/text_report/word_read）", registerOfficeTools, nil, "tool-binary"},
-		{"tool-lsp", "LSP 代码导航（lsp_definition/references/hover/diagnostics）", registerLSPTools, nil, "tool-binary"},
-		{"tool-codegraph", "代码知识图谱（codegraph_build/search/impact/…）", registerCodeGraphTools, nil, "tool-binary"},
-		{"tool-codegraph-extra", "图谱扩展（codegraph_find_by_signature/explore）", registerExtraCodeGraphTools, nil, "tool-binary"},
+		{"tool-debug", "调试工具（debug_inject_log/run_capture/analyze_output/parse_stack/cleanup_logs/watch/evaluate_session）", registerDebugTools, nil, "self"},
+		{"tool-vision", "图像视觉（image_analyze/image_ocr）", registerVisionTools, nil, "self"},
+		{"tool-screenshot", "截图（screenshot_desktop/window/area/webpage）", registerScreenshotTools, nil, "self"},
+		{"tool-web-debug", "网页验证（web_debug）", registerWebDebugTool, nil, "self"},
+		{"tool-bug", "BUG 检测与修复（bug_detect/bug_analyze/bug_fix）", RegisterBugTools, nil, "self"},
+		{"tool-office", "办公文档（csv_read/csv_write/json_to_table/table_stats/text_report/word_read）", registerOfficeTools, nil, "self"},
+		{"tool-lsp", "LSP 代码导航（lsp_definition/references/hover/diagnostics）", registerLSPTools, nil, "self"},
+		{"tool-codegraph", "代码知识图谱（codegraph_build/search/impact/…）", registerCodeGraphTools, nil, "self"},
+		{"tool-codegraph-extra", "图谱扩展（codegraph_find_by_signature/explore）", registerExtraCodeGraphTools, nil, "self"},
 		// tool-system：SystemTool 内部工具（ask_user/task_create 会话专属不可外置）
 		{"tool-system", "系统内部工具（update_tasks/update_plan/tool_stats/history_search/history_list/history_count）——SystemTool 同样可更换",
 			func(r *Registry, root string) {

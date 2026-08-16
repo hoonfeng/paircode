@@ -53,16 +53,19 @@ func TestGeneratedDiskPluginLoad(t *testing.T) {
 			t.Fatalf("%s 名称异常", name)
 		}
 	}
-	// ② 宿主执行器已存档（供 ctx.hostTool 复用）
-	if _, ok := HostToolMeta("git_status"); !ok {
-		t.Fatal("git_status 宿主执行器未存档")
+	// ② ★ 宿主不再承载 git 工具实现（2026-08-16 第三轮：内置 20 组注册删除，
+	//    实现归插件独立二进制）——插件注册时宿主 Registry 无同名工具，
+	//    故不存档 hostExecutors，也不应有宿主执行器
+	if _, ok := HostToolMeta("git_status"); ok {
+		t.Fatal("git_status 不应有宿主执行器（实现已迁移插件独立二进制）")
 	}
-	if _, ok := HostToolMeta("git_commit"); !ok {
-		t.Fatal("git_commit 宿主执行器未存档（含 write 类工具也应存档）")
+	if _, ok := HostToolMeta("git_commit"); ok {
+		t.Fatal("git_commit 不应有宿主执行器（实现已迁移插件独立二进制）")
 	}
-	// ③ hostTool 链路可执行（非 git 目录返回说明信息而非崩溃/未知工具）
-	if _, err := ExecuteHostTool("git_status", map[string]any{"project": repoRoot}); err != nil {
-		t.Fatalf("ExecuteHostTool(git_status) 失败: %v", err)
+	// ③ hostTool 链路：无存档 → 明确报错（宿主已不承载，工具经插件 execute
+	//    调 ctx.binary 独立二进制执行，不走 hostTool）
+	if _, err := ExecuteHostTool("git_status", map[string]any{"project": repoRoot}); err == nil {
+		t.Fatal("ExecuteHostTool(git_status) 应报错（宿主执行器不存在）")
 	}
 }
 

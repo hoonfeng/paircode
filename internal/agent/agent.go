@@ -127,9 +127,10 @@ func (a *AgentBase) Init() error {
 	store := NewMessageStore(root)
 	a.Store = store
 
-	// 3. 初始化工具注册表
+	// 3. 初始化工具注册表（★ 宿主框架协议工具：SystemTool 会话绑定；
+	//    业务工具由磁盘插件 .pair/plugins/tool-* 注册）
 	registry := NewRegistry()
-	RegisterDefaultTools(registry, root)
+	RegisterHostFrameworkTools(registry, root)
 
 	// 3.5 初始化插件宿主（对齐 harness「一切皆插件」）+ cordis 动态插件工具
 	ph := NewPluginHost(registry, store, root)
