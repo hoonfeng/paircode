@@ -30,7 +30,12 @@ var (
 	resumeCtxCacheKey  string
 	resumeCtxCacheVal  string
 	resumeCtxCacheAt   time.Time
-	resumeCtxCacheTTL  = 60 * time.Second
+	// ★ 2026-08-17 调大 TTL（60s→300s）：resumeCtx 注入 system 动态后缀，
+	//   DeepSeek 按 system 消息整体前缀匹配——resumeCtx 每 60s 重建变化会
+	//   使 dynamic 段变化、缓存断裂（命中率 99%→50%）。同一会话短时连续对话
+	//   状态基本不变，5 分钟 TTL 内复用缓存输出 → dynamic 稳定 → 前缀连续命中；
+	//   5 分钟后重建刷新会话上下文（少量断裂可接受）。
+	resumeCtxCacheTTL = 300 * time.Second
 )
 
 // ── 会话连贯性上下文 ─────────────────────────────────────────
