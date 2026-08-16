@@ -1,0 +1,9 @@
+# 发布包排除规则（npm pack 用）
+# node_modules（junction 指向 cmd/companion/web-ui/node_modules，数百 MB，绝不入包）
+**/node_modules
+node_modules
+
+# 本地产物与临时文件
+*.tgz
+*.log
+.tmp

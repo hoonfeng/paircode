@@ -1,0 +1,22 @@
+{
+  "anthropic": {
+    "baseURL": "https://api.anthropic.com/v1",
+    "models": ["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-4-sonnet-20250514", "claude-4-haiku-latest"]
+  },
+  "custom": {
+    "baseURL": "",
+    "models": ["custom"]
+  },
+  "deepseek": {
+    "baseURL": "https://api.deepseek.com/v1",
+    "models": ["deepseek-r1", "deepseek-v4-pro", "deepseek-v4-flash"]
+  },
+  "kimi": {
+    "baseURL": "https://api.moonshot.cn/v1",
+    "models": ["kimi-k3"]
+  },
+  "openai-compatible": {
+    "baseURL": "",
+    "models": ["custom"]
+  }
+}

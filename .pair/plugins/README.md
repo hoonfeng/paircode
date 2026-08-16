@@ -217,3 +217,56 @@ go run -tags toolsgen ./dev/tool_plugin_gen   # 幂等：已有插件不覆盖�
   精确路由，多会话并发不串。SessionManager.Start 检测 reg 已存在同名工具时
   不再注册会话级版本（插件优先、宿主兜底）。ask_user 提问卡片/回答交互
   （message_store ask_user segment + /api/answer → SendAnswer）不变。
+
+---
+
+## 版本发布（2026-08-17 新增）
+
+插件体系支持**整体打包发布**（版本对齐 UI 1.3.0）：
+
+### UI 代码专门目录
+
+- **`ui-app-src/`** —— UI **源码专门目录**（壳 ShellApp + 7 个区域入口
+  ui-main-*.js + 60+ Vue 组件 + docs 文档）。Vite 工程（vite.config.js +
+  package.json），`npm run build` 产壳到 `.pair/assets/runtime/web/`；
+  `node scripts/build-ui.mjs` 产 7 个区域包到 `ui-<region>/assets/`。
+- **`ui-*/`** —— UI 区域插件包（titlebar/activitybar/sidebar/editor/
+  right-panel/statusbar/modals + statusbar-conn），client.js 为浏览器半，
+  assets/ 为构建产物，随发布包分发。
+
+### 发布工程（package.json）
+
+`.pair/plugins/package.json` 是插件体系发布级配置：
+
+```bash
+# 构建 7 个区域 UI 插件包（ui-<region>/assets/）
+npm run build
+# 构建壳（ui-app-src → .pair/assets/runtime/web/）
+npm run build:shell
+# 打包发布（npm pack → release/PairCode-plugins-<version>.tgz）
+npm run pack
+# 版本号升级（如 1.3.0 → 1.4.0）
+npm run version:bump -- 1.4.0
+```
+
+- **files 字段**：全部 33 个插件目录（agentloop/core-api/tool-*/ui-*/web-api）
+  + UI 源码工程（ui-app-src）+ 模型依赖清单（config/models.json +
+  config/settings.template.json）+ README.md —— 即「插件 + 插件代码 + 依赖
+  模型」整体入包。
+- **依赖声明**：dependencies 覆盖 UI 运行时依赖（vue/codemirror/xterm/
+  marked/mermaid/pinia/vue-router），devDependencies 为构建依赖（vite/
+  @vitejs/plugin-vue）；`node_modules`（junction）经 .npmignore 排除，包体
+  只含源码与插件自包含资源。
+
+### 依赖的模型（随包分发）
+
+发布包 **config/** 目录携带模型依赖：
+
+| 文件 | 内容 |
+|------|------|
+| `config/models.json` | 依赖的服务商 + 模型清单：deepseek（deepseek-r1/v4-pro/v4-flash）、anthropic（claude 系列）、kimi（kimi-k3）、openai-compatible/custom |
+| `config/settings.template.json` | 配置模板（默认主模型 deepseek-v4-flash、规划/执行/审核模型、压缩模型等） |
+
+宿主启动时 `EnsureModelList()` 确保 models.json 存在（缺失自动写入默认），
+新环境部署发布包时把 config/models.json 复制到宿主 config/ 即恢复完整模型
+列表。
