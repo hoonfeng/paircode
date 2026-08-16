@@ -1,10 +1,10 @@
 <template>
-  <SettingsModal v-if="showSettings.value" @close="showSettings.value = false" />
-  <SystemModal v-if="showSystem.value" @close="showSystem.value = false" />
-  <SourceModal v-if="showSource.value" @close="showSource.value = false" />
-  <MarketplaceModal v-if="showMarketplace.value" @close="showMarketplace.value = false" />
-  <HelpModal v-if="showHelp.value" @close="showHelp.value = false" @openAbout="onHelpOpenAbout" :initialDoc="helpDocTarget.value" />
-  <AboutModal v-if="showAbout.value" @close="showAbout.value = false" @openHelp="onAboutOpenHelp" />
+  <SettingsModal v-if="showSettings" @close="showSettings = false" />
+  <SystemModal v-if="showSystem" @close="showSystem = false" />
+  <SourceModal v-if="showSource" @close="showSource = false" />
+  <MarketplaceModal v-if="showMarketplace" @close="showMarketplace = false" />
+  <HelpModal v-if="showHelp" @close="showHelp = false" @openAbout="onHelpOpenAbout" :initialDoc="helpDocTarget" />
+  <AboutModal v-if="showAbout" @close="showAbout = false" @openHelp="onAboutOpenHelp" />
   <GlobalDialogs />
   <!-- ★ overlay 槽位（list 型）：插件注册的浮动层条目叠加渲染（badge/toast/status pill 等） -->
   <div ref="overlaySlotEl" class="plugin-overlay-host"></div>

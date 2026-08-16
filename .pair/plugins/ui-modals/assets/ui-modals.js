@@ -7721,31 +7721,31 @@ Please report this to https://github.com/markedjs/marked.`, e) {
           vue.Fragment,
           null,
           [
-            vue.unref(uiState_js.showSettings).value ? (vue.openBlock(), vue.createBlock(SettingsModal, {
+            vue.unref(uiState_js.showSettings) ? (vue.openBlock(), vue.createBlock(SettingsModal, {
               key: 0,
-              onClose: _cache[0] || (_cache[0] = ($event) => vue.unref(uiState_js.showSettings).value = false)
+              onClose: _cache[0] || (_cache[0] = ($event) => uiState_js.showSettings.value = false)
             })) : vue.createCommentVNode("v-if", true),
-            vue.unref(uiState_js.showSystem).value ? (vue.openBlock(), vue.createBlock(SystemModal, {
+            vue.unref(uiState_js.showSystem) ? (vue.openBlock(), vue.createBlock(SystemModal, {
               key: 1,
-              onClose: _cache[1] || (_cache[1] = ($event) => vue.unref(uiState_js.showSystem).value = false)
+              onClose: _cache[1] || (_cache[1] = ($event) => uiState_js.showSystem.value = false)
             })) : vue.createCommentVNode("v-if", true),
-            vue.unref(uiState_js.showSource).value ? (vue.openBlock(), vue.createBlock(SourceModal, {
+            vue.unref(uiState_js.showSource) ? (vue.openBlock(), vue.createBlock(SourceModal, {
               key: 2,
-              onClose: _cache[2] || (_cache[2] = ($event) => vue.unref(uiState_js.showSource).value = false)
+              onClose: _cache[2] || (_cache[2] = ($event) => uiState_js.showSource.value = false)
             })) : vue.createCommentVNode("v-if", true),
-            vue.unref(uiState_js.showMarketplace).value ? (vue.openBlock(), vue.createBlock(MarketplaceModal, {
+            vue.unref(uiState_js.showMarketplace) ? (vue.openBlock(), vue.createBlock(MarketplaceModal, {
               key: 3,
-              onClose: _cache[3] || (_cache[3] = ($event) => vue.unref(uiState_js.showMarketplace).value = false)
+              onClose: _cache[3] || (_cache[3] = ($event) => uiState_js.showMarketplace.value = false)
             })) : vue.createCommentVNode("v-if", true),
-            vue.unref(uiState_js.showHelp).value ? (vue.openBlock(), vue.createBlock(HelpModal, {
+            vue.unref(uiState_js.showHelp) ? (vue.openBlock(), vue.createBlock(HelpModal, {
               key: 4,
-              onClose: _cache[4] || (_cache[4] = ($event) => vue.unref(uiState_js.showHelp).value = false),
+              onClose: _cache[4] || (_cache[4] = ($event) => uiState_js.showHelp.value = false),
               onOpenAbout: onHelpOpenAbout,
-              initialDoc: vue.unref(uiState_js.helpDocTarget).value
+              initialDoc: vue.unref(uiState_js.helpDocTarget)
             }, null, 8, ["initialDoc"])) : vue.createCommentVNode("v-if", true),
-            vue.unref(uiState_js.showAbout).value ? (vue.openBlock(), vue.createBlock(AboutModal, {
+            vue.unref(uiState_js.showAbout) ? (vue.openBlock(), vue.createBlock(AboutModal, {
               key: 5,
-              onClose: _cache[5] || (_cache[5] = ($event) => vue.unref(uiState_js.showAbout).value = false),
+              onClose: _cache[5] || (_cache[5] = ($event) => uiState_js.showAbout.value = false),
               onOpenHelp: onAboutOpenHelp
             })) : vue.createCommentVNode("v-if", true),
             vue.createVNode(GlobalDialogs),
@@ -7768,7 +7768,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
       };
     }
   };
-  const UiModals2 = /* @__PURE__ */ _export_sfc(_sfc_main, [["__scopeId", "data-v-cb2da5dd"]]);
+  const UiModals2 = /* @__PURE__ */ _export_sfc(_sfc_main, [["__scopeId", "data-v-c8fa6ee4"]]);
   function mount(el) {
     const app = vue.createApp(UiModals2);
     app.mount(el);

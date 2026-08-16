@@ -1271,7 +1271,7 @@ to { opacity:1;transform:translateX(0)
 }
 
 /* overlay 槽位（list 型）：浮动层，条目叠加（badge/toast/status pill），不挡交互 */
-.plugin-overlay-host[data-v-cb2da5dd] { position: fixed; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 9999;
+.plugin-overlay-host[data-v-c8fa6ee4] { position: fixed; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 9999;
 }
-.plugin-overlay-item[data-v-cb2da5dd] { pointer-events: auto;
+.plugin-overlay-item[data-v-c8fa6ee4] { pointer-events: auto;
 }
