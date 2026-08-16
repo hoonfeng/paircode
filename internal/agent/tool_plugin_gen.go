@@ -7,10 +7,11 @@
 //   go run -tags toolsgen ./dev/tool_plugin_gen
 //
 // 作用：遍历尚未外置的复杂内置工具组（git/memory/verify/task/
-// project-info/binary/binary-re/debug/vision/screenshot/web-debug/
-// bug/office/lsp/codegraph/codegraph-extra），把每组注册的工具定义
-// （name/description/usageGuide/category/readOnly/requiresApproval/
-// parameters）完整导出为 .pair/plugins/tool-<组>/index.js 磁盘插件。
+// project-info/binary（含逆向，2026-08-16 并入 binary-re）/debug/vision/
+// screenshot/web-debug/bug/office/lsp/codegraph/codegraph-extra），把每组
+// 注册的工具定义（name/description/usageGuide/category/readOnly/
+// requiresApproval/parameters）完整导出为 .pair/plugins/tool-<组>/index.js
+// 磁盘插件。
 //
 // 生成产物与 tool-core 等手工迁移插件同构：api 声明在插件、execute
 // 调 ctx.hostTool.exec 复用宿主 Go 执行器（seam 编排在插件/能力在宿主）。
@@ -53,8 +54,7 @@ func genToolGroups() []genToolGroup {
 		{"tool-memory", "跨会话记忆（memory_write/read/list/search）", registerMemoryTools, nil, "self"},
 		{"tool-verify", "知识库过期验证（memory_verify/project_info_verify）", registerVerifyTools, nil, "self"},
 		{"tool-project-info", "项目知识库（project_info_write/read/list/search/delete/explore）", registerProjectInfoTools, nil, "self"},
-		{"tool-binary", "二进制读写（inspect_binary/write_binary）", registerBinaryTools, nil, "self"},
-		{"tool-binary-re", "二进制正则（binary_strings/find/patch/info/hash/entropy）", registerBinaryRETools, nil, "self"},
+		{"tool-binary", "二进制读写 + 逆向分析（inspect_binary/write_binary/binary_strings/find/patch/info/hash/entropy，含 2026-08-16 并入的 tool-binary-re 逆向 6 工具）", registerBinaryTools, nil, "self"},
 		{"tool-debug", "调试工具（debug_inject_log/run_capture/analyze_output/parse_stack/cleanup_logs/watch/evaluate_session）", registerDebugTools, nil, "self"},
 		{"tool-vision", "图像视觉（image_analyze/image_ocr）", registerVisionTools, nil, "self"},
 		{"tool-screenshot", "截图（screenshot_desktop/window/area/webpage）", registerScreenshotTools, nil, "self"},

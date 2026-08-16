@@ -94,18 +94,20 @@ func TestGeneratedPluginPackagesComplete(t *testing.T) {
 // TestBinaryPluginExec 验证「二进制插件」全链路：磁盘插件 JS 壳（api 声明 +
 // ctx.binary.exec 调度）→ 宿主 ctx.binary 服务 → 插件目录 bin/ 下独立二进制
 // （stdin/stdout JSON 协议）→ 工具执行结果返回。
-// ★ 插件目录自包含：源码（index.js + 独立二进制项目 cmd/plugins/tool-binary-re/）
-//   与二进制（bin/tool-binary-re.exe）均在 .pair/plugins/tool-binary-re/ 内，
+// ★ 插件目录自包含：源码（index.js + 独立二进制项目 cmd/plugins/tool-binary/）
+//   与二进制（bin/tool-binary.exe）均在 .pair/plugins/tool-binary/ 内，
 //   用户改源码重编译即更换实现，无需改主程序。
+// ★ 2026-08-16：tool-binary-re 已合并进 tool-binary（逆向 6 工具并入），
+//   本测试直接验证合并后插件。
 func TestBinaryPluginExec(t *testing.T) {
 	repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
 		t.Fatalf("定位仓库根失败: %v", err)
 	}
-	pluginDir := filepath.Join(repoRoot, ".pair", "plugins", "tool-binary-re")
-	exePath := filepath.Join(pluginDir, "bin", "tool-binary-re.exe")
+	pluginDir := filepath.Join(repoRoot, ".pair", "plugins", "tool-binary")
+	exePath := filepath.Join(pluginDir, "bin", "tool-binary.exe")
 	if _, err := os.Stat(exePath); err != nil {
-		t.Skipf("独立二进制未编译（go build -o %s ./cmd/plugins/tool-binary-re）: %v", exePath, err)
+		t.Skipf("独立二进制未编译（go build -o %s ./cmd/plugins/tool-binary）: %v", exePath, err)
 	}
 	code, err := os.ReadFile(filepath.Join(pluginDir, "index.js"))
 	if err != nil {

@@ -1,6 +1,7 @@
 package impl
 
-// 逆向分析工具集 —— 在 inspect_binary/write_binary 之上丰富：
+// 逆向分析工具集 —— 在 inspect_binary/write_binary 之上丰富（2026-08-16 与
+// tool-binary 合并为同一插件：binary.go 的 Register 末尾调用 RegisterRE 合并注册）：
 //   binary_strings 提取可打印字符串 · binary_find 查字节/文本模式 · binary_patch 按偏移打补丁
 //   binary_info 解析 PE/ELF/Mach-O 结构(stdlib debug/*) · binary_hash 哈希识别 · binary_entropy 熵(查壳)
 // 全 pure-Go（stdlib），只读类不撑爆上下文（结果均有界）。
@@ -24,7 +25,7 @@ import (
 
 const maxBinaryLoad = 64 << 20 // strings/find/entropy 读全文上限 64MB
 
-func Register(r *Registry, root string) {
+func RegisterRE(r *Registry, root string) {
 	r.Register(&Tool{
 		Name: "binary_strings",
 		UsageGuide: "从二进制提取可打印字符串（ASCII + UTF-16LE）。逆向工程常用：找嵌入文本/URL/符号/提示语。比直接 search_content 更高效（跳过二进制结构直接取文本）。",

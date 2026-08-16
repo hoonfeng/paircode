@@ -89,6 +89,8 @@ func Register(r *Registry, root string) {
 			return fmt.Sprintf("已写入 %s（%d 字节）", ArgStr(args, "path"), len(raw)), nil
 		},
 	})
+	// 合并注册逆向分析工具组（binary_strings/find/patch/info/hash/entropy，见 binary_re.go）
+	RegisterRE(r, root)
 }
 
 // detectFileType 按 magic bytes 嗅探常见类型，回退扩展名。

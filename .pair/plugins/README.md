@@ -102,19 +102,19 @@ cordis_* / toolset_* / history_* 等）**保持宿主实现**——它们绑定�
 > 若未来要二进制化 update_tasks：需宿主 TaskManager 改为「磁盘为准 + 每次操作
 > 后内存同步」（mtime 感知），并保证 UI（/api/tasks 读宿主内存）与 agent 视角一致
 > ——改动面大且破坏循环契约，当前不采纳。
-- `ctx.binary.exec(tool, args, {bin})` → opts.bin 指定**其它插件目录的二进制**
-  （跨插件共用统一二进制；如各工具组 JS `{bin:"tool-binary"}` 指向统一宿主
-  二进制，无需各自编译）
+- `ctx.binary.exec(tool, args, {bin})` → opts.bin 可指定**其它插件目录的二进制**
+  （历史形态：跨插件共用统一二进制；第四轮已演进为每插件独立 exe，各工具组
+  JS 缺省 bin=插件名，无跨插件引用）
 - 二进制内可用 `os.Executable()` 定位自身目录 → 上级即插件目录（读 assets/）
 - 超时默认 60s（opts.timeout 毫秒可覆盖）
-- 示例：`.pair/plugins/tool-binary-re/`（6 个逆向工具）——协议实现
-  参考 `cmd/plugins/tool-binary-re/main.go`
+- 示例：`.pair/plugins/tool-binary/`（8 个二进制工具，含逆向分析）——协议实现
+  参考 `cmd/plugins/tool-binary/main.go`
 
 ## 独立插件二进制（每插件一个 exe，2026-08-16 第四轮）
 
-依赖 Go 实现的工具组（git/memory/verify/project-info/binary/binary-re/
+依赖 Go 实现的工具组（git/memory/verify/project-info/binary（含逆向）/
 debug/vision/screenshot/web-debug/bug/office/lsp/codegraph/codegraph-extra/
-search/web 等 15+ 组）**各自一个独立二进制**承载实现：
+search/web 等 17 组）**各自一个独立二进制**承载实现：
 
 - 源码：`cmd/plugins/<name>/main.go` + `cmd/plugins/<name>/impl/`（**自持本组
   实现，不 import internal/agent**）→ 产物 `<插件目录>/bin/<name>.exe`
@@ -123,18 +123,19 @@ search/web 等 15+ 组）**各自一个独立二进制**承载实现：
 - **改实现**：改 `cmd/plugins/<name>/impl/*.go` → `go build -o
   .pair/plugins/<name>/bin/<name>.exe ./cmd/plugins/<name>` → 重启 → 本组生效
   （主程序 exe 无需重编译）
-- tool-binary 只是其中普通一员（承载 binary 组 inspect_binary/write_binary
-  2 个工具），**不是**统一容器——各插件实现互相独立
+- tool-binary 只是其中普通一员（承载 binary 组 inspect_binary/write_binary/
+  binary_strings/find/patch/info/hash/entropy 8 个工具，2026-08-16 并入
+  原 tool-binary-re 逆向 6 工具），**不是**统一容器——各插件实现互相独立
 - hostTool 形态（工具-system）：SystemTool（update_tasks/update_plan/tool_stats/
   history_*）+ Skills/MCP/市场/提交信息——依赖宿主会话状态，execute 走
   `ctx.hostTool.exec`；ask_user/task_create 经**会话桥**（session_bridge.go）
   按 _convID 路由回会话（见下方 tool-system 条目）
 
 当前 execute 形态分布（生成器 tool_plugin_gen.go 的 binary 字段控制）：
-- `self`（独立二进制）：tool-binary、tool-binary-re、tool-bug、tool-codegraph、
+- `self`（独立二进制）：tool-binary、tool-bug、tool-codegraph、
   tool-codegraph-extra、tool-debug、tool-git、tool-harness、tool-lsp、
   tool-memory、tool-office、tool-project-info、tool-screenshot、tool-search、
-  tool-verify、tool-vision、tool-web、tool-web-debug（15+ 组，各自 bin/ 下的 exe）
+  tool-verify、tool-vision、tool-web、tool-web-debug（17 组，各自 bin/ 下的 exe）
 - `""`（hostTool）：tool-system（会话绑定 SystemTool + Skills/MCP/市场/提交）
 - 手工迁移（不在此列）：tool-core（JS 原生 impls）、tool-shell、tool-web（webFetch 直连）
 
@@ -151,13 +152,14 @@ search/web 等 15+ 组）**各自一个独立二进制**承载实现：
 
 ## 修改指南（用户自助）
 
-### 改工具行为（示例：tool-binary-re）
+### 改工具行为（示例：tool-binary）
 ```bash
 # ① 改实现（JS 壳 or 独立二进制源码）
-vim .pair/plugins/tool-binary-re/index.js          # 改 api/调度
-vim cmd/plugins/tool-binary-re/main.go             # 改真实实现
-# ② 重新编译二进制（改了 main.go 时）
-go build -o .pair/plugins/tool-binary-re/bin/tool-binary-re.exe ./cmd/plugins/tool-binary-re
+vim .pair/plugins/tool-binary/index.js              # 改 api/调度
+vim cmd/plugins/tool-binary/impl/binary.go          # 改真实实现（读/写）
+vim cmd/plugins/tool-binary/impl/binary_re.go       # 改真实实现（逆向分析）
+# ② 重新编译二进制（改了 impl 时）
+go build -o .pair/plugins/tool-binary/bin/tool-binary.exe ./cmd/plugins/tool-binary
 # ③ 重启 companion → 生效
 ```
 
