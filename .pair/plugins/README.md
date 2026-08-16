@@ -122,8 +122,10 @@ vision/screenshot/web-debug/bug/project-info…）由**一个统一二进制**�
 - **改实现**：改 `internal/agent/*.go`（工具实现库）或 `cmd/plugins/tool-binary/main.go`
   → `go build -o .pair/plugins/tool-binary/bin/tool-binary.exe ./cmd/plugins/tool-binary`
   → 重启 → 全部切换组生效（主程序 exe 无需重编译）
-- 会话绑定工具（update_tasks 等 SystemTool、ask_user/task_create）由宿主框架
-  执行，二进制排除（excludedTools）；tool-debug 依赖宿主后台进程，保持 hostTool
+- 会话绑定工具（update_tasks 等 SystemTool）由宿主框架执行，二进制排除
+  （excludedTools）；ask_user/task_create 已插件化（tool-system）——经
+  **会话桥**（session_bridge.go）按 _convID 路由回会话（见下方 tool-system 条目）；
+  tool-debug 依赖宿主后台进程，保持 hostTool
 
 当前 execute 形态分布（生成器 tool_plugin_gen.go 的 binary 字段控制）：
 - `tool-binary`：git/memory/verify/project-info/binary/office/lsp/codegraph/
@@ -199,5 +201,12 @@ go run -tags toolsgen ./dev/tool_plugin_gen   # 幂等：已有插件不覆盖�
   marketplace_install）+ 提交信息（generate_commit_message）。execute 全走
   `ctx.hostTool.exec`（宿主 Go 执行器：编排在插件、能力在宿主）。生成器
   tool_plugin_gen.go 的 tool-system 组白名单同步维护（含 11 个新工具），
-  `go run -tags toolsgen ./dev/tool_plugin_gen` 重跑不丢失。ask_user/
-  task_create 会话专属保留宿主（SessionManager 会话绑定）。
+  `go run -tags toolsgen ./dev/tool_plugin_gen` 重跑不丢失。**ask_user/
+  task_create 已插件化**（2026-08-16 会话桥机制）：Loop ctx 链携带 convID
+  （SessionManager.Start runCtx 注入）→ JS 工具包装（jsToolToGo）复制 args
+  注入 `_convID` 内部键 → 插件 execute 经 ctx.hostTool.exec 路由回宿主 →
+  hostTool 路由执行器（session_bridge.go archiveSessionTools）→ SessionBridge
+  （web 层注入，WaitAnswer 读会话 askCh / GetWorkspaceRoot）→ 会话按 convID
+  精确路由，多会话并发不串。SessionManager.Start 检测 reg 已存在同名工具时
+  不再注册会话级版本（插件优先、宿主兜底）。ask_user 提问卡片/回答交互
+  （message_store ask_user segment + /api/answer → SendAnswer）不变。
