@@ -11711,6 +11711,7 @@
     let cleanup = null;
     let unsub = null;
     let started = false;
+    let rendered = false;
     function render2() {
       const host = hostRef.value;
       if (!host) return;
@@ -11736,7 +11737,8 @@
     function refresh() {
       const prev = owner.value;
       owner.value = getSlotOwner(slotId);
-      if (owner.value !== prev && typeof cleanup === "function") {
+      if (rendered && owner.value === prev) return;
+      if (typeof cleanup === "function") {
         try {
           cleanup();
         } catch (e) {
@@ -11744,7 +11746,10 @@
         cleanup = null;
       }
       nextTick(() => {
-        if (owner.value) render2();
+        if (owner.value) {
+          render2();
+          rendered = true;
+        }
       });
     }
     return {

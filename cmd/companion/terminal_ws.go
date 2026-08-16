@@ -263,6 +263,15 @@ func (ps *ptySession) ptyReader() {
 			}
 		}
 		if err != nil {
+			// ★ 正常关闭竞态不打印：wsReader 返回 → ps.close() → sess.Close()
+			//   → 此处读已关闭的 sess → "file already closed"（无害）。
+			//   只有未标记关闭时的读错误才是真异常。
+			ps.mu.Lock()
+			closed := ps.closed
+			ps.mu.Unlock()
+			if closed {
+				return
+			}
 			if err != io.EOF {
 				log.Printf("[terminal-ws] PTY 读错误: %v", err)
 			}

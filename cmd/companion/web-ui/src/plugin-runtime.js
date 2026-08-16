@@ -228,6 +228,7 @@ export function useSingleSlot(slotId) {
   let cleanup = null
   let unsub = null
   let started = false
+  let rendered = false
 
   function render() {
     const host = hostRef.value
@@ -249,11 +250,16 @@ export function useSingleSlot(slotId) {
   function refresh() {
     const prev = owner.value
     owner.value = getSlotOwner(slotId)
-    if (owner.value !== prev && typeof cleanup === 'function') {
-      // 占用者变化（含切回内置）：先清理旧插件渲染
+    // ★ owner 未变化 → 不重渲染。emitSlotChanged 是全局广播（任何插件
+    //   装载/列表刷新/状态同步都触发），重渲染会让复杂槽位（ui-editor：
+    //   CM6 编辑器 + 终端）卸载重挂 → 终端 WebSocket 断开重建（用户可见
+    //   「切到插件面板终端 WS 断开、疯狂重建」）。已渲染且占用者没变时
+    //   保留现有渲染；占用者真变化（插件装卸/切换）才清理重挂。
+    if (rendered && owner.value === prev) return
+    if (typeof cleanup === 'function') {
       try { cleanup() } catch (e) {} cleanup = null
     }
-    nextTick(() => { if (owner.value) render() })
+    nextTick(() => { if (owner.value) { render(); rendered = true } })
   }
 
   return {
