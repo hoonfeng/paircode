@@ -2198,18 +2198,19 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
   };
   const _hoisted_81 = { class: "role-phil-label" };
   const _hoisted_82 = ["value", "onInput", "placeholder"];
-  const _hoisted_83 = {
+  const _hoisted_83 = { key: 0 };
+  const _hoisted_84 = {
     key: 0,
     class: "group-title"
   };
-  const _hoisted_84 = ["type", "onUpdate:modelValue"];
-  const _hoisted_85 = ["onUpdate:modelValue"];
+  const _hoisted_85 = ["type", "onUpdate:modelValue"];
   const _hoisted_86 = ["onUpdate:modelValue"];
   const _hoisted_87 = ["onUpdate:modelValue"];
-  const _hoisted_88 = ["value"];
-  const _hoisted_89 = ["onUpdate:modelValue"];
+  const _hoisted_88 = ["onUpdate:modelValue"];
+  const _hoisted_89 = ["value"];
   const _hoisted_90 = ["onUpdate:modelValue"];
-  const _hoisted_91 = {
+  const _hoisted_91 = ["onUpdate:modelValue"];
+  const _hoisted_92 = {
     key: 6,
     class: "setting-hint"
   };
@@ -3986,128 +3987,136 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                   ])) : vue.createCommentVNode("v-if", true)
                 ])) : vue.createCommentVNode("v-if", true),
                 vue.createCommentVNode(" ═══ 插件配置（ctx.registerSettings 动态注册）═══ "),
-                activeTab.value === "p-" + _ctx.ptab.key ? (vue.openBlock(true), vue.createElementBlock(
+                (vue.openBlock(true), vue.createElementBlock(
                   vue.Fragment,
-                  { key: 7 },
+                  null,
                   vue.renderList(pluginTabs.value, (ptab) => {
-                    return vue.openBlock(), vue.createElementBlock("div", {
-                      key: "p-" + ptab.key
-                    }, [
-                      (vue.openBlock(true), vue.createElementBlock(
-                        vue.Fragment,
-                        null,
-                        vue.renderList(ptab.groups, (grp) => {
-                          return vue.openBlock(), vue.createElementBlock(
-                            "div",
-                            {
-                              key: grp.title || "__main",
-                              class: "setting-group",
-                              style: vue.normalizeStyle(grp.title ? "" : "margin-top:0")
-                            },
-                            [
-                              grp.title ? (vue.openBlock(), vue.createElementBlock(
+                    return vue.openBlock(), vue.createElementBlock(
+                      vue.Fragment,
+                      {
+                        key: "p-" + ptab.key
+                      },
+                      [
+                        activeTab.value === "p-" + ptab.key ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_83, [
+                          (vue.openBlock(true), vue.createElementBlock(
+                            vue.Fragment,
+                            null,
+                            vue.renderList(ptab.groups, (grp) => {
+                              return vue.openBlock(), vue.createElementBlock(
                                 "div",
-                                _hoisted_83,
-                                vue.toDisplayString(grp.title),
-                                1
-                                /* TEXT */
-                              )) : vue.createCommentVNode("v-if", true),
-                              (vue.openBlock(true), vue.createElementBlock(
-                                vue.Fragment,
-                                null,
-                                vue.renderList(grp.fields, (f) => {
-                                  return vue.openBlock(), vue.createElementBlock("div", {
-                                    key: f.name,
-                                    class: "setting-row"
-                                  }, [
-                                    vue.createElementVNode(
-                                      "label",
-                                      null,
-                                      vue.toDisplayString(f.label),
-                                      1
-                                      /* TEXT */
-                                    ),
-                                    f.type === "text" || f.type === "password" ? vue.withDirectives((vue.openBlock(), vue.createElementBlock("input", {
-                                      key: 0,
-                                      type: f.type === "password" ? "password" : "text",
-                                      "onUpdate:modelValue": ($event) => pluginValues[ptab.key][f.name] = $event
-                                    }, null, 8, _hoisted_84)), [
-                                      [vue.vModelDynamic, pluginValues[ptab.key][f.name]]
-                                    ]) : f.type === "number" ? vue.withDirectives((vue.openBlock(), vue.createElementBlock("input", {
-                                      key: 1,
-                                      type: "number",
-                                      "onUpdate:modelValue": ($event) => pluginValues[ptab.key][f.name] = $event
-                                    }, null, 8, _hoisted_85)), [
-                                      [
-                                        vue.vModelText,
-                                        pluginValues[ptab.key][f.name],
-                                        void 0,
-                                        { number: true }
-                                      ]
-                                    ]) : f.type === "checkbox" ? vue.withDirectives((vue.openBlock(), vue.createElementBlock("input", {
-                                      key: 2,
-                                      type: "checkbox",
-                                      "onUpdate:modelValue": ($event) => pluginValues[ptab.key][f.name] = $event
-                                    }, null, 8, _hoisted_86)), [
-                                      [vue.vModelCheckbox, pluginValues[ptab.key][f.name]]
-                                    ]) : f.type === "select" ? vue.withDirectives((vue.openBlock(), vue.createElementBlock("select", {
-                                      key: 3,
-                                      "onUpdate:modelValue": ($event) => pluginValues[ptab.key][f.name] = $event,
-                                      style: { "flex": "1" }
-                                    }, [
-                                      (vue.openBlock(true), vue.createElementBlock(
-                                        vue.Fragment,
-                                        null,
-                                        vue.renderList(f.options, (o) => {
-                                          return vue.openBlock(), vue.createElementBlock("option", {
-                                            key: o,
-                                            value: o
-                                          }, vue.toDisplayString(o), 9, _hoisted_88);
-                                        }),
-                                        128
-                                        /* KEYED_FRAGMENT */
-                                      ))
-                                    ], 8, _hoisted_87)), [
-                                      [vue.vModelSelect, pluginValues[ptab.key][f.name]]
-                                    ]) : f.type === "textarea" ? vue.withDirectives((vue.openBlock(), vue.createElementBlock("textarea", {
-                                      key: 4,
-                                      "onUpdate:modelValue": ($event) => pluginValues[ptab.key][f.name] = $event,
-                                      class: "inst-textarea",
-                                      rows: "3"
-                                    }, null, 8, _hoisted_89)), [
-                                      [vue.vModelText, pluginValues[ptab.key][f.name]]
-                                    ]) : vue.withDirectives((vue.openBlock(), vue.createElementBlock("input", {
-                                      key: 5,
-                                      type: "text",
-                                      "onUpdate:modelValue": ($event) => pluginValues[ptab.key][f.name] = $event
-                                    }, null, 8, _hoisted_90)), [
-                                      [vue.vModelText, pluginValues[ptab.key][f.name]]
-                                    ]),
-                                    f.hint ? (vue.openBlock(), vue.createElementBlock(
-                                      "span",
-                                      _hoisted_91,
-                                      vue.toDisplayString(f.hint),
-                                      1
-                                      /* TEXT */
-                                    )) : vue.createCommentVNode("v-if", true)
-                                  ]);
-                                }),
-                                128
-                                /* KEYED_FRAGMENT */
-                              ))
-                            ],
-                            4
-                            /* STYLE */
-                          );
-                        }),
-                        128
-                        /* KEYED_FRAGMENT */
-                      ))
-                    ]);
+                                {
+                                  key: grp.title || "__main",
+                                  class: "setting-group",
+                                  style: vue.normalizeStyle(grp.title ? "" : "margin-top:0")
+                                },
+                                [
+                                  grp.title ? (vue.openBlock(), vue.createElementBlock(
+                                    "div",
+                                    _hoisted_84,
+                                    vue.toDisplayString(grp.title),
+                                    1
+                                    /* TEXT */
+                                  )) : vue.createCommentVNode("v-if", true),
+                                  (vue.openBlock(true), vue.createElementBlock(
+                                    vue.Fragment,
+                                    null,
+                                    vue.renderList(grp.fields, (f) => {
+                                      return vue.openBlock(), vue.createElementBlock("div", {
+                                        key: f.name,
+                                        class: "setting-row"
+                                      }, [
+                                        vue.createElementVNode(
+                                          "label",
+                                          null,
+                                          vue.toDisplayString(f.label),
+                                          1
+                                          /* TEXT */
+                                        ),
+                                        f.type === "text" || f.type === "password" ? vue.withDirectives((vue.openBlock(), vue.createElementBlock("input", {
+                                          key: 0,
+                                          type: f.type === "password" ? "password" : "text",
+                                          "onUpdate:modelValue": ($event) => pluginValues[ptab.key][f.name] = $event
+                                        }, null, 8, _hoisted_85)), [
+                                          [vue.vModelDynamic, pluginValues[ptab.key][f.name]]
+                                        ]) : f.type === "number" ? vue.withDirectives((vue.openBlock(), vue.createElementBlock("input", {
+                                          key: 1,
+                                          type: "number",
+                                          "onUpdate:modelValue": ($event) => pluginValues[ptab.key][f.name] = $event
+                                        }, null, 8, _hoisted_86)), [
+                                          [
+                                            vue.vModelText,
+                                            pluginValues[ptab.key][f.name],
+                                            void 0,
+                                            { number: true }
+                                          ]
+                                        ]) : f.type === "checkbox" ? vue.withDirectives((vue.openBlock(), vue.createElementBlock("input", {
+                                          key: 2,
+                                          type: "checkbox",
+                                          "onUpdate:modelValue": ($event) => pluginValues[ptab.key][f.name] = $event
+                                        }, null, 8, _hoisted_87)), [
+                                          [vue.vModelCheckbox, pluginValues[ptab.key][f.name]]
+                                        ]) : f.type === "select" ? vue.withDirectives((vue.openBlock(), vue.createElementBlock("select", {
+                                          key: 3,
+                                          "onUpdate:modelValue": ($event) => pluginValues[ptab.key][f.name] = $event,
+                                          style: { "flex": "1" }
+                                        }, [
+                                          (vue.openBlock(true), vue.createElementBlock(
+                                            vue.Fragment,
+                                            null,
+                                            vue.renderList(f.options, (o) => {
+                                              return vue.openBlock(), vue.createElementBlock("option", {
+                                                key: o,
+                                                value: o
+                                              }, vue.toDisplayString(o), 9, _hoisted_89);
+                                            }),
+                                            128
+                                            /* KEYED_FRAGMENT */
+                                          ))
+                                        ], 8, _hoisted_88)), [
+                                          [vue.vModelSelect, pluginValues[ptab.key][f.name]]
+                                        ]) : f.type === "textarea" ? vue.withDirectives((vue.openBlock(), vue.createElementBlock("textarea", {
+                                          key: 4,
+                                          "onUpdate:modelValue": ($event) => pluginValues[ptab.key][f.name] = $event,
+                                          class: "inst-textarea",
+                                          rows: "3"
+                                        }, null, 8, _hoisted_90)), [
+                                          [vue.vModelText, pluginValues[ptab.key][f.name]]
+                                        ]) : vue.withDirectives((vue.openBlock(), vue.createElementBlock("input", {
+                                          key: 5,
+                                          type: "text",
+                                          "onUpdate:modelValue": ($event) => pluginValues[ptab.key][f.name] = $event
+                                        }, null, 8, _hoisted_91)), [
+                                          [vue.vModelText, pluginValues[ptab.key][f.name]]
+                                        ]),
+                                        f.hint ? (vue.openBlock(), vue.createElementBlock(
+                                          "span",
+                                          _hoisted_92,
+                                          vue.toDisplayString(f.hint),
+                                          1
+                                          /* TEXT */
+                                        )) : vue.createCommentVNode("v-if", true)
+                                      ]);
+                                    }),
+                                    128
+                                    /* KEYED_FRAGMENT */
+                                  ))
+                                ],
+                                4
+                                /* STYLE */
+                              );
+                            }),
+                            128
+                            /* KEYED_FRAGMENT */
+                          ))
+                        ])) : vue.createCommentVNode("v-if", true)
+                      ],
+                      64
+                      /* STABLE_FRAGMENT */
+                    );
                   }),
                   128
                   /* KEYED_FRAGMENT */
-                )) : vue.createCommentVNode("v-if", true)
+                ))
               ])
             ]),
             vue.createElementVNode("div", { class: "modal-footer" }, [
@@ -4125,7 +4134,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       };
     }
   };
-  const SettingsModal = /* @__PURE__ */ _export_sfc(_sfc_main$7, [["__scopeId", "data-v-5e5cb9f6"]]);
+  const SettingsModal = /* @__PURE__ */ _export_sfc(_sfc_main$7, [["__scopeId", "data-v-cfece15e"]]);
   const _hoisted_1$5 = { class: "modal-content sys-modal" };
   const _hoisted_2$5 = { class: "modal-header" };
   const _hoisted_3$5 = { class: "modal-body" };

@@ -301,7 +301,8 @@
           </div>
 
           <!-- ═══ 插件配置（ctx.registerSettings 动态注册）═══ -->
-          <div v-for="ptab in pluginTabs" :key="'p-' + ptab.key" v-if="activeTab === 'p-' + ptab.key">
+          <template v-for="ptab in pluginTabs" :key="'p-' + ptab.key">
+            <div v-if="activeTab === 'p-' + ptab.key">
             <div v-for="grp in ptab.groups" :key="grp.title || '__main'" class="setting-group" :style="grp.title ? '' : 'margin-top:0'">
               <div v-if="grp.title" class="group-title">{{ grp.title }}</div>
               <div v-for="f in grp.fields" :key="f.name" class="setting-row">
@@ -319,7 +320,8 @@
                 <span v-if="f.hint" class="setting-hint">{{ f.hint }}</span>
               </div>
             </div>
-          </div>
+            </div>
+          </template>
 
         </div>
       </div>
