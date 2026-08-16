@@ -5,7 +5,8 @@
 package main
 
 import (
-	"bufio"
+	"crypto/sha256"
+"bufio"
 	"bytes"
 	"context"
 	"embed"
@@ -2274,10 +2275,14 @@ func buildWebSystemDynamic() string {
 
 	var b strings.Builder
 	root := core.Root()
-	b.WriteString(skills.Prompt())
-	b.WriteString(agent.LongTermMemoryPrompt())
-	b.WriteString(agent.ProjectRules(root))
-	b.WriteString(agent.ProjectKnowledge(root, 2500))
+	skillsSec := skills.Prompt()
+	memorySec := agent.LongTermMemoryPrompt()
+	rulesSec := agent.ProjectRules(root)
+	knowledgeSec := agent.ProjectKnowledge(root, 2500)
+	b.WriteString(skillsSec)
+	b.WriteString(memorySec)
+	b.WriteString(rulesSec)
+	b.WriteString(knowledgeSec)
 
 	// ★ 项目环境：遍历所有工作区根目录，分别读取各自的 .pair/project.md
 	if len(core.Folders) > 0 {
@@ -2308,6 +2313,23 @@ func buildWebSystemDynamic() string {
 	val := b.String()
 	buildWebSystemDynamicCache.ts = time.Now()
 	buildWebSystemDynamicCache.val = val
+	// ★ 缓存诊断（WB_CACHE_DIAG=1）：输出 dynamic 各段哈希，定位导致前缀变化的内容源。
+	//   DeepSeek 按 system 消息整体前缀匹配（boundary 后动态段变化同样破坏缓存命中）。
+	if os.Getenv("WB_CACHE_DIAG") == "1" {
+		secHash := func(s string) string {
+			sum := sha256.Sum256([]byte(s))
+			return fmt.Sprintf("%x", sum[:4])
+		}
+		var envSec strings.Builder
+		if len(core.Folders) > 0 {
+			for _, f := range core.Folders {
+				projEnv := agent.ReadProjectEnv(f)
+				envSec.WriteString(projEnv)
+			}
+		}
+		log.Printf("[cache-diag] dynamic 段 hash skills=%s memory=%s rules=%s knowledge=%s env=%s total=%s len=%d",
+			secHash(skillsSec), secHash(memorySec), secHash(rulesSec), secHash(knowledgeSec), secHash(envSec.String()), secHash(val), len(val))
+	}
 	return val
 }
 
