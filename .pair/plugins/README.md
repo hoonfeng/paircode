@@ -34,8 +34,7 @@ JS 插件 execute → ctx.binary.exec(tool, args[, {timeout}]) → text
   - ★ 落地用例（2026-08-16）：磁盘插件 `web-api/` 用本能力注册 `/api/ext/*`
     6 条路由（status / fetch 同源代理 / fs-read / fs-exists / fs-list / routes），
     curl 直接消费，验证「插件扩展 HTTP 接口」链路全通（见 web-api/index.js）
-- `ctx.kernel.*` → 内置 HTTP 接口装配（★ 接口插件化：Go 硬编码清零）：
-  - 内置 /api/* 接口实现保留 Go 内核路由表（internal/agent/kernel_api.go，
+- `ctx.kernel.*` → 内置 HTTP 接口装配（★ 接口插件化：Go 硬编码清零）：  - 内置 /api/* 接口实现保留 Go 内核路由表（internal/agent/kernel_api.go，
     由 cmd/companion/kernel_register.go 注册 82 条），**挂载权在插件**；
   - `ctx.kernel.routes()` → 全部内核接口清单 `[{key,method,path,desc}]`
   - `ctx.kernel.install(list)` → 把清单中指定 key 挂到插件 ext 路由表
@@ -178,3 +177,18 @@ go run -tags toolsgen ./dev/tool_plugin_gen   # 幂等：已有插件不覆盖�
 - `.pair/assets/runtime/` — 运行时资源（cordis.bundle.js/bridge_node.js/
   ide_ref*/web 前端产物），外部优先 + embed 兜底（见其 README）
 - `.pair/toolsets/` — 工具集（插件组合包）
+
+## 插件包 config 通道（apply(ctx, config)）
+
+磁盘插件包的 `package.json` 可带 `"config": {...}` 字段，装载时透传给
+`apply(ctx, config)` 第二参（GlobalPluginPackage.Config → def.config），
+改 config 重启生效、无需重编译。用例：
+
+- **`agentloop/`**（2026-08-16）：Agent 循环装配器（LoopFactory 单槽位 JS
+  装配器）。Loop 核心在 Go（会话/持久化深度耦合），本插件做「参数级装配」：
+  apply 时 `ctx.loopFactory.register(apply)`，每次创建循环（会话 Start /
+  自闭环 Run 统一走 CreateLoop）时收到装配快照、返回非空字段覆盖。config
+  支持 systemAppend（追加系统提示词）/maxIterations/maxContextTokens/
+  autonomous/maxAutonomousMinutes/checkpointInterval/reviewMode/autoCommit/
+  reviewBlacklist/reviewWhitelist；停用插件自动还原默认工厂（Loop 不受影响）。
+  （快照字段实现：internal/agent/jsplugin_loopfactory.go）

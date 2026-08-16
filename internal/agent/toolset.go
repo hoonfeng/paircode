@@ -57,6 +57,10 @@ type ToolsetPlugin struct {
 	// <InstallDir>/.pair/plugins/（插件是程序的扩展，不属于工作区）；
 	// scope 仅用于记录与前端徽标。
 	Scope string `json:"scope,omitempty"`
+	// Config 插件配置（package.json "config" 字段，apply(ctx, config) 第二参）。
+	// ★ 磁盘插件配置通道（2026-08-16）：agentloop 等插件从 package.json 读装配
+	//   参数（模型/迭代上限/追加提示词等），无需重新编译 Go。
+	Config map[string]any `json:"config,omitempty"`
 	// ★ 内置工具包条目（无 Code）：引用宿主内置 Go 工具组（core/git/codegraph/… 或
 	//   system/plugin-mgmt/toolset-mgmt）。装载=对 Tools 清单内已注册工具
 	//   SetToolEnabled(true)（工具对 agent 可见）；卸载=恢复默认状态
@@ -285,6 +289,7 @@ type GlobalPluginPackage struct {
 	Type    string `json:"type"`              // "plugin"
 	Main    string `json:"main"`              // host 半源码文件（index.js）
 	Client  string `json:"client,omitempty"`  // client 半源码文件（client.js，可选）
+	Config  map[string]any `json:"config,omitempty"` // 插件配置（透传 apply(ctx, config)）
 }
 
 // LoadGlobalPlugins 装配全部全局插件包（启动时调用；失败不致命）。返回成功装载数。
@@ -339,7 +344,7 @@ func applyGlobalPluginDir(ph *PluginHost, pkgDir string) error {
 	return applyGlobalPlugin(ph, &ToolsetPlugin{
 		Name: pkg.Name, Purpose: pkg.Purpose,
 		Code: string(hostCode), Client: clientCode, Scope: pkg.Scope,
-		Dir: pkgDir,
+		Dir: pkgDir, Config: pkg.Config,
 	})
 }
 
@@ -364,6 +369,7 @@ func applyGlobalPlugin(ph *PluginHost, p *ToolsetPlugin) error {
 			def.scope = "project"
 		}
 		def.dir = p.Dir // ★ 插件目录（ctx.binary 据此定位 bin/<name>.exe 与 assets/）
+		def.config = p.Config // ★ 插件配置（package.json "config"，apply(ctx, config) 第二参）
 	}
 	if err := ph.LoadJSDynamic(def); err != nil {
 		return err
