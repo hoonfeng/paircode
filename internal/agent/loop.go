@@ -435,6 +435,8 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 	}
 
 	tools := l.Registry.Definitions()
+	// ★ 工具描述文言文精简（减小 tools 参数体积——DeepSeek 缓存不覆盖 tools，精简直接降 miss）
+	tools = ApplyConciseToolDescriptions(tools)
 
 	// ★ 流式更新：工具执行中间结果通过 Registry.OnToolUpdate 通知 Loop，由 emit 转发给 UI
 	if l.Registry.OnToolUpdate == nil {
