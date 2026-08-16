@@ -2369,6 +2369,11 @@ func buildWebSystemPrompt() string {
 	dynamic := buildWebSystemDynamic()
 	if ph := handler.GetPluginHost(); ph != nil {
 		if secs, err := agent.PluginPromptSections(ph); err == nil && secs != "" {
+			// ★ 缓存诊断：插件段哈希/长度（dynamic 变化源定位）
+			if os.Getenv("WB_CACHE_DIAG") == "1" {
+				sum := sha256.Sum256([]byte(secs))
+				log.Printf("[cache-diag] 插件段 hash=%x len=%d", sum[:4], len(secs))
+			}
 			dynamic += "\n\n# 插件系统提示（由插件贡献，遵循各自段内规则）\n" + secs
 		}
 	}
