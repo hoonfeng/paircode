@@ -25,6 +25,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/hoonfeng/paircode/internal/core"
 	"github.com/hoonfeng/paircode/internal/pty"
@@ -126,8 +127,11 @@ func (s *webServer) handleTerminalWS(w http.ResponseWriter, r *http.Request) {
 		cwd:   safeCWD(""),
 	}
 
-	// 等待客户端发送 init 消息（文本帧 JSON）
+	// 等待客户端发送 init 消息（文本帧 JSON），15s 超时防泄漏：
+	// 连接后不发 init 的僵尸连接（半开/崩溃）会被清理，避免并发计数永久占满 → 503
+	conn.netConn.SetReadDeadline(time.Now().Add(15 * time.Second))
 	opcode, payload, err := conn.readFrame()
+	conn.netConn.SetReadDeadline(time.Time{})
 	if err != nil {
 		atomic.AddInt32(&activePTYSessions, -1)
 		conn.Close()

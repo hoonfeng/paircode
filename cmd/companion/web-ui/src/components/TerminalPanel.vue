@@ -220,6 +220,7 @@ function createWebSocket(termState, xtermInstance, fitAddon) {
     }
 
     let initSent = false
+    let serverFailed = false  // 服务端明确失败（PTY 等）→ 不自动重连，防无限狂刷
 
     socket.onopen = () => {
       reconnectCount = 0
@@ -267,6 +268,7 @@ function createWebSocket(termState, xtermInstance, fitAddon) {
         } else if (data.type === 'error') {
           xtermInstance.writeln('\r\n\x1b[31m[终端错误] ' + (data.msg || '未知错误') + '\x1b[0m')
           termState.status = 'error'
+          serverFailed = true  // 服务端明确失败：停止自动重连（重连只会再次报错）
         } else if (data.type === 'closed') {
           xtermInstance.writeln('\r\n\x1b[33m[终端会话已关闭]\x1b[0m')
           termState.status = 'closed'
@@ -283,7 +285,9 @@ function createWebSocket(termState, xtermInstance, fitAddon) {
     socket.onclose = () => {
       termState.status = 'disconnected'
       socket = null
-      if (!closed) {
+      // ★ 服务端明确失败/已关闭 → 不再自动重连（防无限狂刷）；
+      //    仅网络抖动（连接未建立）场景自动重连（最多 3 次）
+      if (!closed && !serverFailed) {
         scheduleReconnect()
       }
     }
