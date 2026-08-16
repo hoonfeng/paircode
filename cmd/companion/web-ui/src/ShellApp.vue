@@ -9,6 +9,7 @@
     <!-- titlebar 槽位（single）：标题栏整条 -->
     <div v-if="!panelMode && !slots.titlebar.owner.value" class="slot-empty plugin-area-titlebar">
       <span>标题栏未装配（ui-titlebar）</span>
+      <button class="escape-link" @click="pluginsOpen = true">打开插件面板</button>
     </div>
     <div v-else-if="!panelMode" :ref="slots.titlebar.hostRef"
          class="plugin-slot-host plugin-area-titlebar"></div>
@@ -16,26 +17,27 @@
     <!-- activitybar 槽位（single）：左侧活动栏竖列 -->
     <div v-if="!panelMode && !slots.activitybar.owner.value" class="slot-empty plugin-area-activitybar">
       <span>⦿</span>
+      <button class="escape-link" @click="pluginsOpen = true">面板</button>
     </div>
     <div v-else-if="!panelMode" :ref="slots.activitybar.hostRef"
          class="plugin-slot-host plugin-area-activitybar"></div>
 
     <!-- sidebar 槽位（single）：左侧栏（文件/搜索/Git），sidebarVisible 控制 -->
     <div v-if="!panelMode && state.sidebarVisible && !slots.sidebar.owner.value"
-         class="slot-empty plugin-area-sidebar"><span>侧栏未装配（ui-sidebar）</span></div>
+         class="slot-empty plugin-area-sidebar"><span>侧栏未装配（ui-sidebar）</span><button class="escape-link" @click="pluginsOpen = true">打开插件面板</button></div>
     <div v-else-if="!panelMode && state.sidebarVisible" :ref="slots.sidebar.hostRef"
          class="plugin-slot-host plugin-area-sidebar"></div>
 
     <!-- editor 槽位（single）：主编辑区，focusMode 隐藏 -->
     <div v-if="!panelMode && !state.focusMode && !slots.editor.owner.value"
-         class="slot-empty main-area"><span>编辑器未装配（ui-editor）</span></div>
+         class="slot-empty main-area"><span>编辑器未装配（ui-editor）</span><button class="escape-link" @click="pluginsOpen = true">打开插件面板</button></div>
     <div v-else-if="!panelMode && !state.focusMode" :ref="slots.editor.hostRef"
          class="plugin-slot-host main-area"></div>
 
     <!-- right-panel 槽位（single）：右侧对话容器 -->
     <div v-if="(state.rightPanelVisible || panelMode) && !slots.rightPanel.owner.value"
          class="slot-empty right-container"
-         :class="{ 'focus-mode': state.focusMode, 'panel-only': panelMode }"><span>对话面板未装配（ui-right-panel）</span></div>
+         :class="{ 'focus-mode': state.focusMode, 'panel-only': panelMode }"><span>对话面板未装配（ui-right-panel）</span><button class="escape-link" @click="pluginsOpen = true">打开插件面板</button></div>
     <div v-else-if="(state.rightPanelVisible || panelMode)" :ref="slots.rightPanel.hostRef"
          class="plugin-slot-host right-container"
          :class="{ 'focus-mode': state.focusMode, 'panel-only': panelMode }"></div>
@@ -43,6 +45,7 @@
     <!-- statusbar 槽位（single）：底部状态栏 -->
     <div v-if="!panelMode && !slots.statusbar.owner.value" class="slot-empty app-statusbar-host">
       <span>状态栏未装配（ui-statusbar）</span>
+      <button class="escape-link" @click="pluginsOpen = true">打开插件面板</button>
     </div>
     <div v-else-if="!panelMode" :ref="slots.statusbar.hostRef"
          class="plugin-slot-host app-statusbar-host"></div>
@@ -198,22 +201,37 @@ onUnmounted(() => {
 .modals-empty { display: none; }
 /* 空态占位（区域插件未装配时显示） */
 .slot-empty {
-  display: flex; align-items: center; justify-content: center;
+  display: flex; flex-direction: row; gap: 8px;
+  align-items: center; justify-content: center;
   color: var(--text-muted); font-size: 12px;
   background: var(--bg-primary);
   border: 1px dashed var(--border-color);
   min-height: 0;
 }
+/* activitybar 是竖条（~48px 宽）：空态改纵向排列 */
+.plugin-area-activitybar.slot-empty { flex-direction: column; gap: 4px; padding: 4px; }
+.plugin-area-activitybar.slot-empty .escape-link { font-size: 11px; padding: 2px 8px; }
+/* 空态内的「打开插件面板」恢复入口（上下文感知注入：只在区域未装配时出现，
+   插件全正常时零干扰；与常驻逃生按钮互为双保险） */
+.escape-link {
+  background: none; border: 1px solid var(--border-color);
+  color: var(--accent, #4f8cff); font-size: 12px;
+  padding: 3px 12px; border-radius: 4px; cursor: pointer;
+  opacity: .85; transition: opacity .15s;
+}
+.escape-link:hover { opacity: 1; background: rgba(79,140,255,.12); }
 /* ─── 壳级逃生口：插件面板浮动入口 ───
-   固定右下角极小按钮（状态栏上方 4px），常驻壳层不受插件停用影响；
-   半透明弱化，hover 全显。点击打开浮动插件面板（Fixed 480px 居中）。 */
+   常驻极小按钮位于左下角（状态栏上方）：右侧面板占 grid 第 4 列，
+   左下角处于第 1-2 列区域（activitybar/sidebar 底部），focusMode 全屏对话
+   也不覆盖——不再遮挡右侧对话输入区。半透明弱化，hover 全显。
+   点击打开浮动插件面板（Fixed 560px 居中）。 */
 .plugin-escape-btn {
-  position: fixed; right: 6px; bottom: 28px; z-index: 300;
-  width: 26px; height: 26px; border-radius: 6px;
+  position: fixed; left: 6px; bottom: 26px; z-index: 300;
+  width: 22px; height: 22px; border-radius: 5px;
   display: flex; align-items: center; justify-content: center;
   background: var(--bg-elevated, #2a2d36); color: var(--text-muted);
   border: 1px solid var(--border-color); cursor: pointer;
-  opacity: .45; transition: opacity .15s;
+  opacity: .3; transition: opacity .15s;
 }
 .plugin-escape-btn:hover { opacity: 1; color: var(--accent, #4f8cff); }
 .plugin-escape-overlay {
