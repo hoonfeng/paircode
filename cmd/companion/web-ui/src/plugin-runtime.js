@@ -128,6 +128,24 @@ export function setOverlayActive(slotId, pluginName, on) {
   emitSlotChanged() // 通知宿主重渲染 overlay 槽位
 }
 
+// ★ 插件级 UI 开关：整插件禁用（插件面板「UI 开关」控制）。
+//   背景：single 槽位停用走 setSlotOwner('')「恢复内置」，但壳是纯骨架——没有任何
+//   内置组件实现，getSlotOwner 对空 owner 会「唯一候选自动激活」→ 永远停不掉。
+//   因此 single 槽位插件停用 = 插件级禁用标记（渲染时检查，禁用=不渲染=空态）。
+//   未显式设置 = 默认启用。list 槽位条目同时受本标记与槽位级 overlay 双层控制。
+function uiEnabledKey(pluginName) { return 'slotUIEnabled:' + pluginName }
+export function isPluginUIEnabled(pluginName) {
+  try {
+    const v = localStorage.getItem(uiEnabledKey(pluginName))
+    if (v === null) return true // 从未设置：默认启用
+    return v === '1'
+  } catch (e) { return true }
+}
+export function setPluginUIEnabled(pluginName, on) {
+  try { localStorage.setItem(uiEnabledKey(pluginName), on ? '1' : '0') } catch (e) { /* 忽略 */ }
+  emitSlotChanged() // 通知宿主重渲染（single 空态 / list 过滤）
+}
+
 // getSlotCandidates 某槽位的全部候选（占用者）。
 export function getSlotCandidates(slotId) {
   return clientSlots.filter(s => s.slotId === slotId)
@@ -142,9 +160,9 @@ export function getSlotOwner(slotId) {
     v = localStorage.getItem(slotOwnerKey(slotId)) || ''
     neverChosen = localStorage.getItem(slotOwnerKey(slotId)) === null
   } catch (e) { /* 忽略 */ }
-  if (v && !clientSlots.some(s => s.slotId === slotId && s.kind !== 'list' && s.pluginName === v)) {
-    // ★ 持久选择已失效（插件卸载/改名/槽位体系重构后 localStorage 残留）→
-    //   视为「从未选择」，回退自动激活。修复：demo-shell 时代残留的
+  if (v && !clientSlots.some(s => s.slotId === slotId && s.kind !== 'list' && s.pluginName === v && isPluginUIEnabled(v))) {
+    // ★ 持久选择已失效（插件卸载/改名/槽位体系重构后 localStorage 残留，或插件
+    //   UI 被禁用）→ 视为「从未选择」，回退自动激活。修复：demo-shell 时代残留的
     //   paircode-slot-titlebar='demo-shell' 让 ui-* 插件永远不被激活（空态）。
     neverChosen = true
     v = ''
@@ -157,7 +175,7 @@ export function getSlotOwner(slotId) {
   // ★ 从未显式选择（或持久选择失效）：仅一个 single 候选时自动激活（对齐参考项目
   //   「注册槽位=替换」语义；用户显式选过「内置组件」存 '' 时保留其选择，不自动激活）
   if (neverChosen) {
-    const cands = clientSlots.filter(s => s.slotId === slotId && s.kind !== 'list' && typeof s.render === 'function')
+    const cands = clientSlots.filter(s => s.slotId === slotId && s.kind !== 'list' && typeof s.render === 'function' && isPluginUIEnabled(s.pluginName))
     if (cands.length === 1) return cands[0].pluginName
   }
   return ''
@@ -179,7 +197,7 @@ export function getSlotUI(slotId) {
 // getSlotUIList 取 list 型槽位（叠加）的全部占用者渲染信息数组（kind='list'）。
 export function getSlotUIList(slotId) {
   return clientSlots
-    .filter(s => s.slotId === slotId && s.kind === 'list' && typeof s.render === 'function')
+    .filter(s => s.slotId === slotId && s.kind === 'list' && typeof s.render === 'function' && isPluginUIEnabled(s.pluginName))
     .map(s => ({ render: s.render, ui: getUIFor(s.pluginName), pluginName: s.pluginName }))
 }
 
@@ -625,7 +643,7 @@ export default {
   startPolling, stopPolling, dispatchHostEvent,
   getInstances, setPanelMount, clientPanels,
   clientSlots, setSlotMount, getSlotCandidates, getSlotOwner, setSlotOwner, getSlotUI, getSlotUIList,
-  emitSlotChanged, isOverlayActive, setOverlayActive, mountListSlot,
+  emitSlotChanged, isOverlayActive, setOverlayActive, isPluginUIEnabled, setPluginUIEnabled, mountListSlot,
 }
 
 // ★ 调试/验证暴露（生产保留，无害）：window.__pluginRuntime 供浏览器控制台

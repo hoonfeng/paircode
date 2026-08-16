@@ -11632,6 +11632,25 @@
     }
     emitSlotChanged();
   }
+  function uiEnabledKey(pluginName) {
+    return "slotUIEnabled:" + pluginName;
+  }
+  function isPluginUIEnabled(pluginName) {
+    try {
+      const v = localStorage.getItem(uiEnabledKey(pluginName));
+      if (v === null) return true;
+      return v === "1";
+    } catch (e) {
+      return true;
+    }
+  }
+  function setPluginUIEnabled(pluginName, on) {
+    try {
+      localStorage.setItem(uiEnabledKey(pluginName), on ? "1" : "0");
+    } catch (e) {
+    }
+    emitSlotChanged();
+  }
   function getSlotCandidates(slotId) {
     return clientSlots.filter((s) => s.slotId === slotId);
   }
@@ -11643,14 +11662,14 @@
       neverChosen = localStorage.getItem(slotOwnerKey(slotId)) === null;
     } catch (e) {
     }
-    if (v && !clientSlots.some((s) => s.slotId === slotId && s.kind !== "list" && s.pluginName === v)) {
+    if (v && !clientSlots.some((s) => s.slotId === slotId && s.kind !== "list" && s.pluginName === v && isPluginUIEnabled(v))) {
       neverChosen = true;
       v = "";
     }
     if (!v) neverChosen = true;
     if (v) return v;
     if (neverChosen) {
-      const cands = clientSlots.filter((s) => s.slotId === slotId && s.kind !== "list" && typeof s.render === "function");
+      const cands = clientSlots.filter((s) => s.slotId === slotId && s.kind !== "list" && typeof s.render === "function" && isPluginUIEnabled(s.pluginName));
       if (cands.length === 1) return cands[0].pluginName;
     }
     return "";
@@ -11670,7 +11689,7 @@
     return { render: s.render, ui: getUIFor(owner), pluginName: owner };
   }
   function getSlotUIList(slotId) {
-    return clientSlots.filter((s) => s.slotId === slotId && s.kind === "list" && typeof s.render === "function").map((s) => ({ render: s.render, ui: getUIFor(s.pluginName), pluginName: s.pluginName }));
+    return clientSlots.filter((s) => s.slotId === slotId && s.kind === "list" && typeof s.render === "function" && isPluginUIEnabled(s.pluginName)).map((s) => ({ render: s.render, ui: getUIFor(s.pluginName), pluginName: s.pluginName }));
   }
   function mountListSlot(hostRef, slotId, opts = {}) {
     const isActive = opts.isActive || ((n) => isOverlayActive(slotId, n));
@@ -12091,6 +12110,8 @@
     emitSlotChanged,
     isOverlayActive,
     setOverlayActive,
+    isPluginUIEnabled,
+    setPluginUIEnabled,
     mountListSlot
   };
   if (typeof window !== "undefined") {
@@ -12117,12 +12138,14 @@
     getSlotUIList,
     getUIFor,
     isOverlayActive,
+    isPluginUIEnabled,
     loadClientHalf,
     mountListSlot,
     registerBuiltinSlot,
     reportState,
     setOverlayActive,
     setPanelMount,
+    setPluginUIEnabled,
     setSlotMount,
     setSlotOwner,
     startPolling,

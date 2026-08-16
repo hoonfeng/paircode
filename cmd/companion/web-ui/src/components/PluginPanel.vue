@@ -193,7 +193,7 @@
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import api from '../api.js'
 import SvgIcon from './SvgIcon.vue'
-import { clientPanels, clientSlots, syncClientHalves, unloadClientHalf, startPolling, stopPolling, setPanelMount, setSlotMount, getUIFor, getSlotCandidates, getSlotOwner, setSlotOwner, emitSlotChanged, isOverlayActive, setOverlayActive, getBuiltinSlots } from '../plugin-runtime.js'
+import { clientPanels, clientSlots, syncClientHalves, unloadClientHalf, startPolling, stopPolling, setPanelMount, setSlotMount, getUIFor, getSlotCandidates, getSlotOwner, setSlotOwner, emitSlotChanged, isOverlayActive, setOverlayActive, isPluginUIEnabled, setPluginUIEnabled, getBuiltinSlots } from '../plugin-runtime.js'
 
 const plugins = ref([])
 const loading = ref(false)
@@ -363,8 +363,11 @@ async function togglePluginTool(p, t) {
 }
 
 // ─── UI 插件启用开关（Slot 系统）：勾选=激活该插件注册的全部槽位 ──
-//  single 槽位（statusbar/chat/sidebar）：激活=设为该槽位占用者，停用=恢复内置；
-//  list 槽位（overlay）：激活=勾选叠加显示，停用=隐藏。
+//  single 槽位（titlebar/activitybar/sidebar/editor/right-panel/statusbar/modals）：
+//    激活=插件级 UI 启用（渲染时检查 isPluginUIEnabled）；停用=禁用标记 → 区域空态。
+//    ★ 不再用 setSlotOwner('')「恢复内置」：壳是纯骨架无内置可恢复，空 owner 会
+//      自动回退重新激活唯一候选 → 永远停不掉（历史 bug：单槽插件开关无效）。
+//  list 槽位（overlay）：激活=勾选叠加显示（槽位级 overlay），停用=隐藏。
 function uiSlotsOf(pname) {
   return clientSlots.filter(s => s.pluginName === pname)
 }
@@ -373,16 +376,20 @@ function uiPluginActive(pname) {
   if (!slots.length) return false
   return slots.some(s => {
     if (s.kind === 'list') return isOverlayActive(s.slotId, s.pluginName)
-    return getSlotOwner(s.slotId) === s.pluginName
+    return isPluginUIEnabled(s.pluginName)
   })
 }
 function toggleUiPlugin(p, on) {
   const slots = uiSlotsOf(p.name)
   for (const s of slots) {
-    if (s.kind === 'list') setOverlayActive(s.slotId, s.pluginName, on)
-    else setSlotOwner(s.slotId, on ? s.pluginName : '')
+    if (s.kind === 'list') {
+      setOverlayActive(s.slotId, s.pluginName, on)
+    } else {
+      setPluginUIEnabled(s.pluginName, on)
+      if (on) setSlotOwner(s.slotId, s.pluginName) // 启用时显式占用该区域
+    }
   }
-  window.$toast && window.$toast(on ? '已启用 ' + p.name + ' 的 UI（' + slots.map(s => s.slotId).join(', ') + '）' : '已停用 ' + p.name + ' 的 UI（恢复内置界面）', 'info')
+  window.$toast && window.$toast(on ? '已启用 ' + p.name + ' 的 UI（' + slots.map(s => s.slotId).join(', ') + '）' : '已停用 ' + p.name + ' 的 UI（区域恢复空态）', 'info')
   emitSlotChanged()
 }
 
