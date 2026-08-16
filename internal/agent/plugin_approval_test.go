@@ -55,7 +55,7 @@ func TestClientApprovalDynamic(t *testing.T) {
 
 	// 已批准 → 不再触发（批准覆盖后续版本）
 	def1 := mustDef(t, host, id1)
-	host.MarkClientApproved(def1.name)
+	host.MarkClientApproved(def1.name, def1.scope)
 	if runTool.DynamicApproval(tc1) {
 		t.Fatal("已批准插件再次 run 不应再触发审批")
 	}
@@ -148,7 +148,7 @@ func TestClientApprovalPersist(t *testing.T) {
 	if host.IsClientApproved(pluginID) {
 		t.Fatal("初始不应已批准")
 	}
-	host.MarkClientApproved(pluginID)
+	host.MarkClientApproved(pluginID, "") // scope 空 → project：写工作区文件
 
 	// 批准文件已落盘
 	p := filepath.Join(dir, ".pair", "cordis-approved.json")
@@ -201,7 +201,7 @@ func TestClientApprovalInspect(t *testing.T) {
 	}
 
 	// 批准后：记录 + 摘要更新
-	host.MarkClientApproved(pluginID)
+	host.MarkClientApproved(pluginID, "") // scope 空 → project：写工作区文件
 	rec = host.InspectDetail("ap-inspect")
 	if rec == nil || !rec.ClientApproved {
 		t.Fatalf("批准后记录应 clientApproved: %+v", rec)

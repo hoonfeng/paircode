@@ -240,7 +240,8 @@ func (c *PluginContext) Effect(fn func()) {
 
 // RegisterTool 注册工具（ctx.tools.register），记入本插件名下以便 Unload 回收。
 // ★ 同名冲突检测（P2）：插件不能静默覆盖宿主内置工具或其他插件的工具；
-//   冲突返回明确错误（含占用方与处理建议）。
+//
+//	冲突返回明确错误（含占用方与处理建议）。
 func (c *PluginContext) RegisterTool(t *Tool) error {
 	if t == nil || t.Name == "" {
 		return fmt.Errorf("工具名为空")
@@ -342,12 +343,13 @@ func (c *PluginContext) cleanup() {
 // ─── PluginState / PluginRecord ──────────────────────────
 
 // PluginState 插件运行状态（对齐 harness CordisRunStatus 的进程内简化 6 态）：
-//   running   正在运行（apply 已执行）
-//   stopped   已停止（定义保留，可再 run）
-//   waiting   等待服务（inject 声明的服务未就绪，服务出现后自动激活）
-//   rejected  装载被拒绝（求值/形态/schema 错误——定义期即可发现的问题）
-//   failed    apply 失败（已执行但运行期报错）
-//   cancelled 已取消（undefine 或用户中止）
+//
+//	running   正在运行（apply 已执行）
+//	stopped   已停止（定义保留，可再 run）
+//	waiting   等待服务（inject 声明的服务未就绪，服务出现后自动激活）
+//	rejected  装载被拒绝（求值/形态/schema 错误——定义期即可发现的问题）
+//	failed    apply 失败（已执行但运行期报错）
+//	cancelled 已取消（undefine 或用户中止）
 type PluginState int
 
 // PluginState 取值。
@@ -395,19 +397,19 @@ type PluginRecord struct {
 	Tools      []string     `json:"tools,omitempty"`
 	Sections   []string     `json:"sections,omitempty"`
 	Version    string       `json:"version,omitempty"`
-	Purpose    string       `json:"purpose,omitempty"`     // 用途说明（JS 动态插件）
-	HasClient  bool         `json:"hasClient,omitempty"`   // 是否有 client 半（浏览器端）
-	ClientCode string       `json:"clientCode,omitempty"`  // client 半源码（供浏览器装载；列表接口可能省略）
+	Purpose    string       `json:"purpose,omitempty"`    // 用途说明（JS 动态插件）
+	HasClient  bool         `json:"hasClient,omitempty"`  // 是否有 client 半（浏览器端）
+	ClientCode string       `json:"clientCode,omitempty"` // client 半源码（供浏览器装载；列表接口可能省略）
 	// ClientApproved client 半是否已获激活批准（cordis_run 经审批门后为 true；
 	// 浏览器仅装载已批准的 client 半）
-	ClientApproved bool `json:"clientApproved,omitempty"`
-	DefID      string       `json:"defId,omitempty"`       // JS 动态插件定义 id（dyn-<n>）
-	PluginID   string       `json:"pluginId,omitempty"`    // 稳定插件身份（跨版本；默认=首次定义 id）
-	PkgID      string       `json:"pkgId,omitempty"`       // 当前版本 package id（pkg-<n>，不可变）
-	Versions   int          `json:"versions,omitempty"`    // 该插件累计版本数（含历史）
-	WaitingFor []string     `json:"waitingFor,omitempty"`  // state=waiting 时缺的服务
-	LastError  string       `json:"lastError,omitempty"`   // 最近一次装载失败原因（诊断）
-	Diag       []string     `json:"diag,omitempty"`        // 运行诊断（阶段记录，最新在后）
+	ClientApproved bool     `json:"clientApproved,omitempty"`
+	DefID          string   `json:"defId,omitempty"`      // JS 动态插件定义 id（dyn-<n>）
+	PluginID       string   `json:"pluginId,omitempty"`   // 稳定插件身份（跨版本；默认=首次定义 id）
+	PkgID          string   `json:"pkgId,omitempty"`      // 当前版本 package id（pkg-<n>，不可变）
+	Versions       int      `json:"versions,omitempty"`   // 该插件累计版本数（含历史）
+	WaitingFor     []string `json:"waitingFor,omitempty"` // state=waiting 时缺的服务
+	LastError      string   `json:"lastError,omitempty"`  // 最近一次装载失败原因（诊断）
+	Diag           []string `json:"diag,omitempty"`       // 运行诊断（阶段记录，最新在后）
 }
 
 // ─── PluginHost ───────────────────────────────────────────
@@ -463,10 +465,15 @@ type PluginHost struct {
 	//   approvedClientPackages）：cordis_run 装载带 client 半的插件时经
 	//   现有审批门（ReviewMode manual=人工审批 / auto=AI审核 / off=放行），
 	//   通过后 MarkClientApproved 记录；浏览器 client 半仅装载已批准插件。
-	//   持久化到 <root>/.pair/cordis-approved.json（跨重启存续）。
+	//   ★ 存储按作用域分流：global（UI 类插件）→ 安装目录 <InstallDir>/.pair/
+	//   cordis-approved.json（随安装包发布、跨工作区生效——UI 插件与工作区无关）；
+	//   project（工具插件）→ 工作区 <root>/.pair/cordis-approved.json。
+	//   approvedClients 为合并视图（IsClientApproved 查询用；跨重启恢复）。
 	approveMu       sync.RWMutex
-	approvedClients map[string]bool
-	root            string // 工作区根（持久化 approved 列表用）
+	approvedClients map[string]bool // 合并视图（global + project）
+	approvedGlobal  map[string]bool // 全局（UI 类）批准：安装目录持久化
+	approvedProject map[string]bool // 项目批准：工作区持久化
+	root            string          // 工作区根（project 批准持久化用）
 }
 
 // InspectMethod 一个 inspect provider 方法（对齐参考 manifest.methods 的单个条目）。
@@ -639,19 +646,21 @@ func (h *PluginHost) findDefByNameOrID(nameOrID string) *jsPluginDef {
 // registry：工具注册表（ctx.tools）；store：会话存储（ctx.session）；root：工作区根。
 func NewPluginHost(registry *Registry, store ConversationStore, root string) *PluginHost {
 	h := &PluginHost{
-		plugins:        map[string]Plugin{},
-		states:         map[string]PluginState{},
-		sources:        map[string]PluginSource{},
-		defs:           map[string]*jsPluginDef{},
-		pluginVersions: map[string][]*jsPluginDef{},
-		waiting:        map[string]*jsPluginDef{},
-		pluginTools:    map[string][]string{},
-		pluginSections: map[string][]*PromptSection{},
-		pluginVars:     map[string][]*PromptVariable{},
-		toolOwner:      map[string]string{},
-		templates:      map[string]*ToolsetTemplate{},
+		plugins:         map[string]Plugin{},
+		states:          map[string]PluginState{},
+		sources:         map[string]PluginSource{},
+		defs:            map[string]*jsPluginDef{},
+		pluginVersions:  map[string][]*jsPluginDef{},
+		waiting:         map[string]*jsPluginDef{},
+		pluginTools:     map[string][]string{},
+		pluginSections:  map[string][]*PromptSection{},
+		pluginVars:      map[string][]*PromptVariable{},
+		toolOwner:       map[string]string{},
+		templates:       map[string]*ToolsetTemplate{},
 		approvedClients: map[string]bool{},
-		root:           root,
+		approvedGlobal:  map[string]bool{},
+		approvedProject: map[string]bool{},
+		root:            root,
 	}
 	h.ctx = &PluginContext{
 		host:          h,
@@ -688,19 +697,42 @@ func NewPluginHost(registry *Registry, store ConversationStore, root string) *Pl
 // （=已过审批门）后 MarkClientApproved 记录。批准键 = 插件名 name（跨进程/跨版本
 // 稳定——进程内 dyn-n 序号随装配顺序漂移，不能作持久化键；覆盖该插件后续版本）。
 
-// approvedFilePath .pair/cordis-approved.json 的绝对路径。
-// ★ 有工作区读工作区（开发态）；未打开工作区读安装目录（发布态）——
-//   UI 插件 client 半审批记录跨工作区生效，发布包应随带安装目录副本。
-func (h *PluginHost) approvedFilePath() string {
+// approvedFilePath 按作用域返回 .pair/cordis-approved.json 绝对路径：
+//   - global：安装目录 <InstallDir>/.pair/（UI 类插件跨工作区生效，随安装包
+//     发布——UI 插件与工作区无关；发布版打开任意工作区都不丢批准）
+//   - project：工作区 <root>/.pair/（工具插件按项目隔离）
+//
+// 未打开工作区时 project 退回安装目录（无工作区也能记录项目级批准）。
+func (h *PluginHost) approvedFilePath(scope string) string {
+	if scope == "global" {
+		return filepath.Join(core.InstallDir(), ".pair", "cordis-approved.json")
+	}
 	if h.root != "" {
 		return filepath.Join(h.root, ".pair", "cordis-approved.json")
 	}
 	return filepath.Join(core.InstallDir(), ".pair", "cordis-approved.json")
 }
 
-// loadApprovedClients 从 .pair/cordis-approved.json 恢复批准记录（缺文件/坏 JSON 静默）。
+// loadApprovedClients 恢复批准记录：global（安装目录）+ project（工作区）分别
+// 加载（缺文件/坏 JSON 静默），合并到 approvedClients 视图。
+// ★ 发布版用户电脑：安装目录文件随安装包存在（含全部 UI 插件批准），即使
+//
+//	用户打开了全新工作区（工作区文件缺失）也保持已批准——UI 插件与工作区无关。
 func (h *PluginHost) loadApprovedClients() {
-	p := h.approvedFilePath()
+	h.loadApprovedFile(h.approvedFilePath("global"), h.approvedGlobal)
+	h.loadApprovedFile(h.approvedFilePath("project"), h.approvedProject)
+	h.approveMu.Lock()
+	for n := range h.approvedGlobal {
+		h.approvedClients[n] = true
+	}
+	for n := range h.approvedProject {
+		h.approvedClients[n] = true
+	}
+	h.approveMu.Unlock()
+}
+
+// loadApprovedFile 从指定文件加载批准名单到目标 map（缺文件/坏 JSON 静默）。
+func (h *PluginHost) loadApprovedFile(p string, target map[string]bool) {
 	if p == "" {
 		return
 	}
@@ -713,23 +745,29 @@ func (h *PluginHost) loadApprovedClients() {
 		return
 	}
 	h.approveMu.Lock()
+	defer h.approveMu.Unlock()
 	for _, n := range names {
 		if n != "" {
-			h.approvedClients[n] = true
+			target[n] = true
 		}
 	}
-	h.approveMu.Unlock()
 }
 
-// saveApprovedClients 持久化批准记录（失败静默——批准生效以内存为准，重启后重批即可）。
+// saveApprovedClients 持久化批准记录：global → 安装目录；project → 工作区
+// （失败静默——批准生效以内存为准，重启后重批即可）。
 func (h *PluginHost) saveApprovedClients() {
-	p := h.approvedFilePath()
+	h.saveApprovedFile(h.approvedFilePath("global"), h.approvedGlobal)
+	h.saveApprovedFile(h.approvedFilePath("project"), h.approvedProject)
+}
+
+// saveApprovedFile 把批准名单写入指定文件（失败静默）。
+func (h *PluginHost) saveApprovedFile(p string, src map[string]bool) {
 	if p == "" {
 		return
 	}
 	h.approveMu.RLock()
-	names := make([]string, 0, len(h.approvedClients))
-	for n := range h.approvedClients {
+	names := make([]string, 0, len(src))
+	for n := range src {
 		names = append(names, n)
 	}
 	h.approveMu.RUnlock()
@@ -755,15 +793,25 @@ func (h *PluginHost) IsClientApproved(pluginID string) bool {
 }
 
 // MarkClientApproved 批准插件 client 半激活（cordis_run 经审批门执行成功后调用，
-// 传插件稳定身份 pluginId），并持久化到 .pair/cordis-approved.json。
-func (h *PluginHost) MarkClientApproved(pluginID string) {
+// 传插件稳定身份 pluginId 与作用域 scope），按作用域持久化：
+// global（UI 类）→ 安装目录；project → 工作区。批准覆盖该插件后续版本。
+func (h *PluginHost) MarkClientApproved(pluginID, scope string) {
 	if pluginID == "" {
 		return
 	}
 	h.approveMu.Lock()
 	h.approvedClients[pluginID] = true
+	if scope == "global" {
+		h.approvedGlobal[pluginID] = true
+	} else {
+		h.approvedProject[pluginID] = true
+	}
 	h.approveMu.Unlock()
-	h.saveApprovedClients()
+	if scope == "global" {
+		h.saveApprovedFile(h.approvedFilePath("global"), h.approvedGlobal)
+	} else {
+		h.saveApprovedFile(h.approvedFilePath("project"), h.approvedProject)
+	}
 }
 
 // ─── host→client 事件桥 ──────────────────────────────────
@@ -828,17 +876,17 @@ func (h *PluginHost) ClientEventsSince(seq int64) ([]ClientEvent, int64) {
 // ClientPluginSnapshot 浏览器侧一个 client 半的运行状态（浏览器 plugin-runtime 上报）。
 type ClientPluginSnapshot struct {
 	Name    string   `json:"name"`
-	Status  string   `json:"status"`             // loaded | error
-	Panels  []string `json:"panels,omitempty"`   // 注册的面板 id
-	Events  []string `json:"events,omitempty"`   // 监听的事件名（ui.on）
-	Version string   `json:"version,omitempty"`  // client 半版本（同 host 定义版本）
-	Error   string   `json:"error,omitempty"`    // 装载失败原因
+	Status  string   `json:"status"`            // loaded | error
+	Panels  []string `json:"panels,omitempty"`  // 注册的面板 id
+	Events  []string `json:"events,omitempty"`  // 监听的事件名（ui.on）
+	Version string   `json:"version,omitempty"` // client 半版本（同 host 定义版本）
+	Error   string   `json:"error,omitempty"`   // 装载失败原因
 }
 
 // ClientRuntimeSnapshot 浏览器 client 半运行时整体快照（浏览器周期上报）。
 type ClientRuntimeSnapshot struct {
-	Connected  bool                   `json:"connected"`   // 页面在线且上报过
-	ReportedAt int64                  `json:"reportedAt"`  // 本次上报时间（Unix 秒）
+	Connected  bool                   `json:"connected"`  // 页面在线且上报过
+	ReportedAt int64                  `json:"reportedAt"` // 本次上报时间（Unix 秒）
 	Plugins    []ClientPluginSnapshot `json:"plugins"`
 	Panels     []string               `json:"panels,omitempty"` // 全部已注册面板 id 汇总
 }

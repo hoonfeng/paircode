@@ -189,7 +189,14 @@ func RegisterCordisTools(registry *Registry, host *PluginHost, root string) {
 			//   稳定，覆盖该插件后续版本），浏览器 client 半方可装载（对齐 harness
 			//   approvedClientPackages）。
 			if strings.TrimSpace(def.clientCode) != "" {
-				host.MarkClientApproved(def.name)
+				// 作用域：def.scope 空但含 client 半 = UI 类 → 全局（对齐
+				// cordis_define「含 client 半自动 global」语义；批准写安装目录，
+				// 跨工作区生效——UI 插件与工作区无关）
+				scope := def.scope
+				if scope == "" {
+					scope = "global"
+				}
+				host.MarkClientApproved(def.name, scope)
 			}
 			// 等待语义：装载成功但插件进入 waiting（inject 缺服务）
 			if def.status == PluginWaiting {
@@ -986,7 +993,6 @@ func renderJSDefDetail(d *jsPluginDef) string {
 	sb.WriteString("\n```js\n" + preview + "\n```\n")
 	return sb.String()
 }
-
 
 // ─── 动态插件 → 工作区工具集同步 ───────────────────────────
 
