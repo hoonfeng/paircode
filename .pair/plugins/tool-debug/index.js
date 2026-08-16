@@ -2,8 +2,7 @@
 // tool-debug — 调试工具（debug_inject_log/run_capture/analyze_output/parse_stack/cleanup_logs/watch/evaluate_session）
 //
 // 生成来源（2026-08-16）：内置 Go 工具组 → 磁盘外置插件（tool_plugin_gen.go
-// 自动生成，schema 完整外置拷贝）。api 声明在插件，execute 调 ctx.hostTool
-// 复用宿主 Go 执行器（对齐 harness seam：编排在插件、能力在宿主）。
+// 自动生成，schema 完整外置拷贝）。api 声明在插件，execute 调 ctx.hostTool 复用宿主 Go 执行器（对齐 harness seam：编排在插件、能力在宿主）。
 // 工具清单：debug_inject_log、debug_run_capture、debug_analyze_output、debug_parse_stack、debug_cleanup_logs、debug_watch、debug_evaluate_session
 // ═══════════════════════════════════════════════════════════════
 const tools = [

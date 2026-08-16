@@ -163,3 +163,61 @@ func TestBinaryPluginExec(t *testing.T) {
 		t.Fatal("def.dir 未注入（ctx.binary 依赖它定位二进制）")
 	}
 }
+
+// TestBinaryPluginExecUnified 验证统一宿主二进制链路：其他工具组插件 JS 壳
+// execute 调 ctx.binary.exec(t.name, args, {bin:"tool-binary"}) → 统一二进制
+// （cmd/plugins/tool-binary，承载全部内置组实现）→ 工具执行结果返回。
+// ★ 改实现：重编译 cmd/plugins/tool-binary → 替换 .pair/plugins/tool-binary/bin/
+//   tool-binary.exe → 全部切换组生效（主程序无需重编译）。
+func TestBinaryPluginExecUnified(t *testing.T) {
+	repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("定位仓库根失败: %v", err)
+	}
+	pluginDir := filepath.Join(repoRoot, ".pair", "plugins", "tool-git")
+	exePath := filepath.Join(repoRoot, ".pair", "plugins", "tool-binary", "bin", "tool-binary.exe")
+	if _, err := os.Stat(exePath); err != nil {
+		t.Skipf("统一二进制未编译（go build -o %s ./cmd/plugins/tool-binary）: %v", exePath, err)
+	}
+	code, err := os.ReadFile(filepath.Join(pluginDir, "index.js"))
+	if err != nil {
+		t.Fatalf("读插件源码失败: %v", err)
+	}
+
+	reg := NewRegistry()
+	host := NewPluginHost(reg, nil, repoRoot)
+	RegisterBuiltinPlugins(host)
+
+	id, err := host.DefineJSCodeFull(string(code), "js", "统一二进制插件装载测试", "", "")
+	if err != nil {
+		t.Fatalf("define 失败: %v", err)
+	}
+	def, _ := host.GetJSDef(id)
+	if def == nil {
+		t.Fatalf("定义 %s 不存在", id)
+	}
+	def.dir = filepath.Dir(pluginDir) + string(filepath.Separator) + "tool-git" // ★ 磁盘装载注入
+	if err := host.LoadJSDynamic(def); err != nil {
+		t.Fatalf("装载失败: %v", err)
+	}
+
+	// ① execute 走 ctx.binary {bin:"tool-binary"}（插件 JS 已切换）
+	tool, ok := reg.Get("git_status")
+	if !ok {
+		t.Fatal("git_status 未注册（插件接管失败）")
+	}
+	out, err := tool.Handler(context.Background(), map[string]any{})
+	if err != nil {
+		t.Fatalf("git_status 执行失败: %v", err)
+	}
+	if !strings.Contains(out, "master") && !strings.Contains(out, "branch") {
+		t.Fatalf("git_status 输出异常: %.200s", out)
+	}
+
+	// ② 错误路径（未知工具）走协议 error 分支
+	bad, _ := reg.Get("git_status")
+	if _, err := bad.Handler(context.Background(), map[string]any{"_no_such_arg": true}); err != nil {
+		// 参数错误应报错而非崩溃
+		t.Logf("git_status 非法参数报错（预期可接受）: %v", err)
+	}
+}

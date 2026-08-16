@@ -2,8 +2,7 @@
 // tool-lsp — LSP 代码导航（lsp_definition/references/hover/diagnostics）
 //
 // 生成来源（2026-08-16）：内置 Go 工具组 → 磁盘外置插件（tool_plugin_gen.go
-// 自动生成，schema 完整外置拷贝）。api 声明在插件，execute 调 ctx.hostTool
-// 复用宿主 Go 执行器（对齐 harness seam：编排在插件、能力在宿主）。
+// 自动生成，schema 完整外置拷贝）。api 声明在插件，execute 调 ctx.binary 复用统一宿主二进制（.pair/plugins/tool-binary/bin/，源码 cmd/plugins/tool-binary/，承载全部内置工具组实现）。
 // 工具清单：lsp_definition、lsp_references、lsp_hover、lsp_diagnostics
 // ═══════════════════════════════════════════════════════════════
 const tools = [
@@ -121,7 +120,7 @@ return {
         requiresApproval: t.requiresApproval,
         systemTool: t.systemTool,
         parameters: t.parameters,
-        execute: (args) => ctx.hostTool.exec(t.name, args || {}),
+        execute: (args) => ctx.binary.exec(t.name, args || {}, {bin: 'tool-binary'}),
       })
     }
   },

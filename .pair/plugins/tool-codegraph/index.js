@@ -2,8 +2,7 @@
 // tool-codegraph — 代码知识图谱（codegraph_build/search/impact/…）
 //
 // 生成来源（2026-08-16）：内置 Go 工具组 → 磁盘外置插件（tool_plugin_gen.go
-// 自动生成，schema 完整外置拷贝）。api 声明在插件，execute 调 ctx.hostTool
-// 复用宿主 Go 执行器（对齐 harness seam：编排在插件、能力在宿主）。
+// 自动生成，schema 完整外置拷贝）。api 声明在插件，execute 调 ctx.binary 复用统一宿主二进制（.pair/plugins/tool-binary/bin/，源码 cmd/plugins/tool-binary/，承载全部内置工具组实现）。
 // 工具清单：codegraph_build、codegraph_stats、codegraph_file_structure、codegraph_function、codegraph_class、codegraph_callers、codegraph_callees、codegraph_impact、codegraph_search、codegraph_git_history、codegraph_entity_history、codegraph_get_edit_context、codegraph_find_related_tests、codegraph_analyze_complexity、codegraph_search_by_pattern、codegraph_trace_call_chain、codegraph_find_dead_code、codegraph_module_architecture
 // ═══════════════════════════════════════════════════════════════
 const tools = [
@@ -440,7 +439,7 @@ return {
         requiresApproval: t.requiresApproval,
         systemTool: t.systemTool,
         parameters: t.parameters,
-        execute: (args) => ctx.hostTool.exec(t.name, args || {}),
+        execute: (args) => ctx.binary.exec(t.name, args || {}, {bin: 'tool-binary'}),
       })
     }
   },

@@ -24,10 +24,34 @@ JS 插件 execute → ctx.binary.exec(tool, args[, {timeout}]) → text
 ```
 
 - `ctx.binary.dir()` → 插件目录绝对路径（JS 可拼接 assets/ 资源路径）
+- `ctx.binary.exec(tool, args, {bin})` → opts.bin 指定**其它插件目录的二进制**
+  （跨插件共用统一二进制；如各工具组 JS `{bin:"tool-binary"}` 指向统一宿主
+  二进制，无需各自编译）
 - 二进制内可用 `os.Executable()` 定位自身目录 → 上级即插件目录（读 assets/）
 - 超时默认 60s（opts.timeout 毫秒可覆盖）
 - 示例：`.pair/plugins/tool-binary-re/`（6 个逆向工具）——协议实现
   参考 `cmd/plugins/tool-binary-re/main.go`
+
+## 统一宿主二进制（tool-binary）
+
+依赖 Go 内核的工具组（codegraph/lsp/office/memory/verify/binary/git/
+vision/screenshot/web-debug/bug/project-info…）由**一个统一二进制**承载：
+
+- 源码：`cmd/plugins/tool-binary/main.go`（import agent → RegisterDefaultTools
+  注册全部内置组 → stdin JSON 分发 Registry.Execute）
+- 产物：`.pair/plugins/tool-binary/bin/tool-binary.exe`（39MB，CGO=0）
+- 各组插件 JS 的 execute 统一 `ctx.binary.exec(t.name, args, {bin:"tool-binary"})`
+- **改实现**：改 `internal/agent/*.go`（工具实现库）或 `cmd/plugins/tool-binary/main.go`
+  → `go build -o .pair/plugins/tool-binary/bin/tool-binary.exe ./cmd/plugins/tool-binary`
+  → 重启 → 全部切换组生效（主程序 exe 无需重编译）
+- 会话绑定工具（update_tasks 等 SystemTool、ask_user/task_create）由宿主框架
+  执行，二进制排除（excludedTools）；tool-debug 依赖宿主后台进程，保持 hostTool
+
+当前 execute 形态分布（生成器 tool_plugin_gen.go 的 binary 字段控制）：
+- `tool-binary`：git/memory/verify/project-info/binary/office/lsp/codegraph/
+  codegraph-extra/vision/screenshot/web-debug/bug（14 组）
+- `self`：tool-binary-re（独立二进制，自己 bin/ 下的实现）
+- `hostTool`：tool-debug（宿主后台进程依赖）、tool-system（会话绑定）
 
 ## 三层工具实现（从易到难，用户可改程度递增）
 

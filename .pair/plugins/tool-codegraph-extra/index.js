@@ -2,8 +2,7 @@
 // tool-codegraph-extra — 图谱扩展（codegraph_find_by_signature/explore）
 //
 // 生成来源（2026-08-16）：内置 Go 工具组 → 磁盘外置插件（tool_plugin_gen.go
-// 自动生成，schema 完整外置拷贝）。api 声明在插件，execute 调 ctx.hostTool
-// 复用宿主 Go 执行器（对齐 harness seam：编排在插件、能力在宿主）。
+// 自动生成，schema 完整外置拷贝）。api 声明在插件，execute 调 ctx.binary 复用统一宿主二进制（.pair/plugins/tool-binary/bin/，源码 cmd/plugins/tool-binary/，承载全部内置工具组实现）。
 // 工具清单：codegraph_find_entry_points、codegraph_find_hot_paths、codegraph_find_by_imports、codegraph_get_detailed_symbol、codegraph_find_dead_imports、codegraph_search_by_error、codegraph_index_markdown、codegraph_search_docs、codegraph_verify_design、codegraph_pr_context、codegraph_find_by_signature、codegraph_semantic_search、codegraph_explore
 // ═══════════════════════════════════════════════════════════════
 const tools = [
@@ -299,7 +298,7 @@ return {
         requiresApproval: t.requiresApproval,
         systemTool: t.systemTool,
         parameters: t.parameters,
-        execute: (args) => ctx.hostTool.exec(t.name, args || {}),
+        execute: (args) => ctx.binary.exec(t.name, args || {}, {bin: 'tool-binary'}),
       })
     }
   },

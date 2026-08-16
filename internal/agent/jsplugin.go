@@ -499,6 +499,8 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 	//   ctx.binary.exec(tool, args[, opts]) → text
 	//     stdin  JSON {tool, args, root} → stdout JSON {ok, text} | {ok:false, error}
 	//     二进制约定：<插件目录>/bin/<插件名>.exe（Windows；其它平台无后缀）
+	//     opts.bin 可指定其它二进制文件名（跨插件共用统一二进制，如 {bin:"tool-binary"}）
+	//     opts.timeout 毫秒（默认 60s）
 	//     资源约定：<插件目录>/assets/（ctx.binary.dir() 返回插件目录，JS 可拼接）
 	//   ctx.binary.dir() → 插件目录绝对路径
 	// 未声明插件目录（非磁盘插件）时抛错。
@@ -524,6 +526,7 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 			}
 		}
 		timeout := 60 * time.Second
+		binName := ""
 		if o := call.Argument(2); !goja.IsUndefined(o) && !goja.IsNull(o) {
 			if om, ok := o.Export().(map[string]any); ok {
 				if t, ok := om["timeout"]; ok {
@@ -531,13 +534,30 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 						timeout = time.Duration(ms) * time.Millisecond
 					}
 				}
+				// opts.bin 指定二进制文件名（相对插件目录 bin/，缺省=插件名）。
+				// 支持跨插件共用统一二进制（如 {bin:"tool-binary"} 承载多组工具）。
+				if b, ok := om["bin"]; ok {
+					if s, ok := b.(string); ok && s != "" {
+						binName = s
+					}
+				}
 			}
 		}
-		exeName := p.def.name
-		if runtime.GOOS == "windows" {
+		if binName == "" {
+			binName = p.def.name
+		}
+		exeName := binName
+		if runtime.GOOS == "windows" && !strings.HasSuffix(exeName, ".exe") {
 			exeName += ".exe"
 		}
-		exePath := filepath.Join(p.def.dir, "bin", exeName)
+		// 定位二进制：opts.bin 非空 = 跨插件共用统一二进制（在 <插件根>/<bin>/bin/ 下）；
+		// 缺省 = 本插件目录 bin/<插件名>.exe。
+		var exePath string
+		if binName != p.def.name {
+			exePath = filepath.Join(filepath.Dir(p.def.dir), binName, "bin", exeName)
+		} else {
+			exePath = filepath.Join(p.def.dir, "bin", exeName)
+		}
 		if _, err := os.Stat(exePath); err != nil {
 			panic(vm.NewGoError(fmt.Errorf("ctx.binary.exec: 插件二进制不存在 %s（编译：go build -o %s ./cmd/plugins/<name>）", exePath, exePath)))
 		}
