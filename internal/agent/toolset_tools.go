@@ -483,6 +483,9 @@ func toolsetEditAddPlugin(ph *PluginHost, root string, scope toolsetScope, ts *T
 	// ★ tools 白名单（可选）：只加入插件内指定工具——插件已整体装载（全部工具注册），
 	// 按 PluginToolsByPlugin 查询该插件实际注册的工具，白名单外的写入 DisabledTools
 	// （重装载应用禁用）；白名单中未注册的工具名给警告但不阻塞。
+	// ★ 2026-08-17：白名单内工具必须显式启用（SetToolEnabled(true)）——harness
+	//   对齐模式下工具可能被预置禁用（Enabled=false 但不在 DisabledTools），
+	//   否则 add_plugin 报「仅启用 X」但 X 实际仍不可见。
 	if whitelist := mArgStr(args, "tools"); whitelist != "" {
 		want := map[string]bool{}
 		for _, t := range strings.Split(whitelist, ",") {
@@ -521,6 +524,14 @@ func toolsetEditAddPlugin(ph *PluginHost, root string, scope toolsetScope, ts *T
 			// 重装载应用禁用清单（插件已装载，先卸载再重定义）
 			if err := applyToolsetPlugin(ph, &src); err != nil {
 				return "", fmt.Errorf("应用工具白名单失败: %w", err)
+			}
+		}
+		// 白名单内工具显式启用（幂等：已启用跳过）
+		if ph.Context() != nil && ph.Context().Tools != nil {
+			for _, tn := range enabled {
+				if _, ok := ph.Context().Tools.Get(tn); ok {
+					ph.Context().Tools.SetToolEnabled(tn, true)
+				}
 			}
 		}
 		ts.Plugins = append(ts.Plugins, src)
@@ -637,15 +648,28 @@ func toolsetEditEnableTool(ph *PluginHost, root string, scope toolsetScope, ts *
 			break
 		}
 	}
-	if !removed {
-		return fmt.Sprintf("工具 %q 不在插件 %q 的摘除清单中（无需恢复）", tool, pn), nil
+	// 恢复启用：无论是否在摘除清单，只要工具已注册且当前 disabled → 启用。
+	// （★ 2026-08-17：harness 对齐模式下工具可能被预置禁用（Enabled=false）但不在
+	//   DisabledTools 中——「已加入插件的整组恢复」必须幂等地恢复这类工具，
+	//   否则 enable_tool 报「不在摘除清单中」而工具仍不可见。）
+	reg := (*Registry)(nil)
+	if ph != nil && ph.Context() != nil {
+		reg = ph.Context().Tools
 	}
-	// 恢复启用（若注册在案）
-	if ph.Context() != nil && ph.Context().Tools != nil {
-		ph.Context().Tools.SetToolEnabled(tool, true)
+	enabled := false
+	if reg != nil {
+		if t, ok := reg.Get(tool); ok {
+			enabled = t.Enabled
+			if !t.Enabled {
+				reg.SetToolEnabled(tool, true)
+			}
+		}
 	}
 	if err := saveToolset(root, scope, ts); err != nil {
 		return "", err
+	}
+	if !removed && enabled {
+		return fmt.Sprintf("工具 %q 不在插件 %q 的摘除清单中（已启用，无需操作）", tool, pn), nil
 	}
 	return fmt.Sprintf("✅ 工具 %q 已恢复（插件 %q 的工具重新对 agent 可见）", tool, pn), nil
 }

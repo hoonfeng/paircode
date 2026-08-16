@@ -78,7 +78,7 @@
               </div>
               <div v-for="t in filterTools(g.tools)" :key="t.name" class="ts-add-tool" :title="t.desc">
                 <span class="ts-add-tool-name">{{ t.name }}</span>
-                <button class="ts-btn mini danger" @click="toggleToolsetTool(t)" title="移出工作区工具集（该工具对 agent 不可见）">移出</button>
+                <button class="ts-btn mini danger" @click="toggleToolsetTool(t, g)" title="移出工作区工具集（该工具对 agent 不可见）">移出</button>
               </div>
             </div>
             <div v-if="manualToolNames.length" class="ts-add-group">
@@ -87,7 +87,7 @@
               </div>
               <div v-for="t in filterTools(manualToolObjs)" :key="t.name" class="ts-add-tool" :title="t.desc">
                 <span class="ts-add-tool-name">{{ t.name }}</span>
-                <button class="ts-btn mini danger" @click="toggleToolsetTool(t)" title="移出工作区工具集（该工具对 agent 不可见）">移出</button>
+                <button class="ts-btn mini danger" @click="toggleToolsetTool(t, g)" title="移出工作区工具集（该工具对 agent 不可见）">移出</button>
               </div>
             </div>
             <div v-if="!joinedGroups.length && !manualToolNames.length" class="ts-empty">未加入任何工具。点「管理」在穿梭框中加入。</div>
@@ -199,7 +199,7 @@
     <!-- 工作区工具集穿梭框（未加入 ↔ 已加入 批量管理） -->
     <ToolsetTransfer
       v-if="tsTransferOpen"
-      :groups="builtinInfo?.groups || []"
+      :groups="builtinInfo?.plugins || []"
       :joined="builtinInfo?.joined || []"
       :manual-tools="builtinInfo?.manualTools || []"
       @close="tsTransferOpen = false"
@@ -629,7 +629,11 @@ const joinedToolCount = computed(() => {
 // 已加入分组（工作区工具集内容展示）：source=builtin 的 joined 组 + _manual 手动工具
 const joinedGroups = computed(() => {
   const joined = new Set(builtinInfo.value?.joined || [])
-  return (builtinInfo.value?.groups || []).filter(g => g.source === 'builtin' && joined.has(g.name))
+  const bg = (builtinInfo.value?.groups || []).filter(g => g.source === 'builtin' && joined.has(g.name))
+  const pg = (builtinInfo.value?.plugins || [])
+    .map(g => ({ ...g, tools: (g.tools || []).filter(t => t.enabled) }))
+    .filter(g => (g.tools || []).length > 0)
+  return [...bg, ...pg]
 })
 const manualToolNames = computed(() => builtinInfo.value?.manualTools || [])
 const manualToolObjs = computed(() => manualToolNames.value.map(n => ({ name: n, desc: '手动加入的工具' })))
@@ -641,19 +645,22 @@ function onTransferChanged() {
   loadBuiltin()
 }
 
-// 已捞入工作区工具集的工具名集合（joined 组的组工具 + _manual 手动条目工具）
+// 已捞入工作区工具集的工具名集合（joined 组工具 + 插件已启用工具 + _manual 手动条目工具）
 const joinedTools = computed(() => {
   const set = {}
   const joined = new Set(builtinInfo.value?.joined || [])
   for (const g of builtinInfo.value?.groups || []) {
     if (g.source === 'builtin' && joined.has(g.name)) for (const t of g.tools) set[t.name] = true
   }
+  for (const g of builtinInfo.value?.plugins || []) {
+    for (const t of (g.tools || [])) if (t.enabled) set[t.name] = true
+  }
   for (const tn of builtinInfo.value?.manualTools || []) set[tn] = true
   return set
 })
-
-// 添加工具面板的组列表（全部内置分组）
+// 添加工具面板的组列表（全部内置分组 + 插件分组）
 const builtinGroups = computed(() => builtinInfo.value?.groups || [])
+const pluginGroups = computed(() => builtinInfo.value?.plugins || [])
 
 // 搜索过滤（工具名模糊匹配）
 function filterTools(tools) {
@@ -672,11 +679,21 @@ async function loadBuiltin() {
 }
 
 // 添加/移除工具（持久化：POST /api/plugins/builtin {tool, enabled} → 固化 builtin.json _manual 条目）
-async function toggleToolsetTool(t) {
+async function toggleToolsetTool(t, g) {
   try {
-    const enabled = !joinedTools.value[t.name]
-    const res = await api.builtinPlugins({ tool: t.name, enabled })
-    tsMsg.value = res?.message || (enabled ? '已添加' : '已移除') + ' ' + t.name
+    if (g && g.source === 'plugin') {
+      if (!joinedTools.value[t.name]) {
+        const res = await api.toolsetEdit({ name: 'default', action: 'add_plugin', plugin_name: g.name, tools: t.name })
+        tsMsg.value = res?.message || '已加入 ' + t.name
+      } else {
+        const res = await api.toolsetEdit({ name: 'default', action: 'rm_tool', plugin_name: g.name, tool: t.name })
+        tsMsg.value = res?.message || '已移出 ' + t.name
+      }
+    } else {
+      const enabled = !joinedTools.value[t.name]
+      const res = await api.builtinPlugins({ tool: t.name, enabled })
+      tsMsg.value = res?.message || (enabled ? '已添加' : '已移除') + ' ' + t.name
+    }
     tsMsgErr.value = false
     await loadBuiltin()
   } catch (err) {

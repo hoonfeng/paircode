@@ -73,6 +73,12 @@ type BuiltinToolsetInfo struct {
 	Scope    string             `json:"scope"` // "builtin"
 	Desc     string             `json:"desc"`
 	Groups   []BuiltinGroupInfo `json:"groups"`
+	// Plugins 插件面板中存在工具的插件分组（source=plugin）——工作区工具集管理
+	// 弹窗的候选池：按插件展示工具，勾选工具加入/移出工作区工具集
+	// （toolsetEdit add_plugin / enable_tool / rm_tool / rm_plugin）。
+	// ★ 2026-08-17：管理弹窗不再展示宿主核心自举工具组（plugin-mgmt/toolset-mgmt
+	//   ——它们本就是 agent 可用工具，无「加入」语义），改为插件工具列表。
+	Plugins  []BuiltinGroupInfo `json:"plugins"`
 	Joined   []string           `json:"joined"`      // 已加入工作区（固化在 builtin.json）的分组名
 	ManualTools []string        `json:"manualTools"` // 手动添加的工具（builtin.json _manual 条目）
 	ToolTotal int               `json:"toolTotal"`   // 全部内置工具数
@@ -549,7 +555,73 @@ func BuiltinToolsetInfoOf(reg *Registry, ph *PluginHost, root string) *BuiltinTo
 			info.WorkspaceToolsets = append(info.WorkspaceToolsets, wi)
 		}
 	}
+	// ★ 插件面板中存在工具的插件分组（source=plugin）——工作区工具集管理弹窗
+	//   候选池：每个有工具的插件一组，组内是该插件注册的工具（含启用状态）。
+	//   数据源 ph.PluginToolsByPlugin（插件名→工具清单）+ reg.IsEnabled（启用状态）。
+	//   （2026-08-17：管理弹窗不再展示宿主核心自举组 plugin-mgmt/toolset-mgmt——
+	//     它们本就是 agent 可用工具；插件工具才是用户可勾选加入/移出的对象。）
+	info.Plugins = pluginGroupsOf(reg, ph, info.WorkspaceToolsets)
 	return info
+}
+
+// pluginGroupsOf 插件面板中存在工具的插件分组（source=plugin，含工具+启用状态）。
+// 过滤条件：插件已注册工具（len(tools)>0）；组名=插件名，标题=插件名（tool-* 语义清晰）。
+// Joined：插件是否已加入工作区工具集（任一工具集 JS 插件条目中 Name 匹配）——
+// 前端据此选择加入方式（未加入→add_plugin；已加入→enable_tool 恢复）。
+func pluginGroupsOf(reg *Registry, ph *PluginHost, workspaceToolsets []WorkspaceToolsetInfo) []BuiltinGroupInfo {
+	if ph == nil || reg == nil {
+		return nil
+	}
+	// 已加入工作区工具集的插件名集合（JS 插件条目：Builtin 为空）
+	joinedPlugins := map[string]bool{}
+	for _, wt := range workspaceToolsets {
+		for _, p := range wt.Plugins {
+			if p.Builtin == "" && p.Name != "" {
+				joinedPlugins[p.Name] = true
+			}
+		}
+	}
+	byPlugin := ph.PluginToolsByPlugin()
+	names := make([]string, 0, len(byPlugin))
+	for n := range byPlugin {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	var groups []BuiltinGroupInfo
+	for _, name := range names {
+		tools := byPlugin[name]
+		if name == "" || len(tools) == 0 {
+			continue // 空名/无工具的插件不展示（空 key 为历史残留注册，无操作对象）
+		}
+		sort.Strings(tools)
+		g := BuiltinGroupInfo{Name: name, Title: name, Desc: pluginPurposeOf(ph, name), Source: "plugin"}
+		g.Joined = joinedPlugins[name]
+		anyOn := false
+		all := true
+		for _, tn := range tools {
+			en := reg.IsEnabled(tn)
+			g.Tools = append(g.Tools, BuiltinToolInfo{Name: tn, Desc: toolShortDesc(reg, tn), Enabled: en})
+			if en {
+				anyOn = true
+			} else {
+				all = false
+			}
+		}
+		g.Enabled = all && anyOn && len(tools) > 0
+		g.Partial = anyOn && !all
+		groups = append(groups, g)
+	}
+	return groups
+}
+
+// pluginPurposeOf 取插件用途描述（Inspect 记录里的 Purpose；磁盘插件 tool-* 有）。
+func pluginPurposeOf(ph *PluginHost, name string) string {
+	for _, rec := range ph.Inspect() {
+		if rec.Name == name && rec.Purpose != "" {
+			return rec.Purpose
+		}
+	}
+	return ""
 }
 
 // BuiltinToolsetOf 派生内置工具集（Toolset 形态，scope=builtin 虚拟）。

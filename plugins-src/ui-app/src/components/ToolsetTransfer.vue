@@ -4,7 +4,7 @@
     <div class="dialog-box ts-transfer-box">
       <div class="dialog-title">
         <span class="dialog-title-main"><SvgIcon name="package" :size="14" /> 管理工作区工具集</span>
-        <span class="dialog-title-sub">builtin · 勾选工具后批量加入 / 移出</span>
+        <span class="dialog-title-sub">插件工具 · 勾选后加入 / 移出工作区工具集</span>
       </div>
       <div class="ts-transfer-body">
         <!-- 左：未加入 -->
@@ -91,35 +91,36 @@
 </template>
 
 <script setup>
-// ToolsetTransfer — 工作区工具集（builtin）穿梭框：未加入 ↔ 已加入 批量管理。
-// props.groups：builtin 全量分组（含工具名/描述）；props.joined：已加入组名数组；
-// props.manualTools：手动加入的工具名数组。
-// 加入/移出走 POST /api/plugins/builtin（组级或工具级），完成后 emit('changed') 通知父级刷新。
+// ToolsetTransfer — 工作区工具集穿梭框：未加入 ↔ 已加入 批量管理。
+// ★ 2026-08-17：数据源从「内置分组（builtin groups）」改为「插件面板中存在工具的
+//   插件分组（props.groups = /api/plugins/builtin 的 plugins 字段，source=plugin）」——
+//   每个有工具的插件一组，组内是其注册的工具（含 enabled=agent 可见性）。
+//   左=插件中未加入（enabled=false）的工具；右=已加入（enabled=true）的工具。
+//   加入：插件未加入工具集 → toolsetEdit add_plugin（tools 白名单=勾选）；
+//        插件已加入 → enable_tool 逐个恢复被摘除工具。
+//   移出：rm_tool（摘除单工具）/ rm_plugin（整插件移出）。
+//   手动工具（_manual）仍走 POST /api/plugins/builtin 工具级开关。
 import { ref, computed, reactive } from 'vue'
 import api from '../api.js'
 
 const props = defineProps({
-  groups: { type: Array, default: () => [] },
-  joined: { type: Array, default: () => [] },
+  groups: { type: Array, default: () => [] },   // 插件分组（source=plugin，含 tools[].enabled）
+  joined: { type: Array, default: () => [] },   // 兼容保留（内置组名，不再用于插件分组判定）
   manualTools: { type: Array, default: () => [] },
 })
 const emit = defineEmits(['close', 'changed'])
 
-const joinedSet = computed(() => new Set(props.joined))
-// ★ source 必须校验：剩余派生组可能与已加入组同名（如 system），
-//   只看组名会把未加入组误判为已加入（历史 bug：未在数量不对）
-const isJoinedGroup = g => g.source === 'builtin' && joinedSet.value.has(g.name)
-// 左（未加入）：非 joined 组全量
+// 左（未加入）：有未启用工具（enabled=false）的插件分组 → 只保留未启用工具
 const leftGroups = computed(() => {
   return props.groups
-    .filter(g => !isJoinedGroup(g))
-    .map(g => ({ ...g, tools: g.tools }))
+    .filter(g => (g.tools || []).some(t => !t.enabled))
+    .map(g => ({ ...g, tools: (g.tools || []).filter(t => !t.enabled) }))
 })
-// 右（已加入）：joined 组的工具
+// 右（已加入）：有已启用工具（enabled=true）的插件分组 → 只保留已启用工具
 const joinedGroups = computed(() => {
   return props.groups
-    .filter(g => isJoinedGroup(g))
-    .map(g => ({ ...g, tools: g.tools }))
+    .filter(g => (g.tools || []).some(t => t.enabled))
+    .map(g => ({ ...g, tools: (g.tools || []).filter(t => t.enabled) }))
 })
 const manualTools = computed(() => props.manualTools)
 
@@ -174,34 +175,68 @@ async function callOnce(fn) {
   }
 }
 
+// 勾选工具加入工作区工具集（按插件分组处理）：
+//   - 插件未加入工具集（g.joined=false）→ add_plugin（tools 白名单=勾选集合）——
+//     插件整体装载，白名单外工具自动摘除（DisabledTools），只加入勾选工具；
+//   - 插件已加入（g.joined=true，工具被摘除）→ enable_tool 逐个恢复。
 async function addSelected() {
-  const names = leftGroups.value
-    .flatMap(g => g.tools)
-    .map(t => t.name)
-    .filter(n => leftSelected[n])
+  const byPlugin = {} // 插件名 → 勾选工具名数组
+  for (const g of leftGroups.value) {
+    const names = (g.tools || []).map(t => t.name).filter(n => leftSelected[n])
+    if (names.length) byPlugin[g.name] = { joined: !!g.joined, names }
+  }
   try {
-    for (const n of names) await callOnce(() => api.builtinPlugins({ tool: n, enabled: true }))
+    for (const [pn, info] of Object.entries(byPlugin)) {
+      if (info.joined) {
+        for (const tn of info.names) {
+          await callOnce(() => api.toolsetEdit({ name: 'default', action: 'enable_tool', plugin_name: pn, tool: tn }))
+        }
+      } else {
+        await callOnce(() => api.toolsetEdit({ name: 'default', action: 'add_plugin', plugin_name: pn, tools: info.names.join(',') }))
+      }
+    }
     emit('changed')
   } catch (e) { /* callOnce 已上报 */ }
 }
+// 勾选工具移出工作区工具集：插件工具 → rm_tool（摘除单工具）；
+// 手动工具（_manual）→ POST /api/plugins/builtin 工具级开关。
 async function removeSelected() {
-  const names = [...joinedGroups.value.flatMap(g => g.tools), ...manualTools.value]
-    .map(n => typeof n === 'string' ? n : n.name)
-    .filter(n => rightSelected[n])
+  const byPlugin = {}
+  for (const g of joinedGroups.value) {
+    const names = (g.tools || []).map(t => t.name).filter(n => rightSelected[n])
+    if (names.length) byPlugin[g.name] = names
+  }
+  const manualNames = manualTools.value.filter(n => rightSelected[n])
   try {
-    for (const n of names) await callOnce(() => api.builtinPlugins({ tool: n, enabled: false }))
+    for (const [pn, names] of Object.entries(byPlugin)) {
+      for (const tn of names) {
+        await callOnce(() => api.toolsetEdit({ name: 'default', action: 'rm_tool', plugin_name: pn, tool: tn }))
+      }
+    }
+    for (const n of manualNames) {
+      await callOnce(() => api.builtinPlugins({ tool: n, enabled: false }))
+    }
     emit('changed')
   } catch (e) { /* callOnce 已上报 */ }
 }
+// 整组加入：插件未加入工具集 → add_plugin（不带 tools = 整插件全部工具加入）；
+// 插件已加入 → enable_tool 逐个恢复。
 async function addGroup(g) {
   try {
-    for (const t of g.tools) await callOnce(() => api.builtinPlugins({ tool: t.name, enabled: true }))
+    if (g.joined) {
+      for (const t of g.tools) {
+        await callOnce(() => api.toolsetEdit({ name: 'default', action: 'enable_tool', plugin_name: g.name, tool: t.name }))
+      }
+    } else {
+      await callOnce(() => api.toolsetEdit({ name: 'default', action: 'add_plugin', plugin_name: g.name }))
+    }
     emit('changed')
   } catch (e) { /* callOnce 已上报 */ }
 }
+// 整组移出：rm_plugin（插件移出工具集，其工具恢复默认过滤）
 async function removeGroup(g) {
   try {
-    for (const t of g.tools) await callOnce(() => api.builtinPlugins({ tool: t.name, enabled: false }))
+    await callOnce(() => api.toolsetEdit({ name: 'default', action: 'rm_plugin', plugin_name: g.name }))
     emit('changed')
   } catch (e) { /* callOnce 已上报 */ }
 }

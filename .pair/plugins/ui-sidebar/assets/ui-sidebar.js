@@ -2968,20 +2968,20 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
     __name: "ToolsetTransfer",
     props: {
       groups: { type: Array, default: () => [] },
+      // 插件分组（source=plugin，含 tools[].enabled）
       joined: { type: Array, default: () => [] },
+      // 兼容保留（内置组名，不再用于插件分组判定）
       manualTools: { type: Array, default: () => [] }
     },
     emits: ["close", "changed"],
     setup(__props, { emit: __emit }) {
       const props = __props;
       const emit = __emit;
-      const joinedSet = vue.computed(() => new Set(props.joined));
-      const isJoinedGroup = (g) => g.source === "builtin" && joinedSet.value.has(g.name);
       const leftGroups = vue.computed(() => {
-        return props.groups.filter((g) => !isJoinedGroup(g)).map((g) => ({ ...g, tools: g.tools }));
+        return props.groups.filter((g) => (g.tools || []).some((t) => !t.enabled)).map((g) => ({ ...g, tools: (g.tools || []).filter((t) => !t.enabled) }));
       });
       const joinedGroups = vue.computed(() => {
-        return props.groups.filter((g) => isJoinedGroup(g)).map((g) => ({ ...g, tools: g.tools }));
+        return props.groups.filter((g) => (g.tools || []).some((t) => t.enabled)).map((g) => ({ ...g, tools: (g.tools || []).filter((t) => t.enabled) }));
       });
       const manualTools = vue.computed(() => props.manualTools);
       const leftSelected = vue.reactive({});
@@ -3035,31 +3035,61 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
         }
       }
       async function addSelected() {
-        const names = leftGroups.value.flatMap((g) => g.tools).map((t) => t.name).filter((n) => leftSelected[n]);
+        const byPlugin = {};
+        for (const g of leftGroups.value) {
+          const names = (g.tools || []).map((t) => t.name).filter((n) => leftSelected[n]);
+          if (names.length) byPlugin[g.name] = { joined: !!g.joined, names };
+        }
         try {
-          for (const n of names) await callOnce(() => api.builtinPlugins({ tool: n, enabled: true }));
+          for (const [pn, info] of Object.entries(byPlugin)) {
+            if (info.joined) {
+              for (const tn of info.names) {
+                await callOnce(() => api.toolsetEdit({ name: "default", action: "enable_tool", plugin_name: pn, tool: tn }));
+              }
+            } else {
+              await callOnce(() => api.toolsetEdit({ name: "default", action: "add_plugin", plugin_name: pn, tools: info.names.join(",") }));
+            }
+          }
           emit("changed");
         } catch (e) {
         }
       }
       async function removeSelected() {
-        const names = [...joinedGroups.value.flatMap((g) => g.tools), ...manualTools.value].map((n) => typeof n === "string" ? n : n.name).filter((n) => rightSelected[n]);
+        const byPlugin = {};
+        for (const g of joinedGroups.value) {
+          const names = (g.tools || []).map((t) => t.name).filter((n) => rightSelected[n]);
+          if (names.length) byPlugin[g.name] = names;
+        }
+        const manualNames = manualTools.value.filter((n) => rightSelected[n]);
         try {
-          for (const n of names) await callOnce(() => api.builtinPlugins({ tool: n, enabled: false }));
+          for (const [pn, names] of Object.entries(byPlugin)) {
+            for (const tn of names) {
+              await callOnce(() => api.toolsetEdit({ name: "default", action: "rm_tool", plugin_name: pn, tool: tn }));
+            }
+          }
+          for (const n of manualNames) {
+            await callOnce(() => api.builtinPlugins({ tool: n, enabled: false }));
+          }
           emit("changed");
         } catch (e) {
         }
       }
       async function addGroup(g) {
         try {
-          for (const t of g.tools) await callOnce(() => api.builtinPlugins({ tool: t.name, enabled: true }));
+          if (g.joined) {
+            for (const t of g.tools) {
+              await callOnce(() => api.toolsetEdit({ name: "default", action: "enable_tool", plugin_name: g.name, tool: t.name }));
+            }
+          } else {
+            await callOnce(() => api.toolsetEdit({ name: "default", action: "add_plugin", plugin_name: g.name }));
+          }
           emit("changed");
         } catch (e) {
         }
       }
       async function removeGroup(g) {
         try {
-          for (const t of g.tools) await callOnce(() => api.builtinPlugins({ tool: t.name, enabled: false }));
+          await callOnce(() => api.toolsetEdit({ name: "default", action: "rm_plugin", plugin_name: g.name }));
           emit("changed");
         } catch (e) {
         }
@@ -3103,7 +3133,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                   _cache[2] || (_cache[2] = vue.createElementVNode(
                     "span",
                     { class: "dialog-title-sub" },
-                    "builtin · 勾选工具后批量加入 / 移出",
+                    "插件工具 · 勾选后加入 / 移出工作区工具集",
                     -1
                     /* CACHED */
                   ))
@@ -3393,7 +3423,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
       };
     }
   };
-  const ToolsetTransfer = /* @__PURE__ */ _export_sfc(_sfc_main$6, [["__scopeId", "data-v-20919f19"]]);
+  const ToolsetTransfer = /* @__PURE__ */ _export_sfc(_sfc_main$6, [["__scopeId", "data-v-fc6ee85a"]]);
   const _hoisted_1$5 = { class: "file-explorer" };
   const _hoisted_2$5 = { class: "explorer-toolbar" };
   const _hoisted_3$5 = { class: "ws-section" };
@@ -3883,9 +3913,11 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
         return n + (((_c = builtinInfo.value) == null ? void 0 : _c.manualTools) || []).length;
       });
       const joinedGroups = vue.computed(() => {
-        var _a, _b;
+        var _a, _b, _c;
         const joined = new Set(((_a = builtinInfo.value) == null ? void 0 : _a.joined) || []);
-        return (((_b = builtinInfo.value) == null ? void 0 : _b.groups) || []).filter((g) => g.source === "builtin" && joined.has(g.name));
+        const bg = (((_b = builtinInfo.value) == null ? void 0 : _b.groups) || []).filter((g) => g.source === "builtin" && joined.has(g.name));
+        const pg = (((_c = builtinInfo.value) == null ? void 0 : _c.plugins) || []).map((g) => ({ ...g, tools: (g.tools || []).filter((t) => t.enabled) })).filter((g) => (g.tools || []).length > 0);
+        return [...bg, ...pg];
       });
       const manualToolNames = vue.computed(() => {
         var _a;
@@ -3900,18 +3932,25 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
         loadBuiltin();
       }
       const joinedTools = vue.computed(() => {
-        var _a, _b, _c;
+        var _a, _b, _c, _d;
         const set = {};
         const joined = new Set(((_a = builtinInfo.value) == null ? void 0 : _a.joined) || []);
         for (const g of ((_b = builtinInfo.value) == null ? void 0 : _b.groups) || []) {
           if (g.source === "builtin" && joined.has(g.name)) for (const t of g.tools) set[t.name] = true;
         }
-        for (const tn of ((_c = builtinInfo.value) == null ? void 0 : _c.manualTools) || []) set[tn] = true;
+        for (const g of ((_c = builtinInfo.value) == null ? void 0 : _c.plugins) || []) {
+          for (const t of g.tools || []) if (t.enabled) set[t.name] = true;
+        }
+        for (const tn of ((_d = builtinInfo.value) == null ? void 0 : _d.manualTools) || []) set[tn] = true;
         return set;
       });
       vue.computed(() => {
         var _a;
         return ((_a = builtinInfo.value) == null ? void 0 : _a.groups) || [];
+      });
+      vue.computed(() => {
+        var _a;
+        return ((_a = builtinInfo.value) == null ? void 0 : _a.plugins) || [];
       });
       function filterTools(tools) {
         const q = tsAddSearch.value.trim().toLowerCase();
@@ -3925,11 +3964,21 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
           console.warn("[toolset] 内置工具包加载失败", e);
         }
       }
-      async function toggleToolsetTool(t) {
+      async function toggleToolsetTool(t, g) {
         try {
-          const enabled = !joinedTools.value[t.name];
-          const res = await api.builtinPlugins({ tool: t.name, enabled });
-          tsMsg.value = (res == null ? void 0 : res.message) || (enabled ? "已添加" : "已移除") + " " + t.name;
+          if (g && g.source === "plugin") {
+            if (!joinedTools.value[t.name]) {
+              const res = await api.toolsetEdit({ name: "default", action: "add_plugin", plugin_name: g.name, tools: t.name });
+              tsMsg.value = (res == null ? void 0 : res.message) || "已加入 " + t.name;
+            } else {
+              const res = await api.toolsetEdit({ name: "default", action: "rm_tool", plugin_name: g.name, tool: t.name });
+              tsMsg.value = (res == null ? void 0 : res.message) || "已移出 " + t.name;
+            }
+          } else {
+            const enabled = !joinedTools.value[t.name];
+            const res = await api.builtinPlugins({ tool: t.name, enabled });
+            tsMsg.value = (res == null ? void 0 : res.message) || (enabled ? "已添加" : "已移除") + " " + t.name;
+          }
           tsMsgErr.value = false;
           await loadBuiltin();
         } catch (err) {
@@ -4214,7 +4263,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                               ),
                               vue.createElementVNode("button", {
                                 class: "ts-btn mini danger",
-                                onClick: ($event) => toggleToolsetTool(t),
+                                onClick: ($event) => toggleToolsetTool(t, g),
                                 title: "移出工作区工具集（该工具对 agent 不可见）"
                               }, "移出", 8, _hoisted_21$3)
                             ], 8, _hoisted_19$3);
@@ -4255,7 +4304,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                           ),
                           vue.createElementVNode("button", {
                             class: "ts-btn mini danger",
-                            onClick: ($event) => toggleToolsetTool(t),
+                            onClick: ($event) => toggleToolsetTool(t, _ctx.g),
                             title: "移出工作区工具集（该工具对 agent 不可见）"
                           }, "移出", 8, _hoisted_25$2)
                         ], 8, _hoisted_23$3);
@@ -4635,7 +4684,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
           vue.createCommentVNode(" 工作区工具集穿梭框（未加入 ↔ 已加入 批量管理） "),
           tsTransferOpen.value ? (vue.openBlock(), vue.createBlock(ToolsetTransfer, {
             key: 2,
-            groups: ((_a = builtinInfo.value) == null ? void 0 : _a.groups) || [],
+            groups: ((_a = builtinInfo.value) == null ? void 0 : _a.plugins) || [],
             joined: ((_b = builtinInfo.value) == null ? void 0 : _b.joined) || [],
             "manual-tools": ((_c = builtinInfo.value) == null ? void 0 : _c.manualTools) || [],
             onClose: _cache[9] || (_cache[9] = ($event) => tsTransferOpen.value = false),
@@ -4645,7 +4694,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
       };
     }
   };
-  const FileExplorer = /* @__PURE__ */ _export_sfc(_sfc_main$5, [["__scopeId", "data-v-84fa7cd4"]]);
+  const FileExplorer = /* @__PURE__ */ _export_sfc(_sfc_main$5, [["__scopeId", "data-v-ce8b2e0a"]]);
   const _hoisted_1$4 = { class: "search-panel" };
   const _hoisted_2$4 = { class: "sp-mode-bar" };
   const _hoisted_3$4 = { class: "sp-field" };
