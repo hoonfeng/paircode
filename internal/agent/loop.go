@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -828,6 +829,11 @@ const maxToolResultChars = 9000
 // 输出前缀稳定性诊断：变化时给出原因（system/tools），稳定时输出哈希供人工对比。
 // 跨 Loop/Run 共享 prevShape：多轮对话间也能定位缓存断裂点。
 func (l *Loop) emitCacheShape(callMsgs []Message, tools []ToolDefinition) {
+	// tools 序列化体积（诊断：tools 精简效果 / provider 缓存 miss 量）
+	toolsBytes := 0
+	if b, err := json.Marshal(tools); err == nil {
+		toolsBytes = len(b)
+	}
 	cur := CaptureShape(systemPromptFromMsgs(callMsgs), tools)
 	tag := fmt.Sprintf("[cache-diag] turn=%d step=%d", l.TurnNo, l.StepNo)
 	cacheDiagStateMu.Lock()
@@ -835,7 +841,7 @@ func (l *Loop) emitCacheShape(callMsgs []Message, tools []ToolDefinition) {
 	cacheDiagPrev = cur
 	cacheDiagStateMu.Unlock()
 	if prev.PrefixHash == "" {
-		log.Printf("%s 首轮前缀 shape system=%s dynamic=%s tools=%s tools_raw=%s tools_n=%d", tag, cur.SystemHash, cur.DynamicHash, cur.ToolsHash, cur.ToolsRawHash, len(tools))
+		log.Printf("%s 首轮前缀 shape system=%s dynamic=%s tools=%s tools_raw=%s tools_n=%d tools_bytes=%d", tag, cur.SystemHash, cur.DynamicHash, cur.ToolsHash, cur.ToolsRawHash, len(tools), toolsBytes)
 	} else {
 		diag := CompareShape(prev, cur)
 		switch {
@@ -845,10 +851,10 @@ func (l *Loop) emitCacheShape(callMsgs []Message, tools []ToolDefinition) {
 				prev.SystemHash, diag.SystemHash,
 				prev.ToolsHash, diag.ToolsHash)
 		case diag.DynamicChanged:
-			log.Printf("%s 动态后缀变化（不影响缓存）system=%s dynamic=%s tools=%s tools_raw=%s tools_n=%d",
-				tag, diag.SystemHash, diag.DynamicHash, diag.ToolsHash, cur.ToolsRawHash, len(tools))
+			log.Printf("%s 动态后缀变化（不影响缓存）system=%s dynamic=%s tools=%s tools_raw=%s tools_n=%d tools_bytes=%d",
+				tag, diag.SystemHash, diag.DynamicHash, diag.ToolsHash, cur.ToolsRawHash, len(tools), toolsBytes)
 		default:
-			log.Printf("%s 前缀稳定 system=%s tools=%s tools_raw=%s tools_n=%d", tag, diag.SystemHash, diag.ToolsHash, cur.ToolsRawHash, len(tools))
+			log.Printf("%s 前缀稳定 system=%s tools=%s tools_raw=%s tools_n=%d tools_bytes=%d", tag, diag.SystemHash, diag.ToolsHash, cur.ToolsRawHash, len(tools), toolsBytes)
 		}
 	}
 }
