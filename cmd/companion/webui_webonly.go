@@ -17,8 +17,13 @@ func init() {
 
 func registerExtraHandlers(mux *http.ServeMux, s *webServer) {
 	mux.HandleFunc("/api/chat/send", s.handleChatSend)
-	mux.HandleFunc("/ws", s.handleWebSocket)
-	mux.HandleFunc("/api/terminal/ws", s.handleTerminalWS)
+	// WebSocket 端点由框架层处理（internal/agent）：/ws 全局事件流、
+	// /api/terminal/ws PTY 终端桥——main 只保留注册（帧实现/连接管理
+	// 全部下沉 internal/agent/wsconn.go + event_ws.go + terminal_ws.go）。
+	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		agent.ServeGlobalEventStreamWS(w, r, agentMgr)
+	})
+	mux.HandleFunc("/api/terminal/ws", agent.ServeTerminalWS)
 	mux.HandleFunc("/api/chat/stop", s.handleChatStop)
 	mux.HandleFunc("/api/chat/answer", s.handleChatAnswer)
 	mux.HandleFunc("/api/chat/approve", s.handleChatApprove)

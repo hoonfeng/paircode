@@ -38,6 +38,35 @@ JS 插件 execute → ctx.binary.exec(tool, args[, {timeout}]) → text
   - 返回 unregister 函数；插件卸载自动注销；重复 path 注册报错
   - 实现：internal/agent/ext_sse.go（ExtSSEMiddleware）+ jsplugin.go ctx.sse；
     浏览器/外部用 EventSource/curl 消费（text/event-stream，逐事件 Flush）
+- `ctx.ws.register(path, fn)` → 注册双向 WebSocket 端点（实时双向通道插件化）：
+  - `fn(conn, params) → cleanup`：连接建立后于 VM 锁内调用一次（可 await）；
+    `conn.send(payload)` 发送（string 直传/其他 JSON 序列化，断开后抛错）、
+    `conn.onMessage(fn)` 注册消息回调（Go 读循环 → VM 锁内调 JS，文本帧
+    尝试 JSON.parse）、`conn.close()` 主动关闭；handler 返回 cleanup（断开时调用）
+  - 返回 unregister 函数；插件卸载自动注销；重复 path 注册报错
+  - 实现：internal/agent/ext_ws.go（ExtWSMiddleware）+ wsconn.go（RFC6455
+    帧实现，从 cmd/companion 下沉）+ jsplugin.go ctx.ws
+  - 宿主端点同样由框架层处理：/ws 全局事件流（event_ws.go）、
+    /api/terminal/ws PTY 桥（terminal_ws.go）——main 只保留路由注册
+
+## 会话状态协议（tool-system 保持 hostTool 的依据）
+
+框架协议工具（update_tasks / ask_user / generate_commit_message / tool_stats /
+cordis_* / toolset_* / history_* 等）**保持宿主实现**——它们绑定会话内存态
+（Loop 计划步骤、审核门、UI 任务面板/进度、对话压缩引用），非纯磁盘编码能力。
+磁盘侧协议（供未来二进制化/外部消费参考）：
+
+| 数据 | 位置 | 格式 |
+|------|------|------|
+| 任务列表 | `.pair/tasks/<id>.json` | 每任务一文件：`{id, subject, description, status, dependencies[], planStepIndex?, convId?, created_at, updated_at}`；全量替换=清旧写新 |
+| 执行计划 | 宿主内存 | update_plan（外层编排 agent 用，未持久化） |
+| 工具统计 | 宿主内存（GetToolStats） | ToolStatsSummary（调用次数/时长/成功失败） |
+| 对话历史 | `.pair/conversations/*.jsonl + index.json` | JSONL 追加（只写不读，压缩时读） |
+| 插件定义 | `.pair/plugins/dynamic.json` / `.pair/toolsets/*.json` | 磁盘插件包 + 工具集固化 |
+
+> 若未来要二进制化 update_tasks：需宿主 TaskManager 改为「磁盘为准 + 每次操作
+> 后内存同步」（mtime 感知），并保证 UI（/api/tasks 读宿主内存）与 agent 视角一致
+> ——改动面大且破坏循环契约，当前不采纳。
 - `ctx.binary.exec(tool, args, {bin})` → opts.bin 指定**其它插件目录的二进制**
   （跨插件共用统一二进制；如各工具组 JS `{bin:"tool-binary"}` 指向统一宿主
   二进制，无需各自编译）

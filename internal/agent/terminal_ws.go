@@ -1,4 +1,8 @@
-// PTY 终端 WebSocket 端点 —— 真正的终端模拟器（浏览器端 xterm.js + 服务端 ConPTY）。
+// ═══════════════════════════════════════════════════════════════
+// terminal_ws.go — PTY 终端 WebSocket 端点（框架层）
+//
+// 从 cmd/companion/terminal_ws.go 下沉（2026-08-16）：终端能力由框架层
+// 提供（agent.ServeTerminalWS），main 只保留一行路由注册。
 //
 // 协议：
 //   客户端发文本帧（JSON 控制消息）：{type:"init", shell:"cmd", cwd:"..."} / {type:"resize", cols:N, rows:N}
@@ -10,10 +14,9 @@
 //   - cwd 路径校验（禁止穿越出工作区）
 //   - PTY 关闭时强制终止子进程
 //   - 并发 PTY 会话数限制（最多 16）
-//
-//go:build windows
+// ═══════════════════════════════════════════════════════════════
 
-package main
+package agent
 
 import (
 	"encoding/json"
@@ -51,7 +54,7 @@ var allowedShells = map[string]bool{
 type ptySession struct {
 	mu     sync.Mutex
 	sess   pty.PTY
-	conn   *wsConn
+	conn   *WSConn
 	closed bool
 	shell  string
 	cols   int
@@ -66,7 +69,7 @@ func (ps *ptySession) writeBinary(data []byte) error {
 	if conn == nil {
 		return nil
 	}
-	return conn.writeBinaryFrame(data)
+	return conn.WriteBinaryFrame(data)
 }
 
 func (ps *ptySession) writeText(data []byte) error {
@@ -76,7 +79,7 @@ func (ps *ptySession) writeText(data []byte) error {
 	if conn == nil {
 		return nil
 	}
-	return conn.writeTextFrame(data)
+	return conn.WriteTextFrame(data)
 }
 
 // close 关闭 PTY 和 WebSocket，原子计数减一。
@@ -97,7 +100,7 @@ func (ps *ptySession) close() {
 		sess.Close()
 	}
 	if conn != nil {
-		conn.writeTextFrame([]byte(`{"type":"closed"}`))
+		conn.WriteTextFrame([]byte(`{"type":"closed"}`))
 		conn.Close()
 	}
 	atomic.AddInt32(&activePTYSessions, -1)
@@ -105,14 +108,16 @@ func (ps *ptySession) close() {
 
 // ─── 处理器 ────────────────────────────────────────────────
 
-func (s *webServer) handleTerminalWS(w http.ResponseWriter, r *http.Request) {
+// ServeTerminalWS 是 /api/terminal/ws 端点处理器（框架层）：
+// xterm.js + ConPTY 双向终端桥。
+func ServeTerminalWS(w http.ResponseWriter, r *http.Request) {
 	// 并发限制
 	if atomic.LoadInt32(&activePTYSessions) >= maxPTYSessions {
 		http.Error(w, "Too many active terminal sessions", http.StatusServiceUnavailable)
 		return
 	}
 
-	conn, err := upgradeWebSocket(w, r)
+	conn, err := UpgradeWS(w, r)
 	if err != nil {
 		return
 	}
@@ -129,9 +134,9 @@ func (s *webServer) handleTerminalWS(w http.ResponseWriter, r *http.Request) {
 
 	// 等待客户端发送 init 消息（文本帧 JSON），15s 超时防泄漏：
 	// 连接后不发 init 的僵尸连接（半开/崩溃）会被清理，避免并发计数永久占满 → 503
-	conn.netConn.SetReadDeadline(time.Now().Add(15 * time.Second))
-	opcode, payload, err := conn.readFrame()
-	conn.netConn.SetReadDeadline(time.Time{})
+	conn.SetReadDeadline(time.Now().Add(15 * time.Second))
+	opcode, payload, err := conn.ReadFrame()
+	conn.SetReadDeadline(time.Time{})
 	if err != nil {
 		atomic.AddInt32(&activePTYSessions, -1)
 		conn.Close()
@@ -294,7 +299,7 @@ func (ps *ptySession) wsReader() {
 			return
 		}
 
-		opcode, payload, err := conn.readFrame()
+		opcode, payload, err := conn.ReadFrame()
 		if err != nil {
 			return
 		}
@@ -343,31 +348,6 @@ func (ps *ptySession) handleTextMessage(payload []byte) {
 	case "close":
 		ps.close()
 	}
-}
-
-// ─── wsConn 扩展：writeBinaryFrame ─────────────────────────
-
-func (c *wsConn) writeBinaryFrame(data []byte) error {
-	// 帧头：FIN=1, opcode=0x2 (binary)
-	c.bw.WriteByte(0x82)
-	n := len(data)
-	switch {
-	case n < 126:
-		c.bw.WriteByte(byte(n))
-	case n < 65536:
-		c.bw.WriteByte(126)
-		c.bw.WriteByte(byte(n >> 8))
-		c.bw.WriteByte(byte(n))
-	default:
-		c.bw.WriteByte(127)
-		for i := 5; i >= 0; i-- {
-			c.bw.WriteByte(0)
-		}
-		c.bw.WriteByte(byte(n >> 8))
-		c.bw.WriteByte(byte(n))
-	}
-	c.bw.Write(data)
-	return c.bw.Flush()
 }
 
 // ─── Shell 辅助 ──────────────────────────────────────────

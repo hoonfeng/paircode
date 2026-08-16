@@ -880,6 +880,8 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 			ctxObj.Set("bash", p.buildBashService(pc))
 		case "sse":
 			ctxObj.Set("sse", p.buildSSEService(pc))
+		case "ws":
+			ctxObj.Set("ws", p.buildWSService(pc))
 		case "logger":
 			ctxObj.Set("logger", p.buildLoggerService())
 		case "timer":
@@ -1026,6 +1028,46 @@ func (p *jsPluginAdapter) buildFSService(pc *PluginContext) goja.Value {
 		}
 		return goja.Undefined()
 	})
+	// grep：正则内容搜索（复用 search_content 实现）。grep(pattern, opts?)
+	// opts = {path, glob, case_insensitive, max_results}；返回结果文本（含统计行）。
+	fs.Set("grep", func(call goja.FunctionCall) goja.Value {
+		pattern := call.Argument(0).String()
+		opts := map[string]any{}
+		if a := call.Argument(1); a != nil && !goja.IsUndefined(a) && !goja.IsNull(a) {
+			if o, ok := a.Export().(map[string]any); ok {
+				opts = o
+			}
+		}
+		args := map[string]any{"pattern": pattern}
+		for k, v := range opts {
+			args[k] = v
+		}
+		out, err := searchContentHandler(root)(context.Background(), args)
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return vm.ToValue(out)
+	})
+	// glob：通配符查找文件（复用 search_files 实现）。glob(pattern, opts?)
+	// opts = {path, language, max_results}；返回结果文本（含统计行）。
+	fs.Set("glob", func(call goja.FunctionCall) goja.Value {
+		pattern := call.Argument(0).String()
+		opts := map[string]any{}
+		if a := call.Argument(1); a != nil && !goja.IsUndefined(a) && !goja.IsNull(a) {
+			if o, ok := a.Export().(map[string]any); ok {
+				opts = o
+			}
+		}
+		args := map[string]any{"pattern": pattern}
+		for k, v := range opts {
+			args[k] = v
+		}
+		out, err := searchFilesHandler(root)(context.Background(), args)
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return vm.ToValue(out)
+	})
 	return vm.ToValue(fs)
 }
 
@@ -1151,6 +1193,136 @@ func (p *jsPluginAdapter) buildSSEService(pc *PluginContext) goja.Value {
 		return vm.ToValue(unreg)
 	})
 	return vm.ToValue(sse)
+}
+
+// buildWSService 双向 WebSocket 服务（ctx.ws）：注册双向实时端点。
+// JS 用法（inject 声明 'ws'）：
+//   ctx.ws.register(path, (conn, params) => {
+//     conn.onMessage((payload) => { conn.send({echo: payload}) })   // 收消息
+//     conn.send('hello')                                            // 发消息（跨调用可存 conn）
+//     return () => { /* 断连清理 */ }
+//   })
+// conn 方法：
+//   - send(payload)：发送文本帧（string 直传；其他值 JSON 序列化）。
+//     连接断开后抛错。
+//   - onMessage(fn)：注册消息回调（Go 读循环 → VM 锁内调用）。
+//     文本帧尝试 JSON.parse → 对象/数组/数字；解析失败给字符串。
+//   - close()：发送 close 帧并关闭连接。
+// 生命周期：handler(conn, params) 在连接建立后于 VM 锁内调用一次（可
+// await）；返回函数为 cleanup，连接断开时调用。连接断开后 send 抛错。
+func (p *jsPluginAdapter) buildWSService(pc *PluginContext) goja.Value {
+	vm := p.vm
+	ws := vm.NewObject()
+	ws.Set("register", func(call goja.FunctionCall) goja.Value {
+		path := call.Argument(0).String()
+		if path == "" {
+			panic(vm.NewGoError(fmt.Errorf("ctx.ws.register: path 不能为空")))
+		}
+		handlerFn, ok := goja.AssertFunction(call.Argument(1))
+		if !ok {
+			panic(vm.NewGoError(fmt.Errorf("ctx.ws.register: 第二个参数必须是函数 (conn, params) => cleanup")))
+		}
+		// 宿主 Go 侧 WS handler（连接建立后在 ServeExtWS goroutine 中执行）
+		goH := func(conn *WSConn, params map[string]string, done chan struct{}) func() {
+			// JS 侧连接对象
+			connObj := vm.NewObject()
+			var msgCb goja.Callable // onMessage 回调（读循环触发，VM 锁内调用）
+
+			// send：文本帧（string 直传 / 其他 JSON 序列化）；断开抛错
+			connObj.Set("send", func(call goja.FunctionCall) goja.Value {
+				var data []byte
+				if a := call.Argument(0); a != nil && !goja.IsUndefined(a) && !goja.IsNull(a) {
+					exp := a.Export()
+					if s, isStr := exp.(string); isStr {
+						data = []byte(s)
+					} else if b, err := json.Marshal(exp); err == nil {
+						data = b
+					} else {
+						data = []byte(fmt.Sprint(exp))
+					}
+				}
+				if err := conn.WriteTextFrame(data); err != nil {
+					panic(vm.NewGoError(fmt.Errorf("ws send 失败: %w", err)))
+				}
+				return goja.Undefined()
+			})
+			// close：发 close 帧并关闭
+			connObj.Set("close", func(call goja.FunctionCall) goja.Value {
+				_ = conn.WriteCloseFrame()
+				_ = conn.Close()
+				return goja.Undefined()
+			})
+			// onMessage：注册消息回调（先于读循环启动，无竞态）
+			connObj.Set("onMessage", func(call goja.FunctionCall) goja.Value {
+				fn, ok := goja.AssertFunction(call.Argument(0))
+				if !ok {
+					panic(vm.NewGoError(fmt.Errorf("ctx.ws onMessage: 参数必须是函数 (payload) => void")))
+				}
+				msgCb = fn
+				return goja.Undefined()
+			})
+			// handler 在 VM 锁内调用一次（同步语义，可 await）
+			var cleanupFn func()
+			p.withLock(func() {
+				ret, err := handlerFn(goja.Undefined(), connObj, vm.ToValue(params))
+				if err != nil {
+					fmt.Printf("[js-plugin:%s] ctx.ws %s handler 执行失败: %s\n", p.def.id, path, jsErrorText(err))
+					return
+				}
+				if ret != nil && !goja.IsUndefined(ret) && !goja.IsNull(ret) {
+					if retObj, isObj := ret.(*goja.Object); isObj {
+						if cf, isFn := goja.AssertFunction(retObj); isFn {
+							cleanupFn = func() {
+								p.withLock(func() { _, _ = cf(goja.Undefined()) })
+							}
+							return
+						}
+					}
+					// 非函数返回值：drain Promise（async handler）
+					_, _ = jsResultToText(vm, ret)
+				}
+			})
+			// 读循环 goroutine：读帧 → 锁内调 msgCb；断开 → close(done)
+			go func() {
+				defer close(done)
+				for {
+					op, payload, err := conn.ReadFrame()
+					if err != nil {
+						return
+					}
+					// 文本帧尝试 JSON 解析 → JS 值；失败给字符串。二进制帧给字符串（UTF-8）。
+					var data any
+					if op == 0x1 {
+						if err := json.Unmarshal(payload, &data); err != nil {
+							data = string(payload)
+						}
+					} else {
+						data = string(payload)
+					}
+					p.withLock(func() {
+						if msgCb != nil {
+							if _, cbErr := msgCb(goja.Undefined(), vm.ToValue(data)); cbErr != nil {
+								fmt.Printf("[js-plugin:%s] ctx.ws %s onMessage 回调失败: %s\n", p.def.id, path, jsErrorText(cbErr))
+							}
+						}
+					})
+				}
+			}()
+			return cleanupFn
+		}
+		disposer, err := RegisterExtWS(path, goH)
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		// 返回 unregister 函数；插件卸载经 addCleanup 自动注销
+		unreg := func(call goja.FunctionCall) goja.Value {
+			disposer()
+			return goja.Undefined()
+		}
+		p.addCleanup(disposer)
+		return vm.ToValue(unreg)
+	})
+	return vm.ToValue(ws)
 }
 
 // buildLoggerService 日志服务（ctx.logger(scope)）：cordis 语义，
@@ -1542,7 +1714,7 @@ func (h *PluginHost) checkInjects(def *jsPluginDef) error {
 // hasService 判断宿主是否提供某服务（静态服务键 + 动态 ctx.provide 服务）。
 func (h *PluginHost) hasService(name string) bool {
 	switch name {
-	case "fs", "web", "bash", "sse", "logger", "timer", "tools", "events", "store", "app", "workspaceRoot":
+	case "fs", "web", "bash", "sse", "ws", "logger", "timer", "tools", "events", "store", "app", "workspaceRoot":
 		return true
 	}
 	return h.ctx.Get(name) != nil
@@ -1550,7 +1722,7 @@ func (h *PluginHost) hasService(name string) bool {
 
 // availableServices 宿主可用服务清单（供报错引导/文档展示）。
 func (h *PluginHost) availableServices() []string {
-	names := []string{"fs", "web", "bash", "sse", "logger", "timer", "tools", "events", "store", "app", "workspaceRoot"}
+	names := []string{"fs", "web", "bash", "sse", "ws", "logger", "timer", "tools", "events", "store", "app", "workspaceRoot"}
 	h.ctx.servicesMu.RLock()
 	for n := range h.ctx.services {
 		names = append(names, n)
@@ -2111,6 +2283,7 @@ func (h *PluginHost) DefineJSCodeVersioned(code, language, purpose, dir, clientC
 		code:       js, // 存转译后的 JS（运行时 goja 直接执行）
 		clientCode: clientCode,
 		lang:       lang,
+		dir:        dir, // 插件目录（ctx.binary 据此定位 bin/<name>.exe 与 assets/）
 		version:    fmt.Sprintf("v%d", verNo+1),
 		status:     PluginStopped,
 		createdAt:  time.Now(),

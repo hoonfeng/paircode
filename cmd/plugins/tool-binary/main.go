@@ -61,6 +61,7 @@ func main() {
 
 	reg := agent.NewRegistry()
 	agent.RegisterDefaultTools(reg, root)
+	agent.RegisterRunCode(reg, root) // run_code（Code Mode：node 嵌套调度 + 外部进程）
 	for name := range excludedTools {
 		reg.Unregister(name)
 	}

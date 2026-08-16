@@ -361,6 +361,9 @@ func displayPath(root, p string) string {
 // registerRunCode 注册 run_code 工具：执行一段代码（对齐 harness Code Mode）。
 // Go 侧简化版：把 code 写入临时文件，按语言执行并返回 stdout/stderr。
 // ★node 语言含 tools. 调用时走 goja 宿主内嵌套工具调度（见 runCodeNested）。
+// RegisterRunCode 注册 run_code 工具（统一二进制承载时导出入口）。
+func RegisterRunCode(r *Registry, root string) { registerRunCode(r, root) }
+
 func registerRunCode(r *Registry, root string) {
 	r.Register(&Tool{
 		Name: "run_code",
