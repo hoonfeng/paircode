@@ -1,0 +1,8 @@
+{
+  "main": "index.js",
+  "name": "tool-debug",
+  "purpose": "调试工具（debug_inject_log/run_capture/analyze_output/parse_stack/cleanup_logs/watch/evaluate_session）（自动生成，迁移自内置 Go 工具组）",
+  "scope": "global",
+  "type": "plugin",
+  "version": "1.0.0"
+}

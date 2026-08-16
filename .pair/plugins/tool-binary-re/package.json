@@ -1,0 +1,8 @@
+{
+  "main": "index.js",
+  "name": "tool-binary-re",
+  "purpose": "二进制正则（binary_strings/find/patch/info/hash/entropy）（自动生成，迁移自内置 Go 工具组）",
+  "scope": "global",
+  "type": "plugin",
+  "version": "1.0.0"
+}
