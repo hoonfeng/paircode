@@ -56,7 +56,7 @@
 
 <script setup>
 import { ref, nextTick, watch } from 'vue'
-import { dialogState } from '../main.js'
+import { dialogState } from '../ui-state.js'
 
 const promptInputRef = ref(null)
 

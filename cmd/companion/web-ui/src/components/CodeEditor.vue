@@ -26,7 +26,7 @@ import { xml } from '@codemirror/lang-xml'
 import { sql } from '@codemirror/lang-sql'
 import { indentWithTab } from '@codemirror/commands'
 import { oneDark } from '@codemirror/theme-one-dark'
-import { state } from '../main.js'
+import { state } from '../ui-state.js'
 import api from '../api.js'
 import FindPanel from './FindPanel.vue'
 

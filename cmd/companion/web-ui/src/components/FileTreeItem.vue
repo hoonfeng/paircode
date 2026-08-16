@@ -37,7 +37,7 @@
 
 <script setup>
 import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
-import { state } from '../main.js'
+import { state } from '../ui-state.js'
 import api from '../api.js'
 import SvgIcon from './SvgIcon.vue'
 import ContextMenu from './ContextMenu.vue'

@@ -27,7 +27,7 @@
 
 <script setup>
 import { ref, computed, inject, onMounted, onUnmounted } from 'vue'
-import { state } from '../main.js'
+import { state } from '../ui-state.js'
 import api from '../api.js'
 
 const menus = [

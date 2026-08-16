@@ -180,7 +180,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick, reactive } from 'vue'
-import { state } from '../main.js'
+import { state } from '../ui-state.js'
 import api from '../api.js'
 import FileTreeItem from './FileTreeItem.vue'
 

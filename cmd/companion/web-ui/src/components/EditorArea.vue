@@ -81,7 +81,7 @@
 <script setup>
 import { computed, ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { undo, redo } from '@codemirror/commands'
-import { state } from '../main.js'
+import { state } from '../ui-state.js'
 import api from '../api.js'
 import SvgIcon from './SvgIcon.vue'
 import CodeEditor from './CodeEditor.vue'

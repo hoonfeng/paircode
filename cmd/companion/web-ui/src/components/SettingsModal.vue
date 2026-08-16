@@ -337,10 +337,10 @@
 
 <script setup>
 import { ref, reactive, onMounted, watch, computed } from 'vue'
-import { state } from '../main.js'
+import { state } from '../ui-state.js'
 import api from '../api.js'
 import SvgIcon from './SvgIcon.vue'
-import { applyTheme } from '../main.js'
+import { applyTheme } from '../ui-state.js'
 
 const emit = defineEmits(['close'])
 const activeTab = ref('ai')

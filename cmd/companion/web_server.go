@@ -358,6 +358,32 @@ func startWebUI(port int) {
 	// ★ 预热 system prompt 编译缓存（启动时在后台线程中预热，不阻塞主流程）
 	go agent.PromptCacheWarmer.WarmUp(buildWebSystemPrompt)
 
+	// ── 插件资产静态服务（全 UI 插件化）──
+	// /plugins-assets/<name>/<file>：插件包（<InstallDir>/.pair/plugins/<name>/）
+	// 内的静态资产（如 ui-app 插件的 UI bundle：plugins-assets/ui-app/ui-app.js）。
+	// client 半经此 URL 加载 Vite 提前编译的产物（运行时零编译）。
+	mux.HandleFunc("/plugins-assets/", func(w http.ResponseWriter, r *http.Request) {
+		rest := strings.TrimPrefix(r.URL.Path, "/plugins-assets/")
+		parts := strings.Split(rest, "/")
+		if len(parts) < 2 || parts[0] == "" || strings.Contains(parts[0], "..") {
+			http.NotFound(w, r)
+			return
+		}
+		rel := filepath.Join(parts[1:]...)
+		if rel == "" || strings.Contains(rel, "..") {
+			http.NotFound(w, r)
+			return
+		}
+		base := filepath.Clean(agent.GlobalPluginsPath())
+		p := filepath.Join(base, parts[0], rel)
+		if !strings.HasPrefix(p, base+string(os.PathSeparator)) {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		http.ServeFile(w, r, p)
+	})
+
 	// ── 静态文件 ──
 	// ★ 一切皆插件：前端产物支持磁盘优先（WEB_DIR 环境变量 > exe 旁 web/ 目录），
 	//   fallback 内嵌（//go:embed web-ui/dist）。

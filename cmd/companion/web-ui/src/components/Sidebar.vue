@@ -19,7 +19,7 @@
 
 <script setup>
 import { computed, inject, ref } from 'vue'
-import { state } from '../main.js'
+import { state } from '../ui-state.js'
 import FileExplorer from './FileExplorer.vue'
 import SearchPanel from './SearchPanel.vue'
 import GitPanel from './GitPanel.vue'

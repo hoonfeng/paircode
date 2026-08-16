@@ -88,7 +88,7 @@
 
 <script setup>
 import { ref, computed, inject } from 'vue'
-import { state } from '../main.js'
+import { state } from '../ui-state.js'
 import api from '../api.js'
 import SvgIcon from './SvgIcon.vue'
 

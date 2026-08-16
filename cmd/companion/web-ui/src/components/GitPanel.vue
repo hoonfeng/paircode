@@ -311,7 +311,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import SvgIcon from './SvgIcon.vue'
 import Modal from './Modal.vue'
-import { state } from '../main.js'
+import { state } from '../ui-state.js'
 import api from '../api.js'
 
 // ─── 状态 ─────────────────────────────────────────────────────

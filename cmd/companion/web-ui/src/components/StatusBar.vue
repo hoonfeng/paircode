@@ -31,7 +31,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { state } from '../main.js'
+import { state } from '../ui-state.js'
 import SvgIcon from './SvgIcon.vue'
 import api from '../api.js'
 import { mountListSlot } from '../plugin-runtime.js'

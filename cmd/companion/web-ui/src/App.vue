@@ -74,7 +74,7 @@
 </template>
 <script setup>
 import { ref, reactive, computed, watch, onMounted, onUnmounted, provide, nextTick } from 'vue'
-import { state, savePersistentState, loadPersistentState, applyTheme } from './main.js'
+import { state, savePersistentState, loadPersistentState, applyTheme } from './ui-state.js'
 import api from './api.js'
 import { processAgentEvent, processAgentDone, processStatus, getConvCtxStats } from './agent-events.js'
 import { useSingleSlot, isOverlayActive, syncClientHalves, startPolling, mountListSlot, registerBuiltinSlot } from './plugin-runtime.js'

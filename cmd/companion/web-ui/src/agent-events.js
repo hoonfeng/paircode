@@ -7,7 +7,7 @@
 // - UI 相关回调（scrollToBottom/loadWsTokenStats/autoNameConv/saveConvMsg/onPlanUpdate）通过 setGlobalCtx 注册
 // - RightPanel 在 onMounted 调用 setGlobalCtx 注册回调；App.vue 的 WebSocket onmessage 调用 processAgentEvent
 
-import { state } from './main.js'
+import { state } from './ui-state.js'
 import { reactive } from 'vue'
 
 // ─── 按 convId 存储运行时状态（非响应式，普通对象）──

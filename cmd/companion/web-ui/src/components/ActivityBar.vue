@@ -20,7 +20,7 @@
 
 <script setup>
 import { inject, onMounted, onUnmounted, ref } from 'vue'
-import { state } from '../main.js'
+import { state } from '../ui-state.js'
 import SvgIcon from './SvgIcon.vue'
 import { mountListSlot } from '../plugin-runtime.js'
 

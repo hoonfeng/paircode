@@ -46,7 +46,14 @@ import { ref, nextTick } from 'vue'
 
 // ─── 运行中的 client 半实例 ──────────────────────────────────
 // instances: [{ name, defId, source, status, error?, onHandlers: Map<event, [fn]> }]
-const instances = []
+// ★ 跨副本共享注册表（2026-08-16 全 UI 插件化）：壳与 UI bundle 各自打包本模块时，
+//   instances/clientSlots/clientPanels 必须指向同一数组（window.__SLOT_REGISTRY），
+//   否则外部插件（壳侧装载）与 bundle 内组件（UI bundle 侧）看到两张分裂的装配表，
+//   槽位占用/渲染互相不可见。对齐参考项目单例 SlotRegistry 语义。
+const __registry = (typeof window !== 'undefined')
+  ? (window.__SLOT_REGISTRY = window.__SLOT_REGISTRY || { instances: [], clientSlots: [], clientPanels: [] })
+  : { instances: [], clientSlots: [], clientPanels: [] }
+const instances = __registry.instances
 
 // ─── 事件轮询状态 ────────────────────────────────────────────
 let pollTimer = null
@@ -55,7 +62,8 @@ let pollInterval = 2000
 
 // ─── 面板注册表 ──────────────────────────────────────────────
 // panels: [{ id, title, icon, render, pluginName }]
-export const clientPanels = []
+// ★ 共享数组（见上方 __registry 说明）：跨壳/UI bundle 副本统一
+export const clientPanels = __registry.clientPanels
 // 面板容器元素注册（PluginPanel 挂载后调用）
 let panelMountFn = null
 
@@ -64,7 +72,8 @@ let panelMountFn = null
 // 宿主预定义 slotId：'statusbar'（底部状态栏）、'chat'（对话面板，RightPanel rp-body 整区）。
 // 占用者选择（getSlotOwner/setSlotOwner）持久化 localStorage；
 // owner = '' 表示使用内置组件。
-export const clientSlots = []
+// ★ 共享数组（见上方 __registry 说明）：跨壳/UI bundle 副本统一
+export const clientSlots = __registry.clientSlots
 const slotOwnerKey = (id) => 'paircode-slot-' + id
 
 // ─── 内置槽位注册表（一切皆插件：内置 UI 区域 = 内置默认实现，与插件占用统一装配）───
