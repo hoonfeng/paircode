@@ -122,7 +122,12 @@ onUnmounted(() => {
 <style scoped>
 .app-root {
   display: grid;
-  grid-template-columns: 48px auto 1fr auto;
+  /* ★ 列保护：编辑器列 minmax(340px,1fr) 保证主区不被右侧/侧边栏挤压；
+     右侧列 var(--right-w) 由 ui-right-panel 包（拖拽/初始化）同步，
+     宿主与 bundle 根宽度一致（无空余）。--right-w = rpw+205
+     (chat rpw + conv 200 + resizer/border 5)，rpw 上限 360 → 右侧 ≤565px，
+     1280 窗口编辑器 ≥ 1280-48-280-565 = 387px。 */
+  grid-template-columns: 48px auto minmax(340px, 1fr) var(--right-w, 525px);
   grid-template-rows: 30px 1fr 22px;
   width: 100%; height: 100%;
   background: var(--bg-primary);

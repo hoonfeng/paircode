@@ -166,23 +166,22 @@ export const showHelpWrapper = computed({
 
 // 面板尺寸（editor 包底部面板 / right-panel 包右侧面板 / sidebar 包侧栏）
 export const bottomPanelHeight = ref(180)
-export const rightPanelWidth = ref(380)
+export const rightPanelWidth = ref(320)
 export const sidebarWidth = ref(280)
 
 // 面板尺寸持久化（原 App.vue loadPanelSize/savePanelSize）
 export function loadPanelSize() {
   try {
     const d = JSON.parse(localStorage.getItem('paircode-panel-size') || '{}')
-    // ★ 右侧面板宽度上限 520：desktop 1280 窗口下 600 宽（含 255 附加
-    //    = 855px）会把 main-area（grid 1fr）挤压到 ~97px → 终端/xterm
-    //    挤成 98px 窄条（终端只显示 w 的根因）。cap 后右侧最多
-    //    520+255=775px，保证主区 ≥ ~350px。
-    if (d.rpw) rightPanelWidth.value = Math.min(parseFloat(d.rpw) || 380, 520)
-    if (d.bph) bottomPanelHeight.value = d.bph
+    // ★ 右侧面板宽度 clamp [260,360]：右侧总宽 = rpw + ConvSidebar(200) +
+    //   resizer/border(5) = 465~565px，1280 窗口编辑器 ≥ 387px。
+    //   旧残留 rpw 可能 520+（右侧 775px 挤压编辑器到 ~177px 的历史坑）。
+    if (d.rpw) rightPanelWidth.value = Math.max(260, Math.min(parseFloat(d.rpw) || 320, 360))
+    if (d.bph) bottomPanelHeight.value = Math.max(120, Math.min(parseFloat(d.bph) || 180, 500))
   } catch {}
   try {
     const sw = localStorage.getItem('paircode-sidebar-width')
-    if (sw) sidebarWidth.value = parseInt(sw, 10)
+    if (sw) sidebarWidth.value = Math.min(Math.max(parseInt(sw, 10) || 280, 160), 480)
   } catch {}
 }
 export function savePanelSize() {
@@ -295,7 +294,9 @@ export function loadPersistentState() {
     const data = JSON.parse(raw)
     if (!data || !data.version) return
 
-    if (data.activeActivity) state.activeActivity = data.activeActivity
+    // ★ 不恢复 activeActivity：活动栏切换成本极低，且旧 localStorage 残留
+    //   'plugins'/'marketplace' 等会让侧边栏显示工具集/占位（用户预期
+    //   每次打开是文件树）。默认每次 explorer。
     if (typeof data.sidebarVisible === 'boolean') state.sidebarVisible = data.sidebarVisible
     if (typeof data.rightPanelVisible === 'boolean') state.rightPanelVisible = data.rightPanelVisible
     if (typeof data.bottomPanelVisible === 'boolean') state.bottomPanelVisible = data.bottomPanelVisible

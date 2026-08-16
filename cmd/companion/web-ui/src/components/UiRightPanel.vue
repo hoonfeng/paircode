@@ -1,7 +1,7 @@
 <template>
   <div class="right-container"
        :class="{ 'focus-mode': state.focusMode, 'panel-only': panelMode }"
-       :style="(state.focusMode || panelMode) ? {} : { width: (rightPanelWidth + 4 + 1 + 250) + 'px' }">
+       :style="(state.focusMode || panelMode) ? {} : { width: (rightPanelWidth + 4 + 1 + 200) + 'px' }">
     <div v-if="!panelMode && !state.focusMode" class="right-panel-resizer"
          @mousedown.prevent="startRightResize"></div>
     <RightPanel :panel-mode="panelMode" />
@@ -17,6 +17,14 @@ import RightPanel from './RightPanel.vue'
 
 const panelMode = typeof window !== 'undefined' && window.__DESKTOP_PANEL_MODE__ === true
 
+// ★ 同步壳 grid 列 4 宽度（ShellApp: var(--right-w)）：宿主与 bundle 根
+//   宽度一致，拖拽时实时更新，避免宿主/内容 87px 空余（历史坑）。
+const TOTAL_EXTRA = 4 + 1 + 200 // resizer + border + ConvSidebar 200
+const syncRightWidth = () => {
+  document.documentElement.style.setProperty('--right-w', (rightPanelWidth.value + TOTAL_EXTRA) + 'px')
+}
+syncRightWidth()
+
 let dragging = false
 let startX = 0, startW = 0
 
@@ -27,13 +35,17 @@ const startRightResize = (e) => {
 }
 const onRightMove = (e) => {
   if (!dragging) return
-  rightPanelWidth.value = Math.max(260, Math.min(900, startW + (startX - e.clientX)))
+  // ★ 上限 400：右侧总宽 ≤ 605px（400+205），1280 窗口编辑器 ≥ 347px。
+  //   拖拽到 900（旧值）→ 右侧 1105px → 编辑器被挤到负值/溢出。
+  rightPanelWidth.value = Math.max(260, Math.min(400, startW + (startX - e.clientX)))
+  syncRightWidth()
 }
 const stopRightResize = () => {
   dragging = false
   document.removeEventListener('mousemove', onRightMove)
   document.removeEventListener('mouseup', stopRightResize)
   savePanelSize()
+  syncRightWidth()
 }
 </script>
 

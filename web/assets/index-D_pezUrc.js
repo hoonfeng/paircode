@@ -1,7 +1,7 @@
 (function() {
   "use strict";
   var __vite_style__ = document.createElement("style");
-  __vite_style__.textContent = "\n.app-root[data-v-64a6077d] {\n  display: grid;\n  grid-template-columns: 48px auto 1fr auto;\n  grid-template-rows: 30px 1fr 22px;\n  width: 100%; height: 100%;\n  background: var(--bg-primary);\n  color: var(--text-primary);\n  overflow: hidden;\n  font-family: var(--font-ui);\n}\n/* ★ 桌面端面板独立模式：只渲染右侧面板，占满整个窗口 */\n.app-root.panel-only[data-v-64a6077d] {\n  grid-template-columns: 1fr;\n  grid-template-rows: 1fr;\n}\n.app-root.panel-only .right-container[data-v-64a6077d] {\n  grid-column: 1; grid-row: 1;\n  width: 100% !important;\n  height: 100%;\n}\n/* 整区替换槽位（single）宿主：与内置区域同 grid 位置/尺寸 */\n.plugin-area-titlebar[data-v-64a6077d] { grid-column: 1 / -1; grid-row: 1; height: 30px;\n}\n.plugin-area-activitybar[data-v-64a6077d] { grid-column: 1; grid-row: 2; width: 48px;\n}\n.plugin-area-sidebar[data-v-64a6077d] { grid-column: 2; grid-row: 2; height: 100%; overflow: hidden;\n}\n.main-area[data-v-64a6077d] {\n  grid-column: 3; grid-row: 2;\n  display: flex; flex-direction: column; min-width: 0; overflow: hidden;\n}\n.right-container[data-v-64a6077d] {\n  grid-column: 4; grid-row: 2;\n  display: flex; flex-direction: row; overflow: hidden; position: relative;\n}\n.right-container.focus-mode[data-v-64a6077d] { grid-column: 3 / -1;\n}\n.app-statusbar-host[data-v-64a6077d] { grid-column: 1 / -1; grid-row: 3; z-index: 30; height: 22px;\n}\n.plugin-slot-host[data-v-64a6077d] { height: 100%; overflow: hidden;\n}\n/* ★ 插件渲染的子元素必须撑满宿主（bundle 根 auto 宽度不随宿主 grid 拉伸——\n   focus-mode 下宿主被 grid 拉到 3/-1 全宽，子元素保持内容宽 → 右侧大片空余） */\n.plugin-slot-host.right-container[data-v-64a6077d] > * { width: 100%; min-width: 0;\n}\n/* modals 槽位：fixed 全屏浮层容器（不占 grid 格） */\n.modals-host[data-v-64a6077d] { position: fixed; inset: 0; z-index: 200; pointer-events: none;\n}\n.modals-host[data-v-64a6077d] > * { pointer-events: auto;\n}\n.modals-empty[data-v-64a6077d] { display: none;\n}\n/* 空态占位（区域插件未装配时显示） */\n.slot-empty[data-v-64a6077d] {\n  display: flex; align-items: center; justify-content: center;\n  color: var(--text-muted); font-size: 12px;\n  background: var(--bg-primary);\n  border: 1px dashed var(--border-color);\n  min-height: 0;\n}\n/*$vite$:1*/";
+  __vite_style__.textContent = "\n.app-root[data-v-acd4c540] {\n  display: grid;\n  /* ★ 列保护：编辑器列 minmax(340px,1fr) 保证主区不被右侧/侧边栏挤压；\n     右侧列 var(--right-w) 由 ui-right-panel 包（拖拽/初始化）同步，\n     宿主与 bundle 根宽度一致（无空余）。--right-w = rpw+205\n     (chat rpw + conv 200 + resizer/border 5)，rpw 上限 360 → 右侧 ≤565px，\n     1280 窗口编辑器 ≥ 1280-48-280-565 = 387px。 */\n  grid-template-columns: 48px auto minmax(340px, 1fr) var(--right-w, 525px);\n  grid-template-rows: 30px 1fr 22px;\n  width: 100%; height: 100%;\n  background: var(--bg-primary);\n  color: var(--text-primary);\n  overflow: hidden;\n  font-family: var(--font-ui);\n}\n/* ★ 桌面端面板独立模式：只渲染右侧面板，占满整个窗口 */\n.app-root.panel-only[data-v-acd4c540] {\n  grid-template-columns: 1fr;\n  grid-template-rows: 1fr;\n}\n.app-root.panel-only .right-container[data-v-acd4c540] {\n  grid-column: 1; grid-row: 1;\n  width: 100% !important;\n  height: 100%;\n}\n/* 整区替换槽位（single）宿主：与内置区域同 grid 位置/尺寸 */\n.plugin-area-titlebar[data-v-acd4c540] { grid-column: 1 / -1; grid-row: 1; height: 30px;\n}\n.plugin-area-activitybar[data-v-acd4c540] { grid-column: 1; grid-row: 2; width: 48px;\n}\n.plugin-area-sidebar[data-v-acd4c540] { grid-column: 2; grid-row: 2; height: 100%; overflow: hidden;\n}\n.main-area[data-v-acd4c540] {\n  grid-column: 3; grid-row: 2;\n  display: flex; flex-direction: column; min-width: 0; overflow: hidden;\n}\n.right-container[data-v-acd4c540] {\n  grid-column: 4; grid-row: 2;\n  display: flex; flex-direction: row; overflow: hidden; position: relative;\n}\n.right-container.focus-mode[data-v-acd4c540] { grid-column: 3 / -1;\n}\n.app-statusbar-host[data-v-acd4c540] { grid-column: 1 / -1; grid-row: 3; z-index: 30; height: 22px;\n}\n.plugin-slot-host[data-v-acd4c540] { height: 100%; overflow: hidden;\n}\n/* ★ 插件渲染的子元素必须撑满宿主（bundle 根 auto 宽度不随宿主 grid 拉伸——\n   focus-mode 下宿主被 grid 拉到 3/-1 全宽，子元素保持内容宽 → 右侧大片空余） */\n.plugin-slot-host.right-container[data-v-acd4c540] > * { width: 100%; min-width: 0;\n}\n/* modals 槽位：fixed 全屏浮层容器（不占 grid 格） */\n.modals-host[data-v-acd4c540] { position: fixed; inset: 0; z-index: 200; pointer-events: none;\n}\n.modals-host[data-v-acd4c540] > * { pointer-events: auto;\n}\n.modals-empty[data-v-acd4c540] { display: none;\n}\n/* 空态占位（区域插件未装配时显示） */\n.slot-empty[data-v-acd4c540] {\n  display: flex; align-items: center; justify-content: center;\n  color: var(--text-muted); font-size: 12px;\n  background: var(--bg-primary);\n  border: 1px dashed var(--border-color);\n  min-height: 0;\n}\n/*$vite$:1*/";
   document.head.appendChild(__vite_style__);
   /**
   * @vue/shared v3.5.39
@@ -11423,18 +11423,18 @@
     }
   });
   const bottomPanelHeight = /* @__PURE__ */ ref(180);
-  const rightPanelWidth = /* @__PURE__ */ ref(380);
+  const rightPanelWidth = /* @__PURE__ */ ref(320);
   const sidebarWidth = /* @__PURE__ */ ref(280);
   function loadPanelSize() {
     try {
       const d = JSON.parse(localStorage.getItem("paircode-panel-size") || "{}");
-      if (d.rpw) rightPanelWidth.value = Math.min(parseFloat(d.rpw) || 380, 520);
-      if (d.bph) bottomPanelHeight.value = d.bph;
+      if (d.rpw) rightPanelWidth.value = Math.max(260, Math.min(parseFloat(d.rpw) || 320, 360));
+      if (d.bph) bottomPanelHeight.value = Math.max(120, Math.min(parseFloat(d.bph) || 180, 500));
     } catch {
     }
     try {
       const sw = localStorage.getItem("paircode-sidebar-width");
-      if (sw) sidebarWidth.value = parseInt(sw, 10);
+      if (sw) sidebarWidth.value = Math.min(Math.max(parseInt(sw, 10) || 280, 160), 480);
     } catch {
     }
   }
@@ -11532,7 +11532,6 @@
       if (!raw) return;
       const data = JSON.parse(raw);
       if (!data || !data.version) return;
-      if (data.activeActivity) state.activeActivity = data.activeActivity;
       if (typeof data.sidebarVisible === "boolean") state.sidebarVisible = data.sidebarVisible;
       if (typeof data.rightPanelVisible === "boolean") state.rightPanelVisible = data.rightPanelVisible;
       if (typeof data.bottomPanelVisible === "boolean") state.bottomPanelVisible = data.bottomPanelVisible;
@@ -13213,7 +13212,7 @@
       };
     }
   };
-  const ShellApp = /* @__PURE__ */ _export_sfc(_sfc_main, [["__scopeId", "data-v-64a6077d"]]);
+  const ShellApp = /* @__PURE__ */ _export_sfc(_sfc_main, [["__scopeId", "data-v-acd4c540"]]);
   window.__PAIRCODE_CORE = { Vue, api, uiState, pluginRuntime: pluginRuntime$1, agentEvents, actions };
   createApp(ShellApp).mount("#app");
 })();
