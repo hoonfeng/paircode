@@ -18,40 +18,29 @@ import (
 func TestPluginHostBasic(t *testing.T) {
 	reg := NewRegistry()
 	host := NewPluginHost(reg, nil, `C:\ws`)
-	RegisterBuiltinPlugins(host)
 
-	// sysinfo 插件已 Use（Running）
-	if host.State("sysinfo") != PluginRunning {
-		t.Fatalf("sysinfo 应 running, got %v", host.State("sysinfo"))
-	}
-	// ctx.provide 服务可 get
+	// ★ 框架能力已内联 NewPluginHost（不再以插件形态存在）：
+	// workspaceRoot 服务直接可用（原 sysinfo 插件）
 	if v := host.Context().Get("workspaceRoot"); v != `C:\ws` {
 		t.Fatalf("workspaceRoot 服务 = %v, want C:\\ws", v)
 	}
-	// Inspect 报告：框架插件（sysinfo + toolset-tpl-core）——内置 20 组已迁移
-	// 磁盘插件（.pair/plugins/tool-*），宿主不再装配
+	// 内置工具集模板已注册（原 toolset-tpl-core 插件）
+	if host.Template("toolset.tpl.project-helper") == nil {
+		t.Fatal("内置模板 toolset.tpl.project-helper 未注册")
+	}
+	if host.Template("toolset.tpl.git-flow") == nil {
+		t.Fatal("内置模板 toolset.tpl.git-flow 未注册")
+	}
+	// 插件列表不再含 sysinfo / toolset-tpl-core（无任何 Use）
 	recs := host.Inspect()
-	if len(recs) != 2 {
-		t.Fatalf("Inspect 应含 2 个框架插件, got %d: %+v", len(recs), recs)
-	}
-	foundSys := false
-	for _, r := range recs {
-		if r.Name == "sysinfo" {
-			foundSys = true
-		}
-	}
-	if !foundSys {
-		t.Fatalf("sysinfo 插件缺失: %+v", recs)
-	}
-	// Unload 回收
-	if err := host.Unload("sysinfo"); err != nil {
-		t.Fatal(err)
-	}
-	if host.State("sysinfo") != PluginStopped {
-		t.Fatalf("unload 后应 stopped")
+	if len(recs) != 0 {
+		t.Fatalf("Inspect 应为空（框架能力不占插件位）, got %d: %+v", len(recs), recs)
 	}
 	// 同名重复注册报错
-	dup := &GoPlugin{NameField: "sysinfo", ApplyFn: func(*PluginContext) error { return nil }}
+	dup := &GoPlugin{NameField: "dup-test", ApplyFn: func(*PluginContext) error { return nil }}
+	if err := host.Use(dup); err != nil {
+		t.Fatalf("首次注册应成功: %v", err)
+	}
 	if err := host.Use(dup); err == nil {
 		t.Fatalf("重复注册应报错")
 	}
@@ -760,9 +749,9 @@ func TestAgentBaseInitPlugins(t *testing.T) {
 	if base.Plugins == nil {
 		t.Fatalf("Init 后 Plugins 应为非 nil")
 	}
-	// sysinfo 内置插件 running
-	if base.Plugins.State("sysinfo") != PluginRunning {
-		t.Fatalf("sysinfo 应 running")
+	// ★ 框架能力内联：workspaceRoot 服务可用（原 sysinfo 插件已非插件形态）
+	if v := base.Plugins.Context().Get("workspaceRoot"); v != dir {
+		t.Fatalf("workspaceRoot 服务 = %v, want %v", v, dir)
 	}
 	// cordis 工具已注册且对 LLM 可见
 	for _, name := range []string{"cordis_inspect", "cordis_define", "cordis_run", "cordis_stop", "cordis_undefine"} {
@@ -773,10 +762,6 @@ func TestAgentBaseInitPlugins(t *testing.T) {
 		if !tool.Enabled {
 			t.Fatalf("工具 %s 应启用", name)
 		}
-	}
-	// workspaceRoot 服务可用
-	if v := base.Plugins.Context().Get("workspaceRoot"); v != dir {
-		t.Fatalf("workspaceRoot = %v, want %v", v, dir)
 	}
 }
 

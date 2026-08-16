@@ -34,7 +34,6 @@ func TestParseProjectIntent(t *testing.T) {
 func TestLLMIntentCommands(t *testing.T) {
 	project := mkToolsetGoProject(t) // go.mod + main.go（无 Makefile/package.json → 静态无命令）
 	host := NewPluginHost(NewRegistry(), nil, project)
-	RegisterBuiltinPlugins(host)
 
 	// 注入 mock LLM：识别为 node 项目并给出真实命令
 	old := toolsetLLMProvider
@@ -84,7 +83,6 @@ func TestLLMIntentCommands(t *testing.T) {
 func TestNoLanguageHardcode(t *testing.T) {
 	project := mkToolsetGoProject(t) // go.mod + main.go，无 Makefile/package.json
 	host := NewPluginHost(NewRegistry(), nil, project)
-	RegisterBuiltinPlugins(host)
 	// 无 provider（core.Settings 未配置 → toolsetLLMProvider nil）
 	old := toolsetLLMProvider
 	toolsetLLMProvider = func() Provider { return nil }
@@ -151,7 +149,6 @@ func TestParseProjectIntentCustomPlugins(t *testing.T) {
 func TestBuildToolsetCustomPlugins(t *testing.T) {
 	project := mkToolsetGoProject(t)
 	host := NewPluginHost(NewRegistry(), nil, project)
-	RegisterBuiltinPlugins(host)
 	SetGlobalPluginHost(host)
 	defer SetGlobalPluginHost(nil)
 

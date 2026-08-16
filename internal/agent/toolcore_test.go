@@ -24,7 +24,6 @@ func loadToolCorePlugin(t *testing.T, root string) (*PluginHost, *Registry) {
 	}
 	reg := NewRegistry()
 	host := NewPluginHost(reg, nil, root)
-	RegisterBuiltinPlugins(host)
 	id, err := host.DefineJSCodeFull(string(src), "js", "tool-core 测试", "", "")
 	if err != nil {
 		t.Fatalf("define 失败: %v", err)

@@ -24,7 +24,6 @@ func loadHarnessPlugin(t *testing.T, root string) (*PluginHost, *Registry) {
 	}
 	reg := NewRegistry()
 	host := NewPluginHost(reg, nil, root)
-	RegisterBuiltinPlugins(host)
 	id, err := host.DefineJSCodeFull(string(src), "js", "tool-harness 测试",
 		filepath.Join("..", "..", ".pair", "plugins", "tool-harness"), "")
 	if err != nil {

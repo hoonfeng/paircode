@@ -86,7 +86,7 @@ func NewRegistry() *Registry {
 }
 // Register 注册一个工具（同名覆盖，顺序不变）。
 // ★ 同名覆盖时保留原启用状态：重复注册（如 RegisterDefaultTools 与
-//   RegisterBuiltinPlugins 对同一批内置工具双注册）不得清除 harness 过滤/
+//   RegisterToolGroups 对同一批内置工具双注册）不得清除 harness 过滤/
 //   工具集禁用状态（Enabled=false 保持 false）。首次注册默认启用。
 func (r *Registry) Register(t *Tool) {
 	r.mu.Lock()

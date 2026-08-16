@@ -55,20 +55,23 @@ JS 插件 execute → ctx.binary.exec(tool, args[, {timeout}]) → text
 cordis_* / toolset_* / history_* 等）**保持宿主实现**——它们绑定会话内存态
 （Loop 计划步骤、审核门、UI 任务面板/进度、对话压缩引用），非纯磁盘编码能力。
 
-## 框架能力清单（不可分离，设计上留在宿主）
+## 框架能力清单（宿主固有，不占插件位）
 
 > 除了磁盘插件（可分离/可扩展）与 hostTool（宿主注册表工具）外，还有一类
-> **框架能力**——宿主自我暴露或宿主核心数据，分离无意义，定性为框架：
+> **框架能力**——宿主自我暴露或宿主核心数据，分离无意义。它们**内联在宿主
+> 构造处（NewPluginHost）直接提供，不以插件形态存在**：不可启停、不出现在
+> 插件列表/Inspect 中——插件列表只含真实可管理的插件。
 >
 > | 能力 | 位置 | 为什么不可分离 |
 > |------|------|----------------|
-> | sysinfo（workspaceRoot 服务） | `RegisterBuiltinPlugins`（builtin_plugins.go） | 向插件生态暴露**宿主自己**的工作区根：JS 插件走宿主直接注入（app.workspaceRoot）不消费服务；Go 插件经 `ctx.Get("workspaceRoot")` 取——提供者即宿主，分离无意义 |
-> | toolset-tpl-core（工具集模板） | `RegisterBuiltinPlugins`（toolset_templates.go） | toolset_build 的动态组合数据源（项目助手/Git 流/Web 开发模板），Generate 逻辑内嵌宿主；toolset_build 本身是宿主框架能力，数据源随宿主合理（市场/用户可 RegisterTemplate 追加专属模板） |
+> | workspaceRoot 服务（原 sysinfo） | `NewPluginHost`（plugin.go：`h.ctx.Provide("workspaceRoot", root)`） | 向插件生态暴露**宿主自己**的工作区根：JS 插件走宿主直接注入（app.workspaceRoot）不消费服务；Go/JS 插件经 `ctx.Get("workspaceRoot")` 取——提供者即宿主，分离无意义 |
+> | 内置工具集模板（原 toolset-tpl-core） | `NewPluginHost`（plugin.go：`registerBuiltinTemplates(h)`，toolset_templates.go） | toolset_build 的动态组合数据源（项目助手/Git 流/Web 开发模板），Generate 逻辑内嵌宿主；toolset_build 本身是宿主框架能力，数据源随宿主合理（市场/用户可 RegisterTemplate 追加专属模板） |
 > | SystemTool 组（update_tasks/update_plan/tool_stats/history_*） | `RegisterHostFrameworkTools` | 会话绑定内存态（Loop 计划/审核门/UI 任务面板/对话压缩），见上节「会话状态协议」 |
 > | harness 7 工具（read/write/edit/glob/grep/bash/str_replace_editor） | 宿主注册表 | agent 自身能力面（框架协议），JS 插件同名接管时 ArchiveHostTool 存档供 ctx.hostTool 兜底 |
 >
 > 判别标准：**提供者是否就是宿主自身、数据是否绑定宿主内存态**——两者取一即
-> 不可分离，归为框架能力；其余（业务实现）一律磁盘插件（JS 原生化或独立二进制）。
+> 不可分离，归为框架能力**内联宿主**（不占插件位）；其余（业务实现）一律磁盘
+> 插件（JS 原生化或独立二进制）。
 
 磁盘侧协议（供未来二进制化/外部消费参考）：
 

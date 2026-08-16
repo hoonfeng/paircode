@@ -129,7 +129,6 @@ func loadWSTestPlugin(t *testing.T, root, code string) (*PluginHost, *Registry) 
 	t.Helper()
 	reg := NewRegistry()
 	host := NewPluginHost(reg, nil, root)
-	RegisterBuiltinPlugins(host)
 	id, err := host.DefineJSCodeFull(code, "js", "ws 测试", "", "")
 	if err != nil {
 		t.Fatalf("define 失败: %v", err)

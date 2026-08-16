@@ -27,7 +27,6 @@ func TestToolsetBuildPersistExportImport(t *testing.T) {
 	project := mkToolsetGoProject(t)
 
 	host := NewPluginHost(NewRegistry(), nil, project)
-	RegisterBuiltinPlugins(host) // 含 toolset-tpl-core（模板插件）
 	SetGlobalPluginHost(host)
 	defer SetGlobalPluginHost(nil)
 
@@ -83,7 +82,6 @@ func TestToolsetBuildPersistExportImport(t *testing.T) {
 
 	// 5. 导入到全局（新宿主模拟另一工作区启动自动装载）
 	host2 := NewPluginHost(NewRegistry(), nil, project)
-	RegisterBuiltinPlugins(host2)
 	if err := importToolsetJSON(host2, project, content, "user"); err != nil {
 		t.Fatalf("importToolsetJSON: %v", err)
 	}
@@ -112,7 +110,6 @@ func TestToolsetBuildPersistExportImport(t *testing.T) {
 func TestToolsetMarketInstall(t *testing.T) {
 	project := mkToolsetGoProject(t)
 	host := NewPluginHost(NewRegistry(), nil, project)
-	RegisterBuiltinPlugins(host)
 	SetGlobalPluginHost(host)
 	defer SetGlobalPluginHost(nil)
 
@@ -144,7 +141,6 @@ func TestToolsetMarketInstall(t *testing.T) {
 func TestToolsetJSTemplate(t *testing.T) {
 	project := mkToolsetGoProject(t)
 	host := NewPluginHost(NewRegistry(), nil, project)
-	RegisterBuiltinPlugins(host)
 
 	// 用 JS 插件注册一个专属模板（市场/用户扩展工具集构建处理）
 	_, err := host.DefineJSCodeFull(`
@@ -241,7 +237,6 @@ func TestToolsetEdit(t *testing.T) {
 	project := mkToolsetGoProject(t)
 	reg := NewRegistry()
 	host := NewPluginHost(reg, nil, project)
-	RegisterBuiltinPlugins(host)
 
 	// 1. 造初始工具集（含插件 p1-base）并固化+装载
 	p1Code := `return {

@@ -13,7 +13,6 @@ import (
 func TestExtRouteJSPlugin(t *testing.T) {
 	reg := NewRegistry()
 	host := NewPluginHost(reg, nil, "F:\\syproject\\gou-ide")
-	RegisterBuiltinPlugins(host)
 
 	const code = `return {
 	  name: 'ext-route-demo',

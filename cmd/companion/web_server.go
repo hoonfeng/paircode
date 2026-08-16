@@ -241,10 +241,10 @@ func startWebUI(port int) {
 
 	// ★ 全局插件宿主：web 模式唯一的 PluginHost（浏览器插件面板 + cordis 工具共用）。
 	//   与 AgentBase.Init 对齐：NewPluginHost + RegisterCordisTools + 内置插件 + cordis.patch.json。
+	//   （框架能力 workspaceRoot 服务 + 内置工具集模板已内联 NewPluginHost，不占插件位）
 	if root := core.Root(); root != "" {
 		ph := agent.NewPluginHost(initReg, agentMgr.Store(), root)
 		agent.RegisterCordisTools(initReg, ph, root)
-		agent.RegisterBuiltinPlugins(ph)
 		agent.RegisterToolsetTools(initReg, root, ph)
 		// ★ 自动创建默认内置工具集（builtin.json 缺失时：dsh 极简核心捞入工作区）
 		agent.EnsureDefaultBuiltinToolset(root)

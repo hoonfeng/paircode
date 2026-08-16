@@ -5,7 +5,7 @@
 //   构建模板。toolset_build 时宿主收集全部模板，按项目特征（ProjectProfile）匹配、
 //   组合生成插件集合。
 //
-// 内置模板以插件 toolset-tpl-core 提供（Go 实现，注册于 RegisterBuiltinPlugins）：
+// 内置模板为宿主框架能力（内联于 NewPluginHost，不经过插件体系）：
 //   - toolset.tpl.project-helper  构建/测试/运行命令助手（按语言生成）
 //   - toolset.tpl.git-flow        Git 工作流辅助（提交检查/分支摘要）
 //   - toolset.tpl.code-quality    lint/格式化
@@ -371,63 +371,59 @@ func analyzeProject(projectDir string) *ProjectProfile {
 	return p
 }
 
-// ─── 内置模板插件（toolset-tpl-core）──────────────────────
+// ─── 内置模板（宿主框架能力，内联于 NewPluginHost）─────────
 
-// registerToolsetTemplates 注册内置模板插件（被 RegisterBuiltinPlugins 调用）。
-// 返回插件定义（GoPlugin）。
-func registerToolsetTemplates() *GoPlugin {
-	return &GoPlugin{
-		NameField: "toolset-tpl-core",
-		ApplyFn: func(pc *PluginContext) error {
-			ph := pc.host
-			// 1. 项目助手：构建/测试/运行（按语言生成命令）
-			_ = ph.RegisterTemplate(&ToolsetTemplate{
-				ID: "toolset.tpl.project-helper", Title: "项目构建/测试/运行助手",
-				Tags: []string{"build", "test", "run"},
-				Match: func(p *ProjectProfile) bool { return len(p.Langs) > 0 },
-				Generate: func(p *ProjectProfile, req string) ([]ToolsetPlugin, error) {
-					return genProjectHelper(p), nil
-				},
-			})
-			// 2. Git 工作流辅助
-			_ = ph.RegisterTemplate(&ToolsetTemplate{
-				ID: "toolset.tpl.git-flow", Title: "Git 工作流辅助（提交检查/分支摘要）",
-				Tags: []string{"git"},
-				Match: func(p *ProjectProfile) bool { return true },
-				Generate: func(p *ProjectProfile, req string) ([]ToolsetPlugin, error) {
-					return genGitFlow(), nil
-				},
-			})
-			// 3. 代码质量：lint/格式化（按语言生成命令）
-			_ = ph.RegisterTemplate(&ToolsetTemplate{
-				ID: "toolset.tpl.code-quality", Title: "代码质量（lint/格式化）",
-				Tags: []string{"lint", "code-quality"},
-				Match: func(p *ProjectProfile) bool { return len(p.Langs) > 0 },
-				Generate: func(p *ProjectProfile, req string) ([]ToolsetPlugin, error) {
-					return genCodeQuality(p), nil
-				},
-			})
-			// 4. HTTP 接口调试（web 项目命中）
-			_ = ph.RegisterTemplate(&ToolsetTemplate{
-				ID: "toolset.tpl.web-api", Title: "HTTP 接口调试",
-				Tags: []string{"api", "http"},
-				Match: func(p *ProjectProfile) bool { return p.HasAPI || len(p.Frameworks) > 0 },
-				Generate: func(p *ProjectProfile, req string) ([]ToolsetPlugin, error) {
-					return genWebAPI(p), nil
-				},
-			})
-			// 5. 数据文件概览（数据项目命中）
-			_ = ph.RegisterTemplate(&ToolsetTemplate{
-				ID: "toolset.tpl.data-inspect", Title: "数据文件概览（csv/json/sqlite）",
-				Tags: []string{"data"},
-				Match: func(p *ProjectProfile) bool { return p.HasDBData },
-				Generate: func(p *ProjectProfile, req string) ([]ToolsetPlugin, error) {
-					return genDataInspect(p), nil
-				},
-			})
-			return nil
+// registerBuiltinTemplates 注册宿主内置工具集构建模板（框架能力：toolset_build
+// 的动态组合数据源——Generate 逻辑内嵌宿主，随宿主合理，不经过插件体系）。
+// ★ 2026-08-16：原以插件 toolset-tpl-core 形态注册（不可启停，无意义），
+//   现内联为宿主固有（NewPluginHost 调用），插件列表不再显示；
+//   市场/用户插件仍可经 RegisterTemplate / ctx.toolset.registerTemplate 追加。
+func registerBuiltinTemplates(ph *PluginHost) {
+	// 1. 项目助手：构建/测试/运行（按语言生成命令）
+	_ = ph.RegisterTemplate(&ToolsetTemplate{
+		ID: "toolset.tpl.project-helper", Title: "项目构建/测试/运行助手",
+		Tags: []string{"build", "test", "run"},
+		Match: func(p *ProjectProfile) bool { return len(p.Langs) > 0 },
+		Generate: func(p *ProjectProfile, req string) ([]ToolsetPlugin, error) {
+			return genProjectHelper(p), nil
 		},
-	}
+	})
+	// 2. Git 工作流辅助
+	_ = ph.RegisterTemplate(&ToolsetTemplate{
+		ID: "toolset.tpl.git-flow", Title: "Git 工作流辅助（提交检查/分支摘要）",
+		Tags: []string{"git"},
+		Match: func(p *ProjectProfile) bool { return true },
+		Generate: func(p *ProjectProfile, req string) ([]ToolsetPlugin, error) {
+			return genGitFlow(), nil
+		},
+	})
+	// 3. 代码质量：lint/格式化（按语言生成命令）
+	_ = ph.RegisterTemplate(&ToolsetTemplate{
+		ID: "toolset.tpl.code-quality", Title: "代码质量（lint/格式化）",
+		Tags: []string{"lint", "code-quality"},
+		Match: func(p *ProjectProfile) bool { return len(p.Langs) > 0 },
+		Generate: func(p *ProjectProfile, req string) ([]ToolsetPlugin, error) {
+			return genCodeQuality(p), nil
+		},
+	})
+	// 4. HTTP 接口调试（web 项目命中）
+	_ = ph.RegisterTemplate(&ToolsetTemplate{
+		ID: "toolset.tpl.web-api", Title: "HTTP 接口调试",
+		Tags: []string{"api", "http"},
+		Match: func(p *ProjectProfile) bool { return p.HasAPI || len(p.Frameworks) > 0 },
+		Generate: func(p *ProjectProfile, req string) ([]ToolsetPlugin, error) {
+			return genWebAPI(p), nil
+		},
+	})
+	// 5. 数据文件概览（数据项目命中）
+	_ = ph.RegisterTemplate(&ToolsetTemplate{
+		ID: "toolset.tpl.data-inspect", Title: "数据文件概览（csv/json/sqlite）",
+		Tags: []string{"data"},
+		Match: func(p *ProjectProfile) bool { return p.HasDBData },
+		Generate: func(p *ProjectProfile, req string) ([]ToolsetPlugin, error) {
+			return genDataInspect(p), nil
+		},
+	})
 }
 
 // ─── 内置模板生成器 ───────────────────────────────────────

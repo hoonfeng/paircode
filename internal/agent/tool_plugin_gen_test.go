@@ -25,7 +25,6 @@ func TestGeneratedDiskPluginLoad(t *testing.T) {
 
 	reg := NewRegistry()
 	host := NewPluginHost(reg, nil, repoRoot)
-	RegisterBuiltinPlugins(host)
 
 	id, err := host.DefineJSCodeFull(string(code), "js", "tool-git 装载测试", "", "")
 	if err != nil {
@@ -115,7 +114,6 @@ func TestBinaryPluginExec(t *testing.T) {
 
 	reg := NewRegistry()
 	host := NewPluginHost(reg, nil, repoRoot)
-	RegisterBuiltinPlugins(host)
 
 	id, err := host.DefineJSCodeFull(string(code), "js", "binary 插件装载测试", "", "")
 	if err != nil {
@@ -189,7 +187,6 @@ func TestBinaryPluginExecUnified(t *testing.T) {
 
 	reg := NewRegistry()
 	host := NewPluginHost(reg, nil, repoRoot)
-	RegisterBuiltinPlugins(host)
 
 	id, err := host.DefineJSCodeFull(string(code), "js", "统一二进制插件装载测试", "", "")
 	if err != nil {

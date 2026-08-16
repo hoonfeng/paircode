@@ -152,7 +152,6 @@ func TestPluginReload(t *testing.T) {
 func TestCordisInspectQuery(t *testing.T) {
 	reg := NewRegistry()
 	host := NewPluginHost(reg, nil, `C:\ws`)
-	RegisterBuiltinPlugins(host)
 
 	// service listService
 	out, err := cordisInspectQuery(host, "host", "service", "listService", nil)
@@ -179,14 +178,18 @@ func TestCordisInspectQuery(t *testing.T) {
 	if err != nil || !strings.Contains(out, "Events") {
 		t.Fatalf("listEvent: %v\n%s", err, out)
 	}
-	// plugin listPlugin
+	// plugin listPlugin（宿主无 Use 时列表为空；框架能力不占插件位）
 	out, err = cordisInspectQuery(host, "host", "plugin", "listPlugin", nil)
-	if err != nil || !strings.Contains(out, "sysinfo") {
+	if err != nil {
 		t.Fatalf("listPlugin: %v\n%s", err, out)
 	}
-	out, err = cordisInspectQuery(host, "host", "plugin", "getPlugin", map[string]any{"name": "sysinfo"})
-	if err != nil || !strings.Contains(out, "sysinfo") {
-		t.Fatalf("getPlugin: %v\n%s", err, out)
+	if strings.Contains(out, "sysinfo") {
+		t.Fatalf("框架能力不应出现在插件列表: %s", out)
+	}
+	// service getService workspaceRoot（框架能力内联：原 sysinfo 服务直连宿主）
+	out, err = cordisInspectQuery(host, "host", "service", "getService", map[string]any{"name": "workspaceRoot"})
+	if err != nil || !strings.Contains(out, "动态服务") || !strings.Contains(out, "string") {
+		t.Fatalf("getService workspaceRoot: %v\n%s", err, out)
 	}
 	// client 平台（无上报快照时给离线兜底摘要）
 	out, err = cordisInspectQuery(host, "client", "plugin", "listPlugin", nil)

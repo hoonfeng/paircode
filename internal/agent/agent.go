@@ -135,7 +135,8 @@ func (a *AgentBase) Init() error {
 	// 3.5 初始化插件宿主（对齐 harness「一切皆插件」）+ cordis 动态插件工具
 	ph := NewPluginHost(registry, store, root)
 	RegisterCordisTools(registry, ph, root)
-	RegisterBuiltinPlugins(ph)
+	// ★ 框架能力（workspaceRoot 服务 + 内置工具集模板）已内联 NewPluginHost，
+	//   不再以插件形态装配（不可启停、不出现在插件列表）。
 	// ★ 工具集管理工具 + 启动自动装载（.pair/toolsets/ + 全局）
 	RegisterToolsetTools(registry, root, ph)
 	LoadAllToolsets(ph, root)

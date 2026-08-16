@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// builtin_plugins.go — 内置插件装配（对齐 harness「一切皆插件」）
+// builtin_plugins.go — 内置插件规格（对齐 harness「一切皆插件」）
 //
 // ★ 2026-08-16 第三轮：宿主不再承载工具实现。
 //   - 内置 20 组（core/git/codegraph/…）的实现已迁移为磁盘插件
@@ -9,9 +9,12 @@
 //   - 宿主只注册框架协议工具（RegisterHostFrameworkTools）：SystemTool
 //     （update_tasks/update_plan/tool_stats/history_*）会话绑定，供
 //     tool-system 插件 hostTool 承载（同名接管时 ArchiveHostTool 存档）。
-//   - 宿主保留两个「框架能力」插件（RegisterBuiltinPlugins，不可分离）：
-//     sysinfo（workspaceRoot 服务）+ toolset-tpl-core（toolset_build 模板
-//     数据源）——定性为框架能力（宿主自我暴露 / 宿主核心数据），见下方。
+//
+// ★ 2026-08-16 第四轮：框架能力不再以插件形态存在。
+//   - 原「框架能力插件」sysinfo（workspaceRoot 服务）+ toolset-tpl-core
+//     （工具集构建模板）已内联为宿主固有（NewPluginHost 构造时直接提供：
+//     h.ctx.Provide("workspaceRoot") + registerBuiltinTemplates(h)）——
+//     不可启停、不出现在插件列表/Inspect 中，插件列表只含真实可管理的插件。
 //
 // 双入口共享同一份规格（builtinPluginSpecs）：
 //   - 独立二进制：RegisterToolGroups(r, root, "git") 按组注册（cmd/plugins/*）
@@ -19,8 +22,6 @@
 // ═══════════════════════════════════════════════════════════════
 
 package agent
-
-import "fmt"
 
 // builtinPluginSpec 一个内置插件规格。
 type builtinPluginSpec struct {
@@ -112,28 +113,5 @@ func RegisterHostFrameworkTools(r *Registry, root string) {
 	registerTaskTools(r, root)       // update_tasks（会话绑定 TaskManager）
 }
 
-// RegisterBuiltinPlugins 装配宿主框架插件（AgentBase.Init 与 web 模式共用）。
-// ★ 仅两个「框架能力」插件（不可分离，设计上留在宿主）：
-//   - sysinfo：Provide workspaceRoot（宿主向插件生态暴露自身工作区根的服务协议。
-//     JS 插件走宿主直接注入（app.workspaceRoot）不消费本服务；Go 插件经
-//     ctx.Get("workspaceRoot") 取——提供者就是宿主自己，分离无意义）。
-//   - toolset-tpl-core：工具集构建模板（toolset_build 的动态组合数据源——
-//     项目助手/Git 流/Web 开发等模板的 Generate 逻辑内嵌宿主，供 toolset_build
-//     生成插件代码；toolset_build 本身是宿主框架能力，数据源随宿主合理；
-//     市场/用户插件可经 RegisterTemplate 追加专属模板）。
-// ★ 其余 20 组业务工具实现已全部迁移磁盘插件（JS 原生化或独立二进制），
-//   不再经 PluginHost 装配。
-func RegisterBuiltinPlugins(h *PluginHost) {
-	// ── 框架能力：sysinfo（宿主自我暴露，不可分离）──
-	_ = h.Use(&GoPlugin{
-		NameField: "sysinfo",
-		ApplyFn: func(ctx *PluginContext) error {
-			ctx.Provide("workspaceRoot", ctx.WorkspaceRoot)
-			return nil
-		},
-	})
-	// ── 框架能力：toolset-tpl-core（toolset_build 数据源，随宿主）──
-	if err := h.Use(registerToolsetTemplates()); err != nil {
-		_ = fmt.Errorf("内置工具集模板插件装配失败: %w", err)
-	}
-}
+// ★ 框架能力（workspaceRoot 服务 / 内置工具集模板）已内联 NewPluginHost
+//   （plugin.go），不再以插件形态装配——本文件不再有 RegisterBuiltinPlugins。

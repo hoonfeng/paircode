@@ -666,6 +666,16 @@ func NewPluginHost(registry *Registry, store ConversationStore, root string) *Pl
 	registerBuiltinInspectProviders(h)
 	// 恢复跨重启的 client 半批准记录（.pair/cordis-approved.json；文件缺失/损坏不致命）
 	h.loadApprovedClients()
+
+	// ── 框架能力内联（宿主固有，不经过插件体系：不可启停、不出现在插件列表）──
+	// workspaceRoot 服务：宿主向插件生态暴露自身工作区根（原 sysinfo 插件——
+	// 提供者就是宿主自身，分离无意义；JS 插件走 app.workspaceRoot 注入，
+	// Go/JS 插件经 ctx.Get("workspaceRoot") 取）。
+	h.ctx.Provide("workspaceRoot", root)
+	// 内置工具集构建模板（原 toolset-tpl-core 插件）：toolset_build 的动态组合
+	// 数据源——Generate 逻辑内嵌宿主（toolset_templates.go），随宿主合理；
+	// 市场/用户插件仍可经 RegisterTemplate / ctx.toolset.registerTemplate 追加。
+	registerBuiltinTemplates(h)
 	return h
 }
 
@@ -865,7 +875,7 @@ func (h *PluginHost) Context() *PluginContext { return h.ctx }
 // ─── 工具集模板注册表（toolset_build 动态组合的数据源）──────
 
 // RegisterTemplate 注册一个工具集构建模板（插件化：模板可由任意插件提供，
-// 内置 toolset-tpl-core 提供通用模板，市场/用户插件可注册专属模板）。
+// 宿主内联注册内置通用模板（NewPluginHost），市场/用户插件可注册专属模板）。
 func (h *PluginHost) RegisterTemplate(t *ToolsetTemplate) error {
 	if t == nil || t.ID == "" {
 		return fmt.Errorf("模板 id 不能为空")

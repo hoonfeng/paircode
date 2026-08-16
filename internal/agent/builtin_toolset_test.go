@@ -17,7 +17,6 @@ func mkBuiltinHost(t *testing.T) (*PluginHost, string) {
 	RegisterHarnessTools(reg, root)
 	ph := NewPluginHost(reg, nil, root)
 	RegisterCordisTools(reg, ph, root)
-	RegisterBuiltinPlugins(ph)
 	RegisterToolsetTools(reg, root, ph)
 	SetGlobalPluginHost(ph)
 	t.Cleanup(func() { SetGlobalPluginHost(nil) })
