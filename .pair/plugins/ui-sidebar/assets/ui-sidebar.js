@@ -3445,46 +3445,70 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
     key: 1,
     class: "ts-empty"
   };
-  const _hoisted_27$2 = {
+  const _hoisted_27$2 = { class: "ts-divider" };
+  const _hoisted_28$2 = {
+    key: 0,
+    class: "ts-body"
+  };
+  const _hoisted_29$2 = { class: "ts-build" };
+  const _hoisted_30$2 = { class: "ts-build-head" };
+  const _hoisted_31$2 = { class: "ts-build-title" };
+  const _hoisted_32$2 = {
+    key: 0,
+    class: "ts-empty"
+  };
+  const _hoisted_33$2 = { class: "pp-slot-info" };
+  const _hoisted_34$2 = { class: "pp-slot-title-row" };
+  const _hoisted_35$2 = { class: "pp-slot-id" };
+  const _hoisted_36$2 = { class: "pp-slot-owner" };
+  const _hoisted_37$2 = { class: "ts-build" };
+  const _hoisted_38$2 = { class: "ts-build-head" };
+  const _hoisted_39$2 = { class: "ts-build-title" };
+  const _hoisted_40$2 = {
+    key: 0,
+    class: "ts-empty"
+  };
+  const _hoisted_41$2 = ["title"];
+  const _hoisted_42$2 = {
     class: "dialog-box",
     style: { "max-width": "420px" }
   };
-  const _hoisted_28$2 = { class: "dialog-body" };
-  const _hoisted_29$2 = { class: "input-row" };
-  const _hoisted_30$2 = { class: "dialog-footer" };
-  const _hoisted_31$2 = {
+  const _hoisted_43$2 = { class: "dialog-body" };
+  const _hoisted_44$2 = { class: "input-row" };
+  const _hoisted_45$2 = { class: "dialog-footer" };
+  const _hoisted_46$2 = {
     key: 0,
     class: "dlg-error"
   };
-  const _hoisted_32$2 = ["disabled"];
-  const _hoisted_33$2 = { class: "dialog-box dir-browser-box" };
-  const _hoisted_34$2 = { class: "dialog-title" };
-  const _hoisted_35$2 = { class: "dir-browser" };
-  const _hoisted_36$2 = { class: "dir-breadcrumb" };
-  const _hoisted_37$2 = ["disabled"];
-  const _hoisted_38$2 = { class: "bc-path" };
-  const _hoisted_39$2 = {
+  const _hoisted_47$2 = ["disabled"];
+  const _hoisted_48$2 = { class: "dialog-box dir-browser-box" };
+  const _hoisted_49$2 = { class: "dialog-title" };
+  const _hoisted_50$2 = { class: "dir-browser" };
+  const _hoisted_51$2 = { class: "dir-breadcrumb" };
+  const _hoisted_52$2 = ["disabled"];
+  const _hoisted_53$2 = { class: "bc-path" };
+  const _hoisted_54$2 = {
     key: 0,
     class: "dir-list"
   };
-  const _hoisted_40$2 = ["onDblclick"];
-  const _hoisted_41$2 = { class: "dir-name" };
-  const _hoisted_42$2 = {
+  const _hoisted_55$2 = ["onDblclick"];
+  const _hoisted_56$2 = { class: "dir-name" };
+  const _hoisted_57$2 = {
     key: 1,
     class: "dir-list"
   };
-  const _hoisted_43$2 = ["onClick"];
-  const _hoisted_44$2 = { class: "dir-name" };
-  const _hoisted_45$2 = {
+  const _hoisted_58$2 = ["onClick"];
+  const _hoisted_59$2 = { class: "dir-name" };
+  const _hoisted_60$2 = {
     key: 0,
     class: "dir-empty"
   };
-  const _hoisted_46$2 = { class: "dialog-footer" };
-  const _hoisted_47$2 = {
+  const _hoisted_61$2 = { class: "dialog-footer" };
+  const _hoisted_62$2 = {
     key: 0,
     class: "dlg-error"
   };
-  const _hoisted_48$2 = ["disabled"];
+  const _hoisted_63$2 = ["disabled"];
   const _sfc_main$5 = {
     __name: "FileExplorer",
     setup(__props) {
@@ -3920,10 +3944,39 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
         } catch {
         }
       }
+      const ppOpen = vue.ref(false);
+      const pluginList = vue.ref([]);
+      const slotGroups = vue.computed(() => {
+        const keys = [...new Set(pluginRuntime_js.clientSlots.map((s) => s.slotId + "::" + s.kind))];
+        return keys.map((k) => {
+          const [slotId, kind] = k.split("::");
+          return { slotId, kind, owner: pluginRuntime_js.getSlotOwner(slotId) };
+        });
+      });
+      function togglePp() {
+        ppOpen.value = !ppOpen.value;
+        try {
+          localStorage.setItem("paircode-pp-open", ppOpen.value ? "1" : "0");
+        } catch {
+        }
+      }
+      async function loadPlugins() {
+        try {
+          pluginList.value = await api.listPlugins() || [];
+        } catch (e) {
+          console.warn("[explorer] 插件列表加载失败", e);
+        }
+      }
       vue.onMounted(() => {
         window.addEventListener("refresh-tree", refreshAll);
         window.addEventListener("refresh-workspace", refreshCurrentWs);
         loadBuiltin();
+        loadPlugins();
+        try {
+          const saved = localStorage.getItem("paircode-pp-open");
+          if (saved !== null) ppOpen.value = saved === "1";
+        } catch {
+        }
       });
       vue.onUnmounted(() => {
         window.removeEventListener("refresh-tree", refreshAll);
@@ -4019,7 +4072,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
             ])) : vue.createCommentVNode("v-if", true)
           ]),
           vue.createCommentVNode(" ── 分隔线 ── "),
-          _cache[21] || (_cache[21] = vue.createElementVNode(
+          _cache[23] || (_cache[23] = vue.createElementVNode(
             "div",
             { class: "ws-divider" },
             [
@@ -4226,22 +4279,155 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
               ])
             ])) : vue.createCommentVNode("v-if", true)
           ]),
+          vue.createCommentVNode(" ── 插件与 UI 槽位（卷帘：与文件树同区） ── "),
+          vue.createElementVNode("div", _hoisted_27$2, [
+            vue.createElementVNode(
+              "div",
+              {
+                class: vue.normalizeClass(["ts-header", { open: ppOpen.value }]),
+                onClick: togglePp,
+                title: "插件与 UI 槽位（可折叠）"
+              },
+              [
+                vue.createVNode(SvgIcon, {
+                  name: "puzzle",
+                  size: 12,
+                  class: "ts-header-icon"
+                }),
+                _cache[18] || (_cache[18] = vue.createElementVNode(
+                  "span",
+                  { class: "divider-label ts-label" },
+                  "插件与插槽",
+                  -1
+                  /* CACHED */
+                )),
+                _cache[19] || (_cache[19] = vue.createElementVNode(
+                  "span",
+                  { class: "ts-spacer" },
+                  null,
+                  -1
+                  /* CACHED */
+                )),
+                vue.createVNode(SvgIcon, {
+                  name: "chevron-right",
+                  size: 11,
+                  class: vue.normalizeClass(["ts-chevron", { open: ppOpen.value }])
+                }, null, 8, ["class"])
+              ],
+              2
+              /* CLASS */
+            ),
+            ppOpen.value ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_28$2, [
+              vue.createCommentVNode(" UI 槽位（插件 client 半注册的替换/叠加槽） "),
+              vue.createElementVNode("div", _hoisted_29$2, [
+                vue.createElementVNode("div", _hoisted_30$2, [
+                  vue.createElementVNode(
+                    "span",
+                    _hoisted_31$2,
+                    "UI 槽位（" + vue.toDisplayString(slotGroups.value.length) + "）",
+                    1
+                    /* TEXT */
+                  )
+                ]),
+                slotGroups.value.length === 0 ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_32$2, "无插件注册槽位（插件 client 半装载后出现）")) : vue.createCommentVNode("v-if", true),
+                (vue.openBlock(true), vue.createElementBlock(
+                  vue.Fragment,
+                  null,
+                  vue.renderList(slotGroups.value, (g) => {
+                    return vue.openBlock(), vue.createElementBlock("div", {
+                      key: g.slotId + "::" + g.kind,
+                      class: "pp-slot-row"
+                    }, [
+                      vue.createElementVNode("div", _hoisted_33$2, [
+                        vue.createElementVNode("div", _hoisted_34$2, [
+                          vue.createElementVNode(
+                            "span",
+                            _hoisted_35$2,
+                            vue.toDisplayString(g.slotId),
+                            1
+                            /* TEXT */
+                          ),
+                          vue.createElementVNode(
+                            "span",
+                            {
+                              class: vue.normalizeClass(["pp-slot-kind", g.kind === "list" ? "kind-list" : "kind-single"])
+                            },
+                            vue.toDisplayString(g.kind === "list" ? "叠加" : "替换"),
+                            3
+                            /* TEXT, CLASS */
+                          )
+                        ]),
+                        vue.createElementVNode(
+                          "div",
+                          _hoisted_36$2,
+                          "占用: " + vue.toDisplayString(g.owner || "未分配"),
+                          1
+                          /* TEXT */
+                        )
+                      ])
+                    ]);
+                  }),
+                  128
+                  /* KEYED_FRAGMENT */
+                ))
+              ]),
+              vue.createCommentVNode(" 插件列表 "),
+              vue.createElementVNode("div", _hoisted_37$2, [
+                vue.createElementVNode("div", _hoisted_38$2, [
+                  vue.createElementVNode(
+                    "span",
+                    _hoisted_39$2,
+                    "插件（" + vue.toDisplayString(pluginList.value.length) + "）",
+                    1
+                    /* TEXT */
+                  )
+                ]),
+                pluginList.value.length === 0 ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_40$2, "无插件")) : vue.createCommentVNode("v-if", true),
+                (vue.openBlock(true), vue.createElementBlock(
+                  vue.Fragment,
+                  null,
+                  vue.renderList(pluginList.value, (p) => {
+                    return vue.openBlock(), vue.createElementBlock("div", {
+                      key: p.name,
+                      class: "pp-plugin-row"
+                    }, [
+                      vue.createElementVNode("span", {
+                        class: "pp-plugin-name",
+                        title: p.purpose || p.name
+                      }, vue.toDisplayString(p.name), 9, _hoisted_41$2),
+                      vue.createElementVNode(
+                        "span",
+                        {
+                          class: vue.normalizeClass(["pp-plugin-state", { "st-client": p.hasClient }])
+                        },
+                        vue.toDisplayString(p.hasClient ? "UI" : "") + vue.toDisplayString(p.clientApproved ? " ✓" : ""),
+                        3
+                        /* TEXT, CLASS */
+                      )
+                    ]);
+                  }),
+                  128
+                  /* KEYED_FRAGMENT */
+                ))
+              ])
+            ])) : vue.createCommentVNode("v-if", true)
+          ]),
           vue.createCommentVNode(" ===== 新建工作区对话框 ===== "),
           showWorkspaceDialog.value ? (vue.openBlock(), vue.createElementBlock("div", {
             key: 0,
             class: "dialog-overlay",
             onClick: _cache[7] || (_cache[7] = vue.withModifiers(($event) => showWorkspaceDialog.value = false, ["self"]))
           }, [
-            vue.createElementVNode("div", _hoisted_27$2, [
-              _cache[20] || (_cache[20] = vue.createElementVNode(
+            vue.createElementVNode("div", _hoisted_42$2, [
+              _cache[22] || (_cache[22] = vue.createElementVNode(
                 "div",
                 { class: "dialog-title" },
                 "新建工作区",
                 -1
                 /* CACHED */
               )),
-              vue.createElementVNode("div", _hoisted_28$2, [
-                _cache[18] || (_cache[18] = vue.createElementVNode(
+              vue.createElementVNode("div", _hoisted_43$2, [
+                _cache[20] || (_cache[20] = vue.createElementVNode(
                   "label",
                   null,
                   "工作区名称",
@@ -4262,14 +4448,14 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                 ), [
                   [vue.vModelText, newWsName.value]
                 ]),
-                _cache[19] || (_cache[19] = vue.createElementVNode(
+                _cache[21] || (_cache[21] = vue.createElementVNode(
                   "label",
                   null,
                   "保存路径（可选）",
                   -1
                   /* CACHED */
                 )),
-                vue.createElementVNode("div", _hoisted_29$2, [
+                vue.createElementVNode("div", _hoisted_44$2, [
                   vue.withDirectives(vue.createElementVNode(
                     "input",
                     {
@@ -4289,10 +4475,10 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                   }, "浏览")
                 ])
               ]),
-              vue.createElementVNode("div", _hoisted_30$2, [
+              vue.createElementVNode("div", _hoisted_45$2, [
                 wsError.value ? (vue.openBlock(), vue.createElementBlock(
                   "span",
-                  _hoisted_31$2,
+                  _hoisted_46$2,
                   vue.toDisplayString(wsError.value),
                   1
                   /* TEXT */
@@ -4305,7 +4491,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                   class: "dlg-btn primary",
                   onClick: createWorkspace,
                   disabled: !newWsName.value.trim()
-                }, "创建", 8, _hoisted_32$2)
+                }, "创建", 8, _hoisted_47$2)
               ])
             ])
           ])) : vue.createCommentVNode("v-if", true),
@@ -4315,16 +4501,16 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
             class: "dialog-overlay",
             onClick: vue.withModifiers(closeBrowse, ["self"])
           }, [
-            vue.createElementVNode("div", _hoisted_33$2, [
+            vue.createElementVNode("div", _hoisted_48$2, [
               vue.createElementVNode(
                 "div",
-                _hoisted_34$2,
+                _hoisted_49$2,
                 vue.toDisplayString(browseTitle.value),
                 1
                 /* TEXT */
               ),
-              vue.createElementVNode("div", _hoisted_35$2, [
-                vue.createElementVNode("div", _hoisted_36$2, [
+              vue.createElementVNode("div", _hoisted_50$2, [
+                vue.createElementVNode("div", _hoisted_51$2, [
                   vue.createElementVNode("button", {
                     class: "bc-btn",
                     onClick: browseGoUp,
@@ -4335,16 +4521,16 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                       size: 14,
                       style: { "transform": "rotate(180deg)" }
                     })
-                  ], 8, _hoisted_37$2),
+                  ], 8, _hoisted_52$2),
                   vue.createElementVNode(
                     "span",
-                    _hoisted_38$2,
+                    _hoisted_53$2,
                     vue.toDisplayString(browsePath.value || "选择驱动器..."),
                     1
                     /* TEXT */
                   )
                 ]),
-                browsePath.value === "" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_39$2, [
+                browsePath.value === "" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_54$2, [
                   (vue.openBlock(true), vue.createElementBlock(
                     vue.Fragment,
                     null,
@@ -4360,17 +4546,17 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                         }),
                         vue.createElementVNode(
                           "span",
-                          _hoisted_41$2,
+                          _hoisted_56$2,
                           vue.toDisplayString(drive),
                           1
                           /* TEXT */
                         )
-                      ], 40, _hoisted_40$2);
+                      ], 40, _hoisted_55$2);
                     }),
                     128
                     /* KEYED_FRAGMENT */
                   ))
-                ])) : (vue.openBlock(), vue.createElementBlock("div", _hoisted_42$2, [
+                ])) : (vue.openBlock(), vue.createElementBlock("div", _hoisted_57$2, [
                   (vue.openBlock(true), vue.createElementBlock(
                     vue.Fragment,
                     null,
@@ -4386,23 +4572,23 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                         }, null, 8, ["name"]),
                         vue.createElementVNode(
                           "span",
-                          _hoisted_44$2,
+                          _hoisted_59$2,
                           vue.toDisplayString(entry.name),
                           1
                           /* TEXT */
                         )
-                      ], 10, _hoisted_43$2);
+                      ], 10, _hoisted_58$2);
                     }),
                     128
                     /* KEYED_FRAGMENT */
                   )),
-                  browseEntries.value.length === 0 ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_45$2, "空目录")) : vue.createCommentVNode("v-if", true)
+                  browseEntries.value.length === 0 ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_60$2, "空目录")) : vue.createCommentVNode("v-if", true)
                 ]))
               ]),
-              vue.createElementVNode("div", _hoisted_46$2, [
+              vue.createElementVNode("div", _hoisted_61$2, [
                 browseError.value ? (vue.openBlock(), vue.createElementBlock(
                   "span",
-                  _hoisted_47$2,
+                  _hoisted_62$2,
                   vue.toDisplayString(browseError.value),
                   1
                   /* TEXT */
@@ -4431,7 +4617,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                   class: "dlg-btn primary",
                   onClick: browseConfirm,
                   disabled: browseConfirmDisabled.value
-                }, "确认", 8, _hoisted_48$2)
+                }, "确认", 8, _hoisted_63$2)
               ])
             ])
           ])) : vue.createCommentVNode("v-if", true),
@@ -4459,7 +4645,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
       };
     }
   };
-  const FileExplorer = /* @__PURE__ */ _export_sfc(_sfc_main$5, [["__scopeId", "data-v-9000cc94"]]);
+  const FileExplorer = /* @__PURE__ */ _export_sfc(_sfc_main$5, [["__scopeId", "data-v-84fa7cd4"]]);
   const _hoisted_1$4 = { class: "search-panel" };
   const _hoisted_2$4 = { class: "sp-mode-bar" };
   const _hoisted_3$4 = { class: "sp-field" };
@@ -6907,10 +7093,6 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
         });
       }
       function toggleUiPlugin(p, on) {
-        if (p.name === "ui-sidebar" && !on) {
-          window.$toast && window.$toast("ui-sidebar 承载插件面板，不可停用（恢复入口：右下角壳级按钮）", "warn");
-          return;
-        }
         const slots = uiSlotsOf(p.name);
         for (const s of slots) {
           if (s.kind === "list") {
@@ -6920,7 +7102,8 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
             if (on) pluginRuntime_js.setSlotOwner(s.slotId, s.pluginName);
           }
         }
-        window.$toast && window.$toast(on ? "已启用 " + p.name + " 的 UI（" + slots.map((s) => s.slotId).join(", ") + "）" : "已停用 " + p.name + " 的 UI（区域恢复空态）", "info");
+        const recover = p.name === "ui-sidebar" && !on ? "（已停用；恢复入口：右下角壳级按钮）" : "";
+        window.$toast && window.$toast(on ? "已启用 " + p.name + " 的 UI（" + slots.map((s) => s.slotId).join(", ") + "）" : "已停用 " + p.name + " 的 UI（区域恢复空态）" + recover, on ? "info" : "warn");
         pluginRuntime_js.emitSlotChanged();
       }
       async function doAction(p, action) {
@@ -7846,7 +8029,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
       };
     }
   };
-  const PluginPanel = /* @__PURE__ */ _export_sfc(_sfc_main$1, [["__scopeId", "data-v-2edc992e"]]);
+  const PluginPanel = /* @__PURE__ */ _export_sfc(_sfc_main$1, [["__scopeId", "data-v-5c15f6cc"]]);
   const _hoisted_1 = { class: "sidebar-header" };
   const _hoisted_2 = { class: "sidebar-content" };
   const _hoisted_3 = {

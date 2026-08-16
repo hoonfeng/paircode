@@ -386,12 +386,6 @@ function uiPluginActive(pname) {
   })
 }
 function toggleUiPlugin(p, on) {
-  // ★ 面板宿主保护：ui-sidebar 承载插件面板（本组件）——停用其 UI 会连同
-  //   面板入口一起消失（死锁）。拒绝停用并提示壳级逃生口（右下角按钮）。
-  if (p.name === 'ui-sidebar' && !on) {
-    window.$toast && window.$toast('ui-sidebar 承载插件面板，不可停用（恢复入口：右下角壳级按钮）', 'warn')
-    return
-  }
   const slots = uiSlotsOf(p.name)
   for (const s of slots) {
     if (s.kind === 'list') {
@@ -401,7 +395,10 @@ function toggleUiPlugin(p, on) {
       if (on) setSlotOwner(s.slotId, s.pluginName) // 启用时显式占用该区域
     }
   }
-  window.$toast && window.$toast(on ? '已启用 ' + p.name + ' 的 UI（' + slots.map(s => s.slotId).join(', ') + '）' : '已停用 ' + p.name + ' 的 UI（区域恢复空态）', 'info')
+  // ★ ui-sidebar 承载插件面板：停用后侧边栏（含本面板）立即卸载，入口消失。
+  //   恢复途径：右下角壳级逃生口按钮（ShellApp 浮动面板，不依赖插件）。
+  const recover = p.name === 'ui-sidebar' && !on ? '（已停用；恢复入口：右下角壳级按钮）' : ''
+  window.$toast && window.$toast(on ? '已启用 ' + p.name + ' 的 UI（' + slots.map(s => s.slotId).join(', ') + '）' : '已停用 ' + p.name + ' 的 UI（区域恢复空态）' + recover, on ? 'info' : 'warn')
   emitSlotChanged()
 }
 
