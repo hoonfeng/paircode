@@ -304,6 +304,7 @@ func startWebUI(port int) {
 	mux.HandleFunc("/api/mcp/save", ws.handleMCPSave)
 	mux.HandleFunc("/api/tools", handler.HandleTools)
 	mux.HandleFunc("/api/tools/review", handler.HandleReviewConfig)
+	mux.HandleFunc("/api/ui-assembly", handler.HandleUIAssembly)
 	mux.HandleFunc("/api/skills/list", ws.handleSkillsList)
 	mux.HandleFunc("/api/skills/save", ws.handleSkillsSave)
 	mux.HandleFunc("/api/skills/read", ws.handleSkillsRead)

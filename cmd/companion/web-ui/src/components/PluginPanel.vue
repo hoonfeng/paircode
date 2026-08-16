@@ -380,6 +380,12 @@ function uiPluginActive(pname) {
   })
 }
 function toggleUiPlugin(p, on) {
+  // ★ 面板宿主保护：ui-sidebar 承载插件面板（本组件）——停用其 UI 会连同
+  //   面板入口一起消失（死锁）。拒绝停用并提示壳级逃生口（右下角按钮）。
+  if (p.name === 'ui-sidebar' && !on) {
+    window.$toast && window.$toast('ui-sidebar 承载插件面板，不可停用（恢复入口：右下角壳级按钮）', 'warn')
+    return
+  }
   const slots = uiSlotsOf(p.name)
   for (const s of slots) {
     if (s.kind === 'list') {

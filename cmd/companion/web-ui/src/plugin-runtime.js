@@ -126,6 +126,7 @@ export function isOverlayActive(slotId, pluginName) {
 export function setOverlayActive(slotId, pluginName, on) {
   try { localStorage.setItem(overlayKey(slotId, pluginName), on ? '1' : '0') } catch (e) { /* 忽略 */ }
   emitSlotChanged() // 通知宿主重渲染 overlay 槽位
+  persistAssembly()
 }
 
 // ★ 插件级 UI 开关：整插件禁用（插件面板「UI 开关」控制）。
@@ -144,6 +145,7 @@ export function isPluginUIEnabled(pluginName) {
 export function setPluginUIEnabled(pluginName, on) {
   try { localStorage.setItem(uiEnabledKey(pluginName), on ? '1' : '0') } catch (e) { /* 忽略 */ }
   emitSlotChanged() // 通知宿主重渲染（single 空态 / list 过滤）
+  persistAssembly()
 }
 
 // getSlotCandidates 某槽位的全部候选（占用者）。
@@ -184,6 +186,79 @@ export function getSlotOwner(slotId) {
 export function setSlotOwner(slotId, pluginName) {
   try { localStorage.setItem(slotOwnerKey(slotId), pluginName || '') } catch (e) { /* 忽略 */ }
   emitSlotChanged()
+  persistAssembly()
+}
+
+// ─── 装配状态磁盘持久化（.pair/ui-assembly.json）─────────────────────
+//   UI 槽位装配（slotOwner/slotOverlay/slotUIEnabled）运行时权威 = localStorage
+//   （响应式即时）；磁盘文件 = 用户可编辑的持久层（逃生通道：插件面板被停用/
+//   锁死时，直接编辑文件即可控制 UI 装配）。启动时文件优先 merge 进
+//   localStorage；每次变更防抖（400ms）全量写回。文件内容示例：
+//   { "slotOwner": {"sidebar": "ui-sidebar"},
+//     "slotOverlay": {"statusbar-items:ui-statusbar-conn": true},
+//     "slotUIEnabled": {"ui-titlebar": true} }
+let assemblyTimer = null
+function persistAssembly() {
+  if (assemblyTimer) return
+  assemblyTimer = setTimeout(async () => {
+    assemblyTimer = null
+    try {
+      const slotOwner = {}
+      const slotOverlay = {}
+      const slotUIEnabled = {}
+      for (const s of clientSlots) {
+        const v = localStorage.getItem(slotOwnerKey(s.slotId))
+        if (v) slotOwner[s.slotId] = v
+        if (s.kind === 'list') {
+          const ov = localStorage.getItem(overlayKey(s.slotId, s.pluginName))
+          if (ov === '0') slotOverlay[s.slotId + ':' + s.pluginName] = false
+          else if (ov === '1') slotOverlay[s.slotId + ':' + s.pluginName] = true
+        }
+        const ue = localStorage.getItem(uiEnabledKey(s.pluginName))
+        if (ue === '0') slotUIEnabled[s.pluginName] = false
+        else if (ue === '1') slotUIEnabled[s.pluginName] = true
+      }
+      const res = await fetch('/api/ui-assembly', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slotOwner, slotOverlay, slotUIEnabled }),
+      })
+      if (!res.ok) console.warn('[plugin-runtime] 装配状态落盘失败', res.status)
+    } catch (e) { /* 忽略 */ }
+  }, 400)
+}
+
+// loadAssemblyFile 启动时调用：把磁盘装配文件 merge 进 localStorage（文件优先）。
+export async function loadAssemblyFile() {
+  try {
+    const res = await fetch('/api/ui-assembly')
+    if (!res.ok) return
+    const data = await res.json()
+    if (!data || typeof data !== 'object') return
+    const owner = data.slotOwner || {}
+    const overlay = data.slotOverlay || {}
+    const enabled = data.slotUIEnabled || {}
+    let changed = false
+    for (const [slotId, pname] of Object.entries(owner)) {
+      if (pname && localStorage.getItem(slotOwnerKey(slotId)) !== pname) {
+        localStorage.setItem(slotOwnerKey(slotId), pname); changed = true
+      }
+    }
+    for (const [k, v] of Object.entries(overlay)) {
+      const key = 'slotOverlay:' + k
+      const val = v ? '1' : '0'
+      if (localStorage.getItem(key) !== val) { localStorage.setItem(key, val); changed = true }
+    }
+    for (const [name, v] of Object.entries(enabled)) {
+      const key = uiEnabledKey(name)
+      const val = v ? '1' : '0'
+      if (localStorage.getItem(key) !== val) { localStorage.setItem(key, val); changed = true }
+    }
+    if (changed) emitSlotChanged()
+    console.log('[plugin-runtime] 装配状态已从 .pair/ui-assembly.json 合并（' +
+      Object.keys(owner).length + ' owner / ' + Object.keys(overlay).length + ' overlay / ' +
+      Object.keys(enabled).length + ' uiEnabled）')
+  } catch (e) { /* 忽略 */ }
 }
 // getSlotUI 取激活占用者的渲染信息 {render, ui, pluginName}；无激活返回 null。
 export function getSlotUI(slotId) {
@@ -643,7 +718,7 @@ export default {
   startPolling, stopPolling, dispatchHostEvent,
   getInstances, setPanelMount, clientPanels,
   clientSlots, setSlotMount, getSlotCandidates, getSlotOwner, setSlotOwner, getSlotUI, getSlotUIList,
-  emitSlotChanged, isOverlayActive, setOverlayActive, isPluginUIEnabled, setPluginUIEnabled, mountListSlot,
+  emitSlotChanged, isOverlayActive, setOverlayActive, isPluginUIEnabled, setPluginUIEnabled, mountListSlot, loadAssemblyFile,
 }
 
 // ★ 调试/验证暴露（生产保留，无害）：window.__pluginRuntime 供浏览器控制台
