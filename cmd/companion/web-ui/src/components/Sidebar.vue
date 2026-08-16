@@ -18,14 +18,12 @@
 </template>
 
 <script setup>
-import { computed, inject, ref } from 'vue'
-import { state } from '../ui-state.js'
+import { computed, ref } from 'vue'
+import { state, sidebarWidth } from '../ui-state.js'
 import FileExplorer from './FileExplorer.vue'
 import SearchPanel from './SearchPanel.vue'
 import GitPanel from './GitPanel.vue'
 import PluginPanel from './PluginPanel.vue'
-
-const sidebarWidth = inject('sidebarWidth', ref(280))
 
 const headerTitle = computed(() => {
   const titles = { explorer: '文件浏览器', search: '搜索', source: '源代码管理', plugins: '插件' }

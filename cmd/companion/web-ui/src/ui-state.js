@@ -1,12 +1,13 @@
 // ═══════════════════════════════════════════════════════════════
 // ui-state.js — UI 全局状态/对话框/主题/持久化（原 main.js 状态部分）
 //
-// ★ 2026-08-16 全 UI 插件化：main.js 退化为「壳入口」（createApp 壳组件 +
-// 装载 client 半），本文件承载原 main.js 的全部 UI 侧状态逻辑，供
-// UI bundle（ui-main.js → App.vue 及全部组件）import。
-// 只随 UI bundle 编译，壳不引用（壳无需状态）。
+// ★ 2026-08-16 按槽位细粒度拆分：本文件是全部区域插件包（titlebar/
+// activitybar/sidebar/editor/right-panel/statusbar/modals）共享的核心
+// 状态层——被各区域 bundle external（window.__PAIRCODE_CORE.uiState），
+// 所有区域读写同一份 reactive 状态（替代原 App.vue 的 provide/inject）。
+// 壳（ShellApp）与 app-actions 也引用本模块。
 // ═══════════════════════════════════════════════════════════════
-import { reactive } from 'vue'
+import { reactive, ref, computed } from 'vue'
 
 // ─── 持久化键名 ──────────────────────────────────────────────
 export const PERSIST_KEY = 'paircode-ide-state'
@@ -137,6 +138,64 @@ export const state = reactive({
   theme: 'dark',
   focusMode: true, // ★ 默认专注模式：仅隐藏编辑器（对话面板占满），文件资源侧边栏仍显示；Ctrl+K 可切换
 })
+
+// ─── 全局 UI 面板状态（跨区域共享，替代 App.vue provide/inject）───
+// 对话框开关（titlebar 菜单/activitybar 打开 → modals 包消费）
+export const showSettings = ref(false)
+export const showSystem = ref(false)
+export const showSource = ref(false)
+export const showMarketplace = ref(false)
+export const showAbout = ref(false)
+export const showQuickSwitcher = ref(false)
+export const helpDocTarget = ref('features')
+export const showHelp = ref(false)
+// showHelp 可被设为字符串（文档id）或 true（默认 features）
+// 用 computed 包装以拦截 set（必须用 computed() 才能让 .value 赋值触发 setter）
+export const showHelpWrapper = computed({
+  get() { return showHelp.value },
+  set(v) {
+    if (typeof v === 'string') {
+      helpDocTarget.value = v
+      showHelp.value = true
+    } else {
+      showHelp.value = !!v
+      if (showHelp.value) helpDocTarget.value = 'getting-started'
+    }
+  },
+})
+
+// 面板尺寸（editor 包底部面板 / right-panel 包右侧面板 / sidebar 包侧栏）
+export const bottomPanelHeight = ref(180)
+export const rightPanelWidth = ref(380)
+export const sidebarWidth = ref(280)
+
+// 面板尺寸持久化（原 App.vue loadPanelSize/savePanelSize）
+export function loadPanelSize() {
+  try {
+    const d = JSON.parse(localStorage.getItem('paircode-panel-size') || '{}')
+    // ★ 右侧面板宽度上限 520：desktop 1280 窗口下 600 宽（含 255 附加
+    //    = 855px）会把 main-area（grid 1fr）挤压到 ~97px → 终端/xterm
+    //    挤成 98px 窄条（终端只显示 w 的根因）。cap 后右侧最多
+    //    520+255=775px，保证主区 ≥ ~350px。
+    if (d.rpw) rightPanelWidth.value = Math.min(parseFloat(d.rpw) || 380, 520)
+    if (d.bph) bottomPanelHeight.value = d.bph
+  } catch {}
+  try {
+    const sw = localStorage.getItem('paircode-sidebar-width')
+    if (sw) sidebarWidth.value = parseInt(sw, 10)
+  } catch {}
+}
+export function savePanelSize() {
+  try {
+    localStorage.setItem('paircode-panel-size', JSON.stringify({
+      rpw: rightPanelWidth.value, bph: bottomPanelHeight.value
+    }))
+  } catch {}
+  try {
+    localStorage.setItem('paircode-sidebar-width', String(sidebarWidth.value))
+  } catch {}
+}
+loadPanelSize()
 
 // ★ 调试探针入口：暴露全局 store，供 wb-ui probe 直接读取状态层
 if (typeof window !== 'undefined') window.__state = state

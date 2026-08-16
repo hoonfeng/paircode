@@ -19,12 +19,12 @@
 </template>
 
 <script setup>
-import { inject, onMounted, onUnmounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import { state } from '../ui-state.js'
 import SvgIcon from './SvgIcon.vue'
 import { mountListSlot } from '../plugin-runtime.js'
+import { switchActivity } from '../app-actions.js'
 
-const switchActivity = inject('switchActivity')
 const activitySlotEl = ref(null)
 let activityUnsub = null
 

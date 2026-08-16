@@ -144,17 +144,15 @@
 </template>
 
 <script setup>
-import { ref, computed, inject, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import SvgIcon from './SvgIcon.vue'
-
-const showMarketplace = inject('showMarketplace', null)
-const showSettings = inject('showSettings', null)
+import { showMarketplace, showSettings } from '../ui-state.js'
 
 function openMarketplace() {
-  if (showMarketplace) showMarketplace.value = true
+  showMarketplace.value = true
 }
 function openSettings() {
-  if (showSettings) showSettings.value = true
+  showSettings.value = true
 }
 function formatConvTime(iso) {
   if (!iso) return ''

@@ -26,8 +26,8 @@
 </template>
 
 <script setup>
-import { ref, computed, inject, onMounted, onUnmounted } from 'vue'
-import { state } from '../ui-state.js'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { state, showSettings as showSettingsModal, showMarketplace as showMarketplaceModal, showHelpWrapper as showHelpModal, showAbout as showAboutModal } from '../ui-state.js'
 import api from '../api.js'
 
 const menus = [
@@ -51,11 +51,6 @@ const openMenu = ref(null)
 const btnRefs = ref({})
 const dropdownPos = ref({ x: 0, y: 0 })
 let closeTimer = null
-
-const showSettingsModal = inject('showSettings', null)
-const showMarketplaceModal = inject('showMarketplace', null)
-const showHelpModal = inject('showHelp', null)
-const showAboutModal = inject('showAbout', null)
 
 const currentItems = computed(() => {
   const m = menus.find(m => m.label === openMenu.value)

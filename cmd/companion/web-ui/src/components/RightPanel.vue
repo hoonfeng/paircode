@@ -215,8 +215,8 @@
 </template>
 
 <script setup>
-import { ref, computed, inject, onMounted, onUnmounted, nextTick, watch } from 'vue'
-import { state } from '../ui-state.js'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { state, rightPanelWidth } from '../ui-state.js'
 import api from '../api.js'
 import { setGlobalCtx, startConvRuntime, resetConvRuntime, createAssistantPlaceholder, getConvRuntime, getConvCtxStats, resetConvCtxStats } from '../agent-events.js'
 import { useSingleSlot, mountListSlot } from '../plugin-runtime.js'
@@ -234,7 +234,6 @@ const showDebugLog = ref(false)
 
 const props = defineProps({ panelMode: { type: Boolean, default: false } })
 const panelMode = computed(() => !!props.panelMode)
-const rightPanelWidth = inject('rightPanelWidth')
 const toggleRight = () => { state.rightPanelVisible = false }
 // 专注对话切换：专注模式只隐藏编辑器（main-area），文件资源侧边栏保留（sidebarVisible 独立控制）
 const toggleFocus = () => {
