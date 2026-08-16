@@ -62,6 +62,7 @@ _*.txt
 _*.go
 *.orig
 *.bat
+!scripts/build-plugin-bins.bat
 .dbg/
 debug-*.md
 diag_*.txt
