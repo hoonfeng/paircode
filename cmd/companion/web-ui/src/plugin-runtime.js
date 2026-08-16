@@ -137,13 +137,21 @@ export function getSlotCandidates(slotId) {
 //   不会被误设为替换 owner（否则 getSlotUI 查不到 → 空容器）。
 export function getSlotOwner(slotId) {
   let v = ''
-  try { v = localStorage.getItem(slotOwnerKey(slotId)) || '' } catch (e) { /* 忽略 */ }
-  if (v && !clientSlots.some(s => s.slotId === slotId && s.kind !== 'list' && s.pluginName === v)) v = ''
-  if (v) return v
-  // ★ 从未显式选择：仅一个 single 候选时自动激活（对齐参考项目「注册槽位=替换」语义；
-  //   用户在面板选过「内置组件」后存了 ''，走 localStorage 命中，不再自动激活）
   let neverChosen = true
-  try { neverChosen = localStorage.getItem(slotOwnerKey(slotId)) === null } catch (e) { /* 忽略 */ }
+  try {
+    v = localStorage.getItem(slotOwnerKey(slotId)) || ''
+    neverChosen = localStorage.getItem(slotOwnerKey(slotId)) === null
+  } catch (e) { /* 忽略 */ }
+  if (v && !clientSlots.some(s => s.slotId === slotId && s.kind !== 'list' && s.pluginName === v)) {
+    // ★ 持久选择已失效（插件卸载/改名/槽位体系重构后 localStorage 残留）→
+    //   视为「从未选择」，回退自动激活。修复：demo-shell 时代残留的
+    //   paircode-slot-titlebar='demo-shell' 让 ui-* 插件永远不被激活（空态）。
+    neverChosen = true
+    v = ''
+  }
+  if (v) return v
+  // ★ 从未显式选择（或持久选择失效）：仅一个 single 候选时自动激活（对齐参考项目
+  //   「注册槽位=替换」语义；用户显式选过「内置组件」存 '' 时保留其选择，不自动激活）
   if (neverChosen) {
     const cands = clientSlots.filter(s => s.slotId === slotId && s.kind !== 'list' && typeof s.render === 'function')
     if (cands.length === 1) return cands[0].pluginName
