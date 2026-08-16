@@ -1,5 +1,5 @@
 {
-  "version": "1.2.1",
+  "version": "1.3.0",
   "appName": "PairCode IDE",
   "description": "AI-Powered Code Companion",
   "company": "PairCode",
@@ -14,8 +14,31 @@
   },
   "pipeline": [
     {
+      "name": "sync-plugins-to-bin",
+      "command": "robocopy .pair/plugins bin/.pair/plugins /E /XD node_modules /NJH /NJS /NDL & if errorlevel 8 exit /b 1 & exit /b 0",
+      "os": "windows",
+      "ignoreError": false
+    },
+    {
+      "name": "build-ui-plugins",
+      "command": "node scripts/build-ui.mjs",
+      "ignoreError": false
+    },
+    {
+      "name": "build-ui-shell",
+      "command": "npm run build",
+      "dir": ".pair/plugins/ui-app-src",
+      "ignoreError": false
+    },
+    {
+      "name": "sync-embed-shell",
+      "command": "robocopy .pair/assets/runtime/web cmd/companion/web-ui/dist /E /NJH /NJS /NDL & if errorlevel 8 exit /b 1 & exit /b 0",
+      "os": "windows",
+      "ignoreError": false
+    },
+    {
       "name": "build-frontend",
-      "command": "cd {{frontendDir}} \u0026\u0026 npm run build",
+      "command": "cd {{frontendDir}} && npm run build",
       "ignoreError": true
     },
     {
@@ -114,7 +137,7 @@
         "optional": true,
         "recursive": true
       },
-            {
+      {
         "src": "bin/bash",
         "dst": "bin/bash",
         "optional": true,
