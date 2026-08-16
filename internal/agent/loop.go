@@ -838,7 +838,9 @@ func (l *Loop) emitCacheShape(callMsgs []Message, tools []ToolDefinition) {
 	tag := fmt.Sprintf("[cache-diag] turn=%d step=%d", l.TurnNo, l.StepNo)
 	// ★ 诊断：dynamic 部分内容指纹（定位变化源——system 消息 boundary 后内容）
 	if sp := systemPromptFromMsgs(callMsgs); sp != "" {
-		if _, dyn := splitAtBoundary(sp); dyn != "" {
+		static, dyn := splitAtBoundary(sp)
+		log.Printf("%s system total=%d static=%d dyn=%d boundary_count=%d", tag, len(sp), len(static), len(dyn), strings.Count(sp, CacheBoundary))
+		if dyn != "" {
 			runes := []rune(dyn)
 			head := string(runes[:min(len(runes), 100)])
 			log.Printf("%s dynamic 内容 len=%d head=%q", tag, len(runes), head)
