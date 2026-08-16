@@ -233,30 +233,34 @@ func removeToolset(projectRoot string, scope toolsetScope, name string) error {
 //   否则用户加入的内置分组重启后不生效）。
 // ★ 全局插件（UI 类跨工作区）独立于工具集：见 LoadGlobalPlugins（不进工具集列表）。
 func LoadAllToolsets(ph *PluginHost, projectRoot string) {
-	if ph == nil || projectRoot == "" {
+	if ph == nil {
 		return
 	}
 	loaded := 0
-	for _, meta := range listToolsets(projectRoot, toolsetProject) {
-		ts, err := loadToolset(projectRoot, toolsetProject, meta.Name)
-		if err != nil {
-			continue
-		}
-		if err := installToolset(ph, ts); err != nil {
-			log.Printf("[toolset] %s 装载失败: %v", meta.Name, err)
-			continue
-		}
-		loaded++
-	}
-	// 内置工具包（用户/agent 选择加入的分组）
-	if ts, err := loadToolset(projectRoot, toolsetProject, builtinToolsetName); err == nil {
-		if err := installToolset(ph, ts); err != nil {
-			log.Printf("[toolset] builtin 内置工具包装载失败: %v", err)
-		} else {
+	// ★ 项目工具集（工作区 .pair/toolsets/）——依赖工作区，未打开时跳过
+	if projectRoot != "" {
+		for _, meta := range listToolsets(projectRoot, toolsetProject) {
+			ts, err := loadToolset(projectRoot, toolsetProject, meta.Name)
+			if err != nil {
+				continue
+			}
+			if err := installToolset(ph, ts); err != nil {
+				log.Printf("[toolset] %s 装载失败: %v", meta.Name, err)
+				continue
+			}
 			loaded++
 		}
+		// 内置工具包（用户/agent 选择加入的分组）
+		if ts, err := loadToolset(projectRoot, toolsetProject, builtinToolsetName); err == nil {
+			if err := installToolset(ph, ts); err != nil {
+				log.Printf("[toolset] builtin 内置工具包装载失败: %v", err)
+			} else {
+				loaded++
+			}
+		}
 	}
-	// 全局插件（UI 类跨工作区生效；不属于任何工具集）
+	// ★ 全局插件（UI 类跨工作区生效；不属于任何工具集）——不依赖工作区：
+	//   存 <InstallDir>/.pair/plugins/，未打开工作区也必须装载（发布版启动即生效）
 	if n := LoadGlobalPlugins(ph); n > 0 {
 		loaded += n
 	}
@@ -310,6 +314,10 @@ func LoadGlobalPlugins(ph *PluginHost) int {
 		// ★ 源码包目录约定：<name>-src 是插件源码（如 ui-app-src 前端 Vite 工程），
 		//   不是可装载插件包——跳过（用户可改源码后重新构建进插件包/assets）。
 		if strings.HasSuffix(e.Name(), "-src") {
+			continue
+		}
+		// ★ 非插件目录（无 package.json，如 config/ 模型模板、README 等）静默跳过
+		if _, err := os.Stat(filepath.Join(globalPluginsDir(), e.Name(), "package.json")); err != nil {
 			continue
 		}
 		if err := applyGlobalPluginDir(ph, filepath.Join(globalPluginsDir(), e.Name())); err != nil {

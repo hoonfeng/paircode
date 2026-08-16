@@ -160,6 +160,11 @@
         "optional": true
       },
       {
+        "src": ".pair/cordis-approved.json",
+        "dst": ".pair/cordis-approved.json",
+        "optional": true
+      },
+      {
         "src": "bin/.pair/plugins",
         "dst": ".pair/plugins",
         "optional": true,

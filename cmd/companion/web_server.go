@@ -236,19 +236,23 @@ func startWebUI(port int) {
 		agent.MCPProjectConfigPath = filepath.Join(root, ".pair", "mcp.json")
 	}
 
-	// ★ 启动时初始化参考注册表，供 /api/tools 查询工具列表（无需先启动对话）
-	if root := core.Root(); root != "" {
-		initReg := agent.NewRegistry()
-		agent.RegisterHostFrameworkTools(initReg, root)
-		agent.RegisterHarnessTools(initReg, root)
-		agent.RegisterCommitMessageTool(initReg)
-		// ★ harness 对齐（默认关闭——全量工具集；WB_HARNESS=1 开启时精简 pair 独有工具）；
-		//   被禁用工具保留在注册表（前端可见可管理），内置工具集 builtin 可一键恢复
-		if n := agent.ApplyHarnessToolFilter(initReg, nil); n > 0 {
-			log.Printf("[WebUI] harness 对齐模式：禁用 %d 个 pair 独有工具（WB_FULL_TOOLS=1 恢复全量；工具集面板 builtin 分组开关启用）", n)
-		}
-		handler.SetToolsRegistry(initReg)
-		log.Printf("[WebUI] 参考工具注册表已初始化（%d 个工具）", len(initReg.AllToolMeta()))
+	// ★ 启动时初始化参考注册表 + 全局插件宿主（web 模式唯一的 PluginHost）：
+	//   ★ 插件是程序的扩展，存 <InstallDir>/.pair/plugins/（跨工作区生效）——与
+	//     是否打开工作区无关，未打开工作区也必须初始化并装载全局插件
+	//     （发布版启动即生效：UI 区域插件/工具插件不依赖工作区）；
+	//     项目工具集（工作区 .pair/toolsets/）等有工作区时才装载。
+	root = core.Root() // 可为空（未打开工作区）
+	initReg := agent.NewRegistry()
+	agent.RegisterHostFrameworkTools(initReg, root)
+	agent.RegisterHarnessTools(initReg, root)
+	agent.RegisterCommitMessageTool(initReg)
+	// ★ harness 对齐（默认关闭——全量工具集；WB_HARNESS=1 开启时精简 pair 独有工具）；
+	//   被禁用工具保留在注册表（前端可见可管理），内置工具集 builtin 可一键恢复
+	if n := agent.ApplyHarnessToolFilter(initReg, nil); n > 0 {
+		log.Printf("[WebUI] harness 对齐模式：禁用 %d 个 pair 独有工具（WB_FULL_TOOLS=1 恢复全量；工具集面板 builtin 分组开关启用）", n)
+	}
+	handler.SetToolsRegistry(initReg)
+	log.Printf("[WebUI] 参考工具注册表已初始化（%d 个工具）", len(initReg.AllToolMeta()))
 
 	// ★ 内置 HTTP 接口 → 内核路由表（接口插件化：能力注册，不挂载）。
 	//   必须在磁盘插件装载（LoadAllToolsets → LoadGlobalPlugins 装 core-api）
@@ -258,22 +262,26 @@ func startWebUI(port int) {
 	// ★ 全局插件宿主：web 模式唯一的 PluginHost（浏览器插件面板 + cordis 工具共用）。
 	//   与 AgentBase.Init 对齐：NewPluginHost + RegisterCordisTools + 内置插件 + cordis.patch.json。
 	//   （框架能力 workspaceRoot 服务 + 内置工具集模板已内联 NewPluginHost，不占插件位）
-	if root := core.Root(); root != "" {
-		ph := agent.NewPluginHost(initReg, agentMgr.Store(), root)
-		agent.RegisterCordisTools(initReg, ph, root)
-		agent.RegisterToolsetTools(initReg, root, ph)
+	ph := agent.NewPluginHost(initReg, agentMgr.Store(), root)
+	agent.RegisterCordisTools(initReg, ph, root)
+	agent.RegisterToolsetTools(initReg, root, ph)
+	if root != "" {
 		// ★ 自动创建默认内置工具集（builtin.json 缺失时：dsh 极简核心捞入工作区）
 		agent.EnsureDefaultBuiltinToolset(root)
-		// ★ 启动自动装载工具集（.pair/toolsets/ + 全局）
-		agent.LoadAllToolsets(ph, root)
-		if err := ph.LoadCordisPatch(filepath.Join(root, ".pair", "cordis.patch.json")); err != nil {
-			log.Printf("[WebUI] cordis.patch.json 装配失败（不阻塞启动）: %v", err)
-		}
-		handler.SetPluginHost(ph)
-		agent.SetGlobalPluginHost(ph)
-		log.Printf("[WebUI] 全局插件宿主已初始化（%d 个插件）", len(ph.List()))
 	}
+	// ★ 启动自动装载工具集（工作区 .pair/toolsets/ + 全局插件；未打开工作区只装全局插件）
+	agent.LoadAllToolsets(ph, root)
+	// ★ cordis.patch.json 静态插件装配：有工作区读工作区，否则读安装目录（全局）
+	patchPath := filepath.Join(root, ".pair", "cordis.patch.json")
+	if root == "" {
+		patchPath = filepath.Join(core.InstallDir(), ".pair", "cordis.patch.json")
 	}
+	if err := ph.LoadCordisPatch(patchPath); err != nil {
+		log.Printf("[WebUI] cordis.patch.json 装配失败（不阻塞启动）: %v", err)
+	}
+	handler.SetPluginHost(ph)
+	agent.SetGlobalPluginHost(ph)
+	log.Printf("[WebUI] 全局插件宿主已初始化（%d 个插件）", len(ph.List()))
 
 	// 工作区文件夹变更时同步到 agent 路径解析
 	core.OnSyncWorkspace = func(primaryChanged bool) {

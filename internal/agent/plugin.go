@@ -30,6 +30,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/hoonfeng/paircode/internal/core"
 )
 
 // ─── EventBus ─────────────────────────────────────────────
@@ -687,11 +689,13 @@ func NewPluginHost(registry *Registry, store ConversationStore, root string) *Pl
 // 稳定——进程内 dyn-n 序号随装配顺序漂移，不能作持久化键；覆盖该插件后续版本）。
 
 // approvedFilePath .pair/cordis-approved.json 的绝对路径。
+// ★ 有工作区读工作区（开发态）；未打开工作区读安装目录（发布态）——
+//   UI 插件 client 半审批记录跨工作区生效，发布包应随带安装目录副本。
 func (h *PluginHost) approvedFilePath() string {
-	if h.root == "" {
-		return ""
+	if h.root != "" {
+		return filepath.Join(h.root, ".pair", "cordis-approved.json")
 	}
-	return filepath.Join(h.root, ".pair", "cordis-approved.json")
+	return filepath.Join(core.InstallDir(), ".pair", "cordis-approved.json")
 }
 
 // loadApprovedClients 从 .pair/cordis-approved.json 恢复批准记录（缺文件/坏 JSON 静默）。
