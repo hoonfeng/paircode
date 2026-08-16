@@ -231,6 +231,12 @@ func startWebUI(port int) {
 	if sysDir := filepath.Join(core.ConfigDir(), "skills"); sysDir != "" {
 		agent.SkillSystemDir = sysDir
 	}
+	// ★ 技能启停/状态覆盖在预热前应用（与 buildWebLoopOpts 保持一致）：
+	//   若只在此后 buildWebLoopOpts 才设置，PromptCacheWarmer 预热缓存的是
+	//   「全部技能」版本，运行时 overrides 生效变「部分技能」→ dynamic 段每次
+	//   重建都不同 → system 消息前缀变化 → DeepSeek 缓存断裂（命中率掉到 ~50%）。
+	agent.SkillEnabled = core.Settings.SkillEnabledOverrides
+	agent.SkillStatusOverride = core.Settings.SkillStatusOverrides
 	// 初始化 MCP 配置路径（供 agent/mcp_config.go 读写 mcp.json）
 	agent.MCPUserConfigPath = filepath.Join(core.ConfigDir(), "mcp.json")
 	if root := core.Root(); root != "" {
