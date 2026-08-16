@@ -1,19 +1,25 @@
 // ═══════════════════════════════════════════════════════════════
-// tool-harness — 独立插件二进制（run_code：Code Mode 调度）
+// tool-harness — 独立插件二进制（harness 工具组）
 //
-// tool-harness 磁盘插件 7 个工具（read/write/edit/glob/grep/bash/
-// str_replace_editor）为 JS 原生化（调用实现在插件内），唯 run_code 走
-// 二进制承载（node 嵌套 goja 调度 + 外部进程执行，二进制进程内自持 goja
-// 运行时）——本二进制只注册 run_code。
-//
-// 协议（与宿主 ctx.binary.exec 对齐）：
-//   stdin  JSON {"tool":"run_code","args":{...},"root":"<工作区根>"}
-//   stdout JSON {"ok":true,"text":"..."} | {"ok":false,"error":"..."}
+// ★ 二进制插件协议（宿主 ctx.binary.exec 调用）：
+//   stdin  一行 JSON：{{"tool":"...","args":{{...}},"root":"<工作区根>"}}
+//   stdout 一行 JSON：{{"ok":true,"text":"..."}} | {{"ok":false,"error":"..."}}
 //   exit 0（协议错误 exit 2）
-// 装配位置：.pair/plugins/tool-harness/bin/tool-harness.exe
+//
+// ★ 2026-08-16 第四轮：实现随插件外置——cmd/plugins/tool-harness/impl/ 自持
+//   本组全部实现（不 import internal/agent），本二进制只链接自身实现，
+//   改实现 → 重编译本二进制 → 替换产物 → 重启生效。
 // ═══════════════════════════════════════════════════════════════
 package main
 
-import "github.com/hoonfeng/paircode/pkg/toolbin"
+import (
+	"github.com/hoonfeng/paircode/cmd/plugins/tool-harness/impl"
+	"github.com/hoonfeng/paircode/pkg/toolbin"
+)
 
-func main() { toolbin.RunRunCode() }
+func main() {
+	req, root := toolbin.Boot()
+	reg := toolbin.NewRegistry()
+	impl.Register(reg, root)
+	toolbin.Serve(reg, req)
+}

@@ -1,17 +1,25 @@
 // ═══════════════════════════════════════════════════════════════
-// tool-binary — 独立插件二进制（二进制读写工具组 inspect_binary/write_binary）
+// tool-binary — 独立插件二进制（binary 工具组）
 //
-// ★ 2026-08-16 第三轮：由「统一宿主二进制」改为「独立插件二进制」——
-//   只承载 binary 组（其余组各有自己的 cmd/plugins/tool-*/main.go）。
-//   产物 .pair/plugins/tool-binary/bin/tool-binary.exe。
-//
-// 协议（与宿主 ctx.binary.exec 对齐）：
-//   stdin  JSON {"tool":"inspect_binary","args":{...},"root":"<工作区根>"}
-//   stdout JSON {"ok":true,"text":"..."} | {"ok":false,"error":"..."}
+// ★ 二进制插件协议（宿主 ctx.binary.exec 调用）：
+//   stdin  一行 JSON：{{"tool":"...","args":{{...}},"root":"<工作区根>"}}
+//   stdout 一行 JSON：{{"ok":true,"text":"..."}} | {{"ok":false,"error":"..."}}
 //   exit 0（协议错误 exit 2）
+//
+// ★ 2026-08-16 第四轮：实现随插件外置——cmd/plugins/tool-binary/impl/ 自持
+//   本组全部实现（不 import internal/agent），本二进制只链接自身实现，
+//   改实现 → 重编译本二进制 → 替换产物 → 重启生效。
 // ═══════════════════════════════════════════════════════════════
 package main
 
-import "github.com/hoonfeng/paircode/pkg/toolbin"
+import (
+	"github.com/hoonfeng/paircode/cmd/plugins/tool-binary/impl"
+	"github.com/hoonfeng/paircode/pkg/toolbin"
+)
 
-func main() { toolbin.Run("binary") }
+func main() {
+	req, root := toolbin.Boot()
+	reg := toolbin.NewRegistry()
+	impl.Register(reg, root)
+	toolbin.Serve(reg, req)
+}
