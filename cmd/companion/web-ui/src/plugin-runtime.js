@@ -185,10 +185,13 @@ export function getSlotUIList(slotId) {
 
 // mountListSlot 挂载 list 型槽位宿主（细粒度叠加注入通用入口）。
 // hostRef：Vue ref（.value 为容器 DOM）；slotId：宿主预定义槽位 id；
-// opts.isActive(pluginName) 可选过滤（默认全部激活，同 overlay 语义）。
+// opts.isActive(pluginName) 可选过滤；默认 = isOverlayActive(slotId, n)
+//   （对齐 overlay 语义：未显式设置=激活，勾选取消='0'=隐藏）。
+//   未传该选项时宿主组件也能正确响应插件面板的勾选/取消勾选。
 // 每个占用者渲染进独立 div（class=plugin-slot-item plugin-slot-<id>-item, data-plugin=名）；
 // render 返回的 cleanup 在重渲染前调用。返回取消订阅函数（组件卸载前调用）。
 export function mountListSlot(hostRef, slotId, opts = {}) {
+  const isActive = opts.isActive || ((n) => isOverlayActive(slotId, n))
   const cleanups = new Map()
   function render() {
     const host = hostRef && hostRef.value
@@ -199,7 +202,7 @@ export function mountListSlot(hostRef, slotId, opts = {}) {
     cleanups.clear()
     host.innerHTML = ''
     for (const s of getSlotUIList(slotId)) {
-      if (opts.isActive && !opts.isActive(s.pluginName)) continue
+      if (!isActive(s.pluginName)) continue
       const item = document.createElement('div')
       item.className = 'plugin-slot-item plugin-slot-' + slotId + '-item'
       item.dataset.plugin = s.pluginName

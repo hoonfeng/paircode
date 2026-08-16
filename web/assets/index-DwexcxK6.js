@@ -11673,6 +11673,7 @@
     return clientSlots.filter((s) => s.slotId === slotId && s.kind === "list" && typeof s.render === "function").map((s) => ({ render: s.render, ui: getUIFor(s.pluginName), pluginName: s.pluginName }));
   }
   function mountListSlot(hostRef, slotId, opts = {}) {
+    const isActive = opts.isActive || ((n) => isOverlayActive(slotId, n));
     const cleanups = /* @__PURE__ */ new Map();
     function render2() {
       const host = hostRef && hostRef.value;
@@ -11687,7 +11688,7 @@
       cleanups.clear();
       host.innerHTML = "";
       for (const s of getSlotUIList(slotId)) {
-        if (opts.isActive && !opts.isActive(s.pluginName)) continue;
+        if (!isActive(s.pluginName)) continue;
         const item = document.createElement("div");
         item.className = "plugin-slot-item plugin-slot-" + slotId + "-item";
         item.dataset.plugin = s.pluginName;
