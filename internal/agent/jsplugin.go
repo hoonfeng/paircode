@@ -886,6 +886,8 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 			ctxObj.Set("logger", p.buildLoggerService())
 		case "timer":
 			ctxObj.Set("timer", p.buildTimerService(ctxObj))
+		case "kernel":
+			ctxObj.Set("kernel", p.buildKernelService())
 		}
 	}
 
@@ -1359,6 +1361,83 @@ func (p *jsPluginAdapter) buildTimerService(ctxObj *goja.Object) goja.Value {
 	return vm.ToValue(t)
 }
 
+// ─── ctx.kernel：内核 API 路由服务（接口插件化） ─────────────
+//
+// 内置 /api/* 接口的能力（Go handler）保留在宿主内核路由表
+// （internal/agent/kernel_api.go），路由挂载权经本服务交给插件：
+//   - ctx.kernel.routes()      → 全部内核接口清单（[{key,method,path,desc}]）
+//   - ctx.kernel.install(list) → 把清单里指定 key 的路由挂到 ext 表
+//     （list = [{key}] 或 [{key,method,path}]；忽略未知 key，返回统计）
+//   - ctx.kernel.installed()   → 已安装的 key 列表
+//   - ctx.kernel.total()       → 内核表容量
+//
+// 插件卸载时，install 登记的 disposer 自动摘除路由（接口随插件生灭）。
+func (p *jsPluginAdapter) buildKernelService() goja.Value {
+	vm := p.vm
+	k := vm.NewObject()
+
+	k.Set("routes", func(call goja.FunctionCall) goja.Value {
+		// 手动转 map（goja 对 Go struct 用字段名序列化，需按 json tag 给 JS 侧 key）
+		metas := KernelAPIRoutes()
+		out := make([]map[string]any, 0, len(metas))
+		for _, m := range metas {
+			out = append(out, map[string]any{
+				"key":    m.Key,
+				"method": m.Method,
+				"path":   m.Path,
+				"desc":   m.Desc,
+			})
+		}
+		return vm.ToValue(out)
+	})
+	k.Set("installed", func(call goja.FunctionCall) goja.Value {
+		return vm.ToValue(KernelAPIInstalledKeys())
+	})
+	k.Set("total", func(call goja.FunctionCall) goja.Value {
+		return vm.ToValue(KernelAPITotal())
+	})
+	k.Set("install", func(call goja.FunctionCall) goja.Value {
+		listVal := call.Argument(0)
+		if goja.IsUndefined(listVal) || goja.IsNull(listVal) {
+			panic(vm.NewTypeError("ctx.kernel.install: 需要一个路由清单数组（ctx.kernel.routes() 可查）"))
+		}
+		exported := listVal.Export()
+		items, ok := exported.([]any)
+		if !ok {
+			panic(vm.NewTypeError("ctx.kernel.install: 参数必须是数组 [{key,method,path}, ...]"))
+		}
+		installed := 0
+		missing := 0
+		for _, it := range items {
+			obj, ok := it.(map[string]any)
+			if !ok {
+				continue
+			}
+			key, _ := obj["key"].(string)
+			if key == "" {
+				continue
+			}
+			dispose, err := KernelAPIInstall(key)
+			if err != nil {
+				missing++
+				log.Printf("[js-plugin:%s] ctx.kernel.install %q 失败: %v", p.def.id, key, err)
+				continue
+			}
+			installed++
+			// 卸载时自动摘除路由（与 ctx.http.register 同生命周期纪律）
+			disposeFn := dispose
+			p.addCleanup(disposeFn)
+		}
+		return vm.ToValue(map[string]any{
+			"installed": installed,
+			"missing":   missing,
+			"total":     len(items),
+		})
+	})
+
+	return vm.ToValue(k)
+}
+
 // ─── 沙箱创建与求值 ────────────────────────────────────────
 
 // newJSSandbox 创建插件沙箱：注入 console/btoa/atob/TextEncoder/TextDecoder
@@ -1714,7 +1793,7 @@ func (h *PluginHost) checkInjects(def *jsPluginDef) error {
 // hasService 判断宿主是否提供某服务（静态服务键 + 动态 ctx.provide 服务）。
 func (h *PluginHost) hasService(name string) bool {
 	switch name {
-	case "fs", "web", "bash", "sse", "ws", "logger", "timer", "tools", "events", "store", "app", "workspaceRoot":
+	case "fs", "web", "bash", "sse", "ws", "logger", "timer", "tools", "events", "store", "app", "workspaceRoot", "kernel":
 		return true
 	}
 	return h.ctx.Get(name) != nil
@@ -1722,7 +1801,7 @@ func (h *PluginHost) hasService(name string) bool {
 
 // availableServices 宿主可用服务清单（供报错引导/文档展示）。
 func (h *PluginHost) availableServices() []string {
-	names := []string{"fs", "web", "bash", "sse", "ws", "logger", "timer", "tools", "events", "store", "app", "workspaceRoot"}
+	names := []string{"fs", "web", "bash", "sse", "ws", "logger", "timer", "tools", "events", "store", "app", "workspaceRoot", "kernel"}
 	h.ctx.servicesMu.RLock()
 	for n := range h.ctx.services {
 		names = append(names, n)

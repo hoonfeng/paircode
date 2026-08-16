@@ -239,6 +239,11 @@ func startWebUI(port int) {
 		handler.SetToolsRegistry(initReg)
 		log.Printf("[WebUI] 参考工具注册表已初始化（%d 个工具）", len(initReg.AllToolMeta()))
 
+	// ★ 内置 HTTP 接口 → 内核路由表（接口插件化：能力注册，不挂载）。
+	//   必须在磁盘插件装载（LoadAllToolsets → LoadGlobalPlugins 装 core-api）
+	//   之前调用——core-api apply 时经 ctx.kernel.install 挂载这些接口。
+	registerKernelAPIs(ws)
+
 	// ★ 全局插件宿主：web 模式唯一的 PluginHost（浏览器插件面板 + cordis 工具共用）。
 	//   与 AgentBase.Init 对齐：NewPluginHost + RegisterCordisTools + 内置插件 + cordis.patch.json。
 	//   （框架能力 workspaceRoot 服务 + 内置工具集模板已内联 NewPluginHost，不占插件位）
@@ -278,80 +283,15 @@ func startWebUI(port int) {
 	}
 	mux := http.NewServeMux()
 
-	// ── 基础 API 路由（非 chat） ──
-	mux.HandleFunc("/api/health", ws.handleHealth)
-	mux.HandleFunc("/api/fs/list", ws.handleFSList)
-	mux.HandleFunc("/api/fs/read", ws.handleFSRead)
-	mux.HandleFunc("/api/fs/write", ws.handleFSWrite)
-	mux.HandleFunc("/api/fs/rename", ws.handleFSRename)
-	mux.HandleFunc("/api/fs/drives", ws.handleFSDrives)
-	mux.HandleFunc("/api/workspace", ws.handleWorkspace)
-	mux.HandleFunc("/api/settings", ws.handleSettings)
-	mux.HandleFunc("/api/system/info", ws.handleSysInfo)
-	mux.HandleFunc("/api/fs/search", ws.handleFSSearch)
-	mux.HandleFunc("/api/fs/delete", ws.handleFSDelete)
-	mux.HandleFunc("/api/fs/mkdir", ws.handleFSMkdir)
-	mux.HandleFunc("/api/fs/image", ws.handleFSImage)
-	mux.HandleFunc("/api/fs/file-info", ws.handleFSFileInfo)
-	mux.HandleFunc("/api/fs/hex", ws.handleFSHex)
-	mux.HandleFunc("/api/tasks", ws.handleTasks)
-	mux.HandleFunc("/api/conversations", ws.handleConversations)
-	mux.HandleFunc("/api/conversations/", ws.handleConversationByID)
-	mux.HandleFunc("/api/taskplan", ws.handleTaskPlan)
-	mux.HandleFunc("/api/system/exec", ws.handleExec)
-	mux.HandleFunc("/api/models", ws.handleModels)
-	mux.HandleFunc("/api/instructions", ws.handleInstructions)
-	mux.HandleFunc("/api/philosophy", ws.handlePhilosophy)
-	mux.HandleFunc("/api/mcp/list", ws.handleMCPList)
-	mux.HandleFunc("/api/mcp/save", ws.handleMCPSave)
-	mux.HandleFunc("/api/tools", handler.HandleTools)
-	mux.HandleFunc("/api/tools/review", handler.HandleReviewConfig)
-	mux.HandleFunc("/api/ui-assembly", handler.HandleUIAssembly)
-	mux.HandleFunc("/api/skills/list", ws.handleSkillsList)
-	mux.HandleFunc("/api/skills/save", ws.handleSkillsSave)
-	mux.HandleFunc("/api/skills/read", ws.handleSkillsRead)
+	// ★ 接口插件化（2026-08-16）：内置 /api/* 接口全部进内核路由表
+	//   （internal/agent/kernel_api.go，能力层），路由挂载权交给 core-api
+	//   磁盘插件（.pair/plugins/core-api/，apply 时 ctx.kernel.install）。
+	//   mux 不再硬编码任何 /api/* 路由——插件经 ExtRouteMiddleware 优先拦截；
+	//   插件停用 → 接口消失（接口随插件生命周期生灭）。
+	registerKernelAPIs(ws)
 
-	mux.HandleFunc("/api/skills/delete", ws.handleSkillsDelete)
-	mux.HandleFunc("/api/tokens/stats", ws.handleTokensStats)
-	mux.HandleFunc("/api/debug/logs", ws.handleDebugLogs)
-	mux.HandleFunc("/api/debug/logs/", ws.handleDebugLogByID)
-	mux.HandleFunc("/api/plugins", handler.HandlePlugins)
-	mux.HandleFunc("/api/plugins/detail", handler.HandlePluginDetail)
-	mux.HandleFunc("/api/plugins/action", handler.HandlePluginAction)
-	mux.HandleFunc("/api/plugins/define", handler.HandlePluginDefine)
-	mux.HandleFunc("/api/plugins/event", handler.HandlePluginEvent)
-	mux.HandleFunc("/api/plugins/invoke", handler.HandlePluginInvoke)
-	mux.HandleFunc("/api/plugins/client-failure", handler.HandlePluginClientFailure)
-	mux.HandleFunc("/api/plugins/client-events", handler.HandlePluginClientEvents)
-	mux.HandleFunc("/api/plugins/client-state", handler.HandlePluginClientState)
-	mux.HandleFunc("/api/plugins/builtin", handler.HandleBuiltinPlugins)
-	mux.HandleFunc("/api/plugins/tool", handler.HandlePluginToolToggle)
-	mux.HandleFunc("/api/toolsets", handler.HandleToolsetsList)
-	mux.HandleFunc("/api/toolsets/build", handler.HandleToolsetBuild)
-	mux.HandleFunc("/api/toolsets/export", handler.HandleToolsetExport)
-	mux.HandleFunc("/api/toolsets/import", handler.HandleToolsetImport)
-	mux.HandleFunc("/api/toolsets/remove", handler.HandleToolsetRemove)
-
-	// ── Git API 路由 ──
-	mux.HandleFunc("/api/git/status", ws.handleGitStatus)
-	mux.HandleFunc("/api/git/init", ws.handleGitInit)
-	mux.HandleFunc("/api/git/diff", ws.handleGitDiff)
-	mux.HandleFunc("/api/git/add", ws.handleGitAdd)
-	mux.HandleFunc("/api/git/reset", ws.handleGitReset)
-	mux.HandleFunc("/api/git/commit", ws.handleGitCommit)
-	mux.HandleFunc("/api/git/log", ws.handleGitLog)
-	mux.HandleFunc("/api/git-log", ws.handleGitLog) // 避广告拦截器
-	mux.HandleFunc("/api/git/branch", ws.handleGitBranch)
-	mux.HandleFunc("/api/git/checkout", ws.handleGitCheckout)
-	mux.HandleFunc("/api/git/stash", ws.handleGitStash)
-	mux.HandleFunc("/api/git/stash-list", ws.handleGitStashList)
-	mux.HandleFunc("/api/git/ignore", ws.handleGitIgnore)
-	mux.HandleFunc("/api/git/discard", ws.handleGitDiscard)
-	mux.HandleFunc("/api/git/push", ws.handleGitPush)
-	mux.HandleFunc("/api/git/pull", ws.handleGitPull)
-	mux.HandleFunc("/api/git/remote", ws.handleGitRemote)
-
-	// chat/agent 路由由 registerExtraHandlers 注册（桌面 vs webonly 不同实现）
+	// chat 框架路由（WebSocket 端点 /ws、/api/terminal/ws 保留宿主；
+	// chat/marketplace/memory 等 REST 接口已进内核表，见 registerKernelAPIs）
 	registerExtraHandlers(mux, ws)
 
 	// 启动事件持久化后台 worker：订阅 SubscribeAll，处理 token/历史持久化。

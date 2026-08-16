@@ -14,9 +14,10 @@
 //   GET /api/ext/fs/list  受限目录列表
 //   GET /api/ext/routes   本插件注册的路由清单（自描述）
 //
-// 设计边界：内置 /api/* 核心 API（chat/conversations/plugins/settings…）与
-// Go 内核深度耦合（会话/agent/存储），保持宿主实现（框架协议）；插件扩展点
-// 面向「新增接口」——如本插件的代理/受限访问类 API，前端与外部工具可复用。
+// 设计边界（2026-08-16 更新）：内置 /api/* 核心接口已由 core-api 插件
+// （.pair/plugins/core-api/）接管——实现保留 Go 内核路由表（kernel_api.go），
+// 挂载权在插件（ctx.kernel.install）。本插件（web-api）的 /api/ext/* 仍是
+// 「新增接口」扩展示例（代理/受限访问类），与 core-api 互补。
 // ═══════════════════════════════════════════════════════════════
 
 function parseQuery(qs) {

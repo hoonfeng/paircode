@@ -34,6 +34,20 @@ JS 插件 execute → ctx.binary.exec(tool, args[, {timeout}]) → text
   - ★ 落地用例（2026-08-16）：磁盘插件 `web-api/` 用本能力注册 `/api/ext/*`
     6 条路由（status / fetch 同源代理 / fs-read / fs-exists / fs-list / routes），
     curl 直接消费，验证「插件扩展 HTTP 接口」链路全通（见 web-api/index.js）
+- `ctx.kernel.*` → 内置 HTTP 接口装配（★ 接口插件化：Go 硬编码清零）：
+  - 内置 /api/* 接口实现保留 Go 内核路由表（internal/agent/kernel_api.go，
+    由 cmd/companion/kernel_register.go 注册 82 条），**挂载权在插件**；
+  - `ctx.kernel.routes()` → 全部内核接口清单 `[{key,method,path,desc}]`
+  - `ctx.kernel.install(list)` → 把清单中指定 key 挂到插件 ext 路由表
+    （返回 `{installed, missing, total}`；重复安装报错=装配层契约）
+  - `ctx.kernel.installed()` / `ctx.kernel.total()` → 已安装 key / 表容量
+  - 插件卸载自动摘除路由（接口随插件生命周期生灭）
+  - ★ 落地用例（2026-08-16）：磁盘插件 `core-api/` 持有 82 条内置接口清单
+    并在 apply 时全量安装（改 core-api/index.js 的 ROUTES 数组可增删接口）——
+    web_server.go mux 不再硬编码任何 /api/* 路由（只剩 /ws、/api/terminal/ws
+    WebSocket 端点与 /plugins-assets/、静态文件框架路由）
+  - ⚠️ 管理面自锁：/api/plugins* 与 /api/toolsets* 也由 core-api 装配，
+    停用 core-api 会导致插件面板接口消失（重启恢复，与停用 ui-app 同理）
 - `ctx.sse.register(path, fn)` → 注册 SSE 实时推送端点（事件通道插件化）：
   - `fn(emit, params) → cleanup`：连接建立时在 VM 锁内调用一次（可 await）；
     `emit(event, payload)` 推送事件（payload JSON 序列化，跨调用可保存复用，
