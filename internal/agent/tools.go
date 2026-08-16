@@ -196,6 +196,10 @@ func (r *Registry) UsageGuideText() string {
 	if len(entries) == 0 {
 		return ""
 	}
+	// ★ 2026-08-17 对齐 Definitions 字典序：entries 按 name 排序 + 分类名排序，
+	//   保证工具使用指南文本跨装配时序稳定（该文本注入 system 动态后缀，
+	//   若随注册顺序漂移会连带动态后缀变化，减少可命中的后缀缓存段）。
+	sort.Slice(entries, func(i, j int) bool { return entries[i].name < entries[j].name })
 	// 按 Category 分组
 	groups := map[string][]guideEntry{}
 	var cats []string
@@ -211,6 +215,7 @@ func (r *Registry) UsageGuideText() string {
 		}
 		groups[cat] = append(groups[cat], e)
 	}
+	sort.Strings(cats)
 	var b strings.Builder
 	b.WriteString("📋 工具使用指南（按分类，请优先使用专用工具而非 run_command）：\n\n")
 	for _, cat := range cats {
@@ -303,8 +308,13 @@ func (r *Registry) AllToolMeta() []ToolMeta {
 
 
 
-// Definitions 导出已启用工具的定义（按注册顺序），传给 LLM 作 function-calling。
+// Definitions 导出已启用工具的定义，传给 LLM 作 function-calling。
 // 只包含 Enabled=true 的工具。禁用工具不暴露给 LLM。
+// ★ 对齐 harness system-prompt orderTools（2026-08-17）：按 name 字典序
+//   （code-unit，locale 无关）排序后返回——注册顺序依赖装配时序（内置组、
+//   磁盘插件、工具集、MCP 的加载顺序），直接下发会随时序漂移导致 tools
+//   JSON 逐字节变化，从 tools 处切断 KV 缓存前缀（其后全部历史 miss）。
+//   字典序保证跨机器/跨装配时序稳定，缓存前缀可复用。
 func (r *Registry) Definitions() []ToolDefinition {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -314,24 +324,52 @@ func (r *Registry) Definitions() []ToolDefinition {
 		if !t.Enabled {
 			continue // 禁用的工具不暴露给 LLM
 		}
-		desc := t.Description
-		if len(desc) > 120 {
-			// 在第一个句号或空格处截断
-			cut := strings.LastIndex(desc[:120], "。")
-			if cut < 60 {
-				cut = len(desc[:100])
-				for cut > 60 && desc[cut] != ' ' && desc[cut] != ',' {
-					cut--
-				}
-			}
-			desc = strings.TrimSpace(desc[:cut])
-		}
+		desc := trimToolDesc(t.Description)
 		defs = append(defs, ToolDefinition{
 			Type:     "function",
 			Function: FunctionDefinition{Name: t.Name, Description: desc, Parameters: t.Parameters},
 		})
 	}
+	// ★ 字典序排序（对齐 harness orderTools 的 compareToolNames）：
+	//   code-unit 比较，locale 无关，任意机器/任意装配顺序结果一致。
+	sort.Slice(defs, func(i, j int) bool {
+		return defs[i].Function.Name < defs[j].Function.Name
+	})
 	return defs
+}
+
+// trimToolDesc 工具描述截断（rune 安全）。
+// 截断目标 ~120 字符；优先在中文句号「。」处断，其次在空格/逗号处断。
+// ★ 修复（2026-08-17）：原实现按字节 len(desc[:120]) 截断，多字节 UTF-8
+//   描述（中文）会切在字符中间产生无效字节，strings.LastIndex 在无效字节
+//   上找不到「。」返回 -1，随后 desc[100] 字节级扫描进一步产生乱码截断点
+//   （json.Marshal 会把无效序列转义为 \ufffd，工具描述乱码）。
+//   现改为 []rune 截断，始终落在字符边界。
+func trimToolDesc(desc string) string {
+	runes := []rune(desc)
+	if len(runes) <= 120 {
+		return desc
+	}
+	head := runes[:120]
+	// 在 rune 切片中找最后一个「。」（rune 索引；勿用 strings.LastIndex——
+	// 它返回字节索引，与 head[:cut] 的 rune 索引混用会切错位置）
+	cut := -1
+	for i, r := range head {
+		if r == '。' {
+			cut = i
+		}
+	}
+	if cut < 60 {
+		// 无中文句号（或太靠前）：退到 100 字符内找空格/逗号
+		cut = 100
+		if cut >= len(head) {
+			cut = len(head) - 1
+		}
+		for cut > 60 && head[cut] != ' ' && head[cut] != ',' {
+			cut--
+		}
+	}
+	return strings.TrimSpace(string(head[:cut]))
 }
 
 // Execute 解析 JSON 参数并执行工具。参数 JSON 由 LLM 流式拼接而来，可能为空。

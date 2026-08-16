@@ -55,10 +55,11 @@ func TestDiag_DefinitionsRegistrationOrder(t *testing.T) {
 
 	b1, _ := json.Marshal(r1.Definitions())
 	b2, _ := json.Marshal(r2.Definitions())
-	t.Logf("注册顺序不同 → tools JSON 字节一致? %v (len1=%d len2=%d)", string(b1) == string(b2), len(b1), len(b2))
+	// ★ 2026-08-17 修复后：Definitions 按 name 字典序排序，不同装配时序输出一致
 	if string(b1) != string(b2) {
-		t.Log("★ 结论：tools 顺序依赖注册时序 —— 装配顺序变化即破坏 KV 缓存前缀（参考实现按字典序排序保证跨次稳定）")
+		t.Fatalf("★ 回归：不同装配时序 Definitions 不一致（KV 缓存前缀断裂）")
 	}
+	t.Logf("✓ 注册顺序不同（正序/逆序）→ Definitions 字典序排序后 JSON 完全一致（len=%d）", len(b1))
 }
 
 // 2) 字典序排序后的稳定性：任意装配顺序，排序后一致。
@@ -106,15 +107,16 @@ func TestDiag_DescTruncationValidUTF8(t *testing.T) {
 			cut--
 		}
 	}
-	out := strings.TrimSpace(desc[:cut])
-	if !utf8.ValidString(out) {
-		t.Errorf("★ 截断结果含无效 UTF-8（cut=%d，切在多字节字符中间）→ json.Marshal 会转义为 \\ufffd，工具描述乱码；虽不破坏前缀稳定性，但 schema 质量受损", cut)
+	// ★ 2026-08-17 修复后：trimToolDesc 用 []rune 截断，始终落在字符边界
+	out2 := trimToolDesc(desc)
+	if !utf8.ValidString(out2) {
+		t.Errorf("★ 修复后 trimToolDesc 仍产生无效 UTF-8：%q", out2)
 	} else {
-		t.Logf("截断结果有效 UTF-8（cut=%d）", cut)
+		t.Logf("✓ trimToolDesc 截断结果有效 UTF-8（len(runes)=%d, out=%d runes）", len([]rune(desc)), len([]rune(out2)))
 	}
-	// 边界：正好 100 字节落在多字节字符中间的情况
+	// 原实现字节截断的破坏性对照（desc[:100] 落在多字节字符中间）
 	if !utf8.ValidString(desc[:100]) {
-		t.Logf("★ desc[:100] 本身即无效 UTF-8（第 100 字节落在多字节字符中间）→ LastIndex/TrimSpace 在无效字节上操作，截断点随内容漂移")
+		t.Logf("对照：旧实现 desc[:100] 字节切片为无效 UTF-8（乱码根源，已修复）")
 	}
 }
 
@@ -138,4 +140,81 @@ func TestDiag_UsageOpenAICompat(t *testing.T) {
 	if u2.PromptCacheHitTokens == 0 && u2.PromptCacheMissTokens == 0 {
 		t.Log("★ 结论：OpenAI 兼容端点命中统计丢失（prompt_tokens_details.cached_tokens 未解析）")
 	}
+}
+
+
+// 5) 修复验证：Definitions 现在按字典序排序 → 不同装配时序下 tools JSON 完全一致。
+func TestDiag_DefinitionsSortedNowStable(t *testing.T) {
+	r1 := NewRegistry()
+	r2 := NewRegistry()
+	for _, n := range diagToolNames {
+		d := diagToolDef(n)
+		r1.Register(&Tool{Name: d.Function.Name, Description: d.Function.Description, Parameters: d.Function.Parameters})
+	}
+	for i := len(diagToolNames) - 1; i >= 0; i-- {
+		n := diagToolNames[i]
+		d := diagToolDef(n)
+		r2.Register(&Tool{Name: d.Function.Name, Description: d.Function.Description, Parameters: d.Function.Parameters})
+	}
+	b1, _ := json.Marshal(r1.Definitions())
+	b2, _ := json.Marshal(r2.Definitions())
+	if string(b1) != string(b2) {
+		t.Fatalf("★ 修复未生效：不同装配时序下 Definitions 仍不一致")
+	}
+	// 验证确实是字典序
+	defs := r1.Definitions()
+	for i := 1; i < len(defs); i++ {
+		if defs[i-1].Function.Name > defs[i].Function.Name {
+			t.Fatalf("★ 非字典序：%q > %q", defs[i-1].Function.Name, defs[i].Function.Name)
+		}
+	}
+	t.Logf("✓ 修复生效：不同装配时序 Definitions 完全一致（len=%d，字典序）→ 缓存前缀稳定", len(b1))
+}
+
+// 6) 修复验证：Usage 兼容 OpenAI 兼容拼写 cached_tokens。
+func TestDiag_UsageOpenAICompatFixed(t *testing.T) {
+	rawOpenAI := `{"prompt_tokens":1000,"completion_tokens":50,"total_tokens":1050,"prompt_tokens_details":{"cached_tokens":800}}`
+	var u Usage
+	if err := json.Unmarshal([]byte(rawOpenAI), &u); err != nil {
+		t.Fatal(err)
+	}
+	if u.PromptCacheHitTokens != 800 {
+		t.Fatalf("★ 修复未生效：OpenAI 兼容拼写 cached_tokens 未解析，hit=%d", u.PromptCacheHitTokens)
+	}
+	if u.PromptCacheMissTokens != 200 {
+		t.Fatalf("★ miss 未从 prompt_tokens 反推：miss=%d", u.PromptCacheMissTokens)
+	}
+	t.Logf("✓ 修复生效：OpenAI 兼容拼写 hit=%d miss=%d", u.PromptCacheHitTokens, u.PromptCacheMissTokens)
+}
+
+// 7) 修复验证：CondenseHistoryByPressure 小历史不压缩（缓存前缀稳定）。
+func TestDiag_NoCompressWhenSmall(t *testing.T) {
+	msgs := []Message{
+		{Role: RoleSystem, Content: "sys"},
+		{Role: RoleUser, Content: "任务1"},
+		{Role: RoleAssistant, Content: "完成1"},
+		{Role: RoleUser, Content: "任务2"},
+		{Role: RoleAssistant, Content: "完成2"},
+		{Role: RoleUser, Content: "任务3"},
+		{Role: RoleAssistant, Content: "完成3"},
+		{Role: RoleUser, Content: "任务4"},
+		{Role: RoleAssistant, Content: "完成4"},
+		{Role: RoleUser, Content: "任务5"},
+		{Role: RoleAssistant, Content: "完成5"},
+		{Role: RoleUser, Content: "任务6"},
+	}
+	// 小历史（估算 token 远低于 64K 窗口的 45%）→ 不压缩，前缀逐字节稳定
+	out := CondenseHistoryByPressure(msgs, 64000)
+	if len(out) != len(msgs) {
+		t.Fatalf("★ 修复未生效：小历史仍被压缩 in=%d out=%d", len(msgs), len(out))
+	}
+	for i := range msgs {
+		if out[i].Role != msgs[i].Role || out[i].Content != msgs[i].Content {
+			t.Fatalf("位置 %d 被修改：%q vs %q", i, out[i].Content, msgs[i].Content)
+		}
+	}
+	t.Logf("✓ 修复生效：小历史（%d 条）保持原样 → 前缀稳定，缓存可连续命中", len(msgs))
+	// 对照：旧 CondenseHistory 同输入会压缩（轮数触发）
+	old := CondenseHistory(msgs)
+	t.Logf("对照：旧按轮数 CondenseHistory 压缩到 %d 条（每轮断裂前缀）", len(old))
 }

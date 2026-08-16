@@ -34,6 +34,35 @@ const (
 	maxFullRoundMsgs = 30
 )
 
+// CondenseHistoryByPressure 按 token 压力触发历史精简（★ 对齐 harness
+// compaction-basic：thresholdRatio 触发 + 保留尾部，2026-08-17）。
+//
+// 背景：原 CondenseHistory 按「轮数」强制压缩（历史轮次 > 2 即压缩）——
+// 小对话（仅几轮、token 远未达窗口）也会被改写历史前缀，导致每次请求的
+// 前缀都与上一轮不同，KV 缓存从压缩点整段断裂、命中率骤降。
+// harness 只在请求压力达阈值（默认 0.8 × 上下文窗口）时才压缩，小对话
+// 保持原始消息逐字节不变 → 前缀稳定 → 连续轮次共享缓存命中。
+//
+// 策略（对齐 maybeCompact 的两档阈值）：
+//   - 估算历史 token 占比 < compactRatioEarly（0.45）且未达硬地板 → 不压缩
+//   - 达到阈值 → CondenseHistory 压缩（保留最近轮 + 摘要）
+//   - maxTokens <= 0（未配置窗口）→ 以 compactHardFloor 绝对量兜底
+func CondenseHistoryByPressure(msgs []Message, maxTokens int) []Message {
+	if len(msgs) < 4 {
+		return msgs
+	}
+	if maxTokens <= 0 {
+		maxTokens = compactHardFloor
+	}
+	tokens := estimateTokens(msgs)
+	ratio := float64(tokens) / float64(maxTokens)
+	// 未达预压缩阈值且未触碰硬地板：保持原始历史（KV 前缀稳定，缓存可命中）
+	if ratio < compactRatioEarly && tokens < compactHardFloor {
+		return msgs
+	}
+	return CondenseHistory(msgs)
+}
+
 // CondenseHistory 将已完成的旧轮次压缩：最近 1 轮完整保留、倒数第 2 轮半压缩、
 // 更早轮次压缩为结构化摘要。
 //

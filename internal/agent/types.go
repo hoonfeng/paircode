@@ -5,6 +5,8 @@
 // 故可独立单测（无 CGO/DLL）。GUI 接入在 cmd/companion 主包，由它驱动本引擎。
 package agent
 
+import "encoding/json"
+
 // Role 消息角色（OpenAI 兼容）。
 type Role string
 
@@ -58,8 +60,41 @@ type Usage struct {
 	TotalTokens           int `json:"total_tokens"`
 	PromptCacheHitTokens  int `json:"prompt_cache_hit_tokens,omitempty"`
 	PromptCacheMissTokens int `json:"prompt_cache_miss_tokens,omitempty"`
+	// PromptTokensDetails OpenAI 兼容拼写（prompt_tokens_details.cached_tokens）。
+	// ★ 对齐 harness mapUsage（2026-08-17）：DeepSeek 专有字段与 OpenAI 兼容
+	//   字段二选一解析，避免网关/兼容端点只返回 cached_tokens 时命中统计丢失
+	//   （命中率显示为 0）。UnmarshalJSON 归一化为 PromptCacheHitTokens。
+	PromptTokensDetails *struct {
+		CachedTokens int `json:"cached_tokens"`
+	} `json:"prompt_tokens_details,omitempty"`
 	// PromptBreakdown 估算 prompt 内各类构成（归一化到 prompt_tokens），0 表示未估算。
 	PromptBreakdown `json:"prompt_breakdown,omitempty"`
+}
+
+// UnmarshalJSON 兼容两种缓存命中拼写（对齐 harness llm-deepseek mapUsage）：
+//   - prompt_cache_hit_tokens：DeepSeek 专有
+//   - prompt_tokens_details.cached_tokens：OpenAI 兼容（网关/代理/其他端点）
+// 并做缺失字段推导：服务端返回 hit 但省略 miss 时，用 prompt_tokens - hit 反推，
+// 避免前端命中率分母（hit+miss）失真。
+func (u *Usage) UnmarshalJSON(b []byte) error {
+	type alias Usage
+	var a alias
+	if err := json.Unmarshal(b, &a); err != nil {
+		return err
+	}
+	*u = Usage(a)
+	// OpenAI 兼容拼写 → 归一化为 PromptCacheHitTokens
+	if u.PromptCacheHitTokens == 0 && u.PromptTokensDetails != nil {
+		u.PromptCacheHitTokens = u.PromptTokensDetails.CachedTokens
+	}
+	// 服务端返回 hit 但省略 miss（部分网关只给 cached_tokens）：
+	// 用 prompt_tokens - hit 推算 miss（避免分母=hit+miss=hit 失真）
+	if u.PromptCacheHitTokens > 0 && u.PromptCacheMissTokens == 0 && u.PromptTokens > 0 {
+		if miss := u.PromptTokens - u.PromptCacheHitTokens; miss > 0 {
+			u.PromptCacheMissTokens = miss
+		}
+	}
+	return nil
 }
 
 // PromptBreakdown 估算 prompt token 的构成类别（归一化到 prompt_tokens 总和）。

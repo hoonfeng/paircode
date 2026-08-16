@@ -173,12 +173,32 @@ func TestRegistryDefinitions(t *testing.T) {
 	if len(defs) < 50 {
 		t.Fatalf("默认工具数应 >= 50（含核心/git/memory/project_info/binary/binary_re/debug 等），得 %d", len(defs))
 	}
-	if defs[0].Type != "function" || defs[0].Function.Name != "read_file" {
-		t.Errorf("首个定义 = %+v", defs[0])
+	// ★ 2026-08-17 对齐 harness orderTools：Definitions 按 name 字典序返回
+	//   （不再按注册顺序）——首元素是字典序最小的工具，跨装配时序稳定。
+	if defs[0].Type != "function" {
+		t.Errorf("首个定义 type = %+v", defs[0].Type)
 	}
-	req, _ := defs[0].Function.Parameters["required"].([]string)
-	if len(req) == 0 || req[0] != "path" {
-		t.Errorf("read_file required = %v", req)
+	// 验证字典序（code-unit）：任意相邻两项前项 <= 后项
+	for i := 1; i < len(defs); i++ {
+		if defs[i-1].Function.Name > defs[i].Function.Name {
+			t.Fatalf("Definitions 未按 name 字典序排序：defs[%d]=%q > defs[%d]=%q",
+				i-1, defs[i-1].Function.Name, i, defs[i].Function.Name)
+		}
+	}
+	// read_file 仍在列表中且 required 参数正确（不再假设位置）
+	found := false
+	for _, d := range defs {
+		if d.Function.Name == "read_file" {
+			found = true
+			req, _ := d.Function.Parameters["required"].([]string)
+			if len(req) == 0 || req[0] != "path" {
+				t.Errorf("read_file required = %v", req)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Error("read_file 未出现在 Definitions 中")
 	}
 	// 关键工具必须可见（覆盖各注册组）
 	// ★ 注：find_symbol/get_file_symbols → codegraph_search/codegraph_file_structure；

@@ -2474,7 +2474,11 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 	// ★ 历史精简：跨轮次加载时只保留最近一轮完整交互细节，
 	//   旧轮次压缩为 [用户消息, 助手最终报告]，丢弃中间 tool 输出。
 	//   大幅减少上下文体积，同时保持语义连续性。
-	history = agent.CondenseHistory(history)
+	// ★ 2026-08-17 对齐 harness compaction-basic：改为 token 压力触发——
+	//   原实现按轮数（>2 轮历史）强制压缩，小对话也被改写历史前缀，
+	//   导致 KV 缓存前缀每轮断裂、命中率骤降；现估算 token 占比，
+	//   未达阈值（45% 窗口）保持原始历史逐字节不变（缓存可连续命中）。
+	history = agent.CondenseHistoryByPressure(history, core.Settings.ContextMaxTokens)
 
 
 
