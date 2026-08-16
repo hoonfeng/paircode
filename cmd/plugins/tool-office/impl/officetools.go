@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	. "github.com/hoonfeng/paircode/cmd/plugins/tool-office/toolbin"
 	"io"
 	"os"
 	"os/exec"
@@ -21,7 +22,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	. "github.com/hoonfeng/paircode/pkg/toolbin"
 )
 
 // ─── 注册入口 ──
@@ -47,7 +47,7 @@ func Register(r *Registry, root string) {
 
 func registerCSVRead(r *Registry, root string) {
 	r.Register(&Tool{
-		Name: "csv_read",
+		Name:       "csv_read",
 		UsageGuide: "读取 CSV/TSV 文件并以 Markdown 表格形式返回。比直接 read_file 读 CSV 更友好（自动解析分隔符+格式化表格）。delimiter 可指定 comma/tab。",
 		Description: "读取 CSV/TSV 文件并以 Markdown 表格形式返回内容。" +
 			"参数 delimiter 可选 \"comma\"（逗号, 默认）或 \"tab\"（制表符）。" +
@@ -128,7 +128,7 @@ func registerCSVRead(r *Registry, root string) {
 
 func registerCSVWrite(r *Registry, root string) {
 	r.Register(&Tool{
-		Name: "csv_write",
+		Name:       "csv_write",
 		UsageGuide: "将表格数据写入 CSV/TSV 文件。data 参数支持 JSON 二维数组或 Markdown 表格文本。比手动拼接 CSV 更高效（自动处理转义+分隔符）。需审核批准。",
 		Description: "将表格数据写入 CSV/TSV 文件。" +
 			"data 为 JSON 二维数组（如 [[\"列1\",\"列2\"],[\"值1\",\"值2\"]]）或 Markdown 表格文本。" +
@@ -192,7 +192,7 @@ func registerCSVWrite(r *Registry, root string) {
 
 func registerJSONToTable(r *Registry) {
 	r.Register(&Tool{
-		Name: "json_to_table",
+		Name:       "json_to_table",
 		UsageGuide: "将 JSON 数组字符串转为 Markdown 表格。columns 参数指定列名和顺序。比手动格式化更高效（自动生成表头+对齐）。",
 		Description: "将 JSON 数组字符串转为 Markdown 表格。" +
 			"columns 指定列名和顺序（逗号分隔，如 \"name,age\"），省略则使用全部键并按字母序排列。" +
@@ -273,7 +273,7 @@ func registerJSONToTable(r *Registry) {
 
 func registerTableStats(r *Registry, root string) {
 	r.Register(&Tool{
-		Name: "table_stats",
+		Name:       "table_stats",
 		UsageGuide: "对表格数据的数值列做基本统计（求和/均值/最大/最小/计数）。group_by 可按某列分组统计。比手动计算更快（自动识别数值列+分组聚合）。",
 		Description: "对表格数据的数值列做基本统计（求和、均值、最大值、最小值、计数）。" +
 			"data 为 CSV 文本、JSON 数组或文件路径。format 指定数据格式：\"csv\"（CSV 文本）\"json\"（JSON 数组）\"file\"（文件路径）。" +
@@ -533,7 +533,7 @@ func writeStatsTable(b *strings.Builder, stats []colStat) {
 
 func registerTextReport(r *Registry, root string) {
 	r.Register(&Tool{
-		Name: "text_report",
+		Name:       "text_report",
 		UsageGuide: "扫描目录树，按文件扩展名或目录分组统计代码行数。快速了解项目规模和技术栈分布。比 run_command wc -l 更智能（自动跳过 .git/node_modules+按类型分组）。",
 		Description: "扫描工作区目录树，按文件扩展名分组统计行数。" +
 			"支持统计总行数、代码行（非空非纯注释）、注释行、空行。" +
@@ -753,7 +753,7 @@ func countFileLines(lines []string) (r struct {
 
 func registerWordRead(r *Registry, root string) {
 	r.Register(&Tool{
-		Name: "word_read",
+		Name:       "word_read",
 		UsageGuide: "读取 Microsoft Word (.docx) 文件内容，以纯文本或 Markdown 格式返回。比手动打开 Word 更高效（直接提取文本到上下文）。",
 		Description: "读取 Microsoft Word (.docx) 文件的内容，以纯文本或 Markdown 格式返回。" +
 			"支持段落文本、表格、列表等基本结构提取。" +
@@ -1113,7 +1113,7 @@ func parseMarkdownTable(text string) [][]string {
 
 func registerWordWrite(r *Registry, root string) {
 	r.Register(&Tool{
-		Name: "word_write",
+		Name:       "word_write",
 		UsageGuide: "生成 Microsoft Word (.docx) 文档。content 为 Markdown 格式文本。用于输出报告/文档。比手动排版更高效（Markdown 转 Word 格式）。需审核批准。",
 		Description: "生成 Microsoft Word (.docx) 文档。" +
 			"content 为 Markdown 格式文本（支持 # 标题、普通段落、- 列表项、| 表格），" +
@@ -1272,7 +1272,7 @@ func escapeXML(s string) string {
 
 func registerXLSXRead(r *Registry, root string) {
 	r.Register(&Tool{
-		Name: "read_xlsx",
+		Name:       "read_xlsx",
 		UsageGuide: "读取 Excel (.xlsx) 文件内容，以 Markdown 表格形式返回。sheet 参数指定工作表名。比直接 read_file 更友好（自动解析+多 sheet 支持）。",
 		Description: "读取 Microsoft Excel (.xlsx) 文件的内容，以 Markdown 表格形式返回各工作表。" +
 			"sheet 指定工作表名称（默认第一个）；limit 限制行数（默认 200，-1=全部）。" +
@@ -1317,8 +1317,8 @@ type xlsxWorkbook struct {
 	Sheets []xlsxSheet `xml:"sheets>sheet"`
 }
 type xlsxSheet struct {
-	Name string `xml:"name,attr"`
-	ID   string `xml:"sheetId,attr"`
+	Name  string `xml:"name,attr"`
+	ID    string `xml:"sheetId,attr"`
 	RelID string `xml:"http://schemas.openxmlformats.org/officeDocument/2006/relationships id,attr"`
 }
 type xlsxSharedStrings struct {
@@ -1334,11 +1334,11 @@ type xlsxRow struct {
 	Cells []xlsxCell `xml:"c"`
 }
 type xlsxCell struct {
-	Ref      string `xml:"r,attr"`
-	Type     string `xml:"t,attr"`
-	Style    string `xml:"s,attr"`
-	Value    string `xml:"v"`
-	Text     string `xml:"is>t"` // inline string
+	Ref   string `xml:"r,attr"`
+	Type  string `xml:"t,attr"`
+	Style string `xml:"s,attr"`
+	Value string `xml:"v"`
+	Text  string `xml:"is>t"` // inline string
 }
 
 func parseXLSX(zr *zip.Reader, targetSheet string, limit int) string {
@@ -1486,7 +1486,7 @@ func stripXMLNS(xmlData string, nsURIs []string) string {
 
 func registerXLSXWrite(r *Registry, root string) {
 	r.Register(&Tool{
-		Name: "write_xlsx",
+		Name:       "write_xlsx",
 		UsageGuide: "创建 Excel (.xlsx) 文件。data 为 JSON 二维数组或 Markdown 表格文本。比手动拼接 CSV 更专业（支持多 sheet+格式）。需审核批准。",
 		Description: "创建 Microsoft Excel (.xlsx) 文件。" +
 			"data 为 JSON 二维数组（如 [[\"列1\",\"列2\"],[\"值1\",\"值2\"]]）或 Markdown 表格文本。" +
@@ -1678,7 +1678,7 @@ func colIndexToLetters(idx int) string {
 
 func registerPDFRead(r *Registry, root string) {
 	r.Register(&Tool{
-		Name: "read_pdf",
+		Name:       "read_pdf",
 		UsageGuide: "提取 PDF 文本内容。先尝试纯文本提取，失败则回退 OCR。比手动打开 PDF 复制更高效（直接提取到上下文）。",
 		Description: "提取 PDF 文件的文本内容。" +
 			"先尝试纯文本提取（解析 PDF 流对象）；如提取结果为空或内容极少（<50 字符），" +
@@ -1926,8 +1926,8 @@ func extractPDFText(pdfData string, targetPage int) string {
 			out.WriteString(fmt.Sprintf("--- 第 %d 页 ---\n", pi+1))
 		}
 		if p.content > 0 {
-		// 提取内容流中的文本
-		reStream := regexp.MustCompile(fmt.Sprintf(`(?s)%d\s+\d+\s+obj.*?stream\x0a(.*?)endstream`, p.content))
+			// 提取内容流中的文本
+			reStream := regexp.MustCompile(fmt.Sprintf(`(?s)%d\s+\d+\s+obj.*?stream\x0a(.*?)endstream`, p.content))
 			streamMatches := reStream.FindStringSubmatch(pdfData)
 			if len(streamMatches) > 1 {
 				text := extractTextFromPDFStream(streamMatches[1])
@@ -2019,7 +2019,7 @@ func unescapePDFString(s string) string {
 
 func registerMarkdownToHTML(r *Registry) {
 	r.Register(&Tool{
-		Name: "markdown_to_html",
+		Name:       "markdown_to_html",
 		UsageGuide: "将 Markdown 文本转为 HTML。支持 full_html 参数输出完整 HTML 文档（含 title）。比手动转换更快（内置渲染器+代码高亮）。",
 		Description: "将 Markdown 文本转换为 HTML 片段。" +
 			"支持 # 标题、**粗体**、*斜体*、`行内代码`、```代码块```、- 无序列表、" +
@@ -2220,7 +2220,6 @@ func inlineMDToHTML(text string) string {
 	return text
 }
 
-
 var defaultSkipDirs = map[string]bool{
 	// VCS / 编辑器
 	".git": true, ".svn": true, ".hg": true, ".idea": true, ".vscode": true,
@@ -2236,9 +2235,7 @@ var defaultSkipDirs = map[string]bool{
 	".pair": true, "源码备份": true,
 }
 
-
 var extraSkipDirs = map[string]bool{}
-
 
 // isSkipDir 是否应跳过该目录（默认 + 用户配置）。
 func isSkipDir(name string) bool { return defaultSkipDirs[name] || extraSkipDirs[name] }
@@ -2326,4 +2323,3 @@ func checkTesseractLang(tesseractPath, tessdataDir, lang string) bool {
 	}
 	return true
 }
-

@@ -1,25 +1,25 @@
 package impl
 
 import (
-	"strconv"
-	"syscall"
-	"sync"
-	"sort"
-	"runtime"
-	"errors"
-	"encoding/json"
 	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"sort"
+	"strconv"
 	"strings"
+	"sync"
+	"syscall"
 	"time"
 
 	"wb-ui/goja"
 
-	. "github.com/hoonfeng/paircode/pkg/toolbin"
+	. "github.com/hoonfeng/paircode/cmd/plugins/tool-harness/toolbin"
 )
 
 // RegisterRunCode 注册 run_code 工具（统一二进制承载时导出入口）。
@@ -323,7 +323,6 @@ func applyBashEnv(c *exec.Cmd, msysBin string) {
 	c.Env = append(os.Environ(), "PATH="+msysBin+";"+os.Getenv("PATH"))
 }
 
-
 type bgProc struct {
 	cmd     *exec.Cmd
 	mu      sync.Mutex
@@ -332,13 +331,11 @@ type bgProc struct {
 	exitErr string
 }
 
-
 type bgRegistry struct {
 	mu    sync.Mutex
 	procs map[int]*bgProc
 	next  int
 }
-
 
 func (p *bgProc) Write(b []byte) (int, error) {
 	p.mu.Lock()
@@ -354,14 +351,12 @@ func (p *bgProc) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
-
 func (p *bgProc) snapshot() (out string, done bool, exitErr string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	// 编码探测：子进程输出可能是 GBK（Windows 旧工具无视 chcp），UTF-8 优先、GBK 兜底
 	return DecodeCmdOutput(p.buf.Bytes()), p.done, p.exitErr
 }
-
 
 func (bg *bgRegistry) start(command, dir string) (int, error) {
 	bg.mu.Lock()
@@ -402,13 +397,11 @@ func (bg *bgRegistry) start(command, dir string) (int, error) {
 	return id, nil
 }
 
-
 func (bg *bgRegistry) get(id int) *bgProc {
 	bg.mu.Lock()
 	defer bg.mu.Unlock()
 	return bg.procs[id]
 }
-
 
 func (bg *bgRegistry) cleanupLocked() {
 	const keepDone = 24
@@ -433,7 +426,6 @@ func (bg *bgRegistry) cleanupLocked() {
 	}
 }
 
-
 var globalBG = &bgRegistry{procs: map[int]*bgProc{}}
 
 func killProcessTree(pid int) {
@@ -445,7 +437,6 @@ func killProcessTree(pid int) {
 		p.Kill()
 	}
 }
-
 
 // jsTimeoutErr VM 执行超时标记（vm.Interrupt 携带值）。
 var jsTimeoutErr = errors.New("JS 执行超时（疑似死循环，已强制中断）")
@@ -467,7 +458,6 @@ func runJSWithTimeout(vm *goja.Runtime, timeout time.Duration, fn func() error) 
 	vm.ClearInterrupt() // 竞态消除：JS 结束后 goroutine 若已置位 interrupt flag，清除之
 	return err
 }
-
 
 // isJSTimeout 判断 err 是否为 runJSWithTimeout 的超时中断。
 func isJSTimeout(err error) bool {

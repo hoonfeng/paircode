@@ -1,20 +1,25 @@
 // ═══════════════════════════════════════════════════════════════
+// ★ 2026-08-16 自根 pkg/toolbin 内嵌（插件自包含；改协议请全局同步 17 个插件）。
 // Package toolbin — 插件独立二进制的公共运行骨架
 //
 // ★ 2026-08-16 第三轮：工具实现从「统一宿主二进制」拆分为「每插件独立
-//   二进制」——cmd/plugins/tool-<组>/ 每个 main 只注册自己的工具组。
-//   ★ 2026-08-16 第四轮：工具实现从 internal/agent 迁出（各插件目录 impl
-//   包），独立二进制不再 import agent——本包提供轻量 Registry + 骨架。
+//
+//	二进制」——cmd/plugins/tool-<组>/ 每个 main 只注册自己的工具组。
+//	★ 2026-08-16 第四轮：工具实现从 internal/agent 迁出（各插件目录 impl
+//	包），独立二进制不再 import agent——本包提供轻量 Registry + 骨架。
 //
 // 协议（与宿主 ctx.binary.exec 对齐）：
-//   stdin  JSON {"tool":"git_status","args":{...},"root":"<工作区根>"}
-//   stdout JSON {"ok":true,"text":"..."} | {"ok":false,"error":"..."}
-//   exit 0（协议错误 exit 2）
+//
+//	stdin  JSON {"tool":"git_status","args":{...},"root":"<工作区根>"}
+//	stdout JSON {"ok":true,"text":"..."} | {"ok":false,"error":"..."}
+//	exit 0（协议错误 exit 2）
 //
 // 用法（各插件 main）：
-//   reg := toolbin.NewRegistry()
-//   impl.Register(reg, root)   // 注册本插件工具实现（impl 包在插件目录内）
-//   toolbin.Serve(reg)         // 解析 stdin → 执行 → 输出
+//
+//	reg := toolbin.NewRegistry()
+//	impl.Register(reg, root)   // 注册本插件工具实现（impl 包在插件目录内）
+//	toolbin.Serve(reg)         // 解析 stdin → 执行 → 输出
+//
 // ═══════════════════════════════════════════════════════════════
 package toolbin
 

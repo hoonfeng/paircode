@@ -12,11 +12,11 @@ import (
 	"path/filepath"
 	"regexp"
 
+	. "github.com/hoonfeng/paircode/cmd/plugins/tool-bug/toolbin"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
-	. "github.com/hoonfeng/paircode/pkg/toolbin"
 )
 
 // ── 类型定义 ───────────────────────────────────────────────
@@ -34,41 +34,41 @@ const (
 type BugType string
 
 const (
-	BugTypeCompile  BugType = "compile"   // 编译错误
-	BugTypeTest     BugType = "test"      // 测试失败
-	BugTypePanic    BugType = "panic"     // 运行时 panic
-	BugTypeLint     BugType = "lint"      // lint 警告
-	BugTypeGoVet    BugType = "govet"     // go vet 问题
-	BugTypeRuntime  BugType = "runtime"   // 运行时错误（非 panic）
-	BugTypeUnknown  BugType = "unknown"   // 未知类型
+	BugTypeCompile BugType = "compile" // 编译错误
+	BugTypeTest    BugType = "test"    // 测试失败
+	BugTypePanic   BugType = "panic"   // 运行时 panic
+	BugTypeLint    BugType = "lint"    // lint 警告
+	BugTypeGoVet   BugType = "govet"   // go vet 问题
+	BugTypeRuntime BugType = "runtime" // 运行时错误（非 panic）
+	BugTypeUnknown BugType = "unknown" // 未知类型
 )
 
 // BugLocation 错误代码位置。
 type BugLocation struct {
-	File     string `json:"file"`     // 相对工作区的文件路径
-	Line     int    `json:"line"`     // 行号（1 基）
-	Column   int    `json:"column"`   // 列号（0=未指定）
+	File     string `json:"file"`               // 相对工作区的文件路径
+	Line     int    `json:"line"`               // 行号（1 基）
+	Column   int    `json:"column"`             // 列号（0=未指定）
 	Function string `json:"function,omitempty"` // 函数名（从堆栈提取）
 }
 
 // BugSymptom 单条错误症状。
 type BugSymptom struct {
-	Type      BugType     `json:"type"`      // 错误类型
-	Severity  BugSeverity `json:"severity"`  // 严重级别
-	Message   string      `json:"message"`   // 错误消息全文
-	Location  BugLocation `json:"location"`  // 代码位置
-	Context   string      `json:"context,omitempty"`  // 错误附近的代码上下文（5 行前后）
-	Suggestion string     `json:"suggestion,omitempty"` // 可能的修复建议（可选）
+	Type       BugType     `json:"type"`                 // 错误类型
+	Severity   BugSeverity `json:"severity"`             // 严重级别
+	Message    string      `json:"message"`              // 错误消息全文
+	Location   BugLocation `json:"location"`             // 代码位置
+	Context    string      `json:"context,omitempty"`    // 错误附近的代码上下文（5 行前后）
+	Suggestion string      `json:"suggestion,omitempty"` // 可能的修复建议（可选）
 }
 
 // BugDetectResult 检测结果。
 type BugDetectResult struct {
-	Success    bool          `json:"success"`    // 是否全部通过
-	ErrorCount int           `json:"errorCount"` // 错误总数
-	Symptoms   []BugSymptom  `json:"symptoms"`   // 所有检测到的症状
-	BuildOutput string       `json:"buildOutput"` // 原始构建输出
-	Duration   time.Duration `json:"duration"`   // 检测耗时
-	Summary    string        `json:"summary"`    // 人类可读摘要
+	Success     bool          `json:"success"`     // 是否全部通过
+	ErrorCount  int           `json:"errorCount"`  // 错误总数
+	Symptoms    []BugSymptom  `json:"symptoms"`    // 所有检测到的症状
+	BuildOutput string        `json:"buildOutput"` // 原始构建输出
+	Duration    time.Duration `json:"duration"`    // 检测耗时
+	Summary     string        `json:"summary"`     // 人类可读摘要
 }
 
 // ── 正则表达式 ─────────────────────────────────────────────
@@ -647,7 +647,7 @@ func BuildFixPrompt(result *BugDetectResult) string {
 func registerBugDetect(r *Registry, root string) {
 	// bug_analyze — 分析构建/测试输出，提取错误位置
 	r.Register(&Tool{
-		Name: "bug_analyze",
+		Name:       "bug_analyze",
 		UsageGuide: "分析构建/测试/运行输出，提取错误位置和代码上下文。配合 bug_detect 使用：先 bug_detect 全量检测，拿到输出后 bug_analyze 定位根因。比肉眼扫日志更快（结构化提取错误位置+行号）。",
 		Description: "分析构建/测试/运行输出，提取错误位置和代码上下文。接受 output（构建输出文本），" +
 			"output_type（build/test/run），返回解析后的错误列表（含文件路径、行号、消息和代码上下文）。" +

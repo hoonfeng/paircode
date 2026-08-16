@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"sync"
 
+	. "github.com/hoonfeng/paircode/cmd/plugins/tool-lsp/toolbin"
 	"github.com/hoonfeng/paircode/internal/lsp"
-	. "github.com/hoonfeng/paircode/pkg/toolbin"
 )
 
 // defaultLSPManager 是包级别的 LSP Manager 实例，懒初始化、跨工具共享。

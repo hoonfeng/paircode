@@ -27,7 +27,7 @@ import (
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/launcher"
 	"github.com/go-rod/rod/lib/proto"
-	. "github.com/hoonfeng/paircode/pkg/toolbin"
+	. "github.com/hoonfeng/paircode/cmd/plugins/tool-web-debug/toolbin"
 )
 
 // consoleMessage 表示一条浏览器控制台消息。

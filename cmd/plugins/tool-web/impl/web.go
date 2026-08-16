@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	. "github.com/hoonfeng/paircode/cmd/plugins/tool-web/toolbin"
 	"html"
 	"io"
 	"net/http"
@@ -15,7 +16,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	. "github.com/hoonfeng/paircode/pkg/toolbin"
 )
 
 // ─── SearXNG 配置（设置面板「网络服务」→SearXNG 地址）──────────

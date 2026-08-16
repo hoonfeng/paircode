@@ -1,9 +1,12 @@
 // ═══════════════════════════════════════════════════════════════
+// ★ 2026-08-16 自根 pkg/toolbin 内嵌（插件自包含；改协议请全局同步 17 个插件）。
 // registry.go — 插件独立二进制的轻量工具注册表
 //
 // ★ 2026-08-16 第四轮：工具实现从 internal/agent 迁出（每组一个 impl 包，
-//   放各插件目录），独立二进制不再 import agent——注册表/辅助函数下沉本包。
-//   本包为二进制侧自持的轻量实现（与宿主 Registry 类型无关，协议即 JSON）。
+//
+//	放各插件目录），独立二进制不再 import agent——注册表/辅助函数下沉本包。
+//	本包为二进制侧自持的轻量实现（与宿主 Registry 类型无关，协议即 JSON）。
+//
 // ═══════════════════════════════════════════════════════════════
 package toolbin
 
@@ -21,9 +24,9 @@ type ToolHandler func(ctx context.Context, args map[string]any) (string, error)
 // Tool 一个已注册工具（名/描述/参数 Schema/执行体 + 元信息）。
 type Tool struct {
 	Name             string
-	Description      string // 简短描述（传给 LLM function-calling）
-	UsageGuide       string // 详细使用指导
-	Category         string // 工具分类（如 "git", "file", "web"）
+	Description      string         // 简短描述（传给 LLM function-calling）
+	UsageGuide       string         // 详细使用指导
+	Category         string         // 工具分类（如 "git", "file", "web"）
 	Parameters       map[string]any // JSON Schema
 	Handler          ToolHandler
 	SystemTool       bool // 系统内部工具，不暴露给 LLM
@@ -133,9 +136,15 @@ func (r *Registry) Execute(ctx context.Context, name, argsJSON string) (string, 
 // props JSON Schema properties 简写。
 type Props map[string]any
 
-func StrProp(desc string) map[string]any  { return map[string]any{"type": "string", "description": desc} }
-func BoolProp(desc string) map[string]any { return map[string]any{"type": "boolean", "description": desc} }
-func IntProp(desc string) map[string]any  { return map[string]any{"type": "integer", "description": desc} }
+func StrProp(desc string) map[string]any {
+	return map[string]any{"type": "string", "description": desc}
+}
+func BoolProp(desc string) map[string]any {
+	return map[string]any{"type": "boolean", "description": desc}
+}
+func IntProp(desc string) map[string]any {
+	return map[string]any{"type": "integer", "description": desc}
+}
 func ArrProp(items any) map[string]any {
 	return map[string]any{"type": "array", "items": items}
 }

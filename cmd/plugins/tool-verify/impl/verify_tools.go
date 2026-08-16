@@ -6,23 +6,23 @@ package impl
 // 这些过时信息会误导 Agent。每隔一段时间运行一次可保持数据新鲜。
 
 import (
-	"io/fs"
-	"sort"
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
-	"github.com/hoonfeng/paircode/pkg/memory"
-	. "github.com/hoonfeng/paircode/pkg/toolbin"
-	"github.com/hoonfeng/paircode/pkg/verify"
+	"github.com/hoonfeng/paircode/cmd/plugins/tool-verify/memory"
+	. "github.com/hoonfeng/paircode/cmd/plugins/tool-verify/toolbin"
+	"github.com/hoonfeng/paircode/cmd/plugins/tool-verify/verify"
 )
 
 // registerVerifyTools 注册记忆/知识库验证工具。
 func Register(r *Registry, root string) {
 	r.Register(&Tool{
-		Name: "memory_verify",
+		Name:       "memory_verify",
 		UsageGuide: "验证所有记忆条目引用的文件和目录是否仍然存在。过时记忆会误导 agent，建议定期运行。比手动检查更高效（自动解析引用路径并检测有效性）。",
 		Description: "验证所有记忆条目中引用的文件和目录是否仍然存在。" +
 			"如果条目引用了已不存在的文件，可能是过时信息，建议更新或删除。" +
@@ -35,7 +35,7 @@ func Register(r *Registry, root string) {
 	})
 
 	r.Register(&Tool{
-		Name: "project_info_verify",
+		Name:       "project_info_verify",
 		UsageGuide: "验证知识库条目引用的文件和目录是否仍然存在。项目重构后文件移动可能导致旧引用失效，运行此工具可发现并清理过时条目。",
 		Description: "验证所有知识库条目中引用的文件和目录是否仍然存在。" +
 			"如果条目引用了已不存在的文件/目录，可能是过时信息，建议更新或删除。" +
@@ -271,9 +271,7 @@ func notesToBranchRel(n string) (string, bool) {
 	return branch + "/" + leaf, true
 }
 
-
 type infoEntry struct{ Path, Title, Level, Content string }
-
 
 var defaultSkipDirs = map[string]bool{
 	// VCS / 编辑器
@@ -290,18 +288,13 @@ var defaultSkipDirs = map[string]bool{
 	".pair": true, "源码备份": true,
 }
 
-
 var extraSkipDirs = map[string]bool{}
-
 
 // isSkipDir 是否应跳过该目录（默认 + 用户配置）。
 func isSkipDir(name string) bool { return defaultSkipDirs[name] || extraSkipDirs[name] }
 
-
 // projectInfoDir 知识库目录（.pair/project-info/）。
 func projectInfoDir(root string) string { return filepath.Join(root, ".pair", "project-info") }
 
-
 // memoryDir 记忆目录（.pair/memory/）。
 func memoryDir(root string) string { return filepath.Join(root, ".pair", "memory") }
-

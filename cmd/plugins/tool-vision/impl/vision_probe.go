@@ -12,13 +12,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	. "github.com/hoonfeng/paircode/cmd/plugins/tool-vision/toolbin"
 	"image"
 	"math"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
-	. "github.com/hoonfeng/paircode/pkg/toolbin"
 )
 
 // probeRule 一条扫描规则。

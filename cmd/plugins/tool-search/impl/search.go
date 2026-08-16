@@ -5,16 +5,16 @@ package impl
 // 自动跳过 .git/node_modules 等目录与二进制/超大文件（防把 LLM 上下文撑爆）。
 
 import (
-	"path"
 	"context"
 	"fmt"
+	. "github.com/hoonfeng/paircode/cmd/plugins/tool-search/toolbin"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
-	. "github.com/hoonfeng/paircode/pkg/toolbin"
 )
 
 const (
@@ -87,7 +87,7 @@ func Register(r *Registry, root string) {
 			"path":        StrProp("限定子目录（省略=工作区根）"),
 			"language":    StrProp("可选：按语言过滤，如 \"go\"、\"typescript\"、\"python\""),
 			"max_results": IntProp("结果上限（默认 500）"),
-			"project":    ProjectSchemaProp(),
+			"project":     ProjectSchemaProp(),
 		}, "pattern"),
 		ReadOnly: true,
 		Handler:  searchFilesHandler(root),
@@ -290,7 +290,6 @@ func trimLine(s string) string {
 	return s
 }
 
-
 // matchGlob 支持 ** 的 glob 匹配。pattern 和 name 均为 slash 风格路径。
 //   - **/*.go     匹配 a.go、foo/a.go、foo/bar/a.go
 //   - src/**      匹配 src/a.go、src/foo/a.go
@@ -367,5 +366,3 @@ var skipDirsForFindFiles = map[string]bool{
 	"dist": true, "build": true, "out": true, "target": true, ".next": true, ".nuxt": true,
 	".cache": true, ".pair": true, "coverage": true, ".terraform": true,
 }
-
-

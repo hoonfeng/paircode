@@ -15,6 +15,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	. "github.com/hoonfeng/paircode/cmd/plugins/tool-vision/toolbin"
 	"image"
 	_ "image/gif"
 	_ "image/jpeg"
@@ -26,7 +27,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	. "github.com/hoonfeng/paircode/pkg/toolbin"
 )
 
 // ── 注册 ───────────────────────────────────────────────────
@@ -426,9 +426,9 @@ func quantizeColors(img image.Image, bounds image.Rectangle, maxColors int) ([]q
 	// 合并前 N 个，其余算"其他"
 	if len(colors) > maxColors {
 		others := quantizedColor{
-			R:   0x8888,
-			G:   0x8888,
-			B:   0x8888,
+			R:    0x8888,
+			G:    0x8888,
+			B:    0x8888,
 			Name: "其他颜色",
 		}
 		for i := maxColors - 1; i < len(colors); i++ {
@@ -455,7 +455,7 @@ func quantizeColors(img image.Image, bounds image.Rectangle, maxColors int) ([]q
 type colorBlock struct {
 	X1, Y1, X2, Y2 int    // 边界框
 	R, G, B        uint32 // 主要颜色
-	Description     string // 描述
+	Description    string // 描述
 }
 
 // detectColorBlocks 检测图片中的主要色块区域。
@@ -687,17 +687,17 @@ func mergeTwoBlocks(a, b colorBlock) colorBlock {
 
 // shapeInfo 检测到的图形信息。
 type shapeInfo struct {
-	Kind              string  // "圆形" / "椭圆" / "矩形" / "圆角矩形" / "三角形(3)" / "五边形(5)" / "多边形(N)" / "线条" / "曲线" / "折线" / "箭头" / "扇形" / "文字区域" / "坐标轴" / "图表类型"
-	X1, Y1, X2, Y2    int     // 边界框
-	CenterX, CenterY  int     // 中心点坐标
-	Area              int     // 面积（像素²）
-	Perimeter         float64 // 周长（像素）
-	Circularity       float64 // 圆度（4π×面积/周长²，0~1，1=完美圆）
-	VertexCount       int     // 顶点数（多边形有效）
-	FillRatio         float64 // 填充率（面积/边界框面积）
-	Width, Height     int     // 实际宽度和高度
-	Angle             float64 // 旋转角度（度），对椭圆/矩形有效
-	Description       string
+	Kind             string  // "圆形" / "椭圆" / "矩形" / "圆角矩形" / "三角形(3)" / "五边形(5)" / "多边形(N)" / "线条" / "曲线" / "折线" / "箭头" / "扇形" / "文字区域" / "坐标轴" / "图表类型"
+	X1, Y1, X2, Y2   int     // 边界框
+	CenterX, CenterY int     // 中心点坐标
+	Area             int     // 面积（像素²）
+	Perimeter        float64 // 周长（像素）
+	Circularity      float64 // 圆度（4π×面积/周长²，0~1，1=完美圆）
+	VertexCount      int     // 顶点数（多边形有效）
+	FillRatio        float64 // 填充率（面积/边界框面积）
+	Width, Height    int     // 实际宽度和高度
+	Angle            float64 // 旋转角度（度），对椭圆/矩形有效
+	Description      string
 }
 
 // detectShapes 检测图片中的各种几何形状和图表元素。
@@ -850,7 +850,7 @@ func filterShapesByKindList(shapes []shapeInfo, kinds []string) []shapeInfo {
 func filterOtherShapes(shapes []shapeInfo, groups ...[]shapeInfo) []shapeInfo {
 	// 构建已使用的形状索引集合
 	type shapeKey struct {
-		kind string
+		kind           string
 		x1, y1, x2, y2 int
 	}
 	used := make(map[shapeKey]bool)
@@ -1022,9 +1022,9 @@ func ocrImage(root, path, lang string, detail bool) (string, error) {
 
 // ocrText OCR 识别出的文字块（含坐标）。
 type ocrText struct {
-	Text     string
+	Text           string
 	X1, Y1, X2, Y2 int
-	Conf     int // 置信度 0-100
+	Conf           int // 置信度 0-100
 }
 
 // parseTesseractTSV 解析 Tesseract 的 TSV 输出格式。
@@ -1064,8 +1064,8 @@ func parseTesseractTSV(tsv string) []ocrText {
 
 	// 逐行解析，只取 level=5（文字行）的条目
 	type rawText struct {
-		text     string
-		conf     int
+		text       string
+		conf       int
 		x, y, w, h int
 	}
 
@@ -1137,7 +1137,7 @@ func parseTesseractTSV(tsv string) []ocrText {
 
 	// 按 y 坐标分组（同一行的文字合并）
 	type textLine struct {
-		texts    []rawText
+		texts      []rawText
 		minY, maxY int
 		minX, maxX int
 	}
@@ -1205,16 +1205,15 @@ func parseTesseractTSV(tsv string) []ocrText {
 	return results
 }
 
-
 // findTesseract 查找系统中的 Tesseract 可执行文件。
 // 优先级:
 //
-//	 1) 可执行文件同目录 bin/tesseract/tesseract.exe（发布包模式，所有工具在 bin/ 下）
-//	 2) 项目根目录 bin/tesseract/tesseract.exe（开发模式）
-//	 3) 可执行文件同目录 tesseract/tesseract.exe（旧路径，向后兼容）
-//	 4) 项目根目录 tesseract/tesseract.exe（旧路径，向后兼容）
-//	 5) 系统 PATH
-//	 6) Windows 常见安装路径
+//  1. 可执行文件同目录 bin/tesseract/tesseract.exe（发布包模式，所有工具在 bin/ 下）
+//  2. 项目根目录 bin/tesseract/tesseract.exe（开发模式）
+//  3. 可执行文件同目录 tesseract/tesseract.exe（旧路径，向后兼容）
+//  4. 项目根目录 tesseract/tesseract.exe（旧路径，向后兼容）
+//  5. 系统 PATH
+//  6. Windows 常见安装路径
 func findTesseract(root string) string {
 	// 1. 可执行文件同目录下的 bin/tesseract/（发布包模式，工具统一归到 bin/）
 	if exe, err := os.Executable(); err == nil {
@@ -1271,7 +1270,6 @@ func findTesseract(root string) string {
 	return ""
 }
 
-
 // checkTesseractLang 检查 Tesseract 是否支持指定语言。
 func checkTesseractLang(tesseractPath, tessdataDir, lang string) bool {
 	if lang == "" {
@@ -1320,7 +1318,6 @@ func dominantColorDesc(colors []quantizedColor) string {
 	return fmt.Sprintf("%s（%.1f%%）", colors[0].Name,
 		float64(colors[0].Count)/float64(colors[0].Count+colors[0].Count)*100)
 }
-
 
 // describeColorRegion 根据位置和大小时色块区域进行语义描述。
 func describeColorRegion(blk colorBlock, imgW, imgH int) string {
@@ -1504,11 +1501,11 @@ func dominantHue(r, g, b float64) string {
 
 // detectedRegion 连通区域分析的结果。
 type detectedRegion struct {
-	Pixels   [][2]int // 区域内的所有像素坐标
-	Boundary [][2]int // 边界像素坐标（顺时针）
+	Pixels                 [][2]int // 区域内的所有像素坐标
+	Boundary               [][2]int // 边界像素坐标（顺时针）
 	MinX, MinY, MaxX, MaxY int
-	R, G, B  uint32    // 主色（16 位）
-	Area     int       // 像素数
+	R, G, B                uint32 // 主色（16 位）
+	Area                   int    // 像素数
 }
 
 // regionKey 用于区域标记的唯一标识。
@@ -1613,9 +1610,9 @@ func detectGeometricShapes(img image.Image, bounds image.Rectangle, w, h int) []
 			}
 
 			regions = append(regions, detectedRegion{
-				Pixels:   pixels,
-				MinX:     minX, MinY: minY,
-				MaxX:     maxX, MaxY: maxY,
+				Pixels: pixels,
+				MinX:   minX, MinY: minY,
+				MaxX: maxX, MaxY: maxY,
 				R: r, G: g, B: b,
 				Area: area,
 			})
@@ -1737,10 +1734,10 @@ func detectGeometricShapes(img image.Image, bounds image.Rectangle, w, h int) []
 		}
 
 		shapes = append(shapes, shapeInfo{
-			Kind:        kind,
-			X1:          reg.MinX, Y1: reg.MinY,
-			X2:          reg.MaxX, Y2: reg.MaxY,
-			CenterX:     cx, CenterY: cy,
+			Kind: kind,
+			X1:   reg.MinX, Y1: reg.MinY,
+			X2: reg.MaxX, Y2: reg.MaxY,
+			CenterX: cx, CenterY: cy,
 			Area:        reg.Area,
 			Perimeter:   perimeter,
 			Circularity: circularity,
@@ -1926,10 +1923,10 @@ func checkRoundedCorners(img image.Image, bounds image.Rectangle, reg detectedRe
 
 	// 四个角区域
 	corners := [][4]int{
-		{reg.MinX, reg.MinY, reg.MinX + cornerSizeW, reg.MinY + cornerSizeH},                         // 左上
-		{reg.MaxX - cornerSizeW, reg.MinY, reg.MaxX, reg.MinY + cornerSizeH},                         // 右上
-		{reg.MinX, reg.MaxY - cornerSizeH, reg.MinX + cornerSizeW, reg.MaxY},                         // 左下
-		{reg.MaxX - cornerSizeW, reg.MaxY - cornerSizeH, reg.MaxX, reg.MaxY},                         // 右下
+		{reg.MinX, reg.MinY, reg.MinX + cornerSizeW, reg.MinY + cornerSizeH}, // 左上
+		{reg.MaxX - cornerSizeW, reg.MinY, reg.MaxX, reg.MinY + cornerSizeH}, // 右上
+		{reg.MinX, reg.MaxY - cornerSizeH, reg.MinX + cornerSizeW, reg.MaxY}, // 左下
+		{reg.MaxX - cornerSizeW, reg.MaxY - cornerSizeH, reg.MaxX, reg.MaxY}, // 右下
 	}
 
 	missingPixels := 0
@@ -2236,13 +2233,13 @@ func detectCurvesAndArrows(img image.Image, bounds image.Rectangle, w, h int) []
 				arrowKind, arrowDesc := detectArrowHead(pixels, endpoints, pixelSet, step)
 				if arrowKind != "" {
 					shapes = append(shapes, shapeInfo{
-						Kind:    arrowKind,
-						X1: minX, Y1: minY,
+						Kind: arrowKind,
+						X1:   minX, Y1: minY,
 						X2: maxX, Y2: maxY,
-						CenterX:     cx, CenterY: cy2,
+						CenterX: cx, CenterY: cy2,
 						Area:        area,
 						Description: arrowDesc,
-						Width: rw, Height: rh,
+						Width:       rw, Height: rh,
 					})
 					continue
 				}
@@ -2253,8 +2250,8 @@ func detectCurvesAndArrows(img image.Image, bounds image.Rectangle, w, h int) []
 						Kind: "线条",
 						X1:   minX, Y1: minY,
 						X2: maxX, Y2: maxY,
-						CenterX:     cx, CenterY: cy2,
-						Area:        area,
+						CenterX: cx, CenterY: cy2,
+						Area:  area,
 						Width: rw, Height: rh,
 						Description: fmt.Sprintf("斜线，长 %.0fpx", length),
 					})
@@ -2271,8 +2268,8 @@ func detectCurvesAndArrows(img image.Image, bounds image.Rectangle, w, h int) []
 						Kind: "曲线/折线",
 						X1:   minX, Y1: minY,
 						X2: maxX, Y2: maxY,
-						CenterX:     cx, CenterY: cy2,
-						Area:        area,
+						CenterX: cx, CenterY: cy2,
+						Area:  area,
 						Width: rw, Height: rh,
 						Description: curvDesc,
 					})
@@ -2434,8 +2431,8 @@ func detectChartElements(img image.Image, bounds image.Rectangle, w, h int, shap
 	chartType := inferChartType(chartShapes)
 	if chartType != "" {
 		chartShapes = append(chartShapes, shapeInfo{
-			Kind:        "图表类型",
-			X1: 0, Y1: 0, X2: w, Y2: h,
+			Kind: "图表类型",
+			X1:   0, Y1: 0, X2: w, Y2: h,
 			CenterX: w / 2, CenterY: h / 2,
 			Description: chartType,
 		})
@@ -2559,7 +2556,7 @@ func detectBars(img image.Image, bounds image.Rectangle, w, h int, shapes []shap
 						Kind: "柱状图柱体",
 						X1:   s.X1, Y1: s.Y1,
 						X2: s.X2, Y2: s.Y2,
-						CenterX:     s.CenterX, CenterY: s.CenterY,
+						CenterX: s.CenterX, CenterY: s.CenterY,
 						Width: s.Width, Height: s.Height,
 						Area:        s.Area,
 						Description: fmt.Sprintf("柱体 %d×%d，位置 (%d,%d)-(%d,%d)", s.Width, s.Height, s.X1, s.Y1, s.X2, s.Y2),
@@ -2592,7 +2589,7 @@ func detectBars(img image.Image, bounds image.Rectangle, w, h int, shapes []shap
 			avgGap /= len(gaps)
 			bars = append([]shapeInfo{{
 				Kind: "图表类型",
-				X1: 0, Y1: 0, X2: w, Y2: h,
+				X1:   0, Y1: 0, X2: w, Y2: h,
 				CenterX: w / 2, CenterY: h / 2,
 				Description: fmt.Sprintf("柱状图：%d 个柱体，平均间距 %dpx", len(bars), avgGap),
 			}}, bars...)
@@ -2617,7 +2614,7 @@ func detectPieChart(shapes []shapeInfo) *shapeInfo {
 	}
 	if len(sectors) >= 2 {
 		return &shapeInfo{
-			Kind: "图表类型",
+			Kind:        "图表类型",
 			Description: fmt.Sprintf("饼图/环形图：%d 个扇形区域", len(sectors)),
 		}
 	}
@@ -2639,13 +2636,13 @@ func detectLineChart(shapes []shapeInfo) *shapeInfo {
 	}
 	if lineCount >= 1 && dotCount >= 3 {
 		return &shapeInfo{
-			Kind: "图表类型",
+			Kind:        "图表类型",
 			Description: fmt.Sprintf("折线图：%d 条折线，%d 个数据点", lineCount, dotCount),
 		}
 	}
 	if lineCount >= 1 {
 		return &shapeInfo{
-			Kind: "图表类型",
+			Kind:        "图表类型",
 			Description: "折线图趋势线",
 		}
 	}
@@ -2667,7 +2664,7 @@ func detectLegends(img image.Image, bounds image.Rectangle, w, h int, shapes []s
 				Kind: "图例标记",
 				X1:   s.X1, Y1: s.Y1,
 				X2: s.X2, Y2: s.Y2,
-				CenterX:     s.CenterX, CenterY: s.CenterY,
+				CenterX: s.CenterX, CenterY: s.CenterY,
 				Width: s.Width, Height: s.Height,
 				Description: fmt.Sprintf("图例色块 (%d,%d) 大小 %dx%d", s.X1, s.Y1, s.Width, s.Height),
 			})

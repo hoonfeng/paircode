@@ -1,9 +1,12 @@
 // ═══════════════════════════════════════════════════════════════
+// ★ 2026-08-16 自根 pkg/toolbin 内嵌（插件自包含；改协议请全局同步 17 个插件）。
 // util.go — 插件独立二进制的公共辅助（多项目路由/编码探测/输出截断）
 //
 // ★ 2026-08-16 第四轮：从 internal/agent 抽出的通用工具辅助，供各插件
-//   impl 包复用（迁移自 multiproject.go/encoding_detect.go/tools.go/
-//   search.go 的相关函数）。
+//
+//	impl 包复用（迁移自 multiproject.go/encoding_detect.go/tools.go/
+//	search.go 的相关函数）。
+//
 // ═══════════════════════════════════════════════════════════════
 package toolbin
 
