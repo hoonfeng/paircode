@@ -31,6 +31,9 @@ JS 插件 execute → ctx.binary.exec(tool, args[, {timeout}]) → text
   - 返回 unregister 函数；插件卸载自动注销；重复 (method, path) 注册报错
   - 插件路由在宿主 mux 之前拦截：命中走插件、未命中走内置 /api/* 与静态文件
   - 实现：internal/agent/ext_routes.go（ExtRouteMiddleware）+ jsplugin.go ctx.http
+  - ★ 落地用例（2026-08-16）：磁盘插件 `web-api/` 用本能力注册 `/api/ext/*`
+    6 条路由（status / fetch 同源代理 / fs-read / fs-exists / fs-list / routes），
+    curl 直接消费，验证「插件扩展 HTTP 接口」链路全通（见 web-api/index.js）
 - `ctx.sse.register(path, fn)` → 注册 SSE 实时推送端点（事件通道插件化）：
   - `fn(emit, params) → cleanup`：连接建立时在 VM 锁内调用一次（可 await）；
     `emit(event, payload)` 推送事件（payload JSON 序列化，跨调用可保存复用，

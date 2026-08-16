@@ -1,0 +1,8 @@
+{
+  "main": "index.js",
+  "name": "web-api",
+  "purpose": "HTTP 接口插件化落地（ctx.http.register 首个磁盘用例）——注册 /api/ext/* 扩展路由：宿主状态、web fetch 同源代理、受限文件访问、路由清单",
+  "scope": "global",
+  "type": "plugin",
+  "version": "1.0.0"
+}
