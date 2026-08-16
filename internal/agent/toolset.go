@@ -109,8 +109,8 @@ type ToolsetMeta struct {
 }
 
 // listToolsets 列出指定作用域全部工具集元信息（按名排序）。
-// ★ 跳过 builtin.json：内置工具集（builtin）是虚拟展示（见 listAllToolsets），
-//   固化文件只是「已加入分组」的持久化载体，不作为普通工具集列在列表中。
+// ★ 2026-08-17：builtin.json 独立机制已废除（MigrateLegacyBuiltinJSON 迁移合并），
+//   工具集文件全部为普通工作区工具集，无需跳过。
 func listToolsets(projectRoot string, scope toolsetScope) []ToolsetMeta {
 	dir := toolsetDir(projectRoot, scope)
 	entries, err := os.ReadDir(dir)
@@ -123,7 +123,7 @@ func listToolsets(projectRoot string, scope toolsetScope) []ToolsetMeta {
 			continue
 		}
 		if strings.TrimSuffix(e.Name(), ".json") == builtinToolsetName {
-			continue // 内置工具集虚拟展示
+			continue // 防御：旧版 builtin.json 未迁移前不列入普通工具集 // 内置工具集虚拟展示
 		}
 		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
 		if err != nil {
@@ -251,11 +251,16 @@ func defaultProjectToolset(project string) *Toolset {
 }
 
 // ensureDefaultWorkspaceToolset 无项目工具集时自动生成基础工具集（default.json）。
-// 判定：.pair/toolsets/ 下不存在任何「非 builtin.json」的项目工具集（builtin.json
-// 只是内置分组持久化，不算项目工具集）。幂等：已存在项目工具集时不做事。
+// ★ 先迁移旧版 builtin.json（内置组条目并入 default，旧文件删除）——合并后的
+//   builtin.json 不存在，任何 *.json 都是普通工作区工具集。
+// 判定：.pair/toolsets/ 下不存在任何项目工具集。幂等：已存在时不做。
 func ensureDefaultWorkspaceToolset(root string) error {
 	if root == "" {
 		return nil
+	}
+	// ★ 旧版 builtin.json → 并入工作区主工具集（default.json）后删除
+	if err := MigrateLegacyBuiltinJSON(root); err != nil {
+		log.Printf("[toolset] 旧版 builtin.json 迁移失败（不阻塞）: %v", err)
 	}
 	entries, err := os.ReadDir(toolsetDir(root, toolsetProject))
 	if err == nil {
@@ -263,9 +268,7 @@ func ensureDefaultWorkspaceToolset(root string) error {
 			if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
 				continue
 			}
-			if strings.TrimSuffix(e.Name(), ".json") != builtinToolsetName {
-				return nil // 已有项目工具集
-			}
+			return nil // 已有项目工具集
 		}
 	}
 	ts := defaultProjectToolset(filepath.Base(root))
@@ -278,8 +281,9 @@ func ensureDefaultWorkspaceToolset(root string) error {
 }
 
 // LoadAllToolsets 装载工作区全部工具集（启动时调用；失败不致命）。
-// ★ 内置工具集 builtin.json（listToolsets 虚拟展示跳过，需单独装载——
-//   否则用户加入的内置分组重启后不生效）。
+// ★ 2026-08-17：内置组条目已并入工作区工具集（default.json），随普通工具集
+//   一起装载，无独立 builtin.json 装载路径（旧文件由 ensureDefaultWorkspaceToolset
+//   迁移清理）。
 // ★ 全局插件（UI 类跨工作区）独立于工具集：见 LoadGlobalPlugins（不进工具集列表）。
 func LoadAllToolsets(ph *PluginHost, projectRoot string) {
 	if ph == nil {
@@ -289,7 +293,7 @@ func LoadAllToolsets(ph *PluginHost, projectRoot string) {
 	// ★ 项目工具集（工作区 .pair/toolsets/）——依赖工作区，未打开时跳过
 	if projectRoot != "" {
 		// ★ 2026-08-17：无工具集 → 自动生成基础工具集（装载≠可用语义兜底：
-		//   agent 默认只有基础工具，其余按工具集收敛）
+		//   agent 默认只有基础工具，其余按工具集收敛）；内部含旧 builtin.json 迁移
 		if err := ensureDefaultWorkspaceToolset(projectRoot); err != nil {
 			log.Printf("[toolset] 自动生成基础工具集失败: %v", err)
 		}
@@ -303,14 +307,6 @@ func LoadAllToolsets(ph *PluginHost, projectRoot string) {
 				continue
 			}
 			loaded++
-		}
-		// 内置工具包（用户/agent 选择加入的分组）
-		if ts, err := loadToolset(projectRoot, toolsetProject, builtinToolsetName); err == nil {
-			if err := installToolset(ph, ts); err != nil {
-				log.Printf("[toolset] builtin 内置工具包装载失败: %v", err)
-			} else {
-				loaded++
-			}
 		}
 	}
 	// ★ 全局插件（UI 类跨工作区生效；不属于任何工具集）——不依赖工作区：

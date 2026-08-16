@@ -121,7 +121,7 @@ func TestSetBuiltinGroupEnabled_JoinAndLeave(t *testing.T) {
 	t.Setenv("WB_HARNESS", "1")
 	ApplyHarnessToolFilter(reg, nil)
 
-	// 加入 codegraph 组 → 组内工具全部启用 + 固化 builtin.json
+	// 加入 codegraph 组 → 组内工具全部启用 + 固化工作区工具集（default.json）
 	msg, err := SetBuiltinGroupEnabled(ph, root, "codegraph", true)
 	if err != nil {
 		t.Fatalf("加入 codegraph 失败: %v", err)
@@ -132,16 +132,26 @@ func TestSetBuiltinGroupEnabled_JoinAndLeave(t *testing.T) {
 	if !reg.IsEnabled("codegraph_search") {
 		t.Error("加入后 codegraph_search 应启用（agent 可见）")
 	}
-	// builtin.json 固化
-	ts, err := loadToolset(root, toolsetProject, builtinToolsetName)
+	// 工作区主工具集固化（内置组条目并入 default.json，无独立 builtin.json）
+	ts, err := loadToolset(root, toolsetProject, "default")
 	if err != nil {
-		t.Fatalf("builtin.json 未固化: %v", err)
+		t.Fatalf("工作区工具集未固化: %v", err)
 	}
-	if len(ts.Plugins) != 1 || ts.Plugins[0].Builtin != "codegraph" {
-		t.Errorf("builtin.json 应有 codegraph 条目，实际 %+v", ts.Plugins)
+	found := false
+	for _, p := range ts.Plugins {
+		if p.Builtin == "codegraph" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("default.json 应有 codegraph 内置条目，实际 %+v", ts.Plugins)
+	}
+	if _, err := os.Stat(toolsetPath(root, toolsetProject, builtinToolsetName)); !os.IsNotExist(err) {
+		t.Error("不应存在独立 builtin.json（已合并到工作区工具集）")
 	}
 
-	// 移出 → 恢复默认（harness 模式下禁用）
+	// 移出 → 恢复默认（harness 模式下禁用）；default.json 仍保留（工作区主工具集永存）
 	msg, err = SetBuiltinGroupEnabled(ph, root, "codegraph", false)
 	if err != nil {
 		t.Fatalf("移出 codegraph 失败: %v", err)
@@ -149,8 +159,8 @@ func TestSetBuiltinGroupEnabled_JoinAndLeave(t *testing.T) {
 	if reg.IsEnabled("codegraph_search") {
 		t.Error("移出后 codegraph_search 应恢复默认（禁用）")
 	}
-	if _, err := os.Stat(toolsetPath(root, toolsetProject, builtinToolsetName)); !os.IsNotExist(err) {
-		t.Error("全部移出后 builtin.json 应删除（空工具集不落盘）")
+	if _, err := os.Stat(toolsetPath(root, toolsetProject, "default")); err != nil {
+		t.Error("default.json 应保留（工作区主工具集永存，内置组移出后回到基础工具集）")
 	}
 }
 
@@ -178,9 +188,12 @@ func TestEnableAllBuiltin(t *testing.T) {
 			}
 		}
 	}
-	// 固化文件存在
-	if _, err := os.Stat(toolsetPath(root, toolsetProject, builtinToolsetName)); err != nil {
-		t.Errorf("builtin.json 应存在: %v", err)
+	// 固化到工作区主工具集（default.json；无独立 builtin.json）
+	if _, err := os.Stat(toolsetPath(root, toolsetProject, "default")); err != nil {
+		t.Errorf("default.json 应存在: %v", err)
+	}
+	if _, err := os.Stat(toolsetPath(root, toolsetProject, builtinToolsetName)); !os.IsNotExist(err) {
+		t.Error("不应存在独立 builtin.json（已合并到工作区工具集）")
 	}
 }
 

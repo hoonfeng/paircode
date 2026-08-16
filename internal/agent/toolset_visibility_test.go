@@ -185,14 +185,29 @@ func TestEnsureDefaultWorkspaceToolset(t *testing.T) {
 	if _, err := loadToolset(root2, toolsetProject, "default"); err == nil {
 		t.Error("已有项目工具集时不应生成 default.json")
 	}
-	// 只有 builtin.json → 仍生成 default.json
+	// 只有旧版 builtin.json → 迁移（并入 default 后删除旧文件）→ 生成 default.json
 	root3 := t.TempDir()
 	os.MkdirAll(filepath.Join(root3, ".pair", "toolsets"), 0755)
-	os.WriteFile(filepath.Join(root3, ".pair", "toolsets", "builtin.json"), []byte(`{"name":"builtin"}`), 0644)
+	os.WriteFile(filepath.Join(root3, ".pair", "toolsets", "builtin.json"), []byte(`{"name":"builtin","plugins":[{"name":"builtin:memory","builtin":"memory","tools":["memory_write"]}]}`), 0644)
 	if err := ensureDefaultWorkspaceToolset(root3); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := loadToolset(root3, toolsetProject, "default"); err != nil {
-		t.Error("仅 builtin.json 时应生成 default.json")
+	ts3, err := loadToolset(root3, toolsetProject, "default")
+	if err != nil {
+		t.Fatal("仅旧版 builtin.json 时应生成 default.json")
+	}
+	// 旧文件条目并入 default
+	found := false
+	for _, p := range ts3.Plugins {
+		if p.Builtin == "memory" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("旧版 builtin.json 的 memory 条目应并入 default，实际 %+v", ts3.Plugins)
+	}
+	if _, err := os.Stat(filepath.Join(root3, ".pair", "toolsets", "builtin.json")); !os.IsNotExist(err) {
+		t.Error("迁移后旧版 builtin.json 应被删除")
 	}
 }

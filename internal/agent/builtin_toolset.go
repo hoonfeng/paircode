@@ -1,4 +1,4 @@
-// builtin_toolset.go — 内置工具集（builtin）：被过滤工具进插件面板的载体。
+// builtin_toolset.go — 内置工具包（builtin 虚拟工具集）：被过滤工具进插件面板的载体。
 //
 // 背景（2026-08-16）：harness 对齐模式下 pair 独有工具（codegraph_*/memory_*/
 // project_info_*/git_*/debug_*/binary_*/office 等 130+ 个）被过滤（Enabled=false）。
@@ -6,8 +6,8 @@
 // 每个组一个开关：打开=该组工具全部对 agent 可见（加入工作区），关闭=回到过滤状态。
 // 另提供「强制全部加入」开关（add_builtin_all：全部内置组一次性启用）。
 //
-// 数据模型：内置工具集是「虚拟」工具集（名 builtin，scope=builtin，不落盘），
-// 每次访问从当前注册表 + 插件宿主实时派生：
+// 数据模型（★ 2026-08-17 统一为一套逻辑）：内置工具包是「虚拟」工具集
+// （名 builtin，scope=builtin，不落盘），每次访问从当前注册表 + 插件宿主实时派生：
 //
 //	builtin（内置，不可删除）
 //	├── core（内置插件组：read_file/write_file/edit_file/…）
@@ -16,14 +16,17 @@
 //	├── toolset-mgmt（toolset_* 工具集管理工具）
 //	└── system（其余宿主工具：harness 别名 read/write/edit/…、update_tasks 等）
 //
-// 持久化：用户/agent 选择加入的组固化到工作区 .pair/toolsets/builtin.json
-// （普通 Toolset 结构，Plugins=已加入的内置条目）——启动 LoadAllToolsets 自动装载
-// （applyToolsetPlugin 启用组内工具）；会话级注册表构建时 ApplyToolsetBuiltinState 应用。
-// builtin.json 是持久化载体，不作为普通工具集列表展示（listToolsets 跳过）。
+// 加入状态：用户/agent 选择加入的内置组固化为工作区主工具集（.pair/toolsets/
+// default.json）的 Builtin 条目（与 JS 插件条目同文件）——内置组与工作区工具集
+// 共同组成 agent 可用工具集，一套文件、一套逻辑。旧版独立 builtin.json 由
+// MigrateLegacyBuiltinJSON 启动时自动迁移并入 default.json 后删除。
+// 装载/过滤：installToolset（Builtin 条目启用组内工具）+ workspaceToolsetVisibleTools
+// （白名单）全量覆盖 default.json，无需独立路径。
 
 package agent
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -31,7 +34,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
 )
 
 // builtinToolsetName 内置工具集名（虚拟展示 + builtin.json 固化文件名）。
@@ -215,8 +217,8 @@ func isToolsetMgmtTool(name string) bool {
 // BuiltinGroupsOf 派生内置分组（含工具与启用状态）。
 // reg 为工具注册表（通常 ph.Context().Tools）；ph 提供 JS 插件工具归属（排除用）。
 // 分组构成：
-//  1. 已加入工作区的内置组（builtin.json 条目；未加入的不再展示——工具已全部
-//     由磁盘插件 .pair/plugins/tool-* 承载，插件面板可见可管理）
+//  1. 已加入工作区的内置组（工作区工具集 Builtin 条目；未加入的不再展示——
+//     工具已全部由磁盘插件 .pair/plugins/tool-* 承载，插件面板可见可管理）
 //  2. plugin-mgmt：cordis_* 工具
 //  3. toolset-mgmt：toolset_* 工具
 //  4. system：其余无插件归属的宿主工具
@@ -227,12 +229,18 @@ func BuiltinGroupsOf(reg *Registry, ph *PluginHost) []BuiltinGroupInfo {
 	var groups []BuiltinGroupInfo
 	covered := map[string]bool{} // 已归组工具名
 
-	// 1. 已加入工作区的内置组（builtin.json 固化条目 → 工具清单）。
+	// 1. 已加入工作区的内置组（工作区工具集 *.json 的 Builtin 条目 → 工具清单）。
 	//    ★ 2026-08-16 第三轮：不再从 builtinPluginSpecs 静态派生全部内置组
 	//      （宿主不再注册内置工具，静态清单会与磁盘插件重复展示）
+	//    ★ 2026-08-17：builtin.json 独立机制废除，加入状态就是工作区工具集条目，
+	//      扫描全部工具集收集（default.json 等）。
 	joinedEntries := map[string][]string{}
 	if ph != nil && ph.Context() != nil && ph.Context().WorkspaceRoot != "" {
-		if ts, err := loadToolset(ph.Context().WorkspaceRoot, toolsetProject, builtinToolsetName); err == nil {
+		for _, m := range listToolsets(ph.Context().WorkspaceRoot, toolsetProject) {
+			ts, err := loadToolset(ph.Context().WorkspaceRoot, toolsetProject, m.Name)
+			if err != nil {
+				continue
+			}
 			for _, p := range ts.Plugins {
 				if p.Builtin != "" && p.Builtin != manualBuiltinGroup {
 					joinedEntries[p.Builtin] = append([]string(nil), p.Tools...)
@@ -321,9 +329,50 @@ func BuiltinGroupsOf(reg *Registry, ph *PluginHost) []BuiltinGroupInfo {
 		groups = append(groups, groupFrom("toolset-mgmt", "工具集管理", "toolset_* 工具集管理工具（构建/列表/编辑/导出/导入）", "toolset-mgmt", tsTools))
 	}
 	if len(sysTools) > 0 {
-		groups = append(groups, groupFrom("system", "系统工具", "其余宿主工具（harness 别名/任务追踪/提问/提交标记等）", "system", sysTools))
+		// ★ system 组可能已在步骤 1 展示（已加入的 builtin:system 快照）——
+		//   剩余宿主工具合并进该组，避免同组双展示（否则 builtinEntryOfGroup 取首个
+		//   会漏掉剩余工具，add_builtin_all 不全量启用）
+		merged := false
+		for i := range groups {
+			if groups[i].Name == "system" {
+				groups[i] = mergeBuiltinGroupTools(groups[i], reg, sysTools)
+				merged = true
+				break
+			}
+		}
+		if !merged {
+			groups = append(groups, groupFrom("system", "系统工具", "其余宿主工具（harness 别名/任务追踪/提问/提交标记等）", "system", sysTools))
+		}
 	}
 	return groups
+}
+
+// mergeBuiltinGroupTools 把附加工具合并进已展示的内置组（去重 + 重算启用状态）。
+func mergeBuiltinGroupTools(g BuiltinGroupInfo, reg *Registry, extra []string) BuiltinGroupInfo {
+	have := map[string]bool{}
+	for _, t := range g.Tools {
+		have[t.Name] = true
+	}
+	for _, tn := range extra {
+		if tn == "" || have[tn] {
+			continue
+		}
+		have[tn] = true
+		g.Tools = append(g.Tools, BuiltinToolInfo{Name: tn, Desc: toolShortDesc(reg, tn), Enabled: reg.IsEnabled(tn)})
+	}
+	sort.Slice(g.Tools, func(i, j int) bool { return g.Tools[i].Name < g.Tools[j].Name })
+	all := len(g.Tools) > 0
+	anyOn := false
+	for _, t := range g.Tools {
+		if t.Enabled {
+			anyOn = true
+		} else {
+			all = false
+		}
+	}
+	g.Enabled = all && anyOn
+	g.Partial = anyOn && !all
+	return g
 }
 
 // toolShortDesc 取工具简短描述（截断，前端展示用）。
@@ -343,85 +392,96 @@ func toolShortDesc(reg *Registry, name string) string {
 	return d
 }
 
-// builtinJoinedGroups 已加入工作区（固化在 .pair/toolsets/builtin.json）的分组名。
+// builtinJoinedGroups 已加入工作区（固化在工作区工具集 .pair/toolsets/*.json
+// 的 Builtin 条目）的分组名。
 func builtinJoinedGroups(root string) []string {
-	ts, err := loadToolset(root, toolsetProject, builtinToolsetName)
-	if err != nil {
-		return nil
-	}
 	var out []string
-	for _, p := range ts.Plugins {
-		if p.Builtin != "" {
-			out = append(out, p.Builtin)
+	for _, m := range listToolsets(root, toolsetProject) {
+		ts, err := loadToolset(root, toolsetProject, m.Name)
+		if err != nil {
+			continue
+		}
+		for _, p := range ts.Plugins {
+			if p.Builtin != "" && p.Builtin != manualBuiltinGroup {
+				out = append(out, p.Builtin)
+			}
 		}
 	}
 	sort.Strings(out)
 	return out
 }
 
-// EnsureDefaultBuiltinToolset 确保工作区存在内置工具集固化文件（.pair/toolsets/builtin.json）：
-// 不存在时自动创建「dsh 极简核心」默认工具集（与 deepseek-harness 极简模式对齐——
-// 几个核心工具默认捞入工作区，其余工具留在插件面板池子按需勾选）。
-// 幂等：文件已存在（用户/agent 管理过）则不动。启动装配（LoadAllToolsets 前）调用。
-func EnsureDefaultBuiltinToolset(root string) error {
+// workspaceMainToolset 工作区主工具集（default）——内置组加入/移出/手动工具的
+// 统一落点（★ 2026-08-17：内置工具包与工作区工具集合并为一套，无独立 builtin.json）。
+// 不存在时创建基础工具集（defaultProjectToolset，dsh 极简核心），与
+// ensureDefaultWorkspaceToolset 语义一致。
+func workspaceMainToolset(root string) (*Toolset, error) {
+	if root == "" {
+		return nil, fmt.Errorf("工作区未就绪")
+	}
+	if ts, err := loadToolset(root, toolsetProject, "default"); err == nil {
+		return ts, nil
+	}
+	ts := defaultProjectToolset(filepath.Base(root))
+	if err := saveToolset(root, toolsetProject, ts); err != nil {
+		return nil, err
+	}
+	return ts, nil
+}
+
+// MigrateLegacyBuiltinJSON 迁移旧版独立固化文件 .pair/toolsets/builtin.json：
+// 其中的内置组条目（Builtin 非空）并入工作区主工具集（default.json，去重），
+// 然后删除旧文件。
+// ★ 2026-08-17：内置工具包与工作区工具集统一为「一套逻辑」——内置组的加入状态
+//   就是工作区工具集条目（与 JS 插件条目同文件），不再有独立 builtin.json。
+// 幂等：无旧文件时不做任何事。启动装配（LoadAllToolsets 前）调用。
+func MigrateLegacyBuiltinJSON(root string) error {
 	if root == "" {
 		return nil
 	}
 	path := toolsetPath(root, toolsetProject, builtinToolsetName)
-	if _, err := os.Stat(path); err == nil {
+	if _, err := os.Stat(path); err != nil {
+		return nil // 无旧文件，无需迁移
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var legacy Toolset
+	if err := json.Unmarshal(data, &legacy); err != nil || legacy.Name == "" {
+		// 无效旧文件直接删除（不阻塞启动）
+		_ = os.Remove(path)
 		return nil
 	}
-	ts := defaultBuiltinToolset()
+	ts, err := workspaceMainToolset(root)
+	if err != nil {
+		return err
+	}
+	migrated := 0
+	for _, p := range legacy.Plugins {
+		if p.Builtin == "" {
+			continue // 非内置条目（理论上旧文件只存内置条目）不迁移
+		}
+		dup := false
+		for _, e := range ts.Plugins {
+			if e.Builtin == p.Builtin {
+				dup = true
+				break
+			}
+		}
+		if !dup {
+			ts.Plugins = append(ts.Plugins, p)
+			migrated++
+		}
+	}
 	if err := saveToolset(root, toolsetProject, ts); err != nil {
 		return err
 	}
-	log.Printf("[toolset] 已自动创建默认内置工具集（dsh 极简核心，%d 组条目）: %s", len(ts.Plugins), path)
-	return nil
-}
-
-// defaultBuiltinToolset 默认内置工具集内容：dsh 极简模式核心工具。
-// 工具名分布：system（harness 命名 read/write/edit/glob/grep/bash/str_replace_editor/run_code）、
-// fs-search（search_files/search_content）、web（web_fetch/web_search）、
-// shell（run_background/kill_process/read_output）、vision（read_image，dsh tool-fs 图片读取）。
-func defaultBuiltinToolset() *Toolset {
-	return &Toolset{
-		Name:        builtinToolsetName,
-		Description: "内置工具包——dsh 极简核心已捞入工作区（插件面板为池子，此处为捞出的工具；其余工具在插件面板按需勾选）",
-		Version:     "1.0.0",
-		CreatedAt:   time.Now().Format(time.RFC3339),
-		Plugins: []ToolsetPlugin{
-			{
-				Name:    "builtin:system",
-				Purpose: "system：dsh 极简核心（harness 命名 read/write/edit/glob/grep/bash/str_replace_editor/run_code）",
-				Builtin: "system",
-				Tools:   []string{"read", "write", "edit", "glob", "grep", "bash", "str_replace_editor", "run_code"},
-			},
-			{
-				Name:    "builtin:fs-search",
-				Purpose: "fs-search：文件搜索（search_files/search_content）",
-				Builtin: "fs-search",
-				Tools:   []string{"search_files", "search_content"},
-			},
-			{
-				Name:    "builtin:web",
-				Purpose: "web：网络工具（web_fetch/web_search）",
-				Builtin: "web",
-				Tools:   []string{"web_fetch", "web_search"},
-			},
-			{
-				Name:    "builtin:shell",
-				Purpose: "shell：后台进程（run_background/kill_process/read_output）",
-				Builtin: "shell",
-				Tools:   []string{"run_background", "kill_process", "read_output"},
-			},
-			{
-				Name:    "builtin:vision",
-				Purpose: "vision：read_image（dsh tool-fs 含图片读取）",
-				Builtin: "vision",
-				Tools:   []string{"read_image"},
-			},
-		},
+	if err := os.Remove(path); err != nil {
+		return err
 	}
+	log.Printf("[toolset] 已迁移旧版 builtin.json → %s（%d 个内置组条目并入工作区工具集，旧文件删除）", ts.Name, migrated)
+	return nil
 }
 
 // BuiltinToolsetInfoOf 派生内置工具集完整信息（列表/详情 API 用）。
@@ -440,14 +500,19 @@ func BuiltinToolsetInfoOf(reg *Registry, ph *PluginHost, root string) *BuiltinTo
 		}
 	}
 	info := &BuiltinToolsetInfo{
-		Name:  builtinToolsetName,
-		Scope: "builtin",
-		Desc:  "内置工具包（默认不加入工作区；分组开关加入，add_builtin_all 强制全部）",
-		Groups: groups,
-		Joined: joined,
+		Name:         builtinToolsetName,
+		Scope:        "builtin",
+		Desc:         "内置工具包（默认不加入工作区；分组开关加入，add_builtin_all 强制全部）",
+		Groups:       groups,
+		Joined:       joined,
+		ManualTools:  []string{},
 	}
-	// _manual 手动条目工具（工具级添加，固化 builtin.json）
-	if ts, err := loadToolset(root, toolsetProject, builtinToolsetName); err == nil {
+	// _manual 手动条目工具（工具级添加，固化工作区工具集）
+	for _, m := range listToolsets(root, toolsetProject) {
+		ts, err := loadToolset(root, toolsetProject, m.Name)
+		if err != nil {
+			continue
+		}
 		for _, p := range ts.Plugins {
 			if p.Builtin == manualBuiltinGroup {
 				info.ManualTools = append([]string{}, p.Tools...)
@@ -558,10 +623,10 @@ func applyBuiltinGroupToToolset(ph *PluginHost, root string, groupName string, f
 		}
 		groups = []string{groupName}
 	}
-	// 读取/创建 builtin 工具集（固化文件）
-	ts, err := loadToolset(root, toolsetProject, builtinToolsetName)
+	// 读取/创建工作区主工具集（default——内置组加入/移出的统一落点，无独立 builtin.json）
+	ts, err := workspaceMainToolset(root)
 	if err != nil {
-		ts = &Toolset{Name: builtinToolsetName, Description: "内置工具包（用户/agent 选择加入的内置分组）"}
+		return "", err
 	}
 	added := 0
 	for _, gn := range groups {
@@ -590,14 +655,14 @@ func applyBuiltinGroupToToolset(ph *PluginHost, root string, groupName string, f
 		return "", err
 	}
 	if forceAll {
-		return "✅ 已强制加入全部内置工具组（" + itoaAgent(len(groups)) + " 组，" + itoaAgent(len(ts.Plugins)) + " 个内置条目）→ 组内工具全部对 agent 可见。固化 .pair/toolsets/builtin.json", nil
+		return "✅ 已强制加入全部内置工具组（" + itoaAgent(len(groups)) + " 组，" + itoaAgent(len(ts.Plugins)) + " 个内置条目）→ 组内工具全部对 agent 可见。固化工作区工具集 " + ts.Name + ".json", nil
 	}
-	return "✅ 内置工具组 " + groupName + " 已加入工作区（组内工具全部对 agent 可见）。固化 .pair/toolsets/builtin.json", nil
+	return "✅ 内置工具组 " + groupName + " 已加入工作区（组内工具全部对 agent 可见）。固化工作区工具集 " + ts.Name + ".json", nil
 }
 
-// removeBuiltinGroupFromToolset 把内置分组移出工作区 builtin 工具集（恢复默认过滤状态）。
+// removeBuiltinGroupFromToolset 把内置分组移出工作区工具集（恢复默认过滤状态）。
 func removeBuiltinGroupFromToolset(ph *PluginHost, root string, groupName string) (string, error) {
-	ts, err := loadToolset(root, toolsetProject, builtinToolsetName)
+	ts, err := workspaceMainToolset(root)
 	if err != nil {
 		return "", err
 	}
@@ -609,14 +674,18 @@ func removeBuiltinGroupFromToolset(ph *PluginHost, root string, groupName string
 		}
 	}
 	if len(ts.Plugins) == 0 {
-		// 全移除：删除固化文件（空工具集不落盘）
-		_ = os.Remove(toolsetPath(root, toolsetProject, builtinToolsetName))
+		// 全部移出：重置为基础工具集（default 是工作区工具集主文件，永存——
+		// 否则「工作区有工具集」状态丢失，agent 可见工具会回到全量/默认语义）
+		base := defaultProjectToolset(filepath.Base(root))
+		if err := saveToolset(root, toolsetProject, base); err != nil {
+			return "", err
+		}
 		return "✅ 内置工具组 " + groupName + " 已移出工作区（组内工具恢复默认过滤状态）", nil
 	}
 	if err := saveToolset(root, toolsetProject, ts); err != nil {
 		return "", err
 	}
-	return "✅ 内置工具组 " + groupName + " 已移出工作区（组内工具恢复默认过滤状态）。固化 .pair/toolsets/builtin.json", nil
+	return "✅ 内置工具组 " + groupName + " 已移出工作区（组内工具恢复默认过滤状态）。工作区工具集 " + ts.Name + ".json 已更新", nil
 }
 
 // SetBuiltinGroupEnabled 内置分组开关（启用=组内工具全部对 agent 可见并固化；
@@ -654,9 +723,9 @@ func SetBuiltinToolEnabled(ph *PluginHost, root, toolName string, enabled bool) 
 	if !valid[toolName] {
 		return "", fmt.Errorf("工具 %s 不存在或不属于内置工具包", toolName)
 	}
-	ts, err := loadToolset(root, toolsetProject, builtinToolsetName)
+	ts, err := workspaceMainToolset(root)
 	if err != nil {
-		ts = &Toolset{Name: builtinToolsetName, Description: "内置工具包（用户/agent 选择加入的内置分组与手动工具）"}
+		return "", err
 	}
 
 	if enabled {
@@ -689,7 +758,7 @@ func SetBuiltinToolEnabled(ph *PluginHost, root, toolName string, enabled bool) 
 		if err := saveToolset(root, toolsetProject, ts); err != nil {
 			return "", err
 		}
-		return "✅ 工具 " + toolName + " 已加入 agent 可用（手动工具）。固化 .pair/toolsets/builtin.json", nil
+		return "✅ 工具 " + toolName + " 已加入 agent 可用（手动工具）。固化工作区工具集 " + ts.Name + ".json", nil
 	}
 
 	// 禁用：强制移出 agent 可用集合（SetToolEnabled(false)）+ 持久化差集
@@ -724,13 +793,17 @@ func SetBuiltinToolEnabled(ph *PluginHost, root, toolName string, enabled bool) 
 		}
 	}
 	if len(ts.Plugins) == 0 {
-		_ = os.Remove(toolsetPath(root, toolsetProject, builtinToolsetName))
+		// 全部移出：重置为基础工具集（default 永存，见 removeBuiltinGroupFromToolset）
+		base := defaultProjectToolset(filepath.Base(root))
+		if err := saveToolset(root, toolsetProject, base); err != nil {
+			return "", err
+		}
 		return "✅ 工具 " + toolName + " 已移出 agent 可用集合（工作区工具集）", nil
 	}
 	if err := saveToolset(root, toolsetProject, ts); err != nil {
 		return "", err
 	}
-	return "✅ 工具 " + toolName + " 已移出 agent 可用集合（工作区工具集）。固化 .pair/toolsets/builtin.json", nil
+	return "✅ 工具 " + toolName + " 已移出 agent 可用集合（工作区工具集）。工作区工具集 " + ts.Name + ".json 已更新", nil
 }
 
 // removeToolName 从字符串切片移除指定元素（无则不动）。
@@ -776,7 +849,4 @@ func itoaAgent(n int) string {
 	return string(b[i:])
 }
 
-// builtinToolsetJSONPath builtin.json 固化路径（供前端展示/清理）。
-func builtinToolsetJSONPath(root string) string {
-	return filepath.Join(root, ".pair", "toolsets", builtinToolsetName+".json")
-}
+

@@ -266,8 +266,9 @@ func startWebUI(port int) {
 	agent.RegisterCordisTools(initReg, ph, root)
 	agent.RegisterToolsetTools(initReg, root, ph)
 	if root != "" {
-		// ★ 自动创建默认内置工具集（builtin.json 缺失时：dsh 极简核心捞入工作区）
-		agent.EnsureDefaultBuiltinToolset(root)
+		// ★ 迁移旧版 builtin.json（内置组条目并入工作区工具集 default.json 后删除）；
+		//   内置工具包与工作区工具集统一为一套逻辑
+		agent.MigrateLegacyBuiltinJSON(root)
 	}
 	// ★ 启动自动装载工具集（工作区 .pair/toolsets/ + 全局插件；未打开工作区只装全局插件）
 	agent.LoadAllToolsets(ph, root)

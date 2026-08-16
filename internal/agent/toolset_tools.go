@@ -713,7 +713,7 @@ func toolsetEdit(ph *PluginHost, root string, args map[string]any) (string, erro
 }
 
 // toolsetEditBuiltinTool 内置工具集条目的工具级摘除/恢复（rm_tool/enable_tool）。
-// 直接修改 .pair/toolsets/builtin.json 中对应内置条目的 DisabledTools 并热应用。
+// 直接修改工作区主工具集（default.json）中对应内置条目的 DisabledTools 并热应用。
 func toolsetEditBuiltinTool(ph *PluginHost, root string, args map[string]any, action string) (string, error) {
 	pn := strings.TrimSpace(mArgStr(args, "plugin_name"))
 	tool := strings.TrimSpace(mArgStr(args, "tool"))
@@ -721,7 +721,7 @@ func toolsetEditBuiltinTool(ph *PluginHost, root string, args map[string]any, ac
 	if gn == "" || gn == pn || tool == "" {
 		return "", fmt.Errorf("需要 plugin_name=builtin:组名 与 tool（工具名）")
 	}
-	ts, err := loadToolset(root, toolsetProject, builtinToolsetName)
+	ts, err := workspaceMainToolset(root)
 	if err != nil {
 		return "", err
 	}
