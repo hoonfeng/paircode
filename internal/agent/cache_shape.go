@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 )
@@ -15,18 +16,21 @@ import (
 // provider-side prompt-cache reuse. Comparing snapshots across turns
 // lets us explain *why* a cache miss happened.
 type PrefixShape struct {
-	SystemHash string
-	ToolsHash  string
-	PrefixHash string
+	SystemHash  string // 静态前缀（CacheBoundary 之前）——影响 provider 缓存
+	DynamicHash string // 动态后缀（CacheBoundary 之后）——变化不影响前缀缓存
+	ToolsHash   string
+	PrefixHash  string
 }
 
 // CacheDiagnostics reports what changed between two LLM calls' prefixes.
 type CacheDiagnostics struct {
-	PrefixHash    string   `json:"prefix_hash"`
-	PrefixChanged bool     `json:"prefix_changed"`
-	ChangeReasons []string `json:"change_reasons,omitempty"`
-	SystemHash    string   `json:"system_hash"`
-	ToolsHash     string   `json:"tools_hash"`
+	PrefixHash     string   `json:"prefix_hash"`
+	PrefixChanged  bool     `json:"prefix_changed"`
+	DynamicChanged bool     `json:"dynamic_changed"`
+	ChangeReasons  []string `json:"change_reasons,omitempty"`
+	SystemHash     string   `json:"system_hash"`
+	DynamicHash    string   `json:"dynamic_hash"`
+	ToolsHash      string   `json:"tools_hash"`
 }
 
 func shortHash(v interface{}) string {
@@ -35,16 +39,28 @@ func shortHash(v interface{}) string {
 	return fmt.Sprintf("%x", h[:8])
 }
 
+// splitAtBoundary 把完整 system prompt 拆成静态前缀（CacheBoundary 之前）与动态后缀（之后）。
+// provider 端 prompt-cache 只按静态前缀匹配；动态后缀变化不影响缓存命中。
+func splitAtBoundary(p string) (static, dynamic string) {
+	if i := strings.Index(p, CacheBoundary); i >= 0 {
+		return p[:i], p[i+len(CacheBoundary):]
+	}
+	return p, ""
+}
+
 // CaptureShape takes a snapshot of the current prefix state.
 func CaptureShape(systemPrompt string, toolDefs []ToolDefinition) PrefixShape {
 	normalized := normalizeToolDefs(toolDefs)
 	toolsJSON, _ := json.Marshal(normalized)
+	static, dynamic := splitAtBoundary(systemPrompt)
 	return PrefixShape{
-		SystemHash: shortHash(systemPrompt),
-		ToolsHash:  shortHash(string(toolsJSON)),
-		PrefixHash: shortHash(map[string]interface{}{
-			"system": systemPrompt,
-			"tools":  string(toolsJSON),
+		SystemHash:  shortHash(static),
+		DynamicHash: shortHash(dynamic),
+		ToolsHash:   shortHash(string(toolsJSON)),
+		PrefixHash:  shortHash(map[string]interface{}{
+			"system":  static,
+			"dynamic": dynamic,
+			"tools":   string(toolsJSON),
 		}),
 	}
 }
@@ -62,6 +78,8 @@ func normalizeToolDefs(defs []ToolDefinition) []ToolDefinition {
 }
 
 // CompareShape returns diagnostics describing what changed between two shapes.
+// ★ 只有静态 system 与 tools 变化会导致 provider 缓存断裂（PrefixChanged=true）；
+//   动态后缀（boundary 后）变化单独标记 DynamicChanged，不算断裂。
 func CompareShape(prev, cur PrefixShape) CacheDiagnostics {
 	reasons := []string{}
 	if prev.SystemHash != "" && prev.SystemHash != cur.SystemHash {
@@ -70,12 +88,15 @@ func CompareShape(prev, cur PrefixShape) CacheDiagnostics {
 	if prev.ToolsHash != "" && prev.ToolsHash != cur.ToolsHash {
 		reasons = append(reasons, "tools")
 	}
+	dynChanged := prev.DynamicHash != "" && prev.DynamicHash != cur.DynamicHash
 	return CacheDiagnostics{
-		PrefixHash:    cur.PrefixHash,
-		PrefixChanged: len(reasons) > 0,
-		ChangeReasons: reasons,
-		SystemHash:    cur.SystemHash,
-		ToolsHash:     cur.ToolsHash,
+		PrefixHash:     cur.PrefixHash,
+		PrefixChanged:  len(reasons) > 0,
+		DynamicChanged: dynChanged,
+		ChangeReasons:  reasons,
+		SystemHash:     cur.SystemHash,
+		DynamicHash:    cur.DynamicHash,
+		ToolsHash:      cur.ToolsHash,
 	}
 }
 
