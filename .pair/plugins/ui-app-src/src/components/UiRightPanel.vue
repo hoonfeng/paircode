@@ -35,9 +35,11 @@ const startRightResize = (e) => {
 }
 const onRightMove = (e) => {
   if (!dragging) return
-  // ★ 上限 400：右侧总宽 ≤ 605px（400+205），1280 窗口编辑器 ≥ 347px。
+  // ★ 下限 160：聊天区最小可用宽度（右侧总宽 = 160+205 = 365px，
+  //   1280 窗口编辑器 ≥ 587px）。上限 400：右侧总宽 ≤ 605px（400+205），
+  //   1280 窗口编辑器 ≥ 347px。
   //   拖拽到 900（旧值）→ 右侧 1105px → 编辑器被挤到负值/溢出。
-  rightPanelWidth.value = Math.max(260, Math.min(400, startW + (startX - e.clientX)))
+  rightPanelWidth.value = Math.max(160, Math.min(400, startW + (startX - e.clientX)))
   syncRightWidth()
 }
 const stopRightResize = () => {

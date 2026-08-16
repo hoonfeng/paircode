@@ -1807,15 +1807,15 @@ to { opacity: 1; transform: translateY(0);
 .plugin-slot-chat[data-v-4baeceec] { flex: 1; min-height: 0; display: flex; overflow: hidden;
 }
 
-.right-container[data-v-761036af] {
+.right-container[data-v-d4b1dae6] {
   grid-column: 4; grid-row: 2;
   display: flex; flex-direction: row; overflow: hidden; position: relative;
 }
 /* ★ 专注模式：编辑器（main-area 列 3）隐藏，对话面板从列 3 占满——文件侧边栏（列 2）仍显示 */
-.right-container.focus-mode[data-v-761036af] { grid-column: 3 / -1;
+.right-container.focus-mode[data-v-d4b1dae6] { grid-column: 3 / -1;
 }
-.right-panel-resizer[data-v-761036af] {
+.right-panel-resizer[data-v-d4b1dae6] {
   width: 4px; cursor: ew-resize; background: transparent; flex-shrink: 0; z-index: 10;
 }
-.right-panel-resizer[data-v-761036af]:hover { background: var(--accent);
+.right-panel-resizer[data-v-d4b1dae6]:hover { background: var(--accent);
 }

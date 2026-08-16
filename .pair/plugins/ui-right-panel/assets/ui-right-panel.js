@@ -37888,7 +37888,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
       };
       const onRightMove = (e3) => {
         if (!dragging) return;
-        uiState_js.rightPanelWidth.value = Math.max(260, Math.min(400, startW + (startX2 - e3.clientX)));
+        uiState_js.rightPanelWidth.value = Math.max(160, Math.min(400, startW + (startX2 - e3.clientX)));
         syncRightWidth();
       };
       const stopRightResize = () => {
@@ -37925,7 +37925,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
       };
     }
   };
-  const UiRightPanel2 = /* @__PURE__ */ _export_sfc(_sfc_main, [["__scopeId", "data-v-761036af"]]);
+  const UiRightPanel2 = /* @__PURE__ */ _export_sfc(_sfc_main, [["__scopeId", "data-v-d4b1dae6"]]);
   function mount(el) {
     const app = vue.createApp(UiRightPanel2);
     app.mount(el);

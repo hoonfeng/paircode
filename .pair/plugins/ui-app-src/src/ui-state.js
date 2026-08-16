@@ -173,10 +173,11 @@ export const sidebarWidth = ref(280)
 export function loadPanelSize() {
   try {
     const d = JSON.parse(localStorage.getItem('paircode-panel-size') || '{}')
-    // ★ 右侧面板宽度 clamp [260,360]：右侧总宽 = rpw + ConvSidebar(200) +
-    //   resizer/border(5) = 465~565px，1280 窗口编辑器 ≥ 387px。
+    // ★ 右侧面板宽度 clamp [160,400]（与 UiRightPanel 拖拽 clamp 一致）：
+    //   右侧总宽 = rpw + ConvSidebar(200) + resizer/border(5) = 365~605px，
+    //   1280 窗口编辑器 ≥ 587px。
     //   旧残留 rpw 可能 520+（右侧 775px 挤压编辑器到 ~177px 的历史坑）。
-    if (d.rpw) rightPanelWidth.value = Math.max(260, Math.min(parseFloat(d.rpw) || 320, 360))
+    if (d.rpw) rightPanelWidth.value = Math.max(160, Math.min(parseFloat(d.rpw) || 320, 400))
     if (d.bph) bottomPanelHeight.value = Math.max(120, Math.min(parseFloat(d.bph) || 180, 500))
   } catch {}
   try {
