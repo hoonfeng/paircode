@@ -62,3 +62,17 @@ func resolvePathFor(primaryRoot string, args map[string]any, p string) (string, 
 	}
 	return resolvePath(projRoot, p)
 }
+
+// workspaceRootNames 列出工作区各项目根目录名（诊断/错误提示用）。
+func workspaceRootNames(primaryRoot string) []string {
+	var names []string
+	for _, wr := range orderedRoots(primaryRoot) {
+		names = append(names, filepath.Base(wr))
+	}
+	return names
+}
+
+// samePath 比较两个路径是否指向同一位置（Windows 不区分大小写）。
+func samePath(a, b string) bool {
+	return strings.EqualFold(filepath.Clean(a), filepath.Clean(b))
+}

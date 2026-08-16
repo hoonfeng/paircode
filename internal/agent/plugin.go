@@ -262,8 +262,11 @@ func (h *PluginHost) claimTool(plugin, toolName string) error {
 			toolName, owner, plugin, owner)
 	}
 	if !taken {
-		if _, exists := h.ctx.Tools.Get(toolName); exists {
-			return fmt.Errorf("工具 %q 是宿主内置/已占用工具，插件 %s 不能覆盖。请换工具名", toolName, plugin)
+		if t, exists := h.ctx.Tools.Get(toolName); exists {
+			// ★ 插件接管宿主内置工具（2026-08-16 迁移）：原 Go 实现存档到
+			//   hostExecutors（供 ctx.hostTool 调用），Registry 交给插件工具
+			//   （同名覆盖）。对齐 harness「工具编排在插件、能力在宿主 seam」。
+			ArchiveHostTool(t)
 		}
 	}
 	h.toolOwner[toolName] = plugin
@@ -281,7 +284,9 @@ func (h *PluginHost) IsPluginTool(name string) bool {
 
 // MergePluginTools 把插件宿主中由插件注册的业务工具合并进目标注册表
 // （会话级 reg 独立新建，需同步插件工具——Node 桥工具 + goja 插件
-// ctx.tools.register；同名冲突跳过，避免覆盖会话工具）。
+// ctx.tools.register）。★ 同名接管（2026-08-16 迁移）：插件工具覆盖会话
+// 内置工具——磁盘工具插件（tool-*）注册的同名工具接管 agent 可见面
+// （宿主 Go 实现已存档 hostExecutors，经 ctx.hostTool 调用）。
 func MergePluginTools(reg *Registry, ph *PluginHost) {
 	if ph == nil {
 		return
@@ -294,10 +299,10 @@ func MergePluginTools(reg *Registry, ph *PluginHost) {
 		if !ok {
 			continue
 		}
-		if _, exists := reg.Get(meta.Name); exists {
-			continue // 会话已注册同名工具，不覆盖
-		}
-		reg.Register(t)
+		// 插件工具接管：覆盖会话内置实现，且默认启用（插件是「内容」，
+		// 豁免 harness 过滤；用户装载插件即期望工具可用）。
+		t.Enabled = true
+		reg.Register(t) // 同名覆盖（插件优先）
 	}
 }
 

@@ -74,8 +74,7 @@ func Init(wv *webkit.WebView) {
 		agent.RegisterDefaultTools(initReg, root)
 		agent.RegisterCommitMessageTool(initReg)
 		agenttools.RegisterManagementTools(initReg, root)
-		// 参考注册表也加载 Lua 自定义工具（多项目），保证 /api/tools 工具面板可见
-		agent.LoadAllProjectLuaTools(initReg, root)
+		// 参考注册表也加载管理工具（多项目），保证 /api/tools 工具面板可见
 		handler.SetToolsRegistry(initReg)
 		log.Printf("[Bridge] 参考工具注册表已初始化（%d 个工具）", len(initReg.AllToolMeta()))
 	}
@@ -425,7 +424,6 @@ func buildDesktopLoopOpts(convID, message string, autonomous bool) agent.LoopOpt
 		}
 		agent.RegisterMCPServers(reg, agentCfgs)
 	}
-	agent.LoadAllProjectLuaTools(reg, root)
 	agent.SetCodeGraphDB(bridgeSessionManager.RawDB())
 	agent.InitDebugLogger(root, 50)
 	// ★ 保存注册表引用，供 /api/tools 查询工具列表与状态（桌面端 tools API）

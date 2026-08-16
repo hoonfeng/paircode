@@ -59,7 +59,7 @@ func registerResourceTools(r *Registry, root string) {
 			var ordered []order
 			for _, rt := range []ResourceType{
 				ResourceCapsules, ResourceGenes, ResourceMemory, ResourceProjectInfo,
-				ResourceSkills, ResourceMCPServers, ResourceLuaTools,
+				ResourceSkills, ResourceMCPServers,
 			} {
 				if c, ok := counts[rt]; ok {
 					ordered = append(ordered, order{resourceTypeLabel(rt), c})
@@ -177,8 +177,7 @@ func registerResourceTools(r *Registry, root string) {
 
 			total := 0
 			for _, rt := range []ResourceType{
-				ResourceCapsules, ResourceGenes, ResourceMemory, ResourceProjectInfo,
-				ResourceSkills, ResourceMCPServers, ResourceLuaTools,
+				ResourceSkills, ResourceMCPServers,
 			} {
 				if c, ok := counts[rt]; ok {
 					label := resourceTypeLabel(rt)
@@ -206,7 +205,6 @@ func resourceTypeLabel(rt ResourceType) string {
 		ResourceProjectInfo: "项目知识库",
 		ResourceSkills:      "技能",
 		ResourceMCPServers:  "MCP服务器",
-		ResourceLuaTools:    "Lua工具",
 	}
 	if l, ok := labels[rt]; ok {
 		return l

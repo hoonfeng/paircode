@@ -1,0 +1,9 @@
+{
+  "name": "ui-titlebar",
+  "purpose": "标题栏（titlebar 槽位）：logo/菜单/标题 + titlebar-right 叠加挂载",
+  "version": "0.1.0",
+  "scope": "global",
+  "type": "plugin",
+  "main": "index.js",
+  "client": "client.js"
+}

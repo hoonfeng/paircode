@@ -1,0 +1,8 @@
+{
+  "name": "tool-web",
+  "purpose": "网络工具（web_fetch/web_search）——迁移自内置 registerWebTools",
+  "version": "0.1.0",
+  "scope": "global",
+  "type": "plugin",
+  "main": "index.js"
+}

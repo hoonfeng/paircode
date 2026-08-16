@@ -1159,7 +1159,7 @@ return {
 func TestJSPluginToolNameConflict(t *testing.T) {
 	reg := NewRegistry()
 	host := NewPluginHost(reg, nil, `C:\ws`)
-	// ① 覆盖宿主已有工具名 → 明确报错
+	// ① 插件接管宿主已有工具 → 合法（宿主执行器存档，供 ctx.hostTool 调用）
 	reg.Register(&Tool{Name: "host_tool", Description: "host", Handler: func(ctx context.Context, args map[string]any) (string, error) { return "", nil }})
 	id, _ := host.DefineJS(`
 return {
@@ -1169,9 +1169,14 @@ return {
   }
 }`, "conflict1")
 	def, _ := host.GetJSDef(id)
-	err := host.LoadJSDynamic(def)
-	if err == nil || !strings.Contains(err.Error(), "宿主内置") {
-		t.Fatalf("覆盖宿主工具应报错, got %v", err)
+	if err := host.LoadJSDynamic(def); err != nil {
+		t.Fatalf("插件接管宿主工具应成功（宿主执行器存档），got %v", err)
+	}
+	if _, ok := HostToolMeta("host_tool"); !ok {
+		t.Fatal("接管后宿主执行器应已存档")
+	}
+	if tool, ok := reg.Get("host_tool"); !ok || tool.Description != "clash" {
+		t.Fatalf("插件应接管 host_tool，got %+v", tool)
 	}
 	// ② 两插件注册同名工具 → 第二个报错（含占用方与处理建议）
 	load := func(name, toolName string) error {
@@ -1188,7 +1193,7 @@ return {
 	if err := load("plugin-a", "shared_tool"); err != nil {
 		t.Fatalf("plugin-a 注册应成功: %v", err)
 	}
-	err = load("plugin-b", "shared_tool")
+	err := load("plugin-b", "shared_tool")
 	if err == nil || !strings.Contains(err.Error(), "已被插件 plugin-a 注册") {
 		t.Fatalf("plugin-b 同名应报错, got %v", err)
 	}

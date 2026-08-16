@@ -44,7 +44,6 @@ type AppSettings struct {
 	RequireApproval    bool   `json:"requireHumanApprovalForDestructive"`
 	AIReview           bool   `json:"aiReview"`
 	AutoCommit         bool   `json:"autoCommit"`
-	LuaTools           bool   `json:"luaTools"`
 	Benchmark          bool   `json:"enableBenchmarking"`
 	SystemInstructions string `json:"systemInstructions"`
 	SearxngURL         string `json:"searxngUrl"`
@@ -126,7 +125,7 @@ func Default() AppSettings {
 		Provider: "deepseek", BaseURL: "https://api.deepseek.com/v1",
 		PlanModel: "deepseek-v4-pro", ExecuteModel: "deepseek-v4-flash", ReviewModel: "deepseek-v4-pro",
 		Temperature: "0.3", ThinkingMode: "thinking", MaxTokens: 131072, ContextMaxTokens: 64000,
-		MaxIterations: 50, MaxParallel: 3, ReviewRetries: 3, AutoIterate: true, RequireApproval: true, ReviewMode: "auto", AutoCommit: true, AutoCollapse: true, Benchmark: true, LuaTools: true,
+		MaxIterations: 50, MaxParallel: 3, ReviewRetries: 3, AutoIterate: true, RequireApproval: true, ReviewMode: "auto", AutoCommit: true, AutoCollapse: true, Benchmark: true,
 		DefaultShell: "auto", TermFontSize: 13, TermEncoding: "auto",
 		Theme: "dark", EditorFontSize: 14, TabSize: 2, FontFamily: "'Cascadia Code', 'Fira Code', Consolas, monospace",
 		PhilosophySelected: []string{"tao-te-ching", "huangdi-yinfu-jing", "sunzi-bingfa"},

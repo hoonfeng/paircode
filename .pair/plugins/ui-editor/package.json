@@ -1,0 +1,9 @@
+{
+  "name": "ui-editor",
+  "purpose": "EditorArea + 底部终端面板 + 拖拽 resizer",
+  "version": "0.1.0",
+  "scope": "global",
+  "type": "plugin",
+  "main": "index.js",
+  "client": "client.js"
+}

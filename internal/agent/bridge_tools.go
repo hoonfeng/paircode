@@ -180,7 +180,7 @@ func registerBridgeTools(r *Registry, root string) {
 			return fmt.Sprintf("[成功] 系统管理工具 %q 已注册。\n\n"+
 				"工具描述: %s\n"+
 				"生效范围: 仅接管模式下可用\n"+
-				"注意: 下次重启后此工具不会持久化（需重新注册）。如需持久化，请将其写为 Lua 工具配合接管模式使用。%s",
+				"注意: 下次重启后此工具不会持久化（需重新注册）。如需持久化，请将其写为磁盘插件（.pair/plugins/ 下 cordis 插件）。%s",
 				name, description, nameNote), nil
 		},
 	})
@@ -238,7 +238,7 @@ func executeSystemTool(name, code string, args map[string]any, bc *BridgeControl
 	return fmt.Sprintf("系统工具 %q 已触发。处理函数体:\n```go\n%s\n```\n\n"+
 		"当前调用参数: %s\n\n"+
 		"如需执行系统命令，请直接用 bridge_exec(命令=...) 更简便。\n"+
-		"如需持久化系统管理工具，请创建 Lua 工具 + 在接管模式下配合 bridge_exec 使用。",
+		"如需持久化系统管理工具，请创建磁盘插件（.pair/plugins/ 下 cordis 插件）+ 在接管模式下配合 bridge_exec 使用。",
 		name, code, jsonArgs(args)), nil
 }
 

@@ -117,9 +117,9 @@ func builtinPluginToolGroups() map[string][]string {
 }
 
 // reassignBuiltinToolGroups 归属修正：registerCoreTools 历史聚合调用
-// registerCodeGraphTools/registerExtraCodeGraphTools/registerLuaToolTools
-// （tools.go 末尾），导致 core 组 diff 抢注了 codegraph/lua 工具、独立组
-// （codegraph/codegraph-extra/lua-tools）diff 为空。按精确名/前缀重新归属，
+// registerCodeGraphTools/registerExtraCodeGraphTools
+// （tools.go 末尾），导致 core 组 diff 抢注了 codegraph 工具、独立组
+// （codegraph/codegraph-extra）diff 为空。按精确名/前缀重新归属，
 // 保证各内置插件组工具清单独立准确（前端分组开关 + 内置工具集加入按组生效）。
 func reassignBuiltinToolGroups(m map[string][]string) {
 	reassign := []struct {
@@ -128,7 +128,6 @@ func reassignBuiltinToolGroups(m map[string][]string) {
 	}{
 		{func(n string) bool { return n == "codegraph_find_by_signature" || n == "codegraph_explore" }, "codegraph-extra"},
 		{func(n string) bool { return strings.HasPrefix(n, "codegraph_") }, "codegraph"},
-		{func(n string) bool { return strings.HasPrefix(n, "lua_tool") }, "lua-tools"},
 	}
 	if core, ok := m["core"]; ok {
 		var keep []string
@@ -210,7 +209,7 @@ func BuiltinGroupsOf(reg *Registry, ph *PluginHost) []BuiltinGroupInfo {
 	for _, m := range builtinPluginMetas() {
 		tools := groupsByPlugin[m.name]
 		if len(tools) == 0 {
-			continue // 插件未注册工具（如 lua-tools 无 lua 文件时）
+			continue // 插件未注册工具（如 codegraph-extra 无可用工具时）
 		}
 		sort.Strings(tools)
 		g := BuiltinGroupInfo{Name: m.name, Title: m.name, Desc: m.desc, Source: "builtin"}

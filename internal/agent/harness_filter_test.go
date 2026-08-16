@@ -161,7 +161,7 @@ func TestHarnessOnlyTools_Default(t *testing.T) {
 // 被移除的 pair 独有工具名（harness 精简提示词中不应出现）。
 var trimmedPromptBannedTools = []string{
 	"codegraph", "memory_", "project_info", "history_", "git_", "debug_", "binary_",
-	"csv_", "word_", "xlsx", "read_pdf", "lsp_", "skill_", "mcp_", "lua_tool",
+	"csv_", "word_", "xlsx", "read_pdf", "lsp_", "skill_", "mcp_",
 	"marketplace", "web_debug", "bug_", "screenshot", "multi_edit", "list_files",
 	"run_background", "update_plan", "read_file", "edit_file", "write_file", "run_command",
 	"search_content", "search_files", "find_symbol", "go_build", "go_run", "run_test",
@@ -172,12 +172,9 @@ func TestPromptTrimmedInHarnessMode(t *testing.T) {
 	t.Setenv("WB_HARNESS", "1")
 	roots := []string{"/test/project"}
 
-	// 自管理/记忆/Lua 三段在 harness 模式下应裁剪为空（引用工具已被移除）
+	// 自管理/记忆两段在 harness 模式下应裁剪为空（引用工具已被移除）
 	if s := SelfManagementPrompt(); s != "" {
 		t.Errorf("harness 模式 SelfManagementPrompt 应为空，实际: %.80s…", s)
-	}
-	if s := LuaToolsPrompt(); s != "" {
-		t.Errorf("harness 模式 LuaToolsPrompt 应为空，实际: %.80s…", s)
 	}
 	if s := LongTermMemoryPrompt(); s != "" {
 		t.Errorf("harness 模式 LongTermMemoryPrompt 应为空，实际: %.80s…", s)
@@ -203,9 +200,6 @@ func TestPromptFullInFullToolsMode(t *testing.T) {
 	roots := []string{"/test/project"}
 	if s := SelfManagementPrompt(); s == "" {
 		t.Error("WB_FULL_TOOLS=1 时 SelfManagementPrompt 不应为空")
-	}
-	if s := LuaToolsPrompt(); s == "" {
-		t.Error("WB_FULL_TOOLS=1 时 LuaToolsPrompt 不应为空")
 	}
 	if s := LongTermMemoryPrompt(); s == "" {
 		t.Error("WB_FULL_TOOLS=1 时 LongTermMemoryPrompt 不应为空")

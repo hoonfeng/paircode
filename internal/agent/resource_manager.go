@@ -28,7 +28,6 @@ const (
 	ResourceProjectInfo ResourceType = "project-info" // 项目知识库
 	ResourceSkills      ResourceType = "skills"       // 技能
 	ResourceMCPServers  ResourceType = "mcp-servers"  // MCP 服务器
-	ResourceLuaTools    ResourceType = "lua-tools"    // Lua 自定义工具
 )
 
 // ResourceMeta 统一资源元信息（跨类型列表和搜索用）。
@@ -84,7 +83,6 @@ func NewUnifiedResourceManager(root string) *UnifiedResourceManager {
 	mgr.Register(&projectInfoProvider{root: root})
 	mgr.Register(&skillsProvider{root: root})
 	mgr.Register(&mcpServerProvider{})
-	mgr.Register(&luaToolProvider{root: root})
 
 	return mgr
 }
@@ -559,77 +557,6 @@ func loadMCPConfigs() []struct {
 		}
 	}
 	return result
-}
-
-// 7. luaToolProvider — Lua 自定义工具（.pair/tools/*.lua）
-
-type luaToolProvider struct {
-	root string
-}
-
-func (p *luaToolProvider) Type() ResourceType { return ResourceLuaTools }
-
-func (p *luaToolProvider) toolsDir() string { return filepath.Join(p.root, ".pair", "tools") }
-
-func (p *luaToolProvider) List(scope string) ([]ResourceMeta, error) {
-	dir := p.toolsDir()
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, nil
-	}
-	var result []ResourceMeta
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(strings.ToLower(e.Name()), ".lua") {
-			continue
-		}
-		fi, _ := e.Info()
-		name := strings.TrimSuffix(e.Name(), ".lua")
-		data, _ := os.ReadFile(filepath.Join(dir, e.Name()))
-		desc := extractLuaDesc(string(data))
-		result = append(result, ResourceMeta{
-			ID:          name,
-			Type:        ResourceLuaTools,
-			Scope:       "project",
-			Name:        name,
-			Description: desc,
-			Size:        fi.Size(),
-			ModifiedAt:  fi.ModTime().Format(time.RFC3339),
-		})
-	}
-	return result, nil
-}
-
-func (p *luaToolProvider) Search(query, scope string) ([]ResourceMeta, error) {
-	all, _ := p.List(scope)
-	var matched []ResourceMeta
-	for _, m := range all {
-		if strings.Contains(strings.ToLower(m.ID), query) ||
-			strings.Contains(strings.ToLower(m.Description), query) {
-			matched = append(matched, m)
-		}
-	}
-	return matched, nil
-}
-
-func (p *luaToolProvider) Count(scope string) (int, error) {
-	items, _ := p.List(scope)
-	return len(items), nil
-}
-
-// extractLuaDesc 从 Lua 脚本源码中提取 description 字段。
-func extractLuaDesc(src string) string {
-	for _, line := range strings.Split(src, "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "description") || strings.HasPrefix(line, "-- description") {
-			parts := strings.SplitN(line, "=", 2)
-			if len(parts) == 2 {
-				val := strings.TrimSpace(parts[1])
-				val = strings.Trim(val, "\"' `,")
-				return truncateStr(val, 100)
-			}
-		}
-	}
-	return ""
 }
 
 // firstLine 取首行非空文本。

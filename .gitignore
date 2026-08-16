@@ -17,7 +17,8 @@ go.work
 go.work.sum
 
 # Pair CodeAgent working directory (conversations, session)
-.pair/
+.pair/*
+!.pair/plugins/
 
 # IDE configurations
 .trae/
@@ -67,3 +68,4 @@ build_err.txt
 
 # Python temporary scripts
 *.py
+internal/agent/.pair/

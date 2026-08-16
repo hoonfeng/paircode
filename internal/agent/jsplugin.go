@@ -433,6 +433,101 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 	})
 	ctxObj.Set("tools", toolsObj)
 
+	// ctx.hostTool(name, args)：执行宿主存档工具（Go 实现库）。
+	// 迁移模式（2026-08-16）：磁盘工具插件注册同名工具接管 agent 可见面，
+	// execute 内可调 ctx.hostTool 复用宿主 Go 执行器（对齐 harness seam：
+	// 编排在插件、能力在宿主）。args 为对象（工具参数），返回结果字符串；
+	// 宿主无此执行器 → 抛错。ctx.hostToolMeta(name) 返回宿主工具元数据
+	// （name/description/parameters）供插件声明 schema 时对齐。
+	hostToolObj := vm.NewObject()
+	hostToolObj.Set("exec", func(call goja.FunctionCall) goja.Value {
+		name := call.Argument(0).String()
+		if name == "" {
+			panic(vm.NewTypeError("ctx.hostTool.exec: 工具名不能为空"))
+		}
+		var args map[string]any
+		if v := call.Argument(1); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
+			if m, ok := v.Export().(map[string]any); ok {
+				args = m
+			} else {
+				panic(vm.NewTypeError("ctx.hostTool.exec: 第二参数必须是参数对象"))
+			}
+		}
+		out, hErr := ExecuteHostTool(name, args)
+		if hErr != nil {
+			panic(vm.NewGoError(hErr))
+		}
+		return vm.ToValue(out)
+	})
+	hostToolObj.Set("meta", func(call goja.FunctionCall) goja.Value {
+		name := call.Argument(0).String()
+		t, ok := HostToolMeta(name)
+		if !ok {
+			return goja.Null()
+		}
+		meta := map[string]any{
+			"name":        t.Name,
+			"description": t.Description,
+			"usageGuide":  t.UsageGuide,
+			"category":    t.Category,
+			"parameters":  t.Parameters,
+			"readOnly":    t.ReadOnly,
+		}
+		return vm.ToValue(meta)
+	})
+	hostToolObj.Set("names", func(call goja.FunctionCall) goja.Value {
+		return vm.ToValue(HostToolNames())
+	})
+	ctxObj.Set("hostTool", hostToolObj)
+
+	// ctx.process：后台进程服务（run_background/read_output/kill_process 的能力面）。
+	// globalBG 为全局单例（跨 agent 轮次存活）；cwd 相对工作区根解析（越界拦截）。
+	processObj := vm.NewObject()
+	processObj.Set("runBackground", func(call goja.FunctionCall) goja.Value {
+		command := strings.TrimSpace(call.Argument(0).String())
+		if command == "" {
+			panic(vm.NewTypeError("ctx.process.runBackground: command 不能为空"))
+		}
+		dir := pc.WorkspaceRoot
+		if cwd := call.Argument(1).String(); cwd != "" {
+			var err error
+			if dir, err = resolvePath(pc.WorkspaceRoot, cwd); err != nil {
+				panic(vm.NewGoError(err))
+			}
+		}
+		id, err := globalBG.start(command, dir)
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return vm.ToValue(map[string]any{"id": id})
+	})
+	processObj.Set("readOutput", func(call goja.FunctionCall) goja.Value {
+		id := int(call.Argument(0).ToInteger())
+		p := globalBG.get(id)
+		if p == nil {
+			panic(vm.NewGoError(fmt.Errorf("无此后台进程 id %d", id)))
+		}
+		out, done, exitErr := p.snapshot()
+		return vm.ToValue(map[string]any{
+			"output":  out,
+			"done":    done,
+			"exitErr": exitErr,
+			"status":  map[bool]string{true: "已结束", false: "运行中"}[done],
+		})
+	})
+	processObj.Set("kill", func(call goja.FunctionCall) goja.Value {
+		id := int(call.Argument(0).ToInteger())
+		p := globalBG.get(id)
+		if p == nil {
+			panic(vm.NewGoError(fmt.Errorf("无此后台进程 id %d", id)))
+		}
+		if p.cmd != nil && p.cmd.Process != nil {
+			killProcessTree(p.cmd.Process.Pid)
+		}
+		return vm.ToValue(map[string]any{"ok": true, "id": id})
+	})
+	ctxObj.Set("process", processObj)
+
 	// ctx.loopFactory.register(apply)：注册 agent 循环装配器（对齐 harness setFactory 单槽位）。
 	// apply(opts) → overrides | null：
 	//   opts = { system, maxIterations, maxContextTokens, autonomous,
@@ -1498,7 +1593,28 @@ func jsToolToGo(vm *goja.Runtime, v goja.Value, lockFn func(func())) (*Tool, err
 		Description: desc,
 		Parameters:  params,
 		Handler:     handler,
+		UsageGuide:  strField(obj, "usageGuide"),
+		Category:    strField(obj, "category"),
+		ReadOnly:    boolField(obj, "readOnly"),
+		RequiresApproval: boolField(obj, "requiresApproval"),
+		SystemTool:  boolField(obj, "systemTool"),
 	}, nil
+}
+
+// strField 读对象字符串字段（缺省空串）。
+func strField(obj *goja.Object, key string) string {
+	if v := obj.Get(key); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
+		return v.String()
+	}
+	return ""
+}
+
+// boolField 读对象布尔字段（缺省 false）。
+func boolField(obj *goja.Object, key string) bool {
+	if v := obj.Get(key); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
+		return v.ToBoolean()
+	}
+	return false
 }
 
 // jsResultToText 把 JS 工具执行结果转成 (text, error)。

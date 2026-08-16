@@ -1,0 +1,9 @@
+{
+  "name": "ui-sidebar",
+  "purpose": "文件/搜索/Git/插件 四面板侧栏",
+  "version": "0.1.0",
+  "scope": "global",
+  "type": "plugin",
+  "main": "index.js",
+  "client": "client.js"
+}

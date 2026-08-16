@@ -66,8 +66,6 @@ func builtinPluginSpecs(root string) []builtinPluginSpec {
 			func(c *PluginContext) { registerCodeGraphTools(c.Tools, root) }},
 		{"codegraph-extra", "图谱扩展（codegraph_find_by_signature/explore）",
 			func(c *PluginContext) { registerExtraCodeGraphTools(c.Tools, root) }},
-		{"lua-tools", "Lua 自定义工具管理（lua_tool_list/create/update/delete）",
-			func(c *PluginContext) { registerLuaToolTools(c.Tools, root) }},
 	}
 }
 

@@ -110,7 +110,7 @@ func (r *Registry) Get(name string) (*Tool, bool) {
 	return t, ok
 }
 
-// Unregister 卸载工具（Lua 热重载用）。不存在则无操作。
+// Unregister 卸载工具（插件热重载用）。不存在则无操作。
 func (r *Registry) Unregister(name string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -796,7 +796,6 @@ func registerCoreTools(r *Registry, root string, eh *editHistory, bg *bgRegistry
 
 	registerCodeGraphTools(r, root)          // codegraph_build / codegraph_search / codegraph_impact / ...（代码知识图谱，见 codegraph_tools.go + pkg/codegraph）
 	registerExtraCodeGraphTools(r, root)     // codegraph_find_by_signature / codegraph_explore（额外工具，见 codegraph_extra.go）
-	registerLuaToolTools(r, root)            // lua_tool_list/create/update/delete（Lua 自定义工具管理，见 luatool_tools.go）
 	// ── 默认 BeforeTool：edit_file/multi_edit 执行前用 codegraph 注入最新行号 ──
 	// codegraph 的符号级行号比 old_string 字符串匹配更可靠（不受 CRLF/空白折叠/行号偏移影响）。
 	if r.BeforeTool == nil {

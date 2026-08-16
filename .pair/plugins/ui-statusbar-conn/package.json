@@ -1,0 +1,9 @@
+{
+  "name": "ui-statusbar-conn",
+  "purpose": "状态栏连接状态指示（statusbar-items 槽位，迁移自 web-ui 内置实现）",
+  "version": "0.1.0",
+  "scope": "global",
+  "type": "plugin",
+  "main": "index.js",
+  "client": "client.js"
+}

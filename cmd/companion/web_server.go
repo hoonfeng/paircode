@@ -227,8 +227,6 @@ func startWebUI(port int) {
 		agent.RegisterHarnessTools(initReg, root)
 		agent.RegisterCommitMessageTool(initReg)
 		agenttools.RegisterManagementTools(initReg, root)
-		// 参考注册表也加载 Lua 自定义工具（多项目），保证 /api/tools 工具面板可见
-		reloadWebLuaTools(initReg, root)
 		// ★ harness 对齐（默认关闭——全量工具集；WB_HARNESS=1 开启时精简 pair 独有工具）；
 		//   被禁用工具保留在注册表（前端可见可管理），内置工具集 builtin 可一键恢复
 		if n := agent.ApplyHarnessToolFilter(initReg, nil); n > 0 {
@@ -2303,9 +2301,6 @@ func buildWebSystemDynamic() string {
 	var b strings.Builder
 	root := core.Root()
 	b.WriteString(skills.Prompt())
-	if core.Settings.LuaTools {
-		b.WriteString(agent.LuaToolsPrompt())
-	}
 	b.WriteString(agent.LongTermMemoryPrompt())
 	b.WriteString(agent.ProjectRules(root))
 	b.WriteString(agent.ProjectKnowledge(root, 2500))
@@ -2387,14 +2382,6 @@ func countStates(states []*agent.ExecutionState, status agent.ExecStatus) int {
 	return n
 }
 
-// reloadWebLuaTools 加载工作区所有项目的 .pair/tools/*.lua 自定义工具。
-func reloadWebLuaTools(reg *agent.Registry, root string) {
-	if !core.Settings.LuaTools {
-		return
-	}
-	agent.LoadAllProjectLuaTools(reg, root)
-}
-
 // buildWebLoopOpts 构建 agent.LoopOpts（统一版本，平台差异通过 webCompressor 回调）。
 func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) agent.LoopOpts {
 	prov := buildWebProvider()
@@ -2434,7 +2421,6 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 		agent.RegisterMCPServers(reg, agentCfgs)
 	}
 
-	reloadWebLuaTools(reg, root)
 	// ★ harness 对齐（默认关闭——全量工具集；WB_HARNESS=1 开启时精简 pair 独有工具）；
 	//   插件注册的工具豁免（插件是内容，非 pair 独有编码能力）
 	var pluginHost *agent.PluginHost

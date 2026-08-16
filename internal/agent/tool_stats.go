@@ -17,7 +17,6 @@ type ToolSource string
 
 const (
 	ToolSourceBuiltin ToolSource = "builtin" // 内置 Go 工具
-	ToolSourceLua     ToolSource = "lua"     // Lua 自定义工具
 	ToolSourceMCP     ToolSource = "mcp"     // MCP 外部工具
 )
 
@@ -239,8 +238,7 @@ func inferToolSource(name string) ToolSource {
 	if strings.HasPrefix(name, "mcp__") {
 		return ToolSourceMCP
 	}
-	// Lua 工具名不带前缀，但可以通过检查 Registry 中的 Tool 对象来确定
-	// 这里由调用方明确指定来源
+	// 内置工具与插件工具均由注册表记录来源（调用方明确指定）。
 	return ToolSourceBuiltin
 }
 
@@ -256,7 +254,7 @@ func registerToolStatsTool(r *Registry) {
 		Parameters: objSchema(props{
 			"min_calls": intProp("可选：最少调用次数过滤（默认0=全部显示）"),
 			"recent":    intProp("可选：显示最近 N 条调用记录（不传则不显示）"),
-			"source":    strProp("可选：按来源过滤，\"builtin\" | \"lua\" | \"mcp\"（不传=全部）"),
+			"source":    strProp("可选：按来源过滤，\"builtin\" | \"mcp\"（不传=全部）"),
 		}),
 		ReadOnly: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
@@ -305,13 +303,13 @@ func registerToolStatsTool(r *Registry) {
 			}
 			b.WriteString("| 来源 | 调用次数 | 成功率 |\n")
 			b.WriteString("|------|---------|--------|\n")
-			for _, src := range []string{"builtin", "lua", "mcp"} {
+			for _, src := range []string{"builtin", "mcp"} {
 				if gs, ok := bySource[src]; ok {
 					rate := 0.0
 					if gs.calls > 0 {
 						rate = float64(gs.success) / float64(gs.calls) * 100
 					}
-					srcLabel := map[string]string{"builtin": "内置工具", "lua": "Lua 自定义", "mcp": "MCP 外部"}[src]
+					srcLabel := map[string]string{"builtin": "内置工具", "mcp": "MCP 外部"}[src]
 					fmt.Fprintf(&b, "| %s | %d | %.1f%% |\n", srcLabel, gs.calls, rate)
 				}
 			}
@@ -321,7 +319,7 @@ func registerToolStatsTool(r *Registry) {
 			b.WriteString("| 工具名 | 来源 | 调用 | 成功 | 失败 | 成功率 |\n")
 			b.WriteString("|--------|------|------|------|------|--------|\n")
 			for _, s := range summary {
-				srcLabel := map[string]string{"builtin": "内置", "lua": "Lua", "mcp": "MCP"}[s.Source]
+				srcLabel := map[string]string{"builtin": "内置", "mcp": "MCP"}[s.Source]
 				if srcLabel == "" {
 					srcLabel = s.Source
 				}
@@ -341,7 +339,7 @@ func registerToolStatsTool(r *Registry) {
 						if !rec.Success {
 							status = "❌"
 						}
-						srcLabel := map[string]string{"builtin": "内置", "lua": "Lua", "mcp": "MCP"}[string(rec.Source)]
+						srcLabel := map[string]string{"builtin": "内置", "mcp": "MCP"}[string(rec.Source)]
 						if srcLabel == "" {
 							srcLabel = string(rec.Source)
 						}
@@ -354,8 +352,7 @@ func registerToolStatsTool(r *Registry) {
 			b.WriteString("\n---\n")
 			b.WriteString("[提示] **提示**：如果发现某工具失败率高，Agent 可以：\n")
 			b.WriteString("1. 分析失败原因，调整调用方式\n")
-			b.WriteString("2. 用 `lua_tool_create` 创建新工具替代\n")
-			b.WriteString("3. 用 `evolution_save_capsule` 保存修复经验\n")
+			b.WriteString("2. 用 `evolution_save_capsule` 保存修复经验\n")
 
 			return b.String(), nil
 		},
