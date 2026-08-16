@@ -116,6 +116,7 @@ const ROUTES = [
   { key: 'toolsets.export' },
   { key: 'toolsets.import' },
   { key: 'toolsets.remove' },
+    { key: 'toolsets.edit' },
 ];
 
 return {

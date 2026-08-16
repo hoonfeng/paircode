@@ -285,14 +285,15 @@ func HandleToolsetEdit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Name        string `json:"name"`
-		Scope       string `json:"scope"`
-		Action      string `json:"action"`
-		PluginName  string `json:"plugin_name"`
-		FromToolset string `json:"from_toolset"`
-		Tool        string `json:"tool"`
-		PluginJSON  string `json:"plugin_json"`
-		Overwrite   string `json:"overwrite"`
+		Name         string `json:"name"`
+		Scope        string `json:"scope"`
+		Action       string `json:"action"`
+		PluginName   string `json:"plugin_name"`
+		FromToolset  string `json:"from_toolset"`
+		Tool         string `json:"tool"`
+		Tools        string `json:"tools"`
+		PluginJSON   string `json:"plugin_json"`
+		Overwrite    string `json:"overwrite"`
 		BuiltinGroup string `json:"builtin_group"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -306,6 +307,7 @@ func HandleToolsetEdit(w http.ResponseWriter, r *http.Request) {
 		"plugin_name":   req.PluginName,
 		"from_toolset":  req.FromToolset,
 		"tool":          req.Tool,
+		"tools":         req.Tools,
 		"plugin_json":   req.PluginJSON,
 		"overwrite":     req.Overwrite,
 		"builtin_group": req.BuiltinGroup,

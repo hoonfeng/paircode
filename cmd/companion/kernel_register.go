@@ -139,4 +139,5 @@ func registerKernelAPIs(s *webServer) {
 	_ = agent.KernelAPIRegister("toolsets.export", "GET", "/api/toolsets/export", "工具集导出", handler.HandleToolsetExport)
 	_ = agent.KernelAPIRegister("toolsets.import", "POST", "/api/toolsets/import", "工具集导入", handler.HandleToolsetImport)
 	_ = agent.KernelAPIRegister("toolsets.remove", "POST", "/api/toolsets/remove", "工具集删除", handler.HandleToolsetRemove)
+	_ = agent.KernelAPIRegister("toolsets.edit", "POST", "/api/toolsets/edit", "工具集编辑（add_plugin/rm_plugin/rm_tool/enable_tool）", handler.HandleToolsetEdit)
 }

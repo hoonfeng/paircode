@@ -92,7 +92,7 @@ func RegisterToolsetTools(r *Registry, root string, ph *PluginHost) {
 		Description: "手动编辑工具集（插件化思路）：\n" +
 			"① add_plugin 向工具集添加插件——来源：宿主已定义 JS 动态插件（cordis_define 定义、" +
 			".pair/cordis.patch.json 装配、npm 市场安装的都在宿主 defs 中）、其他工具集（from_toolset）、" +
-			"或 plugin_json 直接给插件定义；\n" +
+			"或 plugin_json 直接给插件定义；★ 可选 tools 参数（逗号分隔）只加入插件内指定工具——插件整体装载、白名单外的工具自动摘除（插件内工具可单独加入工具集，enable_tool 可恢复）；\n" +
 			"② rm_plugin 从工具集移除插件（其注册的全部工具一并卸载）；\n" +
 			"③ rm_tool 摘除插件下单个工具（插件保留、工具对 agent 不可见，enable_tool 可恢复）；\n" +
 			"④ enable_tool 恢复被摘除的工具。\n" +
@@ -111,6 +111,7 @@ func RegisterToolsetTools(r *Registry, root string, ph *PluginHost) {
 			"builtin_group": mStrProp("add_builtin 时的内置分组名（core/git/codegraph/…；toolset_show builtin 查看）"),
 			"from_toolset":  mStrProp("add_plugin 时从其他工具集拷贝插件（不填=从宿主已定义插件找）"),
 			"tool":          mStrProp("rm_tool / enable_tool 时的工具名"),
+			"tools":         mStrProp("add_plugin 可选：逗号分隔的工具白名单——只加入插件内指定工具，其余自动摘除（插件内工具可单独加入工具集）"),
 			"plugin_json":   mStrProp("add_plugin 直接给插件 JSON：{\"name\":\"…\",\"purpose\":\"…\",\"code\":\"…\",\"client\":\"…\"}"),
 			"overwrite":     mStrProp("add_plugin 遇重名时 true=覆盖重装（先删旧），false=报错（默认）"),
 		}),
@@ -195,8 +196,45 @@ func RegisterToolsetTools(r *Registry, root string, ph *PluginHost) {
 			var b strings.Builder
 			fmt.Fprintf(&b, "## 工具集 %s\n- 用途: %s\n- 项目: %s\n- 版本: %s\n- 来源: %s\n- 创建: %s\n\n## 插件\n",
 				ts.Name, ts.Description, ts.Project, ts.Version, "工作区", ts.CreatedAt)
+			// ★ 每个插件列出其工具清单与启用状态（PluginToolsByPlugin 取该插件注册的工具；
+			// DisabledTools 摘除清单内工具标记「已摘除」；插件未装载时提示）
+			pluginTools := map[string][]string{}
+			if ph != nil {
+				pluginTools = ph.PluginToolsByPlugin()
+			}
 			for _, p := range ts.Plugins {
-				fmt.Fprintf(&b, "- **%s**：%s%s\n", p.Name, p.Purpose, boolStr(p.Client != "", "（含 client 半）", ""))
+				extra := ""
+				if p.Client != "" {
+					extra = "（含 client 半）"
+				}
+				if p.Builtin != "" {
+					extra += "（内置组）"
+				}
+				fmt.Fprintf(&b, "- **%s**：%s%s\n", p.Name, p.Purpose, extra)
+				disabled := map[string]bool{}
+				for _, tn := range p.DisabledTools {
+					disabled[tn] = true
+				}
+				tools := pluginTools[p.Name]
+				if len(tools) == 0 && len(disabled) == 0 {
+					continue // 插件未装载/无工具注册：不展示工具行
+				}
+				var names []string
+				for _, tn := range tools {
+					if disabled[tn] {
+						names = append(names, tn+"（已摘除）")
+					} else {
+						names = append(names, tn)
+					}
+				}
+				for tn := range disabled {
+					if !strSliceContains(tools, tn) {
+						names = append(names, tn+"（已摘除·未注册）")
+					}
+				}
+				if len(names) > 0 {
+					fmt.Fprintf(&b, "    └ 工具: %s\n", strings.Join(names, " "))
+				}
 			}
 			return b.String(), nil
 		},
@@ -339,6 +377,16 @@ func boolStr(cond bool, yes, no string) string {
 	return no
 }
 
+// strSliceContains 判断字符串切片是否包含目标。
+func strSliceContains(list []string, target string) bool {
+	for _, s := range list {
+		if s == target {
+			return true
+		}
+	}
+	return false
+}
+
 // resolveWorkspaceProject 解析 project 参数（多项目）：basename 或路径 → 目录。
 func resolveWorkspaceProject(primaryRoot, project string) (string, error) {
 	// 绝对路径或相对主工作区路径
@@ -431,6 +479,59 @@ func toolsetEditAddPlugin(ph *PluginHost, root string, scope toolsetScope, ts *T
 	// 预检装载（失败不写入固化文件，避免状态不一致）
 	if err := applyToolsetPlugin(ph, &src); err != nil {
 		return "", fmt.Errorf("插件装载失败（未写入工具集）: %w", err)
+	}
+	// ★ tools 白名单（可选）：只加入插件内指定工具——插件已整体装载（全部工具注册），
+	// 按 PluginToolsByPlugin 查询该插件实际注册的工具，白名单外的写入 DisabledTools
+	// （重装载应用禁用）；白名单中未注册的工具名给警告但不阻塞。
+	if whitelist := mArgStr(args, "tools"); whitelist != "" {
+		want := map[string]bool{}
+		for _, t := range strings.Split(whitelist, ",") {
+			if t = strings.TrimSpace(t); t != "" {
+				want[t] = true
+			}
+		}
+		all := ph.PluginToolsByPlugin()[src.Name]
+		if len(all) == 0 {
+			return "", fmt.Errorf("插件 %q 已装载但未注册任何工具（无法按 tools 白名单筛选；去掉 tools 参数整插件加入）", src.Name)
+		}
+		var disabled []string
+		var enabled []string
+		var unknown []string
+		for _, tn := range all {
+			if want[tn] {
+				enabled = append(enabled, tn)
+			} else {
+				disabled = append(disabled, tn)
+			}
+		}
+		for t := range want {
+			found := false
+			for _, tn := range all {
+				if tn == t {
+					found = true
+					break
+				}
+			}
+			if !found {
+				unknown = append(unknown, t)
+			}
+		}
+		if len(disabled) > 0 {
+			src.DisabledTools = disabled
+			// 重装载应用禁用清单（插件已装载，先卸载再重定义）
+			if err := applyToolsetPlugin(ph, &src); err != nil {
+				return "", fmt.Errorf("应用工具白名单失败: %w", err)
+			}
+		}
+		ts.Plugins = append(ts.Plugins, src)
+		if err := saveToolset(root, scope, ts); err != nil {
+			return "", err
+		}
+		msg := fmt.Sprintf("✅ 插件 %q 已加入工具集 %q（%s），仅启用工具: %s", src.Name, ts.Name, scope, strings.Join(enabled, ", "))
+		if len(unknown) > 0 {
+			msg += fmt.Sprintf("；白名单中未注册的工具（已忽略）: %s", strings.Join(unknown, ", "))
+		}
+		return msg, nil
 	}
 	ts.Plugins = append(ts.Plugins, src)
 	if err := saveToolset(root, scope, ts); err != nil {

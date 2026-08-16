@@ -1182,6 +1182,9 @@ func harnessSystemPrompt(roots []string) string {
 		"  → 装载并固化。已存在时 toolset_list 查看、toolset_show 看详情、overwrite=true 重建。\n" +
 		"- toolset_export 导出可移植 JSON（分享/发布市场）；toolset_import 导入（用户提供的发布 JSON）；\n" +
 		"  toolset_remove 删除（scope=project|user）。工具集即插件，与 cordis_* 同属插件生态能力。\n" +
+		"- ★ 插件内工具可单独加入：toolset_edit {name=工具集, action=add_plugin, plugin_name=插件, tools=工具1,工具2}\n" +
+		"  只加入插件内指定工具（插件整体装载、白名单外工具自动摘除）；或 add_plugin 整插件加入后\n" +
+		"  rm_tool 摘除不需要的（enable_tool 恢复）。toolset_show 查看每个插件的工具清单与启用状态。\n" +
 		"- 用户也可手动创建（前端文件树「工具集」区点 + 动态构建 / 粘贴导入 / 放置 JSON），\n" +
 		"  两种途径并存；agent 端以 toolset_build 自主创建为主。\n"
 }
@@ -1327,6 +1330,9 @@ func fullSystemPrompt(roots []string) string {
 		"  → 装载并固化。已存在时 toolset_list 查看、toolset_show 看详情、overwrite=true 重建。\n" +
 		"- toolset_export 导出可移植 JSON（分享/发布市场）；toolset_import 导入（用户提供的发布 JSON）；\n" +
 		"  toolset_remove 删除（scope=project|user）。工具集即插件，与 cordis_* 同属插件生态能力。\n" +
+		"- ★ 插件内工具可单独加入：toolset_edit {name=工具集, action=add_plugin, plugin_name=插件, tools=工具1,工具2}\n" +
+		"  只加入插件内指定工具（插件整体装载、白名单外工具自动摘除）；或 add_plugin 整插件加入后\n" +
+		"  rm_tool 摘除不需要的（enable_tool 恢复）。toolset_show 查看每个插件的工具清单与启用状态。\n" +
 		"- 用户也可手动创建（前端文件树「工具集」区点 + 动态构建 / 粘贴导入 / 放置 JSON），\n" +
 		"  两种途径并存；agent 端以 toolset_build 自主创建为主。\n"
 }

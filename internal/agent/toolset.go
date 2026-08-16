@@ -189,9 +189,8 @@ func saveToolset(projectRoot string, scope toolsetScope, ts *Toolset) error {
 	if ts == nil || ts.Name == "" {
 		return fmt.Errorf("工具集名不能为空")
 	}
-	if len(ts.Plugins) == 0 {
-		return fmt.Errorf("工具集 %s 没有插件", ts.Name)
-	}
+	// ★ 允许空插件列表（dynamic 等容器工具集移除最后一个插件后需能保存空状态；
+	//   build/import 路径已有各自的非空校验，不会走到这里保存空工具集）
 	if ts.Version == "" {
 		ts.Version = "1.0.0"
 	}
