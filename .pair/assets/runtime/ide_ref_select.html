@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { font-family: "Segoe UI", sans-serif; padding: 20px; }
+  h3 { margin: 20px 0 8px; font-size: 14px; color: #333; }
+  select { width: 220px; font-size: 14px; margin-bottom: 4px; }
+  .row { display: flex; align-items: center; gap: 16px; margin-bottom: 4px; }
+  .lbl { font-size: 12px; color: #888; }
+</style>
+</head>
+<body>
+<h3>原生 select（Chromium 箭头参照）</h3>
+<div class="row">
+  <select id="s1">
+    <option>gpt-4o</option>
+    <option>claude-sonnet-4</option>
+  </select>
+  <span class="lbl">s1 原生 20px</span>
+</div>
+<div class="row">
+  <select id="s27" style="height:27px">
+    <option>选择服务商</option>
+  </select>
+  <span class="lbl">s27 原生 27px（模拟设置面板）</span>
+</div>
+<div class="row">
+  <select id="spad" style="height:27px;padding:4px 8px;border-radius:3px">
+    <option>选择服务商</option>
+  </select>
+  <span class="lbl">spad 27px padding:4px 8px（真实设置面板样式）</span>
+</div>
+
+<h3>kHTMLSelectArrow 12x12 viewBox（M3 4.5 L6 7.5 L9 4.5）不同 stroke 对比</h3>
+<div class="row">
+  <svg width="12" height="12" viewBox="0 0 12 12"><path d="M3 4.5 L6 7.5 L9 4.5" fill="none" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <span class="lbl">12x12 stroke=1.5</span>
+</div>
+<div class="row">
+  <svg width="12" height="12" viewBox="0 0 12 12"><path d="M3 4.5 L6 7.5 L9 4.5" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <span class="lbl">12x12 stroke=2</span>
+</div>
+<div class="row">
+  <svg width="16" height="16" viewBox="0 0 16 16"><path d="M3 5 L8 10 L13 5" fill="none" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <span class="lbl">16x16 stroke=1.5 (开口10 高5)</span>
+</div>
+<script>
+  document.title = 'SELECT-REF:' + JSON.stringify({
+    s1: (function(){ var r = s1.getBoundingClientRect(); var cs = getComputedStyle(s1);
+      return { x: r.x, y: r.y, w: r.width, h: r.height, border: cs.border, bg: cs.backgroundColor,
+               color: cs.color, padRight: cs.paddingRight, app: cs.appearance };
+    })(),
+    s27: (function(){ var r = s27.getBoundingClientRect(); var cs = getComputedStyle(s27);
+      return { x: r.x, y: r.y, w: r.width, h: r.height, border: cs.border, bg: cs.backgroundColor,
+               color: cs.color, padRight: cs.paddingRight, app: cs.appearance };
+    })(),
+    spad: (function(){ var r = spad.getBoundingClientRect(); var cs = getComputedStyle(spad);
+      return { x: r.x, y: r.y, w: r.width, h: r.height, border: cs.border, bg: cs.backgroundColor,
+               color: cs.color, padRight: cs.paddingRight, app: cs.appearance };
+    })()
+  });
+</script>
+</body>
+</html>

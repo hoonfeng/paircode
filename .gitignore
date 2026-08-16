@@ -19,6 +19,7 @@ go.work.sum
 # Pair CodeAgent working directory (conversations, session)
 .pair/*
 !.pair/plugins/
+!.pair/assets/
 
 # IDE configurations
 .trae/

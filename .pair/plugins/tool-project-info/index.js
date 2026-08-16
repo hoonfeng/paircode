@@ -152,6 +152,7 @@ return {
         category: t.category,
         readOnly: t.readOnly,
         requiresApproval: t.requiresApproval,
+        systemTool: t.systemTool,
         parameters: t.parameters,
         execute: (args) => ctx.hostTool.exec(t.name, args || {}),
       })

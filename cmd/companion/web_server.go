@@ -73,6 +73,12 @@ func resolveWebDir() string {
 	if err != nil {
 		return ""
 	}
+	// ★ 资源外置（主程序只保留框架）：优先 .pair/assets/runtime/web/（插件目录
+	//   统一承载前端产物，可独立更新），其次 exe 旁 web/（兼容既有解压目录）。
+	rtDir := filepath.Join(filepath.Dir(exe), ".pair", "assets", "runtime", "web")
+	if st, err := os.Stat(rtDir); err == nil && st.IsDir() {
+		return rtDir
+	}
 	dir := filepath.Join(filepath.Dir(exe), "web")
 	if st, err := os.Stat(dir); err == nil && st.IsDir() {
 		return dir
@@ -406,34 +412,39 @@ func startWebUI(port int) {
 		w.Header().Set("Pragma", "no-cache")
 		w.Header().Set("Expires", "0")
 		// ide_ref.html：调试参照收集器（Edge headless 访问 9090 加载真实前端）。
+		// ★ 资源外置：外部 .pair/assets/runtime/ide_ref*.html 优先，embed 兜底。
 		if r.URL.Path == "/ide_ref.html" || r.URL.Path == "/ide_ref" {
 			if data, err := ideRefFile.ReadFile("web-ui/ide_ref.html"); err == nil {
+				b, _ := agent.LoadRuntimeAsset("ide_ref.html", data)
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
-				w.Write(data)
+				w.Write(b)
 				return
 			}
 		}
 		// ide_ref_select.html：select 下拉箭头浏览器标准参照（Edge headless）。
 		if r.URL.Path == "/ide_ref_select.html" {
 			if data, err := ideRefSelectFile.ReadFile("web-ui/ide_ref_select.html"); err == nil {
+				b, _ := agent.LoadRuntimeAsset("ide_ref_select.html", data)
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
-				w.Write(data)
+				w.Write(b)
 				return
 			}
 		}
 		// ide_ref_modal.html：设置/工具弹窗 modal 几何浏览器参照（Edge headless）。
 		if r.URL.Path == "/ide_ref_modal.html" {
 			if data, err := ideRefModalFile.ReadFile("web-ui/ide_ref_modal.html"); err == nil {
+				b, _ := agent.LoadRuntimeAsset("ide_ref_modal.html", data)
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
-				w.Write(data)
+				w.Write(b)
 				return
 			}
 		}
 		// ide_ref_setmodal.html：设置面板独立参照（复刻 SettingsModal 样式，Edge 量几何）。
 		if r.URL.Path == "/ide_ref_setmodal.html" {
 			if data, err := ideRefSetModalFile.ReadFile("web-ui/ide_ref_setmodal.html"); err == nil {
+				b, _ := agent.LoadRuntimeAsset("ide_ref_setmodal.html", data)
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
-				w.Write(data)
+				w.Write(b)
 				return
 			}
 		}

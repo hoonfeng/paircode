@@ -38,6 +38,15 @@ import (
 //go:embed bridge_node.js
 var bridgeNodeJS string
 
+// bridgeNodeSource 返回 Node 桥脚本源码。★ 资源外置：优先读
+// <exe 目录>/.pair/assets/runtime/bridge_node.js（可独立更新），缺失回退 embed。
+func bridgeNodeSource() string {
+	if s, ok := LoadRuntimeAssetString("bridge_node.js", bridgeNodeJS); ok {
+		return s
+	}
+	return bridgeNodeJS
+}
+
 // bridgeResult Node 桥返回结果（invoke/service 响应）。
 type bridgeResult struct {
 	ok    bool
@@ -143,7 +152,7 @@ func (b *nodeBridge) start(nodePath string) error {
 	if err := os.MkdirAll(b.dir, 0o755); err != nil {
 		return fmt.Errorf("创建桥目录失败: %v", err)
 	}
-	if err := os.WriteFile(bridgeJS, []byte(bridgeNodeJS), 0o644); err != nil {
+	if err := os.WriteFile(bridgeJS, []byte(bridgeNodeSource()), 0o644); err != nil {
 		return fmt.Errorf("写入 bridge.js 失败: %v", err)
 	}
 

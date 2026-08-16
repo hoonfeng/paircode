@@ -48,7 +48,17 @@ import (
 // .pair/project-info/关键点/修复记录-cordis核心goja验证+trap对齐2026-08-15.md。
 //
 //go:embed assets/cordis.bundle.js
-var cordisBundleJS string
+var cordisBundleEmbed string
+
+// cordisBundleSource 返回 cordis 运行时源码。★ 资源外置（主程序只保留框架）：
+// 优先读 <exe 目录>/.pair/assets/runtime/cordis.bundle.js（可独立更新替换），
+// 缺失回退内嵌 embed（单文件分发兜底）。
+func cordisBundleSource() string {
+	if s, ok := LoadRuntimeAssetString("cordis.bundle.js", cordisBundleEmbed); ok {
+		return s
+	}
+	return cordisBundleEmbed
+}
 
 // ─── JS 执行超时防护（goja Interrupt）─────────────────────
 
@@ -992,7 +1002,7 @@ func newJSSandbox(def *jsPluginDef) (*goja.Runtime, *goja.Object) {
 	// 内置 cordis 运行时：执行 bundle 后全局挂 CordisApi（真 cordis Context），
 	// 插件代码可 new CordisApi.api.Context() 建 cordis app 跑生态插件协作。
 	// 失败不致命：log 警告，沙箱其余能力不受影响。
-	if _, err := vm.RunString(cordisBundleJS); err != nil {
+	if _, err := vm.RunString(cordisBundleSource()); err != nil {
 		log.Printf("[plugin_js] cordis bundle 装载失败（CordisApi 不可用）: %v", err)
 	}
 
