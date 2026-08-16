@@ -172,7 +172,13 @@
             <pre>{{ p.clientCode }}</pre>
           </div>
           <div class="pp-d-actions">
-            <button v-if="p.state === 'running'" class="pp-btn" title="停止整个插件（其全部工具对 agent 不可见）；单工具请用上方工具开关" @click="doAction(p, 'stop')">停止插件</button>
+            <!-- UI 类插件（client 半已装载且有槽位）不再显示「停止插件」：
+                 UI 可见性已由勾选/UI 开关控制（取消勾选=隐藏，勾选=恢复），
+                 stop 会卸载 client 半并清空槽位条目 → 勾选框消失无法再启用。
+                 stopped 状态仍保留「启动插件」按钮作为恢复路径。 -->
+            <template v-if="p.state === 'running'">
+              <button v-if="!(p.hasClient && p.clientApproved && uiSlotsOf(p.name).length)" class="pp-btn" title="停止整个插件（其全部工具对 agent 不可见）；单工具请用上方工具开关" @click="doAction(p, 'stop')">停止插件</button>
+            </template>
             <button v-else class="pp-btn primary" @click="doAction(p, 'start')">启动插件</button>
             <button v-if="p.source === 'js'" class="pp-btn danger" @click="doAction(p, 'undefine')">删除定义</button>
           </div>
