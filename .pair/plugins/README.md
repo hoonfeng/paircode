@@ -110,28 +110,33 @@ cordis_* / toolset_* / history_* 等）**保持宿主实现**——它们绑定�
 - 示例：`.pair/plugins/tool-binary-re/`（6 个逆向工具）——协议实现
   参考 `cmd/plugins/tool-binary-re/main.go`
 
-## 统一宿主二进制（tool-binary）
+## 独立插件二进制（每插件一个 exe，2026-08-16 第四轮）
 
-依赖 Go 内核的工具组（codegraph/lsp/office/memory/verify/binary/git/
-vision/screenshot/web-debug/bug/project-info…）由**一个统一二进制**承载：
+依赖 Go 实现的工具组（git/memory/verify/project-info/binary/binary-re/
+debug/vision/screenshot/web-debug/bug/office/lsp/codegraph/codegraph-extra/
+search/web 等 15+ 组）**各自一个独立二进制**承载实现：
 
-- 源码：`cmd/plugins/tool-binary/main.go`（import agent → RegisterDefaultTools
-  注册全部内置组 → stdin JSON 分发 Registry.Execute）
-- 产物：`.pair/plugins/tool-binary/bin/tool-binary.exe`（39MB，CGO=0）
-- 各组插件 JS 的 execute 统一 `ctx.binary.exec(t.name, args, {bin:"tool-binary"})`
-- **改实现**：改 `internal/agent/*.go`（工具实现库）或 `cmd/plugins/tool-binary/main.go`
-  → `go build -o .pair/plugins/tool-binary/bin/tool-binary.exe ./cmd/plugins/tool-binary`
-  → 重启 → 全部切换组生效（主程序 exe 无需重编译）
-- 会话绑定工具（update_tasks 等 SystemTool）由宿主框架执行，二进制排除
-  （excludedTools）；ask_user/task_create 已插件化（tool-system）——经
-  **会话桥**（session_bridge.go）按 _convID 路由回会话（见下方 tool-system 条目）；
-  tool-debug 依赖宿主后台进程，保持 hostTool
+- 源码：`cmd/plugins/<name>/main.go` + `cmd/plugins/<name>/impl/`（**自持本组
+  实现，不 import internal/agent**）→ 产物 `<插件目录>/bin/<name>.exe`
+- 各组插件 JS 的 execute 统一 `ctx.binary.exec(t.name, args)`（缺省 bin=插件名
+  → 定位本插件目录 bin/ 下的 exe；`opts.bin` 跨插件共用仅历史形态，已无引用）
+- **改实现**：改 `cmd/plugins/<name>/impl/*.go` → `go build -o
+  .pair/plugins/<name>/bin/<name>.exe ./cmd/plugins/<name>` → 重启 → 本组生效
+  （主程序 exe 无需重编译）
+- tool-binary 只是其中普通一员（承载 binary 组 inspect_binary/write_binary
+  2 个工具），**不是**统一容器——各插件实现互相独立
+- hostTool 形态（工具-system）：SystemTool（update_tasks/update_plan/tool_stats/
+  history_*）+ Skills/MCP/市场/提交信息——依赖宿主会话状态，execute 走
+  `ctx.hostTool.exec`；ask_user/task_create 经**会话桥**（session_bridge.go）
+  按 _convID 路由回会话（见下方 tool-system 条目）
 
 当前 execute 形态分布（生成器 tool_plugin_gen.go 的 binary 字段控制）：
-- `tool-binary`：git/memory/verify/project-info/binary/office/lsp/codegraph/
-  codegraph-extra/vision/screenshot/web-debug/bug（14 组）
-- `self`：tool-binary-re（独立二进制，自己 bin/ 下的实现）
-- `hostTool`：tool-debug（宿主后台进程依赖）、tool-system（会话绑定）
+- `self`（独立二进制）：tool-binary、tool-binary-re、tool-bug、tool-codegraph、
+  tool-codegraph-extra、tool-debug、tool-git、tool-harness、tool-lsp、
+  tool-memory、tool-office、tool-project-info、tool-screenshot、tool-search、
+  tool-verify、tool-vision、tool-web、tool-web-debug（15+ 组，各自 bin/ 下的 exe）
+- `""`（hostTool）：tool-system（会话绑定 SystemTool + Skills/MCP/市场/提交）
+- 手工迁移（不在此列）：tool-core（JS 原生 impls）、tool-shell、tool-web（webFetch 直连）
 
 ## 三层工具实现（从易到难，用户可改程度递增）
 

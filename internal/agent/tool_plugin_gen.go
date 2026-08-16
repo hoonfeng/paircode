@@ -45,7 +45,8 @@ type genToolGroup struct {
 // core/fs-search/web/shell 已手工迁移为 tool-core/tool-search/tool-web/tool-shell，
 // 不在此列）。tool-system 内的 SystemTool 工具（update_tasks/update_plan/
 // tool_stats/history_*）对 LLM 可见但前端 UI 隐藏，同样外置可更换；
-// ask_user/task_create 为会话级注册（依赖 askCh/ConvID），不可外置。
+// ask_user/task_create 已插件化（2026-08-16 会话桥机制，见 session_bridge.go：
+// JS 包装经 _convID 路由回宿主 SessionBridge，非「不可外置」）。
 func genToolGroups() []genToolGroup {
 	return []genToolGroup{
 		{"tool-git", "Git 操作（git_status/diff/log/show/blame/add/commit/…）", registerGitTools, nil, "self"},
@@ -64,7 +65,7 @@ func genToolGroups() []genToolGroup {
 		{"tool-codegraph", "代码知识图谱（codegraph_build/search/impact/…）", registerCodeGraphTools, nil, "self"},
 		{"tool-codegraph-extra", "图谱扩展（codegraph_find_by_signature/explore）", registerExtraCodeGraphTools, nil, "self"},
 		// tool-system：SystemTool 内部工具 + Skills/MCP/市场/提交信息
-		// （ask_user/task_create 会话专属不可外置）
+		// （ask_user/task_create 经会话桥插件化，见 session_bridge.go）
 		{"tool-system", "系统内部工具（SystemTool + Skills/MCP/市场/提交信息：update_tasks/update_plan/tool_stats/history_*/skill_*/mcp_*/marketplace_*/generate_commit_message）——全部可更换",
 			func(r *Registry, root string) {
 				RegisterManagementTools(r, root)
