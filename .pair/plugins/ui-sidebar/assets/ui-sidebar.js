@@ -2917,52 +2917,48 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
   };
   const FileTreeItem = /* @__PURE__ */ _export_sfc(_sfc_main$7, [["__scopeId", "data-v-493c29a3"]]);
   const _hoisted_1$6 = { class: "dialog-box ts-transfer-box" };
-  const _hoisted_2$6 = { class: "dialog-title" };
-  const _hoisted_3$6 = { class: "ts-transfer-count" };
-  const _hoisted_4$4 = { class: "ts-transfer-body" };
-  const _hoisted_5$4 = { class: "ts-transfer-col" };
-  const _hoisted_6$4 = { class: "ts-transfer-col-head" };
-  const _hoisted_7$4 = { class: "ts-transfer-list" };
-  const _hoisted_8$4 = { class: "ts-transfer-group-head" };
-  const _hoisted_9$4 = { class: "ts-transfer-check" };
-  const _hoisted_10$4 = ["checked", "onChange"];
-  const _hoisted_11$4 = { class: "ts-transfer-group-name" };
-  const _hoisted_12$4 = { class: "ts-tool-desc" };
-  const _hoisted_13$4 = ["onClick"];
-  const _hoisted_14$4 = ["title"];
-  const _hoisted_15$4 = ["checked", "onChange"];
-  const _hoisted_16$4 = {
+  const _hoisted_2$6 = { class: "ts-transfer-body" };
+  const _hoisted_3$6 = { class: "ts-transfer-col" };
+  const _hoisted_4$4 = { class: "ts-transfer-list" };
+  const _hoisted_5$4 = { class: "ts-transfer-group-head" };
+  const _hoisted_6$4 = { class: "ts-transfer-check" };
+  const _hoisted_7$4 = ["checked", "onChange"];
+  const _hoisted_8$4 = { class: "ts-transfer-group-name" };
+  const _hoisted_9$4 = { class: "ts-tool-desc" };
+  const _hoisted_10$4 = ["onClick"];
+  const _hoisted_11$4 = ["title"];
+  const _hoisted_12$4 = ["checked", "onChange"];
+  const _hoisted_13$4 = {
     key: 0,
     class: "ts-empty"
   };
-  const _hoisted_17$4 = { class: "ts-transfer-ops" };
-  const _hoisted_18$4 = ["disabled"];
-  const _hoisted_19$4 = ["disabled"];
-  const _hoisted_20$4 = { class: "ts-transfer-col" };
-  const _hoisted_21$4 = { class: "ts-transfer-col-head" };
-  const _hoisted_22$4 = { class: "ts-transfer-list" };
-  const _hoisted_23$4 = { class: "ts-transfer-group-head" };
-  const _hoisted_24$4 = { class: "ts-transfer-check" };
-  const _hoisted_25$3 = ["checked", "onChange"];
-  const _hoisted_26$3 = { class: "ts-transfer-group-name" };
-  const _hoisted_27$3 = { class: "ts-tool-desc" };
-  const _hoisted_28$3 = ["onClick"];
-  const _hoisted_29$3 = ["title"];
-  const _hoisted_30$3 = ["checked", "onChange"];
-  const _hoisted_31$3 = {
+  const _hoisted_14$4 = { class: "ts-transfer-ops" };
+  const _hoisted_15$4 = ["disabled"];
+  const _hoisted_16$4 = ["disabled"];
+  const _hoisted_17$4 = { class: "ts-transfer-col" };
+  const _hoisted_18$4 = { class: "ts-transfer-list" };
+  const _hoisted_19$4 = { class: "ts-transfer-group-head" };
+  const _hoisted_20$4 = { class: "ts-transfer-check" };
+  const _hoisted_21$4 = ["checked", "onChange"];
+  const _hoisted_22$4 = { class: "ts-transfer-group-name" };
+  const _hoisted_23$4 = { class: "ts-tool-desc" };
+  const _hoisted_24$4 = ["onClick"];
+  const _hoisted_25$3 = ["title"];
+  const _hoisted_26$3 = ["checked", "onChange"];
+  const _hoisted_27$3 = {
     key: 0,
     class: "ts-transfer-group"
   };
-  const _hoisted_32$3 = { class: "ts-transfer-group-head" };
-  const _hoisted_33$3 = { class: "ts-transfer-check" };
-  const _hoisted_34$3 = ["checked"];
-  const _hoisted_35$3 = { class: "ts-tool-desc" };
-  const _hoisted_36$3 = ["checked", "onChange"];
-  const _hoisted_37$3 = {
+  const _hoisted_28$3 = { class: "ts-transfer-group-head" };
+  const _hoisted_29$3 = { class: "ts-transfer-check" };
+  const _hoisted_30$3 = ["checked"];
+  const _hoisted_31$3 = { class: "ts-tool-desc" };
+  const _hoisted_32$3 = ["checked", "onChange"];
+  const _hoisted_33$3 = {
     key: 1,
     class: "ts-empty"
   };
-  const _hoisted_38$3 = {
+  const _hoisted_34$3 = {
     key: 0,
     class: "ts-msg"
   };
@@ -2978,15 +2974,13 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
       const props = __props;
       const emit = __emit;
       const joinedSet = vue.computed(() => new Set(props.joined));
+      const isJoinedGroup = (g) => g.source === "builtin" && joinedSet.value.has(g.name);
       const leftGroups = vue.computed(() => {
-        return props.groups.filter((g) => !joinedSet.value.has(g.name)).map((g) => ({ ...g, tools: g.tools }));
+        return props.groups.filter((g) => !isJoinedGroup(g)).map((g) => ({ ...g, tools: g.tools }));
       });
       const joinedGroups = vue.computed(() => {
-        return props.groups.filter((g) => joinedSet.value.has(g.name)).map((g) => ({ ...g, tools: g.tools }));
+        return props.groups.filter((g) => isJoinedGroup(g)).map((g) => ({ ...g, tools: g.tools }));
       });
-      const leftCount = vue.computed(() => leftGroups.value.reduce((n, g) => n + g.tools.length, 0));
-      const toolTotal = vue.computed(() => props.groups.reduce((n, g) => n + g.tools.length, 0) + props.manualTools.length);
-      const joinedTotal = vue.computed(() => joinedGroups.value.reduce((n, g) => n + g.tools.length, 0) + props.manualTools.length);
       const leftSelected = vue.reactive({});
       const rightSelected = vue.reactive({});
       const anyLeftSelected = vue.computed(() => Object.keys(leftSelected).some((k) => leftSelected[k]));
@@ -3078,37 +3072,30 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
               onClick: vue.withModifiers(close, ["self"])
             }, [
               vue.createElementVNode("div", _hoisted_1$6, [
+                _cache[4] || (_cache[4] = vue.createElementVNode(
+                  "div",
+                  { class: "dialog-title" },
+                  "管理工作区工具集（builtin）",
+                  -1
+                  /* CACHED */
+                )),
                 vue.createElementVNode("div", _hoisted_2$6, [
-                  _cache[1] || (_cache[1] = vue.createTextVNode(
-                    " 管理工作区工具集（builtin） ",
-                    -1
-                    /* CACHED */
-                  )),
-                  vue.createElementVNode(
-                    "span",
-                    _hoisted_3$6,
-                    "已加入 " + vue.toDisplayString(joinedTotal.value) + "/" + vue.toDisplayString(toolTotal.value) + " 工具",
-                    1
-                    /* TEXT */
-                  )
-                ]),
-                vue.createElementVNode("div", _hoisted_4$4, [
                   vue.createCommentVNode(" 左：未加入 "),
-                  vue.createElementVNode("div", _hoisted_5$4, [
-                    vue.createElementVNode("div", _hoisted_6$4, [
-                      vue.createElementVNode(
+                  vue.createElementVNode("div", _hoisted_3$6, [
+                    vue.createElementVNode("div", { class: "ts-transfer-col-head" }, [
+                      _cache[1] || (_cache[1] = vue.createElementVNode(
                         "span",
                         null,
-                        "未加入（" + vue.toDisplayString(leftGroups.value.length) + " 组 / " + vue.toDisplayString(leftCount.value) + " 工具）",
-                        1
-                        /* TEXT */
-                      ),
+                        "未加入",
+                        -1
+                        /* CACHED */
+                      )),
                       vue.createElementVNode("button", {
                         class: "ts-btn mini",
                         onClick: selectAllLeft
                       }, "全选")
                     ]),
-                    vue.createElementVNode("div", _hoisted_7$4, [
+                    vue.createElementVNode("div", _hoisted_4$4, [
                       (vue.openBlock(true), vue.createElementBlock(
                         vue.Fragment,
                         null,
@@ -3117,23 +3104,23 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                             key: g.name,
                             class: "ts-transfer-group"
                           }, [
-                            vue.createElementVNode("div", _hoisted_8$4, [
-                              vue.createElementVNode("label", _hoisted_9$4, [
+                            vue.createElementVNode("div", _hoisted_5$4, [
+                              vue.createElementVNode("label", _hoisted_6$4, [
                                 vue.createElementVNode("input", {
                                   type: "checkbox",
                                   checked: groupAllChecked(g, true),
                                   onChange: ($event) => toggleGroup(g, true)
-                                }, null, 40, _hoisted_10$4),
+                                }, null, 40, _hoisted_7$4),
                                 vue.createElementVNode(
                                   "span",
-                                  _hoisted_11$4,
+                                  _hoisted_8$4,
                                   vue.toDisplayString(g.name),
                                   1
                                   /* TEXT */
                                 ),
                                 vue.createElementVNode(
                                   "span",
-                                  _hoisted_12$4,
+                                  _hoisted_9$4,
                                   vue.toDisplayString(g.tools.length) + " 工具",
                                   1
                                   /* TEXT */
@@ -3142,7 +3129,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                               vue.createElementVNode("button", {
                                 class: "ts-btn mini",
                                 onClick: ($event) => addGroup(g)
-                              }, "整组加入", 8, _hoisted_13$4)
+                              }, "整组加入", 8, _hoisted_10$4)
                             ]),
                             (vue.openBlock(true), vue.createElementBlock(
                               vue.Fragment,
@@ -3157,7 +3144,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                                     type: "checkbox",
                                     checked: leftSelected[t.name],
                                     onChange: ($event) => toggleSelect(t.name, true)
-                                  }, null, 40, _hoisted_15$4),
+                                  }, null, 40, _hoisted_12$4),
                                   vue.createElementVNode(
                                     "span",
                                     null,
@@ -3165,7 +3152,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                                     1
                                     /* TEXT */
                                   )
-                                ], 8, _hoisted_14$4);
+                                ], 8, _hoisted_11$4);
                               }),
                               128
                               /* KEYED_FRAGMENT */
@@ -3175,40 +3162,40 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                         128
                         /* KEYED_FRAGMENT */
                       )),
-                      !leftGroups.value.length ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_16$4, "全部已加入")) : vue.createCommentVNode("v-if", true)
+                      !leftGroups.value.length ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_13$4, "全部已加入")) : vue.createCommentVNode("v-if", true)
                     ])
                   ]),
                   vue.createCommentVNode(" 中间操作列 "),
-                  vue.createElementVNode("div", _hoisted_17$4, [
+                  vue.createElementVNode("div", _hoisted_14$4, [
                     vue.createElementVNode("button", {
                       class: "ts-btn",
                       onClick: addSelected,
                       disabled: !anyLeftSelected.value,
                       title: "把选中的工具加入工作区工具集"
-                    }, "→ 加入", 8, _hoisted_18$4),
+                    }, "→ 加入", 8, _hoisted_15$4),
                     vue.createElementVNode("button", {
                       class: "ts-btn",
                       onClick: removeSelected,
                       disabled: !anyRightSelected.value,
                       title: "把选中的工具移出工作区工具集"
-                    }, "← 移出", 8, _hoisted_19$4)
+                    }, "← 移出", 8, _hoisted_16$4)
                   ]),
                   vue.createCommentVNode(" 右：已加入 "),
-                  vue.createElementVNode("div", _hoisted_20$4, [
-                    vue.createElementVNode("div", _hoisted_21$4, [
-                      vue.createElementVNode(
+                  vue.createElementVNode("div", _hoisted_17$4, [
+                    vue.createElementVNode("div", { class: "ts-transfer-col-head" }, [
+                      _cache[2] || (_cache[2] = vue.createElementVNode(
                         "span",
                         null,
-                        "已加入（" + vue.toDisplayString(joinedTotal.value) + " 工具）",
-                        1
-                        /* TEXT */
-                      ),
+                        "已加入",
+                        -1
+                        /* CACHED */
+                      )),
                       vue.createElementVNode("button", {
                         class: "ts-btn mini",
                         onClick: selectAllRight
                       }, "全选")
                     ]),
-                    vue.createElementVNode("div", _hoisted_22$4, [
+                    vue.createElementVNode("div", _hoisted_18$4, [
                       (vue.openBlock(true), vue.createElementBlock(
                         vue.Fragment,
                         null,
@@ -3217,23 +3204,23 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                             key: g.name,
                             class: "ts-transfer-group"
                           }, [
-                            vue.createElementVNode("div", _hoisted_23$4, [
-                              vue.createElementVNode("label", _hoisted_24$4, [
+                            vue.createElementVNode("div", _hoisted_19$4, [
+                              vue.createElementVNode("label", _hoisted_20$4, [
                                 vue.createElementVNode("input", {
                                   type: "checkbox",
                                   checked: groupAllChecked(g, false),
                                   onChange: ($event) => toggleGroup(g, false)
-                                }, null, 40, _hoisted_25$3),
+                                }, null, 40, _hoisted_21$4),
                                 vue.createElementVNode(
                                   "span",
-                                  _hoisted_26$3,
+                                  _hoisted_22$4,
                                   vue.toDisplayString(g.name),
                                   1
                                   /* TEXT */
                                 ),
                                 vue.createElementVNode(
                                   "span",
-                                  _hoisted_27$3,
+                                  _hoisted_23$4,
                                   vue.toDisplayString(g.tools.length) + " 工具",
                                   1
                                   /* TEXT */
@@ -3242,7 +3229,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                               vue.createElementVNode("button", {
                                 class: "ts-btn mini danger",
                                 onClick: ($event) => removeGroup(g)
-                              }, "整组移出", 8, _hoisted_28$3)
+                              }, "整组移出", 8, _hoisted_24$4)
                             ]),
                             (vue.openBlock(true), vue.createElementBlock(
                               vue.Fragment,
@@ -3257,7 +3244,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                                     type: "checkbox",
                                     checked: rightSelected[t.name],
                                     onChange: ($event) => toggleSelect(t.name, false)
-                                  }, null, 40, _hoisted_30$3),
+                                  }, null, 40, _hoisted_26$3),
                                   vue.createElementVNode(
                                     "span",
                                     null,
@@ -3265,7 +3252,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                                     1
                                     /* TEXT */
                                   )
-                                ], 8, _hoisted_29$3);
+                                ], 8, _hoisted_25$3);
                               }),
                               128
                               /* KEYED_FRAGMENT */
@@ -3275,15 +3262,15 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                         128
                         /* KEYED_FRAGMENT */
                       )),
-                      __props.manualTools.length ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_31$3, [
-                        vue.createElementVNode("div", _hoisted_32$3, [
-                          vue.createElementVNode("label", _hoisted_33$3, [
+                      __props.manualTools.length ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_27$3, [
+                        vue.createElementVNode("div", _hoisted_28$3, [
+                          vue.createElementVNode("label", _hoisted_29$3, [
                             vue.createElementVNode("input", {
                               type: "checkbox",
                               checked: groupAllChecked({ tools: __props.manualTools }, false),
                               onChange: _cache[0] || (_cache[0] = ($event) => toggleGroup({ tools: __props.manualTools }, false))
-                            }, null, 40, _hoisted_34$3),
-                            _cache[2] || (_cache[2] = vue.createElementVNode(
+                            }, null, 40, _hoisted_30$3),
+                            _cache[3] || (_cache[3] = vue.createElementVNode(
                               "span",
                               { class: "ts-transfer-group-name" },
                               "_manual（手动）",
@@ -3292,7 +3279,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                             )),
                             vue.createElementVNode(
                               "span",
-                              _hoisted_35$3,
+                              _hoisted_31$3,
                               vue.toDisplayString(__props.manualTools.length) + " 工具",
                               1
                               /* TEXT */
@@ -3315,7 +3302,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                                 type: "checkbox",
                                 checked: rightSelected[t],
                                 onChange: ($event) => toggleSelect(t, false)
-                              }, null, 40, _hoisted_36$3),
+                              }, null, 40, _hoisted_32$3),
                               vue.createElementVNode(
                                 "span",
                                 null,
@@ -3329,11 +3316,11 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                           /* KEYED_FRAGMENT */
                         ))
                       ])) : vue.createCommentVNode("v-if", true),
-                      !joinedGroups.value.length && !__props.manualTools.length ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_37$3, "暂无已加入工具")) : vue.createCommentVNode("v-if", true)
+                      !joinedGroups.value.length && !__props.manualTools.length ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_33$3, "暂无已加入工具")) : vue.createCommentVNode("v-if", true)
                     ])
                   ])
                 ]),
-                busy.value ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_38$3, "操作中…")) : vue.createCommentVNode("v-if", true),
+                busy.value ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_34$3, "操作中…")) : vue.createCommentVNode("v-if", true),
                 msg.value ? (vue.openBlock(), vue.createElementBlock(
                   "div",
                   {
@@ -3359,7 +3346,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
       };
     }
   };
-  const ToolsetTransfer = /* @__PURE__ */ _export_sfc(_sfc_main$6, [["__scopeId", "data-v-78aa2e4d"]]);
+  const ToolsetTransfer = /* @__PURE__ */ _export_sfc(_sfc_main$6, [["__scopeId", "data-v-93464384"]]);
   const _hoisted_1$5 = { class: "file-explorer" };
   const _hoisted_2$5 = { class: "explorer-toolbar" };
   const _hoisted_3$5 = { class: "ws-section" };
@@ -3390,73 +3377,67 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
     class: "proj-empty"
   };
   const _hoisted_14$3 = { class: "ts-divider" };
-  const _hoisted_15$3 = { class: "ts-count" };
-  const _hoisted_16$3 = {
+  const _hoisted_15$3 = {
     key: 0,
     class: "ts-body"
   };
-  const _hoisted_17$3 = { class: "ts-build" };
-  const _hoisted_18$3 = { class: "ts-build-head" };
-  const _hoisted_19$3 = { class: "ts-build-title" };
-  const _hoisted_20$3 = { class: "ts-add-list" };
-  const _hoisted_21$3 = { class: "ts-add-group-title" };
-  const _hoisted_22$3 = { class: "ts-tool-desc" };
+  const _hoisted_16$3 = { class: "ts-build" };
+  const _hoisted_17$3 = { class: "ts-add-list" };
+  const _hoisted_18$3 = { class: "ts-add-group-title" };
+  const _hoisted_19$3 = ["title"];
+  const _hoisted_20$3 = { class: "ts-add-tool-name" };
+  const _hoisted_21$3 = ["onClick"];
+  const _hoisted_22$3 = {
+    key: 0,
+    class: "ts-add-group"
+  };
   const _hoisted_23$3 = ["title"];
   const _hoisted_24$3 = { class: "ts-add-tool-name" };
   const _hoisted_25$2 = ["onClick"];
   const _hoisted_26$2 = {
-    key: 0,
-    class: "ts-add-group"
-  };
-  const _hoisted_27$2 = { class: "ts-add-group-title" };
-  const _hoisted_28$2 = { class: "ts-tool-desc" };
-  const _hoisted_29$2 = ["title"];
-  const _hoisted_30$2 = { class: "ts-add-tool-name" };
-  const _hoisted_31$2 = ["onClick"];
-  const _hoisted_32$2 = {
     key: 1,
     class: "ts-empty"
   };
-  const _hoisted_33$2 = {
+  const _hoisted_27$2 = {
     class: "dialog-box",
     style: { "max-width": "420px" }
   };
-  const _hoisted_34$2 = { class: "dialog-body" };
-  const _hoisted_35$2 = { class: "input-row" };
-  const _hoisted_36$2 = { class: "dialog-footer" };
-  const _hoisted_37$2 = {
+  const _hoisted_28$2 = { class: "dialog-body" };
+  const _hoisted_29$2 = { class: "input-row" };
+  const _hoisted_30$2 = { class: "dialog-footer" };
+  const _hoisted_31$2 = {
     key: 0,
     class: "dlg-error"
   };
-  const _hoisted_38$2 = ["disabled"];
-  const _hoisted_39$2 = { class: "dialog-box dir-browser-box" };
-  const _hoisted_40$2 = { class: "dialog-title" };
-  const _hoisted_41$2 = { class: "dir-browser" };
-  const _hoisted_42$2 = { class: "dir-breadcrumb" };
-  const _hoisted_43$2 = ["disabled"];
-  const _hoisted_44$2 = { class: "bc-path" };
-  const _hoisted_45$2 = {
+  const _hoisted_32$2 = ["disabled"];
+  const _hoisted_33$2 = { class: "dialog-box dir-browser-box" };
+  const _hoisted_34$2 = { class: "dialog-title" };
+  const _hoisted_35$2 = { class: "dir-browser" };
+  const _hoisted_36$2 = { class: "dir-breadcrumb" };
+  const _hoisted_37$2 = ["disabled"];
+  const _hoisted_38$2 = { class: "bc-path" };
+  const _hoisted_39$2 = {
     key: 0,
     class: "dir-list"
   };
-  const _hoisted_46$2 = ["onDblclick"];
-  const _hoisted_47$2 = { class: "dir-name" };
-  const _hoisted_48$2 = {
+  const _hoisted_40$2 = ["onDblclick"];
+  const _hoisted_41$2 = { class: "dir-name" };
+  const _hoisted_42$2 = {
     key: 1,
     class: "dir-list"
   };
-  const _hoisted_49$2 = ["onClick"];
-  const _hoisted_50$2 = { class: "dir-name" };
-  const _hoisted_51$2 = {
+  const _hoisted_43$2 = ["onClick"];
+  const _hoisted_44$2 = { class: "dir-name" };
+  const _hoisted_45$2 = {
     key: 0,
     class: "dir-empty"
   };
-  const _hoisted_52$2 = { class: "dialog-footer" };
-  const _hoisted_53$2 = {
+  const _hoisted_46$2 = { class: "dialog-footer" };
+  const _hoisted_47$2 = {
     key: 0,
     class: "dlg-error"
   };
-  const _hoisted_54$2 = ["disabled"];
+  const _hoisted_48$2 = ["disabled"];
   const _sfc_main$5 = {
     __name: "FileExplorer",
     setup(__props) {
@@ -3820,25 +3801,19 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
         if (saved !== null) tsOpen.value = saved === "1";
       } catch {
       }
-      const builtinToolCount = vue.computed(() => {
-        var _a;
-        let n = 0;
-        for (const g of ((_a = builtinInfo.value) == null ? void 0 : _a.groups) || []) n += (g.tools || []).length;
-        return n;
-      });
-      const joinedToolCount = vue.computed(() => {
+      vue.computed(() => {
         var _a, _b, _c;
         let n = 0;
         const joined = new Set(((_a = builtinInfo.value) == null ? void 0 : _a.joined) || []);
         for (const g of ((_b = builtinInfo.value) == null ? void 0 : _b.groups) || []) {
-          if (joined.has(g.name)) n += (g.tools || []).length;
+          if (g.source === "builtin" && joined.has(g.name)) n += (g.tools || []).length;
         }
         return n + (((_c = builtinInfo.value) == null ? void 0 : _c.manualTools) || []).length;
       });
       const joinedGroups = vue.computed(() => {
         var _a, _b;
         const joined = new Set(((_a = builtinInfo.value) == null ? void 0 : _a.joined) || []);
-        return (((_b = builtinInfo.value) == null ? void 0 : _b.groups) || []).filter((g) => joined.has(g.name));
+        return (((_b = builtinInfo.value) == null ? void 0 : _b.groups) || []).filter((g) => g.source === "builtin" && joined.has(g.name));
       });
       const manualToolNames = vue.computed(() => {
         var _a;
@@ -3857,7 +3832,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
         const set = {};
         const joined = new Set(((_a = builtinInfo.value) == null ? void 0 : _a.joined) || []);
         for (const g of ((_b = builtinInfo.value) == null ? void 0 : _b.groups) || []) {
-          if (joined.has(g.name)) for (const t of g.tools) set[t.name] = true;
+          if (g.source === "builtin" && joined.has(g.name)) for (const t of g.tools) set[t.name] = true;
         }
         for (const tn of ((_c = builtinInfo.value) == null ? void 0 : _c.manualTools) || []) set[tn] = true;
         return set;
@@ -3996,7 +3971,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
             ])) : vue.createCommentVNode("v-if", true)
           ]),
           vue.createCommentVNode(" ── 分隔线 ── "),
-          _cache[20] || (_cache[20] = vue.createElementVNode(
+          _cache[21] || (_cache[21] = vue.createElementVNode(
             "div",
             { class: "ws-divider" },
             [
@@ -4053,13 +4028,6 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                 -1
                 /* CACHED */
               )),
-              vue.createElementVNode(
-                "span",
-                _hoisted_15$3,
-                "已加入 " + vue.toDisplayString(joinedToolCount.value) + " 工具",
-                1
-                /* TEXT */
-              ),
               _cache[15] || (_cache[15] = vue.createElementVNode(
                 "span",
                 { class: "ts-spacer" },
@@ -4073,17 +4041,17 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                 class: vue.normalizeClass(["ts-chevron", { open: tsOpen.value }])
               }, null, 8, ["class"])
             ]),
-            tsOpen.value ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_16$3, [
-              vue.createCommentVNode(" 工作区工具集（builtin 全量分组：已加入可移出，未加入可直接加入） "),
-              vue.createElementVNode("div", _hoisted_17$3, [
-                vue.createElementVNode("div", _hoisted_18$3, [
-                  vue.createElementVNode(
+            tsOpen.value ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_15$3, [
+              vue.createCommentVNode(" 工作区工具集（builtin 已加入内容：可移出） "),
+              vue.createElementVNode("div", _hoisted_16$3, [
+                vue.createElementVNode("div", { class: "ts-build-head" }, [
+                  _cache[16] || (_cache[16] = vue.createElementVNode(
                     "span",
-                    _hoisted_19$3,
-                    "工作区工具集（builtin）——已加入 " + vue.toDisplayString(joinedToolCount.value) + "/" + vue.toDisplayString(builtinToolCount.value) + " 工具",
-                    1
-                    /* TEXT */
-                  ),
+                    { class: "ts-build-title" },
+                    "工作区工具集",
+                    -1
+                    /* CACHED */
+                  )),
                   vue.createElementVNode("button", {
                     class: "ts-btn mini",
                     onClick: openTransfer,
@@ -4103,7 +4071,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                 ), [
                   [vue.vModelText, tsAddSearch.value]
                 ]),
-                vue.createElementVNode("div", _hoisted_20$3, [
+                vue.createElementVNode("div", _hoisted_17$3, [
                   (vue.openBlock(true), vue.createElementBlock(
                     vue.Fragment,
                     null,
@@ -4112,18 +4080,11 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                         key: g.name,
                         class: "ts-add-group"
                       }, [
-                        vue.createElementVNode("div", _hoisted_21$3, [
+                        vue.createElementVNode("div", _hoisted_18$3, [
                           vue.createElementVNode(
                             "span",
                             null,
                             vue.toDisplayString(g.name),
-                            1
-                            /* TEXT */
-                          ),
-                          vue.createElementVNode(
-                            "span",
-                            _hoisted_22$3,
-                            vue.toDisplayString(filterTools(g.tools).length) + "/" + vue.toDisplayString(g.tools.length) + " 工具",
                             1
                             /* TEXT */
                           )
@@ -4139,7 +4100,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                             }, [
                               vue.createElementVNode(
                                 "span",
-                                _hoisted_24$3,
+                                _hoisted_20$3,
                                 vue.toDisplayString(t.name),
                                 1
                                 /* TEXT */
@@ -4148,8 +4109,8 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                                 class: "ts-btn mini danger",
                                 onClick: ($event) => toggleToolsetTool(t),
                                 title: "移出工作区工具集（该工具对 agent 不可见）"
-                              }, "移出", 8, _hoisted_25$2)
-                            ], 8, _hoisted_23$3);
+                              }, "移出", 8, _hoisted_21$3)
+                            ], 8, _hoisted_19$3);
                           }),
                           128
                           /* KEYED_FRAGMENT */
@@ -4159,23 +4120,16 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                     128
                     /* KEYED_FRAGMENT */
                   )),
-                  manualToolNames.value.length ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_26$2, [
-                    vue.createElementVNode("div", _hoisted_27$2, [
-                      _cache[16] || (_cache[16] = vue.createElementVNode(
-                        "span",
-                        null,
-                        "_manual（手动）",
-                        -1
-                        /* CACHED */
-                      )),
-                      vue.createElementVNode(
-                        "span",
-                        _hoisted_28$2,
-                        vue.toDisplayString(filterTools(manualToolObjs.value).length) + "/" + vue.toDisplayString(manualToolNames.value.length) + " 工具",
-                        1
-                        /* TEXT */
-                      )
-                    ]),
+                  manualToolNames.value.length ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_22$3, [
+                    _cache[17] || (_cache[17] = vue.createElementVNode(
+                      "div",
+                      { class: "ts-add-group-title" },
+                      [
+                        vue.createElementVNode("span", null, "_manual（手动）")
+                      ],
+                      -1
+                      /* CACHED */
+                    )),
                     (vue.openBlock(true), vue.createElementBlock(
                       vue.Fragment,
                       null,
@@ -4187,7 +4141,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                         }, [
                           vue.createElementVNode(
                             "span",
-                            _hoisted_30$2,
+                            _hoisted_24$3,
                             vue.toDisplayString(t.name),
                             1
                             /* TEXT */
@@ -4196,14 +4150,14 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                             class: "ts-btn mini danger",
                             onClick: ($event) => toggleToolsetTool(t),
                             title: "移出工作区工具集（该工具对 agent 不可见）"
-                          }, "移出", 8, _hoisted_31$2)
-                        ], 8, _hoisted_29$2);
+                          }, "移出", 8, _hoisted_25$2)
+                        ], 8, _hoisted_23$3);
                       }),
                       128
                       /* KEYED_FRAGMENT */
                     ))
                   ])) : vue.createCommentVNode("v-if", true),
-                  !joinedGroups.value.length && !manualToolNames.value.length ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_32$2, "未加入任何工具。点「管理」在穿梭框中加入。")) : vue.createCommentVNode("v-if", true)
+                  !joinedGroups.value.length && !manualToolNames.value.length ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_26$2, "未加入任何工具。点「管理」在穿梭框中加入。")) : vue.createCommentVNode("v-if", true)
                 ]),
                 tsMsg.value ? (vue.openBlock(), vue.createElementBlock(
                   "div",
@@ -4224,16 +4178,16 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
             class: "dialog-overlay",
             onClick: _cache[7] || (_cache[7] = vue.withModifiers(($event) => showWorkspaceDialog.value = false, ["self"]))
           }, [
-            vue.createElementVNode("div", _hoisted_33$2, [
-              _cache[19] || (_cache[19] = vue.createElementVNode(
+            vue.createElementVNode("div", _hoisted_27$2, [
+              _cache[20] || (_cache[20] = vue.createElementVNode(
                 "div",
                 { class: "dialog-title" },
                 "新建工作区",
                 -1
                 /* CACHED */
               )),
-              vue.createElementVNode("div", _hoisted_34$2, [
-                _cache[17] || (_cache[17] = vue.createElementVNode(
+              vue.createElementVNode("div", _hoisted_28$2, [
+                _cache[18] || (_cache[18] = vue.createElementVNode(
                   "label",
                   null,
                   "工作区名称",
@@ -4254,14 +4208,14 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                 ), [
                   [vue.vModelText, newWsName.value]
                 ]),
-                _cache[18] || (_cache[18] = vue.createElementVNode(
+                _cache[19] || (_cache[19] = vue.createElementVNode(
                   "label",
                   null,
                   "保存路径（可选）",
                   -1
                   /* CACHED */
                 )),
-                vue.createElementVNode("div", _hoisted_35$2, [
+                vue.createElementVNode("div", _hoisted_29$2, [
                   vue.withDirectives(vue.createElementVNode(
                     "input",
                     {
@@ -4281,10 +4235,10 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                   }, "浏览")
                 ])
               ]),
-              vue.createElementVNode("div", _hoisted_36$2, [
+              vue.createElementVNode("div", _hoisted_30$2, [
                 wsError.value ? (vue.openBlock(), vue.createElementBlock(
                   "span",
-                  _hoisted_37$2,
+                  _hoisted_31$2,
                   vue.toDisplayString(wsError.value),
                   1
                   /* TEXT */
@@ -4297,7 +4251,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                   class: "dlg-btn primary",
                   onClick: createWorkspace,
                   disabled: !newWsName.value.trim()
-                }, "创建", 8, _hoisted_38$2)
+                }, "创建", 8, _hoisted_32$2)
               ])
             ])
           ])) : vue.createCommentVNode("v-if", true),
@@ -4307,16 +4261,16 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
             class: "dialog-overlay",
             onClick: vue.withModifiers(closeBrowse, ["self"])
           }, [
-            vue.createElementVNode("div", _hoisted_39$2, [
+            vue.createElementVNode("div", _hoisted_33$2, [
               vue.createElementVNode(
                 "div",
-                _hoisted_40$2,
+                _hoisted_34$2,
                 vue.toDisplayString(browseTitle.value),
                 1
                 /* TEXT */
               ),
-              vue.createElementVNode("div", _hoisted_41$2, [
-                vue.createElementVNode("div", _hoisted_42$2, [
+              vue.createElementVNode("div", _hoisted_35$2, [
+                vue.createElementVNode("div", _hoisted_36$2, [
                   vue.createElementVNode("button", {
                     class: "bc-btn",
                     onClick: browseGoUp,
@@ -4327,16 +4281,16 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                       size: 14,
                       style: { "transform": "rotate(180deg)" }
                     })
-                  ], 8, _hoisted_43$2),
+                  ], 8, _hoisted_37$2),
                   vue.createElementVNode(
                     "span",
-                    _hoisted_44$2,
+                    _hoisted_38$2,
                     vue.toDisplayString(browsePath.value || "选择驱动器..."),
                     1
                     /* TEXT */
                   )
                 ]),
-                browsePath.value === "" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_45$2, [
+                browsePath.value === "" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_39$2, [
                   (vue.openBlock(true), vue.createElementBlock(
                     vue.Fragment,
                     null,
@@ -4352,17 +4306,17 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                         }),
                         vue.createElementVNode(
                           "span",
-                          _hoisted_47$2,
+                          _hoisted_41$2,
                           vue.toDisplayString(drive),
                           1
                           /* TEXT */
                         )
-                      ], 40, _hoisted_46$2);
+                      ], 40, _hoisted_40$2);
                     }),
                     128
                     /* KEYED_FRAGMENT */
                   ))
-                ])) : (vue.openBlock(), vue.createElementBlock("div", _hoisted_48$2, [
+                ])) : (vue.openBlock(), vue.createElementBlock("div", _hoisted_42$2, [
                   (vue.openBlock(true), vue.createElementBlock(
                     vue.Fragment,
                     null,
@@ -4378,23 +4332,23 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                         }, null, 8, ["name"]),
                         vue.createElementVNode(
                           "span",
-                          _hoisted_50$2,
+                          _hoisted_44$2,
                           vue.toDisplayString(entry.name),
                           1
                           /* TEXT */
                         )
-                      ], 10, _hoisted_49$2);
+                      ], 10, _hoisted_43$2);
                     }),
                     128
                     /* KEYED_FRAGMENT */
                   )),
-                  browseEntries.value.length === 0 ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_51$2, "空目录")) : vue.createCommentVNode("v-if", true)
+                  browseEntries.value.length === 0 ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_45$2, "空目录")) : vue.createCommentVNode("v-if", true)
                 ]))
               ]),
-              vue.createElementVNode("div", _hoisted_52$2, [
+              vue.createElementVNode("div", _hoisted_46$2, [
                 browseError.value ? (vue.openBlock(), vue.createElementBlock(
                   "span",
-                  _hoisted_53$2,
+                  _hoisted_47$2,
                   vue.toDisplayString(browseError.value),
                   1
                   /* TEXT */
@@ -4423,7 +4377,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                   class: "dlg-btn primary",
                   onClick: browseConfirm,
                   disabled: browseConfirmDisabled.value
-                }, "确认", 8, _hoisted_54$2)
+                }, "确认", 8, _hoisted_48$2)
               ])
             ])
           ])) : vue.createCommentVNode("v-if", true),
@@ -4451,7 +4405,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
       };
     }
   };
-  const FileExplorer = /* @__PURE__ */ _export_sfc(_sfc_main$5, [["__scopeId", "data-v-b232fe61"]]);
+  const FileExplorer = /* @__PURE__ */ _export_sfc(_sfc_main$5, [["__scopeId", "data-v-dd4c7981"]]);
   const _hoisted_1$4 = { class: "search-panel" };
   const _hoisted_2$4 = { class: "sp-mode-bar" };
   const _hoisted_3$4 = { class: "sp-field" };
@@ -6642,8 +6596,8 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
   const _hoisted_35 = ["title"];
   const _hoisted_36 = { class: "pp-slots-title" };
   const _hoisted_37 = { class: "pp-slot-info" };
-  const _hoisted_38 = { class: "pp-slot-id" };
-  const _hoisted_39 = { class: "pp-slot-kind" };
+  const _hoisted_38 = { class: "pp-slot-title-row" };
+  const _hoisted_39 = { class: "pp-slot-id" };
   const _hoisted_40 = ["value", "onChange", "title"];
   const _hoisted_41 = { value: "" };
   const _hoisted_42 = ["value"];
@@ -7475,26 +7429,30 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                   class: "pp-slot-row"
                 }, [
                   vue.createElementVNode("div", _hoisted_37, [
-                    vue.createElementVNode(
-                      "span",
-                      _hoisted_38,
-                      vue.toDisplayString(g.slotId),
-                      1
-                      /* TEXT */
-                    ),
-                    vue.createElementVNode(
-                      "span",
-                      _hoisted_39,
-                      vue.toDisplayString(g.kind === "list" ? "叠加" : "替换"),
-                      1
-                      /* TEXT */
-                    ),
+                    vue.createElementVNode("div", _hoisted_38, [
+                      vue.createElementVNode(
+                        "span",
+                        _hoisted_39,
+                        vue.toDisplayString(g.slotId),
+                        1
+                        /* TEXT */
+                      ),
+                      vue.createElementVNode(
+                        "span",
+                        {
+                          class: vue.normalizeClass(["pp-slot-kind", g.kind === "list" ? "kind-list" : "kind-single"])
+                        },
+                        vue.toDisplayString(g.kind === "list" ? "叠加" : "替换"),
+                        3
+                        /* TEXT, CLASS */
+                      )
+                    ]),
                     vue.createElementVNode(
                       "span",
                       {
-                        class: vue.normalizeClass(["pp-slot-owner", { builtin: !g.owner }])
+                        class: vue.normalizeClass(["pp-slot-owner", { builtin: !g.owner && g.kind !== "list" }])
                       },
-                      vue.toDisplayString(g.owner ? g.owner : g.builtin ? "内置组件" : "（无宿主）"),
+                      vue.toDisplayString(g.kind === "list" ? g.candidates.length ? g.candidates.length + " 个叠加条目" : "（无叠加条目）" : g.owner ? g.owner : g.builtin ? "内置组件" : "（无宿主）"),
                       3
                       /* TEXT, CLASS */
                     )
@@ -7839,7 +7797,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
       };
     }
   };
-  const PluginPanel = /* @__PURE__ */ _export_sfc(_sfc_main$1, [["__scopeId", "data-v-e086fd06"]]);
+  const PluginPanel = /* @__PURE__ */ _export_sfc(_sfc_main$1, [["__scopeId", "data-v-776b41c1"]]);
   const _hoisted_1 = { class: "sidebar-header" };
   const _hoisted_2 = { class: "sidebar-content" };
   const _hoisted_3 = {

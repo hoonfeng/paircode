@@ -60,15 +60,14 @@
       <div class="ts-header" @click="toggleTs" title="工具集（工作区内，可折叠）">
         <SvgIcon name="package" :size="12" class="ts-header-icon" />
         <span class="divider-label ts-label">工具集</span>
-          <span class="ts-count">已加入 {{ joinedToolCount }} 工具</span>
         <span class="ts-spacer"></span>
         <SvgIcon name="chevron-right" :size="11" class="ts-chevron" :class="{ open: tsOpen }" />
       </div>
       <div v-if="tsOpen" class="ts-body">
-        <!-- 工作区工具集（builtin 全量分组：已加入可移出，未加入可直接加入） -->
+        <!-- 工作区工具集（builtin 已加入内容：可移出） -->
         <div class="ts-build">
           <div class="ts-build-head">
-            <span class="ts-build-title">工作区工具集（builtin）——已加入 {{ joinedToolCount }}/{{ builtinToolCount }} 工具</span>
+            <span class="ts-build-title">工作区工具集</span>
             <button class="ts-btn mini" @click="openTransfer" title="穿梭框批量管理：未加入 ↔ 已加入">管理</button>
           </div>
           <input v-model="tsAddSearch" placeholder="搜索工具名…" class="ts-input" />
@@ -76,7 +75,6 @@
             <div v-for="g in joinedGroups" :key="g.name" class="ts-add-group">
               <div class="ts-add-group-title">
                 <span>{{ g.name }}</span>
-                <span class="ts-tool-desc">{{ filterTools(g.tools).length }}/{{ g.tools.length }} 工具</span>
               </div>
               <div v-for="t in filterTools(g.tools)" :key="t.name" class="ts-add-tool" :title="t.desc">
                 <span class="ts-add-tool-name">{{ t.name }}</span>
@@ -86,7 +84,6 @@
             <div v-if="manualToolNames.length" class="ts-add-group">
               <div class="ts-add-group-title">
                 <span>_manual（手动）</span>
-                <span class="ts-tool-desc">{{ filterTools(manualToolObjs).length }}/{{ manualToolNames.length }} 工具</span>
               </div>
               <div v-for="t in filterTools(manualToolObjs)" :key="t.name" class="ts-add-tool" :title="t.desc">
                 <span class="ts-add-tool-name">{{ t.name }}</span>
@@ -576,25 +573,22 @@ try {
   if (saved !== null) tsOpen.value = saved === '1'
 } catch {}
 
-// builtin 工具总数与已加入数（工作区工具集分组视图计数）
-const builtinToolCount = computed(() => {
-  let n = 0
-  for (const g of builtinInfo.value?.groups || []) n += (g.tools || []).length
-  return n
-})
+// 已加入数（仅 source=builtin 且组名在 joined 中；_manual 手动工具）——
+// ★ source 必须校验：剩余派生组可能与已加入组同名（如 system），
+//   只看组名会把未加入组误判为已加入（历史 bug：未在数量不对）
 const joinedToolCount = computed(() => {
   let n = 0
   const joined = new Set(builtinInfo.value?.joined || [])
   for (const g of builtinInfo.value?.groups || []) {
-    if (joined.has(g.name)) n += (g.tools || []).length
+    if (g.source === 'builtin' && joined.has(g.name)) n += (g.tools || []).length
   }
   return n + (builtinInfo.value?.manualTools || []).length
 })
 
-// 已加入分组（工作区工具集内容展示）：joined 组 + _manual 手动工具
+// 已加入分组（工作区工具集内容展示）：source=builtin 的 joined 组 + _manual 手动工具
 const joinedGroups = computed(() => {
   const joined = new Set(builtinInfo.value?.joined || [])
-  return (builtinInfo.value?.groups || []).filter(g => joined.has(g.name))
+  return (builtinInfo.value?.groups || []).filter(g => g.source === 'builtin' && joined.has(g.name))
 })
 const manualToolNames = computed(() => builtinInfo.value?.manualTools || [])
 const manualToolObjs = computed(() => manualToolNames.value.map(n => ({ name: n, desc: '手动加入的工具' })))
@@ -611,7 +605,7 @@ const joinedTools = computed(() => {
   const set = {}
   const joined = new Set(builtinInfo.value?.joined || [])
   for (const g of builtinInfo.value?.groups || []) {
-    if (joined.has(g.name)) for (const t of g.tools) set[t.name] = true
+    if (g.source === 'builtin' && joined.has(g.name)) for (const t of g.tools) set[t.name] = true
   }
   for (const tn of builtinInfo.value?.manualTools || []) set[tn] = true
   return set
@@ -766,10 +760,6 @@ onUnmounted(() => {
 .ts-header:hover { background: var(--bg-hover); }
 .ts-header-icon { color: var(--text-muted); flex-shrink: 0; }
 .ts-label { padding: 0; text-transform: none; letter-spacing: 0; font-size: 11px; }
-.ts-count {
-  font-size: 9px; background: var(--bg-tertiary); color: var(--text-muted);
-  border-radius: 8px; padding: 0 6px; line-height: 14px;
-}
 .ts-spacer { flex: 1; }
 .ts-chevron { transition: transform .15s; color: var(--text-muted); flex-shrink: 0; }
 .ts-chevron.open { transform: rotate(90deg); }
@@ -807,7 +797,6 @@ onUnmounted(() => {
 .ts-list { display: flex; flex-direction: column; gap: 4px; }
 .ts-empty { padding: 10px 4px; text-align: center; color: var(--text-muted); font-size: 11px; }
 
-.ts-tool-desc { font-size: 10px; color: var(--text-muted); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ── 对话框样式（复用） ── */
 .dialog-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; display: flex; align-items: center; justify-content: center; }

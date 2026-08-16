@@ -96,9 +96,15 @@
       <template v-if="slotsOpen">
       <div v-for="g in slotGroups" :key="g.slotId + '::' + g.kind" class="pp-slot-row">
         <div class="pp-slot-info">
-          <span class="pp-slot-id">{{ g.slotId }}</span>
-          <span class="pp-slot-kind">{{ g.kind === 'list' ? '叠加' : '替换' }}</span>
-          <span class="pp-slot-owner" :class="{ builtin: !g.owner }">{{ g.owner ? g.owner : (g.builtin ? '内置组件' : '（无宿主）') }}</span>
+          <div class="pp-slot-title-row">
+            <span class="pp-slot-id">{{ g.slotId }}</span>
+            <span class="pp-slot-kind" :class="g.kind === 'list' ? 'kind-list' : 'kind-single'">{{ g.kind === 'list' ? '叠加' : '替换' }}</span>
+          </div>
+          <span class="pp-slot-owner" :class="{ builtin: !g.owner && g.kind !== 'list' }">
+            {{ g.kind === 'list'
+              ? (g.candidates.length ? g.candidates.length + ' 个叠加条目' : '（无叠加条目）')
+              : (g.owner ? g.owner : (g.builtin ? '内置组件' : '（无宿主）')) }}
+          </span>
         </div>
         <!-- single 槽位：下拉切换占用者（内置默认 / 插件占用者） -->
         <select v-if="g.kind !== 'list'" class="pp-input pp-slot-select" :value="g.owner" @change="switchSlot(g.slotId, $event.target.value)"
@@ -617,24 +623,35 @@ onUnmounted(() => {
 .pp-slot-row {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   background: var(--bg-hover); border-radius: 4px; padding: 4px 8px;
+  transition: background .12s;
 }
-.pp-slot-info { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.pp-slot-row:hover { background: var(--bg-input, var(--bg-elevated)); }
+.pp-slot-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pp-slot-title-row { display: flex; align-items: center; gap: 5px; min-width: 0; }
 .pp-slot-id {
   font-family: var(--font-mono, monospace); font-size: 11px; color: var(--text-primary);
   text-transform: uppercase; letter-spacing: 0.3px;
 }
-.pp-slot-owner { font-size: 10px; color: var(--accent); }
+.pp-slot-owner { font-size: 10px; color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px; }
 .pp-slot-owner.builtin { color: var(--text-muted); }
-.pp-slot-kind { font-size: 9px; color: var(--text-muted); background: var(--bg-input, var(--bg-elevated)); border: 1px solid var(--border-color); border-radius: 3px; padding: 0 4px; align-self: flex-start; }
+.pp-slot-kind {
+  font-size: 9px; border-radius: 3px; padding: 0 4px; align-self: flex-start;
+  line-height: 14px; flex-shrink: 0;
+}
+.pp-slot-kind.kind-single { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); }
+.pp-slot-kind.kind-list { color: #2e7d32; background: color-mix(in srgb, #2e7d32 10%, transparent); border: 1px solid color-mix(in srgb, #2e7d32 30%, transparent); }
 .pp-slot-list { display: flex; flex-direction: column; gap: 2px; align-items: flex-end; flex-shrink: 0; }
 .pp-slot-list-item { display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--text-secondary); cursor: pointer; max-width: 220px; }
+.pp-slot-list-item:hover { color: var(--text-primary); }
 .pp-slot-list-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pp-slot-empty { font-size: 10px; color: var(--text-muted); }
 .pp-slot-select {
   width: 160px; font-size: 11px; padding: 2px 4px;
   background: var(--bg-input, var(--bg-elevated)); color: var(--text-primary);
   border: 1px solid var(--border-color); border-radius: 3px; flex-shrink: 0;
+  cursor: pointer;
 }
+.pp-slot-select:hover { border-color: var(--accent); }
 .pp-client-tabs {
   display: flex;
   gap: 2px;

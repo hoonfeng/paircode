@@ -2,15 +2,12 @@
   <!-- 工作区工具集（builtin）穿梭框：左=未加入，右=已加入，勾选批量加入/移出 -->
   <div class="dialog-overlay" @click.self="close">
     <div class="dialog-box ts-transfer-box">
-      <div class="dialog-title">
-        管理工作区工具集（builtin）
-        <span class="ts-transfer-count">已加入 {{ joinedTotal }}/{{ toolTotal }} 工具</span>
-      </div>
+      <div class="dialog-title">管理工作区工具集（builtin）</div>
       <div class="ts-transfer-body">
         <!-- 左：未加入 -->
         <div class="ts-transfer-col">
           <div class="ts-transfer-col-head">
-            <span>未加入（{{ leftGroups.length }} 组 / {{ leftCount }} 工具）</span>
+            <span>未加入</span>
             <button class="ts-btn mini" @click="selectAllLeft">全选</button>
           </div>
           <div class="ts-transfer-list">
@@ -39,7 +36,7 @@
         <!-- 右：已加入 -->
         <div class="ts-transfer-col">
           <div class="ts-transfer-col-head">
-            <span>已加入（{{ joinedTotal }} 工具）</span>
+            <span>已加入</span>
             <button class="ts-btn mini" @click="selectAllRight">全选</button>
           </div>
           <div class="ts-transfer-list">
@@ -100,21 +97,21 @@ const props = defineProps({
 const emit = defineEmits(['close', 'changed'])
 
 const joinedSet = computed(() => new Set(props.joined))
+// ★ source 必须校验：剩余派生组可能与已加入组同名（如 system），
+//   只看组名会把未加入组误判为已加入（历史 bug：未在数量不对）
+const isJoinedGroup = g => g.source === 'builtin' && joinedSet.value.has(g.name)
 // 左（未加入）：非 joined 组全量
 const leftGroups = computed(() => {
   return props.groups
-    .filter(g => !joinedSet.value.has(g.name))
+    .filter(g => !isJoinedGroup(g))
     .map(g => ({ ...g, tools: g.tools }))
 })
 // 右（已加入）：joined 组的工具
 const joinedGroups = computed(() => {
   return props.groups
-    .filter(g => joinedSet.value.has(g.name))
+    .filter(g => isJoinedGroup(g))
     .map(g => ({ ...g, tools: g.tools }))
 })
-const leftCount = computed(() => leftGroups.value.reduce((n, g) => n + g.tools.length, 0))
-const toolTotal = computed(() => props.groups.reduce((n, g) => n + g.tools.length, 0) + props.manualTools.length)
-const joinedTotal = computed(() => joinedGroups.value.reduce((n, g) => n + g.tools.length, 0) + props.manualTools.length)
 
 const leftSelected = reactive({})
 const rightSelected = reactive({})
@@ -197,8 +194,13 @@ function close() { emit('close') }
 </script>
 
 <style scoped>
+/* ── 弹窗遮罩/盒子（独立组件自带，不能依赖父组件 scoped 样式） ── */
+.dialog-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; display: flex; align-items: center; justify-content: center; }
+.dialog-box { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--border-radius-lg); padding: 16px 20px; min-width: 320px; max-width: 600px; width: 90%; box-shadow: var(--shadow-md); }
+.dialog-title { font-size: 15px; font-weight: 600; margin-bottom: 12px; color: var(--text-primary); display: flex; align-items: center; justify-content: space-between; }
+.dialog-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+
 .ts-transfer-box { width: 780px; max-width: 92vw; }
-.ts-transfer-count { font-size: 10px; color: var(--text-muted); font-weight: normal; margin-left: 8px; }
 .ts-transfer-body { display: flex; gap: 8px; min-height: 320px; max-height: 60vh; }
 .ts-transfer-col { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .ts-transfer-col-head {
