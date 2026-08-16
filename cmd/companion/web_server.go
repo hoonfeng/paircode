@@ -2255,6 +2255,15 @@ func buildSystemStaticPrefix() string {
 	return systemStaticPrefixCache.prefix
 }
 
+// truncateStr 截断字符串到 maxRunes（诊断日志用）。
+func truncateStr(s string, maxRunes int) string {
+	r := []rune(s)
+	if len(r) <= maxRunes {
+		return s
+	}
+	return string(r[:maxRunes]) + "…"
+}
+
 // buildWebSystemDynamicCache 缓存 buildWebSystemDynamic 的输出（30s TTL）。
 // skills 列表/知识库/项目环境等低频变化，缓存避免每次 Loop 重建重复扫描文件系统，
 // 从而让 system 动态后缀在同一配置下保持稳定（减少 KV 缓存前缀断裂点漂移）。
@@ -2327,8 +2336,11 @@ func buildWebSystemDynamic() string {
 				envSec.WriteString(projEnv)
 			}
 		}
-		log.Printf("[cache-diag] dynamic 段 hash skills=%s memory=%s rules=%s knowledge=%s env=%s total=%s len=%d",
-			secHash(skillsSec), secHash(memorySec), secHash(rulesSec), secHash(knowledgeSec), secHash(envSec.String()), secHash(val), len(val))
+		log.Printf("[cache-diag] dynamic 段 hash skills=%s(%d) memory=%s(%d) rules=%s(%d) knowledge=%s(%d) env=%s total=%s len=%d skills_head=%q",
+			secHash(skillsSec), len(skillsSec), secHash(memorySec), len(memorySec),
+			secHash(rulesSec), len(rulesSec), secHash(knowledgeSec), len(knowledgeSec),
+			secHash(envSec.String()), secHash(val), len(val),
+			truncateStr(skillsSec, 160))
 	}
 	return val
 }
