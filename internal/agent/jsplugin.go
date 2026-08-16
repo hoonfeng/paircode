@@ -28,7 +28,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -589,6 +591,91 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 		return vm.ToValue(map[string]any{"text": resp.Text})
 	})
 	ctxObj.Set("binary", binaryObj)
+
+	// ctx.http：HTTP 接口插件化服务（对齐 harness webServer 路由注册）。
+	//   ctx.http.register(method, path, fn) → unregister()
+	//     method: GET/POST/PUT/DELETE/…；path: 绝对路径，"/*" 结尾=前缀匹配
+	//     fn(req) → resp：req = {method, path, query, headers, body}
+	//                   resp = {status, body, headers} 或字符串
+	//     重复 (method, path) 注册报错；插件卸载自动注销；宿主 mux 路由优先保留
+	//   （未命中插件路由才走内置 /api/* 与静态文件，插件路由在 mux 之前拦截）。
+	httpObj := vm.NewObject()
+	httpObj.Set("register", func(call goja.FunctionCall) goja.Value {
+		method := call.Argument(0).String()
+		path := call.Argument(1).String()
+		fnVal := call.Argument(2)
+		fn, ok := goja.AssertFunction(fnVal)
+		if !ok {
+			panic(vm.NewTypeError("ctx.http.register: 第三参数必须是处理函数 fn(req) → resp"))
+		}
+		handler := func(w http.ResponseWriter, r *http.Request) {
+			body, _ := io.ReadAll(r.Body)
+			headers := map[string]string{}
+			for k, vs := range r.Header {
+				if len(vs) > 0 {
+					headers[k] = vs[0]
+				}
+			}
+			reqObj := map[string]any{
+				"method":  r.Method,
+				"path":    r.URL.Path,
+				"query":   r.URL.RawQuery,
+				"headers": headers,
+				"body":    string(body),
+			}
+			var (
+				ret     goja.Value
+				callErr error
+			)
+			p.withLock(func() {
+				v, err := fn(goja.Undefined(), vm.ToValue(reqObj))
+				ret, callErr = v, err
+			})
+			if callErr != nil {
+				http.Error(w, "ctx.http handler 执行失败: "+jsErrorText(callErr), http.StatusInternalServerError)
+				return
+			}
+			status := http.StatusOK
+			respBody := ""
+			respHeaders := map[string]string{}
+			if ret != nil && !goja.IsUndefined(ret) && !goja.IsNull(ret) {
+				if s, ok := ret.Export().(string); ok {
+					respBody = s
+				} else if obj := ret.ToObject(vm); obj != nil {
+					if v := obj.Get("status"); v != nil {
+						status = int(v.ToInteger())
+					}
+					if v := obj.Get("body"); v != nil {
+						respBody = v.String()
+					}
+					if v := obj.Get("headers"); v != nil {
+						if m, ok := v.Export().(map[string]any); ok {
+							for k, vv := range m {
+								respHeaders[k] = fmt.Sprint(vv)
+							}
+						}
+					}
+				} else {
+					respBody = ret.String()
+				}
+			}
+			for k, v := range respHeaders {
+				w.Header().Set(k, v)
+			}
+			w.WriteHeader(status)
+			_, _ = w.Write([]byte(respBody))
+		}
+		dispose, err := RegisterExtRoute(method, path, handler)
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		p.addCleanup(dispose) // 插件卸载自动注销
+		return vm.ToValue(func(goja.FunctionCall) goja.Value {
+			dispose()
+			return goja.Undefined()
+		})
+	})
+	ctxObj.Set("http", httpObj)
 
 	// ctx.process：后台进程服务（run_background/read_output/kill_process 的能力面）。
 	// globalBG 为全局单例（跨 agent 轮次存活）；cwd 相对工作区根解析（越界拦截）。

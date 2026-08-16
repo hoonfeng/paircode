@@ -24,6 +24,13 @@ JS 插件 execute → ctx.binary.exec(tool, args[, {timeout}]) → text
 ```
 
 - `ctx.binary.dir()` → 插件目录绝对路径（JS 可拼接 assets/ 资源路径）
+- `ctx.http.register(method, path, fn)` → 注册自定义 HTTP API 路由（接口插件化）：
+  - path 以 `/*` 结尾=前缀匹配（如 `/api/ext/*` 匹配其下任意路径）
+  - `fn(req) → resp`：req=`{method, path, query, headers, body}`；
+    resp=`{status, body, headers}` 或字符串
+  - 返回 unregister 函数；插件卸载自动注销；重复 (method, path) 注册报错
+  - 插件路由在宿主 mux 之前拦截：命中走插件、未命中走内置 /api/* 与静态文件
+  - 实现：internal/agent/ext_routes.go（ExtRouteMiddleware）+ jsplugin.go ctx.http
 - `ctx.binary.exec(tool, args, {bin})` → opts.bin 指定**其它插件目录的二进制**
   （跨插件共用统一二进制；如各工具组 JS `{bin:"tool-binary"}` 指向统一宿主
   二进制，无需各自编译）
