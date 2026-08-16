@@ -11389,6 +11389,8 @@
     // { [wsRoot]: { promptTokens, ... } } 各工作区 token 统计（隔离）
     settings: {},
     settingsLoaded: false,
+    pluginSchemas: [],
+    // 插件注册的配置段（ctx.registerSettings → GET /api/settings.schemas）
     searchResults: [],
     selectedFilePaths: [],
     // 文件树多选路径列表
@@ -12847,7 +12849,7 @@
           settings.workspaceFolderLists[ws.path] = [...ws.folders];
         }
       }
-      await api.apiPut("/settings", { settings });
+      await api.apiPut("/settings", settings);
     } catch {
     }
   }
@@ -13033,6 +13035,15 @@
       onDisconnected: () => processAllDisconnected()
     });
     (async () => {
+      try {
+        const sresp = await api.apiGet("/settings");
+        if (sresp && sresp.settings) {
+          state.settings = sresp.settings;
+          state.settingsLoaded = true;
+          state.pluginSchemas = sresp.schemas || [];
+        }
+      } catch {
+      }
       try {
         const health = await api.apiGet("/health");
         if (health && health.workspace) {

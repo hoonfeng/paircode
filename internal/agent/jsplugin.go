@@ -41,6 +41,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/hoonfeng/paircode/internal/core"
 	"wb-ui/goja"
 )
 
@@ -867,6 +868,92 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 	appObj := vm.NewObject()
 	appObj.Set("workspaceRoot", pc.WorkspaceRoot)
 	ctxObj.Set("app", appObj)
+
+	// ctx.registerSettings(schema) / ctx.getSettings(key?) / ctx.setSettings(key, value)
+	// —— 插件配置注册机制（2026-08-16，见 core/settings_registry.go）：
+	//   · registerSettings(schema)：注册本插件的配置段（前端设置面板动态渲染 tab）。
+	//     schema = { key?, title?, fields: [{ name, label, type, default?, options?, hint?, group? }] }
+	//       key 缺省=插件名（命名空间）；type: text|password|number|checkbox|select|textarea
+	//     return { key, value }（当前已存值，合并默认后）。
+	//   · getSettings(key?)：读配置值（key 缺省=插件名），返回对象（未设→{}）。
+	//   · setSettings(key?, value)：写配置值并持久化（key 缺省=插件名），返回 true。
+	//   值存 settings.json 的 pluginSettings[key]，与核心字段隔离；重启保留。
+	ctxObj.Set("registerSettings", func(call goja.FunctionCall) goja.Value {
+		raw := call.Argument(0).Export()
+		m, ok := raw.(map[string]any)
+		if !ok {
+			panic(vm.NewTypeError("ctx.registerSettings: 参数必须是 schema 对象"))
+		}
+		key, _ := m["key"].(string)
+		if key == "" {
+			key = p.def.name
+		}
+		title, _ := m["title"].(string)
+		if title == "" {
+			title = key
+		}
+		fields := []core.SettingField{}
+		if farr, ok := m["fields"].([]any); ok {
+			for _, fv := range farr {
+				fm, ok := fv.(map[string]any)
+				if !ok {
+					continue
+				}
+				f := core.SettingField{}
+				f.Name, _ = fm["name"].(string)
+				f.Label, _ = fm["label"].(string)
+				f.Type, _ = fm["type"].(string)
+				if f.Type == "" {
+					f.Type = "text"
+				}
+				f.Default = fm["default"]
+				f.Hint, _ = fm["hint"].(string)
+				f.Group, _ = fm["group"].(string)
+				if opts, ok := fm["options"].([]any); ok {
+					for _, o := range opts {
+						if s, ok := o.(string); ok {
+							f.Options = append(f.Options, s)
+						}
+					}
+				}
+				if f.Name != "" {
+					fields = append(fields, f)
+				}
+			}
+		}
+		core.RegisterPluginSettingSchema(core.SettingSchema{Key: key, Title: title, Fields: fields})
+		// 返回当前值（默认合并）
+		cur := core.Settings.PluginSettingValue(key)
+		for k, d := range core.PluginSettingDefaults(key) {
+			if _, ok := cur[k]; !ok {
+				cur[k] = d
+			}
+		}
+		return vm.ToValue(map[string]any{"key": key, "value": cur})
+	})
+	ctxObj.Set("getSettings", func(call goja.FunctionCall) goja.Value {
+		key := p.def.name
+		if a := call.Argument(0); !goja.IsUndefined(a) && !goja.IsNull(a) && a.String() != "" {
+			key = a.String()
+		}
+		return vm.ToValue(core.Settings.PluginSettingValue(key))
+	})
+	ctxObj.Set("setSettings", func(call goja.FunctionCall) goja.Value {
+		key := p.def.name
+		if a := call.Argument(0); !goja.IsUndefined(a) && !goja.IsNull(a) && a.String() != "" {
+			key = a.String()
+		}
+		value := call.Argument(1).Export()
+		if m, ok := value.(map[string]any); ok {
+			if core.Settings.PluginSettings == nil {
+				core.Settings.PluginSettings = map[string]map[string]any{}
+			}
+			core.Settings.PluginSettings[key] = m
+			core.Save()
+			return vm.ToValue(true)
+		}
+		panic(vm.NewTypeError("ctx.setSettings: 第二参数必须是对象"))
+	})
 
 	// ★ 按 inject 声明注入服务属性（对齐 harness：只读声明过的服务，
 	//   可选服务用 ctx.get(name) 判 undefined；未声明即访问为 undefined）

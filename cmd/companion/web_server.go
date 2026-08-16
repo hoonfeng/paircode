@@ -995,7 +995,12 @@ func (s *webServer) handleWorkspace(w http.ResponseWriter, r *http.Request) {
 func (s *webServer) handleSettings(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "GET":
-		jsonResp(w, core.Settings)
+		// ★ 2026-08-16：附带插件注册的配置段（schemas）供前端设置面板动态渲染
+		jsonResp(w, map[string]any{
+			"settings": core.Settings,
+			"loaded":   core.Loaded,
+			"schemas":  core.PluginSettingSchemas,
+		})
 	case "PUT":
 		// convId 参数可选：来自工具栏切换时传当前对话 ID，仅实时更新该对话的 Loop
 		convId := r.URL.Query().Get("convId")
@@ -2571,7 +2576,6 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 			opts.ReviewProvider = &agent.OpenAIProvider{BaseURL: base, APIKey: key, Model: pm, Temperature: -1, ThinkingMode: "non-thinking"}
 		}
 	}
-	opts.AutoCommit = core.Settings.AutoCommit
 
 	if req.Autonomous {
 		pm := strings.TrimSpace(core.Settings.PlanModel)

@@ -4,13 +4,11 @@ package core
 
 import (
 	"encoding/json"
-	
+
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
-
-	"github.com/hoonfeng/paircode/internal/codetypes"
 )
 
 // AppSettings 持久化设置 —— 字段对齐参考 settings.ts（扁平存储；分组注释）。
@@ -38,13 +36,7 @@ type AppSettings struct {
 	Autonomous         bool     `json:"autonomous"`
 	AutoCollapse       bool   `json:"autoCollapse"`
 	MaxIterations      int    `json:"maxIterations"`
-	MaxParallel        int    `json:"maxParallelAgents"`
-	ReviewRetries      int    `json:"maxReviewRetries"`
 	AutoIterate        bool   `json:"autoIterateOnRejection"`
-	RequireApproval    bool   `json:"requireHumanApprovalForDestructive"`
-	AIReview           bool   `json:"aiReview"`
-	AutoCommit         bool   `json:"autoCommit"`
-	Benchmark          bool   `json:"enableBenchmarking"`
 	SystemInstructions string `json:"systemInstructions"`
 	SearxngURL         string `json:"searxngUrl"`
 	IgnoreDirs         []string `json:"ignoreDirs"`
@@ -71,12 +63,11 @@ type AppSettings struct {
 	PhilosophySelected []string          `json:"philosophySelected"`
 	PhilosophyRoles    map[string]string `json:"philosophyRoles"`
 	// MCP / Skills
-	AutoConnectMCP        bool            `json:"autoConnectMCP"`
-	MCPEnabledOverrides   map[string]bool `json:"mcpEnabledOverrides"`
+	AutoConnectMCP        bool              `json:"autoConnectMCP"`
 	SkillEnabledOverrides map[string]bool   `json:"skillEnabledOverrides"`
 	SkillStatusOverrides  map[string]string `json:"skillStatusOverrides"`
-	// 自定义语言提供者
-	CustomProviders []codetypes.CustomProviderConfig `json:"customProviders"`
+	// 插件配置（插件通过 ctx.registerSettings 注册命名空间，值存这里）
+	PluginSettings map[string]map[string]any `json:"pluginSettings,omitempty"`
 }
 
 var (
@@ -125,7 +116,7 @@ func Default() AppSettings {
 		Provider: "deepseek", BaseURL: "https://api.deepseek.com/v1",
 		PlanModel: "deepseek-v4-pro", ExecuteModel: "deepseek-v4-flash", ReviewModel: "deepseek-v4-pro",
 		Temperature: "0.3", ThinkingMode: "thinking", MaxTokens: 131072, ContextMaxTokens: 64000,
-		MaxIterations: 50, MaxParallel: 3, ReviewRetries: 3, AutoIterate: true, RequireApproval: true, ReviewMode: "auto", AutoCommit: true, AutoCollapse: true, Benchmark: true,
+		MaxIterations: 50, AutoIterate: true, ReviewMode: "auto", AutoCollapse: true,
 		DefaultShell: "auto", TermFontSize: 13, TermEncoding: "auto",
 		Theme: "dark", EditorFontSize: 14, TabSize: 2, FontFamily: "'Cascadia Code', 'Fira Code', Consolas, monospace",
 		PhilosophySelected: []string{"tao-te-ching", "huangdi-yinfu-jing", "sunzi-bingfa"},

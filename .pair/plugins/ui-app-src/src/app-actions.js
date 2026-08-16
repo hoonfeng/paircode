@@ -75,7 +75,7 @@ export async function saveWsList() {
         settings.workspaceFolderLists[ws.path] = [...ws.folders]
       }
     }
-    await api.apiPut('/settings', { settings })
+    await api.apiPut('/settings', settings)
   } catch {}
 }
 
@@ -237,6 +237,16 @@ export function initAppGlobals() {
 
   // 初始工作区（/api/health）：web 端 workspaceRoot 初始化（原 App.vue onMounted）
   ;(async () => {
+    // ★ 设置与插件配置 schema 预取（修复：state.settings 此前从不从后端加载，
+    //   设置面板打开即显示默认值；现全局拉取并缓存 pluginSchemas 供动态渲染）
+    try {
+      const sresp = await api.apiGet('/settings')
+      if (sresp && sresp.settings) {
+        state.settings = sresp.settings
+        state.settingsLoaded = true
+        state.pluginSchemas = sresp.schemas || []
+      }
+    } catch {}
     try {
       const health = await api.apiGet('/health')
       if (health && health.workspace) {

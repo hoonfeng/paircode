@@ -162,6 +162,7 @@ func HandleSettings(w http.ResponseWriter, r *http.Request) {
 	jsonResp(w, map[string]any{
 		"settings": core.Settings,
 		"loaded":   core.Loaded,
+		"schemas":  core.PluginSettingSchemas, // 插件注册的配置段（前端动态渲染）
 	})
 }
 

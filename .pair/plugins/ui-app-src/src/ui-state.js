@@ -130,6 +130,7 @@ export const state = reactive({
   wsTokenStatsByWs: {},      // { [wsRoot]: { promptTokens, ... } } 各工作区 token 统计（隔离）
   settings: {},
   settingsLoaded: false,
+  pluginSchemas: [], // 插件注册的配置段（ctx.registerSettings → GET /api/settings.schemas）
   searchResults: [],
   selectedFilePaths: [],  // 文件树多选路径列表
   lastClickedFilePath: '', // 文件树最近点击（Shift范围选择用）

@@ -2121,104 +2121,143 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
   const _hoisted_30$1 = { class: "setting-row" };
   const _hoisted_31$1 = { class: "setting-row" };
   const _hoisted_32$1 = { class: "setting-row" };
-  const _hoisted_33$1 = { class: "setting-row" };
-  const _hoisted_34$1 = { class: "setting-row" };
-  const _hoisted_35$1 = { class: "setting-row" };
-  const _hoisted_36$1 = { class: "setting-row" };
-  const _hoisted_37$1 = { class: "setting-row" };
-  const _hoisted_38$1 = { class: "setting-row" };
-  const _hoisted_39$1 = {
+  const _hoisted_33$1 = {
     class: "setting-group",
     style: { "margin-top": "12px" }
   };
+  const _hoisted_34$1 = { class: "setting-row" };
+  const _hoisted_35$1 = { class: "setting-row" };
+  const _hoisted_36$1 = { key: 2 };
+  const _hoisted_37$1 = { class: "setting-group" };
+  const _hoisted_38$1 = { class: "setting-row" };
+  const _hoisted_39$1 = { class: "setting-row" };
   const _hoisted_40$1 = { class: "setting-row" };
   const _hoisted_41$1 = { class: "setting-row" };
-  const _hoisted_42$1 = { key: 2 };
-  const _hoisted_43$1 = { class: "setting-group" };
+  const _hoisted_42$1 = {
+    class: "setting-group",
+    style: { "margin-top": "12px" }
+  };
+  const _hoisted_43$1 = { class: "setting-row" };
   const _hoisted_44$1 = { class: "setting-row" };
   const _hoisted_45$1 = { class: "setting-row" };
   const _hoisted_46$1 = { class: "setting-row" };
-  const _hoisted_47$1 = { class: "setting-row" };
-  const _hoisted_48$1 = {
+  const _hoisted_47$1 = {
     class: "setting-group",
     style: { "margin-top": "12px" }
   };
+  const _hoisted_48$1 = { class: "setting-row" };
   const _hoisted_49$1 = { class: "setting-row" };
   const _hoisted_50$1 = { class: "setting-row" };
   const _hoisted_51$1 = { class: "setting-row" };
-  const _hoisted_52$1 = { class: "setting-row" };
-  const _hoisted_53$1 = {
-    class: "setting-group",
-    style: { "margin-top": "12px" }
-  };
+  const _hoisted_52$1 = { key: 3 };
+  const _hoisted_53$1 = { class: "setting-group" };
   const _hoisted_54$1 = { class: "setting-row" };
   const _hoisted_55$1 = { class: "setting-row" };
   const _hoisted_56$1 = { class: "setting-row" };
-  const _hoisted_57$1 = { class: "setting-row" };
-  const _hoisted_58$1 = { key: 3 };
-  const _hoisted_59$1 = { class: "setting-group" };
-  const _hoisted_60$1 = { class: "setting-row" };
-  const _hoisted_61$1 = { class: "setting-row" };
-  const _hoisted_62$1 = { class: "setting-row" };
-  const _hoisted_63$1 = { key: 4 };
-  const _hoisted_64$1 = { class: "setting-group" };
-  const _hoisted_65$1 = { class: "theme-grid" };
-  const _hoisted_66$1 = ["onClick"];
-  const _hoisted_67$1 = { class: "theme-preview" };
-  const _hoisted_68$1 = { class: "tp-main" };
-  const _hoisted_69$1 = { class: "tp-editor" };
-  const _hoisted_70 = { class: "theme-name" };
-  const _hoisted_71 = { class: "theme-font" };
-  const _hoisted_72 = { key: 5 };
-  const _hoisted_73 = { class: "setting-group" };
-  const _hoisted_74 = { class: "setting-row-vertical" };
-  const _hoisted_75 = {
+  const _hoisted_57$1 = { key: 4 };
+  const _hoisted_58$1 = { class: "setting-group" };
+  const _hoisted_59$1 = { class: "theme-grid" };
+  const _hoisted_60$1 = ["onClick"];
+  const _hoisted_61$1 = { class: "theme-preview" };
+  const _hoisted_62$1 = { class: "tp-main" };
+  const _hoisted_63$1 = { class: "tp-editor" };
+  const _hoisted_64$1 = { class: "theme-name" };
+  const _hoisted_65$1 = { class: "theme-font" };
+  const _hoisted_66$1 = { key: 5 };
+  const _hoisted_67$1 = { class: "setting-group" };
+  const _hoisted_68$1 = { class: "setting-row-vertical" };
+  const _hoisted_69$1 = {
     class: "setting-group",
     style: { "margin-top": "16px" }
   };
-  const _hoisted_76 = {
+  const _hoisted_70 = {
     class: "setting-row-vertical",
     style: { "display": "flex", "flex-direction": "column", "gap": "6px" }
   };
-  const _hoisted_77 = { class: "project-inst-hint" };
-  const _hoisted_78 = { key: 6 };
-  const _hoisted_79 = { class: "setting-group" };
-  const _hoisted_80 = { class: "setting-row" };
-  const _hoisted_81 = {
+  const _hoisted_71 = { class: "project-inst-hint" };
+  const _hoisted_72 = { key: 6 };
+  const _hoisted_73 = { class: "setting-group" };
+  const _hoisted_74 = { class: "setting-row" };
+  const _hoisted_75 = {
     key: 0,
     class: "setting-group",
     style: { "margin-top": "12px" }
   };
-  const _hoisted_82 = { class: "classics-list" };
-  const _hoisted_83 = ["value"];
-  const _hoisted_84 = {
+  const _hoisted_76 = { class: "classics-list" };
+  const _hoisted_77 = ["value"];
+  const _hoisted_78 = {
     key: 1,
     class: "setting-group",
     style: { "margin-top": "16px" }
   };
-  const _hoisted_85 = { class: "setting-row-vertical" };
-  const _hoisted_86 = {
+  const _hoisted_79 = { class: "setting-row-vertical" };
+  const _hoisted_80 = {
     key: 2,
     class: "setting-group",
     style: { "margin-top": "12px" }
   };
-  const _hoisted_87 = { class: "role-phil-label" };
-  const _hoisted_88 = ["value", "onInput", "placeholder"];
+  const _hoisted_81 = { class: "role-phil-label" };
+  const _hoisted_82 = ["value", "onInput", "placeholder"];
+  const _hoisted_83 = {
+    key: 0,
+    class: "group-title"
+  };
+  const _hoisted_84 = ["type", "onUpdate:modelValue"];
+  const _hoisted_85 = ["onUpdate:modelValue"];
+  const _hoisted_86 = ["onUpdate:modelValue"];
+  const _hoisted_87 = ["onUpdate:modelValue"];
+  const _hoisted_88 = ["value"];
+  const _hoisted_89 = ["onUpdate:modelValue"];
+  const _hoisted_90 = ["onUpdate:modelValue"];
+  const _hoisted_91 = {
+    key: 6,
+    class: "setting-hint"
+  };
   const _sfc_main$7 = {
     __name: "SettingsModal",
     emits: ["close"],
     setup(__props, { emit: __emit }) {
       const emit = __emit;
       const activeTab = vue.ref("ai");
-      const tabs = [
+      const pluginTabs = vue.computed(() => (uiState_js.state.pluginSchemas || []).map((sch) => ({
+        key: sch.key,
+        title: sch.title || sch.key,
+        // 按 group 分组：Group 空 → 无标题主组
+        groups: groupFields(sch.fields || [])
+      })));
+      const tabs = vue.computed(() => [
         { id: "ai", label: "AI" },
         { id: "agent", label: "Agent" },
         { id: "editor", label: "编辑器" },
         { id: "terminal", label: "终端" },
         { id: "appearance", label: "外观" },
         { id: "instructions", label: "指令" },
-        { id: "philosophy", label: "思想" }
-      ];
+        { id: "philosophy", label: "思想" },
+        ...pluginTabs.value.map((p) => ({ id: "p-" + p.key, label: p.title }))
+      ]);
+      const pluginValues = vue.reactive({});
+      function collectPluginValues() {
+        const out = {};
+        for (const key of Object.keys(pluginValues)) {
+          if (pluginValues[key] && typeof pluginValues[key] === "object") {
+            out[key] = { ...pluginValues[key] };
+          }
+        }
+        return out;
+      }
+      function groupFields(fields) {
+        const groups = [];
+        const map = {};
+        for (const f of fields) {
+          const g2 = f.group || "";
+          if (!map[g2]) {
+            map[g2] = [];
+            groups.push({ title: g2, fields: map[g2] });
+          }
+          map[g2].push(f);
+        }
+        return groups;
+      }
       const providers = vue.ref([]);
       const modelsMap = vue.ref({});
       const classicList = vue.ref([]);
@@ -2240,15 +2279,9 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         reviewModelCustom: "",
         // Agent
         maxIterations: 50,
-        maxParallel: 3,
-        reviewRetries: 3,
-        requireHumanApprovalForDestructive: true,
         reviewMode: "auto",
         autoIterateOnRejection: false,
         autonomous: false,
-        aiReview: false,
-        luaTools: true,
-        autoCommit: true,
         searxngUrl: "",
         ignoreDirsText: "",
         // 编辑器
@@ -2454,15 +2487,9 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         local.contextMaxTokens = s.contextMaxTokens || 1e6;
         local.thinkingMode = s.thinkingMode || "thinking";
         local.maxIterations = s.maxIterations || 50;
-        local.maxParallel = s.maxParallel || 3;
-        local.reviewRetries = s.reviewRetries || 3;
-        local.requireHumanApprovalForDestructive = s.requireHumanApprovalForDestructive !== false;
         local.reviewMode = s.reviewMode || "auto";
         local.autoIterateOnRejection = !!s.autoIterateOnRejection;
         local.autonomous = !!s.autonomous;
-        local.aiReview = !!s.aiReview;
-        local.luaTools = s.luaTools !== false;
-        local.autoCommit = s.autoCommit !== false;
         local.searxngUrl = s.searxngUrl || "";
         local.ignoreDirsText = (s.ignoreDirs || []).join(", ");
         local.editorFontSize = s.editorFontSize || 14;
@@ -2482,6 +2509,14 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         local.termFontSize = s.termFontSize || 13;
         local.termEncoding = s.termEncoding || "auto";
         local.autoConnectMCP = s.autoConnectMCP !== false;
+        for (const sch of uiState_js.state.pluginSchemas || []) {
+          const saved = s.pluginSettings && s.pluginSettings[sch.key] || {};
+          const defs = {};
+          for (const f of sch.fields || []) {
+            if (f.default !== void 0 && f.default !== null) defs[f.name] = f.default;
+          }
+          pluginValues[sch.key] = { ...defs, ...saved };
+        }
       }
       if (uiState_js.state.settingsLoaded) loadSettings();
       vue.onMounted(async () => {
@@ -2515,16 +2550,9 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
             thinkingMode: local.thinkingMode,
             // Agent
             maxIterations: local.maxIterations,
-            maxParallel: local.maxParallel,
-            maxReviewRetries: local.reviewRetries,
-            reviewRetries: local.reviewRetries,
-            requireHumanApprovalForDestructive: local.requireHumanApprovalForDestructive,
             reviewMode: local.reviewMode,
             autoIterateOnRejection: local.autoIterateOnRejection,
             autonomous: local.autonomous,
-            aiReview: local.aiReview,
-            luaTools: local.luaTools,
-            autoCommit: local.autoCommit,
             searxngUrl: local.searxngUrl,
             ignoreDirs: local.ignoreDirsText.split(",").map((s) => s.trim()).filter(Boolean),
             // 编辑器
@@ -2547,7 +2575,9 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
             termFontSize: local.termFontSize,
             termEncoding: local.termEncoding,
             // MCP
-            autoConnectMCP: local.autoConnectMCP
+            autoConnectMCP: local.autoConnectMCP,
+            // 插件配置（ctx.registerSettings 命名空间，按 key 隔离存储）
+            pluginSettings: { ...uiState_js.state.settings.pluginSettings || {}, ...collectPluginValues() }
           };
           await api.apiPut("/settings", settings);
           uiState_js.state.settings = settings;
@@ -2576,7 +2606,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                   name: "settings",
                   size: 18
                 }),
-                _cache[46] || (_cache[46] = vue.createTextVNode(
+                _cache[40] || (_cache[40] = vue.createTextVNode(
                   " 设置",
                   -1
                   /* CACHED */
@@ -2589,25 +2619,25 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
             ]),
             vue.createElementVNode("div", _hoisted_4$5, [
               vue.createElementVNode("div", _hoisted_5$5, [
-                (vue.openBlock(), vue.createElementBlock(
+                (vue.openBlock(true), vue.createElementBlock(
                   vue.Fragment,
                   null,
-                  vue.renderList(tabs, (tab) => {
-                    return vue.createElementVNode("button", {
+                  vue.renderList(tabs.value, (tab) => {
+                    return vue.openBlock(), vue.createElementBlock("button", {
                       key: tab.id,
                       class: vue.normalizeClass({ active: activeTab.value === tab.id }),
                       onClick: ($event) => activeTab.value = tab.id
                     }, vue.toDisplayString(tab.label), 11, _hoisted_6$5);
                   }),
-                  64
-                  /* STABLE_FRAGMENT */
+                  128
+                  /* KEYED_FRAGMENT */
                 ))
               ]),
               vue.createElementVNode("div", _hoisted_7$5, [
                 vue.createCommentVNode(" ═══ AI 模型 ═══ "),
                 activeTab.value === "ai" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_8$5, [
                   vue.createElementVNode("div", _hoisted_9$5, [
-                    _cache[65] || (_cache[65] = vue.createElementVNode(
+                    _cache[59] || (_cache[59] = vue.createElementVNode(
                       "div",
                       { class: "group-title" },
                       "服务商与模型",
@@ -2615,7 +2645,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                       /* CACHED */
                     )),
                     vue.createElementVNode("div", _hoisted_10$5, [
-                      _cache[48] || (_cache[48] = vue.createElementVNode(
+                      _cache[42] || (_cache[42] = vue.createElementVNode(
                         "label",
                         null,
                         "服务商",
@@ -2629,7 +2659,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                           onChange: onProviderChange
                         },
                         [
-                          _cache[47] || (_cache[47] = vue.createElementVNode(
+                          _cache[41] || (_cache[41] = vue.createElementVNode(
                             "option",
                             {
                               value: "",
@@ -2659,7 +2689,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                       ])
                     ]),
                     vue.createElementVNode("div", _hoisted_12$5, [
-                      _cache[49] || (_cache[49] = vue.createElementVNode(
+                      _cache[43] || (_cache[43] = vue.createElementVNode(
                         "label",
                         null,
                         "API 地址",
@@ -2681,7 +2711,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                       ])
                     ]),
                     vue.createElementVNode("div", _hoisted_13$4, [
-                      _cache[50] || (_cache[50] = vue.createElementVNode(
+                      _cache[44] || (_cache[44] = vue.createElementVNode(
                         "label",
                         null,
                         "API Key",
@@ -2703,7 +2733,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                       ])
                     ]),
                     vue.createElementVNode("div", _hoisted_14$4, [
-                      _cache[53] || (_cache[53] = vue.createElementVNode(
+                      _cache[47] || (_cache[47] = vue.createElementVNode(
                         "label",
                         null,
                         "主模型",
@@ -2716,7 +2746,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                           "onUpdate:modelValue": _cache[4] || (_cache[4] = ($event) => local.executeModel = $event)
                         },
                         [
-                          _cache[51] || (_cache[51] = vue.createElementVNode(
+                          _cache[45] || (_cache[45] = vue.createElementVNode(
                             "option",
                             {
                               value: "",
@@ -2738,7 +2768,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                             128
                             /* KEYED_FRAGMENT */
                           )),
-                          _cache[52] || (_cache[52] = vue.createElementVNode(
+                          _cache[46] || (_cache[46] = vue.createElementVNode(
                             "option",
                             { value: "custom" },
                             "自定义",
@@ -2767,7 +2797,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                       ]) : vue.createCommentVNode("v-if", true)
                     ]),
                     vue.createElementVNode("div", _hoisted_16$3, [
-                      _cache[56] || (_cache[56] = vue.createElementVNode(
+                      _cache[50] || (_cache[50] = vue.createElementVNode(
                         "label",
                         null,
                         "规划模型",
@@ -2780,7 +2810,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                           "onUpdate:modelValue": _cache[6] || (_cache[6] = ($event) => local.planModel = $event)
                         },
                         [
-                          _cache[54] || (_cache[54] = vue.createElementVNode(
+                          _cache[48] || (_cache[48] = vue.createElementVNode(
                             "option",
                             {
                               value: "",
@@ -2802,7 +2832,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                             128
                             /* KEYED_FRAGMENT */
                           )),
-                          _cache[55] || (_cache[55] = vue.createElementVNode(
+                          _cache[49] || (_cache[49] = vue.createElementVNode(
                             "option",
                             { value: "custom" },
                             "自定义",
@@ -2831,7 +2861,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                       ]) : vue.createCommentVNode("v-if", true)
                     ]),
                     vue.createElementVNode("div", _hoisted_18$3, [
-                      _cache[59] || (_cache[59] = vue.createElementVNode(
+                      _cache[53] || (_cache[53] = vue.createElementVNode(
                         "label",
                         null,
                         "审核模型",
@@ -2844,7 +2874,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                           "onUpdate:modelValue": _cache[8] || (_cache[8] = ($event) => local.reviewModel = $event)
                         },
                         [
-                          _cache[57] || (_cache[57] = vue.createElementVNode(
+                          _cache[51] || (_cache[51] = vue.createElementVNode(
                             "option",
                             {
                               value: "",
@@ -2866,7 +2896,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                             128
                             /* KEYED_FRAGMENT */
                           )),
-                          _cache[58] || (_cache[58] = vue.createElementVNode(
+                          _cache[52] || (_cache[52] = vue.createElementVNode(
                             "option",
                             { value: "custom" },
                             "自定义",
@@ -2895,7 +2925,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                       ]) : vue.createCommentVNode("v-if", true)
                     ]),
                     vue.createElementVNode("div", _hoisted_20$3, [
-                      _cache[60] || (_cache[60] = vue.createElementVNode(
+                      _cache[54] || (_cache[54] = vue.createElementVNode(
                         "label",
                         null,
                         "温度",
@@ -2932,7 +2962,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                       local.temperature > 0.8 ? (vue.openBlock(), vue.createElementBlock("span", _hoisted_22$2, "⚠️ 高温度降低代码稳定性，建议 ≤0.5")) : vue.createCommentVNode("v-if", true)
                     ]),
                     vue.createElementVNode("div", _hoisted_23$1, [
-                      _cache[61] || (_cache[61] = vue.createElementVNode(
+                      _cache[55] || (_cache[55] = vue.createElementVNode(
                         "label",
                         null,
                         "最大 Token",
@@ -2961,7 +2991,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                       local.maxTokens < 8192 ? (vue.openBlock(), vue.createElementBlock("span", _hoisted_24$1, "⚠️ 过小会导致思考/回复被截断，建议 ≥8192")) : vue.createCommentVNode("v-if", true)
                     ]),
                     vue.createElementVNode("div", _hoisted_25$1, [
-                      _cache[62] || (_cache[62] = vue.createElementVNode(
+                      _cache[56] || (_cache[56] = vue.createElementVNode(
                         "label",
                         null,
                         "上下文 Token",
@@ -2989,7 +3019,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                       ])
                     ]),
                     vue.createElementVNode("div", _hoisted_26$1, [
-                      _cache[64] || (_cache[64] = vue.createElementVNode(
+                      _cache[58] || (_cache[58] = vue.createElementVNode(
                         "label",
                         null,
                         "思考模式",
@@ -3002,7 +3032,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                           "onUpdate:modelValue": _cache[13] || (_cache[13] = ($event) => local.thinkingMode = $event),
                           style: { "flex": "1" }
                         },
-                        [..._cache[63] || (_cache[63] = [
+                        [..._cache[57] || (_cache[57] = [
                           vue.createElementVNode(
                             "option",
                             { value: "" },
@@ -3036,7 +3066,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                 vue.createCommentVNode(" ═══ Agent 行为 ═══ "),
                 activeTab.value === "agent" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_27$1, [
                   vue.createElementVNode("div", _hoisted_28$1, [
-                    _cache[78] || (_cache[78] = vue.createElementVNode(
+                    _cache[65] || (_cache[65] = vue.createElementVNode(
                       "div",
                       { class: "group-title" },
                       "Agent 行为",
@@ -3044,7 +3074,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                       /* CACHED */
                     )),
                     vue.createElementVNode("div", _hoisted_29$1, [
-                      _cache[66] || (_cache[66] = vue.createElementVNode(
+                      _cache[60] || (_cache[60] = vue.createElementVNode(
                         "label",
                         null,
                         "最大迭代次数",
@@ -3072,84 +3102,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                       ])
                     ]),
                     vue.createElementVNode("div", _hoisted_30$1, [
-                      _cache[67] || (_cache[67] = vue.createElementVNode(
-                        "label",
-                        null,
-                        "最大并行 Agent 数",
-                        -1
-                        /* CACHED */
-                      )),
-                      vue.withDirectives(vue.createElementVNode(
-                        "input",
-                        {
-                          type: "number",
-                          "onUpdate:modelValue": _cache[15] || (_cache[15] = ($event) => local.maxParallel = $event),
-                          min: "1",
-                          max: "20"
-                        },
-                        null,
-                        512
-                        /* NEED_PATCH */
-                      ), [
-                        [
-                          vue.vModelText,
-                          local.maxParallel,
-                          void 0,
-                          { number: true }
-                        ]
-                      ])
-                    ]),
-                    vue.createElementVNode("div", _hoisted_31$1, [
-                      _cache[68] || (_cache[68] = vue.createElementVNode(
-                        "label",
-                        null,
-                        "审核重试次数",
-                        -1
-                        /* CACHED */
-                      )),
-                      vue.withDirectives(vue.createElementVNode(
-                        "input",
-                        {
-                          type: "number",
-                          "onUpdate:modelValue": _cache[16] || (_cache[16] = ($event) => local.reviewRetries = $event),
-                          min: "0",
-                          max: "20"
-                        },
-                        null,
-                        512
-                        /* NEED_PATCH */
-                      ), [
-                        [
-                          vue.vModelText,
-                          local.reviewRetries,
-                          void 0,
-                          { number: true }
-                        ]
-                      ])
-                    ]),
-                    vue.createElementVNode("div", _hoisted_32$1, [
-                      _cache[69] || (_cache[69] = vue.createElementVNode(
-                        "label",
-                        null,
-                        "破坏性操作需确认",
-                        -1
-                        /* CACHED */
-                      )),
-                      vue.withDirectives(vue.createElementVNode(
-                        "input",
-                        {
-                          type: "checkbox",
-                          "onUpdate:modelValue": _cache[17] || (_cache[17] = ($event) => local.requireHumanApprovalForDestructive = $event)
-                        },
-                        null,
-                        512
-                        /* NEED_PATCH */
-                      ), [
-                        [vue.vModelCheckbox, local.requireHumanApprovalForDestructive]
-                      ])
-                    ]),
-                    vue.createElementVNode("div", _hoisted_33$1, [
-                      _cache[71] || (_cache[71] = vue.createElementVNode(
+                      _cache[62] || (_cache[62] = vue.createElementVNode(
                         "label",
                         null,
                         "审核模式",
@@ -3159,10 +3112,10 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                       vue.withDirectives(vue.createElementVNode(
                         "select",
                         {
-                          "onUpdate:modelValue": _cache[18] || (_cache[18] = ($event) => local.reviewMode = $event),
+                          "onUpdate:modelValue": _cache[15] || (_cache[15] = ($event) => local.reviewMode = $event),
                           style: { "flex": "1" }
                         },
-                        [..._cache[70] || (_cache[70] = [
+                        [..._cache[61] || (_cache[61] = [
                           vue.createElementVNode(
                             "option",
                             { value: "auto" },
@@ -3191,8 +3144,8 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         [vue.vModelSelect, local.reviewMode]
                       ])
                     ]),
-                    vue.createElementVNode("div", _hoisted_34$1, [
-                      _cache[72] || (_cache[72] = vue.createElementVNode(
+                    vue.createElementVNode("div", _hoisted_31$1, [
+                      _cache[63] || (_cache[63] = vue.createElementVNode(
                         "label",
                         null,
                         "拒绝后自动迭代",
@@ -3203,7 +3156,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         "input",
                         {
                           type: "checkbox",
-                          "onUpdate:modelValue": _cache[19] || (_cache[19] = ($event) => local.autoIterateOnRejection = $event)
+                          "onUpdate:modelValue": _cache[16] || (_cache[16] = ($event) => local.autoIterateOnRejection = $event)
                         },
                         null,
                         512
@@ -3212,8 +3165,8 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         [vue.vModelCheckbox, local.autoIterateOnRejection]
                       ])
                     ]),
-                    vue.createElementVNode("div", _hoisted_35$1, [
-                      _cache[73] || (_cache[73] = vue.createElementVNode(
+                    vue.createElementVNode("div", _hoisted_32$1, [
+                      _cache[64] || (_cache[64] = vue.createElementVNode(
                         "label",
                         null,
                         "自主模式",
@@ -3224,7 +3177,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         "input",
                         {
                           type: "checkbox",
-                          "onUpdate:modelValue": _cache[20] || (_cache[20] = ($event) => local.autonomous = $event)
+                          "onUpdate:modelValue": _cache[17] || (_cache[17] = ($event) => local.autonomous = $event)
                         },
                         null,
                         512
@@ -3232,88 +3185,18 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                       ), [
                         [vue.vModelCheckbox, local.autonomous]
                       ])
-                    ]),
-                    vue.createElementVNode("div", _hoisted_36$1, [
-                      _cache[74] || (_cache[74] = vue.createElementVNode(
-                        "label",
-                        null,
-                        "AI 审核（规划/审核 Agent）",
-                        -1
-                        /* CACHED */
-                      )),
-                      vue.withDirectives(vue.createElementVNode(
-                        "input",
-                        {
-                          type: "checkbox",
-                          "onUpdate:modelValue": _cache[21] || (_cache[21] = ($event) => local.aiReview = $event)
-                        },
-                        null,
-                        512
-                        /* NEED_PATCH */
-                      ), [
-                        [vue.vModelCheckbox, local.aiReview]
-                      ])
-                    ]),
-                    vue.createElementVNode("div", _hoisted_37$1, [
-                      _cache[75] || (_cache[75] = vue.createElementVNode(
-                        "label",
-                        null,
-                        "Lua 工具",
-                        -1
-                        /* CACHED */
-                      )),
-                      vue.withDirectives(vue.createElementVNode(
-                        "input",
-                        {
-                          type: "checkbox",
-                          "onUpdate:modelValue": _cache[22] || (_cache[22] = ($event) => local.luaTools = $event)
-                        },
-                        null,
-                        512
-                        /* NEED_PATCH */
-                      ), [
-                        [vue.vModelCheckbox, local.luaTools]
-                      ])
-                    ]),
-                    vue.createElementVNode("div", _hoisted_38$1, [
-                      _cache[76] || (_cache[76] = vue.createElementVNode(
-                        "label",
-                        null,
-                        "自动 Git 提交",
-                        -1
-                        /* CACHED */
-                      )),
-                      vue.withDirectives(vue.createElementVNode(
-                        "input",
-                        {
-                          type: "checkbox",
-                          "onUpdate:modelValue": _cache[23] || (_cache[23] = ($event) => local.autoCommit = $event)
-                        },
-                        null,
-                        512
-                        /* NEED_PATCH */
-                      ), [
-                        [vue.vModelCheckbox, local.autoCommit]
-                      ]),
-                      _cache[77] || (_cache[77] = vue.createElementVNode(
-                        "span",
-                        { class: "setting-hint" },
-                        "任务完成时自动 git add + commit",
-                        -1
-                        /* CACHED */
-                      ))
                     ])
                   ]),
-                  vue.createElementVNode("div", _hoisted_39$1, [
-                    _cache[81] || (_cache[81] = vue.createElementVNode(
+                  vue.createElementVNode("div", _hoisted_33$1, [
+                    _cache[68] || (_cache[68] = vue.createElementVNode(
                       "div",
                       { class: "group-title" },
                       "搜索与忽略",
                       -1
                       /* CACHED */
                     )),
-                    vue.createElementVNode("div", _hoisted_40$1, [
-                      _cache[79] || (_cache[79] = vue.createElementVNode(
+                    vue.createElementVNode("div", _hoisted_34$1, [
+                      _cache[66] || (_cache[66] = vue.createElementVNode(
                         "label",
                         null,
                         "SearXNG 地址",
@@ -3324,7 +3207,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         "input",
                         {
                           type: "text",
-                          "onUpdate:modelValue": _cache[24] || (_cache[24] = ($event) => local.searxngUrl = $event),
+                          "onUpdate:modelValue": _cache[18] || (_cache[18] = ($event) => local.searxngUrl = $event),
                           placeholder: "留空使用 DuckDuckGo"
                         },
                         null,
@@ -3334,8 +3217,8 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         [vue.vModelText, local.searxngUrl]
                       ])
                     ]),
-                    vue.createElementVNode("div", _hoisted_41$1, [
-                      _cache[80] || (_cache[80] = vue.createElementVNode(
+                    vue.createElementVNode("div", _hoisted_35$1, [
+                      _cache[67] || (_cache[67] = vue.createElementVNode(
                         "label",
                         null,
                         "忽略目录",
@@ -3346,7 +3229,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         "input",
                         {
                           type: "text",
-                          "onUpdate:modelValue": _cache[25] || (_cache[25] = ($event) => local.ignoreDirsText = $event),
+                          "onUpdate:modelValue": _cache[19] || (_cache[19] = ($event) => local.ignoreDirsText = $event),
                           placeholder: "node_modules,.git,dist"
                         },
                         null,
@@ -3359,17 +3242,17 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                   ])
                 ])) : vue.createCommentVNode("v-if", true),
                 vue.createCommentVNode(" ═══ 编辑器 ═══ "),
-                activeTab.value === "editor" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_42$1, [
-                  vue.createElementVNode("div", _hoisted_43$1, [
-                    _cache[86] || (_cache[86] = vue.createElementVNode(
+                activeTab.value === "editor" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_36$1, [
+                  vue.createElementVNode("div", _hoisted_37$1, [
+                    _cache[73] || (_cache[73] = vue.createElementVNode(
                       "div",
                       { class: "group-title" },
                       "编辑器",
                       -1
                       /* CACHED */
                     )),
-                    vue.createElementVNode("div", _hoisted_44$1, [
-                      _cache[82] || (_cache[82] = vue.createElementVNode(
+                    vue.createElementVNode("div", _hoisted_38$1, [
+                      _cache[69] || (_cache[69] = vue.createElementVNode(
                         "label",
                         null,
                         "字号",
@@ -3380,7 +3263,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         "input",
                         {
                           type: "number",
-                          "onUpdate:modelValue": _cache[26] || (_cache[26] = ($event) => local.editorFontSize = $event),
+                          "onUpdate:modelValue": _cache[20] || (_cache[20] = ($event) => local.editorFontSize = $event),
                           min: "10",
                           max: "32"
                         },
@@ -3396,8 +3279,8 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         ]
                       ])
                     ]),
-                    vue.createElementVNode("div", _hoisted_45$1, [
-                      _cache[83] || (_cache[83] = vue.createElementVNode(
+                    vue.createElementVNode("div", _hoisted_39$1, [
+                      _cache[70] || (_cache[70] = vue.createElementVNode(
                         "label",
                         null,
                         "制表符大小",
@@ -3408,7 +3291,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         "input",
                         {
                           type: "number",
-                          "onUpdate:modelValue": _cache[27] || (_cache[27] = ($event) => local.tabSize = $event),
+                          "onUpdate:modelValue": _cache[21] || (_cache[21] = ($event) => local.tabSize = $event),
                           min: "1",
                           max: "8"
                         },
@@ -3424,8 +3307,8 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         ]
                       ])
                     ]),
-                    vue.createElementVNode("div", _hoisted_46$1, [
-                      _cache[84] || (_cache[84] = vue.createElementVNode(
+                    vue.createElementVNode("div", _hoisted_40$1, [
+                      _cache[71] || (_cache[71] = vue.createElementVNode(
                         "label",
                         null,
                         "自动换行",
@@ -3436,7 +3319,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         "input",
                         {
                           type: "checkbox",
-                          "onUpdate:modelValue": _cache[28] || (_cache[28] = ($event) => local.wordWrap = $event)
+                          "onUpdate:modelValue": _cache[22] || (_cache[22] = ($event) => local.wordWrap = $event)
                         },
                         null,
                         512
@@ -3445,8 +3328,8 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         [vue.vModelCheckbox, local.wordWrap]
                       ])
                     ]),
-                    vue.createElementVNode("div", _hoisted_47$1, [
-                      _cache[85] || (_cache[85] = vue.createElementVNode(
+                    vue.createElementVNode("div", _hoisted_41$1, [
+                      _cache[72] || (_cache[72] = vue.createElementVNode(
                         "label",
                         null,
                         "隐藏 Minimap",
@@ -3457,7 +3340,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         "input",
                         {
                           type: "checkbox",
-                          "onUpdate:modelValue": _cache[29] || (_cache[29] = ($event) => local.hideMinimap = $event)
+                          "onUpdate:modelValue": _cache[23] || (_cache[23] = ($event) => local.hideMinimap = $event)
                         },
                         null,
                         512
@@ -3467,16 +3350,16 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                       ])
                     ])
                   ]),
-                  vue.createElementVNode("div", _hoisted_48$1, [
-                    _cache[91] || (_cache[91] = vue.createElementVNode(
+                  vue.createElementVNode("div", _hoisted_42$1, [
+                    _cache[78] || (_cache[78] = vue.createElementVNode(
                       "div",
                       { class: "group-title" },
                       "字体风格",
                       -1
                       /* CACHED */
                     )),
-                    vue.createElementVNode("div", _hoisted_49$1, [
-                      _cache[87] || (_cache[87] = vue.createElementVNode(
+                    vue.createElementVNode("div", _hoisted_43$1, [
+                      _cache[74] || (_cache[74] = vue.createElementVNode(
                         "label",
                         null,
                         "编辑器字族",
@@ -3487,7 +3370,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         "input",
                         {
                           type: "text",
-                          "onUpdate:modelValue": _cache[30] || (_cache[30] = ($event) => local.fontFamily = $event),
+                          "onUpdate:modelValue": _cache[24] || (_cache[24] = ($event) => local.fontFamily = $event),
                           placeholder: "'Cascadia Code', monospace"
                         },
                         null,
@@ -3497,8 +3380,8 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         [vue.vModelText, local.fontFamily]
                       ])
                     ]),
-                    vue.createElementVNode("div", _hoisted_50$1, [
-                      _cache[88] || (_cache[88] = vue.createElementVNode(
+                    vue.createElementVNode("div", _hoisted_44$1, [
+                      _cache[75] || (_cache[75] = vue.createElementVNode(
                         "label",
                         null,
                         "加粗",
@@ -3509,7 +3392,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         "input",
                         {
                           type: "checkbox",
-                          "onUpdate:modelValue": _cache[31] || (_cache[31] = ($event) => local.editorFontBold = $event)
+                          "onUpdate:modelValue": _cache[25] || (_cache[25] = ($event) => local.editorFontBold = $event)
                         },
                         null,
                         512
@@ -3518,8 +3401,8 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         [vue.vModelCheckbox, local.editorFontBold]
                       ])
                     ]),
-                    vue.createElementVNode("div", _hoisted_51$1, [
-                      _cache[89] || (_cache[89] = vue.createElementVNode(
+                    vue.createElementVNode("div", _hoisted_45$1, [
+                      _cache[76] || (_cache[76] = vue.createElementVNode(
                         "label",
                         null,
                         "斜体",
@@ -3530,7 +3413,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         "input",
                         {
                           type: "checkbox",
-                          "onUpdate:modelValue": _cache[32] || (_cache[32] = ($event) => local.editorFontItalic = $event)
+                          "onUpdate:modelValue": _cache[26] || (_cache[26] = ($event) => local.editorFontItalic = $event)
                         },
                         null,
                         512
@@ -3539,8 +3422,8 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         [vue.vModelCheckbox, local.editorFontItalic]
                       ])
                     ]),
-                    vue.createElementVNode("div", _hoisted_52$1, [
-                      _cache[90] || (_cache[90] = vue.createElementVNode(
+                    vue.createElementVNode("div", _hoisted_46$1, [
+                      _cache[77] || (_cache[77] = vue.createElementVNode(
                         "label",
                         null,
                         "下划线",
@@ -3551,7 +3434,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         "input",
                         {
                           type: "checkbox",
-                          "onUpdate:modelValue": _cache[33] || (_cache[33] = ($event) => local.editorFontUnderline = $event)
+                          "onUpdate:modelValue": _cache[27] || (_cache[27] = ($event) => local.editorFontUnderline = $event)
                         },
                         null,
                         512
@@ -3561,16 +3444,16 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                       ])
                     ])
                   ]),
-                  vue.createElementVNode("div", _hoisted_53$1, [
-                    _cache[96] || (_cache[96] = vue.createElementVNode(
+                  vue.createElementVNode("div", _hoisted_47$1, [
+                    _cache[83] || (_cache[83] = vue.createElementVNode(
                       "div",
                       { class: "group-title" },
                       "界面字体",
                       -1
                       /* CACHED */
                     )),
-                    vue.createElementVNode("div", _hoisted_54$1, [
-                      _cache[92] || (_cache[92] = vue.createElementVNode(
+                    vue.createElementVNode("div", _hoisted_48$1, [
+                      _cache[79] || (_cache[79] = vue.createElementVNode(
                         "label",
                         null,
                         "UI 字族",
@@ -3581,7 +3464,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         "input",
                         {
                           type: "text",
-                          "onUpdate:modelValue": _cache[34] || (_cache[34] = ($event) => local.uiFontFamily = $event),
+                          "onUpdate:modelValue": _cache[28] || (_cache[28] = ($event) => local.uiFontFamily = $event),
                           placeholder: "Inter, sans-serif"
                         },
                         null,
@@ -3591,8 +3474,8 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         [vue.vModelText, local.uiFontFamily]
                       ])
                     ]),
-                    vue.createElementVNode("div", _hoisted_55$1, [
-                      _cache[93] || (_cache[93] = vue.createElementVNode(
+                    vue.createElementVNode("div", _hoisted_49$1, [
+                      _cache[80] || (_cache[80] = vue.createElementVNode(
                         "label",
                         null,
                         "加粗",
@@ -3603,7 +3486,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         "input",
                         {
                           type: "checkbox",
-                          "onUpdate:modelValue": _cache[35] || (_cache[35] = ($event) => local.uiFontBold = $event)
+                          "onUpdate:modelValue": _cache[29] || (_cache[29] = ($event) => local.uiFontBold = $event)
                         },
                         null,
                         512
@@ -3612,8 +3495,8 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         [vue.vModelCheckbox, local.uiFontBold]
                       ])
                     ]),
-                    vue.createElementVNode("div", _hoisted_56$1, [
-                      _cache[94] || (_cache[94] = vue.createElementVNode(
+                    vue.createElementVNode("div", _hoisted_50$1, [
+                      _cache[81] || (_cache[81] = vue.createElementVNode(
                         "label",
                         null,
                         "斜体",
@@ -3624,7 +3507,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         "input",
                         {
                           type: "checkbox",
-                          "onUpdate:modelValue": _cache[36] || (_cache[36] = ($event) => local.uiFontItalic = $event)
+                          "onUpdate:modelValue": _cache[30] || (_cache[30] = ($event) => local.uiFontItalic = $event)
                         },
                         null,
                         512
@@ -3633,8 +3516,8 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         [vue.vModelCheckbox, local.uiFontItalic]
                       ])
                     ]),
-                    vue.createElementVNode("div", _hoisted_57$1, [
-                      _cache[95] || (_cache[95] = vue.createElementVNode(
+                    vue.createElementVNode("div", _hoisted_51$1, [
+                      _cache[82] || (_cache[82] = vue.createElementVNode(
                         "label",
                         null,
                         "下划线",
@@ -3645,7 +3528,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         "input",
                         {
                           type: "checkbox",
-                          "onUpdate:modelValue": _cache[37] || (_cache[37] = ($event) => local.uiFontUnderline = $event)
+                          "onUpdate:modelValue": _cache[31] || (_cache[31] = ($event) => local.uiFontUnderline = $event)
                         },
                         null,
                         512
@@ -3657,17 +3540,17 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                   ])
                 ])) : vue.createCommentVNode("v-if", true),
                 vue.createCommentVNode(" ═══ 终端 ═══ "),
-                activeTab.value === "terminal" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_58$1, [
-                  vue.createElementVNode("div", _hoisted_59$1, [
-                    _cache[102] || (_cache[102] = vue.createElementVNode(
+                activeTab.value === "terminal" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_52$1, [
+                  vue.createElementVNode("div", _hoisted_53$1, [
+                    _cache[89] || (_cache[89] = vue.createElementVNode(
                       "div",
                       { class: "group-title" },
                       "终端",
                       -1
                       /* CACHED */
                     )),
-                    vue.createElementVNode("div", _hoisted_60$1, [
-                      _cache[98] || (_cache[98] = vue.createElementVNode(
+                    vue.createElementVNode("div", _hoisted_54$1, [
+                      _cache[85] || (_cache[85] = vue.createElementVNode(
                         "label",
                         null,
                         "默认 Shell",
@@ -3677,10 +3560,10 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                       vue.withDirectives(vue.createElementVNode(
                         "select",
                         {
-                          "onUpdate:modelValue": _cache[38] || (_cache[38] = ($event) => local.defaultShell = $event),
+                          "onUpdate:modelValue": _cache[32] || (_cache[32] = ($event) => local.defaultShell = $event),
                           style: { "flex": "1" }
                         },
-                        [..._cache[97] || (_cache[97] = [
+                        [..._cache[84] || (_cache[84] = [
                           vue.createElementVNode(
                             "option",
                             { value: "auto" },
@@ -3716,8 +3599,8 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         [vue.vModelSelect, local.defaultShell]
                       ])
                     ]),
-                    vue.createElementVNode("div", _hoisted_61$1, [
-                      _cache[99] || (_cache[99] = vue.createElementVNode(
+                    vue.createElementVNode("div", _hoisted_55$1, [
+                      _cache[86] || (_cache[86] = vue.createElementVNode(
                         "label",
                         null,
                         "终端字号",
@@ -3728,7 +3611,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         "input",
                         {
                           type: "number",
-                          "onUpdate:modelValue": _cache[39] || (_cache[39] = ($event) => local.termFontSize = $event),
+                          "onUpdate:modelValue": _cache[33] || (_cache[33] = ($event) => local.termFontSize = $event),
                           min: "10",
                           max: "24"
                         },
@@ -3744,8 +3627,8 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         ]
                       ])
                     ]),
-                    vue.createElementVNode("div", _hoisted_62$1, [
-                      _cache[101] || (_cache[101] = vue.createElementVNode(
+                    vue.createElementVNode("div", _hoisted_56$1, [
+                      _cache[88] || (_cache[88] = vue.createElementVNode(
                         "label",
                         null,
                         "编码",
@@ -3755,10 +3638,10 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                       vue.withDirectives(vue.createElementVNode(
                         "select",
                         {
-                          "onUpdate:modelValue": _cache[40] || (_cache[40] = ($event) => local.termEncoding = $event),
+                          "onUpdate:modelValue": _cache[34] || (_cache[34] = ($event) => local.termEncoding = $event),
                           style: { "flex": "1" }
                         },
-                        [..._cache[100] || (_cache[100] = [
+                        [..._cache[87] || (_cache[87] = [
                           vue.createElementVNode(
                             "option",
                             { value: "auto" },
@@ -3790,16 +3673,16 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                   ])
                 ])) : vue.createCommentVNode("v-if", true),
                 vue.createCommentVNode(" ═══ 外观 ═══ "),
-                activeTab.value === "appearance" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_63$1, [
-                  vue.createElementVNode("div", _hoisted_64$1, [
-                    _cache[103] || (_cache[103] = vue.createElementVNode(
+                activeTab.value === "appearance" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_57$1, [
+                  vue.createElementVNode("div", _hoisted_58$1, [
+                    _cache[90] || (_cache[90] = vue.createElementVNode(
                       "div",
                       { class: "group-title" },
                       "选择主题",
                       -1
                       /* CACHED */
                     )),
-                    vue.createElementVNode("div", _hoisted_65$1, [
+                    vue.createElementVNode("div", _hoisted_59$1, [
                       (vue.openBlock(), vue.createElementBlock(
                         vue.Fragment,
                         null,
@@ -3809,7 +3692,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                             class: vue.normalizeClass(["theme-card", { selected: local.theme === th.id }]),
                             onClick: ($event) => local.theme = th.id
                           }, [
-                            vue.createElementVNode("div", _hoisted_67$1, [
+                            vue.createElementVNode("div", _hoisted_61$1, [
                               vue.createElementVNode(
                                 "div",
                                 {
@@ -3820,7 +3703,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                                 4
                                 /* STYLE */
                               ),
-                              vue.createElementVNode("div", _hoisted_68$1, [
+                              vue.createElementVNode("div", _hoisted_62$1, [
                                 vue.createElementVNode(
                                   "div",
                                   {
@@ -3831,7 +3714,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                                   4
                                   /* STYLE */
                                 ),
-                                vue.createElementVNode("div", _hoisted_69$1, [
+                                vue.createElementVNode("div", _hoisted_63$1, [
                                   vue.createElementVNode(
                                     "div",
                                     {
@@ -3877,19 +3760,19 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                             ]),
                             vue.createElementVNode(
                               "div",
-                              _hoisted_70,
+                              _hoisted_64$1,
                               vue.toDisplayString(th.label),
                               1
                               /* TEXT */
                             ),
                             vue.createElementVNode(
                               "div",
-                              _hoisted_71,
+                              _hoisted_65$1,
                               vue.toDisplayString(th.fontDesc),
                               1
                               /* TEXT */
                             )
-                          ], 10, _hoisted_66$1);
+                          ], 10, _hoisted_60$1);
                         }),
                         64
                         /* STABLE_FRAGMENT */
@@ -3898,20 +3781,20 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                   ])
                 ])) : vue.createCommentVNode("v-if", true),
                 vue.createCommentVNode(" ═══ 指令 ═══ "),
-                activeTab.value === "instructions" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_72, [
-                  vue.createElementVNode("div", _hoisted_73, [
-                    _cache[104] || (_cache[104] = vue.createElementVNode(
+                activeTab.value === "instructions" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_66$1, [
+                  vue.createElementVNode("div", _hoisted_67$1, [
+                    _cache[91] || (_cache[91] = vue.createElementVNode(
                       "div",
                       { class: "group-title" },
                       "系统级指令（所有工作区共享）",
                       -1
                       /* CACHED */
                     )),
-                    vue.createElementVNode("div", _hoisted_74, [
+                    vue.createElementVNode("div", _hoisted_68$1, [
                       vue.withDirectives(vue.createElementVNode(
                         "textarea",
                         {
-                          "onUpdate:modelValue": _cache[41] || (_cache[41] = ($event) => local.systemInstructions = $event),
+                          "onUpdate:modelValue": _cache[35] || (_cache[35] = ($event) => local.systemInstructions = $event),
                           class: "inst-textarea",
                           placeholder: "输入系统级指令，Agent 在每个对话中都会遵守…",
                           rows: "6"
@@ -3924,17 +3807,17 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                       ])
                     ])
                   ]),
-                  vue.createElementVNode("div", _hoisted_75, [
-                    _cache[106] || (_cache[106] = vue.createElementVNode(
+                  vue.createElementVNode("div", _hoisted_69$1, [
+                    _cache[93] || (_cache[93] = vue.createElementVNode(
                       "div",
                       { class: "group-title" },
                       "项目级指令",
                       -1
                       /* CACHED */
                     )),
-                    vue.createElementVNode("div", _hoisted_76, [
-                      vue.createElementVNode("div", _hoisted_77, [
-                        _cache[105] || (_cache[105] = vue.createTextVNode(
+                    vue.createElementVNode("div", _hoisted_70, [
+                      vue.createElementVNode("div", _hoisted_71, [
+                        _cache[92] || (_cache[92] = vue.createTextVNode(
                           " 当前工作区：",
                           -1
                           /* CACHED */
@@ -3955,7 +3838,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                       vue.withDirectives(vue.createElementVNode(
                         "textarea",
                         {
-                          "onUpdate:modelValue": _cache[42] || (_cache[42] = ($event) => local.projectInstructions = $event),
+                          "onUpdate:modelValue": _cache[36] || (_cache[36] = ($event) => local.projectInstructions = $event),
                           class: "inst-textarea",
                           placeholder: "输入此工作区的项目级指令，存储在 .pair/instructions.md…",
                           rows: "6"
@@ -3970,17 +3853,17 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                   ])
                 ])) : vue.createCommentVNode("v-if", true),
                 vue.createCommentVNode(" ═══ 思想 ═══ "),
-                activeTab.value === "philosophy" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_78, [
-                  vue.createElementVNode("div", _hoisted_79, [
-                    _cache[108] || (_cache[108] = vue.createElementVNode(
+                activeTab.value === "philosophy" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_72, [
+                  vue.createElementVNode("div", _hoisted_73, [
+                    _cache[95] || (_cache[95] = vue.createElementVNode(
                       "div",
                       { class: "group-title" },
                       "思想注入（Philosophy）",
                       -1
                       /* CACHED */
                     )),
-                    vue.createElementVNode("div", _hoisted_80, [
-                      _cache[107] || (_cache[107] = vue.createElementVNode(
+                    vue.createElementVNode("div", _hoisted_74, [
+                      _cache[94] || (_cache[94] = vue.createElementVNode(
                         "label",
                         null,
                         "启用思想注入",
@@ -3991,7 +3874,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         "input",
                         {
                           type: "checkbox",
-                          "onUpdate:modelValue": _cache[43] || (_cache[43] = ($event) => local.philosophyEnabled = $event)
+                          "onUpdate:modelValue": _cache[37] || (_cache[37] = ($event) => local.philosophyEnabled = $event)
                         },
                         null,
                         512
@@ -4001,15 +3884,15 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                       ])
                     ])
                   ]),
-                  local.philosophyEnabled ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_81, [
-                    _cache[109] || (_cache[109] = vue.createElementVNode(
+                  local.philosophyEnabled ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_75, [
+                    _cache[96] || (_cache[96] = vue.createElementVNode(
                       "div",
                       { class: "group-title" },
                       "经典选择（选中后注入 Agent 系统提示）",
                       -1
                       /* CACHED */
                     )),
-                    vue.createElementVNode("div", _hoisted_82, [
+                    vue.createElementVNode("div", _hoisted_76, [
                       (vue.openBlock(true), vue.createElementBlock(
                         vue.Fragment,
                         null,
@@ -4021,8 +3904,8 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                             vue.withDirectives(vue.createElementVNode("input", {
                               type: "checkbox",
                               value: c.id,
-                              "onUpdate:modelValue": _cache[44] || (_cache[44] = ($event) => local.philosophySelected = $event)
-                            }, null, 8, _hoisted_83), [
+                              "onUpdate:modelValue": _cache[38] || (_cache[38] = ($event) => local.philosophySelected = $event)
+                            }, null, 8, _hoisted_77), [
                               [vue.vModelCheckbox, local.philosophySelected]
                             ]),
                             vue.createElementVNode(
@@ -4039,19 +3922,19 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                       ))
                     ])
                   ])) : vue.createCommentVNode("v-if", true),
-                  local.philosophyEnabled ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_84, [
-                    _cache[110] || (_cache[110] = vue.createElementVNode(
+                  local.philosophyEnabled ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_78, [
+                    _cache[97] || (_cache[97] = vue.createElementVNode(
                       "div",
                       { class: "group-title" },
                       "主 Agent 哲学",
                       -1
                       /* CACHED */
                     )),
-                    vue.createElementVNode("div", _hoisted_85, [
+                    vue.createElementVNode("div", _hoisted_79, [
                       vue.withDirectives(vue.createElementVNode(
                         "textarea",
                         {
-                          "onUpdate:modelValue": _cache[45] || (_cache[45] = ($event) => local.mainAgentPhilosophy = $event),
+                          "onUpdate:modelValue": _cache[39] || (_cache[39] = ($event) => local.mainAgentPhilosophy = $event),
                           class: "inst-textarea",
                           placeholder: "为主 Agent 定制的专属哲学指引（可选）…",
                           rows: "3"
@@ -4064,8 +3947,8 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                       ])
                     ])
                   ])) : vue.createCommentVNode("v-if", true),
-                  local.philosophyEnabled ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_86, [
-                    _cache[111] || (_cache[111] = vue.createElementVNode(
+                  local.philosophyEnabled ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_80, [
+                    _cache[98] || (_cache[98] = vue.createElementVNode(
                       "div",
                       { class: "group-title" },
                       "子 Agent 角色哲学",
@@ -4083,7 +3966,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         }, [
                           vue.createElementVNode(
                             "div",
-                            _hoisted_87,
+                            _hoisted_81,
                             vue.toDisplayString(role.name),
                             1
                             /* TEXT */
@@ -4094,14 +3977,137 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                             class: "inst-textarea",
                             rows: "2",
                             placeholder: role.name + "的哲学指引（可选）"
-                          }, null, 40, _hoisted_88)
+                          }, null, 40, _hoisted_82)
                         ]);
                       }),
                       128
                       /* KEYED_FRAGMENT */
                     ))
                   ])) : vue.createCommentVNode("v-if", true)
-                ])) : vue.createCommentVNode("v-if", true)
+                ])) : vue.createCommentVNode("v-if", true),
+                vue.createCommentVNode(" ═══ 插件配置（ctx.registerSettings 动态注册）═══ "),
+                activeTab.value === "p-" + _ctx.ptab.key ? (vue.openBlock(true), vue.createElementBlock(
+                  vue.Fragment,
+                  { key: 7 },
+                  vue.renderList(pluginTabs.value, (ptab) => {
+                    return vue.openBlock(), vue.createElementBlock("div", {
+                      key: "p-" + ptab.key
+                    }, [
+                      (vue.openBlock(true), vue.createElementBlock(
+                        vue.Fragment,
+                        null,
+                        vue.renderList(ptab.groups, (grp) => {
+                          return vue.openBlock(), vue.createElementBlock(
+                            "div",
+                            {
+                              key: grp.title || "__main",
+                              class: "setting-group",
+                              style: vue.normalizeStyle(grp.title ? "" : "margin-top:0")
+                            },
+                            [
+                              grp.title ? (vue.openBlock(), vue.createElementBlock(
+                                "div",
+                                _hoisted_83,
+                                vue.toDisplayString(grp.title),
+                                1
+                                /* TEXT */
+                              )) : vue.createCommentVNode("v-if", true),
+                              (vue.openBlock(true), vue.createElementBlock(
+                                vue.Fragment,
+                                null,
+                                vue.renderList(grp.fields, (f) => {
+                                  return vue.openBlock(), vue.createElementBlock("div", {
+                                    key: f.name,
+                                    class: "setting-row"
+                                  }, [
+                                    vue.createElementVNode(
+                                      "label",
+                                      null,
+                                      vue.toDisplayString(f.label),
+                                      1
+                                      /* TEXT */
+                                    ),
+                                    f.type === "text" || f.type === "password" ? vue.withDirectives((vue.openBlock(), vue.createElementBlock("input", {
+                                      key: 0,
+                                      type: f.type === "password" ? "password" : "text",
+                                      "onUpdate:modelValue": ($event) => pluginValues[ptab.key][f.name] = $event
+                                    }, null, 8, _hoisted_84)), [
+                                      [vue.vModelDynamic, pluginValues[ptab.key][f.name]]
+                                    ]) : f.type === "number" ? vue.withDirectives((vue.openBlock(), vue.createElementBlock("input", {
+                                      key: 1,
+                                      type: "number",
+                                      "onUpdate:modelValue": ($event) => pluginValues[ptab.key][f.name] = $event
+                                    }, null, 8, _hoisted_85)), [
+                                      [
+                                        vue.vModelText,
+                                        pluginValues[ptab.key][f.name],
+                                        void 0,
+                                        { number: true }
+                                      ]
+                                    ]) : f.type === "checkbox" ? vue.withDirectives((vue.openBlock(), vue.createElementBlock("input", {
+                                      key: 2,
+                                      type: "checkbox",
+                                      "onUpdate:modelValue": ($event) => pluginValues[ptab.key][f.name] = $event
+                                    }, null, 8, _hoisted_86)), [
+                                      [vue.vModelCheckbox, pluginValues[ptab.key][f.name]]
+                                    ]) : f.type === "select" ? vue.withDirectives((vue.openBlock(), vue.createElementBlock("select", {
+                                      key: 3,
+                                      "onUpdate:modelValue": ($event) => pluginValues[ptab.key][f.name] = $event,
+                                      style: { "flex": "1" }
+                                    }, [
+                                      (vue.openBlock(true), vue.createElementBlock(
+                                        vue.Fragment,
+                                        null,
+                                        vue.renderList(f.options, (o) => {
+                                          return vue.openBlock(), vue.createElementBlock("option", {
+                                            key: o,
+                                            value: o
+                                          }, vue.toDisplayString(o), 9, _hoisted_88);
+                                        }),
+                                        128
+                                        /* KEYED_FRAGMENT */
+                                      ))
+                                    ], 8, _hoisted_87)), [
+                                      [vue.vModelSelect, pluginValues[ptab.key][f.name]]
+                                    ]) : f.type === "textarea" ? vue.withDirectives((vue.openBlock(), vue.createElementBlock("textarea", {
+                                      key: 4,
+                                      "onUpdate:modelValue": ($event) => pluginValues[ptab.key][f.name] = $event,
+                                      class: "inst-textarea",
+                                      rows: "3"
+                                    }, null, 8, _hoisted_89)), [
+                                      [vue.vModelText, pluginValues[ptab.key][f.name]]
+                                    ]) : vue.withDirectives((vue.openBlock(), vue.createElementBlock("input", {
+                                      key: 5,
+                                      type: "text",
+                                      "onUpdate:modelValue": ($event) => pluginValues[ptab.key][f.name] = $event
+                                    }, null, 8, _hoisted_90)), [
+                                      [vue.vModelText, pluginValues[ptab.key][f.name]]
+                                    ]),
+                                    f.hint ? (vue.openBlock(), vue.createElementBlock(
+                                      "span",
+                                      _hoisted_91,
+                                      vue.toDisplayString(f.hint),
+                                      1
+                                      /* TEXT */
+                                    )) : vue.createCommentVNode("v-if", true)
+                                  ]);
+                                }),
+                                128
+                                /* KEYED_FRAGMENT */
+                              ))
+                            ],
+                            4
+                            /* STYLE */
+                          );
+                        }),
+                        128
+                        /* KEYED_FRAGMENT */
+                      ))
+                    ]);
+                  }),
+                  128
+                  /* KEYED_FRAGMENT */
+                )) : vue.createCommentVNode("v-if", true)
               ])
             ]),
             vue.createElementVNode("div", { class: "modal-footer" }, [
@@ -4119,7 +4125,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       };
     }
   };
-  const SettingsModal = /* @__PURE__ */ _export_sfc(_sfc_main$7, [["__scopeId", "data-v-4bc72875"]]);
+  const SettingsModal = /* @__PURE__ */ _export_sfc(_sfc_main$7, [["__scopeId", "data-v-5e5cb9f6"]]);
   const _hoisted_1$5 = { class: "modal-content sys-modal" };
   const _hoisted_2$5 = { class: "modal-header" };
   const _hoisted_3$5 = { class: "modal-body" };

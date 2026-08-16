@@ -335,6 +335,14 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 	}
 	loop := loopHandle.Loop()
 
+	// ★ 2026-08-16：自动提交不再占设置项——绑定工具集勾选状态。
+	//   generate_commit_message（提交协议工具）在工具集中勾选=自动提交可用，
+	//   取消勾选（agent 不可调用该工具）即禁用自动提交。
+	//   （工具被禁用时其 Enabled=false；此处按会话级 Registry 实际状态判定。）
+	if loop.Registry != nil {
+		opts.AutoCommit = loop.Registry.IsEnabled("generate_commit_message")
+	}
+
 	// ★ 恢复上一轮的执行日志（跨轮感知：无论自主还是非自主，新 Loop 都能知道之前每轮的分析/操作）
 	if opts.WorkspaceRoot != "" {
 		if savedLog := LoadExecutionLog(opts.WorkspaceRoot, convID); savedLog != nil && len(savedLog.Entries) > 0 {

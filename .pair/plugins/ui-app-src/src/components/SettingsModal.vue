@@ -96,18 +96,6 @@
                 <input type="number" v-model.number="local.maxIterations" min="1" max="200" />
               </div>
               <div class="setting-row">
-                <label>最大并行 Agent 数</label>
-                <input type="number" v-model.number="local.maxParallel" min="1" max="20" />
-              </div>
-              <div class="setting-row">
-                <label>审核重试次数</label>
-                <input type="number" v-model.number="local.reviewRetries" min="0" max="20" />
-              </div>
-              <div class="setting-row">
-                <label>破坏性操作需确认</label>
-                <input type="checkbox" v-model="local.requireHumanApprovalForDestructive" />
-              </div>
-              <div class="setting-row">
                 <label>审核模式</label>
                 <select v-model="local.reviewMode" style="flex:1">
                   <option value="auto">AI审核（自动审批写操作）</option>
@@ -122,19 +110,6 @@
               <div class="setting-row">
                 <label>自主模式</label>
                 <input type="checkbox" v-model="local.autonomous" />
-              </div>
-              <div class="setting-row">
-                <label>AI 审核（规划/审核 Agent）</label>
-                <input type="checkbox" v-model="local.aiReview" />
-              </div>
-              <div class="setting-row">
-                <label>Lua 工具</label>
-                <input type="checkbox" v-model="local.luaTools" />
-              </div>
-              <div class="setting-row">
-                <label>自动 Git 提交</label>
-                <input type="checkbox" v-model="local.autoCommit" />
-                <span class="setting-hint">任务完成时自动 git add + commit</span>
               </div>
             </div>
             <div class="setting-group" style="margin-top:12px">
@@ -325,6 +300,27 @@
             </div>
           </div>
 
+          <!-- ═══ 插件配置（ctx.registerSettings 动态注册）═══ -->
+          <div v-for="ptab in pluginTabs" :key="'p-' + ptab.key" v-if="activeTab === 'p-' + ptab.key">
+            <div v-for="grp in ptab.groups" :key="grp.title || '__main'" class="setting-group" :style="grp.title ? '' : 'margin-top:0'">
+              <div v-if="grp.title" class="group-title">{{ grp.title }}</div>
+              <div v-for="f in grp.fields" :key="f.name" class="setting-row">
+                <label>{{ f.label }}</label>
+                <input v-if="f.type === 'text' || f.type === 'password'" :type="f.type === 'password' ? 'password' : 'text'"
+                       v-model="pluginValues[ptab.key][f.name]" />
+                <input v-else-if="f.type === 'number'" type="number" v-model.number="pluginValues[ptab.key][f.name]" />
+                <input v-else-if="f.type === 'checkbox'" type="checkbox" v-model="pluginValues[ptab.key][f.name]" />
+                <select v-else-if="f.type === 'select'" v-model="pluginValues[ptab.key][f.name]" style="flex:1">
+                  <option v-for="o in f.options" :key="o" :value="o">{{ o }}</option>
+                </select>
+                <textarea v-else-if="f.type === 'textarea'" v-model="pluginValues[ptab.key][f.name]"
+                          class="inst-textarea" rows="3"></textarea>
+                <input v-else type="text" v-model="pluginValues[ptab.key][f.name]" />
+                <span v-if="f.hint" class="setting-hint">{{ f.hint }}</span>
+              </div>
+            </div>
+          </div>
+
         </div>
       </div>
       <div class="modal-footer">
@@ -345,7 +341,15 @@ import { applyTheme } from '../ui-state.js'
 const emit = defineEmits(['close'])
 const activeTab = ref('ai')
 
-const tabs = [
+// 插件配置 tab（ctx.registerSettings 动态注册，来自 GET /api/settings.schemas）
+const pluginTabs = computed(() => (state.pluginSchemas || []).map(sch => ({
+  key: sch.key,
+  title: sch.title || sch.key,
+  // 按 group 分组：Group 空 → 无标题主组
+  groups: groupFields(sch.fields || []),
+})))
+// tabs = 内置 + 插件（前端固定顺序，插件追加尾部）
+const tabs = computed(() => [
   { id: 'ai', label: 'AI' },
   { id: 'agent', label: 'Agent' },
   { id: 'editor', label: '编辑器' },
@@ -353,7 +357,30 @@ const tabs = [
   { id: 'appearance', label: '外观' },
   { id: 'instructions', label: '指令' },
   { id: 'philosophy', label: '思想' },
-]
+  ...pluginTabs.value.map(p => ({ id: 'p-' + p.key, label: p.title })),
+])
+
+// 插件配置值（按命名空间隔离；loadSettings 时初始化）
+const pluginValues = reactive({})
+function collectPluginValues() {
+  const out = {}
+  for (const key of Object.keys(pluginValues)) {
+    if (pluginValues[key] && typeof pluginValues[key] === 'object') {
+      out[key] = { ...pluginValues[key] }
+    }
+  }
+  return out
+}
+function groupFields(fields) {
+  const groups = []
+  const map = {}
+  for (const f of fields) {
+    const g = f.group || ''
+    if (!map[g]) { map[g] = []; groups.push({ title: g, fields: map[g] }) }
+    map[g].push(f)
+  }
+  return groups
+}
 
 const providers = ref([])
 const modelsMap = ref({})
@@ -377,15 +404,9 @@ const local = reactive({
   reviewModelCustom: '',
   // Agent
   maxIterations: 50,
-  maxParallel: 3,
-  reviewRetries: 3,
-  requireHumanApprovalForDestructive: true,
   reviewMode: 'auto',
   autoIterateOnRejection: false,
   autonomous: false,
-  aiReview: false,
-  luaTools: true,
-  autoCommit: true,
   searxngUrl: '',
   ignoreDirsText: '',
   // 编辑器
@@ -561,15 +582,9 @@ function loadSettings() {
   local.thinkingMode = s.thinkingMode || 'thinking'
   // Agent
   local.maxIterations = s.maxIterations || 50
-  local.maxParallel = s.maxParallel || 3
-  local.reviewRetries = s.reviewRetries || 3
-  local.requireHumanApprovalForDestructive = s.requireHumanApprovalForDestructive !== false
   local.reviewMode = s.reviewMode || 'auto'
   local.autoIterateOnRejection = !!s.autoIterateOnRejection
   local.autonomous = !!s.autonomous
-  local.aiReview = !!s.aiReview
-  local.luaTools = s.luaTools !== false
-  local.autoCommit = s.autoCommit !== false
   local.searxngUrl = s.searxngUrl || ''
   local.ignoreDirsText = (s.ignoreDirs || []).join(', ')
   // 编辑器
@@ -593,6 +608,16 @@ function loadSettings() {
   local.termEncoding = s.termEncoding || 'auto'
   // MCP
   local.autoConnectMCP = s.autoConnectMCP !== false
+
+  // 插件配置值：schema 默认值合并已存值（pluginSettings[key]）
+  for (const sch of (state.pluginSchemas || [])) {
+    const saved = (s.pluginSettings && s.pluginSettings[sch.key]) || {}
+    const defs = {}
+    for (const f of (sch.fields || [])) {
+      if (f.default !== undefined && f.default !== null) defs[f.name] = f.default
+    }
+    pluginValues[sch.key] = { ...defs, ...saved }
+  }
 }
 
 // ─── 初始化 ───
@@ -636,16 +661,9 @@ const saveSettings = async () => {
       thinkingMode: local.thinkingMode,
       // Agent
       maxIterations: local.maxIterations,
-      maxParallel: local.maxParallel,
-      maxReviewRetries: local.reviewRetries,
-      reviewRetries: local.reviewRetries,
-      requireHumanApprovalForDestructive: local.requireHumanApprovalForDestructive,
       reviewMode: local.reviewMode,
       autoIterateOnRejection: local.autoIterateOnRejection,
       autonomous: local.autonomous,
-      aiReview: local.aiReview,
-      luaTools: local.luaTools,
-      autoCommit: local.autoCommit,
       searxngUrl: local.searxngUrl,
       ignoreDirs: local.ignoreDirsText.split(',').map(s => s.trim()).filter(Boolean),
       // 编辑器
@@ -669,6 +687,8 @@ const saveSettings = async () => {
       termEncoding: local.termEncoding,
       // MCP
       autoConnectMCP: local.autoConnectMCP,
+      // 插件配置（ctx.registerSettings 命名空间，按 key 隔离存储）
+      pluginSettings: { ...(state.settings.pluginSettings || {}), ...collectPluginValues() },
     }
     await api.apiPut('/settings', settings)
     state.settings = settings

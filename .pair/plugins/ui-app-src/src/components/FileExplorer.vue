@@ -368,7 +368,8 @@ async function createWorkspace() {
 async function saveWsList() {
   // 同步工作区列表到后端 settings.recentProjects
   try {
-    const settings = await api.apiGet('/settings')
+    const resp = await api.apiGet('/settings')
+    const settings = resp.settings || resp
     settings.recentProjects = (state.wsList || []).slice(0, 20).map(w => w.path).filter(Boolean)
     await api.apiPut('/settings', settings)
   } catch (e) {

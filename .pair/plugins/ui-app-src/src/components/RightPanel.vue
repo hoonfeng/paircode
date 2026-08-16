@@ -196,7 +196,6 @@
               <div class="ibb-btns">
                 <span :class="['obtn', reviewBtnClass]" @click="cycleReviewMode" :title="reviewBtnTitle"><SvgIcon :name="reviewIconName" :size="12" /> {{ reviewBtnLabel }}</span>
                 <span :class="['obtn', { active: autoCollapse }]" @click="toggleAuto('autoCollapse')" title="自动折叠：新消息发出时折叠旧输出，显示完成摘要"><SvgIcon name="list" :size="12" /> 折叠</span>
-                <span :class="['obtn', { active: autoCommit }]" @click="toggleAuto('autoCommit')" title="自动 Git 提交：任务完成时自动 git add + commit"><SvgIcon name="git-commit" :size="12" /> 提交</span>
                 <span class="obtn-sep"></span>
                 <span :class="['obtn', 'obtn-agent', { active: autonomous }]" @click="toggleAuto('autonomous')" title="自主模式：开启=连续执行全部计划步骤，关闭=单次回复"><SvgIcon name="cycle" :size="12" color="#d4a74e" /> 自主</span>
               </div>
@@ -290,7 +289,6 @@ function cycleReviewMode() {
 const autoIterate = ref(false)
 const autoCollapse = ref(localStorage.getItem('autoCollapse') !== 'false')
 const autonomous = ref(false)
-const autoCommit = ref(true)
 const pendingAttachment = ref(null)
 
 // nudge 提示条（从全局 state.nudgeByConv 读取，仅当前对话）
@@ -1185,9 +1183,8 @@ const toggleAuto = async (field) => {
   state.settings[field] = newVal
   // 同步 local ref（浅 watch 不触发，需要手动同步）
   if (field === 'autonomous') autonomous.value = newVal
-  else if (field === 'autoCommit') autoCommit.value = newVal
   else if (field === 'autoCollapse') { autoCollapse.value = newVal; localStorage.setItem('autoCollapse', newVal) }
-  try { await api.apiPut('/settings?convId=' + encodeURIComponent(state.currentConvId), state.settings) } catch { state.settings[field] = oldVal; if (field === 'autonomous') autonomous.value = oldVal; else if (field === 'autoCommit') autoCommit.value = oldVal; else if (field === 'autoCollapse') autoCollapse.value = oldVal }
+  try { await api.apiPut('/settings?convId=' + encodeURIComponent(state.currentConvId), state.settings) } catch { state.settings[field] = oldVal; if (field === 'autonomous') autonomous.value = oldVal; else if (field === 'autoCollapse') autoCollapse.value = oldVal }
 }
 
 const autoNameConv = async (convId, content) => {
@@ -1391,7 +1388,7 @@ watch(() => state.currentConvId, (id, oldId) => {
     }
   })
 
-watch(() => state.settings, (s) => { if (s) { autoIterate.value = !!s.autoIterateOnRejection; autonomous.value = !!s.autonomous; autoCollapse.value = s.autoCollapse !== undefined ? !!s.autoCollapse : true; autoCommit.value = s.autoCommit !== false; } }, { immediate: true })
+watch(() => state.settings, (s) => { if (s) { autoIterate.value = !!s.autoIterateOnRejection; autonomous.value = !!s.autonomous; autoCollapse.value = s.autoCollapse !== undefined ? !!s.autoCollapse : true; } }, { immediate: true })
 
 // ★ 从工作区配置加载审核模式（黑白名单配置已由插件面板/工具集管理取代，不再加载）
 async function loadWorkspaceReviewConfig() {

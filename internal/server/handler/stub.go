@@ -71,7 +71,6 @@ func HandleChatSend(w http.ResponseWriter, r *http.Request) {
 			opts.ReviewProvider = &agent.OpenAIProvider{BaseURL: base, APIKey: key, Model: pm, Temperature: -1, ThinkingMode: "non-thinking"}
 		}
 	}
-	opts.AutoCommit = core.Settings.AutoCommit
 
 	setupCtx, setupCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer setupCancel()

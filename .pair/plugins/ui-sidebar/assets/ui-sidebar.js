@@ -3638,7 +3638,8 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
       }
       async function saveWsList() {
         try {
-          const settings = await api.apiGet("/settings");
+          const resp = await api.apiGet("/settings");
+          const settings = resp.settings || resp;
           settings.recentProjects = (uiState_js.state.wsList || []).slice(0, 20).map((w) => w.path).filter(Boolean);
           await api.apiPut("/settings", settings);
         } catch (e) {
@@ -4458,7 +4459,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
       };
     }
   };
-  const FileExplorer = /* @__PURE__ */ _export_sfc(_sfc_main$5, [["__scopeId", "data-v-6dfdb6d2"]]);
+  const FileExplorer = /* @__PURE__ */ _export_sfc(_sfc_main$5, [["__scopeId", "data-v-9000cc94"]]);
   const _hoisted_1$4 = { class: "search-panel" };
   const _hoisted_2$4 = { class: "sp-mode-bar" };
   const _hoisted_3$4 = { class: "sp-field" };
