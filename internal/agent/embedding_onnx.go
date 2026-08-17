@@ -41,6 +41,26 @@ func findModelDir(root string) string {
 	return ""
 }
 
+// findOrtDll 查找 onnxruntime.dll：发布版 bin/config/onnx/ > 项目 bin/config/onnx/ > exe 同目录 > 项目根。
+func findOrtDll(root string) string {
+	candidates := []string{}
+	if exe, err := os.Executable(); err == nil {
+		exeDir := filepath.Dir(exe)
+		candidates = append(candidates,
+			filepath.Join(exeDir, "bin", "config", "onnx", "onnxruntime.dll"),
+			filepath.Join(exeDir, "onnxruntime.dll"))
+	}
+	candidates = append(candidates,
+		filepath.Join(root, "bin", "config", "onnx", "onnxruntime.dll"),
+		filepath.Join(root, "onnxruntime.dll"))
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			return c
+		}
+	}
+	return ""
+}
+
 // NewONNXBackend 创建 ONNX 嵌入后端（便携 models/ 优先）。
 func NewONNXBackend(root string) (*ONNXBackend, error) {
 	embedDir := findModelDir(root)
@@ -50,6 +70,10 @@ func NewONNXBackend(root string) (*ONNXBackend, error) {
 	tokenizer, err := LoadBERTTokenizer(embedDir)
 	if err != nil {
 		return nil, fmt.Errorf("分词器失败: %w", err)
+	}
+	// 定位 onnxruntime.dll（发布版 bin/config/onnx/、开发版 bin/config/onnx/、exe 同目录兜底）
+	if p := findOrtDll(root); p != "" {
+		onnxruntime_go.SetSharedLibraryPath(p)
 	}
 	if err := onnxruntime_go.InitializeEnvironment(); err != nil {
 		return nil, fmt.Errorf("ONNX Runtime 初始化失败: %w", err)
