@@ -142,10 +142,11 @@ func RegisterManagementTools(r *Registry, root string) {
 
 	// ── 市场 ──
 	r.Register(&Tool{
-		Name: "marketplace_search", Description: "在市场精选注册表里检索可安装的服务器与技能。",
+		Name: "marketplace_search",
+		Description: "在市场检索可安装的 MCP 服务器与技能（★ 无预设数据——必须给 query 关键词，实时远程搜索 npm/GitHub 返回结果）。",
 		ReadOnly: true,
 		Parameters: mObjSchema(map[string]any{
-			"query": mStrProp("关键词"), "kind": mStrProp("mcp/skill/all"),
+			"query": mStrProp("关键词（必填；无关键词返回空）"), "kind": mStrProp("mcp/skill/plugin/all"),
 		}),
 		Handler: func(_ context.Context, args map[string]any) (string, error) {
 			return marketSearchText(mArgStr(args, "query"), mArgStr(args, "kind")), nil
@@ -286,7 +287,10 @@ func mcpAddTool(args map[string]any) (string, error) {
 func marketSearchText(query, kind string) string {
 	results := MarketSearch(query, kind)
 	if len(results) == 0 {
-		return "未找到匹配的市场条目。用 marketplace_install <id> 安装。"
+		if strings.TrimSpace(query) == "" {
+			return "市场无预设数据——请提供搜索关键词（如「github」）实时检索 npm/GitHub。"
+		}
+		return "未找到匹配的市场条目（远程实时搜索）。用 marketplace_install <id> 安装。"
 	}
 	var b strings.Builder
 	for _, e := range results {

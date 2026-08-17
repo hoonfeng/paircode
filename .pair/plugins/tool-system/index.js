@@ -163,11 +163,11 @@ const tools = [
   },
   {
     "name": "marketplace_search",
-    "description": "在市场精选注册表里检索可安装的服务器与技能。",
+    "description": "在市场检索可安装的 MCP 服务器与技能（无预设数据——必须给 query 关键词，实时远程搜索 npm/GitHub）。",
     "parameters": {
       "properties": {
         "kind": {
-          "description": "mcp/skill/all",
+          "description": "mcp/skill/plugin/all",
           "type": "string"
         },
         "query": {
