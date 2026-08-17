@@ -1,0 +1,9 @@
+{
+  "name": "ui-quick-exec",
+  "purpose": "快速执行菜单（titlebar-right 槽位）：按工作区配置 .pair/quick-exec.json 生成命令菜单，点击即执行；配置弹窗增删改查命令列表。纯 UI 插件，命令不对 agent 暴露。",
+  "version": "1.0.0",
+  "scope": "global",
+  "type": "plugin",
+  "main": "index.js",
+  "client": "client.js"
+}
