@@ -533,8 +533,22 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 		if o := call.Argument(2); !goja.IsUndefined(o) && !goja.IsNull(o) {
 			if om, ok := o.Export().(map[string]any); ok {
 				if t, ok := om["timeout"]; ok {
-					if ms, ok := t.(float64); ok && ms > 0 {
-						timeout = time.Duration(ms) * time.Millisecond
+					// ★ 2026-08-17 修复：goja 对 JS 整数字面量 Export 为 int64（非 float64），
+					// 原仅断言 float64 会让 {timeout: 86400000} 等整数超时静默失效 →
+					// 回退 60s 默认，长命令（>60s）被外层提前 kill（表现为任务被中断）。
+					var msNum float64
+					switch n := t.(type) {
+					case float64:
+						msNum = n
+					case int64:
+						msNum = float64(n)
+					case int:
+						msNum = float64(n)
+					case json.Number:
+						msNum, _ = n.Float64()
+					}
+					if msNum > 0 {
+						timeout = time.Duration(msNum) * time.Millisecond
 					}
 				}
 				// opts.bin 指定二进制文件名（相对插件目录 bin/，缺省=插件名）。
@@ -589,6 +603,13 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 		if !resp.OK {
 			panic(vm.NewGoError(fmt.Errorf("ctx.binary.%s: %s", tool, resp.Error)))
 		}
+		// ★ 2026-08-17 修复：外部进程执行可远长于 jsHandlerTimeout（默认 10s）——
+		// runJSWithTimeout 的 timer 触发 vm.Interrupt 只置 flag，JS 阻塞在本原生调用
+		// 期间不生效；命令（如打包）在 Go 侧成功跑完后，JS 恢复执行才撞上 flag，
+		// 被误判「handler 执行超时（疑似死循环）」（表现为任务成功却报超时失败）。
+		// 此处 ClearInterrupt：进程执行等待不计入 JS 超时检测；纯 JS 死循环不经过
+		// 本调用，仍会被 Interrupt 在指令边界正常中断。
+		vm.ClearInterrupt()
 		return vm.ToValue(map[string]any{"text": resp.Text})
 	})
 	ctxObj.Set("binary", binaryObj)
