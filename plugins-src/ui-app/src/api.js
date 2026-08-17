@@ -343,9 +343,15 @@ async function listPlugins() {
 // builtinPlugins 内置工具包（被过滤工具按内置插件组管理——插件面板开关）：
 // GET 返回 {groups, joined, toolTotal, enabledTotal}；
 // POST 切换分组 {group, enabled} 或强制全部 {forceAll:true}。
-async function builtinPlugins(data) {
-  if (data) return apiPost('/plugins/builtin', data)
-  return apiGet('/plugins/builtin')
+async function builtinPlugins(data, workspaceRoot) {
+  // ★ workspaceRoot：目标工作区（工作区隔离——管理弹窗按当前工作区操作，缺省主工作区）
+  const ws = workspaceRoot || ''
+  if (data) {
+    const body = { ...data }
+    if (ws) body.workspaceRoot = ws
+    return apiPost('/plugins/builtin', body)
+  }
+  return apiGet('/plugins/builtin', ws ? { workspaceRoot: ws } : undefined)
 }
 
 // pluginToolToggle 通用工具级开关（任意已注册工具，agent 可见性）：{tool, enabled}。
@@ -398,8 +404,12 @@ async function pluginClientFailure(plugin, phase, message) {
 // ─── 工具集（手动管理：插件化思路）──────────────────────
 
 // getToolsets 工具集列表；传 name 返回该工具集完整详情（含插件与 disabledTools）。
-async function getToolsets(name) {
-  return name ? apiGet('/toolsets', { name }) : apiGet('/toolsets')
+async function getToolsets(name, workspaceRoot) {
+  const ws = workspaceRoot || ''
+  const params = {}
+  if (name) params.name = name
+  if (ws) params.workspaceRoot = ws
+  return apiGet('/toolsets', params)
 }
 
 // toolsetEdit 手动编辑工具集：{name, scope?, action, plugin_name?, from_toolset?, tool?, plugin_json?, overwrite?}

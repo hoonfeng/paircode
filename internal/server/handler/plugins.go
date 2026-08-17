@@ -442,7 +442,7 @@ func HandleBuiltinPlugins(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, "插件系统未初始化")
 		return
 	}
-	root := workspaceRoot()
+	root := pickWorkspaceRoot(r, "")
 	if root == "" {
 		jsonErr(w, "工作区未就绪")
 		return
@@ -460,14 +460,18 @@ func HandleBuiltinPlugins(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Group    string `json:"group"`
-		Tool     string `json:"tool"`
-		Enabled  *bool  `json:"enabled"`
-		ForceAll bool   `json:"forceAll"`
+		Group         string `json:"group"`
+		Tool          string `json:"tool"`
+		Enabled       *bool  `json:"enabled"`
+		ForceAll      bool   `json:"forceAll"`
+		WorkspaceRoot string `json:"workspaceRoot"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonErr(w, "请求体解析失败: "+err.Error())
 		return
+	}
+	if req.WorkspaceRoot != "" {
+		root = req.WorkspaceRoot
 	}
 	if req.ForceAll {
 		msg, err := agent.EnableAllBuiltinPublic(ph, root)

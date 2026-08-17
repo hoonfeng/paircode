@@ -765,7 +765,17 @@ func toolsetEdit(ph *PluginHost, root string, args map[string]any) (string, erro
 	}
 	ts, err := loadToolset(root, toolsetProject, name)
 	if err != nil {
-		return "", err
+		// ★ 2026-08-17：工作区无工具集时（新项目/参考目录等），编辑 default 前自动
+		//   生成基础工具集——保证「加入」可用（工作区隔离：写入本工作区 .pair/toolsets/，
+		//   不影响其他工作区）。
+		if name == "default" {
+			if e := ensureDefaultWorkspaceToolset(root); e == nil {
+				ts, err = loadToolset(root, toolsetProject, name)
+			}
+		}
+		if err != nil {
+			return "", err
+		}
 	}
 	resolved := toolsetProject
 	switch action {

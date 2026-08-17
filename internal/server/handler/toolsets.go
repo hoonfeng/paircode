@@ -31,10 +31,26 @@ func workspaceRoot() string {
 	return ""
 }
 
+// pickWorkspaceRoot 解析本次请求的目标工作区（★ 工作区隔离：管理弹窗/工具集
+// 操作按「请求指定的工作区」读写对应 .pair/toolsets/，互不干扰）。
+// 优先级：body.workspaceRoot > query.workspaceRoot > query.workspace > 主工作区。
+func pickWorkspaceRoot(r *http.Request, bodyWorkspace string) string {
+	if bodyWorkspace != "" {
+		return bodyWorkspace
+	}
+	if ws := r.URL.Query().Get("workspaceRoot"); ws != "" {
+		return ws
+	}
+	if ws := r.URL.Query().Get("workspace"); ws != "" {
+		return ws
+	}
+	return workspaceRoot()
+}
+
 // HandleToolsetsList GET /api/toolsets：工具集列表；?name= 返回该工具集完整详情
 // （含插件）。name=builtin 返回内置工具包详情（分组+工具+启用状态+已加入分组）。
 func HandleToolsetsList(w http.ResponseWriter, r *http.Request) {
-	root := workspaceRoot()
+	root := pickWorkspaceRoot(r, "")
 	if root == "" {
 		jsonResp(w, []any{})
 		return
@@ -76,20 +92,21 @@ func HandleToolsetBuild(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, "插件系统未初始化")
 		return
 	}
-	root := workspaceRoot()
-	if root == "" {
-		jsonErr(w, "工作区未就绪")
-		return
-	}
 	var req struct {
-		Name        string `json:"name"`
-		Description string `json:"description"`
-		Requirement string `json:"requirement"`
-		Project     string `json:"project"`
-		Overwrite   bool   `json:"overwrite"`
+		Name          string `json:"name"`
+		Description   string `json:"description"`
+		Requirement   string `json:"requirement"`
+		Project       string `json:"project"`
+		Overwrite     bool   `json:"overwrite"`
+		WorkspaceRoot string `json:"workspaceRoot"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonErr(w, "请求体解析失败: "+err.Error())
+		return
+	}
+	root := pickWorkspaceRoot(r, req.WorkspaceRoot)
+	if root == "" {
+		jsonErr(w, "工作区未就绪")
 		return
 	}
 	projectDir := root
@@ -139,7 +156,7 @@ func HandleToolsetBuild(w http.ResponseWriter, r *http.Request) {
 
 // HandleToolsetExport GET /api/toolsets/export?name=：导出发布 JSON。
 func HandleToolsetExport(w http.ResponseWriter, r *http.Request) {
-	root := workspaceRoot()
+	root := pickWorkspaceRoot(r, "")
 	if root == "" {
 		jsonErr(w, "工作区未就绪")
 		return
@@ -172,18 +189,19 @@ func HandleToolsetImport(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, "插件系统未初始化")
 		return
 	}
-	root := workspaceRoot()
-	if root == "" {
-		jsonErr(w, "工作区未就绪")
-		return
-	}
 	var req struct {
-		JSON  string `json:"json"`
-		File  string `json:"file"`
-		Scope string `json:"scope"`
+		JSON          string `json:"json"`
+		File          string `json:"file"`
+		Scope         string `json:"scope"`
+		WorkspaceRoot string `json:"workspaceRoot"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonErr(w, "请求体解析失败: "+err.Error())
+		return
+	}
+	root := pickWorkspaceRoot(r, req.WorkspaceRoot)
+	if root == "" {
+		jsonErr(w, "工作区未就绪")
 		return
 	}
 	content := req.JSON
@@ -231,17 +249,18 @@ func HandleToolsetRemove(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, "插件系统未初始化")
 		return
 	}
-	root := workspaceRoot()
-	if root == "" {
-		jsonErr(w, "工作区未就绪")
-		return
-	}
 	var req struct {
-		Name  string `json:"name"`
-		Scope string `json:"scope"`
+		Name          string `json:"name"`
+		Scope         string `json:"scope"`
+		WorkspaceRoot string `json:"workspaceRoot"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonErr(w, "请求体解析失败: "+err.Error())
+		return
+	}
+	root := pickWorkspaceRoot(r, req.WorkspaceRoot)
+	if root == "" {
+		jsonErr(w, "工作区未就绪")
 		return
 	}
 	if req.Name == "" {
@@ -279,25 +298,26 @@ func HandleToolsetEdit(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, "插件系统未初始化")
 		return
 	}
-	root := workspaceRoot()
-	if root == "" {
-		jsonErr(w, "工作区未就绪")
-		return
-	}
 	var req struct {
-		Name         string `json:"name"`
-		Scope        string `json:"scope"`
-		Action       string `json:"action"`
-		PluginName   string `json:"plugin_name"`
-		FromToolset  string `json:"from_toolset"`
-		Tool         string `json:"tool"`
-		Tools        string `json:"tools"`
-		PluginJSON   string `json:"plugin_json"`
-		Overwrite    string `json:"overwrite"`
-		BuiltinGroup string `json:"builtin_group"`
+		Name          string `json:"name"`
+		Scope         string `json:"scope"`
+		Action        string `json:"action"`
+		PluginName    string `json:"plugin_name"`
+		FromToolset   string `json:"from_toolset"`
+		Tool          string `json:"tool"`
+		Tools         string `json:"tools"`
+		PluginJSON    string `json:"plugin_json"`
+		Overwrite     string `json:"overwrite"`
+		BuiltinGroup  string `json:"builtin_group"`
+		WorkspaceRoot string `json:"workspaceRoot"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonErr(w, "请求体解析失败: "+err.Error())
+		return
+	}
+	root := pickWorkspaceRoot(r, req.WorkspaceRoot)
+	if root == "" {
+		jsonErr(w, "工作区未就绪")
 		return
 	}
 	args := map[string]any{

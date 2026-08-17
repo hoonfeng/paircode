@@ -2618,6 +2618,12 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 	}
 	opts := s.buildWebLoopOpts(req.ConvID, req.Message, req.Autonomous)
 	opts.WorkspaceRoot = req.WorkspaceRoot
+	// ★ 工作区隔离（2026-08-17）：移除只影响本工作区——会话 reg 按「会话工作区
+	//   工具集 DisabledTools」禁用被摘除工具（MergePluginTools 全量启用后覆盖），
+	//   其他工作区无摘除记录 → 不受影响（能正常看到/加入该工具）。
+	if opts.Registry != nil {
+		agent.ApplyWorkspaceDisabledTools(opts.Registry, req.WorkspaceRoot)
+	}
 
 	// 先从全局设置取审核配置（默认值）
 	opts.ReviewMode = core.Settings.ReviewMode

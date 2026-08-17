@@ -582,6 +582,27 @@ func pluginGroupsOf(reg *Registry, ph *PluginHost, workspaceToolsets []Workspace
 		}
 	}
 	byPlugin := ph.PluginToolsByPlugin()
+	// ★ 工具 enabled 状态按「root 工作区工具集声明」计算（插件已加入且工具未被
+	// DisabledTools 摘除 → 已加入/可见）。2026-08-17：不再依赖全局 ph 运行时状态
+	// （reg.IsEnabled）——不同工作区各自管理自己的 .pair/toolsets/，管理弹窗按
+	// 当前工作区隔离展示，互不影响。
+	declared := map[string]map[string]bool{} // 插件名 → 工具名 → 声明可用（未摘除）
+	for _, wt := range workspaceToolsets {
+		for _, p := range wt.Plugins {
+			if p.Builtin != "" || p.Name == "" {
+				continue
+			}
+			if declared[p.Name] == nil {
+				declared[p.Name] = map[string]bool{}
+			}
+			for _, tn := range byPlugin[p.Name] {
+				declared[p.Name][tn] = true
+			}
+			for _, tn := range p.DisabledTools {
+				declared[p.Name][tn] = false
+			}
+		}
+	}
 	names := make([]string, 0, len(byPlugin))
 	for n := range byPlugin {
 		names = append(names, n)
@@ -599,7 +620,10 @@ func pluginGroupsOf(reg *Registry, ph *PluginHost, workspaceToolsets []Workspace
 		anyOn := false
 		all := true
 		for _, tn := range tools {
-			en := reg.IsEnabled(tn)
+			en := false
+			if d, ok := declared[name]; ok {
+				en = d[tn]
+			}
 			g.Tools = append(g.Tools, BuiltinToolInfo{Name: tn, Desc: toolShortDesc(reg, tn), Enabled: en})
 			if en {
 				anyOn = true

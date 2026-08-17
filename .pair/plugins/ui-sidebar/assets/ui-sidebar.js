@@ -2971,7 +2971,9 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
       // 插件分组（source=plugin，含 tools[].enabled）
       joined: { type: Array, default: () => [] },
       // 兼容保留（内置组名，不再用于插件分组判定）
-      manualTools: { type: Array, default: () => [] }
+      manualTools: { type: Array, default: () => [] },
+      workspaceRoot: { type: String, default: "" }
+      // ★ 目标工作区（工作区隔离：管理操作只影响本工作区工具集）
     },
     emits: ["close", "changed"],
     setup(__props, { emit: __emit }) {
@@ -3044,10 +3046,10 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
           for (const [pn, info] of Object.entries(byPlugin)) {
             if (info.joined) {
               for (const tn of info.names) {
-                await callOnce(() => api.toolsetEdit({ name: "default", action: "enable_tool", plugin_name: pn, tool: tn }));
+                await callOnce(() => api.toolsetEdit({ name: "default", action: "enable_tool", plugin_name: pn, tool: tn, workspaceRoot: props.workspaceRoot }));
               }
             } else {
-              await callOnce(() => api.toolsetEdit({ name: "default", action: "add_plugin", plugin_name: pn, tools: info.names.join(",") }));
+              await callOnce(() => api.toolsetEdit({ name: "default", action: "add_plugin", plugin_name: pn, tools: info.names.join(","), workspaceRoot: props.workspaceRoot }));
             }
           }
           emit("changed");
@@ -3064,11 +3066,11 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
         try {
           for (const [pn, names] of Object.entries(byPlugin)) {
             for (const tn of names) {
-              await callOnce(() => api.toolsetEdit({ name: "default", action: "rm_tool", plugin_name: pn, tool: tn }));
+              await callOnce(() => api.toolsetEdit({ name: "default", action: "rm_tool", plugin_name: pn, tool: tn, workspaceRoot: props.workspaceRoot }));
             }
           }
           for (const n of manualNames) {
-            await callOnce(() => api.builtinPlugins({ tool: n, enabled: false }));
+            await callOnce(() => api.builtinPlugins({ tool: n, enabled: false }, props.workspaceRoot));
           }
           emit("changed");
         } catch (e) {
@@ -3078,10 +3080,10 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
         try {
           if (g.joined) {
             for (const t of g.tools) {
-              await callOnce(() => api.toolsetEdit({ name: "default", action: "enable_tool", plugin_name: g.name, tool: t.name }));
+              await callOnce(() => api.toolsetEdit({ name: "default", action: "enable_tool", plugin_name: g.name, tool: t.name, workspaceRoot: props.workspaceRoot }));
             }
           } else {
-            await callOnce(() => api.toolsetEdit({ name: "default", action: "add_plugin", plugin_name: g.name }));
+            await callOnce(() => api.toolsetEdit({ name: "default", action: "add_plugin", plugin_name: g.name, workspaceRoot: props.workspaceRoot }));
           }
           emit("changed");
         } catch (e) {
@@ -3089,7 +3091,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
       }
       async function removeGroup(g) {
         try {
-          await callOnce(() => api.toolsetEdit({ name: "default", action: "rm_plugin", plugin_name: g.name }));
+          await callOnce(() => api.toolsetEdit({ name: "default", action: "rm_plugin", plugin_name: g.name, workspaceRoot: props.workspaceRoot }));
           emit("changed");
         } catch (e) {
         }
@@ -3097,7 +3099,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
       async function removeManualTools() {
         try {
           for (const n of props.manualTools) {
-            await callOnce(() => api.builtinPlugins({ tool: n, enabled: false }));
+            await callOnce(() => api.builtinPlugins({ tool: n, enabled: false }, props.workspaceRoot));
           }
           emit("changed");
         } catch (e) {
@@ -3423,7 +3425,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
       };
     }
   };
-  const ToolsetTransfer = /* @__PURE__ */ _export_sfc(_sfc_main$6, [["__scopeId", "data-v-90cc752f"]]);
+  const ToolsetTransfer = /* @__PURE__ */ _export_sfc(_sfc_main$6, [["__scopeId", "data-v-c410b51f"]]);
   const _hoisted_1$5 = { class: "file-explorer" };
   const _hoisted_2$5 = { class: "explorer-toolbar" };
   const _hoisted_3$5 = { class: "ws-section" };
@@ -3931,6 +3933,9 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
       function onTransferChanged() {
         loadBuiltin();
       }
+      vue.watch(() => uiState_js.state.workspaceRoot, () => {
+        loadBuiltin();
+      });
       const joinedTools = vue.computed(() => {
         var _a, _b, _c, _d;
         const set = {};
@@ -3959,7 +3964,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
       }
       async function loadBuiltin() {
         try {
-          builtinInfo.value = await api.builtinPlugins();
+          builtinInfo.value = await api.builtinPlugins(void 0, uiState_js.state.workspaceRoot);
         } catch (e) {
           console.warn("[toolset] 内置工具包加载失败", e);
         }
@@ -3968,15 +3973,15 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
         try {
           if (g && g.source === "plugin") {
             if (!joinedTools.value[t.name]) {
-              const res = await api.toolsetEdit({ name: "default", action: "add_plugin", plugin_name: g.name, tools: t.name });
+              const res = await api.toolsetEdit({ name: "default", action: "add_plugin", plugin_name: g.name, tools: t.name, workspaceRoot: uiState_js.state.workspaceRoot });
               tsMsg.value = (res == null ? void 0 : res.message) || "已加入 " + t.name;
             } else {
-              const res = await api.toolsetEdit({ name: "default", action: "rm_tool", plugin_name: g.name, tool: t.name });
+              const res = await api.toolsetEdit({ name: "default", action: "rm_tool", plugin_name: g.name, tool: t.name, workspaceRoot: uiState_js.state.workspaceRoot });
               tsMsg.value = (res == null ? void 0 : res.message) || "已移出 " + t.name;
             }
           } else {
             const enabled = !joinedTools.value[t.name];
-            const res = await api.builtinPlugins({ tool: t.name, enabled });
+            const res = await api.builtinPlugins({ tool: t.name, enabled }, uiState_js.state.workspaceRoot);
             tsMsg.value = (res == null ? void 0 : res.message) || (enabled ? "已添加" : "已移除") + " " + t.name;
           }
           tsMsgErr.value = false;
@@ -4687,14 +4692,15 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
             groups: ((_a = builtinInfo.value) == null ? void 0 : _a.plugins) || [],
             joined: ((_b = builtinInfo.value) == null ? void 0 : _b.joined) || [],
             "manual-tools": ((_c = builtinInfo.value) == null ? void 0 : _c.manualTools) || [],
+            "workspace-root": vue.unref(uiState_js.state).workspaceRoot,
             onClose: _cache[9] || (_cache[9] = ($event) => tsTransferOpen.value = false),
             onChanged: onTransferChanged
-          }, null, 8, ["groups", "joined", "manual-tools"])) : vue.createCommentVNode("v-if", true)
+          }, null, 8, ["groups", "joined", "manual-tools", "workspace-root"])) : vue.createCommentVNode("v-if", true)
         ]);
       };
     }
   };
-  const FileExplorer = /* @__PURE__ */ _export_sfc(_sfc_main$5, [["__scopeId", "data-v-ce8b2e0a"]]);
+  const FileExplorer = /* @__PURE__ */ _export_sfc(_sfc_main$5, [["__scopeId", "data-v-bedb16a6"]]);
   const _hoisted_1$4 = { class: "search-panel" };
   const _hoisted_2$4 = { class: "sp-mode-bar" };
   const _hoisted_3$4 = { class: "sp-field" };

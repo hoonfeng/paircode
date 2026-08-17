@@ -990,6 +990,43 @@ func (h *PluginHost) workspaceToolsetDisabledTools() map[string]bool {
 	return out
 }
 
+// ApplyWorkspaceDisabledTools 按工作区工具集的 DisabledTools 摘除清单禁用工具
+// （会话级 reg 用）。★ 工作区隔离（2026-08-17）：移除只影响本工作区——会话 reg
+// 每会话新建、插件工具经 MergePluginTools 全量启用，需在此按「本工作区摘除清单」
+// 重新禁用，保证移除对 agent 生效且不污染其他工作区（其他工作区无摘除记录 → 不受影响）。
+func ApplyWorkspaceDisabledTools(reg *Registry, root string) {
+	if reg == nil || root == "" {
+		return
+	}
+	entries, err := os.ReadDir(toolsetDir(root, toolsetProject))
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(toolsetDir(root, toolsetProject), e.Name()))
+		if err != nil {
+			continue
+		}
+		var ts Toolset
+		if err := json.Unmarshal(data, &ts); err != nil || ts.Name == "" {
+			continue
+		}
+		for _, p := range ts.Plugins {
+			for _, tn := range p.DisabledTools {
+				if tn == "" {
+					continue
+				}
+				if _, ok := reg.Get(tn); ok {
+					reg.SetToolEnabled(tn, false)
+				}
+			}
+		}
+	}
+}
+
 // applyPluginToolVisibility 插件装载后应用工具可见性（★ 装载 ≠ agent 可用）：
 // 插件注册的工具若不在工作区工具集白名单（内置条目 Tools / 工具集 JS 插件声明），
 // 对 agent 隐藏（Enabled=false）——cordis/前端仍可见可管理，toolset_edit 加入后恢复。

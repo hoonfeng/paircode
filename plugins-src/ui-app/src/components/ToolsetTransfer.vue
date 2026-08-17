@@ -107,6 +107,7 @@ const props = defineProps({
   groups: { type: Array, default: () => [] },   // 插件分组（source=plugin，含 tools[].enabled）
   joined: { type: Array, default: () => [] },   // 兼容保留（内置组名，不再用于插件分组判定）
   manualTools: { type: Array, default: () => [] },
+  workspaceRoot: { type: String, default: '' }, // ★ 目标工作区（工作区隔离：管理操作只影响本工作区工具集）
 })
 const emit = defineEmits(['close', 'changed'])
 
@@ -189,10 +190,10 @@ async function addSelected() {
     for (const [pn, info] of Object.entries(byPlugin)) {
       if (info.joined) {
         for (const tn of info.names) {
-          await callOnce(() => api.toolsetEdit({ name: 'default', action: 'enable_tool', plugin_name: pn, tool: tn }))
+          await callOnce(() => api.toolsetEdit({ name: 'default', action: 'enable_tool', plugin_name: pn, tool: tn, workspaceRoot: props.workspaceRoot }))
         }
       } else {
-        await callOnce(() => api.toolsetEdit({ name: 'default', action: 'add_plugin', plugin_name: pn, tools: info.names.join(',') }))
+        await callOnce(() => api.toolsetEdit({ name: 'default', action: 'add_plugin', plugin_name: pn, tools: info.names.join(','), workspaceRoot: props.workspaceRoot }))
       }
     }
     emit('changed')
@@ -210,11 +211,11 @@ async function removeSelected() {
   try {
     for (const [pn, names] of Object.entries(byPlugin)) {
       for (const tn of names) {
-        await callOnce(() => api.toolsetEdit({ name: 'default', action: 'rm_tool', plugin_name: pn, tool: tn }))
+        await callOnce(() => api.toolsetEdit({ name: 'default', action: 'rm_tool', plugin_name: pn, tool: tn, workspaceRoot: props.workspaceRoot }))
       }
     }
     for (const n of manualNames) {
-      await callOnce(() => api.builtinPlugins({ tool: n, enabled: false }))
+      await callOnce(() => api.builtinPlugins({ tool: n, enabled: false }, props.workspaceRoot))
     }
     emit('changed')
   } catch (e) { /* callOnce 已上报 */ }
@@ -225,10 +226,10 @@ async function addGroup(g) {
   try {
     if (g.joined) {
       for (const t of g.tools) {
-        await callOnce(() => api.toolsetEdit({ name: 'default', action: 'enable_tool', plugin_name: g.name, tool: t.name }))
+        await callOnce(() => api.toolsetEdit({ name: 'default', action: 'enable_tool', plugin_name: g.name, tool: t.name, workspaceRoot: props.workspaceRoot }))
       }
     } else {
-      await callOnce(() => api.toolsetEdit({ name: 'default', action: 'add_plugin', plugin_name: g.name }))
+      await callOnce(() => api.toolsetEdit({ name: 'default', action: 'add_plugin', plugin_name: g.name, workspaceRoot: props.workspaceRoot }))
     }
     emit('changed')
   } catch (e) { /* callOnce 已上报 */ }
@@ -236,14 +237,14 @@ async function addGroup(g) {
 // 整组移出：rm_plugin（插件移出工具集，其工具恢复默认过滤）
 async function removeGroup(g) {
   try {
-    await callOnce(() => api.toolsetEdit({ name: 'default', action: 'rm_plugin', plugin_name: g.name }))
+    await callOnce(() => api.toolsetEdit({ name: 'default', action: 'rm_plugin', plugin_name: g.name, workspaceRoot: props.workspaceRoot }))
     emit('changed')
   } catch (e) { /* callOnce 已上报 */ }
 }
 async function removeManualTools() {
   try {
     for (const n of props.manualTools) {
-      await callOnce(() => api.builtinPlugins({ tool: n, enabled: false }))
+      await callOnce(() => api.builtinPlugins({ tool: n, enabled: false }, props.workspaceRoot))
     }
     emit('changed')
   } catch (e) { /* callOnce 已上报 */ }

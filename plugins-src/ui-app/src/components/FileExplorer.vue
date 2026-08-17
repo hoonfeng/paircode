@@ -202,6 +202,7 @@
       :groups="builtinInfo?.plugins || []"
       :joined="builtinInfo?.joined || []"
       :manual-tools="builtinInfo?.manualTools || []"
+      :workspace-root="state.workspaceRoot"
       @close="tsTransferOpen = false"
       @changed="onTransferChanged"
     />
@@ -209,7 +210,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { state } from '../ui-state.js'
 import api from '../api.js'
 import FileTreeItem from './FileTreeItem.vue'
@@ -644,6 +645,8 @@ function openTransfer() { tsTransferOpen.value = true }
 function onTransferChanged() {
   loadBuiltin()
 }
+// ★ 工作区切换时重载工具集（管理弹窗按当前工作区隔离展示）
+watch(() => state.workspaceRoot, () => { loadBuiltin() })
 
 // 已捞入工作区工具集的工具名集合（joined 组工具 + 插件已启用工具 + _manual 手动条目工具）
 const joinedTools = computed(() => {
@@ -672,7 +675,7 @@ function filterTools(tools) {
 // 加载工作区工具集（builtin）信息（池子）
 async function loadBuiltin() {
   try {
-    builtinInfo.value = await api.builtinPlugins()
+    builtinInfo.value = await api.builtinPlugins(undefined, state.workspaceRoot)
   } catch (e) {
     console.warn('[toolset] 内置工具包加载失败', e)
   }
@@ -683,15 +686,15 @@ async function toggleToolsetTool(t, g) {
   try {
     if (g && g.source === 'plugin') {
       if (!joinedTools.value[t.name]) {
-        const res = await api.toolsetEdit({ name: 'default', action: 'add_plugin', plugin_name: g.name, tools: t.name })
+        const res = await api.toolsetEdit({ name: 'default', action: 'add_plugin', plugin_name: g.name, tools: t.name, workspaceRoot: state.workspaceRoot })
         tsMsg.value = res?.message || '已加入 ' + t.name
       } else {
-        const res = await api.toolsetEdit({ name: 'default', action: 'rm_tool', plugin_name: g.name, tool: t.name })
+        const res = await api.toolsetEdit({ name: 'default', action: 'rm_tool', plugin_name: g.name, tool: t.name, workspaceRoot: state.workspaceRoot })
         tsMsg.value = res?.message || '已移出 ' + t.name
       }
     } else {
       const enabled = !joinedTools.value[t.name]
-      const res = await api.builtinPlugins({ tool: t.name, enabled })
+      const res = await api.builtinPlugins({ tool: t.name, enabled }, state.workspaceRoot)
       tsMsg.value = res?.message || (enabled ? '已添加' : '已移除') + ' ' + t.name
     }
     tsMsgErr.value = false
