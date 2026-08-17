@@ -1,0 +1,7 @@
+{
+  "name": "market-skill",
+  "purpose": "技能市场：GitHub 仓库搜索 → skill 条目（安装到 .pair/skills）",
+  "version": "0.1.0",
+  "type": "plugin",
+  "main": "index.js"
+}

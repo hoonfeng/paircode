@@ -1,0 +1,7 @@
+{
+  "name": "market-mcp",
+  "purpose": "MCP 市场：npm registry 搜索 MCP 服务器（安装到用户级/工作区级配置）",
+  "version": "0.1.0",
+  "type": "plugin",
+  "main": "index.js"
+}

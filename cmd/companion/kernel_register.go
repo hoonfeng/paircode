@@ -112,6 +112,7 @@ func registerKernelAPIs(s *webServer) {
 	_ = agent.KernelAPIRegister("marketplace.install", "POST", "/api/marketplace/install", "市场安装", s.handleMarketplaceInstall)
 	_ = agent.KernelAPIRegister("marketplace.uninstall", "POST", "/api/marketplace/uninstall", "市场卸载", s.handleMarketplaceUninstall)
 	_ = agent.KernelAPIRegister("marketplace.refresh", "POST", "/api/marketplace/refresh", "市场刷新", s.handleMarketplaceRefresh)
+	_ = agent.KernelAPIRegister("marketplace.sources", "GET", "/api/marketplace/sources", "市场源列表（插件化市场：skill/mcp/plugin）", s.handleMarketplaceSources)
 
 	// ── 记忆 ──
 	_ = agent.KernelAPIRegister("memory.search", "GET", "/api/memory/search", "记忆搜索", s.handleMemorySearch)

@@ -2956,6 +2956,12 @@ func (s *webServer) handleMarketplaceRefresh(w http.ResponseWriter, r *http.Requ
 	jsonResp(w, map[string]any{"ok": true, "message": "远程市场已刷新", "status": marketplacepanel.FetchStatus()})
 }
 
+// handleMarketplaceSources 返回当前已注册的市场源（磁盘插件 market-* 声明）。
+// 前端据此动态生成市场 tab：停用某市场插件 → 对应市场消失。
+func (s *webServer) handleMarketplaceSources(w http.ResponseWriter, r *http.Request) {
+	jsonResp(w, agent.MarketSources())
+}
+
 // ── 对话摘要生成 ──────────────────────────────────────────
 
 // generateConversationSummary 用规则式生成对话摘要并保存到 MessageStore。

@@ -5,9 +5,9 @@
         <h2><SvgIcon name="package" :size="20" /> 市场</h2>
         <div class="market-tabs">
           <button :class="{ active: tab === 'all' }" @click="tab='all';doSearch()">全部</button>
-          <button :class="{ active: tab === 'mcp' }" @click="tab='mcp';doSearch()">MCP</button>
-          <button :class="{ active: tab === 'skill' }" @click="tab='skill';doSearch()">技能</button>
-          <button :class="{ active: tab === 'plugin' }" @click="tab='plugin';doSearch()">插件/工具集</button>
+            <button v-for="s in marketTabs" :key="s.kind"
+                    :class="{ active: tab === s.kind }"
+                    @click="tab=s.kind;doSearch()">{{ s.label }}</button>
           <button :class="{ active: tab === 'installed' }" @click="tab='installed';loadInstalled()">已安装</button>
         </div>
         <button class="modal-close" @click="$emit('close')">×</button>
@@ -199,7 +199,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import api from '../api.js'
 import SvgIcon from './SvgIcon.vue'
 
@@ -214,6 +214,21 @@ const refreshing = ref(false)
 const error = ref('')
 const refreshTip = ref('')
 const listRef = ref(null)
+
+// ── 市场源（插件化：磁盘插件 market-* 声明，动态 tab）──
+const sources = ref([])
+const marketTabs = computed(() => {
+  const labelMap = { skill: '技能', mcp: 'MCP', plugin: '插件/工具集' }
+  return (sources.value || []).map((s) => ({ kind: s.kind, label: labelMap[s.kind] || s.name || s.kind }))
+})
+async function loadSources() {
+  try {
+    const srcs = await api.apiGet('/marketplace/sources')
+    sources.value = srcs || []
+  } catch (e) {
+    // 接口不可用（如 core-api 插件停用）→ 保持空 tab，搜索仍可经 kind 触发
+  }
+}
 
 // ── 已安装管理 ──
 const installedMCPs = ref([])
@@ -446,6 +461,7 @@ async function uninstallItem(item) {
 }
 
 onMounted(() => {
+  loadSources()
   doSearch()
 })
 </script>

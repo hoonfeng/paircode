@@ -996,6 +996,8 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 			ctxObj.Set("timer", p.buildTimerService(ctxObj))
 		case "kernel":
 			ctxObj.Set("kernel", p.buildKernelService())
+		case "market":
+			ctxObj.Set("market", p.buildMarketService())
 		}
 	}
 
@@ -1546,6 +1548,56 @@ func (p *jsPluginAdapter) buildKernelService() goja.Value {
 	return vm.ToValue(k)
 }
 
+// ─── ctx.market：市场源服务（市场插件化）─────────────────
+//
+// 磁盘插件 apply 时声明自己提供的市场（skill/mcp/plugin）：
+//   - ctx.market.register({kind, source, name, desc}) → 注册/覆盖该市场；
+//     source 标识搜索实现：github（skill）/ npm（mcp）/ npm-cordis（plugin）
+//   - ctx.market.unregister(kind) → 注销市场
+//   - ctx.market.list()           → 已注册市场列表
+//
+// 插件卸载/停用时自动注销其注册的市场（与 ctx.kernel.install 同生命周期纪律）。
+func (p *jsPluginAdapter) buildMarketService() goja.Value {
+	vm := p.vm
+	m := vm.NewObject()
+
+	m.Set("register", func(call goja.FunctionCall) goja.Value {
+		a := call.Argument(0)
+		if goja.IsUndefined(a) || goja.IsNull(a) {
+			panic(vm.NewTypeError("ctx.market.register: 需要 {kind, source, name, desc}"))
+		}
+		obj, ok := a.Export().(map[string]any)
+		if !ok {
+			panic(vm.NewTypeError("ctx.market.register: 参数必须是对象 {kind, source, name, desc}"))
+		}
+		kind, _ := obj["kind"].(string)
+		if kind == "" {
+			panic(vm.NewTypeError("ctx.market.register: 缺 kind（skill/mcp/plugin）"))
+		}
+		source, _ := obj["source"].(string)
+		name, _ := obj["name"].(string)
+		desc, _ := obj["desc"].(string)
+		RegisterMarketSource(MarketSourceMeta{Kind: kind, Name: name, Source: source, Desc: desc})
+		// 插件卸载 → 自动注销市场（同 kernel.install 生命周期纪律）
+		p.addCleanup(func() { UnregisterMarketSource(kind) })
+		return vm.ToValue(true)
+	})
+	m.Set("unregister", func(call goja.FunctionCall) goja.Value {
+		UnregisterMarketSource(call.Argument(0).String())
+		return vm.ToValue(true)
+	})
+	m.Set("list", func(call goja.FunctionCall) goja.Value {
+		srcs := MarketSources()
+		out := make([]map[string]any, 0, len(srcs))
+		for _, s := range srcs {
+			out = append(out, map[string]any{"kind": s.Kind, "name": s.Name, "source": s.Source, "desc": s.Desc})
+		}
+		return vm.ToValue(out)
+	})
+
+	return vm.ToValue(m)
+}
+
 // ─── 沙箱创建与求值 ────────────────────────────────────────
 
 // newJSSandbox 创建插件沙箱：注入 console/btoa/atob/TextEncoder/TextDecoder
@@ -1905,7 +1957,7 @@ func (h *PluginHost) checkInjects(def *jsPluginDef) error {
 // hasService 判断宿主是否提供某服务（静态服务键 + 动态 ctx.provide 服务）。
 func (h *PluginHost) hasService(name string) bool {
 	switch name {
-	case "fs", "web", "bash", "sse", "ws", "logger", "timer", "tools", "events", "store", "app", "workspaceRoot", "kernel":
+	case "fs", "web", "bash", "sse", "ws", "logger", "timer", "tools", "events", "store", "app", "workspaceRoot", "kernel", "market":
 		return true
 	}
 	return h.ctx.Get(name) != nil
@@ -1913,7 +1965,7 @@ func (h *PluginHost) hasService(name string) bool {
 
 // availableServices 宿主可用服务清单（供报错引导/文档展示）。
 func (h *PluginHost) availableServices() []string {
-	names := []string{"fs", "web", "bash", "sse", "ws", "logger", "timer", "tools", "events", "store", "app", "workspaceRoot", "kernel"}
+	names := []string{"fs", "web", "bash", "sse", "ws", "logger", "timer", "tools", "events", "store", "app", "workspaceRoot", "kernel", "market"}
 	h.ctx.servicesMu.RLock()
 	for n := range h.ctx.services {
 		names = append(names, n)

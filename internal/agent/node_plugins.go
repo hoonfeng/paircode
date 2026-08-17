@@ -184,18 +184,18 @@ func marketInstallNPMPluginNode(info *npmPackageInfo, srcDir string, auto bool) 
 	}
 
 	// 5. 重启桥装载（首次安装则启动）
+	// ★ 2026-08-17 修复：安装后必须重启桥才能装载新插件。
+	//   旧逻辑 nodeBridgeHasPlugin(spec) 检查 plugins.json——但第 3 步刚把 spec
+	//   写入 plugins.json → 恒 true → 永不重启桥 → 新插件「安装了但没生效」。
+	//   桥在跑则先关再启，新桥从 plugins.json 装载全部插件（含新装）。
 	ph := GetGlobalPluginHost()
 	if ph != nil {
-		if _, err := ensureNodeBridge(ph, bridgeDir); err != nil {
-			return "", fmt.Errorf("Node 桥启动失败: %v（插件已安装，重启应用后自动装载）", err)
-		}
-		if !nodeBridgeHasPlugin(spec) {
-			// 桥已运行但新插件未装载 → 重启桥
+		if globalNodeBridge != nil {
 			globalNodeBridge.Close()
 			globalNodeBridge = nil
-			if _, err := ensureNodeBridge(ph, bridgeDir); err != nil {
-				return "", fmt.Errorf("Node 桥重启失败: %v", err)
-			}
+		}
+		if _, err := ensureNodeBridge(ph, bridgeDir); err != nil {
+			return "", fmt.Errorf("Node 桥启动失败: %v（插件已安装，重启应用后自动装载）", err)
 		}
 	}
 	// 原生依赖提示（不阻塞安装）
@@ -241,24 +241,6 @@ func npmInstallPlugin(bridgeDir, spec string) error {
 		return fmt.Errorf("npm install %s 失败: %v（%s）", spec, err, last)
 	}
 	return nil
-}
-
-// nodeBridgeHasPlugin 判断桥当前是否已装载指定插件 spec。
-func nodeBridgeHasPlugin(spec string) bool {
-	b := globalNodeBridge
-	if b == nil {
-		return false
-	}
-	doc, err := readNodePluginsFile(filepath.Join(b.dir, "plugins.json"))
-	if err != nil {
-		return false
-	}
-	for _, s := range doc.Plugins {
-		if s == spec {
-			return true
-		}
-	}
-	return false
 }
 
 // uninstallNodePlugin 卸载 Node 桥插件：plugins.json 移除 + patch 移除 + 重启桥。
@@ -329,6 +311,12 @@ func copyDir(src, dst string) error {
 	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
+		}
+		// ★ 2026-08-18：跳过符号链接/junction（Windows npm 本地链接如
+		//   local-test-plugin → _tmp_bridge_plugin；复制链接目标会失败）。
+		//   链接目标在复制场景无意义（node_modules 复制按真实文件拷贝）。
+		if info.Mode()&os.ModeSymlink != 0 {
+			return nil
 		}
 		rel, _ := filepath.Rel(src, path)
 		target := filepath.Join(dst, rel)

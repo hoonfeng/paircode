@@ -79,7 +79,10 @@ var (
 // ★ 2026-08-17：无预设数据——query 空返回空（打开市场不展示任何条目）；
 //   query 非空才触发实时远程搜索（npm MCP / GitHub skill / npm cordis 插件），
 //   并发请求、合并去重后返回并缓存（MarketFind 可查）。
-// kind 可空/""=全部，"mcp"/"skill"/"plugin"=指定类型。
+// ★ 2026-08-18：市场插件化——只搜索「已注册的市场」（磁盘插件 market-* 声明，
+//   ctx.market.register 挂载）；指定 kind 未注册（插件停用/删除）→ 空。
+//   source 标识分派搜索实现：skill→github、mcp→npm、plugin→npm-cordis。
+// kind 可空/""=全部（已注册市场的并集），"mcp"/"skill"/"plugin"=指定类型。
 func MarketSearch(query, kind string) []MarketEntry {
 	if strings.TrimSpace(query) == "" {
 		return nil
@@ -87,32 +90,25 @@ func MarketSearch(query, kind string) []MarketEntry {
 	if kind == "" || kind == "all" {
 		kind = ""
 	}
+	enabled := marketEnabledKinds()
+	if kind != "" && !enabled[kind] {
+		return nil // 指定市场未注册（对应插件未装载）→ 不搜索
+	}
 	type apiResult struct {
 		entries []MarketEntry
 		kind    string
 	}
 	ch := make(chan apiResult, 3)
-	go func() {
-		if kind == "" || kind == "mcp" {
-			ch <- apiResult{searchMarketNPM(query), "mcp"}
+	run := func(k, src string, fn func(string) []MarketEntry) {
+		if (kind == "" || kind == k) && enabled[k] && marketSourceOf(k) == src {
+			ch <- apiResult{fn(query), k}
 		} else {
-			ch <- apiResult{nil, "mcp"}
+			ch <- apiResult{nil, k}
 		}
-	}()
-	go func() {
-		if kind == "" || kind == "skill" {
-			ch <- apiResult{searchMarketGitHub(query), "skill"}
-		} else {
-			ch <- apiResult{nil, "skill"}
-		}
-	}()
-	go func() {
-		if kind == "" || kind == "plugin" {
-			ch <- apiResult{searchMarketNPMPlugins(query), "plugin"}
-		} else {
-			ch <- apiResult{nil, "plugin"}
-		}
-	}()
+	}
+	go run("mcp", "npm", searchMarketNPM)
+	go run("skill", "github", searchMarketGitHub)
+	go run("plugin", "npm-cordis", searchMarketNPMPlugins)
 
 	var out []MarketEntry
 	seen := map[string]bool{}

@@ -94,6 +94,7 @@ const ROUTES = [
   { key: 'marketplace.install' },
   { key: 'marketplace.uninstall' },
   { key: 'marketplace.refresh' },
+  { key: 'marketplace.sources' },
   // 记忆
   { key: 'memory.search' },
   { key: 'memory.list' },
