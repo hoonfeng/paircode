@@ -176,59 +176,12 @@ func (r *Registry) EnabledNames() []string {
 }
 
 // UsageGuideText 生成工具使用指南文本（供注入系统提示使用）。
-// 按 Category 分组，展示每个已启用工具的 UsageGuide。
+// ★ 工具描述已取消（2026-08-17）：提示词中不再注入工具使用指南——
+//   工具的名称、用途与参数完全由 tools 参数 schema 提供（随 function-calling
+//   下发，天然与注册表一致，不会与提示词文本脱节）。故恒返回空串；
+//   保留函数签名与调用点，便于将来按需恢复。
 func (r *Registry) UsageGuideText() string {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	type guideEntry struct {
-		name     string
-		guide    string
-		category string
-	}
-	entries := make([]guideEntry, 0, len(r.order))
-	for _, name := range r.order {
-		t := r.tools[name]
-		if !t.Enabled || t.UsageGuide == "" {
-			continue
-		}
-		entries = append(entries, guideEntry{name, t.UsageGuide, t.Category})
-	}
-	if len(entries) == 0 {
-		return ""
-	}
-	// ★ 2026-08-17 对齐 Definitions 字典序：entries 按 name 排序 + 分类名排序，
-	//   保证工具使用指南文本跨装配时序稳定（该文本注入 system 动态后缀，
-	//   若随注册顺序漂移会连带动态后缀变化，减少可命中的后缀缓存段）。
-	sort.Slice(entries, func(i, j int) bool { return entries[i].name < entries[j].name })
-	// 按 Category 分组
-	groups := map[string][]guideEntry{}
-	var cats []string
-	catSet := map[string]bool{}
-	for _, e := range entries {
-		cat := e.category
-		if cat == "" {
-			cat = "其他"
-		}
-		if !catSet[cat] {
-			catSet[cat] = true
-			cats = append(cats, cat)
-		}
-		groups[cat] = append(groups[cat], e)
-	}
-	sort.Strings(cats)
-	var b strings.Builder
-	b.WriteString("📋 工具使用指南（按分类，请优先使用专用工具而非 run_command）：\n\n")
-	for _, cat := range cats {
-		ents := groups[cat]
-		b.WriteString("### " + cat + "\n")
-		for _, e := range ents {
-			b.WriteString("- **" + e.name + "**：" + e.guide + "\n")
-		}
-		b.WriteString("\n")
-	}
-	b.WriteString("💡 通用原则：当存在专用工具时，请优先使用专用工具而非 run_command。" +
-		"专用工具拥有更精确的参数校验、错误处理和输出格式化，结果更可靠。")
-	return b.String()
+	return ""
 }
 
 // Copy 深拷贝 Registry（含钩子引用）。子 Loop 用副本注册工具，避免污染父表。

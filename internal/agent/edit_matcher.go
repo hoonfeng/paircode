@@ -350,7 +350,7 @@ func diagnoseNotFound(content, old string) error {
 			fmt.Fprintf(&b, "  L%d: %s\n", i+1, strings.TrimSpace(contentLines[i]))
 		}
 	}
-	b.WriteString("\n建议：1) 用 read_file 重新获取最新内容并逐字复制 old_string；2) 改用 line_start/line_end 行号定位（更可靠）；3) 检查缩进 tab/空格、行尾空白是否一致。")
+	b.WriteString("\n建议：1) 重新获取最新内容并逐字复制原文；2) 改用行号定位（更可靠）；3) 检查缩进 tab/空格、行尾空白是否一致。")
 	return fmt.Errorf("%s", b.String())
 }
 

@@ -1035,14 +1035,14 @@ func (l *Loop) buildInjectionMessage() string {
 			b.WriteString("\n\n")
 		}
 		b.WriteString("# ★ 自主模式：计划→子任务树形追踪\n")
-		b.WriteString("自主模式下使用两级任务追踪——计划步骤为树干，子任务为枝叶：\n")
-		b.WriteString("1. 收到任务后第一轮：调用 update_plan 制定高层执行计划（2-5 步），用 pending/in_progress/done 追踪\n")
-		b.WriteString("2. 每个步骤开始执行时：调用 update_tasks 为该步骤创建子任务，每项子任务必须带 plan_step_index 绑定到对应的计划步骤\n")
-		b.WriteString("   plan_step_index = 0 表示第 1 步，1 表示第 2 步，以此类推\n")
-		b.WriteString("3. 当前步骤的所有子任务完成后：调用 update_plan 将该步骤标记 done，然后进入下一步骤\n")
+		b.WriteString("自主模式下使用两级任务追踪——计划步骤为树干，子任务为枝叶（工具名称与用法见 tools 参数 schema）：\n")
+		b.WriteString("1. 收到任务后第一轮：调用计划工具制定高层执行计划（2-5 步），用 pending/in_progress/done 追踪\n")
+		b.WriteString("2. 每个步骤开始执行时：调用任务清单工具为该步骤创建子任务，每项子任务必须绑定到对应的计划步骤\n")
+		b.WriteString("   plan_step_index = 0 表示第 1 步，1 表示第 2 步，以此类推（参数定义见 tools 参数 schema）\n")
+		b.WriteString("3. 当前步骤的所有子任务完成后：调用计划工具将该步骤标记 done，然后进入下一步骤\n")
 		b.WriteString("4. 所有计划步骤全部完成后：结束本轮任务\n")
-		b.WriteString("- ★ 每次 update_tasks 必须把该步骤内的所有子任务一起传入（全量替换），已不在列表中的子任务将自动清理\n")
-		b.WriteString("- 子任务也遵守全量替换规则——即使是不同步骤的子任务，也要在一次 update_tasks 中传入（用不同的 plan_step_index 区分）\n")
+		b.WriteString("- ★ 每次调用任务清单工具必须把该步骤内的所有子任务一起传入（全量替换），已不在列表中的子任务将自动清理\n")
+		b.WriteString("- 子任务也遵守全量替换规则——即使是不同步骤的子任务，也要在一次调用中传入（用不同的 plan_step_index 区分）\n")
 	}
 
 	if b.Len() == 0 {
@@ -1311,91 +1311,60 @@ func fullSystemPrompt(roots []string) string {
 		"- 修改文件前，先调用影响分析类工具（函数级影响链或文件级导入依赖）了解影响范围。\n" +
 		"- 每次最多并行 2 个读操作（仅在两文件明显互不依赖时）。\n" +
 		"- 写操作和读操作不要混在同一轮——先读完确认，再写。\n\n" +
-		"# ★ 代码知识图谱（codegraph）使用指南\n" +
-		"codegraph 11 个工具基于结构化理解（实体+关系+调用图），比旧版纯文本工具更精确、更智能。\n" +
-		"决策规则：搜函数/类型/变量名 → codegraph_search（优于 search_content）；找函数定义 → codegraph_function（多语言，优于 find_symbol）；\n" +
-		"查调用者 → codegraph_callers（优于 find_symbol_usages）；函数级影响分析 → codegraph_impact（优于 check_impact）；\n" +
-		"看类型结构 → codegraph_class（优于 get_file_symbols）。\n" +
-		"覆盖 34 种语言（Go/JS/TS/Python/Rust/Java/C++/C#/Ruby/PHP/Swift/Kotlin/Dart/Lua/Bash/SQL/Vue/HTML/CSS/JSON/YAML/Markdown 等）。\n\n" +
+
 		"# 错误恢复\n" +
 		"- 工具调用失败后分析错误原因，换一种方式重试（最多 3 次）。\n" +
-		"- edit_file/multi_edit 已内置 CRLF 归一化与空白折叠匹配，常规差异无需重读。\n" +
-		"  失败时诊断信息含行号上下文：优先改用 line_start/line_end 行号定位（最可靠）；\n" +
-		"  若仍失败再 read_file 确认最新内容。★ 绝不要因匹配失败就改用 write_file 覆盖整个文件。\n" +
+		"- 编辑类工具已内置 CRLF 归一化与空白折叠匹配，常规差异无需重读；\n" +
+		"  失败时诊断信息含行号上下文：优先改用行号定位（最可靠），再读取确认最新内容。\n" +
+		"  ★ 绝不要因匹配失败就改用整文件覆盖写入。\n" +
 		"- 工具执行失败后分析错误原因，换一种方式重试。\n" +
-		"- run_command 失败 → 检查 stderr 输出，不要只靠 exit code 判断。\n" +
-		"- ★ run_command 被 isBlockingCommand 拦截 → 说明命令是长期进程（如 dev server）。" +
-		"你用了错误的工具！请改用 run_background 执行，不要用 run_command 重试。\n\n" +
+		"- 命令执行失败 → 检查 stderr 输出，不要只靠 exit code 判断。\n" +
+		"- ★ 命令执行被阻塞拦截 → 说明是长期进程（如 dev server）：改用后台执行方式，不要原地重试。\n\n" +
 		"# 代码修改纪律（严格遵守，防改错）\n" +
 		"★★ 以下规则是反复改出语法错误后总结的铁律，必须遵守 ★★\n\n" +
 		"## 改前准备\n" +
-		"1. 修改前先用 read_file 完整读取目标区域（至少 20 行上下文），分析清楚结构和缩进风格。\n" +
+		"1. 修改前先完整读取目标区域（至少 20 行上下文），分析清楚结构和缩进风格。\n" +
 		"2. 一次只改一个文件的一个逻辑块——不在一轮中交叉修改多个文件。\n" +
-		"3. 同一文件的多次改动用 multi_edit 在一次工具调用中完成，不要分多次 edit_file。\n\n" +
+		"3. 同一文件的多次改动用批量编辑在一次工具调用中完成，不要分多次零散编辑。\n\n" +
 		"## 修改方式\n" +
-		"1. 小改动（≤5 行）：用 edit_file 精确替换，确保 old_string 在文件中唯一。\n" +
-		"2. 大改动（>5 行或整段替换）：改用 write_file 写入整个目标区域（先用 read_file 确认内容后，精确写需要替换的行范围）。\n" +
-		"3. ★ 换行符兼容 ★ edit_file 已内置 CRLF/空白折叠匹配，不需要手动调整换行符格式。\n" +
-		"4. ★ 行号定位优先 ★ 当 edit_file 匹配失败时，优先用 line_start/line_end 行号定位，不再尝试 old_string 匹配。\n" +
-		"5. ★ 文件结构错乱时 ★ 如果文件已经因为反复修改而结构错乱（重复定义、大括号不匹配），先用 git checkout -- 文件 恢复原始版本，再重新做完整修改——不在乱文件上继续打补丁。\n\n" +
+		"1. 小改动（≤5 行）：用编辑类工具精确替换，确保替换文本在文件中唯一。\n" +
+		"2. 大改动（>5 行或整段替换）：写入整个目标区域（先确认内容后，精确写需要替换的行范围）。\n" +
+		"3. ★ 换行符兼容 ★ 编辑工具已内置 CRLF/空白折叠匹配，不需要手动调整换行符格式。\n" +
+		"4. ★ 行号定位优先 ★ 编辑匹配失败时，优先用行号定位，不再尝试文本匹配。\n" +
+		"5. ★ 文件结构错乱时 ★ 如果文件已经因为反复修改而结构错乱（重复定义、大括号不匹配），先恢复原始版本，再重新做完整修改——不在乱文件上继续打补丁。\n\n" +
 		"## 验证\n" +
-		"1. 改完后必须运行对应语言的编译/语法检查工具验证无错误（如 gofmt -e、vite build、tsc --noEmit 等）。\n" +
+		"1. 改完后必须运行对应语言的编译/语法检查工具验证无错误。\n" +
 		"2. 编译通过≠功能正确，仍需执行相应运行时验证。\n\n" +
 		"# 验证原则\n" +
-		"每次工具调用后，先验证再行动：文件读取后确认行号匹配；run_command 后检查 stdout 内容；\n" +
+		"每次工具调用后，先验证再行动：文件读取后确认行号匹配；命令执行后检查输出内容；\n" +
 		"搜索结果确认匹配正确。不要声称改动成功除非看到了证据。\n\n" +
 		"# ⚠️ 验证流程（核心要求——不允许跳过）\n" +
 		"写完代码后，编译通过 ≠ 功能正常。必须根据改动类型执行实际验证：\n\n" +
 		"## Web 前端改动（Vue/React/HTML/CSS/JS）\n" +
-		"1. 确认 dev server 正在运行（run_background 启动 npm run dev / go run 等）\n" +
-		"2. 调用 web_debug 打开页面 URL，检查控制台错误 + 截图\n" +
-		"3. 如有交互逻辑，通过 web_debug 的 type_selector/click_selector 模拟操作\n" +
-		"4. 用 eval 参数执行 JS 检查 DOM 状态\n\n" +
+		"1. 确认 dev server 正在运行（后台方式启动）\n" +
+		"2. 打开页面 URL，检查控制台错误 + 截图\n" +
+		"3. 如有交互逻辑，通过页面调试工具的模拟操作验证\n" +
+		"4. 用脚本执行检查 DOM 状态\n\n" +
 		"## 后端 API / Go 代码 / 桌面端改动\n" +
-		"1. go_build 确认编译通过，run_test 执行相关测试\n" +
-		"2. 启动 server 后用 web_debug 或 curl 验证接口\n" +
-		"3. 复杂逻辑用 debug_start 设置断点调试\n\n" +
+		"1. 编译确认通过，执行相关测试\n" +
+		"2. 启动服务后用调试工具或请求验证接口\n" +
+		"3. 复杂逻辑用断点调试\n\n" +
 		"## 验证纪律\n" +
 		"- 每次代码改动后必须验证，不允许只编译就声称完成\n" +
 		"- 验证失败时先修复再继续\n\n" +
-		"# ★ 调研优先：善用 codegraph\n" +
-		"项目已预构建代码知识图谱（codegraph），能秒级定位函数/类型定义、调用关系、影响范围，无需全文读取。\n" +
-		"应优先使用 codegraph 工具而非 search_content 全文搜索或 list_files 遍历——它们是结构化的，更省 token。\n" +
-		"搜函数→codegraph_search / 找定义→codegraph_function / 查调用者→codegraph_callers / 查影响→codegraph_impact。\n\n" +
-		"其他工具：编辑(read_file/edit_file/multi_edit)、运行(run_command/run_background)、\n" +
-		"联网(web_fetch/web_search)、截图(screenshot_*)、调试(debug_*)、Git(git_*)、记忆(memory_*)、\n" +
-		"BUG检测(bug_*)、办公(csv_*/word_*/read_pdf)、MCP/技能(skill_*/mcp_*)、任务(update_tasks/update_plan)。\n\n" +
+
 		"# 工作方式\n" +
-		"BUG检测(bug_*)、办公(csv_*/word_*/read_pdf)、MCP/技能(skill_*/mcp_*)、任务(update_tasks)。\n" +
-		"复杂或多步任务先用 update_tasks 列出细分任务，再逐步执行并更新状态（自主模式下先用 update_plan 再建子任务）。\n" +
-		"先用 search_* 定位、read_file 细读，再动手；改动优先 edit_file（小而准），大改才 write_file。\n" +
-		"不确定的库用法/报错/最新信息，用 web_search / web_fetch 查证，别凭记忆臆测。\n" +
-		"写类操作在手动审核模式下需用户批准；若被拒绝，换思路或先解释原因，勿反复重试同一操作。\n\n" +
+		"复杂或多步任务先用任务清单工具列出细分任务，再逐步执行并更新状态（自主模式下先列计划再建子任务）。\n" +
+		"先用搜索/定位类工具定位、细读，再动手；改动优先小而准的编辑，大改才整段写入。\n" +
+		"不确定的库用法/报错/最新信息，用联网检索类工具查证，别凭记忆臆测。\n" +
+		"写类操作在手动审核模式下需用户批准；若被拒绝，换思路或先解释原因，勿反复重试同一操作。\n" +
+		"所有工具的具体名称、用途与参数以 tools 参数中给出的 schema 为准，不要臆造工具名或参数。\n\n" +
 		"# 防止卡死\n" +
 		"- 不要连续 3 轮只输出分析文本而不调用任何工具。\n" +
 		"- 不确定时宁可声明完成并向用户汇报，让用户决定是否继续。\n" +
-		"复杂或多步任务先用 update_tasks 列出细分任务，再逐步执行并更新状态。\n" +
-		"- run_command 阻塞预防：长期进程用 run_background（后台不阻塞）。\n" +
-		"- 完成后输出 Markdown 总结：改了哪些文件、如何验证、遗留问题。\n\n" +
-		"# 插件管理（cordis_* 工具）\n" +
-		"- 本环境支持动态插件（goja 沙箱 + Node 桥双路径），两种形态：① 对象 { name, apply(ctx, config), inject? }；\n" +
-		"  ② 函数 (ctx, config) => void。链路：cordis_define 登记 → cordis_run 装载（apply 注册工具/服务）→\n" +
-		"  cordis_stop 停止回收 → cordis_undefine 忘掉定义；cordis_inspect 查看插件/定义/贡献归属。\n" +
-		"- 服务型插件（ctx.provide 提供能力对象）自动暴露为 <service>_<method> 工具，agent 可直接调用；\n" +
-		"  npm 插件走 Node 桥真实运行（需 node + npm；缺原生依赖时安装会给出提示与替代方案）。\n" +
-		"- 写插件前先 cordis_service_list 查精确签名；失败修复用 cordis_define pluginId=xxx 追加版本再 cordis_run。\n\n" +
-		"# 工具集管理（toolset_*，agent 自主创建）\n" +
-		"- 工具集 = 为项目/需求组合的插件包（固化 .pair/toolsets/*.json，启动自动装载）。\n" +
-		"  ★ 创建由 agent 自主决策：接手项目/任务发现缺少合适工具集时，主动用\n" +
-		"  toolset_build 分析项目（语言/框架/文件结构 + LLM 理解项目目的）→ 模板组合生成插件\n" +
-		"  → 装载并固化。已存在时 toolset_list 查看、toolset_show 看详情、overwrite=true 重建。\n" +
-		"- toolset_export 导出可移植 JSON（分享/发布市场）；toolset_import 导入（用户提供的发布 JSON）；\n" +
-		"  toolset_remove 删除（scope=project|user）。工具集即插件，与 cordis_* 同属插件生态能力。\n" +
-		"- ★ 插件内工具可单独加入：toolset_edit {name=工具集, action=add_plugin, plugin_name=插件, tools=工具1,工具2}\n" +
-		"  只加入插件内指定工具（插件整体装载、白名单外工具自动摘除）；或 add_plugin 整插件加入后\n" +
-		"  rm_tool 摘除不需要的（enable_tool 恢复）。toolset_show 查看每个插件的工具清单与启用状态。\n" +
-		"- 用户也可手动创建（前端文件树「工具集」区点 + 动态构建 / 粘贴导入 / 放置 JSON），\n" +
-		"  两种途径并存；agent 端以 toolset_build 自主创建为主。\n"
+		"复杂或多步任务先用任务清单工具列出细分任务，再逐步执行并更新状态。\n" +
+		"- 阻塞预防：长期进程用后台执行（不阻塞等待）。\n" +
+		"- 完成后输出 Markdown 总结：改了哪些文件、如何验证、遗留问题。\n\n"
 }
 
 // ComposeSystemPrompt 组装完整 system prompt：静态前缀 + 唯一 CacheBoundary + 动态后缀。

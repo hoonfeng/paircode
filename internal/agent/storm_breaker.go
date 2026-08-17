@@ -145,7 +145,7 @@ func (g *RepeatSuccessGuard) Check(toolName, argsJSON string, readOnly bool) (bo
 		return false, ""
 	}
 	return true, fmt.Sprintf(
-		"[循环防护] %q 已成功执行 %d 次，参数完全相同。再次执行不会带来新进展。请改用其他方式：用 edit_file 做文件修改、用 read_file 或 run_command 验证结果，或在最终答复中说明情况。",
+		"[循环防护] %q 已成功执行 %d 次，参数完全相同。再次执行不会带来新进展。请改用其他方式：用编辑工具做文件修改、用读取/命令执行工具验证结果，或在最终答复中说明情况。",
 		toolName, count)
 }
 

@@ -113,9 +113,9 @@ func formatVerifyReport(source string, r *verify.Report) string {
 			}
 		}
 		b.WriteString("\n建议：\n")
-		b.WriteString("- 对过期条目用 memory_delete 删除，或用 memory_write 更新内容\n")
-		b.WriteString("- 对知识库过条目用 project_info_delete 删除，或用 project_info_write 更新\n")
-		b.WriteString("- 定期运行 memory_verify / project_info_verify 保持数据新鲜\n")
+		b.WriteString("- 对过期条目可删除或用更新类工具刷新（工具名称与用法见 tools 参数 schema）\n")
+		b.WriteString("- 对知识库过期条目可删除或用更新类工具刷新\n")
+		b.WriteString("- 定期执行过期检查类工具保持数据新鲜\n")
 	} else {
 		b.WriteString("，全部正常。\n")
 	}
@@ -175,6 +175,6 @@ func AutoVerifyStale() string {
 		}
 		b.WriteString("\n")
 	}
-	b.WriteString("运行 memory_verify 或 project_info_verify 查看完整报告。")
+	b.WriteString("可运行过期检查类工具查看完整报告（工具名称与用法见 tools 参数 schema）。")
 	return b.String()
 }

@@ -566,6 +566,9 @@ func toolsetEditRmPlugin(ph *PluginHost, root string, scope toolsetScope, ts *To
 		}
 	}
 	if idx < 0 {
+		if toolsetPluginIsSelfBootstrap(ph, pn) {
+			return "", fmt.Errorf("插件 %q 是系统自举管理插件（工具全部为 SystemTool/协议工具，恒对 agent 可见、不依赖工具集声明），不在工作区工具集内、无需也无法移出", pn)
+		}
 		return "", fmt.Errorf("工具集 %q 中没有插件 %q（toolset_show 查看现有插件）", ts.Name, pn)
 	}
 	unloadToolsetPlugin(ph, &ts.Plugins[idx])
@@ -592,6 +595,12 @@ func toolsetEditRmTool(ph *PluginHost, root string, scope toolsetScope, ts *Tool
 		}
 	}
 	if idx < 0 {
+		return "", fmt.Errorf("工具集 %q 中没有插件 %q", ts.Name, pn)
+	}
+	if idx < 0 {
+		if toolsetPluginIsSelfBootstrap(ph, pn) {
+			return "", fmt.Errorf("插件 %q 是系统自举管理插件（工具全部为 SystemTool/协议工具，恒对 agent 可见、不依赖工具集声明），不在工作区工具集内、无需也无法移出", pn)
+		}
 		return "", fmt.Errorf("工具集 %q 中没有插件 %q", ts.Name, pn)
 	}
 	p := &ts.Plugins[idx]
@@ -637,6 +646,9 @@ func toolsetEditEnableTool(ph *PluginHost, root string, scope toolsetScope, ts *
 		}
 	}
 	if idx < 0 {
+		if toolsetPluginIsSelfBootstrap(ph, pn) {
+			return "", fmt.Errorf("插件 %q 是系统自举管理插件（工具全部为 SystemTool/协议工具，恒对 agent 可见、不依赖工具集声明），不在工作区工具集内、无需也无法移出", pn)
+		}
 		return "", fmt.Errorf("工具集 %q 中没有插件 %q", ts.Name, pn)
 	}
 	p := &ts.Plugins[idx]
@@ -795,6 +807,30 @@ func toolsetEditBuiltinTool(ph *PluginHost, root string, args map[string]any, ac
 		return fmt.Sprintf("✅ 工具 %q 已恢复（内置组 %q 的工具重新对 agent 可见）", tool, gn), nil
 	}
 	return fmt.Sprintf("✅ 工具 %q 已从内置组 %q 摘除（组保留，工具对 agent 不可见；enable_tool 可恢复）", tool, gn), nil
+}
+
+// toolsetPluginIsSelfBootstrap 插件（按名）是否装载且其注册工具全部为系统自举
+// 协议工具（SystemTool/isAgentProtocolTool）。这类插件（如磁盘插件 tool-system）
+// 不在工具集管理范畴（工具恒对 agent 可见、不依赖工具集声明）；rm_tool/rm_plugin/
+// enable_tool 找不到工具集条目时据此给出友好提示，避免「工具集中没有插件」的误导。
+func toolsetPluginIsSelfBootstrap(ph *PluginHost, pn string) bool {
+	if ph == nil {
+		return false
+	}
+	tns := ph.PluginToolsByPlugin()[pn]
+	if len(tns) == 0 {
+		return false
+	}
+	reg := (*Registry)(nil)
+	if ph.Context() != nil {
+		reg = ph.Context().Tools
+	}
+	for _, tn := range tns {
+		if !toolIsSelfProtocol(reg, tn) {
+			return false
+		}
+	}
+	return true
 }
 
 // EditToolsetPublic 工具集手动编辑（公开导出，web_server/前端面板直调）。

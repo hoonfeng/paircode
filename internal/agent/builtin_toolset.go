@@ -593,6 +593,22 @@ func pluginGroupsOf(reg *Registry, ph *PluginHost, workspaceToolsets []Workspace
 		if name == "" || len(tools) == 0 {
 			continue // 空名/无工具的插件不展示（空 key 为历史残留注册，无操作对象）
 		}
+		// ★ 系统自举插件组过滤（2026-08-17）：整组工具全部为系统自举协议工具
+		//   （SystemTool / isAgentProtocolTool——如磁盘插件 tool-system 的
+		//   update_tasks/update_plan/history_* 等）→ 跳过。这类插件是宿主自举链路：
+		//   工具恒对 agent 可见、不依赖工作区工具集声明，无「加入/移出工具集」语义；
+		//   展示在管理弹窗会误判为「已加入」（enabled=true 但工具集无条目），
+		//   移出时 rm_tool/rm_plugin 报「工具集中没有插件」——误导用户。
+		allProtocol := true
+		for _, tn := range tools {
+			if !toolIsSelfProtocol(reg, tn) {
+				allProtocol = false
+				break
+			}
+		}
+		if allProtocol {
+			continue
+		}
 		sort.Strings(tools)
 		g := BuiltinGroupInfo{Name: name, Title: name, Desc: pluginPurposeOf(ph, name), Source: "plugin"}
 		g.Joined = joinedPlugins[name]
@@ -622,6 +638,21 @@ func pluginPurposeOf(ph *PluginHost, name string) string {
 		}
 	}
 	return ""
+}
+
+// toolIsSelfProtocol 工具是否为系统自举协议工具（SystemTool 或 isAgentProtocolTool）。
+// 这类工具不依赖工作区工具集声明（恒对 agent 可见），不可通过工具集移出/恢复，
+// 也不应出现在「可加入/移出工具集」的管理弹窗候选池。
+func toolIsSelfProtocol(reg *Registry, name string) bool {
+	if isAgentProtocolTool(name) {
+		return true
+	}
+	if reg != nil {
+		if t, ok := reg.Get(name); ok && t.SystemTool {
+			return true
+		}
+	}
+	return false
 }
 
 // BuiltinToolsetOf 派生内置工具集（Toolset 形态，scope=builtin 虚拟）。

@@ -839,9 +839,9 @@ func buildKBStaleness(roots []string) string {
 		b.WriteString(allStale[i] + "\n")
 	}
 	if len(allStale) > 10 {
-		b.WriteString(fmt.Sprintf("  … 还有 %d 条。建议运行 project_info_verify 查看全量，并更新或删除过时条目。\n", len(allStale)-10))
+		b.WriteString(fmt.Sprintf("  … 还有 %d 条。建议查看全量报告，并更新或删除过时条目。\n", len(allStale)-10))
 	}
-	b.WriteString("过时条目用 project_info_delete 删除或用 project_info_write 更新。")
+	b.WriteString("过时条目可删除或用更新类工具刷新（工具名称与用法见 tools 参数 schema）。")
 	return b.String()
 }
 
@@ -956,7 +956,7 @@ func buildCodeGraphStats() string {
 	if stats.RelationCount > 0 {
 		b.WriteString(fmt.Sprintf("关系总数：%d。\n", stats.RelationCount))
 	}
-	b.WriteString("如果项目文件有变更，用 codegraph_build 重建图谱获取最新结构。")
+	b.WriteString("如果项目文件有变更，应重建代码图谱获取最新结构（工具名称与用法见 tools 参数 schema）。")
 	return b.String()
 }
 
@@ -987,7 +987,7 @@ func BuildResumeContext(convID, currentTask string, history []Message, store Mes
 		if recall := buildRecallContext(roots, currentTask); recall != "" {
 			b.WriteString("\n\n# 相关项目记忆（自动召回）\n")
 			b.WriteString(recall)
-			b.WriteString("\n（需要细节用 memory_read 读全文。）")
+			b.WriteString("\n（需要细节可查询记忆全文。）")
 		}
 		if gs := buildGitStatus(roots); gs != "" {
 			b.WriteString("\n\n# Git 状态\n")
@@ -1075,10 +1075,10 @@ func buildPluginReferences(history []Message) string {
 		}
 		fmt.Fprintf(&b, "reference: {\"pluginId\": %q, \"name\": %q, \"version\": %q, \"state\": %q, \"pkg\": %q, \"versions\": %d, \"purpose\": %q}\n",
 			d.pluginId, d.name, d.version, state, d.packageId, len(ph.PluginVersions(d.pluginId)), d.purpose)
-		b.WriteString("用户引用了该插件。继续推进前先了解其当前实现：\n")
-		b.WriteString("1. cordis_inspect id=" + d.pluginId + " 查看版本链与运行状态；\n")
-		b.WriteString("2. cordis_inspect id=" + d.pluginId + " version=" + d.version + " 读源码与诊断（不要凭记忆臆测代码）；\n")
-		b.WriteString("3. 需要修改：cordis_define pluginId=" + d.pluginId + " 追加新版本 → cordis_run id=" + d.pluginId + " 装载更新。\n")
+		b.WriteString("用户引用了该插件。继续推进前先了解其当前实现（工具名称与用法见 tools 参数 schema）：\n")
+		b.WriteString("1. 用插件检查类工具查看版本链与运行状态；\n")
+		b.WriteString("2. 查看指定版本的源码与诊断（不要凭记忆臆测代码）；\n")
+		b.WriteString("3. 需要修改：追加新版本并装载更新。\n")
 		b.WriteString("</cordis_dynamic_plugin_context>")
 	}
 	return b.String()

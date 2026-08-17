@@ -187,10 +187,15 @@ func TestPromptTrimmedInHarnessMode(t *testing.T) {
 			t.Errorf("harness 精简提示词仍引用被移除工具名 %q", banned)
 		}
 	}
-	// 协议描述保留
-	for _, keep := range []string{"update_tasks", "generate_commit_message", "read", "edit", "write", "bash", "web_search", "cordis_define", "cordis_run"} {
-		if !strings.Contains(p, keep) {
-			t.Errorf("harness 精简提示词缺失协议/保留工具描述 %q", keep)
+	// ★ 工具描述已取消（2026-08-17）：提示词中不再注入任何工具名/用法说明——
+	//   协议工具（update_tasks/generate_commit_message 等）同样不点名，
+	//   工具名称与用法完全由 tools 参数 schema 提供。
+	for _, banned := range []string{"update_tasks", "generate_commit_message", "update_plan",
+		"read_file", "edit_file", "write_file", "run_command", "web_search", "web_fetch",
+		"cordis_define", "cordis_run", "cordis_inspect", "toolset_build", "toolset_show",
+		"ask_user", "str_replace_editor"} {
+		if strings.Contains(p, banned) {
+			t.Errorf("harness 精简提示词不应引用工具名 %q（工具信息以 tools 参数 schema 为准）", banned)
 		}
 	}
 }
@@ -204,7 +209,7 @@ func TestPromptFullInFullToolsMode(t *testing.T) {
 	if s := LongTermMemoryPrompt(); s == "" {
 		t.Error("WB_FULL_TOOLS=1 时 LongTermMemoryPrompt 不应为空")
 	}
-	// 完整版提示词长度应显著大于精简版（保留 pair 工具说明）
+	// 完整版提示词长度应显著大于精简版（保留验证流程等行为段）
 	full := DefaultSystemPrompt(roots)
 	t.Setenv("WB_FULL_TOOLS", "")
 	t.Setenv("WB_HARNESS", "1")
@@ -212,7 +217,8 @@ func TestPromptFullInFullToolsMode(t *testing.T) {
 	if len(full) <= len(trimmed) {
 		t.Errorf("完整版提示词应比精简版长：full=%d trimmed=%d", len(full), len(trimmed))
 	}
-	if !strings.Contains(full, "codegraph") {
-		t.Error("WB_FULL_TOOLS=1 完整版提示词应包含 codegraph 说明")
+	// ★ 工具描述已取消（2026-08-17）：完整版同样不应包含 codegraph 等工具说明
+	if strings.Contains(full, "codegraph") {
+		t.Error("WB_FULL_TOOLS=1 完整版提示词不应包含 codegraph 工具说明（工具信息以 tools 参数 schema 为准）")
 	}
 }

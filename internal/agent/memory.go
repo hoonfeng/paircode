@@ -60,7 +60,7 @@ func RecallMemories(root, task string, max int) string {
 	for _, h := range hits {
 		b.WriteString("- 「" + h.name + "」：" + h.desc + "\n")
 	}
-	b.WriteString("（需要细节用 memory_read 读全文。）")
+	b.WriteString("（需要细节可查询记忆全文。）")
 	return b.String()
 }
 

@@ -496,7 +496,7 @@ func buildDesktopSystemStatic() string {
 	var b strings.Builder
 	b.WriteString("你是 PairCode IDE 桌面端的内置 Agent，运行在本地桌面环境中。")
 	b.WriteString("你的任务是帮助用户完成代码编辑、文件操作、Git 管理、问题排查等开发工作。")
-	b.WriteString("优先使用专用工具而非 run_command。写类操作需谨慎。")
+	b.WriteString("优先使用专用工具完成操作，写类操作需谨慎。")
 	b.WriteString(skills.Prompt())
 	return b.String()
 }

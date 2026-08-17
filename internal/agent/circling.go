@@ -47,7 +47,7 @@ func (l *Loop) detectCircling() string {
 	}
 	if sameCount >= circlingRepeatStop {
 		return "[系统提示·打破死循环] 你已连续 " + strconv.Itoa(sameCount) +
-			" 次执行同一操作 `" + shortSig(last) + "`，中间没有任何其他操作——像在原地绕圈。请停下来换思路：先 read_file 看看当前状态，或换工具、换方式推进。别继续重复同一步。"
+			" 次执行同一操作 `" + shortSig(last) + "`，中间没有任何其他操作——像在原地绕圈。请停下来换思路：先读取当前状态确认事实，或换工具、换方式推进。别继续重复同一步。"
 	}
 
 	// ---- 2. 从尾部倒扫连续相同签名+失败 ----
@@ -61,8 +61,8 @@ func (l *Loop) detectCircling() string {
 	}
 	if failCount >= circlingFailStop {
 		return "[系统提示·打破死循环] 操作 `" + shortSig(last) + "` 已连续失败 " + strconv.Itoa(failCount) +
-			" 次且中间没有其他操作——别原样重试！请：① 先 read_file / run_command 检查真实状态、定位失败根因；" +
-			"② 换一种工具或思路；③ 仍卡住就用 ask_user 说明卡点求助。"
+			" 次且中间没有其他操作——别原样重试！请：① 先检查真实状态、定位失败根因；" +
+			"② 换一种工具或思路；③ 仍卡住就向用户说明卡点求助。"
 	}
 
 	return ""
