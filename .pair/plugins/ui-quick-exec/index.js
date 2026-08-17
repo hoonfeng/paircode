@@ -56,26 +56,31 @@ return {
       return saveCommands(cmds)
     })
 
-    // 执行命令（独立二进制 ui-quick-exec.exe，工作区根 cwd，超时可配默认 600s）
-    // ★ 2026-08-17：原走 ctx.bash.exec（宿主 runShellWithTimeout 硬编码 120s，
-    // 打包类长命令超 120s 被强制 kill）→ 改经 ctx.binary.exec，超时由 timeoutMs
-    // 精确控制（opts.timeout = timeoutMs+10s 作外层保护），完全不经宿主 120s 桥接。
+      // 执行命令（独立二进制 ui-quick-exec.exe，工作区根 cwd，超时可配）
+      // ★ 2026-08-17：原走 ctx.bash.exec（宿主 runShellWithTimeout 硬编码 120s，
+      // 打包类长命令超 120s 被强制 kill）→ 改经 ctx.binary.exec。
+      // ★ 超时语义：timeoutMs 是命令级精确控制（exe 内 taskkill /T 杀进程树，不留孤儿）；
+      // opts.timeout 只是宿主外层兜底——0=不超时时给 24h（真不超时），>0 时给
+      // timeoutMs+60s（须显著大于命令级超时，否则宿主先杀 exe 会让打包子进程变孤儿
+      // 继续跑完却向上报超时失败——"任务成功但报超时"的根因）。
     ctx.registerClientMethod('runCommand', (args) => {
       const command = args && typeof args.command === 'string' ? args.command.trim() : ''
-      const timeoutMs = args && typeof args.timeoutMs === 'number' && args.timeoutMs > 0
-        ? Math.round(args.timeoutMs)
-        : 600000 // 默认 600s
+      const rawMs = args && typeof args.timeoutMs === 'number' ? args.timeoutMs : 600000
+      const timeoutMs = rawMs > 0 ? Math.round(rawMs) : 0 // 0 = 不超时
       if (!command) {
         return { ok: false, command: '', output: '', error: '命令为空', exitCode: -1, timedOut: false, durationMs: 0, timeoutMs }
       }
       try {
-        const res = ctx.binary.exec('run', { command, timeoutMs }, { timeout: timeoutMs + 10000 })
+        const hostTimeout = timeoutMs > 0 ? timeoutMs + 60000 : 86400000 // 外层兜底：>0 时 +60s；0 时 24h
+        const res = ctx.binary.exec('run', { command, timeoutMs }, { timeout: hostTimeout })
         let data = {}
         try { data = JSON.parse((res && res.text) || '{}') } catch (e) { /* 二进制返回非 JSON（理论上不会） */ }
         const timedOut = !!data.timedOut
         const exitCode = typeof data.exitCode === 'number' ? data.exitCode : 0
         let error = ''
-        if (timedOut) error = '命令超时（超过 ' + Math.round(timeoutMs / 1000) + ' 秒，已强制结束）'
+        if (timedOut) error = timeoutMs > 0
+          ? '命令超时（超过 ' + Math.round(timeoutMs / 1000) + ' 秒，已强制结束）'
+          : '命令被强制结束（已超过外层兜底时间）'
         else if (exitCode !== 0) error = '命令退出码: ' + exitCode
         return {
           ok: !timedOut && exitCode === 0,

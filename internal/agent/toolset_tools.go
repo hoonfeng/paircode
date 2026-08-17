@@ -553,6 +553,8 @@ func toolsetEditAddPlugin(ph *PluginHost, root string, scope toolsetScope, ts *T
 }
 
 // toolsetEditRmPlugin 从工具集移除插件（卸载其注册的全部工具）。
+// ★ 2026-08-17：插件不在工作区工具集条目中但已装载时，整组移出 = 该插件全部
+//   工具移出 agent 可用集合（插件记入工具集 + DisabledTools 全量摘除）。
 func toolsetEditRmPlugin(ph *PluginHost, root string, scope toolsetScope, ts *Toolset, args map[string]any) (string, error) {
 	pn := strings.TrimSpace(mArgStr(args, "plugin_name"))
 	if pn == "" {
@@ -566,8 +568,23 @@ func toolsetEditRmPlugin(ph *PluginHost, root string, scope toolsetScope, ts *To
 		}
 	}
 	if idx < 0 {
-		if toolsetPluginIsSelfBootstrap(ph, pn) {
-			return "", fmt.Errorf("插件 %q 是系统自举管理插件（工具全部为 SystemTool/协议工具，恒对 agent 可见、不依赖工具集声明），不在工作区工具集内、无需也无法移出", pn)
+		// 插件不在工具集条目中但已装载——管理弹窗展示的是「当前所有可用工具」，
+		// 整组移出 = 全部工具移出 agent 可用集合：插件记入工具集（条目 +
+		// DisabledTools 全量摘除）+ 禁用全部工具，重启后保持禁用（enable_tool 可恢复）。
+		if ph != nil {
+			if tns := ph.PluginToolsByPlugin()[pn]; len(tns) > 0 {
+				entry := &ToolsetPlugin{Name: pn, Purpose: pluginPurposeOf(ph, pn), DisabledTools: append([]string(nil), tns...)}
+				ts.Plugins = append(ts.Plugins, *entry)
+				if reg := pluginHostRegistry(ph); reg != nil {
+					for _, tn := range tns {
+						reg.SetToolEnabled(tn, false)
+					}
+				}
+				if err := saveToolset(root, scope, ts); err != nil {
+					return "", err
+				}
+				return fmt.Sprintf("✅ 插件 %q 已整组移出（%d 个工具对 agent 不可见；插件已记入工作区工具集，enable_tool 可恢复）", pn, len(tns)), nil
+			}
 		}
 		return "", fmt.Errorf("工具集 %q 中没有插件 %q（toolset_show 查看现有插件）", ts.Name, pn)
 	}
@@ -579,8 +596,10 @@ func toolsetEditRmPlugin(ph *PluginHost, root string, scope toolsetScope, ts *To
 	return fmt.Sprintf("✅ 插件 %q 已从工具集 %q 移除（工具已卸载）。剩余 %d 个插件。",
 		pn, ts.Name, len(ts.Plugins)), nil
 }
-
 // toolsetEditRmTool 摘除插件下单个工具（插件保留；工具禁用 → agent 不可见）。
+// ★ 2026-08-17：插件不在工作区工具集条目中但已装载注册工具时同样支持移除——
+//   管理弹窗展示的是「当前所有可用工具」，移除 = 让该工具对 agent 不可用：
+//   插件记入工具集（条目 + DisabledTools 摘除清单）+ 禁用工具，重启后保持禁用。
 func toolsetEditRmTool(ph *PluginHost, root string, scope toolsetScope, ts *Toolset, args map[string]any) (string, error) {
 	pn := strings.TrimSpace(mArgStr(args, "plugin_name"))
 	tool := strings.TrimSpace(mArgStr(args, "tool"))
@@ -595,13 +614,20 @@ func toolsetEditRmTool(ph *PluginHost, root string, scope toolsetScope, ts *Tool
 		}
 	}
 	if idx < 0 {
-		return "", fmt.Errorf("工具集 %q 中没有插件 %q", ts.Name, pn)
-	}
-	if idx < 0 {
-		if toolsetPluginIsSelfBootstrap(ph, pn) {
-			return "", fmt.Errorf("插件 %q 是系统自举管理插件（工具全部为 SystemTool/协议工具，恒对 agent 可见、不依赖工具集声明），不在工作区工具集内、无需也无法移出", pn)
+		// 插件不在工具集条目：已装载注册工具 → 记入工具集并摘除（移除生效）；
+		// 未装载/未注册 → 明确报错（插件名/工具名可能有误）。
+		if ph != nil && toolRegisteredBy(ph, pn, tool) {
+			entry := &ToolsetPlugin{Name: pn, Purpose: pluginPurposeOf(ph, pn), DisabledTools: []string{tool}}
+			ts.Plugins = append(ts.Plugins, *entry)
+			if reg := pluginHostRegistry(ph); reg != nil {
+				reg.SetToolEnabled(tool, false)
+			}
+			if err := saveToolset(root, scope, ts); err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("✅ 工具 %q 已移出 agent 可用集合（插件 %q 已记入工作区工具集，工具摘除；enable_tool 可恢复）", tool, pn), nil
 		}
-		return "", fmt.Errorf("工具集 %q 中没有插件 %q", ts.Name, pn)
+		return "", fmt.Errorf("工具集 %q 中没有插件 %q（toolset_show 查看现有插件）", ts.Name, pn)
 	}
 	p := &ts.Plugins[idx]
 	// 去重加入禁用清单
@@ -612,8 +638,8 @@ func toolsetEditRmTool(ph *PluginHost, root string, scope toolsetScope, ts *Tool
 	}
 	// 工具存在性提示（不阻塞：插件未运行时工具本就不注册，记录后下次装载生效）
 	registered := false
-	if ph.Context() != nil && ph.Context().Tools != nil {
-		if _, ok := ph.Context().Tools.Get(tool); ok {
+	if reg := pluginHostRegistry(ph); reg != nil {
+		if _, ok := reg.Get(tool); ok {
 			registered = true
 		}
 	}
@@ -630,8 +656,9 @@ func toolsetEditRmTool(ph *PluginHost, root string, scope toolsetScope, ts *Tool
 	}
 	return fmt.Sprintf("✅ 工具 %q 已从插件 %q 摘除（插件保留，工具对 agent 不可见；enable_tool 可恢复）", tool, pn), nil
 }
-
 // toolsetEditEnableTool 恢复被摘除的工具。
+// ★ 2026-08-17：插件不在工具集条目中但工具已注册 → 直接恢复启用（插件记入
+//   工具集，空摘除清单），重启后保持可见。
 func toolsetEditEnableTool(ph *PluginHost, root string, scope toolsetScope, ts *Toolset, args map[string]any) (string, error) {
 	pn := strings.TrimSpace(mArgStr(args, "plugin_name"))
 	tool := strings.TrimSpace(mArgStr(args, "tool"))
@@ -646,10 +673,24 @@ func toolsetEditEnableTool(ph *PluginHost, root string, scope toolsetScope, ts *
 		}
 	}
 	if idx < 0 {
-		if toolsetPluginIsSelfBootstrap(ph, pn) {
-			return "", fmt.Errorf("插件 %q 是系统自举管理插件（工具全部为 SystemTool/协议工具，恒对 agent 可见、不依赖工具集声明），不在工作区工具集内、无需也无法移出", pn)
+		// 插件不在工具集条目：工具已注册 → 启用 + 记入工具集（无摘除），重启后保持可见。
+		reg := pluginHostRegistry(ph)
+		if reg != nil {
+			if t, ok := reg.Get(tool); ok {
+				if !t.Enabled {
+					reg.SetToolEnabled(tool, true)
+				}
+				if tns := ph.PluginToolsByPlugin()[pn]; len(tns) > 0 {
+					entry := &ToolsetPlugin{Name: pn, Purpose: pluginPurposeOf(ph, pn)}
+					ts.Plugins = append(ts.Plugins, *entry)
+					if err := saveToolset(root, scope, ts); err != nil {
+						return "", err
+					}
+				}
+				return fmt.Sprintf("✅ 工具 %q 已恢复（插件 %q 的工具重新对 agent 可见）", tool, pn), nil
+			}
 		}
-		return "", fmt.Errorf("工具集 %q 中没有插件 %q", ts.Name, pn)
+		return "", fmt.Errorf("工具集 %q 中没有插件 %q（toolset_show 查看现有插件）", ts.Name, pn)
 	}
 	p := &ts.Plugins[idx]
 	removed := false
@@ -664,10 +705,7 @@ func toolsetEditEnableTool(ph *PluginHost, root string, scope toolsetScope, ts *
 	// （★ 2026-08-17：harness 对齐模式下工具可能被预置禁用（Enabled=false）但不在
 	//   DisabledTools 中——「已加入插件的整组恢复」必须幂等地恢复这类工具，
 	//   否则 enable_tool 报「不在摘除清单中」而工具仍不可见。）
-	reg := (*Registry)(nil)
-	if ph != nil && ph.Context() != nil {
-		reg = ph.Context().Tools
-	}
+	reg := pluginHostRegistry(ph)
 	enabled := false
 	if reg != nil {
 		if t, ok := reg.Get(tool); ok {
@@ -685,8 +723,6 @@ func toolsetEditEnableTool(ph *PluginHost, root string, scope toolsetScope, ts *
 	}
 	return fmt.Sprintf("✅ 工具 %q 已恢复（插件 %q 的工具重新对 agent 可见）", tool, pn), nil
 }
-
-// toolsetEdit 工具集手动编辑核心逻辑（toolset_edit 工具与 /api/toolsets/edit 共用）。
 func toolsetEdit(ph *PluginHost, root string, args map[string]any) (string, error) {
 	name := strings.TrimSpace(mArgStr(args, "name"))
 	if name == "" {
@@ -809,32 +845,27 @@ func toolsetEditBuiltinTool(ph *PluginHost, root string, args map[string]any, ac
 	return fmt.Sprintf("✅ 工具 %q 已从内置组 %q 摘除（组保留，工具对 agent 不可见；enable_tool 可恢复）", tool, gn), nil
 }
 
-// toolsetPluginIsSelfBootstrap 插件（按名）是否装载且其注册工具全部为系统自举
-// 协议工具（SystemTool/isAgentProtocolTool）。这类插件（如磁盘插件 tool-system）
-// 不在工具集管理范畴（工具恒对 agent 可见、不依赖工具集声明）；rm_tool/rm_plugin/
-// enable_tool 找不到工具集条目时据此给出友好提示，避免「工具集中没有插件」的误导。
-func toolsetPluginIsSelfBootstrap(ph *PluginHost, pn string) bool {
+// pluginHostRegistry 取插件宿主的工具注册表（nil 安全）。
+func pluginHostRegistry(ph *PluginHost) *Registry {
+	if ph != nil && ph.Context() != nil {
+		return ph.Context().Tools
+	}
+	return nil
+}
+
+// toolRegisteredBy 插件是否已装载且注册了指定工具（rm_tool 对不在工具集条目中的
+// 插件判断「移除是否可执行」：插件已装载且工具已注册才可移除）。
+func toolRegisteredBy(ph *PluginHost, pn, tool string) bool {
 	if ph == nil {
 		return false
 	}
-	tns := ph.PluginToolsByPlugin()[pn]
-	if len(tns) == 0 {
-		return false
-	}
-	reg := (*Registry)(nil)
-	if ph.Context() != nil {
-		reg = ph.Context().Tools
-	}
-	for _, tn := range tns {
-		if !toolIsSelfProtocol(reg, tn) {
-			return false
+	for _, tn := range ph.PluginToolsByPlugin()[pn] {
+		if tn == tool {
+			return true
 		}
 	}
-	return true
+	return false
 }
-
-// EditToolsetPublic 工具集手动编辑（公开导出，web_server/前端面板直调）。
-// args 与 toolset_edit 工具参数一致：name/scope/action/plugin_name/from_toolset/tool/plugin_json/overwrite。
 func EditToolsetPublic(ph *PluginHost, root string, args map[string]any) (string, error) {
 	return toolsetEdit(ph, root, args)
 }

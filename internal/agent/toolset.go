@@ -922,9 +922,15 @@ func (h *PluginHost) workspaceToolsetVisibleTools() map[string]bool {
 			continue
 		}
 		for _, p := range ts.Plugins {
+			// ★ 2026-08-17：DisabledTools 摘除清单内的工具不进白名单——
+			//   移除后重启保持禁用（可见性收敛据此排除）。
+			disabled := map[string]bool{}
+			for _, tn := range p.DisabledTools {
+				disabled[tn] = true
+			}
 			if p.Builtin != "" {
 				for _, tn := range p.Tools {
-					if tn != "" {
+					if tn != "" && !disabled[tn] {
 						keep[tn] = true
 					}
 				}
@@ -937,13 +943,51 @@ func (h *PluginHost) workspaceToolsetVisibleTools() map[string]bool {
 			tns := append([]string(nil), h.pluginTools[p.Name]...)
 			h.mu.RUnlock()
 			for _, tn := range tns {
-				if tn != "" {
+				if tn != "" && !disabled[tn] {
 					keep[tn] = true
 				}
 			}
 		}
 	}
 	return keep
+}
+
+// workspaceToolsetDisabledTools 工作区工具集显式摘除的工具集合（全部条目
+// DisabledTools 并集）。
+// ★ 2026-08-17：摘除清单对「协议/SystemTool 工具」也生效——用户从管理弹窗
+//   移出的工具写入 DisabledTools，重启后 ApplyToolsetVisibilityFilter 先排除
+//   这些工具再强启协议工具，保证移除持久有效（enable_tool 可恢复）。
+func (h *PluginHost) workspaceToolsetDisabledTools() map[string]bool {
+	out := map[string]bool{}
+	if h == nil || h.root == "" {
+		return out
+	}
+	dir := toolsetDir(h.root, toolsetProject)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return out
+	}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			continue
+		}
+		var ts Toolset
+		if err := json.Unmarshal(data, &ts); err != nil || ts.Name == "" {
+			continue
+		}
+		for _, p := range ts.Plugins {
+			for _, tn := range p.DisabledTools {
+				if tn != "" {
+					out[tn] = true
+				}
+			}
+		}
+	}
+	return out
 }
 
 // applyPluginToolVisibility 插件装载后应用工具可见性（★ 装载 ≠ agent 可用）：
@@ -1013,7 +1057,17 @@ func ApplyToolsetVisibilityFilter(r *Registry, ph *PluginHost, root string) int 
 	}
 	keep := map[string]bool{}
 	// ① 协议/管理工具（SystemTool + cordis_*/toolset_* + 循环协议）
+	//    ★ 2026-08-17：工作区工具集显式摘除（DisabledTools）的工具豁免——
+	//      用户从管理弹窗移出的工具重启后保持禁用（否则协议工具被无条件
+	//      重新启用，移除无效；enable_tool 恢复时从摘除清单移除即可）。
+	explicitlyRemoved := map[string]bool{}
+	if ph != nil {
+		explicitlyRemoved = ph.workspaceToolsetDisabledTools()
+	}
 	for _, name := range r.Names() {
+		if explicitlyRemoved[name] {
+			continue
+		}
 		if isAgentProtocolTool(name) {
 			keep[name] = true
 			continue

@@ -23,12 +23,12 @@ import (
 func Register(reg *toolbin.Registry, root string) {
 	reg.Register(&toolbin.Tool{
 		Name:        "run",
-		Description: "在工作区目录执行 shell 命令（可配超时，默认 600s），返回完整输出/退出码/耗时",
+		Description: "在工作区目录执行 shell 命令（超时可配：0 = 不超时，缺省 600s），返回完整输出/退出码/耗时",
 		Category:    "exec",
 		Parameters: toolbin.ObjSchema(toolbin.Props{
 			"command":   toolbin.StrProp("要执行的 shell 命令（Windows cmd 语法）"),
 			"cwd":       toolbin.StrProp("工作目录（缺省 = 工作区根）"),
-			"timeoutMs": toolbin.IntProp("超时毫秒（缺省 600000 = 600 秒；超时强制结束并返回 timedOut=true）"),
+			"timeoutMs": toolbin.IntProp("超时毫秒（缺省 600000 = 600 秒；0 = 不超时；超时强制结束并返回 timedOut=true）"),
 		}, "command"),
 		Handler: runCommand(root),
 	})

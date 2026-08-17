@@ -39,15 +39,19 @@ type request struct {
 
 // Serve 执行 stdin 请求（req 为 nil 时从 stdin 解析）。
 //
-// ★ 超时策略（本插件专用）：args.timeoutMs 优先（默认 600s，夹到 [1s, 3600s]），
-// 供 ui-quick-exec 跑长命令（打包等）——宿主 ctx.binary.exec 的 opts.timeout 是
-// 外层保护，本超时是命令级精确控制（超时 kill 并返回 timedOut=true）。
+// ★ 超时策略（本插件专用）：args.timeoutMs 精确控制命令级超时——
+//   · timeoutMs > 0  → 按毫秒设超时（不设上限，超时 kill 整棵进程树并返回 timedOut=true）
+//   · timeoutMs <= 0 → 不超时（打包等超长命令可配 0，真·无限等待）
+//   · 缺省 → 600s（默认保护）
+// 宿主 ctx.binary.exec 的 opts.timeout 只是外层兜底（调用方须给足），
+// 真正的命令级控制在本层（超时用 taskkill /T 杀进程树，不留孤儿）。
 func Serve(reg *Registry, req *request) {
 	if req == nil {
 		req, _ = Boot()
 	}
 	argsJSON, _ := json.Marshal(req.Args)
 	timeout := 600 * time.Second
+	noTimeout := false
 	if ms := req.Args["timeoutMs"]; ms != nil {
 		var msInt int
 		switch n := ms.(type) {
@@ -58,11 +62,19 @@ func Serve(reg *Registry, req *request) {
 		case string:
 			_, _ = fmt.Sscanf(n, "%d", &msInt)
 		}
-		if msInt >= 1000 && msInt <= 3600000 {
+		if msInt <= 0 {
+			noTimeout = true
+		} else {
 			timeout = time.Duration(msInt) * time.Millisecond
 		}
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	var ctx context.Context
+	var cancel context.CancelFunc
+	if noTimeout {
+		ctx, cancel = context.WithCancel(context.Background())
+	} else {
+		ctx, cancel = context.WithTimeout(context.Background(), timeout)
+	}
 	defer cancel()
 	result, err := reg.Execute(ctx, req.Tool, string(argsJSON))
 	if err != nil {
