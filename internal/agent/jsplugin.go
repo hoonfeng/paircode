@@ -621,6 +621,18 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 	//                   resp = {status, body, headers} 或字符串
 	//     重复 (method, path) 注册报错；插件卸载自动注销；宿主 mux 路由优先保留
 	//   （未命中插件路由才走内置 /api/* 与静态文件，插件路由在 mux 之前拦截）。
+	// ★ ctx.http：HTTP 接口插件化（旧形态，向后兼容）——每个插件都可注册
+	//   自己的接口：接口定义（method+path）与处理逻辑（fn）都在插件 JS 中，
+	//   服务能力走 ctx.fs/ctx.web/ctx.tools/ctx.process 等 Go 服务。
+	//   - register(method, path, fn)：fn 支持 async（返回 Promise 同步 drain）；
+	//     fn(req) → string | {status, body, headers} | 任意 JSON 值；req 含
+	//     method/path/query/headers/body 与 json() 便捷解析。
+	//     返回 disposer 函数（取消注册）。重复 (method, path) 注册报错（装配契约）。
+	//   - list()：已注册路由清单（含内核接口经 core-api 安装的条目）。
+	//   - 插件卸载自动注销全部路由（addCleanup）。
+	// ★ 2026-08-18：新插件请用 ctx.webServer（对齐 harness dsh-host-webserver：
+	//   register({kind, path, handler})，handler 为 Node 风格 (req, res)）。
+	//   ctx.http 保留以兼容现有插件（web-api 等）；二者共用 ext 路由表。
 	httpObj := vm.NewObject()
 	httpObj.Set("register", func(call goja.FunctionCall) goja.Value {
 		method := call.Argument(0).String()
@@ -638,19 +650,30 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 					headers[k] = vs[0]
 				}
 			}
-			reqObj := map[string]any{
-				"method":  r.Method,
-				"path":    r.URL.Path,
-				"query":   r.URL.RawQuery,
-				"headers": headers,
-				"body":    string(body),
-			}
+			// req 对象（goja 构造，附 json() 便捷解析）
+			reqObj := vm.NewObject()
+			reqObj.Set("method", r.Method)
+			reqObj.Set("path", r.URL.Path)
+			reqObj.Set("query", r.URL.RawQuery)
+			reqObj.Set("headers", headers)
+			reqObj.Set("body", string(body))
+			reqObj.Set("json", func(call goja.FunctionCall) goja.Value {
+				var out any
+				if err := json.Unmarshal(body, &out); err != nil {
+					panic(vm.NewGoError(fmt.Errorf("req.json(): 请求体不是合法 JSON: %w", err)))
+				}
+				return vm.ToValue(out)
+			})
 			var (
 				ret     goja.Value
 				callErr error
 			)
 			p.withLock(func() {
-				v, err := fn(goja.Undefined(), vm.ToValue(reqObj))
+				v, err := fn(goja.Undefined(), reqObj)
+				if err == nil {
+					// ★ async handler：返回值若是 Promise，同步 drain 取结果
+					v, err = awaitJSValue(vm, v)
+				}
 				ret, callErr = v, err
 			})
 			if callErr != nil {
@@ -697,7 +720,67 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 			return goja.Undefined()
 		})
 	})
+	// ctx.http.list()：已注册路由清单（含内核安装条目；插件自描述/调试用）
+	httpObj.Set("list", func(call goja.FunctionCall) goja.Value {
+		return vm.ToValue(RegisteredExtRoutes())
+	})
 	ctxObj.Set("http", httpObj)
+
+	// ── ctx.webServer：HTTP 接口插件化（对齐 harness dsh-host-webserver）──
+	// ★ 2026-08-18：兼容 dsh 插件生态——与参考项目同形态：
+	//   ctx.webServer.register({ kind, path, handler }) → disposer
+	//   - kind: 'exact'（逐字匹配）| 'prefix'（path 与 path/<anything>）
+	//   - handler: (req, res) => void | Promise<void> —— Node 风格，完全持有
+	//     响应生命周期：res.writeHead(status, headers) / res.setHeader /
+	//     res.write(chunk) / res.end(chunk) / res.statusCode 属性赋值；
+	//     req: { method, url, path, query, headers, body, json(), on('data'|'end') }。
+	//   - 不区分 HTTP 方法（对齐 harness：method 由 handler 自行判断 req.method）
+	//   - 重复 (kind, path) 报错（装配层契约）；插件卸载自动注销。
+	//   - 兼容便捷形态 register(kind, path, handler)（三参数）。
+	//   - 另兼容旧 ctx.http 返回对象形态：{ status, body, headers }。
+	webServerObj := vm.NewObject()
+	webServerObj.Set("register", func(call goja.FunctionCall) goja.Value {
+		var kind, path string
+		var fn goja.Callable
+		arg0 := call.Argument(0)
+		if obj := arg0.ToObject(vm); obj != nil {
+			if kv := obj.Get("kind"); kv != nil && !goja.IsUndefined(kv) && !goja.IsNull(kv) {
+				if pv := obj.Get("path"); pv != nil && !goja.IsUndefined(pv) && !goja.IsNull(pv) {
+					kind, path = kv.String(), pv.String()
+					fn, _ = goja.AssertFunction(obj.Get("handler"))
+				}
+			}
+		}
+		if fn == nil {
+			kind = arg0.String()
+			path = call.Argument(1).String()
+			fn, _ = goja.AssertFunction(call.Argument(2))
+		}
+		if kind != "exact" && kind != "prefix" {
+			panic(vm.NewTypeError("ctx.webServer.register: kind 必须是 'exact'|'prefix'"))
+		}
+		if path == "" {
+			panic(vm.NewTypeError("ctx.webServer.register: path 不能为空"))
+		}
+		if fn == nil {
+			panic(vm.NewTypeError("ctx.webServer.register: handler 必须是函数 (req, res)"))
+		}
+		regPath := path
+		if kind == "prefix" && !strings.HasSuffix(regPath, "/*") {
+			regPath = strings.TrimSuffix(regPath, "/") + "/*"
+		}
+		handler := p.buildNodeHTTPHandler(fn)
+		dispose, err := RegisterExtRouteAny(regPath, handler)
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		p.addCleanup(dispose)
+		return vm.ToValue(func(goja.FunctionCall) goja.Value {
+			dispose()
+			return goja.Undefined()
+		})
+	})
+	ctxObj.Set("webServer", webServerObj)
 
 	// ctx.process：后台进程服务（run_background/read_output/kill_process 的能力面）。
 	// globalBG 为全局单例（跨 agent 轮次存活）；cwd 相对工作区根解析（越界拦截）。
@@ -2333,6 +2416,213 @@ func boolField(obj *goja.Object, key string) bool {
 	return false
 }
 
+// awaitJSValue 同步等待 JS Promise 并返回 resolve 值（goja 同步 VM：
+// 微任务队列由 RunString("") 驱动 drain）。async 函数返回的 Promise 在
+// 微任务队列中已排队，drain 后立即取到结果——用于 ctx.http.register 的
+// async handler 与工具 execute 的 async 返回（对齐 harness run 语义）。
+// 非 Promise 值原样返回；reject → error。
+func awaitJSValue(vm *goja.Runtime, v goja.Value) (goja.Value, error) {
+	if v == nil || goja.IsUndefined(v) || goja.IsNull(v) {
+		return v, nil
+	}
+	o, ok := v.(*goja.Object)
+	if !ok {
+		return v, nil
+	}
+	then := o.Get("then")
+	if then == nil || goja.IsUndefined(then) || goja.IsNull(then) {
+		return v, nil
+	}
+	thenFn, ok := goja.AssertFunction(then)
+	if !ok {
+		return v, nil
+	}
+	var got goja.Value
+	var gotErr error
+	vm.Set("__pResolve", func(call goja.FunctionCall) goja.Value {
+		got = call.Argument(0)
+		return goja.Undefined()
+	})
+	vm.Set("__pReject", func(call goja.FunctionCall) goja.Value {
+		gotErr = fmt.Errorf("%s", call.Argument(0).String())
+		return goja.Undefined()
+	})
+	if _, err := thenFn(v, vm.Get("__pResolve"), vm.Get("__pReject")); err != nil {
+		return nil, err
+	}
+	_, _ = vm.RunString("") // drain 微任务队列（Promise.then 回调在 job 中执行）
+	if gotErr != nil {
+		return nil, gotErr
+	}
+	return awaitJSValue(vm, got) // 递归：then 链上的嵌套 promise
+}
+
+// ── ctx.webServer：Node 风格 HTTP handler 桥（对齐 harness dsh-host-webserver）──
+
+// buildNodeHTTPHandler 构造 Node 风格 HTTP handler：JS 插件以
+// handler(req, res) 形态实现处理逻辑（接口定义 + 逻辑都在插件中），
+// 服务能力经 ctx.fs/ctx.web/ctx.tools 等 Go 服务访问。
+//   req:  { method, url, path, query, headers, body, httpVersion, json(),
+//          on('data'|'end', cb)（body 已整体读入：data 触发一次、end 立即）}
+//   res:  { statusCode（属性赋值）, statusMessage, writeHead(code, headers?),
+//          setHeader(k,v), getHeader(k), hasHeader(k), removeHeader(k),
+//          write(chunk), end(chunk?), on('finish'|'close', cb) }
+// 兼容旧 ctx.http 返回对象形态：{ status, body, headers }（未调 end 时）。
+func (p *jsPluginAdapter) buildNodeHTTPHandler(fn goja.Callable) http.HandlerFunc {
+	vm := p.vm
+	return func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		headers := map[string]string{}
+		for k, vs := range r.Header {
+			if len(vs) > 0 {
+				headers[k] = vs[0]
+			}
+		}
+		// ── req 桥 ──
+		reqObj := vm.NewObject()
+		reqObj.Set("method", r.Method)
+		reqObj.Set("url", r.URL.RequestURI())
+		reqObj.Set("path", r.URL.Path)
+		reqObj.Set("query", r.URL.RawQuery)
+		reqObj.Set("headers", headers)
+		reqObj.Set("body", string(body))
+		reqObj.Set("httpVersion", r.Proto)
+		reqObj.Set("json", func(call goja.FunctionCall) goja.Value {
+			var out any
+			if err := json.Unmarshal(body, &out); err != nil {
+				panic(vm.NewGoError(fmt.Errorf("req.json(): 请求体不是合法 JSON: %w", err)))
+			}
+			return vm.ToValue(out)
+		})
+		var dataCbs, endCbs []goja.Callable
+		reqObj.Set("on", func(call goja.FunctionCall) goja.Value {
+			ev := call.Argument(0).String()
+			cb, ok := goja.AssertFunction(call.Argument(1))
+			if ok {
+				switch ev {
+				case "data":
+					dataCbs = append(dataCbs, cb)
+				case "end":
+					endCbs = append(endCbs, cb)
+				}
+			}
+			return reqObj // 链式
+		})
+		// ── res 桥 ──
+		type resStateT struct {
+			status  int
+			headers map[string]string
+			chunks  []string
+			ended   bool
+		}
+		rs := &resStateT{status: http.StatusOK, headers: map[string]string{}}
+		var finishCbs []goja.Callable
+		resObj := vm.NewObject()
+		resObj.Set("writeHead", func(call goja.FunctionCall) goja.Value {
+			rs.status = int(call.Argument(0).ToInteger())
+			if h := call.Argument(1); h != nil && !goja.IsUndefined(h) && !goja.IsNull(h) {
+				if m, ok := h.Export().(map[string]any); ok {
+					for k, v := range m {
+						rs.headers[k] = fmt.Sprint(v)
+					}
+				}
+			}
+			return resObj
+		})
+		resObj.Set("setHeader", func(call goja.FunctionCall) goja.Value {
+			rs.headers[call.Argument(0).String()] = call.Argument(1).String()
+			return resObj
+		})
+		resObj.Set("getHeader", func(call goja.FunctionCall) goja.Value {
+			if v, ok := rs.headers[call.Argument(0).String()]; ok {
+				return vm.ToValue(v)
+			}
+			return goja.Undefined()
+		})
+		resObj.Set("hasHeader", func(call goja.FunctionCall) goja.Value {
+			_, ok := rs.headers[call.Argument(0).String()]
+			return vm.ToValue(ok)
+		})
+		resObj.Set("removeHeader", func(call goja.FunctionCall) goja.Value {
+			delete(rs.headers, call.Argument(0).String())
+			return goja.Undefined()
+		})
+		resObj.Set("write", func(call goja.FunctionCall) goja.Value {
+			if v := call.Argument(0); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
+				rs.chunks = append(rs.chunks, v.String())
+			}
+			return vm.ToValue(true) // 可继续写
+		})
+		resObj.Set("end", func(call goja.FunctionCall) goja.Value {
+			if v := call.Argument(0); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
+				rs.chunks = append(rs.chunks, v.String())
+			}
+			rs.ended = true
+			return vm.ToValue(resObj)
+		})
+		resObj.Set("on", func(call goja.FunctionCall) goja.Value {
+			if ev := call.Argument(0).String(); ev == "finish" || ev == "close" {
+				if cb, ok := goja.AssertFunction(call.Argument(1)); ok {
+					finishCbs = append(finishCbs, cb)
+				}
+			}
+			return resObj
+		})
+		// ── 调用 handler（async 支持：返回值 Promise 同步 drain）──
+		var ret goja.Value
+		var callErr error
+		p.withLock(func() {
+			v, err := fn(goja.Undefined(), reqObj, resObj)
+			if err == nil {
+				v, err = awaitJSValue(vm, v)
+			}
+			ret, callErr = v, err
+		})
+		if callErr != nil {
+			http.Error(w, "ctx.webServer handler 执行失败: "+jsErrorText(callErr), http.StatusInternalServerError)
+			return
+		}
+		// ── flush 响应 ──
+		status := rs.status
+		if sv := resObj.Get("statusCode"); sv != nil && !goja.IsUndefined(sv) && !goja.IsNull(sv) {
+			status = int(sv.ToInteger())
+		}
+		respHeaders := rs.headers
+		respBody := strings.Join(rs.chunks, "")
+		if !rs.ended && ret != nil && !goja.IsUndefined(ret) && !goja.IsNull(ret) {
+			// 兼容旧 ctx.http 返回对象形态：{ status, body, headers } / 字符串
+			if s, ok := ret.Export().(string); ok {
+				respBody = s
+			} else if obj := ret.ToObject(vm); obj != nil {
+				if v := obj.Get("status"); v != nil {
+					status = int(v.ToInteger())
+				}
+				if v := obj.Get("body"); v != nil {
+					respBody = v.String()
+				}
+				if v := obj.Get("headers"); v != nil {
+					if m, ok := v.Export().(map[string]any); ok {
+						for k, vv := range m {
+							respHeaders[k] = fmt.Sprint(vv)
+						}
+					}
+				}
+			} else {
+				respBody = ret.String()
+			}
+		}
+		for k, v := range respHeaders {
+			w.Header().Set(k, v)
+		}
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(respBody))
+		// res 'finish'/'close' 回调（end 后触发）
+		for _, cb := range finishCbs {
+			_, _ = cb(goja.Undefined())
+		}
+	}
+}
+
 // jsResultToText 把 JS 工具执行结果转成 (text, error)。
 // 规则（对齐 harness 输出块约定）：
 //   - { text }          → text
@@ -2344,32 +2634,15 @@ func jsResultToText(vm *goja.Runtime, v goja.Value) (string, error) {
 	if v == nil || goja.IsUndefined(v) || goja.IsNull(v) {
 		return "", nil
 	}
-	// Promise：调用 then 同步取结果
+	// Promise：awaitJSValue 同步 drain（then 链），再递归转文本
 	if o, ok := v.(*goja.Object); ok {
 		if then := o.Get("then"); then != nil {
-			if thenFn, ok := goja.AssertFunction(then); ok {
-				var got goja.Value
-				var gotErr error
-				vm.Set("__pResolve", func(call goja.FunctionCall) goja.Value {
-					got = call.Argument(0)
-					return goja.Undefined()
-				})
-				vm.Set("__pReject", func(call goja.FunctionCall) goja.Value {
-					gotErr = fmt.Errorf("%s", call.Argument(0).String())
-					return goja.Undefined()
-				})
-				if _, err := thenFn(v, vm.Get("__pResolve"), vm.Get("__pReject")); err != nil {
+			if _, ok := goja.AssertFunction(then); ok {
+				got, err := awaitJSValue(vm, v)
+				if err != nil {
 					return "", err
 				}
-				// drain 微任务队列（Promise.then 回调在 job 中执行）
-				_, _ = vm.RunString("")
-				if gotErr != nil {
-					return "", gotErr
-				}
-				if got != nil {
-					return jsResultToText(vm, got)
-				}
-				return "", nil
+				return jsResultToText(vm, got)
 			}
 		}
 	}

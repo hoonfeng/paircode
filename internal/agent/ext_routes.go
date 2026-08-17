@@ -23,6 +23,7 @@ package agent
 import (
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -73,17 +74,55 @@ func RegisterExtRoute(method, path string, h ExtRouteHandler) (func(), error) {
 	}, nil
 }
 
+// ExtRouteInfo 已注册外部路由的信息（ctx.http.list() 查询）。
+type ExtRouteInfo struct {
+	Method string `json:"method"`
+	Path   string `json:"path"`
+	Prefix bool   `json:"prefix"`
+}
+
+// RegisteredExtRoutes 返回全部已注册的外部路由（按 method+path 排序；ctx.http.list 用）。
+func RegisteredExtRoutes() []ExtRouteInfo {
+	extRoutesMu.RLock()
+	defer extRoutesMu.RUnlock()
+	out := make([]ExtRouteInfo, 0, len(extRoutes))
+	for _, rt := range extRoutes {
+		path := rt.path
+		if rt.prefix {
+			path += "/*"
+		}
+		out = append(out, ExtRouteInfo{Method: rt.method, Path: path, Prefix: rt.prefix})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Method != out[j].Method {
+			return out[i].Method < out[j].Method
+		}
+		return out[i].Path < out[j].Path
+	})
+	return out
+}
+
+// RegisterExtRouteAny 注册一条不区分 HTTP 方法的路由（method 通配 "*"）。
+// 对齐 harness webServer：route 只有 kind/path/handler，不携带 method——
+// handler 自行判断 req.method（Node 风格）。精确 method 路由优先于 "*"。
+func RegisterExtRouteAny(path string, h ExtRouteHandler) (func(), error) {
+	return RegisterExtRoute("*", path, h)
+}
+
 // ServeExtRoute 尝试用插件路由处理请求；命中返回 true（已写响应）。
 // 供 ExtRouteMiddleware 与测试直接调用。
 func ServeExtRoute(w http.ResponseWriter, r *http.Request) bool {
 	p := r.URL.Path
-	// 精确匹配优先
+	// 精确匹配优先（先同方法，再 "*" 通配——webServer 路由不区分方法）
 	extRoutesMu.RLock()
 	hit, ok := extRoutes[r.Method+" "+p]
 	if !ok {
-		// 前缀匹配：逐条检查（注册量小，线性可接受）
+		hit, ok = extRoutes["*"+" "+p]
+	}
+	if !ok {
+		// 前缀匹配：逐条检查（注册量小，线性可接受；method 同方法或通配）
 		for _, rt := range extRoutes {
-			if rt.prefix && rt.method == r.Method && (p == rt.path || strings.HasPrefix(p, rt.path+"/")) {
+			if rt.prefix && (rt.method == r.Method || rt.method == "*") && (p == rt.path || strings.HasPrefix(p, rt.path+"/")) {
 				hit, ok = rt, true
 				break
 			}

@@ -1,23 +1,25 @@
 // ═══════════════════════════════════════════════════════════════
-// web-api — HTTP 接口插件化落地（ctx.http.register 首个磁盘插件用例）
+// web-api — HTTP 接口插件化落地（ctx.webServer 对齐 harness dsh-host-webserver）
 //
-// 背景（2026-08-16）：宿主已提供 HTTP 接口插件化扩展点（ctx.http.register →
-// internal/agent/ext_routes.go ExtRouteMiddleware，插件路由在宿主 mux 之前拦截），
-// 但一直无磁盘插件使用。本插件把该能力落到磁盘：注册 /api/ext/* 扩展路由，
-// 证明「插件可以扩展 HTTP 接口」链路全通（浏览器/外部工具可直接 curl 消费）。
+// 背景（2026-08-16）：宿主提供 HTTP 接口插件化扩展点，本插件把能力落到磁盘：
+// 注册 /api/ext/* 扩展路由，证明「接口在插件中定义、处理逻辑在插件中、
+// 服务能力走 ctx.fs/ctx.web/ctx.tools 等 Go 服务」链路全通。
 //
-// 路由清单（6 条，全部同步实现——ctx.fs/ctx.web 方法同步返回，无需 await）：
-//   GET /api/ext/status   宿主/插件状态（工作区根、工具数、服务名、时间）
-//   GET /api/ext/fetch    web fetch 同源代理（?url=…，解决前端跨域）
-//   GET /api/ext/fs/read  受限读文件（?path=相对工作区根，越界拦截）
-//   GET /api/ext/fs/exists 文件存在检查
-//   GET /api/ext/fs/list  受限目录列表
-//   GET /api/ext/routes   本插件注册的路由清单（自描述）
+// ★ 2026-08-18：注册形态对齐参考项目（ref/deepseek-harness）——ctx.webServer
+//   register({kind, path, handler})，handler 为 Node 风格 (req, res)：
+//   res.writeHead(status, headers) / res.end(body) / res.statusCode 属性赋值；
+//   支持 async handler（返回值 Promise 同步 drain）与 req.json() 解析。
+//   dsh 生态插件的 webServer 注册代码可直接兼容。
 //
-// 设计边界（2026-08-16 更新）：内置 /api/* 核心接口已由 core-api 插件
-// （.pair/plugins/core-api/）接管——实现保留 Go 内核路由表（kernel_api.go），
-// 挂载权在插件（ctx.kernel.install）。本插件（web-api）的 /api/ext/* 仍是
-// 「新增接口」扩展示例（代理/受限访问类），与 core-api 互补。
+// 路由清单（8 条，全部 ctx.webServer 注册）：
+//   GET  /api/ext/status        宿主/插件状态（工作区根、工具数、服务名、时间）
+//   GET  /api/ext/fetch         web fetch 同源代理（?url=…）
+//   GET  /api/ext/fs/read       受限读文件（?path=相对工作区根）
+//   GET  /api/ext/fs/exists     文件存在检查
+//   GET  /api/ext/fs/list       受限目录列表
+//   GET  /api/ext/routes        全量已注册路由清单（ctx.http.list()）
+//   GET  /api/ext/async/status  ★ async handler 示例（await 编排）
+//   POST /api/ext/echo          ★ req.json() 示例（JSON 体解析回显）
 // ═══════════════════════════════════════════════════════════════
 
 function parseQuery(qs) {
@@ -33,17 +35,15 @@ function parseQuery(qs) {
   return out;
 }
 
-function json(status, obj) {
-  return {
-    status,
-    body: JSON.stringify(obj),
-    headers: { 'Content-Type': 'application/json; charset=utf-8' },
-  };
+// Node 风格响应助手（res 完全持有响应生命周期，对齐 harness handler 形态）
+function send(res, status, obj) {
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
+  res.end(JSON.stringify(obj));
 }
 
 return {
   name: 'web-api',
-  purpose: 'HTTP 接口插件化落地（ctx.http.register 首个磁盘用例）——注册 /api/ext/* 扩展路由：宿主状态、web fetch 同源代理、受限文件访问、路由清单',
+  purpose: 'HTTP 接口插件化落地（ctx.webServer 对齐 harness）——注册 /api/ext/* 扩展路由：宿主状态、web fetch 同源代理、受限文件访问、async handler 与 req.json() 示例',
   inject: ['fs', 'web', 'tools', 'logger'],
   apply(ctx) {
     const root = (ctx.app && ctx.app.workspaceRoot) || ctx.workspaceRoot || '';
@@ -52,82 +52,104 @@ return {
     const log = (msg) => ctx.logger('web-api').log(msg);
     const routes = [];
 
-    // 1. 宿主/插件状态
-    ctx.http.register('GET', '/api/ext/status', () => {
+    // 1. 宿主/插件状态（Node 风格 res）
+    ctx.webServer.register({ kind: 'exact', path: '/api/ext/status', handler: (req, res) => {
       let toolCount = 0;
-      try { toolCount = (ctx.tools.list() || []).length; } catch (e) { /* 工具服务不可用时忽略 */ }
-      return json(200, {
+      try { toolCount = (ctx.tools.list() || []).length; } catch (e) { /* 忽略 */ }
+      send(res, 200, {
         ok: true,
         service: 'web-api',
         workspaceRoot: root,
         tools: toolCount,
         time: new Date().toISOString(),
       });
-    });
+    }});
     routes.push('GET /api/ext/status');
 
     // 2. web fetch 同源代理（GET ?url=…）
-    ctx.http.register('GET', '/api/ext/fetch', (req) => {
+    ctx.webServer.register({ kind: 'exact', path: '/api/ext/fetch', handler: (req, res) => {
       const q = parseQuery(req.query);
       const url = q.url || '';
-      if (!url) return json(400, { ok: false, error: '缺少 url 查询参数' });
+      if (!url) return send(res, 400, { ok: false, error: '缺少 url 查询参数' });
       try {
         const r = webSvc.fetch(url);
-        return {
-          status: r.ok ? 200 : 502,
-          body: r.text || '',
-          headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-        };
+        res.writeHead(r.ok ? 200 : 502, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end(r.text || '');
       } catch (e) {
-        return json(502, { ok: false, error: String(e) });
+        send(res, 502, { ok: false, error: String(e) });
       }
-    });
+    }});
     routes.push('GET /api/ext/fetch');
 
     // 3. 受限读文件（?path=相对工作区根）
-    ctx.http.register('GET', '/api/ext/fs/read', (req) => {
+    ctx.webServer.register({ kind: 'exact', path: '/api/ext/fs/read', handler: (req, res) => {
       const q = parseQuery(req.query);
       const path = q.path || '';
-      if (!path) return json(400, { ok: false, error: '缺少 path 参数' });
+      if (!path) return send(res, 400, { ok: false, error: '缺少 path 参数' });
       try {
-        const text = fsSvc.readFile(path);
-        return { status: 200, body: text, headers: { 'Content-Type': 'text/plain; charset=utf-8' } };
+        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end(fsSvc.readFile(path));
       } catch (e) {
-        return json(404, { ok: false, error: String(e) });
+        send(res, 404, { ok: false, error: String(e) });
       }
-    });
+    }});
     routes.push('GET /api/ext/fs/read');
 
     // 4. 文件存在检查
-    ctx.http.register('GET', '/api/ext/fs/exists', (req) => {
+    ctx.webServer.register({ kind: 'exact', path: '/api/ext/fs/exists', handler: (req, res) => {
       const q = parseQuery(req.query);
       const path = q.path || '';
-      if (!path) return json(400, { ok: false, error: '缺少 path 参数' });
+      if (!path) return send(res, 400, { ok: false, error: '缺少 path 参数' });
       try {
-        return json(200, { ok: true, exists: !!fsSvc.exists(path) });
+        send(res, 200, { ok: true, exists: !!fsSvc.exists(path) });
       } catch (e) {
-        return json(200, { ok: true, exists: false });
+        send(res, 200, { ok: true, exists: false });
       }
-    });
+    }});
     routes.push('GET /api/ext/fs/exists');
 
     // 5. 受限目录列表
-    ctx.http.register('GET', '/api/ext/fs/list', (req) => {
+    ctx.webServer.register({ kind: 'exact', path: '/api/ext/fs/list', handler: (req, res) => {
       const q = parseQuery(req.query);
       const path = q.path || '';
       try {
-        const entries = fsSvc.readdir(path);
-        return json(200, { ok: true, entries: entries || [] });
+        send(res, 200, { ok: true, entries: fsSvc.readdir(path) || [] });
       } catch (e) {
-        return json(404, { ok: false, error: String(e) });
+        send(res, 404, { ok: false, error: String(e) });
       }
-    });
+    }});
     routes.push('GET /api/ext/fs/list');
 
-    // 6. 路由清单（自描述）
-    ctx.http.register('GET', '/api/ext/routes', () => json(200, { ok: true, service: 'web-api', routes }));
+    // 6. 路由清单（自描述；ctx.http.list() 返回全量已注册路由，含内核安装条目）
+    ctx.webServer.register({ kind: 'exact', path: '/api/ext/routes', handler: (req, res) => {
+      const all = ctx.http.list() || [];
+      send(res, 200, { ok: true, service: 'web-api', routes, all });
+    }});
     routes.push('GET /api/ext/routes');
 
-    log(`已注册 /api/ext/* 共 ${routes.length} 条 HTTP 路由（接口插件化落地）`);
+    // 7. ★ async handler 示例：async 函数 + await ctx.tools.list()（Go 服务）+
+    //    await Promise.resolve（微任务链）——处理逻辑可异步编排。
+    ctx.webServer.register({ kind: 'exact', path: '/api/ext/async/status', handler: async (req, res) => {
+      const tools = await ctx.tools.list();
+      const r2 = await Promise.resolve((ctx.app && ctx.app.workspaceRoot) || ctx.workspaceRoot || '');
+      send(res, 200, {
+        ok: true,
+        async: true,
+        service: 'web-api',
+        workspaceRoot: r2,
+        tools: (tools || []).length,
+      });
+    }});
+    routes.push('GET /api/ext/async/status');
+
+    // 8. req.json() 示例：POST JSON 体解析 → 回显（服务在 Go，逻辑在插件）
+    ctx.webServer.register({ kind: 'exact', path: '/api/ext/echo', handler: (req, res) => {
+      let data;
+      try { data = req.json(); } catch (e) { return send(res, 400, { ok: false, error: String(e) }); }
+      send(res, 200, { ok: true, method: req.method, path: req.path, received: data });
+    }});
+    routes.push('POST /api/ext/echo');
+
+    log(`已注册 /api/ext/* 共 ${routes.length} 条 HTTP 路由（ctx.webServer 对齐 harness）`);
   },
 }
