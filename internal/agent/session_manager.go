@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -354,10 +355,16 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 	}
 
 	// OnEvent：将事件写入 session.Events（非阻塞，满则丢弃防阻塞 Loop）
+	// ★ 丢弃时打日志（排查「无响应」：前端消费慢/无订阅导致事件丢失的可见化）
+	eventDropped := 0
 	loop.OnEvent = func(e Event) {
 		select {
 		case sess.Events <- e:
 		default:
+			eventDropped++
+			if eventDropped == 1 || eventDropped%100 == 0 {
+				log.Printf("[session] 事件被丢弃 conv=%s 累计%d条（Events 通道满，前端消费慢/未订阅）", convID, eventDropped)
+			}
 		}
 	}
 
@@ -648,6 +655,10 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		//   → 任务未正常完成，标记为"可继续"；正常完成（err==nil）→ 保持 false。
 		if err != nil {
 			interrupted = true
+			// ★ Loop 异常结束日志（排查「无响应」：确认 Loop 退出的原因）
+			log.Printf("[session] Loop 异常结束 conv=%s stopped=%v err=%v", convID, sess.stopped, err)
+		} else {
+			log.Printf("[session] Loop 正常结束 conv=%s msgs=%d", convID, len(msgs))
 		}
 
 		// ★ 持久化执行日志到磁盘（无论自主还是非自主，保证下轮能感知本轮分析和操作）

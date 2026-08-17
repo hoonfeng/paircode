@@ -16,6 +16,7 @@ import (
 // ErrCirclingLoop 绕圈检测连续触发多次，由 Loop.Run 返回。
 
 var ErrCirclingLoop = errors.New("绕圈检测连续 3 次触发，仍在重复同一操作，已停止")
+
 // ErrMaxIterations 已达最大迭代数仍未完成，由 Loop.Run 返回。
 var ErrMaxIterations = errors.New("已达最大迭代数，停止")
 
@@ -35,12 +36,12 @@ const (
 	EventCircling   EventType = "circling"    // 检测到重复绕圈，已注入「换思路」提示打破死循环（UI 显示一行提示）
 	// EventApproval 等待用户审批某次写类工具调用。由宿主（UI 桥）在 Approve 钩子里 emit，
 	// loop 自身不直接发——loop 只通过 Approve 回调阻塞等待裁决（见 agent_bridge.go）。
-	EventUsage    EventType = "usage"     // LLM 调用完成后的 token 用量（含缓存命中/未命中）
+	EventUsage    EventType = "usage" // LLM 调用完成后的 token 用量（含缓存命中/未命中）
 	EventApproval EventType = "approval"
 
-	EventNotice   EventType = "notice"    // 后台任务通知（jobs 包用；UI 显示一行素色提示）
-	EventPhase    EventType = "phase"     // 阶段切换（自主模式下的规划/执行/评测等阶段指示）
-	EventDone     EventType = "done"      // 结构化完成信号（供 delegate/子 agent 使用；主 Loop Exit 走此事件）
+	EventNotice EventType = "notice" // 后台任务通知（jobs 包用；UI 显示一行素色提示）
+	EventPhase  EventType = "phase"  // 阶段切换（自主模式下的规划/执行/评测等阶段指示）
+	EventDone   EventType = "done"   // 结构化完成信号（供 delegate/子 agent 使用；主 Loop Exit 走此事件）
 )
 
 // CacheBoundary 分隔系统提示词静态前缀与动态后缀。
@@ -100,8 +101,6 @@ type Event struct {
 	// 与 DoneReason 并存：DoneReason 保持兼容值（task_complete），TurnReason 为枚举值。
 	TurnReason string
 }
-
-
 
 // Loop TAOR 编排器：think(LLM 决策)→act(执行工具)→observe(结果回灌)→repeat。
 // 停止：自然终止（无 tool_call + 有正文）/ 达最大迭代 / 外部取消。
@@ -184,9 +183,9 @@ type Loop struct {
 	rejectionCount   int    // 连续被驳回次数，达 3 次自动停止
 	lastRejectedTool string // 上次被驳回的工具名
 
-	WorkspaceRoot string // 工作区根路径（用于 SaveTokenUsage 等工作区级持久化）
-	CompactRequested bool         // 外部设置后下轮迭代触发上下文压缩（供主动压缩 API 使用）
-	Autonomous     bool           // 自主模式标志（单 Loop 阶段化循环）
+	WorkspaceRoot    string // 工作区根路径（用于 SaveTokenUsage 等工作区级持久化）
+	CompactRequested bool   // 外部设置后下轮迭代触发上下文压缩（供主动压缩 API 使用）
+	Autonomous       bool   // 自主模式标志（单 Loop 阶段化循环）
 
 	mu sync.Mutex // 保护 ReviewMode 的并发读写（SetReviewMode/getReviewMode）
 
@@ -371,6 +370,9 @@ func (l *Loop) aiReviewApprove(ctx context.Context, tc ToolCall) (bool, string) 
 // 返回在 history/l.History 基础上追加了 system(首轮)/user/assistant/tool
 // 等本轮全部消息的完整对话。
 func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []Message, err error) {
+	// ★ Run 启动日志（排查「无响应」：确认 Loop 确实进入运行，以及每次启动时间）
+	log.Printf("[loop] Run 开始 taskLen=%d history=%d maxIter=%d autonomous=%v",
+		len(task), len(history), l.MaxIterations, l.Autonomous)
 	// 自闭环：history 为 nil 时使用持久化的 l.History
 	if history == nil {
 		history = l.History
@@ -556,6 +558,10 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 			l.emitCacheShape(callMsgs, tools)
 		}
 
+		// ★ LLM 调用日志（排查「无响应」：每轮调用耗时 + 错误，重试期间用户看到的就是无响应）
+		callStart := time.Now()
+		log.Printf("[loop] LLM 调用开始 turn=%d step=%d provider=%s msgs=%d tools=%d",
+			l.TurnNo, l.StepNo, l.Provider.Name(), len(callMsgs), len(tools))
 		var stopReason string
 		assistant, err := l.Provider.Chat(ctx, callMsgs, tools, func(c Chunk) {
 			if c.StopReason != "" {
@@ -589,11 +595,15 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 			}
 		})
 		if err != nil {
+			log.Printf("[loop] LLM 调用失败 turn=%d step=%d 耗时=%s err=%v",
+				l.TurnNo, l.StepNo, time.Since(callStart).Round(time.Millisecond), err)
 			l.emit(Event{Type: EventError, Content: err.Error()})
 			l.LastTurnReason = TurnError
 			return msgs, err
 		}
-        msgs = append(msgs, assistant)
+		log.Printf("[loop] LLM 调用完成 turn=%d step=%d 耗时=%s stop=%s len=%d",
+			l.TurnNo, l.StepNo, time.Since(callStart).Round(time.Millisecond), stopReason, len(assistant.Content))
+		msgs = append(msgs, assistant)
 		l.currentMsgs = msgs // 同步当前消息列表，供 persist worker 获取完整历史
 
 		// ★ 在工具执行前立即持久化 assistant 消息（含 thinking + tool_calls），
@@ -641,97 +651,103 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 				msgs = parMsgs
 			} else {
 
-		for _, tc := range assistant.ToolCalls {
-			l.emit(Event{Type: EventToolCall, Tool: tc.Function.Name, Args: tc.Function.Arguments, CallID: tc.ID})
+				for _, tc := range assistant.ToolCalls {
+					l.emit(Event{Type: EventToolCall, Tool: tc.Function.Name, Args: tc.Function.Arguments, CallID: tc.ID})
 
-			// ★ 审批门：Loop 内部根据 ReviewMode + 黑白名单自决审核策略 ★
-			// - ReviewMode="auto" → 内部 AI 审核（用 ReviewProvider 懒建 Reviewer）
-			// - ReviewMode="off" → 全部放行（nil=全部通过，不经过任何审核）
-			// - ReviewMode="manual" → 走外部 l.Approve（人工审批）
-			// ★ 黑白名单优先于 ReviewMode：
-			//   - 若 ReviewBlacklist 非空且命中 → 强制审核
-			//   - 若 ReviewWhitelist 非空且命中 → 跳过审核
-			//   - 黑名单优先于白名单
-			approveFn := l.Approve
-			toolName := tc.Function.Name
-			// 检查黑白名单
-			inBlacklist := false
-			for _, name := range l.ReviewBlacklist {
-				if strings.Contains(toolName, name) { inBlacklist = true; break }
-			}
-			inWhitelist := false
-			if !inBlacklist {
-				for _, name := range l.ReviewWhitelist {
-					if strings.Contains(toolName, name) { inWhitelist = true; break }
-				}
-			}
-			if inBlacklist {
-				// 黑名单命中：按 ReviewMode 审核（即使 mode=off 也审核）
-				switch l.getReviewMode() {
-				case "auto":
-					approveFn = l.aiReviewApprove
-				default:
-					approveFn = l.Approve
-				}
-			} else if inWhitelist {
-				// 白名单命中：跳过审核
-				approveFn = nil
-			} else {
-				// 不在黑白名单中：按 ReviewMode 执行
-				switch l.getReviewMode() {
-				case "auto":
-					approveFn = l.aiReviewApprove
-				case "off":
-					approveFn = nil
-				}
-			}
-			if approveFn != nil {
-				if tool, ok := l.Registry.Get(tc.Function.Name); ok && (tool.RequiresApproval || (tool.DynamicApproval != nil && tool.DynamicApproval(tc))) {
-					if approved, feedback := approveFn(ctx, tc); !approved {
-						rej := strings.TrimSpace(feedback)
-						if rej == "" {
-							rej = "用户拒绝了此操作。请勿重试该操作；改用其他方式达成目标，或先向用户说明你为何需要它。"
+					// ★ 审批门：Loop 内部根据 ReviewMode + 黑白名单自决审核策略 ★
+					// - ReviewMode="auto" → 内部 AI 审核（用 ReviewProvider 懒建 Reviewer）
+					// - ReviewMode="off" → 全部放行（nil=全部通过，不经过任何审核）
+					// - ReviewMode="manual" → 走外部 l.Approve（人工审批）
+					// ★ 黑白名单优先于 ReviewMode：
+					//   - 若 ReviewBlacklist 非空且命中 → 强制审核
+					//   - 若 ReviewWhitelist 非空且命中 → 跳过审核
+					//   - 黑名单优先于白名单
+					approveFn := l.Approve
+					toolName := tc.Function.Name
+					// 检查黑白名单
+					inBlacklist := false
+					for _, name := range l.ReviewBlacklist {
+						if strings.Contains(toolName, name) {
+							inBlacklist = true
+							break
 						}
-						// ★ 连续驳回追踪：同一工具连续驳回 3 次→自动停止
-						if tc.Function.Name == l.lastRejectedTool {
-							l.rejectionCount++
-						} else {
-							l.rejectionCount = 1
-							l.lastRejectedTool = tc.Function.Name
-						}
-						if l.rejectionCount >= 3 {
-							l.emit(Event{Type: EventError, Content: "操作 " + tc.Function.Name + " 已被连续驳回 3 次，自动停止"})
-							l.LastTurnReason = TurnBlocked
-							return msgs, errors.New("连续驳回 3 次，自动停止")
-						}
-						l.emit(Event{Type: EventToolResult, Tool: tc.Function.Name, Content: rej, CallID: tc.ID})
-						msgs = append(msgs, Message{Role: RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: rej})
-						l.trackCall(tc.Function.Name, tc.Function.Arguments, true)
-						continue
 					}
-					// 审批通过 → 重置驳回追踪
-					if tc.Function.Name == l.lastRejectedTool {
-						l.rejectionCount = 0
-						l.lastRejectedTool = ""
+					inWhitelist := false
+					if !inBlacklist {
+						for _, name := range l.ReviewWhitelist {
+							if strings.Contains(toolName, name) {
+								inWhitelist = true
+								break
+							}
+						}
+					}
+					if inBlacklist {
+						// 黑名单命中：按 ReviewMode 审核（即使 mode=off 也审核）
+						switch l.getReviewMode() {
+						case "auto":
+							approveFn = l.aiReviewApprove
+						default:
+							approveFn = l.Approve
+						}
+					} else if inWhitelist {
+						// 白名单命中：跳过审核
+						approveFn = nil
+					} else {
+						// 不在黑白名单中：按 ReviewMode 执行
+						switch l.getReviewMode() {
+						case "auto":
+							approveFn = l.aiReviewApprove
+						case "off":
+							approveFn = nil
+						}
+					}
+					if approveFn != nil {
+						if tool, ok := l.Registry.Get(tc.Function.Name); ok && (tool.RequiresApproval || (tool.DynamicApproval != nil && tool.DynamicApproval(tc))) {
+							if approved, feedback := approveFn(ctx, tc); !approved {
+								rej := strings.TrimSpace(feedback)
+								if rej == "" {
+									rej = "用户拒绝了此操作。请勿重试该操作；改用其他方式达成目标，或先向用户说明你为何需要它。"
+								}
+								// ★ 连续驳回追踪：同一工具连续驳回 3 次→自动停止
+								if tc.Function.Name == l.lastRejectedTool {
+									l.rejectionCount++
+								} else {
+									l.rejectionCount = 1
+									l.lastRejectedTool = tc.Function.Name
+								}
+								if l.rejectionCount >= 3 {
+									l.emit(Event{Type: EventError, Content: "操作 " + tc.Function.Name + " 已被连续驳回 3 次，自动停止"})
+									l.LastTurnReason = TurnBlocked
+									return msgs, errors.New("连续驳回 3 次，自动停止")
+								}
+								l.emit(Event{Type: EventToolResult, Tool: tc.Function.Name, Content: rej, CallID: tc.ID})
+								msgs = append(msgs, Message{Role: RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: rej})
+								l.trackCall(tc.Function.Name, tc.Function.Arguments, true)
+								continue
+							}
+							// 审批通过 → 重置驳回追踪
+							if tc.Function.Name == l.lastRejectedTool {
+								l.rejectionCount = 0
+								l.lastRejectedTool = ""
+							}
+						}
+					}
+
+					result, terr := l.Registry.Execute(ctx, tc.Function.Name, tc.Function.Arguments)
+					if terr != nil {
+						result = "Error: " + terr.Error()
+					}
+					l.emit(Event{Type: EventToolResult, Tool: tc.Function.Name, Content: result, CallID: tc.ID})
+					msgs = append(msgs, Message{Role: RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: result})
+					l.trackCall(tc.Function.Name, tc.Function.Arguments, terr != nil || strings.HasPrefix(strings.TrimSpace(result), "Error:"))
+
+					// ★ 自主模式：generate_commit_message 记录提交信息（供最终完成时使用）
+					// 不再用于区分阶段/完成，仅记录 commit message 字符串
+					if tc.Function.Name == "generate_commit_message" {
+						l.commitMessage = result
 					}
 				}
-			}
-
-			result, terr := l.Registry.Execute(ctx, tc.Function.Name, tc.Function.Arguments)
-			if terr != nil {
-				result = "Error: " + terr.Error()
-			}
-			l.emit(Event{Type: EventToolResult, Tool: tc.Function.Name, Content: result, CallID: tc.ID})
-			msgs = append(msgs, Message{Role: RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: result})
-			l.trackCall(tc.Function.Name, tc.Function.Arguments, terr != nil || strings.HasPrefix(strings.TrimSpace(result), "Error:"))
-
-			// ★ 自主模式：generate_commit_message 记录提交信息（供最终完成时使用）
-			// 不再用于区分阶段/完成，仅记录 commit message 字符串
-			if tc.Function.Name == "generate_commit_message" {
-				l.commitMessage = result
-			}
-		}
-		} // end else (serial tool execution)
+			} // end else (serial tool execution)
 		} // end if !truncated
 
 		// 先同步 currentMsgs（包含 tool results），供 persist worker 获取完整历史
@@ -901,7 +917,8 @@ func systemPromptFromMsgs(msgs []Message) string {
 // 返回完整的 LLM 调用上下文。调用后自动清空 ephemeralMsgs，
 // 确保内部消息不会被持久化。
 // ★ 同时生成「工具结果瘦身副本」：超长 RoleTool 内容只保留首尾（见 trimToolResult），
-//   不修改原始 msgs——持久化历史与 UI 展示仍为完整内容。
+//
+//	不修改原始 msgs——持久化历史与 UI 展示仍为完整内容。
 func (l *Loop) buildCallContext(msgs []Message) []Message {
 	// ★ 背景块（固定内容，每次迭代注入相同 → KV 前缀稳定）：
 	//   记忆/知识库过期检查（l.staleMsg）+ 历史摘要/自主模式提示（buildInjectionMessage）
@@ -1048,16 +1065,15 @@ func (l *Loop) buildLogBlock() string {
 	return backgroundCtxMarker + systemReminderFrame("执行日志", logStr)
 }
 
-
-
 // DefaultSystemPrompt 核心铁律的系统提示词（中文 lock / 改前 read / 工作区限定）。
 // roots 为工作区所有根目录（支持多根工作区）；roots[0] 为主根。
 // roots 为空时使用当前工作目录作为兜底根目录。
 // ★ harness 对齐：默认（HarnessOnlyTools）返回精简版 harnessSystemPrompt——
-//   只描述保留的工具（read/write/edit/glob/grep/str_replace_editor/bash/
-//   web_search/web_fetch/run_code + 协议工具 update_tasks/ask_user/
-//   generate_commit_message），不引用已被移除的 pair 独有工具，降低冗余与误导；
-//   WB_FULL_TOOLS=1 返回完整版 fullSystemPrompt（含 codegraph/记忆/技能等说明）。
+//
+//	只描述保留的工具（read/write/edit/glob/grep/str_replace_editor/bash/
+//	web_search/web_fetch/run_code + 协议工具 update_tasks/ask_user/
+//	generate_commit_message），不引用已被移除的 pair 独有工具，降低冗余与误导；
+//	WB_FULL_TOOLS=1 返回完整版 fullSystemPrompt（含 codegraph/记忆/技能等说明）。
 func DefaultSystemPrompt(roots []string) string {
 	if HarnessOnlyTools() {
 		return harnessSystemPrompt(roots)
@@ -1080,6 +1096,7 @@ func DefaultSystemPromptWithPersona(roots []string, persona string) string {
 //   - rules：默认规则段 = 「# 工作区」之后的全部行为准则
 //     （第一铁律/核心规则/调研/搜索/错误恢复/修改纪律/工作方式/插件管理等），
 //     插件 rules 整体替换该段（rules 槽位换行为准则，身份/工作区保留）。
+//
 // 两者独立可组合：persona 换人格、rules 换准则，工作区/静态前缀其余部分不变。
 // 任一为空则该槽位用默认值。全部为空时与 DefaultSystemPrompt 输出逐字节一致。
 func DefaultSystemPromptWithOverrides(roots []string, persona, rules string) string {
@@ -1175,7 +1192,7 @@ func harnessSystemPrompt(roots []string) string {
 		"  若问题未记录，在解决后用 edit 更新 .pair/project.md（编译方式、多端目标、CGO 开关等），\n" +
 		"  避免后续对话反复探测同一问题浪费 token。\n" +
 		"- 【完成标记】任务完成时调用 generate_commit_message 记录提交信息，然后输出最终完成总结。" +
-			" 切勿在正文中输出 [FINAL] 等标记。系统自动检测到无工具调用+有正文时视为完成。\n\n" +
+		" 切勿在正文中输出 [FINAL] 等标记。系统自动检测到无工具调用+有正文时视为完成。\n\n" +
 		"# 多轮对话（历史轮次识别）\n" +
 		"同一对话线程可连续发起多轮任务：历史轮次与当前任务都是「用户」角色消息。\n" +
 		"- 消息列表中最后一条用户消息 = 当前任务；其余用户消息均为历史轮次，仅作上下文参考。\n" +
@@ -1314,7 +1331,7 @@ func fullSystemPrompt(roots []string) string {
 		"  若问题未记录，在解决后用 edit_file 更新 .pair/project.md（编译方式、多端目标、CGO 开关等），\n" +
 		"  避免后续对话反复探测同一问题浪费 token。\n" +
 		"- 【完成标记】任务完成时调用 generate_commit_message 记录提交信息，然后输出最终完成总结。" +
-			" 切勿在正文中输出 [FINAL] 等标记。系统自动检测到无工具调用+有正文时视为完成。\n\n" +
+		" 切勿在正文中输出 [FINAL] 等标记。系统自动检测到无工具调用+有正文时视为完成。\n\n" +
 		"# 多轮对话（历史轮次识别）\n" +
 		"同一对话线程可连续发起多轮任务：历史轮次与当前任务都是「用户」角色消息。\n" +
 		"- 消息列表中最后一条用户消息 = 当前任务；其余用户消息均为历史轮次，仅作上下文参考。\n" +
@@ -1367,7 +1384,7 @@ func fullSystemPrompt(roots []string) string {
 		"- 工具执行失败后分析错误原因，换一种方式重试。\n" +
 		"- run_command 失败 → 检查 stderr 输出，不要只靠 exit code 判断。\n" +
 		"- ★ run_command 被 isBlockingCommand 拦截 → 说明命令是长期进程（如 dev server）。" +
-			"你用了错误的工具！请改用 run_background 执行，不要用 run_command 重试。\n\n" +
+		"你用了错误的工具！请改用 run_background 执行，不要用 run_command 重试。\n\n" +
 		"# 代码修改纪律（严格遵守，防改错）\n" +
 		"★★ 以下规则是反复改出语法错误后总结的铁律，必须遵守 ★★\n\n" +
 		"## 改前准备\n" +
@@ -1408,7 +1425,7 @@ func fullSystemPrompt(roots []string) string {
 		"联网(web_fetch/web_search)、截图(screenshot_*)、调试(debug_*)、Git(git_*)、记忆(memory_*)、\n" +
 		"BUG检测(bug_*)、办公(csv_*/word_*/read_pdf)、MCP/技能(skill_*/mcp_*)、任务(update_tasks/update_plan)。\n\n" +
 		"# 工作方式\n" +
-"BUG检测(bug_*)、办公(csv_*/word_*/read_pdf)、MCP/技能(skill_*/mcp_*)、任务(update_tasks)。\n" +
+		"BUG检测(bug_*)、办公(csv_*/word_*/read_pdf)、MCP/技能(skill_*/mcp_*)、任务(update_tasks)。\n" +
 		"复杂或多步任务先用 update_tasks 列出细分任务，再逐步执行并更新状态（自主模式下先用 update_plan 再建子任务）。\n" +
 		"先用 search_* 定位、read_file 细读，再动手；改动优先 edit_file（小而准），大改才 write_file。\n" +
 		"不确定的库用法/报错/最新信息，用 web_search / web_fetch 查证，别凭记忆臆测。\n" +
@@ -1416,7 +1433,7 @@ func fullSystemPrompt(roots []string) string {
 		"# 防止卡死\n" +
 		"- 不要连续 3 轮只输出分析文本而不调用任何工具。\n" +
 		"- 不确定时宁可声明完成并向用户汇报，让用户决定是否继续。\n" +
-"复杂或多步任务先用 update_tasks 列出细分任务，再逐步执行并更新状态。\n" +
+		"复杂或多步任务先用 update_tasks 列出细分任务，再逐步执行并更新状态。\n" +
 		"- run_command 阻塞预防：长期进程用 run_background（后台不阻塞）。\n" +
 		"- 完成后输出 Markdown 总结：改了哪些文件、如何验证、遗留问题。\n\n" +
 		"# 插件管理（cordis_* 工具）\n" +
@@ -1450,8 +1467,10 @@ func ComposeSystemPrompt(static, dynamic string) string {
 
 // ProjectRules 读工作区根的项目约定，拼成系统提示附加段供 agent 遵守：
 // ★分层项目文档（参考 deepseek-harness 约定，模型后训练含参考数据会幻觉这些路径）：
-//   根 AGENTS.md/CLAUDE.md（取首个，根约定）+ docs/AGENTS.md（文档标准层）+
-//   .agents/AGENTS.md（决策/流程规则层）——全部存在则全部注入（各标来源，各自截断）。
+//
+//	根 AGENTS.md/CLAUDE.md（取首个，根约定）+ docs/AGENTS.md（文档标准层）+
+//	.agents/AGENTS.md（决策/流程规则层）——全部存在则全部注入（各标来源，各自截断）。
+//
 // 另注入用户在设置「指令」tab 写的 .pair/rules.md。都没有则返回空串。
 func ProjectRules(root string) string {
 	var b strings.Builder

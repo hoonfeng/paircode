@@ -11014,6 +11014,7 @@
   let wsCallbacks = null;
   let wsManuallyClosed = false;
   let wsPongTimer = null;
+  let wsRunningConvs = null;
   function initWebSocket(callbacks) {
     wsCallbacks = callbacks;
     wsManuallyClosed = false;
@@ -11051,6 +11052,10 @@
         clearTimeout(wsPongTimer);
       }
       wsPongTimer = setTimeout(() => {
+        if (wsRunningConvs && wsRunningConvs.size > 0) {
+          console.warn("[WS] 45s 无业务消息但 agent 运行中，保持连接（等待后端 ping）");
+          return;
+        }
         console.warn("[WS] 45s 无消息，触发重连");
         if (wsSocket) wsSocket.close();
       }, 45e3);
@@ -11061,7 +11066,11 @@
         return;
       }
       if (!data) return;
+      if (data.type === "ping") {
+        return;
+      }
       if (data.type === "status" && data.runningConvs) {
+        wsRunningConvs = new Set(data.runningConvs);
         (_a = wsCallbacks == null ? void 0 : wsCallbacks.onStatus) == null ? void 0 : _a.call(wsCallbacks, {
           runningConvs: data.runningConvs,
           runningByWorkspace: data.runningByWorkspace || {}

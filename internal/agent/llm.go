@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"math/rand"
 	"net"
 	"net/http"
@@ -288,6 +289,7 @@ func (p *OpenAIProvider) Chat(ctx context.Context, messages []Message, tools []T
 				return Message{}, err
 			}
 			lastErr = fmt.Errorf("LLM 请求失败 (第%d次): %w", attempt+1, err)
+			log.Printf("[llm] %s 网络请求失败（第%d次，退避后重试）: %v", p.Model, attempt+1, err)
 			continue
 		}
 
@@ -304,19 +306,25 @@ func (p *OpenAIProvider) Chat(ctx context.Context, messages []Message, tools []T
 
 		// 401/403 → 认证错误，不重试
 		if statusCode == http.StatusUnauthorized || statusCode == http.StatusForbidden {
-			return Message{}, fmt.Errorf("LLM HTTP %d (认证失败): %s", statusCode, bodyStr)
+			err := fmt.Errorf("LLM HTTP %d (认证失败): %s", statusCode, bodyStr)
+			log.Printf("[llm] %s 认证失败（不重试）: %v", p.Model, err)
+			return Message{}, err
 		}
 
 		// 可重试状态码：408（超时）、429（限流）、5xx（服务端错误）
 		if statusCode == http.StatusRequestTimeout || statusCode == http.StatusTooManyRequests || (statusCode >= 500 && statusCode <= 599) {
 			lastErr = fmt.Errorf("LLM HTTP %d (第%d次): %s", statusCode, attempt+1, bodyStr)
+			log.Printf("[llm] %s HTTP %d（第%d次，退避后重试）: %s", p.Model, statusCode, attempt+1, bodyStr)
 			continue
 		}
 
 		// 其他 4xx → 客户端错误，不重试
-		return Message{}, fmt.Errorf("LLM HTTP %d: %s", statusCode, bodyStr)
+		err = fmt.Errorf("LLM HTTP %d: %s", statusCode, bodyStr)
+		log.Printf("[llm] %s HTTP %d（客户端错误，不重试）: %s", p.Model, statusCode, bodyStr)
+		return Message{}, err
 	}
 
+	log.Printf("[llm] %s 请求失败（已达最大重试次数 %d）: %v", p.Model, maxRetries, lastErr)
 	return Message{}, fmt.Errorf("LLM 请求失败（已达最大重试次数 %d）: %w", maxRetries, lastErr)
 }
 

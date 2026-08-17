@@ -67,7 +67,14 @@ func ServeGlobalEventStreamWS(w http.ResponseWriter, r *http.Request, mgr *Sessi
 		case <-clientClosed:
 			return
 		case <-heartbeat.C:
-			if err := wsc.WritePingFrame(); err != nil {
+			// ★ 2026-08-17 修复「发送消息后 agent 无响应」根因：
+			//   心跳必须用文本帧 {type:"ping"}，不能用协议层 Ping 帧！
+			//   浏览器 WebSocket 的 onmessage 只触发于数据帧；协议层 Ping 帧由
+			//   浏览器自动回复 Pong，不触发 onmessage → 前端「45s 无消息」定时器
+			//   永不重置 → agent 思考/LLM 重试期间无业务事件时，前端误判连接
+			//   断开 → 反复重连 → 事件全部丢失（用户看到无任何响应）。
+			//   文本帧 ping 触发 onmessage（重置超时器），实现真正的连接健康检测。
+			if err := wsc.WriteTextFrame([]byte(`{"type":"ping"}`)); err != nil {
 				return
 			}
 		case ge, ok := <-ch:

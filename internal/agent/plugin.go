@@ -461,6 +461,11 @@ type PluginHost struct {
 	inspectMu sync.RWMutex
 	inspect   map[string]map[string]*InspectProvider
 
+	// ★ approvedGlobalDir global 批准文件目录覆盖（默认空=core.InstallDir()）。
+	//   测试隔离用：go test 开发态 InstallDir()=cwd=包目录，直接写会污染源码树
+	//   （internal/agent/.pair/cordis-approved.json 残留导致测试误判）。
+	approvedGlobalDir string
+
 	// ★ client 半激活批准（per-plugin，批准覆盖后续版本；对齐 harness
 	//   approvedClientPackages）：cordis_run 装载带 client 半的插件时经
 	//   现有审批门（ReviewMode manual=人工审批 / auto=AI审核 / off=放行），
@@ -705,12 +710,23 @@ func NewPluginHost(registry *Registry, store ConversationStore, root string) *Pl
 // 未打开工作区时 project 退回安装目录（无工作区也能记录项目级批准）。
 func (h *PluginHost) approvedFilePath(scope string) string {
 	if scope == "global" {
-		return filepath.Join(core.InstallDir(), ".pair", "cordis-approved.json")
+		base := h.approvedGlobalDir
+		if base == "" {
+			base = core.InstallDir()
+		}
+		return filepath.Join(base, ".pair", "cordis-approved.json")
 	}
 	if h.root != "" {
 		return filepath.Join(h.root, ".pair", "cordis-approved.json")
 	}
 	return filepath.Join(core.InstallDir(), ".pair", "cordis-approved.json")
+}
+
+// SetApprovedGlobalDir 覆盖 global 批准文件目录（测试隔离用；生产代码不要调用）。
+func (h *PluginHost) SetApprovedGlobalDir(dir string) {
+	h.approveMu.Lock()
+	defer h.approveMu.Unlock()
+	h.approvedGlobalDir = dir
 }
 
 // loadApprovedClients 恢复批准记录：global（安装目录）+ project（工作区）分别

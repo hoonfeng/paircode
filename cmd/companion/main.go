@@ -37,6 +37,9 @@ func main() {
 		}
 	}()
 
+	// ★ 日志落盘（<安装目录>/logs/paircode.log）：最先初始化，确保启动日志也进文件
+	initLogFile()
+
 	port := InitCore()
 
 	log.Printf("[main] PairCode IDE %s 启动中 (%s, %s/%s)", version, runtime.Version(), runtime.GOOS, runtime.GOARCH)

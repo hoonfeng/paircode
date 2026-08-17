@@ -23,6 +23,9 @@ func TestClientApprovalDynamic(t *testing.T) {
 	dir := t.TempDir()
 	reg := NewRegistry()
 	host := NewPluginHost(reg, nil, dir)
+	// ★ 测试隔离：global 批准文件不写 core.InstallDir()（开发态=cwd=包目录，
+	//   会污染源码树 internal/agent/.pair/cordis-approved.json 导致测试误判）
+	host.SetApprovedGlobalDir(dir)
 	RegisterCordisTools(reg, host, dir)
 
 	runTool, ok := reg.Get("cordis_run")
@@ -75,6 +78,8 @@ func TestClientApprovalGateLoop(t *testing.T) {
 	dir := t.TempDir()
 	reg := NewRegistry()
 	host := NewPluginHost(reg, nil, dir)
+	// ★ 测试隔离：global 批准文件写测试目录（见 TestClientApprovalDynamic）
+	host.SetApprovedGlobalDir(dir)
 	RegisterCordisTools(reg, host, dir)
 
 	id, err := host.DefineJSCodeFull(`return { name: 'ap-gate', apply(ctx) {} };`, "", "", "", approvalClientCode)

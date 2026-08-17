@@ -5,10 +5,10 @@
 package main
 
 import (
-	"crypto/sha256"
-"bufio"
+	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -29,11 +29,11 @@ import (
 
 	"github.com/hoonfeng/paircode/internal/agent"
 	"github.com/hoonfeng/paircode/internal/core"
+	"github.com/hoonfeng/paircode/internal/roleprompts"
 	"github.com/hoonfeng/paircode/internal/server/handler"
 	marketplacepanel "github.com/hoonfeng/paircode/internal/ui/marketplace"
 	mcppanel "github.com/hoonfeng/paircode/internal/ui/mcp"
 	"github.com/hoonfeng/paircode/internal/ui/skills"
-	"github.com/hoonfeng/paircode/internal/roleprompts"
 	"github.com/hoonfeng/paircode/pkg/memory"
 	"github.com/hoonfeng/paircode/pkg/summary"
 )
@@ -59,8 +59,10 @@ var ideRefSetModalFile embed.FS
 //  1. WEB_DIR 环境变量（显式指定，如开发时指向 web-ui/dist）
 //  2. exe 旁 web/ 目录（存在则用；不存在则首次从 embed 解压产物）
 //  3. 都不可用返回 ""（使用内嵌资源）
+//
 // ★ 用户改 UI 的路径：改 web-ui/src → npm run build → 拷贝/覆盖到外部目录 → 重启生效，
-//   无需重新编译 Go；或直接编辑外部目录下的产物文件（index.html / assets/*.js）后重启。
+//
+//	无需重新编译 Go；或直接编辑外部目录下的产物文件（index.html / assets/*.js）后重启。
 func resolveWebDir() string {
 	if dir := strings.TrimSpace(os.Getenv("WEB_DIR")); dir != "" {
 		if st, err := os.Stat(dir); err == nil && st.IsDir() {
@@ -134,10 +136,11 @@ var ws *webServer
 
 // ── 平台回调注册（由 webui_*.go 在启动时注册） ──
 // 统一 API 层后，平台差异仅通过以下回调参数化：
-//   buildProviderFn:   创建 LLM Provider（主模型）
-//   buildSystemPromptFn:创建系统提示语
-//   buildCompressorFn:  创建上下文压缩器（nil=规则式压缩）
-//   buildPlanProviderFn:创建规划 Provider（自主模式，回退到 buildProviderFn）
+//
+//	buildProviderFn:   创建 LLM Provider（主模型）
+//	buildSystemPromptFn:创建系统提示语
+//	buildCompressorFn:  创建上下文压缩器（nil=规则式压缩）
+//	buildPlanProviderFn:创建规划 Provider（自主模式，回退到 buildProviderFn）
 type (
 	buildProviderFn     func() agent.Provider
 	buildSystemPromptFn func() string
@@ -146,10 +149,10 @@ type (
 )
 
 var (
-	webProvider         buildProviderFn
-	webSystemPrompt     buildSystemPromptFn
-	webCompressor       buildCompressorFn
-	webPlanProvider     buildPlanProviderFn
+	webProvider     buildProviderFn
+	webSystemPrompt buildSystemPromptFn
+	webCompressor   buildCompressorFn
+	webPlanProvider buildPlanProviderFn
 )
 
 // findMessageStoreRoot 在所有工作区文件夹中查找第一个有对话数据目录的路径。
@@ -306,7 +309,7 @@ func startWebUI(port int) {
 				memory.SetRoot(root)
 			}
 		}
-		
+
 	}
 	mux := http.NewServeMux()
 
@@ -500,7 +503,6 @@ func (s *webServer) handleFSList(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonResp(w, result)
 }
-
 
 func (s *webServer) handleFSRead(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Query().Get("path")
@@ -1430,23 +1432,23 @@ func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Reques
 					jsonErr(w, err.Error())
 					return
 				}
-			if msgs == nil {
-				msgs = []agent.StoredMessage{}
-			}
-			msgs = agent.MergeConsecutiveAssistants(msgs)
-			total, _ := store.Count(id)
-			jsonResp(w, map[string]any{"messages": msgs, "total": total})
-		} else {
-			msgs, total, err := store.LoadLatest(id, limit)
-			if err != nil {
-				jsonErr(w, err.Error())
-				return
-			}
-			if msgs == nil {
-				msgs = []agent.StoredMessage{}
-			}
-			msgs = agent.MergeConsecutiveAssistants(msgs)
-			jsonResp(w, map[string]any{"messages": msgs, "total": total})
+				if msgs == nil {
+					msgs = []agent.StoredMessage{}
+				}
+				msgs = agent.MergeConsecutiveAssistants(msgs)
+				total, _ := store.Count(id)
+				jsonResp(w, map[string]any{"messages": msgs, "total": total})
+			} else {
+				msgs, total, err := store.LoadLatest(id, limit)
+				if err != nil {
+					jsonErr(w, err.Error())
+					return
+				}
+				if msgs == nil {
+					msgs = []agent.StoredMessage{}
+				}
+				msgs = agent.MergeConsecutiveAssistants(msgs)
+				jsonResp(w, map[string]any{"messages": msgs, "total": total})
 			}
 
 		case sub == "token-stats":
@@ -1648,8 +1650,8 @@ func (s *webServer) handleModels(w http.ResponseWriter, r *http.Request) {
 		modelMap[p] = core.GetModels(p)
 	}
 	jsonResp(w, map[string]any{
-		"providers":    providers,
-		"models":       modelMap,
+		"providers":        providers,
+		"models":           modelMap,
 		"providerBaseURLs": core.GetProviderBaseURLs(),
 	})
 }
@@ -1905,7 +1907,6 @@ func (s *webServer) handleTokensStats(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, "不支持的方法")
 	}
 
-
 }
 
 // ─── Skills HTTP API ──────────────────────────────────────
@@ -2014,7 +2015,6 @@ func jsonResp(w http.ResponseWriter, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(data)
 }
-
 
 // handleSkillsRead 读取技能正文内容。
 // 支持 level 查询参数：system（全局 config/skills/）或 project（工作区 .pair/skills/，默认）。
@@ -2364,7 +2364,8 @@ func buildWebSystemDynamic() string {
 // 使用唯一的 CACHE_BOUNDARY 分隔静态前缀与动态后缀，最大化 LLM KV Cache 命中率。
 // ★ 通过 ComposeSystemPrompt 统一添加 boundary，避免双边界/漏边界。
 // ★ 插件贡献的系统提示段/变量（对齐 harness system-prompt 注册中心）并入动态侧：
-//   插件段随加载/卸载变化，放 boundary 后避免破坏静态前缀 KV 缓存。
+//
+//	插件段随加载/卸载变化，放 boundary 后避免破坏静态前缀 KV 缓存。
 func buildWebSystemPrompt() string {
 	dynamic := buildWebSystemDynamic()
 	if ph := handler.GetPluginHost(); ph != nil {
@@ -2484,9 +2485,6 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 	// ★ 保存注册表引用，供 /api/tools 查询工具列表与状态
 	handler.SetToolsRegistry(reg)
 
-
-	
-
 	var history []agent.Message
 	var summaries []string
 
@@ -2540,13 +2538,7 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 	//   未达阈值（45% 窗口）保持原始历史逐字节不变（缓存可连续命中）。
 	history = agent.CondenseHistoryByPressure(history, core.Settings.ContextMaxTokens)
 
-
-
-
-
-
 	maxIter := core.Settings.MaxIterations
-
 
 	if autonomous {
 		if maxIter <= 0 {
@@ -2557,16 +2549,16 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 	}
 
 	return agent.LoopOpts{
-		Provider:         prov,
-		Registry:         reg,
-		System:           sys,
-		MaxIterations:    maxIter,
-		MaxContextTokens: core.Settings.ContextMaxTokens,
-		Compressor:       webCompressor(),
-		History:          history,          // 压缩版：供 LLM 上下文使用
-		HistoryOriginal:  originalHistory,  // 原始版：供持久化使用，防止压缩版写回历史记录
+		Provider:            prov,
+		Registry:            reg,
+		System:              sys,
+		MaxIterations:       maxIter,
+		MaxContextTokens:    core.Settings.ContextMaxTokens,
+		Compressor:          webCompressor(),
+		History:             history,         // 压缩版：供 LLM 上下文使用
+		HistoryOriginal:     originalHistory, // 原始版：供持久化使用，防止压缩版写回历史记录
 		CompressedSummaries: summaries,
-		Autonomous:       autonomous,
+		Autonomous:          autonomous,
 	}
 }
 
@@ -2601,6 +2593,10 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 	if req.WorkspaceRoot == "" {
 		req.WorkspaceRoot = core.Root()
 	}
+
+	// ★ 收到消息入口日志（排查「无响应」：确认后端确实收到并进入处理）
+	log.Printf("[chat] 收到发送请求 conv=%s len=%d autonomous=%v ws=%s",
+		req.ConvID, len(req.Message), req.Autonomous, req.WorkspaceRoot)
 
 	if !core.Configured() {
 		jsonErr(w, "未配置 API key。请在设置面板中配置 API Key 和模型。")
@@ -2667,9 +2663,12 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 	setupCtx, setupCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer setupCancel()
 	if err := agentMgr.Start(setupCtx, req.ConvID, req.Message, opts); err != nil {
+		// ★ Start 失败日志（排查「无响应」：前端 catch 会显示启动失败，此处留档）
+		log.Printf("[chat] Start 失败 conv=%s err=%v", req.ConvID, err)
 		jsonErr(w, err.Error())
 		return
 	}
+	log.Printf("[chat] Start 成功 conv=%s（agent 循环已启动）", req.ConvID)
 	jsonResp(w, map[string]any{"ok": true, "convId": req.ConvID})
 }
 
