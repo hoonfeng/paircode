@@ -77,11 +77,11 @@
                 <input type="number" v-model.number="local.contextMaxTokens" min="4096" max="1000000" />
               </div>
               <div class="setting-row">
-                <label>思考模式</label>
+                <label>推理强度</label>
                 <select v-model="local.thinkingMode" style="flex:1">
-                  <option value="">禁用</option>
-                  <option value="thinking">启用思考</option>
-                  <option value="non-thinking">非思考模式</option>
+                  <option value="non-thinking">关闭思考（Off）</option>
+                  <option value="thinking">高（High）</option>
+                  <option value="thinking_max">最大（Max）</option>
                 </select>
               </div>
             </div>

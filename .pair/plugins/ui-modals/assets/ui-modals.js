@@ -3023,7 +3023,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                       _cache[58] || (_cache[58] = vue.createElementVNode(
                         "label",
                         null,
-                        "思考模式",
+                        "推理强度",
                         -1
                         /* CACHED */
                       )),
@@ -3036,22 +3036,22 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         [..._cache[57] || (_cache[57] = [
                           vue.createElementVNode(
                             "option",
-                            { value: "" },
-                            "禁用",
+                            { value: "non-thinking" },
+                            "关闭思考（Off）",
                             -1
                             /* CACHED */
                           ),
                           vue.createElementVNode(
                             "option",
                             { value: "thinking" },
-                            "启用思考",
+                            "高（High）",
                             -1
                             /* CACHED */
                           ),
                           vue.createElementVNode(
                             "option",
-                            { value: "non-thinking" },
-                            "非思考模式",
+                            { value: "thinking_max" },
+                            "最大（Max）",
                             -1
                             /* CACHED */
                           )
@@ -4134,7 +4134,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       };
     }
   };
-  const SettingsModal = /* @__PURE__ */ _export_sfc(_sfc_main$7, [["__scopeId", "data-v-cfece15e"]]);
+  const SettingsModal = /* @__PURE__ */ _export_sfc(_sfc_main$7, [["__scopeId", "data-v-de533ee8"]]);
   const _hoisted_1$5 = { class: "modal-content sys-modal" };
   const _hoisted_2$5 = { class: "modal-header" };
   const _hoisted_3$5 = { class: "modal-body" };
