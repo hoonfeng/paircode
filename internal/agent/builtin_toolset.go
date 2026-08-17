@@ -582,24 +582,24 @@ func pluginGroupsOf(reg *Registry, ph *PluginHost, workspaceToolsets []Workspace
 		}
 	}
 	byPlugin := ph.PluginToolsByPlugin()
-	// ★ 工具 enabled 状态按「root 工作区工具集声明」计算（插件已加入且工具未被
-	// DisabledTools 摘除 → 已加入/可见）。2026-08-17：不再依赖全局 ph 运行时状态
-	// （reg.IsEnabled）——不同工作区各自管理自己的 .pair/toolsets/，管理弹窗按
-	// 当前工作区隔离展示，互不影响。
-	declared := map[string]map[string]bool{} // 插件名 → 工具名 → 声明可用（未摘除）
+	// ★ 工具 enabled = 该工作区 agent 实际可用：运行时已装载（byPlugin 遍历）
+	//   − 本工作区工具集 DisabledTools 摘除清单（每个工作区自己的 .pair/toolsets/，
+	//   互不影响）。默认全部可用（enabled=true）；被摘除才不可见。2026-08-17：
+	//   工作区工具集 = 当前 agent 可用工具，管理弹窗就是它的管理界面。
+	removed := map[string]map[string]bool{} // 插件名 → 工具名 → 已被本工作区摘除
 	for _, wt := range workspaceToolsets {
 		for _, p := range wt.Plugins {
 			if p.Builtin != "" || p.Name == "" {
 				continue
 			}
-			if declared[p.Name] == nil {
-				declared[p.Name] = map[string]bool{}
+			if len(p.DisabledTools) == 0 {
+				continue
 			}
-			for _, tn := range byPlugin[p.Name] {
-				declared[p.Name][tn] = true
+			if removed[p.Name] == nil {
+				removed[p.Name] = map[string]bool{}
 			}
 			for _, tn := range p.DisabledTools {
-				declared[p.Name][tn] = false
+				removed[p.Name][tn] = true
 			}
 		}
 	}
@@ -620,9 +620,9 @@ func pluginGroupsOf(reg *Registry, ph *PluginHost, workspaceToolsets []Workspace
 		anyOn := false
 		all := true
 		for _, tn := range tools {
-			en := false
-			if d, ok := declared[name]; ok {
-				en = d[tn]
+			en := true // 默认可用（运行时已装载）；被本工作区摘除才不可见
+			if d, ok := removed[name]; ok && d[tn] {
+				en = false
 			}
 			g.Tools = append(g.Tools, BuiltinToolInfo{Name: tn, Desc: toolShortDesc(reg, tn), Enabled: en})
 			if en {
