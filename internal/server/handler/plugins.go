@@ -15,6 +15,7 @@ package handler
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -452,6 +453,11 @@ func HandleBuiltinPlugins(w http.ResponseWriter, r *http.Request) {
 		reg = ph.Context().Tools
 	}
 	if r.Method == "GET" {
+		// ★ 无工具集配置 → 先自动创建基础工具集（dsh 极简核心 + 框架本身提供的
+		//   工具），管理弹窗/工具集面板才有据可依；有配置保持不动。
+		if err := agent.EnsureWorkspaceToolsetPublic(ph, root); err != nil {
+			log.Printf("[builtin] 自动生成基础工具集失败: %v", err)
+		}
 		jsonResp(w, agent.BuiltinToolsetInfoPublic(reg, ph, root))
 		return
 	}

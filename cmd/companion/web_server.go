@@ -278,7 +278,7 @@ func startWebUI(port int) {
 	if root != "" {
 		// ★ 迁移旧版 builtin.json（内置组条目并入工作区工具集 default.json 后删除）；
 		//   内置工具包与工作区工具集统一为一套逻辑
-		agent.MigrateLegacyBuiltinJSON(root)
+		agent.MigrateLegacyBuiltinJSON(ph, root)
 	}
 	// ★ 启动自动装载工具集（工作区 .pair/toolsets/ + 全局插件；未打开工作区只装全局插件）
 	agent.LoadAllToolsets(ph, root)
@@ -2618,11 +2618,13 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 	}
 	opts := s.buildWebLoopOpts(req.ConvID, req.Message, req.Autonomous)
 	opts.WorkspaceRoot = req.WorkspaceRoot
-	// ★ 工作区隔离（2026-08-17）：移除只影响本工作区——会话 reg 按「会话工作区
-	//   工具集 DisabledTools」禁用被摘除工具（MergePluginTools 全量启用后覆盖），
-	//   其他工作区无摘除记录 → 不受影响（能正常看到/加入该工具）。
+	// ★ 工作区工具集白名单（2026-08-17）：agent 只暴露「会话工作区工具集」声明的
+	//   工具——有配置只暴露配置里的；无配置先自动创建基础工具集（dsh 极简核心 +
+	//   框架本身提供的工具），再按声明收敛。MergePluginTools 全量启用后应用，
+	//   插件工具未加入工具集 → 对 agent 隐藏（cordis/前端仍可见可管理）。
+	//   工作区隔离：每个工作区读自己的 .pair/toolsets/，移除/加入互不影响。
 	if opts.Registry != nil {
-		agent.ApplyWorkspaceDisabledTools(opts.Registry, req.WorkspaceRoot)
+		agent.ApplyWorkspaceToolsetWhitelist(handler.GetPluginHost(), opts.Registry, req.WorkspaceRoot)
 	}
 
 	// 先从全局设置取审核配置（默认值）

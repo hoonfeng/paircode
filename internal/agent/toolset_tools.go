@@ -769,7 +769,7 @@ func toolsetEdit(ph *PluginHost, root string, args map[string]any) (string, erro
 		//   生成基础工具集——保证「加入」可用（工作区隔离：写入本工作区 .pair/toolsets/，
 		//   不影响其他工作区）。
 		if name == "default" {
-			if e := ensureDefaultWorkspaceToolset(root); e == nil {
+			if e := ensureDefaultWorkspaceToolset(ph, root); e == nil {
 				ts, err = loadToolset(root, toolsetProject, name)
 			}
 		}
@@ -803,7 +803,7 @@ func toolsetEditBuiltinTool(ph *PluginHost, root string, args map[string]any, ac
 	if gn == "" || gn == pn || tool == "" {
 		return "", fmt.Errorf("需要 plugin_name=builtin:组名 与 tool（工具名）")
 	}
-	ts, err := workspaceMainToolset(root)
+	ts, err := workspaceMainToolset(ph, root)
 	if err != nil {
 		return "", err
 	}

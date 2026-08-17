@@ -154,7 +154,7 @@ func TestApplyToolsetVisibilityFilter_HarnessModeSkips(t *testing.T) {
 func TestEnsureDefaultWorkspaceToolset(t *testing.T) {
 	root := t.TempDir()
 	// 空工作区 → 生成基础工具集
-	if err := ensureDefaultWorkspaceToolset(root); err != nil {
+	if err := ensureDefaultWorkspaceToolset(nil, root); err != nil {
 		t.Fatal(err)
 	}
 	ts, err := loadToolset(root, toolsetProject, "default")
@@ -170,7 +170,7 @@ func TestEnsureDefaultWorkspaceToolset(t *testing.T) {
 		t.Fatalf("基础工具应 %v，实际 %v", want, got)
 	}
 	// 幂等：再次调用不覆盖/不报错
-	if err := ensureDefaultWorkspaceToolset(root); err != nil {
+	if err := ensureDefaultWorkspaceToolset(nil, root); err != nil {
 		t.Fatal(err)
 	}
 	// 已有项目工具集（非 builtin）→ 不生成新内容
@@ -179,7 +179,7 @@ func TestEnsureDefaultWorkspaceToolset(t *testing.T) {
 	custom := Toolset{Name: "custom", Plugins: []ToolsetPlugin{{Name: "p1"}}}
 	data, _ := json.Marshal(custom)
 	os.WriteFile(filepath.Join(root2, ".pair", "toolsets", "custom.json"), data, 0644)
-	if err := ensureDefaultWorkspaceToolset(root2); err != nil {
+	if err := ensureDefaultWorkspaceToolset(nil, root2); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := loadToolset(root2, toolsetProject, "default"); err == nil {
@@ -189,7 +189,7 @@ func TestEnsureDefaultWorkspaceToolset(t *testing.T) {
 	root3 := t.TempDir()
 	os.MkdirAll(filepath.Join(root3, ".pair", "toolsets"), 0755)
 	os.WriteFile(filepath.Join(root3, ".pair", "toolsets", "builtin.json"), []byte(`{"name":"builtin","plugins":[{"name":"builtin:memory","builtin":"memory","tools":["memory_write"]}]}`), 0644)
-	if err := ensureDefaultWorkspaceToolset(root3); err != nil {
+	if err := ensureDefaultWorkspaceToolset(nil, root3); err != nil {
 		t.Fatal(err)
 	}
 	ts3, err := loadToolset(root3, toolsetProject, "default")
@@ -209,5 +209,43 @@ func TestEnsureDefaultWorkspaceToolset(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root3, ".pair", "toolsets", "builtin.json")); !os.IsNotExist(err) {
 		t.Error("迁移后旧版 builtin.json 应被删除")
+	}
+}
+
+
+// TestApplyWorkspaceToolsetWhitelist 白名单模型：agent 只暴露「工作区工具集声明 +
+// 框架本身提供的工具」——无工具集先自动创建基础工具集；有工具集按声明收敛。
+// ★ 2026-08-17：有配置只暴露配置里的（+框架自举工具）；未声明的插件/内置包工具禁用。
+func TestApplyWorkspaceToolsetWhitelist(t *testing.T) {
+	ph, root := mkBuiltinHost(t)
+	reg := ph.Context().Tools
+	// 无工具集：白名单应用前应自动创建基础工具集
+	ApplyWorkspaceToolsetWhitelist(ph, reg, root)
+	if !hasWorkspaceToolsets(root) {
+		t.Fatal("无工具集时应自动创建基础工具集")
+	}
+	// 框架自举工具恒可用：SystemTool（update_tasks）、cordis_*、toolset_*
+	for _, tn := range []string{"update_tasks", "update_plan", "cordis_define", "cordis_run", "toolset_edit", "toolset_build"} {
+		if !reg.IsEnabled(tn) {
+			t.Errorf("框架自举工具 %s 应可用（白名单兜底）", tn)
+		}
+	}
+	// dsh 极简核心可用（默认工具集 system 条目声明）
+	for _, tn := range []string{"read", "write", "edit", "glob", "grep", "bash", "str_replace_editor", "run_code"} {
+		if !reg.IsEnabled(tn) {
+			t.Errorf("dsh 核心工具 %s 应可用（基础工具集声明）", tn)
+		}
+	}
+	// 未声明的内置包工具禁用（codegraph_search 等非框架宿主工具）
+	if reg.IsEnabled("codegraph_search") {
+		t.Error("未声明的 codegraph_search 应对 agent 隐藏")
+	}
+	// 加入 codegraph 组 → 其工具可用
+	if _, err := SetBuiltinGroupEnabled(ph, root, "codegraph", true); err != nil {
+		t.Fatalf("加入 codegraph 失败: %v", err)
+	}
+	ApplyWorkspaceToolsetWhitelist(ph, reg, root)
+	if !reg.IsEnabled("codegraph_search") {
+		t.Error("加入 codegraph 后 codegraph_search 应可用")
 	}
 }

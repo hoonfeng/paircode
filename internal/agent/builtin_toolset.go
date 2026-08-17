@@ -421,14 +421,18 @@ func builtinJoinedGroups(root string) []string {
 // 统一落点（★ 2026-08-17：内置工具包与工作区工具集合并为一套，无独立 builtin.json）。
 // 不存在时创建基础工具集（defaultProjectToolset，dsh 极简核心），与
 // ensureDefaultWorkspaceToolset 语义一致。
-func workspaceMainToolset(root string) (*Toolset, error) {
+func workspaceMainToolset(ph *PluginHost, root string) (*Toolset, error) {
 	if root == "" {
 		return nil, fmt.Errorf("工作区未就绪")
 	}
 	if ts, err := loadToolset(root, toolsetProject, "default"); err == nil {
 		return ts, nil
 	}
-	ts := defaultProjectToolset(filepath.Base(root))
+	var reg *Registry
+	if ph != nil && ph.Context() != nil {
+		reg = ph.Context().Tools
+	}
+	ts := defaultProjectToolset(reg, ph, filepath.Base(root))
 	if err := saveToolset(root, toolsetProject, ts); err != nil {
 		return nil, err
 	}
@@ -441,7 +445,7 @@ func workspaceMainToolset(root string) (*Toolset, error) {
 // ★ 2026-08-17：内置工具包与工作区工具集统一为「一套逻辑」——内置组的加入状态
 //   就是工作区工具集条目（与 JS 插件条目同文件），不再有独立 builtin.json。
 // 幂等：无旧文件时不做任何事。启动装配（LoadAllToolsets 前）调用。
-func MigrateLegacyBuiltinJSON(root string) error {
+func MigrateLegacyBuiltinJSON(ph *PluginHost, root string) error {
 	if root == "" {
 		return nil
 	}
@@ -459,7 +463,7 @@ func MigrateLegacyBuiltinJSON(root string) error {
 		_ = os.Remove(path)
 		return nil
 	}
-	ts, err := workspaceMainToolset(root)
+	ts, err := workspaceMainToolset(ph, root)
 	if err != nil {
 		return err
 	}
@@ -582,24 +586,25 @@ func pluginGroupsOf(reg *Registry, ph *PluginHost, workspaceToolsets []Workspace
 		}
 	}
 	byPlugin := ph.PluginToolsByPlugin()
-	// ★ 工具 enabled = 该工作区 agent 实际可用：运行时已装载（byPlugin 遍历）
-	//   − 本工作区工具集 DisabledTools 摘除清单（每个工作区自己的 .pair/toolsets/，
-	//   互不影响）。默认全部可用（enabled=true）；被摘除才不可见。2026-08-17：
-	//   工作区工具集 = 当前 agent 可用工具，管理弹窗就是它的管理界面。
-	removed := map[string]map[string]bool{} // 插件名 → 工具名 → 已被本工作区摘除
+	// ★ 工具 enabled = 工作区工具集声明白名单：插件已加入工具集（JS 条目）且
+	//   工具未被其 DisabledTools 摘除 → 已加入（agent 可用）；未声明的插件工具
+	//   → 未加入（可勾选加入）。★ 2026-08-17 白名单模型：agent 只暴露工具集
+	//   里声明的工具；无配置先自动创建基础工具集（dsh 核心 + 框架工具），
+	//   插件工具默认全部未加入，用户按需加入。
+	declared := map[string]map[string]bool{} // 插件名 → 工具名 → 工具集声明可用
 	for _, wt := range workspaceToolsets {
 		for _, p := range wt.Plugins {
 			if p.Builtin != "" || p.Name == "" {
 				continue
 			}
-			if len(p.DisabledTools) == 0 {
-				continue
+			if declared[p.Name] == nil {
+				declared[p.Name] = map[string]bool{}
 			}
-			if removed[p.Name] == nil {
-				removed[p.Name] = map[string]bool{}
+			for _, tn := range byPlugin[p.Name] {
+				declared[p.Name][tn] = true
 			}
 			for _, tn := range p.DisabledTools {
-				removed[p.Name][tn] = true
+				declared[p.Name][tn] = false
 			}
 		}
 	}
@@ -620,9 +625,9 @@ func pluginGroupsOf(reg *Registry, ph *PluginHost, workspaceToolsets []Workspace
 		anyOn := false
 		all := true
 		for _, tn := range tools {
-			en := true // 默认可用（运行时已装载）；被本工作区摘除才不可见
-			if d, ok := removed[name]; ok && d[tn] {
-				en = false
+			en := false // 默认未加入（白名单：工具集声明内才可见）
+			if d, ok := declared[name]; ok && d[tn] {
+				en = true
 			}
 			g.Tools = append(g.Tools, BuiltinToolInfo{Name: tn, Desc: toolShortDesc(reg, tn), Enabled: en})
 			if en {
@@ -721,7 +726,7 @@ func applyBuiltinGroupToToolset(ph *PluginHost, root string, groupName string, f
 		groups = []string{groupName}
 	}
 	// 读取/创建工作区主工具集（default——内置组加入/移出的统一落点，无独立 builtin.json）
-	ts, err := workspaceMainToolset(root)
+	ts, err := workspaceMainToolset(ph, root)
 	if err != nil {
 		return "", err
 	}
@@ -759,7 +764,7 @@ func applyBuiltinGroupToToolset(ph *PluginHost, root string, groupName string, f
 
 // removeBuiltinGroupFromToolset 把内置分组移出工作区工具集（恢复默认过滤状态）。
 func removeBuiltinGroupFromToolset(ph *PluginHost, root string, groupName string) (string, error) {
-	ts, err := workspaceMainToolset(root)
+	ts, err := workspaceMainToolset(ph, root)
 	if err != nil {
 		return "", err
 	}
@@ -773,7 +778,11 @@ func removeBuiltinGroupFromToolset(ph *PluginHost, root string, groupName string
 	if len(ts.Plugins) == 0 {
 		// 全部移出：重置为基础工具集（default 是工作区工具集主文件，永存——
 		// 否则「工作区有工具集」状态丢失，agent 可见工具会回到全量/默认语义）
-		base := defaultProjectToolset(filepath.Base(root))
+		var reg0 *Registry
+	if ph != nil && ph.Context() != nil {
+		reg0 = ph.Context().Tools
+	}
+	base := defaultProjectToolset(reg0, ph, filepath.Base(root))
 		if err := saveToolset(root, toolsetProject, base); err != nil {
 			return "", err
 		}
@@ -820,7 +829,7 @@ func SetBuiltinToolEnabled(ph *PluginHost, root, toolName string, enabled bool) 
 	if !valid[toolName] {
 		return "", fmt.Errorf("工具 %s 不存在或不属于内置工具包", toolName)
 	}
-	ts, err := workspaceMainToolset(root)
+	ts, err := workspaceMainToolset(ph, root)
 	if err != nil {
 		return "", err
 	}
@@ -891,7 +900,11 @@ func SetBuiltinToolEnabled(ph *PluginHost, root, toolName string, enabled bool) 
 	}
 	if len(ts.Plugins) == 0 {
 		// 全部移出：重置为基础工具集（default 永存，见 removeBuiltinGroupFromToolset）
-		base := defaultProjectToolset(filepath.Base(root))
+		var reg0 *Registry
+	if ph != nil && ph.Context() != nil {
+		reg0 = ph.Context().Tools
+	}
+	base := defaultProjectToolset(reg0, ph, filepath.Base(root))
 		if err := saveToolset(root, toolsetProject, base); err != nil {
 			return "", err
 		}
