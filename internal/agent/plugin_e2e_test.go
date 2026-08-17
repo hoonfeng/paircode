@@ -349,8 +349,13 @@ return { name: 'ref-demo', apply(ctx) { ctx.tools.register({ name: 'ref_probe', 
 	if !strings.Contains(out, `"pluginId": "`+id+`"`) {
 		t.Fatalf("引用应含 pluginId: %s", out)
 	}
-	if !strings.Contains(out, "cordis_inspect") {
-		t.Fatalf("指引应含 cordis_inspect: %s", out)
+	// ★ 工具描述已取消（2026-08-17）：指引不再点名 cordis_inspect 等工具名，
+	//   改为泛化描述（工具信息以 tools 参数 schema 为准）。
+	if strings.Contains(out, "cordis_inspect") || strings.Contains(out, "cordis_define") {
+		t.Fatalf("指引不应含具体工具名: %s", out)
+	}
+	if !strings.Contains(out, "查看版本链与运行状态") {
+		t.Fatalf("指引应含泛化操作说明: %s", out)
 	}
 	// 无引用 → 空
 	if buildPluginReferences([]Message{{Role: RoleUser, Content: "今天天气不错"}}) != "" {
