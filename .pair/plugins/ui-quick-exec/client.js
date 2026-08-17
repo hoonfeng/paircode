@@ -68,6 +68,7 @@
 .qexec-row-main{flex:1;min-width:0}
 .qexec-row-name{display:block;font-size:12px;color:var(--text-primary,#e6edf3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .qexec-row-cmd{display:block;font-size:11px;color:var(--text-muted,#8b949e);font-family:Consolas,Menlo,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.qexec-timeout-tag{margin-left:6px;font-size:9px;color:var(--accent-color,#4f8cff);border:1px solid var(--border-color,#30363d);border-radius:3px;padding:0 3px;flex-shrink:0}
 .qexec-row-ops{display:flex;gap:2px;flex-shrink:0}
 .qexec-op{display:flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 4px;font-size:11px;color:var(--text-muted,#8b949e);background:none;border:none;border-radius:3px;cursor:pointer}
 .qexec-op:hover{color:var(--text-primary,#e6edf3);background:var(--bg-hover,#2d333b)}
@@ -79,6 +80,9 @@
 .qexec-edit input:focus{border-color:var(--accent-color,#4f8cff)}
 .qexec-edit label{font-size:10px;color:var(--text-muted,#8b949e)}
 .qexec-edit-ops{display:flex;gap:6px;justify-content:flex-end}
+.qexec-edit-timeout-row{display:flex;align-items:center;gap:8px}
+.qexec-in-timeout{width:90px !important;flex-shrink:0}
+.qexec-edit-timeout-hint{font-size:10px;color:var(--text-muted,#8b949e)}
 .qexec-btn2{padding:4px 12px;font-size:12px;border-radius:5px;cursor:pointer;border:1px solid var(--border-color,#30363d);background:var(--bg-tertiary,#21262d);color:var(--text-secondary,#c9d1d9)}
 .qexec-btn2:hover{background:var(--bg-hover,#2d333b);color:var(--text-primary,#e6edf3)}
 .qexec-btn2.primary{border-color:var(--accent-color,#4f8cff);background:var(--accent-color,#4f8cff);color:#fff}
@@ -95,6 +99,7 @@
 .qexec-res-status.err{color:#f85149;background:rgba(248,81,73,.12)}
 .qexec-pre{margin:0 0 8px;max-height:260px;overflow:auto;padding:8px 10px;font-size:11px;line-height:1.5;font-family:Consolas,Menlo,monospace;white-space:pre-wrap;word-break:break-all;background:var(--bg-primary,#161b22);border:1px solid var(--border-color,#30363d);border-radius:6px;color:var(--text-primary,#e6edf3)}
 .qexec-pre.err{border-color:rgba(248,81,73,.5);color:#f85149}
+.qexec-res-meta{font-size:10px;color:var(--text-muted,#8b949e);margin-bottom:8px}
 .qexec-empty-pre{color:var(--text-muted,#8b949e);font-style:italic}
 `
     document.head.appendChild(st)
@@ -112,7 +117,7 @@
       let wsName = ''
       let cfgOpen = false
       let cfgCmds = []
-      let editing = null // { idx, name, command }；idx<0 = 新增模式
+      let editing = null // { idx, name, command, timeout }；idx<0 = 新增模式
       let cfgMsg = ''
       let cfgMsgOk = false
       let saving = false
@@ -123,6 +128,7 @@
       let resEl = null
       let nameInput = null
       let cmdInput = null
+        let timeoutInput = null
 
       const esc = (s) => String(s == null ? '' : s)
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -176,7 +182,7 @@
               '<div class="qexec-item" data-act="run" data-idx="' + i + '">' +
                 '<div class="qexec-item-main">' +
                   '<span class="qexec-item-name">' + esc(c.name) + '</span>' +
-                  '<span class="qexec-item-cmd">' + esc(c.command) + '</span>' +
+                  '<span class="qexec-item-cmd">' + esc(c.command) + (c.timeout && c.timeout !== 600 ? ' <span class="qexec-timeout-tag">' + c.timeout + 's</span>' : '') + '</span>' +
                 '</div>' +
                 '<span class="qexec-item-run" title="执行">' + SVG.play + '</span>' +
               '</div>').join('')
@@ -213,13 +219,14 @@
         busy = true
         renderMenu()
         try {
-          const r = await ui.invoke(PLUGIN, 'runCommand', { command: c.command })
+          const r = await ui.invoke(PLUGIN, 'runCommand', { command: c.command, timeoutMs: (parseInt(c.timeout, 10) || 600) * 1000 })
           resData = {
             name: c.name, command: c.command,
             output: (r && r.output) || '', error: (r && r.error) || '', ok: !!(r && r.ok),
+            durationMs: (r && r.durationMs) || 0, timeoutMs: (r && r.timeoutMs) || 0, timedOut: !!(r && r.timedOut),
           }
         } catch (e) {
-          resData = { name: c.name, command: c.command, output: '', error: String((e && e.message) || e), ok: false }
+          resData = { name: c.name, command: c.command, output: '', error: String((e && e.message) || e), ok: false, durationMs: 0, timeoutMs: (parseInt(c.timeout, 10) || 600) * 1000, timedOut: false }
         }
         busy = false
         closeMenu()
@@ -229,7 +236,7 @@
       // ── 配置弹窗 ──
       function openCfg() {
         cfgOpen = true
-        cfgCmds = cmds.map((c) => ({ name: c.name, command: c.command }))
+        cfgCmds = cmds.map((c) => ({ name: c.name, command: c.command, timeout: c.timeout || 600 }))
         editing = null
         cfgMsg = ''
         cfgMsgOk = false
@@ -261,6 +268,7 @@
           ? '<div class="qexec-edit">' +
               '<div><label>命令名称</label><input type="text" class="qexec-in-name" placeholder="如：构建" value="' + esc(editing.name) + '" /></div>' +
               '<div><label>执行命令</label><input type="text" class="qexec-in-cmd" placeholder="如：go build ./cmd/companion" value="' + esc(editing.command) + '" /></div>' +
+              '<div class="qexec-edit-timeout-row"><label>超时(秒)</label><input type="number" class="qexec-in-timeout" min="1" max="3600" value="' + (editing.timeout || 600) + '" /><span class="qexec-edit-timeout-hint">超过自动结束（默认 600s，打包等长命令可调大）</span></div>' +
               '<div class="qexec-edit-ops">' +
                 '<button type="button" class="qexec-btn2" data-act="edit-cancel">取消</button>' +
                 '<button type="button" class="qexec-btn2 primary" data-act="edit-ok">确定</button>' +
@@ -279,6 +287,7 @@
         // 编辑表单取值引用
         nameInput = ov.querySelector('.qexec-in-name')
         cmdInput = ov.querySelector('.qexec-in-cmd')
+        timeoutInput = ov.querySelector('.qexec-in-timeout')
       }
       const ensureCfg = () => {
         if (!cfgEl) {
@@ -309,11 +318,11 @@
         const op = t.getAttribute('data-op')
         const idx = parseInt(t.getAttribute('data-idx'), 10)
         if (act === 'close' || act === 'cancel') { closeCfg(); return }
-        if (act === 'add') { editing = { idx: -1, name: '', command: '' }; cfgMsg = ''; cfgMsgOk = false; renderCfg(); focusEdit() }
+        if (act === 'add') { editing = { idx: -1, name: '', command: '', timeout: 600 }; cfgMsg = ''; cfgMsgOk = false; renderCfg(); focusEdit() }
         else if (act === 'edit-ok') { applyEdit() }
         else if (act === 'edit-cancel') { editing = null; renderCfg() }
         else if (act === 'save') { saveCfg() }
-        else if (op === 'edit') { editing = { idx, name: cfgCmds[idx].name, command: cfgCmds[idx].command }; cfgMsg = ''; cfgMsgOk = false; renderCfg(); focusEdit() }
+        else if (op === 'edit') { editing = { idx, name: cfgCmds[idx].name, command: cfgCmds[idx].command, timeout: cfgCmds[idx].timeout || 600 }; cfgMsg = ''; cfgMsgOk = false; renderCfg(); focusEdit() }
         else if (op === 'del') { cfgCmds.splice(idx, 1); if (editing && editing.idx === idx) editing = null; cfgMsg = ''; cfgMsgOk = false; renderCfg() }
         else if (op === 'up' && idx > 0) { const t2 = cfgCmds[idx]; cfgCmds[idx] = cfgCmds[idx - 1]; cfgCmds[idx - 1] = t2; if (editing && editing.idx === idx) editing.idx = idx - 1; renderCfg() }
         else if (op === 'down' && idx < cfgCmds.length - 1) { const t2 = cfgCmds[idx]; cfgCmds[idx] = cfgCmds[idx + 1]; cfgCmds[idx + 1] = t2; if (editing && editing.idx === idx) editing.idx = idx + 1; renderCfg() }
@@ -325,8 +334,10 @@
         const name = nameInput ? nameInput.value.trim() : ''
         const command = cmdInput ? cmdInput.value.trim() : ''
         if (!name || !command) { cfgMsg = '名称与命令均不能为空'; cfgMsgOk = false; renderCfg(); return }
-        if (editing.idx < 0) cfgCmds.push({ name, command })
-        else cfgCmds[editing.idx] = { name, command }
+        const rawTimeout = timeoutInput ? parseInt(timeoutInput.value, 10) : 600
+        const timeout = (!rawTimeout || rawTimeout < 1) ? 600 : Math.min(rawTimeout, 3600)
+        if (editing.idx < 0) cfgCmds.push({ name, command, timeout })
+        else cfgCmds[editing.idx] = { name, command, timeout }
         editing = null
         cfgMsg = ''; cfgMsgOk = false
         renderCfg()
@@ -337,7 +348,7 @@
         try {
           const clean = cfgCmds.filter((c) => c && c.name && c.command)
           await ui.invoke(PLUGIN, 'saveCommands', { commands: clean })
-          cmds = clean.map((c) => ({ name: c.name, command: c.command }))
+          cmds = clean.map((c) => ({ name: c.name, command: c.command, timeout: c.timeout || 600 }))
           cfgMsg = '已保存 ' + clean.length + ' 条命令'; cfgMsgOk = true
           saving = false
           renderCfg()
@@ -358,6 +369,13 @@
         resOpen = false
         if (resEl) { resEl.remove(); resEl = null }
       }
+      const fmtDur = (ms) => {
+        if (!ms || ms < 1000) return (ms || 0) + 'ms'
+        const s = ms / 1000
+        if (s < 60) return (Math.round(s * 10) / 10) + 's'
+        const m = Math.floor(s / 60), sec = Math.round(s % 60)
+        return m + '分' + sec + '秒'
+      }
       function renderRes() {
         if (!resData) return
         const ov = ensureRes()
@@ -366,11 +384,17 @@
           : '<pre class="qexec-pre qexec-empty-pre">（无输出）</pre>'
         const errHtml = resData.error
           ? '<pre class="qexec-pre err">' + esc(resData.error) + '</pre>' : ''
+        const statusText = resData.ok
+          ? '执行成功（耗时 ' + fmtDur(resData.durationMs) + '）'
+          : (resData.timedOut ? '已超时，命令被强制结束' : '执行失败')
+        const metaHtml = resData.timeoutMs
+          ? '<div class="qexec-res-meta">超时 ' + Math.round(resData.timeoutMs / 1000) + 's · 实际耗时 ' + fmtDur(resData.durationMs) + '</div>'
+          : ''
         ov.querySelector('.qexec-res-body').innerHTML =
           '<div class="qexec-res-name">' + esc(resData.name) + '</div>' +
           '<code class="qexec-res-cmd">' + esc(resData.command) + '</code>' +
-          '<span class="qexec-res-status ' + (resData.ok ? 'ok' : 'err') + '">' +
-            (resData.ok ? '执行成功' : '执行失败') + '</span>' +
+          '<span class="qexec-res-status ' + (resData.ok ? 'ok' : 'err') + '">' + statusText + '</span>' +
+          metaHtml +
           outHtml + errHtml
       }
       const ensureRes = () => {

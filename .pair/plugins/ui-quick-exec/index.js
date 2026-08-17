@@ -56,16 +56,49 @@ return {
       return saveCommands(cmds)
     })
 
-    // 执行命令（bash，工作区根 cwd，120s 超时，输出截断）
+    // 执行命令（独立二进制 ui-quick-exec.exe，工作区根 cwd，超时可配默认 600s）
+    // ★ 2026-08-17：原走 ctx.bash.exec（宿主 runShellWithTimeout 硬编码 120s，
+    // 打包类长命令超 120s 被强制 kill）→ 改经 ctx.binary.exec，超时由 timeoutMs
+    // 精确控制（opts.timeout = timeoutMs+10s 作外层保护），完全不经宿主 120s 桥接。
     ctx.registerClientMethod('runCommand', (args) => {
       const command = args && typeof args.command === 'string' ? args.command.trim() : ''
-      if (!command) return { ok: false, command: '', output: '', error: '命令为空' }
-      const res = ctx.bash.exec(command)
-      return {
-        ok: !res.error,
-        command: command,
-        output: res.output || '',
-        error: res.error || '',
+      const timeoutMs = args && typeof args.timeoutMs === 'number' && args.timeoutMs > 0
+        ? Math.round(args.timeoutMs)
+        : 600000 // 默认 600s
+      if (!command) {
+        return { ok: false, command: '', output: '', error: '命令为空', exitCode: -1, timedOut: false, durationMs: 0, timeoutMs }
+      }
+      try {
+        const res = ctx.binary.exec('run', { command, timeoutMs }, { timeout: timeoutMs + 10000 })
+        let data = {}
+        try { data = JSON.parse((res && res.text) || '{}') } catch (e) { /* 二进制返回非 JSON（理论上不会） */ }
+        const timedOut = !!data.timedOut
+        const exitCode = typeof data.exitCode === 'number' ? data.exitCode : 0
+        let error = ''
+        if (timedOut) error = '命令超时（超过 ' + Math.round(timeoutMs / 1000) + ' 秒，已强制结束）'
+        else if (exitCode !== 0) error = '命令退出码: ' + exitCode
+        return {
+          ok: !timedOut && exitCode === 0,
+          command: command,
+          output: data.output || '',
+          error: error,
+          exitCode: exitCode,
+          timedOut: timedOut,
+          durationMs: typeof data.durationMs === 'number' ? data.durationMs : 0,
+          timeoutMs: timeoutMs,
+        }
+      } catch (e) {
+        const msg = (e && e.message) || String(e)
+        return {
+          ok: false,
+          command: command,
+          output: '',
+          error: msg,
+          exitCode: -1,
+          timedOut: /超时/.test(msg),
+          durationMs: 0,
+          timeoutMs: timeoutMs,
+        }
       }
     })
 
