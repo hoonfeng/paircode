@@ -4700,7 +4700,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
       };
     }
   };
-  const FileExplorer = /* @__PURE__ */ _export_sfc(_sfc_main$5, [["__scopeId", "data-v-bedb16a6"]]);
+  const FileExplorer = /* @__PURE__ */ _export_sfc(_sfc_main$5, [["__scopeId", "data-v-b0d45b44"]]);
   const _hoisted_1$4 = { class: "search-panel" };
   const _hoisted_2$4 = { class: "sp-mode-bar" };
   const _hoisted_3$4 = { class: "sp-field" };
@@ -8048,7 +8048,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                       )
                     ])) : vue.createCommentVNode("v-if", true),
                     vue.createElementVNode("div", _hoisted_73, [
-                      vue.createCommentVNode(" UI 类插件（client 半已装载且有槽位）不再显示「停止插件」：\n                 UI 可见性已由勾选/UI 开关控制（取消勾选=隐藏，勾选=恢复），\n                 stop 会卸载 client 半并清空槽位条目 → 勾选框消失无法再启用。\n                 stopped 状态仍保留「启动插件」按钮作为恢复路径。 "),
+                      vue.createCommentVNode(" UI 类插件（client 半已装载且有槽位）不再显示「停止插件」：\r\n                 UI 可见性已由勾选/UI 开关控制（取消勾选=隐藏，勾选=恢复），\r\n                 stop 会卸载 client 半并清空槽位条目 → 勾选框消失无法再启用。\r\n                 stopped 状态仍保留「启动插件」按钮作为恢复路径。 "),
                       p.state === "running" ? (vue.openBlock(), vue.createElementBlock(
                         vue.Fragment,
                         { key: 0 },
@@ -8084,7 +8084,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
       };
     }
   };
-  const PluginPanel = /* @__PURE__ */ _export_sfc(_sfc_main$1, [["__scopeId", "data-v-5c15f6cc"]]);
+  const PluginPanel = /* @__PURE__ */ _export_sfc(_sfc_main$1, [["__scopeId", "data-v-fc515e85"]]);
   const _hoisted_1 = { class: "sidebar-header" };
   const _hoisted_2 = { class: "sidebar-content" };
   const _hoisted_3 = {

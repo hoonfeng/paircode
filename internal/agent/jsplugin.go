@@ -2854,7 +2854,13 @@ func (h *PluginHost) RemoveJSDef(id string) error {
 	delete(h.waiting, def.id)
 	def.setStatus(PluginCancelled, nil)
 	h.mu.Unlock()
-	return nil
+	// ★ 同步删除磁盘插件包（防重启 LoadGlobalPlugins 扫描目录重新装配「复活」）；
+	//   纯内存定义（无磁盘包）时静默跳过。
+	dir := def.dir
+	if dir == "" {
+		dir = filepath.Join(globalPluginsDir(), def.name)
+	}
+	return removeGlobalPluginPackage(dir)
 }
 
 // JSDefs 全部 JS 定义（按 id 排序）。

@@ -4134,7 +4134,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       };
     }
   };
-  const SettingsModal = /* @__PURE__ */ _export_sfc(_sfc_main$7, [["__scopeId", "data-v-de533ee8"]]);
+  const SettingsModal = /* @__PURE__ */ _export_sfc(_sfc_main$7, [["__scopeId", "data-v-3fe5c108"]]);
   const _hoisted_1$5 = { class: "modal-content sys-modal" };
   const _hoisted_2$5 = { class: "modal-header" };
   const _hoisted_3$5 = { class: "modal-body" };
@@ -7774,7 +7774,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
       };
     }
   };
-  const UiModals2 = /* @__PURE__ */ _export_sfc(_sfc_main, [["__scopeId", "data-v-c8fa6ee4"]]);
+  const UiModals2 = /* @__PURE__ */ _export_sfc(_sfc_main, [["__scopeId", "data-v-95a2c5d7"]]);
   function mount(el) {
     const app = vue.createApp(UiModals2);
     app.mount(el);

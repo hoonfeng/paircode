@@ -3485,7 +3485,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       };
     }
   };
-  const ConvSidebar = /* @__PURE__ */ _export_sfc(_sfc_main$5, [["__scopeId", "data-v-826e3783"]]);
+  const ConvSidebar = /* @__PURE__ */ _export_sfc(_sfc_main$5, [["__scopeId", "data-v-9e804d8a"]]);
   const _hoisted_1$3 = { class: "ask-user-card" };
   const _hoisted_2$3 = { class: "ask-user-question" };
   const _hoisted_3$3 = {
@@ -37842,7 +37842,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
       };
     }
   };
-  const RightPanel = /* @__PURE__ */ _export_sfc(_sfc_main$1, [["__scopeId", "data-v-b26ab304"]]);
+  const RightPanel = /* @__PURE__ */ _export_sfc(_sfc_main$1, [["__scopeId", "data-v-7c0a60c8"]]);
   const TOTAL_EXTRA = 4 + 1 + 200;
   const _sfc_main = {
     __name: "UiRightPanel",

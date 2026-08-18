@@ -150,9 +150,17 @@ func HandlePluginAction(w http.ResponseWriter, r *http.Request) {
 		}
 		jsonResp(w, map[string]any{"ok": true, "name": name, "state": "stopped"})
 	case "undefine":
-		if err := ph.Undefine(name); err != nil {
+		// ★ UndefinePermanent = 删内存定义 + 删磁盘插件包目录（.pair/plugins/<name>/），
+		//   防重启 LoadGlobalPlugins 从磁盘包重新装配「复活」。
+		if err := ph.UndefinePermanent(name); err != nil {
 			jsonErr(w, err.Error())
 			return
+		}
+		// ★ 联动：工具集中若有内嵌 code 的同名条目一并移除（防重启 installToolset 复活）
+		if root := pickWorkspaceRoot(r, ""); root != "" {
+			if n := agent.RemovePluginFromToolsetsPublic(root, name); n > 0 {
+				log.Printf("[plugin] 删除定义 %s 时已从 %d 个工具集移除内嵌条目", name, n)
+			}
 		}
 		jsonResp(w, map[string]any{"ok": true, "name": name, "state": "removed"})
 	default:

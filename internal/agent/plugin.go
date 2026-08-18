@@ -1155,6 +1155,45 @@ func (h *PluginHost) Undefine(name string) error {
 	return nil
 }
 
+// UndefinePermanent 删除插件定义并同步删除磁盘插件包（前端「删除定义」按钮 /
+// cordis_undefine 用）。与 Undefine 的区别：Undefine 只删进程内存（defs/plugins/
+// sources/order），磁盘插件包目录 <InstallDir>/.pair/plugins/<name>/ 保留——
+// 重启 LoadGlobalPlugins 扫描目录重新装配，插件「复活」。Permanent 复用
+// RemoveJSDef（解析 def → 删版本链 → 删磁盘包），彻底移除。
+// ★ 工具集装卸等内部路径仍用 Undefine（纯内存语义，不误删磁盘包）。
+func (h *PluginHost) UndefinePermanent(name string) error {
+	// 解析 def（dyn id / pluginId / 插件名）——defs 的 key 是 dyn id，不能直接
+	// 按 name 调 Undefine（未装载时 defs[name]/plugins[name] 都查不到）。
+	def, err := h.resolveJSDef(name)
+	if err != nil {
+		// 非 JS 插件（Go 插件等）：回退普通 Undefine（无磁盘包概念）
+		return h.Undefine(name)
+	}
+	return h.RemoveJSDef(def.pluginId)
+}
+
+// removeGlobalPluginPackage 删除全局插件包目录（仅限 globalPluginsDir 内的目录，
+// 且含 package.json 才删——防误删非插件目录；目录不存在则静默跳过）。
+// 供 UndefinePermanent / RemoveJSDef 复用。
+func removeGlobalPluginPackage(dir string) error {
+	if dir == "" {
+		return nil
+	}
+	base := filepath.Clean(globalPluginsDir())
+	dirC := filepath.Clean(dir)
+	if !strings.HasPrefix(dirC, base+string(os.PathSeparator)) {
+		// 目录不在全局插件目录内（如工具集路径/测试临时目录）→ 不删磁盘
+		return nil
+	}
+	if _, err := os.Stat(filepath.Join(dirC, "package.json")); err != nil {
+		return nil // 非插件包目录 / 已不存在 → 无需处理
+	}
+	if err := os.RemoveAll(dirC); err != nil {
+		return fmt.Errorf("删除插件包目录 %s 失败: %w", dirC, err)
+	}
+	return nil
+}
+
 // Get 取插件（未注册返回 nil,false）。
 func (h *PluginHost) Get(name string) (Plugin, bool) {
 	h.mu.RLock()

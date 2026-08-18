@@ -857,6 +857,40 @@ func UnloadToolsetPlugins(ph *PluginHost, ts *Toolset) {
 	}
 }
 
+// RemovePluginFromToolsetsPublic 从工作区全部工具集移除「含 code 的同名插件条目」并保存。
+// 用途：删除插件定义时联动——工具集条目内嵌 code，重启 installToolset 会重新
+// define+load（插件「复活」）；移除条目后删除才彻底。仅移除含 code 的条目
+// （纯摘除记录 DisabledTools / 内置组条目不涉及插件定义，保留）。
+// 返回移除了条目的工具集数量（0 = 工具集中无该插件条目）。
+func RemovePluginFromToolsetsPublic(root, name string) int {
+	if root == "" || name == "" {
+		return 0
+	}
+	removed := 0
+	for _, meta := range listToolsets(root, toolsetProject) {
+		ts, err := loadToolset(root, toolsetProject, meta.Name)
+		if err != nil || ts == nil {
+			continue
+		}
+		changed := false
+		out := ts.Plugins[:0]
+		for _, p := range ts.Plugins {
+			if p.Name == name && strings.TrimSpace(p.Code) != "" {
+				changed = true
+				continue
+			}
+			out = append(out, p)
+		}
+		if changed {
+			ts.Plugins = out
+			if err := saveToolset(root, toolsetProject, ts); err == nil {
+				removed++
+			}
+		}
+	}
+	return removed
+}
+
 // applyToolsetPlugin 装载单个工具集条目：
 //   - JS 插件条目（Code 非空）：定义（define 预检）→ 装载（apply 注册工具）
 //     → 应用 DisabledTools（工具级摘除：Registry.SetToolEnabled(false)，agent 不可见）。
