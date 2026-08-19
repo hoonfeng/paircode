@@ -2101,7 +2101,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
   const _hoisted_10$5 = ["onUpdate:modelValue", "min", "max", "step"];
   const _hoisted_11$5 = ["title"];
   const _hoisted_12$5 = ["onUpdate:modelValue"];
-  const _hoisted_13$4 = ["onUpdate:modelValue"];
+  const _hoisted_13$4 = ["onUpdate:modelValue", "onChange"];
   const _hoisted_14$4 = ["value"];
   const _hoisted_15$3 = ["onUpdate:modelValue", "placeholder"];
   const _hoisted_16$3 = { class: "slider-row" };
@@ -2148,6 +2148,44 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
           map[g2].push(f);
         }
         return groups;
+      }
+      const modelData = vue.ref(null);
+      let lastProvider = "";
+      async function loadModels() {
+        try {
+          modelData.value = await api.getModels();
+        } catch {
+          modelData.value = null;
+        }
+      }
+      function modelsFor(provider) {
+        const m2 = modelData.value && modelData.value.models || {};
+        return m2[provider] || [];
+      }
+      function dynamicOptions(tabKey, f) {
+        var _a2, _b;
+        if (f.optionsSource === "models") {
+          const cur = (_a2 = form[tabKey]) == null ? void 0 : _a2[f.name];
+          const list = modelsFor((_b = form["ai"]) == null ? void 0 : _b.provider);
+          if (cur && !list.includes(cur)) return [...list, cur];
+          return list;
+        }
+        if (f.optionsSource === "providers") {
+          const list = modelData.value && modelData.value.providers || [];
+          return list.length ? list : f.options || [];
+        }
+        return f.options || [];
+      }
+      function onSelectChange(f) {
+        if (!f.linkField || !form["ai"]) return;
+        const ai = form["ai"];
+        const urls = modelData.value && modelData.value.providerBaseURLs || {};
+        const oldDefault = urls[lastProvider];
+        const b2 = ai[f.linkField];
+        if (b2 === void 0 || b2 === "" || oldDefault && b2 === oldDefault) {
+          ai[f.linkField] = urls[ai.provider] || "";
+        }
+        lastProvider = ai.provider;
       }
       const form = vue.reactive({});
       const projectInst = vue.ref("");
@@ -2247,6 +2285,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       };
       vue.onMounted(() => {
         loadSettings();
+        loadModels();
       });
       return (_ctx, _cache) => {
         return vue.openBlock(), vue.createElementBlock("div", {
@@ -2385,15 +2424,16 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                                         vue.Fragment,
                                         { key: 3 },
                                         [
-                                          vue.createCommentVNode(" select "),
+                                          vue.createCommentVNode(" select（optionsSource 驱动动态数据源：models=按服务商模型列表 / providers=服务商列表） "),
                                           vue.withDirectives(vue.createElementVNode("select", {
                                             "onUpdate:modelValue": ($event) => form[tab.key][f.name] = $event,
-                                            class: "field-select"
+                                            class: "field-select",
+                                            onChange: ($event) => onSelectChange(f)
                                           }, [
                                             (vue.openBlock(true), vue.createElementBlock(
                                               vue.Fragment,
                                               null,
-                                              vue.renderList(f.options, (o) => {
+                                              vue.renderList(dynamicOptions(tab.key, f), (o) => {
                                                 return vue.openBlock(), vue.createElementBlock("option", {
                                                   key: o,
                                                   value: o
@@ -2402,7 +2442,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                                               128
                                               /* KEYED_FRAGMENT */
                                             ))
-                                          ], 8, _hoisted_13$4), [
+                                          ], 40, _hoisted_13$4), [
                                             [vue.vModelSelect, form[tab.key][f.name]]
                                           ])
                                         ],
@@ -2568,7 +2608,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       };
     }
   };
-  const SettingsModal = /* @__PURE__ */ _export_sfc(_sfc_main$7, [["__scopeId", "data-v-3423dc63"]]);
+  const SettingsModal = /* @__PURE__ */ _export_sfc(_sfc_main$7, [["__scopeId", "data-v-60f4e3d6"]]);
   const _hoisted_1$5 = { class: "modal-content sys-modal" };
   const _hoisted_2$5 = { class: "modal-header" };
   const _hoisted_3$5 = { class: "modal-body" };

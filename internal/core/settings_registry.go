@@ -31,6 +31,9 @@ type SettingField struct {
 	Min         *int   `json:"min,omitempty"`         // number/slider 最小值
 	Max         *int   `json:"max,omitempty"`         // number/slider 最大值
 	Step        *int   `json:"step,omitempty"`        // number/slider 步长
+	// ★ 2026-08-19 动态数据源与联动（前端通用渲染，纯 schema 声明）：
+	OptionsSource string `json:"optionsSource,omitempty"` // select 动态选项源：'models'=按服务商模型列表 / 'providers'=服务商列表（经 /api/models）
+	LinkField     string `json:"linkField,omitempty"`     // select 变化时联动填充的字段名（如 provider→baseURL，经 providerBaseURLs）
 }
 
 // SettingSchema 一个插件注册的配置段（前端渲染为一个 tab）。

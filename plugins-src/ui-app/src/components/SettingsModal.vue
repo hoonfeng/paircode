@@ -32,9 +32,9 @@
                     <span class="pp-switch-track"></span>
                   </label>
 
-                  <!-- select -->
-                  <select v-else-if="f.type === 'select'" v-model="form[tab.key][f.name]" class="field-select">
-                    <option v-for="o in f.options" :key="o" :value="o">{{ o }}</option>
+                  <!-- select（optionsSource 驱动动态数据源：models=按服务商模型列表 / providers=服务商列表） -->
+                  <select v-else-if="f.type === 'select'" v-model="form[tab.key][f.name]" class="field-select" @change="onSelectChange(f)">
+                    <option v-for="o in dynamicOptions(tab.key, f)" :key="o" :value="o">{{ o }}</option>
                   </select>
 
                   <!-- textarea -->
@@ -111,6 +111,47 @@ function groupFields(fields) {
     map[g].push(f)
   }
   return groups
+}
+
+// ─── 动态数据源（schema 属性 optionsSource/linkField 驱动；复用已有 /api/models，无新后端）───
+// modelData = { providers:[...], models:{provider:[...]}, providerBaseURLs:{provider:url} }
+// 由插件注册声明字段行为：optionsSource='providers' 服务商列表 / 'models' 按服务商模型列表；
+// linkField='xxx' 选择变化时用 providerBaseURLs 联动填充目标字段（如 provider→baseURL）。
+const modelData = ref(null)
+let lastProvider = '' // linkField 联动：记录上一个服务商（判断目标字段是否用户自定义）
+async function loadModels() {
+  try { modelData.value = await api.getModels() } catch { modelData.value = null }
+}
+function modelsFor(provider) {
+  const m = (modelData.value && modelData.value.models) || {}
+  return m[provider] || []
+}
+// 通用选项计算：f.optionsSource ∈ 'models' | 'providers' | 缺省（静态 f.options）
+function dynamicOptions(tabKey, f) {
+  if (f.optionsSource === 'models') {
+    const cur = form[tabKey]?.[f.name]
+    const list = modelsFor(form['ai']?.provider)
+    if (cur && !list.includes(cur)) return [...list, cur] // 自定义值兜底显示
+    return list
+  }
+  if (f.optionsSource === 'providers') {
+    const list = (modelData.value && modelData.value.providers) || []
+    return list.length ? list : (f.options || [])
+  }
+  return f.options || []
+}
+// 通用联动：f.linkField 存在时（如 provider→baseURL），用 providerBaseURLs 填充目标字段
+// （目标字段为空 或 等于旧服务商默认端点时自动填充，用户自定义过的值不动）
+function onSelectChange(f) {
+  if (!f.linkField || !form['ai']) return
+  const ai = form['ai']
+  const urls = (modelData.value && modelData.value.providerBaseURLs) || {}
+  const oldDefault = urls[lastProvider]
+  const b = ai[f.linkField]
+  if (b === undefined || b === '' || (oldDefault && b === oldDefault)) {
+    ai[f.linkField] = urls[ai.provider] || ''
+  }
+  lastProvider = ai.provider
 }
 
 // ─── 值模型：binding → 顶层 AppSettings；非 binding → 插件命名空间 ───
@@ -216,6 +257,7 @@ const saveSettings = async () => {
 
 onMounted(() => {
   loadSettings()
+  loadModels()
 })
 </script>
 
