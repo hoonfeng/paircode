@@ -1,7 +1,0 @@
-{
-  "name": "settings-ui",
-  "version": "1.0.0",
-  "main": "index.js",
-  "description": "配置 UI：注册全部配置 schema（组件类型/值/名称/分组），设置面板纯 schema 驱动",
-  "scope": "global"
-}

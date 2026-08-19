@@ -35,10 +35,46 @@ return {
   purpose: 'Agent 循环 JS 实现（核心外置：策略在 JS，能力在 Go；含配置注册化）',
   inject: ['logger'],
   apply(ctx, config) {
-    // ── 配置注册化：声明本插件需要的配置段（前端设置面板动态渲染）──
+    // ═══════════════════════════════════════════════════════════
+    // 配置注册（分散化：本插件承载 Agent 相关的全部配置）——
+    //   · ai 组：服务商/模型/密钥/温度/token（binding → AppSettings 顶层）
+    //   · agentloop 组：循环参数覆盖 + Agent 行为（旧字段非 binding 存
+    //     pluginSettings['agentloop'] 保持业务读取兼容；新字段 binding 全局）
+    //   · instructions 组：系统级指令（binding → systemInstructions）
+    // ═══════════════════════════════════════════════════════════
+    // ── AI：服务商与模型 ──
+    ctx.registerSettings({
+      key: 'ai',
+      title: 'AI',
+      fields: [
+        { name: 'provider', label: '服务商', type: 'select', binding: 'provider',
+          options: ['deepseek', 'openai', 'ollama', 'anthropic', 'azure', 'custom'],
+          hint: '模型服务商（决定默认 Base URL 与模型列表）' },
+        { name: 'baseURL', label: 'Base URL', type: 'text', binding: 'baseURL',
+          placeholder: 'https://api.deepseek.com/v1', hint: 'API 端点（custom 服务商必填）' },
+        { name: 'apiKey', label: 'API Key', type: 'password', binding: 'apiKey',
+          placeholder: 'sk-…', hint: '服务商密钥，仅本地保存' },
+        { name: 'executeModel', label: '执行模型', type: 'text', binding: 'executeModel',
+          placeholder: 'deepseek-v4-flash', hint: '执行 Agent 使用的模型' },
+        { name: 'planModel', label: '规划模型', type: 'text', binding: 'planModel',
+          placeholder: 'deepseek-v4-pro', hint: '规划 Agent 使用的模型（更强推理）' },
+        { name: 'reviewModel', label: '审核模型', type: 'text', binding: 'reviewModel',
+          placeholder: 'deepseek-v4-pro', hint: '审核 Agent 使用的模型' },
+        { name: 'temperature', label: '温度', type: 'select', binding: 'temperature',
+          options: ['0', '0.1', '0.3', '0.5', '0.7', '1.0'],
+          hint: '随机性：越低越确定，越高越发散' },
+        { name: 'thinkingMode', label: '思考模式', type: 'select', binding: 'thinkingMode',
+          options: ['thinking', 'non-thinking'], hint: 'thinking=深度思考（更慢更准）' },
+        { name: 'maxTokens', label: '最大输出 Token', type: 'number', binding: 'maxTokens', min: 1024, max: 131072, step: 1024 },
+        { name: 'contextMaxTokens', label: '上下文窗口', type: 'number', binding: 'contextMaxTokens', min: 4096, max: 200000, step: 4096,
+          hint: '历史注入的上下文上限' },
+      ],
+    })
+
+    // ── Agent：循环参数覆盖 + 行为 ──
     const reg = ctx.registerSettings({
       key: 'agentloop',
-      title: 'Agent 循环',
+      title: 'Agent',
       fields: [
         { name: 'systemAppend', label: '系统提示词追加', type: 'textarea', default: '', hint: '追加到系统提示词末尾（如行为规范/角色设定）' },
         { name: 'maxIterations', label: '最大迭代数', type: 'number', default: 0, hint: '0=不覆盖（默认 50）' },
@@ -50,8 +86,26 @@ return {
         { name: 'autoCommit', label: '完成自动提交', type: 'checkbox', default: false, hint: '覆盖完成自动提交开关' },
         { name: 'reviewBlacklist', label: '审核黑名单', type: 'text', default: '', hint: '逗号分隔工具名（命中需审核）' },
         { name: 'reviewWhitelist', label: '审核白名单', type: 'text', default: '', hint: '逗号分隔工具名（命中跳过审核，黑名单优先）' },
+        { name: 'autoCollapse', label: '自动折叠', type: 'checkbox', binding: 'autoCollapse' },
+        { name: 'autoIterateOnRejection', label: '拒绝后自动迭代', type: 'checkbox', binding: 'autoIterateOnRejection' },
+        { name: 'searxngUrl', label: 'SearXNG URL', type: 'text', binding: 'searxngUrl',
+          placeholder: 'http://localhost:8080', hint: '可选：自建搜索实例' },
+        { name: 'ignoreDirs', label: '忽略目录', type: 'tags', binding: 'ignoreDirs',
+          hint: '逗号分隔（node_modules, dist, .git…）' },
+        { name: 'autoConnectMCP', label: '自动连接 MCP', type: 'checkbox', binding: 'autoConnectMCP',
+          hint: '启动时自动连接已配置的 MCP 服务器' },
       ],
-    });
+    })
+
+    // ── 指令：系统级 ──
+    ctx.registerSettings({
+      key: 'instructions',
+      title: '指令',
+      fields: [
+        { name: 'systemInstructions', label: '系统级指令（所有工作区共享）', type: 'textarea', binding: 'systemInstructions',
+          placeholder: '输入全局系统指令…' },
+      ],
+    })
 
     // ── 运行时读取配置（registerSettings 返回当前值=已存值合并默认）──
     const cfg = (reg && reg.value) || ctx.getSettings('agentloop') || {};
