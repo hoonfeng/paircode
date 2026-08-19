@@ -49,7 +49,7 @@ return {
       fields: [
           { name: 'provider', label: '服务商', type: 'select', binding: 'provider',
             optionsSource: 'providers', linkField: 'baseURL',
-            options: ['deepseek', 'openai', 'ollama', 'anthropic', 'azure', 'custom'],
+            options: ['deepseek', '硅基', 'kimi', 'anthropic', 'custom', 'openai-compatible'],
             hint: '模型服务商（切换自动带出默认 Base URL 与模型列表）' },
         { name: 'baseURL', label: 'Base URL', type: 'text', binding: 'baseURL',
           placeholder: 'https://api.deepseek.com/v1', hint: 'API 端点（custom 服务商必填）' },
