@@ -67,6 +67,8 @@ func RegisterAll(r *Router) {
 
 	// 模型 / 指令 / 思想
 	r.Handle("GET", "/api/models", HandleModels)
+	r.Handle("POST", "/api/models", HandleModels)
+	r.Handle("PUT", "/api/models", HandleModels)
 	r.Handle("GET", "/api/instructions", HandleInstructions)
 	r.Handle("PUT", "/api/instructions", HandleInstructionsPut)
 	r.Handle("GET", "/api/philosophy", HandlePhilosophy)

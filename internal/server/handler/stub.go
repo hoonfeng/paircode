@@ -454,6 +454,28 @@ func HandleTaskPlan(w http.ResponseWriter, r *http.Request) {
 // ─── 模型 / 指令 / 思想 ──────────────────────────────────
 
 func HandleModels(w http.ResponseWriter, r *http.Request) {
+	// POST/PUT：全量保存服务商与模型列表 → 落盘到安装目录 config/models.json
+	// body: { "providers": { "<name>": { "baseURL": "...", "models": ["..."] } } }
+	if r.Method == http.MethodPost || r.Method == http.MethodPut {
+		var req struct {
+			Providers map[string]core.ProviderEntry `json:"providers"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			jsonErr(w, "无效 JSON: "+err.Error())
+			return
+		}
+		if req.Providers == nil {
+			jsonErr(w, "providers 不能为空")
+			return
+		}
+		core.SetModelList(req.Providers)
+		if err := core.SaveModelList(); err != nil {
+			jsonErr(w, "保存失败: "+err.Error())
+			return
+		}
+		jsonResp(w, map[string]any{"ok": true, "saved": len(req.Providers)})
+		return
+	}
 	providers := core.GetProviders()
 	modelMap := make(map[string][]string)
 	for _, p := range providers {

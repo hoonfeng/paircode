@@ -67,7 +67,7 @@ func registerKernelAPIs(s *webServer) {
 	_ = agent.KernelAPIRegister("taskplan", "GET", "/api/taskplan", "任务计划", s.handleTaskPlan)
 
 	// ── 模型 / 指令 / 思想 ──
-	_ = agent.KernelAPIRegister("models", "GET", "/api/models", "模型列表", s.handleModels)
+	_ = agent.KernelAPIRegister("models", "GET,POST,PUT", "/api/models", "模型列表读取/全量保存", s.handleModels)
 	_ = agent.KernelAPIRegister("instructions", "GET,PUT", "/api/instructions", "指令读取/保存", s.handleInstructions)
 	_ = agent.KernelAPIRegister("philosophy", "GET,PUT", "/api/philosophy", "思想读取/保存", s.handlePhilosophy)
 

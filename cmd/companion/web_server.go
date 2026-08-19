@@ -1647,16 +1647,8 @@ func (s *webServer) handleTaskPlan(w http.ResponseWriter, r *http.Request) {
 // ─── 模型列表 API ──────────────────────────────────────────
 
 func (s *webServer) handleModels(w http.ResponseWriter, r *http.Request) {
-	providers := core.GetProviders()
-	modelMap := make(map[string][]string)
-	for _, p := range providers {
-		modelMap[p] = core.GetModels(p)
-	}
-	jsonResp(w, map[string]any{
-		"providers":        providers,
-		"models":           modelMap,
-		"providerBaseURLs": core.GetProviderBaseURLs(),
-	})
+	// 委托共享实现：GET 读取 / POST/PUT 全量保存 → 落盘安装目录 config/models.json
+	handler.HandleModels(w, r)
 }
 
 // ─── 指令 API ──────────────────────────────────────────────

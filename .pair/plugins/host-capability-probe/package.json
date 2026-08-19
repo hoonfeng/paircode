@@ -1,0 +1,8 @@
+{
+  "name": "host-capability-probe",
+  "purpose": "宿主能力探测插件（ctx.app / ctx.fs.tree / webServer 注册）",
+  "version": "1.0.0",
+  "scope": "global",
+  "type": "plugin",
+  "main": "index.js"
+}

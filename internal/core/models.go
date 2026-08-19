@@ -135,6 +135,11 @@ func SaveModelList() error {
 	return os.WriteFile(p, data, 0o644)
 }
 
+// SetModelList 全量替换模型列表（面板保存用：providers 全量快照）。
+func SetModelList(list ModelListMap) {
+	ModelList = list
+}
+
 // AddProvider 添加新服务商（含 API 地址和模型列表）
 func AddProvider(name, baseURL string, models []string) error {
 	if ModelList == nil {
