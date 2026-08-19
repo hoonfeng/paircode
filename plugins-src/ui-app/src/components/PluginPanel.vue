@@ -159,10 +159,10 @@
             <div v-if="p.provides && p.provides.length" class="pp-d-line">服务: {{ p.provides.join(', ') }}</div>
             <div v-if="p.sections && p.sections.length" class="pp-d-line">提示片段: {{ p.sections.join(', ') }}</div>
             <div v-if="p.tools && p.tools.length" class="pp-d-tools">
-              <div class="pp-d-tools-title">工具（{{ p.tools.length }}）· 勾选=加入工作区工具集（agent 可用）；取消=移出</div>
+              <div class="pp-d-tools-title">工具（{{ p.tools.length }}）· 勾选=对 cordis（JS 插件运行时）可见；取消=隐藏。agent 可用性由工作区工具集决定</div>
               <div v-for="t in p.tools" :key="t" class="pp-d-tool">
                 <span class="pp-d-tname" :title="t">{{ t }}</span>
-                <label class="pp-switch" :title="pluginToolOn(p, t) ? '已加入工作区工具集（agent 可用）；点击移出' : '未加入工作区工具集（agent 不可见）；点击加入'">
+                <label class="pp-switch" :title="pluginToolOn(p, t) ? '对 cordis 可见；点击隐藏（JS 插件 ctx.tools 看不到它）' : '对 cordis 隐藏；点击恢复可见'">
                   <input type="checkbox" :checked="pluginToolOn(p, t)" @change="togglePluginTool(p, t)" />
                   <span class="pp-switch-track"></span>
                 </label>
@@ -373,31 +373,20 @@ async function loadWsToolsetMap() {
 }
 
 function pluginToolOn(p, t) {
-  return wsToolsetMap.value?.[p.name]?.tools?.[t] === true
-}
-
-// 切换工具在工作区工具集的状态：
-//   勾选加入：插件未加入工具集 → add_plugin（tools 白名单=本工具，其余工具摘除）；
-//             插件已加入但工具被摘除 → enable_tool 恢复。
-//   取消移出：rm_tool（摘除单工具，插件保留）。
+  // ★ 对勾语义（2026-08-19）：读工具对 cordis 可见性（与 agent 工具集解耦）
+  return p.toolCordisVisible?.[t] !== false
+// 切换工具对 cordis 的可见性（★ 与 agent 工具集解耦——agent 可用性由工作区工具集决定）：
+//   勾选 → 对 cordis 可见（JS 插件 ctx.tools 能看到）；取消 → 对 cordis 隐藏。
 async function togglePluginTool(p, t) {
   const target = !pluginToolOn(p, t)
-  const info = wsToolsetMap.value?.[p.name]
   try {
-    if (target) {
-      if (info && info.joined) {
-        await api.toolsetEdit({ name: 'default', action: 'enable_tool', plugin_name: p.name, tool: t, workspaceRoot: state.workspaceRoot })
-      } else {
-        await api.toolsetEdit({ name: 'default', action: 'add_plugin', plugin_name: p.name, tools: t, workspaceRoot: state.workspaceRoot })
-      }
-    } else {
-      await api.toolsetEdit({ name: 'default', action: 'rm_tool', plugin_name: p.name, tool: t, workspaceRoot: state.workspaceRoot })
-    }
-    window.$toast && window.$toast((target ? '已加入工作区工具集（agent 可用）' : '已从工作区工具集移出（agent 不可见）') + ' ' + t, 'info')
-    await Promise.all([refresh(), loadWsToolsetMap()])
+    await api.pluginToolToggle(t, target)
+    window.$toast && window.$toast((target ? '对 cordis 可见' : '对 cordis 隐藏') + ' ' + t, 'info')
+    await refresh()
   } catch (e) {
     window.$toast && window.$toast(e.message || '操作失败', 'error')
   }
+}
 }
 
 // ─── UI 插件启用开关（Slot 系统）：勾选=激活该插件注册的全部槽位 ──

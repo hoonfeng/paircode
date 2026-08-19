@@ -474,6 +474,57 @@ type PluginHost struct {
 	approvedGlobal  map[string]bool // 全局（UI 类）批准：安装目录持久化 [废弃]
 	approvedProject map[string]bool // 项目批准：工作区持久化 [废弃]
 	root            string          // 工作区根（project 批准持久化用）
+
+	// ★ 工具对 cordis 可见性（2026-08-19）：插件面板「插件内工具」对勾控制的是
+	//   「JS 插件运行时（ctx.tools.list）能否看到该工具」，与 agent 可见性
+	//   （工作区工具集 Enabled）完全解耦。默认全部对 cordis 可见（缺省 true）。
+	cordisMu        sync.RWMutex
+	toolCordisVisible map[string]bool
+}
+
+// ─── 工具对 cordis 可见性（对勾语义：控制 JS 插件运行时能否看到工具）───
+
+// SetToolCordisVisible 设置工具对 cordis（ctx.tools.list）的可见性。
+// 插件面板工具对勾（/api/plugins/tool）调用；不影响 agent 可见性
+// （agent 只由工作区工具集 Enabled 决定）。
+func (h *PluginHost) SetToolCordisVisible(name string, visible bool) {
+	if h == nil {
+		return
+	}
+	h.cordisMu.Lock()
+	if h.toolCordisVisible == nil {
+		h.toolCordisVisible = map[string]bool{}
+	}
+	h.toolCordisVisible[name] = visible
+	h.cordisMu.Unlock()
+}
+
+// IsToolCordisVisible 工具是否对 cordis 可见（缺省 true——未显式设置即可见）。
+func (h *PluginHost) IsToolCordisVisible(name string) bool {
+	if h == nil {
+		return true
+	}
+	h.cordisMu.RLock()
+	v, ok := h.toolCordisVisible[name]
+	h.cordisMu.RUnlock()
+	if !ok {
+		return true
+	}
+	return v
+}
+
+// ToolCordisVisibility 全部工具对 cordis 可见性快照（前端插件面板展示用）。
+func (h *PluginHost) ToolCordisVisibility() map[string]bool {
+	out := map[string]bool{}
+	if h == nil {
+		return out
+	}
+	h.cordisMu.RLock()
+	for k, v := range h.toolCordisVisible {
+		out[k] = v
+	}
+	h.cordisMu.RUnlock()
+	return out
 }
 
 // InspectMethod 一个 inspect provider 方法（对齐参考 manifest.methods 的单个条目）。

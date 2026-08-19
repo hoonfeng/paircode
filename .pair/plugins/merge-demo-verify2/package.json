@@ -1,0 +1,8 @@
+{
+  "name": "merge-demo-verify2",
+  "purpose": "merge demo 2 验证 v2：读 demo2.txt 当前内容 → 检查/兜底替换 beta→BETA → bash echo，结果编码进 Error 供 inspect 读取",
+  "version": "1.0.0",
+  "scope": "project",
+  "type": "plugin",
+  "main": "index.js"
+}

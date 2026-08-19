@@ -1,0 +1,8 @@
+{
+  "name": "merge-demo-replace2",
+  "purpose": "merge demo 2：read 读取 demo2.txt → edit 替换 beta→BETA → bash echo 验证",
+  "version": "1.0.0",
+  "scope": "project",
+  "type": "plugin",
+  "main": "index.js"
+}

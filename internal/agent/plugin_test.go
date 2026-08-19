@@ -1288,3 +1288,64 @@ func TestJSNodeAPITraps(t *testing.T) {
 		}
 	}
 }
+
+// ★ 2026-08-19：插件面板工具对勾 = cordis 可见性（与 agent 工具集解耦）。
+// ctx.tools.list 应过滤对 cordis 隐藏的工具；SetToolCordisVisible 不影响 agent
+// 可见性（Enabled/工具集独立）。
+func TestToolCordisVisibility(t *testing.T) {
+	reg := NewRegistry()
+	reg.Register(&Tool{Name: "tool_a", Description: "a", Handler: func(ctx context.Context, args map[string]any) (string, error) { return "a", nil }})
+	host := NewPluginHost(reg, nil, `C:\ws`)
+	if host == nil {
+		t.Fatal("NewPluginHost nil")
+	}
+
+	// 默认全部对 cordis 可见
+	if !host.IsToolCordisVisible("tool_a") {
+		t.Error("默认工具应对 cordis 可见")
+	}
+
+	// 隐藏 tool_a → ctx.tools.list 过滤（探针工具观察）
+	host.SetToolCordisVisible("tool_a", false)
+	code := `return { name: 'cordis-vis-test', apply(ctx) {
+	  ctx.tools.register({ name: 'list_probe', description: 'probe', execute: () => ({ text: ctx.tools.list().join(',') }) })
+	} }`
+	id, err := host.DefineJS(code, "cordis visibility")
+	if err != nil {
+		t.Fatalf("DefineJS: %v", err)
+	}
+	def, _ := host.GetJSDef(id)
+	if err := host.LoadJSDynamic(def); err != nil {
+		t.Fatalf("LoadJSDynamic: %v", err)
+	}
+	t.Cleanup(func() { _ = host.Unload(def.name) })
+
+	out, err := reg.Execute(context.Background(), "list_probe", `{}`)
+	if err != nil {
+		t.Fatalf("list_probe: %v", err)
+	}
+	if strings.Contains(out, "tool_a") {
+		t.Errorf("ctx.tools.list 应过滤对 cordis 隐藏的工具（含 tool_a）: %s", out)
+	}
+	if !strings.Contains(out, "list_probe") {
+		t.Errorf("ctx.tools.list 应包含插件自注册工具: %s", out)
+	}
+
+	// agent 可见性（Enabled）不受影响
+	if !reg.IsEnabled("tool_a") {
+		t.Error("对 cordis 隐藏不应影响 agent 可见性（Enabled 仍 true）")
+	}
+
+	// 恢复可见 → ctx.tools.list 重新包含
+	host.SetToolCordisVisible("tool_a", true)
+	if !host.IsToolCordisVisible("tool_a") {
+		t.Error("恢复后应对 cordis 可见")
+	}
+	out, err = reg.Execute(context.Background(), "list_probe", `{}`)
+	if err != nil {
+		t.Fatalf("list_probe(恢复后): %v", err)
+	}
+	if !strings.Contains(out, "tool_a") {
+		t.Errorf("恢复后 ctx.tools.list 应包含 tool_a: %s", out)
+	}
+}

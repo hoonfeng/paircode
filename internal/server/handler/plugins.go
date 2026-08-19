@@ -378,6 +378,14 @@ func pluginRecordSummary(rec agent.PluginRecord, reg *agent.Registry) map[string
 			toolStates[t] = true
 		}
 	}
+	// ★ 对勾语义（2026-08-19）：toolCordisVisible 单独返回插件面板对勾状态
+	//   （对 cordis 可见性），与 toolStates（agent 可见性/工具集）解耦。
+	cordisVisible := map[string]bool{}
+	if ph := GetPluginHost(); ph != nil {
+		for _, t := range rec.Tools {
+			cordisVisible[t] = ph.IsToolCordisVisible(t)
+		}
+	}
 	return map[string]any{
 		"name":          rec.Name,
 		"source":        rec.Source,
@@ -386,6 +394,7 @@ func pluginRecordSummary(rec agent.PluginRecord, reg *agent.Registry) map[string
 		"provides":      rec.Provides,
 		"tools":         rec.Tools,
 		"toolStates":    toolStates,
+		"toolCordisVisible": cordisVisible,
 		"sections":      rec.Sections,
 		"version":       rec.Version,
 		"purpose":       rec.Purpose,
@@ -431,10 +440,13 @@ func HandlePluginToolToggle(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, "工具不存在: "+req.Tool)
 		return
 	}
-	reg.SetToolEnabled(req.Tool, *req.Enabled)
-	state := "已启用"
+	// ★ 对勾语义（2026-08-19）：/api/plugins/tool 控制「对 cordis 可见性」
+	//   （JS 插件运行时 ctx.tools.list 能否看到该工具）；agent 可见性由
+	//   工作区工具集（toolset_edit/工具集面板）独立决定，此处不再触碰 Enabled。
+	ph.SetToolCordisVisible(req.Tool, *req.Enabled)
+	state := "对 cordis 可见"
 	if !*req.Enabled {
-		state = "已禁用"
+		state = "对 cordis 隐藏"
 	}
 	jsonResp(w, map[string]any{"ok": true, "message": state + " " + req.Tool})
 }

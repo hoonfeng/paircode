@@ -448,6 +448,17 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 	})
 	toolsObj.Set("list", func(call goja.FunctionCall) goja.Value {
 		names := pc.Tools.Names()
+		// ★ 对勾语义（2026-08-19）：ctx.tools.list 只返回对 cordis 可见的工具
+		//   （插件面板工具对勾控制）；agent 可见性由工作区工具集独立决定。
+		if pc.host != nil {
+			visible := make([]string, 0, len(names))
+			for _, n := range names {
+				if pc.host.IsToolCordisVisible(n) {
+					visible = append(visible, n)
+				}
+			}
+			return vm.ToValue(visible)
+		}
 		return vm.ToValue(names)
 	})
 	ctxObj.Set("tools", toolsObj)
