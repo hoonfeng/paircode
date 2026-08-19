@@ -7,8 +7,10 @@ package langsrv
 
 import (
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
+	"syscall"
 
 	"github.com/hoonfeng/paircode/internal/uiapi"
 )
@@ -145,7 +147,11 @@ func MaybeOfferInstall(lang string) {
 func installLSPServer(server, cmd string, args []string) {
 	uiapi.MessageInfo("正在安装 " + server + " …（后台运行，完成后重开该文件即生效）")
 	go func() {
-		out, err := exec.Command(cmd, args...).CombinedOutput()
+		lc := exec.Command(cmd, args...)
+		if runtime.GOOS == "windows" {
+			lc.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		}
+		out, err := lc.CombinedOutput()
 		if err != nil {
 			tail := strings.TrimSpace(string(out))
 			if r := []rune(tail); len(r) > 160 {

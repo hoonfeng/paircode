@@ -13,9 +13,11 @@
 //   - 崩溃自动重启（有限次）、退出清理子进程
 //
 // 桥目录结构（工作区 .pair/cordis/node/）：
-//   bridge.js      ← 本文件 embed 内容落盘
-//   plugins.json   ← {"plugins":["pkg@ver",...]} 要装载的插件（node_modules 安装）
-//   node_modules/  ← npm install 的依赖（@cordisjs/core + 插件及其依赖）
+//
+//	bridge.js      ← 本文件 embed 内容落盘
+//	plugins.json   ← {"plugins":["pkg@ver",...]} 要装载的插件（node_modules 安装）
+//	node_modules/  ← npm install 的依赖（@cordisjs/core + 插件及其依赖）
+//
 // ═══════════════════════════════════════════════════════════
 package agent
 
@@ -28,8 +30,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	_ "embed"
@@ -161,6 +165,11 @@ func (b *nodeBridge) start(nodePath string) error {
 
 	cmd := exec.Command(nodePath, bridgeJS)
 	cmd.Dir = b.dir
+	// ★ 2026-08-19：node.exe 是 console 程序——父进程无控制台（后台/服务方式
+	//   启动）时会自己弹出控制台窗口；这里显式隐藏，杜绝弹窗。
+	if runtime.GOOS == "windows" {
+		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	}
 	cmd.Env = append(os.Environ(),
 		"CORDIS_BRIDGE_DIR="+b.dir,
 		"CORDIS_WORKSPACE_ROOT="+npmPluginProjectRoot(),
@@ -214,20 +223,20 @@ func (b *nodeBridge) readLoop(stdout interface{ Read([]byte) (int, error) }) {
 			continue
 		}
 		var msg struct {
-			T    string          `json:"t"`
-			ID   int64           `json:"id"`
-			OK   bool            `json:"ok"`
-			Data string          `json:"data"`
-			Err  string          `json:"error"`
-			Level string         `json:"level"`
-			Text string          `json:"msg"`
-			Plugins []string     `json:"plugins"`
-			Tool   string        `json:"tool"`
-			Plugin string        `json:"plugin"`
-			Def    json.RawMessage `json:"def"`
-			Svc    string        `json:"svc"`
-			Method string        `json:"method"`
-			Args   json.RawMessage `json:"args"`
+			T       string          `json:"t"`
+			ID      int64           `json:"id"`
+			OK      bool            `json:"ok"`
+			Data    string          `json:"data"`
+			Err     string          `json:"error"`
+			Level   string          `json:"level"`
+			Text    string          `json:"msg"`
+			Plugins []string        `json:"plugins"`
+			Tool    string          `json:"tool"`
+			Plugin  string          `json:"plugin"`
+			Def     json.RawMessage `json:"def"`
+			Svc     string          `json:"svc"`
+			Method  string          `json:"method"`
+			Args    json.RawMessage `json:"args"`
 		}
 		if err := json.Unmarshal([]byte(line), &msg); err != nil {
 			log.Printf("[node-bridge] 协议解析失败: %v (line %.80s)", err, line)

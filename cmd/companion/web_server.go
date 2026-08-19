@@ -25,6 +25,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/hoonfeng/paircode/internal/agent"
@@ -1302,6 +1303,8 @@ func (s *webServer) handleExec(w http.ResponseWriter, r *http.Request) {
 
 	cmd := exec.CommandContext(r.Context(), cmdName, args...)
 	cmd.Dir = currDir
+	// ★ 2026-08-19：cmd.exe 是 console 程序——无控制台父进程时会弹窗，显式隐藏。
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -3130,6 +3133,7 @@ func runGitInternal(ctx context.Context, args ...string) (string, error) {
 	}
 	fullArgs := append([]string{"-C", dir, "-c", "core.quotepath=false"}, args...)
 	cmd := exec.CommandContext(ctx, "git", fullArgs...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

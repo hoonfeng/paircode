@@ -67,6 +67,19 @@ func detectBash() (bashPath, msysBin string) {
 	return detectedBashPath, detectedMsysBin
 }
 
+// hideShellWindow 隐藏子进程控制台窗口（Windows；非 Windows 原样返回）。
+// 所有 shell 子进程统一调用——父进程无控制台（后台/服务方式启动）时，
+// cmd.exe/bash.exe 等 console 程序会自己弹出控制台窗口，必须显式隐藏。
+func hideShellWindow(c *exec.Cmd) *exec.Cmd {
+	if runtime.GOOS == "windows" {
+		if c.SysProcAttr == nil {
+			c.SysProcAttr = &syscall.SysProcAttr{}
+		}
+		c.SysProcAttr.HideWindow = true
+	}
+	return c
+}
+
 // newShellCommand 构造 shell 命令：
 //   - bash 可用 → bash -c（POSIX 语法 + UTF-8，msys bin 前置 PATH 使 ls/grep 等可用）
 //   - 否则 → cmd /C chcp 65001 + 命令（原逻辑兜底）
@@ -74,9 +87,9 @@ func newShellCommand(command string) *exec.Cmd {
 	if bashPath, msysBin := detectBash(); bashPath != "" {
 		c := exec.Command(bashPath, "-c", command)
 		applyBashEnv(c, msysBin)
-		return c
+		return hideShellWindow(c)
 	}
-	return exec.Command("cmd", "/C", "chcp 65001 >nul & "+command)
+	return hideShellWindow(exec.Command("cmd", "/C", "chcp 65001 >nul & "+command))
 }
 
 // newShellCommandContext 带 ctx 的版本（超时/取消）。
@@ -84,9 +97,9 @@ func newShellCommandContext(ctx context.Context, command string) *exec.Cmd {
 	if bashPath, msysBin := detectBash(); bashPath != "" {
 		c := exec.CommandContext(ctx, bashPath, "-c", command)
 		applyBashEnv(c, msysBin)
-		return c
+		return hideShellWindow(c)
 	}
-	return exec.CommandContext(ctx, "cmd", "/C", "chcp 65001 >nul & "+command)
+	return hideShellWindow(exec.CommandContext(ctx, "cmd", "/C", "chcp 65001 >nul & "+command))
 }
 
 // applyBashEnv msys bin 前置 PATH：非登录 shell 不读 /etc/profile，须显式补 PATH
@@ -97,6 +110,7 @@ func applyBashEnv(c *exec.Cmd, msysBin string) {
 	}
 	c.Env = append(os.Environ(), "PATH="+msysBin+";"+os.Getenv("PATH"))
 }
+
 // bgProc 一个后台进程：cmd + 带锁输出缓冲 + 结束状态。实现 io.Writer 供 exec 直接写。
 type bgProc struct {
 	cmd     *exec.Cmd
@@ -129,9 +143,10 @@ func (p *bgProc) snapshot() (out string, done bool, exitErr string) {
 
 // bgRegistry 后台进程注册表（并发安全；全局单例 globalBG，跨 agent 轮次存活）。
 // ★ globalBG 必须为包级单例：Registry 在每次发消息/每轮对话都会重建（web_server.go
-//   buildWebLoopOpts 调 RegisterDefaultTools 新建 Registry），若 bgRegistry 随之重建，
-//   上一轮 run_background 启动的进程（含已结束进程的输出缓冲）将在下一轮丢失——
-//   read_output 读不到、kill_process 找不到 id。提升为全局后进程与输出跨轮保留。
+//
+//	buildWebLoopOpts 调 RegisterDefaultTools 新建 Registry），若 bgRegistry 随之重建，
+//	上一轮 run_background 启动的进程（含已结束进程的输出缓冲）将在下一轮丢失——
+//	read_output 读不到、kill_process 找不到 id。提升为全局后进程与输出跨轮保留。
 var globalBG = &bgRegistry{procs: map[int]*bgProc{}}
 
 type bgRegistry struct {
@@ -213,7 +228,7 @@ func (bg *bgRegistry) cleanupLocked() {
 func registerShellTools(r *Registry, bg *bgRegistry, root string) {
 	// run_background / read_output / kill_process — 3 个后台命令工具共享同一份 bgRegistry。
 	r.Register(&Tool{
-		Name: "run_background",
+		Name:       "run_background",
 		UsageGuide: "后台启动一条长命令，不阻塞 agent 循环。用于 dev server、npm run dev/watch 模式、调试服务、TCP 监听——这些场景只能用此工具，不可用 run_command。返回进程 id，之后用 read_output/kill_process 控制。比 run_command 更合适的长命令：run_background（不阻塞）+ read_output（分阶段读）+ kill_process（手动停止）。",
 		Description: "在后台启动一条长命令，不阻塞 agent 循环（推荐用于 dev server、watch 模式、调试服务等）。" +
 			"返回进程 id，随后用 read_output 读输出、kill_process 停止。" +
@@ -285,7 +300,7 @@ func registerShellTools(r *Registry, bg *bgRegistry, root string) {
 
 // killProcessTree 杀进程树（Windows: taskkill /T；Unix: 进程组 SIGKILL）。
 func killProcessTree(pid int) {
-	if err := exec.Command("taskkill", "/T", "/F", "/PID", strconv.Itoa(pid)).Run(); err == nil {
+	if err := hideShellWindow(exec.Command("taskkill", "/T", "/F", "/PID", strconv.Itoa(pid))).Run(); err == nil {
 		return
 	}
 	// Unix 兜底

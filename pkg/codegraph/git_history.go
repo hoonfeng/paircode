@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
+	"syscall"
 )
 
 // ── Git 历史集成（演化运维层） ──────────────────────────
@@ -24,15 +26,15 @@ func NewGitHistory(root string) *GitHistory {
 
 // CommitInfo 一次 Git 提交的结构化信息。
 type CommitInfo struct {
-	Hash      string   `json:"hash"`      // 提交哈希（短格式）
-	Author    string   `json:"author"`    // 作者
-	Date      string   `json:"date"`      // 提交日期
-	Message   string   `json:"message"`   // 提交消息首行
-	FullMsg   string   `json:"fullMsg"`   // 完整提交消息
-	Files     []string `json:"files"`     // 变更的文件
-	Added     []string `json:"added"`     // 新增文件
-	Modified  []string `json:"modified"`  // 修改文件
-	Deleted   []string `json:"deleted"`   // 删除文件
+	Hash     string   `json:"hash"`     // 提交哈希（短格式）
+	Author   string   `json:"author"`   // 作者
+	Date     string   `json:"date"`     // 提交日期
+	Message  string   `json:"message"`  // 提交消息首行
+	FullMsg  string   `json:"fullMsg"`  // 完整提交消息
+	Files    []string `json:"files"`    // 变更的文件
+	Added    []string `json:"added"`    // 新增文件
+	Modified []string `json:"modified"` // 修改文件
+	Deleted  []string `json:"deleted"`  // 删除文件
 }
 
 // GetRecentCommits 获取最近的 N 次提交。
@@ -48,6 +50,9 @@ func (gh *GitHistory) GetRecentCommits(count int) ([]CommitInfo, error) {
 		"--format=%H|%an|%ai|%s|%b",
 		"--name-status",
 	)
+	if runtime.GOOS == "windows" {
+		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	}
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("git log 失败: %w", err)
@@ -70,6 +75,9 @@ func (gh *GitHistory) GetCommitsAffecting(filePath string, maxCount int) ([]Comm
 		"--name-status",
 		"--", filePath,
 	)
+	if runtime.GOOS == "windows" {
+		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	}
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("git log -- %s 失败: %w", filePath, err)
@@ -87,6 +95,9 @@ func (gh *GitHistory) GetCommitByHash(hash string) (*CommitInfo, error) {
 		"--name-status",
 		hash,
 	)
+	if runtime.GOOS == "windows" {
+		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	}
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("git show %s 失败: %w", hash, err)
@@ -182,10 +193,10 @@ func (gh *GitHistory) BuildEvolutionGraph(g *Graph, maxCommits int) error {
 	for _, c := range commits {
 		commitID := EntityID(EntityCommit, "", c.Hash)
 		g.AddEntity(&Entity{
-			ID:       commitID,
-			Kind:     EntityCommit,
-			Name:     c.Hash,
-			FQN:      c.Hash,
+			ID:        commitID,
+			Kind:      EntityCommit,
+			Name:      c.Hash,
+			FQN:       c.Hash,
 			Signature: c.Message,
 			Metadata: map[string]string{
 				"author": c.Author,
@@ -240,6 +251,9 @@ func (gh *GitHistory) BlameFile(filePath string) ([]BlameInfo, error) {
 		"--porcelain",
 		filePath,
 	)
+	if runtime.GOOS == "windows" {
+		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	}
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("git blame %s 失败: %w", filePath, err)
@@ -298,6 +312,9 @@ func (gh *GitHistory) parseBlame(output string) ([]BlameInfo, error) {
 // runGit 执行 git 命令（类似 agent 中的 runGit）。
 func runGit(root string, args ...string) (string, error) {
 	cmd := exec.Command("git", append([]string{"-C", root}, args...)...)
+	if runtime.GOOS == "windows" {
+		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -369,6 +386,9 @@ func (gh *GitHistory) WhenIntroduced(filePath string) (*CommitInfo, error) {
 		"--name-status",
 		"--", filePath,
 	)
+	if runtime.GOOS == "windows" {
+		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	}
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("查询首次提交失败: %w", err)

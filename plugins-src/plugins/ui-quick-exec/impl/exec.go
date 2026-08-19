@@ -14,6 +14,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"runtime"
+	"syscall"
 	"time"
 
 	"github.com/hoonfeng/paircode/plugins-src/plugins/ui-quick-exec/toolbin"
@@ -36,7 +38,7 @@ func Register(reg *toolbin.Registry, root string) {
 		Name:        "ping",
 		Description: "连通性探测（返回 ok）",
 		Category:    "exec",
-		Parameters: toolbin.ObjSchema(toolbin.Props{}),
+		Parameters:  toolbin.ObjSchema(toolbin.Props{}),
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
 			return "ok (ui-quick-exec v1)", nil
 		},
@@ -61,6 +63,10 @@ func runCommand(root string) toolbin.ToolHandler {
 		// 改用手动管理：goroutine 监听 ctx.Done()，趁 cmd 还活着先 taskkill /T
 		// 杀整棵进程树，再 Kill 兜底。
 		cmd := exec.Command("cmd", "/c", command)
+		// 隐藏子进程控制台窗口（无控制台父进程时 console 程序会自己弹窗）
+		if runtime.GOOS == "windows" {
+			cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		}
 		cmd.Dir = cwd
 		var buf bytes.Buffer
 		cmd.Stdout = &buf

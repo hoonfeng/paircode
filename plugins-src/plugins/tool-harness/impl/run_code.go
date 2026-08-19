@@ -298,22 +298,35 @@ func detectBash() (bashPath, msysBin string) {
 	return detectedBashPath, detectedMsysBin
 }
 
+// hideShellWindow 隐藏子进程控制台窗口（Windows；非 Windows 原样返回）。
+// 父进程无控制台（后台/服务方式启动）时，cmd.exe/bash.exe 等 console 程序
+// 会自己弹出控制台窗口，必须显式隐藏。
+func hideShellWindow(c *exec.Cmd) *exec.Cmd {
+	if runtime.GOOS == "windows" {
+		if c.SysProcAttr == nil {
+			c.SysProcAttr = &syscall.SysProcAttr{}
+		}
+		c.SysProcAttr.HideWindow = true
+	}
+	return c
+}
+
 func newShellCommand(command string) *exec.Cmd {
 	if bashPath, msysBin := detectBash(); bashPath != "" {
 		c := exec.Command(bashPath, "-c", command)
 		applyBashEnv(c, msysBin)
-		return c
+		return hideShellWindow(c)
 	}
-	return exec.Command("cmd", "/C", "chcp 65001 >nul & "+command)
+	return hideShellWindow(exec.Command("cmd", "/C", "chcp 65001 >nul & "+command))
 }
 
 func newShellCommandContext(ctx context.Context, command string) *exec.Cmd {
 	if bashPath, msysBin := detectBash(); bashPath != "" {
 		c := exec.CommandContext(ctx, bashPath, "-c", command)
 		applyBashEnv(c, msysBin)
-		return c
+		return hideShellWindow(c)
 	}
-	return exec.CommandContext(ctx, "cmd", "/C", "chcp 65001 >nul & "+command)
+	return hideShellWindow(exec.CommandContext(ctx, "cmd", "/C", "chcp 65001 >nul & "+command))
 }
 
 func applyBashEnv(c *exec.Cmd, msysBin string) {

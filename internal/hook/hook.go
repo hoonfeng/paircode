@@ -22,6 +22,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -374,6 +375,10 @@ func DefaultSpawner(ctx context.Context, in SpawnInput) SpawnResult {
 
 	name, args := shellInvocation(in.Command)
 	cmd := exec.CommandContext(cctx, name, args...)
+	// 隐藏子进程控制台窗口（无控制台父进程时 console 程序会自己弹窗）
+	if runtime.GOOS == "windows" {
+		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	}
 	hideWindow(cmd)
 	cmd.Dir = in.Cwd
 	cmd.Stdin = strings.NewReader(in.Stdin)

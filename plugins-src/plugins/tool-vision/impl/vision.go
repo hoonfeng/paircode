@@ -24,9 +24,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 )
 
 // ── 注册 ───────────────────────────────────────────────────
@@ -924,6 +926,9 @@ func ocrImage(root, path, lang string, detail bool) (string, error) {
 	}
 
 	cmd := exec.Command(tesseractPath, args...)
+	if runtime.GOOS == "windows" {
+		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	}
 	output, err := cmd.Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -1281,6 +1286,9 @@ func checkTesseractLang(tesseractPath, tessdataDir, lang string) bool {
 	}
 	args = append(args, "--list-langs")
 	cmd := exec.Command(tesseractPath, args...)
+	if runtime.GOOS == "windows" {
+		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	}
 	output, err := cmd.Output()
 	if err != nil {
 		return false

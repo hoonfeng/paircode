@@ -12,6 +12,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"syscall"
 )
 
 // Folders 工作区的所有文件夹（多根，VS Code 模型）。空=未打开工作区。
@@ -56,6 +58,10 @@ func OpenInNewWindow(p string) {
 		exe = os.Args[0]
 	}
 	c := exec.Command(exe, p)
+	// 隐藏子进程控制台窗口（无控制台父进程时 console 程序会自己弹窗）
+	if runtime.GOOS == "windows" {
+		c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	}
 	c.Dir = filepath.Dir(exe) // 与 exe 同目录启动，能找到 libSkiaSharp.dll / fonts
 	_ = c.Start()
 }

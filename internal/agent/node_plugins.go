@@ -3,11 +3,11 @@
 //
 // 插件 package.json 声明了运行时 npm 依赖（dependencies 非空）时，
 // goja 沙箱无法运行（mock 空模块）——改走 Node 桥：
-//   1. tarball 源码落盘 .pair/cordis/node/plugins/<pkg>@<ver>/（可查看）
-//   2. 桥目录 npm install <pkg>@<ver>（真实 node_modules + @cordisjs/core）
-//   3. plugins.json 记录要装载的插件（bridge.js 启动时加载）
-//   4. 重启 Node 桥（或首次启动）→ 插件 apply 执行 → ctx.tools.register
-//      的工具进 Go Registry（agent 可直接调用）
+//  1. tarball 源码落盘 .pair/cordis/node/plugins/<pkg>@<ver>/（可查看）
+//  2. 桥目录 npm install <pkg>@<ver>（真实 node_modules + @cordisjs/core）
+//  3. plugins.json 记录要装载的插件（bridge.js 启动时加载）
+//  4. 重启 Node 桥（或首次启动）→ 插件 apply 执行 → ctx.tools.register
+//     的工具进 Go Registry（agent 可直接调用）
 //
 // patch（.pair/cordis.patch.json）仍记录条目（config.runtime="node" +
 // config.npm），保证卸载/已安装判断/重启恢复统一走 patch 链路。
@@ -22,7 +22,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -66,6 +68,7 @@ func writeNodePluginsFile(path string, doc *nodePluginsFile) error {
 //   - dependencies 非空（真实 npm 依赖，mock 空模块运行期 undefined）
 //   - peerDependencies 里 cordis/@cordisjs/core 主版本为 4
 //     （goja 内置 CordisApi 对齐 cordis3 API，无 cordis4 的 inject 等）
+//
 // 仅 peer cordis3 / 零依赖 → goja 沙箱（快、无需 node）。
 func nodePluginNeedsNode(manifest map[string]any) bool {
 	if deps, _ := manifest["dependencies"].(map[string]any); len(deps) > 0 {
@@ -231,6 +234,10 @@ func npmInstallPlugin(bridgeDir, spec string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, npmCmd, "install", "--no-audit", "--no-fund", "--prefix", bridgeDir, spec)
+	// 隐藏子进程控制台窗口（无控制台父进程时 console 程序会自己弹窗）
+	if runtime.GOOS == "windows" {
+		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	}
 	cmd.Env = append(os.Environ(), "npm_config_yes=true")
 	out, err := cmd.CombinedOutput()
 	if err != nil {

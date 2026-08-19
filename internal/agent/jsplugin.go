@@ -39,6 +39,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/hoonfeng/paircode/internal/core"
@@ -582,6 +583,10 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 		ctxTO, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 		cmd := exec.CommandContext(ctxTO, exePath)
+		// 隐藏子进程控制台窗口（无控制台父进程时 console 程序会自己弹窗）
+		if runtime.GOOS == "windows" {
+			cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		}
 		cmd.Stdin = strings.NewReader(string(reqJSON))
 		var outBuf, errBuf bytes.Buffer
 		cmd.Stdout = &outBuf
@@ -1318,11 +1323,13 @@ func (p *jsPluginAdapter) buildBashService(pc *PluginContext) goja.Value {
 // 事件流（进度、日志、通知等），宿主统一管理连接生命周期。
 //
 // JS 用法（inject 声明 'sse'）：
-//   const unregister = ctx.sse.register('/api/ext/stream', (emit, params) => {
-//     emit('hello', { ts: Date.now() })            // 建立时先推一条
-//     push = emit                                  // 保存供外部触发
-//     return () => { push = null }                 // 断连清理（可选）
-//   })
+//
+//	const unregister = ctx.sse.register('/api/ext/stream', (emit, params) => {
+//	  emit('hello', { ts: Date.now() })            // 建立时先推一条
+//	  push = emit                                  // 保存供外部触发
+//	  return () => { push = null }                 // 断连清理（可选）
+//	})
+//
 // emit(event, payload)：payload 会被 JSON 序列化；连接断开后调用抛错。
 // handler 在连接建立时于 VM 锁内调用一次（可 await）；返回 cleanup。
 func (p *jsPluginAdapter) buildSSEService(pc *PluginContext) goja.Value {
@@ -1392,17 +1399,20 @@ func (p *jsPluginAdapter) buildSSEService(pc *PluginContext) goja.Value {
 
 // buildWSService 双向 WebSocket 服务（ctx.ws）：注册双向实时端点。
 // JS 用法（inject 声明 'ws'）：
-//   ctx.ws.register(path, (conn, params) => {
-//     conn.onMessage((payload) => { conn.send({echo: payload}) })   // 收消息
-//     conn.send('hello')                                            // 发消息（跨调用可存 conn）
-//     return () => { /* 断连清理 */ }
-//   })
+//
+//	ctx.ws.register(path, (conn, params) => {
+//	  conn.onMessage((payload) => { conn.send({echo: payload}) })   // 收消息
+//	  conn.send('hello')                                            // 发消息（跨调用可存 conn）
+//	  return () => { /* 断连清理 */ }
+//	})
+//
 // conn 方法：
 //   - send(payload)：发送文本帧（string 直传；其他值 JSON 序列化）。
 //     连接断开后抛错。
 //   - onMessage(fn)：注册消息回调（Go 读循环 → VM 锁内调用）。
 //     文本帧尝试 JSON.parse → 对象/数组/数字；解析失败给字符串。
 //   - close()：发送 close 帧并关闭连接。
+//
 // 生命周期：handler(conn, params) 在连接建立后于 VM 锁内调用一次（可
 // await）；返回函数为 cleanup，连接断开时调用。连接断开后 send 抛错。
 func (p *jsPluginAdapter) buildWSService(pc *PluginContext) goja.Value {
@@ -1522,7 +1532,8 @@ func (p *jsPluginAdapter) buildWSService(pc *PluginContext) goja.Value {
 
 // buildLoggerService 日志服务（ctx.logger(scope)）：cordis 语义，
 // 返回带 scope 的 logger（log/info/warn/debug/error），写透宿主 stdout。
-func (p *jsPluginAdapter) buildLoggerService() goja.Value {	vm := p.vm
+func (p *jsPluginAdapter) buildLoggerService() goja.Value {
+	vm := p.vm
 	loggerFn := func(call goja.FunctionCall) goja.Value {
 		scope := call.Argument(0).String()
 		tag := fmt.Sprintf("[js-plugin:%s:%s]", p.def.id, scope)
@@ -2217,7 +2228,8 @@ func normalizeToolSchema(params map[string]any) map[string]any {
 // realm 安全：整棵可 JSON 序列化、拒绝外部 $ref 与原型污染键）。
 // 不合法返回 error——cordis_define/registerTool 提前暴露，避免运行期才崩。
 // （对齐 harness guard.ts：schema type 白名单 + cloneJson 无损克隆；goja 单 realm
-//   天然豁免跨 realm instanceof，此处补序列化与引用边界。）
+//
+//	天然豁免跨 realm instanceof，此处补序列化与引用边界。）
 func validateToolSchema(params map[string]any) error {
 	if params == nil {
 		return nil
@@ -2388,15 +2400,15 @@ func jsToolToGo(vm *goja.Runtime, v goja.Value, lockFn func(func())) (*Tool, err
 	}
 
 	return &Tool{
-		Name:        name.String(),
-		Description: desc,
-		Parameters:  params,
-		Handler:     handler,
-		UsageGuide:  strField(obj, "usageGuide"),
-		Category:    strField(obj, "category"),
-		ReadOnly:    boolField(obj, "readOnly"),
+		Name:             name.String(),
+		Description:      desc,
+		Parameters:       params,
+		Handler:          handler,
+		UsageGuide:       strField(obj, "usageGuide"),
+		Category:         strField(obj, "category"),
+		ReadOnly:         boolField(obj, "readOnly"),
 		RequiresApproval: boolField(obj, "requiresApproval"),
-		SystemTool:  boolField(obj, "systemTool"),
+		SystemTool:       boolField(obj, "systemTool"),
 	}, nil
 }
 
@@ -2462,11 +2474,13 @@ func awaitJSValue(vm *goja.Runtime, v goja.Value) (goja.Value, error) {
 // buildNodeHTTPHandler 构造 Node 风格 HTTP handler：JS 插件以
 // handler(req, res) 形态实现处理逻辑（接口定义 + 逻辑都在插件中），
 // 服务能力经 ctx.fs/ctx.web/ctx.tools 等 Go 服务访问。
-//   req:  { method, url, path, query, headers, body, httpVersion, json(),
-//          on('data'|'end', cb)（body 已整体读入：data 触发一次、end 立即）}
-//   res:  { statusCode（属性赋值）, statusMessage, writeHead(code, headers?),
-//          setHeader(k,v), getHeader(k), hasHeader(k), removeHeader(k),
-//          write(chunk), end(chunk?), on('finish'|'close', cb) }
+//
+//	req:  { method, url, path, query, headers, body, httpVersion, json(),
+//	       on('data'|'end', cb)（body 已整体读入：data 触发一次、end 立即）}
+//	res:  { statusCode（属性赋值）, statusMessage, writeHead(code, headers?),
+//	       setHeader(k,v), getHeader(k), hasHeader(k), removeHeader(k),
+//	       write(chunk), end(chunk?), on('finish'|'close', cb) }
+//
 // 兼容旧 ctx.http 返回对象形态：{ status, body, headers }（未调 end 时）。
 func (p *jsPluginAdapter) buildNodeHTTPHandler(fn goja.Callable) http.HandlerFunc {
 	vm := p.vm

@@ -19,9 +19,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 )
 
 // ─── 注册入口 ──
@@ -1800,6 +1802,9 @@ func pdfPageToOCR(root, pdfPath string, pages []int) (string, error) {
 			args = append(args, pdfPath, pagePrefix)
 
 			cmd := exec.Command(renderTool, args...)
+			if runtime.GOOS == "windows" {
+				cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+			}
 			if out, err := cmd.CombinedOutput(); err != nil {
 				return "", fmt.Errorf("pdftoppm 渲染失败: %s\n输出: %s", err, DecodeCmdOutput(out))
 			}
@@ -1828,6 +1833,9 @@ func pdfPageToOCR(root, pdfPath string, pages []int) (string, error) {
 				args = append(args, strconv.Itoa(pageNum))
 			}
 			cmd := exec.Command(renderTool, args...)
+			if runtime.GOOS == "windows" {
+				cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+			}
 			if out, err := cmd.CombinedOutput(); err != nil {
 				return "", fmt.Errorf("mutool 渲染失败: %s\n输出: %s", err, DecodeCmdOutput(out))
 			}
@@ -1872,6 +1880,9 @@ func callTesseractOCR(tesseractPath, tessdataDir, imgPath string) (string, error
 	}
 
 	cmd := exec.Command(tesseractPath, args...)
+	if runtime.GOOS == "windows" {
+		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	}
 	output, err := cmd.Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -2306,6 +2317,9 @@ func checkTesseractLang(tesseractPath, tessdataDir, lang string) bool {
 	}
 	args = append(args, "--list-langs")
 	cmd := exec.Command(tesseractPath, args...)
+	if runtime.GOOS == "windows" {
+		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	}
 	output, err := cmd.Output()
 	if err != nil {
 		return false

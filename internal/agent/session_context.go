@@ -14,9 +14,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -26,10 +28,10 @@ import (
 // 这里对输出做短 TTL 缓存（同 convID+roots，60s 内复用），显著降低断裂频率。
 
 var (
-	resumeCtxCacheMu   sync.Mutex
-	resumeCtxCacheKey  string
-	resumeCtxCacheVal  string
-	resumeCtxCacheAt   time.Time
+	resumeCtxCacheMu  sync.Mutex
+	resumeCtxCacheKey string
+	resumeCtxCacheVal string
+	resumeCtxCacheAt  time.Time
 	// ★ 2026-08-17 调大 TTL（60s→300s）：resumeCtx 注入 system 动态后缀，
 	//   DeepSeek 按 system 消息整体前缀匹配——resumeCtx 每 60s 重建变化会
 	//   使 dynamic 段变化、缓存断裂（命中率 99%→50%）。同一会话短时连续对话
@@ -42,18 +44,18 @@ var (
 
 // SessionContext 聚合了让 Agent 理解"当前在哪、在干什么、干过什么"的所有信息。
 type SessionContext struct {
-	ConversationSummary    string   // 对话摘要（来自 MessageStore.SetSummary）
-	TaskProgress           string   // 当前任务进度（来自持久化的 update_tasks）
-	RelevantMemories       string   // 自动召回的相关项目记忆
-	ProjectHint            string   // 当前对话最可能相关的项目目录
-	WorkspaceStructure     string   // 工作区结构概览
-	LastActivity           string   // 上次活动时间/内容
-	RecentFileEdits        []string // 最近编辑的文件列表（从工具调用精确提取）
-	GitStatus              string   // Git 状态快照（最近提交 + 未提交改动）
-	CodeGraphStats         string   // 代码图谱统计（实体数/覆盖率）
-	BuildStatus            string   // 最近构建状态（编译成功/失败、二进制时间戳）
-	KBStaleness            string   // 知识库过期警告（哪些条目引用了不存在的文件）
-	PluginReferences       string   // @pluginId 引用上下文（用户消息中 @ 引用的 JS 动态插件）
+	ConversationSummary string   // 对话摘要（来自 MessageStore.SetSummary）
+	TaskProgress        string   // 当前任务进度（来自持久化的 update_tasks）
+	RelevantMemories    string   // 自动召回的相关项目记忆
+	ProjectHint         string   // 当前对话最可能相关的项目目录
+	WorkspaceStructure  string   // 工作区结构概览
+	LastActivity        string   // 上次活动时间/内容
+	RecentFileEdits     []string // 最近编辑的文件列表（从工具调用精确提取）
+	GitStatus           string   // Git 状态快照（最近提交 + 未提交改动）
+	CodeGraphStats      string   // 代码图谱统计（实体数/覆盖率）
+	BuildStatus         string   // 最近构建状态（编译成功/失败、二进制时间戳）
+	KBStaleness         string   // 知识库过期警告（哪些条目引用了不存在的文件）
+	PluginReferences    string   // @pluginId 引用上下文（用户消息中 @ 引用的 JS 动态插件）
 }
 
 // BuildSessionContext 构建会话连贯性上下文。
@@ -726,6 +728,9 @@ func runGitCmd(dir string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", args...)
+	if runtime.GOOS == "windows" {
+		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	}
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	if err != nil {

@@ -12,8 +12,10 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -33,7 +35,7 @@ type mcpConnection struct {
 	client      *mcp.Client
 	mu          sync.Mutex
 	session     *mcp.ClientSession
-	cmd         *exec.Cmd // 显式保活引用（go-sdk 内部也持有，便于诊断）
+	cmd         *exec.Cmd     // 显式保活引用（go-sdk 内部也持有，便于诊断）
 	transport   mcp.Transport // 可注入（测试用 InMemoryTransport）；nil 时 connect 内部建 CommandTransport
 	callTimeout time.Duration
 }
@@ -55,6 +57,10 @@ func (c *mcpConnection) connect(ctx context.Context) error {
 		transport = c.transport
 	} else {
 		cmd := exec.Command(c.cfg.Command, c.cfg.Args...)
+		// 隐藏子进程控制台窗口（无控制台父进程时 console 程序会自己弹窗）
+		if runtime.GOOS == "windows" {
+			cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		}
 		if len(c.cfg.Env) > 0 {
 			cmd.Env = os.Environ()
 			for k, v := range c.cfg.Env {
@@ -242,7 +248,7 @@ func registerClientTools(r *Registry, conn *mcpConnection) (int, error) {
 		if schema == nil {
 			schema = map[string]any{"type": "object", "properties": map[string]any{}}
 		}
-		toolName := td.Name       // 原始名，传给 MCP 服务器用（不 sanitize）
+		toolName := td.Name                  // 原始名，传给 MCP 服务器用（不 sanitize）
 		regName := sanitizeToolName(td.Name) // 注册到 Registry 的名，必须符合 ^[a-zA-Z0-9_-]+$
 		toolDesc := td.Description
 		r.Register(&Tool{

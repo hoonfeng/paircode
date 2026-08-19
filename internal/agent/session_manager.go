@@ -10,13 +10,27 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 	"unicode"
 
 	pkgdb "github.com/hoonfeng/paircode/pkg/db"
 )
+
+// hideCmd 隐藏子进程控制台窗口（Windows；非 Windows 原样返回）。
+// 父进程无控制台（后台/服务方式启动）时，console 子进程会自己弹窗，须显式隐藏。
+func hideCmd(c *exec.Cmd) *exec.Cmd {
+	if runtime.GOOS == "windows" {
+		if c.SysProcAttr == nil {
+			c.SysProcAttr = &syscall.SysProcAttr{}
+		}
+		c.SysProcAttr.HideWindow = true
+	}
+	return c
+}
 
 // Compressor 上下文压缩器（语义别名，复用 Provider 接口）。
 // 非空时用轻量压缩模型做 LLM 摘要；空则规则式摘要。
@@ -1220,6 +1234,9 @@ func doAutoCommit(primaryRoot, task, result, commitMsg string) {
 		}
 
 		add := exec.Command("git", "add", "-A")
+		if runtime.GOOS == "windows" {
+			add.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		}
 		add.Dir = root
 		if out, err := add.CombinedOutput(); err != nil {
 			fmt.Printf("[auto-commit] git add 失败 (%s): %v\n%s\n", root, err, decodeCmdOutput(out))
@@ -1230,15 +1247,18 @@ func doAutoCommit(primaryRoot, task, result, commitMsg string) {
 			"-c", "user.name=Pairode",
 			"-c", "user.email=agent@paircode.dev",
 			"commit", "-m", "auto: "+msg)
+		if runtime.GOOS == "windows" {
+			commit.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		}
 		commit.Dir = root
 		if out, err := commit.CombinedOutput(); err != nil {
 			errStr := decodeCmdOutput(out)
 			if strings.Contains(errStr, "nothing to commit") {
-				exec.Command("git", "reset", "HEAD").Run()
+				_ = hideCmd(exec.Command("git", "reset", "HEAD")).Run()
 				continue
 			}
 			fmt.Printf("[auto-commit] git commit 失败 (%s): %v\n%s\n", root, err, errStr)
-			exec.Command("git", "reset", "HEAD").Run()
+			_ = hideCmd(exec.Command("git", "reset", "HEAD")).Run()
 			continue
 		}
 		fmt.Printf("[auto-commit] ✅ 已自动提交 (%s): auto: %s\n", root, msg)

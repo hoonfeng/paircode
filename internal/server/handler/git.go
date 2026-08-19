@@ -10,7 +10,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/hoonfeng/paircode/internal/core"
@@ -68,6 +70,9 @@ func runGit(ctx context.Context, args ...string) (string, error) {
 
 	fullArgs := append([]string{"-C", dir, "-c", "core.quotepath=false"}, args...)
 	cmd := exec.CommandContext(ctx, "git", fullArgs...)
+	if runtime.GOOS == "windows" {
+		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -169,7 +174,9 @@ func HandleGitDiff(w http.ResponseWriter, r *http.Request) {
 
 func HandleGitAdd(w http.ResponseWriter, r *http.Request) {
 	r = withGitDir(r)
-	var req struct{ Path string `json:"path"` }
+	var req struct {
+		Path string `json:"path"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonErr(w, err.Error())
 		return
@@ -189,7 +196,9 @@ func HandleGitAdd(w http.ResponseWriter, r *http.Request) {
 
 func HandleGitReset(w http.ResponseWriter, r *http.Request) {
 	r = withGitDir(r)
-	var req struct{ Path string `json:"path"` }
+	var req struct {
+		Path string `json:"path"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonErr(w, err.Error())
 		return
@@ -207,7 +216,9 @@ func HandleGitReset(w http.ResponseWriter, r *http.Request) {
 
 func HandleGitCommit(w http.ResponseWriter, r *http.Request) {
 	r = withGitDir(r)
-	var req struct{ Message string `json:"message"` }
+	var req struct {
+		Message string `json:"message"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonErr(w, err.Error())
 		return
@@ -311,7 +322,9 @@ func HandleGitCheckout(w http.ResponseWriter, r *http.Request) {
 
 func HandleGitStash(w http.ResponseWriter, r *http.Request) {
 	r = withGitDir(r)
-	var req struct{ Action string `json:"action"` }
+	var req struct {
+		Action string `json:"action"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonErr(w, err.Error())
 		return
@@ -350,7 +363,9 @@ func HandleGitIgnore(w http.ResponseWriter, r *http.Request) {
 	gitDir := gitRoot(r.Context())
 	p := filepath.Join(gitDir, ".gitignore")
 	if r.Method == "POST" {
-		var req struct{ Content string `json:"content"` }
+		var req struct {
+			Content string `json:"content"`
+		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			jsonErr(w, err.Error())
 			return
@@ -368,7 +383,9 @@ func HandleGitIgnore(w http.ResponseWriter, r *http.Request) {
 
 func HandleGitDiscard(w http.ResponseWriter, r *http.Request) {
 	r = withGitDir(r)
-	var req struct{ Path string `json:"path"` }
+	var req struct {
+		Path string `json:"path"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonErr(w, err.Error())
 		return
