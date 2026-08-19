@@ -350,7 +350,7 @@ func registerCodeGraphTools(r *Registry, root string) {
 	// ── 4. codegraph_function — 函数定义定位 ──
 	r.Register(&Tool{
 		Name: "codegraph_function",
-		UsageGuide: "按名称查找函数/方法的定义位置，携带函数签名。支持包名.函数名、接收者.方法名。比 search_content 全文搜索更精确（基于 AST 直接定位）。搜函数定义首选此工具。",
+		UsageGuide: "按名称查找函数/方法的定义位置，携带函数签名。支持包名.函数名、接收者.方法名。比全文搜索更精确（基于 AST 直接定位）。搜函数定义首选此工具。",
 		Description: "按名称查找函数/方法的定义位置。支持函数名、包名.函数名、或接收者.方法名。" +
 			"返回文件路径、行号、签名等信息。",
 		Parameters: objSchema(props{
@@ -404,7 +404,7 @@ func registerCodeGraphTools(r *Registry, root string) {
 	// ── 6. codegraph_callers — 调用者查询 ──
 	r.Register(&Tool{
 		Name: "codegraph_callers",
-		UsageGuide: "查询哪些函数调用了指定的函数。修改函数签名/行为前必调此工具了解调用方，防止漏改。比 search_content 搜索引用更精确（基于调用图）。",
+		UsageGuide: "查询哪些函数调用了指定的函数。修改函数签名/行为前必调此工具了解调用方，防止漏改。比全文搜索引用更精确（基于调用图）。",
 		Description: "查询哪些函数调用了指定的函数/方法。用于理解函数被使用的情况。" +
 			"返回调用者的文件路径和行号。",
 		Parameters: objSchema(props{
@@ -491,7 +491,7 @@ func registerCodeGraphTools(r *Registry, root string) {
 		UsageGuide: "在代码知识图谱中搜索实体（函数/类型/变量/文件等）。scope 限定类型（function/type/variable/file）。搜函数/类型定义首选此工具，其次才是 search_content。比全文搜索精确一个数量级。",
 		Description: "在代码知识图谱中搜索实体（函数、类型、变量、文件等）。" +
 			"支持按名称搜索和按类型过滤。返回匹配实体的位置、签名和相关度评分。" +
-			"比 search_content 更精确，因为基于结构化理解而非纯文本匹配。",
+			"比全文搜索更精确，因为基于结构化理解而非纯文本匹配。",
 		Parameters: objSchema(props{
 			"project": projectSchemaProp(),
 			"query": strProp("搜索关键词（函数名、类型名、变量名等）"),
@@ -733,7 +733,7 @@ func registerCodeGraphTools(r *Registry, root string) {
 	// ── 15. codegraph_search_by_pattern — 正则模式搜索 ──
 	r.Register(&Tool{
 		Name: "codegraph_search_by_pattern",
-		UsageGuide: "用正则表达式在代码实体名、签名、文档注释中搜索。比 search_content 更结构化（只搜实体级元信息而非全文）。scope 可选 name/signature/docstring。",
+		UsageGuide: "用正则表达式在代码实体名、签名、文档注释中搜索。比全文搜索更结构化（只搜实体级元信息而非全文）。scope 可选 name/signature/docstring。",
 		Description: "用正则表达式在代码实体的名称、签名、文档注释中搜索。" +
 			"比 codegraph_search 更精确，支持 scope 过滤（name/signature/docstring/any）。" +
 			"支持按实体类型过滤（function/method/struct/interface/variable）。",

@@ -255,7 +255,6 @@ func startWebUI(port int) {
 	root = core.Root() // 可为空（未打开工作区）
 	initReg := agent.NewRegistry()
 	agent.RegisterHostFrameworkTools(initReg, root)
-	agent.RegisterHarnessTools(initReg, root)
 	agent.RegisterCommitMessageTool(initReg)
 	// ★ harness 对齐（默认关闭——全量工具集；WB_HARNESS=1 开启时精简 pair 独有工具）；
 	//   被禁用工具保留在注册表（前端可见可管理），内置工具集 builtin 可一键恢复
@@ -2427,7 +2426,6 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 	}
 	reg := agent.NewRegistry()
 	agent.RegisterHostFrameworkTools(reg, root)
-	agent.RegisterHarnessTools(reg, root)
 	agent.RegisterCommitMessageTool(reg)
 	// ★ 插件系统：全局 PluginHost 的 cordis_* 工具（浏览器插件面板同源）
 	if ph := handler.GetPluginHost(); ph != nil {

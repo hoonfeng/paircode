@@ -26,7 +26,7 @@ const maxBinaryLoad = 64 << 20 // strings/find/entropy 读全文上限 64MB
 func registerBinaryRETools(r *Registry, root string) {
 	r.Register(&Tool{
 		Name: "binary_strings",
-		UsageGuide: "从二进制提取可打印字符串（ASCII + UTF-16LE）。逆向工程常用：找嵌入文本/URL/符号/提示语。比直接 search_content 更高效（跳过二进制结构直接取文本）。",
+		UsageGuide: "从二进制提取可打印字符串（ASCII + UTF-16LE）。逆向工程常用：找嵌入文本/URL/符号/提示语。比全文搜索更高效（跳过二进制结构直接取文本）。",
 		Description: "从二进制提取可打印字符串（ASCII + UTF-16LE，逆向找嵌入文本/URL/符号/提示语常用）。" +
 			"min_length 最短长度(默认 4)；max_results(默认 200)。返回 偏移: 字符串。",
 		Parameters: objSchema(props{
@@ -48,7 +48,7 @@ func registerBinaryRETools(r *Registry, root string) {
 
 	r.Register(&Tool{
 		Name: "binary_find",
-		UsageGuide: "在二进制中按字节（hex）或文本（text）搜索模式，返回命中偏移。逆向分析用。比 search_content 更快（直接字节匹配无需文本解码）。",
+		UsageGuide: "在二进制中按字节（hex）或文本（text）搜索模式，返回命中偏移。逆向分析用。比全文搜索更快（直接字节匹配无需文本解码）。",
 		Description: "在二进制里查找字节模式（hex 如 4d5a 或 'ff d8 ff'）或文本（text），返回命中字节偏移（十六进制）。" +
 			"hex 与 text 二选一；max_results 默认 100。",
 		Parameters: objSchema(props{

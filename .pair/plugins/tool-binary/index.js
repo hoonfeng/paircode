@@ -10,8 +10,8 @@
 const tools = [
   {
     "name": "inspect_binary",
-    "description": "分析二进制文件而不撑爆上下文：返回大小 + 嗅探类型（按 magic bytes）+ 指定区段的十六进制/ASCII 预览（hexdump 风格）。读图片/可执行/压缩包/字体等二进制用它，别用 read_file。",
-    "usageGuide": "分析二进制文件：大小 + 类型嗅探（magic bytes）+ hexdump 预览。二进制文件（图片/可执行/压缩包/字体等）只能用此工具，不可用 read_file（read_file 会拒绝含 NULL 字节的文件）。比直接读原始字节安全（预览有界不撑爆上下文）。",
+    "description": "分析二进制文件而不撑爆上下文：返回大小 + 嗅探类型（按 magic bytes）+ 指定区段的十六进制/ASCII 预览（hexdump 风格）。读图片/可执行/压缩包/字体等二进制用它，别用文本读取工具。",
+    "usageGuide": "分析二进制文件：大小 + 类型嗅探（magic bytes）+ hexdump 预览。二进制文件（图片/可执行/压缩包/字体等）只能用此工具，不可用文本读取工具（含 NULL 字节会被拒绝）。比直接读原始字节安全（预览有界不撑爆上下文）。",
     "parameters": {
       "properties": {
         "length": {

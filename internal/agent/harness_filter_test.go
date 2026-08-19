@@ -161,7 +161,7 @@ func TestHarnessOnlyTools_Default(t *testing.T) {
 // 被移除的 pair 独有工具名（harness 精简提示词中不应出现）。
 var trimmedPromptBannedTools = []string{
 	"codegraph", "memory_", "project_info", "history_", "git_", "debug_", "binary_",
-	"csv_", "word_", "xlsx", "read_pdf", "lsp_", "skill_", "mcp_",
+	"csv_", "word_", "xlsx", "read_pdf", "skill_", "mcp_",
 	"marketplace", "web_debug", "bug_", "screenshot", "multi_edit", "list_files",
 	"run_background", "update_plan", "read_file", "edit_file", "write_file", "run_command",
 	"search_content", "search_files", "find_symbol", "go_build", "go_run", "run_test",

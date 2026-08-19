@@ -77,7 +77,7 @@ func registerExtraCodeGraphTools(r *Registry, root string) {
 	// ---- 21. codegraph_find_by_imports ----
 	r.Register(&Tool{
 		Name: "codegraph_find_by_imports", Description: "查找所有导入指定模块的文件。",
-		UsageGuide: "查找所有导入指定模块的文件。想了解某包被哪些文件引用时用。比 search_content 搜索 import 语句更精确（基于解析的 import 关系）。",
+		UsageGuide: "查找所有导入指定模块的文件。想了解某包被哪些文件引用时用。比全文搜索 import 语句更精确（基于解析的 import 关系）。",
 		Parameters: objSchema(props{"moduleName": strProp("模块/包名"), "matchMode": strProp("可选：exact/prefix/contains/fuzzy，默认 contains"), "limit": intProp("可选：最大返回数（默认 50）")}, "moduleName"),
 		ReadOnly: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {

@@ -263,7 +263,7 @@ const tools = [
   {
     "name": "codegraph_explore",
     "description": "一站式代码理解工具。用自然语言或符号名探索代码，返回相关源码和位置。分析代码的首选工具。",
-    "usageGuide": "一站式代码理解工具。用自然语言或符号名探索代码，返回相关源码和位置。新接触项目时用此工具了解代码比逐个 read_file 更高效。",
+    "usageGuide": "一站式代码理解工具。用自然语言或符号名探索代码，返回相关源码和位置。新接触项目时用此工具了解代码比逐个文件读取更高效。",
     "parameters": {
       "properties": {
         "maxFiles": {

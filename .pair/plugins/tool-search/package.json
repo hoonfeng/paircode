@@ -1,8 +1,0 @@
-{
-  "name": "tool-search",
-  "purpose": "搜索工具（search_content/search_files）——迁移自内置 registerSearchTools",
-  "version": "0.1.0",
-  "scope": "global",
-  "type": "plugin",
-  "main": "index.js"
-}

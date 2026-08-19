@@ -13,7 +13,7 @@ import (
 	"strings"
 )
 
-const maxReadFileSize = 10 << 20 // read_file 文本上限 10MB（更大用 offset/limit 或 search_content）
+const maxReadFileSize = 10 << 20 // read_file 文本上限 10MB（更大用 offset/limit 或全文搜索工具）
 
 func registerBinaryTools(r *Registry, root string) {
 	r.Register(&Tool{

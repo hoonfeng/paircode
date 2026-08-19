@@ -1,0 +1,7 @@
+{
+  "name": "merge-demo-verify",
+  "version": "1.0.0",
+  "scope": "project",
+  "type": "plugin",
+  "main": "index.js"
+}

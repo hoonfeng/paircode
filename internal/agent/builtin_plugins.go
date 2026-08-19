@@ -69,8 +69,6 @@ func builtinPluginSpecs(root string) []builtinPluginSpec {
 			func(c *PluginContext) { RegisterBugTools(c.Tools, root) }},
 		{"office", "办公文档（csv_read/csv_write/json_to_table/table_stats/text_report/word_read）",
 			func(c *PluginContext) { registerOfficeTools(c.Tools, root) }},
-		{"lsp", "LSP 代码导航（lsp_definition/references/hover/diagnostics）",
-			func(c *PluginContext) { registerLSPTools(c.Tools, root) }},
 		{"codegraph", "代码知识图谱（codegraph_build/search/impact/…）",
 			func(c *PluginContext) { registerCodeGraphTools(c.Tools, root) }},
 		{"codegraph-extra", "图谱扩展（codegraph_find_by_signature/explore）",

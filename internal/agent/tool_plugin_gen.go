@@ -61,7 +61,6 @@ func genToolGroups() []genToolGroup {
 		{"tool-web-debug", "网页验证（web_debug）", registerWebDebugTool, nil, "self"},
 		{"tool-bug", "BUG 检测与修复（bug_detect/bug_analyze/bug_fix）", RegisterBugTools, nil, "self"},
 		{"tool-office", "办公文档（csv_read/csv_write/json_to_table/table_stats/text_report/word_read）", registerOfficeTools, nil, "self"},
-		{"tool-lsp", "LSP 代码导航（lsp_definition/references/hover/diagnostics）", registerLSPTools, nil, "self"},
 		{"tool-codegraph", "代码知识图谱（codegraph_build/search/impact/…）", registerCodeGraphTools, nil, "self"},
 		{"tool-codegraph-extra", "图谱扩展（codegraph_find_by_signature/explore）", registerExtraCodeGraphTools, nil, "self"},
 		// tool-system：SystemTool 内部工具 + Skills/MCP/市场/提交信息

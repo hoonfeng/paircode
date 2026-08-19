@@ -18,7 +18,7 @@ var diagToolNames = []string{
 	"web_fetch", "web_search", "run_background", "read_output", "kill_process",
 	"memory_write", "memory_read", "memory_search", "project_info_read", "project_info_tree",
 	"update_tasks", "update_plan", "tool_stats", "history_search", "codegraph_build",
-	"codegraph_search", "codegraph_impact", "lsp_definition", "bug_detect", "bug_fix",
+	"codegraph_search", "codegraph_impact", "bug_detect", "bug_fix",
 	"csv_read", "word_read", "screenshot_desktop", "web_debug", "image_analyze",
 	"cordis_define", "cordis_run", "toolset_build", "mcp_add", "generate_commit_message",
 	"ask_user", "run_code", "str_replace_editor", "debug_start", "debug_stop",

@@ -86,7 +86,7 @@ const tools = [
   {
     "name": "codegraph_class",
     "description": "获取类型（struct/interface）的完整层次结构：字段、方法、嵌入类型。支持结构体名或接口名。",
-    "usageGuide": "获取类型（struct/interface）的完整层次结构：字段、方法、嵌入类型。比 read_file 逐个文件翻更高效（聚合所有相关定义）。",
+    "usageGuide": "获取类型（struct/interface）的完整层次结构：字段、方法、嵌入类型。比逐个文件读取更高效（聚合所有相关定义）。",
     "parameters": {
       "properties": {
         "name": {
@@ -130,7 +130,7 @@ const tools = [
   {
     "name": "codegraph_callees",
     "description": "查询指定的函数/方法调用了哪些其他函数。用于理解函数的内部调用情况。返回被调用者的名称和调用位置。",
-    "usageGuide": "查询指定函数内部调用了哪些函数。理解函数实现逻辑时用。比 read_file 手动翻更快（聚合被调函数列表）。",
+    "usageGuide": "查询指定函数内部调用了哪些函数。理解函数实现逻辑时用。比手动翻文件更快（聚合被调函数列表）。",
     "parameters": {
       "properties": {
         "name": {
@@ -253,7 +253,7 @@ const tools = [
   {
     "name": "codegraph_get_edit_context",
     "description": "获取修改某个代码位置所需的完整上下文。一次调用返回：符号源码、调用者列表、关联测试、近期 Git 历史、相关记忆。比分别调用多个工具更高效。参数 maxTokens 控制返回内容的 token 预算。",
-    "usageGuide": "获取修改某代码位置所需的完整上下文。调用 edit_file 前先用此工具获取周边代码，减少多次 read_file 的 token 消耗。",
+    "usageGuide": "获取修改某代码位置所需的完整上下文。调用 edit_file 前先用此工具获取周边代码，减少多次文件读取的 token 消耗。",
     "parameters": {
       "properties": {
         "file": {
