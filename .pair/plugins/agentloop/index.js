@@ -103,6 +103,18 @@ return {
       ],
     })
 
+      // ── 服务商：维护服务商列表（名称/Base URL/模型列表）──
+      // type='provider-manager'：SettingsModal 渲染 CRUD 面板，数据经 /api/models（config/models.json）。
+      // AI tab 的 provider 下拉（optionsSource='providers'）与模型下拉（optionsSource='models'）均来自此处维护的数据。
+      ctx.registerSettings({
+        key: 'providers',
+        title: '服务商',
+        fields: [
+          { name: 'providers', label: '服务商列表', type: 'provider-manager',
+            hint: '维护服务商：名称、Base URL、可用模型列表。AI tab 的下拉与模型联动均来自此处。' },
+        ],
+      })
+
     // ═══════════════════════════════════════════════════════════
     // ★ 配置消费插件化（2026-08-19）：LLM Provider 参数装配器
     //   Go 内核（buildWebProvider/Review/Plan/工具集分析）不再直接读配置业务字段，

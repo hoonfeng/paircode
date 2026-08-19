@@ -69,6 +69,9 @@
                       <textarea v-else-if="f.type === 'project'" v-model="projectInst" class="field-textarea"
                                 rows="4" :placeholder="f.placeholder"></textarea>
 
+                      <!-- provider-manager（服务商维护面板：CRUD /api/models，独立保存，不参与普通表单） -->
+                      <ProviderManager v-else-if="f.type === 'provider-manager'" @saved="loadModels" />
+
                       <!-- 兜底 text -->
                       <input v-else type="text" v-model="form[tab.key][f.name]" />
                     </div>
@@ -95,6 +98,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { state, applyTheme } from '../ui-state.js'
 import api from '../api.js'
 import SvgIcon from './SvgIcon.vue'
+import ProviderManager from './ProviderManager.vue'
 
 const emit = defineEmits(['close'])
 const activeTab = ref('')
@@ -188,7 +192,7 @@ function buildForm() {
     form[s.key] = {}
     for (const f of (s.fields || [])) {
       let v
-      if (f.type === 'project') { continue }
+      if (f.type === 'project' || f.type === 'provider-manager') { continue }
       if (f.binding) {
         v = top[f.binding] !== undefined ? top[f.binding] : f.default
       } else {
@@ -246,6 +250,10 @@ const saveSettings = async () => {
       for (const f of (s.fields || [])) {
         if (f.type === 'project') {
           await api.saveInstructions('project', projectInst.value)
+          continue
+        }
+        if (f.type === 'provider-manager') {
+          // 服务商维护走独立面板（ProviderManager 内部直接 POST /api/models），不并入通用表单保存
           continue
         }
         const v = vals[f.name]
