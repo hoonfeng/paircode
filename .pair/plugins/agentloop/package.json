@@ -1,11 +1,8 @@
 {
   "main": "index.js",
   "name": "agentloop",
-  "purpose": "Agent 循环装配器（LoopFactory 参数级装配：迭代上限/自主模式/审核/追加提示词；对齐 deepseek-harness AgentLoop 插件）",
+  "purpose": "Agent 循环装配器（配置注册化：迭代上限/自主模式/审核/追加提示词；对齐 deepseek-harness AgentLoop 插件）",
   "scope": "global",
   "type": "plugin",
-  "version": "1.0.0",
-  "config": {
-    "systemAppend": ""
-  }
+  "version": "1.0.1"
 }
