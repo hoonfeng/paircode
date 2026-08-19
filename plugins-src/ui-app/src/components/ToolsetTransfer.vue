@@ -181,14 +181,19 @@ async function callOnce(fn) {
 //     插件整体装载，白名单外工具自动摘除（DisabledTools），只加入勾选工具；
 //   - 插件已加入（g.joined=true，工具被摘除）→ enable_tool 逐个恢复。
 async function addSelected() {
-  const byPlugin = {} // 插件名 → 勾选工具名数组
+  const byPlugin = {} // 组名 → 勾选工具名数组
   for (const g of leftGroups.value) {
     const names = (g.tools || []).map(t => t.name).filter(n => leftSelected[n])
-    if (names.length) byPlugin[g.name] = { joined: !!g.joined, names }
+    if (names.length) byPlugin[g.name] = { joined: !!g.joined, names, source: g.source }
   }
   try {
     for (const [pn, info] of Object.entries(byPlugin)) {
-      if (info.joined) {
+      if (info.source !== 'plugin') {
+        // 内置工具：工具级启用（加入工作区工具集 → agent 可用）
+        for (const tn of info.names) {
+          await callOnce(() => api.builtinPlugins({ tool: tn, enabled: true }, props.workspaceRoot))
+        }
+      } else if (info.joined) {
         for (const tn of info.names) {
           await callOnce(() => api.toolsetEdit({ name: 'default', action: 'enable_tool', plugin_name: pn, tool: tn, workspaceRoot: props.workspaceRoot }))
         }
@@ -205,13 +210,17 @@ async function removeSelected() {
   const byPlugin = {}
   for (const g of joinedGroups.value) {
     const names = (g.tools || []).map(t => t.name).filter(n => rightSelected[n])
-    if (names.length) byPlugin[g.name] = names
+    if (names.length) byPlugin[g.name] = { source: g.source, names }
   }
   const manualNames = manualTools.value.filter(n => rightSelected[n])
   try {
-    for (const [pn, names] of Object.entries(byPlugin)) {
-      for (const tn of names) {
-        await callOnce(() => api.toolsetEdit({ name: 'default', action: 'rm_tool', plugin_name: pn, tool: tn, workspaceRoot: props.workspaceRoot }))
+    for (const [pn, info] of Object.entries(byPlugin)) {
+      for (const tn of info.names) {
+        if (info.source !== 'plugin') {
+          await callOnce(() => api.builtinPlugins({ tool: tn, enabled: false }, props.workspaceRoot))
+        } else {
+          await callOnce(() => api.toolsetEdit({ name: 'default', action: 'rm_tool', plugin_name: pn, tool: tn, workspaceRoot: props.workspaceRoot }))
+        }
       }
     }
     for (const n of manualNames) {
@@ -224,7 +233,18 @@ async function removeSelected() {
 // 插件已加入 → enable_tool 逐个恢复。
 async function addGroup(g) {
   try {
-    if (g.joined) {
+    if (g.source !== 'plugin') {
+      // 内置工具组：未加入 → 整组加入；已加入 → 逐个启用未启用工具
+      if (g.joined) {
+        for (const t of g.tools) {
+          if (!t.enabled) {
+            await callOnce(() => api.builtinPlugins({ tool: t.name, enabled: true }, props.workspaceRoot))
+          }
+        }
+      } else {
+        await callOnce(() => api.builtinPlugins({ group: g.name, enabled: true }, props.workspaceRoot))
+      }
+    } else if (g.joined) {
       for (const t of g.tools) {
         await callOnce(() => api.toolsetEdit({ name: 'default', action: 'enable_tool', plugin_name: g.name, tool: t.name, workspaceRoot: props.workspaceRoot }))
       }
@@ -234,10 +254,14 @@ async function addGroup(g) {
     emit('changed')
   } catch (e) { /* callOnce 已上报 */ }
 }
-// 整组移出：rm_plugin（插件移出工具集，其工具恢复默认过滤）
+// 整组移出：内置组 → 组开关禁用；插件 → rm_plugin（移出工具集，工具恢复默认过滤）
 async function removeGroup(g) {
   try {
-    await callOnce(() => api.toolsetEdit({ name: 'default', action: 'rm_plugin', plugin_name: g.name, workspaceRoot: props.workspaceRoot }))
+    if (g.source !== 'plugin') {
+      await callOnce(() => api.builtinPlugins({ group: g.name, enabled: false }, props.workspaceRoot))
+    } else {
+      await callOnce(() => api.toolsetEdit({ name: 'default', action: 'rm_plugin', plugin_name: g.name, workspaceRoot: props.workspaceRoot }))
+    }
     emit('changed')
   } catch (e) { /* callOnce 已上报 */ }
 }

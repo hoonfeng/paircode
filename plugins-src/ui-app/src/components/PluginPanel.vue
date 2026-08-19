@@ -123,6 +123,31 @@
       </template>
     </div>
     <div class="pp-list">
+      <!-- 内置工具区（框架自带工具：默认在工作区工具集，可勾选加入/移出） -->
+      <div v-if="builtinGroups.length" class="pp-builtin">
+        <div class="pp-builtin-head">
+          <span class="pp-builtin-title"><SvgIcon name="package" :size="12" /> 内置工具（框架自带）</span>
+          <span class="pp-builtin-sub">勾选=在工作区工具集中（agent 可用）；取消=移出</span>
+        </div>
+        <div v-for="g in builtinGroups" :key="g.name" class="pp-builtin-group">
+          <div class="pp-builtin-grow">
+            <span class="pp-builtin-gname">{{ g.title || g.name }}</span>
+            <span v-if="g.desc" class="pp-builtin-gdesc">{{ g.desc }}</span>
+            <span class="pp-builtin-gcount">{{ g.tools.length }} 工具</span>
+            <button v-if="!g.allOn" class="pp-btn mini" @click="enableBuiltinGroup(g)" title="整组加入工作区工具集">整组启用</button>
+            <button v-if="g.anyOn" class="pp-btn mini danger" @click="disableBuiltinGroup(g)" title="整组移出工作区工具集">整组移出</button>
+          </div>
+          <div class="pp-builtin-tools">
+            <div v-for="t in g.tools" :key="t.name" class="pp-d-tool" :title="t.desc">
+              <span class="pp-d-tname">{{ t.name }}</span>
+              <label class="pp-switch" :title="t.enabled ? '在工作区工具集中（agent 可用）；点击移出' : '未加入工作区工具集；点击加入'">
+                <input type="checkbox" :checked="t.enabled" @change="toggleBuiltinTool(t, $event.target.checked)" />
+                <span class="pp-switch-track"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
       <div v-if="loading && plugins.length === 0" class="pp-loading">
         <SvgIcon name="refresh" :size="16" class="spinner" /><span>加载插件…</span>
       </div>
@@ -372,6 +397,56 @@ async function loadWsToolsetMap() {
   }
 }
 
+// ─── 内置工具区（框架自带工具：system/plugin-mgmt/toolset-mgmt）────────
+// ★ 2026-08-20：内置工具默认在工作区工具集（agent 可用）；插件面板展示内置
+//   分组，工具对勾 = 是否加入工作区工具集（勾选=加入/agent 可用；取消=移出）。
+const builtinGroups = ref([])
+async function loadBuiltinGroups() {
+  try {
+    const info = await api.builtinPlugins(null, state.workspaceRoot)
+    const groups = ((info && info.groups) || [])
+      .filter(g => g.source !== 'plugin' && (g.tools || []).length)
+      .map(g => ({
+        ...g,
+        anyOn: (g.tools || []).some(x => x.enabled),
+        allOn: (g.tools || []).length > 0 && (g.tools || []).every(x => x.enabled),
+      }))
+    builtinGroups.value = groups
+  } catch (e) {
+    builtinGroups.value = []
+  }
+}
+async function toggleBuiltinTool(t, checked) {
+  try {
+    const res = await api.builtinPlugins({ tool: t.name, enabled: checked }, state.workspaceRoot)
+    window.$toast && window.$toast(res?.message || (checked ? '已加入工作区工具集' : '已移出工作区工具集') + ' ' + t.name, 'info')
+    await loadBuiltinGroups()
+    await loadWsToolsetMap()
+  } catch (e) {
+    window.$toast && window.$toast(e.message || '操作失败', 'error')
+  }
+}
+async function enableBuiltinGroup(g) {
+  try {
+    const res = await api.builtinPlugins({ group: g.name, enabled: true }, state.workspaceRoot)
+    window.$toast && window.$toast(res?.message || '已整组加入工作区工具集', 'info')
+    await loadBuiltinGroups()
+    await loadWsToolsetMap()
+  } catch (e) {
+    window.$toast && window.$toast(e.message || '操作失败', 'error')
+  }
+}
+async function disableBuiltinGroup(g) {
+  try {
+    const res = await api.builtinPlugins({ group: g.name, enabled: false }, state.workspaceRoot)
+    window.$toast && window.$toast(res?.message || '已整组移出工作区工具集', 'info')
+    await loadBuiltinGroups()
+    await loadWsToolsetMap()
+  } catch (e) {
+    window.$toast && window.$toast(e.message || '操作失败', 'error')
+  }
+}
+
 function pluginToolOn(p, t) {
   // ★ 对勾语义（2026-08-19）：读工具对 cordis 可见性（与 agent 工具集解耦）
   return p.toolCordisVisible?.[t] !== false
@@ -535,6 +610,7 @@ onMounted(() => {
   startPolling()
   refresh()
   loadWsToolsetMap()
+  loadBuiltinGroups()
 })
 
 onUnmounted(() => {
@@ -803,6 +879,34 @@ onUnmounted(() => {
 .pp-btn:disabled { opacity: .5; cursor: not-allowed; }
 .spinner { animation: pp-spin 1s linear infinite; }
 @keyframes pp-spin { to { transform: rotate(360deg); } }
+.pp-builtin {
+  display: flex; flex-direction: column; gap: 6px;
+  margin: 4px 6px 10px; padding: 8px 10px;
+  border: 1px solid rgba(212,167,78,.3); border-radius: 8px;
+  background: rgba(212,167,78,.05);
+}
+.pp-builtin-head { display: flex; align-items: center; gap: 8px; }
+.pp-builtin-title {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 12px; font-weight: 700; color: #d4a74e; letter-spacing: .3px;
+}
+.pp-builtin-sub { font-size: 10px; color: var(--text-muted); }
+.pp-builtin-group {
+  display: flex; flex-direction: column; gap: 4px;
+  border: 1px solid var(--border-color); border-radius: 6px;
+  background: var(--bg-tertiary); padding: 6px 8px;
+}
+.pp-builtin-grow {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+}
+.pp-builtin-gname { font-size: 12px; font-weight: 600; color: var(--text-primary); }
+.pp-builtin-gdesc { font-size: 10px; color: var(--text-muted); flex: 1; min-width: 80px; }
+.pp-builtin-gcount { font-size: 10px; color: var(--text-secondary); }
+.pp-builtin-tools {
+  display: flex; flex-direction: column; gap: 2px;
+  max-height: 220px; overflow-y: auto;
+}
+.pp-btn.mini { padding: 2px 8px; font-size: 10px; border-radius: 4px; }
 </style>
 
 /* ─── 工具集管理区 ─── */

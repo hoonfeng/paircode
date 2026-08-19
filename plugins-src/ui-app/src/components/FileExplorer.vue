@@ -591,7 +591,10 @@ const joinedToolCount = computed(() => {
 const joinedGroups = computed(() => {
   const joined = new Set(builtinInfo.value?.joined || [])
   const bg = (builtinInfo.value?.groups || []).filter(g => g.source === 'builtin' && joined.has(g.name))
+  // ★ 2026-08-20：plugins 候选池已并入内置组（穿梭框可管理）——卷帘只展示
+  //   插件分组（source=plugin），内置组由 bg 展示（避免重复）
   const pg = (builtinInfo.value?.plugins || [])
+    .filter(g => g.source === 'plugin')
     .map(g => ({ ...g, tools: (g.tools || []).filter(t => t.enabled) }))
     .filter(g => (g.tools || []).length > 0)
   return [...bg, ...pg]

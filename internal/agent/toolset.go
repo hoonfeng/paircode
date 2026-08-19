@@ -42,7 +42,11 @@ type Toolset struct {
 	Project     string          `json:"project,omitempty"`  // 适用项目（basename，多项目区分）
 	Version     string          `json:"version,omitempty"`  // 语义版本
 	CreatedAt   string          `json:"createdAt,omitempty"`
-	Plugins     []ToolsetPlugin `json:"plugins"`
+	// BuiltinsInited 内置工具组是否已初始化进本工具集（★ 2026-08-20：
+	// 内置工具默认放入工作区工具集；用户后续可整组/单工具移出。
+	// 标记只补一次——防止「移出后重启又补回」；旧工具集无此字段 → 视为未初始化补齐一次）。
+	BuiltinsInited bool            `json:"builtinsInited,omitempty"`
+	Plugins        []ToolsetPlugin `json:"plugins"`
 }
 
 // ToolsetPlugin 工具集内一个插件定义（host/client 双半）。
@@ -236,11 +240,27 @@ func removeToolset(projectRoot string, scope toolsetScope, name string) error {
 //     - plugin-mgmt：cordis_* 插件管理工具
 //     - toolset-mgmt：toolset_* 工具集管理工具
 // 业务插件工具（tool-git/tool-codegraph 等磁盘插件）不默认加入——用户用
-// toolset_edit add_plugin 按需加入。内置工具包残留（无 owner 非 SystemTool 的
-// 宿主注册工具）也不进默认（保持默认禁用，add_builtin 可加入）。
+// toolset_edit add_plugin 按需加入。
 // ★ 2026-08-17：装载≠可用兜底——新工作区无任何工具集时，agent 默认只有
 //   基础工具 + 框架本身提供的工具；其余工具对 agent 隐藏，按需加入。
+// ★ 2026-08-20：内置工具组（system/plugin-mgmt/toolset-mgmt）默认写入
+//   default.json（ensureBuiltinGroupsInWorkspace 对已有工作区幂等补齐）——
+//   内置工具在工作区工具集中可见可管理（工具集面板/插件面板控制启用）。
 func defaultProjectToolset(reg *Registry, ph *PluginHost, project string) *Toolset {
+	return &Toolset{
+		Name:           "default",
+		Description:    "基础工具集（自动生成）——极简核心 + 框架本身提供的工具；插件工具用 toolset_edit add_plugin 按需加入",
+		Project:        project,
+		Version:        "1.0.0",
+		CreatedAt:      time.Now().Format(time.RFC3339),
+		BuiltinsInited: true, // 内置工具组已含在 Plugins（默认放入工作区工具集）
+		Plugins:        builtinGroupEntries(reg, ph),
+	}
+}
+
+// builtinGroupEntries 框架内置工具组条目（system/plugin-mgmt/toolset-mgmt）——
+// defaultProjectToolset 与 ensureBuiltinGroupsInWorkspace 共用同一组装逻辑。
+func builtinGroupEntries(reg *Registry, ph *PluginHost) []ToolsetPlugin {
 	base := []string{"read", "write", "edit", "glob", "grep", "bash", "str_replace_editor", "run_code"}
 	sysSet := map[string]bool{}
 	for _, t := range base {
@@ -280,8 +300,7 @@ func defaultProjectToolset(reg *Registry, ph *PluginHost, project string) *Tools
 			case isToolsetMgmtTool(meta.Name):
 				tsTools = append(tsTools, meta.Name)
 			}
-			// 其余无 owner 非 SystemTool 工具：内置包残留（如内置 codegraph），
-			// 默认禁用，add_builtin 可加入
+			// 其余无 owner 非 SystemTool 工具：内置包残留，默认禁用
 		}
 	}
 	var sysTools []string
@@ -316,14 +335,7 @@ func defaultProjectToolset(reg *Registry, ph *PluginHost, project string) *Tools
 			Tools:   tsTools,
 		})
 	}
-	return &Toolset{
-		Name:        "default",
-		Description: "基础工具集（自动生成）——极简核心 + 框架本身提供的工具；插件工具用 toolset_edit add_plugin 按需加入",
-		Project:     project,
-		Version:     "1.0.0",
-		CreatedAt:   time.Now().Format(time.RFC3339),
-		Plugins:     plugins,
-	}
+	return plugins
 }
 
 // ensureDefaultWorkspaceToolset 无项目工具集时自动生成基础工具集（default.json）。
@@ -360,6 +372,58 @@ func ensureDefaultWorkspaceToolset(ph *PluginHost, root string) error {
 	return nil
 }
 
+// ensureBuiltinGroupsInWorkspace 确保工作区主工具集（default.json）含全部内置工具组
+// 条目（system/plugin-mgmt/toolset-mgmt）。★ 2026-08-20：内置工具默认放到工作区
+// 工具集（agent 默认可用、面板可见可管理）。只补一次：default.json 的
+// BuiltinsInited 标记置位后不再自动补（用户移出/增删后保持自己的管理结果）。
+// 返回是否补了条目（调用方决定是否重装载）。
+func ensureBuiltinGroupsInWorkspace(ph *PluginHost, root string) (bool, error) {
+	if root == "" {
+		return false, nil
+	}
+	var reg *Registry
+	if ph != nil && ph.Context() != nil {
+		reg = ph.Context().Tools
+	}
+	ts, err := loadToolset(root, toolsetProject, "default")
+	if err != nil || ts == nil {
+		// 无主工具集：由 ensureDefaultWorkspaceToolset 生成（defaultProjectToolset 已含内置组）
+		return false, nil
+	}
+	if ts.BuiltinsInited {
+		return false, nil // 已初始化过：保持用户管理结果（含移出后的状态）
+	}
+	entries := builtinGroupEntries(reg, ph)
+	have := map[string]bool{}
+	for _, p := range ts.Plugins {
+		if p.Builtin != "" {
+			have[p.Builtin] = true
+		}
+	}
+	changed := false
+	for _, e := range entries {
+		if have[e.Builtin] {
+			continue
+		}
+		ts.Plugins = append(ts.Plugins, e)
+		have[e.Builtin] = true
+		changed = true
+	}
+	ts.BuiltinsInited = true
+	if !changed {
+		// 无新增条目也置标记（避免反复扫描）
+		if err := saveToolset(root, toolsetProject, ts); err != nil {
+			return false, err
+		}
+		return false, nil
+	}
+	if err := saveToolset(root, toolsetProject, ts); err != nil {
+		return false, err
+	}
+	log.Printf("[toolset] 已补齐内置工具组条目到工作区工具集 %s（%d 个）", ts.Name, len(entries))
+	return true, nil
+}
+
 // EnsureWorkspaceToolsetPublic 无工具集时自动生成基础工具集（供 handler/前端调用）。
 func EnsureWorkspaceToolsetPublic(ph *PluginHost, root string) error {
 	return ensureDefaultWorkspaceToolset(ph, root)
@@ -382,6 +446,17 @@ func LoadAllToolsets(ph *PluginHost, projectRoot string) {
 		//   内部含旧 builtin.json 迁移
 		if err := ensureDefaultWorkspaceToolset(ph, projectRoot); err != nil {
 			log.Printf("[toolset] 自动生成基础工具集失败: %v", err)
+		}
+		// ★ 2026-08-20：内置工具默认放入工作区工具集——已有工具集幂等补齐
+		//   内置组条目（system/plugin-mgmt/toolset-mgmt），补后需重新装载
+		if added, err := ensureBuiltinGroupsInWorkspace(ph, projectRoot); err != nil {
+			log.Printf("[toolset] 内置工具组补齐失败: %v", err)
+		} else if added {
+			if ts0, err := loadToolset(projectRoot, toolsetProject, "default"); err == nil && ts0 != nil {
+				if err := installToolset(ph, ts0); err != nil {
+					log.Printf("[toolset] default 重装载失败: %v", err)
+				}
+			}
 		}
 		for _, meta := range listToolsets(projectRoot, toolsetProject) {
 			ts, err := loadToolset(projectRoot, toolsetProject, meta.Name)

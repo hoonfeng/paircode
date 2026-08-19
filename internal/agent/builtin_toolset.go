@@ -559,12 +559,14 @@ func BuiltinToolsetInfoOf(reg *Registry, ph *PluginHost, root string) *BuiltinTo
 			info.WorkspaceToolsets = append(info.WorkspaceToolsets, wi)
 		}
 	}
-	// ★ 插件面板中存在工具的插件分组（source=plugin）——工作区工具集管理弹窗
-	//   候选池：每个有工具的插件一组，组内是该插件注册的工具（含启用状态）。
-	//   数据源 ph.PluginToolsByPlugin（插件名→工具清单）+ reg.IsEnabled（启用状态）。
-	//   （2026-08-17：管理弹窗不再展示宿主核心自举组 plugin-mgmt/toolset-mgmt——
-	//     它们本就是 agent 可用工具；插件工具才是用户可勾选加入/移出的对象。）
-	info.Plugins = pluginGroupsOf(reg, ph, info.WorkspaceToolsets)
+	// ★ 工具集管理弹窗候选池 = 内置工具组（source=system/plugin-mgmt/
+	//   toolset-mgmt 或 joined 组 source=builtin）+ 插件分组（source=plugin）。
+	//   内置工具默认在工作区工具集中（ensureBuiltinGroupsInWorkspace 补齐），
+	//   在此可勾选启用/移出；插件工具按需加入。前端按 source 分支操作：
+	//   source=plugin → toolsetEdit（add_plugin/enable_tool/rm_tool）；
+	//   内置组 → /api/plugins/builtin（group/tool enabled）。
+	pluginGroups := pluginGroupsOf(reg, ph, info.WorkspaceToolsets)
+	info.Plugins = append(groups, pluginGroups...)
 	return info
 }
 
@@ -809,10 +811,12 @@ func EnableAllBuiltin(ph *PluginHost, root string) (string, error) {
 }
 
 // SetBuiltinToolEnabled 内置工具级开关（前端工具列表/文件浏览器「手动添加工具」）。
-//   - enabled=true：工具加入 agent 可用（SetToolEnabled(true)），持久化到 builtin.json
-//     的 _manual 手动条目（Tools 快照幂等追加）
-//   - enabled=false：工具恢复默认状态（ToolDefaultEnabled——harness 保留清单内保持启用），
-//     从 _manual 移除；若工具在某已加入组条目快照内，加入该组 DisabledTools 保持禁用。
+//   - enabled=true：工具加入 agent 可用（SetToolEnabled(true)）+ 清理该工具的
+//     DisabledTools 残留（★ 2026-08-20：否则重启 applyToolsetPlugin 会再次摘除）。
+//     已属某已加入内置组条目 → 只清理 DisabledTools 并同步移除 _manual 重复项；
+//     不属于任何已加入组 → 持久化到 _manual 手动条目（Tools 快照幂等追加）。
+//   - enabled=false：工具移出 agent 可用（SetToolEnabled(false)），从 _manual 移除；
+//     若工具在某已加入组条目快照内，加入该组 DisabledTools 保持禁用。
 //   固化文件全空时删除（空工具集不落盘）。
 func SetBuiltinToolEnabled(ph *PluginHost, root, toolName string, enabled bool) (string, error) {
 	reg := (*Registry)(nil)
@@ -835,28 +839,72 @@ func SetBuiltinToolEnabled(ph *PluginHost, root, toolName string, enabled bool) 
 	}
 
 	if enabled {
-		idx := -1
+		// 清理所有内置组条目的 DisabledTools（恢复启用语义——防止重启再次摘除）
 		for i := range ts.Plugins {
-			if ts.Plugins[i].Builtin == manualBuiltinGroup {
-				idx = i
+			p := &ts.Plugins[i]
+			if p.Builtin == "" {
+				continue
+			}
+			removeToolName(&p.DisabledTools, toolName)
+		}
+		// 工具是否已属某已加入内置组条目
+		inJoined := false
+		for i := range ts.Plugins {
+			p := &ts.Plugins[i]
+			if p.Builtin == "" || p.Builtin == manualBuiltinGroup {
+				continue
+			}
+			for _, tn := range p.Tools {
+				if tn == toolName {
+					inJoined = true
+					break
+				}
+			}
+			if inJoined {
 				break
 			}
 		}
-		if idx < 0 {
-			ts.Plugins = append(ts.Plugins, ToolsetPlugin{
-				Name: "builtin:" + manualBuiltinGroup, Purpose: "手动添加的工具（工具级开关）", Builtin: manualBuiltinGroup,
-			})
-			idx = len(ts.Plugins) - 1
-		}
-		has := false
-		for _, tn := range ts.Plugins[idx].Tools {
-			if tn == toolName {
-				has = true
-				break
+		if inJoined {
+			// 已属组条目：清理 _manual 重复项（历史残留）
+			for i := range ts.Plugins {
+				p := &ts.Plugins[i]
+				if p.Builtin == manualBuiltinGroup {
+					removeToolName(&p.Tools, toolName)
+					break
+				}
+			}
+		} else {
+			// 不属于任何已加入组：幂等追加到 _manual 手动条目
+			idx := -1
+			for i := range ts.Plugins {
+				if ts.Plugins[i].Builtin == manualBuiltinGroup {
+					idx = i
+					break
+				}
+			}
+			if idx < 0 {
+				ts.Plugins = append(ts.Plugins, ToolsetPlugin{
+					Name: "builtin:" + manualBuiltinGroup, Purpose: "手动添加的工具（工具级开关）", Builtin: manualBuiltinGroup,
+				})
+				idx = len(ts.Plugins) - 1
+			}
+			has := false
+			for _, tn := range ts.Plugins[idx].Tools {
+				if tn == toolName {
+					has = true
+					break
+				}
+			}
+			if !has {
+				ts.Plugins[idx].Tools = append(ts.Plugins[idx].Tools, toolName)
 			}
 		}
-		if !has {
-			ts.Plugins[idx].Tools = append(ts.Plugins[idx].Tools, toolName)
+		// 清空空 _manual 条目
+		for i := range ts.Plugins {
+			if ts.Plugins[i].Builtin == manualBuiltinGroup && len(ts.Plugins[i].Tools) == 0 {
+				ts.Plugins = append(ts.Plugins[:i], ts.Plugins[i+1:]...)
+				break
+			}
 		}
 		if reg != nil {
 			reg.SetToolEnabled(toolName, true)
@@ -864,7 +912,7 @@ func SetBuiltinToolEnabled(ph *PluginHost, root, toolName string, enabled bool) 
 		if err := saveToolset(root, toolsetProject, ts); err != nil {
 			return "", err
 		}
-		return "✅ 工具 " + toolName + " 已加入 agent 可用（手动工具）。固化工作区工具集 " + ts.Name + ".json", nil
+		return "✅ 工具 " + toolName + " 已加入 agent 可用（内置工具包）。固化工作区工具集 " + ts.Name + ".json", nil
 	}
 
 	// 禁用：强制移出 agent 可用集合（SetToolEnabled(false)）+ 持久化差集
