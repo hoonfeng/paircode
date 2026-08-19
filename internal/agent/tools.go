@@ -330,7 +330,7 @@ func trimToolDesc(desc string) string {
 func (r *Registry) Execute(ctx context.Context, name, argsJSON string) (string, error) {
 	t, ok := r.Get(name)
 	if !ok {
-		return "", fmt.Errorf("未知工具: %s", name)
+		return "", fmt.Errorf("未知工具: %s（当前工具集未包含该工具。可能原因：未加入工作区工具集 / 插件未装载 / 名称拼写错误。可用 tools.list() 查看当前可用工具；需要启用可用 toolset_edit add_builtin）", name)
 	}
 	if !t.Enabled {
 		// 禁用工具：对齐原「未注册」的不可见语义——agent 不应调用（Definitions 已过滤），
@@ -628,6 +628,10 @@ func registerCoreTools(r *Registry, root string, eh *editHistory, bg *bgRegistry
 			}
 			entries, err := os.ReadDir(p)
 			if err != nil {
+				// ★ 路径不存在给明确提示（Windows 原生错误晦涩，LLM 难恢复）
+				if os.IsNotExist(err) {
+					return "", fmt.Errorf("目录不存在: %s（请确认路径在工作区内且拼写正确；可用 str_replace_editor view 列目录探查）", argStr(args, "path"))
+				}
 				return "", err
 			}
 			pattern := argStr(args, "pattern")

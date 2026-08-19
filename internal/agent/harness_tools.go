@@ -202,19 +202,33 @@ func sreView(root, p string, viewRange []int, ctx context.Context) (string, erro
 	prompt := fmt.Sprintf("以下是 %s 的内容（共 %d 行）：", displayPath(root, p), len(allLines))
 	if len(viewRange) == 2 {
 		initial, final = viewRange[0], viewRange[1]
-		if initial < 1 || initial > len(allLines) {
-			return "", fmt.Errorf("view_range 首元素 %d 超出文件行范围 [1, %d]", initial, len(allLines))
+		// ★ 容错：行号超界自动 clamp（不报错），避免 LLM 凭记忆传行号差几行就整次失败。
+		//   历史数据：view_range 超界失败占 str_replace_editor 失败近半，多数只差 1-30 行。
+		clamped := false
+		if initial < 1 {
+			initial = 1
+			clamped = true
 		}
-		if final > len(allLines) {
-			return "", fmt.Errorf("view_range 次元素 %d 超出文件总行数 %d", final, len(allLines))
+		if initial > len(allLines) {
+			initial = len(allLines) // 首元素超界 → 显示最后一行
+			clamped = true
+		}
+		if final != -1 && final > len(allLines) {
+			final = len(allLines) // 次元素超界 → 截断到文件尾
+			clamped = true
 		}
 		if final != -1 && final < initial {
-			return "", fmt.Errorf("view_range 次元素 %d 应 >= 首元素 %d", final, initial)
+			// 逻辑错误（次 < 首）仍报错，但给出可恢复提示
+			return "", fmt.Errorf("view_range 次元素 %d 应 >= 首元素 %d（文件共 %d 行；可用 view_range=[%d, %d] 读末尾）",
+				viewRange[1], initial, len(allLines), max(1, len(allLines)-20), len(allLines))
 		}
 		if final == -1 {
 			final = len(allLines)
 		}
 		prompt += fmt.Sprintf("（view_range=[%d, %d]）", initial, final)
+		if clamped {
+			prompt += fmt.Sprintf("（行号已自动修正到文件范围 [1, %d]）", len(allLines))
+		}
 	}
 	lines := allLines[initial-1 : final]
 	var b strings.Builder
@@ -291,10 +305,12 @@ func sreReplace(p, oldStr, newStr string, args map[string]any, root string) (str
 	content := string(data)
 	n := strings.Count(content, oldStr)
 	if n == 0 {
-		return "", fmt.Errorf("str_replace 失败：old_str 在 %s 中未找到。请用 view 查看实际内容（注意空白/缩进要精确匹配）", displayPath(root, p))
+		// ★ 复用 edit 的相似行诊断：给出文件中包含 old_str 关键词的行 + 建议（比单纯报错更易恢复）
+		return "", diagnoseNotFound(content, oldStr)
 	}
 	if n > 1 {
-		return "", fmt.Errorf("str_replace 失败：old_str 在 %s 中出现 %d 次，不唯一。请在 old_str 中加上更多上下文使其唯一", displayPath(root, p), n)
+		// ★ 复用 edit 的多次命中诊断：列出所有命中起始行号，引导加长上下文
+		return "", diagnoseMultiple(content, oldStr)
 	}
 	out := strings.Replace(content, oldStr, newStr, 1)
 	if err := writeFileWithSnapshot(root, p, out); err != nil {

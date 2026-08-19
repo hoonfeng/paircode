@@ -291,3 +291,70 @@ func hasGoEnv() bool {
 	_, err := exec.LookPath("go")
 	return err == nil
 }
+
+// ★ 2026-08-19 工具成功率改进验证：
+// view_range 超界容错（不报错，自动 clamp）+ str_replace 诊断增强（相似行）。
+
+// TestStrReplaceEditor_ViewRangeClamp view_range 次元素超界 → 自动截断不报错。
+func TestStrReplaceEditor_ViewRangeClamp(t *testing.T) {
+	_, r := setupSRE(t)
+	ctx := context.Background()
+
+	// 次元素远超文件行数 → 截断到文件尾 + 提示
+	out, err := r.Execute(ctx, "str_replace_editor", `{"command":"view","path":"doc.txt","view_range":[1,999]}`)
+	if err != nil {
+		t.Fatalf("view_range 超界应容错（不报错）: %v", err)
+	}
+	for _, want := range []string{"1  alpha", "4  beta", "自动修正"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("截断输出缺少 %q:\n%s", want, out)
+		}
+	}
+
+	// 首元素超界 → 显示最后一行
+	out, err = r.Execute(ctx, "str_replace_editor", `{"command":"view","path":"doc.txt","view_range":[999,1000]}`)
+	if err != nil {
+		t.Fatalf("view_range 首元素超界应容错: %v", err)
+	}
+	if !strings.Contains(out, "4  beta") {
+		t.Errorf("首元素超界应显示最后一行:\n%s", out)
+	}
+}
+
+// TestStrReplaceEditor_StrReplaceDiagnose str_replace 未找到 → 诊断含相似行与建议。
+func TestStrReplaceEditor_StrReplaceDiagnose(t *testing.T) {
+	_, r := setupSRE(t)
+	ctx := context.Background()
+
+	// 未找到但 old_str 关键词在文件中（beta 存在于 doc.txt）
+	_, err := r.Execute(ctx, "str_replace_editor", `{"command":"str_replace","path":"doc.txt","old_str":"betta","new_str":"x"}`)
+	if err == nil {
+		t.Fatal("str_replace 应报错")
+	}
+	if !strings.Contains(err.Error(), "相似行") {
+		t.Errorf("诊断应含相似行提示，got: %.200s", err.Error())
+	}
+	if !strings.Contains(err.Error(), "建议") {
+		t.Errorf("诊断应含恢复建议，got: %.200s", err.Error())
+	}
+}
+
+// TestUnknownToolFriendly 未知工具错误提示工具集/恢复路径。
+func TestUnknownToolFriendly(t *testing.T) {
+	r := NewRegistry()
+	_, err := r.Execute(context.Background(), "no_such_tool_xyz", `{}`)
+	if err == nil || !strings.Contains(err.Error(), "工具集") {
+		t.Errorf("未知工具错误应提示工具集，got err=%v", err)
+	}
+}
+
+// TestListFilesNotFound list_files 目录不存在 → 明确提示。
+func TestListFilesNotFound(t *testing.T) {
+	root := t.TempDir()
+	r := NewRegistry()
+	RegisterDefaultTools(r, root)
+	_, err := r.Execute(context.Background(), "list_files", `{"path":"no_such_dir_abc"}`)
+	if err == nil || !strings.Contains(err.Error(), "目录不存在") {
+		t.Errorf("list_files 目录不存在应明确提示，got err=%v", err)
+	}
+}

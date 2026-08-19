@@ -150,6 +150,20 @@ func TestLoadAllSkills_EnabledFilter(t *testing.T) {
 
 // ─── L3 资源沙箱 ──
 
+// ★ 2026-08-19：docs/ 目录加入资源沙箱允许列表（技能自带文档资源加载）。
+func TestLoadSkillResource_DocsDirAllowed(t *testing.T) {
+	dir := t.TempDir()
+	writeTestFile(t, filepath.Join(dir, "docs", "build.md"), "# 构建\n细节")
+	s := Skill{Name: "docs-skill", DirPath: dir}
+	got, err := LoadSkillResource(&s, "docs/build.md", 0)
+	if err != nil {
+		t.Fatalf("docs/ 资源应允许: %v", err)
+	}
+	if !strings.Contains(got, "构建") {
+		t.Errorf("docs 资源内容异常: %q", got)
+	}
+}
+
 func TestLoadSkillResource_Valid(t *testing.T) {
 	dir := t.TempDir()
 	writeTestFile(t, filepath.Join(dir, "ref-skill", "SKILL.md"),

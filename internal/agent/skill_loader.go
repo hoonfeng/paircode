@@ -273,7 +273,7 @@ func parseList(s string) []string {
 // ─── L3 资源加载（沙箱）──
 
 // allowedResourceDirs 资源沙箱允许的子目录前缀。
-var allowedResourceDirs = []string{"references", "assets", "scripts"}
+var allowedResourceDirs = []string{"references", "assets", "scripts", "docs"}
 
 // LoadSkillResource 加载技能子资源（L3）：references/ assets/ scripts/ 下的文件。
 // relPath 必须位于这三个前缀目录内，防路径穿越。maxBytes>0 时限制大小。
