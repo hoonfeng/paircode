@@ -60,52 +60,6 @@ func TestWebSearchEmptyQuery(t *testing.T) {
 	}
 }
 
-// TestSearxngPreferred 配置 SearXNG 后 web_search 优先用之（JSON API），不走 DDG。
-func TestSearxngPreferred(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("format") != "json" {
-			t.Errorf("应带 format=json，得 %q", r.URL.RawQuery)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		io.WriteString(w, `{"results":[{"title":"Go 官网","url":"https://go.dev/","content":"可靠的软件"}]}`)
-	}))
-	defer srv.Close()
-	SetSearxngURL(srv.URL + "/") // 带尾斜杠，验证被清理
-	defer SetSearxngURL("")
-
-	out, err := webSearch(context.Background(), map[string]any{"query": "golang"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(out, "SearXNG") || !strings.Contains(out, "Go 官网") || !strings.Contains(out, "https://go.dev/") {
-		t.Errorf("未走 SearXNG 或结果缺失：%q", out)
-	}
-}
-
-// TestSearxngFallbackToDDG SearXNG 不可用（500/非 JSON）时静默回退 DuckDuckGo。
-func TestSearxngFallbackToDDG(t *testing.T) {
-	searx := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError) // 未开放 JSON / 故障
-	}))
-	defer searx.Close()
-	ddg := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		io.WriteString(w, `<a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2F&rut=x">回退结果</a>`)
-	}))
-	defer ddg.Close()
-	SetSearxngURL(searx.URL)
-	defer SetSearxngURL("")
-	old := ddgSearchURL
-	ddgSearchURL = ddg.URL
-	defer func() { ddgSearchURL = old }()
-
-	out, err := webSearch(context.Background(), map[string]any{"query": "golang"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(out, "回退结果") || strings.Contains(out, "SearXNG") {
-		t.Errorf("未回退到 DDG：%q", out)
-	}
-}
 
 // TestWebFetchRejectsNonHTTP 非 http(s) URL 应拒绝（挡 file:// 等）。
 func TestWebFetchRejectsNonHTTP(t *testing.T) {

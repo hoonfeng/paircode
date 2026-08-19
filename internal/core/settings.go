@@ -34,32 +34,15 @@ type AppSettings struct {
 	ReviewBlacklist    []string `json:"reviewBlacklist"`    // 审核黑名单：命中此列表的工具需要审核（为空=全部审核）
 	ReviewWhitelist    []string `json:"reviewWhitelist"`    // 审核白名单：命中此列表的工具跳过审核（黑名单优先）
 	Autonomous         bool     `json:"autonomous"`
-	AutoCollapse       bool   `json:"autoCollapse"`
 	MaxIterations      int    `json:"maxIterations"`
 	AutoIterate        bool   `json:"autoIterateOnRejection"`
 	SystemInstructions string `json:"systemInstructions"`
-	SearxngURL         string `json:"searxngUrl"`
 	IgnoreDirs         []string `json:"ignoreDirs"`
-	// 终端
-	DefaultShell string `json:"defaultShell"`
-	TermFontSize int    `json:"termFontSize"`
-	TermEncoding string `json:"termEncoding"`
 	// 外观
-	Theme              string `json:"theme"`
-	FontFamily         string `json:"fontFamily"`
-	EditorFontSize     int    `json:"editorFontSize"`
-	EditorFontBold      bool `json:"editorFontBold"`
-	EditorFontItalic    bool `json:"editorFontItalic"`
-	EditorFontUnderline bool `json:"editorFontUnderline"`
-	UIFontFamily    string `json:"uiFontFamily"`
-	UIFontBold      bool   `json:"uiFontBold"`
-	UIFontItalic    bool   `json:"uiFontItalic"`
-	UIFontUnderline bool   `json:"uiFontUnderline"`
-	HideMinimap     bool   `json:"hideMinimap"`
-	TabSize         int    `json:"tabSize"`
-	WordWrap        bool   `json:"wordWrap"`
+	Theme   string `json:"theme"`
+	FontSize int   `json:"fontSize"`
+	TabSize  int   `json:"tabSize"`
 	// MCP / Skills
-	AutoConnectMCP        bool              `json:"autoConnectMCP"`
 	SkillEnabledOverrides map[string]bool   `json:"skillEnabledOverrides"`
 	SkillStatusOverrides  map[string]string `json:"skillStatusOverrides"`
 	// 插件配置（插件通过 ctx.registerSettings 注册命名空间，值存这里）
@@ -112,10 +95,8 @@ func Default() AppSettings {
 		Provider: "deepseek", BaseURL: "https://api.deepseek.com/v1",
 		PlanModel: "deepseek-v4-pro", ExecuteModel: "deepseek-v4-flash", ReviewModel: "deepseek-v4-pro",
 		Temperature: "0.3", ThinkingMode: "thinking", MaxTokens: 131072, ContextMaxTokens: 64000,
-		MaxIterations: 50, AutoIterate: true, ReviewMode: "auto", AutoCollapse: true,
-		DefaultShell: "auto", TermFontSize: 13, TermEncoding: "auto",
-		Theme: "dark", EditorFontSize: 14, TabSize: 2, FontFamily: "'Cascadia Code', 'Fira Code', Consolas, monospace",
-		AutoConnectMCP:     true,
+		MaxIterations: 50, AutoIterate: true, ReviewMode: "auto",
+		Theme: "dark", FontSize: 14, TabSize: 2,
 	}
 }
 
@@ -141,6 +122,15 @@ func Load() bool {
 					} else {
 						Settings.ReviewMode = "manual"
 					}
+				}
+			}
+		}
+		// ★ 迁移旧版 editorFontSize 字段 → fontSize（2026-08-19 字段名对齐前端消费）
+		if _, hasNew := raw["fontSize"]; !hasNew {
+			if v, hasOld := raw["editorFontSize"]; hasOld {
+				var n int
+				if json.Unmarshal(v, &n) == nil && n > 0 {
+					Settings.FontSize = n
 				}
 			}
 		}

@@ -871,6 +871,30 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 	p.attachLoopRegister(loopFactoryObj)
 	ctxObj.Set("loopFactory", loopFactoryObj)
 
+	// ctx.providerFactory.register(apply)：注册 LLM Provider 参数装配器（配置消费插件化）。
+	// apply(current) → overrides | null：
+	//   current = { baseURL, apiKey, model, temperature, maxTokens, thinkingMode,
+	//               planModel, reviewModel }（当前存储基线参数快照）
+	//   返回同形状对象时按覆盖语义合并：字符串非空才覆盖、temperature≥0 才覆盖、
+	//   maxTokens>0 才覆盖；返回 null/undefined 表示不改动。
+	//   注册即替换全局 ProviderFactory 单槽位（后注册覆盖先注册），插件卸载时自动还原。
+	//   ★ 业务层（buildWebProvider/ReviewProvider/PlanProvider/工具集 LLM 分析）统一经
+	//     agent.ResolveProviderParams() 获取最终参数——Go 内核不再直接读配置业务字段。
+	providerFactoryObj := vm.NewObject()
+	providerFactoryObj.Set("register", func(call goja.FunctionCall) goja.Value {
+		applyVal := call.Argument(0)
+		applyFn, ok := goja.AssertFunction(applyVal)
+		if !ok {
+			panic(vm.NewTypeError("ctx.providerFactory.register: 参数必须是函数 apply(current) → overrides"))
+		}
+		bridge := &jsProviderFactoryBridge{vm: vm, apply: applyFn, plugin: p}
+		restore := ReplaceProviderFactory(bridge)
+		p.addCleanup(restore)
+		p.def.addDiag("注册 LLM Provider 装配器（ProviderFactory 单槽位，卸载自动还原）")
+		return goja.Undefined()
+	})
+	ctxObj.Set("providerFactory", providerFactoryObj)
+
 	// ctx.registerClientMethod(method, fn)：host 半暴露方法给浏览器 client 半
 	// 远程调用（D11 invoke RPC；对齐 harness @Remote('invoke') 的方法注册面）。
 	// 与 harness.handle 共用存储，但语义显式面向 client 半；浏览器侧经
@@ -1011,6 +1035,15 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 	defineAppProp("configDir", func() any { return core.ConfigDir() })
 	defineAppProp("recentProjects", func() any { return core.Settings.RecentProjects })
 	defineAppProp("workspaceFolders", func() any { return core.Settings.WorkspaceFolders })
+	// settings：完整配置快照（顶层 AppSettings + pluginSettings 命名空间）。
+	// ★ 配置消费插件化的读取入口：binding 字段存顶层，插件经 ctx.app.settings 读取
+	//   （ctx.getSettings 只读本插件命名空间，取不到顶层 binding 值）。
+	defineAppProp("settings", func() any {
+		b, _ := json.Marshal(core.Settings)
+		var m map[string]any
+		_ = json.Unmarshal(b, &m)
+		return m
+	})
 	ctxObj.Set("app", appObj)
 
 	// ctx.registerSettings(schema) / ctx.getSettings(key?) / ctx.setSettings(key, value)

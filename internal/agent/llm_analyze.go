@@ -17,8 +17,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-
-	"github.com/hoonfeng/paircode/internal/core"
 )
 
 // ToolsetIntentTags 可推荐的工具类别（语言无关；LLM 只能从其中选择）。
@@ -77,16 +75,18 @@ func (it *ProjectIntent) applyToProfile(p *ProjectProfile) {
 // toolsetLLMProvider 返回 LLM provider（工具集分析用）；nil 表示不可用（跳过分析）。
 // 包级变量便于测试替换（MockProvider 注入）。
 var toolsetLLMProvider = func() Provider {
-	if core.Settings.APIKey == "" || core.Settings.BaseURL == "" {
+	// ★ 配置消费插件化：统一经装配点解析（存储基线 → 插件装配器覆盖）。
+	cur := ResolveProviderParams()
+	if cur.APIKey == "" || cur.BaseURL == "" {
 		return nil
 	}
 	return &OpenAIProvider{
-		BaseURL:      core.Settings.BaseURL,
-		APIKey:       core.Settings.APIKey,
-		Model:        core.MainModel(),
+		BaseURL:      cur.BaseURL,
+		APIKey:       cur.APIKey,
+		Model:        cur.Model,
 		Temperature:  0.2,
 		MaxTokens:    1024,
-		ThinkingMode: core.Settings.ThinkingMode,
+		ThinkingMode: cur.ThinkingMode,
 	}
 }
 

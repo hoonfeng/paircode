@@ -13,11 +13,6 @@ return {
       fields: [
         { name: 'theme', label: '主题', type: 'select', binding: 'theme',
           options: ['dark', 'light'], hint: '深色 / 浅色主题' },
-        { name: 'uiFontFamily', label: '界面字体', type: 'text', binding: 'uiFontFamily', group: '界面字体',
-          placeholder: 'Cascadia Code, Consolas, monospace' },
-        { name: 'uiFontBold', label: '粗体', type: 'checkbox', binding: 'uiFontBold', group: '界面字体' },
-        { name: 'uiFontItalic', label: '斜体', type: 'checkbox', binding: 'uiFontItalic', group: '界面字体' },
-        { name: 'uiFontUnderline', label: '下划线', type: 'checkbox', binding: 'uiFontUnderline', group: '界面字体' },
       ],
     })
   },

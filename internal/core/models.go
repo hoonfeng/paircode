@@ -29,6 +29,8 @@ var (
 		"deepseek":          {BaseURL: "https://api.deepseek.com/v1", Models: []string{"deepseek-r1", "deepseek-v4-pro", "deepseek-v4-flash"}},
 		"openai":            {BaseURL: "https://api.openai.com/v1", Models: []string{"gpt-4o", "gpt-4o-mini", "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "o1", "o3-mini", "o4-mini"}},
 		"anthropic":         {BaseURL: "https://api.anthropic.com/v1", Models: []string{"claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-4-sonnet-20250514", "claude-4-haiku-latest"}},
+		"ollama":            {BaseURL: "http://localhost:11434/v1", Models: []string{"llama3.1", "qwen2.5", "deepseek-r1", "mistral"}},
+		"azure":             {BaseURL: "https://YOUR_RESOURCE.openai.azure.com/openai/v1", Models: []string{"YOUR_DEPLOYMENT"}},
 		"openai-compatible": {BaseURL: "", Models: []string{"custom"}},
 		"custom":            {BaseURL: "", Models: []string{"custom"}},
 	}

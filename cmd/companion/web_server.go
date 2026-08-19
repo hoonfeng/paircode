@@ -2556,7 +2556,7 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[chat] 收到发送请求 conv=%s len=%d autonomous=%v ws=%s",
 		req.ConvID, len(req.Message), req.Autonomous, req.WorkspaceRoot)
 
-	if !core.Configured() {
+	if !agent.ConfiguredProvider() {
 		jsonErr(w, "未配置 API key。请在设置面板中配置 API Key 和模型。")
 		return
 	}
@@ -2602,22 +2602,22 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 			opts.ReviewWhitelist = wrWhite
 		}
 	}
-	if core.Settings.ReviewMode == "auto" && core.Settings.ReviewModel != "" {
-		pm := strings.TrimSpace(core.Settings.PlanModel)
-		base := strings.TrimSpace(core.Settings.BaseURL)
-		key := strings.TrimSpace(core.Settings.APIKey)
-		if pm != "" && base != "" && key != "" {
-			opts.ReviewProvider = &agent.OpenAIProvider{BaseURL: base, APIKey: key, Model: pm, Temperature: -1, ThinkingMode: "non-thinking"}
+	// ★ 配置消费插件化：Review/Plan Provider 参数统一经装配点解析。
+	cur := agent.ResolveProviderParams()
+	if opts.ReviewMode == "auto" && cur.ReviewModel != "" {
+		pm := strings.TrimSpace(cur.PlanModel)
+		if pm != "" && cur.BaseURL != "" && cur.APIKey != "" {
+			opts.ReviewProvider = &agent.OpenAIProvider{BaseURL: cur.BaseURL, APIKey: cur.APIKey, Model: pm, Temperature: -1, ThinkingMode: "non-thinking"}
 		}
 	}
 
 	if req.Autonomous {
-		pm := strings.TrimSpace(core.Settings.PlanModel)
-		if pm != "" && core.Settings.BaseURL != "" && core.Settings.APIKey != "" {
+		pm := strings.TrimSpace(cur.PlanModel)
+		if pm != "" && cur.BaseURL != "" && cur.APIKey != "" {
 			opts.PlanProvider = &agent.OpenAIProvider{
-				BaseURL: core.Settings.BaseURL, APIKey: core.Settings.APIKey,
-				Model: pm, Temperature: core.Temperature(), MaxTokens: core.Settings.MaxTokens,
-				ThinkingMode: core.Settings.ThinkingMode,
+				BaseURL: cur.BaseURL, APIKey: cur.APIKey,
+				Model: pm, Temperature: cur.Temperature, MaxTokens: cur.MaxTokens,
+				ThinkingMode: cur.ThinkingMode,
 			}
 		} else if prov := buildWebProvider(); prov != nil {
 			opts.PlanProvider = prov

@@ -61,8 +61,8 @@ return {
         { name: 'reviewModel', label: '审核模型', type: 'text', binding: 'reviewModel',
           placeholder: 'deepseek-v4-pro', hint: '审核 Agent 使用的模型' },
         { name: 'temperature', label: '温度', type: 'select', binding: 'temperature',
-          options: ['0', '0.1', '0.3', '0.5', '0.7', '1.0'],
-          hint: '随机性：越低越确定，越高越发散' },
+          options: ['0', '0.1', '0.2', '0.3', '0.4', '0.5', '0.6', '0.7', '0.8', '0.9', '1.0', '1.2', '1.5', '2.0'],
+          hint: '随机性：越低越确定，越高越发散（0~2，deepseek 默认 1.0）' },
         { name: 'thinkingMode', label: '思考模式', type: 'select', binding: 'thinkingMode',
           options: ['thinking', 'non-thinking'], hint: 'thinking=深度思考（更慢更准）' },
         { name: 'maxTokens', label: '最大输出 Token', type: 'number', binding: 'maxTokens', min: 1024, max: 131072, step: 1024 },
@@ -79,21 +79,16 @@ return {
         { name: 'systemAppend', label: '系统提示词追加', type: 'textarea', default: '', hint: '追加到系统提示词末尾（如行为规范/角色设定）' },
         { name: 'maxIterations', label: '最大迭代数', type: 'number', default: 0, hint: '0=不覆盖（默认 50）' },
         { name: 'maxContextTokens', label: '上下文 token 上限', type: 'number', default: 0, hint: '0=不覆盖' },
-        { name: 'autonomous', label: '自主模式', type: 'checkbox', default: false, hint: '覆盖全局自主模式开关' },
+        { name: 'autonomous', label: '自主模式', type: 'checkbox', default: false, hint: '勾选=强制开启自主（不勾=跟随全局开关，不再强制关闭）' },
         { name: 'maxAutonomousMinutes', label: '自主时间预算（分钟）', type: 'number', default: 0, hint: '0=不覆盖' },
         { name: 'checkpointInterval', label: '检查点间隔（迭代数）', type: 'number', default: 0, hint: '0=不覆盖' },
         { name: 'reviewMode', label: '审核模式', type: 'select', default: '', options: ['', 'auto', 'manual', 'off'], hint: '空=不覆盖（auto=AI审核/manual=手动审批/off=放行）' },
-        { name: 'autoCommit', label: '完成自动提交', type: 'checkbox', default: false, hint: '覆盖完成自动提交开关' },
+        { name: 'autoCommit', label: '完成自动提交', type: 'checkbox', default: false, hint: '勾选=强制开启自动提交（不勾=跟随全局，不再强制关闭）' },
         { name: 'reviewBlacklist', label: '审核黑名单', type: 'text', default: '', hint: '逗号分隔工具名（命中需审核）' },
         { name: 'reviewWhitelist', label: '审核白名单', type: 'text', default: '', hint: '逗号分隔工具名（命中跳过审核，黑名单优先）' },
-        { name: 'autoCollapse', label: '自动折叠', type: 'checkbox', binding: 'autoCollapse' },
         { name: 'autoIterateOnRejection', label: '拒绝后自动迭代', type: 'checkbox', binding: 'autoIterateOnRejection' },
-        { name: 'searxngUrl', label: 'SearXNG URL', type: 'text', binding: 'searxngUrl',
-          placeholder: 'http://localhost:8080', hint: '可选：自建搜索实例' },
         { name: 'ignoreDirs', label: '忽略目录', type: 'tags', binding: 'ignoreDirs',
           hint: '逗号分隔（node_modules, dist, .git…）' },
-        { name: 'autoConnectMCP', label: '自动连接 MCP', type: 'checkbox', binding: 'autoConnectMCP',
-          hint: '启动时自动连接已配置的 MCP 服务器' },
       ],
     })
 
@@ -107,6 +102,35 @@ return {
       ],
     })
 
+    // ═══════════════════════════════════════════════════════════
+    // ★ 配置消费插件化（2026-08-19）：LLM Provider 参数装配器
+    //   Go 内核（buildWebProvider/Review/Plan/工具集分析）不再直接读配置业务字段，
+    //   统一经 agent.ResolveProviderParams() → 本装配器（ctx.providerFactory）获取。
+    //   本装配器是 AI 连接参数的唯一业务来源：读 ai 组配置（binding 顶层，经
+    //   ctx.app.settings 快照）→ 返回 overrides（非空字段覆盖）。
+    // ═══════════════════════════════════════════════════════════
+    ctx.providerFactory.register((current) => {
+      const s = (ctx.app && ctx.app.settings) || {};
+      const over = {};
+      const baseURL = (s.baseURL || '').trim();
+      const apiKey = (s.apiKey || '').trim();
+      const model = (s.executeModel || s.model || '').trim();
+      const planModel = (s.planModel || '').trim();
+      const reviewModel = (s.reviewModel || '').trim();
+      if (baseURL) over.baseURL = baseURL;
+      if (apiKey) over.apiKey = apiKey;
+      if (model) over.model = model;
+      if (planModel) over.planModel = planModel;
+      if (reviewModel) over.reviewModel = reviewModel;
+      if (s.temperature !== undefined && s.temperature !== null && s.temperature !== '') {
+        const t = parseFloat(s.temperature);
+        if (!isNaN(t) && t >= 0) over.temperature = t;
+      }
+      if (s.maxTokens && Number(s.maxTokens) > 0) over.maxTokens = Number(s.maxTokens);
+      if (s.thinkingMode) over.thinkingMode = s.thinkingMode;
+      return over;
+    });
+
     // ── 运行时读取配置（registerSettings 返回当前值=已存值合并默认）──
     const cfg = (reg && reg.value) || ctx.getSettings('agentloop') || {};
 
@@ -118,17 +142,24 @@ return {
       }
       if (cfg.maxIterations != null && Number(cfg.maxIterations) > 0) over.maxIterations = Number(cfg.maxIterations);
       if (cfg.maxContextTokens != null && Number(cfg.maxContextTokens) > 0) over.maxContextTokens = Number(cfg.maxContextTokens);
-      if (typeof cfg.autonomous === 'boolean') over.autonomous = cfg.autonomous;
+      // ★ 2026-08-19 修复：仅强制开启（true 才覆盖）——false 不再覆盖全局，
+      //   消除「保存设置面板即强制关闭全局自主模式」的默认值缺陷。
+      if (cfg.autonomous === true) over.autonomous = true;
       if (cfg.maxAutonomousMinutes != null && Number(cfg.maxAutonomousMinutes) > 0) over.maxAutonomousMinutes = Number(cfg.maxAutonomousMinutes);
       if (cfg.checkpointInterval != null && Number(cfg.checkpointInterval) > 0) over.checkpointInterval = Number(cfg.checkpointInterval);
       if (typeof cfg.reviewMode === 'string' && cfg.reviewMode) over.reviewMode = cfg.reviewMode;
-      if (typeof cfg.autoCommit === 'boolean') over.autoCommit = cfg.autoCommit;
+      // ★ 2026-08-19 修复：仅强制开启（true 才覆盖），false 不覆盖全局。
+      if (cfg.autoCommit === true) over.autoCommit = true;
       if (typeof cfg.reviewBlacklist === 'string' && cfg.reviewBlacklist) {
         over.reviewBlacklist = cfg.reviewBlacklist.split(/[,，]/).map(s => s.trim()).filter(Boolean);
       }
       if (typeof cfg.reviewWhitelist === 'string' && cfg.reviewWhitelist) {
         over.reviewWhitelist = cfg.reviewWhitelist.split(/[,，]/).map(s => s.trim()).filter(Boolean);
       }
+      // ai 组 contextMaxTokens（binding 顶层，经 ctx.app.settings 快照）→ 覆盖循环上下文窗口
+      const aiTop = (ctx.app && ctx.app.settings) || {};
+      const ctxMax = Number(aiTop.contextMaxTokens);
+      if (ctxMax > 0) over.maxContextTokens = ctxMax;
       return over;
     });
 

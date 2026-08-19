@@ -44,7 +44,7 @@ func HandleChatSend(w http.ResponseWriter, r *http.Request) {
 	if req.WorkspaceRoot == "" {
 		req.WorkspaceRoot = core.Root()
 	}
-	if !core.Configured() {
+	if !agent.ConfiguredProvider() {
 		jsonErr(w, "未配置 API key。请在设置面板中配置 API Key 和模型。")
 		return
 	}
@@ -63,12 +63,12 @@ func HandleChatSend(w http.ResponseWriter, r *http.Request) {
 	opts := BuildLoopOpts(req.ConvID, req.Message, req.Autonomous)
 	opts.WorkspaceRoot = req.WorkspaceRoot
 	opts.ReviewMode = core.Settings.ReviewMode
-	if core.Settings.ReviewMode == "auto" && core.Settings.ReviewModel != "" {
-		pm := strings.TrimSpace(core.Settings.PlanModel)
-		base := strings.TrimSpace(core.Settings.BaseURL)
-		key := strings.TrimSpace(core.Settings.APIKey)
-		if pm != "" && base != "" && key != "" {
-			opts.ReviewProvider = &agent.OpenAIProvider{BaseURL: base, APIKey: key, Model: pm, Temperature: -1, ThinkingMode: "non-thinking"}
+	// ★ 配置消费插件化：ReviewProvider 参数统一经装配点解析。
+	cur := agent.ResolveProviderParams()
+	if core.Settings.ReviewMode == "auto" && cur.ReviewModel != "" {
+		pm := strings.TrimSpace(cur.PlanModel)
+		if pm != "" && cur.BaseURL != "" && cur.APIKey != "" {
+			opts.ReviewProvider = &agent.OpenAIProvider{BaseURL: cur.BaseURL, APIKey: cur.APIKey, Model: pm, Temperature: -1, ThinkingMode: "non-thinking"}
 		}
 	}
 

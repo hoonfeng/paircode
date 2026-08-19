@@ -5,7 +5,6 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"html"
 	"io"
@@ -13,30 +12,9 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 )
 
-// ─── SearXNG 配置（设置面板「网络服务」→SearXNG 地址）──────────
-// 全局：宿主在设置加载/保存时经 SetSearxngURL 注入；为空则 web_search 用 DuckDuckGo。
-var (
-	searxngMu  sync.RWMutex
-	searxngURL string
-)
-
-// SetSearxngURL 设置自托管 SearXNG 实例地址（自动去尾斜杠；空=禁用，回退 DuckDuckGo）。
-// 复刻参考源 tools/api-config.ts 的 setSearxngUrl。
-func SetSearxngURL(u string) {
-	searxngMu.Lock()
-	searxngURL = strings.TrimRight(strings.TrimSpace(u), "/")
-	searxngMu.Unlock()
-}
-
-func getSearxngURL() string {
-	searxngMu.RLock()
-	defer searxngMu.RUnlock()
-	return searxngURL
-}
 
 var (
 	reScriptStyle = regexp.MustCompile(`(?is)<(script|style)\b[^>]*>.*?</(script|style)>`)
@@ -120,46 +98,7 @@ func webFetch(ctx context.Context, args map[string]any) (string, error) {
 // ddgSearchURL DuckDuckGo HTML 搜索端点（无需 key）；测试中可替换为 httptest。
 var ddgSearchURL = "https://html.duckduckgo.com/html/"
 
-// searxngResp SearXNG JSON API（/search?format=json）的结果结构（只取需要的字段）。
-type searxngResp struct {
-	Results []struct {
-		Title   string `json:"title"`
-		URL     string `json:"url"`
-		Content string `json:"content"`
-	} `json:"results"`
-}
 
-// searxngSearch 查自托管 SearXNG 实例（JSON API），格式化前 8 条 标题/链接/摘要。
-// 端点：{base}/search?q=...&format=json&language=auto。失败（含未开放 JSON 输出）返回 error→调用方回退 DDG。
-func searxngSearch(ctx context.Context, base, q string) (string, error) {
-	endpoint := base + "/search?format=json&language=auto&q=" + url.QueryEscape(q)
-	body, status, err := httpGetBytes(ctx, endpoint, webFetchMaxBody)
-	if err != nil {
-		return "", err
-	}
-	if status != http.StatusOK {
-		return "", fmt.Errorf("SearXNG HTTP %d", status)
-	}
-	var sr searxngResp
-	if err := json.Unmarshal(body, &sr); err != nil {
-		return "", err // 非 JSON（多半实例未开放 json 格式）→ 回退
-	}
-	if len(sr.Results) == 0 {
-		return "", fmt.Errorf("SearXNG 无结果")
-	}
-	var b strings.Builder
-	fmt.Fprintf(&b, "「%s」搜索结果（SearXNG）：\n", q)
-	for i, r := range sr.Results {
-		if i >= 8 {
-			break
-		}
-		fmt.Fprintf(&b, "\n%d. %s\n   %s\n", i+1, stripTags(r.Title), r.URL)
-		if s := stripTags(r.Content); s != "" {
-			fmt.Fprintf(&b, "   %s\n", s)
-		}
-	}
-	return b.String(), nil
-}
 
 var (
 	reDDGAnchor  = regexp.MustCompile(`(?is)<a\b([^>]*class="result__a"[^>]*)>(.*?)</a>`)
@@ -206,18 +145,13 @@ func parseDDGResults(htmlBody string) []ddgResult {
 	return out
 }
 
-// webSearch 搜索网络，返回前 8 条。已配置 SearXNG（设置→网络服务）则优先用之，
-// 失败/无结果再回退 DuckDuckGo（无需 key，尽力而为，依赖 DDG HTML，可能被限流/改版）。
+// webSearch 搜索网络，返回前 8 条。
+// ★ 2026-08-19：移除 SearXNG 分支（searxngUrl 配置无消费链路已删），统一走 DuckDuckGo
+//   （无需 key，尽力而为，依赖 DDG HTML，可能被限流/改版）。
 func webSearch(ctx context.Context, args map[string]any) (string, error) {
 	q := strings.TrimSpace(argStr(args, "query"))
 	if q == "" {
 		return "", fmt.Errorf("query 不能为空")
-	}
-	if base := getSearxngURL(); base != "" { // 优先自托管 SearXNG
-		if out, err := searxngSearch(ctx, base, q); err == nil && out != "" {
-			return out, nil
-		}
-		// 失败/空 → 静默回退 DuckDuckGo
 	}
 	body, status, err := httpGetBytes(ctx, ddgSearchURL+"?q="+url.QueryEscape(q), webFetchMaxBody)
 	if err != nil {

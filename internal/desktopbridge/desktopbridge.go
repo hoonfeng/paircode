@@ -478,17 +478,18 @@ func buildDesktopLoopOpts(convID, message string, autonomous bool) agent.LoopOpt
 }
 
 func buildDesktopProvider() agent.Provider {
-	s := core.Settings
-	if s.APIKey == "" || s.BaseURL == "" {
+	// ★ 配置消费插件化：Provider 参数统一经装配点解析（存储基线 → 插件装配器覆盖）。
+	cur := agent.ResolveProviderParams()
+	if cur.APIKey == "" || cur.BaseURL == "" {
 		return nil
 	}
 	return &agent.OpenAIProvider{
-		BaseURL:      s.BaseURL,
-		APIKey:       s.APIKey,
-		Model:        core.MainModel(),
-		Temperature:  core.Temperature(),
-		MaxTokens:    s.MaxTokens,
-		ThinkingMode: s.ThinkingMode,
+		BaseURL:      cur.BaseURL,
+		APIKey:       cur.APIKey,
+		Model:        cur.Model,
+		Temperature:  cur.Temperature,
+		MaxTokens:    cur.MaxTokens,
+		ThinkingMode: cur.ThinkingMode,
 	}
 }
 
