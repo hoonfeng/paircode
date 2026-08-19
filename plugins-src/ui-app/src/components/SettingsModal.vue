@@ -15,58 +15,66 @@
             <div v-if="activeTab === tab.key">
               <div v-for="grp in tab.groups" :key="grp.title || '__main'" class="setting-group">
                 <div v-if="grp.title" class="group-title">{{ grp.title }}</div>
-                <div v-for="f in grp.fields" :key="f.name" class="setting-row">
-                  <label class="field-label" :title="f.hint">{{ f.label }}</label>
+                <div v-for="f in grp.fields" :key="f.name" class="setting-row"
+                     :class="{ 'row-toggle': f.type === 'checkbox' }">
+                  <!-- checkbox：label 与开关同行 -->
+                  <template v-if="f.type === 'checkbox'">
+                    <label class="field-label" :title="f.hint">{{ f.label }}</label>
+                    <label class="pp-switch" :title="f.hint">
+                      <input type="checkbox" v-model="form[tab.key][f.name]" />
+                      <span class="pp-switch-track"></span>
+                    </label>
+                  </template>
 
-                  <!-- text / password -->
-                  <input v-if="f.type === 'text' || f.type === 'password'" :type="f.type === 'password' ? 'password' : 'text'"
-                         v-model="form[tab.key][f.name]" :placeholder="f.placeholder" />
+                  <!-- 其他类型：label 在上、控件在下、说明文字在控件下方（不挤占输入区） -->
+                  <template v-else>
+                    <label class="field-label" :title="f.hint">{{ f.label }}</label>
+                    <div class="field-control">
+                      <!-- text / password -->
+                      <input v-if="f.type === 'text' || f.type === 'password'" :type="f.type === 'password' ? 'password' : 'text'"
+                             v-model="form[tab.key][f.name]" :placeholder="f.placeholder" />
 
-                  <!-- number -->
-                  <input v-else-if="f.type === 'number'" type="number" v-model.number="form[tab.key][f.name]"
-                         :min="f.min" :max="f.max" :step="f.step" />
+                      <!-- number -->
+                      <input v-else-if="f.type === 'number'" type="number" v-model.number="form[tab.key][f.name]"
+                             :min="f.min" :max="f.max" :step="f.step" />
 
-                  <!-- checkbox（开关） -->
-                  <label v-else-if="f.type === 'checkbox'" class="pp-switch" :title="f.hint">
-                    <input type="checkbox" v-model="form[tab.key][f.name]" />
-                    <span class="pp-switch-track"></span>
-                  </label>
+                      <!-- select（optionsSource 驱动动态数据源：models=按服务商模型列表 / providers=服务商列表） -->
+                      <select v-else-if="f.type === 'select'" v-model="form[tab.key][f.name]" class="field-select" @change="onSelectChange(f)">
+                        <option v-for="o in dynamicOptions(tab.key, f)" :key="o" :value="o">{{ o }}</option>
+                      </select>
 
-                  <!-- select（optionsSource 驱动动态数据源：models=按服务商模型列表 / providers=服务商列表） -->
-                  <select v-else-if="f.type === 'select'" v-model="form[tab.key][f.name]" class="field-select" @change="onSelectChange(f)">
-                    <option v-for="o in dynamicOptions(tab.key, f)" :key="o" :value="o">{{ o }}</option>
-                  </select>
+                      <!-- textarea -->
+                      <textarea v-else-if="f.type === 'textarea'" v-model="form[tab.key][f.name]" class="field-textarea"
+                                rows="4" :placeholder="f.placeholder"></textarea>
 
-                  <!-- textarea -->
-                  <textarea v-else-if="f.type === 'textarea'" v-model="form[tab.key][f.name]" class="field-textarea"
-                            rows="4" :placeholder="f.placeholder"></textarea>
+                      <!-- slider -->
+                      <div v-else-if="f.type === 'slider'" class="slider-row">
+                        <input type="range" v-model.number="form[tab.key][f.name]"
+                               :min="f.min != null ? f.min : 0" :max="f.max != null ? f.max : 100" :step="f.step || 1" />
+                        <span class="slider-val">{{ form[tab.key][f.name] }}</span>
+                      </div>
 
-                  <!-- slider -->
-                  <div v-else-if="f.type === 'slider'" class="slider-row">
-                    <input type="range" v-model.number="form[tab.key][f.name]"
-                           :min="f.min != null ? f.min : 0" :max="f.max != null ? f.max : 100" :step="f.step || 1" />
-                    <span class="slider-val">{{ form[tab.key][f.name] }}</span>
-                  </div>
+                      <!-- color -->
+                      <div v-else-if="f.type === 'color'" class="color-row">
+                        <input type="color" v-model="form[tab.key][f.name]" />
+                        <code class="color-code">{{ form[tab.key][f.name] }}</code>
+                      </div>
 
-                  <!-- color -->
-                  <div v-else-if="f.type === 'color'" class="color-row">
-                    <input type="color" v-model="form[tab.key][f.name]" />
-                    <code class="color-code">{{ form[tab.key][f.name] }}</code>
-                  </div>
+                      <!-- tags（逗号分隔数组） -->
+                      <input v-else-if="f.type === 'tags'" type="text" class="field-tags"
+                             :value="tagsText(tab.key, f)" @input="onTagsInput(tab.key, f, $event)"
+                             :placeholder="f.placeholder || '逗号分隔'" />
 
-                  <!-- tags（逗号分隔数组） -->
-                  <input v-else-if="f.type === 'tags'" type="text" class="field-tags"
-                         :value="tagsText(tab.key, f)" @input="onTagsInput(tab.key, f, $event)"
-                         :placeholder="f.placeholder || '逗号分隔'" />
+                      <!-- project（平台特殊：项目级指令，经 /api/instructions 读写） -->
+                      <textarea v-else-if="f.type === 'project'" v-model="projectInst" class="field-textarea"
+                                rows="4" :placeholder="f.placeholder"></textarea>
 
-                  <!-- project（平台特殊：项目级指令，经 /api/instructions 读写） -->
-                  <textarea v-else-if="f.type === 'project'" v-model="projectInst" class="field-textarea"
-                            rows="4" :placeholder="f.placeholder"></textarea>
+                      <!-- 兜底 text -->
+                      <input v-else type="text" v-model="form[tab.key][f.name]" />
+                    </div>
 
-                  <!-- 兜底 text -->
-                  <input v-else type="text" v-model="form[tab.key][f.name]" />
-
-                  <span v-if="f.hint" class="setting-hint">{{ f.hint }}</span>
+                    <span v-if="f.hint" class="setting-hint">{{ f.hint }}</span>
+                  </template>
                 </div>
               </div>
             </div>
@@ -136,7 +144,12 @@ function dynamicOptions(tabKey, f) {
   }
   if (f.optionsSource === 'providers') {
     const list = (modelData.value && modelData.value.providers) || []
-    return list.length ? list : (f.options || [])
+    if (list.length) {
+      const cur = form[tabKey]?.[f.name]
+      if (cur && !list.includes(cur)) return [...list, cur] // 自定义服务商兜底显示（如用户手填的网关名）
+      return list
+    }
+    return f.options || []
   }
   return f.options || []
 }
@@ -316,21 +329,22 @@ h2 {
   text-transform: uppercase; opacity: .85;
 }
 .setting-row {
-  display: flex; align-items: center; gap: 10px;
-  padding: 7px 8px; margin-bottom: 4px; border-radius: 7px;
+  display: flex; flex-direction: column; gap: 5px;
+  padding: 8px 10px; margin-bottom: 6px; border-radius: 7px;
   transition: background .12s;
 }
 .setting-row:hover { background: var(--bg-hover, rgba(255,255,255,.04)); }
+.setting-row.row-toggle { flex-direction: row; align-items: center; justify-content: space-between; }
 .field-label {
-  width: 180px; flex-shrink: 0;
-  font-size: 13px; color: var(--text-primary, #ddd);
+  font-size: 13px; color: var(--text-primary, #ddd); font-weight: 500;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+.field-control { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .setting-row input[type="text"],
 .setting-row input[type="password"],
 .setting-row input[type="number"],
 .setting-row .field-select {
-  flex: 1; min-width: 0;
+  width: 100%; box-sizing: border-box;
   background: var(--input-bg, #14141f);
   border: 1px solid var(--border-color, #3a3a4a);
   color: var(--text-primary, #eee);
@@ -340,11 +354,11 @@ h2 {
 .setting-row input:focus,
 .setting-row select:focus { border-color: var(--accent, #4f8cff); }
 .setting-hint {
-  flex: 1; font-size: 11px; color: var(--text-secondary, #888);
-  line-height: 1.4; min-width: 0;
+  font-size: 11px; color: var(--text-secondary, #888);
+  line-height: 1.45; min-width: 0;
 }
 .field-textarea {
-  flex: 1; min-width: 0; resize: vertical;
+  width: 100%; box-sizing: border-box; resize: vertical;
   background: var(--input-bg, #14141f);
   border: 1px solid var(--border-color, #3a3a4a);
   color: var(--text-primary, #eee); border-radius: 6px;

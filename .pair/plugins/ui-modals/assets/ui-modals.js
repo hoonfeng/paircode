@@ -2097,27 +2097,29 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     class: "group-title"
   };
   const _hoisted_8$5 = ["title"];
-  const _hoisted_9$5 = ["type", "onUpdate:modelValue", "placeholder"];
-  const _hoisted_10$5 = ["onUpdate:modelValue", "min", "max", "step"];
+  const _hoisted_9$5 = ["title"];
+  const _hoisted_10$5 = ["onUpdate:modelValue"];
   const _hoisted_11$5 = ["title"];
-  const _hoisted_12$5 = ["onUpdate:modelValue"];
-  const _hoisted_13$4 = ["onUpdate:modelValue", "onChange"];
-  const _hoisted_14$4 = ["value"];
-  const _hoisted_15$3 = ["onUpdate:modelValue", "placeholder"];
-  const _hoisted_16$3 = { class: "slider-row" };
-  const _hoisted_17$3 = ["onUpdate:modelValue", "min", "max", "step"];
-  const _hoisted_18$3 = { class: "slider-val" };
-  const _hoisted_19$3 = { class: "color-row" };
-  const _hoisted_20$3 = ["onUpdate:modelValue"];
-  const _hoisted_21$2 = { class: "color-code" };
-  const _hoisted_22$2 = ["value", "onInput", "placeholder"];
-  const _hoisted_23$1 = ["placeholder"];
-  const _hoisted_24$1 = ["onUpdate:modelValue"];
-  const _hoisted_25$1 = {
-    key: 10,
+  const _hoisted_12$5 = { class: "field-control" };
+  const _hoisted_13$4 = ["type", "onUpdate:modelValue", "placeholder"];
+  const _hoisted_14$4 = ["onUpdate:modelValue", "min", "max", "step"];
+  const _hoisted_15$3 = ["onUpdate:modelValue", "onChange"];
+  const _hoisted_16$3 = ["value"];
+  const _hoisted_17$3 = ["onUpdate:modelValue", "placeholder"];
+  const _hoisted_18$3 = { class: "slider-row" };
+  const _hoisted_19$3 = ["onUpdate:modelValue", "min", "max", "step"];
+  const _hoisted_20$3 = { class: "slider-val" };
+  const _hoisted_21$2 = { class: "color-row" };
+  const _hoisted_22$2 = ["onUpdate:modelValue"];
+  const _hoisted_23$1 = { class: "color-code" };
+  const _hoisted_24$1 = ["value", "onInput", "placeholder"];
+  const _hoisted_25$1 = ["placeholder"];
+  const _hoisted_26$1 = ["onUpdate:modelValue"];
+  const _hoisted_27$1 = {
+    key: 0,
     class: "setting-hint"
   };
-  const _hoisted_26$1 = {
+  const _hoisted_28$1 = {
     key: 0,
     class: "settings-empty"
   };
@@ -2163,7 +2165,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         return m2[provider] || [];
       }
       function dynamicOptions(tabKey, f) {
-        var _a2, _b;
+        var _a2, _b, _c;
         if (f.optionsSource === "models") {
           const cur = (_a2 = form[tabKey]) == null ? void 0 : _a2[f.name];
           const list = modelsFor((_b = form["ai"]) == null ? void 0 : _b.provider);
@@ -2172,7 +2174,12 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         }
         if (f.optionsSource === "providers") {
           const list = modelData.value && modelData.value.providers || [];
-          return list.length ? list : f.options || [];
+          if (list.length) {
+            const cur = (_c = form[tabKey]) == null ? void 0 : _c[f.name];
+            if (cur && !list.includes(cur)) return [...list, cur];
+            return list;
+          }
+          return f.options || [];
         }
         return f.options || [];
       }
@@ -2356,222 +2363,243 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                                   vue.Fragment,
                                   null,
                                   vue.renderList(grp.fields, (f) => {
-                                    return vue.openBlock(), vue.createElementBlock("div", {
-                                      key: f.name,
-                                      class: "setting-row"
-                                    }, [
-                                      vue.createElementVNode("label", {
-                                        class: "field-label",
-                                        title: f.hint
-                                      }, vue.toDisplayString(f.label), 9, _hoisted_8$5),
-                                      vue.createCommentVNode(" text / password "),
-                                      f.type === "text" || f.type === "password" ? vue.withDirectives((vue.openBlock(), vue.createElementBlock("input", {
-                                        key: 0,
-                                        type: f.type === "password" ? "password" : "text",
-                                        "onUpdate:modelValue": ($event) => form[tab.key][f.name] = $event,
-                                        placeholder: f.placeholder
-                                      }, null, 8, _hoisted_9$5)), [
-                                        [vue.vModelDynamic, form[tab.key][f.name]]
-                                      ]) : f.type === "number" ? (vue.openBlock(), vue.createElementBlock(
-                                        vue.Fragment,
-                                        { key: 1 },
-                                        [
-                                          vue.createCommentVNode(" number "),
-                                          vue.withDirectives(vue.createElementVNode("input", {
-                                            type: "number",
-                                            "onUpdate:modelValue": ($event) => form[tab.key][f.name] = $event,
-                                            min: f.min,
-                                            max: f.max,
-                                            step: f.step
-                                          }, null, 8, _hoisted_10$5), [
-                                            [
-                                              vue.vModelText,
-                                              form[tab.key][f.name],
-                                              void 0,
-                                              { number: true }
-                                            ]
-                                          ])
-                                        ],
-                                        2112
-                                        /* STABLE_FRAGMENT, DEV_ROOT_FRAGMENT */
-                                      )) : f.type === "checkbox" ? (vue.openBlock(), vue.createElementBlock(
-                                        vue.Fragment,
-                                        { key: 2 },
-                                        [
-                                          vue.createCommentVNode(" checkbox（开关） "),
-                                          vue.createElementVNode("label", {
-                                            class: "pp-switch",
-                                            title: f.hint
-                                          }, [
-                                            vue.withDirectives(vue.createElementVNode("input", {
-                                              type: "checkbox",
-                                              "onUpdate:modelValue": ($event) => form[tab.key][f.name] = $event
-                                            }, null, 8, _hoisted_12$5), [
-                                              [vue.vModelCheckbox, form[tab.key][f.name]]
+                                    return vue.openBlock(), vue.createElementBlock(
+                                      "div",
+                                      {
+                                        key: f.name,
+                                        class: vue.normalizeClass(["setting-row", { "row-toggle": f.type === "checkbox" }])
+                                      },
+                                      [
+                                        vue.createCommentVNode(" checkbox：label 与开关同行 "),
+                                        f.type === "checkbox" ? (vue.openBlock(), vue.createElementBlock(
+                                          vue.Fragment,
+                                          { key: 0 },
+                                          [
+                                            vue.createElementVNode("label", {
+                                              class: "field-label",
+                                              title: f.hint
+                                            }, vue.toDisplayString(f.label), 9, _hoisted_8$5),
+                                            vue.createElementVNode("label", {
+                                              class: "pp-switch",
+                                              title: f.hint
+                                            }, [
+                                              vue.withDirectives(vue.createElementVNode("input", {
+                                                type: "checkbox",
+                                                "onUpdate:modelValue": ($event) => form[tab.key][f.name] = $event
+                                              }, null, 8, _hoisted_10$5), [
+                                                [vue.vModelCheckbox, form[tab.key][f.name]]
+                                              ]),
+                                              _cache[4] || (_cache[4] = vue.createElementVNode(
+                                                "span",
+                                                { class: "pp-switch-track" },
+                                                null,
+                                                -1
+                                                /* CACHED */
+                                              ))
+                                            ], 8, _hoisted_9$5)
+                                          ],
+                                          64
+                                          /* STABLE_FRAGMENT */
+                                        )) : (vue.openBlock(), vue.createElementBlock(
+                                          vue.Fragment,
+                                          { key: 1 },
+                                          [
+                                            vue.createCommentVNode(" 其他类型：label 在上、控件在下、说明文字在控件下方（不挤占输入区） "),
+                                            vue.createElementVNode("label", {
+                                              class: "field-label",
+                                              title: f.hint
+                                            }, vue.toDisplayString(f.label), 9, _hoisted_11$5),
+                                            vue.createElementVNode("div", _hoisted_12$5, [
+                                              vue.createCommentVNode(" text / password "),
+                                              f.type === "text" || f.type === "password" ? vue.withDirectives((vue.openBlock(), vue.createElementBlock("input", {
+                                                key: 0,
+                                                type: f.type === "password" ? "password" : "text",
+                                                "onUpdate:modelValue": ($event) => form[tab.key][f.name] = $event,
+                                                placeholder: f.placeholder
+                                              }, null, 8, _hoisted_13$4)), [
+                                                [vue.vModelDynamic, form[tab.key][f.name]]
+                                              ]) : f.type === "number" ? (vue.openBlock(), vue.createElementBlock(
+                                                vue.Fragment,
+                                                { key: 1 },
+                                                [
+                                                  vue.createCommentVNode(" number "),
+                                                  vue.withDirectives(vue.createElementVNode("input", {
+                                                    type: "number",
+                                                    "onUpdate:modelValue": ($event) => form[tab.key][f.name] = $event,
+                                                    min: f.min,
+                                                    max: f.max,
+                                                    step: f.step
+                                                  }, null, 8, _hoisted_14$4), [
+                                                    [
+                                                      vue.vModelText,
+                                                      form[tab.key][f.name],
+                                                      void 0,
+                                                      { number: true }
+                                                    ]
+                                                  ])
+                                                ],
+                                                2112
+                                                /* STABLE_FRAGMENT, DEV_ROOT_FRAGMENT */
+                                              )) : f.type === "select" ? (vue.openBlock(), vue.createElementBlock(
+                                                vue.Fragment,
+                                                { key: 2 },
+                                                [
+                                                  vue.createCommentVNode(" select（optionsSource 驱动动态数据源：models=按服务商模型列表 / providers=服务商列表） "),
+                                                  vue.withDirectives(vue.createElementVNode("select", {
+                                                    "onUpdate:modelValue": ($event) => form[tab.key][f.name] = $event,
+                                                    class: "field-select",
+                                                    onChange: ($event) => onSelectChange(f)
+                                                  }, [
+                                                    (vue.openBlock(true), vue.createElementBlock(
+                                                      vue.Fragment,
+                                                      null,
+                                                      vue.renderList(dynamicOptions(tab.key, f), (o) => {
+                                                        return vue.openBlock(), vue.createElementBlock("option", {
+                                                          key: o,
+                                                          value: o
+                                                        }, vue.toDisplayString(o), 9, _hoisted_16$3);
+                                                      }),
+                                                      128
+                                                      /* KEYED_FRAGMENT */
+                                                    ))
+                                                  ], 40, _hoisted_15$3), [
+                                                    [vue.vModelSelect, form[tab.key][f.name]]
+                                                  ])
+                                                ],
+                                                2112
+                                                /* STABLE_FRAGMENT, DEV_ROOT_FRAGMENT */
+                                              )) : f.type === "textarea" ? (vue.openBlock(), vue.createElementBlock(
+                                                vue.Fragment,
+                                                { key: 3 },
+                                                [
+                                                  vue.createCommentVNode(" textarea "),
+                                                  vue.withDirectives(vue.createElementVNode("textarea", {
+                                                    "onUpdate:modelValue": ($event) => form[tab.key][f.name] = $event,
+                                                    class: "field-textarea",
+                                                    rows: "4",
+                                                    placeholder: f.placeholder
+                                                  }, null, 8, _hoisted_17$3), [
+                                                    [vue.vModelText, form[tab.key][f.name]]
+                                                  ])
+                                                ],
+                                                2112
+                                                /* STABLE_FRAGMENT, DEV_ROOT_FRAGMENT */
+                                              )) : f.type === "slider" ? (vue.openBlock(), vue.createElementBlock(
+                                                vue.Fragment,
+                                                { key: 4 },
+                                                [
+                                                  vue.createCommentVNode(" slider "),
+                                                  vue.createElementVNode("div", _hoisted_18$3, [
+                                                    vue.withDirectives(vue.createElementVNode("input", {
+                                                      type: "range",
+                                                      "onUpdate:modelValue": ($event) => form[tab.key][f.name] = $event,
+                                                      min: f.min != null ? f.min : 0,
+                                                      max: f.max != null ? f.max : 100,
+                                                      step: f.step || 1
+                                                    }, null, 8, _hoisted_19$3), [
+                                                      [
+                                                        vue.vModelText,
+                                                        form[tab.key][f.name],
+                                                        void 0,
+                                                        { number: true }
+                                                      ]
+                                                    ]),
+                                                    vue.createElementVNode(
+                                                      "span",
+                                                      _hoisted_20$3,
+                                                      vue.toDisplayString(form[tab.key][f.name]),
+                                                      1
+                                                      /* TEXT */
+                                                    )
+                                                  ])
+                                                ],
+                                                2112
+                                                /* STABLE_FRAGMENT, DEV_ROOT_FRAGMENT */
+                                              )) : f.type === "color" ? (vue.openBlock(), vue.createElementBlock(
+                                                vue.Fragment,
+                                                { key: 5 },
+                                                [
+                                                  vue.createCommentVNode(" color "),
+                                                  vue.createElementVNode("div", _hoisted_21$2, [
+                                                    vue.withDirectives(vue.createElementVNode("input", {
+                                                      type: "color",
+                                                      "onUpdate:modelValue": ($event) => form[tab.key][f.name] = $event
+                                                    }, null, 8, _hoisted_22$2), [
+                                                      [vue.vModelText, form[tab.key][f.name]]
+                                                    ]),
+                                                    vue.createElementVNode(
+                                                      "code",
+                                                      _hoisted_23$1,
+                                                      vue.toDisplayString(form[tab.key][f.name]),
+                                                      1
+                                                      /* TEXT */
+                                                    )
+                                                  ])
+                                                ],
+                                                2112
+                                                /* STABLE_FRAGMENT, DEV_ROOT_FRAGMENT */
+                                              )) : f.type === "tags" ? (vue.openBlock(), vue.createElementBlock(
+                                                vue.Fragment,
+                                                { key: 6 },
+                                                [
+                                                  vue.createCommentVNode(" tags（逗号分隔数组） "),
+                                                  vue.createElementVNode("input", {
+                                                    type: "text",
+                                                    class: "field-tags",
+                                                    value: tagsText(tab.key, f),
+                                                    onInput: ($event) => onTagsInput(tab.key, f, $event),
+                                                    placeholder: f.placeholder || "逗号分隔"
+                                                  }, null, 40, _hoisted_24$1)
+                                                ],
+                                                2112
+                                                /* STABLE_FRAGMENT, DEV_ROOT_FRAGMENT */
+                                              )) : f.type === "project" ? (vue.openBlock(), vue.createElementBlock(
+                                                vue.Fragment,
+                                                { key: 7 },
+                                                [
+                                                  vue.createCommentVNode(" project（平台特殊：项目级指令，经 /api/instructions 读写） "),
+                                                  vue.withDirectives(vue.createElementVNode("textarea", {
+                                                    "onUpdate:modelValue": _cache[1] || (_cache[1] = ($event) => projectInst.value = $event),
+                                                    class: "field-textarea",
+                                                    rows: "4",
+                                                    placeholder: f.placeholder
+                                                  }, null, 8, _hoisted_25$1), [
+                                                    [vue.vModelText, projectInst.value]
+                                                  ])
+                                                ],
+                                                2112
+                                                /* STABLE_FRAGMENT, DEV_ROOT_FRAGMENT */
+                                              )) : (vue.openBlock(), vue.createElementBlock(
+                                                vue.Fragment,
+                                                { key: 8 },
+                                                [
+                                                  vue.createCommentVNode(" 兜底 text "),
+                                                  vue.withDirectives(vue.createElementVNode("input", {
+                                                    type: "text",
+                                                    "onUpdate:modelValue": ($event) => form[tab.key][f.name] = $event
+                                                  }, null, 8, _hoisted_26$1), [
+                                                    [vue.vModelText, form[tab.key][f.name]]
+                                                  ])
+                                                ],
+                                                2112
+                                                /* STABLE_FRAGMENT, DEV_ROOT_FRAGMENT */
+                                              ))
                                             ]),
-                                            _cache[4] || (_cache[4] = vue.createElementVNode(
+                                            f.hint ? (vue.openBlock(), vue.createElementBlock(
                                               "span",
-                                              { class: "pp-switch-track" },
-                                              null,
-                                              -1
-                                              /* CACHED */
-                                            ))
-                                          ], 8, _hoisted_11$5)
-                                        ],
-                                        2112
-                                        /* STABLE_FRAGMENT, DEV_ROOT_FRAGMENT */
-                                      )) : f.type === "select" ? (vue.openBlock(), vue.createElementBlock(
-                                        vue.Fragment,
-                                        { key: 3 },
-                                        [
-                                          vue.createCommentVNode(" select（optionsSource 驱动动态数据源：models=按服务商模型列表 / providers=服务商列表） "),
-                                          vue.withDirectives(vue.createElementVNode("select", {
-                                            "onUpdate:modelValue": ($event) => form[tab.key][f.name] = $event,
-                                            class: "field-select",
-                                            onChange: ($event) => onSelectChange(f)
-                                          }, [
-                                            (vue.openBlock(true), vue.createElementBlock(
-                                              vue.Fragment,
-                                              null,
-                                              vue.renderList(dynamicOptions(tab.key, f), (o) => {
-                                                return vue.openBlock(), vue.createElementBlock("option", {
-                                                  key: o,
-                                                  value: o
-                                                }, vue.toDisplayString(o), 9, _hoisted_14$4);
-                                              }),
-                                              128
-                                              /* KEYED_FRAGMENT */
-                                            ))
-                                          ], 40, _hoisted_13$4), [
-                                            [vue.vModelSelect, form[tab.key][f.name]]
-                                          ])
-                                        ],
-                                        2112
-                                        /* STABLE_FRAGMENT, DEV_ROOT_FRAGMENT */
-                                      )) : f.type === "textarea" ? (vue.openBlock(), vue.createElementBlock(
-                                        vue.Fragment,
-                                        { key: 4 },
-                                        [
-                                          vue.createCommentVNode(" textarea "),
-                                          vue.withDirectives(vue.createElementVNode("textarea", {
-                                            "onUpdate:modelValue": ($event) => form[tab.key][f.name] = $event,
-                                            class: "field-textarea",
-                                            rows: "4",
-                                            placeholder: f.placeholder
-                                          }, null, 8, _hoisted_15$3), [
-                                            [vue.vModelText, form[tab.key][f.name]]
-                                          ])
-                                        ],
-                                        2112
-                                        /* STABLE_FRAGMENT, DEV_ROOT_FRAGMENT */
-                                      )) : f.type === "slider" ? (vue.openBlock(), vue.createElementBlock(
-                                        vue.Fragment,
-                                        { key: 5 },
-                                        [
-                                          vue.createCommentVNode(" slider "),
-                                          vue.createElementVNode("div", _hoisted_16$3, [
-                                            vue.withDirectives(vue.createElementVNode("input", {
-                                              type: "range",
-                                              "onUpdate:modelValue": ($event) => form[tab.key][f.name] = $event,
-                                              min: f.min != null ? f.min : 0,
-                                              max: f.max != null ? f.max : 100,
-                                              step: f.step || 1
-                                            }, null, 8, _hoisted_17$3), [
-                                              [
-                                                vue.vModelText,
-                                                form[tab.key][f.name],
-                                                void 0,
-                                                { number: true }
-                                              ]
-                                            ]),
-                                            vue.createElementVNode(
-                                              "span",
-                                              _hoisted_18$3,
-                                              vue.toDisplayString(form[tab.key][f.name]),
+                                              _hoisted_27$1,
+                                              vue.toDisplayString(f.hint),
                                               1
                                               /* TEXT */
-                                            )
-                                          ])
-                                        ],
-                                        2112
-                                        /* STABLE_FRAGMENT, DEV_ROOT_FRAGMENT */
-                                      )) : f.type === "color" ? (vue.openBlock(), vue.createElementBlock(
-                                        vue.Fragment,
-                                        { key: 6 },
-                                        [
-                                          vue.createCommentVNode(" color "),
-                                          vue.createElementVNode("div", _hoisted_19$3, [
-                                            vue.withDirectives(vue.createElementVNode("input", {
-                                              type: "color",
-                                              "onUpdate:modelValue": ($event) => form[tab.key][f.name] = $event
-                                            }, null, 8, _hoisted_20$3), [
-                                              [vue.vModelText, form[tab.key][f.name]]
-                                            ]),
-                                            vue.createElementVNode(
-                                              "code",
-                                              _hoisted_21$2,
-                                              vue.toDisplayString(form[tab.key][f.name]),
-                                              1
-                                              /* TEXT */
-                                            )
-                                          ])
-                                        ],
-                                        2112
-                                        /* STABLE_FRAGMENT, DEV_ROOT_FRAGMENT */
-                                      )) : f.type === "tags" ? (vue.openBlock(), vue.createElementBlock(
-                                        vue.Fragment,
-                                        { key: 7 },
-                                        [
-                                          vue.createCommentVNode(" tags（逗号分隔数组） "),
-                                          vue.createElementVNode("input", {
-                                            type: "text",
-                                            class: "field-tags",
-                                            value: tagsText(tab.key, f),
-                                            onInput: ($event) => onTagsInput(tab.key, f, $event),
-                                            placeholder: f.placeholder || "逗号分隔"
-                                          }, null, 40, _hoisted_22$2)
-                                        ],
-                                        2112
-                                        /* STABLE_FRAGMENT, DEV_ROOT_FRAGMENT */
-                                      )) : f.type === "project" ? (vue.openBlock(), vue.createElementBlock(
-                                        vue.Fragment,
-                                        { key: 8 },
-                                        [
-                                          vue.createCommentVNode(" project（平台特殊：项目级指令，经 /api/instructions 读写） "),
-                                          vue.withDirectives(vue.createElementVNode("textarea", {
-                                            "onUpdate:modelValue": _cache[1] || (_cache[1] = ($event) => projectInst.value = $event),
-                                            class: "field-textarea",
-                                            rows: "4",
-                                            placeholder: f.placeholder
-                                          }, null, 8, _hoisted_23$1), [
-                                            [vue.vModelText, projectInst.value]
-                                          ])
-                                        ],
-                                        2112
-                                        /* STABLE_FRAGMENT, DEV_ROOT_FRAGMENT */
-                                      )) : (vue.openBlock(), vue.createElementBlock(
-                                        vue.Fragment,
-                                        { key: 9 },
-                                        [
-                                          vue.createCommentVNode(" 兜底 text "),
-                                          vue.withDirectives(vue.createElementVNode("input", {
-                                            type: "text",
-                                            "onUpdate:modelValue": ($event) => form[tab.key][f.name] = $event
-                                          }, null, 8, _hoisted_24$1), [
-                                            [vue.vModelText, form[tab.key][f.name]]
-                                          ])
-                                        ],
-                                        2112
-                                        /* STABLE_FRAGMENT, DEV_ROOT_FRAGMENT */
-                                      )),
-                                      f.hint ? (vue.openBlock(), vue.createElementBlock(
-                                        "span",
-                                        _hoisted_25$1,
-                                        vue.toDisplayString(f.hint),
-                                        1
-                                        /* TEXT */
-                                      )) : vue.createCommentVNode("v-if", true)
-                                    ]);
+                                            )) : vue.createCommentVNode("v-if", true)
+                                          ],
+                                          64
+                                          /* STABLE_FRAGMENT */
+                                        ))
+                                      ],
+                                      2
+                                      /* CLASS */
+                                    );
                                   }),
                                   128
                                   /* KEYED_FRAGMENT */
@@ -2590,7 +2618,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                   128
                   /* KEYED_FRAGMENT */
                 )),
-                !tabs.value.length ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_26$1, "暂无配置项（等待插件注册…）")) : vue.createCommentVNode("v-if", true)
+                !tabs.value.length ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_28$1, "暂无配置项（等待插件注册…）")) : vue.createCommentVNode("v-if", true)
               ])
             ]),
             vue.createElementVNode("div", { class: "modal-footer" }, [
@@ -2608,7 +2636,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       };
     }
   };
-  const SettingsModal = /* @__PURE__ */ _export_sfc(_sfc_main$7, [["__scopeId", "data-v-60f4e3d6"]]);
+  const SettingsModal = /* @__PURE__ */ _export_sfc(_sfc_main$7, [["__scopeId", "data-v-11cfe509"]]);
   const _hoisted_1$5 = { class: "modal-content sys-modal" };
   const _hoisted_2$5 = { class: "modal-header" };
   const _hoisted_3$5 = { class: "modal-body" };
