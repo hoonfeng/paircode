@@ -71,8 +71,7 @@
 
                       <!-- provider-manager（服务商维护面板：CRUD /api/models，独立保存，不参与普通表单） -->
                       <ProviderManager v-else-if="f.type === 'provider-manager'" @saved="loadModels" />
-                      <ModelParamsManager v-else-if="f.type === 'model-params-manager'" />
-
+                      
                       <!-- 兜底 text -->
                       <input v-else type="text" v-model="form[tab.key][f.name]" />
                     </div>
@@ -100,7 +99,6 @@ import { state, applyTheme } from '../ui-state.js'
 import api from '../api.js'
 import SvgIcon from './SvgIcon.vue'
 import ProviderManager from './ProviderManager.vue'
-import ModelParamsManager from './ModelParamsManager.vue'
 
 const emit = defineEmits(['close'])
 const activeTab = ref('')

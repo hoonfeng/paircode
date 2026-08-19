@@ -94,27 +94,17 @@ return {
       ],
     })
 
-      // ── 服务商：维护服务商列表（名称/Base URL/API Key/模型列表）──
+      // ── 服务商：维护服务商列表（名称/Base URL/API Key/模型列表 + 每模型参数）──
       // type='provider-manager'：SettingsModal 渲染 CRUD 面板，数据经 /api/models（config/models.json）。
+      // 模型参数（温度/思考档位/输出上限/上下文窗口）在服务商编辑表单内逐模型维护，
+      // 存 settings.json 顶层 modelParams（装配器按 服务商+模型 精确匹配）。
       // AI tab 的 provider 下拉（optionsSource='providers'）与模型下拉（optionsSource='models'）均来自此处维护的数据。
       ctx.registerSettings({
         key: 'providers',
         title: '服务商',
         fields: [
           { name: 'providers', label: '服务商列表', type: 'provider-manager',
-            hint: '维护服务商：名称、Base URL、API Key、可用模型列表。AI tab 的下拉与联动均来自此处。' },
-        ],
-      })
-
-      // ── 模型参数：每个模型独立配置生成参数（temperature/思考模式/输出上限/上下文窗口）──
-      // type='model-params-manager'：SettingsModal 渲染配置面板，数据存 settings.json 顶层 modelParams。
-      // 装配器按 服务商+模型 精确匹配；未配置的模型沿用默认。
-      ctx.registerSettings({
-        key: 'modelParams',
-        title: '模型参数',
-        fields: [
-          { name: 'modelParams', label: '模型参数配置', type: 'model-params-manager',
-            hint: '每个模型可独立配置：温度、思考模式、最大输出 Token、上下文窗口。AI tab 与 Agent 面板的全局参数已并入此处。' },
+            hint: '维护服务商：名称、Base URL、API Key、可用模型列表，及每模型独立参数（温度/思考/输出上限/上下文窗口）。AI tab 的下拉与联动均来自此处。' },
         ],
       })
 

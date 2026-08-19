@@ -35563,8 +35563,9 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
   const _hoisted_84 = { class: "ibb-model" };
   const _hoisted_85 = ["value"];
   const _hoisted_86 = ["value"];
-  const _hoisted_87 = ["title"];
-  const _hoisted_88 = ["disabled"];
+  const _hoisted_87 = ["value"];
+  const _hoisted_88 = ["title"];
+  const _hoisted_89 = ["disabled"];
   const _sfc_main$1 = {
     __name: "RightPanel",
     props: { panelMode: { type: Boolean, default: false } },
@@ -35582,6 +35583,17 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
       const modelData = vue.ref(null);
       const composerProvider = vue.ref("");
       const composerModel = vue.ref("");
+      const composerThinking = vue.ref("");
+      const THINK_TIERS = [
+        { v: "", label: "思考默认" },
+        { v: "none", label: "思考: none（关）" },
+        { v: "minimal", label: "思考: minimal（极简）" },
+        { v: "low", label: "思考: low（低）" },
+        { v: "medium", label: "思考: medium（中）" },
+        { v: "high", label: "思考: high（高）" },
+        { v: "xhigh", label: "思考: xhigh（超高）" },
+        { v: "max", label: "思考: max（最大化）" }
+      ];
       const modelProviders = vue.computed(() => modelData.value && modelData.value.providers || []);
       const composerModels = vue.computed(() => {
         const m2 = modelData.value && modelData.value.models || {};
@@ -35606,7 +35618,13 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
         else if (ms2.length) composerModel.value = ms2[0];
         onCmpModelChange();
       }
+      function initComposerThinking() {
+        const mp = uiState_js.state.settings && uiState_js.state.settings.modelParams || {};
+        const by = mp[composerProvider.value] && mp[composerProvider.value][composerModel.value] || null;
+        composerThinking.value = by && by.thinkingMode || "";
+      }
       async function onCmpModelChange() {
+        initComposerThinking();
         if (!composerProvider.value || !composerModel.value) return;
         const md = modelData.value || {};
         const top2 = { ...uiState_js.state.settings || {}, provider: composerProvider.value, executeModel: composerModel.value };
@@ -35618,6 +35636,30 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
           window.$toast && window.$toast("已切换：" + composerProvider.value + " / " + composerModel.value, "success");
         } catch (e3) {
           window.$toast && window.$toast("模型切换失败: " + (e3.message || e3), "error");
+        }
+      }
+      async function onCmpThinkingChange() {
+        if (!composerProvider.value || !composerModel.value) return;
+        const v3 = composerThinking.value;
+        const mp = JSON.parse(JSON.stringify(uiState_js.state.settings && uiState_js.state.settings.modelParams || {}));
+        if (!mp[composerProvider.value]) mp[composerProvider.value] = {};
+        const prev2 = mp[composerProvider.value][composerModel.value] || {};
+        if (v3) {
+          mp[composerProvider.value][composerModel.value] = { ...prev2, thinkingMode: v3 };
+        } else {
+          delete prev2.thinkingMode;
+          if (Object.keys(prev2).length) mp[composerProvider.value][composerModel.value] = prev2;
+          else delete mp[composerProvider.value][composerModel.value];
+          if (!Object.keys(mp[composerProvider.value]).length) delete mp[composerProvider.value];
+        }
+        const top2 = { ...uiState_js.state.settings || {}, modelParams: mp };
+        try {
+          await api.apiPut("/settings", { settings: top2, pluginSettings: uiState_js.state.settings && uiState_js.state.settings.pluginSettings || {} });
+          uiState_js.state.settings = top2;
+          window.$toast && window.$toast(v3 ? "思考档位已切换并记录：" + v3 + "（" + composerProvider.value + " / " + composerModel.value + "）" : "思考档位已恢复默认", "success");
+        } catch (e3) {
+          window.$toast && window.$toast("思考切换失败: " + (e3.message || e3), "error");
+          initComposerThinking();
         }
       }
       const feedbackText = vue.ref("");
@@ -36698,6 +36740,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
       vue.onMounted(() => {
         loadModelData();
         initComposerModel();
+        initComposerThinking();
         loadWsTokenStats();
         loadConvList();
         scrollToBottom();
@@ -36843,7 +36886,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                 name: "bot",
                 size: 16
               }),
-              _cache[12] || (_cache[12] = vue.createTextVNode(
+              _cache[13] || (_cache[13] = vue.createTextVNode(
                 " 对话",
                 -1
                 /* CACHED */
@@ -36982,7 +37025,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                           ref_key: "topSentinel",
                           ref: topSentinel
                         },
-                        [..._cache[13] || (_cache[13] = [
+                        [..._cache[14] || (_cache[14] = [
                           vue.createElementVNode(
                             "span",
                             null,
@@ -37026,7 +37069,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                           name: "git-branch",
                                           size: 10
                                         }),
-                                        _cache[14] || (_cache[14] = vue.createTextVNode(
+                                        _cache[15] || (_cache[15] = vue.createTextVNode(
                                           " 委派任务",
                                           -1
                                           /* CACHED */
@@ -37045,7 +37088,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                           name: "message-square",
                                           size: 10
                                         }),
-                                        _cache[15] || (_cache[15] = vue.createTextVNode(
+                                        _cache[16] || (_cache[16] = vue.createTextVNode(
                                           " 用户反馈",
                                           -1
                                           /* CACHED */
@@ -37100,7 +37143,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                           name: "undo",
                                           size: 11
                                         }),
-                                        _cache[16] || (_cache[16] = vue.createTextVNode(
+                                        _cache[17] || (_cache[17] = vue.createTextVNode(
                                           " 回退",
                                           -1
                                           /* CACHED */
@@ -37144,7 +37187,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                                 name: "message-square",
                                                 size: 11
                                               }),
-                                              _cache[17] || (_cache[17] = vue.createTextVNode(
+                                              _cache[18] || (_cache[18] = vue.createTextVNode(
                                                 " 用户反馈",
                                                 -1
                                                 /* CACHED */
@@ -37173,7 +37216,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                           class: "folded-summary",
                                           onClick: ($event) => combo.assistant._folded = !combo.assistant._folded
                                         }, [
-                                          _cache[18] || (_cache[18] = vue.createElementVNode(
+                                          _cache[19] || (_cache[19] = vue.createElementVNode(
                                             "svg",
                                             {
                                               class: "folded-chevron",
@@ -37193,7 +37236,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                             name: "list",
                                             size: 11
                                           }),
-                                          _cache[19] || (_cache[19] = vue.createElementVNode(
+                                          _cache[20] || (_cache[20] = vue.createElementVNode(
                                             "span",
                                             { class: "folded-title" },
                                             "完成摘要",
@@ -37217,7 +37260,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                               { key: si },
                                               [
                                                 seg.type === "thinking" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_39, [
-                                                  _cache[21] || (_cache[21] = vue.createElementVNode(
+                                                  _cache[22] || (_cache[22] = vue.createElementVNode(
                                                     "span",
                                                     { class: "tl-dot tl-dot-thinking" },
                                                     null,
@@ -37240,7 +37283,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                                         name: "message-square",
                                                         size: 12
                                                       }),
-                                                      _cache[20] || (_cache[20] = vue.createTextVNode(
+                                                      _cache[21] || (_cache[21] = vue.createTextVNode(
                                                         " 思考…",
                                                         -1
                                                         /* CACHED */
@@ -37254,7 +37297,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                                     }, "▲ 收起", 8, _hoisted_43)) : vue.createCommentVNode("v-if", true)
                                                   ])
                                                 ])) : seg.type === "tool_call" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_44, [
-                                                  _cache[28] || (_cache[28] = vue.createElementVNode(
+                                                  _cache[29] || (_cache[29] = vue.createElementVNode(
                                                     "span",
                                                     { class: "tl-dot tl-dot-tool" },
                                                     null,
@@ -37266,7 +37309,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                                       class: "tl-tc-header",
                                                       onClick: ($event) => seg._expanded = !seg._expanded
                                                     }, [
-                                                      !seg._expanded ? (vue.openBlock(), vue.createElementBlock("svg", _hoisted_47, [..._cache[22] || (_cache[22] = [
+                                                      !seg._expanded ? (vue.openBlock(), vue.createElementBlock("svg", _hoisted_47, [..._cache[23] || (_cache[23] = [
                                                         vue.createElementVNode(
                                                           "path",
                                                           { d: "M2.6 1.2 L6.8 4 L2.6 6.8 Z" },
@@ -37274,7 +37317,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                                           -1
                                                           /* CACHED */
                                                         )
-                                                      ])])) : (vue.openBlock(), vue.createElementBlock("svg", _hoisted_48, [..._cache[23] || (_cache[23] = [
+                                                      ])])) : (vue.openBlock(), vue.createElementBlock("svg", _hoisted_48, [..._cache[24] || (_cache[24] = [
                                                         vue.createElementVNode(
                                                           "path",
                                                           { d: "M1.2 2.6 L4 6.8 L6.8 2.6 Z" },
@@ -37316,7 +37359,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                                         { key: 0 },
                                                         [
                                                           vue.createElementVNode("div", _hoisted_53, [
-                                                            _cache[24] || (_cache[24] = vue.createElementVNode(
+                                                            _cache[25] || (_cache[25] = vue.createElementVNode(
                                                               "div",
                                                               { class: "tl-tc-section-title" },
                                                               "命令",
@@ -37332,7 +37375,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                                             )
                                                           ]),
                                                           seg.result ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_55, [
-                                                            _cache[25] || (_cache[25] = vue.createElementVNode(
+                                                            _cache[26] || (_cache[26] = vue.createElementVNode(
                                                               "div",
                                                               { class: "tl-tc-section-title" },
                                                               "输出",
@@ -37355,7 +37398,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                                         { key: 1 },
                                                         [
                                                           seg.argsRaw ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_57, [
-                                                            _cache[26] || (_cache[26] = vue.createElementVNode(
+                                                            _cache[27] || (_cache[27] = vue.createElementVNode(
                                                               "div",
                                                               { class: "tl-tc-section-title" },
                                                               "参数",
@@ -37373,7 +37416,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                                             ])
                                                           ])) : vue.createCommentVNode("v-if", true),
                                                           seg.result ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_58, [
-                                                            _cache[27] || (_cache[27] = vue.createElementVNode(
+                                                            _cache[28] || (_cache[28] = vue.createElementVNode(
                                                               "div",
                                                               { class: "tl-tc-section-title" },
                                                               "结果",
@@ -37397,7 +37440,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                                     ])) : vue.createCommentVNode("v-if", true)
                                                   ])
                                                 ])) : seg.type === "ask_user" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_59, [
-                                                  _cache[29] || (_cache[29] = vue.createElementVNode(
+                                                  _cache[30] || (_cache[30] = vue.createElementVNode(
                                                     "span",
                                                     { class: "tl-dot tl-dot-ask" },
                                                     null,
@@ -37415,7 +37458,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                                     }, null, 8, ["question", "ask-type", "options", "call-id", "answered", "onAnswer"])
                                                   ])
                                                 ])) : seg.type === "content" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_61, [
-                                                  _cache[30] || (_cache[30] = vue.createElementVNode(
+                                                  _cache[31] || (_cache[31] = vue.createElementVNode(
                                                     "span",
                                                     { class: "tl-dot tl-dot-content" },
                                                     null,
@@ -37450,7 +37493,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                         name: "chevron-up",
                                         size: 12
                                       }),
-                                      _cache[31] || (_cache[31] = vue.createElementVNode(
+                                      _cache[32] || (_cache[32] = vue.createElementVNode(
                                         "span",
                                         null,
                                         "折叠输出",
@@ -37464,7 +37507,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                       { key: 3 },
                                       [
                                         combo.assistant.content ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_64, [
-                                          _cache[32] || (_cache[32] = vue.createElementVNode(
+                                          _cache[33] || (_cache[33] = vue.createElementVNode(
                                             "span",
                                             { class: "tl-dot tl-dot-content" },
                                             null,
@@ -37490,7 +37533,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                       /* TEXT */
                                     )) : vue.createCommentVNode("v-if", true)
                                   ]),
-                                  combo.assistant._loading ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_67, [..._cache[33] || (_cache[33] = [
+                                  combo.assistant._loading ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_67, [..._cache[34] || (_cache[34] = [
                                     vue.createElementVNode(
                                       "span",
                                       { class: "dot" },
@@ -37523,7 +37566,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                           /* KEYED_FRAGMENT */
                         ))
                       ]),
-                      vue.unref(uiState_js.state).chatLoading && vue.unref(uiState_js.state).messages && vue.unref(uiState_js.state).messages.length > 0 ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_68, [..._cache[34] || (_cache[34] = [
+                      vue.unref(uiState_js.state).chatLoading && vue.unref(uiState_js.state).messages && vue.unref(uiState_js.state).messages.length > 0 ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_68, [..._cache[35] || (_cache[35] = [
                         vue.createElementVNode(
                           "span",
                           { class: "dot-pulse" },
@@ -37546,14 +37589,14 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                             size: 32
                           })
                         ]),
-                        _cache[35] || (_cache[35] = vue.createElementVNode(
+                        _cache[36] || (_cache[36] = vue.createElementVNode(
                           "div",
                           { class: "chat-empty-text" },
                           "开始新的对话",
                           -1
                           /* CACHED */
                         )),
-                        _cache[36] || (_cache[36] = vue.createElementVNode(
+                        _cache[37] || (_cache[37] = vue.createElementVNode(
                           "div",
                           { class: "chat-empty-hint" },
                           "发送消息即可与 AI 助手对话",
@@ -37575,7 +37618,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                               name: "chevron-down",
                               size: 14
                             }),
-                            _cache[37] || (_cache[37] = vue.createTextVNode(
+                            _cache[38] || (_cache[38] = vue.createTextVNode(
                               " 新消息",
                               -1
                               /* CACHED */
@@ -37637,14 +37680,14 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                       ),
                       vue.createCommentVNode(" ★ 未完成任务提示条：上次运行异常中断/未完成时显示，一键继续 "),
                       currentConvInterrupted.value ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_71, [
-                        _cache[39] || (_cache[39] = vue.createElementVNode(
+                        _cache[40] || (_cache[40] = vue.createElementVNode(
                           "span",
                           { class: "resume-icon" },
                           "⚠️",
                           -1
                           /* CACHED */
                         )),
-                        _cache[40] || (_cache[40] = vue.createElementVNode(
+                        _cache[41] || (_cache[41] = vue.createElementVNode(
                           "span",
                           { class: "resume-text" },
                           "上次任务未完成，本对话上下文与进度已保留，可直接继续",
@@ -37660,7 +37703,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                             name: "refresh",
                             size: 11
                           }),
-                          _cache[38] || (_cache[38] = vue.createTextVNode(
+                          _cache[39] || (_cache[39] = vue.createTextVNode(
                             " 继续任务 ",
                             -1
                             /* CACHED */
@@ -37824,9 +37867,36 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                 /* NEED_HYDRATION, NEED_PATCH */
                               ), [
                                 [vue.vModelSelect, composerModel.value]
+                              ]),
+                              vue.withDirectives(vue.createElementVNode(
+                                "select",
+                                {
+                                  "onUpdate:modelValue": _cache[9] || (_cache[9] = ($event) => composerThinking.value = $event),
+                                  class: "cmp-sel cmp-think",
+                                  onChange: onCmpThinkingChange,
+                                  title: "思考档位：临时切换并记录到该模型配置（OpenAI 定义：none/minimal/low/medium/high/xhigh/max）"
+                                },
+                                [
+                                  (vue.openBlock(), vue.createElementBlock(
+                                    vue.Fragment,
+                                    null,
+                                    vue.renderList(THINK_TIERS, (th) => {
+                                      return vue.createElementVNode("option", {
+                                        key: "k" + th.v,
+                                        value: th.v
+                                      }, vue.toDisplayString(th.label), 9, _hoisted_87);
+                                    }),
+                                    64
+                                    /* STABLE_FRAGMENT */
+                                  ))
+                                ],
+                                544
+                                /* NEED_HYDRATION, NEED_PATCH */
+                              ), [
+                                [vue.vModelSelect, composerThinking.value]
                               ])
                             ]),
-                            _cache[43] || (_cache[43] = vue.createElementVNode(
+                            _cache[44] || (_cache[44] = vue.createElementVNode(
                               "span",
                               { class: "obtn-sep" },
                               null,
@@ -37847,12 +37917,12 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                 1
                                 /* TEXT */
                               )
-                            ], 10, _hoisted_87),
+                            ], 10, _hoisted_88),
                             vue.createElementVNode(
                               "span",
                               {
                                 class: vue.normalizeClass(["obtn", { active: autoCollapse.value }]),
-                                onClick: _cache[9] || (_cache[9] = ($event) => toggleAuto("autoCollapse")),
+                                onClick: _cache[10] || (_cache[10] = ($event) => toggleAuto("autoCollapse")),
                                 title: "自动折叠：新消息发出时折叠旧输出，显示完成摘要"
                               },
                               [
@@ -37860,7 +37930,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                   name: "list",
                                   size: 12
                                 }),
-                                _cache[41] || (_cache[41] = vue.createTextVNode(
+                                _cache[42] || (_cache[42] = vue.createTextVNode(
                                   " 折叠",
                                   -1
                                   /* CACHED */
@@ -37869,7 +37939,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                               2
                               /* CLASS */
                             ),
-                            _cache[44] || (_cache[44] = vue.createElementVNode(
+                            _cache[45] || (_cache[45] = vue.createElementVNode(
                               "span",
                               { class: "obtn-sep" },
                               null,
@@ -37880,7 +37950,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                               "span",
                               {
                                 class: vue.normalizeClass(["obtn", "obtn-agent", { active: autonomous.value }]),
-                                onClick: _cache[10] || (_cache[10] = ($event) => toggleAuto("autonomous")),
+                                onClick: _cache[11] || (_cache[11] = ($event) => toggleAuto("autonomous")),
                                 title: "自主模式：开启=连续执行全部计划步骤，关闭=单次回复"
                               },
                               [
@@ -37889,7 +37959,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                   size: 12,
                                   color: "#d4a74e"
                                 }),
-                                _cache[42] || (_cache[42] = vue.createTextVNode(
+                                _cache[43] || (_cache[43] = vue.createTextVNode(
                                   " 自主",
                                   -1
                                   /* CACHED */
@@ -37909,7 +37979,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                               name: "send-plane",
                               size: 16
                             })
-                          ], 8, _hoisted_88)) : (vue.openBlock(), vue.createElementBlock("button", {
+                          ], 8, _hoisted_89)) : (vue.openBlock(), vue.createElementBlock("button", {
                             key: 1,
                             class: "stop-btn",
                             onClick: stopChat
@@ -37929,7 +37999,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                 vue.createCommentVNode(" 右侧：Debug日志面板 / 会话列表 "),
                 showDebugLog.value ? (vue.openBlock(), vue.createBlock(DebugLogPanel, {
                   key: 0,
-                  onClose: _cache[11] || (_cache[11] = ($event) => showDebugLog.value = false)
+                  onClose: _cache[12] || (_cache[12] = ($event) => showDebugLog.value = false)
                 })) : (vue.openBlock(), vue.createBlock(ConvSidebar, {
                   key: 1,
                   conversations: convList.value,
@@ -37952,7 +38022,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
       };
     }
   };
-  const RightPanel = /* @__PURE__ */ _export_sfc(_sfc_main$1, [["__scopeId", "data-v-6c4e083c"]]);
+  const RightPanel = /* @__PURE__ */ _export_sfc(_sfc_main$1, [["__scopeId", "data-v-4565a6fc"]]);
   const TOTAL_EXTRA = 4 + 1 + 200;
   const _sfc_main = {
     __name: "UiRightPanel",

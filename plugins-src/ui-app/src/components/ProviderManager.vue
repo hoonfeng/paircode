@@ -25,7 +25,25 @@
         <span class="pm-field-label">上下文大小（Token）</span>
         <input v-model="editForm.contextMaxTokens" type="number" min="0" step="1000" placeholder="0=不限制（模型级未配置时的默认窗口）" />
       </div>
-      <ModelEditor :models="editModels" @change="editModels = $event" />
+      <ModelEditor :models="editModels" @change="onModelsChange" />
+          <div class="pm-params">
+            <div class="pm-params-title">模型参数（每模型独立配置；对话里也可临时切换思考档位）</div>
+            <div v-if="editModels.length" class="pm-param-rows">
+              <div v-for="m in editModels" :key="m" class="pm-param-row">
+                <span class="pm-param-model" :title="m">{{ m }}</span>
+                <select v-model="editParams[m].temperature" title="温度（随机性）">
+                  <option v-for="t in TEMPS" :key="'t' + t" :value="t">{{ t === '' ? '温度默认' : t }}</option>
+                </select>
+                <select v-model="editParams[m].thinkingMode" title="思考档位（OpenAI 定义）">
+                  <option v-for="th in THINK_TIERS" :key="'k' + th.v" :value="th.v">{{ th.label }}</option>
+                </select>
+                <input v-model.number="editParams[m].maxTokens" type="number" min="0" step="1024" placeholder="输出 Token" title="最大输出 Token（0=默认）" />
+                <input v-model.number="editParams[m].contextMaxTokens" type="number" min="0" step="4096" placeholder="上下文" title="上下文窗口（0=默认）" />
+              </div>
+            </div>
+            <div v-else class="pm-params-empty">添加模型后，可逐模型配置温度/思考档位/输出上限/上下文窗口</div>
+          </div>
+
       <div class="pm-edit-actions">
         <button class="pm-btn pm-primary" :disabled="saving" @click="saveEdit">
           {{ saving ? '保存中…' : '保存服务商' }}
@@ -55,7 +73,25 @@
             <span class="pm-field-label">上下文大小（Token）</span>
             <input v-model="editForm.contextMaxTokens" type="number" min="0" step="1000" placeholder="0=不限制（模型级未配置时的默认窗口）" />
           </div>
-          <ModelEditor :models="editModels" @change="editModels = $event" />
+          <ModelEditor :models="editModels" @change="onModelsChange" />
+          <div class="pm-params">
+            <div class="pm-params-title">模型参数（每模型独立配置；对话里也可临时切换思考档位）</div>
+            <div v-if="editModels.length" class="pm-param-rows">
+              <div v-for="m in editModels" :key="m" class="pm-param-row">
+                <span class="pm-param-model" :title="m">{{ m }}</span>
+                <select v-model="editParams[m].temperature" title="温度（随机性）">
+                  <option v-for="t in TEMPS" :key="'t' + t" :value="t">{{ t === '' ? '温度默认' : t }}</option>
+                </select>
+                <select v-model="editParams[m].thinkingMode" title="思考档位（OpenAI 定义）">
+                  <option v-for="th in THINK_TIERS" :key="'k' + th.v" :value="th.v">{{ th.label }}</option>
+                </select>
+                <input v-model.number="editParams[m].maxTokens" type="number" min="0" step="1024" placeholder="输出 Token" title="最大输出 Token（0=默认）" />
+                <input v-model.number="editParams[m].contextMaxTokens" type="number" min="0" step="4096" placeholder="上下文" title="上下文窗口（0=默认）" />
+              </div>
+            </div>
+            <div v-else class="pm-params-empty">添加模型后，可逐模型配置温度/思考档位/输出上限/上下文窗口</div>
+          </div>
+
           <div class="pm-edit-actions">
             <button class="pm-btn pm-primary" :disabled="saving" @click="saveEdit">
               {{ saving ? '保存中…' : '保存服务商' }}
@@ -78,6 +114,7 @@
             <span v-if="!p.models.length" class="pm-none">（未配置模型）</span>
             <span v-for="m in p.models" :key="m" class="pm-tag">{{ m }}</span>
           </div>
+          <div v-if="paramsSummary(p.name)" class="pm-params-summary">{{ paramsSummary(p.name) }}</div>
         </div>
       </template>
     </div>
@@ -89,6 +126,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { state } from '../ui-state.js'
 import api from '../api.js'
 import ModelEditor from './ModelEditor.vue'
 
@@ -100,8 +138,27 @@ const providers = ref([])
 const editingName = ref('')        // '' = 不编辑；'__new__' = 新增；其他 = 编辑该服务商（就地展开）
 const editForm = ref({ name: '', baseURL: '', apiKey: '', contextMaxTokens: 0 })
 const editModels = ref([])
+const editParams = ref({})   // 模型级参数：{模型: {temperature, thinkingMode, maxTokens, contextMaxTokens}} → settings.json modelParams
 const error = ref('')
 const saving = ref(false)
+
+// 思考档位（OpenAI ReasoningEffort）+ 温度档位
+const THINK_TIERS = [
+  { v: '', label: '默认' },
+  { v: 'none', label: 'none（关闭）' },
+  { v: 'minimal', label: 'minimal（极简）' },
+  { v: 'low', label: 'low（低）' },
+  { v: 'medium', label: 'medium（中）' },
+  { v: 'high', label: 'high（高）' },
+  { v: 'xhigh', label: 'xhigh（超高）' },
+  { v: 'max', label: 'max（最大化）' },
+]
+const TEMPS = ['', '0', '0.1', '0.2', '0.3', '0.4', '0.5', '0.6', '0.7', '0.8', '0.9', '1.0', '1.2', '1.5', '2.0']
+
+function readProviderParams(providerName) {
+  const mp = (state.settings && state.settings.modelParams) || {}
+  return JSON.parse(JSON.stringify(mp[providerName] || {}))
+}
 
 async function load() {
   try {
@@ -124,13 +181,27 @@ function startAdd() {
   editingName.value = '__new__'
   editForm.value = { name: '', baseURL: '', apiKey: '', contextMaxTokens: 0 }
   editModels.value = []
+  editParams.value = {}
   error.value = ''
 }
 function startEdit(p) {
   editingName.value = p.name
   editForm.value = { name: p.name, baseURL: p.baseURL, apiKey: p.apiKey || '', contextMaxTokens: p.contextMaxTokens || 0 }
   editModels.value = [...(p.models || [])]
+  const params = readProviderParams(p.name)
+  // 为所有模型补默认参数键（模板 v-model 需要键存在）
+  for (const m of editModels.value) if (!params[m]) params[m] = { temperature: '', thinkingMode: '', maxTokens: 0, contextMaxTokens: 0 }
+  editParams.value = params
   error.value = ''
+}
+
+// 模型列表变化：新模型补参数键、移除模型清理参数
+function onModelsChange(list) {
+  const params = { ...editParams.value }
+  for (const m of list) if (!params[m]) params[m] = { temperature: '', thinkingMode: '', maxTokens: 0, contextMaxTokens: 0 }
+  for (const m of Object.keys(params)) if (!list.includes(m)) delete params[m]
+  editParams.value = params
+  editModels.value = list
 }
 function cancelEdit() { editingName.value = ''; error.value = '' }
 
@@ -155,6 +226,7 @@ async function saveEdit() {
   saving.value = true
   try {
     await api.saveModels(map)
+    await saveModelParams(name) // ★ 模型参数同步 settings.modelParams
     editingName.value = ''
     await load()
     emit('saved') // AI tab 下拉同步刷新
@@ -163,17 +235,52 @@ async function saveEdit() {
   } finally { saving.value = false }
 }
 
+// 将当前编辑的模型参数写回 settings.json 顶层 modelParams（仅保留非空项）
+async function saveModelParams(providerName) {
+  const mp = JSON.parse(JSON.stringify((state.settings && state.settings.modelParams) || {}))
+  const clean = {}
+  for (const [m, cfg] of Object.entries(editParams.value)) {
+    const c = cfg || {}
+    const out = {}
+    if (c.temperature !== '' && c.temperature !== undefined && c.temperature !== null) out.temperature = c.temperature
+    if (c.thinkingMode) out.thinkingMode = c.thinkingMode
+    if (Number(c.maxTokens) > 0) out.maxTokens = Number(c.maxTokens)
+    if (Number(c.contextMaxTokens) > 0) out.contextMaxTokens = Number(c.contextMaxTokens)
+    if (Object.keys(out).length) clean[m] = out
+  }
+  if (Object.keys(clean).length) mp[providerName] = clean
+  else delete mp[providerName]
+  const top = { ...(state.settings || {}), modelParams: mp }
+  await api.apiPut('/settings', { settings: top, pluginSettings: (state.settings && state.settings.pluginSettings) || {} })
+  state.settings = top
+}
+
 async function removeProvider(p) {
   if (!window.confirm(`删除服务商「${p.name}」？\n（AI tab 将不再可选该服务商）`)) return
   const map = snapshot()
   delete map[p.name]
   try {
     await api.saveModels(map)
+    // 同步清理该服务商的模型参数
+    const mp = JSON.parse(JSON.stringify((state.settings && state.settings.modelParams) || {}))
+    if (mp[p.name]) {
+      delete mp[p.name]
+      const top = { ...(state.settings || {}), modelParams: mp }
+      await api.apiPut('/settings', { settings: top, pluginSettings: (state.settings && state.settings.pluginSettings) || {} })
+      state.settings = top
+    }
     await load()
     emit('saved')
   } catch (e) {
     error.value = '删除失败: ' + (e.message || e)
   }
+}
+
+function paramsSummary(providerName) {
+  const mp = (state.settings && state.settings.modelParams) || {}
+  const by = mp[providerName] || {}
+  const n = Object.keys(by).length
+  return n ? '模型参数已配置 ' + n + ' 个' : ''
 }
 </script>
 
@@ -255,4 +362,27 @@ async function removeProvider(p) {
   border: 1px solid rgba(224,108,108,.3); border-radius: 6px;
   background: rgba(224,108,108,.08);
 }
+.pm-params { display: flex; flex-direction: column; gap: 6px; }
+.pm-params-title { font-size: 12px; color: var(--text-secondary, #999); font-weight: 600; }
+.pm-param-rows { display: flex; flex-direction: column; gap: 6px; }
+.pm-param-row {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 8px; border: 1px solid var(--border-color, #333);
+  border-radius: 6px; background: var(--bg-tertiary, rgba(0,0,0,.1));
+}
+.pm-param-model {
+  flex: 0 0 auto; max-width: 140px; font-size: 12px; font-weight: 500;
+  color: var(--text-primary, #ddd); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pm-param-row select, .pm-param-row input {
+  background: var(--input-bg, #14141f);
+  border: 1px solid var(--border-color, #3a3a4a);
+  color: var(--text-primary, #eee); border-radius: 5px;
+  padding: 4px 6px; font-size: 12px; outline: none; font-family: inherit;
+}
+.pm-param-row select { flex: 1.1; min-width: 0; }
+.pm-param-row input { flex: 0 0 84px; width: 84px; }
+.pm-param-row select:focus, .pm-param-row input:focus { border-color: var(--accent, #4f8cff); }
+.pm-params-empty { font-size: 12px; color: var(--text-secondary, #777); padding: 4px 0; }
+.pm-params-summary { font-size: 11px; color: var(--text-secondary, #999); }
 </style>
