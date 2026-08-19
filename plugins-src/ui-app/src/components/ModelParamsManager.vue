@@ -33,8 +33,13 @@
           <span>思考模式</span>
           <select v-model="form.thinkingMode">
             <option value="">默认</option>
-            <option value="thinking">thinking（深度思考，更慢更准）</option>
-            <option value="non-thinking">non-thinking（快速响应）</option>
+            <option value="none">none（关闭思考）</option>
+            <option value="minimal">minimal（极简思考）</option>
+            <option value="low">low（低强度）</option>
+            <option value="medium">medium（中等）</option>
+            <option value="high">high（高强度）</option>
+            <option value="xhigh">xhigh（超高强度）</option>
+            <option value="max">max（最大化思考）</option>
           </select>
         </label>
         <label class="mp-field">

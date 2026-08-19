@@ -151,15 +151,24 @@ return {
         }
         if (mp.thinkingMode) over.thinkingMode = mp.thinkingMode;
         if (mp.maxTokens && Number(mp.maxTokens) > 0) over.maxTokens = Number(mp.maxTokens);
-        if (mp.contextMaxTokens && Number(mp.contextMaxTokens) > 0) over.contextMaxTokens = Number(mp.contextMaxTokens);
-      } else {
+      }
+      // ★ 上下文窗口层级：模型级 > 服务商级（models.json 每服务商 contextMaxTokens）> 全局
+      const pctx = (current.providerContextMaxTokens && Number(current.providerContextMaxTokens) > 0)
+        ? Number(current.providerContextMaxTokens) : 0;
+      let cctx = (mp && mp.contextMaxTokens) ? Number(mp.contextMaxTokens) : 0;
+      if (!(cctx > 0) && pctx > 0) cctx = pctx;
+      if (!(cctx > 0) && s.contextMaxTokens) cctx = Number(s.contextMaxTokens);
+      if (cctx > 0) over.contextMaxTokens = cctx;
+      // ★ 全局温度/思考/输出（模型级与服务商级未配置时兜底，兼容旧配置）
+      if (!(mp && mp.temperature !== undefined && mp.temperature !== null && mp.temperature !== '')) {
         if (s.temperature !== undefined && s.temperature !== null && s.temperature !== '') {
           const t = parseFloat(s.temperature);
           if (!isNaN(t) && t >= 0) over.temperature = t;
         }
-        if (s.maxTokens && Number(s.maxTokens) > 0) over.maxTokens = Number(s.maxTokens);
-        if (s.thinkingMode) over.thinkingMode = s.thinkingMode;
-        if (s.contextMaxTokens && Number(s.contextMaxTokens) > 0) over.contextMaxTokens = Number(s.contextMaxTokens);
+      }
+      if (!(mp && mp.thinkingMode) && s.thinkingMode) over.thinkingMode = s.thinkingMode;
+      if (!(mp && mp.maxTokens && Number(mp.maxTokens) > 0) && s.maxTokens && Number(s.maxTokens) > 0) {
+        over.maxTokens = Number(s.maxTokens);
       }
       return over;
     });

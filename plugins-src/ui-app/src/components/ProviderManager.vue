@@ -21,6 +21,10 @@
         <span class="pm-field-label">API Key（该服务商独立保存）</span>
         <input v-model="editForm.apiKey" type="password" placeholder="sk-…" />
       </div>
+      <div class="pm-field">
+        <span class="pm-field-label">上下文大小（Token）</span>
+        <input v-model="editForm.contextMaxTokens" type="number" min="0" step="1000" placeholder="0=不限制（模型级未配置时的默认窗口）" />
+      </div>
       <ModelEditor :models="editModels" @change="editModels = $event" />
       <div class="pm-edit-actions">
         <button class="pm-btn pm-primary" :disabled="saving" @click="saveEdit">
@@ -47,6 +51,10 @@
             <span class="pm-field-label">API Key（该服务商独立保存）</span>
             <input v-model="editForm.apiKey" type="password" placeholder="sk-…" />
           </div>
+          <div class="pm-field">
+            <span class="pm-field-label">上下文大小（Token）</span>
+            <input v-model="editForm.contextMaxTokens" type="number" min="0" step="1000" placeholder="0=不限制（模型级未配置时的默认窗口）" />
+          </div>
           <ModelEditor :models="editModels" @change="editModels = $event" />
           <div class="pm-edit-actions">
             <button class="pm-btn pm-primary" :disabled="saving" @click="saveEdit">
@@ -65,6 +73,7 @@
           </div>
           <div class="pm-url" :title="p.baseURL">{{ p.baseURL || '未配置 Base URL' }}</div>
           <div class="pm-key" :class="{ 'pm-key-ok': p.apiKey }" :title="p.apiKey ? '已配置 API Key' : '未配置 API Key'">{{ p.apiKey ? 'API Key 已配置' : '未配置 API Key' }}</div>
+          <div class="pm-ctx">{{ p.contextMaxTokens > 0 ? ('上下文 ' + (p.contextMaxTokens / 1000).toFixed(0) + 'K Token') : '上下文 未限制' }}</div>
           <div class="pm-models">
             <span v-if="!p.models.length" class="pm-none">（未配置模型）</span>
             <span v-for="m in p.models" :key="m" class="pm-tag">{{ m }}</span>
@@ -89,7 +98,7 @@ const emit = defineEmits(['saved'])
 
 const providers = ref([])
 const editingName = ref('')        // '' = 不编辑；'__new__' = 新增；其他 = 编辑该服务商（就地展开）
-const editForm = ref({ name: '', baseURL: '', apiKey: '' })
+const editForm = ref({ name: '', baseURL: '', apiKey: '', contextMaxTokens: 0 })
 const editModels = ref([])
 const error = ref('')
 const saving = ref(false)
@@ -101,6 +110,7 @@ async function load() {
       name,
       baseURL: (d.providerBaseURLs || {})[name] || '',
       apiKey: (d.providerKeys || {})[name] || '',
+      contextMaxTokens: (d.providerContexts || {})[name] || 0, // ★ 服务商级默认上下文窗口
       models: (d.models || {})[name] || [],
     }))
     error.value = ''
@@ -112,13 +122,13 @@ onMounted(load)
 
 function startAdd() {
   editingName.value = '__new__'
-  editForm.value = { name: '', baseURL: '', apiKey: '' }
+  editForm.value = { name: '', baseURL: '', apiKey: '', contextMaxTokens: 0 }
   editModels.value = []
   error.value = ''
 }
 function startEdit(p) {
   editingName.value = p.name
-  editForm.value = { name: p.name, baseURL: p.baseURL, apiKey: p.apiKey || '' }
+  editForm.value = { name: p.name, baseURL: p.baseURL, apiKey: p.apiKey || '', contextMaxTokens: p.contextMaxTokens || 0 }
   editModels.value = [...(p.models || [])]
   error.value = ''
 }
@@ -127,7 +137,7 @@ function cancelEdit() { editingName.value = ''; error.value = '' }
 // 当前列表 → 全量快照 map（供 POST /api/models）
 function snapshot() {
   const map = {}
-  for (const p of providers.value) map[p.name] = { baseURL: p.baseURL, models: p.models, apiKey: p.apiKey || '' }
+  for (const p of providers.value) map[p.name] = { baseURL: p.baseURL, models: p.models, apiKey: p.apiKey || '', contextMaxTokens: p.contextMaxTokens || 0 }
   return map
 }
 
@@ -136,7 +146,12 @@ async function saveEdit() {
   if (!name) { error.value = '服务商名称不能为空'; return }
   const map = snapshot()
   if (editingName.value === '__new__' && map[name]) { error.value = `服务商「${name}」已存在`; return }
-  map[name] = { baseURL: editForm.value.baseURL.trim(), models: editModels.value, apiKey: (editForm.value.apiKey || '').trim() }
+  map[name] = {
+    baseURL: editForm.value.baseURL.trim(),
+    models: editModels.value,
+    apiKey: (editForm.value.apiKey || '').trim(),
+    contextMaxTokens: Math.max(0, Number(editForm.value.contextMaxTokens) || 0), // ★ 服务商级默认上下文窗口
+  }
   saving.value = true
   try {
     await api.saveModels(map)
@@ -224,6 +239,7 @@ async function removeProvider(p) {
   font-size: 11px; color: var(--text-secondary, #999);
   word-break: break-all; line-height: 1.5;
 }
+.pm-ctx { font-size: 11px; color: var(--text-secondary, #999); }
 .pm-models { display: flex; flex-wrap: wrap; gap: 5px; }
 .pm-tag {
   font-size: 11px; padding: 2px 9px; border-radius: 10px;

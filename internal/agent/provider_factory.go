@@ -25,8 +25,9 @@ type ProviderParams struct {
 	ThinkingMode     string                               // non-thinking/thinking/thinking_max；空=不下发
 	PlanModel        string                               // 规划模型（自主模式分解任务用）
 	ReviewModel      string                               // 审核模型（AI 审核用）
-	ContextMaxTokens int                                  // ★ 模型级上下文窗口（0=不传）
-	ModelParams      map[string]map[string]core.ModelParamEntry // ★ 模型级参数表（服务商 → 模型 → 参数），供装配器按当前模型取
+	ContextMaxTokens         int                                  // ★ 模型级上下文窗口（0=不传）
+	ProviderContextMaxTokens int                                  // ★ 服务商级默认上下文窗口（models.json 每服务商配置；0=未配置，供装配器兜底）
+	ModelParams              map[string]map[string]core.ModelParamEntry // ★ 模型级参数表（服务商 → 模型 → 参数），供装配器按当前模型取
 }
 
 // ProviderFactory 装配 LLM Provider 参数的工厂接口（对齐 LoopFactory 单槽位语义）。
@@ -87,11 +88,12 @@ func ResolveProviderParams() ProviderParams {
 		Model:            core.MainModel(),
 		Temperature:      core.Temperature(),
 		MaxTokens:        core.Settings.MaxTokens,
-		ThinkingMode:     core.Settings.ThinkingMode,
-		ContextMaxTokens: core.Settings.ContextMaxTokens,
-		PlanModel:        core.Settings.PlanModel,
-		ReviewModel:      core.Settings.ReviewModel,
-		ModelParams:      core.Settings.ModelParams,
+		ThinkingMode:             core.Settings.ThinkingMode,
+		ContextMaxTokens:         core.Settings.ContextMaxTokens,
+		ProviderContextMaxTokens: core.GetProviderContextMaxToken(provider), // ★ 服务商级默认上下文（模型级未配置时兜底）
+		PlanModel:                core.Settings.PlanModel,
+		ReviewModel:              core.Settings.ReviewModel,
+		ModelParams:              core.Settings.ModelParams,
 	}
 	return ProviderFactoryNow().Apply(cur)
 }

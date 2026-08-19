@@ -482,10 +482,11 @@ func HandleModels(w http.ResponseWriter, r *http.Request) {
 		modelMap[p] = core.GetModels(p)
 	}
 	jsonResp(w, map[string]any{
-		"providers":        providers,
-		"models":           modelMap,
-		"providerBaseURLs": core.GetProviderBaseURLs(),
-		"providerKeys":     core.GetProviderAPIKeys(), // ★ 服务商独立 API Key（切服务商自动带出）
+		"providers":          providers,
+		"models":             modelMap,
+		"providerBaseURLs":   core.GetProviderBaseURLs(),
+		"providerKeys":       core.GetProviderAPIKeys(),       // ★ 服务商独立 API Key（切服务商自动带出）
+		"providerContexts":   core.GetProviderContextMaxTokens(), // ★ 服务商级默认上下文窗口（模型级可覆盖）
 	})
 }
 

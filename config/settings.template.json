@@ -7,7 +7,7 @@
   "executeModel": "deepseek-v4-flash",
   "reviewModel": "deepseek-v4-flash",
   "temperature": 1.0,
-  "thinkingMode": "thinking",
+  "thinkingMode": "high",
   "maxTokens": 131072,
   "contextMaxTokens": 1000000,
   "compressEnabled": true,

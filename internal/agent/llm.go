@@ -69,37 +69,53 @@ type OpenAIProvider struct {
 
 func (p *OpenAIProvider) Name() string { return "openai:" + p.Model }
 
-// applyThinking 把思考模式下发到请求体。
+// normalizeThinkingMode 把存储值归一为 OpenAI 思考档位枚举：
+// none / minimal / low / medium / high / xhigh / max（OpenAI 官方 ReasoningEffort 定义）。
+// ★ 兼容旧值：non-thinking→none（关闭）、thinking→high、thinking_max→max。
+func normalizeThinkingMode(mode string) string {
+	switch mode {
+	case "":
+		return "" // 未配置：不下发思考参数（用服务端默认）
+	case "non-thinking", "none":
+		return "none"
+	case "minimal":
+		return "minimal"
+	case "low":
+		return "low"
+	case "medium":
+		return "medium"
+	case "thinking", "high":
+		return "high"
+	case "xhigh":
+		return "xhigh"
+	case "thinking_max", "max":
+		return "max"
+	}
+	return ""
+}
+
+// applyThinking 把思考档位下发到请求体（按 OpenAI reasoning_effort 档位分档）。
 // DeepSeek V4 系模型（model 含 "v4"）：完整支持 thinking{enabled/disabled} + reasoning_effort。
 // 非 v4 模型（如 OpenAI o-series、其他兼容模型）：仅下发 reasoning_effort（OpenAI 兼容），
-// 不支持的服务端会忽略未知参数，安全无副作用。non-thinking 对非 v4 不下发（用服务端默认）。
+// 不支持的服务端会忽略未知参数，安全无副作用。none 关闭思考（v4 显式 disabled；非 v4 不下发用服务端默认）。
 func applyThinking(body map[string]any, model, mode string) {
-	if mode == "" {
-		return
+	eff := normalizeThinkingMode(mode)
+	if eff == "" {
+		return // 未配置：不下发思考参数（用服务端默认行为）
 	}
-	// DeepSeek V4 系：完整 thinking + reasoning_effort 支持
-	if strings.Contains(model, "v4") {
-		if mode == "non-thinking" {
+	if eff == "none" {
+		// 显式关闭：v4 系下 thinking disabled；非 v4 不下发（用服务端默认行为）
+		if strings.Contains(model, "v4") {
 			body["thinking"] = map[string]any{"type": "disabled"}
-			return
 		}
-		body["thinking"] = map[string]any{"type": "enabled"}
-		eff := "high"
-		if mode == "thinking_max" {
-			eff = "max"
-		}
-		body["reasoning_effort"] = eff
 		return
 	}
-	// 非 v4 模型：尝试 reasoning_effort（OpenAI o-series / 兼容模型）
-	// 仅对 thinking/thinking_max 下发；non-thinking 不下发（用服务端默认行为）
-	if mode == "thinking" || mode == "thinking_max" {
-		eff := "high"
-		if mode == "thinking_max" {
-			eff = "max"
-		}
-		body["reasoning_effort"] = eff
+	// DeepSeek V4 系：thinking enabled + reasoning_effort 档位
+	if strings.Contains(model, "v4") {
+		body["thinking"] = map[string]any{"type": "enabled"}
 	}
+	// 非 v4 模型仅下发 reasoning_effort（OpenAI o-series / 兼容模型；不支持的服务端会忽略）
+	body["reasoning_effort"] = eff
 }
 
 // sanitizeToolPairing 修复消息列表中的工具调用配对，确保满足 OpenAI 兼容 API 的契约：

@@ -54,7 +54,7 @@ type AppSettings struct {
 // ModelParamEntry 单个模型的独立生成参数（模型级配置，覆盖全局默认）。
 type ModelParamEntry struct {
 	Temperature      string `json:"temperature,omitempty"`      // 随机性（"0"~"2.0"，空=不覆盖）
-	ThinkingMode     string `json:"thinkingMode,omitempty"`     // thinking/non-thinking，空=不覆盖
+	ThinkingMode     string `json:"thinkingMode,omitempty"`     // OpenAI 思考档位 none/minimal/low/medium/high/xhigh/max，空=不覆盖
 	MaxTokens        int    `json:"maxTokens,omitempty"`        // 最大输出 token，0=不覆盖
 	ContextMaxTokens int    `json:"contextMaxTokens,omitempty"` // 上下文窗口，0=不覆盖
 }
@@ -104,7 +104,7 @@ func Default() AppSettings {
 	return AppSettings{
 		Provider: "deepseek", BaseURL: "https://api.deepseek.com/v1",
 		PlanModel: "deepseek-v4-pro", ExecuteModel: "deepseek-v4-flash", ReviewModel: "deepseek-v4-pro",
-		Temperature: "0.3", ThinkingMode: "thinking", MaxTokens: 131072, ContextMaxTokens: 64000,
+		Temperature: "0.3", ThinkingMode: "high", MaxTokens: 131072, ContextMaxTokens: 64000,
 		MaxIterations: 50, AutoIterate: true, ReviewMode: "auto",
 		Theme: "dark", FontSize: 14, TabSize: 2,
 	}

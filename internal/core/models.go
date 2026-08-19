@@ -12,9 +12,10 @@ import (
 
 // ProviderEntry 一个服务商的信息，含 API 基地址和可用模型列表。
 type ProviderEntry struct {
-	BaseURL string   `json:"baseURL"`
-	Models  []string `json:"models"`
-	APIKey  string   `json:"apiKey,omitempty"` // ★ 2026-08-20 服务商独立 API Key（切换服务商自动带出）
+	BaseURL          string   `json:"baseURL"`
+	Models           []string `json:"models"`
+	APIKey           string   `json:"apiKey,omitempty"`            // ★ 2026-08-20 服务商独立 API Key（切换服务商自动带出）
+	ContextMaxTokens int      `json:"contextMaxTokens,omitempty"`   // ★ 2026-08-20 服务商级默认上下文窗口（Token；0=不限制/未配置，模型级可覆盖）
 }
 
 // ModelListMap 按服务商分组，key=服务商名，value=ProviderEntry。
@@ -119,6 +120,29 @@ func GetProviderAPIKeys() map[string]string {
 		out[k] = v.APIKey
 	}
 	return out
+}
+
+// GetProviderContextMaxTokens 返回各服务商默认上下文窗口（Token；0=未配置）。
+func GetProviderContextMaxTokens() map[string]int {
+	if ModelList == nil {
+		LoadModelList()
+	}
+	out := make(map[string]int, len(ModelList))
+	for k, v := range ModelList {
+		out[k] = v.ContextMaxTokens
+	}
+	return out
+}
+
+// GetProviderContextMaxToken 返回指定服务商的默认上下文窗口（0=未配置）。
+func GetProviderContextMaxToken(provider string) int {
+	if ModelList == nil {
+		LoadModelList()
+	}
+	if v, ok := ModelList[provider]; ok {
+		return v.ContextMaxTokens
+	}
+	return 0
 }
 
 // GetProviderAPIKey 返回指定服务商的 API Key（空=未配置）。

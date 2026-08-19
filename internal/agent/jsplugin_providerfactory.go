@@ -35,8 +35,9 @@ func (b *jsProviderFactoryBridge) Apply(current ProviderParams) ProviderParams {
 		"thinkingMode":     current.ThinkingMode,
 		"planModel":        current.PlanModel,
 		"reviewModel":      current.ReviewModel,
-		"contextMaxTokens": current.ContextMaxTokens,
-		"modelParams":      current.ModelParams,
+		"contextMaxTokens":         current.ContextMaxTokens,
+		"providerContextMaxTokens": current.ProviderContextMaxTokens, // ★ 服务商级默认上下文（模型级未配置时兜底）
+		"modelParams":              current.ModelParams,
 	}
 	var (
 		ret     goja.Value
