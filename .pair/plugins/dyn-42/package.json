@@ -1,0 +1,8 @@
+{
+  "name": "dyn-42",
+  "purpose": "读取 tmp/merge_demo/demo2.txt 文件内容（console 输出）",
+  "version": "1.0.0",
+  "scope": "project",
+  "type": "plugin",
+  "main": "index.js"
+}

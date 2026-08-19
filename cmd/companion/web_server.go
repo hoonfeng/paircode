@@ -2442,12 +2442,14 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 	}
 
 	// ★ harness 对齐（默认关闭——全量工具集；WB_HARNESS=1 开启时精简 pair 独有工具）；
-	//   插件注册的工具豁免（插件是内容，非 pair 独有编码能力）
-	var pluginHost *agent.PluginHost
+	//   插件注册的工具豁免（插件是内容，非 pair 独有编码能力）。
+	//   ★ 2026-08-19 修复：pluginHost 直接获取，不依赖过滤回调（全量模式下
+	//     ApplyHarnessToolFilter 提前 return 不触发回调 → pluginHost 恒 nil →
+	//     MergePluginTools 跳过 → 插件工具不进会话 reg（agent 只剩管理工具）。
+	pluginHost := handler.GetPluginHost()
 	agent.ApplyHarnessToolFilter(reg, func(name string) bool {
-		if ph := handler.GetPluginHost(); ph != nil {
-			pluginHost = ph
-			return ph.IsPluginTool(name)
+		if pluginHost != nil {
+			return pluginHost.IsPluginTool(name)
 		}
 		return false
 	})
