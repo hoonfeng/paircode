@@ -370,6 +370,11 @@ func (l *Loop) aiReviewApprove(ctx context.Context, tc ToolCall) (bool, string) 
 // 返回在 history/l.History 基础上追加了 system(首轮)/user/assistant/tool
 // 等本轮全部消息的完整对话。
 func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []Message, err error) {
+	// ★ agentloop 核心外置：全局注册了 JS 循环实现时，委托 JS 驱动循环
+	//   （Go 保留能力经能力代理注入；停用插件即还原 Go 循环，可回退）。
+	if impl := CurrentJSLoop(); impl != nil {
+		return l.runWithJS(ctx, task, history, impl)
+	}
 	// ★ Run 启动日志（排查「无响应」：确认 Loop 确实进入运行，以及每次启动时间）
 	log.Printf("[loop] Run 开始 taskLen=%d history=%d maxIter=%d autonomous=%v",
 		len(task), len(history), l.MaxIterations, l.Autonomous)

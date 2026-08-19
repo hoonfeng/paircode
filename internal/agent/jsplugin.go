@@ -856,6 +856,8 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 		p.def.addDiag("注册 agent 循环装配器（LoopFactory 单槽位，卸载自动还原）")
 		return goja.Undefined()
 	})
+	// ★ agentloop 核心外置：registerLoop(impl) 注册 JS 循环实现（Run 委托 JS 驱动）
+	p.attachLoopRegister(loopFactoryObj)
 	ctxObj.Set("loopFactory", loopFactoryObj)
 
 	// ctx.registerClientMethod(method, fn)：host 半暴露方法给浏览器 client 半
