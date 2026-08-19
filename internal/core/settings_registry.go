@@ -11,14 +11,26 @@ package core
 // 内置核心字段（AppSettings 顶层）保持不变；插件配置不再写死进结构体。
 
 // SettingField 一个可注册的配置字段（前端按 type 渲染控件）。
+//
+// ★ 配置本身无内置（2026-08-19）：所有配置项由插件经 ctx.registerSettings 注册，
+//   前端设置面板纯 schema 驱动渲染。组件类型规范：
+//     text / password / number / checkbox / select / textarea / slider(0-100) /
+//     color(hex) / tags(逗号分隔数组) / roles(键值对文本区)
 type SettingField struct {
-	Name    string   `json:"name"`              // 字段名（key）
-	Label   string   `json:"label"`             // 显示名
-	Type    string   `json:"type"`              // text|password|number|checkbox|select|textarea
+	Name    string   `json:"name"`              // 字段名（key——值对象属性名）
+	Label   string   `json:"label"`             // 显示名（名称）
+	Type    string   `json:"type"`              // 组件类型：text|password|number|checkbox|select|textarea|slider|color|tags|roles
 	Default any      `json:"default,omitempty"` // 默认值（前端合并；无则零值）
 	Options []string `json:"options,omitempty"` // select 的可选项
 	Hint    string   `json:"hint,omitempty"`    // 提示文字
 	Group   string   `json:"group,omitempty"`   // 分组标题（同一 tab 内分组）
+	Binding string   `json:"binding,omitempty"` // ★ AppSettings 顶层字段绑定（settings.json 的 json key）；
+	//   空 = 插件命名空间（存 pluginSettings[key]，由注册插件自行消费）；
+	//   非空 = 核心运行字段（存 AppSettings 顶层，宿主 Go 运行时读取）。
+	Placeholder string `json:"placeholder,omitempty"` // 输入占位文字
+	Min         *int   `json:"min,omitempty"`         // number/slider 最小值
+	Max         *int   `json:"max,omitempty"`         // number/slider 最大值
+	Step        *int   `json:"step,omitempty"`        // number/slider 步长
 }
 
 // SettingSchema 一个插件注册的配置段（前端渲染为一个 tab）。

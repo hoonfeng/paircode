@@ -492,34 +492,6 @@ func HandleInstructions(w http.ResponseWriter, r *http.Request) { jsonResp(w, ""
 func HandleInstructionsPut(w http.ResponseWriter, r *http.Request) {
 	jsonResp(w, map[string]string{"status": "ok"})
 }
-func HandlePhilosophy(w http.ResponseWriter, r *http.Request) {
-	jsonResp(w, map[string]any{
-		"enabled":  core.Settings.PhilosophyEnabled,
-		"selected": core.Settings.PhilosophySelected,
-		"roles":    core.Settings.PhilosophyRoles,
-		"availableClassics": []map[string]string{
-			{"id": "tao-te-ching", "name": "《道德经》"},
-			{"id": "huangdi-yinfu-jing", "name": "《黄帝阴符经》"},
-			{"id": "sunzi-bingfa", "name": "《孙子兵法》"},
-			{"id": "lunyu", "name": "《论语》"},
-			{"id": "yijing", "name": "《易经》"},
-			{"id": "zhongyong", "name": "《中庸》"},
-			{"id": "daxue", "name": "《大学》"},
-		},
-		"availableRoles": []map[string]string{
-			{"id": "planner", "name": "规划 Agent"},
-			{"id": "reviewer", "name": "审核 Agent"},
-			{"id": "judge", "name": "评测 Agent"},
-			{"id": "explorer", "name": "探索 Agent"},
-			{"id": "verifier", "name": "验证 Agent"},
-			{"id": "debugger", "name": "调试 Agent"},
-			{"id": "executor", "name": "执行 Agent"},
-		},
-	})
-}
-func HandlePhilosophyPut(w http.ResponseWriter, r *http.Request) {
-	jsonResp(w, map[string]string{"status": "ok"})
-}
 
 // ─── MCP / Skills ────────────────────────────────────────
 

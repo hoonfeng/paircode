@@ -1053,6 +1053,20 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 				f.Default = fm["default"]
 				f.Hint, _ = fm["hint"].(string)
 				f.Group, _ = fm["group"].(string)
+				f.Binding, _ = fm["binding"].(string)
+				f.Placeholder, _ = fm["placeholder"].(string)
+				if v, ok := fm["min"].(float64); ok {
+					iv := int(v)
+					f.Min = &iv
+				}
+				if v, ok := fm["max"].(float64); ok {
+					iv := int(v)
+					f.Max = &iv
+				}
+				if v, ok := fm["step"].(float64); ok {
+					iv := int(v)
+					f.Step = &iv
+				}
 				if opts, ok := fm["options"].([]any); ok {
 					for _, o := range opts {
 						if s, ok := o.(string); ok {

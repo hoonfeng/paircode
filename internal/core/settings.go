@@ -58,10 +58,6 @@ type AppSettings struct {
 	HideMinimap     bool   `json:"hideMinimap"`
 	TabSize         int    `json:"tabSize"`
 	WordWrap        bool   `json:"wordWrap"`
-	// 思想
-	PhilosophyEnabled  bool              `json:"philosophyEnabled"`
-	PhilosophySelected []string          `json:"philosophySelected"`
-	PhilosophyRoles    map[string]string `json:"philosophyRoles"`
 	// MCP / Skills
 	AutoConnectMCP        bool              `json:"autoConnectMCP"`
 	SkillEnabledOverrides map[string]bool   `json:"skillEnabledOverrides"`
@@ -119,7 +115,6 @@ func Default() AppSettings {
 		MaxIterations: 50, AutoIterate: true, ReviewMode: "auto", AutoCollapse: true,
 		DefaultShell: "auto", TermFontSize: 13, TermEncoding: "auto",
 		Theme: "dark", EditorFontSize: 14, TabSize: 2, FontFamily: "'Cascadia Code', 'Fira Code', Consolas, monospace",
-		PhilosophySelected: []string{"tao-te-ching", "huangdi-yinfu-jing", "sunzi-bingfa"},
 		AutoConnectMCP:     true,
 	}
 }

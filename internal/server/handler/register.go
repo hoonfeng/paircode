@@ -71,8 +71,6 @@ func RegisterAll(r *Router) {
 	r.Handle("PUT", "/api/models", HandleModels)
 	r.Handle("GET", "/api/instructions", HandleInstructions)
 	r.Handle("PUT", "/api/instructions", HandleInstructionsPut)
-	r.Handle("GET", "/api/philosophy", HandlePhilosophy)
-	r.Handle("PUT", "/api/philosophy", HandlePhilosophyPut)
 
 	// 工具配置（启用开关 + 审核黑白名单）
 	r.Handle("GET", "/api/tools", HandleTools)

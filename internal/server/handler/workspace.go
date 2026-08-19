@@ -167,17 +167,52 @@ func HandleSettings(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleSettingsPut 保存设置
+//
+// ★ 配置插件化（2026-08-19）：请求体 { settings?, pluginSettings? }——
+//   - settings：AppSettings 顶层字段（json key 直接写回；由配置插件 binding 字段收集）
+//   - pluginSettings：插件命名空间值（ctx.setSettings 写入的，整体合并）
+// 兼容旧格式：{ settings: <完整 AppSettings> }（整体替换，含顶层 + pluginSettings）。
 func HandleSettingsPut(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Settings *core.AppSettings `json:"settings"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	var raw map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
 		jsonErr(w, err.Error())
 		return
 	}
-	if req.Settings != nil {
-		core.Settings = *req.Settings
+	// 顶层字段写回（json key → AppSettings 字段）
+	if top, ok := raw["settings"].(map[string]any); ok {
+		applyTopSettings(top)
+	}
+	// 插件命名空间写回
+	if ps, ok := raw["pluginSettings"].(map[string]any); ok {
+		if core.Settings.PluginSettings == nil {
+			core.Settings.PluginSettings = map[string]map[string]any{}
+		}
+		for k, v := range ps {
+			if m, ok := v.(map[string]any); ok {
+				core.Settings.PluginSettings[k] = m
+			}
+		}
 	}
 	core.Save()
 	jsonResp(w, map[string]any{"ok": true})
+}
+
+// applyTopSettings 把前端提交的顶层字段（json key）合并进 AppSettings。
+// 经 JSON 往返：只写已知字段（未知 key 忽略），保持类型安全。
+func applyTopSettings(top map[string]any) {
+	// 序列化当前 + 覆盖提交的已知字段
+	cur := core.Settings
+	merged := map[string]any{}
+	if b, err := json.Marshal(cur); err == nil {
+		_ = json.Unmarshal(b, &merged)
+	}
+	for k, v := range top {
+		merged[k] = v
+	}
+	if b, err := json.Marshal(merged); err == nil {
+		var out core.AppSettings
+		if err := json.Unmarshal(b, &out); err == nil {
+			core.Settings = out
+		}
+	}
 }

@@ -397,8 +397,6 @@ GET /api/settings
   "tabSize": 2,
   "wordWrap": false,
   "hideMinimap": false,
-  "philosophyEnabled": false,
-  "philosophySelected": ["tao-te-ching", "huangdi-yinfu-jing", "sunzi-bingfa"],
   "autoConnectMCP": true,
   "skillEnabledOverrides": {},
   "skillStatusOverrides": {},
@@ -834,7 +832,6 @@ PUT /api/instructions?scope={作用域}
 ### 8.3 读取行为指导
 
 ```
-GET /api/philosophy
 ```
 
 **响应：** 返回 AI 行为指导配置文本。
@@ -842,7 +839,6 @@ GET /api/philosophy
 ### 8.4 保存行为指导
 
 ```
-PUT /api/philosophy
 ```
 
 **请求体：** 纯文本字符串。
@@ -1801,7 +1797,6 @@ ws://127.0.0.1:{port}/api/terminal/ws
 | POST | `/api/marketplace/install` | 安装扩展 |
 | POST | `/api/marketplace/refresh` | 刷新市场缓存 |
 | GET/PUT | `/api/instructions` | 指令管理 |
-| GET/PUT | `/api/philosophy` | 行为指导 |
 | GET | `/api/tasks` | 任务列表（只读查询） |
 | GET/POST | `/api/taskplan` | 规划文档管理 |
 

@@ -30,7 +30,6 @@ import (
 
 	"github.com/hoonfeng/paircode/internal/agent"
 	"github.com/hoonfeng/paircode/internal/core"
-	"github.com/hoonfeng/paircode/internal/roleprompts"
 	"github.com/hoonfeng/paircode/internal/server/handler"
 	marketplacepanel "github.com/hoonfeng/paircode/internal/ui/marketplace"
 	mcppanel "github.com/hoonfeng/paircode/internal/ui/mcp"
@@ -1035,6 +1034,30 @@ func (s *webServer) handleSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// ★ 配置插件化（2026-08-19）嵌套格式支持：{ settings: {...}, pluginSettings: {...} }
+		//   · settings 对象：AppSettings 顶层字段（配置插件 binding 字段收集），
+		//     展开进 rawMap 参与下方反射增量 merge（类型精度保留）
+		//   · pluginSettings 对象：插件命名空间值（ctx.setSettings 写入），整体合并
+		if sRaw, ok := rawMap["settings"]; ok {
+			var sMap map[string]json.RawMessage
+			if err := json.Unmarshal(sRaw, &sMap); err == nil {
+				for k, v := range sMap {
+					rawMap[k] = v
+				}
+			}
+		}
+		if psRaw, ok := rawMap["pluginSettings"]; ok {
+			var ps map[string]map[string]any
+			if err := json.Unmarshal(psRaw, &ps); err == nil {
+				if core.Settings.PluginSettings == nil {
+					core.Settings.PluginSettings = map[string]map[string]any{}
+				}
+				for k, v := range ps {
+					core.Settings.PluginSettings[k] = v
+				}
+			}
+		}
+
 		// 检查审核模式是否变更
 		oldReviewMode := core.Settings.ReviewMode
 
@@ -1719,65 +1742,6 @@ func (s *webServer) handleInstructions(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// ─── 思想配置 API ──────────────────────────────────────────
-
-func (s *webServer) handlePhilosophy(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case "GET":
-		jsonResp(w, map[string]any{
-			"enabled":  core.Settings.PhilosophyEnabled,
-			"selected": core.Settings.PhilosophySelected,
-			"roles":    core.Settings.PhilosophyRoles,
-			"availableClassics": []map[string]string{
-				{"id": "tao-te-ching", "name": "《道德经》"},
-				{"id": "huangdi-yinfu-jing", "name": "《黄帝阴符经》"},
-				{"id": "sunzi-bingfa", "name": "《孙子兵法》"},
-				{"id": "lunyu", "name": "《论语》"},
-				{"id": "yijing", "name": "《易经》"},
-				{"id": "zhongyong", "name": "《中庸》"},
-				{"id": "daxue", "name": "《大学》"},
-			},
-			"availableRoles": []map[string]string{
-				{"id": "planner", "name": "规划 Agent"},
-				{"id": "reviewer", "name": "审核 Agent"},
-				{"id": "judge", "name": "评测 Agent"},
-				{"id": "explorer", "name": "探索 Agent"},
-				{"id": "verifier", "name": "验证 Agent"},
-				{"id": "debugger", "name": "调试 Agent"},
-				{"id": "executor", "name": "执行 Agent"},
-			},
-		})
-
-	case "PUT":
-		var req struct {
-			Enabled  bool              `json:"enabled"`
-			Selected []string          `json:"selected"`
-			Roles    map[string]string `json:"roles"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			jsonErr(w, err.Error())
-			return
-		}
-		core.Settings.PhilosophyEnabled = req.Enabled
-		if req.Selected != nil {
-			core.Settings.PhilosophySelected = req.Selected
-		}
-		if req.Roles != nil {
-			if core.Settings.PhilosophyRoles == nil {
-				core.Settings.PhilosophyRoles = make(map[string]string)
-			}
-			for k, v := range req.Roles {
-				core.Settings.PhilosophyRoles[k] = v
-			}
-		}
-		core.Save()
-		jsonResp(w, map[string]any{"ok": true})
-
-	default:
-		jsonErr(w, "不支持的方法")
-	}
-}
-
 // ─── MCP 列表 API ──────────────────────────────────────────
 
 func (s *webServer) handleMCPList(w http.ResponseWriter, r *http.Request) {
@@ -2205,7 +2169,7 @@ func (s *webServer) loadConversationHistory(convID string) []agent.Message {
 // ── 统一 API 层（平台无关，差异通过回调参数化） ─────────────────
 
 // systemStaticPrefixCache 缓存 system prompt 静态前缀（CACHE_BOUNDARY 之前部分）。
-// 键由 workspace roots hash + SystemInstructions + Philosophy 构成；
+// 键由 workspace roots hash + SystemInstructions 构成；
 // 只要这些不变，静态前缀就无需重新拼接。
 var systemStaticPrefixCache struct {
 	mu     sync.Mutex
@@ -2216,7 +2180,7 @@ var systemStaticPrefixCache struct {
 func systemStaticPrefixKey() string {
 	si := core.Settings.SystemInstructions
 	roots := strings.Join(core.Folders, "|")
-	return fmt.Sprintf("%s|%s|%s", roots, si, roleprompts.PhilosophyPrompt())
+	return fmt.Sprintf("%s|%s", roots, si)
 }
 
 // buildSystemStaticPrefix 构建 system prompt 静态前缀（CACHE_BOUNDARY 之前）。
@@ -2246,10 +2210,9 @@ func buildSystemStaticPrefix() string {
 	if si := strings.TrimSpace(core.Settings.SystemInstructions); si != "" {
 		b.WriteString("\n\n# 系统级指令（务必遵守）\n" + si)
 	}
-	b.WriteString(roleprompts.PhilosophyPrompt())
 	b.WriteString(agent.SelfManagementPrompt())
 	// 注意：不在此追加 CacheBoundary——唯一 boundary 由 ComposeSystemPrompt 统一添加，
-	// 确保 SystemInstructions/Philosophy 等静态内容全部位于 boundary 之前（同一静态前缀内）。
+	// 确保 SystemInstructions 等静态内容全部位于 boundary 之前（同一静态前缀内）。
 	systemStaticPrefixCache.key = k
 	systemStaticPrefixCache.prefix = b.String()
 	return systemStaticPrefixCache.prefix

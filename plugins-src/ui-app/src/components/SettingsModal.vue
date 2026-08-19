@@ -1,328 +1,77 @@
 <template>
-  <div class="modal-overlay">
-    <div class="modal-content settings-modal">
-      <div class="modal-header">
-        <h2><SvgIcon name="settings" :size="18" /> 设置</h2>
+  <div class="modal-overlay" @click.self="$emit('close')">
+    <div class="modal-content">
+      <h2><SvgIcon name="settings" :size="18" /> 设置
         <button class="modal-close" @click="$emit('close')">×</button>
-      </div>
+      </h2>
       <div class="modal-body">
-        <div class="settings-tabs">
-          <button v-for="tab in tabs" :key="tab.id"
-                  :class="{ active: activeTab === tab.id }"
-                  @click="activeTab = tab.id">{{ tab.label }}</button>
+        <!-- ═══ 纯 schema 驱动：所有配置 tab 由插件 ctx.registerSettings 注册 ═══ -->
+        <div v-if="tabs.length" class="settings-tabs">
+          <button v-for="t in tabs" :key="t.key" :class="['settings-tab', { active: activeTab === t.key }]"
+                  @click="activeTab = t.key">{{ t.title }}</button>
         </div>
-        <div class="settings-body">
-          <!-- ═══ AI 模型 ═══ -->
-          <div v-if="activeTab === 'ai'">
-            <div class="setting-group">
-              <div class="group-title">服务商与模型</div>
-              <div class="setting-row">
-                <label>服务商</label>
-                <select v-model="local.provider" @change="onProviderChange">
-                  <option value="" disabled>选择服务商</option>
-                  <option v-for="p in providers" :key="p" :value="p">{{ providerLabel(p) }}</option>
-                </select>
-              </div>
-              <div class="setting-row">
-                <label>API 地址</label>
-                <input type="text" v-model="local.baseURL" placeholder="https://api.openai.com/v1" />
-              </div>
-              <div class="setting-row">
-                <label>API Key</label>
-                <input type="password" v-model="local.apiKey" placeholder="sk-..." />
-              </div>
-              <div class="setting-row">
-                <label>主模型</label>
-                <select v-model="local.executeModel">
-                  <option value="" disabled>选择模型</option>
-                  <option v-for="m in modelsForProvider" :key="m" :value="m">{{ m }}</option>
-                  <option value="custom">自定义</option>
-                </select>
-                <input v-if="local.executeModel === 'custom'" v-model="local.executeModelCustom"
-                       placeholder="手动输入模型名" class="set-input-sm flex-1" />
-              </div>
-              <div class="setting-row">
-                <label>规划模型</label>
-                <select v-model="local.planModel">
-                  <option value="" disabled>选择模型</option>
-                  <option v-for="m in modelsForProvider" :key="m" :value="m">{{ m }}</option>
-                  <option value="custom">自定义</option>
-                </select>
-                <input v-if="local.planModel === 'custom'" v-model="local.planModelCustom"
-                       placeholder="手动输入模型名" class="set-input-sm flex-1" />
-              </div>
-              <div class="setting-row">
-                <label>审核模型</label>
-                <select v-model="local.reviewModel">
-                  <option value="" disabled>选择模型</option>
-                  <option v-for="m in modelsForProvider" :key="m" :value="m">{{ m }}</option>
-                  <option value="custom">自定义</option>
-                </select>
-                <input v-if="local.reviewModel === 'custom'" v-model="local.reviewModelCustom"
-                       placeholder="手动输入模型名" class="set-input-sm flex-1" />
-              </div>
-              <div class="setting-row">
-                <label>温度</label>
-                <input type="range" min="0" max="2" step="0.1" v-model.number="local.temperature" />
-                <span class="range-val">{{ local.temperature }}</span>
-                <span class="setting-hint" v-if="local.temperature > 0.8">⚠️ 高温度降低代码稳定性，建议 ≤0.5</span>
-              </div>
-              <div class="setting-row">
-                <label>最大 Token</label>
-                <input type="number" v-model.number="local.maxTokens" min="4096" max="128000" />
-                <span class="setting-hint" v-if="local.maxTokens < 8192">⚠️ 过小会导致思考/回复被截断，建议 ≥8192</span>
-              </div>
-              <div class="setting-row">
-                <label>上下文 Token</label>
-                <input type="number" v-model.number="local.contextMaxTokens" min="4096" max="1000000" />
-              </div>
-              <div class="setting-row">
-                <label>推理强度</label>
-                <select v-model="local.thinkingMode" style="flex:1">
-                  <option value="non-thinking">关闭思考（Off）</option>
-                  <option value="thinking">高（High）</option>
-                  <option value="thinking_max">最大（Max）</option>
-                </select>
-              </div>
-            </div>
-          </div>
+        <div class="settings-content">
+          <template v-for="tab in tabs" :key="tab.key">
+            <div v-if="activeTab === tab.key">
+              <div v-for="grp in tab.groups" :key="grp.title || '__main'" class="setting-group">
+                <div v-if="grp.title" class="group-title">{{ grp.title }}</div>
+                <div v-for="f in grp.fields" :key="f.name" class="setting-row">
+                  <label class="field-label" :title="f.hint">{{ f.label }}</label>
 
-          <!-- ═══ Agent 行为 ═══ -->
-          <div v-if="activeTab === 'agent'">
-            <div class="setting-group">
-              <div class="group-title">Agent 行为</div>
-              <div class="setting-row">
-                <label>最大迭代次数</label>
-                <input type="number" v-model.number="local.maxIterations" min="1" max="200" />
-              </div>
-              <div class="setting-row">
-                <label>审核模式</label>
-                <select v-model="local.reviewMode" style="flex:1">
-                  <option value="auto">AI审核（自动审批写操作）</option>
-                  <option value="manual">手动审批（每次需用户确认）</option>
-                  <option value="off">关闭审核（全部放行）</option>
-                </select>
-              </div>
-              <div class="setting-row">
-                <label>拒绝后自动迭代</label>
-                <input type="checkbox" v-model="local.autoIterateOnRejection" />
-              </div>
-              <div class="setting-row">
-                <label>自主模式</label>
-                <input type="checkbox" v-model="local.autonomous" />
-              </div>
-            </div>
-            <div class="setting-group" style="margin-top:12px">
-              <div class="group-title">搜索与忽略</div>
-              <div class="setting-row">
-                <label>SearXNG 地址</label>
-                <input type="text" v-model="local.searxngUrl" placeholder="留空使用 DuckDuckGo" />
-              </div>
-              <div class="setting-row">
-                <label>忽略目录</label>
-                <input type="text" v-model="local.ignoreDirsText" placeholder="node_modules,.git,dist" />
-              </div>
-            </div>
-          </div>
+                  <!-- text / password -->
+                  <input v-if="f.type === 'text' || f.type === 'password'" :type="f.type === 'password' ? 'password' : 'text'"
+                         v-model="form[tab.key][f.name]" :placeholder="f.placeholder" />
 
-          <!-- ═══ 编辑器 ═══ -->
-          <div v-if="activeTab === 'editor'">
-            <div class="setting-group">
-              <div class="group-title">编辑器</div>
-              <div class="setting-row">
-                <label>字号</label>
-                <input type="number" v-model.number="local.editorFontSize" min="10" max="32" />
-              </div>
-              <div class="setting-row">
-                <label>制表符大小</label>
-                <input type="number" v-model.number="local.tabSize" min="1" max="8" />
-              </div>
-              <div class="setting-row">
-                <label>自动换行</label>
-                <input type="checkbox" v-model="local.wordWrap" />
-              </div>
-              <div class="setting-row">
-                <label>隐藏 Minimap</label>
-                <input type="checkbox" v-model="local.hideMinimap" />
-              </div>
-            </div>
-            <div class="setting-group" style="margin-top:12px">
-              <div class="group-title">字体风格</div>
-              <div class="setting-row">
-                <label>编辑器字族</label>
-                <input type="text" v-model="local.fontFamily" placeholder="'Cascadia Code', monospace" />
-              </div>
-              <div class="setting-row">
-                <label>加粗</label>
-                <input type="checkbox" v-model="local.editorFontBold" />
-              </div>
-              <div class="setting-row">
-                <label>斜体</label>
-                <input type="checkbox" v-model="local.editorFontItalic" />
-              </div>
-              <div class="setting-row">
-                <label>下划线</label>
-                <input type="checkbox" v-model="local.editorFontUnderline" />
-              </div>
-            </div>
-            <div class="setting-group" style="margin-top:12px">
-              <div class="group-title">界面字体</div>
-              <div class="setting-row">
-                <label>UI 字族</label>
-                <input type="text" v-model="local.uiFontFamily" placeholder="Inter, sans-serif" />
-              </div>
-              <div class="setting-row">
-                <label>加粗</label>
-                <input type="checkbox" v-model="local.uiFontBold" />
-              </div>
-              <div class="setting-row">
-                <label>斜体</label>
-                <input type="checkbox" v-model="local.uiFontItalic" />
-              </div>
-              <div class="setting-row">
-                <label>下划线</label>
-                <input type="checkbox" v-model="local.uiFontUnderline" />
-              </div>
-            </div>
-          </div>
+                  <!-- number -->
+                  <input v-else-if="f.type === 'number'" type="number" v-model.number="form[tab.key][f.name]"
+                         :min="f.min" :max="f.max" :step="f.step" />
 
-          <!-- ═══ 终端 ═══ -->
-          <div v-if="activeTab === 'terminal'">
-            <div class="setting-group">
-              <div class="group-title">终端</div>
-              <div class="setting-row">
-                <label>默认 Shell</label>
-                <select v-model="local.defaultShell" style="flex:1">
-                  <option value="auto">自动检测</option>
-                  <option value="cmd">cmd</option>
-                  <option value="powershell">PowerShell</option>
-                  <option value="git-bash">Git Bash</option>
-                </select>
-              </div>
-              <div class="setting-row">
-                <label>终端字号</label>
-                <input type="number" v-model.number="local.termFontSize" min="10" max="24" />
-              </div>
-              <div class="setting-row">
-                <label>编码</label>
-                <select v-model="local.termEncoding" style="flex:1">
-                  <option value="auto">自动</option>
-                  <option value="utf-8">UTF-8</option>
-                  <option value="gbk">GBK</option>
-                </select>
-              </div>
-            </div>
-          </div>
+                  <!-- checkbox（开关） -->
+                  <label v-else-if="f.type === 'checkbox'" class="pp-switch" :title="f.hint">
+                    <input type="checkbox" v-model="form[tab.key][f.name]" />
+                    <span class="pp-switch-track"></span>
+                  </label>
 
-          <!-- ═══ 外观 ═══ -->
-          <div v-if="activeTab === 'appearance'">
-            <div class="setting-group">
-              <div class="group-title">选择主题</div>
-              <div class="theme-grid">
-                <div v-for="th in themeList" :key="th.id"
-                     :class="['theme-card', { selected: local.theme === th.id }]"
-                     @click="local.theme = th.id">
-                  <div class="theme-preview">
-                    <div class="tp-activity" :style="{background: th.colors.activity}"></div>
-                    <div class="tp-main">
-                      <div class="tp-sidebar" :style="{background: th.colors.sidebar}"></div>
-                      <div class="tp-editor">
-                        <div class="tp-line" :style="{background: th.colors.line1}"></div>
-                        <div class="tp-line tp-line-accent" :style="{background: th.colors.line2}"></div>
-                        <div class="tp-line" :style="{background: th.colors.line3}"></div>
-                      </div>
-                      <div class="tp-accent-bar" :style="{background: th.colors.accent}"></div>
-                    </div>
+                  <!-- select -->
+                  <select v-else-if="f.type === 'select'" v-model="form[tab.key][f.name]" class="field-select">
+                    <option v-for="o in f.options" :key="o" :value="o">{{ o }}</option>
+                  </select>
+
+                  <!-- textarea -->
+                  <textarea v-else-if="f.type === 'textarea'" v-model="form[tab.key][f.name]" class="field-textarea"
+                            rows="4" :placeholder="f.placeholder"></textarea>
+
+                  <!-- slider -->
+                  <div v-else-if="f.type === 'slider'" class="slider-row">
+                    <input type="range" v-model.number="form[tab.key][f.name]"
+                           :min="f.min != null ? f.min : 0" :max="f.max != null ? f.max : 100" :step="f.step || 1" />
+                    <span class="slider-val">{{ form[tab.key][f.name] }}</span>
                   </div>
-                  <div class="theme-name">{{ th.label }}</div>
-                  <div class="theme-font">{{ th.fontDesc }}</div>
+
+                  <!-- color -->
+                  <div v-else-if="f.type === 'color'" class="color-row">
+                    <input type="color" v-model="form[tab.key][f.name]" />
+                    <code class="color-code">{{ form[tab.key][f.name] }}</code>
+                  </div>
+
+                  <!-- tags（逗号分隔数组） -->
+                  <input v-else-if="f.type === 'tags'" type="text" class="field-tags"
+                         :value="tagsText(tab.key, f)" @input="onTagsInput(tab.key, f, $event)"
+                         :placeholder="f.placeholder || '逗号分隔'" />
+
+                  <!-- project（平台特殊：项目级指令，经 /api/instructions 读写） -->
+                  <textarea v-else-if="f.type === 'project'" v-model="projectInst" class="field-textarea"
+                            rows="4" :placeholder="f.placeholder"></textarea>
+
+                  <!-- 兜底 text -->
+                  <input v-else type="text" v-model="form[tab.key][f.name]" />
+
+                  <span v-if="f.hint" class="setting-hint">{{ f.hint }}</span>
                 </div>
               </div>
-            </div>
-          </div>
-
-          <!-- ═══ 指令 ═══ -->
-          <div v-if="activeTab === 'instructions'">
-            <div class="setting-group">
-              <div class="group-title">系统级指令（所有工作区共享）</div>
-              <div class="setting-row-vertical">
-                <textarea v-model="local.systemInstructions" class="inst-textarea"
-                          placeholder="输入系统级指令，Agent 在每个对话中都会遵守…" rows="6"></textarea>
-              </div>
-            </div>
-            <div class="setting-group" style="margin-top:16px">
-              <div class="group-title">项目级指令</div>
-              <div class="setting-row-vertical" style="display:flex;flex-direction:column;gap:6px">
-                <div class="project-inst-hint">
-                  当前工作区：<code>{{ wsRoot || '未设置' }}</code>
-                  <button v-if="wsRoot" class="btn-xs" @click="reloadProjectInst">重新加载</button>
-                </div>
-                <textarea v-model="local.projectInstructions" class="inst-textarea"
-                          placeholder="输入此工作区的项目级指令，存储在 .pair/instructions.md…" rows="6"></textarea>
-              </div>
-            </div>
-          </div>
-
-          <!-- ═══ 思想 ═══ -->
-          <div v-if="activeTab === 'philosophy'">
-            <div class="setting-group">
-              <div class="group-title">思想注入（Philosophy）</div>
-              <div class="setting-row">
-                <label>启用思想注入</label>
-                <input type="checkbox" v-model="local.philosophyEnabled" />
-              </div>
-            </div>
-            <div v-if="local.philosophyEnabled" class="setting-group" style="margin-top:12px">
-              <div class="group-title">经典选择（选中后注入 Agent 系统提示）</div>
-              <div class="classics-list">
-                <label v-for="c in classicList" :key="c.id" class="classic-item">
-                  <input type="checkbox" :value="c.id" v-model="local.philosophySelected" />
-                  <span>{{ c.name }}</span>
-                </label>
-              </div>
-            </div>
-            <div v-if="local.philosophyEnabled" class="setting-group" style="margin-top:16px">
-              <div class="group-title">主 Agent 哲学</div>
-              <div class="setting-row-vertical">
-                <textarea v-model="local.mainAgentPhilosophy" class="inst-textarea"
-                          placeholder="为主 Agent 定制的专属哲学指引（可选）…" rows="3"></textarea>
-              </div>
-            </div>
-            <div v-if="local.philosophyEnabled" class="setting-group" style="margin-top:12px">
-              <div class="group-title">子 Agent 角色哲学</div>
-              <div v-for="role in roleList" :key="role.id" class="setting-row-vertical" style="margin-bottom:8px">
-                <div class="role-phil-label">{{ role.name }}</div>
-                <textarea :value="local.philosophyRoles[role.id] || ''"
-                          @input="onRolePhilInput(role.id, $event)"
-                          class="inst-textarea" rows="2"
-                          :placeholder="role.name + '的哲学指引（可选）'"></textarea>
-              </div>
-            </div>
-          </div>
-
-          <!-- ═══ 插件配置（ctx.registerSettings 动态注册）═══ -->
-          <template v-for="ptab in pluginTabs" :key="'p-' + ptab.key">
-            <div v-if="activeTab === 'p-' + ptab.key">
-            <div v-for="grp in ptab.groups" :key="grp.title || '__main'" class="setting-group" :style="grp.title ? '' : 'margin-top:0'">
-              <div v-if="grp.title" class="group-title">{{ grp.title }}</div>
-              <div v-for="f in grp.fields" :key="f.name" class="setting-row">
-                <label>{{ f.label }}</label>
-                <input v-if="f.type === 'text' || f.type === 'password'" :type="f.type === 'password' ? 'password' : 'text'"
-                       v-model="pluginValues[ptab.key][f.name]" />
-                <input v-else-if="f.type === 'number'" type="number" v-model.number="pluginValues[ptab.key][f.name]" />
-                <input v-else-if="f.type === 'checkbox'" type="checkbox" v-model="pluginValues[ptab.key][f.name]" />
-                <select v-else-if="f.type === 'select'" v-model="pluginValues[ptab.key][f.name]" style="flex:1">
-                  <option v-for="o in f.options" :key="o" :value="o">{{ o }}</option>
-                </select>
-                <textarea v-else-if="f.type === 'textarea'" v-model="pluginValues[ptab.key][f.name]"
-                          class="inst-textarea" rows="3"></textarea>
-                <input v-else type="text" v-model="pluginValues[ptab.key][f.name]" />
-                <span v-if="f.hint" class="setting-hint">{{ f.hint }}</span>
-              </div>
-            </div>
             </div>
           </template>
-
+          <div v-if="!tabs.length" class="settings-empty">暂无配置项（等待插件注册…）</div>
         </div>
       </div>
       <div class="modal-footer">
@@ -334,45 +83,25 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch, computed } from 'vue'
-import { state } from '../ui-state.js'
+import { ref, reactive, computed, onMounted } from 'vue'
+import { state, applyTheme } from '../ui-state.js'
 import api from '../api.js'
 import SvgIcon from './SvgIcon.vue'
-import { applyTheme } from '../ui-state.js'
 
 const emit = defineEmits(['close'])
-const activeTab = ref('ai')
+const activeTab = ref('')
 
-// 插件配置 tab（ctx.registerSettings 动态注册，来自 GET /api/settings.schemas）
-const pluginTabs = computed(() => (state.pluginSchemas || []).map(sch => ({
-  key: sch.key,
-  title: sch.title || sch.key,
-  // 按 group 分组：Group 空 → 无标题主组
-  groups: groupFields(sch.fields || []),
-})))
-// tabs = 内置 + 插件（前端固定顺序，插件追加尾部）
-const tabs = computed(() => [
-  { id: 'ai', label: 'AI' },
-  { id: 'agent', label: 'Agent' },
-  { id: 'editor', label: '编辑器' },
-  { id: 'terminal', label: '终端' },
-  { id: 'appearance', label: '外观' },
-  { id: 'instructions', label: '指令' },
-  { id: 'philosophy', label: '思想' },
-  ...pluginTabs.value.map(p => ({ id: 'p-' + p.key, label: p.title })),
-])
+// ─── tabs：全部来自插件注册 schema（配置本身无内置）───
+const tabs = computed(() => {
+  const list = (state.pluginSchemas || []).map(s => ({
+    key: s.key,
+    title: s.title || s.key,
+    groups: groupFields(s.fields || []),
+  }))
+  if (list.length && !activeTab.value) activeTab.value = list[0].key
+  return list
+})
 
-// 插件配置值（按命名空间隔离；loadSettings 时初始化）
-const pluginValues = reactive({})
-function collectPluginValues() {
-  const out = {}
-  for (const key of Object.keys(pluginValues)) {
-    if (pluginValues[key] && typeof pluginValues[key] === 'object') {
-      out[key] = { ...pluginValues[key] }
-    }
-  }
-  return out
-}
 function groupFields(fields) {
   const groups = []
   const map = {}
@@ -384,449 +113,246 @@ function groupFields(fields) {
   return groups
 }
 
-const providers = ref([])
-const modelsMap = ref({})
-const classicList = ref([])
-const roleList = ref([])
-const wsRoot = ref('')
+// ─── 值模型：binding → 顶层 AppSettings；非 binding → 插件命名空间 ───
+const form = reactive({})       // form[tabKey][fieldName] = 值
+const projectInst = ref('')     // 项目级指令（type=project 字段）
 
-const local = reactive({
-  provider: '',
-  baseURL: '',
-  apiKey: '',
-  executeModel: '',
-  executeModelCustom: '',
-  planModel: '',
-  reviewModel: '',
-  temperature: 0.3,
-  maxTokens: 16384,
-  contextMaxTokens: 1000000,
-  thinkingMode: 'thinking',
-  planModelCustom: '',
-  reviewModelCustom: '',
-  // Agent
-  maxIterations: 50,
-  reviewMode: 'auto',
-  autoIterateOnRejection: false,
-  autonomous: false,
-  searxngUrl: '',
-  ignoreDirsText: '',
-  // 编辑器
-  editorFontSize: 14,
-  tabSize: 2,
-  wordWrap: false,
-  hideMinimap: false,
-  fontFamily: "'Cascadia Code', 'Fira Code', Consolas, monospace",
-  editorFontBold: false,
-  editorFontItalic: false,
-  editorFontUnderline: false,
-  uiFontFamily: '',
-  uiFontBold: false,
-  uiFontItalic: false,
-  uiFontUnderline: false,
-  // 外观
-  theme: 'dark',
-  // 终端
-  defaultShell: 'auto',
-  termFontSize: 13,
-  termEncoding: 'auto',
-  // 指令
-  systemInstructions: '',
-  projectInstructions: '',
-  // 思想
-  philosophyEnabled: false,
-  philosophySelected: [],
-  mainAgentPhilosophy: '',
-  philosophyRoles: {},
-  // MCP
-  autoConnectMCP: true,
-})
-
-const modelsForProvider = computed(() => {
-  if (!local.provider || !modelsMap.value[local.provider]) return []
-  return modelsMap.value[local.provider]
-})
-
-// ─── 主题 ───
-const themeList = [
-  { id: 'dark', label: '暗色科技风', fontDesc: 'Inter + JetBrains Mono',
-    colors: { activity: '#0d1117', sidebar: '#161b22', editor: '#0d1117',
-              line1: '#21262d', line2: '#58a6ff33', line3: '#30363d', accent: '#58a6ff' } },
-  { id: 'light', label: '白色简约风', fontDesc: 'Inter + JetBrains Mono',
-    colors: { activity: '#2c2c2c', sidebar: '#f8f9fa', editor: '#ffffff',
-              line1: '#e8eaed', line2: '#1a73e833', line3: '#dadce0', accent: '#1a73e8' } },
-  { id: 'warm', label: '暖色温暖风', fontDesc: 'Noto Serif SC + Source Code Pro',
-    colors: { activity: '#5c4033', sidebar: '#f5ece0', editor: '#faf3e8',
-              line1: '#efe4d4', line2: '#b8733344', line3: '#d6c8b8', accent: '#b87333' } },
-  { id: 'night', label: '暗夜紫风', fontDesc: 'Inter + JetBrains Mono',
-    colors: { activity: '#12101a', sidebar: '#1a1726', editor: '#12101a',
-              line1: '#221f30', line2: '#9b8ec444', line3: '#2d2940', accent: '#9b8ec4' } },
-]
-
-// ─── 模型 ───
-function providerLabel(p) {
-  const labels = { deepseek: 'DeepSeek', openai: 'OpenAI', anthropic: 'Anthropic', 'openai-compatible': '兼容 OpenAI', custom: '自定义' }
-  return labels[p] || p
-}
-
-async function loadModels() {
-  try {
-    const data = await api.getModels()
-    providers.value = data.providers || []
-    modelsMap.value = data.models || {}
-    if (data.providerBaseURLs) {
-      runtimeProviderBaseURLs = data.providerBaseURLs
-    }
-  } catch (e) {
-    providers.value = ['deepseek', 'openai', 'anthropic', 'openai-compatible']
-    modelsMap.value = {
-      deepseek: ['deepseek-r1', 'deepseek-v4-pro', 'deepseek-v4-flash'],
-      openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'o1', 'o3-mini', 'o4-mini'],
-      anthropic: ['claude-3-5-sonnet-20241022', 'claude-3-5-haiku-20241022', 'claude-4-sonnet-20250514', 'claude-4-haiku-latest'],
-      'openai-compatible': ['custom'],
-    }
+function zeroValue(type) {
+  switch (type) {
+    case 'checkbox': return false
+    case 'number': return 0
+    case 'tags': return []
+    default: return ''
   }
 }
 
-const defaultProviderBaseURLs = {
-  deepseek: 'https://api.deepseek.com/v1',
-  openai: 'https://api.openai.com/v1',
-  anthropic: 'https://api.anthropic.com/v1',
-  'openai-compatible': '',
-  custom: '',
-}
-let runtimeProviderBaseURLs = {}
-
-function getProviderBaseURL(provider) {
-  return runtimeProviderBaseURLs[provider] || defaultProviderBaseURLs[provider] || ''
-}
-
-function onProviderChange() {
-  local.baseURL = getProviderBaseURL(local.provider)
-  const models = modelsMap.value[local.provider] || []
-  if (models.length > 0) {
-    if (!models.includes(local.executeModel)) local.executeModel = models[0]
-    if (!models.includes(local.planModel)) local.planModel = models[0]
-    if (!models.includes(local.reviewModel)) local.reviewModel = models[0]
+function buildForm() {
+  for (const key of Object.keys(form)) delete form[key]
+  const top = state.settings || {}
+  const pvals = (top.pluginSettings || {})
+  for (const s of (state.pluginSchemas || [])) {
+    form[s.key] = {}
+    for (const f of (s.fields || [])) {
+      let v
+      if (f.type === 'project') { continue }
+      if (f.binding) {
+        v = top[f.binding] !== undefined ? top[f.binding] : f.default
+      } else {
+        const cur = pvals[s.key] || {}
+        v = cur[f.name] !== undefined ? cur[f.name] : f.default
+      }
+      if (v === undefined) v = zeroValue(f.type)
+      // 类型规整
+      if (f.type === 'checkbox') v = !!v
+      if (f.type === 'number') v = typeof v === 'number' ? v : Number(v) || 0
+      if (f.type === 'tags') v = Array.isArray(v) ? v : []
+      form[s.key][f.name] = v
+    }
   }
+  // 平台特殊字段：项目级指令
+  const hasProject = (state.pluginSchemas || []).some(s => (s.fields || []).some(f => f.type === 'project'))
+  projectInst.value = ''
+  if (hasProject) loadProjectInstructions()
 }
 
-function onRolePhilInput(roleId, event) {
-  local.philosophyRoles[roleId] = event.target.value
+// tags 显示/输入
+function tagsText(tabKey, f) {
+  const v = form[tabKey]?.[f.name]
+  return Array.isArray(v) ? v.join(', ') : (v || '')
+}
+function onTagsInput(tabKey, f, ev) {
+  form[tabKey][f.name] = ev.target.value.split(',').map(s => s.trim()).filter(Boolean)
 }
 
-// ─── 加载指令 ───
-async function loadInstructions() {
-  try {
-    const sys = await api.getInstructions('system')
-    local.systemInstructions = sys.content || ''
-  } catch {}
+async function loadProjectInstructions() {
   try {
     const proj = await api.getInstructions('project')
-    local.projectInstructions = proj.content || ''
+    projectInst.value = proj.content || ''
   } catch {}
 }
 
-async function loadPhilosophy() {
-  try {
-    const data = await api.getPhilosophy()
-    local.philosophyEnabled = data.enabled || false
-    local.philosophySelected = data.selected || []
-    const roles = data.roles || {}
-    local.mainAgentPhilosophy = roles['main'] || ''
-    const rolePhil = { ...roles }
-    delete rolePhil['main']
-    local.philosophyRoles = rolePhil
-    classicList.value = data.availableClassics || []
-    roleList.value = data.availableRoles || []
-  } catch {
-    classicList.value = [
-      { id: 'tao-te-ching', name: '《道德经》' },
-      { id: 'huangdi-yinfu-jing', name: '《黄帝阴符经》' },
-      { id: 'sunzi-bingfa', name: '《孙子兵法》' },
-    ]
-    roleList.value = [
-      { id: 'planner', name: '规划 Agent' },
-      { id: 'reviewer', name: '审核 Agent' },
-    ]
-  }
-}
-
-// ─── 加载设置到 local ───
+// ─── 加载 ───
 function loadSettings() {
-  const s = state.settings
-  if (!s) return
-  local.provider = s.provider || ''
-  local.baseURL = s.baseURL || ''
-  local.apiKey = s.apiKey || ''
-  local.executeModel = s.executeModel || s.model || ''
-  const execModels = modelsMap.value[local.provider] || []
-  local.executeModelCustom = ''
-  if (local.executeModel && execModels.length > 0 && !execModels.includes(local.executeModel) && local.executeModel !== 'custom') {
-    local.executeModelCustom = local.executeModel
-    local.executeModel = 'custom'
-  }
-  local.planModel = s.planModel || ''
-  local.planModelCustom = ''
-  if (local.planModel && execModels.length > 0 && !execModels.includes(local.planModel) && local.planModel !== 'custom') {
-    local.planModelCustom = local.planModel
-    local.planModel = 'custom'
-  }
-  local.reviewModel = s.reviewModel || ''
-  local.reviewModelCustom = ''
-  if (local.reviewModel && execModels.length > 0 && !execModels.includes(local.reviewModel) && local.reviewModel !== 'custom') {
-    local.reviewModelCustom = local.reviewModel
-    local.reviewModel = 'custom'
-  }
-  local.temperature = s.temperature ?? 0.3
-  local.maxTokens = s.maxTokens || 16384
-  local.contextMaxTokens = s.contextMaxTokens || 1000000
-  local.thinkingMode = s.thinkingMode || 'thinking'
-  // Agent
-  local.maxIterations = s.maxIterations || 50
-  local.reviewMode = s.reviewMode || 'auto'
-  local.autoIterateOnRejection = !!s.autoIterateOnRejection
-  local.autonomous = !!s.autonomous
-  local.searxngUrl = s.searxngUrl || ''
-  local.ignoreDirsText = (s.ignoreDirs || []).join(', ')
-  // 编辑器
-  local.editorFontSize = s.editorFontSize || 14
-  local.tabSize = s.tabSize || 2
-  local.wordWrap = !!s.wordWrap
-  local.hideMinimap = !!s.hideMinimap
-  local.fontFamily = s.fontFamily || "'Cascadia Code', 'Fira Code', Consolas, monospace"
-  local.editorFontBold = !!s.editorFontBold
-  local.editorFontItalic = !!s.editorFontItalic
-  local.editorFontUnderline = !!s.editorFontUnderline
-  local.uiFontFamily = s.uiFontFamily || ''
-  local.uiFontBold = !!s.uiFontBold
-  local.uiFontItalic = !!s.uiFontItalic
-  local.uiFontUnderline = !!s.uiFontUnderline
-  // 外观
-  local.theme = s.theme || 'dark'
-  // 终端
-  local.defaultShell = s.defaultShell || 'auto'
-  local.termFontSize = s.termFontSize || 13
-  local.termEncoding = s.termEncoding || 'auto'
-  // MCP
-  local.autoConnectMCP = s.autoConnectMCP !== false
-
-  // 插件配置值：schema 默认值合并已存值（pluginSettings[key]）
-  for (const sch of (state.pluginSchemas || [])) {
-    const saved = (s.pluginSettings && s.pluginSettings[sch.key]) || {}
-    const defs = {}
-    for (const f of (sch.fields || [])) {
-      if (f.default !== undefined && f.default !== null) defs[f.name] = f.default
-    }
-    pluginValues[sch.key] = { ...defs, ...saved }
-  }
+  buildForm()
+  if (state.settings?.theme) applyTheme(state.settings.theme)
 }
 
-// ─── 初始化 ───
-// ★ setup 顶层同步预取：组件创建时 state.settingsLoaded 往往已为 true
-//   （App.vue onMounted 已 fetch 完成），在首次渲染前填充 local 可让
-//   input/select 的 v-model 初值即为真实设置值，避免「打开面板显示默认值」。
-//   onMounted 里异步修改 reactive 的 local 在 wb-ui 引擎中可能不触发组件
-//   重渲染（Vue scheduler 微任务未被驱动），故必须在渲染前同步赋值。
-if (state.settingsLoaded) loadSettings()
+async function reloadProjectInst() { await loadProjectInstructions() }
 
-onMounted(async () => {
-  wsRoot.value = state.workspaceRoot || ''
-  await loadModels()
-  await loadInstructions()
-  await loadPhilosophy()
-})
+const resetForm = () => { loadSettings() }
 
-watch(() => state.settingsLoaded, (v) => { if (v) loadSettings() })
-
-function reloadProjectInst() {
-  loadInstructions()
-}
-
-const resetForm = () => {
-  loadSettings()
-}
-
+// ─── 保存：分拣 binding → 顶层 / 非 binding → 插件命名空间 ───
 const saveSettings = async () => {
   try {
-    const settings = {
-      ...state.settings,
-      provider: local.provider,
-      baseURL: local.baseURL,
-      apiKey: local.apiKey,
-      executeModel: local.executeModel === 'custom' ? local.executeModelCustom : local.executeModel,
-      planModel: local.planModel === 'custom' ? local.planModelCustom : local.planModel,
-      reviewModel: local.reviewModel === 'custom' ? local.reviewModelCustom : local.reviewModel,
-      temperature: String(local.temperature),
-      maxTokens: local.maxTokens,
-      contextMaxTokens: local.contextMaxTokens,
-      thinkingMode: local.thinkingMode,
-      // Agent
-      maxIterations: local.maxIterations,
-      reviewMode: local.reviewMode,
-      autoIterateOnRejection: local.autoIterateOnRejection,
-      autonomous: local.autonomous,
-      searxngUrl: local.searxngUrl,
-      ignoreDirs: local.ignoreDirsText.split(',').map(s => s.trim()).filter(Boolean),
-      // 编辑器
-      editorFontSize: local.editorFontSize,
-      tabSize: local.tabSize,
-      wordWrap: local.wordWrap,
-      hideMinimap: local.hideMinimap,
-      fontFamily: local.fontFamily,
-      editorFontBold: local.editorFontBold,
-      editorFontItalic: local.editorFontItalic,
-      editorFontUnderline: local.editorFontUnderline,
-      uiFontFamily: local.uiFontFamily,
-      uiFontBold: local.uiFontBold,
-      uiFontItalic: local.uiFontItalic,
-      uiFontUnderline: local.uiFontUnderline,
-      // 外观
-      theme: local.theme,
-      // 终端
-      defaultShell: local.defaultShell,
-      termFontSize: local.termFontSize,
-      termEncoding: local.termEncoding,
-      // MCP
-      autoConnectMCP: local.autoConnectMCP,
-      // 插件配置（ctx.registerSettings 命名空间，按 key 隔离存储）
-      pluginSettings: { ...(state.settings.pluginSettings || {}), ...collectPluginValues() },
+    const top = { ...(state.settings || {}) }
+    const pluginOut = {}
+    let themeChanged = false
+    for (const s of (state.pluginSchemas || [])) {
+      const vals = form[s.key] || {}
+      for (const f of (s.fields || [])) {
+        if (f.type === 'project') {
+          await api.saveInstructions('project', projectInst.value)
+          continue
+        }
+        const v = vals[f.name]
+        if (f.binding) {
+          if (f.name === 'theme' && v !== top[f.binding]) themeChanged = true
+          top[f.binding] = v
+        } else {
+          if (!pluginOut[s.key]) pluginOut[s.key] = {}
+          pluginOut[s.key][f.name] = v
+        }
+      }
     }
-    await api.apiPut('/settings', settings)
-    state.settings = settings
-    applyTheme(local.theme)
-    // 保存系统指令
-    await api.saveInstructions('system', local.systemInstructions)
-    // 保存项目指令
-    await api.saveInstructions('project', local.projectInstructions)
-    // 保存思想配置
-    const roles = { ...local.philosophyRoles }
-    if (local.mainAgentPhilosophy) roles['main'] = local.mainAgentPhilosophy
-    await api.savePhilosophy({
-      enabled: local.philosophyEnabled,
-      selected: local.philosophySelected,
-      roles: roles,
-    })
+    await api.apiPut('/settings', { settings: top, pluginSettings: pluginOut })
+    state.settings = top
+    if (themeChanged) applyTheme(top.theme)
     window.$toast('设置已保存', 'success')
     emit('close')
   } catch (err) {
     window.$toast('保存失败: ' + err.message, 'error')
   }
 }
+
+onMounted(() => {
+  loadSettings()
+})
 </script>
 
 <style scoped>
 .modal-overlay {
-  position: fixed;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex; align-items: center; justify-content: center; z-index: 1000;
 }
 .modal-content {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  width: 80vw;
-  max-width: 720px;
-  max-height: 80vh;
-  display: flex;
-  flex-direction: column;
+  background: var(--bg-secondary, #1e1e2e);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 10px;
+  width: 82vw; max-width: 760px; max-height: 86vh;
+  display: flex; flex-direction: column;
+  box-shadow: 0 12px 40px rgba(0,0,0,.4);
   overflow: hidden;
 }
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-color);
+h2 {
+  display: flex; align-items: center; gap: 8px;
+  margin: 0; padding: 14px 18px;
+  font-size: 15px; font-weight: 600;
+  border-bottom: 1px solid var(--border-color, #333);
+  color: var(--text-primary, #eee);
 }
-.modal-header h2 { font-size: 16px; color: var(--text-primary); display:flex;align-items:center;gap:6px; }
-.modal-close { background: none; border: none; color: var(--text-secondary); font-size: 20px; cursor: pointer; }
-.modal-close:hover { color: var(--text-primary); }
-.modal-body { flex: 1; display: flex; overflow: hidden; }
+.modal-close {
+  margin-left: auto; background: none; border: none;
+  color: var(--text-secondary, #999); font-size: 18px; cursor: pointer;
+  width: 28px; height: 28px; border-radius: 6px; line-height: 1;
+}
+.modal-close:hover { background: var(--bg-hover, rgba(255,255,255,.08)); color: #fff; }
+.modal-body { display: flex; flex: 1; min-height: 0; }
 .settings-tabs {
-  width: 100px;
-  border-right: 1px solid var(--border-color);
-  padding: 4px 0;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 10px 8px; width: 140px; flex-shrink: 0;
+  border-right: 1px solid var(--border-color, #333);
+  background: var(--bg-tertiary, rgba(0,0,0,.15));
+  overflow-y: auto;
 }
-.settings-tabs button {
-  display: block; width: 100%; text-align: left;
-  padding: 7px 10px; background: none; border: none; border-right: 2px solid transparent;
-  color: var(--text-secondary); font-size: 13px; cursor: pointer;
+.settings-tab {
+  text-align: left; padding: 8px 12px; border: none; border-radius: 7px;
+  background: none; color: var(--text-secondary, #aaa);
+  font-size: 13px; cursor: pointer; transition: all .15s;
+}
+.settings-tab:hover { background: var(--bg-hover, rgba(255,255,255,.06)); color: var(--text-primary, #eee); }
+.settings-tab.active {
+  background: var(--accent, #4f8cff); color: #fff; font-weight: 600;
+}
+.settings-content { flex: 1; padding: 16px 18px; overflow-y: auto; }
+.settings-empty { color: var(--text-secondary, #888); text-align: center; padding: 40px 0; font-size: 13px; }
+
+.setting-group { margin-bottom: 14px; }
+.group-title {
+  font-size: 12px; font-weight: 600; letter-spacing: .4px;
+  color: var(--text-secondary, #999); margin-bottom: 8px;
+  text-transform: uppercase; opacity: .85;
+}
+.setting-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 8px; margin-bottom: 4px; border-radius: 7px;
+  transition: background .12s;
+}
+.setting-row:hover { background: var(--bg-hover, rgba(255,255,255,.04)); }
+.field-label {
+  width: 180px; flex-shrink: 0;
+  font-size: 13px; color: var(--text-primary, #ddd);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
-.settings-tabs button.active { background: var(--bg-active); color: var(--text-primary); border-right-color: var(--accent); }
-.settings-tabs button:hover { color: var(--text-primary); background: var(--bg-hover); }
-.settings-body { flex: 1; overflow: auto; padding: 12px 16px; }
-.setting-group { margin-bottom: 16px; }
-.group-title { font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid var(--border-color); }
-.setting-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
-.setting-row label { width: 120px; font-size: 13px; color: var(--text-primary); flex-shrink: 0; }
-.setting-row-vertical { padding: 4px 0; }
 .setting-row input[type="text"],
 .setting-row input[type="password"],
 .setting-row input[type="number"],
-.setting-row select {
-  flex: 1; background: var(--input-bg); border: 1px solid var(--border-color);
-  color: var(--text-primary); padding: 4px 8px; font-size: 13px; outline: none; border-radius: 3px;
+.setting-row .field-select {
+  flex: 1; min-width: 0;
+  background: var(--input-bg, #14141f);
+  border: 1px solid var(--border-color, #3a3a4a);
+  color: var(--text-primary, #eee);
+  border-radius: 6px; padding: 6px 10px; font-size: 13px;
+  outline: none; transition: border-color .15s;
 }
-.setting-row input:focus, .setting-row select:focus { border-color: var(--accent); }
-.setting-row input[type="range"] { flex: 1; }
-.range-val { width: 30px; text-align: center; font-size: 12px; color: var(--text-secondary); }
-.setting-row input[type="checkbox"] { width: 16px; height: 16px; }
-.set-input-sm { background: var(--input-bg); border: 1px solid var(--border-color); color: var(--text-primary); padding: 4px 6px; font-size: 12px; outline: none; border-radius: 3px; width: 100px; }
-.set-input-sm.flex-1 { flex: 1; }
-
-/* ── 主题卡片 ── */
-.theme-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 8px 0; }
-.theme-card { border: 2px solid var(--border-color); border-radius: var(--border-radius-lg); padding: 10px; cursor: pointer; transition: all 0.15s; background: var(--bg-primary); }
-.theme-card:hover { border-color: var(--text-muted); transform: translateY(-1px); box-shadow: var(--shadow-sm); }
-.theme-card.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
-.theme-preview { height: 56px; border-radius: 4px; overflow: hidden; display: flex; flex-direction: row; margin-bottom: 6px; }
-.tp-activity { width: 10px; flex-shrink: 0; }
-.tp-main { flex: 1; display: flex; flex-direction: row; }
-.tp-sidebar { width: 28px; }
-.tp-editor { flex: 1; padding: 6px 4px; display: flex; flex-direction: column; gap: 3px; }
-.tp-line { height: 4px; border-radius: 2px; }
-.tp-line-accent { height: 3px; }
-.tp-accent-bar { width: 4px; flex-shrink: 0; }
-.theme-name { font-size: 13px; font-weight: 600; color: var(--text-primary); text-align: center; }
-.theme-font { font-size: 10px; color: var(--text-muted); text-align: center; margin-top: 2px; }
-
-/* ── 指令 ── */
-.inst-textarea {
-  width: 100%; box-sizing: border-box;
-  background: var(--input-bg); border: 1px solid var(--border-color);
-  color: var(--text-primary); padding: 6px 8px; font-size: 13px;
-  outline: none; border-radius: 3px; font-family: var(--font-code, monospace);
-  resize: vertical; min-height: 60px;
+.setting-row input:focus,
+.setting-row select:focus { border-color: var(--accent, #4f8cff); }
+.setting-hint {
+  flex: 1; font-size: 11px; color: var(--text-secondary, #888);
+  line-height: 1.4; min-width: 0;
 }
-.inst-textarea:focus { border-color: var(--accent); }
-.project-inst-hint { font-size: 12px; color: var(--text-muted); display:flex;align-items:center;gap:6px; }
-.project-inst-hint code { background: var(--bg-tertiary); padding: 1px 4px; border-radius: 3px; font-size: 11px; }
-.btn-xs { background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary); padding: 2px 8px; font-size: 11px; cursor: pointer; border-radius: 3px; }
-.btn-xs:hover { background: var(--bg-hover); }
+.field-textarea {
+  flex: 1; min-width: 0; resize: vertical;
+  background: var(--input-bg, #14141f);
+  border: 1px solid var(--border-color, #3a3a4a);
+  color: var(--text-primary, #eee); border-radius: 6px;
+  padding: 8px 10px; font-size: 13px; font-family: inherit; outline: none;
+}
+.field-textarea:focus { border-color: var(--accent, #4f8cff); }
 
-/* ── 思想 ── */
-.classics-list { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 0; }
-.classic-item { display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--text-primary); cursor: pointer; padding: 4px 8px; border-radius: 4px; background: var(--bg-tertiary); }
-.classic-item:hover { background: var(--bg-hover); }
-.role-phil-label { font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 2px; }
+/* 开关（对齐 pp-switch 风格） */
+.pp-switch { position: relative; display: inline-flex; align-items: center; cursor: pointer; flex-shrink: 0; }
+.pp-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.pp-switch-track {
+  width: 34px; height: 18px; border-radius: 9px;
+  background: var(--border-color, #444); position: relative; transition: background .18s;
+}
+.pp-switch-track::after {
+  content: ''; position: absolute; top: 2px; left: 2px;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: #fff; transition: transform .18s;
+}
+.pp-switch input:checked + .pp-switch-track { background: var(--accent, #4f8cff); }
+.pp-switch input:checked + .pp-switch-track::after { transform: translateX(16px); }
 
-.modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--border-color); }
-.btn-secondary { background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary); padding: 6px 16px; cursor: pointer; border-radius: 3px; }
-.btn-primary { background: var(--accent); border: none; color: #fff; padding: 6px 16px; cursor: pointer; border-radius: 3px; }
+/* slider */
+.slider-row { flex: 1; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.slider-row input[type="range"] { flex: 1; accent-color: var(--accent, #4f8cff); }
+.slider-val {
+  min-width: 36px; text-align: right;
+  font-size: 12px; color: var(--text-primary, #eee); font-variant-numeric: tabular-nums;
+}
 
-.toggle-indicator { width: 36px; height: 18px; border-radius: 10px; background: var(--border-color); transition: background 0.2s; position: relative; }
-.toggle-indicator::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: transform 0.2s; }
-.toggle-indicator.on { background: var(--accent); }
-.toggle-indicator.on::after { transform: translateX(18px); }
+/* color */
+.color-row { flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.color-row input[type="color"] {
+  width: 34px; height: 24px; border: 1px solid var(--border-color, #3a3a4a);
+  border-radius: 5px; background: none; padding: 1px; cursor: pointer;
+}
+.color-code { font-size: 12px; color: var(--text-secondary, #aaa); }
+
+.modal-footer {
+  display: flex; justify-content: flex-end; gap: 10px;
+  padding: 12px 18px; border-top: 1px solid var(--border-color, #333);
+}
+.btn-secondary, .btn-primary {
+  padding: 7px 16px; border-radius: 7px; font-size: 13px;
+  cursor: pointer; border: 1px solid var(--border-color, #444); transition: all .15s;
+}
+.btn-secondary { background: none; color: var(--text-primary, #ddd); }
+.btn-secondary:hover { background: var(--bg-hover, rgba(255,255,255,.06)); }
+.btn-primary {
+  background: var(--accent, #4f8cff); color: #fff; border-color: var(--accent, #4f8cff); font-weight: 600;
+}
+.btn-primary:hover { filter: brightness(1.12); }
 </style>

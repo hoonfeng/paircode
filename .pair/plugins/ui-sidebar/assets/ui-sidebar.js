@@ -6941,28 +6941,8 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
         }
       }
       function pluginToolOn(p, t) {
-        var _a, _b, _c;
-        return ((_c = (_b = (_a = wsToolsetMap.value) == null ? void 0 : _a[p.name]) == null ? void 0 : _b.tools) == null ? void 0 : _c[t]) === true;
-      }
-      async function togglePluginTool(p, t) {
         var _a;
-        const target = !pluginToolOn(p, t);
-        const info = (_a = wsToolsetMap.value) == null ? void 0 : _a[p.name];
-        try {
-          if (target) {
-            if (info && info.joined) {
-              await api.toolsetEdit({ name: "default", action: "enable_tool", plugin_name: p.name, tool: t, workspaceRoot: uiState_js.state.workspaceRoot });
-            } else {
-              await api.toolsetEdit({ name: "default", action: "add_plugin", plugin_name: p.name, tools: t, workspaceRoot: uiState_js.state.workspaceRoot });
-            }
-          } else {
-            await api.toolsetEdit({ name: "default", action: "rm_tool", plugin_name: p.name, tool: t, workspaceRoot: uiState_js.state.workspaceRoot });
-          }
-          window.$toast && window.$toast((target ? "已加入工作区工具集（agent 可用）" : "已从工作区工具集移出（agent 不可见）") + " " + t, "info");
-          await Promise.all([refresh(), loadWsToolsetMap()]);
-        } catch (e) {
-          window.$toast && window.$toast(e.message || "操作失败", "error");
-        }
+        return ((_a = p.toolCordisVisible) == null ? void 0 : _a[t]) !== false;
       }
       function uiSlotsOf(pname) {
         return pluginRuntime_js.clientSlots.filter((s) => s.pluginName === pname);
@@ -7809,7 +7789,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                       vue.createElementVNode(
                         "div",
                         _hoisted_64,
-                        "工具（" + vue.toDisplayString(p.tools.length) + "）· 勾选=加入工作区工具集（agent 可用）；取消=移出",
+                        "工具（" + vue.toDisplayString(p.tools.length) + "）· 勾选=对 cordis（JS 插件运行时）可见；取消=隐藏。agent 可用性由工作区工具集决定",
                         1
                         /* TEXT */
                       ),
@@ -7827,12 +7807,12 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                             }, vue.toDisplayString(t), 9, _hoisted_65),
                             vue.createElementVNode("label", {
                               class: "pp-switch",
-                              title: pluginToolOn(p, t) ? "已加入工作区工具集（agent 可用）；点击移出" : "未加入工作区工具集（agent 不可见）；点击加入"
+                              title: pluginToolOn(p, t) ? "对 cordis 可见；点击隐藏（JS 插件 ctx.tools 看不到它）" : "对 cordis 隐藏；点击恢复可见"
                             }, [
                               vue.createElementVNode("input", {
                                 type: "checkbox",
                                 checked: pluginToolOn(p, t),
-                                onChange: ($event) => togglePluginTool(p, t)
+                                onChange: ($event) => _ctx.togglePluginTool(p, t)
                               }, null, 40, _hoisted_67),
                               _cache[24] || (_cache[24] = vue.createElementVNode(
                                 "span",
@@ -7877,7 +7857,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                       )
                     ])) : vue.createCommentVNode("v-if", true),
                     vue.createElementVNode("div", _hoisted_71, [
-                      vue.createCommentVNode(" UI 类插件（client 半已装载且有槽位）不再显示「停止插件」：\n                 UI 可见性已由勾选/UI 开关控制（取消勾选=隐藏，勾选=恢复），\n                 stop 会卸载 client 半并清空槽位条目 → 勾选框消失无法再启用。\n                 stopped 状态仍保留「启动插件」按钮作为恢复路径。 "),
+                      vue.createCommentVNode(" UI 类插件（client 半已装载且有槽位）不再显示「停止插件」：\r\n                 UI 可见性已由勾选/UI 开关控制（取消勾选=隐藏，勾选=恢复），\r\n                 stop 会卸载 client 半并清空槽位条目 → 勾选框消失无法再启用。\r\n                 stopped 状态仍保留「启动插件」按钮作为恢复路径。 "),
                       p.state === "running" ? (vue.openBlock(), vue.createElementBlock(
                         vue.Fragment,
                         { key: 0 },
@@ -7913,7 +7893,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
       };
     }
   };
-  const PluginPanel = /* @__PURE__ */ _export_sfc(_sfc_main$1, [["__scopeId", "data-v-0382d874"]]);
+  const PluginPanel = /* @__PURE__ */ _export_sfc(_sfc_main$1, [["__scopeId", "data-v-28cc536a"]]);
   const _hoisted_1 = { class: "sidebar-header" };
   const _hoisted_2 = { class: "sidebar-content" };
   const _hoisted_3 = {
