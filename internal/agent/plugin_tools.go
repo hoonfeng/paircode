@@ -149,23 +149,11 @@ func RegisterCordisTools(registry *Registry, host *PluginHost, root string) {
 			"id":     strProp("cordis_define 返回的 dyn id（如 dyn-1，精确版本）或 pluginId（稳定身份=首次 dyn id，装载最新版本）。"),
 			"config": strProp("可选：插件配置 JSON 对象（透传给 apply(ctx, config) 第二参）。"),
 		}, "id"),
-		// ★ client 半激活动态审批：装载「带 client 半且尚未批准」的插件时自动进
-		//   现有审批门（manual=人工审批条 / auto=AI 审核 / off=放行）。批准覆盖
-		//   该插件后续版本——已批准插件再次 run 不再触发审批。
+		// ★ 2026-08-19：client 半激活审批机制整体取消（参考项目 deepseek-harness
+		//   无此机制）→ 恒 false：装载带 client 半的插件不再触发审批门，浏览器
+		//   直接装载（IsClientApproved 恒 true）。
 		DynamicApproval: func(tc ToolCall) bool {
-			var a map[string]any
-			if err := json.Unmarshal([]byte(tc.Function.Arguments), &a); err != nil {
-				return false
-			}
-			id := argStr(a, "id")
-			if id == "" {
-				return false
-			}
-			def, err := host.resolveJSDef(id)
-			if err != nil {
-				return false
-			}
-			return strings.TrimSpace(def.clientCode) != "" && !host.IsClientApproved(def.name)
+			return false
 		},
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
 			id := argStr(args, "id")
@@ -183,21 +171,8 @@ func RegisterCordisTools(registry *Registry, host *PluginHost, root string) {
 			if err := host.LoadJSDynamic(def); err != nil {
 				return "", err
 			}
-			// ★ client 半激活批准：带 client 半的插件首次装载必须经审批门（本工具
-			//   DynamicApproval 判定）；工具能执行到这里 = 已过审批（manual 人工批准 /
-			//   auto AI 审核 / off 全部放行）→ 记录批准（键=插件名 name，跨进程/跨版本
-			//   稳定，覆盖该插件后续版本），浏览器 client 半方可装载（对齐 harness
-			//   approvedClientPackages）。
-			if strings.TrimSpace(def.clientCode) != "" {
-				// 作用域：def.scope 空但含 client 半 = UI 类 → 全局（对齐
-				// cordis_define「含 client 半自动 global」语义；批准写安装目录，
-				// 跨工作区生效——UI 插件与工作区无关）
-				scope := def.scope
-				if scope == "" {
-					scope = "global"
-				}
-				host.MarkClientApproved(def.name, scope)
-			}
+			// ★ 2026-08-19：client 半激活审批机制整体取消（参考项目无此机制），
+			//   不再 MarkClientApproved；浏览器直接装载全部 client 半。
 			// 等待语义：装载成功但插件进入 waiting（inject 缺服务）
 			if def.status == PluginWaiting {
 				msg := fmt.Sprintf("插件 %s (%s v%s) 已进入 waiting：inject 声明 %v 中宿主未提供 %v。服务出现后将自动激活；可用 cordis_inspect id=%s 查看。",
@@ -831,14 +806,6 @@ func cordisInspectReport(host *PluginHost, filter, version string) (string, erro
 		}
 		if d.status == PluginFailed || d.status == PluginRejected {
 			extra = fmt.Sprintf(" ❌ %s: %s", d.status, truncateStr(d.lastError, 80))
-		}
-		// client 半激活批准状态（浏览器仅装载已批准；cordis_run 触发审批门）
-		if strings.TrimSpace(d.clientCode) != "" {
-			if host.IsClientApproved(d.name) {
-				extra += " client=已批准"
-			} else {
-				extra += " client=待批准(cordis_run 触发审批)"
-			}
 		}
 		sb.WriteString(fmt.Sprintf("- %s %s [%s] %s%s%s\n", d.pluginId, d.name, state, d.version, verNote, extra))
 	}

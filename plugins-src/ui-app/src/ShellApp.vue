@@ -22,10 +22,12 @@
     <div v-else-if="!panelMode" :ref="slots.activitybar.hostRef"
          class="plugin-slot-host plugin-area-activitybar"></div>
 
-    <!-- sidebar 槽位（single）：左侧栏（文件/搜索/Git），sidebarVisible 控制 -->
-    <div v-if="!panelMode && state.sidebarVisible && !slots.sidebar.owner.value"
+    <!-- sidebar 槽位（single）：左侧栏（文件/搜索/Git），sidebarVisible 仅 CSS 隐藏
+         ★ v-show 保持 DOM（不卸载插件 UI）：v-if 会在隐藏时销毁宿主 div，重新显示时
+           useSingleSlot 判定 owner 未变跳过重渲染 → 面板空白需整页刷新（历史 bug） -->
+    <div v-if="!panelMode && !slots.sidebar.owner.value" v-show="state.sidebarVisible"
          class="slot-empty plugin-area-sidebar"><span>侧栏未装配（ui-sidebar）</span><button class="escape-link" @click="pluginsOpen = true">打开插件面板</button></div>
-    <div v-else-if="!panelMode && state.sidebarVisible" :ref="slots.sidebar.hostRef"
+    <div v-else-if="!panelMode" v-show="state.sidebarVisible" :ref="slots.sidebar.hostRef"
          class="plugin-slot-host plugin-area-sidebar"></div>
 
     <!-- editor 槽位（single）：主编辑区，focusMode 隐藏 -->

@@ -466,18 +466,13 @@ type PluginHost struct {
 	//   （internal/agent/.pair/cordis-approved.json 残留导致测试误判）。
 	approvedGlobalDir string
 
-	// ★ client 半激活批准（per-plugin，批准覆盖后续版本；对齐 harness
-	//   approvedClientPackages）：cordis_run 装载带 client 半的插件时经
-	//   现有审批门（ReviewMode manual=人工审批 / auto=AI审核 / off=放行），
-	//   通过后 MarkClientApproved 记录；浏览器 client 半仅装载已批准插件。
-	//   ★ 存储按作用域分流：global（UI 类插件）→ 安装目录 <InstallDir>/.pair/
-	//   cordis-approved.json（随安装包发布、跨工作区生效——UI 插件与工作区无关）；
-	//   project（工具插件）→ 工作区 <root>/.pair/cordis-approved.json。
-	//   approvedClients 为合并视图（IsClientApproved 查询用；跨重启恢复）。
+	// ★ 已废弃（2026-08-19）：client 半激活审批机制整体取消（参考项目无此机制）。
+	//   以下字段与 load/save 函数仅为兼容保留，不再产生效果（IsClientApproved 恒
+	//   true、cordis_run 不再触发审批门）；未来如需恢复审批可复用。
 	approveMu       sync.RWMutex
-	approvedClients map[string]bool // 合并视图（global + project）
-	approvedGlobal  map[string]bool // 全局（UI 类）批准：安装目录持久化
-	approvedProject map[string]bool // 项目批准：工作区持久化
+	approvedClients map[string]bool // 合并视图（global + project）[废弃]
+	approvedGlobal  map[string]bool // 全局（UI 类）批准：安装目录持久化 [废弃]
+	approvedProject map[string]bool // 项目批准：工作区持久化 [废弃]
 	root            string          // 工作区根（project 批准持久化用）
 }
 
@@ -695,12 +690,11 @@ func NewPluginHost(registry *Registry, store ConversationStore, root string) *Pl
 	return h
 }
 
-// ─── client 半激活批准 ────────────────────────────────────
-// 对齐 harness「per Plugin, human-approved Client activation」：cordis_run 装载
-// 带 client 半的插件时，若该插件 client 半尚未批准，工具调用自动进现有审批门
-// （ReviewMode manual=人工审批条 / auto=AI 审核 / off=放行）；工具执行成功
-// （=已过审批门）后 MarkClientApproved 记录。批准键 = 插件名 name（跨进程/跨版本
-// 稳定——进程内 dyn-n 序号随装配顺序漂移，不能作持久化键；覆盖该插件后续版本）。
+// ─── client 半激活批准（已废弃）────────────────────────────
+// ★ 2026-08-19：client 半激活审批机制整体取消（参考项目 deepseek-harness 无
+//   approvedClientPackages 机制，属自行添加）→ IsClientApproved 恒 true，
+//   cordis_run 不再触发审批门。以下 load/save 函数保留仅为兼容，不再产生效果；
+//   未来如需恢复审批可复用。
 
 // approvedFilePath 按作用域返回 .pair/cordis-approved.json 绝对路径：
 //   - global：安装目录 <InstallDir>/.pair/（UI 类插件跨工作区生效，随安装包
@@ -797,15 +791,13 @@ func (h *PluginHost) saveApprovedFile(p string, src map[string]bool) {
 	_ = os.WriteFile(p, data, 0o644)
 }
 
-// IsClientApproved 该插件（稳定身份 pluginId）的 client 半是否已获激活批准
-// （批准覆盖后续版本）。
+// IsClientApproved 该插件的 client 半是否已获激活批准。
+// ★ 2026-08-19：client 半激活审批机制整体取消（参考项目 deepseek-harness 无
+//   approvedClientPackages 机制，属自行添加）→ 恒 true：所有带 client 半的插件
+//   视为已批准，浏览器直接装载，无需 cordis_run 审批门、无需手动维护
+//   .pair/cordis-approved.json。保留签名兼容调用点；load/save 批准文件不再产生效果。
 func (h *PluginHost) IsClientApproved(pluginID string) bool {
-	if pluginID == "" {
-		return false
-	}
-	h.approveMu.RLock()
-	defer h.approveMu.RUnlock()
-	return h.approvedClients[pluginID]
+	return true
 }
 
 // MarkClientApproved 批准插件 client 半激活（cordis_run 经审批门执行成功后调用，

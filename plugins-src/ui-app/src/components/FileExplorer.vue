@@ -97,45 +97,6 @@
       </div>
     </div>
 
-    <!-- ── 插件与 UI 槽位（卷帘：与文件树同区） ── -->
-    <div class="ts-divider">
-      <div class="ts-header" :class="{ open: ppOpen }" @click="togglePp" title="插件与 UI 槽位（可折叠）">
-        <SvgIcon name="puzzle" :size="12" class="ts-header-icon" />
-        <span class="divider-label ts-label">插件与插槽</span>
-        <span class="ts-spacer"></span>
-        <SvgIcon name="chevron-right" :size="11" class="ts-chevron" :class="{ open: ppOpen }" />
-      </div>
-      <div v-if="ppOpen" class="ts-body">
-        <!-- UI 槽位（插件 client 半注册的替换/叠加槽） -->
-        <div class="ts-build">
-          <div class="ts-build-head">
-            <span class="ts-build-title">UI 槽位（{{ slotGroups.length }}）</span>
-          </div>
-          <div v-if="slotGroups.length === 0" class="ts-empty">无插件注册槽位（插件 client 半装载后出现）</div>
-          <div v-for="g in slotGroups" :key="g.slotId + '::' + g.kind" class="pp-slot-row">
-            <div class="pp-slot-info">
-              <div class="pp-slot-title-row">
-                <span class="pp-slot-id">{{ g.slotId }}</span>
-                <span class="pp-slot-kind" :class="g.kind === 'list' ? 'kind-list' : 'kind-single'">{{ g.kind === 'list' ? '叠加' : '替换' }}</span>
-              </div>
-              <div class="pp-slot-owner">占用: {{ g.owner || '未分配' }}</div>
-            </div>
-          </div>
-        </div>
-        <!-- 插件列表 -->
-        <div class="ts-build">
-          <div class="ts-build-head">
-            <span class="ts-build-title">插件（{{ pluginList.length }}）</span>
-          </div>
-          <div v-if="pluginList.length === 0" class="ts-empty">无插件</div>
-          <div v-for="p in pluginList" :key="p.name" class="pp-plugin-row">
-            <span class="pp-plugin-name" :title="p.purpose || p.name">{{ p.name }}</span>
-            <span class="pp-plugin-state" :class="{ 'st-client': p.hasClient }">{{ p.hasClient ? 'UI' : '' }}{{ p.clientApproved ? ' ✓' : '' }}</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <!-- ===== 新建工作区对话框 ===== -->
     <div v-if="showWorkspaceDialog" class="dialog-overlay" @click.self="showWorkspaceDialog = false">
       <div class="dialog-box" style="max-width:420px">
@@ -215,7 +176,6 @@ import { state } from '../ui-state.js'
 import api from '../api.js'
 import FileTreeItem from './FileTreeItem.vue'
 import ToolsetTransfer from './ToolsetTransfer.vue'
-import { clientSlots, getSlotOwner } from '../plugin-runtime.js'
 
 // ★ desktop(goja) workaround：渲染 effect 对整体赋值数组的 set 不收集依赖（v-for/v-if 不更新）。
 //   App.vue setup 顶层已同步预取 wsList（mount 前），首次渲染即读到 5 项；此处用 computed
@@ -711,39 +671,11 @@ function toggleTs() {
   try { localStorage.setItem('paircode-ts-open', tsOpen.value ? '1' : '0') } catch {}
 }
 
-// ── 插件与 UI 槽位（卷帘 section：显示插件 client 半注册的槽位 + 插件列表） ──
-const ppOpen = ref(false)
-const pluginList = ref([])
-// 按 (slotId, kind) 分组：同一区域可同时有 single 替换与 list 叠加占用
-const slotGroups = computed(() => {
-  const keys = [...new Set(clientSlots.map(s => s.slotId + '::' + s.kind))]
-  return keys.map(k => {
-    const [slotId, kind] = k.split('::')
-    return { slotId, kind, owner: getSlotOwner(slotId) }
-  })
-})
-function togglePp() {
-  ppOpen.value = !ppOpen.value
-  try { localStorage.setItem('paircode-pp-open', ppOpen.value ? '1' : '0') } catch {}
-}
-async function loadPlugins() {
-  try {
-    pluginList.value = (await api.listPlugins()) || []
-  } catch (e) {
-    console.warn('[explorer] 插件列表加载失败', e)
-  }
-}
-
 // ── 生命周期 ──
 onMounted(() => {
   window.addEventListener('refresh-tree', refreshAll)
   window.addEventListener('refresh-workspace', refreshCurrentWs)
   loadBuiltin()
-  loadPlugins()
-  try {
-    const saved = localStorage.getItem('paircode-pp-open')
-    if (saved !== null) ppOpen.value = saved === '1'
-  } catch {}
 })
 onUnmounted(() => {
   window.removeEventListener('refresh-tree', refreshAll)
@@ -965,19 +897,4 @@ onUnmounted(() => {
 .dir-name { flex: 1; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dir-empty { padding: 16px; text-align: center; color: var(--text-muted); font-size: 12px; }
 
-/* 插件与插槽卷帘（复用 ts-* 骨架 + 槽位/插件行） */
-.pp-slot-row { display: flex; align-items: center; justify-content: space-between; padding: 5px 8px; border-radius: 4px; }
-.pp-slot-row:hover { background: var(--bg-hover); }
-.pp-slot-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.pp-slot-title-row { display: flex; align-items: center; gap: 6px; }
-.pp-slot-id { font-family: var(--font-mono, monospace); font-size: 12px; color: var(--text-primary); }
-.pp-slot-kind { font-size: 10px; padding: 0 5px; border-radius: 8px; }
-.pp-slot-kind.kind-list { background: rgba(52, 152, 219, 0.2); color: #3498db; }
-.pp-slot-kind.kind-single { background: rgba(46, 204, 113, 0.2); color: #2ecc71; }
-.pp-slot-owner { font-size: 11px; color: var(--text-muted); }
-.pp-plugin-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 4px 8px; border-radius: 4px; font-size: 12px; }
-.pp-plugin-row:hover { background: var(--bg-hover); }
-.pp-plugin-name { color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pp-plugin-state { font-size: 10px; color: var(--text-muted); flex-shrink: 0; }
-.pp-plugin-state.st-client { color: #2ecc71; }
 </style>

@@ -142,11 +142,9 @@
           <span class="pp-name" :title="p.purpose || p.name">{{ p.name }}</span>
           <span class="pp-src" :class="p.source">{{ p.source }}</span>
           <span v-if="p.scope === 'global'" class="pp-badge" title="全局插件：跨工作区生效（UI 类），不属于任何工具集">全局</span>
-          <span v-if="p.hasClient && p.clientApproved" class="pp-badge" title="含 client 半（浏览器 UI，已批准装载）">UI</span>
-          <span v-else-if="p.hasClient && p.state === 'running'" class="pp-badge pp-badge-warn" title="client 半待激活批准：在对话中用 cordis_run 装载该插件触发审批">UI 待批准</span>
-          <span v-else-if="p.hasClient" class="pp-badge" title="含 client 半（浏览器 UI；装载后需批准）">UI</span>
+          <span v-if="p.hasClient" class="pp-badge" title="含 client 半（浏览器 UI，运行中自动装载）">UI</span>
           <span v-if="p.tools && p.tools.length" class="pp-count" :title="p.tools.join(', ')">{{ p.tools.length }} 工具</span>
-          <template v-if="p.hasClient && p.clientApproved && uiSlotsOf(p.name).length">
+          <template v-if="p.hasClient && uiSlotsOf(p.name).length">
             <span class="pp-ui-label" :class="{ on: uiPluginActive(p.name) }">{{ uiPluginActive(p.name) ? 'UI 已启用' : 'UI 未启用' }}</span>
             <label class="pp-switch" :title="uiPluginActive(p.name) ? '停用该插件的 UI（恢复内置界面）' : '启用该插件的 UI（替换对应界面区域）'">
               <input type="checkbox" :checked="uiPluginActive(p.name)" @change="toggleUiPlugin(p, $event.target.checked)" @click.stop />
@@ -161,10 +159,10 @@
             <div v-if="p.provides && p.provides.length" class="pp-d-line">服务: {{ p.provides.join(', ') }}</div>
             <div v-if="p.sections && p.sections.length" class="pp-d-line">提示片段: {{ p.sections.join(', ') }}</div>
             <div v-if="p.tools && p.tools.length" class="pp-d-tools">
-              <div class="pp-d-tools-title">工具（{{ p.tools.length }}）· 开关控制 agent 可见性</div>
+              <div class="pp-d-tools-title">工具（{{ p.tools.length }}）· 勾选=加入工作区工具集（agent 可用）；取消=移出</div>
               <div v-for="t in p.tools" :key="t" class="pp-d-tool">
                 <span class="pp-d-tname" :title="t">{{ t }}</span>
-                <label class="pp-switch" :title="pluginToolOn(p, t) ? '对 agent 可见；点击禁用（不影响插件运行）' : '对 agent 不可见；点击启用'">
+                <label class="pp-switch" :title="pluginToolOn(p, t) ? '已加入工作区工具集（agent 可用）；点击移出' : '未加入工作区工具集（agent 不可见）；点击加入'">
                   <input type="checkbox" :checked="pluginToolOn(p, t)" @change="togglePluginTool(p, t)" />
                   <span class="pp-switch-track"></span>
                 </label>
@@ -183,7 +181,7 @@
                  stop 会卸载 client 半并清空槽位条目 → 勾选框消失无法再启用。
                  stopped 状态仍保留「启动插件」按钮作为恢复路径。 -->
             <template v-if="p.state === 'running'">
-              <button v-if="!(p.hasClient && p.clientApproved && uiSlotsOf(p.name).length)" class="pp-btn" title="停止整个插件（其全部工具对 agent 不可见）；单工具请用上方工具开关" @click="doAction(p, 'stop')">停止插件</button>
+              <button v-if="!(p.hasClient && uiSlotsOf(p.name).length)" class="pp-btn" title="停止整个插件（其全部工具对 agent 不可见）；单工具请用上方工具开关" @click="doAction(p, 'stop')">停止插件</button>
             </template>
             <button v-else class="pp-btn primary" @click="doAction(p, 'start')">启动插件</button>
             <button v-if="p.source === 'js'" class="pp-btn danger" @click="doAction(p, 'undefine')">删除定义</button>
@@ -199,6 +197,7 @@
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import api from '../api.js'
 import SvgIcon from './SvgIcon.vue'
+import { state } from '../ui-state.js'
 import { clientPanels, clientSlots, syncClientHalves, unloadClientHalf, startPolling, stopPolling, setPanelMount, setSlotMount, getUIFor, getSlotCandidates, getSlotOwner, setSlotOwner, emitSlotChanged, isOverlayActive, setOverlayActive, isPluginUIEnabled, setPluginUIEnabled } from '../plugin-runtime.js'
 
 const plugins = ref([])
@@ -351,18 +350,51 @@ async function toggleDetail(p) {
   }
 }
 
-// ─── 插件详情：单个工具开关（agent 可见性；不影响插件运行）──────────
-function pluginToolOn(p, t) {
-  return !(p.toolStates && p.toolStates[t] === false)
+// ─── 插件详情：单个工具对勾（加入/移出工作区工具集）──────────
+// ★ 2026-08-18：对勾 = 工具是否已加入工作区工具集（.pair/toolsets/*.json 声明）——
+//   加入工具集的工具对 agent 可见可用（工具集白名单模型）；未加入的注册保留但
+//   agent 不可见。持久化到工作区工具集，重启保持。
+//   状态源：/api/plugins/builtin 的 plugins 字段（source=plugin 分组：g.joined 插件
+//   是否已加入工具集、t.enabled 工具是否在声明内启用）。
+const wsToolsetMap = ref(null) // { [pluginName]: { joined, tools: { [toolName]: enabled } } }
+
+async function loadWsToolsetMap() {
+  try {
+    const info = await api.builtinPlugins(null, state.workspaceRoot)
+    const map = {}
+    for (const g of (info && info.plugins) || []) {
+      map[g.name] = { joined: !!g.joined, tools: {} }
+      for (const t of (g.tools) || []) map[g.name].tools[t.name] = !!t.enabled
+    }
+    wsToolsetMap.value = map
+  } catch (e) {
+    wsToolsetMap.value = null
+  }
 }
 
+function pluginToolOn(p, t) {
+  return wsToolsetMap.value?.[p.name]?.tools?.[t] === true
+}
+
+// 切换工具在工作区工具集的状态：
+//   勾选加入：插件未加入工具集 → add_plugin（tools 白名单=本工具，其余工具摘除）；
+//             插件已加入但工具被摘除 → enable_tool 恢复。
+//   取消移出：rm_tool（摘除单工具，插件保留）。
 async function togglePluginTool(p, t) {
   const target = !pluginToolOn(p, t)
+  const info = wsToolsetMap.value?.[p.name]
   try {
-    const res = await api.pluginToolToggle(t, target)
-    window.$toast && window.$toast((res && res.message) || (target ? '已启用' : '已禁用') + ' ' + t, 'info')
-    if (!p.toolStates) p.toolStates = {}
-    p.toolStates[t] = target
+    if (target) {
+      if (info && info.joined) {
+        await api.toolsetEdit({ name: 'default', action: 'enable_tool', plugin_name: p.name, tool: t, workspaceRoot: state.workspaceRoot })
+      } else {
+        await api.toolsetEdit({ name: 'default', action: 'add_plugin', plugin_name: p.name, tools: t, workspaceRoot: state.workspaceRoot })
+      }
+    } else {
+      await api.toolsetEdit({ name: 'default', action: 'rm_tool', plugin_name: p.name, tool: t, workspaceRoot: state.workspaceRoot })
+    }
+    window.$toast && window.$toast((target ? '已加入工作区工具集（agent 可用）' : '已从工作区工具集移出（agent 不可见）') + ' ' + t, 'info')
+    await Promise.all([refresh(), loadWsToolsetMap()])
   } catch (e) {
     window.$toast && window.$toast(e.message || '操作失败', 'error')
   }
@@ -513,6 +545,7 @@ onMounted(() => {
   slotUnsub = setSlotMount(refreshSlots)
   startPolling()
   refresh()
+  loadWsToolsetMap()
 })
 
 onUnmounted(() => {
