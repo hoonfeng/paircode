@@ -2622,7 +2622,7 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 	opts := s.buildWebLoopOpts(req.ConvID, req.Message, req.Autonomous)
 	opts.WorkspaceRoot = req.WorkspaceRoot
 	// ★ 工作区工具集白名单（2026-08-17）：agent 只暴露「会话工作区工具集」声明的
-	//   工具——有配置只暴露配置里的；无配置先自动创建基础工具集（dsh 极简核心 +
+	//   工具——有配置只暴露配置里的；无配置先自动创建基础工具集（极简核心 +
 	//   框架本身提供的工具），再按声明收敛。MergePluginTools 全量启用后应用，
 	//   插件工具未加入工具集 → 对 agent 隐藏（cordis/前端仍可见可管理）。
 	//   工作区隔离：每个工作区读自己的 .pair/toolsets/，移除/加入互不影响。
@@ -2832,7 +2832,11 @@ func (s *webServer) startEventPersistWorker() {
 // ─── 市场搜索 API ──────────────────────────────────────────
 
 func (s *webServer) handleMarketplaceSearch(w http.ResponseWriter, r *http.Request) {
+	// ★ 2026-08-19：前端传 query、老接口用 q——兼容两者，修复市场搜索恒空 bug。
 	query := r.URL.Query().Get("q")
+	if query == "" {
+		query = r.URL.Query().Get("query")
+	}
 	kind := r.URL.Query().Get("kind")
 	if kind == "" {
 		kind = "all"

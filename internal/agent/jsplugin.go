@@ -35,6 +35,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"sync"
@@ -635,7 +636,7 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 	//     返回 disposer 函数（取消注册）。重复 (method, path) 注册报错（装配契约）。
 	//   - list()：已注册路由清单（含内核接口经 core-api 安装的条目）。
 	//   - 插件卸载自动注销全部路由（addCleanup）。
-	// ★ 2026-08-18：新插件请用 ctx.webServer（对齐 harness dsh-host-webserver：
+	// ★ 2026-08-18：新插件请用 ctx.webServer（对齐 harness host-webserver：
 	//   register({kind, path, handler})，handler 为 Node 风格 (req, res)）。
 	//   ctx.http 保留以兼容现有插件（web-api 等）；二者共用 ext 路由表。
 	httpObj := vm.NewObject()
@@ -731,8 +732,8 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 	})
 	ctxObj.Set("http", httpObj)
 
-	// ── ctx.webServer：HTTP 接口插件化（对齐 harness dsh-host-webserver）──
-	// ★ 2026-08-18：兼容 dsh 插件生态——与参考项目同形态：
+	// ── ctx.webServer：HTTP 接口插件化（对齐 harness host-webserver）──
+	// ★ 2026-08-18：兼容 harness 插件生态——与参考项目同形态：
 	//   ctx.webServer.register({ kind, path, handler }) → disposer
 	//   - kind: 'exact'（逐字匹配）| 'prefix'（path 与 path/<anything>）
 	//   - handler: (req, res) => void | Promise<void> —— Node 风格，完全持有
@@ -2469,7 +2470,7 @@ func awaitJSValue(vm *goja.Runtime, v goja.Value) (goja.Value, error) {
 	return awaitJSValue(vm, got) // 递归：then 链上的嵌套 promise
 }
 
-// ── ctx.webServer：Node 风格 HTTP handler 桥（对齐 harness dsh-host-webserver）──
+// ── ctx.webServer：Node 风格 HTTP handler 桥（对齐 harness host-webserver）──
 
 // buildNodeHTTPHandler 构造 Node 风格 HTTP handler：JS 插件以
 // handler(req, res) 形态实现处理逻辑（接口定义 + 逻辑都在插件中），
@@ -2485,6 +2486,14 @@ func awaitJSValue(vm *goja.Runtime, v goja.Value) (goja.Value, error) {
 func (p *jsPluginAdapter) buildNodeHTTPHandler(fn goja.Callable) http.HandlerFunc {
 	vm := p.vm
 	return func(w http.ResponseWriter, r *http.Request) {
+		// ★ 2026-08-19：兜底 recover——goja 边缘异常路径已修（wb-ui/goja
+		//   try 栈空栈越界）；此处再兜底，避免 net/http 无信息刷屏并记录 URL 定位。
+		defer func() {
+			if x := recover(); x != nil {
+				log.Printf("[webServer] /api/ext handler panic（%s %s）: %v\n%s", r.Method, r.URL.Path, x, debug.Stack())
+				http.Error(w, "internal error", http.StatusInternalServerError)
+			}
+		}()
 		body, _ := io.ReadAll(r.Body)
 		headers := map[string]string{}
 		for k, vs := range r.Header {

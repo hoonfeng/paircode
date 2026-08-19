@@ -1,6 +1,6 @@
 // 市场注册表 —— 自闭环：搜索 + 安装。
 // ★ 2026-08-17：无预设数据——内置注册表已清空。用户搜索（query 非空）才触发
-//   实时远程搜索（npm MCP / GitHub skill / npm cordis 插件），搜索结果显示后
+//   实时远程搜索（npm MCP / GitHub skill / npm PairCode 插件），搜索结果显示后
 //   按 id 安装。MarketSearch/MarketFind 是 agent 工具与前端市场的统一入口。
 // 无 //go:build 标签，全平台可用。
 
@@ -77,11 +77,11 @@ var (
 
 // MarketSearch 搜索市场条目。
 // ★ 2026-08-17：无预设数据——query 空返回空（打开市场不展示任何条目）；
-//   query 非空才触发实时远程搜索（npm MCP / GitHub skill / npm cordis 插件），
+//   query 非空才触发实时远程搜索（npm MCP / GitHub skill / npm PairCode 插件），
 //   并发请求、合并去重后返回并缓存（MarketFind 可查）。
 // ★ 2026-08-18：市场插件化——只搜索「已注册的市场」（磁盘插件 market-* 声明，
 //   ctx.market.register 挂载）；指定 kind 未注册（插件停用/删除）→ 空。
-//   source 标识分派搜索实现：skill→github、mcp→npm、plugin→npm-cordis。
+//   source 标识分派搜索实现：skill→github、mcp→npm、plugin→npm-paircode。
 // kind 可空/""=全部（已注册市场的并集），"mcp"/"skill"/"plugin"=指定类型。
 func MarketSearch(query, kind string) []MarketEntry {
 	if strings.TrimSpace(query) == "" {
@@ -108,7 +108,7 @@ func MarketSearch(query, kind string) []MarketEntry {
 	}
 	go run("mcp", "npm", searchMarketNPM)
 	go run("skill", "github", searchMarketGitHub)
-	go run("plugin", "npm-cordis", searchMarketNPMPlugins)
+	go run("plugin", "npm-paircode", searchMarketNPMPlugins)
 
 	var out []MarketEntry
 	seen := map[string]bool{}
@@ -155,11 +155,11 @@ func MarketFind(id string) *MarketEntry {
 
 // ─── 远程 API 搜索实现（npm registry + GitHub）──
 
-// searchMarketNPMPlugins 搜索 npm 上的 cordis 插件。过滤：名字含 plugin/cordis
-// 且非框架本体（@cordisjs/core、cordis）。
+// searchMarketNPMPlugins 搜索 npm 上的 PairCode 插件（自己的插件生态，借 npm 分发）。
+// 过滤：名字/描述含 paircode（发布者 package.json 带 paircode 关键词即被收录）。
 func searchMarketNPMPlugins(query string) []MarketEntry {
 	q := strings.TrimSpace(query)
-	q = q + " cordis"
+	q = q + " paircode"
 	searchQ := url.QueryEscape(q)
 	apiURL := "https://registry.npmjs.org/-/v1/search?text=" + searchQ + "&size=" + fmt.Sprintf("%d", maxMarketAPISearch)
 
@@ -198,7 +198,7 @@ func searchMarketNPMPlugins(query string) []MarketEntry {
 		if low == "cordis" || low == "@cordisjs/core" || low == "@cordisjs/plugin-loader" {
 			continue
 		}
-		if !strings.Contains(low, "plugin") && !strings.Contains(strings.ToLower(pkg.Description), "cordis") {
+		if !strings.Contains(low, "paircode") && !strings.Contains(strings.ToLower(pkg.Description), "paircode") {
 			continue
 		}
 		name := pkg.Name
@@ -210,7 +210,7 @@ func searchMarketNPMPlugins(query string) []MarketEntry {
 			Kind:        "plugin",
 			Name:        name,
 			Description: pkg.Description,
-			Tags:        append([]string{"plugin", "cordis"}, pkg.Keywords...),
+			Tags:        append([]string{"plugin", "paircode"}, pkg.Keywords...),
 			Source:      "npm:" + pkg.Name + "@" + pkg.Version,
 		})
 	}

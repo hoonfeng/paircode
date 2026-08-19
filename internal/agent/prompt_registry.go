@@ -1,4 +1,4 @@
-// prompt_registry.go —— 系统提示词组装注册表（对齐 deepseek-harness dsh-system-prompt）。
+// prompt_registry.go —— 系统提示词组装注册表（对齐 deepseek-harness system-prompt）。
 //
 // harness 设计（packages/core/system-prompt）：
 //   - sections（段）：{ name, order, text } 有序贡献；order 升序拼接（-100 身份 / 0 persona /
@@ -25,7 +25,7 @@ import (
 // promptVarRe 匹配 {{name}} 完整组（name 内不含 { }，防嵌套）。
 var promptVarRe = regexp.MustCompile(`\{\{([^{}]+)\}\}`)
 
-// ── 系统提示槽位约定（对齐 deepseek-harness dsh-system-prompt）──
+// ── 系统提示槽位约定（对齐 deepseek-harness system-prompt）──
 // harness 用固定 section name/order 约定可替换槽位：
 //   PERSONA_SECTION = "deployment:persona"（部署人格槽位，order=0）
 //   RULES_SECTION   = "deployment:rules"（行为准则槽位，order=100）

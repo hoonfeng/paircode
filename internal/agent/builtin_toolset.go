@@ -419,7 +419,7 @@ func builtinJoinedGroups(root string) []string {
 
 // workspaceMainToolset 工作区主工具集（default）——内置组加入/移出/手动工具的
 // 统一落点（★ 2026-08-17：内置工具包与工作区工具集合并为一套，无独立 builtin.json）。
-// 不存在时创建基础工具集（defaultProjectToolset，dsh 极简核心），与
+// 不存在时创建基础工具集（defaultProjectToolset，极简核心），与
 // ensureDefaultWorkspaceToolset 语义一致。
 func workspaceMainToolset(ph *PluginHost, root string) (*Toolset, error) {
 	if root == "" {
@@ -589,7 +589,7 @@ func pluginGroupsOf(reg *Registry, ph *PluginHost, workspaceToolsets []Workspace
 	// ★ 工具 enabled = 工作区工具集声明白名单：插件已加入工具集（JS 条目）且
 	//   工具未被其 DisabledTools 摘除 → 已加入（agent 可用）；未声明的插件工具
 	//   → 未加入（可勾选加入）。★ 2026-08-17 白名单模型：agent 只暴露工具集
-	//   里声明的工具；无配置先自动创建基础工具集（dsh 核心 + 框架工具），
+	//   里声明的工具；无配置先自动创建基础工具集（核心 + 框架工具），
 	//   插件工具默认全部未加入，用户按需加入。
 	declared := map[string]map[string]bool{} // 插件名 → 工具名 → 工具集声明可用
 	for _, wt := range workspaceToolsets {

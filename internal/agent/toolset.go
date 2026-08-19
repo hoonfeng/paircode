@@ -228,10 +228,10 @@ func removeToolset(projectRoot string, scope toolsetScope, name string) error {
 // ─── 装载（启动时自动装配 + 构建后装载）──────────────────
 
 // defaultProjectToolset 基础工具集（无工具集时自动生成）：
-//  1. 基础工具：dsh 极简核心（harness 命名 read/write/edit/glob/grep/bash/
+//  1. 基础工具：极简核心（harness 命名 read/write/edit/glob/grep/bash/
 //     str_replace_editor/run_code）；
 //  2. 框架本身提供给 agent 的工具（默认可用）：
-//     - system：dsh 核心 + SystemTool（任务追踪/提问/提交标记/历史/技能/MCP/
+//     - system：核心 + SystemTool（任务追踪/提问/提交标记/历史/技能/MCP/
 //       市场等宿主自举工具）+ tool-system 插件承载的框架工具
 //     - plugin-mgmt：cordis_* 插件管理工具
 //     - toolset-mgmt：toolset_* 工具集管理工具
@@ -295,7 +295,7 @@ func defaultProjectToolset(reg *Registry, ph *PluginHost, project string) *Tools
 	plugins := []ToolsetPlugin{
 		{
 			Name:    "builtin:system",
-			Purpose: "system：dsh 极简核心 + 框架宿主工具（harness 别名/任务追踪/提问/提交标记等）",
+			Purpose: "system：极简核心 + 框架宿主工具（harness 别名/任务追踪/提问/提交标记等）",
 			Builtin: "system",
 			Tools:   sysTools,
 		},
@@ -318,7 +318,7 @@ func defaultProjectToolset(reg *Registry, ph *PluginHost, project string) *Tools
 	}
 	return &Toolset{
 		Name:        "default",
-		Description: "基础工具集（自动生成）——dsh 极简核心 + 框架本身提供的工具；插件工具用 toolset_edit add_plugin 按需加入",
+		Description: "基础工具集（自动生成）——极简核心 + 框架本身提供的工具；插件工具用 toolset_edit add_plugin 按需加入",
 		Project:     project,
 		Version:     "1.0.0",
 		CreatedAt:   time.Now().Format(time.RFC3339),
@@ -1118,7 +1118,7 @@ func (h *PluginHost) workspaceToolsetDisabledTools() map[string]bool {
 // agent 只暴露工作区工具集声明的工具（builtin 条目 Tools + JS 插件工具 −
 // DisabledTools），未声明的全部禁用（cordis/前端仍可见可管理，toolset_edit 可加入）。
 // ★ 2026-08-17 白名单模型：有工具集 → 只暴露工具集里的工具；无工具集 → 先自动
-//   创建基础工具集（dsh 极简核心 + 框架本身提供的工具），再按声明收敛。
+//   创建基础工具集（极简核心 + 框架本身提供的工具），再按声明收敛。
 //   工作区隔离：每个工作区读自己的 .pair/toolsets/，互不影响。
 func ApplyWorkspaceToolsetWhitelist(ph *PluginHost, reg *Registry, root string) {
 	if reg == nil || root == "" {

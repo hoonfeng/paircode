@@ -230,10 +230,10 @@ func TestApplyWorkspaceToolsetWhitelist(t *testing.T) {
 			t.Errorf("框架自举工具 %s 应可用（白名单兜底）", tn)
 		}
 	}
-	// dsh 极简核心可用（默认工具集 system 条目声明）
+	// 极简核心可用（默认工具集 system 条目声明）
 	for _, tn := range []string{"read", "write", "edit", "glob", "grep", "bash", "str_replace_editor", "run_code"} {
 		if !reg.IsEnabled(tn) {
-			t.Errorf("dsh 核心工具 %s 应可用（基础工具集声明）", tn)
+			t.Errorf("核心工具 %s 应可用（基础工具集声明）", tn)
 		}
 	}
 	// 未声明的内置包工具禁用（codegraph_search 等非框架宿主工具）

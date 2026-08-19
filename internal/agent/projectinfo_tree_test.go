@@ -121,11 +121,11 @@ func TestProjectRulesLayered(t *testing.T) {
 // TestAgentsSkillsCompat .agents/skills/ 参考路径技能加载（与 .pair/skills 并列，均 project 级）。
 func TestAgentsSkillsCompat(t *testing.T) {
 	root := t.TempDir()
-	agentsSkills := filepath.Join(root, ".agents", "skills", "dsh-doc-standards")
+	agentsSkills := filepath.Join(root, ".agents", "skills", "doc-standards")
 	if err := os.MkdirAll(agentsSkills, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	skill := "---\nname: dsh-doc-standards\ndescription: '文档标准审计工作流'\n---\n\n# 审计\n检查文档冗余"
+	skill := "---\nname: doc-standards\ndescription: '文档标准审计工作流'\n---\n\n# 审计\n检查文档冗余"
 	if err := os.WriteFile(filepath.Join(agentsSkills, "SKILL.md"), []byte(skill), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func TestAgentsSkillsCompat(t *testing.T) {
 	all := LoadAllSkillsFromRoot(root, "", nil)
 	found := false
 	for _, s := range all {
-		if s.Name == "dsh-doc-standards" {
+		if s.Name == "doc-standards" {
 			found = true
 			if s.Level != LevelProject {
 				t.Errorf(".agents/skills 技能应为 project 级，实际 %s", s.Level)

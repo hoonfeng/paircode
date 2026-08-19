@@ -1,6 +1,6 @@
 // market_source.go — 市场源注册表（市场插件化：能力与挂载分离）
 //
-// 2026-08-18：skill/mcp/dsh(插件) 三个市场全部插件化——市场由磁盘插件
+// 2026-08-18：skill/mcp/plugin 三个市场全部插件化——市场由磁盘插件
 // （.pair/plugins/market-skill|market-mcp|market-plugin）声明挂载：
 //   - 能力层（本文件 + market_registry.go）：搜索/安装实现留在 Go 内核；
 //   - 挂载层（磁盘插件 JS）：apply 时 ctx.market.register({kind, source, name})
@@ -9,7 +9,7 @@
 // 搜索实现按 source 标识分派：
 //   - "github"     → searchMarketGitHub（GitHub 仓库 → skill 条目）
 //   - "npm"        → searchMarketNPM（npm registry → mcp 条目）
-//   - "npm-cordis" → searchMarketNPMPlugins（npm cordis 插件 → plugin 条目）
+//   - "npm-paircode" → searchMarketNPMPlugins（npm PairCode 插件 → plugin 条目）
 //
 // 无 //go:build 标签，全平台可用。
 
