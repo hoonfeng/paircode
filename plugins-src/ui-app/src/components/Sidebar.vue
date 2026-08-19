@@ -6,7 +6,6 @@
     <div class="sidebar-content">
       <FileExplorer v-if="state.activeActivity === 'explorer'" />
       <SearchPanel v-else-if="state.activeActivity === 'search'" />
-      <GitPanel v-else-if="state.activeActivity === 'source'" />
       <PluginPanel v-else-if="state.activeActivity === 'plugins'" />
       <div v-else class="sidebar-placeholder">
         <span>面板加载中...</span>
@@ -22,7 +21,6 @@ import { computed, ref } from 'vue'
 import { state, sidebarWidth } from '../ui-state.js'
 import FileExplorer from './FileExplorer.vue'
 import SearchPanel from './SearchPanel.vue'
-import GitPanel from './GitPanel.vue'
 import PluginPanel from './PluginPanel.vue'
 
 const headerTitle = computed(() => {

@@ -891,350 +891,6 @@
   color: #d4a05a;
 }
 
-.modal-overlay[data-v-fce3d7ef] {
-  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.5); z-index: 2000;
-  display: flex; align-items: center; justify-content: center;
-}
-.modal-container[data-v-fce3d7ef] {
-  background: var(--bg-primary); border: 1px solid var(--border-color);
-  border-radius: 8px; min-width: 320px; max-width: 520px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-  display: flex; flex-direction: column; max-height: 80vh;
-}
-.modal-header[data-v-fce3d7ef] {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 16px; border-bottom: 1px solid var(--border-color);
-}
-.modal-title[data-v-fce3d7ef] { font-size: 13px; font-weight: 600; color: var(--text-primary);
-}
-.modal-close[data-v-fce3d7ef] {
-  display: flex; align-items: center; justify-content: center;
-  width: 28px; height: 28px; cursor: pointer; border: none; background: none;
-  color: var(--text-muted); border-radius: 4px;
-}
-.modal-close[data-v-fce3d7ef]:hover { background: var(--bg-hover); color: var(--text-primary);
-}
-.modal-body[data-v-fce3d7ef] { flex: 1; overflow-y: auto;
-}
-
-.git-panel[data-v-ed956158] { display: flex; flex-direction: column; height: 100%; font-size: 12px; overflow: hidden; color: var(--text-primary); position: relative;
-}
-
-/* 加载与空状态 */
-.git-loading[data-v-ed956158], .git-empty[data-v-ed956158] {
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  padding: 24px; gap: 8px; color: var(--text-muted); flex: 1;
-}
-.git-empty .subtitle[data-v-ed956158] { font-size: 11px; color: var(--text-muted);
-}
-.spinner[data-v-ed956158] { animation: spin-ed956158 1s linear infinite;
-}
-@keyframes spin-ed956158 {
-to { transform: rotate(360deg);
-}
-}
-
-/* 仓库顶栏 */
-.git-repo-bar[data-v-ed956158] {
-  display: flex; align-items: center; height: 32px; padding: 0 8px;
-  background: var(--bg-tertiary); border-bottom: 1px solid var(--border-color); gap: 6px;
-  position: relative; flex-shrink: 0;
-}
-.git-branch-select[data-v-ed956158] {
-  display: flex; align-items: center; gap: 4px; cursor: pointer;
-  padding: 2px 6px; border-radius: 3px; font-size: 12px; color: var(--text-primary);
-}
-.git-branch-select[data-v-ed956158]:hover { background: var(--bg-hover);
-}
-.branch-name[data-v-ed956158] { max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.git-project-select[data-v-ed956158] {
-  font-size: 11px; background: var(--bg-tertiary); color: var(--text-primary);
-  border: 1px solid var(--border-color); border-radius: 3px; padding: 1px 4px;
-  max-width: 120px; cursor: pointer;
-}
-.git-project-select[data-v-ed956158]:hover { border-color: var(--accent);
-}
-.ahead-badge[data-v-ed956158] { color: #4ec9b0; font-size: 10px;
-}
-.behind-badge[data-v-ed956158] { color: #dcdcaa; font-size: 10px;
-}
-.repo-actions[data-v-ed956158] { margin-left: auto; display: flex; gap: 2px;
-}
-.icon-btn[data-v-ed956158] {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 24px; height: 24px; cursor: pointer; border: none; background: none;
-  color: var(--text-secondary); border-radius: 3px;
-}
-.icon-btn[data-v-ed956158]:hover { background: var(--bg-hover); color: var(--text-primary);
-}
-.spinning[data-v-ed956158] { animation: spin-ed956158 1s linear infinite;
-}
-
-/* 分支菜单 */
-.branch-menu[data-v-ed956158] {
-  position: absolute; top: 32px; left: 8px; z-index: 100;
-  width: calc(100% - 16px); max-width: 300px;
-  background: var(--bg-primary); border: 1px solid var(--border-color);
-  border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,0.3);
-  max-height: 300px; display: flex; flex-direction: column;
-}
-.branch-filter-input[data-v-ed956158] {
-  width: 100%; padding: 4px 8px; font-size: 12px;
-  background: var(--bg-primary); border: 1px solid var(--border-color);
-  color: var(--text-primary); outline: none; border-radius: 3px;
-}
-.branch-filter-input[data-v-ed956158]:focus { border-color: var(--accent);
-}
-.branch-list[data-v-ed956158] { flex: 1; overflow-y: auto;
-}
-.branch-item[data-v-ed956158] {
-  display: flex; align-items: center; gap: 6px; padding: 6px 10px;
-  cursor: pointer; font-size: 12px; color: var(--text-secondary);
-}
-.branch-item[data-v-ed956158]:hover { background: var(--bg-hover); color: var(--text-primary);
-}
-.branch-item.active[data-v-ed956158] { color: var(--accent); font-weight: 600;
-}
-.branch-item-name[data-v-ed956158] { flex: 1; overflow: hidden; text-overflow: ellipsis;
-}
-.branch-del-btn[data-v-ed956158] {
-  display: flex; align-items: center; justify-content: center;
-  width: 18px; height: 18px; border: none; background: none;
-  cursor: pointer; color: var(--text-muted); border-radius: 3px;
-}
-.branch-del-btn[data-v-ed956158]:hover { background: rgba(244,135,113,0.2); color: #f48771;
-}
-.branch-menu-footer[data-v-ed956158] {
-  display: flex; gap: 4px; padding: 8px; border-top: 1px solid var(--border-color);
-  justify-content: flex-end;
-}
-
-/* 操作栏 */
-.git-action-bar[data-v-ed956158] {
-  display: flex; align-items: center; padding: 6px; gap: 4px; flex-wrap: wrap; flex-shrink: 0;
-}
-.git-btn[data-v-ed956158] {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 4px 10px; font-size: 11px; cursor: pointer;
-  background: var(--bg-tertiary); border: 1px solid var(--border-color);
-  color: var(--text-primary); border-radius: 3px; white-space: nowrap;
-}
-.git-btn[data-v-ed956158]:hover:not(:disabled) { background: var(--bg-hover);
-}
-.git-btn[data-v-ed956158]:disabled { opacity: 0.4; cursor: default;
-}
-.action-btn[data-v-ed956158] { font-size: 11px; min-height: 24px;
-}
-.btn-primary[data-v-ed956158] { background: var(--accent); color: #fff; border-color: var(--accent);
-}
-.btn-primary[data-v-ed956158]:hover:not(:disabled) { filter: brightness(1.1);
-}
-.action-spacer[data-v-ed956158] { flex: 1;
-}
-.init-btn[data-v-ed956158] { margin-top: 8px; background: var(--accent); color: #fff; border: none; padding: 6px 16px;
-}
-
-/* 变更区块 */
-.git-sections[data-v-ed956158] { flex: 1; overflow-y: auto; border-top: 1px solid var(--border-color);
-}
-.section-block[data-v-ed956158] { border-bottom: 1px solid var(--border-color);
-}
-.section-header[data-v-ed956158] {
-  display: flex; align-items: center; gap: 4px; padding: 5px 8px;
-  cursor: pointer; font-size: 11px; color: var(--accent); user-select: none;
-}
-.section-header[data-v-ed956158]:hover { background: var(--bg-hover);
-}
-.section-header.conflict[data-v-ed956158] { color: #f48771;
-}
-.section-header.modified[data-v-ed956158] { color: #dcdcaa;
-}
-.section-header.untracked[data-v-ed956158] { color: var(--text-muted);
-}
-.section-items[data-v-ed956158] { max-height: 300px; overflow-y: auto;
-}
-.file-row[data-v-ed956158] {
-  display: flex; align-items: center; gap: 4px; padding: 3px 8px 3px 20px;
-  cursor: pointer; font-size: 12px;
-}
-.file-row[data-v-ed956158]:hover { background: var(--bg-hover);
-}
-.file-status[data-v-ed956158] {
-  width: 14px; text-align: center; font-size: 12px; font-weight: bold; flex-shrink: 0;
-}
-.file-status.staged[data-v-ed956158] { color: var(--accent);
-}
-.file-status.modified-st[data-v-ed956158] { color: #dcdcaa;
-}
-.file-status.untracked-st[data-v-ed956158] { color: var(--text-muted);
-}
-.file-status.conflict-st[data-v-ed956158] { color: #f48771;
-}
-.file-path[data-v-ed956158] { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.file-path.conflict-text[data-v-ed956158] { color: #f48771;
-}
-.file-path.untracked-text[data-v-ed956158] { color: var(--text-muted);
-}
-.file-actions[data-v-ed956158] { display: flex; gap: 2px; opacity: 0;
-}
-.file-row:hover .file-actions[data-v-ed956158] { opacity: 1;
-}
-.row-btn[data-v-ed956158] {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 20px; height: 20px; cursor: pointer; border: none; background: none;
-  color: var(--text-muted); border-radius: 3px;
-}
-.row-btn[data-v-ed956158]:hover { background: var(--bg-hover); color: var(--accent);
-}
-.row-btn.danger[data-v-ed956158]:hover { color: #f48771;
-}
-.clean-hint[data-v-ed956158] {
-  display: flex; align-items: center; gap: 6px; padding: 8px 12px;
-  color: var(--text-muted); font-size: 11px;
-}
-
-/* 提交历史 */
-.git-history[data-v-ed956158] { border-top: 1px solid var(--border-color); flex-shrink: 0;
-}
-.history-header[data-v-ed956158] {
-  display: flex; align-items: center; gap: 4px; padding: 5px 8px;
-  cursor: pointer; font-size: 11px; color: var(--accent);
-}
-.history-header[data-v-ed956158]:hover { background: var(--bg-hover);
-}
-.history-list[data-v-ed956158] { max-height: 160px; overflow-y: auto;
-}
-.commit-row[data-v-ed956158] {
-  display: flex; align-items: center; gap: 6px; padding: 3px 8px 3px 20px;
-  cursor: pointer; font-size: 11px;
-}
-.commit-row[data-v-ed956158]:hover { background: var(--bg-hover);
-}
-.commit-hash[data-v-ed956158] { color: var(--accent); width: 48px; flex-shrink: 0; font-family: monospace; font-size: 10px;
-}
-.commit-msg[data-v-ed956158] { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.commit-date[data-v-ed956158] { color: var(--text-muted); font-size: 10px; flex-shrink: 0;
-}
-
-/* 对话框表单 */
-.form-layout[data-v-ed956158] { padding: 16px; display: flex; flex-direction: column; gap: 8px;
-}
-.form-input[data-v-ed956158], .form-textarea[data-v-ed956158] {
-  width: 100%; padding: 6px 8px; font-size: 13px;
-  background: var(--input-bg); border: 1px solid var(--border-color);
-  color: var(--text-primary); border-radius: 3px; outline: none;
-}
-.form-input[data-v-ed956158]:focus, .form-textarea[data-v-ed956158]:focus { border-color: var(--accent);
-}
-.form-textarea[data-v-ed956158] { resize: vertical; font-family: inherit;
-}
-.form-hint[data-v-ed956158] { color: var(--text-muted); font-size: 10px;
-}
-.form-actions[data-v-ed956158] { display: flex; gap: 8px; justify-content: flex-end;
-}
-.form-checkbox[data-v-ed956158] { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); cursor: pointer;
-}
-
-/* 暂存面板 */
-.overlay[data-v-ed956158] {
-  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.4); z-index: 1000;
-  display: flex; align-items: flex-start; justify-content: center; padding-top: 80px;
-}
-.overlay-panel[data-v-ed956158] {
-  background: var(--bg-primary); border: 1px solid var(--border-color);
-  border-radius: 8px; display: flex; flex-direction: column; box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-}
-.stash-panel[data-v-ed956158] { width: 480px; max-height: 400px;
-}
-.overlay-header[data-v-ed956158] {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 12px; border-bottom: 1px solid var(--border-color);
-  font-size: 13px; font-weight: 600;
-}
-.stash-form[data-v-ed956158] { display: flex; gap: 8px; padding: 8px 12px; align-items: center;
-}
-.stash-form .form-input[data-v-ed956158] { flex: 1;
-}
-.stash-list[data-v-ed956158] { flex: 1; overflow-y: auto;
-}
-.stash-item[data-v-ed956158] {
-  display: flex; align-items: center; gap: 8px; padding: 6px 12px;
-  border-bottom: 1px solid var(--border-color); font-size: 12px;
-}
-.stash-ref[data-v-ed956158] { color: var(--accent); font-family: monospace; font-size: 11px; width: 70px; flex-shrink: 0;
-}
-.stash-msg[data-v-ed956158] { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.stash-actions[data-v-ed956158] { display: flex; gap: 2px;
-}
-.stash-empty[data-v-ed956158] { padding: 20px; text-align: center; color: var(--text-muted); font-size: 12px;
-}
-
-/* .gitignore 编辑器 */
-.ignore-panel[data-v-ed956158] { width: 500px; max-height: 500px;
-}
-.ignore-textarea[data-v-ed956158] {
-  width: 100%; padding: 8px 12px; font-family: monospace; font-size: 12px;
-  background: var(--input-bg); border: none; color: var(--text-primary);
-  resize: vertical; outline: none; line-height: 1.5;
-}
-.ignore-actions[data-v-ed956158] { display: flex; gap: 8px; padding: 8px 12px; justify-content: flex-end; border-top: 1px solid var(--border-color);
-}
-
-/* 提交详情 */
-.detail-content[data-v-ed956158] { padding: 12px 16px; max-height: 400px; overflow-y: auto;
-}
-.detail-meta[data-v-ed956158] { margin-bottom: 12px; font-size: 12px; color: var(--text-secondary); line-height: 1.8;
-}
-.detail-meta code[data-v-ed956158] { background: var(--bg-tertiary); padding: 1px 6px; border-radius: 3px; font-size: 11px;
-}
-.detail-diff[data-v-ed956158] {
-  background: var(--bg-tertiary); border-radius: 4px; padding: 12px;
-  font-family: monospace; font-size: 11px; line-height: 1.5;
-  overflow-x: auto; color: var(--text-primary); white-space: pre-wrap;
-  max-height: 300px; overflow-y: auto;
-}
-
-/* 文件差异对话框 */
-.diff-title[data-v-ed956158] {
-  display: inline-block;
-  max-width: 500px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  vertical-align: middle;
-}
-.diff-content[data-v-ed956158] {
-  padding: 12px 16px;
-  max-height: 400px;
-  overflow: auto;
-}
-.diff-text[data-v-ed956158] {
-  font-family: monospace;
-  font-size: 11px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  color: var(--text-primary);
-  margin: 0;
-}
-
-/* 滚动条 */
-.git-sections[data-v-ed956158]::-webkit-scrollbar,
-.history-list[data-v-ed956158]::-webkit-scrollbar,
-.stash-list[data-v-ed956158]::-webkit-scrollbar,
-.detail-content[data-v-ed956158]::-webkit-scrollbar { width: 4px;
-}
-.git-sections[data-v-ed956158]::-webkit-scrollbar-thumb,
-.history-list[data-v-ed956158]::-webkit-scrollbar-thumb,
-.stash-list[data-v-ed956158]::-webkit-scrollbar-thumb,
-.detail-content[data-v-ed956158]::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 2px;
-}
-
 .plugin-panel[data-v-28cc536a] {
   height: 100%;
   display: flex;
@@ -1546,7 +1202,7 @@ to { transform: rotate(360deg);
 }
 }
 
-.sidebar[data-v-e10d2b7b] {
+.sidebar[data-v-eee3b33a] {
   background: var(--sidebar-bg);
   border-right: 1px solid var(--border-color);
   display: flex;
@@ -1557,7 +1213,7 @@ to { transform: rotate(360deg);
      溢出窗口 → 工具集被裁到窗口外；短面板 → 底部空余）。 */
   height: 100%;
 }
-.sidebar-header[data-v-e10d2b7b] {
+.sidebar-header[data-v-eee3b33a] {
   height: 32px;
   display: flex;
   align-items: center;
@@ -1569,17 +1225,17 @@ to { transform: rotate(360deg);
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
 }
-.sidebar-content[data-v-e10d2b7b] {
+.sidebar-content[data-v-eee3b33a] {
   flex: 1;
   overflow: auto;
 }
-.sidebar-placeholder[data-v-e10d2b7b] {
+.sidebar-placeholder[data-v-eee3b33a] {
   padding: 20px;
   text-align: center;
   color: var(--text-muted);
   font-size: 13px;
 }
-.sidebar-resizer[data-v-e10d2b7b] {
+.sidebar-resizer[data-v-eee3b33a] {
   position: absolute;
   right: -2px;
   top: 0;
@@ -1589,6 +1245,6 @@ to { transform: rotate(360deg);
   z-index: 10;
   background: transparent;
 }
-.sidebar-resizer[data-v-e10d2b7b]:hover {
+.sidebar-resizer[data-v-eee3b33a]:hover {
   background: var(--accent);
 }

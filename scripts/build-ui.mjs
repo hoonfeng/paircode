@@ -38,6 +38,8 @@ const regions = [
   { id: 'right-panel', entry: 'src/ui-main-right-panel.js', global: 'UiRightPanel' },
   { id: 'statusbar',   entry: 'src/ui-main-statusbar.js',   global: 'UiStatusbar' },
   { id: 'modals',      entry: 'src/ui-main-modals.js',      global: 'UiModals' },
+  // git-api 插件 Git 面板（接口+UI 一体化，输出到插件包 assets）
+  { id: 'git-api', entry: 'src/ui-main-git.js', global: 'GitPanel', outDir: '.pair/plugins/git-api/assets', fileName: 'git-panel' },
 ]
 
 // external 匹配（组件里的相对导入 + vue）
@@ -62,7 +64,8 @@ function globalFor(id) {
 
 let failed = 0
 for (const r of regions) {
-  const outDir = path.join(repoRoot, '.pair/plugins/ui-' + r.id, 'assets')
+  const outDir = r.outDir ? path.join(repoRoot, r.outDir) : path.join(repoRoot, '.pair/plugins/ui-' + r.id, 'assets')
+  const fname = r.fileName || ('ui-' + r.id)
   console.log(`\n═══ 构建 ui-${r.id} (${r.entry}) ═══`)
   try {
     await build({
@@ -86,8 +89,8 @@ for (const r of regions) {
           output: {
             globals: globalFor,
             // 产物固定名：ui-<region>.js / ui-<region>.css
-            entryFileNames: `ui-${r.id}.js`,
-            assetFileNames: `ui-${r.id}[extname]`,
+            entryFileNames: `${fname}.js`,
+            assetFileNames: `${fname}[extname]`,
           },
         },
       },
@@ -98,5 +101,5 @@ for (const r of regions) {
     console.error(`✗ ui-${r.id} 构建失败:`, e && e.message || e)
   }
 }
-console.log(failed ? `\n完成（${failed} 个失败）` : '\n全部 7 个区域构建成功')
+console.log(failed ? `\n完成（${failed} 个失败）` : `\n全部 ${regions.length} 个区域构建成功`)
 process.exit(failed ? 1 : 0)
