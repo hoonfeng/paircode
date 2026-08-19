@@ -279,4 +279,4 @@ PairCode 的「一切皆插件」遵循统一模式：**实现留内核（Go）�
 
 - 内核路由/服务登记均带 disposer（`ctx.kernel.install` 返回 `{installed,total,missing}`；插件卸载自动摘除）；
 - 插件停用/删除 → 其挂载的内核接口、注册的工具、提供的服务、监听的监听器全部回收；
-- 磁盘插件（`.pair/plugins/`）启动自动装载（全局）+ 工具集装载（项目）；`cordis.patch.json` 承载静态插件持久化。
+- 磁盘插件（`.pair/plugins/`）启动自动装载（全局）；工具集（`.pair/toolsets/`）装载其内嵌引用的插件定义（项目级）；`cordis.patch.json` 承载静态插件持久化。
