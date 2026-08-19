@@ -974,9 +974,30 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 	})
 	ctxObj.Set("toolset", toolsetObj)
 
-	// ctx.app：宿主基本信息（可选）
+	// ctx.app：宿主基本信息（可选；动态只读属性——每次访问实时读 core 包，
+	// 工作区切换后取到的是最新值）：
+	//   workspaceRoot    当前工作区根（PluginContext 快照）
+	//   root             主工作区根（core.Root()，实时）
+	//   folders          当前工作区全部文件夹（多根，VS Code 模型；core.Folders）
+	//   projectName      工作区显示名（core.ProjectName()）
+	//   installDir       exe 安装目录（core.InstallDir()）
+	//   configDir        配置目录（core.ConfigDir()）
+	//   recentProjects   最近打开的工作区列表（core.Settings.RecentProjects）
+	//   workspaceFolders 持久化工作区文件夹（core.Settings.WorkspaceFolders）
 	appObj := vm.NewObject()
 	appObj.Set("workspaceRoot", pc.WorkspaceRoot)
+	defineAppProp := func(name string, fn func() any) {
+		appObj.DefineAccessorProperty(name,
+			vm.ToValue(func(goja.FunctionCall) goja.Value { return vm.ToValue(fn()) }),
+			goja.Undefined(), goja.FLAG_TRUE, goja.FLAG_TRUE)
+	}
+	defineAppProp("root", func() any { return core.Root() })
+	defineAppProp("folders", func() any { return core.Folders })
+	defineAppProp("projectName", func() any { return core.ProjectName() })
+	defineAppProp("installDir", func() any { return core.InstallDir() })
+	defineAppProp("configDir", func() any { return core.ConfigDir() })
+	defineAppProp("recentProjects", func() any { return core.Settings.RecentProjects })
+	defineAppProp("workspaceFolders", func() any { return core.Settings.WorkspaceFolders })
 	ctxObj.Set("app", appObj)
 
 	// ctx.registerSettings(schema) / ctx.getSettings(key?) / ctx.setSettings(key, value)
@@ -1269,7 +1290,77 @@ func (p *jsPluginAdapter) buildFSService(pc *PluginContext) goja.Value {
 		}
 		return vm.ToValue(out)
 	})
+	// tree：递归文件树。tree(path?, depth?) → [{name, path, isDir, children?}]
+	//   path  相对工作区根（默认 "."）
+	//   depth 递归深度（默认 3；<=0 用默认）
+	//   path 字段为相对请求根的 "/" 分隔路径（前端展开/定位文件用）；
+	//   自动忽略常见目录（.git/node_modules/dist/…）与 Settings.IgnoreDirs 配置。
+	fs.Set("tree", func(call goja.FunctionCall) goja.Value {
+		rel := call.Argument(0).String()
+		if rel == "" {
+			rel = "."
+		}
+		depth := int(call.Argument(1).ToInteger())
+		if depth <= 0 {
+			depth = 3
+		}
+		full, err := resolve(rel)
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		ignores := map[string]bool{
+			".git": true, "node_modules": true, ".next": true, "dist": true,
+			"build": true, ".cache": true, "__pycache__": true, ".venv": true,
+			"vendor": true, ".idea": true, ".vscode": true, "tmp": true,
+			"logs": true, "coverage": true,
+		}
+		if len(core.Settings.IgnoreDirs) > 0 {
+			for _, d := range core.Settings.IgnoreDirs {
+				ignores[strings.ToLower(strings.TrimSpace(d))] = true
+			}
+		}
+		nodes, err := buildFileTree(full, full, ignores, depth)
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return vm.ToValue(nodes)
+	})
 	return vm.ToValue(fs)
+}
+
+// buildFileTree 递归构建文件树节点列表（ctx.fs.tree 用）。
+// dir 为当前目录，base 为请求根（path 字段的相对基准）；忽略目录命中即剪枝。
+func buildFileTree(dir, base string, ignores map[string]bool, depth int) ([]map[string]any, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]map[string]any, 0, len(entries))
+	for _, e := range entries {
+		name := e.Name()
+		node := map[string]any{"name": name}
+		full := filepath.Join(dir, name)
+		if rel, rerr := filepath.Rel(base, full); rerr == nil {
+			node["path"] = filepath.ToSlash(rel)
+		} else {
+			node["path"] = name
+		}
+		if e.IsDir() {
+			if ignores[strings.ToLower(name)] {
+				continue
+			}
+			node["isDir"] = true
+			if depth > 1 {
+				if children, cerr := buildFileTree(full, base, ignores, depth-1); cerr == nil {
+					node["children"] = children
+				}
+			}
+		} else {
+			node["isDir"] = false
+		}
+		out = append(out, node)
+	}
+	return out, nil
 }
 
 // buildWebService HTTP 服务（ctx.web.fetch）：GET 抓取 URL，
