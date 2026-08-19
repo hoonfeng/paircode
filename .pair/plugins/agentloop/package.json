@@ -1,8 +1,8 @@
 {
   "main": "index.js",
   "name": "agentloop",
-  "purpose": "Agent 循环装配器（配置注册化：迭代上限/自主模式/审核/追加提示词；对齐 deepseek-harness AgentLoop 插件）",
+  "purpose": "Agent 循环 JS 实现（agentloop 核心外置：策略在 JS/能力在 Go；含配置注册化与参数装配）",
   "scope": "global",
   "type": "plugin",
-  "version": "1.0.1"
+  "version": "1.1.0"
 }

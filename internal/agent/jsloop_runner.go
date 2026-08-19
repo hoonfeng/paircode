@@ -441,8 +441,8 @@ func (r *jsLoopRunner) buildProxy() *goja.Object {
 		// 子事件经 SubAgentSink 过滤（父 EventFinal/Done/Error/Circling/Compacted 不泄漏）
 		sub.OnEvent = SubAgentSink(l.OnEvent, agentName)
 		sub.OnFeedback = l.OnFeedback
-		// 子 Loop 深度 +1（嵌套限制）
-		subCtx := context.WithValue(r.ctx, jsLoopDepthKey{}, depth+1)
+		// 子 Loop 深度 +1（嵌套限制）；标记父 JS 锁内（子 runWithJS 不重复加锁）
+		subCtx := context.WithValue(context.WithValue(r.ctx, jsLoopDepthKey{}, depth+1), jsLoopInLockKey{}, true)
 		_, subErr := sub.Run(subCtx, task, nil) // 子 Loop 自己处理 History
 		// 结果：最后一条 assistant 正文（无则空）
 		content := ""

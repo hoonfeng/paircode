@@ -150,6 +150,10 @@ func jsLoopDepth(ctx context.Context) int {
 	return 0
 }
 
+// jsLoopInLockKey 标记「父 JS 执行锁已持有」（delegate 子 Loop 用）。
+// 子 Loop.runWithJS 检测到该标志时不重复 vm.Lock（非重入，二次加锁死锁）。
+type jsLoopInLockKey struct{}
+
 // ── runWithJS：Loop.Run 的 JS 委托实现 ───────────────────────
 
 // runWithJS 由 Loop.Run 在 CurrentJSLoop() 非空时调用：Go 做前置准备与收尾，
@@ -210,11 +214,14 @@ func (l *Loop) runWithJS(ctx context.Context, task string, history []Message, im
 	// ── 构建能力代理并委托 JS ──
 	runner := &jsLoopRunner{loop: l, ctx: ctx, impl: impl}
 	var (
-		result goja.Value
+		result  goja.Value
 		callErr error
 	)
-	impl.plugin.withLock(func() {
-		callErr = runJSWithTimeout(impl.vm, 0, func() error {
+	// ★ 锁语义：顶层 Run 经 withLock 加 VM 执行锁（独占 JS）。
+	//   delegate 子 Loop（ctx 带 jsLoopInLockKey=true，父 JS 调用栈内同步执行）
+	//   不再重复加锁——vm.lock 非重入，二次 Lock 同 goroutine 死锁。
+	runJS := func() error {
+		return runJSWithTimeout(impl.vm, 0, func() error {
 			v, e := impl.run(goja.Undefined(), impl.vm.ToValue(runner.buildArgs(task, msgs, tools, max)))
 			if e != nil {
 				return e
@@ -227,7 +234,13 @@ func (l *Loop) runWithJS(ctx context.Context, task string, history []Message, im
 			result = av
 			return nil
 		})
-	})
+	}
+	if inParentLock, _ := ctx.Value(jsLoopInLockKey{}).(bool); inParentLock {
+		// delegate 嵌套：父 runWithJS 已持锁（同一 goroutine），直接执行
+		callErr = runJS()
+	} else {
+		impl.plugin.withLock(func() { callErr = runJS() })
+	}
 	if callErr != nil {
 		log.Printf("[loop-js] JS 循环 %q 执行失败: %v", impl.id, callErr)
 		l.emit(Event{Type: EventError, Content: "JS 循环执行失败: " + callErr.Error()})

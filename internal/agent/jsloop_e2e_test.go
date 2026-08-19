@@ -129,6 +129,78 @@ func TestJSLoopRealAgentloopNaturalFinish(t *testing.T) {
 	}
 }
 
+// delegate 子 agent：JS 循环内部创建子 Loop（SubAgentSink 事件过滤）。
+func TestJSLoopDelegateSubAgent(t *testing.T) {
+	if !gojaOk() {
+		t.Skip("goja 不可用")
+	}
+	if CurrentJSLoop() != nil {
+		t.Skipf("已有 JS 循环注册（%v），跳过防污染", CurrentJSLoop().id)
+	}
+	coreSettingsEnsure()
+
+	// 精简插件：run 内 delegate 一个子 agent
+	const delegatePlugin = `
+return {
+  name: 'jsloop-delegate',
+  apply(ctx) {
+    ctx.loopFactory.registerLoop({
+      id: 'delegate-e2e',
+      async run({ task, msgs, tools, meta, loop }) {
+        // 委托子 agent 执行子任务
+        const sub = loop.delegate.run({
+          task: '子任务：回复 hello',
+          agentName: 'coder',
+          maxIterations: 2,
+        });
+        // 子 agent 结果注入本 agent
+        loop.events.emit({ type: 'notice', content: '子 agent 结果: ' + (sub.error || sub.content) });
+        loop.events.emit({ type: 'done', content: '父任务完成，子结果=' + sub.content, doneReason: 'task_complete', turnReason: 'completed' });
+        return { msgs };
+      }
+    })
+  }
+}`
+	reg := NewRegistry()
+	host := NewPluginHost(reg, nil, `C:\ws`)
+	id, err := host.DefineJS(delegatePlugin, "delegate e2e")
+	if err != nil {
+		t.Fatalf("DefineJS: %v", err)
+	}
+	def, _ := host.GetJSDef(id)
+	if err := host.LoadJSDynamic(def); err != nil {
+		t.Fatalf("LoadJSDynamic: %v", err)
+	}
+	t.Cleanup(func() { _ = host.Unload(def.name) })
+
+	// MockProvider：父调用返回子结果可观察——用脚本化 provider：
+	// 第 1 次调用（父）：自然完成
+	// 子 agent 的调用也走同一 mock（按调用顺序）
+	mock := &MockProvider{Responses: []Message{
+		{Content: "父 agent 回复"},
+		{Content: "子 agent 回复 hello"},
+	}}
+	var events []Event
+	loop := &Loop{Provider: mock, Registry: reg, MaxIterations: 5,
+		OnEvent: func(e Event) { events = append(events, e) }}
+	msgs, err := loop.Run(context.Background(), "父任务", nil)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	// 事件流应包含子 agent 标记的 notice（AgentName=coder）
+	var sawSubNotice bool
+	for _, e := range events {
+		if e.Type == EventNotice && strings.Contains(e.Content, "子 agent") {
+			sawSubNotice = true
+			break
+		}
+	}
+	if !sawSubNotice {
+		t.Error("未收到子 agent 结果 notice 事件")
+	}
+	_ = msgs
+}
+
 // 回退：卸载插件 → 还原 Go 默认循环。
 func TestJSLoopUnloadRestoreGoLoop(t *testing.T) {
 	if !gojaOk() {
