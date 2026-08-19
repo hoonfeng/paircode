@@ -359,6 +359,9 @@ func (l *Loop) aiReviewApprove(ctx context.Context, tc ToolCall) (bool, string) 
 	return false, v.FeedbackText()
 }
 
+// goLoopDeprecatedOnce Go 默认循环 deprecated 提示只打一次。
+var goLoopDeprecatedOnce sync.Once
+
 // Run 跑一轮任务。history 为先前对话（可空）。
 //
 // 自闭环模式：history 传 nil 时使用 l.History（持久化历史），前端只需传 task。
@@ -375,6 +378,11 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 	if impl := CurrentJSLoop(); impl != nil {
 		return l.runWithJS(ctx, task, history, impl)
 	}
+	// ★ Go 默认循环标记 deprecated（agentloop 核心已外置 JS）。
+	//   仅提示一次避免刷屏；未装载 JS 循环插件时作为回退路径继续工作。
+	goLoopDeprecatedOnce.Do(func() {
+		log.Printf("[loop] ⚠ Go 默认循环已 deprecated——装载 agentloop 插件（.pair/plugins/agentloop）后循环逻辑由 JS 驱动；本路径保留为回退")
+	})
 	// ★ Run 启动日志（排查「无响应」：确认 Loop 确实进入运行，以及每次启动时间）
 	log.Printf("[loop] Run 开始 taskLen=%d history=%d maxIter=%d autonomous=%v",
 		len(task), len(history), l.MaxIterations, l.Autonomous)

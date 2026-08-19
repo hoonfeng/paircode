@@ -245,3 +245,83 @@ func coreSettingsEnsure() {
 		core.Settings = core.Default()
 	}
 }
+
+// 并行工具执行：一次 LLM 返回 2 个只读工具调用 → runParallel 并行执行（非串行）。
+func TestJSLoopParallelTools(t *testing.T) {
+	if !gojaOk() {
+		t.Skip("goja 不可用")
+	}
+	if CurrentJSLoop() != nil {
+		t.Skipf("已有 JS 循环注册（%v），跳过防污染", CurrentJSLoop().id)
+	}
+	coreSettingsEnsure()
+	loadRealAgentloop(t)
+
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("AAA"), 0o644)
+	os.WriteFile(filepath.Join(dir, "b.txt"), []byte("BBB"), 0o644)
+	reg := NewRegistry()
+	RegisterDefaultTools(reg, dir)
+
+	mock := &MockProvider{Responses: []Message{
+		{ToolCalls: []ToolCall{
+			{ID: "c1", Type: "function", Function: FunctionCall{Name: "read_file", Arguments: `{"path":"a.txt"}`}},
+			{ID: "c2", Type: "function", Function: FunctionCall{Name: "read_file", Arguments: `{"path":"b.txt"}`}},
+		}},
+		{Content: "读完两个文件"},
+	}}
+	var events []Event
+	loop := &Loop{Provider: mock, Registry: reg, System: "test-js-parallel", MaxIterations: 5,
+		OnEvent: func(e Event) { events = append(events, e) }}
+
+	msgs, err := loop.Run(context.Background(), "读 a.txt 和 b.txt", nil)
+	if err != nil {
+		t.Fatalf("Run(并行): %v", err)
+	}
+	if mock.Calls() != 2 {
+		t.Errorf("LLM 应调用 2 次，得 %d", mock.Calls())
+	}
+	// 2 条 tool 消息回灌
+	var toolMsgs []Message
+	for _, m := range msgs {
+		if m.Role == RoleTool {
+			toolMsgs = append(toolMsgs, m)
+		}
+	}
+	if len(toolMsgs) != 2 {
+		t.Errorf("应有 2 条 tool 消息，得 %d", len(toolMsgs))
+	}
+	// 两个结果都在
+	var sawA, sawB bool
+	for _, m := range toolMsgs {
+		if strings.Contains(m.Content, "AAA") {
+			sawA = true
+		}
+		if strings.Contains(m.Content, "BBB") {
+			sawB = true
+		}
+	}
+	if !sawA || !sawB {
+		t.Errorf("并行结果缺失：A=%v B=%v", sawA, sawB)
+	}
+	// tool_result 事件 2 个（并行路径 Go 侧 emit）
+	var results int
+	for _, e := range events {
+		if e.Type == EventToolResult {
+			results++
+		}
+	}
+	if results != 2 {
+		t.Errorf("应有 2 个 tool_result 事件，得 %d", results)
+	}
+	// tool_call 事件 2 个（JS 审批循环 emit）
+	var calls int
+	for _, e := range events {
+		if e.Type == EventToolCall {
+			calls++
+		}
+	}
+	if calls != 2 {
+		t.Errorf("应有 2 个 tool_call 事件，得 %d", calls)
+	}
+}

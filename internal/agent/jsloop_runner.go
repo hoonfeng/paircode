@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
+	"sync"
 	"time"
 
 	"wb-ui/goja"
@@ -22,6 +24,7 @@ import (
 //	llm.chat(msgs, tools, onChunk) → assistant      // Provider.Chat 流式
 //	tools.list() → [ToolDefinition]                 // ApplyConcise 后的定义
 //	tools.run(name, argsJson) → {content, error}    // Registry.Execute
+//	tools.runParallel([{id,name,args}]) → 结果|null // 纯只读并行（含写退回串行）
 //	events.emit(event)                              // l.emit（自动回填 turn/step）
 //	persist.batch(msgs)                             // OnBatchPersist + currentMsgs 同步
 //	approve.ask(tc) → {approved, feedback, blocked, reason}  // 审核门（黑白名单/mode/连续驳回）
@@ -205,6 +208,89 @@ func (r *jsLoopRunner) buildProxy() *goja.Object {
 			out["error"] = terr.Error()
 		}
 		return vm.ToValue(out)
+	})
+	// tools.runParallel([{id, name, args}, ...]) → 结果数组 或 null
+	// 契约：调用方（JS）负责先逐个 emit tool_call；本函数仅对「纯只读」工具
+	//   并行执行（与 Go 默认 canParallelize 保守策略一致：含写/需审批 → 返回
+	//   null 退回串行）。执行后按传入顺序 emit tool_result + trackCall，
+	//   返回 [{id, name, content, error}]。调用方收到结果后只负责组装 tool
+	//   消息（不再 emit / 不再 track，避免重复）。
+	toolsObj.Set("runParallel", func(call goja.FunctionCall) goja.Value {
+		v := call.Argument(0)
+		if v == nil || goja.IsUndefined(v) || goja.IsNull(v) {
+			return goja.Null()
+		}
+		exp := v.Export()
+		arr, ok := exp.([]any)
+		if !ok || len(arr) < 2 {
+			return goja.Null()
+		}
+		calls := make([]ToolCall, 0, len(arr))
+		for _, item := range arr {
+			m, ok := item.(map[string]any)
+			if !ok {
+				return goja.Null()
+			}
+			id, _ := m["id"].(string)
+			name, _ := m["name"].(string)
+			args := ""
+			if s, ok := m["args"].(string); ok {
+				args = s
+			}
+			if name == "" {
+				return goja.Null()
+			}
+			calls = append(calls, ToolCall{ID: id, Function: FunctionCall{Name: name, Arguments: args}})
+		}
+		// 仅纯只读才并行（含写/需审批 → 退回串行）
+		for _, tc := range calls {
+			t, ok := l.Registry.Get(tc.Function.Name)
+			if !ok || !t.ReadOnly || t.RequiresApproval {
+				return goja.Null()
+			}
+		}
+		log.Printf("[loop-js] 并行执行 %d 个只读工具（turn=%d step=%d）", len(calls), l.TurnNo, l.StepNo)
+		// 并行执行（结果按原始顺序收集）
+		type presult struct {
+			tc     ToolCall
+			output string
+			err    error
+		}
+		results := make([]presult, len(calls))
+		var wg sync.WaitGroup
+		for i, tc := range calls {
+			wg.Add(1)
+			go func(idx int, tc ToolCall) {
+				defer wg.Done()
+				out, err := l.Registry.Execute(r.ctx, tc.Function.Name, tc.Function.Arguments)
+				results[idx] = presult{tc: tc, output: out, err: err}
+			}(i, tc)
+		}
+		wg.Wait()
+		// 按序 emit tool_result + trackCall + 组装返回值
+		outArr := make([]any, 0, len(calls))
+		for _, pr := range results {
+			output := pr.output
+			if pr.err != nil {
+				output = "Error: " + pr.err.Error()
+			}
+			l.emit(Event{Type: EventToolResult, Tool: pr.tc.Function.Name, Content: output, CallID: pr.tc.ID})
+			l.trackCall(pr.tc.Function.Name, pr.tc.Function.Arguments, pr.err != nil || strings.HasPrefix(strings.TrimSpace(output), "Error:"))
+			if pr.tc.Function.Name == "generate_commit_message" {
+				l.commitMessage = output
+			}
+			errAny := any(nil)
+			if pr.err != nil {
+				errAny = pr.err.Error()
+			}
+			outArr = append(outArr, map[string]any{
+				"id":      pr.tc.ID,
+				"name":    pr.tc.Function.Name,
+				"content": output,
+				"error":   errAny,
+			})
+		}
+		return vm.ToValue(outArr)
 	})
 	proxy.Set("tools", toolsObj)
 

@@ -7,6 +7,7 @@
 //
 //     loop.llm.chat(msgs, tools, onChunk) → assistant
 //     loop.tools.list() / loop.tools.run(name, argsJson)
+//     loop.tools.runParallel([{id,name,args}]) → 结果|null（纯只读并行）
 //     loop.events.emit(event)
 //     loop.persist.batch(msgs)
 //     loop.approve.ask(tc) → {approved, feedback, blocked, reason}
@@ -194,37 +195,63 @@ return {
               loop.circling.track(tc.function.name, tc.function.arguments, true);
             }
           } else {
-            // ── 12. ACT + OBSERVE：依次执行工具（串行；并行优化后续迭代）──
-            for (const tc of assistant.toolCalls || []) {
-              loop.events.emit({ type: 'tool_call', tool: tc.function.name, args: tc.function.arguments, callId: tc.id });
-
-              // 审批门（黑白名单 + ReviewMode + RequiresApproval + 连续驳回，Go 侧实现）
-              const ap = loop.approve.ask(tc);
-              if (!ap.approved) {
-                const rej = (ap.feedback || '').trim() || REJ_DEFAULT;
-                if (ap.blocked) {
-                  loop.events.emit({ type: 'error', content: ap.reason });
-                  return { msgs, error: ap.reason };
+            // ── 12. ACT + OBSERVE：审批 → （并行优先 / 串行退回）执行 ──
+            const tcs = assistant.toolCalls || [];
+            if (tcs.length > 0) {
+              // 12a. 审批门（黑白名单 + ReviewMode + RequiresApproval + 连续驳回，Go 侧实现）
+              const approved = [];
+              let blocked = false, blockReason = '';
+              for (const tc of tcs) {
+                loop.events.emit({ type: 'tool_call', tool: tc.function.name, args: tc.function.arguments, callId: tc.id });
+                const ap = loop.approve.ask(tc);
+                if (!ap.approved) {
+                  const rej = (ap.feedback || '').trim() || REJ_DEFAULT;
+                  if (ap.blocked) { blocked = true; blockReason = ap.reason; break; }
+                  loop.events.emit({ type: 'tool_result', tool: tc.function.name, content: rej, callId: tc.id });
+                  msgs.push({ role: 'tool', toolCallId: tc.id, name: tc.function.name, content: rej });
+                  loop.circling.track(tc.function.name, tc.function.arguments, true);
+                  continue;
                 }
-                loop.events.emit({ type: 'tool_result', tool: tc.function.name, content: rej, callId: tc.id });
-                msgs.push({ role: 'tool', toolCallId: tc.id, name: tc.function.name, content: rej });
-                loop.circling.track(tc.function.name, tc.function.arguments, true);
-                continue;
+                approved.push(tc);
               }
-
-              // 执行工具
-              const res = loop.tools.run(tc.function.name, tc.function.arguments);
-              const output = res.error ? 'Error: ' + res.error : res.content;
-              loop.events.emit({ type: 'tool_result', tool: tc.function.name, content: output, callId: tc.id });
-              msgs.push({ role: 'tool', toolCallId: tc.id, name: tc.function.name, content: output });
-              loop.circling.track(tc.function.name, tc.function.arguments, !!res.error);
-
-              // 提交信息记录（generate_commit_message 工具）
-              if (tc.function.name === 'generate_commit_message') {
-                loop.store.set('commitMessage', output);
+              if (blocked) {
+                loop.events.emit({ type: 'error', content: blockReason });
+                return { msgs, error: blockReason };
               }
-            }
+              // 12b. 执行：≥2 个先试并行（纯只读），runParallel 返回 null（含写/需审批）
+              //      或 <2 个 → 串行退回。契约：runParallel 已 emit tool_result + track，
+              //      JS 只组装消息；串行路径 JS 自己 emit + track。
+              if (approved.length >= 2) {
+                const par = loop.tools.runParallel(approved.map(tc => ({
+                  id: tc.id, name: tc.function.name, args: tc.function.arguments,
+                })));
+                if (par) {
+                  for (const r of par) {
+                    const output = r.error ? 'Error: ' + r.error : r.content;
+                    msgs.push({ role: 'tool', toolCallId: r.id, name: r.name, content: output });
+                    if (r.name === 'generate_commit_message') loop.store.set('commitMessage', output);
+                  }
+                } else {
+                  for (const tc of approved) {
+                    const res = loop.tools.run(tc.function.name, tc.function.arguments);
+                    const output = res.error ? 'Error: ' + res.error : res.content;
+                    loop.events.emit({ type: 'tool_result', tool: tc.function.name, content: output, callId: tc.id });
+                    msgs.push({ role: 'tool', toolCallId: tc.id, name: tc.function.name, content: output });
+                    loop.circling.track(tc.function.name, tc.function.arguments, !!res.error);
+                    if (tc.function.name === 'generate_commit_message') loop.store.set('commitMessage', output);
+                  }
+                }
+              } else if (approved.length === 1) {
+                const tc = approved[0];
+                const res = loop.tools.run(tc.function.name, tc.function.arguments);
+                const output = res.error ? 'Error: ' + res.error : res.content;
+                loop.events.emit({ type: 'tool_result', tool: tc.function.name, content: output, callId: tc.id });
+                msgs.push({ role: 'tool', toolCallId: tc.id, name: tc.function.name, content: output });
+                loop.circling.track(tc.function.name, tc.function.arguments, !!res.error);
+                if (tc.function.name === 'generate_commit_message') loop.store.set('commitMessage', output);
+              }
           }
+            }
 
           // ── 13. step 收尾 ──
           const tcCount = (assistant.toolCalls || []).length;
