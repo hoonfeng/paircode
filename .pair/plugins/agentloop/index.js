@@ -48,27 +48,19 @@ return {
       title: 'AI',
       fields: [
           { name: 'provider', label: '服务商', type: 'select', binding: 'provider',
-            optionsSource: 'providers', linkField: 'baseURL',
+            optionsSource: 'providers', linkFields: ['baseURL', 'apiKey'],
             options: ['deepseek', '硅基', 'kimi', 'anthropic', 'custom', 'openai-compatible'],
-            hint: '模型服务商（切换自动带出默认 Base URL 与模型列表）' },
+            hint: '模型服务商（切换自动带出该服务商的 Base URL 与 API Key）' },
         { name: 'baseURL', label: 'Base URL', type: 'text', binding: 'baseURL',
-          placeholder: 'https://api.deepseek.com/v1', hint: 'API 端点（custom 服务商必填）' },
+          placeholder: 'https://api.deepseek.com/v1', hint: 'API 端点（custom 服务商必填，切换服务商自动带出）' },
         { name: 'apiKey', label: 'API Key', type: 'password', binding: 'apiKey',
-          placeholder: 'sk-…', hint: '服务商密钥，仅本地保存' },
+          placeholder: 'sk-…', hint: '★ 按服务商独立保存：切换服务商自动带出该服务商密钥；修改后保存设置即写回' },
           { name: 'executeModel', label: '执行模型', type: 'select', binding: 'executeModel',
             optionsSource: 'models', placeholder: 'deepseek-v4-flash', hint: '执行 Agent 使用的模型（下拉=按服务商预设）' },
           { name: 'planModel', label: '规划模型', type: 'select', binding: 'planModel',
             optionsSource: 'models', placeholder: 'deepseek-v4-pro', hint: '规划 Agent 使用的模型（更强推理）' },
           { name: 'reviewModel', label: '审核模型', type: 'select', binding: 'reviewModel',
             optionsSource: 'models', placeholder: 'deepseek-v4-pro', hint: '审核 Agent 使用的模型' },
-        { name: 'temperature', label: '温度', type: 'select', binding: 'temperature',
-          options: ['0', '0.1', '0.2', '0.3', '0.4', '0.5', '0.6', '0.7', '0.8', '0.9', '1.0', '1.2', '1.5', '2.0'],
-          hint: '随机性：越低越确定，越高越发散（0~2，deepseek 默认 1.0）' },
-        { name: 'thinkingMode', label: '思考模式', type: 'select', binding: 'thinkingMode',
-          options: ['thinking', 'non-thinking'], hint: 'thinking=深度思考（更慢更准）' },
-        { name: 'maxTokens', label: '最大输出 Token', type: 'number', binding: 'maxTokens', min: 1024, max: 131072, step: 1024 },
-        { name: 'contextMaxTokens', label: '上下文窗口', type: 'number', binding: 'contextMaxTokens', min: 4096, max: 200000, step: 4096,
-          hint: '历史注入的上下文上限' },
       ],
     })
 
@@ -79,7 +71,6 @@ return {
       fields: [
         { name: 'systemAppend', label: '系统提示词追加', type: 'textarea', default: '', hint: '追加到系统提示词末尾（如行为规范/角色设定）' },
         { name: 'maxIterations', label: '最大迭代数', type: 'number', default: 0, hint: '0=不覆盖（默认 50）' },
-        { name: 'maxContextTokens', label: '上下文 token 上限', type: 'number', default: 0, hint: '0=不覆盖' },
         { name: 'autonomous', label: '自主模式', type: 'checkbox', default: false, hint: '勾选=强制开启自主（不勾=跟随全局开关，不再强制关闭）' },
         { name: 'maxAutonomousMinutes', label: '自主时间预算（分钟）', type: 'number', default: 0, hint: '0=不覆盖' },
         { name: 'checkpointInterval', label: '检查点间隔（迭代数）', type: 'number', default: 0, hint: '0=不覆盖' },
@@ -103,7 +94,7 @@ return {
       ],
     })
 
-      // ── 服务商：维护服务商列表（名称/Base URL/模型列表）──
+      // ── 服务商：维护服务商列表（名称/Base URL/API Key/模型列表）──
       // type='provider-manager'：SettingsModal 渲染 CRUD 面板，数据经 /api/models（config/models.json）。
       // AI tab 的 provider 下拉（optionsSource='providers'）与模型下拉（optionsSource='models'）均来自此处维护的数据。
       ctx.registerSettings({
@@ -111,7 +102,19 @@ return {
         title: '服务商',
         fields: [
           { name: 'providers', label: '服务商列表', type: 'provider-manager',
-            hint: '维护服务商：名称、Base URL、可用模型列表。AI tab 的下拉与模型联动均来自此处。' },
+            hint: '维护服务商：名称、Base URL、API Key、可用模型列表。AI tab 的下拉与联动均来自此处。' },
+        ],
+      })
+
+      // ── 模型参数：每个模型独立配置生成参数（temperature/思考模式/输出上限/上下文窗口）──
+      // type='model-params-manager'：SettingsModal 渲染配置面板，数据存 settings.json 顶层 modelParams。
+      // 装配器按 服务商+模型 精确匹配；未配置的模型沿用默认。
+      ctx.registerSettings({
+        key: 'modelParams',
+        title: '模型参数',
+        fields: [
+          { name: 'modelParams', label: '模型参数配置', type: 'model-params-manager',
+            hint: '每个模型可独立配置：温度、思考模式、最大输出 Token、上下文窗口。AI tab 与 Agent 面板的全局参数已并入此处。' },
         ],
       })
 
@@ -125,22 +128,39 @@ return {
     ctx.providerFactory.register((current) => {
       const s = (ctx.app && ctx.app.settings) || {};
       const over = {};
-      const baseURL = (s.baseURL || '').trim();
-      const apiKey = (s.apiKey || '').trim();
-      const model = (s.executeModel || s.model || '').trim();
-      const planModel = (s.planModel || '').trim();
-      const reviewModel = (s.reviewModel || '').trim();
+      // ★ 服务商独立 Key/BaseURL：Go 端 ResolveProviderParams 已按 models.json[provider] 优先注入
+      //   current.baseURL/apiKey；此处仅当为空时用 settings 全局字段兜底（兼容旧配置）。
+      const baseURL = (current.baseURL || s.baseURL || '').trim();
+      const apiKey = (current.apiKey || s.apiKey || '').trim();
+      const model = (current.model || s.executeModel || s.model || '').trim();
+      const planModel = (current.planModel || s.planModel || '').trim();
+      const reviewModel = (current.reviewModel || s.reviewModel || '').trim();
       if (baseURL) over.baseURL = baseURL;
       if (apiKey) over.apiKey = apiKey;
       if (model) over.model = model;
       if (planModel) over.planModel = planModel;
       if (reviewModel) over.reviewModel = reviewModel;
-      if (s.temperature !== undefined && s.temperature !== null && s.temperature !== '') {
-        const t = parseFloat(s.temperature);
-        if (!isNaN(t) && t >= 0) over.temperature = t;
+      // ★ 2026-08-20 模型级参数（settings.modelParams[服务商][模型]）优先；无则回退全局（兼容旧配置）
+      const provider = current.provider || s.provider || '';
+      const mp = (s.modelParams && s.modelParams[provider] && s.modelParams[provider][model]) ||
+                 (current.modelParams && current.modelParams[provider] && current.modelParams[provider][model]) || null;
+      if (mp) {
+        if (mp.temperature !== undefined && mp.temperature !== null && mp.temperature !== '') {
+          const t = parseFloat(mp.temperature);
+          if (!isNaN(t) && t >= 0) over.temperature = t;
+        }
+        if (mp.thinkingMode) over.thinkingMode = mp.thinkingMode;
+        if (mp.maxTokens && Number(mp.maxTokens) > 0) over.maxTokens = Number(mp.maxTokens);
+        if (mp.contextMaxTokens && Number(mp.contextMaxTokens) > 0) over.contextMaxTokens = Number(mp.contextMaxTokens);
+      } else {
+        if (s.temperature !== undefined && s.temperature !== null && s.temperature !== '') {
+          const t = parseFloat(s.temperature);
+          if (!isNaN(t) && t >= 0) over.temperature = t;
+        }
+        if (s.maxTokens && Number(s.maxTokens) > 0) over.maxTokens = Number(s.maxTokens);
+        if (s.thinkingMode) over.thinkingMode = s.thinkingMode;
+        if (s.contextMaxTokens && Number(s.contextMaxTokens) > 0) over.contextMaxTokens = Number(s.contextMaxTokens);
       }
-      if (s.maxTokens && Number(s.maxTokens) > 0) over.maxTokens = Number(s.maxTokens);
-      if (s.thinkingMode) over.thinkingMode = s.thinkingMode;
       return over;
     });
 

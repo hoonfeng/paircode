@@ -45,8 +45,18 @@ type AppSettings struct {
 	// MCP / Skills
 	SkillEnabledOverrides map[string]bool   `json:"skillEnabledOverrides"`
 	SkillStatusOverrides  map[string]string `json:"skillStatusOverrides"`
+	// 模型级参数（★ 2026-08-20）：每个模型独立配置生成参数，key=服务商 → 模型 → 参数
+	ModelParams map[string]map[string]ModelParamEntry `json:"modelParams,omitempty"`
 	// 插件配置（插件通过 ctx.registerSettings 注册命名空间，值存这里）
 	PluginSettings map[string]map[string]any `json:"pluginSettings,omitempty"`
+}
+
+// ModelParamEntry 单个模型的独立生成参数（模型级配置，覆盖全局默认）。
+type ModelParamEntry struct {
+	Temperature      string `json:"temperature,omitempty"`      // 随机性（"0"~"2.0"，空=不覆盖）
+	ThinkingMode     string `json:"thinkingMode,omitempty"`     // thinking/non-thinking，空=不覆盖
+	MaxTokens        int    `json:"maxTokens,omitempty"`        // 最大输出 token，0=不覆盖
+	ContextMaxTokens int    `json:"contextMaxTokens,omitempty"` // 上下文窗口，0=不覆盖
 }
 
 var (

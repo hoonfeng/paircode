@@ -14,6 +14,7 @@ import (
 type ProviderEntry struct {
 	BaseURL string   `json:"baseURL"`
 	Models  []string `json:"models"`
+	APIKey  string   `json:"apiKey,omitempty"` // ★ 2026-08-20 服务商独立 API Key（切换服务商自动带出）
 }
 
 // ModelListMap 按服务商分组，key=服务商名，value=ProviderEntry。
@@ -106,6 +107,29 @@ func GetProviderBaseURLs() map[string]string {
 		out[k] = v.BaseURL
 	}
 	return out
+}
+
+// GetProviderAPIKeys 返回服务商 → API Key 映射（切服务商自动带出，Key 按服务商独立保存）。
+func GetProviderAPIKeys() map[string]string {
+	if ModelList == nil {
+		LoadModelList()
+	}
+	out := make(map[string]string, len(ModelList))
+	for k, v := range ModelList {
+		out[k] = v.APIKey
+	}
+	return out
+}
+
+// GetProviderAPIKey 返回指定服务商的 API Key（空=未配置）。
+func GetProviderAPIKey(provider string) string {
+	if ModelList == nil {
+		LoadModelList()
+	}
+	if entry, ok := ModelList[provider]; ok {
+		return entry.APIKey
+	}
+	return ""
 }
 
 // GetProviders 返回 ModelList 中的所有服务商名称（排序后）。

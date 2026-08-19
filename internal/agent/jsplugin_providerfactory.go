@@ -26,14 +26,17 @@ type jsProviderFactoryBridge struct {
 // Apply 实现 ProviderFactory：JS 装配 → 参数合并。
 func (b *jsProviderFactoryBridge) Apply(current ProviderParams) ProviderParams {
 	snap := map[string]any{
-		"baseURL":      current.BaseURL,
-		"apiKey":       current.APIKey,
-		"model":        current.Model,
-		"temperature":  current.Temperature,
-		"maxTokens":    current.MaxTokens,
-		"thinkingMode": current.ThinkingMode,
-		"planModel":    current.PlanModel,
-		"reviewModel":  current.ReviewModel,
+		"provider":         current.Provider,
+		"baseURL":          current.BaseURL,
+		"apiKey":           current.APIKey,
+		"model":            current.Model,
+		"temperature":      current.Temperature,
+		"maxTokens":        current.MaxTokens,
+		"thinkingMode":     current.ThinkingMode,
+		"planModel":        current.PlanModel,
+		"reviewModel":      current.ReviewModel,
+		"contextMaxTokens": current.ContextMaxTokens,
+		"modelParams":      current.ModelParams,
 	}
 	var (
 		ret     goja.Value
@@ -67,6 +70,11 @@ func (b *jsProviderFactoryBridge) applyOverrides(cur ProviderParams, obj *goja.O
 	}
 	if v := get("model"); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) && v.String() != "" {
 		out.Model = v.String()
+	}
+	if v := get("contextMaxTokens"); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
+		if n := int(v.ToInteger()); n > 0 {
+			out.ContextMaxTokens = n
+		}
 	}
 	if v := get("temperature"); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
 		if f := v.ToFloat(); f >= 0 {

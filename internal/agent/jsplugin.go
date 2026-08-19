@@ -1090,6 +1090,13 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 				f.Placeholder, _ = fm["placeholder"].(string)
 				f.OptionsSource, _ = fm["optionsSource"].(string)
 				f.LinkField, _ = fm["linkField"].(string)
+				if lfs, ok := fm["linkFields"].([]any); ok {
+					for _, lf := range lfs {
+						if s, ok := lf.(string); ok {
+							f.LinkFields = append(f.LinkFields, s)
+						}
+					}
+				}
 				if v, ok := fm["min"].(float64); ok {
 					iv := int(v)
 					f.Min = &iv

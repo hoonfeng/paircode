@@ -17,6 +17,10 @@
         <span class="pm-field-label">Base URL</span>
         <input v-model="editForm.baseURL" placeholder="https://api.deepseek.com/v1" />
       </div>
+      <div class="pm-field">
+        <span class="pm-field-label">API Key（该服务商独立保存）</span>
+        <input v-model="editForm.apiKey" type="password" placeholder="sk-…" />
+      </div>
       <ModelEditor :models="editModels" @change="editModels = $event" />
       <div class="pm-edit-actions">
         <button class="pm-btn pm-primary" :disabled="saving" @click="saveEdit">
@@ -39,6 +43,10 @@
             <span class="pm-field-label">Base URL</span>
             <input v-model="editForm.baseURL" placeholder="https://api.deepseek.com/v1" />
           </div>
+          <div class="pm-field">
+            <span class="pm-field-label">API Key（该服务商独立保存）</span>
+            <input v-model="editForm.apiKey" type="password" placeholder="sk-…" />
+          </div>
           <ModelEditor :models="editModels" @change="editModels = $event" />
           <div class="pm-edit-actions">
             <button class="pm-btn pm-primary" :disabled="saving" @click="saveEdit">
@@ -56,6 +64,7 @@
             </div>
           </div>
           <div class="pm-url" :title="p.baseURL">{{ p.baseURL || '未配置 Base URL' }}</div>
+          <div class="pm-key" :class="{ 'pm-key-ok': p.apiKey }" :title="p.apiKey ? '已配置 API Key' : '未配置 API Key'">{{ p.apiKey ? 'API Key 已配置' : '未配置 API Key' }}</div>
           <div class="pm-models">
             <span v-if="!p.models.length" class="pm-none">（未配置模型）</span>
             <span v-for="m in p.models" :key="m" class="pm-tag">{{ m }}</span>
@@ -80,7 +89,7 @@ const emit = defineEmits(['saved'])
 
 const providers = ref([])
 const editingName = ref('')        // '' = 不编辑；'__new__' = 新增；其他 = 编辑该服务商（就地展开）
-const editForm = ref({ name: '', baseURL: '' })
+const editForm = ref({ name: '', baseURL: '', apiKey: '' })
 const editModels = ref([])
 const error = ref('')
 const saving = ref(false)
@@ -91,6 +100,7 @@ async function load() {
     providers.value = (d.providers || []).map(name => ({
       name,
       baseURL: (d.providerBaseURLs || {})[name] || '',
+      apiKey: (d.providerKeys || {})[name] || '',
       models: (d.models || {})[name] || [],
     }))
     error.value = ''
@@ -102,13 +112,13 @@ onMounted(load)
 
 function startAdd() {
   editingName.value = '__new__'
-  editForm.value = { name: '', baseURL: '' }
+  editForm.value = { name: '', baseURL: '', apiKey: '' }
   editModels.value = []
   error.value = ''
 }
 function startEdit(p) {
   editingName.value = p.name
-  editForm.value = { name: p.name, baseURL: p.baseURL }
+  editForm.value = { name: p.name, baseURL: p.baseURL, apiKey: p.apiKey || '' }
   editModels.value = [...(p.models || [])]
   error.value = ''
 }
@@ -117,7 +127,7 @@ function cancelEdit() { editingName.value = ''; error.value = '' }
 // 当前列表 → 全量快照 map（供 POST /api/models）
 function snapshot() {
   const map = {}
-  for (const p of providers.value) map[p.name] = { baseURL: p.baseURL, models: p.models }
+  for (const p of providers.value) map[p.name] = { baseURL: p.baseURL, models: p.models, apiKey: p.apiKey || '' }
   return map
 }
 
@@ -126,7 +136,7 @@ async function saveEdit() {
   if (!name) { error.value = '服务商名称不能为空'; return }
   const map = snapshot()
   if (editingName.value === '__new__' && map[name]) { error.value = `服务商「${name}」已存在`; return }
-  map[name] = { baseURL: editForm.value.baseURL.trim(), models: editModels.value }
+  map[name] = { baseURL: editForm.value.baseURL.trim(), models: editModels.value, apiKey: (editForm.value.apiKey || '').trim() }
   saving.value = true
   try {
     await api.saveModels(map)
@@ -220,6 +230,8 @@ async function removeProvider(p) {
   background: rgba(79,140,255,.1); color: #8ab4ff;
   border: 1px solid rgba(79,140,255,.22); white-space: nowrap;
 }
+.pm-key { font-size: 11px; color: var(--text-secondary, #777); }
+.pm-key-ok { color: #7ecb7e; }
 .pm-none { color: var(--text-secondary, #777); font-size: 12px; }
 .pm-empty { color: var(--text-secondary, #888); text-align: center; padding: 30px 0; font-size: 13px; }
 .pm-error {

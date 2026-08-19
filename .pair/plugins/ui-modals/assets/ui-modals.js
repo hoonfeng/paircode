@@ -11,12 +11,12 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     }
     return target;
   };
-  const _hoisted_1$9 = ["width", "height"];
-  const _hoisted_2$9 = {
+  const _hoisted_1$a = ["width", "height"];
+  const _hoisted_2$a = {
     key: 0,
     d: "M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
   };
-  const _sfc_main$a = {
+  const _sfc_main$b = {
     __name: "SvgIcon",
     props: {
       name: { type: String, required: true },
@@ -36,7 +36,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
           "stroke-linejoin": "round"
         }, [
           vue.createCommentVNode(" Folder "),
-          __props.name === "folder" ? (vue.openBlock(), vue.createElementBlock("path", _hoisted_2$9)) : __props.name === "folder-open" ? (vue.openBlock(), vue.createElementBlock(
+          __props.name === "folder" ? (vue.openBlock(), vue.createElementBlock("path", _hoisted_2$a)) : __props.name === "folder-open" ? (vue.openBlock(), vue.createElementBlock(
             vue.Fragment,
             { key: 1 },
             [
@@ -2078,22 +2078,22 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
             64
             /* STABLE_FRAGMENT */
           ))
-        ], 8, _hoisted_1$9);
+        ], 8, _hoisted_1$a);
       };
     }
   };
-  const SvgIcon = /* @__PURE__ */ _export_sfc(_sfc_main$a, [["__scopeId", "data-v-faf69761"]]);
-  const _hoisted_1$8 = { class: "me-field" };
-  const _hoisted_2$8 = { class: "me-editor" };
-  const _hoisted_3$8 = { class: "me-input-row" };
-  const _hoisted_4$7 = ["onKeydown"];
-  const _hoisted_5$7 = { class: "me-tags" };
-  const _hoisted_6$7 = {
+  const SvgIcon = /* @__PURE__ */ _export_sfc(_sfc_main$b, [["__scopeId", "data-v-faf69761"]]);
+  const _hoisted_1$9 = { class: "me-field" };
+  const _hoisted_2$9 = { class: "me-editor" };
+  const _hoisted_3$9 = { class: "me-input-row" };
+  const _hoisted_4$8 = ["onKeydown"];
+  const _hoisted_5$8 = { class: "me-tags" };
+  const _hoisted_6$8 = {
     key: 0,
     class: "me-empty"
   };
-  const _hoisted_7$7 = ["onClick"];
-  const _sfc_main$9 = {
+  const _hoisted_7$8 = ["onClick"];
+  const _sfc_main$a = {
     __name: "ModelEditor",
     props: {
       models: { type: Array, default: () => [] }
@@ -2140,7 +2140,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         emit("change", [...local.value]);
       }
       return (_ctx, _cache) => {
-        return vue.openBlock(), vue.createElementBlock("div", _hoisted_1$8, [
+        return vue.openBlock(), vue.createElementBlock("div", _hoisted_1$9, [
           _cache[1] || (_cache[1] = vue.createElementVNode(
             "span",
             { class: "me-label" },
@@ -2148,15 +2148,15 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
             -1
             /* CACHED */
           )),
-          vue.createElementVNode("div", _hoisted_2$8, [
-            vue.createElementVNode("div", _hoisted_3$8, [
+          vue.createElementVNode("div", _hoisted_2$9, [
+            vue.createElementVNode("div", _hoisted_3$9, [
               vue.withDirectives(vue.createElementVNode("input", {
                 "onUpdate:modelValue": _cache[0] || (_cache[0] = ($event) => input.value = $event),
                 class: "me-input",
                 placeholder: "输入模型名，回车添加…",
                 onKeydown: vue.withKeys(vue.withModifiers(addModels, ["prevent"]), ["enter"]),
                 onPaste
-              }, null, 40, _hoisted_4$7), [
+              }, null, 40, _hoisted_4$8), [
                 [vue.vModelText, input.value]
               ]),
               vue.createElementVNode("button", {
@@ -2164,8 +2164,8 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                 onClick: addModels
               }, "添加")
             ]),
-            vue.createElementVNode("div", _hoisted_5$7, [
-              !local.value.length ? (vue.openBlock(), vue.createElementBlock("span", _hoisted_6$7, "暂无模型——添加后 AI tab 的模型下拉会按服务商显示")) : vue.createCommentVNode("v-if", true),
+            vue.createElementVNode("div", _hoisted_5$8, [
+              !local.value.length ? (vue.openBlock(), vue.createElementBlock("span", _hoisted_6$8, "暂无模型——添加后 AI tab 的模型下拉会按服务商显示")) : vue.createCommentVNode("v-if", true),
               (vue.openBlock(true), vue.createElementBlock(
                 vue.Fragment,
                 null,
@@ -2183,7 +2183,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                       class: "me-x",
                       title: "移除",
                       onClick: ($event) => removeAt(i)
-                    }, "×", 8, _hoisted_7$7)
+                    }, "×", 8, _hoisted_7$8)
                   ]);
                 }),
                 128
@@ -2195,63 +2195,66 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       };
     }
   };
-  const ModelEditor = /* @__PURE__ */ _export_sfc(_sfc_main$9, [["__scopeId", "data-v-e3700bd7"]]);
-  const _hoisted_1$7 = { class: "provider-manager" };
-  const _hoisted_2$7 = { class: "pm-toolbar" };
-  const _hoisted_3$7 = { class: "pm-count" };
-  const _hoisted_4$6 = {
+  const ModelEditor = /* @__PURE__ */ _export_sfc(_sfc_main$a, [["__scopeId", "data-v-e3700bd7"]]);
+  const _hoisted_1$8 = { class: "provider-manager" };
+  const _hoisted_2$8 = { class: "pm-toolbar" };
+  const _hoisted_3$8 = { class: "pm-count" };
+  const _hoisted_4$7 = {
     key: 0,
     class: "pm-edit"
   };
-  const _hoisted_5$6 = { class: "pm-field" };
-  const _hoisted_6$6 = { class: "pm-field" };
-  const _hoisted_7$6 = { class: "pm-edit-actions" };
-  const _hoisted_8$6 = ["disabled"];
-  const _hoisted_9$6 = {
+  const _hoisted_5$7 = { class: "pm-field" };
+  const _hoisted_6$7 = { class: "pm-field" };
+  const _hoisted_7$7 = { class: "pm-field" };
+  const _hoisted_8$7 = { class: "pm-edit-actions" };
+  const _hoisted_9$7 = ["disabled"];
+  const _hoisted_10$7 = {
     key: 1,
     class: "pm-cards"
   };
-  const _hoisted_10$6 = {
+  const _hoisted_11$7 = {
     key: 0,
     class: "pm-edit"
   };
-  const _hoisted_11$6 = { class: "pm-edit-title" };
-  const _hoisted_12$6 = { class: "pm-field" };
-  const _hoisted_13$5 = ["value"];
-  const _hoisted_14$5 = { class: "pm-field" };
-  const _hoisted_15$4 = { class: "pm-edit-actions" };
-  const _hoisted_16$4 = ["disabled"];
-  const _hoisted_17$4 = {
+  const _hoisted_12$7 = { class: "pm-edit-title" };
+  const _hoisted_13$6 = { class: "pm-field" };
+  const _hoisted_14$6 = ["value"];
+  const _hoisted_15$5 = { class: "pm-field" };
+  const _hoisted_16$5 = { class: "pm-field" };
+  const _hoisted_17$5 = { class: "pm-edit-actions" };
+  const _hoisted_18$5 = ["disabled"];
+  const _hoisted_19$5 = {
     key: 1,
     class: "pm-card"
   };
-  const _hoisted_18$4 = { class: "pm-card-head" };
-  const _hoisted_19$4 = ["title"];
-  const _hoisted_20$4 = { class: "pm-ops" };
-  const _hoisted_21$3 = ["onClick"];
-  const _hoisted_22$3 = ["onClick"];
-  const _hoisted_23$2 = ["title"];
-  const _hoisted_24$2 = { class: "pm-models" };
-  const _hoisted_25$2 = {
+  const _hoisted_20$5 = { class: "pm-card-head" };
+  const _hoisted_21$4 = ["title"];
+  const _hoisted_22$4 = { class: "pm-ops" };
+  const _hoisted_23$3 = ["onClick"];
+  const _hoisted_24$2 = ["onClick"];
+  const _hoisted_25$2 = ["title"];
+  const _hoisted_26$2 = ["title"];
+  const _hoisted_27$2 = { class: "pm-models" };
+  const _hoisted_28$2 = {
     key: 0,
     class: "pm-none"
   };
-  const _hoisted_26$2 = {
+  const _hoisted_29$1 = {
     key: 2,
     class: "pm-empty"
   };
-  const _hoisted_27$2 = {
+  const _hoisted_30$1 = {
     key: 3,
     class: "pm-error"
   };
-  const _sfc_main$8 = {
+  const _sfc_main$9 = {
     __name: "ProviderManager",
     emits: ["saved"],
     setup(__props, { emit: __emit }) {
       const emit = __emit;
       const providers = vue.ref([]);
       const editingName = vue.ref("");
-      const editForm = vue.ref({ name: "", baseURL: "" });
+      const editForm = vue.ref({ name: "", baseURL: "", apiKey: "" });
       const editModels = vue.ref([]);
       const error = vue.ref("");
       const saving = vue.ref(false);
@@ -2261,6 +2264,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
           providers.value = (d2.providers || []).map((name) => ({
             name,
             baseURL: (d2.providerBaseURLs || {})[name] || "",
+            apiKey: (d2.providerKeys || {})[name] || "",
             models: (d2.models || {})[name] || []
           }));
           error.value = "";
@@ -2271,13 +2275,13 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       vue.onMounted(load);
       function startAdd() {
         editingName.value = "__new__";
-        editForm.value = { name: "", baseURL: "" };
+        editForm.value = { name: "", baseURL: "", apiKey: "" };
         editModels.value = [];
         error.value = "";
       }
       function startEdit(p) {
         editingName.value = p.name;
-        editForm.value = { name: p.name, baseURL: p.baseURL };
+        editForm.value = { name: p.name, baseURL: p.baseURL, apiKey: p.apiKey || "" };
         editModels.value = [...p.models || []];
         error.value = "";
       }
@@ -2287,7 +2291,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       }
       function snapshot() {
         const map = {};
-        for (const p of providers.value) map[p.name] = { baseURL: p.baseURL, models: p.models };
+        for (const p of providers.value) map[p.name] = { baseURL: p.baseURL, models: p.models, apiKey: p.apiKey || "" };
         return map;
       }
       async function saveEdit() {
@@ -2301,7 +2305,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
           error.value = `服务商「${name}」已存在`;
           return;
         }
-        map[name] = { baseURL: editForm.value.baseURL.trim(), models: editModels.value };
+        map[name] = { baseURL: editForm.value.baseURL.trim(), models: editModels.value, apiKey: (editForm.value.apiKey || "").trim() };
         saving.value = true;
         try {
           await api.saveModels(map);
@@ -2328,12 +2332,12 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         }
       }
       return (_ctx, _cache) => {
-        return vue.openBlock(), vue.createElementBlock("div", _hoisted_1$7, [
+        return vue.openBlock(), vue.createElementBlock("div", _hoisted_1$8, [
           vue.createCommentVNode(" 工具栏 "),
-          vue.createElementVNode("div", _hoisted_2$7, [
+          vue.createElementVNode("div", _hoisted_2$8, [
             vue.createElementVNode(
               "span",
-              _hoisted_3$7,
+              _hoisted_3$8,
               vue.toDisplayString(providers.value.length) + " 个服务商",
               1
               /* TEXT */
@@ -2344,16 +2348,16 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
             }, "+ 新增服务商")
           ]),
           vue.createCommentVNode(" 新增表单（工具栏下方展开，紧邻按钮不跳动） "),
-          editingName.value === "__new__" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_4$6, [
-            _cache[7] || (_cache[7] = vue.createElementVNode(
+          editingName.value === "__new__" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_4$7, [
+            _cache[10] || (_cache[10] = vue.createElementVNode(
               "div",
               { class: "pm-edit-title" },
               "新增服务商",
               -1
               /* CACHED */
             )),
-            vue.createElementVNode("div", _hoisted_5$6, [
-              _cache[5] || (_cache[5] = vue.createElementVNode(
+            vue.createElementVNode("div", _hoisted_5$7, [
+              _cache[7] || (_cache[7] = vue.createElementVNode(
                 "span",
                 { class: "pm-field-label" },
                 "服务商名称",
@@ -2373,8 +2377,8 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                 [vue.vModelText, editForm.value.name]
               ])
             ]),
-            vue.createElementVNode("div", _hoisted_6$6, [
-              _cache[6] || (_cache[6] = vue.createElementVNode(
+            vue.createElementVNode("div", _hoisted_6$7, [
+              _cache[8] || (_cache[8] = vue.createElementVNode(
                 "span",
                 { class: "pm-field-label" },
                 "Base URL",
@@ -2394,16 +2398,38 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                 [vue.vModelText, editForm.value.baseURL]
               ])
             ]),
+            vue.createElementVNode("div", _hoisted_7$7, [
+              _cache[9] || (_cache[9] = vue.createElementVNode(
+                "span",
+                { class: "pm-field-label" },
+                "API Key（该服务商独立保存）",
+                -1
+                /* CACHED */
+              )),
+              vue.withDirectives(vue.createElementVNode(
+                "input",
+                {
+                  "onUpdate:modelValue": _cache[2] || (_cache[2] = ($event) => editForm.value.apiKey = $event),
+                  type: "password",
+                  placeholder: "sk-…"
+                },
+                null,
+                512
+                /* NEED_PATCH */
+              ), [
+                [vue.vModelText, editForm.value.apiKey]
+              ])
+            ]),
             vue.createVNode(ModelEditor, {
               models: editModels.value,
-              onChange: _cache[2] || (_cache[2] = ($event) => editModels.value = $event)
+              onChange: _cache[3] || (_cache[3] = ($event) => editModels.value = $event)
             }, null, 8, ["models"]),
-            vue.createElementVNode("div", _hoisted_7$6, [
+            vue.createElementVNode("div", _hoisted_8$7, [
               vue.createElementVNode("button", {
                 class: "pm-btn pm-primary",
                 disabled: saving.value,
                 onClick: saveEdit
-              }, vue.toDisplayString(saving.value ? "保存中…" : "保存服务商"), 9, _hoisted_8$6),
+              }, vue.toDisplayString(saving.value ? "保存中…" : "保存服务商"), 9, _hoisted_9$7),
               vue.createElementVNode("button", {
                 class: "pm-btn",
                 onClick: cancelEdit
@@ -2411,7 +2437,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
             ])
           ])) : vue.createCommentVNode("v-if", true),
           vue.createCommentVNode(" 服务商卡片列表（编辑时在卡片位置就地展开表单，不跳顶） "),
-          providers.value.length ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_9$6, [
+          providers.value.length ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_10$7, [
             (vue.openBlock(true), vue.createElementBlock(
               vue.Fragment,
               null,
@@ -2422,16 +2448,16 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                     key: p.name
                   },
                   [
-                    editingName.value === p.name ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_10$6, [
+                    editingName.value === p.name ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_11$7, [
                       vue.createElementVNode(
                         "div",
-                        _hoisted_11$6,
+                        _hoisted_12$7,
                         "编辑服务商：" + vue.toDisplayString(p.name),
                         1
                         /* TEXT */
                       ),
-                      vue.createElementVNode("div", _hoisted_12$6, [
-                        _cache[8] || (_cache[8] = vue.createElementVNode(
+                      vue.createElementVNode("div", _hoisted_13$6, [
+                        _cache[11] || (_cache[11] = vue.createElementVNode(
                           "span",
                           { class: "pm-field-label" },
                           "服务商名称",
@@ -2441,10 +2467,10 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         vue.createElementVNode("input", {
                           value: p.name,
                           disabled: ""
-                        }, null, 8, _hoisted_13$5)
+                        }, null, 8, _hoisted_14$6)
                       ]),
-                      vue.createElementVNode("div", _hoisted_14$5, [
-                        _cache[9] || (_cache[9] = vue.createElementVNode(
+                      vue.createElementVNode("div", _hoisted_15$5, [
+                        _cache[12] || (_cache[12] = vue.createElementVNode(
                           "span",
                           { class: "pm-field-label" },
                           "Base URL",
@@ -2454,7 +2480,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         vue.withDirectives(vue.createElementVNode(
                           "input",
                           {
-                            "onUpdate:modelValue": _cache[3] || (_cache[3] = ($event) => editForm.value.baseURL = $event),
+                            "onUpdate:modelValue": _cache[4] || (_cache[4] = ($event) => editForm.value.baseURL = $event),
                             placeholder: "https://api.deepseek.com/v1"
                           },
                           null,
@@ -2464,44 +2490,70 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                           [vue.vModelText, editForm.value.baseURL]
                         ])
                       ]),
+                      vue.createElementVNode("div", _hoisted_16$5, [
+                        _cache[13] || (_cache[13] = vue.createElementVNode(
+                          "span",
+                          { class: "pm-field-label" },
+                          "API Key（该服务商独立保存）",
+                          -1
+                          /* CACHED */
+                        )),
+                        vue.withDirectives(vue.createElementVNode(
+                          "input",
+                          {
+                            "onUpdate:modelValue": _cache[5] || (_cache[5] = ($event) => editForm.value.apiKey = $event),
+                            type: "password",
+                            placeholder: "sk-…"
+                          },
+                          null,
+                          512
+                          /* NEED_PATCH */
+                        ), [
+                          [vue.vModelText, editForm.value.apiKey]
+                        ])
+                      ]),
                       vue.createVNode(ModelEditor, {
                         models: editModels.value,
-                        onChange: _cache[4] || (_cache[4] = ($event) => editModels.value = $event)
+                        onChange: _cache[6] || (_cache[6] = ($event) => editModels.value = $event)
                       }, null, 8, ["models"]),
-                      vue.createElementVNode("div", _hoisted_15$4, [
+                      vue.createElementVNode("div", _hoisted_17$5, [
                         vue.createElementVNode("button", {
                           class: "pm-btn pm-primary",
                           disabled: saving.value,
                           onClick: saveEdit
-                        }, vue.toDisplayString(saving.value ? "保存中…" : "保存服务商"), 9, _hoisted_16$4),
+                        }, vue.toDisplayString(saving.value ? "保存中…" : "保存服务商"), 9, _hoisted_18$5),
                         vue.createElementVNode("button", {
                           class: "pm-btn",
                           onClick: cancelEdit
                         }, "取消")
                       ])
-                    ])) : (vue.openBlock(), vue.createElementBlock("div", _hoisted_17$4, [
-                      vue.createElementVNode("div", _hoisted_18$4, [
+                    ])) : (vue.openBlock(), vue.createElementBlock("div", _hoisted_19$5, [
+                      vue.createElementVNode("div", _hoisted_20$5, [
                         vue.createElementVNode("span", {
                           class: "pm-name",
                           title: p.name
-                        }, vue.toDisplayString(p.name), 9, _hoisted_19$4),
-                        vue.createElementVNode("div", _hoisted_20$4, [
+                        }, vue.toDisplayString(p.name), 9, _hoisted_21$4),
+                        vue.createElementVNode("div", _hoisted_22$4, [
                           vue.createElementVNode("button", {
                             class: "pm-btn pm-small",
                             onClick: ($event) => startEdit(p)
-                          }, "编辑", 8, _hoisted_21$3),
+                          }, "编辑", 8, _hoisted_23$3),
                           vue.createElementVNode("button", {
                             class: "pm-btn pm-small pm-danger",
                             onClick: ($event) => removeProvider(p)
-                          }, "删除", 8, _hoisted_22$3)
+                          }, "删除", 8, _hoisted_24$2)
                         ])
                       ]),
                       vue.createElementVNode("div", {
                         class: "pm-url",
                         title: p.baseURL
-                      }, vue.toDisplayString(p.baseURL || "未配置 Base URL"), 9, _hoisted_23$2),
-                      vue.createElementVNode("div", _hoisted_24$2, [
-                        !p.models.length ? (vue.openBlock(), vue.createElementBlock("span", _hoisted_25$2, "（未配置模型）")) : vue.createCommentVNode("v-if", true),
+                      }, vue.toDisplayString(p.baseURL || "未配置 Base URL"), 9, _hoisted_25$2),
+                      vue.createElementVNode("div", {
+                        class: vue.normalizeClass(["pm-key", { "pm-key-ok": p.apiKey }]),
+                        title: p.apiKey ? "已配置 API Key" : "未配置 API Key"
+                      }, vue.toDisplayString(p.apiKey ? "API Key 已配置" : "未配置 API Key"), 11, _hoisted_26$2),
+                      vue.createElementVNode("div", _hoisted_27$2, [
+                        !p.models.length ? (vue.openBlock(), vue.createElementBlock("span", _hoisted_28$2, "（未配置模型）")) : vue.createCommentVNode("v-if", true),
                         (vue.openBlock(true), vue.createElementBlock(
                           vue.Fragment,
                           null,
@@ -2530,10 +2582,10 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
               128
               /* KEYED_FRAGMENT */
             ))
-          ])) : editingName.value !== "__new__" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_26$2, "暂无服务商，点「+ 新增服务商」添加")) : vue.createCommentVNode("v-if", true),
+          ])) : editingName.value !== "__new__" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_29$1, "暂无服务商，点「+ 新增服务商」添加")) : vue.createCommentVNode("v-if", true),
           error.value ? (vue.openBlock(), vue.createElementBlock(
             "div",
-            _hoisted_27$2,
+            _hoisted_30$1,
             vue.toDisplayString(error.value),
             1
             /* TEXT */
@@ -2542,7 +2594,482 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       };
     }
   };
-  const ProviderManager = /* @__PURE__ */ _export_sfc(_sfc_main$8, [["__scopeId", "data-v-6d2e476a"]]);
+  const ProviderManager = /* @__PURE__ */ _export_sfc(_sfc_main$9, [["__scopeId", "data-v-71f7a4d3"]]);
+  const _hoisted_1$7 = { class: "mp-manager" };
+  const _hoisted_2$7 = { class: "mp-pickers" };
+  const _hoisted_3$7 = { class: "mp-pick" };
+  const _hoisted_4$6 = ["value"];
+  const _hoisted_5$6 = { class: "mp-pick" };
+  const _hoisted_6$6 = ["value"];
+  const _hoisted_7$6 = {
+    key: 0,
+    class: "mp-form"
+  };
+  const _hoisted_8$6 = { class: "mp-form-title" };
+  const _hoisted_9$6 = { class: "mp-form-grid" };
+  const _hoisted_10$6 = { class: "mp-field" };
+  const _hoisted_11$6 = ["value"];
+  const _hoisted_12$6 = { class: "mp-field" };
+  const _hoisted_13$5 = { class: "mp-field" };
+  const _hoisted_14$5 = { class: "mp-field" };
+  const _hoisted_15$4 = { class: "mp-actions" };
+  const _hoisted_16$4 = ["disabled"];
+  const _hoisted_17$4 = {
+    key: 0,
+    class: "mp-msg"
+  };
+  const _hoisted_18$4 = {
+    key: 1,
+    class: "mp-empty"
+  };
+  const _hoisted_19$4 = {
+    key: 2,
+    class: "mp-list"
+  };
+  const _hoisted_20$4 = { class: "mp-list-title" };
+  const _hoisted_21$3 = { class: "mp-item-name" };
+  const _hoisted_22$3 = { class: "mp-item-summary" };
+  const _hoisted_23$2 = ["onClick"];
+  const _sfc_main$8 = {
+    __name: "ModelParamsManager",
+    setup(__props) {
+      const TEMPS = ["0", "0.1", "0.2", "0.3", "0.4", "0.5", "0.6", "0.7", "0.8", "0.9", "1.0", "1.2", "1.5", "2.0"];
+      const provider = vue.ref("");
+      const model = vue.ref("");
+      const providers = vue.ref([]);
+      const models = vue.ref([]);
+      const form = vue.ref({ temperature: "", thinkingMode: "", maxTokens: 0, contextMaxTokens: 0 });
+      const saving = vue.ref(false);
+      const msg = vue.ref("");
+      function allParams() {
+        return uiState_js.state.settings && uiState_js.state.settings.modelParams || {};
+      }
+      function currentEntry() {
+        if (!provider.value || !model.value) return null;
+        const byProv = allParams()[provider.value];
+        return byProv ? byProv[model.value] || null : null;
+      }
+      const isConfigured = vue.computed(() => !!currentEntry());
+      const configuredList = vue.computed(() => {
+        const out = [];
+        const mp = allParams();
+        for (const p of Object.keys(mp || {})) {
+          for (const m2 of Object.keys(mp[p] || {})) {
+            const e = mp[p][m2] || {};
+            const parts = [];
+            if (e.temperature !== void 0 && e.temperature !== "") parts.push("温度 " + e.temperature);
+            if (e.thinkingMode) parts.push("思考 " + e.thinkingMode);
+            if (e.maxTokens) parts.push("输出 " + e.maxTokens);
+            if (e.contextMaxTokens) parts.push("上下文 " + e.contextMaxTokens);
+            out.push({ provider: p, model: m2, summary: parts.join(" · ") || "（空配置）" });
+          }
+        }
+        return out;
+      });
+      async function load() {
+        try {
+          const d2 = await api.getModels();
+          providers.value = d2.providers || [];
+          if (!provider.value && uiState_js.state.settings && uiState_js.state.settings.provider && providers.value.includes(uiState_js.state.settings.provider)) {
+            provider.value = uiState_js.state.settings.provider;
+            onProviderChange();
+          }
+        } catch {
+        }
+      }
+      function onProviderChange() {
+        model.value = "";
+        refreshModels();
+      }
+      async function refreshModels() {
+        if (!provider.value) {
+          models.value = [];
+          return;
+        }
+        try {
+          const d2 = await api.getModels();
+          const ms = (d2.models || {})[provider.value] || [];
+          const mp = allParams()[provider.value] || {};
+          for (const m2 of Object.keys(mp)) if (!ms.includes(m2)) ms.push(m2);
+          models.value = ms;
+          const cur = uiState_js.state.settings && uiState_js.state.settings.executeModel;
+          if (cur && ms.includes(cur)) model.value = cur;
+          else if (ms.length === 1) model.value = ms[0];
+          else if (ms.length) model.value = "";
+        } catch {
+        }
+      }
+      function syncForm() {
+        const e = currentEntry();
+        form.value = {
+          temperature: e && e.temperature !== void 0 && e.temperature !== null ? String(e.temperature) : "",
+          thinkingMode: e && e.thinkingMode || "",
+          maxTokens: e && e.maxTokens || 0,
+          contextMaxTokens: e && e.contextMaxTokens || 0
+        };
+      }
+      async function save() {
+        saving.value = true;
+        msg.value = "";
+        try {
+          const mp = JSON.parse(JSON.stringify(allParams()));
+          if (!mp[provider.value]) mp[provider.value] = {};
+          mp[provider.value][model.value] = {
+            temperature: form.value.temperature,
+            thinkingMode: form.value.thinkingMode,
+            maxTokens: form.value.maxTokens || 0,
+            contextMaxTokens: form.value.contextMaxTokens || 0
+          };
+          const top = { ...uiState_js.state.settings || {}, modelParams: mp };
+          await api.apiPut("/settings", { settings: top, pluginSettings: uiState_js.state.settings && uiState_js.state.settings.pluginSettings || {} });
+          uiState_js.state.settings = top;
+          msg.value = `已保存：${provider.value} / ${model.value} 的参数`;
+          setTimeout(() => {
+            msg.value = "";
+          }, 2500);
+        } catch (e) {
+          msg.value = "保存失败: " + (e.message || e);
+        } finally {
+          saving.value = false;
+        }
+      }
+      function clearConfig() {
+        const mp = JSON.parse(JSON.stringify(allParams()));
+        if (mp[provider.value]) delete mp[provider.value][model.value];
+        if (mp[provider.value] && !Object.keys(mp[provider.value]).length) delete mp[provider.value];
+        const top = { ...uiState_js.state.settings || {}, modelParams: mp };
+        api.apiPut("/settings", { settings: top, pluginSettings: uiState_js.state.settings && uiState_js.state.settings.pluginSettings || {} }).then(() => {
+          uiState_js.state.settings = top;
+          syncForm();
+          msg.value = "已清空该模型参数";
+          setTimeout(() => {
+            msg.value = "";
+          }, 2e3);
+        }).catch((e) => {
+          msg.value = "清空失败: " + (e.message || e);
+        });
+      }
+      function removeConfig(p, m2) {
+        const mp = JSON.parse(JSON.stringify(allParams()));
+        if (mp[p]) delete mp[p][m2];
+        if (mp[p] && !Object.keys(mp[p]).length) delete mp[p];
+        const top = { ...uiState_js.state.settings || {}, modelParams: mp };
+        api.apiPut("/settings", { settings: top, pluginSettings: uiState_js.state.settings && uiState_js.state.settings.pluginSettings || {} }).then(() => {
+          uiState_js.state.settings = top;
+          if (p === provider.value && m2 === model.value) syncForm();
+        }).catch((e) => {
+          msg.value = "删除失败: " + (e.message || e);
+        });
+      }
+      vue.watch(provider, refreshModels);
+      vue.watch(model, syncForm);
+      vue.onMounted(load);
+      return (_ctx, _cache) => {
+        return vue.openBlock(), vue.createElementBlock("div", _hoisted_1$7, [
+          vue.createCommentVNode(" 选择器：服务商 + 模型 "),
+          vue.createElementVNode("div", _hoisted_2$7, [
+            vue.createElementVNode("label", _hoisted_3$7, [
+              _cache[7] || (_cache[7] = vue.createElementVNode(
+                "span",
+                null,
+                "服务商",
+                -1
+                /* CACHED */
+              )),
+              vue.withDirectives(vue.createElementVNode(
+                "select",
+                {
+                  "onUpdate:modelValue": _cache[0] || (_cache[0] = ($event) => provider.value = $event),
+                  onChange: onProviderChange
+                },
+                [
+                  _cache[6] || (_cache[6] = vue.createElementVNode(
+                    "option",
+                    { value: "" },
+                    "请选择…",
+                    -1
+                    /* CACHED */
+                  )),
+                  (vue.openBlock(true), vue.createElementBlock(
+                    vue.Fragment,
+                    null,
+                    vue.renderList(providers.value, (p) => {
+                      return vue.openBlock(), vue.createElementBlock("option", {
+                        key: p,
+                        value: p
+                      }, vue.toDisplayString(p), 9, _hoisted_4$6);
+                    }),
+                    128
+                    /* KEYED_FRAGMENT */
+                  ))
+                ],
+                544
+                /* NEED_HYDRATION, NEED_PATCH */
+              ), [
+                [vue.vModelSelect, provider.value]
+              ])
+            ]),
+            vue.createElementVNode("label", _hoisted_5$6, [
+              _cache[9] || (_cache[9] = vue.createElementVNode(
+                "span",
+                null,
+                "模型",
+                -1
+                /* CACHED */
+              )),
+              vue.withDirectives(vue.createElementVNode(
+                "select",
+                {
+                  "onUpdate:modelValue": _cache[1] || (_cache[1] = ($event) => model.value = $event)
+                },
+                [
+                  _cache[8] || (_cache[8] = vue.createElementVNode(
+                    "option",
+                    { value: "" },
+                    "请选择…",
+                    -1
+                    /* CACHED */
+                  )),
+                  (vue.openBlock(true), vue.createElementBlock(
+                    vue.Fragment,
+                    null,
+                    vue.renderList(models.value, (m2) => {
+                      return vue.openBlock(), vue.createElementBlock("option", {
+                        key: m2,
+                        value: m2
+                      }, vue.toDisplayString(m2), 9, _hoisted_6$6);
+                    }),
+                    128
+                    /* KEYED_FRAGMENT */
+                  ))
+                ],
+                512
+                /* NEED_PATCH */
+              ), [
+                [vue.vModelSelect, model.value]
+              ])
+            ])
+          ]),
+          vue.createCommentVNode(" 参数表单 "),
+          provider.value && model.value ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_7$6, [
+            vue.createElementVNode(
+              "div",
+              _hoisted_8$6,
+              "参数配置：" + vue.toDisplayString(provider.value) + " / " + vue.toDisplayString(model.value),
+              1
+              /* TEXT */
+            ),
+            vue.createElementVNode("div", _hoisted_9$6, [
+              vue.createElementVNode("label", _hoisted_10$6, [
+                _cache[11] || (_cache[11] = vue.createElementVNode(
+                  "span",
+                  null,
+                  "温度（随机性）",
+                  -1
+                  /* CACHED */
+                )),
+                vue.withDirectives(vue.createElementVNode(
+                  "select",
+                  {
+                    "onUpdate:modelValue": _cache[2] || (_cache[2] = ($event) => form.value.temperature = $event)
+                  },
+                  [
+                    _cache[10] || (_cache[10] = vue.createElementVNode(
+                      "option",
+                      { value: "" },
+                      "默认",
+                      -1
+                      /* CACHED */
+                    )),
+                    (vue.openBlock(), vue.createElementBlock(
+                      vue.Fragment,
+                      null,
+                      vue.renderList(TEMPS, (t) => {
+                        return vue.createElementVNode("option", {
+                          key: t,
+                          value: t
+                        }, vue.toDisplayString(t), 9, _hoisted_11$6);
+                      }),
+                      64
+                      /* STABLE_FRAGMENT */
+                    ))
+                  ],
+                  512
+                  /* NEED_PATCH */
+                ), [
+                  [vue.vModelSelect, form.value.temperature]
+                ])
+              ]),
+              vue.createElementVNode("label", _hoisted_12$6, [
+                _cache[13] || (_cache[13] = vue.createElementVNode(
+                  "span",
+                  null,
+                  "思考模式",
+                  -1
+                  /* CACHED */
+                )),
+                vue.withDirectives(vue.createElementVNode(
+                  "select",
+                  {
+                    "onUpdate:modelValue": _cache[3] || (_cache[3] = ($event) => form.value.thinkingMode = $event)
+                  },
+                  [..._cache[12] || (_cache[12] = [
+                    vue.createElementVNode(
+                      "option",
+                      { value: "" },
+                      "默认",
+                      -1
+                      /* CACHED */
+                    ),
+                    vue.createElementVNode(
+                      "option",
+                      { value: "thinking" },
+                      "thinking（深度思考，更慢更准）",
+                      -1
+                      /* CACHED */
+                    ),
+                    vue.createElementVNode(
+                      "option",
+                      { value: "non-thinking" },
+                      "non-thinking（快速响应）",
+                      -1
+                      /* CACHED */
+                    )
+                  ])],
+                  512
+                  /* NEED_PATCH */
+                ), [
+                  [vue.vModelSelect, form.value.thinkingMode]
+                ])
+              ]),
+              vue.createElementVNode("label", _hoisted_13$5, [
+                _cache[14] || (_cache[14] = vue.createElementVNode(
+                  "span",
+                  null,
+                  "最大输出 Token",
+                  -1
+                  /* CACHED */
+                )),
+                vue.withDirectives(vue.createElementVNode(
+                  "input",
+                  {
+                    type: "number",
+                    "onUpdate:modelValue": _cache[4] || (_cache[4] = ($event) => form.value.maxTokens = $event),
+                    placeholder: "0=默认",
+                    min: "0",
+                    max: "131072",
+                    step: "1024"
+                  },
+                  null,
+                  512
+                  /* NEED_PATCH */
+                ), [
+                  [
+                    vue.vModelText,
+                    form.value.maxTokens,
+                    void 0,
+                    { number: true }
+                  ]
+                ])
+              ]),
+              vue.createElementVNode("label", _hoisted_14$5, [
+                _cache[15] || (_cache[15] = vue.createElementVNode(
+                  "span",
+                  null,
+                  "上下文窗口",
+                  -1
+                  /* CACHED */
+                )),
+                vue.withDirectives(vue.createElementVNode(
+                  "input",
+                  {
+                    type: "number",
+                    "onUpdate:modelValue": _cache[5] || (_cache[5] = ($event) => form.value.contextMaxTokens = $event),
+                    placeholder: "0=默认",
+                    min: "0",
+                    max: "200000",
+                    step: "4096"
+                  },
+                  null,
+                  512
+                  /* NEED_PATCH */
+                ), [
+                  [
+                    vue.vModelText,
+                    form.value.contextMaxTokens,
+                    void 0,
+                    { number: true }
+                  ]
+                ])
+              ])
+            ]),
+            vue.createElementVNode("div", _hoisted_15$4, [
+              vue.createElementVNode("button", {
+                class: "mp-btn mp-primary",
+                disabled: saving.value,
+                onClick: save
+              }, vue.toDisplayString(saving.value ? "保存中…" : "保存该模型参数"), 9, _hoisted_16$4),
+              isConfigured.value ? (vue.openBlock(), vue.createElementBlock("button", {
+                key: 0,
+                class: "mp-btn mp-danger",
+                onClick: clearConfig
+              }, "清空（恢复默认）")) : vue.createCommentVNode("v-if", true)
+            ]),
+            msg.value ? (vue.openBlock(), vue.createElementBlock(
+              "div",
+              _hoisted_17$4,
+              vue.toDisplayString(msg.value),
+              1
+              /* TEXT */
+            )) : vue.createCommentVNode("v-if", true)
+          ])) : (vue.openBlock(), vue.createElementBlock("div", _hoisted_18$4, "选择服务商与模型后，可为此模型单独配置生成参数")),
+          vue.createCommentVNode(" 已配置列表 "),
+          configuredList.value.length ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_19$4, [
+            vue.createElementVNode(
+              "div",
+              _hoisted_20$4,
+              "已配置参数的模型（" + vue.toDisplayString(configuredList.value.length) + "）",
+              1
+              /* TEXT */
+            ),
+            (vue.openBlock(true), vue.createElementBlock(
+              vue.Fragment,
+              null,
+              vue.renderList(configuredList.value, (c, i) => {
+                return vue.openBlock(), vue.createElementBlock("div", {
+                  key: i,
+                  class: "mp-item"
+                }, [
+                  vue.createElementVNode(
+                    "span",
+                    _hoisted_21$3,
+                    vue.toDisplayString(c.provider) + " / " + vue.toDisplayString(c.model),
+                    1
+                    /* TEXT */
+                  ),
+                  vue.createElementVNode(
+                    "code",
+                    _hoisted_22$3,
+                    vue.toDisplayString(c.summary),
+                    1
+                    /* TEXT */
+                  ),
+                  vue.createElementVNode("button", {
+                    class: "mp-del",
+                    title: "删除该模型配置",
+                    onClick: ($event) => removeConfig(c.provider, c.model)
+                  }, "×", 8, _hoisted_23$2)
+                ]);
+              }),
+              128
+              /* KEYED_FRAGMENT */
+            ))
+          ])) : vue.createCommentVNode("v-if", true)
+        ]);
+      };
+    }
+  };
+  const ModelParamsManager = /* @__PURE__ */ _export_sfc(_sfc_main$8, [["__scopeId", "data-v-5ed58ddf"]]);
   const _hoisted_1$6 = { class: "modal-content" };
   const _hoisted_2$6 = { class: "modal-body" };
   const _hoisted_3$6 = {
@@ -2644,15 +3171,26 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         return f.options || [];
       }
       function onSelectChange(f) {
-        if (!f.linkField || !form["ai"]) return;
+        if (!form["ai"]) return;
         const ai = form["ai"];
-        const urls = modelData.value && modelData.value.providerBaseURLs || {};
+        const fields = f.linkFields || (f.linkField ? [f.linkField] : []);
+        if (!fields.length) return;
+        const md = modelData.value || {};
+        const urls = md.providerBaseURLs || {};
+        const keys = md.providerKeys || {};
+        const newP = ai.provider;
         const oldDefault = urls[lastProvider];
-        const b2 = ai[f.linkField];
-        if (b2 === void 0 || b2 === "" || oldDefault && b2 === oldDefault) {
-          ai[f.linkField] = urls[ai.provider] || "";
+        for (const name of fields) {
+          if (name === "apiKey") {
+            ai[name] = keys[newP] || "";
+          } else {
+            const cur = ai[name];
+            if (cur === void 0 || cur === "" || oldDefault && cur === oldDefault) {
+              ai[name] = urls[newP] || "";
+            }
+          }
         }
-        lastProvider = ai.provider;
+        lastProvider = newP;
       }
       const form = vue.reactive({});
       const projectInst = vue.ref("");
@@ -2671,12 +3209,13 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       function buildForm() {
         for (const key of Object.keys(form)) delete form[key];
         const top = uiState_js.state.settings || {};
+        lastProvider = top.provider || "";
         const pvals = top.pluginSettings || {};
         for (const s of uiState_js.state.pluginSchemas || []) {
           form[s.key] = {};
           for (const f of s.fields || []) {
             let v2;
-            if (f.type === "project" || f.type === "provider-manager") {
+            if (f.type === "project" || f.type === "provider-manager" || f.type === "model-params-manager") {
               continue;
             }
             if (f.binding) {
@@ -2731,7 +3270,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                 await api.saveInstructions("project", projectInst.value);
                 continue;
               }
-              if (f.type === "provider-manager") {
+              if (f.type === "provider-manager" || f.type === "model-params-manager") {
                 continue;
               }
               const v2 = vals[f.name];
@@ -2747,6 +3286,23 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
           await api.apiPut("/settings", { settings: top, pluginSettings: pluginOut });
           uiState_js.state.settings = top;
           if (themeChanged) uiState_js.applyTheme(top.theme);
+          try {
+            const md = await api.getModels();
+            const prov = form["ai"] && form["ai"].provider;
+            if (prov && (md.providers || []).includes(prov)) {
+              const map = {};
+              for (const pp of md.providers || []) {
+                map[pp] = {
+                  baseURL: (md.providerBaseURLs || {})[pp] || "",
+                  models: (md.models || {})[pp] || [],
+                  apiKey: (md.providerKeys || {})[pp] || ""
+                };
+              }
+              map[prov].apiKey = (form["ai"].apiKey || "").trim();
+              await api.saveModels(map);
+            }
+          } catch {
+          }
           window.$toast("设置已保存", "success");
           emit("close");
         } catch (err) {
@@ -3041,9 +3597,9 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                                                 ],
                                                 2112
                                                 /* STABLE_FRAGMENT, DEV_ROOT_FRAGMENT */
-                                              )) : (vue.openBlock(), vue.createElementBlock(
+                                              )) : f.type === "model-params-manager" ? (vue.openBlock(), vue.createBlock(ModelParamsManager, { key: 9 })) : (vue.openBlock(), vue.createElementBlock(
                                                 vue.Fragment,
-                                                { key: 9 },
+                                                { key: 10 },
                                                 [
                                                   vue.createCommentVNode(" 兜底 text "),
                                                   vue.withDirectives(vue.createElementVNode("input", {
@@ -3108,7 +3664,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       };
     }
   };
-  const SettingsModal = /* @__PURE__ */ _export_sfc(_sfc_main$7, [["__scopeId", "data-v-51fffeb3"]]);
+  const SettingsModal = /* @__PURE__ */ _export_sfc(_sfc_main$7, [["__scopeId", "data-v-f5dbade0"]]);
   const _hoisted_1$5 = { class: "modal-content sys-modal" };
   const _hoisted_2$5 = { class: "modal-header" };
   const _hoisted_3$5 = { class: "modal-body" };

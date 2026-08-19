@@ -33,7 +33,8 @@ type SettingField struct {
 	Step        *int   `json:"step,omitempty"`        // number/slider 步长
 	// ★ 2026-08-19 动态数据源与联动（前端通用渲染，纯 schema 声明）：
 	OptionsSource string `json:"optionsSource,omitempty"` // select 动态选项源：'models'=按服务商模型列表 / 'providers'=服务商列表（经 /api/models）
-	LinkField     string `json:"linkField,omitempty"`     // select 变化时联动填充的字段名（如 provider→baseURL，经 providerBaseURLs）
+	LinkField     string   `json:"linkField,omitempty"`   // select 变化时联动填充的字段名（如 provider→baseURL，经 providerBaseURLs）
+	LinkFields    []string `json:"linkFields,omitempty"`  // ★ 多字段联动（如 provider→[baseURL, apiKey]；apiKey 经 providerKeys 填充）
 }
 
 // SettingSchema 一个插件注册的配置段（前端渲染为一个 tab）。

@@ -16,14 +16,17 @@ import (
 
 // ProviderParams LLM Provider 可装配参数（基线 + 插件覆盖合并后的最终值）。
 type ProviderParams struct {
-	BaseURL      string  // API 端点（不含 /chat/completions）
-	APIKey       string  // 服务商密钥
-	Model        string  // 主执行模型
-	Temperature  float64 // 随机性（-1=不传）
-	MaxTokens    int     // 最大输出 token（0=不传）
-	ThinkingMode string  // non-thinking/thinking/thinking_max；空=不下发
-	PlanModel    string  // 规划模型（自主模式分解任务用）
-	ReviewModel  string  // 审核模型（AI 审核用）
+	Provider         string                               // 当前服务商（装配器按服务商取模型级参数）
+	BaseURL          string                               // API 端点（不含 /chat/completions）
+	APIKey           string                               // 服务商密钥
+	Model            string                               // 主执行模型
+	Temperature      float64                              // 随机性（-1=不传）
+	MaxTokens        int                                  // 最大输出 token（0=不传）
+	ThinkingMode     string                               // non-thinking/thinking/thinking_max；空=不下发
+	PlanModel        string                               // 规划模型（自主模式分解任务用）
+	ReviewModel      string                               // 审核模型（AI 审核用）
+	ContextMaxTokens int                                  // ★ 模型级上下文窗口（0=不传）
+	ModelParams      map[string]map[string]core.ModelParamEntry // ★ 模型级参数表（服务商 → 模型 → 参数），供装配器按当前模型取
 }
 
 // ProviderFactory 装配 LLM Provider 参数的工厂接口（对齐 LoopFactory 单槽位语义）。
@@ -66,15 +69,29 @@ func ProviderFactoryNow() ProviderFactory {
 // ResolveProviderParams 解析最终 Provider 参数：存储基线 → 装配器覆盖。
 // ★ 业务层统一入口：Go 内核不再直接读 core.Settings 的 AI 业务字段。
 func ResolveProviderParams() ProviderParams {
+	provider := core.Settings.Provider
+	// ★ 2026-08-20 服务商独立 Key/BaseURL 优先（models.json 每服务商保存），
+	//   缺省回退全局 settings 字段（兼容旧配置）。
+	baseURL := core.Settings.BaseURL
+	apiKey := core.Settings.APIKey
+	if p := core.GetProviderBaseURL(provider); p != "" {
+		baseURL = p
+	}
+	if k := core.GetProviderAPIKey(provider); k != "" {
+		apiKey = k
+	}
 	cur := ProviderParams{
-		BaseURL:      core.Settings.BaseURL,
-		APIKey:       core.Settings.APIKey,
-		Model:        core.MainModel(),
-		Temperature:  core.Temperature(),
-		MaxTokens:    core.Settings.MaxTokens,
-		ThinkingMode: core.Settings.ThinkingMode,
-		PlanModel:    core.Settings.PlanModel,
-		ReviewModel:  core.Settings.ReviewModel,
+		Provider:         provider,
+		BaseURL:          baseURL,
+		APIKey:           apiKey,
+		Model:            core.MainModel(),
+		Temperature:      core.Temperature(),
+		MaxTokens:        core.Settings.MaxTokens,
+		ThinkingMode:     core.Settings.ThinkingMode,
+		ContextMaxTokens: core.Settings.ContextMaxTokens,
+		PlanModel:        core.Settings.PlanModel,
+		ReviewModel:      core.Settings.ReviewModel,
+		ModelParams:      core.Settings.ModelParams,
 	}
 	return ProviderFactoryNow().Apply(cur)
 }

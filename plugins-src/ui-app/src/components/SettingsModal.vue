@@ -71,6 +71,7 @@
 
                       <!-- provider-manager（服务商维护面板：CRUD /api/models，独立保存，不参与普通表单） -->
                       <ProviderManager v-else-if="f.type === 'provider-manager'" @saved="loadModels" />
+                      <ModelParamsManager v-else-if="f.type === 'model-params-manager'" />
 
                       <!-- 兜底 text -->
                       <input v-else type="text" v-model="form[tab.key][f.name]" />
@@ -99,6 +100,7 @@ import { state, applyTheme } from '../ui-state.js'
 import api from '../api.js'
 import SvgIcon from './SvgIcon.vue'
 import ProviderManager from './ProviderManager.vue'
+import ModelParamsManager from './ModelParamsManager.vue'
 
 const emit = defineEmits(['close'])
 const activeTab = ref('')
@@ -160,15 +162,28 @@ function dynamicOptions(tabKey, f) {
 // 通用联动：f.linkField 存在时（如 provider→baseURL），用 providerBaseURLs 填充目标字段
 // （目标字段为空 或 等于旧服务商默认端点时自动填充，用户自定义过的值不动）
 function onSelectChange(f) {
-  if (!f.linkField || !form['ai']) return
+  if (!form['ai']) return
   const ai = form['ai']
-  const urls = (modelData.value && modelData.value.providerBaseURLs) || {}
+  // linkFields 数组（多字段联动，如 provider → baseURL + apiKey）；兼容旧单 linkField
+  const fields = f.linkFields || (f.linkField ? [f.linkField] : [])
+  if (!fields.length) return
+  const md = modelData.value || {}
+  const urls = md.providerBaseURLs || {}
+  const keys = md.providerKeys || {} // 服务商独立 API Key
+  const newP = ai.provider
   const oldDefault = urls[lastProvider]
-  const b = ai[f.linkField]
-  if (b === undefined || b === '' || (oldDefault && b === oldDefault)) {
-    ai[f.linkField] = urls[ai.provider] || ''
+  for (const name of fields) {
+    if (name === 'apiKey') {
+      // 服务商密钥：始终带出该服务商保存的 key（用户可改，保存设置时写回）
+      ai[name] = keys[newP] || ''
+    } else {
+      const cur = ai[name]
+      if (cur === undefined || cur === '' || (oldDefault && cur === oldDefault)) {
+        ai[name] = urls[newP] || ''
+      }
+    }
   }
-  lastProvider = ai.provider
+  lastProvider = newP
 }
 
 // ─── 值模型：binding → 顶层 AppSettings；非 binding → 插件命名空间 ───
@@ -187,12 +202,13 @@ function zeroValue(type) {
 function buildForm() {
   for (const key of Object.keys(form)) delete form[key]
   const top = state.settings || {}
+  lastProvider = top.provider || '' // ★ 联动基准：当前服务商（切走时 baseURL 判断是否覆盖旧默认）
   const pvals = (top.pluginSettings || {})
   for (const s of (state.pluginSchemas || [])) {
     form[s.key] = {}
     for (const f of (s.fields || [])) {
       let v
-      if (f.type === 'project' || f.type === 'provider-manager') { continue }
+      if (f.type === 'project' || f.type === 'provider-manager' || f.type === 'model-params-manager') { continue }
       if (f.binding) {
         v = top[f.binding] !== undefined ? top[f.binding] : f.default
       } else {
@@ -252,8 +268,8 @@ const saveSettings = async () => {
           await api.saveInstructions('project', projectInst.value)
           continue
         }
-        if (f.type === 'provider-manager') {
-          // 服务商维护走独立面板（ProviderManager 内部直接 POST /api/models），不并入通用表单保存
+        if (f.type === 'provider-manager' || f.type === 'model-params-manager') {
+          // 服务商/模型参数维护走独立面板（各自内部保存），不并入通用表单保存
           continue
         }
         const v = vals[f.name]
@@ -269,6 +285,21 @@ const saveSettings = async () => {
     await api.apiPut('/settings', { settings: top, pluginSettings: pluginOut })
     state.settings = top
     if (themeChanged) applyTheme(top.theme)
+    // ★ 服务商独立 Key：把当前填写的 API Key 写回 models.json[provider]（切服务商自动带出）
+    try {
+      const md = await api.getModels()
+      const prov = form['ai'] && form['ai'].provider
+      if (prov && (md.providers || []).includes(prov)) {
+        const map = {}
+        for (const pp of (md.providers || [])) {
+          map[pp] = { baseURL: (md.providerBaseURLs || {})[pp] || '',
+                      models: (md.models || {})[pp] || [],
+                      apiKey: (md.providerKeys || {})[pp] || '' }
+        }
+        map[prov].apiKey = (form['ai'].apiKey || '').trim()
+        await api.saveModels(map)
+      }
+    } catch {}
     window.$toast('设置已保存', 'success')
     emit('close')
   } catch (err) {

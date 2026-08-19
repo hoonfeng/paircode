@@ -194,6 +194,16 @@
             <textarea class="chat-input" ref="inputRef" v-model="inputText" @keydown="onKeydown" @dragover.prevent @drop="handleDrop" @paste="handlePaste" :style="{ height: inputHeight + 'px' }" placeholder="发送消息到 AI... (Enter 发送, Shift+Enter 换行)" :disabled="state.chatLoading"></textarea>
             <div class="input-bottom-bar">
               <div class="ibb-btns">
+                <!-- ★ composer 模型选择器：快速切换服务商/执行模型（写入 settings，发送即用） -->
+                <span class="ibb-model">
+                  <select v-model="composerProvider" class="cmp-sel cmp-prov" @change="onCmpProviderChange" title="服务商（切换自动带出密钥与模型）">
+                    <option v-for="p in modelProviders" :key="p" :value="p">{{ p }}</option>
+                  </select>
+                  <select v-model="composerModel" class="cmp-sel cmp-model" @change="onCmpModelChange" title="执行模型（每个模型可独立配置参数）">
+                    <option v-for="m in composerModels" :key="m" :value="m">{{ m }}</option>
+                  </select>
+                </span>
+                <span class="obtn-sep"></span>
                 <span :class="['obtn', reviewBtnClass]" @click="cycleReviewMode" :title="reviewBtnTitle"><SvgIcon :name="reviewIconName" :size="12" /> {{ reviewBtnLabel }}</span>
                 <span :class="['obtn', { active: autoCollapse }]" @click="toggleAuto('autoCollapse')" title="自动折叠：新消息发出时折叠旧输出，显示完成摘要"><SvgIcon name="list" :size="12" /> 折叠</span>
                 <span class="obtn-sep"></span>
@@ -239,6 +249,47 @@ const toggleFocus = () => {
   state.focusMode = !state.focusMode
 }
 const inputText = ref('')
+
+// ─── composer 模型选择器（快速切换服务商/执行模型，写 settings 发送即用）───
+const modelData = ref(null)
+const composerProvider = ref('')
+const composerModel = ref('')
+const modelProviders = computed(() => (modelData.value && modelData.value.providers) || [])
+const composerModels = computed(() => {
+  const m = (modelData.value && modelData.value.models) || {}
+  return m[composerProvider.value] || []
+})
+async function loadModelData() {
+  try { modelData.value = await api.getModels() } catch {}
+}
+function initComposerModel() {
+  const s = state.settings || {}
+  if (s.provider) composerProvider.value = s.provider
+  if (s.executeModel) composerModel.value = s.executeModel
+}
+function onCmpProviderChange() {
+  composerModel.value = ''
+  const ms = composerModels.value
+  const cur = state.settings && state.settings.executeModel
+  if (cur && ms.includes(cur)) composerModel.value = cur
+  else if (ms.length) composerModel.value = ms[0]
+  onCmpModelChange()
+}
+async function onCmpModelChange() {
+  if (!composerProvider.value || !composerModel.value) return
+  const md = modelData.value || {}
+  const top = { ...(state.settings || {}), provider: composerProvider.value, executeModel: composerModel.value }
+  // 服务商联动：带出该服务商默认 BaseURL 与 API Key
+  if (md.providerBaseURLs && md.providerBaseURLs[composerProvider.value]) top.baseURL = md.providerBaseURLs[composerProvider.value]
+  if (md.providerKeys && md.providerKeys[composerProvider.value]) top.apiKey = md.providerKeys[composerProvider.value]
+  try {
+    await api.apiPut('/settings', { settings: top, pluginSettings: (state.settings && state.settings.pluginSettings) || {} })
+    state.settings = top
+    window.$toast && window.$toast('已切换：' + composerProvider.value + ' / ' + composerModel.value, 'success')
+  } catch (e) {
+    window.$toast && window.$toast('模型切换失败: ' + (e.message || e), 'error')
+  }
+}
 const feedbackText = ref('')
 const msgRef = ref(null)
 const inputRef = ref(null)
@@ -1426,6 +1477,7 @@ const chatSlot = useSingleSlot('chat')
 chatSlot.init() // setup 同步初始化 owner（首帧直接走正确分支）
 
 onMounted(() => {
+  loadModelData(); initComposerModel()
   loadWsTokenStats(); loadConvList(); scrollToBottom()
   if (state.workspaceRoot && state.workspaceRoot !== '') loadWorkspaceReviewConfig()
 
@@ -1786,6 +1838,15 @@ onUnmounted(() => {
 .chat-input { display: block; width: 100%; background: transparent; border: none; color: var(--text-primary); padding: 14px 16px 14px 16px; border-radius: 0; font-size: 14px; resize: none; outline: none; min-height: 80px; font-family: inherit; line-height: 1.6; box-sizing: border-box; }
 .input-bottom-bar { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 0 12px 8px 12px; }
 .ibb-btns { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; position: relative; }
+.ibb-model { display: inline-flex; align-items: center; gap: 4px; }
+.cmp-sel {
+  background: var(--bg-tertiary); color: var(--text-primary, #ddd);
+  border: 1px solid var(--border-color, #444); border-radius: 5px;
+  font-size: 11px; padding: 3px 4px; outline: none; max-width: 110px;
+  cursor: pointer;
+}
+.cmp-sel:focus { border-color: var(--accent, #4f8cff); }
+.cmp-prov { max-width: 90px; }
 .obtn { display: flex; align-items: center; gap: 3px; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; color: var(--text-muted); background: var(--bg-tertiary); border: 1px solid var(--border-color); white-space: nowrap; user-select: none; }
 .obtn.active { color: var(--accent); background: rgba(212, 167, 78, 0.1); border-color: rgba(212, 167, 78, 0.3); }
 .obtn-obtn-agent.active { color: #d4a74e; }

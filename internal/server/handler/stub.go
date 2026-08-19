@@ -485,6 +485,7 @@ func HandleModels(w http.ResponseWriter, r *http.Request) {
 		"providers":        providers,
 		"models":           modelMap,
 		"providerBaseURLs": core.GetProviderBaseURLs(),
+		"providerKeys":     core.GetProviderAPIKeys(), // ★ 服务商独立 API Key（切服务商自动带出）
 	})
 }
 
