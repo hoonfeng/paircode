@@ -11,12 +11,12 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     }
     return target;
   };
-  const _hoisted_1$8 = ["width", "height"];
-  const _hoisted_2$8 = {
+  const _hoisted_1$9 = ["width", "height"];
+  const _hoisted_2$9 = {
     key: 0,
     d: "M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
   };
-  const _sfc_main$9 = {
+  const _sfc_main$a = {
     __name: "SvgIcon",
     props: {
       name: { type: String, required: true },
@@ -36,7 +36,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
           "stroke-linejoin": "round"
         }, [
           vue.createCommentVNode(" Folder "),
-          __props.name === "folder" ? (vue.openBlock(), vue.createElementBlock("path", _hoisted_2$8)) : __props.name === "folder-open" ? (vue.openBlock(), vue.createElementBlock(
+          __props.name === "folder" ? (vue.openBlock(), vue.createElementBlock("path", _hoisted_2$9)) : __props.name === "folder-open" ? (vue.openBlock(), vue.createElementBlock(
             vue.Fragment,
             { key: 1 },
             [
@@ -2078,54 +2078,169 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
             64
             /* STABLE_FRAGMENT */
           ))
-        ], 8, _hoisted_1$8);
+        ], 8, _hoisted_1$9);
       };
     }
   };
-  const SvgIcon = /* @__PURE__ */ _export_sfc(_sfc_main$9, [["__scopeId", "data-v-faf69761"]]);
+  const SvgIcon = /* @__PURE__ */ _export_sfc(_sfc_main$a, [["__scopeId", "data-v-faf69761"]]);
+  const _hoisted_1$8 = { class: "me-field" };
+  const _hoisted_2$8 = { class: "me-editor" };
+  const _hoisted_3$8 = { class: "me-input-row" };
+  const _hoisted_4$7 = ["onKeydown"];
+  const _hoisted_5$7 = { class: "me-tags" };
+  const _hoisted_6$7 = {
+    key: 0,
+    class: "me-empty"
+  };
+  const _hoisted_7$7 = ["onClick"];
+  const _sfc_main$9 = {
+    __name: "ModelEditor",
+    props: {
+      models: { type: Array, default: () => [] }
+    },
+    emits: ["change"],
+    setup(__props, { emit: __emit }) {
+      const props = __props;
+      const emit = __emit;
+      const input = vue.ref("");
+      const local = vue.ref([...props.models]);
+      vue.watch(() => props.models, (v2) => {
+        local.value = [...v2];
+      });
+      function addModels() {
+        const parts = input.value.split(/[\n,，]/).map((s) => s.trim()).filter(Boolean);
+        let changed = false;
+        for (const m2 of parts) {
+          if (!local.value.includes(m2)) {
+            local.value.push(m2);
+            changed = true;
+          }
+        }
+        if (changed) emit("change", [...local.value]);
+        input.value = "";
+      }
+      function onPaste(ev) {
+        const text = (ev.clipboardData || window.clipboardData).getData("text");
+        if (/[,\n，]/.test(text)) {
+          ev.preventDefault();
+          const parts = text.split(/[\n,，]/).map((s) => s.trim()).filter(Boolean);
+          let changed = false;
+          for (const m2 of parts) {
+            if (!local.value.includes(m2)) {
+              local.value.push(m2);
+              changed = true;
+            }
+          }
+          if (changed) emit("change", [...local.value]);
+          input.value = "";
+        }
+      }
+      function removeAt(i) {
+        local.value.splice(i, 1);
+        emit("change", [...local.value]);
+      }
+      return (_ctx, _cache) => {
+        return vue.openBlock(), vue.createElementBlock("div", _hoisted_1$8, [
+          _cache[1] || (_cache[1] = vue.createElementVNode(
+            "span",
+            { class: "me-label" },
+            "可用模型（回车或逗号分隔添加；支持整段粘贴）",
+            -1
+            /* CACHED */
+          )),
+          vue.createElementVNode("div", _hoisted_2$8, [
+            vue.createElementVNode("div", _hoisted_3$8, [
+              vue.withDirectives(vue.createElementVNode("input", {
+                "onUpdate:modelValue": _cache[0] || (_cache[0] = ($event) => input.value = $event),
+                class: "me-input",
+                placeholder: "输入模型名，回车添加…",
+                onKeydown: vue.withKeys(vue.withModifiers(addModels, ["prevent"]), ["enter"]),
+                onPaste
+              }, null, 40, _hoisted_4$7), [
+                [vue.vModelText, input.value]
+              ]),
+              vue.createElementVNode("button", {
+                class: "me-btn",
+                onClick: addModels
+              }, "添加")
+            ]),
+            vue.createElementVNode("div", _hoisted_5$7, [
+              !local.value.length ? (vue.openBlock(), vue.createElementBlock("span", _hoisted_6$7, "暂无模型——添加后 AI tab 的模型下拉会按服务商显示")) : vue.createCommentVNode("v-if", true),
+              (vue.openBlock(true), vue.createElementBlock(
+                vue.Fragment,
+                null,
+                vue.renderList(local.value, (m2, i) => {
+                  return vue.openBlock(), vue.createElementBlock("span", {
+                    key: m2 + i,
+                    class: "me-tag"
+                  }, [
+                    vue.createTextVNode(
+                      vue.toDisplayString(m2) + " ",
+                      1
+                      /* TEXT */
+                    ),
+                    vue.createElementVNode("button", {
+                      class: "me-x",
+                      title: "移除",
+                      onClick: ($event) => removeAt(i)
+                    }, "×", 8, _hoisted_7$7)
+                  ]);
+                }),
+                128
+                /* KEYED_FRAGMENT */
+              ))
+            ])
+          ])
+        ]);
+      };
+    }
+  };
+  const ModelEditor = /* @__PURE__ */ _export_sfc(_sfc_main$9, [["__scopeId", "data-v-e3700bd7"]]);
   const _hoisted_1$7 = { class: "provider-manager" };
-  const _hoisted_2$7 = {
+  const _hoisted_2$7 = { class: "pm-toolbar" };
+  const _hoisted_3$7 = { class: "pm-count" };
+  const _hoisted_4$6 = {
     key: 0,
     class: "pm-edit"
   };
-  const _hoisted_3$7 = { class: "pm-edit-title" };
-  const _hoisted_4$6 = { class: "pm-field" };
-  const _hoisted_5$6 = ["disabled"];
+  const _hoisted_5$6 = { class: "pm-field" };
   const _hoisted_6$6 = { class: "pm-field" };
-  const _hoisted_7$6 = { class: "pm-field" };
-  const _hoisted_8$6 = { class: "pm-models-editor" };
-  const _hoisted_9$6 = { class: "pm-me-input-row" };
-  const _hoisted_10$6 = ["onKeydown"];
-  const _hoisted_11$6 = { class: "pm-me-tags" };
-  const _hoisted_12$6 = {
-    key: 0,
-    class: "pm-me-empty"
-  };
-  const _hoisted_13$5 = ["onClick"];
-  const _hoisted_14$5 = { class: "pm-edit-actions" };
-  const _hoisted_15$4 = ["disabled"];
-  const _hoisted_16$4 = { class: "pm-toolbar" };
-  const _hoisted_17$4 = { class: "pm-count" };
-  const _hoisted_18$4 = {
+  const _hoisted_7$6 = { class: "pm-edit-actions" };
+  const _hoisted_8$6 = ["disabled"];
+  const _hoisted_9$6 = {
     key: 1,
     class: "pm-cards"
   };
-  const _hoisted_19$4 = { class: "pm-card-head" };
-  const _hoisted_20$4 = ["title"];
-  const _hoisted_21$3 = { class: "pm-ops" };
+  const _hoisted_10$6 = {
+    key: 0,
+    class: "pm-edit"
+  };
+  const _hoisted_11$6 = { class: "pm-edit-title" };
+  const _hoisted_12$6 = { class: "pm-field" };
+  const _hoisted_13$5 = ["value"];
+  const _hoisted_14$5 = { class: "pm-field" };
+  const _hoisted_15$4 = { class: "pm-edit-actions" };
+  const _hoisted_16$4 = ["disabled"];
+  const _hoisted_17$4 = {
+    key: 1,
+    class: "pm-card"
+  };
+  const _hoisted_18$4 = { class: "pm-card-head" };
+  const _hoisted_19$4 = ["title"];
+  const _hoisted_20$4 = { class: "pm-ops" };
+  const _hoisted_21$3 = ["onClick"];
   const _hoisted_22$3 = ["onClick"];
-  const _hoisted_23$2 = ["onClick"];
-  const _hoisted_24$2 = ["title"];
-  const _hoisted_25$2 = { class: "pm-models" };
-  const _hoisted_26$2 = {
+  const _hoisted_23$2 = ["title"];
+  const _hoisted_24$2 = { class: "pm-models" };
+  const _hoisted_25$2 = {
     key: 0,
     class: "pm-none"
   };
-  const _hoisted_27$2 = {
+  const _hoisted_26$2 = {
     key: 2,
     class: "pm-empty"
   };
-  const _hoisted_28$2 = {
+  const _hoisted_27$2 = {
     key: 3,
     class: "pm-error"
   };
@@ -2135,11 +2250,9 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     setup(__props, { emit: __emit }) {
       const emit = __emit;
       const providers = vue.ref([]);
-      const editing = vue.ref(false);
-      const editMode = vue.ref("add");
+      const editingName = vue.ref("");
       const editForm = vue.ref({ name: "", baseURL: "" });
       const editModels = vue.ref([]);
-      const modelInput = vue.ref("");
       const error = vue.ref("");
       const saving = vue.ref(false);
       async function load() {
@@ -2157,42 +2270,20 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       }
       vue.onMounted(load);
       function startAdd() {
-        editMode.value = "add";
+        editingName.value = "__new__";
         editForm.value = { name: "", baseURL: "" };
         editModels.value = [];
-        modelInput.value = "";
         error.value = "";
-        editing.value = true;
       }
       function startEdit(p) {
-        editMode.value = "edit";
+        editingName.value = p.name;
         editForm.value = { name: p.name, baseURL: p.baseURL };
         editModels.value = [...p.models || []];
-        modelInput.value = "";
         error.value = "";
-        editing.value = true;
       }
       function cancelEdit() {
-        editing.value = false;
+        editingName.value = "";
         error.value = "";
-      }
-      function addModelFromInput() {
-        const parts = modelInput.value.split(/[\n,，]/).map((s) => s.trim()).filter(Boolean);
-        for (const m2 of parts) {
-          if (!editModels.value.includes(m2)) editModels.value.push(m2);
-        }
-        modelInput.value = "";
-      }
-      function onPasteModels(ev) {
-        const text = (ev.clipboardData || window.clipboardData).getData("text");
-        if (/[,\n，]/.test(text)) {
-          ev.preventDefault();
-          const parts = text.split(/[\n,，]/).map((s) => s.trim()).filter(Boolean);
-          for (const m2 of parts) {
-            if (!editModels.value.includes(m2)) editModels.value.push(m2);
-          }
-          modelInput.value = "";
-        }
       }
       function snapshot() {
         const map = {};
@@ -2200,13 +2291,13 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         return map;
       }
       async function saveEdit() {
-        const name = editForm.value.name.trim();
+        const name = editForm.value.name.trim() || (editingName.value !== "__new__" ? editingName.value : "");
         if (!name) {
           error.value = "服务商名称不能为空";
           return;
         }
         const map = snapshot();
-        if (editMode.value === "add" && map[name]) {
+        if (editingName.value === "__new__" && map[name]) {
           error.value = `服务商「${name}」已存在`;
           return;
         }
@@ -2214,7 +2305,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         saving.value = true;
         try {
           await api.saveModels(map);
-          editing.value = false;
+          editingName.value = "";
           await load();
           emit("saved");
         } catch (e) {
@@ -2238,33 +2329,52 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       }
       return (_ctx, _cache) => {
         return vue.openBlock(), vue.createElementBlock("div", _hoisted_1$7, [
-          vue.createCommentVNode(" 编辑表单（新增/编辑共用） "),
-          editing.value ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_2$7, [
+          vue.createCommentVNode(" 工具栏 "),
+          vue.createElementVNode("div", _hoisted_2$7, [
             vue.createElementVNode(
-              "div",
+              "span",
               _hoisted_3$7,
-              vue.toDisplayString(editMode.value === "add" ? "新增服务商" : "编辑服务商"),
+              vue.toDisplayString(providers.value.length) + " 个服务商",
               1
               /* TEXT */
             ),
-            vue.createElementVNode("div", _hoisted_4$6, [
-              _cache[3] || (_cache[3] = vue.createElementVNode(
+            vue.createElementVNode("button", {
+              class: "pm-btn pm-primary",
+              onClick: startAdd
+            }, "+ 新增服务商")
+          ]),
+          vue.createCommentVNode(" 新增表单（工具栏下方展开，紧邻按钮不跳动） "),
+          editingName.value === "__new__" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_4$6, [
+            _cache[7] || (_cache[7] = vue.createElementVNode(
+              "div",
+              { class: "pm-edit-title" },
+              "新增服务商",
+              -1
+              /* CACHED */
+            )),
+            vue.createElementVNode("div", _hoisted_5$6, [
+              _cache[5] || (_cache[5] = vue.createElementVNode(
                 "span",
                 { class: "pm-field-label" },
                 "服务商名称",
                 -1
                 /* CACHED */
               )),
-              vue.withDirectives(vue.createElementVNode("input", {
-                "onUpdate:modelValue": _cache[0] || (_cache[0] = ($event) => editForm.value.name = $event),
-                placeholder: "如 deepseek",
-                disabled: editMode.value === "edit"
-              }, null, 8, _hoisted_5$6), [
+              vue.withDirectives(vue.createElementVNode(
+                "input",
+                {
+                  "onUpdate:modelValue": _cache[0] || (_cache[0] = ($event) => editForm.value.name = $event),
+                  placeholder: "如 deepseek"
+                },
+                null,
+                512
+                /* NEED_PATCH */
+              ), [
                 [vue.vModelText, editForm.value.name]
               ])
             ]),
             vue.createElementVNode("div", _hoisted_6$6, [
-              _cache[4] || (_cache[4] = vue.createElementVNode(
+              _cache[6] || (_cache[6] = vue.createElementVNode(
                 "span",
                 { class: "pm-field-label" },
                 "Base URL",
@@ -2284,144 +2394,146 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                 [vue.vModelText, editForm.value.baseURL]
               ])
             ]),
-            vue.createCommentVNode(" 模型编辑器：输入/回车/粘贴添加，点 × 删除 "),
+            vue.createVNode(ModelEditor, {
+              models: editModels.value,
+              onChange: _cache[2] || (_cache[2] = ($event) => editModels.value = $event)
+            }, null, 8, ["models"]),
             vue.createElementVNode("div", _hoisted_7$6, [
-              _cache[5] || (_cache[5] = vue.createElementVNode(
-                "span",
-                { class: "pm-field-label" },
-                "可用模型（回车或逗号分隔添加；支持整段粘贴）",
-                -1
-                /* CACHED */
-              )),
-              vue.createElementVNode("div", _hoisted_8$6, [
-                vue.createElementVNode("div", _hoisted_9$6, [
-                  vue.withDirectives(vue.createElementVNode("input", {
-                    "onUpdate:modelValue": _cache[2] || (_cache[2] = ($event) => modelInput.value = $event),
-                    class: "pm-me-input",
-                    placeholder: "输入模型名，回车添加…",
-                    onKeydown: vue.withKeys(vue.withModifiers(addModelFromInput, ["prevent"]), ["enter"]),
-                    onPaste: onPasteModels
-                  }, null, 40, _hoisted_10$6), [
-                    [vue.vModelText, modelInput.value]
-                  ]),
-                  vue.createElementVNode("button", {
-                    class: "pm-btn pm-small",
-                    onClick: addModelFromInput
-                  }, "添加")
-                ]),
-                vue.createElementVNode("div", _hoisted_11$6, [
-                  !editModels.value.length ? (vue.openBlock(), vue.createElementBlock("span", _hoisted_12$6, "暂无模型——添加后 AI tab 的模型下拉会按服务商显示")) : vue.createCommentVNode("v-if", true),
-                  (vue.openBlock(true), vue.createElementBlock(
-                    vue.Fragment,
-                    null,
-                    vue.renderList(editModels.value, (m2, i) => {
-                      return vue.openBlock(), vue.createElementBlock("span", {
-                        key: m2 + i,
-                        class: "pm-me-tag"
-                      }, [
-                        vue.createTextVNode(
-                          vue.toDisplayString(m2) + " ",
-                          1
-                          /* TEXT */
-                        ),
-                        vue.createElementVNode("button", {
-                          class: "pm-me-x",
-                          title: "移除",
-                          onClick: ($event) => editModels.value.splice(i, 1)
-                        }, "×", 8, _hoisted_13$5)
-                      ]);
-                    }),
-                    128
-                    /* KEYED_FRAGMENT */
-                  ))
-                ])
-              ])
-            ]),
-            vue.createElementVNode("div", _hoisted_14$5, [
               vue.createElementVNode("button", {
                 class: "pm-btn pm-primary",
                 disabled: saving.value,
                 onClick: saveEdit
-              }, vue.toDisplayString(saving.value ? "保存中…" : "保存服务商"), 9, _hoisted_15$4),
+              }, vue.toDisplayString(saving.value ? "保存中…" : "保存服务商"), 9, _hoisted_8$6),
               vue.createElementVNode("button", {
                 class: "pm-btn",
                 onClick: cancelEdit
               }, "取消")
             ])
           ])) : vue.createCommentVNode("v-if", true),
-          vue.createCommentVNode(" 服务商卡片列表 "),
-          vue.createElementVNode("div", _hoisted_16$4, [
-            vue.createElementVNode(
-              "span",
-              _hoisted_17$4,
-              vue.toDisplayString(providers.value.length) + " 个服务商",
-              1
-              /* TEXT */
-            ),
-            vue.createElementVNode("button", {
-              class: "pm-btn pm-primary",
-              onClick: startAdd
-            }, "+ 新增服务商")
-          ]),
-          providers.value.length ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_18$4, [
+          vue.createCommentVNode(" 服务商卡片列表（编辑时在卡片位置就地展开表单，不跳顶） "),
+          providers.value.length ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_9$6, [
             (vue.openBlock(true), vue.createElementBlock(
               vue.Fragment,
               null,
               vue.renderList(providers.value, (p) => {
-                return vue.openBlock(), vue.createElementBlock("div", {
-                  key: p.name,
-                  class: "pm-card"
-                }, [
-                  vue.createElementVNode("div", _hoisted_19$4, [
-                    vue.createElementVNode("span", {
-                      class: "pm-name",
-                      title: p.name
-                    }, vue.toDisplayString(p.name), 9, _hoisted_20$4),
-                    vue.createElementVNode("div", _hoisted_21$3, [
-                      vue.createElementVNode("button", {
-                        class: "pm-btn pm-small",
-                        onClick: ($event) => startEdit(p)
-                      }, "编辑", 8, _hoisted_22$3),
-                      vue.createElementVNode("button", {
-                        class: "pm-btn pm-small pm-danger",
-                        onClick: ($event) => removeProvider(p)
-                      }, "删除", 8, _hoisted_23$2)
-                    ])
-                  ]),
-                  vue.createElementVNode("div", {
-                    class: "pm-url",
-                    title: p.baseURL
-                  }, vue.toDisplayString(p.baseURL || "未配置 Base URL"), 9, _hoisted_24$2),
-                  vue.createElementVNode("div", _hoisted_25$2, [
-                    !p.models.length ? (vue.openBlock(), vue.createElementBlock("span", _hoisted_26$2, "（未配置模型）")) : vue.createCommentVNode("v-if", true),
-                    (vue.openBlock(true), vue.createElementBlock(
-                      vue.Fragment,
-                      null,
-                      vue.renderList(p.models, (m2) => {
-                        return vue.openBlock(), vue.createElementBlock(
+                return vue.openBlock(), vue.createElementBlock(
+                  vue.Fragment,
+                  {
+                    key: p.name
+                  },
+                  [
+                    editingName.value === p.name ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_10$6, [
+                      vue.createElementVNode(
+                        "div",
+                        _hoisted_11$6,
+                        "编辑服务商：" + vue.toDisplayString(p.name),
+                        1
+                        /* TEXT */
+                      ),
+                      vue.createElementVNode("div", _hoisted_12$6, [
+                        _cache[8] || (_cache[8] = vue.createElementVNode(
                           "span",
+                          { class: "pm-field-label" },
+                          "服务商名称",
+                          -1
+                          /* CACHED */
+                        )),
+                        vue.createElementVNode("input", {
+                          value: p.name,
+                          disabled: ""
+                        }, null, 8, _hoisted_13$5)
+                      ]),
+                      vue.createElementVNode("div", _hoisted_14$5, [
+                        _cache[9] || (_cache[9] = vue.createElementVNode(
+                          "span",
+                          { class: "pm-field-label" },
+                          "Base URL",
+                          -1
+                          /* CACHED */
+                        )),
+                        vue.withDirectives(vue.createElementVNode(
+                          "input",
                           {
-                            key: m2,
-                            class: "pm-tag"
+                            "onUpdate:modelValue": _cache[3] || (_cache[3] = ($event) => editForm.value.baseURL = $event),
+                            placeholder: "https://api.deepseek.com/v1"
                           },
-                          vue.toDisplayString(m2),
-                          1
-                          /* TEXT */
-                        );
-                      }),
-                      128
-                      /* KEYED_FRAGMENT */
-                    ))
-                  ])
-                ]);
+                          null,
+                          512
+                          /* NEED_PATCH */
+                        ), [
+                          [vue.vModelText, editForm.value.baseURL]
+                        ])
+                      ]),
+                      vue.createVNode(ModelEditor, {
+                        models: editModels.value,
+                        onChange: _cache[4] || (_cache[4] = ($event) => editModels.value = $event)
+                      }, null, 8, ["models"]),
+                      vue.createElementVNode("div", _hoisted_15$4, [
+                        vue.createElementVNode("button", {
+                          class: "pm-btn pm-primary",
+                          disabled: saving.value,
+                          onClick: saveEdit
+                        }, vue.toDisplayString(saving.value ? "保存中…" : "保存服务商"), 9, _hoisted_16$4),
+                        vue.createElementVNode("button", {
+                          class: "pm-btn",
+                          onClick: cancelEdit
+                        }, "取消")
+                      ])
+                    ])) : (vue.openBlock(), vue.createElementBlock("div", _hoisted_17$4, [
+                      vue.createElementVNode("div", _hoisted_18$4, [
+                        vue.createElementVNode("span", {
+                          class: "pm-name",
+                          title: p.name
+                        }, vue.toDisplayString(p.name), 9, _hoisted_19$4),
+                        vue.createElementVNode("div", _hoisted_20$4, [
+                          vue.createElementVNode("button", {
+                            class: "pm-btn pm-small",
+                            onClick: ($event) => startEdit(p)
+                          }, "编辑", 8, _hoisted_21$3),
+                          vue.createElementVNode("button", {
+                            class: "pm-btn pm-small pm-danger",
+                            onClick: ($event) => removeProvider(p)
+                          }, "删除", 8, _hoisted_22$3)
+                        ])
+                      ]),
+                      vue.createElementVNode("div", {
+                        class: "pm-url",
+                        title: p.baseURL
+                      }, vue.toDisplayString(p.baseURL || "未配置 Base URL"), 9, _hoisted_23$2),
+                      vue.createElementVNode("div", _hoisted_24$2, [
+                        !p.models.length ? (vue.openBlock(), vue.createElementBlock("span", _hoisted_25$2, "（未配置模型）")) : vue.createCommentVNode("v-if", true),
+                        (vue.openBlock(true), vue.createElementBlock(
+                          vue.Fragment,
+                          null,
+                          vue.renderList(p.models, (m2) => {
+                            return vue.openBlock(), vue.createElementBlock(
+                              "span",
+                              {
+                                key: m2,
+                                class: "pm-tag"
+                              },
+                              vue.toDisplayString(m2),
+                              1
+                              /* TEXT */
+                            );
+                          }),
+                          128
+                          /* KEYED_FRAGMENT */
+                        ))
+                      ])
+                    ]))
+                  ],
+                  64
+                  /* STABLE_FRAGMENT */
+                );
               }),
               128
               /* KEYED_FRAGMENT */
             ))
-          ])) : !editing.value ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_27$2, "暂无服务商，点「+ 新增服务商」添加")) : vue.createCommentVNode("v-if", true),
+          ])) : editingName.value !== "__new__" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_26$2, "暂无服务商，点「+ 新增服务商」添加")) : vue.createCommentVNode("v-if", true),
           error.value ? (vue.openBlock(), vue.createElementBlock(
             "div",
-            _hoisted_28$2,
+            _hoisted_27$2,
             vue.toDisplayString(error.value),
             1
             /* TEXT */
@@ -2430,7 +2542,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       };
     }
   };
-  const ProviderManager = /* @__PURE__ */ _export_sfc(_sfc_main$8, [["__scopeId", "data-v-3033049e"]]);
+  const ProviderManager = /* @__PURE__ */ _export_sfc(_sfc_main$8, [["__scopeId", "data-v-6d2e476a"]]);
   const _hoisted_1$6 = { class: "modal-content" };
   const _hoisted_2$6 = { class: "modal-body" };
   const _hoisted_3$6 = {
