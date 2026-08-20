@@ -1,5 +1,5 @@
 {
-  "version": "1.3.4",
+  "version": "1.4.0",
   "appName": "PairCode IDE",
   "description": "AI-Powered Code Companion",
   "company": "PairCode",
@@ -159,16 +159,6 @@
         "dst": "bin/config/onnx",
         "optional": true,
         "recursive": true
-      },
-      {
-        "src": "bin/headless-check.js",
-        "dst": "bin/headless-check.js",
-        "optional": true
-      },
-      {
-        "src": ".pair/cordis-approved.json",
-        "dst": ".pair/cordis-approved.json",
-        "optional": true
       },
       {
         "src": "bin/.pair/plugins",
