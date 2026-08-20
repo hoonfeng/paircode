@@ -509,17 +509,26 @@ async function saveModels(providers) {
 
 }
 
-// getModelGroups 获取模型组定义（组名 → 实例列表；实例 = models.json 服务商条目）
-async function getModelGroups() {
+// getAiPresets 获取 AI 配置预设列表（预设名 → 完整配置快照；config/ai-presets.json）
+async function getAiPresets() {
 
-  return apiGet('/model-groups')
+  return apiGet('/ai-presets')
 
 }
 
-// saveModelGroups 全量保存模型组（groups → config/model-groups.json）
-async function saveModelGroups(groups) {
+// saveAiPreset 保存一条预设（action: save/apply/delete/rename）
+async function saveAiPreset(action, name, preset) {
 
-  return apiPut('/model-groups', { groups })
+  const body = { action, name }
+  if (preset) body.preset = preset
+  return apiPost('/ai-presets', body)
+
+}
+
+// saveAiPresets 全量保存 AI 配置预设（presets → config/ai-presets.json）
+async function saveAiPresets(presets) {
+
+  return apiPut('/ai-presets', { presets })
 
 }
 
@@ -583,7 +592,7 @@ async function saveInstructions(scope, content) {
 
 }
 
-export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, isWebSocketOpen, waitForWebSocket, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatCompact, chatStop, getMessages, getMessagesCount, getModels, saveModels, getModelGroups, saveModelGroups, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, listPlugins, getPluginDetail, pluginAction, definePlugin, pluginEmit, pluginClientEvents, pluginClientState, pluginInvoke, pluginClientFailure, builtinPlugins, pluginToolToggle, getToolsets, toolsetEdit }
+export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, isWebSocketOpen, waitForWebSocket, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatCompact, chatStop, getMessages, getMessagesCount, getModels, saveModels, getAiPresets, saveAiPreset, saveAiPresets, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, listPlugins, getPluginDetail, pluginAction, definePlugin, pluginEmit, pluginClientEvents, pluginClientState, pluginInvoke, pluginClientFailure, builtinPlugins, pluginToolToggle, getToolsets, toolsetEdit }
 
 // ─── 插件（管理 + 使用 + host/client 事件桥）──────────────
 

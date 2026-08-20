@@ -194,10 +194,14 @@
             <textarea class="chat-input" ref="inputRef" v-model="inputText" @keydown="onKeydown" @dragover.prevent @drop="handleDrop" @paste="handlePaste" :style="{ height: inputHeight + 'px' }" placeholder="发送消息到 AI... (Enter 发送, Shift+Enter 换行)" :disabled="state.chatLoading"></textarea>
             <div class="input-bottom-bar">
               <div class="ibb-btns">
-                <!-- ★ composer 模型选择器：快速切换模型组/执行模型（写入 settings，发送即用；模型组内实例自带 Key） -->
+                <!-- ★ composer 配置选择器：选「AI 预设」整套配置生效（多套配置快速切换）；无预设时手动选服务商/模型 -->
                 <span class="ibb-model">
-                  <select v-model="composerGroup" class="cmp-sel cmp-prov" @change="onCmpProviderChange" title="模型组（用户命名；组内实例自带密钥，无需再选服务商）">
-                    <option v-for="p in modelGroups" :key="p" :value="p">{{ p }}</option>
+                  <select v-model="composerPreset" class="cmp-sel cmp-preset" @change="onCmpPresetChange" title="AI 配置预设（设置面板「AI 预设」中把配好的配置命名保存；选中整套配置生效）">
+                    <option value="">手动配置</option>
+                    <option v-for="p in presetOptions" :key="p" :value="p">{{ p }}</option>
+                  </select>
+                  <select v-model="composerProvider" class="cmp-sel cmp-prov" @change="onCmpProviderChange" title="服务商（未选预设时手动切换；选预设时自动带出）">
+                    <option v-for="p in (modelData && modelData.providers) || []" :key="p" :value="p">{{ p }}</option>
                   </select>
                   <select v-model="composerModel" class="cmp-sel cmp-model" @change="onCmpModelChange" title="执行模型（每个模型可独立配置参数）">
                     <option v-for="m in composerModels" :key="m" :value="m">{{ m }}</option>
@@ -253,11 +257,11 @@ const toggleFocus = () => {
 }
 const inputText = ref('')
 
-// ─── composer 模型选择器（★ 2026-08-20 模型组化：选「模型组+模型」，自动匹配实例 Key，不再选服务商）───
+// ─── composer 配置选择器（★ 2026-08-20 AI 配置预设：选「预设」整套配置生效；无预设时回退直接选服务商/模型）───
 const modelData = ref(null)
-const modelGroupsData = ref(null)      // 模型组定义 {组名: [实例名]}（/api/model-groups）
-const composerGroup = ref('')          // 模型组名（UI 下拉）
-const composerProvider = ref('')       // 解析后的实例名（写 settings.provider）
+const presetData = ref({})           // AI 配置预设 {预设名: 完整配置快照}（/api/ai-presets）
+const composerPreset = ref('')       // 当前预设名（UI 下拉；''=未用预设，直接手动选服务商/模型）
+const composerProvider = ref('')     // 当前服务商名（写 settings.provider）
 const composerModel = ref('')
 const composerThinking = ref('')   // 思考档位（''=默认/沿用模型配置；切换即写入 modelParams 记录）
 const THINK_TIERS = [
@@ -270,56 +274,73 @@ const THINK_TIERS = [
   { v: 'xhigh', label: '思考: xhigh（超高）' },
   { v: 'max', label: '思考: max（最大化）' },
 ]
-const modelGroups = computed(() => {
-  const groups = modelGroupsData.value || {}
-  const names = Object.keys(groups)
-  if (names.length) return names
-  // ★ 无模型组（旧配置）→ 用实例（服务商）直接作选项，保持可用
-  return (modelData.value && modelData.value.providers) || []
+// 预设列表（含「手动选择」入口）：预设名 + 空项（未用预设 → 手动选服务商）
+const presetOptions = computed(() => {
+  const names = Object.keys(presetData.value || {})
+  return names
 })
-// 组内模型聚合：模型组 → 组内所有实例模型并集
+// 模型下拉：当前服务商可用模型（预设应用后 provider 已切换；手动模式直接用服务商模型）
 const composerModels = computed(() => {
   const m = (modelData.value && modelData.value.models) || {}
-  const groups = modelGroupsData.value || {}
-  const insts = groups[composerGroup.value]
-  if (Array.isArray(insts) && insts.length) {
-    const out = []
-    for (const inst of insts) for (const mm of (m[inst] || [])) if (!out.includes(mm)) out.push(mm)
-    return out
-  }
-  return m[composerGroup.value] || [] // 兼容：模型组不存在时按实例名直取
+  return m[composerProvider.value] || []
 })
-// 模型 → 所属实例：组内第一个包含该模型的实例
-function instanceForModel(group, model) {
-  const groups = modelGroupsData.value || {}
-  const m = (modelData.value && modelData.value.models) || {}
-  const insts = groups[group] || []
-  for (const inst of insts) if ((m[inst] || []).includes(model)) return inst
-  if (m[group] && (m[group] || []).includes(model)) return group // 兼容旧 provider 直指实例
-  return insts[0] || group
-}
 async function loadModelData() {
   try {
-    const [md, mg] = await Promise.all([api.getModels(), api.getModelGroups().catch(() => ({ groups: {} }))])
+    const [md, pr] = await Promise.all([api.getModels(), api.getAiPresets().catch(() => ({ presets: {} }))])
     modelData.value = md
-    modelGroupsData.value = (mg && mg.groups) || {}
+    presetData.value = (pr && pr.presets) || {}
   } catch {}
 }
 function initComposerModel() {
   const s = state.settings || {}
-  const groups = modelGroupsData.value || {}
-  // 优先用 settings.modelGroup（模型组名）；旧配置回退：从 provider（实例名）反查所属组
-  let g = s.modelGroup || ''
-  if (!g && s.provider) {
-    for (const [name, insts] of Object.entries(groups)) {
-      if (insts.includes(s.provider)) { g = name; break }
-    }
-    if (!g) g = s.provider // 组不存在时按实例名显示
+  // 优先：settings.preset 记录当前预设名 → 选中该预设（并按其 provider 加载模型）
+  const pn = s.preset || ''
+  if (pn && presetData.value[pn]) {
+    composerPreset.value = pn
+    composerProvider.value = (presetData.value[pn].provider || s.provider || '')
+  } else {
+    composerPreset.value = ''
+    composerProvider.value = s.provider || ''
   }
-  if (!g) g = Object.keys(groups)[0] || ''
-  composerGroup.value = g
-  composerProvider.value = s.provider || instanceForModel(g, s.executeModel)
   if (s.executeModel) composerModel.value = s.executeModel
+}
+function onCmpPresetChange() {
+  if (composerPreset.value) {
+    // 选预设：整套配置生效（服务端 apply 写回 settings，同时本地同步 provider/模型）
+    const p = presetData.value[composerPreset.value] || {}
+    composerProvider.value = p.provider || composerProvider.value
+    composerModel.value = ''
+    const ms = (modelData.value && modelData.value.models) || {}
+    const list = ms[composerProvider.value] || []
+    const cur = p.executeModel || (state.settings && state.settings.executeModel)
+    if (cur && list.includes(cur)) composerModel.value = cur
+    else if (list.length) composerModel.value = list[0]
+    applyPresetComposer()
+  } else {
+    // 切回手动：服务商保留当前，清模型重新选
+    composerModel.value = ''
+    onCmpModelChange()
+  }
+}
+// 预设应用（与服务端同步 settings：provider/baseURL/apiKey/模型/参数整套写回）
+async function applyPresetComposer() {
+  if (!composerPreset.value) return
+  try {
+    const r = await api.saveAiPreset('apply', composerPreset.value)
+    if (r && r.ok && r.settings) {
+      state.settings = r.settings
+      composerProvider.value = r.settings.provider || composerProvider.value
+      if (r.settings.executeModel) composerModel.value = r.settings.executeModel
+      initComposerThinking()
+      window.$toast && window.$toast('已应用预设：' + composerPreset.value, 'success')
+    } else {
+      window.$toast && window.$toast('预设应用失败: ' + ((r && r.error) || ''), 'error')
+      initComposerModel()
+    }
+  } catch (e) {
+    window.$toast && window.$toast('预设应用失败: ' + (e.message || e), 'error')
+    initComposerModel()
+  }
 }
 function onCmpProviderChange() {
   composerModel.value = ''
@@ -331,35 +352,32 @@ function onCmpProviderChange() {
 }
 function initComposerThinking() {
   const mp = (state.settings && state.settings.modelParams) || {}
-  const prov = composerProvider.value || composerGroup.value
+  const prov = composerProvider.value
   const by = (mp[prov] && mp[prov][composerModel.value]) || null
   composerThinking.value = (by && by.thinkingMode) || ''
 }
 async function onCmpModelChange() {
   initComposerThinking()
-  if (!composerGroup.value || !composerModel.value) return
+  if (!composerProvider.value || !composerModel.value) return
   const md = modelData.value || {}
-  // ★ 解析模型所属实例：模型组 + 模型 → 实例名（settings.provider 存实例名，装配器直接命中 models.json）
-  const prov = instanceForModel(composerGroup.value, composerModel.value)
-  composerProvider.value = prov
-  const top = { ...(state.settings || {}), modelGroup: composerGroup.value, provider: prov, executeModel: composerModel.value }
+  const prov = composerProvider.value
+  const top = { ...(state.settings || {}), provider: prov, executeModel: composerModel.value }
+  if (composerPreset.value) top.preset = composerPreset.value
   // 实例联动：带出该实例的 BaseURL 与 API Key
   if (md.providerBaseURLs && md.providerBaseURLs[prov]) top.baseURL = md.providerBaseURLs[prov]
   if (md.providerKeys && md.providerKeys[prov]) top.apiKey = md.providerKeys[prov]
   try {
     await api.apiPut('/settings', { settings: top, pluginSettings: (state.settings && state.settings.pluginSettings) || {} })
     state.settings = top
-    window.$toast && window.$toast('已切换：' + composerGroup.value + ' / ' + composerModel.value + '（' + prov + '）', 'success')
   } catch (e) {
     window.$toast && window.$toast('模型切换失败: ' + (e.message || e), 'error')
   }
 }
-// 思考档位：临时切换 → 写入 settings.modelParams[实例][模型].thinkingMode（装配器发送即用；记录后下次默认沿用）
+// 思考档位：临时切换 → 写入 settings.modelParams[服务商][模型].thinkingMode（装配器发送即用；记录后下次默认沿用）
 async function onCmpThinkingChange() {
-  if (!composerGroup.value || !composerModel.value) return
+  if (!composerProvider.value || !composerModel.value) return
   const v = composerThinking.value
-  const prov = composerProvider.value || instanceForModel(composerGroup.value, composerModel.value)
-  composerProvider.value = prov
+  const prov = composerProvider.value
   const mp = JSON.parse(JSON.stringify((state.settings && state.settings.modelParams) || {}))
   if (!mp[prov]) mp[prov] = {}
   const prev = mp[prov][composerModel.value] || {}
@@ -371,11 +389,11 @@ async function onCmpThinkingChange() {
     else delete mp[prov][composerModel.value]
     if (!Object.keys(mp[prov]).length) delete mp[prov]
   }
-  const top = { ...(state.settings || {}), modelGroup: composerGroup.value, modelParams: mp }
+  const top = { ...(state.settings || {}), modelParams: mp }
   try {
     await api.apiPut('/settings', { settings: top, pluginSettings: (state.settings && state.settings.pluginSettings) || {} })
     state.settings = top
-    window.$toast && window.$toast(v ? ('思考档位已切换并记录：' + v + '（' + composerGroup.value + ' / ' + composerModel.value + '）') : '思考档位已恢复默认', 'success')
+    window.$toast && window.$toast(v ? ('思考档位已切换并记录：' + v + '（' + prov + ' / ' + composerModel.value + '）') : '思考档位已恢复默认', 'success')
   } catch (e) {
     window.$toast && window.$toast('思考切换失败: ' + (e.message || e), 'error')
     initComposerThinking()
@@ -1531,6 +1549,22 @@ watch(() => state.currentConvId, (id, oldId) => {
   })
 
 watch(() => state.settings, (s) => { if (s) { autoIterate.value = !!s.autoIterateOnRejection; autonomous.value = !!s.autonomous; autoCollapse.value = s.autoCollapse !== undefined ? !!s.autoCollapse : true; } }, { immediate: true })
+
+// ★ AI 预设数据变化（新增/应用后）刷新预设列表下拉（对话面板即时可见）
+watch(() => state.settings && state.settings.preset, async (pn) => {
+  try {
+    const pr = await api.getAiPresets().catch(() => ({ presets: {} }))
+    presetData.value = (pr && pr.presets) || {}
+    if (pn) {
+      const p = presetData.value[pn]
+      if (p) {
+        composerPreset.value = pn
+        composerProvider.value = p.provider || composerProvider.value
+        if (p.executeModel && composerModel.value !== p.executeModel) composerModel.value = p.executeModel
+      }
+    }
+  } catch {}
+})
 
 // ★ 从工作区配置加载审核模式（黑白名单配置已由插件面板/工具集管理取代，不再加载）
 async function loadWorkspaceReviewConfig() {

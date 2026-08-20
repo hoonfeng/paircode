@@ -11200,11 +11200,16 @@
   async function saveModels(providers) {
     return apiPost("/models", { providers });
   }
-  async function getModelGroups() {
-    return apiGet("/model-groups");
+  async function getAiPresets() {
+    return apiGet("/ai-presets");
   }
-  async function saveModelGroups(groups) {
-    return apiPut("/model-groups", { groups });
+  async function saveAiPreset(action, name, preset) {
+    const body = { action, name };
+    if (preset) body.preset = preset;
+    return apiPost("/ai-presets", body);
+  }
+  async function saveAiPresets(presets) {
+    return apiPut("/ai-presets", { presets });
   }
   async function getMcpList(level = "all") {
     return apiGet("/mcp/list", { level });
@@ -11232,7 +11237,7 @@
   async function saveInstructions(scope, content) {
     return apiPut("/instructions?scope=" + scope, { content });
   }
-  const api = { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, isWebSocketOpen, waitForWebSocket, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatCompact, chatStop, getMessages, getMessagesCount, getModels, saveModels, getModelGroups, saveModelGroups, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, listPlugins, getPluginDetail, pluginAction, definePlugin, pluginEmit, pluginClientEvents, pluginClientState, pluginInvoke, pluginClientFailure, builtinPlugins, pluginToolToggle, getToolsets, toolsetEdit };
+  const api = { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, isWebSocketOpen, waitForWebSocket, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatCompact, chatStop, getMessages, getMessagesCount, getModels, saveModels, getAiPresets, saveAiPreset, saveAiPresets, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, listPlugins, getPluginDetail, pluginAction, definePlugin, pluginEmit, pluginClientEvents, pluginClientState, pluginInvoke, pluginClientFailure, builtinPlugins, pluginToolToggle, getToolsets, toolsetEdit };
   async function listPlugins() {
     return apiGet("/plugins");
   }

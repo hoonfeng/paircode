@@ -490,47 +490,107 @@ func HandleModels(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// HandleModelGroups 模型组管理（GET 查询 / PUT 全量保存）。
-// ★ 2026-08-20 模型组：AI 配置多例化——用户命名的连接配置集合，组内实例 = models.json 服务商条目。
-//   body (PUT): { "groups": { "<组名>": ["<实例名>", ...] } }
-func HandleModelGroups(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodPost || r.Method == http.MethodPut {
+// HandleAiPresets AI 配置预设管理（GET 查询 / POST 保存-删除-应用 / PUT 全量保存）。
+// ★ 2026-08-20 AI 配置预设：把「一份完整 AI 配置」命名保存为预设，对话面板快速切换。
+//   body (POST): { "action": "save", "name": "预设名", "preset": {...} }   —— 保存/覆盖
+//                { "action": "apply", "name": "预设名" }                    —— 应用（写回 settings）
+//                { "action": "delete", "name": "预设名" }                   —— 删除
+//   body (PUT):  { "presets": { "<预设名>": {...} } }                       —— 全量替换
+func HandleAiPresets(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodPost:
 		var req struct {
-			Groups core.ModelGroups `json:"groups"`
+			Action string           `json:"action"`
+			Name   string           `json:"name"`
+			Preset core.AiPreset    `json:"preset"`
+			Presets core.AiPresets  `json:"presets"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			jsonErr(w, "无效 JSON: "+err.Error())
 			return
 		}
-		if req.Groups == nil {
-			jsonErr(w, "groups 不能为空")
-			return
-		}
-		// 校验实例存在性：跳过不存在的实例（避免模型组引用已删服务商）
-		providers := core.GetProviders()
-		valid := make(map[string]bool, len(providers))
-		for _, p := range providers {
-			valid[p] = true
-		}
-		for name, insts := range req.Groups {
-			filtered := make([]string, 0, len(insts))
-			for _, inst := range insts {
-				if valid[inst] {
-					filtered = append(filtered, inst)
+		switch req.Action {
+		case "save":
+			if req.Name == "" {
+				jsonErr(w, "预设名不能为空")
+				return
+			}
+			// 未传 preset 时抓取当前 settings 快照
+			p := req.Preset
+			if p.Provider == "" && p.ExecuteModel == "" && p.BaseURL == "" && p.APIKey == "" {
+				p = core.AiPresetFromSettings()
+			}
+			core.GetAiPresets()
+			core.PresetList[req.Name] = p
+			if err := core.SaveAiPresets(); err != nil {
+				jsonErr(w, "保存失败: "+err.Error())
+				return
+			}
+			jsonResp(w, map[string]any{"ok": true, "name": req.Name, "presets": core.GetAiPresets()})
+		case "apply":
+			if req.Name == "" {
+				jsonErr(w, "预设名不能为空")
+				return
+			}
+			p := core.GetPreset(req.Name)
+			if p.Provider == "" && p.ExecuteModel == "" {
+				jsonErr(w, "预设不存在: "+req.Name)
+				return
+			}
+			// 应用：预设字段写回 settings（provider/baseURL/apiKey/模型/参数）
+			core.ApplyPreset(req.Name, p)
+			jsonResp(w, map[string]any{"ok": true, "name": req.Name, "settings": core.Settings})
+		case "delete":
+			if req.Name == "" {
+				jsonErr(w, "预设名不能为空")
+				return
+			}
+			core.GetAiPresets()
+			if _, ok := core.PresetList[req.Name]; ok {
+				delete(core.PresetList, req.Name)
+				if err := core.SaveAiPresets(); err != nil {
+					jsonErr(w, "保存失败: "+err.Error())
+					return
 				}
 			}
-			req.Groups[name] = filtered
+			jsonResp(w, map[string]any{"ok": true, "presets": core.GetAiPresets()})
+		case "rename":
+			if req.Name == "" || req.Presets == nil {
+				jsonErr(w, "rename 需要 name 与 presets（改名后全量）")
+				return
+			}
+			core.SetAiPresets(req.Presets)
+			if err := core.SaveAiPresets(); err != nil {
+				jsonErr(w, "保存失败: "+err.Error())
+				return
+			}
+			jsonResp(w, map[string]any{"ok": true, "presets": core.GetAiPresets()})
+		default:
+			jsonErr(w, "未知 action: "+req.Action+"（save/apply/delete/rename）")
 		}
-		core.SetModelGroups(req.Groups)
-		if err := core.SaveModelGroups(); err != nil {
+		return
+	case http.MethodPut:
+		var req struct {
+			Presets core.AiPresets `json:"presets"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			jsonErr(w, "无效 JSON: "+err.Error())
+			return
+		}
+		if req.Presets == nil {
+			jsonErr(w, "presets 不能为空")
+			return
+		}
+		core.SetAiPresets(req.Presets)
+		if err := core.SaveAiPresets(); err != nil {
 			jsonErr(w, "保存失败: "+err.Error())
 			return
 		}
-		jsonResp(w, map[string]any{"ok": true, "saved": len(req.Groups)})
+		jsonResp(w, map[string]any{"ok": true, "saved": len(req.Presets)})
 		return
 	}
 	jsonResp(w, map[string]any{
-		"groups": core.GetModelGroups(),
+		"presets": core.GetAiPresets(),
 	})
 }
 

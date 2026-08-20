@@ -14,7 +14,7 @@ import (
 // AppSettings 持久化设置 —— 字段对齐参考 settings.ts（扁平存储；分组注释）。
 type AppSettings struct {
 	Provider         string `json:"provider"`
-	ModelGroup       string `json:"modelGroup"` // ★ 2026-08-20 当前模型组名（用户命名；provider 存组内解析出的实例名）
+	Preset           string `json:"preset"` // ★ 2026-08-20 当前 AI 配置预设名（对话面板选预设时记录，UI 高亮用）
 	BaseURL          string `json:"baseURL"`
 	APIKey           string `json:"apiKey"`
 	Model            string `json:"model"` // 兼容旧单模型字段（迁移→ExecuteModel）
@@ -153,8 +153,8 @@ func Load() bool {
 	Loaded = loaded
 	// 确保模型列表已加载（models.json 不存在则自动写入默认）
 	EnsureModelList()
-	// 确保模型组已加载（model-groups.json 不存在则建空映射）
-	EnsureModelGroups()
+	// 确保 AI 配置预设已加载（ai-presets.json 不存在则建空映射）
+	EnsureAiPresets()
 	return loaded
 }
 

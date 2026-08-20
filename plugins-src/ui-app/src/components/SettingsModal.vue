@@ -72,8 +72,8 @@
                       <!-- provider-manager（服务商维护面板：CRUD /api/models，独立保存，不参与普通表单） -->
                       <ProviderManager v-else-if="f.type === 'provider-manager'" @saved="loadModels" />
 
-                      <!-- model-group-manager（模型组维护面板：CRUD /api/model-groups，独立保存，不参与普通表单） -->
-                      <ModelGroupManager v-else-if="f.type === 'model-group-manager'" @saved="loadModels" />
+                      <!-- preset-manager（AI 配置预设面板：CRUD /api/ai-presets，独立保存，不参与普通表单） -->
+                      <PresetManager v-else-if="f.type === 'preset-manager'" @saved="onPresetSaved" />
                       
                       <!-- 兜底 text -->
                       <input v-else type="text" v-model="form[tab.key][f.name]" />
@@ -102,7 +102,7 @@ import { state, applyTheme } from '../ui-state.js'
 import api from '../api.js'
 import SvgIcon from './SvgIcon.vue'
 import ProviderManager from './ProviderManager.vue'
-import ModelGroupManager from './ModelGroupManager.vue'
+import PresetManager from './PresetManager.vue'
 
 const emit = defineEmits(['close'])
 const activeTab = ref('')
@@ -134,46 +134,25 @@ function groupFields(fields) {
 // 由插件注册声明字段行为：optionsSource='providers' 服务商列表 / 'models' 按服务商模型列表；
 // linkField='xxx' 选择变化时用 providerBaseURLs 联动填充目标字段（如 provider→baseURL）。
 const modelData = ref(null)
-const modelGroupsData = ref(null) // ★ 模型组定义（组名 → 实例列表）
 let lastProvider = '' // linkField 联动：记录上一个服务商（判断目标字段是否用户自定义）
 async function loadModels() {
   try {
-    const [md, mg] = await Promise.all([api.getModels(), api.getModelGroups().catch(() => ({ groups: {} }))])
-    modelData.value = md
-    modelGroupsData.value = (mg && mg.groups) || {}
-  } catch { modelData.value = null; modelGroupsData.value = {} }
+    modelData.value = await api.getModels()
+  } catch { modelData.value = null }
 }
-// 组内模型聚合：provider=模型组名 → 组内所有实例模型并集；否则视为实例名直接取（兼容旧配置）
+// 按服务商取模型列表（optionsSource='models' 数据源）
 function modelsFor(provider) {
   if (!provider) return []
   const m = (modelData.value && modelData.value.models) || {}
-  const groups = modelGroupsData.value || {}
-  const insts = groups[provider]
-  if (Array.isArray(insts) && insts.length) {
-    const out = []
-    for (const inst of insts) for (const mm of (m[inst] || [])) if (!out.includes(mm)) out.push(mm)
-    return out
-  }
   return m[provider] || []
 }
-// 通用选项计算：f.optionsSource ∈ 'models' | 'providers' | 'model-groups' | 缺省（静态 f.options）
+// 通用选项计算：f.optionsSource ∈ 'models' | 'providers' | 缺省（静态 f.options）
 function dynamicOptions(tabKey, f) {
   if (f.optionsSource === 'models') {
     const cur = form[tabKey]?.[f.name]
     const list = modelsFor(form['ai']?.provider)
     if (cur && !list.includes(cur)) return [...list, cur] // 自定义值兜底显示
     return list
-  }
-  if (f.optionsSource === 'model-groups') {
-    let list = Object.keys(modelGroupsData.value || {})
-    // ★ 无模型组（旧配置）→ fallback 到实例（服务商）列表，保持可用
-    if (!list.length) list = (modelData.value && modelData.value.providers) || []
-    if (list.length) {
-      const cur = form[tabKey]?.[f.name]
-      if (cur && !list.includes(cur)) return [...list, cur] // 自定义模型组兜底显示
-      return list
-    }
-    return f.options || []
   }
   if (f.optionsSource === 'providers') {
     const list = (modelData.value && modelData.value.providers) || []
@@ -235,16 +214,12 @@ function buildForm() {
     form[s.key] = {}
     for (const f of (s.fields || [])) {
       let v
-      if (f.type === 'project' || f.type === 'provider-manager' || f.type === 'model-params-manager' || f.type === 'model-group-manager') { continue }
+      if (f.type === 'project' || f.type === 'provider-manager' || f.type === 'model-params-manager' || f.type === 'preset-manager') { continue }
       if (f.binding) {
         v = top[f.binding] !== undefined ? top[f.binding] : f.default
       } else {
         const cur = pvals[s.key] || {}
         v = cur[f.name] !== undefined ? cur[f.name] : f.default
-      }
-      // ★ AI tab provider 字段：settings 存实例名，表单显示模型组名（modelGroup 优先，其次从实例反查所属组）
-      if (f.name === 'provider' && f.optionsSource === 'model-groups') {
-        v = top.modelGroup || reverseGroupOf(top.provider) || top.provider || v
       }
       if (v === undefined) v = zeroValue(f.type)
       // 类型规整
@@ -258,29 +233,6 @@ function buildForm() {
   const hasProject = (state.pluginSchemas || []).some(s => (s.fields || []).some(f => f.type === 'project'))
   projectInst.value = ''
   if (hasProject) loadProjectInstructions()
-}
-
-// 从实例名反查所属模型组（无则返回空）
-function reverseGroupOf(provider) {
-  if (!provider) return ''
-  const groups = modelGroupsData.value || {}
-  for (const [name, insts] of Object.entries(groups)) {
-    if (Array.isArray(insts) && insts.includes(provider)) return name
-  }
-  return ''
-}
-
-// 模型组 + 模型 → 实例名（组内第一个包含该模型的实例；无则组内第一个）
-function groupToProvider(group, model) {
-  if (!group) return ''
-  const groups = modelGroupsData.value || {}
-  const m = (modelData.value && modelData.value.models) || {}
-  const insts = groups[group]
-  if (Array.isArray(insts) && insts.length) {
-    if (model) for (const inst of insts) if ((m[inst] || []).includes(model)) return inst
-    return insts[0]
-  }
-  return group // 兼容旧配置：非模型组名则原样（实例名）
 }
 
 // tags 显示/输入
@@ -309,6 +261,18 @@ async function reloadProjectInst() { await loadProjectInstructions() }
 
 const resetForm = () => { loadSettings() }
 
+// ─── AI 配置预设变更后：重新拉 settings（应用预设已整套写回）并重建表单 ───
+async function onPresetSaved() {
+  try {
+    const r = await api.apiGet('/settings')
+    if (r && r.settings) {
+      state.settings = r.settings
+      await loadModels()
+      loadSettings()
+    }
+  } catch {}
+}
+
 // ─── 保存：分拣 binding → 顶层 / 非 binding → 插件命名空间 ───
 const saveSettings = async () => {
   try {
@@ -322,22 +286,12 @@ const saveSettings = async () => {
           await api.saveInstructions('project', projectInst.value)
           continue
         }
-        if (f.type === 'provider-manager' || f.type === 'model-params-manager' || f.type === 'model-group-manager') {
-          // 服务商/模型组/模型参数维护走独立面板（各自内部保存），不并入通用表单保存
+        if (f.type === 'provider-manager' || f.type === 'model-params-manager' || f.type === 'preset-manager') {
+          // 服务商/模型参数/AI 配置预设维护走独立面板（各自内部保存），不并入通用表单保存
           continue
         }
         const v = vals[f.name]
         if (f.binding) {
-          // ★ AI tab provider（模型组名）→ 保存为实例名（装配器直接命中 models.json），并记录 modelGroup
-          if (f.name === 'provider' && f.optionsSource === 'model-groups') {
-            const g = v
-            if (g) {
-              const exec = vals['executeModel']
-              top.provider = groupToProvider(g, exec)
-              top.modelGroup = g
-            }
-            continue
-          }
           if (f.name === 'theme' && v !== top[f.binding]) themeChanged = true
           top[f.binding] = v
         } else {

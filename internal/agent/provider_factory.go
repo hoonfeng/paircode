@@ -69,15 +69,11 @@ func ProviderFactoryNow() ProviderFactory {
 
 // ResolveProviderParams 解析最终 Provider 参数：存储基线 → 装配器覆盖。
 // ★ 业务层统一入口：Go 内核不再直接读 core.Settings 的 AI 业务字段。
+// ★ 预设应用由前端/装配器完成：选中预设 → provider/baseURL/apiKey/模型整套写 settings，
+//   Go 侧只按 服务商独立 Key（models.json）注入，不做预设业务。
 func ResolveProviderParams() ProviderParams {
 	provider := core.Settings.Provider
-	// ★ 2026-08-20 模型组兜底：provider 若是模型组名（旧配置/外部写入），按 modelGroup 内模型匹配实例
-	if provider != "" && core.GetProviderAPIKey(provider) == "" && core.GetProviderBaseURL(provider) == "" {
-		if resolved := resolveInstanceForModel(core.Settings.ModelGroup, core.MainModel()); resolved != "" {
-			provider = resolved
-		}
-	}
-	// ★ 2026-08-20 服务商独立 Key/BaseURL 优先（models.json 每服务商保存），
+	// ★ 服务商独立 Key/BaseURL 优先（models.json 每服务商保存），
 	//   缺省回退全局 settings 字段（兼容旧配置）。
 	baseURL := core.Settings.BaseURL
 	apiKey := core.Settings.APIKey
@@ -102,30 +98,6 @@ func ResolveProviderParams() ProviderParams {
 		ModelParams:              core.Settings.ModelParams,
 	}
 	return ProviderFactoryNow().Apply(cur)
-}
-
-// resolveInstanceForModel 按 模型组+模型 解析实例名（装配兜底用）。
-//   - 组内第一个包含该模型的实例优先；
-//   - 无匹配则组内第一个实例；
-//   - 模型组不存在/为空 → 返回空（调用方回退原 provider）。
-func resolveInstanceForModel(group, model string) string {
-	if group == "" {
-		return ""
-	}
-	insts := core.GetGroupInstances(group)
-	if len(insts) == 0 {
-		return ""
-	}
-	if model != "" {
-		for _, inst := range insts {
-			for _, m := range core.GetModels(inst) {
-				if m == model {
-					return inst
-				}
-			}
-		}
-	}
-	return insts[0]
 }
 
 // ConfiguredProvider 是否已配好可用 Provider（业务层用，替代 core.Configured 的 AI 检查）。

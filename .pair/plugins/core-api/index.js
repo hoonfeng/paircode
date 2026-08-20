@@ -43,9 +43,9 @@ const ROUTES = [
   // Tasks / Plan
   { key: 'tasks' },
   { key: 'taskplan' },
-  // 模型 / 指令
+  // 模型 / 指令 / AI 配置预设
   { key: 'models' },
-  { key: 'model-groups' },
+  { key: 'ai-presets' },
   { key: 'instructions' },
   // 工具配置
   { key: 'tools' },

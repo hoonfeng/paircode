@@ -1,0 +1,14 @@
+{
+  "主力配置": {
+    "provider": "deepseek",
+    "baseURL": "https://api.deepseek.com/v1",
+    "apiKey": "sk_tr_EGE8q0mmOsCp08bftRzhMKsznWrqR-7_U7Q3Y7Ld8K0",
+    "executeModel": "deepseek-v4-pro",
+    "planModel": "deepseek-v4-flash-0731",
+    "reviewModel": "deepseek-v4-flash-0731",
+    "temperature": "0.7",
+    "thinkingMode": "thinking",
+    "maxTokens": 131072,
+    "contextMaxTokens": 1000000
+  }
+}
