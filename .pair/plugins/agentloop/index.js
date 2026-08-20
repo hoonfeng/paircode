@@ -158,11 +158,12 @@ return {
       return over;
     });
 
-    // ── 运行时读取配置（registerSettings 返回当前值=已存值合并默认）──
-    const cfg = (reg && reg.value) || ctx.getSettings('agentloop') || {};
-
     // ── 参数级装配（保留）：CreateLoop 时覆盖装配参数（提示词/迭代/审核模式）──
     ctx.loopFactory.register((opts) => {
+      // ★ 2026-08-21 修复：动态读取配置（registerSettings 返回的 value 是 apply 时
+      //   静态快照，设置面板保存后不刷新 → 装配器一直用旧值 → maxIterations 等
+      //   设置保存不生效）。改为每次 Create 时实时读 pluginSettings.agentloop。
+      const cfg = ctx.getSettings('agentloop') || {};
       const over = {};
       if (typeof cfg.systemAppend === 'string' && cfg.systemAppend) {
         over.system = (opts.system || '') + '\n\n' + cfg.systemAppend;
