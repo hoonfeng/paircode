@@ -31,6 +31,15 @@ const REGISTRY = process.env.PAIRCODE_NPM_REGISTRY || 'https://registry.npmjs.or
 const PROXY = process.env.PAIRCODE_PROXY || process.env.HTTPS_PROXY || process.env.HTTP_PROXY || ''
 const proxyArgs = PROXY ? ` --proxy=${PROXY} --https-proxy=${PROXY}` : ''
 
+// ── npm 认证：显式引用 .pair/publish/.npmrc（与 plugin-publisher 共享同一 token 文件）──
+//   ★ 不引用时 npm 走全局 ~/.npmrc——用户改 token 时只改一处，两脚本同步生效。
+const npmrcPath = path.join(publishDir, '.npmrc')
+
+// 同步冷却（npm 限流防护）：Atomics.wait 无子进程开销，Node 主线程可用
+function sleepSync(ms) {
+  try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms) } catch {}
+}
+
 const args = process.argv.slice(2)
 const DO_PUBLISH = args.includes('--publish')
 const DO_CHECK = args.includes('--check')
@@ -73,8 +82,18 @@ function listPlugins() {
 }
 
 // ── 内容指纹：对打包白名单文件（index.js/client.js/assets/bin/package.json/README.md）
-//    计算目录级 SHA-256——解决「文件改了但版本没 bump → 误判已一致跳过」问题 ──
-function dirHash(dir) {
+//    计算目录级 SHA-256——解决「文件改了但版本没 bump → 误判已一致跳过」问题
+// ★ 指纹分层（2026-08-21）：src（源码）+ artifact（构建产物 assets/bin）分开
+//   背景：Go 二进制重编译会嵌入 git VCS 信息（vcs.revision/vcs.time）→ 每次重编译必变；
+//         前端重打包（esbuild 确定性压缩）→ 源码不变则产物不变。
+//   判定：源码变 → 实质变更 → 自动 bump 发布；仅产物变（重编译/重打包）→ 刷新产物基线，不误报不误发。
+//   ★ 与 scripts/plugin-publisher.mjs 的 dirHashSplit 保持同一算法（rel + '\0' + data），共享记录可互相读取。
+const ARTIFACT_DIRS = ['assets', 'bin']
+function isArtifactRel(rel) {
+  const top = String(rel).split(/[\\/]/)[0]
+  return ARTIFACT_DIRS.includes(top)
+}
+function dirHashSplit(dir) {
   const files = []
   ;(function walk(p, rel) {
     for (const ent of fs.readdirSync(p, { withFileTypes: true })) {
@@ -83,18 +102,26 @@ function dirHash(dir) {
       const s = path.join(p, ent.name)
       const r = rel ? path.join(rel, ent.name) : ent.name
       if (ent.isDirectory()) walk(s, r)
-      else files.push(r)
+      else files.push({ rel: r, data: fs.readFileSync(s) })
     }
   })(dir, '')
-  files.sort()
-  const h = crypto.createHash('sha256')
+  files.sort((a, b) => (a.rel < b.rel ? -1 : 1))
+  const src = crypto.createHash('sha256')
+  const art = crypto.createHash('sha256')
   for (const f of files) {
-    h.update(f)
-    h.update('\x00')
-    h.update(fs.readFileSync(path.join(dir, f)))
-    h.update('\x00')
+    const h = isArtifactRel(f.rel) ? art : src
+    h.update(f.rel); h.update('\0'); h.update(f.data)
   }
-  return h.digest('hex')
+  return { src: src.digest('hex'), artifact: art.digest('hex') }
+}
+// 旧记录迁移：{version, hash} → {version, src, artifact}（旧 hash 视为 src；artifact 未知 → 触发一次产物基线刷新）
+function migrateRec(rec) {
+  if (!rec) return null
+  if (rec.hash && !rec.src) return { version: rec.version, src: rec.hash, artifact: rec.artifact || '' }
+  return rec
+}
+function dirHash(dir) {
+  return dirHashSplit(dir).src + dirHashSplit(dir).artifact
 }
 
 // ── 发布记录（.pair/publish/.content-hashes.json）：上次发布时的版本 + 内容指纹 ──
@@ -105,6 +132,14 @@ function loadHashes() {
 function saveHashes(hashes) {
   fs.mkdirSync(publishDir, { recursive: true })
   fs.writeFileSync(HASH_FILE, JSON.stringify(hashes, null, 2))
+}
+
+// 自动 bump patch 版本（写回源 .pair/plugins/<name>/package.json，版本随源码持久化）
+// 过滤 npm notice 噪音行（notice 是正常打包清单，非错误），提取真实错误信息
+function cleanNpmError(raw) {
+  const lines = String(raw || '').split('\n')
+  const errLines = lines.filter((l) => !/^\s*npm notice/i.test(l) && l.trim())
+  return errLines.join(' | ').slice(0, 500) || String(raw || '').slice(0, 500)
 }
 
 // 自动 bump patch 版本（写回源 .pair/plugins/<name>/package.json，版本随源码持久化）
@@ -162,33 +197,49 @@ function main() {
   const ok = []
   const fail = []
   const hashes = loadHashes()
-  for (const p of plugins) {
+  for (let pi = 0; pi < plugins.length; pi++) {
+    const p = plugins[pi]
+    // 发布模式下包间冷却 15s（npm 限流防护；验证模式为本地打包，无需冷却）
+    if (pi > 0 && DO_PUBLISH) {
+      console.log(`（冷却 15s 防 npm 限流）`)
+      sleepSync(15000)
+    }
     const pkgName = `@paircode/${p.name}`
     const dst = path.join(publishDir, p.name)
-    // ★ 指纹感知跳过（2026-08-21）：不仅比版本号，还比打包内容指纹。
+    // ★ 指纹感知跳过（2026-08-21）：版本 + 内容指纹（src 源码 / artifact 构建产物分层）
     //   - 线上无 → 发布；线上版本不同 → 发布；
-    //   - 版本相同 + 指纹相同 → 真一致，跳过；
+    //   - 版本相同 + src/artifact 全同 → 真一致，跳过；
     //   - 版本相同 + 无记录（首次运行）→ 建立指纹基线，跳过；
-    //   - 版本相同 + 指纹变化（改了代码没 bump 版本）→ 自动 bump patch 后发布。
+    //   - 版本相同 + src 同 + artifact 不同（重编译/重打包）→ 刷新产物基线，不发布；
+    //   - 版本相同 + src 不同（改了源码没 bump 版本）→ 自动 bump patch 后发布。
     const existing = npmExists(pkgName)
-    const srcHash = dirHash(p.dir)
-    const rec = hashes[pkgName] || {}
+    let h = { src: '', artifact: '' }
+    try { h = dirHashSplit(p.dir) } catch {}
+    const rec = migrateRec(hashes[pkgName]) || {}
     if (existing && existing === p.pkg.version) {
-      if (rec.hash === srcHash) {
+      if (rec.src === h.src && rec.artifact === h.artifact) {
         console.log(`  ⏭ ${pkgName} 已一致（@${existing}，内容指纹相同），跳过`)
         ok.push({ name: p.name, pkgName, out: `skip@${existing}` })
         continue
       }
-      if (!rec.hash) {
-        hashes[pkgName] = { version: p.pkg.version, hash: srcHash }
+      if (!rec.src) {
+        hashes[pkgName] = { version: p.pkg.version, src: h.src, artifact: h.artifact }
         saveHashes(hashes)
         console.log(`  ⏭ ${pkgName} 已存在（@${existing}），首次建立内容指纹基线`)
         ok.push({ name: p.name, pkgName, out: `skip@${existing}（基线）` })
         continue
       }
-      // 版本相同但内容变了 → 自动 bump patch（写回源 package.json，随源码持久化）
+      if (rec.src === h.src && rec.artifact !== h.artifact) {
+        // 仅构建产物变化（重编译/重打包）→ 刷新产物基线，不 bump 不发布
+        hashes[pkgName] = { version: p.pkg.version, src: h.src, artifact: h.artifact }
+        saveHashes(hashes)
+        console.log(`  ⏭ ${pkgName} 仅构建产物变化（重编译/重打包），源码未变 → 已刷新产物基线，不发布`)
+        ok.push({ name: p.name, pkgName, out: `skip@${existing}（产物基线刷新）` })
+        continue
+      }
+      // 源码变了 → 自动 bump patch（写回源 package.json，随源码持久化）
       const newVer = bumpPatch(path.join(p.dir, 'package.json'))
-      console.log(`  ✚ ${pkgName} 内容已变化但版本未 bump（线上 @${existing}），自动升 patch → ${newVer}`)
+      console.log(`  ✚ ${pkgName} 源码已变化但版本未 bump（线上 @${existing}），自动升 patch → ${newVer}`)
       p.pkg.version = newVer
     }
     if (existing && existing !== p.pkg.version) {
@@ -209,16 +260,17 @@ function main() {
       pkg.files = ['index.js', 'client.js', 'assets', 'bin', 'package.json']
       fs.writeFileSync(path.join(dst, 'package.json'), JSON.stringify(pkg, null, 2))
       // 3. 验证/发布（支持代理：npm --proxy / --https-proxy）
+      // ★ stderr 必须 pipe 捕获——否则 npm 真实错误（401/网络/权限）被丢弃，只剩 "Command failed" 外壳
       const cmd = DO_PUBLISH
-        ? `npm publish ${path.join(dst, 'package.json').replace(/package\.json$/, '').replace(/\\/g, '/')} --registry=${REGISTRY} --access public${OTP ? ` --otp=${OTP}` : ''}${proxyArgs}`
+        ? `npm publish ${path.join(dst, 'package.json').replace(/package\.json$/, '').replace(/\\/g, '/')} --registry=${REGISTRY} --access public --userconfig=${npmrcPath}${OTP ? ` --otp=${OTP}` : ''}${proxyArgs}`
         : `npm pack ${path.join(dst, 'package.json').replace(/package\.json$/, '').replace(/\\/g, '/')} --dry-run --json${proxyArgs}`
-      const out = execSync(cmd, { encoding: 'utf8', cwd: dst, stdio: ['ignore', 'pipe', 'ignore'] })
-      hashes[pkgName] = { version: pkg.version, hash: srcHash }
+      const out = execSync(cmd, { encoding: 'utf8', cwd: dst, stdio: ['ignore', 'pipe', 'pipe'], timeout: 120000 })
+      hashes[pkgName] = { version: pkg.version, src: h.src, artifact: h.artifact }
       saveHashes(hashes)
       ok.push({ name: p.name, pkgName, out })
       console.log(`  ✅ ${pkgName} ${DO_PUBLISH ? '已发布' : '打包验证通过'}（${pkg.version}）`)
     } catch (e) {
-      fail.push({ name: p.name, pkgName, err: String(e.stderr || e.message).split('\n').slice(0, 4).join(' | ') })
+      fail.push({ name: p.name, pkgName, err: cleanNpmError(e.stderr || e.message) })
       console.log(`  ❌ ${pkgName}: ${fail[fail.length - 1].err}`)
     }
   }

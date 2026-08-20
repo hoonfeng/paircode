@@ -4,5 +4,5 @@
   "purpose": "内置 HTTP 接口装配器（接口插件化：Go 硬编码清零）——持有全部内置 /api/* 接口清单，apply 时 ctx.kernel.install 挂载到插件路由表；改 index.js ROUTES 数组可增删接口",
   "scope": "global",
   "type": "plugin",
-  "version": "1.0.0"
+  "version": "1.0.1"
 }

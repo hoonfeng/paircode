@@ -155,17 +155,21 @@ async function scanAll() {
     const p = plugins[i]
     const rc = checks[i]
     const pkgName = SCOPED + '/' + p.name
-    let srcHash = ''
-    try { srcHash = dirHash(path.join(pluginsDir, p.name)) } catch {}
-    const rec = hashes[pkgName]
-    const hashSame = !!rec && !!srcHash && rec.hash === srcHash
+    let h = { src: '', artifact: '' }
+    try { h = dirHashSplit(path.join(pluginsDir, p.name)) } catch {}
+    const rec = migrateRec(hashes[pkgName])
+    const srcSame = !!rec && !!h.src && rec.src === h.src
+    const artSame = !!rec && !!h.artifact && rec.artifact === h.artifact
     const st = rc.ok ? statusOf(p.version, rc.version) : { code: 'check-failed', label: '检测失败' }
     let note = ''
-    // 版本相同但内容指纹不同 → 细分（解决「改了代码没 bump 版本 → 误判已一致」）
+    // 版本相同但指纹不同 → 细分：源码变=实质变更（自动 bump）；仅产物变=重编译/重打包（刷新基线）
     if (rc.ok && st.code === 'same') {
-      if (rec && !hashSame) {
+      if (rec && !srcSame) {
         st.code = 'changed'; st.label = '内容已变'
-        note = `内容指纹与上次发布不一致（${rec.hash.slice(0, 8)}… ≠ ${srcHash.slice(0, 8)}…），版本未 bump，发布时将自动升 patch`
+        note = `源码指纹与上次发布不一致（${rec.src.slice(0, 8)}… ≠ ${h.src.slice(0, 8)}…），版本未 bump，发布时将自动升 patch`
+      } else if (rec && srcSame && !artSame) {
+        st.code = 'artifact-changed'; st.label = '仅产物变'
+        note = '构建产物与记录不一致（可能为重编译/重打包），源码未变 → 不触发发布，发布时将刷新产物基线'
       } else if (!rec) {
         st.code = 'baseline'; st.label = '基线'
         note = '线上已是最新版本，首次建立内容指纹基线（本次跳过）'
@@ -177,7 +181,8 @@ async function scanAll() {
       status: st.code,
       statusLabel: st.label,
       note,
-      srcHash,
+      srcHash: h.src,
+      artifactHash: h.artifact,
       checkError: rc.ok ? '' : rc.reason,
       publishable: rc.ok && (st.code === 'unpublished' || st.code === 'update' || st.code === 'changed'),
     })
@@ -234,6 +239,43 @@ function clearToken() {
 // ── 内容指纹：对打包白名单文件（index.js/client.js/assets/bin/package.json/README.md）
 //    计算目录级 SHA-256——解决「文件改了但版本没 bump → 误判已一致跳过」问题 ──
 const hashFile = path.join(publishDir, '.content-hashes.json')
+// ★ 指纹分层（2026-08-21）：src（源码）+ artifact（构建产物 assets/bin）分开
+//   背景：Go 二进制重编译会嵌入 git VCS 信息（vcs.revision/vcs.time）→ 每次重编译必变；
+//         前端重打包（esbuild 确定性压缩）→ 源码不变则产物不变。
+//   判定：源码变 → 实质变更 → 自动 bump 发布；仅产物变（重编译/重打包）→ 刷新产物基线，不误报不误发。
+const ARTIFACT_DIRS = ['assets', 'bin']
+function isArtifactRel(rel) {
+  const top = String(rel).split(/[\\/]/)[0]
+  return ARTIFACT_DIRS.includes(top)
+}
+// 目录指纹拆分：返回 { src, artifact } 两组 SHA-256（walk 逻辑同 dirHash）
+function dirHashSplit(dir) {
+  const files = []
+  ;(function walk(p, rel) {
+    for (const ent of fs.readdirSync(p, { withFileTypes: true })) {
+      if (ent.name === 'node_modules' || ent.name === '.git') continue
+      if (rel === '' && !PUBLISH_FILES.includes(ent.name)) continue
+      const s = path.join(p, ent.name)
+      const r = rel ? path.join(rel, ent.name) : ent.name
+      if (ent.isDirectory()) walk(s, r)
+      else files.push({ rel: r, data: fs.readFileSync(s) })
+    }
+  })(dir, '')
+  files.sort((a, b) => (a.rel < b.rel ? -1 : 1))
+  const src = crypto.createHash('sha256')
+  const art = crypto.createHash('sha256')
+  for (const f of files) {
+    const h = isArtifactRel(f.rel) ? art : src
+    h.update(f.rel); h.update('\0'); h.update(f.data)
+  }
+  return { src: src.digest('hex'), artifact: art.digest('hex') }
+}
+// 旧记录迁移：{version, hash} → {version, src, artifact}（旧 hash 视为 src；artifact 未知 → 触发一次产物基线刷新）
+function migrateRec(rec) {
+  if (!rec) return null
+  if (rec.hash && !rec.src) return { version: rec.version, src: rec.hash, artifact: rec.artifact || '' }
+  return rec
+}
 function dirHash(dir) {
   const files = []
   ;(function walk(p, rel) {
@@ -264,6 +306,12 @@ function bumpPatch(v) {
   const m = /^(\d+)\.(\d+)\.(\d+)/.exec(String(v || '').trim().replace(/^v/, ''))
   if (!m) return String(v || '0.0.0') + '.1'
   return `${m[1]}.${m[2]}.${+m[3] + 1}`
+}
+// 过滤 npm notice 噪音行（notice 是正常打包清单，非错误），提取真实错误信息
+function cleanNpmError(raw) {
+  const lines = String(raw || '').split('\n')
+  const errLines = lines.filter((l) => !/^\s*npm notice/i.test(l) && l.trim())
+  return errLines.join(' | ').slice(0, 500) || String(raw || '').slice(0, 500)
 }
 
 // ── 打包（复制白名单文件 + package.json 改造）──
@@ -317,24 +365,30 @@ async function publishOne(name, { onLog = log } = {}) {
   // ── 内容指纹：版本相同 + 指纹不同 → 自动 bump patch；无记录 → 建基线跳过 ──
   const hashes = readHashes()
   const pkgName = SCOPED + '/' + name
-  let srcHash = ''
-  try { srcHash = dirHash(srcDir) } catch {}
-  const rec = hashes[pkgName]
-  if (st.code === 'same' && rec && rec.hash !== srcHash) {
+  let h = { src: '', artifact: '' }
+  try { h = dirHashSplit(srcDir) } catch {}
+  const rec = migrateRec(hashes[pkgName])
+  if (st.code === 'same' && rec && rec.src !== h.src) {
+    // 源码变了 → 自动 bump（实质变更）
     const bumped = bumpPatch(local)
-    onLog(`  ✚ ${pkgName} 内容已变化但版本未 bump（线上 @${rc.version}），自动升 patch → ${bumped}`)
+    onLog(`  ✚ ${pkgName} 源码已变化但版本未 bump（线上 @${rc.version}），自动升 patch → ${bumped}`)
     try {
       const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
       pkg.version = bumped
       fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n')
       local = bumped
-      try { srcHash = dirHash(srcDir) } catch {}
+      try { h = dirHashSplit(srcDir) } catch {}
     } catch (e) {
       return { name, ok: false, error: `自动 bump 版本失败: ${String(e.message || e).slice(0, 120)}` }
     }
+  } else if (st.code === 'same' && rec && rec.src === h.src && rec.artifact !== h.artifact) {
+    // 仅构建产物变化（重编译/重打包）→ 刷新产物基线，不 bump 不发布
+    hashes[pkgName] = { version: local, src: h.src, artifact: h.artifact }
+    saveHashes(hashes)
+    return { name, ok: false, skipped: true, reason: '仅构建产物变化（重编译/重打包），源码未变 → 已刷新产物基线，不发布' }
   } else if (st.code === 'same' && !rec) {
     // 首次基线：记录本次指纹并跳过（与线上内容一致，无需发布）
-    hashes[pkgName] = { version: local, hash: srcHash }
+    hashes[pkgName] = { version: local, src: h.src, artifact: h.artifact }
     saveHashes(hashes)
     return { name, ok: false, skipped: true, reason: `已一致（线上 @${rc.version}），首次建立内容指纹基线` }
   } else if (st.code === 'same') {
@@ -348,9 +402,9 @@ async function publishOne(name, { onLog = log } = {}) {
     try {
       execSync('node scripts/build-ui.mjs', { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 600000 })
       onLog('  ✅ UI 构建完成（全部区域）')
-      try { srcHash = dirHash(srcDir) } catch {}
+      try { h = dirHashSplit(srcDir) } catch {}
     } catch (e) {
-      const msg = String(e.stderr || e.message || e).split('\n').slice(0, 4).join(' | ')
+      const msg = cleanNpmError(e.stderr || e.message || e)
       return { name, ok: false, error: `UI 构建失败，中止发布（避免发旧 UI 资产）: ${msg.slice(0, 200)}` }
     }
   }
@@ -366,13 +420,13 @@ async function publishOne(name, { onLog = log } = {}) {
   onLog(`  ⬆ 发布 ${SCOPED}/${name}@${b.version} ...`)
   try {
     const out = execSync(cmd, { cwd: pkgDir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 120000 })
-    // 发布成功 → 更新内容指纹记录（新版本 + 构建后最新内容）
-    hashes[pkgName] = { version: b.version, hash: srcHash }
+    // 发布成功 → 更新内容指纹记录（新版本 + 构建后最新 src/artifact）
+    hashes[pkgName] = { version: b.version, src: h.src, artifact: h.artifact }
     saveHashes(hashes)
     onLog(`  ✅ ${SCOPED}/${name}@${b.version} 发布成功`)
     return { name, ok: true, action: st.code === 'unpublished' ? 'published' : 'updated', version: b.version, remote: rc.version, out: out.slice(0, 300) }
   } catch (e) {
-    const msg = String(e.stderr || e.message || e).split('\n').slice(0, 6).join(' | ')
+    const msg = cleanNpmError(e.stderr || e.message || e)
     return { name, ok: false, error: msg.slice(0, 400), version: b.version }
   }
 }
@@ -556,7 +610,7 @@ async function loadProxy(){try{const j=await api('/api/proxy');
 const inp=$('#proxy');inp.placeholder=j.proxy?('已配置: '+j.proxy):'如 http://127.0.0.1:7890（留空=直连）';
 $('#clearProxy').style.display=j.proxy?'':'none';
 $('#proxyHint').innerHTML='保存到 <code>.pair/publish/.proxy</code> · 当前'+(j.proxy?('生效: <code>'+j.proxy+'</code>（'+j.source+'）'):'未配置代理（直连）')}catch(e){}}
-const badge={unpublished:['b-unpublished','未发布'],same:['b-same','已一致'],update:['b-update','本地有更新'],ahead:['b-ahead','线上更高'],'check-failed':['b-check-failed','检测失败'],changed:['b-update','内容已变'],baseline:['b-same','基线']}
+const badge={unpublished:['b-unpublished','未发布'],same:['b-same','已一致'],update:['b-update','本地有更新'],ahead:['b-ahead','线上更高'],'check-failed':['b-check-failed','检测失败'],changed:['b-update','内容已变'],'artifact-changed':['b-ahead','仅产物变'],baseline:['b-same','基线']}
 async function loadList(){const j=await api('/api/list');
 $('#count').textContent='· '+j.plugins.length+' 个 · 待发布 '+j.plugins.filter(p=>p.publishable).length+' 个';
 const tb=$('#tbody');tb.innerHTML=''

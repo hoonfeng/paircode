@@ -1,7 +1,7 @@
 {
   "name": "git-api",
   "purpose": "Git 接口插件化（17 条）+ Git 源代码管理面板（接口与 UI 一体化）",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "scope": "global",
   "type": "plugin",
   "main": "index.js",

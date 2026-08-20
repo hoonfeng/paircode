@@ -1,7 +1,7 @@
 {
   "name": "tool-core",
   "purpose": "核心文件工具（read_file/write_file/edit_file/multi_edit/run_command/move_file/delete_file）——迁移自内置 registerCoreTools",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "scope": "global",
   "type": "plugin",
   "main": "index.js"

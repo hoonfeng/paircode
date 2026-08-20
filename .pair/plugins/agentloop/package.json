@@ -4,5 +4,5 @@
   "purpose": "Agent 循环 JS 实现（agentloop 核心外置：策略在 JS/能力在 Go；含配置注册化与参数装配）",
   "scope": "global",
   "type": "plugin",
-  "version": "1.1.0"
+  "version": "1.1.1"
 }
