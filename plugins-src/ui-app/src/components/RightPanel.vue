@@ -194,16 +194,10 @@
             <textarea class="chat-input" ref="inputRef" v-model="inputText" @keydown="onKeydown" @dragover.prevent @drop="handleDrop" @paste="handlePaste" :style="{ height: inputHeight + 'px' }" placeholder="发送消息到 AI... (Enter 发送, Shift+Enter 换行)" :disabled="state.chatLoading"></textarea>
             <div class="input-bottom-bar">
               <div class="ibb-btns">
-                <!-- ★ composer 配置选择器：模型/服务商/思考（配置在设置面板「AI」tab 维护，预设列表也在其中） -->
+                <!-- ★ composer 模型选择器（★ 2026-08-20 同步 AI 配置列表模式：服务商/Key/思考均由「AI」配置决定，聊天面板只留模型下拉） -->
                 <span class="ibb-model">
-                  <select v-model="composerProvider" class="cmp-sel cmp-prov" @change="onCmpProviderChange" title="服务商">
-                    <option v-for="p in (modelData && modelData.providers) || []" :key="p" :value="p">{{ p }}</option>
-                  </select>
-                  <select v-model="composerModel" class="cmp-sel cmp-model" @change="onCmpModelChange" title="执行模型（每个模型可独立配置参数）">
+                  <select v-model="composerModel" class="cmp-sel cmp-model" @change="onCmpModelChange" title="执行模型（配置在设置面板「AI」配置 tab 维护，应用后随 settings 同步）">
                     <option v-for="m in composerModels" :key="m" :value="m">{{ m }}</option>
-                  </select>
-                  <select v-model="composerThinking" class="cmp-sel cmp-think" @change="onCmpThinkingChange" title="思考档位：临时切换并记录到该模型配置（OpenAI 定义：none/minimal/low/medium/high/xhigh/max）">
-                    <option v-for="th in THINK_TIERS" :key="'k' + th.v" :value="th.v">{{ th.label }}</option>
                   </select>
                 </span>
                 <span class="obtn-sep"></span>
@@ -253,22 +247,11 @@ const toggleFocus = () => {
 }
 const inputText = ref('')
 
-// ─── composer 配置选择器（★ 2026-08-20 AI 配置预设：选「预设」整套配置生效；无预设时回退直接选服务商/模型）───
+// ─── composer 模型选择器（★ 2026-08-20 同步 AI 配置列表模式：服务商/Key/思考均由配置决定，聊天面板只留模型下拉）───
 const modelData = ref(null)
-const composerProvider = ref('')     // 当前服务商名（写 settings.provider）
+const composerProvider = ref('')     // 当前生效服务商名（来自 settings，应用配置后 watch 同步）
 const composerModel = ref('')
-const composerThinking = ref('')   // 思考档位（''=默认/沿用模型配置；切换即写入 modelParams 记录）
-const THINK_TIERS = [
-  { v: '', label: '思考默认' },
-  { v: 'none', label: '思考: none（关）' },
-  { v: 'minimal', label: '思考: minimal（极简）' },
-  { v: 'low', label: '思考: low（低）' },
-  { v: 'medium', label: '思考: medium（中）' },
-  { v: 'high', label: '思考: high（高）' },
-  { v: 'xhigh', label: '思考: xhigh（超高）' },
-  { v: 'max', label: '思考: max（最大化）' },
-]
-// 模型下拉：当前服务商可用模型
+// 模型下拉：当前生效服务商可用模型
 const composerModels = computed(() => {
   const m = (modelData.value && modelData.value.models) || {}
   return m[composerProvider.value] || []
@@ -283,28 +266,12 @@ function initComposerModel() {
   composerProvider.value = s.provider || ''
   if (s.executeModel) composerModel.value = s.executeModel
 }
-// （★ 2026-08-20 预设选择从对话面板移除：预设列表在设置面板「AI」tab 内管理，应用后随 settings 自动同步）
-function onCmpProviderChange() {
-  composerModel.value = ''
-  const ms = composerModels.value
-  const cur = state.settings && state.settings.executeModel
-  if (cur && ms.includes(cur)) composerModel.value = cur
-  else if (ms.length) composerModel.value = ms[0]
-  onCmpModelChange()
-}
-function initComposerThinking() {
-  const mp = (state.settings && state.settings.modelParams) || {}
-  const prov = composerProvider.value
-  const by = (mp[prov] && mp[prov][composerModel.value]) || null
-  composerThinking.value = (by && by.thinkingMode) || ''
-}
 async function onCmpModelChange() {
-  initComposerThinking()
   if (!composerProvider.value || !composerModel.value) return
   const md = modelData.value || {}
   const prov = composerProvider.value
   const top = { ...(state.settings || {}), provider: prov, executeModel: composerModel.value }
-  // 实例联动：带出该实例的 BaseURL 与 API Key
+  // 实例联动：带出该服务商的 BaseURL 与 API Key
   if (md.providerBaseURLs && md.providerBaseURLs[prov]) top.baseURL = md.providerBaseURLs[prov]
   if (md.providerKeys && md.providerKeys[prov]) top.apiKey = md.providerKeys[prov]
   try {
@@ -312,32 +279,6 @@ async function onCmpModelChange() {
     state.settings = top
   } catch (e) {
     window.$toast && window.$toast('模型切换失败: ' + (e.message || e), 'error')
-  }
-}
-// 思考档位：临时切换 → 写入 settings.modelParams[服务商][模型].thinkingMode（装配器发送即用；记录后下次默认沿用）
-async function onCmpThinkingChange() {
-  if (!composerProvider.value || !composerModel.value) return
-  const v = composerThinking.value
-  const prov = composerProvider.value
-  const mp = JSON.parse(JSON.stringify((state.settings && state.settings.modelParams) || {}))
-  if (!mp[prov]) mp[prov] = {}
-  const prev = mp[prov][composerModel.value] || {}
-  if (v) {
-    mp[prov][composerModel.value] = { ...prev, thinkingMode: v }
-  } else {
-    delete prev.thinkingMode
-    if (Object.keys(prev).length) mp[prov][composerModel.value] = prev
-    else delete mp[prov][composerModel.value]
-    if (!Object.keys(mp[prov]).length) delete mp[prov]
-  }
-  const top = { ...(state.settings || {}), modelParams: mp }
-  try {
-    await api.apiPut('/settings', { settings: top, pluginSettings: (state.settings && state.settings.pluginSettings) || {} })
-    state.settings = top
-    window.$toast && window.$toast(v ? ('思考档位已切换并记录：' + v + '（' + prov + ' / ' + composerModel.value + '）') : '思考档位已恢复默认', 'success')
-  } catch (e) {
-    window.$toast && window.$toast('思考切换失败: ' + (e.message || e), 'error')
-    initComposerThinking()
   }
 }
 const feedbackText = ref('')
@@ -1491,11 +1432,10 @@ watch(() => state.currentConvId, (id, oldId) => {
 
 watch(() => state.settings, (s) => { if (s) { autoIterate.value = !!s.autoIterateOnRejection; autonomous.value = !!s.autonomous; autoCollapse.value = s.autoCollapse !== undefined ? !!s.autoCollapse : true; } }, { immediate: true })
 
-// ★ settings 变化（AI tab 应用预设 / 保存设置）→ 同步对话面板服务商/模型下拉
+// ★ settings 变化（AI tab 应用配置 / 保存设置）→ 同步对话面板模型下拉
 watch(() => [state.settings && state.settings.provider, state.settings && state.settings.executeModel], ([prov, model]) => {
   if (prov && composerProvider.value !== prov) composerProvider.value = prov
   if (model && composerModel.value !== model) composerModel.value = model
-  initComposerThinking()
 })
 
 // ★ 从工作区配置加载审核模式（黑白名单配置已由插件面板/工具集管理取代，不再加载）
@@ -1534,7 +1474,7 @@ const chatSlot = useSingleSlot('chat')
 chatSlot.init() // setup 同步初始化 owner（首帧直接走正确分支）
 
 onMounted(() => {
-  loadModelData().then(() => { initComposerModel(); initComposerThinking() })
+  loadModelData().then(() => { initComposerModel() })
   loadWsTokenStats(); loadConvList(); scrollToBottom()
   if (state.workspaceRoot && state.workspaceRoot !== '') loadWorkspaceReviewConfig()
 
@@ -1903,8 +1843,6 @@ onUnmounted(() => {
   cursor: pointer;
 }
 .cmp-sel:focus { border-color: var(--accent, #4f8cff); }
-.cmp-prov { max-width: 90px; }
-.cmp-think { max-width: 130px; color: #d4a74e; border-color: rgba(212,167,78,.35); }
 .obtn { display: flex; align-items: center; gap: 3px; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; color: var(--text-muted); background: var(--bg-tertiary); border: 1px solid var(--border-color); white-space: nowrap; user-select: none; }
 .obtn.active { color: var(--accent); background: rgba(212, 167, 78, 0.1); border-color: rgba(212, 167, 78, 0.3); }
 .obtn-obtn-agent.active { color: #d4a74e; }

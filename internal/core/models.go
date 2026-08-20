@@ -27,12 +27,12 @@ var (
 	ModelList ModelListMap
 
 	// defaultModels 仅在 models.json 不存在或解析失败时使用的兜底列表。
-	// ★ 2026-08-20 与安装版 config/models.json 对齐（用户实际在用）：6 个服务商含「硅基」网关。
+	// ★ 2026-08-20 与安装版 config/models.json 对齐（用户实际在用）：6 个服务商含「基元律动」网关。
 	defaultModels = ModelListMap{
 		"anthropic":         {BaseURL: "https://api.anthropic.com/v1", Models: []string{"claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-4-sonnet-20250514", "claude-4-haiku-latest"}},
 		"custom":            {BaseURL: "", Models: []string{"custom"}},
 		"deepseek":          {BaseURL: "https://api.deepseek.com/v1", Models: []string{"deepseek-v4-pro", "deepseek-v4-flash"}},
-		"硅基":               {BaseURL: "https://tokenrhythm.studio/v1", Models: []string{"deepseek-v4-pro-0813", "deepseek-v4-flash-0731"}},
+		"基元律动":           {BaseURL: "https://tokenrhythm.studio/v1", Models: []string{"deepseek-v4-pro-0813", "deepseek-v4-flash-0731"}},
 		"kimi":              {BaseURL: "https://api.moonshot.cn/v1", Models: []string{"kimi-k3"}},
 		"openai-compatible": {BaseURL: "", Models: []string{"custom"}},
 	}

@@ -21,13 +21,6 @@
       "deepseek-v4-flash"
     ]
   },
-  "硅基": {
-    "baseURL": "https://tokenrhythm.studio/v1",
-    "models": [
-      "deepseek-v4-pro-0813",
-      "deepseek-v4-flash-0731"
-    ]
-  },
   "kimi": {
     "baseURL": "https://api.moonshot.cn/v1",
     "models": [
@@ -38,6 +31,13 @@
     "baseURL": "",
     "models": [
       "custom"
+    ]
+  },
+  "基元律动": {
+    "baseURL": "https://tokenrhythm.studio/v1",
+    "models": [
+      "deepseek-v4-pro-0813",
+      "deepseek-v4-flash-0731"
     ]
   }
 }
