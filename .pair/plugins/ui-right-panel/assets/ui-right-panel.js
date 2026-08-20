@@ -35579,9 +35579,15 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
       };
       const inputText = vue.ref("");
       const modelData = vue.ref(null);
+      const aiPresets = vue.ref(null);
       const composerProvider = vue.ref("");
       const composerModel = vue.ref("");
       const composerModels = vue.computed(() => {
+        const p2 = aiPresets.value || {};
+        const names = Object.keys(p2);
+        if (names.length) {
+          return [...new Set(names.map((n2) => p2[n2] && p2[n2].executeModel || "").filter(Boolean))];
+        }
         const m2 = modelData.value && modelData.value.models || {};
         return m2[composerProvider.value] || [];
       });
@@ -35590,16 +35596,44 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
           modelData.value = await api.getModels();
         } catch {
         }
+        try {
+          const r2 = await api.getAiPresets();
+          aiPresets.value = r2 && r2.presets || {};
+        } catch {
+        }
       }
       function initComposerModel() {
         const s2 = uiState_js.state.settings || {};
         composerProvider.value = s2.provider || "";
         if (s2.executeModel) composerModel.value = s2.executeModel;
+        const p2 = aiPresets.value || {};
+        const names = Object.keys(p2);
+        if (names.length) {
+          const modelSet = [...new Set(names.map((n2) => p2[n2] && p2[n2].executeModel || "").filter(Boolean))];
+          if (modelSet.length && modelSet.indexOf(composerModel.value) === -1) {
+            composerModel.value = modelSet[0];
+            onCmpModelChange();
+          }
+        }
       }
       async function onCmpModelChange() {
         if (!composerProvider.value || !composerModel.value) return;
         const md = modelData.value || {};
         const prov = composerProvider.value;
+        const presets = aiPresets.value || {};
+        const hit = Object.entries(presets).find(([, c2]) => c2 && c2.executeModel === composerModel.value && (!prov || !c2.provider || c2.provider === prov));
+        if (hit) {
+          const [name, c2] = hit;
+          const top3 = { ...uiState_js.state.settings || {}, preset: name, provider: c2.provider, baseURL: c2.baseURL, apiKey: c2.apiKey, executeModel: c2.executeModel, planModel: c2.planModel, reviewModel: c2.reviewModel };
+          try {
+            await api.apiPut("/settings", { settings: top3, pluginSettings: uiState_js.state.settings && uiState_js.state.settings.pluginSettings || {} });
+            uiState_js.state.settings = top3;
+            composerProvider.value = c2.provider || prov;
+          } catch (e3) {
+            window.$toast && window.$toast("模型切换失败: " + (e3.message || e3), "error");
+          }
+          return;
+        }
         const top2 = { ...uiState_js.state.settings || {}, provider: prov, executeModel: composerModel.value };
         if (md.providerBaseURLs && md.providerBaseURLs[prov]) top2.baseURL = md.providerBaseURLs[prov];
         if (md.providerKeys && md.providerKeys[prov]) top2.apiKey = md.providerKeys[prov];
@@ -37920,7 +37954,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
       };
     }
   };
-  const RightPanel = /* @__PURE__ */ _export_sfc(_sfc_main$1, [["__scopeId", "data-v-f4496418"]]);
+  const RightPanel = /* @__PURE__ */ _export_sfc(_sfc_main$1, [["__scopeId", "data-v-30ad69e4"]]);
   const TOTAL_EXTRA = 4 + 1 + 200;
   const _sfc_main = {
     __name: "UiRightPanel",

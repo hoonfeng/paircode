@@ -249,10 +249,17 @@ const inputText = ref('')
 
 // ─── composer 模型选择器（★ 2026-08-20 同步 AI 配置列表模式：服务商/Key/思考均由配置决定，聊天面板只留模型下拉）───
 const modelData = ref(null)
+const aiPresets = ref(null)          // AI 配置列表（ai-presets.json：配置名 → 完整配置快照）
 const composerProvider = ref('')     // 当前生效服务商名（来自 settings，应用配置后 watch 同步）
 const composerModel = ref('')
-// 模型下拉：当前生效服务商可用模型
+// 模型下拉：优先展示「配置列表里添加的模型」（各配置 executeModel 去重）；
+// 无配置时回退为当前服务商可用模型列表
 const composerModels = computed(() => {
+  const p = aiPresets.value || {}
+  const names = Object.keys(p)
+  if (names.length) {
+    return [...new Set(names.map(n => (p[n] && p[n].executeModel) || '').filter(Boolean))]
+  }
   const m = (modelData.value && modelData.value.models) || {}
   return m[composerProvider.value] || []
 })
@@ -260,18 +267,48 @@ async function loadModelData() {
   try {
     modelData.value = await api.getModels()
   } catch {}
+  try {
+    const r = await api.getAiPresets()
+    aiPresets.value = (r && r.presets) || {}
+  } catch {}
 }
 function initComposerModel() {
   const s = state.settings || {}
   composerProvider.value = s.provider || ''
   if (s.executeModel) composerModel.value = s.executeModel
+  // ★ 配置列表模式：settings 模型不在配置模型集时，自动对齐到配置列表首个模型
+  //   （聊天面板模型以配置列表为准，避免下拉无选中项/与配置脱节）
+  const p = aiPresets.value || {}
+  const names = Object.keys(p)
+  if (names.length) {
+    const modelSet = [...new Set(names.map(n => (p[n] && p[n].executeModel) || '').filter(Boolean))]
+    if (modelSet.length && modelSet.indexOf(composerModel.value) === -1) {
+      composerModel.value = modelSet[0]
+      onCmpModelChange()
+    }
+  }
 }
 async function onCmpModelChange() {
   if (!composerProvider.value || !composerModel.value) return
   const md = modelData.value || {}
   const prov = composerProvider.value
+  const presets = aiPresets.value || {}
+  // 配置列表联动：命中配置（同服务商 + 执行模型匹配）→ 整套应用（服务商/BaseURL/Key/三模型）
+  const hit = Object.entries(presets).find(([, c]) => c && c.executeModel === composerModel.value && (!prov || !c.provider || c.provider === prov))
+  if (hit) {
+    const [name, c] = hit
+    const top = { ...(state.settings || {}), preset: name, provider: c.provider, baseURL: c.baseURL, apiKey: c.apiKey, executeModel: c.executeModel, planModel: c.planModel, reviewModel: c.reviewModel }
+    try {
+      await api.apiPut('/settings', { settings: top, pluginSettings: (state.settings && state.settings.pluginSettings) || {} })
+      state.settings = top
+      composerProvider.value = c.provider || prov
+    } catch (e) {
+      window.$toast && window.$toast('模型切换失败: ' + (e.message || e), 'error')
+    }
+    return
+  }
+  // 无配置命中 → 按服务商联动 BaseURL/Key（保持原行为）
   const top = { ...(state.settings || {}), provider: prov, executeModel: composerModel.value }
-  // 实例联动：带出该服务商的 BaseURL 与 API Key
   if (md.providerBaseURLs && md.providerBaseURLs[prov]) top.baseURL = md.providerBaseURLs[prov]
   if (md.providerKeys && md.providerKeys[prov]) top.apiKey = md.providerKeys[prov]
   try {
