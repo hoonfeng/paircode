@@ -569,7 +569,7 @@ const tsAddSearch = ref('')
 const tsMsg = ref('')
 const tsMsgErr = ref(false)
 const builtinInfo = ref(null)   // GET /api/plugins/builtin：{groups, joined, manualTools, toolTotal, enabledTotal}
-const tsOpen = ref(true) // 卷帘默认展开
+const tsOpen = ref(false) // 卷帘默认收缩（2026-08-20：默认收起工具集区，点击标题展开）
 try {
   const saved = localStorage.getItem('paircode-ts-open')
   if (saved !== null) tsOpen.value = saved === '1'

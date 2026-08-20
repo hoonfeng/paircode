@@ -123,12 +123,15 @@
       </template>
     </div>
     <div class="pp-list">
-      <!-- 内置工具区（框架自带工具：默认在工作区工具集，可勾选加入/移出） -->
+      <!-- 内置工具区（框架自带工具：默认在工作区工具集，可勾选加入/移出）
+      ★ 2026-08-20：默认收缩（折叠），点击标题展开 -->
       <div v-if="builtinGroups.length" class="pp-builtin">
-        <div class="pp-builtin-head">
+        <div class="pp-builtin-head" @click="builtinOpen = !builtinOpen" :title="builtinOpen ? '点击收起内置工具区' : '点击展开内置工具区'" style="cursor:pointer">
           <span class="pp-builtin-title"><SvgIcon name="package" :size="12" /> 内置工具（框架自带）</span>
           <span class="pp-builtin-sub">勾选=在工作区工具集中（agent 可用）；取消=移出</span>
+          <SvgIcon name="chevron-right" :size="11" class="pp-chevron" :class="{ open: builtinOpen }" />
         </div>
+        <template v-if="builtinOpen">
         <div v-for="g in builtinGroups" :key="g.name" class="pp-builtin-group">
           <div class="pp-builtin-grow">
             <span class="pp-builtin-gname">{{ g.title || g.name }}</span>
@@ -147,6 +150,7 @@
             </div>
           </div>
         </div>
+        </template>
       </div>
       <div v-if="loading && plugins.length === 0" class="pp-loading">
         <SvgIcon name="refresh" :size="16" class="spinner" /><span>加载插件…</span>
@@ -233,6 +237,7 @@ const expanded = reactive({})
 const showNew = ref(false)
 const defining = ref(false)
 const slotsOpen = ref(false) // UI 槽位区默认折叠：打开面板直接看到插件列表
+const builtinOpen = ref(false) // 内置工具区默认收缩（2026-08-20）：点击标题展开
 const newMsg = ref('')
 const newMsgErr = ref(false)
 const activePanelId = ref('')
@@ -886,11 +891,12 @@ onUnmounted(() => {
   background: rgba(212,167,78,.05);
 }
 .pp-builtin-head { display: flex; align-items: center; gap: 8px; }
+.pp-builtin-head:hover { background: rgba(212,167,78,.08); }
 .pp-builtin-title {
   display: flex; align-items: center; gap: 5px;
   font-size: 12px; font-weight: 700; color: #d4a74e; letter-spacing: .3px;
 }
-.pp-builtin-sub { font-size: 10px; color: var(--text-muted); }
+.pp-builtin-sub { font-size: 10px; color: var(--text-muted); flex: 1; }
 .pp-builtin-group {
   display: flex; flex-direction: column; gap: 4px;
   border: 1px solid var(--border-color); border-radius: 6px;
