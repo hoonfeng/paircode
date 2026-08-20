@@ -85,7 +85,12 @@
         <div v-else-if="tab === 'installed'" class="market-list" ref="listRef">
           <!-- 插件分组（★ 2026-08-20 新增：磁盘插件清单） -->
           <div v-if="installedPlugins.length > 0" class="installed-group">
-            <div class="installed-group-title">插件</div>
+            <div class="installed-group-title" @click="toggleGroup('plugin')" :title="collapsedGroups.has('plugin') ? '展开插件列表' : '收起插件列表'">
+              <SvgIcon :name="collapsedGroups.has('plugin') ? 'chevron-right' : 'chevron-down'" :size="12" class="ig-arrow" />
+              <span>插件</span>
+              <span class="ig-count">{{ installedPlugins.length }}</span>
+            </div>
+            <div v-show="!collapsedGroups.has('plugin')">
             <div v-for="item in installedPlugins" :key="'plugin-' + item.name" class="installed-item">
               <div class="ii-icon icon-plugin"><SvgIcon name="puzzle" :size="18" /></div>
               <div class="ii-status-dot" :class="item.state === 'running' ? 'dot-connected' : 'dot-disabled'" :title="item.state === 'running' ? '运行中' : '已停止'"></div>
@@ -105,10 +110,16 @@
                 <button v-if="!isCorePlugin(item.name)" class="ii-btn ii-del" @click="uninstallPlugin(item)" title="卸载：删除插件包目录，可重新从市场安装">卸载</button>
               </div>
             </div>
+            </div>
           </div>
           <!-- MCP 分组 -->
           <div v-if="installedMCPs.length > 0" class="installed-group">
-            <div class="installed-group-title">MCP 服务器</div>
+            <div class="installed-group-title" @click="toggleGroup('mcp')" :title="collapsedGroups.has('mcp') ? '展开 MCP 列表' : '收起 MCP 列表'">
+              <SvgIcon :name="collapsedGroups.has('mcp') ? 'chevron-right' : 'chevron-down'" :size="12" class="ig-arrow" />
+              <span>MCP 服务器</span>
+              <span class="ig-count">{{ installedMCPs.length }}</span>
+            </div>
+            <div v-show="!collapsedGroups.has('mcp')">
             <div v-for="item in installedMCPs" :key="'mcp-' + item.name + '-' + item.level" class="installed-item">
               <div class="ii-icon icon-mcp"><SvgIcon name="package" :size="18" /></div>
               <div class="ii-status-dot" :class="item.enabled === false ? 'dot-disabled' : (item._connected ? 'dot-connected' : 'dot-idle')" :title="item.enabled === false ? '已禁用' : (item._connected ? '已连接' : '未连接')"></div>
@@ -125,10 +136,16 @@
                 <button class="ii-btn ii-del" @click="delMCP(item)" title="删除">删除</button>
               </div>
             </div>
+            </div>
           </div>
           <!-- 技能分组 -->
           <div v-if="installedSkills.length > 0" class="installed-group">
-            <div class="installed-group-title">技能</div>
+            <div class="installed-group-title" @click="toggleGroup('skill')" :title="collapsedGroups.has('skill') ? '展开技能列表' : '收起技能列表'">
+              <SvgIcon :name="collapsedGroups.has('skill') ? 'chevron-right' : 'chevron-down'" :size="12" class="ig-arrow" />
+              <span>技能</span>
+              <span class="ig-count">{{ installedSkills.length }}</span>
+            </div>
+            <div v-show="!collapsedGroups.has('skill')">
             <div v-for="item in installedSkills" :key="'skill-' + item.name + '-' + item.level" class="installed-item">
               <div class="ii-icon icon-skill"><SvgIcon name="code" :size="18" /></div>
               <div class="ii-body">
@@ -151,6 +168,7 @@
                 <button class="ii-btn ii-view" @click="viewSkill(item)" title="查看内容">查看</button>
                 <button v-if="item.level !== 'system'" class="ii-btn ii-del" @click="delSkill(item)" title="删除">删除</button>
               </div>
+            </div>
             </div>
           </div>
           <div v-if="installedMCPs.length === 0 && installedSkills.length === 0 && installedPlugins.length === 0" class="market-empty">
@@ -198,9 +216,11 @@
                 </button>
               </template>
             </div>
-            <button v-else class="mi-uninstall-btn" @click="uninstallItem(item)">
-              <SvgIcon name="trash" :size="12" /> 卸载
-            </button>
+            <div v-else class="mi-install-area">
+              <button class="mi-uninstall-btn" @click="uninstallItem(item)" title="卸载：从配置中移除">
+                <SvgIcon name="trash" :size="12" /> 卸载
+              </button>
+            </div>
           </div>
           <div v-if="!loading && items.length === 0" class="market-empty">
             <div class="me-icon"><SvgIcon name="package" :size="32" /></div>
@@ -238,6 +258,14 @@ const refreshing = ref(false)
 const error = ref('')
 const refreshTip = ref('')
 const listRef = ref(null)
+
+// ── 已安装分组折叠状态（★ 2026-08-20：插件过多可收缩）──
+const collapsedGroups = ref(new Set())
+function toggleGroup(g) {
+  const s = new Set(collapsedGroups.value)
+  s.has(g) ? s.delete(g) : s.add(g)
+  collapsedGroups.value = s
+}
 
 // ── 市场源（插件化：磁盘插件 market-* 声明，动态 tab）──
 const sources = ref([])
@@ -788,10 +816,34 @@ onMounted(() => {
   background: var(--bg-tertiary);
   border-radius: 5px;
   margin: 0 6px 4px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.1s;
+}
+.installed-group-title:hover { background: var(--bg-hover); }
+.ig-arrow { flex-shrink: 0; opacity: 0.7; }
+.ig-count {
+  margin-left: auto;
+  font-size: 10px;
+  background: var(--bg-primary);
+  color: var(--text-muted);
+  padding: 0 6px;
+  border-radius: 8px;
+  line-height: 14px;
 }
 .installed-item {
   display: flex;
   align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 6px;
+  /* ★ 窄面板：操作区换行独立一行，避免挤压文字图标 */
+  flex-wrap: wrap;
+}
+.installed-item:hover { background: var(--bg-hover); }
 .ii-icon {
   width: 36px; height: 36px;
   border-radius: 8px;
@@ -809,16 +861,19 @@ onMounted(() => {
   border-radius: 3px;
   margin-right: 4px;
 }
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
 .ii-body { flex: 1; min-width: 0; }
 .ii-name { font-size: 13px; color: var(--text-primary); font-weight: 600; }
 .ii-desc { font-size: 12px; color: var(--text-muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ii-badge { font-size: 10px; color: var(--text-muted); background: var(--bg-tertiary); padding: 0 6px; border-radius: 3px; display: inline-block; margin-top: 2px; }
-.ii-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.ii-badge { font-size: 10px; color: var(--text-muted); background: var(--bg-tertiary); padding: 0 6px; border-radius: 3px; display: block; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ii-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+  /* ★ 窄面板：操作区独立一行右对齐 */
+  flex-basis: 100%;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
 .ii-btn {
   padding: 4px 10px;
   border-radius: 4px;
@@ -975,11 +1030,8 @@ onMounted(() => {
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
   color: var(--text-secondary);
-  /* ★ 窄面板：卸载按钮独立一行右对齐 */
-  width: 100%;
-  justify-content: flex-end;
-  order: 10;
-  margin-top: 4px;
+  /* 紧凑宽度（容器 mi-install-area 已负责独立行右对齐） */
+  width: auto;
 }
 .mi-uninstall-btn:hover { color: #c03; border-color: #c03; background: rgba(204, 0, 51, 0.08); }
 
