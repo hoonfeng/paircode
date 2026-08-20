@@ -1,7 +1,7 @@
 {
   "name": "tool-harness",
   "purpose": "harness 核心协议工具（read/write/edit/glob/grep/bash/str_replace_editor/run_code）——迁移自内置 RegisterHarnessTools，api 声明在插件、执行走宿主执行器",
-  "version": "0.1.0",
+  "version": "1.0.1",
   "scope": "global",
   "type": "plugin",
   "main": "index.js"

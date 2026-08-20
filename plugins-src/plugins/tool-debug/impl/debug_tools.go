@@ -1868,6 +1868,25 @@ func ClearExecutionLog(root, convID string) {
 }
 
 // ─── 支撑：shell 命令（迁移自 shell.go）───
+// progFiles 返回 Windows 程序安装目录候选（%ProgramFiles%/%ProgramFiles(x86)% 环境变量优先，
+// 空值回退默认 C 盘路径；去重保序）。系统盘非 C 或自定义安装位置时也能动态命中。
+func progFiles() []string {
+	seen := map[string]bool{}
+	var dirs []string
+	add := func(d string) {
+		d = filepath.Clean(d)
+		if d != "" && d != "." && !seen[d] {
+			seen[d] = true
+			dirs = append(dirs, d)
+		}
+	}
+	add(os.Getenv("ProgramFiles"))
+	add(os.Getenv("ProgramFiles(x86)"))
+	add(`C:\Program Files`)
+	add(`C:\Program Files (x86)`)
+	return dirs
+}
+
 func detectBash() (bashPath, msysBin string) {
 	detectedBashOnce.Do(func() {
 		// 1. 内置资源：exe 同目录 bin/bash/usr/bin/bash.exe
@@ -1881,11 +1900,9 @@ func detectBash() (bashPath, msysBin string) {
 				return
 			}
 		}
-		// 2. 系统 Git Bash（回退）
-		for _, cand := range []string{
-			`C:\Program Files\Git\usr\bin\bash.exe`,
-			`C:\Program Files (x86)\Git\usr\bin\bash.exe`,
-		} {
+		// 2. 系统 Git Bash（回退：动态程序目录，非仅 C 盘）
+		for _, d := range progFiles() {
+			cand := filepath.Join(d, `Git`, `usr`, `bin`, `bash.exe`)
 			if st, err := os.Stat(cand); err == nil && !st.IsDir() {
 				detectedBashPath = cand
 				detectedMsysBin = filepath.Dir(cand)

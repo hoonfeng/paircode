@@ -2251,6 +2251,25 @@ var extraSkipDirs = map[string]bool{}
 // isSkipDir 是否应跳过该目录（默认 + 用户配置）。
 func isSkipDir(name string) bool { return defaultSkipDirs[name] || extraSkipDirs[name] }
 
+// progFiles 返回 Windows 程序安装目录候选（%ProgramFiles%/%ProgramFiles(x86)% 环境变量优先，
+// 空值回退默认 C 盘路径；去重保序）。系统盘非 C 或自定义安装位置时也能动态命中。
+func progFiles() []string {
+	seen := map[string]bool{}
+	var dirs []string
+	add := func(d string) {
+		d = filepath.Clean(d)
+		if d != "" && d != "." && !seen[d] {
+			seen[d] = true
+			dirs = append(dirs, d)
+		}
+	}
+	add(os.Getenv("ProgramFiles"))
+	add(os.Getenv("ProgramFiles(x86)"))
+	add(`C:\Program Files`)
+	add(`C:\Program Files (x86)`)
+	return dirs
+}
+
 func findTesseract(root string) string {
 	// 1. 可执行文件同目录下的 bin/tesseract/（发布包模式，工具统一归到 bin/）
 	if exe, err := os.Executable(); err == nil {
@@ -2294,12 +2313,9 @@ func findTesseract(root string) string {
 		return path
 	}
 
-	// 6. Windows 常见安装路径
-	candidates := []string{
-		`C:\Program Files\Tesseract-OCR\tesseract.exe`,
-		`C:\Program Files (x86)\Tesseract-OCR\tesseract.exe`,
-	}
-	for _, candidate := range candidates {
+	// 6. Windows 常见安装路径（动态程序目录，非仅 C 盘）
+	for _, d := range progFiles() {
+		candidate := filepath.Join(d, `Tesseract-OCR`, `tesseract.exe`)
 		if _, err := os.Stat(candidate); err == nil {
 			return candidate
 		}
