@@ -42,32 +42,20 @@ return {
     //     pluginSettings['agentloop'] 保持业务读取兼容；新字段 binding 全局）
     //   · instructions 组：系统级指令（binding → systemInstructions）
     // ═══════════════════════════════════════════════════════════
-    // ── AI：服务商与模型 ──
+    // ── AI：多例配置列表（★ 2026-08-20 改变模式：不再单例表单+预设分组，
+    //    主视图直接列出已添加的配置；点「添加新配置」弹出表单去设置模型和 Key）──
+    // type='preset-manager'：SettingsModal 在 AI tab 内渲染「AI 配置」列表
+    //   （添加/编辑/应用/删除），数据经 /api/ai-presets（config/ai-presets.json）。
+    //   每条配置 = 完整 AI 配置快照（provider/baseURL/apiKey/执行-规划-审核模型）。
+    //   「应用」整套写回 settings 顶层（provider/baseURL/apiKey/executeModel…），
+    //   装配器仍按 settings 顶层读取——配置列表是这些字段的唯一维护入口。
+    //   settings 顶层现有值（旧配置）保留；应用某条配置后即被该配置覆盖。
     ctx.registerSettings({
       key: 'ai',
       title: 'AI',
       fields: [
-          { name: 'provider', label: '服务商', type: 'select', binding: 'provider',
-            optionsSource: 'providers', linkFields: ['baseURL', 'apiKey'],
-            options: ['deepseek', '硅基', 'kimi', 'anthropic', 'custom', 'openai-compatible'],
-            hint: '模型服务商（切换自动带出该服务商的 Base URL 与 API Key）' },
-        { name: 'baseURL', label: 'Base URL', type: 'text', binding: 'baseURL',
-          placeholder: 'https://api.deepseek.com/v1', hint: 'API 端点（custom 服务商必填，切换服务商自动带出）' },
-        { name: 'apiKey', label: 'API Key', type: 'password', binding: 'apiKey',
-          placeholder: 'sk-…', hint: '★ 按服务商独立保存：切换服务商自动带出该服务商密钥；修改后保存设置即写回' },
-          { name: 'executeModel', label: '执行模型', type: 'select', binding: 'executeModel',
-            optionsSource: 'models', placeholder: 'deepseek-v4-flash', hint: '执行 Agent 使用的模型（下拉=按服务商预设）' },
-          { name: 'planModel', label: '规划模型', type: 'select', binding: 'planModel',
-            optionsSource: 'models', placeholder: 'deepseek-v4-pro', hint: '规划 Agent 使用的模型（更强推理）' },
-          { name: 'reviewModel', label: '审核模型', type: 'select', binding: 'reviewModel',
-            optionsSource: 'models', placeholder: 'deepseek-v4-pro', hint: '审核 Agent 使用的模型' },
-          // ── AI 配置预设（★ 2026-08-20 移入 AI tab）：把配好的一份完整配置命名保存为预设 ──
-          // type='preset-manager'：SettingsModal 在 AI tab 内渲染 CRUD 面板（保存当前/应用/改名/删除），
-          // 数据经 /api/ai-presets（config/ai-presets.json）。每条预设 = 完整配置快照
-          // （provider/baseURL/apiKey/模型/温度/思考/输出上限/上下文窗口）。「应用」即整套写回 settings，
-          // 对话面板随 settings 变化自动同步（聊天输入区只保留模型/服务商/思考下拉，无预设下拉）。
-          { name: 'presets', label: 'AI 配置预设', type: 'preset-manager',
-            hint: '把配好的 AI 配置（服务商/模型/Key/参数）保存为命名预设；点「应用」整套配置生效，对话无需逐项重配。' },
+          { name: 'presets', label: 'AI 配置', type: 'preset-manager',
+            hint: '已添加的 AI 配置列表（每套含服务商/模型/Key）。点「＋ 添加新配置」弹出表单设置模型和 Key；点「应用」整套配置生效。' },
       ],
     })
 
