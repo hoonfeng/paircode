@@ -150,6 +150,7 @@ async function scanAll() {
   const plugins = listPlugins()
   const checks = await Promise.all(plugins.map((p) => remoteCheck(p.name)))
   const hashes = readHashes()
+  const autoRefresh = [] // 仅产物变化（重编译/重打包）→ 统一刷新基线，不显示不一致
   const out = []
   for (let i = 0; i < plugins.length; i++) {
     const p = plugins[i]
@@ -162,17 +163,21 @@ async function scanAll() {
     const artSame = !!rec && !!h.artifact && rec.artifact === h.artifact
     const st = rc.ok ? statusOf(p.version, rc.version) : { code: 'check-failed', label: '检测失败' }
     let note = ''
-    // 版本相同但指纹不同 → 细分：源码变=实质变更（自动 bump）；仅产物变=重编译/重打包（刷新基线）
+    // 版本相同但指纹不同 → 细分：源码变=实质变更（自动 bump）；仅产物变=重编译/重打包（自动刷新基线，不显示不一致）
     if (rc.ok && st.code === 'same') {
       if (rec && !srcSame) {
         st.code = 'changed'; st.label = '内容已变'
         note = `源码指纹与上次发布不一致（${rec.src.slice(0, 8)}… ≠ ${h.src.slice(0, 8)}…），版本未 bump，发布时将自动升 patch`
       } else if (rec && srcSame && !artSame) {
-        st.code = 'artifact-changed'; st.label = '仅产物变'
-        note = '构建产物与记录不一致（可能为重编译/重打包），源码未变 → 不触发发布，发布时将刷新产物基线'
+        // 仅构建产物变化（重编译/重打包）→ 自动刷新基线，状态视为已一致（不打扰）
+        autoRefresh.push({ pkgName, src: h.src, artifact: h.artifact, version: p.version })
+        st.code = 'same'; st.label = '已一致'
+        note = '构建产物已变化（重编译/重打包），基线已自动刷新；如需发布请先 bump 版本'
       } else if (!rec) {
         st.code = 'baseline'; st.label = '基线'
         note = '线上已是最新版本，首次建立内容指纹基线（本次跳过）'
+        // 无记录（含旧格式迁移）→ 一并写盘建基线，下次扫描即稳定为「已一致」
+        autoRefresh.push({ pkgName, src: h.src, artifact: h.artifact, version: p.version })
       }
     }
     out.push({
@@ -186,6 +191,12 @@ async function scanAll() {
       checkError: rc.ok ? '' : rc.reason,
       publishable: rc.ok && (st.code === 'unpublished' || st.code === 'update' || st.code === 'changed'),
     })
+  }
+  // 仅产物变化（重编译/重打包）统一写盘刷新基线（幂等：刷新后下次扫描即一致）
+  if (autoRefresh.length > 0) {
+    const hh = readHashes()
+    for (const r of autoRefresh) hh[r.pkgName] = { version: r.version, src: r.src, artifact: r.artifact }
+    saveHashes(hh)
   }
   return { plugins: out, registry: REG, pkgPrefix: SCOPED + '/', root }
 }
@@ -264,17 +275,20 @@ function dirHashSplit(dir) {
   files.sort((a, b) => (a.rel < b.rel ? -1 : 1))
   const src = crypto.createHash('sha256')
   const art = crypto.createHash('sha256')
+  let hasArtifact = false
   for (const f of files) {
-    const h = isArtifactRel(f.rel) ? art : src
-    h.update(f.rel); h.update('\0'); h.update(f.data)
+    if (isArtifactRel(f.rel)) { art.update(f.rel); art.update('\0'); art.update(f.data); hasArtifact = true }
+    else { src.update(f.rel); src.update('\0'); src.update(f.data) }
   }
-  return { src: src.digest('hex'), artifact: art.digest('hex') }
+  // 空产物归一化：无 bin/assets 的纯 js 插件 artifact 恒为 ''（与旧记录迁移值一致，不误报）
+  return { src: src.digest('hex'), artifact: hasArtifact ? art.digest('hex') : '' }
 }
-// 旧记录迁移：{version, hash} → {version, src, artifact}（旧 hash 视为 src；artifact 未知 → 触发一次产物基线刷新）
+// 旧记录迁移：旧格式 {version, hash} 的 hash 是「完整内容旧算法」，与新分层 src（只算源码）
+// 算法不兼容 → 强行比对必误判 → 视为无记录重建基线（保守不 bump、不发布）
 function migrateRec(rec) {
   if (!rec) return null
-  if (rec.hash && !rec.src) return { version: rec.version, src: rec.hash, artifact: rec.artifact || '' }
-  return rec
+  if (rec.src) return rec // 新格式 {version, src, artifact} 直接用
+  return null
 }
 function dirHash(dir) {
   const files = []
@@ -382,10 +396,10 @@ async function publishOne(name, { onLog = log } = {}) {
       return { name, ok: false, error: `自动 bump 版本失败: ${String(e.message || e).slice(0, 120)}` }
     }
   } else if (st.code === 'same' && rec && rec.src === h.src && rec.artifact !== h.artifact) {
-    // 仅构建产物变化（重编译/重打包）→ 刷新产物基线，不 bump 不发布
+    // 仅构建产物变化（重编译/重打包）→ 刷新产物基线，不 bump 不发布（视为已一致）
     hashes[pkgName] = { version: local, src: h.src, artifact: h.artifact }
     saveHashes(hashes)
-    return { name, ok: false, skipped: true, reason: '仅构建产物变化（重编译/重打包），源码未变 → 已刷新产物基线，不发布' }
+    return { name, ok: false, skipped: true, reason: '已一致（构建产物基线已自动刷新，重编译/重打包不触发发布）' }
   } else if (st.code === 'same' && !rec) {
     // 首次基线：记录本次指纹并跳过（与线上内容一致，无需发布）
     hashes[pkgName] = { version: local, src: h.src, artifact: h.artifact }

@@ -108,17 +108,20 @@ function dirHashSplit(dir) {
   files.sort((a, b) => (a.rel < b.rel ? -1 : 1))
   const src = crypto.createHash('sha256')
   const art = crypto.createHash('sha256')
+  let hasArtifact = false
   for (const f of files) {
-    const h = isArtifactRel(f.rel) ? art : src
-    h.update(f.rel); h.update('\0'); h.update(f.data)
+    if (isArtifactRel(f.rel)) { art.update(f.rel); art.update('\0'); art.update(f.data); hasArtifact = true }
+    else { src.update(f.rel); src.update('\0'); src.update(f.data) }
   }
-  return { src: src.digest('hex'), artifact: art.digest('hex') }
+  // 空产物归一化：无 bin/assets 的纯 js 插件 artifact 恒为 ''（与旧记录迁移值一致，不误报）
+  return { src: src.digest('hex'), artifact: hasArtifact ? art.digest('hex') : '' }
 }
-// 旧记录迁移：{version, hash} → {version, src, artifact}（旧 hash 视为 src；artifact 未知 → 触发一次产物基线刷新）
+// 旧记录迁移：旧格式 {version, hash} 的 hash 是「完整内容旧算法」，与新分层 src（只算源码）
+// 算法不兼容 → 强行比对必误判 → 视为无记录重建基线（保守不 bump、不发布）
 function migrateRec(rec) {
   if (!rec) return null
-  if (rec.hash && !rec.src) return { version: rec.version, src: rec.hash, artifact: rec.artifact || '' }
-  return rec
+  if (rec.src) return rec // 新格式 {version, src, artifact} 直接用
+  return null
 }
 function dirHash(dir) {
   return dirHashSplit(dir).src + dirHashSplit(dir).artifact
@@ -230,10 +233,10 @@ function main() {
         continue
       }
       if (rec.src === h.src && rec.artifact !== h.artifact) {
-        // 仅构建产物变化（重编译/重打包）→ 刷新产物基线，不 bump 不发布
+        // 仅构建产物变化（重编译/重打包）→ 刷新产物基线，不 bump 不发布（视为已一致，不打扰）
         hashes[pkgName] = { version: p.pkg.version, src: h.src, artifact: h.artifact }
         saveHashes(hashes)
-        console.log(`  ⏭ ${pkgName} 仅构建产物变化（重编译/重打包），源码未变 → 已刷新产物基线，不发布`)
+        console.log(`  ⏭ ${pkgName} 已一致（构建产物基线自动刷新：重编译/重打包不触发发布）`)
         ok.push({ name: p.name, pkgName, out: `skip@${existing}（产物基线刷新）` })
         continue
       }

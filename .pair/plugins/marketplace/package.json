@@ -1,7 +1,7 @@
 {
   "name": "marketplace",
   "purpose": "市场（全插件化）：npm/GitHub 实时搜索 + 安装/卸载 MCP/技能/工具集/npm 插件 + 市场面板 UI + agent 市场工具",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "scope": "global",
   "type": "plugin",
   "main": "index.js",
