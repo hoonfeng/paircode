@@ -63,7 +63,7 @@
     "format": "zip",
     "include": [
       {
-        "src": "config/models.json",
+        "src": "config/models.template.json",
         "dst": "config/models.json",
         "optional": true
       },
@@ -73,7 +73,7 @@
         "optional": true
       },
       {
-        "src": "config/mcp.json",
+        "src": "config/mcp.template.json",
         "dst": "config/mcp.json",
         "optional": true
       },
