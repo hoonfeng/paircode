@@ -67,9 +67,13 @@ function listPlugins() {
 
 // 检查 npm 上是否已存在（返回已发布版本或 null）
 function npmExists(pkgName) {
+  // 用 dist-tags 端点检测（registry 对新包 metadata 可能 404，但 dist-tags 立即可查）
   try {
-    const out = execSync(`npm view ${pkgName} version --registry=${REGISTRY} --json 2>/dev/null`, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
-    return String(out).trim().replace(/^"|"$/g, '') || null
+    const out = execSync(`curl -s -w "\\n%{http_code}" "${REGISTRY}/-/package/${pkgName}/dist-tags"`, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+    const lines = out.trim().split('\n')
+    const code = lines[lines.length - 1]
+    if (code !== '200') return null
+    try { return JSON.parse(lines.slice(0, -1).join('\n')).latest || null } catch { return null }
   } catch { return null }
 }
 
@@ -95,6 +99,13 @@ function main() {
   for (const p of plugins) {
     const pkgName = `@paircode/${p.name}`
     const dst = path.join(publishDir, p.name)
+    // 已存在则跳过（避免 403 cannot publish over versions）
+    const existing = npmExists(pkgName)
+    if (existing) {
+      console.log(`  ⏭ ${pkgName} 已存在（@${existing}），跳过`)
+      ok.push({ name: p.name, pkgName, out: `skip@${existing}` })
+      continue
+    }
     try {
       // 1. 整目录拷贝（保留 index.js/client.js/assets/bin/）
       copyDir(p.dir, dst)
