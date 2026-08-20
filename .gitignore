@@ -72,3 +72,6 @@ build_err.txt
 # Python temporary scripts
 *.py
 internal/agent/.pair/
+
+# PairCode 内置 bash（含 npm 登录凭据 .npmrc，禁止进仓库）
+bin/bash/

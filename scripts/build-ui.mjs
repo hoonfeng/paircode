@@ -83,7 +83,7 @@ for (const r of regions) {
         },
         outDir,
         emptyOutDir: false,
-        minify: false,
+        minify: 'esbuild',
         cssCodeSplit: false,
         assetsInlineLimit: 1000000, // 小资源内联（logo.svg 等）
         rollupOptions: {

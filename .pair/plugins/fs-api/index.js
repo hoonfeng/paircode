@@ -43,8 +43,50 @@ const ok = (data) => ({ status: 200, headers: { 'Content-Type': 'application/jso
     }
 
     // ── list：目录列表 [{name,isDir,size,modTime}] ──
+    // ★ browse=1：目录浏览器模式（添加工作区/新建项目选目录需要浏览全盘）。
+    //   ctx.fs 是工作区受限服务（root 为空/越界都会报错），改用 ctx.bash 只读列目录
+    //   （bash 不受工作区限制；输出经 UTF-8/GBK 自动转换，中文目录名安全）。
     const fsList = (req) => {
       const p = fsPath(qp(req, 'path') || '')
+      if (qp(req, 'browse') === '1') {
+        try {
+          // ★ 路径规范化：盘根（F:\）保留末尾反斜杠——PowerShell 里 'F:' 是
+          //   "F 盘当前位置" 而非盘根；普通目录才去末尾斜杠。
+          const m = /^([a-zA-Z]):[\\/]?$/.exec(String(p))
+          const dir = m ? m[1] + ':\\' : String(p).replace(/[\\/]+$/, '')
+          // PowerShell 脚本：单引号转义路径 → UTF-16LE base64（-EncodedCommand）。
+          // 这样 bash -c 传输的是纯 ASCII，无引号嵌套/中文编码乱码问题。
+          // ★ goja 沙箱无 Buffer 且 btoa 对 >127 字符行为不可靠，自写 base64。
+          // ★ $ProgressPreference 抑制 progress 流（否则 CLIXML 写 stderr 混入
+          //   stdout 破坏 JSON）；bash 侧 2>/dev/null 双保险。
+          const ps = `$ProgressPreference='SilentlyContinue'; Get-ChildItem -Force -LiteralPath '${dir.replace(/'/g, "''")}' | ForEach-Object { [PSCustomObject]@{ n = $_.Name; d = $_.PSIsContainer; s = $_.Length } } | ConvertTo-Json -Compress`
+          // UTF-16LE → 字节 → base64（纯 JS，无 btoa）
+          const B64CH = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+          const bytes = []
+          for (let i = 0; i < ps.length; i++) {
+            const c = ps.charCodeAt(i)
+            bytes.push(c & 0xff, (c >> 8) & 0xff)
+          }
+          let b64 = ''
+          for (let i = 0; i < bytes.length; i += 3) {
+            const b0 = bytes[i], b1 = bytes[i + 1], b2 = bytes[i + 2]
+            b64 += B64CH[b0 >> 2]
+            b64 += B64CH[((b0 & 3) << 4) | (b1 === undefined ? 0 : b1 >> 4)]
+            if (b1 === undefined) { b64 += '=='; break }
+            b64 += B64CH[((b1 & 15) << 2) | (b2 === undefined ? 0 : b2 >> 6)]
+            if (b2 === undefined) { b64 += '='; break }
+            b64 += B64CH[b2 & 63]
+          }
+          const r = ctx.bash.exec('powershell -NoProfile -NonInteractive -EncodedCommand ' + b64 + ' 2>/dev/null')
+          if (r && r.error) return err('browse 失败: ' + r.error + (r && r.output ? ' | out: ' + String(r.output).slice(0, 200) : ''))
+          const text = (r && r.output || '').trim()
+          if (!text) return ok([])
+          let arr = JSON.parse(text)
+          if (!Array.isArray(arr)) arr = arr ? [arr] : []
+          const out = arr.map(x => ({ name: x.n, isDir: !!x.d, size: x.s || 0, modTime: '' }))
+          return ok(out)
+        } catch (e) { return err('browse 失败: ' + String(e && e.message || e)) }
+      }
       try {
         const names = ctx.fs.readdir(p) || []
         const out = []

@@ -447,7 +447,8 @@ async function browseGoUp() {
 
 async function loadBrowseDir(path) {
   try {
-    browseEntries.value = await api.apiGet('/fs/list', { path })
+    // browse=1：目录浏览器走不受限的只读列目录（可浏览任意磁盘路径）
+    browseEntries.value = await api.apiGet('/fs/list', { path, browse: '1' })
   } catch (err) { browseError.value = err.message }
 }
 
