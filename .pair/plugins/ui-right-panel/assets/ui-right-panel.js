@@ -35585,12 +35585,21 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
       const composerModels = vue.computed(() => {
         const p2 = aiPresets.value || {};
         const names = Object.keys(p2);
-        if (names.length) {
-          return [...new Set(names.map((n2) => p2[n2] && p2[n2].executeModel || "").filter(Boolean))];
-        }
+        if (names.length) return names;
         const m2 = modelData.value && modelData.value.models || {};
         return m2[composerProvider.value] || [];
       });
+      function presetNameOf(s2) {
+        const p2 = aiPresets.value || {};
+        const names = Object.keys(p2);
+        if (!names.length) return "";
+        if (s2.preset && p2[s2.preset]) return s2.preset;
+        const hit = names.find((n2) => {
+          const c2 = p2[n2];
+          return c2 && c2.executeModel === s2.executeModel && (!c2.provider || c2.provider === s2.provider);
+        });
+        return hit || "";
+      }
       async function loadModelData() {
         try {
           modelData.value = await api.getModels();
@@ -35605,35 +35614,36 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
       function initComposerModel() {
         const s2 = uiState_js.state.settings || {};
         composerProvider.value = s2.provider || "";
-        if (s2.executeModel) composerModel.value = s2.executeModel;
         const p2 = aiPresets.value || {};
         const names = Object.keys(p2);
         if (names.length) {
-          const modelSet = [...new Set(names.map((n2) => p2[n2] && p2[n2].executeModel || "").filter(Boolean))];
-          if (modelSet.length && modelSet.indexOf(composerModel.value) === -1) {
-            composerModel.value = modelSet[0];
-            onCmpModelChange();
-          }
+          const name = presetNameOf(s2);
+          composerModel.value = name || names[0];
+          if (!name) onCmpModelChange();
+        } else {
+          composerModel.value = s2.executeModel || "";
         }
       }
       async function onCmpModelChange() {
-        if (!composerProvider.value || !composerModel.value) return;
-        const md = modelData.value || {};
-        const prov = composerProvider.value;
+        if (!composerModel.value) return;
         const presets = aiPresets.value || {};
-        const hit = Object.entries(presets).find(([, c2]) => c2 && c2.executeModel === composerModel.value && (!prov || !c2.provider || c2.provider === prov));
-        if (hit) {
-          const [name, c2] = hit;
-          const top3 = { ...uiState_js.state.settings || {}, preset: name, provider: c2.provider, baseURL: c2.baseURL, apiKey: c2.apiKey, executeModel: c2.executeModel, planModel: c2.planModel, reviewModel: c2.reviewModel };
+        const names = Object.keys(presets);
+        if (names.length) {
+          const c2 = presets[composerModel.value];
+          if (!c2) return;
+          const top3 = { ...uiState_js.state.settings || {}, preset: composerModel.value, provider: c2.provider, baseURL: c2.baseURL, apiKey: c2.apiKey, executeModel: c2.executeModel, planModel: c2.planModel, reviewModel: c2.reviewModel };
           try {
             await api.apiPut("/settings", { settings: top3, pluginSettings: uiState_js.state.settings && uiState_js.state.settings.pluginSettings || {} });
             uiState_js.state.settings = top3;
-            composerProvider.value = c2.provider || prov;
+            composerProvider.value = c2.provider || composerProvider.value;
           } catch (e3) {
-            window.$toast && window.$toast("模型切换失败: " + (e3.message || e3), "error");
+            window.$toast && window.$toast("配置切换失败: " + (e3.message || e3), "error");
           }
           return;
         }
+        if (!composerProvider.value) return;
+        const md = modelData.value || {};
+        const prov = composerProvider.value;
         const top2 = { ...uiState_js.state.settings || {}, provider: prov, executeModel: composerModel.value };
         if (md.providerBaseURLs && md.providerBaseURLs[prov]) top2.baseURL = md.providerBaseURLs[prov];
         if (md.providerKeys && md.providerKeys[prov]) top2.apiKey = md.providerKeys[prov];
@@ -36693,7 +36703,13 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
       }, { immediate: true });
       vue.watch(() => [uiState_js.state.settings && uiState_js.state.settings.provider, uiState_js.state.settings && uiState_js.state.settings.executeModel], ([prov, model]) => {
         if (prov && composerProvider.value !== prov) composerProvider.value = prov;
-        if (model && composerModel.value !== model) composerModel.value = model;
+        const names = Object.keys(aiPresets.value || {});
+        if (names.length) {
+          const name = presetNameOf(uiState_js.state.settings || {});
+          if (name && composerModel.value !== name) composerModel.value = name;
+        } else if (model && composerModel.value !== model) {
+          composerModel.value = model;
+        }
       });
       async function loadWorkspaceReviewConfig() {
         try {
@@ -37806,7 +37822,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                   "onUpdate:modelValue": _cache[7] || (_cache[7] = ($event) => composerModel.value = $event),
                                   class: "cmp-sel cmp-model",
                                   onChange: onCmpModelChange,
-                                  title: "执行模型（配置在设置面板「AI」配置 tab 维护，应用后随 settings 同步）"
+                                  title: "AI 配置（设置面板「AI」配置 tab 添加的配置，选中整套应用）"
                                 },
                                 [
                                   (vue.openBlock(true), vue.createElementBlock(
@@ -37954,7 +37970,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
       };
     }
   };
-  const RightPanel = /* @__PURE__ */ _export_sfc(_sfc_main$1, [["__scopeId", "data-v-30ad69e4"]]);
+  const RightPanel = /* @__PURE__ */ _export_sfc(_sfc_main$1, [["__scopeId", "data-v-260dd4b6"]]);
   const TOTAL_EXTRA = 4 + 1 + 200;
   const _sfc_main = {
     __name: "UiRightPanel",
