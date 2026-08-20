@@ -493,7 +493,7 @@ func HandleModels(w http.ResponseWriter, r *http.Request) {
 // HandleAiPresets AI 配置预设管理（GET 查询 / POST 保存-删除-应用 / PUT 全量保存）。
 // ★ 2026-08-20 AI 配置预设：把「一份完整 AI 配置」命名保存为预设，对话面板快速切换。
 //   body (POST): { "action": "save", "name": "预设名", "preset": {...} }   —— 保存/覆盖
-//                { "action": "apply", "name": "预设名" }                    —— 应用（写回 settings）
+//                { "action": "apply", "name": "预设名" }                    —— 应用（只写 settings.preset，装配时按 preset 展开）
 //                { "action": "delete", "name": "预设名" }                   —— 删除
 //   body (PUT):  { "presets": { "<预设名>": {...} } }                       —— 全量替换
 func HandleAiPresets(w http.ResponseWriter, r *http.Request) {

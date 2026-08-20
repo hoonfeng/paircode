@@ -46,10 +46,10 @@ return {
     //    主视图直接列出已添加的配置；点「添加新配置」弹出表单去设置模型和 Key）──
     // type='preset-manager'：SettingsModal 在 AI tab 内渲染「AI 配置」列表
     //   （添加/编辑/应用/删除），数据经 /api/ai-presets（config/ai-presets.json）。
-    //   每条配置 = 完整 AI 配置快照（provider/baseURL/apiKey/执行-规划-审核模型）。
-    //   「应用」整套写回 settings 顶层（provider/baseURL/apiKey/executeModel…），
-    //   装配器仍按 settings 顶层读取——配置列表是这些字段的唯一维护入口。
-    //   settings 顶层现有值（旧配置）保留；应用某条配置后即被该配置覆盖。
+    //   每条配置 = 完整 AI 配置快照（provider/baseURL/apiKey/模型/参数）。
+    //   「应用」只把配置名写入 settings.preset——装配时按 preset 从 ai-presets.json
+    //   展开整套配置（key/模型/参数唯一来源），settings 不再冗余存 key/模型。
+    //   settings 顶层现有值仅兜底（兼容无预设旧配置）；应用某条配置后装配即用该配置。
     ctx.registerSettings({
       key: 'ai',
       title: 'AI',
@@ -113,8 +113,10 @@ return {
     ctx.providerFactory.register((current) => {
       const s = (ctx.app && ctx.app.settings) || {};
       const over = {};
-      // ★ baseURL/apiKey：Go 端 ResolveProviderParams 已按「settings 顶层优先、models.json
-      //   服务商默认兜底」注入 current；此处仅当 current 为空时用 settings 全局字段兜底。
+      // ★ baseURL/apiKey/模型：Go 端 ResolveProviderParams 已按「激活预设 → settings 顶层
+      //   → models.json 服务商」展开注入 current；此处仅当 current 为空时用 settings 兜底。
+      // ★ 统一模型（2026-08-21）：不再拆分 规划/审核 模型，Go 端 planModel/reviewModel 已
+      //   统一为执行模型，此处直接透传。
       const baseURL = (current.baseURL || s.baseURL || '').trim();
       const apiKey = (current.apiKey || s.apiKey || '').trim();
       const model = (current.model || s.executeModel || s.model || '').trim();

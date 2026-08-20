@@ -12,15 +12,17 @@ import (
 )
 
 // AppSettings 持久化设置 —— 字段对齐参考 settings.ts（扁平存储；分组注释）。
+// ★ 2026-08-21 AI 业务字段（provider/baseURL/apiKey/模型）加 omitempty：
+//   settings 不再存 key/模型（唯一来源 ai-presets.json），Save 时不把空字段写回文件。
 type AppSettings struct {
-	Provider         string `json:"provider"`
+	Provider         string `json:"provider,omitempty"`
 	Preset           string `json:"preset"` // ★ 2026-08-20 当前 AI 配置预设名（对话面板选预设时记录，UI 高亮用）
-	BaseURL          string `json:"baseURL"`
-	APIKey           string `json:"apiKey"`
-	Model            string `json:"model"` // 兼容旧单模型字段（迁移→ExecuteModel）
-	PlanModel        string `json:"planModel"`
-	ExecuteModel     string `json:"executeModel"`
-	ReviewModel      string `json:"reviewModel"`
+	BaseURL          string `json:"baseURL,omitempty"`
+	APIKey           string `json:"apiKey,omitempty"`
+	Model            string `json:"model,omitempty"` // 兼容旧单模型字段（迁移→ExecuteModel）
+	PlanModel        string `json:"planModel,omitempty"`
+	ExecuteModel     string `json:"executeModel,omitempty"`
+	ReviewModel      string `json:"reviewModel,omitempty"`
 	Temperature      string `json:"temperature"`
 	ThinkingMode     string `json:"thinkingMode"`
 	MaxTokens        int    `json:"maxTokens"`
@@ -103,8 +105,11 @@ func SettingsPath() string { return filepath.Join(ConfigDir(), "settings.json") 
 // Default 默认值。
 func Default() AppSettings {
 	return AppSettings{
-		Provider: "deepseek", BaseURL: "https://api.deepseek.com/v1",
-		PlanModel: "deepseek-v4-pro", ExecuteModel: "deepseek-v4-flash", ReviewModel: "deepseek-v4-pro",
+		// ★ 2026-08-21 AI 业务字段不再设默认（配置来源收敛到 ai-presets.json：
+		//   装配按 settings.preset 展开；无预设时 models.json 服务商 key/baseURL 兜底。
+		//   全局参数（温度/思考/输出/上下文）保留默认作为装配兜底。
+		Provider: "", BaseURL: "", APIKey: "",
+		PlanModel: "", ExecuteModel: "", ReviewModel: "",
 		Temperature: "0.3", ThinkingMode: "high", MaxTokens: 131072, ContextMaxTokens: 64000,
 		MaxIterations: 50, AutoIterate: true, ReviewMode: "auto",
 		Theme: "dark", FontSize: 14, TabSize: 2,

@@ -28,20 +28,8 @@
         <input v-model="form.apiKey" type="password" placeholder="sk-…" />
       </div>
       <div class="mgm-field">
-        <span class="mgm-field-label">执行模型</span>
+        <span class="mgm-field-label">模型</span>
         <select v-model="form.executeModel" class="mgm-select">
-          <option v-for="m in formModels" :key="m" :value="m">{{ m }}</option>
-        </select>
-      </div>
-      <div class="mgm-field">
-        <span class="mgm-field-label">规划模型</span>
-        <select v-model="form.planModel" class="mgm-select">
-          <option v-for="m in formModels" :key="m" :value="m">{{ m }}</option>
-        </select>
-      </div>
-      <div class="mgm-field">
-        <span class="mgm-field-label">审核模型</span>
-        <select v-model="form.reviewModel" class="mgm-select">
           <option v-for="m in formModels" :key="m" :value="m">{{ m }}</option>
         </select>
       </div>
@@ -68,8 +56,7 @@
         </div>
         <div class="pm-preview">
           <div class="pm-snap-row"><span>服务商</span><b>{{ (presets[n] || {}).provider || '—' }}</b></div>
-          <div class="pm-snap-row"><span>执行模型</span><b>{{ (presets[n] || {}).executeModel || '—' }}</b></div>
-          <div class="pm-snap-row"><span>规划 / 审核</span><b>{{ (presets[n] || {}).planModel || '—' }} / {{ (presets[n] || {}).reviewModel || '—' }}</b></div>
+          <div class="pm-snap-row"><span>模型</span><b>{{ (presets[n] || {}).executeModel || '—' }}</b></div>
           <div class="pm-snap-row"><span>API Key</span><b>{{ keyMask((presets[n] || {}).apiKey) }}</b></div>
         </div>
       </div>
@@ -106,7 +93,7 @@ const formModels = computed(() => {
   const m = (modelData.value && modelData.value.models) || {}
   return m[form.value.provider] || []
 })
-const form = ref({ name: '', provider: '', baseURL: '', apiKey: '', executeModel: '', planModel: '', reviewModel: '' })
+const form = ref({ name: '', provider: '', baseURL: '', apiKey: '', executeModel: '' })
 
 function showError(msg) { error.value = msg; setTimeout(() => { if (error.value === msg) error.value = '' }, 4000) }
 function keyMask(k) { return k ? (k.slice(0, 10) + '…') : '—' }
@@ -135,23 +122,24 @@ function providerInfo(prov) {
   }
 }
 
-// 打开添加表单（服务商默认当前生效的，带出 BaseURL/Key）
-// ★ 优先带出 settings 当前生效值（预设应用写入的 baseURL/apiKey/模型），
-//   其次 models.json 服务商默认（providerBaseURLs/providerKeys）。
+// 打开添加表单（服务商默认当前生效的，带出 BaseURL/Key/模型）
+// ★ 优先带出激活预设（settings.preset → ai-presets 整套配置），
+//   其次 settings 当前生效值，最后 models.json 服务商默认。
 function openAdd() {
   const s = (window && window.__PAIRCODE_CORE && window.__PAIRCODE_CORE.uiState && window.__PAIRCODE_CORE.uiState.state
     && window.__PAIRCODE_CORE.uiState.state.settings) || {}
-  const prov = (s.provider && providers.value.includes(s.provider)) ? s.provider : (providers.value[0] || '')
+  let base = {}
+  if (s.preset && presets.value && presets.value[s.preset]) base = presets.value[s.preset]
+  const prov = (base.provider || s.provider || providers.value[0] || '')
   const info = providerInfo(prov)
   const ms = info.models
+  const model = (base.executeModel || s.executeModel || '')
   form.value = {
     name: '',
     provider: prov,
-    baseURL: (s.baseURL || info.baseURL || ''),
-    apiKey: (s.apiKey || info.apiKey || ''),
-    executeModel: (ms.includes(s.executeModel) ? s.executeModel : (ms[0] || '')),
-    planModel: (ms.includes(s.planModel) ? s.planModel : (ms[0] || '')),
-    reviewModel: (ms.includes(s.reviewModel) ? s.reviewModel : (ms[0] || '')),
+    baseURL: (base.baseURL || s.baseURL || info.baseURL || ''),
+    apiKey: (base.apiKey || s.apiKey || info.apiKey || ''),
+    executeModel: (ms.includes(model) ? model : (ms[0] || '')),
   }
   editingName.value = ''
   showForm.value = true
@@ -166,8 +154,6 @@ function openEdit(name) {
     baseURL: p.baseURL || '',
     apiKey: p.apiKey || '',
     executeModel: p.executeModel || '',
-    planModel: p.planModel || '',
-    reviewModel: p.reviewModel || '',
   }
   editingName.value = name
   showForm.value = true
@@ -182,8 +168,6 @@ function onProviderChange() {
   form.value.baseURL = info.baseURL || ''
   form.value.apiKey = info.apiKey || ''
   form.value.executeModel = info.models.includes(form.value.executeModel) ? form.value.executeModel : (info.models[0] || '')
-  form.value.planModel = info.models.includes(form.value.planModel) ? form.value.planModel : (info.models[0] || '')
-  form.value.reviewModel = info.models.includes(form.value.reviewModel) ? form.value.reviewModel : (info.models[0] || '')
 }
 
 // ★ 联动双保险：除 @change 外再挂 watch（ov 非空 = 用户在表单内切换服务商，
@@ -201,13 +185,11 @@ async function confirmSave() {
   saving.value = true
   error.value = ''
   try {
-    const preset = {
+  const preset = {
       provider: form.value.provider,
       baseURL: form.value.baseURL,
       apiKey: form.value.apiKey,
       executeModel: form.value.executeModel,
-      planModel: form.value.planModel,
-      reviewModel: form.value.reviewModel,
     }
     if (editingName.value && editingName.value !== name) {
       // 改名：PUT 全量（新名入库 + 旧名删除），并同步 settings.preset

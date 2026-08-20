@@ -261,12 +261,14 @@ const composerModels = computed(() => {
   return m[composerProvider.value] || []
 })
 // 根据 settings 解析当前应选中的配置名（配置列表为空返回 ''）
+// ★ 2026-08-21 配置来源收敛：settings.preset 直接指向配置名（ai-presets.json 唯一来源）；
+//   旧数据兜底：按 executeModel+provider 匹配。
 function presetNameOf(s) {
   const p = aiPresets.value || {}
-  const names = Object.keys(p)
-  if (!names.length) return ''
-  if (s.preset && p[s.preset]) return s.preset
-  const hit = names.find(n => {
+  if (!Object.keys(p).length) return ''
+  if (s && s.preset && p[s.preset]) return s.preset
+  if (!s) return ''
+  const hit = Object.keys(p).find(n => {
     const c = p[n]
     return c && c.executeModel === s.executeModel && (!c.provider || c.provider === s.provider)
   })
@@ -283,15 +285,17 @@ async function loadModelData() {
 }
 function initComposerModel() {
   const s = state.settings || {}
-  composerProvider.value = s.provider || ''
   const p = aiPresets.value || {}
   const names = Object.keys(p)
   if (names.length) {
     // 配置列表模式：下拉选中配置名；settings 未对应任何配置时自动对齐首个配置并整套应用
     const name = presetNameOf(s)
     composerModel.value = name || names[0]
+    const act = (name && p[name]) || null
+    composerProvider.value = (act && act.provider) || s.provider || ''
     if (!name) onCmpModelChange()
   } else {
+    composerProvider.value = s.provider || ''
     composerModel.value = s.executeModel || ''
   }
 }
@@ -309,10 +313,11 @@ async function onCmpModelChange() {
   const names = Object.keys(presets)
   const base = await latestSettingsBase()
   if (names.length) {
-    // 配置列表模式：composerModel 是配置名 → 整套应用该配置（服务商/BaseURL/Key/三模型）
+    // 配置列表模式：composerModel 是配置名 → 只把 preset 名写 settings（AI 配置唯一
+    // 来源 ai-presets.json，装配时按 preset 展开 key/模型——不再冗余写回 settings 顶层）
     const c = presets[composerModel.value]
     if (!c) return
-    const top = { ...base, preset: composerModel.value, provider: c.provider, baseURL: c.baseURL, apiKey: c.apiKey, executeModel: c.executeModel, planModel: c.planModel, reviewModel: c.reviewModel }
+    const top = { ...base, preset: composerModel.value }
     try {
       await api.apiPut('/settings', { settings: top, pluginSettings: (base.pluginSettings) || {} })
       state.settings = top
@@ -1487,10 +1492,17 @@ watch(() => state.currentConvId, (id, oldId) => {
 
 watch(() => state.settings, (s) => { if (s) { autoIterate.value = !!s.autoIterateOnRejection; autonomous.value = !!s.autonomous; autoCollapse.value = s.autoCollapse !== undefined ? !!s.autoCollapse : true; } }, { immediate: true })
 
-// ★ settings 变化（AI tab 应用配置 / 保存设置）→ 同步对话面板模型下拉（配置名）
-watch(() => [state.settings && state.settings.provider, state.settings && state.settings.executeModel], ([prov, model]) => {
-  if (prov && composerProvider.value !== prov) composerProvider.value = prov
-  const names = Object.keys(aiPresets.value || {})
+// ★ settings 变化（AI tab 应用配置 / 保存设置 / 切配置）→ 同步对话面板模型下拉（配置名）
+// ★ 2026-08-21 改监听 preset：settings 只存配置名，provider/executeModel 不再是业务来源
+watch(() => [state.settings && state.settings.preset, state.settings && state.settings.executeModel], ([presetName, model]) => {
+  const p = aiPresets.value || {}
+  if (presetName && p[presetName]) {
+    if (composerModel.value !== presetName) composerModel.value = presetName
+    const act = p[presetName]
+    if (act.provider && composerProvider.value !== act.provider) composerProvider.value = act.provider
+    return
+  }
+  const names = Object.keys(p)
   if (names.length) {
     const name = presetNameOf(state.settings || {})
     if (name && composerModel.value !== name) composerModel.value = name

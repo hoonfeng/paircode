@@ -2,16 +2,20 @@
 //
 // ★ 2026-08-20 AI 配置预设：用户把「一份完整 AI 配置」命名保存为预设，
 //   供对话面板快速切换（多套配置，选中整套生效）。
-//   每条预设 = 完整配置快照（provider/baseURL/apiKey/执行-规划-审核模型/
-//   温度/思考档位/输出上限/上下文窗口）。
+//   每条预设 = 完整配置快照（provider/baseURL/apiKey/执行模型/温度/思考档位/
+//   输出上限/上下文窗口）。
+//
+// ★ 2026-08-21 配置来源收敛 + 统一模型：
+//   · settings 不再冗余存 key/模型——只存 preset（当前激活预设名）；
+//     装配时按 preset 从本文件展开整套配置（ai-presets.json 是唯一配置来源）。
+//   · 不再拆分 规划/审核 模型，统一用一个模型（executeModel）。
 //
 // 存储：config/ai-presets.json（安装目录）
-//   { "<预设名>": { provider, baseURL, apiKey, executeModel, planModel,
-//                   reviewModel, temperature, thinkingMode, maxTokens,
-//                   contextMaxTokens } }
+//   { "<预设名>": { provider, baseURL, apiKey, executeModel, temperature,
+//                   thinkingMode, maxTokens, contextMaxTokens } }
 //
 // 与 model-groups（组内挂实例）不同：预设是「整份配置的命名快照」，
-// 保存时从当前 settings 抓取全部 AI 业务字段；应用时整套写回 settings。
+// 保存时从表单/当前配置抓取全部 AI 业务字段；应用时只记录 preset 名。
 
 package core
 
@@ -27,9 +31,9 @@ type AiPreset struct {
 	Provider         string `json:"provider,omitempty"`         // 服务商名（models.json 条目名）
 	BaseURL          string `json:"baseURL,omitempty"`          // API 端点
 	APIKey           string `json:"apiKey,omitempty"`           // API Key（预设自带，应用时写入 settings）
-	ExecuteModel     string `json:"executeModel,omitempty"`     // 执行模型
-	PlanModel        string `json:"planModel,omitempty"`        // 规划模型
-	ReviewModel      string `json:"reviewModel,omitempty"`      // 审核模型
+	ExecuteModel     string `json:"executeModel,omitempty"`     // 模型（统一模型：规划/审核/执行共用，2026-08-21 不再拆分）
+	PlanModel        string `json:"planModel,omitempty"`        // ★ 旧字段保留兼容（历史数据）；新数据不写，装配统一用 ExecuteModel
+	ReviewModel      string `json:"reviewModel,omitempty"`      // ★ 旧字段保留兼容（历史数据）；新数据不写，装配统一用 ExecuteModel
 	Temperature      string `json:"temperature,omitempty"`      // 随机性（字符串保留原格式）
 	ThinkingMode     string `json:"thinkingMode,omitempty"`     // 思考档位
 	MaxTokens        int    `json:"maxTokens,omitempty"`        // 输出上限
@@ -118,15 +122,16 @@ func EnsureAiPresets() {
 	LoadAiPresets()
 }
 
-// AiPresetFromSettings 从当前 settings 抓取完整 AI 配置快照（保存预设时用）。
+// AiPresetFromSettings 从当前 settings 抓取 AI 配置快照（保存预设时用；未传 preset 的兜底）。
+// ★ 2026-08-21 统一模型：不再拆分 规划/审核 模型，plan/review 与执行模型一致。
 func AiPresetFromSettings() AiPreset {
 	return AiPreset{
 		Provider:         Settings.Provider,
 		BaseURL:          Settings.BaseURL,
 		APIKey:           Settings.APIKey,
 		ExecuteModel:     Settings.ExecuteModel,
-		PlanModel:        Settings.PlanModel,
-		ReviewModel:      Settings.ReviewModel,
+		PlanModel:        Settings.ExecuteModel,
+		ReviewModel:      Settings.ExecuteModel,
 		Temperature:      Settings.Temperature,
 		ThinkingMode:     Settings.ThinkingMode,
 		MaxTokens:        Settings.MaxTokens,
@@ -134,38 +139,9 @@ func AiPresetFromSettings() AiPreset {
 	}
 }
 
-// ApplyPreset 应用预设：整份配置写回 settings（并记录当前预设名，供 UI 高亮）。
+// ApplyPreset 应用预设：只记录当前预设名（settings 不再冗余存 key/模型/参数，
+// 装配时按 settings.preset 从 ai-presets.json 读整套配置）。
 func ApplyPreset(name string, p AiPreset) {
 	Settings.Preset = name
-	if p.Provider != "" {
-		Settings.Provider = p.Provider
-	}
-	if p.BaseURL != "" {
-		Settings.BaseURL = p.BaseURL
-	}
-	if p.APIKey != "" {
-		Settings.APIKey = p.APIKey
-	}
-	if p.ExecuteModel != "" {
-		Settings.ExecuteModel = p.ExecuteModel
-	}
-	if p.PlanModel != "" {
-		Settings.PlanModel = p.PlanModel
-	}
-	if p.ReviewModel != "" {
-		Settings.ReviewModel = p.ReviewModel
-	}
-	if p.Temperature != "" {
-		Settings.Temperature = p.Temperature
-	}
-	if p.ThinkingMode != "" {
-		Settings.ThinkingMode = p.ThinkingMode
-	}
-	if p.MaxTokens > 0 {
-		Settings.MaxTokens = p.MaxTokens
-	}
-	if p.ContextMaxTokens > 0 {
-		Settings.ContextMaxTokens = p.ContextMaxTokens
-	}
 	Save()
 }

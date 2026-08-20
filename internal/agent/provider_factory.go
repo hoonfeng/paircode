@@ -67,18 +67,53 @@ func ProviderFactoryNow() ProviderFactory {
 	return providerFactoryVal
 }
 
-// ResolveProviderParams 解析最终 Provider 参数：存储基线 → 装配器覆盖。
+// ResolveProviderParams 解析最终 Provider 参数：激活预设 → 存储基线 → 装配器覆盖。
 // ★ 业务层统一入口：Go 内核不再直接读 core.Settings 的 AI 业务字段。
-// ★ 预设应用由前端/装配器完成：选中预设 → provider/baseURL/apiKey/模型整套写 settings，
-//   Go 侧只按 服务商独立 Key（models.json）注入，不做预设业务。
+// ★ 2026-08-21 配置来源收敛：ai-presets.json 是 AI 配置（key/模型/参数）的唯一来源——
+//   settings 只存 preset（当前激活预设名），装配时按 preset 从 ai-presets.json 展开整套配置；
+//   settings 顶层字段仅兜底（兼容无预设的旧配置），models.json 服务商 key/baseURL 再兜底。
+// ★ 统一模型：不再拆分 规划/审核 模型，PlanModel/ReviewModel 一律等于执行模型。
 func ResolveProviderParams() ProviderParams {
 	provider := core.Settings.Provider
-	// ★ 2026-08-21 修复：settings 顶层（AI 配置预设「应用」写入的 baseURL/apiKey）优先，
-	//   models.json 服务商默认仅兜底（兼容旧配置）。此前反过来——服务商 key 非空即覆盖
-	//   settings 顶层 → 应用 AI 配置/选择模型后实际仍用 models.json 服务商 key，
-	//   ai-presets.json 里配置的 key 永远不生效。
 	baseURL := core.Settings.BaseURL
 	apiKey := core.Settings.APIKey
+	model := core.MainModel()
+	temperature := core.Temperature()
+	thinking := core.Settings.ThinkingMode
+	maxTokens := core.Settings.MaxTokens
+	context := core.Settings.ContextMaxTokens
+
+	// ① 激活预设展开（settings.preset → ai-presets.json，整套覆盖）
+	if name := core.Settings.Preset; name != "" {
+		if p := core.GetPreset(name); p.Provider != "" || p.ExecuteModel != "" {
+			if p.Provider != "" {
+				provider = p.Provider
+			}
+			if p.BaseURL != "" {
+				baseURL = p.BaseURL
+			}
+			if p.APIKey != "" {
+				apiKey = p.APIKey
+			}
+			if p.ExecuteModel != "" {
+				model = p.ExecuteModel
+			}
+			if p.Temperature != "" {
+				temperature = core.ParseTempOr(p.Temperature, -1)
+			}
+			if p.ThinkingMode != "" {
+				thinking = p.ThinkingMode
+			}
+			if p.MaxTokens > 0 {
+				maxTokens = p.MaxTokens
+			}
+			if p.ContextMaxTokens > 0 {
+				context = p.ContextMaxTokens
+			}
+		}
+	}
+	// ② settings 顶层兜底（兼容旧配置）
+	// ③ models.json 服务商 key/baseURL 兜底（无 preset 且 settings 顶层为空时）
 	if baseURL == "" {
 		if p := core.GetProviderBaseURL(provider); p != "" {
 			baseURL = p
@@ -89,18 +124,21 @@ func ResolveProviderParams() ProviderParams {
 			apiKey = k
 		}
 	}
+	// ★ 统一模型：规划/审核 一律用执行模型（不拆分）
+	planModel := model
+	reviewModel := model
 	cur := ProviderParams{
 		Provider:         provider,
 		BaseURL:          baseURL,
 		APIKey:           apiKey,
-		Model:            core.MainModel(),
-		Temperature:      core.Temperature(),
-		MaxTokens:        core.Settings.MaxTokens,
-		ThinkingMode:             core.Settings.ThinkingMode,
-		ContextMaxTokens:         core.Settings.ContextMaxTokens,
+		Model:            model,
+		Temperature:      temperature,
+		MaxTokens:        maxTokens,
+		ThinkingMode:     thinking,
+		ContextMaxTokens: context,
 		ProviderContextMaxTokens: core.GetProviderContextMaxToken(provider), // ★ 服务商级默认上下文（模型级未配置时兜底）
-		PlanModel:                core.Settings.PlanModel,
-		ReviewModel:              core.Settings.ReviewModel,
+		PlanModel:                planModel,
+		ReviewModel:              reviewModel,
 		ModelParams:              core.Settings.ModelParams,
 	}
 	return ProviderFactoryNow().Apply(cur)
