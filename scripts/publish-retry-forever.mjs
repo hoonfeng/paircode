@@ -1,4 +1,5 @@
 // publish-retry-forever.mjs — 无限重试补发官方插件（限流多久都等）
+// ★ 重试间隔 1 小时（2026-08-20：npm 限流持续久，3 分钟太频繁会反复撞墙）
 // ★ 2026-08-20 增强：
 //   1. 开头自动重新打包（跑 publish-official-plugins.mjs 默认模式，从 .pair/plugins
 //      复制最新内容到 .pair/publish/，避免发旧版 UI 资源）
@@ -61,7 +62,7 @@ for (const name of REMAIN) {
       break
     } catch (e) {
       log(`FAIL ${pkgName} 尝试${tries}: ${String(e.message||e).split('\n')[0]}`)
-      await sleep(180000) // 3 分钟
+      await sleep(3600000) // 1 小时（npm 限流持续久，3 分钟太频繁会反复撞墙）
     }
   }
   await sleep(20000)
