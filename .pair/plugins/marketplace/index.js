@@ -325,6 +325,31 @@ return {
       return ok(ctx.market.list())
     })
 
+    // 6. check-update（GET）——npm 来源插件的版本对比（更新机制 2026-08-20）
+    reg('/api/marketplace/check-update', (req) => {
+      if (req.method !== 'GET') return err('仅 GET')
+      try {
+        const updates = ctx.npm.checkUpdates()
+        return ok(updates)
+      } catch (e) {
+        return err(e && e.message || String(e))
+      }
+    })
+
+    // 7. update（POST {pkg}）——更新指定 npm 插件到 registry latest
+    reg('/api/marketplace/update', (req) => {
+      if (req.method !== 'POST') return err('仅 POST')
+      try {
+        const b = bodyOf(req)
+        const pkg = String(b.pkg || '').trim()
+        if (!pkg) return err('缺 pkg（npm 包名）')
+        const message = ctx.npm.update(pkg)
+        return ok({ ok: true, message })
+      } catch (e) {
+        return err(e && e.message || String(e))
+      }
+    })
+
     registerAll()
 
     // ── 市场源注册（替代 market-skill/market-mcp/market-plugin 三插件）──

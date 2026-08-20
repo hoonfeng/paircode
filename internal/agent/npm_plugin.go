@@ -355,7 +355,11 @@ func npmMarketInstall(pkg string) (string, error) {
 	}
 
 	// 固化为磁盘插件包（package.json + index.js，重启自动装配）
-	if err := syncGlobalPlugin(ToolsetPlugin{Name: pluginName, Purpose: purpose, Code: code, Scope: "project"}); err != nil {
+	// ★ config.npm 记录 npm 来源与版本（更新机制元数据：checkUpdates 扫描它）
+	if err := syncGlobalPlugin(ToolsetPlugin{
+		Name: pluginName, Purpose: purpose, Code: code, Scope: "project",
+		Config: map[string]any{"npm": map[string]any{"pkg": pkg, "version": info.Version}},
+	}); err != nil {
 		if ph != nil && defID != "" {
 			_ = ph.Unload(defID)
 			_ = ph.RemoveJSDef(defID)
@@ -490,4 +494,139 @@ func npmPluginDiskName(pkg string) string {
 		return name[i+1:]
 	}
 	return name
+}
+
+// ─── npm 插件更新机制（2026-08-20：基于 npm registry 版本对比）────────
+// 元数据载体：磁盘插件包 package.json 的 config.npm = { pkg, version }
+// （npmMarketInstall 固化时写入；装配时透传 apply(ctx, config) 无副作用）。
+
+// npmPluginMeta 单个磁盘插件的 npm 来源元数据。
+type npmPluginMeta struct {
+	Name    string `json:"name"`    // 磁盘插件名（.pair/plugins/<name>/）
+	Pkg     string `json:"pkg"`     // npm 包名（@scope/pkg 或裸名）
+	Version string `json:"version"` // 已安装的 npm 版本
+}
+
+// npmPluginMetaPath 读磁盘插件包的 config.npm 元数据；无则返回零值。
+func npmPluginMetaPath(pkgDir string) (npmPluginMeta, error) {
+	data, err := os.ReadFile(filepath.Join(pkgDir, "package.json"))
+	if err != nil {
+		return npmPluginMeta{}, err
+	}
+	var pkg GlobalPluginPackage
+	if err := json.Unmarshal(data, &pkg); err != nil {
+		return npmPluginMeta{}, err
+	}
+	meta := npmPluginMeta{Name: pkg.Name}
+	if cfg, ok := pkg.Config["npm"].(map[string]any); ok {
+		meta.Pkg, _ = cfg["pkg"].(string)
+		meta.Version, _ = cfg["version"].(string)
+	}
+	return meta, nil
+}
+
+// npmPluginMetaByPkg 按 npm 包名（或磁盘插件名）查已装元数据。
+// 返回零值 meta 表示未安装/无 npm 来源。
+func npmPluginMetaByPkg(pkg string) npmPluginMeta {
+	dir := filepath.Join(globalPluginsDir(), npmPluginDiskName(pkg))
+	if meta, err := npmPluginMetaPath(filepath.Join(dir)); err == nil && meta.Pkg != "" {
+		return meta
+	}
+	// 入参可能是磁盘插件名而非 npm 全名：扫描全部目录匹配 config.npm.pkg
+	entries, err := os.ReadDir(globalPluginsDir())
+	if err != nil {
+		return npmPluginMeta{}
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		meta, err := npmPluginMetaPath(filepath.Join(globalPluginsDir(), e.Name()))
+		if err != nil || meta.Pkg == "" {
+			continue
+		}
+		if meta.Pkg == pkg || meta.Name == pkg {
+			return meta
+		}
+	}
+	return npmPluginMeta{}
+}
+
+// npmPluginCheckUpdates 扫描全部磁盘插件的 config.npm 元数据，
+// 逐个查询 npm registry latest 对比，返回可更新清单。
+// 单个查询失败不阻塞整体（error 字段记录，方便前端提示网络问题）。
+// ★ 返回 []map[string]any（小写 key）：goja 转 JS 对象时用字段名而非 json tag，
+//   结构体字段名大写会导致前端/agent 取不到（2026-08-20 实测修正）。
+func npmPluginCheckUpdates() []map[string]any {
+	entries, err := os.ReadDir(globalPluginsDir())
+	if err != nil {
+		return nil
+	}
+	updates := make([]map[string]any, 0)
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		meta, err := npmPluginMetaPath(filepath.Join(globalPluginsDir(), e.Name()))
+		if err != nil || meta.Pkg == "" {
+			continue // 非 npm 来源（内置/工具集插件）跳过
+		}
+		info := map[string]any{
+			"name": meta.Name, "pkg": meta.Pkg, "current": meta.Version,
+			"latest": "", "updateable": false, "error": "",
+		}
+		if meta.Version == "" {
+			info["error"] = "本地无版本记录（旧安装，重新安装一次即可支持更新）"
+			updates = append(updates, info)
+			continue
+		}
+		remote, err := fetchNPMInfo(meta.Pkg)
+		if err != nil {
+			info["error"] = "查询 registry 失败: " + err.Error()
+			updates = append(updates, info)
+			continue
+		}
+		info["latest"] = remote.Version
+		info["updateable"] = remote.Version != meta.Version
+		updates = append(updates, info)
+	}
+	return updates
+}
+
+// npmPluginUpdateInfo 单个插件的更新检查结果。
+type npmPluginUpdateInfo struct {
+	Name       string `json:"name"`       // 磁盘插件名
+	Pkg        string `json:"pkg"`        // npm 包名
+	Current    string `json:"current"`    // 已装版本（config.npm.version）
+	Latest     string `json:"latest"`     // registry latest
+	Updateable bool   `json:"updateable"` // 是否有新版
+	Error      string `json:"error,omitempty"`
+}
+
+// npmPluginUpdate 更新指定 npm 插件到 registry latest：
+//  1. 预查 latest + 版本对比（失败/已最新 → 旧插件不受影响）
+//  2. 卸载旧插件（磁盘目录 + 宿主 def）
+//  3. 重新安装（npmMarketInstall 下载新版本 → 装载 → 固化）
+// 返回人类可读消息。
+func npmPluginUpdate(pkg string) (string, error) {
+	meta := npmPluginMetaByPkg(pkg)
+	if meta.Pkg == "" {
+		return "", fmt.Errorf("插件 %s 非 npm 来源或未安装（无法更新）", pkg)
+	}
+	info, err := fetchNPMInfo(meta.Pkg)
+	if err != nil {
+		return "", fmt.Errorf("查询 %s 最新版本失败: %v", meta.Pkg, err)
+	}
+	if meta.Version != "" && info.Version == meta.Version {
+		return fmt.Sprintf("「%s」已是最新版本 v%s，无需更新", meta.Pkg, meta.Version), nil
+	}
+	oldVer := meta.Version
+	if err := uninstallNPMPlugin(meta.Pkg); err != nil {
+		return "", fmt.Errorf("卸载旧版本失败: %v", err)
+	}
+	msg, err := npmMarketInstall(meta.Pkg)
+	if err != nil {
+		return "", fmt.Errorf("更新 %s 失败（旧版 v%s 已卸载，可重试或重新安装）: %v", meta.Pkg, oldVer, err)
+	}
+	return fmt.Sprintf("%s（%s → %s）", msg, oldVer, info.Version), nil
 }

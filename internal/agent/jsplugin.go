@@ -2101,6 +2101,20 @@ func (p *jsPluginAdapter) buildNPMService(pc *PluginContext) goja.Value {
 	n.Set("installed", func(call goja.FunctionCall) goja.Value {
 		return vm.ToValue(npmPluginInstalled(call.Argument(0).String()))
 	})
+	n.Set("checkUpdates", func(call goja.FunctionCall) goja.Value {
+		return vm.ToValue(npmPluginCheckUpdates())
+	})
+	n.Set("update", func(call goja.FunctionCall) goja.Value {
+		pkg := strings.TrimSpace(call.Argument(0).String())
+		if pkg == "" {
+			panic(vm.NewTypeError("ctx.npm.update: 缺包名"))
+		}
+		msg, err := npmPluginUpdate(pkg)
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return vm.ToValue(msg)
+	})
 	return vm.ToValue(n)
 }
 

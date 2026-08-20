@@ -83,6 +83,14 @@
 
         <!-- 已安装列表 -->
         <div v-else-if="tab === 'installed'" class="market-list" ref="listRef">
+          <!-- 工具条：检查更新（npm 插件更新机制） -->
+          <div class="installed-updbar">
+            <button class="ii-btn ii-check-upd" @click="checkUpdates(false)" :disabled="checkingUpd" title="对比 npm registry，检查已装插件是否有新版本">
+              <SvgIcon name="refresh" :size="13" />
+              {{ checkingUpd ? '检查中…' : '检查更新' }}
+            </button>
+            <span v-if="updSummary" class="installed-toolbar-tip" :class="{ 'has-upd': updates.some(u => u.updateable) }">{{ updSummary }}</span>
+          </div>
           <!-- 插件分组（★ 2026-08-20 新增：磁盘插件清单） -->
           <div v-if="installedPlugins.length > 0" class="installed-group">
             <div class="installed-group-title" @click="toggleGroup('plugin')" :title="collapsedGroups.has('plugin') ? '展开插件列表' : '收起插件列表'">
@@ -102,9 +110,14 @@
                   插件 ·
                   <span :class="'status-' + (item.state === 'running' ? 'on' : 'off')">{{ item.state === 'running' ? '运行中' : '已停止' }}</span>
                   · {{ item.scope === 'global' ? '全局' : '工作区' }}
+                  <template v-if="npmOf(item)">
+                    · v{{ npmOf(item).current }}
+                    <span v-if="npmOf(item).updateable" class="badge-updateable" :title="'registry 最新 v' + npmOf(item).latest">有新版</span>
+                  </template>
                 </span>
               </div>
               <div class="ii-actions">
+                <button v-if="npmOf(item) && npmOf(item).updateable" class="ii-btn ii-upd" @click="updatePlugin(item)" :title="'更新到 v' + npmOf(item).latest">更新</button>
                 <button v-if="item.state === 'running'" class="ii-btn ii-toggle" @click="togglePlugin(item)" title="停止：插件及其工具/UI 不再生效">停止</button>
                 <button v-else class="ii-btn ii-toggle is-enabled" @click="togglePlugin(item)" title="启动插件">启动</button>
                 <button v-if="!isCorePlugin(item.name)" class="ii-btn ii-del" @click="uninstallPlugin(item)" title="卸载：删除插件包目录，可重新从市场安装">卸载</button>
@@ -311,10 +324,57 @@ async function loadInstalled() {
     installedMCPs.value = mcpList || []
     installedSkills.value = skillList || []
     installedPlugins.value = pluginList || []
+    // ★ 更新机制：并行静默检查 npm 来源插件版本（失败不阻塞列表）
+    checkUpdates(true)
   } catch (err) {
     error.value = '加载失败: ' + err.message
   } finally {
     loading.value = false
+  }
+}
+
+// ── npm 插件更新机制（2026-08-20）──
+const updates = ref([])
+const checkingUpd = ref(false)
+const updSummary = ref('')
+const npmMap = computed(() => {
+  const m = {}
+  for (const u of updates.value) m[u.name] = u
+  return m
+})
+function npmOf(item) { return npmMap.value[item.name] }
+
+async function checkUpdates(silent) {
+  checkingUpd.value = true
+  try {
+    const r = await api.apiGet('/marketplace/check-update')
+    // ★ ok() 直接序列化数组（body 即数组），非 {ok,data} 包装
+    updates.value = Array.isArray(r) ? r : ((r && r.data) || [])
+    const upd = updates.value.filter(u => u.updateable)
+    const errs = updates.value.filter(u => u.error && !u.updateable)
+    if (upd.length) updSummary.value = `${upd.length} 个插件可更新`
+    else if (errs.length) updSummary.value = `${errs.length} 个插件检查失败（见网络/registry）`
+    else updSummary.value = updates.value.length ? '全部已是最新' : ''
+    if (!silent) window.$toast?.(updSummary.value || '无 npm 来源插件', 'success')
+  } catch (e) {
+    updSummary.value = '检查失败: ' + e.message
+    if (!silent) window.$toast?.('检查更新失败: ' + e.message, 'error')
+  } finally {
+    checkingUpd.value = false
+  }
+}
+
+async function updatePlugin(item) {
+  const u = npmOf(item)
+  if (!u) return
+  if (!confirm(`更新「${item.name}」到 v${u.latest}？\n将卸载旧版本（v${u.current}）并重新安装最新版。`)) return
+  try {
+    const r = await api.apiPost('/marketplace/update', { pkg: u.pkg })
+    window.$toast?.(r.message || r.data?.message || `「${item.name}」已更新`, 'success')
+    await Promise.all([loadInstalled(), checkUpdates(true)])
+  } catch (err) {
+    error.value = '更新失败: ' + err.message
+    window.$toast?.('更新失败: ' + err.message, 'error')
   }
 }
 
@@ -861,6 +921,46 @@ onMounted(() => {
   border-radius: 3px;
   margin-right: 4px;
 }
+.badge-updateable {
+  font-size: 10px;
+  color: #4aa3ff;
+  background: rgba(74, 163, 255, 0.14);
+  padding: 0 5px;
+  border-radius: 3px;
+  margin-left: 4px;
+}
+/* ── 已安装 tab 检查更新工具条（更新机制）── */
+.installed-updbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+}
+.ii-check-upd {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-secondary);
+  min-width: 0;
+}
+.ii-check-upd:disabled { opacity: 0.5; cursor: wait; }
+.installed-toolbar-tip {
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.installed-toolbar-tip.has-upd { color: #4aa3ff; font-weight: 600; }
+.ii-upd {
+  color: #4aa3ff;
+  border-color: rgba(74, 163, 255, 0.4);
+  background: rgba(74, 163, 255, 0.08);
+}
+.ii-upd:hover { color: #4aa3ff; border-color: #4aa3ff; background: rgba(74, 163, 255, 0.15); }
 .ii-body { flex: 1; min-width: 0; }
 .ii-name { font-size: 13px; color: var(--text-primary); font-weight: 600; }
 .ii-desc { font-size: 12px; color: var(--text-muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

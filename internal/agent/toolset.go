@@ -619,6 +619,7 @@ func syncGlobalPlugin(entry ToolsetPlugin) error {
 	pkg := GlobalPluginPackage{
 		Name: entry.Name, Purpose: entry.Purpose, Version: "1.0.0",
 		Scope: entry.Scope, Type: "plugin", Main: "index.js",
+		Config: entry.Config,
 	}
 	if pkg.Scope == "" {
 		pkg.Scope = "project"

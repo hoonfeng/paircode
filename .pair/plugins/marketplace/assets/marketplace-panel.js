@@ -2128,96 +2128,100 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
     key: 5,
     class: "market-loading"
   };
-  const _hoisted_29 = {
+  const _hoisted_29 = { class: "installed-updbar" };
+  const _hoisted_30 = ["disabled"];
+  const _hoisted_31 = {
     key: 0,
     class: "installed-group"
   };
-  const _hoisted_30 = ["title"];
-  const _hoisted_31 = { class: "ig-count" };
-  const _hoisted_32 = { class: "ii-icon icon-plugin" };
-  const _hoisted_33 = ["title"];
-  const _hoisted_34 = { class: "ii-body" };
-  const _hoisted_35 = { class: "ii-name" };
-  const _hoisted_36 = { class: "ii-desc" };
-  const _hoisted_37 = { class: "ii-badge" };
-  const _hoisted_38 = {
+  const _hoisted_32 = ["title"];
+  const _hoisted_33 = { class: "ig-count" };
+  const _hoisted_34 = { class: "ii-icon icon-plugin" };
+  const _hoisted_35 = ["title"];
+  const _hoisted_36 = { class: "ii-body" };
+  const _hoisted_37 = { class: "ii-name" };
+  const _hoisted_38 = { class: "ii-desc" };
+  const _hoisted_39 = { class: "ii-badge" };
+  const _hoisted_40 = {
     key: 0,
     class: "badge-system"
   };
-  const _hoisted_39 = { class: "ii-actions" };
-  const _hoisted_40 = ["onClick"];
-  const _hoisted_41 = ["onClick"];
-  const _hoisted_42 = ["onClick"];
-  const _hoisted_43 = {
+  const _hoisted_41 = ["title"];
+  const _hoisted_42 = { class: "ii-actions" };
+  const _hoisted_43 = ["onClick", "title"];
+  const _hoisted_44 = ["onClick"];
+  const _hoisted_45 = ["onClick"];
+  const _hoisted_46 = ["onClick"];
+  const _hoisted_47 = {
     key: 1,
     class: "installed-group"
   };
-  const _hoisted_44 = ["title"];
-  const _hoisted_45 = { class: "ig-count" };
-  const _hoisted_46 = { class: "ii-icon icon-mcp" };
-  const _hoisted_47 = ["title"];
-  const _hoisted_48 = { class: "ii-body" };
-  const _hoisted_49 = { class: "ii-name" };
-  const _hoisted_50 = { class: "ii-desc" };
-  const _hoisted_51 = { class: "ii-badge" };
-  const _hoisted_52 = { class: "ii-actions" };
-  const _hoisted_53 = ["onClick", "title"];
-  const _hoisted_54 = ["onClick"];
-  const _hoisted_55 = ["onClick"];
-  const _hoisted_56 = {
+  const _hoisted_48 = ["title"];
+  const _hoisted_49 = { class: "ig-count" };
+  const _hoisted_50 = { class: "ii-icon icon-mcp" };
+  const _hoisted_51 = ["title"];
+  const _hoisted_52 = { class: "ii-body" };
+  const _hoisted_53 = { class: "ii-name" };
+  const _hoisted_54 = { class: "ii-desc" };
+  const _hoisted_55 = { class: "ii-badge" };
+  const _hoisted_56 = { class: "ii-actions" };
+  const _hoisted_57 = ["onClick", "title"];
+  const _hoisted_58 = ["onClick"];
+  const _hoisted_59 = ["onClick"];
+  const _hoisted_60 = {
     key: 2,
     class: "installed-group"
   };
-  const _hoisted_57 = ["title"];
-  const _hoisted_58 = { class: "ig-count" };
-  const _hoisted_59 = { class: "ii-icon icon-skill" };
-  const _hoisted_60 = { class: "ii-body" };
-  const _hoisted_61 = { class: "ii-name" };
-  const _hoisted_62 = { class: "ii-desc" };
-  const _hoisted_63 = { class: "ii-badge" };
-  const _hoisted_64 = { class: "ii-actions" };
-  const _hoisted_65 = ["value", "onChange", "title"];
-  const _hoisted_66 = ["onClick"];
-  const _hoisted_67 = ["onClick"];
-  const _hoisted_68 = {
+  const _hoisted_61 = ["title"];
+  const _hoisted_62 = { class: "ig-count" };
+  const _hoisted_63 = { class: "ii-icon icon-skill" };
+  const _hoisted_64 = { class: "ii-body" };
+  const _hoisted_65 = { class: "ii-name" };
+  const _hoisted_66 = { class: "ii-desc" };
+  const _hoisted_67 = { class: "ii-badge" };
+  const _hoisted_68 = { class: "ii-actions" };
+  const _hoisted_69 = ["value", "onChange", "title"];
+  const _hoisted_70 = ["onClick"];
+  const _hoisted_71 = ["onClick"];
+  const _hoisted_72 = {
     key: 3,
     class: "market-empty"
   };
-  const _hoisted_69 = { class: "me-icon" };
-  const _hoisted_70 = { class: "mi-body" };
-  const _hoisted_71 = { class: "mi-name" };
-  const _hoisted_72 = { class: "mi-desc" };
-  const _hoisted_73 = { class: "mi-meta" };
-  const _hoisted_74 = {
+  const _hoisted_73 = { class: "me-icon" };
+  const _hoisted_74 = { class: "mi-body" };
+  const _hoisted_75 = { class: "mi-name" };
+  const _hoisted_76 = { class: "mi-desc" };
+  const _hoisted_77 = { class: "mi-meta" };
+  const _hoisted_78 = {
     key: 0,
     class: "mi-tags"
   };
-  const _hoisted_75 = {
+  const _hoisted_79 = {
     key: 1,
     class: "mi-installed"
   };
-  const _hoisted_76 = {
+  const _hoisted_80 = {
     key: 0,
     class: "mi-install-area"
   };
-  const _hoisted_77 = ["onClick", "disabled"];
-  const _hoisted_78 = ["onUpdate:modelValue"];
-  const _hoisted_79 = ["onClick", "disabled"];
-  const _hoisted_80 = {
+  const _hoisted_81 = ["onClick", "disabled"];
+  const _hoisted_82 = ["onUpdate:modelValue"];
+  const _hoisted_83 = ["onClick", "disabled"];
+  const _hoisted_84 = {
     key: 1,
     class: "mi-install-area"
   };
-  const _hoisted_81 = ["onClick"];
-  const _hoisted_82 = {
+  const _hoisted_85 = ["onClick"];
+  const _hoisted_86 = {
     key: 0,
     class: "market-empty"
   };
-  const _hoisted_83 = { class: "me-icon" };
-  const _hoisted_84 = { key: 0 };
-  const _hoisted_85 = { key: 1 };
-  const _hoisted_86 = { class: "market-footer" };
-  const _hoisted_87 = { class: "market-count" };
-  const _hoisted_88 = {
+  const _hoisted_87 = { class: "me-icon" };
+  const _hoisted_88 = { key: 0 };
+  const _hoisted_89 = { key: 1 };
+  const _hoisted_90 = { class: "market-footer" };
+  const _hoisted_91 = { class: "market-count" };
+  const _hoisted_92 = {
     key: 0,
     class: "market-error"
   };
@@ -2280,10 +2284,56 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
           installedMCPs.value = mcpList || [];
           installedSkills.value = skillList || [];
           installedPlugins.value = pluginList || [];
+          checkUpdates(true);
         } catch (err) {
           error.value = "加载失败: " + err.message;
         } finally {
           loading.value = false;
+        }
+      }
+      const updates = vue.ref([]);
+      const checkingUpd = vue.ref(false);
+      const updSummary = vue.ref("");
+      const npmMap = vue.computed(() => {
+        const m = {};
+        for (const u of updates.value) m[u.name] = u;
+        return m;
+      });
+      function npmOf(item) {
+        return npmMap.value[item.name];
+      }
+      async function checkUpdates(silent) {
+        var _a, _b;
+        checkingUpd.value = true;
+        try {
+          const r = await api.apiGet("/marketplace/check-update");
+          updates.value = Array.isArray(r) ? r : r && r.data || [];
+          const upd = updates.value.filter((u) => u.updateable);
+          const errs = updates.value.filter((u) => u.error && !u.updateable);
+          if (upd.length) updSummary.value = `${upd.length} 个插件可更新`;
+          else if (errs.length) updSummary.value = `${errs.length} 个插件检查失败（见网络/registry）`;
+          else updSummary.value = updates.value.length ? "全部已是最新" : "";
+          if (!silent) (_a = window.$toast) == null ? void 0 : _a.call(window, updSummary.value || "无 npm 来源插件", "success");
+        } catch (e) {
+          updSummary.value = "检查失败: " + e.message;
+          if (!silent) (_b = window.$toast) == null ? void 0 : _b.call(window, "检查更新失败: " + e.message, "error");
+        } finally {
+          checkingUpd.value = false;
+        }
+      }
+      async function updatePlugin(item) {
+        var _a, _b, _c;
+        const u = npmOf(item);
+        if (!u) return;
+        if (!confirm(`更新「${item.name}」到 v${u.latest}？
+将卸载旧版本（v${u.current}）并重新安装最新版。`)) return;
+        try {
+          const r = await api.apiPost("/marketplace/update", { pkg: u.pkg });
+          (_b = window.$toast) == null ? void 0 : _b.call(window, r.message || ((_a = r.data) == null ? void 0 : _a.message) || `「${item.name}」已更新`, "success");
+          await Promise.all([loadInstalled(), checkUpdates(true)]);
+        } catch (err) {
+          error.value = "更新失败: " + err.message;
+          (_c = window.$toast) == null ? void 0 : _c.call(window, "更新失败: " + err.message, "error");
         }
       }
       async function saveMCP() {
@@ -2511,7 +2561,7 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
                 name: "package",
                 size: 20
               }),
-              _cache[20] || (_cache[20] = vue.createTextVNode(
+              _cache[21] || (_cache[21] = vue.createTextVNode(
                 " 市场",
                 -1
                 /* CACHED */
@@ -2624,7 +2674,7 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
                   name: "plus",
                   size: 14
                 }),
-                _cache[21] || (_cache[21] = vue.createTextVNode(
+                _cache[22] || (_cache[22] = vue.createTextVNode(
                   " 添加 MCP 服务器",
                   -1
                   /* CACHED */
@@ -2638,7 +2688,7 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
                   name: "refresh",
                   size: 14
                 }),
-                _cache[22] || (_cache[22] = vue.createTextVNode(
+                _cache[23] || (_cache[23] = vue.createTextVNode(
                   " 刷新",
                   -1
                   /* CACHED */
@@ -2648,7 +2698,7 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
             vue.createCommentVNode(" 添加 MCP 表单 "),
             showAddMCP.value ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_10, [
               vue.createElementVNode("div", _hoisted_11, [
-                _cache[23] || (_cache[23] = vue.createElementVNode(
+                _cache[24] || (_cache[24] = vue.createElementVNode(
                   "label",
                   null,
                   "名称",
@@ -2669,7 +2719,7 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
                 ])
               ]),
               vue.createElementVNode("div", _hoisted_12, [
-                _cache[24] || (_cache[24] = vue.createElementVNode(
+                _cache[25] || (_cache[25] = vue.createElementVNode(
                   "label",
                   null,
                   "命令",
@@ -2690,7 +2740,7 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
                 ])
               ]),
               vue.createElementVNode("div", _hoisted_13, [
-                _cache[25] || (_cache[25] = vue.createElementVNode(
+                _cache[26] || (_cache[26] = vue.createElementVNode(
                   "label",
                   null,
                   "参数",
@@ -2711,7 +2761,7 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
                 ])
               ]),
               vue.createElementVNode("div", _hoisted_14, [
-                _cache[27] || (_cache[27] = vue.createElementVNode(
+                _cache[28] || (_cache[28] = vue.createElementVNode(
                   "label",
                   null,
                   "层级",
@@ -2723,7 +2773,7 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
                   {
                     "onUpdate:modelValue": _cache[8] || (_cache[8] = ($event) => mcpForm.value.level = $event)
                   },
-                  [..._cache[26] || (_cache[26] = [
+                  [..._cache[27] || (_cache[27] = [
                     vue.createElementVNode(
                       "option",
                       { value: "user" },
@@ -2770,7 +2820,7 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
             vue.createCommentVNode(" 编辑 MCP 表单 "),
             editingMCP.value ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_18, [
               vue.createElementVNode("div", _hoisted_19, [
-                _cache[28] || (_cache[28] = vue.createElementVNode(
+                _cache[29] || (_cache[29] = vue.createElementVNode(
                   "label",
                   null,
                   "名称",
@@ -2790,7 +2840,7 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
                 ])
               ]),
               vue.createElementVNode("div", _hoisted_20, [
-                _cache[29] || (_cache[29] = vue.createElementVNode(
+                _cache[30] || (_cache[30] = vue.createElementVNode(
                   "label",
                   null,
                   "命令",
@@ -2810,7 +2860,7 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
                 ])
               ]),
               vue.createElementVNode("div", _hoisted_21, [
-                _cache[30] || (_cache[30] = vue.createElementVNode(
+                _cache[31] || (_cache[31] = vue.createElementVNode(
                   "label",
                   null,
                   "参数",
@@ -2830,7 +2880,7 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
                 ])
               ]),
               vue.createElementVNode("div", _hoisted_22, [
-                _cache[32] || (_cache[32] = vue.createElementVNode(
+                _cache[33] || (_cache[33] = vue.createElementVNode(
                   "label",
                   null,
                   "层级",
@@ -2842,7 +2892,7 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
                   {
                     "onUpdate:modelValue": _cache[13] || (_cache[13] = ($event) => editMCPForm.value.level = $event)
                   },
-                  [..._cache[31] || (_cache[31] = [
+                  [..._cache[32] || (_cache[32] = [
                     vue.createElementVNode(
                       "option",
                       { value: "user" },
@@ -2900,7 +2950,7 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
               )
             ])) : vue.createCommentVNode("v-if", true),
             vue.createCommentVNode(" 加载状态 "),
-            loading.value ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_28, [..._cache[33] || (_cache[33] = [
+            loading.value ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_28, [..._cache[34] || (_cache[34] = [
               vue.createElementVNode(
                 "span",
                 { class: "dot-pulse" },
@@ -2928,11 +2978,40 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
                     ref: listRef
                   },
                   [
+                    vue.createCommentVNode(" 工具条：检查更新（npm 插件更新机制） "),
+                    vue.createElementVNode("div", _hoisted_29, [
+                      vue.createElementVNode("button", {
+                        class: "ii-btn ii-check-upd",
+                        onClick: _cache[16] || (_cache[16] = ($event) => checkUpdates(false)),
+                        disabled: checkingUpd.value,
+                        title: "对比 npm registry，检查已装插件是否有新版本"
+                      }, [
+                        vue.createVNode(SvgIcon, {
+                          name: "refresh",
+                          size: 13
+                        }),
+                        vue.createTextVNode(
+                          " " + vue.toDisplayString(checkingUpd.value ? "检查中…" : "检查更新"),
+                          1
+                          /* TEXT */
+                        )
+                      ], 8, _hoisted_30),
+                      updSummary.value ? (vue.openBlock(), vue.createElementBlock(
+                        "span",
+                        {
+                          key: 0,
+                          class: vue.normalizeClass(["installed-toolbar-tip", { "has-upd": updates.value.some((u) => u.updateable) }])
+                        },
+                        vue.toDisplayString(updSummary.value),
+                        3
+                        /* TEXT, CLASS */
+                      )) : vue.createCommentVNode("v-if", true)
+                    ]),
                     vue.createCommentVNode(" 插件分组（★ 2026-08-20 新增：磁盘插件清单） "),
-                    installedPlugins.value.length > 0 ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_29, [
+                    installedPlugins.value.length > 0 ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_31, [
                       vue.createElementVNode("div", {
                         class: "installed-group-title",
-                        onClick: _cache[16] || (_cache[16] = ($event) => toggleGroup("plugin")),
+                        onClick: _cache[17] || (_cache[17] = ($event) => toggleGroup("plugin")),
                         title: collapsedGroups.value.has("plugin") ? "展开插件列表" : "收起插件列表"
                       }, [
                         vue.createVNode(SvgIcon, {
@@ -2940,7 +3019,7 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
                           size: 12,
                           class: "ig-arrow"
                         }, null, 8, ["name"]),
-                        _cache[34] || (_cache[34] = vue.createElementVNode(
+                        _cache[35] || (_cache[35] = vue.createElementVNode(
                           "span",
                           null,
                           "插件",
@@ -2949,12 +3028,12 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
                         )),
                         vue.createElementVNode(
                           "span",
-                          _hoisted_31,
+                          _hoisted_33,
                           vue.toDisplayString(installedPlugins.value.length),
                           1
                           /* TEXT */
                         )
-                      ], 8, _hoisted_30),
+                      ], 8, _hoisted_32),
                       vue.withDirectives(vue.createElementVNode(
                         "div",
                         null,
@@ -2967,7 +3046,7 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
                                 key: "plugin-" + item.name,
                                 class: "installed-item"
                               }, [
-                                vue.createElementVNode("div", _hoisted_32, [
+                                vue.createElementVNode("div", _hoisted_34, [
                                   vue.createVNode(SvgIcon, {
                                     name: "puzzle",
                                     size: 18
@@ -2976,25 +3055,25 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
                                 vue.createElementVNode("div", {
                                   class: vue.normalizeClass(["ii-status-dot", item.state === "running" ? "dot-connected" : "dot-disabled"]),
                                   title: item.state === "running" ? "运行中" : "已停止"
-                                }, null, 10, _hoisted_33),
-                                vue.createElementVNode("div", _hoisted_34, [
+                                }, null, 10, _hoisted_35),
+                                vue.createElementVNode("div", _hoisted_36, [
                                   vue.createElementVNode(
                                     "div",
-                                    _hoisted_35,
+                                    _hoisted_37,
                                     vue.toDisplayString(item.name),
                                     1
                                     /* TEXT */
                                   ),
                                   vue.createElementVNode(
                                     "div",
-                                    _hoisted_36,
+                                    _hoisted_38,
                                     vue.toDisplayString(item.purpose || "（无描述）"),
                                     1
                                     /* TEXT */
                                   ),
-                                  vue.createElementVNode("span", _hoisted_37, [
-                                    isCorePlugin(item.name) ? (vue.openBlock(), vue.createElementBlock("span", _hoisted_38, "系统")) : vue.createCommentVNode("v-if", true),
-                                    _cache[35] || (_cache[35] = vue.createTextVNode(
+                                  vue.createElementVNode("span", _hoisted_39, [
+                                    isCorePlugin(item.name) ? (vue.openBlock(), vue.createElementBlock("span", _hoisted_40, "系统")) : vue.createCommentVNode("v-if", true),
+                                    _cache[36] || (_cache[36] = vue.createTextVNode(
                                       " 插件 · ",
                                       -1
                                       /* CACHED */
@@ -3009,30 +3088,54 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
                                       /* TEXT, CLASS */
                                     ),
                                     vue.createTextVNode(
-                                      " · " + vue.toDisplayString(item.scope === "global" ? "全局" : "工作区"),
+                                      " · " + vue.toDisplayString(item.scope === "global" ? "全局" : "工作区") + " ",
                                       1
                                       /* TEXT */
-                                    )
+                                    ),
+                                    npmOf(item) ? (vue.openBlock(), vue.createElementBlock(
+                                      vue.Fragment,
+                                      { key: 1 },
+                                      [
+                                        vue.createTextVNode(
+                                          " · v" + vue.toDisplayString(npmOf(item).current) + " ",
+                                          1
+                                          /* TEXT */
+                                        ),
+                                        npmOf(item).updateable ? (vue.openBlock(), vue.createElementBlock("span", {
+                                          key: 0,
+                                          class: "badge-updateable",
+                                          title: "registry 最新 v" + npmOf(item).latest
+                                        }, "有新版", 8, _hoisted_41)) : vue.createCommentVNode("v-if", true)
+                                      ],
+                                      64
+                                      /* STABLE_FRAGMENT */
+                                    )) : vue.createCommentVNode("v-if", true)
                                   ])
                                 ]),
-                                vue.createElementVNode("div", _hoisted_39, [
-                                  item.state === "running" ? (vue.openBlock(), vue.createElementBlock("button", {
+                                vue.createElementVNode("div", _hoisted_42, [
+                                  npmOf(item) && npmOf(item).updateable ? (vue.openBlock(), vue.createElementBlock("button", {
                                     key: 0,
+                                    class: "ii-btn ii-upd",
+                                    onClick: ($event) => updatePlugin(item),
+                                    title: "更新到 v" + npmOf(item).latest
+                                  }, "更新", 8, _hoisted_43)) : vue.createCommentVNode("v-if", true),
+                                  item.state === "running" ? (vue.openBlock(), vue.createElementBlock("button", {
+                                    key: 1,
                                     class: "ii-btn ii-toggle",
                                     onClick: ($event) => togglePlugin(item),
                                     title: "停止：插件及其工具/UI 不再生效"
-                                  }, "停止", 8, _hoisted_40)) : (vue.openBlock(), vue.createElementBlock("button", {
-                                    key: 1,
+                                  }, "停止", 8, _hoisted_44)) : (vue.openBlock(), vue.createElementBlock("button", {
+                                    key: 2,
                                     class: "ii-btn ii-toggle is-enabled",
                                     onClick: ($event) => togglePlugin(item),
                                     title: "启动插件"
-                                  }, "启动", 8, _hoisted_41)),
+                                  }, "启动", 8, _hoisted_45)),
                                   !isCorePlugin(item.name) ? (vue.openBlock(), vue.createElementBlock("button", {
-                                    key: 2,
+                                    key: 3,
                                     class: "ii-btn ii-del",
                                     onClick: ($event) => uninstallPlugin(item),
                                     title: "卸载：删除插件包目录，可重新从市场安装"
-                                  }, "卸载", 8, _hoisted_42)) : vue.createCommentVNode("v-if", true)
+                                  }, "卸载", 8, _hoisted_46)) : vue.createCommentVNode("v-if", true)
                                 ])
                               ]);
                             }),
@@ -3047,10 +3150,10 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
                       ])
                     ])) : vue.createCommentVNode("v-if", true),
                     vue.createCommentVNode(" MCP 分组 "),
-                    installedMCPs.value.length > 0 ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_43, [
+                    installedMCPs.value.length > 0 ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_47, [
                       vue.createElementVNode("div", {
                         class: "installed-group-title",
-                        onClick: _cache[17] || (_cache[17] = ($event) => toggleGroup("mcp")),
+                        onClick: _cache[18] || (_cache[18] = ($event) => toggleGroup("mcp")),
                         title: collapsedGroups.value.has("mcp") ? "展开 MCP 列表" : "收起 MCP 列表"
                       }, [
                         vue.createVNode(SvgIcon, {
@@ -3058,7 +3161,7 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
                           size: 12,
                           class: "ig-arrow"
                         }, null, 8, ["name"]),
-                        _cache[36] || (_cache[36] = vue.createElementVNode(
+                        _cache[37] || (_cache[37] = vue.createElementVNode(
                           "span",
                           null,
                           "MCP 服务器",
@@ -3067,12 +3170,12 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
                         )),
                         vue.createElementVNode(
                           "span",
-                          _hoisted_45,
+                          _hoisted_49,
                           vue.toDisplayString(installedMCPs.value.length),
                           1
                           /* TEXT */
                         )
-                      ], 8, _hoisted_44),
+                      ], 8, _hoisted_48),
                       vue.withDirectives(vue.createElementVNode(
                         "div",
                         null,
@@ -3085,7 +3188,7 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
                                 key: "mcp-" + item.name + "-" + item.level,
                                 class: "installed-item"
                               }, [
-                                vue.createElementVNode("div", _hoisted_46, [
+                                vue.createElementVNode("div", _hoisted_50, [
                                   vue.createVNode(SvgIcon, {
                                     name: "package",
                                     size: 18
@@ -3094,46 +3197,46 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
                                 vue.createElementVNode("div", {
                                   class: vue.normalizeClass(["ii-status-dot", item.enabled === false ? "dot-disabled" : item._connected ? "dot-connected" : "dot-idle"]),
                                   title: item.enabled === false ? "已禁用" : item._connected ? "已连接" : "未连接"
-                                }, null, 10, _hoisted_47),
-                                vue.createElementVNode("div", _hoisted_48, [
+                                }, null, 10, _hoisted_51),
+                                vue.createElementVNode("div", _hoisted_52, [
                                   vue.createElementVNode(
                                     "div",
-                                    _hoisted_49,
+                                    _hoisted_53,
                                     vue.toDisplayString(item.name),
                                     1
                                     /* TEXT */
                                   ),
                                   vue.createElementVNode(
                                     "div",
-                                    _hoisted_50,
+                                    _hoisted_54,
                                     vue.toDisplayString(item.command) + " " + vue.toDisplayString((item.args || []).join(" ")),
                                     1
                                     /* TEXT */
                                   ),
                                   vue.createElementVNode(
                                     "span",
-                                    _hoisted_51,
+                                    _hoisted_55,
                                     "MCP · " + vue.toDisplayString(item.level === "project" ? "工作区级" : "用户级"),
                                     1
                                     /* TEXT */
                                   )
                                 ]),
-                                vue.createElementVNode("div", _hoisted_52, [
+                                vue.createElementVNode("div", _hoisted_56, [
                                   vue.createElementVNode("button", {
                                     class: vue.normalizeClass(["ii-btn ii-toggle", { "is-enabled": item.enabled !== false }]),
                                     onClick: ($event) => toggleMCP(item),
                                     title: item.enabled === false ? "点击启用" : "点击禁用"
-                                  }, vue.toDisplayString(item.enabled === false ? "禁用" : "启用"), 11, _hoisted_53),
+                                  }, vue.toDisplayString(item.enabled === false ? "禁用" : "启用"), 11, _hoisted_57),
                                   vue.createElementVNode("button", {
                                     class: "ii-btn ii-edit",
                                     onClick: ($event) => startEditMCP(item),
                                     title: "编辑"
-                                  }, "编辑", 8, _hoisted_54),
+                                  }, "编辑", 8, _hoisted_58),
                                   vue.createElementVNode("button", {
                                     class: "ii-btn ii-del",
                                     onClick: ($event) => delMCP(item),
                                     title: "删除"
-                                  }, "删除", 8, _hoisted_55)
+                                  }, "删除", 8, _hoisted_59)
                                 ])
                               ]);
                             }),
@@ -3148,10 +3251,10 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
                       ])
                     ])) : vue.createCommentVNode("v-if", true),
                     vue.createCommentVNode(" 技能分组 "),
-                    installedSkills.value.length > 0 ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_56, [
+                    installedSkills.value.length > 0 ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_60, [
                       vue.createElementVNode("div", {
                         class: "installed-group-title",
-                        onClick: _cache[18] || (_cache[18] = ($event) => toggleGroup("skill")),
+                        onClick: _cache[19] || (_cache[19] = ($event) => toggleGroup("skill")),
                         title: collapsedGroups.value.has("skill") ? "展开技能列表" : "收起技能列表"
                       }, [
                         vue.createVNode(SvgIcon, {
@@ -3159,7 +3262,7 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
                           size: 12,
                           class: "ig-arrow"
                         }, null, 8, ["name"]),
-                        _cache[37] || (_cache[37] = vue.createElementVNode(
+                        _cache[38] || (_cache[38] = vue.createElementVNode(
                           "span",
                           null,
                           "技能",
@@ -3168,12 +3271,12 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
                         )),
                         vue.createElementVNode(
                           "span",
-                          _hoisted_58,
+                          _hoisted_62,
                           vue.toDisplayString(installedSkills.value.length),
                           1
                           /* TEXT */
                         )
-                      ], 8, _hoisted_57),
+                      ], 8, _hoisted_61),
                       vue.withDirectives(vue.createElementVNode(
                         "div",
                         null,
@@ -3186,29 +3289,29 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
                                 key: "skill-" + item.name + "-" + item.level,
                                 class: "installed-item"
                               }, [
-                                vue.createElementVNode("div", _hoisted_59, [
+                                vue.createElementVNode("div", _hoisted_63, [
                                   vue.createVNode(SvgIcon, {
                                     name: "code",
                                     size: 18
                                   })
                                 ]),
-                                vue.createElementVNode("div", _hoisted_60, [
+                                vue.createElementVNode("div", _hoisted_64, [
                                   vue.createElementVNode(
                                     "div",
-                                    _hoisted_61,
+                                    _hoisted_65,
                                     vue.toDisplayString(item.name),
                                     1
                                     /* TEXT */
                                   ),
                                   vue.createElementVNode(
                                     "div",
-                                    _hoisted_62,
+                                    _hoisted_66,
                                     vue.toDisplayString(item.description || "无描述"),
                                     1
                                     /* TEXT */
                                   ),
-                                  vue.createElementVNode("span", _hoisted_63, [
-                                    _cache[38] || (_cache[38] = vue.createTextVNode(
+                                  vue.createElementVNode("span", _hoisted_67, [
+                                    _cache[39] || (_cache[39] = vue.createTextVNode(
                                       " 技能 · ",
                                       -1
                                       /* CACHED */
@@ -3229,13 +3332,13 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
                                     )
                                   ])
                                 ]),
-                                vue.createElementVNode("div", _hoisted_64, [
+                                vue.createElementVNode("div", _hoisted_68, [
                                   vue.createElementVNode("select", {
                                     class: "ss-status-select",
                                     value: item.status || "on",
                                     onChange: ($event) => setSkillStatus(item, $event.target.value),
                                     title: statusTitle(item)
-                                  }, [..._cache[39] || (_cache[39] = [
+                                  }, [..._cache[40] || (_cache[40] = [
                                     vue.createElementVNode(
                                       "option",
                                       { value: "off" },
@@ -3257,18 +3360,18 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
                                       -1
                                       /* CACHED */
                                     )
-                                  ])], 40, _hoisted_65),
+                                  ])], 40, _hoisted_69),
                                   vue.createElementVNode("button", {
                                     class: "ii-btn ii-view",
                                     onClick: ($event) => viewSkill(item),
                                     title: "查看内容"
-                                  }, "查看", 8, _hoisted_66),
+                                  }, "查看", 8, _hoisted_70),
                                   item.level !== "system" ? (vue.openBlock(), vue.createElementBlock("button", {
                                     key: 0,
                                     class: "ii-btn ii-del",
                                     onClick: ($event) => delSkill(item),
                                     title: "删除"
-                                  }, "删除", 8, _hoisted_67)) : vue.createCommentVNode("v-if", true)
+                                  }, "删除", 8, _hoisted_71)) : vue.createCommentVNode("v-if", true)
                                 ])
                               ]);
                             }),
@@ -3282,21 +3385,21 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
                         [vue.vShow, !collapsedGroups.value.has("skill")]
                       ])
                     ])) : vue.createCommentVNode("v-if", true),
-                    installedMCPs.value.length === 0 && installedSkills.value.length === 0 && installedPlugins.value.length === 0 ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_68, [
-                      vue.createElementVNode("div", _hoisted_69, [
+                    installedMCPs.value.length === 0 && installedSkills.value.length === 0 && installedPlugins.value.length === 0 ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_72, [
+                      vue.createElementVNode("div", _hoisted_73, [
                         vue.createVNode(SvgIcon, {
                           name: "package",
                           size: 32
                         })
                       ]),
-                      _cache[40] || (_cache[40] = vue.createElementVNode(
+                      _cache[41] || (_cache[41] = vue.createElementVNode(
                         "div",
                         null,
                         "暂无已安装内容",
                         -1
                         /* CACHED */
                       )),
-                      _cache[41] || (_cache[41] = vue.createElementVNode(
+                      _cache[42] || (_cache[42] = vue.createElementVNode(
                         "div",
                         { class: "me-hint" },
                         "切换到「全部」tab 搜索安装，或点击上方「添加 MCP 服务器」",
@@ -3346,22 +3449,22 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
                             2
                             /* CLASS */
                           ),
-                          vue.createElementVNode("div", _hoisted_70, [
+                          vue.createElementVNode("div", _hoisted_74, [
                             vue.createElementVNode(
                               "div",
-                              _hoisted_71,
+                              _hoisted_75,
                               vue.toDisplayString(item.name),
                               1
                               /* TEXT */
                             ),
                             vue.createElementVNode(
                               "div",
-                              _hoisted_72,
+                              _hoisted_76,
                               vue.toDisplayString(item.description),
                               1
                               /* TEXT */
                             ),
-                            vue.createElementVNode("div", _hoisted_73, [
+                            vue.createElementVNode("div", _hoisted_77, [
                               vue.createElementVNode(
                                 "span",
                                 {
@@ -3371,7 +3474,7 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
                                 3
                                 /* TEXT, CLASS */
                               ),
-                              item.tags ? (vue.openBlock(), vue.createElementBlock("span", _hoisted_74, [
+                              item.tags ? (vue.openBlock(), vue.createElementBlock("span", _hoisted_78, [
                                 (vue.openBlock(true), vue.createElementBlock(
                                   vue.Fragment,
                                   null,
@@ -3391,12 +3494,12 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
                                   /* KEYED_FRAGMENT */
                                 ))
                               ])) : vue.createCommentVNode("v-if", true),
-                              item.installed ? (vue.openBlock(), vue.createElementBlock("span", _hoisted_75, [
+                              item.installed ? (vue.openBlock(), vue.createElementBlock("span", _hoisted_79, [
                                 vue.createVNode(SvgIcon, {
                                   name: "check",
                                   size: 10
                                 }),
-                                _cache[42] || (_cache[42] = vue.createTextVNode(
+                                _cache[43] || (_cache[43] = vue.createTextVNode(
                                   " 已安装",
                                   -1
                                   /* CACHED */
@@ -3404,7 +3507,7 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
                               ])) : vue.createCommentVNode("v-if", true)
                             ])
                           ]),
-                          !item.installed ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_76, [
+                          !item.installed ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_80, [
                             item.kind !== "mcp" ? (vue.openBlock(), vue.createElementBlock("button", {
                               key: 0,
                               class: "mi-install-btn",
@@ -3421,16 +3524,16 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
                                 1
                                 /* TEXT */
                               )
-                            ], 8, _hoisted_77)) : (vue.openBlock(), vue.createElementBlock(
+                            ], 8, _hoisted_81)) : (vue.openBlock(), vue.createElementBlock(
                               vue.Fragment,
                               { key: 1 },
                               [
                                 vue.withDirectives(vue.createElementVNode("select", {
                                   "onUpdate:modelValue": ($event) => item._installScope = $event,
                                   class: "mi-scope-select",
-                                  onClick: _cache[19] || (_cache[19] = vue.withModifiers(() => {
+                                  onClick: _cache[20] || (_cache[20] = vue.withModifiers(() => {
                                   }, ["stop"]))
-                                }, [..._cache[43] || (_cache[43] = [
+                                }, [..._cache[44] || (_cache[44] = [
                                   vue.createElementVNode(
                                     "option",
                                     { value: "user" },
@@ -3445,7 +3548,7 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
                                     -1
                                     /* CACHED */
                                   )
-                                ])], 8, _hoisted_78), [
+                                ])], 8, _hoisted_82), [
                                   [vue.vModelSelect, item._installScope]
                                 ]),
                                 vue.createElementVNode("button", {
@@ -3463,12 +3566,12 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
                                     1
                                     /* TEXT */
                                   )
-                                ], 8, _hoisted_79)
+                                ], 8, _hoisted_83)
                               ],
                               64
                               /* STABLE_FRAGMENT */
                             ))
-                          ])) : (vue.openBlock(), vue.createElementBlock("div", _hoisted_80, [
+                          ])) : (vue.openBlock(), vue.createElementBlock("div", _hoisted_84, [
                             vue.createElementVNode("button", {
                               class: "mi-uninstall-btn",
                               onClick: ($event) => uninstallItem(item),
@@ -3478,20 +3581,20 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
                                 name: "trash",
                                 size: 12
                               }),
-                              _cache[44] || (_cache[44] = vue.createTextVNode(
+                              _cache[45] || (_cache[45] = vue.createTextVNode(
                                 " 卸载 ",
                                 -1
                                 /* CACHED */
                               ))
-                            ], 8, _hoisted_81)
+                            ], 8, _hoisted_85)
                           ]))
                         ]);
                       }),
                       128
                       /* KEYED_FRAGMENT */
                     )),
-                    !loading.value && items.value.length === 0 ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_82, [
-                      vue.createElementVNode("div", _hoisted_83, [
+                    !loading.value && items.value.length === 0 ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_86, [
+                      vue.createElementVNode("div", _hoisted_87, [
                         vue.createVNode(SvgIcon, {
                           name: "package",
                           size: 32
@@ -3499,12 +3602,12 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
                       ]),
                       query.value ? (vue.openBlock(), vue.createElementBlock(
                         "div",
-                        _hoisted_84,
+                        _hoisted_88,
                         '未找到匹配 "' + vue.toDisplayString(query.value) + '" 的条目',
                         1
                         /* TEXT */
-                      )) : (vue.openBlock(), vue.createElementBlock("div", _hoisted_85, "市场中暂无可用条目")),
-                      _cache[45] || (_cache[45] = vue.createElementVNode(
+                      )) : (vue.openBlock(), vue.createElementBlock("div", _hoisted_89, "市场中暂无可用条目")),
+                      _cache[46] || (_cache[46] = vue.createElementVNode(
                         "div",
                         { class: "me-hint" },
                         "试试其他关键词或分类",
@@ -3521,22 +3624,22 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
               /* STABLE_FRAGMENT, DEV_ROOT_FRAGMENT */
             ))
           ]),
-          vue.createElementVNode("div", _hoisted_86, [
+          vue.createElementVNode("div", _hoisted_90, [
             vue.createElementVNode(
               "span",
-              _hoisted_87,
+              _hoisted_91,
               vue.toDisplayString(tab.value === "installed" ? installedMCPs.value.length + installedSkills.value.length + installedPlugins.value.length : items.value.length) + " 个条目",
               1
               /* TEXT */
             ),
             error.value ? (vue.openBlock(), vue.createElementBlock(
               "span",
-              _hoisted_88,
+              _hoisted_92,
               vue.toDisplayString(error.value),
               1
               /* TEXT */
             )) : vue.createCommentVNode("v-if", true),
-            _cache[46] || (_cache[46] = vue.createElementVNode(
+            _cache[47] || (_cache[47] = vue.createElementVNode(
               "span",
               { class: "market-tip" },
               "安装后下次对话生效",
@@ -3552,7 +3655,7 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
       };
     }
   };
-  const MarketplacePanel2 = /* @__PURE__ */ _export_sfc(_sfc_main, [["__scopeId", "data-v-67aec65d"]]);
+  const MarketplacePanel2 = /* @__PURE__ */ _export_sfc(_sfc_main, [["__scopeId", "data-v-59ec627c"]]);
   function mount(el) {
     const app = vue.createApp(MarketplacePanel2);
     app.mount(el);
