@@ -202,6 +202,7 @@ function stopResize() {
   overflow: auto;
 }
 .git-host { height: 100%; }
+.market-host { height: 100%; }
 .sidebar-placeholder {
   padding: 20px;
   text-align: center;

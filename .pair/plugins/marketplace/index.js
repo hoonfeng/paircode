@@ -39,6 +39,9 @@ return {
       const out = []
       for (const obj of (data.objects || [])) {
         const p = obj.package || {}
+        // ★ 官方插件（@paircode/*、paircode-plugin-*）不是 MCP 服务器，排除避免搜索结果重复/错类
+        const low = String(p.name || '').toLowerCase()
+        if (low.startsWith('@paircode/') || low.startsWith('paircode-plugin-')) continue
         out.push({
           id: 'npm-' + p.name, kind: 'mcp', name: shortName(p.name),
           description: p.description || '',
@@ -73,29 +76,57 @@ return {
     //   ① @paircode/<name> scope 包（唯一权威）
     //   ② paircode-plugin-<name> 裸名包（须带 paircode 关键词双重校验）
     // 无关包（paircode-terminal 等）被排除。
+    // ★ 2026-08-20 增强：除相关性搜索（q paircode）外，追加 keywords:paircode 官方全集兜底，
+    //   本地 name/desc/keywords 匹配 query——任意词都能搜到官方插件（不受 npm 相关性/索引延迟影响）。
     function searchNpmPlugins(query) {
-      const q = (String(query || '').trim() + ' paircode').trim()
-      const r = ctx.web.fetch(NPM_SEARCH + encodeURIComponent(q) + '&size=' + MAX)
-      if (!r || !r.ok) return []
-      let data = {}
-      try { data = JSON.parse(r.text || '{}') } catch (e) { return [] }
+      const q0 = String(query || '').trim()
+      const fetchNpm = (text, size = MAX) => {
+        const r = ctx.web.fetch(NPM_SEARCH + encodeURIComponent(text) + '&size=' + size)
+        if (!r || !r.ok) return []
+        try { return JSON.parse(r.text || '{}').objects || [] } catch (e) { return [] }
+      }
+      const norm = (s) => String(s || '').toLowerCase()
+      const isOfficial = (low) => low.startsWith('@paircode/') || low.startsWith('paircode-plugin-')
+      const localMatch = (p) => {
+        if (!q0) return true
+        const hay = norm([p.name, p.description || ''].concat(Array.isArray(p.keywords) ? p.keywords : []).join(' '))
+        return hay.includes(norm(q0))
+      }
+      const toEntry = (p) => ({
+        id: p.name, kind: 'plugin', name: shortName(p.name),
+        description: p.description || '',
+        tags: ['plugin'].concat(p.keywords || []),
+        source: 'npm:' + p.name, version: p.version || '',
+      })
       const out = []
-      for (const obj of (data.objects || [])) {
+      const seen = new Set()
+      // A：相关性搜索（query + paircode）
+      for (const obj of fetchNpm((q0 ? q0 + ' ' : '') + 'paircode')) {
         const p = obj.package || {}
-        const low = String(p.name || '').toLowerCase()
+        const low = norm(p.name)
         if (low === 'cordis' || low === '@cordisjs/core' || low === '@cordisjs/plugin-loader') continue
-        const isOfficial = low.startsWith('@paircode/') || low.startsWith('paircode-plugin-')
-        if (!isOfficial) continue
+        if (!isOfficial(low)) continue
         if (low.startsWith('paircode-plugin-')) {
           const kws = (Array.isArray(p.keywords) ? p.keywords : []).join(',').toLowerCase()
           if (!kws.includes('paircode')) continue
         }
-        out.push({
-          id: p.name, kind: 'plugin', name: shortName(p.name),
-          description: p.description || '',
-          tags: ['plugin'].concat(p.keywords || []),
-          source: 'npm:' + p.name, version: p.version || '',
-        })
+        if (seen.has(p.name)) continue
+        seen.add(p.name)
+        out.push(toEntry(p))
+      }
+      // B：官方全集兜底（keywords:paircode，size=100 防截断，本地匹配）——补相关性搜不到的（新包/低分）
+      for (const obj of fetchNpm('keywords:paircode', 100)) {
+        const p = obj.package || {}
+        const low = norm(p.name)
+        if (!isOfficial(low)) continue
+        if (low.startsWith('paircode-plugin-')) {
+          const kws = (Array.isArray(p.keywords) ? p.keywords : []).join(',').toLowerCase()
+          if (!kws.includes('paircode')) continue
+        }
+        if (seen.has(p.name)) continue
+        if (!localMatch(p)) continue
+        seen.add(p.name)
+        out.push(toEntry(p))
       }
       return out
     }

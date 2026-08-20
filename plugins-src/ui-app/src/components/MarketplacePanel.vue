@@ -187,7 +187,7 @@
           </div>
         </div>
       </div>
-      <div class="modal-footer">
+      <div class="market-footer">
         <span class="market-count">{{ tab === 'installed' ? (installedMCPs.length + installedSkills.length) : items.length }} 个条目</span>
         <span v-if="error" class="market-error">{{ error }}</span>
         <span class="market-tip">安装后下次对话生效</span>
@@ -476,21 +476,21 @@ onMounted(() => {
   overflow: hidden;
 }
 
-/* ── 头部 ── */
+/* ── 头部（★ 侧边栏窄面板适配：h2+关闭 一行，tabs 独立一行横向滚动）── */
 .market-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
+  gap: 6px 8px;
+  padding: 8px 10px;
   border-bottom: 1px solid var(--border-color);
   flex-wrap: wrap;
 }
 .market-header h2 {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--text-primary);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-shrink: 0;
 }
 .market-tabs {
@@ -499,16 +499,23 @@ onMounted(() => {
   background: var(--bg-tertiary);
   border-radius: 6px;
   padding: 2px;
+  /* ★ tabs 独占一行，横向滚动不换行（窄面板 6 个 tab 放不下） */
+  order: 10;
+  width: 100%;
+  overflow-x: auto;
+  flex-wrap: nowrap;
+  scrollbar-width: thin;
 }
 .market-tabs button {
   background: none;
   border: none;
   color: var(--text-secondary);
-  font-size: 13px;
-  padding: 5px 14px;
+  font-size: 12px;
+  padding: 4px 10px;
   cursor: pointer;
   border-radius: 4px;
   transition: all 0.15s;
+  flex-shrink: 0;
 }
 .market-tabs button:hover { color: var(--text-primary); }
 .market-tabs button.active {
@@ -521,10 +528,10 @@ onMounted(() => {
   background: none;
   border: none;
   color: var(--text-secondary);
-  font-size: 22px;
+  font-size: 18px;
   cursor: pointer;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -808,21 +815,23 @@ onMounted(() => {
   50% { opacity: 1; transform: scale(1.2); }
 }
 
-/* ── 列表 ── */
+/* ── 列表（★ 窄面板紧凑）── */
 .market-list {
   flex: 1;
   overflow-y: auto;
-  padding: 8px 12px;
+  padding: 6px 8px;
   min-height: 0;
 }
 .market-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 10px;
+  gap: 8px;
+  padding: 10px 8px;
   border-radius: 8px;
   cursor: default;
   transition: background 0.1s;
+  /* ★ 窄面板：操作区换行独立一行，避免挤压 body（tags 换行堆叠） */
+  flex-wrap: wrap;
 }
 .market-item:hover { background: var(--bg-hover); }
 .market-item + .market-item {
@@ -831,34 +840,33 @@ onMounted(() => {
 }
 
 .mi-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  font-size: 20px;
+  font-size: 17px;
 }
 .icon-mcp { background: rgba(126, 184, 218, 0.15); color: #7eb8da; }
 .icon-skill { background: rgba(212, 167, 78, 0.15); color: #d4a74e; }
 
 .mi-body { flex: 1; min-width: 0; }
-.mi-name { font-size: 14px; color: var(--text-primary); font-weight: 600; }
-.mi-desc { font-size: 12px; color: var(--text-muted); margin-top: 3px; line-height: 1.4; }
-.mi-meta { display: flex; gap: 6px; margin-top: 5px; flex-wrap: wrap; align-items: center; }
-.mi-type { font-size: 10px; padding: 1px 8px; border-radius: 10px; font-weight: 500; }
+.mi-name { font-size: 13px; color: var(--text-primary); font-weight: 600; }
+.mi-desc { font-size: 12px; color: var(--text-muted); margin-top: 2px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.mi-meta { display: flex; gap: 6px; margin-top: 5px; flex-wrap: nowrap; overflow: hidden; align-items: center; }
 .type-mcp { background: rgba(126, 184, 218, 0.15); color: #7eb8da; }
 .type-skill { background: rgba(212, 167, 78, 0.15); color: #d4a74e; }
-.mi-tags { display: flex; gap: 3px; flex-wrap: wrap; }
-.mi-tag { font-size: 10px; padding: 0 5px; border-radius: 3px; background: var(--bg-tertiary); color: var(--text-muted); }
+.mi-tags { display: flex; gap: 3px; flex-wrap: nowrap; overflow: hidden; }
+.mi-tag { font-size: 10px; padding: 0 5px; border-radius: 3px; background: var(--bg-tertiary); color: var(--text-muted); flex-shrink: 0; }
 .mi-installed { font-size: 11px; color: #6a9955; display: flex; align-items: center; gap: 2px; }
 
 .mi-install-btn, .mi-uninstall-btn {
   flex-shrink: 0;
-  padding: 6px 14px;
+  padding: 5px 10px;
   border-radius: 6px;
-  font-size: 13px;
+  font-size: 12px;
   cursor: pointer;
   border: none;
   display: flex;
@@ -873,8 +881,16 @@ onMounted(() => {
 .mi-install-btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
 .mi-install-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
-/* ── 安装区域（含 scope 选择）── */
-.mi-install-area { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+/* ── 安装区域（含 scope 选择；★ 窄面板独立一行右对齐）── */
+.mi-install-area {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  justify-content: flex-end;
+  order: 10;
+  margin-top: 4px;
+}
 .mi-scope-select {
   background: var(--input-bg);
   border: 1px solid var(--border-color);
@@ -890,6 +906,11 @@ onMounted(() => {
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
   color: var(--text-secondary);
+  /* ★ 窄面板：卸载按钮独立一行右对齐 */
+  width: 100%;
+  justify-content: flex-end;
+  order: 10;
+  margin-top: 4px;
 }
 .mi-uninstall-btn:hover { color: #c03; border-color: #c03; background: rgba(204, 0, 51, 0.08); }
 
@@ -906,14 +927,15 @@ onMounted(() => {
 .me-icon { margin-bottom: 12px; opacity: 0.25; font-size: 32px; }
 .me-hint { font-size: 12px; margin-top: 6px; opacity: 0.6; }
 
-/* ── 底部 ── */
+/* ── 底部（★ 窄面板精简：隐藏浮层式关闭按钮）── */
 .market-footer {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 20px;
+  padding: 8px 10px;
   border-top: 1px solid var(--border-color);
 }
+.market-footer .btn-secondary { display: none; }
 .market-count { font-size: 12px; color: var(--text-muted); }
 .market-error { font-size: 12px; color: #c03; flex: 1; }
 .market-tip { margin-left: auto; font-size: 11px; color: var(--text-muted); }

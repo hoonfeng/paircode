@@ -6672,7 +6672,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
       };
     }
   };
-  const Sidebar = /* @__PURE__ */ _export_sfc(_sfc_main, [["__scopeId", "data-v-bc54dd33"]]);
+  const Sidebar = /* @__PURE__ */ _export_sfc(_sfc_main, [["__scopeId", "data-v-e1bda347"]]);
   function mount(el) {
     const app = vue.createApp(Sidebar);
     app.mount(el);

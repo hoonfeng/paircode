@@ -2187,7 +2187,7 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
   const _hoisted_64 = { class: "me-icon" };
   const _hoisted_65 = { key: 0 };
   const _hoisted_66 = { key: 1 };
-  const _hoisted_67 = { class: "modal-footer" };
+  const _hoisted_67 = { class: "market-footer" };
   const _hoisted_68 = { class: "market-count" };
   const _hoisted_69 = {
     key: 0,
@@ -3312,7 +3312,7 @@ var MarketplacePanel = (function(exports, vue, api, uiState_js) {
       };
     }
   };
-  const MarketplacePanel2 = /* @__PURE__ */ _export_sfc(_sfc_main, [["__scopeId", "data-v-d35768b1"]]);
+  const MarketplacePanel2 = /* @__PURE__ */ _export_sfc(_sfc_main, [["__scopeId", "data-v-bc5de650"]]);
   function mount(el) {
     const app = vue.createApp(MarketplacePanel2);
     app.mount(el);
