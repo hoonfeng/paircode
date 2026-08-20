@@ -16,6 +16,9 @@ import { fileURLToPath } from 'node:url'
 const REGISTRY = 'https://registry.npmjs.org'
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const PUBLISH_DIR = join(REPO_ROOT, '.pair', 'publish')
+// ── 代理配置：PAIRCODE_PROXY → HTTPS_PROXY → HTTP_PROXY（透传给 curl / npm）──
+const PROXY = process.env.PAIRCODE_PROXY || process.env.HTTPS_PROXY || process.env.HTTP_PROXY || ''
+const proxyArgs = PROXY ? ` --proxy=${PROXY} --https-proxy=${PROXY}` : ''
 const REMAIN = ['marketplace','ui-activitybar','ui-appearance','ui-editor','ui-modals','ui-quick-exec','ui-right-panel','ui-sidebar','ui-statusbar','ui-statusbar-conn','ui-titlebar','web-api']
 const MAX_ROUNDS = 48 // 最多 48 轮（48 小时），仍不够可手动再跑
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -24,7 +27,7 @@ const log = (m) => console.log(new Date().toISOString() + ' ' + m)
 // 查询 npm 已发布的最新版本（修 CRLF：curl 在 Windows cmd 输出 \r\n）
 function npmExists(pkgName) {
   try {
-    const out = execSync(`curl -s -w "\\n%{http_code}" "${REGISTRY}/-/package/${pkgName}/dist-tags"`, { encoding: 'utf8', stdio: ['ignore','pipe','ignore'] })
+    const out = execSync(`curl -s${PROXY ? ` -x "${PROXY}"` : ''} -w "\\n%{http_code}" "${REGISTRY}/-/package/${pkgName}/dist-tags"`, { encoding: 'utf8', stdio: ['ignore','pipe','ignore'] })
     const lines = out.trim().split('\n')
     const code = (lines[lines.length - 1] || '').trim() // ★ 必须 trim 掉 \r
     if (code !== '200') return null
@@ -43,7 +46,7 @@ function localVersion(name) {
 log('══ 步骤 1/2：重新打包官方插件（publish-official-plugins.mjs 默认=验证模式）══')
 try {
   execSync(`node ${join(REPO_ROOT, 'scripts', 'publish-official-plugins.mjs')}`, {
-    cwd: REPO_ROOT, encoding: 'utf8', stdio: ['ignore', 'inherit', 'ignore'], timeout: 300000,
+    cwd: REPO_ROOT, encoding: 'utf8', stdio: ['ignore', 'inherit', 'ignore'], timeout: 600000,
   })
 } catch (e) {
   log(`重新打包失败: ${String(e.message || e).split('\n')[0]}（继续用现有 .pair/publish/ 内容）`)
@@ -67,7 +70,7 @@ for (let round = 1; round <= MAX_ROUNDS; round++) {
     const dir = join(PUBLISH_DIR, name)
     const want = localVersion(name) || '未知'
     try {
-      execSync(`npm publish "${dir}/" --registry=${REGISTRY} --access public`, {
+      execSync(`npm publish "${dir}/" --registry=${REGISTRY} --access public${proxyArgs}`, {
         timeout: 120000, encoding: 'utf8', stdio: ['ignore','pipe','ignore'],
       })
       log(`OK ${pkgName}@${want} 发布成功`)

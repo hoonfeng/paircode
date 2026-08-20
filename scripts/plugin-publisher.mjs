@@ -44,6 +44,10 @@ const REG = String(process.env.PAIRCODE_NPM_REGISTRY || '').replace(/\/+$/, '') 
 const SCOPED = '@paircode'
 const PUBLISH_FILES = ['index.js', 'client.js', 'assets', 'bin', 'package.json', 'README.md']
 const COOLDOWN_MS = 15000 // 包间冷却（npm 限流防护）
+// ── 代理配置：PAIRCODE_PROXY → HTTPS_PROXY → HTTP_PROXY（透传给 curl / npm）──
+// ★ node fetch 不读 HTTP(S)_PROXY 环境变量，故线上查询改走 curl（天然支持 -x）
+const PROXY = process.env.PAIRCODE_PROXY || process.env.HTTPS_PROXY || process.env.HTTP_PROXY || ''
+const proxyArgs = PROXY ? ` --proxy=${PROXY} --https-proxy=${PROXY}` : ''
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const log = (m = '') => console.log(m)
@@ -88,10 +92,13 @@ async function remoteCheck(name) {
   const pkgName = SCOPED + '/' + name
   const url = `${REG}/${encodeURIComponent(pkgName)}`
   try {
-    const r = await fetch(url)
-    if (r.status === 404) return { ok: true, version: null }
-    if (!r.ok) return { ok: false, reason: `HTTP ${r.status}` }
-    const j = await r.json()
+    // curl 查询（packument）：404=未发布 / 200=已发布；支持代理 -x
+    const out = execSync(`curl -s${PROXY ? ` -x "${PROXY}"` : ''} -w "\\n%{http_code}" "${url}"`, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+    const lines = out.trim().split('\n')
+    const code = (lines[lines.length - 1] || '').trim()
+    if (code === '404') return { ok: true, version: null }
+    if (code !== '200') return { ok: false, reason: `HTTP ${code}` }
+    const j = JSON.parse(lines.slice(0, -1).join('\n'))
     return { ok: true, version: (j['dist-tags'] && j['dist-tags'].latest) || null }
   } catch (e) {
     return { ok: false, reason: String(e.message || e).slice(0, 80) }
@@ -241,7 +248,7 @@ async function publishOne(name, { onLog = log } = {}) {
   if (!readToken()) return { name, ok: false, error: '未保存 npm token（请先设置 token）' }
   const pkgDir = path.join(publishDir, name)
   // 发布：绝对路径的包目录 + userconfig（相对路径+反斜杠会导致 npm 找不到配置卡认证）
-  const cmd = `npm publish "${pkgDir}" --registry=${REG} --userconfig=${npmrcPath} --access public`
+  const cmd = `npm publish "${pkgDir}" --registry=${REG} --userconfig=${npmrcPath} --access public${proxyArgs}`
   onLog(`  ⬆ 发布 ${SCOPED}/${name}@${b.version} ...`)
   try {
     const out = execSync(cmd, { cwd: pkgDir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 120000 })
