@@ -35,15 +35,17 @@ const onlyIdx = args.indexOf('--only')
 const ONLY = onlyIdx >= 0 ? args[onlyIdx + 1].split(',').map((s) => s.trim()).filter(Boolean) : null
 
 // 拷贝文件/目录（白名单：只拷发布所需，排除 node_modules/.git 等）
+// ★ 2026-08-20 修复：topLevel 只在顶层做 PUBLISH_FILES 过滤；
+//   递归进入 assets/bin 等子目录时复制全部内容（否则 UI 构建产物全被过滤掉）。
 const PUBLISH_FILES = ['index.js', 'client.js', 'assets', 'bin', 'package.json', 'README.md']
-function copyDir(src, dst) {
+function copyDir(src, dst, topLevel = true) {
   fs.mkdirSync(dst, { recursive: true })
   for (const ent of fs.readdirSync(src, { withFileTypes: true })) {
     if (ent.name === 'node_modules' || ent.name === '.git') continue
-    if (!PUBLISH_FILES.includes(ent.name)) continue
+    if (topLevel && !PUBLISH_FILES.includes(ent.name)) continue
     const s = path.join(src, ent.name)
     const d = path.join(dst, ent.name)
-    if (ent.isDirectory()) copyDir(s, d)
+    if (ent.isDirectory()) copyDir(s, d, false)
     else fs.copyFileSync(s, d)
   }
 }
@@ -99,12 +101,17 @@ function main() {
   for (const p of plugins) {
     const pkgName = `@paircode/${p.name}`
     const dst = path.join(publishDir, p.name)
-    // 已存在则跳过（避免 403 cannot publish over versions）
+    // ★ 版本感知跳过（2026-08-20 修复）：仅当 npm 已存在「相同版本」才跳过。
+    //   本地版本高于 npm（手动 bump 后）→ 继续打包并可发布（覆盖旧版修复内容）；
+    //   npm 版本更高/不同 → 同样继续（避免误吞更新，由 npm 403 兜底同版本冲突）。
     const existing = npmExists(pkgName)
-    if (existing) {
+    if (existing && existing === p.pkg.version) {
       console.log(`  ⏭ ${pkgName} 已存在（@${existing}），跳过`)
       ok.push({ name: p.name, pkgName, out: `skip@${existing}` })
       continue
+    }
+    if (existing) {
+      console.log(`  ↗ ${pkgName} npm 已有 @${existing} ≠ 本地 ${p.pkg.version}，重新打包${DO_PUBLISH ? '并发布' : '验证'}`)
     }
     try {
       // 1. 整目录拷贝（保留 index.js/client.js/assets/bin/）
