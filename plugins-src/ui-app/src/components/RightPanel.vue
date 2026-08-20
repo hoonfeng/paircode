@@ -194,13 +194,9 @@
             <textarea class="chat-input" ref="inputRef" v-model="inputText" @keydown="onKeydown" @dragover.prevent @drop="handleDrop" @paste="handlePaste" :style="{ height: inputHeight + 'px' }" placeholder="发送消息到 AI... (Enter 发送, Shift+Enter 换行)" :disabled="state.chatLoading"></textarea>
             <div class="input-bottom-bar">
               <div class="ibb-btns">
-                <!-- ★ composer 配置选择器：选「AI 预设」整套配置生效（多套配置快速切换）；无预设时手动选服务商/模型 -->
+                <!-- ★ composer 配置选择器：模型/服务商/思考（配置在设置面板「AI」tab 维护，预设列表也在其中） -->
                 <span class="ibb-model">
-                  <select v-model="composerPreset" class="cmp-sel cmp-preset" @change="onCmpPresetChange" title="AI 配置预设（设置面板「AI 预设」中把配好的配置命名保存；选中整套配置生效）">
-                    <option value="">手动配置</option>
-                    <option v-for="p in presetOptions" :key="p" :value="p">{{ p }}</option>
-                  </select>
-                  <select v-model="composerProvider" class="cmp-sel cmp-prov" @change="onCmpProviderChange" title="服务商（未选预设时手动切换；选预设时自动带出）">
+                  <select v-model="composerProvider" class="cmp-sel cmp-prov" @change="onCmpProviderChange" title="服务商">
                     <option v-for="p in (modelData && modelData.providers) || []" :key="p" :value="p">{{ p }}</option>
                   </select>
                   <select v-model="composerModel" class="cmp-sel cmp-model" @change="onCmpModelChange" title="执行模型（每个模型可独立配置参数）">
@@ -259,8 +255,6 @@ const inputText = ref('')
 
 // ─── composer 配置选择器（★ 2026-08-20 AI 配置预设：选「预设」整套配置生效；无预设时回退直接选服务商/模型）───
 const modelData = ref(null)
-const presetData = ref({})           // AI 配置预设 {预设名: 完整配置快照}（/api/ai-presets）
-const composerPreset = ref('')       // 当前预设名（UI 下拉；''=未用预设，直接手动选服务商/模型）
 const composerProvider = ref('')     // 当前服务商名（写 settings.provider）
 const composerModel = ref('')
 const composerThinking = ref('')   // 思考档位（''=默认/沿用模型配置；切换即写入 modelParams 记录）
@@ -274,74 +268,22 @@ const THINK_TIERS = [
   { v: 'xhigh', label: '思考: xhigh（超高）' },
   { v: 'max', label: '思考: max（最大化）' },
 ]
-// 预设列表（含「手动选择」入口）：预设名 + 空项（未用预设 → 手动选服务商）
-const presetOptions = computed(() => {
-  const names = Object.keys(presetData.value || {})
-  return names
-})
-// 模型下拉：当前服务商可用模型（预设应用后 provider 已切换；手动模式直接用服务商模型）
+// 模型下拉：当前服务商可用模型
 const composerModels = computed(() => {
   const m = (modelData.value && modelData.value.models) || {}
   return m[composerProvider.value] || []
 })
 async function loadModelData() {
   try {
-    const [md, pr] = await Promise.all([api.getModels(), api.getAiPresets().catch(() => ({ presets: {} }))])
-    modelData.value = md
-    presetData.value = (pr && pr.presets) || {}
+    modelData.value = await api.getModels()
   } catch {}
 }
 function initComposerModel() {
   const s = state.settings || {}
-  // 优先：settings.preset 记录当前预设名 → 选中该预设（并按其 provider 加载模型）
-  const pn = s.preset || ''
-  if (pn && presetData.value[pn]) {
-    composerPreset.value = pn
-    composerProvider.value = (presetData.value[pn].provider || s.provider || '')
-  } else {
-    composerPreset.value = ''
-    composerProvider.value = s.provider || ''
-  }
+  composerProvider.value = s.provider || ''
   if (s.executeModel) composerModel.value = s.executeModel
 }
-function onCmpPresetChange() {
-  if (composerPreset.value) {
-    // 选预设：整套配置生效（服务端 apply 写回 settings，同时本地同步 provider/模型）
-    const p = presetData.value[composerPreset.value] || {}
-    composerProvider.value = p.provider || composerProvider.value
-    composerModel.value = ''
-    const ms = (modelData.value && modelData.value.models) || {}
-    const list = ms[composerProvider.value] || []
-    const cur = p.executeModel || (state.settings && state.settings.executeModel)
-    if (cur && list.includes(cur)) composerModel.value = cur
-    else if (list.length) composerModel.value = list[0]
-    applyPresetComposer()
-  } else {
-    // 切回手动：服务商保留当前，清模型重新选
-    composerModel.value = ''
-    onCmpModelChange()
-  }
-}
-// 预设应用（与服务端同步 settings：provider/baseURL/apiKey/模型/参数整套写回）
-async function applyPresetComposer() {
-  if (!composerPreset.value) return
-  try {
-    const r = await api.saveAiPreset('apply', composerPreset.value)
-    if (r && r.ok && r.settings) {
-      state.settings = r.settings
-      composerProvider.value = r.settings.provider || composerProvider.value
-      if (r.settings.executeModel) composerModel.value = r.settings.executeModel
-      initComposerThinking()
-      window.$toast && window.$toast('已应用预设：' + composerPreset.value, 'success')
-    } else {
-      window.$toast && window.$toast('预设应用失败: ' + ((r && r.error) || ''), 'error')
-      initComposerModel()
-    }
-  } catch (e) {
-    window.$toast && window.$toast('预设应用失败: ' + (e.message || e), 'error')
-    initComposerModel()
-  }
-}
+// （★ 2026-08-20 预设选择从对话面板移除：预设列表在设置面板「AI」tab 内管理，应用后随 settings 自动同步）
 function onCmpProviderChange() {
   composerModel.value = ''
   const ms = composerModels.value
@@ -362,7 +304,6 @@ async function onCmpModelChange() {
   const md = modelData.value || {}
   const prov = composerProvider.value
   const top = { ...(state.settings || {}), provider: prov, executeModel: composerModel.value }
-  if (composerPreset.value) top.preset = composerPreset.value
   // 实例联动：带出该实例的 BaseURL 与 API Key
   if (md.providerBaseURLs && md.providerBaseURLs[prov]) top.baseURL = md.providerBaseURLs[prov]
   if (md.providerKeys && md.providerKeys[prov]) top.apiKey = md.providerKeys[prov]
@@ -1550,20 +1491,11 @@ watch(() => state.currentConvId, (id, oldId) => {
 
 watch(() => state.settings, (s) => { if (s) { autoIterate.value = !!s.autoIterateOnRejection; autonomous.value = !!s.autonomous; autoCollapse.value = s.autoCollapse !== undefined ? !!s.autoCollapse : true; } }, { immediate: true })
 
-// ★ AI 预设数据变化（新增/应用后）刷新预设列表下拉（对话面板即时可见）
-watch(() => state.settings && state.settings.preset, async (pn) => {
-  try {
-    const pr = await api.getAiPresets().catch(() => ({ presets: {} }))
-    presetData.value = (pr && pr.presets) || {}
-    if (pn) {
-      const p = presetData.value[pn]
-      if (p) {
-        composerPreset.value = pn
-        composerProvider.value = p.provider || composerProvider.value
-        if (p.executeModel && composerModel.value !== p.executeModel) composerModel.value = p.executeModel
-      }
-    }
-  } catch {}
+// ★ settings 变化（AI tab 应用预设 / 保存设置）→ 同步对话面板服务商/模型下拉
+watch(() => [state.settings && state.settings.provider, state.settings && state.settings.executeModel], ([prov, model]) => {
+  if (prov && composerProvider.value !== prov) composerProvider.value = prov
+  if (model && composerModel.value !== model) composerModel.value = model
+  initComposerThinking()
 })
 
 // ★ 从工作区配置加载审核模式（黑白名单配置已由插件面板/工具集管理取代，不再加载）

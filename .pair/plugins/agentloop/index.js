@@ -61,6 +61,13 @@ return {
             optionsSource: 'models', placeholder: 'deepseek-v4-pro', hint: '规划 Agent 使用的模型（更强推理）' },
           { name: 'reviewModel', label: '审核模型', type: 'select', binding: 'reviewModel',
             optionsSource: 'models', placeholder: 'deepseek-v4-pro', hint: '审核 Agent 使用的模型' },
+          // ── AI 配置预设（★ 2026-08-20 移入 AI tab）：把配好的一份完整配置命名保存为预设 ──
+          // type='preset-manager'：SettingsModal 在 AI tab 内渲染 CRUD 面板（保存当前/应用/改名/删除），
+          // 数据经 /api/ai-presets（config/ai-presets.json）。每条预设 = 完整配置快照
+          // （provider/baseURL/apiKey/模型/温度/思考/输出上限/上下文窗口）。「应用」即整套写回 settings，
+          // 对话面板随 settings 变化自动同步（聊天输入区只保留模型/服务商/思考下拉，无预设下拉）。
+          { name: 'presets', label: 'AI 配置预设', type: 'preset-manager',
+            hint: '把配好的 AI 配置（服务商/模型/Key/参数）保存为命名预设；点「应用」整套配置生效，对话无需逐项重配。' },
       ],
     })
 
@@ -105,19 +112,6 @@ return {
         fields: [
           { name: 'providers', label: '服务商列表', type: 'provider-manager',
             hint: '维护服务商：名称、Base URL、API Key、可用模型列表，及每模型独立参数（温度/思考/输出上限/上下文窗口）。AI tab 的下拉与联动均来自此处。' },
-        ],
-      })
-
-      // ── AI 配置预设：把配好的一份完整配置命名保存为预设，供对话面板快速切换 ──
-      // type='preset-manager'：预设 CRUD（保存当前/选择/改名/删除），数据经 /api/ai-presets（config/ai-presets.json）。
-      // 每条预设 = 完整配置快照（provider/baseURL/apiKey/模型/温度/思考/输出上限/上下文窗口）。
-      // 对话面板（RightPanel）的预设下拉读取同一数据源，选择后整套配置写入 settings 生效。
-      ctx.registerSettings({
-        key: 'presets',
-        title: 'AI 预设',
-        fields: [
-          { name: 'presets', label: 'AI 配置预设（多套配置，对话快速切换）', type: 'preset-manager',
-            hint: '把当前 AI 配置（服务商/模型/参数）保存为命名预设；对话面板从预设列表选择，选中整套配置即生效，无需逐项重配。' },
         ],
       })
 
