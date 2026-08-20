@@ -194,10 +194,10 @@
             <textarea class="chat-input" ref="inputRef" v-model="inputText" @keydown="onKeydown" @dragover.prevent @drop="handleDrop" @paste="handlePaste" :style="{ height: inputHeight + 'px' }" placeholder="发送消息到 AI... (Enter 发送, Shift+Enter 换行)" :disabled="state.chatLoading"></textarea>
             <div class="input-bottom-bar">
               <div class="ibb-btns">
-                <!-- ★ composer 模型选择器：快速切换服务商/执行模型（写入 settings，发送即用） -->
+                <!-- ★ composer 模型选择器：快速切换模型组/执行模型（写入 settings，发送即用；模型组内实例自带 Key） -->
                 <span class="ibb-model">
-                  <select v-model="composerProvider" class="cmp-sel cmp-prov" @change="onCmpProviderChange" title="服务商（切换自动带出密钥与模型）">
-                    <option v-for="p in modelProviders" :key="p" :value="p">{{ p }}</option>
+                  <select v-model="composerGroup" class="cmp-sel cmp-prov" @change="onCmpProviderChange" title="模型组（用户命名；组内实例自带密钥，无需再选服务商）">
+                    <option v-for="p in modelGroups" :key="p" :value="p">{{ p }}</option>
                   </select>
                   <select v-model="composerModel" class="cmp-sel cmp-model" @change="onCmpModelChange" title="执行模型（每个模型可独立配置参数）">
                     <option v-for="m in composerModels" :key="m" :value="m">{{ m }}</option>
@@ -253,9 +253,11 @@ const toggleFocus = () => {
 }
 const inputText = ref('')
 
-// ─── composer 模型选择器（快速切换服务商/执行模型，写 settings 发送即用）───
+// ─── composer 模型选择器（★ 2026-08-20 模型组化：选「模型组+模型」，自动匹配实例 Key，不再选服务商）───
 const modelData = ref(null)
-const composerProvider = ref('')
+const modelGroupsData = ref(null)      // 模型组定义 {组名: [实例名]}（/api/model-groups）
+const composerGroup = ref('')          // 模型组名（UI 下拉）
+const composerProvider = ref('')       // 解析后的实例名（写 settings.provider）
 const composerModel = ref('')
 const composerThinking = ref('')   // 思考档位（''=默认/沿用模型配置；切换即写入 modelParams 记录）
 const THINK_TIERS = [
@@ -268,17 +270,55 @@ const THINK_TIERS = [
   { v: 'xhigh', label: '思考: xhigh（超高）' },
   { v: 'max', label: '思考: max（最大化）' },
 ]
-const modelProviders = computed(() => (modelData.value && modelData.value.providers) || [])
+const modelGroups = computed(() => {
+  const groups = modelGroupsData.value || {}
+  const names = Object.keys(groups)
+  if (names.length) return names
+  // ★ 无模型组（旧配置）→ 用实例（服务商）直接作选项，保持可用
+  return (modelData.value && modelData.value.providers) || []
+})
+// 组内模型聚合：模型组 → 组内所有实例模型并集
 const composerModels = computed(() => {
   const m = (modelData.value && modelData.value.models) || {}
-  return m[composerProvider.value] || []
+  const groups = modelGroupsData.value || {}
+  const insts = groups[composerGroup.value]
+  if (Array.isArray(insts) && insts.length) {
+    const out = []
+    for (const inst of insts) for (const mm of (m[inst] || [])) if (!out.includes(mm)) out.push(mm)
+    return out
+  }
+  return m[composerGroup.value] || [] // 兼容：模型组不存在时按实例名直取
 })
+// 模型 → 所属实例：组内第一个包含该模型的实例
+function instanceForModel(group, model) {
+  const groups = modelGroupsData.value || {}
+  const m = (modelData.value && modelData.value.models) || {}
+  const insts = groups[group] || []
+  for (const inst of insts) if ((m[inst] || []).includes(model)) return inst
+  if (m[group] && (m[group] || []).includes(model)) return group // 兼容旧 provider 直指实例
+  return insts[0] || group
+}
 async function loadModelData() {
-  try { modelData.value = await api.getModels() } catch {}
+  try {
+    const [md, mg] = await Promise.all([api.getModels(), api.getModelGroups().catch(() => ({ groups: {} }))])
+    modelData.value = md
+    modelGroupsData.value = (mg && mg.groups) || {}
+  } catch {}
 }
 function initComposerModel() {
   const s = state.settings || {}
-  if (s.provider) composerProvider.value = s.provider
+  const groups = modelGroupsData.value || {}
+  // 优先用 settings.modelGroup（模型组名）；旧配置回退：从 provider（实例名）反查所属组
+  let g = s.modelGroup || ''
+  if (!g && s.provider) {
+    for (const [name, insts] of Object.entries(groups)) {
+      if (insts.includes(s.provider)) { g = name; break }
+    }
+    if (!g) g = s.provider // 组不存在时按实例名显示
+  }
+  if (!g) g = Object.keys(groups)[0] || ''
+  composerGroup.value = g
+  composerProvider.value = s.provider || instanceForModel(g, s.executeModel)
   if (s.executeModel) composerModel.value = s.executeModel
 }
 function onCmpProviderChange() {
@@ -291,45 +331,51 @@ function onCmpProviderChange() {
 }
 function initComposerThinking() {
   const mp = (state.settings && state.settings.modelParams) || {}
-  const by = (mp[composerProvider.value] && mp[composerProvider.value][composerModel.value]) || null
+  const prov = composerProvider.value || composerGroup.value
+  const by = (mp[prov] && mp[prov][composerModel.value]) || null
   composerThinking.value = (by && by.thinkingMode) || ''
 }
 async function onCmpModelChange() {
   initComposerThinking()
-  if (!composerProvider.value || !composerModel.value) return
+  if (!composerGroup.value || !composerModel.value) return
   const md = modelData.value || {}
-  const top = { ...(state.settings || {}), provider: composerProvider.value, executeModel: composerModel.value }
-  // 服务商联动：带出该服务商默认 BaseURL 与 API Key
-  if (md.providerBaseURLs && md.providerBaseURLs[composerProvider.value]) top.baseURL = md.providerBaseURLs[composerProvider.value]
-  if (md.providerKeys && md.providerKeys[composerProvider.value]) top.apiKey = md.providerKeys[composerProvider.value]
+  // ★ 解析模型所属实例：模型组 + 模型 → 实例名（settings.provider 存实例名，装配器直接命中 models.json）
+  const prov = instanceForModel(composerGroup.value, composerModel.value)
+  composerProvider.value = prov
+  const top = { ...(state.settings || {}), modelGroup: composerGroup.value, provider: prov, executeModel: composerModel.value }
+  // 实例联动：带出该实例的 BaseURL 与 API Key
+  if (md.providerBaseURLs && md.providerBaseURLs[prov]) top.baseURL = md.providerBaseURLs[prov]
+  if (md.providerKeys && md.providerKeys[prov]) top.apiKey = md.providerKeys[prov]
   try {
     await api.apiPut('/settings', { settings: top, pluginSettings: (state.settings && state.settings.pluginSettings) || {} })
     state.settings = top
-    window.$toast && window.$toast('已切换：' + composerProvider.value + ' / ' + composerModel.value, 'success')
+    window.$toast && window.$toast('已切换：' + composerGroup.value + ' / ' + composerModel.value + '（' + prov + '）', 'success')
   } catch (e) {
     window.$toast && window.$toast('模型切换失败: ' + (e.message || e), 'error')
   }
 }
-// 思考档位：临时切换 → 写入 settings.modelParams[服务商][模型].thinkingMode（装配器发送即用；记录后下次默认沿用）
+// 思考档位：临时切换 → 写入 settings.modelParams[实例][模型].thinkingMode（装配器发送即用；记录后下次默认沿用）
 async function onCmpThinkingChange() {
-  if (!composerProvider.value || !composerModel.value) return
+  if (!composerGroup.value || !composerModel.value) return
   const v = composerThinking.value
+  const prov = composerProvider.value || instanceForModel(composerGroup.value, composerModel.value)
+  composerProvider.value = prov
   const mp = JSON.parse(JSON.stringify((state.settings && state.settings.modelParams) || {}))
-  if (!mp[composerProvider.value]) mp[composerProvider.value] = {}
-  const prev = mp[composerProvider.value][composerModel.value] || {}
+  if (!mp[prov]) mp[prov] = {}
+  const prev = mp[prov][composerModel.value] || {}
   if (v) {
-    mp[composerProvider.value][composerModel.value] = { ...prev, thinkingMode: v }
+    mp[prov][composerModel.value] = { ...prev, thinkingMode: v }
   } else {
     delete prev.thinkingMode
-    if (Object.keys(prev).length) mp[composerProvider.value][composerModel.value] = prev
-    else delete mp[composerProvider.value][composerModel.value]
-    if (!Object.keys(mp[composerProvider.value]).length) delete mp[composerProvider.value]
+    if (Object.keys(prev).length) mp[prov][composerModel.value] = prev
+    else delete mp[prov][composerModel.value]
+    if (!Object.keys(mp[prov]).length) delete mp[prov]
   }
-  const top = { ...(state.settings || {}), modelParams: mp }
+  const top = { ...(state.settings || {}), modelGroup: composerGroup.value, modelParams: mp }
   try {
     await api.apiPut('/settings', { settings: top, pluginSettings: (state.settings && state.settings.pluginSettings) || {} })
     state.settings = top
-    window.$toast && window.$toast(v ? ('思考档位已切换并记录：' + v + '（' + composerProvider.value + ' / ' + composerModel.value + '）') : '思考档位已恢复默认', 'success')
+    window.$toast && window.$toast(v ? ('思考档位已切换并记录：' + v + '（' + composerGroup.value + ' / ' + composerModel.value + '）') : '思考档位已恢复默认', 'success')
   } catch (e) {
     window.$toast && window.$toast('思考切换失败: ' + (e.message || e), 'error')
     initComposerThinking()
@@ -1522,7 +1568,7 @@ const chatSlot = useSingleSlot('chat')
 chatSlot.init() // setup 同步初始化 owner（首帧直接走正确分支）
 
 onMounted(() => {
-  loadModelData(); initComposerModel(); initComposerThinking()
+  loadModelData().then(() => { initComposerModel(); initComposerThinking() })
   loadWsTokenStats(); loadConvList(); scrollToBottom()
   if (state.workspaceRoot && state.workspaceRoot !== '') loadWorkspaceReviewConfig()
 

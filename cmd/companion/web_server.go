@@ -1673,6 +1673,11 @@ func (s *webServer) handleModels(w http.ResponseWriter, r *http.Request) {
 	handler.HandleModels(w, r)
 }
 
+// handleModelGroups 模型组 API（委托共享实现）：GET 读取 / PUT 全量保存
+func (s *webServer) handleModelGroups(w http.ResponseWriter, r *http.Request) {
+	handler.HandleModelGroups(w, r)
+}
+
 // ─── 指令 API ──────────────────────────────────────────────
 
 func (s *webServer) handleInstructions(w http.ResponseWriter, r *http.Request) {

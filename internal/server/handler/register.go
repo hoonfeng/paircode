@@ -69,6 +69,8 @@ func RegisterAll(r *Router) {
 	r.Handle("GET", "/api/models", HandleModels)
 	r.Handle("POST", "/api/models", HandleModels)
 	r.Handle("PUT", "/api/models", HandleModels)
+	r.Handle("GET", "/api/model-groups", HandleModelGroups)
+	r.Handle("PUT", "/api/model-groups", HandleModelGroups)
 	r.Handle("GET", "/api/instructions", HandleInstructions)
 	r.Handle("PUT", "/api/instructions", HandleInstructionsPut)
 

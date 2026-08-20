@@ -490,6 +490,50 @@ func HandleModels(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// HandleModelGroups 模型组管理（GET 查询 / PUT 全量保存）。
+// ★ 2026-08-20 模型组：AI 配置多例化——用户命名的连接配置集合，组内实例 = models.json 服务商条目。
+//   body (PUT): { "groups": { "<组名>": ["<实例名>", ...] } }
+func HandleModelGroups(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost || r.Method == http.MethodPut {
+		var req struct {
+			Groups core.ModelGroups `json:"groups"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			jsonErr(w, "无效 JSON: "+err.Error())
+			return
+		}
+		if req.Groups == nil {
+			jsonErr(w, "groups 不能为空")
+			return
+		}
+		// 校验实例存在性：跳过不存在的实例（避免模型组引用已删服务商）
+		providers := core.GetProviders()
+		valid := make(map[string]bool, len(providers))
+		for _, p := range providers {
+			valid[p] = true
+		}
+		for name, insts := range req.Groups {
+			filtered := make([]string, 0, len(insts))
+			for _, inst := range insts {
+				if valid[inst] {
+					filtered = append(filtered, inst)
+				}
+			}
+			req.Groups[name] = filtered
+		}
+		core.SetModelGroups(req.Groups)
+		if err := core.SaveModelGroups(); err != nil {
+			jsonErr(w, "保存失败: "+err.Error())
+			return
+		}
+		jsonResp(w, map[string]any{"ok": true, "saved": len(req.Groups)})
+		return
+	}
+	jsonResp(w, map[string]any{
+		"groups": core.GetModelGroups(),
+	})
+}
+
 func HandleInstructions(w http.ResponseWriter, r *http.Request) { jsonResp(w, "") }
 func HandleInstructionsPut(w http.ResponseWriter, r *http.Request) {
 	jsonResp(w, map[string]string{"status": "ok"})

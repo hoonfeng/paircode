@@ -1,7 +1,7 @@
 (function() {
   "use strict";
   var __vite_style__ = document.createElement("style");
-  __vite_style__.textContent = "\n@keyframes stopPulse-faf69761 {\n0%, 100% { opacity: 0.6;\n}\n50% { opacity: 1;\n}\n}\n@keyframes stopRingPulse-faf69761 {\n0%, 100% { opacity: 0.3; transform: scale(1);\n}\n50% { opacity: 0.15; transform: scale(1.15);\n}\n}\n.stop-pulse[data-v-faf69761] {\n  animation: stopPulse-faf69761 1.2s ease-in-out infinite;\n}\n.stop-pulse-ring[data-v-faf69761] {\n  animation: stopRingPulse-faf69761 1.2s ease-in-out infinite;\n  fill: none;\n  transform-origin: center;\n}\n.svg-icon[data-v-faf69761] {\n  display: inline-block;\n  vertical-align: middle;\n  flex-shrink: 0;\n}\n\n.plugin-panel[data-v-28cc536a] {\r\n  height: 100%;\r\n  display: flex;\r\n  flex-direction: column;\r\n  overflow: hidden;\r\n  font-size: 13px;\n}\n.pp-header[data-v-28cc536a] {\r\n  display: flex;\r\n  align-items: center;\r\n  justify-content: space-between;\r\n  padding: 8px 10px;\r\n  border-bottom: 1px solid var(--border-color);\r\n  flex-shrink: 0;\n}\n.pp-title[data-v-28cc536a] {\r\n  display: flex;\r\n  align-items: center;\r\n  gap: 6px;\r\n  font-weight: 600;\r\n  font-size: 12px;\r\n  color: var(--text-primary);\n}\n.pp-actions[data-v-28cc536a] { display: flex; gap: 4px;\n}\n.pp-icon-btn[data-v-28cc536a] {\r\n  background: none; border: none; cursor: pointer;\r\n  color: var(--text-muted); padding: 2px 4px; border-radius: 3px;\r\n  display: flex; align-items: center;\n}\n.pp-icon-btn[data-v-28cc536a]:hover { background: var(--bg-hover); color: var(--text-primary);\n}\r\n\r\n/* 新建表单 */\n.pp-new[data-v-28cc536a] {\r\n  padding: 10px;\r\n  border-bottom: 1px solid var(--border-color);\r\n  display: flex;\r\n  flex-direction: column;\r\n  gap: 6px;\r\n  background: var(--bg-tertiary);\r\n  flex-shrink: 0;\r\n  max-height: 45%;\r\n  overflow: auto;\n}\n.pp-new-title[data-v-28cc536a] { font-size: 12px; font-weight: 600; color: var(--text-secondary);\n}\n.pp-input[data-v-28cc536a], .pp-textarea[data-v-28cc536a] {\r\n  background: var(--bg-primary);\r\n  border: 1px solid var(--border-color);\r\n  color: var(--text-primary);\r\n  border-radius: 4px;\r\n  padding: 5px 8px;\r\n  font-size: 12px;\r\n  width: 100%;\r\n  box-sizing: border-box;\n}\n.pp-textarea.code[data-v-28cc536a] {\r\n  font-family: var(--font-code);\r\n  font-size: 11px;\r\n  line-height: 1.5;\r\n  resize: vertical;\n}\n.pp-new-foot[data-v-28cc536a] { display: flex; align-items: center; gap: 8px;\n}\n.pp-lang[data-v-28cc536a] { width: auto; flex-shrink: 0;\n}\n.pp-check[data-v-28cc536a] { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-secondary); white-space: nowrap;\n}\n.pp-new-msg[data-v-28cc536a] { font-size: 11px; color: var(--accent-light); word-break: break-all;\n}\n.pp-new-msg.err[data-v-28cc536a] { color: var(--error, #e06c75);\n}\r\n\r\n/* client 面板区 */\n.pp-client[data-v-28cc536a] {\r\n  border-bottom: 1px solid var(--border-color);\r\n  flex-shrink: 0;\r\n  display: flex;\r\n  flex-direction: column;\r\n  max-height: 40%;\n}\r\n/* UI 槽位区（Slot 系统） */\n.pp-slots[data-v-28cc536a] {\r\n  border-bottom: 1px solid var(--border-color);\r\n  flex-shrink: 0;\r\n  padding: 6px 8px;\r\n  display: flex;\r\n  flex-direction: column;\r\n  gap: 5px;\r\n  max-height: 30%;\r\n  overflow-y: auto;\n}\n.pp-slots-head[data-v-28cc536a] {\r\n  display: flex; align-items: center; gap: 6px;\r\n  font-size: 11px; color: var(--text-primary); font-weight: 600;\n}\n.pp-slots-head svg[data-v-28cc536a] { color: var(--accent);\n}\n.pp-slots-sub[data-v-28cc536a] { font-weight: 400; font-size: 10px; color: var(--text-muted);\n}\n.pp-slot-row[data-v-28cc536a] {\r\n  display: flex; align-items: center; justify-content: space-between; gap: 8px;\r\n  background: var(--bg-primary);\r\n  border: 1px solid var(--border-color);\r\n  border-left: 2px solid var(--accent);\r\n  border-radius: 6px; padding: 5px 8px;\r\n  transition: border-color .12s, background .12s;\n}\n.pp-slot-row[data-v-28cc536a]:hover {\r\n  border-color: color-mix(in srgb, var(--accent) 45%, var(--border-color));\r\n  background: var(--bg-hover);\n}\n.pp-slot-info[data-v-28cc536a] { display: flex; flex-direction: column; gap: 2px; min-width: 0;\n}\n.pp-slot-title-row[data-v-28cc536a] { display: flex; align-items: center; gap: 6px; min-width: 0;\n}\n.pp-slot-id[data-v-28cc536a] {\r\n  font-family: var(--font-mono, monospace); font-size: 11px; color: var(--accent-light);\r\n  text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;\n}\n.pp-slot-owner[data-v-28cc536a] { font-size: 10px; color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px;\n}\n.pp-slot-owner.builtin[data-v-28cc536a] { color: var(--text-muted);\n}\n.pp-slot-kind[data-v-28cc536a] {\r\n  font-size: 9px; border-radius: 4px; padding: 0 5px; align-self: flex-start;\r\n  line-height: 15px; flex-shrink: 0; font-weight: 600; letter-spacing: .3px;\n}\n.pp-slot-kind.kind-single[data-v-28cc536a] { color: var(--accent-light); background: color-mix(in srgb, var(--accent) 14%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);\n}\n.pp-slot-kind.kind-list[data-v-28cc536a] { color: #3fb950; background: rgba(63, 185, 80, .10); border: 1px solid rgba(63, 185, 80, .30);\n}\n.pp-slot-list[data-v-28cc536a] { display: flex; flex-direction: column; gap: 3px; align-items: flex-end; flex-shrink: 0;\n}\n.pp-slot-list-item[data-v-28cc536a] {\r\n  display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--text-secondary);\r\n  cursor: pointer; max-width: 220px; padding: 1px 4px; border-radius: 4px;\r\n  transition: background .1s, color .1s;\n}\n.pp-slot-list-item[data-v-28cc536a]:hover { color: var(--text-primary); background: var(--bg-hover);\n}\n.pp-slot-list-item input[type='checkbox'][data-v-28cc536a] { accent-color: var(--accent); margin: 0;\n}\n.pp-slot-list-item span[data-v-28cc536a] { overflow: hidden; text-overflow: ellipsis; white-space: nowrap;\n}\n.pp-slot-empty[data-v-28cc536a] { font-size: 10px; color: var(--text-muted);\n}\n.pp-slot-select[data-v-28cc536a] {\r\n  width: 170px; font-size: 11px; padding: 3px 6px;\r\n  background: var(--bg-secondary); color: var(--text-primary);\r\n  border: 1px solid var(--border-color); border-radius: 5px; flex-shrink: 0;\r\n  cursor: pointer; transition: border-color .12s, box-shadow .12s;\n}\n.pp-slot-select[data-v-28cc536a]:hover { border-color: var(--accent);\n}\n.pp-slot-select[data-v-28cc536a]:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--focus-ring);\n}\n.pp-client-tabs[data-v-28cc536a] {\r\n  display: flex;\r\n  gap: 2px;\r\n  padding: 4px 8px 0;\r\n  border-bottom: 1px solid var(--border-color);\r\n  overflow-x: auto;\n}\n.pp-client-tab[data-v-28cc536a] {\r\n  display: flex; align-items: center; gap: 4px;\r\n  padding: 4px 10px;\r\n  font-size: 11px;\r\n  color: var(--text-secondary);\r\n  cursor: pointer;\r\n  border: 1px solid transparent;\r\n  border-bottom: none;\r\n  border-radius: 4px 4px 0 0;\r\n  white-space: nowrap;\n}\n.pp-client-tab.active[data-v-28cc536a] {\r\n  background: var(--bg-primary);\r\n  color: var(--text-primary);\r\n  border-color: var(--border-color);\n}\n.pp-client-tab-title[data-v-28cc536a] { max-width: 120px; overflow: hidden; text-overflow: ellipsis;\n}\n.pp-client-body[data-v-28cc536a] {\r\n  min-height: 80px;\r\n  max-height: 200px;\r\n  overflow: auto;\r\n  padding: 6px 8px;\r\n  font-size: 12px;\n}\r\n\r\n/* 列表 */\n.pp-list[data-v-28cc536a] { flex: 1; overflow: auto; padding: 4px 0;\n}\n.pp-loading[data-v-28cc536a], .pp-empty[data-v-28cc536a] {\r\n  display: flex; flex-direction: column; align-items: center; gap: 6px;\r\n  padding: 24px 12px; color: var(--text-muted); font-size: 12px;\n}\n.pp-empty-sub[data-v-28cc536a] { font-size: 11px; color: var(--text-muted); text-align: center;\n}\n.pp-item[data-v-28cc536a] { border-bottom: 1px solid var(--border-color);\n}\n.pp-item-row[data-v-28cc536a] {\r\n  display: flex; align-items: center; gap: 6px;\r\n  padding: 7px 10px;\r\n  cursor: pointer;\n}\n.pp-item-row[data-v-28cc536a]:hover { background: var(--bg-hover);\n}\n.pp-state[data-v-28cc536a] {\r\n  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;\n}\n.pp-state.on[data-v-28cc536a] { background: #4caf50; box-shadow: 0 0 4px rgba(76, 175, 80, .6);\n}\n.pp-state.off[data-v-28cc536a] { background: var(--text-muted); opacity: .4;\n}\n.pp-name[data-v-28cc536a] {\r\n  flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;\n}\n.pp-src[data-v-28cc536a] {\r\n  font-size: 9px; padding: 1px 5px; border-radius: 3px;\r\n  font-family: var(--font-code); text-transform: uppercase;\n}\n.pp-src.js[data-v-28cc536a] { background: rgba(240, 219, 79, .15); color: #e5c07b;\n}\n.pp-src.go[data-v-28cc536a] { background: rgba(0, 178, 255, .12); color: #61afef;\n}\n.pp-badge[data-v-28cc536a] {\r\n  font-size: 9px; padding: 1px 5px; border-radius: 3px;\r\n  background: rgba(198, 120, 221, .15); color: #c678dd;\r\n  flex-shrink: 0;\n}\n.pp-badge-warn[data-v-28cc536a] {\r\n  background: rgba(229, 192, 123, .18); color: #e5c07b;\r\n  cursor: help;\n}\n.pp-count[data-v-28cc536a] { font-size: 10px; color: var(--text-muted); flex-shrink: 0;\n}\n.pp-ui-label[data-v-28cc536a] { font-size: 10px; color: var(--text-muted); flex-shrink: 0;\n}\n.pp-ui-label.on[data-v-28cc536a] { color: var(--accent, #4c9aff);\n}\n.pp-chevron[data-v-28cc536a] { transition: transform .15s; flex-shrink: 0;\n}\n.pp-chevron.open[data-v-28cc536a] { transform: rotate(90deg);\n}\n.pp-detail[data-v-28cc536a] { padding: 4px 10px 10px 24px; background: var(--bg-tertiary);\n}\n.pp-d-purpose[data-v-28cc536a] { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;\n}\n.pp-d-line[data-v-28cc536a] { font-size: 11px; color: var(--text-muted); margin: 2px 0; word-break: break-all;\n}\n.pp-d-tools[data-v-28cc536a] { display: flex; flex-direction: column; gap: 1px; margin: 4px 0; padding: 4px 6px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary);\n}\n.pp-d-tools-title[data-v-28cc536a] { font-size: 10px; color: var(--text-muted); margin-bottom: 2px;\n}\n.pp-d-tool[data-v-28cc536a] { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 1px 2px; border-radius: 3px;\n}\n.pp-d-tool[data-v-28cc536a]:hover { background: var(--bg-secondary);\n}\n.pp-d-tname[data-v-28cc536a] { font-family: var(--font-code); font-size: 11px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;\n}\n.pp-d-code[data-v-28cc536a] {\r\n  margin-top: 6px;\r\n  border: 1px solid var(--border-color);\r\n  border-radius: 4px;\r\n  overflow: hidden;\n}\n.pp-d-code-head[data-v-28cc536a] {\r\n  display: flex; align-items: center; justify-content: space-between;\r\n  padding: 3px 8px;\r\n  background: var(--bg-primary);\r\n  font-size: 10px; color: var(--text-secondary);\r\n  border-bottom: 1px solid var(--border-color);\n}\n.pp-d-code pre[data-v-28cc536a] {\r\n  margin: 0; padding: 6px 8px;\r\n  font-family: var(--font-code); font-size: 10px;\r\n  line-height: 1.5;\r\n  color: var(--text-secondary);\r\n  overflow: auto;\r\n  max-height: 160px;\r\n  white-space: pre-wrap;\r\n  word-break: break-all;\n}\n.pp-d-actions[data-v-28cc536a] { display: flex; gap: 6px; margin-top: 8px;\n}\n.pp-btn[data-v-28cc536a] {\r\n  background: var(--bg-primary);\r\n  border: 1px solid var(--border-color);\r\n  color: var(--text-secondary);\r\n  border-radius: 4px;\r\n  padding: 3px 10px;\r\n  font-size: 11px;\r\n  cursor: pointer;\n}\n.pp-btn[data-v-28cc536a]:hover { background: var(--bg-hover); color: var(--text-primary);\n}\n.pp-btn.primary[data-v-28cc536a] { border-color: var(--accent); color: var(--accent-light);\n}\n.pp-btn.danger[data-v-28cc536a] { border-color: #e06c75; color: #e06c75;\n}\n.pp-btn[data-v-28cc536a]:disabled { opacity: .5; cursor: not-allowed;\n}\n.spinner[data-v-28cc536a] { animation: pp-spin-28cc536a 1s linear infinite;\n}\n@keyframes pp-spin-28cc536a {\nto { transform: rotate(360deg);\n}\n}\r\n\n.app-root[data-v-bdce687f] {\n  display: grid;\n  /* ★ 列保护：编辑器列 minmax(340px,1fr) 保证主区不被右侧/侧边栏挤压；\n     右侧列 var(--right-w) 由 ui-right-panel 包（拖拽/初始化）同步，\n     宿主与 bundle 根宽度一致（无空余）。--right-w = rpw+205\n     (chat rpw + conv 200 + resizer/border 5)，rpw 上限 360 → 右侧 ≤565px，\n     1280 窗口编辑器 ≥ 1280-48-280-565 = 387px。 */\n  grid-template-columns: 48px auto minmax(340px, 1fr) var(--right-w, 525px);\n  grid-template-rows: 30px 1fr 22px;\n  width: 100%; height: 100%;\n  background: var(--bg-primary);\n  color: var(--text-primary);\n  overflow: hidden;\n  font-family: var(--font-ui);\n}\n/* ★ 桌面端面板独立模式：只渲染右侧面板，占满整个窗口 */\n.app-root.panel-only[data-v-bdce687f] {\n  grid-template-columns: 1fr;\n  grid-template-rows: 1fr;\n}\n.app-root.panel-only .right-container[data-v-bdce687f] {\n  grid-column: 1; grid-row: 1;\n  width: 100% !important;\n  height: 100%;\n}\n/* 整区替换槽位（single）宿主：与内置区域同 grid 位置/尺寸 */\n.plugin-area-titlebar[data-v-bdce687f] { grid-column: 1 / -1; grid-row: 1; height: 30px;\n}\n.plugin-area-activitybar[data-v-bdce687f] { grid-column: 1; grid-row: 2; width: 48px;\n}\n.plugin-area-sidebar[data-v-bdce687f] { grid-column: 2; grid-row: 2; height: 100%; overflow: hidden;\n}\n.main-area[data-v-bdce687f] {\n  grid-column: 3; grid-row: 2;\n  display: flex; flex-direction: column; min-width: 0; overflow: hidden;\n}\n.right-container[data-v-bdce687f] {\n  grid-column: 4; grid-row: 2;\n  display: flex; flex-direction: row; overflow: hidden; position: relative;\n}\n.right-container.focus-mode[data-v-bdce687f] { grid-column: 3 / -1;\n}\n.app-statusbar-host[data-v-bdce687f] { grid-column: 1 / -1; grid-row: 3; z-index: 30; height: 22px;\n}\n.plugin-slot-host[data-v-bdce687f] { height: 100%; overflow: hidden;\n}\n/* ★ 插件渲染的子元素必须撑满宿主（bundle 根 auto 宽度不随宿主 grid 拉伸——\n   focus-mode 下宿主被 grid 拉到 3/-1 全宽，子元素保持内容宽 → 右侧大片空余） */\n.plugin-slot-host.right-container[data-v-bdce687f] > * { width: 100%; min-width: 0;\n}\n/* modals 槽位：fixed 全屏浮层容器（不占 grid 格） */\n.modals-host[data-v-bdce687f] { position: fixed; inset: 0; z-index: 200; pointer-events: none;\n}\n.modals-host[data-v-bdce687f] > * { pointer-events: auto;\n}\n.modals-empty[data-v-bdce687f] { display: none;\n}\n/* 空态占位（区域插件未装配时显示） */\n.slot-empty[data-v-bdce687f] {\n  display: flex; flex-direction: row; gap: 8px;\n  align-items: center; justify-content: center;\n  color: var(--text-muted); font-size: 12px;\n  background: var(--bg-primary);\n  border: 1px dashed var(--border-color);\n  min-height: 0;\n}\n/* activitybar 是竖条（~48px 宽）：空态改纵向排列 */\n.plugin-area-activitybar.slot-empty[data-v-bdce687f] { flex-direction: column; gap: 4px; padding: 4px;\n}\n.plugin-area-activitybar.slot-empty .escape-link[data-v-bdce687f] { font-size: 11px; padding: 2px 8px;\n}\n/* 空态内的「打开插件面板」恢复入口（上下文感知注入：只在区域未装配时出现，\n   插件全正常时零干扰；与常驻逃生按钮互为双保险） */\n.escape-link[data-v-bdce687f] {\n  background: none; border: 1px solid var(--border-color);\n  color: var(--accent, #4f8cff); font-size: 12px;\n  padding: 3px 12px; border-radius: 4px; cursor: pointer;\n  opacity: .85; transition: opacity .15s;\n}\n.escape-link[data-v-bdce687f]:hover { opacity: 1; background: rgba(79,140,255,.12);\n}\n/* ─── 壳级逃生口：插件面板浮动入口 ───\n   常驻极小按钮位于左下角（状态栏上方）：右侧面板占 grid 第 4 列，\n   左下角处于第 1-2 列区域（activitybar/sidebar 底部），focusMode 全屏对话\n   也不覆盖——不再遮挡右侧对话输入区。半透明弱化，hover 全显。\n   点击打开浮动插件面板（Fixed 560px 居中）。 */\n.plugin-escape-btn[data-v-bdce687f] {\n  position: fixed; left: 6px; bottom: 26px; z-index: 300;\n  width: 22px; height: 22px; border-radius: 5px;\n  display: flex; align-items: center; justify-content: center;\n  background: var(--bg-elevated, #2a2d36); color: var(--text-muted);\n  border: 1px solid var(--border-color); cursor: pointer;\n  opacity: .3; transition: opacity .15s;\n}\n.plugin-escape-btn[data-v-bdce687f]:hover { opacity: 1; color: var(--accent, #4f8cff);\n}\n.plugin-escape-overlay[data-v-bdce687f] {\n  position: fixed; inset: 0; z-index: 400;\n  background: rgba(0,0,0,.45);\n  display: flex; align-items: center; justify-content: center;\n}\n.plugin-escape-panel[data-v-bdce687f] {\n  width: 560px; max-width: 92vw; height: 70vh; max-height: 640px;\n  background: var(--bg-primary); border: 1px solid var(--border-color);\n  border-radius: 10px; box-shadow: 0 8px 40px rgba(0,0,0,.5);\n  display: flex; flex-direction: column; overflow: hidden;\n}\n.plugin-escape-head[data-v-bdce687f] {\n  display: flex; align-items: center; justify-content: space-between;\n  padding: 6px 10px; font-size: 12px; color: var(--text-muted);\n  border-bottom: 1px solid var(--border-color);\n  background: var(--bg-elevated, #262932);\n}\n.plugin-escape-close[data-v-bdce687f] {\n  border: none; background: none; color: var(--text-muted);\n  cursor: pointer; font-size: 13px; padding: 2px 6px; border-radius: 4px;\n}\n.plugin-escape-close[data-v-bdce687f]:hover { background: rgba(255,255,255,.08); color: #fff;\n}\n.plugin-escape-body[data-v-bdce687f] { flex: 1; overflow: auto;\n}\n.plugin-escape-body .plugin-panel[data-v-bdce687f] { height: 100%; border: none;\n}\n/*$vite$:1*/";
+  __vite_style__.textContent = "\n@keyframes stopPulse-faf69761 {\n0%, 100% { opacity: 0.6;\n}\n50% { opacity: 1;\n}\n}\n@keyframes stopRingPulse-faf69761 {\n0%, 100% { opacity: 0.3; transform: scale(1);\n}\n50% { opacity: 0.15; transform: scale(1.15);\n}\n}\n.stop-pulse[data-v-faf69761] {\n  animation: stopPulse-faf69761 1.2s ease-in-out infinite;\n}\n.stop-pulse-ring[data-v-faf69761] {\n  animation: stopRingPulse-faf69761 1.2s ease-in-out infinite;\n  fill: none;\n  transform-origin: center;\n}\n.svg-icon[data-v-faf69761] {\n  display: inline-block;\n  vertical-align: middle;\n  flex-shrink: 0;\n}\n\n.plugin-panel[data-v-3e12e77f] {\n  height: 100%;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n  font-size: 13px;\n}\n.pp-header[data-v-3e12e77f] {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 8px 10px;\n  border-bottom: 1px solid var(--border-color);\n  flex-shrink: 0;\n}\n.pp-title[data-v-3e12e77f] {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  font-weight: 600;\n  font-size: 12px;\n  color: var(--text-primary);\n}\n.pp-actions[data-v-3e12e77f] { display: flex; gap: 4px;\n}\n.pp-icon-btn[data-v-3e12e77f] {\n  background: none; border: none; cursor: pointer;\n  color: var(--text-muted); padding: 2px 4px; border-radius: 3px;\n  display: flex; align-items: center;\n}\n.pp-icon-btn[data-v-3e12e77f]:hover { background: var(--bg-hover); color: var(--text-primary);\n}\n\n/* 新建表单 */\n.pp-new[data-v-3e12e77f] {\n  padding: 10px;\n  border-bottom: 1px solid var(--border-color);\n  display: flex;\n  flex-direction: column;\n  gap: 6px;\n  background: var(--bg-tertiary);\n  flex-shrink: 0;\n  max-height: 45%;\n  overflow: auto;\n}\n.pp-new-title[data-v-3e12e77f] { font-size: 12px; font-weight: 600; color: var(--text-secondary);\n}\n.pp-input[data-v-3e12e77f], .pp-textarea[data-v-3e12e77f] {\n  background: var(--bg-primary);\n  border: 1px solid var(--border-color);\n  color: var(--text-primary);\n  border-radius: 4px;\n  padding: 5px 8px;\n  font-size: 12px;\n  width: 100%;\n  box-sizing: border-box;\n}\n.pp-textarea.code[data-v-3e12e77f] {\n  font-family: var(--font-code);\n  font-size: 11px;\n  line-height: 1.5;\n  resize: vertical;\n}\n.pp-new-foot[data-v-3e12e77f] { display: flex; align-items: center; gap: 8px;\n}\n.pp-lang[data-v-3e12e77f] { width: auto; flex-shrink: 0;\n}\n.pp-check[data-v-3e12e77f] { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-secondary); white-space: nowrap;\n}\n.pp-new-msg[data-v-3e12e77f] { font-size: 11px; color: var(--accent-light); word-break: break-all;\n}\n.pp-new-msg.err[data-v-3e12e77f] { color: var(--error, #e06c75);\n}\n\n/* client 面板区 */\n.pp-client[data-v-3e12e77f] {\n  border-bottom: 1px solid var(--border-color);\n  flex-shrink: 0;\n  display: flex;\n  flex-direction: column;\n  max-height: 40%;\n}\n/* UI 槽位区（Slot 系统） */\n.pp-slots[data-v-3e12e77f] {\n  border-bottom: 1px solid var(--border-color);\n  flex-shrink: 0;\n  padding: 6px 8px;\n  display: flex;\n  flex-direction: column;\n  gap: 5px;\n  max-height: 30%;\n  overflow-y: auto;\n}\n.pp-slots-head[data-v-3e12e77f] {\n  display: flex; align-items: center; gap: 6px;\n  font-size: 11px; color: var(--text-primary); font-weight: 600;\n}\n.pp-slots-head svg[data-v-3e12e77f] { color: var(--accent);\n}\n.pp-slots-sub[data-v-3e12e77f] { font-weight: 400; font-size: 10px; color: var(--text-muted);\n}\n.pp-slot-row[data-v-3e12e77f] {\n  display: flex; align-items: center; justify-content: space-between; gap: 8px;\n  background: var(--bg-primary);\n  border: 1px solid var(--border-color);\n  border-left: 2px solid var(--accent);\n  border-radius: 6px; padding: 5px 8px;\n  transition: border-color .12s, background .12s;\n}\n.pp-slot-row[data-v-3e12e77f]:hover {\n  border-color: color-mix(in srgb, var(--accent) 45%, var(--border-color));\n  background: var(--bg-hover);\n}\n.pp-slot-info[data-v-3e12e77f] { display: flex; flex-direction: column; gap: 2px; min-width: 0;\n}\n.pp-slot-title-row[data-v-3e12e77f] { display: flex; align-items: center; gap: 6px; min-width: 0;\n}\n.pp-slot-id[data-v-3e12e77f] {\n  font-family: var(--font-mono, monospace); font-size: 11px; color: var(--accent-light);\n  text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;\n}\n.pp-slot-owner[data-v-3e12e77f] { font-size: 10px; color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px;\n}\n.pp-slot-owner.builtin[data-v-3e12e77f] { color: var(--text-muted);\n}\n.pp-slot-kind[data-v-3e12e77f] {\n  font-size: 9px; border-radius: 4px; padding: 0 5px; align-self: flex-start;\n  line-height: 15px; flex-shrink: 0; font-weight: 600; letter-spacing: .3px;\n}\n.pp-slot-kind.kind-single[data-v-3e12e77f] { color: var(--accent-light); background: color-mix(in srgb, var(--accent) 14%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);\n}\n.pp-slot-kind.kind-list[data-v-3e12e77f] { color: #3fb950; background: rgba(63, 185, 80, .10); border: 1px solid rgba(63, 185, 80, .30);\n}\n.pp-slot-list[data-v-3e12e77f] { display: flex; flex-direction: column; gap: 3px; align-items: flex-end; flex-shrink: 0;\n}\n.pp-slot-list-item[data-v-3e12e77f] {\n  display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--text-secondary);\n  cursor: pointer; max-width: 220px; padding: 1px 4px; border-radius: 4px;\n  transition: background .1s, color .1s;\n}\n.pp-slot-list-item[data-v-3e12e77f]:hover { color: var(--text-primary); background: var(--bg-hover);\n}\n.pp-slot-list-item input[type='checkbox'][data-v-3e12e77f] { accent-color: var(--accent); margin: 0;\n}\n.pp-slot-list-item span[data-v-3e12e77f] { overflow: hidden; text-overflow: ellipsis; white-space: nowrap;\n}\n.pp-slot-empty[data-v-3e12e77f] { font-size: 10px; color: var(--text-muted);\n}\n.pp-slot-select[data-v-3e12e77f] {\n  width: 170px; font-size: 11px; padding: 3px 6px;\n  background: var(--bg-secondary); color: var(--text-primary);\n  border: 1px solid var(--border-color); border-radius: 5px; flex-shrink: 0;\n  cursor: pointer; transition: border-color .12s, box-shadow .12s;\n}\n.pp-slot-select[data-v-3e12e77f]:hover { border-color: var(--accent);\n}\n.pp-slot-select[data-v-3e12e77f]:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--focus-ring);\n}\n.pp-client-tabs[data-v-3e12e77f] {\n  display: flex;\n  gap: 2px;\n  padding: 4px 8px 0;\n  border-bottom: 1px solid var(--border-color);\n  overflow-x: auto;\n}\n.pp-client-tab[data-v-3e12e77f] {\n  display: flex; align-items: center; gap: 4px;\n  padding: 4px 10px;\n  font-size: 11px;\n  color: var(--text-secondary);\n  cursor: pointer;\n  border: 1px solid transparent;\n  border-bottom: none;\n  border-radius: 4px 4px 0 0;\n  white-space: nowrap;\n}\n.pp-client-tab.active[data-v-3e12e77f] {\n  background: var(--bg-primary);\n  color: var(--text-primary);\n  border-color: var(--border-color);\n}\n.pp-client-tab-title[data-v-3e12e77f] { max-width: 120px; overflow: hidden; text-overflow: ellipsis;\n}\n.pp-client-body[data-v-3e12e77f] {\n  min-height: 80px;\n  max-height: 200px;\n  overflow: auto;\n  padding: 6px 8px;\n  font-size: 12px;\n}\n\n/* 列表 */\n.pp-list[data-v-3e12e77f] { flex: 1; overflow: auto; padding: 4px 0;\n}\n.pp-loading[data-v-3e12e77f], .pp-empty[data-v-3e12e77f] {\n  display: flex; flex-direction: column; align-items: center; gap: 6px;\n  padding: 24px 12px; color: var(--text-muted); font-size: 12px;\n}\n.pp-empty-sub[data-v-3e12e77f] { font-size: 11px; color: var(--text-muted); text-align: center;\n}\n.pp-item[data-v-3e12e77f] { border-bottom: 1px solid var(--border-color);\n}\n.pp-item-row[data-v-3e12e77f] {\n  display: flex; align-items: center; gap: 6px;\n  padding: 7px 10px;\n  cursor: pointer;\n}\n.pp-item-row[data-v-3e12e77f]:hover { background: var(--bg-hover);\n}\n.pp-state[data-v-3e12e77f] {\n  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;\n}\n.pp-state.on[data-v-3e12e77f] { background: #4caf50; box-shadow: 0 0 4px rgba(76, 175, 80, .6);\n}\n.pp-state.off[data-v-3e12e77f] { background: var(--text-muted); opacity: .4;\n}\n.pp-name[data-v-3e12e77f] {\n  flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;\n}\n.pp-src[data-v-3e12e77f] {\n  font-size: 9px; padding: 1px 5px; border-radius: 3px;\n  font-family: var(--font-code); text-transform: uppercase;\n}\n.pp-src.js[data-v-3e12e77f] { background: rgba(240, 219, 79, .15); color: #e5c07b;\n}\n.pp-src.go[data-v-3e12e77f] { background: rgba(0, 178, 255, .12); color: #61afef;\n}\n.pp-badge[data-v-3e12e77f] {\n  font-size: 9px; padding: 1px 5px; border-radius: 3px;\n  background: rgba(198, 120, 221, .15); color: #c678dd;\n  flex-shrink: 0;\n}\n.pp-badge-warn[data-v-3e12e77f] {\n  background: rgba(229, 192, 123, .18); color: #e5c07b;\n  cursor: help;\n}\n.pp-count[data-v-3e12e77f] { font-size: 10px; color: var(--text-muted); flex-shrink: 0;\n}\n.pp-ui-label[data-v-3e12e77f] { font-size: 10px; color: var(--text-muted); flex-shrink: 0;\n}\n.pp-ui-label.on[data-v-3e12e77f] { color: var(--accent, #4c9aff);\n}\n.pp-chevron[data-v-3e12e77f] { transition: transform .15s; flex-shrink: 0;\n}\n.pp-chevron.open[data-v-3e12e77f] { transform: rotate(90deg);\n}\n.pp-detail[data-v-3e12e77f] { padding: 4px 10px 10px 24px; background: var(--bg-tertiary);\n}\n.pp-d-purpose[data-v-3e12e77f] { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;\n}\n.pp-d-line[data-v-3e12e77f] { font-size: 11px; color: var(--text-muted); margin: 2px 0; word-break: break-all;\n}\n.pp-d-tools[data-v-3e12e77f] { display: flex; flex-direction: column; gap: 1px; margin: 4px 0; padding: 4px 6px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary);\n}\n.pp-d-tools-title[data-v-3e12e77f] { font-size: 10px; color: var(--text-muted); margin-bottom: 2px;\n}\n.pp-d-tool[data-v-3e12e77f] { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 1px 2px; border-radius: 3px;\n}\n.pp-d-tool[data-v-3e12e77f]:hover { background: var(--bg-secondary);\n}\n.pp-d-tname[data-v-3e12e77f] { font-family: var(--font-code); font-size: 11px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;\n}\n.pp-d-code[data-v-3e12e77f] {\n  margin-top: 6px;\n  border: 1px solid var(--border-color);\n  border-radius: 4px;\n  overflow: hidden;\n}\n.pp-d-code-head[data-v-3e12e77f] {\n  display: flex; align-items: center; justify-content: space-between;\n  padding: 3px 8px;\n  background: var(--bg-primary);\n  font-size: 10px; color: var(--text-secondary);\n  border-bottom: 1px solid var(--border-color);\n}\n.pp-d-code pre[data-v-3e12e77f] {\n  margin: 0; padding: 6px 8px;\n  font-family: var(--font-code); font-size: 10px;\n  line-height: 1.5;\n  color: var(--text-secondary);\n  overflow: auto;\n  max-height: 160px;\n  white-space: pre-wrap;\n  word-break: break-all;\n}\n.pp-d-actions[data-v-3e12e77f] { display: flex; gap: 6px; margin-top: 8px;\n}\n.pp-btn[data-v-3e12e77f] {\n  background: var(--bg-primary);\n  border: 1px solid var(--border-color);\n  color: var(--text-secondary);\n  border-radius: 4px;\n  padding: 3px 10px;\n  font-size: 11px;\n  cursor: pointer;\n}\n.pp-btn[data-v-3e12e77f]:hover { background: var(--bg-hover); color: var(--text-primary);\n}\n.pp-btn.primary[data-v-3e12e77f] { border-color: var(--accent); color: var(--accent-light);\n}\n.pp-btn.danger[data-v-3e12e77f] { border-color: #e06c75; color: #e06c75;\n}\n.pp-btn[data-v-3e12e77f]:disabled { opacity: .5; cursor: not-allowed;\n}\n.spinner[data-v-3e12e77f] { animation: pp-spin-3e12e77f 1s linear infinite;\n}\n@keyframes pp-spin-3e12e77f {\nto { transform: rotate(360deg);\n}\n}\n.pp-builtin[data-v-3e12e77f] {\n  display: flex; flex-direction: column; gap: 6px;\n  margin: 4px 6px 10px; padding: 8px 10px;\n  border: 1px solid rgba(212,167,78,.3); border-radius: 8px;\n  background: rgba(212,167,78,.05);\n}\n.pp-builtin-head[data-v-3e12e77f] { display: flex; align-items: center; gap: 8px;\n}\n.pp-builtin-title[data-v-3e12e77f] {\n  display: flex; align-items: center; gap: 5px;\n  font-size: 12px; font-weight: 700; color: #d4a74e; letter-spacing: .3px;\n}\n.pp-builtin-sub[data-v-3e12e77f] { font-size: 10px; color: var(--text-muted);\n}\n.pp-builtin-group[data-v-3e12e77f] {\n  display: flex; flex-direction: column; gap: 4px;\n  border: 1px solid var(--border-color); border-radius: 6px;\n  background: var(--bg-tertiary); padding: 6px 8px;\n}\n.pp-builtin-grow[data-v-3e12e77f] {\n  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;\n}\n.pp-builtin-gname[data-v-3e12e77f] { font-size: 12px; font-weight: 600; color: var(--text-primary);\n}\n.pp-builtin-gdesc[data-v-3e12e77f] { font-size: 10px; color: var(--text-muted); flex: 1; min-width: 80px;\n}\n.pp-builtin-gcount[data-v-3e12e77f] { font-size: 10px; color: var(--text-secondary);\n}\n.pp-builtin-tools[data-v-3e12e77f] {\n  display: flex; flex-direction: column; gap: 2px;\n  max-height: 220px; overflow-y: auto;\n}\n.pp-btn.mini[data-v-3e12e77f] { padding: 2px 8px; font-size: 10px; border-radius: 4px;\n}\n\n.app-root[data-v-bdce687f] {\n  display: grid;\n  /* ★ 列保护：编辑器列 minmax(340px,1fr) 保证主区不被右侧/侧边栏挤压；\n     右侧列 var(--right-w) 由 ui-right-panel 包（拖拽/初始化）同步，\n     宿主与 bundle 根宽度一致（无空余）。--right-w = rpw+205\n     (chat rpw + conv 200 + resizer/border 5)，rpw 上限 360 → 右侧 ≤565px，\n     1280 窗口编辑器 ≥ 1280-48-280-565 = 387px。 */\n  grid-template-columns: 48px auto minmax(340px, 1fr) var(--right-w, 525px);\n  grid-template-rows: 30px 1fr 22px;\n  width: 100%; height: 100%;\n  background: var(--bg-primary);\n  color: var(--text-primary);\n  overflow: hidden;\n  font-family: var(--font-ui);\n}\n/* ★ 桌面端面板独立模式：只渲染右侧面板，占满整个窗口 */\n.app-root.panel-only[data-v-bdce687f] {\n  grid-template-columns: 1fr;\n  grid-template-rows: 1fr;\n}\n.app-root.panel-only .right-container[data-v-bdce687f] {\n  grid-column: 1; grid-row: 1;\n  width: 100% !important;\n  height: 100%;\n}\n/* 整区替换槽位（single）宿主：与内置区域同 grid 位置/尺寸 */\n.plugin-area-titlebar[data-v-bdce687f] { grid-column: 1 / -1; grid-row: 1; height: 30px;\n}\n.plugin-area-activitybar[data-v-bdce687f] { grid-column: 1; grid-row: 2; width: 48px;\n}\n.plugin-area-sidebar[data-v-bdce687f] { grid-column: 2; grid-row: 2; height: 100%; overflow: hidden;\n}\n.main-area[data-v-bdce687f] {\n  grid-column: 3; grid-row: 2;\n  display: flex; flex-direction: column; min-width: 0; overflow: hidden;\n}\n.right-container[data-v-bdce687f] {\n  grid-column: 4; grid-row: 2;\n  display: flex; flex-direction: row; overflow: hidden; position: relative;\n}\n.right-container.focus-mode[data-v-bdce687f] { grid-column: 3 / -1;\n}\n.app-statusbar-host[data-v-bdce687f] { grid-column: 1 / -1; grid-row: 3; z-index: 30; height: 22px;\n}\n.plugin-slot-host[data-v-bdce687f] { height: 100%; overflow: hidden;\n}\n/* ★ 插件渲染的子元素必须撑满宿主（bundle 根 auto 宽度不随宿主 grid 拉伸——\n   focus-mode 下宿主被 grid 拉到 3/-1 全宽，子元素保持内容宽 → 右侧大片空余） */\n.plugin-slot-host.right-container[data-v-bdce687f] > * { width: 100%; min-width: 0;\n}\n/* modals 槽位：fixed 全屏浮层容器（不占 grid 格） */\n.modals-host[data-v-bdce687f] { position: fixed; inset: 0; z-index: 200; pointer-events: none;\n}\n.modals-host[data-v-bdce687f] > * { pointer-events: auto;\n}\n.modals-empty[data-v-bdce687f] { display: none;\n}\n/* 空态占位（区域插件未装配时显示） */\n.slot-empty[data-v-bdce687f] {\n  display: flex; flex-direction: row; gap: 8px;\n  align-items: center; justify-content: center;\n  color: var(--text-muted); font-size: 12px;\n  background: var(--bg-primary);\n  border: 1px dashed var(--border-color);\n  min-height: 0;\n}\n/* activitybar 是竖条（~48px 宽）：空态改纵向排列 */\n.plugin-area-activitybar.slot-empty[data-v-bdce687f] { flex-direction: column; gap: 4px; padding: 4px;\n}\n.plugin-area-activitybar.slot-empty .escape-link[data-v-bdce687f] { font-size: 11px; padding: 2px 8px;\n}\n/* 空态内的「打开插件面板」恢复入口（上下文感知注入：只在区域未装配时出现，\n   插件全正常时零干扰；与常驻逃生按钮互为双保险） */\n.escape-link[data-v-bdce687f] {\n  background: none; border: 1px solid var(--border-color);\n  color: var(--accent, #4f8cff); font-size: 12px;\n  padding: 3px 12px; border-radius: 4px; cursor: pointer;\n  opacity: .85; transition: opacity .15s;\n}\n.escape-link[data-v-bdce687f]:hover { opacity: 1; background: rgba(79,140,255,.12);\n}\n/* ─── 壳级逃生口：插件面板浮动入口 ───\n   常驻极小按钮位于左下角（状态栏上方）：右侧面板占 grid 第 4 列，\n   左下角处于第 1-2 列区域（activitybar/sidebar 底部），focusMode 全屏对话\n   也不覆盖——不再遮挡右侧对话输入区。半透明弱化，hover 全显。\n   点击打开浮动插件面板（Fixed 560px 居中）。 */\n.plugin-escape-btn[data-v-bdce687f] {\n  position: fixed; left: 6px; bottom: 26px; z-index: 300;\n  width: 22px; height: 22px; border-radius: 5px;\n  display: flex; align-items: center; justify-content: center;\n  background: var(--bg-elevated, #2a2d36); color: var(--text-muted);\n  border: 1px solid var(--border-color); cursor: pointer;\n  opacity: .3; transition: opacity .15s;\n}\n.plugin-escape-btn[data-v-bdce687f]:hover { opacity: 1; color: var(--accent, #4f8cff);\n}\n.plugin-escape-overlay[data-v-bdce687f] {\n  position: fixed; inset: 0; z-index: 400;\n  background: rgba(0,0,0,.45);\n  display: flex; align-items: center; justify-content: center;\n}\n.plugin-escape-panel[data-v-bdce687f] {\n  width: 560px; max-width: 92vw; height: 70vh; max-height: 640px;\n  background: var(--bg-primary); border: 1px solid var(--border-color);\n  border-radius: 10px; box-shadow: 0 8px 40px rgba(0,0,0,.5);\n  display: flex; flex-direction: column; overflow: hidden;\n}\n.plugin-escape-head[data-v-bdce687f] {\n  display: flex; align-items: center; justify-content: space-between;\n  padding: 6px 10px; font-size: 12px; color: var(--text-muted);\n  border-bottom: 1px solid var(--border-color);\n  background: var(--bg-elevated, #262932);\n}\n.plugin-escape-close[data-v-bdce687f] {\n  border: none; background: none; color: var(--text-muted);\n  cursor: pointer; font-size: 13px; padding: 2px 6px; border-radius: 4px;\n}\n.plugin-escape-close[data-v-bdce687f]:hover { background: rgba(255,255,255,.08); color: #fff;\n}\n.plugin-escape-body[data-v-bdce687f] { flex: 1; overflow: auto;\n}\n.plugin-escape-body .plugin-panel[data-v-bdce687f] { height: 100%; border: none;\n}\n/*$vite$:1*/";
   document.head.appendChild(__vite_style__);
   /**
   * @vue/shared v3.5.39
@@ -11200,6 +11200,12 @@
   async function saveModels(providers) {
     return apiPost("/models", { providers });
   }
+  async function getModelGroups() {
+    return apiGet("/model-groups");
+  }
+  async function saveModelGroups(groups) {
+    return apiPut("/model-groups", { groups });
+  }
   async function getMcpList(level = "all") {
     return apiGet("/mcp/list", { level });
   }
@@ -11226,7 +11232,7 @@
   async function saveInstructions(scope, content) {
     return apiPut("/instructions?scope=" + scope, { content });
   }
-  const api = { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, isWebSocketOpen, waitForWebSocket, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatCompact, chatStop, getMessages, getMessagesCount, getModels, saveModels, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, listPlugins, getPluginDetail, pluginAction, definePlugin, pluginEmit, pluginClientEvents, pluginClientState, pluginInvoke, pluginClientFailure, builtinPlugins, pluginToolToggle, getToolsets, toolsetEdit };
+  const api = { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, isWebSocketOpen, waitForWebSocket, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatCompact, chatStop, getMessages, getMessagesCount, getModels, saveModels, getModelGroups, saveModelGroups, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, listPlugins, getPluginDetail, pluginAction, definePlugin, pluginEmit, pluginClientEvents, pluginClientState, pluginInvoke, pluginClientFailure, builtinPlugins, pluginToolToggle, getToolsets, toolsetEdit };
   async function listPlugins() {
     return apiGet("/plugins");
   }
@@ -13912,70 +13918,90 @@
   const _hoisted_46 = { class: "pp-list" };
   const _hoisted_47 = {
     key: 0,
+    class: "pp-builtin"
+  };
+  const _hoisted_48 = { class: "pp-builtin-head" };
+  const _hoisted_49 = { class: "pp-builtin-title" };
+  const _hoisted_50 = { class: "pp-builtin-grow" };
+  const _hoisted_51 = { class: "pp-builtin-gname" };
+  const _hoisted_52 = {
+    key: 0,
+    class: "pp-builtin-gdesc"
+  };
+  const _hoisted_53 = { class: "pp-builtin-gcount" };
+  const _hoisted_54 = ["onClick"];
+  const _hoisted_55 = ["onClick"];
+  const _hoisted_56 = { class: "pp-builtin-tools" };
+  const _hoisted_57 = ["title"];
+  const _hoisted_58 = { class: "pp-d-tname" };
+  const _hoisted_59 = ["title"];
+  const _hoisted_60 = ["checked", "onChange"];
+  const _hoisted_61 = {
+    key: 1,
     class: "pp-loading"
   };
-  const _hoisted_48 = {
-    key: 1,
-    class: "pp-empty"
-  };
-  const _hoisted_49 = {
+  const _hoisted_62 = {
     key: 2,
     class: "pp-empty"
   };
-  const _hoisted_50 = ["onClick"];
-  const _hoisted_51 = ["title"];
-  const _hoisted_52 = {
+  const _hoisted_63 = {
+    key: 3,
+    class: "pp-empty"
+  };
+  const _hoisted_64 = ["onClick"];
+  const _hoisted_65 = ["title"];
+  const _hoisted_66 = {
     key: 0,
     class: "pp-badge",
     title: "全局插件：跨工作区生效（UI 类），不属于任何工具集"
   };
-  const _hoisted_53 = {
+  const _hoisted_67 = {
     key: 1,
     class: "pp-badge",
     title: "含 client 半（浏览器 UI，运行中自动装载）"
   };
-  const _hoisted_54 = ["title"];
-  const _hoisted_55 = ["title"];
-  const _hoisted_56 = ["checked", "onChange"];
-  const _hoisted_57 = {
+  const _hoisted_68 = ["title"];
+  const _hoisted_69 = ["title"];
+  const _hoisted_70 = ["checked", "onChange"];
+  const _hoisted_71 = {
     key: 0,
     class: "pp-detail"
   };
-  const _hoisted_58 = {
+  const _hoisted_72 = {
     key: 0,
     class: "pp-d-purpose"
   };
-  const _hoisted_59 = {
+  const _hoisted_73 = {
     key: 1,
     class: "pp-d-line"
   };
-  const _hoisted_60 = { key: 0 };
-  const _hoisted_61 = {
+  const _hoisted_74 = { key: 0 };
+  const _hoisted_75 = {
     key: 2,
     class: "pp-d-line"
   };
-  const _hoisted_62 = {
+  const _hoisted_76 = {
     key: 3,
     class: "pp-d-line"
   };
-  const _hoisted_63 = {
+  const _hoisted_77 = {
     key: 4,
     class: "pp-d-tools"
   };
-  const _hoisted_64 = { class: "pp-d-tools-title" };
-  const _hoisted_65 = ["title"];
-  const _hoisted_66 = ["title"];
-  const _hoisted_67 = ["checked", "onChange"];
-  const _hoisted_68 = {
+  const _hoisted_78 = { class: "pp-d-tools-title" };
+  const _hoisted_79 = ["title"];
+  const _hoisted_80 = ["title"];
+  const _hoisted_81 = ["checked", "onChange"];
+  const _hoisted_82 = {
     key: 5,
     class: "pp-d-code"
   };
-  const _hoisted_69 = { class: "pp-d-code-head" };
-  const _hoisted_70 = ["onClick"];
-  const _hoisted_71 = { class: "pp-d-actions" };
-  const _hoisted_72 = ["onClick"];
-  const _hoisted_73 = ["onClick"];
-  const _hoisted_74 = ["onClick"];
+  const _hoisted_83 = { class: "pp-d-code-head" };
+  const _hoisted_84 = ["onClick"];
+  const _hoisted_85 = { class: "pp-d-actions" };
+  const _hoisted_86 = ["onClick"];
+  const _hoisted_87 = ["onClick"];
+  const _hoisted_88 = ["onClick"];
   const _sfc_main$1 = {
     __name: "PluginPanel",
     setup(__props) {
@@ -14130,6 +14156,50 @@
           wsToolsetMap.value = null;
         }
       }
+      const builtinGroups = /* @__PURE__ */ ref([]);
+      async function loadBuiltinGroups() {
+        try {
+          const info = await api.builtinPlugins(null, state.workspaceRoot);
+          const groups = (info && info.groups || []).filter((g) => g.source !== "plugin" && (g.tools || []).length).map((g) => ({
+            ...g,
+            anyOn: (g.tools || []).some((x) => x.enabled),
+            allOn: (g.tools || []).length > 0 && (g.tools || []).every((x) => x.enabled)
+          }));
+          builtinGroups.value = groups;
+        } catch (e) {
+          builtinGroups.value = [];
+        }
+      }
+      async function toggleBuiltinTool(t, checked) {
+        try {
+          const res = await api.builtinPlugins({ tool: t.name, enabled: checked }, state.workspaceRoot);
+          window.$toast && window.$toast((res == null ? void 0 : res.message) || (checked ? "已加入工作区工具集" : "已移出工作区工具集") + " " + t.name, "info");
+          await loadBuiltinGroups();
+          await loadWsToolsetMap();
+        } catch (e) {
+          window.$toast && window.$toast(e.message || "操作失败", "error");
+        }
+      }
+      async function enableBuiltinGroup(g) {
+        try {
+          const res = await api.builtinPlugins({ group: g.name, enabled: true }, state.workspaceRoot);
+          window.$toast && window.$toast((res == null ? void 0 : res.message) || "已整组加入工作区工具集", "info");
+          await loadBuiltinGroups();
+          await loadWsToolsetMap();
+        } catch (e) {
+          window.$toast && window.$toast(e.message || "操作失败", "error");
+        }
+      }
+      async function disableBuiltinGroup(g) {
+        try {
+          const res = await api.builtinPlugins({ group: g.name, enabled: false }, state.workspaceRoot);
+          window.$toast && window.$toast((res == null ? void 0 : res.message) || "已整组移出工作区工具集", "info");
+          await loadBuiltinGroups();
+          await loadWsToolsetMap();
+        } catch (e) {
+          window.$toast && window.$toast(e.message || "操作失败", "error");
+        }
+      }
       function pluginToolOn(p2, t) {
         var _a;
         return ((_a = p2.toolCordisVisible) == null ? void 0 : _a[t]) !== false;
@@ -14254,6 +14324,7 @@
         startPolling();
         refresh();
         loadWsToolsetMap();
+        loadBuiltinGroups();
       });
       onUnmounted(() => {
         stopPolling();
@@ -14553,32 +14624,90 @@
             }), 128)) : createCommentVNode("", true)
           ])) : createCommentVNode("", true),
           createBaseVNode("div", _hoisted_46, [
-            loading.value && plugins.value.length === 0 ? (openBlock(), createElementBlock("div", _hoisted_47, [
+            builtinGroups.value.length ? (openBlock(), createElementBlock("div", _hoisted_47, [
+              createBaseVNode("div", _hoisted_48, [
+                createBaseVNode("span", _hoisted_49, [
+                  createVNode(SvgIcon, {
+                    name: "package",
+                    size: 12
+                  }),
+                  _cache[19] || (_cache[19] = createTextVNode(" 内置工具（框架自带）", -1))
+                ]),
+                _cache[20] || (_cache[20] = createBaseVNode("span", { class: "pp-builtin-sub" }, "勾选=在工作区工具集中（agent 可用）；取消=移出", -1))
+              ]),
+              (openBlock(true), createElementBlock(Fragment, null, renderList(builtinGroups.value, (g) => {
+                return openBlock(), createElementBlock("div", {
+                  key: g.name,
+                  class: "pp-builtin-group"
+                }, [
+                  createBaseVNode("div", _hoisted_50, [
+                    createBaseVNode("span", _hoisted_51, toDisplayString(g.title || g.name), 1),
+                    g.desc ? (openBlock(), createElementBlock("span", _hoisted_52, toDisplayString(g.desc), 1)) : createCommentVNode("", true),
+                    createBaseVNode("span", _hoisted_53, toDisplayString(g.tools.length) + " 工具", 1),
+                    !g.allOn ? (openBlock(), createElementBlock("button", {
+                      key: 1,
+                      class: "pp-btn mini",
+                      onClick: ($event) => enableBuiltinGroup(g),
+                      title: "整组加入工作区工具集"
+                    }, "整组启用", 8, _hoisted_54)) : createCommentVNode("", true),
+                    g.anyOn ? (openBlock(), createElementBlock("button", {
+                      key: 2,
+                      class: "pp-btn mini danger",
+                      onClick: ($event) => disableBuiltinGroup(g),
+                      title: "整组移出工作区工具集"
+                    }, "整组移出", 8, _hoisted_55)) : createCommentVNode("", true)
+                  ]),
+                  createBaseVNode("div", _hoisted_56, [
+                    (openBlock(true), createElementBlock(Fragment, null, renderList(g.tools, (t) => {
+                      return openBlock(), createElementBlock("div", {
+                        key: t.name,
+                        class: "pp-d-tool",
+                        title: t.desc
+                      }, [
+                        createBaseVNode("span", _hoisted_58, toDisplayString(t.name), 1),
+                        createBaseVNode("label", {
+                          class: "pp-switch",
+                          title: t.enabled ? "在工作区工具集中（agent 可用）；点击移出" : "未加入工作区工具集；点击加入"
+                        }, [
+                          createBaseVNode("input", {
+                            type: "checkbox",
+                            checked: t.enabled,
+                            onChange: ($event) => toggleBuiltinTool(t, $event.target.checked)
+                          }, null, 40, _hoisted_60),
+                          _cache[21] || (_cache[21] = createBaseVNode("span", { class: "pp-switch-track" }, null, -1))
+                        ], 8, _hoisted_59)
+                      ], 8, _hoisted_57);
+                    }), 128))
+                  ])
+                ]);
+              }), 128))
+            ])) : createCommentVNode("", true),
+            loading.value && plugins.value.length === 0 ? (openBlock(), createElementBlock("div", _hoisted_61, [
               createVNode(SvgIcon, {
                 name: "refresh",
                 size: 16,
                 class: "spinner"
               }),
-              _cache[19] || (_cache[19] = createBaseVNode("span", null, "加载插件…", -1))
-            ])) : loadError.value ? (openBlock(), createElementBlock("div", _hoisted_48, [
+              _cache[22] || (_cache[22] = createBaseVNode("span", null, "加载插件…", -1))
+            ])) : loadError.value ? (openBlock(), createElementBlock("div", _hoisted_62, [
               createVNode(SvgIcon, {
                 name: "puzzle",
                 size: 22,
                 color: "var(--text-muted)"
               }),
-              _cache[20] || (_cache[20] = createBaseVNode("span", null, "插件列表加载失败", -1)),
+              _cache[23] || (_cache[23] = createBaseVNode("span", null, "插件列表加载失败", -1)),
               createBaseVNode("button", {
                 class: "pp-btn primary",
                 onClick: refresh
               }, "重试")
-            ])) : plugins.value.length === 0 && !loading.value ? (openBlock(), createElementBlock("div", _hoisted_49, [
+            ])) : plugins.value.length === 0 && !loading.value ? (openBlock(), createElementBlock("div", _hoisted_63, [
               createVNode(SvgIcon, {
                 name: "puzzle",
                 size: 22,
                 color: "var(--text-muted)"
               }),
-              _cache[21] || (_cache[21] = createBaseVNode("span", null, "暂无插件", -1)),
-              _cache[22] || (_cache[22] = createBaseVNode("span", { class: "pp-empty-sub" }, "点击上方 + 新建 JS 动态插件，或用对话 cordis_define 定义", -1))
+              _cache[24] || (_cache[24] = createBaseVNode("span", null, "暂无插件", -1)),
+              _cache[25] || (_cache[25] = createBaseVNode("span", { class: "pp-empty-sub" }, "点击上方 + 新建 JS 动态插件，或用对话 cordis_define 定义", -1))
             ])) : createCommentVNode("", true),
             (openBlock(true), createElementBlock(Fragment, null, renderList(plugins.value, (p2) => {
               return openBlock(), createElementBlock("div", {
@@ -14595,17 +14724,17 @@
                   createBaseVNode("span", {
                     class: "pp-name",
                     title: p2.purpose || p2.name
-                  }, toDisplayString(p2.name), 9, _hoisted_51),
+                  }, toDisplayString(p2.name), 9, _hoisted_65),
                   createBaseVNode("span", {
                     class: normalizeClass(["pp-src", p2.source])
                   }, toDisplayString(p2.source), 3),
-                  p2.scope === "global" ? (openBlock(), createElementBlock("span", _hoisted_52, "全局")) : createCommentVNode("", true),
-                  p2.hasClient ? (openBlock(), createElementBlock("span", _hoisted_53, "UI")) : createCommentVNode("", true),
+                  p2.scope === "global" ? (openBlock(), createElementBlock("span", _hoisted_66, "全局")) : createCommentVNode("", true),
+                  p2.hasClient ? (openBlock(), createElementBlock("span", _hoisted_67, "UI")) : createCommentVNode("", true),
                   p2.tools && p2.tools.length ? (openBlock(), createElementBlock("span", {
                     key: 2,
                     class: "pp-count",
                     title: p2.tools.join(", ")
-                  }, toDisplayString(p2.tools.length) + " 工具", 9, _hoisted_54)) : createCommentVNode("", true),
+                  }, toDisplayString(p2.tools.length) + " 工具", 9, _hoisted_68)) : createCommentVNode("", true),
                   p2.hasClient && uiSlotsOf(p2.name).length ? (openBlock(), createElementBlock(Fragment, { key: 3 }, [
                     createBaseVNode("span", {
                       class: normalizeClass(["pp-ui-label", { on: uiPluginActive(p2.name) }])
@@ -14620,26 +14749,26 @@
                         onChange: ($event) => toggleUiPlugin(p2, $event.target.checked),
                         onClick: _cache[10] || (_cache[10] = withModifiers(() => {
                         }, ["stop"]))
-                      }, null, 40, _hoisted_56),
-                      _cache[23] || (_cache[23] = createBaseVNode("span", { class: "pp-switch-track" }, null, -1))
-                    ], 8, _hoisted_55)
+                      }, null, 40, _hoisted_70),
+                      _cache[26] || (_cache[26] = createBaseVNode("span", { class: "pp-switch-track" }, null, -1))
+                    ], 8, _hoisted_69)
                   ], 64)) : createCommentVNode("", true),
                   createVNode(SvgIcon, {
                     name: "chevron-right",
                     size: 12,
                     class: normalizeClass(["pp-chevron", { open: expanded[p2.name] }])
                   }, null, 8, ["class"])
-                ], 8, _hoisted_50),
-                expanded[p2.name] ? (openBlock(), createElementBlock("div", _hoisted_57, [
-                  p2.purpose ? (openBlock(), createElementBlock("div", _hoisted_58, toDisplayString(p2.purpose), 1)) : createCommentVNode("", true),
-                  p2.defId ? (openBlock(), createElementBlock("div", _hoisted_59, [
+                ], 8, _hoisted_64),
+                expanded[p2.name] ? (openBlock(), createElementBlock("div", _hoisted_71, [
+                  p2.purpose ? (openBlock(), createElementBlock("div", _hoisted_72, toDisplayString(p2.purpose), 1)) : createCommentVNode("", true),
+                  p2.defId ? (openBlock(), createElementBlock("div", _hoisted_73, [
                     createTextVNode("定义: " + toDisplayString(p2.defId), 1),
-                    p2.version ? (openBlock(), createElementBlock("span", _hoisted_60, " · " + toDisplayString(p2.version), 1)) : createCommentVNode("", true)
+                    p2.version ? (openBlock(), createElementBlock("span", _hoisted_74, " · " + toDisplayString(p2.version), 1)) : createCommentVNode("", true)
                   ])) : createCommentVNode("", true),
-                  p2.provides && p2.provides.length ? (openBlock(), createElementBlock("div", _hoisted_61, "服务: " + toDisplayString(p2.provides.join(", ")), 1)) : createCommentVNode("", true),
-                  p2.sections && p2.sections.length ? (openBlock(), createElementBlock("div", _hoisted_62, "提示片段: " + toDisplayString(p2.sections.join(", ")), 1)) : createCommentVNode("", true),
-                  p2.tools && p2.tools.length ? (openBlock(), createElementBlock("div", _hoisted_63, [
-                    createBaseVNode("div", _hoisted_64, "工具（" + toDisplayString(p2.tools.length) + "）· 勾选=对 cordis（JS 插件运行时）可见；取消=隐藏。agent 可用性由工作区工具集决定", 1),
+                  p2.provides && p2.provides.length ? (openBlock(), createElementBlock("div", _hoisted_75, "服务: " + toDisplayString(p2.provides.join(", ")), 1)) : createCommentVNode("", true),
+                  p2.sections && p2.sections.length ? (openBlock(), createElementBlock("div", _hoisted_76, "提示片段: " + toDisplayString(p2.sections.join(", ")), 1)) : createCommentVNode("", true),
+                  p2.tools && p2.tools.length ? (openBlock(), createElementBlock("div", _hoisted_77, [
+                    createBaseVNode("div", _hoisted_78, "工具（" + toDisplayString(p2.tools.length) + "）· 勾选=对 cordis（JS 插件运行时）可见；取消=隐藏。agent 可用性由工作区工具集决定", 1),
                     (openBlock(true), createElementBlock(Fragment, null, renderList(p2.tools, (t) => {
                       return openBlock(), createElementBlock("div", {
                         key: t,
@@ -14648,7 +14777,7 @@
                         createBaseVNode("span", {
                           class: "pp-d-tname",
                           title: t
-                        }, toDisplayString(t), 9, _hoisted_65),
+                        }, toDisplayString(t), 9, _hoisted_79),
                         createBaseVNode("label", {
                           class: "pp-switch",
                           title: pluginToolOn(p2, t) ? "对 cordis 可见；点击隐藏（JS 插件 ctx.tools 看不到它）" : "对 cordis 隐藏；点击恢复可见"
@@ -14657,15 +14786,15 @@
                             type: "checkbox",
                             checked: pluginToolOn(p2, t),
                             onChange: ($event) => _ctx.togglePluginTool(p2, t)
-                          }, null, 40, _hoisted_67),
-                          _cache[24] || (_cache[24] = createBaseVNode("span", { class: "pp-switch-track" }, null, -1))
-                        ], 8, _hoisted_66)
+                          }, null, 40, _hoisted_81),
+                          _cache[27] || (_cache[27] = createBaseVNode("span", { class: "pp-switch-track" }, null, -1))
+                        ], 8, _hoisted_80)
                       ]);
                     }), 128))
                   ])) : createCommentVNode("", true),
-                  p2.clientCode ? (openBlock(), createElementBlock("div", _hoisted_68, [
-                    createBaseVNode("div", _hoisted_69, [
-                      _cache[25] || (_cache[25] = createBaseVNode("span", null, "client 半源码", -1)),
+                  p2.clientCode ? (openBlock(), createElementBlock("div", _hoisted_82, [
+                    createBaseVNode("div", _hoisted_83, [
+                      _cache[28] || (_cache[28] = createBaseVNode("span", null, "client 半源码", -1)),
                       createBaseVNode("button", {
                         class: "pp-icon-btn",
                         onClick: ($event) => copyText(p2.clientCode),
@@ -14675,28 +14804,28 @@
                           name: "copy",
                           size: 11
                         })
-                      ], 8, _hoisted_70)
+                      ], 8, _hoisted_84)
                     ]),
                     createBaseVNode("pre", null, toDisplayString(p2.clientCode), 1)
                   ])) : createCommentVNode("", true),
-                  createBaseVNode("div", _hoisted_71, [
+                  createBaseVNode("div", _hoisted_85, [
                     p2.state === "running" ? (openBlock(), createElementBlock(Fragment, { key: 0 }, [
                       !(p2.hasClient && uiSlotsOf(p2.name).length) ? (openBlock(), createElementBlock("button", {
                         key: 0,
                         class: "pp-btn",
                         title: "停止整个插件（其全部工具对 agent 不可见）；单工具请用上方工具开关",
                         onClick: ($event) => doAction(p2, "stop")
-                      }, "停止插件", 8, _hoisted_72)) : createCommentVNode("", true)
+                      }, "停止插件", 8, _hoisted_86)) : createCommentVNode("", true)
                     ], 64)) : (openBlock(), createElementBlock("button", {
                       key: 1,
                       class: "pp-btn primary",
                       onClick: ($event) => doAction(p2, "start")
-                    }, "启动插件", 8, _hoisted_73)),
+                    }, "启动插件", 8, _hoisted_87)),
                     p2.source === "js" ? (openBlock(), createElementBlock("button", {
                       key: 2,
                       class: "pp-btn danger",
                       onClick: ($event) => doAction(p2, "undefine")
-                    }, "删除定义", 8, _hoisted_74)) : createCommentVNode("", true)
+                    }, "删除定义", 8, _hoisted_88)) : createCommentVNode("", true)
                   ])
                 ])) : createCommentVNode("", true)
               ]);
@@ -14706,7 +14835,7 @@
       };
     }
   };
-  const PluginPanel = /* @__PURE__ */ _export_sfc(_sfc_main$1, [["__scopeId", "data-v-28cc536a"]]);
+  const PluginPanel = /* @__PURE__ */ _export_sfc(_sfc_main$1, [["__scopeId", "data-v-3e12e77f"]]);
   const _hoisted_1 = {
     key: 0,
     class: "slot-empty plugin-area-titlebar"

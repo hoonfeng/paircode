@@ -35581,6 +35581,8 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
       };
       const inputText = vue.ref("");
       const modelData = vue.ref(null);
+      const modelGroupsData = vue.ref(null);
+      const composerGroup = vue.ref("");
       const composerProvider = vue.ref("");
       const composerModel = vue.ref("");
       const composerThinking = vue.ref("");
@@ -35594,20 +35596,55 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
         { v: "xhigh", label: "思考: xhigh（超高）" },
         { v: "max", label: "思考: max（最大化）" }
       ];
-      const modelProviders = vue.computed(() => modelData.value && modelData.value.providers || []);
+      const modelGroups = vue.computed(() => {
+        const groups = modelGroupsData.value || {};
+        const names = Object.keys(groups);
+        if (names.length) return names;
+        return modelData.value && modelData.value.providers || [];
+      });
       const composerModels = vue.computed(() => {
         const m2 = modelData.value && modelData.value.models || {};
-        return m2[composerProvider.value] || [];
+        const groups = modelGroupsData.value || {};
+        const insts = groups[composerGroup.value];
+        if (Array.isArray(insts) && insts.length) {
+          const out = [];
+          for (const inst of insts) for (const mm of m2[inst] || []) if (!out.includes(mm)) out.push(mm);
+          return out;
+        }
+        return m2[composerGroup.value] || [];
       });
+      function instanceForModel(group, model) {
+        const groups = modelGroupsData.value || {};
+        const m2 = modelData.value && modelData.value.models || {};
+        const insts = groups[group] || [];
+        for (const inst of insts) if ((m2[inst] || []).includes(model)) return inst;
+        if (m2[group] && (m2[group] || []).includes(model)) return group;
+        return insts[0] || group;
+      }
       async function loadModelData() {
         try {
-          modelData.value = await api.getModels();
+          const [md, mg] = await Promise.all([api.getModels(), api.getModelGroups().catch(() => ({ groups: {} }))]);
+          modelData.value = md;
+          modelGroupsData.value = mg && mg.groups || {};
         } catch {
         }
       }
       function initComposerModel() {
         const s2 = uiState_js.state.settings || {};
-        if (s2.provider) composerProvider.value = s2.provider;
+        const groups = modelGroupsData.value || {};
+        let g2 = s2.modelGroup || "";
+        if (!g2 && s2.provider) {
+          for (const [name, insts] of Object.entries(groups)) {
+            if (insts.includes(s2.provider)) {
+              g2 = name;
+              break;
+            }
+          }
+          if (!g2) g2 = s2.provider;
+        }
+        if (!g2) g2 = Object.keys(groups)[0] || "";
+        composerGroup.value = g2;
+        composerProvider.value = s2.provider || instanceForModel(g2, s2.executeModel);
         if (s2.executeModel) composerModel.value = s2.executeModel;
       }
       function onCmpProviderChange() {
@@ -35620,43 +35657,48 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
       }
       function initComposerThinking() {
         const mp = uiState_js.state.settings && uiState_js.state.settings.modelParams || {};
-        const by = mp[composerProvider.value] && mp[composerProvider.value][composerModel.value] || null;
+        const prov = composerProvider.value || composerGroup.value;
+        const by = mp[prov] && mp[prov][composerModel.value] || null;
         composerThinking.value = by && by.thinkingMode || "";
       }
       async function onCmpModelChange() {
         initComposerThinking();
-        if (!composerProvider.value || !composerModel.value) return;
+        if (!composerGroup.value || !composerModel.value) return;
         const md = modelData.value || {};
-        const top2 = { ...uiState_js.state.settings || {}, provider: composerProvider.value, executeModel: composerModel.value };
-        if (md.providerBaseURLs && md.providerBaseURLs[composerProvider.value]) top2.baseURL = md.providerBaseURLs[composerProvider.value];
-        if (md.providerKeys && md.providerKeys[composerProvider.value]) top2.apiKey = md.providerKeys[composerProvider.value];
+        const prov = instanceForModel(composerGroup.value, composerModel.value);
+        composerProvider.value = prov;
+        const top2 = { ...uiState_js.state.settings || {}, modelGroup: composerGroup.value, provider: prov, executeModel: composerModel.value };
+        if (md.providerBaseURLs && md.providerBaseURLs[prov]) top2.baseURL = md.providerBaseURLs[prov];
+        if (md.providerKeys && md.providerKeys[prov]) top2.apiKey = md.providerKeys[prov];
         try {
           await api.apiPut("/settings", { settings: top2, pluginSettings: uiState_js.state.settings && uiState_js.state.settings.pluginSettings || {} });
           uiState_js.state.settings = top2;
-          window.$toast && window.$toast("已切换：" + composerProvider.value + " / " + composerModel.value, "success");
+          window.$toast && window.$toast("已切换：" + composerGroup.value + " / " + composerModel.value + "（" + prov + "）", "success");
         } catch (e3) {
           window.$toast && window.$toast("模型切换失败: " + (e3.message || e3), "error");
         }
       }
       async function onCmpThinkingChange() {
-        if (!composerProvider.value || !composerModel.value) return;
+        if (!composerGroup.value || !composerModel.value) return;
         const v3 = composerThinking.value;
+        const prov = composerProvider.value || instanceForModel(composerGroup.value, composerModel.value);
+        composerProvider.value = prov;
         const mp = JSON.parse(JSON.stringify(uiState_js.state.settings && uiState_js.state.settings.modelParams || {}));
-        if (!mp[composerProvider.value]) mp[composerProvider.value] = {};
-        const prev2 = mp[composerProvider.value][composerModel.value] || {};
+        if (!mp[prov]) mp[prov] = {};
+        const prev2 = mp[prov][composerModel.value] || {};
         if (v3) {
-          mp[composerProvider.value][composerModel.value] = { ...prev2, thinkingMode: v3 };
+          mp[prov][composerModel.value] = { ...prev2, thinkingMode: v3 };
         } else {
           delete prev2.thinkingMode;
-          if (Object.keys(prev2).length) mp[composerProvider.value][composerModel.value] = prev2;
-          else delete mp[composerProvider.value][composerModel.value];
-          if (!Object.keys(mp[composerProvider.value]).length) delete mp[composerProvider.value];
+          if (Object.keys(prev2).length) mp[prov][composerModel.value] = prev2;
+          else delete mp[prov][composerModel.value];
+          if (!Object.keys(mp[prov]).length) delete mp[prov];
         }
-        const top2 = { ...uiState_js.state.settings || {}, modelParams: mp };
+        const top2 = { ...uiState_js.state.settings || {}, modelGroup: composerGroup.value, modelParams: mp };
         try {
           await api.apiPut("/settings", { settings: top2, pluginSettings: uiState_js.state.settings && uiState_js.state.settings.pluginSettings || {} });
           uiState_js.state.settings = top2;
-          window.$toast && window.$toast(v3 ? "思考档位已切换并记录：" + v3 + "（" + composerProvider.value + " / " + composerModel.value + "）" : "思考档位已恢复默认", "success");
+          window.$toast && window.$toast(v3 ? "思考档位已切换并记录：" + v3 + "（" + composerGroup.value + " / " + composerModel.value + "）" : "思考档位已恢复默认", "success");
         } catch (e3) {
           window.$toast && window.$toast("思考切换失败: " + (e3.message || e3), "error");
           initComposerThinking();
@@ -36738,9 +36780,10 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
       const chatSlot = pluginRuntime_js.useSingleSlot("chat");
       chatSlot.init();
       vue.onMounted(() => {
-        loadModelData();
-        initComposerModel();
-        initComposerThinking();
+        loadModelData().then(() => {
+          initComposerModel();
+          initComposerThinking();
+        });
         loadWsTokenStats();
         loadConvList();
         scrollToBottom();
@@ -37812,21 +37855,21 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                         ]),
                         vue.createElementVNode("div", _hoisted_82, [
                           vue.createElementVNode("div", _hoisted_83, [
-                            vue.createCommentVNode(" ★ composer 模型选择器：快速切换服务商/执行模型（写入 settings，发送即用） "),
+                            vue.createCommentVNode(" ★ composer 模型选择器：快速切换模型组/执行模型（写入 settings，发送即用；模型组内实例自带 Key） "),
                             vue.createElementVNode("span", _hoisted_84, [
                               vue.withDirectives(vue.createElementVNode(
                                 "select",
                                 {
-                                  "onUpdate:modelValue": _cache[7] || (_cache[7] = ($event) => composerProvider.value = $event),
+                                  "onUpdate:modelValue": _cache[7] || (_cache[7] = ($event) => composerGroup.value = $event),
                                   class: "cmp-sel cmp-prov",
                                   onChange: onCmpProviderChange,
-                                  title: "服务商（切换自动带出密钥与模型）"
+                                  title: "模型组（用户命名；组内实例自带密钥，无需再选服务商）"
                                 },
                                 [
                                   (vue.openBlock(true), vue.createElementBlock(
                                     vue.Fragment,
                                     null,
-                                    vue.renderList(modelProviders.value, (p2) => {
+                                    vue.renderList(modelGroups.value, (p2) => {
                                       return vue.openBlock(), vue.createElementBlock("option", {
                                         key: p2,
                                         value: p2
@@ -37839,7 +37882,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
                                 544
                                 /* NEED_HYDRATION, NEED_PATCH */
                               ), [
-                                [vue.vModelSelect, composerProvider.value]
+                                [vue.vModelSelect, composerGroup.value]
                               ]),
                               vue.withDirectives(vue.createElementVNode(
                                 "select",
@@ -38022,7 +38065,7 @@ Please report this to https://github.com/markedjs/marked.`, e3) {
       };
     }
   };
-  const RightPanel = /* @__PURE__ */ _export_sfc(_sfc_main$1, [["__scopeId", "data-v-4565a6fc"]]);
+  const RightPanel = /* @__PURE__ */ _export_sfc(_sfc_main$1, [["__scopeId", "data-v-384466c5"]]);
   const TOTAL_EXTRA = 4 + 1 + 200;
   const _sfc_main = {
     __name: "UiRightPanel",

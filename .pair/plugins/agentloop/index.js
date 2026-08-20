@@ -42,21 +42,17 @@ return {
     //     pluginSettings['agentloop'] 保持业务读取兼容；新字段 binding 全局）
     //   · instructions 组：系统级指令（binding → systemInstructions）
     // ═══════════════════════════════════════════════════════════
-    // ── AI：服务商与模型 ──
+    // ── AI：模型组与模型（★ 2026-08-20 多例化：provider=模型组名，组内实例自带 Key/BaseURL）──
     ctx.registerSettings({
       key: 'ai',
       title: 'AI',
       fields: [
-          { name: 'provider', label: '服务商', type: 'select', binding: 'provider',
-            optionsSource: 'providers', linkFields: ['baseURL', 'apiKey'],
-            options: ['deepseek', '硅基', 'kimi', 'anthropic', 'custom', 'openai-compatible'],
-            hint: '模型服务商（切换自动带出该服务商的 Base URL 与 API Key）' },
-        { name: 'baseURL', label: 'Base URL', type: 'text', binding: 'baseURL',
-          placeholder: 'https://api.deepseek.com/v1', hint: 'API 端点（custom 服务商必填，切换服务商自动带出）' },
-        { name: 'apiKey', label: 'API Key', type: 'password', binding: 'apiKey',
-          placeholder: 'sk-…', hint: '★ 按服务商独立保存：切换服务商自动带出该服务商密钥；修改后保存设置即写回' },
+          { name: 'provider', label: '模型组', type: 'select', binding: 'provider',
+            optionsSource: 'model-groups',
+            options: [],
+            hint: '模型组（用户命名；组内实例自带 API Key/Base URL，切换自动带出，无需再选服务商）' },
           { name: 'executeModel', label: '执行模型', type: 'select', binding: 'executeModel',
-            optionsSource: 'models', placeholder: 'deepseek-v4-flash', hint: '执行 Agent 使用的模型（下拉=按服务商预设）' },
+            optionsSource: 'models', placeholder: 'deepseek-v4-flash', hint: '执行 Agent 使用的模型（下拉=按模型组内实例聚合）' },
           { name: 'planModel', label: '规划模型', type: 'select', binding: 'planModel',
             optionsSource: 'models', placeholder: 'deepseek-v4-pro', hint: '规划 Agent 使用的模型（更强推理）' },
           { name: 'reviewModel', label: '审核模型', type: 'select', binding: 'reviewModel',
@@ -94,17 +90,20 @@ return {
       ],
     })
 
-      // ── 服务商：维护服务商列表（名称/Base URL/API Key/模型列表 + 每模型参数）──
-      // type='provider-manager'：SettingsModal 渲染 CRUD 面板，数据经 /api/models（config/models.json）。
+      // ── 模型组：维护模型组（用户命名）与组内实例（服务商：Key/BaseURL/模型列表/参数）──
+      // type='model-group-manager'：模型组 CRUD（组名 + 挂载实例），数据经 /api/model-groups（config/model-groups.json）。
+      // type='provider-manager'：实例（服务商）CRUD，数据经 /api/models（config/models.json）。
       // 模型参数（温度/思考档位/输出上限/上下文窗口）在服务商编辑表单内逐模型维护，
-      // 存 settings.json 顶层 modelParams（装配器按 服务商+模型 精确匹配）。
-      // AI tab 的 provider 下拉（optionsSource='providers'）与模型下拉（optionsSource='models'）均来自此处维护的数据。
+      // 存 settings.json 顶层 modelParams（装配器按 实例+模型 精确匹配）。
+      // AI tab 的模型组下拉（optionsSource='model-groups'）与模型下拉（optionsSource='models'）均来自此处维护的数据。
       ctx.registerSettings({
         key: 'providers',
-        title: '服务商',
+        title: '模型组',
         fields: [
-          { name: 'providers', label: '服务商列表', type: 'provider-manager',
-            hint: '维护服务商：名称、Base URL、API Key、可用模型列表，及每模型独立参数（温度/思考/输出上限/上下文窗口）。AI tab 的下拉与联动均来自此处。' },
+          { name: 'modelGroups', label: '模型组（用户命名，组内多实例）', type: 'model-group-manager',
+            hint: '模型组 = 用户命名的实例集合。新增模型组并挂载实例后，AI tab 与对话面板即可按「模型组 → 模型」选择，无需再选服务商（实例自带 Key）。' },
+          { name: 'providers', label: '实例（服务商）', type: 'provider-manager',
+            hint: '维护实例：名称、Base URL、API Key、可用模型列表，及每模型独立参数（温度/思考/输出上限/上下文窗口）。一个实例 = 一个 Key + 服务商连接，可挂载到任意模型组。' },
         ],
       })
 

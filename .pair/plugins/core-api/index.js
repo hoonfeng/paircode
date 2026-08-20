@@ -45,6 +45,7 @@ const ROUTES = [
   { key: 'taskplan' },
   // 模型 / 指令
   { key: 'models' },
+  { key: 'model-groups' },
   { key: 'instructions' },
   // 工具配置
   { key: 'tools' },
