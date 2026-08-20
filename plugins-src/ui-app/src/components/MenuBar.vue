@@ -27,8 +27,9 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { state, showSettings as showSettingsModal, showMarketplace as showMarketplaceModal, showHelpWrapper as showHelpModal, showAbout as showAboutModal } from '../ui-state.js'
+import { state, showSettings as showSettingsModal, showHelpWrapper as showHelpModal, showAbout as showAboutModal } from '../ui-state.js'
 import api from '../api.js'
+import { switchActivity } from '../app-actions.js'
 
 const menus = [
   {
@@ -231,7 +232,7 @@ const execItem = async (item) => {
     return
   }
   if (a === 'open-marketplace') {
-    if (showMarketplaceModal) showMarketplaceModal.value = true
+    switchActivity('marketplace')
     return
   }
 

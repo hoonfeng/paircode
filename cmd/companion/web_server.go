@@ -31,7 +31,6 @@ import (
 	"github.com/hoonfeng/paircode/internal/agent"
 	"github.com/hoonfeng/paircode/internal/core"
 	"github.com/hoonfeng/paircode/internal/server/handler"
-	marketplacepanel "github.com/hoonfeng/paircode/internal/ui/marketplace"
 	mcppanel "github.com/hoonfeng/paircode/internal/ui/mcp"
 	"github.com/hoonfeng/paircode/internal/ui/skills"
 	"github.com/hoonfeng/paircode/pkg/memory"
@@ -190,8 +189,6 @@ func startWebUI(port int) {
 	// 初始化 MessageStore（消息持久化的唯一权威），并迁移旧格式数据
 	// ★ 先找已有对话数据的工作区目录（排序变化后 core.Root() 可能指向了没有对话数据的目录）
 	root := findMessageStoreRoot()
-	// 初始化市场系统（尝试从本地缓存加载，异步获取远程注册表）
-	marketplacepanel.Init(root)
 	if root != "" {
 		agentMgr.SetWorkspaceRoot(root)
 		agent.SetCodeGraphDB(agentMgr.RawDB())
@@ -2787,146 +2784,6 @@ func (s *webServer) startEventPersistWorker() {
 	agentMgr.OnDone = func(convID string) {
 		go generateConversationSummary(convID, webCompressor())
 	}
-}
-
-// ─── 市场搜索 API ──────────────────────────────────────────
-
-func (s *webServer) handleMarketplaceSearch(w http.ResponseWriter, r *http.Request) {
-	// ★ 2026-08-19：前端传 query、老接口用 q——兼容两者，修复市场搜索恒空 bug。
-	query := r.URL.Query().Get("q")
-	if query == "" {
-		query = r.URL.Query().Get("query")
-	}
-	kind := r.URL.Query().Get("kind")
-	if kind == "" {
-		kind = "all"
-	}
-	results := marketplacepanel.Search(query, kind)
-	type resultItem struct {
-		ID          string   `json:"id"`
-		Kind        string   `json:"kind"`
-		Name        string   `json:"name"`
-		Description string   `json:"description"`
-		Tags        []string `json:"tags"`
-		Command     string   `json:"command"`
-		Args        []string `json:"args"`
-		Source      string   `json:"source"`
-		Installed   bool     `json:"installed"`
-	}
-	out := make([]resultItem, 0, len(results))
-	for _, e := range results {
-		out = append(out, resultItem{
-			ID: e.ID, Kind: e.Kind, Name: e.Name,
-			Description: e.Description, Tags: e.Tags,
-			Command: e.Command, Args: e.Args, Source: e.Source,
-			Installed: marketplacepanel.IsInstalled(e.ID),
-		})
-	}
-	jsonResp(w, out)
-}
-
-func (s *webServer) handleMarketplaceInstall(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		jsonErr(w, "仅 POST")
-		return
-	}
-	var req struct {
-		ID          string   `json:"id"`
-		Kind        string   `json:"kind"`
-		Command     string   `json:"command"`
-		Args        []string `json:"args"`
-		Scope       string   `json:"scope"`  // "user" 或 "project"，默认 "user"
-		Source      string   `json:"source"` // npm 插件：Source="npm:<pkg>@<ver>"
-		Description string   `json:"description"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonErr(w, err.Error())
-		return
-	}
-	if req.ID == "" {
-		jsonErr(w, "id 必填")
-		return
-	}
-	if req.Scope == "" {
-		req.Scope = "user"
-	}
-	var msg string
-	var err error
-	// npm 插件（搜索结果带 source=npm:...）或带 command 的 MCP → 走完整条目安装
-	if req.Command != "" || strings.HasPrefix(req.Source, "npm:") {
-		entry := marketplacepanel.RegistryEntry{
-			ID: req.ID, Kind: req.Kind,
-			Command: req.Command, Args: req.Args,
-			Source: req.Source, Description: req.Description,
-		}
-		msg, err = marketplacepanel.InstallEntry(entry, false, req.Scope)
-	} else {
-		msg, err = marketplacepanel.InstallScoped(req.ID, false, req.Scope)
-	}
-	if err != nil {
-		jsonErr(w, err.Error())
-		return
-	}
-	jsonResp(w, map[string]any{"ok": true, "message": msg})
-}
-
-// handleMarketplaceUninstall 卸载市场条目（MCP/技能/插件工具集/npm 插件）。
-func (s *webServer) handleMarketplaceUninstall(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		jsonErr(w, "仅 POST")
-		return
-	}
-	var req struct {
-		ID     string `json:"id"`
-		Kind   string `json:"kind"`
-		Source string `json:"source"` // npm 插件：Source="npm:<pkg>"
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonErr(w, err.Error())
-		return
-	}
-	if req.ID == "" {
-		jsonErr(w, "id 必填")
-		return
-	}
-	var msg string
-	var err error
-	if strings.HasPrefix(req.Source, "npm:") {
-		pkg := strings.TrimPrefix(req.Source, "npm:")
-		if i := strings.Index(pkg, "@"); i > 0 {
-			pkg = pkg[:i] // 去掉版本后缀（scoped 包名 @scope/pkg 的 @ 在首位不误伤）
-		}
-		err = agent.UninstallNPMPlugin(pkg)
-		if err == nil {
-			msg = "已卸载 npm 插件 " + pkg
-		}
-	} else {
-		msg, err = agent.MarketUninstall(req.ID, req.Kind)
-	}
-	if err != nil {
-		jsonErr(w, err.Error())
-		return
-	}
-	jsonResp(w, map[string]any{"ok": true, "message": msg})
-}
-
-func (s *webServer) handleMarketplaceRefresh(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		jsonErr(w, "仅 POST")
-		return
-	}
-	root := core.Root()
-	if err := marketplacepanel.FetchRemoteRegistry(root, true); err != nil {
-		jsonResp(w, map[string]any{"ok": false, "message": err.Error(), "status": marketplacepanel.FetchStatus()})
-		return
-	}
-	jsonResp(w, map[string]any{"ok": true, "message": "远程市场已刷新", "status": marketplacepanel.FetchStatus()})
-}
-
-// handleMarketplaceSources 返回当前已注册的市场源（磁盘插件 market-* 声明）。
-// 前端据此动态生成市场 tab：停用某市场插件 → 对应市场消失。
-func (s *webServer) handleMarketplaceSources(w http.ResponseWriter, r *http.Request) {
-	jsonResp(w, agent.MarketSources())
 }
 
 // ── 对话摘要生成 ──────────────────────────────────────────

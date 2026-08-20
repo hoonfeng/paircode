@@ -40,6 +40,8 @@ const regions = [
   { id: 'modals',      entry: 'src/ui-main-modals.js',      global: 'UiModals' },
   // git-api 插件 Git 面板（接口+UI 一体化，输出到插件包 assets）
   { id: 'git-api', entry: 'src/ui-main-git.js', global: 'GitPanel', outDir: '.pair/plugins/git-api/assets', fileName: 'git-panel' },
+  // marketplace 插件市场面板（市场功能全插件化，输出到插件包 assets）
+  { id: 'marketplace', entry: 'src/ui-main-marketplace.js', global: 'MarketplacePanel', outDir: '.pair/plugins/marketplace/assets', fileName: 'marketplace-panel' },
 ]
 
 // external 匹配（组件里的相对导入 + vue）

@@ -107,12 +107,6 @@ func registerKernelAPIs(s *webServer) {
 	_ = agent.KernelAPIRegister("git.pull", "POST", "/api/git/pull", "Git pull", s.handleGitPull)
 	_ = agent.KernelAPIRegister("git.remote", "GET", "/api/git/remote", "Git remote", s.handleGitRemote)
 
-	// ── 市场 ──
-	_ = agent.KernelAPIRegister("marketplace.search", "GET", "/api/marketplace/search", "市场搜索", s.handleMarketplaceSearch)
-	_ = agent.KernelAPIRegister("marketplace.install", "POST", "/api/marketplace/install", "市场安装", s.handleMarketplaceInstall)
-	_ = agent.KernelAPIRegister("marketplace.uninstall", "POST", "/api/marketplace/uninstall", "市场卸载", s.handleMarketplaceUninstall)
-	_ = agent.KernelAPIRegister("marketplace.refresh", "POST", "/api/marketplace/refresh", "市场刷新", s.handleMarketplaceRefresh)
-	_ = agent.KernelAPIRegister("marketplace.sources", "GET", "/api/marketplace/sources", "市场源列表（插件化市场：skill/mcp/plugin）", s.handleMarketplaceSources)
 
 	// ── 记忆 ──
 	_ = agent.KernelAPIRegister("memory.search", "GET", "/api/memory/search", "记忆搜索", s.handleMemorySearch)

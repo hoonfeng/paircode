@@ -18,7 +18,7 @@ import { reactive, nextTick } from 'vue'
 import api from './api.js'
 import {
   state, loadPersistentState, savePersistentState,
-  showSettings, showSystem, showMarketplace,
+  showSettings, showSystem,
 } from './ui-state.js'
 import {
   processAgentEvent, processAgentDone, processStatus, processAllDisconnected,
@@ -138,12 +138,11 @@ export async function loadConversationsForWorkspace(path) {
   }
 }
 
-// switchActivity 活动栏切换（原 App.vue；settings/system/chat/marketplace 分流）
+// switchActivity 活动栏切换（原 App.vue；settings/system/chat 分流）
 export function switchActivity(id) {
   if (id === 'settings') { showSettings.value = true; return }
   if (id === 'system') { showSystem.value = true; return }
   if (id === 'chat') { state.rightPanelVisible = !state.rightPanelVisible; return }
-  if (id === 'marketplace') { showMarketplace.value = true; return }
   if (state.activeActivity === id) {
     state.sidebarVisible = !state.sidebarVisible
   } else {
@@ -267,7 +266,7 @@ export function initAppGlobals() {
   const handlers = {
     'refresh-tree': refreshTree,
     'switch-activity': (e) => { if (e.detail?.id) switchActivity(e.detail.id) },
-    'open-marketplace': () => { showMarketplace.value = true },
+    'open-marketplace': () => { switchActivity('marketplace') },
     'open-settings': () => { showSettings.value = true },
     'stop-agent': () => { window.dispatchEvent(new CustomEvent('agent-stop')) },
     'save-conversations': async () => { checkNotifications() },

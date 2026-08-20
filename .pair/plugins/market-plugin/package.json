@@ -1,7 +1,0 @@
-{
-  "name": "market-plugin",
-  "purpose": "dsh 插件市场：npm registry 搜索 cordis 插件（goja 沙箱 / Node 桥安装）",
-  "version": "0.1.0",
-  "type": "plugin",
-  "main": "index.js"
-}

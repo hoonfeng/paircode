@@ -1177,6 +1177,16 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 			ctxObj.Set("kernel", p.buildKernelService())
 		case "market":
 			ctxObj.Set("market", p.buildMarketService())
+		case "mcp":
+			ctxObj.Set("mcp", p.buildMCPService())
+		case "skill":
+			ctxObj.Set("skill", p.buildSkillService(pc))
+		case "toolset":
+			ctxObj.Set("toolset", p.buildToolsetService(pc))
+		case "npm":
+			ctxObj.Set("npm", p.buildNPMService(pc))
+		case "plugins":
+			ctxObj.Set("plugins", p.buildPluginsService(pc))
 		}
 	}
 
@@ -1853,7 +1863,262 @@ func (p *jsPluginAdapter) buildMarketService() goja.Value {
 	return vm.ToValue(m)
 }
 
-// ─── 沙箱创建与求值 ────────────────────────────────────────
+// ─── ctx.mcp：MCP 服务器配置服务（通用能力，市场/工具插件安装用）────────
+//   ctx.mcp.list(level?) → [{name, command, args, enabled, level}]（level 空=user+project）
+//   ctx.mcp.upsert({name, command, args, level}) → "已保存 MCP 服务器 <name>"
+//   ctx.mcp.remove(name, level?) → "已删除 MCP 服务器 <name>"（level 默认 user）
+func (p *jsPluginAdapter) buildMCPService() goja.Value {
+	vm := p.vm
+	m := vm.NewObject()
+	levelOf := func(s string) MCPLevel {
+		if s == "project" {
+			return MCPLevelProject
+		}
+		return MCPLevelUser
+	}
+	m.Set("list", func(call goja.FunctionCall) goja.Value {
+		lvArg := call.Argument(0).String()
+		levels := []MCPLevel{MCPLevelUser, MCPLevelProject}
+		if lvArg == "user" || lvArg == "project" {
+			levels = []MCPLevel{levelOf(lvArg)}
+		}
+		out := []map[string]any{}
+		for _, lv := range levels {
+			lvLabel := "user"
+			if lv == MCPLevelProject {
+				lvLabel = "project"
+			}
+			for _, e := range MCPReadLevel(lv) {
+				out = append(out, map[string]any{
+					"name": e.Name, "command": e.Command, "args": e.Args,
+					"enabled": MCPEnabled(lv, e.Name), "level": lvLabel,
+				})
+			}
+		}
+		return vm.ToValue(out)
+	})
+	m.Set("upsert", func(call goja.FunctionCall) goja.Value {
+		a := call.Argument(0)
+		obj := map[string]any{}
+		if !goja.IsUndefined(a) && !goja.IsNull(a) {
+			obj, _ = a.Export().(map[string]any)
+		}
+		name, _ := obj["name"].(string)
+		if name == "" {
+			panic(vm.NewTypeError("ctx.mcp.upsert: 缺 name"))
+		}
+		cmd, _ := obj["command"].(string)
+		if cmd == "" {
+			cmd = "npx"
+		}
+		args := []string{}
+		if av, ok := obj["args"].([]any); ok {
+			for _, x := range av {
+				args = append(args, fmt.Sprint(x))
+			}
+		}
+		lv := levelOf(fmt.Sprint(obj["level"]))
+		if err := MCPUpsert(lv, MCPEntry{Name: name, Command: cmd, Args: args}); err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return vm.ToValue("已保存 MCP 服务器 " + name)
+	})
+	m.Set("remove", func(call goja.FunctionCall) goja.Value {
+		name := call.Argument(0).String()
+		lv := levelOf(call.Argument(1).String())
+		if err := MCPDelete(lv, name); err != nil {
+			if os.IsNotExist(err) {
+				return vm.ToValue("未找到 MCP 服务器 " + name)
+			}
+			panic(vm.NewGoError(err))
+		}
+		return vm.ToValue("已删除 MCP 服务器 " + name)
+	})
+	return vm.ToValue(m)
+}
+
+// ─── ctx.skill：技能读写服务（通用能力，市场/工具插件安装用）─────────
+//   ctx.skill.list() → [{name, description, mode, level}]
+//   ctx.skill.write({name, description, mode, content}) → 写 <workspace>/.pair/skills/<name>/SKILL.md
+//   ctx.skill.remove(name) → "已删除技能 <name>"
+func (p *jsPluginAdapter) buildSkillService(pc *PluginContext) goja.Value {
+	vm := p.vm
+	projectDir := SkillProjectDir
+	if projectDir == "" && pc.WorkspaceRoot != "" {
+		projectDir = filepath.Join(pc.WorkspaceRoot, ".pair", "skills")
+	}
+	s := vm.NewObject()
+	s.Set("list", func(call goja.FunctionCall) goja.Value {
+		skills := LoadAllSkills()
+		out := make([]map[string]any, 0, len(skills))
+		for _, sk := range skills {
+			out = append(out, map[string]any{
+				"name": sk.Name, "description": sk.Description,
+				"mode": sk.Mode, "level": string(sk.Level),
+			})
+		}
+		return vm.ToValue(out)
+	})
+	s.Set("write", func(call goja.FunctionCall) goja.Value {
+		a := call.Argument(0)
+		obj := map[string]any{}
+		if !goja.IsUndefined(a) && !goja.IsNull(a) {
+			obj, _ = a.Export().(map[string]any)
+		}
+		name, _ := obj["name"].(string)
+		if name == "" {
+			panic(vm.NewTypeError("ctx.skill.write: 缺 name"))
+		}
+		mode, _ := obj["mode"].(string)
+		if mode == "" {
+			mode = "auto"
+		}
+		desc, _ := obj["description"].(string)
+		body, _ := obj["content"].(string)
+		if err := WriteSkill(projectDir, Skill{Name: name, Description: desc, Mode: mode, Body: body}); err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return vm.ToValue("已安装技能 " + name + "（工作区级 .pair/skills）")
+	})
+	s.Set("remove", func(call goja.FunctionCall) goja.Value {
+		name := call.Argument(0).String()
+		if err := DeleteSkill(projectDir, name); err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return vm.ToValue("已删除技能 " + name)
+	})
+	return vm.ToValue(s)
+}
+
+// ─── ctx.toolset：工具集固化/装载服务（通用能力）───────────────────
+//   ctx.toolset.list() → [{name, description, pluginCount}]
+//   ctx.toolset.save({name, description, plugins:[{name,purpose,code,client}], scope}) → 固化工具集 JSON
+//   ctx.toolset.remove(name) → 删除工具集
+//   ctx.toolset.install(name) → 立即装载已固化工具集（失败回滚固化文件）
+func (p *jsPluginAdapter) buildToolsetService(pc *PluginContext) goja.Value {
+	vm := p.vm
+	projectRoot := pc.WorkspaceRoot
+	if projectRoot == "" {
+		projectRoot = primaryWorkspaceRoot()
+	}
+	t := vm.NewObject()
+	t.Set("list", func(call goja.FunctionCall) goja.Value {
+		ts := listToolsets(projectRoot, toolsetProject)
+		out := make([]map[string]any, 0, len(ts))
+		for _, x := range ts {
+			out = append(out, map[string]any{
+				"name": x.Name, "description": x.Description, "pluginCount": x.PluginCount,
+			})
+		}
+		return vm.ToValue(out)
+	})
+	t.Set("save", func(call goja.FunctionCall) goja.Value {
+		a := call.Argument(0)
+		obj := map[string]any{}
+		if !goja.IsUndefined(a) && !goja.IsNull(a) {
+			obj, _ = a.Export().(map[string]any)
+		}
+		name, _ := obj["name"].(string)
+		if name == "" {
+			panic(vm.NewTypeError("ctx.toolset.save: 缺 name"))
+		}
+		desc, _ := obj["description"].(string)
+		ts := &Toolset{Name: name, Description: desc}
+		if pl, ok := obj["plugins"].([]any); ok {
+			for _, x := range pl {
+				if pm, ok := x.(map[string]any); ok {
+					code, _ := pm["code"].(string)
+					client, _ := pm["client"].(string)
+					purpose, _ := pm["purpose"].(string)
+					pname, _ := pm["name"].(string)
+					ts.Plugins = append(ts.Plugins, ToolsetPlugin{Name: pname, Purpose: purpose, Code: code, Client: client})
+				}
+			}
+		}
+		if err := saveToolset(projectRoot, toolsetProject, ts); err != nil {
+			panic(vm.NewGoError(err))
+		}
+		// 立即装载（全局宿主存在时）；失败回滚
+		if ph := GetGlobalPluginHost(); ph != nil {
+			if err := installToolset(ph, ts); err != nil {
+				_ = removeToolset(projectRoot, toolsetProject, ts.Name)
+				panic(vm.NewGoError(fmt.Errorf("工具集装载失败已回滚: %w", err)))
+			}
+		}
+		return vm.ToValue(fmt.Sprintf("已安装插件工具集「%s」（工作区，%d 个插件）", ts.Name, len(ts.Plugins)))
+	})
+	t.Set("remove", func(call goja.FunctionCall) goja.Value {
+		name := call.Argument(0).String()
+		if err := removeToolset(projectRoot, toolsetProject, name); err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return vm.ToValue("已卸载工具集「" + name + "」（工作区）")
+	})
+	t.Set("install", func(call goja.FunctionCall) goja.Value {
+		name := call.Argument(0).String()
+		ts, err := loadToolset(projectRoot, toolsetProject, name)
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		if ph := GetGlobalPluginHost(); ph != nil {
+			if err := installToolset(ph, ts); err != nil {
+				panic(vm.NewGoError(err))
+			}
+		}
+		return vm.ToValue("已装载工具集「" + name + "」")
+	})
+	return vm.ToValue(t)
+}
+
+// ─── ctx.npm：npm 插件安装服务（通用能力）──────────────────────
+//   ctx.npm.install(pkg) → "已安装 npm 插件「<pkg>」v<ver>（插件目录 .pair/plugins/<name>/…）"
+//   ctx.npm.uninstall(pkg) → "已卸载 npm 插件 <pkg>"
+//   ctx.npm.installed(pkg) → bool（磁盘插件包 / 旧 cordis.patch 兼容）
+func (p *jsPluginAdapter) buildNPMService(pc *PluginContext) goja.Value {
+	vm := p.vm
+	n := vm.NewObject()
+	n.Set("install", func(call goja.FunctionCall) goja.Value {
+		pkg := strings.TrimSpace(call.Argument(0).String())
+		if pkg == "" {
+			panic(vm.NewTypeError("ctx.npm.install: 缺包名"))
+		}
+		msg, err := npmMarketInstall(pkg)
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return vm.ToValue(msg)
+	})
+	n.Set("uninstall", func(call goja.FunctionCall) goja.Value {
+		pkg := strings.TrimSpace(call.Argument(0).String())
+		if pkg == "" {
+			panic(vm.NewTypeError("ctx.npm.uninstall: 缺包名"))
+		}
+		if err := uninstallNPMPlugin(pkg); err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return vm.ToValue("已卸载 npm 插件 " + pkg)
+	})
+	n.Set("installed", func(call goja.FunctionCall) goja.Value {
+		return vm.ToValue(npmPluginInstalled(call.Argument(0).String()))
+	})
+	return vm.ToValue(n)
+}
+
+// ─── ctx.plugins：磁盘插件装配服务（通用能力）───────────────────
+//   ctx.plugins.reloadDisk() → "已重新扫描磁盘插件包（n 个插件）"（新装插件立即生效）
+func (p *jsPluginAdapter) buildPluginsService(pc *PluginContext) goja.Value {
+	vm := p.vm
+	pl := vm.NewObject()
+	pl.Set("reloadDisk", func(call goja.FunctionCall) goja.Value {
+		ph := GetGlobalPluginHost()
+		if ph == nil {
+			return vm.ToValue("宿主未就绪，跳过磁盘插件重扫（重启自动装配）")
+		}
+		n := LoadGlobalPlugins(ph)
+		return vm.ToValue(fmt.Sprintf("已重新扫描磁盘插件包（%d 个插件装载）", n))
+	})
+	return vm.ToValue(pl)
+}
 
 // newJSSandbox 创建插件沙箱：注入 console/btoa/atob/TextEncoder/TextDecoder
 // 与 __resolve 回调。返回 runtime 与 resolve 回调（goja 值 → 插件对象导出）。
@@ -2212,7 +2477,7 @@ func (h *PluginHost) checkInjects(def *jsPluginDef) error {
 // hasService 判断宿主是否提供某服务（静态服务键 + 动态 ctx.provide 服务）。
 func (h *PluginHost) hasService(name string) bool {
 	switch name {
-	case "fs", "web", "bash", "sse", "ws", "logger", "timer", "tools", "events", "store", "app", "workspaceRoot", "kernel", "market":
+	case "fs", "web", "bash", "sse", "ws", "logger", "timer", "tools", "events", "store", "app", "workspaceRoot", "kernel", "market", "mcp", "skill", "toolset", "npm", "plugins":
 		return true
 	}
 	return h.ctx.Get(name) != nil
@@ -2220,7 +2485,7 @@ func (h *PluginHost) hasService(name string) bool {
 
 // availableServices 宿主可用服务清单（供报错引导/文档展示）。
 func (h *PluginHost) availableServices() []string {
-	names := []string{"fs", "web", "bash", "sse", "ws", "logger", "timer", "tools", "events", "store", "app", "workspaceRoot", "kernel", "market"}
+	names := []string{"fs", "web", "bash", "sse", "ws", "logger", "timer", "tools", "events", "store", "app", "workspaceRoot", "kernel", "market", "mcp", "skill", "toolset", "npm", "plugins"}
 	h.ctx.servicesMu.RLock()
 	for n := range h.ctx.services {
 		names = append(names, n)

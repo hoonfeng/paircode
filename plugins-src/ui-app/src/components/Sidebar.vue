@@ -9,6 +9,9 @@
       <!-- Git 源代码管理面板：由 git-api 插件加载 bundle 到 window.GitPanel，
            本组件动态挂载（跨 bundle，不能静态 import） -->
       <div v-else-if="state.activeActivity === 'source'" ref="gitHost" class="git-host"></div>
+      <!-- 市场面板：由 marketplace 插件加载 bundle 到 window.MarketplacePanel，
+           本组件动态挂载（与 GitPanel 同模式） -->
+      <div v-else-if="state.activeActivity === 'marketplace'" ref="marketHost" class="market-host"></div>
       <PluginPanel v-else-if="state.activeActivity === 'plugins'" />
       <div v-else class="sidebar-placeholder">
         <span>面板加载中...</span>
@@ -27,7 +30,7 @@ import SearchPanel from './SearchPanel.vue'
 import PluginPanel from './PluginPanel.vue'
 
 const headerTitle = computed(() => {
-  const titles = { explorer: '文件浏览器', search: '搜索', source: '源代码管理', plugins: '插件' }
+  const titles = { explorer: '文件浏览器', search: '搜索', source: '源代码管理', marketplace: '市场', plugins: '插件' }
   return titles[state.activeActivity] || ''
 })
 
@@ -83,9 +86,61 @@ watch(() => state.activeActivity, (a) => {
   } else {
     unmountGitPanel()
   }
+  if (a === 'marketplace') {
+    nextTick(mountMarketPanel)
+  } else {
+    unmountMarketPanel()
+  }
 })
 
-onUnmounted(unmountGitPanel)
+onUnmounted(() => {
+  unmountGitPanel()
+  unmountMarketPanel()
+})
+
+// ─── 市场面板动态挂载（marketplace 插件 bundle → window.MarketplacePanel）───
+// 2026-08-20：市场功能全插件化——面板 bundle 由 marketplace 插件 client 半注入，
+// 本组件只负责在 activeActivity==='marketplace' 时取 window.MarketplacePanel 挂载。
+const marketHost = ref(null)
+let marketUnmount = null
+let marketRetryTimer = null
+
+function mountMarketPanel() {
+  const el = marketHost.value
+  if (!el) return
+  el.innerHTML = ''
+  const mod = window.MarketplacePanel
+  if (mod && typeof mod.mount === 'function') {
+    try {
+      marketUnmount = mod.mount(el)
+      return
+    } catch (e) {
+      console.warn('[sidebar] 市场面板挂载失败', e)
+      el.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text-muted)">挂载失败: ' + (e && e.message || e) + '</div>'
+      return
+    }
+  }
+  if (marketRetryTimer) return
+  let tries = 0
+  marketRetryTimer = setInterval(() => {
+    tries++
+    if (window.MarketplacePanel) {
+      clearInterval(marketRetryTimer); marketRetryTimer = null
+      mountMarketPanel()
+      return
+    }
+    if (tries >= 8) {
+      clearInterval(marketRetryTimer); marketRetryTimer = null
+      el.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text-muted)">市场面板未就绪（marketplace 插件未启用）</div>'
+    }
+  }, 800)
+  el.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text-muted)">市场面板加载中...</div>'
+}
+
+function unmountMarketPanel() {
+  if (marketRetryTimer) { clearInterval(marketRetryTimer); marketRetryTimer = null }
+  if (marketUnmount) { try { marketUnmount() } catch (e) {} marketUnmount = null }
+}
 
 let dragging = false
 let startX = 0

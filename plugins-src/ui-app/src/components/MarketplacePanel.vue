@@ -1,7 +1,6 @@
 <template>
-  <div class="modal-overlay">
-    <div class="modal-content market-modal">
-      <div class="modal-header">
+  <div class="market-panel">
+    <div class="market-header">
         <h2><SvgIcon name="package" :size="20" /> 市场</h2>
         <div class="market-tabs">
           <button :class="{ active: tab === 'all' }" @click="tab='all';doSearch()">全部</button>
@@ -10,9 +9,9 @@
                     @click="tab=s.kind;doSearch()">{{ s.label }}</button>
           <button :class="{ active: tab === 'installed' }" @click="tab='installed';loadInstalled()">已安装</button>
         </div>
-        <button class="modal-close" @click="$emit('close')">×</button>
+        <button class="modal-close" @click="closePanel">×</button>
       </div>
-      <div class="modal-body">
+      <div class="market-body">
         <!-- 搜索栏（非「已安装」tab 显示） -->
         <div v-if="tab !== 'installed'" class="market-search">
           <div class="search-icon"><SvgIcon name="search" :size="14" /></div>
@@ -192,9 +191,8 @@
         <span class="market-count">{{ tab === 'installed' ? (installedMCPs.length + installedSkills.length) : items.length }} 个条目</span>
         <span v-if="error" class="market-error">{{ error }}</span>
         <span class="market-tip">安装后下次对话生效</span>
-        <button class="btn-secondary" @click="$emit('close')">关闭</button>
+        <button class="btn-secondary" @click="closePanel">关闭</button>
       </div>
-    </div>
   </div>
 </template>
 
@@ -202,8 +200,11 @@
 import { ref, computed, onMounted } from 'vue'
 import api from '../api.js'
 import SvgIcon from './SvgIcon.vue'
+import { state } from '../ui-state.js'
 
-const emit = defineEmits(['close'])
+function closePanel() {
+  state.activeActivity = 'explorer'
+}
 
 const tab = ref('all')
 const query = ref('')
@@ -467,41 +468,25 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.modal-overlay {
-  position: fixed;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.55);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  backdrop-filter: blur(4px);
-}
-.market-modal {
+.market-panel {
   background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  width: 85vw;
-  max-width: 800px;
-  max-height: 80vh;
   display: flex;
   flex-direction: column;
+  height: 100%;
   overflow: hidden;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-  height: 75vh;
-  min-height: 400px;
 }
 
 /* ── 头部 ── */
-.modal-header {
+.market-header {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 16px 20px;
+  gap: 8px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--border-color);
+  flex-wrap: wrap;
 }
-.modal-header h2 {
-  font-size: 16px;
+.market-header h2 {
+  font-size: 14px;
   color: var(--text-primary);
   display: flex;
   align-items: center;
@@ -548,7 +533,7 @@ onMounted(() => {
 .modal-close:hover { color: var(--text-primary); background: var(--bg-hover); }
 
 /* ── 主体 ── */
-.modal-body {
+.market-body {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -922,7 +907,7 @@ onMounted(() => {
 .me-hint { font-size: 12px; margin-top: 6px; opacity: 0.6; }
 
 /* ── 底部 ── */
-.modal-footer {
+.market-footer {
   display: flex;
   align-items: center;
   gap: 8px;

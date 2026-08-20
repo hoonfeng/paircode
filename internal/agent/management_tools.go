@@ -140,34 +140,6 @@ func RegisterManagementTools(r *Registry, root string) {
 		},
 	})
 
-	// ── 市场 ──
-	r.Register(&Tool{
-		Name: "marketplace_search",
-		Description: "在市场检索可安装的 MCP 服务器与技能（★ 无预设数据——必须给 query 关键词，实时远程搜索 npm/GitHub 返回结果）。",
-		ReadOnly: true,
-		Parameters: mObjSchema(map[string]any{
-			"query": mStrProp("关键词（必填；无关键词返回空）"), "kind": mStrProp("mcp/skill/plugin/all"),
-		}),
-		Handler: func(_ context.Context, args map[string]any) (string, error) {
-			return marketSearchText(mArgStr(args, "query"), mArgStr(args, "kind")), nil
-		},
-	})
-	r.Register(&Tool{
-		Name: "marketplace_install",
-		Description: "从市场按 id 安装一个 MCP 或技能。scope 可选 user/project。",
-		RequiresApproval: true,
-		Parameters: mObjSchema(map[string]any{
-			"id": mStrProp("条目 id"), "scope": mStrProp("user/project"),
-		}, "id"),
-		Handler: func(_ context.Context, args map[string]any) (string, error) {
-			scope := mArgStr(args, "scope")
-			if scope == "" {
-				scope = "user"
-			}
-			return MarketInstallScoped(mArgStr(args, "id"), true, scope)
-		},
-	})
-
 	// ── 已完成对话历史 ──
 	r.Register(&Tool{
 		Name: "history_search", Description: "按关键词搜索已完成对话的历史记录（标题/摘要/标签/关键点）。", ReadOnly: true,
@@ -280,28 +252,6 @@ func mcpAddTool(args map[string]any) (string, error) {
 		return "", err
 	}
 	return "已添加 MCP 服务器 " + e.Name + "（" + levelLabel + "）", nil
-}
-
-// ─── 市场工具实现 ──
-
-func marketSearchText(query, kind string) string {
-	results := MarketSearch(query, kind)
-	if len(results) == 0 {
-		if strings.TrimSpace(query) == "" {
-			return "市场无预设数据——请提供搜索关键词（如「github」）实时检索 npm/GitHub。"
-		}
-		return "未找到匹配的市场条目（远程实时搜索）。用 marketplace_install <id> 安装。"
-	}
-	var b strings.Builder
-	for _, e := range results {
-		installed := ""
-		if MarketIsInstalled(e.ID) {
-			installed = " [已安装]"
-		}
-		fmt.Fprintf(&b, "- [%s] %s（%s）：%s%s\n", e.Kind, e.Name, e.ID, e.Description, installed)
-	}
-	fmt.Fprintf(&b, "\n共 %d 个条目。用 marketplace_install <id> 安装。", len(results))
-	return b.String()
 }
 
 // ─── 已完成对话历史工具实现 ──

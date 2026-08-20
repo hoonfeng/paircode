@@ -146,10 +146,11 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import SvgIcon from './SvgIcon.vue'
-import { showMarketplace, showSettings } from '../ui-state.js'
+import { showSettings } from '../ui-state.js'
+import { switchActivity } from '../app-actions.js'
 
 function openMarketplace() {
-  showMarketplace.value = true
+  switchActivity('marketplace')
 }
 function openSettings() {
   showSettings.value = true

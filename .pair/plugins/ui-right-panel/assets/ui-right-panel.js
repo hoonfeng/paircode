@@ -1,4 +1,4 @@
-var UiRightPanel = (function(exports, vue, uiState_js, api, agentEvents_js, pluginRuntime_js) {
+var UiRightPanel = (function(exports, vue, uiState_js, api, agentEvents_js, pluginRuntime_js, appActions_js) {
   "use strict";var __defProp = Object.defineProperty;
 var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
 var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
@@ -2848,7 +2848,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     emits: ["new-conversation", "switch-conversation", "delete-conversation"],
     setup(__props) {
       function openMarketplace() {
-        uiState_js.showMarketplace.value = true;
+        appActions_js.switchActivity("marketplace");
       }
       function openSettings() {
         uiState_js.showSettings.value = true;
@@ -3485,7 +3485,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       };
     }
   };
-  const ConvSidebar = /* @__PURE__ */ _export_sfc(_sfc_main$5, [["__scopeId", "data-v-9e804d8a"]]);
+  const ConvSidebar = /* @__PURE__ */ _export_sfc(_sfc_main$5, [["__scopeId", "data-v-0d3c308d"]]);
   const _hoisted_1$3 = { class: "ask-user-card" };
   const _hoisted_2$3 = { class: "ask-user-question" };
   const _hoisted_3$3 = {
@@ -184692,4 +184692,4 @@ ${prefix}${Math.round(value2 * 100) / 100}${suffix}`;
   exports.mount = mount;
   Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
   return exports;
-})({}, window.__PAIRCODE_CORE.Vue, window.__PAIRCODE_CORE.uiState, window.__PAIRCODE_CORE.api, window.__PAIRCODE_CORE.agentEvents, window.__PAIRCODE_CORE.pluginRuntime);
+})({}, window.__PAIRCODE_CORE.Vue, window.__PAIRCODE_CORE.uiState, window.__PAIRCODE_CORE.api, window.__PAIRCODE_CORE.agentEvents, window.__PAIRCODE_CORE.pluginRuntime, window.__PAIRCODE_CORE.actions);

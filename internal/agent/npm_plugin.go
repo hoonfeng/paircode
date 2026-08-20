@@ -280,15 +280,10 @@ func removePatchNPMPlugin(path, pkg string) (bool, error) {
 // marketInstallNPMPlugin 安装 npm/cordis 插件：
 // 下载 tarball → 取 main 源码 → 追加 .pair/cordis.patch.json（跨重启）→
 // 立即经 goja 宿主装载。装载失败回滚 patch（与工具集安装失败回滚一致）。
-func marketInstallNPMPlugin(entry MarketEntry, auto bool) (string, error) {
-	pkg := strings.TrimPrefix(entry.Source, "npm:")
-	// 剥离版本后缀（scoped 包 @scope/pkg@ver 的版本在最后一个 @ 后）
-	if i := strings.LastIndex(pkg, "@"); i > 0 {
-		pkg = pkg[:i]
-	}
-	if pkg == "" {
-		pkg = entry.ID
-	}
+// npmInstallPlugin 安装 npm 插件（通用能力，ctx.npm.install 暴露）：
+// 下载 tarball → goja 沙箱或 Node 运行时桥 → 固化为磁盘插件包
+// <InstallDir>/.pair/plugins/<name>/（重启 LoadGlobalPlugins 自动装配）。
+func npmMarketInstall(pkg string) (string, error) {
 	if pkg == "" {
 		return "", fmt.Errorf("npm 插件缺包名")
 	}
@@ -305,7 +300,7 @@ func marketInstallNPMPlugin(entry MarketEntry, auto bool) (string, error) {
 	// 否则 goja 沙箱（快、无需 node）。
 	if nodePluginNeedsNode(manifest) {
 		info.Manifest = manifest // 原生依赖提示用
-		msg, err := marketInstallNPMPluginNode(info, dir, auto)
+		msg, err := marketInstallNPMPluginNode(info, dir, true)
 		if err != nil {
 			return "", err
 		}
@@ -424,6 +419,14 @@ func (h *PluginHost) removeNPMPluginDefs(pkg string) {
 			_ = h.RemoveJSDef(d.id)
 		}
 	}
+}
+
+// primaryWorkspaceRoot 取主工作区根（WorkspaceRoots[0] 或全局根）。
+func primaryWorkspaceRoot() string {
+	if len(WorkspaceRoots) > 0 {
+		return WorkspaceRoots[0]
+	}
+	return ""
 }
 
 // npmPluginProjectRoot 取 npm 插件安装/判断用的工作区根（与工具集安装同链路）。

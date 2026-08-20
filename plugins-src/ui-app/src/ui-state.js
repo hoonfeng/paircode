@@ -145,7 +145,6 @@ export const state = reactive({
 export const showSettings = ref(false)
 export const showSystem = ref(false)
 export const showSource = ref(false)
-export const showMarketplace = ref(false)
 export const showAbout = ref(false)
 export const showQuickSwitcher = ref(false)
 export const helpDocTarget = ref('features')

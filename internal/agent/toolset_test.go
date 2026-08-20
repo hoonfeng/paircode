@@ -107,31 +107,24 @@ func TestToolsetBuildPersistExportImport(t *testing.T) {
 }
 
 // TestToolsetMarketInstall 市场 plugin 类型安装（固化 + 装载）。
-// ★ 2026-08-17：无预设数据——市场不再内置条目。本测试用「搜索后安装」的等价
-//   路径：构造 toolset 发布条目 → MarketInstallEntry 直接安装（前端搜索结果
-//   已含 Content/command 的场景）。
+// ★ 2026-08-20：市场功能已全插件化（ctx.toolset.save 组合 saveToolset+installToolset），
+//   Go 内核无市场实现。本测试直接验证底层能力路径：固化 → 装载。
 func TestToolsetMarketInstall(t *testing.T) {
 	project := mkToolsetGoProject(t)
 	host := NewPluginHost(NewRegistry(), nil, project)
 	SetGlobalPluginHost(host)
 	defer SetGlobalPluginHost(nil)
 
-	// 构造一个可安装的插件工具集条目（toolset 发布 JSON 作 Content）
+	// 构造一个可安装的插件工具集（ctx.toolset.save 等价路径）
 	ts, err := BuildToolset(host, project, "go-dev", "", "Go 项目开发辅助")
 	if err != nil {
 		t.Fatalf("BuildToolset: %v", err)
 	}
-	content, err := ExportToolsetJSON(ts, nil, "test", "github:demo/repo")
-	if err != nil {
-		t.Fatalf("ExportToolsetJSON: %v", err)
+	if err := saveToolset(project, toolsetProject, ts); err != nil {
+		t.Fatalf("saveToolset: %v", err)
 	}
-	entry := MarketEntry{ID: "plugin-" + ts.Name, Kind: "plugin", Name: ts.Name, Content: content}
-	msg, err := MarketInstallEntry(entry, false, "project")
-	if err != nil {
-		t.Fatalf("MarketInstallEntry: %v", err)
-	}
-	if !strings.Contains(msg, ts.Name) {
-		t.Fatalf("安装消息异常: %s", msg)
+	if err := installToolset(host, ts); err != nil {
+		t.Fatalf("installToolset: %v", err)
 	}
 	// 已固化到工作区
 	if _, err := os.Stat(filepath.Join(project, ".pair", "toolsets", ts.Name+".json")); err != nil {

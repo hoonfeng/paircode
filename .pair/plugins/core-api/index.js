@@ -62,12 +62,6 @@ const ROUTES = [
   { key: 'debug.logs' },
   { key: 'debug.logs.byID' },
   // Git
-  // 市场
-  { key: 'marketplace.search' },
-  { key: 'marketplace.install' },
-  { key: 'marketplace.uninstall' },
-  { key: 'marketplace.refresh' },
-  { key: 'marketplace.sources' },
   // 记忆
   { key: 'memory.search' },
   { key: 'memory.list' },

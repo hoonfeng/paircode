@@ -1,9 +1,9 @@
 // ═══════════════════════════════════════════════════════════════
-// tool-system — 系统内部工具（SystemTool + Skills/MCP/市场/提交信息：update_tasks/update_plan/tool_stats/history_*/skill_*/mcp_*/marketplace_*/generate_commit_message）——全部可更换
+// tool-system — 系统内部工具（SystemTool + Skills/MCP/市场/提交信息：update_tasks/update_plan/tool_stats/history_*/skill_*/mcp_*/generate_commit_message）——全部可更换
 //
 // 生成来源（2026-08-16）：内置 Go 工具组 → 磁盘外置插件（tool_plugin_gen.go
 // 自动生成，schema 完整外置拷贝）。api 声明在插件，execute 调 ctx.hostTool 复用宿主 Go 执行器（对齐 harness seam：编排在插件、能力在宿主）。
-// 工具清单：skill_list、load_skill、load_skill_resource、skill_write、skill_delete、mcp_list、mcp_add、mcp_remove、marketplace_search、marketplace_install、history_search、history_list、history_count、update_plan、tool_stats、update_tasks、generate_commit_message
+// 工具清单：skill_list、load_skill、load_skill_resource、skill_write、skill_delete、mcp_list、mcp_add、mcp_remove、history_search、history_list、history_count、update_plan、tool_stats、update_tasks、generate_commit_message
 // ═══════════════════════════════════════════════════════════════
 const tools = [
   {
@@ -156,46 +156,6 @@ const tools = [
       },
       "required": [
         "name"
-      ],
-      "type": "object"
-    },
-    "requiresApproval": true
-  },
-  {
-    "name": "marketplace_search",
-    "description": "在市场检索可安装的 MCP 服务器与技能（无预设数据——必须给 query 关键词，实时远程搜索 npm/GitHub）。",
-    "parameters": {
-      "properties": {
-        "kind": {
-          "description": "mcp/skill/plugin/all",
-          "type": "string"
-        },
-        "query": {
-          "description": "关键词",
-          "type": "string"
-        }
-      },
-      "required": [],
-      "type": "object"
-    },
-    "readOnly": true
-  },
-  {
-    "name": "marketplace_install",
-    "description": "从市场按 id 安装一个 MCP 或技能。scope 可选 user/project。",
-    "parameters": {
-      "properties": {
-        "id": {
-          "description": "条目 id",
-          "type": "string"
-        },
-        "scope": {
-          "description": "user/project",
-          "type": "string"
-        }
-      },
-      "required": [
-        "id"
       ],
       "type": "object"
     },
@@ -446,7 +406,7 @@ const tools = [
 
 return {
   name: 'tool-system',
-  purpose: '系统内部工具（SystemTool + Skills/MCP/市场/提交信息：update_tasks/update_plan/tool_stats/history_*/skill_*/mcp_*/marketplace_*/generate_commit_message）——全部可更换（自动生成，迁移自内置 Go 工具组）',
+  purpose: '系统内部工具（SystemTool + Skills/MCP/市场/提交信息：update_tasks/update_plan/tool_stats/history_*/skill_*/mcp_*/generate_commit_message）——全部可更换（自动生成，迁移自内置 Go 工具组）',
   apply(ctx) {
     for (const t of tools) {
       ctx.tools.register({

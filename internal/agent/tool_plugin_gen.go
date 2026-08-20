@@ -63,9 +63,10 @@ func genToolGroups() []genToolGroup {
 		{"tool-office", "办公文档（csv_read/csv_write/json_to_table/table_stats/text_report/word_read）", registerOfficeTools, nil, "self"},
 		{"tool-codegraph", "代码知识图谱（codegraph_build/search/impact/…）", registerCodeGraphTools, nil, "self"},
 		{"tool-codegraph-extra", "图谱扩展（codegraph_find_by_signature/explore）", registerExtraCodeGraphTools, nil, "self"},
-		// tool-system：SystemTool 内部工具 + Skills/MCP/市场/提交信息
-		// （ask_user/task_create 经会话桥插件化，见 session_bridge.go）
-		{"tool-system", "系统内部工具（SystemTool + Skills/MCP/市场/提交信息：update_tasks/update_plan/tool_stats/history_*/skill_*/mcp_*/marketplace_*/generate_commit_message）——全部可更换",
+		// tool-system：SystemTool 内部工具 + Skills/MCP/提交信息
+		// （ask_user/task_create 经会话桥插件化，见 session_bridge.go；
+		//  marketplace_search/install 已迁至 marketplace 插件，2026-08-20）
+		{"tool-system", "系统内部工具（SystemTool + Skills/MCP/提交信息：update_tasks/update_plan/tool_stats/history_*/skill_*/mcp_*/generate_commit_message）——全部可更换",
 			func(r *Registry, root string) {
 				RegisterManagementTools(r, root)
 				registerPlanTool(r)
@@ -78,7 +79,6 @@ func genToolGroups() []genToolGroup {
 				"history_search", "history_list", "history_count",
 				"skill_list", "load_skill", "load_skill_resource", "skill_write", "skill_delete",
 				"mcp_list", "mcp_add", "mcp_remove",
-				"marketplace_search", "marketplace_install",
 				"generate_commit_message",
 			},
 			"",

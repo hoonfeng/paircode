@@ -2,7 +2,6 @@
   <SettingsModal v-if="showSettings" @close="showSettings = false" />
   <SystemModal v-if="showSystem" @close="showSystem = false" />
   <SourceModal v-if="showSource" @close="showSource = false" />
-  <MarketplaceModal v-if="showMarketplace" @close="showMarketplace = false" />
   <HelpModal v-if="showHelp" @close="showHelp = false" @openAbout="onHelpOpenAbout" :initialDoc="helpDocTarget" />
   <AboutModal v-if="showAbout" @close="showAbout = false" @openHelp="onAboutOpenHelp" />
   <GlobalDialogs />
@@ -16,14 +15,13 @@
 // 开关状态来自共享 ui-state（titlebar 菜单 / activitybar 设置钮打开）。
 import { ref, onMounted, onUnmounted } from 'vue'
 import {
-  showSettings, showSystem, showSource, showMarketplace,
+  showSettings, showSystem, showSource,
   showHelp, showAbout, helpDocTarget,
 } from '../ui-state.js'
 import { mountListSlot, isOverlayActive } from '../plugin-runtime.js'
 import SettingsModal from './SettingsModal.vue'
 import SystemModal from './SystemModal.vue'
 import SourceModal from './SourceModal.vue'
-import MarketplaceModal from './MarketplaceModal.vue'
 import HelpModal from './HelpModal.vue'
 import AboutModal from './AboutModal.vue'
 import GlobalDialogs from './GlobalDialogs.vue'

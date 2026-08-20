@@ -6437,14 +6437,14 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
   const _hoisted_1 = { class: "sidebar-header" };
   const _hoisted_2 = { class: "sidebar-content" };
   const _hoisted_3 = {
-    key: 4,
+    key: 5,
     class: "sidebar-placeholder"
   };
   const _sfc_main = {
     __name: "Sidebar",
     setup(__props) {
       const headerTitle = vue.computed(() => {
-        const titles = { explorer: "文件浏览器", search: "搜索", source: "源代码管理", plugins: "插件" };
+        const titles = { explorer: "文件浏览器", search: "搜索", source: "源代码管理", marketplace: "市场", plugins: "插件" };
         return titles[uiState_js.state.activeActivity] || "";
       });
       const gitHost = vue.ref(null);
@@ -6502,8 +6502,65 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
         } else {
           unmountGitPanel();
         }
+        if (a === "marketplace") {
+          vue.nextTick(mountMarketPanel);
+        } else {
+          unmountMarketPanel();
+        }
       });
-      vue.onUnmounted(unmountGitPanel);
+      vue.onUnmounted(() => {
+        unmountGitPanel();
+        unmountMarketPanel();
+      });
+      const marketHost = vue.ref(null);
+      let marketUnmount = null;
+      let marketRetryTimer = null;
+      function mountMarketPanel() {
+        const el = marketHost.value;
+        if (!el) return;
+        el.innerHTML = "";
+        const mod = window.MarketplacePanel;
+        if (mod && typeof mod.mount === "function") {
+          try {
+            marketUnmount = mod.mount(el);
+            return;
+          } catch (e) {
+            console.warn("[sidebar] 市场面板挂载失败", e);
+            el.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text-muted)">挂载失败: ' + (e && e.message || e) + "</div>";
+            return;
+          }
+        }
+        if (marketRetryTimer) return;
+        let tries = 0;
+        marketRetryTimer = setInterval(() => {
+          tries++;
+          if (window.MarketplacePanel) {
+            clearInterval(marketRetryTimer);
+            marketRetryTimer = null;
+            mountMarketPanel();
+            return;
+          }
+          if (tries >= 8) {
+            clearInterval(marketRetryTimer);
+            marketRetryTimer = null;
+            el.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text-muted)">市场面板未就绪（marketplace 插件未启用）</div>';
+          }
+        }, 800);
+        el.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text-muted)">市场面板加载中...</div>';
+      }
+      function unmountMarketPanel() {
+        if (marketRetryTimer) {
+          clearInterval(marketRetryTimer);
+          marketRetryTimer = null;
+        }
+        if (marketUnmount) {
+          try {
+            marketUnmount();
+          } catch (e) {
+          }
+          marketUnmount = null;
+        }
+      }
       let dragging = false;
       let startX = 0;
       let startW = 0;
@@ -6568,7 +6625,26 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
                 ],
                 2112
                 /* STABLE_FRAGMENT, DEV_ROOT_FRAGMENT */
-              )) : vue.unref(uiState_js.state).activeActivity === "plugins" ? (vue.openBlock(), vue.createBlock(PluginPanel, { key: 3 })) : (vue.openBlock(), vue.createElementBlock("div", _hoisted_3, [..._cache[0] || (_cache[0] = [
+              )) : vue.unref(uiState_js.state).activeActivity === "marketplace" ? (vue.openBlock(), vue.createElementBlock(
+                vue.Fragment,
+                { key: 3 },
+                [
+                  vue.createCommentVNode(" 市场面板：由 marketplace 插件加载 bundle 到 window.MarketplacePanel，\n           本组件动态挂载（与 GitPanel 同模式） "),
+                  vue.createElementVNode(
+                    "div",
+                    {
+                      ref_key: "marketHost",
+                      ref: marketHost,
+                      class: "market-host"
+                    },
+                    null,
+                    512
+                    /* NEED_PATCH */
+                  )
+                ],
+                2112
+                /* STABLE_FRAGMENT, DEV_ROOT_FRAGMENT */
+              )) : vue.unref(uiState_js.state).activeActivity === "plugins" ? (vue.openBlock(), vue.createBlock(PluginPanel, { key: 4 })) : (vue.openBlock(), vue.createElementBlock("div", _hoisted_3, [..._cache[0] || (_cache[0] = [
                 vue.createElementVNode(
                   "span",
                   null,
@@ -6596,7 +6672,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
       };
     }
   };
-  const Sidebar = /* @__PURE__ */ _export_sfc(_sfc_main, [["__scopeId", "data-v-a38248a1"]]);
+  const Sidebar = /* @__PURE__ */ _export_sfc(_sfc_main, [["__scopeId", "data-v-bc54dd33"]]);
   function mount(el) {
     const app = vue.createApp(Sidebar);
     app.mount(el);

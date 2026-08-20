@@ -1,4 +1,4 @@
-var UiTitlebar = (function(exports, vue, uiState_js, api, appActions_js, pluginRuntime_js) {
+var MarketplacePanel = (function(exports, vue, api, uiState_js) {
   "use strict";
   const _export_sfc = (sfc, props) => {
     const target = sfc.__vccOpts || sfc;
@@ -7,402 +7,6 @@ var UiTitlebar = (function(exports, vue, uiState_js, api, appActions_js, pluginR
     }
     return target;
   };
-  const _hoisted_1$2 = { class: "menubar" };
-  const _hoisted_2$2 = ["onClick", "onMouseenter"];
-  const _hoisted_3$1 = {
-    key: 0,
-    class: "menu-divider"
-  };
-  const _hoisted_4$1 = ["onClick"];
-  const _hoisted_5 = { class: "menu-item-label" };
-  const _hoisted_6 = {
-    key: 0,
-    class: "menu-item-shortcut"
-  };
-  const _sfc_main$2 = {
-    __name: "MenuBar",
-    setup(__props, { expose: __expose }) {
-      const menus = [
-        {
-          label: "帮助",
-          items: [
-            { label: "常见问题", action: "help-faq" },
-            { label: "快速开始", action: "help-getting-started" },
-            { label: "文档中心", action: "help-docs" },
-            { label: "功能介绍", action: "help-features" },
-            { label: "API 文档", action: "help-api" },
-            { label: "工具文档", action: "help-tools" },
-            { label: "快捷键参考", action: "help-shortcuts" },
-            { divider: true },
-            { label: "关于 PairCode IDE", action: "about" }
-          ]
-        }
-      ];
-      const openMenu = vue.ref(null);
-      const btnRefs = vue.ref({});
-      const dropdownPos = vue.ref({ x: 0, y: 0 });
-      let closeTimer = null;
-      const currentItems = vue.computed(() => {
-        const m = menus.find((m2) => m2.label === openMenu.value);
-        return m ? m.items : [];
-      });
-      const dropdownStyle = vue.computed(() => ({
-        left: dropdownPos.value.x + "px",
-        top: dropdownPos.value.y + "px"
-      }));
-      function toggleMenu(event, label) {
-        event.stopPropagation();
-        if (openMenu.value === label) {
-          openMenu.value = null;
-          return;
-        }
-        const btn = btnRefs.value[label];
-        if (btn) {
-          const rect = btn.getBoundingClientRect();
-          dropdownPos.value = { x: rect.left, y: rect.bottom };
-        }
-        openMenu.value = label;
-        cancelClose();
-      }
-      function hoverMenu(label) {
-        if (openMenu.value && openMenu.value !== label) {
-          const btn = btnRefs.value[label];
-          if (btn) {
-            const rect = btn.getBoundingClientRect();
-            dropdownPos.value = { x: rect.left, y: rect.bottom };
-          }
-          openMenu.value = label;
-        }
-      }
-      const scheduleClose = () => {
-        closeTimer = setTimeout(() => {
-          openMenu.value = null;
-        }, 200);
-      };
-      const cancelClose = () => {
-        if (closeTimer) {
-          clearTimeout(closeTimer);
-          closeTimer = null;
-        }
-      };
-      function closeMenu() {
-        openMenu.value = null;
-      }
-      __expose({ closeMenu });
-      const execItem = async (item) => {
-        openMenu.value = null;
-        const a = item.action;
-        if (a === "view-explorer") {
-          uiState_js.state.focusMode = false;
-          uiState_js.state.activeActivity = "explorer";
-          uiState_js.state.sidebarVisible = true;
-          return;
-        }
-        if (a === "view-search") {
-          uiState_js.state.focusMode = false;
-          uiState_js.state.activeActivity = "search";
-          uiState_js.state.sidebarVisible = true;
-          return;
-        }
-        if (a === "view-git") {
-          uiState_js.state.focusMode = false;
-          uiState_js.state.activeActivity = "source";
-          uiState_js.state.sidebarVisible = true;
-          return;
-        }
-        if (a === "toggle-sidebar") {
-          uiState_js.state.sidebarVisible = !uiState_js.state.sidebarVisible;
-          return;
-        }
-        if (a === "toggle-terminal") {
-          uiState_js.state.bottomPanelVisible = !uiState_js.state.bottomPanelVisible;
-          uiState_js.state.bottomPanelTab = "terminal";
-          return;
-        }
-        if (a === "toggle-right") {
-          uiState_js.state.rightPanelVisible = !uiState_js.state.rightPanelVisible;
-          return;
-        }
-        if (a === "focus-mode") {
-          uiState_js.state.focusMode = !uiState_js.state.focusMode;
-          if (uiState_js.state.focusMode) {
-            uiState_js.state.bottomPanelVisible = false;
-          }
-          return;
-        }
-        if (a === "new-file") {
-          const name = await window.$prompt("文件名:", "", "新建文件");
-          if (!name) return;
-          const dir = uiState_js.state.activeFile ? uiState_js.state.activeFile.substring(0, uiState_js.state.activeFile.lastIndexOf("\\")) : uiState_js.state.workspaceFolders[0] || uiState_js.state.workspaceRoot;
-          if (!dir) return window.$toast("请先在文件浏览器中打开一个目录", "warning");
-          try {
-            await api.apiPost("/fs/write", { path: dir + "\\" + name, content: "" });
-            window.dispatchEvent(new CustomEvent("refresh-tree"));
-          } catch (err) {
-            window.$toast("创建失败: " + err.message, "error");
-          }
-          return;
-        }
-        if (a === "open-file") {
-          const path = await window.$prompt("输入文件路径:", "", "打开文件");
-          if (!path) return;
-          if (!uiState_js.state.openFiles.includes(path)) uiState_js.state.openFiles.push(path);
-          uiState_js.state.activeFile = path;
-          return;
-        }
-        if (a === "open-folder") {
-          const path = await window.$prompt("输入文件夹路径:", "", "打开文件夹");
-          if (!path) return;
-          try {
-            await api.apiPost("/workspace", { action: "add-folder", path });
-            window.dispatchEvent(new CustomEvent("refresh-tree"));
-          } catch (err) {
-            window.$toast("添加失败: " + err.message, "error");
-          }
-          return;
-        }
-        if (a === "add-folder") {
-          const path = await window.$prompt("输入要添加的文件夹路径:", "", "添加文件夹");
-          if (!path) return;
-          try {
-            await api.apiPost("/workspace", { action: "add-folder", path });
-            window.dispatchEvent(new CustomEvent("refresh-tree"));
-          } catch (err) {
-            window.$toast("添加失败: " + err.message, "error");
-          }
-          return;
-        }
-        if (a === "save") {
-          if (!uiState_js.state.activeFile || uiState_js.state.fileContents[uiState_js.state.activeFile] === void 0) return;
-          try {
-            await api.apiPost("/fs/write", { path: uiState_js.state.activeFile, content: uiState_js.state.fileContents[uiState_js.state.activeFile] });
-            uiState_js.state.fileDirty[uiState_js.state.activeFile] = false;
-          } catch (err) {
-            window.$toast("保存失败: " + err.message, "error");
-          }
-          return;
-        }
-        if (a === "save-all") {
-          for (const f of uiState_js.state.openFiles) {
-            if (uiState_js.state.fileDirty[f] && uiState_js.state.fileContents[f] !== void 0) {
-              try {
-                await api.apiPost("/fs/write", { path: f, content: uiState_js.state.fileContents[f] });
-                uiState_js.state.fileDirty[f] = false;
-              } catch {
-              }
-            }
-          }
-          return;
-        }
-        if (a === "save-workspace") {
-          window.$toast("工作区已自动保存", "success");
-          return;
-        }
-        if (a === "manage-workspace") {
-          uiState_js.state.activeActivity = "explorer";
-          uiState_js.state.sidebarVisible = true;
-          return;
-        }
-        if (a === "close-project") {
-          uiState_js.state.openFiles = [];
-          uiState_js.state.activeFile = "";
-          uiState_js.state.fileContents = {};
-          return;
-        }
-        if (a === "close-workspace") {
-          if (await window.$confirm("关闭工作区？所有未保存更改将丢失。")) {
-            uiState_js.state.workspaceRoot = "";
-            uiState_js.state.workspaceFolders = [];
-            uiState_js.state.fileTree = [];
-            uiState_js.state.openFiles = [];
-            uiState_js.state.activeFile = "";
-            uiState_js.state.fileContents = {};
-          }
-          return;
-        }
-        if (a === "undo") {
-          window.dispatchEvent(new CustomEvent("editor-undo"));
-          return;
-        }
-        if (a === "redo") {
-          window.dispatchEvent(new CustomEvent("editor-redo"));
-          return;
-        }
-        if (a === "cut" || a === "copy" || a === "paste") {
-          document.execCommand(a);
-          return;
-        }
-        if (a === "find-chat") {
-          uiState_js.state.rightPanelVisible = true;
-          return;
-        }
-        if (a === "global-search") {
-          uiState_js.state.activeActivity = "search";
-          uiState_js.state.sidebarVisible = true;
-          return;
-        }
-        if (a === "find-file") {
-          uiState_js.state.activeActivity = "search";
-          uiState_js.state.sidebarVisible = true;
-          return;
-        }
-        if (a === "new-terminal") {
-          uiState_js.state.bottomPanelVisible = true;
-          uiState_js.state.bottomPanelTab = "terminal";
-          return;
-        }
-        if (a === "clear-terminal") {
-          window.dispatchEvent(new CustomEvent("clear-terminal"));
-          return;
-        }
-        if (a === "open-settings") {
-          if (uiState_js.showSettings) uiState_js.showSettings.value = true;
-          return;
-        }
-        if (a === "open-marketplace") {
-          appActions_js.switchActivity("marketplace");
-          return;
-        }
-        if (a === "help-faq") {
-          if (uiState_js.showHelpWrapper) {
-            uiState_js.showHelpWrapper.value = "faq";
-            return;
-          }
-          return;
-        }
-        if (a === "help-getting-started") {
-          if (uiState_js.showHelpWrapper) {
-            uiState_js.showHelpWrapper.value = "getting-started";
-            return;
-          }
-          return;
-        }
-        if (a === "help-docs") {
-          if (uiState_js.showHelpWrapper) uiState_js.showHelpWrapper.value = true;
-          return;
-        }
-        if (a === "help-features") {
-          if (uiState_js.showHelpWrapper) {
-            uiState_js.showHelpWrapper.value = "features";
-            return;
-          }
-          return;
-        }
-        if (a === "help-api") {
-          if (uiState_js.showHelpWrapper) {
-            uiState_js.showHelpWrapper.value = "api";
-            return;
-          }
-          return;
-        }
-        if (a === "help-tools") {
-          if (uiState_js.showHelpWrapper) {
-            uiState_js.showHelpWrapper.value = "tools";
-            return;
-          }
-          return;
-        }
-        if (a === "help-shortcuts") {
-          if (uiState_js.showHelpWrapper) {
-            uiState_js.showHelpWrapper.value = "shortcuts";
-            return;
-          }
-          return;
-        }
-        if (a === "about") {
-          if (uiState_js.showAbout) uiState_js.showAbout.value = true;
-          return;
-        }
-      };
-      const handleDocClick = (e) => {
-        if (openMenu.value) {
-          const path = e.composedPath ? e.composedPath() : [];
-          const inMenu = path.some((el) => el.classList && el.classList.contains("menu-dropdown"));
-          const inBtn = path.some((el) => el.classList && el.classList.contains("menu-btn") || el.closest && el.closest(".menubar"));
-          if (!inMenu && !inBtn) openMenu.value = null;
-        }
-      };
-      vue.onMounted(() => document.addEventListener("click", handleDocClick));
-      vue.onUnmounted(() => document.removeEventListener("click", handleDocClick));
-      return (_ctx, _cache) => {
-        return vue.openBlock(), vue.createElementBlock("div", _hoisted_1$2, [
-          (vue.openBlock(), vue.createElementBlock(
-            vue.Fragment,
-            null,
-            vue.renderList(menus, (menu) => {
-              return vue.createElementVNode("div", {
-                key: menu.label,
-                class: "menu-group"
-              }, [
-                vue.createElementVNode("button", {
-                  class: "menu-btn",
-                  ref_for: true,
-                  ref: (el) => {
-                    if (el) btnRefs.value[menu.label] = el;
-                  },
-                  onClick: ($event) => toggleMenu($event, menu.label),
-                  onMouseenter: ($event) => hoverMenu(menu.label)
-                }, vue.toDisplayString(menu.label), 41, _hoisted_2$2)
-              ]);
-            }),
-            64
-            /* STABLE_FRAGMENT */
-          )),
-          openMenu.value ? (vue.openBlock(), vue.createElementBlock(
-            "div",
-            {
-              key: 0,
-              class: "menu-dropdown",
-              style: vue.normalizeStyle(dropdownStyle.value),
-              onMouseleave: _cache[0] || (_cache[0] = ($event) => scheduleClose()),
-              onMouseenter: _cache[1] || (_cache[1] = ($event) => cancelClose())
-            },
-            [
-              (vue.openBlock(true), vue.createElementBlock(
-                vue.Fragment,
-                null,
-                vue.renderList(currentItems.value, (item, i) => {
-                  return vue.openBlock(), vue.createElementBlock(
-                    vue.Fragment,
-                    { key: i },
-                    [
-                      item.divider ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_3$1)) : item.label ? (vue.openBlock(), vue.createElementBlock("div", {
-                        key: 1,
-                        class: vue.normalizeClass(["menu-item", { disabled: item.disabled }]),
-                        onClick: ($event) => !item.disabled && execItem(item)
-                      }, [
-                        vue.createElementVNode(
-                          "span",
-                          _hoisted_5,
-                          vue.toDisplayString(item.label),
-                          1
-                          /* TEXT */
-                        ),
-                        item.shortcut ? (vue.openBlock(), vue.createElementBlock(
-                          "span",
-                          _hoisted_6,
-                          vue.toDisplayString(item.shortcut),
-                          1
-                          /* TEXT */
-                        )) : vue.createCommentVNode("v-if", true)
-                      ], 10, _hoisted_4$1)) : vue.createCommentVNode("v-if", true)
-                    ],
-                    64
-                    /* STABLE_FRAGMENT */
-                  );
-                }),
-                128
-                /* KEYED_FRAGMENT */
-              ))
-            ],
-            36
-            /* STYLE, NEED_HYDRATION */
-          )) : vue.createCommentVNode("v-if", true)
-        ]);
-      };
-    }
-  };
-  const MenuBar = /* @__PURE__ */ _export_sfc(_sfc_main$2, [["__scopeId", "data-v-352a5f2a"]]);
   const _hoisted_1$1 = ["width", "height"];
   const _hoisted_2$1 = {
     key: 0,
@@ -2475,92 +2079,1242 @@ var UiTitlebar = (function(exports, vue, uiState_js, api, appActions_js, pluginR
     }
   };
   const SvgIcon = /* @__PURE__ */ _export_sfc(_sfc_main$1, [["__scopeId", "data-v-faf69761"]]);
-  const logoUrl = "data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20width='512'%20height='512'%20viewBox='0%200%20512%20512'%3e%3cdefs%3e%3c!--%20背景渐变（深色科技风）%20--%3e%3clinearGradient%20id='bgGrad'%20x1='0'%20y1='0'%20x2='1'%20y2='1'%3e%3cstop%20offset='0%25'%20stop-color='%230a1628'/%3e%3cstop%20offset='100%25'%20stop-color='%230d1f2e'/%3e%3c/linearGradient%3e%3c!--%20左侧尖括号渐变（科技蓝）%20--%3e%3clinearGradient%20id='leftBracket'%20x1='0'%20y1='0'%20x2='0'%20y2='1'%3e%3cstop%20offset='0%25'%20stop-color='%2300d4ff'/%3e%3cstop%20offset='100%25'%20stop-color='%230077b6'/%3e%3c/linearGradient%3e%3c!--%20右侧尖括号渐变（科技绿）%20--%3e%3clinearGradient%20id='rightBracket'%20x1='0'%20y1='0'%20x2='0'%20y2='1'%3e%3cstop%20offset='0%25'%20stop-color='%2300e676'/%3e%3cstop%20offset='100%25'%20stop-color='%2300c853'/%3e%3c/linearGradient%3e%3c!--%20中间连接线（蓝绿渐变）%20--%3e%3clinearGradient%20id='connector'%20x1='0'%20y1='0'%20x2='1'%20y2='0'%3e%3cstop%20offset='0%25'%20stop-color='%2300d4ff'/%3e%3cstop%20offset='50%25'%20stop-color='%2300e5ff'/%3e%3cstop%20offset='100%25'%20stop-color='%2300e676'/%3e%3c/linearGradient%3e%3c!--%20外发光%20--%3e%3cfilter%20id='glow'%3e%3cfeGaussianBlur%20stdDeviation='4'%20result='blur'/%3e%3cfeMerge%3e%3cfeMergeNode%20in='blur'/%3e%3cfeMergeNode%20in='SourceGraphic'/%3e%3c/feMerge%3e%3c/filter%3e%3cfilter%20id='softGlow'%3e%3cfeGaussianBlur%20stdDeviation='8'%20result='blur'/%3e%3cfeMerge%3e%3cfeMergeNode%20in='blur'/%3e%3cfeMergeNode%20in='SourceGraphic'/%3e%3c/feMerge%3e%3c/filter%3e%3c/defs%3e%3c!--%20圆角方形背景（深色科技底）%20--%3e%3crect%20x='32'%20y='32'%20width='448'%20height='448'%20rx='96'%20ry='96'%20fill='url(%23bgGrad)'%20stroke='%231a3a4a'%20stroke-width='2'/%3e%3c!--%20左侧%20%3c%20尖括号（三段式直线%20—%20科技蓝，代表代码输入/开发者）%20--%3e%3cpath%20d='M180%20150%20L96%20256%20L180%20362'%20stroke='url(%23leftBracket)'%20stroke-width='40'%20stroke-linejoin='round'%20fill='none'%20filter='url(%23glow)'/%3e%3c!--%20右侧%20%3e%20尖括号（三段式直线%20—%20科技绿，代表代码输出/AI伙伴）%20--%3e%3cpath%20d='M332%20150%20L416%20256%20L332%20362'%20stroke='url(%23rightBracket)'%20stroke-width='40'%20stroke-linejoin='round'%20fill='none'%20filter='url(%23glow)'/%3e%3c!--%20中间「=」连接线已移除（图标只留%20%3c%20%3e%20尖括号%20+%20中心%20AI%20核心光点）。%20--%3e%3c!--%20中心光点（代表%20AI%20核心%20—%20亮青色）%20--%3e%3ccircle%20cx='256'%20cy='256'%20r='18'%20fill='transparent'%20stroke='%2300e5ff'%20stroke-width='3'%20opacity='0.6'/%3e%3ccircle%20cx='256'%20cy='256'%20r='8'%20fill='%2300e5ff'%20opacity='0.9'%3e%3canimate%20attributeName='opacity'%20values='0.6;1;0.6'%20dur='2s'%20repeatCount='indefinite'/%3e%3c/circle%3e%3c/svg%3e";
-  const _hoisted_1 = { class: "app-logo" };
-  const _hoisted_2 = ["src"];
-  const _hoisted_3 = { class: "title-center" };
-  const _hoisted_4 = { class: "title-right" };
+  const _hoisted_1 = { class: "market-panel" };
+  const _hoisted_2 = { class: "market-header" };
+  const _hoisted_3 = { class: "market-tabs" };
+  const _hoisted_4 = ["onClick"];
+  const _hoisted_5 = { class: "market-body" };
+  const _hoisted_6 = {
+    key: 0,
+    class: "market-search"
+  };
+  const _hoisted_7 = { class: "search-icon" };
+  const _hoisted_8 = ["disabled", "title"];
+  const _hoisted_9 = {
+    key: 1,
+    class: "installed-toolbar"
+  };
+  const _hoisted_10 = {
+    key: 2,
+    class: "mcp-form"
+  };
+  const _hoisted_11 = { class: "mcp-form-row" };
+  const _hoisted_12 = { class: "mcp-form-row" };
+  const _hoisted_13 = { class: "mcp-form-row" };
+  const _hoisted_14 = { class: "mcp-form-row" };
+  const _hoisted_15 = { class: "mcp-form-actions" };
+  const _hoisted_16 = ["disabled"];
+  const _hoisted_17 = {
+    key: 0,
+    class: "mcp-form-error"
+  };
+  const _hoisted_18 = {
+    key: 3,
+    class: "mcp-form"
+  };
+  const _hoisted_19 = { class: "mcp-form-row" };
+  const _hoisted_20 = { class: "mcp-form-row" };
+  const _hoisted_21 = { class: "mcp-form-row" };
+  const _hoisted_22 = { class: "mcp-form-row" };
+  const _hoisted_23 = { class: "mcp-form-actions" };
+  const _hoisted_24 = ["disabled"];
+  const _hoisted_25 = {
+    key: 4,
+    class: "skill-viewer"
+  };
+  const _hoisted_26 = { class: "skill-viewer-header" };
+  const _hoisted_27 = { class: "skill-viewer-content" };
+  const _hoisted_28 = {
+    key: 5,
+    class: "market-loading"
+  };
+  const _hoisted_29 = {
+    key: 0,
+    class: "installed-group"
+  };
+  const _hoisted_30 = { class: "ii-icon icon-mcp" };
+  const _hoisted_31 = ["title"];
+  const _hoisted_32 = { class: "ii-body" };
+  const _hoisted_33 = { class: "ii-name" };
+  const _hoisted_34 = { class: "ii-desc" };
+  const _hoisted_35 = { class: "ii-badge" };
+  const _hoisted_36 = { class: "ii-actions" };
+  const _hoisted_37 = ["onClick", "title"];
+  const _hoisted_38 = ["onClick"];
+  const _hoisted_39 = ["onClick"];
+  const _hoisted_40 = {
+    key: 1,
+    class: "installed-group"
+  };
+  const _hoisted_41 = { class: "ii-icon icon-skill" };
+  const _hoisted_42 = { class: "ii-body" };
+  const _hoisted_43 = { class: "ii-name" };
+  const _hoisted_44 = { class: "ii-desc" };
+  const _hoisted_45 = { class: "ii-badge" };
+  const _hoisted_46 = { class: "ii-actions" };
+  const _hoisted_47 = ["value", "onChange", "title"];
+  const _hoisted_48 = ["onClick"];
+  const _hoisted_49 = ["onClick"];
+  const _hoisted_50 = {
+    key: 2,
+    class: "market-empty"
+  };
+  const _hoisted_51 = { class: "me-icon" };
+  const _hoisted_52 = { class: "mi-body" };
+  const _hoisted_53 = { class: "mi-name" };
+  const _hoisted_54 = { class: "mi-desc" };
+  const _hoisted_55 = { class: "mi-meta" };
+  const _hoisted_56 = {
+    key: 0,
+    class: "mi-tags"
+  };
+  const _hoisted_57 = {
+    key: 1,
+    class: "mi-installed"
+  };
+  const _hoisted_58 = {
+    key: 0,
+    class: "mi-install-area"
+  };
+  const _hoisted_59 = ["onClick", "disabled"];
+  const _hoisted_60 = ["onUpdate:modelValue"];
+  const _hoisted_61 = ["onClick", "disabled"];
+  const _hoisted_62 = ["onClick"];
+  const _hoisted_63 = {
+    key: 0,
+    class: "market-empty"
+  };
+  const _hoisted_64 = { class: "me-icon" };
+  const _hoisted_65 = { key: 0 };
+  const _hoisted_66 = { key: 1 };
+  const _hoisted_67 = { class: "modal-footer" };
+  const _hoisted_68 = { class: "market-count" };
+  const _hoisted_69 = {
+    key: 0,
+    class: "market-error"
+  };
   const _sfc_main = {
-    __name: "UiTitlebar",
+    __name: "MarketplacePanel",
     setup(__props) {
-      const menuBarRef = vue.ref(null);
-      const titlebarRightEl = vue.ref(null);
-      let titlebarRightUnsub = null;
-      const wsList = uiState_js.state.wsList;
-      const closeAllMenus = () => {
-        var _a, _b;
-        if (menuBarRef.value) (_b = (_a = menuBarRef.value).closeMenu) == null ? void 0 : _b.call(_a);
-      };
-      vue.onMounted(() => {
-        titlebarRightUnsub = pluginRuntime_js.mountListSlot(titlebarRightEl, "titlebar-right");
+      function closePanel() {
+        uiState_js.state.activeActivity = "explorer";
+      }
+      const tab = vue.ref("all");
+      const query = vue.ref("");
+      const items = vue.ref([]);
+      const installing = vue.ref("");
+      const loading = vue.ref(false);
+      const refreshing = vue.ref(false);
+      const error = vue.ref("");
+      const refreshTip = vue.ref("");
+      const listRef = vue.ref(null);
+      const sources = vue.ref([]);
+      const marketTabs = vue.computed(() => {
+        const labelMap = { skill: "技能", mcp: "MCP", plugin: "插件/工具集" };
+        return (sources.value || []).map((s) => ({ kind: s.kind, label: labelMap[s.kind] || s.name || s.kind }));
       });
-      vue.onUnmounted(() => {
-        if (titlebarRightUnsub) {
-          titlebarRightUnsub();
-          titlebarRightUnsub = null;
+      async function loadSources() {
+        try {
+          const srcs = await api.apiGet("/marketplace/sources");
+          sources.value = srcs || [];
+        } catch (e) {
         }
+      }
+      const installedMCPs = vue.ref([]);
+      const installedSkills = vue.ref([]);
+      const showAddMCP = vue.ref(false);
+      const savingMCP = vue.ref(false);
+      const mcpError = vue.ref("");
+      const editingMCP = vue.ref(false);
+      const viewingSkill = vue.ref(null);
+      const mcpForm = vue.ref({ name: "", command: "", argsText: "", level: "user" });
+      const editMCPForm = vue.ref({ name: "", command: "", argsText: "", level: "user", origName: "" });
+      function resetMCPForm() {
+        mcpForm.value = { name: "", command: "", argsText: "", level: "user" };
+        mcpError.value = "";
+      }
+      async function loadInstalled() {
+        loading.value = true;
+        error.value = "";
+        try {
+          const [mcpList, skillList] = await Promise.all([
+            api.getMcpList("all"),
+            api.getSkillsList()
+          ]);
+          installedMCPs.value = mcpList || [];
+          installedSkills.value = skillList || [];
+        } catch (err) {
+          error.value = "加载失败: " + err.message;
+        } finally {
+          loading.value = false;
+        }
+      }
+      async function saveMCP() {
+        const f = mcpForm.value;
+        if (!f.name) return;
+        savingMCP.value = true;
+        mcpError.value = "";
+        try {
+          const args = f.argsText ? f.argsText.split(" ").filter(Boolean) : [];
+          await api.saveMcpItem({ action: "save", name: f.name, command: f.command || "npx", args, level: f.level });
+          showAddMCP.value = false;
+          resetMCPForm();
+          await loadInstalled();
+        } catch (err) {
+          mcpError.value = err.message;
+        } finally {
+          savingMCP.value = false;
+        }
+      }
+      function startEditMCP(item) {
+        editMCPForm.value = {
+          origName: item.name,
+          name: item.name,
+          command: item.command,
+          argsText: (item.args || []).join(" "),
+          level: item.level
+        };
+        editingMCP.value = true;
+      }
+      async function updateMCP() {
+        const f = editMCPForm.value;
+        if (!f.name) return;
+        try {
+          if (f.origName !== f.name) {
+            await api.saveMcpItem({ action: "delete", name: f.origName, level: f.level });
+          }
+          const args = f.argsText ? f.argsText.split(" ").filter(Boolean) : [];
+          await api.saveMcpItem({ action: "save", name: f.name, command: f.command || "npx", args, level: f.level });
+          editingMCP.value = false;
+          await loadInstalled();
+        } catch (err) {
+          error.value = "保存失败: " + err.message;
+        }
+      }
+      async function delMCP(item) {
+        if (!confirm(`确认删除 MCP 服务器「${item.name}」？`)) return;
+        try {
+          await api.saveMcpItem({ action: "delete", name: item.name, level: item.level });
+          await loadInstalled();
+        } catch (err) {
+          error.value = "删除失败: " + err.message;
+        }
+      }
+      async function viewSkill(item) {
+        try {
+          const data = await api.readSkill(item.name, item.level);
+          viewingSkill.value = data || { name: item.name, content: "（内容读取失败）" };
+        } catch (err) {
+          viewingSkill.value = { name: item.name, content: "读取失败: " + err.message };
+        }
+      }
+      async function delSkill(item) {
+        if (!confirm(`确认删除技能「${item.name}」？`)) return;
+        try {
+          await api.deleteSkill(item.name);
+          await loadInstalled();
+        } catch (err) {
+          error.value = "删除失败: " + err.message;
+        }
+      }
+      function statusTitle(item) {
+        if (item.status === "off") return "已关闭：技能完全禁用，不加载";
+        if (item.status === "max") return "始终激活：技能常驻 system prompt";
+        return "按需：根据关键词/文件匹配自动激活";
+      }
+      async function setSkillStatus(item, status) {
+        var _a, _b;
+        try {
+          await api.saveSkillStatus(item.name, item.level || "project", status);
+          item.status = status;
+          (_a = window.$toast) == null ? void 0 : _a.call(window, `技能「${item.name}」状态已设为 ${status === "off" ? "关闭" : status === "max" ? "始终激活" : "按需"}`, "success");
+        } catch (err) {
+          error.value = "设置失败: " + err.message;
+          (_b = window.$toast) == null ? void 0 : _b.call(window, "设置失败: " + err.message, "error");
+        }
+      }
+      let debounceTimer = null;
+      function debounceSearch() {
+        clearTimeout(debounceTimer);
+        loading.value = true;
+        debounceTimer = setTimeout(doSearch, 250);
+      }
+      async function doSearch() {
+        loading.value = true;
+        error.value = "";
+        try {
+          const kind = tab.value === "all" ? "" : tab.value;
+          const results = await api.apiGet("/marketplace/search", {
+            q: query.value,
+            kind
+          });
+          items.value = results || [];
+        } catch (err) {
+          error.value = "搜索失败: " + err.message;
+          items.value = [];
+        } finally {
+          loading.value = false;
+        }
+      }
+      async function refreshRemote() {
+        var _a, _b;
+        refreshing.value = true;
+        error.value = "";
+        try {
+          const result = await api.apiPost("/marketplace/refresh", {});
+          refreshTip.value = result.status || "已刷新";
+          (_a = window.$toast) == null ? void 0 : _a.call(window, result.message || "远程市场已刷新", "success");
+          await doSearch();
+        } catch (err) {
+          error.value = "刷新失败: " + err.message;
+          (_b = window.$toast) == null ? void 0 : _b.call(window, "刷新远程市场失败: " + err.message, "error");
+        } finally {
+          refreshing.value = false;
+          setTimeout(() => {
+            refreshTip.value = "";
+          }, 5e3);
+        }
+      }
+      async function installItem(item, scope) {
+        var _a, _b;
+        installing.value = item.id;
+        error.value = "";
+        try {
+          const body = {
+            id: item.id,
+            kind: item.kind || "",
+            command: item.command || "",
+            args: item.args || [],
+            source: item.source || "",
+            description: item.description || ""
+          };
+          if (item.kind === "mcp") {
+            body.scope = scope || "user";
+          } else if (item.kind === "plugin") {
+            body.scope = "project";
+          }
+          const result = await api.apiPost("/marketplace/install", body);
+          item.installed = true;
+          (_a = window.$toast) == null ? void 0 : _a.call(window, result.message || "安装成功", "success");
+        } catch (err) {
+          error.value = "安装失败: " + err.message;
+          (_b = window.$toast) == null ? void 0 : _b.call(window, "安装失败: " + err.message, "error");
+        } finally {
+          installing.value = "";
+        }
+      }
+      async function toggleMCP(item) {
+        var _a, _b;
+        try {
+          const result = await api.saveMcpItem({ action: "toggle", name: item.name, level: item.level });
+          item.enabled = result.enabled;
+          (_a = window.$toast) == null ? void 0 : _a.call(window, `MCP 服务器「${item.name}」${result.enabled ? "已启用" : "已禁用"}`, "success");
+        } catch (err) {
+          error.value = "切换失败: " + err.message;
+          (_b = window.$toast) == null ? void 0 : _b.call(window, "切换失败: " + err.message, "error");
+        }
+      }
+      async function uninstallItem(item) {
+        var _a, _b;
+        error.value = "";
+        try {
+          const isNpm = (item.source || "").startsWith("npm:");
+          if (isNpm) {
+            await api.apiPost("/marketplace/uninstall", { id: item.id, kind: "plugin", source: item.source });
+          } else if (item.kind === "mcp") {
+            await api.saveMcpItem({ action: "delete", name: item.id, level: "user" });
+          } else if (item.kind === "skill") {
+            await api.deleteSkill(item.id);
+          } else if (item.kind === "plugin") {
+            await api.apiPost("/toolsets/remove", { name: item.id.replace(/^plugin-/, ""), scope: "project" });
+          }
+          item.installed = false;
+          (_a = window.$toast) == null ? void 0 : _a.call(window, "已卸载: " + item.name, "success");
+        } catch (err) {
+          error.value = "卸载失败: " + err.message;
+          (_b = window.$toast) == null ? void 0 : _b.call(window, "卸载失败: " + err.message, "error");
+        }
+      }
+      vue.onMounted(() => {
+        loadSources();
+        doSearch();
       });
       return (_ctx, _cache) => {
-        return vue.openBlock(), vue.createElementBlock("div", {
-          class: "titlebar",
-          onClick: closeAllMenus
-        }, [
-          vue.createElementVNode("div", _hoisted_1, [
-            vue.createElementVNode("img", {
-              src: vue.unref(logoUrl),
-              class: "logo-img",
-              alt: "PairCode"
-            }, null, 8, _hoisted_2)
-          ]),
-          vue.createVNode(
-            MenuBar,
-            {
-              ref_key: "menuBarRef",
-              ref: menuBarRef
-            },
-            null,
-            512
-            /* NEED_PATCH */
-          ),
-          vue.createElementVNode(
-            "div",
-            _hoisted_3,
-            vue.toDisplayString(vue.unref(uiState_js.state).workspaceName),
-            1
-            /* TEXT */
-          ),
-          vue.createElementVNode("div", _hoisted_4, [
-            vue.unref(wsList).length > 1 ? (vue.openBlock(), vue.createElementBlock("button", {
-              key: 0,
-              class: "ws-quick-btn",
-              onClick: _cache[0] || (_cache[0] = ($event) => uiState_js.showQuickSwitcher.value = !vue.unref(uiState_js.showQuickSwitcher)),
-              title: "快速切换工作区"
-            }, [
+        return vue.openBlock(), vue.createElementBlock("div", _hoisted_1, [
+          vue.createElementVNode("div", _hoisted_2, [
+            vue.createElementVNode("h2", null, [
               vue.createVNode(SvgIcon, {
-                name: "folder",
-                size: 14
-              })
+                name: "package",
+                size: 20
+              }),
+              _cache[17] || (_cache[17] = vue.createTextVNode(
+                " 市场",
+                -1
+                /* CACHED */
+              ))
+            ]),
+            vue.createElementVNode("div", _hoisted_3, [
+              vue.createElementVNode(
+                "button",
+                {
+                  class: vue.normalizeClass({ active: tab.value === "all" }),
+                  onClick: _cache[0] || (_cache[0] = ($event) => {
+                    tab.value = "all";
+                    doSearch();
+                  })
+                },
+                "全部",
+                2
+                /* CLASS */
+              ),
+              (vue.openBlock(true), vue.createElementBlock(
+                vue.Fragment,
+                null,
+                vue.renderList(marketTabs.value, (s) => {
+                  return vue.openBlock(), vue.createElementBlock("button", {
+                    key: s.kind,
+                    class: vue.normalizeClass({ active: tab.value === s.kind }),
+                    onClick: ($event) => {
+                      tab.value = s.kind;
+                      doSearch();
+                    }
+                  }, vue.toDisplayString(s.label), 11, _hoisted_4);
+                }),
+                128
+                /* KEYED_FRAGMENT */
+              )),
+              vue.createElementVNode(
+                "button",
+                {
+                  class: vue.normalizeClass({ active: tab.value === "installed" }),
+                  onClick: _cache[1] || (_cache[1] = ($event) => {
+                    tab.value = "installed";
+                    loadInstalled();
+                  })
+                },
+                "已安装",
+                2
+                /* CLASS */
+              )
+            ]),
+            vue.createElementVNode("button", {
+              class: "modal-close",
+              onClick: closePanel
+            }, "×")
+          ]),
+          vue.createElementVNode("div", _hoisted_5, [
+            vue.createCommentVNode(" 搜索栏（非「已安装」tab 显示） "),
+            tab.value !== "installed" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_6, [
+              vue.createElementVNode("div", _hoisted_7, [
+                vue.createVNode(SvgIcon, {
+                  name: "search",
+                  size: 14
+                })
+              ]),
+              vue.withDirectives(vue.createElementVNode(
+                "input",
+                {
+                  "onUpdate:modelValue": _cache[2] || (_cache[2] = ($event) => query.value = $event),
+                  placeholder: "搜索 MCP / 技能 / npm 插件…",
+                  onInput: debounceSearch,
+                  class: "search-input"
+                },
+                null,
+                544
+                /* NEED_HYDRATION, NEED_PATCH */
+              ), [
+                [vue.vModelText, query.value]
+              ]),
+              query.value ? (vue.openBlock(), vue.createElementBlock("button", {
+                key: 0,
+                class: "search-clear",
+                onClick: _cache[3] || (_cache[3] = ($event) => {
+                  query.value = "";
+                  doSearch();
+                })
+              }, "×")) : vue.createCommentVNode("v-if", true),
+              vue.createElementVNode("button", {
+                class: "market-refresh-btn",
+                onClick: refreshRemote,
+                disabled: refreshing.value,
+                title: refreshTip.value
+              }, [
+                vue.createVNode(SvgIcon, {
+                  name: refreshing.value ? "cycle" : "refresh",
+                  size: 14
+                }, null, 8, ["name"]),
+                vue.createTextVNode(
+                  " " + vue.toDisplayString(refreshing.value ? "刷新中…" : "刷新"),
+                  1
+                  /* TEXT */
+                )
+              ], 8, _hoisted_8)
             ])) : vue.createCommentVNode("v-if", true),
-            vue.createCommentVNode(" ★ titlebar-right 槽位（list 型）：标题栏右侧细粒度叠加（插件加小按钮/状态） "),
+            vue.createCommentVNode(" 「已安装」tab 的操作栏 "),
+            tab.value === "installed" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_9, [
+              vue.createElementVNode("button", {
+                class: "btn-add-mcp",
+                onClick: _cache[4] || (_cache[4] = ($event) => showAddMCP.value = true)
+              }, [
+                vue.createVNode(SvgIcon, {
+                  name: "plus",
+                  size: 14
+                }),
+                _cache[18] || (_cache[18] = vue.createTextVNode(
+                  " 添加 MCP 服务器",
+                  -1
+                  /* CACHED */
+                ))
+              ]),
+              vue.createElementVNode("button", {
+                class: "btn-refresh",
+                onClick: loadInstalled
+              }, [
+                vue.createVNode(SvgIcon, {
+                  name: "refresh",
+                  size: 14
+                }),
+                _cache[19] || (_cache[19] = vue.createTextVNode(
+                  " 刷新",
+                  -1
+                  /* CACHED */
+                ))
+              ])
+            ])) : vue.createCommentVNode("v-if", true),
+            vue.createCommentVNode(" 添加 MCP 表单 "),
+            showAddMCP.value ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_10, [
+              vue.createElementVNode("div", _hoisted_11, [
+                _cache[20] || (_cache[20] = vue.createElementVNode(
+                  "label",
+                  null,
+                  "名称",
+                  -1
+                  /* CACHED */
+                )),
+                vue.withDirectives(vue.createElementVNode(
+                  "input",
+                  {
+                    "onUpdate:modelValue": _cache[5] || (_cache[5] = ($event) => mcpForm.value.name = $event),
+                    placeholder: "如 my-server"
+                  },
+                  null,
+                  512
+                  /* NEED_PATCH */
+                ), [
+                  [vue.vModelText, mcpForm.value.name]
+                ])
+              ]),
+              vue.createElementVNode("div", _hoisted_12, [
+                _cache[21] || (_cache[21] = vue.createElementVNode(
+                  "label",
+                  null,
+                  "命令",
+                  -1
+                  /* CACHED */
+                )),
+                vue.withDirectives(vue.createElementVNode(
+                  "input",
+                  {
+                    "onUpdate:modelValue": _cache[6] || (_cache[6] = ($event) => mcpForm.value.command = $event),
+                    placeholder: "如 npx / uvx"
+                  },
+                  null,
+                  512
+                  /* NEED_PATCH */
+                ), [
+                  [vue.vModelText, mcpForm.value.command]
+                ])
+              ]),
+              vue.createElementVNode("div", _hoisted_13, [
+                _cache[22] || (_cache[22] = vue.createElementVNode(
+                  "label",
+                  null,
+                  "参数",
+                  -1
+                  /* CACHED */
+                )),
+                vue.withDirectives(vue.createElementVNode(
+                  "input",
+                  {
+                    "onUpdate:modelValue": _cache[7] || (_cache[7] = ($event) => mcpForm.value.argsText = $event),
+                    placeholder: "如 -y @modelcontextprotocol/server-filesystem"
+                  },
+                  null,
+                  512
+                  /* NEED_PATCH */
+                ), [
+                  [vue.vModelText, mcpForm.value.argsText]
+                ])
+              ]),
+              vue.createElementVNode("div", _hoisted_14, [
+                _cache[24] || (_cache[24] = vue.createElementVNode(
+                  "label",
+                  null,
+                  "层级",
+                  -1
+                  /* CACHED */
+                )),
+                vue.withDirectives(vue.createElementVNode(
+                  "select",
+                  {
+                    "onUpdate:modelValue": _cache[8] || (_cache[8] = ($event) => mcpForm.value.level = $event)
+                  },
+                  [..._cache[23] || (_cache[23] = [
+                    vue.createElementVNode(
+                      "option",
+                      { value: "user" },
+                      "用户级（全局）",
+                      -1
+                      /* CACHED */
+                    ),
+                    vue.createElementVNode(
+                      "option",
+                      { value: "project" },
+                      "工作区级",
+                      -1
+                      /* CACHED */
+                    )
+                  ])],
+                  512
+                  /* NEED_PATCH */
+                ), [
+                  [vue.vModelSelect, mcpForm.value.level]
+                ])
+              ]),
+              vue.createElementVNode("div", _hoisted_15, [
+                vue.createElementVNode("button", {
+                  class: "btn-primary",
+                  onClick: saveMCP,
+                  disabled: !mcpForm.value.name || savingMCP.value
+                }, vue.toDisplayString(savingMCP.value ? "保存中…" : "保存"), 9, _hoisted_16),
+                vue.createElementVNode("button", {
+                  class: "btn-secondary",
+                  onClick: _cache[9] || (_cache[9] = ($event) => {
+                    showAddMCP.value = false;
+                    resetMCPForm();
+                  })
+                }, "取消")
+              ]),
+              mcpError.value ? (vue.openBlock(), vue.createElementBlock(
+                "div",
+                _hoisted_17,
+                vue.toDisplayString(mcpError.value),
+                1
+                /* TEXT */
+              )) : vue.createCommentVNode("v-if", true)
+            ])) : vue.createCommentVNode("v-if", true),
+            vue.createCommentVNode(" 编辑 MCP 表单 "),
+            editingMCP.value ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_18, [
+              vue.createElementVNode("div", _hoisted_19, [
+                _cache[25] || (_cache[25] = vue.createElementVNode(
+                  "label",
+                  null,
+                  "名称",
+                  -1
+                  /* CACHED */
+                )),
+                vue.withDirectives(vue.createElementVNode(
+                  "input",
+                  {
+                    "onUpdate:modelValue": _cache[10] || (_cache[10] = ($event) => editMCPForm.value.name = $event)
+                  },
+                  null,
+                  512
+                  /* NEED_PATCH */
+                ), [
+                  [vue.vModelText, editMCPForm.value.name]
+                ])
+              ]),
+              vue.createElementVNode("div", _hoisted_20, [
+                _cache[26] || (_cache[26] = vue.createElementVNode(
+                  "label",
+                  null,
+                  "命令",
+                  -1
+                  /* CACHED */
+                )),
+                vue.withDirectives(vue.createElementVNode(
+                  "input",
+                  {
+                    "onUpdate:modelValue": _cache[11] || (_cache[11] = ($event) => editMCPForm.value.command = $event)
+                  },
+                  null,
+                  512
+                  /* NEED_PATCH */
+                ), [
+                  [vue.vModelText, editMCPForm.value.command]
+                ])
+              ]),
+              vue.createElementVNode("div", _hoisted_21, [
+                _cache[27] || (_cache[27] = vue.createElementVNode(
+                  "label",
+                  null,
+                  "参数",
+                  -1
+                  /* CACHED */
+                )),
+                vue.withDirectives(vue.createElementVNode(
+                  "input",
+                  {
+                    "onUpdate:modelValue": _cache[12] || (_cache[12] = ($event) => editMCPForm.value.argsText = $event)
+                  },
+                  null,
+                  512
+                  /* NEED_PATCH */
+                ), [
+                  [vue.vModelText, editMCPForm.value.argsText]
+                ])
+              ]),
+              vue.createElementVNode("div", _hoisted_22, [
+                _cache[29] || (_cache[29] = vue.createElementVNode(
+                  "label",
+                  null,
+                  "层级",
+                  -1
+                  /* CACHED */
+                )),
+                vue.withDirectives(vue.createElementVNode(
+                  "select",
+                  {
+                    "onUpdate:modelValue": _cache[13] || (_cache[13] = ($event) => editMCPForm.value.level = $event)
+                  },
+                  [..._cache[28] || (_cache[28] = [
+                    vue.createElementVNode(
+                      "option",
+                      { value: "user" },
+                      "用户级（全局）",
+                      -1
+                      /* CACHED */
+                    ),
+                    vue.createElementVNode(
+                      "option",
+                      { value: "project" },
+                      "工作区级",
+                      -1
+                      /* CACHED */
+                    )
+                  ])],
+                  512
+                  /* NEED_PATCH */
+                ), [
+                  [vue.vModelSelect, editMCPForm.value.level]
+                ])
+              ]),
+              vue.createElementVNode("div", _hoisted_23, [
+                vue.createElementVNode("button", {
+                  class: "btn-primary",
+                  onClick: updateMCP,
+                  disabled: !editMCPForm.value.name
+                }, "保存", 8, _hoisted_24),
+                vue.createElementVNode("button", {
+                  class: "btn-secondary",
+                  onClick: _cache[14] || (_cache[14] = ($event) => editingMCP.value = false)
+                }, "取消")
+              ])
+            ])) : vue.createCommentVNode("v-if", true),
+            vue.createCommentVNode(" 技能内容查看 "),
+            viewingSkill.value ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_25, [
+              vue.createElementVNode("div", _hoisted_26, [
+                vue.createElementVNode(
+                  "strong",
+                  null,
+                  vue.toDisplayString(viewingSkill.value.name),
+                  1
+                  /* TEXT */
+                ),
+                vue.createElementVNode("button", {
+                  class: "modal-close",
+                  onClick: _cache[15] || (_cache[15] = ($event) => viewingSkill.value = null)
+                }, "×")
+              ]),
+              vue.createElementVNode(
+                "pre",
+                _hoisted_27,
+                vue.toDisplayString(viewingSkill.value.content),
+                1
+                /* TEXT */
+              )
+            ])) : vue.createCommentVNode("v-if", true),
+            vue.createCommentVNode(" 加载状态 "),
+            loading.value ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_28, [..._cache[30] || (_cache[30] = [
+              vue.createElementVNode(
+                "span",
+                { class: "dot-pulse" },
+                null,
+                -1
+                /* CACHED */
+              ),
+              vue.createElementVNode(
+                "span",
+                null,
+                "搜索中...",
+                -1
+                /* CACHED */
+              )
+            ])])) : tab.value === "installed" ? (vue.openBlock(), vue.createElementBlock(
+              vue.Fragment,
+              { key: 6 },
+              [
+                vue.createCommentVNode(" 已安装列表 "),
+                vue.createElementVNode(
+                  "div",
+                  {
+                    class: "market-list",
+                    ref_key: "listRef",
+                    ref: listRef
+                  },
+                  [
+                    vue.createCommentVNode(" MCP 分组 "),
+                    installedMCPs.value.length > 0 ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_29, [
+                      _cache[31] || (_cache[31] = vue.createElementVNode(
+                        "div",
+                        { class: "installed-group-title" },
+                        "MCP 服务器",
+                        -1
+                        /* CACHED */
+                      )),
+                      (vue.openBlock(true), vue.createElementBlock(
+                        vue.Fragment,
+                        null,
+                        vue.renderList(installedMCPs.value, (item) => {
+                          return vue.openBlock(), vue.createElementBlock("div", {
+                            key: "mcp-" + item.name + "-" + item.level,
+                            class: "installed-item"
+                          }, [
+                            vue.createElementVNode("div", _hoisted_30, [
+                              vue.createVNode(SvgIcon, {
+                                name: "package",
+                                size: 18
+                              })
+                            ]),
+                            vue.createElementVNode("div", {
+                              class: vue.normalizeClass(["ii-status-dot", item.enabled === false ? "dot-disabled" : item._connected ? "dot-connected" : "dot-idle"]),
+                              title: item.enabled === false ? "已禁用" : item._connected ? "已连接" : "未连接"
+                            }, null, 10, _hoisted_31),
+                            vue.createElementVNode("div", _hoisted_32, [
+                              vue.createElementVNode(
+                                "div",
+                                _hoisted_33,
+                                vue.toDisplayString(item.name),
+                                1
+                                /* TEXT */
+                              ),
+                              vue.createElementVNode(
+                                "div",
+                                _hoisted_34,
+                                vue.toDisplayString(item.command) + " " + vue.toDisplayString((item.args || []).join(" ")),
+                                1
+                                /* TEXT */
+                              ),
+                              vue.createElementVNode(
+                                "span",
+                                _hoisted_35,
+                                "MCP · " + vue.toDisplayString(item.level === "project" ? "工作区级" : "用户级"),
+                                1
+                                /* TEXT */
+                              )
+                            ]),
+                            vue.createElementVNode("div", _hoisted_36, [
+                              vue.createElementVNode("button", {
+                                class: vue.normalizeClass(["ii-btn ii-toggle", { "is-enabled": item.enabled !== false }]),
+                                onClick: ($event) => toggleMCP(item),
+                                title: item.enabled === false ? "点击启用" : "点击禁用"
+                              }, vue.toDisplayString(item.enabled === false ? "禁用" : "启用"), 11, _hoisted_37),
+                              vue.createElementVNode("button", {
+                                class: "ii-btn ii-edit",
+                                onClick: ($event) => startEditMCP(item),
+                                title: "编辑"
+                              }, "编辑", 8, _hoisted_38),
+                              vue.createElementVNode("button", {
+                                class: "ii-btn ii-del",
+                                onClick: ($event) => delMCP(item),
+                                title: "删除"
+                              }, "删除", 8, _hoisted_39)
+                            ])
+                          ]);
+                        }),
+                        128
+                        /* KEYED_FRAGMENT */
+                      ))
+                    ])) : vue.createCommentVNode("v-if", true),
+                    vue.createCommentVNode(" 技能分组 "),
+                    installedSkills.value.length > 0 ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_40, [
+                      _cache[34] || (_cache[34] = vue.createElementVNode(
+                        "div",
+                        { class: "installed-group-title" },
+                        "技能",
+                        -1
+                        /* CACHED */
+                      )),
+                      (vue.openBlock(true), vue.createElementBlock(
+                        vue.Fragment,
+                        null,
+                        vue.renderList(installedSkills.value, (item) => {
+                          return vue.openBlock(), vue.createElementBlock("div", {
+                            key: "skill-" + item.name + "-" + item.level,
+                            class: "installed-item"
+                          }, [
+                            vue.createElementVNode("div", _hoisted_41, [
+                              vue.createVNode(SvgIcon, {
+                                name: "code",
+                                size: 18
+                              })
+                            ]),
+                            vue.createElementVNode("div", _hoisted_42, [
+                              vue.createElementVNode(
+                                "div",
+                                _hoisted_43,
+                                vue.toDisplayString(item.name),
+                                1
+                                /* TEXT */
+                              ),
+                              vue.createElementVNode(
+                                "div",
+                                _hoisted_44,
+                                vue.toDisplayString(item.description || "无描述"),
+                                1
+                                /* TEXT */
+                              ),
+                              vue.createElementVNode("span", _hoisted_45, [
+                                _cache[32] || (_cache[32] = vue.createTextVNode(
+                                  " 技能 · ",
+                                  -1
+                                  /* CACHED */
+                                )),
+                                vue.createElementVNode(
+                                  "span",
+                                  {
+                                    class: vue.normalizeClass("status-" + (item.status || "on"))
+                                  },
+                                  vue.toDisplayString(item.status === "off" ? "关闭" : item.status === "max" ? "始终激活" : "按需"),
+                                  3
+                                  /* TEXT, CLASS */
+                                ),
+                                vue.createTextVNode(
+                                  " · " + vue.toDisplayString(item.level === "system" ? "用户级" : "工作区级"),
+                                  1
+                                  /* TEXT */
+                                )
+                              ])
+                            ]),
+                            vue.createElementVNode("div", _hoisted_46, [
+                              vue.createElementVNode("select", {
+                                class: "ss-status-select",
+                                value: item.status || "on",
+                                onChange: ($event) => setSkillStatus(item, $event.target.value),
+                                title: statusTitle(item)
+                              }, [..._cache[33] || (_cache[33] = [
+                                vue.createElementVNode(
+                                  "option",
+                                  { value: "off" },
+                                  "关闭",
+                                  -1
+                                  /* CACHED */
+                                ),
+                                vue.createElementVNode(
+                                  "option",
+                                  { value: "on" },
+                                  "按需",
+                                  -1
+                                  /* CACHED */
+                                ),
+                                vue.createElementVNode(
+                                  "option",
+                                  { value: "max" },
+                                  "始终激活",
+                                  -1
+                                  /* CACHED */
+                                )
+                              ])], 40, _hoisted_47),
+                              vue.createElementVNode("button", {
+                                class: "ii-btn ii-view",
+                                onClick: ($event) => viewSkill(item),
+                                title: "查看内容"
+                              }, "查看", 8, _hoisted_48),
+                              item.level !== "system" ? (vue.openBlock(), vue.createElementBlock("button", {
+                                key: 0,
+                                class: "ii-btn ii-del",
+                                onClick: ($event) => delSkill(item),
+                                title: "删除"
+                              }, "删除", 8, _hoisted_49)) : vue.createCommentVNode("v-if", true)
+                            ])
+                          ]);
+                        }),
+                        128
+                        /* KEYED_FRAGMENT */
+                      ))
+                    ])) : vue.createCommentVNode("v-if", true),
+                    installedMCPs.value.length === 0 && installedSkills.value.length === 0 ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_50, [
+                      vue.createElementVNode("div", _hoisted_51, [
+                        vue.createVNode(SvgIcon, {
+                          name: "package",
+                          size: 32
+                        })
+                      ]),
+                      _cache[35] || (_cache[35] = vue.createElementVNode(
+                        "div",
+                        null,
+                        "暂无已安装的 MCP 服务器或技能",
+                        -1
+                        /* CACHED */
+                      )),
+                      _cache[36] || (_cache[36] = vue.createElementVNode(
+                        "div",
+                        { class: "me-hint" },
+                        "切换到「全部」tab 搜索安装，或点击上方「添加 MCP 服务器」",
+                        -1
+                        /* CACHED */
+                      ))
+                    ])) : vue.createCommentVNode("v-if", true)
+                  ],
+                  512
+                  /* NEED_PATCH */
+                )
+              ],
+              2112
+              /* STABLE_FRAGMENT, DEV_ROOT_FRAGMENT */
+            )) : (vue.openBlock(), vue.createElementBlock(
+              vue.Fragment,
+              { key: 7 },
+              [
+                vue.createCommentVNode(" 搜索/浏览列表 "),
+                vue.createElementVNode(
+                  "div",
+                  {
+                    class: "market-list",
+                    ref_key: "listRef",
+                    ref: listRef
+                  },
+                  [
+                    (vue.openBlock(true), vue.createElementBlock(
+                      vue.Fragment,
+                      null,
+                      vue.renderList(items.value, (item) => {
+                        return vue.openBlock(), vue.createElementBlock("div", {
+                          key: item.id,
+                          class: "market-item"
+                        }, [
+                          vue.createElementVNode(
+                            "div",
+                            {
+                              class: vue.normalizeClass(["mi-icon", "icon-" + item.kind])
+                            },
+                            [
+                              vue.createVNode(SvgIcon, {
+                                name: item.kind === "plugin" ? "puzzle" : item.kind === "skill" ? "code" : "package",
+                                size: 20
+                              }, null, 8, ["name"])
+                            ],
+                            2
+                            /* CLASS */
+                          ),
+                          vue.createElementVNode("div", _hoisted_52, [
+                            vue.createElementVNode(
+                              "div",
+                              _hoisted_53,
+                              vue.toDisplayString(item.name),
+                              1
+                              /* TEXT */
+                            ),
+                            vue.createElementVNode(
+                              "div",
+                              _hoisted_54,
+                              vue.toDisplayString(item.description),
+                              1
+                              /* TEXT */
+                            ),
+                            vue.createElementVNode("div", _hoisted_55, [
+                              vue.createElementVNode(
+                                "span",
+                                {
+                                  class: vue.normalizeClass(["mi-type", "type-" + item.kind])
+                                },
+                                vue.toDisplayString(item.kind === "mcp" ? "MCP" : item.kind === "plugin" ? "插件" : "技能"),
+                                3
+                                /* TEXT, CLASS */
+                              ),
+                              item.tags ? (vue.openBlock(), vue.createElementBlock("span", _hoisted_56, [
+                                (vue.openBlock(true), vue.createElementBlock(
+                                  vue.Fragment,
+                                  null,
+                                  vue.renderList(item.tags, (tag) => {
+                                    return vue.openBlock(), vue.createElementBlock(
+                                      "span",
+                                      {
+                                        key: tag,
+                                        class: "mi-tag"
+                                      },
+                                      vue.toDisplayString(tag),
+                                      1
+                                      /* TEXT */
+                                    );
+                                  }),
+                                  128
+                                  /* KEYED_FRAGMENT */
+                                ))
+                              ])) : vue.createCommentVNode("v-if", true),
+                              item.installed ? (vue.openBlock(), vue.createElementBlock("span", _hoisted_57, [
+                                vue.createVNode(SvgIcon, {
+                                  name: "check",
+                                  size: 10
+                                }),
+                                _cache[37] || (_cache[37] = vue.createTextVNode(
+                                  " 已安装",
+                                  -1
+                                  /* CACHED */
+                                ))
+                              ])) : vue.createCommentVNode("v-if", true)
+                            ])
+                          ]),
+                          !item.installed ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_58, [
+                            item.kind !== "mcp" ? (vue.openBlock(), vue.createElementBlock("button", {
+                              key: 0,
+                              class: "mi-install-btn",
+                              onClick: ($event) => installItem(item, "user"),
+                              disabled: installing.value === item.id
+                            }, [
+                              installing.value === item.id ? (vue.openBlock(), vue.createBlock(SvgIcon, {
+                                key: 0,
+                                name: "cycle",
+                                size: 12
+                              })) : vue.createCommentVNode("v-if", true),
+                              vue.createTextVNode(
+                                " " + vue.toDisplayString(installing.value === item.id ? "安装中…" : "安装"),
+                                1
+                                /* TEXT */
+                              )
+                            ], 8, _hoisted_59)) : (vue.openBlock(), vue.createElementBlock(
+                              vue.Fragment,
+                              { key: 1 },
+                              [
+                                vue.withDirectives(vue.createElementVNode("select", {
+                                  "onUpdate:modelValue": ($event) => item._installScope = $event,
+                                  class: "mi-scope-select",
+                                  onClick: _cache[16] || (_cache[16] = vue.withModifiers(() => {
+                                  }, ["stop"]))
+                                }, [..._cache[38] || (_cache[38] = [
+                                  vue.createElementVNode(
+                                    "option",
+                                    { value: "user" },
+                                    "用户级",
+                                    -1
+                                    /* CACHED */
+                                  ),
+                                  vue.createElementVNode(
+                                    "option",
+                                    { value: "project" },
+                                    "工作区级",
+                                    -1
+                                    /* CACHED */
+                                  )
+                                ])], 8, _hoisted_60), [
+                                  [vue.vModelSelect, item._installScope]
+                                ]),
+                                vue.createElementVNode("button", {
+                                  class: "mi-install-btn",
+                                  onClick: ($event) => installItem(item, item._installScope || "user"),
+                                  disabled: installing.value === item.id
+                                }, [
+                                  installing.value === item.id ? (vue.openBlock(), vue.createBlock(SvgIcon, {
+                                    key: 0,
+                                    name: "cycle",
+                                    size: 12
+                                  })) : vue.createCommentVNode("v-if", true),
+                                  vue.createTextVNode(
+                                    " " + vue.toDisplayString(installing.value === item.id ? "安装中…" : "安装"),
+                                    1
+                                    /* TEXT */
+                                  )
+                                ], 8, _hoisted_61)
+                              ],
+                              64
+                              /* STABLE_FRAGMENT */
+                            ))
+                          ])) : (vue.openBlock(), vue.createElementBlock("button", {
+                            key: 1,
+                            class: "mi-uninstall-btn",
+                            onClick: ($event) => uninstallItem(item)
+                          }, [
+                            vue.createVNode(SvgIcon, {
+                              name: "trash",
+                              size: 12
+                            }),
+                            _cache[39] || (_cache[39] = vue.createTextVNode(
+                              " 卸载 ",
+                              -1
+                              /* CACHED */
+                            ))
+                          ], 8, _hoisted_62))
+                        ]);
+                      }),
+                      128
+                      /* KEYED_FRAGMENT */
+                    )),
+                    !loading.value && items.value.length === 0 ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_63, [
+                      vue.createElementVNode("div", _hoisted_64, [
+                        vue.createVNode(SvgIcon, {
+                          name: "package",
+                          size: 32
+                        })
+                      ]),
+                      query.value ? (vue.openBlock(), vue.createElementBlock(
+                        "div",
+                        _hoisted_65,
+                        '未找到匹配 "' + vue.toDisplayString(query.value) + '" 的条目',
+                        1
+                        /* TEXT */
+                      )) : (vue.openBlock(), vue.createElementBlock("div", _hoisted_66, "市场中暂无可用条目")),
+                      _cache[40] || (_cache[40] = vue.createElementVNode(
+                        "div",
+                        { class: "me-hint" },
+                        "试试其他关键词或分类",
+                        -1
+                        /* CACHED */
+                      ))
+                    ])) : vue.createCommentVNode("v-if", true)
+                  ],
+                  512
+                  /* NEED_PATCH */
+                )
+              ],
+              2112
+              /* STABLE_FRAGMENT, DEV_ROOT_FRAGMENT */
+            ))
+          ]),
+          vue.createElementVNode("div", _hoisted_67, [
             vue.createElementVNode(
-              "div",
-              {
-                ref_key: "titlebarRightEl",
-                ref: titlebarRightEl,
-                class: "plugin-slot-host plugin-slot-titlebar"
-              },
-              null,
-              512
-              /* NEED_PATCH */
-            )
+              "span",
+              _hoisted_68,
+              vue.toDisplayString(tab.value === "installed" ? installedMCPs.value.length + installedSkills.value.length : items.value.length) + " 个条目",
+              1
+              /* TEXT */
+            ),
+            error.value ? (vue.openBlock(), vue.createElementBlock(
+              "span",
+              _hoisted_69,
+              vue.toDisplayString(error.value),
+              1
+              /* TEXT */
+            )) : vue.createCommentVNode("v-if", true),
+            _cache[41] || (_cache[41] = vue.createElementVNode(
+              "span",
+              { class: "market-tip" },
+              "安装后下次对话生效",
+              -1
+              /* CACHED */
+            )),
+            vue.createElementVNode("button", {
+              class: "btn-secondary",
+              onClick: closePanel
+            }, "关闭")
           ])
         ]);
       };
     }
   };
-  const UiTitlebar2 = /* @__PURE__ */ _export_sfc(_sfc_main, [["__scopeId", "data-v-c1c31662"]]);
+  const MarketplacePanel2 = /* @__PURE__ */ _export_sfc(_sfc_main, [["__scopeId", "data-v-d35768b1"]]);
   function mount(el) {
-    const app = vue.createApp(UiTitlebar2);
+    const app = vue.createApp(MarketplacePanel2);
     app.mount(el);
     return () => {
       app.unmount();
@@ -2569,4 +3323,4 @@ var UiTitlebar = (function(exports, vue, uiState_js, api, appActions_js, pluginR
   exports.mount = mount;
   Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
   return exports;
-})({}, window.__PAIRCODE_CORE.Vue, window.__PAIRCODE_CORE.uiState, window.__PAIRCODE_CORE.api, window.__PAIRCODE_CORE.actions, window.__PAIRCODE_CORE.pluginRuntime);
+})({}, window.__PAIRCODE_CORE.Vue, window.__PAIRCODE_CORE.api, window.__PAIRCODE_CORE.uiState);

@@ -11,12 +11,12 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     }
     return target;
   };
-  const _hoisted_1$a = ["width", "height"];
-  const _hoisted_2$a = {
+  const _hoisted_1$9 = ["width", "height"];
+  const _hoisted_2$9 = {
     key: 0,
     d: "M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
   };
-  const _sfc_main$b = {
+  const _sfc_main$a = {
     __name: "SvgIcon",
     props: {
       name: { type: String, required: true },
@@ -36,7 +36,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
           "stroke-linejoin": "round"
         }, [
           vue.createCommentVNode(" Folder "),
-          __props.name === "folder" ? (vue.openBlock(), vue.createElementBlock("path", _hoisted_2$a)) : __props.name === "folder-open" ? (vue.openBlock(), vue.createElementBlock(
+          __props.name === "folder" ? (vue.openBlock(), vue.createElementBlock("path", _hoisted_2$9)) : __props.name === "folder-open" ? (vue.openBlock(), vue.createElementBlock(
             vue.Fragment,
             { key: 1 },
             [
@@ -2078,22 +2078,22 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
             64
             /* STABLE_FRAGMENT */
           ))
-        ], 8, _hoisted_1$a);
+        ], 8, _hoisted_1$9);
       };
     }
   };
-  const SvgIcon = /* @__PURE__ */ _export_sfc(_sfc_main$b, [["__scopeId", "data-v-faf69761"]]);
-  const _hoisted_1$9 = { class: "me-field" };
-  const _hoisted_2$9 = { class: "me-editor" };
-  const _hoisted_3$9 = { class: "me-input-row" };
-  const _hoisted_4$8 = ["onKeydown"];
-  const _hoisted_5$8 = { class: "me-tags" };
-  const _hoisted_6$8 = {
+  const SvgIcon = /* @__PURE__ */ _export_sfc(_sfc_main$a, [["__scopeId", "data-v-faf69761"]]);
+  const _hoisted_1$8 = { class: "me-field" };
+  const _hoisted_2$8 = { class: "me-editor" };
+  const _hoisted_3$8 = { class: "me-input-row" };
+  const _hoisted_4$7 = ["onKeydown"];
+  const _hoisted_5$7 = { class: "me-tags" };
+  const _hoisted_6$7 = {
     key: 0,
     class: "me-empty"
   };
-  const _hoisted_7$8 = ["onClick"];
-  const _sfc_main$a = {
+  const _hoisted_7$7 = ["onClick"];
+  const _sfc_main$9 = {
     __name: "ModelEditor",
     props: {
       models: { type: Array, default: () => [] }
@@ -2140,7 +2140,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         emit("change", [...local.value]);
       }
       return (_ctx, _cache) => {
-        return vue.openBlock(), vue.createElementBlock("div", _hoisted_1$9, [
+        return vue.openBlock(), vue.createElementBlock("div", _hoisted_1$8, [
           _cache[1] || (_cache[1] = vue.createElementVNode(
             "span",
             { class: "me-label" },
@@ -2148,15 +2148,15 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
             -1
             /* CACHED */
           )),
-          vue.createElementVNode("div", _hoisted_2$9, [
-            vue.createElementVNode("div", _hoisted_3$9, [
+          vue.createElementVNode("div", _hoisted_2$8, [
+            vue.createElementVNode("div", _hoisted_3$8, [
               vue.withDirectives(vue.createElementVNode("input", {
                 "onUpdate:modelValue": _cache[0] || (_cache[0] = ($event) => input.value = $event),
                 class: "me-input",
                 placeholder: "输入模型名，回车添加…",
                 onKeydown: vue.withKeys(vue.withModifiers(addModels, ["prevent"]), ["enter"]),
                 onPaste
-              }, null, 40, _hoisted_4$8), [
+              }, null, 40, _hoisted_4$7), [
                 [vue.vModelText, input.value]
               ]),
               vue.createElementVNode("button", {
@@ -2164,8 +2164,8 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                 onClick: addModels
               }, "添加")
             ]),
-            vue.createElementVNode("div", _hoisted_5$8, [
-              !local.value.length ? (vue.openBlock(), vue.createElementBlock("span", _hoisted_6$8, "暂无模型——添加后 AI tab 的模型下拉会按服务商显示")) : vue.createCommentVNode("v-if", true),
+            vue.createElementVNode("div", _hoisted_5$7, [
+              !local.value.length ? (vue.openBlock(), vue.createElementBlock("span", _hoisted_6$7, "暂无模型——添加后 AI tab 的模型下拉会按服务商显示")) : vue.createCommentVNode("v-if", true),
               (vue.openBlock(true), vue.createElementBlock(
                 vue.Fragment,
                 null,
@@ -2183,7 +2183,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                       class: "me-x",
                       title: "移除",
                       onClick: ($event) => removeAt(i)
-                    }, "×", 8, _hoisted_7$8)
+                    }, "×", 8, _hoisted_7$7)
                   ]);
                 }),
                 128
@@ -2195,98 +2195,98 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       };
     }
   };
-  const ModelEditor = /* @__PURE__ */ _export_sfc(_sfc_main$a, [["__scopeId", "data-v-e3700bd7"]]);
-  const _hoisted_1$8 = { class: "provider-manager" };
-  const _hoisted_2$8 = { class: "pm-toolbar" };
-  const _hoisted_3$8 = { class: "pm-count" };
-  const _hoisted_4$7 = {
+  const ModelEditor = /* @__PURE__ */ _export_sfc(_sfc_main$9, [["__scopeId", "data-v-e3700bd7"]]);
+  const _hoisted_1$7 = { class: "provider-manager" };
+  const _hoisted_2$7 = { class: "pm-toolbar" };
+  const _hoisted_3$7 = { class: "pm-count" };
+  const _hoisted_4$6 = {
     key: 0,
     class: "pm-edit"
   };
-  const _hoisted_5$7 = { class: "pm-field" };
-  const _hoisted_6$7 = { class: "pm-field" };
-  const _hoisted_7$7 = { class: "pm-field" };
-  const _hoisted_8$7 = { class: "pm-field" };
-  const _hoisted_9$7 = { class: "pm-params" };
-  const _hoisted_10$7 = {
+  const _hoisted_5$6 = { class: "pm-field" };
+  const _hoisted_6$6 = { class: "pm-field" };
+  const _hoisted_7$6 = { class: "pm-field" };
+  const _hoisted_8$6 = { class: "pm-field" };
+  const _hoisted_9$6 = { class: "pm-params" };
+  const _hoisted_10$6 = {
     key: 0,
     class: "pm-param-rows"
   };
-  const _hoisted_11$7 = ["title"];
-  const _hoisted_12$7 = ["onUpdate:modelValue"];
-  const _hoisted_13$6 = ["value"];
-  const _hoisted_14$6 = ["onUpdate:modelValue"];
-  const _hoisted_15$5 = ["value"];
-  const _hoisted_16$5 = ["onUpdate:modelValue"];
-  const _hoisted_17$5 = ["onUpdate:modelValue"];
-  const _hoisted_18$5 = {
+  const _hoisted_11$6 = ["title"];
+  const _hoisted_12$6 = ["onUpdate:modelValue"];
+  const _hoisted_13$5 = ["value"];
+  const _hoisted_14$5 = ["onUpdate:modelValue"];
+  const _hoisted_15$4 = ["value"];
+  const _hoisted_16$4 = ["onUpdate:modelValue"];
+  const _hoisted_17$4 = ["onUpdate:modelValue"];
+  const _hoisted_18$4 = {
     key: 1,
     class: "pm-params-empty"
   };
-  const _hoisted_19$5 = { class: "pm-edit-actions" };
-  const _hoisted_20$5 = ["disabled"];
-  const _hoisted_21$4 = {
+  const _hoisted_19$4 = { class: "pm-edit-actions" };
+  const _hoisted_20$4 = ["disabled"];
+  const _hoisted_21$3 = {
     key: 1,
     class: "pm-cards"
   };
-  const _hoisted_22$4 = {
+  const _hoisted_22$3 = {
     key: 0,
     class: "pm-edit"
   };
-  const _hoisted_23$3 = { class: "pm-edit-title" };
-  const _hoisted_24$3 = { class: "pm-field" };
-  const _hoisted_25$3 = ["value"];
-  const _hoisted_26$3 = { class: "pm-field" };
-  const _hoisted_27$3 = { class: "pm-field" };
-  const _hoisted_28$3 = { class: "pm-field" };
-  const _hoisted_29$2 = { class: "pm-params" };
-  const _hoisted_30$2 = {
+  const _hoisted_23$2 = { class: "pm-edit-title" };
+  const _hoisted_24$2 = { class: "pm-field" };
+  const _hoisted_25$2 = ["value"];
+  const _hoisted_26$2 = { class: "pm-field" };
+  const _hoisted_27$2 = { class: "pm-field" };
+  const _hoisted_28$2 = { class: "pm-field" };
+  const _hoisted_29$1 = { class: "pm-params" };
+  const _hoisted_30$1 = {
     key: 0,
     class: "pm-param-rows"
   };
-  const _hoisted_31$2 = ["title"];
-  const _hoisted_32$2 = ["onUpdate:modelValue"];
-  const _hoisted_33$2 = ["value"];
-  const _hoisted_34$1 = ["onUpdate:modelValue"];
-  const _hoisted_35$1 = ["value"];
-  const _hoisted_36$1 = ["onUpdate:modelValue"];
-  const _hoisted_37$1 = ["onUpdate:modelValue"];
-  const _hoisted_38$1 = {
+  const _hoisted_31$1 = ["title"];
+  const _hoisted_32$1 = ["onUpdate:modelValue"];
+  const _hoisted_33$1 = ["value"];
+  const _hoisted_34 = ["onUpdate:modelValue"];
+  const _hoisted_35 = ["value"];
+  const _hoisted_36 = ["onUpdate:modelValue"];
+  const _hoisted_37 = ["onUpdate:modelValue"];
+  const _hoisted_38 = {
     key: 1,
     class: "pm-params-empty"
   };
-  const _hoisted_39$1 = { class: "pm-edit-actions" };
-  const _hoisted_40$1 = ["disabled"];
-  const _hoisted_41$1 = {
+  const _hoisted_39 = { class: "pm-edit-actions" };
+  const _hoisted_40 = ["disabled"];
+  const _hoisted_41 = {
     key: 1,
     class: "pm-card"
   };
-  const _hoisted_42$1 = { class: "pm-card-head" };
-  const _hoisted_43$1 = ["title"];
-  const _hoisted_44$1 = { class: "pm-ops" };
-  const _hoisted_45$1 = ["onClick"];
-  const _hoisted_46$1 = ["onClick"];
-  const _hoisted_47$1 = ["title"];
-  const _hoisted_48$1 = ["title"];
-  const _hoisted_49$1 = { class: "pm-ctx" };
-  const _hoisted_50$1 = { class: "pm-models" };
-  const _hoisted_51$1 = {
+  const _hoisted_42 = { class: "pm-card-head" };
+  const _hoisted_43 = ["title"];
+  const _hoisted_44 = { class: "pm-ops" };
+  const _hoisted_45 = ["onClick"];
+  const _hoisted_46 = ["onClick"];
+  const _hoisted_47 = ["title"];
+  const _hoisted_48 = ["title"];
+  const _hoisted_49 = { class: "pm-ctx" };
+  const _hoisted_50 = { class: "pm-models" };
+  const _hoisted_51 = {
     key: 0,
     class: "pm-none"
   };
-  const _hoisted_52$1 = {
+  const _hoisted_52 = {
     key: 0,
     class: "pm-params-summary"
   };
-  const _hoisted_53$1 = {
+  const _hoisted_53 = {
     key: 2,
     class: "pm-empty"
   };
-  const _hoisted_54$1 = {
+  const _hoisted_54 = {
     key: 3,
     class: "pm-error"
   };
-  const _sfc_main$9 = {
+  const _sfc_main$8 = {
     __name: "ProviderManager",
     emits: ["saved"],
     setup(__props, { emit: __emit }) {
@@ -2438,12 +2438,12 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         return n ? "模型参数已配置 " + n + " 个" : "";
       }
       return (_ctx, _cache) => {
-        return vue.openBlock(), vue.createElementBlock("div", _hoisted_1$8, [
+        return vue.openBlock(), vue.createElementBlock("div", _hoisted_1$7, [
           vue.createCommentVNode(" 工具栏 "),
-          vue.createElementVNode("div", _hoisted_2$8, [
+          vue.createElementVNode("div", _hoisted_2$7, [
             vue.createElementVNode(
               "span",
-              _hoisted_3$8,
+              _hoisted_3$7,
               vue.toDisplayString(providers.value.length) + " 个服务商",
               1
               /* TEXT */
@@ -2454,7 +2454,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
             }, "+ 新增服务商")
           ]),
           vue.createCommentVNode(" 新增表单（工具栏下方展开，紧邻按钮不跳动） "),
-          editingName.value === "__new__" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_4$7, [
+          editingName.value === "__new__" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_4$6, [
             _cache[12] || (_cache[12] = vue.createElementVNode(
               "div",
               { class: "pm-edit-title" },
@@ -2462,7 +2462,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
               -1
               /* CACHED */
             )),
-            vue.createElementVNode("div", _hoisted_5$7, [
+            vue.createElementVNode("div", _hoisted_5$6, [
               _cache[7] || (_cache[7] = vue.createElementVNode(
                 "span",
                 { class: "pm-field-label" },
@@ -2483,7 +2483,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                 [vue.vModelText, editForm.value.name]
               ])
             ]),
-            vue.createElementVNode("div", _hoisted_6$7, [
+            vue.createElementVNode("div", _hoisted_6$6, [
               _cache[8] || (_cache[8] = vue.createElementVNode(
                 "span",
                 { class: "pm-field-label" },
@@ -2504,7 +2504,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                 [vue.vModelText, editForm.value.baseURL]
               ])
             ]),
-            vue.createElementVNode("div", _hoisted_7$7, [
+            vue.createElementVNode("div", _hoisted_7$6, [
               _cache[9] || (_cache[9] = vue.createElementVNode(
                 "span",
                 { class: "pm-field-label" },
@@ -2526,7 +2526,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                 [vue.vModelText, editForm.value.apiKey]
               ])
             ]),
-            vue.createElementVNode("div", _hoisted_8$7, [
+            vue.createElementVNode("div", _hoisted_8$6, [
               _cache[10] || (_cache[10] = vue.createElementVNode(
                 "span",
                 { class: "pm-field-label" },
@@ -2554,7 +2554,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
               models: editModels.value,
               onChange: onModelsChange
             }, null, 8, ["models"]),
-            vue.createElementVNode("div", _hoisted_9$7, [
+            vue.createElementVNode("div", _hoisted_9$6, [
               _cache[11] || (_cache[11] = vue.createElementVNode(
                 "div",
                 { class: "pm-params-title" },
@@ -2562,7 +2562,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                 -1
                 /* CACHED */
               )),
-              editModels.value.length ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_10$7, [
+              editModels.value.length ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_10$6, [
                 (vue.openBlock(true), vue.createElementBlock(
                   vue.Fragment,
                   null,
@@ -2574,7 +2574,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                       vue.createElementVNode("span", {
                         class: "pm-param-model",
                         title: m2
-                      }, vue.toDisplayString(m2), 9, _hoisted_11$7),
+                      }, vue.toDisplayString(m2), 9, _hoisted_11$6),
                       vue.withDirectives(vue.createElementVNode("select", {
                         "onUpdate:modelValue": ($event) => editParams.value[m2].temperature = $event,
                         title: "温度（随机性）"
@@ -2586,12 +2586,12 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                             return vue.createElementVNode("option", {
                               key: "t" + t,
                               value: t
-                            }, vue.toDisplayString(t === "" ? "温度默认" : t), 9, _hoisted_13$6);
+                            }, vue.toDisplayString(t === "" ? "温度默认" : t), 9, _hoisted_13$5);
                           }),
                           64
                           /* STABLE_FRAGMENT */
                         ))
-                      ], 8, _hoisted_12$7), [
+                      ], 8, _hoisted_12$6), [
                         [vue.vModelSelect, editParams.value[m2].temperature]
                       ]),
                       vue.withDirectives(vue.createElementVNode("select", {
@@ -2605,12 +2605,12 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                             return vue.createElementVNode("option", {
                               key: "k" + th.v,
                               value: th.v
-                            }, vue.toDisplayString(th.label), 9, _hoisted_15$5);
+                            }, vue.toDisplayString(th.label), 9, _hoisted_15$4);
                           }),
                           64
                           /* STABLE_FRAGMENT */
                         ))
-                      ], 8, _hoisted_14$6), [
+                      ], 8, _hoisted_14$5), [
                         [vue.vModelSelect, editParams.value[m2].thinkingMode]
                       ]),
                       vue.withDirectives(vue.createElementVNode("input", {
@@ -2620,7 +2620,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         step: "1024",
                         placeholder: "输出 Token",
                         title: "最大输出 Token（0=默认）"
-                      }, null, 8, _hoisted_16$5), [
+                      }, null, 8, _hoisted_16$4), [
                         [
                           vue.vModelText,
                           editParams.value[m2].maxTokens,
@@ -2635,7 +2635,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         step: "4096",
                         placeholder: "上下文",
                         title: "上下文窗口（0=默认）"
-                      }, null, 8, _hoisted_17$5), [
+                      }, null, 8, _hoisted_17$4), [
                         [
                           vue.vModelText,
                           editParams.value[m2].contextMaxTokens,
@@ -2648,14 +2648,14 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                   128
                   /* KEYED_FRAGMENT */
                 ))
-              ])) : (vue.openBlock(), vue.createElementBlock("div", _hoisted_18$5, "添加模型后，可逐模型配置温度/思考档位/输出上限/上下文窗口"))
+              ])) : (vue.openBlock(), vue.createElementBlock("div", _hoisted_18$4, "添加模型后，可逐模型配置温度/思考档位/输出上限/上下文窗口"))
             ]),
-            vue.createElementVNode("div", _hoisted_19$5, [
+            vue.createElementVNode("div", _hoisted_19$4, [
               vue.createElementVNode("button", {
                 class: "pm-btn pm-primary",
                 disabled: saving.value,
                 onClick: saveEdit
-              }, vue.toDisplayString(saving.value ? "保存中…" : "保存服务商"), 9, _hoisted_20$5),
+              }, vue.toDisplayString(saving.value ? "保存中…" : "保存服务商"), 9, _hoisted_20$4),
               vue.createElementVNode("button", {
                 class: "pm-btn",
                 onClick: cancelEdit
@@ -2663,7 +2663,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
             ])
           ])) : vue.createCommentVNode("v-if", true),
           vue.createCommentVNode(" 服务商卡片列表（编辑时在卡片位置就地展开表单，不跳顶） "),
-          providers.value.length ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_21$4, [
+          providers.value.length ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_21$3, [
             (vue.openBlock(true), vue.createElementBlock(
               vue.Fragment,
               null,
@@ -2674,15 +2674,15 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                     key: p.name
                   },
                   [
-                    editingName.value === p.name ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_22$4, [
+                    editingName.value === p.name ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_22$3, [
                       vue.createElementVNode(
                         "div",
-                        _hoisted_23$3,
+                        _hoisted_23$2,
                         "编辑服务商：" + vue.toDisplayString(p.name),
                         1
                         /* TEXT */
                       ),
-                      vue.createElementVNode("div", _hoisted_24$3, [
+                      vue.createElementVNode("div", _hoisted_24$2, [
                         _cache[13] || (_cache[13] = vue.createElementVNode(
                           "span",
                           { class: "pm-field-label" },
@@ -2693,9 +2693,9 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         vue.createElementVNode("input", {
                           value: p.name,
                           disabled: ""
-                        }, null, 8, _hoisted_25$3)
+                        }, null, 8, _hoisted_25$2)
                       ]),
-                      vue.createElementVNode("div", _hoisted_26$3, [
+                      vue.createElementVNode("div", _hoisted_26$2, [
                         _cache[14] || (_cache[14] = vue.createElementVNode(
                           "span",
                           { class: "pm-field-label" },
@@ -2716,7 +2716,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                           [vue.vModelText, editForm.value.baseURL]
                         ])
                       ]),
-                      vue.createElementVNode("div", _hoisted_27$3, [
+                      vue.createElementVNode("div", _hoisted_27$2, [
                         _cache[15] || (_cache[15] = vue.createElementVNode(
                           "span",
                           { class: "pm-field-label" },
@@ -2738,7 +2738,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                           [vue.vModelText, editForm.value.apiKey]
                         ])
                       ]),
-                      vue.createElementVNode("div", _hoisted_28$3, [
+                      vue.createElementVNode("div", _hoisted_28$2, [
                         _cache[16] || (_cache[16] = vue.createElementVNode(
                           "span",
                           { class: "pm-field-label" },
@@ -2766,7 +2766,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         models: editModels.value,
                         onChange: onModelsChange
                       }, null, 8, ["models"]),
-                      vue.createElementVNode("div", _hoisted_29$2, [
+                      vue.createElementVNode("div", _hoisted_29$1, [
                         _cache[17] || (_cache[17] = vue.createElementVNode(
                           "div",
                           { class: "pm-params-title" },
@@ -2774,7 +2774,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                           -1
                           /* CACHED */
                         )),
-                        editModels.value.length ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_30$2, [
+                        editModels.value.length ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_30$1, [
                           (vue.openBlock(true), vue.createElementBlock(
                             vue.Fragment,
                             null,
@@ -2786,7 +2786,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                                 vue.createElementVNode("span", {
                                   class: "pm-param-model",
                                   title: m2
-                                }, vue.toDisplayString(m2), 9, _hoisted_31$2),
+                                }, vue.toDisplayString(m2), 9, _hoisted_31$1),
                                 vue.withDirectives(vue.createElementVNode("select", {
                                   "onUpdate:modelValue": ($event) => editParams.value[m2].temperature = $event,
                                   title: "温度（随机性）"
@@ -2798,12 +2798,12 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                                       return vue.createElementVNode("option", {
                                         key: "t" + t,
                                         value: t
-                                      }, vue.toDisplayString(t === "" ? "温度默认" : t), 9, _hoisted_33$2);
+                                      }, vue.toDisplayString(t === "" ? "温度默认" : t), 9, _hoisted_33$1);
                                     }),
                                     64
                                     /* STABLE_FRAGMENT */
                                   ))
-                                ], 8, _hoisted_32$2), [
+                                ], 8, _hoisted_32$1), [
                                   [vue.vModelSelect, editParams.value[m2].temperature]
                                 ]),
                                 vue.withDirectives(vue.createElementVNode("select", {
@@ -2817,12 +2817,12 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                                       return vue.createElementVNode("option", {
                                         key: "k" + th.v,
                                         value: th.v
-                                      }, vue.toDisplayString(th.label), 9, _hoisted_35$1);
+                                      }, vue.toDisplayString(th.label), 9, _hoisted_35);
                                     }),
                                     64
                                     /* STABLE_FRAGMENT */
                                   ))
-                                ], 8, _hoisted_34$1), [
+                                ], 8, _hoisted_34), [
                                   [vue.vModelSelect, editParams.value[m2].thinkingMode]
                                 ]),
                                 vue.withDirectives(vue.createElementVNode("input", {
@@ -2832,7 +2832,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                                   step: "1024",
                                   placeholder: "输出 Token",
                                   title: "最大输出 Token（0=默认）"
-                                }, null, 8, _hoisted_36$1), [
+                                }, null, 8, _hoisted_36), [
                                   [
                                     vue.vModelText,
                                     editParams.value[m2].maxTokens,
@@ -2847,7 +2847,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                                   step: "4096",
                                   placeholder: "上下文",
                                   title: "上下文窗口（0=默认）"
-                                }, null, 8, _hoisted_37$1), [
+                                }, null, 8, _hoisted_37), [
                                   [
                                     vue.vModelText,
                                     editParams.value[m2].contextMaxTokens,
@@ -2860,53 +2860,53 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                             128
                             /* KEYED_FRAGMENT */
                           ))
-                        ])) : (vue.openBlock(), vue.createElementBlock("div", _hoisted_38$1, "添加模型后，可逐模型配置温度/思考档位/输出上限/上下文窗口"))
+                        ])) : (vue.openBlock(), vue.createElementBlock("div", _hoisted_38, "添加模型后，可逐模型配置温度/思考档位/输出上限/上下文窗口"))
                       ]),
-                      vue.createElementVNode("div", _hoisted_39$1, [
+                      vue.createElementVNode("div", _hoisted_39, [
                         vue.createElementVNode("button", {
                           class: "pm-btn pm-primary",
                           disabled: saving.value,
                           onClick: saveEdit
-                        }, vue.toDisplayString(saving.value ? "保存中…" : "保存服务商"), 9, _hoisted_40$1),
+                        }, vue.toDisplayString(saving.value ? "保存中…" : "保存服务商"), 9, _hoisted_40),
                         vue.createElementVNode("button", {
                           class: "pm-btn",
                           onClick: cancelEdit
                         }, "取消")
                       ])
-                    ])) : (vue.openBlock(), vue.createElementBlock("div", _hoisted_41$1, [
-                      vue.createElementVNode("div", _hoisted_42$1, [
+                    ])) : (vue.openBlock(), vue.createElementBlock("div", _hoisted_41, [
+                      vue.createElementVNode("div", _hoisted_42, [
                         vue.createElementVNode("span", {
                           class: "pm-name",
                           title: p.name
-                        }, vue.toDisplayString(p.name), 9, _hoisted_43$1),
-                        vue.createElementVNode("div", _hoisted_44$1, [
+                        }, vue.toDisplayString(p.name), 9, _hoisted_43),
+                        vue.createElementVNode("div", _hoisted_44, [
                           vue.createElementVNode("button", {
                             class: "pm-btn pm-small",
                             onClick: ($event) => startEdit(p)
-                          }, "编辑", 8, _hoisted_45$1),
+                          }, "编辑", 8, _hoisted_45),
                           vue.createElementVNode("button", {
                             class: "pm-btn pm-small pm-danger",
                             onClick: ($event) => removeProvider(p)
-                          }, "删除", 8, _hoisted_46$1)
+                          }, "删除", 8, _hoisted_46)
                         ])
                       ]),
                       vue.createElementVNode("div", {
                         class: "pm-url",
                         title: p.baseURL
-                      }, vue.toDisplayString(p.baseURL || "未配置 Base URL"), 9, _hoisted_47$1),
+                      }, vue.toDisplayString(p.baseURL || "未配置 Base URL"), 9, _hoisted_47),
                       vue.createElementVNode("div", {
                         class: vue.normalizeClass(["pm-key", { "pm-key-ok": p.apiKey }]),
                         title: p.apiKey ? "已配置 API Key" : "未配置 API Key"
-                      }, vue.toDisplayString(p.apiKey ? "API Key 已配置" : "未配置 API Key"), 11, _hoisted_48$1),
+                      }, vue.toDisplayString(p.apiKey ? "API Key 已配置" : "未配置 API Key"), 11, _hoisted_48),
                       vue.createElementVNode(
                         "div",
-                        _hoisted_49$1,
+                        _hoisted_49,
                         vue.toDisplayString(p.contextMaxTokens > 0 ? "上下文 " + (p.contextMaxTokens / 1e3).toFixed(0) + "K Token" : "上下文 未限制"),
                         1
                         /* TEXT */
                       ),
-                      vue.createElementVNode("div", _hoisted_50$1, [
-                        !p.models.length ? (vue.openBlock(), vue.createElementBlock("span", _hoisted_51$1, "（未配置模型）")) : vue.createCommentVNode("v-if", true),
+                      vue.createElementVNode("div", _hoisted_50, [
+                        !p.models.length ? (vue.openBlock(), vue.createElementBlock("span", _hoisted_51, "（未配置模型）")) : vue.createCommentVNode("v-if", true),
                         (vue.openBlock(true), vue.createElementBlock(
                           vue.Fragment,
                           null,
@@ -2928,7 +2928,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                       ]),
                       paramsSummary(p.name) ? (vue.openBlock(), vue.createElementBlock(
                         "div",
-                        _hoisted_52$1,
+                        _hoisted_52,
                         vue.toDisplayString(paramsSummary(p.name)),
                         1
                         /* TEXT */
@@ -2942,10 +2942,10 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
               128
               /* KEYED_FRAGMENT */
             ))
-          ])) : editingName.value !== "__new__" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_53$1, "暂无服务商，点「+ 新增服务商」添加")) : vue.createCommentVNode("v-if", true),
+          ])) : editingName.value !== "__new__" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_53, "暂无服务商，点「+ 新增服务商」添加")) : vue.createCommentVNode("v-if", true),
           error.value ? (vue.openBlock(), vue.createElementBlock(
             "div",
-            _hoisted_54$1,
+            _hoisted_54,
             vue.toDisplayString(error.value),
             1
             /* TEXT */
@@ -2954,56 +2954,56 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       };
     }
   };
-  const ProviderManager = /* @__PURE__ */ _export_sfc(_sfc_main$9, [["__scopeId", "data-v-3d0d780d"]]);
-  const _hoisted_1$7 = { class: "pm-manager" };
-  const _hoisted_2$7 = { class: "mgm-toolbar" };
-  const _hoisted_3$7 = { class: "mgm-count" };
-  const _hoisted_4$6 = {
+  const ProviderManager = /* @__PURE__ */ _export_sfc(_sfc_main$8, [["__scopeId", "data-v-3d0d780d"]]);
+  const _hoisted_1$6 = { class: "pm-manager" };
+  const _hoisted_2$6 = { class: "mgm-toolbar" };
+  const _hoisted_3$6 = { class: "mgm-count" };
+  const _hoisted_4$5 = {
     key: 0,
     class: "mgm-edit"
   };
-  const _hoisted_5$6 = { class: "mgm-edit-title" };
-  const _hoisted_6$6 = { class: "mgm-field" };
-  const _hoisted_7$6 = { class: "mgm-field" };
-  const _hoisted_8$6 = ["value"];
-  const _hoisted_9$6 = { class: "mgm-field" };
-  const _hoisted_10$6 = { class: "mgm-field" };
-  const _hoisted_11$6 = { class: "mgm-field" };
-  const _hoisted_12$6 = ["value"];
-  const _hoisted_13$5 = { class: "mgm-field" };
-  const _hoisted_14$5 = ["value"];
-  const _hoisted_15$4 = { class: "mgm-field" };
-  const _hoisted_16$4 = ["value"];
-  const _hoisted_17$4 = { class: "mgm-edit-actions" };
-  const _hoisted_18$4 = ["disabled"];
-  const _hoisted_19$4 = {
+  const _hoisted_5$5 = { class: "mgm-edit-title" };
+  const _hoisted_6$5 = { class: "mgm-field" };
+  const _hoisted_7$5 = { class: "mgm-field" };
+  const _hoisted_8$5 = ["value"];
+  const _hoisted_9$5 = { class: "mgm-field" };
+  const _hoisted_10$5 = { class: "mgm-field" };
+  const _hoisted_11$5 = { class: "mgm-field" };
+  const _hoisted_12$5 = ["value"];
+  const _hoisted_13$4 = { class: "mgm-field" };
+  const _hoisted_14$4 = ["value"];
+  const _hoisted_15$3 = { class: "mgm-field" };
+  const _hoisted_16$3 = ["value"];
+  const _hoisted_17$3 = { class: "mgm-edit-actions" };
+  const _hoisted_18$3 = ["disabled"];
+  const _hoisted_19$3 = {
     key: 1,
     class: "mgm-cards"
   };
-  const _hoisted_20$4 = { class: "mgm-card-head" };
-  const _hoisted_21$3 = ["title"];
-  const _hoisted_22$3 = {
+  const _hoisted_20$3 = { class: "mgm-card-head" };
+  const _hoisted_21$2 = ["title"];
+  const _hoisted_22$2 = {
     key: 0,
     class: "pm-active-badge"
   };
-  const _hoisted_23$2 = { class: "mgm-ops" };
-  const _hoisted_24$2 = ["disabled", "onClick"];
-  const _hoisted_25$2 = ["onClick"];
-  const _hoisted_26$2 = ["onClick"];
-  const _hoisted_27$2 = { class: "pm-preview" };
-  const _hoisted_28$2 = { class: "pm-snap-row" };
-  const _hoisted_29$1 = { class: "pm-snap-row" };
-  const _hoisted_30$1 = { class: "pm-snap-row" };
-  const _hoisted_31$1 = { class: "pm-snap-row" };
-  const _hoisted_32$1 = {
+  const _hoisted_23$1 = { class: "mgm-ops" };
+  const _hoisted_24$1 = ["disabled", "onClick"];
+  const _hoisted_25$1 = ["onClick"];
+  const _hoisted_26$1 = ["onClick"];
+  const _hoisted_27$1 = { class: "pm-preview" };
+  const _hoisted_28$1 = { class: "pm-snap-row" };
+  const _hoisted_29 = { class: "pm-snap-row" };
+  const _hoisted_30 = { class: "pm-snap-row" };
+  const _hoisted_31 = { class: "pm-snap-row" };
+  const _hoisted_32 = {
     key: 2,
     class: "mgm-empty"
   };
-  const _hoisted_33$1 = {
+  const _hoisted_33 = {
     key: 3,
     class: "mgm-error"
   };
-  const _sfc_main$8 = {
+  const _sfc_main$7 = {
     __name: "PresetManager",
     emits: ["saved"],
     setup(__props, { expose: __expose, emit: __emit }) {
@@ -3188,12 +3188,12 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       vue.onMounted(load);
       __expose({ load });
       return (_ctx, _cache) => {
-        return vue.openBlock(), vue.createElementBlock("div", _hoisted_1$7, [
+        return vue.openBlock(), vue.createElementBlock("div", _hoisted_1$6, [
           vue.createCommentVNode(" 工具栏 "),
-          vue.createElementVNode("div", _hoisted_2$7, [
+          vue.createElementVNode("div", _hoisted_2$6, [
             vue.createElementVNode(
               "span",
-              _hoisted_3$7,
+              _hoisted_3$6,
               vue.toDisplayString(names.value.length) + " 个配置",
               1
               /* TEXT */
@@ -3204,15 +3204,15 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
             }, "＋ 添加新配置")
           ]),
           vue.createCommentVNode(" 添加 / 编辑表单（点击添加/编辑才弹出） "),
-          showForm.value ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_4$6, [
+          showForm.value ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_4$5, [
             vue.createElementVNode(
               "div",
-              _hoisted_5$6,
+              _hoisted_5$5,
               vue.toDisplayString(editingName.value ? "编辑配置：" + editingName.value : "添加新配置"),
               1
               /* TEXT */
             ),
-            vue.createElementVNode("div", _hoisted_6$6, [
+            vue.createElementVNode("div", _hoisted_6$5, [
               _cache[7] || (_cache[7] = vue.createElementVNode(
                 "span",
                 { class: "mgm-field-label" },
@@ -3234,7 +3234,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                 [vue.vModelText, form.value.name]
               ])
             ]),
-            vue.createElementVNode("div", _hoisted_7$6, [
+            vue.createElementVNode("div", _hoisted_7$5, [
               _cache[8] || (_cache[8] = vue.createElementVNode(
                 "span",
                 { class: "mgm-field-label" },
@@ -3257,7 +3257,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                       return vue.openBlock(), vue.createElementBlock("option", {
                         key: p,
                         value: p
-                      }, vue.toDisplayString(p), 9, _hoisted_8$6);
+                      }, vue.toDisplayString(p), 9, _hoisted_8$5);
                     }),
                     128
                     /* KEYED_FRAGMENT */
@@ -3269,7 +3269,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                 [vue.vModelSelect, form.value.provider]
               ])
             ]),
-            vue.createElementVNode("div", _hoisted_9$6, [
+            vue.createElementVNode("div", _hoisted_9$5, [
               _cache[9] || (_cache[9] = vue.createElementVNode(
                 "span",
                 { class: "mgm-field-label" },
@@ -3290,7 +3290,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                 [vue.vModelText, form.value.baseURL]
               ])
             ]),
-            vue.createElementVNode("div", _hoisted_10$6, [
+            vue.createElementVNode("div", _hoisted_10$5, [
               _cache[10] || (_cache[10] = vue.createElementVNode(
                 "span",
                 { class: "mgm-field-label" },
@@ -3312,7 +3312,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                 [vue.vModelText, form.value.apiKey]
               ])
             ]),
-            vue.createElementVNode("div", _hoisted_11$6, [
+            vue.createElementVNode("div", _hoisted_11$5, [
               _cache[11] || (_cache[11] = vue.createElementVNode(
                 "span",
                 { class: "mgm-field-label" },
@@ -3334,7 +3334,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                       return vue.openBlock(), vue.createElementBlock("option", {
                         key: m2,
                         value: m2
-                      }, vue.toDisplayString(m2), 9, _hoisted_12$6);
+                      }, vue.toDisplayString(m2), 9, _hoisted_12$5);
                     }),
                     128
                     /* KEYED_FRAGMENT */
@@ -3346,7 +3346,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                 [vue.vModelSelect, form.value.executeModel]
               ])
             ]),
-            vue.createElementVNode("div", _hoisted_13$5, [
+            vue.createElementVNode("div", _hoisted_13$4, [
               _cache[12] || (_cache[12] = vue.createElementVNode(
                 "span",
                 { class: "mgm-field-label" },
@@ -3368,7 +3368,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                       return vue.openBlock(), vue.createElementBlock("option", {
                         key: m2,
                         value: m2
-                      }, vue.toDisplayString(m2), 9, _hoisted_14$5);
+                      }, vue.toDisplayString(m2), 9, _hoisted_14$4);
                     }),
                     128
                     /* KEYED_FRAGMENT */
@@ -3380,7 +3380,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                 [vue.vModelSelect, form.value.planModel]
               ])
             ]),
-            vue.createElementVNode("div", _hoisted_15$4, [
+            vue.createElementVNode("div", _hoisted_15$3, [
               _cache[13] || (_cache[13] = vue.createElementVNode(
                 "span",
                 { class: "mgm-field-label" },
@@ -3402,7 +3402,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                       return vue.openBlock(), vue.createElementBlock("option", {
                         key: m2,
                         value: m2
-                      }, vue.toDisplayString(m2), 9, _hoisted_16$4);
+                      }, vue.toDisplayString(m2), 9, _hoisted_16$3);
                     }),
                     128
                     /* KEYED_FRAGMENT */
@@ -3414,12 +3414,12 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                 [vue.vModelSelect, form.value.reviewModel]
               ])
             ]),
-            vue.createElementVNode("div", _hoisted_17$4, [
+            vue.createElementVNode("div", _hoisted_17$3, [
               vue.createElementVNode("button", {
                 class: "mgm-btn mgm-primary",
                 disabled: saving.value,
                 onClick: confirmSave
-              }, vue.toDisplayString(saving.value ? "保存中…" : "保存配置"), 9, _hoisted_18$4),
+              }, vue.toDisplayString(saving.value ? "保存中…" : "保存配置"), 9, _hoisted_18$3),
               vue.createElementVNode("button", {
                 class: "mgm-btn",
                 onClick: closeForm
@@ -3427,7 +3427,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
             ])
           ])) : vue.createCommentVNode("v-if", true),
           vue.createCommentVNode(" 配置卡片列表（主视图） "),
-          names.value.length ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_19$4, [
+          names.value.length ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_19$3, [
             (vue.openBlock(true), vue.createElementBlock(
               vue.Fragment,
               null,
@@ -3439,7 +3439,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                     class: vue.normalizeClass(["mgm-card", { "pm-active": n === activeName.value }])
                   },
                   [
-                    vue.createElementVNode("div", _hoisted_20$4, [
+                    vue.createElementVNode("div", _hoisted_20$3, [
                       vue.createElementVNode("span", {
                         class: "mgm-name",
                         title: n
@@ -3449,26 +3449,26 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                           1
                           /* TEXT */
                         ),
-                        n === activeName.value ? (vue.openBlock(), vue.createElementBlock("span", _hoisted_22$3, "使用中")) : vue.createCommentVNode("v-if", true)
-                      ], 8, _hoisted_21$3),
-                      vue.createElementVNode("div", _hoisted_23$2, [
+                        n === activeName.value ? (vue.openBlock(), vue.createElementBlock("span", _hoisted_22$2, "使用中")) : vue.createCommentVNode("v-if", true)
+                      ], 8, _hoisted_21$2),
+                      vue.createElementVNode("div", _hoisted_23$1, [
                         vue.createElementVNode("button", {
                           class: "mgm-btn mgm-small",
                           disabled: applying.value === n,
                           onClick: ($event) => applyPreset(n)
-                        }, vue.toDisplayString(applying.value === n ? "应用中…" : "应用"), 9, _hoisted_24$2),
+                        }, vue.toDisplayString(applying.value === n ? "应用中…" : "应用"), 9, _hoisted_24$1),
                         vue.createElementVNode("button", {
                           class: "mgm-btn mgm-small",
                           onClick: ($event) => openEdit(n)
-                        }, "编辑", 8, _hoisted_25$2),
+                        }, "编辑", 8, _hoisted_25$1),
                         vue.createElementVNode("button", {
                           class: "mgm-btn mgm-small mgm-danger",
                           onClick: ($event) => removePreset(n)
-                        }, "删除", 8, _hoisted_26$2)
+                        }, "删除", 8, _hoisted_26$1)
                       ])
                     ]),
-                    vue.createElementVNode("div", _hoisted_27$2, [
-                      vue.createElementVNode("div", _hoisted_28$2, [
+                    vue.createElementVNode("div", _hoisted_27$1, [
+                      vue.createElementVNode("div", _hoisted_28$1, [
                         _cache[14] || (_cache[14] = vue.createElementVNode(
                           "span",
                           null,
@@ -3484,7 +3484,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                           /* TEXT */
                         )
                       ]),
-                      vue.createElementVNode("div", _hoisted_29$1, [
+                      vue.createElementVNode("div", _hoisted_29, [
                         _cache[15] || (_cache[15] = vue.createElementVNode(
                           "span",
                           null,
@@ -3500,7 +3500,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                           /* TEXT */
                         )
                       ]),
-                      vue.createElementVNode("div", _hoisted_30$1, [
+                      vue.createElementVNode("div", _hoisted_30, [
                         _cache[16] || (_cache[16] = vue.createElementVNode(
                           "span",
                           null,
@@ -3516,7 +3516,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                           /* TEXT */
                         )
                       ]),
-                      vue.createElementVNode("div", _hoisted_31$1, [
+                      vue.createElementVNode("div", _hoisted_31, [
                         _cache[17] || (_cache[17] = vue.createElementVNode(
                           "span",
                           null,
@@ -3541,10 +3541,10 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
               128
               /* KEYED_FRAGMENT */
             ))
-          ])) : !showForm.value ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_32$1, "还没有 AI 配置。点「＋ 添加新配置」去设置模型和 Key，保存后即可应用。")) : vue.createCommentVNode("v-if", true),
+          ])) : !showForm.value ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_32, "还没有 AI 配置。点「＋ 添加新配置」去设置模型和 Key，保存后即可应用。")) : vue.createCommentVNode("v-if", true),
           error.value ? (vue.openBlock(), vue.createElementBlock(
             "div",
-            _hoisted_33$1,
+            _hoisted_33,
             vue.toDisplayString(error.value),
             1
             /* TEXT */
@@ -3553,48 +3553,48 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       };
     }
   };
-  const PresetManager = /* @__PURE__ */ _export_sfc(_sfc_main$8, [["__scopeId", "data-v-f3b42a54"]]);
-  const _hoisted_1$6 = { class: "modal-content" };
-  const _hoisted_2$6 = { class: "modal-body" };
-  const _hoisted_3$6 = {
+  const PresetManager = /* @__PURE__ */ _export_sfc(_sfc_main$7, [["__scopeId", "data-v-f3b42a54"]]);
+  const _hoisted_1$5 = { class: "modal-content" };
+  const _hoisted_2$5 = { class: "modal-body" };
+  const _hoisted_3$5 = {
     key: 0,
     class: "settings-tabs"
   };
-  const _hoisted_4$5 = ["onClick"];
-  const _hoisted_5$5 = { class: "settings-content" };
-  const _hoisted_6$5 = { key: 0 };
-  const _hoisted_7$5 = {
+  const _hoisted_4$4 = ["onClick"];
+  const _hoisted_5$4 = { class: "settings-content" };
+  const _hoisted_6$4 = { key: 0 };
+  const _hoisted_7$4 = {
     key: 0,
     class: "group-title"
   };
-  const _hoisted_8$5 = ["title"];
-  const _hoisted_9$5 = ["title"];
-  const _hoisted_10$5 = ["onUpdate:modelValue"];
-  const _hoisted_11$5 = ["title"];
-  const _hoisted_12$5 = { class: "field-control" };
-  const _hoisted_13$4 = ["type", "onUpdate:modelValue", "placeholder"];
-  const _hoisted_14$4 = ["onUpdate:modelValue", "min", "max", "step"];
-  const _hoisted_15$3 = ["onUpdate:modelValue", "onChange"];
-  const _hoisted_16$3 = ["value"];
-  const _hoisted_17$3 = ["onUpdate:modelValue", "placeholder"];
-  const _hoisted_18$3 = { class: "slider-row" };
-  const _hoisted_19$3 = ["onUpdate:modelValue", "min", "max", "step"];
-  const _hoisted_20$3 = { class: "slider-val" };
-  const _hoisted_21$2 = { class: "color-row" };
-  const _hoisted_22$2 = ["onUpdate:modelValue"];
-  const _hoisted_23$1 = { class: "color-code" };
-  const _hoisted_24$1 = ["value", "onInput", "placeholder"];
-  const _hoisted_25$1 = ["placeholder"];
-  const _hoisted_26$1 = ["onUpdate:modelValue"];
-  const _hoisted_27$1 = {
+  const _hoisted_8$4 = ["title"];
+  const _hoisted_9$4 = ["title"];
+  const _hoisted_10$4 = ["onUpdate:modelValue"];
+  const _hoisted_11$4 = ["title"];
+  const _hoisted_12$4 = { class: "field-control" };
+  const _hoisted_13$3 = ["type", "onUpdate:modelValue", "placeholder"];
+  const _hoisted_14$3 = ["onUpdate:modelValue", "min", "max", "step"];
+  const _hoisted_15$2 = ["onUpdate:modelValue", "onChange"];
+  const _hoisted_16$2 = ["value"];
+  const _hoisted_17$2 = ["onUpdate:modelValue", "placeholder"];
+  const _hoisted_18$2 = { class: "slider-row" };
+  const _hoisted_19$2 = ["onUpdate:modelValue", "min", "max", "step"];
+  const _hoisted_20$2 = { class: "slider-val" };
+  const _hoisted_21$1 = { class: "color-row" };
+  const _hoisted_22$1 = ["onUpdate:modelValue"];
+  const _hoisted_23 = { class: "color-code" };
+  const _hoisted_24 = ["value", "onInput", "placeholder"];
+  const _hoisted_25 = ["placeholder"];
+  const _hoisted_26 = ["onUpdate:modelValue"];
+  const _hoisted_27 = {
     key: 0,
     class: "setting-hint"
   };
-  const _hoisted_28$1 = {
+  const _hoisted_28 = {
     key: 0,
     class: "settings-empty"
   };
-  const _sfc_main$7 = {
+  const _sfc_main$6 = {
     __name: "SettingsModal",
     emits: ["close"],
     setup(__props, { emit: __emit }) {
@@ -3797,7 +3797,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
           class: "modal-overlay",
           onClick: _cache[2] || (_cache[2] = vue.withModifiers(($event) => _ctx.$emit("close"), ["self"]))
         }, [
-          vue.createElementVNode("div", _hoisted_1$6, [
+          vue.createElementVNode("div", _hoisted_1$5, [
             vue.createElementVNode("h2", null, [
               vue.createVNode(SvgIcon, {
                 name: "settings",
@@ -3813,9 +3813,9 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                 onClick: _cache[0] || (_cache[0] = ($event) => _ctx.$emit("close"))
               }, "×")
             ]),
-            vue.createElementVNode("div", _hoisted_2$6, [
+            vue.createElementVNode("div", _hoisted_2$5, [
               vue.createCommentVNode(" ═══ 纯 schema 驱动：所有配置 tab 由插件 ctx.registerSettings 注册 ═══ "),
-              tabs.value.length ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_3$6, [
+              tabs.value.length ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_3$5, [
                 (vue.openBlock(true), vue.createElementBlock(
                   vue.Fragment,
                   null,
@@ -3824,13 +3824,13 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                       key: t.key,
                       class: vue.normalizeClass(["settings-tab", { active: activeTab.value === t.key }]),
                       onClick: ($event) => activeTab.value = t.key
-                    }, vue.toDisplayString(t.title), 11, _hoisted_4$5);
+                    }, vue.toDisplayString(t.title), 11, _hoisted_4$4);
                   }),
                   128
                   /* KEYED_FRAGMENT */
                 ))
               ])) : vue.createCommentVNode("v-if", true),
-              vue.createElementVNode("div", _hoisted_5$5, [
+              vue.createElementVNode("div", _hoisted_5$4, [
                 (vue.openBlock(true), vue.createElementBlock(
                   vue.Fragment,
                   null,
@@ -3841,7 +3841,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                         key: tab.key
                       },
                       [
-                        activeTab.value === tab.key ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_6$5, [
+                        activeTab.value === tab.key ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_6$4, [
                           (vue.openBlock(true), vue.createElementBlock(
                             vue.Fragment,
                             null,
@@ -3852,7 +3852,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                               }, [
                                 grp.title ? (vue.openBlock(), vue.createElementBlock(
                                   "div",
-                                  _hoisted_7$5,
+                                  _hoisted_7$4,
                                   vue.toDisplayString(grp.title),
                                   1
                                   /* TEXT */
@@ -3876,7 +3876,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                                             vue.createElementVNode("label", {
                                               class: "field-label",
                                               title: f.hint
-                                            }, vue.toDisplayString(f.label), 9, _hoisted_8$5),
+                                            }, vue.toDisplayString(f.label), 9, _hoisted_8$4),
                                             vue.createElementVNode("label", {
                                               class: "pp-switch",
                                               title: f.hint
@@ -3884,7 +3884,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                                               vue.withDirectives(vue.createElementVNode("input", {
                                                 type: "checkbox",
                                                 "onUpdate:modelValue": ($event) => form[tab.key][f.name] = $event
-                                              }, null, 8, _hoisted_10$5), [
+                                              }, null, 8, _hoisted_10$4), [
                                                 [vue.vModelCheckbox, form[tab.key][f.name]]
                                               ]),
                                               _cache[4] || (_cache[4] = vue.createElementVNode(
@@ -3894,7 +3894,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                                                 -1
                                                 /* CACHED */
                                               ))
-                                            ], 8, _hoisted_9$5)
+                                            ], 8, _hoisted_9$4)
                                           ],
                                           64
                                           /* STABLE_FRAGMENT */
@@ -3906,15 +3906,15 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                                             vue.createElementVNode("label", {
                                               class: "field-label",
                                               title: f.hint
-                                            }, vue.toDisplayString(f.label), 9, _hoisted_11$5),
-                                            vue.createElementVNode("div", _hoisted_12$5, [
+                                            }, vue.toDisplayString(f.label), 9, _hoisted_11$4),
+                                            vue.createElementVNode("div", _hoisted_12$4, [
                                               vue.createCommentVNode(" text / password "),
                                               f.type === "text" || f.type === "password" ? vue.withDirectives((vue.openBlock(), vue.createElementBlock("input", {
                                                 key: 0,
                                                 type: f.type === "password" ? "password" : "text",
                                                 "onUpdate:modelValue": ($event) => form[tab.key][f.name] = $event,
                                                 placeholder: f.placeholder
-                                              }, null, 8, _hoisted_13$4)), [
+                                              }, null, 8, _hoisted_13$3)), [
                                                 [vue.vModelDynamic, form[tab.key][f.name]]
                                               ]) : f.type === "number" ? (vue.openBlock(), vue.createElementBlock(
                                                 vue.Fragment,
@@ -3927,7 +3927,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                                                     min: f.min,
                                                     max: f.max,
                                                     step: f.step
-                                                  }, null, 8, _hoisted_14$4), [
+                                                  }, null, 8, _hoisted_14$3), [
                                                     [
                                                       vue.vModelText,
                                                       form[tab.key][f.name],
@@ -3955,12 +3955,12 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                                                         return vue.openBlock(), vue.createElementBlock("option", {
                                                           key: o,
                                                           value: o
-                                                        }, vue.toDisplayString(o), 9, _hoisted_16$3);
+                                                        }, vue.toDisplayString(o), 9, _hoisted_16$2);
                                                       }),
                                                       128
                                                       /* KEYED_FRAGMENT */
                                                     ))
-                                                  ], 40, _hoisted_15$3), [
+                                                  ], 40, _hoisted_15$2), [
                                                     [vue.vModelSelect, form[tab.key][f.name]]
                                                   ])
                                                 ],
@@ -3976,7 +3976,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                                                     class: "field-textarea",
                                                     rows: "4",
                                                     placeholder: f.placeholder
-                                                  }, null, 8, _hoisted_17$3), [
+                                                  }, null, 8, _hoisted_17$2), [
                                                     [vue.vModelText, form[tab.key][f.name]]
                                                   ])
                                                 ],
@@ -3987,14 +3987,14 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                                                 { key: 4 },
                                                 [
                                                   vue.createCommentVNode(" slider "),
-                                                  vue.createElementVNode("div", _hoisted_18$3, [
+                                                  vue.createElementVNode("div", _hoisted_18$2, [
                                                     vue.withDirectives(vue.createElementVNode("input", {
                                                       type: "range",
                                                       "onUpdate:modelValue": ($event) => form[tab.key][f.name] = $event,
                                                       min: f.min != null ? f.min : 0,
                                                       max: f.max != null ? f.max : 100,
                                                       step: f.step || 1
-                                                    }, null, 8, _hoisted_19$3), [
+                                                    }, null, 8, _hoisted_19$2), [
                                                       [
                                                         vue.vModelText,
                                                         form[tab.key][f.name],
@@ -4004,7 +4004,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                                                     ]),
                                                     vue.createElementVNode(
                                                       "span",
-                                                      _hoisted_20$3,
+                                                      _hoisted_20$2,
                                                       vue.toDisplayString(form[tab.key][f.name]),
                                                       1
                                                       /* TEXT */
@@ -4018,16 +4018,16 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                                                 { key: 5 },
                                                 [
                                                   vue.createCommentVNode(" color "),
-                                                  vue.createElementVNode("div", _hoisted_21$2, [
+                                                  vue.createElementVNode("div", _hoisted_21$1, [
                                                     vue.withDirectives(vue.createElementVNode("input", {
                                                       type: "color",
                                                       "onUpdate:modelValue": ($event) => form[tab.key][f.name] = $event
-                                                    }, null, 8, _hoisted_22$2), [
+                                                    }, null, 8, _hoisted_22$1), [
                                                       [vue.vModelText, form[tab.key][f.name]]
                                                     ]),
                                                     vue.createElementVNode(
                                                       "code",
-                                                      _hoisted_23$1,
+                                                      _hoisted_23,
                                                       vue.toDisplayString(form[tab.key][f.name]),
                                                       1
                                                       /* TEXT */
@@ -4047,7 +4047,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                                                     value: tagsText(tab.key, f),
                                                     onInput: ($event) => onTagsInput(tab.key, f, $event),
                                                     placeholder: f.placeholder || "逗号分隔"
-                                                  }, null, 40, _hoisted_24$1)
+                                                  }, null, 40, _hoisted_24)
                                                 ],
                                                 2112
                                                 /* STABLE_FRAGMENT, DEV_ROOT_FRAGMENT */
@@ -4061,7 +4061,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                                                     class: "field-textarea",
                                                     rows: "4",
                                                     placeholder: f.placeholder
-                                                  }, null, 8, _hoisted_25$1), [
+                                                  }, null, 8, _hoisted_25), [
                                                     [vue.vModelText, projectInst.value]
                                                   ])
                                                 ],
@@ -4093,7 +4093,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                                                   vue.withDirectives(vue.createElementVNode("input", {
                                                     type: "text",
                                                     "onUpdate:modelValue": ($event) => form[tab.key][f.name] = $event
-                                                  }, null, 8, _hoisted_26$1), [
+                                                  }, null, 8, _hoisted_26), [
                                                     [vue.vModelText, form[tab.key][f.name]]
                                                   ])
                                                 ],
@@ -4103,7 +4103,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                                             ]),
                                             f.hint ? (vue.openBlock(), vue.createElementBlock(
                                               "span",
-                                              _hoisted_27$1,
+                                              _hoisted_27,
                                               vue.toDisplayString(f.hint),
                                               1
                                               /* TEXT */
@@ -4134,7 +4134,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                   128
                   /* KEYED_FRAGMENT */
                 )),
-                !tabs.value.length ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_28$1, "暂无配置项（等待插件注册…）")) : vue.createCommentVNode("v-if", true)
+                !tabs.value.length ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_28, "暂无配置项（等待插件注册…）")) : vue.createCommentVNode("v-if", true)
               ])
             ]),
             vue.createElementVNode("div", { class: "modal-footer" }, [
@@ -4152,26 +4152,26 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       };
     }
   };
-  const SettingsModal = /* @__PURE__ */ _export_sfc(_sfc_main$7, [["__scopeId", "data-v-fd93ed4c"]]);
-  const _hoisted_1$5 = { class: "modal-content sys-modal" };
-  const _hoisted_2$5 = { class: "modal-header" };
-  const _hoisted_3$5 = { class: "modal-body" };
-  const _hoisted_4$4 = {
+  const SettingsModal = /* @__PURE__ */ _export_sfc(_sfc_main$6, [["__scopeId", "data-v-fd93ed4c"]]);
+  const _hoisted_1$4 = { class: "modal-content sys-modal" };
+  const _hoisted_2$4 = { class: "modal-header" };
+  const _hoisted_3$4 = { class: "modal-body" };
+  const _hoisted_4$3 = {
     key: 0,
     class: "loading"
   };
-  const _hoisted_5$4 = {
+  const _hoisted_5$3 = {
     key: 1,
     class: "sys-info"
   };
-  const _hoisted_6$4 = { class: "info-row" };
-  const _hoisted_7$4 = { class: "info-row" };
-  const _hoisted_8$4 = { class: "info-row" };
-  const _hoisted_9$4 = { class: "info-row" };
-  const _hoisted_10$4 = { class: "info-row" };
-  const _hoisted_11$4 = { class: "info-row" };
-  const _hoisted_12$4 = { class: "modal-footer" };
-  const _sfc_main$6 = {
+  const _hoisted_6$3 = { class: "info-row" };
+  const _hoisted_7$3 = { class: "info-row" };
+  const _hoisted_8$3 = { class: "info-row" };
+  const _hoisted_9$3 = { class: "info-row" };
+  const _hoisted_10$3 = { class: "info-row" };
+  const _hoisted_11$3 = { class: "info-row" };
+  const _hoisted_12$3 = { class: "modal-footer" };
+  const _sfc_main$5 = {
     __name: "SystemModal",
     emits: ["close"],
     setup(__props, { emit: __emit }) {
@@ -4189,8 +4189,8 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
           class: "modal-overlay",
           onClick: _cache[2] || (_cache[2] = vue.withModifiers(($event) => _ctx.$emit("close"), ["self"]))
         }, [
-          vue.createElementVNode("div", _hoisted_1$5, [
-            vue.createElementVNode("div", _hoisted_2$5, [
+          vue.createElementVNode("div", _hoisted_1$4, [
+            vue.createElementVNode("div", _hoisted_2$4, [
               _cache[3] || (_cache[3] = vue.createElementVNode(
                 "h2",
                 null,
@@ -4203,9 +4203,9 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                 onClick: _cache[0] || (_cache[0] = ($event) => _ctx.$emit("close"))
               }, "×")
             ]),
-            vue.createElementVNode("div", _hoisted_3$5, [
-              loading.value ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_4$4, "加载中...")) : (vue.openBlock(), vue.createElementBlock("div", _hoisted_5$4, [
-                vue.createElementVNode("div", _hoisted_6$4, [
+            vue.createElementVNode("div", _hoisted_3$4, [
+              loading.value ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_4$3, "加载中...")) : (vue.openBlock(), vue.createElementBlock("div", _hoisted_5$3, [
+                vue.createElementVNode("div", _hoisted_6$3, [
                   _cache[4] || (_cache[4] = vue.createElementVNode(
                     "label",
                     null,
@@ -4221,7 +4221,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                     /* TEXT */
                   )
                 ]),
-                vue.createElementVNode("div", _hoisted_7$4, [
+                vue.createElementVNode("div", _hoisted_7$3, [
                   _cache[5] || (_cache[5] = vue.createElementVNode(
                     "label",
                     null,
@@ -4237,7 +4237,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                     /* TEXT */
                   )
                 ]),
-                vue.createElementVNode("div", _hoisted_8$4, [
+                vue.createElementVNode("div", _hoisted_8$3, [
                   _cache[6] || (_cache[6] = vue.createElementVNode(
                     "label",
                     null,
@@ -4253,7 +4253,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                     /* TEXT */
                   )
                 ]),
-                vue.createElementVNode("div", _hoisted_9$4, [
+                vue.createElementVNode("div", _hoisted_9$3, [
                   _cache[7] || (_cache[7] = vue.createElementVNode(
                     "label",
                     null,
@@ -4269,7 +4269,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                     /* TEXT */
                   )
                 ]),
-                vue.createElementVNode("div", _hoisted_10$4, [
+                vue.createElementVNode("div", _hoisted_10$3, [
                   _cache[8] || (_cache[8] = vue.createElementVNode(
                     "label",
                     null,
@@ -4285,7 +4285,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                     /* TEXT */
                   )
                 ]),
-                vue.createElementVNode("div", _hoisted_11$4, [
+                vue.createElementVNode("div", _hoisted_11$3, [
                   _cache[9] || (_cache[9] = vue.createElementVNode(
                     "label",
                     null,
@@ -4303,7 +4303,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
                 ])
               ]))
             ]),
-            vue.createElementVNode("div", _hoisted_12$4, [
+            vue.createElementVNode("div", _hoisted_12$3, [
               vue.createElementVNode("button", {
                 class: "btn-secondary",
                 onClick: _cache[1] || (_cache[1] = ($event) => _ctx.$emit("close"))
@@ -4314,11 +4314,11 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       };
     }
   };
-  const SystemModal = /* @__PURE__ */ _export_sfc(_sfc_main$6, [["__scopeId", "data-v-c27b6ec9"]]);
-  const _hoisted_1$4 = { class: "modal-content source-modal" };
-  const _hoisted_2$4 = { class: "modal-header" };
-  const _hoisted_3$4 = { class: "modal-footer" };
-  const _sfc_main$5 = {
+  const SystemModal = /* @__PURE__ */ _export_sfc(_sfc_main$5, [["__scopeId", "data-v-c27b6ec9"]]);
+  const _hoisted_1$3 = { class: "modal-content source-modal" };
+  const _hoisted_2$3 = { class: "modal-header" };
+  const _hoisted_3$3 = { class: "modal-footer" };
+  const _sfc_main$4 = {
     __name: "SourceModal",
     emits: ["close"],
     setup(__props) {
@@ -4327,8 +4327,8 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
           class: "modal-overlay",
           onClick: _cache[2] || (_cache[2] = vue.withModifiers(($event) => _ctx.$emit("close"), ["self"]))
         }, [
-          vue.createElementVNode("div", _hoisted_1$4, [
-            vue.createElementVNode("div", _hoisted_2$4, [
+          vue.createElementVNode("div", _hoisted_1$3, [
+            vue.createElementVNode("div", _hoisted_2$3, [
               _cache[3] || (_cache[3] = vue.createElementVNode(
                 "h2",
                 null,
@@ -4363,7 +4363,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
               -1
               /* CACHED */
             )),
-            vue.createElementVNode("div", _hoisted_3$4, [
+            vue.createElementVNode("div", _hoisted_3$3, [
               vue.createElementVNode("button", {
                 class: "btn-secondary",
                 onClick: _cache[1] || (_cache[1] = ($event) => _ctx.$emit("close"))
@@ -4374,1242 +4374,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       };
     }
   };
-  const SourceModal = /* @__PURE__ */ _export_sfc(_sfc_main$5, [["__scopeId", "data-v-2e060397"]]);
-  const _hoisted_1$3 = { class: "modal-overlay" };
-  const _hoisted_2$3 = { class: "modal-content market-modal" };
-  const _hoisted_3$3 = { class: "modal-header" };
-  const _hoisted_4$3 = { class: "market-tabs" };
-  const _hoisted_5$3 = ["onClick"];
-  const _hoisted_6$3 = { class: "modal-body" };
-  const _hoisted_7$3 = {
-    key: 0,
-    class: "market-search"
-  };
-  const _hoisted_8$3 = { class: "search-icon" };
-  const _hoisted_9$3 = ["disabled", "title"];
-  const _hoisted_10$3 = {
-    key: 1,
-    class: "installed-toolbar"
-  };
-  const _hoisted_11$3 = {
-    key: 2,
-    class: "mcp-form"
-  };
-  const _hoisted_12$3 = { class: "mcp-form-row" };
-  const _hoisted_13$3 = { class: "mcp-form-row" };
-  const _hoisted_14$3 = { class: "mcp-form-row" };
-  const _hoisted_15$2 = { class: "mcp-form-row" };
-  const _hoisted_16$2 = { class: "mcp-form-actions" };
-  const _hoisted_17$2 = ["disabled"];
-  const _hoisted_18$2 = {
-    key: 0,
-    class: "mcp-form-error"
-  };
-  const _hoisted_19$2 = {
-    key: 3,
-    class: "mcp-form"
-  };
-  const _hoisted_20$2 = { class: "mcp-form-row" };
-  const _hoisted_21$1 = { class: "mcp-form-row" };
-  const _hoisted_22$1 = { class: "mcp-form-row" };
-  const _hoisted_23 = { class: "mcp-form-row" };
-  const _hoisted_24 = { class: "mcp-form-actions" };
-  const _hoisted_25 = ["disabled"];
-  const _hoisted_26 = {
-    key: 4,
-    class: "skill-viewer"
-  };
-  const _hoisted_27 = { class: "skill-viewer-header" };
-  const _hoisted_28 = { class: "skill-viewer-content" };
-  const _hoisted_29 = {
-    key: 5,
-    class: "market-loading"
-  };
-  const _hoisted_30 = {
-    key: 0,
-    class: "installed-group"
-  };
-  const _hoisted_31 = { class: "ii-icon icon-mcp" };
-  const _hoisted_32 = ["title"];
-  const _hoisted_33 = { class: "ii-body" };
-  const _hoisted_34 = { class: "ii-name" };
-  const _hoisted_35 = { class: "ii-desc" };
-  const _hoisted_36 = { class: "ii-badge" };
-  const _hoisted_37 = { class: "ii-actions" };
-  const _hoisted_38 = ["onClick", "title"];
-  const _hoisted_39 = ["onClick"];
-  const _hoisted_40 = ["onClick"];
-  const _hoisted_41 = {
-    key: 1,
-    class: "installed-group"
-  };
-  const _hoisted_42 = { class: "ii-icon icon-skill" };
-  const _hoisted_43 = { class: "ii-body" };
-  const _hoisted_44 = { class: "ii-name" };
-  const _hoisted_45 = { class: "ii-desc" };
-  const _hoisted_46 = { class: "ii-badge" };
-  const _hoisted_47 = { class: "ii-actions" };
-  const _hoisted_48 = ["value", "onChange", "title"];
-  const _hoisted_49 = ["onClick"];
-  const _hoisted_50 = ["onClick"];
-  const _hoisted_51 = {
-    key: 2,
-    class: "market-empty"
-  };
-  const _hoisted_52 = { class: "me-icon" };
-  const _hoisted_53 = { class: "mi-body" };
-  const _hoisted_54 = { class: "mi-name" };
-  const _hoisted_55 = { class: "mi-desc" };
-  const _hoisted_56 = { class: "mi-meta" };
-  const _hoisted_57 = {
-    key: 0,
-    class: "mi-tags"
-  };
-  const _hoisted_58 = {
-    key: 1,
-    class: "mi-installed"
-  };
-  const _hoisted_59 = {
-    key: 0,
-    class: "mi-install-area"
-  };
-  const _hoisted_60 = ["onClick", "disabled"];
-  const _hoisted_61 = ["onUpdate:modelValue"];
-  const _hoisted_62 = ["onClick", "disabled"];
-  const _hoisted_63 = ["onClick"];
-  const _hoisted_64 = {
-    key: 0,
-    class: "market-empty"
-  };
-  const _hoisted_65 = { class: "me-icon" };
-  const _hoisted_66 = { key: 0 };
-  const _hoisted_67 = { key: 1 };
-  const _hoisted_68 = { class: "modal-footer" };
-  const _hoisted_69 = { class: "market-count" };
-  const _hoisted_70 = {
-    key: 0,
-    class: "market-error"
-  };
-  const _sfc_main$4 = {
-    __name: "MarketplaceModal",
-    emits: ["close"],
-    setup(__props, { emit: __emit }) {
-      const tab = vue.ref("all");
-      const query = vue.ref("");
-      const items = vue.ref([]);
-      const installing = vue.ref("");
-      const loading = vue.ref(false);
-      const refreshing = vue.ref(false);
-      const error = vue.ref("");
-      const refreshTip = vue.ref("");
-      const listRef = vue.ref(null);
-      const sources = vue.ref([]);
-      const marketTabs = vue.computed(() => {
-        const labelMap = { skill: "技能", mcp: "MCP", plugin: "插件/工具集" };
-        return (sources.value || []).map((s) => ({ kind: s.kind, label: labelMap[s.kind] || s.name || s.kind }));
-      });
-      async function loadSources() {
-        try {
-          const srcs = await api.apiGet("/marketplace/sources");
-          sources.value = srcs || [];
-        } catch (e) {
-        }
-      }
-      const installedMCPs = vue.ref([]);
-      const installedSkills = vue.ref([]);
-      const showAddMCP = vue.ref(false);
-      const savingMCP = vue.ref(false);
-      const mcpError = vue.ref("");
-      const editingMCP = vue.ref(false);
-      const viewingSkill = vue.ref(null);
-      const mcpForm = vue.ref({ name: "", command: "", argsText: "", level: "user" });
-      const editMCPForm = vue.ref({ name: "", command: "", argsText: "", level: "user", origName: "" });
-      function resetMCPForm() {
-        mcpForm.value = { name: "", command: "", argsText: "", level: "user" };
-        mcpError.value = "";
-      }
-      async function loadInstalled() {
-        loading.value = true;
-        error.value = "";
-        try {
-          const [mcpList, skillList] = await Promise.all([
-            api.getMcpList("all"),
-            api.getSkillsList()
-          ]);
-          installedMCPs.value = mcpList || [];
-          installedSkills.value = skillList || [];
-        } catch (err) {
-          error.value = "加载失败: " + err.message;
-        } finally {
-          loading.value = false;
-        }
-      }
-      async function saveMCP() {
-        const f = mcpForm.value;
-        if (!f.name) return;
-        savingMCP.value = true;
-        mcpError.value = "";
-        try {
-          const args = f.argsText ? f.argsText.split(" ").filter(Boolean) : [];
-          await api.saveMcpItem({ action: "save", name: f.name, command: f.command || "npx", args, level: f.level });
-          showAddMCP.value = false;
-          resetMCPForm();
-          await loadInstalled();
-        } catch (err) {
-          mcpError.value = err.message;
-        } finally {
-          savingMCP.value = false;
-        }
-      }
-      function startEditMCP(item) {
-        editMCPForm.value = {
-          origName: item.name,
-          name: item.name,
-          command: item.command,
-          argsText: (item.args || []).join(" "),
-          level: item.level
-        };
-        editingMCP.value = true;
-      }
-      async function updateMCP() {
-        const f = editMCPForm.value;
-        if (!f.name) return;
-        try {
-          if (f.origName !== f.name) {
-            await api.saveMcpItem({ action: "delete", name: f.origName, level: f.level });
-          }
-          const args = f.argsText ? f.argsText.split(" ").filter(Boolean) : [];
-          await api.saveMcpItem({ action: "save", name: f.name, command: f.command || "npx", args, level: f.level });
-          editingMCP.value = false;
-          await loadInstalled();
-        } catch (err) {
-          error.value = "保存失败: " + err.message;
-        }
-      }
-      async function delMCP(item) {
-        if (!confirm(`确认删除 MCP 服务器「${item.name}」？`)) return;
-        try {
-          await api.saveMcpItem({ action: "delete", name: item.name, level: item.level });
-          await loadInstalled();
-        } catch (err) {
-          error.value = "删除失败: " + err.message;
-        }
-      }
-      async function viewSkill(item) {
-        try {
-          const data = await api.readSkill(item.name, item.level);
-          viewingSkill.value = data || { name: item.name, content: "（内容读取失败）" };
-        } catch (err) {
-          viewingSkill.value = { name: item.name, content: "读取失败: " + err.message };
-        }
-      }
-      async function delSkill(item) {
-        if (!confirm(`确认删除技能「${item.name}」？`)) return;
-        try {
-          await api.deleteSkill(item.name);
-          await loadInstalled();
-        } catch (err) {
-          error.value = "删除失败: " + err.message;
-        }
-      }
-      function statusTitle(item) {
-        if (item.status === "off") return "已关闭：技能完全禁用，不加载";
-        if (item.status === "max") return "始终激活：技能常驻 system prompt";
-        return "按需：根据关键词/文件匹配自动激活";
-      }
-      async function setSkillStatus(item, status) {
-        var _a2, _b;
-        try {
-          await api.saveSkillStatus(item.name, item.level || "project", status);
-          item.status = status;
-          (_a2 = window.$toast) == null ? void 0 : _a2.call(window, `技能「${item.name}」状态已设为 ${status === "off" ? "关闭" : status === "max" ? "始终激活" : "按需"}`, "success");
-        } catch (err) {
-          error.value = "设置失败: " + err.message;
-          (_b = window.$toast) == null ? void 0 : _b.call(window, "设置失败: " + err.message, "error");
-        }
-      }
-      let debounceTimer = null;
-      function debounceSearch() {
-        clearTimeout(debounceTimer);
-        loading.value = true;
-        debounceTimer = setTimeout(doSearch, 250);
-      }
-      async function doSearch() {
-        loading.value = true;
-        error.value = "";
-        try {
-          const kind = tab.value === "all" ? "" : tab.value;
-          const results = await api.apiGet("/marketplace/search", {
-            q: query.value,
-            kind
-          });
-          items.value = results || [];
-        } catch (err) {
-          error.value = "搜索失败: " + err.message;
-          items.value = [];
-        } finally {
-          loading.value = false;
-        }
-      }
-      async function refreshRemote() {
-        var _a2, _b;
-        refreshing.value = true;
-        error.value = "";
-        try {
-          const result = await api.apiPost("/marketplace/refresh", {});
-          refreshTip.value = result.status || "已刷新";
-          (_a2 = window.$toast) == null ? void 0 : _a2.call(window, result.message || "远程市场已刷新", "success");
-          await doSearch();
-        } catch (err) {
-          error.value = "刷新失败: " + err.message;
-          (_b = window.$toast) == null ? void 0 : _b.call(window, "刷新远程市场失败: " + err.message, "error");
-        } finally {
-          refreshing.value = false;
-          setTimeout(() => {
-            refreshTip.value = "";
-          }, 5e3);
-        }
-      }
-      async function installItem(item, scope) {
-        var _a2, _b;
-        installing.value = item.id;
-        error.value = "";
-        try {
-          const body = {
-            id: item.id,
-            kind: item.kind || "",
-            command: item.command || "",
-            args: item.args || [],
-            source: item.source || "",
-            description: item.description || ""
-          };
-          if (item.kind === "mcp") {
-            body.scope = scope || "user";
-          } else if (item.kind === "plugin") {
-            body.scope = "project";
-          }
-          const result = await api.apiPost("/marketplace/install", body);
-          item.installed = true;
-          (_a2 = window.$toast) == null ? void 0 : _a2.call(window, result.message || "安装成功", "success");
-        } catch (err) {
-          error.value = "安装失败: " + err.message;
-          (_b = window.$toast) == null ? void 0 : _b.call(window, "安装失败: " + err.message, "error");
-        } finally {
-          installing.value = "";
-        }
-      }
-      async function toggleMCP(item) {
-        var _a2, _b;
-        try {
-          const result = await api.saveMcpItem({ action: "toggle", name: item.name, level: item.level });
-          item.enabled = result.enabled;
-          (_a2 = window.$toast) == null ? void 0 : _a2.call(window, `MCP 服务器「${item.name}」${result.enabled ? "已启用" : "已禁用"}`, "success");
-        } catch (err) {
-          error.value = "切换失败: " + err.message;
-          (_b = window.$toast) == null ? void 0 : _b.call(window, "切换失败: " + err.message, "error");
-        }
-      }
-      async function uninstallItem(item) {
-        var _a2, _b;
-        error.value = "";
-        try {
-          const isNpm = (item.source || "").startsWith("npm:");
-          if (isNpm) {
-            await api.apiPost("/marketplace/uninstall", { id: item.id, kind: "plugin", source: item.source });
-          } else if (item.kind === "mcp") {
-            await api.saveMcpItem({ action: "delete", name: item.id, level: "user" });
-          } else if (item.kind === "skill") {
-            await api.deleteSkill(item.id);
-          } else if (item.kind === "plugin") {
-            await api.apiPost("/toolsets/remove", { name: item.id.replace(/^plugin-/, ""), scope: "project" });
-          }
-          item.installed = false;
-          (_a2 = window.$toast) == null ? void 0 : _a2.call(window, "已卸载: " + item.name, "success");
-        } catch (err) {
-          error.value = "卸载失败: " + err.message;
-          (_b = window.$toast) == null ? void 0 : _b.call(window, "卸载失败: " + err.message, "error");
-        }
-      }
-      vue.onMounted(() => {
-        loadSources();
-        doSearch();
-      });
-      return (_ctx, _cache) => {
-        return vue.openBlock(), vue.createElementBlock("div", _hoisted_1$3, [
-          vue.createElementVNode("div", _hoisted_2$3, [
-            vue.createElementVNode("div", _hoisted_3$3, [
-              vue.createElementVNode("h2", null, [
-                vue.createVNode(SvgIcon, {
-                  name: "package",
-                  size: 20
-                }),
-                _cache[19] || (_cache[19] = vue.createTextVNode(
-                  " 市场",
-                  -1
-                  /* CACHED */
-                ))
-              ]),
-              vue.createElementVNode("div", _hoisted_4$3, [
-                vue.createElementVNode(
-                  "button",
-                  {
-                    class: vue.normalizeClass({ active: tab.value === "all" }),
-                    onClick: _cache[0] || (_cache[0] = ($event) => {
-                      tab.value = "all";
-                      doSearch();
-                    })
-                  },
-                  "全部",
-                  2
-                  /* CLASS */
-                ),
-                (vue.openBlock(true), vue.createElementBlock(
-                  vue.Fragment,
-                  null,
-                  vue.renderList(marketTabs.value, (s) => {
-                    return vue.openBlock(), vue.createElementBlock("button", {
-                      key: s.kind,
-                      class: vue.normalizeClass({ active: tab.value === s.kind }),
-                      onClick: ($event) => {
-                        tab.value = s.kind;
-                        doSearch();
-                      }
-                    }, vue.toDisplayString(s.label), 11, _hoisted_5$3);
-                  }),
-                  128
-                  /* KEYED_FRAGMENT */
-                )),
-                vue.createElementVNode(
-                  "button",
-                  {
-                    class: vue.normalizeClass({ active: tab.value === "installed" }),
-                    onClick: _cache[1] || (_cache[1] = ($event) => {
-                      tab.value = "installed";
-                      loadInstalled();
-                    })
-                  },
-                  "已安装",
-                  2
-                  /* CLASS */
-                )
-              ]),
-              vue.createElementVNode("button", {
-                class: "modal-close",
-                onClick: _cache[2] || (_cache[2] = ($event) => _ctx.$emit("close"))
-              }, "×")
-            ]),
-            vue.createElementVNode("div", _hoisted_6$3, [
-              vue.createCommentVNode(" 搜索栏（非「已安装」tab 显示） "),
-              tab.value !== "installed" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_7$3, [
-                vue.createElementVNode("div", _hoisted_8$3, [
-                  vue.createVNode(SvgIcon, {
-                    name: "search",
-                    size: 14
-                  })
-                ]),
-                vue.withDirectives(vue.createElementVNode(
-                  "input",
-                  {
-                    "onUpdate:modelValue": _cache[3] || (_cache[3] = ($event) => query.value = $event),
-                    placeholder: "搜索 MCP / 技能 / npm 插件…",
-                    onInput: debounceSearch,
-                    class: "search-input"
-                  },
-                  null,
-                  544
-                  /* NEED_HYDRATION, NEED_PATCH */
-                ), [
-                  [vue.vModelText, query.value]
-                ]),
-                query.value ? (vue.openBlock(), vue.createElementBlock("button", {
-                  key: 0,
-                  class: "search-clear",
-                  onClick: _cache[4] || (_cache[4] = ($event) => {
-                    query.value = "";
-                    doSearch();
-                  })
-                }, "×")) : vue.createCommentVNode("v-if", true),
-                vue.createElementVNode("button", {
-                  class: "market-refresh-btn",
-                  onClick: refreshRemote,
-                  disabled: refreshing.value,
-                  title: refreshTip.value
-                }, [
-                  vue.createVNode(SvgIcon, {
-                    name: refreshing.value ? "cycle" : "refresh",
-                    size: 14
-                  }, null, 8, ["name"]),
-                  vue.createTextVNode(
-                    " " + vue.toDisplayString(refreshing.value ? "刷新中…" : "刷新"),
-                    1
-                    /* TEXT */
-                  )
-                ], 8, _hoisted_9$3)
-              ])) : vue.createCommentVNode("v-if", true),
-              vue.createCommentVNode(" 「已安装」tab 的操作栏 "),
-              tab.value === "installed" ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_10$3, [
-                vue.createElementVNode("button", {
-                  class: "btn-add-mcp",
-                  onClick: _cache[5] || (_cache[5] = ($event) => showAddMCP.value = true)
-                }, [
-                  vue.createVNode(SvgIcon, {
-                    name: "plus",
-                    size: 14
-                  }),
-                  _cache[20] || (_cache[20] = vue.createTextVNode(
-                    " 添加 MCP 服务器",
-                    -1
-                    /* CACHED */
-                  ))
-                ]),
-                vue.createElementVNode("button", {
-                  class: "btn-refresh",
-                  onClick: loadInstalled
-                }, [
-                  vue.createVNode(SvgIcon, {
-                    name: "refresh",
-                    size: 14
-                  }),
-                  _cache[21] || (_cache[21] = vue.createTextVNode(
-                    " 刷新",
-                    -1
-                    /* CACHED */
-                  ))
-                ])
-              ])) : vue.createCommentVNode("v-if", true),
-              vue.createCommentVNode(" 添加 MCP 表单 "),
-              showAddMCP.value ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_11$3, [
-                vue.createElementVNode("div", _hoisted_12$3, [
-                  _cache[22] || (_cache[22] = vue.createElementVNode(
-                    "label",
-                    null,
-                    "名称",
-                    -1
-                    /* CACHED */
-                  )),
-                  vue.withDirectives(vue.createElementVNode(
-                    "input",
-                    {
-                      "onUpdate:modelValue": _cache[6] || (_cache[6] = ($event) => mcpForm.value.name = $event),
-                      placeholder: "如 my-server"
-                    },
-                    null,
-                    512
-                    /* NEED_PATCH */
-                  ), [
-                    [vue.vModelText, mcpForm.value.name]
-                  ])
-                ]),
-                vue.createElementVNode("div", _hoisted_13$3, [
-                  _cache[23] || (_cache[23] = vue.createElementVNode(
-                    "label",
-                    null,
-                    "命令",
-                    -1
-                    /* CACHED */
-                  )),
-                  vue.withDirectives(vue.createElementVNode(
-                    "input",
-                    {
-                      "onUpdate:modelValue": _cache[7] || (_cache[7] = ($event) => mcpForm.value.command = $event),
-                      placeholder: "如 npx / uvx"
-                    },
-                    null,
-                    512
-                    /* NEED_PATCH */
-                  ), [
-                    [vue.vModelText, mcpForm.value.command]
-                  ])
-                ]),
-                vue.createElementVNode("div", _hoisted_14$3, [
-                  _cache[24] || (_cache[24] = vue.createElementVNode(
-                    "label",
-                    null,
-                    "参数",
-                    -1
-                    /* CACHED */
-                  )),
-                  vue.withDirectives(vue.createElementVNode(
-                    "input",
-                    {
-                      "onUpdate:modelValue": _cache[8] || (_cache[8] = ($event) => mcpForm.value.argsText = $event),
-                      placeholder: "如 -y @modelcontextprotocol/server-filesystem"
-                    },
-                    null,
-                    512
-                    /* NEED_PATCH */
-                  ), [
-                    [vue.vModelText, mcpForm.value.argsText]
-                  ])
-                ]),
-                vue.createElementVNode("div", _hoisted_15$2, [
-                  _cache[26] || (_cache[26] = vue.createElementVNode(
-                    "label",
-                    null,
-                    "层级",
-                    -1
-                    /* CACHED */
-                  )),
-                  vue.withDirectives(vue.createElementVNode(
-                    "select",
-                    {
-                      "onUpdate:modelValue": _cache[9] || (_cache[9] = ($event) => mcpForm.value.level = $event)
-                    },
-                    [..._cache[25] || (_cache[25] = [
-                      vue.createElementVNode(
-                        "option",
-                        { value: "user" },
-                        "用户级（全局）",
-                        -1
-                        /* CACHED */
-                      ),
-                      vue.createElementVNode(
-                        "option",
-                        { value: "project" },
-                        "工作区级",
-                        -1
-                        /* CACHED */
-                      )
-                    ])],
-                    512
-                    /* NEED_PATCH */
-                  ), [
-                    [vue.vModelSelect, mcpForm.value.level]
-                  ])
-                ]),
-                vue.createElementVNode("div", _hoisted_16$2, [
-                  vue.createElementVNode("button", {
-                    class: "btn-primary",
-                    onClick: saveMCP,
-                    disabled: !mcpForm.value.name || savingMCP.value
-                  }, vue.toDisplayString(savingMCP.value ? "保存中…" : "保存"), 9, _hoisted_17$2),
-                  vue.createElementVNode("button", {
-                    class: "btn-secondary",
-                    onClick: _cache[10] || (_cache[10] = ($event) => {
-                      showAddMCP.value = false;
-                      resetMCPForm();
-                    })
-                  }, "取消")
-                ]),
-                mcpError.value ? (vue.openBlock(), vue.createElementBlock(
-                  "div",
-                  _hoisted_18$2,
-                  vue.toDisplayString(mcpError.value),
-                  1
-                  /* TEXT */
-                )) : vue.createCommentVNode("v-if", true)
-              ])) : vue.createCommentVNode("v-if", true),
-              vue.createCommentVNode(" 编辑 MCP 表单 "),
-              editingMCP.value ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_19$2, [
-                vue.createElementVNode("div", _hoisted_20$2, [
-                  _cache[27] || (_cache[27] = vue.createElementVNode(
-                    "label",
-                    null,
-                    "名称",
-                    -1
-                    /* CACHED */
-                  )),
-                  vue.withDirectives(vue.createElementVNode(
-                    "input",
-                    {
-                      "onUpdate:modelValue": _cache[11] || (_cache[11] = ($event) => editMCPForm.value.name = $event)
-                    },
-                    null,
-                    512
-                    /* NEED_PATCH */
-                  ), [
-                    [vue.vModelText, editMCPForm.value.name]
-                  ])
-                ]),
-                vue.createElementVNode("div", _hoisted_21$1, [
-                  _cache[28] || (_cache[28] = vue.createElementVNode(
-                    "label",
-                    null,
-                    "命令",
-                    -1
-                    /* CACHED */
-                  )),
-                  vue.withDirectives(vue.createElementVNode(
-                    "input",
-                    {
-                      "onUpdate:modelValue": _cache[12] || (_cache[12] = ($event) => editMCPForm.value.command = $event)
-                    },
-                    null,
-                    512
-                    /* NEED_PATCH */
-                  ), [
-                    [vue.vModelText, editMCPForm.value.command]
-                  ])
-                ]),
-                vue.createElementVNode("div", _hoisted_22$1, [
-                  _cache[29] || (_cache[29] = vue.createElementVNode(
-                    "label",
-                    null,
-                    "参数",
-                    -1
-                    /* CACHED */
-                  )),
-                  vue.withDirectives(vue.createElementVNode(
-                    "input",
-                    {
-                      "onUpdate:modelValue": _cache[13] || (_cache[13] = ($event) => editMCPForm.value.argsText = $event)
-                    },
-                    null,
-                    512
-                    /* NEED_PATCH */
-                  ), [
-                    [vue.vModelText, editMCPForm.value.argsText]
-                  ])
-                ]),
-                vue.createElementVNode("div", _hoisted_23, [
-                  _cache[31] || (_cache[31] = vue.createElementVNode(
-                    "label",
-                    null,
-                    "层级",
-                    -1
-                    /* CACHED */
-                  )),
-                  vue.withDirectives(vue.createElementVNode(
-                    "select",
-                    {
-                      "onUpdate:modelValue": _cache[14] || (_cache[14] = ($event) => editMCPForm.value.level = $event)
-                    },
-                    [..._cache[30] || (_cache[30] = [
-                      vue.createElementVNode(
-                        "option",
-                        { value: "user" },
-                        "用户级（全局）",
-                        -1
-                        /* CACHED */
-                      ),
-                      vue.createElementVNode(
-                        "option",
-                        { value: "project" },
-                        "工作区级",
-                        -1
-                        /* CACHED */
-                      )
-                    ])],
-                    512
-                    /* NEED_PATCH */
-                  ), [
-                    [vue.vModelSelect, editMCPForm.value.level]
-                  ])
-                ]),
-                vue.createElementVNode("div", _hoisted_24, [
-                  vue.createElementVNode("button", {
-                    class: "btn-primary",
-                    onClick: updateMCP,
-                    disabled: !editMCPForm.value.name
-                  }, "保存", 8, _hoisted_25),
-                  vue.createElementVNode("button", {
-                    class: "btn-secondary",
-                    onClick: _cache[15] || (_cache[15] = ($event) => editingMCP.value = false)
-                  }, "取消")
-                ])
-              ])) : vue.createCommentVNode("v-if", true),
-              vue.createCommentVNode(" 技能内容查看 "),
-              viewingSkill.value ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_26, [
-                vue.createElementVNode("div", _hoisted_27, [
-                  vue.createElementVNode(
-                    "strong",
-                    null,
-                    vue.toDisplayString(viewingSkill.value.name),
-                    1
-                    /* TEXT */
-                  ),
-                  vue.createElementVNode("button", {
-                    class: "modal-close",
-                    onClick: _cache[16] || (_cache[16] = ($event) => viewingSkill.value = null)
-                  }, "×")
-                ]),
-                vue.createElementVNode(
-                  "pre",
-                  _hoisted_28,
-                  vue.toDisplayString(viewingSkill.value.content),
-                  1
-                  /* TEXT */
-                )
-              ])) : vue.createCommentVNode("v-if", true),
-              vue.createCommentVNode(" 加载状态 "),
-              loading.value ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_29, [..._cache[32] || (_cache[32] = [
-                vue.createElementVNode(
-                  "span",
-                  { class: "dot-pulse" },
-                  null,
-                  -1
-                  /* CACHED */
-                ),
-                vue.createElementVNode(
-                  "span",
-                  null,
-                  "搜索中...",
-                  -1
-                  /* CACHED */
-                )
-              ])])) : tab.value === "installed" ? (vue.openBlock(), vue.createElementBlock(
-                vue.Fragment,
-                { key: 6 },
-                [
-                  vue.createCommentVNode(" 已安装列表 "),
-                  vue.createElementVNode(
-                    "div",
-                    {
-                      class: "market-list",
-                      ref_key: "listRef",
-                      ref: listRef
-                    },
-                    [
-                      vue.createCommentVNode(" MCP 分组 "),
-                      installedMCPs.value.length > 0 ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_30, [
-                        _cache[33] || (_cache[33] = vue.createElementVNode(
-                          "div",
-                          { class: "installed-group-title" },
-                          "MCP 服务器",
-                          -1
-                          /* CACHED */
-                        )),
-                        (vue.openBlock(true), vue.createElementBlock(
-                          vue.Fragment,
-                          null,
-                          vue.renderList(installedMCPs.value, (item) => {
-                            return vue.openBlock(), vue.createElementBlock("div", {
-                              key: "mcp-" + item.name + "-" + item.level,
-                              class: "installed-item"
-                            }, [
-                              vue.createElementVNode("div", _hoisted_31, [
-                                vue.createVNode(SvgIcon, {
-                                  name: "package",
-                                  size: 18
-                                })
-                              ]),
-                              vue.createElementVNode("div", {
-                                class: vue.normalizeClass(["ii-status-dot", item.enabled === false ? "dot-disabled" : item._connected ? "dot-connected" : "dot-idle"]),
-                                title: item.enabled === false ? "已禁用" : item._connected ? "已连接" : "未连接"
-                              }, null, 10, _hoisted_32),
-                              vue.createElementVNode("div", _hoisted_33, [
-                                vue.createElementVNode(
-                                  "div",
-                                  _hoisted_34,
-                                  vue.toDisplayString(item.name),
-                                  1
-                                  /* TEXT */
-                                ),
-                                vue.createElementVNode(
-                                  "div",
-                                  _hoisted_35,
-                                  vue.toDisplayString(item.command) + " " + vue.toDisplayString((item.args || []).join(" ")),
-                                  1
-                                  /* TEXT */
-                                ),
-                                vue.createElementVNode(
-                                  "span",
-                                  _hoisted_36,
-                                  "MCP · " + vue.toDisplayString(item.level === "project" ? "工作区级" : "用户级"),
-                                  1
-                                  /* TEXT */
-                                )
-                              ]),
-                              vue.createElementVNode("div", _hoisted_37, [
-                                vue.createElementVNode("button", {
-                                  class: vue.normalizeClass(["ii-btn ii-toggle", { "is-enabled": item.enabled !== false }]),
-                                  onClick: ($event) => toggleMCP(item),
-                                  title: item.enabled === false ? "点击启用" : "点击禁用"
-                                }, vue.toDisplayString(item.enabled === false ? "禁用" : "启用"), 11, _hoisted_38),
-                                vue.createElementVNode("button", {
-                                  class: "ii-btn ii-edit",
-                                  onClick: ($event) => startEditMCP(item),
-                                  title: "编辑"
-                                }, "编辑", 8, _hoisted_39),
-                                vue.createElementVNode("button", {
-                                  class: "ii-btn ii-del",
-                                  onClick: ($event) => delMCP(item),
-                                  title: "删除"
-                                }, "删除", 8, _hoisted_40)
-                              ])
-                            ]);
-                          }),
-                          128
-                          /* KEYED_FRAGMENT */
-                        ))
-                      ])) : vue.createCommentVNode("v-if", true),
-                      vue.createCommentVNode(" 技能分组 "),
-                      installedSkills.value.length > 0 ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_41, [
-                        _cache[36] || (_cache[36] = vue.createElementVNode(
-                          "div",
-                          { class: "installed-group-title" },
-                          "技能",
-                          -1
-                          /* CACHED */
-                        )),
-                        (vue.openBlock(true), vue.createElementBlock(
-                          vue.Fragment,
-                          null,
-                          vue.renderList(installedSkills.value, (item) => {
-                            return vue.openBlock(), vue.createElementBlock("div", {
-                              key: "skill-" + item.name + "-" + item.level,
-                              class: "installed-item"
-                            }, [
-                              vue.createElementVNode("div", _hoisted_42, [
-                                vue.createVNode(SvgIcon, {
-                                  name: "code",
-                                  size: 18
-                                })
-                              ]),
-                              vue.createElementVNode("div", _hoisted_43, [
-                                vue.createElementVNode(
-                                  "div",
-                                  _hoisted_44,
-                                  vue.toDisplayString(item.name),
-                                  1
-                                  /* TEXT */
-                                ),
-                                vue.createElementVNode(
-                                  "div",
-                                  _hoisted_45,
-                                  vue.toDisplayString(item.description || "无描述"),
-                                  1
-                                  /* TEXT */
-                                ),
-                                vue.createElementVNode("span", _hoisted_46, [
-                                  _cache[34] || (_cache[34] = vue.createTextVNode(
-                                    " 技能 · ",
-                                    -1
-                                    /* CACHED */
-                                  )),
-                                  vue.createElementVNode(
-                                    "span",
-                                    {
-                                      class: vue.normalizeClass("status-" + (item.status || "on"))
-                                    },
-                                    vue.toDisplayString(item.status === "off" ? "关闭" : item.status === "max" ? "始终激活" : "按需"),
-                                    3
-                                    /* TEXT, CLASS */
-                                  ),
-                                  vue.createTextVNode(
-                                    " · " + vue.toDisplayString(item.level === "system" ? "用户级" : "工作区级"),
-                                    1
-                                    /* TEXT */
-                                  )
-                                ])
-                              ]),
-                              vue.createElementVNode("div", _hoisted_47, [
-                                vue.createElementVNode("select", {
-                                  class: "ss-status-select",
-                                  value: item.status || "on",
-                                  onChange: ($event) => setSkillStatus(item, $event.target.value),
-                                  title: statusTitle(item)
-                                }, [..._cache[35] || (_cache[35] = [
-                                  vue.createElementVNode(
-                                    "option",
-                                    { value: "off" },
-                                    "关闭",
-                                    -1
-                                    /* CACHED */
-                                  ),
-                                  vue.createElementVNode(
-                                    "option",
-                                    { value: "on" },
-                                    "按需",
-                                    -1
-                                    /* CACHED */
-                                  ),
-                                  vue.createElementVNode(
-                                    "option",
-                                    { value: "max" },
-                                    "始终激活",
-                                    -1
-                                    /* CACHED */
-                                  )
-                                ])], 40, _hoisted_48),
-                                vue.createElementVNode("button", {
-                                  class: "ii-btn ii-view",
-                                  onClick: ($event) => viewSkill(item),
-                                  title: "查看内容"
-                                }, "查看", 8, _hoisted_49),
-                                item.level !== "system" ? (vue.openBlock(), vue.createElementBlock("button", {
-                                  key: 0,
-                                  class: "ii-btn ii-del",
-                                  onClick: ($event) => delSkill(item),
-                                  title: "删除"
-                                }, "删除", 8, _hoisted_50)) : vue.createCommentVNode("v-if", true)
-                              ])
-                            ]);
-                          }),
-                          128
-                          /* KEYED_FRAGMENT */
-                        ))
-                      ])) : vue.createCommentVNode("v-if", true),
-                      installedMCPs.value.length === 0 && installedSkills.value.length === 0 ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_51, [
-                        vue.createElementVNode("div", _hoisted_52, [
-                          vue.createVNode(SvgIcon, {
-                            name: "package",
-                            size: 32
-                          })
-                        ]),
-                        _cache[37] || (_cache[37] = vue.createElementVNode(
-                          "div",
-                          null,
-                          "暂无已安装的 MCP 服务器或技能",
-                          -1
-                          /* CACHED */
-                        )),
-                        _cache[38] || (_cache[38] = vue.createElementVNode(
-                          "div",
-                          { class: "me-hint" },
-                          "切换到「全部」tab 搜索安装，或点击上方「添加 MCP 服务器」",
-                          -1
-                          /* CACHED */
-                        ))
-                      ])) : vue.createCommentVNode("v-if", true)
-                    ],
-                    512
-                    /* NEED_PATCH */
-                  )
-                ],
-                2112
-                /* STABLE_FRAGMENT, DEV_ROOT_FRAGMENT */
-              )) : (vue.openBlock(), vue.createElementBlock(
-                vue.Fragment,
-                { key: 7 },
-                [
-                  vue.createCommentVNode(" 搜索/浏览列表 "),
-                  vue.createElementVNode(
-                    "div",
-                    {
-                      class: "market-list",
-                      ref_key: "listRef",
-                      ref: listRef
-                    },
-                    [
-                      (vue.openBlock(true), vue.createElementBlock(
-                        vue.Fragment,
-                        null,
-                        vue.renderList(items.value, (item) => {
-                          return vue.openBlock(), vue.createElementBlock("div", {
-                            key: item.id,
-                            class: "market-item"
-                          }, [
-                            vue.createElementVNode(
-                              "div",
-                              {
-                                class: vue.normalizeClass(["mi-icon", "icon-" + item.kind])
-                              },
-                              [
-                                vue.createVNode(SvgIcon, {
-                                  name: item.kind === "plugin" ? "puzzle" : item.kind === "skill" ? "code" : "package",
-                                  size: 20
-                                }, null, 8, ["name"])
-                              ],
-                              2
-                              /* CLASS */
-                            ),
-                            vue.createElementVNode("div", _hoisted_53, [
-                              vue.createElementVNode(
-                                "div",
-                                _hoisted_54,
-                                vue.toDisplayString(item.name),
-                                1
-                                /* TEXT */
-                              ),
-                              vue.createElementVNode(
-                                "div",
-                                _hoisted_55,
-                                vue.toDisplayString(item.description),
-                                1
-                                /* TEXT */
-                              ),
-                              vue.createElementVNode("div", _hoisted_56, [
-                                vue.createElementVNode(
-                                  "span",
-                                  {
-                                    class: vue.normalizeClass(["mi-type", "type-" + item.kind])
-                                  },
-                                  vue.toDisplayString(item.kind === "mcp" ? "MCP" : item.kind === "plugin" ? "插件" : "技能"),
-                                  3
-                                  /* TEXT, CLASS */
-                                ),
-                                item.tags ? (vue.openBlock(), vue.createElementBlock("span", _hoisted_57, [
-                                  (vue.openBlock(true), vue.createElementBlock(
-                                    vue.Fragment,
-                                    null,
-                                    vue.renderList(item.tags, (tag) => {
-                                      return vue.openBlock(), vue.createElementBlock(
-                                        "span",
-                                        {
-                                          key: tag,
-                                          class: "mi-tag"
-                                        },
-                                        vue.toDisplayString(tag),
-                                        1
-                                        /* TEXT */
-                                      );
-                                    }),
-                                    128
-                                    /* KEYED_FRAGMENT */
-                                  ))
-                                ])) : vue.createCommentVNode("v-if", true),
-                                item.installed ? (vue.openBlock(), vue.createElementBlock("span", _hoisted_58, [
-                                  vue.createVNode(SvgIcon, {
-                                    name: "check",
-                                    size: 10
-                                  }),
-                                  _cache[39] || (_cache[39] = vue.createTextVNode(
-                                    " 已安装",
-                                    -1
-                                    /* CACHED */
-                                  ))
-                                ])) : vue.createCommentVNode("v-if", true)
-                              ])
-                            ]),
-                            !item.installed ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_59, [
-                              item.kind !== "mcp" ? (vue.openBlock(), vue.createElementBlock("button", {
-                                key: 0,
-                                class: "mi-install-btn",
-                                onClick: ($event) => installItem(item, "user"),
-                                disabled: installing.value === item.id
-                              }, [
-                                installing.value === item.id ? (vue.openBlock(), vue.createBlock(SvgIcon, {
-                                  key: 0,
-                                  name: "cycle",
-                                  size: 12
-                                })) : vue.createCommentVNode("v-if", true),
-                                vue.createTextVNode(
-                                  " " + vue.toDisplayString(installing.value === item.id ? "安装中…" : "安装"),
-                                  1
-                                  /* TEXT */
-                                )
-                              ], 8, _hoisted_60)) : (vue.openBlock(), vue.createElementBlock(
-                                vue.Fragment,
-                                { key: 1 },
-                                [
-                                  vue.withDirectives(vue.createElementVNode("select", {
-                                    "onUpdate:modelValue": ($event) => item._installScope = $event,
-                                    class: "mi-scope-select",
-                                    onClick: _cache[17] || (_cache[17] = vue.withModifiers(() => {
-                                    }, ["stop"]))
-                                  }, [..._cache[40] || (_cache[40] = [
-                                    vue.createElementVNode(
-                                      "option",
-                                      { value: "user" },
-                                      "用户级",
-                                      -1
-                                      /* CACHED */
-                                    ),
-                                    vue.createElementVNode(
-                                      "option",
-                                      { value: "project" },
-                                      "工作区级",
-                                      -1
-                                      /* CACHED */
-                                    )
-                                  ])], 8, _hoisted_61), [
-                                    [vue.vModelSelect, item._installScope]
-                                  ]),
-                                  vue.createElementVNode("button", {
-                                    class: "mi-install-btn",
-                                    onClick: ($event) => installItem(item, item._installScope || "user"),
-                                    disabled: installing.value === item.id
-                                  }, [
-                                    installing.value === item.id ? (vue.openBlock(), vue.createBlock(SvgIcon, {
-                                      key: 0,
-                                      name: "cycle",
-                                      size: 12
-                                    })) : vue.createCommentVNode("v-if", true),
-                                    vue.createTextVNode(
-                                      " " + vue.toDisplayString(installing.value === item.id ? "安装中…" : "安装"),
-                                      1
-                                      /* TEXT */
-                                    )
-                                  ], 8, _hoisted_62)
-                                ],
-                                64
-                                /* STABLE_FRAGMENT */
-                              ))
-                            ])) : (vue.openBlock(), vue.createElementBlock("button", {
-                              key: 1,
-                              class: "mi-uninstall-btn",
-                              onClick: ($event) => uninstallItem(item)
-                            }, [
-                              vue.createVNode(SvgIcon, {
-                                name: "trash",
-                                size: 12
-                              }),
-                              _cache[41] || (_cache[41] = vue.createTextVNode(
-                                " 卸载 ",
-                                -1
-                                /* CACHED */
-                              ))
-                            ], 8, _hoisted_63))
-                          ]);
-                        }),
-                        128
-                        /* KEYED_FRAGMENT */
-                      )),
-                      !loading.value && items.value.length === 0 ? (vue.openBlock(), vue.createElementBlock("div", _hoisted_64, [
-                        vue.createElementVNode("div", _hoisted_65, [
-                          vue.createVNode(SvgIcon, {
-                            name: "package",
-                            size: 32
-                          })
-                        ]),
-                        query.value ? (vue.openBlock(), vue.createElementBlock(
-                          "div",
-                          _hoisted_66,
-                          '未找到匹配 "' + vue.toDisplayString(query.value) + '" 的条目',
-                          1
-                          /* TEXT */
-                        )) : (vue.openBlock(), vue.createElementBlock("div", _hoisted_67, "市场中暂无可用条目")),
-                        _cache[42] || (_cache[42] = vue.createElementVNode(
-                          "div",
-                          { class: "me-hint" },
-                          "试试其他关键词或分类",
-                          -1
-                          /* CACHED */
-                        ))
-                      ])) : vue.createCommentVNode("v-if", true)
-                    ],
-                    512
-                    /* NEED_PATCH */
-                  )
-                ],
-                2112
-                /* STABLE_FRAGMENT, DEV_ROOT_FRAGMENT */
-              ))
-            ]),
-            vue.createElementVNode("div", _hoisted_68, [
-              vue.createElementVNode(
-                "span",
-                _hoisted_69,
-                vue.toDisplayString(tab.value === "installed" ? installedMCPs.value.length + installedSkills.value.length : items.value.length) + " 个条目",
-                1
-                /* TEXT */
-              ),
-              error.value ? (vue.openBlock(), vue.createElementBlock(
-                "span",
-                _hoisted_70,
-                vue.toDisplayString(error.value),
-                1
-                /* TEXT */
-              )) : vue.createCommentVNode("v-if", true),
-              _cache[43] || (_cache[43] = vue.createElementVNode(
-                "span",
-                { class: "market-tip" },
-                "安装后下次对话生效",
-                -1
-                /* CACHED */
-              )),
-              vue.createElementVNode("button", {
-                class: "btn-secondary",
-                onClick: _cache[18] || (_cache[18] = ($event) => _ctx.$emit("close"))
-              }, "关闭")
-            ])
-          ])
-        ]);
-      };
-    }
-  };
-  const MarketplaceModal = /* @__PURE__ */ _export_sfc(_sfc_main$4, [["__scopeId", "data-v-383abd54"]]);
+  const SourceModal = /* @__PURE__ */ _export_sfc(_sfc_main$4, [["__scopeId", "data-v-2e060397"]]);
   const featuresMd = '# 功能介绍\n\nPairCode IDE 是一款纯 Web 端的 AI 辅助编程开发环境。你只需打开浏览器，在对话面板中用自然语言描述需求，AI 就能理解你的意图，直接生成代码、修改文件、执行命令、管理版本——把 IDE 从工具变为你的编程搭档。\n\n---\n\n## AI 对话编程\n\n**用自然语言驱动整个开发流程，就像跟资深开发者聊天一样跟 AI 交流。**\n\n在右侧对话面板中，你只需用自然语言描述需求，AI 就会理解你的意图并自动完成相应操作。无论是"帮我写一个 REST API"还是"把这个函数改成异步的"，AI 都能立刻执行。\n\n- **流式实时输出** — AI 的思考过程和操作结果实时显示，你始终能看清它在想什么、做什么\n- **透明可追溯** — 每一步操作都有详细上下文，不是黑盒\n- **随时干预** — 如果 AI 方向跑偏，可以随时给出反馈，AI 会立即调整\n\n---\n\n## 自主编程模式\n\n**AI 独立完成复杂的多步骤任务，你只需做最关键的决定。**\n\n开启自主模式后，AI 能自己分析项目结构、扫描代码问题、制定修复计划并逐个执行。你可以在关键节点审核确认，其他步骤 AI 自动完成。执行进度实时可见，你可以随时暂停、中止或补充指令。\n\n**Agent 核心采用 deepseek-harness 双层循环架构**：\n- **turn / step 双层边界** — 每次工具执行都有独立的 step 事件（开始/结束/摘要），每轮用户交互是 turn，进度颗粒度清晰可追溯\n- **inbox 双队列** — 任务转向（next-step）与后续追问（next-turn）分队列消费，多轮交互不粘连\n- **消息组装与落盘对齐** — agentloop 编号与消息序列严格一致，历史恢复与实时流状态吻合\n- **历史注入精简** — 去掉冗余前缀标注与时间戳，系统提示内置多轮规则，长对话上下文更干净\n\n---\n\n## 智能代码编辑器\n\n**内置浏览器端编辑器，让你在同一个窗口中完成所有编辑工作。**\n\n- **语法高亮** — 支持 Go、TypeScript、Python、Rust、Java、Vue、HTML、CSS 等主流语言\n- **代码折叠** — 折叠函数和代码块，聚焦关键逻辑\n- **多标签页** — 同时打开编辑多个文件，标签栏快捷切换\n- **括号匹配与自动缩进** — 代码结构清晰可见\n- **十六进制查看器** — 查看二进制文件的原始字节内容\n- **图片预览** — 在编辑器中直接显示图片文件\n\n---\n\n## 文件管理\n\n**完整的工作区文件管理能力，所有操作一目了然。**\n\n- **目录树浏览** — 以树形结构展示项目目录，支持展开 / 折叠\n- **文件操作** — 新建、编辑、保存、删除、重命名、移动文件\n- **多文件夹工作区** — 同时管理多个目录，组合成一个统一的工作区\n- **快速切换工作区** — 在最近使用的项目之间一键切换\n- **文件搜索** — 按文件名快速定位\n- **内容搜索** — 在整个工作区按关键词搜索代码内容\n\n---\n\n## Git 版本控制\n\n**在对话中完成所有 Git 操作，告别记忆复杂命令。**\n\n你只需用自然语言告诉 AI 你想做什么：\n- "查看当前仓库状态"\n- "暂存所有修改，提交信息为\'修复登录校验\'"\n- "创建一个名为 feature-search 的分支"\n- "从远程拉取最新代码"\n\nAI 会自动执行对应的 Git 操作并返回结果。你也可以通过 Git 面板查看文件变更的逐行对比。\n\n---\n\n## 内置终端\n\n**浏览器中的终端，无需切换窗口。**\n\n终端面板直接内嵌在 IDE 底部，打开即用。AI 也能自动使用终端执行命令、读取输出并分析结果。支持多标签页，方便同时运行不同任务。\n\n---\n\n## 帮助文档中心\n\n**结构化的帮助文档体系，快速找到你需要的信息。**\n\n帮助面板侧边栏按分类组织文档：\n\n| 分类 | 包含文档 |\n|------|---------|\n| **文档中心** | 快速开始、功能介绍、API 文档、工具文档、快捷键、常见问题 |\n| **其他** | 更新日志 |\n\n- **按分类导航** — 文档归入"文档中心"分组，找什么一目了然\n- **文档间跳转** — 关于面板与帮助面板之间可互相跳转\n- **翻页浏览** — 文档底部支持上一页/下一页顺序阅读\n- **搜索过滤** — 侧边栏搜索框可快速筛选文档\n\n---\n\n## API 二次开发支持\n\n**完整的 HTTP REST API + WebSocket 协议文档，支持第三方基于本 IDE 进行二次开发。**\n\n- **详细的请求/响应格式** — 每个 API 接口提供 JSON Schema 请求体、完整响应示例、字段说明和错误码\n- **WebSocket 协议定义** — 完整的 AI 事件流协议文档（15+ 事件类型、数据结构、典型事件序列）\n- **终端协议文档** — PTY WebSocket 的初始化流程、控制消息格式、白名单限制等\n- **API 索引速查表** — 按功能分类列出所有 60+ API 端点，方便快速查找\n\n所有 API 仅监听本地回环地址，安全可控。\n\n---\n\n## 代码知识图谱\n\n**AI 能理解你的代码结构和调用关系，不仅仅是搜索文本。**\n\nCodeGraph 将项目的代码结构构建成可查询的知识图谱，让 AI 理解函数之间的调用关系、类型的层次结构和文件的依赖网络。AI 可以准确找到某个函数的所有调用者、分析修改影响范围、查看完整的类型继承链。\n\n**多项目独立建图** — 在多项目工作区中，每个项目独立构建知识图谱（主项目用共享库、非主项目用各自存储），跨项目切换不串数据，工具通过 project 参数精确路由到目标项目。\n\n---\n\n## 对话历史管理\n\n**每次对话自动保存，随时回溯，不会丢失。**\n\n- 对话自动持久化到本地磁盘，刷新页面不会丢失\n- 左侧对话列表展示所有历史记录，支持继续之前的话题\n- 不同工作区的对话自动隔离，各项目互不干扰\n- 支持向前翻页加载更多历史消息\n\n---\n\n## BUG 自动检测与修复\n\n**AI 主动扫描代码问题并生成修复方案，反复验证直到全部通过。**\n\n- 自动运行编译检查和测试，标记所有错误位置\n- 分析错误根因，生成具体的修复方案\n- 修复后再次验证，支持多轮迭代\n- 修复前会展示改动内容，你可以审阅确认\n\n---\n\n## Skills / MCP / 工具集扩展\n\n**通过扩展增强 AI 的能力，让 IDE 更贴合你的工作流。**\n\n- **Skills（技能）** — 可复用的工作流程模板，AI 在对应场景中自动加载使用\n- **MCP（模型上下文协议）** — 标准化的工具扩展协议，可为 AI 添加自定义能力（如查询内部数据库、调用第三方 API）\n- **工具集（Toolset）** — 按项目需求组合的插件包，动态构建并固化到工作区，可导出/导入/发布市场\n- **内置市场** — 一键浏览和安装社区贡献的扩展（技能 / MCP / 插件工具集三类）\n\n---\n\n## 插件化自定义工具\n\n**通过 JS / TS / Go / Lua 插件扩展 AI 的工具集，一切皆插件。**\n\nPairCode IDE 的工具体系全部插件化——内置功能（文件/搜索/Git/Web/记忆/任务/图谱等 21 组）以插件形态装配，你也可以编写自己的插件扩展能力：\n\n- **JS / TS 插件** — 通过 `cordis_define` 定义函数形态插件，支持 `apply(ctx, config)` 注入服务、timer 定时器、跨 goroutine 执行锁；TS 插件由内置编译器（esbuild 纯 Go）直接转译加载，无需 Node.js\n- **Go 插件** — 内置插件框架，核心功能组全部以 Go 插件装配，`cordis_inspect` 可查看工具归属，`cordis_stop` 卸载整组\n- **Lua 工具** — 支持 Lua 脚本自定义工具，封装常用命令组合与自定义数据处理逻辑\n- **沙箱防护** — VM 超时防护、schema 校验，插件异常不影响主进程\n\n## 工具集生态\n\n**按项目需求动态组合工具集，固化到工作区，可导出分享。**\n\n- **动态构建** — 描述你的项目需求（如"Go 后端 + 前端调试"），AI 分析项目结构后自动组合所需工具并创建工具集插件\n- **固化与重建** — 工具集固化到 `.pair/toolsets/`，随项目走；显式调用可更新重建\n- **导出 / 导入 / 市场** — 工具集可导出为 JSON 分享，或发布到市场供他人一键安装（project/user 两种范围）\n- **LLM 意图分析** — 分析项目目的时由 LLM 参与理解（语言无关，不固化任何语言模板），跨语言项目同样适用\n\n---\n\n## 项目知识库\n\n**把项目架构、模块职责和设计决策沉淀成结构化知识库，AI 跨会话持续了解你的项目。**\n\n- **树形分支组织** — 知识按 目标 / 架构 / 实现 / 关键点 / 设计思想 分类，深挖有细节、浏览有全貌\n- **跨会话记忆** — AI 每次接手项目自动加载知识库导航，无需从零分析项目\n- **团队共享** — 知识库存入项目 `.pair/` 目录，随项目版本控制，团队协作时信息不丢失\n- **过期检测** — 自动验证知识条目引用的文件/目录是否存在，失效条目提示清理\n- **AGENTS.md 分层** — 项目说明、环境配置、开发指南分层管理，.agents 路径兼容\n\n## 记忆系统\n\n**AI 能跨会话记住你的偏好和项目决策。**\n\nAI 会记住你的编码偏好、经常使用的模式和做过的决策。下次打开 IDE 时，AI 会自动引用这些记忆，无需重复说明。记忆可搜索、可管理。\n\n---\n\n## 任务与规划管理\n\n**复杂的多步骤开发任务有条不紊地执行。**\n\nAI 会自动分解复杂任务为可追踪的子任务步骤，每步的执行状态和结果清晰可见。支持依赖关系管理，任务清单持久化，重启不会丢失。\n\n---\n\n## 主题与个性化\n\n**按照你的喜好定制 IDE 外观。**\n\n- **四套预设主题** — 暗色科技风、白色简约风、暖色温暖风、暗夜紫风格\n- **即时切换** — 切换主题立即生效，无需刷新\n- **统一字体方案** — 界面字体和代码字体分别配置\n\n---\n\n## 多模型支持\n\n**灵活选择 AI 模型后端。**\n\n支持 OpenAI、Claude 等主流 AI 服务商。可为"执行任务"和"制定规划"分别配置不同的模型。所有模型配置在设置面板中集中管理，支持自定义 API 地址。\n\n---\n\n## 安全设计\n\n**你的代码和数据始终在你的控制之下。**\n\n- **本地运行** — 所有操作在本地计算机执行，不经过第三方云端\n- **路径隔离** — 文件操作限定在工作区目录范围内\n- **审批机制** — 写文件和执行命令等敏感操作需你确认\n- **本地地址** — IDE 服务仅监听本地回环地址，默认不对外暴露\n\n---\n\n## 操作界面速览\n\n| 区域 | 说明 |\n|------|------|\n| **标题栏** | 顶部菜单栏，提供帮助文档、设置等入口 |\n| **活动栏** | 左侧图标栏，切换文件浏览、搜索、Git 等功能面板 |\n| **侧栏** | 文件树、搜索面板、Git 面板等工具区域 |\n| **主编辑区** | 代码编辑区域，支持多标签页切换 |\n| **对话面板** | 右侧 AI 对话区域，与 AI 交流的核心界面 |\n| **状态栏** | 底部状态信息，显示文件编码、行号列号 |\n| **终端面板** | 底部内置终端，执行命令和脚本 |\n\n---\n\n## 快捷键一览\n\n| 快捷键 | 功能 |\n|--------|------|\n| Ctrl+S | 保存当前文件 |\n| Ctrl+B | 切换侧栏显示 |\n| Ctrl+\\` | 切换终端面板 |\n| Ctrl+K | 专注模式（隐藏所有面板） |\n| Ctrl+Shift+E | 切换到文件浏览器 |\n| Ctrl+Shift+F | 全局搜索 |\n| Ctrl+Shift+T | 打开对话面板 |\n| Ctrl+Shift+C | 切换对话面板 |\n';
   const apiDocsMd = '# API 文档\r\n\r\nPairCode IDE 内置了一套完整的 HTTP REST API + WebSocket 实时通信协议，供 Web 前端与后端核心功能交互，也**支持第三方开发者基于本 API 进行二次开发**。所有 API 地址均以 `/api` 开头，返回 JSON 格式数据。\r\n\r\n> **安全提示**：所有 API 仅监听本地回环地址（127.0.0.1），默认不对外暴露。请勿将服务端口暴露到公网或局域网。\r\n\r\n---\r\n\r\n## 通用约定\r\n\r\n### 请求格式\r\n- 查询参数（GET）直接在 URL 中传递\r\n- POST / PUT 请求体使用 `application/json`\r\n- 无特殊说明时，Content-Type 为 `application/json`\r\n\r\n### 响应格式\r\n| 场景 | 格式 | 说明 |\r\n|------|------|------|\r\n| 成功 | JSON 对象 或 JSON 数组 | 直接返回业务数据 |\r\n| 错误 | `{"error": "错误描述信息"}` | HTTP 状态码 4xx/5xx |\r\n\r\n### 错误码惯例\r\n| HTTP 状态码 | 含义 |\r\n|-------------|------|\r\n| 200 | 成功 |\r\n| 400 | 参数错误 / 请求体错误 |\r\n| 404 | 资源不存在 |\r\n| 405 | 方法不允许（如 GET 用了 POST） |\r\n| 500 | 服务器内部错误 |\r\n\r\n---\r\n\r\n## 一、服务健康检查\r\n\r\n检查 IDE 后端服务是否正常运行。\r\n\r\n```\r\nGET /api/health\r\n```\r\n\r\n**响应示例：**\r\n```json\r\n{\r\n  "status": "ok",\r\n  "workspace": "F:/projects/my-app",\r\n  "folders": ["F:/projects/my-app"]\r\n}\r\n```\r\n\r\n| 字段 | 类型 | 说明 |\r\n|------|------|------|\r\n| status | string | 固定 `"ok"` |\r\n| workspace | string | 当前工作区路径 |\r\n| folders | string[] | 工作区包含的文件夹列表 |\r\n\r\n---\r\n\r\n## 二、文件系统操作\r\n\r\n浏览、读写和管理工作区内的文件与目录。\r\n\r\n### 2.1 列出目录\r\n\r\n```\r\nGET /api/fs/list?path={目录路径}\r\n```\r\n\r\n**参数：**\r\n| 参数 | 类型 | 必填 | 说明 |\r\n|------|------|------|------|\r\n| path | string | 否 | 目录路径，省略时返回工作区根目录 |\r\n\r\n**响应示例：**\r\n```json\r\n[\r\n  {"name": "src", "isDir": true, "size": 4096, "modTime": "2026-07-11T10:00:00Z"},\r\n  {"name": "main.go", "isDir": false, "size": 2048, "modTime": "2026-07-11T09:30:00Z"}\r\n]\r\n```\r\n\r\n| 字段 | 类型 | 说明 |\r\n|------|------|------|\r\n| name | string | 文件/目录名 |\r\n| isDir | boolean | 是否为目录 |\r\n| size | number | 文件大小（字节） |\r\n| modTime | string | 最后修改时间（ISO 8601） |\r\n\r\n---\r\n\r\n### 2.2 读取文件\r\n\r\n```\r\nGET /api/fs/read?path={文件路径}\r\n```\r\n\r\n**参数：**\r\n| 参数 | 类型 | 必填 | 说明 |\r\n|------|------|------|------|\r\n| path | string | 是 | 文件路径 |\r\n\r\n**响应：** 返回文件文本内容（字符串）。\r\n\r\n---\r\n\r\n### 2.3 写入文件\r\n\r\n```\r\nPOST /api/fs/write\r\n```\r\n\r\n**请求体：**\r\n```json\r\n{\r\n  "path": "src/main.go",\r\n  "content": "package main\\n\\nfunc main() {\\n\\tprintln(\\"hello\\")\\n}\\n"\r\n}\r\n```\r\n\r\n| 字段 | 类型 | 必填 | 说明 |\r\n|------|------|------|------|\r\n| path | string | 是 | 文件路径（相对于工作区或绝对路径） |\r\n| content | string | 是 | 文件内容（覆盖写入，自动创建目录） |\r\n\r\n**响应：** `{"ok": true}`\r\n\r\n---\r\n\r\n### 2.4 搜索文件内容\r\n\r\n```\r\nGET /api/fs/search?q={关键词}&path={搜索路径}\r\n```\r\n\r\n**参数：**\r\n| 参数 | 类型 | 必填 | 说明 |\r\n|------|------|------|------|\r\n| q | string | 是 | 搜索关键词 |\r\n| path | string | 否 | 搜索目录，省略时使用工作区根目录 |\r\n\r\n**响应示例：**\r\n```json\r\n[\r\n  {"file": "src/main.go", "line": 15, "text": "func handleRequest(w http.ResponseWriter, r *http.Request) {"},\r\n  {"file": "src/utils.go", "line": 42, "text": "// handleRequest 处理 HTTP 请求"}\r\n]\r\n```\r\n\r\n| 字段 | 类型 | 说明 |\r\n|------|------|------|\r\n| file | string | 文件相对路径 |\r\n| line | number | 行号 |\r\n| text | string | 匹配行的内容 |\r\n\r\n**自动忽略的目录：** `.git`、`node_modules`、`vendor`、`.pair`、`__pycache__`、`bin` 等。**仅搜索文本文件扩展名**（`.go` `.js` `.ts` `.vue` `.html` `.css` `.json` `.md` `.py` `.rs` `.java` 等 50+ 种）。\r\n\r\n---\r\n\r\n### 2.5 重命名/移动文件\r\n\r\n```\r\nPOST /api/fs/rename\r\n```\r\n\r\n**请求体：**\r\n```json\r\n{\r\n  "oldPath": "src/old.go",\r\n  "newPath": "src/new.go"\r\n}\r\n```\r\n\r\n| 字段 | 类型 | 必填 | 说明 |\r\n|------|------|------|------|\r\n| oldPath | string | 是 | 原路径 |\r\n| newPath | string | 是 | 新路径 |\r\n\r\n**响应：** `{"ok": true}`\r\n\r\n---\r\n\r\n### 2.6 删除文件/目录\r\n\r\n```\r\nPOST /api/fs/delete\r\n```\r\n\r\n**请求体：**\r\n```json\r\n{\r\n  "path": "src/temp.go"\r\n}\r\n```\r\n\r\n> ⚠️ 不可恢复，递归删除目录及其所有内容。\r\n\r\n**响应：** `{"ok": true}`\r\n\r\n---\r\n\r\n### 2.7 创建目录\r\n\r\n```\r\nPOST /api/fs/mkdir\r\n```\r\n\r\n**请求体：**\r\n```json\r\n{\r\n  "path": "src/new-folder"\r\n}\r\n```\r\n\r\n**响应：** `{"ok": true}`\r\n\r\n---\r\n\r\n### 2.8 获取图片数据\r\n\r\n```\r\nGET /api/fs/image?path={图片路径}\r\n```\r\n\r\n**参数：** `path` — 图片文件路径（支持 PNG / JPEG）\r\n\r\n**响应：** Base64 编码的图片数据字符串（不含 `data:image/...` 前缀）。\r\n\r\n**响应头：** `Content-Type: text/plain; charset=utf-8`\r\n\r\n---\r\n\r\n### 2.9 获取文件信息\r\n\r\n```\r\nGET /api/fs/file-info?path={文件路径}\r\n```\r\n\r\n**响应示例：**\r\n```json\r\n{\r\n  "name": "main.go",\r\n  "path": "F:/projects/my-app/src/main.go",\r\n  "size": 2048,\r\n  "modTime": "2026-07-11T09:30:00Z",\r\n  "isDir": false\r\n}\r\n```\r\n\r\n---\r\n\r\n### 2.10 十六进制查看\r\n\r\n```\r\nGET /api/fs/hex?path={文件路径}&offset={偏移}&length={长度}\r\n```\r\n\r\n**参数：**\r\n| 参数 | 类型 | 必填 | 说明 |\r\n|------|------|------|------|\r\n| path | string | 是 | 文件路径 |\r\n| offset | number | 否 | 起始字节偏移（默认 0） |\r\n| length | number | 否 | 读取字节数（默认 512，最大 4096） |\r\n\r\n**响应示例：**\r\n```json\r\n{\r\n  "hex": "4d5a90000300000004000000ffff0000b80000000000000040",\r\n  "text": "MZ.............@",\r\n  "offset": 0,\r\n  "length": 32\r\n}\r\n```\r\n\r\n| 字段 | 类型 | 说明 |\r\n|------|------|------|\r\n| hex | string | 十六进制字符串 |\r\n| text | string | ASCII 可打印字符（不可打印的替换为 `.`） |\r\n| offset | number | 起始偏移 |\r\n| length | number | 返回的字节数 |\r\n\r\n---\r\n\r\n### 2.11 列出磁盘驱动器\r\n\r\n```\r\nGET /api/fs/drives\r\n```\r\n\r\n**响应示例：**\r\n```json\r\n["C:\\\\", "D:\\\\", "E:\\\\"]\r\n```\r\n\r\n---\r\n\r\n## 三、工作区管理\r\n\r\n### 3.1 获取当前工作区\r\n\r\n```\r\nGET /api/workspace\r\n```\r\n\r\n**响应示例：**\r\n```json\r\n{\r\n  "root": "F:/projects/my-app",\r\n  "folders": ["F:/projects/my-app"],\r\n  "loaded": true\r\n}\r\n```\r\n\r\n### 3.2 切换/设置工作区\r\n\r\n```\r\nPOST /api/workspace\r\n```\r\n\r\n**请求体（切换工作区）：**\r\n```json\r\n{\r\n  "path": "F:/projects/another-project"\r\n}\r\n```\r\n\r\n**请求体（添加文件夹）：**\r\n```json\r\n{\r\n  "addFolder": "F:/projects/shared-lib"\r\n}\r\n```\r\n\r\n**请求体（创建新工作区）：**\r\n```json\r\n{\r\n  "create": "F:/projects/new-project"\r\n}\r\n```\r\n\r\n| 字段 | 类型 | 必填 | 说明 |\r\n|------|------|------|------|\r\n| path | string | 按场景 | 切换工作区到指定路径 |\r\n| addFolder | string | 按场景 | 在当前工作区添加文件夹 |\r\n| create | string | 按场景 | 创建新目录并切换为其工作区 |\r\n\r\n**响应：** 返回更新后的工作区信息（同 GET 响应格式）。\r\n\r\n---\r\n\r\n## 四、设置管理\r\n\r\n### 4.1 读取设置\r\n\r\n```\r\nGET /api/settings\r\n```\r\n\r\n**响应：** 返回完整 `AppSettings` 对象（字段较多，按需取用）：\r\n\r\n```json\r\n{\r\n  "provider": "deepseek",\r\n  "baseURL": "https://api.deepseek.com/v1",\r\n  "apiKey": "sk-xxx",\r\n  "planModel": "deepseek-v4-pro",\r\n  "executeModel": "deepseek-v4-flash",\r\n  "reviewModel": "deepseek-v4-pro",\r\n  "temperature": "0.3",\r\n  "thinkingMode": "thinking",\r\n  "maxTokens": 131072,\r\n  "contextMaxTokens": 64000,\r\n  "lastProject": "F:/projects/my-app",\r\n  "workspaceFolders": ["F:/projects/my-app"],\r\n  "recentProjects": ["F:/projects/app1"],\r\n  "reviewMode": "auto",\r\n  "reviewBlacklist": [],\r\n  "reviewWhitelist": [],\r\n  "autonomous": false,\r\n  "autoCollapse": true,\r\n  "maxIterations": 50,\r\n  "maxParallelAgents": 3,\r\n  "maxReviewRetries": 3,\r\n  "autoIterateOnRejection": true,\r\n  "requireHumanApprovalForDestructive": true,\r\n  "aiReview": false,\r\n  "autoCommit": true,\r\n  "luaTools": true,\r\n  "enableBenchmarking": true,\r\n  "systemInstructions": "",\r\n  "searxngUrl": "",\r\n  "ignoreDirs": [],\r\n  "defaultShell": "auto",\r\n  "termFontSize": 13,\r\n  "termEncoding": "auto",\r\n  "theme": "dark",\r\n  "fontFamily": "\'Cascadia Code\', Consolas, monospace",\r\n  "editorFontSize": 14,\r\n  "tabSize": 2,\r\n  "wordWrap": false,\r\n  "hideMinimap": false,\r\n  "autoConnectMCP": true,\r\n  "skillEnabledOverrides": {},\r\n  "skillStatusOverrides": {},\r\n  "mcpEnabledOverrides": {},\r\n  "customProviders": []\r\n}\r\n```\r\n\r\n### 4.2 保存设置\r\n\r\n```\r\nPUT /api/settings?convId={对话ID}\r\n```\r\n\r\n**请求体：** 与 GET 返回格式相同，只需传入要修改的字段（增量合并，未传字段保持不变）。\r\n\r\n**参数：** `convId` — 可选，当前对话 ID。当 `reviewMode` 字段变更时，实时更新该对话的 Loop 审核模式。\r\n\r\n**响应：** `{"ok": true}`\r\n\r\n---\r\n\r\n## 五、系统工具\r\n\r\n### 5.1 系统信息\r\n\r\n```\r\nGET /api/system/info\r\n```\r\n\r\n**响应示例：**\r\n```json\r\n{\r\n  "hostname": "DESKTOP-ABC123",\r\n  "cwd": "F:/projects/my-app",\r\n  "os": "windows",\r\n  "goos": "windows",\r\n  "workspace": "F:/projects/my-app",\r\n  "folders": ["F:/projects/my-app"],\r\n  "version": "v1.1.2"\r\n}\r\n```\r\n\r\n| 字段 | 类型 | 说明 |\r\n|------|------|------|\r\n| hostname | string | 主机名 |\r\n| cwd | string | 当前工作目录 |\r\n| os | string | 操作系统名称 |\r\n| goos | string | Go 平台标识 |\r\n| workspace | string | IDE 工作区根路径 |\r\n| folders | string[] | 工作区文件夹列表 |\r\n| version | string | IDE 版本号（由打包器注入） |\r\n\r\n### 5.2 执行命令\r\n\r\n```\r\nPOST /api/system/exec\r\n```\r\n\r\n**请求体：**\r\n```json\r\n{\r\n  "command": "go build ./cmd/app",\r\n  "cwd": "F:/projects/my-app"\r\n}\r\n```\r\n\r\n| 字段 | 类型 | 必填 | 说明 |\r\n|------|------|------|------|\r\n| command | string | 是 | 要执行的命令 |\r\n| cwd | string | 否 | 工作目录（默认工作区根目录） |\r\n\r\n**响应示例：**\r\n```json\r\n{\r\n  "stdout": "# github.com/foo/app\\nsrc/main.go:42: undefined: x\\n",\r\n  "stderr": "",\r\n  "exitCode": 2\r\n}\r\n```\r\n\r\n| 字段 | 类型 | 说明 |\r\n|------|------|------|\r\n| stdout | string | 标准输出 |\r\n| stderr | string | 标准错误 |\r\n| exitCode | number | 退出码（0 = 成功） |\r\n\r\n> **安全限制：** 命令在工作区目录下执行；禁止交互式命令（如 `vim`）。\r\n\r\n---\r\n\r\n## 六、AI 模型\r\n\r\n### 获取可用模型列表\r\n\r\n```\r\nGET /api/models\r\n```\r\n\r\n**响应示例：**\r\n```json\r\n{\r\n  "providers": [\r\n    {\r\n      "name": "openai",\r\n      "models": ["gpt-4", "gpt-4-turbo", "gpt-3.5-turbo"]\r\n    },\r\n    {\r\n      "name": "claude",\r\n      "models": ["claude-3-opus", "claude-3-sonnet", "claude-3-haiku"]\r\n    }\r\n  ],\r\n  "current": {\r\n    "provider": "openai",\r\n    "model": "gpt-4"\r\n  }\r\n}\r\n```\r\n\r\n---\r\n\r\n## 七、对话管理\r\n\r\n### 7.1 对话列表\r\n\r\n```\r\nGET /api/conversations?workspace={工作区路径}\r\n```\r\n\r\n**参数：**\r\n| 参数 | 类型 | 必填 | 说明 |\r\n|------|------|------|------|\r\n| workspace | string | 否 | 工作区路径，省略时使用当前工作区 |\r\n\r\n**响应示例：**\r\n```json\r\n[\r\n  {\r\n    "id": "conv_1741680000000",\r\n    "title": "修复登录页面样式",\r\n    "createdAt": "2026-07-11T10:00:00Z",\r\n    "messageCount": 12,\r\n    "workspace": "F:/projects/my-app"\r\n  }\r\n]\r\n```\r\n\r\n### 7.2 创建对话\r\n\r\n```\r\nPOST /api/conversations\r\n```\r\n\r\n**请求体：**\r\n```json\r\n{\r\n  "title": "新对话",\r\n  "workspace": "F:/projects/my-app"\r\n}\r\n```\r\n\r\n**响应：** 返回创建的对话对象（同 GET 列表中的格式）。\r\n\r\n### 7.3 获取对话详情（含消息）\r\n\r\n```\r\nGET /api/conversations/{convId}\r\n```\r\n\r\n**响应：** 返回该对话的最近 50 条消息：\r\n\r\n```json\r\n{\r\n  "messages": [\r\n    {"role": "user", "content": "帮我写一个 HTTP 服务", "createdAt": "2026-07-11T10:00:00Z"},\r\n    {"role": "assistant", "content": "好的，我来创建...", "createdAt": "2026-07-11T10:00:05Z"}\r\n  ],\r\n  "total": 42\r\n}\r\n```\r\n\r\n### 7.4 更新对话\r\n\r\n```\r\nPUT /api/conversations/{convId}\r\n```\r\n\r\n**请求体：**\r\n```json\r\n{\r\n  "title": "新的标题"\r\n}\r\n```\r\n\r\n**响应：** `{"ok": true}`\r\n\r\n### 7.5 删除对话\r\n\r\n```\r\nDELETE /api/conversations/{convId}\r\n```\r\n\r\n**响应：** `{"ok": true}`（同时删除该对话的所有消息）。\r\n\r\n### 7.6 获取消息列表（分页）\r\n\r\n```\r\nGET /api/conversations/{convId}/messages?limit={数量}&before={索引}\r\n```\r\n\r\n**参数：**\r\n| 参数 | 类型 | 必填 | 说明 |\r\n|------|------|------|------|\r\n| limit | number | 否 | 返回消息条数（默认 50） |\r\n| before | number | 否 | 从消息索引 before 处开始往前加载（用于分页翻历史） |\r\n\r\n**响应：**\r\n```json\r\n{\r\n  "messages": [\r\n    {"role": "user", "content": "第一条消息", "createdAt": "..."},\r\n    {"role": "assistant", "content": "回复", "createdAt": "..."}\r\n  ],\r\n  "total": 42\r\n}\r\n```\r\n\r\n> 连续的 assistant 消息会被合并（`MergeConsecutiveAssistants`）。\r\n\r\n### 7.7 添加消息\r\n\r\n```\r\nPOST /api/conversations/{convId}/messages\r\n```\r\n\r\n**请求体：**\r\n```json\r\n{\r\n  "role": "user",\r\n  "content": "继续上一个话题"\r\n}\r\n```\r\n\r\n**响应：** `{"ok": true}`\r\n\r\n### 7.8 消息总数\r\n\r\n```\r\nGET /api/conversations/{convId}/messages/count\r\n```\r\n\r\n**响应：** `{"count": 42}`\r\n\r\n### 7.9 发送消息给 AI（非阻塞）\r\n\r\n```\r\nPOST /api/chat/send\r\n```\r\n\r\n**请求体：**\r\n```json\r\n{\r\n  "message": "帮我创建一个 Go HTTP 服务",\r\n  "sessionId": "sess_xxx",\r\n  "convId": "conv_1741680000000",\r\n  "autonomous": false,\r\n  "workspaceRoot": "F:/projects/my-app"\r\n}\r\n```\r\n\r\n| 字段 | 类型 | 必填 | 说明 |\r\n|------|------|------|------|\r\n| message | string | 是 | 用户消息内容（最长 50000 字符，超出截断） |\r\n| sessionId | string | 否 | 会话 ID |\r\n| convId | string | 否 | 对话 ID（留空则自动生成 `conv_{时间戳}`） |\r\n| autonomous | boolean | 否 | 是否启用自主模式（默认 false） |\r\n| workspaceRoot | string | 否 | 工作区路径（默认当前工作区） |\r\n\r\n**响应：** `{"sessionId": "sess_xxx", "convId": "conv_1741680000000"}`\r\n\r\nAI 的回复不在此响应的 Body 中返回，而是通过 **WebSocket 实时推送**事件流（见第十七章）。\r\n\r\n**前置条件：** 必须先配置 API Key 和模型。\r\n\r\n---\r\n\r\n### 7.10 停止 AI 响应\r\n\r\n```\r\nPOST /api/chat/stop?convId={对话ID}\r\n```\r\n\r\n**参数：** `convId` — 要停止的对话 ID。\r\n\r\n**响应：** `{"ok": true}`\r\n\r\n---\r\n\r\n### 7.11 审批操作\r\n\r\n```\r\nPOST /api/chat/approve\r\n```\r\n\r\n**请求体：**\r\n```json\r\n{\r\n  "convId": "conv_xxx",\r\n  "approved": true,\r\n  "reply": "请把函数名改为驼峰命名法"\r\n}\r\n```\r\n\r\n| 字段 | 类型 | 必填 | 说明 |\r\n|------|------|------|------|\r\n| convId | string | 是 | 对话 ID |\r\n| approved | boolean | 是 | 批准（true）或拒绝（false） |\r\n| reply | string | 否 | 拒绝时的反馈/纠正建议 |\r\n\r\n**响应：** `{"ok": true}`\r\n\r\n---\r\n\r\n### 7.12 发送运行时反馈\r\n\r\n```\r\nPOST /api/chat/feedback\r\n```\r\n\r\n**请求体：**\r\n```json\r\n{\r\n  "convId": "conv_xxx",\r\n  "feedback": "请改用更简洁的实现方式"\r\n}\r\n```\r\n\r\n| 字段 | 类型 | 必填 | 说明 |\r\n|------|------|------|------|\r\n| convId | string | 是 | 对话 ID |\r\n| feedback | string | 是 | 反馈/纠正内容 |\r\n\r\n**工作原理：** 在 AI 下次 LLM 调用前，将反馈内容作为用户消息注入本轮上下文，让 AI 在下一次回复中响应用户的补充或纠正。\r\n\r\n---\r\n\r\n### 7.13 回答 ask_user 提问\r\n\r\n```\r\nPOST /api/chat/answer\r\n```\r\n\r\n当 AI 通过 `ask_user` 工具向用户提问时，用此接口发送回答。\r\n\r\n**请求体：**\r\n```json\r\n{\r\n  "convId": "conv_xxx",\r\n  "answer": "用 POST 方法"\r\n}\r\n```\r\n\r\n| 字段 | 类型 | 必填 | 说明 |\r\n|------|------|------|------|\r\n| convId | string | 是 | 对话 ID |\r\n| answer | string | 是 | 用户的回答 |\r\n\r\n**响应：** `{"ok": true}`\r\n\r\n---\r\n\r\n### 7.14 回滚消息\r\n\r\n```\r\nPOST /api/chat/rollback\r\n```\r\n\r\n回滚到指定用户消息之前的状态：恢复该消息关联的所有文件快照，并删除该消息之后的对话历史。\r\n\r\n**请求体：**\r\n```json\r\n{\r\n  "convId": "conv_xxx",\r\n  "msgIdx": 3\r\n}\r\n```\r\n\r\n| 字段 | 类型 | 必填 | 说明 |\r\n|------|------|------|------|\r\n| convId | string | 是 | 对话 ID |\r\n| msgIdx | number | 是 | 用户消息索引（0 基），回滚到此消息之前 |\r\n\r\n**响应：** `{"ok": true, "msgIdx": 3}`\r\n\r\n---\r\n\r\n### 7.15 压缩上下文\r\n\r\n```\r\nPOST /api/chat/compact?convId={对话ID}\r\n```\r\n\r\n手动触发上下文压缩：将对话中间部分的老消息压缩为摘要，释放 token 预算。\r\n\r\n**参数：** `convId` — 对话 ID。\r\n\r\n**响应：** `{"ok": true}`\r\n\r\n---\r\n\r\n## 八、指令与思想\r\n\r\n### 8.1 读取指令\r\n\r\n```\r\nGET /api/instructions?scope={作用域}\r\n```\r\n\r\n**参数：** `scope` — 指令作用域（如 `"system"`、`"user"`）。\r\n\r\n**响应：** 返回指令文本内容（字符串）。\r\n\r\n### 8.2 保存指令\r\n\r\n```\r\nPUT /api/instructions?scope={作用域}\r\n```\r\n\r\n**请求体：** 纯文本字符串（指令内容）。\r\n\r\n**响应：** `{"ok": true}`\r\n\r\n### 8.3 读取行为指导\r\n\r\n```\r\n```\r\n\r\n**响应：** 返回 AI 行为指导配置文本。\r\n\r\n### 8.4 保存行为指导\r\n\r\n```\r\n```\r\n\r\n**请求体：** 纯文本字符串。\r\n\r\n**响应：** `{"ok": true}`\r\n\r\n---\r\n\r\n## 九、任务与规划\r\n\r\n> **注意：** 任务由 Agent 通过 `update_tasks` / `update_plan` 工具自主管理。以下 API 仅提供前端只读查询接口。\r\n\r\n### 9.1 获取任务列表\r\n\r\n```\r\nGET /api/tasks?convId={对话ID}\r\n```\r\n\r\n**参数：** `convId` — 可选，过滤指定对话的任务。\r\n\r\n**响应示例：**\r\n```json\r\n{\r\n  "tasks": [\r\n    {\r\n      "step": "创建 HTTP 服务文件",\r\n      "status": "completed",\r\n      "taskId": "task_1",\r\n      "description": "在 src/server.go 创建 HTTP 服务",\r\n      "created_at": "2026-07-11T10:00:00Z"\r\n    }\r\n  ]\r\n}\r\n```\r\n\r\n> 任务数据持久化在工作区 `.pair/tasks/*.json`，由 Agent 的 `update_tasks` 工具写入。\r\n\r\n### 9.2 读取任务规划文档\r\n\r\n```\r\nGET /api/taskplan?name={规划名}\r\n```\r\n\r\n列出或读取 Markdown 格式的规划文档。\r\n\r\n**参数：** `name` — 可选，指定规划文档名（不含 `.md` 后缀）；省略则返回所有规划文档列表。\r\n\r\n**GET 响应（列出全部）：**\r\n```json\r\n[\r\n  {"name": "refactor-auth", "file": "F:/projects/.pair/tasks/refactor-auth.md"}\r\n]\r\n```\r\n\r\n**GET 响应（读单个）：**\r\n```json\r\n{\r\n  "name": "refactor-auth",\r\n  "content": "## 重构计划\\n1. 提取认证中间件\\n2. 添加 JWT 支持"\r\n}\r\n```\r\n\r\n### 9.3 追加/完成规划文档\r\n\r\n```\r\nPOST /api/taskplan\r\n```\r\n\r\n**请求体：**\r\n```json\r\n{\r\n  "name": "refactor-auth",\r\n  "content": "- 完成 JWT 集成",\r\n  "action": "append"\r\n}\r\n```\r\n\r\n| 字段 | 类型 | 必填 | 说明 |\r\n|------|------|------|------|\r\n| name | string | 否 | 规划名称（省略则自动生成 `plan_日期时间`） |\r\n| content | string | 是 | 要追加的内容（Markdown） |\r\n| action | string | 否 | `"append"`（追加）或 `"complete"`（追加"[已完成] 时间戳"），默认 `"append"` |\r\n\r\n**响应：** `{"ok": true}`\r\n\r\n---\r\n\r\n## 十、Git 版本控制\r\n\r\n所有 Git API 均在**当前工作区目录**（或指定仓库路径）下执行。\r\n\r\n### 10.1 初始化仓库\r\n\r\n```\r\nPOST /api/git/init?path={目录路径}\r\n```\r\n\r\n**参数：** `path` — 目标目录（默认当前工作区）。\r\n\r\n**响应：** `{"output": "Initialized empty Git repository in ..."}`\r\n\r\n---\r\n\r\n### 10.2 仓库状态\r\n\r\n```\r\nGET /api/git/status?path={仓库路径}\r\n```\r\n\r\n**参数：**\r\n| 参数 | 类型 | 必填 | 说明 |\r\n|------|------|------|------|\r\n| path | string | 否 | 仓库路径（默认当前工作区） |\r\n\r\n**响应示例：**\r\n```json\r\n{\r\n  "branch": "main",\r\n  "changes": [\r\n    {"path": "src/main.go", "status": "M", "staged": false},\r\n    {"path": "src/utils.go", "status": "M", "staged": true}\r\n  ],\r\n  "untracked": ["src/new.go"],\r\n  "ahead": 1,\r\n  "behind": 0\r\n}\r\n```\r\n\r\n| 字段 | 类型 | 说明 |\r\n|------|------|------|\r\n| branch | string | 当前分支名 |\r\n| changes[].path | string | 变更文件路径 |\r\n| changes[].status | string | 状态码：`M`(修改) `A`(新增) `D`(删除) `R`(重命名) |\r\n| changes[].staged | boolean | 是否已暂存 |\r\n| untracked | string[] | 未跟踪文件列表 |\r\n| ahead | number | 领先远程的提交数 |\r\n| behind | number | 落后远程的提交数 |\r\n\r\n### 10.3 查看差异\r\n\r\n```\r\nGET /api/git/diff?path={仓库路径}&file={文件路径}&staged={是否暂存}\r\n```\r\n\r\n**参数：**\r\n| 参数 | 类型 | 必填 | 说明 |\r\n|------|------|------|------|\r\n| path | string | 否 | 仓库路径 |\r\n| file | string | 否 | 指定文件（省略则返回所有变更的 diff） |\r\n| staged | string | 否 | `"true"` = 只显示已暂存差异（--cached） |\r\n\r\n**响应：** 返回 diff 文本（字符串）。\r\n\r\n### 10.4 暂存文件\r\n\r\n```\r\nPOST /api/git/add\r\n```\r\n\r\n**请求体：**\r\n```json\r\n{\r\n  "path": "F:/projects/my-app",\r\n  "files": ["src/main.go", "src/utils.go"]\r\n}\r\n```\r\n\r\n| 字段 | 类型 | 必填 | 说明 |\r\n|------|------|------|------|\r\n| path | string | 否 | 仓库路径（默认工作区） |\r\n| files | string[] | 否 | 要暂存的文件列表（省略则暂存全部 `-A`） |\r\n\r\n**响应：** `{"ok": true}`\r\n\r\n### 10.5 取消暂存\r\n\r\n```\r\nPOST /api/git/reset\r\n```\r\n\r\n**请求体：** 格式同 `git/add`。\r\n\r\n**响应：** `{"ok": true}`\r\n\r\n### 10.6 提交\r\n\r\n```\r\nPOST /api/git/commit\r\n```\r\n\r\n**请求体：**\r\n```json\r\n{\r\n  "path": "F:/projects/my-app",\r\n  "message": "feat: 添加用户认证模块"\r\n}\r\n```\r\n\r\n| 字段 | 类型 | 必填 | 说明 |\r\n|------|------|------|------|\r\n| path | string | 否 | 仓库路径 |\r\n| message | string | 是 | 提交信息 |\r\n\r\n**响应：**\r\n```json\r\n{\r\n  "ok": true,\r\n  "hash": "a1b2c3d4e5f6..."\r\n}\r\n```\r\n\r\n### 10.7 查看提交历史\r\n\r\n```\r\nGET /api/git/log?path={仓库路径}&count={数量}&file={文件路径}\r\n```\r\n\r\n> **别名：** `/api/git-log`（绕过部分浏览器广告拦截器对 `/api/git/log` 的误杀）。\r\n\r\n**参数：**\r\n| 参数 | 类型 | 必填 | 说明 |\r\n|------|------|------|------|\r\n| path | string | 否 | 仓库路径 |\r\n| count | number | 否 | 返回条数（默认 15） |\r\n| file | string | 否 | 限定某文件的提交历史 |\r\n\r\n**响应示例：**\r\n```json\r\n[\r\n  {\r\n    "hash": "a1b2c3d",\r\n    "author": "user",\r\n    "date": "2026-07-11 10:00:00",\r\n    "message": "feat: 添加用户认证模块"\r\n  }\r\n]\r\n```\r\n\r\n### 10.8 分支管理\r\n\r\n```\r\nPOST /api/git/branch\r\n```\r\n\r\n| 操作 | 请求体 | 说明 |\r\n|------|--------|------|\r\n| 创建 | `{"path":"...","name":"feature-x","action":"create"}` | 创建新分支 |\r\n| 删除 | `{"path":"...","name":"feature-x","action":"delete"}` | 删除分支 |\r\n| 列表 | `{"path":"...","action":"list"}` | 列出所有分支 |\r\n| 切换 | `{"path":"...","name":"feature-x","action":"checkout"}` | 切换分支 |\r\n\r\n**响应：** 列表操作返回 `["main", "feature-x", ...]`，其他返回 `{"ok": true}`。\r\n\r\n### 10.9 切换分支 / 恢复文件\r\n\r\n```\r\nPOST /api/git/checkout\r\n```\r\n\r\n**请求体：**\r\n```json\r\n{\r\n  "path": "F:/projects/my-app",\r\n  "branch": "feature-x",\r\n  "file": "src/main.go"\r\n}\r\n```\r\n\r\n| 字段 | 类型 | 必填 | 说明 |\r\n|------|------|------|------|\r\n| branch | string | 按场景 | 切换到的分支名 |\r\n| file | string | 按场景 | 恢复指定文件到 HEAD（branch 和 file 二选一） |\r\n\r\n**响应：** `{"ok": true}`\r\n\r\n### 10.10 贮藏\r\n\r\n```\r\nPOST /api/git/stash\r\n```\r\n\r\n**请求体：**\r\n```json\r\n{\r\n  "path": "F:/projects/my-app",\r\n  "action": "push",\r\n  "message": "暂存当前 WIP"\r\n}\r\n```\r\n\r\n| 字段 | 类型 | 必填 | 说明 |\r\n|------|------|------|------|\r\n| path | string | 否 | 仓库路径 |\r\n| action | string | 否 | `"push"`(贮藏,默认) \\| `"pop"`(恢复) \\| `"apply"`(应用) \\| `"drop"`(丢弃) |\r\n| message | string | 否 | 贮藏备注 |\r\n\r\n**响应：** `{"ok": true}`\r\n\r\n### 10.11 查看贮藏列表\r\n\r\n```\r\nGET /api/git/stash-list?path={仓库路径}\r\n```\r\n\r\n**响应示例：**\r\n```json\r\n[\r\n  {"index": 0, "message": "暂存当前 WIP"},\r\n  {"index": 1, "message": "On feature-x: 临时保存"}\r\n]\r\n```\r\n\r\n### 10.12 管理 `.gitignore`\r\n\r\n```\r\nGET /api/git/ignore?path={仓库路径}\r\nPOST /api/git/ignore?path={仓库路径}\r\n```\r\n\r\n**GET 响应：** 返回当前 `.gitignore` 内容：\r\n```json\r\n{\r\n  "content": "*.log\\n.env\\nbuild/",\r\n  "rules": ["*.log", ".env", "build/"]\r\n}\r\n```\r\n\r\n**POST 请求体（覆盖写入）：**\r\n```json\r\n{\r\n  "content": "*.log\\n.env\\nnode_modules/"\r\n}\r\n```\r\n\r\n**POST 请求体（追加一行）：**\r\n```json\r\n{\r\n  "append": "dist/"\r\n}\r\n```\r\n\r\n| 字段 | 类型 | 必填 | 说明 |\r\n|------|------|------|------|\r\n| content | string | 按场景 | 完整覆盖 `.gitignore` 内容 |\r\n| append | string | 按场景 | 追加一行到 `.gitignore`（content 和 append 二选一） |\r\n\r\n**响应：** `{"ok": true}`\r\n\r\n### 10.13 丢弃修改\r\n\r\n```\r\nPOST /api/git/discard\r\n```\r\n\r\n**请求体：**\r\n```json\r\n{\r\n  "path": "F:/projects/my-app",\r\n  "files": ["src/main.go"]\r\n}\r\n```\r\n\r\n> ⚠️ 不可恢复！丢弃工作区未暂存的修改。\r\n\r\n**响应：** `{"ok": true}`\r\n\r\n### 10.14 推送\r\n\r\n```\r\nPOST /api/git/push\r\n```\r\n\r\n**请求体：**\r\n```json\r\n{\r\n  "path": "F:/projects/my-app",\r\n  "remote": "origin",\r\n  "branch": "main"\r\n}\r\n```\r\n\r\n| 字段 | 类型 | 必填 | 说明 |\r\n|------|------|------|------|\r\n| remote | string | 否 | 远程名（默认 `"origin"`） |\r\n| branch | string | 否 | 分支名（默认当前分支） |\r\n\r\n**响应：** `{"ok": true}`\r\n\r\n### 10.15 拉取\r\n\r\n```\r\nPOST /api/git/pull\r\n```\r\n\r\n**请求体：** 同 `git/push`。\r\n\r\n**响应：** `{"ok": true}`\r\n\r\n### 10.16 远程仓库管理\r\n\r\n```\r\nGET /api/git/remote?path={仓库路径}\r\nPOST /api/git/remote?path={仓库路径}\r\n```\r\n\r\n**GET 响应示例：**\r\n```json\r\n[\r\n  {"name": "origin", "url": "https://github.com/user/repo.git"}\r\n]\r\n```\r\n\r\n**POST 请求体：**\r\n```json\r\n{\r\n  "name": "upstream",\r\n  "url": "https://github.com/other/repo.git",\r\n  "action": "add"\r\n}\r\n```\r\n\r\n| 字段 | 类型 | 必填 | 说明 |\r\n|------|------|------|------|\r\n| name | string | 是 | 远程名 |\r\n| url | string | 是 | 远程 URL |\r\n| action | string | 否 | `"add"`（添加）或 `"remove"`（删除），默认 `"add"` |\r\n\r\n**响应：** `{"ok": true}`\r\n\r\n---\r\n\r\n## 十一、Skills 技能\r\n\r\n### 11.1 技能列表\r\n\r\n```\r\nGET /api/skills/list\r\n```\r\n\r\n**响应示例：**\r\n```json\r\n[\r\n  {\r\n    "name": "code-review",\r\n    "description": "代码审查工作流",\r\n    "mode": "auto",\r\n    "version": "1.0"\r\n  }\r\n]\r\n```\r\n\r\n### 11.2 读取技能\r\n\r\n```\r\nGET /api/skills/read?name={技能名}&level={层级}\r\n```\r\n\r\n**参数：**\r\n| 参数 | 类型 | 必填 | 说明 |\r\n|------|------|------|------|\r\n| name | string | 是 | 技能名 |\r\n| level | string | 否 | `"system"`（全局）或 `"project"`（项目，默认） |\r\n\r\n**响应：** 返回技能的完整 Markdown 内容。\r\n\r\n### 11.3 保存/更新技能状态\r\n\r\n```\r\nPOST /api/skills/save\r\n```\r\n\r\n**请求体：**\r\n```json\r\n{\r\n  "name": "code-review",\r\n  "level": "project",\r\n  "action": "set-status",\r\n  "status": "on"\r\n}\r\n```\r\n\r\n| 字段 | 类型 | 必填 | 说明 |\r\n|------|------|------|------|\r\n| name | string | 是 | 技能名 |\r\n| level | string | 否 | `"system"` / `"project"`（默认 project） |\r\n| action | string | 是 | 固定 `"set-status"` |\r\n| status | string | 是 | `"off"` \\| `"on"` \\| `"max"` |\r\n\r\n**响应：** `{"ok": true, "action": "set-status", "name": "code-review", "status": "on"}`\r\n\r\n### 11.4 删除技能\r\n\r\n```\r\nPOST /api/skills/delete\r\n```\r\n\r\n**请求体：**\r\n```json\r\n{\r\n  "name": "code-review"\r\n}\r\n```\r\n\r\n**响应：** `{"ok": true}`\r\n\r\n---\r\n\r\n## 十二、MCP 扩展\r\n\r\n### 12.1 MCP 列表\r\n\r\n```\r\nGET /api/mcp/list?level={层级}\r\n```\r\n\r\n**参数：**\r\n| 参数 | 类型 | 必填 | 说明 |\r\n|------|------|------|------|\r\n| level | string | 否 | 层级过滤（`"user"`、`"project"`） |\r\n\r\n### 12.2 MCP 保存/管理\r\n\r\n```\r\nPOST /api/mcp/save\r\n```\r\n\r\n统一管理 MCP 的添加、更新、删除和启用切换。\r\n\r\n**请求体（添加/更新）：**\r\n```json\r\n{\r\n  "name": "my-db",\r\n  "command": "node",\r\n  "args": ["mcp-server-db/index.js"],\r\n  "level": "project"\r\n}\r\n```\r\n\r\n**请求体（删除）：**\r\n```json\r\n{\r\n  "action": "delete",\r\n  "name": "my-db",\r\n  "level": "project"\r\n}\r\n```\r\n\r\n**请求体（启用/禁用切换）：**\r\n```json\r\n{\r\n  "action": "toggle",\r\n  "name": "my-db",\r\n  "level": "project"\r\n}\r\n```\r\n\r\n| 字段 | 类型 | 必填 | 说明 |\r\n|------|------|------|------|\r\n| action | string | 否 | `"delete"`（删除）\\| `"toggle"`（启用切换），省略则为新增/更新 |\r\n| name | string | 是 | MCP 名称 |\r\n| command | string | 新增时必填 | 启动命令 |\r\n| args | string[] | 否 | 命令参数 |\r\n| level | string | 否 | `"user"`（用户级）\\| `"project"`（项目级），默认 user |\r\n\r\n**响应：** `{"ok": true, "action": "...", "name": "..."}`\r\n\r\n---\r\n\r\n## 十三、Token 统计\r\n\r\n### 获取 Token 用量\r\n\r\n```\r\nGET /api/tokens/stats?workspaceRoot={工作区路径}\r\n```\r\n\r\n**参数：** `workspaceRoot` — 工作区路径（默认当前工作区）。\r\n\r\n**响应示例：**\r\n```json\r\n{\r\n  "workspaceRoot": "F:/projects/my-app",\r\n  "promptTokens": 125000,\r\n  "completionTokens": 45000,\r\n  "totalTokens": 170000,\r\n  "cost": 0.85\r\n}\r\n```\r\n\r\n| 字段 | 类型 | 说明 |\r\n|------|------|------|\r\n| promptTokens | number | 提示词 Token 数 |\r\n| completionTokens | number | 补全 Token 数 |\r\n| totalTokens | number | 总 Token 数 |\r\n| cost | number | 估算费用（美元） |\r\n\r\n---\r\n\r\n## 十四、调试日志\r\n\r\n### 14.1 日志列表\r\n\r\n```\r\nGET /api/debug/logs\r\n```\r\n\r\n**响应示例：**\r\n```json\r\n[\r\n  {"id": "log_001", "time": "2026-07-11T10:00:00Z", "session": "sess_xxx", "summary": "工具调用: read_file src/main.go"}\r\n]\r\n```\r\n\r\n### 14.2 日志详情\r\n\r\n```\r\nGET /api/debug/logs/{日志ID}\r\n```\r\n\r\n**响应：** 返回指定日志的完整内容。\r\n\r\n---\r\n\r\n## 十五、技能市场\r\n\r\n### 15.1 搜索市场\r\n\r\n```\r\nGET /api/marketplace/search?q={关键词}&kind={类型}\r\n```\r\n\r\n**参数：**\r\n| 参数 | 类型 | 必填 | 说明 |\r\n|------|------|------|------|\r\n| q | string | 否 | 搜索关键词 |\r\n| kind | string | 否 | 类型（`"mcp"`、`"skill"`、`"all"`） |\r\n\r\n### 15.2 安装扩展\r\n\r\n```\r\nPOST /api/marketplace/install\r\n```\r\n\r\n**请求体：**\r\n```json\r\n{\r\n  "id": "skill-code-review",\r\n  "scope": "project"\r\n}\r\n```\r\n\r\n| 字段 | 类型 | 必填 | 说明 |\r\n|------|------|------|------|\r\n| id | string | 是 | 扩展 ID |\r\n| scope | string | 否 | 安装范围（`"user"`、`"project"`） |\r\n\r\n**响应：** `{"ok": true}`\r\n\r\n### 15.3 刷新市场缓存\r\n\r\n```\r\nPOST /api/marketplace/refresh\r\n```\r\n\r\n**响应：** `{"ok": true}`\r\n\r\n---\r\n\r\n## 十六、记忆系统\r\n\r\n### 16.1 搜索记忆\r\n\r\n```\r\nGET /api/memory/search?q={关键词}\r\n```\r\n\r\n**响应示例：**\r\n```json\r\n[\r\n  {"name": "项目编码规范", "description": "使用驼峰命名法", "type": "project", "content": "..."}\r\n]\r\n```\r\n\r\n### 16.2 记忆列表\r\n\r\n```\r\nGET /api/memory/list\r\n```\r\n\r\n### 16.3 重建索引\r\n\r\n```\r\nPOST /api/memory/rebuild\r\n```\r\n\r\n**响应：** `{"ok": true}`\r\n\r\n---\r\n\r\n## 十七、插件与工具集管理\r\n\r\nPairCode IDE 的工具系统全部插件化（一切皆插件）。插件（plugin）是工具的最小可复用单元，工具集（toolset）是按项目需求组合的命名插件包。相关 API：\r\n\r\n### 17.1 插件管理\r\n\r\n```\r\nGET   /api/plugins            # 列出已注册插件（含工具归属）\r\nGET   /api/plugins/detail     # 插件详情\r\nPOST  /api/plugins/define     # 定义 JS/TS 插件\r\nPOST  /api/plugins/action     # 插件动作（run/stop/inspect 等）\r\nPOST  /api/plugins/event      # 插件事件\r\nGET   /api/plugins/client-state   # host/client 双半客户端状态\r\nPOST  /api/plugins/client-events  # 客户端事件\r\n```\r\n\r\n### 17.2 工具集管理\r\n\r\n```\r\nGET   /api/toolsets           # 列出工具集\r\nPOST  /api/toolsets/build     # 动态构建工具集（按项目+需求组合插件）\r\nGET   /api/toolsets/export    # 导出工具集 JSON\r\nPOST  /api/toolsets/import    # 导入工具集（project/user 范围）\r\nPOST  /api/toolsets/remove    # 移除工具集\r\n```\r\n\r\n### 17.3 工具配置\r\n\r\n```\r\nGET   /api/tools              # 工具清单（含启用/审核状态）\r\nPOST  /api/tools/save         # 保存工具配置\r\nPOST  /api/tools/review       # 审核配置\r\n```\r\n\r\n---\r\n\r\n## 十八、WebSocket 实时通信协议\r\n\r\nPairCode IDE 使用 **WebSocket** 实现双向实时通信。\r\n\r\n### 17.1 AI 事件推送\r\n\r\n```\r\nws://127.0.0.1:{port}/ws\r\n```\r\n\r\n**用途：** 接收 AI 对话的事件流（思考过程、工具调用、回复内容、错误等）。\r\n\r\n**协议：** 纯文本帧（JSON），**服务端单向推送**，客户端无需发送任何消息。\r\n\r\n#### 事件类型总表\r\n\r\n| 事件类型 | 说明 | 前端展示 |\r\n|---------|------|---------|\r\n| `thinking` | LLM 思考链增量 | 流式显示思考过程（斜体/灰色） |\r\n| `content` | LLM 正文回复增量 | 流式显示正文内容 |\r\n| `tool_call` | AI 即将执行某工具 | 显示工具调用卡片（工具名+参数） |\r\n| `tool_result` | 工具执行结果返回 | 显示结果摘要 |\r\n| `usage` | Token 用量统计 | 更新 Token 计数器 |\r\n| `approval` | 请求用户审批写类操作 | 显示审批对话框（含工具名、参数、文件路径） |\r\n| `error` | 出错或触发止损 | 显示错误信息 |\r\n| `done` | 本次 AI 回复完成 | 关闭加载状态 |\r\n| `compacted` | 上下文已压缩（旧消息被摘要替换） | 显示一条素色提示 |\r\n| `evaluation` | 自主模式任务评分 | 显示评分卡 |\r\n| `circling` | 检测到 AI 重复绕圈 | 显示"换思路"提示 |\r\n| `notice` | 后台任务通知 | 显示一条素色提示 |\r\n| `phase` | 自主模式阶段切换 | 显示阶段指示器（规划/执行/评测） |\r\n| `final` | 单轮委托完成（delegate 用） | 同 done |\r\n\r\n#### 事件 JSON 格式\r\n\r\n```json\r\n{\r\n  "type": "thinking",\r\n  "content": "我来分析一下这个需求...",\r\n  "tool": "",\r\n  "args": "",\r\n  "callId": "",\r\n  "agentName": "",\r\n  "usage": null,\r\n  "doneReason": ""\r\n}\r\n```\r\n\r\n| 字段 | 类型 | 必含 | 说明 |\r\n|------|------|------|------|\r\n| type | string | 是 | 事件类型（见上表） |\r\n| content | string | 按场景 | thinking/content/error/final 时携带文本内容 |\r\n| tool | string | 按场景 | tool_call/tool_result 时携带工具名 |\r\n| args | string | 按场景 | tool_call 时携带工具参数的 JSON 字符串 |\r\n| callId | string | 按场景 | 工具调用 ID，用于关联 tool_call → tool_result |\r\n| agentName | string | 按场景 | 事件来源 Agent 名。空串=主 Agent，非空=子 Agent |\r\n| usage | object | 按场景 | usage 时携带：`{promptTokens:N, completionTokens:N, totalTokens:N}` |\r\n| doneReason | string | 按场景 | done 时携带完成原因（`"completed"`、`"stopped"`、`"error"`） |\r\n\r\n#### 典型事件序列\r\n\r\n```\r\n→ {type:"thinking", content:"我来分析一下..."}\r\n→ {type:"tool_call", tool:"read_file", args:"{\\"path\\":\\"main.go\\"}", callId:"call_1"}\r\n→ {type:"tool_result", tool:"read_file", content:"文件内容...", callId:"call_1"}\r\n→ {type:"thinking", content:"看到文件结构了，接下来..."}\r\n→ {type:"tool_call", tool:"edit_file", args:"{\\"path\\":\\"main.go\\",\\"content\\":\\"...\\"}", callId:"call_2"}\r\n→ {type:"approval", tool:"edit_file", args:"{\\"path\\":\\"main.go\\"}", callId:"call_2"}\r\n   （等待用户审批 → 调用 POST /api/chat/approve）\r\n→ {type:"tool_result", tool:"edit_file", content:"文件已更新", callId:"call_2"}\r\n→ {type:"content", content:"已完成修改，以下是改动内容..."}\r\n→ {type:"usage", content:"", usage:{promptTokens:1200, completionTokens:350, totalTokens:1550}}\r\n→ {type:"done", doneReason:"completed"}\r\n```\r\n\r\n> **重要：** WebSocket 连接为全局单连接，推送**所有**会话的事件。事件中的 `convId` 字段（若存在）用于区分不同对话。前端需根据 `convId` 路由到对应的对话面板。\r\n\r\n---\r\n\r\n### 17.2 终端 WebSocket\r\n\r\n```\r\nws://127.0.0.1:{port}/api/terminal/ws\r\n```\r\n\r\n**用途：** 内置终端的双向输入输出通道，每连接对应一个 PTY 终端会话。\r\n\r\n#### 协议规则\r\n\r\n| 帧类型 | 方向 | 说明 |\r\n|--------|------|------|\r\n| 文本帧 (JSON) | 客户端→服务端 | 控制消息 |\r\n| 文本帧 (JSON) | 服务端→客户端 | 状态通知 |\r\n| 二进制帧 | 双向 | 原始 PTY I/O 字节流（含 VT 转义序列，由 xterm.js 渲染） |\r\n\r\n#### 控制消息格式\r\n\r\n**客户端 → 服务端（初始化）：**\r\n```json\r\n{"type": "init", "shell": "cmd", "cwd": "F:/projects/my-app"}\r\n```\r\n\r\n| 字段 | 类型 | 必填 | 说明 |\r\n|------|------|------|------|\r\n| type | string | 是 | 固定 `"init"` |\r\n| shell | string | 是 | Shell 名：`"cmd"` \\| `"powershell"` \\| `"gitbash"`（白名单限制） |\r\n| cwd | string | 是 | 工作目录（禁止穿越出工作区） |\r\n\r\n**客户端 → 服务端（调整大小）：**\r\n```json\r\n{"type": "resize", "cols": 120, "rows": 30}\r\n```\r\n\r\n**服务端 → 客户端：**\r\n```json\r\n{"type": "ready"}\r\n{"type": "error", "msg": "shell 不在白名单中"}\r\n{"type": "closed"}\r\n```\r\n\r\n#### 安全措施\r\n\r\n- Shell 白名单：仅允许 `cmd`、`powershell`、`gitbash`\r\n- `cwd` 路径校验：禁止穿越出工作区\r\n- PTY 关闭时强制终止子进程\r\n- 并发 PTY 会话数限制：最多 16 个\r\n\r\n---\r\n\r\n## 附录：API 索引速查\r\n\r\n### 基础 API\r\n| 方法 | 端点 | 用途 |\r\n|------|------|------|\r\n| GET | `/api/health` | 健康检查 |\r\n| GET | `/api/system/info` | 系统信息+版本号 |\r\n| POST | `/api/system/exec` | 执行命令 |\r\n\r\n### 文件系统 (11 个)\r\n| 方法 | 端点 | 用途 |\r\n|------|------|------|\r\n| GET | `/api/fs/list` | 列出目录 |\r\n| GET | `/api/fs/read` | 读取文件 |\r\n| POST | `/api/fs/write` | 写入文件 |\r\n| GET | `/api/fs/search` | 搜索内容 |\r\n| POST | `/api/fs/rename` | 重命名/移动 |\r\n| POST | `/api/fs/delete` | 删除 |\r\n| POST | `/api/fs/mkdir` | 创建目录 |\r\n| GET | `/api/fs/image` | 图片 Base64 |\r\n| GET | `/api/fs/file-info` | 文件信息 |\r\n| GET | `/api/fs/hex` | 十六进制查看 |\r\n| GET | `/api/fs/drives` | 磁盘驱动器列表 |\r\n\r\n### 工作区 & 设置\r\n| 方法 | 端点 | 用途 |\r\n|------|------|------|\r\n| GET/POST | `/api/workspace` | 工作区管理 |\r\n| GET/PUT | `/api/settings` | 设置管理 |\r\n\r\n### AI 对话 (9 个)\r\n| 方法 | 端点 | 用途 |\r\n|------|------|------|\r\n| POST | `/api/chat/send` | 发送消息给 AI |\r\n| POST | `/api/chat/stop` | 停止 AI 回复 |\r\n| POST | `/api/chat/approve` | 审批操作 |\r\n| POST | `/api/chat/feedback` | 发送运行时反馈 |\r\n| POST | `/api/chat/answer` | 回答 ask_user 提问 |\r\n| POST | `/api/chat/rollback` | 回滚到指定消息前 |\r\n| POST | `/api/chat/compact` | 手动压缩上下文 |\r\n| GET | `/api/models` | 可用模型列表 |\r\n\r\n### 对话管理 (8 个)\r\n| 方法 | 端点 | 用途 |\r\n|------|------|------|\r\n| GET | `/api/conversations` | 对话列表 |\r\n| POST | `/api/conversations` | 创建对话 |\r\n| GET | `/api/conversations/{id}` | 对话详情（含消息） |\r\n| PUT | `/api/conversations/{id}` | 更新对话 |\r\n| DELETE | `/api/conversations/{id}` | 删除对话 |\r\n| GET | `/api/conversations/{id}/messages` | 消息列表（分页） |\r\n| POST | `/api/conversations/{id}/messages` | 添加消息 |\r\n| GET | `/api/conversations/{id}/messages/count` | 消息总数 |\r\n\r\n### Git (16 个)\r\n| 方法 | 端点 | 用途 |\r\n|------|------|------|\r\n| POST | `/api/git/init` | 初始化仓库 |\r\n| GET | `/api/git/status` | 仓库状态 |\r\n| GET | `/api/git/diff` | 查看差异 |\r\n| POST | `/api/git/add` | 暂存 |\r\n| POST | `/api/git/reset` | 取消暂存 |\r\n| POST | `/api/git/commit` | 提交 |\r\n| GET | `/api/git/log` | 提交历史 |\r\n| GET | `/api/git-log` | 提交历史（别名） |\r\n| POST | `/api/git/branch` | 分支管理 |\r\n| POST | `/api/git/checkout` | 切换分支/恢复文件 |\r\n| POST | `/api/git/stash` | 贮藏 |\r\n| GET | `/api/git/stash-list` | 贮藏列表 |\r\n| GET/POST | `/api/git/ignore` | 管理 .gitignore |\r\n| POST | `/api/git/discard` | 丢弃修改 |\r\n| POST | `/api/git/push` | 推送 |\r\n| POST | `/api/git/pull` | 拉取 |\r\n| GET/POST | `/api/git/remote` | 远程仓库管理 |\r\n\r\n### 扩展 & 系统\r\n| 方法 | 端点 | 用途 |\r\n|------|------|------|\r\n| GET | `/api/skills/list` | 技能列表 |\r\n| GET | `/api/skills/read` | 读取技能 |\r\n| POST | `/api/skills/save` | 保存/更新技能状态 |\r\n| POST | `/api/skills/delete` | 删除技能 |\r\n| GET | `/api/mcp/list` | MCP 列表 |\r\n| POST | `/api/mcp/save` | MCP 保存/管理 |\r\n| GET | `/api/tokens/stats` | Token 统计 |\r\n| GET | `/api/debug/logs` | 调试日志列表 |\r\n| GET | `/api/debug/logs/{id}` | 调试日志详情 |\r\n| GET | `/api/memory/search` | 搜索记忆 |\r\n| GET | `/api/memory/list` | 记忆列表 |\r\n| POST | `/api/memory/rebuild` | 重建记忆索引 |\r\n| GET | `/api/marketplace/search` | 市场搜索 |\r\n| POST | `/api/marketplace/install` | 安装扩展 |\r\n| POST | `/api/marketplace/refresh` | 刷新市场缓存 |\r\n| GET/PUT | `/api/instructions` | 指令管理 |\r\n| GET | `/api/tasks` | 任务列表（只读查询） |\r\n| GET/POST | `/api/taskplan` | 规划文档管理 |\r\n\r\n### 插件 & 工具集\r\n| 方法 | 端点 | 用途 |\r\n|------|------|------|\r\n| GET | `/api/plugins` | 插件列表（含工具归属） |\r\n| GET | `/api/plugins/detail` | 插件详情 |\r\n| POST | `/api/plugins/define` | 定义 JS/TS 插件 |\r\n| POST | `/api/plugins/action` | 插件动作（run/stop/inspect） |\r\n| POST | `/api/plugins/event` | 插件事件 |\r\n| GET | `/api/plugins/client-state` | host/client 客户端状态 |\r\n| POST | `/api/plugins/client-events` | 客户端事件 |\r\n| GET | `/api/toolsets` | 工具集列表 |\r\n| POST | `/api/toolsets/build` | 动态构建工具集 |\r\n| GET | `/api/toolsets/export` | 导出工具集 JSON |\r\n| POST | `/api/toolsets/import` | 导入工具集 |\r\n| POST | `/api/toolsets/remove` | 移除工具集 |\r\n| GET | `/api/tools` | 工具清单 |\r\n| POST | `/api/tools/save` | 保存工具配置 |\r\n| POST | `/api/tools/review` | 审核配置 |\r\n\r\n---\r\n\r\n### WebSocket 端点\r\n| 端点 | 用途 |\r\n|------|------|\r\n| `ws://host/ws` | AI 事件流推送（思考/工具/结果/完成） |\r\n| `ws://host/api/terminal/ws` | PTY 终端双向 I/O |\r\n';
   const toolsMd = '# AI 工具文档\n\nPairCode IDE 中的 AI 助手拥有丰富的内置能力，可以像你使用 IDE 一样操作文件、搜索代码、运行命令、管理版本。你只需用自然语言告诉 AI 你想做什么，AI 会自动选择合适的工具来完成任务。\n\n所有工具对 AI 完全开放，你无需记忆工具名称——只需描述需求，AI 自动判断该用什么。\n\n---\n\n## 一、代码阅读与搜索\n\n**浏览项目结构、搜索代码内容和定位符号定义，是 AI 理解你代码的基础能力。**\n\nAI 可以像你一样阅读和浏览项目代码：\n\n- 读取文件内容（可按行号范围读取部分内容）\n- 列出目录下的文件和子目录\n- 按关键词或正则表达式在文件内容中搜索\n- 按通配符模式递归查找文件\n- 搜索函数、类型、结构体等符号的定义位置\n- 查看指定文件中所有检测到的符号\n- 搜索某个符号在项目中的所有引用位置\n- 列出项目中所有导出的公开符号\n- 查看文件的导入依赖和反向依赖\n- 分析修改某个文件后可能影响的其他文件\n- 检测项目中的循环依赖\n\n---\n\n## 二、代码知识图谱 CodeGraph\n\n**AI 能理解你的代码结构和调用关系，而不仅仅是搜索文本。**\n\nCodeGraph 将项目的代码整体结构构建成可查询的知识图谱，让 AI 像理解知识一样理解你的代码：\n\n- 构建或更新项目的代码知识图谱\n- 查看知识图谱的统计信息\n- 按名称查找函数或方法的定义位置和签名\n- 获取结构体或接口的完整层次结构（字段、方法、嵌入类型）\n- 查询哪些函数调用了指定的某个函数\n- 查询某个函数内部调用了哪些其他函数\n- 分析修改某个函数或类型后可能影响的范围\n- 在知识图谱中按名称搜索代码实体\n- 查询代码实体的 Git 变更历史\n\n---\n\n## 三、文件操作\n\n**读写和编辑工作区内的文件，是 AI 帮你写代码的主要方式。**\n\nAI 可以直接在工作区中进行文件操作：\n\n- 将内容写入指定文件（覆盖模式，自动创建父目录）\n- 精确替换文件中的一段文本\n- 将文件或目录移动到新位置（也可用于重命名）\n- 删除指定文件\n- 将文件恢复到修改前的版本\n- 查看某个文件的所有修改历史版本\n\n---\n\n## 四、命令执行\n\n**在工作区中运行命令，AI 也能用命令行来完成任务。**\n\n- 执行一条 shell 命令并等待结果返回\n- 在后台启动一条长命令（如启动开发服务器）\n- 读取后台进程累积的输出内容\n- 停止正在运行的后台进程\n- 直接执行一段代码（自动探测语言，写临时文件运行 Go / Python / Node.js 并返回结果）\n\n---\n\n## 五、网络与搜索\n\n**AI 可以联网获取信息或搜索资料。**\n\n- 抓取网页内容并提取纯文本\n- 通过搜索引擎检索网络信息\n\n---\n\n## 六、网页验证与截图\n\n**AI 可以打开网页、截图并分析页面内容，用于验证前端效果。**\n\n- 在浏览器中打开网页，可输入文字、点击元素、检查控制台错误并截图\n- 获取 JavaScript 渲染后的页面文本内容（适合单页应用）\n- 截取桌面或指定窗口的屏幕\n- 截取指定 URL 的网页\n\n---\n\n## 七、图像分析\n\n**AI 可以"看"图片并理解其中的内容。**\n\n- 读取图片文件内容（供支持视觉的模型直接理解图像）\n- 分析图片中的颜色分布、色块区域和基本图形\n- 从图片中识别文字，支持中英文混合识别\n\n---\n\n## 八、二进制分析\n\n**查看和分析二进制文件的内容，用于逆向工程或文件格式分析。**\n\n- 分析二进制文件的大小、类型和十六进制预览\n- 将 Base64 编码的内容写入二进制文件\n- 从二进制文件中提取可打印的字符串\n- 在二进制文件中搜索指定的字节模式或文本\n- 在二进制文件的指定位置写入字节补丁\n- 解析可执行文件的结构（架构、入口、节区、导入导出）\n- 计算文件的 MD5、SHA1、SHA256 哈希值\n- 按块计算文件的香农熵（识别压缩或加密区域）\n\n---\n\n## 九、办公文档\n\n**读写常见的办公文档格式，包括表格、文档和 PDF。**\n\n- 读取 CSV 或 TSV 文件并以表格形式展示\n- 将数据写入 CSV 或 TSV 文件\n- 将 JSON 数组数据转为 Markdown 表格\n- 对表格数据的数值列做统计（求和、均值、最大值等）\n- 按文件扩展名分组统计代码行数\n- 读取和生成 Word 文档\n- 读取和创建 Excel 文件\n- 提取 PDF 文件的文本内容（扫描型 PDF 自动进行 OCR 识别）\n- 将 Markdown 文本转换为 HTML\n\n---\n\n## 十、Git 版本控制\n\n**在对话中完成 Git 操作，AI 可以帮你管理代码版本。**\n\n- 查看工作区的 Git 状态\n- 查看文件的变更内容\n- 查看最近的提交历史\n- 查看某次提交的详情和改动\n- 逐行查看文件的最后修改人和提交信息\n- 将文件加入暂存区\n- 提交已暂存的改动\n- 列出、创建或删除分支\n- 切换分支或恢复文件的修改\n- 将工作区的改动暂存起来，稍后恢复\n\n---\n\n## 十一、调试器\n\n**AI 可以启动调试会话，设置断点并检查程序运行状态。**\n\n- 启动 Go 程序的调试会话\n- 停止当前的调试会话\n- 在指定文件的指定行设置断点\n- 从暂停状态继续执行程序\n- 单步跳过（不进入函数内部）\n- 单步进入（进入函数调用内部）\n- 单步跳出（执行到函数返回）\n- 查看当前线程的调用栈\n- 查看当前暂停点的变量值\n- 在暂停状态下求值表达式\n- 查看当前调试会话的状态\n\n---\n\n## 十二、项目知识库\n\n**将项目架构、模块职责和设计决策记录下来，让 AI 跨会话了解你的项目。**\n\n- 写入一条项目知识（如架构说明或设计决策）\n- 读取某条项目知识的详细内容\n- 列出知识库的所有条目概览\n- 按关键词搜索知识库内容\n- 删除某条项目知识\n- 生成项目目录结构概览\n\n---\n\n## 十三、记忆系统\n\n**AI 可以记住你的偏好、历史决策和项目约束，跨对话持续积累。**\n\n- 写入一条持久记忆，AI 在后续对话中自动参考\n- 读取某条记忆的详细内容\n- 按关键词搜索已有记忆\n- 列出所有历史记忆的摘要\n- 删除一条过时的记忆\n- 查询记忆库中的总条目数\n\n---\n\n## 十四、BUG 检测与修复\n\n**AI 可以自动发现代码中的问题并给出修复方案。**\n\n- 分析构建或测试的输出，提取错误位置和上下文\n- 全量检测项目中的 BUG，自动运行编译和测试检查\n- 自动检测 BUG 并生成修复方案，支持多次迭代修复\n\n---\n\n## 十五、任务与规划\n\n**AI 可以追踪任务进度和执行计划，确保复杂的多步骤任务有条不紊。**\n\n- 创建一个新的子任务并跟踪其状态\n- 更新任务清单中各项任务的进度状态\n- 维护和更新执行计划的步骤清单\n- 任务全部完成后生成提交信息\n\n---\n\n## 十六、技能与 MCP 管理\n\n**管理和扩展 AI 的能力——技能是工作流模板，MCP 是标准化的工具扩展协议。**\n\n- 列出所有可用的技能及其激活模式\n- 加载某个技能的完整内容供 AI 使用\n- 加载技能的附加资源文件\n- 创建或更新一个技能模板\n- 删除一个项目级技能\n- 列出已配置的 MCP 服务器\n- 新增或删除 MCP 服务器扩展\n\n---\n\n## 十七、市场\n\n**浏览和安装来自公共市场的技能和 MCP 扩展。**\n\n- 在市场检索可安装的 MCP 服务器或技能\n- 从市场安装指定的扩展\n\n---\n\n## 十八、插件管理\n\n**管理 JS / TS / Go / Lua 插件——一切皆插件，自定义和扩展 AI 的工具集。**\n\n- 定义一个函数形态的 JS/TS 插件（支持 apply(ctx, config) 注入服务、timer 定时器、跨 goroutine 执行锁）\n- 查看已注册插件的详情（含工具归属：每个工具来自哪个插件，可整体卸载回收）\n- 对插件执行查询（inspect 内部状态）\n- 运行插件注册的服务或回调\n- 列出 / 停止已注册的插件服务\n- 撤销（undefine）一个已定义的插件\n- 列出所有已创建的 Lua 自定义工具\n- 创建一个新的 Lua 自定义工具\n- 更新现有 Lua 工具的代码或参数\n- 删除一个 Lua 自定义工具\n\n---\n\n## 十九、工具集管理\n\n**按项目需求动态组合工具集，固化/导出/导入，构建处理本身也插件化。**\n\n- 分析项目结构与需求，动态组合所需工具并创建工具集插件（固化到工作区 `.pair/toolsets/`）\n- 列出当前项目可用的工具集\n- 查看某个工具集的详细内容\n- 导出工具集为 JSON（可提交 Git / 发布市场）\n- 从 JSON 或文件导入工具集（project 工作区级 / user 全局级）\n- 移除不再需要的工具集\n\n---\n\n## 二十、其他工具\n\n**辅助性工具，在特定场景下帮助 AI 更好地与你协作。**\n\n- **用户提问** — 当 AI 遇到关键决策点时，向你提问以澄清需求\n- **任务委派** — 将复杂任务委托给子 AI 独立完成\n- **资产清单** — 查看和使用已保存的经验胶囊和最佳实践\n';
@@ -7757,19 +6522,15 @@ Please report this to https://github.com/markedjs/marked.`, e) {
               key: 2,
               onClose: _cache[2] || (_cache[2] = ($event) => uiState_js.showSource.value = false)
             })) : vue.createCommentVNode("v-if", true),
-            vue.unref(uiState_js.showMarketplace) ? (vue.openBlock(), vue.createBlock(MarketplaceModal, {
-              key: 3,
-              onClose: _cache[3] || (_cache[3] = ($event) => uiState_js.showMarketplace.value = false)
-            })) : vue.createCommentVNode("v-if", true),
             vue.unref(uiState_js.showHelp) ? (vue.openBlock(), vue.createBlock(HelpModal, {
-              key: 4,
-              onClose: _cache[4] || (_cache[4] = ($event) => uiState_js.showHelp.value = false),
+              key: 3,
+              onClose: _cache[3] || (_cache[3] = ($event) => uiState_js.showHelp.value = false),
               onOpenAbout: onHelpOpenAbout,
               initialDoc: vue.unref(uiState_js.helpDocTarget)
             }, null, 8, ["initialDoc"])) : vue.createCommentVNode("v-if", true),
             vue.unref(uiState_js.showAbout) ? (vue.openBlock(), vue.createBlock(AboutModal, {
-              key: 5,
-              onClose: _cache[5] || (_cache[5] = ($event) => uiState_js.showAbout.value = false),
+              key: 4,
+              onClose: _cache[4] || (_cache[4] = ($event) => uiState_js.showAbout.value = false),
               onOpenHelp: onAboutOpenHelp
             })) : vue.createCommentVNode("v-if", true),
             vue.createVNode(GlobalDialogs),
@@ -7792,7 +6553,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
       };
     }
   };
-  const UiModals2 = /* @__PURE__ */ _export_sfc(_sfc_main, [["__scopeId", "data-v-95a2c5d7"]]);
+  const UiModals2 = /* @__PURE__ */ _export_sfc(_sfc_main, [["__scopeId", "data-v-519b8494"]]);
   function mount(el) {
     const app = vue.createApp(UiModals2);
     app.mount(el);
