@@ -465,9 +465,39 @@ func copyFile(dst, src string) error {
 	return err
 }
 
+// stripSecretsRecursive 递归遍历 JSON 树，删除任意层级匹配敏感字段名的键。
+// 返回是否发生变更。
+func stripSecretsRecursive(v any, fieldSet map[string]bool) bool {
+	changed := false
+	switch t := v.(type) {
+	case map[string]any:
+		for k, child := range t {
+			if fieldSet[k] {
+				delete(t, k)
+				changed = true
+				continue
+			}
+			if stripSecretsRecursive(child, fieldSet) {
+				changed = true
+			}
+		}
+	case []any:
+		for i := range t {
+			if stripSecretsRecursive(t[i], fieldSet) {
+				changed = true
+			}
+		}
+	}
+	return changed
+}
+
 func stripSecrets(distDir string, fields, files []string) {
 	if len(fields) == 0 || len(files) == 0 {
 		return
+	}
+	fieldSet := make(map[string]bool, len(fields))
+	for _, f := range fields {
+		fieldSet[f] = true
 	}
 	for _, rel := range files {
 		path := filepath.Join(distDir, rel)
@@ -479,14 +509,7 @@ func stripSecrets(distDir string, fields, files []string) {
 		if err := json.Unmarshal(data, &m); err != nil {
 			continue
 		}
-		changed := false
-		for _, f := range fields {
-			if _, ok := m[f]; ok {
-				delete(m, f)
-				changed = true
-			}
-		}
-		if changed {
+		if stripSecretsRecursive(m, fieldSet) {
 			cleaned, _ := json.MarshalIndent(m, "", "  ")
 			os.WriteFile(path, cleaned, 0644)
 			fmt.Printf("  🔒 密钥已清除: %s\n", rel)

@@ -1,8 +1,0 @@
-{
-  "name": "dyn-44",
-  "purpose": "用 logger 输出 demo2.txt 内容",
-  "version": "1.0.0",
-  "scope": "project",
-  "type": "plugin",
-  "main": "index.js"
-}

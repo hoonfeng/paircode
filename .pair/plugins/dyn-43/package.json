@@ -1,8 +1,0 @@
-{
-  "name": "dyn-43",
-  "purpose": "读取 tmp/merge_demo/demo2.txt 并以错误回显内容",
-  "version": "1.0.0",
-  "scope": "project",
-  "type": "plugin",
-  "main": "index.js"
-}
