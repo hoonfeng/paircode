@@ -157,7 +157,11 @@ return {
     // ── 已安装检查 ──
     function isInstalled(e) {
       const id = e.id
-      if (e.kind === 'mcp') return (ctx.mcp.list() || []).some(x => x.name === id)
+      if (e.kind === 'mcp') {
+        // 兼容新旧安装名（旧名带 npm- 前缀）
+        const id2 = String(id).replace(/^npm-/, '')
+        return (ctx.mcp.list() || []).some(x => x.name === id || x.name === id2)
+      }
       if (e.kind === 'skill') return (ctx.skill.list() || []).some(x => x.name === id)
       if (e.kind === 'plugin') {
         if (String(e.source || '').startsWith('npm:')) return ctx.npm.installed(id)
@@ -199,12 +203,13 @@ return {
         return msg
       }
       if (kind === 'mcp') {
-        const name = id
+        // ★ 2026-08-20 修复：安装名用展示短名（去 npm- 前缀）——之前用 id（'npm-xxx'）导致已安装 MCP 名带前缀
+        const name = String(body.name || id).replace(/^npm-/, '')
         const cmd = body.command || 'npx'
         const args = Array.isArray(body.args) ? body.args : []
         ctx.mcp.upsert({ name, command: cmd, args, level: scope })
         const lv = scope === 'project' ? '工作区级' : '用户级（全局）'
-        return '✅ 已安装 MCP 服务器「' + (body.name || name) + '」（' + lv + '）'
+        return '✅ 已安装 MCP 服务器「' + name + '」（' + lv + '）'
       }
       if (kind === 'skill') {
         ctx.skill.write({ name: id, description: body.description || '', mode: body.activation || 'auto', content: body.content || '' })
@@ -225,9 +230,13 @@ return {
         return '已卸载 npm 插件 ' + pkg
       }
       if (kind === 'mcp') {
+        // 兼容新旧安装名：安装名可能带 npm- 前缀（旧）或短名（新）
+        const id2 = String(id).replace(/^npm-/, '')
+        ctx.mcp.remove(id2, 'user')
+        ctx.mcp.remove(id2, 'project')
         ctx.mcp.remove(id, 'user')
         ctx.mcp.remove(id, 'project')
-        return '已卸载 MCP 服务器 ' + id
+        return '已卸载 MCP 服务器 ' + (id2 || id)
       }
       if (kind === 'skill') return ctx.skill.remove(id)
       if (kind === 'plugin') {

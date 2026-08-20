@@ -83,6 +83,29 @@
 
         <!-- 已安装列表 -->
         <div v-else-if="tab === 'installed'" class="market-list" ref="listRef">
+          <!-- 插件分组（★ 2026-08-20 新增：磁盘插件清单） -->
+          <div v-if="installedPlugins.length > 0" class="installed-group">
+            <div class="installed-group-title">插件</div>
+            <div v-for="item in installedPlugins" :key="'plugin-' + item.name" class="installed-item">
+              <div class="ii-icon icon-plugin"><SvgIcon name="puzzle" :size="18" /></div>
+              <div class="ii-status-dot" :class="item.state === 'running' ? 'dot-connected' : 'dot-disabled'" :title="item.state === 'running' ? '运行中' : '已停止'"></div>
+              <div class="ii-body">
+                <div class="ii-name">{{ item.name }}</div>
+                <div class="ii-desc">{{ item.purpose || '（无描述）' }}</div>
+                <span class="ii-badge">
+                  <span v-if="isCorePlugin(item.name)" class="badge-system">系统</span>
+                  插件 ·
+                  <span :class="'status-' + (item.state === 'running' ? 'on' : 'off')">{{ item.state === 'running' ? '运行中' : '已停止' }}</span>
+                  · {{ item.scope === 'global' ? '全局' : '工作区' }}
+                </span>
+              </div>
+              <div class="ii-actions">
+                <button v-if="item.state === 'running'" class="ii-btn ii-toggle" @click="togglePlugin(item)" title="停止：插件及其工具/UI 不再生效">停止</button>
+                <button v-else class="ii-btn ii-toggle is-enabled" @click="togglePlugin(item)" title="启动插件">启动</button>
+                <button v-if="!isCorePlugin(item.name)" class="ii-btn ii-del" @click="uninstallPlugin(item)" title="卸载：删除插件包目录，可重新从市场安装">卸载</button>
+              </div>
+            </div>
+          </div>
           <!-- MCP 分组 -->
           <div v-if="installedMCPs.length > 0" class="installed-group">
             <div class="installed-group-title">MCP 服务器</div>
@@ -130,9 +153,9 @@
               </div>
             </div>
           </div>
-          <div v-if="installedMCPs.length === 0 && installedSkills.length === 0" class="market-empty">
+          <div v-if="installedMCPs.length === 0 && installedSkills.length === 0 && installedPlugins.length === 0" class="market-empty">
             <div class="me-icon"><SvgIcon name="package" :size="32" /></div>
-            <div>暂无已安装的 MCP 服务器或技能</div>
+            <div>暂无已安装内容</div>
             <div class="me-hint">切换到「全部」tab 搜索安装，或点击上方「添加 MCP 服务器」</div>
           </div>
         </div>
@@ -188,7 +211,7 @@
         </div>
       </div>
       <div class="market-footer">
-        <span class="market-count">{{ tab === 'installed' ? (installedMCPs.length + installedSkills.length) : items.length }} 个条目</span>
+        <span class="market-count">{{ tab === 'installed' ? (installedMCPs.length + installedSkills.length + installedPlugins.length) : items.length }} 个条目</span>
         <span v-if="error" class="market-error">{{ error }}</span>
         <span class="market-tip">安装后下次对话生效</span>
         <button class="btn-secondary" @click="closePanel">关闭</button>
@@ -234,6 +257,7 @@ async function loadSources() {
 // ── 已安装管理 ──
 const installedMCPs = ref([])
 const installedSkills = ref([])
+const installedPlugins = ref([])
 const showAddMCP = ref(false)
 const savingMCP = ref(false)
 const mcpError = ref('')
@@ -251,12 +275,14 @@ async function loadInstalled() {
   loading.value = true
   error.value = ''
   try {
-    const [mcpList, skillList] = await Promise.all([
+    const [mcpList, skillList, pluginList] = await Promise.all([
       api.getMcpList('all'),
-      api.getSkillsList()
+      api.getSkillsList(),
+      api.listPlugins()
     ])
     installedMCPs.value = mcpList || []
     installedSkills.value = skillList || []
+    installedPlugins.value = pluginList || []
   } catch (err) {
     error.value = '加载失败: ' + err.message
   } finally {
@@ -345,6 +371,35 @@ function statusTitle(item) {
   return '按需：根据关键词/文件匹配自动激活'
 }
 
+// ★ 2026-08-20 新增：插件启停/卸载（/plugins/action）
+// 系统核心插件（基础设施）禁卸载，避免破坏装配链
+const CORE_PLUGINS = ['agentloop', 'core-api', 'marketplace', 'web-api', 'fs-api', 'git-api']
+function isCorePlugin(name) { return CORE_PLUGINS.includes(name) }
+
+async function togglePlugin(item) {
+  const action = item.state === 'running' ? 'stop' : 'start'
+  try {
+    await api.pluginAction(item.name, action)
+    item.state = action === 'stop' ? 'stopped' : 'running'
+    window.$toast?.(`插件「${item.name}」已${action === 'stop' ? '停止' : '启动'}`, 'success')
+  } catch (err) {
+    error.value = '操作失败: ' + err.message
+    window.$toast?.('操作失败: ' + err.message, 'error')
+  }
+}
+
+async function uninstallPlugin(item) {
+  if (!confirm(`确认卸载插件「${item.name}」？\n将删除 .pair/plugins/${item.name} 目录，如需恢复可从市场重新安装。`)) return
+  try {
+    await api.pluginAction(item.name, 'undefine')
+    installedPlugins.value = installedPlugins.value.filter(p => p.name !== item.name)
+    window.$toast?.(`插件「${item.name}」已卸载`, 'success')
+  } catch (err) {
+    error.value = '卸载失败: ' + err.message
+    window.$toast?.('卸载失败: ' + err.message, 'error')
+  }
+}
+
 async function setSkillStatus(item, status) {
   try {
     await api.saveSkillStatus(item.name, item.level || 'project', status)
@@ -414,6 +469,7 @@ async function installItem(item, scope) {
     }
     if (item.kind === 'mcp') {
       body.scope = scope || 'user'
+      body.name = item.name || String(item.id).replace(/^npm-/, '') // ★ 安装名用短名（后端去 npm- 前缀）
     } else if (item.kind === 'plugin') {
       body.scope = 'project' // 插件/工具集默认装到工作区（npm 插件 → .pair/plugins/<name>/ 插件包目录）
     }
@@ -442,19 +498,16 @@ async function toggleMCP(item) {
 async function uninstallItem(item) {
   error.value = ''
   try {
-    const isNpm = (item.source || '').startsWith('npm:')
-    if (isNpm) {
-      // npm 插件：统一卸载接口（patch 移除 + 宿主卸载）
-      await api.apiPost('/marketplace/uninstall', { id: item.id, kind: 'plugin', source: item.source })
-    } else if (item.kind === 'mcp') {
-      await api.saveMcpItem({ action: 'delete', name: item.id, level: 'user' })
-    } else if (item.kind === 'skill') {
-      await api.deleteSkill(item.id)
-    } else if (item.kind === 'plugin') {
-      await api.apiPost('/toolsets/remove', { name: item.id.replace(/^plugin-/, ''), scope: 'project' })
-    }
+    // ★ 2026-08-20 修复：统一走 /marketplace/uninstall（后端按 kind 分派，mcp 删双 level、npm 插件按 source）
+    const result = await api.apiPost('/marketplace/uninstall', {
+      id: item.id,
+      kind: item.kind,
+      source: item.source || '',
+    })
     item.installed = false
-    window.$toast?.('已卸载: ' + item.name, 'success')
+    window.$toast?.(result.message || '已卸载: ' + item.name, 'success')
+    // 刷新搜索结果（重算 installed 状态）
+    await doSearch()
   } catch (err) {
     error.value = '卸载失败: ' + err.message
     window.$toast?.('卸载失败: ' + err.message, 'error')
@@ -463,6 +516,8 @@ async function uninstallItem(item) {
 
 onMounted(() => {
   loadSources()
+  // ★ 2026-08-20：初始预加载——默认搜索官方插件，避免打开市场一片空白
+  if (!query.value) query.value = 'paircode'
   doSearch()
 })
 </script>
@@ -721,25 +776,39 @@ onMounted(() => {
 }
 
 /* ── 已安装列表 ── */
-.installed-group { margin-bottom: 4px; }
+.installed-group { margin-bottom: 8px; }
+.installed-group + .installed-group { border-top: 1px solid var(--border-color); padding-top: 4px; }
 .installed-group-title {
   font-size: 11px;
   text-transform: uppercase;
-  color: var(--text-muted);
-  padding: 8px 12px 4px;
+  color: var(--text-secondary);
+  padding: 6px 10px;
   letter-spacing: 0.5px;
+  font-weight: 600;
+  background: var(--bg-tertiary);
+  border-radius: 5px;
+  margin: 0 6px 4px;
 }
 .installed-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  border-radius: 6px;
-}
-.installed-item:hover { background: var(--bg-hover); }
 .ii-icon {
   width: 36px; height: 36px;
   border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.icon-plugin { background: rgba(167, 139, 250, 0.15); color: #a78bfa; }
+.badge-system {
+  font-size: 10px;
+  color: #e8b84b;
+  background: rgba(232, 184, 75, 0.15);
+  padding: 0 5px;
+  border-radius: 3px;
+  margin-right: 4px;
+}
   display: flex;
   align-items: center;
   justify-content: center;
