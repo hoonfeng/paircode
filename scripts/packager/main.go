@@ -473,6 +473,12 @@ func stripSecretsRecursive(v any, fieldSet map[string]bool) bool {
 	case map[string]any:
 		for k, child := range t {
 			if fieldSet[k] {
+				// 占位符（<...>）或空值保留——模板提示无害；真实密钥（非空且非占位符）删除
+				if s, ok := child.(string); ok {
+					if s == "" || (strings.HasPrefix(s, "<") && strings.HasSuffix(s, ">")) {
+						continue
+					}
+				}
 				delete(t, k)
 				changed = true
 				continue

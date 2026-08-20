@@ -90,11 +90,6 @@
         "recursive": true
       },
       {
-        "src": "config/ai-presets.json",
-        "dst": "config/ai-presets.json",
-        "optional": true
-      },
-      {
         "src": "config/roles",
         "dst": "config/roles",
         "optional": true,
@@ -198,8 +193,7 @@
     "files": [
       "config/settings.json",
       "config/mcp.json",
-      "config/models.json",
-      "config/ai-presets.json"
+      "config/models.json"
     ]
   }
 }
