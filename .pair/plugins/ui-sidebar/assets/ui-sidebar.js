@@ -6426,7 +6426,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
   const _hoisted_1 = { class: "sidebar-header" };
   const _hoisted_2 = { class: "sidebar-content" };
   const _hoisted_3 = {
-    key: 3,
+    key: 4,
     class: "sidebar-placeholder"
   };
   const _sfc_main = {
@@ -6436,6 +6436,63 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
         const titles = { explorer: "文件浏览器", search: "搜索", source: "源代码管理", plugins: "插件" };
         return titles[uiState_js.state.activeActivity] || "";
       });
+      const gitHost = vue.ref(null);
+      let gitUnmount = null;
+      let gitRetryTimer = null;
+      function mountGitPanel() {
+        const el = gitHost.value;
+        if (!el) return;
+        el.innerHTML = "";
+        const mod = window.GitPanel;
+        if (mod && typeof mod.mount === "function") {
+          try {
+            gitUnmount = mod.mount(el);
+            return;
+          } catch (e) {
+            console.warn("[sidebar] Git 面板挂载失败", e);
+            el.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text-muted)">挂载失败: ' + (e && e.message || e) + "</div>";
+            return;
+          }
+        }
+        if (gitRetryTimer) return;
+        let tries = 0;
+        gitRetryTimer = setInterval(() => {
+          tries++;
+          if (window.GitPanel) {
+            clearInterval(gitRetryTimer);
+            gitRetryTimer = null;
+            mountGitPanel();
+            return;
+          }
+          if (tries >= 8) {
+            clearInterval(gitRetryTimer);
+            gitRetryTimer = null;
+            el.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text-muted)">Git 面板未就绪（git-api 插件未启用）</div>';
+          }
+        }, 800);
+        el.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text-muted)">Git 面板加载中...</div>';
+      }
+      function unmountGitPanel() {
+        if (gitRetryTimer) {
+          clearInterval(gitRetryTimer);
+          gitRetryTimer = null;
+        }
+        if (gitUnmount) {
+          try {
+            gitUnmount();
+          } catch (e) {
+          }
+          gitUnmount = null;
+        }
+      }
+      vue.watch(() => uiState_js.state.activeActivity, (a) => {
+        if (a === "source") {
+          vue.nextTick(mountGitPanel);
+        } else {
+          unmountGitPanel();
+        }
+      });
+      vue.onUnmounted(unmountGitPanel);
       let dragging = false;
       let startX = 0;
       let startW = 0;
@@ -6481,7 +6538,26 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
               )
             ]),
             vue.createElementVNode("div", _hoisted_2, [
-              vue.unref(uiState_js.state).activeActivity === "explorer" ? (vue.openBlock(), vue.createBlock(FileExplorer, { key: 0 })) : vue.unref(uiState_js.state).activeActivity === "search" ? (vue.openBlock(), vue.createBlock(SearchPanel, { key: 1 })) : vue.unref(uiState_js.state).activeActivity === "plugins" ? (vue.openBlock(), vue.createBlock(PluginPanel, { key: 2 })) : (vue.openBlock(), vue.createElementBlock("div", _hoisted_3, [..._cache[0] || (_cache[0] = [
+              vue.unref(uiState_js.state).activeActivity === "explorer" ? (vue.openBlock(), vue.createBlock(FileExplorer, { key: 0 })) : vue.unref(uiState_js.state).activeActivity === "search" ? (vue.openBlock(), vue.createBlock(SearchPanel, { key: 1 })) : vue.unref(uiState_js.state).activeActivity === "source" ? (vue.openBlock(), vue.createElementBlock(
+                vue.Fragment,
+                { key: 2 },
+                [
+                  vue.createCommentVNode(" Git 源代码管理面板：由 git-api 插件加载 bundle 到 window.GitPanel，\n           本组件动态挂载（跨 bundle，不能静态 import） "),
+                  vue.createElementVNode(
+                    "div",
+                    {
+                      ref_key: "gitHost",
+                      ref: gitHost,
+                      class: "git-host"
+                    },
+                    null,
+                    512
+                    /* NEED_PATCH */
+                  )
+                ],
+                2112
+                /* STABLE_FRAGMENT, DEV_ROOT_FRAGMENT */
+              )) : vue.unref(uiState_js.state).activeActivity === "plugins" ? (vue.openBlock(), vue.createBlock(PluginPanel, { key: 3 })) : (vue.openBlock(), vue.createElementBlock("div", _hoisted_3, [..._cache[0] || (_cache[0] = [
                 vue.createElementVNode(
                   "span",
                   null,
@@ -6509,7 +6585,7 @@ var UiSidebar = (function(exports, vue, uiState_js, api, pluginRuntime_js) {
       };
     }
   };
-  const Sidebar = /* @__PURE__ */ _export_sfc(_sfc_main, [["__scopeId", "data-v-eee3b33a"]]);
+  const Sidebar = /* @__PURE__ */ _export_sfc(_sfc_main, [["__scopeId", "data-v-a38248a1"]]);
   function mount(el) {
     const app = vue.createApp(Sidebar);
     app.mount(el);

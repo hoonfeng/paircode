@@ -6,6 +6,9 @@
     <div class="sidebar-content">
       <FileExplorer v-if="state.activeActivity === 'explorer'" />
       <SearchPanel v-else-if="state.activeActivity === 'search'" />
+      <!-- Git 源代码管理面板：由 git-api 插件加载 bundle 到 window.GitPanel，
+           本组件动态挂载（跨 bundle，不能静态 import） -->
+      <div v-else-if="state.activeActivity === 'source'" ref="gitHost" class="git-host"></div>
       <PluginPanel v-else-if="state.activeActivity === 'plugins'" />
       <div v-else class="sidebar-placeholder">
         <span>面板加载中...</span>
@@ -17,7 +20,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { state, sidebarWidth } from '../ui-state.js'
 import FileExplorer from './FileExplorer.vue'
 import SearchPanel from './SearchPanel.vue'
@@ -27,6 +30,62 @@ const headerTitle = computed(() => {
   const titles = { explorer: '文件浏览器', search: '搜索', source: '源代码管理', plugins: '插件' }
   return titles[state.activeActivity] || ''
 })
+
+// ─── Git 面板动态挂载（git-api 插件 bundle → window.GitPanel）───
+// 2026-08-20：Git 面板从插件面板「客户端面板」区移出，改为活动栏 source 图标
+// 打开的侧边栏独立面板。bundle 由 git-api 插件 client 半注入（插件停用即消失），
+// 本组件只负责在 activeActivity==='source' 时取 window.GitPanel 挂载。
+const gitHost = ref(null)
+let gitUnmount = null
+let gitRetryTimer = null
+
+function mountGitPanel() {
+  const el = gitHost.value
+  if (!el) return
+  el.innerHTML = ''
+  const mod = window.GitPanel
+  if (mod && typeof mod.mount === 'function') {
+    try {
+      gitUnmount = mod.mount(el)
+      return
+    } catch (e) {
+      console.warn('[sidebar] Git 面板挂载失败', e)
+      el.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text-muted)">挂载失败: ' + (e && e.message || e) + '</div>'
+      return
+    }
+  }
+  // bundle 未就绪（git-api 插件未启用/正在加载）：提示 + 短暂自动重试
+  if (gitRetryTimer) return
+  let tries = 0
+  gitRetryTimer = setInterval(() => {
+    tries++
+    if (window.GitPanel) {
+      clearInterval(gitRetryTimer); gitRetryTimer = null
+      mountGitPanel()
+      return
+    }
+    if (tries >= 8) {
+      clearInterval(gitRetryTimer); gitRetryTimer = null
+      el.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text-muted)">Git 面板未就绪（git-api 插件未启用）</div>'
+    }
+  }, 800)
+  el.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text-muted)">Git 面板加载中...</div>'
+}
+
+function unmountGitPanel() {
+  if (gitRetryTimer) { clearInterval(gitRetryTimer); gitRetryTimer = null }
+  if (gitUnmount) { try { gitUnmount() } catch (e) {} gitUnmount = null }
+}
+
+watch(() => state.activeActivity, (a) => {
+  if (a === 'source') {
+    nextTick(mountGitPanel)
+  } else {
+    unmountGitPanel()
+  }
+})
+
+onUnmounted(unmountGitPanel)
 
 let dragging = false
 let startX = 0
@@ -87,6 +146,7 @@ function stopResize() {
   flex: 1;
   overflow: auto;
 }
+.git-host { height: 100%; }
 .sidebar-placeholder {
   padding: 20px;
   text-align: center;

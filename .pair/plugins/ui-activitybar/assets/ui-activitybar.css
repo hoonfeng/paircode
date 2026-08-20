@@ -25,7 +25,7 @@
   flex-shrink: 0;
 }
 
-.activity-bar[data-v-9bb358c8] {
+.activity-bar[data-v-570982e5] {
   width: 48px;
   background: var(--activity-bar-bg);
   display: flex;
@@ -33,15 +33,15 @@
   align-items: center;
   padding: 4px 0;
 }
-.activity-top[data-v-9bb358c8], .activity-bottom[data-v-9bb358c8] {
+.activity-top[data-v-570982e5], .activity-bottom[data-v-570982e5] {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 2px;
 }
-.activity-bottom[data-v-9bb358c8] { margin-top: auto;
+.activity-bottom[data-v-570982e5] { margin-top: auto;
 }
-.activity-bar button[data-v-9bb358c8] {
+.activity-bar button[data-v-570982e5] {
   width: 40px;
   height: 40px;
   display: flex;
@@ -54,18 +54,18 @@
   color: var(--text-muted);
   transition: all 0.1s;
 }
-.activity-bar button[data-v-9bb358c8]:hover { color: var(--text-primary);
+.activity-bar button[data-v-570982e5]:hover { color: var(--text-primary);
 }
-.activity-bar button.active[data-v-9bb358c8] {
+.activity-bar button.active[data-v-570982e5] {
   color: var(--text-primary);
   border-left-color: var(--text-primary);
 }
-.activity-bar button.highlight[data-v-9bb358c8] {
+.activity-bar button.highlight[data-v-570982e5] {
   color: var(--accent-light);
   border-left-color: var(--accent);
 }
 /* activitybar 槽位（list 型）：插件图标入口与内置按钮同列，不撑满高度 */
-.plugin-slot-activitybar[data-v-9bb358c8] {
+.plugin-slot-activitybar[data-v-570982e5] {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -73,7 +73,7 @@
   height: auto;
   margin-top: 4px;
 }
-.plugin-slot-activitybar .plugin-slot-item[data-v-9bb358c8] {
+.plugin-slot-activitybar .plugin-slot-item[data-v-570982e5] {
   display: flex;
   align-items: center;
   justify-content: center;

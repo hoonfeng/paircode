@@ -38,6 +38,7 @@ onUnmounted(() => {
 const items = [
   { id: 'explorer', label: '文件浏览器', icon: 'folder' },
   { id: 'search', label: '搜索', icon: 'search' },
+  { id: 'source', label: '源代码管理', icon: 'source-control' },
   { id: 'plugins', label: '插件', icon: 'puzzle' },
   { id: 'marketplace', label: '市场', icon: 'package' },
   { id: 'chat', label: '对话', icon: 'chat' },
