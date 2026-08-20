@@ -414,7 +414,7 @@ async function installItem(item, scope) {
     if (item.kind === 'mcp') {
       body.scope = scope || 'user'
     } else if (item.kind === 'plugin') {
-      body.scope = 'project' // 插件/工具集默认装到工作区（npm 插件 → .pair/cordis.patch.json）
+      body.scope = 'project' // 插件/工具集默认装到工作区（npm 插件 → .pair/plugins/<name>/ 插件包目录）
     }
     const result = await api.apiPost('/marketplace/install', body)
     item.installed = true

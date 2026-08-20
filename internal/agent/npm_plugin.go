@@ -330,14 +330,12 @@ func marketInstallNPMPlugin(entry MarketEntry, auto bool) (string, error) {
 		purpose = "npm cordis 插件 " + pkg
 	}
 
-	// 目标：工作区 .pair/cordis.patch.json
-	projectRoot := npmPluginProjectRoot()
-	if projectRoot == "" {
-		return "", fmt.Errorf("无工作区根，无法安装插件")
-	}
-	patchPath := filepath.Join(projectRoot, ".pair", "cordis.patch.json")
+	// ★ 2026-08-20 落盘统一：npm 插件固化为磁盘插件包
+	//   <InstallDir>/.pair/plugins/<name>/（与 cordis_define 固化路径一致，
+	//   重启 LoadGlobalPlugins 自动装配）；不再写 .pair/cordis.patch.json。
+	pluginName := npmPluginDiskName(pkg)
 
-	// 先装载（成功才固化 patch；防重启后依旧装载失败的状态不一致）
+	// 先装载（成功才固化；防重启后依旧装载失败的状态不一致）
 	ph := GetGlobalPluginHost()
 	var defID string
 	if ph != nil {
@@ -353,22 +351,27 @@ func marketInstallNPMPlugin(entry MarketEntry, auto bool) (string, error) {
 		}
 	}
 
-	// 固化 patch（跨重启存续）
-	if err := appendPatchNPMPlugin(patchPath, pkg, info.Version, code, purpose); err != nil {
-		return "", fmt.Errorf("写入 cordis.patch.json 失败: %v", err)
+	// 固化为磁盘插件包（package.json + index.js，重启自动装配）
+	if err := syncGlobalPlugin(ToolsetPlugin{Name: pluginName, Purpose: purpose, Code: code, Scope: "project"}); err != nil {
+		if ph != nil && defID != "" {
+			_ = ph.Unload(defID)
+			_ = ph.RemoveJSDef(defID)
+		}
+		return "", fmt.Errorf("固化插件包 %s 失败: %v", pluginName, err)
 	}
 
-	level := "工作区"
-	msg := fmt.Sprintf("✅ 已安装 npm 插件「%s」v%s（%s，.pair/cordis.patch.json）", pkg, info.Version, level)
+	msg := fmt.Sprintf("✅ 已安装 npm 插件「%s」v%s（插件目录 .pair/plugins/%s/，重启自动装配）", pkg, info.Version, pluginName)
 	if ph == nil {
-		msg += "。已保存（重启后自动装配）。"
+		msg += "。已保存。"
 	} else {
 		msg += "。已立即装载可用。"
 	}
 	return msg, nil
 }
 
-// uninstallNPMPlugin 卸载 npm 插件：从 patch 移除 + 从宿主卸载/移除定义。
+// uninstallNPMPlugin 卸载 npm 插件：
+// ① 磁盘插件包目录 .pair/plugins/<name>/（2026-08-20 新安装形态）删除；
+// ② cordis.patch.json 条目移除（旧安装向后兼容）+ 宿主卸载/移除定义。
 func uninstallNPMPlugin(pkg string) error {
 	projectRoot := npmPluginProjectRoot()
 	var runtime string
@@ -378,7 +381,7 @@ func uninstallNPMPlugin(pkg string) error {
 		if err != nil {
 			return err
 		}
-		// 识别 runtime 类型（node 桥插件 vs goja 插件）
+		// 识别 runtime 类型（node 桥插件 vs goja 插件；仅旧 patch 安装有）
 		for _, p := range doc.Plugins {
 			src, _ := p.Config["npm"].(string)
 			if src == pkg || strings.HasPrefix(src, pkg+"@") {
@@ -389,8 +392,16 @@ func uninstallNPMPlugin(pkg string) error {
 		if err != nil {
 			return err
 		}
+		// 不在 patch（新安装走磁盘插件包）→ 删除插件包目录
 		if !removed {
-			return fmt.Errorf("未在 cordis.patch.json 中找到插件 %s", pkg)
+			dir := filepath.Join(globalPluginsDir(), npmPluginDiskName(pkg))
+			if err := removeGlobalPluginPackage(dir); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("删除插件包目录失败: %w", err)
+			}
+			// 磁盘插件包也不存在 → 未安装
+			if _, serr := os.Stat(filepath.Join(globalPluginsDir(), npmPluginDiskName(pkg), "package.json")); serr != nil {
+				return fmt.Errorf("未找到插件 %s（无 .pair/plugins/%s/，也不在 cordis.patch.json）", pkg, npmPluginDiskName(pkg))
+			}
 		}
 	}
 	if runtime == "node" {
@@ -426,8 +437,13 @@ func npmPluginProjectRoot() string {
 	return core.Root()
 }
 
-// npmPluginInstalled 检查 npm 插件是否已安装（patch 中存在 config.npm 匹配）。
+// npmPluginInstalled 检查 npm 插件是否已安装：
+// ① 磁盘插件包目录 .pair/plugins/<name>/（2026-08-20 新安装形态）；
+// ② cordis.patch.json config.npm 匹配（旧安装向后兼容）。
 func npmPluginInstalled(id string) bool {
+	if _, err := os.Stat(filepath.Join(globalPluginsDir(), npmPluginDiskName(id), "package.json")); err == nil {
+		return true
+	}
 	projectRoot := npmPluginProjectRoot()
 	if projectRoot == "" {
 		return false
@@ -443,4 +459,14 @@ func npmPluginInstalled(id string) bool {
 		}
 	}
 	return false
+}
+
+// npmPluginDiskName npm 包名 → 磁盘插件包目录名：
+// @scope/pkg → pkg（目录名不友好字符清理）；裸名原样。
+func npmPluginDiskName(pkg string) string {
+	name := strings.TrimPrefix(pkg, "@")
+	if i := strings.Index(name, "/"); i > 0 {
+		return name[i+1:]
+	}
+	return name
 }

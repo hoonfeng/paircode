@@ -156,7 +156,12 @@ func MarketFind(id string) *MarketEntry {
 // ─── 远程 API 搜索实现（npm registry + GitHub）──
 
 // searchMarketNPMPlugins 搜索 npm 上的 PairCode 插件（自己的插件生态，借 npm 分发）。
-// 过滤：名字/描述含 paircode（发布者 package.json 带 paircode 关键词即被收录）。
+// ★ 2026-08-20 重名唯一化：官方插件统一发布到 npm scope @paircode/*（scope 是 npm
+//   唯一命名空间，裸名包无法占用），搜索只收「官方命名约定」的包：
+//     ① scope 包：@paircode/<name>（唯一权威）
+//     ② 裸名包：paircode-plugin-<name>（须带 paircode 关键词双重校验）
+//   旧过滤「名字/描述含 paircode」太宽松——paircode-terminal（WhatsApp 配对码显示）
+//   等无关包会混入搜索结果。现精确匹配后无关包被排除。
 func searchMarketNPMPlugins(query string) []MarketEntry {
 	q := strings.TrimSpace(query)
 	q = q + " paircode"
@@ -198,7 +203,18 @@ func searchMarketNPMPlugins(query string) []MarketEntry {
 		if low == "cordis" || low == "@cordisjs/core" || low == "@cordisjs/plugin-loader" {
 			continue
 		}
-		if !strings.Contains(low, "paircode") && !strings.Contains(strings.ToLower(pkg.Description), "paircode") {
+		// ★ 官方命名约定精确匹配（排除 paircode-terminal 等无关包）：
+		//   scope 包 @paircode/* 直接收录；裸名 paircode-plugin-* 须带 paircode 关键词
+		kwPaircode := false
+		for _, kw := range pkg.Keywords {
+			if strings.EqualFold(kw, "paircode") {
+				kwPaircode = true
+				break
+			}
+		}
+		isOfficial := strings.HasPrefix(low, "@paircode/") ||
+			(strings.HasPrefix(low, "paircode-plugin-") && kwPaircode)
+		if !isOfficial {
 			continue
 		}
 		name := pkg.Name
