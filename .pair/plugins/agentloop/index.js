@@ -113,8 +113,8 @@ return {
     ctx.providerFactory.register((current) => {
       const s = (ctx.app && ctx.app.settings) || {};
       const over = {};
-      // ★ 服务商独立 Key/BaseURL：Go 端 ResolveProviderParams 已按 models.json[provider] 优先注入
-      //   current.baseURL/apiKey；此处仅当为空时用 settings 全局字段兜底（兼容旧配置）。
+      // ★ baseURL/apiKey：Go 端 ResolveProviderParams 已按「settings 顶层优先、models.json
+      //   服务商默认兜底」注入 current；此处仅当 current 为空时用 settings 全局字段兜底。
       const baseURL = (current.baseURL || s.baseURL || '').trim();
       const apiKey = (current.apiKey || s.apiKey || '').trim();
       const model = (current.model || s.executeModel || s.model || '').trim();

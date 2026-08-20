@@ -295,17 +295,26 @@ function initComposerModel() {
     composerModel.value = s.executeModel || ''
   }
 }
+// ★ 修复：切换配置/模型前先拉后端最新 settings 作基底（state.settings 是启动快照，
+//   可能过期——用旧缓存整体 PUT 会覆盖设置面板/预设应用刚写入后端的新值）
+async function latestSettingsBase() {
+  try {
+    const r = await api.apiGet('/settings')
+    return (r && r.settings) || {}
+  } catch { return {} }
+}
 async function onCmpModelChange() {
   if (!composerModel.value) return
   const presets = aiPresets.value || {}
   const names = Object.keys(presets)
+  const base = await latestSettingsBase()
   if (names.length) {
     // 配置列表模式：composerModel 是配置名 → 整套应用该配置（服务商/BaseURL/Key/三模型）
     const c = presets[composerModel.value]
     if (!c) return
-    const top = { ...(state.settings || {}), preset: composerModel.value, provider: c.provider, baseURL: c.baseURL, apiKey: c.apiKey, executeModel: c.executeModel, planModel: c.planModel, reviewModel: c.reviewModel }
+    const top = { ...base, preset: composerModel.value, provider: c.provider, baseURL: c.baseURL, apiKey: c.apiKey, executeModel: c.executeModel, planModel: c.planModel, reviewModel: c.reviewModel }
     try {
-      await api.apiPut('/settings', { settings: top, pluginSettings: (state.settings && state.settings.pluginSettings) || {} })
+      await api.apiPut('/settings', { settings: top, pluginSettings: (base.pluginSettings) || {} })
       state.settings = top
       composerProvider.value = c.provider || composerProvider.value
     } catch (e) {
@@ -317,11 +326,11 @@ async function onCmpModelChange() {
   if (!composerProvider.value) return
   const md = modelData.value || {}
   const prov = composerProvider.value
-  const top = { ...(state.settings || {}), provider: prov, executeModel: composerModel.value }
+  const top = { ...base, provider: prov, executeModel: composerModel.value }
   if (md.providerBaseURLs && md.providerBaseURLs[prov]) top.baseURL = md.providerBaseURLs[prov]
   if (md.providerKeys && md.providerKeys[prov]) top.apiKey = md.providerKeys[prov]
   try {
-    await api.apiPut('/settings', { settings: top, pluginSettings: (state.settings && state.settings.pluginSettings) || {} })
+    await api.apiPut('/settings', { settings: top, pluginSettings: (base.pluginSettings) || {} })
     state.settings = top
   } catch (e) {
     window.$toast && window.$toast('模型切换失败: ' + (e.message || e), 'error')

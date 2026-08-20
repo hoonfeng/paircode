@@ -237,7 +237,10 @@ async function saveEdit() {
 
 // 将当前编辑的模型参数写回 settings.json 顶层 modelParams（仅保留非空项）
 async function saveModelParams(providerName) {
-  const mp = JSON.parse(JSON.stringify((state.settings && state.settings.modelParams) || {}))
+  // ★ 先拉后端最新 settings 作基底，避免过期缓存覆盖其他字段
+  let base = {};
+  try { const l = await api.apiGet('/settings'); base = (l && l.settings) || {} } catch {}
+  const mp = JSON.parse(JSON.stringify((base.modelParams) || {}))
   const clean = {}
   for (const [m, cfg] of Object.entries(editParams.value)) {
     const c = cfg || {}
@@ -250,8 +253,8 @@ async function saveModelParams(providerName) {
   }
   if (Object.keys(clean).length) mp[providerName] = clean
   else delete mp[providerName]
-  const top = { ...(state.settings || {}), modelParams: mp }
-  await api.apiPut('/settings', { settings: top, pluginSettings: (state.settings && state.settings.pluginSettings) || {} })
+  const top = { ...base, modelParams: mp }
+  await api.apiPut('/settings', { settings: top, pluginSettings: (base.pluginSettings) || {} })
   state.settings = top
 }
 
@@ -261,12 +264,14 @@ async function removeProvider(p) {
   delete map[p.name]
   try {
     await api.saveModels(map)
-    // 同步清理该服务商的模型参数
-    const mp = JSON.parse(JSON.stringify((state.settings && state.settings.modelParams) || {}))
+    // 同步清理该服务商的模型参数（先拉后端最新 settings 作基底，避免缓存覆盖）
+    let base = {};
+    try { const l = await api.apiGet('/settings'); base = (l && l.settings) || {} } catch {}
+    const mp = JSON.parse(JSON.stringify((base.modelParams) || {}))
     if (mp[p.name]) {
       delete mp[p.name]
-      const top = { ...(state.settings || {}), modelParams: mp }
-      await api.apiPut('/settings', { settings: top, pluginSettings: (state.settings && state.settings.pluginSettings) || {} })
+      const top = { ...base, modelParams: mp }
+      await api.apiPut('/settings', { settings: top, pluginSettings: (base.pluginSettings) || {} })
       state.settings = top
     }
     await load()

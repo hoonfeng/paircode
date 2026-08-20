@@ -31,11 +31,11 @@
                     <label class="field-label" :title="f.hint">{{ f.label }}</label>
                     <div class="field-control">
                       <!-- text / password -->
-                      <input v-if="f.type === 'text' || f.type === 'password'" :type="f.type === 'password' ? 'password' : 'text'"
+                      <input v-if="f.type === 'text' || f.type === 'password'" class="field-input" :type="f.type === 'password' ? 'password' : 'text'"
                              v-model="form[tab.key][f.name]" :placeholder="f.placeholder" />
 
                       <!-- number -->
-                      <input v-else-if="f.type === 'number'" type="number" v-model.number="form[tab.key][f.name]"
+                      <input v-else-if="f.type === 'number'" class="field-input" type="number" v-model.number="form[tab.key][f.name]"
                              :min="f.min" :max="f.max" :step="f.step" />
 
                       <!-- select（optionsSource 驱动动态数据源：models=按服务商模型列表 / providers=服务商列表） -->
@@ -61,7 +61,7 @@
                       </div>
 
                       <!-- tags（逗号分隔数组） -->
-                      <input v-else-if="f.type === 'tags'" type="text" class="field-tags"
+                      <input v-else-if="f.type === 'tags'" type="text" class="field-input"
                              :value="tagsText(tab.key, f)" @input="onTagsInput(tab.key, f, $event)"
                              :placeholder="f.placeholder || '逗号分隔'" />
 
@@ -76,7 +76,7 @@
                       <PresetManager v-else-if="f.type === 'preset-manager'" @saved="onPresetSaved" />
                       
                       <!-- 兜底 text -->
-                      <input v-else type="text" v-model="form[tab.key][f.name]" />
+                      <input v-else class="field-input" type="text" v-model="form[tab.key][f.name]" />
                     </div>
 
                     <span v-if="f.hint" class="setting-hint">{{ f.hint }}</span>
@@ -276,8 +276,16 @@ async function onPresetSaved() {
 // ─── 保存：分拣 binding → 顶层 / 非 binding → 插件命名空间 ───
 const saveSettings = async () => {
   try {
-    const top = { ...(state.settings || {}) }
-    const pluginOut = {}
+    // ★ 修复：PUT 前先拉后端最新 settings 作基底（state.settings 是启动时快照+本地增量，
+    //   AI 配置「应用」/对话面板切模型/服务商面板等已把新值写入后端——用过期缓存整体
+    //   PUT 会把这些新值覆盖回旧值，导致「配置永远不会修改」）
+    let base = {}
+    try {
+      const latest = await api.apiGet('/settings')
+      base = (latest && latest.settings) || {}
+    } catch {}
+    const top = { ...base }
+    const pluginOut = { ...((base.pluginSettings) || {}) }
     let themeChanged = false
     for (const s of (state.pluginSchemas || [])) {
       const vals = form[s.key] || {}
@@ -382,6 +390,7 @@ h2 {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .field-control { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.setting-row .field-input,
 .setting-row input[type="text"],
 .setting-row input[type="password"],
 .setting-row input[type="number"],

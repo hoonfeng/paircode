@@ -73,15 +73,21 @@ func ProviderFactoryNow() ProviderFactory {
 //   Go 侧只按 服务商独立 Key（models.json）注入，不做预设业务。
 func ResolveProviderParams() ProviderParams {
 	provider := core.Settings.Provider
-	// ★ 服务商独立 Key/BaseURL 优先（models.json 每服务商保存），
-	//   缺省回退全局 settings 字段（兼容旧配置）。
+	// ★ 2026-08-21 修复：settings 顶层（AI 配置预设「应用」写入的 baseURL/apiKey）优先，
+	//   models.json 服务商默认仅兜底（兼容旧配置）。此前反过来——服务商 key 非空即覆盖
+	//   settings 顶层 → 应用 AI 配置/选择模型后实际仍用 models.json 服务商 key，
+	//   ai-presets.json 里配置的 key 永远不生效。
 	baseURL := core.Settings.BaseURL
 	apiKey := core.Settings.APIKey
-	if p := core.GetProviderBaseURL(provider); p != "" {
-		baseURL = p
+	if baseURL == "" {
+		if p := core.GetProviderBaseURL(provider); p != "" {
+			baseURL = p
+		}
 	}
-	if k := core.GetProviderAPIKey(provider); k != "" {
-		apiKey = k
+	if apiKey == "" {
+		if k := core.GetProviderAPIKey(provider); k != "" {
+			apiKey = k
+		}
 	}
 	cur := ProviderParams{
 		Provider:         provider,

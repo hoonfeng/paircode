@@ -11,7 +11,7 @@
       <div class="mgm-edit-title">{{ editingName ? '编辑配置：' + editingName : '添加新配置' }}</div>
       <div class="mgm-field">
         <span class="mgm-field-label">配置名称</span>
-        <input v-model="form.name" placeholder="如：主力 / 写作备用…" @keydown.enter="confirmSave" />
+        <input v-model="form.name" type="text" placeholder="如：主力 / 写作备用…" @keydown.enter="confirmSave" />
       </div>
       <div class="mgm-field">
         <span class="mgm-field-label">服务商</span>
@@ -21,7 +21,7 @@
       </div>
       <div class="mgm-field">
         <span class="mgm-field-label">Base URL</span>
-        <input v-model="form.baseURL" placeholder="https://api.deepseek.com/v1" />
+        <input v-model="form.baseURL" type="text" placeholder="https://api.deepseek.com/v1" />
       </div>
       <div class="mgm-field">
         <span class="mgm-field-label">API Key</span>
@@ -81,7 +81,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import api from '../api.js'
 
 // ★ AI 配置列表（2026-08-20 改变模式）：AI tab 主视图 = 已添加的配置列表；
@@ -136,19 +136,22 @@ function providerInfo(prov) {
 }
 
 // 打开添加表单（服务商默认当前生效的，带出 BaseURL/Key）
+// ★ 优先带出 settings 当前生效值（预设应用写入的 baseURL/apiKey/模型），
+//   其次 models.json 服务商默认（providerBaseURLs/providerKeys）。
 function openAdd() {
   const s = (window && window.__PAIRCODE_CORE && window.__PAIRCODE_CORE.uiState && window.__PAIRCODE_CORE.uiState.state
     && window.__PAIRCODE_CORE.uiState.state.settings) || {}
   const prov = (s.provider && providers.value.includes(s.provider)) ? s.provider : (providers.value[0] || '')
   const info = providerInfo(prov)
+  const ms = info.models
   form.value = {
     name: '',
     provider: prov,
-    baseURL: info.baseURL || '',
-    apiKey: info.apiKey || '',
-    executeModel: info.models.includes(s.executeModel) ? s.executeModel : (info.models[0] || ''),
-    planModel: info.models.includes(s.planModel) ? s.planModel : (info.models[0] || ''),
-    reviewModel: info.models.includes(s.reviewModel) ? s.reviewModel : (info.models[0] || ''),
+    baseURL: (s.baseURL || info.baseURL || ''),
+    apiKey: (s.apiKey || info.apiKey || ''),
+    executeModel: (ms.includes(s.executeModel) ? s.executeModel : (ms[0] || '')),
+    planModel: (ms.includes(s.planModel) ? s.planModel : (ms[0] || '')),
+    reviewModel: (ms.includes(s.reviewModel) ? s.reviewModel : (ms[0] || '')),
   }
   editingName.value = ''
   showForm.value = true
@@ -172,15 +175,23 @@ function openEdit(name) {
 
 function closeForm() { showForm.value = false; editingName.value = '' }
 
-// 切换服务商 → 带出该服务商 BaseURL/Key + 模型列表默认选中
+// 切换服务商 → 带出该服务商 BaseURL/Key + 模型列表（模型保留当前值若在新列表中，否则默认第一个）
 function onProviderChange() {
-  const info = providerInfo(form.provider)
-  form.value.baseURL = info.baseURL
-  form.value.apiKey = info.apiKey
-  form.value.executeModel = info.models[0] || ''
-  form.value.planModel = info.models[0] || ''
-  form.value.reviewModel = info.models[0] || ''
+  if (!form.value.provider) return
+  const info = providerInfo(form.value.provider)
+  form.value.baseURL = info.baseURL || ''
+  form.value.apiKey = info.apiKey || ''
+  form.value.executeModel = info.models.includes(form.value.executeModel) ? form.value.executeModel : (info.models[0] || '')
+  form.value.planModel = info.models.includes(form.value.planModel) ? form.value.planModel : (info.models[0] || '')
+  form.value.reviewModel = info.models.includes(form.value.reviewModel) ? form.value.reviewModel : (info.models[0] || '')
 }
+
+// ★ 联动双保险：除 @change 外再挂 watch（ov 非空 = 用户在表单内切换服务商，
+//   跳过 openAdd/openEdit 初始化赋值；兼容 wb-ui 引擎 select change 事件缺失场景）
+watch(() => form.value.provider, (nv, ov) => {
+  if (!showForm.value || ov === '') return
+  if (nv !== ov) onProviderChange()
+})
 
 async function confirmSave() {
   const name = form.value.name.trim()
@@ -208,7 +219,9 @@ async function confirmSave() {
       presets.value = map
       if (activeName.value === editingName.value) {
         activeName.value = name
-        await api.apiPut('/settings', { settings: { ...(window.__PAIRCODE_CORE?.uiState?.state?.settings || {}), preset: name }, pluginSettings: {} })
+        // ★ 修复：不再用 UI 缓存 settings 整体 PUT（过期缓存会覆盖后端新值）。
+        //   只提交变更字段 preset——后端 applyTopSettings 为合并语义，其余字段保留后端现值。
+        await api.apiPut('/settings', { settings: { preset: name }, pluginSettings: {} }).catch(() => {})
       }
     } else {
       const r = await api.saveAiPreset('save', name, preset)
@@ -278,11 +291,17 @@ defineExpose({ load })
 .mgm-edit-title { font-weight: 600; margin-bottom: 10px; }
 .mgm-field { margin-bottom: 10px; }
 .mgm-field-label { display: block; font-size: 12px; color: var(--txt-dim, #8a8f98); margin-bottom: 6px; }
-.mgm-field input[type="text"], .mgm-field input[type="password"], .mgm-field .mgm-select {
+/* ★ 用元素选择器（不用 input[type=…] 属性选择器）：模板部分输入框无显式 type 时
+   属性选择器匹配不上（CSS 属性选择器只匹配显式属性）→ 输入框丢失全部样式 */
+.mgm-field input, .mgm-field select {
   width: 100%; padding: 6px 8px; border: 1px solid var(--bd, #333); border-radius: 4px;
   background: var(--bg, #111); color: var(--txt, #ccc); box-sizing: border-box;
+  font-size: 13px; font-family: inherit;
 }
-.mgm-field .mgm-select { appearance: auto; }
+.mgm-field select { appearance: auto; }
+.mgm-field input:focus, .mgm-field select:focus {
+  border-color: var(--accent, #3b82f6); outline: none;
+}
 .mgm-edit-actions { display: flex; gap: 8px; }
 .mgm-cards { display: flex; flex-direction: column; gap: 8px; }
 .mgm-card { border: 1px solid var(--bd, #333); border-radius: 6px; padding: 10px 12px; }
