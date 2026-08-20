@@ -11,8 +11,14 @@
 //      发布时 --userconfig 引用，不污染全局 ~/.npmrc）；
 //   2. 插件列表：扫描 .pair/plugins/*/package.json，自动检测 npm 线上版本
 //      （dist-tags）→ 状态：未发布 / 已一致 / 本地有更新 / 线上更高；
-//   3. 自动发布：未发布 → 自动发布；本地有更新 → 自动更新版本发布；
+//   3. 内容指纹：对打包白名单文件计算 SHA-256 记录到 .content-hashes.json——
+//      「版本相同 + 内容已变」不再误判跳过，发布时自动升 patch 版本；
+//   4. 自动构建：含 assets 的 UI 插件发布前自动跑 scripts/build-ui.mjs（项目内），
+//      避免发旧 UI 构建产物；
+//   5. 自动发布：未发布 → 自动发布；本地有更新 / 内容已变 → 自动更新版本发布；
 //      已一致 / 线上更高 → 自动跳过（返回原因）。
+//   6. 代理配置：Web UI 可保存代理到 .pair/publish/.proxy（优先级高于环境变量
+//      PAIRCODE_PROXY / HTTPS_PROXY / HTTP_PROXY），curl 检测与 npm 发布均走该代理。
 //
 // 用法（node 需 ≥18，fetch 内置）：
 //   node scripts/plugin-publisher.mjs                交互式 CLI 菜单
@@ -27,6 +33,7 @@
 // ═══════════════════════════════════════════════════════════════
 import fs from 'node:fs'
 import path from 'node:path'
+import crypto from 'node:crypto'
 import { execSync } from 'node:child_process'
 import { createInterface } from 'node:readline/promises'
 import http from 'node:http'
@@ -44,10 +51,21 @@ const REG = String(process.env.PAIRCODE_NPM_REGISTRY || '').replace(/\/+$/, '') 
 const SCOPED = '@paircode'
 const PUBLISH_FILES = ['index.js', 'client.js', 'assets', 'bin', 'package.json', 'README.md']
 const COOLDOWN_MS = 15000 // 包间冷却（npm 限流防护）
-// ── 代理配置：PAIRCODE_PROXY → HTTPS_PROXY → HTTP_PROXY（透传给 curl / npm）──
+// ── 代理配置：Web 配置(.pair/publish/.proxy 文件) → PAIRCODE_PROXY → HTTPS_PROXY → HTTP_PROXY ──
 // ★ node fetch 不读 HTTP(S)_PROXY 环境变量，故线上查询改走 curl（天然支持 -x）
-const PROXY = process.env.PAIRCODE_PROXY || process.env.HTTPS_PROXY || process.env.HTTP_PROXY || ''
-const proxyArgs = PROXY ? ` --proxy=${PROXY} --https-proxy=${PROXY}` : ''
+const proxyPath = path.join(publishDir, '.proxy')
+function getProxy() {
+  // 1) Web UI 保存的代理配置（最高优先级，用户显式配置）
+  try { const p = String(fs.readFileSync(proxyPath, 'utf8') || '').trim(); if (p) return p } catch {}
+  // 2) 环境变量回退
+  return process.env.PAIRCODE_PROXY || process.env.HTTPS_PROXY || process.env.HTTP_PROXY || ''
+}
+function getProxyArgs() { const p = getProxy(); return p ? ` --proxy=${p} --https-proxy=${p}` : '' }
+function proxySource() {
+  try { if (String(fs.readFileSync(proxyPath, 'utf8') || '').trim()) return 'web-config' } catch {}
+  if (process.env.PAIRCODE_PROXY || process.env.HTTPS_PROXY || process.env.HTTP_PROXY) return 'env'
+  return ''
+}
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const log = (m = '') => console.log(m)
@@ -93,7 +111,8 @@ async function remoteCheck(name) {
   const url = `${REG}/${encodeURIComponent(pkgName)}`
   try {
     // curl 查询（packument）：404=未发布 / 200=已发布；支持代理 -x
-    const out = execSync(`curl -s${PROXY ? ` -x "${PROXY}"` : ''} -w "\\n%{http_code}" "${url}"`, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+    const px = getProxy()
+    const out = execSync(`curl -s${px ? ` -x "${px}"` : ''} -w "\\n%{http_code}" "${url}"`, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
     const lines = out.trim().split('\n')
     const code = (lines[lines.length - 1] || '').trim()
     if (code === '404') return { ok: true, version: null }
@@ -126,22 +145,41 @@ function statusOf(local, remote) {
   return { code: 'ahead', label: '线上更高' }
 }
 
-// 扫描全部插件 + 检测（并发检测，快）
+// 扫描全部插件 + 检测（并发检测，快）；含内容指纹感知（同版本下区分真一致/内容已变/首次基线）
 async function scanAll() {
   const plugins = listPlugins()
   const checks = await Promise.all(plugins.map((p) => remoteCheck(p.name)))
+  const hashes = readHashes()
   const out = []
   for (let i = 0; i < plugins.length; i++) {
     const p = plugins[i]
     const rc = checks[i]
+    const pkgName = SCOPED + '/' + p.name
+    let srcHash = ''
+    try { srcHash = dirHash(path.join(pluginsDir, p.name)) } catch {}
+    const rec = hashes[pkgName]
+    const hashSame = !!rec && !!srcHash && rec.hash === srcHash
     const st = rc.ok ? statusOf(p.version, rc.version) : { code: 'check-failed', label: '检测失败' }
+    let note = ''
+    // 版本相同但内容指纹不同 → 细分（解决「改了代码没 bump 版本 → 误判已一致」）
+    if (rc.ok && st.code === 'same') {
+      if (rec && !hashSame) {
+        st.code = 'changed'; st.label = '内容已变'
+        note = `内容指纹与上次发布不一致（${rec.hash.slice(0, 8)}… ≠ ${srcHash.slice(0, 8)}…），版本未 bump，发布时将自动升 patch`
+      } else if (!rec) {
+        st.code = 'baseline'; st.label = '基线'
+        note = '线上已是最新版本，首次建立内容指纹基线（本次跳过）'
+      }
+    }
     out.push({
       ...p,
       remote: rc.ok ? rc.version : null,
       status: st.code,
       statusLabel: st.label,
+      note,
+      srcHash,
       checkError: rc.ok ? '' : rc.reason,
-      publishable: rc.ok && (st.code === 'unpublished' || st.code === 'update'),
+      publishable: rc.ok && (st.code === 'unpublished' || st.code === 'update' || st.code === 'changed'),
     })
   }
   return { plugins: out, registry: REG, pkgPrefix: SCOPED + '/', root }
@@ -193,6 +231,41 @@ function clearToken() {
   }
 }
 
+// ── 内容指纹：对打包白名单文件（index.js/client.js/assets/bin/package.json/README.md）
+//    计算目录级 SHA-256——解决「文件改了但版本没 bump → 误判已一致跳过」问题 ──
+const hashFile = path.join(publishDir, '.content-hashes.json')
+function dirHash(dir) {
+  const files = []
+  ;(function walk(p, rel) {
+    for (const ent of fs.readdirSync(p, { withFileTypes: true })) {
+      if (ent.name === 'node_modules' || ent.name === '.git') continue
+      if (rel === '' && !PUBLISH_FILES.includes(ent.name)) continue
+      const s = path.join(p, ent.name)
+      const r = rel ? path.join(rel, ent.name) : ent.name
+      if (ent.isDirectory()) walk(s, r)
+      else files.push({ rel: r, data: fs.readFileSync(s) })
+    }
+  })(dir, '')
+  files.sort((a, b) => (a.rel < b.rel ? -1 : 1))
+  const h = crypto.createHash('sha256')
+  for (const f of files) { h.update(f.rel); h.update('\0'); h.update(f.data) }
+  return h.digest('hex')
+}
+function readHashes() {
+  try { return JSON.parse(fs.readFileSync(hashFile, 'utf8')) } catch { return {} }
+}
+function saveHashes(h) {
+  try { fs.mkdirSync(publishDir, { recursive: true }); fs.writeFileSync(hashFile, JSON.stringify(h, null, 2)) } catch (e) {
+    console.warn('[publisher] 指纹记录写盘失败:', e.message)
+  }
+}
+// 自动升 patch（1.2.3 → 1.2.4；非标准版本追加 .1）
+function bumpPatch(v) {
+  const m = /^(\d+)\.(\d+)\.(\d+)/.exec(String(v || '').trim().replace(/^v/, ''))
+  if (!m) return String(v || '0.0.0') + '.1'
+  return `${m[1]}.${m[2]}.${+m[3] + 1}`
+}
+
 // ── 打包（复制白名单文件 + package.json 改造）──
 function copyDir(src, dst, topLevel = true) {
   fs.mkdirSync(dst, { recursive: true })
@@ -228,18 +301,59 @@ function buildPackage(name) {
   }
 }
 
-// 单个插件发布：检测 → 打包 → npm publish（自动跳过已一致/线上更高）
+// 单个插件发布：检测 → 自动 bump（内容变了版本没变时）→ 自动构建 UI（含 assets 时）
+//             → 打包 → npm publish（自动跳过已一致/线上更高）；成功后更新内容指纹
 async function publishOne(name, { onLog = log } = {}) {
   let local = '0.0.0'
+  const srcDir = path.join(pluginsDir, name)
+  const pkgPath = path.join(srcDir, 'package.json')
   try {
-    const pkgPath = path.join(pluginsDir, name, 'package.json')
     local = JSON.parse(fs.readFileSync(pkgPath, 'utf8')).version || '0.0.0'
   } catch {}
   const rc = await remoteCheck(name)
   if (!rc.ok) return { name, ok: false, error: `线上版本检测失败: ${rc.reason}` }
   const st = statusOf(local, rc.version)
-  if (st.code === 'same') return { name, ok: false, skipped: true, reason: `已一致（线上 @${rc.version}）` }
+
+  // ── 内容指纹：版本相同 + 指纹不同 → 自动 bump patch；无记录 → 建基线跳过 ──
+  const hashes = readHashes()
+  const pkgName = SCOPED + '/' + name
+  let srcHash = ''
+  try { srcHash = dirHash(srcDir) } catch {}
+  const rec = hashes[pkgName]
+  if (st.code === 'same' && rec && rec.hash !== srcHash) {
+    const bumped = bumpPatch(local)
+    onLog(`  ✚ ${pkgName} 内容已变化但版本未 bump（线上 @${rc.version}），自动升 patch → ${bumped}`)
+    try {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
+      pkg.version = bumped
+      fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n')
+      local = bumped
+      try { srcHash = dirHash(srcDir) } catch {}
+    } catch (e) {
+      return { name, ok: false, error: `自动 bump 版本失败: ${String(e.message || e).slice(0, 120)}` }
+    }
+  } else if (st.code === 'same' && !rec) {
+    // 首次基线：记录本次指纹并跳过（与线上内容一致，无需发布）
+    hashes[pkgName] = { version: local, hash: srcHash }
+    saveHashes(hashes)
+    return { name, ok: false, skipped: true, reason: `已一致（线上 @${rc.version}），首次建立内容指纹基线` }
+  } else if (st.code === 'same') {
+    return { name, ok: false, skipped: true, reason: `已一致（线上 @${rc.version}，内容指纹相同）` }
+  }
   if (st.code === 'ahead') return { name, ok: false, skipped: true, reason: `线上更高（${rc.version} > 本地 ${local}），请先本地 bump 版本` }
+
+  // ── 自动构建 UI：含 assets（UI 构建产物）且项目有 build-ui.mjs → 发布前重建，避免发旧 UI ──
+  if (fs.existsSync(path.join(srcDir, 'assets')) && fs.existsSync(path.join(root, 'scripts', 'build-ui.mjs'))) {
+    onLog('  ⚙ 检测到 UI 插件（含 assets），发布前自动重新构建 UI（node scripts/build-ui.mjs）...')
+    try {
+      execSync('node scripts/build-ui.mjs', { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 600000 })
+      onLog('  ✅ UI 构建完成（全部区域）')
+      try { srcHash = dirHash(srcDir) } catch {}
+    } catch (e) {
+      const msg = String(e.stderr || e.message || e).split('\n').slice(0, 4).join(' | ')
+      return { name, ok: false, error: `UI 构建失败，中止发布（避免发旧 UI 资产）: ${msg.slice(0, 200)}` }
+    }
+  }
 
   onLog(`  ⚙ 打包 ${SCOPED}/${name}@${local} ...`)
   const b = buildPackage(name)
@@ -247,11 +361,14 @@ async function publishOne(name, { onLog = log } = {}) {
 
   if (!readToken()) return { name, ok: false, error: '未保存 npm token（请先设置 token）' }
   const pkgDir = path.join(publishDir, name)
-  // 发布：绝对路径的包目录 + userconfig（相对路径+反斜杠会导致 npm 找不到配置卡认证）
-  const cmd = `npm publish "${pkgDir}" --registry=${REG} --userconfig=${npmrcPath} --access public${proxyArgs}`
+  // 发布：绝对路径的包目录 + userconfig + 代理（相对路径+反斜杠会导致 npm 找不到配置卡认证）
+  const cmd = `npm publish "${pkgDir}" --registry=${REG} --userconfig=${npmrcPath} --access public${getProxyArgs()}`
   onLog(`  ⬆ 发布 ${SCOPED}/${name}@${b.version} ...`)
   try {
     const out = execSync(cmd, { cwd: pkgDir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 120000 })
+    // 发布成功 → 更新内容指纹记录（新版本 + 构建后最新内容）
+    hashes[pkgName] = { version: b.version, hash: srcHash }
+    saveHashes(hashes)
     onLog(`  ✅ ${SCOPED}/${name}@${b.version} 发布成功`)
     return { name, ok: true, action: st.code === 'unpublished' ? 'published' : 'updated', version: b.version, remote: rc.version, out: out.slice(0, 300) }
   } catch (e) {
@@ -295,7 +412,8 @@ function printList(scan) {
   if (scan.plugins.length === 0) { log('  （.pair/plugins/ 下无插件）'); return }
   for (const p of scan.plugins) {
     const remote = p.remote || (p.checkError ? '—' : '未发布')
-    log(`  ${w(p.name, 22)}${w(p.version, 10)}${w(remote, 10)}${p.statusLabel}${p.checkError ? '（' + p.checkError + '）' : ''}`)
+    const note = p.note ? `  ${p.note}` : ''
+    log(`  ${w(p.name, 22)}${w(p.version, 10)}${w(remote, 10)}${p.statusLabel}${p.checkError ? '（' + p.checkError + '）' : ''}${note}`)
   }
   const pend = scan.plugins.filter((p) => p.publishable)
   log('')
@@ -397,6 +515,16 @@ border-radius:50%;animation:sp 1s linear infinite;vertical-align:-2px}
 </div>
 
 <div class="card">
+  <h2>网络代理</h2>
+  <div class="row">
+    <input id="proxy" type="text" placeholder="如 http://127.0.0.1:7890（留空=直连）">
+    <button id="saveProxy" class="primary">保存</button>
+    <button id="clearProxy" class="danger" style="display:none">清除</button>
+  </div>
+  <div class="hint" id="proxyHint">保存到 <code>.pair/publish/.proxy</code>（工作区内），线上检测（curl）与发布（npm）均走该代理 · 优先级高于环境变量 PAIRCODE_PROXY</div>
+</div>
+
+<div class="card">
   <div class="row" style="justify-content:space-between">
     <h2 style="margin:0">插件列表 <span id="count" class="hint"></span></h2>
     <div class="row">
@@ -424,7 +552,11 @@ let mask=''
 async function loadToken(){try{const j=await api('/api/token');mask=j.masked||'';
 const inp=$('#token');inp.placeholder=mask?('已保存: '+mask+'（留空则保存新 token）'):'粘贴 npm token';
 $('#clearToken').style.display=j.has?'':'none';$('#tokenHint').innerHTML='保存到 <code>.pair/publish/.npmrc</code>（工作区内） · registry: <code>'+(j.registry||'')+'</code>'}catch(e){}}
-const badge={unpublished:['b-unpublished','未发布'],same:['b-same','已一致'],update:['b-update','本地有更新'],ahead:['b-ahead','线上更高'],'check-failed':['b-check-failed','检测失败']}
+async function loadProxy(){try{const j=await api('/api/proxy');
+const inp=$('#proxy');inp.placeholder=j.proxy?('已配置: '+j.proxy):'如 http://127.0.0.1:7890（留空=直连）';
+$('#clearProxy').style.display=j.proxy?'':'none';
+$('#proxyHint').innerHTML='保存到 <code>.pair/publish/.proxy</code> · 当前'+(j.proxy?('生效: <code>'+j.proxy+'</code>（'+j.source+'）'):'未配置代理（直连）')}catch(e){}}
+const badge={unpublished:['b-unpublished','未发布'],same:['b-same','已一致'],update:['b-update','本地有更新'],ahead:['b-ahead','线上更高'],'check-failed':['b-check-failed','检测失败'],changed:['b-update','内容已变'],baseline:['b-same','基线']}
 async function loadList(){const j=await api('/api/list');
 $('#count').textContent='· '+j.plugins.length+' 个 · 待发布 '+j.plugins.filter(p=>p.publishable).length+' 个';
 const tb=$('#tbody');tb.innerHTML=''
@@ -434,7 +566,7 @@ const tr=document.createElement('tr')
 tr.innerHTML='<td>'+(p.publishable?'<input type="checkbox" checked data-n="'+p.name+'">':'')+'</td>'+
 '<td><span class="pkg">'+(j.pkgPrefix||'@paircode/')+p.name+'</span><span class="purpose" title="'+esc(p.purpose)+'">'+esc(p.purpose)+'</span></td>'+
 '<td class="ver">'+p.version+'</td><td class="ver">'+(p.remote||(p.checkError?'—':'未发布'))+'</td>'+
-'<td><span class="badge '+b[0]+'">'+b[1]+'</span></td>'+
+'<td><span class="badge '+b[0]+'" title="'+(p.note?esc(p.note):b[1])+'">'+b[1]+'</span>'+(p.note?'<div class="purpose" title="'+esc(p.note)+'">'+esc(p.note)+'</div>':'')+'</td>'+
 '<td>'+(p.publishable?'<button class="sm" data-one="'+p.name+'">发布</button>':'')+'</td>'
 tb.appendChild(tr)}
 tb.querySelectorAll('[data-one]').forEach(b=>b.onclick=()=>publish([b.dataset.one]))
@@ -455,10 +587,13 @@ $('#saveToken').onclick=async()=>{const t=$('#token').value.trim()
 if(!t){addLog('❌ 请先粘贴 token','err');return}
 try{await api('/api/token',{method:'POST',body:{token:t}});$('#token').value='';await loadToken();addLog('✅ token 已保存','ok')}catch(e){addLog('❌ 保存失败: '+e.message,'err')}}
 $('#clearToken').onclick=async()=>{try{await api('/api/token/clear',{method:'POST',body:{}});await loadToken();addLog('ℹ token 已清除','info')}catch(e){addLog('❌ '+e.message,'err')}}
+$('#saveProxy').onclick=async()=>{const p=$('#proxy').value.trim()
+try{await api('/api/proxy',{method:'POST',body:{proxy:p}});$('#proxy').value='';await loadProxy();addLog(p?('✅ 代理已保存: '+p):'ℹ 代理已清除（直连）','ok')}catch(e){addLog('❌ 保存失败: '+e.message,'err')}}
+$('#clearProxy').onclick=async()=>{try{await api('/api/proxy',{method:'POST',body:{proxy:''}});await loadProxy();addLog('ℹ 代理已清除','info')}catch(e){addLog('❌ '+e.message,'err')}}
 $('#refresh').onclick=async()=>{try{await loadList();addLog('↻ 状态已刷新','info')}catch(e){addLog('❌ '+e.message,'err')}}
 $('#publishAll').onclick=()=>{const checked=[...document.querySelectorAll('tbody input[type=checkbox]:checked')].map(i=>i.dataset.n)
 publish(checked)}
-loadToken();loadList().catch(e=>addLog('❌ 加载列表失败: '+e.message,'err'))
+loadToken();loadProxy();loadList().catch(e=>addLog('❌ 加载列表失败: '+e.message,'err'))
 </script></body></html>`
 
 function startServer(port) {
@@ -495,6 +630,23 @@ function startServer(port) {
         const r = clearToken()
         if (!r.ok) return send(400, { error: r.error })
         send(200, { ok: true })
+        return
+      }
+      if (u.pathname === '/api/proxy' && req.method === 'GET') {
+        send(200, { proxy: getProxy(), source: proxySource() === 'web-config' ? 'web 配置' : (proxySource() === 'env' ? '环境变量' : '') })
+        return
+      }
+      if (u.pathname === '/api/proxy' && req.method === 'POST') {
+        let body = {}
+        try { body = JSON.parse(await readBody(req)) } catch {}
+        const p = String(body.proxy || '').trim()
+        try {
+          if (p) { fs.mkdirSync(publishDir, { recursive: true }); fs.writeFileSync(proxyPath, p + '\n') }
+          else if (fs.existsSync(proxyPath)) fs.unlinkSync(proxyPath)
+          send(200, { ok: true, proxy: p })
+        } catch (e) {
+          send(500, { error: String(e.message || e).slice(0, 200) })
+        }
         return
       }
       if (u.pathname === '/api/publish' && req.method === 'POST') {
