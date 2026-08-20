@@ -24,8 +24,14 @@ import (
 	"github.com/hoonfeng/paircode/internal/core"
 )
 
-// npmRegistryBase npm registry 地址（测试可替换为 httptest server）。
-var npmRegistryBase = "https://registry.npmjs.org"
+// npmRegistryBase npm registry 地址（测试可替换为 httptest server；
+// 运行时可用环境变量 PAIRCODE_NPM_REGISTRY 覆盖——本地市场/私有 registry）。
+var npmRegistryBase = func() string {
+	if v := os.Getenv("PAIRCODE_NPM_REGISTRY"); v != "" {
+		return strings.TrimRight(v, "/")
+	}
+	return "https://registry.npmjs.org"
+}()
 
 // npmFetchTimeout npm 拉取超时（下载 tarball 可能较慢）。
 var npmFetchTimeout = 120 * time.Second
@@ -340,6 +346,8 @@ func npmMarketInstall(pkg string) (string, error) {
 		}
 		def, _ := ph.GetJSDef(defID)
 		if def != nil {
+			// 打卸载锚点（新磁盘插件形态无 config.npm；removeNPMPluginDefs 靠它匹配）
+			ph.SetJSDefConfig(defID, "npm", pkg)
 			if err := ph.LoadJSDynamic(def); err != nil {
 				return "", fmt.Errorf("插件装载失败（可能依赖 node 模块）: %v", err)
 			}
@@ -390,11 +398,14 @@ func uninstallNPMPlugin(pkg string) error {
 		// 不在 patch（新安装走磁盘插件包）→ 删除插件包目录
 		if !removed {
 			dir := filepath.Join(globalPluginsDir(), npmPluginDiskName(pkg))
-			if err := removeGlobalPluginPackage(dir); err != nil && !os.IsNotExist(err) {
-				return fmt.Errorf("删除插件包目录失败: %w", err)
-			}
-			// 磁盘插件包也不存在 → 未安装
-			if _, serr := os.Stat(filepath.Join(globalPluginsDir(), npmPluginDiskName(pkg), "package.json")); serr != nil {
+			if _, serr := os.Stat(filepath.Join(dir, "package.json")); serr == nil {
+				if err := removeGlobalPluginPackage(dir); err != nil {
+					return fmt.Errorf("删除插件包目录失败: %w", err)
+				}
+			} else if !os.IsNotExist(serr) {
+				return fmt.Errorf("检查插件包目录失败: %w", serr)
+			} else {
+				// 磁盘插件包也不存在 → 未安装
 				return fmt.Errorf("未找到插件 %s（无 .pair/plugins/%s/，也不在 cordis.patch.json）", pkg, npmPluginDiskName(pkg))
 			}
 		}
@@ -413,9 +424,16 @@ func uninstallNPMPlugin(pkg string) error {
 }
 
 // removeNPMPluginDefs 卸载并移除 config.npm 匹配的插件定义（npm 插件卸载用）。
+// 新安装形态（磁盘插件包）无 config.npm——按插件目录（d.dir 末尾 == 磁盘包名）匹配。
 func (h *PluginHost) removeNPMPluginDefs(pkg string) {
+	diskName := npmPluginDiskName(pkg)
 	for _, d := range h.JSDefs() {
 		if src, _ := d.config["npm"].(string); src == pkg || strings.HasPrefix(src, pkg+"@") {
+			_ = h.RemoveJSDef(d.id)
+			continue
+		}
+		dirBase := filepath.Base(filepath.Clean(d.dir))
+		if dirBase == diskName || d.name == diskName {
 			_ = h.RemoveJSDef(d.id)
 		}
 	}

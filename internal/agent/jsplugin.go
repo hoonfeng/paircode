@@ -3278,6 +3278,18 @@ func (h *PluginHost) GetJSDef(id string) (*jsPluginDef, bool) {
 	return d, ok
 }
 
+// SetJSDefConfig 设置 JS 插件定义配置（npm 插件安装打卸载锚点 config["npm"]=pkg 用）。
+func (h *PluginHost) SetJSDefConfig(id, key string, val any) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if d, ok := h.defs[id]; ok {
+		if d.config == nil {
+			d.config = map[string]any{}
+		}
+		d.config[key] = val
+	}
+}
+
 // RemoveJSDef 删除 JS 定义（cordis_undefine 用；先停再删）。
 // 删除整个 pluginId 的全部版本（版本化模型：undefine 按稳定身份清链）。
 func (h *PluginHost) RemoveJSDef(id string) error {

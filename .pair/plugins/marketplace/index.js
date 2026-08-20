@@ -24,7 +24,9 @@ return {
     const log = (msg) => { if (ctx.logger) ctx.logger('marketplace').log(msg) }
 
     // ── 搜索实现（ctx.web.fetch，同步返回 {ok, status, text}）──
-    const NPM_SEARCH = 'https://registry.npmjs.org/-/v1/search?text='
+    // registry 可覆盖（本地市场/私有 registry 测试）：PAIRCODE_NPM_REGISTRY=http://127.0.0.1:4873
+    const REG = String(process.env.PAIRCODE_NPM_REGISTRY || '').replace(/\/+$/, '') || 'https://registry.npmjs.org'
+    const NPM_SEARCH = REG + '/-/v1/search?text='
     const MAX = 20
     const shortName = (n) => { const p = String(n).split('/'); return p.length > 1 ? p[1] : p[0] }
 
@@ -85,7 +87,7 @@ return {
         const isOfficial = low.startsWith('@paircode/') || low.startsWith('paircode-plugin-')
         if (!isOfficial) continue
         if (low.startsWith('paircode-plugin-')) {
-          const kws = String(p.keywords || []).join(',').toLowerCase()
+          const kws = (Array.isArray(p.keywords) ? p.keywords : []).join(',').toLowerCase()
           if (!kws.includes('paircode')) continue
         }
         out.push({
@@ -198,6 +200,15 @@ return {
       }
       if (kind === 'skill') return ctx.skill.remove(id)
       if (kind === 'plugin') {
+        // npm 插件：搜索结果 source=npm:<pkg>（cache 兜底：未搜索直接卸载也可）；
+        // 或 id 符合 PairCode 命名约定（paircode-plugin-* / @paircode/*）
+        const cached = cache.get(id)
+        const src = source || (cached && cached.source) || ''
+        if (src.startsWith('npm:') || /^(paircode-plugin-|@paircode\/)/.test(id)) {
+          const pkg = src.startsWith('npm:') ? src.slice(4) : id
+          ctx.npm.uninstall(pkg)
+          return '已卸载 npm 插件 ' + pkg
+        }
         const name = String(id).replace(/^plugin-/, '')
         return ctx.toolset.remove(name)
       }
