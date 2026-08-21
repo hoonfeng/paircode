@@ -162,6 +162,13 @@ func (l *Loop) runWithJS(ctx context.Context, task string, history []Message, im
 	log.Printf("[loop-js] Run 开始（JS 循环实现 %q）taskLen=%d history=%d maxIter=%d autonomous=%v",
 		impl.id, len(task), len(history), l.MaxIterations, l.Autonomous)
 
+	// ★ 2026-08-21：Provider 判空兜底——清空配置后 buildWebProvider 返回 nil，
+	//   JS 循环首次 loop.llm.chat → l.Provider.Chat nil pointer panic。
+	//   此处提前拦截返回明确错误（handleChatSend 已前置提示，此为其他入口兜底）。
+	if l.Provider == nil {
+		return msgs, fmt.Errorf("Loop.Provider 为空：未配置 AI 服务商（APIKey/BaseURL 缺失），无法启动循环")
+	}
+
 	// ── 前置准备（与 Go Run 一致）──
 	if history == nil {
 		history = l.History

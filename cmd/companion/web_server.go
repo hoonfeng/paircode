@@ -2615,6 +2615,13 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	opts := s.buildWebLoopOpts(req.ConvID, req.Message, req.Autonomous)
+	// ★ 2026-08-21：Provider 判空——清空配置后 APIKey/BaseURL 为空 → buildWebProvider
+	//   返回 nil → Loop.Provider=nil → agentloop 插件首次 loop.llm.chat 触发
+	//   nil pointer panic（[session] Loop goroutine panic）。此处前置拦截给友好提示。
+	if opts.Provider == nil {
+		jsonErr(w, "未配置 AI 服务商（APIKey/BaseURL 为空）：请先在「设置 → AI」中添加并应用 AI 配置，再发送消息")
+		return
+	}
 	opts.WorkspaceRoot = req.WorkspaceRoot
 	// ★ 工作区工具集白名单（2026-08-17）：agent 只暴露「会话工作区工具集」声明的
 	//   工具——有配置只暴露配置里的；无配置先自动创建基础工具集（极简核心 +

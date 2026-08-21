@@ -50,10 +50,20 @@ const ok = (data) => ({ status: 200, headers: { 'Content-Type': 'application/jso
       const p = fsPath(qp(req, 'path') || '')
       if (qp(req, 'browse') === '1') {
         try {
-          // ★ 路径规范化：盘根（F:\）保留末尾反斜杠——PowerShell 里 'F:' 是
+          // ★ 2026-08-21 修复「browse 失败: exit status 1」：
+          //   1) 空路径（前端 browse 初始 browsePath=''）→ 直接返回空数组，
+          //      不调 PowerShell（Get-ChildItem -LiteralPath '' 报错 exit 1）。
+          //   2) 双反斜杠污染路径（F:\\syproject\\gou-ide）折叠为单反斜杠——
+          //      否则 PowerShell 找不到路径 exit 1。
+          //   3) PowerShell 执行失败（exit!=0：路径不存在/无权限）→ 容错返回
+          //      空数组（浏览模式不阻断，前端显示空目录+盘符列表可回退）。
+          let dir = String(p || '').replace(/\\\\+/g, '\\')
+          // 路径规范化：盘根（F:\）保留末尾反斜杠——PowerShell 里 'F:' 是
           //   "F 盘当前位置" 而非盘根；普通目录才去末尾斜杠。
-          const m = /^([a-zA-Z]):[\\/]?$/.exec(String(p))
-          const dir = m ? m[1] + ':\\' : String(p).replace(/[\\/]+$/, '')
+          const m = /^([a-zA-Z]):[\\/]?$/.exec(dir)
+          if (m) dir = m[1] + ':\\'
+          else dir = dir.replace(/[\\/]+$/, '')
+          if (!dir) return ok([])
           // PowerShell 脚本：单引号转义路径 → UTF-16LE base64（-EncodedCommand）。
           // 这样 bash -c 传输的是纯 ASCII，无引号嵌套/中文编码乱码问题。
           // ★ goja 沙箱无 Buffer 且 btoa 对 >127 字符行为不可靠，自写 base64。
@@ -78,7 +88,7 @@ const ok = (data) => ({ status: 200, headers: { 'Content-Type': 'application/jso
             b64 += B64CH[b2 & 63]
           }
           const r = ctx.bash.exec('powershell -NoProfile -NonInteractive -EncodedCommand ' + b64 + ' 2>/dev/null')
-          if (r && r.error) return err('browse 失败: ' + r.error + (r && r.output ? ' | out: ' + String(r.output).slice(0, 200) : ''))
+          if (r && r.error) return ok([]) // 失败容错：空目录（路径不存在/无权限，不阻断浏览）
           const text = (r && r.output || '').trim()
           if (!text) return ok([])
           let arr = JSON.parse(text)

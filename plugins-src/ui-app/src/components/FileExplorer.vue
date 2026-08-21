@@ -424,7 +424,7 @@ function closeBrowse() {
 
 function browseSelect(entry) {
   if (!entry.isDir) return
-  const full = browsePath.value + '\\' + entry.name
+  const full = normPath(browsePath.value + '\\' + entry.name) // 归一化（防双反斜杠污染）
   browseSelected.value = full
   // 展开
   browsePath.value = full
@@ -432,14 +432,14 @@ function browseSelect(entry) {
 }
 
 async function browseEnter(path) {
-  browsePath.value = path
+  browsePath.value = normPath(path) // 归一化（防双反斜杠污染 → PowerShell 找不到路径 exit 1）
   browseSelected.value = ''
-  loadBrowseDir(path)
+  loadBrowseDir(browsePath.value)
 }
 
 async function browseGoUp() {
   if (!browsePath.value) return
-  const parts = browsePath.value.replace(/\\$/, '').split('\\')
+  const parts = normPath(browsePath.value).replace(/\\$/, '').split('\\')
   if (parts.length <= 1) {
     browsePath.value = ''
     browseEntries.value = []

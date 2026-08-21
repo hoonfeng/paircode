@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"syscall"
@@ -622,7 +623,8 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		defer func() {
 			// panic recovery：确保会话状态和事件通道始终被清理
 			if r := recover(); r != nil {
-				fmt.Printf("[session] Loop goroutine panic conv=%s: %v\n", convID, r)
+				// ★ 2026-08-21：打印完整堆栈（原仅 %v 无法定位 nil 指针来源）
+				fmt.Printf("[session] Loop goroutine panic conv=%s: %v\n%s\n", convID, r, debug.Stack())
 				// ★ panic 恢复时也发送 EventError，否则前端无任何信号（assistant 永久 loading）
 				// 注：用 select+default 非阻塞发送，不阻塞 defer 关闭流程，也不向已关闭 channel panic
 				select {
