@@ -27,6 +27,14 @@ import {
 // ─── 工作区列表 ──────────────────────────────────────────────
 // （原 App.vue：wsList 从后端 /api/settings 拉取；desktop(goja) 预取逻辑
 //   由壳 ShellApp 保留——本模块面向 web 端）
+
+// ★ 路径归一化（2026-08-21）：历史异常数据里的双反斜杠（F:\\syproject\\gou-ide）
+//   折叠为单反斜杠——清空配置重启后旧页面提交/读取时自愈，不再持续污染配置。
+function normPath(p) {
+  if (typeof p !== 'string' || !p) return p
+  return p.replace(/\\\\+/g, '\\')
+}
+
 export async function loadWsList() {
   if (!state.wsList) state.wsList = reactive([])
   const wsList = state.wsList
@@ -38,10 +46,12 @@ export async function loadWsList() {
     const projects = settings.recentProjects || []
     const folderLists = settings.workspaceFolderLists || {}
     const seen = new Set()
-    for (const p of projects) {
-      if (!p || seen.has(p)) continue
+    for (const p0 of projects) {
+      if (!p0 || seen.has(p0)) continue
+      const p = normPath(p0) // 归一化历史双反斜杠路径（自愈）
       seen.add(p)
-      const folders = folderLists[p]?.length > 0 ? [...folderLists[p]] : [p]
+      const fl = folderLists[p0]?.length > 0 ? [...folderLists[p0]] : (folderLists[p]?.length > 0 ? [...folderLists[p]] : [])
+      const folders = fl.length > 0 ? fl.map(normPath) : [p]
       loadedItems.push(reactive({
         path: p,
         name: p.split(/[\\/]/).filter(Boolean).pop() || p,
@@ -68,11 +78,11 @@ export async function saveWsList() {
   try {
     const resp = await api.apiGet('/settings')
     const settings = resp.settings || resp
-    settings.recentProjects = wsList.slice(0, 20).map(w => w.path).filter(Boolean)
+    settings.recentProjects = wsList.slice(0, 20).map(w => normPath(w.path)).filter(Boolean)
     settings.workspaceFolderLists = settings.workspaceFolderLists || {}
     for (const ws of wsList) {
       if (ws.folders?.length > 0) {
-        settings.workspaceFolderLists[ws.path] = [...ws.folders]
+        settings.workspaceFolderLists[normPath(ws.path)] = ws.folders.map(normPath)
       }
     }
     await api.apiPut('/settings', settings)

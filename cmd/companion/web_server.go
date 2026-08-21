@@ -837,6 +837,8 @@ func (s *webServer) handleWorkspace(w http.ResponseWriter, r *http.Request) {
 			if root == "" {
 				home, _ := os.UserHomeDir()
 				root = filepath.Join(home, "paircode-workspaces", req.Name)
+			} else {
+				root = filepath.Clean(root) // 归一化（防双反斜杠污染）
 			}
 			if err := os.MkdirAll(root, 0755); err != nil {
 				jsonErr(w, "创建工作区失败: "+err.Error())
@@ -857,6 +859,7 @@ func (s *webServer) handleWorkspace(w http.ResponseWriter, r *http.Request) {
 				jsonErr(w, "需要 path 参数")
 				return
 			}
+			req.Path = filepath.Clean(req.Path) // 归一化（防双反斜杠污染 → os.Stat 误判不存在 400）
 			if _, err := os.Stat(req.Path); err != nil {
 				jsonErr(w, "目录不存在: "+err.Error())
 				return
@@ -880,6 +883,7 @@ func (s *webServer) handleWorkspace(w http.ResponseWriter, r *http.Request) {
 				jsonErr(w, "需要 path 参数")
 				return
 			}
+			req.Path = filepath.Clean(req.Path) // 归一化（防双反斜杠污染）
 			newFolders := make([]string, 0, len(core.Folders))
 			for _, f := range core.Folders {
 				if f != req.Path {
@@ -936,7 +940,7 @@ func (s *webServer) handleWorkspace(w http.ResponseWriter, r *http.Request) {
 				jsonErr(w, "需要 root 参数（工作区路径）")
 				return
 			}
-			root := req.Root
+			root := filepath.Clean(req.Root) // 归一化（防双反斜杠污染）
 			// 1. 从 RecentProjects 中移除
 			newProjects := make([]string, 0, len(core.Settings.RecentProjects))
 			for _, p := range core.Settings.RecentProjects {
@@ -990,7 +994,15 @@ func (s *webServer) handleWorkspace(w http.ResponseWriter, r *http.Request) {
 
 		default:
 			if req.Root != "" {
-				core.Folders = append([]string{req.Root}, req.Folders...)
+				req.Root = filepath.Clean(req.Root) // 归一化（switch/打开工作区：防双反斜杠污染）
+				flds := make([]string, 0, len(req.Folders)+1)
+				flds = append(flds, req.Root)
+				for _, f := range req.Folders {
+					if f != "" && f != req.Root {
+						flds = append(flds, filepath.Clean(f))
+					}
+				}
+				core.Folders = flds
 				core.Settings.LastProject = req.Root
 				core.Settings.WorkspaceFolders = core.Folders
 				core.Loaded = true
@@ -1076,6 +1088,32 @@ func (s *webServer) handleSettings(w http.ResponseWriter, r *http.Request) {
 			if err := json.Unmarshal(rawVal, newVal); err == nil {
 				sv.Field(i).Set(reflect.ValueOf(newVal).Elem())
 			}
+		}
+
+		// ★ 路径归一化（2026-08-21）：旧页面（未含前端 normPath）提交的双反斜杠路径
+		//   在此折叠为单反斜杠，防污染传播到配置（recentProjects/workspaceFolders/
+		//   workspaceFolderLists 全量清理；前端新版本已自愈，此处后端兜底）。
+		cleanPathList := func(ss []string) []string {
+			out := make([]string, 0, len(ss))
+			for _, p := range ss {
+				if p != "" {
+					out = append(out, filepath.Clean(p))
+				}
+			}
+			return out
+		}
+		if core.Settings.RecentProjects != nil {
+			core.Settings.RecentProjects = cleanPathList(core.Settings.RecentProjects)
+		}
+		if core.Settings.WorkspaceFolders != nil {
+			core.Settings.WorkspaceFolders = cleanPathList(core.Settings.WorkspaceFolders)
+		}
+		if core.Settings.WorkspaceFolderLists != nil {
+			lists := make(map[string][]string, len(core.Settings.WorkspaceFolderLists))
+			for k, v := range core.Settings.WorkspaceFolderLists {
+				lists[filepath.Clean(k)] = cleanPathList(v)
+			}
+			core.Settings.WorkspaceFolderLists = lists
 		}
 
 		core.Save()

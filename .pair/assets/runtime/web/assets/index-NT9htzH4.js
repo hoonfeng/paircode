@@ -12825,8 +12825,12 @@
     setGlobalCtx,
     startConvRuntime
   }, Symbol.toStringTag, { value: "Module" }));
+  function normPath(p2) {
+    if (typeof p2 !== "string" || !p2) return p2;
+    return p2.replace(/\\\\+/g, "\\");
+  }
   async function loadWsList() {
-    var _a, _b, _c;
+    var _a, _b, _c, _d;
     if (!state.wsList) state.wsList = /* @__PURE__ */ reactive([]);
     const wsList = state.wsList;
     wsList.length = 0;
@@ -12837,14 +12841,16 @@
       const projects = settings.recentProjects || [];
       const folderLists = settings.workspaceFolderLists || {};
       const seen = /* @__PURE__ */ new Set();
-      for (const p2 of projects) {
-        if (!p2 || seen.has(p2)) continue;
+      for (const p0 of projects) {
+        if (!p0 || seen.has(p0)) continue;
+        const p2 = normPath(p0);
         seen.add(p2);
-        const folders = ((_a = folderLists[p2]) == null ? void 0 : _a.length) > 0 ? [...folderLists[p2]] : [p2];
+        const fl = ((_a = folderLists[p0]) == null ? void 0 : _a.length) > 0 ? [...folderLists[p0]] : ((_b = folderLists[p2]) == null ? void 0 : _b.length) > 0 ? [...folderLists[p2]] : [];
+        const folders = fl.length > 0 ? fl.map(normPath) : [p2];
         loadedItems.push(/* @__PURE__ */ reactive({
           path: p2,
           name: p2.split(/[\\/]/).filter(Boolean).pop() || p2,
-          folders: p2 === state.workspaceRoot && ((_b = state.workspaceFolders) == null ? void 0 : _b.length) > 0 ? [...state.workspaceFolders] : folders,
+          folders: p2 === state.workspaceRoot && ((_c = state.workspaceFolders) == null ? void 0 : _c.length) > 0 ? [...state.workspaceFolders] : folders,
           notify: false
         }));
       }
@@ -12854,7 +12860,7 @@
       loadedItems.push(/* @__PURE__ */ reactive({
         path: state.workspaceRoot,
         name: state.workspaceRoot.split(/[\\/]/).filter(Boolean).pop() || state.workspaceRoot,
-        folders: ((_c = state.workspaceFolders) == null ? void 0 : _c.length) > 0 ? [...state.workspaceFolders] : [state.workspaceRoot],
+        folders: ((_d = state.workspaceFolders) == null ? void 0 : _d.length) > 0 ? [...state.workspaceFolders] : [state.workspaceRoot],
         notify: false
       }));
     }
@@ -12866,11 +12872,11 @@
     try {
       const resp = await api.apiGet("/settings");
       const settings = resp.settings || resp;
-      settings.recentProjects = wsList.slice(0, 20).map((w) => w.path).filter(Boolean);
+      settings.recentProjects = wsList.slice(0, 20).map((w) => normPath(w.path)).filter(Boolean);
       settings.workspaceFolderLists = settings.workspaceFolderLists || {};
       for (const ws of wsList) {
         if (((_a = ws.folders) == null ? void 0 : _a.length) > 0) {
-          settings.workspaceFolderLists[ws.path] = [...ws.folders];
+          settings.workspaceFolderLists[normPath(ws.path)] = ws.folders.map(normPath);
         }
       }
       await api.apiPut("/settings", settings);

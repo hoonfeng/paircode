@@ -366,12 +366,18 @@ async function createWorkspace() {
   } catch (err) { wsError.value = err.message }
 }
 
+// ★ 路径归一化（2026-08-21）：历史双反斜杠路径折叠为单反斜杠（自愈污染）。
+function normPath(p) {
+  if (typeof p !== 'string' || !p) return p
+  return p.replace(/\\\\+/g, '\\')
+}
+
 async function saveWsList() {
   // 同步工作区列表到后端 settings.recentProjects
   try {
     const resp = await api.apiGet('/settings')
     const settings = resp.settings || resp
-    settings.recentProjects = (state.wsList || []).slice(0, 20).map(w => w.path).filter(Boolean)
+    settings.recentProjects = (state.wsList || []).slice(0, 20).map(w => normPath(w.path)).filter(Boolean)
     await api.apiPut('/settings', settings)
   } catch (e) {
 
@@ -488,7 +494,9 @@ async function refreshCurrentWs() {
     if (cur) cur.folders = [...state.workspaceFolders]
     // 同步 settings 中的 workspaceFolders，防止设置对话框保存时覆盖
     state.settings.workspaceFolders = [...state.workspaceFolders]
-    await saveWsList()
+    // ★ 2026-08-21：不在此提交 wsList——被动刷新（add-folder 后同步）不是工作区
+    //   列表的明确添加/移除事件，提交会把内存历史工作区写回后端配置（清空配置
+    //   重启后被旧页面周期刷回异常数据）；recentProjects 仅由明确事件更新。
   } catch (e) {
     console.warn('刷新工作区失败:', e)
   }
@@ -515,7 +523,9 @@ async function refreshAll() {
     }
     // 同步 settings 中的 workspaceFolders，防止设置对话框保存时覆盖
     state.settings.workspaceFolders = [...state.workspaceFolders]
-    await saveWsList()
+    // ★ 2026-08-21：周期/被动刷新（5s refresh-tree）绝不提交 wsList——页面内存里的
+    //   历史工作区列表会在后端配置清空后把旧数据写回（周期提交 bug）。工作区列表
+    //   仅在明确添加/移除/切换事件（createWorkspace/delete/rename/switch）时保存。
     window.dispatchEvent(new CustomEvent('refresh-tree'))
   } catch (e) {
     console.warn('刷新全部失败:', e)

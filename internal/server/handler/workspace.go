@@ -50,6 +50,8 @@ func HandleWorkspacePost(w http.ResponseWriter, r *http.Request) {
 		if root == "" {
 			home, _ := os.UserHomeDir()
 			root = filepath.Join(home, "paircode-workspaces", req.Name)
+		} else {
+			root = filepath.Clean(root) // 归一化路径（防双反斜杠等污染）
 		}
 		if err := os.MkdirAll(root, 0755); err != nil {
 			jsonErr(w, "创建工作区失败: "+err.Error())
@@ -70,6 +72,7 @@ func HandleWorkspacePost(w http.ResponseWriter, r *http.Request) {
 			jsonErr(w, "需要 path 参数")
 			return
 		}
+		req.Path = filepath.Clean(req.Path) // 归一化路径（防双反斜杠污染）
 		for _, f := range core.Folders {
 			if f == req.Path {
 				jsonErr(w, "文件夹已在工作区中")
@@ -92,6 +95,7 @@ func HandleWorkspacePost(w http.ResponseWriter, r *http.Request) {
 			jsonErr(w, "需要 path 参数")
 			return
 		}
+		req.Path = filepath.Clean(req.Path) // 归一化路径（防双反斜杠污染）
 		newFolders := make([]string, 0, len(core.Folders))
 		for _, f := range core.Folders {
 			if f != req.Path {
@@ -121,10 +125,11 @@ func HandleWorkspacePost(w http.ResponseWriter, r *http.Request) {
 			jsonErr(w, "需要 root 参数")
 			return
 		}
+		req.Root = filepath.Clean(req.Root) // 归一化路径（防双反斜杠污染）
 		newFolders := []string{req.Root}
 		for _, f := range req.Folders {
 			if f != "" && f != req.Root {
-				newFolders = append(newFolders, f)
+				newFolders = append(newFolders, filepath.Clean(f)) // 归一化附加文件夹
 			}
 		}
 		core.Folders = newFolders
@@ -142,6 +147,7 @@ func HandleWorkspacePost(w http.ResponseWriter, r *http.Request) {
 			jsonErr(w, "需要 root 参数")
 			return
 		}
+		req.Root = filepath.Clean(req.Root) // 归一化路径（防双反斜杠污染）
 		core.Folders = []string{req.Root}
 		core.Settings.LastProject = req.Root
 		core.Settings.WorkspaceFolders = core.Folders

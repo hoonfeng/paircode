@@ -1202,6 +1202,13 @@ func (p *jsPluginAdapter) buildFSService(pc *PluginContext) goja.Value {
 	vm := p.vm
 	root := pc.WorkspaceRoot
 	resolve := func(path string) (string, error) {
+		// ★ 工作区根动态读取（2026-08-21）：pc.WorkspaceRoot 是插件装载时快照——
+		//   清空配置启动后切换工作区（core.OnSyncWorkspace 已更新 WorkspaceRoots），
+		//   快照仍为空/旧 → ctx.fs 接口报 400「工作区根为空，无法解析路径」。
+		//   每次解析优先取当前主根（switch 后立即生效），空则回落装载时根。
+		if cur := primaryWorkspaceRoot(); cur != "" {
+			root = cur
+		}
 		if root == "" {
 			return "", fmt.Errorf("ctx.fs: 工作区根为空，无法解析路径 %q", path)
 		}
