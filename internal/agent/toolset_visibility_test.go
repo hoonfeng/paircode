@@ -66,9 +66,11 @@ func mkVisibilityHost(t *testing.T, reg *Registry) (*PluginHost, string) {
 		t.Fatal(err)
 	}
 	h := NewPluginHost(reg, nil, root)
-	// 模拟插件注册：tool-foo（工具集插件）注册 4 个工具
+	// 模拟插件注册：tool-foo（工具集插件）注册 4 个工具（装载后 running——
+	// ★ 2026-08-2x：白名单仅含 running 插件的工具，未启用插件不暴露）
 	h.mu.Lock()
 	h.pluginTools["tool-foo"] = []string{"codegraph_search", "codegraph_impact", "memory_read", "git_diff"}
+	h.states["tool-foo"] = PluginRunning
 	h.mu.Unlock()
 	return h, root
 }

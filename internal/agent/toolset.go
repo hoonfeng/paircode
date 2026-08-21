@@ -26,6 +26,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -474,6 +475,14 @@ func LoadAllToolsets(ph *PluginHost, projectRoot string) {
 	//   存 <InstallDir>/.pair/plugins/，未打开工作区也必须装载（发布版启动即生效）
 	if n := LoadGlobalPlugins(ph); n > 0 {
 		loaded += n
+	}
+	// ★ 2026-08-2x：实装后二次过滤——工具集中「未暴露」的条目/工具清理落盘
+	//   （未装载插件条目 / 未注册工具 / 整组未启用的内置组）。已装载插件的工具
+	//   保留；清理结果保存到 .pair/toolsets/*.json，下次启动不再出现。
+	if projectRoot != "" {
+		if n := pruneUnavailableFromToolsets(ph, projectRoot); n > 0 {
+			log.Printf("[toolset] 实装后清理：%d 个工具集已移除未暴露条目并保存", n)
+		}
 	}
 	// ★ 2026-08-17：装载 ≠ agent 可用——全部插件照常装载（cordis/前端可见可管理），
 	//   但收敛 agent 可见工具 = 工作区工具集声明 + 自举管理工具（SystemTool +
@@ -967,6 +976,56 @@ func RemovePluginFromToolsetsPublic(root, name string) int {
 	return removed
 }
 
+// RestorePluginToToolsetsPublic 把磁盘插件包加回工作区 default 工具集（start 联动，
+// 与 stop 的 RemovePluginFromToolsetsPublic 对称）：读 <InstallDir>/.pair/plugins/
+// <name>/package.json + main 源码 → 作为 JS 条目加入（已有同名条目跳过）。
+// ★ 2026-08-2x：stop 移除条目后若不加回，重启时磁盘插件虽被 LoadGlobalPlugins
+//   装载（running），但工具不在工具集白名单 → agent 不可见（start 后也恢复不了）。
+//   调用方需确保该插件有工具（无工具插件不加，避免 UI 类插件占位工具集）。
+// 返回加入的工具集数（0 = 无包目录/已在工具集/失败）。
+func RestorePluginToToolsetsPublic(root, name string) int {
+	if root == "" || name == "" {
+		return 0
+	}
+	dir := filepath.Join(globalPluginsDir(), name)
+	data, err := os.ReadFile(filepath.Join(dir, "package.json"))
+	if err != nil {
+		return 0
+	}
+	var pkg GlobalPluginPackage
+	if err := json.Unmarshal(data, &pkg); err != nil || pkg.Name == "" || pkg.Main == "" {
+		return 0
+	}
+	code, err := os.ReadFile(filepath.Join(dir, pkg.Main))
+	if err != nil {
+		return 0
+	}
+	ts, err := loadToolset(root, toolsetProject, "default")
+	if err != nil || ts == nil {
+		return 0
+	}
+	for _, p := range ts.Plugins {
+		if p.Builtin == "" && p.Name == name {
+			return 0 // 已有同名条目
+		}
+	}
+	scope := pkg.Scope
+	if scope == "" {
+		scope = "project"
+	}
+	ts.Plugins = append(ts.Plugins, ToolsetPlugin{
+		Name:    name,
+		Purpose: pkg.Purpose,
+		Code:    string(code),
+		Scope:   scope,
+	})
+	if err := saveToolset(root, toolsetProject, ts); err != nil {
+		return 0
+	}
+	log.Printf("[toolset] start 联动：插件 %s 已加回工作区工具集 %s", name, ts.Name)
+	return 1
+}
+
 // applyToolsetPlugin 装载单个工具集条目：
 //   - JS 插件条目（Code 非空）：定义（define 预检）→ 装载（apply 注册工具）
 //     → 应用 DisabledTools（工具级摘除：Registry.SetToolEnabled(false)，agent 不可见）。
@@ -1117,6 +1176,10 @@ func (h *PluginHost) workspaceToolsetVisibleTools() map[string]bool {
 		if err := json.Unmarshal(data, &ts); err != nil || ts.Name == "" {
 			continue
 		}
+		reg := (*Registry)(nil)
+		if h.ctx != nil {
+			reg = h.ctx.Tools
+		}
 		for _, p := range ts.Plugins {
 			// ★ 2026-08-17：DisabledTools 摘除清单内的工具不进白名单——
 			//   移除后重启保持禁用（可见性收敛据此排除）。
@@ -1125,14 +1188,27 @@ func (h *PluginHost) workspaceToolsetVisibleTools() map[string]bool {
 				disabled[tn] = true
 			}
 			if p.Builtin != "" {
+				// ★ 2026-08-2x：内置条目仅「真实注册的工具」进白名单——
+				//   声明了但宿主没有的工具（组已废弃/工具被移除）视为未暴露。
 				for _, tn := range p.Tools {
-					if tn != "" && !disabled[tn] {
-						keep[tn] = true
+					if tn == "" || disabled[tn] {
+						continue
 					}
+					if reg != nil {
+						if _, ok := reg.Get(tn); !ok {
+							continue
+						}
+					}
+					keep[tn] = true
 				}
 				continue
 			}
 			if p.Name == "" {
+				continue
+			}
+			// ★ 2026-08-2x：JS 插件条目仅当插件「已启用（running）」时其工具
+			//   才进白名单——插件被停止/未装载 → 整条跳过（工具不暴露给 agent）。
+			if h.State(p.Name) != PluginRunning {
 				continue
 			}
 			h.mu.RLock()
@@ -1186,10 +1262,101 @@ func (h *PluginHost) workspaceToolsetDisabledTools() map[string]bool {
 	return out
 }
 
-// ApplyWorkspaceDisabledTools 按工作区工具集的 DisabledTools 摘除清单禁用工具
-// （会话级 reg 用）。★ 工作区隔离（2026-08-17）：移除只影响本工作区——会话 reg
-// 每会话新建、插件工具经 MergePluginTools 全量启用，需在此按「本工作区摘除清单」
-// 重新禁用，保证移除对 agent 生效且不污染其他工作区（其他工作区无摘除记录 → 不受影响）。
+// pruneUnavailableFromToolsets 实装后清理工作区工具集中「未暴露」的条目/工具并保存
+// （★ 2026-08-2x：插件面板未启用/未装载的插件工具不再留在工具集）：
+//   - JS 插件条目：插件未装载（未定义或非 running）→ 整条移除（未启用的插件
+//     不给工具集——工具集管理/白名单不再出现）。
+//   - builtin 条目：Tools/DisabledTools 中未真实注册的工具移除；组内工具全部
+//     未暴露（Tools 为空，或全部被 DisabledTools 摘除 = 面板未启用）→ 整条移除。
+// 幂等；仅启动实装（LoadAllToolsets）完成后调用一次。返回清理了条目的工具集数量。
+func pruneUnavailableFromToolsets(ph *PluginHost, root string) int {
+	if root == "" {
+		return 0
+	}
+	var reg *Registry
+	if ph != nil && ph.Context() != nil {
+		reg = ph.Context().Tools
+	}
+	cleaned := 0
+	for _, meta := range listToolsets(root, toolsetProject) {
+		ts, err := loadToolset(root, toolsetProject, meta.Name)
+		if err != nil || ts == nil {
+			continue
+		}
+		out := make([]ToolsetPlugin, 0, len(ts.Plugins))
+		changed := false
+		for i := range ts.Plugins {
+			p := ts.Plugins[i]
+			// ── JS 插件条目：插件必须已装载（running）才保留 ──
+			if p.Builtin == "" && strings.TrimSpace(p.Code) != "" {
+				if p.Name == "" || ph == nil || ph.State(p.Name) != PluginRunning {
+					changed = true
+					log.Printf("[toolset] %s 清理：插件 %q 未启用（未装载），移除工具集条目", ts.Name, p.Name)
+					continue
+				}
+				out = append(out, p)
+				continue
+			}
+			// ── builtin 条目：清理未注册工具；整组未暴露 → 整条移除 ──
+			if p.Builtin != "" && strings.TrimSpace(p.Code) == "" {
+				if reg == nil {
+					out = append(out, p)
+					continue
+				}
+				tools := make([]string, 0, len(p.Tools))
+				for _, tn := range p.Tools {
+					if _, ok := reg.Get(tn); ok {
+						tools = append(tools, tn)
+					} else {
+						changed = true
+						log.Printf("[toolset] %s 清理：内置组 %s 工具 %s 未注册，移除声明", ts.Name, p.Builtin, tn)
+					}
+				}
+				p.Tools = tools
+				dis := make([]string, 0, len(p.DisabledTools))
+				for _, tn := range p.DisabledTools {
+					if _, ok := reg.Get(tn); ok {
+						dis = append(dis, tn)
+					} else {
+						changed = true
+						log.Printf("[toolset] %s 清理：内置组 %s 摘除记录 %s 未注册，移除", ts.Name, p.Builtin, tn)
+					}
+				}
+				p.DisabledTools = dis
+				// 整组未暴露：无工具声明，或全部工具被摘除（面板未启用）→ 整条移除
+				if len(p.Tools) == 0 {
+					changed = true
+					log.Printf("[toolset] %s 清理：内置组 %s 无可用工具（未启用），移除工具集条目", ts.Name, p.Builtin)
+					continue
+				}
+				allDisabled := true
+				for _, tn := range p.Tools {
+					if !slices.Contains(p.DisabledTools, tn) {
+						allDisabled = false
+						break
+					}
+				}
+				if allDisabled {
+					changed = true
+					log.Printf("[toolset] %s 清理：内置组 %s 工具全部未启用，移除工具集条目", ts.Name, p.Builtin)
+					continue
+				}
+				out = append(out, p)
+				continue
+			}
+			out = append(out, p)
+		}
+		if changed {
+			ts.Plugins = out
+			if err := saveToolset(root, toolsetProject, ts); err == nil {
+				cleaned++
+				log.Printf("[toolset] %s 清理完成：未暴露条目已从工作区工具集移除并保存", ts.Name)
+			}
+		}
+	}
+	return cleaned
+}
+
 // ApplyWorkspaceToolsetWhitelist 会话级注册表应用「工作区工具集白名单」：
 // agent 只暴露工作区工具集声明的工具（builtin 条目 Tools + JS 插件工具 −
 // DisabledTools），未声明的全部禁用（cordis/前端仍可见可管理，toolset_edit 可加入）。
@@ -1254,20 +1421,36 @@ func workspaceToolsetVisibleToolsFor(ph *PluginHost, root string) map[string]boo
 		if err := json.Unmarshal(data, &ts); err != nil || ts.Name == "" {
 			continue
 		}
+		var reg *Registry
+		if ph != nil && ph.Context() != nil {
+			reg = ph.Context().Tools
+		}
 		for _, p := range ts.Plugins {
 			disabled := map[string]bool{}
 			for _, tn := range p.DisabledTools {
 				disabled[tn] = true
 			}
 			if p.Builtin != "" {
+				// ★ 2026-08-2x：内置条目仅「真实注册的工具」进白名单（未暴露跳过）。
 				for _, tn := range p.Tools {
-					if tn != "" && !disabled[tn] {
-						keep[tn] = true
+					if tn == "" || disabled[tn] {
+						continue
 					}
+					if reg != nil {
+						if _, ok := reg.Get(tn); !ok {
+							continue
+						}
+					}
+					keep[tn] = true
 				}
 				continue
 			}
 			if p.Name == "" {
+				continue
+			}
+			// ★ 2026-08-2x：JS 插件条目仅当插件 running 时其工具才进白名单
+			//   （插件未启用/未装载 → 整条跳过，工具不暴露）。
+			if ph == nil || ph.State(p.Name) != PluginRunning {
 				continue
 			}
 			// JS 插件条目：插件注册的全部工具（−DisabledTools）→ 声明可见

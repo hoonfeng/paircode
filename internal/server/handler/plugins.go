@@ -142,11 +142,31 @@ func HandlePluginAction(w http.ResponseWriter, r *http.Request) {
 			jsonErr(w, err.Error())
 			return
 		}
+		// ★ 2026-08-2x：启动联动——有工具的磁盘插件加回工作区工具集
+		//   （与 stop 移除对称；纯 UI 无工具插件不加，避免占位工具集）
+		if root := pickWorkspaceRoot(r, ""); root != "" {
+			if len(ph.PluginToolsByPlugin()[name]) > 0 {
+				if n := agent.RestorePluginToToolsetsPublic(root, name); n > 0 {
+					log.Printf("[plugin] 启动 %s 时已加回 %d 个工具集条目", name, n)
+				}
+			}
+			// 重算可见性：新声明工具对 agent 可见（幂等）
+			if ph.Context() != nil && ph.Context().Tools != nil {
+				agent.ApplyToolsetVisibilityFilter(ph.Context().Tools, ph, root)
+			}
+		}
 		jsonResp(w, map[string]any{"ok": true, "name": name, "state": "running"})
 	case "stop":
 		if err := ph.Unload(name); err != nil {
 			jsonErr(w, err.Error())
 			return
+		}
+		// ★ 2026-08-2x：停止插件联动工作区工具集——同名内嵌 code 条目移除并保存
+		//   （未启用插件不再留在工具集；重启 installToolset 不会复活其声明）
+		if root := pickWorkspaceRoot(r, ""); root != "" {
+			if n := agent.RemovePluginFromToolsetsPublic(root, name); n > 0 {
+				log.Printf("[plugin] 停止 %s 时已从 %d 个工具集移除内嵌条目", name, n)
+			}
 		}
 		jsonResp(w, map[string]any{"ok": true, "name": name, "state": "stopped"})
 	case "undefine":
