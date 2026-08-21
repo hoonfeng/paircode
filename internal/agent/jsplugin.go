@@ -1226,6 +1226,20 @@ func (p *jsPluginAdapter) buildFSService(pc *PluginContext) goja.Value {
 		}
 		return vm.ToValue(string(b))
 	})
+	// readFileBase64：读文件返回 base64 字符串（二进制安全——图片/任意字节）。
+	// ★ 2026-08-21：vision 插件需要读图片字节做 base64 内联（DeepSeek 视觉 API），
+	//   readFile 返回 string（UTF-8 强制转换）会损坏二进制，故加此方法。
+	fs.Set("readFileBase64", func(call goja.FunctionCall) goja.Value {
+		full, err := resolve(call.Argument(0).String())
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		b, err := os.ReadFile(full)
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return vm.ToValue(base64.StdEncoding.EncodeToString(b))
+	})
 	fs.Set("writeFile", func(call goja.FunctionCall) goja.Value {
 		full, err := resolve(call.Argument(0).String())
 		if err != nil {
@@ -1465,6 +1479,46 @@ func (p *jsPluginAdapter) buildWebService(pc *PluginContext) goja.Value {
 		return vm.ToValue(map[string]any{
 			"ok":     status >= 200 && status < 300,
 			"status": status,
+			"text":   string(body),
+		})
+	})
+	// post：HTTP POST（JSON/任意 body）→ { ok, status, text }（110s 超时，8MB 响应上限）。
+	// ★ 2026-08-21：vision 插件需要 POST DeepSeek 视觉 API（OpenAI 兼容 chat/completions），
+	//   fetch 仅 GET 不够，故加 post。参数：(url, headersObj?, bodyStr?)。
+	web.Set("post", func(call goja.FunctionCall) goja.Value {
+		url := call.Argument(0).String()
+		headers := map[string]string{}
+		if h := call.Argument(1); h != nil && !goja.IsUndefined(h) && !goja.IsNull(h) {
+			if obj := h.ToObject(vm); obj != nil {
+				for _, k := range obj.Keys() {
+					if v := obj.Get(k); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
+						headers[k] = v.String()
+					}
+				}
+			}
+		}
+		bodyStr := ""
+		if b := call.Argument(2); b != nil && !goja.IsUndefined(b) && !goja.IsNull(b) {
+			bodyStr = b.String()
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 110*time.Second)
+		defer cancel()
+		req, err := http.NewRequestWithContext(ctx, "POST", url, strings.NewReader(bodyStr))
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+		return vm.ToValue(map[string]any{
+			"ok":     resp.StatusCode >= 200 && resp.StatusCode < 300,
+			"status": resp.StatusCode,
 			"text":   string(body),
 		})
 	})
