@@ -1,0 +1,8 @@
+{
+  "name": "tool-vision-llm",
+  "purpose": "DeepSeek 视觉模型图片理解（双模式 + 配置面板注册，跨平台）",
+  "version": "1.0.0",
+  "scope": "project",
+  "type": "plugin",
+  "main": "index.js"
+}
