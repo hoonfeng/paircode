@@ -21,13 +21,19 @@
 package agent
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
+	"crypto/md5"
+	"crypto/sha1"
+	"crypto/sha256"
 	_ "embed"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/hoonfeng/paircode/pkg/executil"
 	"io"
 	"log"
 	"net/http"
@@ -40,7 +46,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/hoonfeng/paircode/internal/core"
@@ -72,11 +77,15 @@ func cordisBundleSource() string {
 
 // JS 执行超时值：防插件死循环卡死进程（goja RunString/函数调用在 JS 代码
 // 内可被 Interrupt 强制中断；原生 Go 调用如 ctx.fs/web/bash 自身带超时）。
+// ★ 工具 execute 默认不限时（2026-08-22 调整）：宿主不再强加 30s——阻塞型
+//
+//	交互工具（ask_user 等）的等待不应被 VM Interrupt 打断，真实超时由会话层
+//	控制；插件如需死循环护栏，在工具定义上声明 timeout（秒）自行控制。
+//
 // var 而非 const：测试中可调小验证超时路径。
 var (
 	jsEvalTimeout     = 5 * time.Second  // 插件代码求值（RunString）
 	jsApplyTimeout    = 5 * time.Second  // apply(ctx, config)
-	jsToolTimeout     = 30 * time.Second // 工具 execute
 	jsHandlerTimeout  = 10 * time.Second // harness.handle 方法
 	jsCallbackTimeout = 5 * time.Second  // 事件/timer 回调
 )
@@ -203,10 +212,34 @@ type jsPluginAdapter struct {
 	mu       sync.Mutex
 	handlers map[string]func(args any) (any, error) // harness.handle 注册的方法
 
+	// ★ 2026-08-23 工具调用工作区绑定（重大 BUG：切换工作区使运行中对话工具串台）：
+	//   JS 工具 execute 在 withLock（vm.Lock）内同步执行期间，记录发起方会话的
+	//   工作区根；插件 ctx 基础服务（fs/process/binary/bash/…）优先用该根解析
+	//   路径，而不是全局当前工作区（primaryWorkspaceRoot）或插件装载快照。
+	//   同 VM 同步 + vm 锁串行化保证同时只有一个绑定，读写无需加锁。
+	callWsRoot string
+
 	timersMu   sync.Mutex
 	timers     []func() // 活动 timer 的取消函数（Unload 时统一清理）
 	cleanupsMu sync.Mutex
 	cleanups   []func() // 其他 JS 侧资源撤销函数（如 ctx.provide 的服务撤销）
+}
+
+// toolCallRoot 返回当前工具调用绑定的会话工作区根（无绑定返回空串）。
+// 必须在 withLock 内调用（JS 原生函数回调天然在 VM 锁内）。
+func (p *jsPluginAdapter) toolCallRoot() string { return p.callWsRoot }
+
+// setToolCallRoot 设置/清除当前工具调用绑定（同 withLock 内，无需锁）。
+func (p *jsPluginAdapter) setToolCallRoot(root string) { p.callWsRoot = root }
+
+// ctxServiceRoot 返回插件 ctx 服务解析路径的首选根：
+// 当前工具调用会话根（2026-08-23 工作区隔离）＞ 插件装载时工作区根。
+// 必须在 withLock 内调用（JS 原生函数回调天然在 VM 锁内）。
+func (p *jsPluginAdapter) ctxServiceRoot(pc *PluginContext) string {
+	if r := p.toolCallRoot(); r != "" {
+		return r
+	}
+	return pc.WorkspaceRoot
 }
 
 // withLock 在 VM 执行锁保护下运行 fn：timer 回调、事件回调、工具 execute
@@ -437,7 +470,7 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 	// ctx.tools.register(toolDef)
 	toolsObj := vm.NewObject()
 	toolsObj.Set("register", func(call goja.FunctionCall) goja.Value {
-		tool, tErr := jsToolToGo(vm, call.Argument(0), p.withLock)
+		tool, tErr := jsToolToGo(vm, call.Argument(0), p.withLock, p)
 		if tErr != nil {
 			panic(vm.NewGoError(tErr))
 		}
@@ -588,16 +621,29 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 		} else {
 			exePath = filepath.Join(p.def.dir, "bin", exeName)
 		}
+		// root 解析：优先当前工具调用会话根（★ 2026-08-23 工作区隔离：切换全局
+		// 工作区不改变运行中对话的二进制调用根），回落装载快照 pc.WorkspaceRoot。
+		binaryRoot := p.ctxServiceRoot(pc)
 		if _, err := os.Stat(exePath); err != nil {
+			// ★ 2026-08-22 JS/Go 原生迁移：插件二进制 exe 已归档移除（bin/legacy-plugin-bins/），
+			// 找不到 exe 时回退宿主内嵌 Go 内核——「api 声明在插件、执行走宿主」。
+			// 插件 JS 无需改动（仍调 ctx.binary.exec）。
+			if text, found, terr := callEmbeddedTool(context.Background(), binaryRoot, tool, args); found {
+				vm.ClearInterrupt()
+				if terr != nil {
+					panic(vm.NewGoError(fmt.Errorf("ctx.binary.%s: %v", tool, terr)))
+				}
+				return vm.ToValue(map[string]any{"text": text})
+			}
 			panic(vm.NewGoError(fmt.Errorf("ctx.binary.exec: 插件二进制不存在 %s（编译：go build -o %s ./plugins-src/plugins/<name>）", exePath, exePath)))
 		}
-		reqJSON, _ := json.Marshal(map[string]any{"tool": tool, "args": args, "root": pc.WorkspaceRoot})
+		reqJSON, _ := json.Marshal(map[string]any{"tool": tool, "args": args, "root": binaryRoot})
 		ctxTO, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 		cmd := exec.CommandContext(ctxTO, exePath)
 		// 隐藏子进程控制台窗口（无控制台父进程时 console 程序会自己弹窗）
 		if runtime.GOOS == "windows" {
-			cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+			executil.HideWindow(cmd)
 		}
 		cmd.Stdin = strings.NewReader(string(reqJSON))
 		var outBuf, errBuf bytes.Buffer
@@ -807,10 +853,10 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 		if command == "" {
 			panic(vm.NewTypeError("ctx.process.runBackground: command 不能为空"))
 		}
-		dir := pc.WorkspaceRoot
+		dir := p.ctxServiceRoot(pc)
 		if cwd := call.Argument(1).String(); cwd != "" {
 			var err error
-			if dir, err = resolvePath(pc.WorkspaceRoot, cwd); err != nil {
+			if dir, err = resolvePath(dir, cwd); err != nil {
 				panic(vm.NewGoError(err))
 			}
 		}
@@ -844,6 +890,74 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 			killProcessTree(p.cmd.Process.Pid)
 		}
 		return vm.ToValue(map[string]any{"ok": true, "id": id})
+	})
+	// ctx.process.exec：argv 数组执行（★ 2026-08-22 新增——无 shell 注入，
+	// 对齐 Go 原版 exec.CommandContext，供 tool-git/tool-debug/tool-bug 等
+	// CLI 封装型磁盘插件 JS 原生化使用）。
+	//   opts = { cmd, args: [], cwd?, timeout? }
+	//     cmd     可执行文件（如 git/go/node）
+	//     args    参数数组（不经过 shell，无转义/注入问题）
+	//     cwd     工作目录（相对工作区根解析，越界拦截）
+	//     timeout 秒（默认 120；0/负 = 120）
+	//   返回 { output, error, exitCode }：
+	//     output 已 GBK 解码 + 16000 截断；非零退出 error 非空（含退出码）；超时 error=「超时 Ns 已终止」
+	processObj.Set("exec", func(call goja.FunctionCall) goja.Value {
+		getStr := func(obj *goja.Object, key string) string {
+			if v := obj.Get(key); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
+				return v.String()
+			}
+			return ""
+		}
+		var cmd string
+		var args []string
+		dir := p.ctxServiceRoot(pc)
+		timeout := 120
+		if a := call.Argument(0); a != nil && !goja.IsUndefined(a) && !goja.IsNull(a) {
+			if obj := a.ToObject(vm); obj != nil {
+				cmd = getStr(obj, "cmd")
+				if v := obj.Get("args"); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
+					if arr, ok := v.Export().([]any); ok {
+						for _, item := range arr {
+							args = append(args, fmt.Sprint(item))
+						}
+					}
+				}
+				if cwd := getStr(obj, "cwd"); cwd != "" {
+					if resolved, err := resolvePath(dir, cwd); err == nil {
+						dir = resolved
+					}
+				}
+				if v := obj.Get("timeout"); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
+					if n := v.ToInteger(); n > 0 {
+						timeout = int(n)
+					}
+				}
+			}
+		}
+		if strings.TrimSpace(cmd) == "" {
+			panic(vm.NewTypeError("ctx.process.exec: cmd 不能为空"))
+		}
+		cctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
+		defer cancel()
+		c := exec.CommandContext(cctx, cmd, args...)
+		executil.HideWindow(c)
+		c.Dir = dir
+		out, err := c.CombinedOutput()
+		res := map[string]any{
+			"output":   capOutput(decodeCmdOutput(out), 16000),
+			"exitCode": 0,
+		}
+		if err != nil {
+			res["error"] = err.Error()
+			res["exitCode"] = 1
+			if ee, ok := err.(*exec.ExitError); ok {
+				res["exitCode"] = ee.ExitCode()
+			}
+			if cctx.Err() == context.DeadlineExceeded {
+				res["error"] = fmt.Sprintf("超时 %ds 已终止", timeout)
+			}
+		}
+		return vm.ToValue(res)
 	})
 	ctxObj.Set("process", processObj)
 
@@ -1116,6 +1230,56 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 						}
 					}
 				}
+				// ★ 2026-08-21 模型参数定义（provider-manager 专用）：解析 modelParamFields
+				//   数组（每项 {name,label,type,default,options,hint,min,max,step}），
+				//   前端 ProviderManager 按此 schema 动态渲染逐模型参数区。
+				if mpf, ok := fm["modelParamFields"].([]any); ok {
+					for _, mfv := range mpf {
+						mfm, ok := mfv.(map[string]any)
+						if !ok {
+							continue
+						}
+						def := core.ModelParamFieldDef{}
+						def.Name, _ = mfm["name"].(string)
+						def.Label, _ = mfm["label"].(string)
+						def.Type, _ = mfm["type"].(string)
+						if def.Type == "" {
+							def.Type = "text"
+						}
+						def.Default = mfm["default"]
+						def.Hint, _ = mfm["hint"].(string)
+						if opts, ok := mfm["options"].([]any); ok {
+							for _, o := range opts {
+								if s, ok := o.(string); ok {
+									def.Options = append(def.Options, s)
+								}
+							}
+						}
+						if v, ok := mfm["min"].(float64); ok {
+							iv := int(v)
+							def.Min = &iv
+						}
+						if v, ok := mfm["max"].(float64); ok {
+							iv := int(v)
+							def.Max = &iv
+						}
+						if v, ok := mfm["step"].(float64); ok {
+							iv := int(v)
+							def.Step = &iv
+						}
+						if def.Name != "" {
+							f.ModelParamFields = append(f.ModelParamFields, def)
+						}
+					}
+				}
+				// ★ 2026-08-21 模型编辑器声明（provider-manager 专用）：解析 modelEditor
+				//   {label, placeholder}，前端 ProviderManager 按此渲染添加模型区。
+				if me, ok := fm["modelEditor"].(map[string]any); ok {
+					def := core.ModelEditorDef{}
+					def.Label, _ = me["label"].(string)
+					def.Placeholder, _ = me["placeholder"].(string)
+					f.ModelEditor = &def
+				}
 				if f.Name != "" {
 					fields = append(fields, f)
 				}
@@ -1202,11 +1366,12 @@ func (p *jsPluginAdapter) buildFSService(pc *PluginContext) goja.Value {
 	vm := p.vm
 	root := pc.WorkspaceRoot
 	resolve := func(path string) (string, error) {
-		// ★ 工作区根动态读取（2026-08-21）：pc.WorkspaceRoot 是插件装载时快照——
-		//   清空配置启动后切换工作区（core.OnSyncWorkspace 已更新 WorkspaceRoots），
-		//   快照仍为空/旧 → ctx.fs 接口报 400「工作区根为空，无法解析路径」。
-		//   每次解析优先取当前主根（switch 后立即生效），空则回落装载时根。
-		if cur := primaryWorkspaceRoot(); cur != "" {
+		// ★ 工作区根优先级（2026-08-23 隔离修复）：当前工具调用会话根 ＞ 全局当前
+		//   主根（原 2026-08-21 动态读取逻辑）＞ 装载快照。正在执行的对话绑定自己的
+		//   工作区，切换全局工作区不再使其工具跑进新工作区。
+		if r := p.toolCallRoot(); r != "" {
+			root = r
+		} else if cur := primaryWorkspaceRoot(); cur != "" {
 			root = cur
 		}
 		if root == "" {
@@ -1240,6 +1405,94 @@ func (p *jsPluginAdapter) buildFSService(pc *PluginContext) goja.Value {
 		}
 		return vm.ToValue(base64.StdEncoding.EncodeToString(b))
 	})
+	// writeFileBase64：base64 解码后写入文件（二进制安全——tool-binary 的
+	// write_binary/binary_patch 用；父目录自动创建）。
+	fs.Set("writeFileBase64", func(call goja.FunctionCall) goja.Value {
+		full, err := resolve(call.Argument(0).String())
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(call.Argument(1).String()))
+		if err != nil {
+			panic(vm.NewGoError(fmt.Errorf("base64 解码失败: %w", err)))
+		}
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			panic(vm.NewGoError(err))
+		}
+		if err := os.WriteFile(full, raw, 0o644); err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return vm.ToValue(len(raw))
+	})
+	// fileHash：读文件计算 MD5+SHA1+SHA256+大小（binary_hash 用；Go crypto
+	// 原生能力，JS 无标准库）。
+	fs.Set("fileHash", func(call goja.FunctionCall) goja.Value {
+		full, err := resolve(call.Argument(0).String())
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		f, err := os.Open(full)
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		defer f.Close()
+		h5, h1, h256 := md5.New(), sha1.New(), sha256.New()
+		n, err := io.Copy(io.MultiWriter(h5, h1, h256), f)
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		return vm.ToValue(map[string]any{
+			"size":   n,
+			"md5":    hex.EncodeToString(h5.Sum(nil)),
+			"sha1":   hex.EncodeToString(h1.Sum(nil)),
+			"sha256": hex.EncodeToString(h256.Sum(nil)),
+		})
+	})
+	// zipEntries：列出 ZIP 包内条目名（docx/xlsx 等 OOXML 解析基础原语）。
+	fs.Set("zipEntries", func(call goja.FunctionCall) goja.Value {
+		full, err := resolve(call.Argument(0).String())
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		zr, err := zip.OpenReader(full)
+		if err != nil {
+			panic(vm.NewGoError(fmt.Errorf("无法打开 ZIP 包: %w", err)))
+		}
+		defer zr.Close()
+		names := make([]string, 0, len(zr.File))
+		for _, f := range zr.File {
+			names = append(names, f.Name)
+		}
+		return vm.ToValue(names)
+	})
+	// zipReadEntry：读取 ZIP 包内指定条目（文本形式，XML/JSON 解析用）。
+	fs.Set("zipReadEntry", func(call goja.FunctionCall) goja.Value {
+		full, err := resolve(call.Argument(0).String())
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		entry := call.Argument(1).String()
+		zr, err := zip.OpenReader(full)
+		if err != nil {
+			panic(vm.NewGoError(fmt.Errorf("无法打开 ZIP 包: %w", err)))
+		}
+		defer zr.Close()
+		for _, f := range zr.File {
+			if f.Name == entry {
+				rc, err := f.Open()
+				if err != nil {
+					panic(vm.NewGoError(err))
+				}
+				defer rc.Close()
+				b, err := io.ReadAll(rc)
+				if err != nil {
+					panic(vm.NewGoError(err))
+				}
+				return vm.ToValue(string(b))
+			}
+		}
+		panic(vm.NewGoError(fmt.Errorf("ZIP 包内无条目 %q（共 %d 条）", entry, len(zr.File))))
+	})
 	fs.Set("writeFile", func(call goja.FunctionCall) goja.Value {
 		full, err := resolve(call.Argument(0).String())
 		if err != nil {
@@ -1272,6 +1525,26 @@ func (p *jsPluginAdapter) buildFSService(pc *PluginContext) goja.Value {
 			return vm.ToValue(false) // 越界视为不存在
 		}
 		return vm.ToValue(pathExists(full))
+	})
+	// roots：工作区全部根目录（主根 + 多项目根，绝对路径）——tool-verify 等
+	// 需跨根存在性检查的插件用（★ 2026-08-22 新增）。
+	// ★ 2026-08-23 隔离：主根优先当前工具调用会话根。
+	fs.Set("roots", func(call goja.FunctionCall) goja.Value {
+		roots := []string{}
+		if r := p.toolCallRoot(); r != "" {
+			root = r
+		} else if cur := primaryWorkspaceRoot(); cur != "" {
+			root = cur
+		}
+		if root != "" {
+			roots = append(roots, root)
+		}
+		for _, wr := range WorkspaceRoots {
+			if wr != root {
+				roots = append(roots, wr)
+			}
+		}
+		return vm.ToValue(roots)
 	})
 	fs.Set("readdir", func(call goja.FunctionCall) goja.Value {
 		full, err := resolve(call.Argument(0).String())
@@ -1527,20 +1800,31 @@ func (p *jsPluginAdapter) buildWebService(pc *PluginContext) goja.Value {
 
 // buildBashService 进程服务（ctx.bash.exec）：执行 shell 命令
 // （复用 runShellWithTimeout：120s 超时 + 输出截断），返回 { output, error }。
-// 第二参可选 cwd（相对工作区根解析）。
+// 第二参可选 cwd（相对工作区根解析）；★ 2026-08-22 第三参可选 timeout 秒
+// （>0 覆盖默认 120s；debug_run_capture 等需要短超时的工具用）。
 func (p *jsPluginAdapter) buildBashService(pc *PluginContext) goja.Value {
 	vm := p.vm
 	bsh := vm.NewObject()
 	bsh.Set("exec", func(call goja.FunctionCall) goja.Value {
 		cmd := call.Argument(0).String()
-		dir := pc.WorkspaceRoot
+		dir := p.ctxServiceRoot(pc)
 		// 第二参可选 cwd：undefined/null/空串时保持工作区根
 		if d := call.Argument(1); d != nil && !goja.IsUndefined(d) && !goja.IsNull(d) && d.String() != "" {
-			if resolved, err := resolvePath(pc.WorkspaceRoot, d.String()); err == nil {
+			if resolved, err := resolvePath(dir, d.String()); err == nil {
 				dir = resolved
 			}
 		}
-		out, exitErr := runShellWithTimeout(context.Background(), cmd, dir)
+		timeout := 120 * time.Second
+		if t := call.Argument(2); t != nil && !goja.IsUndefined(t) && !goja.IsNull(t) {
+			if n := t.ToInteger(); n != 0 {
+				if n > 0 {
+					timeout = time.Duration(n) * time.Second
+				} else {
+					timeout = 0 // 0 = 不超时（runShellWithTimeoutN 的 deadline=nil 语义）
+				}
+			}
+		}
+		out, exitErr := runShellWithTimeoutN(context.Background(), cmd, dir, timeout)
 		res := map[string]any{"output": out}
 		if exitErr != "" {
 			res["error"] = exitErr
@@ -1925,9 +2209,10 @@ func (p *jsPluginAdapter) buildMarketService() goja.Value {
 }
 
 // ─── ctx.mcp：MCP 服务器配置服务（通用能力，市场/工具插件安装用）────────
-//   ctx.mcp.list(level?) → [{name, command, args, enabled, level}]（level 空=user+project）
-//   ctx.mcp.upsert({name, command, args, level}) → "已保存 MCP 服务器 <name>"
-//   ctx.mcp.remove(name, level?) → "已删除 MCP 服务器 <name>"（level 默认 user）
+//
+//	ctx.mcp.list(level?) → [{name, command, args, enabled, level}]（level 空=user+project）
+//	ctx.mcp.upsert({name, command, args, level}) → "已保存 MCP 服务器 <name>"
+//	ctx.mcp.remove(name, level?) → "已删除 MCP 服务器 <name>"（level 默认 user）
 func (p *jsPluginAdapter) buildMCPService() goja.Value {
 	vm := p.vm
 	m := vm.NewObject()
@@ -1999,13 +2284,17 @@ func (p *jsPluginAdapter) buildMCPService() goja.Value {
 }
 
 // ─── ctx.skill：技能读写服务（通用能力，市场/工具插件安装用）─────────
-//   ctx.skill.list() → [{name, description, mode, level}]
-//   ctx.skill.write({name, description, mode, content}) → 写 <workspace>/.pair/skills/<name>/SKILL.md
-//   ctx.skill.remove(name) → "已删除技能 <name>"
+//
+//	ctx.skill.list() → [{name, description, mode, level}]
+//	ctx.skill.write({name, description, mode, content}) → 写 <workspace>/.pair/skills/<name>/SKILL.md
+//	ctx.skill.remove(name) → "已删除技能 <name>"
 func (p *jsPluginAdapter) buildSkillService(pc *PluginContext) goja.Value {
 	vm := p.vm
 	projectDir := SkillProjectDir
-	if projectDir == "" && pc.WorkspaceRoot != "" {
+	// ★ 2026-08-23 隔离：工具调用期间的 skill 读写绑定会话根（不随全局切换）。
+	if r := p.toolCallRoot(); r != "" {
+		projectDir = filepath.Join(r, ".pair", "skills")
+	} else if projectDir == "" && pc.WorkspaceRoot != "" {
 		projectDir = filepath.Join(pc.WorkspaceRoot, ".pair", "skills")
 	}
 	s := vm.NewObject()
@@ -2052,13 +2341,14 @@ func (p *jsPluginAdapter) buildSkillService(pc *PluginContext) goja.Value {
 }
 
 // ─── ctx.toolset：工具集固化/装载服务（通用能力）───────────────────
-//   ctx.toolset.list() → [{name, description, pluginCount}]
-//   ctx.toolset.save({name, description, plugins:[{name,purpose,code,client}], scope}) → 固化工具集 JSON
-//   ctx.toolset.remove(name) → 删除工具集
-//   ctx.toolset.install(name) → 立即装载已固化工具集（失败回滚固化文件）
+//
+//	ctx.toolset.list() → [{name, description, pluginCount}]
+//	ctx.toolset.save({name, description, plugins:[{name,purpose,code,client}], scope}) → 固化工具集 JSON
+//	ctx.toolset.remove(name) → 删除工具集
+//	ctx.toolset.install(name) → 立即装载已固化工具集（失败回滚固化文件）
 func (p *jsPluginAdapter) buildToolsetService(pc *PluginContext) goja.Value {
 	vm := p.vm
-	projectRoot := pc.WorkspaceRoot
+	projectRoot := p.ctxServiceRoot(pc)
 	if projectRoot == "" {
 		projectRoot = primaryWorkspaceRoot()
 	}
@@ -2132,9 +2422,10 @@ func (p *jsPluginAdapter) buildToolsetService(pc *PluginContext) goja.Value {
 }
 
 // ─── ctx.npm：npm 插件安装服务（通用能力）──────────────────────
-//   ctx.npm.install(pkg) → "已安装 npm 插件「<pkg>」v<ver>（插件目录 .pair/plugins/<name>/…）"
-//   ctx.npm.uninstall(pkg) → "已卸载 npm 插件 <pkg>"
-//   ctx.npm.installed(pkg) → bool（磁盘插件包 / 旧 cordis.patch 兼容）
+//
+//	ctx.npm.install(pkg) → "已安装 npm 插件「<pkg>」v<ver>（插件目录 .pair/plugins/<name>/…）"
+//	ctx.npm.uninstall(pkg) → "已卸载 npm 插件 <pkg>"
+//	ctx.npm.installed(pkg) → bool（磁盘插件包 / 旧 cordis.patch 兼容）
 func (p *jsPluginAdapter) buildNPMService(pc *PluginContext) goja.Value {
 	vm := p.vm
 	n := vm.NewObject()
@@ -2180,7 +2471,8 @@ func (p *jsPluginAdapter) buildNPMService(pc *PluginContext) goja.Value {
 }
 
 // ─── ctx.plugins：磁盘插件装配服务（通用能力）───────────────────
-//   ctx.plugins.reloadDisk() → "已重新扫描磁盘插件包（n 个插件）"（新装插件立即生效）
+//
+//	ctx.plugins.reloadDisk() → "已重新扫描磁盘插件包（n 个插件）"（新装插件立即生效）
 func (p *jsPluginAdapter) buildPluginsService(pc *PluginContext) goja.Value {
 	vm := p.vm
 	pl := vm.NewObject()
@@ -2552,7 +2844,7 @@ func (h *PluginHost) checkInjects(def *jsPluginDef) error {
 // hasService 判断宿主是否提供某服务（静态服务键 + 动态 ctx.provide 服务）。
 func (h *PluginHost) hasService(name string) bool {
 	switch name {
-	case "fs", "web", "bash", "sse", "ws", "logger", "timer", "tools", "events", "store", "app", "workspaceRoot", "kernel", "market", "mcp", "skill", "toolset", "npm", "plugins":
+	case "fs", "web", "bash", "sse", "ws", "logger", "timer", "tools", "events", "store", "app", "workspaceRoot", "kernel", "market", "mcp", "skill", "toolset", "npm", "plugins", "process":
 		return true
 	}
 	return h.ctx.Get(name) != nil
@@ -2560,7 +2852,7 @@ func (h *PluginHost) hasService(name string) bool {
 
 // availableServices 宿主可用服务清单（供报错引导/文档展示）。
 func (h *PluginHost) availableServices() []string {
-	names := []string{"fs", "web", "bash", "sse", "ws", "logger", "timer", "tools", "events", "store", "app", "workspaceRoot", "kernel", "market", "mcp", "skill", "toolset", "npm", "plugins"}
+	names := []string{"fs", "web", "bash", "sse", "ws", "logger", "timer", "tools", "events", "store", "app", "workspaceRoot", "kernel", "market", "mcp", "skill", "toolset", "npm", "plugins", "process"}
 	h.ctx.servicesMu.RLock()
 	for n := range h.ctx.services {
 		names = append(names, n)
@@ -2578,13 +2870,13 @@ func injectHarness(vm *goja.Runtime, adapter *jsPluginAdapter, pc *PluginContext
 	harnessObj := vm.NewObject()
 	harnessObj.Set("defineTool", func(call goja.FunctionCall) goja.Value {
 		// 预检工具定义可转换（不注册）；返回原对象
-		if _, err := jsToolToGo(vm, call.Argument(0), adapter.withLock); err != nil {
+		if _, err := jsToolToGo(vm, call.Argument(0), adapter.withLock, adapter); err != nil {
 			panic(vm.NewGoError(err))
 		}
 		return call.Argument(0)
 	})
 	harnessObj.Set("registerTool", func(call goja.FunctionCall) goja.Value {
-		tool, err := jsToolToGo(vm, call.Argument(0), adapter.withLock)
+		tool, err := jsToolToGo(vm, call.Argument(0), adapter.withLock, adapter)
 		if err != nil {
 			panic(vm.NewGoError(err))
 		}
@@ -2827,7 +3119,7 @@ func validateToolSchema(params map[string]any) error {
 
 // jsToolToGo 把 JS 工具定义对象转成 *Tool。
 // 支持 execute: (args) => result | Promise<result>（result 可为 {text} 或任意 JSON 值）。
-func jsToolToGo(vm *goja.Runtime, v goja.Value, lockFn func(func())) (*Tool, error) {
+func jsToolToGo(vm *goja.Runtime, v goja.Value, lockFn func(func()), owner *jsPluginAdapter) (*Tool, error) {
 	if v == nil || goja.IsUndefined(v) || goja.IsNull(v) {
 		return nil, fmt.Errorf("工具定义为空")
 	}
@@ -2868,23 +3160,53 @@ func jsToolToGo(vm *goja.Runtime, v goja.Value, lockFn func(func())) (*Tool, err
 			//   `_convID` 内部键（不污染原 args——AfterTool 观察/统计用原值）。
 			//   插件工具 execute 内可读 args._convID 经 ctx.hostTool 路由回宿主
 			//   （ask_user/task_create 会话桥；其余工具可忽略）。无会话则原样。
+			// ★ 2026-08-23 工作区隔离：同步注入 `_wsRoot`（会话绑定的工作区根）并
+			//   绑定 adapter.callWsRoot——插件 ctx 服务优先用它解析路径，切换全局
+			//   工作区不再带偏正在执行的对话（工具串台根因之一）。
+			wsRoot := SessionWorkspaceRoot(ctx)
 			injected := args
-			if convID := SessionConvID(ctx); convID != "" {
-				injected = make(map[string]any, len(args)+1)
+			if convID := SessionConvID(ctx); convID != "" || wsRoot != "" {
+				injected = make(map[string]any, len(args)+2)
 				for k, v := range args {
 					injected[k] = v
 				}
-				injected["_convID"] = convID
+				if convID != "" {
+					injected["_convID"] = convID
+				}
+				if wsRoot != "" {
+					injected["_wsRoot"] = wsRoot
+				}
 			}
 			var res goja.Value
-			execErr := runJSWithTimeout(vm, jsToolTimeout, func() error {
+			// ★ 工具 execute 默认不限时（2026-08-22）：宿主不再强加 30s 超时——
+			// 阻塞型交互工具（ask_user 等）等待用户回答期间不应被 VM Interrupt
+			// 打断（否则 Agent 收到 Error 重试 → 提问重复显示）；真实超时由会话层
+			// （session_manager）控制。插件如需死循环护栏，在工具定义上声明
+			// timeout（秒），>0 才启用 Interrupt 强制中断——超时由插件自身控制。
+			exec := func() error {
+				prevWs := ""
+				if owner != nil {
+					prevWs = owner.callWsRoot
+					owner.callWsRoot = wsRoot
+				}
+				defer func() {
+					if owner != nil {
+						owner.callWsRoot = prevWs
+					}
+				}()
 				r, err := execFn(goja.Undefined(), vm.ToValue(injected))
 				res = r
 				return err
-			})
+			}
+			var execErr error
+			if toolTimeout := time.Duration(numField(obj, "timeout", 0) * float64(time.Second)); toolTimeout > 0 {
+				execErr = runJSWithTimeout(vm, toolTimeout, exec)
+			} else {
+				execErr = exec()
+			}
 			if execErr != nil {
 				if isJSTimeout(execErr) {
-					hErr = fmt.Errorf("JS 工具 %s 执行超时（%.0fs，疑似死循环，已强制中断）", name.String(), jsToolTimeout.Seconds())
+					hErr = fmt.Errorf("JS 工具 %s 执行超时（已强制中断，请检查插件死循环或声明 timeout）", name.String())
 				} else {
 					hErr = fmt.Errorf("JS 工具 %s 执行失败: %v", name.String(), jsErrorText(execErr))
 				}
@@ -2927,6 +3249,27 @@ func boolField(obj *goja.Object, key string) bool {
 		return v.ToBoolean()
 	}
 	return false
+}
+
+// numField 读对象数值字段（缺省 def）。支持 float64/int64/int 等导出类型。
+func numField(obj *goja.Object, key string, def float64) float64 {
+	v := obj.Get(key)
+	if v == nil || goja.IsUndefined(v) || goja.IsNull(v) {
+		return def
+	}
+	switch n := v.Export().(type) {
+	case float64:
+		return n
+	case float32:
+		return float64(n)
+	case int:
+		return float64(n)
+	case int64:
+		return float64(n)
+	case uint64:
+		return float64(n)
+	}
+	return def
 }
 
 // awaitJSValue 同步等待 JS Promise 并返回 resolve 值（goja 同步 VM：

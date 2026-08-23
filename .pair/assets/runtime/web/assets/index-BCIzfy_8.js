@@ -10959,6 +10959,7 @@
     withScopeId
   }, Symbol.toStringTag, { value: "Module" }));
   const BASE = "/api";
+  const API_TIMEOUT = 3e4;
   function apiURL(path, params = {}) {
     if (!path.startsWith("/")) path = "/" + path;
     const u = new URL(BASE + path, location.origin);
@@ -10967,19 +10968,20 @@
     }
     return u.toString();
   }
-  async function apiGet(path, params = {}) {
-    const r = await fetch(apiURL(path, params));
+  async function apiGet(path, params = {}, opts = {}) {
+    const r = await fetch(apiURL(path, params), { signal: apiSignal(opts) });
     if (!r.ok) {
       const e = await r.json().catch(() => ({ error: r.statusText }));
       throw new Error(e.error || e.message || r.statusText);
     }
     return r.json();
   }
-  async function apiPost(path, body = {}, params = {}) {
+  async function apiPost(path, body = {}, params = {}, opts = {}) {
     const r = await fetch(apiURL(path, params), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
+      signal: apiSignal(opts)
     });
     if (!r.ok) {
       const e = await r.json().catch(() => ({ error: r.statusText }));
@@ -10987,11 +10989,12 @@
     }
     return r.json();
   }
-  async function apiPut(path, body = {}) {
+  async function apiPut(path, body = {}, opts = {}) {
     const r = await fetch(apiURL(path), {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
+      signal: apiSignal(opts)
     });
     if (!r.ok) {
       const e = await r.json().catch(() => ({ error: r.statusText }));
@@ -10999,13 +11002,22 @@
     }
     return r.json();
   }
-  async function apiDelete(path) {
-    const r = await fetch(apiURL(path), { method: "DELETE" });
+  async function apiDelete(path, opts = {}) {
+    const r = await fetch(apiURL(path), { method: "DELETE", signal: apiSignal(opts) });
     if (!r.ok) {
       const e = await r.json().catch(() => ({ error: r.statusText }));
       throw new Error(e.error || e.message || r.statusText);
     }
     return r.json();
+  }
+  function apiSignal(opts = {}) {
+    const timeout = opts.timeout || API_TIMEOUT;
+    const ctrl = new AbortController();
+    setTimeout(() => ctrl.abort(new Error("请求超时(" + timeout / 1e3 + "s)")), timeout);
+    if (opts.signal) {
+      opts.signal.addEventListener("abort", () => ctrl.abort(), { once: true });
+    }
+    return ctrl.signal;
   }
   let wsSocket = null;
   let wsReconnectTimer = null;
@@ -11047,7 +11059,7 @@
       }, 45e3);
     };
     wsSocket.onmessage = (ev) => {
-      var _a, _b, _c;
+      var _a, _b, _c, _d;
       if (wsPongTimer) {
         clearTimeout(wsPongTimer);
       }
@@ -11066,12 +11078,20 @@
         return;
       }
       if (!data) return;
+      if (Array.isArray(data)) {
+        for (const snap of data) {
+          if (snap && snap.type === "snapshot" && snap.convId) {
+            (_a = wsCallbacks == null ? void 0 : wsCallbacks.onEvent) == null ? void 0 : _a.call(wsCallbacks, snap.convId, snap);
+          }
+        }
+        return;
+      }
       if (data.type === "ping") {
         return;
       }
       if (data.type === "status" && data.runningConvs) {
         wsRunningConvs = new Set(data.runningConvs);
-        (_a = wsCallbacks == null ? void 0 : wsCallbacks.onStatus) == null ? void 0 : _a.call(wsCallbacks, {
+        (_b = wsCallbacks == null ? void 0 : wsCallbacks.onStatus) == null ? void 0 : _b.call(wsCallbacks, {
           runningConvs: data.runningConvs,
           runningByWorkspace: data.runningByWorkspace || {}
         });
@@ -11080,9 +11100,9 @@
       const convId = data.convId;
       if (!convId) return;
       if (data.type === "done") {
-        (_b = wsCallbacks == null ? void 0 : wsCallbacks.onDone) == null ? void 0 : _b.call(wsCallbacks, convId, data);
+        (_c = wsCallbacks == null ? void 0 : wsCallbacks.onDone) == null ? void 0 : _c.call(wsCallbacks, convId, data);
       } else {
-        (_c = wsCallbacks == null ? void 0 : wsCallbacks.onEvent) == null ? void 0 : _c.call(wsCallbacks, convId, data);
+        (_d = wsCallbacks == null ? void 0 : wsCallbacks.onEvent) == null ? void 0 : _d.call(wsCallbacks, convId, data);
       }
     };
     wsSocket.onclose = () => {
@@ -11163,9 +11183,10 @@
     }
     return !!(wsSocket && wsSocket.readyState === WebSocket.OPEN);
   }
-  async function chatStart(convId, message, autonomous, workspaceRoot) {
+  async function chatStart(convId, message, autonomous, workspaceRoot, images) {
     const body = { convId, message, autonomous };
     if (workspaceRoot) body.workspaceRoot = workspaceRoot;
+    if (images && images.length > 0) body.images = images;
     return apiPost("/chat/send", body);
   }
   async function chatStop(convId) {
@@ -11186,13 +11207,16 @@
   async function chatCompact(convId) {
     return apiPost("/chat/compact?convId=" + encodeURIComponent(convId), {});
   }
-  async function getMessages(convId, { limit = 50, before = null } = {}) {
+  async function getMessages(convId, { limit = 50, before = null, workspaceRoot = "" } = {}) {
     const params = { limit };
     if (before !== null && before !== void 0) params.before = before;
+    if (workspaceRoot) params.workspaceRoot = workspaceRoot;
     return apiGet("/conversations/" + encodeURIComponent(convId) + "/messages", params);
   }
-  async function getMessagesCount(convId) {
-    return apiGet("/conversations/" + encodeURIComponent(convId) + "/messages/count");
+  async function getMessagesCount(convId, workspaceRoot = "") {
+    const params = {};
+    if (workspaceRoot) params.workspaceRoot = workspaceRoot;
+    return apiGet("/conversations/" + encodeURIComponent(convId) + "/messages/count", params);
   }
   async function getModels() {
     return apiGet("/models");
@@ -12248,6 +12272,13 @@
   function makeMsgKey() {
     return "msg_" + Date.now() + "_" + msgKeyCounter++;
   }
+  function normalizeAskType(raw) {
+    const s = String(raw || "").trim().toLowerCase().replace(/_/g, "-");
+    if (s === "single" || s === "choice" || s === "radio" || s === "single-choice") return "single";
+    if (s === "multi" || s === "multiple" || s === "checkbox" || s === "multi-choice" || s === "multi-select") return "multi";
+    if (s === "single-with-input" || s === "single-with-custom" || s === "choice-with-input" || s === "single-input") return "single-with-input";
+    return "text";
+  }
   function pushSegment(segs, type, initial) {
     const last = segs[segs.length - 1];
     if (last && last.type === type) return last;
@@ -12300,6 +12331,135 @@
     msgs.push(assistantMsg);
     return key;
   }
+  function applyLiveSnapshot(convId, msg, rt, snap) {
+    const oldSegs = msg.segments || [];
+    const oldThinkStates = [];
+    const oldToolStates = [];
+    for (const s of oldSegs) {
+      if (s.type === "thinking") oldThinkStates.push(s._collapsed === false ? "expanded" : "collapsed");
+      else if (s.type === "tool_call") oldToolStates.push(s._expanded === true ? "expanded" : "collapsed");
+    }
+    const events = Array.isArray(snap.events) && snap.events.length > 0 ? snap.events : null;
+    const segments = [];
+    const restoreToolState = (seg) => {
+      if (oldToolStates.shift() === "expanded") {
+        seg._expanded = true;
+        seg._mode = "expanded";
+      }
+      return seg;
+    };
+    if (events) {
+      for (const ev of events) {
+        const type = ev.type || "";
+        if (type === "thinking") {
+          const seg = pushSegment(segments, "thinking", { _mode: "collapsed", _collapsed: true });
+          if (oldThinkStates.shift() === "expanded") {
+            seg._collapsed = false;
+            seg._mode = "expanded";
+          }
+          seg.content += ev.content || "";
+        } else if (type === "content") {
+          const seg = pushSegment(segments, "content");
+          seg.content += ev.content || "";
+        } else if (type === "tool_call") {
+          const toolName = ev.tool || ev.name || "";
+          if (toolName === "ask_user") {
+            let question = "";
+            let askType = "text";
+            let options = [];
+            try {
+              const args = typeof ev.args === "string" ? JSON.parse(ev.args) : ev.args;
+              question = args.question || "（无问题内容）";
+              askType = normalizeAskType(args.askType || args.type || "text");
+              if (Array.isArray(args.options)) options = args.options;
+            } catch {
+            }
+            segments.push({
+              type: "ask_user",
+              question,
+              askType,
+              options,
+              callId: ev.callId || "",
+              answer: ev.content || "",
+              _answered: !!ev.content
+            });
+          } else {
+            segments.push(restoreToolState({
+              type: "tool_call",
+              name: toolName,
+              callId: ev.callId || "",
+              argsRaw: ev.args ? typeof ev.args === "string" ? ev.args : JSON.stringify(ev.args, null, 2) : "",
+              result: ev.content || "",
+              // 后端已将 tool_result 回填到 tool_call 事件的 Content
+              _mode: "collapsed",
+              _collapsed: false,
+              _expanded: false
+            }));
+          }
+        } else if (type === "tool_result") {
+          const callId = ev.callId || "";
+          for (let i = segments.length - 1; i >= 0; i--) {
+            const s = segments[i];
+            if (s.type === "tool_call") {
+              if (callId && s.callId === callId) {
+                s.result = ev.content || "";
+                break;
+              }
+              if (!s.result && !callId) {
+                s.result = ev.content || "";
+                break;
+              }
+            }
+          }
+        } else if (type === "error") {
+          const seg = pushSegment(segments, "content");
+          seg.content += "**[错误]** " + (ev.content || "");
+        } else if (type === "notice" || type === "compacted" || type === "circling" || type === "evaluation" || type === "approval") {
+          const seg = pushSegment(segments, "content");
+          seg.content += ev.content || "";
+        }
+      }
+    } else {
+      const reasoning = snap.reasoning || "";
+      const content = snap.content || "";
+      const tools = Array.isArray(snap.toolSegments) ? snap.toolSegments : [];
+      if (reasoning) {
+        const seg = { type: "thinking", content: reasoning, _mode: "collapsed", _collapsed: true };
+        if (oldThinkStates.shift() === "expanded") {
+          seg._collapsed = false;
+          seg._mode = "expanded";
+        }
+        segments.push(seg);
+      }
+      if (content) {
+        segments.push({ type: "content", content });
+      }
+      for (const t of tools) {
+        if (!t || !t.name) continue;
+        segments.push(restoreToolState({
+          type: "tool_call",
+          name: t.name,
+          callId: t.callId || "",
+          argsRaw: t.args ? typeof t.args === "string" ? t.args : JSON.stringify(t.args, null, 2) : "",
+          result: t.result || "",
+          _mode: "collapsed",
+          _collapsed: false,
+          _expanded: false
+        }));
+      }
+    }
+    msg.segments = segments;
+    msg.content = snap.content || "";
+    rt.finalContent = snap.content || "";
+    console.log(
+      "[AE] liveSnapshot 已应用 conv=%s events=%d reasoning=%d content=%d tools=%d",
+      convId,
+      events ? events.length : 0,
+      (snap.reasoning || "").length,
+      (snap.content || "").length,
+      (snap.toolSegments || []).length
+    );
+  }
   function processAgentEvent(convId, data) {
     if (!state.messagesByConv[convId]) state.messagesByConv[convId] = [];
     const msgs = state.messagesByConv[convId];
@@ -12310,7 +12470,7 @@
         console.log("[AE] processAgentEvent 自动恢复 runtime conv=%s key=%s type=%s", convId, lastLoading._key, data.type);
         rt = { msgKey: lastLoading._key, finalContent: "", lastUserText: "" };
         runtimes[convId] = rt;
-      } else if (data.type === "content" || data.type === "thinking" || data.type === "done" || data.type === "error") {
+      } else if (data.type === "content" || data.type === "thinking" || data.type === "done" || data.type === "error" || data.type === "snapshot") {
         console.log("[AE] processAgentEvent 创建临时占位 conv=%s type=%s", convId, data.type);
         const key = makeMsgKey();
         let phNextIdx = msgs.length;
@@ -12354,7 +12514,9 @@
       return;
     }
     msg._loading = false;
-    if (data.type === "thinking") {
+    if (data.type === "snapshot") {
+      applyLiveSnapshot(convId, msg, rt, data);
+    } else if (data.type === "thinking") {
       const seg = pushSegment(msg.segments, "thinking", { _mode: "collapsed", _collapsed: true });
       seg.content += data.content || "";
     } else if (data.type === "content") {
@@ -12370,7 +12532,7 @@
         try {
           const args = typeof data.args === "string" ? JSON.parse(data.args) : data.args;
           question = args.question || "（无问题内容）";
-          askType = args.askType || args.type || "text";
+          askType = normalizeAskType(args.askType || args.type || "text");
           if (Array.isArray(args.options)) {
             options = args.options;
           }
@@ -12413,8 +12575,8 @@
           callId: data.callId || data.callID || "",
           argsRaw: data.args ? typeof data.args === "string" ? data.args : JSON.stringify(data.args, null, 2) : "",
           result: "",
-          _mode: "expanded",
-          _expanded: true
+          _mode: "collapsed",
+          _expanded: false
         });
       } else if (toolName === "task_update") {
         try {
@@ -12428,8 +12590,8 @@
           callId: data.callId || data.callID || "",
           argsRaw: data.args ? typeof data.args === "string" ? data.args : JSON.stringify(data.args, null, 2) : "",
           result: "",
-          _mode: "expanded",
-          _expanded: true
+          _mode: "collapsed",
+          _expanded: false
         });
       } else if (toolName === "update_tasks") {
         try {
@@ -12462,8 +12624,8 @@
           callId: data.callId || data.callID || "",
           argsRaw: data.args ? typeof data.args === "string" ? data.args : JSON.stringify(data.args, null, 2) : "",
           result: "",
-          _mode: "expanded",
-          _expanded: true
+          _mode: "collapsed",
+          _expanded: false
         });
       }
     } else if (data.type === "tool_result") {
@@ -12491,7 +12653,7 @@
       }
       if (target) {
         target.result = data.content || "";
-        target._expanded = false;
+        if (target._expanded !== true) target._expanded = false;
       }
     } else if (data.type === "approval") {
       let parsedArgs = {};
@@ -12815,6 +12977,7 @@
     createAssistantPlaceholder,
     getConvCtxStats,
     getConvRuntime,
+    normalizeAskType,
     processAgentDisconnect,
     processAgentDone,
     processAgentEvent,
@@ -12909,11 +13072,7 @@
       state.activeFile = "";
       state.fileContents = {};
       await loadFileTree();
-      try {
-        const list = await api.apiGet("/conversations", { workspace: targetPath });
-        state.conversations = list || [];
-      } catch {
-      }
+      await loadConversationsForWorkspace(targetPath);
       window.dispatchEvent(new CustomEvent("workspace-switched"));
       const ws = wsList.find((w) => w.path === targetPath);
       if (ws) ws.notify = false;
@@ -12939,6 +13098,9 @@
     try {
       const list = await api.apiGet("/conversations", { workspace: path });
       state.conversations = list || [];
+      if (state.conversations.length > 0) {
+        state.currentConvId = state.conversations[0].id;
+      }
     } catch (e) {
       console.warn("从后端加载对话消息失败:", e);
     }

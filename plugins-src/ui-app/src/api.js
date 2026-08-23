@@ -1,6 +1,7 @@
 // ─── REST API ────────────────────────────────────────────────
 
 const BASE = '/api'
+const API_TIMEOUT = 30000 // ★ 2026-08-21 请求超时：后端卡死时前端不无限等待（AbortController）
 
 function apiURL(path, params = {}) {
 
@@ -20,84 +21,61 @@ function apiURL(path, params = {}) {
 
 }
 
-async function apiGet(path, params = {}) {
-
-  const r = await fetch(apiURL(path, params))
-
+async function apiGet(path, params = {}, opts = {}) {
+  const r = await fetch(apiURL(path, params), { signal: apiSignal(opts) })
   if (!r.ok) {
-
     const e = await r.json().catch(() => ({ error: r.statusText }))
-
     throw new Error(e.error || e.message || r.statusText)
-
   }
-
   return r.json()
-
 }
 
-async function apiPost(path, body = {}, params = {}) {
-
+async function apiPost(path, body = {}, params = {}, opts = {}) {
   const r = await fetch(apiURL(path, params), {
-
     method: 'POST',
-
     headers: { 'Content-Type': 'application/json' },
-
     body: JSON.stringify(body),
-
+    signal: apiSignal(opts),
   })
-
   if (!r.ok) {
-
     const e = await r.json().catch(() => ({ error: r.statusText }))
-
     throw new Error(e.error || e.message || r.statusText)
-
   }
-
   return r.json()
-
 }
 
-async function apiPut(path, body = {}) {
-
+async function apiPut(path, body = {}, opts = {}) {
   const r = await fetch(apiURL(path), {
-
     method: 'PUT',
-
     headers: { 'Content-Type': 'application/json' },
-
     body: JSON.stringify(body),
-
+    signal: apiSignal(opts),
   })
-
   if (!r.ok) {
-
     const e = await r.json().catch(() => ({ error: r.statusText }))
-
     throw new Error(e.error || e.message || r.statusText)
-
   }
-
   return r.json()
-
 }
 
-async function apiDelete(path) {
-
-  const r = await fetch(apiURL(path), { method: 'DELETE' })
-
+async function apiDelete(path, opts = {}) {
+  const r = await fetch(apiURL(path), { method: 'DELETE', signal: apiSignal(opts) })
   if (!r.ok) {
-
     const e = await r.json().catch(() => ({ error: r.statusText }))
-
     throw new Error(e.error || e.message || r.statusText)
-
   }
-
   return r.json()
+}
 
+// apiSignal 构造超时信号：opts.timeout（毫秒，默认 30s）；opts.signal 可传入外部取消信号。
+function apiSignal(opts = {}) {
+  const timeout = opts.timeout || API_TIMEOUT
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(new Error('请求超时(' + (timeout / 1000) + 's)')), timeout)
+  if (opts.signal) {
+    opts.signal.addEventListener('abort', () => ctrl.abort(), { once: true })
+  }
+  return ctrl.signal
 }
 
 // ─── WebSocket（替代 SSE）：单一全局连接推送所有会话事件 ────
@@ -221,6 +199,17 @@ function doWsConnect() {
     try { data = JSON.parse(ev.data) } catch { return }
 
     if (!data) return
+
+    // ★ 2026-08-21 WS 断线补偿：服务端重连时推送批量快照数组
+    //   [{convId, type:'snapshot', content, reasoning, toolSegments:[...]}]
+    if (Array.isArray(data)) {
+      for (const snap of data) {
+        if (snap && snap.type === 'snapshot' && snap.convId) {
+          wsCallbacks?.onEvent?.(snap.convId, snap)
+        }
+      }
+      return
+    }
 
     if (data.type === 'ping') {
 
@@ -411,16 +400,14 @@ async function waitForWebSocket(timeout = 3000) {
 }
 
 // 非阻塞启动指定对话的 agent（后端返回 {ok, convId}）
-
-async function chatStart(convId, message, autonomous, workspaceRoot) {
-
+async function chatStart(convId, message, autonomous, workspaceRoot, images) {
   const body = { convId, message, autonomous }
-
   if (workspaceRoot) body.workspaceRoot = workspaceRoot
-
+  if (images && images.length > 0) body.images = images // ★ 2026-08-21 多模态：结构化图片数组（{data,mimeType,detail}）
   return apiPost('/chat/send', body)
-
 }
+
+
 
 // 停止指定对话的 agent
 
@@ -476,11 +463,16 @@ async function chatCompact(convId) {
 
 // 返回 { messages: [...], total: N }，messages 中每条含 segments 字段
 
-async function getMessages(convId, { limit = 50, before = null } = {}) {
+// ★ 2026-08-23 工作区隔离：workspaceRoot 参数透传（对话消息回放按所属工作区路由，
+// 运行中切换工作区后回放旧工作区对话不再落到新工作区存储）
+
+async function getMessages(convId, { limit = 50, before = null, workspaceRoot = '' } = {}) {
 
   const params = { limit }
 
   if (before !== null && before !== undefined) params.before = before
+
+  if (workspaceRoot) params.workspaceRoot = workspaceRoot
 
   return apiGet('/conversations/' + encodeURIComponent(convId) + '/messages', params)
 
@@ -488,9 +480,13 @@ async function getMessages(convId, { limit = 50, before = null } = {}) {
 
 // 获取对话消息总数
 
-async function getMessagesCount(convId) {
+async function getMessagesCount(convId, workspaceRoot = '') {
 
-  return apiGet('/conversations/' + encodeURIComponent(convId) + '/messages/count')
+  const params = {}
+
+  if (workspaceRoot) params.workspaceRoot = workspaceRoot
+
+  return apiGet('/conversations/' + encodeURIComponent(convId) + '/messages/count', params)
 
 }
 

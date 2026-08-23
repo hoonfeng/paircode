@@ -115,10 +115,10 @@ export async function switchWorkspace(targetPath) {
     state.activeFile = ''
     state.fileContents = {}
     await loadFileTree()
-    try {
-      const list = await api.apiGet('/conversations', { workspace: targetPath })
-      state.conversations = list || []
-    } catch {}
+    // ★ 2026-08-23 工作区隔离：切换工作区必须清空当前对话选中状态与消息视图，
+    //   否则切走后仍显示旧工作区的对话消息（与 FileExplorer.switchToWorkspace 对齐），
+    //   同时按目标工作区加载对话列表（loadConversationsForWorkspace 含清空逻辑）。
+    await loadConversationsForWorkspace(targetPath)
     window.dispatchEvent(new CustomEvent('workspace-switched'))
     const ws = wsList.find(w => w.path === targetPath)
     if (ws) ws.notify = false
@@ -143,6 +143,12 @@ export async function loadConversationsForWorkspace(path) {
   try {
     const list = await api.apiGet('/conversations', { workspace: path })
     state.conversations = list || []
+    // ★ 2026-08-21 修复"刷新后不自动选对话"：加载列表后自动选中最近更新的对话
+    //   （后端按 UpdatedAt 倒序 → 取第一个）；currentConvId 赋值触发 RightPanel 的
+    //   watch → switchConv 加载消息。同时触发 save-conversations 持久化选中状态。
+    if (state.conversations.length > 0) {
+      state.currentConvId = state.conversations[0].id
+    }
   } catch (e) {
     console.warn('从后端加载对话消息失败:', e)
   }

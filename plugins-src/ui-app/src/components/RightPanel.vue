@@ -54,7 +54,7 @@
                   <div v-else class="user-msg-placeholder">（空消息）</div>
                   <div v-if="combo.user._attachments && combo.user._attachments.length > 0" class="user-attachments">
                     <div v-for="(att, ai) in combo.user._attachments" :key="'att'+ai" class="att-tag" :class="'att-tag-' + att.type">
-                      <SvgIcon :name="att.type === 'image' ? 'image' : 'file'" :size="11" />
+                      <SvgIcon :name="att.type === 'image' ? 'image' : 'file'" :size="12" />
                       <span class="att-tag-label">{{ att.label }}</span>
                     </div>
                   </div>
@@ -127,7 +127,7 @@
                       </template>
                     </template>
                   </template>
-                  <div v-if="!combo.assistant._folded && combo.assistant.segments && combo.assistant.segments.length > 0" class="msg-fold-btn" @click="combo.assistant._folded = true">
+                  <div v-if="!combo.assistant._folded && combo.assistant.segments && combo.assistant.segments.length > 0 && !hasUnansweredAsk(combo.assistant)" class="msg-fold-btn" @click="combo.assistant._folded = true">
                     <SvgIcon name="chevron-up" :size="12" /><span>折叠输出</span>
                   </div>
                   <!-- 历史消息 fallback：有 content 但无 segments -->
@@ -183,15 +183,11 @@
             <button class="feedback-send-btn" @click="sendFeedback" :disabled="!feedbackText.trim()" title="发送反馈"><SvgIcon name="send" :size="14" /></button>
           </div>
           <div class="input-resizer" @mousedown.prevent="startInputResize" title="拖拽调整高度"></div>
-          <div v-if="pendingAttachment" class="attachment-badge">
-            <div class="att-icon"><SvgIcon :name="pendingAttachment.type === 'file' ? 'file' : 'file-code'" :size="14" /></div>
-            <div class="att-info"><span class="att-filename">{{ pendingAttachment.path || pendingAttachment.filename }}</span>
-              <span v-if="pendingAttachment.lineStart" class="att-lines">:{{ pendingAttachment.lineStart }}-{{ pendingAttachment.lineEnd }}</span>
-              <span class="att-type">{{ pendingAttachment.type === 'file' ? '文件' : '选中代码' }}</span></div>
-            <button class="att-close" @click="pendingAttachment = null" title="移除">×</button>
-          </div>
           <div class="input-wrapper">
-            <textarea class="chat-input" ref="inputRef" v-model="inputText" @keydown="onKeydown" @dragover.prevent @drop="handleDrop" @paste="handlePaste" :style="{ height: inputHeight + 'px' }" placeholder="发送消息到 AI... (Enter 发送, Shift+Enter 换行)" :disabled="state.chatLoading"></textarea>
+            <!-- ★ 2026-08-22 输入框改造：contenteditable，附件以内联 tag 渲染在输入框内（光标处），
+                 不再「上方 badge 区 + 文本内 token」。tag 点 × 或 Backspace/Delete 可删除。
+                 文本内容由 @input 序列化到 inputText（tag → @@attN@@ token），发送时替换为语义化引用。 -->
+            <div class="chat-input" ref="inputRef" :contenteditable="state.chatLoading ? 'false' : 'true'" :style="{ height: inputHeight + 'px' }" data-placeholder="发送消息到 AI... (Enter 发送, Shift+Enter 换行)" @keydown="onKeydown" @input="onInput" @dragover.prevent @drop="handleDrop" @paste="handlePaste"></div>
             <div class="input-bottom-bar">
               <div class="ibb-btns">
                 <!-- ★ composer 模型选择器（★ 2026-08-20 同步 AI 配置列表模式：服务商/Key/思考均由「AI」配置决定，聊天面板只留模型下拉） -->
@@ -206,7 +202,7 @@
                 <span class="obtn-sep"></span>
                 <span :class="['obtn', 'obtn-agent', { active: autonomous }]" @click="toggleAuto('autonomous')" title="自主模式：开启=连续执行全部计划步骤，关闭=单次回复"><SvgIcon name="cycle" :size="12" color="#d4a74e" /> 自主</span>
               </div>
-              <button v-if="!state.chatLoading" class="send-btn" @click="sendMessage" :disabled="!inputText.trim()"><SvgIcon name="send-plane" :size="16" /></button>
+              <button v-if="!state.chatLoading" class="send-btn" @click="sendMessage" :disabled="!inputText.trim() && pendingAttachments.length === 0"><SvgIcon name="send-plane" :size="16" /></button>
               <button v-else class="stop-btn" @click="stopChat"><SvgIcon name="stop-dot" :size="20" /></button>
             </div>
           </div>
@@ -224,7 +220,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { state, rightPanelWidth } from '../ui-state.js'
 import api from '../api.js'
-import { setGlobalCtx, startConvRuntime, resetConvRuntime, createAssistantPlaceholder, getConvRuntime, getConvCtxStats, resetConvCtxStats } from '../agent-events.js'
+import { setGlobalCtx, startConvRuntime, resetConvRuntime, createAssistantPlaceholder, getConvRuntime, getConvCtxStats, resetConvCtxStats, normalizeAskType } from '../agent-events.js'
 import { useSingleSlot, mountListSlot } from '../plugin-runtime.js'
 import SvgIcon from './SvgIcon.vue'
 import PlanPanel from './PlanPanel.vue'
@@ -391,7 +387,294 @@ function cycleReviewMode() {
 const autoIterate = ref(false)
 const autoCollapse = ref(localStorage.getItem('autoCollapse') !== 'false')
 const autonomous = ref(false)
-const pendingAttachment = ref(null)
+const pendingAttachments = ref([])     // ★ 2026-08-21 多附件 + 光标位置插入：数组化。每个附件带 _token 占位符
+let attSeq = 0
+
+// ── ★ 2026-08-21 多模态：文件树/拖拽添加的图片附件（仅路径无内容）──
+// 通过 /api/fs/image 读取文件 → base64 dataURL，发送时才可走多模态 images 数组。
+const IMG_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp']
+function isImagePath(p) {
+  if (!p) return false
+  const name = String(p).split(/[\\/]/).pop() || ''
+  const dot = name.lastIndexOf('.')
+  if (dot < 0) return false
+  return IMG_EXTS.includes(name.slice(dot + 1).toLowerCase())
+}
+async function loadImageData(att) {
+  try {
+    if (!att.path) throw new Error('无路径')
+    const res = await fetch('/api/fs/image?path=' + encodeURIComponent(att.path))
+    if (!res.ok) throw new Error('HTTP ' + res.status)
+    const blob = await res.blob()
+    const dataUrl = await new Promise((resolve, reject) => {
+      const fr = new FileReader()
+      fr.onload = () => resolve(fr.result)
+      fr.onerror = () => reject(new Error('FileReader 失败'))
+      fr.readAsDataURL(blob)
+    })
+    att.content = dataUrl
+    att.mimeType = blob.type || 'image/png'
+  } catch (e) {
+    console.warn('[RP] 图片附件读取失败 path=%s err=%s', att.path, e && e.message || e)
+  }
+  att._imageReady = true
+}
+
+// addAttachment 添加附件：分配唯一 token，渲染为内联 tag 插入输入框光标处（无光标则追加末尾）
+function addAttachment(att) {
+  // ★ 2026-08-21 多模态：文件是图片 → 统一按图片附件处理（异步读取 base64 内容）
+  if (att.type === 'file' && isImagePath(att.path)) {
+    att.type = 'image'
+    att._imageReady = false
+    att._imgPromise = loadImageData(att)
+  }
+  attSeq++
+  att._token = '@@att' + attSeq + '@@'
+  pendingAttachments.value.push(att)
+  insertTagAtCursor(att)
+  inputRef.value?.focus()
+}
+
+// ── ★ 2026-08-22 contenteditable 输入框：附件内联 tag（tag 随文字混排，在输入框内）──
+// ATT_ICON_SVG：tag 内联图标（feather 风格，与 SvgIcon 同款，stroke currentColor）
+const ATT_ICON_SVG = {
+  file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>',
+  code: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="10" y1="12" x2="8" y2="14"/><line x1="10" y1="16" x2="8" y2="18"/><line x1="14" y1="12" x2="16" y2="14"/><line x1="14" y1="16" x2="16" y2="18"/>',
+  dir: '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>',
+  image: '<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',
+}
+function attIconKey(att) {
+  if (att.type === 'image') return 'image'
+  if (att.type === 'selection') return 'code'
+  if (att.type === 'dir') return 'dir'
+  return 'file'
+}
+
+// insertTagAtCursor 在光标处插入附件 tag（contenteditable=false 内联药丸）
+function insertTagAtCursor(att) {
+  const el = inputRef.value
+  if (!el) return
+  const kind = attIconKey(att)
+  const span = document.createElement('span')
+  span.className = 'att-inline att-inline-' + kind
+  span.contentEditable = 'false'
+  span.dataset.token = att._token || ''
+  span.title = '附件（点 × 或 Backspace 移除）'
+  const icon = document.createElement('span')
+  icon.className = 'att-inline-icon'
+  // ★ 2026-08-22 修复图标巨大：动态创建的 svg 无 width/height 且 scoped CSS 不生效
+  //   → 默认 300x150 拉伸。内联 width/height 属性 + 全局样式双保险。
+  icon.innerHTML = '<svg class="att-inline-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + (ATT_ICON_SVG[kind] || ATT_ICON_SVG.file) + '</svg>'
+  const label = document.createElement('span')
+  label.className = 'att-inline-label'
+  let name = att.path || att.filename || ''
+  if (att.lineStart) name += ' L' + att.lineStart + '-' + (att.lineEnd || att.lineStart)
+  label.textContent = name
+  const x = document.createElement('span')
+  x.className = 'att-inline-x'
+  x.textContent = '×'
+  x.title = '移除'
+  x.addEventListener('mousedown', (ev) => ev.preventDefault()) // 防止抢走光标/清选区
+  x.addEventListener('click', (ev) => { ev.stopPropagation(); removeAttTagByEl(span) })
+  span.appendChild(icon); span.appendChild(label); span.appendChild(x)
+  insertNodeAtCaret(span)
+  syncInput()
+}
+
+// insertNodeAtCaret 把节点插入到当前光标处（输入框无焦点时追加末尾），光标移到节点后
+function insertNodeAtCaret(node) {
+  const el = inputRef.value
+  if (!el) return
+  const sel = window.getSelection()
+  if (sel && sel.rangeCount > 0 && el.contains(sel.anchorNode)) {
+    const range = sel.getRangeAt(0)
+    range.deleteContents()
+    range.insertNode(node)
+    try {
+      range.setStartAfter(node)
+      range.collapse(true)
+      sel.removeAllRanges()
+      sel.addRange(range)
+    } catch (_) {}
+  } else {
+    el.appendChild(node)
+    // 无焦点追加：光标定位到节点后，避免 focus() 后光标跳到开头
+    try {
+      const sel2 = window.getSelection()
+      const range2 = document.createRange()
+      range2.setStartAfter(node)
+      range2.collapse(true)
+      sel2.removeAllRanges()
+      sel2.addRange(range2)
+    } catch (_) {}
+  }
+}
+
+// serializeInput 序列化输入框 DOM → 纯文本（tag span → @@attN@@ token，换行 BR/DIV → \n）
+function serializeInput() {
+  const el = inputRef.value
+  if (!el) return ''
+  let out = ''
+  for (const node of el.childNodes) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      out += node.textContent
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      if (node.nodeName === 'BR') {
+        out += '\n'
+      } else if (node.classList && node.classList.contains('att-inline')) {
+        out += node.dataset.token || ''
+      } else {
+        const block = node.nodeName === 'DIV' || node.nodeName === 'P'
+        if (block) out += '\n'
+        out += node.textContent || ''
+        if (block) out += '\n'
+      }
+    }
+  }
+  return out
+}
+
+// reconcileAttachments 对账：DOM 中已消失的 tag（选中删除/浏览器默认删除）→ 同步移除 pendingAttachments
+function reconcileAttachments() {
+  const el = inputRef.value
+  if (!el) return
+  const domTokens = new Set()
+  el.querySelectorAll('.att-inline').forEach(n => { if (n.dataset.token) domTokens.add(n.dataset.token) })
+  for (let i = pendingAttachments.value.length - 1; i >= 0; i--) {
+    if (!domTokens.has(pendingAttachments.value[i]._token)) pendingAttachments.value.splice(i, 1)
+  }
+}
+
+// syncInput DOM → inputText（输入后/发送前调用；顺带清理孤立 <br> 保证 :empty placeholder 生效）
+function syncInput() {
+  const el = inputRef.value
+  if (!el) return
+  if (el.childNodes.length === 1 && el.firstChild.nodeType === Node.ELEMENT_NODE && el.firstChild.nodeName === 'BR') {
+    el.innerHTML = ''
+  }
+  inputText.value = serializeInput()
+  reconcileAttachments()
+}
+
+// onInput 输入事件：同步 inputText + 附件对账
+function onInput() {
+  syncInput()
+}
+
+// setInputText 程序化设置输入框内容（继续任务/切换对话/清空）：重建为纯文本节点
+function setInputText(text) {
+  const el = inputRef.value
+  if (!el) { inputText.value = text; return }
+  el.innerHTML = ''
+  if (text) el.appendChild(document.createTextNode(text))
+  inputText.value = text
+  reconcileAttachments()
+}
+
+// insertTextAtCursor 光标处插入纯文本（多行 → <br> 分段；无焦点追加末尾）
+function insertTextAtCursor(text) {
+  if (!text) return
+  const el = inputRef.value
+  if (!el) { inputText.value += text; return }
+  const parts = String(text).split('\n')
+  const frag = document.createDocumentFragment()
+  for (let i = 0; i < parts.length; i++) {
+    if (i > 0) frag.appendChild(document.createElement('br'))
+    if (parts[i]) frag.appendChild(document.createTextNode(parts[i]))
+  }
+  const sel = window.getSelection()
+  if (sel && sel.rangeCount > 0 && el.contains(sel.anchorNode)) {
+    const range = sel.getRangeAt(0)
+    range.deleteContents()
+    range.insertNode(frag)
+    try {
+      range.setStartAfter(frag)
+      range.collapse(true)
+      sel.removeAllRanges()
+      sel.addRange(range)
+    } catch (_) {}
+  } else {
+    el.appendChild(frag)
+    try {
+      const sel2 = window.getSelection()
+      const range2 = document.createRange()
+      range2.setStartAfter(frag)
+      range2.collapse(true)
+      sel2.removeAllRanges()
+      sel2.addRange(range2)
+    } catch (_) {}
+  }
+  syncInput()
+}
+
+// removeAttTagByEl 删除指定 tag 节点（× 点击 / Backspace/Delete 边缘），光标归位到删除位置
+function removeAttTagByEl(span) {
+  if (!span || !span.parentNode) return
+  const el = inputRef.value
+  const parent = span.parentNode
+  const next = span.nextSibling
+  parent.removeChild(span)
+  if (el) {
+    try {
+      const sel = window.getSelection()
+      const range = document.createRange()
+      if (next) {
+        range.setStart(next, 0)
+      } else {
+        const last = parent.lastChild
+        if (last && last.nodeType === Node.TEXT_NODE) range.setStart(last, (last.textContent || '').length)
+        else if (last) range.setStartAfter(last)
+        else range.setStart(parent, 0)
+      }
+      range.collapse(true)
+      sel.removeAllRanges()
+      sel.addRange(range)
+    } catch (_) {}
+    el.focus()
+  }
+  const token = span.dataset.token
+  if (token) {
+    const i = pendingAttachments.value.findIndex(a => a._token === token)
+    if (i >= 0) pendingAttachments.value.splice(i, 1)
+  }
+  syncInput()
+}
+
+// removeAttTagByToken 按 token 删除 tag + 附件（移除附件 API 入口）
+function removeAttTagByToken(token) {
+  if (!token) return
+  const el = inputRef.value
+  if (el) {
+    const span = el.querySelector('.att-inline[data-token="' + token + '"]')
+    if (span && span.parentNode) span.parentNode.removeChild(span)
+  }
+  const i = pendingAttachments.value.findIndex(a => a._token === token)
+  if (i >= 0) pendingAttachments.value.splice(i, 1)
+  syncInput()
+}
+
+// removeAttachment 移除附件（按索引，等价 token 删除）
+function removeAttachment(idx) {
+  const att = pendingAttachments.value[idx]
+  if (att && att._token) removeAttTagByToken(att._token)
+  else if (att) pendingAttachments.value.splice(idx, 1)
+}
+
+// buildAttachRefText 生成附件的语义化引用文本（发给 LLM 的路径引用）
+function buildAttachRefText(att) {
+  if (att.type === 'image') {
+    return '![图片附件: ' + (att.filename || '图片') + ']'
+  }
+  if (att.type === 'selection') {
+    let t = '\n\n📎 代码引用: `' + att.path + '` L' + (att.lineStart || 1) + '-' + (att.lineEnd || 1)
+    if (att.content) t += '\n```\n' + att.content.slice(0, 3000) + '\n```'
+    return t
+  }
+  if (att.type === 'dir') {
+    return '\n\n📎 目录: `' + att.path + '`（请用 list_files 查看）'
+  }
+  return '\n\n📎 附件: `' + (att.path || att.filename) + '`（请用 read_file 读取）'
+}
 
 // nudge 提示条（从全局 state.nudgeByConv 读取，仅当前对话）
 const currentNudge = computed(() => state.nudgeByConv[state.currentConvId] || '')
@@ -499,7 +782,7 @@ const currentConvInterrupted = computed(() => {
 const continueTask = () => {
   const convId = state.currentConvId
   if (!convId || state.chatLoading) return
-  inputText.value = '请继续完成上次未完成的任务。请先回顾当前上下文中的进度与遗留问题（含执行日志与任务列表），然后继续推进直到任务完成。'
+  setInputText('请继续完成上次未完成的任务。请先回顾当前上下文中的进度与遗留问题（含执行日志与任务列表），然后继续推进直到任务完成。')
   nextTick(() => { sendMessage() })
 }
 const hasMoreTop = computed(() => {
@@ -585,8 +868,9 @@ function onScroll() {
     // 显示跳到底部按钮
     // 用户离开底部（滚动向上 > threshold）时隐藏跳底按钮
     showScrollDown.value = !isNearBottom.value && state.messages && state.messages.length > 0
-    // 顶部懒加载：scrollTop < 100 且还有更早消息可加载
-    if (el.scrollTop < 100 && !loadingMoreTop.value) {
+    // 顶部懒加载：scrollTop < 100 且还有更早消息可加载（★ 仅内容满一屏时触发；
+    // 不满一屏由 fillViewport 按空间加载，避免每次 scroll 事件重复请求）
+    if (el.scrollTop < 100 && el.scrollHeight > el.clientHeight + 10 && !loadingMoreTop.value) {
       loadMoreMessages()
     }
   }
@@ -606,14 +890,17 @@ const loadMoreMessages = async () => {
   const oldScrollHeight = msgRef.value ? msgRef.value.scrollHeight : 0
   const oldScrollTop = msgRef.value ? msgRef.value.scrollTop : 0
   try {
-    const data = await api.getMessages(id, { before: oldestIdx, limit: 50 })
+    const data = await api.getMessages(id, { before: oldestIdx, limit: 50, workspaceRoot: state.workspaceRoot })
     const older = (data.messages || [])
       .filter(m => (m.message?.role || m.role) !== 'tool')
       .map((m, i) => ({
         role: m.message?.role || m.role || '',
         content: m.message?.content || m.content || '',
         segments: (m.segments || []).map(seg => {
-          if (seg.type === 'ask_user') seg._answered = !!seg.answer
+          if (seg.type === 'ask_user') {
+            seg._answered = !!seg.answer
+            seg.askType = normalizeAskType(seg.askType || 'text')
+          }
           return seg
         }),
         _key: 'msg_' + Date.now() + '_older_' + i,
@@ -667,7 +954,8 @@ const fillViewport = async () => {
     const after = state.messagesByConv[state.currentConvId]
     if (!after || after.length === before) break // 无新消息
   }
-  forceScrollToBottom()
+  // ★ 仅在用户未主动上翻时滚底（用户在浏览/展开历史时不应被强制拉到底部）
+  if (!window.__scrollLockTimer) forceScrollToBottom()
 }
 
 // ── 段模式（兼容旧版）──
@@ -744,7 +1032,7 @@ const loadWsTokenStats = async () => {
       Object.assign(state.wsTokenStatsByWs[state.workspaceRoot], data)
     }
     if (state.currentConvId) {
-      const ts = await api.apiGet('/conversations/' + state.currentConvId + '/token-stats')
+      const ts = await api.apiGet('/conversations/' + state.currentConvId + '/token-stats' + (state.workspaceRoot ? '?workspaceRoot=' + encodeURIComponent(state.workspaceRoot) : ''))
       if (ts && ts.promptTokens !== undefined) Object.assign(getConvCtxStats(state.currentConvId), ts)
     }
   } catch {}
@@ -844,14 +1132,25 @@ function cleanMsgContent(msg) {
     .replace(/\n*!\[图片\].+/s, '')
 }
 
+// hasUnansweredAsk 消息中是否存在未回答的 ask_user（这些消息不能被折叠，否则问题不可见）
+function hasUnansweredAsk(msg) {
+  return !!msg.segments && msg.segments.some(s => s.type === 'ask_user' && !s._answered)
+}
+
 function collapsePreviousOutputs() {
   if (!autoCollapse.value) return
   for (const msg of state.messages) {
     if (msg.role !== 'assistant' || msg._loading) continue
     if (!msg.segments || msg.segments.length === 0) continue
+    // ★ 有未回答 ask_user 的消息保持展开（否则问题被折叠隐藏无法回答）
+    if (hasUnansweredAsk(msg)) continue
+    // ★ 保留用户交互状态：已手动展开的气泡（_folded===false）不再强制折叠，
+    //   段级展开同样保留——否则「新消息发出时」用户刚展开的旧输出被折叠，
+    //   表现为「展开折叠后 滚动/发送新消息 又被自动折叠」
+    if (msg._folded === false) continue
     for (const seg of msg.segments) {
-      if (seg.type === 'thinking') seg._collapsed = true
-      if (seg.type === 'tool_call') seg._expanded = false
+      if (seg.type === 'thinking' && seg._collapsed !== false) seg._collapsed = true
+      if (seg.type === 'tool_call' && seg._expanded !== true) seg._expanded = false
     }
     msg._folded = true
   }
@@ -864,6 +1163,8 @@ function applyAutoCollapse() {
   for (const msg of state.messages) {
     if (msg.role !== 'assistant' || msg._loading) continue
     if (!msg.segments || msg.segments.length === 0) continue
+    // ★ 有未回答 ask_user 的消息保持展开
+    if (hasUnansweredAsk(msg)) continue
     for (const seg of msg.segments) {
       if (seg.type === 'thinking' && seg._collapsed === undefined) seg._collapsed = true
       if (seg.type === 'tool_call' && seg._expanded === undefined) seg._expanded = false
@@ -873,8 +1174,10 @@ function applyAutoCollapse() {
 }
 
 const sendMessage = async () => {
+  // ★ 2026-08-22 contenteditable：发送前从 DOM 序列化（tag → token），保证 inputText 最新
+  syncInput()
   const text = inputText.value.trim()
-  if (!text && !pendingAttachment.value) return
+  if (!text && pendingAttachments.value.length === 0) return
   if (state.chatLoading) { console.log('[RP] sendMessage 跳过: chatLoading 已为 true'); return }
 
   // ★ 确保 WS 连接就绪（等待最多 3s，避免事件丢失）
@@ -917,32 +1220,49 @@ const sendMessage = async () => {
   startConvRuntime(convId, msgKey, lastUserText)
   console.log('[RP] sendMessage ▸ 用户发送 conv=%s msgKey=%s textLen=%d', convId, msgKey, lastUserText.length)
 
-  // ── ★ 创建用户消息 ──
+  // ── ★ 创建用户消息（★ 2026-08-21 附件 token 原位替换为语义化引用 → 跟随文字位置） ──
+  const rawText = inputText.value
   let fullContent = lastUserText
   const attachments = [] // 结构化的附件列表（用于前端标签渲染）
-  if (pendingAttachment.value) {
-    const att = pendingAttachment.value
-    if (att.type === 'image') {
-      fullContent += '\n\n![图片](' + (att.content || '') + ')'
-      attachments.push({ type: 'image', path: att.filename || '', label: att.filename || '图片' })
-    } else if (att.type === 'selection') {
-      // 选中代码：将代码内容作为上下文尾注，路径为标签
-      fullContent += '\n\n📎 代码引用: `' + att.path + '` L' + (att.lineStart || 1) + '-' + (att.lineEnd || 1)
-      if (att.content) fullContent += '\n```\n' + att.content.slice(0, 3000) + '\n```'
-      attachments.push({ type: 'code', path: att.path, lineStart: att.lineStart, lineEnd: att.lineEnd,
-        label: (att.filename || att.path) + ':' + (att.lineStart || 1) + '-' + (att.lineEnd || 1) })
-    } else if (att.type === 'dir') {
-      // 目录引用：提示 agent 用 list_files 查看
-      fullContent += '\n\n📎 目录: `' + att.path + '`（请用 list_files 查看）'
-      attachments.push({ type: 'dir', path: att.path, label: att.filename || att.path.split(/[\\/]/).pop() || att.path })
-    } else {
-      // file / code: 仅传递路径引用，不内联内容（agent 通过 read_file 读取）
-      fullContent += '\n\n📎 附件: `' + att.path + '`（请用 read_file 读取）'
-      attachments.push({ type: att.type, path: att.path, filename: att.filename,
-        label: att.filename || att.path.split(/[\\/]/).pop() || att.path })
+  const images = []      // ★ 2026-08-21 多模态：结构化图片数组（{data,mimeType,detail}），随 chatStart 发送
+  const pendings = [...pendingAttachments.value]
+  if (pendings.length > 0) {
+    for (const att of pendings) {
+      // token 在文本中 → 原位替换为语义化引用（跟随用户光标位置）；已删 token → 末尾兜底
+      const refText = buildAttachRefText(att)
+      const tok = att._token || ''
+      if (tok && rawText.includes(tok)) {
+        fullContent = fullContent.split(tok).join(refText)
+      } else {
+        fullContent += refText
+      }
+      // 结构化附件（气泡标签渲染）
+      if (att.type === 'image') {
+        // ★ 2026-08-21 多模态：图片不再内联 markdown，改为结构化 images 数组发送
+        //   （后端转 Message.Images → Provider 以 OpenAI content 块数组发送）
+        //   文件树添加的图片（仅路径）先等待 /api/fs/image 异步读取完成。
+        if (att._imgPromise) await att._imgPromise.catch(() => {})
+        if (att._imageReady && att.content) {
+          const mime = att.mimeType || (att.content || '').match(/^data:([^;,]+)/)?.[1] || 'image/png'
+          images.push({ data: att.content, mimeType: mime, detail: 'high' })
+          attachments.push({ type: 'image', path: att.filename || '', label: att.filename || '图片', data: att.content })
+        } else {
+          // 读取失败 → 降级为文本附件（旧行为，提示模型用 read_file）
+          attachments.push({ type: 'image', path: att.path || att.filename || '', filename: att.filename || '',
+            label: att.filename || att.path.split(/[\\/]/).pop() || '图片' })
+        }
+      } else if (att.type === 'selection') {
+        attachments.push({ type: 'code', path: att.path, lineStart: att.lineStart, lineEnd: att.lineEnd,
+          label: (att.filename || att.path) + ':' + (att.lineStart || 1) + '-' + (att.lineEnd || 1) })
+      } else if (att.type === 'dir') {
+        attachments.push({ type: 'dir', path: att.path, label: att.filename || att.path.split(/[\\/]/).pop() || att.path })
+      } else {
+        attachments.push({ type: att.type, path: att.path, filename: att.filename,
+          label: att.filename || att.path.split(/[\\/]/).pop() || att.path })
+      }
     }
   }
-  inputText.value = ''; pendingAttachment.value = null
+  setInputText(''); pendingAttachments.value = []
   collapsePreviousOutputs()
 
   if (!state.messagesByConv[convId]) state.messagesByConv[convId] = []
@@ -981,7 +1301,7 @@ const sendMessage = async () => {
 
   // ── 调用后端 chatStart（HTTP 发送，WS 事件异步更新 assistant 消息） ──
   try {
-    await api.chatStart(convId, fullContent, autonomous.value, state.workspaceRoot)
+    await api.chatStart(convId, fullContent, autonomous.value, state.workspaceRoot, images)
   } catch (err) {
     const msgs0 = state.messagesByConv[convId]
     if (msgs0) {
@@ -1095,7 +1415,39 @@ const rollbackTo = async (msgIdx) => {
   }
 }
 
-const onKeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!state.chatLoading) sendMessage() } }
+// ── ★ 2026-08-22 contenteditable 输入框：Enter 发送（IME 确认不拦截）+ Backspace/Delete 处理 tag 边缘删除 ──
+// handleTagEdgeDelete Backspace/Delete 在 tag 相邻边缘时删除整个 tag（否则浏览器半删除/光标穿墙）
+function handleTagEdgeDelete(e) {
+  const el = inputRef.value
+  if (!el) return
+  const sel = window.getSelection()
+  if (!sel || sel.rangeCount === 0) return
+  const range = sel.getRangeAt(0)
+  if (!range.collapsed) return // 非折叠选区：可能选中 tag，交给默认行为 + input 对账
+  const back = e.key === 'Backspace'
+  let target = null
+  if (range.startContainer.nodeType === Node.TEXT_NODE) {
+    const tn = range.startContainer
+    const len = (tn.textContent || '').length
+    if (back && range.startOffset > 0) return
+    if (!back && range.startOffset < len) return
+    target = back ? tn.previousSibling : tn.nextSibling
+  } else {
+    const children = range.startContainer.childNodes
+    const idx = range.startOffset
+    target = back ? children[idx - 1] : children[idx]
+  }
+  if (target && target.classList && target.classList.contains('att-inline')) {
+    e.preventDefault()
+    removeAttTagByEl(target)
+  }
+}
+
+const onKeydown = (e) => {
+  if (e.isComposing || e.keyCode === 229) return // IME 组合中不处理
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!state.chatLoading) sendMessage(); return }
+  if (e.key === 'Backspace' || e.key === 'Delete') handleTagEdgeDelete(e)
+}
 
 const scrollToBottom = () => {
   showScrollDown.value = false
@@ -1113,6 +1465,15 @@ const loadConvList = async () => {
   try {
     const list = await api.apiGet('/conversations', { workspace: state.workspaceRoot })
     state.conversations = list || []
+    // ★ 2026-08-21 修复"刷新后不自动选对话"：列表加载后若无当前对话（或当前对话已被删），
+    //   自动选中最近更新的对话（后端按 UpdatedAt 倒序 → 取第一个）。
+    //   currentConvId 赋值即触发 watch → switchConv 加载消息。
+    if (state.conversations.length > 0) {
+      const cur = state.currentConvId
+      if (!cur || !state.conversations.some(c => c.id === cur)) {
+        state.currentConvId = state.conversations[0].id
+      }
+    }
     // 无对话时自动创建一个"新对话"
     if (state.conversations.length === 0 && state.workspaceRoot) {
       await newConversation()
@@ -1141,7 +1502,7 @@ const newConversation = async () => {
   state.agentRunning = false
   currentPlan.value = []
   currentTasks.value = []
-  inputText.value = ''
+  setInputText('')
   nextTick(() => inputRef.value?.focus())
 }
 
@@ -1194,7 +1555,7 @@ const switchConv = async (id) => {
 
   // 加载 token 统计
   try {
-    const ts = await api.apiGet('/conversations/' + id + '/token-stats')
+    const ts = await api.apiGet('/conversations/' + id + '/token-stats' + (state.workspaceRoot ? '?workspaceRoot=' + encodeURIComponent(state.workspaceRoot) : ''))
     if (ts && ts.promptTokens !== undefined) Object.assign(getConvCtxStats(id), ts)
   } catch {}
 
@@ -1203,7 +1564,7 @@ const switchConv = async (id) => {
   const hasRealMsgs = msgs.length > 0 && msgs.some(m => !m._loading)
   if (!hasRealMsgs) {
     try {
-      const data = await api.getMessages(id, { limit: 50 })
+      const data = await api.getMessages(id, { limit: 50, workspaceRoot: state.workspaceRoot })
       const loaded = (data.messages || [])
         .filter(m => (m.message?.role || m.role) !== 'tool')
         .map((m, i) => {
@@ -1212,12 +1573,19 @@ const switchConv = async (id) => {
             if (seg.type === 'tool_call' && seg.name === 'finish_task') {
               return { type: 'content', content: seg.result || '' }
             }
-            if (seg.type === 'ask_user') seg._answered = !!seg.answer
+            if (seg.type === 'ask_user') {
+              seg._answered = !!seg.answer
+              seg.askType = normalizeAskType(seg.askType || 'text')
+            }
             return seg
           })
           return {
             role, content: m.message?.content || m.content || '', segments,
             _key: 'msg_' + Date.now() + '_' + i, _idx: m.idx, _time: m.timestamp || '',
+            // ★ 2026-08-21 多模态：历史消息带图片时映射为附件缩略图（dataURL 直显）
+            _attachments: (m.message?.images || m.images || []).map(img => ({
+              type: 'image', label: '图片', data: img.data || '', path: img.mimeType || '',
+            })),
           }
         })
         .sort((a, b) => (a._idx || 0) - (b._idx || 0))
@@ -1229,7 +1597,9 @@ const switchConv = async (id) => {
       state.messages = mergedMsgs
       state.msgTotalByConv[id] = data.total || loaded.length
       state.msgLoadedByConv[id] = mergedMsgs.length
-      nextTick(() => applyAutoCollapse())
+      // ★ 2026-08-21 修复"折叠跳动"：同步应用折叠默认值（不再 nextTick 延迟）。
+      //   消息写入即折叠，首帧渲染即为折叠态——历史做法先展开渲染一帧再折叠，造成跳动。
+      applyAutoCollapse()
 
       // ★ 若该对话正在运行（agentRunningByConv 已由 processStatus 设置），
       //   创建 assistant 占位 + runtime，准备接收 WS 实时事件
@@ -1272,7 +1642,10 @@ const switchConv = async (id) => {
   applyAutoCollapse()
   // ★ 按空间加载：初始内容不足视口时自动加载更早消息（浏览器行为），
   //   引擎几何桥修复后 clientHeight/scrollHeight 为真实值，fillViewport 可判断。
-  await fillViewport()
+  //   ★ 2026-08-22 性能修复：不再 await——fillViewport 可能串行多轮大请求，
+  //     阻塞任务状态/计划加载与首屏显示（表现为「消息加载慢」）；
+  //     改为后台执行，先完成首屏滚底，fillViewport 完成后按锁定状态滚底。
+  fillViewport()
   forceScrollToBottom()
   } finally {
     _loadingConvs.delete(id)
@@ -1369,7 +1742,7 @@ const handleDrop = (e) => {
   // 优先检查工作区文件路径（文件树拖拽携带的路径）
   const wsPath = e.dataTransfer?.getData('application/x-file-path') || e.dataTransfer?.getData('text/x-file-path') || ''
   if (wsPath) {
-    pendingAttachment.value = { type: 'file', path: wsPath, filename: wsPath.split(/[\\/]/).pop() }
+    addAttachment({ type: 'file', path: wsPath, filename: wsPath.split(/[\\/]/).pop() })
     return
   }
   // 外部文件（浏览器文件系统）—— 不在工作区内，提示用户
@@ -1379,9 +1752,9 @@ const handleDrop = (e) => {
     window.$toast && window.$toast('该文件不在工作区内，请先添加到工作区或从文件树拖入', 'warn')
     return
   }
-  // 纯文本拖拽 —— 保留原逻辑
+  // 纯文本拖拽 —— 光标处插入文本
   const textData = e.dataTransfer?.getData('text/plain')
-  if (textData) { inputText.value += textData; inputRef.value?.focus() }
+  if (textData) { insertTextAtCursor(textData); inputRef.value?.focus() }
 }
 
 const handlePaste = (e) => {
@@ -1396,7 +1769,7 @@ const handlePaste = (e) => {
           return
         }
         const reader = new FileReader()
-        reader.onload = (ev) => { pendingAttachment.value = { type: 'image', path: file.name, filename: file.name, content: ev.target?.result || '' } }
+        reader.onload = (ev) => { addAttachment({ type: 'image', path: file.name, filename: file.name, content: ev.target?.result || '' }) }
         reader.readAsDataURL(file)
       } else {
         // 非图片文件 —— 不读取内容，提示从编辑器或文件树拖入
@@ -1405,11 +1778,15 @@ const handlePaste = (e) => {
       return
     }
   }
-  // ── 无文件粘贴：检测长文本 → 自动转为临时附件 ──
+  // ── 无文件粘贴：检测长文本 → 自动转为临时附件；短文本 → 光标处插入纯文本（防富文本） ──
   const plainText = e.clipboardData.getData('text/plain')
   if (plainText && plainText.length > 2000) {
     e.preventDefault()
     createTempAttachment(plainText)
+  } else if (plainText) {
+    e.preventDefault()
+    insertTextAtCursor(plainText)
+    inputRef.value?.focus()
   }
 }
 
@@ -1424,7 +1801,7 @@ async function createTempAttachment(text) {
   const filePath = tempPath + '\\paste_' + ts + '.txt'
   try {
     await api.apiPost('/fs/write', { path: filePath, content: text })
-    pendingAttachment.value = { type: 'file', path: filePath, filename: 'paste_' + ts + '.txt' }
+    addAttachment({ type: 'file', path: filePath, filename: 'paste_' + ts + '.txt' })
     window.$toast('长文本已保存为临时附件: ' + filePath, 'info')
   } catch (err) {
     window.$toast('创建临时文件失败: ' + err.message, 'error')
@@ -1454,10 +1831,13 @@ function stopContentResizeObserver() {
 
 // ★ watch 兜底：App.vue async onMounted 设置 currentConvId 后自动加载消息
 //   _loadingConvs 防重入：sidebar 直接调用时 watch 自动跳过
+// ★ 2026-08-22 修复初始化竞态：ui-right-panel 插件挂载（watch 注册）晚于
+//   initAppGlobals 异步设置 currentConvId → watch 永不触发 → 历史消息不加载。
+//   加 immediate：挂载时若 currentConvId 已存在则立即 switchConv 加载。
 watch(() => state.currentConvId, (id, oldId) => {
   if (id && id !== oldId) switchConv(id)
   nextTick(() => startContentResizeObserver())
-})
+}, { immediate: true })
 
   // ── 对话消息全量替换（如首次加载/切换）时也重启观察器
   watch(() => state.messages, () => {
@@ -1654,7 +2034,7 @@ onMounted(() => {
 
   window.addEventListener('add-to-chat', (e) => {
     const detail = e.detail; if (!detail) return
-    pendingAttachment.value = { type: detail.type || 'file', path: detail.path || '', filename: detail.filename || '', lineStart: detail.lineStart || null, lineEnd: detail.lineEnd || null, content: detail.content || '' }
+    addAttachment({ type: detail.type || 'file', path: detail.path || '', filename: detail.filename || '', lineStart: detail.lineStart || null, lineEnd: detail.lineEnd || null, content: detail.content || '' })
   })
   window.addEventListener('workspace-switched', async () => {
     // 工作区切换：不清空 messagesByConv/loadingByConv/agentRunningByConv（agent 后台继续运行）
@@ -1662,7 +2042,7 @@ onMounted(() => {
     state.chatLoading = false
     state.agentRunning = false
     state.chatSessionId = ''
-    inputText.value = ''
+    setInputText('')
     currentPlan.value = []
     await loadConvList()
     // loadConvList 已处理 currentConvId 和 messages 的设置（自动创建或保持空）
@@ -1694,9 +2074,10 @@ onUnmounted(() => {
 .rp-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
 .rp-body { flex: 1; display: flex; flex-direction: row; overflow: hidden; min-height: 0; }
 .chat-area { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; max-width: 100%; }
-.chat-messages { flex: 1; overflow-y: auto; padding: 8px 12px; min-height: 0; position: relative; overflow-anchor: none; }
-.msg-list-wrap { display: flex; flex-direction: column; gap: 12px; min-height: 100%; }
-.msg-item { display: flex; gap: 8px; align-items: flex-start; content-visibility: auto; contain-intrinsic-size: 60px; }
+.chat-messages { flex: 1; overflow-y: auto; padding: 10px 14px; min-height: 0; position: relative; overflow-anchor: none; }
+.msg-list-wrap { display: flex; flex-direction: column; gap: 14px; min-height: 100%; }
+.msg-item { display: flex; gap: 8px; align-items: flex-start; content-visibility: auto; contain-intrinsic-size: 60px; border-radius: 10px; padding: 2px 4px; transition: background 0.12s; }
+.msg-item:hover { background: var(--bg-hover); }
 
 /* 新对话空状态 */
 .chat-empty {
@@ -1709,7 +2090,7 @@ onUnmounted(() => {
   position: absolute;
   inset: 0;
 }
-.chat-empty-icon { margin-bottom: 16px; opacity: 0.2; }
+.chat-empty-icon { margin-bottom: 16px; opacity: 0.35; color: var(--accent); filter: drop-shadow(0 0 12px rgba(88, 166, 255, 0.35)); }
 .chat-empty-text { font-size: 16px; font-weight: 500; margin-bottom: 6px; color: var(--text-secondary); }
 .chat-empty-hint { font-size: 13px; opacity: 0.7; }
 .msg-user { flex-direction: row-reverse; justify-content: flex-start; gap: 10px; }
@@ -1721,15 +2102,16 @@ onUnmounted(() => {
   flex: 0 0 auto;
   max-width: 80%;
   min-width: 40px;
-  background: var(--accent);
+  /* ★ 2026-08-21 可视优化：纯色蓝底 → accent 渐变 + 柔和阴影，保持主题 accent 色调 */
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-light) 100%);
   color: #fff;
   padding: 10px 16px;
-  border-radius: 16px 16px 4px 16px;
+  border-radius: 14px 14px 4px 14px;
   overflow-wrap: break-word;
   word-break: break-word;
   overflow-wrap: anywhere;
   margin: 2px 0;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.18);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.22);
   transition: box-shadow 0.15s ease, transform 0.1s ease;
   position: relative;
 }
@@ -1758,8 +2140,8 @@ onUnmounted(() => {
 .rollback-btn { display: flex; align-items: center; gap: 2px; padding: 1px 6px; border-radius: 8px; cursor: pointer; font-size: 10px; color: rgba(255,255,255,0.6); background: rgba(0,0,0,0.2); border: none; user-select: none; }
 .rollback-btn:hover { color: #f48771; background: rgba(244, 135, 113, 0.25); }
 .msg-avatar { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.msg-user .msg-avatar { background: var(--accent); color: #fff; }
-.msg-assistant .msg-avatar { background: var(--bg-tertiary); color: var(--text-secondary); border: 1px solid var(--border-color); }
+.msg-user .msg-avatar { background: linear-gradient(135deg, var(--accent) 0%, var(--accent-light) 100%); color: #fff; box-shadow: 0 1px 4px rgba(88, 166, 255, 0.25); }
+.msg-assistant .msg-avatar { background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-active) 100%); color: var(--accent); border: 1px solid var(--border-color); }
 .msg-bubble { flex: 1; min-width: 0; max-width: 85%; font-size: 13px; line-height: 1.6; word-break: break-word; overflow-wrap: break-word; position: relative; padding: 2px 0; }
 
 .bubble-assistant { background: transparent; color: var(--text-primary); padding: 2px 0; }
@@ -1904,8 +2286,23 @@ onUnmounted(() => {
 }
 .resume-btn:hover { background: rgba(232, 172, 82, 0.4); }
 .input-resizer { position: absolute; top: -8px; left: 0; right: 0; height: 12px; cursor: ns-resize; z-index: 10; }
-.input-wrapper { background: var(--input-bg); border: 1px solid var(--border-color); border-radius: 8px; }
-.chat-input { display: block; width: 100%; background: transparent; border: none; color: var(--text-primary); padding: 14px 16px 14px 16px; border-radius: 0; font-size: 14px; resize: none; outline: none; min-height: 80px; font-family: inherit; line-height: 1.6; box-sizing: border-box; }
+.input-wrapper { background: var(--input-bg); border: 1px solid var(--border-color); border-radius: 10px; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+/* ★ 2026-08-21 可视优化：输入框聚焦时 accent 描边（键盘可达性/审美） */
+.input-wrapper:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-ring); }
+/* ★ 2026-08-22 contenteditable 输入框改造：附件内联 tag 渲染在输入框内 */
+.chat-input { display: block; width: 100%; background: transparent; border: none; color: var(--text-primary); padding: 14px 16px 14px 16px; border-radius: 0; font-size: 14px; resize: none; outline: none; min-height: 80px; font-family: inherit; line-height: 1.6; box-sizing: border-box; overflow-y: auto; white-space: pre-wrap; word-break: break-word; cursor: text; }
+/* placeholder（contenteditable 无原生 placeholder，用 :empty 伪元素） */
+.chat-input:empty::before { content: attr(data-placeholder); color: var(--text-muted); pointer-events: none; }
+.chat-input[contenteditable="false"] { opacity: 0.55; cursor: not-allowed; }
+/* 附件内联 tag：contenteditable=false 药丸，与文字混排 */
+.att-inline { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px 1px 8px; margin: 0 2px; border-radius: 11px; font-size: 12px; line-height: 1.5; vertical-align: middle; user-select: none; cursor: default; max-width: 340px; background: rgba(0, 120, 212, 0.12); color: #4daafc; border: 1px solid rgba(0, 120, 212, 0.25); }
+.att-inline-image { background: rgba(0, 180, 120, 0.12); color: #4cc9a0; border-color: rgba(0, 180, 120, 0.25); }
+.att-inline-dir { background: rgba(180, 130, 30, 0.12); color: #e0b45e; border-color: rgba(180, 130, 30, 0.25); }
+.att-inline .att-inline-icon { display: inline-flex; flex-shrink: 0; }
+.att-inline .att-inline-svg { width: 12px; height: 12px; }
+.att-inline .att-inline-label { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.att-inline .att-inline-x { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 50%; font-size: 12px; line-height: 1; color: inherit; opacity: 0.7; cursor: pointer; flex-shrink: 0; }
+.att-inline .att-inline-x:hover { opacity: 1; background: rgba(0, 0, 0, 0.25); }
 .input-bottom-bar { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 0 12px 8px 12px; }
 .ibb-btns { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; position: relative; }
 .ibb-model { display: inline-flex; align-items: center; gap: 4px; }
@@ -1916,7 +2313,8 @@ onUnmounted(() => {
   cursor: pointer;
 }
 .cmp-sel:focus { border-color: var(--accent, #4f8cff); }
-.obtn { display: flex; align-items: center; gap: 3px; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; color: var(--text-muted); background: var(--bg-tertiary); border: 1px solid var(--border-color); white-space: nowrap; user-select: none; }
+.obtn { display: flex; align-items: center; gap: 3px; padding: 4px 8px; border-radius: 6px; cursor: pointer; font-size: 11px; color: var(--text-muted); background: var(--bg-tertiary); border: 1px solid var(--border-color); white-space: nowrap; user-select: none; transition: all 0.12s; }
+.obtn:hover { color: var(--text-secondary); border-color: var(--text-muted); }
 .obtn.active { color: var(--accent); background: rgba(212, 167, 78, 0.1); border-color: rgba(212, 167, 78, 0.3); }
 .obtn-obtn-agent.active { color: #d4a74e; }
 /* 三态审核按钮样式 */
@@ -1926,16 +2324,28 @@ onUnmounted(() => {
 
 
 
-.send-btn { background: var(--accent); color: #fff; padding: 6px 14px; border-radius: 4px; cursor: pointer; border: none; }
-.stop-btn { background: #c03; color: #fff; padding: 6px 14px; border-radius: 4px; cursor: pointer; border: none; }
-.attachment-badge { display: flex; align-items: center; gap: 6px; padding: 4px 8px; margin: 4px 0; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px; }
-
+.send-btn { background: linear-gradient(135deg, var(--accent) 0%, var(--accent-light) 100%); color: #fff; padding: 6px 14px; border-radius: 8px; cursor: pointer; border: none; transition: opacity 0.15s, transform 0.1s; display: inline-flex; align-items: center; gap: 4px; }
+.send-btn:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
+.send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.stop-btn { background: #c03; color: #fff; padding: 6px 14px; border-radius: 8px; cursor: pointer; border: none; }
 /* ── 用户消息附件标签 ── */
 .user-attachments { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
-.att-tag { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 12px; font-size: 11px; cursor: default; }
+.att-tag { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px 1px 8px; border-radius: 11px; font-size: 12px; cursor: default; }
 .att-tag-file, .att-tag-code, .att-tag-dir { background: rgba(0, 120, 212, 0.12); color: #4daafc; border: 1px solid rgba(0, 120, 212, 0.25); }
 .att-tag-image { background: rgba(0, 180, 120, 0.12); color: #4cc9a0; border: 1px solid rgba(0, 180, 120, 0.25); }
 .att-tag-label { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* ★ 2026-08-22 附件 chip 只显示「左侧图标 + 文件名」文字大小尺寸：图片附件不再渲染 96px 大缩略图 */
+/* ★ 2026-08-21 气泡内附件反色：用户气泡为 accent 渐变底色，原淡蓝标签与气泡同色系难辨认。
+   改为白色半透明底 + 白字 + 白边，四主题（蓝/白/橙/紫）下均高对比 */
+.bubble-user .att-tag,
+.bubble-user .att-tag-file,
+.bubble-user .att-tag-code,
+.bubble-user .att-tag-dir,
+.bubble-user .att-tag-image {
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+}
 
 /* ── SubAgentBlock 内部样式已移除，替换为时间线展示 ── */
 .seg-content { line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
@@ -2011,4 +2421,40 @@ onUnmounted(() => {
 }
 /* chat 槽位：插件渲染的对话面板占满 rp-body */
 .plugin-slot-chat { flex: 1; min-height: 0; display: flex; overflow: hidden; }
+</style>
+
+<!-- ★ 2026-08-22 附件内联 tag 全局样式（非 scoped）：
+     insertTagAtCursor 用 JS 动态创建 span/svg（无 data-v 属性），scoped 选择器
+     [data-v-xxx] 匹配不到 → 样式全失效（svg 默认 300x150 巨大拉伸）。
+     此处用作用域限定选择器（.chat-input 内）避免全局污染，与 scoped 版同规格。 -->
+<style>
+.chat-input .att-inline {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 1px 6px 1px 8px; margin: 0 2px;
+  border-radius: 11px; font-size: 12px; line-height: 1.5;
+  vertical-align: middle; user-select: none; cursor: default;
+  max-width: 340px;
+  background: rgba(0, 120, 212, 0.12); color: #4daafc;
+  border: 1px solid rgba(0, 120, 212, 0.25);
+  box-sizing: border-box;
+}
+.chat-input .att-inline-image {
+  background: rgba(0, 180, 120, 0.12); color: #4cc9a0;
+  border-color: rgba(0, 180, 120, 0.25);
+}
+.chat-input .att-inline-dir {
+  background: rgba(180, 130, 30, 0.12); color: #e0b45e;
+  border-color: rgba(180, 130, 30, 0.25);
+}
+.chat-input .att-inline .att-inline-icon { display: inline-flex; flex-shrink: 0; }
+.chat-input .att-inline .att-inline-svg { width: 12px; height: 12px; display: block; }
+.chat-input .att-inline .att-inline-label {
+  max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.chat-input .att-inline .att-inline-x {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 14px; height: 14px; border-radius: 50%; font-size: 12px; line-height: 1;
+  color: inherit; opacity: 0.7; cursor: pointer; flex-shrink: 0;
+}
+.chat-input .att-inline .att-inline-x:hover { opacity: 1; background: rgba(0, 0, 0, 0.25); }
 </style>

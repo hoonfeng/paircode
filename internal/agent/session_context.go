@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/hoonfeng/paircode/pkg/executil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,7 +19,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -98,7 +98,7 @@ func BuildSessionContext(convID string, workspaceRoots []string, currentTask str
 	sc.GitStatus = buildGitStatus(workspaceRoots)
 
 	// 9. 代码图谱统计
-	sc.CodeGraphStats = buildCodeGraphStats()
+	sc.CodeGraphStats = buildCodeGraphStats(workspaceRoots)
 
 	// 10. 构建状态（最近编译结果 + 二进制时间戳）
 	sc.BuildStatus = buildBuildStatus(workspaceRoots)
@@ -729,7 +729,7 @@ func runGitCmd(dir string, args ...string) (string, error) {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", args...)
 	if runtime.GOOS == "windows" {
-		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		executil.HideWindow(cmd)
 	}
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
@@ -931,13 +931,21 @@ func scanStaleRefs(text, workspaceRoot string) []string {
 }
 
 // buildCodeGraphStats 获取代码图谱统计信息。
-func buildCodeGraphStats() string {
-	root := WorkspaceRoots[0]
+// ★ 只读缓存图（getCachedCodeGraph）：发送消息/会话上下文注入路径
+//   绝不触发变更检测与增量构建（增量构建需加载/保存数百 MB 图谱，
+//   （getCodeGraph/BeforeTool）路径在后台维护最新。
+// ★ 2026-08-23 工作区隔离：按传入的 roots（会话上下文构建时的会话/工作区根）取主根，
+//   不再读全局 WorkspaceRoots[0]（运行中切换工作区导致注入上下文串台）。
+func buildCodeGraphStats(roots []string) string {
+	root := ""
+	if len(roots) > 0 {
+		root = roots[0]
+	}
 	if root == "" {
 		return ""
 	}
-	g, err := getCodeGraph(root)
-	if err != nil || g == nil {
+	g, ok := getCachedCodeGraph(root)
+	if !ok || g == nil {
 		return ""
 	}
 	stats := g.Stats()
@@ -998,7 +1006,7 @@ func BuildResumeContext(convID, currentTask string, history []Message, store Mes
 			b.WriteString("\n\n# Git 状态\n")
 			b.WriteString(gs)
 		}
-		if cgs := buildCodeGraphStats(); cgs != "" {
+		if cgs := buildCodeGraphStats(roots); cgs != "" {
 			b.WriteString("\n\n# 代码图谱\n")
 			b.WriteString(cgs)
 		}

@@ -19,7 +19,7 @@ import (
 // registerVerifyTools 注册记忆/知识库验证工具。
 func registerVerifyTools(r *Registry, root string) {
 	r.Register(&Tool{
-		Name: "memory_verify",
+		Name:       "memory_verify",
 		UsageGuide: "验证所有记忆条目引用的文件和目录是否仍然存在。过时记忆会误导 agent，建议定期运行。比手动检查更高效（自动解析引用路径并检测有效性）。",
 		Description: "验证所有记忆条目中引用的文件和目录是否仍然存在。" +
 			"如果条目引用了已不存在的文件，可能是过时信息，建议更新或删除。" +
@@ -27,12 +27,12 @@ func registerVerifyTools(r *Registry, root string) {
 		Parameters: objSchema(props{}),
 		ReadOnly:   true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
-			return runMemoryVerify()
+			return runMemoryVerify(ctx)
 		},
 	})
 
 	r.Register(&Tool{
-		Name: "project_info_verify",
+		Name:       "project_info_verify",
 		UsageGuide: "验证知识库条目引用的文件和目录是否仍然存在。项目重构后文件移动可能导致旧引用失效，运行此工具可发现并清理过时条目。",
 		Description: "验证所有知识库条目中引用的文件和目录是否仍然存在。" +
 			"如果条目引用了已不存在的文件/目录，可能是过时信息，建议更新或删除。" +
@@ -40,14 +40,16 @@ func registerVerifyTools(r *Registry, root string) {
 		Parameters: objSchema(props{}),
 		ReadOnly:   true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
-			return runKBVerify()
+			return runKBVerify(ctx)
 		},
 	})
 }
 
 // runMemoryVerify 执行记忆验证，返回可读报告文本。
-func runMemoryVerify() (string, error) {
-	roots := WorkspaceRoots
+// ★ 2026-08-23 工作区隔离：优先会话绑定的工作区根（Verify 覆盖范围=发起会话的工作区），
+//   无会话上下文时回落全局 WorkspaceRoots（与原逻辑一致）。
+func runMemoryVerify(ctx context.Context) (string, error) {
+	roots := sessionRootsOrGlobal(ctx)
 	if len(roots) == 0 {
 		return "无工作区，跳过验证", nil
 	}
@@ -75,8 +77,9 @@ func runMemoryVerify() (string, error) {
 }
 
 // runKBVerify 执行知识库验证，返回可读报告文本。
-func runKBVerify() (string, error) {
-	roots := WorkspaceRoots
+// ★ 2026-08-23 工作区隔离：优先会话绑定的工作区根。
+func runKBVerify(ctx context.Context) (string, error) {
+	roots := sessionRootsOrGlobal(ctx)
 	if len(roots) == 0 {
 		return "无工作区，跳过验证", nil
 	}

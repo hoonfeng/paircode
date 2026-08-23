@@ -26,6 +26,7 @@ import (
 // ─── 会话上下文（ctx 链传递 convID） ──────────────────────────
 
 type sessionCtxKey struct{}
+type sessionWsCtxKey struct{}
 
 // WithSessionConvID 向 ctx 注入会话 ID（SessionManager.Start 的 runCtx 设置，
 // Loop 内 Registry.Execute 的 ctx 同源，JS 工具包装时可提取）。
@@ -42,6 +43,39 @@ func SessionConvID(ctx context.Context) string {
 		return v
 	}
 	return ""
+}
+
+// WithSessionWorkspaceRoot 向 ctx 注入会话绑定的工作区根路径。
+// ★ 2026-08-23 工作区隔离（重大 BUG）：工具执行必须绑定「会话启动时的工作区」，
+//   而不能读全局当前工作区（core.Folders/WorkspaceRoots——切换工作区时被覆写，
+//   正在执行的对话会因此把工具跑进新工作区，造成文件读写/命令执行串台）。
+//   SessionManager.Start 把 opts.WorkspaceRoot 注入 runCtx，与 convID 平行；
+//   Loop → Registry.Execute → 插件工具包装（jsToolToGo）沿 ctx 链提取。
+func WithSessionWorkspaceRoot(ctx context.Context, wsRoot string) context.Context {
+	return context.WithValue(ctx, sessionWsCtxKey{}, wsRoot)
+}
+
+// SessionWorkspaceRoot 从 ctx 提取会话绑定的工作区根（无则空串）。
+// ctx 可为 nil（测试/无会话上下文）；返回空串时调用方回落全局/装载快照。
+func SessionWorkspaceRoot(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	if v, ok := ctx.Value(sessionWsCtxKey{}).(string); ok {
+		return v
+	}
+	return ""
+}
+
+// sessionRootsOrGlobal 返回工具调用场景的工作区根列表：会话绑定的工作区根（单元素）
+// 优先（工作区隔离），无会话上下文时回落全局 WorkspaceRoots。
+func sessionRootsOrGlobal(ctx context.Context) []string {
+	if ctx != nil {
+		if r := SessionWorkspaceRoot(ctx); r != "" {
+			return []string{r}
+		}
+	}
+	return WorkspaceRoots
 }
 
 // ─── 会话桥（web 层注入，agent 包不依赖 web 层实例） ──────────
@@ -85,17 +119,17 @@ func SetSessionBridge(b *SessionBridge) {
 // 插件停用/未装载时 Start 仍注册会话级版本兜底，行为与旧版一致。
 func archiveSessionTools() {
 	ArchiveHostTool(&Tool{
-		Name:        "ask_user",
-		SystemTool:  true,
+		Name:       "ask_user",
+		SystemTool: true,
 		Description: "向用户提问并等待回答（用于关键决策、歧义澄清，别滥用）。" +
 			"question 必填；askType 可选(text/single/multi/single-with-input)，默认 text 纯文本输入；" +
-			"options 可选(选择类 question 的选项列表；single-with-input 时用户可另选或自定义输入)。调用会阻塞直到用户回答。",
+			"★ options 当 askType 为 single/multi/single-with-input 时必须提供（至少 2 个，如 [\"方案A\",\"方案B\"]），text 时可省略。调用会阻塞直到用户回答。",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
 				"question": map[string]any{"type": "string", "description": "向用户提出的问题"},
-				"askType":   map[string]any{"type": "string", "enum": []string{"text", "single", "multi", "single-with-input"}, "description": "提问类型：text(纯文本)/single(单选)/multi(多选)/single-with-input(单选+自由输入)"},
-				"options":   map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "选择类问题用：可选项列表"},
+				"askType":  map[string]any{"type": "string", "enum": []string{"text", "single", "multi", "single-with-input"}, "description": "提问类型：text(纯文本)/single(单选)/multi(多选)/single-with-input(单选+自由输入)"},
+				"options":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "选择类问题用：可选项列表"},
 			},
 			"required": []string{"question"},
 		},
@@ -113,9 +147,9 @@ func archiveSessionTools() {
 	})
 
 	ArchiveHostTool(&Tool{
-		Name:        "task_create",
-		SystemTool:  true,
-		UsageGuide:  "创建子任务并追踪执行进度。复杂任务（3+ 步）必须拆解为子任务，每完成一项更新状态（in_progress→completed）。依赖项用 dependencies 参数关联。比手动记清单更可靠（持久化到磁盘+状态自动管理）。",
+		Name:       "task_create",
+		SystemTool: true,
+		UsageGuide: "创建子任务并追踪执行进度。复杂任务（3+ 步）必须拆解为子任务，每完成一项更新状态（in_progress→completed）。依赖项用 dependencies 参数关联。比手动记清单更可靠（持久化到磁盘+状态自动管理）。",
 		Description: "创建新的子任务。创建后必须立即执行该任务：先调用 task_update 标记为 in_progress 开始执行，" +
 			"执行完成后调用 task_update 标记为 completed 并说明结果。重复此流程直到所有子任务完成。",
 		Parameters: objSchema(props{

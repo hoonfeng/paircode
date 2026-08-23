@@ -26,6 +26,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/hoonfeng/paircode/pkg/executil"
 	"log"
 	"os"
 	"os/exec"
@@ -33,7 +34,6 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	_ "embed"
@@ -168,7 +168,7 @@ func (b *nodeBridge) start(nodePath string) error {
 	// ★ 2026-08-19：node.exe 是 console 程序——父进程无控制台（后台/服务方式
 	//   启动）时会自己弹出控制台窗口；这里显式隐藏，杜绝弹窗。
 	if runtime.GOOS == "windows" {
-		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		executil.HideWindow(cmd)
 	}
 	cmd.Env = append(os.Environ(),
 		"CORDIS_BRIDGE_DIR="+b.dir,
@@ -342,6 +342,8 @@ func (b *nodeBridge) handleToolMsg(plugin string, defRaw json.RawMessage) {
 }
 
 // invokeTool 调用 Node 侧插件工具（发送 invoke 消息并等待结果）。
+// ★ 2026-08-23 工作区隔离：payload 附带会话绑定的工作区根（ctx 链提取），
+//   Node 侧插件可用（ctx.fs 等沙箱服务按根解析）；无会话时为空。
 func (b *nodeBridge) invokeTool(ctx context.Context, tool string, args map[string]any) (string, error) {
 	if !b.isReady() {
 		return "", fmt.Errorf("node 桥未就绪（工具 %s 不可用）", tool)
@@ -353,7 +355,8 @@ func (b *nodeBridge) invokeTool(ctx context.Context, tool string, args map[strin
 	b.pending[id] = ch
 	b.mu.Unlock()
 
-	payload, _ := json.Marshal(map[string]any{"t": "invoke", "id": id, "tool": tool, "args": args})
+	wsRoot := SessionWorkspaceRoot(ctx)
+	payload, _ := json.Marshal(map[string]any{"t": "invoke", "id": id, "tool": tool, "args": args, "wsRoot": wsRoot})
 	if err := b.sendLine(payload); err != nil {
 		return "", fmt.Errorf("node 桥发送失败: %v", err)
 	}

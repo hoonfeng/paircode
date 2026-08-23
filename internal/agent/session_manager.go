@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/hoonfeng/paircode/pkg/executil"
 	"log"
 	"os"
 	"os/exec"
@@ -16,7 +17,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-	"unicode"
 
 	pkgdb "github.com/hoonfeng/paircode/pkg/db"
 )
@@ -28,7 +28,7 @@ func hideCmd(c *exec.Cmd) *exec.Cmd {
 		if c.SysProcAttr == nil {
 			c.SysProcAttr = &syscall.SysProcAttr{}
 		}
-		c.SysProcAttr.HideWindow = true
+		executil.HideWindow(c)
 	}
 	return c
 }
@@ -62,8 +62,6 @@ type LoopOpts struct {
 	ReviewWhitelist []string
 	// ReviewProvider 审核模型的 Provider（ReviewMode="auto" 时用）。Loop 内部用它懒建 Reviewer。
 	ReviewProvider Provider
-	// AutoCommit 任务完成时自动 git add + git commit。
-	AutoCommit bool
 	// PlanProvider 规划模型的 Provider（自主模式用）。当 Autonomous=true 时，Loop 内部使用此
 	// Provider 执行规划阶段（update_plan），与主 Provider 区分以支持不同模型。
 	PlanProvider Provider
@@ -124,13 +122,29 @@ type SessionManager struct {
 	globalSubMu       sync.RWMutex
 	globalSubscribers []chan GlobalEvent
 
-	store ConversationStore // 消息持久化存储（通过 SetWorkspaceRoot 注入）
+	store ConversationStore // 消息持久化存储（通过 SetWorkspaceRoot 注入；＝当前工作区的缓存 store）
 
-	// ds 统一 SQLite 数据库实例，codegraph/其他组件共用同一连接。
+	// ds 统一 SQLite 数据库实例，codegraph/其他组件共用同一连接（＝当前工作区的缓存 DB）。
 	ds *pkgdb.SQLiteDB
+
+	// ★ 2026-08-23 多工作区隔离（重大 BUG 修复）：按工作区根缓存 store/DB。
+	//   此前 SetWorkspaceRoot 每切一次工作区就替换全局 store 并关闭旧 DB——
+	//   正在运行的会话（绑定旧工作区）继续持久化/查询会落进新工作区，
+	//   工具执行由全局根（WorkspaceRoots）驱动直接串台。
+	//   缓存后：switch 只切换「当前指针」，已存在根保持句柄不死；
+	//   删除工作区时经 CloseWorkspaceDB 显式关闭（Windows 文件占用问题保留解决路径）。
+	wsMu    sync.Mutex
+	stores  map[string]*MessageStore
+	dbs     map[string]*pkgdb.SQLiteDB
+	curRoot string
 
 	// 内部持久化 worker 状态
 	persistWorkerStarted bool
+
+	// starting 启动中会话集合（异步 Start 防重：HTTP 立即返回后 Start 在后台执行，
+	// 同一 conv 的二次请求在此拒绝，避免并发双启）。
+	startingMu sync.Mutex
+	starting   map[string]bool
 
 	// OnDone 会话完成回调（由 web 层设置，用于生成对话摘要等副作用）。
 	// 在 Session goroutine 写盘后调用，convID 为刚结束的会话 ID。
@@ -142,32 +156,25 @@ func NewSessionManager() *SessionManager {
 	return &SessionManager{
 		sessions:    make(map[string]*Session),
 		maxSessions: 100,
+		starting:    make(map[string]bool),
+		stores:      make(map[string]*MessageStore),
+		dbs:         make(map[string]*pkgdb.SQLiteDB),
 	}
 }
 
-// SetWorkspaceRoot 注入工作区根路径，初始化 MessageStore（JSONL 消息存储）和 SQLite（供 codegraph 使用）。
-// 消息持久化使用 MessageStore（JSONL），codegraph 等组件通过 RawDB() 获取同一 *sql.DB 实例。
+// SetWorkspaceRoot 设置「当前工作区根」，切换当前 store/DS 指针（惰性缓存，不关闭旧句柄）。
+// ★ 2026-08-23 多工作区隔离：不再替换全局 store / 关闭旧 DB——正在运行的会话
+//   （绑定启动时工作区）继续用自己根的 store/DB（storeFor 按根路由），切换只影响新会话。
+//   工作区删除时经 CloseWorkspaceDB(root) 显式关闭该根句柄（Windows 文件占用）。
 func (m *SessionManager) SetWorkspaceRoot(root string) {
+	m.wsMu.Lock()
+	m.curRoot = root
+	m.wsMu.Unlock()
+
+	m.store = m.storeFor(root)
+	m.ds = m.dbFor(root)
+
 	m.mu.Lock()
-
-	// 初始化 MessageStore（JSONL 消息存储）
-	m.store = NewMessageStore(root)
-
-	// 初始化 SQLite（供 codegraph 等组件使用，不再担当消息存储）
-	dbPath := filepath.Join(root, ".pair", "pair.db")
-	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
-		fmt.Printf("[session] 创建数据库目录失败: %v\n", err)
-		m.ds = nil
-		m.mu.Unlock()
-		return
-	}
-	if ds, err := pkgdb.NewSQLiteDB(dbPath); err == nil {
-		m.ds = ds
-	} else {
-		fmt.Printf("[session] 打开 SQLite 数据库失败: %v\n", err)
-		m.ds = nil
-	}
-
 	shouldStart := !m.persistWorkerStarted
 	if shouldStart {
 		m.persistWorkerStarted = true
@@ -176,6 +183,98 @@ func (m *SessionManager) SetWorkspaceRoot(root string) {
 
 	if shouldStart {
 		m.startPersistWorker()
+	}
+}
+
+// storeFor 返回指定工作区根的消息存储（惰性创建并缓存；root 为空返回 nil）。
+func (m *SessionManager) storeFor(root string) *MessageStore {
+	if root == "" {
+		return nil
+	}
+	m.wsMu.Lock()
+	if s, ok := m.stores[root]; ok {
+		m.wsMu.Unlock()
+		return s
+	}
+	m.wsMu.Unlock()
+
+	// 锁外创建（NewMessageStore 只做目录准备/读 index，无并发副作用；double-check 防重复缓存）
+	s := NewMessageStore(root)
+	m.wsMu.Lock()
+	if exist, ok := m.stores[root]; ok {
+		m.wsMu.Unlock()
+		return exist
+	}
+	m.stores[root] = s
+	m.wsMu.Unlock()
+	return s
+}
+
+// dbFor 返回指定工作区根的 SQLite（惰性创建并缓存；root 为空返回 nil）。
+func (m *SessionManager) dbFor(root string) *pkgdb.SQLiteDB {
+	if root == "" {
+		return nil
+	}
+	m.wsMu.Lock()
+	if d, ok := m.dbs[root]; ok {
+		m.wsMu.Unlock()
+		return d
+	}
+	m.wsMu.Unlock()
+
+	var ds *pkgdb.SQLiteDB
+	dbPath := filepath.Join(root, ".pair", "pair.db")
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err == nil {
+		if d, err := pkgdb.NewSQLiteDB(dbPath); err == nil {
+			ds = d
+		} else {
+			fmt.Printf("[session] 打开 SQLite 数据库失败 %s: %v\n", root, err)
+		}
+	} else {
+		fmt.Printf("[session] 创建数据库目录失败 %s: %v\n", root, err)
+	}
+	m.wsMu.Lock()
+	if exist, ok := m.dbs[root]; ok {
+		m.wsMu.Unlock()
+		return exist
+	}
+	m.dbs[root] = ds
+	m.wsMu.Unlock()
+	return ds
+}
+
+// StoreFor 返回指定工作区根的消息存储（web 层按请求工作区路由；root 为空回落当前）。
+func (m *SessionManager) StoreFor(root string) ConversationStore {
+	if root == "" {
+		return m.Store()
+	}
+	return m.storeFor(root)
+}
+
+// RawDBFor 返回指定工作区根的 *sql.DB（codegraph 按会话根路由，防止切换后串库）。
+func (m *SessionManager) RawDBFor(root string) *sql.DB {
+	ds := m.dbFor(root)
+	if ds == nil {
+		return nil
+	}
+	return ds.RawDB().(*sql.DB)
+}
+
+// CloseWorkspaceDB 关闭并丢弃指定工作区根的 store/DB（工作区删除时调用；
+// Windows 上不关闭句柄会导致删除失败）。
+func (m *SessionManager) CloseWorkspaceDB(root string) {
+	m.wsMu.Lock()
+	store := m.stores[root]
+	delete(m.stores, root)
+	ds := m.dbs[root]
+	delete(m.dbs, root)
+	if m.curRoot == root {
+		m.curRoot = ""
+	}
+	m.wsMu.Unlock()
+	_ = store
+	if ds != nil {
+		_ = ds.Close()
 	}
 }
 
@@ -289,6 +388,21 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		return errors.New("convID 不能为空")
 	}
 
+	// ★ 2026-08-22 异步 Start 防重：HTTP 层立即返回后 Start 在后台 goroutine 执行，
+	//   同一 convID 的并发请求（用户快速连点/重试）在此直接拒绝，避免双 Loop 竞态。
+	m.startingMu.Lock()
+	if m.starting[convID] {
+		m.startingMu.Unlock()
+		return ErrSessionRunning
+	}
+	m.starting[convID] = true
+	m.startingMu.Unlock()
+	defer func() {
+		m.startingMu.Lock()
+		delete(m.starting, convID)
+		m.startingMu.Unlock()
+	}()
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	// 已有运行中的会话则拒绝（同一对话不可并行跑两个 Loop）
@@ -297,9 +411,12 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 	}
 
 	// 持久化：确保 store 中存在该对话的元数据。
-	// store 为 nil（web 层未注入）时跳过；CreateConversation 失败只警告不阻塞 Start。
-	if m.store != nil {
-		existing, getErr := m.store.GetConversation(convID)
+	// ★ 2026-08-23 会话级 store 路由：会话绑定 opts.WorkspaceRoot（启动时工作区），
+	//   写入对应根的 MessageStore——运行中切换工作区不影响本会话落盘位置。
+	//   store 为 nil（web 层未注入）时跳过；CreateConversation 失败只警告不阻塞 Start。
+	sessStore := m.storeFor(opts.WorkspaceRoot)
+	if sessStore != nil {
+		existing, getErr := sessStore.GetConversation(convID)
 		if getErr != nil {
 			fmt.Printf("[session] 查询对话 %s 元数据失败: %v\n", convID, getErr)
 		} else if existing == nil {
@@ -307,7 +424,7 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 			if len(title) > 30 {
 				title = title[:30]
 			}
-			if createErr := m.store.CreateConversation(convID, title, opts.WorkspaceRoot); createErr != nil {
+			if createErr := sessStore.CreateConversation(convID, title, opts.WorkspaceRoot); createErr != nil {
 				fmt.Printf("[session] 创建对话 %s 元数据失败: %v\n", convID, createErr)
 			}
 		} else {
@@ -329,6 +446,11 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 	//   JS 插件工具包装时可提取 convID（_convID 注入），ask_user/task_create
 	//   经会话桥按 convID 路由（多会话并发不串）。
 	runCtx = WithSessionConvID(runCtx, convID)
+	// ★ 2026-08-23 会话工作区根注入 ctx 链（工作区隔离）：工具执行/持久化按
+	//   会话绑定根路由，切换全局工作区不再带偏正在执行的对话。
+	if opts.WorkspaceRoot != "" {
+		runCtx = WithSessionWorkspaceRoot(runCtx, opts.WorkspaceRoot)
+	}
 
 	sess := &Session{
 		ConvID:        convID,
@@ -351,13 +473,15 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 	}
 	loop := loopHandle.Loop()
 
-	// ★ 2026-08-16：自动提交不再占设置项——绑定工具集勾选状态。
-	//   generate_commit_message（提交协议工具）在工具集中勾选=自动提交可用，
-	//   取消勾选（agent 不可调用该工具）即禁用自动提交。
-	//   （工具被禁用时其 Enabled=false；此处按会话级 Registry 实际状态判定。）
-	if loop.Registry != nil {
-		opts.AutoCommit = loop.Registry.IsEnabled("generate_commit_message")
+	// ★ 2026-08-21 LLM 重试通知：Provider 支持 RetryNotifier 时绑定重试回调，
+	//   重试期间以 notice 事件推送到前端——用户不再「干等无响应」。
+	if rn, ok := loop.Provider.(RetryNotifier); ok {
+		rn.SetOnRetry(func(attempt, maxRetries int, errMsg string) {
+			msg := fmt.Sprintf("LLM 请求失败（%s），正在自动重试 第%d/%d次…", shortenErr(errMsg, 120), attempt, maxRetries)
+			loop.emit(Event{Type: EventNotice, Content: msg})
+		})
 	}
+
 
 	// ★ 恢复上一轮的执行日志（跨轮感知：无论自主还是非自主，新 Loop 都能知道之前每轮的分析/操作）
 	if opts.WorkspaceRoot != "" {
@@ -493,7 +617,7 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 				return ""
 			}
 			next := tasks[0]
-			msg := fmt.Sprintf("继续执行下一阶段任务。\n\n任务：**%s**\n描述：%s\n\n请先调用 update_plan 将此项标记为 in_progress，然后开始执行。完成后更新状态，再调用 generate_commit_message 提交。",
+			msg := fmt.Sprintf("继续执行下一阶段任务。\n\n任务：**%s**\n描述：%s\n\n请先调用 update_plan 将此项标记为 in_progress，然后开始执行。完成后更新状态。",
 				next.Subject, next.Description)
 			return msg
 		}
@@ -516,13 +640,13 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 				SystemTool: true,
 				Description: "向用户提问并等待回答（用于关键决策、歧义澄清，别滥用）。" +
 					"question 必填；askType 可选(text/single/multi/single-with-input)，默认 text 纯文本输入；" +
-					"options 可选(选择类 question 的选项列表；single-with-input 时用户可另选或自定义输入)。调用会阻塞直到用户回答。",
+					"★ options 当 askType 为 single/multi/single-with-input 时必须提供（至少 2 个，如 [\"方案A\",\"方案B\"]），text 时可省略。调用会阻塞直到用户回答。",
 				Parameters: map[string]any{
 					"type": "object",
 					"properties": map[string]any{
 						"question": map[string]any{"type": "string", "description": "向用户提出的问题"},
 						"askType":  map[string]any{"type": "string", "enum": []string{"text", "single", "multi", "single-with-input"}, "description": "提问类型：text(纯文本)/single(单选)/multi(多选)/single-with-input(单选+自由输入)"},
-						"options":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "选择类问题用：可选项列表"},
+						"options":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "选项列表（当 askType 为 single/multi/single-with-input 时必须提供，至少 2 个，例如 [\"方案A\",\"方案B\"]；text 时可省略）"},
 					},
 					"required": []string{"question"},
 				},
@@ -657,9 +781,8 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		if opts.Autonomous {
 			// ★ 新自主模式：单 Loop 内阶段化循环
 			// 不再使用 RunAutonomous（外层设计者 Loop + 内层执行 Loop 的嵌套架构）。
-			// 改为设置 loop.Autonomous=true，让 Loop.Run 在自然终止处自主检测：
-			//   - generate_commit_message 尚未调用 → 阶段完成：持久化 + 注入继续消息 + 继续迭代
-			//   - generate_commit_message 已被调用 → 全部完成：正常退出返回
+			// 改为设置 loop.Autonomous=true，让 Loop.Run 在自然终止处通过 OnNextTask 回调
+			// 获取下一阶段任务：有任务 → 持久化 + 注入继续消息 + 继续迭代；无任务 → 正常退出。
 			// 由此实现「规划→执行→规划→执行...」的同 Loop 循环，每阶段自动落盘后继续。
 			loop.Autonomous = true
 			msgs, err = loop.Run(runCtx, task, nil)
@@ -713,15 +836,6 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		// 现在每轮 assistant 独立存储，由 SegmentsFromMessage 在读取时通过 look-ahead
 		// 自动将 tool_result 嵌入对应 tool_call segment，形成完整的"工具+结果"链路。
 
-		// ★ Auto commit：任务正常完成时自动 git 提交
-		if opts.AutoCommit && err == nil {
-			result := ""
-			if loop.finishResult != nil {
-				result = *loop.finishResult
-			}
-			commitMsg := loop.Registry.CommitMessage
-			doAutoCommit(opts.WorkspaceRoot, task, result, commitMsg)
-		}
 
 		// ★ 错误/停止处理：确保前端总收到结束信号（防止 assistant 消息永久 loading）
 		// Loop.Run 内部已对多数错误发射 EventError，此处补发 Loop 未覆盖的信号：
@@ -909,6 +1023,9 @@ func (m *SessionManager) GetHistory(convID string) []Message {
 	m.mu.RLock()
 	sess, ok := m.sessions[convID]
 	store := m.store
+	if ok && sess.WorkspaceRoot != "" {
+		store = m.storeFor(sess.WorkspaceRoot)
+	}
 	m.mu.RUnlock()
 	if !ok {
 		// 会话不在内存中：fallback 到 store 加载完整历史
@@ -1131,6 +1248,24 @@ func (m *SessionManager) SubscribeAll() <-chan GlobalEvent {
 	return ch
 }
 
+// PushStartError 向全局订阅者推送会话启动失败错误事件。
+// 供 handleChatSend 异步化后使用：Start 在后台 goroutine 执行，HTTP 已立即返回，
+// 失败时经 WebSocket 事件流推送到前端（前端按 convID 路由到 assistant 占位消息，
+// 显示「[错误] …」并清理 loading 状态）。
+func (m *SessionManager) PushStartError(convID, errMsg string) {
+	m.globalSubMu.RLock()
+	gsubs := m.globalSubscribers
+	m.globalSubMu.RUnlock()
+	ge := GlobalEvent{ConvID: convID, Event: Event{Type: EventError, Content: errMsg}}
+	for _, gsub := range gsubs {
+		select {
+		case gsub <- ge:
+		default:
+		}
+	}
+	log.Printf("[session] PushStartError conv=%s err=%s", convID, errMsg)
+}
+
 // UnsubscribeAll 取消全局订阅并 close 该 channel。
 // 传入 SubscribeAll 返回的只读 channel；若不存在则无操作。
 func (m *SessionManager) UnsubscribeAll(ch <-chan GlobalEvent) {
@@ -1165,6 +1300,15 @@ func closeGlobalChan(ch chan GlobalEvent) {
 	close(ch)
 }
 
+// shortenErr 截断错误文本（服务端 notice/日志用：过长错误不美观且占满通道）。
+func shortenErr(s string, max int) string {
+	s = strings.TrimSpace(s)
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "…"
+}
+
 // ListRunningByWorkspace 返回指定工作区下所有 Running=true 的 convID 列表。
 // 供前端状态指示器使用：显示每个工作区有多少 agent 在运行。
 func (m *SessionManager) ListRunningByWorkspace(wsRoot string) []string {
@@ -1179,6 +1323,30 @@ func (m *SessionManager) ListRunningByWorkspace(wsRoot string) []string {
 	return out
 }
 
+// LiveSnapshotEvent (convID) 生成当前会话的流式生成进度快照事件。
+// 供 WebSocket 端点重连补偿：客户端 WS 断线期间 content/thinking/tool 事件丢失，
+// 重连后推送本事件，前端据此重建占位消息（不再出现内容截断）。
+// convID 未运行或无 Loop 时返回 nil。
+func (m *SessionManager) LiveSnapshotEvent(convID string) *Event {
+	m.mu.RLock()
+	sess, ok := m.sessions[convID]
+	m.mu.RUnlock()
+	if !ok || sess == nil || !sess.Running || sess.Loop == nil {
+		return nil
+	}
+	content, reasoning, tools, events := sess.Loop.LiveSnapshot()
+	if content == "" && reasoning == "" && len(tools) == 0 && len(events) == 0 {
+		return nil // 无累积（尚未产出）→ 无需补偿
+	}
+	return &Event{
+		Type:         EventSnapshot,
+		Content:      content,
+		Reasoning:    reasoning,
+		ToolSegments: tools,
+		LiveEvents:   events,
+	}
+}
+
 // GetWorkspaceRoot 返回指定会话的 WorkspaceRoot。
 // 会话不存在返回空字符串。
 func (m *SessionManager) GetWorkspaceRoot(convID string) string {
@@ -1191,113 +1359,6 @@ func (m *SessionManager) GetWorkspaceRoot(convID string) string {
 	return sess.WorkspaceRoot
 }
 
-// doAutoCommit 在任务完成后自动执行 git add + git commit。
-// 遍历所有工作区目录（WorkspaceRoots），对每个 git 仓库提交改动。
-// 从 agent 的 result（最终输出）中提取第一行实质性内容作为 commit message，
-// 不直接使用用户消息，确保提交信息反映 agent 实际完成的工作。
-// 自动设置 git user config 避免因全局配置缺失导致提交失败。
-// 执行失败时只日志不 panic（不影响 agent 主流程）。
-func doAutoCommit(primaryRoot, task, result, commitMsg string) {
-	// 收集所有要提交的目录：用 WorkspaceRoots（全量），兜底 primaryRoot
-	roots := WorkspaceRoots
-	if len(roots) == 0 && primaryRoot != "" {
-		roots = []string{primaryRoot}
-	}
-	if len(roots) == 0 {
-		return
-	}
-
-	// 优先使用 agent 通过 generate_commit_message 工具生成的提交信息
-	msg := strings.TrimSpace(commitMsg)
-	if msg == "" {
-		msg = extractSummary(result)
-	}
-	if msg == "" {
-		msg = strings.TrimSpace(task)
-	}
-	if len(msg) > 72 {
-		msg = msg[:72]
-		if idx := strings.LastIndex(msg, " "); idx > 30 {
-			msg = msg[:idx]
-		}
-	}
-	if msg == "" {
-		msg = "auto commit"
-	}
-
-	for _, root := range roots {
-		if root == "" {
-			continue
-		}
-		// 检查是否为 git 仓库
-		gitDir := filepath.Join(root, ".git")
-		if fi, err := os.Stat(gitDir); err != nil || !fi.IsDir() {
-			continue // 不是 git 仓库，跳过
-		}
-
-		add := exec.Command("git", "add", "-A")
-		if runtime.GOOS == "windows" {
-			add.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-		}
-		add.Dir = root
-		if out, err := add.CombinedOutput(); err != nil {
-			fmt.Printf("[auto-commit] git add 失败 (%s): %v\n%s\n", root, err, decodeCmdOutput(out))
-			continue
-		}
-
-		commit := exec.Command("git",
-			"-c", "user.name=Pairode",
-			"-c", "user.email=agent@paircode.dev",
-			"commit", "-m", "auto: "+msg)
-		if runtime.GOOS == "windows" {
-			commit.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-		}
-		commit.Dir = root
-		if out, err := commit.CombinedOutput(); err != nil {
-			errStr := decodeCmdOutput(out)
-			if strings.Contains(errStr, "nothing to commit") {
-				_ = hideCmd(exec.Command("git", "reset", "HEAD")).Run()
-				continue
-			}
-			fmt.Printf("[auto-commit] git commit 失败 (%s): %v\n%s\n", root, err, errStr)
-			_ = hideCmd(exec.Command("git", "reset", "HEAD")).Run()
-			continue
-		}
-		fmt.Printf("[auto-commit] ✅ 已自动提交 (%s): auto: %s\n", root, msg)
-	}
-}
-
-// extractSummary 从 agent 输出的结果中提取第一行实质性内容。
-// 跳过 markdown 标题、空行、纯标点行，找到第一段有实际文字的句子。
-func extractSummary(text string) string {
-	lines := strings.Split(text, "\n")
-	for _, line := range lines {
-		l := strings.TrimSpace(line)
-		// 跳过 markdown 标题、分割线、空行
-		l = strings.TrimLeft(l, "#*> \t")
-		if l == "" || len(l) < 4 {
-			continue
-		}
-		// 跳过纯标点/符号行（如 "---"、"==="、"****"）
-		hasLetter := false
-		for _, r := range l {
-			if r > 127 || unicode.IsLetter(r) {
-				hasLetter = true
-				break
-			}
-		}
-		if !hasLetter {
-			continue
-		}
-		// 取第一句（到句号/换行），最长 72 字
-		if idx := strings.IndexAny(l, "。.！!\n"); idx > 0 {
-			l = l[:idx+1]
-		}
-		return strings.TrimSpace(l)
-	}
-	return ""
-}
-
 // AppendPersistedMessage 追加一条消息到 MessageStore（持久化）。
 // 供 web 层 startEventPersistWorker 在 EventDone 等时机调用，
 // 将 loop.History 中的新消息增量持久化。
@@ -1305,6 +1366,9 @@ func extractSummary(text string) string {
 func (m *SessionManager) AppendPersistedMessage(convID string, msg Message, segments []Segment) error {
 	m.mu.RLock()
 	store := m.store
+	if s, ok := m.sessions[convID]; ok && s.WorkspaceRoot != "" {
+		store = m.storeFor(s.WorkspaceRoot)
+	}
 	m.mu.RUnlock()
 	if store == nil {
 		return nil
@@ -1318,11 +1382,50 @@ func (m *SessionManager) AppendPersistedMessage(convID string, msg Message, segm
 func (m *SessionManager) AppendPersistedUserMessage(convID, content string) error {
 	m.mu.RLock()
 	store := m.store
+	if s, ok := m.sessions[convID]; ok && s.WorkspaceRoot != "" {
+		store = m.storeFor(s.WorkspaceRoot)
+	}
 	m.mu.RUnlock()
 	if store == nil {
 		return nil
 	}
 	return store.AppendUserMessage(convID, content)
+}
+
+// AppendPersistedUserMessageWithImages 追加一条带图片的用户消息（★ 2026-08-21 多模态）。
+// 供 web 层 handleChatSend 在调 Start 前调用：前端结构化发送 images 数组 → 落盘 →
+// Provider.Chat 转 OpenAI content 块数组发送。
+func (m *SessionManager) AppendPersistedUserMessageWithImages(convID, content string, images []ImagePart) error {
+	m.mu.RLock()
+	store := m.store
+	if s, ok := m.sessions[convID]; ok && s.WorkspaceRoot != "" {
+		store = m.storeFor(s.WorkspaceRoot)
+	}
+	m.mu.RUnlock()
+	if store == nil {
+		return nil
+	}
+	return store.AppendUserMessageWithImages(convID, content, images)
+}
+
+// AppendPersistedUserMessageTo 按指定工作区根追加用户消息（★ 2026-08-23 工作区隔离：
+// handleChatSend 提交的 workspaceRoot 直接路由到对应 store——切换工作区后继续向
+// 旧工作区会话发消息不再落进新工作区存储）。
+func (m *SessionManager) AppendPersistedUserMessageTo(wsRoot, convID, content string) error {
+	store := m.StoreFor(wsRoot)
+	if store == nil {
+		return nil
+	}
+	return store.AppendUserMessage(convID, content)
+}
+
+// AppendPersistedUserMessageToWithImages 按指定工作区根追加带图片用户消息。
+func (m *SessionManager) AppendPersistedUserMessageToWithImages(wsRoot, convID, content string, images []ImagePart) error {
+	store := m.StoreFor(wsRoot)
+	if store == nil {
+		return nil
+	}
+	return store.AppendUserMessageWithImages(convID, content, images)
 }
 
 // startPersistWorker 启动内部持久化 worker goroutine（在 SetWorkspaceRoot 注入 store 后自动调用）。
@@ -1335,7 +1438,16 @@ func (m *SessionManager) startPersistWorker() {
 	go func() {
 		for ge := range ch {
 			if ge.Event.Type == EventUsage && ge.Event.Usage != nil {
-				if store := m.Store(); store != nil {
+				// ★ 2026-08-23 按会话工作区根路由（运行中切换工作区不串库）。
+				m.mu.RLock()
+				var store ConversationStore
+				if s, ok := m.sessions[ge.ConvID]; ok && s.WorkspaceRoot != "" {
+					store = m.storeFor(s.WorkspaceRoot)
+				} else {
+					store = m.store
+				}
+				m.mu.RUnlock()
+				if store != nil {
 					_ = store.SetCtxStats(ge.ConvID, ge.Event.Usage)
 				}
 			}

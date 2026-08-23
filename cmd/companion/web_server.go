@@ -1,6 +1,5 @@
 // HTTP 服务器核心（无 GWui 依赖，webonly 和桌面模式共用）。
 //
-//go:build windows
 
 package main
 
@@ -12,6 +11,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"github.com/hoonfeng/paircode/pkg/executil"
 	"io"
 	"io/fs"
 	"log"
@@ -25,7 +25,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/hoonfeng/paircode/internal/agent"
@@ -192,6 +191,9 @@ func startWebUI(port int) {
 	if root != "" {
 		agentMgr.SetWorkspaceRoot(root)
 		agent.SetCodeGraphDB(agentMgr.RawDB())
+		// ★ 主项目根与共享 DB 成对设置：共享 DB 归属判定（cgStoreFor）依赖
+		//   cgSharedRoot，缺省空串导致主项目恒走 JSONStore（307MB 全量读写）。
+		agent.SetCodeGraphRoot(root)
 		// ★ 会话桥注入（ask_user/task_create 插件化路由）：插件工具经
 		//   ctx.hostTool.exec('ask_user'/'task_create') + _convID 路由回本会话，
 		//   多会话并发按 convID 精确路由（WaitAnswer 读会话 askCh / 工作区查询）。
@@ -251,7 +253,6 @@ func startWebUI(port int) {
 	root = core.Root() // 可为空（未打开工作区）
 	initReg := agent.NewRegistry()
 	agent.RegisterHostFrameworkTools(initReg, root)
-	agent.RegisterCommitMessageTool(initReg)
 	// ★ harness 对齐（默认关闭——全量工具集；WB_HARNESS=1 开启时精简 pair 独有工具）；
 	//   被禁用工具保留在注册表（前端可见可管理），内置工具集 builtin 可一键恢复
 	if n := agent.ApplyHarnessToolFilter(initReg, nil); n > 0 {
@@ -293,6 +294,9 @@ func startWebUI(port int) {
 	// 工作区文件夹变更时同步到 agent 路径解析
 	core.OnSyncWorkspace = func(primaryChanged bool) {
 		agent.WorkspaceRoots = core.Folders
+		// ★ 清理已移除工作区的图谱缓存（释放内存图引用；后台构建回填前
+		//   也会校验 root 是否仍活跃，不会复活已移除项目的缓存）。
+		agent.PruneCodeGraphs(core.Folders)
 		if primaryChanged {
 			// 主工作区变更：同步数据库/技能/MCP/记忆路径到新工作区
 			root := core.Root()
@@ -303,9 +307,13 @@ func startWebUI(port int) {
 				agent.SkillProjectDir = filepath.Join(root, ".pair", "skills")
 				agent.MCPProjectConfigPath = filepath.Join(root, ".pair", "mcp.json")
 				memory.SetRoot(root)
+			} else {
+				// ★ 主工作区被移除：清共享 DB 引用（SetWorkspaceRoot 已关闭
+				//   旧连接；codegraph 不再持句柄 → 删除工作区文件夹不失败）。
+				agent.SetCodeGraphDB(nil)
+				agent.SetCodeGraphRoot("")
 			}
 		}
-
 	}
 	mux := http.NewServeMux()
 
@@ -847,6 +855,8 @@ func (s *webServer) handleWorkspace(w http.ResponseWriter, r *http.Request) {
 			core.Folders = []string{root}
 			core.Settings.LastProject = root
 			core.Settings.WorkspaceFolders = core.Folders
+			// ★ 2026-08-22 同步 workspaceFolderLists（创建后刷新数据一致）
+			core.SyncWorkspaceFolderList(root, core.Folders)
 			core.Loaded = true
 			core.Save()
 			if core.OnSyncWorkspace != nil {
@@ -872,6 +882,11 @@ func (s *webServer) handleWorkspace(w http.ResponseWriter, r *http.Request) {
 			}
 			core.Folders = append(core.Folders, req.Path)
 			core.Settings.WorkspaceFolders = core.Folders
+			// ★ 2026-08-22 同步 workspaceFolderLists（每工作区文件夹列表快照）：
+			//   此前前端 saveWsList 只在明确事件时写该字段，add-folder 后若不写，
+			//   刷新页面 loadWsList 从它恢复 folders 时新项目丢——从后端兜底同步，
+			//   保证刷新/重启后 folders 完整。
+			core.SyncWorkspaceFolderList(core.Root(), core.Folders)
 			core.Save()
 			if core.OnSyncWorkspace != nil {
 				core.OnSyncWorkspace(true)
@@ -892,6 +907,8 @@ func (s *webServer) handleWorkspace(w http.ResponseWriter, r *http.Request) {
 			}
 			core.Folders = newFolders
 			core.Settings.WorkspaceFolders = core.Folders
+			// ★ 2026-08-22 同步 workspaceFolderLists（同上：移除后刷新数据一致）
+			core.SyncWorkspaceFolderList(core.Root(), core.Folders)
 			core.Save()
 			if core.OnSyncWorkspace != nil {
 				core.OnSyncWorkspace(true)
@@ -931,6 +948,8 @@ func (s *webServer) handleWorkspace(w http.ResponseWriter, r *http.Request) {
 			if !found {
 				core.Folders = append(core.Folders, projPath)
 				core.Settings.WorkspaceFolders = core.Folders
+				// ★ 2026-08-22 同步 workspaceFolderLists（新建项目后刷新数据一致）
+				core.SyncWorkspaceFolderList(core.Root(), core.Folders)
 				core.Save()
 			}
 			jsonResp(w, map[string]any{"ok": true, "path": projPath, "lang": lang})
@@ -941,6 +960,12 @@ func (s *webServer) handleWorkspace(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			root := filepath.Clean(req.Root) // 归一化（防双反斜杠污染）
+			// ★ 2026-08-23 工作区隔离：删除前显式关闭该根的 store/DB 缓存句柄
+			//   （多工作区缓存后不再由 SetWorkspaceRoot 代关——不关会导致
+			//   Windows 删除/移动工作区文件夹时 pair.db 被占用而失败）。
+			if agentMgr != nil {
+				agentMgr.CloseWorkspaceDB(root)
+			}
 			// 1. 从 RecentProjects 中移除
 			newProjects := make([]string, 0, len(core.Settings.RecentProjects))
 			for _, p := range core.Settings.RecentProjects {
@@ -1005,6 +1030,9 @@ func (s *webServer) handleWorkspace(w http.ResponseWriter, r *http.Request) {
 				core.Folders = flds
 				core.Settings.LastProject = req.Root
 				core.Settings.WorkspaceFolders = core.Folders
+				// ★ 2026-08-22 同步 workspaceFolderLists（切换后刷新数据一致）：
+				//   该工作区的文件夹列表快照以切换时提交的 folders 为准。
+				core.SyncWorkspaceFolderList(req.Root, core.Folders)
 				core.Loaded = true
 				core.Save()
 				if core.OnSyncWorkspace != nil {
@@ -1361,7 +1389,7 @@ func (s *webServer) handleExec(w http.ResponseWriter, r *http.Request) {
 	cmd := exec.CommandContext(r.Context(), cmdName, args...)
 	cmd.Dir = currDir
 	// ★ 2026-08-19：cmd.exe 是 console 程序——无控制台父进程时会弹窗，显式隐藏。
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	executil.HideWindow(cmd)
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -1392,7 +1420,9 @@ func (s *webServer) handleConversations(w http.ResponseWriter, r *http.Request) 
 	switch r.Method {
 	case "GET":
 		wsFilter := r.URL.Query().Get("workspace")
-		store := agentMgr.Store()
+		// ★ 2026-08-23 工作区隔离：列表按请求工作区路由 store（此前全局 Store()
+		//   → 切换后查询旧工作区对话拿到的是新工作区存储，列表为空/串数据）。
+		store := agentMgr.StoreFor(wsFilter)
 		if store == nil {
 			jsonResp(w, []agent.ConversationMeta{})
 			return
@@ -1417,7 +1447,7 @@ func (s *webServer) handleConversations(w http.ResponseWriter, r *http.Request) 
 			jsonErr(w, err.Error())
 			return
 		}
-		store := agentMgr.Store()
+		store := agentMgr.StoreFor(req.WorkspaceRoot)
 		if store == nil {
 			jsonErr(w, "消息存储未初始化")
 			return
@@ -1461,7 +1491,11 @@ func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Reques
 		subSub = parts[2]
 	}
 
-	store := agentMgr.Store()
+	// ★ 2026-08-23 工作区隔离：按请求工作区根路由 store（前端对话加载/回放带
+	//   workspaceRoot 参数；缺省=当前工作区）。运行中切换工作区后回放旧工作区
+	//   对话不再落到新工作区存储。
+	wsRoot := r.URL.Query().Get("workspaceRoot")
+	store := agentMgr.StoreFor(wsRoot)
 	if store == nil {
 		jsonErr(w, "消息存储未初始化")
 		return
@@ -1487,7 +1521,9 @@ func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Reques
 			if beforeStr != "" {
 				var before int
 				fmt.Sscanf(beforeStr, "%d", &before)
-				msgs, err := store.LoadBefore(id, before, limit)
+				// ★ 2026-08-22 展示专用：全量合并后再按合并条数 limit
+				//（此前按原始行 limit，长对话每轮只返回 1~5 条超大合并消息，加载慢）
+				msgs, err := store.LoadBeforeForDisplay(id, before, limit)
 				if err != nil {
 					jsonErr(w, err.Error())
 					return
@@ -1495,11 +1531,10 @@ func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Reques
 				if msgs == nil {
 					msgs = []agent.StoredMessage{}
 				}
-				msgs = agent.MergeConsecutiveAssistants(msgs)
 				total, _ := store.Count(id)
 				jsonResp(w, map[string]any{"messages": msgs, "total": total})
 			} else {
-				msgs, total, err := store.LoadLatest(id, limit)
+				msgs, total, err := store.LoadLatestForDisplay(id, limit)
 				if err != nil {
 					jsonErr(w, err.Error())
 					return
@@ -1507,7 +1542,6 @@ func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Reques
 				if msgs == nil {
 					msgs = []agent.StoredMessage{}
 				}
-				msgs = agent.MergeConsecutiveAssistants(msgs)
 				jsonResp(w, map[string]any{"messages": msgs, "total": total})
 			}
 
@@ -2379,21 +2413,25 @@ func buildWebSystemPrompt() string {
 }
 
 // buildWebProvider 构建 LLM Provider（桌面和 web 端共享）。
+// ★ 2026-08-21：改用 ResolveProviderParams() 获取最终参数（含 agentloop 装配器覆盖：
+//
+//	模型级温度/思考/输出/上下文/多模态），不再直接读 core.Settings 业务字段。
 func buildWebProvider() agent.Provider {
-	s := core.Settings
-	if s.APIKey == "" || s.BaseURL == "" {
+	cur := agent.ResolveProviderParams()
+	if cur.APIKey == "" || cur.BaseURL == "" {
 		return nil
 	}
-	if s.MaxTokens > 0 && s.MaxTokens < 8192 {
-		log.Printf("[WARN] maxTokens=%d 过小（<8192），可能导致思考/回复被截断。建议在设置中调大至 ≥8192", s.MaxTokens)
+	if cur.MaxTokens > 0 && cur.MaxTokens < 8192 {
+		log.Printf("[WARN] maxTokens=%d 过小（<8192），可能导致思考/回复被截断。建议在设置中调大至 ≥8192", cur.MaxTokens)
 	}
 	return &agent.OpenAIProvider{
-		BaseURL:      s.BaseURL,
-		APIKey:       s.APIKey,
-		Model:        core.MainModel(),
-		Temperature:  core.Temperature(),
-		MaxTokens:    s.MaxTokens,
-		ThinkingMode: s.ThinkingMode,
+		BaseURL:      cur.BaseURL,
+		APIKey:       cur.APIKey,
+		Model:        cur.Model,
+		Temperature:  cur.Temperature,
+		MaxTokens:    cur.MaxTokens,
+		ThinkingMode: cur.ThinkingMode,
+		Multimodal:   cur.Multimodal, // ★ 2026-08-21 多模态：模型级参数标记 → Provider 以多模态格式发送图片
 	}
 }
 
@@ -2409,10 +2447,16 @@ func countStates(states []*agent.ExecutionState, status agent.ExecStatus) int {
 }
 
 // buildWebLoopOpts 构建 agent.LoopOpts（统一版本，平台差异通过 webCompressor 回调）。
-func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) agent.LoopOpts {
+func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool, wsRoot string) agent.LoopOpts {
 	prov := buildWebProvider()
 
-	root := core.Root()
+	// ★ 2026-08-23 工作区隔离（重大 BUG）：会话根由请求指定，不再用全局当前根
+	//   core.Root()——前端为其他工作区发起会话时，工具注册根必须等于会话根；
+	//   运行中切换全局工作区也只影响新会话，不改变已注册工具的根。
+	if wsRoot == "" {
+		wsRoot = core.Root()
+	}
+	root := wsRoot
 	agent.WorkspaceRoots = core.Folders
 	if root != "" {
 		agent.SkillProjectDir = filepath.Join(root, ".pair", "skills")
@@ -2429,7 +2473,6 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 	}
 	reg := agent.NewRegistry()
 	agent.RegisterHostFrameworkTools(reg, root)
-	agent.RegisterCommitMessageTool(reg)
 	// ★ 插件系统：全局 PluginHost 的 cordis_* 工具（浏览器插件面板同源）
 	if ph := handler.GetPluginHost(); ph != nil {
 		agent.RegisterCordisTools(reg, ph, root)
@@ -2466,6 +2509,9 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 		agent.MergePluginTools(reg, pluginHost)
 	}
 	agent.SetCodeGraphDB(agentMgr.RawDB())
+	// ★ 与 SetCodeGraphDB 成对：buildWebLoopOpts 每次构建会话注册表时同步
+	//   主项目根（共享 DB 归属判定），与 startWebUI 启动路径保持一致。
+	agent.SetCodeGraphRoot(core.Root())
 	agent.InitDebugLogger(root, 50)
 
 	sys := buildWebSystemPrompt()
@@ -2488,7 +2534,9 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 
 	var sumErr error
 	if convID != "" {
-		if store := agentMgr.Store(); store != nil {
+		// ★ 2026-08-23 工作区隔离：会话历史加载按会话根路由 store（此前全局
+		//   Store() 在切换工作区后可能读到其他工作区的存储）。
+		if store := agentMgr.StoreFor(root); store != nil {
 			raw, loadErr := store.LoadAll(convID)
 			if loadErr != nil {
 				log.Printf("[chat] LoadAll 失败 conv=%s err=%v", convID, loadErr)
@@ -2522,7 +2570,8 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool) ag
 	// ★★★ 会话连贯性上下文：主动注入任务进度、对话摘要、相关记忆、项目归属、工作区结构 ★★★
 	// 核心思想：主动注入 > 被动工具。Agent 不应依赖自己"想起来"去调用 memory_* 工具，
 	// 而应在每次对话恢复时由系统主动注入上下文，确保 Agent 知道"在干什么、干过什么"。
-	if resumeCtx := agent.BuildResumeContext(convID, message, history, agentMgr.Store(), core.Folders); resumeCtx != "" {
+	// ★ 2026-08-23 工作区隔离：store/roots 均按会话根（此前 core.Folders 全局切换后串台）。
+	if resumeCtx := agent.BuildResumeContext(convID, message, history, agentMgr.StoreFor(root), []string{root}); resumeCtx != "" {
 		// 注入为系统提示的动态后缀（在 CACHE_BOUNDARY 之后，不影响 KV Cache 前缀）
 		sys += "\n\n" + resumeCtx
 	}
@@ -2567,11 +2616,12 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Message       string `json:"message"`
-		SessionID     string `json:"sessionId"`
-		Autonomous    bool   `json:"autonomous"`
-		ConvID        string `json:"convId"`
-		WorkspaceRoot string `json:"workspaceRoot"`
+		Message       string            `json:"message"`
+		SessionID     string            `json:"sessionId"`
+		Autonomous    bool              `json:"autonomous"`
+		ConvID        string            `json:"convId"`
+		WorkspaceRoot string            `json:"workspaceRoot"`
+		Images        []agent.ImagePart `json:"images,omitempty"` // ★ 2026-08-21 多模态：前端结构化发送的图片（base64 data URL / http(s) URL）
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonErr(w, err.Error())
@@ -2601,87 +2651,105 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := agentMgr.AppendPersistedUserMessage(req.ConvID, req.Message); err != nil {
-		log.Printf("[chat] AppendPersistedUserMessage 失败 conv=%s err=%v", req.ConvID, err)
-		jsonErr(w, "写入用户消息失败: "+err.Error())
-		return
+	if len(req.Images) > 0 {
+		// ★ 2026-08-21 多模态：带图片的用户消息落盘（Images 随消息持久化，回放/历史加载保留）
+		// ★ 2026-08-23 工作区隔离：按请求工作区根路由 store（切换后不在新工作区落盘）。
+		if err := agentMgr.AppendPersistedUserMessageToWithImages(req.WorkspaceRoot, req.ConvID, req.Message, req.Images); err != nil {
+			log.Printf("[chat] AppendPersistedUserMessageWithImages 失败 conv=%s err=%v", req.ConvID, err)
+			jsonErr(w, "写入用户消息失败: "+err.Error())
+			return
+		}
+	} else {
+		if err := agentMgr.AppendPersistedUserMessageTo(req.WorkspaceRoot, req.ConvID, req.Message); err != nil {
+			log.Printf("[chat] AppendPersistedUserMessage 失败 conv=%s err=%v", req.ConvID, err)
+			jsonErr(w, "写入用户消息失败: "+err.Error())
+			return
+		}
 	}
-	// 记录当前消息索引，后续文件编辑快照关联到此消息
-	if store := agentMgr.Store(); store != nil {
+	// 记录当前消息索引，后续文件编辑快照关联到此消息（★ 按会话根路由 store）
+	if store := agentMgr.StoreFor(req.WorkspaceRoot); store != nil {
 		if count, err := store.Count(req.ConvID); err == nil && count > 0 {
 			if tr := agent.GetTracker(); tr != nil {
 				tr.SetCurrentMsg(req.ConvID, count-1)
 			}
 		}
 	}
-	opts := s.buildWebLoopOpts(req.ConvID, req.Message, req.Autonomous)
-	// ★ 2026-08-21：Provider 判空——清空配置后 APIKey/BaseURL 为空 → buildWebProvider
-	//   返回 nil → Loop.Provider=nil → agentloop 插件首次 loop.llm.chat 触发
-	//   nil pointer panic（[session] Loop goroutine panic）。此处前置拦截给友好提示。
-	if opts.Provider == nil {
-		jsonErr(w, "未配置 AI 服务商（APIKey/BaseURL 为空）：请先在「设置 → AI」中添加并应用 AI 配置，再发送消息")
-		return
-	}
-	opts.WorkspaceRoot = req.WorkspaceRoot
-	// ★ 工作区工具集白名单（2026-08-17）：agent 只暴露「会话工作区工具集」声明的
-	//   工具——有配置只暴露配置里的；无配置先自动创建基础工具集（极简核心 +
-	//   框架本身提供的工具），再按声明收敛。MergePluginTools 全量启用后应用，
-	//   插件工具未加入工具集 → 对 agent 隐藏（cordis/前端仍可见可管理）。
-	//   工作区隔离：每个工作区读自己的 .pair/toolsets/，移除/加入互不影响。
-	if opts.Registry != nil {
-		agent.ApplyWorkspaceToolsetWhitelist(handler.GetPluginHost(), opts.Registry, req.WorkspaceRoot)
-	}
+	// ★ 2026-08-22 异步 Start：重活（opts 构建/插件合并/会话上下文注入/会话装配/历史加载）
+	//   可能在 10s~76s 波动（实测日志），原同步等待会让前端 30s 超时显示「请求超时」。
+	//   现改为 HTTP 立即返回「马上的消息」，Start 在后台 goroutine 执行；
+	//   失败经 PushStartError → WS error 事件推送（前端按 convID 路由、清理 loading）。
+	//   快速校验（消息空/未配置 Provider/用户消息落盘失败）保持在同步段，失败语义不变。
+	go func() {
+		// ★ 2026-08-23 工作区隔离：会话根（请求指定）贯穿 buildWebLoopOpts。
+		opts := s.buildWebLoopOpts(req.ConvID, req.Message, req.Autonomous, req.WorkspaceRoot)
+		// ★ 2026-08-21：Provider 判空——清空配置后 APIKey/BaseURL 为空 → buildWebProvider
+		//   返回 nil → Loop.Provider=nil → agentloop 插件首次 loop.llm.chat 触发
+		//   nil pointer panic（[session] Loop goroutine panic）。此处前置拦截给友好提示。
+		if opts.Provider == nil {
+			agentMgr.PushStartError(req.ConvID, "未配置 AI 服务商（APIKey/BaseURL 为空）：请先在「设置 → AI」中添加并应用 AI 配置，再发送消息")
+			return
+		}
+		opts.WorkspaceRoot = req.WorkspaceRoot
+		// ★ 工作区工具集白名单（2026-08-17）：agent 只暴露「会话工作区工具集」声明的
+		//   工具——有配置只暴露配置里的；无配置先自动创建基础工具集（极简核心 +
+		//   框架本身提供的工具），再按声明收敛。MergePluginTools 全量启用后应用，
+		//   插件工具未加入工具集 → 对 agent 隐藏（cordis/前端仍可见可管理）。
+		//   工作区隔离：每个工作区读自己的 .pair/toolsets/，移除/加入互不影响。
+		if opts.Registry != nil {
+			agent.ApplyWorkspaceToolsetWhitelist(handler.GetPluginHost(), opts.Registry, req.WorkspaceRoot)
+		}
 
-	// 先从全局设置取审核配置（默认值）
-	opts.ReviewMode = core.Settings.ReviewMode
-	opts.ReviewBlacklist = core.Settings.ReviewBlacklist
-	opts.ReviewWhitelist = core.Settings.ReviewWhitelist
-	// ★ 如果请求中指定了工作区根路径，从工作区配置覆盖审核配置
-	if req.WorkspaceRoot != "" {
-		wrMode, wrBlack, wrWhite := agent.LoadWorkspaceReviewConfig(req.WorkspaceRoot)
-		if wrMode != "" && wrMode != "auto" {
-			opts.ReviewMode = wrMode
-		}
-		if wrBlack != nil {
-			opts.ReviewBlacklist = wrBlack
-		}
-		if wrWhite != nil {
-			opts.ReviewWhitelist = wrWhite
-		}
-	}
-	// ★ 配置消费插件化：Review/Plan Provider 参数统一经装配点解析。
-	cur := agent.ResolveProviderParams()
-	if opts.ReviewMode == "auto" && cur.ReviewModel != "" {
-		pm := strings.TrimSpace(cur.PlanModel)
-		if pm != "" && cur.BaseURL != "" && cur.APIKey != "" {
-			opts.ReviewProvider = &agent.OpenAIProvider{BaseURL: cur.BaseURL, APIKey: cur.APIKey, Model: pm, Temperature: -1, ThinkingMode: "non-thinking"}
-		}
-	}
-
-	if req.Autonomous {
-		pm := strings.TrimSpace(cur.PlanModel)
-		if pm != "" && cur.BaseURL != "" && cur.APIKey != "" {
-			opts.PlanProvider = &agent.OpenAIProvider{
-				BaseURL: cur.BaseURL, APIKey: cur.APIKey,
-				Model: pm, Temperature: cur.Temperature, MaxTokens: cur.MaxTokens,
-				ThinkingMode: cur.ThinkingMode,
+		// 先从全局设置取审核配置（默认值）
+		opts.ReviewMode = core.Settings.ReviewMode
+		opts.ReviewBlacklist = core.Settings.ReviewBlacklist
+		opts.ReviewWhitelist = core.Settings.ReviewWhitelist
+		// ★ 如果请求中指定了工作区根路径，从工作区配置覆盖审核配置
+		if req.WorkspaceRoot != "" {
+			wrMode, wrBlack, wrWhite := agent.LoadWorkspaceReviewConfig(req.WorkspaceRoot)
+			if wrMode != "" && wrMode != "auto" {
+				opts.ReviewMode = wrMode
 			}
-		} else if prov := buildWebProvider(); prov != nil {
-			opts.PlanProvider = prov
+			if wrBlack != nil {
+				opts.ReviewBlacklist = wrBlack
+			}
+			if wrWhite != nil {
+				opts.ReviewWhitelist = wrWhite
+			}
 		}
-	}
+		// ★ 配置消费插件化：Review/Plan Provider 参数统一经装配点解析。
+		cur := agent.ResolveProviderParams()
+		if opts.ReviewMode == "auto" && cur.ReviewModel != "" {
+			pm := strings.TrimSpace(cur.PlanModel)
+			if pm != "" && cur.BaseURL != "" && cur.APIKey != "" {
+				opts.ReviewProvider = &agent.OpenAIProvider{BaseURL: cur.BaseURL, APIKey: cur.APIKey, Model: pm, Temperature: -1, ThinkingMode: "non-thinking"}
+			}
+		}
 
-	// 使用分离的 context：setupCtx 用于 Start 方法本身的超时（避免在获取锁或建表时永久阻塞），
-	// Loop 的运行由内部独立的 context 管理（Stop 可取消），不受此超时影响。
-	setupCtx, setupCancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer setupCancel()
-	if err := agentMgr.Start(setupCtx, req.ConvID, req.Message, opts); err != nil {
-		// ★ Start 失败日志（排查「无响应」：前端 catch 会显示启动失败，此处留档）
-		log.Printf("[chat] Start 失败 conv=%s err=%v", req.ConvID, err)
-		jsonErr(w, err.Error())
-		return
-	}
-	log.Printf("[chat] Start 成功 conv=%s（agent 循环已启动）", req.ConvID)
+		if req.Autonomous {
+			pm := strings.TrimSpace(cur.PlanModel)
+			if pm != "" && cur.BaseURL != "" && cur.APIKey != "" {
+				opts.PlanProvider = &agent.OpenAIProvider{
+					BaseURL: cur.BaseURL, APIKey: cur.APIKey,
+					Model: pm, Temperature: cur.Temperature, MaxTokens: cur.MaxTokens,
+					ThinkingMode: cur.ThinkingMode,
+				}
+			} else if prov := buildWebProvider(); prov != nil {
+				opts.PlanProvider = prov
+			}
+		}
+
+		// 使用分离的 context：setupCtx 用于 Start 方法本身的超时（避免在获取锁或建表时永久阻塞），
+		// Loop 的运行由内部独立的 context 管理（Stop 可取消），不受此超时影响。
+		setupCtx, setupCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer setupCancel()
+		if err := agentMgr.Start(setupCtx, req.ConvID, req.Message, opts); err != nil {
+			// ★ Start 失败日志（排查「无响应」：异步后经 WS error 事件推送，此处留档）
+			log.Printf("[chat] Start 失败 conv=%s err=%v", req.ConvID, err)
+			agentMgr.PushStartError(req.ConvID, err.Error())
+			return
+		}
+		log.Printf("[chat] Start 成功 conv=%s（agent 循环已启动）", req.ConvID)
+	}()
 	jsonResp(w, map[string]any{"ok": true, "convId": req.ConvID})
 }
 
@@ -2999,7 +3067,7 @@ func runGitInternal(ctx context.Context, args ...string) (string, error) {
 	}
 	fullArgs := append([]string{"-C", dir, "-c", "core.quotepath=false"}, args...)
 	cmd := exec.CommandContext(ctx, "git", fullArgs...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	executil.HideWindow(cmd)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
