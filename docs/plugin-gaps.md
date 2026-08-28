@@ -27,15 +27,23 @@
 
 - **后端完整构建**：`CGO_ENABLED=1 go build -o pair.exe ./cmd/companion` ✅（pair.exe 74.7MB）。
 - **启动冒烟**：`WEB_PORT=9322 ./pair.exe` 启动 → 进程持续运行、`/api/health` 返回 200、启动日志无 FATAL/panic、全局插件宿主 43 个插件、工具集 44 个（18 插件，含 t2 新增 7 个 tool-*）→ 验证后立即终止，端口释放。
-- **前端构建**：⚠️ **沙箱环境阻断**——`npm run build`（plugins-src/ui-app）在 DSH 沙箱内无法执行：vite 依赖 esbuild JS API，而 esbuild 服务进程 spawn（pipe stdio）被 DSH 沙箱设计边界拦截（`spawn EPERM`，Node `child_process.spawn` 的 pipe/overlapped stdio 均被禁；本会话无批准升级通道）。前端源码工程位于 `plugins-src/ui-app`（vite 输出 `.pair/assets/runtime/web`，packager 经 robocopy 同步到 `cmd/companion/web-ui/dist` 作 embed 兜底）；t5 验收命令中的 `cd cmd/companion/web-ui && npm run build` 目录本身无 package.json（该目录仅含 dist/node_modules），正确入口为 `cd plugins-src/ui-app && npm run build`。**前端构建需在沙箱外环境执行**（同一命令即可），dist 产物为既有构建结果。
+- **前端构建**：⚠️ **沙箱环境阻断**——`npm run build`（入口 `cmd/companion/web-ui`（兼容 package.json，2026-08-29 新增）→ `scripts/build-ui.mjs` + `plugins-src/ui-app` vite 壳 + `scripts/sync-web-dist.mjs` 同步 dist）在 DSH 沙箱内无法执行：vite/esbuild 服务进程 spawn（pipe stdio）被 DSH 沙箱设计边界拦截（`spawn EPERM`，Node `child_process.spawn` 的 pipe/overlapped stdio 均被禁；本会话无批准升级通道）。**前端构建需在沙箱外执行**（同一命令即可），dist 产物为既有构建结果。
+
+### 集成收尾处理（2026-08-29）
+
+- **✅ 基线快照与提交**：团队既有 WIP + t2 实施已提交（`07faf08e` 集成提交、`0c7f5ff0` docs 收尾）；集成收尾另提交 `18eb91b2`（敏感配置移出跟踪/运行时状态忽略/杂物清理）与 `0bde4354`（web-ui 构建兼容入口路径修正）；提交后 `git status` 完全干净。
+- **⚠️ 敏感信息处置（已上报 captain）**：`config/ai-presets.json` 与 `cmd/desktop/config/settings.json` 含**真实 API key**（sk_tr_…/sk-56cf…）且早于本次已入 git 历史（未 push，本地 master ahead 1062）。本次收尾已将 4 个本地配置（ai-presets.json、cmd/desktop/config/*、dev/desktop_probe/config/*）`git rm --cached` 移出跟踪并加入 `.gitignore`（防再犯）；**建议轮换上述 key**，历史清除（filter-repo 或接受现状）由 captain 决策。
+- **✅ M1/M2 修复**：见「遗留项与后续建议」第 1 条与 docs/plugin-verification.md「处理状态」。
+- **✅ generate_commit_message 失配修复**：tool-system 插件移除该死工具（宿主无实现、零消费方）。
+- **⚠️ 环境依赖测试复跑结论**：TestToolLandingSpotCheck / TestToolProjectInfoJSNative / TestToolVerifyJSNative 复跑仍失败——`ctx.binary.exec: 插件二进制不存在`（tool-project-info/tool-verify 插件仍 binary 形态；build-plugin-bins.bat 已废弃（插件全 JS 化，禁止再跑）；内嵌内核未覆盖 project-info/verify 组）。属**团队既有 WIP 失配**（非 t2/t5 引入），复跑/修复路径：将 tool-project-info/tool-verify/tool-memory 插件 JS 原生迁移（对齐 tool-core 模式），或在内嵌内核（`internal/agent/embedded_tools.go`）补齐对应注册函数；建议后续专项任务处理。
 
 ### 遗留项与后续建议
 
 1. **t4 审查 findings（verdict=pass，2 medium + 5 low）**：M1（roles 漂移）与 M2（钩子信任门）**✅ 已修复（2026-08-29 集成收尾）**——reviewer.md 已同步 + 新增漂移守卫测试 `TestRolePromptDiskDefaultSync`；钩子装载默认不信任项目钩子（`PAIRCODE_TRUST_PROJECT_HOOKS=1` 显式信任）+ 新增 `TestLoopHookProjectTrustGate`；详见 docs/plugin-verification.md「处理状态」。L1–L5 低危项保留记录，建议后续 cleanup 任务处理。
 2. **11 个 internal 死包**（jobs/permission/provider/vterm/agenttools/codetypes/event/store/model/summary/verify）：删除需产品确认。
 3. **S2/F2/F3/L3/L4/G2/G3/G4（P2）**：见上表理由，建议专项清理。
-4. **前端构建流水线**：建议在沙箱外 CI/本机执行 `cd plugins-src/ui-app && npm run build` 后再打包；`scripts/build-ui.mjs`（UI 区域插件 bundle）同样依赖 vite/esbuild，需同环境执行。
-5. **验证命令目录修正**：后续集成/验证任务引用前端构建时，用 `plugins-src/ui-app` 而非 `cmd/companion/web-ui`（后者无 package.json）。
+4. **前端构建流水线**：沙箱外执行 `cd cmd/companion/web-ui && npm run build`（兼容入口，含 9 个 UI 区域插件 + vite 壳 + dist 同步；路径已修正）；或直接 `cd plugins-src/ui-app && npm run build`。
+5. **验证命令目录**：`cmd/companion/web-ui` 现已有兼容 package.json（构建入口有效），vite 壳产物输出 `.pair/assets/runtime/web`，`scripts/sync-web-dist.mjs` 同步 embed 兜底 dist。
 
 ---
 
