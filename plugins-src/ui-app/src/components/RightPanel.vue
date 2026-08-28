@@ -132,7 +132,7 @@
                         </div>
                         <div v-else-if="seg.type === 'ask_user'" class="tl-item">
                           <span class="tl-dot tl-dot-ask"></span>
-                          <div class="tl-body"><AskUserCard :question="seg.question" :ask-type="seg.askType" :options="seg.options" :call-id="seg.callId" :answered="seg._answered" @answer="onAskAnswer(seg, $event)" /></div>
+                          <div class="tl-body"><AskUserCard :question="seg.question" :ask-type="seg.askType" :options="seg.options" :questions="seg.questions" :call-id="seg.callId" :answered="seg._answered" @answer="onAskAnswer(seg, $event)" /></div>
                         </div>
                         <div v-else-if="seg.type === 'content'" class="tl-item tl-content-item">
                           <span class="tl-dot tl-dot-content"></span>
@@ -988,7 +988,7 @@ const loadMoreMessages = async () => {
         content: m.message?.content || m.content || '',
         segments: (m.segments || []).map(seg => {
           if (seg.type === 'ask_user') {
-            seg._answered = !!seg.answer
+            seg._answered = !!(seg.answer || (seg.answers && seg.answers.length))
             seg.askType = normalizeAskType(seg.askType || 'text')
           }
           return seg
@@ -1467,12 +1467,26 @@ const onFeedbackKeydown = (e) => {
   }
 }
 
-const onAskAnswer = (seg, { callId, answer }) => {
-  if (!answer) return; seg.answer = answer
+const onAskAnswer = (seg, { callId, answer, answers }) => {
+  if (answers && answers.length) {
+    seg.answers = answers
+  } else if (answer) {
+    seg.answer = answer
+  } else {
+    return
+  }
   submitAskAnswer(seg)
 }
 
 const submitAskAnswer = async (seg) => {
+  // ★ Round3 ⑤：多问题 answers 数组优先，缺省回落单问题 answer（后端双兼容）
+  if (seg.answers && seg.answers.length) {
+    seg._answered = true
+    try {
+      await api.apiPost('/chat/answer', { convId: state.currentConvId, callId: seg.callId, answers: seg.answers })
+    } catch {}
+    return
+  }
   const answer = (seg.answer || '').trim()
   if (!answer) return; seg._answered = true
   try { await api.apiPost('/chat/answer', { convId: state.currentConvId, answer }) } catch {}
@@ -1685,7 +1699,7 @@ const switchConv = async (id) => {
               return { type: 'content', content: seg.result || '' }
             }
             if (seg.type === 'ask_user') {
-              seg._answered = !!seg.answer
+              seg._answered = !!(seg.answer || (seg.answers && seg.answers.length))
               seg.askType = normalizeAskType(seg.askType || 'text')
             }
             return seg

@@ -1,5 +1,36 @@
 <template>
   <div class="ask-user-card">
+    <!-- ★ Round3 ⑤ 多问题模式：questions 数组渲染列表，一次「提交」回灌 answers -->
+    <div v-if="questions && questions.length" class="ask-multi-list">
+      <div v-for="(q, qi) in questions" :key="q.id || qi" class="ask-multi-item">
+        <div class="ask-user-question">{{ qi + 1 }}. {{ q.question }}</div>
+        <!-- 有选项：单选/多选（multi_select 区分） -->
+        <div v-if="q.options && q.options.length" class="ask-user-options">
+          <label v-for="opt in q.options" :key="opt"
+                 :class="['ask-option', { selected: isMultiSelected(q, opt) }]"
+                 @click="toggleMultiOption(q, opt)">
+            <span v-if="q.multiSelect" :class="['ask-checkbox', { checked: isMultiSelected(q, opt) }]">
+              <span v-if="isMultiSelected(q, opt)" class="ask-checkmark">✓</span>
+            </span>
+            <span v-else :class="['ask-radio-circle', { checked: isMultiSelected(q, opt) }]"></span>
+            <span class="ask-option-text">{{ opt }}</span>
+          </label>
+        </div>
+        <!-- 无选项：文本输入 -->
+        <div v-else class="ask-user-input-row">
+          <input v-model="multiTexts[q.id]" class="ask-user-input" type="text"
+                 placeholder="输入回答..." @keydown.enter="submitMultiForm" :disabled="answered" />
+        </div>
+      </div>
+      <div class="ask-multi-actions">
+        <button class="ask-user-btn" @click="submitMultiForm" :disabled="answered || !multiFormValid">
+          {{ answered ? '已回答' : '提交回答' }}
+        </button>
+      </div>
+    </div>
+
+    <!-- 单问题模式（原路径不变） -->
+    <div v-else>
     <div class="ask-user-question">{{ question }}</div>
 
     <!-- 单选 (radio)：options 为空时降级为文本输入（见下方兜底） -->
@@ -66,6 +97,7 @@
         {{ answered ? '已回答' : '发送' }}
       </button>
     </div>
+    </div>
   </div>
 </template>
 
@@ -78,8 +110,45 @@ const props = defineProps({
   options: { type: Array, default: () => [] },
   callId: { type: String, default: '' },
   answered: { type: Boolean, default: false },
+  // ★ Round3 ⑤ 多问题：questions 数组 [{id, question, options?, multiSelect?}]
+  questions: { type: Array, default: () => [] },
 })
 const emit = defineEmits(['answer'])
+
+// ── 多问题模式（Round3 ⑤） ──
+const multiTexts = ref({})        // qid → 文本输入
+const multiSelections = ref({})   // qid → 已选项数组
+function isMultiSelected(q, opt) {
+  return (multiSelections.value[q.id] || []).includes(opt)
+}
+function toggleMultiOption(q, opt) {
+  const list = multiSelections.value[q.id] || []
+  if (q.multiSelect) {
+    const idx = list.indexOf(opt)
+    multiSelections.value[q.id] = idx >= 0 ? list.filter(o => o !== opt) : [...list, opt]
+  } else {
+    multiSelections.value[q.id] = [opt]
+  }
+}
+const multiFormValid = computed(() => {
+  const qs = props.questions || []
+  return qs.length > 0 && qs.every(q => {
+    if (q.options && q.options.length) return (multiSelections.value[q.id] || []).length > 0
+    return !!((multiTexts.value[q.id] || '').trim())
+  })
+})
+function submitMultiForm() {
+  const qs = props.questions || []
+  const answers = qs.map(q => {
+    let answer = ''
+    if (q.options && q.options.length) answer = (multiSelections.value[q.id] || []).join(', ')
+    else answer = (multiTexts.value[q.id] || '').trim()
+    return { id: q.id, answer }
+  })
+  emit('answer', { callId: props.callId, answers })
+}
+
+// ── 单问题模式（原逻辑不变） ──
 
 // hasOptions：选项列表非空（选择类卡片仅在有选项时渲染选项）
 const hasOptions = computed(() => Array.isArray(props.options) && props.options.length > 0)

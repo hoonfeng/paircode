@@ -16,6 +16,20 @@ import (
 	"time"
 )
 
+// SegmentQuestion 多问题提问的单条问题（Round3 ⑤ ask_user 多问题）。
+type SegmentQuestion struct {
+	ID          string   `json:"id"`                    // 问题 ID（回答回灌用）
+	Question    string   `json:"question"`              // 问题文本
+	Options     []string `json:"options,omitempty"`     // 选项（single/multi 类）
+	MultiSelect bool     `json:"multiSelect,omitempty"` // 是否多选
+}
+
+// SegmentAnswer 多问题提问的单条回答（Round3 ⑤）。
+type SegmentAnswer struct {
+	ID     string `json:"id"`
+	Answer string `json:"answer"`
+}
+
 // Segment 前端展示用的消息分段（thinking/content/tool_call/tool_result/ask_user 等）。
 type Segment struct {
 	Type     string   `json:"type"`               // thinking | content | tool_call | tool_result | ask_user
@@ -23,11 +37,15 @@ type Segment struct {
 	Name     string   `json:"name,omitempty"`     // 工具名（tool_call）
 	ArgsRaw  string   `json:"argsRaw,omitempty"`  // 工具参数 JSON 字符串（tool_call）
 	Result   string   `json:"result,omitempty"`   // 工具结果（tool_call）
-	Question string   `json:"question,omitempty"` // 问题文本（ask_user）
+	Question string   `json:"question,omitempty"` // 问题文本（ask_user 单问题路径）
 	CallID   string   `json:"callId,omitempty"`   // 工具调用 ID（tool_call/ask_user）
-	Answer   string   `json:"answer,omitempty"`   // 用户答案（ask_user）
+	Answer   string   `json:"answer,omitempty"`   // 用户答案（ask_user 单问题路径）
 	AskType  string   `json:"askType,omitempty"`  // 提问类型：text(默认) | single(单选) | multi(多选) | single-with-input(单选+自由输入)
 	Options  []string `json:"options,omitempty"`  // 选项列表（ask_user 选择类用），如 ["是","否","不确定"]
+	// ★ Round3 ⑤ 多问题：Questions/Answers 数组（旧 Question/Options/Answer 字段
+	//   保留序列化兼容——旧前端/历史数据不受影响）
+	Questions []SegmentQuestion `json:"questions,omitempty"`
+	Answers   []SegmentAnswer   `json:"answers,omitempty"`
 }
 
 // StoredMessage JSONL 中的一行。
@@ -199,19 +217,20 @@ func SegmentsFromMessage(msg Message, hist []Message, idx int) []Segment {
 		// ★ 委托工具（已随多角色模型移除 2026-08-16）不再生成 tool_call segment——
 		//   保留 ask_user 等交互式工具的 segment 逻辑
 		if name == "ask_user" {
-			// ★ ask_user 生成独立交互式 segment
-			question, askType, options := parseAskArgs(tc.Function.Arguments)
+			// ★ ask_user 生成独立交互式 segment（Round3 ⑤：多问题 questions 数组）
+			question, askType, options, questions := parseAskArgsV2(tc.Function.Arguments)
 			seg := Segment{
-				Type:     "ask_user",
-				Question: question,
-				AskType:  askType,
-				Options:  options,
-				CallID:   tc.ID,
+				Type:      "ask_user",
+				Question:  question,
+				AskType:   askType,
+				Options:   options,
+				Questions: questions,
+				CallID:    tc.ID,
 			}
 			if hist != nil {
 				for j := idx + 1; j < len(hist); j++ {
 					if hist[j].Role == RoleTool && hist[j].ToolCallID == tc.ID {
-						seg.Answer = hist[j].Content
+						seg.Answer, seg.Answers = parseAskResultV2(hist[j].Content)
 						break
 					}
 				}
@@ -320,9 +339,43 @@ func normalizeAskType(raw string) string {
 }
 
 func parseAskArgs(argsRaw string) (question, askType string, options []string) {
+	question, askType, options, _ = parseAskArgsV2(argsRaw)
+	return
+}
+
+// parseAskArgsV2 解析 ask_user 参数（Round3 ⑤）：questions 数组优先，
+// 缺省回落单问题路径（question/askType/options）。
+func parseAskArgsV2(argsRaw string) (question, askType string, options []string, questions []SegmentQuestion) {
 	var raw map[string]any
 	if err := json.Unmarshal([]byte(argsRaw), &raw); err != nil {
-		return argsRaw, "text", nil
+		return argsRaw, "text", nil, nil
+	}
+	// 多问题路径：questions: [{id, question, options?, multi_select?}]
+	if qs, ok := raw["questions"].([]any); ok && len(qs) > 0 {
+		for _, it := range qs {
+			m, ok := it.(map[string]any)
+			if !ok {
+				continue
+			}
+			q := SegmentQuestion{}
+			q.ID, _ = m["id"].(string)
+			q.Question, _ = m["question"].(string)
+			q.MultiSelect, _ = m["multi_select"].(bool)
+			if opts, ok := m["options"].([]any); ok {
+				for _, o := range opts {
+					if s, ok := o.(string); ok {
+						q.Options = append(q.Options, s)
+					}
+				}
+			}
+			if q.Question != "" {
+				questions = append(questions, q)
+			}
+		}
+		if len(questions) > 0 {
+			// 多问题：旧单问题字段不再填充（前端按 questions 渲染）
+			return "", "text", nil, questions
+		}
 	}
 	question, _ = raw["question"].(string)
 	if question == "" {
@@ -344,6 +397,51 @@ func parseAskArgs(argsRaw string) (question, askType string, options []string) {
 		}
 	}
 	return
+}
+
+// askQuestionsFromArgs 从已解析的工具参数取多问题列表（Round3 ⑤；无则 nil）。
+func askQuestionsFromArgs(args map[string]any) []SegmentQuestion {
+	raw, ok := args["questions"].([]any)
+	if !ok || len(raw) == 0 {
+		return nil
+	}
+	var out []SegmentQuestion
+	for _, it := range raw {
+		m, ok := it.(map[string]any)
+		if !ok {
+			continue
+		}
+		q := SegmentQuestion{}
+		q.ID, _ = m["id"].(string)
+		q.Question, _ = m["question"].(string)
+		q.MultiSelect, _ = m["multi_select"].(bool)
+		if opts, ok := m["options"].([]any); ok {
+			for _, o := range opts {
+				if s, ok := o.(string); ok {
+					q.Options = append(q.Options, s)
+				}
+			}
+		}
+		if q.Question != "" {
+			out = append(out, q)
+		}
+	}
+	return out
+}
+
+// parseAskResultV2 解析 ask_user 工具结果回灌：多问题（answers JSON 数组）优先，
+// 缺省回落单问题（整段文本即答案）。
+func parseAskResultV2(content string) (answer string, answers []SegmentAnswer) {
+	content = strings.TrimSpace(content)
+	if strings.HasPrefix(content, "{") {
+		var raw struct {
+			Answers []SegmentAnswer `json:"answers"`
+		}
+		if err := json.Unmarshal([]byte(content), &raw); err == nil && len(raw.Answers) > 0 {
+			return "", raw.Answers
+		}
+	}
+	return content, nil
 }
 
 // conversationsDir 返回 {root}/.pair/conversations/ 路径。

@@ -212,6 +212,10 @@ func startWebUI(port int) {
 			WaitAnswer: func(ctx context.Context, convID string) (string, error) {
 				return agentMgr.WaitAnswer(ctx, convID)
 			},
+			// ★ Round3 ⑤：多问题回答数组（answers 路由）
+			WaitAnswers: func(ctx context.Context, convID string) ([]agent.AskAnswer, error) {
+				return agentMgr.WaitAnswers(ctx, convID)
+			},
 			GetWorkspaceRoot: func(convID string) string {
 				return agentMgr.GetSessionWorkspaceRoot(convID)
 			},
@@ -2384,14 +2388,20 @@ func (s *webServer) handleChatCompact(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleChatAnswer 发送 ask_user 的用户回答。
+// ★ Round3 ⑤：支持多问题 answers 数组 [{id, answer}]（与旧单问题 {answer} 双兼容）。
 func (s *webServer) handleChatAnswer(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		jsonErr(w, "仅 POST")
 		return
 	}
 	var req struct {
-		ConvID string `json:"convId"`
-		Answer string `json:"answer"`
+		ConvID  string `json:"convId"`
+		CallID  string `json:"callId"`
+		Answer  string `json:"answer"`
+		Answers []struct {
+			ID     string `json:"id"`
+			Answer string `json:"answer"`
+		} `json:"answers"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonErr(w, err.Error())
@@ -2401,9 +2411,20 @@ func (s *webServer) handleChatAnswer(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, "convId 必填")
 		return
 	}
-	if err := agentMgr.SendAnswer(req.ConvID, req.Answer); err != nil {
-		jsonErr(w, err.Error())
-		return
+	if len(req.Answers) > 0 {
+		answers := make([]agent.AskAnswer, 0, len(req.Answers))
+		for _, a := range req.Answers {
+			answers = append(answers, agent.AskAnswer{ID: a.ID, Answer: a.Answer})
+		}
+		if err := agentMgr.SendAnswers(req.ConvID, answers); err != nil {
+			jsonErr(w, err.Error())
+			return
+		}
+	} else {
+		if err := agentMgr.SendAnswer(req.ConvID, req.Answer); err != nil {
+			jsonErr(w, err.Error())
+			return
+		}
 	}
 	jsonResp(w, map[string]any{"ok": true})
 }

@@ -144,20 +144,25 @@ function applyLiveSnapshot(convId, msg, rt, snap) {
         const toolName = ev.tool || ev.name || ''
         if (toolName === 'ask_user') {
           // 与 processAgentEvent 的 ask_user 分支对齐：重建交互式提问卡
+          // ★ Round3 ⑤：questions 多问题数组（后端已解析进 seg.questions）
           let question = ''
           let askType = 'text'
           let options = []
+          let questions = []
           try {
             const args = typeof ev.args === 'string' ? JSON.parse(ev.args) : ev.args
             question = args.question || '（无问题内容）'
             askType = normalizeAskType(args.askType || args.type || 'text')
             if (Array.isArray(args.options)) options = args.options
+            if (Array.isArray(args.questions)) questions = args.questions
           } catch {}
-          segments.push({
-            type: 'ask_user', question, askType, options,
+          const seg = {
+            type: 'ask_user', question, askType, options, questions,
             callId: ev.callId || '',
             answer: ev.content || '', _answered: !!ev.content,
-          })
+          }
+          if (questions.length > 0) seg.question = ''
+          segments.push(seg)
         } else {
           segments.push(restoreToolState({
             type: 'tool_call', name: toolName,
@@ -295,6 +300,7 @@ export function processAgentEvent(convId, data) {
       let question = ''
       let askType = 'text'
       let options = []
+      let questions = []
       try {
         const args = typeof data.args === 'string' ? JSON.parse(data.args) : data.args
         question = args.question || '（无问题内容）'
@@ -302,12 +308,18 @@ export function processAgentEvent(convId, data) {
         if (Array.isArray(args.options)) {
           options = args.options
         }
+        // ★ Round3 ⑤：多问题数组
+        if (Array.isArray(args.questions)) {
+          questions = args.questions
+        }
       } catch {}
-      msg.segments.push({
-        type: 'ask_user', question, askType, options,
+      const seg = {
+        type: 'ask_user', question, askType, options, questions,
         callId: data.callId || data.callID || '',
         answer: '', _answered: false,
-      })
+      }
+      if (questions.length > 0) seg.question = ''
+      msg.segments.push(seg)
     } else if (toolName === 'update_plan') {
       try {
         const args = data.args ? (typeof data.args === 'string' ? JSON.parse(data.args) : data.args) : {}

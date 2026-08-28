@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/hoonfeng/paircode/pkg/executil"
@@ -83,6 +84,12 @@ type ApprovalResult struct {
 	Reply    string // 用户输入的回复内容（拒绝时填写原因，允许时可选）
 }
 
+// AskAnswer 一条 ask_user 回答（Round3 ⑤ 多问题：ID 关联问题；单问题 ID 为空）。
+type AskAnswer struct {
+	ID     string `json:"id"`
+	Answer string `json:"answer"`
+}
+
 var DefaultApproved = ApprovalResult{Approved: true, Reply: ""}
 var DefaultDenied = ApprovalResult{Approved: false, Reply: "用户拒绝了此操作"}
 
@@ -100,7 +107,8 @@ type Session struct {
 	StartedAt     time.Time
 
 	// 交互通道（从 web 层 webAgentSession 迁移）
-	askCh      chan string         // ask_user 工具阻塞等用户回答
+	// ★ Round3 ⑤：askCh 结构化（多问题 answers 数组；单问题=单元素数组，向后兼容）
+	askCh      chan []AskAnswer // ask_user 工具阻塞等用户回答
 	approvalCh chan ApprovalResult // Approve 钩子阻塞等用户裁决
 	feedbackCh chan string         // OnFeedback 每轮 LLM 调用前检查
 
@@ -463,7 +471,7 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		History:       CopyHistory(opts.History), // 深复制避免外部修改
 		Running:       true,
 		StartedAt:     time.Now(),
-		askCh:         make(chan string, 1),
+		askCh:         make(chan []AskAnswer, 1),
 		approvalCh:    make(chan ApprovalResult, 1),
 		feedbackCh:    make(chan string, 5),
 	}
@@ -653,26 +661,57 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 				Name:       "ask_user",
 				SystemTool: true,
 				Description: "向用户提问并等待回答（用于关键决策、歧义澄清，别滥用）。" +
-					"question 必填；askType 可选(text/single/multi/single-with-input)，默认 text 纯文本输入；" +
-					"★ options 当 askType 为 single/multi/single-with-input 时必须提供（至少 2 个，如 [\"方案A\",\"方案B\"]），text 时可省略。调用会阻塞直到用户回答。",
+					"question 必填（或 questions 数组多问题）；askType 可选(text/single/multi/single-with-input)，默认 text 纯文本输入；" +
+					"★ options 当 askType 为 single/multi/single-with-input 时必须提供（至少 2 个，如 [\"方案A\",\"方案B\"]），text 时可省略。" +
+					"多问题：questions:[{id, question, options?, multi_select?}]（questions 优先，缺省回落单问题）。调用会阻塞直到用户回答。",
 				Parameters: map[string]any{
 					"type": "object",
 					"properties": map[string]any{
-						"question": map[string]any{"type": "string", "description": "向用户提出的问题"},
+						"question": map[string]any{"type": "string", "description": "向用户提出的问题（单问题路径；与 questions 二选一）"},
 						"askType":  map[string]any{"type": "string", "enum": []string{"text", "single", "multi", "single-with-input"}, "description": "提问类型：text(纯文本)/single(单选)/multi(多选)/single-with-input(单选+自由输入)"},
 						"options":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "选项列表（当 askType 为 single/multi/single-with-input 时必须提供，至少 2 个，例如 [\"方案A\",\"方案B\"]；text 时可省略）"},
+						"questions": map[string]any{
+							"type":        "array",
+							"description": "多问题数组（与 question 二选一；questions 优先）。每项 {id, question, options?, multi_select?}",
+							"items": map[string]any{
+								"type": "object",
+								"properties": map[string]any{
+									"id":           map[string]any{"type": "string", "description": "问题 ID（回答回灌时对应）"},
+									"question":     map[string]any{"type": "string", "description": "问题文本"},
+									"options":      map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "选项（选择类问题）"},
+									"multi_select": map[string]any{"type": "boolean", "description": "是否多选（默认 false 单选）"},
+								},
+								"required": []string{"id", "question"},
+							},
+						},
 					},
-					"required": []string{"question"},
+					"required": []string{},
 				},
 				RequiresApproval: false,
 				Handler: func(hctx context.Context, args map[string]any) (string, error) {
+					// ★ Round3 ⑤：questions 数组优先，缺省回落单问题路径
+					if qs := askQuestionsFromArgs(args); len(qs) > 0 {
+						select {
+						case answers := <-sess.askCh:
+							b, _ := json.MarshalIndent(map[string]any{"answers": answers}, "", "  ")
+							return string(b), nil
+						case <-hctx.Done():
+							return "", hctx.Err()
+						case <-time.After(5 * time.Minute):
+							fmt.Printf("[session] ask_user(多问题) 超时 conv=%s\n", convID)
+							return "", fmt.Errorf("等待用户回答超时（5 分钟）")
+						}
+					}
 					question, _ := args["question"].(string)
 					if question == "" {
 						question = "（无问题内容）"
 					}
 					select {
-					case answer := <-sess.askCh:
-						return strings.TrimSpace(answer), nil
+					case answers := <-sess.askCh:
+						if len(answers) > 0 {
+							return strings.TrimSpace(answers[0].Answer), nil
+						}
+						return "", nil
 					case <-hctx.Done():
 						return "", hctx.Err()
 					case <-time.After(5 * time.Minute):
@@ -1178,9 +1217,15 @@ func (m *SessionManager) ListRunning() []string {
 	return out
 }
 
-// SendAnswer 向指定会话发送 ask_user 的用户回答。
+// SendAnswer 向指定会话发送 ask_user 的用户回答（单问题路径：编为单元素数组）。
 // 会话不存在或未运行返回错误。
 func (m *SessionManager) SendAnswer(convID string, answer string) error {
+	return m.SendAnswers(convID, []AskAnswer{{Answer: answer}})
+}
+
+// SendAnswers 向指定会话发送 ask_user 的回答数组（Round3 ⑤ 多问题）。
+// 会话不存在或未运行返回错误。
+func (m *SessionManager) SendAnswers(convID string, answers []AskAnswer) error {
 	m.mu.RLock()
 	sess, ok := m.sessions[convID]
 	m.mu.RUnlock()
@@ -1191,34 +1236,46 @@ func (m *SessionManager) SendAnswer(convID string, answer string) error {
 		return ErrSessionNotRunning
 	}
 	select {
-	case sess.askCh <- answer:
+	case sess.askCh <- answers:
 		return nil
 	default:
 		return errors.New("回答通道已满（可能已有待处理回答）")
 	}
 }
 
-// WaitAnswer 按 convID 等待用户回答（ask_user 会话桥路由入口）。
+// WaitAnswer 按 convID 等待用户回答（ask_user 会话桥路由入口，单问题路径）。
 // 与 SendAnswer 配对：前端 /api/answer → SendAnswer → askCh → 本方法返回。
 // 会话不存在/未运行报错；ctx 取消或 5 分钟超时返回错误（不永久阻塞）。
 func (m *SessionManager) WaitAnswer(ctx context.Context, convID string) (string, error) {
+	answers, err := m.WaitAnswers(ctx, convID)
+	if err != nil {
+		return "", err
+	}
+	if len(answers) == 0 {
+		return "", nil
+	}
+	return strings.TrimSpace(answers[0].Answer), nil
+}
+
+// WaitAnswers 按 convID 等待用户回答数组（Round3 ⑤ 多问题）。
+func (m *SessionManager) WaitAnswers(ctx context.Context, convID string) ([]AskAnswer, error) {
 	m.mu.RLock()
 	sess, ok := m.sessions[convID]
 	m.mu.RUnlock()
 	if !ok {
-		return "", ErrSessionNotFound
+		return nil, ErrSessionNotFound
 	}
 	if !sess.Running {
-		return "", ErrSessionNotRunning
+		return nil, ErrSessionNotRunning
 	}
 	select {
-	case answer := <-sess.askCh:
-		return strings.TrimSpace(answer), nil
+	case answers := <-sess.askCh:
+		return answers, nil
 	case <-ctx.Done():
-		return "", ctx.Err()
+		return nil, ctx.Err()
 	case <-time.After(5 * time.Minute):
 		fmt.Printf("[session] ask_user 超时 conv=%s\n", convID)
-		return "", fmt.Errorf("等待用户回答超时（5 分钟）")
+		return nil, fmt.Errorf("等待用户回答超时（5 分钟）")
 	}
 }
 

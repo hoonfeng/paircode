@@ -386,7 +386,7 @@ const tools = [
   },
   {
     "name": "ask_user",
-    "description": "向用户提问并等待回答（用于关键决策、歧义澄清，别滥用）。question 必填；askType 可选(text/single/multi/single-with-input)，默认 text 纯文本输入；options 可选(选择类 question 的选项列表；single-with-input 时用户可另选或自定义输入)。questions 可选（DSH 参考形态：一次多问，[{id, question, options?, multi_select?}]——宿主前端当前渲染单问题，传 questions 时请同时给 question 作合并文本，多问题 UI 属前端专项）。调用会阻塞直到用户回答。",
+    "description": "向用户提问并等待回答（用于关键决策、歧义澄清，别滥用）。question 必填（或 questions 数组多问题）；askType 可选(text/single/multi/single-with-input)，默认 text 纯文本输入；options 可选(选择类 question 的选项列表；single-with-input 时用户可另选或自定义输入)。多问题：questions:[{id, question, options?, multi_select?}]（questions 优先，缺省回落单问题；Round3 ⑤ 前端已支持多问题渲染与 answers 回灌）。调用会阻塞直到用户回答。",
     "parameters": {
       "properties": {
         "askType": {
@@ -407,11 +407,11 @@ const tools = [
           "type": "array"
         },
         "question": {
-          "description": "向用户提出的问题（questions 数组存在时建议给合并文本）",
+          "description": "向用户提出的问题（单问题路径；与 questions 二选一）",
           "type": "string"
         },
         "questions": {
-          "description": "可选：一次问多个问题（DSH ask_user_question 形态，[{id, question, options?, multi_select?}]）；宿主前端当前按单问题渲染，多问题 UI 属前端专项",
+          "description": "多问题数组（与 question 二选一；questions 优先，前端按多问题卡片渲染、一次提交 answers 回灌）",
           "items": {
             "properties": {
               "id": {
@@ -434,6 +434,10 @@ const tools = [
                 "type": "string"
               }
             },
+            "required": [
+              "id",
+              "question"
+            ],
             "type": "object"
           },
           "type": "array"

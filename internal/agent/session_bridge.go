@@ -20,6 +20,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 )
 
@@ -87,6 +88,8 @@ type SessionBridge struct {
 	// WaitAnswer 等待用户回答（ask_user）：从 convID 对应会话的 askCh 读，
 	// 前端 /api/answer → SendAnswer 写入。阻塞直到回答/超时/ctx 取消。
 	WaitAnswer func(ctx context.Context, convID string) (string, error)
+	// WaitAnswers 等待用户回答数组（Round3 ⑤ 多问题；单问题=单元素数组）。
+	WaitAnswers func(ctx context.Context, convID string) ([]AskAnswer, error)
 	// GetWorkspaceRoot 取会话工作区根（task_create 持久化用；无会话返回空串）。
 	GetWorkspaceRoot func(convID string) string
 }
@@ -124,16 +127,31 @@ func archiveSessionTools() {
 		Name:       "ask_user",
 		SystemTool: true,
 		Description: "向用户提问并等待回答（用于关键决策、歧义澄清，别滥用）。" +
-			"question 必填；askType 可选(text/single/multi/single-with-input)，默认 text 纯文本输入；" +
-			"★ options 当 askType 为 single/multi/single-with-input 时必须提供（至少 2 个，如 [\"方案A\",\"方案B\"]），text 时可省略。调用会阻塞直到用户回答。",
+			"question 必填（或 questions 数组多问题）；askType 可选(text/single/multi/single-with-input)，默认 text 纯文本输入；" +
+			"★ options 当 askType 为 single/multi/single-with-input 时必须提供（至少 2 个，如 [\"方案A\",\"方案B\"]），text 时可省略。" +
+			"多问题：questions:[{id, question, options?, multi_select?}]（questions 优先，缺省回落单问题）。调用会阻塞直到用户回答。",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"question": map[string]any{"type": "string", "description": "向用户提出的问题"},
+				"question": map[string]any{"type": "string", "description": "向用户提出的问题（单问题路径；与 questions 二选一）"},
 				"askType":  map[string]any{"type": "string", "enum": []string{"text", "single", "multi", "single-with-input"}, "description": "提问类型：text(纯文本)/single(单选)/multi(多选)/single-with-input(单选+自由输入)"},
 				"options":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "选择类问题用：可选项列表"},
+				"questions": map[string]any{
+					"type":        "array",
+					"description": "多问题数组（与 question 二选一；questions 优先）。每项 {id, question, options?, multi_select?}",
+					"items": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"id":           map[string]any{"type": "string", "description": "问题 ID（回答回灌时对应）"},
+							"question":     map[string]any{"type": "string", "description": "问题文本"},
+							"options":      map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "选项（选择类问题）"},
+							"multi_select": map[string]any{"type": "boolean", "description": "是否多选（默认 false 单选）"},
+						},
+						"required": []string{"id", "question"},
+					},
+				},
 			},
-			"required": []string{"question"},
+			"required": []string{},
 		},
 		RequiresApproval: false,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
@@ -141,8 +159,23 @@ func archiveSessionTools() {
 			if convID == "" {
 				return "", fmt.Errorf("ask_user：缺少会话标识（_convID 未注入）——插件工具须经宿主工具执行链调用")
 			}
-			if sessionBridge == nil || sessionBridge.WaitAnswer == nil {
+			if sessionBridge == nil {
 				return "", fmt.Errorf("ask_user：会话桥未注入（web 层未调用 SetSessionBridge）")
+			}
+			// ★ Round3 ⑤：多问题路径（questions 优先；回答数组 JSON 回灌）
+			if qs := askQuestionsFromArgs(args); len(qs) > 0 {
+				if sessionBridge.WaitAnswers == nil {
+					return "", fmt.Errorf("ask_user(多问题)：会话桥未注入 WaitAnswers（web 层未升级）")
+				}
+				answers, err := sessionBridge.WaitAnswers(ctx, convID)
+				if err != nil {
+					return "", err
+				}
+				b, _ := json.MarshalIndent(map[string]any{"answers": answers}, "", "  ")
+				return string(b), nil
+			}
+			if sessionBridge.WaitAnswer == nil {
+				return "", fmt.Errorf("ask_user：会话桥未注入 WaitAnswer（web 层未调用 SetSessionBridge）")
 			}
 			return sessionBridge.WaitAnswer(ctx, convID)
 		},
