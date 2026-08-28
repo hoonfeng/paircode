@@ -27,8 +27,9 @@ func mkHarnessReg() *Registry {
 	for _, n := range []string{"toolset_build", "toolset_list", "toolset_show", "toolset_export", "toolset_import", "toolset_remove", "toolset_edit"} {
 		reg.Register(&Tool{Name: n, Handler: noopHandler, SystemTool: true})
 	}
-	// pair 独有工具（应被移除）
-	for _, n := range []string{"read", "write", "edit", "multi_edit", "glob", "bash",
+	// pair 独有工具（应被移除；★ Round3：read/write/edit/glob/bash 已并入 harness
+	// 保留清单，此处只用真正的 pair 独有工具）
+	for _, n := range []string{"multi_edit", "update_plan", "tool_stats",
 		"codegraph_search", "memory_read", "project_info_write", "git_diff", "debug_inject_log",
 		"binary_hash", "csv_read", "web_debug", "go_build", "fix_flex_autoheight"} {
 		reg.Register(&Tool{Name: n, Handler: noopHandler})
@@ -54,7 +55,8 @@ func TestApplyHarnessToolFilter_RemovesPairTools(t *testing.T) {
 		}
 	}
 	// pair 独有工具保留在注册表但被禁用（agent 不可见，前端可见可恢复）
-	for _, name := range []string{"read", "write", "codegraph_search", "memory_read",
+	for _, name := range []string{"multi_edit", "update_plan", "tool_stats",
+		"codegraph_search", "memory_read",
 		"project_info_write", "git_diff", "debug_inject_log", "binary_hash", "csv_read", "web_debug",
 		"go_build", "fix_flex_autoheight"} {
 		tool, ok := reg.Get(name)

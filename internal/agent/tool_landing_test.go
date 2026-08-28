@@ -59,6 +59,11 @@ var toolPluginModes = map[string]string{
 	"tool-progress":    "hostTool",
 	"tool-resource":    "hostTool",
 	"tool-snapshot":    "hostTool",
+	// ★ Round3 ③/⑤：goal/workflow 宿主机制工具面（execute → ctx.hostTool）；
+	//   tool-subagent 走 ctx.agents 服务（JS 原生编排，非 hostTool）
+	"tool-goal":     "hostTool",
+	"tool-subagent": "native",
+	"tool-workflow": "hostTool",
 }
 
 // harnessNativeAliases tool-harness 的 JS 原生别名（模式表注释声明的例外）：
