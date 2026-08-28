@@ -1,0 +1,8 @@
+{
+  "main": "index.js",
+  "name": "tool-subagent",
+  "purpose": "子 Agent 编排工具面（subagent/subagent_fork/report/list_agents/interrupt_agent/send_message，宿主 ctx.agents）",
+  "scope": "global",
+  "type": "plugin",
+  "version": "1.0.0"
+}

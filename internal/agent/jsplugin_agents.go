@@ -6,6 +6,9 @@
 //   ctx.agents —— 成员会话（可续聊子 Agent）编排：
 //     start({task, convId?, parentConvId?, label?, team?, member?,
 //            system?, model?, wsRoot?, denyTools?}) → {convId, state, ...}
+//     fork({task, forkFrom, convId?, system?, model?, ...})  → {convId, ...}
+//         ★ Round3 ③.2：以源会话消息快照派生新会话（DSH subagent_fork 对齐）
+//     report(convId, text) → {ok}（成员主动报告，status/list 可读）
 //     followup(convId, text)      → {queued:bool}（忙则排队，轮次结束自动续发）
 //     stop(convId)                → true
 //     running(convId)             → bool
@@ -56,6 +59,8 @@ func (p *jsPluginAdapter) buildAgentsService(pc *PluginContext) goja.Value {
 			"state":        rec.State,
 			"lastError":    rec.LastError,
 			"pending":      rec.Pending,
+			"forkOf":       rec.ForkOf, // Round3 ③.2：fork 源会话
+			"report":       rec.Report, // Round3 ③.2：成员主动报告
 		})
 	}
 
@@ -107,6 +112,54 @@ func (p *jsPluginAdapter) buildAgentsService(pc *PluginContext) goja.Value {
 		return vm.ToValue(map[string]any{"ok": true, "queued": queued, "convId": convID})
 	})
 
+	// ★ Round3 ③.2 fork：以源会话消息快照派生新会话（run_in_background 语义 =
+	//   异步启动立即返回；DSH subagent_fork 对齐）
+	a.Set("fork", func(call goja.FunctionCall) goja.Value {
+		arg := call.Argument(0)
+		if goja.IsUndefined(arg) || goja.IsNull(arg) {
+			panic(vm.NewTypeError("ctx.agents.fork: 需要一个对象 {task, forkFrom, system?, model?, ...}"))
+		}
+		obj, ok := arg.Export().(map[string]any)
+		if !ok {
+			panic(vm.NewTypeError("ctx.agents.fork: 参数必须是对象"))
+		}
+		spec := SubAgentSpec{
+			ConvID:          mapStr(obj, "convId"),
+			ParentConv:      mapStr(obj, "parentConvId"),
+			Label:           mapStr(obj, "label"),
+			Team:            mapStr(obj, "team"),
+			Member:          mapStr(obj, "member"),
+			Task:            mapStr(obj, "task"),
+			System:          mapStr(obj, "system"),
+			Model:           mapStr(obj, "model"),
+			Provider:        mapStr(obj, "provider"),
+			ReasoningEffort: mapStr(obj, "reasoningEffort"),
+			WsRoot:          mapStr(obj, "wsRoot"),
+			DenyTools:       mapStrSlice(obj, "denyTools"),
+			MaxIter:         mapInt(obj, "maxIterations"),
+			ForkOf:          mapStr(obj, "forkFrom"), // 源会话 convID
+		}
+		if spec.WsRoot == "" {
+			spec.WsRoot = p.effectiveWsRoot(pc)
+		}
+		rec, err := ForkSubAgent(spec)
+		if err != nil {
+			panic(vm.NewGoError(fmt.Errorf("ctx.agents.fork 失败: %v", err)))
+		}
+		return toJS(rec)
+	})
+
+	// ★ Round3 ③.2 report：成员主动报告（写入 SubAgentRecord.Report，status/list 可读）。
+	//   调用方为子会话自身（convID = 会话链注入的 _convID）。
+	a.Set("report", func(call goja.FunctionCall) goja.Value {
+		convID := call.Argument(0).String()
+		text := call.Argument(1).String()
+		if err := ReportSubAgent(convID, text); err != nil {
+			panic(vm.NewGoError(fmt.Errorf("ctx.agents.report 失败: %v", err)))
+		}
+		return vm.ToValue(map[string]any{"ok": true, "convId": convID})
+	})
+
 	a.Set("stop", func(call goja.FunctionCall) goja.Value {
 		convID := call.Argument(0).String()
 		if err := StopSubAgent(convID); err != nil {
@@ -156,6 +209,8 @@ func (p *jsPluginAdapter) buildAgentsService(pc *PluginContext) goja.Value {
 				"lastError":    rec.LastError,
 				"pending":      rec.Pending,
 				"lastActiveAt": rec.LastActive,
+				"forkOf":       rec.ForkOf,
+				"report":       rec.Report,
 			})
 		}
 		return vm.ToValue(out)

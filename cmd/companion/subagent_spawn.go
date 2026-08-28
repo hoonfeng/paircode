@@ -38,8 +38,135 @@ func (s *webServer) installSubAgentSpawner() {
 		LastAssistant: subAgentLastAssistant,
 		Models:        subAgentModelCatalog,
 		Current:       subAgentCurrentRoute,
+		// ★ Round3 ③.2 fork：源会话消息快照 + 快照历史启动派生会话
+		ForkSeed: subAgentForkSeed,
+		Fork:     s.startSubAgentFork,
 	})
-	log.Printf("[subagent] 成员会话启动器已注入（JS 插件 ctx.agents 可用）")
+	log.Printf("[subagent] 成员会话启动器已注入（JS 插件 ctx.agents 可用；含 fork）")
+}
+
+// subAgentForkSeed 取源会话当前消息快照（fork 种子历史）：内存优先，
+// 会话被回收后读持久化历史（按源会话根路由 store；取最近 60 条防撑爆上下文）。
+func subAgentForkSeed(sourceConvID string) []agent.Message {
+	if msgs := agentMgr.GetHistory(sourceConvID); len(msgs) > 0 {
+		return msgs
+	}
+	// 内存会话已回收 → 持久化历史（各工作区 store 尝试）
+	for _, root := range core.Folders {
+		if store := agentMgr.StoreFor(root); store != nil {
+			if msgs, err := store.LoadAll(sourceConvID); err == nil && len(msgs) > 0 {
+				if len(msgs) > 60 {
+					msgs = msgs[len(msgs)-60:]
+				}
+				return msgs
+			}
+		}
+	}
+	return nil
+}
+
+// startSubAgentFork 以快照历史启动 fork 派生会话（异步；与 startSubAgentTurn
+// 同构，仅初始历史 = 源会话快照 + 任务）。
+func (s *webServer) startSubAgentFork(spec agent.SubAgentSpec, seed []agent.Message) error {
+	convID := strings.TrimSpace(spec.ConvID)
+	if convID == "" {
+		return fmt.Errorf("成员会话 fork 失败：convId 为空")
+	}
+	task := strings.TrimSpace(spec.Task)
+	if task == "" {
+		return fmt.Errorf("成员会话 fork 失败：本轮输入为空")
+	}
+	if !agent.ConfiguredProvider() {
+		return fmt.Errorf("未配置 API key：请先在「设置 → AI」中配置服务商与模型")
+	}
+	if agentMgr.IsRunning(convID) {
+		return fmt.Errorf("成员会话 %s 正在运行中（同一会话不可并行两轮）", convID)
+	}
+	wsRoot := strings.TrimSpace(spec.WsRoot)
+	if wsRoot == "" {
+		wsRoot = core.Root()
+	}
+	// 用户消息落盘（与 /api/chat/send 一致：先落盘再启动，刷新页面可见）
+	if err := agentMgr.AppendPersistedUserMessageTo(wsRoot, convID, task); err != nil {
+		return fmt.Errorf("成员会话消息落盘失败: %v", err)
+	}
+
+	go func() {
+		opts := s.buildWebLoopOpts(convID, task, false, wsRoot)
+		if opts.Provider == nil {
+			agentMgr.PushStartError(convID, "未配置 AI 服务商（APIKey/BaseURL 为空）")
+			return
+		}
+		opts.WorkspaceRoot = wsRoot
+		// ★ fork 语义：初始历史 = 源会话快照（History 与 HistoryOriginal 同源，
+		//   持久化时快照随新会话落盘——子会话自带父上下文）
+		opts.History = seed
+		opts.HistoryOriginal = seed
+
+		// ① persona：追加到系统提示尾部（不替换宿主提示——成员仍需完整工具纪律）
+		if persona := strings.TrimSpace(spec.System); persona != "" {
+			opts.System = strings.TrimRight(opts.System, "\n") + "\n\n" + persona
+		}
+
+		// ② 模型覆盖（成员可用不同模型/服务商）
+		if prov := buildSubAgentProvider(spec); prov != nil {
+			opts.Provider = prov
+		}
+
+		// ③ 工具面：工作区工具集白名单 → 再摘除队长专属工具
+		if opts.Registry != nil {
+			agent.ApplyWorkspaceToolsetWhitelist(handler.GetPluginHost(), opts.Registry, wsRoot)
+			for _, name := range spec.DenyTools {
+				if n := strings.TrimSpace(name); n != "" {
+					opts.Registry.Unregister(n)
+				}
+			}
+		}
+
+		// ④ 审核配置（与主会话同源：全局设置 + 工作区覆盖）
+		opts.ReviewMode = core.Settings.ReviewMode
+		opts.ReviewBlacklist = core.Settings.ReviewBlacklist
+		opts.ReviewWhitelist = core.Settings.ReviewWhitelist
+		if wsRoot != "" {
+			if wrMode, wrBlack, wrWhite := agent.LoadWorkspaceReviewConfig(wsRoot); true {
+				if wrMode != "" && wrMode != "auto" {
+					opts.ReviewMode = wrMode
+				}
+				if wrBlack != nil {
+					opts.ReviewBlacklist = wrBlack
+				}
+				if wrWhite != nil {
+					opts.ReviewWhitelist = wrWhite
+				}
+			}
+		}
+		cur := agent.ResolveProviderParams()
+		if opts.ReviewMode == "auto" && cur.ReviewModel != "" {
+			if pm := strings.TrimSpace(cur.PlanModel); pm != "" && cur.BaseURL != "" && cur.APIKey != "" {
+				rp := cur
+				rp.Model = pm
+				rp.Temperature = -1
+				rp.ThinkingMode = "non-thinking"
+				rp.MaxTokens = 0
+				rp.Multimodal = false
+				opts.ReviewProvider = agent.CreateProvider(rp)
+			}
+		}
+		if spec.MaxIter > 0 {
+			opts.MaxIterations = spec.MaxIter
+		}
+
+		setupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := agentMgr.Start(setupCtx, convID, task, opts); err != nil {
+			log.Printf("[subagent] fork 启动失败 conv=%s label=%s err=%v", convID, spec.Label, err)
+			agentMgr.PushStartError(convID, err.Error())
+			return
+		}
+		log.Printf("[subagent] fork 轮次已启动 conv=%s label=%s forkFrom=%s seedMsgs=%d",
+			convID, spec.Label, spec.ForkOf, len(seed))
+	}()
+	return nil
 }
 
 // startSubAgentTurn 启动成员会话的一轮（异步；同步段只做快速校验与消息落盘）。

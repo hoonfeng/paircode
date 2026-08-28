@@ -48,6 +48,9 @@ type SubAgentSpec struct {
 	WsRoot          string   // 工作区根（空=父会话/全局主根）
 	DenyTools       []string // 工具黑名单（成员不可用的工具，如队长专属工具）
 	MaxIter         int      // 单轮最大迭代（<=0 用宿主默认）
+	// ★ Round3 ③.2 fork 机制：源会话 convID（非空 = fork 派生：新会话初始历史
+	//   取源会话当前消息快照 + 任务，persona/模型沿用 spec）
+	ForkOf string
 }
 
 // SubAgentRecord 成员会话记录（内存态）。
@@ -69,6 +72,9 @@ type SubAgentRecord struct {
 	State           string   `json:"state"`     // running | idle | stopped
 	LastError       string   `json:"lastError"` // 最近一轮错误（空=无）
 	Pending         int      `json:"pending"`   // 排队中的消息条数
+	// ★ Round3 ③.2：fork 源会话 convID 与成员主动报告（ctx.agents.report → Report）
+	ForkOf string `json:"forkOf,omitempty"`
+	Report string `json:"report,omitempty"`
 }
 
 // SubAgentSpawner 会话启动能力（web 层注入；agent 包只持接口）。
@@ -85,6 +91,11 @@ type SubAgentSpawner struct {
 	Models func() []map[string]any
 	// Current 当前主模型（{provider, model}）。
 	Current func() map[string]any
+	// ★ Round3 ③.2 fork 机制：
+	//   ForkSeed 取源会话当前消息快照（fork 子会话的初始历史；空=空历史）。
+	//   Fork 以快照历史启动一个 fork 派生会话（初始历史 = seed + 任务）。
+	ForkSeed func(sourceConvID string) []Message
+	Fork     func(spec SubAgentSpec, seed []Message) error
 }
 
 var (
@@ -237,6 +248,89 @@ func FollowupSubAgent(convID, text string) (queued bool, err error) {
 		return false, err
 	}
 	return false, nil
+}
+
+// ForkSubAgent 以源会话消息快照派生一个新会话（Round3 ③.2 fork 机制）。
+// spec.ForkOf 为源会话 convID；新会话初始历史 = ForkSeed(sourceConvID) + 任务。
+// 与 SpawnSubAgent 同构：异步启动、立即返回记录、事件桥续聊。
+func ForkSubAgent(spec SubAgentSpec) (*SubAgentRecord, error) {
+	if strings.TrimSpace(spec.Task) == "" {
+		return nil, fmt.Errorf("子 Agent fork 失败：task（首轮输入）不能为空")
+	}
+	if strings.TrimSpace(spec.ForkOf) == "" {
+		return nil, fmt.Errorf("子 Agent fork 失败：forkFrom（源会话 convID）不能为空")
+	}
+	subAgentMu.Lock()
+	spawner := subAgentSpawner
+	if spawner == nil || spawner.Fork == nil {
+		subAgentMu.Unlock()
+		return nil, fmt.Errorf("子 Agent fork 能力未就绪：Fork 未注入（web 层需提供 fork 实现）")
+	}
+	convID := strings.TrimSpace(spec.ConvID)
+	if convID == "" {
+		convID = newSubAgentConvID(spec.Team, spec.Member)
+	}
+	spec.ConvID = convID
+	now := time.Now().UnixMilli()
+	rec := subAgents[convID]
+	if rec == nil {
+		rec = &SubAgentRecord{ConvID: convID, CreatedAt: now}
+		subAgents[convID] = rec
+	}
+	rec.ParentConv = spec.ParentConv
+	rec.Label = spec.Label
+	rec.Team = spec.Team
+	rec.Member = spec.Member
+	rec.System = spec.System
+	rec.Model = spec.Model
+	rec.Provider = spec.Provider
+	rec.ReasoningEffort = spec.ReasoningEffort
+	rec.WsRoot = spec.WsRoot
+	rec.DenyTools = spec.DenyTools
+	rec.ForkOf = spec.ForkOf
+	rec.State = "running"
+	rec.LastActive = now
+	rec.Turns++
+	rec.LastError = ""
+	subAgentMu.Unlock()
+
+	// fork 种子 = 源会话当前消息快照（web 层实现；空=空历史）
+	var seed []Message
+	if spawner.ForkSeed != nil {
+		seed = spawner.ForkSeed(spec.ForkOf)
+	}
+
+	ensureSubAgentEventBridge()
+
+	if err := spawner.Fork(spec, seed); err != nil {
+		subAgentMu.Lock()
+		rec.State = "idle"
+		rec.LastError = err.Error()
+		subAgentMu.Unlock()
+		return rec, err
+	}
+	log.Printf("[subagent] 已 fork 派生会话 conv=%s label=%s forkFrom=%s seedMsgs=%d",
+		convID, spec.Label, spec.ForkOf, len(seed))
+	return snapshotSubAgent(rec), nil
+}
+
+// ReportSubAgent 写入成员会话主动报告（ctx.agents.report；status/list 可读）。
+func ReportSubAgent(convID, text string) error {
+	convID = strings.TrimSpace(convID)
+	if convID == "" {
+		return fmt.Errorf("report 失败：convId 不能为空")
+	}
+	subAgentMu.Lock()
+	defer subAgentMu.Unlock()
+	rec := subAgents[convID]
+	if rec == nil {
+		// 宿主重启后插件带 convID 回来：按需重建记录（report 落字段）
+		rec = &SubAgentRecord{ConvID: convID, CreatedAt: time.Now().UnixMilli(), State: "idle"}
+		subAgents[convID] = rec
+	}
+	rec.Report = text
+	rec.LastActive = time.Now().UnixMilli()
+	return nil
 }
 
 // specFromRecord 由记录还原启动规格（续聊沿用 persona/模型/工作区/黑名单）。
