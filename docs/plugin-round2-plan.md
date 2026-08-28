@@ -415,8 +415,8 @@ R2-8 独立但需与 R2-6/2-7 顺序隔离（工具集装载逻辑改动后跑�
 
 ### 7.2 风险清单（被删/保留工具的消费方记录）
 
-1. **Go 旧名工具实现保留（测试/归档专用）**：registerCoreTools/registerSearchTools + builtinPluginSpecs 的 core/fs-search 条目被 89 处测试的 RegisterDefaultTools 与 plugins-src 归档二进制引用——本轮不删（删除需先迁移测试面），生产注册面已零旧名（R2-9 已核实）。消费方引用已同步：node_bridge（→read/write/bash）、config/roles 4 个 md（→read/bash/glob/grep）、前端 built 产物保留旧名图标分支作兼容。
-2. **jobs/permission/provider/vterm 死包**：保留待产品确认（t1 判定）；删除前需确认无 build tag 引用（实测无）。
+1. **Go 旧名工具实现保留（测试/归档专用）**：~~registerCoreTools/registerSearchTools + builtinPluginSpecs 的 core/fs-search 条目被 89 处测试的 RegisterDefaultTools 与 plugins-src 归档二进制引用——本轮不删（删除需先迁移测试面）~~ → **Round3 已处置（2026-09）**：测试引用 17 文件必迁完成、旧名注册面清零（read/write/edit/bash/glob/grep 新名基座、别名层与 fs-search 组删除），详见 docs/plugin-round3-plan.md §10。消费方引用已同步：node_bridge（→read/write/bash）、config/roles 4 个 md（→read/bash/glob/grep）。
+2. **jobs/permission/provider/vterm 死包**：~~保留待产品确认（t1 判定）~~ → **Round3 已删除（2026-09）**：零导入实测 + relocate_imports 映射清理，见 docs/plugin-round3-plan.md §10。
 3. **t4 L4 RegisterProviderImpl 还原顺序**：文档化（单插件场景无影响），栈式还原留后续。
 4. **default.json 运行时数据**（git-ignored）：本轮清理仅作用于本机运行时态；装载逻辑（applyToolsetPlugin 磁盘优先）为持久生效项；其他工作区/安装目录的 default.json 若仍带内嵌 code，装载时同样被跳过（磁盘优先）。
 5. **read 输出形态变化**：tool-harness read 由纯文本 → DSH 行号块；消费方为 LLM 与通用消息流（无格式断言），前端渲染为文本展示无破坏；harness_test.go 断言已同步。
