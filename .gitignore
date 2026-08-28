@@ -76,5 +76,15 @@ internal/agent/.pair/
 # PairCode 内置 bash（含 npm 登录凭据 .npmrc，禁止进仓库）
 bin/bash/
 
-# AgentTeams 团队运行时状态（不入库）.agent-teams/
+# AgentTeams 团队运行时状态（不入库）
+.agent-teams/
+
+# 本地敏感配置（含 API key，禁止入库；发布侧经 packager stripSecrets 脱敏）
+config/ai-presets.json
+cmd/desktop/config/
+dev/desktop_probe/config/
+
+# 验证/探针临时产物（t3 验证日志 / dev 探针截图）
+.verify-tmp/
+dev/wsprobe/
 # 独立验证临时日志.verify-tmp/
