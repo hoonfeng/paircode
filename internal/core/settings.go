@@ -2,9 +2,10 @@ package core
 
 import (
 	"encoding/json"
-
+	"log"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 )
@@ -141,6 +142,9 @@ func Load() bool {
 					}
 				}
 			}
+			// ★ 2026-09 Round3（G4）：未知顶层键告警（不阻断）——配置模板漂移/拼写
+			//   错误在启动日志可见，避免静默忽略。
+			warnUnknownKeys(SettingsPath(), raw, settingsKnownKeys())
 		}
 		// ★ 迁移旧版 editorFontSize 字段 → fontSize（2026-08-19 字段名对齐前端消费）
 		if _, hasNew := raw["fontSize"]; !hasNew {
@@ -249,4 +253,36 @@ func ParseTempOr(s string, def float64) float64 {
 		return v
 	}
 	return def
+}
+
+// ─── 配置模板对齐 / 未知键告警（2026-09 Round3 G4）──────────────────
+
+// structJSONKeys 反射取结构体全部 json tag 名（含 omitempty 字段）。
+func structJSONKeys(v any) map[string]bool {
+	t := reflect.TypeOf(v)
+	known := map[string]bool{}
+	for i := 0; i < t.NumField(); i++ {
+		tag := t.Field(i).Tag.Get("json")
+		name := strings.Split(tag, ",")[0]
+		if name != "" && name != "-" {
+			known[name] = true
+		}
+	}
+	return known
+}
+
+// settingsKnownKeys AppSettings 的全部 json 键（模板对齐测试与 Load 告警共用）。
+func settingsKnownKeys() map[string]bool { return structJSONKeys(AppSettings{}) }
+
+// warnUnknownKeys 输出 JSON 顶层键中不属于 known（且非已知遗留迁移键）的告警。
+// log.Warn 级、不阻断加载——配置模板漂移/拼写错误在启动日志可见。
+func warnUnknownKeys(path string, raw map[string]json.RawMessage, known map[string]bool) {
+	// 已知遗留迁移键：Load 显式处理，不算未知
+	legacy := map[string]bool{"autoReview": true, "editorFontSize": true}
+	for k := range raw {
+		if known[k] || legacy[k] {
+			continue
+		}
+		log.Printf("[config] ⚠️ 未知配置键 %q（%s）——可能已改名/废弃，将被忽略", k, path)
+	}
 }

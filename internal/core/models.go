@@ -60,8 +60,25 @@ func LoadModelList() {
 		useDefaultModels()
 		return
 	}
+	// ★ 2026-09 Round3（G4）：服务商条目未知键告警（不阻断）——配置模板漂移
+	//   在启动日志可见（服务商名为自由键，只查条目内部字段）。
+	if raw, ok := parseRawProviders(data); ok {
+		known := structJSONKeys(ProviderEntry{})
+		for prov, fields := range raw {
+			warnUnknownKeys(p+" [服务商 "+prov+"]", fields, known)
+		}
+	}
 
 	ModelList = fileModels
+}
+
+// parseRawProviders 把 models.json 解析为 服务商 → 字段 → 原始值（未知键告警用）。
+func parseRawProviders(data []byte) (map[string]map[string]json.RawMessage, bool) {
+	var m map[string]map[string]json.RawMessage
+	if err := json.Unmarshal(data, &m); err != nil {
+		return nil, false
+	}
+	return m, true
 }
 
 func useDefaultModels() {
