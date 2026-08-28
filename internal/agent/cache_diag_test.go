@@ -13,8 +13,8 @@ import (
 
 // 模拟一批真实工具名（插件化后的注册来源多样：内置组、磁盘插件、工具集、MCP）。
 var diagToolNames = []string{
-	"read_file", "write_file", "edit_file", "multi_edit", "run_command", "move_file",
-	"delete_file", "search_content", "search_files", "git_status", "git_diff", "git_log",
+	"read", "write", "edit", "multi_edit", "bash", "move_file",
+	"delete_file", "grep", "glob", "git_status", "git_diff", "git_log",
 	"web_fetch", "web_search", "run_background", "read_output", "kill_process",
 	"memory_write", "memory_read", "memory_search", "project_info_read", "project_info_tree",
 	"update_tasks", "update_plan", "tool_stats", "history_search", "codegraph_build",

@@ -33,13 +33,13 @@ func TestBuiltinPluginToolGroups(t *testing.T) {
 	}
 	found := false
 	for _, n := range core {
-		if n == "read_file" {
+		if n == "read" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Errorf("core 组应含 read_file，实际 %v", core)
+		t.Errorf("core 组应含 read，实际 %v", core)
 	}
 	// codegraph 组存在（被过滤工具的载体）
 	if len(groups["codegraph"]) == 0 {

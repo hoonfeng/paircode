@@ -19,42 +19,42 @@ func TestSearchContent(t *testing.T) {
 	mustWrite(t, dir, "readme.md", "Hello world\n")
 
 	// 基本正则匹配 func ...(（递归到 sub）
-	out, err := reg.Execute(ctx, "search_content", `{"pattern":"func \\w+\\("}`)
+	out, err := reg.Execute(ctx, "grep", `{"pattern":"func \\w+\\("}`)
 	if err != nil {
-		t.Fatalf("search_content: %v", err)
+		t.Fatalf("grep: %v", err)
 	}
 	if !strings.Contains(out, "a.go:2:") || !strings.Contains(out, "sub/b.go:2:") {
 		t.Errorf("应匹配两处 func，得:\n%s", out)
 	}
 
 	// 大小写敏感：Hello（大写）匹配 a.go/readme.md，不匹配 b.go 的小写 hello
-	out, _ = reg.Execute(ctx, "search_content", `{"pattern":"Hello"}`)
+	out, _ = reg.Execute(ctx, "grep", `{"pattern":"Hello"}`)
 	if !strings.Contains(out, "a.go:2:") || strings.Contains(out, "b.go") {
 		t.Errorf("大小写敏感匹配错误:\n%s", out)
 	}
 	// 忽略大小写：hello 同时匹配 a.go 与 b.go
-	out, _ = reg.Execute(ctx, "search_content", `{"pattern":"hello","case_insensitive":true}`)
+	out, _ = reg.Execute(ctx, "grep", `{"pattern":"hello","case_insensitive":true}`)
 	if !strings.Contains(out, "a.go") || !strings.Contains(out, "b.go") {
 		t.Errorf("忽略大小写应匹配 a.go 与 b.go:\n%s", out)
 	}
 
 	// glob 仅搜 *.md
-	out, _ = reg.Execute(ctx, "search_content", `{"pattern":"Hello","glob":"*.md"}`)
+	out, _ = reg.Execute(ctx, "grep", `{"pattern":"Hello","glob":"*.md"}`)
 	if !strings.Contains(out, "readme.md") || strings.Contains(out, ".go") {
 		t.Errorf("glob 过滤错误:\n%s", out)
 	}
 
 	// path 限定子目录 sub
-	out, _ = reg.Execute(ctx, "search_content", `{"pattern":"func","path":"sub"}`)
+	out, _ = reg.Execute(ctx, "grep", `{"pattern":"func","path":"sub"}`)
 	if !strings.Contains(out, "sub/b.go") || strings.Contains(out, "a.go:") {
 		t.Errorf("path 限定错误:\n%s", out)
 	}
 
 	// 无匹配 / 非法正则
-	if out, _ = reg.Execute(ctx, "search_content", `{"pattern":"NOTHING_MATCHES_XYZ"}`); !strings.Contains(out, "未找到") {
+	if out, _ = reg.Execute(ctx, "grep", `{"pattern":"NOTHING_MATCHES_XYZ"}`); !strings.Contains(out, "未找到") {
 		t.Errorf("无匹配应提示，得 %q", out)
 	}
-	if _, err := reg.Execute(ctx, "search_content", `{"pattern":"("}`); err == nil {
+	if _, err := reg.Execute(ctx, "grep", `{"pattern":"("}`); err == nil {
 		t.Error("非法正则应报错")
 	}
 }
@@ -69,7 +69,7 @@ func TestSearchContentSkipsBinaryAndIgnoredDirs(t *testing.T) {
 	mustWrite(t, dir, ".git/config", "needle in git\n")
 	mustWrite(t, dir, "node_modules/pkg/index.js", "needle in nm\n")
 
-	out, _ := reg.Execute(context.Background(), "search_content", `{"pattern":"needle"}`)
+	out, _ := reg.Execute(context.Background(), "grep", `{"pattern":"needle"}`)
 	if !strings.Contains(out, "code.go") {
 		t.Errorf("应匹配 code.go:\n%s", out)
 	}
@@ -92,9 +92,9 @@ func TestSearchFiles(t *testing.T) {
 	}
 
 	// *.go 文件名匹配（递归、跳过 .git）
-	out, err := reg.Execute(ctx, "search_files", `{"pattern":"*.go"}`)
+	out, err := reg.Execute(ctx, "glob", `{"pattern":"*.go"}`)
 	if err != nil {
-		t.Fatalf("search_files: %v", err)
+		t.Fatalf("glob: %v", err)
 	}
 	for _, want := range []string{"main.go", "util.go", "internal/app/app.go"} {
 		if !strings.Contains(out, want) {
@@ -106,11 +106,11 @@ func TestSearchFiles(t *testing.T) {
 	}
 
 	// 含 / 的路径通配
-	if out, _ = reg.Execute(ctx, "search_files", `{"pattern":"internal/*/app.go"}`); !strings.Contains(out, "internal/app/app.go") {
+	if out, _ = reg.Execute(ctx, "glob", `{"pattern":"internal/*/app.go"}`); !strings.Contains(out, "internal/app/app.go") {
 		t.Errorf("路径通配应匹配:\n%s", out)
 	}
 	// 无匹配
-	if out, _ = reg.Execute(ctx, "search_files", `{"pattern":"*.rs"}`); !strings.Contains(out, "未找到") {
+	if out, _ = reg.Execute(ctx, "glob", `{"pattern":"*.rs"}`); !strings.Contains(out, "未找到") {
 		t.Errorf("无匹配应提示，得 %q", out)
 	}
 }

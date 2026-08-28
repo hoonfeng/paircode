@@ -47,17 +47,17 @@ func TestMergePluginTools(t *testing.T) {
 		t.Fatal(err)
 	}
 	// 宿主内置工具（无插件归属）
-	phReg.Register(&Tool{Name: "read_file", Description: "builtin", Handler: noopHandler})
+	phReg.Register(&Tool{Name: "read", Description: "builtin", Handler: noopHandler})
 
 	reg := NewRegistry()
-	reg.Register(&Tool{Name: "read_file", Description: "session builtin", Handler: noopHandler}) // 会话同名内置
+	reg.Register(&Tool{Name: "read", Description: "session builtin", Handler: noopHandler}) // 会话同名内置
 	MergePluginTools(reg, ph)
 
 	if _, ok := reg.Get("hello_bridge"); !ok {
 		t.Fatalf("合并后应有插件工具 hello_bridge")
 	}
 	// 同名内置不覆盖
-	if tool2, _ := reg.Get("read_file"); tool2.Description != "session builtin" {
+	if tool2, _ := reg.Get("read"); tool2.Description != "session builtin" {
 		t.Fatalf("会话内置工具不应被插件宿主覆盖: %s", tool2.Description)
 	}
 	t.Log("MergePluginTools OK")

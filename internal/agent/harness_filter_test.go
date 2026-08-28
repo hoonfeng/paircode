@@ -28,7 +28,7 @@ func mkHarnessReg() *Registry {
 		reg.Register(&Tool{Name: n, Handler: noopHandler, SystemTool: true})
 	}
 	// pair 独有工具（应被移除）
-	for _, n := range []string{"read_file", "write_file", "edit_file", "multi_edit", "list_files", "run_command",
+	for _, n := range []string{"read", "write", "edit", "multi_edit", "glob", "bash",
 		"codegraph_search", "memory_read", "project_info_write", "git_diff", "debug_inject_log",
 		"binary_hash", "csv_read", "web_debug", "go_build", "fix_flex_autoheight"} {
 		reg.Register(&Tool{Name: n, Handler: noopHandler})
@@ -54,7 +54,7 @@ func TestApplyHarnessToolFilter_RemovesPairTools(t *testing.T) {
 		}
 	}
 	// pair 独有工具保留在注册表但被禁用（agent 不可见，前端可见可恢复）
-	for _, name := range []string{"read_file", "write_file", "codegraph_search", "memory_read",
+	for _, name := range []string{"read", "write", "codegraph_search", "memory_read",
 		"project_info_write", "git_diff", "debug_inject_log", "binary_hash", "csv_read", "web_debug",
 		"go_build", "fix_flex_autoheight"} {
 		tool, ok := reg.Get(name)
@@ -162,9 +162,9 @@ func TestHarnessOnlyTools_Default(t *testing.T) {
 var trimmedPromptBannedTools = []string{
 	"codegraph", "memory_", "project_info", "history_", "git_", "debug_", "binary_",
 	"csv_", "word_", "xlsx", "read_pdf", "skill_", "mcp_",
-	"marketplace", "web_debug", "bug_", "screenshot", "multi_edit", "list_files",
-	"run_background", "update_plan", "read_file", "edit_file", "write_file", "run_command",
-	"search_content", "search_files", "find_symbol", "go_build", "go_run", "run_test",
+	"marketplace", "web_debug", "bug_", "screenshot", "multi_edit", "glob",
+	"run_background", "update_plan", "read", "edit", "write", "bash",
+	"grep", "glob", "find_symbol", "go_build", "go_run", "run_test",
 	"fix_flex_autoheight", "image_",
 }
 
@@ -191,7 +191,7 @@ func TestPromptTrimmedInHarnessMode(t *testing.T) {
 	//   协议工具（update_tasks/ask_user 等）同样不点名，
 	//   工具名称与用法完全由 tools 参数 schema 提供。
 	for _, banned := range []string{"update_tasks", "update_plan",
-		"read_file", "edit_file", "write_file", "run_command", "web_search", "web_fetch",
+		"read", "edit", "write", "bash", "web_search", "web_fetch",
 		"cordis_define", "cordis_run", "cordis_inspect", "toolset_build", "toolset_show",
 		"ask_user", "str_replace_editor"} {
 		if strings.Contains(p, banned) {

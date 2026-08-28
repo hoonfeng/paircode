@@ -14,7 +14,7 @@ func TestBuildSnapshotPayloadCarriesOrderedEvents(t *testing.T) {
 	l := &Loop{}
 	l.emit(Event{Type: EventThinking, Content: "分析"})
 	l.emit(Event{Type: EventContent, Content: "先看代码"})
-	l.emit(Event{Type: EventToolCall, Tool: "read_file", Args: `{"path":"main.go"}`, CallID: "c1"})
+	l.emit(Event{Type: EventToolCall, Tool: "read", Args: `{"path":"main.go"}`, CallID: "c1"})
 	l.emit(Event{Type: EventContent, Content: "继续"})
 	m.mu.Lock()
 	m.sessions[convID] = &Session{ConvID: convID, Running: true, Loop: l}

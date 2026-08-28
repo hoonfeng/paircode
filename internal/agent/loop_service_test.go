@@ -13,7 +13,7 @@ import (
 	"wb-ui/goja"
 )
 
-// loopSvcProvider 固定返回 read_file 工具调用的 mock Provider（计数调用次数+时间戳）。
+// loopSvcProvider 固定返回 read 工具调用的 mock Provider（计数调用次数+时间戳）。
 type loopSvcProvider struct {
 	n    atomic.Int32
 	last atomic.Int64 // 上次 Chat 调用 UnixNano
@@ -24,7 +24,7 @@ func (p *loopSvcProvider) Chat(ctx context.Context, m []Message, td []ToolDefini
 	p.n.Add(1)
 	p.last.Store(time.Now().UnixNano())
 	return Message{Role: RoleAssistant, ToolCalls: []ToolCall{
-		{ID: "x", Type: "function", Function: FunctionCall{Name: "read_file", Arguments: `{"path":"x.txt"}`}},
+		{ID: "x", Type: "function", Function: FunctionCall{Name: "read", Arguments: `{"path":"x.txt"}`}},
 	}}, nil
 }
 

@@ -170,7 +170,7 @@ func TestGitToolsProjectParam(t *testing.T) {
 	}
 }
 
-// TestCoreToolsProjectParam 核心文件工具 project 参数：read_file 读非主项目文件。
+// TestCoreToolsProjectParam 核心文件工具 project 参数：read 读非主项目文件。
 func TestCoreToolsProjectParam(t *testing.T) {
 	old := WorkspaceRoots
 	defer func() { WorkspaceRoots = old }()
@@ -183,16 +183,16 @@ func TestCoreToolsProjectParam(t *testing.T) {
 	RegisterDefaultTools(reg, primary)
 
 	// 带 project 参数读非主项目文件（相对路径基于该项目根）
-	out, err := reg.Execute(context.Background(), "read_file", `{"path":"pkg/wb-ui/a.go","project":"wb-ui"}`)
+	out, err := reg.Execute(context.Background(), "read", `{"path":"pkg/wb-ui/a.go","project":"wb-ui"}`)
 	if err != nil {
-		t.Fatalf("read_file(project=wb-ui): %v", err)
+		t.Fatalf("read(project=wb-ui): %v", err)
 	}
 	if !strings.Contains(out, "HelloA") {
 		t.Fatalf("应读到 wb-ui 的 a.go, got %q", out)
 	}
 
 	// 不带 project 默认主项目：同样路径在主项目下不存在
-	_, err = reg.Execute(context.Background(), "read_file", `{"path":"pkg/wb-ui/a.go"}`)
+	_, err = reg.Execute(context.Background(), "read", `{"path":"pkg/wb-ui/a.go"}`)
 	if err == nil {
 		t.Fatalf("主项目下不存在该路径，应报错")
 	}

@@ -57,7 +57,7 @@ func TestJSLoopRealAgentloopToolThenFinal(t *testing.T) {
 	RegisterDefaultTools(reg, dir)
 
 	mock := &MockProvider{Responses: []Message{
-		{ToolCalls: []ToolCall{{ID: "c1", Type: "function", Function: FunctionCall{Name: "read_file", Arguments: `{"path":"hello.txt"}`}}}},
+		{ToolCalls: []ToolCall{{ID: "c1", Type: "function", Function: FunctionCall{Name: "read", Arguments: `{"path":"hello.txt"}`}}}},
 		{Content: "读到了 JSLOOP_WORLD"},
 	}}
 	var events []Event
@@ -79,7 +79,7 @@ func TestJSLoopRealAgentloopToolThenFinal(t *testing.T) {
 		}
 	}
 	if !foundTool {
-		t.Error("未把 read_file 结果作 role=tool 消息回灌")
+		t.Error("未把 read 结果作 role=tool 消息回灌")
 	}
 	// 末事件 done
 	last := events[len(events)-1]
@@ -89,7 +89,7 @@ func TestJSLoopRealAgentloopToolThenFinal(t *testing.T) {
 	// 事件流完整性：thinking/content/tool_call/tool_result/usage
 	var sawCall, sawResult, sawContent bool
 	for _, e := range events {
-		if e.Type == EventToolCall && e.Tool == "read_file" {
+		if e.Type == EventToolCall && e.Tool == "read" {
 			sawCall = true
 		}
 		if e.Type == EventToolResult && strings.Contains(e.Content, "JSLOOP_WORLD") {
@@ -265,8 +265,8 @@ func TestJSLoopParallelTools(t *testing.T) {
 
 	mock := &MockProvider{Responses: []Message{
 		{ToolCalls: []ToolCall{
-			{ID: "c1", Type: "function", Function: FunctionCall{Name: "read_file", Arguments: `{"path":"a.txt"}`}},
-			{ID: "c2", Type: "function", Function: FunctionCall{Name: "read_file", Arguments: `{"path":"b.txt"}`}},
+			{ID: "c1", Type: "function", Function: FunctionCall{Name: "read", Arguments: `{"path":"a.txt"}`}},
+			{ID: "c2", Type: "function", Function: FunctionCall{Name: "read", Arguments: `{"path":"b.txt"}`}},
 		}},
 		{Content: "读完两个文件"},
 	}}

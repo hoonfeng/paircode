@@ -9,41 +9,43 @@ import (
 	"testing"
 )
 
-// ─── harness 别名注册 ────────────────────────────────────────
+// ─── harness 基座注册 ────────────────────────────────────────
 
-// TestRegisterHarnessTools_Aliases 验证 harness 别名工具注册且复用旧 handler。
-func TestRegisterHarnessTools_Aliases(t *testing.T) {
+// TestRegisterHarnessTools_Base 验证 harness 命名基座工具已以新名注册
+// （Round3 别名层删除：read/write/edit/bash/glob/grep 直接由 registerCoreTools
+// 注册，RegisterHarnessTools 仅补 str_replace_editor/run_code）。
+func TestRegisterHarnessTools_Base(t *testing.T) {
 	root := t.TempDir()
 	r := NewRegistry()
 	RegisterDefaultTools(r, root)
 	RegisterHarnessTools(r, root)
 
-	pairs := [][2]string{
-		{"read", "read_file"},
-		{"write", "write_file"},
-		{"edit", "edit_file"},
-		{"glob", "search_files"},
-		{"grep", "search_content"},
-		{"bash", "run_command"},
+	// 基座工具直接存在（不再依赖旧名 + 别名层）
+	base := map[string]bool{
+		"read": true, "write": true, "edit": true,
+		"glob": true, "grep": true, "bash": true,
 	}
-	for _, p := range pairs {
-		alias, ok := r.Get(p[0])
+	for name := range base {
+		tool, ok := r.Get(name)
 		if !ok {
-			t.Fatalf("harness 别名 %q 未注册", p[0])
+			t.Fatalf("基座工具 %q 未注册", name)
 		}
-		src, ok := r.Get(p[1])
-		if !ok {
-			t.Fatalf("旧工具 %q 未注册", p[1])
+		if tool.Handler == nil {
+			t.Fatalf("%q handler 为空", name)
 		}
-		if alias.Handler == nil || src.Handler == nil {
-			t.Fatalf("%q/%q handler 为空", p[0], p[1])
+	}
+	// 旧名注册面已删除（零旧名）
+	for _, old := range []string{"read_file", "write_file", "edit_file", "list_files", "run_command", "search_content", "search_files"} {
+		if _, ok := r.Get(old); ok {
+			t.Errorf("旧名 %q 不应再注册（Round3 清理）", old)
 		}
-		if alias.ReadOnly != src.ReadOnly {
-			t.Errorf("%q ReadOnly=%v 与 %q 不一致（%v）", p[0], alias.ReadOnly, p[1], src.ReadOnly)
-		}
-		if alias.RequiresApproval != src.RequiresApproval {
-			t.Errorf("%q RequiresApproval=%v 与 %q 不一致（%v）", p[0], alias.RequiresApproval, p[1], src.RequiresApproval)
-		}
+	}
+	// 只读/审批语义
+	if ro, _ := r.Get("read"); !ro.ReadOnly {
+		t.Error("read 应只读")
+	}
+	if wa, _ := r.Get("write"); !wa.RequiresApproval {
+		t.Error("write 应需审批")
 	}
 	// web 工具已有同名，不重复注册
 	if _, ok := r.Get("web_search"); !ok {
@@ -348,13 +350,13 @@ func TestUnknownToolFriendly(t *testing.T) {
 	}
 }
 
-// TestListFilesNotFound list_files 目录不存在 → 明确提示。
-func TestListFilesNotFound(t *testing.T) {
+// TestGlobListNotFound glob 目录列举模式（无 pattern）目录不存在 → 明确提示。
+func TestGlobListNotFound(t *testing.T) {
 	root := t.TempDir()
 	r := NewRegistry()
 	RegisterDefaultTools(r, root)
-	_, err := r.Execute(context.Background(), "list_files", `{"path":"no_such_dir_abc"}`)
+	_, err := r.Execute(context.Background(), "glob", `{"path":"no_such_dir_abc"}`)
 	if err == nil || !strings.Contains(err.Error(), "目录不存在") {
-		t.Errorf("list_files 目录不存在应明确提示，got err=%v", err)
+		t.Errorf("glob 目录不存在应明确提示，got err=%v", err)
 	}
 }

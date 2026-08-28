@@ -40,7 +40,7 @@ func TestRunBackground(t *testing.T) {
 	}
 }
 
-// TestRunCommandInLoop run_command 执行完毕后循环继续调用 LLM 的下一轮。
+// TestRunCommandInLoop bash 执行完毕后循环继续调用 LLM 的下一轮。
 // 验证：工具结果正确回灌 → 第 2 轮 LLM 自然终止。
 func TestRunCommandInLoop(t *testing.T) {
 	dir := t.TempDir()
@@ -48,7 +48,7 @@ func TestRunCommandInLoop(t *testing.T) {
 	RegisterDefaultTools(reg, dir)
 
 	mock := &MockProvider{Responses: []Message{
-		{ToolCalls: []ToolCall{{ID: "c1", Type: "function", Function: FunctionCall{Name: "run_command", Arguments: `{"command":"echo RUNCMD_OK"}`}}}},
+		{ToolCalls: []ToolCall{{ID: "c1", Type: "function", Function: FunctionCall{Name: "bash", Arguments: `{"command":"echo RUNCMD_OK"}`}}}},
 		{Content: "done"},
 	}}
 	var events []Event
@@ -61,7 +61,7 @@ func TestRunCommandInLoop(t *testing.T) {
 	}
 
 	// ★ 核心验证：LLM 应被调用了 2 次（工具结果→下一轮→自然终止）
-	// 如果这里失败，说明 run_command 执行完后 loop 没有继续调用 LLM
+	// 如果这里失败，说明 bash 执行完后 loop 没有继续调用 LLM
 	if mock.Calls() != 2 {
 		t.Errorf("LLM 应调用 2 次（工具结果→下一轮），得 %d", mock.Calls())
 	}
@@ -75,7 +75,7 @@ func TestRunCommandInLoop(t *testing.T) {
 		}
 	}
 	if !foundOutput {
-		t.Errorf("未把 run_command 结果作 role=tool 消息回灌")
+		t.Errorf("未把 bash 结果作 role=tool 消息回灌")
 	}
 
 	// 验证末事件为 done
@@ -85,7 +85,7 @@ func TestRunCommandInLoop(t *testing.T) {
 	}
 }
 
-// TestRunCommandContextCancelled 验证 context 取消时 run_command 优雅终止且循环正常退出。
+// TestRunCommandContextCancelled 验证 context 取消时 bash 优雅终止且循环正常退出。
 func TestRunCommandContextCancelled(t *testing.T) {
 	dir := t.TempDir()
 	reg := NewRegistry()
@@ -95,7 +95,7 @@ func TestRunCommandContextCancelled(t *testing.T) {
 	defer cancel()
 
 	mock := &MockProvider{Responses: []Message{
-		{ToolCalls: []ToolCall{{ID: "c1", Type: "function", Function: FunctionCall{Name: "run_command", Arguments: `{"command":"ping -n 10 127.0.0.1"}`}}}},
+		{ToolCalls: []ToolCall{{ID: "c1", Type: "function", Function: FunctionCall{Name: "bash", Arguments: `{"command":"ping -n 10 127.0.0.1"}`}}}},
 		{Content: "done"},
 	}}
 	loop := &Loop{Provider: mock, Registry: reg, System: "test-cancel", MaxIterations: 5}

@@ -23,7 +23,7 @@ func TestProjectRules(t *testing.T) {
 	}
 }
 
-// 端到端 TAOR：MockProvider 脚本「第1轮调 read_file → 第2轮自然终止」，
+// 端到端 TAOR：MockProvider 脚本「第1轮调 read → 第2轮自然终止」，
 // 验证 think→act→observe(结果回灌)→think→done 全链路。
 func TestLoopToolThenFinal(t *testing.T) {
 	dir := t.TempDir()
@@ -32,7 +32,7 @@ func TestLoopToolThenFinal(t *testing.T) {
 	RegisterDefaultTools(reg, dir)
 
 	mock := &MockProvider{Responses: []Message{
-		{ToolCalls: []ToolCall{{ID: "c1", Type: "function", Function: FunctionCall{Name: "read_file", Arguments: `{"path":"hello.txt"}`}}}},
+		{ToolCalls: []ToolCall{{ID: "c1", Type: "function", Function: FunctionCall{Name: "read", Arguments: `{"path":"hello.txt"}`}}}},
 		{Content: "读到了 WORLD_123"},
 	}}
 	var events []Event
@@ -55,7 +55,7 @@ func TestLoopToolThenFinal(t *testing.T) {
 		}
 	}
 	if !foundTool {
-		t.Error("未把 read_file 结果作 role=tool 消息回灌")
+		t.Error("未把 read 结果作 role=tool 消息回灌")
 	}
 
 	// 末事件应为 done（task_complete），且内容含 WORLD_123
@@ -64,10 +64,10 @@ func TestLoopToolThenFinal(t *testing.T) {
 		t.Errorf("末事件应为 EventDone(task_complete)，得 %+v", last)
 	}
 
-	// 应广播过 tool_call(read_file) 与 tool_result(含结果) 事件
+	// 应广播过 tool_call(read) 与 tool_result(含结果) 事件
 	var sawCall, sawResult bool
 	for _, e := range events {
-		if e.Type == EventToolCall && e.Tool == "read_file" {
+		if e.Type == EventToolCall && e.Tool == "read" {
 			sawCall = true
 		}
 		if e.Type == EventToolResult && strings.Contains(e.Content, "WORLD_123") {
@@ -100,7 +100,7 @@ func (a *alwaysToolProvider) Name() string { return "always" }
 func (a *alwaysToolProvider) Chat(ctx context.Context, m []Message, td []ToolDefinition, oc func(Chunk)) (Message, error) {
 	a.n++
 	return Message{Role: RoleAssistant, ToolCalls: []ToolCall{
-		{ID: "x", Type: "function", Function: FunctionCall{Name: "read_file", Arguments: `{"path":"x.txt"}`}},
+		{ID: "x", Type: "function", Function: FunctionCall{Name: "read", Arguments: `{"path":"x.txt"}`}},
 	}}, nil
 }
 
@@ -132,7 +132,7 @@ func TestLoopApprovalReject(t *testing.T) {
 	reg := NewRegistry()
 	RegisterDefaultTools(reg, dir)
 	mock := &MockProvider{Responses: []Message{
-		{ToolCalls: []ToolCall{{ID: "w1", Type: "function", Function: FunctionCall{Name: "write_file", Arguments: `{"path":"out.txt","content":"DATA"}`}}}},
+		{ToolCalls: []ToolCall{{ID: "w1", Type: "function", Function: FunctionCall{Name: "write", Arguments: `{"path":"out.txt","content":"DATA"}`}}}},
 		{Content: "放弃写文件"},
 	}}
 	var approvedTools []string
@@ -147,10 +147,10 @@ func TestLoopApprovalReject(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 	if _, e := os.Stat(filepath.Join(dir, "out.txt")); e == nil {
-		t.Error("被拒绝的 write_file 不应写盘")
+		t.Error("被拒绝的 write 不应写盘")
 	}
-	if len(approvedTools) != 1 || approvedTools[0] != "write_file" {
-		t.Errorf("Approve 应被 write_file 调用一次，得 %v", approvedTools)
+	if len(approvedTools) != 1 || approvedTools[0] != "write" {
+		t.Errorf("Approve 应被 write 调用一次，得 %v", approvedTools)
 	}
 	var fedBack bool
 	for _, m := range msgs {
@@ -169,7 +169,7 @@ func TestLoopApprovalApprove(t *testing.T) {
 	reg := NewRegistry()
 	RegisterDefaultTools(reg, dir)
 	mock := &MockProvider{Responses: []Message{
-		{ToolCalls: []ToolCall{{ID: "w1", Type: "function", Function: FunctionCall{Name: "write_file", Arguments: `{"path":"out.txt","content":"DATA"}`}}}},
+		{ToolCalls: []ToolCall{{ID: "w1", Type: "function", Function: FunctionCall{Name: "write", Arguments: `{"path":"out.txt","content":"DATA"}`}}}},
 		{Content: "已写入文件"},
 	}}
 	loop := &Loop{Provider: mock, Registry: reg, MaxIterations: 5,
@@ -178,18 +178,18 @@ func TestLoopApprovalApprove(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 	if b, e := os.ReadFile(filepath.Join(dir, "out.txt")); e != nil || string(b) != "DATA" {
-		t.Errorf("通过审批的 write_file 应写盘，得 %q err=%v", b, e)
+		t.Errorf("通过审批的 write 应写盘，得 %q err=%v", b, e)
 	}
 }
 
-// 只读工具不经审批门：即便设了 Approve，read_file（RequiresApproval=false）也不应触发它。
+// 只读工具不经审批门：即便设了 Approve，read（RequiresApproval=false）也不应触发它。
 func TestLoopApprovalSkipsReadOnly(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "x.txt"), []byte("hi"), 0o644)
 	reg := NewRegistry()
 	RegisterDefaultTools(reg, dir)
 	mock := &MockProvider{Responses: []Message{
-		{ToolCalls: []ToolCall{{ID: "r1", Type: "function", Function: FunctionCall{Name: "read_file", Arguments: `{"path":"x.txt"}`}}}},
+		{ToolCalls: []ToolCall{{ID: "r1", Type: "function", Function: FunctionCall{Name: "read", Arguments: `{"path":"x.txt"}`}}}},
 		{Content: "已读取文件"},
 	}}
 	called := false
@@ -199,7 +199,7 @@ func TestLoopApprovalSkipsReadOnly(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 	if called {
-		t.Error("只读工具 read_file 不应触发审批门")
+		t.Error("只读工具 read 不应触发审批门")
 	}
 }
 
@@ -245,7 +245,7 @@ func TestCanParallelize(t *testing.T) {
 
 // TestToolError 验证统一错误类型。
 func TestToolError(t *testing.T) {
-	e := NewToolError("edit_file", "替换失败", WithRetryable(true), WithSuggestion("请用行号定位"), WithSeverity("warn"))
+	e := NewToolError("edit", "替换失败", WithRetryable(true), WithSuggestion("请用行号定位"), WithSeverity("warn"))
 	if !e.Retryable {
 		t.Error("应可重试")
 	}
@@ -253,7 +253,7 @@ func TestToolError(t *testing.T) {
 		t.Errorf("severity 应为 warn: %s", e.Severity)
 	}
 	msg := e.Error()
-	if !strings.Contains(msg, "edit_file") || !strings.Contains(msg, "替换失败") || !strings.Contains(msg, "行号定位") {
+	if !strings.Contains(msg, "edit") || !strings.Contains(msg, "替换失败") || !strings.Contains(msg, "行号定位") {
 		t.Errorf("错误消息不完整: %s", msg)
 	}
 	e2 := NewToolError("run", "超时")
@@ -309,8 +309,8 @@ func TestLoopLiveSnapshot(t *testing.T) {
 	l := &Loop{}
 	l.emit(Event{Type: EventThinking, Content: "分析问题"})
 	l.emit(Event{Type: EventContent, Content: "我先看看代码"})
-	l.emit(Event{Type: EventToolCall, Tool: "read_file", Args: `{"path":"main.go"}`, CallID: "c1"})
-	l.emit(Event{Type: EventToolResult, Tool: "read_file", Content: "package main", CallID: "c1"})
+	l.emit(Event{Type: EventToolCall, Tool: "read", Args: `{"path":"main.go"}`, CallID: "c1"})
+	l.emit(Event{Type: EventToolResult, Tool: "read", Content: "package main", CallID: "c1"})
 	l.emit(Event{Type: EventContent, Content: "代码结构清晰"})
 
 	content, reasoning, tools, events := l.LiveSnapshot()
@@ -323,7 +323,7 @@ func TestLoopLiveSnapshot(t *testing.T) {
 	if len(tools) != 1 {
 		t.Fatalf("应 1 个工具段，得 %d", len(tools))
 	}
-	if tools[0].Name != "read_file" || tools[0].Args != `{"path":"main.go"}` || tools[0].Result != "package main" {
+	if tools[0].Name != "read" || tools[0].Args != `{"path":"main.go"}` || tools[0].Result != "package main" {
 		t.Errorf("工具段 = %+v", tools[0])
 	}
 

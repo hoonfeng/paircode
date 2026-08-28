@@ -30,14 +30,14 @@ func TestInspectBinary(t *testing.T) {
 	}
 }
 
-// TestReadFileBinaryGuard read_file 遇二进制报错并引导到 inspect_binary（不把字节灌进上下文）。
+// TestReadFileBinaryGuard read 遇二进制报错并引导到 inspect_binary（不把字节灌进上下文）。
 func TestReadFileBinaryGuard(t *testing.T) {
 	root := t.TempDir()
 	reg := NewRegistry()
 	RegisterDefaultTools(reg, root)
 	ctx := context.Background()
 	os.WriteFile(filepath.Join(root, "blob.bin"), []byte{0x00, 0x01, 0x02, 0x00, 0xff}, 0o644)
-	if _, err := reg.Execute(ctx, "read_file", `{"path":"blob.bin"}`); err == nil || !strings.Contains(err.Error(), "inspect_binary") {
+	if _, err := reg.Execute(ctx, "read", `{"path":"blob.bin"}`); err == nil || !strings.Contains(err.Error(), "inspect_binary") {
 		t.Errorf("读二进制应报错并引导 inspect_binary，得 %v", err)
 	}
 }
@@ -106,11 +106,11 @@ func TestExtraSkipDirs(t *testing.T) {
 		os.MkdirAll(filepath.Join(root, d), 0o755)
 		os.WriteFile(filepath.Join(root, d, "f.txt"), []byte("needle 针"), 0o644)
 	}
-	if out, _ := reg.Execute(ctx, "search_content", `{"pattern":"needle"}`); !strings.Contains(out, "generated/") {
+	if out, _ := reg.Execute(ctx, "grep", `{"pattern":"needle"}`); !strings.Contains(out, "generated/") {
 		t.Errorf("默认 generated 不在跳过表，应命中：%q", out)
 	}
 	SetExtraSkipDirs([]string{"generated"})
-	out, _ := reg.Execute(ctx, "search_content", `{"pattern":"needle"}`)
+	out, _ := reg.Execute(ctx, "grep", `{"pattern":"needle"}`)
 	if strings.Contains(out, "generated/") {
 		t.Errorf("配置忽略后不应命中 generated：%q", out)
 	}
@@ -129,7 +129,7 @@ func TestSearchSkipsExpandedDirs(t *testing.T) {
 		os.MkdirAll(filepath.Join(root, d), 0o755)
 		os.WriteFile(filepath.Join(root, d, "f.txt"), []byte("needle 针"), 0o644)
 	}
-	out, _ := reg.Execute(ctx, "search_content", `{"pattern":"needle"}`)
+	out, _ := reg.Execute(ctx, "grep", `{"pattern":"needle"}`)
 	if strings.Contains(out, "target/") || strings.Contains(out, "__pycache__/") {
 		t.Errorf("应跳过依赖库/产物目录：%q", out)
 	}

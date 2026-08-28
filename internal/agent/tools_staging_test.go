@@ -16,14 +16,14 @@ func TestFilterMinimalTools(t *testing.T) {
 		}
 		return out
 	}
-	full := mk("read_file", "grep", "codegraph_build", "write_file", "binary_patch", "run_command", "edit_file")
+	full := mk("read", "grep", "codegraph_build", "write", "binary_patch", "bash", "edit")
 	min := FilterMinimalTools(full)
-	if len(min) != 5 { // read_file/write_file/run_command/edit_file + grep
+	if len(min) != 5 { // read/write/bash/edit + grep
 		t.Fatalf("极简面应为 5 个，得 %d: %+v", len(min), min)
 	}
 	for _, d := range min {
 		switch d.Function.Name {
-		case "read_file", "write_file", "run_command", "edit_file", "grep":
+		case "read", "write", "bash", "edit", "grep":
 		default:
 			t.Errorf("不应保留 %s", d.Function.Name)
 		}
@@ -86,7 +86,7 @@ func TestJSLoopStagedToolsFirstStepMinimal(t *testing.T) {
 
 	rp := &recordingProvider{inner: &MockProvider{Responses: []Message{
 		{ToolCalls: []ToolCall{
-			{ID: "s1", Type: "function", Function: FunctionCall{Name: "read_file", Arguments: `{"path":"a.txt"}`}},
+			{ID: "s1", Type: "function", Function: FunctionCall{Name: "read", Arguments: `{"path":"a.txt"}`}},
 		}},
 		{Content: "完成"},
 	}}}
@@ -128,7 +128,7 @@ func TestJSLoopStagedToolsDisabled(t *testing.T) {
 
 	rp := &recordingProvider{inner: &MockProvider{Responses: []Message{
 		{ToolCalls: []ToolCall{
-			{ID: "s1", Type: "function", Function: FunctionCall{Name: "read_file", Arguments: `{"path":"a.txt"}`}},
+			{ID: "s1", Type: "function", Function: FunctionCall{Name: "read", Arguments: `{"path":"a.txt"}`}},
 		}},
 		{Content: "完成"},
 	}}}
@@ -152,7 +152,7 @@ func TestGoLoopStagedToolsFirstStepMinimal(t *testing.T) {
 
 	rp := &recordingProvider{inner: &MockProvider{Responses: []Message{
 		{ToolCalls: []ToolCall{
-			{ID: "s1", Type: "function", Function: FunctionCall{Name: "read_file", Arguments: `{"path":"a.txt"}`}},
+			{ID: "s1", Type: "function", Function: FunctionCall{Name: "read", Arguments: `{"path":"a.txt"}`}},
 		}},
 		{Content: "完成"},
 	}}}
@@ -176,8 +176,8 @@ func TestMinimalToolGroups(t *testing.T) {
 	}
 	// ngroups 为空 → 回退默认组
 	full := []ToolDefinition{
-		{Type: "function", Function: FunctionDefinition{Name: "read_file", Description: "d"}},
-		{Type: "function", Function: FunctionDefinition{Name: "run_command", Description: "d"}},
+		{Type: "function", Function: FunctionDefinition{Name: "read", Description: "d"}},
+		{Type: "function", Function: FunctionDefinition{Name: "bash", Description: "d"}},
 	}
 	if got := FilterMinimalToolsWith(full, nil); len(got) != 2 {
 		t.Fatalf("空组应回退默认过滤，得 %d", len(got))
@@ -215,9 +215,9 @@ func TestMinimalToolGroups(t *testing.T) {
 
 // TestNewLoopStagedGroupsTransferred LoopOpts 候选组经 newLoop 传入 Loop 字段。
 func TestNewLoopStagedGroupsTransferred(t *testing.T) {
-	groups := [][]string{{"read_file"}, {"write_file"}}
+	groups := [][]string{{"read"}, {"write"}}
 	l := newLoop(LoopOpts{StagedToolGroups: groups})
-	if len(l.StagedToolGroups) != 2 || l.StagedToolGroups[0][0] != "read_file" {
+	if len(l.StagedToolGroups) != 2 || l.StagedToolGroups[0][0] != "read" {
 		t.Fatalf("候选组未传入 Loop: %+v", l.StagedToolGroups)
 	}
 	// 未配置 → nil（过滤时回退默认）

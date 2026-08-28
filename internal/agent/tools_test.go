@@ -14,48 +14,48 @@ func TestToolsReadWriteEditList(t *testing.T) {
 	RegisterDefaultTools(reg, dir)
 	ctx := context.Background()
 
-	// write_file（含自动建父目录）
-	out, err := reg.Execute(ctx, "write_file", `{"path":"sub/a.txt","content":"hello WORLD"}`)
+	// write（含自动建父目录）
+	out, err := reg.Execute(ctx, "write", `{"path":"sub/a.txt","content":"hello WORLD"}`)
 	if err != nil {
-		t.Fatalf("write_file: %v", err)
+		t.Fatalf("write: %v", err)
 	}
 	if !strings.Contains(out, "已写入") {
-		t.Errorf("write_file 返回 %q", out)
+		t.Errorf("write 返回 %q", out)
 	}
 	if b, _ := os.ReadFile(filepath.Join(dir, "sub", "a.txt")); string(b) != "hello WORLD" {
 		t.Errorf("写入内容 = %q", b)
 	}
 
-	// read_file
-	out, err = reg.Execute(ctx, "read_file", `{"path":"sub/a.txt"}`)
+	// read
+	out, err = reg.Execute(ctx, "read", `{"path":"sub/a.txt"}`)
 	if err != nil || out != "hello WORLD" {
-		t.Errorf("read_file = %q, err=%v", out, err)
+		t.Errorf("read = %q, err=%v", out, err)
 	}
 
-	// edit_file（唯一替换）
-	if _, err = reg.Execute(ctx, "edit_file", `{"path":"sub/a.txt","old_string":"WORLD","new_string":"GOUI"}`); err != nil {
-		t.Fatalf("edit_file: %v", err)
+	// edit（唯一替换）
+	if _, err = reg.Execute(ctx, "edit", `{"path":"sub/a.txt","old_string":"WORLD","new_string":"GOUI"}`); err != nil {
+		t.Fatalf("edit: %v", err)
 	}
 	if b, _ := os.ReadFile(filepath.Join(dir, "sub", "a.txt")); string(b) != "hello GOUI" {
 		t.Errorf("edit 后 = %q", b)
 	}
 
-	// edit_file：old_string 非唯一 → 报错
+	// edit：old_string 非唯一 → 报错
 	os.WriteFile(filepath.Join(dir, "dup.txt"), []byte("x x x"), 0o644)
-	if _, err = reg.Execute(ctx, "edit_file", `{"path":"dup.txt","old_string":"x","new_string":"y"}`); err == nil {
-		t.Error("edit_file 非唯一 old_string 应报错")
+	if _, err = reg.Execute(ctx, "edit", `{"path":"dup.txt","old_string":"x","new_string":"y"}`); err == nil {
+		t.Error("edit 非唯一 old_string 应报错")
 	}
 
-	// list_files
-	out, err = reg.Execute(ctx, "list_files", `{}`)
+	// glob
+	out, err = reg.Execute(ctx, "glob", `{}`)
 	if err != nil {
-		t.Fatalf("list_files: %v", err)
+		t.Fatalf("glob: %v", err)
 	}
 	if !strings.Contains(out, "sub/") || !strings.Contains(out, "dup.txt") {
-		t.Errorf("list_files = %q", out)
+		t.Errorf("glob = %q", out)
 	}
-	// list_files + pattern
-	if out, _ = reg.Execute(ctx, "list_files", `{"pattern":"*.txt"}`); !strings.Contains(out, "dup.txt") {
+	// glob + pattern
+	if out, _ = reg.Execute(ctx, "glob", `{"pattern":"*.txt"}`); !strings.Contains(out, "dup.txt") {
 		t.Errorf("pattern 过滤 = %q", out)
 	}
 }
@@ -65,7 +65,7 @@ func TestToolsPathTraversalBlocked(t *testing.T) {
 	reg := NewRegistry()
 	RegisterDefaultTools(reg, dir)
 	for _, p := range []string{"../escape.txt", "../../etc/hosts", "sub/../../out.txt"} {
-		if _, err := reg.Execute(context.Background(), "read_file", `{"path":"`+p+`"}`); err == nil {
+		if _, err := reg.Execute(context.Background(), "read", `{"path":"`+p+`"}`); err == nil {
 			t.Errorf("越界路径 %q 应被拒", p)
 		}
 	}
@@ -75,12 +75,12 @@ func TestToolRunCommand(t *testing.T) {
 	dir := t.TempDir()
 	reg := NewRegistry()
 	RegisterDefaultTools(reg, dir)
-	out, err := reg.Execute(context.Background(), "run_command", `{"command":"echo CMD_OK_88"}`)
+	out, err := reg.Execute(context.Background(), "bash", `{"command":"echo CMD_OK_88"}`)
 	if err != nil {
-		t.Fatalf("run_command: %v", err)
+		t.Fatalf("bash: %v", err)
 	}
 	if !strings.Contains(out, "CMD_OK_88") {
-		t.Errorf("run_command 输出 = %q", out)
+		t.Errorf("bash 输出 = %q", out)
 	}
 }
 
@@ -123,17 +123,17 @@ func TestReadFileRange(t *testing.T) {
 	RegisterDefaultTools(r, dir)
 	ctx := context.Background()
 
-	out, err := r.Execute(ctx, "read_file", `{"path":"f.txt","offset":2,"limit":2}`)
+	out, err := r.Execute(ctx, "read", `{"path":"f.txt","offset":2,"limit":2}`)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if out != "L2\nL3" {
 		t.Errorf("片段 = %q，期望 'L2\\nL3'", out)
 	}
-	if full, _ := r.Execute(ctx, "read_file", `{"path":"f.txt"}`); full != "L1\nL2\nL3\nL4\nL5" {
+	if full, _ := r.Execute(ctx, "read", `{"path":"f.txt"}`); full != "L1\nL2\nL3\nL4\nL5" {
 		t.Errorf("全文 = %q", full)
 	}
-	if _, err := r.Execute(ctx, "read_file", `{"path":"f.txt","offset":99}`); err == nil {
+	if _, err := r.Execute(ctx, "read", `{"path":"f.txt","offset":99}`); err == nil {
 		t.Error("offset 越界应报错")
 	}
 }
@@ -185,28 +185,28 @@ func TestRegistryDefinitions(t *testing.T) {
 				i-1, defs[i-1].Function.Name, i, defs[i].Function.Name)
 		}
 	}
-	// read_file 仍在列表中且 required 参数正确（不再假设位置）
+	// read 仍在列表中且 required 参数正确（不再假设位置）
 	found := false
 	for _, d := range defs {
-		if d.Function.Name == "read_file" {
+		if d.Function.Name == "read" {
 			found = true
 			req, _ := d.Function.Parameters["required"].([]string)
 			if len(req) == 0 || req[0] != "path" {
-				t.Errorf("read_file required = %v", req)
+				t.Errorf("read required = %v", req)
 			}
 			break
 		}
 	}
 	if !found {
-		t.Error("read_file 未出现在 Definitions 中")
+		t.Error("read 未出现在 Definitions 中")
 	}
 	// 关键工具必须可见（覆盖各注册组）
 	// ★ 注：find_symbol/get_file_symbols → codegraph_search/codegraph_file_structure；
-	//   find_files_by_pattern → search_files（增加 language 参数）；
+	//   find_files_by_pattern → glob（增加 language 参数）；
 	//   task_create → update_tasks。均已合并/更名，这里断言替代后的工具。
 	mustHave := []string{
-		"read_file", "write_file", "edit_file", "multi_edit", "list_files", "run_command",
-		"git_status", "memory_write", "search_files", "search_content",
+		"read", "write", "edit", "multi_edit", "glob", "bash",
+		"git_status", "memory_write", "glob", "grep",
 		"update_tasks", "codegraph_search", "codegraph_file_structure",
 		"project_info_write", "project_info_read", "inspect_binary", "binary_strings",
 		"debug_inject_log", "debug_run_capture", "debug_evaluate_session",

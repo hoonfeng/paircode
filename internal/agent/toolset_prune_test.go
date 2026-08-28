@@ -23,7 +23,7 @@ func TestVisibleToolsSkipUnloadedPlugin(t *testing.T) {
 
 	// 模拟两个插件：plug-a running、plug-b stopped
 	ph.mu.Lock()
-	ph.pluginTools["plug-a"] = []string{"read_file", "tool_a_only"}
+	ph.pluginTools["plug-a"] = []string{"read", "tool_a_only"}
 	ph.pluginTools["plug-b"] = []string{"tool_b_only"}
 	ph.states["plug-a"] = PluginRunning
 	ph.states["plug-b"] = PluginStopped
@@ -32,13 +32,13 @@ func TestVisibleToolsSkipUnloadedPlugin(t *testing.T) {
 	mkTs(t, root, []ToolsetPlugin{
 		{Name: "plug-a", Code: "x", Purpose: "running 插件"},
 		{Name: "plug-b", Code: "x", Purpose: "stopped 插件"},
-		{Name: "builtin:test", Builtin: "test", Tools: []string{"read_file", "fake_not_registered"}},
+		{Name: "builtin:test", Builtin: "test", Tools: []string{"read", "fake_not_registered"}},
 	})
 
 	keep := ph.workspaceToolsetVisibleTools()
 	// running 插件的工具在白名单
-	if !keep["read_file"] {
-		t.Errorf("plug-a（running）的工具 read_file 应在白名单")
+	if !keep["read"] {
+		t.Errorf("plug-a（running）的工具 read 应在白名单")
 	}
 	if !keep["tool_a_only"] {
 		t.Errorf("plug-a（running）的工具 tool_a_only 应在白名单")
@@ -60,7 +60,7 @@ func TestPruneUnavailableFromToolsets(t *testing.T) {
 
 	// plug-a running（保留）；plug-b stopped（应移除）
 	ph.mu.Lock()
-	ph.pluginTools["plug-a"] = []string{"read_file"}
+	ph.pluginTools["plug-a"] = []string{"read"}
 	ph.states["plug-a"] = PluginRunning
 	ph.states["plug-b"] = PluginStopped
 	ph.mu.Unlock()
@@ -71,13 +71,13 @@ func TestPruneUnavailableFromToolsets(t *testing.T) {
 		// ② JS 条目：未装载插件 → 整条移除
 		{Name: "plug-b", Code: "x", Purpose: "stopped"},
 		// ③ builtin 条目：含未注册工具 → 该工具移除，注册工具保留
-		{Name: "builtin:g1", Builtin: "g1", Tools: []string{"read_file", "fake_missing"}},
+		{Name: "builtin:g1", Builtin: "g1", Tools: []string{"read", "fake_missing"}},
 		// ④ builtin 条目：工具全部被 DisabledTools 摘除（面板未启用）→ 整条移除
-		{Name: "builtin:g2", Builtin: "g2", Tools: []string{"read_file"}, DisabledTools: []string{"read_file"}},
+		{Name: "builtin:g2", Builtin: "g2", Tools: []string{"read"}, DisabledTools: []string{"read"}},
 		// ⑤ builtin 条目：无工具声明 → 整条移除
 		{Name: "builtin:g3", Builtin: "g3", Tools: []string{}},
 		// ⑥ builtin 条目：正常（保留）
-		{Name: "builtin:g4", Builtin: "g4", Tools: []string{"read_file"}},
+		{Name: "builtin:g4", Builtin: "g4", Tools: []string{"read"}},
 	})
 
 	cleaned := pruneUnavailableFromToolsets(ph, root)

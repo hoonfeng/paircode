@@ -20,8 +20,8 @@ func TestLoopPersistTurnStepConsistency(t *testing.T) {
 
 	// 3 次 LLM 调用：step1=tool call，step2=tool call，step3=纯文本收尾。
 	mock := &MockProvider{Responses: []Message{
-		{ToolCalls: []ToolCall{{ID: "c1", Type: "function", Function: FunctionCall{Name: "read_file", Arguments: `{"path":"nope.txt"}`}}}},
-		{ToolCalls: []ToolCall{{ID: "c2", Type: "function", Function: FunctionCall{Name: "read_file", Arguments: `{"path":"nope2.txt"}`}}}},
+		{ToolCalls: []ToolCall{{ID: "c1", Type: "function", Function: FunctionCall{Name: "read", Arguments: `{"path":"nope.txt"}`}}}},
+		{ToolCalls: []ToolCall{{ID: "c2", Type: "function", Function: FunctionCall{Name: "read", Arguments: `{"path":"nope2.txt"}`}}}},
 		{Content: "任务完成"},
 	}}
 	var events []Event

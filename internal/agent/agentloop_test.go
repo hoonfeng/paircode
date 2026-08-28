@@ -16,7 +16,7 @@ func TestLoopTurnStepFields(t *testing.T) {
 	RegisterDefaultTools(reg, dir)
 
 	mock := &MockProvider{Responses: []Message{
-		{ToolCalls: []ToolCall{{ID: "c1", Type: "function", Function: FunctionCall{Name: "read_file", Arguments: `{"path":"nope.txt"}`}}}},
+		{ToolCalls: []ToolCall{{ID: "c1", Type: "function", Function: FunctionCall{Name: "read", Arguments: `{"path":"nope.txt"}`}}}},
 		{Content: "任务完成"},
 	}}
 	var events []Event
@@ -187,7 +187,7 @@ func TestLoopMaxTokensSticky(t *testing.T) {
 	// 第 2 轮：正常完成（无 tool call）→ 结果不得降级为 completed
 	prov := &stopReasonProvider{
 		responses: []Message{
-			{ToolCalls: []ToolCall{{ID: "c1", Type: "function", Function: FunctionCall{Name: "read_file", Arguments: `{"path":"x.txt"}`}}}},
+			{ToolCalls: []ToolCall{{ID: "c1", Type: "function", Function: FunctionCall{Name: "read", Arguments: `{"path":"x.txt"}`}}}},
 			{Content: "总结完成"},
 		},
 		stopReasons: []string{"length", "stop"},
@@ -209,7 +209,7 @@ func TestLoopMaxTokensSticky(t *testing.T) {
 func TestLoopCancelAborted(t *testing.T) {
 	reg := NewRegistry()
 	mock := &MockProvider{Responses: []Message{
-		{ToolCalls: []ToolCall{{ID: "c1", Type: "function", Function: FunctionCall{Name: "read_file", Arguments: `{"path":"x.txt"}`}}}},
+		{ToolCalls: []ToolCall{{ID: "c1", Type: "function", Function: FunctionCall{Name: "read", Arguments: `{"path":"x.txt"}`}}}},
 		{Content: "继续"},
 	}}
 	loop := &Loop{Provider: mock, Registry: reg, System: "test", MaxIterations: 5}
@@ -239,7 +239,7 @@ func TestLoopFollowUpOpensNextTurn(t *testing.T) {
 	// 第 2 轮调用工具 → 第 3 轮自然终止 → 完成
 	mock := &MockProvider{Responses: []Message{
 		{Content: "第一段完成"},
-		{ToolCalls: []ToolCall{{ID: "c1", Type: "function", Function: FunctionCall{Name: "read_file", Arguments: `{"path":"x.txt"}`}}}},
+		{ToolCalls: []ToolCall{{ID: "c1", Type: "function", Function: FunctionCall{Name: "read", Arguments: `{"path":"x.txt"}`}}}},
 		{Content: "第二段完成"},
 	}}
 	loop := &Loop{Provider: mock, Registry: reg, System: "test", MaxIterations: 5}
