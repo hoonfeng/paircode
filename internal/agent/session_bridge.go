@@ -171,6 +171,11 @@ func archiveSessionTools() {
 				if err != nil {
 					return "", err
 				}
+				// ★ t4 F6：answers 问题 ID 集合校验（前端异常/协议错配时明确报错，
+				//   防乱序/缺答/未知 ID 静默回灌给模型）
+				if err := validateAskAnswers(qs, answers); err != nil {
+					return "", err
+				}
 				b, _ := json.MarshalIndent(map[string]any{"answers": answers}, "", "  ")
 				return string(b), nil
 			}

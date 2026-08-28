@@ -49,6 +49,31 @@ func TestAskUserMultiQuestion_Parse(t *testing.T) {
 	}
 }
 
+// TestValidateAskAnswers 回答 ID 集合校验（t4 F6）：合法通过、未知 ID/重复/缺答拒绝。
+func TestValidateAskAnswers(t *testing.T) {
+	qs := []SegmentQuestion{{ID: "q1", Question: "A?"}, {ID: "q2", Question: "B?"}}
+	// 合法
+	if err := validateAskAnswers(qs, []AskAnswer{{ID: "q1", Answer: "a"}, {ID: "q2", Answer: "b"}}); err != nil {
+		t.Errorf("合法 answers 应通过: %v", err)
+	}
+	// 未知 ID
+	if err := validateAskAnswers(qs, []AskAnswer{{ID: "q1", Answer: "a"}, {ID: "qx", Answer: "b"}}); err == nil {
+		t.Error("未知回答 ID 应拒绝")
+	}
+	// 缺答
+	if err := validateAskAnswers(qs, []AskAnswer{{ID: "q1", Answer: "a"}}); err == nil {
+		t.Error("缺回答应拒绝")
+	}
+	// 重复回答
+	if err := validateAskAnswers(qs, []AskAnswer{{ID: "q1", Answer: "a"}, {ID: "q1", Answer: "a2"}, {ID: "q2", Answer: "b"}}); err == nil {
+		t.Error("重复回答应拒绝")
+	}
+	// 空 ID
+	if err := validateAskAnswers(qs, []AskAnswer{{ID: "", Answer: "a"}, {ID: "q2", Answer: "b"}}); err == nil {
+		t.Error("空回答 ID 应拒绝")
+	}
+}
+
 // TestAskUserMultiQuestion_Routing SessionManager 结构化路由回环 + 单问题兼容。
 func TestAskUserMultiQuestion_Routing(t *testing.T) {
 	mgr := NewSessionManager()

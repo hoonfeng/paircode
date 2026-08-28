@@ -193,9 +193,9 @@ func BuildDetailedFixPrompt(detected *BugDetectResult, root string) string {
 
 	// 修复指南
 	b.WriteString("## 修复指南\n\n")
-	b.WriteString("1. 使用 `read_file` 读取每个错误位置附近的代码\n")
+	b.WriteString("1. 使用 `read` 读取每个错误位置附近的代码\n")
 	b.WriteString("2. 分析错误原因：是语法错误、类型不匹配、未定义标识符还是其他问题\n")
-	b.WriteString("3. 使用 `edit_file` 或 `write_file` 修复\n")
+	b.WriteString("3. 使用 `edit` 或 `write` 修复\n")
 	b.WriteString("4. 修改后使用 `go_build` 验证是否通过\n")
 	b.WriteString("5. 如果仍有错误，继续修复\n")
 	b.WriteString("6. 所有错误修复完成后，运行 `go_build` 确认全部通过，然后输出完成总结。\n\n")

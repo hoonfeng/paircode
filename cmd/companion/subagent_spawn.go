@@ -46,9 +46,13 @@ func (s *webServer) installSubAgentSpawner() {
 }
 
 // subAgentForkSeed 取源会话当前消息快照（fork 种子历史）：内存优先，
-// 会话被回收后读持久化历史（按源会话根路由 store；取最近 60 条防撑爆上下文）。
+// 会话被回收后读持久化历史（按源会话根路由 store）。★ 两条路径统一取
+// 最近 60 条（防快照撑爆 fork 子会话上下文；t4 F5 补齐内存路径截断）。
 func subAgentForkSeed(sourceConvID string) []agent.Message {
 	if msgs := agentMgr.GetHistory(sourceConvID); len(msgs) > 0 {
+		if len(msgs) > 60 {
+			msgs = msgs[len(msgs)-60:]
+		}
 		return msgs
 	}
 	// 内存会话已回收 → 持久化历史（各工作区 store 尝试）

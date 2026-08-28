@@ -50,7 +50,7 @@ func Register(r *Registry, root string) {
 func registerCSVRead(r *Registry, root string) {
 	r.Register(&Tool{
 		Name:       "csv_read",
-		UsageGuide: "读取 CSV/TSV 文件并以 Markdown 表格形式返回。比直接 read_file 读 CSV 更友好（自动解析分隔符+格式化表格）。delimiter 可指定 comma/tab。",
+		UsageGuide: "读取 CSV/TSV 文件并以 Markdown 表格形式返回。比直接 read 读 CSV 更友好（自动解析分隔符+格式化表格）。delimiter 可指定 comma/tab。",
 		Description: "读取 CSV/TSV 文件并以 Markdown 表格形式返回内容。" +
 			"参数 delimiter 可选 \"comma\"（逗号, 默认）或 \"tab\"（制表符）。" +
 			"columns 按列索引过滤（从 0 开始，逗号分隔，如 \"0,2,3\"）。" +
@@ -73,7 +73,7 @@ func registerCSVRead(r *Registry, root string) {
 				return "", fmt.Errorf("读取文件失败: %w", err)
 			}
 			if len(data) > 100<<20 { // 100MB 上限
-				return "", fmt.Errorf("文件超过 100MB，请缩小范围后用 search_content 搜索特定内容")
+				return "", fmt.Errorf("文件超过 100MB，请缩小范围后用 grep 搜索特定内容")
 			}
 
 			delim := csvDelim(ArgStr(args, "delimiter"))
@@ -536,7 +536,7 @@ func writeStatsTable(b *strings.Builder, stats []colStat) {
 func registerTextReport(r *Registry, root string) {
 	r.Register(&Tool{
 		Name:       "text_report",
-		UsageGuide: "扫描目录树，按文件扩展名或目录分组统计代码行数。快速了解项目规模和技术栈分布。比 run_command wc -l 更智能（自动跳过 .git/node_modules+按类型分组）。",
+		UsageGuide: "扫描目录树，按文件扩展名或目录分组统计代码行数。快速了解项目规模和技术栈分布。比 bash wc -l 更智能（自动跳过 .git/node_modules+按类型分组）。",
 		Description: "扫描工作区目录树，按文件扩展名分组统计行数。" +
 			"支持统计总行数、代码行（非空非纯注释）、注释行、空行。" +
 			"path 限定扫描子目录（默认工作区根）；extensions 限定文件扩展名（逗号分隔，如 \".go,.ts,.vue\"）；" +
@@ -1275,7 +1275,7 @@ func escapeXML(s string) string {
 func registerXLSXRead(r *Registry, root string) {
 	r.Register(&Tool{
 		Name:       "read_xlsx",
-		UsageGuide: "读取 Excel (.xlsx) 文件内容，以 Markdown 表格形式返回。sheet 参数指定工作表名。比直接 read_file 更友好（自动解析+多 sheet 支持）。",
+		UsageGuide: "读取 Excel (.xlsx) 文件内容，以 Markdown 表格形式返回。sheet 参数指定工作表名。比直接 read 更友好（自动解析+多 sheet 支持）。",
 		Description: "读取 Microsoft Excel (.xlsx) 文件的内容，以 Markdown 表格形式返回各工作表。" +
 			"sheet 指定工作表名称（默认第一个）；limit 限制行数（默认 200，-1=全部）。" +
 			"纯 Go 标准库实现（解析 ZIP + XML），零外部依赖。",

@@ -251,4 +251,42 @@ TestGoalArchiveExecutors / TestAgentsForkSpec / TestJSPluginAgentsFork / TestWor
 TestWorkflowRunner_Pipeline / TestWorkflowRunner_Parallel / TestWorkflowRunner_PhaseLogArgs /
 TestWorkflowRunner_Cancel / TestWorkflowRunner_Errors / TestCommandsRegistry / TestJSPluginCommandsBridge /
 TestAskUserMultiQuestion_Parse / TestAskUserMultiQuestion_Routing / TestAskUserMultiQuestion_Executor /
-TestTemplateSchemaAligned / TestAskUserNoHostTimeout（单问题回归）。
+TestTemplateSchemaAligned / TestAskUserNoHostTimeout（单问题回归）/
+TestValidateAskAnswers（t5 新增，回答 ID 集合校验）。
+
+---
+
+## 11. t4/t5 集成结论（2026-09 · reviewer/engineer 回填）
+
+> t4 代码审查 verdict=pass（7 个非阻塞 findings）；t5 集成处置 findings 后全量构建/冒烟/docs 收尾。
+
+### 11.1 t4 findings 处置（t5 集成，2026-09）
+
+| ID | 严重度 | 处置 | 证据 |
+|---|---|---|---|
+| F1 | low | **已修复**：scripts/relocate_imports.go vterm 映射残留删除（4 条死包映射全部清零） | `scripts/relocate_imports.go`；grep 复核 |
+| F2 | low | **已修复（文案清扫）**：plugins-src/plugins/tool-*/impl/*.go 归档源 UsageGuide 旧名（read_file/search_content/run_command 等）批量替换为新名，Go 归档源零旧名 | 11 个 impl 文件；grep 零残留 |
+| F3 | medium-low | **已修复**：reviewer.go NeedsReview 补 write/edit/bash（旧名保留历史兼容）；Review()/reviewUserPrompt 的 run_command 分支同补 bash（auto 审核模式下新名写类工具不再跳过 AI 审核） | `internal/agent/reviewer.go` |
+| F4 | medium-low | **已修复**：workflow 脚本加 CPU 看门狗（workflowWallClockLimit=90min，runJSWithTimeout 兜底 Interrupt；agent 等待为 Go 侧通道阻塞不受影响） | `internal/agent/workflow.go` |
+| F5 | low | **已修复**：subAgentForkSeed 内存路径补齐最近 60 条截断（与持久化路径一致） | `cmd/companion/subagent_spawn.go` |
+| F6 | low | **已修复**：ask_user 多问题回答 ID 集合校验（未知/重复/缺答/空 ID 明确报错） | `internal/agent/message_store.go` + session_bridge.go；TestValidateAskAnswers |
+| F7 | cosmetic | 已随 F2 清扫覆盖（plugins-src 文案） | — |
+
+### 11.2 集成验证（t5 复跑）
+
+- **前端构建**：`cd cmd/companion/web-ui && npm run build` 与 `node scripts/build-ui.mjs` 均在本沙箱实测
+  `spawn EPERM`（vite/esbuild 边界，DSH 文档化）——前端源码改动**待队长 danger-full-access 通道复跑**，
+  `.pair/assets/runtime/web` 当前仍为 round2 期 bundle（t3 F1 同注）。
+- **CGO 构建**：`CGO_ENABLED=1 go build -o pair.exe ./cmd/companion` ✅（67.2MB，exit 0；pair.exe git-ignored 不作提交物）。
+- **启动冒烟**（pair.exe，WEB_PORT=9442）：/api/health 200；46 插件全 running；184 工具
+  （goal 3 + subagent 6 + workflow 1 零缺失）；/api/commands 返回 /agent-teams；日志零 FATAL/panic/重复注册。
+- **测试**：`go test ./internal/agent/` 仅 14 项环境依赖失败（round2 §6.13 同根因）；核心/服务/hook 全绿。
+- **git**：工作树干净；Round3-1…Round3-16 全量改动落 t2 inScope；`.agent-teams/`、`release/`、
+  敏感配置、`E:\` 安装目录零改动。
+
+### 11.3 遗留（交付说明）
+
+1. **前端重建**（唯一待办）：队长全权限通道复跑 `cd cmd/companion/web-ui && npm run build` +
+   `node scripts/sync-web-dist.mjs`，重建后 slash 菜单与 ask_user 多问题 UI 上线（t3 F1）。
+2. **workflow parallel 并发**：goja 单线程顺序调度为设计取舍（§3.3/§10.1 声明）。
+3. reviewer/requirements 流程：t4 已 pass、t5 集成完成——Round3 可交付。

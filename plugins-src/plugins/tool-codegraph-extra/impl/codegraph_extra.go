@@ -153,7 +153,7 @@ func Register(r *Registry, root string) {
 	// ---- 21. codegraph_find_by_imports ----
 	r.Register(&Tool{
 		Name: "codegraph_find_by_imports", Description: "查找所有导入指定模块的文件。",
-		UsageGuide: "查找所有导入指定模块的文件。想了解某包被哪些文件引用时用。比 search_content 搜索 import 语句更精确（基于解析的 import 关系）。",
+		UsageGuide: "查找所有导入指定模块的文件。想了解某包被哪些文件引用时用。比 grep 搜索 import 语句更精确（基于解析的 import 关系）。",
 		Parameters: ObjSchema(Props{"moduleName": StrProp("模块/包名"), "matchMode": StrProp("可选：exact/prefix/contains/fuzzy，默认 contains"), "limit": IntProp("可选：最大返回数（默认 50）")}, "moduleName"),
 		ReadOnly:   true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
@@ -682,7 +682,7 @@ func Register(r *Registry, root string) {
 	// ── 29. codegraph_find_by_signature — 按签名查找函数 ──
 	r.Register(&Tool{
 		Name:        "codegraph_find_by_signature",
-		UsageGuide:  "按结构特征查找函数：参数个数/返回类型/名称模式。想找「接收 string 返回 error」的函数时用。比 search_content 更原子化（基于签名匹配）。",
+		UsageGuide:  "按结构特征查找函数：参数个数/返回类型/名称模式。想找「接收 string 返回 error」的函数时用。比 grep 更原子化（基于签名匹配）。",
 		Description: "按结构特征（参数数、返回类型、名称模式）查找函数。",
 		Parameters: ObjSchema(Props{
 			"namePattern": StrProp("可选：函数名通配模式，如 'get*'、'*Handler'"),
@@ -904,7 +904,7 @@ func Register(r *Registry, root string) {
 	// ── 30. codegraph_explore — 自然语言→源码 ──
 	r.Register(&Tool{
 		Name:        "codegraph_explore",
-		UsageGuide:  "一站式代码理解工具。用自然语言或符号名探索代码，返回相关源码和位置。新接触项目时用此工具了解代码比逐个 read_file 更高效。",
+		UsageGuide:  "一站式代码理解工具。用自然语言或符号名探索代码，返回相关源码和位置。新接触项目时用此工具了解代码比逐个 read 更高效。",
 		Description: "一站式代码理解工具。用自然语言或符号名探索代码，返回相关源码和位置。分析代码的首选工具。",
 		Parameters:  ObjSchema(Props{"query": StrProp("自然语言问题或符号名"), "maxFiles": IntProp("可选：最大返回文件数（默认 8）")}, "query"),
 		ReadOnly:    true,

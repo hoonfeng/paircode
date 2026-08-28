@@ -85,7 +85,8 @@ var criticalFiles = map[string]bool{
 // NeedsReview 是否需要审核：只读工具放行，仅写类（写/改/删/移/运行命令/后台命令）过审。
 func NeedsReview(toolName string) bool {
 	switch toolName {
-	case "write_file", "edit_file", "multi_edit", "move_file", "delete_file", "run_command":
+	// ★ Round3：新名（write/edit/bash）补入；旧名保留历史消息兼容
+	case "write", "edit", "bash", "write_file", "edit_file", "multi_edit", "move_file", "delete_file", "run_command":
 		return true
 	}
 	// run_background/kill_process 管理自己启动的后台进程，是安全的进程管理，无需审核。
@@ -125,8 +126,8 @@ func (r *Reviewer) Review(ctx context.Context, tc ToolCall) (ReviewVerdict, erro
 	_ = json.Unmarshal([]byte(tc.Function.Arguments), &args)
 	name := tc.Function.Name
 
-	// run_command/run_background 安全命令智能放行（无需 LLM 审核）
-	if name == "run_command" && isSafeShellCommand(argStr(args, "command")) && !isBlockingCommand(argStr(args, "command")) {
+	// bash/run_command 安全命令智能放行（无需 LLM 审核；Round3 新名 bash 与旧名并存兼容）
+	if (name == "run_command" || name == "bash") && isSafeShellCommand(argStr(args, "command")) && !isBlockingCommand(argStr(args, "command")) {
 		return ReviewVerdict{Verdict: "通过", Confidence: 1, Summary: "安全检查通过：普通构建/测试/查询命令"}, nil
 	}
 	if name == "run_background" && isSafeShellCommand(argStr(args, "command")) {
@@ -165,13 +166,13 @@ func (r *Reviewer) Review(ctx context.Context, tc ToolCall) (ReviewVerdict, erro
 	return parseVerdict(resp.Content), nil
 }
 func reviewUserPrompt(name string, args map[string]any) string {
-	if name == "run_command" || name == "run_background" {
+	if name == "run_command" || name == "run_background" || name == "bash" {
 		cmd, _ := args["command"].(string)
 		return "[审核：Shell 命令]\n命令：" + cmd + "\n\n请严格检查：\n" +
 			"1. 破坏性操作（rm -rf、force push、hard reset、format、del /f /s 等）\n" +
 			"2. 会修改项目外系统状态的命令\n3. 路径穿越或访问系统关键目录\n" +
 			"4. 编码风险（cmd.exe 中文乱码 / PowerShell 未指定 -Encoding）\n" +
-			"5. 【阻塞检查】run_command 同步执行最长 120s，是否在运行长期命令（dev server / watch / go run 服务 / npm run dev）？" +
+			"5. 【阻塞检查】bash/run_command 同步执行最长 120s，是否在运行长期命令（dev server / watch / go run 服务 / npm run dev）？" +
 			"此类命令应改用 run_background 后台执行，否则会阻塞 agent 循环\n\n以 JSON 格式输出审核结果。"
 	}
 	path, _ := args["path"].(string)

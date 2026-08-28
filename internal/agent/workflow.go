@@ -34,6 +34,10 @@ import (
 // workflowAgentTimeout 单个 agent 钩子的最长等待（超时报错，防脚本悬挂）。
 const workflowAgentTimeout = 20 * time.Minute
 
+// workflowWallClockLimit 整个 workflow 脚本的墙钟上限（t4 F4：CPU 看门狗）。
+// 只拦纯死循环/失控脚本；agent 等待在 Go 侧通道阻塞，Interrupt 不打断等待本身。
+const workflowWallClockLimit = 90 * time.Minute
+
 // workflowRunner 一次 workflow 执行的运行态。
 type workflowRunner struct {
 	vm     *goja.Runtime
@@ -92,7 +96,10 @@ func RunWorkflow(ctx context.Context, script string, args map[string]any) (strin
 	// ★ 脚本体按函数体执行（DSH workflow 语义：脚本以 return <value> 结尾）——
 	// goja 顶层不允许 return，包一层立即执行函数。
 	wrapped := "(function(){\n" + script + "\n})()"
-	runErr := runJSWithTimeout(vm, 0, func() error { // 无超时中断：agent 等待是通道阻塞
+	// ★ t4 F4：CPU 看门狗——纯死循环 JS 脚本会挂死执行 goroutine，需 Interrupt 兜底。
+	//   agent() 等待在 Go 侧通道阻塞（JS 不执行），Interrupt 只在 JS 真正执行时生效；
+	//   上限取 90 分钟墙钟（远大于多 agent 串联等待预算 20min×N），只拦死循环不误伤长任务。
+	runErr := runJSWithTimeout(vm, workflowWallClockLimit, func() error {
 		var err error
 		outVal, err = vm.RunString(wrapped)
 		return err

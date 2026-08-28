@@ -21,7 +21,6 @@ var replacements = map[string]string{
 	// jobs/permission/provider/vterm 死包已删除（Round3），映射不再需要
 	`github.com/hoonfeng/paircode/internal/langsrv`:     `github.com/hoonfeng/paircode/internal/langsrv`,
 	`github.com/hoonfeng/paircode/internal/roleprompts`: `github.com/hoonfeng/paircode/internal/roleprompts`,
-	`github.com/hoonfeng/paircode/internal/vterm`:       `github.com/hoonfeng/paircode/internal/vterm`,
 	`github.com/hoonfeng/paircode/internal/ui/marketplace`: `github.com/hoonfeng/paircode/internal/ui/marketplace`,
 	`github.com/hoonfeng/paircode/internal/ui/mcp`:      `github.com/hoonfeng/paircode/internal/ui/mcp`,
 	`github.com/hoonfeng/paircode/internal/ui/skills`:   `github.com/hoonfeng/paircode/internal/ui/skills`,

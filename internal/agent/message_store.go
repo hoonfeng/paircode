@@ -429,6 +429,33 @@ func askQuestionsFromArgs(args map[string]any) []SegmentQuestion {
 	return out
 }
 
+// validateAskAnswers 校验多问题回答数组（t4 F6）：回答 ID 必须全部属于问题 ID 集合。
+func validateAskAnswers(qs []SegmentQuestion, answers []AskAnswer) error {
+	known := make(map[string]bool, len(qs))
+	for _, q := range qs {
+		known[q.ID] = true
+	}
+	seen := make(map[string]bool, len(answers))
+	for _, a := range answers {
+		if a.ID == "" {
+			return fmt.Errorf("ask_user(多问题)：回答缺少问题 ID（应为 %d 个问题的 answers 数组）", len(qs))
+		}
+		if !known[a.ID] {
+			return fmt.Errorf("ask_user(多问题)：回答 ID %q 不属于问题集合（%d 个问题）——回答与提问错配", a.ID, len(qs))
+		}
+		if seen[a.ID] {
+			return fmt.Errorf("ask_user(多问题)：问题 %q 收到重复回答", a.ID)
+		}
+		seen[a.ID] = true
+	}
+	for _, q := range qs {
+		if !seen[q.ID] {
+			return fmt.Errorf("ask_user(多问题)：问题 %q 缺回答（应 %d 条 answers）", q.ID, len(qs))
+		}
+	}
+	return nil
+}
+
 // parseAskResultV2 解析 ask_user 工具结果回灌：多问题（answers JSON 数组）优先，
 // 缺省回落单问题（整段文本即答案）。
 func parseAskResultV2(content string) (answer string, answers []SegmentAnswer) {
