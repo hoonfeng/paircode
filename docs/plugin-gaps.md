@@ -31,7 +31,7 @@
 
 ### 遗留项与后续建议
 
-1. **t4 审查 findings（verdict=pass，2 medium + 5 low）**：M1=config/roles/reviewer.md 与内置 reviewerSystemPrompt 内容漂移（磁盘优先 loader 使其生产静默生效，需同步并加漂移守卫测试）；M2=L2 钩子接线硬编码 Trusted:true 旁路 internal/hook 信任门且 web 监听全接口（打开恶意工作区即执行钩子 shell 命令，需信任门控）；L1-L5=文档/字段/语义级低危（bridge_release→bridge_lockdown 描述漂移、payload.turn 恒 0、G1 注释与实现不一致、ProviderImpl 还原顺序敏感、config/philosophy 残留）。完整 findings 见 t4 任务结构化字段；建议后续 repair 任务闭环。
+1. **t4 审查 findings（verdict=pass，2 medium + 5 low）**：M1（roles 漂移）与 M2（钩子信任门）**✅ 已修复（2026-08-29 集成收尾）**——reviewer.md 已同步 + 新增漂移守卫测试 `TestRolePromptDiskDefaultSync`；钩子装载默认不信任项目钩子（`PAIRCODE_TRUST_PROJECT_HOOKS=1` 显式信任）+ 新增 `TestLoopHookProjectTrustGate`；详见 docs/plugin-verification.md「处理状态」。L1–L5 低危项保留记录，建议后续 cleanup 任务处理。
 2. **11 个 internal 死包**（jobs/permission/provider/vterm/agenttools/codetypes/event/store/model/summary/verify）：删除需产品确认。
 3. **S2/F2/F3/L3/L4/G2/G3/G4（P2）**：见上表理由，建议专项清理。
 4. **前端构建流水线**：建议在沙箱外 CI/本机执行 `cd plugins-src/ui-app && npm run build` 后再打包；`scripts/build-ui.mjs`（UI 区域插件 bundle）同样依赖 vite/esbuild，需同环境执行。
