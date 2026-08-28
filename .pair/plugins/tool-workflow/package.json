@@ -1,0 +1,8 @@
+{
+  "main": "index.js",
+  "name": "tool-workflow",
+  "purpose": "workflow 编排工具面（宿主 goja 运行器：agent/pipeline/parallel/phase/log）",
+  "scope": "global",
+  "type": "plugin",
+  "version": "1.0.0"
+}
