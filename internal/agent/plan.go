@@ -11,7 +11,7 @@ import (
 
 func registerPlanTool(r *Registry) {
 	r.Register(&Tool{
-		Name: "update_plan",
+		Name:       "update_plan",
 		SystemTool: true,
 		Description: "维护任务计划清单：传入完整步骤列表（每步 step 描述 + status：pending/in_progress/done）。" +
 			"复杂任务应先用它列出计划，执行中随时更新状态（每次传全量整份清单）。清单会展示给用户。",
@@ -49,13 +49,13 @@ func registerPlanTool(r *Registry) {
 					if status == "done" {
 						done++
 					}
-				statusIcon := "[待办]"
-				switch status {
-				case "done":
-					statusIcon = "[完成]"
-				case "in_progress":
-					statusIcon = "[进行中]"
-				}
+					statusIcon := "[待办]"
+					switch status {
+					case "done":
+						statusIcon = "[完成]"
+					case "in_progress":
+						statusIcon = "[进行中]"
+					}
 					b.WriteString(fmt.Sprintf("%d. %s %s\n", i+1, statusIcon, step))
 				}
 			}

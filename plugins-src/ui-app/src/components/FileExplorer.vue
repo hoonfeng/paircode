@@ -265,13 +265,12 @@ async function loadConversationsForWorkspace(path) {
     state.conversations = list || []
   } catch (e) {
     console.warn('从后端加载对话消息失败:', e)
-
-
+  }
+  // ★ 2026-08-21 工作区切换后自动选中最近对话（与 app-actions.js 一致）
+  if (state.conversations.length > 0) {
+    state.currentConvId = state.conversations[0].id
+  }
 }
-
-}
-
-
 const showWorkspaceDialog = ref(false)
 const newWsName = ref('')
 const newWsPath = ref('')
@@ -373,11 +372,20 @@ function normPath(p) {
 }
 
 async function saveWsList() {
-  // 同步工作区列表到后端 settings.recentProjects
+  // 同步工作区列表到后端 settings（recentProjects + workspaceFolderLists）
+  // ★ 2026-08-22 修复：此前只写 recentProjects，漏写 workspaceFolderLists ——
+  //   刷新页面后 loadWsList 从 workspaceFolderLists 恢复各条目 folders 时全部
+  //   退化为根目录（新添加的项目消失）。对齐 app-actions.js 的 saveWsList。
   try {
     const resp = await api.apiGet('/settings')
     const settings = resp.settings || resp
     settings.recentProjects = (state.wsList || []).slice(0, 20).map(w => normPath(w.path)).filter(Boolean)
+    settings.workspaceFolderLists = settings.workspaceFolderLists || {}
+    for (const ws of (state.wsList || [])) {
+      if (ws.folders?.length > 0) {
+        settings.workspaceFolderLists[normPath(ws.path)] = ws.folders.map(normPath)
+      }
+    }
     await api.apiPut('/settings', settings)
   } catch (e) {
 

@@ -1,7 +1,6 @@
 // 项目级 Token / 上下文 / 消耗统计 —— 持久化存在安装目录，独立于对话记录。
 // 这样即使用户清空对话历史，统计数据也不会丢失，可长期追踪整个项目的 LLM 使用情况。
 //
-//go:build windows
 
 package core
 
@@ -48,8 +47,8 @@ type ProjectStats struct {
 	PerDay map[string]*DayStats `json:"perDay,omitempty"`
 
 	// 累积估算费用（分币种）
-	TotalCost     float64 `json:"totalCost"`
-	CostCurrency  string  `json:"costCurrency"` // 币种符号，如 ¥、$
+	TotalCost    float64 `json:"totalCost"`
+	CostCurrency string  `json:"costCurrency"` // 币种符号，如 ¥、$
 
 	// 首次记录时间 / 最近更新
 	FirstRecord time.Time `json:"firstRecord"`
@@ -61,23 +60,23 @@ type ProjectStats struct {
 
 // ModelStats 按模型的细分统计。
 type ModelStats struct {
-	PromptTokens     int `json:"promptTokens"`
-	CompletionTokens int `json:"completionTokens"`
-	TotalTokens      int `json:"totalTokens"`
-	LLMCalls         int `json:"llmCalls"`
-	CacheHitTokens   int `json:"cacheHitTokens"`
-	CacheMissTokens  int `json:"cacheMissTokens"`
+	PromptTokens     int     `json:"promptTokens"`
+	CompletionTokens int     `json:"completionTokens"`
+	TotalTokens      int     `json:"totalTokens"`
+	LLMCalls         int     `json:"llmCalls"`
+	CacheHitTokens   int     `json:"cacheHitTokens"`
+	CacheMissTokens  int     `json:"cacheMissTokens"`
 	Cost             float64 `json:"cost"`
 }
 
 // DayStats 按日期的细分统计。
 type DayStats struct {
-	PromptTokens     int `json:"promptTokens"`
-	CompletionTokens int `json:"completionTokens"`
-	TotalTokens      int `json:"totalTokens"`
-	LLMCalls         int `json:"llmCalls"`
-	Turns            int `json:"turns"`
-	ToolCalls        int `json:"toolCalls"`
+	PromptTokens     int     `json:"promptTokens"`
+	CompletionTokens int     `json:"completionTokens"`
+	TotalTokens      int     `json:"totalTokens"`
+	LLMCalls         int     `json:"llmCalls"`
+	Turns            int     `json:"turns"`
+	ToolCalls        int     `json:"toolCalls"`
 	Cost             float64 `json:"cost"`
 }
 
@@ -100,9 +99,9 @@ func GetProjectStats() *ProjectStats {
 // loadProjectStats 从磁盘加载，不存在则返回零值。
 func loadProjectStats() *ProjectStats {
 	ps := &ProjectStats{
-		PerModel:       make(map[string]*ModelStats),
-		PerDay:         make(map[string]*DayStats),
-		CostCurrency:   "¥",
+		PerModel:          make(map[string]*ModelStats),
+		PerDay:            make(map[string]*DayStats),
+		CostCurrency:      "¥",
 		ContextWindowSize: 1000000,
 	}
 	ps.filePath = statsFilePath()

@@ -23,15 +23,18 @@ var uiAssemblyMu sync.Mutex
 // HandleUIAssembly GET/PUT /api/ui-assembly：UI 装配状态磁盘持久化。
 func HandleUIAssembly(w http.ResponseWriter, r *http.Request) {
 	root := core.Root()
-	if root == "" {
-		jsonErr(w, "未设置工作区")
-		return
-	}
-	path := filepath.Join(root, ".pair", "ui-assembly.json")
 	switch r.Method {
 	case "GET":
 		uiAssemblyMu.Lock()
 		defer uiAssemblyMu.Unlock()
+		// 空工作区（未打开文件夹）：不存在装配文件，语义上就是空状态——
+		// 返回 {} 而非 400（早期实现返回"未设置工作区"400，网络面板出现
+		// 错误响应，且与「新建工作区弹窗」等前端缺陷混淆排查）。
+		if root == "" {
+			jsonResp(w, map[string]any{})
+			return
+		}
+		path := filepath.Join(root, ".pair", "ui-assembly.json")
 		data, err := os.ReadFile(path)
 		if err != nil {
 			if os.IsNotExist(err) {
@@ -49,6 +52,12 @@ func HandleUIAssembly(w http.ResponseWriter, r *http.Request) {
 			jsonErr(w, "无效 JSON: "+err.Error())
 			return
 		}
+		if root == "" {
+			// 空工作区无落盘位置：静默成功（装配状态本就只存 localStorage）
+			jsonResp(w, map[string]string{"status": "ok"})
+			return
+		}
+		path := filepath.Join(root, ".pair", "ui-assembly.json")
 		uiAssemblyMu.Lock()
 		defer uiAssemblyMu.Unlock()
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

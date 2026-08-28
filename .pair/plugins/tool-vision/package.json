@@ -1,0 +1,8 @@
+{
+  "main": "index.js",
+  "name": "tool-vision",
+  "purpose": "图片提交给 LLM 视觉识别（submit_image：把图片随上下文提交给当前模型，OpenAI 兼容 image_url 块协议；结果标记 __SUBMIT_IMAGE__ 由 Loop 层解析注入）",
+  "scope": "global",
+  "type": "plugin",
+  "version": "1.0.0"
+}

@@ -58,7 +58,7 @@ func newTestConn(t *testing.T, name string, transport mcp.Transport) *mcpConnect
 // TestMCPListAndCall 主流程：listAllTools 发现工具 + callTool 返回 TextContent。
 func TestMCPListAndCall(t *testing.T) {
 	ct, cancel := startTestServer(t, 100, testTool{
-		def:     &mcp.Tool{Name: "echo", Description: "回显文本", InputSchema: emptySchema()},
+		def: &mcp.Tool{Name: "echo", Description: "回显文本", InputSchema: emptySchema()},
 		handler: func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "echoed"}}}, nil
 		},
@@ -168,7 +168,7 @@ func TestMCPPagination(t *testing.T) {
 // callTool 内部 ensureAlive 检测 Ping 失败 → 重连 → 调用新 server 工具。
 func TestMCPReconnect(t *testing.T) {
 	ct1, cancel1 := startTestServer(t, 100, testTool{
-		def:     &mcp.Tool{Name: "v1", Description: "版本1", InputSchema: emptySchema()},
+		def: &mcp.Tool{Name: "v1", Description: "版本1", InputSchema: emptySchema()},
 		handler: func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "v1"}}}, nil
 		},
@@ -186,7 +186,7 @@ func TestMCPReconnect(t *testing.T) {
 
 	// 启动 server2（新 transport）
 	ct2, cancel2 := startTestServer(t, 100, testTool{
-		def:     &mcp.Tool{Name: "v2", Description: "版本2", InputSchema: emptySchema()},
+		def: &mcp.Tool{Name: "v2", Description: "版本2", InputSchema: emptySchema()},
 		handler: func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "v2"}}}, nil
 		},
@@ -242,7 +242,7 @@ func TestMCPTimeout(t *testing.T) {
 // BeforeTool 钩子可拒绝（短路）或放行（执行 handler）。
 func TestMCPRegistryHITL(t *testing.T) {
 	ct, cancel := startTestServer(t, 100, testTool{
-		def:     &mcp.Tool{Name: "danger", Description: "危险工具", InputSchema: emptySchema()},
+		def: &mcp.Tool{Name: "danger", Description: "危险工具", InputSchema: emptySchema()},
 		handler: func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "executed"}}}, nil
 		},

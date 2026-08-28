@@ -37,10 +37,10 @@ type rollbackData struct {
 // SnapshotTracker 管理快照到消息的映射。
 // 跨所有工作区根目录的对话共享一个跟踪器，但按 root+convId 隔离数据。
 type SnapshotTracker struct {
-	mu       sync.Mutex
-	root     string           // 工作区根
-	current  map[string]int  // convId → 当前正在处理的 msgIdx
-	dirty    bool
+	mu      sync.Mutex
+	root    string         // 工作区根
+	current map[string]int // convId → 当前正在处理的 msgIdx
+	dirty   bool
 }
 
 // GlobalTracker 全局快照跟踪器实例。

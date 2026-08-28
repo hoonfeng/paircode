@@ -127,7 +127,7 @@ func main() {
 			var state = reactive({ baseURL: '', provider: '' });
 			effect(function() { runs.push('effect: provider=' + state.provider + ' baseURL=' + state.baseURL); });
 			state.provider = 'deepseek';
-			state.baseURL = 'https://api.deepseek.com/v1';
+			state.baseURL = 'https://api.deepseek.com/v1/chat/completions';
 			return JSON.stringify({runs: runs});
 		} catch(e) { return 'ERR ' + (e && e.message ? e.message : String(e)); }
 	})()`))

@@ -77,6 +77,13 @@ type nodeBridge struct {
 // globalNodeBridge 全局单例（对齐 GetGlobalPluginHost 模式）。
 var globalNodeBridge *nodeBridge
 
+// nodeBridgeManager 会话管理器引用（Node 插件 ctx.store / ctx.loop 服务后端）。
+// cmd/companion 启动时经 SetNodeBridgeManager 注入（跨包解耦）。
+var nodeBridgeManager *SessionManager
+
+// SetNodeBridgeManager 注入会话管理器（web 层启动时调用一次）。
+func SetNodeBridgeManager(m *SessionManager) { nodeBridgeManager = m }
+
 // nodeBridgeDir 返回工作区 Node 桥目录（.pair/cordis/node）。
 func nodeBridgeDir() string {
 	root := npmPluginProjectRoot()
@@ -421,6 +428,101 @@ func (b *nodeBridge) sendResult(id int64, ok bool, data, errMsg string) {
 // mapBridgeService 把 (svc, method, args) 映射到 Go 侧工具。
 // 返回 (工具名, 映射后参数, 直连处理器, 错误)。
 func mapBridgeService(svcName, method string, args map[string]any) (string, map[string]any, func() (string, error), error) {
+	// ★ 2026-08-27 Node 桥能力扩展：ctx.store（消息读写落盘）+ ctx.loop（循环状态/上下文快照）
+	//   ——Node 插件可参与上下文处理与数据落盘逻辑（改变 agentloop 行为的基础）。
+	switch svcName {
+	case "store":
+		convID := argStr(args, "convId")
+		if convID == "" {
+			return "", nil, nil, fmt.Errorf("store.%s 缺少 convId", method)
+		}
+		root := argStr(args, "workspaceRoot")
+		if root == "" {
+			root = npmPluginProjectRoot()
+		}
+		switch method {
+		case "read":
+			return "", nil, func() (string, error) {
+				if nodeBridgeManager == nil {
+					return "", fmt.Errorf("会话管理器未注入（host 未就绪）")
+				}
+				st := nodeBridgeManager.StoreFor(root)
+				if st == nil {
+					return "", fmt.Errorf("工作区 %s 无会话存储", root)
+				}
+				msgs, err := st.LoadAll(convID)
+				if err != nil {
+					return "", err
+				}
+				out := make([]map[string]any, 0, len(msgs))
+				for _, m := range msgs {
+					out = append(out, map[string]any{"role": m.Role, "content": m.Content, "name": m.Name, "toolCallId": m.ToolCallID})
+				}
+				b, _ := json.Marshal(out)
+				return string(b), nil
+			}, nil
+		case "append":
+			role := argStr(args, "role")
+			content := argStr(args, "content")
+			if role == "" {
+				return "", nil, nil, fmt.Errorf("store.append 缺少 role")
+			}
+			return "", nil, func() (string, error) {
+				if nodeBridgeManager == nil {
+					return "", fmt.Errorf("会话管理器未注入（host 未就绪）")
+				}
+				st := nodeBridgeManager.StoreFor(root)
+				if st == nil {
+					return "", fmt.Errorf("工作区 %s 无会话存储", root)
+				}
+				msg := Message{Role: Role(role), Content: content}
+				if err := st.AppendMessage(convID, msg, nil); err != nil {
+					return "", err
+				}
+				return "ok", nil
+			}, nil
+		}
+		return "", nil, nil, fmt.Errorf("未知 store 服务方法: %s", method)
+	case "loop":
+		switch method {
+		case "info":
+			return "", nil, func() (string, error) {
+				if nodeBridgeManager == nil {
+					return "", fmt.Errorf("会话管理器未注入（host 未就绪）")
+				}
+				running := nodeBridgeManager.ListRunning()
+				b, _ := json.Marshal(map[string]any{"running": running, "active": fmt.Sprint(running)})
+				return string(b), nil
+			}, nil
+		case "snapshot":
+			convID := argStr(args, "convId")
+			if convID == "" {
+				return "", nil, nil, fmt.Errorf("loop.snapshot 缺少 convId")
+			}
+			root := argStr(args, "workspaceRoot")
+			if root == "" {
+				root = npmPluginProjectRoot()
+			}
+			return "", nil, func() (string, error) {
+				if nodeBridgeManager == nil {
+					return "", fmt.Errorf("会话管理器未注入（host 未就绪）")
+				}
+				hist := nodeBridgeManager.GetCurrentHistory(convID)
+				summaries := nodeBridgeManager.GetCurrentCompressedSummaries(convID)
+				running := nodeBridgeManager.IsRunning(convID)
+				out := make([]map[string]any, 0, len(hist))
+				for _, m := range hist {
+					out = append(out, map[string]any{"role": m.Role, "content": m.Content})
+				}
+				b, _ := json.Marshal(map[string]any{
+					"convId": convID, "running": running,
+					"messages": out, "summaries": summaries,
+				})
+				return string(b), nil
+			}, nil
+		}
+		return "", nil, nil, fmt.Errorf("未知 loop 服务方法: %s", method)
+	}
 	switch svcName {
 	case "fs":
 		p := argStr(args, "path")

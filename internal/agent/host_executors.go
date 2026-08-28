@@ -26,9 +26,9 @@ import (
 type hostToolExecutor = ToolHandler
 
 var (
-	hostExecMu      sync.RWMutex
-	hostExecutors   = map[string]hostToolExecutor{}   // 工具名 → 宿主执行器
-	hostExecMeta    = map[string]*Tool{}              // 工具名 → 宿主元数据（schema 参考）
+	hostExecMu    sync.RWMutex
+	hostExecutors = map[string]hostToolExecutor{} // 工具名 → 宿主执行器
+	hostExecMeta  = map[string]*Tool{}            // 工具名 → 宿主元数据（schema 参考）
 )
 
 // ArchiveHostTool 存档宿主工具（执行器 + 元数据）。同名重复存档覆盖。

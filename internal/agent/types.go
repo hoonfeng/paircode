@@ -25,6 +25,17 @@ type Message struct {
 	ToolCallID string     `json:"tool_call_id,omitempty"` // role=tool 时对应的调用 id
 	Name       string     `json:"name,omitempty"`
 	Reasoning  string     `json:"reasoning_content,omitempty"` // 思考链（DeepSeek，回传需保留）
+	// ★ 2026-08-21 多模态：user 消息可携带图片（OpenAI 兼容 content 块数组格式）。
+	//   仅当 Provider.Multimodal=true 时发送；否则忽略（避免非视觉模型 400）。
+	//   前端粘贴/拖拽图片 → handleChatSend 转 Images → 落盘 → Provider.Chat 转块数组。
+	Images []ImagePart `json:"images,omitempty"`
+}
+
+// ImagePart 一条图片消息（OpenAI 兼容 image_url 块）。
+type ImagePart struct {
+	Data     string `json:"data,omitempty"`     // base64 data URL（data:<mime>;base64,<b64>）或 http(s) URL
+	MimeType string `json:"mimeType,omitempty"` // image/png|image/jpeg|image/gif|image/webp（data URL 时）
+	Detail   string `json:"detail,omitempty"`   // low|high|original|auto（空=auto）
 }
 
 // ToolCall LLM 请求的一次工具调用。
@@ -74,6 +85,7 @@ type Usage struct {
 // UnmarshalJSON 兼容两种缓存命中拼写（对齐 harness llm-deepseek mapUsage）：
 //   - prompt_cache_hit_tokens：DeepSeek 专有
 //   - prompt_tokens_details.cached_tokens：OpenAI 兼容（网关/代理/其他端点）
+//
 // 并做缺失字段推导：服务端返回 hit 但省略 miss 时，用 prompt_tokens - hit 反推，
 // 避免前端命中率分母（hit+miss）失真。
 func (u *Usage) UnmarshalJSON(b []byte) error {
@@ -110,10 +122,10 @@ type PromptBreakdown struct {
 
 // Chunk 流式输出的一片（content/reasoning/toolCalls 为增量）。
 type Chunk struct {
-	Content   string
-	Reasoning string
-	ToolCalls []ToolCall
-	Done      bool
-	Usage     *Usage
+	Content    string
+	Reasoning  string
+	ToolCalls  []ToolCall
+	Done       bool
+	Usage      *Usage
 	StopReason string // 完成原因：stop/length/content_filter/null（仅 Done=true 时有值）
 }

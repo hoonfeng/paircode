@@ -48,7 +48,8 @@ var (
 // path 以 "/*" 结尾表示前缀匹配（匹配 path 与 path/<anything>，如 "/api/ext/*"）。
 // 返回 disposer（卸载路由）。
 // ★ key 用原始 path（含 "/*"）——prefix 路由与同路径精确路由可共存
-//   （如 "/api/conversations" 精确 + "/api/conversations/*" 前缀）。
+//
+//	（如 "/api/conversations" 精确 + "/api/conversations/*" 前缀）。
 func RegisterExtRoute(method, path string, h ExtRouteHandler) (func(), error) {
 	if method == "" || path == "" || h == nil {
 		return nil, fmt.Errorf("外部路由注册: method/path/handler 不能为空")

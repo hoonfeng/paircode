@@ -85,7 +85,7 @@ func registerSearchTools(r *Registry, root string) {
 			"path":        strProp("限定子目录（省略=工作区根）"),
 			"language":    strProp("可选：按语言过滤，如 \"go\"、\"typescript\"、\"python\""),
 			"max_results": intProp("结果上限（默认 500）"),
-			"project":    projectSchemaProp(),
+			"project":     projectSchemaProp(),
 		}, "pattern"),
 		ReadOnly: true,
 		Handler:  searchFilesHandler(root),

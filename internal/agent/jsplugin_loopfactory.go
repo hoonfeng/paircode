@@ -54,7 +54,6 @@ func (b *jsLoopFactoryBridge) buildSnapshot(opts LoopOpts) map[string]any {
 		"checkpointInterval":   opts.CheckpointInterval,
 		"workspaceRoot":        opts.WorkspaceRoot,
 		"reviewMode":           opts.ReviewMode,
-		"autoCommit":           opts.AutoCommit,
 		"reviewBlacklist":      opts.ReviewBlacklist,
 		"reviewWhitelist":      opts.ReviewWhitelist,
 	}
@@ -91,6 +90,30 @@ func (b *jsLoopFactoryBridge) applyOverrides(opts LoopOpts, obj *goja.Object) Lo
 			}
 		}
 	}
+	// setGroups：JS 数组数组 → [][]string（极简工具候选组；过滤空组/空串）。
+	setGroups := func(key string, dst *[][]string) {
+		if v := obj.Get(key); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
+			if arr, ok := v.Export().([]any); ok {
+				var groups [][]string
+				for _, it := range arr {
+					if inner, ok := it.([]any); ok {
+						var g []string
+						for _, s := range inner {
+							if str, ok := s.(string); ok && str != "" {
+								g = append(g, str)
+							}
+						}
+						if len(g) > 0 {
+							groups = append(groups, g)
+						}
+					}
+				}
+				if len(groups) > 0 {
+					*dst = groups
+				}
+			}
+		}
+	}
 	setStr("system", &out.System)
 	setInt("maxIterations", &out.MaxIterations)
 	setInt("maxContextTokens", &out.MaxContextTokens)
@@ -99,8 +122,8 @@ func (b *jsLoopFactoryBridge) applyOverrides(opts LoopOpts, obj *goja.Object) Lo
 	setInt("checkpointInterval", &out.CheckpointInterval)
 	setStr("workspaceRoot", &out.WorkspaceRoot)
 	setStr("reviewMode", &out.ReviewMode)
-	setBool("autoCommit", &out.AutoCommit)
 	setStrs("reviewBlacklist", &out.ReviewBlacklist)
 	setStrs("reviewWhitelist", &out.ReviewWhitelist)
+	setGroups("stagedToolGroups", &out.StagedToolGroups)
 	return out
 }

@@ -13,9 +13,10 @@ package core
 // SettingField 一个可注册的配置字段（前端按 type 渲染控件）。
 //
 // ★ 配置本身无内置（2026-08-19）：所有配置项由插件经 ctx.registerSettings 注册，
-//   前端设置面板纯 schema 驱动渲染。组件类型规范：
-//     text / password / number / checkbox / select / textarea / slider(0-100) /
-//     color(hex) / tags(逗号分隔数组) / roles(键值对文本区)
+//
+//	前端设置面板纯 schema 驱动渲染。组件类型规范：
+//	  text / password / number / checkbox / select / textarea / slider(0-100) /
+//	  color(hex) / tags(逗号分隔数组) / roles(键值对文本区)
 type SettingField struct {
 	Name    string   `json:"name"`              // 字段名（key——值对象属性名）
 	Label   string   `json:"label"`             // 显示名（名称）
@@ -32,9 +33,35 @@ type SettingField struct {
 	Max         *int   `json:"max,omitempty"`         // number/slider 最大值
 	Step        *int   `json:"step,omitempty"`        // number/slider 步长
 	// ★ 2026-08-19 动态数据源与联动（前端通用渲染，纯 schema 声明）：
-	OptionsSource string `json:"optionsSource,omitempty"` // select 动态选项源：'models'=按服务商模型列表 / 'providers'=服务商列表（经 /api/models）
-	LinkField     string   `json:"linkField,omitempty"`   // select 变化时联动填充的字段名（如 provider→baseURL，经 providerBaseURLs）
-	LinkFields    []string `json:"linkFields,omitempty"`  // ★ 多字段联动（如 provider→[baseURL, apiKey]；apiKey 经 providerKeys 填充）
+	OptionsSource string   `json:"optionsSource,omitempty"` // select 动态选项源：'models'=按服务商模型列表 / 'providers'=服务商列表（经 /api/models）
+	LinkField     string   `json:"linkField,omitempty"`     // select 变化时联动填充的字段名（如 provider→baseURL，经 providerBaseURLs）
+	LinkFields    []string `json:"linkFields,omitempty"`    // ★ 多字段联动（如 provider→[baseURL, apiKey]；apiKey 经 providerKeys 填充）
+	// ★ 2026-08-21 模型参数定义（provider-manager 专用）：声明服务商编辑表单内
+	//   逐模型参数区的字段清单（温度/思考档位/输出上限/上下文窗口/多模态…），
+	//   前端 ProviderManager 按此 schema 动态渲染，参数定义全部在配置注册里。
+	ModelParamFields []ModelParamFieldDef `json:"modelParamFields,omitempty"`
+	// ★ 2026-08-21 模型编辑器声明（provider-manager 专用）：{label, placeholder} 声明
+	//   添加模型区组件配置，前端 ProviderManager 按此渲染模型编辑器（schema 驱动）。
+	ModelEditor *ModelEditorDef `json:"modelEditor,omitempty"`
+}
+
+// ModelEditorDef provider-manager 的模型编辑器声明（schema 驱动）。
+type ModelEditorDef struct {
+	Label       string `json:"label,omitempty"`       // 区域标题（缺省用组件默认）
+	Placeholder string `json:"placeholder,omitempty"` // 输入框占位（缺省用组件默认）
+}
+
+// ModelParamFieldDef provider-manager 的单个模型参数定义（schema 驱动）。
+type ModelParamFieldDef struct {
+	Name    string   `json:"name"`              // 参数名（settings.modelParams[provider][model] 的属性名）
+	Label   string   `json:"label"`             // 显示名
+	Type    string   `json:"type"`              // checkbox|select|number|text
+	Default any      `json:"default,omitempty"` // 默认值
+	Options []string `json:"options,omitempty"` // select 可选项
+	Hint    string   `json:"hint,omitempty"`    // 提示文字
+	Min     *int     `json:"min,omitempty"`     // number 最小值
+	Max     *int     `json:"max,omitempty"`     // number 最大值
+	Step    *int     `json:"step,omitempty"`    // number 步长
 }
 
 // SettingSchema 一个插件注册的配置段（前端渲染为一个 tab）。

@@ -15,14 +15,14 @@
     ]
   },
   "deepseek": {
-    "baseURL": "https://api.deepseek.com/v1",
+    "baseURL": "https://api.deepseek.com/v1/chat/completions",
     "models": [
       "deepseek-v4-pro",
       "deepseek-v4-flash"
     ]
   },
   "kimi": {
-    "baseURL": "https://api.moonshot.cn/v1",
+    "baseURL": "https://api.moonshot.cn/v1/chat/completions",
     "models": [
       "kimi-k3"
     ]
@@ -34,7 +34,7 @@
     ]
   },
   "基元律动": {
-    "baseURL": "https://tokenrhythm.studio/v1",
+    "baseURL": "https://tokenrhythm.studio/v1/chat/completions",
     "models": [
       "deepseek-v4-pro-0813",
       "deepseek-v4-flash-0731"

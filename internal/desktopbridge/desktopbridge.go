@@ -59,6 +59,10 @@ func Init(wv *webkit.WebView) {
 	log.Printf("[Bridge] 工作区: %s (%d 个文件夹)", core.ProjectName(), len(core.Folders))
 	log.Printf("[Bridge] API 已配置: %v", core.Configured())
 
+	// ★ 钩子系统（t1 L2 闭环）：装载配置钩子（.pair/settings.json + ~/.pair/settings.json），
+	//   与 web 端 startWebUI 同一入口；无配置时全部 no-op。
+	agent.InitLoopHooks()
+
 	// ── 消息存储（会话/对话列表/消息记录真实数据） ──
 	if root := core.Root(); root != "" {
 		bridgeSessionManager.SetWorkspaceRoot(root)
@@ -71,11 +75,24 @@ func Init(wv *webkit.WebView) {
 	if root := core.Root(); root != "" {
 		initReg := agent.NewRegistry()
 		agent.RegisterHostFrameworkTools(initReg, root)
-		agent.RegisterCommitMessageTool(initReg)
+		// ★ harness 对齐（默认关闭——全量工具集；WB_HARNESS=1 开启时精简 pair 独有工具）；
+		//   与 web 端 startWebUI 同一套过滤语义（桌面端此前缺失）
+		if n := agent.ApplyHarnessToolFilter(initReg, nil); n > 0 {
+			log.Printf("[Bridge] harness 对齐模式：禁用 %d 个 pair 独有工具（WB_FULL_TOOLS=1 恢复全量；工具集面板 builtin 分组开关启用）", n)
+		}
 		// 参考注册表也加载管理工具（多项目），保证 /api/tools 工具面板可见
 		handler.SetToolsRegistry(initReg)
 		log.Printf("[Bridge] 参考工具注册表已初始化（%d 个工具）", len(initReg.AllToolMeta()))
 	}
+
+	// ★ 全局插件宿主（t1 报告 L1 缺口闭环：桌面端此前完全没有 PluginHost）：
+	// 与 web 端 startWebUI 对齐——NewPluginHost + RegisterCordisTools +
+	// RegisterToolsetTools + 磁盘插件自动装载（tool-* 工具插件 / ui-* UI 插件 /
+	// core-api 接口插件）+ cordis.patch.json 静态装配。
+	//   · 桌面会话 Agent 不再只有框架工具：MergePluginTools 把插件业务工具
+	//     合并进会话注册表（buildDesktopLoopOpts）；
+	//   · /api/plugins 与 7 区域 UI 槽位随插件宿主就绪（前端插件面板/UI 装配可用）。
+	initPluginHostDesktop()
 
 	registerHandlers()
 
@@ -147,14 +164,16 @@ func registerHandlers() {
 //   - window.WebSocket stub：/ws 连接不实际建连，消息由 Go 端 EvalJS 推送
 //
 // ★ fetch 拦截**不再由这里注入**：/api/* → 本地 Go handler 由 wb-ui 原生
-//   bridge（page.RegisterFetch / bridge.RegisterHTTP 两层直调）承担，前端
-//   fetch('/api/xxx') 直接被引擎拦截并调用注册的 Go handler，无需任何 JS
-//   包装层。这里只保留前端运行必需的环境标记与 WebSocket stub。
+//
+//	bridge（page.RegisterFetch / bridge.RegisterHTTP 两层直调）承担，前端
+//	fetch('/api/xxx') 直接被引擎拦截并调用注册的 Go handler，无需任何 JS
+//	包装层。这里只保留前端运行必需的环境标记与 WebSocket stub。
 //
 // ★ panel-only（只加载右侧面板）不再在此注入：那是独立测试程序
-//   （dev/desktop_probe/folded_probe.go 等）的需求，由调用方经
-//   webkit.BeforePageScripts 自行注入 window.__DESKTOP_PANEL_MODE__ = true；
-//   cmd/desktop 主程序保持完整 IDE 布局。
+//
+//	（dev/desktop_probe/folded_probe.go 等）的需求，由调用方经
+//	webkit.BeforePageScripts 自行注入 window.__DESKTOP_PANEL_MODE__ = true；
+//	cmd/desktop 主程序保持完整 IDE 布局。
 func injectJSBridge(rt *jsc.Interpreter) {
 	rt.RunJS(`(function(){
 		window.__DESKTOP_MODE__ = true;
@@ -276,6 +295,7 @@ func injectJSBridge(rt *jsc.Interpreter) {
 // forwardAgentEvents 订阅全部 agent 会话事件并推送到前端：
 //   - 每条 GlobalEvent → window.desktopBridge.onAgentEvent(convId, dataJSON)
 //   - done/error 事件后追加 status 推送（对齐 web 端 WS 行为）
+//
 // 前端无 onAgentEvent 订阅时降级为通过 WebSocket stub 的 dispatchMessage 推送
 // （兼容 companion 前端 initWebSocket 的 onmessage 通道）。
 func forwardAgentEvents(wv *webkit.WebView) {
@@ -316,8 +336,8 @@ func forwardAgentEvents(wv *webkit.WebView) {
 		convID := ge.ConvID
 		// ★ 主线程执行（goja 非线程安全）：投递队列，Host.OnFrame drain。
 		enqueueJS(`(function(){
-			var convId = `+convJSON(convID)+`;
-			var data = `+string(data)+`;
+			var convId = ` + convJSON(convID) + `;
+			var data = ` + string(data) + `;
 			if (window.desktopBridge && typeof window.desktopBridge.onAgentEvent === 'function') {
 				try { window.desktopBridge.onAgentEvent(convId, JSON.stringify(data)); } catch(e) {}
 			}
@@ -391,8 +411,58 @@ func evalJSOnDesktop(wv *webkit.WebView, js string) {
 	rt.RunJS(js)
 }
 
+// ─── 全局插件宿主（桌面端）─────────────────────────────────
+// ★ t1 报告 L1（P0）闭环：桌面端此前无 PluginHost、无工具集、无 UI 插件装配，
+//   桌面会话 Agent 只有框架工具、7 区域 UI 槽位全「未装配」。本函数与 web 端
+//   startWebUI 的插件宿主初始化对齐（同一套装载语义，见 cmd/companion/web_server.go）：
+//   NewPluginHost → RegisterCordisTools → RegisterToolsetTools →
+//   LoadAllToolsets（工作区工具集 + 全局磁盘插件）→ LoadCordisPatch → SetPluginHost。
+//   幂等：重复调用（Init 多次）时跳过已初始化的宿主。
+
+var (
+	desktopPluginHostOnce sync.Once
+	desktopPluginHost     *agent.PluginHost
+)
+
+func initPluginHostDesktop() {
+	desktopPluginHostOnce.Do(func() {
+		root := core.Root() // 可为空（未打开工作区）：全局插件（UI 类）仍装载
+		initReg := agent.NewRegistry()
+		agent.RegisterHostFrameworkTools(initReg, root)
+		if n := agent.ApplyHarnessToolFilter(initReg, nil); n > 0 {
+			log.Printf("[Bridge] 插件宿主 harness 对齐模式：禁用 %d 个 pair 独有工具", n)
+		}
+		ph := agent.NewPluginHost(initReg, bridgeSessionManager.Store(), root)
+		agent.RegisterCordisTools(initReg, ph, root)
+		agent.RegisterToolsetTools(initReg, root, ph)
+		if root != "" {
+			// 迁移旧版 builtin.json（内置组条目并入工作区工具集 default.json 后删除）
+			_ = agent.MigrateLegacyBuiltinJSON(ph, root)
+		}
+		// 启动自动装载工具集（工作区 .pair/toolsets/ + 全局插件；未打开工作区只装全局插件）
+		agent.LoadAllToolsets(ph, root)
+		// cordis.patch.json 静态插件装配：有工作区读工作区，否则读安装目录（全局）
+		patchPath := filepath.Join(root, ".pair", "cordis.patch.json")
+		if root == "" {
+			patchPath = filepath.Join(core.InstallDir(), ".pair", "cordis.patch.json")
+		}
+		if err := ph.LoadCordisPatch(patchPath); err != nil {
+			log.Printf("[Bridge] cordis.patch.json 装配失败（不阻塞启动）: %v", err)
+		}
+		handler.SetPluginHost(ph)
+		agent.SetGlobalPluginHost(ph)
+		desktopPluginHost = ph
+		log.Printf("[Bridge] 全局插件宿主已初始化（%d 个插件）", len(ph.List()))
+	})
+}
+
+// desktopPluginHostNow 取桌面端插件宿主（未初始化返回 nil）。
+func desktopPluginHostNow() *agent.PluginHost {
+	return desktopPluginHost
+}
+
 // buildDesktopLoopOpts 构建 agent.LoopOpts（桌面版）。
-// 与 web 端 buildWebLoopOpts 对齐：Provider + 工具注册表 + 系统提示词 + 历史加载。
+// 与 web 端 buildWebLoopOpts 对齐：Provider + 工具注册表 + 插件工具合并 + 系统提示词 + 历史加载。
 func buildDesktopLoopOpts(convID, message string, autonomous bool) agent.LoopOpts {
 	prov := buildDesktopProvider()
 
@@ -413,7 +483,20 @@ func buildDesktopLoopOpts(convID, message string, autonomous bool) agent.LoopOpt
 
 	reg := agent.NewRegistry()
 	agent.RegisterHostFrameworkTools(reg, root)
-	agent.RegisterCommitMessageTool(reg)
+	// ★ 插件系统（t1 L1 闭环）：全局 PluginHost 的 cordis_* 工具 + 工具集管理工具
+	//    + 插件业务工具合并——桌面会话 Agent 与 web 端同构，不再是「只有框架工具」
+	if ph := desktopPluginHostNow(); ph != nil {
+		agent.RegisterCordisTools(reg, ph, root)
+		agent.RegisterToolsetTools(reg, root, ph)
+		// harness 对齐（插件注册的工具豁免——插件是内容，非 pair 独有编码能力）
+		agent.ApplyHarnessToolFilter(reg, func(name string) bool {
+			return ph.IsPluginTool(name)
+		})
+		// 应用工作区工具集「内置工具包」状态（builtin 组 → 组内工具启用）
+		agent.ApplyToolsetBuiltinState(reg, root)
+		// 合并插件注册的业务工具（Node 桥工具 + goja 插件 ctx.tools.register）
+		agent.MergePluginTools(reg, ph)
+	}
 	if cfgs := mcppanel.LoadConfigs(); len(cfgs) > 0 {
 		agentCfgs := make([]agent.MCPServerConfig, len(cfgs))
 		for i, c := range cfgs {
@@ -422,6 +505,9 @@ func buildDesktopLoopOpts(convID, message string, autonomous bool) agent.LoopOpt
 		agent.RegisterMCPServers(reg, agentCfgs)
 	}
 	agent.SetCodeGraphDB(bridgeSessionManager.RawDB())
+	// ★ 与 SetCodeGraphDB 成对（共享 DB 归属判定）：桌面桥同样走共享 SQLite 存储
+	//   （按文件粒度增量写入 pair.db），避免回退 JSONStore 全量读写。
+	agent.SetCodeGraphRoot(root)
 	agent.InitDebugLogger(root, 50)
 	// ★ 保存注册表引用，供 /api/tools 查询工具列表与状态（桌面端 tools API）
 	handler.SetToolsRegistry(reg)
@@ -483,14 +569,9 @@ func buildDesktopProvider() agent.Provider {
 	if cur.APIKey == "" || cur.BaseURL == "" {
 		return nil
 	}
-	return &agent.OpenAIProvider{
-		BaseURL:      cur.BaseURL,
-		APIKey:       cur.APIKey,
-		Model:        cur.Model,
-		Temperature:  cur.Temperature,
-		MaxTokens:    cur.MaxTokens,
-		ThinkingMode: cur.ThinkingMode,
-	}
+	// ★ t1 S1：实现级插件槽位——服务商名有插件实现（ctx.provider.register）用之，
+	//   否则回退 OpenAI 兼容（与历史行为一致）。
+	return agent.CreateProvider(cur)
 }
 
 func buildDesktopSystemStatic() string {

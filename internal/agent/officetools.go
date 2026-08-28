@@ -15,14 +15,11 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
-	"syscall"
 )
 
 // ─── 注册入口 ──
@@ -1680,10 +1677,9 @@ func colIndexToLetters(idx int) string {
 func registerPDFRead(r *Registry, root string) {
 	r.Register(&Tool{
 		Name:       "read_pdf",
-		UsageGuide: "提取 PDF 文本内容。先尝试纯文本提取，失败则回退 OCR。比手动打开 PDF 复制更高效（直接提取到上下文）。",
-		Description: "提取 PDF 文件的文本内容。" +
-			"先尝试纯文本提取（解析 PDF 流对象）；如提取结果为空或内容极少（<50 字符），" +
-			"自动调用 pdftoppm/mutool 将页面渲染为图片 + Tesseract OCR 识别文字。" +
+		UsageGuide: "提取 PDF 文件文本内容（解析 PDF 流对象，纯文本 PDF）。page 指定页码；limit 限制返回字符数。扫描/图片型 PDF 无嵌入文本时返回提示。",
+		Description: "提取 PDF 文件的文本内容（解析 PDF 流对象，支持纯文本 PDF）。" +
+			"扫描/图片型 PDF（无嵌入文本）无法提取，返回说明。" +
 			"page 指定页码（从 1 开始，默认全部）；limit 限制返回字符数（默认 10000）。",
 		Parameters: objSchema(props{
 			"path":  strProp("PDF 文件路径（工作区内）"),
@@ -1707,189 +1703,21 @@ func registerPDFRead(r *Registry, root string) {
 				return "", fmt.Errorf("文件超过 100MB")
 			}
 
-			// 1. 先尝试纯文本提取
+			// 纯文本提取
 			content := extractPDFText(string(data), targetPage)
-			cleanText := strings.TrimSpace(content)
-			textExtracted := len(cleanText) >= 50
-
-			var ocrNote string
-			if !textExtracted {
-				// 2. 文本提取失败，自动降级 OCR
-				pdfPath := p
-				pages := determinePDFPages(targetPage)
-				ocrResult, err := pdfPageToOCR(root, pdfPath, pages)
-				if err != nil {
-					// OCR 也失败，返回混合信息
-					ocrNote = "\n\n---\n⚠️ 纯文本提取为空，OCR 也未能识别。"
-					if content != "" {
-						ocrNote += "\n\n提取到的少量文本：\n" + content
-					}
-					ocrNote += "\n\n尝试方案：请先用系统 PDF 阅读器打开文件确认是否为可读文档，"
-					ocrNote += "或安装 poppler-utils（pdftoppm）后重试。"
-				} else {
-					content = ocrResult
-					ocrNote = "\n\n---\n[OCR] **自动 OCR 识别**（该 PDF 为扫描/图片型文档，已调 pdftoppm + Tesseract 识别文字）"
-				}
+			content = strings.TrimSpace(content)
+			if content == "" {
+				// OCR 已移除（2026-08-22 模型文件清理）——扫描/图片型 PDF 无法提取
+				return fmt.Sprintf("**PDF 文件**: `%s`\n\n⚠️ 未提取到嵌入文本（扫描/图片型 PDF）。"+
+					"该文件需 OCR 才能识别文字，但 OCR 已整体移除。", argStr(args, "path")), nil
 			}
 
 			if limit > 0 && len(content) > limit {
 				content = content[:limit] + fmt.Sprintf("\n\n…[内容共 %d 字符，仅显示前 %d 字符]", len(content), limit)
 			}
-			return fmt.Sprintf("**PDF 文件**: `%s`\n\n%s%s", argStr(args, "path"), content, ocrNote), nil
+			return fmt.Sprintf("**PDF 文件**: `%s`\n\n%s", argStr(args, "path"), content), nil
 		},
 	})
-}
-
-// determinePDFPages 根据 targetPage 确定要处理的页码列表。
-// targetPage=0 → 全部页面（用 -1 标记）；否则单页。
-func determinePDFPages(targetPage int) []int {
-	if targetPage <= 0 {
-		return []int{-1} // -1 表示全部
-	}
-	return []int{targetPage}
-}
-
-// pdfPageToOCR 把 PDF 页面渲染为图片后 OCR 识别文字。
-// 尝试 pdftoppm（poppler-utils）优先，回退 mutool draw（mupdf）。
-func pdfPageToOCR(root, pdfPath string, pages []int) (string, error) {
-	// 查找渲染工具
-	renderTool, err := exec.LookPath("pdftoppm")
-	if err != nil {
-		renderTool, err = exec.LookPath("mutool")
-		if err != nil {
-			return "", fmt.Errorf("未找到 PDF 渲染工具。请安装 poppler-utils（推荐）：\n" +
-				"  Windows: scoop install poppler  或  choco install poppler\n" +
-				"  Linux:   apt install poppler-utils\n" +
-				"  Mac:     brew install poppler")
-		}
-	}
-
-	// 查找 Tesseract
-	tesseractPath := findTesseract(root)
-	if tesseractPath == "" {
-		return "", fmt.Errorf("未检测到 Tesseract OCR。请运行下载脚本：\n" +
-			"  powershell -ExecutionPolicy Bypass -File download_tesseract.ps1\n" +
-			"或安装系统级 Tesseract：scoop install tesseract / choco install tesseract")
-	}
-
-	// 准备 tessdata
-	tesseractDir := filepath.Dir(tesseractPath)
-	tessdataDir := filepath.Join(tesseractDir, "tessdata")
-	if _, err := os.Stat(tessdataDir); os.IsNotExist(err) {
-		tessdataDir = ""
-	}
-
-	// 创建临时目录
-	tmpDir, err := os.MkdirTemp("", "paircode_pdfocr_*")
-	if err != nil {
-		return "", fmt.Errorf("创建临时目录失败: %w", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	var allText strings.Builder
-	pagePrefix := filepath.Join(tmpDir, "page")
-
-	for _, pageNum := range pages {
-		var pngPath string
-
-		if strings.Contains(renderTool, "pdftoppm") {
-			// pdftoppm -png -f 1 -l 1 input.pdf output_prefix
-			args := []string{"-png", "-r", "300"}
-			if pageNum > 0 {
-				args = append(args, "-f", strconv.Itoa(pageNum), "-l", strconv.Itoa(pageNum))
-			}
-			args = append(args, pdfPath, pagePrefix)
-
-			cmd := exec.Command(renderTool, args...)
-			if runtime.GOOS == "windows" {
-				cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-			}
-			if out, err := cmd.CombinedOutput(); err != nil {
-				return "", fmt.Errorf("pdftoppm 渲染失败: %s\n输出: %s", err, decodeCmdOutput(out))
-			}
-
-			// pdftoppm 输出为 page-1.png, page-2.png 格式
-			if pageNum > 0 {
-				pngPath = pagePrefix + "-" + strconv.Itoa(pageNum) + ".png"
-			} else {
-				// 全部页面：查找所有 page-*.png 文件
-				pattern := pagePrefix + "-*.png"
-				matches, _ := filepath.Glob(pattern)
-				for _, m := range matches {
-					text, err := callTesseractOCR(tesseractPath, tessdataDir, m)
-					if err == nil {
-						allText.WriteString(text)
-						allText.WriteString("\n")
-					}
-				}
-				continue
-			}
-		} else {
-			// mutool draw -o output.png input.pdf page_number
-			outPath := pagePrefix + ".png"
-			args := []string{"draw", "-o", outPath, pdfPath}
-			if pageNum > 0 {
-				args = append(args, strconv.Itoa(pageNum))
-			}
-			cmd := exec.Command(renderTool, args...)
-			if runtime.GOOS == "windows" {
-				cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-			}
-			if out, err := cmd.CombinedOutput(); err != nil {
-				return "", fmt.Errorf("mutool 渲染失败: %s\n输出: %s", err, decodeCmdOutput(out))
-			}
-			pngPath = outPath
-		}
-
-		// OCR 识别
-		if pngPath != "" {
-			text, err := callTesseractOCR(tesseractPath, tessdataDir, pngPath)
-			if err != nil {
-				return "", err
-			}
-			if pageNum > 0 {
-				allText.WriteString(fmt.Sprintf("--- 第 %d 页 ---\n", pageNum))
-			}
-			allText.WriteString(text)
-			allText.WriteString("\n")
-		}
-	}
-
-	result := strings.TrimSpace(allText.String())
-	if result == "" {
-		return "", fmt.Errorf("OCR 未识别到任何文字")
-	}
-	return result, nil
-}
-
-// callTesseractOCR 调用 Tesseract 对单张图片进行 OCR 识别，返回纯文本。
-func callTesseractOCR(tesseractPath, tessdataDir, imgPath string) (string, error) {
-	args := []string{}
-	if tessdataDir != "" {
-		args = append(args, "--tessdata-dir", tessdataDir)
-	}
-	args = append(args, imgPath, "stdout")
-	// 默认中英文
-	engAvail := checkTesseractLang(tesseractPath, tessdataDir, "eng")
-	chiAvail := checkTesseractLang(tesseractPath, tessdataDir, "chi_sim+eng")
-	if chiAvail {
-		args = append(args, "-l", "chi_sim+eng")
-	} else if engAvail {
-		args = append(args, "-l", "eng")
-	}
-
-	cmd := exec.Command(tesseractPath, args...)
-	if runtime.GOOS == "windows" {
-		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-	}
-	output, err := cmd.Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return "", fmt.Errorf("Tesseract 执行失败: %s\nstderr: %s", err, decodeCmdOutput(exitErr.Stderr))
-		}
-		return "", fmt.Errorf("Tesseract 执行失败: %w", err)
-	}
-	return strings.TrimSpace(decodeCmdOutput(output)), nil
 }
 
 // extractPDFText 从 PDF 原始字符串中提取文本（简单解析器，支持纯文本 PDF）。

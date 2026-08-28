@@ -60,7 +60,7 @@ func CaptureShape(systemPrompt string, toolDefs []ToolDefinition) PrefixShape {
 		DynamicHash:  shortHash(dynamic),
 		ToolsHash:    shortHash(string(toolsJSON)),
 		ToolsRawHash: shortHash(string(rawJSON)),
-		PrefixHash:   shortHash(map[string]interface{}{
+		PrefixHash: shortHash(map[string]interface{}{
 			"system":  static,
 			"dynamic": dynamic,
 			"tools":   string(toolsJSON),
@@ -82,7 +82,8 @@ func normalizeToolDefs(defs []ToolDefinition) []ToolDefinition {
 
 // CompareShape returns diagnostics describing what changed between two shapes.
 // ★ 只有静态 system 与 tools 变化会导致 provider 缓存断裂（PrefixChanged=true）；
-//   动态后缀（boundary 后）变化单独标记 DynamicChanged，不算断裂。
+//
+//	动态后缀（boundary 后）变化单独标记 DynamicChanged，不算断裂。
 func CompareShape(prev, cur PrefixShape) CacheDiagnostics {
 	reasons := []string{}
 	if prev.SystemHash != "" && prev.SystemHash != cur.SystemHash {

@@ -38,6 +38,12 @@ type WSConn struct {
 
 	writeMu sync.Mutex
 	closed  bool
+
+	// ★ 2026-08-22 读超时（>0 启用）：ReadFrame 每次循环（含 Ping/Pong 后
+	//   continue）自动刷新读 deadline——否则 deadline 从连接建立起固定，
+	//   客户端持续回 Pong 的连接仍会在固定时长后被误判死（实测复现：
+	//   30s/60s Pong 均到达，70s 仍读超时断开）。由调用方经 SetReadTimeout 设置。
+	readTO time.Duration
 }
 
 // UpgradeWS 执行 HTTP→WebSocket 升级握手，返回封装的 WSConn。
@@ -84,6 +90,7 @@ func UpgradeWS(w http.ResponseWriter, r *http.Request) (*WSConn, error) {
 		return nil, err
 	}
 
+	// br 使用 http.Hijack 返回的 brw.Reader（内含握手残留缓冲，标准做法）
 	return &WSConn{
 		netConn: conn,
 		br:      brw.Reader,
@@ -134,17 +141,14 @@ func (c *WSConn) writeFrame(headByte byte, data []byte) error {
 		if err := c.bw.WriteByte(127); err != nil {
 			return err
 		}
-		// 8 字节长度（高 6 字节为 0，因为我们不会超过 4GB）
-		for i := 5; i >= 0; i-- {
-			if err := c.bw.WriteByte(0); err != nil {
+		// ★ 2026-08-22 修复：8 字节长度必须完整大端写出（b7..b0）。
+		//   原实现只写 6 字节 0 + 低 16 位 → n>=65536 时长度被截断成低 16 位，
+		//   客户端按错误长度切帧 → 帧边界错位 → "Invalid frame header" → 断线循环。
+		//   （2026-08-21 snapshot 断线补偿推送 >64KB 大 JSON 后暴露）
+		for i := 7; i >= 0; i-- {
+			if err := c.bw.WriteByte(byte(n >> (8 * i))); err != nil {
 				return err
 			}
-		}
-		if err := c.bw.WriteByte(byte(n >> 8)); err != nil {
-			return err
-		}
-		if err := c.bw.WriteByte(byte(n)); err != nil {
-			return err
 		}
 	}
 	if _, err := c.bw.Write(data); err != nil {
@@ -212,12 +216,20 @@ func (c *WSConn) WritePongFrame(data []byte) error {
 // ReadFrame 读取一个 WebSocket 帧，返回 opcode 和 payload。
 // 处理掩码解码、分片拼接（continuation frame）。
 // 收到 ping 自动回复 pong，收到 close 返回 io.EOF。
+// ★ 2026-08-22 readTO>0 时每次循环（含 Ping/Pong 后 continue）自动刷新
+//
+//	读 deadline——否则 deadline 从连接建立起固定，客户端持续回 Pong 的
+//	连接仍会在固定时长后被误判死（实测：30s/60s Pong 均到达、70s 仍超时断开）。
+//
 // 注意：必须单 goroutine 调用。
 func (c *WSConn) ReadFrame() (opcode byte, payload []byte, err error) {
 	if c == nil {
 		return 0, nil, io.ErrUnexpectedEOF
 	}
 	for {
+		if c.readTO > 0 {
+			c.SetReadDeadline(time.Now().Add(c.readTO))
+		}
 		op, data, e := c.readSingleFrame()
 		if e != nil {
 			return 0, nil, e
@@ -307,6 +319,12 @@ func (c *WSConn) Close() error {
 	c.closed = true
 	c.writeMu.Unlock()
 	return c.netConn.Close()
+}
+
+// SetReadTimeout 启用 ReadFrame 内部读超时管理（每帧刷新 deadline）。
+// 传 0 恢复默认（由调用方自行管理 SetReadDeadline）。
+func (c *WSConn) SetReadTimeout(d time.Duration) {
+	c.readTO = d
 }
 
 // SetDeadline 设置读写截止时间。

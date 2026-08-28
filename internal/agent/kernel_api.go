@@ -40,8 +40,8 @@ type kernelRoute struct {
 
 var (
 	kernelAPIMu     sync.RWMutex
-	kernelAPITable  = map[string]kernelRoute{}   // key -> route（能力注册表）
-	kernelInstalled = map[string]bool{}          // key -> 是否已挂到 ext 表（防重复）
+	kernelAPITable  = map[string]kernelRoute{} // key -> route（能力注册表）
+	kernelInstalled = map[string]bool{}        // key -> 是否已挂到 ext 表（防重复）
 )
 
 // KernelAPIRegister 注册一条内核能力路由（key 唯一，重复注册报错）。

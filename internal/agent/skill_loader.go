@@ -31,9 +31,11 @@ var SkillProjectDir string
 var SkillEnabled map[string]bool
 
 // SkillStatusOverride 技能状态覆盖（键 "level::name"，值 "off"/"on"/"max"）。
-//   "off"  → 关闭（完全禁用，不加载）
-//   "on"   → 开启（按关键词/globs 自动激活）
-//   "max"  → 始终激活（注入 system prompt）
+//
+//	"off"  → 关闭（完全禁用，不加载）
+//	"on"   → 开启（按关键词/globs 自动激活）
+//	"max"  → 始终激活（注入 system prompt）
+//
 // 优先级高于 SkillEnabled 和 frontmatter 的 activation 字段。
 // 由 bridge 从 settings.json 的 SkillStatusOverrides 注入。
 var SkillStatusOverride map[string]string
@@ -85,7 +87,8 @@ func LoadAllSkills() []Skill {
 // systemDir 为内置技能目录（全局固定）；enabled 为启用过滤映射。
 // 若 enabled 为 nil 则全部启用。
 // ★兼容参考项目路径 .agents/skills/（模型后训练含参考数据会幻觉该目录）：
-//   与 .pair/skills/ 并列扫描（Level 均 project），同名技能 .pair 优先（先扫在前）。
+//
+//	与 .pair/skills/ 并列扫描（Level 均 project），同名技能 .pair 优先（先扫在前）。
 func LoadAllSkillsFromRoot(root, systemDir string, enabled map[string]bool) []Skill {
 	projectDir := ""
 	if root != "" {

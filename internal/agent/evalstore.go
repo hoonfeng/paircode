@@ -23,22 +23,22 @@ const evalsDirName = ".Pair/evals"
 
 // EvalRecord 一条完整的评分记录（存档在 .Pair/evals/records.json）。
 type EvalRecord struct {
-	ID            string    `json:"id"`            // 唯一标识 "eval_{seq}"
-	Timestamp     time.Time `json:"timestamp"`     // 评分时间
-	Task          string    `json:"task"`           // 原始任务（前 200 字符摘要）
-	AgentModel    string    `json:"agentModel"`    // 执行模型名
-	JudgeModel    string    `json:"judgeModel"`    // 评测模型名
-	Scores        EvalScores `json:"scores"`       // 4 维度分
-	Total         int       `json:"total"`         // 总分 0-100
-	Strengths     []string  `json:"strengths"`     // 优点列表
-	Weaknesses    []string  `json:"weaknesses"`    // 不足列表
-	Feedback      string    `json:"feedback"`      // 一句话总评
-	ToolCalls     int       `json:"toolCalls"`     // 工具调用次数
-	ToolErrors    int       `json:"toolErrors"`    // 工具错误次数
-	MaxIterations int       `json:"maxIterations"` // 执行时迭代上限
-	Autonomous    bool      `json:"autonomous"`    // 是否自主模式
-	Duration      string    `json:"duration"`      // 执行耗时（秒）
-	Iteration     int       `json:"iteration"`     // 自动迭代轮次 0=首轮 1=第一轮改进 2=第二轮
+	ID            string     `json:"id"`            // 唯一标识 "eval_{seq}"
+	Timestamp     time.Time  `json:"timestamp"`     // 评分时间
+	Task          string     `json:"task"`          // 原始任务（前 200 字符摘要）
+	AgentModel    string     `json:"agentModel"`    // 执行模型名
+	JudgeModel    string     `json:"judgeModel"`    // 评测模型名
+	Scores        EvalScores `json:"scores"`        // 4 维度分
+	Total         int        `json:"total"`         // 总分 0-100
+	Strengths     []string   `json:"strengths"`     // 优点列表
+	Weaknesses    []string   `json:"weaknesses"`    // 不足列表
+	Feedback      string     `json:"feedback"`      // 一句话总评
+	ToolCalls     int        `json:"toolCalls"`     // 工具调用次数
+	ToolErrors    int        `json:"toolErrors"`    // 工具错误次数
+	MaxIterations int        `json:"maxIterations"` // 执行时迭代上限
+	Autonomous    bool       `json:"autonomous"`    // 是否自主模式
+	Duration      string     `json:"duration"`      // 执行耗时（秒）
+	Iteration     int        `json:"iteration"`     // 自动迭代轮次 0=首轮 1=第一轮改进 2=第二轮
 }
 
 // recordsFile 所有记录的持久化数据结构（JSON 文件格式）。
@@ -245,18 +245,18 @@ func (s *EvalRecordStore) LastRecord() *EvalRecord {
 
 // EvalStats 聚合统计结果。
 type EvalStats struct {
-	TotalRecords      int            `json:"totalRecords"`
-	AvgTotal          float64        `json:"avgTotal"`
-	AvgCompletion     float64        `json:"avgCompletion"`
-	AvgCorrectness    float64        `json:"avgCorrectness"`
-	AvgDepth          float64        `json:"avgDepth"`
-	AvgEfficiency     float64        `json:"avgEfficiency"`
-	TopWeaknesses     []*FreqItem    `json:"topWeaknesses"`   // 高频不足
-	TopStrengths      []*FreqItem    `json:"topStrengths"`    // 高频优点
-	RecentTrend       []*TrendPoint  `json:"recentTrend"`     // 最近 N 条趋势
-	ModelStats        []*ModelStat   `json:"modelStats"`       // 按模型统计
-	WeakDimension     string         `json:"weakDimension"`    // 最弱维度名
-	WeakDimensionAvg  float64        `json:"weakDimensionAvg"` // 最弱维度平均分
+	TotalRecords     int           `json:"totalRecords"`
+	AvgTotal         float64       `json:"avgTotal"`
+	AvgCompletion    float64       `json:"avgCompletion"`
+	AvgCorrectness   float64       `json:"avgCorrectness"`
+	AvgDepth         float64       `json:"avgDepth"`
+	AvgEfficiency    float64       `json:"avgEfficiency"`
+	TopWeaknesses    []*FreqItem   `json:"topWeaknesses"`    // 高频不足
+	TopStrengths     []*FreqItem   `json:"topStrengths"`     // 高频优点
+	RecentTrend      []*TrendPoint `json:"recentTrend"`      // 最近 N 条趋势
+	ModelStats       []*ModelStat  `json:"modelStats"`       // 按模型统计
+	WeakDimension    string        `json:"weakDimension"`    // 最弱维度名
+	WeakDimensionAvg float64       `json:"weakDimensionAvg"` // 最弱维度平均分
 }
 
 // FreqItem 频次统计项。
@@ -386,10 +386,10 @@ func (s *EvalRecordStore) Stats() *EvalStats {
 
 // OptimizationHint 一条优化建议。
 type OptimizationHint struct {
-	Dimension string `json:"dimension"` // 建议涉及的维度
-	Severity  string `json:"severity"`  // high / medium / low
+	Dimension  string `json:"dimension"`  // 建议涉及的维度
+	Severity   string `json:"severity"`   // high / medium / low
 	Suggestion string `json:"suggestion"` // 建议内容
-	Reason    string `json:"reason"`    // 依据（聚合数据说明）
+	Reason     string `json:"reason"`     // 依据（聚合数据说明）
 }
 
 // AnalyzeOptimization 基于历史评分记录给出配置优化建议。

@@ -2,18 +2,103 @@
 // tool-web — 网络工具（web_fetch/web_search）
 //
 // 迁移来源（2026-08-16）：内置 registerWebTools（internal/agent/web.go）
-// → 磁盘外置插件。web_fetch 调用实现在插件内（JS 编排 ctx.web.fetch）；
-// web_search 走宿主执行器（SearXNG/DuckDuckGo 集成，二进制方案）。
+// → 磁盘外置插件。★ 2026-08-22 完整 JS 原生化：web_fetch（htmlToText
+// 去标签 + 20000 截断）与 web_search（DuckDuckGo HTML 正则解析）实现全在
+// 插件内（ctx.web.fetch），不再依赖 bin/tool-web.exe。
 // ═══════════════════════════════════════════════════════════════
 
-// web_fetch：抓取网页转纯文本（JS 实现；ctx.web.fetch 返回 {ok,status,text}）
-async function webFetch(ctx, args) {
+// HTML 实体解码（常见命名实体 + &#xHH;/&#DDD; 数字实体）。
+function decodeEntities(s) {
+  return s
+    .replace(/&#x([0-9a-fA-F]+);/g, (m, h) => { try { return String.fromCodePoint(parseInt(h, 16)) } catch { return m } })
+    .replace(/&#(\d+);/g, (m, d) => { try { return String.fromCodePoint(Number(d)) } catch { return m } })
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+}
+
+// htmlToText 把 HTML 粗略转可读纯文本：去 script/style、块标签→换行、去其余标签、解实体、压空白。
+function htmlToText(s) {
+  s = String(s)
+    .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<\/(p|div|li|tr|h[1-6]|section|article|header|footer|ul|ol|table|blockquote)>|<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+  s = decodeEntities(s)
+  const lines = s.split('\n').map(l => l.replace(/[ \t]{2,}/g, ' ').trim())
+  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim()
+}
+
+// web_fetch：抓取网页转纯文本（ctx.web.fetch 60s/4MB；20000 截断）
+function webFetch(ctx, args) {
   const url = String(args.url || '').trim()
   if (!/^https?:\/\//i.test(url)) throw new Error('仅支持 http(s) URL：' + url)
-  const res = await ctx.web.fetch(url)
-  if (!res.ok) throw new Error('HTTP ' + res.status + '：抓取 ' + url + ' 失败')
-  const text = String(res.text || '')
-  return text.length > 20000 ? text.slice(0, 20000) + '\n…[输出截断]' : text
+  const res = ctx.web.fetch(url)
+  const text = htmlToText(res.text || '')
+  if (text.length > 20000) return 'URL: ' + url + '\nHTTP ' + res.status + '\n\n' + text.slice(0, 20000) + '\n…（内容已截断）'
+  return 'URL: ' + url + '\nHTTP ' + res.status + '\n\n' + text
+}
+
+// —— web_search：DuckDuckGo HTML 正则解析（与二进制实现等价，SearXNG 无配置链路）——
+
+// decodeDDGHref 解出 DDG 跳转链接里的真实 URL（//duckduckgo.com/l/?uddg=ENCODED）。
+function decodeDDGHref(href) {
+  const i = href.indexOf('uddg=')
+  if (i >= 0) {
+    let v = href.slice(i + 5)
+    const j = v.indexOf('&')
+    if (j >= 0) v = v.slice(0, j)
+    try { return decodeURIComponent(v) } catch { return v }
+  }
+  return href
+}
+
+// stripTags 去标签 + 解实体 + 压空白。
+function stripTags(s) {
+  return decodeEntities(String(s).replace(/<[^>]+>/g, '')).trim()
+}
+
+// parseDDGResults 从 DDG HTML 结果页粗略抽取 标题/链接/摘要（按出现顺序配对）。
+function parseDDGResults(body) {
+  const anchors = []
+  const reA = /<a\b([^>]*class="result__a"[^>]*)>([\s\S]*?)<\/a>/gi
+  let m
+  while ((m = reA.exec(body)) !== null) anchors.push(m)
+  const snips = []
+  const reS = /class="result__snippet"[^>]*>([\s\S]*?)<\/a>/gi
+  while ((m = reS.exec(body)) !== null) snips.push(m)
+  const out = []
+  for (let i = 0; i < anchors.length; i++) {
+    const attrs = anchors[i][1]
+    const hrefM = /href="([^"]+)"/.exec(attrs)
+    const href = hrefM ? hrefM[1] : ''
+    out.push({
+      title: stripTags(anchors[i][2]),
+      url: decodeDDGHref(href),
+      snippet: i < snips.length ? stripTags(snips[i][1]) : '',
+    })
+  }
+  return out
+}
+
+// web_search：DuckDuckGo（无需 key；限流/改版时返回无结果提示而非崩溃）。
+function webSearch(ctx, args) {
+  const q = String(args.query || '').trim()
+  if (!q) throw new Error('query 不能为空')
+  const resp = ctx.web.fetch('https://html.duckduckgo.com/html/?q=' + encodeURIComponent(q))
+  const body = String(resp.text || '')
+  const results = parseDDGResults(body)
+  if (results.length === 0) {
+    return '「' + q + '」无搜索结果（HTTP ' + resp.status + '；可能被限流或页面改版）。'
+  }
+  let out = '「' + q + '」搜索结果：\n'
+  results.slice(0, 8).forEach((r, i) => {
+    out += '\n' + (i + 1) + '. ' + r.title + '\n   ' + r.url
+    if (r.snippet) out += '\n   ' + r.snippet
+  })
+  return out
 }
 
 const tools = [
@@ -49,10 +134,10 @@ const tools = [
 
 return {
   name: 'tool-web',
-  purpose: '网络工具（web_fetch/web_search）——迁移自内置 registerWebTools；web_fetch JS 实现（ctx.web.fetch）、web_search 统一宿主二进制',
+  inject: ['web'],
+  purpose: '网络工具（web_fetch/web_search）——2026-08-22 完整 JS 原生化：htmlToText/DDG 正则解析全部在插件内（ctx.web.fetch），不再依赖独立二进制',
   apply(ctx) {
     for (const t of tools) {
-      const isFetch = t.name === 'web_fetch'
       ctx.tools.register({
         name: t.name,
         description: t.description,
@@ -60,9 +145,8 @@ return {
         category: t.category,
         readOnly: t.readOnly,
         parameters: t.parameters,
-        execute: (args) => (isFetch ? webFetch(ctx, args || {}) : ctx.binary.exec(t.name, args || {})),
+        execute: (args) => (t.name === 'web_fetch' ? webFetch(ctx, args || {}) : webSearch(ctx, args || {})),
       })
     }
-    // 日志已省略（logger 需 inject 声明）
   },
 }

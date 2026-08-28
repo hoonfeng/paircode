@@ -1,6 +1,6 @@
 {
   "provider": "deepseek",
-  "baseURL": "https://api.deepseek.com/v1",
+  "baseURL": "https://api.deepseek.com/v1/chat/completions",
   "apiKey": "sk-56cfcb644ed146409ffb5051128ac923",
   "model": "deepseek-v4-flash",
   "planModel": "deepseek-v4-flash",

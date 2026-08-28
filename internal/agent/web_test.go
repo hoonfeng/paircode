@@ -60,7 +60,6 @@ func TestWebSearchEmptyQuery(t *testing.T) {
 	}
 }
 
-
 // TestWebFetchRejectsNonHTTP 非 http(s) URL 应拒绝（挡 file:// 等）。
 func TestWebFetchRejectsNonHTTP(t *testing.T) {
 	if _, err := webFetch(context.Background(), map[string]any{"url": "file:///etc/passwd"}); err == nil {

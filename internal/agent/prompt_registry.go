@@ -27,9 +27,11 @@ var promptVarRe = regexp.MustCompile(`\{\{([^{}]+)\}\}`)
 
 // ── 系统提示槽位约定（对齐 deepseek-harness system-prompt）──
 // harness 用固定 section name/order 约定可替换槽位：
-//   PERSONA_SECTION = "deployment:persona"（部署人格槽位，order=0）
-//   RULES_SECTION   = "deployment:rules"（行为准则槽位，order=100）
-//   HARNESS_IDENTITY = -100：harness 身份段（本实现并入默认 persona 文本，不单独暴露）
+//
+//	PERSONA_SECTION = "deployment:persona"（部署人格槽位，order=0）
+//	RULES_SECTION   = "deployment:rules"（行为准则槽位，order=100）
+//	HARNESS_IDENTITY = -100：harness 身份段（本实现并入默认 persona 文本，不单独暴露）
+//
 // 插件若以 name==PERSONA_SECTION 贡献段，组装时**替换**默认 persona 段
 // （而非追加），对齐 harness「persona slot 可被 agent preset 替换」语义；
 // 同理 name==RULES_SECTION 的段替换默认规则段（# 工作区之后的第一铁律/核心规则等

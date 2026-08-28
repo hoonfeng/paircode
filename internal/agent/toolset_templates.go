@@ -193,8 +193,8 @@ type ProjectProfile struct {
 	BuildCmd   string   `json:"buildCmd"`
 	TestCmd    string   `json:"testCmd"`
 	RunCmd     string   `json:"runCmd"`
-	LintCmd    string   `json:"lintCmd"`    // 通常由 LLM 分析给出（不按语言固化）
-	FormatCmd  string   `json:"formatCmd"`  // 通常由 LLM 分析给出
+	LintCmd    string   `json:"lintCmd"`   // 通常由 LLM 分析给出（不按语言固化）
+	FormatCmd  string   `json:"formatCmd"` // 通常由 LLM 分析给出
 	HasDocker  bool     `json:"hasDocker"`
 	HasDBData  bool     `json:"hasDBData"` // csv/json/db/sqlite 数据文件
 	HasAPI     bool     `json:"hasAPI"`    // api 目录/路由文件
@@ -376,13 +376,14 @@ func analyzeProject(projectDir string) *ProjectProfile {
 // registerBuiltinTemplates 注册宿主内置工具集构建模板（框架能力：toolset_build
 // 的动态组合数据源——Generate 逻辑内嵌宿主，随宿主合理，不经过插件体系）。
 // ★ 2026-08-16：原以插件 toolset-tpl-core 形态注册（不可启停，无意义），
-//   现内联为宿主固有（NewPluginHost 调用），插件列表不再显示；
-//   市场/用户插件仍可经 RegisterTemplate / ctx.toolset.registerTemplate 追加。
+//
+//	现内联为宿主固有（NewPluginHost 调用），插件列表不再显示；
+//	市场/用户插件仍可经 RegisterTemplate / ctx.toolset.registerTemplate 追加。
 func registerBuiltinTemplates(ph *PluginHost) {
 	// 1. 项目助手：构建/测试/运行（按语言生成命令）
 	_ = ph.RegisterTemplate(&ToolsetTemplate{
 		ID: "toolset.tpl.project-helper", Title: "项目构建/测试/运行助手",
-		Tags: []string{"build", "test", "run"},
+		Tags:  []string{"build", "test", "run"},
 		Match: func(p *ProjectProfile) bool { return len(p.Langs) > 0 },
 		Generate: func(p *ProjectProfile, req string) ([]ToolsetPlugin, error) {
 			return genProjectHelper(p), nil
@@ -391,7 +392,7 @@ func registerBuiltinTemplates(ph *PluginHost) {
 	// 2. Git 工作流辅助
 	_ = ph.RegisterTemplate(&ToolsetTemplate{
 		ID: "toolset.tpl.git-flow", Title: "Git 工作流辅助（提交检查/分支摘要）",
-		Tags: []string{"git"},
+		Tags:  []string{"git"},
 		Match: func(p *ProjectProfile) bool { return true },
 		Generate: func(p *ProjectProfile, req string) ([]ToolsetPlugin, error) {
 			return genGitFlow(), nil
@@ -400,7 +401,7 @@ func registerBuiltinTemplates(ph *PluginHost) {
 	// 3. 代码质量：lint/格式化（按语言生成命令）
 	_ = ph.RegisterTemplate(&ToolsetTemplate{
 		ID: "toolset.tpl.code-quality", Title: "代码质量（lint/格式化）",
-		Tags: []string{"lint", "code-quality"},
+		Tags:  []string{"lint", "code-quality"},
 		Match: func(p *ProjectProfile) bool { return len(p.Langs) > 0 },
 		Generate: func(p *ProjectProfile, req string) ([]ToolsetPlugin, error) {
 			return genCodeQuality(p), nil
@@ -409,7 +410,7 @@ func registerBuiltinTemplates(ph *PluginHost) {
 	// 4. HTTP 接口调试（web 项目命中）
 	_ = ph.RegisterTemplate(&ToolsetTemplate{
 		ID: "toolset.tpl.web-api", Title: "HTTP 接口调试",
-		Tags: []string{"api", "http"},
+		Tags:  []string{"api", "http"},
 		Match: func(p *ProjectProfile) bool { return p.HasAPI || len(p.Frameworks) > 0 },
 		Generate: func(p *ProjectProfile, req string) ([]ToolsetPlugin, error) {
 			return genWebAPI(p), nil
@@ -418,7 +419,7 @@ func registerBuiltinTemplates(ph *PluginHost) {
 	// 5. 数据文件概览（数据项目命中）
 	_ = ph.RegisterTemplate(&ToolsetTemplate{
 		ID: "toolset.tpl.data-inspect", Title: "数据文件概览（csv/json/sqlite）",
-		Tags: []string{"data"},
+		Tags:  []string{"data"},
 		Match: func(p *ProjectProfile) bool { return p.HasDBData },
 		Generate: func(p *ProjectProfile, req string) ([]ToolsetPlugin, error) {
 			return genDataInspect(p), nil
@@ -449,7 +450,8 @@ func toolPrefix(p *ProjectProfile) string {
 // genProjectHelper 生成项目构建/测试/运行助手插件。
 // 工具名带项目短名前缀（如 gouide_build），避免多个工具集工具名冲突。
 // ★ 命令来自真实探测或 LLM 分析（profile 字段）；命令缺失时不生成对应工具
-//   （不按语言固化命令——项目语言不可预知）。_profile 工具始终生成。
+//
+//	（不按语言固化命令——项目语言不可预知）。_profile 工具始终生成。
 func genProjectHelper(p *ProjectProfile) []ToolsetPlugin {
 	buildCmd := p.BuildCmd
 	testCmd := p.TestCmd
@@ -577,7 +579,8 @@ func genGitFlow() []ToolsetPlugin {
 // genCodeQuality 生成代码质量插件（按语言选 lint/格式化命令）。
 // genCodeQuality 生成代码质量插件（lint/格式化）。
 // ★ 命令来自 LLM 分析或真实探测（profile.LintCmd/FormatCmd），不按语言固化——
-//   无命令时返回 nil（不生成该插件）。
+//
+//	无命令时返回 nil（不生成该插件）。
 func genCodeQuality(p *ProjectProfile) []ToolsetPlugin {
 	lintCmd, fmtCmd := strings.TrimSpace(p.LintCmd), strings.TrimSpace(p.FormatCmd)
 	if lintCmd == "" && fmtCmd == "" {

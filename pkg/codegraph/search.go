@@ -26,9 +26,9 @@ func NewSearchEngine(g *Graph, root string) *SearchEngine {
 type SearchType string
 
 const (
-	SearchExact  SearchType = "exact"   // 精确匹配
-	SearchFuzzy  SearchType = "fuzzy"   // 模糊匹配
-	SearchPrefix SearchType = "prefix"  // 前缀匹配
+	SearchExact  SearchType = "exact"  // 精确匹配
+	SearchFuzzy  SearchType = "fuzzy"  // 模糊匹配
+	SearchPrefix SearchType = "prefix" // 前缀匹配
 )
 
 // SearchScope 搜索范围。

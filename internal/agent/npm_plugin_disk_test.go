@@ -11,10 +11,10 @@ import (
 //   - scope 包：@scope/pkg → pkg（去掉 @ 与 /，目录名友好）
 func TestNPMPluginDiskName(t *testing.T) {
 	cases := map[string]string{
-		"paircode-plugin-x":    "paircode-plugin-x",
-		"@paircode/git":        "git",
-		"@someorg/tool":        "tool",
-		"plain-name":           "plain-name",
+		"paircode-plugin-x": "paircode-plugin-x",
+		"@paircode/git":     "git",
+		"@someorg/tool":     "tool",
+		"plain-name":        "plain-name",
 	}
 	for in, want := range cases {
 		if got := npmPluginDiskName(in); got != want {

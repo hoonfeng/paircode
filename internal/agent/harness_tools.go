@@ -3,7 +3,7 @@
 // 背景（2026-08-15）：用户要求按 deepseek-harness 设计重写 agent，并「暂时对齐他的工具集」
 // 为下一步自举迭代（用 agent 开发 agent）做准备。harness 核心工具集：
 //
-//	tool-fs:             read / write / edit / read_image
+//	tool-fs:             read / write / edit
 //	tool-fs-search:      glob / grep
 //	tool-str-replace:    str_replace_editor（view/create/str_replace/insert）
 //	tool-bash:           bash（含 run_in_background）
@@ -135,13 +135,13 @@ func registerStrReplaceEditor(r *Registry, root string) {
 			"与 edit_file 相比更适合『需要先查看行号、再精确替换』的流程；带行号输出方便后续定位。",
 		Category: "文件",
 		Parameters: objSchema(props{
-			"command":      strProp("要执行的命令：view / create / str_replace / insert（必填）"),
-			"path":         strProp("文件或目录路径（工作区内；view 支持目录，其他命令须为文件）"),
-			"file_text":    strProp("create 命令的文件内容"),
-			"insert_line":  intProp("insert 命令：在此行之后插入 new_str（1 基）"),
-			"new_str":      strProp("str_replace 的替换新内容 / insert 的插入内容"),
-			"old_str":      strProp("str_replace 的原文（须精确且唯一匹配）"),
-			"view_range":   map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "view 命令行范围，如 [11,12]；[-1] 表示到文件尾"},
+			"command":     strProp("要执行的命令：view / create / str_replace / insert（必填）"),
+			"path":        strProp("文件或目录路径（工作区内；view 支持目录，其他命令须为文件）"),
+			"file_text":   strProp("create 命令的文件内容"),
+			"insert_line": intProp("insert 命令：在此行之后插入 new_str（1 基）"),
+			"new_str":     strProp("str_replace 的替换新内容 / insert 的插入内容"),
+			"old_str":     strProp("str_replace 的原文（须精确且唯一匹配）"),
+			"view_range":  map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "view 命令行范围，如 [11,12]；[-1] 表示到文件尾"},
 		}, "command", "path"),
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
 			command := argStr(args, "command")
@@ -571,6 +571,13 @@ func runCodeSnippet(ctx context.Context, root, lang, code string) (string, error
 // runShellWithTimeout 执行 shell 命令并返回输出（120s 超时 + ctx 取消）。
 // 复用全局后台进程机制（不阻塞 loop 线程）。
 func runShellWithTimeout(ctx context.Context, command, dir string) (string, string) {
+	return runShellWithTimeoutN(ctx, command, dir, 120*time.Second)
+}
+
+// runShellWithTimeoutN ★ 2026-08-22 带自定义超时的版本（ctx.bash.exec 第三参
+// timeout 用；JS 插件需要短超时（如 debug_run_capture 60s 默认）时覆盖）。
+// 语义与 runShellWithTimeout 完全一致，仅 deadline 可配。
+func runShellWithTimeoutN(ctx context.Context, command, dir string, timeout time.Duration) (string, string) {
 	bg := globalBG
 	id, err := bg.start(command, dir)
 	if err != nil {
@@ -580,7 +587,10 @@ func runShellWithTimeout(ctx context.Context, command, dir string) (string, stri
 	if p == nil {
 		return "", "内部错误：后台进程创建后丢失"
 	}
-	deadline := time.After(120 * time.Second)
+	deadline := time.After(timeout)
+	if timeout <= 0 {
+		deadline = nil // nil channel select 永不触发（不设超时）
+	}
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	for {
@@ -596,7 +606,7 @@ func runShellWithTimeout(ctx context.Context, command, dir string) (string, stri
 				killProcessTree(p.cmd.Process.Pid)
 			}
 			out, _, _ := p.snapshot()
-			return capOutput(out, 16000), "超时 120s 已终止"
+			return capOutput(out, 16000), "超时 " + timeout.String() + " 已终止"
 		case <-ticker.C:
 			out, done, exitErr := p.snapshot()
 			if done {

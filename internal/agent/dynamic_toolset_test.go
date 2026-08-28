@@ -8,10 +8,10 @@ import (
 
 func TestExtractJSPluginName(t *testing.T) {
 	cases := map[string]string{
-		`return { name: 'hello', apply(ctx) {} };`:                     "hello",
-		`return { name: "world", apply(ctx, config) {} };`:             "world",
-		`return (ctx, config) => { console.log('x') };`:                "",
-		`return function myPlugin(ctx) { ctx.tools.register({}); };`:   "myPlugin",
+		`return { name: 'hello', apply(ctx) {} };`:                      "hello",
+		`return { name: "world", apply(ctx, config) {} };`:              "world",
+		`return (ctx, config) => { console.log('x') };`:                 "",
+		`return function myPlugin(ctx) { ctx.tools.register({}); };`:    "myPlugin",
 		`(async () => { return { name: 'ts-plugin', apply(ctx) {} } })`: "ts-plugin",
 	}
 	for code, want := range cases {

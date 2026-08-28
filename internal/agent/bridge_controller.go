@@ -19,11 +19,11 @@ package agent
 import (
 	"context"
 	"fmt"
+	"github.com/hoonfeng/paircode/pkg/executil"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -52,22 +52,22 @@ const (
 type SystemCapability string
 
 const (
-	CapFileSystem     SystemCapability = "filesystem"       // 文件系统
-	CapProcess        SystemCapability = "process"          // 进程管理
-	CapNetwork        SystemCapability = "network"          // 网络
-	CapSystemConfig   SystemCapability = "system_config"    // 系统配置
-	CapServiceControl SystemCapability = "service_control"  // 服务控制
-	CapRegistry       SystemCapability = "registry"         // 注册表（Windows）
-	CapEnvironment    SystemCapability = "environment"      // 环境变量
+	CapFileSystem     SystemCapability = "filesystem"      // 文件系统
+	CapProcess        SystemCapability = "process"         // 进程管理
+	CapNetwork        SystemCapability = "network"         // 网络
+	CapSystemConfig   SystemCapability = "system_config"   // 系统配置
+	CapServiceControl SystemCapability = "service_control" // 服务控制
+	CapRegistry       SystemCapability = "registry"        // 注册表（Windows）
+	CapEnvironment    SystemCapability = "environment"     // 环境变量
 )
 
 // BridgeController Agent 与系统之间的桥接控制器。
 // 线程安全：方法级别的锁保护模式切换和审计日志。
 type BridgeController struct {
 	mu     sync.RWMutex
-	mode   BridgeMode      // 当前模式
-	root   string           // 工作区根目录
-	log    []AuditEntry     // 审计日志
+	mode   BridgeMode                // 当前模式
+	root   string                    // 工作区根目录
+	log    []AuditEntry              // 审计日志
 	capMap map[SystemCapability]bool // 当前可用能力集合
 
 	// takeoverAuthorized 接管授权标记（仅 TakeoverMode 下为 true）
@@ -316,7 +316,7 @@ func (bc *BridgeController) ExecCommand(ctx context.Context, command, cwd string
 	cctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	c := newShellCommandContext(cctx, command)
-	c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	executil.HideWindow(c)
 	c.Dir = dir
 	out, err := c.CombinedOutput()
 	result := decodeCmdOutput(out)

@@ -19,7 +19,7 @@ func mkVisibilityReg() *Registry {
 	reg := NewRegistry()
 	// 协议/管理工具（恒对 agent 可见）
 	for _, n := range []string{"update_tasks", "update_plan", "tool_stats", "ask_user",
-		"generate_commit_message", "task_create", "history_search", "history_list", "history_count"} {
+		"task_create", "history_search", "history_list", "history_count"} {
 		reg.Register(&Tool{Name: n, Handler: noopHandler, SystemTool: true})
 	}
 	for _, n := range []string{"cordis_inspect", "cordis_define", "cordis_run", "cordis_stop",
@@ -39,7 +39,7 @@ func mkVisibilityReg() *Registry {
 		reg.Register(&Tool{Name: n, Handler: noopHandler})
 	}
 	// 非工具集插件工具（tool-bar 注册，应隐藏）
-	for _, n := range []string{"skill_list", "load_skill", "mcp_list", "image_ocr"} {
+	for _, n := range []string{"skill_list", "load_skill", "mcp_list", "submit_image"} {
 		reg.Register(&Tool{Name: n, Handler: noopHandler})
 	}
 	return reg
@@ -79,13 +79,13 @@ func TestApplyToolsetVisibilityFilter(t *testing.T) {
 	reg := mkVisibilityReg()
 	h, _ := mkVisibilityHost(t, reg)
 	n := ApplyToolsetVisibilityFilter(reg, h, h.root)
-	// 非工具集工具：skill_list/load_skill/mcp_list/image_ocr 应禁用（4 个）
+	// 非工具集工具：skill_list/load_skill/mcp_list/submit_image 应禁用（4 个）
 	if n != 4 {
 		t.Errorf("应禁用 4 个非工具集工具，实际 %d", n)
 	}
 	// 协议工具保持启用
 	for _, name := range []string{"update_tasks", "update_plan", "tool_stats", "ask_user",
-		"generate_commit_message", "task_create", "history_search",
+		"task_create", "history_search",
 		"cordis_inspect", "cordis_define", "cordis_run", "toolset_build", "toolset_edit"} {
 		if !reg.IsEnabled(name) {
 			t.Errorf("协议工具 %s 应保持启用", name)
@@ -104,7 +104,7 @@ func TestApplyToolsetVisibilityFilter(t *testing.T) {
 		}
 	}
 	// 非工具集插件工具禁用（保留注册）
-	for _, name := range []string{"skill_list", "load_skill", "mcp_list", "image_ocr"} {
+	for _, name := range []string{"skill_list", "load_skill", "mcp_list", "submit_image"} {
 		if _, ok := reg.Get(name); !ok {
 			t.Errorf("非工具集工具 %s 应保留注册", name)
 		}
@@ -114,7 +114,7 @@ func TestApplyToolsetVisibilityFilter(t *testing.T) {
 	}
 	// Definitions 只导出启用项
 	for _, d := range reg.Definitions() {
-		if d.Function.Name == "skill_list" || d.Function.Name == "image_ocr" {
+		if d.Function.Name == "skill_list" || d.Function.Name == "submit_image" {
 			t.Errorf("Definitions 不应含禁用工具 %s", d.Function.Name)
 		}
 	}
@@ -148,7 +148,7 @@ func TestApplyToolsetVisibilityFilter_HarnessModeSkips(t *testing.T) {
 	if n := ApplyToolsetVisibilityFilter(reg, h, h.root); n != 0 {
 		t.Errorf("harness 模式不应干预，实际禁用 %d", n)
 	}
-	if !reg.IsEnabled("skill_list") || !reg.IsEnabled("image_ocr") {
+	if !reg.IsEnabled("skill_list") || !reg.IsEnabled("submit_image") {
 		t.Error("harness 模式全部工具应保持启用")
 	}
 }
@@ -213,7 +213,6 @@ func TestEnsureDefaultWorkspaceToolset(t *testing.T) {
 		t.Error("迁移后旧版 builtin.json 应被删除")
 	}
 }
-
 
 // TestApplyWorkspaceToolsetWhitelist 白名单模型：agent 只暴露「工作区工具集声明 +
 // 框架本身提供的工具」——无工具集先自动创建基础工具集；有工具集按声明收敛。

@@ -108,7 +108,8 @@ func TestToolsetBuildPersistExportImport(t *testing.T) {
 
 // TestToolsetMarketInstall 市场 plugin 类型安装（固化 + 装载）。
 // ★ 2026-08-20：市场功能已全插件化（ctx.toolset.save 组合 saveToolset+installToolset），
-//   Go 内核无市场实现。本测试直接验证底层能力路径：固化 → 装载。
+//
+//	Go 内核无市场实现。本测试直接验证底层能力路径：固化 → 装载。
 func TestToolsetMarketInstall(t *testing.T) {
 	project := mkToolsetGoProject(t)
 	host := NewPluginHost(NewRegistry(), nil, project)

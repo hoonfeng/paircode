@@ -23,8 +23,9 @@ import (
 
 // HarnessOnlyTools 判断是否处于 harness 对齐模式。
 // ★ 默认关闭（全量工具集——插件面板工具默认全勾，全部对 agent 可见）；
-//   `WB_HARNESS=1` 显式开启（对齐 deepseek-harness 精简工具集）；
-//   旧开关兼容：`WB_FULL_TOOLS=1` 强制全量（关闭过滤）。
+//
+//	`WB_HARNESS=1` 显式开启（对齐 deepseek-harness 精简工具集）；
+//	旧开关兼容：`WB_FULL_TOOLS=1` 强制全量（关闭过滤）。
 func HarnessOnlyTools() bool {
 	if os.Getenv("WB_HARNESS") == "1" {
 		return true
@@ -36,18 +37,19 @@ func HarnessOnlyTools() bool {
 }
 
 // HarnessAlignedToolNames 保留清单（过滤时仅保留以下工具）：
-//  ① harness 原生工具集：read/write/edit（tool-fs）、glob/grep（tool-fs-search）、
-//     str_replace_editor、bash（tool-bash）、web_search/web_fetch（tool-web）、
-//     run_code（code-mode）
-//  ② 对话协议基础设施：update_tasks（任务追踪，前端任务面板依赖）、
-//     ask_user（提问）、generate_commit_message（完成标记，Loop 读取 CommitMessage）——
-//     属循环协议而非 pair 独有编码能力，保留以维持 agent 循环契约。
-//  ③ 插件管理工具集（cordis_*）：插件即工具的登记/装载/停止/回收/查看——
-//     自举链路关键能力（用 agent 开发 agent 时需能动态注册新工具），
-//     与 harness 的 "tools are plugins" 哲学一致，保留。
-//  ④ 工具集管理（toolset_*）：工具集=插件组合的固化单元（.pair/toolsets/*.json）。
-//     与 cordis_* 同级保留——agent 需能自主构建/查看/导出/管理工具集
-//     （需求：工具集由 agent 自主创建，而非仅前端手动创建）。
+//
+//	① harness 原生工具集：read/write/edit（tool-fs）、glob/grep（tool-fs-search）、
+//	   str_replace_editor、bash（tool-bash）、web_search/web_fetch（tool-web）、
+//	   run_code（code-mode）
+//	② 对话协议基础设施：update_tasks（任务追踪，前端任务面板依赖）、
+//	   ask_user（提问）——
+//	   属循环协议而非 pair 独有编码能力，保留以维持 agent 循环契约。
+//	③ 插件管理工具集（cordis_*）：插件即工具的登记/装载/停止/回收/查看——
+//	   自举链路关键能力（用 agent 开发 agent 时需能动态注册新工具），
+//	   与 harness 的 "tools are plugins" 哲学一致，保留。
+//	④ 工具集管理（toolset_*）：工具集=插件组合的固化单元（.pair/toolsets/*.json）。
+//	   与 cordis_* 同级保留——agent 需能自主构建/查看/导出/管理工具集
+//	   （需求：工具集由 agent 自主创建，而非仅前端手动创建）。
 var HarnessAlignedToolNames = map[string]bool{
 	// harness 原生工具集
 	"read": true, "write": true, "edit": true,
@@ -57,16 +59,15 @@ var HarnessAlignedToolNames = map[string]bool{
 	"web_search":         true, "web_fetch": true,
 	"run_code": true,
 	// 对话协议基础设施
-	"update_tasks":           true,
-	"ask_user":               true,
-	"generate_commit_message": true,
+	"update_tasks": true,
+	"ask_user":     true,
 	// 插件管理（cordis_*）：登记/装载/停止/回收/查看 JS 动态插件
-	"cordis_inspect":       true,
-	"cordis_define":        true,
-	"cordis_run":           true,
-	"cordis_stop":          true,
-	"cordis_undefine":      true,
-	"cordis_service_list":  true,
+	"cordis_inspect":      true,
+	"cordis_define":       true,
+	"cordis_run":          true,
+	"cordis_stop":         true,
+	"cordis_undefine":     true,
+	"cordis_service_list": true,
 	// 工具集管理（toolset_*）：工具集=插件组合的固化单元，agent 自主构建/查看/导出/管理
 	"toolset_build":  true,
 	"toolset_list":   true,
@@ -81,13 +82,17 @@ var HarnessAlignedToolNames = map[string]bool{
 // （Enabled=false），返回禁用数量。开关关闭（默认全量 / WB_FULL_TOOLS=1）时不做任何事，返回 0。
 //
 // ★ 语义（2026-08-16 重构）：从「Unregister 删除」改为「SetToolEnabled(false) 禁用」——
-//   工具保留在注册表（前端 /api/tools 可见、可管理），但 Definitions() 只导出启用工具
-//   → agent 不可见；Execute 拦截禁用工具调用。恢复 = SetToolEnabled(true)（可逆）。
-//   这为「内置工具集（builtin）」铺路：被过滤工具以内置插件组形态进插件面板，
-//   用户选择加入（启用）或强制全部加入，无需重新注册。
+//
+//	工具保留在注册表（前端 /api/tools 可见、可管理），但 Definitions() 只导出启用工具
+//	→ agent 不可见；Execute 拦截禁用工具调用。恢复 = SetToolEnabled(true)（可逆）。
+//	这为「内置工具集（builtin）」铺路：被过滤工具以内置插件组形态进插件面板，
+//	用户选择加入（启用）或强制全部加入，无需重新注册。
+//
 // ★ exempt 回调：返回 true 的工具豁免过滤（保持启用；插件注册的工具——插件是内容，
-//   非 pair 独有编码能力；goja 插件工具与 Node 桥工具都经 PluginHost 注册）。
-// 使用 SetToolEnabled 而非 Unregister，保留钩子/CommitMessage 等注册表字段。
+//
+//	非 pair 独有编码能力；goja 插件工具与 Node 桥工具都经 PluginHost 注册）。
+//
+// 使用 SetToolEnabled 而非 Unregister，保留钩子等注册表字段。
 func ApplyHarnessToolFilter(r *Registry, exempt func(string) bool) int {
 	if !HarnessOnlyTools() {
 		return 0

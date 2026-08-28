@@ -58,7 +58,7 @@ func (s *SQLiteStore) Save(g *Graph) error {
 	// 插入实体，建立 entity id → rowid 映射
 	entityMap := make(map[string]int64, len(snapshot.Entities))
 	entStmt, err := tx.Prepare(
-		`INSERT INTO code_entities (kind, name, file_path, line, signature, package_name, module) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO code_entities (kind, name, file_path, line, signature, package_name, module, entity_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 	)
 	if err != nil {
 		return fmt.Errorf("准备实体插入失败: %w", err)
@@ -76,7 +76,7 @@ func (s *SQLiteStore) Save(g *Graph) error {
 		if idx := lastDot(e.FQN); idx > 0 {
 			pkgName = e.FQN[:idx]
 		}
-		result, err := entStmt.Exec(kind, e.Name, fp, e.Line, sig, pkgName, "")
+		result, err := entStmt.Exec(kind, e.Name, fp, e.Line, sig, pkgName, "", e.ID)
 		if err != nil {
 			continue
 		}
@@ -160,7 +160,7 @@ func (s *SQLiteStore) SaveIncremental(g *Graph, changedFiles []string) error {
 
 	// 3. 重新插入变更文件的实体
 	entStmt, err := tx.Prepare(
-		`INSERT INTO code_entities (kind, name, file_path, line, signature, package_name, module) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO code_entities (kind, name, file_path, line, signature, package_name, module, entity_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 	)
 	if err != nil {
 		return fmt.Errorf("准备实体插入失败: %w", err)
@@ -179,24 +179,26 @@ func (s *SQLiteStore) SaveIncremental(g *Graph, changedFiles []string) error {
 		if idx := lastDot(e.FQN); idx > 0 {
 			pkgName = e.FQN[:idx]
 		}
-		entStmt.Exec(kind, e.Name, fp, e.Line, sig, pkgName, "")
+		entStmt.Exec(kind, e.Name, fp, e.Line, sig, pkgName, "", e.ID)
 	}
 	entStmt.Close()
 
-	// 4. 重建完整 entityID → rowid 映射（从数据库查询最新 rowid）
+	// 4. 重建完整 entityID → rowid 映射（从数据库查询最新 rowid，优先原始 entity_id）
 	entityMap := make(map[string]int64, len(snapshot.Entities))
-	entRows, err := tx.Query(`SELECT id, kind, name, file_path, line FROM code_entities`)
+	entRows, err := tx.Query(`SELECT id, entity_id, kind, name, file_path, line FROM code_entities`)
 	if err != nil {
 		return fmt.Errorf("查询实体映射失败: %w", err)
 	}
 	for entRows.Next() {
 		var rowID int64
-		var kind, name, fp string
+		var entityID, kind, name, fp string
 		var line int
-		if err := entRows.Scan(&rowID, &kind, &name, &fp, &line); err != nil {
+		if err := entRows.Scan(&rowID, &entityID, &kind, &name, &fp, &line); err != nil {
 			continue
 		}
-		entityID := fp + ":" + kind + ":" + name
+		if entityID == "" {
+			entityID = fp + ":" + kind + ":" + name
+		}
 		entityMap[entityID] = rowID
 	}
 	entRows.Close()
@@ -273,7 +275,7 @@ func (s *SQLiteStore) Load() (*Graph, error) {
 	g := NewGraph()
 
 	entRows, err := s.db.Query(
-		`SELECT id, kind, name, file_path, line, signature, package_name FROM code_entities ORDER BY line ASC`,
+		`SELECT id, kind, name, file_path, line, signature, package_name, entity_id FROM code_entities ORDER BY line ASC`,
 	)
 	if err != nil {
 		return NewGraph(), nil
@@ -283,13 +285,18 @@ func (s *SQLiteStore) Load() (*Graph, error) {
 	rowIDToID := make(map[int64]string)
 	for entRows.Next() {
 		var rowID int64
-		var kind, name, fp, sig, pkgName string
+		var kind, name, fp, sig, pkgName, entityID string
 		var line int
-		if err := entRows.Scan(&rowID, &kind, &name, &fp, &line, &sig, &pkgName); err != nil {
+		if err := entRows.Scan(&rowID, &kind, &name, &fp, &line, &sig, &pkgName, &entityID); err != nil {
 			continue
 		}
 		entityKind := EntityKind(kind)
-		id := fp + ":" + kind + ":" + name
+		// ★ 优先使用存储的原始实体 ID（entity_id）——ID 含调用点行号等唯一信息；
+		//   旧数据（无 entity_id）回退拼接（含行号，减少 call_site 同名冲突）。
+		id := entityID
+		if id == "" {
+			id = fmt.Sprintf("%s:%s:%s:%d", fp, kind, name, line)
+		}
 		rowIDToID[rowID] = id
 
 		g.AddEntity(&Entity{

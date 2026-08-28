@@ -26,15 +26,15 @@ type jsProviderFactoryBridge struct {
 // Apply 实现 ProviderFactory：JS 装配 → 参数合并。
 func (b *jsProviderFactoryBridge) Apply(current ProviderParams) ProviderParams {
 	snap := map[string]any{
-		"provider":         current.Provider,
-		"baseURL":          current.BaseURL,
-		"apiKey":           current.APIKey,
-		"model":            current.Model,
-		"temperature":      current.Temperature,
-		"maxTokens":        current.MaxTokens,
-		"thinkingMode":     current.ThinkingMode,
-		"planModel":        current.PlanModel,
-		"reviewModel":      current.ReviewModel,
+		"provider":                 current.Provider,
+		"baseURL":                  current.BaseURL,
+		"apiKey":                   current.APIKey,
+		"model":                    current.Model,
+		"temperature":              current.Temperature,
+		"maxTokens":                current.MaxTokens,
+		"thinkingMode":             current.ThinkingMode,
+		"planModel":                current.PlanModel,
+		"reviewModel":              current.ReviewModel,
 		"contextMaxTokens":         current.ContextMaxTokens,
 		"providerContextMaxTokens": current.ProviderContextMaxTokens, // ★ 服务商级默认上下文（模型级未配置时兜底）
 		"modelParams":              current.ModelParams,
@@ -89,6 +89,10 @@ func (b *jsProviderFactoryBridge) applyOverrides(cur ProviderParams, obj *goja.O
 	}
 	if v := get("thinkingMode"); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) && v.String() != "" {
 		out.ThinkingMode = v.String()
+	}
+	// ★ 2026-08-21 多模态：装配器按模型级参数标记（agentloop 读 modelParams[provider][model].multimodal）
+	if v := get("multimodal"); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
+		out.Multimodal = v.ToBoolean()
 	}
 	if v := get("planModel"); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) && v.String() != "" {
 		out.PlanModel = v.String()

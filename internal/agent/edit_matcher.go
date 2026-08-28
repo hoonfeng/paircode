@@ -228,8 +228,6 @@ func matchWhitespaceFold(normContent, normOld, normNew string) (string, bool) {
 	return strings.Join(result, "\n"), true
 }
 
-
-
 // ─── 换行符工具 ─────────────────────────────────────────────
 
 // normalizeNewlines 把 \r\n 和孤立 \r 统一为 \n（仅匹配阶段用）。

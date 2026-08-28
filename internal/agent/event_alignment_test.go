@@ -86,4 +86,3 @@ func TestPersistNewMessages_EventAnnotation(t *testing.T) {
 		t.Errorf("assistant(final) 标注错误: %+v", loaded[3])
 	}
 }
-

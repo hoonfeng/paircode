@@ -175,3 +175,51 @@ func TestJSLoopFactoryAssemblerNull(t *testing.T) {
 }
 
 var _ = context.Background // 保留 context import（后续断言扩展）
+
+// ─── 装配器传递首步极简候选组（stagedToolGroups） ─────────────────
+
+const demoLoopAssemblerGroupsPlugin = `
+return {
+  name: 'loop-assembler-groups',
+  apply(ctx) {
+    ctx.loopFactory.register(() => ({
+      stagedToolGroups: [['custom_read'], ['custom_write', 'fallback_write']]
+    }))
+  }
+}`
+
+func TestJSLoopFactoryStagedGroups(t *testing.T) {
+	if _, ok := LoopFactoryNow().(goLoopFactory); !ok {
+		t.Skipf("当前 LoopFactory 非默认（%T），跳过避免污染", LoopFactoryNow())
+	}
+	reg := NewRegistry()
+	host := NewPluginHost(reg, nil, `C:\ws`)
+	id, err := host.DefineJS(demoLoopAssemblerGroupsPlugin, "loop assembler groups demo")
+	if err != nil {
+		t.Fatalf("DefineJS: %v", err)
+	}
+	def, _ := host.GetJSDef(id)
+	if err := host.LoadJSDynamic(def); err != nil {
+		t.Fatalf("LoadJSDynamic: %v", err)
+	}
+	defer host.Unload("loop-assembler-groups")
+
+	h, err := CreateLoop(LoopOpts{MaxIterations: 4})
+	if err != nil {
+		t.Fatalf("CreateLoop(JS 装配): %v", err)
+	}
+	loop := h.Loop()
+	want := [][]string{{"custom_read"}, {"custom_write", "fallback_write"}}
+	if len(loop.StagedToolGroups) != 2 || loop.StagedToolGroups[1][1] != "fallback_write" {
+		t.Fatalf("装配后 StagedToolGroups = %+v, want %+v", loop.StagedToolGroups, want)
+	}
+	// 装配的候选组参与极简过滤
+	tools := []ToolDefinition{
+		{Type: "function", Function: FunctionDefinition{Name: "custom_read", Description: "d"}},
+		{Type: "function", Function: FunctionDefinition{Name: "fallback_write", Description: "d"}},
+		{Type: "function", Function: FunctionDefinition{Name: "read_file", Description: "d"}},
+	}
+	if got := FilterStagedTools(tools, loop.StagedToolGroups); len(got) != 2 {
+		t.Fatalf("按装配候选组应保留 2 个，得 %d: %+v", len(got), got)
+	}
+}

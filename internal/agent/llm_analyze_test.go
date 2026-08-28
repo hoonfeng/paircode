@@ -39,7 +39,7 @@ func TestLLMIntentCommands(t *testing.T) {
 	old := toolsetLLMProvider
 	toolsetLLMProvider = func() Provider {
 		return &MockProvider{Responses: []Message{{
-			Role: RoleAssistant,
+			Role:    RoleAssistant,
 			Content: `{"purpose":"Next.js 前端应用","buildCmd":"npm run build","testCmd":"npm test","runCmd":"npm run dev","lintCmd":"npx eslint .","formatCmd":"npx prettier --write .","recommendedTags":["build","test","lint"],"notes":"需要构建与代码质量工具"}`,
 		}}}
 	}
@@ -155,7 +155,7 @@ func TestBuildToolsetCustomPlugins(t *testing.T) {
 	old := toolsetLLMProvider
 	toolsetLLMProvider = func() Provider {
 		return &MockProvider{Responses: []Message{{
-			Role:    RoleAssistant,
+			Role: RoleAssistant,
 			Content: `{"purpose":"OpenAPI 服务生成器","recommendedTags":["api","build"],"customPlugins":[` +
 				`{"name":"openapi-gen","purpose":"OpenAPI 定义校验与生成","code":"return { name: 'openapi-gen', inject: ['bash'], apply(ctx) { ctx.tools.register({ name: 'openapi_validate', description: '校验 OpenAPI 定义', parameters: { type: 'object', properties: { path: { type: 'string', description: 'OpenAPI 文件路径' } }, required: ['path'] }, execute: async (a) => { const r = await ctx.bash.exec('npx @redocly/cli lint ' + a.path); return r.error || r.output; } }); } };"},` +
 				`{"name":"broken","purpose":"语法错误应被剔除","code":"return { name: 'broken', apply(ctx) { ctx.tools.register("},` +

@@ -86,8 +86,10 @@ func TestRegistryHooks_OnToolErrorEnhance(t *testing.T) {
 func TestRegistryHooks_OnToolErrorSwallow(t *testing.T) {
 	reg := NewRegistry()
 	reg.Register(&Tool{
-		Name:    "fail",
-		Handler: func(ctx context.Context, args map[string]any) (string, error) { return "", errors.New("可恢复错误") },
+		Name: "fail",
+		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			return "", errors.New("可恢复错误")
+		},
 	})
 	// OnToolError 吞掉错误，转为成功结果
 	reg.OnToolError = func(ctx context.Context, name string, args map[string]any, err error) (string, error) {

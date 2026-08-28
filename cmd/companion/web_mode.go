@@ -1,6 +1,5 @@
 // Web-only 模式服务器生命周期管理。
 //
-//go:build windows
 
 package main
 

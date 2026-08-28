@@ -1,9 +1,9 @@
 <template>
   <div class="me-field">
-    <span class="me-label">可用模型（回车或逗号分隔添加；支持整段粘贴）</span>
+    <span class="me-label">{{ label }}</span>
     <div class="me-editor">
       <div class="me-input-row">
-        <input v-model="input" class="me-input" placeholder="输入模型名，回车添加…"
+        <input v-model="input" class="me-input" :placeholder="placeholder"
                @keydown.enter.prevent="addModels" @paste="onPaste" />
         <button class="me-btn" @click="addModels">添加</button>
       </div>
@@ -23,8 +23,12 @@ import { ref, watch } from 'vue'
 
 // 模型 tag 编辑器：输入/回车/逗号/粘贴批量添加，点 × 删除。
 // props.models 同步外部数组；每次变更 emit('change', 新数组)。
+// ★ 2026-08-21 schema 驱动：label/placeholder 由配置注册时声明（providers.modelEditor），
+//   前端按声明渲染，无需改组件即可调整文案。
 const props = defineProps({
   models: { type: Array, default: () => [] },
+  label: { type: String, default: '可用模型（回车或逗号分隔添加；支持整段粘贴）' },
+  placeholder: { type: String, default: '输入模型名，回车添加…' },
 })
 const emit = defineEmits(['change'])
 

@@ -213,8 +213,8 @@ type LangBuilder struct {
 func NewLangBuilder(root, moduleName string) *LangBuilder {
 	return &LangBuilder{ModuleName: moduleName, root: root, graph: NewGraph()}
 }
-func (b *LangBuilder) Graph() *Graph    { return b.graph }
-func (b *LangBuilder) Reset()           { b.graph = NewGraph() }
+func (b *LangBuilder) Graph() *Graph     { return b.graph }
+func (b *LangBuilder) Reset()            { b.graph = NewGraph() }
 func (b *LangBuilder) SetGraph(g *Graph) { b.graph = g }
 
 // ParseFile 根据文件扩展名路由到具体语言解析器。
@@ -295,7 +295,7 @@ func (b *LangBuilder) ParseDir(dirPath string) (int, []error) {
 
 // entityExtract 共享的结构体，将行级实体提取逻辑封装。
 type entityExtract struct {
-	lines   []string
+	lines    []string
 	filePath string
 	fileID   string
 	graph    *Graph
@@ -330,7 +330,7 @@ func (e *entityExtract) addRel(src, dst string, kind RelationKind, lineNo int) {
 // ── Rust ──────────────────────────────────────────────
 
 var (
-	reRustFn    = regexp.MustCompile(`^\s*(?:pub\s+)?(?:unsafe\s+)?fn\s+(` + reIdent + `)\s*\(`)
+	reRustFn     = regexp.MustCompile(`^\s*(?:pub\s+)?(?:unsafe\s+)?fn\s+(` + reIdent + `)\s*\(`)
 	reRustStruct = regexp.MustCompile(`^\s*(?:pub\s+)?struct\s+(` + reTypeIdent + `)`)
 	reRustEnum   = regexp.MustCompile(`^\s*(?:pub\s+)?enum\s+(` + reTypeIdent + `)`)
 	reRustTrait  = regexp.MustCompile(`^\s*(?:pub\s+)?trait\s+(` + reTypeIdent + `)`)
@@ -349,8 +349,8 @@ func parseRustFile(b *LangBuilder, filePath string, source []byte) (string, erro
 
 	// 使用 brace 栈跟踪 impl 块归属
 	type implFrame struct {
-		implType string // 当前 impl 的类型
-		braceDepth int  // 进入时的花括号深度
+		implType   string // 当前 impl 的类型
+		braceDepth int    // 进入时的花括号深度
 	}
 	implStack := []implFrame{}
 	braceDepth := 0
@@ -363,10 +363,15 @@ func parseRustFile(b *LangBuilder, filePath string, source []byte) (string, erro
 		ln := lineNo + 1
 
 		// 计算本行的 brace 变化（忽略字符串中的括号）
-		openBrace := 0; closeBrace := 0
+		openBrace := 0
+		closeBrace := 0
 		for _, ch := range trimmed {
-			if ch == '{' { openBrace++ }
-			if ch == '}' { closeBrace++ }
+			if ch == '{' {
+				openBrace++
+			}
+			if ch == '}' {
+				closeBrace++
+			}
 		}
 
 		// 检查是否在 impl 块开始时记录
@@ -456,7 +461,7 @@ func parseRustFile(b *LangBuilder, filePath string, source []byte) (string, erro
 // ── Java ──────────────────────────────────────────────
 
 var (
-	reJavaClass = regexp.MustCompile(`^\s*(?:public\s+|private\s+|protected\s+)?(?:abstract\s+|final\s+|static\s+)*(?:class|interface|enum|@interface)\s+(` + reTypeIdent + `)`)
+	reJavaClass  = regexp.MustCompile(`^\s*(?:public\s+|private\s+|protected\s+)?(?:abstract\s+|final\s+|static\s+)*(?:class|interface|enum|@interface)\s+(` + reTypeIdent + `)`)
 	reJavaMethod = regexp.MustCompile(`^\s*(?:public\s+|private\s+|protected\s+)?(?:static\s+|abstract\s+|final\s+|synchronized\s+)*(?:<[^>]+>\s*)?(` + reTypeIdent + `|void|int|long|double|float|boolean|char|byte|short|String|` + reTypeIdent + `\[])\s+(` + reIdent + `)\s*\(`)
 	reJavaFn     = regexp.MustCompile(`^\s*(?:public\s+|private\s+|protected\s+)?(?:static\s+)?(` + reIdent + `)\s+(` + reIdent + `)\s*\(`)
 	reJavaImport = regexp.MustCompile(`^\s*import\s+(?:static\s+)?(\S+);`)
@@ -519,12 +524,12 @@ func parseJavaFile(b *LangBuilder, filePath string, source []byte) (string, erro
 // ── C ─────────────────────────────────────────────────
 
 var (
-	reCFunc     = regexp.MustCompile(`^\s*(?:static\s+|inline\s+|extern\s+)?(?:const\s+)?(` + reIdent + `\s*\*?)\s+(` + reIdent + `)\s*\(`)
-	reCStruct   = regexp.MustCompile(`^\s*(?:typedef\s+)?struct\s+(` + reIdent + `)\s*\{`)
-	reCInclude  = regexp.MustCompile(`^\s*#\s*include\s+[<"](.+)[>"]`)
-	reCTypedef  = regexp.MustCompile(`^\s*typedef\s+(?:const\s+)?(` + reIdent + `)\s+(` + reIdent + `)\s*;`)
-	reCMacro    = regexp.MustCompile(`^\s*#\s*define\s+(` + reIdent + `)\s+`)
-	reCEnum     = regexp.MustCompile(`^\s*(?:typedef\s+)?enum\s+(` + reIdent + `)\s*\{`)
+	reCFunc    = regexp.MustCompile(`^\s*(?:static\s+|inline\s+|extern\s+)?(?:const\s+)?(` + reIdent + `\s*\*?)\s+(` + reIdent + `)\s*\(`)
+	reCStruct  = regexp.MustCompile(`^\s*(?:typedef\s+)?struct\s+(` + reIdent + `)\s*\{`)
+	reCInclude = regexp.MustCompile(`^\s*#\s*include\s+[<"](.+)[>"]`)
+	reCTypedef = regexp.MustCompile(`^\s*typedef\s+(?:const\s+)?(` + reIdent + `)\s+(` + reIdent + `)\s*;`)
+	reCMacro   = regexp.MustCompile(`^\s*#\s*define\s+(` + reIdent + `)\s+`)
+	reCEnum    = regexp.MustCompile(`^\s*(?:typedef\s+)?enum\s+(` + reIdent + `)\s*\{`)
 )
 
 func parseCFile(b *LangBuilder, filePath string, source []byte) (string, error) {
@@ -592,11 +597,11 @@ func parseCFamily(b *LangBuilder, filePath string, source []byte) (string, error
 // ── C# ────────────────────────────────────────────────
 
 var (
-	reCsClass   = regexp.MustCompile(`^\s*(?:public|private|protected|internal|static|abstract|sealed|partial)\s+(?:class|struct|interface|record|enum)\s+(` + reTypeIdent + `)`)
-	reCsMethod  = regexp.MustCompile(`^\s*(?:public|private|protected|internal|static|virtual|override|abstract|async|unsafe)\s+(?:` + reIdent + `\s+)?(` + reIdent + `)\s+(` + reIdent + `)\s*\(`)
-	reCsUsing   = regexp.MustCompile(`^\s*using\s+(?:static\s+)?(\S+)\s*;`)
-	reCsProp    = regexp.MustCompile(`^\s*(?:public|private|protected|internal)\s+(?:static\s+)?(` + reIdent + `)\s+(` + reIdent + `)\s*\{`)
-	reCsNs      = regexp.MustCompile(`^\s*namespace\s+(\S+)`)
+	reCsClass  = regexp.MustCompile(`^\s*(?:public|private|protected|internal|static|abstract|sealed|partial)\s+(?:class|struct|interface|record|enum)\s+(` + reTypeIdent + `)`)
+	reCsMethod = regexp.MustCompile(`^\s*(?:public|private|protected|internal|static|virtual|override|abstract|async|unsafe)\s+(?:` + reIdent + `\s+)?(` + reIdent + `)\s+(` + reIdent + `)\s*\(`)
+	reCsUsing  = regexp.MustCompile(`^\s*using\s+(?:static\s+)?(\S+)\s*;`)
+	reCsProp   = regexp.MustCompile(`^\s*(?:public|private|protected|internal)\s+(?:static\s+)?(` + reIdent + `)\s+(` + reIdent + `)\s*\{`)
+	reCsNs     = regexp.MustCompile(`^\s*namespace\s+(\S+)`)
 )
 
 func parseCsharpFile(b *LangBuilder, filePath string, source []byte) (string, error) {
@@ -648,11 +653,11 @@ func parseCsharpFile(b *LangBuilder, filePath string, source []byte) (string, er
 // ── Ruby ──────────────────────────────────────────────
 
 var (
-	reRubyClass = regexp.MustCompile(`^\s*(?:class\s+)(` + reTypeIdent + `(?:\s*<\s*` + reTypeIdent + `)?)`)
-	reRubyModule = regexp.MustCompile(`^\s*(?:module\s+)(` + reTypeIdent + `)`)
-	reRubyDef   = regexp.MustCompile(`^\s*(?:public|private|protected|static)?\s*def\s+(?:self\.)?(` + reIdent + `)`)
+	reRubyClass   = regexp.MustCompile(`^\s*(?:class\s+)(` + reTypeIdent + `(?:\s*<\s*` + reTypeIdent + `)?)`)
+	reRubyModule  = regexp.MustCompile(`^\s*(?:module\s+)(` + reTypeIdent + `)`)
+	reRubyDef     = regexp.MustCompile(`^\s*(?:public|private|protected|static)?\s*def\s+(?:self\.)?(` + reIdent + `)`)
 	reRubyRequire = regexp.MustCompile(`^\s*(?:require|require_relative|load|autoload)\s+['"](\S+)['"]`)
-	reRubyAttr  = regexp.MustCompile(`^\s*(?:attr_accessor|attr_reader|attr_writer)\s+(?::(` + reIdent + `))`)
+	reRubyAttr    = regexp.MustCompile(`^\s*(?:attr_accessor|attr_reader|attr_writer)\s+(?::(` + reIdent + `))`)
 )
 
 func parseRubyFile(b *LangBuilder, filePath string, source []byte) (string, error) {
@@ -687,9 +692,9 @@ func parseRubyFile(b *LangBuilder, filePath string, source []byte) (string, erro
 		case reRubyDef.MatchString(trimmed):
 			m := reRubyDef.FindStringSubmatch(trimmed)
 			name := m[1]
-		if currentClass != "" {
-			id := ext.addEntity(EntityMethod, currentClass+"."+name,
-				fmt.Sprintf("%s.%s(...)", currentClass, name), ln)
+			if currentClass != "" {
+				id := ext.addEntity(EntityMethod, currentClass+"."+name,
+					fmt.Sprintf("%s.%s(...)", currentClass, name), ln)
 				clsID := EntityID(EntityStruct, "", currentClass)
 				ext.addRel(clsID, id, RelDefines, ln)
 			} else {
@@ -710,12 +715,12 @@ func parseRubyFile(b *LangBuilder, filePath string, source []byte) (string, erro
 // ── PHP ───────────────────────────────────────────────
 
 var (
-	rePhpClass  = regexp.MustCompile(`^\s*(?:abstract\s+|final\s+)?class\s+(` + reTypeIdent + `)`)
+	rePhpClass     = regexp.MustCompile(`^\s*(?:abstract\s+|final\s+)?class\s+(` + reTypeIdent + `)`)
 	rePhpInterface = regexp.MustCompile(`^\s*interface\s+(` + reTypeIdent + `)`)
-	rePhpTrait  = regexp.MustCompile(`^\s*trait\s+(` + reTypeIdent + `)`)
-	rePhpFunc   = regexp.MustCompile(`^\s*(?:public|private|protected|static|abstract|final)?\s*(?:function)\s+(` + reIdent + `)\s*\(`)
-	rePhpUse    = regexp.MustCompile(`^\s*use\s+(.+);$`)
-	rePhpConst  = regexp.MustCompile(`^\s*(?:const|define)\s*\(?\s*['"]?(` + reIdent + `)`)
+	rePhpTrait     = regexp.MustCompile(`^\s*trait\s+(` + reTypeIdent + `)`)
+	rePhpFunc      = regexp.MustCompile(`^\s*(?:public|private|protected|static|abstract|final)?\s*(?:function)\s+(` + reIdent + `)\s*\(`)
+	rePhpUse       = regexp.MustCompile(`^\s*use\s+(.+);$`)
+	rePhpConst     = regexp.MustCompile(`^\s*(?:const|define)\s*\(?\s*['"]?(` + reIdent + `)`)
 )
 
 func parsePhpFile(b *LangBuilder, filePath string, source []byte) (string, error) {
@@ -778,10 +783,10 @@ func parsePhpFile(b *LangBuilder, filePath string, source []byte) (string, error
 // ── Swift ─────────────────────────────────────────────
 
 var (
-	reSwiftClass = regexp.MustCompile(`^\s*(?:public|private|internal|open|final)?\s*(?:class|struct|enum|protocol|extension)\s+(` + reTypeIdent + `)`)
-	reSwiftFunc  = regexp.MustCompile(`^\s*(?:public|private|internal|fileprivate|static|class|override)?\s*(?:func)\s+(` + reIdent + `)\s*\(`)
+	reSwiftClass  = regexp.MustCompile(`^\s*(?:public|private|internal|open|final)?\s*(?:class|struct|enum|protocol|extension)\s+(` + reTypeIdent + `)`)
+	reSwiftFunc   = regexp.MustCompile(`^\s*(?:public|private|internal|fileprivate|static|class|override)?\s*(?:func)\s+(` + reIdent + `)\s*\(`)
 	reSwiftImport = regexp.MustCompile(`^\s*import\s+(?:` + reIdent + `\s+)?(\S+)`)
-	reSwiftVar   = regexp.MustCompile(`^\s*(?:public|private|internal|static|let|var)\s+(?:let|var)\s+(` + reIdent + `)\s*:`)
+	reSwiftVar    = regexp.MustCompile(`^\s*(?:public|private|internal|static|let|var)\s+(?:let|var)\s+(` + reIdent + `)\s*:`)
 )
 
 func parseSwiftFile(b *LangBuilder, filePath string, source []byte) (string, error) {
@@ -1027,7 +1032,7 @@ func parseLuaFile(b *LangBuilder, filePath string, source []byte) (string, error
 
 var (
 	reBashFn     = regexp.MustCompile(`^\s*(?:function\s+)?(` + reIdent + `)\s*\(\s*\)`)
-	reBashVar    = regexp.MustCompile(`^\s*(?:export\s+)?(` + reIdent + `)=[\"'`+"`"+`]?`)
+	reBashVar    = regexp.MustCompile(`^\s*(?:export\s+)?(` + reIdent + `)=[\"'` + "`" + `]?`)
 	reBashSource = regexp.MustCompile(`^\s*(?:source|\.)\s+(\S+)`)
 )
 
@@ -1071,10 +1076,10 @@ func parseBashFile(b *LangBuilder, filePath string, source []byte) (string, erro
 // ── SQL ───────────────────────────────────────────────
 
 var (
-	reSqlCreateTable  = regexp.MustCompile(`(?i)create\s+(?:temp|temporary|global\s+temporary)?\s*table\s+(?:if\s+not\s+exists\s+)?(?:` + reIdent + `\.)?(` + reIdent + `)`)
-	reSqlCreateFunc   = regexp.MustCompile(`(?i)create\s+(?:or\s+replace\s+)?(?:function|procedure|trigger|view)\s+(?:` + reIdent + `\.)?(` + reIdent + `)`)
-	reSqlCreateIndex  = regexp.MustCompile(`(?i)create\s+(?:unique\s+)?index\s+(?:` + reIdent + `\.)?(` + reIdent + `)`)
-	reSqlCreateType   = regexp.MustCompile(`(?i)create\s+(?:or\s+replace\s+)?type\s+(?:` + reIdent + `\.)?(` + reIdent + `)`)
+	reSqlCreateTable = regexp.MustCompile(`(?i)create\s+(?:temp|temporary|global\s+temporary)?\s*table\s+(?:if\s+not\s+exists\s+)?(?:` + reIdent + `\.)?(` + reIdent + `)`)
+	reSqlCreateFunc  = regexp.MustCompile(`(?i)create\s+(?:or\s+replace\s+)?(?:function|procedure|trigger|view)\s+(?:` + reIdent + `\.)?(` + reIdent + `)`)
+	reSqlCreateIndex = regexp.MustCompile(`(?i)create\s+(?:unique\s+)?index\s+(?:` + reIdent + `\.)?(` + reIdent + `)`)
+	reSqlCreateType  = regexp.MustCompile(`(?i)create\s+(?:or\s+replace\s+)?type\s+(?:` + reIdent + `\.)?(` + reIdent + `)`)
 )
 
 func parseSqlFile(b *LangBuilder, filePath string, source []byte) (string, error) {
@@ -1177,9 +1182,9 @@ func extractNameAfterKeyword(s, keyword string) string {
 // ── HTML ──────────────────────────────────────────────
 
 var (
-	reHTMLTag      = regexp.MustCompile(`(?i)<(/?)([a-z]\w*)(?:\s+[^>]*)?>`)
-	reHTMLClass    = regexp.MustCompile(`(?i)class\s*=\s*["']([^"']+)["']`)
-	reHTMLID       = regexp.MustCompile(`(?i)id\s*=\s*["']([^"']+)["']`)
+	reHTMLTag       = regexp.MustCompile(`(?i)<(/?)([a-z]\w*)(?:\s+[^>]*)?>`)
+	reHTMLClass     = regexp.MustCompile(`(?i)class\s*=\s*["']([^"']+)["']`)
+	reHTMLID        = regexp.MustCompile(`(?i)id\s*=\s*["']([^"']+)["']`)
 	reHTMLComponent = regexp.MustCompile(`(?i)<([A-Z]\w*)(?:\s+[^>]*)?>`)
 )
 
@@ -1298,7 +1303,7 @@ func parseCSSFile(b *LangBuilder, filePath string, source []byte) (string, error
 // ── JSON ──────────────────────────────────────────────
 
 var (
-	reJSONKey = regexp.MustCompile(`^\s*"([a-zA-Z_]\w*)"\s*:`)
+	reJSONKey  = regexp.MustCompile(`^\s*"([a-zA-Z_]\w*)"\s*:`)
 	reJSONType = regexp.MustCompile(`^\s*"([a-zA-Z_]\w*)"\s*:\s*(\{|\[|"|\d+|true|false|null)`)
 )
 
@@ -1351,9 +1356,9 @@ func parseYAMLFile(b *LangBuilder, filePath string, source []byte) (string, erro
 // ── Markdown ──────────────────────────────────────────
 
 var (
-	reMDHeading = regexp.MustCompile(`^(#{1,6})\s+(.+)$`)
+	reMDHeading   = regexp.MustCompile(`^(#{1,6})\s+(.+)$`)
 	reMDCodeFence = regexp.MustCompile("^`{3,}(\\w*)")
-	reMDLink    = regexp.MustCompile(`\[([^\]]+)\]\(([^)]+)\)`)
+	reMDLink      = regexp.MustCompile(`\[([^\]]+)\]\(([^)]+)\)`)
 )
 
 func parseMarkdownFile(b *LangBuilder, filePath string, source []byte) (string, error) {
@@ -1387,13 +1392,13 @@ func parseMarkdownFile(b *LangBuilder, filePath string, source []byte) (string, 
 // ── Dockerfile ────────────────────────────────────────
 
 var (
-	reDockerFrom    = regexp.MustCompile(`(?i)^\s*FROM\s+(\S+)(?:\s+AS\s+(\S+))?`)
-	reDockerRun     = regexp.MustCompile(`(?i)^\s*RUN\s+(.+)`)
-	reDockerCopy    = regexp.MustCompile(`(?i)^\s*COPY\s+(.+?)\s+(.+)`)
-	reDockerExpose  = regexp.MustCompile(`(?i)^\s*EXPOSE\s+(\d+)`)
-	reDockerArg     = regexp.MustCompile(`(?i)^\s*ARG\s+(\S+)`)
-	reDockerEnv     = regexp.MustCompile(`(?i)^\s*ENV\s+(\S+)(?:=(.+))?`)
-	reDockerLabel   = regexp.MustCompile(`(?i)^\s*LABEL\s+(\S+)=`)
+	reDockerFrom   = regexp.MustCompile(`(?i)^\s*FROM\s+(\S+)(?:\s+AS\s+(\S+))?`)
+	reDockerRun    = regexp.MustCompile(`(?i)^\s*RUN\s+(.+)`)
+	reDockerCopy   = regexp.MustCompile(`(?i)^\s*COPY\s+(.+?)\s+(.+)`)
+	reDockerExpose = regexp.MustCompile(`(?i)^\s*EXPOSE\s+(\d+)`)
+	reDockerArg    = regexp.MustCompile(`(?i)^\s*ARG\s+(\S+)`)
+	reDockerEnv    = regexp.MustCompile(`(?i)^\s*ENV\s+(\S+)(?:=(.+))?`)
+	reDockerLabel  = regexp.MustCompile(`(?i)^\s*LABEL\s+(\S+)=`)
 )
 
 func parseDockerfileFile(b *LangBuilder, filePath string, source []byte) (string, error) {
@@ -1442,8 +1447,8 @@ func parseDockerfileFile(b *LangBuilder, filePath string, source []byte) (string
 // ── Makefile ──────────────────────────────────────────
 
 var (
-	reMakeTarget = regexp.MustCompile(`^([a-zA-Z_]\w*)\s*:`)
-	reMakeVar    = regexp.MustCompile(`^([A-Z_]\w*)\s*[\+\?]?=\s*(.*)`)
+	reMakeTarget  = regexp.MustCompile(`^([a-zA-Z_]\w*)\s*:`)
+	reMakeVar     = regexp.MustCompile(`^([A-Z_]\w*)\s*[\+\?]?=\s*(.*)`)
 	reMakeInclude = regexp.MustCompile(`^include\s+(\S+)`)
 )
 
@@ -1634,11 +1639,11 @@ func parsePSFile(b *LangBuilder, filePath string, source []byte) (string, error)
 // ── Zig ───────────────────────────────────────────────
 
 var (
-	reZigFn      = regexp.MustCompile(`^\s*(?:pub\s+)?fn\s+([a-zA-Z_]\w*)\s*\(`)
-	reZigStruct  = regexp.MustCompile(`^\s*(?:pub\s+)?(?:const\s+)?([A-Z]\w*)\s*=\s*(?:struct|union|enum)\s*\{`)
-	reZigConst   = regexp.MustCompile(`^\s*(?:pub\s+)?const\s+([a-zA-Z_]\w*)\s*=`)
-	reZigVar     = regexp.MustCompile(`^\s*(?:pub\s+)?var\s+([a-zA-Z_]\w*)\s*:`)
-	reZigTest    = regexp.MustCompile(`^\s*test\s+"(.+?)"`)
+	reZigFn     = regexp.MustCompile(`^\s*(?:pub\s+)?fn\s+([a-zA-Z_]\w*)\s*\(`)
+	reZigStruct = regexp.MustCompile(`^\s*(?:pub\s+)?(?:const\s+)?([A-Z]\w*)\s*=\s*(?:struct|union|enum)\s*\{`)
+	reZigConst  = regexp.MustCompile(`^\s*(?:pub\s+)?const\s+([a-zA-Z_]\w*)\s*=`)
+	reZigVar    = regexp.MustCompile(`^\s*(?:pub\s+)?var\s+([a-zA-Z_]\w*)\s*:`)
+	reZigTest   = regexp.MustCompile(`^\s*test\s+"(.+?)"`)
 )
 
 func parseZigFile(b *LangBuilder, filePath string, source []byte) (string, error) {
@@ -1761,12 +1766,12 @@ func parseScalaFile(b *LangBuilder, filePath string, source []byte) (string, err
 // ── Elixir ────────────────────────────────────────────
 
 var (
-	reElixirModule = regexp.MustCompile(`^\s*defmodule\s+([A-Z]\w*(?:\.[A-Z]\w+)*)\s+do`)
-	reElixirDef    = regexp.MustCompile(`^\s*def\s+([a-zA-Z_]\w*)\s*\(`)
-	reElixirDefP   = regexp.MustCompile(`^\s*defp\s+([a-zA-Z_]\w*)\s*\(`)
+	reElixirModule   = regexp.MustCompile(`^\s*defmodule\s+([A-Z]\w*(?:\.[A-Z]\w+)*)\s+do`)
+	reElixirDef      = regexp.MustCompile(`^\s*def\s+([a-zA-Z_]\w*)\s*\(`)
+	reElixirDefP     = regexp.MustCompile(`^\s*defp\s+([a-zA-Z_]\w*)\s*\(`)
 	reElixirDefMacro = regexp.MustCompile(`^\s*defmacro\s+([a-zA-Z_]\w*)\s*\(`)
-	reElixirImport = regexp.MustCompile(`^\s*(?:import|alias|use|require)\s+([A-Z]\w*(?:\.[A-Z]\w+)*)`)
-	reElixirStruct = regexp.MustCompile(`^\s*defstruct\s+(?:[a-z_]\w*:\s*)?(\w+)`)
+	reElixirImport   = regexp.MustCompile(`^\s*(?:import|alias|use|require)\s+([A-Z]\w*(?:\.[A-Z]\w+)*)`)
+	reElixirStruct   = regexp.MustCompile(`^\s*defstruct\s+(?:[a-z_]\w*:\s*)?(\w+)`)
 )
 
 func parseElixirFile(b *LangBuilder, filePath string, source []byte) (string, error) {
@@ -1828,9 +1833,9 @@ func parseElixirFile(b *LangBuilder, filePath string, source []byte) (string, er
 // ── R ─────────────────────────────────────────────────
 
 var (
-	reRFunc   = regexp.MustCompile(`^([a-zA-Z_]\w*)\s*<-\s*function\s*\(`)
-	reRAssign = regexp.MustCompile(`^([a-zA-Z_]\w*)\s*<-\s+`)
-	reRSource = regexp.MustCompile(`^\s*source\(['"](.+?)['"]\)`)
+	reRFunc    = regexp.MustCompile(`^([a-zA-Z_]\w*)\s*<-\s*function\s*\(`)
+	reRAssign  = regexp.MustCompile(`^([a-zA-Z_]\w*)\s*<-\s+`)
+	reRSource  = regexp.MustCompile(`^\s*source\(['"](.+?)['"]\)`)
 	reRLibrary = regexp.MustCompile(`^\s*(?:library|require)\(['"]?(.+?)['"]?\)`)
 )
 

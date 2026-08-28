@@ -18,9 +18,15 @@ type ConversationStore interface {
 	// 消息操作
 	AppendMessage(convID string, msg Message, segments []Segment) error
 	AppendUserMessage(convID, content string) error
+	AppendUserMessageWithImages(convID, content string, images []ImagePart) error // ★ 2026-08-21 多模态：带图片的用户消息落盘
 	PersistNewMessages(convID string, hist []Message) error
 	LoadLatest(convID string, limit int) ([]StoredMessage, int, error)
 	LoadBefore(convID string, beforeIdx int, limit int) ([]StoredMessage, error)
+	// ★ 2026-08-22 展示专用（全量合并后再按合并条数 limit）：LoadLatest/LoadBefore
+	//   按原始行 limit，JSONL 行 = 一次迭代/tool 行，长对话合并后每轮仅 1~5 条，
+	//   前端历史加载极慢。展示接口返回合并后的 limit 条消息。
+	LoadLatestForDisplay(convID string, limit int) ([]StoredMessage, int, error)
+	LoadBeforeForDisplay(convID string, beforeIdx int, limit int) ([]StoredMessage, error)
 	LoadAll(convID string) ([]Message, error)
 	Count(convID string) (int, error)
 	GetPersistedCount(convID string) int

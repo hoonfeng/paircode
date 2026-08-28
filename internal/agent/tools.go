@@ -38,9 +38,9 @@ type ToolHandler func(ctx context.Context, args map[string]any) (string, error)
 // Tool 一个已注册工具（名/描述/参数 Schema/执行体 + 元信息）。
 type Tool struct {
 	Name             string
-	Description      string // 简短描述（传给 LLM function-calling）
-	UsageGuide       string // ★ 详细使用指导：何时用此工具、注意事项、对比 run_command 的优势
-	Category         string // ★ 工具分类：如 "code-search", "git", "file", "web", "debug", "build", "test"
+	Description      string         // 简短描述（传给 LLM function-calling）
+	UsageGuide       string         // ★ 详细使用指导：何时用此工具、注意事项、对比 run_command 的优势
+	Category         string         // ★ 工具分类：如 "code-search", "git", "file", "web", "debug", "build", "test"
 	Parameters       map[string]any // JSON Schema
 	Handler          ToolHandler
 	SystemTool       bool // ★ 系统内部工具（如历史搜索、委托任务等），不暴露给 LLM agent 选择，前端 UI 隐藏
@@ -76,18 +76,18 @@ type Registry struct {
 	// callID 为工具调用 ID（空串表示非工具调用场景），partialResult 为当前累积的中间文本。
 	// 此钩子不替代最终结果，仅用于流式展示。handler 的返回值仍是正式结果。
 	OnToolUpdate func(name string, callID string, partialResult string)
-
-	CommitMessage string // agent 通过 generate_commit_message 工具显式设置的提交信息
 }
 
 // NewRegistry 创建空注册表。
 func NewRegistry() *Registry {
 	return &Registry{tools: map[string]*Tool{}}
 }
+
 // Register 注册一个工具（同名覆盖，顺序不变）。
 // ★ 同名覆盖时保留原启用状态：重复注册（如 RegisterDefaultTools 与
-//   RegisterToolGroups 对同一批内置工具双注册）不得清除 harness 过滤/
-//   工具集禁用状态（Enabled=false 保持 false）。首次注册默认启用。
+//
+//	RegisterToolGroups 对同一批内置工具双注册）不得清除 harness 过滤/
+//	工具集禁用状态（Enabled=false 保持 false）。首次注册默认启用。
 func (r *Registry) Register(t *Tool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -153,7 +153,6 @@ func (r *Registry) EnabledDefinitions() []ToolDefinition {
 	return r.Definitions()
 }
 
-
 // Names 全部已注册工具名（注册顺序；含禁用工具）。
 func (r *Registry) Names() []string {
 	r.mu.RLock()
@@ -177,9 +176,10 @@ func (r *Registry) EnabledNames() []string {
 
 // UsageGuideText 生成工具使用指南文本（供注入系统提示使用）。
 // ★ 工具描述已取消（2026-08-17）：提示词中不再注入工具使用指南——
-//   工具的名称、用途与参数完全由 tools 参数 schema 提供（随 function-calling
-//   下发，天然与注册表一致，不会与提示词文本脱节）。故恒返回空串；
-//   保留函数签名与调用点，便于将来按需恢复。
+//
+//	工具的名称、用途与参数完全由 tools 参数 schema 提供（随 function-calling
+//	下发，天然与注册表一致，不会与提示词文本脱节）。故恒返回空串；
+//	保留函数签名与调用点，便于将来按需恢复。
 func (r *Registry) UsageGuideText() string {
 	return ""
 }
@@ -189,11 +189,11 @@ func (r *Registry) Copy() *Registry {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	out := &Registry{
-		tools:       map[string]*Tool{},
-		order:       append([]string(nil), r.order...),
-		BeforeTool:  r.BeforeTool,
-		AfterTool:   r.AfterTool,
-		OnToolError: r.OnToolError,
+		tools:        map[string]*Tool{},
+		order:        append([]string(nil), r.order...),
+		BeforeTool:   r.BeforeTool,
+		AfterTool:    r.AfterTool,
+		OnToolError:  r.OnToolError,
 		OnToolUpdate: r.OnToolUpdate,
 	}
 	for n, t := range r.tools {
@@ -209,10 +209,10 @@ func (r *Registry) Subset(names []string) *Registry {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	out := &Registry{
-		tools:       map[string]*Tool{},
-		BeforeTool:  r.BeforeTool,
-		AfterTool:   r.AfterTool,
-		OnToolError: r.OnToolError,
+		tools:        map[string]*Tool{},
+		BeforeTool:   r.BeforeTool,
+		AfterTool:    r.AfterTool,
+		OnToolError:  r.OnToolError,
 		OnToolUpdate: r.OnToolUpdate,
 	}
 	set := map[string]bool{}
@@ -253,21 +253,20 @@ func (r *Registry) AllToolMeta() []ToolMeta {
 			UsageGuide:  t.UsageGuide,
 			Enabled:     t.Enabled,
 			ReadOnly:    t.ReadOnly,
-		SystemTool:  t.SystemTool,
+			SystemTool:  t.SystemTool,
 		})
 	}
 	return metas
 }
 
-
-
 // Definitions 导出已启用工具的定义，传给 LLM 作 function-calling。
 // 只包含 Enabled=true 的工具。禁用工具不暴露给 LLM。
 // ★ 对齐 harness system-prompt orderTools（2026-08-17）：按 name 字典序
-//   （code-unit，locale 无关）排序后返回——注册顺序依赖装配时序（内置组、
-//   磁盘插件、工具集、MCP 的加载顺序），直接下发会随时序漂移导致 tools
-//   JSON 逐字节变化，从 tools 处切断 KV 缓存前缀（其后全部历史 miss）。
-//   字典序保证跨机器/跨装配时序稳定，缓存前缀可复用。
+//
+//	（code-unit，locale 无关）排序后返回——注册顺序依赖装配时序（内置组、
+//	磁盘插件、工具集、MCP 的加载顺序），直接下发会随时序漂移导致 tools
+//	JSON 逐字节变化，从 tools 处切断 KV 缓存前缀（其后全部历史 miss）。
+//	字典序保证跨机器/跨装配时序稳定，缓存前缀可复用。
 func (r *Registry) Definitions() []ToolDefinition {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -294,10 +293,11 @@ func (r *Registry) Definitions() []ToolDefinition {
 // trimToolDesc 工具描述截断（rune 安全）。
 // 截断目标 ~120 字符；优先在中文句号「。」处断，其次在空格/逗号处断。
 // ★ 修复（2026-08-17）：原实现按字节 len(desc[:120]) 截断，多字节 UTF-8
-//   描述（中文）会切在字符中间产生无效字节，strings.LastIndex 在无效字节
-//   上找不到「。」返回 -1，随后 desc[100] 字节级扫描进一步产生乱码截断点
-//   （json.Marshal 会把无效序列转义为 \ufffd，工具描述乱码）。
-//   现改为 []rune 截断，始终落在字符边界。
+//
+//	描述（中文）会切在字符中间产生无效字节，strings.LastIndex 在无效字节
+//	上找不到「。」返回 -1，随后 desc[100] 字节级扫描进一步产生乱码截断点
+//	（json.Marshal 会把无效序列转义为 \ufffd，工具描述乱码）。
+//	现改为 []rune 截断，始终落在字符边界。
 func trimToolDesc(desc string) string {
 	runes := []rune(desc)
 	if len(runes) <= 120 {
@@ -343,6 +343,16 @@ func (r *Registry) Execute(ctx context.Context, name, argsJSON string) (string, 
 			return "", fmt.Errorf("参数 JSON 解析失败: %w（原文 %q）", err, argsJSON)
 		}
 	}
+	// ★ 钩子系统（t1 L2 闭环）：PreToolUse 门——配置钩子（.pair/settings.json /
+	//   ~/.pair/settings.json，exit 2/超时拦截）+ 插件注册钩子（ctx.hooks.register）。
+	//   拦截时把反馈作为错误回灌 LLM（对齐审批驳回的可见性）。无钩子配置时零开销。
+	if blocked, feedback := firePreToolUseHooks(ctx, name, argsJSON); blocked {
+		msg := strings.TrimSpace(feedback)
+		if msg == "" {
+			msg = "PreToolUse 钩子拦截了此工具调用"
+		}
+		return "", fmt.Errorf("钩子拦截: %s", msg)
+	}
 	// BeforeTool 钩子：可短路（审批拒绝/缓存命中/校验拦截）
 	if r.BeforeTool != nil {
 		proceed, override, overrideErr := r.BeforeTool(ctx, name, args)
@@ -359,6 +369,9 @@ func (r *Registry) Execute(ctx context.Context, name, argsJSON string) (string, 
 	start := time.Now()
 	result, err := t.Handler(ctx, args)
 	dur := time.Since(start)
+	// ★ 钩子系统（t1 L2 闭环）：PostToolUse 观察（配置钩子 + 插件钩子；不拦截）。
+	//   在 AfterTool 之前触发（内部钩子语义：工具结果产出后立即通知）。
+	firePostToolUseHooks(ctx, name, argsJSON, result, err)
 	// AfterTool 钩子：观察（统计/日志），不改结果
 	if r.AfterTool != nil {
 		r.AfterTool(ctx, name, args, result, err, dur)
@@ -390,7 +403,7 @@ func registerCoreTools(r *Registry, root string, eh *editHistory, bg *bgRegistry
 		Name:        "read_file",
 		UsageGuide:  "读取文件内容，限工作区内路径。大文件用 offset+limit 分页读取，避免撑爆上下文。二进制文件会自动拒绝读取，请改用 inspect_binary。比 os.ReadFile 更安全（路径越界拦截+二进制保护）。",
 		Description: "读取文件内容。path 为工作区内路径。可选 offset(起始行,1 基)+limit(行数)读片段；省略则读全文(超 2000 行只返回前 2000 行并提示用 offset/limit 翻页)。",
-		Parameters:  objSchema(props{"path": strProp("文件路径（工作区内）"), "offset": intProp("可选：起始行号(1 基)"), "limit": intProp("可选：读取行数"), "project": projectSchemaProp(), }, "path"),
+		Parameters:  objSchema(props{"path": strProp("文件路径（工作区内）"), "offset": intProp("可选：起始行号(1 基)"), "limit": intProp("可选：读取行数"), "project": projectSchemaProp()}, "path"),
 		ReadOnly:    true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
 			p, err := resolvePathFor(root, args, argStr(args, "path"))
@@ -433,7 +446,7 @@ func registerCoreTools(r *Registry, root string, eh *editHistory, bg *bgRegistry
 		Name:             "write_file",
 		UsageGuide:       "写入文件，父目录自动创建。需审核批准。比 os.WriteFile 更安全（自动快照+路径越界拦截+变更回调）。如需追加内容请先用 read_file 读入再加上新内容后 write_file 覆盖。",
 		Description:      "把 content 完整写入 path（覆盖；父目录自动创建）。",
-		Parameters:       objSchema(props{"path": strProp("文件路径"), "content": strProp("完整文件内容"), "project": projectSchemaProp(), }, "path", "content"),
+		Parameters:       objSchema(props{"path": strProp("文件路径"), "content": strProp("完整文件内容"), "project": projectSchemaProp()}, "path", "content"),
 		RequiresApproval: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
 			p, err := resolvePathFor(root, args, argStr(args, "path"))
@@ -456,7 +469,7 @@ func registerCoreTools(r *Registry, root string, eh *editHistory, bg *bgRegistry
 	})
 
 	r.Register(&Tool{
-		Name: "edit_file",
+		Name:       "edit_file",
 		UsageGuide: "把文件中唯一一处 old_string 替换为 new_string。内置智能匹配（CRLF 归一化+空白折叠）。匹配失败时优先用 line_start/line_end 行号定位（最可靠）。比手动 read+write 更精确（保留换行风格+行号偏移追踪+codegraph 自动注入）。仅用于小改动（≤5 行），大改动请用 write_file 写整段。",
 		Description: "把文件中唯一一处 old_string 替换为 new_string。" +
 			"匹配策略（自动）：精确→CRLF归一化（兼容 Windows \\r\\n 文件与 LLM 给的 \\n）→空白折叠（容忍缩进/行尾空白/tab与空格差异）；全部失败时返回带行号上下文的诊断。" +
@@ -509,16 +522,16 @@ func registerCoreTools(r *Registry, root string, eh *editHistory, bg *bgRegistry
 			}
 			nl := countLines(argStr(args, "new_string"))
 			eh.record(fileEditRecord{Path: p, LineDelta: delta, EditEnd: ls + nl - 1})
-		editCtx := editContext(strings.Split(normalizeNewlines(newStr), "\n"), ls, le, nl, delta)
+			editCtx := editContext(strings.Split(normalizeNewlines(newStr), "\n"), ls, le, nl, delta)
 			if FileChangeCallback != nil {
 				FileChangeCallback(argStr(args, "path"))
 			}
-		return fmt.Sprintf("已编辑 %s\n%s", argStr(args, "path"), editCtx), nil
+			return fmt.Sprintf("已编辑 %s\n%s", argStr(args, "path"), editCtx), nil
 		},
 	})
 
 	r.Register(&Tool{
-		Name: "multi_edit",
+		Name:       "multi_edit",
 		UsageGuide: "按顺序对一个文件应用多处替换。比多次 edit_file 更高效（原子提交：任一步失败全部回滚）。编辑项较多时用 multi_edit 替代多次 edit_file 调用。",
 		Description: "对一个文件按顺序应用多处替换（edits：每项 old_string→new_string 或 line_start/line_end 行号定位）。" +
 			"匹配策略同 edit_file（精确→CRLF归一化→空白折叠→诊断）。原子：任一步失败则全部不写。" +
@@ -615,7 +628,7 @@ func registerCoreTools(r *Registry, root string, eh *editHistory, bg *bgRegistry
 		Name:        "list_files",
 		UsageGuide:  "列出工作区目录下的文件和子目录（目录排前）。比 run_command dir /s 更高效（跳过 .git/node_modules、结果结构化排序）。配合 pattern 按通配符过滤文件（如 *.go）。",
 		Description: "列出目录下的文件/子目录（目录在前）。path 省略则列工作区根；pattern 可选（如 *.go）。",
-		Parameters:  objSchema(props{"path": strProp("目录路径（省略=工作区根）"), "pattern": strProp("可选通配符过滤，如 *.go")}, ),
+		Parameters:  objSchema(props{"path": strProp("目录路径（省略=工作区根）"), "pattern": strProp("可选通配符过滤，如 *.go")}),
 		ReadOnly:    true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
 			rel := argStr(args, "path")
@@ -668,7 +681,7 @@ func registerCoreTools(r *Registry, root string, eh *editHistory, bg *bgRegistry
 		Name:             "run_command",
 		UsageGuide:       "同步执行 shell 命令，120s 超时自动终止（内部后台执行，不阻塞 agent）。适用于构建、编译、测试、文件查询等短命令。禁止用于长期进程（dev server/npm run dev/watch 模式）——请改用 run_background。比直接手动执行更安全（路径越界拦截+输出截断 16KB+UTF-8 编码统一）。",
 		Description:      "同步执行一条 shell 命令并返回输出。适用于构建、编译、测试、文件查询等短命令（几秒内完成）。\n禁止用于以下场景（会阻塞 agent）：启动 dev server、npm run dev、go run 启动服务、watch 模式、tcp 监听、任何需保持运行的进程。此类命令请改用 run_background。",
-		Parameters:       objSchema(props{"command": strProp("要执行的命令"), "cwd": strProp("可选工作目录（工作区内，省略=根）"), "project": projectSchemaProp(), }, "command"),
+		Parameters:       objSchema(props{"command": strProp("要执行的命令"), "cwd": strProp("可选工作目录（工作区内，省略=根）"), "project": projectSchemaProp()}, "command"),
 		RequiresApproval: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
 			command := argStr(args, "command")
@@ -730,7 +743,7 @@ func registerCoreTools(r *Registry, root string, eh *editHistory, bg *bgRegistry
 		Name:             "move_file",
 		UsageGuide:       "移动或重命名工作区内的文件/目录。目标父目录自动创建。需审核批准。覆盖 os.Rename 的限制（自动创建目标目录+路径越界拦截+变更通知）。",
 		Description:      "把文件/目录从 from 移动或重命名到 to（都在工作区内；目标父目录自动创建）。",
-		Parameters:       objSchema(props{"from": strProp("源路径"), "to": strProp("目标路径"), "project": projectSchemaProp(), }, "from", "to"),
+		Parameters:       objSchema(props{"from": strProp("源路径"), "to": strProp("目标路径"), "project": projectSchemaProp()}, "from", "to"),
 		RequiresApproval: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
 			from, err := resolvePathFor(root, args, argStr(args, "from"))
@@ -758,7 +771,7 @@ func registerCoreTools(r *Registry, root string, eh *editHistory, bg *bgRegistry
 		Name:             "delete_file",
 		UsageGuide:       "删除工作区内的文件（不可恢复，谨慎）。为安全不删目录（删除目录请用 run_command rmdir）。需审核批准。比直接 os.Remove 更安全（只删文件不删目录+路径越界拦截）。",
 		Description:      "删除一个文件（工作区内，不可恢复，谨慎）。为安全不删目录。",
-		Parameters:       objSchema(props{"path": strProp("要删除的文件路径"), "project": projectSchemaProp(), }, "path"),
+		Parameters:       objSchema(props{"path": strProp("要删除的文件路径"), "project": projectSchemaProp()}, "path"),
 		RequiresApproval: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
 			p, err := resolvePathFor(root, args, argStr(args, "path"))
@@ -782,8 +795,8 @@ func registerCoreTools(r *Registry, root string, eh *editHistory, bg *bgRegistry
 		},
 	})
 
-	registerCodeGraphTools(r, root)          // codegraph_build / codegraph_search / codegraph_impact / ...（代码知识图谱，见 codegraph_tools.go + pkg/codegraph）
-	registerExtraCodeGraphTools(r, root)     // codegraph_find_by_signature / codegraph_explore（额外工具，见 codegraph_extra.go）
+	registerCodeGraphTools(r, root)      // codegraph_build / codegraph_search / codegraph_impact / ...（代码知识图谱，见 codegraph_tools.go + pkg/codegraph）
+	registerExtraCodeGraphTools(r, root) // codegraph_find_by_signature / codegraph_explore（额外工具，见 codegraph_extra.go）
 	// ── 默认 BeforeTool：edit_file/multi_edit 执行前用 codegraph 注入最新行号 ──
 	// codegraph 的符号级行号比 old_string 字符串匹配更可靠（不受 CRLF/空白折叠/行号偏移影响）。
 	if r.BeforeTool == nil {
@@ -873,9 +886,15 @@ func StreamUpdate(ctx context.Context, name, callID, partial string) {
 
 type props = map[string]any
 
-func strProp(desc string) map[string]any  { return map[string]any{"type": "string", "description": desc} }
-func boolProp(desc string) map[string]any { return map[string]any{"type": "boolean", "description": desc} }
-func intProp(desc string) map[string]any  { return map[string]any{"type": "integer", "description": desc} }
+func strProp(desc string) map[string]any {
+	return map[string]any{"type": "string", "description": desc}
+}
+func boolProp(desc string) map[string]any {
+	return map[string]any{"type": "boolean", "description": desc}
+}
+func intProp(desc string) map[string]any {
+	return map[string]any{"type": "integer", "description": desc}
+}
 
 // objSchema 拼 object 类型的 JSON Schema。
 
@@ -983,6 +1002,7 @@ func resolvePath(root, p string) (string, error) {
 	}
 	return "", fmt.Errorf("路径 %q 超出工作区范围（root: %s）", p, root)
 }
+
 // capOutput 截断过长输出（保头 3/4 + 尾 1/4），防工具结果撑爆上下文。
 func capOutput(s string, limit int) string {
 	if len(s) <= limit {

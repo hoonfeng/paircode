@@ -554,7 +554,8 @@ func toolsetEditAddPlugin(ph *PluginHost, root string, scope toolsetScope, ts *T
 
 // toolsetEditRmPlugin 从工具集移除插件（卸载其注册的全部工具）。
 // ★ 2026-08-17：插件不在工作区工具集条目中但已装载时，整组移出 = 该插件全部
-//   工具移出 agent 可用集合（插件记入工具集 + DisabledTools 全量摘除）。
+//
+//	工具移出 agent 可用集合（插件记入工具集 + DisabledTools 全量摘除）。
 func toolsetEditRmPlugin(ph *PluginHost, root string, scope toolsetScope, ts *Toolset, args map[string]any) (string, error) {
 	pn := strings.TrimSpace(mArgStr(args, "plugin_name"))
 	if pn == "" {
@@ -596,10 +597,12 @@ func toolsetEditRmPlugin(ph *PluginHost, root string, scope toolsetScope, ts *To
 	return fmt.Sprintf("✅ 插件 %q 已从工具集 %q 移除（工具已卸载）。剩余 %d 个插件。",
 		pn, ts.Name, len(ts.Plugins)), nil
 }
+
 // toolsetEditRmTool 摘除插件下单个工具（插件保留；工具禁用 → agent 不可见）。
 // ★ 2026-08-17：插件不在工作区工具集条目中但已装载注册工具时同样支持移除——
-//   管理弹窗展示的是「当前所有可用工具」，移除 = 让该工具对 agent 不可用：
-//   插件记入工具集（条目 + DisabledTools 摘除清单）+ 禁用工具，重启后保持禁用。
+//
+//	管理弹窗展示的是「当前所有可用工具」，移除 = 让该工具对 agent 不可用：
+//	插件记入工具集（条目 + DisabledTools 摘除清单）+ 禁用工具，重启后保持禁用。
 func toolsetEditRmTool(ph *PluginHost, root string, scope toolsetScope, ts *Toolset, args map[string]any) (string, error) {
 	pn := strings.TrimSpace(mArgStr(args, "plugin_name"))
 	tool := strings.TrimSpace(mArgStr(args, "tool"))
@@ -656,9 +659,11 @@ func toolsetEditRmTool(ph *PluginHost, root string, scope toolsetScope, ts *Tool
 	}
 	return fmt.Sprintf("✅ 工具 %q 已从插件 %q 摘除（插件保留，工具对 agent 不可见；enable_tool 可恢复）", tool, pn), nil
 }
+
 // toolsetEditEnableTool 恢复被摘除的工具。
 // ★ 2026-08-17：插件不在工具集条目中但工具已注册 → 直接恢复启用（插件记入
-//   工具集，空摘除清单），重启后保持可见。
+//
+//	工具集，空摘除清单），重启后保持可见。
 func toolsetEditEnableTool(ph *PluginHost, root string, scope toolsetScope, ts *Toolset, args map[string]any) (string, error) {
 	pn := strings.TrimSpace(mArgStr(args, "plugin_name"))
 	tool := strings.TrimSpace(mArgStr(args, "tool"))

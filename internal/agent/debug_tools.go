@@ -230,7 +230,7 @@ func registerDebugTools(r *Registry, root string) {
 
 func registerInjectLog(r *Registry, root string) {
 	r.Register(&Tool{
-		Name: "debug_inject_log",
+		Name:       "debug_inject_log",
 		UsageGuide: "在代码指定行后插入日志输出语句（语言无关）。自动识别文件后缀选择 print/console.log/println 等。日志含 🪵 [DEBUG] 标记，后续可用 debug_cleanup_logs 清理。支持 Go/Python/JS/TS/Rust/Java/C++/C#/Ruby/PHP 等 20+ 语言。",
 		Description: "在指定文件的指定行后插入日志输出语句。自动根据文件扩展名选择正确的日志语法。" +
 			"插入的日志包含 🪵 [DEBUG] 标记，后续可用 debug_cleanup_logs 统一移除。" +
@@ -334,7 +334,7 @@ func extractIndent(line string) string {
 
 func registerRunCapture(r *Registry, root string) {
 	r.Register(&Tool{
-		Name: "debug_run_capture",
+		Name:       "debug_run_capture",
 		UsageGuide: "运行程序并捕获完整输出（stdout+stderr+exit code+耗时）。比手动 run_command 更专注于调试场景：输出无限、报告退出码、包含耗时。支持超时控制。",
 		Description: "运行指定命令并捕获完整输出。适用于调试场景：" +
 			"运行目标程序，捕获所有 stdout/stderr，报告退出码和执行耗时。" +
@@ -427,14 +427,14 @@ func registerRunCapture(r *Registry, root string) {
 
 // outputAnalysis 结构化的输出分析结果。
 type outputAnalysis struct {
-	LineCount   int               `json:"line_count"`
-	ErrorLines  []string          `json:"error_lines"`
-	StackFrames []parsedFrame     `json:"stack_frames"`
-	Warnings    []string          `json:"warnings"`
-	HasPanic    bool              `json:"has_panic"`
-	HasError    bool              `json:"has_error"`
-	KeyPatterns map[string]int    `json:"key_patterns"`
-	Summary     string            `json:"summary"`
+	LineCount   int            `json:"line_count"`
+	ErrorLines  []string       `json:"error_lines"`
+	StackFrames []parsedFrame  `json:"stack_frames"`
+	Warnings    []string       `json:"warnings"`
+	HasPanic    bool           `json:"has_panic"`
+	HasError    bool           `json:"has_error"`
+	KeyPatterns map[string]int `json:"key_patterns"`
+	Summary     string         `json:"summary"`
 }
 
 // parsedFrame 解析出的堆栈帧。
@@ -448,7 +448,7 @@ type parsedFrame struct {
 
 func registerAnalyzeOutput(r *Registry, root string) {
 	r.Register(&Tool{
-		Name: "debug_analyze_output",
+		Name:       "debug_analyze_output",
 		UsageGuide: "分析程序运行输出，提取错误行、堆栈帧、警告、异常模式。返回结构化分析结果，帮助 AI 快速定位问题。配合 debug_run_capture 使用。",
 		Description: "分析程序运行输出文本，自动提取结构化信息：" +
 			"错误行、堆栈帧（支持多语言格式）、警告信息、panic/异常检测。" +
@@ -555,20 +555,20 @@ func analyzeOutputText(output string) outputAnalysis {
 
 	// 检测关键模式
 	patterns := map[string]string{
-		"error":      "error",
-		"exception":  "exception",
-		"panic":      "panic",
-		"traceback":  "traceback",
-		"failed":     "failed",
-		"warning":    "warning",
-		"warn":       "warn",
-		"fatal":      "fatal",
-		"undefined":  "undefined",
-		"nil pointer": "nil pointer",
-		"segmentation": "segmentation",
-		"bus error":  "bus error",
-		"assertion":  "assertion",
-		"cannot find": "cannot find",
+		"error":            "error",
+		"exception":        "exception",
+		"panic":            "panic",
+		"traceback":        "traceback",
+		"failed":           "failed",
+		"warning":          "warning",
+		"warn":             "warn",
+		"fatal":            "fatal",
+		"undefined":        "undefined",
+		"nil pointer":      "nil pointer",
+		"segmentation":     "segmentation",
+		"bus error":        "bus error",
+		"assertion":        "assertion",
+		"cannot find":      "cannot find",
 		"module not found": "module not found",
 	}
 	for key, pattern := range patterns {
@@ -785,7 +785,7 @@ func buildAnalysisSummary(analysis outputAnalysis) string {
 
 func registerParseStack(r *Registry, root string) {
 	r.Register(&Tool{
-		Name: "debug_parse_stack",
+		Name:       "debug_parse_stack",
 		UsageGuide: "解析堆栈轨迹文本为结构化数据（帧列表）。自动识别 Go/Python/JS/TS/Java/Rust/C# 等多种格式。返回函数名、文件、行号、列号。",
 		Description: "解析堆栈轨迹文本，返回结构化的帧列表。自动识别多种语言的堆栈格式：" +
 			"Go（goroutine）、Python（Traceback）、JS/TS（at）、Java（at）、Rust（at/panic）、C#（at ... in）。" +
@@ -811,12 +811,12 @@ func registerParseStack(r *Registry, root string) {
 
 			if len(allFrames) == 0 {
 				return "未能从输入中解析出堆栈帧。支持的格式：\n" +
-					"- Go:     `main.foo() /path/file.go:10`\n" +
-					"- Python: `File \"file.py\", line 10, in function`\n" +
-					"- JS/TS:  `at function (/path/file.ts:10:5)`\n" +
-					"- Java:   `at com.example.Foo.bar(Foo.java:10)`\n" +
-					"- Rust:   `at /path/file.rs:10:5`\n" +
-					"- C#:     `at Namespace.Class.Method() in file:10`",
+						"- Go:     `main.foo() /path/file.go:10`\n" +
+						"- Python: `File \"file.py\", line 10, in function`\n" +
+						"- JS/TS:  `at function (/path/file.ts:10:5)`\n" +
+						"- Java:   `at com.example.Foo.bar(Foo.java:10)`\n" +
+						"- Rust:   `at /path/file.rs:10:5`\n" +
+						"- C#:     `at Namespace.Class.Method() in file:10`",
 					nil
 			}
 
@@ -858,7 +858,7 @@ func registerParseStack(r *Registry, root string) {
 
 func registerCleanupLogs(r *Registry, root string) {
 	r.Register(&Tool{
-		Name: "debug_cleanup_logs",
+		Name:       "debug_cleanup_logs",
 		UsageGuide: "移除之前通过 debug_inject_log 注入的日志语句（包含 🪵 [DEBUG] 标记的行）。可指定单个文件或全部清理。",
 		Description: "移除之前通过 debug_inject_log 注入的日志语句。" +
 			"扫描文件中包含 🪵 [DEBUG] 标记的行并删除。" +
@@ -989,15 +989,15 @@ func cleanupAllFiles(root string) (string, error) {
 
 // watchProc 一个监听器实例。
 type watchProc struct {
-	id       int
-	stopCh   chan struct{}
-	root     string
-	pattern  string
-	command  string
-	timeout  int
-	lastMod  map[string]time.Time // 文件→最后修改时间
-	output   string
-	mu       sync.Mutex
+	id      int
+	stopCh  chan struct{}
+	root    string
+	pattern string
+	command string
+	timeout int
+	lastMod map[string]time.Time // 文件→最后修改时间
+	output  string
+	mu      sync.Mutex
 }
 
 var (
@@ -1008,7 +1008,7 @@ var (
 
 func registerWatch(r *Registry, root string) {
 	r.Register(&Tool{
-		Name: "debug_watch",
+		Name:       "debug_watch",
 		UsageGuide: "监听文件变更并自动重跑命令。用于「改代码→自动跑」的调试循环。指定 glob 模式匹配文件，变更后自动执行命令。内置 2s 轮询+去抖动。stop=true 停止指定 watch。",
 		Description: "监听匹配 glob 模式的文件，变更后自动执行指定命令。" +
 			"用于「改代码→自动跑」的调试循环。内置 2 秒轮询，500ms 去抖动。" +
@@ -1148,8 +1148,8 @@ func (wp *watchProc) scanFiles() []string {
 			}
 			return nil
 		}
-			// 简单通配匹配
-			if matchGlob(wp.pattern, d.Name()) {
+		// 简单通配匹配
+		if matchGlob(wp.pattern, d.Name()) {
 			info, err := d.Info()
 			if err == nil {
 				current[path] = info.ModTime()
@@ -1224,14 +1224,14 @@ func (wp *watchProc) execute(changed []string) {
 
 // SessionScore 会话评分结果。
 type SessionScore struct {
-	SessionID     string             `json:"session_id"`
-	Task          string             `json:"task"`
-	Completed     bool               `json:"completed"`
-	Rounds        int                `json:"rounds"`
-	ToolCalls     int                `json:"tool_calls"`
-	ToolStats     []ToolStatsSummary `json:"tool_stats"`
-	ErrorCount    int                `json:"error_count"`
-	PanicCount    int                `json:"panic_count"`
+	SessionID  string             `json:"session_id"`
+	Task       string             `json:"task"`
+	Completed  bool               `json:"completed"`
+	Rounds     int                `json:"rounds"`
+	ToolCalls  int                `json:"tool_calls"`
+	ToolStats  []ToolStatsSummary `json:"tool_stats"`
+	ErrorCount int                `json:"error_count"`
+	PanicCount int                `json:"panic_count"`
 
 	// 各维度评分（0-100）
 	CompletionScore   float64 `json:"completion_score"`   // 任务完成度
@@ -1243,7 +1243,7 @@ type SessionScore struct {
 
 func registerEvaluateSession(r *Registry, root string) {
 	r.Register(&Tool{
-		Name: "debug_evaluate_session",
+		Name:       "debug_evaluate_session",
 		UsageGuide: "对 agent 会话进行离线评分评估（机械公式）。如需更高质的语义化评分，请运行独立评分工具：go run ./cmd/evaluator -root <workspace>。评分是离线分析，不消耗 agent 运行时的 token。",
 		Description: "评估 agent 会话的表现，生成结构化评分报告。" +
 			"基于已保存的执行日志（.pair/execution_logs/）和工具调用统计进行离线分析。" +

@@ -251,7 +251,9 @@ func (p *jsPluginAdapter) uiWsRootValue() string { return p.uiWsRoot }
 // 当前工具调用会话根（会话上下文，2026-08-23 工作区隔离）＞ UI invoke 绑定
 // 主根（UI 上下文，client 半操作跟随用户当前所见工作区）＞ 插件装载时工作区根。
 // ★ 不再回落到全局主根 primaryWorkspaceRoot：正在执行的对话（Loop/agentloop
-//   prompt 组装等非工具 JS 调用）必须保持自己的根，切换全局工作区不得带偏。
+//
+//	prompt 组装等非工具 JS 调用）必须保持自己的根，切换全局工作区不得带偏。
+//
 // 必须在 withLock 内调用（JS 原生函数回调天然在 VM 锁内）。
 func (p *jsPluginAdapter) ctxServiceRoot(pc *PluginContext) string {
 	if r := p.toolCallRoot(); r != "" {
@@ -1029,6 +1031,136 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 		return goja.Undefined()
 	})
 	ctxObj.Set("providerFactory", providerFactoryObj)
+
+	// ── ctx.provider：Provider 实现级插件槽位（t1 S1 闭环）──
+	// ctx.provider.register(name, impl)：注册 JS 实现的 LLM Provider。
+	//   impl = { chat(params, messages, tools) }；chat 返回或 Promise 解析为
+	//   { content, reasoning, toolCalls: [{id, name, arguments}] }（非流式契约，
+	//   Go 侧一次性 emit Done chunk）。JS 侧经 ctx.provider.http(req) 调任意
+	//   LLM 端点（新协议——Anthropic 原生/本地推理等——100% 插件内实现，
+	//   无需改 Go 内核）。注册即进全局实现注册表（同名覆盖；按服务商名路由，
+	//   CreateProvider 消费），插件卸载自动还原。
+	// ctx.provider.http({method, url, headers, body}) → {status, headers, body}：
+	//   宿主 HTTP 通道（无 CORS/证书限制，响应体 ≤2MiB 截断）。
+	providerImplObj := vm.NewObject()
+	providerImplObj.Set("register", func(call goja.FunctionCall) goja.Value {
+		name := strings.TrimSpace(call.Argument(0).String())
+		implVal := call.Argument(1)
+		chatFn, ok := goja.AssertFunction(implVal.ToObject(vm).Get("chat"))
+		if !ok || name == "" {
+			panic(vm.NewTypeError("ctx.provider.register: 参数必须是 (name, { chat(params, messages, tools) })"))
+		}
+		// ★ 实现工厂：CreateProvider 时捕获最终参数快照 → JS chat 的 params 参数
+		//   （与 Go 实现一致：参数在创建时刻定稿，而非 Chat 时重新解析）。
+		restore := RegisterProviderImpl(name, func(params ProviderParams) Provider {
+			return &jsProviderBridge{vm: vm, plugin: p, name: name, chat: chatFn, params: params}
+		})
+		p.addCleanup(restore)
+		p.def.addDiag(fmt.Sprintf("注册 Provider 实现 %s（实现级插件槽位，卸载自动还原）", name))
+		return goja.Undefined()
+	})
+	providerImplObj.Set("http", func(call goja.FunctionCall) goja.Value {
+		req := call.Argument(0).ToObject(vm)
+		method := strings.ToUpper(req.Get("method").String())
+		if method == "" {
+			method = "GET"
+		}
+		url := req.Get("url").String()
+		if url == "" {
+			panic(vm.NewTypeError("ctx.provider.http: url 不能为空"))
+		}
+		body := ""
+		if v := req.Get("body"); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
+			body = v.String()
+		}
+		headers := map[string]string{}
+		if v := req.Get("headers"); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
+			if m, ok := v.Export().(map[string]any); ok {
+				for k, vv := range m {
+					headers[k] = fmt.Sprint(vv)
+				}
+			}
+		}
+		httpReq, err := http.NewRequest(method, url, strings.NewReader(body))
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		for k, v := range headers {
+			httpReq.Header.Set(k, v)
+		}
+		client := &http.Client{Timeout: 120 * time.Second}
+		resp, err := client.Do(httpReq)
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		defer resp.Body.Close()
+		// 响应体截断（2MiB）：LLM 响应通常远小于此，防恶意端点撑爆内存
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+		respHeaders := map[string]string{}
+		for k := range resp.Header {
+			respHeaders[k] = resp.Header.Get(k)
+		}
+		return vm.ToValue(map[string]any{
+			"status":  resp.StatusCode,
+			"headers": respHeaders,
+			"body":    string(raw),
+		})
+	})
+	ctxObj.Set("provider", providerImplObj)
+
+	// ── ctx.hooks.register(event, fn)：插件注册循环钩子（t1 L2 闭环）──
+	// 事件：'PreToolUse'（工具执行前，可拦截）| 'PostToolUse'（执行后观察）|
+	//       'UserPromptSubmit'（轮次开始前，可拦截）| 'Stop'（轮次结束观察）。
+	// fn(payload) → { block, feedback } | null：
+	//   payload = { event, cwd, turn, toolName, toolArgs, toolResult, prompt, message }
+	//   block=true（仅门事件 PreToolUse/UserPromptSubmit 生效）→ 工具/轮次被拦截，
+	//   feedback 回灌 LLM。注册即生效（与配置钩子 .pair/settings.json 同事件表），
+	//   插件卸载自动注销。
+	hooksObj := vm.NewObject()
+	hooksObj.Set("register", func(call goja.FunctionCall) goja.Value {
+		event := call.Argument(0).String()
+		fnVal := call.Argument(1)
+		fn, ok := goja.AssertFunction(fnVal)
+		if !ok {
+			panic(vm.NewTypeError("ctx.hooks.register: 参数必须是 (event, fn(payload))"))
+		}
+		switch event {
+		case "PreToolUse", "PostToolUse", "UserPromptSubmit", "Stop":
+		default:
+			panic(vm.NewTypeError("ctx.hooks.register: 未知事件 " + event + "（支持 PreToolUse/PostToolUse/UserPromptSubmit/Stop）"))
+		}
+		restore := RegisterLoopHook(event, func(payload map[string]any) (bool, string) {
+			var (
+				ret     goja.Value
+				callErr error
+			)
+			p.withLock(func() {
+				v, err := fn(goja.Undefined(), vm.ToValue(payload))
+				ret, callErr = v, err
+			})
+			if callErr != nil {
+				log.Printf("[hooks] 插件 %s 钩子 %s 执行失败: %v", p.def.name, event, callErr)
+				return false, ""
+			}
+			if ret == nil || goja.IsUndefined(ret) || goja.IsNull(ret) {
+				return false, ""
+			}
+			obj := ret.ToObject(vm)
+			block := false
+			if v := obj.Get("block"); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
+				block = v.ToBoolean()
+			}
+			feedback := ""
+			if v := obj.Get("feedback"); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
+				feedback = v.String()
+			}
+			return block, feedback
+		})
+		p.addCleanup(restore)
+		p.def.addDiag(fmt.Sprintf("注册循环钩子 %s（插件钩子，卸载自动注销）", event))
+		return goja.Undefined()
+	})
+	ctxObj.Set("hooks", hooksObj)
 
 	// ctx.registerClientMethod(method, fn)：host 半暴露方法给浏览器 client 半
 	// 远程调用（D11 invoke RPC；对齐 harness @Remote('invoke') 的方法注册面）。
@@ -2785,11 +2917,11 @@ func (h *PluginHost) LoadJSDynamic(def *jsPluginDef) error {
 	}
 
 	adapter := &jsPluginAdapter{
-		host:     h,
-		def:      def,
-		vm:       vm,
-		applyFn:  applyFn,
-		handlers: map[string]func(args any) (any, error){},
+		host:       h,
+		def:        def,
+		vm:         vm,
+		applyFn:    applyFn,
+		handlers:   map[string]func(args any) (any, error){},
 		handlersUI: map[string]func(args any) (any, error){},
 	}
 

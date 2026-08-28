@@ -1,5 +1,5 @@
 {
-  "version": "1.4.0",
+  "version": "1.4.6",
   "appName": "PairCode IDE",
   "description": "AI-Powered Code Companion",
   "company": "PairCode",
@@ -10,15 +10,10 @@
     "frontendDir": "cmd/companion/web-ui",
     "icon": "assets/icon.png",
     "mainPkg": "./cmd/companion",
-    "output": "pair.exe"
+    "output": "pair.exe",
+    "targets": "windows/amd64,linux/amd64,darwin/arm64"
   },
   "pipeline": [
-    {
-      "name": "build-plugin-bins",
-      "command": "scripts\\build-plugin-bins.bat",
-      "os": "windows",
-      "ignoreError": false
-    },
     {
       "name": "build-ui-plugins",
       "command": "node scripts/build-ui.mjs",
@@ -26,7 +21,7 @@
     },
     {
       "name": "sync-plugins-to-bin",
-      "command": "robocopy .pair/plugins bin/.pair/plugins /E /XD node_modules /NJH /NJS /NDL & if errorlevel 8 exit /b 1 & exit /b 0",
+      "command": "robocopy .pair/plugins bin/.pair/plugins /MIR /XD node_modules /NJH /NJS /NDL & if errorlevel 8 exit /b 1 & exit /b 0",
       "os": "windows",
       "ignoreError": false
     },
@@ -96,12 +91,6 @@
         "recursive": true
       },
       {
-        "src": "config/philosophy",
-        "dst": "config/philosophy",
-        "optional": true,
-        "recursive": true
-      },
-      {
         "src": "assets/icon.svg",
         "dst": "assets/icon.svg",
         "optional": true
@@ -133,12 +122,6 @@
         "optional": true
       },
       {
-        "src": "bin/tesseract",
-        "dst": "bin/tesseract",
-        "optional": true,
-        "recursive": true
-      },
-      {
         "src": "bin/bash",
         "dst": "bin/bash",
         "optional": true,
@@ -150,10 +133,22 @@
         "optional": true
       },
       {
-        "src": "bin/config/onnx",
-        "dst": "bin/config/onnx",
-        "optional": true,
-        "recursive": true
+        "src": "bin/config/onnx/onnxruntime.dll",
+        "dst": "bin/config/onnx/onnxruntime.dll",
+        "os": "windows",
+        "optional": true
+      },
+      {
+        "src": "bin/config/onnx/libonnxruntime.so",
+        "dst": "bin/config/onnx/libonnxruntime.so",
+        "os": "linux",
+        "optional": true
+      },
+      {
+        "src": "bin/config/onnx/libonnxruntime.dylib",
+        "dst": "bin/config/onnx/libonnxruntime.dylib",
+        "os": "darwin",
+        "optional": true
       },
       {
         "src": "bin/.pair/plugins",

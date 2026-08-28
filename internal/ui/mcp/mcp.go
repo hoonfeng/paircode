@@ -11,7 +11,6 @@
 // - 类型别名 `=` 不是类型定义，外部代码使用 `mcppanel.Level` 即 `agent.MCPLevel`
 // - 如果 agent 包中的 MCP 函数签名变化，本文件的转发函数需同步更新
 //
-//go:build windows
 
 package mcp
 

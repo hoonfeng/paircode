@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/hoonfeng/paircode/pkg/executil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -75,7 +76,7 @@ func hideShellWindow(c *exec.Cmd) *exec.Cmd {
 		if c.SysProcAttr == nil {
 			c.SysProcAttr = &syscall.SysProcAttr{}
 		}
-		c.SysProcAttr.HideWindow = true
+		executil.HideWindow(c)
 	}
 	return c
 }
@@ -171,7 +172,7 @@ func (bg *bgRegistry) start(command, dir string) (int, error) {
 		if c.SysProcAttr == nil {
 			c.SysProcAttr = &syscall.SysProcAttr{}
 		}
-		c.SysProcAttr.HideWindow = true
+		executil.HideWindow(c)
 	}
 	c.Stdout = p
 	c.Stderr = p

@@ -18,13 +18,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/hoonfeng/paircode/pkg/executil"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -236,7 +236,7 @@ func npmInstallPlugin(bridgeDir, spec string) error {
 	cmd := exec.CommandContext(ctx, npmCmd, "install", "--no-audit", "--no-fund", "--prefix", bridgeDir, spec)
 	// 隐藏子进程控制台窗口（无控制台父进程时 console 程序会自己弹窗）
 	if runtime.GOOS == "windows" {
-		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		executil.HideWindow(cmd)
 	}
 	cmd.Env = append(os.Environ(), "npm_config_yes=true")
 	out, err := cmd.CombinedOutput()

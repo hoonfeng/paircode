@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 // TestOpenAIProviderParams 温度/maxTokens：>=0 / >0 时下发请求体；-1 / 0 时不下发（用服务端默认）。
@@ -153,5 +155,149 @@ func TestOpenAIProviderHTTPError(t *testing.T) {
 		t.Error("HTTP 401 应返回错误")
 	} else if !strings.Contains(err.Error(), "401") {
 		t.Errorf("错误应含状态码 401，得 %v", err)
+	}
+}
+
+// ★ 2026-08-21 多模态：buildOpenAIMessages 把带 Images 的 user 消息转 content 块数组。
+func TestBuildOpenAIMessagesMultimodal(t *testing.T) {
+	msgs := []Message{
+		{Role: RoleUser, Content: "看这张图", Images: []ImagePart{
+			{Data: "data:image/png;base64,AAAA", MimeType: "image/png", Detail: "auto"},
+		}},
+		{Role: RoleUser, Content: "纯文本"},
+	}
+	// multimodal=true：带图消息转块数组
+	out := buildOpenAIMessages(msgs, true)
+	if len(out) != 2 {
+		t.Fatalf("应 2 条消息，得 %d", len(out))
+	}
+	blocks, ok := out[0]["content"].([]map[string]any)
+	if !ok {
+		t.Fatalf("multimodal 消息 content 应为块数组，得 %T", out[0]["content"])
+	}
+	if len(blocks) != 2 {
+		t.Fatalf("应 2 个块（text+image），得 %d", len(blocks))
+	}
+	if blocks[0]["type"] != "text" || blocks[0]["text"] != "看这张图" {
+		t.Errorf("块[0] 应为 text，得 %v", blocks[0])
+	}
+	iu, ok := blocks[1]["image_url"].(map[string]any)
+	if !ok {
+		t.Fatalf("块[1] 应为 image_url，得 %v", blocks[1])
+	}
+	if iu["url"] != "data:image/png;base64,AAAA" || iu["detail"] != "auto" {
+		t.Errorf("image_url = %v", iu)
+	}
+	// 纯文本消息保持字符串 content
+	if s, ok := out[1]["content"].(string); !ok || s != "纯文本" {
+		t.Errorf("纯文本消息 content 应为字符串，得 %v", out[1]["content"])
+	}
+
+	// multimodal=false：即使带 Images 也保持字符串（避免非视觉模型 400）
+	out2 := buildOpenAIMessages(msgs, false)
+	if s, ok := out2[0]["content"].(string); !ok || s != "看这张图" {
+		t.Errorf("非多模态时 content 应为字符串，得 %v", out2[0]["content"])
+	}
+}
+
+// ★ 2026-08-21 SSE 流中断重试策略测试：
+// ① 未产出内容的流中断（空流 EOF）→ 安全重试，最终成功；
+// ② 已产出内容后中断（EOF 无 [DONE]）→ 不重试（避免重复输出），返回带累积内容的错误。
+// ③ parseSSE 直接喂「无完成标记」的流 → 应报「提前结束」错误且携带已累积内容。
+func TestOpenAIProviderSSEStreamRetry(t *testing.T) {
+	oldBase := llmRetryBaseDelay
+	llmRetryBaseDelay = time.Millisecond
+	defer func() { llmRetryBaseDelay = oldBase }()
+
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := atomic.AddInt32(&hits, 1)
+		w.Header().Set("Content-Type", "text/event-stream")
+		if n == 1 {
+			// 第一次：直接断开（未产出任何内容）
+			w.(http.Flusher).Flush()
+			return // handler 返回 = 连接 EOF（无 [DONE]）
+		}
+		io.WriteString(w, "data: {\"choices\":[{\"delta\":{\"content\":\"重试成功\"}}]}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n")
+	}))
+	defer srv.Close()
+
+	prov := &OpenAIProvider{BaseURL: srv.URL, APIKey: "k", Model: "m"}
+	msg, err := prov.Chat(context.Background(), []Message{{Role: RoleUser, Content: "hi"}}, nil, func(Chunk) {})
+	if err != nil {
+		t.Fatalf("空流中断应重试后成功，得 err=%v", err)
+	}
+	if atomic.LoadInt32(&hits) < 2 {
+		t.Errorf("应至少请求 2 次，得 %d", atomic.LoadInt32(&hits))
+	}
+	if msg.Content != "重试成功" {
+		t.Errorf("content = %q", msg.Content)
+	}
+}
+
+func TestOpenAIProviderSSEStreamInterruptNoRetry(t *testing.T) {
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		w.Header().Set("Content-Type", "text/event-stream")
+		// 产出部分内容后直接断开（无 [DONE]）
+		io.WriteString(w, "data: {\"choices\":[{\"delta\":{\"content\":\"一半\"}}]}\n\n")
+	}))
+	defer srv.Close()
+
+	prov := &OpenAIProvider{BaseURL: srv.URL, APIKey: "k", Model: "m"}
+	_, err := prov.Chat(context.Background(), []Message{{Role: RoleUser, Content: "hi"}}, nil, func(Chunk) {})
+	if err == nil {
+		t.Fatal("已产出内容后中断应返回错误")
+	}
+	if !strings.Contains(err.Error(), "提前结束") && !strings.Contains(err.Error(), "中断") {
+		t.Errorf("错误信息应说明流中断，得 %v", err)
+	}
+	if atomic.LoadInt32(&hits) != 1 {
+		t.Errorf("已产出内容不应重试，请求次数 = %d（期望 1）", atomic.LoadInt32(&hits))
+	}
+}
+
+func TestParseSSEIncompleteStream(t *testing.T) {
+	// 无 [DONE]/finish_reason 的流：内容部分保留，错误说明已累积量
+	msg, err := parseSSE(strings.NewReader(
+		"data: {\"choices\":[{\"delta\":{\"content\":\"你好\"}}]}\n\n"+
+			"data: {\"choices\":[{\"delta\":{\"content\":\"，世界\"}}]}\n\n"+
+			"data: {\"choices\":[{\"delta\":{\"content\":\"！\"}}]}\n\n"), nil)
+	if err == nil {
+		t.Fatal("无完成标记的流应报错（提前结束）")
+	}
+	if msg.Content != "你好，世界！" {
+		t.Errorf("错误时应保留已累积内容，得 %q", msg.Content)
+	}
+	if !strings.Contains(err.Error(), "提前结束") {
+		t.Errorf("应提示提前结束，得 %v", err)
+	}
+}
+
+// TestOpenAIProviderURLNoAppend ★ 2026-08-27：配置 URL 即完整请求端点（含 /chat/completions），
+// 直接使用不再拼接——防止 URL 二次拼接（如 /chat/completions/chat/completions）导致服务商无法访问。
+func TestOpenAIProviderURLNoAppend(t *testing.T) {
+	sse := "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n"
+	var gotPath, gotRaw string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotRaw = r.URL.RequestURI()
+		w.Header().Set("Content-Type", "text/event-stream")
+		io.WriteString(w, sse)
+	}))
+	defer srv.Close()
+
+	full := srv.URL + "/v1/chat/completions"
+	prov := &OpenAIProvider{BaseURL: full, APIKey: "k", Model: "m"}
+	_, err := prov.Chat(context.Background(), []Message{{Role: RoleUser, Content: "hi"}}, nil, func(Chunk) {})
+	if err != nil {
+		t.Fatalf("Chat: %v", err)
+	}
+	if gotRaw != "/v1/chat/completions" {
+		t.Errorf("应直接使用配置 URL，得 %q", gotRaw)
+	}
+	if gotPath != "/v1/chat/completions" {
+		t.Errorf("路径异常：%q", gotPath)
 	}
 }

@@ -329,11 +329,15 @@ func TestParseSSE_StreamInterrupted(t *testing.T) {
 	partialStream := "data: {\"choices\":[{\"delta\":{\"content\":\"hello \"}}]}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"world\"}}]}\n"
 	r := strings.NewReader(partialStream)
 	msg, err := parseSSE(r, nil)
-	if err != nil {
-		t.Fatalf("parseSSE failed: %v", err)
+	// ★ 2026-08-21 行为变更：无 [DONE]/finish_reason 的流视为提前截断 → 必须返回错误（防静默截断）
+	if err == nil {
+		t.Fatalf("parseSSE should fail on interrupted stream (no [DONE]/finish_reason), got nil")
+	}
+	if !strings.Contains(err.Error(), "提前结束") {
+		t.Errorf("expected '提前结束' error, got %v", err)
 	}
 	if msg.Content != "hello world" {
-		t.Errorf("expected content 'hello world', got %q", msg.Content)
+		t.Errorf("expected content 'hello world' preserved, got %q", msg.Content)
 	}
 }
 

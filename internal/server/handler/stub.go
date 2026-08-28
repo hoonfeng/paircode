@@ -20,11 +20,12 @@ import (
 // HandleChatSend 启动 agent 会话
 func HandleChatSend(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Message       string `json:"message"`
-		SessionID     string `json:"sessionId"`
-		Autonomous    bool   `json:"autonomous"`
-		ConvID        string `json:"convId"`
-		WorkspaceRoot string `json:"workspaceRoot"`
+		Message       string            `json:"message"`
+		SessionID     string            `json:"sessionId"`
+		Autonomous    bool              `json:"autonomous"`
+		ConvID        string            `json:"convId"`
+		WorkspaceRoot string            `json:"workspaceRoot"`
+		Images        []agent.ImagePart `json:"images,omitempty"` // ★ 2026-08-21 多模态：前端结构化发送的图片
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonErr(w, err.Error())
@@ -48,10 +49,19 @@ func HandleChatSend(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, "未配置 API key。请在设置面板中配置 API Key 和模型。")
 		return
 	}
-	if err := AgentMgr.AppendPersistedUserMessage(req.ConvID, req.Message); err != nil {
-		log.Printf("[chat] AppendPersistedUserMessage 失败 conv=%s err=%v", req.ConvID, err)
-		jsonErr(w, "写入用户消息失败: "+err.Error())
-		return
+	if len(req.Images) > 0 {
+		// ★ 2026-08-21 多模态：带图片的用户消息落盘
+		if err := AgentMgr.AppendPersistedUserMessageWithImages(req.ConvID, req.Message, req.Images); err != nil {
+			log.Printf("[chat] AppendPersistedUserMessageWithImages 失败 conv=%s err=%v", req.ConvID, err)
+			jsonErr(w, "写入用户消息失败: "+err.Error())
+			return
+		}
+	} else {
+		if err := AgentMgr.AppendPersistedUserMessage(req.ConvID, req.Message); err != nil {
+			log.Printf("[chat] AppendPersistedUserMessage 失败 conv=%s err=%v", req.ConvID, err)
+			jsonErr(w, "写入用户消息失败: "+err.Error())
+			return
+		}
 	}
 	if store := AgentMgr.Store(); store != nil {
 		if count, err := store.Count(req.ConvID); err == nil && count > 0 {
@@ -68,7 +78,14 @@ func HandleChatSend(w http.ResponseWriter, r *http.Request) {
 	if core.Settings.ReviewMode == "auto" && cur.ReviewModel != "" {
 		pm := strings.TrimSpace(cur.PlanModel)
 		if pm != "" && cur.BaseURL != "" && cur.APIKey != "" {
-			opts.ReviewProvider = &agent.OpenAIProvider{BaseURL: cur.BaseURL, APIKey: cur.APIKey, Model: pm, Temperature: -1, ThinkingMode: "non-thinking"}
+			// ★ t1 S1：实现级插件槽位（插件注册的 Provider 实现对新协议生效）
+			rp := cur
+			rp.Model = pm
+			rp.Temperature = -1
+			rp.ThinkingMode = "non-thinking"
+			rp.MaxTokens = 0
+			rp.Multimodal = false
+			opts.ReviewProvider = agent.CreateProvider(rp)
 		}
 	}
 
@@ -482,28 +499,29 @@ func HandleModels(w http.ResponseWriter, r *http.Request) {
 		modelMap[p] = core.GetModels(p)
 	}
 	jsonResp(w, map[string]any{
-		"providers":          providers,
-		"models":             modelMap,
-		"providerBaseURLs":   core.GetProviderBaseURLs(),
-		"providerKeys":       core.GetProviderAPIKeys(),       // ★ 服务商独立 API Key（切服务商自动带出）
-		"providerContexts":   core.GetProviderContextMaxTokens(), // ★ 服务商级默认上下文窗口（模型级可覆盖）
+		"providers":        providers,
+		"models":           modelMap,
+		"providerBaseURLs": core.GetProviderBaseURLs(),
+		"providerKeys":     core.GetProviderAPIKeys(),          // ★ 服务商独立 API Key（切服务商自动带出）
+		"providerContexts": core.GetProviderContextMaxTokens(), // ★ 服务商级默认上下文窗口（模型级可覆盖）
 	})
 }
 
 // HandleAiPresets AI 配置预设管理（GET 查询 / POST 保存-删除-应用 / PUT 全量保存）。
 // ★ 2026-08-20 AI 配置预设：把「一份完整 AI 配置」命名保存为预设，对话面板快速切换。
-//   body (POST): { "action": "save", "name": "预设名", "preset": {...} }   —— 保存/覆盖
-//                { "action": "apply", "name": "预设名" }                    —— 应用（只写 settings.preset，装配时按 preset 展开）
-//                { "action": "delete", "name": "预设名" }                   —— 删除
-//   body (PUT):  { "presets": { "<预设名>": {...} } }                       —— 全量替换
+//
+//	body (POST): { "action": "save", "name": "预设名", "preset": {...} }   —— 保存/覆盖
+//	             { "action": "apply", "name": "预设名" }                    —— 应用（只写 settings.preset，装配时按 preset 展开）
+//	             { "action": "delete", "name": "预设名" }                   —— 删除
+//	body (PUT):  { "presets": { "<预设名>": {...} } }                       —— 全量替换
 func HandleAiPresets(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:
 		var req struct {
-			Action string           `json:"action"`
-			Name   string           `json:"name"`
-			Preset core.AiPreset    `json:"preset"`
-			Presets core.AiPresets  `json:"presets"`
+			Action  string         `json:"action"`
+			Name    string         `json:"name"`
+			Preset  core.AiPreset  `json:"preset"`
+			Presets core.AiPresets `json:"presets"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			jsonErr(w, "无效 JSON: "+err.Error())

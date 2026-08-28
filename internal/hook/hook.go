@@ -16,13 +16,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/hoonfeng/paircode/pkg/executil"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -377,7 +377,7 @@ func DefaultSpawner(ctx context.Context, in SpawnInput) SpawnResult {
 	cmd := exec.CommandContext(cctx, name, args...)
 	// 隐藏子进程控制台窗口（无控制台父进程时 console 程序会自己弹窗）
 	if runtime.GOOS == "windows" {
-		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		executil.HideWindow(cmd)
 	}
 	hideWindow(cmd)
 	cmd.Dir = in.Cwd

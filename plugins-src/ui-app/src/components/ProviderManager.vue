@@ -14,8 +14,8 @@
         <input v-model="editForm.name" placeholder="如 deepseek" />
       </div>
       <div class="pm-field">
-        <span class="pm-field-label">Base URL</span>
-        <input v-model="editForm.baseURL" placeholder="https://api.deepseek.com/v1" />
+        <span class="pm-field-label">API URL（完整端点）</span>
+        <input v-model="editForm.baseURL" placeholder="https://api.deepseek.com/v1/chat/completions" />
       </div>
       <div class="pm-field">
         <span class="pm-field-label">API Key（该服务商独立保存）</span>
@@ -25,25 +25,27 @@
         <span class="pm-field-label">上下文大小（Token）</span>
         <input v-model="editForm.contextMaxTokens" type="number" min="0" step="1000" placeholder="0=不限制（模型级未配置时的默认窗口）" />
       </div>
-      <ModelEditor :models="editModels" @change="onModelsChange" />
-          <div class="pm-params">
+<ModelEditor :models="editModels" :label="modelEditor.label || '可用模型（回车或逗号分隔添加；支持整段粘贴）'" :placeholder="modelEditor.placeholder || '输入模型名，回车添加…'" @change="onModelsChange" />
+<div class="pm-params">
             <div class="pm-params-title">模型参数（每模型独立配置；对话里也可临时切换思考档位）</div>
             <div v-if="editModels.length" class="pm-param-rows">
               <div v-for="m in editModels" :key="m" class="pm-param-row">
                 <span class="pm-param-model" :title="m">{{ m }}</span>
-                <select v-model="editParams[m].temperature" title="温度（随机性）">
-                  <option v-for="t in TEMPS" :key="'t' + t" :value="t">{{ t === '' ? '温度默认' : t }}</option>
-                </select>
-                <select v-model="editParams[m].thinkingMode" title="思考档位（OpenAI 定义）">
-                  <option v-for="th in THINK_TIERS" :key="'k' + th.v" :value="th.v">{{ th.label }}</option>
-                </select>
-                <input v-model.number="editParams[m].maxTokens" type="number" min="0" step="1024" placeholder="输出 Token" title="最大输出 Token（0=默认）" />
-                <input v-model.number="editParams[m].contextMaxTokens" type="number" min="0" step="4096" placeholder="上下文" title="上下文窗口（0=默认）" />
+                <!-- ★ 2026-08-21 schema 驱动：按 modelParamFields 动态渲染（checkbox/select/number/text） -->
+                <template v-for="f in modelParamFields" :key="f.name">
+                  <label v-if="f.type === 'checkbox'" class="pm-param-check" :title="f.hint || f.label">
+                    <input type="checkbox" v-model="editParams[m][f.name]" /> {{ f.label }}
+                  </label>
+                  <select v-else-if="f.type === 'select'" v-model="editParams[m][f.name]" :title="f.hint || f.label">
+                    <option v-for="opt in (f.options || [])" :key="'o'+opt" :value="opt">{{ opt === '' ? (f.label + '默认') : opt }}</option>
+                  </select>
+                  <input v-else-if="f.type === 'number'" v-model.number="editParams[m][f.name]" type="number" :min="f.min ?? 0" :step="f.step ?? 1" :placeholder="f.label" :title="f.hint || f.label" />
+                  <input v-else v-model="editParams[m][f.name]" type="text" :placeholder="f.label" :title="f.hint || f.label" />
+                </template>
               </div>
             </div>
-            <div v-else class="pm-params-empty">添加模型后，可逐模型配置温度/思考档位/输出上限/上下文窗口</div>
+            <div v-else class="pm-params-empty">添加模型后，可逐模型配置参数（温度/思考/输出/上下文/多模态…）</div>
           </div>
-
       <div class="pm-edit-actions">
         <button class="pm-btn pm-primary" :disabled="saving" @click="saveEdit">
           {{ saving ? '保存中…' : '保存服务商' }}
@@ -62,8 +64,8 @@
             <input :value="p.name" disabled />
           </div>
           <div class="pm-field">
-            <span class="pm-field-label">Base URL</span>
-            <input v-model="editForm.baseURL" placeholder="https://api.deepseek.com/v1" />
+            <span class="pm-field-label">API URL（完整端点）</span>
+            <input v-model="editForm.baseURL" placeholder="https://api.deepseek.com/v1/chat/completions" />
           </div>
           <div class="pm-field">
             <span class="pm-field-label">API Key（该服务商独立保存）</span>
@@ -73,27 +75,33 @@
             <span class="pm-field-label">上下文大小（Token）</span>
             <input v-model="editForm.contextMaxTokens" type="number" min="0" step="1000" placeholder="0=不限制（模型级未配置时的默认窗口）" />
           </div>
-          <ModelEditor :models="editModels" @change="onModelsChange" />
-          <div class="pm-params">
+<ModelEditor :models="editModels" :label="modelEditor.label || '可用模型（回车或逗号分隔添加；支持整段粘贴）'" :placeholder="modelEditor.placeholder || '输入模型名，回车添加…'" @change="onModelsChange" />
+<div class="pm-params">
             <div class="pm-params-title">模型参数（每模型独立配置；对话里也可临时切换思考档位）</div>
             <div v-if="editModels.length" class="pm-param-rows">
               <div v-for="m in editModels" :key="m" class="pm-param-row">
                 <span class="pm-param-model" :title="m">{{ m }}</span>
-                <select v-model="editParams[m].temperature" title="温度（随机性）">
-                  <option v-for="t in TEMPS" :key="'t' + t" :value="t">{{ t === '' ? '温度默认' : t }}</option>
-                </select>
-                <select v-model="editParams[m].thinkingMode" title="思考档位（OpenAI 定义）">
-                  <option v-for="th in THINK_TIERS" :key="'k' + th.v" :value="th.v">{{ th.label }}</option>
-                </select>
-                <input v-model.number="editParams[m].maxTokens" type="number" min="0" step="1024" placeholder="输出 Token" title="最大输出 Token（0=默认）" />
-                <input v-model.number="editParams[m].contextMaxTokens" type="number" min="0" step="4096" placeholder="上下文" title="上下文窗口（0=默认）" />
+                <!-- ★ 2026-08-21 schema 驱动：按 modelParamFields 动态渲染（checkbox/select/number/text） -->
+                <template v-for="f in modelParamFields" :key="f.name">
+                  <label v-if="f.type === 'checkbox'" class="pm-param-check" :title="f.hint || f.label">
+                    <input type="checkbox" v-model="editParams[m][f.name]" /> {{ f.label }}
+                  </label>
+                  <select v-else-if="f.type === 'select'" v-model="editParams[m][f.name]" :title="f.hint || f.label">
+                    <option v-for="opt in (f.options || [])" :key="'o'+opt" :value="opt">{{ opt === '' ? (f.label + '默认') : opt }}</option>
+                  </select>
+                  <input v-else-if="f.type === 'number'" v-model.number="editParams[m][f.name]" type="number" :min="f.min ?? 0" :step="f.step ?? 1" :placeholder="f.label" :title="f.hint || f.label" />
+                  <input v-else v-model="editParams[m][f.name]" type="text" :placeholder="f.label" :title="f.hint || f.label" />
+                </template>
               </div>
+
             </div>
-            <div v-else class="pm-params-empty">添加模型后，可逐模型配置温度/思考档位/输出上限/上下文窗口</div>
+            <div v-else class="pm-params-empty">添加模型后，可逐模型配置参数（温度/思考/输出/上下文/多模态…）</div>
           </div>
 
-          <div class="pm-edit-actions">
-            <button class="pm-btn pm-primary" :disabled="saving" @click="saveEdit">
+
+
+<div class="pm-edit-actions">
+<button class="pm-btn pm-primary" :disabled="saving" @click="saveEdit">
               {{ saving ? '保存中…' : '保存服务商' }}
             </button>
             <button class="pm-btn" @click="cancelEdit">取消</button>
@@ -107,7 +115,7 @@
               <button class="pm-btn pm-small pm-danger" @click="removeProvider(p)">删除</button>
             </div>
           </div>
-          <div class="pm-url" :title="p.baseURL">{{ p.baseURL || '未配置 Base URL' }}</div>
+          <div class="pm-url" :title="p.baseURL">{{ p.baseURL || '未配置 API URL' }}</div>
           <div class="pm-key" :class="{ 'pm-key-ok': p.apiKey }" :title="p.apiKey ? '已配置 API Key' : '未配置 API Key'">{{ p.apiKey ? 'API Key 已配置' : '未配置 API Key' }}</div>
           <div class="pm-ctx">{{ p.contextMaxTokens > 0 ? ('上下文 ' + (p.contextMaxTokens / 1000).toFixed(0) + 'K Token') : '上下文 未限制' }}</div>
           <div class="pm-models">
@@ -132,17 +140,24 @@ import ModelEditor from './ModelEditor.vue'
 
 // 服务商管理面板：维护 config/models.json（GET/POST /api/models）。
 // 保存后 emit('saved') 通知父组件刷新 AI tab 的 provider/模型下拉。
+// ★ 2026-08-21 模型参数区 schema 驱动：modelParamFields prop 声明逐模型参数字段
+//   （temperature/thinkingMode/maxTokens/contextMaxTokens/multimodal…），
+//   模板按 schema 动态渲染（checkbox/select/number/text），新增参数无需改本组件。
 const emit = defineEmits(['saved'])
+const props = defineProps({
+  modelParamFields: { type: Array, default: () => [] }, // [{name,label,type,default,options,hint,min,max,step}]
+  modelEditor: { type: Object, default: () => ({}) },   // ★ 2026-08-21 schema 驱动：{label, placeholder} 声明模型编辑器
+})
 
 const providers = ref([])
 const editingName = ref('')        // '' = 不编辑；'__new__' = 新增；其他 = 编辑该服务商（就地展开）
 const editForm = ref({ name: '', baseURL: '', apiKey: '', contextMaxTokens: 0 })
 const editModels = ref([])
-const editParams = ref({})   // 模型级参数：{模型: {temperature, thinkingMode, maxTokens, contextMaxTokens}} → settings.json modelParams
+const editParams = ref({})   // 模型级参数：{模型: {字段名: 值}} → settings.json modelParams
 const error = ref('')
 const saving = ref(false)
 
-// 思考档位（OpenAI ReasoningEffort）+ 温度档位
+// 思考档位（OpenAI ReasoningEffort）+ 温度档位（兼容旧硬编码，schema 未声明时兜底）
 const THINK_TIERS = [
   { v: '', label: '默认' },
   { v: 'none', label: 'none（关闭）' },
@@ -154,6 +169,17 @@ const THINK_TIERS = [
   { v: 'max', label: 'max（最大化）' },
 ]
 const TEMPS = ['', '0', '0.1', '0.2', '0.3', '0.4', '0.5', '0.6', '0.7', '0.8', '0.9', '1.0', '1.2', '1.5', '2.0']
+
+// ★ 2026-08-21 按 schema 生成某模型的默认参数键（模板 v-model 需要键存在）
+function defaultParamKeys() {
+  const keys = {}
+  for (const f of props.modelParamFields) {
+    if (f.type === 'checkbox') keys[f.name] = false
+    else if (f.type === 'number') keys[f.name] = 0
+    else keys[f.name] = ''
+  }
+  return keys
+}
 
 function readProviderParams(providerName) {
   const mp = (state.settings && state.settings.modelParams) || {}
@@ -189,8 +215,9 @@ function startEdit(p) {
   editForm.value = { name: p.name, baseURL: p.baseURL, apiKey: p.apiKey || '', contextMaxTokens: p.contextMaxTokens || 0 }
   editModels.value = [...(p.models || [])]
   const params = readProviderParams(p.name)
-  // 为所有模型补默认参数键（模板 v-model 需要键存在）
-  for (const m of editModels.value) if (!params[m]) params[m] = { temperature: '', thinkingMode: '', maxTokens: 0, contextMaxTokens: 0 }
+  // 为所有模型补默认参数键（模板 v-model 需要键存在；★ 2026-08-21 按 schema 生成）
+  const dk = defaultParamKeys()
+  for (const m of editModels.value) if (!params[m]) params[m] = { ...dk }
   editParams.value = params
   error.value = ''
 }
@@ -198,7 +225,8 @@ function startEdit(p) {
 // 模型列表变化：新模型补参数键、移除模型清理参数
 function onModelsChange(list) {
   const params = { ...editParams.value }
-  for (const m of list) if (!params[m]) params[m] = { temperature: '', thinkingMode: '', maxTokens: 0, contextMaxTokens: 0 }
+  const dk = defaultParamKeys()
+  for (const m of list) if (!params[m]) params[m] = { ...dk }
   for (const m of Object.keys(params)) if (!list.includes(m)) delete params[m]
   editParams.value = params
   editModels.value = list
@@ -236,6 +264,7 @@ async function saveEdit() {
 }
 
 // 将当前编辑的模型参数写回 settings.json 顶层 modelParams（仅保留非空项）
+// ★ 2026-08-21 按 schema 字段写回：checkbox 存 true；number 存 >0；select/text 存非空字符串。
 async function saveModelParams(providerName) {
   // ★ 先拉后端最新 settings 作基底，避免过期缓存覆盖其他字段
   let base = {};
@@ -245,10 +274,16 @@ async function saveModelParams(providerName) {
   for (const [m, cfg] of Object.entries(editParams.value)) {
     const c = cfg || {}
     const out = {}
-    if (c.temperature !== '' && c.temperature !== undefined && c.temperature !== null) out.temperature = c.temperature
-    if (c.thinkingMode) out.thinkingMode = c.thinkingMode
-    if (Number(c.maxTokens) > 0) out.maxTokens = Number(c.maxTokens)
-    if (Number(c.contextMaxTokens) > 0) out.contextMaxTokens = Number(c.contextMaxTokens)
+    for (const f of props.modelParamFields) {
+      const v = c[f.name]
+      if (f.type === 'checkbox') {
+        if (v === true) out[f.name] = true
+      } else if (f.type === 'number') {
+        if (Number(v) > 0) out[f.name] = Number(v)
+      } else {
+        if (v !== '' && v !== undefined && v !== null) out[f.name] = v
+      }
+    }
     if (Object.keys(out).length) clean[m] = out
   }
   if (Object.keys(clean).length) mp[providerName] = clean
@@ -382,9 +417,11 @@ function paramsSummary(providerName) {
 .pm-param-row select, .pm-param-row input {
   background: var(--input-bg, #14141f);
   border: 1px solid var(--border-color, #3a3a4a);
-  color: var(--text-primary, #eee); border-radius: 5px;
-  padding: 4px 6px; font-size: 12px; outline: none; font-family: inherit;
+  border-radius: 4px; color: var(--text-primary, #ddd);
+  padding: 3px 6px; font-size: 11px;
 }
+.pm-param-check { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: #4cc9a0; cursor: pointer; white-space: nowrap; }
+.pm-param-check input { accent-color: #4cc9a0; }
 .pm-param-row select { flex: 1.1; min-width: 0; }
 .pm-param-row input { flex: 0 0 84px; width: 84px; }
 .pm-param-row select:focus, .pm-param-row input:focus { border-color: var(--accent, #4f8cff); }

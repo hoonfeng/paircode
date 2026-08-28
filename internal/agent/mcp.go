@@ -10,12 +10,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/hoonfeng/paircode/pkg/executil"
 	"os"
 	"os/exec"
 	"runtime"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -59,7 +59,7 @@ func (c *mcpConnection) connect(ctx context.Context) error {
 		cmd := exec.Command(c.cfg.Command, c.cfg.Args...)
 		// 隐藏子进程控制台窗口（无控制台父进程时 console 程序会自己弹窗）
 		if runtime.GOOS == "windows" {
-			cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+			executil.HideWindow(cmd)
 		}
 		if len(c.cfg.Env) > 0 {
 			cmd.Env = os.Environ()

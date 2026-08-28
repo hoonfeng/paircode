@@ -315,6 +315,7 @@ func createTables(db *sql.DB) error {
 			signature TEXT DEFAULT '',
 			package_name TEXT DEFAULT '',
 			module TEXT DEFAULT '',
+			entity_id TEXT DEFAULT '',
 			UNIQUE(kind, name, file_path, line)
 		);
 		CREATE INDEX IF NOT EXISTS idx_entities_name ON code_entities(name);

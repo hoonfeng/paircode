@@ -130,6 +130,13 @@ type webServer struct {
 // web 层作为套壳，所有会话生命周期通过 agentMgr 管理。
 var agentMgr = agent.NewSessionManager()
 
+// ★ Node 桥会话管理器注入：Node 插件（npm cordis）经 ctx.store/ctx.loop 服务
+//
+//	读写会话消息/感知循环状态（数据落盘逻辑可插件化）。
+func init() {
+	agent.SetNodeBridgeManager(agentMgr)
+}
+
 var ws *webServer
 
 // ── 平台回调注册（由 webui_*.go 在启动时注册） ──
@@ -185,6 +192,12 @@ func startWebUI(port int) {
 		port:      port,
 		eventRing: newEventRing(1000), // 缓存最近 1000 个全局事件用于断连回放
 	}
+	// ★ 2026-08-28 多智能体团队：注入成员会话（可续聊子 Agent）启动器，
+	//   JS 插件经 ctx.agents.start/followup/stop 驱动（agent-teams 插件依赖）。
+	ws.installSubAgentSpawner()
+	// ★ 钩子系统（t1 L2 闭环）：装载配置钩子（.pair/settings.json + ~/.pair/settings.json），
+	//   与桌面端 Init 同一入口；无配置时全部 no-op。
+	agent.InitLoopHooks()
 	// 初始化 MessageStore（消息持久化的唯一权威），并迁移旧格式数据
 	// ★ 先找已有对话数据的工作区目录（排序变化后 core.Root() 可能指向了没有对话数据的目录）
 	root := findMessageStoreRoot()
@@ -2322,13 +2335,13 @@ func buildWebSystemDynamic() string {
 	var b strings.Builder
 	root := core.Root()
 	skillsSec := skills.Prompt()
-	memorySec := agent.LongTermMemoryPrompt()
 	rulesSec := agent.ProjectRules(root)
-	knowledgeSec := agent.ProjectKnowledge(root, 2500)
+	// ★ 2026-08-27 缓存优化：记忆/知识库从 system 动态后缀移入「背景上下文快照」
+	//   （Loop.syncContextSnapshot / agentloop 插件的 snapshot.sync）——
+	//   记忆/知识库高频变化曾导致 system 整体前缀断裂（全部 miss）；
+	//   移到消息流快照后，变化只断快照之后的尾部，system 前缀稳定。
 	b.WriteString(skillsSec)
-	b.WriteString(memorySec)
 	b.WriteString(rulesSec)
-	b.WriteString(knowledgeSec)
 
 	// ★ 项目环境：遍历所有工作区根目录，分别读取各自的 .pair/project.md
 	if len(core.Folders) > 0 {
@@ -2373,10 +2386,11 @@ func buildWebSystemDynamic() string {
 				envSec.WriteString(projEnv)
 			}
 		}
-		log.Printf("[cache-diag] dynamic 段 hash skills=%s(%d) memory=%s(%d) rules=%s(%d) knowledge=%s(%d) env=%s total=%s len=%d",
-			secHash(skillsSec), len(skillsSec), secHash(memorySec), len(memorySec),
-			secHash(rulesSec), len(rulesSec), secHash(knowledgeSec), len(knowledgeSec),
+		log.Printf("[cache-diag] dynamic 段 hash skills=%s(%d) rules=%s(%d) env=%s total=%s len=%d",
+			secHash(skillsSec), len(skillsSec),
+			secHash(rulesSec), len(rulesSec),
 			secHash(envSec.String()), secHash(val), len(val))
+		log.Printf("[cache-diag] 记忆/知识库已移入背景快照（buildWebSystemDynamic 不再承载；快照变化见 [cache-diag] snapshot 行）")
 		// 技能行级：定位列表变化的具体技能（行格式 "- 名字：描述"）
 		for _, skillLine := range strings.Split(skillsSec, "\n") {
 			if strings.HasPrefix(skillLine, "- ") {
@@ -2416,6 +2430,10 @@ func buildWebSystemPrompt() string {
 // ★ 2026-08-21：改用 ResolveProviderParams() 获取最终参数（含 agentloop 装配器覆盖：
 //
 //	模型级温度/思考/输出/上下文/多模态），不再直接读 core.Settings 业务字段。
+//
+// ★ 2026-09（t1 S1 闭环）：经 agent.CreateProvider 创建——服务商名在实现注册表
+//
+//	（插件 ctx.provider.register）有实现 → 用插件实现；否则回退 OpenAI 兼容。
 func buildWebProvider() agent.Provider {
 	cur := agent.ResolveProviderParams()
 	if cur.APIKey == "" || cur.BaseURL == "" {
@@ -2424,15 +2442,7 @@ func buildWebProvider() agent.Provider {
 	if cur.MaxTokens > 0 && cur.MaxTokens < 8192 {
 		log.Printf("[WARN] maxTokens=%d 过小（<8192），可能导致思考/回复被截断。建议在设置中调大至 ≥8192", cur.MaxTokens)
 	}
-	return &agent.OpenAIProvider{
-		BaseURL:      cur.BaseURL,
-		APIKey:       cur.APIKey,
-		Model:        cur.Model,
-		Temperature:  cur.Temperature,
-		MaxTokens:    cur.MaxTokens,
-		ThinkingMode: cur.ThinkingMode,
-		Multimodal:   cur.Multimodal, // ★ 2026-08-21 多模态：模型级参数标记 → Provider 以多模态格式发送图片
-	}
+	return agent.CreateProvider(cur)
 }
 
 // countStates 统计具备指定状态的执行状态数量。
@@ -2721,18 +2731,24 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 		if opts.ReviewMode == "auto" && cur.ReviewModel != "" {
 			pm := strings.TrimSpace(cur.PlanModel)
 			if pm != "" && cur.BaseURL != "" && cur.APIKey != "" {
-				opts.ReviewProvider = &agent.OpenAIProvider{BaseURL: cur.BaseURL, APIKey: cur.APIKey, Model: pm, Temperature: -1, ThinkingMode: "non-thinking"}
+				// ★ t1 S1：实现级插件槽位（插件注册的 Provider 实现对新协议生效）
+				rp := cur
+				rp.Model = pm
+				rp.Temperature = -1
+				rp.ThinkingMode = "non-thinking"
+				rp.MaxTokens = 0
+				rp.Multimodal = false
+				opts.ReviewProvider = agent.CreateProvider(rp)
 			}
 		}
 
 		if req.Autonomous {
 			pm := strings.TrimSpace(cur.PlanModel)
 			if pm != "" && cur.BaseURL != "" && cur.APIKey != "" {
-				opts.PlanProvider = &agent.OpenAIProvider{
-					BaseURL: cur.BaseURL, APIKey: cur.APIKey,
-					Model: pm, Temperature: cur.Temperature, MaxTokens: cur.MaxTokens,
-					ThinkingMode: cur.ThinkingMode,
-				}
+				pp := cur
+				pp.Model = pm
+				pp.Multimodal = false
+				opts.PlanProvider = agent.CreateProvider(pp)
 			} else if prov := buildWebProvider(); prov != nil {
 				opts.PlanProvider = prov
 			}

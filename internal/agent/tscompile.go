@@ -85,7 +85,7 @@ func detectPluginLanguage(src, language string) string {
 // （相对导入内联，非相对包 mock；export default 转 IIFE）。
 func compilePluginSource(src, language, sourceName, dir string) (string, error) {
 	lang := detectPluginLanguage(src, language)
-	if dir != "" && needsBundle(src) {
+	if needsBundle(src) {
 		return compileTSBundle(src, sourceName, dir, lang)
 	}
 	switch lang {
@@ -146,6 +146,60 @@ func mockPackageOnResolve(src, dir, sourceName string) func(api.OnResolveArgs) (
 		}
 		return api.OnResolveResult{Path: "mock-" + args.Path, Namespace: "mock-pkg"}, nil
 	}
+}
+
+func resolvePluginDep(src, dir, sourceName string) func(api.OnResolveArgs) (api.OnResolveResult, error) {
+	preset := extractAllImportNamesFromSource(src)
+	return func(args api.OnResolveArgs) (api.OnResolveResult, error) {
+		raw := args.Path
+		name := stripNodePrefix(raw)
+		// ① 内置库（path/events/util）：直接内联纯 JS 实现
+		if _, _, ok := builtinLibFor(name); ok {
+			return api.OnResolveResult{Path: "builtin:" + name, Namespace: "builtin-lib"}, nil
+		}
+		// ② npm 包真实解析（纯 JS 依赖库）：node_modules 层级探测——
+		//    命中 → 不拦截（返回空结果让 esbuild 默认解析并 bundle）；
+		//    未命中 → mock（现状兜底，保持生态插件可编译）
+		if _, ok := locateNodeModule(name, dir); ok {
+			return api.OnResolveResult{}, nil
+		}
+		// ③ mock 兜底：非相对包导入 → 空模块（命名导入补 undefined）
+		var names []string
+		if m, ok := preset[raw]; ok {
+			names = m
+		}
+		if real := filepath.Join(dir, args.Importer); real != sourceName {
+			if st, err := os.Stat(real); err == nil && !st.IsDir() {
+				names = mergeStringSlice(names, extractImportNames(real, raw))
+			}
+		}
+		if len(names) > 0 {
+			mockMu.Lock()
+			mockNames[raw] = mergeStringSlice(mockNames[raw], names)
+			mockMu.Unlock()
+		}
+		return api.OnResolveResult{Path: "mock-" + raw, Namespace: "mock-pkg"}, nil
+	}
+}
+
+// locateNodeModule 从 startDir 向上逐层探测 node_modules/<pkg>（含 @scope/pkg）。
+func locateNodeModule(pkg, startDir string) (string, bool) {
+	if pkg == "" || strings.HasPrefix(pkg, ".") || strings.HasPrefix(pkg, "/") || strings.HasPrefix(pkg, "\\") {
+		return "", false
+	}
+	dir := startDir
+	for {
+		cand := filepath.Join(dir, "node_modules", filepath.FromSlash(pkg))
+		if st, err := os.Stat(filepath.Join(cand, "package.json")); err == nil && !st.IsDir() {
+			return cand, true
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return "", false
 }
 
 func mergeStringSlice(a, b []string) []string {
@@ -271,9 +325,17 @@ func compileTSBundle(src, sourceName, dir, lang string) (string, error) {
 		Platform:      api.PlatformNeutral,
 		AbsWorkingDir: dir,
 		Plugins: []api.Plugin{{
-			Name: "mock-packages",
+			Name: "goja-deps",
 			Setup: func(b api.PluginBuild) {
-				b.OnResolve(api.OnResolveOptions{Filter: `^[^./]`}, mockPackageOnResolve(src, dir, sourceName))
+				b.OnResolve(api.OnResolveOptions{Filter: `^[^./]`}, resolvePluginDep(src, dir, sourceName))
+				b.OnLoad(api.OnLoadOptions{Filter: `.*`, Namespace: "builtin-lib"}, func(args api.OnLoadArgs) (api.OnLoadResult, error) {
+					name := strings.TrimPrefix(args.Path, "builtin:")
+					_, libSrc, ok := builtinLibFor(name)
+					if !ok {
+						return api.OnLoadResult{}, fmt.Errorf("builtin library %q 未注册", name)
+					}
+					return api.OnLoadResult{Contents: &libSrc, Loader: api.LoaderJS}, nil
+				})
 				b.OnLoad(api.OnLoadOptions{Filter: `.*`, Namespace: "mock-pkg"}, mockPackageOnLoad)
 			},
 		}},

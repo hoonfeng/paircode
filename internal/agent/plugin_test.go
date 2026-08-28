@@ -977,16 +977,14 @@ return {
 
 // TestJSTimeoutProtection 死循环插件（求值/apply/工具 execute）被 goja
 // Interrupt 强制中断：进程不卡死、错误信息明确、超时后 VM 可继续使用。
+// 注意：工具 execute 默认不限时，只有声明 timeout（秒）才启用中断防护。
 func TestJSTimeoutProtection(t *testing.T) {
 	// 调小超时加快测试（同包测试串行，无并发竞争）
-	oldTool := jsToolTimeout
 	oldEval := jsEvalTimeout
 	oldApply := jsApplyTimeout
-	jsToolTimeout = 500 * time.Millisecond
 	jsEvalTimeout = 500 * time.Millisecond
 	jsApplyTimeout = 500 * time.Millisecond
 	defer func() {
-		jsToolTimeout = oldTool
 		jsEvalTimeout = oldEval
 		jsApplyTimeout = oldApply
 	}()
@@ -1018,7 +1016,8 @@ func TestJSTimeoutProtection(t *testing.T) {
 		t.Fatalf("apply 死循环应报超时, got %v", err)
 	}
 
-	// ③ 工具 execute 死循环
+	// ③ 工具 execute 死循环：工具声明 timeout（秒）→ 按声明强制中断；
+	//    不声明则默认不限时（超时由插件自身控制）
 	reg := NewRegistry()
 	host2 := NewPluginHost(reg, nil, `C:\ws`)
 	id3, _ := host2.DefineJS(`
@@ -1028,6 +1027,7 @@ return {
     ctx.tools.register({
       name: 'hang_tool',
       description: 'infinite loop',
+      timeout: 0.5,
       execute: () => { while (true) {} }
     })
   }

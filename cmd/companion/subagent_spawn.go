@@ -115,10 +115,14 @@ func (s *webServer) startSubAgentTurn(spec agent.SubAgentSpec) error {
 		cur := agent.ResolveProviderParams()
 		if opts.ReviewMode == "auto" && cur.ReviewModel != "" {
 			if pm := strings.TrimSpace(cur.PlanModel); pm != "" && cur.BaseURL != "" && cur.APIKey != "" {
-				opts.ReviewProvider = &agent.OpenAIProvider{
-					BaseURL: cur.BaseURL, APIKey: cur.APIKey, Model: pm,
-					Temperature: -1, ThinkingMode: "non-thinking",
-				}
+				// ★ t1 S1：实现级插件槽位（插件注册的 Provider 实现对新协议生效）
+				rp := cur
+				rp.Model = pm
+				rp.Temperature = -1
+				rp.ThinkingMode = "non-thinking"
+				rp.MaxTokens = 0
+				rp.Multimodal = false
+				opts.ReviewProvider = agent.CreateProvider(rp)
 			}
 		}
 		if spec.MaxIter > 0 {
@@ -165,14 +169,12 @@ func buildSubAgentProvider(spec agent.SubAgentSpec) agent.Provider {
 			provider, model, baseURL != "", apiKey != "")
 		return nil
 	}
-	return &agent.OpenAIProvider{
-		BaseURL:      baseURL,
-		APIKey:       apiKey,
-		Model:        model,
-		Temperature:  cur.Temperature,
-		MaxTokens:    cur.MaxTokens,
-		ThinkingMode: cur.ThinkingMode,
-	}
+	// ★ t1 S1：实现级插件槽位——按目标服务商名路由插件实现（未注册回退 OpenAI 兼容）
+	cur.Provider = provider
+	cur.BaseURL = baseURL
+	cur.APIKey = apiKey
+	cur.Model = model
+	return agent.CreateProvider(cur)
 }
 
 // subAgentLastAssistant 取会话最近一条助手正文（队长汇总成员结果用）。

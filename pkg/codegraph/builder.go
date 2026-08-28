@@ -20,12 +20,12 @@ import (
 
 // BuildConfig 构建配置。
 type BuildConfig struct {
-	Root         string // 工作区根目录
-	ModuleName   string // 模块名（从 go.mod 读取）
-	SkipVendor   bool   // 是否跳过 vendor 目录
-	WithCallGraph bool  // 是否分析调用图
-	MaxParallel  int    // 最大并行解析文件数（0=串行）
-	AutoSave     bool   // 构建后自动保存
+	Root          string // 工作区根目录
+	ModuleName    string // 模块名（从 go.mod 读取）
+	SkipVendor    bool   // 是否跳过 vendor 目录
+	WithCallGraph bool   // 是否分析调用图
+	MaxParallel   int    // 最大并行解析文件数（0=串行）
+	AutoSave      bool   // 构建后自动保存
 }
 
 // DefaultBuildConfig 返回默认构建配置。
@@ -64,14 +64,14 @@ type BuildError struct {
 //   - .py  → PyBuilder (规则解析)
 //   - 其他 → TsitBuilder (tsit 树遍历, 预留)
 type Builder struct {
-	config          BuildConfig
-	store           GraphStore
-	graph           *Graph
-	goBuilder       *GoBuilder
-	jsBuilder       *JSBuilder
-	pyBuilder       *PyBuilder
-	langBuilder     *LangBuilder
-	importAnalyzer  *ImportAnalyzer
+	config         BuildConfig
+	store          GraphStore
+	graph          *Graph
+	goBuilder      *GoBuilder
+	jsBuilder      *JSBuilder
+	pyBuilder      *PyBuilder
+	langBuilder    *LangBuilder
+	importAnalyzer *ImportAnalyzer
 }
 
 // NewBuilder 创建新的构建器。
@@ -79,8 +79,8 @@ func NewBuilder(config BuildConfig) *Builder {
 	graph := NewGraph()
 	return &Builder{
 		config: config,
-	store:          NewStore(config.Root),
-	graph:          graph,
+		store:  NewStore(config.Root),
+		graph:  graph,
 		goBuilder: &GoBuilder{
 			ModuleName: config.ModuleName,
 			root:       config.Root,
@@ -233,7 +233,9 @@ func (b *Builder) BuildFull() (*BuildResult, error) {
 		if info.IsDir() {
 			if strings.HasPrefix(info.Name(), ".") ||
 				info.Name() == "vendor" ||
-				info.Name() == "node_modules" {
+				info.Name() == "node_modules" ||
+				info.Name() == "_temp" ||
+				info.Name() == "tmp" {
 				return filepath.SkipDir
 			}
 			return nil
@@ -280,6 +282,13 @@ func (b *Builder) BuildFull() (*BuildResult, error) {
 				Message: fmt.Sprintf("保存图谱失败: %v", err),
 			})
 		}
+		// ★ 重建文件索引：BuildFull 前旧索引可能缺失/陈旧（存储切换、
+		//   长期只增量、索引丢失等）→ 增量检测会把大量文件误判为变更。
+		if err := b.store.SaveIndex(b.collectIndex()); err != nil {
+			result.Errors = append(result.Errors, BuildError{
+				Message: fmt.Sprintf("保存索引失败: %v", err),
+			})
+		}
 	}
 
 	return result, nil
@@ -313,6 +322,14 @@ func (b *Builder) IncrementalBuild() (*BuildResult, error) {
 	// 扫描文件变化
 	changedFiles, err := b.detectChangedFiles(index)
 	if err != nil {
+		return b.BuildFull()
+	}
+
+	// ★ 索引严重过期检测：变更文件占比过高（>50% 或 >=800 个）说明索引与磁盘
+	//   严重不符（存储切换/索引丢失/长期未增量），伪增量会残留大量已删除实体的
+	//   陈旧数据 → 回退全量构建，保证图与磁盘一致。
+	total := b.countSupportedFiles()
+	if len(changedFiles) >= 800 || (total > 0 && len(changedFiles)*100/total > 50) {
 		return b.BuildFull()
 	}
 
@@ -365,15 +382,49 @@ func (b *Builder) IncrementalBuild() (*BuildResult, error) {
 // detectChangedFiles 检测自上次构建以来变更的文件。
 func (b *Builder) detectChangedFiles(index map[string]time.Time) ([]string, error) {
 	var changed []string
+	b.walkSupportedFiles(func(relPath string, info os.FileInfo) {
+		lastMod, exists := index[relPath]
+		if !exists || info.ModTime().After(lastMod) {
+			changed = append(changed, relPath)
+		}
+	})
+	sort.Strings(changed)
+	return changed, nil
+}
 
-	err := filepath.Walk(b.config.Root, func(path string, info os.FileInfo, err error) error {
+// collectIndex 扫描全部支持文件，构建「文件路径 → mtime」索引。
+// 用于 BuildFull 后重建索引（旧索引缺失/陈旧时增量检测会误判全量变更）。
+func (b *Builder) collectIndex() map[string]time.Time {
+	index := make(map[string]time.Time)
+	b.walkSupportedFiles(func(relPath string, info os.FileInfo) {
+		index[relPath] = info.ModTime()
+	})
+	return index
+}
+
+// countSupportedFiles 统计工作区内受支持的文件总数（用于判断索引过期比例）。
+func (b *Builder) countSupportedFiles() int {
+	n := 0
+	b.walkSupportedFiles(func(relPath string, info os.FileInfo) {
+		n++
+	})
+	return n
+}
+
+// walkSupportedFiles 遍历工作区内所有受支持的文件，回调相对路径（正斜杠）。
+// 跳过 . 前缀目录 / vendor / node_modules / _temp / tmp（与 BuildFull 扫描规则一致，
+// 临时目录/构建产物不进图谱）。
+func (b *Builder) walkSupportedFiles(fn func(relPath string, info os.FileInfo)) {
+	filepath.Walk(b.config.Root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return err
+			return nil
 		}
 		if info.IsDir() {
 			if strings.HasPrefix(info.Name(), ".") ||
 				info.Name() == "vendor" ||
-				info.Name() == "node_modules" {
+				info.Name() == "node_modules" ||
+				info.Name() == "_temp" ||
+				info.Name() == "tmp" {
 				return filepath.SkipDir
 			}
 			return nil
@@ -381,23 +432,11 @@ func (b *Builder) detectChangedFiles(index map[string]time.Time) ([]string, erro
 		if !isSupportedFile(info.Name()) {
 			return nil
 		}
-
 		relPath, _ := filepath.Rel(b.config.Root, path)
 		relPath = filepath.ToSlash(relPath)
-
-		lastMod, exists := index[relPath]
-		if !exists || info.ModTime().After(lastMod) {
-			changed = append(changed, relPath)
-		}
+		fn(relPath, info)
 		return nil
 	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	sort.Strings(changed)
-	return changed, nil
 }
 
 // ── 工具 ──────────────────────────────────────────────

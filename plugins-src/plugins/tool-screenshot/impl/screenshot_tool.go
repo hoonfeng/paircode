@@ -110,7 +110,7 @@ func Register(r *Registry, root string) {
 		UsageGuide: "截取整个桌面（所有显示器），保存为 PNG。用于查看当前桌面状态、验证 GUI 效果。比手动按 PrintScreen 更方便（自动保存到 screenshots/ + 文件名管理）。",
 		Description: "截取整个桌面（所有显示器），保存为 PNG 图片到 screenshots/ 目录。" +
 			"返回文件路径、尺寸和截图时间。" +
-			"之后可用 image_analyze 分析截图中的颜色/色块/图形，或用 image_ocr 识别文字。",
+			"之后可用多模态模型（如 DeepSeek-VL）直接分析截图内容。",
 		Parameters: ObjSchema(Props{
 			"name": StrProp("可选：自定义文件名（不含扩展名），默认自动生成时间戳名称"),
 		}),

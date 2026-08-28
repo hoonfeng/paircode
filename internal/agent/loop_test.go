@@ -137,7 +137,10 @@ func TestLoopApprovalReject(t *testing.T) {
 	}}
 	var approvedTools []string
 	loop := &Loop{Provider: mock, Registry: reg, MaxIterations: 5,
-		Approve: func(ctx context.Context, tc ToolCall) (bool, string) { approvedTools = append(approvedTools, tc.Function.Name); return false, "" }}
+		Approve: func(ctx context.Context, tc ToolCall) (bool, string) {
+			approvedTools = append(approvedTools, tc.Function.Name)
+			return false, ""
+		}}
 
 	msgs, err := loop.Run(context.Background(), "写个文件", nil)
 	if err != nil {
@@ -220,48 +223,43 @@ func TestCanParallelize(t *testing.T) {
 	reg.Register(&Tool{Name: "search", ReadOnly: true})
 	reg.Register(&Tool{Name: "write", ReadOnly: false})
 
-	if canParallelize(nil, reg) { t.Error("空调用不应并行") }
-	if canParallelize([]ToolCall{{Function: FunctionCall{Name: "read"}}}, reg) { t.Error("单个调用不应并行") }
+	if canParallelize(nil, reg) {
+		t.Error("空调用不应并行")
+	}
+	if canParallelize([]ToolCall{{Function: FunctionCall{Name: "read"}}}, reg) {
+		t.Error("单个调用不应并行")
+	}
 	if !canParallelize([]ToolCall{
 		{Function: FunctionCall{Name: "read"}},
 		{Function: FunctionCall{Name: "search"}},
-	}, reg) { t.Error("两个只读工具应可并行") }
+	}, reg) {
+		t.Error("两个只读工具应可并行")
+	}
 	if canParallelize([]ToolCall{
 		{Function: FunctionCall{Name: "read"}},
 		{Function: FunctionCall{Name: "write"}},
-	}, reg) { t.Error("含写工具不应并行") }
-}
-
-// TestRejectTrack 验证驳回追踪：连续3次→停止。
-func TestRejectTrack(t *testing.T) {
-	rt := &rejectTrack{}
-	stop, _ := rt.record("write_file")
-	if stop { t.Error("首次驳回不应停止") }
-	stop, _ = rt.record("write_file")
-	if stop { t.Error("2次驳回不应停止") }
-	stop, reason := rt.record("write_file")
-	if !stop { t.Error("3次驳回应停止") }
-	if reason == "" { t.Error("停止时应给原因") }
-	// 切换工具→重置
-	stop, _ = rt.record("delete_file")
-	if stop { t.Error("不同工具应重置") }
-	if rt.count != 1 { t.Errorf("切换后 count=1: %d", rt.count) }
-	// resetIf
-	rt.resetIf("delete_file")
-	if rt.count != 0 { t.Error("resetIf 应清零") }
+	}, reg) {
+		t.Error("含写工具不应并行")
+	}
 }
 
 // TestToolError 验证统一错误类型。
 func TestToolError(t *testing.T) {
 	e := NewToolError("edit_file", "替换失败", WithRetryable(true), WithSuggestion("请用行号定位"), WithSeverity("warn"))
-	if !e.Retryable { t.Error("应可重试") }
-	if e.Severity != "warn" { t.Errorf("severity 应为 warn: %s", e.Severity) }
+	if !e.Retryable {
+		t.Error("应可重试")
+	}
+	if e.Severity != "warn" {
+		t.Errorf("severity 应为 warn: %s", e.Severity)
+	}
 	msg := e.Error()
 	if !strings.Contains(msg, "edit_file") || !strings.Contains(msg, "替换失败") || !strings.Contains(msg, "行号定位") {
 		t.Errorf("错误消息不完整: %s", msg)
 	}
 	e2 := NewToolError("run", "超时")
-	if e2.Severity != "error" { t.Errorf("默认 severity=error: %s", e2.Severity) }
+	if e2.Severity != "error" {
+		t.Errorf("默认 severity=error: %s", e2.Severity)
+	}
 }
 
 // TestHookStore 验证多钩子优先级+短路+移除。
@@ -269,13 +267,17 @@ func TestHookStore(t *testing.T) {
 	hs := NewHookStore()
 	var calls []string
 	hs.Add(&Hook{Name: "b2", Kind: HookBefore, Priority: 200, BeforeFn: func(ctx context.Context, n string, a map[string]any) (bool, string, error) {
-		calls = append(calls, "b2"); return true, "", nil
+		calls = append(calls, "b2")
+		return true, "", nil
 	}})
 	hs.Add(&Hook{Name: "b1", Kind: HookBefore, Priority: 50, BeforeFn: func(ctx context.Context, n string, a map[string]any) (bool, string, error) {
-		calls = append(calls, "b1"); return true, "", nil
+		calls = append(calls, "b1")
+		return true, "", nil
 	}})
 	hs.ExecuteBefore(context.Background(), "test", nil)
-	if len(calls) != 2 || calls[0] != "b1" || calls[1] != "b2" { t.Errorf("应 b1 先于 b2: %v", calls) }
+	if len(calls) != 2 || calls[0] != "b1" || calls[1] != "b2" {
+		t.Errorf("应 b1 先于 b2: %v", calls)
+	}
 	// 短路
 	hs2 := NewHookStore()
 	hs2.Add(&Hook{Name: "s1", Kind: HookBefore, BeforeFn: func(ctx context.Context, n string, a map[string]any) (bool, string, error) {
@@ -283,13 +285,92 @@ func TestHookStore(t *testing.T) {
 	}})
 	var shortCalled bool
 	hs2.Add(&Hook{Name: "s2", Kind: HookBefore, BeforeFn: func(ctx context.Context, n string, a map[string]any) (bool, string, error) {
-		shortCalled = true; return true, "", nil
+		shortCalled = true
+		return true, "", nil
 	}})
 	proceed, override, _ := hs2.ExecuteBefore(context.Background(), "test", nil)
-	if proceed || override != "blocked" || shortCalled { t.Error("短路钩子应阻止后续") }
+	if proceed || override != "blocked" || shortCalled {
+		t.Error("短路钩子应阻止后续")
+	}
 	// Remove
 	hs.Remove("b1")
 	calls = nil
 	hs.ExecuteBefore(context.Background(), "test", nil)
-	if len(calls) != 1 || calls[0] != "b2" { t.Errorf("Remove b1 后仅 b2: %v", calls) }
+	if len(calls) != 1 || calls[0] != "b2" {
+		t.Errorf("Remove b1 后仅 b2: %v", calls)
+	}
+}
+
+// ★ 2026-08-21 Live 快照（WS 断线补偿）：emit 累积 content/thinking/tool 事件，
+// SnapshotLive 返回完整进度；resetLive 清空（新 turn 占位）。
+// ★ 2026-08-22 扩展：liveEvents 有序序列保真时序——前端逐事件重放可还原
+//   「thinking→content→tool_call→content」的真实交错顺序（不聚集成工具全上/正文全下）。
+func TestLoopLiveSnapshot(t *testing.T) {
+	l := &Loop{}
+	l.emit(Event{Type: EventThinking, Content: "分析问题"})
+	l.emit(Event{Type: EventContent, Content: "我先看看代码"})
+	l.emit(Event{Type: EventToolCall, Tool: "read_file", Args: `{"path":"main.go"}`, CallID: "c1"})
+	l.emit(Event{Type: EventToolResult, Tool: "read_file", Content: "package main", CallID: "c1"})
+	l.emit(Event{Type: EventContent, Content: "代码结构清晰"})
+
+	content, reasoning, tools, events := l.LiveSnapshot()
+	if content != "我先看看代码代码结构清晰" {
+		t.Errorf("content = %q", content)
+	}
+	if reasoning != "分析问题" {
+		t.Errorf("reasoning = %q", reasoning)
+	}
+	if len(tools) != 1 {
+		t.Fatalf("应 1 个工具段，得 %d", len(tools))
+	}
+	if tools[0].Name != "read_file" || tools[0].Args != `{"path":"main.go"}` || tools[0].Result != "package main" {
+		t.Errorf("工具段 = %+v", tools[0])
+	}
+
+	// ★ 事件序列顺序保真：thinking → content → tool_call → content（重放后不丢失交错）
+	wantTypes := []string{"thinking", "content", "tool_call", "content"}
+	if len(events) != len(wantTypes) {
+		t.Fatalf("事件序列长度 = %d，期望 %d: %+v", len(events), len(wantTypes), events)
+	}
+	for i, wt := range wantTypes {
+		if events[i].Type != wt {
+			t.Errorf("事件[%d] type = %q，期望 %q", i, events[i].Type, wt)
+		}
+	}
+	// 连续 thinking/content 增量合并
+	if events[0].Content != "分析问题" {
+		t.Errorf("thinking 事件内容 = %q", events[0].Content)
+	}
+	if events[1].Content != "我先看看代码" {
+		t.Errorf("content 事件内容 = %q", events[1].Content)
+	}
+	if events[2].CallID != "c1" || events[2].Content != "package main" {
+		t.Errorf("tool_call 事件回填 result 失败: %+v", events[2])
+	}
+
+	// resetLive（新 turn）清空
+	l.resetLive()
+	content, reasoning, tools, events = l.LiveSnapshot()
+	if content != "" || reasoning != "" || len(tools) != 0 || len(events) != 0 {
+		t.Errorf("resetLive 后应清空: content=%q reasoning=%q tools=%d events=%d", content, reasoning, len(tools), len(events))
+	}
+}
+
+// ★ 2026-08-22 连续流式增量合并：thinking/content 多次 emit 应合并为单条事件。
+func TestLoopLiveSnapshotMergeIncrements(t *testing.T) {
+	l := &Loop{}
+	l.emit(Event{Type: EventContent, Content: "你好，"})
+	l.emit(Event{Type: EventContent, Content: "世界"})
+	l.emit(Event{Type: EventThinking, Content: "想"})
+	l.emit(Event{Type: EventThinking, Content: "考"})
+	_, _, _, events := l.LiveSnapshot()
+	if len(events) != 2 {
+		t.Fatalf("应合并为 2 条事件，得 %d: %+v", len(events), events)
+	}
+	if events[0].Type != "content" || events[0].Content != "你好，世界" {
+		t.Errorf("content 合并失败: %+v", events[0])
+	}
+	if events[1].Type != "thinking" || events[1].Content != "想考" {
+		t.Errorf("thinking 合并失败: %+v", events[1])
+	}
 }

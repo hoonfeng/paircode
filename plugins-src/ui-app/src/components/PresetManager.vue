@@ -20,8 +20,8 @@
         </select>
       </div>
       <div class="mgm-field">
-        <span class="mgm-field-label">Base URL</span>
-        <input v-model="form.baseURL" type="text" placeholder="https://api.deepseek.com/v1" />
+        <span class="mgm-field-label">API URL（完整端点）</span>
+        <input v-model="form.baseURL" type="text" placeholder="https://api.deepseek.com/v1/chat/completions" />
       </div>
       <div class="mgm-field">
         <span class="mgm-field-label">API Key</span>

@@ -30,7 +30,8 @@ package.json、go.mod、.env、CLAUDE.md、AGENTS.md、Dockerfile、.gitignore �
 {"verdict":"通过"|"驳回"|"需要修改","confidence":0.0-1.0,"issues":[{"severity":"严重"|"重要"|"轻微","description":"问题描述","location":"文件:行号"}],"suggestions":["改进建议"],"summary":"审核结论一句话总结"}
 
 # 决策标准
-- 无安全隐患且变更合理 → 通过
+- 无安全隐患且变更合理，与当前任务上下文一致 → 通过
+- Agent 正按照用户的任务要求修改文件/运行命令 → 除非有明确的安全风险，否则应放行
 - 存在安全问题或触发关键文件保护 → 驳回
 - 需调整但不严重 → 需要修改 + 具体建议
 - 所有审核输出使用中文

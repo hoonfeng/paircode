@@ -482,8 +482,8 @@ func (b *GoBuilder) parseCallExprs(body *ast.BlockStmt, fset *token.FileSet, fil
 			FilePath: filePath,
 			Line:     callLine,
 			Metadata: map[string]string{
-				"caller":  callerID,
-				"callee":  calleeName,
+				"caller": callerID,
+				"callee": calleeName,
 			},
 		}
 		b.graph.AddEntity(callSiteEntity)

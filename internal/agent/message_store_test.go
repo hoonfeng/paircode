@@ -929,3 +929,65 @@ func TestMessageStore_CheckAndArchive(t *testing.T) {
 		}
 	})
 }
+
+// TestNormalizeAskType 归一化 ask_type 变体（模型可能生成 various 变体）。
+func TestNormalizeAskType(t *testing.T) {
+	cases := map[string]string{
+		"":                    "text",
+		"text":                "text",
+		"input":               "text",
+		"free-text":           "text",
+		"single":              "single",
+		"single-choice":       "single",
+		"radio":               "single",
+		"choice":              "single",
+		"multi":               "multi",
+		"multiple":            "multi",
+		"checkbox":            "multi",
+		"multi-select":        "multi",
+		"single_with_input":   "single-with-input",
+		"single-with-input":   "single-with-input",
+		"single-input":        "single-with-input",
+		"choice-with-input":   "single-with-input",
+		"single_with_custom":  "single-with-input",
+		"unknown_variant_xyz": "text", // 未知变体回退 text（保证输入框出现）
+	}
+	for in, want := range cases {
+		if got := normalizeAskType(in); got != want {
+			t.Errorf("normalizeAskType(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// TestParseAskArgs_Variants parseAskArgs 对 askType 变体与 type 字段容错。
+func TestParseAskArgs_Variants(t *testing.T) {
+	// 变体：type=single_with_input + options
+	q, at, opts := parseAskArgs(`{"question":"继续吗?","type":"single_with_input","options":["是","否"]}`)
+	if q != "继续吗?" {
+		t.Errorf("question = %q", q)
+	}
+	if at != "single-with-input" {
+		t.Errorf("askType = %q, want single-with-input", at)
+	}
+	if len(opts) != 2 {
+		t.Errorf("options = %v", opts)
+	}
+
+	// 变体：askType=choice（single 语义）
+	_, at2, _ := parseAskArgs(`{"question":"选一个","askType":"choice","options":["A","B"]}`)
+	if at2 != "single" {
+		t.Errorf("askType = %q, want single", at2)
+	}
+
+	// 未知类型回退 text
+	_, at3, _ := parseAskArgs(`{"question":"x","askType":"whatever"}`)
+	if at3 != "text" {
+		t.Errorf("askType = %q, want text", at3)
+	}
+
+	// 无参数 → 原始文本 + text
+	q4, at4, _ := parseAskArgs(`裸问题`)
+	if q4 != `裸问题` || at4 != "text" {
+		t.Errorf("got q=%q at=%q", q4, at4)
+	}
+}

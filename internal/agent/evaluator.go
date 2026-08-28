@@ -36,8 +36,14 @@ type Evaluator struct {
 	SystemPrompt string // 评分系统提示（空=用内置默认）；宿主可从 config 加载覆盖（非硬编码）
 }
 
-// DefaultJudgePrompt 内置默认评分提示（config/roles/judge.md 缺失时的回退）。
-func DefaultJudgePrompt() string { return judgeSystemPrompt }
+// DefaultJudgePrompt 评测角色提示（磁盘优先：config/roles/judge.md 覆盖；
+// 缺失/不可读时回退内置 judgeSystemPrompt）。★ t1 C1/C2 闭环：角色内容在磁盘。
+func DefaultJudgePrompt() string {
+	if s := LoadRolePrompt("judge"); s != "" {
+		return s
+	}
+	return judgeSystemPrompt
+}
 
 // judgeSystemPrompt 复刻参考 bench/evaluator.ts 的 JUDGE_SYSTEM_PROMPT（评分维度 + 输出格式）。
 const judgeSystemPrompt = `你是一个严格的代码质量评审专家。请根据以下维度评估任务完成质量：
@@ -67,7 +73,7 @@ func (e *Evaluator) Evaluate(ctx context.Context, task, summary string) (Evaluat
 		msg = string(r[:16000])
 	}
 	resp, err := e.Provider.Chat(ctx, []Message{
-		{Role: RoleSystem, Content: orDefault(e.SystemPrompt, judgeSystemPrompt)},
+		{Role: RoleSystem, Content: orDefault(e.SystemPrompt, DefaultJudgePrompt())},
 		{Role: RoleUser, Content: msg},
 	}, nil, nil)
 	if err != nil {

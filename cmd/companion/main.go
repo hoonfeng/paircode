@@ -1,7 +1,6 @@
 // PairCode IDE Web 服务器入口。
 // 直接启动 Web 服务（不再有 goui 启动面板）。
 //
-//go:build windows
 
 package main
 

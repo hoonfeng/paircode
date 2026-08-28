@@ -149,11 +149,11 @@ func (qe *QueryEngine) GetFunctionDefinition(name string) []FuncLocation {
 
 // ClassHierarchy 类型层次结构。
 type ClassHierarchy struct {
-	Type       *Entity          `json:"type"`
-	Methods    []FuncLocation   `json:"methods"`
-	Fields     []*Entity        `json:"fields"`
-	Embedded   []string         `json:"embedded"`   // 嵌入的类型
-	Interfaces []string         `json:"interfaces"` // 实现的接口
+	Type       *Entity        `json:"type"`
+	Methods    []FuncLocation `json:"methods"`
+	Fields     []*Entity      `json:"fields"`
+	Embedded   []string       `json:"embedded"`   // 嵌入的类型
+	Interfaces []string       `json:"interfaces"` // 实现的接口
 }
 
 // GetClassHierarchy 返回指定类型（struct/interface）的完整层次结构。
@@ -205,11 +205,11 @@ func (qe *QueryEngine) GetClassHierarchy(typeName string) *ClassHierarchy {
 
 // CallInfo 调用关系信息。
 type CallInfo struct {
-	CallerName  string `json:"callerName"`  // 调用者名称
-	CalleeName  string `json:"calleeName"`  // 被调用者名称
-	CallerFile  string `json:"callerFile"`  // 调用者文件
-	CallerLine  int    `json:"callerLine"`  // 调用所在行
-	CallerKind  string `json:"callerKind"`  // 调用者类型
+	CallerName string `json:"callerName"` // 调用者名称
+	CalleeName string `json:"calleeName"` // 被调用者名称
+	CallerFile string `json:"callerFile"` // 调用者文件
+	CallerLine int    `json:"callerLine"` // 调用所在行
+	CallerKind string `json:"callerKind"` // 调用者类型
 }
 
 // GetCallers 返回调用指定函数的所有调用者。
@@ -287,11 +287,11 @@ func (qe *QueryEngine) GetCallees(funcName string) []CallInfo {
 
 // ImpactResult 影响分析结果。
 type ImpactResult struct {
-	StartEntity  *Entity       `json:"startEntity"`
-	Paths        []ImpactPath  `json:"paths"`
-	AffectedFiles []string      `json:"affectedFiles"`
-	AffectedFuncs []string      `json:"affectedFuncs"`
-	Summary      string         `json:"summary"`
+	StartEntity   *Entity      `json:"startEntity"`
+	Paths         []ImpactPath `json:"paths"`
+	AffectedFiles []string     `json:"affectedFiles"`
+	AffectedFuncs []string     `json:"affectedFuncs"`
+	Summary       string       `json:"summary"`
 }
 
 // ImpactAnalysis 分析修改某实体后的影响范围。
@@ -366,7 +366,7 @@ func (qe *QueryEngine) ImpactAnalysis(entityID string, maxDepth int) *ImpactResu
 
 // SearchResult 搜索结果。
 type SearchResult struct {
-	Entity   *Entity `json:"entity"`
+	Entity    *Entity `json:"entity"`
 	Relevance float64 `json:"relevance"` // 相关度评分（0-1）
 }
 
@@ -737,10 +737,10 @@ func GetEditContext(qe *QueryEngine, root, filePath string, line int, maxTokens 
 		callers := qe.GetCallers(target.Name)
 		for _, c := range callers {
 			cd := CallerDetail{
-				Name:      c.CallerName,
-				Kind:      c.CallerKind,
-				FilePath:  c.CallerFile,
-				Line:      c.CallerLine,
+				Name:     c.CallerName,
+				Kind:     c.CallerKind,
+				FilePath: c.CallerFile,
+				Line:     c.CallerLine,
 			}
 			// 读取调用者源码（前后 5 行）
 			if source, err := readFileLines(root, c.CallerFile, c.CallerLine-3, c.CallerLine+3); err == nil {
@@ -1219,6 +1219,7 @@ type DeadEntity struct {
 //   - 函数/方法：没有被其他函数/方法调用（无 incoming RelCalls 边）
 //   - 全局变量/常量：没有被引用
 //   - 结构体/接口：没有被引用
+//
 // 注意：Go 的反射和接口动态分发可能导致误报，结果仅供参考。
 func (qe *QueryEngine) FindDeadCode() *DeadCodeResult {
 	result := &DeadCodeResult{}
@@ -1229,8 +1230,8 @@ func (qe *QueryEngine) FindDeadCode() *DeadCodeResult {
 
 	// 常见的「入口点」函数名（不能算死代码）
 	entryPoints := map[string]bool{
-		"main":    true,
-		"init":    true,
+		"main":     true,
+		"init":     true,
 		"TestMain": true,
 	}
 
@@ -1290,13 +1291,13 @@ func (qe *QueryEngine) FindDeadCode() *DeadCodeResult {
 
 // ModuleArchitecture 模块架构信息。
 type ModuleArchitecture struct {
-	Directory      string        `json:"directory"`      // 目录路径
-	FileCount      int           `json:"fileCount"`      // 文件数
-	FunctionCount  int           `json:"functionCount"`  // 函数/方法数
-	ExportedFuncs  []string      `json:"exportedFuncs"`  // 导出函数列表
-	Types          []string      `json:"types"`          // 类型列表
-	Imports        []string      `json:"imports"`        // 导入的外部包
-	InternalDeps   []string      `json:"internalDeps"`   // 内部依赖
+	Directory       string               `json:"directory"`       // 目录路径
+	FileCount       int                  `json:"fileCount"`       // 文件数
+	FunctionCount   int                  `json:"functionCount"`   // 函数/方法数
+	ExportedFuncs   []string             `json:"exportedFuncs"`   // 导出函数列表
+	Types           []string             `json:"types"`           // 类型列表
+	Imports         []string             `json:"imports"`         // 导入的外部包
+	InternalDeps    []string             `json:"internalDeps"`    // 内部依赖
 	ComplexHotspots []FunctionComplexity `json:"complexHotspots"` // 高复杂度热点
 }
 
@@ -1311,7 +1312,6 @@ func (qe *QueryEngine) GetModuleArchitecture(root, dirPath string) *ModuleArchit
 	typeSet := make(map[string]bool)
 	importSet := make(map[string]bool)
 	internalDepSet := make(map[string]bool)
-
 
 	for _, fe := range allEntities {
 		if !strings.HasPrefix(fe.FilePath, dirPath) {

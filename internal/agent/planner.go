@@ -32,8 +32,14 @@ type Planner struct {
 	SystemPrompt string // 角色系统提示（空=用内置默认）；宿主可从 config 加载覆盖（非硬编码）
 }
 
-// DefaultPlannerPrompt 内置默认规划角色提示（config/roles/planner.md 缺失时的回退）。
-func DefaultPlannerPrompt() string { return plannerSystemPrompt }
+// DefaultPlannerPrompt 规划角色提示（磁盘优先：config/roles/planner.md 覆盖；
+// 缺失/不可读时回退内置 plannerSystemPrompt）。★ t1 C1/C2 闭环：角色内容在磁盘。
+func DefaultPlannerPrompt() string {
+	if s := LoadRolePrompt("planner"); s != "" {
+		return s
+	}
+	return plannerSystemPrompt
+}
 
 // plannerSystemPrompt 复刻参考 prompts/roles/planner.md（角色/原则/步骤规范/输出格式/规则）。
 const plannerSystemPrompt = `# 角色
@@ -79,7 +85,7 @@ func (p *Planner) Plan(ctx context.Context, task string, history []Message) (Pla
 			return Plan{}, err
 		}
 		msgs := make([]Message, 0, len(history)+2)
-		msgs = append(msgs, Message{Role: RoleSystem, Content: orDefault(p.SystemPrompt, plannerSystemPrompt)})
+		msgs = append(msgs, Message{Role: RoleSystem, Content: orDefault(p.SystemPrompt, DefaultPlannerPrompt())})
 		msgs = append(msgs, history...)
 		msgs = append(msgs, Message{Role: RoleUser, Content: planUserPrompt(task, lastErr)})
 		resp, err := p.Provider.Chat(ctx, msgs, nil, nil)

@@ -69,7 +69,7 @@ func (l *Loop) tryParallelExecute(ctx context.Context, calls []ToolCall, msgs []
 	}
 
 	// 收集需要并行执行的任务
-	var toExec []int   // 需要执行的下标
+	var toExec []int // 需要执行的下标
 	var wg sync.WaitGroup
 	type execResult struct {
 		idx    int
@@ -115,14 +115,14 @@ func (l *Loop) tryParallelExecute(ctx context.Context, calls []ToolCall, msgs []
 		output := r.output
 		if r.err != nil {
 			output = "Error: " + r.err.Error()
+		} else {
+			// ★ 图片提交（2026-08-22）：工具结果含 submit_image 标记 → 读图挂 pendingImages
+			output = l.parseImageSubmitResult(output)
 		}
 		tc := preflight[r.idx].tc
 		l.emit(Event{Type: EventToolResult, Tool: tc.Function.Name, Content: output, CallID: tc.ID})
 		msgs = append(msgs, Message{Role: RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: output})
 		l.trackCall(tc.Function.Name, tc.Function.Arguments, r.err != nil || strings.HasPrefix(strings.TrimSpace(output), "Error:"))
-		if tc.Function.Name == "generate_commit_message" {
-			l.commitMessage = output
-		}
 	}
 
 	return msgs, true
@@ -155,14 +155,14 @@ func (l *Loop) executeReadOnlyParallel(ctx context.Context, calls []ToolCall, ms
 		output := r.output
 		if r.err != nil {
 			output = "Error: " + r.err.Error()
+		} else {
+			// ★ 图片提交（2026-08-22）：工具结果含 submit_image 标记 → 读图挂 pendingImages
+			output = l.parseImageSubmitResult(output)
 		}
 		l.emit(Event{Type: EventToolResult, Tool: r.tc.Function.Name, Content: output, CallID: r.tc.ID})
 		msgs = append(msgs, Message{Role: RoleTool, ToolCallID: r.tc.ID, Name: r.tc.Function.Name, Content: output})
 		l.trackCall(r.tc.Function.Name, r.tc.Function.Arguments, r.err != nil || strings.HasPrefix(strings.TrimSpace(output), "Error:"))
 
-		if r.tc.Function.Name == "generate_commit_message" {
-			l.commitMessage = output
-		}
 	}
 	return msgs
 }

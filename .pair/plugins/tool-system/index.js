@@ -1,9 +1,11 @@
 // ═══════════════════════════════════════════════════════════════
-// tool-system — 系统内部工具（SystemTool + Skills/MCP/市场/提交信息：update_tasks/update_plan/tool_stats/history_*/skill_*/mcp_*/generate_commit_message）——全部可更换
+// tool-system — 系统内部工具（SystemTool + Skills/MCP/市场：update_tasks/update_plan/tool_stats/history_*/skill_*/mcp_*）——全部可更换
 //
 // 生成来源（2026-08-16）：内置 Go 工具组 → 磁盘外置插件（tool_plugin_gen.go
 // 自动生成，schema 完整外置拷贝）。api 声明在插件，execute 调 ctx.hostTool 复用宿主 Go 执行器（对齐 harness seam：编排在插件、能力在宿主）。
-// 工具清单：skill_list、load_skill、load_skill_resource、skill_write、skill_delete、mcp_list、mcp_add、mcp_remove、history_search、history_list、history_count、update_plan、tool_stats、update_tasks、generate_commit_message
+// ★ 2026-08-29（t2 集成修复）：移除 generate_commit_message——宿主无对应 Go 实现
+//   （零消费方），claimTool 无存档导致 hostTool 执行必失败；与生成器白名单对齐。
+// 工具清单：skill_list、load_skill、load_skill_resource、skill_write、skill_delete、mcp_list、mcp_add、mcp_remove、history_search、history_list、history_count、update_plan、tool_stats、update_tasks
 // ═══════════════════════════════════════════════════════════════
 const tools = [
   {
@@ -323,22 +325,6 @@ const tools = [
     "systemTool": true
   },
   {
-    "name": "generate_commit_message",
-    "description": "在任务完成时调用此工具，生成一段简洁的 git commit message。参数 message 应是一段简要描述本次变更的句子，用作自动提交信息。系统提示中的「完成标记」已说明输出完成总结的方式，此工具只负责记录提交信息。",
-    "parameters": {
-      "properties": {
-        "message": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "message"
-      ],
-      "type": "object"
-    },
-    "systemTool": true
-  },
-  {
     "name": "ask_user",
     "description": "向用户提问并等待回答（用于关键决策、歧义澄清，别滥用）。question 必填；askType 可选(text/single/multi/single-with-input)，默认 text 纯文本输入；options 可选(选择类 question 的选项列表；single-with-input 时用户可另选或自定义输入)。调用会阻塞直到用户回答。",
     "parameters": {
@@ -406,7 +392,7 @@ const tools = [
 
 return {
   name: 'tool-system',
-  purpose: '系统内部工具（SystemTool + Skills/MCP/市场/提交信息：update_tasks/update_plan/tool_stats/history_*/skill_*/mcp_*/generate_commit_message）——全部可更换（自动生成，迁移自内置 Go 工具组）',
+  purpose: '系统内部工具（SystemTool + Skills/MCP/市场：update_tasks/update_plan/tool_stats/history_*/skill_*/mcp_*）——全部可更换（自动生成，迁移自内置 Go 工具组）',
   apply(ctx) {
     for (const t of tools) {
       ctx.tools.register({

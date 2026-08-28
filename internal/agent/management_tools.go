@@ -69,18 +69,18 @@ func RegisterManagementTools(r *Registry, root string) {
 		},
 	})
 	r.Register(&Tool{
-		Name: "load_skill",
+		Name:        "load_skill",
 		Description: "加载某技能的完整 SKILL.md 正文（L2 渐进式披露）。",
-		ReadOnly: true,
-		Parameters: mObjSchema(map[string]any{"name": mStrProp("技能名")}, "name"),
+		ReadOnly:    true,
+		Parameters:  mObjSchema(map[string]any{"name": mStrProp("技能名")}, "name"),
 		Handler: func(_ context.Context, args map[string]any) (string, error) {
 			return loadSkillFull(mArgStr(args, "name"), root)
 		},
 	})
 	r.Register(&Tool{
-		Name: "load_skill_resource",
+		Name:        "load_skill_resource",
 		Description: "加载某技能的子资源文件（L3 渐进式披露）。",
-		ReadOnly: true,
+		ReadOnly:    true,
 		Parameters: mObjSchema(map[string]any{
 			"name": mStrProp("技能名"), "path": mStrProp("资源相对路径"),
 		}, "name", "path"),
@@ -89,12 +89,12 @@ func RegisterManagementTools(r *Registry, root string) {
 		},
 	})
 	r.Register(&Tool{
-		Name: "skill_write",
-		Description: "创建或更新一个技能（写入 .pair/skills/<名>/SKILL.md）。",
+		Name:             "skill_write",
+		Description:      "创建或更新一个技能（写入 .pair/skills/<名>/SKILL.md）。",
 		RequiresApproval: true,
 		Parameters: mObjSchema(map[string]any{
 			"name": mStrProp("技能名"), "description": mStrProp("一句话描述"),
-			"mode": mStrProp("激活模式：auto/always/manual，默认 auto"),
+			"mode":    mStrProp("激活模式：auto/always/manual，默认 auto"),
 			"content": mStrProp("技能正文"),
 		}, "name", "content"),
 		Handler: func(_ context.Context, args map[string]any) (string, error) {
@@ -116,15 +116,15 @@ func RegisterManagementTools(r *Registry, root string) {
 	r.Register(&Tool{
 		Name: "mcp_list", Description: "列出已配置的 MCP 服务器。", ReadOnly: true,
 		Parameters: mObjSchema(map[string]any{}),
-		Handler: func(_ context.Context, _ map[string]any) (string, error) { return listMCPText(), nil },
+		Handler:    func(_ context.Context, _ map[string]any) (string, error) { return listMCPText(), nil },
 	})
 	r.Register(&Tool{
-		Name: "mcp_add",
-		Description: "新增一个 MCP 服务器。scope 可选 user 或 project。",
+		Name:             "mcp_add",
+		Description:      "新增一个 MCP 服务器。scope 可选 user 或 project。",
 		RequiresApproval: true,
 		Parameters: mObjSchema(map[string]any{
 			"name": mStrProp("服务器名"), "command": mStrProp("启动命令"),
-			"args": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+			"args":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
 			"scope": mStrProp("user/project"),
 		}, "name", "command"),
 		Handler: func(_ context.Context, args map[string]any) (string, error) { return mcpAddTool(args) },
@@ -244,9 +244,11 @@ func mcpAddTool(args map[string]any) (string, error) {
 	var levelLabel string
 	switch scope {
 	case "project":
-		level = MCPLevelProject; levelLabel = "工作区级"
+		level = MCPLevelProject
+		levelLabel = "工作区级"
 	default:
-		level = MCPLevelUser; levelLabel = "用户级（全局）"
+		level = MCPLevelUser
+		levelLabel = "用户级（全局）"
 	}
 	if err := MCPUpsert(level, e); err != nil {
 		return "", err

@@ -1,6 +1,5 @@
 // 自主控制器辅助：外层规划工具注册 + 编辑距离等工具
 //
-//go:build windows
 
 package agent
 

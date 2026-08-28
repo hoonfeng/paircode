@@ -67,7 +67,7 @@ JS 插件 execute → ctx.binary.exec(tool, args[, {timeout}]) → text
 
 ## 会话状态协议（tool-system 保持 hostTool 的依据）
 
-框架协议工具（update_tasks / ask_user / generate_commit_message / tool_stats /
+框架协议工具（update_tasks / ask_user / tool_stats /
 cordis_* / toolset_* / history_* 等）**保持宿主实现**——它们绑定会话内存态
 （Loop 计划步骤、审核门、UI 任务面板/进度、对话压缩引用），非纯磁盘编码能力。
 
@@ -198,14 +198,14 @@ go run -tags toolsgen ./dev/tool_plugin_gen   # 幂等：已有插件不覆盖�
   apply 时 `ctx.loopFactory.register(apply)`，每次创建循环（会话 Start /
   自闭环 Run 统一走 CreateLoop）时收到装配快照、返回非空字段覆盖。config
   支持 systemAppend（追加系统提示词）/maxIterations/maxContextTokens/
-  autonomous/maxAutonomousMinutes/checkpointInterval/reviewMode/autoCommit/
+  autonomous/maxAutonomousMinutes/checkpointInterval/reviewMode/
   reviewBlacklist/reviewWhitelist；停用插件自动还原默认工厂（Loop 不受影响）。
   （快照字段实现：internal/agent/jsplugin_loopfactory.go）
-- **`tool-system/`**（2026-08-16 扩容）：系统内部工具 17 个——SystemTool 组
+- **`tool-system/`**（2026-08-16 扩容）：系统内部工具 16 个——SystemTool 组
   （update_tasks/update_plan/tool_stats/history_search/history_list/history_count）
   + Skills（skill_list/load_skill/load_skill_resource/skill_write/skill_delete）
   + MCP（mcp_list/mcp_add/mcp_remove）+ 市场（marketplace_search/
-  marketplace_install）+ 提交信息（generate_commit_message）。execute 全走
+  marketplace_install）。execute 全走
   `ctx.hostTool.exec`（宿主 Go 执行器：编排在插件、能力在宿主）。生成器
   tool_plugin_gen.go 的 tool-system 组白名单同步维护（含 11 个新工具），
   `go run -tags toolsgen ./dev/tool_plugin_gen` 重跑不丢失。**ask_user/

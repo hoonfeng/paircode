@@ -218,7 +218,9 @@ func TestLoopRunNoAutoCompact(t *testing.T) {
 	reg.Register(&Tool{
 		Name: "echo", Description: "echo", ReadOnly: true,
 		Parameters: objSchema(props{"x": strProp("x")}, "x"),
-		Handler:    func(_ context.Context, args map[string]any) (string, error) { return "echoed " + argStr(args, "x"), nil },
+		Handler: func(_ context.Context, args map[string]any) (string, error) {
+			return "echoed " + argStr(args, "x"), nil
+		},
 	})
 	var responses []Message
 	for i := 0; i < 18; i++ {
@@ -265,7 +267,7 @@ func TestTrimToolResult(t *testing.T) {
 
 	// 2. 超长内容截断：保留开头与结尾，中间省略标记
 	longContent := strings.Repeat("甲", 4000) + "中间关键内容" + strings.Repeat("乙", 4000) // 8004 rune > 9000? 不够
-	longContent = strings.Repeat("甲", 6000) + "中间关键内容" + strings.Repeat("乙", 6000)   // 12005 rune
+	longContent = strings.Repeat("甲", 6000) + "中间关键内容" + strings.Repeat("乙", 6000)  // 12005 rune
 	long := Message{Role: RoleTool, ToolCallID: "c2", Name: "run_command", Content: longContent}
 	got := l.trimToolResult(long)
 	if len([]rune(got.Content)) >= len([]rune(longContent)) {
@@ -323,47 +325,16 @@ func TestBuildCallContextTrimTool(t *testing.T) {
 	}
 }
 
-// TestBuildCallContextBackgroundBeforeTask 验证：背景类 ephemeral 消息
-// （历史摘要/执行日志/过期检查，带 backgroundCtxMarker 前缀）必须插入到
-// 当前任务（最后一条 user 消息）之前，不能追加在任务之后——
-// 否则 LLM 会把「历史摘要」误认为最新输入，只核对历史不执行任务。
-func TestBuildCallContextBackgroundBeforeTask(t *testing.T) {
-	l := &Loop{}
-	msgs := []Message{
-		{Role: RoleSystem, Content: "sys"},
-		{Role: RoleUser, Content: "旧任务1"},
-		{Role: RoleAssistant, Content: "旧回复"},
-		{Role: RoleUser, Content: "当前任务"},
-	}
-	// 背景摘要（带标记）+ 即时指令（用户反馈，不带标记）
-	l.ephemeralMsgs = []Message{
-		{Role: RoleUser, Content: backgroundCtxMarker + "# 上下文已压缩——历史摘要\n..."},
-		{Role: RoleUser, Content: "【用户反馈】请调整方案"},
-	}
-	out := l.buildCallContext(msgs)
-	if len(out) != 6 {
-		t.Fatalf("输出应含 6 条：%d", len(out))
-	}
-	// 顺序断言：system, 旧任务, 旧回复, 背景摘要, 当前任务, 用户反馈
-	if !strings.Contains(out[3].Content, "上下文已压缩") {
-		t.Errorf("背景摘要应插在任务之前（位置 3），实际 out[3]=%q", out[3].Content)
-	}
-	if out[4].Content != "当前任务" {
-		t.Errorf("当前任务应位于背景之后（位置 4），实际 out[4]=%q", out[4].Content)
-	}
-	if out[5].Content != "【用户反馈】请调整方案" {
-		t.Errorf("即时消息应保持在末尾（位置 5），实际 out[5]=%q", out[5].Content)
-	}
-	// 最后一条 user 必须是当前任务（或即时指令），不能是历史摘要
-	lastUser := out[len(out)-1]
-	if lastUser.Role == RoleUser && strings.Contains(lastUser.Content, "上下文已压缩") {
-		t.Error("历史摘要不得成为最后一条 user 消息")
-	}
-}
+// TestBuildCallContextBackgroundBeforeTask 已被新语义取代：背景类 ephemeral 消息
+// （历史摘要/执行日志/过期检查）不再插入「当前任务之前」的固定背景位——
+// 背景快照已持久化到消息流（syncContextSnapshot，位置=当前任务之后，
+// 对齐 dsh RuntimeContextProjection）。本测试删除，语义见
+// TestBuildCallContextEphemeralMarkerAppended 与 TestSyncContextSnapshotIdempotent。
 
-// TestBuildCallContextBackgroundNoUser 验证：msgs 无 user 消息（异常场景）时，
-// 背景消息兜底放 system 之后而不是丢在末尾造成混淆。
-func TestBuildCallContextBackgroundNoUser(t *testing.T) {
+// TestBuildCallContextEphemeralMarkerAppended 验证：带背景标记的 ephemeral 消息
+// 不再被收集进固定背景位（快照已持久化到消息流），全部按顺序追加末尾。
+// 快照持久化后位置固定，ephemeral marker 消息仅兼容外部注入（追加末尾不影响前缀）。
+func TestBuildCallContextEphemeralMarkerAppended(t *testing.T) {
 	l := &Loop{}
 	msgs := []Message{
 		{Role: RoleSystem, Content: "sys"},
@@ -376,32 +347,70 @@ func TestBuildCallContextBackgroundNoUser(t *testing.T) {
 	if len(out) != 3 {
 		t.Fatalf("输出应含 3 条：%d", len(out))
 	}
-	if !strings.Contains(out[1].Content, "上下文已压缩") {
-		t.Errorf("无 user 时背景应兜底放 system 之后（位置 1），实际 out[1]=%q", out[1].Content)
+	if !strings.Contains(out[2].Content, "上下文已压缩") {
+		t.Errorf("marker ephemeral 应追加末尾（位置 2），实际 out[2]=%q", out[2].Content)
 	}
 }
 
-// TestBuildInjectionMessageHasMarker 验证 buildInjectionMessage 输出带背景标记前缀，
-// 保证 buildCallContext 能将其识别为背景并插到任务之前。
-func TestBuildInjectionMessageHasMarker(t *testing.T) {
-	loop := &Loop{CompressedSummaries: []string{"[压缩摘要] xxx"}}
-	out := loop.buildInjectionMessage()
-	if !strings.HasPrefix(out, backgroundCtxMarker) {
-		t.Errorf("buildInjectionMessage 应以 backgroundCtxMarker 开头，实际前缀=%q", out[:min(len(out), 20)])
+// syncContextSnapshot 注入快照后 build 的前缀稳定验证见 TestBuildCallContextStableAcrossCalls
+// （快照持久化语义：位置固定当前任务之后，零动态注入）。
+
+// TestBuildSnapshotContent 验证 buildSnapshotContent：摘要/状态/记忆/知识库组装、
+// 无内容时返回空（marker 与框架由 syncContextSnapshot 统一包裹）。
+func TestBuildSnapshotContent(t *testing.T) {
+	l := &Loop{
+		staleMsg:            "⚠️ 检测到 3 条可能过期的记忆/知识库条目",
+		CompressedSummaries: []string{"[压缩摘要] 轮次1 完成"},
+		WorkspaceRoot:       "",
 	}
-	if !strings.Contains(out, "并非当前任务") {
-		t.Error("摘要引导语应明确提示非当前任务")
+	out := l.buildSnapshotContent()
+	if out == "" {
+		t.Fatal("有摘要时应返回非空")
 	}
-	// 无摘要且非自主模式 → 无实质内容，不注入
-	if empty := (&Loop{}).buildInjectionMessage(); empty != "" {
-		t.Errorf("无摘要且非自主时不应注入背景块，实际=%q", empty)
+	if !strings.Contains(out, "上下文已压缩") {
+		t.Error("应包含压缩摘要标记")
+	}
+	if !strings.Contains(out, "过期") {
+		t.Error("应包含记忆/知识库过期检查")
+	}
+	// 无摘要且非自主、无状态 → 不含摘要/自主/状态段（记忆/知识库为全局数据，
+	// 存在于否不归 Loop 控制——只断言策略段不出现）
+	empty := (&Loop{}).buildSnapshotContent()
+	if strings.Contains(empty, "上下文已压缩") || strings.Contains(empty, "自主模式") || strings.Contains(empty, "过期") {
+		t.Errorf("无摘要/非自主/无状态时不应含策略段，实际=%q", empty)
 	}
 }
 
-// TestBuildCallContextStableAcrossCalls 验证：背景块（过期检查/摘要）每次迭代注入
-// **相同内容且位置固定**（当前任务之前），使 iter1/iter2 的消息前缀完全一致——
-// 这是 KV Cache 前缀命中的前提：若背景只在第一次迭代注入，第二次迭代前缀会在
-// 背景处断裂，损失后续所有迭代对首轮缓存（历史大头）的复用。
+// TestSyncContextSnapshotIdempotent 验证快照同步幂等语义（对齐 dsh
+// RuntimeContextProjection）：内容相同 → 零注入；不同 → 追加新快照到
+// 当前任务之后（随 tail 落盘），旧快照保留（append-only，位置固定）。
+func TestSyncContextSnapshotIdempotent(t *testing.T) {
+	l := &Loop{CompressedSummaries: []string{"[摘要] A"}}
+	msgs := []Message{{Role: RoleUser, Content: "任务1"}}
+	// 首次同步：注入快照（任务之后）
+	msgs = l.syncContextSnapshot(msgs)
+	if len(msgs) != 2 || msgs[1].Role != RoleUser || !strings.HasPrefix(msgs[1].Content, backgroundCtxMarker) {
+		t.Fatalf("首次同步应注入快照到任务之后，实际 msgs=%+v", msgs)
+	}
+	// 内容相同 → 零注入
+	again := l.syncContextSnapshot(append([]Message{}, msgs...))
+	if len(again) != len(msgs) {
+		t.Fatalf("内容相同应零注入，实际 len=%d -> %d", len(msgs), len(again))
+	}
+	// 内容变化（新增摘要）→ 追加新快照（旧快照保留）
+	l.CompressedSummaries = append(l.CompressedSummaries, "[摘要] B")
+	changed := l.syncContextSnapshot(append([]Message{}, msgs...))
+	if len(changed) != 3 {
+		t.Fatalf("内容变化应追加新快照（旧快照保留），实际 len=%d", len(changed))
+	}
+	if !strings.Contains(changed[2].Content, "[摘要] B") {
+		t.Error("新快照应含新摘要内容")
+	}
+}
+
+// TestBuildCallContextStableAcrossCalls 验证：快照（过期检查/摘要）同步进消息流后，
+// build 输出前缀稳定——快照位置固定（当前任务之后），跨迭代仅末尾单调增长，
+// 这是 KV Cache 前缀命中的前提（快照不再每次迭代动态注入，位置不漂移）。
 func TestBuildCallContextStableAcrossCalls(t *testing.T) {
 	l := &Loop{
 		staleMsg:            "⚠️ 检测到 3 条可能过期的记忆/知识库条目",
@@ -413,6 +422,8 @@ func TestBuildCallContextStableAcrossCalls(t *testing.T) {
 		{Role: RoleAssistant, Content: "旧回复"},
 		{Role: RoleUser, Content: "当前任务"},
 	}
+	// ★ Run 开始：快照同步进消息流（任务之后）
+	msgs = l.syncContextSnapshot(msgs)
 	call1 := l.buildCallContext(msgs)
 	// 模拟 iter1 后追加 assistant tool_call + tool 结果
 	msgs = append(msgs,
@@ -430,11 +441,18 @@ func TestBuildCallContextStableAcrossCalls(t *testing.T) {
 				j, call1[j].Role, truncStr(call1[j].Content, 40), call2[j].Role, truncStr(call2[j].Content, 40))
 		}
 	}
-	// 背景（过期检查+摘要）应插在 task 前且每次相同
-	if !strings.Contains(call1[3].Content, "过期") {
-		t.Errorf("背景应含过期检查且在 task 前，实际 call1[3]=%q", call1[3].Content)
+	// 快照（过期检查+摘要）应位于当前任务之后且在 iter1/iter2 相同位置；
+	// 快照自带「非当前任务」声明（对齐 dsh runtime context snapshot：在任务
+	// 之后，用声明让模型区分任务与背景，避免误把快照当最新输入）
+	if !strings.Contains(call1[4].Content, "过期") {
+		t.Errorf("快照应含过期检查且位于任务之后（位置 4），实际 call1[4]=%q", call1[4].Content)
 	}
-	if !strings.Contains(call2[3].Content, "过期") {
-		t.Errorf("iter2 背景仍应含过期检查（每次注入），实际 call2[3]=%q", call2[3].Content)
+	if !strings.Contains(call2[4].Content, "过期") {
+		t.Errorf("iter2 快照仍应含过期检查（位置固定），实际 call2[4]=%q", call2[4].Content)
+	}
+	// 快照必须是最后一条 user 且带非当前任务声明（快照在任务之后）
+	last := call1[len(call1)-1]
+	if last.Role != RoleUser || !strings.Contains(last.Content, "背景上下文") {
+		t.Errorf("快照位于任务之后且带背景标记，实际 last=%+v", last)
 	}
 }

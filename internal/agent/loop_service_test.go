@@ -159,7 +159,8 @@ func TestLoopService_PauseResume(t *testing.T) {
 }
 
 // 控制面·停止：RequestStop 后 Run 提前退出（CancelCause.kind=plugin）。
-func TestLoopService_RequestStop(t *testing.T) {	ph := withLoopSvcHost(t)
+func TestLoopService_RequestStop(t *testing.T) {
+	ph := withLoopSvcHost(t)
 	dir, prov := loopSvcEnv(t)
 	reg := NewRegistry()
 	RegisterDefaultTools(reg, dir)

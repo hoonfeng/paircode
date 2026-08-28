@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/yalue/onnxruntime_go"
 )
@@ -41,18 +42,29 @@ func findModelDir(root string) string {
 	return ""
 }
 
-// findOrtDll 查找 onnxruntime.dll：发布版 bin/config/onnx/ > 项目 bin/config/onnx/ > exe 同目录 > 项目根。
+// findOrtDll 查找 onnxruntime 运行时库（按平台选库名，2026-08-22 多平台化）：
+//
+//	windows → onnxruntime.dll；linux → libonnxruntime.so；darwin → libonnxruntime.dylib
+//
+// 优先级：发布版 bin/config/onnx/ > 项目 bin/config/onnx/ > exe 同目录 > 项目根。
 func findOrtDll(root string) string {
+	libName := "onnxruntime.dll"
+	switch runtime.GOOS {
+	case "linux":
+		libName = "libonnxruntime.so"
+	case "darwin":
+		libName = "libonnxruntime.dylib"
+	}
 	candidates := []string{}
 	if exe, err := os.Executable(); err == nil {
 		exeDir := filepath.Dir(exe)
 		candidates = append(candidates,
-			filepath.Join(exeDir, "bin", "config", "onnx", "onnxruntime.dll"),
-			filepath.Join(exeDir, "onnxruntime.dll"))
+			filepath.Join(exeDir, "bin", "config", "onnx", libName),
+			filepath.Join(exeDir, libName))
 	}
 	candidates = append(candidates,
-		filepath.Join(root, "bin", "config", "onnx", "onnxruntime.dll"),
-		filepath.Join(root, "onnxruntime.dll"))
+		filepath.Join(root, "bin", "config", "onnx", libName),
+		filepath.Join(root, libName))
 	for _, c := range candidates {
 		if _, err := os.Stat(c); err == nil {
 			return c
@@ -96,7 +108,9 @@ func NewONNXBackend(root string) (*ONNXBackend, error) {
 		nil,
 	)
 	if err != nil {
-		inputTensor.Destroy(); maskTensor.Destroy(); outputTensor.Destroy()
+		inputTensor.Destroy()
+		maskTensor.Destroy()
+		outputTensor.Destroy()
 		return nil, fmt.Errorf("创建 ONNX 会话失败: %w", err)
 	}
 	return &ONNXBackend{

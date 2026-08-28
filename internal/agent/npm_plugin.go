@@ -40,9 +40,9 @@ var npmFetchTimeout = 120 * time.Second
 var npmHTTPClient = &http.Client{
 	Timeout: npmFetchTimeout,
 	Transport: &http.Transport{
-		TLSHandshakeTimeout: 30 * time.Second,
+		TLSHandshakeTimeout:   30 * time.Second,
 		ResponseHeaderTimeout: 30 * time.Second,
-		MaxIdleConns:         4,
+		MaxIdleConns:          4,
 	},
 }
 
@@ -556,7 +556,8 @@ func npmPluginMetaByPkg(pkg string) npmPluginMeta {
 // 逐个查询 npm registry latest 对比，返回可更新清单。
 // 单个查询失败不阻塞整体（error 字段记录，方便前端提示网络问题）。
 // ★ 返回 []map[string]any（小写 key）：goja 转 JS 对象时用字段名而非 json tag，
-//   结构体字段名大写会导致前端/agent 取不到（2026-08-20 实测修正）。
+//
+//	结构体字段名大写会导致前端/agent 取不到（2026-08-20 实测修正）。
 func npmPluginCheckUpdates() []map[string]any {
 	entries, err := os.ReadDir(globalPluginsDir())
 	if err != nil {
@@ -607,6 +608,7 @@ type npmPluginUpdateInfo struct {
 //  1. 预查 latest + 版本对比（失败/已最新 → 旧插件不受影响）
 //  2. 卸载旧插件（磁盘目录 + 宿主 def）
 //  3. 重新安装（npmMarketInstall 下载新版本 → 装载 → 固化）
+//
 // 返回人类可读消息。
 func npmPluginUpdate(pkg string) (string, error) {
 	meta := npmPluginMetaByPkg(pkg)

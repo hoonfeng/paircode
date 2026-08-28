@@ -57,8 +57,9 @@ return {
     })
 
       // 执行命令（独立二进制 ui-quick-exec.exe，工作区根 cwd，超时可配）
-      // ★ 2026-08-17：原走 ctx.bash.exec（宿主 runShellWithTimeout 硬编码 120s，
-      // 打包类长命令超 120s 被强制 kill）→ 改经 ctx.binary.exec。
+      // ★ 2026-08-22 JS 原生化：原走 ctx.binary.exec（ui-quick-exec.exe，超时
+      // 语义明确但重了独立二进制）→ 改经 ctx.bash.exec(cmd, cwd, timeoutSec)：
+      // 超时秒精确控制（0=不超时）、进程树杀同语义，见下方实现注释。
       // ★ 超时语义：timeoutMs 是命令级精确控制（exe 内 taskkill /T 杀进程树，不留孤儿）；
       // opts.timeout 只是宿主外层兜底——0=不超时时给 24h（真不超时），>0 时给
       // timeoutMs+60s（须显著大于命令级超时，否则宿主先杀 exe 会让打包子进程变孤儿
@@ -70,26 +71,33 @@ return {
       if (!command) {
         return { ok: false, command: '', output: '', error: '命令为空', exitCode: -1, timedOut: false, durationMs: 0, timeoutMs }
       }
+      // ★ 2026-08-22 JS 原生化：原走 ctx.binary.exec（ui-quick-exec.exe）——
+      // exe 已归档。改经 ctx.bash.exec(cmd, cwd, timeoutSec)：
+      //   · 超时秒（0 = 不超时，宿主 runShellWithTimeoutN deadline=nil 语义；
+      //     缺省 120s 由 <0 触发——这里永远显式传值）
+      //   · 进程树杀（killProcessTree）由宿主保证，不留孤儿
+      //   · 输出上限 16000 字符（原 exe 200KB——大输出场景接受截断）
+      const timeoutSec = timeoutMs > 0 ? Math.ceil(timeoutMs / 1000) : 0
       try {
-        const hostTimeout = timeoutMs > 0 ? timeoutMs + 60000 : 86400000 // 外层兜底：>0 时 +60s；0 时 24h
-        const res = ctx.binary.exec('run', { command, timeoutMs }, { timeout: hostTimeout })
-        let data = {}
-        try { data = JSON.parse((res && res.text) || '{}') } catch (e) { /* 二进制返回非 JSON（理论上不会） */ }
-        const timedOut = !!data.timedOut
-        const exitCode = typeof data.exitCode === 'number' ? data.exitCode : 0
-        let error = ''
-        if (timedOut) error = timeoutMs > 0
-          ? '命令超时（超过 ' + Math.round(timeoutMs / 1000) + ' 秒，已强制结束）'
-          : '命令被强制结束（已超过外层兜底时间）'
-        else if (exitCode !== 0) error = '命令退出码: ' + exitCode
+        const st = Date.now()
+        const res = ctx.bash.exec(command, '', timeoutSec)
+        const durationMs = Date.now() - st
+        const output = (res && res.output) || ''
+        const errMsg = (res && res.error) || ''
+        const timedOut = /超时/.test(errMsg)
+        const exitCode = timedOut ? -1 : (errMsg ? 1 : 0)
+        const error = timedOut
+          ? (timeoutMs > 0 ? '命令超时（超过 ' + Math.round(timeoutMs / 1000) + ' 秒，已强制结束）'
+                           : '命令被强制结束（已超过外层兜底时间）')
+          : errMsg
         return {
-          ok: !timedOut && exitCode === 0,
+          ok: exitCode === 0,
           command: command,
-          output: data.output || '',
+          output: output,
           error: error,
           exitCode: exitCode,
           timedOut: timedOut,
-          durationMs: typeof data.durationMs === 'number' ? data.durationMs : 0,
+          durationMs: durationMs,
           timeoutMs: timeoutMs,
         }
       } catch (e) {

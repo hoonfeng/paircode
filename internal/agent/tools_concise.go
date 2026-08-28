@@ -57,13 +57,13 @@ var conciseToolDescriptions = map[string]string{
 	"memory_search": "按关键词搜记忆（名/摘要/正文）返名+摘要。",
 
 	// ── 插件 cordis ──
-	"cordis_inspect":        "观插件运行时：无 id 摘要、id 版本链、id+version=vN 源码与诊断。",
-	"cordis_define":         "登记 JS/TS 动态插件（预检不运行）：code 为 async 函数体，可 ctx.tools.register/systemPrompt/on/provide；含 client 半自动 global；scope 定 project/global；pluginId 非空则追加版本。",
-	"cordis_run":            "装载已登记插件（id 或 pluginId）：goja 求值并 apply(ctx, config)；重复 run 先卸旧再装新。",
-	"cordis_stop":           "停止运行中插件，回收其工具/提示/监听；定义保留可再 run。",
-	"cordis_undefine":       "删插件定义（先停后忘）；删后不可再 run。",
-	"cordis_service_list":   "列宿主服务与方法签名（写插件先查；静态服务 ctx.xxx 访问，动态 ctx.get）。",
-	"cordis_inspect_query":  "按协议查询插件运行时（platform=host 只读）：provider=service/tool/event/plugin，method=list*/get*。",
+	"cordis_inspect":       "观插件运行时：无 id 摘要、id 版本链、id+version=vN 源码与诊断。",
+	"cordis_define":        "登记 JS/TS 动态插件（预检不运行）：code 为 async 函数体，可 ctx.tools.register/systemPrompt/on/provide；含 client 半自动 global；scope 定 project/global；pluginId 非空则追加版本。",
+	"cordis_run":           "装载已登记插件（id 或 pluginId）：goja 求值并 apply(ctx, config)；重复 run 先卸旧再装新。",
+	"cordis_stop":          "停止运行中插件，回收其工具/提示/监听；定义保留可再 run。",
+	"cordis_undefine":      "删插件定义（先停后忘）；删后不可再 run。",
+	"cordis_service_list":  "列宿主服务与方法签名（写插件先查；静态服务 ctx.xxx 访问，动态 ctx.get）。",
+	"cordis_inspect_query": "按协议查询插件运行时（platform=host 只读）：provider=service/tool/event/plugin，method=list*/get*。",
 
 	// ── 工具集 ──
 	"toolset_build":  "动态构建工具集：分析项目 → 模板组合生成插件 → 装载固化 .pair/toolsets/{name}.json；overwrite=true 覆盖。",
@@ -75,9 +75,7 @@ var conciseToolDescriptions = map[string]string{
 	"toolset_remove": "删工具集（scope 指定作用域；builtin 不可删）。",
 
 	// ── 其他 ──
-	"generate_commit_message": "任务完成时调用：message 为本次变更的简短描述，作自动提交信息。",
-	"ask_user":                "向用户提问等答（关键决策/歧义澄清，勿滥用）；question 必填，askType 定 text/single/multi/single-with-input。",
-	"read_image":              "读图（PNG/JPEG/GIF）返 {path,width,height,mediaType,bytes(base64)}；>2MB 或非支持格式报错。",
+	"ask_user": "向用户提问等答（关键决策/歧义澄清，勿滥用）；question 必填，askType 定 text/single/multi/single-with-input。",
 }
 
 // ApplyConciseToolDescriptions 精简工具描述：深拷贝并替换 description 为文言文精简版。

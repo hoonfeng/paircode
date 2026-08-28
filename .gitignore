@@ -75,3 +75,6 @@ internal/agent/.pair/
 
 # PairCode 内置 bash（含 npm 登录凭据 .npmrc，禁止进仓库）
 bin/bash/
+
+# AgentTeams 团队运行时状态（不入库）.agent-teams/
+# 独立验证临时日志.verify-tmp/

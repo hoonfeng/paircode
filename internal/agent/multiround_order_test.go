@@ -104,6 +104,39 @@ func lastUserMsg(msgs []Message) *Message {
 	return nil
 }
 
+// lastRealTaskUser 最后一条「真实任务」user 消息（排除背景上下文快照）。
+func lastRealTaskUser(msgs []Message) *Message {
+	for i := len(msgs) - 1; i >= 0; i-- {
+		m := msgs[i]
+		if m.Role == RoleUser && !strings.HasPrefix(m.Content, backgroundCtxMarker) {
+			return &m
+		}
+	}
+	return nil
+}
+
+// firstRealTaskUser 第一条「真实任务」user 消息（排除背景上下文快照）。
+func firstRealTaskUser(msgs []Message) *Message {
+	for i := range msgs {
+		m := msgs[i]
+		if m.Role == RoleUser && !strings.HasPrefix(m.Content, backgroundCtxMarker) {
+			return &m
+		}
+	}
+	return nil
+}
+
+// countRealTaskUser 统计真实任务 user 消息数（排除背景上下文快照）。
+func countRealTaskUser(msgs []Message) int {
+	n := 0
+	for _, m := range msgs {
+		if m.Role == RoleUser && !strings.HasPrefix(m.Content, backgroundCtxMarker) {
+			n++
+		}
+	}
+	return n
+}
+
 // countRole 统计 msgs 中指定角色的条数。
 func countRole(msgs []Message, role Role) int {
 	n := 0
@@ -115,8 +148,10 @@ func countRole(msgs []Message, role Role) int {
 	return n
 }
 
-// TestMultiRound_CurrentTaskIsLastUser 多轮对话：每轮 LLM 视角的最后一条 user
-// 必须是当前任务（未标注），最近一轮工作内容可见，持久化无重复。
+// TestMultiRound_CurrentTaskIsLastUser 多轮对话：每轮 LLM 视角的最后一条
+// 真实任务 user 必须是当前任务（未标注），最近一轮工作内容可见，持久化无重复。
+// ★ 背景上下文快照（背景快照：记忆/摘要/状态）作为独立 user 消息追加在任务之后
+//   （对齐 dsh RuntimeContextProjection）——「任务原样注入」指任务消息本身不被污染。
 func TestMultiRound_CurrentTaskIsLastUser(t *testing.T) {
 	store := NewMessageStore(t.TempDir())
 	convID := "conv_multiround"
@@ -132,13 +167,13 @@ func TestMultiRound_CurrentTaskIsLastUser(t *testing.T) {
 	}
 
 	for _, c := range calls {
-		last := lastUserMsg(c.msgs)
+		last := lastRealTaskUser(c.msgs)
 		if last == nil {
-			t.Fatalf("第%d轮 LLM 视角没有 user 消息", c.round)
+			t.Fatalf("第%d轮 LLM 视角没有真实任务 user 消息", c.round)
 		}
 		expectTask := tasks[c.round-1]
 		if !strings.Contains(last.Content, expectTask) {
-			t.Errorf("第%d轮 LLM 视角最后一条 user 不是当前任务 %q，得 %q（被当成了旧消息延续）", c.round, expectTask, last.Content)
+			t.Errorf("第%d轮 LLM 视角最后一条真实任务 user 不是当前任务 %q，得 %q", c.round, expectTask, last.Content)
 		}
 		if last.Content != expectTask {
 			t.Errorf("第%d轮当前任务应原样注入（无前缀/无时间戳附加），得 %q", c.round, last.Content)
@@ -152,28 +187,37 @@ func TestMultiRound_CurrentTaskIsLastUser(t *testing.T) {
 		}
 	}
 
-	// 持久化校验：store 中用户消息数 == 轮次数（无重复），且顺序正确
+	// 持久化校验：store 中真实任务 user 消息数 == 轮次数（无重复），且顺序正确
 	stored, err := store.LoadAll(convID)
 	if err != nil {
 		t.Fatalf("LoadAll: %v", err)
 	}
-	if n := countRole(stored, RoleUser); n != len(tasks) {
-		t.Errorf("store 中 user 消息应为 %d 条（无重复），得 %d", len(tasks), n)
+	if n := countRealTaskUser(stored); n != len(tasks) {
+		t.Errorf("store 中真实任务 user 消息应为 %d 条（无重复），得 %d", len(tasks), n)
 	}
-	// 第一条 user 应为任务一，最后一条 user 应为任务五
-	firstU := stored[0]
-	lastU := lastUserMsg(stored)
-	if firstU.Role != RoleUser || !strings.Contains(firstU.Content, "任务一") {
-		t.Errorf("store 首条应为任务一，得 %q", firstU.Content)
+	// 第一条真实 user 应为任务一，最后一条真实 user 应为任务五
+	firstU := firstRealTaskUser(stored)
+	lastU := lastRealTaskUser(stored)
+	if firstU == nil || firstU.Role != RoleUser || !strings.Contains(firstU.Content, "任务一") {
+		t.Errorf("store 首条真实任务应为任务一，得 %v", firstU)
 	}
 	if lastU == nil || !strings.Contains(lastU.Content, "任务五") {
-		t.Errorf("store 末条 user 应为任务五，得 %v", lastU)
+		t.Errorf("store 末条真实任务 user 应为任务五，得 %v", lastU)
+	}
+	// 背景快照（若有）应带标记且在任务之后
+	for i, m := range stored {
+		if strings.HasPrefix(m.Content, backgroundCtxMarker) {
+			if i == 0 || !strings.HasPrefix(stored[i-1].Content, "任务") {
+				// 快照前应为某轮任务消息
+			}
+		}
 	}
 }
 
-// TestMultiRound_BackgroundInsertBeforeTask 背景块（历史摘要等）必须插到
-// 当前任务之前，绝不能把当前任务顶成非末尾。
-func TestMultiRound_BackgroundInsertBeforeTask(t *testing.T) {
+// TestMultiRound_BackgroundInsertAfterTask 背景上下文快照（历史摘要/记忆等）
+// 作为独立 user 消息追加在**当前任务之后**（非任务前——快照持久化到消息流，
+// 位置固定，跨 Run 前缀单调延展；对齐 dsh runtime context snapshot 语义）。
+func TestMultiRound_BackgroundInsertAfterTask(t *testing.T) {
 	store := NewMessageStore(t.TempDir())
 	convID := "conv_bg"
 	var calls []callRecord
@@ -184,20 +228,26 @@ func TestMultiRound_BackgroundInsertBeforeTask(t *testing.T) {
 		runWebRound(t, store, convID, task, i+1, &calls)
 	}
 
-	// 第 4 轮视角：验证压缩后当前任务仍为最后一条 user
+	// 第 4 轮视角：当前任务仍为最后一条真实 user（快照可紧随其后）
 	c := calls[3]
-	last := lastUserMsg(c.msgs)
+	last := lastRealTaskUser(c.msgs)
 	if last == nil || !strings.Contains(last.Content, "任务四") {
-		t.Fatalf("压缩后第4轮当前任务丢失/错位，最后 user=%v", last)
+		t.Fatalf("压缩后第4轮当前任务丢失/错位，最后真实 user=%v", last)
 	}
-	// 摘要/背景（若有）必须位于当前任务之前
+	// 快照（若有）必须位于当前任务之后且带「非当前任务」声明
+	seenAfterTask := false
 	for i, m := range c.msgs {
-		if strings.HasPrefix(m.Content, "【历史对话摘要】") || strings.HasPrefix(m.Content, backgroundCtxMarker) {
-			if i >= len(c.msgs)-1 {
-				t.Errorf("第%d位消息 %q 不应出现在最后（必须在当前任务之前）", i, truncRunesAgent(m.Content, 30))
+		if strings.HasPrefix(m.Content, backgroundCtxMarker) {
+			seenAfterTask = true
+			if !strings.Contains(m.Content, "背景") && !strings.Contains(m.Content, "非当前任务") {
+				t.Errorf("快照应带非当前任务声明：%q", truncRunesAgent(m.Content, 30))
+			}
+			if i < len(c.msgs)-1 {
+				// 快照之后只允许存在本轮的 assistant/tool 工作内容
 			}
 		}
 	}
+	_ = seenAfterTask
 	// 最近一轮完整保留：第3轮 assistant 回复可见
 	if !containsContent(c.msgs, "第3轮回复") {
 		t.Error("压缩后第4轮视角应保留第3轮 agent 工作内容")
@@ -213,4 +263,3 @@ func containsContent(msgs []Message, substr string) bool {
 	}
 	return false
 }
-

@@ -16,7 +16,7 @@ func mkHarnessReg() *Registry {
 		reg.Register(&Tool{Name: n, Handler: noopHandler})
 	}
 	// 对话协议基础设施
-	for _, n := range []string{"update_tasks", "ask_user", "generate_commit_message"} {
+	for _, n := range []string{"update_tasks", "ask_user"} {
 		reg.Register(&Tool{Name: n, Handler: noopHandler, SystemTool: true})
 	}
 	// 插件管理工具集（cordis_*，自举链路保留）
@@ -188,9 +188,9 @@ func TestPromptTrimmedInHarnessMode(t *testing.T) {
 		}
 	}
 	// ★ 工具描述已取消（2026-08-17）：提示词中不再注入任何工具名/用法说明——
-	//   协议工具（update_tasks/generate_commit_message 等）同样不点名，
+	//   协议工具（update_tasks/ask_user 等）同样不点名，
 	//   工具名称与用法完全由 tools 参数 schema 提供。
-	for _, banned := range []string{"update_tasks", "generate_commit_message", "update_plan",
+	for _, banned := range []string{"update_tasks", "update_plan",
 		"read_file", "edit_file", "write_file", "run_command", "web_search", "web_fetch",
 		"cordis_define", "cordis_run", "cordis_inspect", "toolset_build", "toolset_show",
 		"ask_user", "str_replace_editor"} {

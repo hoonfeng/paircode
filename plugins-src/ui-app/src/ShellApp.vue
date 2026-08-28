@@ -30,10 +30,13 @@
     <div v-else-if="!panelMode" v-show="state.sidebarVisible" :ref="slots.sidebar.hostRef"
          class="plugin-slot-host plugin-area-sidebar"></div>
 
-    <!-- editor 槽位（single）：主编辑区，focusMode 隐藏 -->
-    <div v-if="!panelMode && !state.focusMode && !slots.editor.owner.value"
+    <!-- editor 槽位（single）：主编辑区，focusMode 仅 CSS 隐藏
+         ★ v-show 保持 DOM（不卸载插件 UI）：v-if 会在 focusMode 时销毁宿主 div，
+           退出专注重新显示时 useSingleSlot 判定 owner 未变跳过重渲染 →
+           编辑器空白需整页刷新（历史 bug，同上方 sidebar 修复先例） -->
+    <div v-if="!panelMode && !slots.editor.owner.value" v-show="!state.focusMode"
          class="slot-empty main-area"><span>编辑器未装配（ui-editor）</span><button class="escape-link" @click="pluginsOpen = true">打开插件面板</button></div>
-    <div v-else-if="!panelMode && !state.focusMode" :ref="slots.editor.hostRef"
+    <div v-else-if="!panelMode" v-show="!state.focusMode" :ref="slots.editor.hostRef"
          class="plugin-slot-host main-area"></div>
 
     <!-- right-panel 槽位（single）：右侧对话容器 -->

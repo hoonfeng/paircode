@@ -1,3 +1,5 @@
+//go:build windows
+
 // screenshot_tool.go 截图工具集：桌面截图 + 窗口截图 + 区域截图。
 //
 // 提供三个工具：
@@ -30,11 +32,11 @@ import (
 // ── Windows GDI 常量 ───────────────────────────────────────
 
 const (
-	_SRCCOPY        = 0x00CC0020
-	_DIB_RGB_COLORS = 0
-	_BI_RGB         = 0
-	_SM_CXSCREEN      = 0
-	_SM_CYSCREEN      = 1
+	_SRCCOPY            = 0x00CC0020
+	_DIB_RGB_COLORS     = 0
+	_BI_RGB             = 0
+	_SM_CXSCREEN        = 0
+	_SM_CYSCREEN        = 1
 	_SM_XVIRTUALSCREEN  = 76
 	_SM_YVIRTUALSCREEN  = 77
 	_SM_CXVIRTUALSCREEN = 78
@@ -105,11 +107,11 @@ type _windowInfo struct {
 func registerScreenshotTools(r *Registry, root string) {
 	// ── screenshot_desktop ──
 	r.Register(&Tool{
-		Name: "screenshot_desktop",
+		Name:       "screenshot_desktop",
 		UsageGuide: "截取整个桌面（所有显示器），保存为 PNG。用于查看当前桌面状态、验证 GUI 效果。比手动按 PrintScreen 更方便（自动保存到 screenshots/ + 文件名管理）。",
 		Description: "截取整个桌面（所有显示器），保存为 PNG 图片到 screenshots/ 目录。" +
 			"返回文件路径、尺寸和截图时间。" +
-			"之后可用 image_analyze 分析截图中的颜色/色块/图形，或用 image_ocr 识别文字。",
+			"之后可用多模态模型（如 DeepSeek-VL）直接分析截图内容。",
 		Parameters: objSchema(props{
 			"name": strProp("可选：自定义文件名（不含扩展名），默认自动生成时间戳名称"),
 		}),
@@ -122,7 +124,7 @@ func registerScreenshotTools(r *Registry, root string) {
 
 	// ── screenshot_window ──
 	r.Register(&Tool{
-		Name: "screenshot_window",
+		Name:       "screenshot_window",
 		UsageGuide: "按窗口标题截取特定窗口，保存为 PNG。比截图整个桌面更精确（只截目标窗口）。title 支持子串匹配不区分大小写。",
 		Description: "按窗口标题或标题子串截取特定窗口，保存为 PNG 图片到 screenshots/ 目录。" +
 			"返回文件路径、窗口尺寸和截图时间。" +
@@ -144,7 +146,7 @@ func registerScreenshotTools(r *Registry, root string) {
 
 	// ── screenshot_area ──
 	r.Register(&Tool{
-		Name: "screenshot_area",
+		Name:       "screenshot_area",
 		UsageGuide: "按坐标截取指定屏幕区域。left/top/right/bottom 支持像素或百分比（如 10%）。用于截取界面局部细节。",
 		Description: "按坐标截取指定区域，保存为 PNG 图片到 screenshots/ 目录。" +
 			"区域坐标可以是绝对坐标（相对于桌面左上角），也可以是百分比（如 \"10% 20% 50% 30%\"）。" +

@@ -26,8 +26,8 @@ import (
 
 // PluginHost 全局插件宿主（浏览器 UI 与 REST 共用）。
 var (
-	PluginHost     *agent.PluginHost
-	PluginHostMu   sync.RWMutex
+	PluginHost   *agent.PluginHost
+	PluginHostMu sync.RWMutex
 )
 
 // SetPluginHost 由入口注入全局插件宿主（创建于启动初始化时）。
@@ -407,21 +407,21 @@ func pluginRecordSummary(rec agent.PluginRecord, reg *agent.Registry) map[string
 		}
 	}
 	return map[string]any{
-		"name":          rec.Name,
-		"source":        rec.Source,
-		"scope":         rec.Scope,
-		"state":         rec.State,
-		"provides":      rec.Provides,
-		"tools":         rec.Tools,
-		"toolStates":    toolStates,
+		"name":              rec.Name,
+		"source":            rec.Source,
+		"scope":             rec.Scope,
+		"state":             rec.State,
+		"provides":          rec.Provides,
+		"tools":             rec.Tools,
+		"toolStates":        toolStates,
 		"toolCordisVisible": cordisVisible,
-		"sections":      rec.Sections,
-		"version":       rec.Version,
-		"purpose":       rec.Purpose,
-		"hasClient":     rec.HasClient,
-		"clientCode":    rec.ClientCode,
-		"clientApproved": rec.ClientApproved,
-		"defId":         rec.DefID,
+		"sections":          rec.Sections,
+		"version":           rec.Version,
+		"purpose":           rec.Purpose,
+		"hasClient":         rec.HasClient,
+		"clientCode":        rec.ClientCode,
+		"clientApproved":    rec.ClientApproved,
+		"defId":             rec.DefID,
 	}
 }
 

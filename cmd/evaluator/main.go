@@ -286,7 +286,8 @@ func callLLM(baseURL, apiKey, model, logData string) (*scoringResult, error) {
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
-	url := strings.TrimRight(baseURL, "/") + "/chat/completions"
+	// ★ 2026-08-27：不再拼接 /chat/completions，配置 URL 即完整请求端点。
+	url := strings.TrimRight(baseURL, "/")
 	httpReq, err := http.NewRequest("POST", url, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)

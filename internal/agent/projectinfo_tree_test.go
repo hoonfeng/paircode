@@ -26,7 +26,7 @@ func TestInfoTreeStructure(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		"目标/", "架构/", "设计思想/",        // 分支节点
+		"目标/", "架构/", "设计思想/", // 分支节点
 		"项目愿景", "Agent 引擎模块", "模块-agent", // 叶子标题 + 末段
 		"├──", "└──", // 树形连接符
 	} {

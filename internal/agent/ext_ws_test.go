@@ -302,4 +302,3 @@ func TestExtWSConnConcurrentSend(t *testing.T) {
 		t.Fatalf("并发 send 帧不完整: %v", got)
 	}
 }
-

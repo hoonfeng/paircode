@@ -6,13 +6,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/hoonfeng/paircode/pkg/executil"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/hoonfeng/paircode/internal/core"
@@ -71,7 +71,7 @@ func runGit(ctx context.Context, args ...string) (string, error) {
 	fullArgs := append([]string{"-C", dir, "-c", "core.quotepath=false"}, args...)
 	cmd := exec.CommandContext(ctx, "git", fullArgs...)
 	if runtime.GOOS == "windows" {
-		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		executil.HideWindow(cmd)
 	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

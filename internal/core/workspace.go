@@ -2,18 +2,16 @@
 // 本文件:工作区路径状态(多根文件夹 + 主根)。纯路径/持久化，不碰 UI/面板/设置(设置耦合的工作区逻辑
 // 仍在 main，读 core.Folders/Root + theSettings)。
 //
-//go:build windows
 
 package core
 
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/hoonfeng/paircode/pkg/executil"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
-	"syscall"
 )
 
 // Folders 工作区的所有文件夹（多根，VS Code 模型）。空=未打开工作区。
@@ -59,9 +57,7 @@ func OpenInNewWindow(p string) {
 	}
 	c := exec.Command(exe, p)
 	// 隐藏子进程控制台窗口（无控制台父进程时 console 程序会自己弹窗）
-	if runtime.GOOS == "windows" {
-		c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-	}
+	executil.HideWindow(c)
 	c.Dir = filepath.Dir(exe) // 与 exe 同目录启动，能找到 libSkiaSharp.dll / fonts
 	_ = c.Start()
 }

@@ -22,8 +22,8 @@ type JSBuilder struct {
 func NewJSBuilder(root, moduleName string) *JSBuilder {
 	return &JSBuilder{ModuleName: moduleName, root: root, graph: NewGraph()}
 }
-func (b *JSBuilder) Graph() *Graph   { return b.graph }
-func (b *JSBuilder) Reset()          { b.graph = NewGraph() }
+func (b *JSBuilder) Graph() *Graph     { return b.graph }
+func (b *JSBuilder) Reset()            { b.graph = NewGraph() }
 func (b *JSBuilder) SetGraph(g *Graph) { b.graph = g }
 
 // ── 文件解析 ──────────────────────────────────────────
@@ -141,9 +141,9 @@ func (b *JSBuilder) processClass(cl *ast.ClassLiteral, className, filePath, file
 			b.graph.AddEntity(&Entity{
 				ID: methodID, Kind: EntityMethod, Name: methodName,
 				FQN: className + "." + methodName, FilePath: filePath,
-				Line: int(e.Idx0()),
+				Line:      int(e.Idx0()),
 				Signature: fmt.Sprintf("%s.%s(...)", className, methodName),
-				Metadata: map[string]string{"receiver": className},
+				Metadata:  map[string]string{"receiver": className},
 			})
 			b.graph.AddRelation(&Relation{SourceID: classID, TargetID: methodID, Kind: RelDefines, File: filePath})
 		}

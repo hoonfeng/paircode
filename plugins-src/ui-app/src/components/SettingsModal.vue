@@ -70,7 +70,7 @@
                                 rows="4" :placeholder="f.placeholder"></textarea>
 
                       <!-- provider-manager（服务商维护面板：CRUD /api/models，独立保存，不参与普通表单） -->
-                      <ProviderManager v-else-if="f.type === 'provider-manager'" @saved="loadModels" />
+                      <ProviderManager v-else-if="f.type === 'provider-manager'" :model-param-fields="f.modelParamFields || []" :model-editor="f.modelEditor || {}" @saved="loadModels" />
 
                       <!-- preset-manager（AI 配置预设面板：CRUD /api/ai-presets，独立保存，不参与普通表单） -->
                       <PresetManager v-else-if="f.type === 'preset-manager'" @saved="onPresetSaved" />

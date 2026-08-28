@@ -29,10 +29,10 @@ type MarketSourceMeta struct {
 }
 
 var (
-	marketSourceMu     sync.RWMutex
-	marketSources      = map[string]MarketSourceMeta{} // kind -> meta（已注册的市场）
-	marketSourceKinds  = []string{"skill", "mcp", "plugin"}
-	marketSourceKnown  = map[string]bool{"skill": true, "mcp": true, "plugin": true}
+	marketSourceMu    sync.RWMutex
+	marketSources     = map[string]MarketSourceMeta{} // kind -> meta（已注册的市场）
+	marketSourceKinds = []string{"skill", "mcp", "plugin"}
+	marketSourceKnown = map[string]bool{"skill": true, "mcp": true, "plugin": true}
 )
 
 // RegisterMarketSource 注册一个市场源（磁盘插件 apply 时调用）。

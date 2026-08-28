@@ -42,6 +42,10 @@ const (
 	EventNotice EventType = "notice" // 后台任务通知（jobs 包用；UI 显示一行素色提示）
 	EventPhase  EventType = "phase"  // 阶段切换（自主模式下的规划/执行/评测等阶段指示）
 	EventDone   EventType = "done"   // 结构化完成信号（供 delegate/子 agent 使用；主 Loop Exit 走此事件）
+	// EventSnapshot WS 断线补偿快照（★ 2026-08-21）：客户端重连后，服务端推送当前
+	// running 会话的流式生成进度（content/reasoning/toolSegments），前端据此重建
+	// 占位消息，避免断线期间事件丢失导致内容截断。
+	EventSnapshot EventType = "snapshot"
 )
 
 // CacheBoundary 分隔系统提示词静态前缀与动态后缀。
@@ -100,6 +104,20 @@ type Event struct {
 	// TurnReason 结构化 turn 结束原因（仅 EventDone 时设置，见 agentloop.go）。
 	// 与 DoneReason 并存：DoneReason 保持兼容值（task_complete），TurnReason 为枚举值。
 	TurnReason string
+	// Reasoning live 快照的思考累积（仅 EventSnapshot：WS 断线补偿）。
+	Reasoning string
+	// ToolSegments live 快照的工具调用段（仅 EventSnapshot：WS 断线补偿）。
+	ToolSegments []LiveToolSeg
+	// LiveEvents live 快照的有序事件序列（仅 EventSnapshot：WS 断线补偿）。
+	// 前端逐事件重放重建 segments，保真 content/tool_call 交错时序。
+	LiveEvents []LiveEvent `json:"events,omitempty"`
+}
+
+// pendingImage 一张待注入 LLM 上下文的图片（submit_image 工具提交）。
+type pendingImage struct {
+	Part   ImagePart // image_url 块（base64 data URL）
+	Note   string    // 注入 user 消息时的说明文本（来源工具/路径/prompt）
+	Source string    // 原始路径（去重用）
 }
 
 // Loop TAOR 编排器：think(LLM 决策)→act(执行工具)→observe(结果回灌)→repeat。
@@ -144,16 +162,25 @@ type Loop struct {
 	// CompressedSummaries 累积的上下文压缩摘要列表。
 	// 每次 maybeCompact 压缩中段老消息后追加一条摘要。
 	// 这些摘要不作为 system message 的可变部分注入（那会破坏 KV Cache 前缀），
-	// 而是在循环迭代中通过 buildInjectionMessage 构建并作为 user 消息插入历史。
+	// 而是经 buildSnapshotContent 构建进「背景上下文快照」并作为 user 消息
+	// 持久化到消息流（syncContextSnapshot；快照内容变化时追加新快照）。
 	CompressedSummaries []string
 
 	// staleMsg Run 启动时记忆/知识库过期检查结果（固定内容）。
 	// 存字段而非每次调用扫描：VerifyAll 检查文件系统有成本，且内容须跨迭代稳定
-	// 以保持 KV Cache 前缀一致（由 buildCallContext 每次迭代注入到当前任务之前）。
+	// 以保持 KV Cache 前缀一致（经背景快照 syncContextSnapshot 进入消息流）。
 	staleMsg string
 
 	lastPromptTokens int // 上一轮 API 实测 prompt_tokens（驱动压缩阈值，比纯估算可信）
 	compactCooldown  int // 压缩后冷却剩余轮数（防每轮重复压缩，复刻参考 refreshCooldown）
+
+	// compactArchive 本 Run 内被 compact 丢弃的中段消息归档（按原时间序追加）。
+	// ★ 落盘/展示线还原（2026-08-27）：压缩视图仅供 LLM 提交，绝不允许压缩版
+	//   覆盖落盘 store——否则前端刷新后只剩压缩摘要、完整历史丢失（1214 排查中
+	//   实锤：唯一 user 被压缩删除后 lastUser 锚点失效走兜底分支，压缩版直接落盘）。
+	//   所有持久化点经 l.persist（内部 fullHistory 还原）；展示同步点（currentMsgs）
+	//   同样经 fullHistory。Run 开始时重置（此时历史自 store 加载，本身完整）。
+	compactArchive []Message
 
 	// cacheDiagOn 缓存诊断开关（WB_CACHE_DIAG=1 启用；前缀形状/累计状态为包级全局，
 	// 跨 Loop/Run 共享，见 cacheDiagPrev/cacheDiagSession）。
@@ -174,15 +201,23 @@ type Loop struct {
 	InheritedPrefixLen int
 
 	// ── 状态与元数据 ──
-	State         map[string]any // 跨 Run 共享状态（如 executionLog 恢复，避免塞进 messages 撑爆上下文）
-	currentMsgs   []Message      // Run 期间当前消息列表（供 persist worker 获取完整历史）
-	finishResult  *string        // 退出信号（自然终止时的最终内容）
-	commitMessage string         // agent 通过 generate_commit_message 工具显式设置的提交信息
+	State        map[string]any // 跨 Run 共享状态（如 executionLog 恢复，避免塞进 messages 撑爆上下文）
+	currentMsgs  []Message      // Run 期间当前消息列表（供 persist worker 获取完整历史）
+	finishResult *string        // 退出信号（自然终止时的最终内容）
 
-	// ── 连续驳回追踪 ──
-	rejectionCount   int    // 连续被驳回次数，达 3 次自动停止
-	lastRejectedTool string // 上次被驳回的工具名
+	// ── 审核共享上下文值（2026-08-27 错误计数移除）──
+	// approveState 审核决策共享状态：最近驳回决策 + 轻量历史（不计数）。
+	// JS 插件经 loop.approve.state.get/set 读写；agentloop 审核逻辑据此决策。
+	approveState *ApproveState
 
+	// ── 首步极简工具面（2026-08-27 实测改进）──
+	// StagedTools 开启后：会话第一个 Run 的首个 LLM 调用只注入极简核心工具面，
+	// 自第 2 个 step 起恢复完整工具面（实测首步选对率 91.7% vs 全量 87.5%，
+	// 且减少首步 token 开销）。默认开启；false 时始终全量。
+	StagedTools bool
+	// StagedToolGroups 极简工具候选组（插件装配链传入：agentloop 插件
+	// registerSettings → 装配器解析 → LoopOpts；nil/空 = 回退默认组）
+	StagedToolGroups [][]string
 	WorkspaceRoot    string // 工作区根路径（用于 SaveTokenUsage 等工作区级持久化）
 	CompactRequested bool   // 外部设置后下轮迭代触发上下文压缩（供主动压缩 API 使用）
 	Autonomous       bool   // 自主模式标志（单 Loop 阶段化循环）
@@ -219,6 +254,17 @@ type Loop struct {
 	// 调用 buildCallContext 后自动清空，确保不会污染持久化历史。
 	ephemeralMsgs []Message
 
+	// ── 图片提交（★ 2026-08-22 submit_image 工具）──
+	// pendingImages 工具产出/提交的图片队列（ImagePart 挂载在该 Loop 上）；
+	// 工具执行结果含 __SUBMIT_IMAGE__ 标记 → 读图 bytes → 挂入（含提示文本）；
+	// buildCallContext 每次迭代末尾把队列中的图片作为 user 消息（Images 字段）
+	// 注入 LLM 上下文（next LLM 请求即以 image_url 块发送）——图片不再只落磁盘、
+	// LLM 直接"看到"。仅当 Provider 支持多模态时注入图片（见 injectPendingImages）；
+	// 每轮最多 1 张 + 每张 ≤2MiB + 路径去重（防上下文爆炸）。
+	imageMu        sync.Mutex
+	pendingImages  []pendingImage  // 待注入图片（消费后清空）
+	imageInjected  map[string]bool // 已注入图片路径（会话级去重，防重复提交）
+	imageInjectedN int             // 已注入图片数（上限防护）
 	// autonomousStartTime 自主模式启动时间（用于时间预算检查）。
 	autonomousStartTime time.Time
 
@@ -254,6 +300,35 @@ type Loop struct {
 	PreStep func(ctx context.Context, callMsgs []Message, turn, step int) (rewritten []Message, reject bool, err error)
 	// CancelCause 本轮 turn 被取消的原因（ctx 取消时由 Run 设置，见 agentloop.go）。
 	CancelCause AgentCancelCause
+
+	// ── Live 流式快照（★ 2026-08-21 WS 断线补偿）──
+	// WS 断线期间 content/thinking/tool 事件会丢失；WebSocket 端点可调用
+	// SnapshotLive() 在客户端重连时推送当前生成进度，前端据此重建占位消息，
+	// 避免「断线后 assistant 内容截断/缺失」。
+	liveMu        sync.Mutex
+	liveContent   string        // 本 turn 已累积正文（跨 step 连续追加）
+	liveReasoning string        // 本 turn 已累积思考
+	liveToolCalls []LiveToolSeg // 已 emit 的工具调用摘要（tool_call + tool_result）
+	liveEvents    []LiveEvent   // 已 emit 事件的有序序列（快照重建用：保真时序）
+}
+
+// LiveToolSeg 工具调用实时段（WS 断线补偿快照用：重建 tool_call 展示）。
+type LiveToolSeg struct {
+	CallID string `json:"callId"`
+	Name   string `json:"name"`
+	Args   string `json:"args"`
+	Result string `json:"result"` // tool_result 正文（未完成时为空）
+}
+
+// LiveEvent 实时事件序列（WS 断线补偿快照：按 emit 顺序记录，供前端逐事件
+// 重放重建 segments——解决「快照重建顺序丢失」：content 与 tool_call 的真实
+// 交错时序（thinking→content→tool_call→…）必须在快照中保真）。
+type LiveEvent struct {
+	Type    string `json:"type"`              // thinking/content/tool_call/tool_result/error/notice/compacted/circling/evaluation
+	Content string `json:"content,omitempty"` // thinking/content/tool_result 文本
+	Tool    string `json:"tool,omitempty"`    // tool_call/tool_result 工具名
+	Args    string `json:"args,omitempty"`    // tool_call 参数 JSON
+	CallID  string `json:"callId,omitempty"`  // 工具调用 ID
 }
 
 func (l *Loop) emit(e Event) {
@@ -266,6 +341,51 @@ func (l *Loop) emit(e Event) {
 	}
 	if l.OnEvent != nil {
 		l.OnEvent(e)
+	}
+	// ★ live 快照维护（★ 2026-08-21 WS 断线补偿）：内容/工具事件同步累积，
+	//   供 WebSocket 端点重连时推送当前生成进度（见 SnapshotLive）。
+	switch e.Type {
+	case EventThinking:
+		l.liveMu.Lock()
+		l.liveReasoning += e.Content
+		l.liveEvents = appendLiveEvent(l.liveEvents, LiveEvent{Type: "thinking", Content: e.Content})
+		l.liveMu.Unlock()
+	case EventContent:
+		l.liveMu.Lock()
+		l.liveContent += e.Content
+		l.liveEvents = appendLiveEvent(l.liveEvents, LiveEvent{Type: "content", Content: e.Content})
+		l.liveMu.Unlock()
+	case EventToolCall:
+		l.liveMu.Lock()
+		l.liveToolCalls = append(l.liveToolCalls, LiveToolSeg{CallID: e.CallID, Name: e.Tool, Args: e.Args})
+		l.liveEvents = append(l.liveEvents, LiveEvent{Type: "tool_call", Tool: e.Tool, Args: e.Args, CallID: e.CallID})
+		l.liveMu.Unlock()
+	case EventToolResult:
+		l.liveMu.Lock()
+		for i := len(l.liveToolCalls) - 1; i >= 0; i-- {
+			if l.liveToolCalls[i].CallID == e.CallID {
+				l.liveToolCalls[i].Result = e.Content
+				break
+			}
+		}
+		// 事件序列同步回填（前端重放时据此更新对应 tool_call 段 result）
+		found := false
+		for i := len(l.liveEvents) - 1; i >= 0; i-- {
+			if l.liveEvents[i].Type == "tool_call" && l.liveEvents[i].CallID == e.CallID {
+				l.liveEvents[i].Content = e.Content
+				found = true
+				break
+			}
+		}
+		if !found {
+			// 兜底：tool_result 无匹配 tool_call（异常）→ 独立记录，前端仍可显示
+			l.liveEvents = append(l.liveEvents, LiveEvent{Type: "tool_result", Tool: e.Tool, Content: e.Content, CallID: e.CallID})
+		}
+		l.liveMu.Unlock()
+	case EventError, EventNotice, EventCompacted, EventCircling, EventEvaluation, EventApproval:
+		l.liveMu.Lock()
+		l.liveEvents = append(l.liveEvents, LiveEvent{Type: string(e.Type), Content: e.Content})
+		l.liveMu.Unlock()
 	}
 	// ★ loop 服务快照同步（插件 ctx.get('loop') 的 getState 数据源）。
 	if l.loopSvc != nil {
@@ -294,6 +414,45 @@ func (l *Loop) emit(e Event) {
 // 在当前 step 边界处消费。使用场景：用户在 agent 正在执行时输入补充指令。
 func (l *Loop) Steer(msg Message) {
 	l.steerQueue = append(l.steerQueue, msg)
+}
+
+// LiveSnapshot 当前流式生成进度快照（WS 断线补偿：重连时推送重建占位消息）。
+// ★ 使用场景：ServeGlobalEventStreamWS 客户端重连后，对每个 running 会话
+//
+//	（Session.Running=true）推送此快照，前端据此恢复断线期间丢失的 content/thinking/tool 事件。
+//	返回 liveEvents 有序序列：前端逐事件重放重建 segments，保真 content/tool_call 交错时序
+//	（修复「快照重建后所有工具调用聚在上方、正文聚在下方」的顺序丢失问题）。
+func (l *Loop) LiveSnapshot() (content, reasoning string, tools []LiveToolSeg, events []LiveEvent) {
+	l.liveMu.Lock()
+	defer l.liveMu.Unlock()
+	out := make([]LiveToolSeg, len(l.liveToolCalls))
+	copy(out, l.liveToolCalls)
+	evs := make([]LiveEvent, len(l.liveEvents))
+	copy(evs, l.liveEvents)
+	return l.liveContent, l.liveReasoning, out, evs
+}
+
+// resetLive 清空 live 快照（新 turn 开始时调用：新占位消息，旧累积无效）。
+func (l *Loop) resetLive() {
+	l.liveMu.Lock()
+	l.liveContent = ""
+	l.liveReasoning = ""
+	l.liveToolCalls = nil
+	l.liveEvents = nil
+	l.liveMu.Unlock()
+}
+
+// appendLiveEvent 向事件序列追加事件：连续同类流式事件（thinking/content）
+// 合并为一条（增量聚合），防止序列按 chunk 无限膨胀；非同类直接追加。
+func appendLiveEvent(evs []LiveEvent, ev LiveEvent) []LiveEvent {
+	if len(evs) > 0 {
+		last := &evs[len(evs)-1]
+		if last.Type == ev.Type && (ev.Type == "thinking" || ev.Type == "content") {
+			last.Content += ev.Content
+			return evs
+		}
+	}
+	return append(evs, ev)
 }
 
 // FollowUp 托管一条跟进消息：在当前 turn 自然终止（无 tool call 且有正文）后注入，
@@ -373,6 +532,20 @@ var goLoopDeprecatedOnce sync.Once
 // 返回在 history/l.History 基础上追加了 system(首轮)/user/assistant/tool
 // 等本轮全部消息的完整对话。
 func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []Message, err error) {
+	// ★ 钩子系统（t1 L2 闭环）：UserPromptSubmit 门（轮次开始前；配置钩子 +
+	//   插件钩子拦截 → 反馈回灌并终止本轮）。无钩子配置时零开销。
+	if blocked, feedback := fireUserPromptSubmitHooks(ctx, task); blocked {
+		msg := strings.TrimSpace(feedback)
+		if msg == "" {
+			msg = "UserPromptSubmit 钩子拦截了本轮任务"
+		}
+		l.emit(Event{Type: EventDone, Content: msg, DoneReason: "hook_blocked"})
+		return []Message{{Role: RoleUser, Content: task}, {Role: RoleAssistant, Content: msg}}, fmt.Errorf("钩子拦截: %s", msg)
+	}
+	// ★ Stop 钩子：defer 兜底所有返回路径（轮次结束通知）。
+	defer fireStopHooks(ctx)
+	// ★ 新 turn：清空 live 快照（占位消息重新累积，旧累积无效）
+	l.resetLive()
 	// ★ agentloop 核心外置：全局注册了 JS 循环实现时，委托 JS 驱动循环
 	//   （Go 保留能力经能力代理注入；停用插件即还原 Go 循环，可回退）。
 	if impl := CurrentJSLoop(); impl != nil {
@@ -407,10 +580,11 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 
 	// 统一持久化出口：每次 Run 返回后更新 l.History（不论调用方是否传了 history）
 	defer func() {
-		l.History = msgs
-		// 最终写盘兜底：OnBatchPersist 非空则调用一次
+		l.History = l.fullHistory(msgs)
+		// 最终写盘兜底：OnBatchPersist 非空则调用一次（经 fullHistory 还原完整时间线，
+		// 防止压缩视图覆盖 store——否则前端刷新后只剩压缩摘要）
 		if l.OnBatchPersist != nil && msgs != nil {
-			l.OnBatchPersist(msgs)
+			l.persist(msgs)
 		}
 		// agentloop：turn 收尾（未显式设置结束原因时按 err/ctx 推断）
 		l.endTurn(err, ctx.Err() != nil)
@@ -420,6 +594,8 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 
 	// 深复制 history，避免下层 append 污染原切片
 	hist := CopyHistory(history)
+	l.compactArchive = nil // Run 开始历史完整（store 加载），压缩归档仅本 Run 有效
+	l.currentMsgs = hist
 
 	max := l.MaxIterations
 	if max <= 0 {
@@ -473,6 +649,11 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 	//   是 LLM 后续轮次引用的关键上下文，run 内压缩会把中段细节丢弃成摘要，
 	//   导致 LLM 失忆、理解力下降（2026-08-05 排查结论）。
 	msgs = l.maybeCompact(ctx, msgs)
+	// ★ 背景上下文快照同步（2026-08-27 缓存优化，对齐 dsh RuntimeContextProjection）：
+	//   压缩更新摘要后同步快照到持久化消息流——内容与历史最后快照相同时零注入
+	//   （前缀稳定），不同时追加新快照（当前任务之后，随 tail 落盘）。
+	//   快照位于历史中固定位置，跨 Run 前缀单调延展，消除背景块位置漂移导致的缓存断裂。
+	msgs = l.syncContextSnapshot(msgs)
 
 	// ★ 历史轮次用户消息标注已移除（2026-08-15 对齐 harness）：
 	//   harness 不往消息正文注入前缀文本——历史轮次与当前任务同为 RoleUser，
@@ -565,18 +746,21 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 			}
 		}
 
-		// ★ 缓存诊断：LLM 调用前快照前缀形状（system prompt + 工具定义），
-		//   与上一轮比较输出变化原因——用于定位缓存断裂（前缀变动 → provider 缓存失效）
-		if l.cacheDiagOn {
-			l.emitCacheShape(callMsgs, tools)
-		}
+		// ★ 缓存诊断已由 buildCallContext 内部统一执行（Go/JS 循环共用），
+		//   此处不再重复调用，避免双份诊断输出。
 
 		// ★ LLM 调用日志（排查「无响应」：每轮调用耗时 + 错误，重试期间用户看到的就是无响应）
 		callStart := time.Now()
+		// ★ 2026-08-27 首步极简工具面（Go 回退循环同样生效；tools_staging.go）
+		//   注意：用局部变量，勿覆盖原 tools（后续迭代需全量恢复）。
+		callTools := tools
+		if l.StagedTools && l.TurnNo <= 1 && l.StepNo <= 1 {
+			callTools = FilterStagedTools(tools, l.StagedToolGroups)
+		}
 		log.Printf("[loop] LLM 调用开始 turn=%d step=%d provider=%s msgs=%d tools=%d",
-			l.TurnNo, l.StepNo, l.Provider.Name(), len(callMsgs), len(tools))
+			l.TurnNo, l.StepNo, l.Provider.Name(), len(callMsgs), len(callTools))
 		var stopReason string
-		assistant, err := l.Provider.Chat(ctx, callMsgs, tools, func(c Chunk) {
+		assistant, err := l.Provider.Chat(ctx, callMsgs, callTools, func(c Chunk) {
 			if c.StopReason != "" {
 				stopReason = c.StopReason
 			}
@@ -617,14 +801,12 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 		log.Printf("[loop] LLM 调用完成 turn=%d step=%d 耗时=%s stop=%s len=%d",
 			l.TurnNo, l.StepNo, time.Since(callStart).Round(time.Millisecond), stopReason, len(assistant.Content))
 		msgs = append(msgs, assistant)
-		l.currentMsgs = msgs // 同步当前消息列表，供 persist worker 获取完整历史
+		l.currentMsgs = l.fullHistory(msgs) // 同步当前消息列表（还原完整时间线），供 persist worker/前端拉历史
 
 		// ★ 在工具执行前立即持久化 assistant 消息（含 thinking + tool_calls），
 		//   确保 ask_user 等阻塞工具不会导致本轮 assistant 输出丢失。
-		//   后续工具结果由迭代末尾的 OnBatchPersist 补充。
-		if l.OnBatchPersist != nil {
-			l.OnBatchPersist(msgs)
-		}
+		//   后续工具结果由迭代末尾的 persist 补充。
+		l.persist(msgs)
 
 		// ★ 记录执行日志：当 assistant 有分析内容且有工具调用时（即将执行操作前）
 		// 记录本轮的分析和决策，供跨轮感知
@@ -653,7 +835,7 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 				msgs = append(msgs, Message{Role: RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: errMsg})
 				l.trackCall(tc.Function.Name, tc.Function.Arguments, true)
 			}
-			l.currentMsgs = msgs
+			l.currentMsgs = l.fullHistory(msgs)
 		}
 
 		if !truncated {
@@ -721,50 +903,37 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 								if rej == "" {
 									rej = "用户拒绝了此操作。请勿重试该操作；改用其他方式达成目标，或先向用户说明你为何需要它。"
 								}
-								// ★ 连续驳回追踪：同一工具连续驳回 3 次→自动停止
-								if tc.Function.Name == l.lastRejectedTool {
-									l.rejectionCount++
-								} else {
-									l.rejectionCount = 1
-									l.lastRejectedTool = tc.Function.Name
-								}
-								if l.rejectionCount >= 3 {
-									l.emit(Event{Type: EventError, Content: "操作 " + tc.Function.Name + " 已被连续驳回 3 次，自动停止"})
-									l.LastTurnReason = TurnBlocked
-									return msgs, errors.New("连续驳回 3 次，自动停止")
-								}
+								// ★ 2026-08-27 错误计数移除：驳回仅反馈继续（打破死循环由
+								//   绕圈检测兜底）；驳回记录进共享审核状态（approveState）。
+								l.getApproveState().recordReject(tc.Function.Name, rej)
 								l.emit(Event{Type: EventToolResult, Tool: tc.Function.Name, Content: rej, CallID: tc.ID})
 								msgs = append(msgs, Message{Role: RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: rej})
 								l.trackCall(tc.Function.Name, tc.Function.Arguments, true)
 								continue
 							}
-							// 审批通过 → 重置驳回追踪
-							if tc.Function.Name == l.lastRejectedTool {
-								l.rejectionCount = 0
-								l.lastRejectedTool = ""
-							}
+							// 审批通过 → 清掉该工具的最近驳回标记
+							l.getApproveState().clearTool(tc.Function.Name)
 						}
 					}
 
 					result, terr := l.Registry.Execute(ctx, tc.Function.Name, tc.Function.Arguments)
 					if terr != nil {
 						result = "Error: " + terr.Error()
+					} else {
+						// ★ 图片提交（2026-08-22）：工具结果含 submit_image 标记 →
+						//   读图挂 pendingImages，标记从文本剥离（净化后发 LLM）。
+						result = l.parseImageSubmitResult(result)
 					}
 					l.emit(Event{Type: EventToolResult, Tool: tc.Function.Name, Content: result, CallID: tc.ID})
 					msgs = append(msgs, Message{Role: RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: result})
 					l.trackCall(tc.Function.Name, tc.Function.Arguments, terr != nil || strings.HasPrefix(strings.TrimSpace(result), "Error:"))
 
-					// ★ 自主模式：generate_commit_message 记录提交信息（供最终完成时使用）
-					// 不再用于区分阶段/完成，仅记录 commit message 字符串
-					if tc.Function.Name == "generate_commit_message" {
-						l.commitMessage = result
-					}
 				}
 			} // end else (serial tool execution)
 		} // end if !truncated
 
-		// 先同步 currentMsgs（包含 tool results），供 persist worker 获取完整历史
-		l.currentMsgs = msgs
+		// 先同步 currentMsgs（包含 tool results，还原完整时间线），供 persist worker/前端获取完整历史
+		l.currentMsgs = l.fullHistory(msgs)
 
 		// agentloop：step/end——本轮 step 收尾（LLM 调用 + 工具执行已完成）。
 		// 对应 deepseek-harness step/end 事件；统计本轮工具调用数供前端/日志展示。
@@ -829,9 +998,7 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 
 		// ★ 每轮迭代结束立即持久化，确保 tool_call 与 tool_result 配对完整写入磁盘。
 		//   即使进程崩溃，最多丢失当前正在执行的这一轮，之前的所有轮次消息完好。
-		if l.OnBatchPersist != nil {
-			l.OnBatchPersist(msgs)
-		}
+		l.persist(msgs)
 	}
 	l.LastTurnReason = TurnMaxIterations
 	l.emit(Event{Type: EventError, Content: ErrMaxIterations.Error()})
@@ -933,68 +1100,169 @@ func systemPromptFromMsgs(msgs []Message) string {
 //
 //	不修改原始 msgs——持久化历史与 UI 展示仍为完整内容。
 func (l *Loop) buildCallContext(msgs []Message) []Message {
-	// ★ 背景块（固定内容，每次迭代注入相同 → KV 前缀稳定）：
-	//   记忆/知识库过期检查（l.staleMsg）+ 历史摘要/自主模式提示（buildInjectionMessage）
-	//   + 防御性收集外部注入的带 backgroundCtxMarker 的 ephemeral 消息。
-	//   全部插入到「当前任务（最后一条 user 消息）」之前——
-	//   若背景追加在任务之后，LLM 会把「历史摘要」误认为最新输入，只核对历史不执行任务；
-	//   若背景只注入一次，第二次迭代前缀会在背景处断裂（损失缓存命中）。
+	// ★ 背景快照已持久化到消息流（syncContextSnapshot 在 Run 开始注入、幂等）：
+	//   不再每次迭代动态注入背景块——快照在历史中位置固定（当前任务之后），
+	//   跨 Run 前缀单调延展，KV 缓存不再因背景块位置漂移而断裂
+	//   （对齐 dsh RuntimeContextProjection：内容变化时才追加新快照，旧快照保留）。
 	// ★ 动态内容（执行日志 buildLogBlock）与即时消息（用户反馈/时间预算/绕圈提示）追加末尾：
 	//   随迭代增长放在末尾不影响前缀命中。
-	var bg []Message
-	if l.staleMsg != "" {
-		bg = append(bg, Message{Role: RoleUser, Content: backgroundCtxMarker + systemReminderFrame("状态提示（记忆/知识库过期检查）", l.staleMsg)})
-	}
-	if msg := l.buildInjectionMessage(); msg != "" {
-		bg = append(bg, Message{Role: RoleUser, Content: msg})
-	}
-	rest := make([]Message, 0, len(l.ephemeralMsgs)+1)
+	var rest []Message
 	for _, m := range l.ephemeralMsgs {
-		if strings.HasPrefix(m.Content, backgroundCtxMarker) {
-			bg = append(bg, m)
-		} else {
-			rest = append(rest, m)
-		}
+		rest = append(rest, m)
 	}
 	if logStr := l.buildLogBlock(); logStr != "" {
 		rest = append(rest, Message{Role: RoleUser, Content: logStr})
 	}
 
-	result := make([]Message, 0, len(msgs)+len(bg)+len(rest))
-	if len(bg) > 0 {
-		// 定位背景插入点：正常情况 = 最后一条 user（当前任务）之前；
-		// msgs 无 user（异常兜底）= 第一条非 system 之前（背景紧跟 system，绝不落末尾）。
-		lastUser := -1
-		for i := len(msgs) - 1; i >= 0; i-- {
-			if msgs[i].Role == RoleUser {
-				lastUser = i
-				break
-			}
-		}
-		insertAt := lastUser
-		if insertAt < 0 {
-			insertAt = 0
-			for insertAt < len(msgs) && msgs[insertAt].Role == RoleSystem {
-				insertAt++
-			}
-		}
-		for i, m := range msgs {
-			if i == insertAt {
-				result = append(result, bg...)
-			}
-			result = append(result, l.trimToolResult(m))
-		}
-		if insertAt >= len(msgs) { // 极异常（msgs 全 system/空）：背景放最末兜底
-			result = append(result, bg...)
-		}
-	} else {
-		for _, m := range msgs {
-			result = append(result, l.trimToolResult(m))
-		}
+	result := make([]Message, 0, len(msgs)+len(rest))
+	for _, m := range msgs {
+		result = append(result, l.trimToolResult(m))
 	}
 	result = append(result, rest...)
+	// ★ 图片提交（2026-08-22）：工具 submit_image 提交的图片注入 LLM 上下文
+	//   （user 消息带 Images → Provider.Chat 以 image_url 块发送；仅多模态模型）。
+	result = l.injectPendingImages(result)
+	// ★ GLM 兼容兜底（2026-08-27）：GLM（智谱）硬校验 messages 中必须至少存在一条
+	//   user 消息，否则 HTTP 400 code=1214「messages 参数非法」（实测 T6/T10；
+	//   OpenAI/DeepSeek 无此校验）。触发路径：循环中途压缩（compact）把唯一 user
+	//   消息丢进中段摘要——摘要只进 CompressedSummaries，快照要等下次 Run 开始
+	//   才经 syncContextSnapshot 落盘，此间隙 callMsgs 可能全为 system+assistant+tool。
+	//   最终兜底：无 user 时在 system 前缀之后插入一条 user 消息（仅调用副本不落盘，
+	//   不破坏 system 前缀；实测 GLM 接受 user 后接 assistant/tool/孤立 tool）。
+	hasUser := false
+	for _, m := range result {
+		if m.Role == RoleUser {
+			hasUser = true
+			break
+		}
+	}
+	if !hasUser {
+		ph := Message{Role: RoleUser,
+			Content: "【系统提示】历史任务消息已压缩为背景摘要（将随后续快照注入），请基于系统提示与工具结果继续执行当前任务。"}
+		at := 0
+		for at < len(result) && result[at].Role == RoleSystem {
+			at++
+		}
+		result = append(result[:at], append([]Message{ph}, result[at:]...)...)
+	}
 	l.ephemeralMsgs = nil // 清空，确保不会重复注入
+	// ★ 缓存诊断：每次构建后快照前缀形状（Go/JS 循环统一在构建处诊断，
+	//   避免 JS 循环缺形状诊断、且与 Go 默认循环重复调用）
+	if l.cacheDiagOn {
+		l.emitCacheShape(result, l.Registry.Definitions())
+	}
 	return result
+}
+
+// findLastSnapshotContent 在消息序列中查找最后一条「背景上下文快照」消息
+// （backgroundCtxMarker 前缀的 RoleUser），返回其内容；无则返回 ("", false)。
+// 快照作为持久化消息进入 JSONL 流，跨 Run 可识别、可幂等比较。
+func findLastSnapshotContent(msgs []Message) (string, bool) {
+	for i := len(msgs) - 1; i >= 0; i-- {
+		m := msgs[i]
+		if m.Role == RoleUser && strings.HasPrefix(m.Content, backgroundCtxMarker) {
+			return m.Content, true
+		}
+	}
+	return "", false
+}
+
+// syncContextSnapshot 同步「背景上下文快照」到持久化消息流（对齐 dsh
+// RuntimeContextProjection，缓存前缀稳定的核心机制）：
+//   - 快照内容 = 状态提示（staleMsg）+ 历史摘要（CompressedSummaries）+
+//     自主模式提示 + 记忆 + 知识库（由 buildSnapshotContent 组装）。
+//   - 与历史中最后一条快照比较：内容相同 → 不动（前缀稳定，零注入）；
+//     不同 → 追加新快照到 msgs 末尾（当前任务之后，随 tail 落盘）；
+//     旧快照保留（append-only，位置固定，前缀单调延展）。
+//   - 空内容时不注入（历史已有旧快照也保留不动，避免删消息破坏前缀）。
+//   - 调用时机：Run 开始且 maybeCompact 之后（压缩更新摘要后再同步）。
+//   - 返回追加后的 msgs（可能原样返回）。
+func (l *Loop) syncContextSnapshot(msgs []Message) []Message {
+	content := l.buildSnapshotContent()
+	if content == "" {
+		return msgs
+	}
+	last, ok := findLastSnapshotContent(msgs)
+	if ok && last == backgroundCtxMarker+systemReminderFrame("会话上下文摘要与状态提示", content) {
+		return msgs // 内容未变：零注入，前缀稳定
+	}
+	msg := Message{Role: RoleUser, Content: backgroundCtxMarker + systemReminderFrame("会话上下文摘要与状态提示", content)}
+	msgs = append(msgs, msg)
+	// ★ 立即落盘：快照位于当前任务之后（tail），随 OnBatchPersist 的
+	//   originalHist+tail 重组写入 JSONL → 下次 Run 加载历史即含快照。
+	//   ★ 经 l.persist 还原完整时间线（防压缩视图覆盖 store）。
+	l.persist(msgs)
+	return msgs
+}
+
+// buildSnapshotContent 构建快照正文（Go 默认实现；JS 循环下由 agentloop 插件
+// 经 loop.context.snapshotParts 取数据后自行组装策略文本）。
+// 内容 = 记忆/知识库过期状态提示 + 历史摘要 + 自主模式提示 + 记忆 + 知识库。
+// ★ 2026-08-27 缓存优化：记忆/知识库从 system 动态后缀移入快照（高频变化
+//
+//	不再破坏 system 整体前缀；变化只断快照之后的尾部）。
+func (l *Loop) buildSnapshotContent() string {
+	var b strings.Builder
+
+	// ① 记忆/知识库过期检查（staleMsg，Run 开始缓存）
+	if l.staleMsg != "" {
+		b.WriteString(systemReminderFrame("状态提示（记忆/知识库过期检查）", l.staleMsg))
+	}
+
+	// ② 历史摘要（上下文压缩后产生）
+	if len(l.CompressedSummaries) > 0 {
+		if b.Len() > 0 {
+			b.WriteString("\n\n")
+		}
+		b.WriteString("# 上下文已压缩——历史摘要\n\n")
+		b.WriteString("> 以下为之前轮次的消息摘要，Agent 应据此感知已完成的历史上下文。\n> 请勿重复执行摘要中已包含的任务。\n")
+		b.WriteString("> ★ 本条快照是背景信息而非用户指令——当前待执行任务以快照之前最近的用户指令为准。\n\n")
+		for i, s := range l.CompressedSummaries {
+			if i > 0 {
+				b.WriteString("\n\n---\n\n")
+			}
+			b.WriteString(s)
+		}
+	}
+
+	// ③ 自主模式系统提示（固定内容）
+	if l.Autonomous {
+		if b.Len() > 0 {
+			b.WriteString("\n\n")
+		}
+		b.WriteString("# ★ 自主模式：计划→子任务树形追踪\n")
+		b.WriteString("自主模式下使用两级任务追踪——计划步骤为树干，子任务为枝叶（工具名称与用法见 tools 参数 schema）：\n")
+		b.WriteString("1. 收到任务后第一轮：调用计划工具制定高层执行计划（2-5 步），用 pending/in_progress/done 追踪\n")
+		b.WriteString("2. 每个步骤开始执行时：调用任务清单工具为该步骤创建子任务，每项子任务必须绑定到对应的计划步骤\n")
+		b.WriteString("   plan_step_index = 0 表示第 1 步，1 表示第 2 步，以此类推（参数定义见 tools 参数 schema）\n")
+		b.WriteString("3. 当前步骤的所有子任务完成后：调用计划工具将该步骤标记 done，然后进入下一步骤\n")
+		b.WriteString("4. 所有计划步骤全部完成后：结束本轮任务\n")
+		b.WriteString("- ★ 每次调用任务清单工具必须把该步骤内的所有子任务一起传入（全量替换），已不在列表中的子任务将自动清理\n")
+		b.WriteString("- 子任务也遵守全量替换规则——即使是不同步骤的子任务，也要在一次调用中传入（用不同的 plan_step_index 区分）\n")
+	}
+
+	// ④ 记忆（长期记忆提示，system→快照迁移：高频变化不再破坏 system 前缀）
+	if mem := LongTermMemoryPrompt(); mem != "" {
+		if b.Len() > 0 {
+			b.WriteString("\n\n")
+		}
+		b.WriteString(strings.TrimSpace(mem))
+	}
+
+	// ⑤ 知识库（项目结构化理解树，system→快照迁移）
+	if l.WorkspaceRoot != "" {
+		if kb := ProjectKnowledge(l.WorkspaceRoot, 2500); kb != "" {
+			if b.Len() > 0 {
+				b.WriteString("\n\n")
+			}
+			b.WriteString(strings.TrimSpace(kb))
+		}
+	}
+
+	if b.Len() == 0 {
+		return ""
+	}
+	return b.String()
 }
 
 // trimToolResult 对超长工具结果生成 LLM 视图瘦身副本：保留开头 + 结尾关键部分，
@@ -1022,47 +1290,8 @@ func (l *Loop) trimToolResult(m Message) Message {
 	return m
 }
 
-// buildInjectionMessage 构建「固定背景块」：历史摘要 + 自主模式两级追踪提示。
-// 内容在两次压缩之间保持稳定（CompressedSummaries 与提示均固定），
-// 由 buildCallContext 每次迭代注入到当前任务之前——位置与内容均稳定，不破坏 KV Cache 前缀。
-// 执行日志动态增长，见 buildLogBlock（追加在末尾，不占固定位置）。
-func (l *Loop) buildInjectionMessage() string {
-	var b strings.Builder
-
-	// 历史摘要（上下文压缩后产生）
-	if len(l.CompressedSummaries) > 0 {
-		b.WriteString("# 上下文已压缩——历史摘要\n\n")
-		b.WriteString("> 以下为之前轮次的消息摘要，Agent 应据此感知已完成的历史上下文。\n> 请勿重复执行摘要中已包含的任务。\n")
-		b.WriteString("> ★ 本条是历史背景信息，并非当前任务——当前任务请以最后一条用户消息为准。\n\n")
-		for i, s := range l.CompressedSummaries {
-			if i > 0 {
-				b.WriteString("\n\n---\n\n")
-			}
-			b.WriteString(s)
-		}
-	}
-
-	// ★ 自主模式系统提示：说明两级追踪机制（固定内容，随背景块每次迭代注入）
-	if l.Autonomous {
-		if b.Len() > 0 {
-			b.WriteString("\n\n")
-		}
-		b.WriteString("# ★ 自主模式：计划→子任务树形追踪\n")
-		b.WriteString("自主模式下使用两级任务追踪——计划步骤为树干，子任务为枝叶（工具名称与用法见 tools 参数 schema）：\n")
-		b.WriteString("1. 收到任务后第一轮：调用计划工具制定高层执行计划（2-5 步），用 pending/in_progress/done 追踪\n")
-		b.WriteString("2. 每个步骤开始执行时：调用任务清单工具为该步骤创建子任务，每项子任务必须绑定到对应的计划步骤\n")
-		b.WriteString("   plan_step_index = 0 表示第 1 步，1 表示第 2 步，以此类推（参数定义见 tools 参数 schema）\n")
-		b.WriteString("3. 当前步骤的所有子任务完成后：调用计划工具将该步骤标记 done，然后进入下一步骤\n")
-		b.WriteString("4. 所有计划步骤全部完成后：结束本轮任务\n")
-		b.WriteString("- ★ 每次调用任务清单工具必须把该步骤内的所有子任务一起传入（全量替换），已不在列表中的子任务将自动清理\n")
-		b.WriteString("- 子任务也遵守全量替换规则——即使是不同步骤的子任务，也要在一次调用中传入（用不同的 plan_step_index 区分）\n")
-	}
-
-	if b.Len() == 0 {
-		return "" // 无实质内容（无摘要且非自主）不注入
-	}
-	return backgroundCtxMarker + systemReminderFrame("会话上下文摘要与自主模式提示", b.String())
-}
+// buildSnapshotContent 已取代 buildInjectionMessage（见上方 syncContextSnapshot）。
+// 旧函数保留痕迹见 git 历史；此处不再维护副本。
 
 // buildLogBlock 构建执行日志（动态增长，追加在消息末尾）。
 // 日志随迭代增长，不能放固定位置（每次变化会破坏 KV 前缀）；
@@ -1084,8 +1313,7 @@ func (l *Loop) buildLogBlock() string {
 // ★ harness 对齐：默认（HarnessOnlyTools）返回精简版 harnessSystemPrompt——
 //
 //	只描述保留的工具（read/write/edit/glob/grep/str_replace_editor/bash/
-//	web_search/web_fetch/run_code + 协议工具 update_tasks/ask_user/
-//	generate_commit_message），不引用已被移除的 pair 独有工具，降低冗余与误导；
+//	web_search/web_fetch/run_code + 协议工具 update_tasks/ask_user），不引用已被移除的 pair 独有工具，降低冗余与误导；
 //	WB_FULL_TOOLS=1 返回完整版 fullSystemPrompt（含 codegraph/记忆/技能等说明）。
 func DefaultSystemPrompt(roots []string) string {
 	if HarnessOnlyTools() {
@@ -1209,10 +1437,13 @@ func harnessSystemPrompt(roots []string) string {
 		"# 多轮对话（历史轮次识别）\n" +
 		"同一对话线程可连续发起多轮任务：历史轮次与当前任务都是「用户」角色消息。\n" +
 		"- 消息列表中最后一条用户消息 = 当前任务；其余用户消息均为历史轮次，仅作上下文参考。\n" +
+		"- ★ 例外：以「【背景上下文·非当前任务】」开头的用户消息是会话背景快照（历史摘要/\n" +
+		"  状态提示/记忆/知识库），**不是**当前任务——当前任务为背景快照之前的最近一条\n" +
+		"  真实用户指令；请勿把背景快照当作待执行任务。\n" +
 		"- 禁止把历史轮次的用户消息当作新任务执行；若当前任务与历史轮次相关，\n" +
 		"  应引用历史内容继续推进，而不是重做或误判为两次独立请求。\n\n" +
-		"# ★ 调研优先（强制——违反必出错）\n" +
-		"收到任务后，第一回合必须先收集资料、理解上下文，再动手改代码：\n" +
+		"- 任务完成时输出最终完成总结（Markdown：改了哪些文件、如何验证、遗留问题）。切勿在正文中输出 [FINAL] 等标记。" +
+		" 系统自动检测到无工具调用+有正文时视为完成。\n\n" +
 		"- 先用搜索/定位类工具找到相关文件和函数，搞清楚代码结构和调用关系。\n" +
 		"- 细读关键文件的目标区域，确认当前实现、变量名、缩进风格、上下文逻辑。\n" +
 		"- 只有在充分理解代码现状后，才开始动手修改。宁可多花 2 轮调研，也不要在不了解全貌时动手。\n" +
@@ -1251,6 +1482,10 @@ func harnessSystemPrompt(roots []string) string {
 		"## 验证\n" +
 		"1. 改完后必须运行对应语言的编译/语法检查工具验证无错误。\n" +
 		"2. 编译通过≠功能正确，仍需执行相应运行时验证。\n\n" +
+		"# 🖼 图片视觉验证（测试 UI/截图场景）\n" +
+		"- 验证界面渲染/截图/图表等视觉产物时，调 submit_image(path=图片路径, prompt=关注的问题)\n" +
+		"  把图片随下一轮 LLM 请求提交给模型——LLM 直接看图片（识别文字、分析布局、验证渲染）。\n" +
+		"- 仅靠本地工具（DOM 分析等）看不到画面，视觉验证必须 submit_image。\n\n" +
 		"# 工作方式\n" +
 		"复杂或多步任务先用任务清单工具列出细分任务，再逐步执行并更新状态。\n" +
 		"先用搜索/查看类工具定位、细读，再动手；改动优先小而准的编辑，大改才整段写入。\n" +
@@ -1286,14 +1521,17 @@ func fullSystemPrompt(roots []string) string {
 		"  若问题未记录，在解决后更新 .pair/project.md（编译方式、多端目标、CGO 开关等），\n" +
 		"  避免后续对话反复探测同一问题浪费 token。\n" +
 		"- 【完成标记】任务完成时调用提交信息记录工具（名称与用法见 tools 参数 schema）记录本次变更，然后输出最终完成总结。" +
-		" 切勿在正文中输出 [FINAL] 等标记。系统自动检测到无工具调用+有正文时视为完成。\n\n" +
+		"- 消息列表中最后一条用户消息 = 当前任务；其余用户消息均为历史轮次，仅作上下文参考。\n" +
+		"- ★ 例外：以「【背景上下文·非当前任务】」开头的用户消息是会话背景快照（历史摘要/\n" +
+		"  状态提示/记忆/知识库），**不是**当前任务——当前任务为背景快照之前的最近一条\n" +
+		"  真实用户指令；请勿把背景快照当作待执行任务。\n" +
 		"# 多轮对话（历史轮次识别）\n" +
 		"同一对话线程可连续发起多轮任务：历史轮次与当前任务都是「用户」角色消息。\n" +
 		"- 消息列表中最后一条用户消息 = 当前任务；其余用户消息均为历史轮次，仅作上下文参考。\n" +
 		"- 禁止把历史轮次的用户消息当作新任务执行；若当前任务与历史轮次相关，\n" +
 		"  应引用历史内容继续推进，而不是重做或误判为两次独立请求。\n\n" +
-		"# ★ 调研优先（强制——违反必出错）\n" +
-		"收到任务后，第一回合必须先收集资料、理解上下文，再动手改代码：\n" +
+		"- 任务完成时输出最终完成总结（Markdown：改了哪些文件、如何验证、遗留问题）。切勿在正文中输出 [FINAL] 等标记。" +
+		" 系统自动检测到无工具调用+有正文时视为完成。\n\n" +
 		"- 先用搜索/定位类工具找到相关文件和函数，搞清楚代码结构和调用关系（搜函数/类型名优先用更精确的结构化搜索）。\n" +
 		"- 细读关键文件的目标区域，确认当前实现、变量名、缩进风格、上下文逻辑。\n" +
 		"- 如果涉及多个文件，先用影响分析类工具了解函数/文件级影响范围，不要漏改调用方。\n" +
@@ -1365,6 +1603,10 @@ func fullSystemPrompt(roots []string) string {
 		"## 验证纪律\n" +
 		"- 每次代码改动后必须验证，不允许只编译就声称完成\n" +
 		"- 验证失败时先修复再继续\n\n" +
+		"# 🖼 图片视觉验证（测试 UI/截图场景）\n" +
+		"- 验证界面渲染/截图/图表等视觉产物时，调 submit_image(path=图片路径, prompt=关注的问题)\n" +
+		"  把图片随下一轮 LLM 请求提交给模型——LLM 直接看图片（识别文字、分析布局、验证渲染）。\n" +
+		"- 仅靠本地工具（DOM 分析等）看不到画面，视觉验证必须 submit_image。\n\n" +
 
 		"# 工作方式\n" +
 		"复杂或多步任务先用任务清单工具列出细分任务，再逐步执行并更新状态（自主模式下先列计划再建子任务）。\n" +

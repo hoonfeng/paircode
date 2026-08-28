@@ -14,7 +14,9 @@ import "fmt"
 
 // SelfManagementPrompt 返回"自管理与扩展"段落的系统提示文本。
 // ★ 工具描述已取消（2026-08-17）：不再提示 skill_*/mcp_*/marketplace_*/memory_verify 等
-//   具体工具——工具信息以 tools 参数 schema 为准。仅保留非工具性质的会话连贯性行为引导。
+//
+//	具体工具——工具信息以 tools 参数 schema 为准。仅保留非工具性质的会话连贯性行为引导。
+//
 // harness 对齐模式下返回空。
 func SelfManagementPrompt() string {
 	if HarnessOnlyTools() {
@@ -31,7 +33,9 @@ func SelfManagementPrompt() string {
 
 // LongTermMemoryPrompt 返回"长时记忆检索"段落的系统提示文本。
 // ★ 工具描述已取消（2026-08-17）：不再提示 memory_search/memory_list/memory_count 等
-//   具体工具——工具信息以 tools 参数 schema 为准。仅保留机制说明。
+//
+//	具体工具——工具信息以 tools 参数 schema 为准。仅保留机制说明。
+//
 // harness 对齐模式下返回空。
 func LongTermMemoryPrompt() string {
 	if HarnessOnlyTools() {

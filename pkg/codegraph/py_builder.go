@@ -22,18 +22,18 @@ type PyBuilder struct {
 func NewPyBuilder(root, moduleName string) *PyBuilder {
 	return &PyBuilder{ModuleName: moduleName, root: root, graph: NewGraph()}
 }
-func (b *PyBuilder) Graph() *Graph   { return b.graph }
-func (b *PyBuilder) Reset()          { b.graph = NewGraph() }
+func (b *PyBuilder) Graph() *Graph     { return b.graph }
+func (b *PyBuilder) Reset()            { b.graph = NewGraph() }
 func (b *PyBuilder) SetGraph(g *Graph) { b.graph = g }
 
 // ── 正则模式 ──────────────────────────────────────────
 
 var (
-	reFuncDef   = regexp.MustCompile(`^\s*def\s+([a-zA-Z_]\w*)\s*\(`)
-	reClassDef  = regexp.MustCompile(`^\s*class\s+([a-zA-Z_]\w*)\s*(?:\(|:|$)`)
-	reImport    = regexp.MustCompile(`^\s*import\s+(.+)`)
+	reFuncDef    = regexp.MustCompile(`^\s*def\s+([a-zA-Z_]\w*)\s*\(`)
+	reClassDef   = regexp.MustCompile(`^\s*class\s+([a-zA-Z_]\w*)\s*(?:\(|:|$)`)
+	reImport     = regexp.MustCompile(`^\s*import\s+(.+)`)
 	reFromImport = regexp.MustCompile(`^\s*from\s+(\S+)\s+import\s+(.+)`)
-	reAssign    = regexp.MustCompile(`^\s*([a-zA-Z_]\w*)\s*=\s*`)
+	reAssign     = regexp.MustCompile(`^\s*([a-zA-Z_]\w*)\s*=\s*`)
 )
 
 // parseContext 解析上下文跟踪缩进层级。

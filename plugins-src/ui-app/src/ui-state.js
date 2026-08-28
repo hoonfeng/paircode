@@ -232,7 +232,7 @@ let fontLinkEl = null
 function loadThemeFonts(theme) {
   const cfg = FONT_CONFIG[theme] || FONT_CONFIG.dark
   const families = [cfg.ui[0], cfg.code[0]].filter(Boolean).join('&family=')
-  const href = 'https://fonts.geekzu.org/css2?family=' + families + '&display=swap'
+  const href = 'https://fonts.loli.net/css2?family=' + families + '&display=swap'
 
   // 移除旧 link
   if (fontLinkEl) { document.head.removeChild(fontLinkEl); fontLinkEl = null }

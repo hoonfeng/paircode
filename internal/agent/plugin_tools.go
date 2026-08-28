@@ -723,9 +723,10 @@ func (h *PluginHost) resolvePluginName(idOrName string) (string, error) {
 }
 
 // cordisInspectReport 生成插件运行时报告（三层自检，对齐 harness cordis_inspect_self）：
-//   L1 摘要：filter 为空 → 插件列表 + 动态包列表（含版本数）+ waiting 提示
-//   L2 版本：filter=pluginId/dyn id/插件名（无 version）→ 该插件版本链 + 运行状态 + 诊断摘要
-//   L3 源码：filter 指向定义且带 version → 指定版本源码 + 完整诊断
+//
+//	L1 摘要：filter 为空 → 插件列表 + 动态包列表（含版本数）+ waiting 提示
+//	L2 版本：filter=pluginId/dyn id/插件名（无 version）→ 该插件版本链 + 运行状态 + 诊断摘要
+//	L3 源码：filter 指向定义且带 version → 指定版本源码 + 完整诊断
 func cordisInspectReport(host *PluginHost, filter, version string) (string, error) {
 	var sb strings.Builder
 	recs := host.Inspect()
@@ -966,6 +967,7 @@ func renderJSDefDetail(d *jsPluginDef) string {
 // extractJSPluginName 从转译后的插件代码静态提取插件名：
 //   - 对象形态 return { name: 'xxx', apply(ctx) {...} } → name 字符串字面量
 //   - 函数形态 return (ctx, config) => {...} / function name(ctx) → 函数名（匿名返回空）
+//
 // 提取失败返回空串（调用方 fallback 到 dyn id）。
 func extractJSPluginName(jsCode string) string {
 	s := strings.TrimSpace(jsCode)
@@ -1004,8 +1006,9 @@ func extractJSPluginName(jsCode string) string {
 }
 
 // ★ cordis 动态插件一律固化到程序目录 <InstallDir>/.pair/plugins/dynamic.json
-//   （插件是程序的扩展，不属于工作区；scope 仅记录生效作用域：global=UI 类
-//   跨工作区 / project=工具插件）。
+//
+//	（插件是程序的扩展，不属于工作区；scope 仅记录生效作用域：global=UI 类
+//	跨工作区 / project=工具插件）。
 const dynamicToolsetName = "dynamic"
 
 // syncDynamicPluginToToolset 把 cordis_define 登记的动态插件固化到全局插件文件

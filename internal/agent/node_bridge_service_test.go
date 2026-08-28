@@ -162,3 +162,53 @@ func mustJSON(v any) string {
 	b, _ := json.Marshal(v)
 	return string(b)
 }
+
+// TestMapBridgeStoreLoop 验证 Node 桥扩展服务（store/loop）映射与参数校验。
+func TestMapBridgeStoreLoop(t *testing.T) {
+	// store.read：convId 必须
+	if _, _, _, err := mapBridgeService("store", "read", map[string]any{}); err == nil {
+		t.Fatal("store.read 缺 convId 应报错")
+	}
+	// store.append：缺 role 报错
+	if _, _, _, err := mapBridgeService("store", "append", map[string]any{"convId": "c1"}); err == nil {
+		t.Fatal("store.append 缺 role 应报错")
+	}
+	// store.read 映射（nodeBridgeManager nil → 执行时报错，映射本身成功）
+	tool, margs, direct, err := mapBridgeService("store", "read", map[string]any{"convId": "c1"})
+	if err != nil || tool != "" || direct == nil {
+		t.Fatalf("store.read 映射异常: tool=%q err=%v", tool, err)
+	}
+	if _, derr := direct(); derr == nil {
+		t.Fatal("无会话管理器时应报错")
+	}
+	_ = margs
+	// loop.info 映射
+	if _, _, direct, err := mapBridgeService("loop", "info", map[string]any{}); err != nil || direct == nil {
+		t.Fatalf("loop.info 映射异常: %v", err)
+	}
+	// loop.snapshot 缺 convId 报错
+	if _, _, _, err := mapBridgeService("loop", "snapshot", map[string]any{}); err == nil {
+		t.Fatal("loop.snapshot 缺 convId 应报错")
+	}
+	// 未知方法
+	if _, _, _, err := mapBridgeService("store", "bogus", map[string]any{"convId": "c1"}); err == nil {
+		t.Fatal("未知 method 应报错")
+	}
+	if _, _, _, err := mapBridgeService("loop", "bogus", map[string]any{}); err == nil {
+		t.Fatal("未知 loop method 应报错")
+	}
+}
+
+// TestNodeBridgeManagerSet 验证管理器注入。
+func TestNodeBridgeManagerSet(t *testing.T) {
+	defer func() { nodeBridgeManager = nil }()
+	SetNodeBridgeManager(nil) // 幂等
+	if nodeBridgeManager != nil {
+		t.Fatal("set nil 应生效")
+	}
+	// 序列化 sanity（消息角色映射到 store.read 输出结构）
+	b, _ := json.Marshal(map[string]any{"role": "user", "content": "hi"})
+	if string(b) != `{"content":"hi","role":"user"}` {
+		t.Fatalf("序列化异常: %s", b)
+	}
+}

@@ -32,17 +32,7 @@ func registerKernelAPIs(s *webServer) {
 	_ = agent.KernelAPIRegister("system.exec", "POST", "/api/system/exec", "执行 shell 命令", s.handleExec)
 
 	// ── 文件系统 ──
-	_ = agent.KernelAPIRegister("fs.drives", "GET", "/api/fs/drives", "磁盘驱动器列表", s.handleFSDrives)
-	_ = agent.KernelAPIRegister("fs.list", "GET", "/api/fs/list", "目录列表", s.handleFSList)
-	_ = agent.KernelAPIRegister("fs.read", "GET", "/api/fs/read", "读文本文件", s.handleFSRead)
-	_ = agent.KernelAPIRegister("fs.write", "POST", "/api/fs/write", "写文件", s.handleFSWrite)
-	_ = agent.KernelAPIRegister("fs.rename", "POST", "/api/fs/rename", "重命名/移动", s.handleFSRename)
-	_ = agent.KernelAPIRegister("fs.delete", "POST", "/api/fs/delete", "删除文件/目录", s.handleFSDelete)
-	_ = agent.KernelAPIRegister("fs.mkdir", "POST", "/api/fs/mkdir", "创建目录", s.handleFSMkdir)
-	_ = agent.KernelAPIRegister("fs.search", "GET", "/api/fs/search", "文件搜索", s.handleFSSearch)
 	_ = agent.KernelAPIRegister("fs.image", "GET", "/api/fs/image", "图片读取（原始字节）", s.handleFSImage)
-	_ = agent.KernelAPIRegister("fs.file-info", "GET", "/api/fs/file-info", "文件类型信息", s.handleFSFileInfo)
-	_ = agent.KernelAPIRegister("fs.hex", "GET", "/api/fs/hex", "文件十六进制转储", s.handleFSHex)
 
 	// ── 工作区 / 设置 ──
 	_ = agent.KernelAPIRegister("workspace", "GET,POST", "/api/workspace", "工作区查询/变更", s.handleWorkspace)
@@ -89,24 +79,6 @@ func registerKernelAPIs(s *webServer) {
 	_ = agent.KernelAPIRegister("debug.logs.byID", "GET", "/api/debug/logs/*", "调试日志详情（前缀）", s.handleDebugLogByID)
 
 	// ── Git ──
-	_ = agent.KernelAPIRegister("git.status", "GET", "/api/git/status", "Git 状态", s.handleGitStatus)
-	_ = agent.KernelAPIRegister("git.init", "GET", "/api/git/init", "Git 初始化", s.handleGitInit)
-	_ = agent.KernelAPIRegister("git.diff", "GET", "/api/git/diff", "Git diff", s.handleGitDiff)
-	_ = agent.KernelAPIRegister("git.add", "POST", "/api/git/add", "Git add", s.handleGitAdd)
-	_ = agent.KernelAPIRegister("git.reset", "POST", "/api/git/reset", "Git reset", s.handleGitReset)
-	_ = agent.KernelAPIRegister("git.commit", "POST", "/api/git/commit", "Git commit", s.handleGitCommit)
-	_ = agent.KernelAPIRegister("git.log", "GET", "/api/git/log", "Git log", s.handleGitLog)
-	_ = agent.KernelAPIRegister("git.log.alias", "GET", "/api/git-log", "Git log（避广告拦截器别名）", s.handleGitLog)
-	_ = agent.KernelAPIRegister("git.branch", "POST", "/api/git/branch", "Git 分支", s.handleGitBranch)
-	_ = agent.KernelAPIRegister("git.checkout", "POST", "/api/git/checkout", "Git checkout", s.handleGitCheckout)
-	_ = agent.KernelAPIRegister("git.stash", "POST", "/api/git/stash", "Git stash", s.handleGitStash)
-	_ = agent.KernelAPIRegister("git.stash-list", "GET", "/api/git/stash-list", "Git stash 列表", s.handleGitStashList)
-	_ = agent.KernelAPIRegister("git.ignore", "GET", "/api/git/ignore", "Git ignore 读取", s.handleGitIgnore)
-	_ = agent.KernelAPIRegister("git.discard", "POST", "/api/git/discard", "Git discard", s.handleGitDiscard)
-	_ = agent.KernelAPIRegister("git.push", "POST", "/api/git/push", "Git push", s.handleGitPush)
-	_ = agent.KernelAPIRegister("git.pull", "POST", "/api/git/pull", "Git pull", s.handleGitPull)
-	_ = agent.KernelAPIRegister("git.remote", "GET", "/api/git/remote", "Git remote", s.handleGitRemote)
-
 
 	// ── 记忆 ──
 	_ = agent.KernelAPIRegister("memory.search", "GET", "/api/memory/search", "记忆搜索", s.handleMemorySearch)

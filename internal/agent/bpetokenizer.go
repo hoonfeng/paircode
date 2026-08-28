@@ -17,18 +17,18 @@ import (
 // 纯 Go 实现，零外部依赖。
 
 const (
-	bertMaxSeqLen  = 512
-	bertCLS        = "[CLS]"
-	bertSEP        = "[SEP]"
-	bertPAD        = "[PAD]"
-	bertUNK        = "[UNK]"
-	bertMASK       = "[MASK]"
+	bertMaxSeqLen = 512
+	bertCLS       = "[CLS]"
+	bertSEP       = "[SEP]"
+	bertPAD       = "[PAD]"
+	bertUNK       = "[UNK]"
+	bertMASK      = "[MASK]"
 
-	clsID    = 101
-	sepID    = 102
-	padID    = 0
-	unkID    = 100
-	maskID   = 103
+	clsID  = 101
+	sepID  = 102
+	padID  = 0
+	unkID  = 100
+	maskID = 103
 )
 
 // BERTTokenizer BERT WordPiece 分词器。

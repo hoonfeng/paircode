@@ -95,10 +95,13 @@ func TestGeneratedPluginPackagesComplete(t *testing.T) {
 // ctx.binary.exec 调度）→ 宿主 ctx.binary 服务 → 插件目录 bin/ 下独立二进制
 // （stdin/stdout JSON 协议）→ 工具执行结果返回。
 // ★ 插件目录自包含：源码（index.js + 独立二进制项目 plugins-src/plugins/tool-binary/）
-//   与二进制（bin/tool-binary.exe）均在 .pair/plugins/tool-binary/ 内，
-//   用户改源码重编译即更换实现，无需改主程序。
+//
+//	与二进制（bin/tool-binary.exe）均在 .pair/plugins/tool-binary/ 内，
+//	用户改源码重编译即更换实现，无需改主程序。
+//
 // ★ 2026-08-16：tool-binary-re 已合并进 tool-binary（逆向 6 工具并入），
-//   本测试直接验证合并后插件。
+//
+//	本测试直接验证合并后插件。
 func TestBinaryPluginExec(t *testing.T) {
 	repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
@@ -171,7 +174,8 @@ func TestBinaryPluginExec(t *testing.T) {
 // execute 调 ctx.binary.exec(t.name, args, {bin:"tool-binary"}) → 统一二进制
 // （plugins-src/plugins/tool-binary，承载全部内置组实现）→ 工具执行结果返回。
 // ★ 改实现：重编译 plugins-src/plugins/tool-binary → 替换 .pair/plugins/tool-binary/bin/
-//   tool-binary.exe → 全部切换组生效（主程序无需重编译）。
+//
+//	tool-binary.exe → 全部切换组生效（主程序无需重编译）。
 func TestBinaryPluginExecUnified(t *testing.T) {
 	repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {

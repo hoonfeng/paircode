@@ -16,9 +16,9 @@ const (
 
 // Hook 工具钩子：可注册多个，按优先级有序调用。
 type Hook struct {
-	Name     string                 // 唯一标识
-	Kind     HookKind               // before/after/error
-	Priority int                    // 越小越先调用（默认 100）
+	Name     string   // 唯一标识
+	Kind     HookKind // before/after/error
+	Priority int      // 越小越先调用（默认 100）
 	BeforeFn func(ctx context.Context, name string, args map[string]any) (proceed bool, override string, overrideErr error)
 	AfterFn  func(ctx context.Context, name string, args map[string]any, result string, err error, duration time.Duration)
 	ErrorFn  func(ctx context.Context, name string, args map[string]any, err error) (result string, replacedErr error)
@@ -26,8 +26,8 @@ type Hook struct {
 
 // HookStore 钩子存储：支持 Add/Remove/Get。
 type HookStore struct {
-	hooks    []*Hook          // 按 Priority 排序
-	byName   map[string]*Hook // 唯一名索引
+	hooks  []*Hook          // 按 Priority 排序
+	byName map[string]*Hook // 唯一名索引
 }
 
 // NewHookStore 创建钩子存储。

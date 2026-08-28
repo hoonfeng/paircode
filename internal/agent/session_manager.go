@@ -62,6 +62,9 @@ type LoopOpts struct {
 	ReviewWhitelist []string
 	// ReviewProvider 审核模型的 Provider（ReviewMode="auto" 时用）。Loop 内部用它懒建 Reviewer。
 	ReviewProvider Provider
+	// StagedToolGroups 首步极简工具面候选组（插件装配链：agentloop registerSettings
+	// → 装配器解析 → 本字段；nil/空 = 内核默认组 tools_staging.go）。
+	StagedToolGroups [][]string
 	// PlanProvider 规划模型的 Provider（自主模式用）。当 Autonomous=true 时，Loop 内部使用此
 	// Provider 执行规划阶段（update_plan），与主 Provider 区分以支持不同模型。
 	PlanProvider Provider
@@ -560,9 +563,12 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		originalHist := opts.HistoryOriginal
 		loop.OnBatchPersist = func(msgs []Message) {
 			// ★ 重组：原始历史（未压缩）+ 本轮新增消息 = 持久化版本。
-			// msgs 结构：[system(可能), ...历史, 当前用户消息, ...本轮新增(assistant/tool)]
-			// 锚点：最后一条 RoleUser = 当前任务（Run 保证存在）。
-			//   tail = 最后一条 user 之后的所有消息（本轮新增）。
+			// msgs 结构：[system(可能), ...历史, 当前用户消息, 背景上下文快照?, ...本轮新增(assistant/tool)]
+			// 锚点：最后一条「真实任务」RoleUser = 当前任务（Run 保证存在）——
+			//   ★ 2026-08-27 背景快照（backgroundCtxMarker 前缀）也是 RoleUser，
+			//   但它是循环同步进消息流的背景信息（位于任务之后），不能作为锚点
+			//   （否则 tail 为空、快照与后续消息全部丢失——快照落盘即失效）。
+			//   tail = 锚点之后的所有消息（含快照 + 本轮新增）。
 			// ⚠️ 不能再用「condensedLen 固定偏移」定位 tail：
 			//   Run 开头的 maybeCompact（compact 分支，历史 token 超阈值）会压缩 msgs、
 			//   删除中段历史 → len(msgs) 可能 < condensedLen → 旧逻辑误走兜底把压缩版
@@ -571,7 +577,7 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 			var combined []Message
 			lastUserIdx := -1
 			for i := len(msgs) - 1; i >= 0; i-- {
-				if msgs[i].Role == RoleUser {
+				if msgs[i].Role == RoleUser && !strings.HasPrefix(msgs[i].Content, backgroundCtxMarker) {
 					lastUserIdx = i
 					break
 				}

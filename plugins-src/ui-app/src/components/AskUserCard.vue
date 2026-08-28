@@ -2,8 +2,8 @@
   <div class="ask-user-card">
     <div class="ask-user-question">{{ question }}</div>
 
-    <!-- 单选 (radio) -->
-    <div v-if="askType === 'single'" class="ask-user-options">
+    <!-- 单选 (radio)：options 为空时降级为文本输入（见下方兜底） -->
+    <div v-if="askType === 'single' && hasOptions" class="ask-user-options">
       <label v-for="(opt, i) in options" :key="i"
              :class="['ask-option', { selected: selectedOpt === opt }]"
              @click="selectOption(opt)">
@@ -16,8 +16,8 @@
       </button>
     </div>
 
-    <!-- 多选 (checkbox) -->
-    <div v-if="askType === 'multi'" class="ask-user-options">
+    <!-- 多选 (checkbox)：options 为空时降级为文本输入 -->
+    <div v-else-if="askType === 'multi' && hasOptions" class="ask-user-options">
       <label v-for="(opt, i) in options" :key="i"
              :class="['ask-option', { selected: selectedMulti.includes(opt) }]"
              @click="toggleMulti(opt)">
@@ -34,8 +34,8 @@
       </div>
     </div>
 
-    <!-- 单选 + 自由输入 -->
-    <div v-if="askType === 'single-with-input'" class="ask-user-wrapper">
+    <!-- 单选 + 自由输入：options 为空时降级为文本输入 -->
+    <div v-else-if="askType === 'single-with-input' && hasOptions" class="ask-user-wrapper">
       <div class="ask-user-options">
         <label v-for="(opt, i) in options" :key="i"
                :class="['ask-option', { selected: selectedOpt === opt }]"
@@ -55,10 +55,12 @@
       </div>
     </div>
 
-    <!-- 纯文本输入 (默认) -->
-    <div v-if="askType === 'text' || !askType" class="ask-user-input-row">
+    <!-- 纯文本输入 (默认/兜底：任何未识别类型都显示输入框，保证可回答) -->
+    <!-- ★ options 空兜底：选择类 askType 但未提供选项时降级为文本输入，附提示，
+         避免出现「只有提交按钮、点不了」的死卡片（模型漏填 options 的常见情况） -->
+    <div v-else class="ask-user-input-row">
       <input v-model="textInput" class="ask-user-input" type="text"
-             placeholder="输入回答..." @keydown.enter="submitText" :disabled="answered" />
+             :placeholder="noOptionsHint" @keydown.enter="submitText" :disabled="answered" />
       <button class="ask-user-btn" @click="submitText"
               :disabled="answered || !textInput.trim()">
         {{ answered ? '已回答' : '发送' }}
@@ -68,7 +70,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 
 const props = defineProps({
   question: { type: String, default: '' },
@@ -78,6 +80,17 @@ const props = defineProps({
   answered: { type: Boolean, default: false },
 })
 const emit = defineEmits(['answer'])
+
+// hasOptions：选项列表非空（选择类卡片仅在有选项时渲染选项）
+const hasOptions = computed(() => Array.isArray(props.options) && props.options.length > 0)
+// noOptionsHint：选择类 askType 但无选项时，输入框提示语
+const noOptionsHint = computed(() => {
+  const t = String(props.askType || '')
+  if (t === 'single' || t === 'multi' || t === 'single-with-input') {
+    return '（未提供选项，请直接输入你的回答）'
+  }
+  return '输入回答...'
+})
 
 const selectedOpt = ref('')
 const selectedMulti = ref([])

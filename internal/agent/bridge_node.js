@@ -174,6 +174,16 @@ function decorateCtx(ctx, plugin) {
   ctx.bash = {
     exec: (command, opts) => svc('bash', 'exec', Object.assign({ command }, opts || {})),
   };
+  // ★ 2026-08-27 Node 桥能力扩展：消息落盘（store）+ 循环状态/上下文快照（loop）
+  //   ——Node 插件可读/写会话消息（数据落盘逻辑改变）、感知/干预 agentloop。
+  ctx.store = {
+    read: (convId, opts) => svc('store', 'read', Object.assign({ convId }, opts || {})),
+    append: (convId, role, content, opts) => svc('store', 'append', Object.assign({ convId, role, content }, opts || {})),
+  };
+  ctx.loop = {
+    info: () => svc('loop', 'info', {}),
+    snapshot: (convId, opts) => svc('loop', 'snapshot', Object.assign({ convId }, opts || {})),
+  };
   ctx.workspaceRoot = process.env.CORDIS_WORKSPACE_ROOT || '.';
   return ctx;
 }

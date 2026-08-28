@@ -19,8 +19,8 @@ var diagToolNames = []string{
 	"memory_write", "memory_read", "memory_search", "project_info_read", "project_info_tree",
 	"update_tasks", "update_plan", "tool_stats", "history_search", "codegraph_build",
 	"codegraph_search", "codegraph_impact", "bug_detect", "bug_fix",
-	"csv_read", "word_read", "screenshot_desktop", "web_debug", "image_analyze",
-	"cordis_define", "cordis_run", "toolset_build", "mcp_add", "generate_commit_message",
+	"csv_read", "word_read", "screenshot_desktop", "web_debug",
+	"cordis_define", "cordis_run", "toolset_build", "mcp_add",
 	"ask_user", "run_code", "str_replace_editor", "debug_start", "debug_stop",
 	"memory_verify", "project_info_verify", "skill_load", "skill_write",
 }
@@ -36,8 +36,8 @@ func diagToolDef(name string) ToolDefinition {
 	}
 }
 
-// 1) 注册顺序稳定性：按 r.order 输出的 Definitions 依赖装配时序；
-//    两次调用同一 Registry 应一致（确定性），但不同装配顺序会导致不同前缀。
+//  1. 注册顺序稳定性：按 r.order 输出的 Definitions 依赖装配时序；
+//     两次调用同一 Registry 应一致（确定性），但不同装配顺序会导致不同前缀。
 func TestDiag_DefinitionsRegistrationOrder(t *testing.T) {
 	// 模拟两种装配顺序（如插件加载时序不同）：正序 vs 逆序
 	r1 := NewRegistry()
@@ -120,8 +120,8 @@ func TestDiag_DescTruncationValidUTF8(t *testing.T) {
 	}
 }
 
-// 4) Usage 解析：OpenAI 兼容端点返回 prompt_tokens_details.cached_tokens，
-//    而 agent.Usage 只绑定 prompt_cache_hit_tokens —— 命中统计会显示为 0。
+//  4. Usage 解析：OpenAI 兼容端点返回 prompt_tokens_details.cached_tokens，
+//     而 agent.Usage 只绑定 prompt_cache_hit_tokens —— 命中统计会显示为 0。
 func TestDiag_UsageOpenAICompat(t *testing.T) {
 	// DeepSeek 专有拼写
 	rawDeepSeek := `{"prompt_tokens":1000,"completion_tokens":50,"total_tokens":1050,"prompt_cache_hit_tokens":800,"prompt_cache_miss_tokens":200}`
@@ -141,7 +141,6 @@ func TestDiag_UsageOpenAICompat(t *testing.T) {
 		t.Log("★ 结论：OpenAI 兼容端点命中统计丢失（prompt_tokens_details.cached_tokens 未解析）")
 	}
 }
-
 
 // 5) 修复验证：Definitions 现在按字典序排序 → 不同装配时序下 tools JSON 完全一致。
 func TestDiag_DefinitionsSortedNowStable(t *testing.T) {

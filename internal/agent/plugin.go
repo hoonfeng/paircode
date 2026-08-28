@@ -478,7 +478,7 @@ type PluginHost struct {
 	// ★ 工具对 cordis 可见性（2026-08-19）：插件面板「插件内工具」对勾控制的是
 	//   「JS 插件运行时（ctx.tools.list）能否看到该工具」，与 agent 可见性
 	//   （工作区工具集 Enabled）完全解耦。默认全部对 cordis 可见（缺省 true）。
-	cordisMu        sync.RWMutex
+	cordisMu          sync.RWMutex
 	toolCordisVisible map[string]bool
 }
 
@@ -621,7 +621,13 @@ func (h *PluginHost) InvokeClientMethod(plugin, method string, args any) (any, e
 		return nil, fmt.Errorf("插件 %q 未在运行（无法 invoke %s）", plugin, method)
 	}
 	adapter.mu.Lock()
-	fn, ok := adapter.handlers[method]
+	// ★ 2026-08-27 双上下文：先查 UI handler 存储（client 半 invoke 专用，
+	//   执行期间绑定当前主根）；未注册则回退通用 handlers（向后兼容早期用
+	//   harness.handle 暴露的 UI 方法——无 UI 根绑定，遵循装载根语义）。
+	fn, ok := adapter.handlersUI[method]
+	if !ok {
+		fn, ok = adapter.handlers[method]
+	}
 	adapter.mu.Unlock()
 	if !ok {
 		return nil, fmt.Errorf("插件 %q 未注册 host 方法 %q（可用 harness.handle 或 ctx.registerClientMethod 注册）", plugin, method)
@@ -738,6 +744,11 @@ func NewPluginHost(registry *Registry, store ConversationStore, root string) *Pl
 	// 数据源——Generate 逻辑内嵌宿主（toolset_templates.go），随宿主合理；
 	// 市场/用户插件仍可经 RegisterTemplate / ctx.toolset.registerTemplate 追加。
 	registerBuiltinTemplates(h)
+	// ★ t1 T1 闭环：孤儿工具组 Go 实现存档为宿主能力（hostExecutors），
+	//   供 .pair/plugins/tool-{asset,bridge,entryconfig,evolution,progress,
+	//   resource,snapshot} 磁盘插件经 ctx.hostTool.exec 复用（seam 模式；
+	//   不注册进 Registry，agent 可见面由插件决定）。
+	ArchiveHostLegacyTools(root)
 	return h
 }
 
@@ -844,9 +855,10 @@ func (h *PluginHost) saveApprovedFile(p string, src map[string]bool) {
 
 // IsClientApproved 该插件的 client 半是否已获激活批准。
 // ★ 2026-08-19：client 半激活审批机制整体取消（参考项目 deepseek-harness 无
-//   approvedClientPackages 机制，属自行添加）→ 恒 true：所有带 client 半的插件
-//   视为已批准，浏览器直接装载，无需 cordis_run 审批门、无需手动维护
-//   .pair/cordis-approved.json。保留签名兼容调用点；load/save 批准文件不再产生效果。
+//
+//	approvedClientPackages 机制，属自行添加）→ 恒 true：所有带 client 半的插件
+//	视为已批准，浏览器直接装载，无需 cordis_run 审批门、无需手动维护
+//	.pair/cordis-approved.json。保留签名兼容调用点；load/save 批准文件不再产生效果。
 func (h *PluginHost) IsClientApproved(pluginID string) bool {
 	return true
 }

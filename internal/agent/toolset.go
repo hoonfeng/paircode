@@ -38,11 +38,11 @@ import (
 
 // Toolset 工具集 = 命名插件包。
 type Toolset struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	Project     string          `json:"project,omitempty"`  // 适用项目（basename，多项目区分）
-	Version     string          `json:"version,omitempty"`  // 语义版本
-	CreatedAt   string          `json:"createdAt,omitempty"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Project     string `json:"project,omitempty"` // 适用项目（basename，多项目区分）
+	Version     string `json:"version,omitempty"` // 语义版本
+	CreatedAt   string `json:"createdAt,omitempty"`
 	// BuiltinsInited 内置工具组是否已初始化进本工具集（★ 2026-08-20：
 	// 内置工具默认放入工作区工具集；用户后续可整组/单工具移出。
 	// 标记只补一次——防止「移出后重启又补回」；旧工具集无此字段 → 视为未初始化补齐一次）。
@@ -54,9 +54,9 @@ type Toolset struct {
 type ToolsetPlugin struct {
 	Name    string `json:"name"`
 	Purpose string `json:"purpose"`
-	Code    string `json:"code,omitempty"`     // host 半：async 函数体（return { name, apply(ctx) }）
-	Client  string `json:"client,omitempty"`   // client 半：(ui) => void
-	Dir     string `json:"-"`                  // ★ 插件目录（磁盘插件包装载时注入，供 ctx.binary 定位 bin/assets）
+	Code    string `json:"code,omitempty"`   // host 半：async 函数体（return { name, apply(ctx) }）
+	Client  string `json:"client,omitempty"` // client 半：(ui) => void
+	Dir     string `json:"-"`                // ★ 插件目录（磁盘插件包装载时注入，供 ctx.binary 定位 bin/assets）
 	// Scope 插件生效作用域（cordis 动态插件条目）："global"=全局插件（UI 类，
 	// 跨工作区生效，存程序目录）/""或"project"=项目插件。★ 存储统一在程序目录
 	// <InstallDir>/.pair/plugins/（插件是程序的扩展，不属于工作区）；
@@ -109,13 +109,14 @@ type ToolsetMeta struct {
 	Project     string `json:"project,omitempty"`
 	Version     string `json:"version,omitempty"`
 	CreatedAt   string `json:"createdAt,omitempty"`
-	Scope       string `json:"scope"`             // project | global
+	Scope       string `json:"scope"` // project | global
 	PluginCount int    `json:"pluginCount"`
 }
 
 // listToolsets 列出指定作用域全部工具集元信息（按名排序）。
 // ★ 2026-08-17：builtin.json 独立机制已废除（MigrateLegacyBuiltinJSON 迁移合并），
-//   工具集文件全部为普通工作区工具集，无需跳过。
+//
+//	工具集文件全部为普通工作区工具集，无需跳过。
 func listToolsets(projectRoot string, scope toolsetScope) []ToolsetMeta {
 	dir := toolsetDir(projectRoot, scope)
 	entries, err := os.ReadDir(dir)
@@ -237,16 +238,20 @@ func removeToolset(projectRoot string, scope toolsetScope, name string) error {
 //     str_replace_editor/run_code）；
 //  2. 框架本身提供给 agent 的工具（默认可用）：
 //     - system：核心 + SystemTool（任务追踪/提问/提交标记/历史/技能/MCP/
-//       市场等宿主自举工具）+ tool-system 插件承载的框架工具
+//     市场等宿主自举工具）+ tool-system 插件承载的框架工具
 //     - plugin-mgmt：cordis_* 插件管理工具
 //     - toolset-mgmt：toolset_* 工具集管理工具
+//
 // 业务插件工具（tool-git/tool-codegraph 等磁盘插件）不默认加入——用户用
 // toolset_edit add_plugin 按需加入。
 // ★ 2026-08-17：装载≠可用兜底——新工作区无任何工具集时，agent 默认只有
-//   基础工具 + 框架本身提供的工具；其余工具对 agent 隐藏，按需加入。
+//
+//	基础工具 + 框架本身提供的工具；其余工具对 agent 隐藏，按需加入。
+//
 // ★ 2026-08-20：内置工具组（system/plugin-mgmt/toolset-mgmt）默认写入
-//   default.json（ensureBuiltinGroupsInWorkspace 对已有工作区幂等补齐）——
-//   内置工具在工作区工具集中可见可管理（工具集面板/插件面板控制启用）。
+//
+//	default.json（ensureBuiltinGroupsInWorkspace 对已有工作区幂等补齐）——
+//	内置工具在工作区工具集中可见可管理（工具集面板/插件面板控制启用）。
 func defaultProjectToolset(reg *Registry, ph *PluginHost, project string) *Toolset {
 	return &Toolset{
 		Name:           "default",
@@ -267,7 +272,7 @@ func builtinGroupEntries(reg *Registry, ph *PluginHost) []ToolsetPlugin {
 	for _, t := range base {
 		sysSet[t] = true
 	}
-	// tool-system 插件承载的框架工具（SystemTool 承揽 + Skills/MCP/市场/提交信息）
+	// tool-system 插件承载的框架工具（SystemTool 承揽 + Skills/MCP/市场）
 	if ph != nil {
 		for _, tn := range ph.PluginToolsByPlugin()["tool-system"] {
 			if tn != "" {
@@ -341,7 +346,9 @@ func builtinGroupEntries(reg *Registry, ph *PluginHost) []ToolsetPlugin {
 
 // ensureDefaultWorkspaceToolset 无项目工具集时自动生成基础工具集（default.json）。
 // ★ 先迁移旧版 builtin.json（内置组条目并入 default，旧文件删除）——合并后的
-//   builtin.json 不存在，任何 *.json 都是普通工作区工具集。
+//
+//	builtin.json 不存在，任何 *.json 都是普通工作区工具集。
+//
 // 判定：.pair/toolsets/ 下不存在任何项目工具集。幂等：已存在时不做。
 func ensureDefaultWorkspaceToolset(ph *PluginHost, root string) error {
 	if root == "" {
@@ -432,8 +439,10 @@ func EnsureWorkspaceToolsetPublic(ph *PluginHost, root string) error {
 
 // LoadAllToolsets 装载工作区全部工具集（启动时调用；失败不致命）。
 // ★ 2026-08-17：内置组条目已并入工作区工具集（default.json），随普通工具集
-//   一起装载，无独立 builtin.json 装载路径（旧文件由 ensureDefaultWorkspaceToolset
-//   迁移清理）。
+//
+//	一起装载，无独立 builtin.json 装载路径（旧文件由 ensureDefaultWorkspaceToolset
+//	迁移清理）。
+//
 // ★ 全局插件（UI 类跨工作区）独立于工具集：见 LoadGlobalPlugins（不进工具集列表）。
 func LoadAllToolsets(ph *PluginHost, projectRoot string) {
 	if ph == nil {
@@ -501,9 +510,10 @@ func LoadAllToolsets(ph *PluginHost, projectRoot string) {
 // ─── 全局插件（独立于工具集）────────────────────────────
 
 // ★ 设计：没有「全局工具集」——工具集是工作区级概念。全局生效的是插件
-//   （UI 类插件，含 client 半，跨工作区装载），存 <InstallDir>/.pair/plugins/，
-//   每个插件一个「插件包」目录（package.json + 源码），启动时单独装配，
-//   不属于任何工具集（工具集列表/管理不显示）。
+//
+//	（UI 类插件，含 client 半，跨工作区装载），存 <InstallDir>/.pair/plugins/，
+//	每个插件一个「插件包」目录（package.json + 源码），启动时单独装配，
+//	不属于任何工具集（工具集列表/管理不显示）。
 func globalPluginsDir() string {
 	return filepath.Join(core.InstallDir(), ".pair", "plugins")
 }
@@ -515,14 +525,14 @@ func GlobalPluginsPath() string {
 
 // GlobalPluginPackage 全局插件包描述（<name>/package.json）。
 type GlobalPluginPackage struct {
-	Name    string `json:"name"`              // 插件名（包目录名）
-	Purpose string `json:"purpose,omitempty"` // 用途说明
-	Version string `json:"version"`           // 版本
-	Scope   string `json:"scope,omitempty"`   // "global"（UI 类跨工作区）/ "project"
-	Type    string `json:"type"`              // "plugin"
-	Main    string `json:"main"`              // host 半源码文件（index.js）
-	Client  string `json:"client,omitempty"`  // client 半源码文件（client.js，可选）
-	Config  map[string]any `json:"config,omitempty"` // 插件配置（透传 apply(ctx, config)）
+	Name    string         `json:"name"`              // 插件名（包目录名）
+	Purpose string         `json:"purpose,omitempty"` // 用途说明
+	Version string         `json:"version"`           // 版本
+	Scope   string         `json:"scope,omitempty"`   // "global"（UI 类跨工作区）/ "project"
+	Type    string         `json:"type"`              // "plugin"
+	Main    string         `json:"main"`              // host 半源码文件（index.js）
+	Client  string         `json:"client,omitempty"`  // client 半源码文件（client.js，可选）
+	Config  map[string]any `json:"config,omitempty"`  // 插件配置（透传 apply(ctx, config)）
 }
 
 // LoadGlobalPlugins 装配全部全局插件包（启动时调用；失败不致命）。返回成功装载数。
@@ -595,7 +605,7 @@ func applyGlobalPlugin(ph *PluginHost, p *ToolsetPlugin) error {
 		_ = ph.Unload(p.Name)
 		_ = ph.Undefine(p.Name)
 	}
-	id, err := ph.DefineJSCodeFull(p.Code, "", p.Purpose, "", p.Client)
+	id, err := ph.DefineJSCodeFull(p.Code, "", p.Purpose, p.Dir, p.Client)
 	if err != nil {
 		return err
 	}
@@ -605,7 +615,7 @@ func applyGlobalPlugin(ph *PluginHost, p *ToolsetPlugin) error {
 		if def.scope == "" {
 			def.scope = "project"
 		}
-		def.dir = p.Dir // ★ 插件目录（ctx.binary 据此定位 bin/<name>.exe 与 assets/）
+		def.dir = p.Dir       // ★ 插件目录（ctx.binary 据此定位 bin/<name>.exe 与 assets/）
 		def.config = p.Config // ★ 插件配置（package.json "config"，apply(ctx, config) 第二参）
 	}
 	if err := ph.LoadJSDynamic(def); err != nil {
@@ -792,7 +802,7 @@ func ExportToolsetJSON(ts *Toolset, tags []string, author, repo string) (string,
 		Tags:          tags,
 		Author:        author,
 		Repository:    repo,
-		Readme:        fmt.Sprintf("# 工具集：%s\n\n%s\n\n## 包含插件\n%s",
+		Readme: fmt.Sprintf("# 工具集：%s\n\n%s\n\n## 包含插件\n%s",
 			ts.Name, ts.Description, toolsetPluginList(ts)),
 	}
 	data, err := json.MarshalIndent(pub, "", "  ")
@@ -980,8 +990,10 @@ func RemovePluginFromToolsetsPublic(root, name string) int {
 // 与 stop 的 RemovePluginFromToolsetsPublic 对称）：读 <InstallDir>/.pair/plugins/
 // <name>/package.json + main 源码 → 作为 JS 条目加入（已有同名条目跳过）。
 // ★ 2026-08-2x：stop 移除条目后若不加回，重启时磁盘插件虽被 LoadGlobalPlugins
-//   装载（running），但工具不在工具集白名单 → agent 不可见（start 后也恢复不了）。
-//   调用方需确保该插件有工具（无工具插件不加，避免 UI 类插件占位工具集）。
+//
+//	装载（running），但工具不在工具集白名单 → agent 不可见（start 后也恢复不了）。
+//	调用方需确保该插件有工具（无工具插件不加，避免 UI 类插件占位工具集）。
+//
 // 返回加入的工具集数（0 = 无包目录/已在工具集/失败）。
 func RestorePluginToToolsetsPublic(root, name string) int {
 	if root == "" || name == "" {
@@ -1063,7 +1075,7 @@ func applyToolsetPlugin(ph *PluginHost, p *ToolsetPlugin) error {
 		_ = ph.Unload(p.Name)
 		_ = ph.Undefine(p.Name) // 删除 plugins 注册（defs 按 id 存，孤儿条目无碍）
 	}
-	id, err := ph.DefineJSCodeFull(p.Code, "", p.Purpose, "", p.Client)
+	id, err := ph.DefineJSCodeFull(p.Code, "", p.Purpose, p.Dir, p.Client)
 	if err != nil {
 		return err
 	}
@@ -1088,6 +1100,7 @@ func applyToolsetPlugin(ph *PluginHost, p *ToolsetPlugin) error {
 //     恢复默认状态（ToolDefaultEnabled：harness 保留清单内保持启用，其余禁用）——
 //     工具从「已加入」回到「被过滤」。
 //   - JS 插件条目：正常 Unload（回收工具/事件/系统提示）+ Undefine。
+//
 // 幂等：插件未运行 / 工具未注册时无操作。
 func unloadToolsetPlugin(ph *PluginHost, p *ToolsetPlugin) {
 	if ph == nil || p == nil {
@@ -1132,7 +1145,7 @@ func unloadToolsetPlugin(ph *PluginHost, p *ToolsetPlugin) {
 //   - SystemTool（宿主会话绑定：update_tasks/update_plan/tool_stats/history_*）
 //   - cordis_*（插件登记/装载/停止/回收/查看——agent 自举链路）
 //   - toolset_*（工具集管理——agent 自主构建/编辑工具集）
-//   - ask_user / generate_commit_message / task_create（循环协议）
+//   - ask_user / task_create（循环协议）
 func isAgentProtocolTool(name string) bool {
 	if HarnessAlignedToolNames[name] {
 		return true
@@ -1153,6 +1166,7 @@ func isAgentProtocolTool(name string) bool {
 // workspaceToolsetVisibleTools 工作区工具集声明的工具白名单：
 //   - 内置工具包条目（Builtin）：Tools 清单（用户选择加入的内置组工具）
 //   - JS 插件条目：该插件经 pluginTools 注册的工具（工具集插件 = 声明工具对 agent 可见）
+//
 // 供可见性收敛使用（装载钩子 + 启动全量兜底）。
 func (h *PluginHost) workspaceToolsetVisibleTools() map[string]bool {
 	keep := map[string]bool{}
@@ -1227,8 +1241,9 @@ func (h *PluginHost) workspaceToolsetVisibleTools() map[string]bool {
 // workspaceToolsetDisabledTools 工作区工具集显式摘除的工具集合（全部条目
 // DisabledTools 并集）。
 // ★ 2026-08-17：摘除清单对「协议/SystemTool 工具」也生效——用户从管理弹窗
-//   移出的工具写入 DisabledTools，重启后 ApplyToolsetVisibilityFilter 先排除
-//   这些工具再强启协议工具，保证移除持久有效（enable_tool 可恢复）。
+//
+//	移出的工具写入 DisabledTools，重启后 ApplyToolsetVisibilityFilter 先排除
+//	这些工具再强启协议工具，保证移除持久有效（enable_tool 可恢复）。
 func (h *PluginHost) workspaceToolsetDisabledTools() map[string]bool {
 	out := map[string]bool{}
 	if h == nil || h.root == "" {
@@ -1268,6 +1283,7 @@ func (h *PluginHost) workspaceToolsetDisabledTools() map[string]bool {
 //     不给工具集——工具集管理/白名单不再出现）。
 //   - builtin 条目：Tools/DisabledTools 中未真实注册的工具移除；组内工具全部
 //     未暴露（Tools 为空，或全部被 DisabledTools 摘除 = 面板未启用）→ 整条移除。
+//
 // 幂等；仅启动实装（LoadAllToolsets）完成后调用一次。返回清理了条目的工具集数量。
 func pruneUnavailableFromToolsets(ph *PluginHost, root string) int {
 	if root == "" {
@@ -1361,8 +1377,9 @@ func pruneUnavailableFromToolsets(ph *PluginHost, root string) int {
 // agent 只暴露工作区工具集声明的工具（builtin 条目 Tools + JS 插件工具 −
 // DisabledTools），未声明的全部禁用（cordis/前端仍可见可管理，toolset_edit 可加入）。
 // ★ 2026-08-17 白名单模型：有工具集 → 只暴露工具集里的工具；无工具集 → 先自动
-//   创建基础工具集（极简核心 + 框架本身提供的工具），再按声明收敛。
-//   工作区隔离：每个工作区读自己的 .pair/toolsets/，互不影响。
+//
+//	创建基础工具集（极简核心 + 框架本身提供的工具），再按声明收敛。
+//	工作区隔离：每个工作区读自己的 .pair/toolsets/，互不影响。
 func ApplyWorkspaceToolsetWhitelist(ph *PluginHost, reg *Registry, root string) {
 	if reg == nil || root == "" {
 		return
@@ -1490,8 +1507,9 @@ func (h *PluginHost) applyPluginToolVisibility(name string) {
 
 // hasWorkspaceToolsets 工作区是否存在工具集配置（.pair/toolsets/ 下任意 *.json）。
 // ★ 2026-08-17：可见性收敛（装载≠可用）仅在「工作区配置了工具集」时生效——
-//   无工具集（新项目未 toolset_build、单元测试临时目录等）保持默认全量
-//   （工具注册即对 agent 可见，旧行为）。用户配置工具集后即开始收敛。
+//
+//	无工具集（新项目未 toolset_build、单元测试临时目录等）保持默认全量
+//	（工具注册即对 agent 可见，旧行为）。用户配置工具集后即开始收敛。
 func hasWorkspaceToolsets(root string) bool {
 	if root == "" {
 		return false
@@ -1525,9 +1543,11 @@ func (h *PluginHost) hideToolIfNotInToolset(name string) {
 
 // ApplyToolsetVisibilityFilter 收敛 agent 可见工具 = 工作区工具集声明 + 协议/管理工具。
 // ★ 语义（2026-08-17）：装载 ≠ agent 可用。全部插件照常装载（cordis 可见可管理），
-//   但 agent 执行任务时只能看到「工作区工具集（.pair/toolsets/*.json）声明的工具」+
-//   「自举管理工具（SystemTool + cordis_*/toolset_* 等）」。未加入工具集的工具
-//   Enabled=false（注册保留、前端可见），恢复 = toolset_edit add_plugin。
+//
+//	但 agent 执行任务时只能看到「工作区工具集（.pair/toolsets/*.json）声明的工具」+
+//	「自举管理工具（SystemTool + cordis_*/toolset_* 等）」。未加入工具集的工具
+//	Enabled=false（注册保留、前端可见），恢复 = toolset_edit add_plugin。
+//
 // 幂等；harness 对齐模式（WB_HARNESS=1）不干预（走 ApplyHarnessToolFilter）。
 func ApplyToolsetVisibilityFilter(r *Registry, ph *PluginHost, root string) int {
 	if r == nil || HarnessOnlyTools() || !hasWorkspaceToolsets(root) {

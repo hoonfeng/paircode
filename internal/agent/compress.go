@@ -17,19 +17,19 @@ import (
 )
 
 const (
-	compactRatio         = 0.90 // 重度压缩触发阈值：90% 时全量压缩（避免到 95% 急刹）
-	compactRatioEarly    = 0.45 // 预压缩触发阈值：45% 时做轻度压缩，让 Agent 更早感知早期上下文
+	compactRatio      = 0.90 // 重度压缩触发阈值：90% 时全量压缩（避免到 95% 急刹）
+	compactRatioEarly = 0.45 // 预压缩触发阈值：45% 时做轻度压缩，让 Agent 更早感知早期上下文
 	// compactHardFloor 绝对硬地板：配置窗口超大（>此值）时，相对阈值形同虚设
 	// （如 contextMaxTokens=100 万 → 45% 需 45 万 token 才触发，对话几乎永不压缩，
 	//   导致历史全量注入、token 快速膨胀）。token 绝对量达到硬地板即强制全量压缩，
 	//   无论窗口多大都保证单次注入有上限。
-	compactHardFloor     = 120000
-	compactKeepRecent    = 16   // 恒留最近条数（复刻参考 keepCount=16）
+	compactHardFloor       = 120000
+	compactKeepRecent      = 16 // 恒留最近条数（复刻参考 keepCount=16）
 	compactKeepRecentEarly = 24 // 预压缩保留条数：比全量压缩更多，保持更多上下文
-	compactMinDrop       = 2    // 中段可丢条数下限：太少不值得压
-	compactLLMSlice      = 40   // LLM 摘要喂入的末尾非 system 条数上限（复刻参考 slice(-40)）
-	compactCooldownTurns = 10   // 压缩后冷却轮数：期间不再压缩（改为 10 轮，大幅降低压缩频率）
-	compactCooldownEarly = 3    // 预压缩后冷却：比全量压缩更短，允许快速再次尝试
+	compactMinDrop         = 2  // 中段可丢条数下限：太少不值得压
+	compactLLMSlice        = 40 // LLM 摘要喂入的末尾非 system 条数上限（复刻参考 slice(-40)）
+	compactCooldownTurns   = 10 // 压缩后冷却轮数：期间不再压缩（改为 10 轮，大幅降低压缩频率）
+	compactCooldownEarly   = 3  // 预压缩后冷却：比全量压缩更短，允许快速再次尝试
 )
 
 // maybeCompact 若上下文超窗口阈值，把中段老消息压成摘要后存入 l.CompressedSummaries，
@@ -93,7 +93,7 @@ func (l *Loop) maybeCompact(ctx context.Context, msgs []Message) []Message {
 		l.CompressedSummaries = l.CompressedSummaries[len(l.CompressedSummaries)-maxSummaries:]
 	}
 	l.compactCooldown = compactCooldownTurns // 进入冷却，避免下几轮反复压缩
-	l.lastPromptTokens = 0                    // 重置：压缩后等下轮实测/重新估算
+	l.lastPromptTokens = 0                   // 重置：压缩后等下轮实测/重新估算
 	l.emit(Event{Type: EventCompacted, Content: fmt.Sprintf("上下文已压缩 · 早期 %d 条对话合并为摘要，保留最近 %d 条", dropped, prefixLen(out))})
 	return out
 }
@@ -116,11 +116,40 @@ func (l *Loop) compact(ctx context.Context, msgs []Message) ([]Message, string, 
 		return msgs, "", 0 // 中段太短，不值得压
 	}
 	summary := l.summarize(ctx, dropped)
+	// ★ 归档被删消息（2026-08-27）：压缩视图仅供 LLM 提交；落盘/展示线由
+	//   fullHistory 还原（prefix + 归档 + 视图尾部 = 完整时间线），防止压缩版
+	//   覆盖 store 后前端刷新只剩压缩摘要。
+	l.compactArchive = append(l.compactArchive, dropped...)
 	// 不插入摘要消息到 out——摘要将通过系统提示可变部分注入
 	out := make([]Message, 0, prefix+len(msgs)-keepFrom)
 	out = append(out, msgs[:prefix]...)
 	out = append(out, msgs[keepFrom:]...)
 	return out, summary, len(dropped)
+}
+
+// fullHistory 还原完整时间线：prefix（开头连续 system）+ 本 Run 压缩归档 + 视图尾部。
+// 前提：compact 只丢弃 [prefix, keepFrom) 段（prefix 恒留且不变形），归档按原时间序追加，
+// 因此 prefix + 归档 + 视图尾部 = Run 开始完整历史 + Run 内新增。多次压缩依次归档仍保序。
+// 所有持久化点（l.persist）与展示同步点（currentMsgs）必须经此还原——
+// 压缩视图仅供 LLM 提交，绝不能覆盖落盘 store（否则前端刷新后历史只剩压缩摘要）。
+func (l *Loop) fullHistory(msgs []Message) []Message {
+	if len(l.compactArchive) == 0 {
+		return msgs
+	}
+	prefix := prefixLen(msgs)
+	out := make([]Message, 0, prefix+len(l.compactArchive)+len(msgs))
+	out = append(out, msgs[:prefix]...)
+	out = append(out, l.compactArchive...)
+	out = append(out, msgs[prefix:]...)
+	return out
+}
+
+// persist 统一持久化出口：还原完整时间线后写盘（防压缩视图覆盖 store）。
+func (l *Loop) persist(msgs []Message) {
+	if l.OnBatchPersist == nil {
+		return
+	}
+	l.OnBatchPersist(l.fullHistory(msgs))
 }
 
 // earlyCompact 预压缩：在 60% 阈值时做轻度压缩，只在消息中植入一条简洁摘要。

@@ -27,7 +27,8 @@ import (
 //	tools.runParallel([{id,name,args}]) → 结果|null // 纯只读并行（含写退回串行）
 //	events.emit(event)                              // l.emit（自动回填 turn/step）
 //	persist.batch(msgs)                             // OnBatchPersist + currentMsgs 同步
-//	approve.ask(tc) → {approved, feedback, blocked, reason}  // 审核门（黑白名单/mode/连续驳回）
+//	approve.ask(tc) → {approved, feedback}                 // 审核门（黑白名单/mode；驳回记录进 state）
+//	approve.state.get() / approve.state.set(obj)          // 共享审核状态（最近驳回/历史，不计数）
 //	context.build(msgs, ephemeral) → callMsgs       // buildCallContext（含背景注入/日志）
 //	compact(msgs) → msgs                            // maybeCompact（Run 内手动压缩）
 //	circling.track(name, args, failed)              // 绕圈签名记录
@@ -110,6 +111,13 @@ func (r *jsLoopRunner) buildProxy() *goja.Object {
 		}
 
 		var stopReason string
+		// ★ 2026-08-27 首步极简工具面（实测改进）：会话首个 Run 的首个 LLM 调用
+		//   只注入极简核心工具，自第 2 个 step 起恢复完整工具面（tools_staging.go）。
+		//   依据：极简面首步选对率 91.7% vs 全量 87.5%（48 次采样），
+		//   且首步 token 开销显著降低。
+		if l.StagedTools && l.TurnNo <= 1 && l.StepNo <= 1 {
+			jtools = FilterStagedTools(jtools, l.StagedToolGroups)
+		}
 		callStart := time.Now()
 		log.Printf("[loop-js] LLM 调用开始 turn=%d step=%d provider=%s msgs=%d tools=%d",
 			l.TurnNo, l.StepNo, l.Provider.Name(), len(jmsgs), len(jtools))
@@ -206,6 +214,10 @@ func (r *jsLoopRunner) buildProxy() *goja.Object {
 		if terr != nil {
 			out["content"] = "Error: " + terr.Error()
 			out["error"] = terr.Error()
+		} else {
+			// ★ 图片提交（2026-08-22）：工具结果含 submit_image 标记 → 读图挂
+			//   pendingImages（标记剥离，净化文本给 JS 循环组装 tool 消息）。
+			out["content"] = l.parseImageSubmitResult(result)
 		}
 		return vm.ToValue(out)
 	})
@@ -273,12 +285,13 @@ func (r *jsLoopRunner) buildProxy() *goja.Object {
 			output := pr.output
 			if pr.err != nil {
 				output = "Error: " + pr.err.Error()
+			} else {
+				// ★ 图片提交（2026-08-22）：工具结果含 submit_image 标记 → 读图挂
+				//   pendingImages（标记剥离，净化文本给 JS 循环组装 tool 消息）。
+				output = l.parseImageSubmitResult(output)
 			}
 			l.emit(Event{Type: EventToolResult, Tool: pr.tc.Function.Name, Content: output, CallID: pr.tc.ID})
 			l.trackCall(pr.tc.Function.Name, pr.tc.Function.Arguments, pr.err != nil || strings.HasPrefix(strings.TrimSpace(output), "Error:"))
-			if pr.tc.Function.Name == "generate_commit_message" {
-				l.commitMessage = output
-			}
 			errAny := any(nil)
 			if pr.err != nil {
 				errAny = pr.err.Error()
@@ -352,16 +365,46 @@ func (r *jsLoopRunner) buildProxy() *goja.Object {
 		if jerr != nil {
 			panic(vm.NewGoError(jerr))
 		}
-		l.currentMsgs = jmsgs
-		if l.OnBatchPersist != nil {
-			l.OnBatchPersist(jmsgs)
-		}
+		l.currentMsgs = l.fullHistory(jmsgs) // 还原完整时间线（压缩视图仅供 LLM 提交）
+		l.persist(jmsgs)
 		return goja.Undefined()
 	})
 	proxy.Set("persist", persistObj)
 
-	// ── approve.ask(tc) → {approved, feedback, blocked, reason} ──
+	// ── approve：审核门（策略判定 JS / 动作执行 Go）──
+	// ★ 2026-08-27 错误计数移除：不再有连续驳回计数/自动停止（blocked 已删除），
+	//   驳回仅反馈继续（打破死循环由绕圈检测兜底）；审核决策状态改为共享上下文值
+	//   approve.state（Go 会话级持有，JS get/set 读写），agentloop 审核逻辑据此决策。
 	approveObj := vm.NewObject()
+	// policy()：审批策略数据面（黑白名单/审核模式/需审工具映射）。
+	approveObj.Set("policy", func(call goja.FunctionCall) goja.Value {
+		ra := map[string]bool{}
+		for _, name := range l.Registry.Names() {
+			if t, ok := l.Registry.Get(name); ok && t.RequiresApproval {
+				ra[name] = true
+			}
+		}
+		return vm.ToValue(map[string]any{
+			"reviewMode":       l.getReviewMode(),
+			"reviewBlacklist":  append([]string(nil), l.ReviewBlacklist...),
+			"reviewWhitelist":  append([]string(nil), l.ReviewWhitelist...),
+			"requiresApproval": ra,
+		})
+	})
+	// state 共享审核状态（共享上下文的值）：get 读快照 / set 合并改写。
+	stateObj := vm.NewObject()
+	stateObj.Set("get", func(call goja.FunctionCall) goja.Value {
+		return vm.ToValue(l.getApproveState().Snapshot())
+	})
+	stateObj.Set("set", func(call goja.FunctionCall) goja.Value {
+		if v := call.Argument(0); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
+			if obj, ok := v.Export().(map[string]any); ok {
+				l.getApproveState().Set(obj)
+			}
+		}
+		return goja.Undefined()
+	})
+	approveObj.Set("state", stateObj)
 	approveObj.Set("ask", func(call goja.FunctionCall) goja.Value {
 		tc, terr := jsToTC(call.Argument(0).Export())
 		if terr != nil {
@@ -369,32 +412,13 @@ func (r *jsLoopRunner) buildProxy() *goja.Object {
 		}
 		approved, feedback := l.resolveApproval(r.ctx, tc)
 		if approved {
-			// 通过 → 重置驳回追踪（若正是上次被驳回的工具）
-			if tc.Function.Name == l.lastRejectedTool {
-				l.rejectionCount = 0
-				l.lastRejectedTool = ""
-			}
+			// 通过 → 清掉该工具的最近驳回标记
+			l.getApproveState().clearTool(tc.Function.Name)
 			return vm.ToValue(map[string]any{"approved": true, "feedback": ""})
 		}
-		// 驳回 → 连续驳回追踪（同一工具连续 3 次 → 自动停止）
-		if tc.Function.Name == l.lastRejectedTool {
-			l.rejectionCount++
-		} else {
-			l.rejectionCount = 1
-			l.lastRejectedTool = tc.Function.Name
-		}
-		blocked := false
-		reason := ""
-		if l.rejectionCount >= 3 {
-			blocked = true
-			reason = "操作 " + tc.Function.Name + " 已被连续驳回 3 次，自动停止"
-		}
-		return vm.ToValue(map[string]any{
-			"approved": false,
-			"feedback": feedback,
-			"blocked":  blocked,
-			"reason":   reason,
-		})
+		// 驳回 → 共享状态记录（不计数）
+		l.getApproveState().recordReject(tc.Function.Name, feedback)
+		return vm.ToValue(map[string]any{"approved": false, "feedback": feedback})
 	})
 	proxy.Set("approve", approveObj)
 
@@ -418,19 +442,116 @@ func (r *jsLoopRunner) buildProxy() *goja.Object {
 		callMsgs := l.buildCallContext(jmsgs)
 		return vm.ToValue(msgsToJS(vm, callMsgs))
 	})
+
+	// ── context.snapshot（2026-08-27 背景快照同步，对齐 dsh RuntimeContextProjection）──
+	//   · snapshotParts() → 数据面：{stale, summaries, memory, knowledge, autonomous}
+	//     （文本格式组装策略在 JS 插件；Go 只提供原始数据，能力/策略分离）
+	//   · snapshot.sync(msgs, text) → msgs：与历史最后快照比较；不同则追加到
+	//     msgs 末尾（当前任务之后，随 tail 落盘）并立即持久化；相同零注入。
+	//   ★ 快照持久化到消息流后位置固定，跨 Run 前缀单调延展——KV 缓存不再因
+	//     背景块位置漂移而断裂（对应 Go 回退路径 syncContextSnapshot）。
+	snapObj := vm.NewObject()
+	snapObj.Set("parts", func(call goja.FunctionCall) goja.Value {
+		summaries := make([]string, 0, len(l.CompressedSummaries))
+		summaries = append(summaries, l.CompressedSummaries...)
+		knowledge := ""
+		if l.WorkspaceRoot != "" {
+			knowledge = ProjectKnowledge(l.WorkspaceRoot, 2500)
+		}
+		return vm.ToValue(map[string]any{
+			"stale":      l.staleMsg,
+			"summaries":  summaries,
+			"memory":     LongTermMemoryPrompt(),
+			"knowledge":  knowledge,
+			"autonomous": l.Autonomous,
+		})
+	})
+	snapObj.Set("sync", func(call goja.FunctionCall) goja.Value {
+		msgsArg := call.Argument(0)
+		jmsgs, jerr := jsToMsgs(vm, msgsArg)
+		if jerr != nil {
+			panic(vm.NewGoError(jerr))
+		}
+		text := ""
+		if v := call.Argument(1); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
+			text = v.String()
+		}
+		log.Printf("[snapshot-sync] 收到 JS 快照请求 len=%d textLen=%d msgs=%d", len(msgsArg.String()), len(text), len(jmsgs))
+		if text == "" {
+			return msgsArg // 无内容：不注入（历史已有旧快照保留，避免删消息破坏前缀）
+		}
+		full := backgroundCtxMarker + systemReminderFrame("会话上下文摘要与状态提示", text)
+		if last, ok := findLastSnapshotContent(jmsgs); ok && last == full {
+			return msgsArg // 内容未变：零注入，前缀稳定
+		}
+		jmsgs = append(jmsgs, Message{Role: RoleUser, Content: full})
+		log.Printf("[snapshot-sync] 注入新快照 textLen=%d msgs=%d -> %d", len(text), len(jmsgs)-1, len(jmsgs))
+		l.persist(jmsgs) // 还原完整时间线落盘（防压缩视图覆盖 store）
+		return vm.ToValue(msgsToJS(vm, jmsgs))
+	})
+	ctxObj.Set("snapshot", snapObj)
 	proxy.Set("context", ctxObj)
 
-	// ── compact(msgs) → msgs ──
-	proxy.Set("compact", func(call goja.FunctionCall) goja.Value {
+	// ── compact.estimate(msgs) / compact.apply(msgs, mode) ──
+	// ★ 2026-08-27 压缩策略外置：阈值/冷却/硬地板判定在 JS（agentloop），
+	//   Go 提供数据面（estimate：token 估算+配置）与执行面（apply：early/full）。
+	compactObj := vm.NewObject()
+	compactObj.Set("estimate", func(call goja.FunctionCall) goja.Value {
 		jmsgs, jerr := jsToMsgs(vm, call.Argument(0))
 		if jerr != nil {
 			panic(vm.NewGoError(jerr))
 		}
-		out := l.maybeCompact(r.ctx, jmsgs)
-		return vm.ToValue(msgsToJS(vm, out))
+		tokens := estimateTokens(jmsgs)
+		if l.lastPromptTokens > tokens {
+			tokens = l.lastPromptTokens
+		}
+		max := l.MaxContextTokens
+		ratio := 0.0
+		if max > 0 {
+			ratio = float64(tokens) / float64(max)
+		}
+		if max > compactHardFloor && tokens >= compactHardFloor {
+			ratio = compactRatio
+		}
+		return vm.ToValue(map[string]any{
+			"tokens":           tokens,
+			"lastPromptTokens": l.lastPromptTokens,
+			"maxContextTokens": max,
+			"ratio":            ratio,
+			"cooldown":         l.compactCooldown,
+			"cooldownEarly":    compactCooldownEarly,
+			"cooldownFull":     compactCooldownTurns,
+			"thresholdEarly":   compactRatioEarly,
+			"thresholdFull":    compactRatio,
+			"hardFloor":        compactHardFloor,
+			"minDrop":          compactMinDrop,
+		})
 	})
+	compactObj.Set("apply", func(call goja.FunctionCall) goja.Value {
+		jmsgs, jerr := jsToMsgs(vm, call.Argument(0))
+		if jerr != nil {
+			panic(vm.NewGoError(jerr))
+		}
+		mode := call.Argument(1).String()
+		if mode == "early" {
+			out := l.earlyCompact(jmsgs)
+			return vm.ToValue(map[string]any{"msgs": msgsToJS(vm, out), "dropped": 0, "mode": "early"})
+		}
+		out, summary, dropped := l.compact(r.ctx, jmsgs)
+		if dropped > 0 {
+			const maxSummaries = 3
+			l.CompressedSummaries = append(l.CompressedSummaries, summary)
+			if len(l.CompressedSummaries) > maxSummaries {
+				l.CompressedSummaries = l.CompressedSummaries[len(l.CompressedSummaries)-maxSummaries:]
+			}
+			l.compactCooldown = compactCooldownTurns
+			l.lastPromptTokens = 0
+		}
+		return vm.ToValue(map[string]any{"msgs": msgsToJS(vm, out), "dropped": dropped, "mode": "full"})
+	})
+	proxy.Set("compact", compactObj)
 
-	// ── circling.track / circling.detect ──
+	// ── circling.state() / circling.clear() + track / detect（detect 保留为回退）──
 	circlingObj := vm.NewObject()
 	circlingObj.Set("track", func(call goja.FunctionCall) goja.Value {
 		name := call.Argument(0).String()
@@ -443,6 +564,18 @@ func (r *jsLoopRunner) buildProxy() *goja.Object {
 			failed = v.ToBoolean()
 		}
 		l.trackCall(name, args, failed)
+		return goja.Undefined()
+	})
+	// state()：绕圈数据面（最近调用签名+成败）——★ 判定策略已移 JS（阈值/窗口/提示文本可配）
+	circlingObj.Set("state", func(call goja.FunctionCall) goja.Value {
+		out := make([]map[string]any, 0, len(l.recentCalls))
+		for _, c := range l.recentCalls {
+			out = append(out, map[string]any{"sig": c.sig, "failed": c.failed})
+		}
+		return vm.ToValue(out)
+	})
+	circlingObj.Set("clear", func(call goja.FunctionCall) goja.Value {
+		l.recentCalls = nil
 		return goja.Undefined()
 	})
 	circlingObj.Set("detect", func(call goja.FunctionCall) goja.Value {
@@ -503,18 +636,18 @@ func (r *jsLoopRunner) buildProxy() *goja.Object {
 			return vm.ToValue(map[string]any{"error": "delegate 嵌套超过 3 层上限", "content": "", "msgs": nil})
 		}
 		subOpts := LoopOpts{
-			Provider:           l.Provider,
-			Registry:           l.Registry,
-			WorkspaceRoot:      l.WorkspaceRoot,
-			Autonomous:         false,
-			ReviewMode:         l.getReviewMode(),
-			ReviewBlacklist:    l.ReviewBlacklist,
-			ReviewWhitelist:    l.ReviewWhitelist,
-			ReviewProvider:     l.ReviewProvider,
-			MaxContextTokens:   l.MaxContextTokens,
-			Compressor:         l.Compressor,
-			MaxIterations:      10,
-			System:             l.System,
+			Provider:            l.Provider,
+			Registry:            l.Registry,
+			WorkspaceRoot:       l.WorkspaceRoot,
+			Autonomous:          false,
+			ReviewMode:          l.getReviewMode(),
+			ReviewBlacklist:     l.ReviewBlacklist,
+			ReviewWhitelist:     l.ReviewWhitelist,
+			ReviewProvider:      l.ReviewProvider,
+			MaxContextTokens:    l.MaxContextTokens,
+			Compressor:          l.Compressor,
+			MaxIterations:       10,
+			System:              l.System,
 			CompressedSummaries: nil,
 		}
 		if v := obj.Get("system"); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) && v.String() != "" {

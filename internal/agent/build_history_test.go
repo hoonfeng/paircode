@@ -59,10 +59,14 @@ func TestLoopRun_多轮历史原样注入(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 
-	// 历史 user 消息必须内容原样（无前缀/无附加）
+	// 历史 user 消息必须内容原样（无前缀/无附加）；
+	// ★ 背景上下文快照（带 backgroundCtxMarker）为独立新增消息，不构成对任务的污染。
 	for _, m := range msgs {
 		if m.Role != RoleUser {
 			continue
+		}
+		if strings.HasPrefix(m.Content, backgroundCtxMarker) {
+			continue // 背景快照（记忆/摘要/状态）：独立消息，任务内容不受影响
 		}
 		switch m.Content {
 		case "第一轮任务", "第二轮任务":

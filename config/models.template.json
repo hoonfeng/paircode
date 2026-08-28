@@ -1,36 +1,30 @@
 {
-  "anthropic": {
-    "baseURL": "https://api.anthropic.com/v1",
-    "models": [
-      "claude-3-5-sonnet-20241022",
-      "claude-3-5-haiku-20241022",
-      "claude-4-sonnet-20250514",
-      "claude-4-haiku-latest"
-    ]
-  },
-  "custom": {
-    "baseURL": "",
-    "models": [
-      "custom"
-    ]
-  },
   "deepseek": {
-    "baseURL": "https://api.deepseek.com/v1",
+    "baseURL": "https://api.deepseek.com/v1/chat/completions",
     "models": [
       "deepseek-v4-pro",
-      "deepseek-v4-flash"
+      "deepseek-v4-flash",
+      "deepseek-v4-flash-vision-exp"
     ]
   },
   "kimi": {
-    "baseURL": "https://api.moonshot.cn/v1",
+    "baseURL": "https://api.moonshot.cn/v1/chat/completions",
     "models": [
       "kimi-k3"
     ]
   },
-  "openai-compatible": {
-    "baseURL": "",
+  "基元流动": {
+    "baseURL": "https://tokenrhythm.studio/v1/chat/completions",
     "models": [
-      "custom"
-    ]
+      "deepseek-v4-flash-0731"
+    ],
+    "contextMaxTokens": 1024000
+  },
+  "硅基流动": {
+    "baseURL": "https://api.siliconflow.cn/v1/chat/completions",
+    "models": [
+      "deepseek-ai/DeepSeek-V4-Flash"
+    ],
+    "contextMaxTokens": 1000000
   }
 }

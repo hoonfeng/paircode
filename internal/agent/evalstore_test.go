@@ -19,9 +19,9 @@ func TestEvalRecordStore(t *testing.T) {
 
 	// Append a record
 	id := store.Append(&EvalRecord{
-		Task:   "Test task",
-		Total:  85,
-		Scores: EvalScores{Completion: 32, Correctness: 25, Depth: 18, Efficiency: 10},
+		Task:       "Test task",
+		Total:      85,
+		Scores:     EvalScores{Completion: 32, Correctness: 25, Depth: 18, Efficiency: 10},
 		Strengths:  []string{"good plan"},
 		Weaknesses: []string{"missing test"},
 		Feedback:   "decent",

@@ -9,9 +9,9 @@ import (
 // ── JS 循环注册表（单槽位，对齐 harness AgentRegistry.setFactory）──
 //
 // agentloop 核心外置（2026-08-19）：循环策略（turn/step 双层循环、审核决策、
-// 自然终止检测、content-only/绕圈防护）由 JS 插件实现；Go 保留能力
-// （Provider.Chat / Registry.Execute / emit / persist / approve / buildCallContext 等），
-// 经能力代理对象注入 JS run({task, msgs, tools, meta, loop})。
+// 自然终止检测、content-only/绕圈防护、背景快照组装）由 JS 插件实现；Go 保留能力
+// （Provider.Chat / Registry.Execute / emit / persist / approve / buildCallContext /
+// snapshot.parts+sync 等），经能力代理对象注入 JS run({task, msgs, tools, meta, loop})。
 //
 // 注册语义：
 //   - ctx.loopFactory.registerLoop({id, run}) → RegisterJSLoop（后注册覆盖先注册）

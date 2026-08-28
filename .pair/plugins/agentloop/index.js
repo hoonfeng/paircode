@@ -10,7 +10,8 @@
 //     loop.tools.runParallel([{id,name,args}]) → 结果|null（纯只读并行）
 //     loop.events.emit(event)
 //     loop.persist.batch(msgs)
-//     loop.approve.ask(tc) → {approved, feedback, blocked, reason}
+//     loop.approve.ask(tc) → {approved, feedback}  // 审核门（动作执行；驳回记录进共享状态）
+//     loop.approve.state.get()/set(obj)             // 共享审核状态（最近驳回/历史，不计数）
 //     loop.context.build(msgs, ephemeral) → callMsgs
 //     loop.compact(msgs) → msgs
 //     loop.circling.track(name, args, failed) / loop.circling.detect()
@@ -21,7 +22,7 @@
 //   本插件实现循环业务（策略层）：
 //     - turn/step 双层循环（一次 Run = 一个 turn，每轮 LLM+工具 = 一个 step）
 //     - 流式事件分发（thinking/content 增量透传）
-//     - 工具执行 + 审核决策（loop.approve.ask 含黑白名单/连续驳回）
+//     - 工具执行 + 审核决策（loop.approve.ask + 共享状态 approve.state 增强）
 //     - 自然终止检测（无 tool_call + 有正文 → 完成/跟进/下一阶段）
 //     - content-only 防护 / 绕圈检测注入
 //     - 每轮持久化（loop.persist.batch）
@@ -70,12 +71,13 @@ return {
         { name: 'maxAutonomousMinutes', label: '自主时间预算（分钟）', type: 'number', default: 0, hint: '0=不覆盖' },
         { name: 'checkpointInterval', label: '检查点间隔（迭代数）', type: 'number', default: 0, hint: '0=不覆盖' },
         { name: 'reviewMode', label: '审核模式', type: 'select', default: '', options: ['', 'auto', 'manual', 'off'], hint: '空=不覆盖（auto=AI审核/manual=手动审批/off=放行）' },
-        { name: 'autoCommit', label: '完成自动提交', type: 'checkbox', default: false, hint: '勾选=强制开启自动提交（不勾=跟随全局，不再强制关闭）' },
         { name: 'reviewBlacklist', label: '审核黑名单', type: 'text', default: '', hint: '逗号分隔工具名（命中需审核）' },
         { name: 'reviewWhitelist', label: '审核白名单', type: 'text', default: '', hint: '逗号分隔工具名（命中跳过审核，黑名单优先）' },
         { name: 'autoIterateOnRejection', label: '拒绝后自动迭代', type: 'checkbox', binding: 'autoIterateOnRejection' },
         { name: 'ignoreDirs', label: '忽略目录', type: 'tags', binding: 'ignoreDirs',
           hint: '逗号分隔（node_modules, dist, .git…）' },
+        { name: 'stagedToolGroups', label: '首步极简工具候选组', type: 'textarea', default: '',
+          hint: '每行一组（组内逗号分隔，语义等价工具）；首步只注入这些工具，第 2 步起恢复全量。命中规则：每组取工具面中第一个存在的名字。空=默认组（read/write/edit/搜索/命令等 8 组）。' },
       ],
     })
 
@@ -89,17 +91,30 @@ return {
       ],
     })
 
-      // ── 服务商：维护服务商列表（名称/Base URL/API Key/模型列表 + 每模型参数）──
+      // ── 服务商：维护服务商列表（名称/API URL（完整端点）/API Key/模型列表 + 每模型参数）──
       // type='provider-manager'：SettingsModal 渲染 CRUD 面板，数据经 /api/models（config/models.json）。
-      // 模型参数（温度/思考档位/输出上限/上下文窗口）在服务商编辑表单内逐模型维护，
+      // 模型参数（温度/思考档位/输出上限/上下文窗口/多模态）在服务商编辑表单内逐模型维护，
       // 存 settings.json 顶层 modelParams（装配器按 服务商+模型 精确匹配）。
+      // ★ 2026-08-21 模型参数区 schema 驱动：字段定义全部在本 modelParamFields 声明，
+      //   前端 ProviderManager 按此动态渲染（新增参数无需改前端组件）。
       // AI tab 的 provider 下拉（optionsSource='providers'）与模型下拉（optionsSource='models'）均来自此处维护的数据。
       ctx.registerSettings({
         key: 'providers',
         title: '服务商',
         fields: [
           { name: 'providers', label: '服务商列表', type: 'provider-manager',
-            hint: '维护服务商：名称、Base URL、API Key、可用模型列表，及每模型独立参数（温度/思考/输出上限/上下文窗口）。AI tab 的下拉与联动均来自此处。' },
+            hint: '维护服务商：名称、API URL（完整端点，含 /chat/completions，直接作为请求地址）、API Key、可用模型列表，及每模型独立参数（温度/思考/输出上限/上下文窗口/多模态）。AI tab 的下拉与联动均来自此处。',
+            // ★ 2026-08-21 添加模型区 schema 驱动：modelEditor 声明组件配置（label/placeholder），
+            //   前端 ProviderManager 按此渲染模型编辑器（与 modelParamFields 同层，新增配置无需改前端组件）。
+            modelEditor: { label: '可用模型（回车或逗号分隔添加；支持整段粘贴）', placeholder: '输入模型名，回车添加…' },
+            modelParamFields: [
+              { name: 'temperature', label: '温度', type: 'select', options: ['', '0', '0.1', '0.2', '0.3', '0.4', '0.5', '0.6', '0.7', '0.8', '0.9', '1.0', '1.2', '1.5', '2.0'], hint: '温度（随机性），空=默认' },
+              { name: 'thinkingMode', label: '思考档位', type: 'select', options: ['', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'], hint: '思考档位（OpenAI 定义），空=默认' },
+              { name: 'maxTokens', label: '输出 Token', type: 'number', min: 0, step: 1024, hint: '最大输出 Token（0=默认）' },
+              { name: 'contextMaxTokens', label: '上下文窗口', type: 'number', min: 0, step: 4096, hint: '上下文窗口（0=默认）' },
+              { name: 'multimodal', label: '多模态', type: 'checkbox', hint: '勾选=该模型支持图片输入（对话中可直接粘贴/拖拽图片，agentloop 自动以多模态格式发送）' },
+            ],
+          },
         ],
       })
 
@@ -129,8 +144,16 @@ return {
       if (reviewModel) over.reviewModel = reviewModel;
       // ★ 2026-08-20 模型级参数（settings.modelParams[服务商][模型]）优先；无则回退全局（兼容旧配置）
       const provider = current.provider || s.provider || '';
-      const mp = (s.modelParams && s.modelParams[provider] && s.modelParams[provider][model]) ||
-                 (current.modelParams && current.modelParams[provider] && current.modelParams[provider][model]) || null;
+      let mp = (s.modelParams && s.modelParams[provider] && s.modelParams[provider][model]) ||
+               (current.modelParams && current.modelParams[provider] && current.modelParams[provider][model]) || null;
+      // ★ 2026-08-21 兼容：provider key 编码损坏/改名（如 settings.json 被 GBK 保存污染）
+      //   → 精确匹配失败后按「模型名唯一匹配」兜底（modelParams[任意provider][model]）。
+      if (!mp && s.modelParams) {
+        for (const pk of Object.keys(s.modelParams)) {
+          const pm = s.modelParams[pk];
+          if (pm && typeof pm === 'object' && pm[model]) { mp = pm[model]; break }
+        }
+      }
       if (mp) {
         if (mp.temperature !== undefined && mp.temperature !== null && mp.temperature !== '') {
           const t = parseFloat(mp.temperature);
@@ -138,6 +161,8 @@ return {
         }
         if (mp.thinkingMode) over.thinkingMode = mp.thinkingMode;
         if (mp.maxTokens && Number(mp.maxTokens) > 0) over.maxTokens = Number(mp.maxTokens);
+        // ★ 2026-08-21 多模态：模型级参数标记该模型支持图片输入 → Provider 以多模态格式发送
+        if (mp.multimodal === true) over.multimodal = true;
       }
       // ★ 上下文窗口层级：模型级 > 服务商级（models.json 每服务商 contextMaxTokens）> 全局
       const pctx = (current.providerContextMaxTokens && Number(current.providerContextMaxTokens) > 0)
@@ -178,13 +203,20 @@ return {
       if (cfg.maxAutonomousMinutes != null && Number(cfg.maxAutonomousMinutes) > 0) over.maxAutonomousMinutes = Number(cfg.maxAutonomousMinutes);
       if (cfg.checkpointInterval != null && Number(cfg.checkpointInterval) > 0) over.checkpointInterval = Number(cfg.checkpointInterval);
       if (typeof cfg.reviewMode === 'string' && cfg.reviewMode) over.reviewMode = cfg.reviewMode;
-      // ★ 2026-08-19 修复：仅强制开启（true 才覆盖），false 不覆盖全局。
-      if (cfg.autoCommit === true) over.autoCommit = true;
       if (typeof cfg.reviewBlacklist === 'string' && cfg.reviewBlacklist) {
         over.reviewBlacklist = cfg.reviewBlacklist.split(/[,，]/).map(s => s.trim()).filter(Boolean);
       }
       if (typeof cfg.reviewWhitelist === 'string' && cfg.reviewWhitelist) {
         over.reviewWhitelist = cfg.reviewWhitelist.split(/[,，]/).map(s => s.trim()).filter(Boolean);
+      }
+      // ★ 2026-08-27 首步极简工具候选组（插件注册化配置）：textarea 每行一组、
+      //   组内逗号分隔 → 数组数组传给 Go（Loop.StagedToolGroups，nil=默认组）
+      if (typeof cfg.stagedToolGroups === 'string' && cfg.stagedToolGroups.trim()) {
+        const groups = cfg.stagedToolGroups.split('\n')
+          .map(l => l.trim()).filter(Boolean)
+          .map(l => l.split(/[,，]/).map(s => s.trim()).filter(Boolean))
+          .filter(g => g.length > 0);
+        if (groups.length > 0) over.stagedToolGroups = groups;
       }
       // ai 组 contextMaxTokens（binding 顶层，经 ctx.app.settings 快照）→ 覆盖循环上下文窗口
       const aiTop = (ctx.app && ctx.app.settings) || {};
@@ -220,6 +252,163 @@ return {
         const REJ_DEFAULT = '用户拒绝了此操作。请勿重试该操作；改用其他方式达成目标，或先向用户说明你为何需要它。';
         const NUDGE_CONTENT = '[系统提示] 你已经连续三轮只输出文字而没有调用任何工具。如果任务已完成，直接自然总结；如还需继续，请调用工具推进。';
 
+        // ═══════════════════════════════════════════════════════
+        // ★ 策略外置常量（2026-08-27）：压缩/绕圈/审批的「判定策略」本插件自持
+        //   （阈值/窗口/提示文本均可在此自定义；数据面/执行面在 Go）。
+        // ═══════════════════════════════════════════════════════
+        // 压缩策略：两档阈值 + 冷却 + 硬地板（对齐 Go 原实现默认值，可调）
+        const COMPACT = { thresholdEarly: 0.45, thresholdFull: 0.90, cooldownEarly: 3, cooldownFull: 10, hardFloor: 120000 };
+        // 绕圈检测策略：窗口 + 重复/失败阈值
+        const CIRCLING = { window: 12, repeatStop: 3, failStop: 2 };
+
+        // 压缩判定（策略 JS / 执行 Go compact.apply）：返回处理后的 msgs
+        function maybeCompact(msgs) {
+          if (!loop.compact || !loop.compact.estimate) return msgs; // 无数据面（回退路径）→ 不动
+          const est = loop.compact.estimate(msgs);
+          if (!est.maxContextTokens || est.maxContextTokens <= 0) return msgs; // 未配置窗口 → 压缩关闭
+          if ((est.cooldown || 0) > 0) return msgs; // 冷却期（apply 后 Go 侧自动设置）
+          let ratio = est.ratio;
+          if (est.maxContextTokens > COMPACT.hardFloor && est.tokens >= COMPACT.hardFloor) {
+            ratio = COMPACT.thresholdFull; // 绝对硬地板：超大窗口强制全量压缩
+          }
+          if (ratio < COMPACT.thresholdEarly) return msgs; // 未超任何阈值
+          if (ratio < COMPACT.thresholdFull) {
+            const r = loop.compact.apply(msgs, 'early');
+            return (r && r.msgs) ? r.msgs : msgs;
+          }
+          const r = loop.compact.apply(msgs, 'full');
+          return (r && r.dropped > 0 && r.msgs) ? r.msgs : msgs;
+        }
+
+        // 绕圈判定（策略 JS / 数据 Go circling.state）：
+        // 从尾部倒扫「连续相同操作（间无其他操作）」——重复或连续失败超阈值 → 提示换思路
+        function shortSig(sig) { return String(sig || '').replace(/\|/g, ' ').slice(0, 60); }
+        function detectCircling() {
+          if (!loop.circling || !loop.circling.state) return ''; // 无数据面 → 不检测
+          const st = loop.circling.state();
+          const n = st.length;
+          if (n < 2) return '';
+          const last = st[n - 1].sig;
+          // 1. 连续相同签名（纯重复）
+          let sameCount = 1;
+          for (let i = n - 2; i >= 0 && st[i].sig === last; i--) sameCount++;
+          if (sameCount >= CIRCLING.repeatStop) {
+            if (loop.circling.clear) loop.circling.clear();
+            return '[系统提示·打破死循环] 你已连续 ' + sameCount +
+              ' 次执行同一操作 `' + shortSig(last) + '`，中间没有任何其他操作——像在原地绕圈。请停下来换思路：先读取当前状态确认事实，或换工具、换方式推进。别继续重复同一步。';
+          }
+          // 2. 连续相同签名+失败
+          let failCount = 0;
+          for (let i = n - 1; i >= 0 && st[i].sig === last; i--) {
+            if (st[i].failed) failCount++; else break;
+          }
+          if (failCount >= CIRCLING.failStop) {
+            if (loop.circling.clear) loop.circling.clear();
+            return '[系统提示·打破死循环] 操作 `' + shortSig(last) + '` 已连续失败 ' + failCount +
+              ' 次且中间没有其他操作——别原样重试！请：① 先检查真实状态、定位失败根因；' +
+              '② 换一种工具或思路；③ 仍卡住就向用户说明卡点求助。';
+          }
+          return '';
+        }
+
+        // 审批判定（策略 JS / 动作 Go approve.ask）：
+        // 黑名单 → 恒审；白名单 → 免审；auto → 全审；off → 免审；manual/空 → 仅需审工具审
+        // ★ 2026-08-27 错误计数移除：连续驳回计数/自动停止（blocked）已删除；
+        //   审核决策状态为共享上下文值（loop.approve.state），供本插件读写以增强审核逻辑：
+        //   · 同一工具刚被驳回（<5 分钟）→ 免打扰自动驳回（防骚扰重试，不计数）
+        //   · 白名单/off 直通 → 清最近驳回标记
+        let _appPolicy = null;
+        function appPolicy() {
+          if (_appPolicy === null) _appPolicy = (loop.approve && loop.approve.policy) ? loop.approve.policy() : null;
+          return _appPolicy;
+        }
+        function appState() {
+          return (loop.approve && loop.approve.state && loop.approve.state.get) ? (loop.approve.state.get() || null) : null;
+        }
+        function needsApprove(tc) {
+          const pol = appPolicy();
+          if (!pol) return true; // 无策略面 → 保守走 ask
+          const name = tc.function ? tc.function.name : (tc.name || '');
+          const inBlack = (pol.reviewBlacklist || []).some(b => name.includes(b));
+          const inWhite = !inBlack && (pol.reviewWhitelist || []).some(w => name.includes(w));
+          if (inBlack) return true;
+          if (inWhite) return false;
+          if (pol.reviewMode === 'auto') return true;
+          if (pol.reviewMode === 'off') return false;
+          return !!(pol.requiresApproval || {})[name];
+        }
+        // 共享审核状态驱动：同一工具最近被驳回（<5 分钟）→ 免打扰自动驳回。
+        // （依据 state 的 lastRejectedTool/lastRejectedAt 判断，不依赖计数。）
+        const REJECT_REMIND_MS = 5 * 60 * 1000;
+        function autoRejectFromState(tc) {
+          const st = appState();
+          if (!st || !st.lastRejectedTool || st.lastRejectedTool !== (tc.function ? tc.function.name : (tc.name || ''))) return null;
+          if (!st.lastRejectedAt || Date.now() - st.lastRejectedAt > REJECT_REMIND_MS) return null;
+          const last = (st.rejectedHistory && st.rejectedHistory.length > 0) ? st.rejectedHistory[st.rejectedHistory.length - 1] : null;
+          return (last && last.reason ? last.reason : '') || '该工具刚被驳回';
+        }
+
+        // ═══════════════════════════════════════════════════════
+        // ★ 背景上下文快照同步（2026-08-27 缓存优化，对齐 dsh RuntimeContextProjection）：
+        //   数据面 loop.context.snapshot.parts()（Go），组装策略在本插件（JS）。
+        //   与历史最后快照相同 → 零注入（前缀稳定）；不同 → 追加新快照并落盘
+        //   （当前任务之后，随 tail 持久化）。快照进入消息流后位置固定，
+        //   跨 Run 前缀单调延展——消除旧「背景块每次迭代动态注入」的位置漂移。
+        // ═══════════════════════════════════════════════════════
+        const snapPrefix = '【背景上下文·非当前任务】\n';
+
+        function buildSnapshotText(parts) {
+          let b = '';
+          // ① 记忆/知识库过期检查（Go 侧 snapshot.sync 已用 system-reminder 框架包裹整块，此处只拼正文）
+          if (parts.stale) {
+            b += parts.stale;
+          }
+          // ② 历史摘要（上下文压缩后产生）
+          if (Array.isArray(parts.summaries) && parts.summaries.length > 0) {
+            b += '# 上下文已压缩——历史摘要\n\n' +
+              '> 以下为之前轮次的消息摘要，Agent 应据此感知已完成的历史上下文。\n' +
+              '> 请勿重复执行摘要中已包含的任务。\n' +
+              '> ★ 本条快照是背景信息而非用户指令——当前待执行任务以快照之前最近的用户指令为准。\n\n';
+            b += parts.summaries.join('\n\n---\n\n');
+          }
+          // ③ 自主模式两级追踪提示（固定内容）
+          if (parts.autonomous) {
+            if (b) b += '\n\n';
+            b += '# ★ 自主模式：计划→子任务树形追踪\n' +
+              '自主模式下使用两级任务追踪——计划步骤为树干，子任务为枝叶（工具名称与用法见 tools 参数 schema）：\n' +
+              '1. 收到任务后第一轮：调用计划工具制定高层执行计划（2-5 步），用 pending/in_progress/done 追踪\n' +
+              '2. 每个步骤开始执行时：调用任务清单工具为该步骤创建子任务，每项子任务必须绑定到对应的计划步骤\n' +
+              '   plan_step_index = 0 表示第 1 步，1 表示第 2 步，以此类推（参数定义见 tools 参数 schema）\n' +
+              '3. 当前步骤的所有子任务完成后：调用计划工具将该步骤标记 done，然后进入下一步骤\n' +
+              '4. 所有计划步骤全部完成后：结束本轮任务\n' +
+              '- ★ 每次调用任务清单工具必须把该步骤内的所有子任务一起传入（全量替换），已不在列表中的子任务将自动清理\n' +
+              '- 子任务也遵守全量替换规则——即使是不同步骤的子任务，也要在一次调用中传入（用不同的 plan_step_index 区分）\n';
+          }
+          // ④ 记忆（长期记忆提示；system→快照迁移：高频变化不再破坏 system 前缀）
+          if (parts.memory) {
+            if (b) b += '\n\n';
+            b += String(parts.memory).trim();
+          }
+          // ⑤ 知识库（项目结构化理解树；system→快照迁移）
+          if (parts.knowledge) {
+            if (b) b += '\n\n';
+            b += String(parts.knowledge).trim();
+          }
+          return b;
+        }
+
+        // 快照同步（数据面 Go / 组装策略本插件）——仅在快照数据面可用时执行
+        if (loop.context && loop.context.snapshot && loop.context.snapshot.parts) {
+          const parts = loop.context.snapshot.parts();
+          const text = buildSnapshotText(parts);
+          if (text) {
+            msgs = loop.context.snapshot.sync(msgs, text) ?? msgs;
+          }
+        }
+
+        // ── run 入口自动压缩（策略 JS：阈值/冷却/硬地板；执行 Go compact.apply）──
+        msgs = maybeCompact(msgs);
+
         for (let iter = 0; iter < maxIter; iter++) {
           // ── 1. step 边界 + 暂停/停止/取消检查 ──
           loop.ctrl.beginStep();
@@ -244,7 +433,8 @@ return {
 
           // ── 3. 手动压缩请求（前端压缩按钮）──
           if (loop.ctrl.compactRequested()) {
-            msgs = loop.compact(msgs);
+            const cr = loop.compact.apply(msgs, 'full');
+            if (cr && cr.msgs) msgs = cr.msgs;
             loop.ctrl.resetCompactRequest();
           }
 
@@ -268,6 +458,7 @@ return {
           }
 
           // ── 6. THINK：构建 callMsgs（背景注入/日志由 Go buildCallContext 完成）──
+          msgs = maybeCompact(msgs); // 每步 LLM 前自动压缩判定（原 Go maybeCompact 语义）
           let callMsgs = loop.context.build(msgs, ephemeral);
           ephemeral.length = 0; // Go 侧已消费，JS 清空防重复注入
 
@@ -313,25 +504,32 @@ return {
             // ── 12. ACT + OBSERVE：审批 → （并行优先 / 串行退回）执行 ──
             const tcs = assistant.toolCalls || [];
             if (tcs.length > 0) {
-              // 12a. 审批门（黑白名单 + ReviewMode + RequiresApproval + 连续驳回，Go 侧实现）
+              // 12a. 审批门（策略判定 JS：黑白名单/审核模式/需审工具；动作执行 Go：
+              //      manual 挂起/AI 审核/用户审批 + 连续驳回自动停止）
               const approved = [];
-              let blocked = false, blockReason = '';
               for (const tc of tcs) {
                 loop.events.emit({ type: 'tool_call', tool: tc.function.name, args: tc.function.arguments, callId: tc.id });
-                const ap = loop.approve.ask(tc);
+                let ap = { approved: true, feedback: '' };
+                if (needsApprove(tc)) {
+                  // 共享审核状态驱动：刚被驳回的工具 → 免打扰自动驳回（不计数）
+                  const autoRej = autoRejectFromState(tc);
+                  if (autoRej) {
+                    ap = { approved: false, feedback: autoRej + '。请勿原样重试——前一次驳回理由仍有效；改用其他方式达成目标，或先向用户说明你为何需要它。' };
+                  } else {
+                    ap = loop.approve.ask(tc) || ap;
+                  }
+                } else {
+                  // 策略直通（白名单/off）：清掉该工具的最近驳回标记
+                  if (loop.approve.state && loop.approve.state.set) loop.approve.state.set({ lastRejectedTool: '' });
+                }
                 if (!ap.approved) {
                   const rej = (ap.feedback || '').trim() || REJ_DEFAULT;
-                  if (ap.blocked) { blocked = true; blockReason = ap.reason; break; }
                   loop.events.emit({ type: 'tool_result', tool: tc.function.name, content: rej, callId: tc.id });
                   msgs.push({ role: 'tool', toolCallId: tc.id, name: tc.function.name, content: rej });
                   loop.circling.track(tc.function.name, tc.function.arguments, true);
                   continue;
                 }
                 approved.push(tc);
-              }
-              if (blocked) {
-                loop.events.emit({ type: 'error', content: blockReason });
-                return { msgs, error: blockReason };
               }
               // 12b. 执行：≥2 个先试并行（纯只读），runParallel 返回 null（含写/需审批）
               //      或 <2 个 → 串行退回。契约：runParallel 已 emit tool_result + track，
@@ -344,7 +542,6 @@ return {
                   for (const r of par) {
                     const output = r.error ? 'Error: ' + r.error : r.content;
                     msgs.push({ role: 'tool', toolCallId: r.id, name: r.name, content: output });
-                    if (r.name === 'generate_commit_message') loop.store.set('commitMessage', output);
                   }
                 } else {
                   for (const tc of approved) {
@@ -353,7 +550,6 @@ return {
                     loop.events.emit({ type: 'tool_result', tool: tc.function.name, content: output, callId: tc.id });
                     msgs.push({ role: 'tool', toolCallId: tc.id, name: tc.function.name, content: output });
                     loop.circling.track(tc.function.name, tc.function.arguments, !!res.error);
-                    if (tc.function.name === 'generate_commit_message') loop.store.set('commitMessage', output);
                   }
                 }
               } else if (approved.length === 1) {
@@ -363,7 +559,6 @@ return {
                 loop.events.emit({ type: 'tool_result', tool: tc.function.name, content: output, callId: tc.id });
                 msgs.push({ role: 'tool', toolCallId: tc.id, name: tc.function.name, content: output });
                 loop.circling.track(tc.function.name, tc.function.arguments, !!res.error);
-                if (tc.function.name === 'generate_commit_message') loop.store.set('commitMessage', output);
               }
           }
             }
@@ -419,8 +614,8 @@ return {
             contentOnlyIters = 0;
           }
 
-          // ── 16. 绕圈检测：重复操作/反复失败 → 注入「换思路」──
-          const nudge = loop.circling.detect();
+          // ── 16. 绕圈检测：重复操作/反复失败 → 注入「换思路」（策略 JS / 数据 Go state）──
+          const nudge = detectCircling();
           if (nudge) {
             loop.events.emit({ type: 'circling', content: '检测到重复操作/反复失败，已提示 Agent 换思路打破死循环' });
             ephemeral.push({ role: 'user', content: nudge });

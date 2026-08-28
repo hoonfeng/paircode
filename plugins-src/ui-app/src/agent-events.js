@@ -17,6 +17,16 @@ const runtimes = {}
 let msgKeyCounter = 0
 function makeMsgKey() { return 'msg_' + Date.now() + '_' + (msgKeyCounter++) }
 
+// normalizeAskType 归一化 ask_user 的 askType 变体（与后端 parseAskArgs 对齐）：
+// single_with_input / single-input / choice-with-input 等 → single-with-input；unknown → text。
+export function normalizeAskType(raw) {
+  const s = String(raw || '').trim().toLowerCase().replace(/_/g, '-')
+  if (s === 'single' || s === 'choice' || s === 'radio' || s === 'single-choice') return 'single'
+  if (s === 'multi' || s === 'multiple' || s === 'checkbox' || s === 'multi-choice' || s === 'multi-select') return 'multi'
+  if (s === 'single-with-input' || s === 'single-with-custom' || s === 'choice-with-input' || s === 'single-input') return 'single-with-input'
+  return 'text'
+}
+
 function pushSegment(segs, type, initial) {
   const last = segs[segs.length - 1]
   if (last && last.type === type) return last
@@ -92,6 +102,119 @@ export function createAssistantPlaceholder(convId, key) {
   return key
 }
 
+// ─── Live 快照（WS 断线补偿）──
+// 服务端在客户端重连时推送 running 会话的流式生成进度快照，
+// 重建占位消息（快照为完整最新状态 → 整体替换 segments/finalContent）。
+// ★ 2026-08-22 时序修复：后端快照新增 events 有序序列（thinking/content/tool_call/
+//   tool_result/error…按 emit 顺序），前端逐事件重放重建 segments——
+//   保真「正文→工具→正文」的真实交错顺序。旧快照（仅 reasoning/tools/content
+//   三个分离累积字段，无法还原交错）降级兼容：content 聚在工具调用后面，
+//   表现为「上方总工具调用、下方总正文输出」，已由本修复根除。
+function applyLiveSnapshot(convId, msg, rt, snap) {
+  // ★ 2026-08-22 保留用户交互状态：快照重建 segments 前按类别收集旧的展开状态
+  //   （thinking 展开 = _collapsed===false；tool_call 展开 = _expanded===true），
+  //   重建时按出现顺序恢复——否则刷新后 WS 重连快照到达会把用户刚展开的
+  //   思考/工具调用全部重置回折叠态（表现为「滚动/刷新后自动折叠」）。
+  const oldSegs = msg.segments || []
+  const oldThinkStates = []
+  const oldToolStates = []
+  for (const s of oldSegs) {
+    if (s.type === 'thinking') oldThinkStates.push(s._collapsed === false ? 'expanded' : 'collapsed')
+    else if (s.type === 'tool_call') oldToolStates.push(s._expanded === true ? 'expanded' : 'collapsed')
+  }
+  const events = Array.isArray(snap.events) && snap.events.length > 0 ? snap.events : null
+  const segments = []
+  // 恢复单个 tool_call 段的展开状态（按旧 segments 中 tool_call 的出现顺序匹配）
+  const restoreToolState = (seg) => {
+    if (oldToolStates.shift() === 'expanded') { seg._expanded = true; seg._mode = 'expanded' }
+    return seg
+  }
+  if (events) {
+    // ── 新路径：按有序事件序列逐事件重放（与实时流 processAgentEvent 同构）──
+    for (const ev of events) {
+      const type = ev.type || ''
+      if (type === 'thinking') {
+        const seg = pushSegment(segments, 'thinking', { _mode: 'collapsed', _collapsed: true })
+        if (oldThinkStates.shift() === 'expanded') { seg._collapsed = false; seg._mode = 'expanded' }
+        seg.content += ev.content || ''
+      } else if (type === 'content') {
+        const seg = pushSegment(segments, 'content')
+        seg.content += ev.content || ''
+      } else if (type === 'tool_call') {
+        const toolName = ev.tool || ev.name || ''
+        if (toolName === 'ask_user') {
+          // 与 processAgentEvent 的 ask_user 分支对齐：重建交互式提问卡
+          let question = ''
+          let askType = 'text'
+          let options = []
+          try {
+            const args = typeof ev.args === 'string' ? JSON.parse(ev.args) : ev.args
+            question = args.question || '（无问题内容）'
+            askType = normalizeAskType(args.askType || args.type || 'text')
+            if (Array.isArray(args.options)) options = args.options
+          } catch {}
+          segments.push({
+            type: 'ask_user', question, askType, options,
+            callId: ev.callId || '',
+            answer: ev.content || '', _answered: !!ev.content,
+          })
+        } else {
+          segments.push(restoreToolState({
+            type: 'tool_call', name: toolName,
+            callId: ev.callId || '',
+            argsRaw: ev.args ? (typeof ev.args === 'string' ? ev.args : JSON.stringify(ev.args, null, 2)) : '',
+            result: ev.content || '', // 后端已将 tool_result 回填到 tool_call 事件的 Content
+            _mode: 'collapsed', _collapsed: false, _expanded: false,
+          }))
+        }
+      } else if (type === 'tool_result') {
+        // 兜底：独立 tool_result 事件（异常路径）——回填最近的 tool_call 段
+        const callId = ev.callId || ''
+        for (let i = segments.length - 1; i >= 0; i--) {
+          const s = segments[i]
+          if (s.type === 'tool_call') {
+            if (callId && s.callId === callId) { s.result = ev.content || ''; break }
+            if (!s.result && !callId) { s.result = ev.content || ''; break }
+          }
+        }
+      } else if (type === 'error') {
+        const seg = pushSegment(segments, 'content')
+        seg.content += '**[错误]** ' + (ev.content || '')
+      } else if (type === 'notice' || type === 'compacted' || type === 'circling' || type === 'evaluation' || type === 'approval') {
+        const seg = pushSegment(segments, 'content')
+        seg.content += ev.content || ''
+      }
+    }
+  } else {
+    // ── 旧路径（兼容旧后端）：三字段无法还原交错，按推理→正文→工具 顺序归位──
+    const reasoning = snap.reasoning || ''
+    const content = snap.content || ''
+    const tools = Array.isArray(snap.toolSegments) ? snap.toolSegments : []
+    if (reasoning) {
+      const seg = { type: 'thinking', content: reasoning, _mode: 'collapsed', _collapsed: true }
+      if (oldThinkStates.shift() === 'expanded') { seg._collapsed = false; seg._mode = 'expanded' }
+      segments.push(seg)
+    }
+    if (content) {
+      segments.push({ type: 'content', content })
+    }
+    for (const t of tools) {
+      if (!t || !t.name) continue
+      segments.push(restoreToolState({
+        type: 'tool_call', name: t.name, callId: t.callId || '',
+        argsRaw: t.args ? (typeof t.args === 'string' ? t.args : JSON.stringify(t.args, null, 2)) : '',
+        result: t.result || '', _mode: 'collapsed', _collapsed: false, _expanded: false,
+      }))
+    }
+  }
+  msg.segments = segments
+  msg.content = snap.content || ''
+  rt.finalContent = snap.content || ''
+  console.log('[AE] liveSnapshot 已应用 conv=%s events=%d reasoning=%d content=%d tools=%d',
+    convId, events ? events.length : 0, (snap.reasoning || '').length, (snap.content || '').length,
+    (snap.toolSegments || []).length)
+}
+
 // ─── 事件处理 ──
 export function processAgentEvent(convId, data) {
   // 确保 messagesByConv 存在
@@ -107,10 +230,11 @@ export function processAgentEvent(convId, data) {
       console.log('[AE] processAgentEvent 自动恢复 runtime conv=%s key=%s type=%s', convId, lastLoading._key, data.type)
       rt = { msgKey: lastLoading._key, finalContent: '', lastUserText: '' }
       runtimes[convId] = rt
-    } else if (data.type === 'content' || data.type === 'thinking' || data.type === 'done' || data.type === 'error') {
+    } else if (data.type === 'content' || data.type === 'thinking' || data.type === 'done' || data.type === 'error' || data.type === 'snapshot') {
       // 内容类/错误类事件没有 runtime 也无 loading 消息时，创建新 assistant 占位。
       // ★ error 事件必须在此分支：否则异常中断（LLM API 错误/panic）时若 runtime 丢失
       //   （页面刷新后/事件乱序），错误被静默丢弃 → 用户看到 agent 无故停止且无任何提示。
+      // ★ snapshot 事件必须在此分支：页面刷新后重连，需创建占位以承载断线补偿快照。
       console.log('[AE] processAgentEvent 创建临时占位 conv=%s type=%s', convId, data.type)
       const key = makeMsgKey()
       let phNextIdx = msgs.length
@@ -154,7 +278,11 @@ export function processAgentEvent(convId, data) {
   }
   msg._loading = false
 
-  if (data.type === 'thinking') {
+  if (data.type === 'snapshot') {
+    // ★ 2026-08-21 WS 断线补偿：用服务端快照重建占位消息。
+    //   断线期间丢失的 content/thinking/tool 事件由快照补齐（快照是最新完整状态 → 整体替换）。
+    applyLiveSnapshot(convId, msg, rt, data)
+  } else if (data.type === 'thinking') {
     const seg = pushSegment(msg.segments, 'thinking', { _mode: 'collapsed', _collapsed: true })
     seg.content += data.content || ''
   } else if (data.type === 'content') {
@@ -170,7 +298,7 @@ export function processAgentEvent(convId, data) {
       try {
         const args = typeof data.args === 'string' ? JSON.parse(data.args) : data.args
         question = args.question || '（无问题内容）'
-        askType = args.askType || args.type || 'text' // 容错：部分模型生成 type 而非 askType
+        askType = normalizeAskType(args.askType || args.type || 'text') // 容错：变体统一归一化
         if (Array.isArray(args.options)) {
           options = args.options
         }
@@ -201,7 +329,7 @@ export function processAgentEvent(convId, data) {
         type: 'tool_call', name: toolName,
         callId: data.callId || data.callID || '',
         argsRaw: data.args ? (typeof data.args === 'string' ? data.args : JSON.stringify(data.args, null, 2)) : '',
-        result: '', _mode: 'expanded', _expanded: true,
+        result: '', _mode: 'collapsed', _expanded: false,
       })
     } else if (toolName === 'task_update') {
       try {
@@ -212,7 +340,7 @@ export function processAgentEvent(convId, data) {
         type: 'tool_call', name: toolName,
         callId: data.callId || data.callID || '',
         argsRaw: data.args ? (typeof data.args === 'string' ? data.args : JSON.stringify(data.args, null, 2)) : '',
-        result: '', _mode: 'expanded', _expanded: true,
+        result: '', _mode: 'collapsed', _expanded: false,
       })
     } else if (toolName === 'update_tasks') {
       // update_tasks 全量替换子任务清单（用于内层 Loop 的 update_tasks 子任务跟踪）
@@ -239,7 +367,7 @@ export function processAgentEvent(convId, data) {
         type: 'tool_call', name: toolName,
         callId: data.callId || data.callID || '',
         argsRaw: data.args ? (typeof data.args === 'string' ? data.args : JSON.stringify(data.args, null, 2)) : '',
-        result: '', _mode: 'expanded', _expanded: true,
+        result: '', _mode: 'collapsed', _expanded: false,
       })
     }
   } else if (data.type === 'tool_result') {
@@ -269,7 +397,9 @@ export function processAgentEvent(convId, data) {
     }
     if (target) {
       target.result = data.content || ''
-      target._expanded = false
+      // ★ 用户已手动展开的 tool_call 不被结果折叠：流式期间用户展开查看细节时，
+      //   结果到达不强制收起——否则表现为「展开后又被自动折叠」
+      if (target._expanded !== true) target._expanded = false
     }
   } else if (data.type === 'approval') {
     // 解析 args JSON，结构化展示

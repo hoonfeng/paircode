@@ -11,8 +11,8 @@ import (
 //
 // KV 缓存命中的核心条件：后续请求的 messages 数组必须以之前请求的 messages
 // 数组为完整前缀。本项目实现中，多个因素会破坏此条件：
-//   1. time.Now() 在系统提示词动态后缀中（buildWebSystemDynamic）
-//   2. 自主模式完成报告注入改变历史结构
+//  1. time.Now() 在系统提示词动态后缀中（buildWebSystemDynamic）
+//  2. 自主模式完成报告注入改变历史结构
 //
 // 本测试模拟多轮对话，验证：
 //   - 同轮次内各迭代的消息前缀是否稳定（msg_seq 增长模式）
@@ -97,32 +97,32 @@ func TestSystemPromptVariance(t *testing.T) {
 	}
 }
 
-// TestBuildInjectionMessage 验证 buildInjectionMessage
-// 不会触及 system prompt 且输出内容合理。
-func TestBuildInjectionMessage(t *testing.T) {
+// TestBuildSnapshotContentGrows 验证 buildSnapshotContent：摘要变化后内容增长，
+// 且不触及 system prompt（纯消息流快照正文；marker/框架由 syncContextSnapshot 包裹）。
+func TestBuildSnapshotContentGrows(t *testing.T) {
 	loop := &Loop{
 		CompressedSummaries: []string{"[压缩摘要] 用户要求读取文件 a.go，已读取完毕"},
 	}
 
-	// 首次调用 buildInjectionMessage
-	result1 := loop.buildInjectionMessage()
+	// 首次调用 buildSnapshotContent
+	result1 := loop.buildSnapshotContent()
 	if result1 == "" {
-		t.Error("有摘要时 buildInjectionMessage 不应返回空")
+		t.Error("有摘要时 buildSnapshotContent 不应返回空")
 	}
 	if !strings.Contains(result1, "上下文已压缩") {
-		t.Error("buildInjectionMessage 应包含压缩摘要标记")
+		t.Error("buildSnapshotContent 应包含压缩摘要标记")
 	}
 
 	// 模拟新增一条摘要
 	loop.CompressedSummaries = append(loop.CompressedSummaries, "[压缩摘要] 用户要求修改 b.go，已修改完毕")
-	result2 := loop.buildInjectionMessage()
+	result2 := loop.buildSnapshotContent()
 	if result2 == "" {
-		t.Error("有摘要时 buildInjectionMessage 不应返回空")
+		t.Error("有摘要时 buildSnapshotContent 不应返回空")
 	}
 	if len(result2) <= len(result1) {
-		t.Error("新增摘要后 buildInjectionMessage 应更长")
+		t.Error("新增摘要后 buildSnapshotContent 应更长")
 	}
-	t.Logf("buildInjectionMessage ✓ (result1=%d, result2=%d)", len(result1), len(result2))
+	t.Logf("buildSnapshotContent ✓ (result1=%d, result2=%d)", len(result1), len(result2))
 }
 
 // TestSerializedMessagesPrefix 验证序列化后的 messages 数组是否保持前缀稳定。
@@ -221,7 +221,6 @@ func TestSerializedMessagesPrefix(t *testing.T) {
 			len(lastR1JSON), len(r2PrefixJSON))
 	}
 }
-
 
 func max(a, b int) int {
 	if a > b {

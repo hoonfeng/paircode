@@ -25,14 +25,15 @@ package agent
 
 // builtinPluginSpec 一个内置插件规格。
 type builtinPluginSpec struct {
-	name string // 插件名（cordis_inspect 展示；同名注册冲突时报错）
-	desc string // 插件用途
+	name  string // 插件名（cordis_inspect 展示；同名注册冲突时报错）
+	desc  string // 插件用途
 	apply func(c *PluginContext)
 }
 
 // builtinPluginSpecs 内置插件规格全表（顺序即装配顺序，core 最先）。
 // ★ 仅作二进制实现库的组规格（plugins-src/plugins/tool-*/ 经 RegisterToolGroups
-//   按组注册）——宿主进程不再 apply 本表。
+//
+//	按组注册）——宿主进程不再 apply 本表。
 func builtinPluginSpecs(root string) []builtinPluginSpec {
 	eh := newEditHistory() // ★ v2: 编辑行号偏移追踪器
 	bg := globalBG         // ★ 全局共享后台进程注册表（跨轮次/跨 Registry 存活，见 shell.go）
@@ -59,8 +60,6 @@ func builtinPluginSpecs(root string) []builtinPluginSpec {
 			func(c *PluginContext) { registerBinaryTools(c.Tools, root); registerBinaryRETools(c.Tools, root) }},
 		{"debug", "调试工具（debug_inject_log/run_capture/analyze_output/parse_stack/cleanup_logs/watch/evaluate_session）",
 			func(c *PluginContext) { registerDebugTools(c.Tools, root) }},
-		{"vision", "图像视觉（image_analyze/image_ocr）",
-			func(c *PluginContext) { registerVisionTools(c.Tools, root) }},
 		{"screenshot", "截图（screenshot_desktop/window/area/webpage）",
 			func(c *PluginContext) { registerScreenshotTools(c.Tools, root) }},
 		{"web-debug", "网页验证（web_debug）",
@@ -93,7 +92,8 @@ func RegisterToolGroups(r *Registry, root string, groups ...string) {
 
 // RegisterDefaultTools 注册全部内置工具组（独立宿主/测试/示例用）。
 // ★ 宿主进程（AgentBase.Init / web_server / desktopbridge）不再调用——
-//   改用 RegisterHostFrameworkTools（工具实现已全部迁移磁盘插件）。
+//
+//	改用 RegisterHostFrameworkTools（工具实现已全部迁移磁盘插件）。
 func RegisterDefaultTools(r *Registry, root string) {
 	RegisterToolGroups(r, root)
 }

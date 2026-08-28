@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/hoonfeng/paircode/internal/bridge"
 	"github.com/hoonfeng/paircode/internal/agent"
+	"github.com/hoonfeng/paircode/internal/bridge"
 )
 
 // ─── 辅助函数 ──────────────────────────────────────────────

@@ -25,7 +25,7 @@ import (
 
 // ── Go ↔ JS 消息转换 ─────────────────────────────────────────
 
-// msgsToJS 把 []Message 转为 JS 数组（role/content/toolCalls/toolCallId/name/reasoning）。
+// msgsToJS 把 []Message 转为 JS 数组（role/content/toolCalls/toolCallId/name/reasoning/images）。
 func msgsToJS(vm *goja.Runtime, msgs []Message) []any {
 	out := make([]any, 0, len(msgs))
 	for _, m := range msgs {
@@ -41,6 +41,18 @@ func msgsToJS(vm *goja.Runtime, msgs []Message) []any {
 		}
 		if m.Reasoning != "" {
 			obj["reasoning"] = m.Reasoning
+		}
+		// ★ 2026-08-21 多模态：图片随消息透传给 JS 循环（原样回传给 llm.chat）
+		if len(m.Images) > 0 {
+			imgs := make([]any, 0, len(m.Images))
+			for _, img := range m.Images {
+				imgs = append(imgs, map[string]any{
+					"data":     img.Data,
+					"mimeType": img.MimeType,
+					"detail":   img.Detail,
+				})
+			}
+			obj["images"] = imgs
 		}
 		if len(m.ToolCalls) > 0 {
 			tcs := make([]any, 0, len(m.ToolCalls))
@@ -104,6 +116,18 @@ func jsObjToMsg(v any) (Message, error) {
 	if s, ok := obj["reasoning"].(string); ok {
 		m.Reasoning = s
 	}
+	// ★ 2026-08-21 多模态：images 数组（{data,mimeType,detail}）转回 ImagePart
+	if imgs, ok := obj["images"].([]any); ok {
+		for _, it := range imgs {
+			if im, ok := it.(map[string]any); ok {
+				var ip ImagePart
+				ip.Data, _ = im["data"].(string)
+				ip.MimeType, _ = im["mimeType"].(string)
+				ip.Detail, _ = im["detail"].(string)
+				m.Images = append(m.Images, ip)
+			}
+		}
+	}
 	if tcs, ok := obj["toolCalls"].([]any); ok {
 		for _, it := range tcs {
 			if tcm, ok := it.(map[string]any); ok {
@@ -162,6 +186,9 @@ func (l *Loop) runWithJS(ctx context.Context, task string, history []Message, im
 	log.Printf("[loop-js] Run 开始（JS 循环实现 %q）taskLen=%d history=%d maxIter=%d autonomous=%v",
 		impl.id, len(task), len(history), l.MaxIterations, l.Autonomous)
 
+	// ★ 新 turn：清空 live 快照（占位消息重新累积，旧累积无效）
+	l.resetLive()
+
 	// ★ 2026-08-21：Provider 判空兜底——清空配置后 buildWebProvider 返回 nil，
 	//   JS 循环首次 loop.llm.chat → l.Provider.Chat nil pointer panic。
 	//   此处提前拦截返回明确错误（handleChatSend 已前置提示，此为其他入口兜底）。
@@ -183,15 +210,17 @@ func (l *Loop) runWithJS(ctx context.Context, task string, history []Message, im
 	}
 
 	defer func() {
-		l.History = msgs
+		l.History = l.fullHistory(msgs) // 还原完整时间线（压缩视图仅供 LLM 提交）
 		if l.OnBatchPersist != nil && msgs != nil {
-			l.OnBatchPersist(msgs)
+			l.persist(msgs)
 		}
 		l.endTurn(err, ctx.Err() != nil)
 		l.loopSvc = nil
 	}()
 
 	hist := CopyHistory(history)
+	l.compactArchive = nil // Run 开始历史完整（store 加载），压缩归档仅本 Run 有效
+	l.currentMsgs = hist
 	max := l.MaxIterations
 	if max <= 0 {
 		max = 30
@@ -216,7 +245,10 @@ func (l *Loop) runWithJS(ctx context.Context, task string, history []Message, im
 			l.emit(Event{Type: EventToolUpdate, Tool: name, ToolCallID: callID, PartialResult: partial})
 		}
 	}
-	msgs = l.maybeCompact(ctx, msgs)
+	// ★ 2026-08-27 自动压缩策略外置：判定（阈值/冷却/硬地板）与执行
+	//   由 JS 循环（agentloop）经 loop.compact.estimate/apply 完成——
+	//   此处不再前置 maybeCompact（避免与 JS 双重压缩；Go 回退路径 loop.go 保留）。
+	// msgs = l.maybeCompact(ctx, msgs)
 
 	// ── 构建能力代理并委托 JS ──
 	runner := &jsLoopRunner{loop: l, ctx: ctx, impl: impl}

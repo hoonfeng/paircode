@@ -15,7 +15,7 @@ func TestCaptureDesktop(t *testing.T) {
 		t.Fatalf("Getwd 失败: %v", err)
 	}
 	for i := 0; i < 5; i++ {
-		if _, err := os.Stat(filepath.Join(root, "bin", "tesseract")); err == nil {
+		if _, err := os.Stat(filepath.Join(root, ".pair")); err == nil {
 			break
 		}
 		root = filepath.Dir(root)
@@ -43,7 +43,7 @@ func TestCaptureArea(t *testing.T) {
 		t.Fatalf("Getwd 失败: %v", err)
 	}
 	for i := 0; i < 5; i++ {
-		if _, err := os.Stat(filepath.Join(root, "bin", "tesseract")); err == nil {
+		if _, err := os.Stat(filepath.Join(root, ".pair")); err == nil {
 			break
 		}
 		root = filepath.Dir(root)

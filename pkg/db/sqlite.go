@@ -121,6 +121,7 @@ func (s *SQLiteDB) migrate() error {
 			signature TEXT DEFAULT '',
 			package_name TEXT DEFAULT '',
 			module TEXT DEFAULT '',
+			entity_id TEXT DEFAULT '',
 			UNIQUE(kind, name, file_path, line)
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_entities_name ON code_entities(name)`,
@@ -162,6 +163,44 @@ func (s *SQLiteDB) migrate() error {
 		if _, err := s.db.Exec(ddl); err != nil {
 			return fmt.Errorf("exec %q: %w", ddl[:40], err)
 		}
+	}
+
+	// ★ 兼容迁移：为既有 code_entities 表增加 entity_id 列（存储原始实体 ID；
+	//   此前 Load 只能按 file_path:kind:name 重建 ID → call_site 等同名实体
+	//   被去重丢失，加载图与存储不一致）。
+	if err := s.ensureCodegraphEntityIDColumn(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// ensureCodegraphEntityIDColumn 确保 code_entities 表存在 entity_id 列（旧库 ALTER 补列）。
+func (s *SQLiteDB) ensureCodegraphEntityIDColumn() error {
+	rows, err := s.db.Query(`PRAGMA table_info(code_entities)`)
+	if err != nil {
+		return nil // 表不存在（后续建表时含列）
+	}
+	defer rows.Close()
+	hasCol := false
+	for rows.Next() {
+		var cid int
+		var cname, ctype string
+		var notnull, pk int
+		var dflt any
+		if err := rows.Scan(&cid, &cname, &ctype, &notnull, &dflt, &pk); err != nil {
+			continue
+		}
+		if cname == "entity_id" {
+			hasCol = true
+			break
+		}
+	}
+	if hasCol {
+		return nil
+	}
+	_, err = s.db.Exec(`ALTER TABLE code_entities ADD COLUMN entity_id TEXT DEFAULT ''`)
+	if err != nil {
+		return fmt.Errorf("code_entities 添加 entity_id 列失败: %w", err)
 	}
 	return nil
 }

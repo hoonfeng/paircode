@@ -157,7 +157,7 @@ func registerBridgeTools(r *Registry, root string) {
 			r.Register(&Tool{
 				Name:        name,
 				Description: "【系统工具】" + description + "（接管模式）",
-				Parameters: objSchema(props{
+				Parameters:  objSchema(props{
 					// 默认接收任意参数
 				}),
 				RequiresApproval: true,
@@ -221,8 +221,8 @@ func bcStatusText(bc *BridgeController, fullAudit bool) string {
 
 // executeSystemTool 执行注册的系统工具（模拟运行时 handler 执行）。
 // 由于无法编译运行时 Go 代码，提供两条路径：
-//   1. 如果是简单命令，直接通过 BridgeController 执行
-//   2. 如果是复杂操作，返回引导信息让 Agent 用 bridge_exec 组合实现
+//  1. 如果是简单命令，直接通过 BridgeController 执行
+//  2. 如果是复杂操作，返回引导信息让 Agent 用 bridge_exec 组合实现
 func executeSystemTool(name, code string, args map[string]any, bc *BridgeController, ctx context.Context) (string, error) {
 	// 尝试通过标准系统调用执行
 	cmd := ""

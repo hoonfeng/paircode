@@ -18,14 +18,14 @@ import (
 
 // Segment 前端展示用的消息分段（thinking/content/tool_call/tool_result/ask_user 等）。
 type Segment struct {
-	Type     string `json:"type"`               // thinking | content | tool_call | tool_result | ask_user
-	Content  string `json:"content,omitempty"`  // 文本内容（thinking/content/tool_result）
-	Name     string `json:"name,omitempty"`     // 工具名（tool_call）
-	ArgsRaw  string `json:"argsRaw,omitempty"`  // 工具参数 JSON 字符串（tool_call）
-	Result   string `json:"result,omitempty"`   // 工具结果（tool_call）
-	Question string `json:"question,omitempty"` // 问题文本（ask_user）
-	CallID   string `json:"callId,omitempty"`   // 工具调用 ID（tool_call/ask_user）
-	Answer   string `json:"answer,omitempty"`   // 用户答案（ask_user）
+	Type     string   `json:"type"`               // thinking | content | tool_call | tool_result | ask_user
+	Content  string   `json:"content,omitempty"`  // 文本内容（thinking/content/tool_result）
+	Name     string   `json:"name,omitempty"`     // 工具名（tool_call）
+	ArgsRaw  string   `json:"argsRaw,omitempty"`  // 工具参数 JSON 字符串（tool_call）
+	Result   string   `json:"result,omitempty"`   // 工具结果（tool_call）
+	Question string   `json:"question,omitempty"` // 问题文本（ask_user）
+	CallID   string   `json:"callId,omitempty"`   // 工具调用 ID（tool_call/ask_user）
+	Answer   string   `json:"answer,omitempty"`   // 用户答案（ask_user）
 	AskType  string   `json:"askType,omitempty"`  // 提问类型：text(默认) | single(单选) | multi(多选) | single-with-input(单选+自由输入)
 	Options  []string `json:"options,omitempty"`  // 选项列表（ask_user 选择类用），如 ["是","否","不确定"]
 }
@@ -94,6 +94,13 @@ func turnStepFor(msgs []Message) [][2]int {
 	for i, m := range msgs {
 		switch m.Role {
 		case RoleUser:
+			// ★ 背景上下文快照（【背景上下文·非当前任务】前缀）不是用户任务轮次：
+			//   它是循环同步进消息流的背景信息（历史摘要/状态/记忆/知识库），
+			//   不递增 turn/step——避免 turnStepFor 把它推为新一轮任务（EventType
+			//   仍是 user/message，模型可见；仅 turn/step 语义标注忽略）。
+			if strings.HasPrefix(m.Content, backgroundCtxMarker) {
+				break
+			}
 			turn++
 			step = 0
 		case RoleAssistant:
@@ -133,7 +140,7 @@ type ConversationMeta struct {
 	MsgCount      int    `json:"msgCount"`
 	Summary       string `json:"summary,omitempty"`
 	SummaryAt     string `json:"summaryAt,omitempty"`
-	CtxStats      *Usage  `json:"ctxStats,omitempty"`
+	CtxStats      *Usage `json:"ctxStats,omitempty"`
 	// Interrupted 标记该对话上次运行是否异常中断（LLM API 错误/panic/崩溃等非用户停止）。
 	// 前端据此展示"未完成，可继续"引导，用户在原对话继续即可恢复上下文与任务进度。
 	Interrupted bool `json:"interrupted,omitempty"`
@@ -144,11 +151,11 @@ type ConversationMeta struct {
 // 并发安全：per-conv mutex（sync.Map[convID]*sync.Mutex）防同一文件并发 append 冲突，
 // index.json 全局 mutex 防元数据读写冲突。
 type MessageStore struct {
-	root           string          // 工作区根路径
-	convMu         sync.Map        // map[string]*sync.Mutex  key=convID，懒初始化
-	indexMu        sync.Mutex      // index.json 全局锁
-	persistedCount map[string]int  // convID → 已持久化的非 System 消息数（内存计数器，避免每轮读文件+全量遍历）
-	pcMu           sync.RWMutex    // persistedCount 的并发锁
+	root           string         // 工作区根路径
+	convMu         sync.Map       // map[string]*sync.Mutex  key=convID，懒初始化
+	indexMu        sync.Mutex     // index.json 全局锁
+	persistedCount map[string]int // convID → 已持久化的非 System 消息数（内存计数器，避免每轮读文件+全量遍历）
+	pcMu           sync.RWMutex   // persistedCount 的并发锁
 }
 
 // NewMessageStore 创建消息存储器，初始化 .pair/conversations/ 目录。
@@ -237,7 +244,8 @@ func SegmentsFromMessage(msg Message, hist []Message, idx int) []Segment {
 // 用于 API 返回前，使前端将一个 agent 回复的多轮 LLM 迭代显示为单个气泡。
 // 非 assistant 消息（user/system）保持不变，作为合并的天然边界。
 // ★ RoleTool 消息跳过（不打断合并，也不输出到结果）——其工具执行结果已通过
-//   SegmentsFromMessage 合并到对应 assistant 消息的 tool_call segment 中。
+//
+//	SegmentsFromMessage 合并到对应 assistant 消息的 tool_call segment 中。
 func MergeConsecutiveAssistants(msgs []StoredMessage) []StoredMessage {
 	if len(msgs) == 0 {
 		return msgs
@@ -293,6 +301,24 @@ func MergeConsecutiveAssistants(msgs []StoredMessage) []StoredMessage {
 }
 
 // parseAskArgs 从问用户工具的 JSON arguments 中提取结构化字段。
+// normalizeAskType 将模型可能生成的各种 askType 变体归一化为标准值：
+// text | single | multi | single-with-input。
+func normalizeAskType(raw string) string {
+	switch strings.ToLower(strings.ReplaceAll(strings.TrimSpace(raw), "_", "-")) {
+	case "single", "choice", "selected", "radio", "single-choice":
+		return "single"
+	case "multi", "multiple", "checkbox", "multi-choice", "multi-select":
+		return "multi"
+	case "single-with-input", "single-with-custom", "choice-with-input", "single-input":
+		return "single-with-input"
+	case "text", "input", "free-text", "string", "":
+		return "text"
+	default:
+		// 未知变体：默认文本输入（保证输入框一定出现）
+		return "text"
+	}
+}
+
 func parseAskArgs(argsRaw string) (question, askType string, options []string) {
 	var raw map[string]any
 	if err := json.Unmarshal([]byte(argsRaw), &raw); err != nil {
@@ -309,9 +335,7 @@ func parseAskArgs(argsRaw string) (question, askType string, options []string) {
 			askType = v
 		}
 	}
-	if askType == "" {
-		askType = "text"
-	}
+	askType = normalizeAskType(askType)
 	if opts, ok := raw["options"].([]any); ok {
 		for _, o := range opts {
 			if s, ok := o.(string); ok {
@@ -361,9 +385,6 @@ func (s *MessageStore) CleanupTempFiles() {
 func (s *MessageStore) convFilePath(convID string) string {
 	return filepath.Join(s.conversationsDir(), convID+".jsonl")
 }
-
-
-
 
 // convSummariesPath 返回 {root}/.pair/conversations/{convID}.summaries.json 路径。
 func (s *MessageStore) convSummariesPath(convID string) string {
@@ -655,6 +676,11 @@ func (s *MessageStore) AppendUserMessage(convID, content string) error {
 	return s.AppendMessage(convID, Message{Role: RoleUser, Content: content}, nil)
 }
 
+// AppendUserMessageWithImages 便捷封装：追加一条带图片的用户消息（★ 2026-08-21 多模态）。
+func (s *MessageStore) AppendUserMessageWithImages(convID, content string, images []ImagePart) error {
+	return s.AppendMessage(convID, Message{Role: RoleUser, Content: content, Images: images}, nil)
+}
+
 // PersistNewMessages 原子性追加 hist 中尚未持久化的新消息到 store。
 // 在 per-conv mutex 保护下完成：读当前行数 → 比较 diff → 逐条写入 → 更新 index。
 //
@@ -675,8 +701,8 @@ func (s *MessageStore) PersistNewMessages(convID string, hist []Message) error {
 
 	// 收集要写入的消息（跳过 System），同时记录每个消息在原始 hist 中的索引。
 	type msgWithIdx struct {
-		msg   Message
-		hIdx  int // 在原始 hist 中的位置
+		msg  Message
+		hIdx int // 在原始 hist 中的位置
 	}
 	var msgs []msgWithIdx
 	for hi, m := range hist {
@@ -762,13 +788,7 @@ func (s *MessageStore) PersistNewMessages(convID string, hist []Message) error {
 	return nil
 }
 
-
-
-
-
 // rebuildSegmentsIfMissing
-
-
 
 // rebuildSegmentsIfMissing 为 segments 为空的消息重建 segments。
 // 需要完整消息列表做 look-ahead（tool result 可能在后面的消息中）。
@@ -859,6 +879,56 @@ func (s *MessageStore) LoadBefore(convID string, beforeIdx int, limit int) ([]St
 	}
 
 	// 取最新 limit 条（filtered 已按 idx 升序，取末尾 limit 条）
+	if len(filtered) <= limit {
+		return filtered, nil
+	}
+	return filtered[len(filtered)-limit:], nil
+}
+
+// LoadLatestForDisplay 供前端消息展示：在完整列表上合并（tool 行并入 segments、
+// 连续 assistant 合并）后再按合并条数取末尾 limit 条。
+// ★ 2026-08-22 性能修复：此前按原始行取 limit——JSONL 中一行 = 一次迭代/tool 行，
+//   50 行经合并后可能只剩 1~5 条超大消息（一个 run 的全部段），前端 fillViewport
+//   每轮只前进 1 条（每条 100~400KB），长对话首屏/滚动加载极慢。返回合并后的
+//   limit 条（≥1）、total 保持原始行数。
+func (s *MessageStore) LoadLatestForDisplay(convID string, limit int) ([]StoredMessage, int, error) {
+	msgs, err := s.readJSONL(convID)
+	if err != nil {
+		return nil, 0, err
+	}
+	if msgs == nil {
+		msgs = []StoredMessage{}
+	}
+	rebuildSegmentsIfMissing(msgs)
+	total := len(msgs)
+	merged := MergeConsecutiveAssistants(msgs)
+	if limit <= 0 || limit >= len(merged) {
+		return merged, total, nil
+	}
+	return merged[len(merged)-limit:], total, nil
+}
+
+// LoadBeforeForDisplay 供前端向上分页：全量合并后过滤 Idx < beforeIdx 的条目，
+// 取末尾 limit 条（idx 升序）。语义对应 LoadLatestForDisplay。
+func (s *MessageStore) LoadBeforeForDisplay(convID string, beforeIdx int, limit int) ([]StoredMessage, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	msgs, err := s.readJSONL(convID)
+	if err != nil {
+		return nil, err
+	}
+	rebuildSegmentsIfMissing(msgs)
+	merged := MergeConsecutiveAssistants(msgs)
+	var filtered []StoredMessage
+	for _, m := range merged {
+		if m.Idx < beforeIdx {
+			filtered = append(filtered, m)
+		}
+	}
+	if len(filtered) == 0 {
+		return []StoredMessage{}, nil
+	}
 	if len(filtered) <= limit {
 		return filtered, nil
 	}

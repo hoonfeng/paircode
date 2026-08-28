@@ -67,11 +67,15 @@ async function apiDelete(path, opts = {}) {
   return r.json()
 }
 
-// apiSignal 构造超时信号：opts.timeout（毫秒，默认 30s）；opts.signal 可传入外部取消信号。
+// apiSignal 构造超时信号：opts.timeout（毫秒，默认 30s；★ 0 = 不限时——
+// invoke RPC 等长操作用，执行时长由宿主方法自控，前端不抬）；opts.signal 可传入外部取消信号。
 function apiSignal(opts = {}) {
-  const timeout = opts.timeout || API_TIMEOUT
+  // ★ 用 typeof 判断而非 ||：0（不限时）不会被默认值吞掉
+  const timeout = typeof opts.timeout === 'number' ? opts.timeout : API_TIMEOUT
   const ctrl = new AbortController()
-  const timer = setTimeout(() => ctrl.abort(new Error('请求超时(' + (timeout / 1000) + 's)')), timeout)
+  if (timeout > 0) {
+    setTimeout(() => ctrl.abort(new Error('请求超时(' + (timeout / 1000) + 's)')), timeout)
+  }
   if (opts.signal) {
     opts.signal.addEventListener('abort', () => ctrl.abort(), { once: true })
   }
@@ -689,8 +693,10 @@ async function pluginClientState(snapshot) {
 // {plugin, method, args} → {ok, value} 或 {ok:false, error}。
 
 async function pluginInvoke(plugin, method, args) {
-
-  return apiPost('/plugins/invoke', { plugin, method, args: args === undefined ? null : args })
+  // ★ timeout: 0 = 前端不限时：invoke 可能执行长命令（如 ui-quick-exec 打包），
+  //   命令级超时由宿主方法自控（runCommand 的 timeoutMs 语义）；前端 30s
+  //   abort 会造成「命令被强制结束」假象（宿主实际仍在跑，结果却回不来）。
+  return apiPost('/plugins/invoke', { plugin, method, args: args === undefined ? null : args }, {}, { timeout: 0 })
 
 }
 

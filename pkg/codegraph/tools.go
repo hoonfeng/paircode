@@ -255,6 +255,7 @@ func NormalizeFilePath(root, path string) string {
 	}
 	return p
 }
+
 // ── 新增格式函数 ───────────────────────────────────
 
 // PatternSearchText 生成可读的模式搜索结果。
@@ -373,4 +374,3 @@ func ModuleArchitectureText(arch *ModuleArchitecture) string {
 	}
 	return b.String()
 }
-

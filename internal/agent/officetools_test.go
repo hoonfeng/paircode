@@ -491,7 +491,7 @@ func TestPDFRead(t *testing.T) {
 		t.Error("read_pdf 不存在的文件应报错")
 	}
 
-	// 空文本内容（图片 PDF 模拟——无 BT/ET 但文件存在 → OCR 降级应有提示）
+	// 空文本内容（图片 PDF 模拟——无 BT/ET 但文件存在 → 应返回无嵌入文本提示）
 	emptyPDF := "%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
 		"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
 		"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\n" +
@@ -499,12 +499,12 @@ func TestPDFRead(t *testing.T) {
 		"trailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n200\n%%%%EOF"
 	os.WriteFile(filepath.Join(dir, "img.pdf"), []byte(emptyPDF), 0o644)
 	out, err = reg.Execute(ctx, "read_pdf", `{"path":"img.pdf"}`)
-	// 应返回成功但含 OCR 降级提示
+	// OCR 已移除（2026-08-22）——应返回成功但含「未提取到嵌入文本」提示
 	if err != nil {
 		t.Errorf("read_pdf 空文本应返回成功含提示, 但返回错误: %v", err)
 	}
-	if !strings.Contains(out, "OCR") && !strings.Contains(out, "poppler") {
-		t.Errorf("read_pdf 空文本应含 OCR 降级提示: %q", out)
+	if !strings.Contains(out, "未提取到嵌入文本") {
+		t.Errorf("read_pdf 空文本应含未提取提示: %q", out)
 	}
 }
 
@@ -563,17 +563,33 @@ func TestMarkdownToHTML(t *testing.T) {
 // ═══════════════════════════════════════════════════════════
 
 func TestCSVDelim(t *testing.T) {
-	if csvDelim("tab") != '\t' { t.Error("tab 应返回制表符") }
-	if csvDelim("Tab") != '\t' { t.Error("Tab 应返回制表符") }
-	if csvDelim("comma") != ',' { t.Error("comma 应返回逗号") }
-	if csvDelim("") != ',' { t.Error("空值应返回逗号") }
-	if csvDelim("xxx") != ',' { t.Error("未知值应返回逗号") }
+	if csvDelim("tab") != '\t' {
+		t.Error("tab 应返回制表符")
+	}
+	if csvDelim("Tab") != '\t' {
+		t.Error("Tab 应返回制表符")
+	}
+	if csvDelim("comma") != ',' {
+		t.Error("comma 应返回逗号")
+	}
+	if csvDelim("") != ',' {
+		t.Error("空值应返回逗号")
+	}
+	if csvDelim("xxx") != ',' {
+		t.Error("未知值应返回逗号")
+	}
 }
 
 func TestPadRight(t *testing.T) {
-	if padRight("abc", 5) != "abc  " { t.Errorf("padRight 结果=%q", padRight("abc", 5)) }
-	if padRight("abcde", 3) != "abcde" { t.Errorf("padRight 不应截断=%q", padRight("abcde", 3)) }
-	if padRight("", 4) != "    " { t.Errorf("padRight 空串=%q", padRight("", 4)) }
+	if padRight("abc", 5) != "abc  " {
+		t.Errorf("padRight 结果=%q", padRight("abc", 5))
+	}
+	if padRight("abcde", 3) != "abcde" {
+		t.Errorf("padRight 不应截断=%q", padRight("abcde", 3))
+	}
+	if padRight("", 4) != "    " {
+		t.Errorf("padRight 空串=%q", padRight("", 4))
+	}
 }
 
 func TestParseColIndex(t *testing.T) {

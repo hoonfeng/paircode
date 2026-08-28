@@ -41,13 +41,13 @@ const (
 
 // Step 执行计划中的一个步骤。
 type Step struct {
-	ID           string      `json:"id"`
-	Description  string      `json:"description"`
-	Status       StepStatus  `json:"status"`
-	Dependencies []string    `json:"dependencies,omitempty"`
-	StartedAt    string      `json:"startedAt,omitempty"`
-	CompletedAt  string      `json:"completedAt,omitempty"`
-	Summary      string      `json:"summary,omitempty"`
+	ID           string     `json:"id"`
+	Description  string     `json:"description"`
+	Status       StepStatus `json:"status"`
+	Dependencies []string   `json:"dependencies,omitempty"`
+	StartedAt    string     `json:"startedAt,omitempty"`
+	CompletedAt  string     `json:"completedAt,omitempty"`
+	Summary      string     `json:"summary,omitempty"`
 }
 
 // ExecutionPlan 统一执行计划，融合 PlanRec / Task / ExecutionState。
@@ -55,15 +55,15 @@ type ExecutionPlan struct {
 	ID        string     `json:"id"`
 	ConvID    string     `json:"convId,omitempty"`
 	Status    PlanStatus `json:"status"`
-	Task      string     `json:"task"`       // 原始用户任务
+	Task      string     `json:"task"` // 原始用户任务
 	Reasoning string     `json:"reasoning,omitempty"`
 
-	Steps      []Step  `json:"steps"`       // 执行步骤清单
-	LoopCount  int     `json:"loopCount"`   // 当前循环轮次
-	MaxLoops   int     `json:"maxLoops"`    // 最大轮次
-	Phase      string  `json:"phase"`       // 当前阶段描述
+	Steps     []Step `json:"steps"`     // 执行步骤清单
+	LoopCount int    `json:"loopCount"` // 当前循环轮次
+	MaxLoops  int    `json:"maxLoops"`  // 最大轮次
+	Phase     string `json:"phase"`     // 当前阶段描述
 
-	Errors       []string `json:"errors,omitempty"`
+	Errors        []string `json:"errors,omitempty"`
 	ModifiedFiles []string `json:"modifiedFiles,omitempty"`
 
 	CreatedAt string `json:"createdAt"`

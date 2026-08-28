@@ -7,7 +7,7 @@
 //   go run -tags toolsgen ./dev/tool_plugin_gen
 //
 // 作用：遍历尚未外置的复杂内置工具组（git/memory/verify/task/
-// project-info/binary（含逆向，2026-08-16 并入 binary-re）/debug/vision/
+// project-info/binary（含逆向，2026-08-16 并入 binary-re）/debug/
 // screenshot/web-debug/bug/office/lsp/codegraph/codegraph-extra），把每组
 // 注册的工具定义（name/description/usageGuide/category/readOnly/
 // requiresApproval/parameters）完整导出为 .pair/plugins/tool-<组>/index.js
@@ -31,10 +31,10 @@ import (
 
 // genToolGroup 一个待生成的工具组。
 type genToolGroup struct {
-	plugin string // 磁盘插件目录名（tool-<组>）
-	desc   string // 插件用途（purpose/头注释）
+	plugin string                         // 磁盘插件目录名（tool-<组>）
+	desc   string                         // 插件用途（purpose/头注释）
 	apply  func(r *Registry, root string) // 组注册函数
-	names  []string // 可选白名单：只挑选这些工具（nil=全部非 SystemTool 工具）
+	names  []string                       // 可选白名单：只挑选这些工具（nil=全部非 SystemTool 工具）
 	// binary 指定 execute 调度形态（2026-08-16 第三轮：全部独立二进制）：
 	//   ""     → ctx.hostTool.exec（宿主内执行器，会话/宿主状态依赖——tool-system）
 	//   "self" → ctx.binary.exec（本插件目录 bin/<插件名>.exe，独立二进制；
@@ -56,33 +56,48 @@ func genToolGroups() []genToolGroup {
 		{"tool-project-info", "项目知识库（project_info_write/read/list/search/delete/explore）", registerProjectInfoTools, nil, "self"},
 		{"tool-binary", "二进制读写 + 逆向分析（inspect_binary/write_binary/binary_strings/find/patch/info/hash/entropy，含 2026-08-16 并入的 tool-binary-re 逆向 6 工具）", registerBinaryTools, nil, "self"},
 		{"tool-debug", "调试工具（debug_inject_log/run_capture/analyze_output/parse_stack/cleanup_logs/watch/evaluate_session）", registerDebugTools, nil, "self"},
-		{"tool-vision", "图像视觉（image_analyze/image_ocr）", registerVisionTools, nil, "self"},
 		{"tool-screenshot", "截图（screenshot_desktop/window/area/webpage）", registerScreenshotTools, nil, "self"},
 		{"tool-web-debug", "网页验证（web_debug）", registerWebDebugTool, nil, "self"},
 		{"tool-bug", "BUG 检测与修复（bug_detect/bug_analyze/bug_fix）", RegisterBugTools, nil, "self"},
 		{"tool-office", "办公文档（csv_read/csv_write/json_to_table/table_stats/text_report/word_read）", registerOfficeTools, nil, "self"},
 		{"tool-codegraph", "代码知识图谱（codegraph_build/search/impact/…）", registerCodeGraphTools, nil, "self"},
 		{"tool-codegraph-extra", "图谱扩展（codegraph_find_by_signature/explore）", registerExtraCodeGraphTools, nil, "self"},
-		// tool-system：SystemTool 内部工具 + Skills/MCP/提交信息
+		// tool-system：SystemTool 内部工具 + Skills/MCP
 		// （ask_user/task_create 经会话桥插件化，见 session_bridge.go；
 		//  marketplace_search/install 已迁至 marketplace 插件，2026-08-20）
-		{"tool-system", "系统内部工具（SystemTool + Skills/MCP/提交信息：update_tasks/update_plan/tool_stats/history_*/skill_*/mcp_*/generate_commit_message）——全部可更换",
+		{"tool-system", "系统内部工具（SystemTool + Skills/MCP：update_tasks/update_plan/tool_stats/history_*/skill_*/mcp_*）——全部可更换",
 			func(r *Registry, root string) {
 				RegisterManagementTools(r, root)
 				registerPlanTool(r)
 				registerToolStatsTool(r)
 				registerTaskTools(r, root)
-				RegisterCommitMessageTool(r)
 			},
 			[]string{
 				"update_tasks", "update_plan", "tool_stats",
 				"history_search", "history_list", "history_count",
 				"skill_list", "load_skill", "load_skill_resource", "skill_write", "skill_delete",
 				"mcp_list", "mcp_add", "mcp_remove",
-				"generate_commit_message",
 			},
 			"",
 		},
+		// ★ 2026-09 第二轮外置（t1 报告 T1 缺口闭环）：7 组「孤儿工具」注册函数
+		//   （有实现、零调用点、Agent 永不可用）迁移为磁盘插件。Go 实现经
+		//   ArchiveHostLegacyTools 存档为宿主能力（hostExecutors），插件 execute
+		//   走 ctx.hostTool.exec 复用——对齐 harness seam：编排在插件、能力在宿主。
+		{"tool-asset", "智能资产管理（asset_list/asset_search/asset_delete：经验胶囊 + 技能基因）",
+			registerAssetTools, nil, ""},
+		{"tool-bridge", "桌面桥接（bridge_status/bridge_takeover/bridge_release/bridge_exec/bridge_register_system_tool）",
+			registerBridgeTools, nil, ""},
+		{"tool-entryconfig", "入口与配置定位（find_entry_points/find_config_files）",
+			registerEntryConfigTools, nil, ""},
+		{"tool-evolution", "进化系统（evolution_save_capsule/evolution_search_capsules/evolution_save_gene/evolution_status）",
+			registerEvolutionTools, nil, ""},
+		{"tool-progress", "进度检查（progress_checker）",
+			registerProgressChecker, nil, ""},
+		{"tool-resource", "资源管理（resource_list/resource_search/resource_stats）",
+			registerResourceTools, nil, ""},
+		{"tool-snapshot", "会话快照（restore_snapshot/list_snapshots）",
+			RegisterSnapshotTools, nil, ""},
 	}
 }
 

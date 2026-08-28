@@ -15,7 +15,6 @@ import (
 	"time"
 )
 
-
 var (
 	reScriptStyle = regexp.MustCompile(`(?is)<(script|style)\b[^>]*>.*?</(script|style)>`)
 	reBlockTag    = regexp.MustCompile(`(?i)</(p|div|li|tr|h[1-6]|section|article|header|footer|ul|ol|table|blockquote)>|<br\s*/?>`)
@@ -98,8 +97,6 @@ func webFetch(ctx context.Context, args map[string]any) (string, error) {
 // ddgSearchURL DuckDuckGo HTML 搜索端点（无需 key）；测试中可替换为 httptest。
 var ddgSearchURL = "https://html.duckduckgo.com/html/"
 
-
-
 var (
 	reDDGAnchor  = regexp.MustCompile(`(?is)<a\b([^>]*class="result__a"[^>]*)>(.*?)</a>`)
 	reDDGHref    = regexp.MustCompile(`href="([^"]+)"`)
@@ -147,7 +144,8 @@ func parseDDGResults(htmlBody string) []ddgResult {
 
 // webSearch 搜索网络，返回前 8 条。
 // ★ 2026-08-19：移除 SearXNG 分支（searxngUrl 配置无消费链路已删），统一走 DuckDuckGo
-//   （无需 key，尽力而为，依赖 DDG HTML，可能被限流/改版）。
+//
+//	（无需 key，尽力而为，依赖 DDG HTML，可能被限流/改版）。
 func webSearch(ctx context.Context, args map[string]any) (string, error) {
 	q := strings.TrimSpace(argStr(args, "query"))
 	if q == "" {

@@ -359,7 +359,7 @@ GET /api/settings
 ```json
 {
   "provider": "deepseek",
-  "baseURL": "https://api.deepseek.com/v1",
+  "baseURL": "https://api.deepseek.com/v1/chat/completions",
   "apiKey": "sk-xxx",
   "planModel": "deepseek-v4-pro",
   "executeModel": "deepseek-v4-flash",

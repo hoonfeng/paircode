@@ -22,40 +22,40 @@ import (
 type FixAttemptStatus string
 
 const (
-	FixAttemptPending   FixAttemptStatus = "pending"    // 待执行
-	FixAttemptRunning   FixAttemptStatus = "running"    // 执行中
-	FixAttemptFixed     FixAttemptStatus = "fixed"      // 修复成功
-	FixAttemptFailed    FixAttemptStatus = "failed"     // 修复失败
-	FixAttemptRollback  FixAttemptStatus = "rollback"   // 已回滚
+	FixAttemptPending  FixAttemptStatus = "pending"  // 待执行
+	FixAttemptRunning  FixAttemptStatus = "running"  // 执行中
+	FixAttemptFixed    FixAttemptStatus = "fixed"    // 修复成功
+	FixAttemptFailed   FixAttemptStatus = "failed"   // 修复失败
+	FixAttemptRollback FixAttemptStatus = "rollback" // 已回滚
 )
 
 // BugFixResult 一次完整的 BUG 修复闭环结果。
 type BugFixResult struct {
-	Detected      *BugDetectResult  `json:"detected"`      // 检测结果
-	Fixed         bool              `json:"fixed"`          // 是否修复成功
-	FixedCount    int               `json:"fixedCount"`     // 修复的问题数
-	Remaining     int               `json:"remaining"`      // 剩余问题数
-	Attempts      int               `json:"attempts"`       // 修复尝试次数
-	RolledBack    bool              `json:"rolledBack"`     // 是否已回滚
-	FixSummary    string            `json:"fixSummary"`     // 修复摘要
-	AgentTask     string            `json:"agentTask"`      // 生成的 agent 修复任务文本
-	FinalDetect   *BugDetectResult  `json:"finalDetect"`    // 修复后的检测结果
-	Duration      time.Duration     `json:"duration"`       // 总耗时
-	backupDir     string            `json:"-"`              // 备份目录（内部使用，不序列化）
+	Detected    *BugDetectResult `json:"detected"`    // 检测结果
+	Fixed       bool             `json:"fixed"`       // 是否修复成功
+	FixedCount  int              `json:"fixedCount"`  // 修复的问题数
+	Remaining   int              `json:"remaining"`   // 剩余问题数
+	Attempts    int              `json:"attempts"`    // 修复尝试次数
+	RolledBack  bool             `json:"rolledBack"`  // 是否已回滚
+	FixSummary  string           `json:"fixSummary"`  // 修复摘要
+	AgentTask   string           `json:"agentTask"`   // 生成的 agent 修复任务文本
+	FinalDetect *BugDetectResult `json:"finalDetect"` // 修复后的检测结果
+	Duration    time.Duration    `json:"duration"`    // 总耗时
+	backupDir   string           `json:"-"`           // 备份目录（内部使用，不序列化）
 }
 
 // FixRecord 修复记录（持久化到 .pair/tasks/fix-records/）。
 type FixRecord struct {
-	ID           string        `json:"id"`
-	Time         string        `json:"time"`
-	ConvID       string        `json:"convId,omitempty"`
+	ID           string           `json:"id"`
+	Time         string           `json:"time"`
+	ConvID       string           `json:"convId,omitempty"`
 	InitialState *BugDetectResult `json:"initialState"`
 	FinalState   *BugDetectResult `json:"finalState"`
-	Fixed        bool          `json:"fixed"`
-	Attempts     int           `json:"attempts"`
-	RolledBack   bool          `json:"rolledBack"`
-	Summary      string        `json:"summary"`
-	FilesChanged []string      `json:"filesChanged,omitempty"`
+	Fixed        bool             `json:"fixed"`
+	Attempts     int              `json:"attempts"`
+	RolledBack   bool             `json:"rolledBack"`
+	Summary      string           `json:"summary"`
+	FilesChanged []string         `json:"filesChanged,omitempty"`
 }
 
 // ── 核心函数 ───────────────────────────────────────────────
@@ -134,10 +134,10 @@ func VerifyAfterFix(root string, result *BugFixResult) *BugFixResult {
 			if result.backupDir != "" {
 				rollbackFiles(result.backupDir, root)
 				result.RolledBack = true
-			result.FixSummary = fmt.Sprintf("[失败] 修复失败（尝试 %d 次），已回滚。剩余 %d 个问题。",
+				result.FixSummary = fmt.Sprintf("[失败] 修复失败（尝试 %d 次），已回滚。剩余 %d 个问题。",
 					result.Attempts, result.Remaining)
 			} else {
-			result.FixSummary = fmt.Sprintf("[失败] 修复失败（尝试 %d 次），无备份无法回滚。剩余 %d 个问题。",
+				result.FixSummary = fmt.Sprintf("[失败] 修复失败（尝试 %d 次），无备份无法回滚。剩余 %d 个问题。",
 					result.Attempts, result.Remaining)
 			}
 		} else {
@@ -348,14 +348,13 @@ func FormatBuildErrorForAgent(buildOutput string, root string) string {
 func registerBugFixTools(r *Registry, root string) {
 	// bug_detect — 全量项目 BUG 检测
 	r.Register(&Tool{
-		Name: "bug_detect",
+		Name:       "bug_detect",
 		UsageGuide: "全量检测项目 BUG：自动运行 go vet → go build → go test，聚合所有错误。修改代码后验证无错误的推荐工具。比手动分别运行更高效（一站式检测）。",
 		Description: "全量检测项目中是否存在 BUG。自动运行 go vet → go build → go test，" +
 			"输出解析后的错误列表（含文件路径、行号、错误消息和代码上下文）。" +
 			"用于自动发现编译/测试/运行时的 BUG。集成在自主模式的编排循环中。",
-		Parameters: objSchema(props{},
-		),
-		ReadOnly: true,
+		Parameters: objSchema(props{}),
+		ReadOnly:   true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
 			result := DetectProjectErrors(root)
 			if result.Success {
@@ -367,7 +366,7 @@ func registerBugFixTools(r *Registry, root string) {
 
 	// bug_fix — 生成 BUG 修复任务（检测 + 生成修复提示）
 	r.Register(&Tool{
-		Name: "bug_fix",
+		Name:       "bug_fix",
 		UsageGuide: "自动检测并修复项目 BUG。运行编译/测试后定位错误，生成修复方案并 apply。max_attempts 控制最大尝试次数（默认 3）。注意：自动修复可能引入新问题，改完需验证。",
 		Description: "自动检测项目 BUG（编译/测试/运行时错误），生成详细的修复任务文本。" +
 			"返回包含错误位置、代码上下文和修复指南的完整修复任务。" +
@@ -395,4 +394,3 @@ func RegisterBugTools(r *Registry, root string) {
 }
 
 // ── 辅助 ──────────────────────────────────────────────────
-

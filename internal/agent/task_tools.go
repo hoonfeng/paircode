@@ -35,7 +35,7 @@ func registerTaskTools(r *Registry, root string) {
 	tm := UseTaskManager(root)
 
 	r.Register(&Tool{
-		Name: "update_tasks",
+		Name:       "update_tasks",
 		SystemTool: true,
 		UsageGuide: "管理持久化任务列表（全量替换模式）。复杂任务（3+ 步）必须拆解为子任务并逐项追踪。每次传入完整清单，状态变化时重传整份。系统自动持久化到磁盘。plan_step_index 用于自主模式下绑定到 update_plan 的步骤。",
 		Description: "维护任务列表：传入完整任务清单（全量替换），系统自动持久化到磁盘。" +
@@ -50,11 +50,11 @@ func registerTaskTools(r *Registry, root string) {
 					"items": map[string]any{
 						"type": "object",
 						"properties": props{
-							"id":           strProp("任务 ID（可选，不传则自动生成）"),
-							"subject":      strProp("任务标题，用祈使句（如\"修复登录超时\"）"),
-							"description":  strProp("详细描述（可选）：做什么、涉及哪些文件"),
-							"status":       map[string]any{"type": "string", "enum": []string{"pending", "in_progress", "completed", "cancelled"}, "description": "状态"},
-							"dependencies":   map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "依赖的任务 ID 列表（可选）"},
+							"id":              strProp("任务 ID（可选，不传则自动生成）"),
+							"subject":         strProp("任务标题，用祈使句（如\"修复登录超时\"）"),
+							"description":     strProp("详细描述（可选）：做什么、涉及哪些文件"),
+							"status":          map[string]any{"type": "string", "enum": []string{"pending", "in_progress", "completed", "cancelled"}, "description": "状态"},
+							"dependencies":    map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "依赖的任务 ID 列表（可选）"},
 							"plan_step_index": map[string]any{"type": "integer", "description": "所属 plan 步骤索引（0 基；自主模式下绑定到 update_plan 的某步）"},
 						},
 						"required": []string{"subject", "status"},

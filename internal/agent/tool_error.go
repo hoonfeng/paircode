@@ -38,7 +38,7 @@ func NewToolError(op, msg string, opts ...ToolErrorOption) *ToolError {
 // ToolErrorOption 工具错误可选配置。
 type ToolErrorOption func(*ToolError)
 
-func WithRetryable(v bool) ToolErrorOption  { return func(e *ToolError) { e.Retryable = v } }
+func WithRetryable(v bool) ToolErrorOption    { return func(e *ToolError) { e.Retryable = v } }
 func WithSuggestion(s string) ToolErrorOption { return func(e *ToolError) { e.Suggestion = s } }
 func WithSeverity(s string) ToolErrorOption   { return func(e *ToolError) { e.Severity = s } }
 func WithCause(c error) ToolErrorOption       { return func(e *ToolError) { e.Cause = c } }

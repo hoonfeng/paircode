@@ -1,10 +1,11 @@
 // Package codegraph 实现代码知识图谱，作为 Agent 内置的确定性记忆与推理引擎。
 //
 // 四层融合知识：
-//   (1) 语法结构层 — 文件/包/类/函数/变量结构（Go AST）
-//   (2) 依赖调用层 — 导入/调用/继承关系（静态分析）
-//   (3) 语义文档层 — 注释/文档/嵌入向量（预留）
-//   (4) 演化运维层 — Git历史/变更追溯（预留）
+//
+//	(1) 语法结构层 — 文件/包/类/函数/变量结构（Go AST）
+//	(2) 依赖调用层 — 导入/调用/继承关系（静态分析）
+//	(3) 语义文档层 — 注释/文档/嵌入向量（预留）
+//	(4) 演化运维层 — Git历史/变更追溯（预留）
 //
 // 设计原则：
 //   - 图谱是「地图」而非「全书」：只存结构和元信息，源码按需从文件系统读取。
@@ -28,30 +29,30 @@ type EntityKind string
 
 const (
 	// 语法结构层
-	EntityProject    EntityKind = "project"     // 项目（根节点）
-	EntityModule     EntityKind = "module"      // Go module
-	EntityPackage    EntityKind = "package"     // Go package
-	EntityFile       EntityKind = "file"        // 源文件
-	EntityStruct     EntityKind = "struct"      // 结构体
-	EntityInterface  EntityKind = "interface"   // 接口
-	EntityFunction   EntityKind = "function"    // 函数
-	EntityMethod     EntityKind = "method"      // 方法（结构体/接口的方法）
-	EntityType       EntityKind = "type"        // 类型别名/定义
-	EntityVariable   EntityKind = "variable"    // 全局变量
-	EntityConstant   EntityKind = "constant"    // 常量
-	EntityField      EntityKind = "field"       // 结构体字段
-	EntityParameter  EntityKind = "parameter"   // 函数参数
+	EntityProject   EntityKind = "project"   // 项目（根节点）
+	EntityModule    EntityKind = "module"    // Go module
+	EntityPackage   EntityKind = "package"   // Go package
+	EntityFile      EntityKind = "file"      // 源文件
+	EntityStruct    EntityKind = "struct"    // 结构体
+	EntityInterface EntityKind = "interface" // 接口
+	EntityFunction  EntityKind = "function"  // 函数
+	EntityMethod    EntityKind = "method"    // 方法（结构体/接口的方法）
+	EntityType      EntityKind = "type"      // 类型别名/定义
+	EntityVariable  EntityKind = "variable"  // 全局变量
+	EntityConstant  EntityKind = "constant"  // 常量
+	EntityField     EntityKind = "field"     // 结构体字段
+	EntityParameter EntityKind = "parameter" // 函数参数
 
 	// 依赖调用层
-	EntityImport     EntityKind = "import"      // 导入语句
-	EntityCallSite   EntityKind = "call_site"   // 调用点
+	EntityImport   EntityKind = "import"    // 导入语句
+	EntityCallSite EntityKind = "call_site" // 调用点
 
 	// 语义文档层（预留）
 	EntityComment    EntityKind = "comment"     // 注释块
 	EntityDocSection EntityKind = "doc_section" // 文档段落
 
 	// 演化运维层（预留）
-	EntityCommit     EntityKind = "commit"      // Git 提交
+	EntityCommit EntityKind = "commit" // Git 提交
 )
 
 // GraphStore 图谱持久化接口（JSON 和 SQLite 两种实现）。
@@ -76,30 +77,30 @@ type RelationKind string
 
 const (
 	// 包含关系（层次结构）
-	RelContains    RelationKind = "contains"    // 父包含子（如包→文件，文件→函数）
-	RelBelongsTo   RelationKind = "belongs_to"  // 子隶属于父（反向语义）
+	RelContains  RelationKind = "contains"   // 父包含子（如包→文件，文件→函数）
+	RelBelongsTo RelationKind = "belongs_to" // 子隶属于父（反向语义）
 
 	// 定义关系
-	RelDefines     RelationKind = "defines"     // 定义（如文件→函数，类型→方法）
+	RelDefines RelationKind = "defines" // 定义（如文件→函数，类型→方法）
 
 	// 依赖/调用关系
-	RelCalls       RelationKind = "calls"       // 函数调用
-	RelCalledBy    RelationKind = "called_by"   // 被调用（反向）
-	RelImports     RelationKind = "imports"     // 文件导入包
-	RelImportedBy  RelationKind = "imported_by" // 被导入（反向）
-	RelDependsOn   RelationKind = "depends_on"  // 包依赖包
+	RelCalls      RelationKind = "calls"       // 函数调用
+	RelCalledBy   RelationKind = "called_by"   // 被调用（反向）
+	RelImports    RelationKind = "imports"     // 文件导入包
+	RelImportedBy RelationKind = "imported_by" // 被导入（反向）
+	RelDependsOn  RelationKind = "depends_on"  // 包依赖包
 
 	// 类型关系
-	RelInherits    RelationKind = "inherits"    // 继承/实现接口
-	RelImplements  RelationKind = "implements"  // 实现接口
-	RelEmbeds      RelationKind = "embeds"      // 嵌入类型
+	RelInherits   RelationKind = "inherits"   // 继承/实现接口
+	RelImplements RelationKind = "implements" // 实现接口
+	RelEmbeds     RelationKind = "embeds"     // 嵌入类型
 
 	// 语义关系（预留）
-	RelDescribes   RelationKind = "describes"   // 文档描述实体
+	RelDescribes RelationKind = "describes" // 文档描述实体
 
 	// 演化关系（预留）
-	RelIntroduced  RelationKind = "introduced"  // 提交引入实体
-	RelModifiedBy  RelationKind = "modified_by" // 实体被提交修改
+	RelIntroduced RelationKind = "introduced"  // 提交引入实体
+	RelModifiedBy RelationKind = "modified_by" // 实体被提交修改
 )
 
 // ── 实体（节点） ───────────────────────────────────────
@@ -152,7 +153,7 @@ type Graph struct {
 	mu sync.RWMutex
 
 	// 基本存储
-	entities map[string]*Entity   // ID → Entity
+	entities  map[string]*Entity   // ID → Entity
 	relations map[string]*Relation // ID → Relation
 
 	// 索引：实体类型索引
@@ -174,11 +175,11 @@ type Graph struct {
 
 // GraphStats 图谱统计信息。
 type GraphStats struct {
-	EntityCount  int            `json:"entityCount"`
-	RelationCount int           `json:"relationCount"`
-	KindCounts   map[string]int `json:"kindCounts"`   // 各类实体数量
-	FileCount    int            `json:"fileCount"`     // 覆盖的文件数
-	PackageCount int            `json:"packageCount"`  // 覆盖的包数
+	EntityCount   int            `json:"entityCount"`
+	RelationCount int            `json:"relationCount"`
+	KindCounts    map[string]int `json:"kindCounts"`   // 各类实体数量
+	FileCount     int            `json:"fileCount"`    // 覆盖的文件数
+	PackageCount  int            `json:"packageCount"` // 覆盖的包数
 }
 
 // NewGraph 创建一个新的空图。
@@ -521,9 +522,9 @@ func (g *Graph) dfsRecursive(id string, depth, maxDepth int, visited map[string]
 
 // ImpactPath 一条从源到目标的影响路径。
 type ImpactPath struct {
-	Path     []string `json:"path"`     // 实体ID链
-	Entities []*Entity `json:"-"`       // 对应的实体对象（导出时不序列化）
-	Depth    int       `json:"depth"`   // 路径深度
+	Path     []string  `json:"path"`  // 实体ID链
+	Entities []*Entity `json:"-"`     // 对应的实体对象（导出时不序列化）
+	Depth    int       `json:"depth"` // 路径深度
 }
 
 // FindImpactPaths 查找从 startID 出发的所有影响路径（DFS 有限深度）。

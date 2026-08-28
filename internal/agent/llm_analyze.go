@@ -28,12 +28,12 @@ var ToolsetIntentTags = []string{
 
 // ProjectIntent LLM 项目意图分析结论（结构化输出，强制 JSON）。
 type ProjectIntent struct {
-	Purpose         string   `json:"purpose"`         // 项目目的（一句话，作为工具集描述）
-	BuildCmd        string   `json:"buildCmd"`        // 项目真实构建命令（如 npm run build / make / cargo build；未知留空）
-	TestCmd         string   `json:"testCmd"`         // 测试命令
-	RunCmd          string   `json:"runCmd"`          // 运行/启动命令
-	LintCmd         string   `json:"lintCmd"`         // lint/检查命令（如 npx eslint . / ruff check .；无则空）
-	FormatCmd       string   `json:"formatCmd"`       // 格式化命令（无则空）
+	Purpose         string         `json:"purpose"`         // 项目目的（一句话，作为工具集描述）
+	BuildCmd        string         `json:"buildCmd"`        // 项目真实构建命令（如 npm run build / make / cargo build；未知留空）
+	TestCmd         string         `json:"testCmd"`         // 测试命令
+	RunCmd          string         `json:"runCmd"`          // 运行/启动命令
+	LintCmd         string         `json:"lintCmd"`         // lint/检查命令（如 npx eslint . / ruff check .；无则空）
+	FormatCmd       string         `json:"formatCmd"`       // 格式化命令（无则空）
 	RecommendedTags []string       `json:"recommendedTags"` // 推荐工具类别（ToolsetIntentTags 子集）
 	Notes           string         `json:"notes"`           // 补充说明（透传模板 generate 裁剪插件）
 	CustomPlugins   []CustomPlugin `json:"customPlugins"`   // LLM 现场生成的项目专属插件（模板覆盖不到的能力缺口）
@@ -80,14 +80,11 @@ var toolsetLLMProvider = func() Provider {
 	if cur.APIKey == "" || cur.BaseURL == "" {
 		return nil
 	}
-	return &OpenAIProvider{
-		BaseURL:      cur.BaseURL,
-		APIKey:       cur.APIKey,
-		Model:        cur.Model,
-		Temperature:  0.2,
-		MaxTokens:    1024,
-		ThinkingMode: cur.ThinkingMode,
-	}
+	// ★ t1 S1：实现级插件槽位——插件注册的 Provider 实现（ctx.provider.register）
+	//   对工具集 LLM 分析同样生效；未注册回退 OpenAI 兼容。
+	cur.Temperature = 0.2
+	cur.MaxTokens = 1024
+	return CreateProvider(cur)
 }
 
 // llmAnalyzeProject 调用 LLM 理解项目目的并推荐工具类别。
@@ -265,7 +262,9 @@ func fileTreeOverview(projectDir string) string {
 			}
 		}
 	}
-	sort.Slice(files, func(i, j int) bool { return extRank[strings.ToLower(filepath.Ext(files[i]))] < extRank[strings.ToLower(filepath.Ext(files[j]))] })
+	sort.Slice(files, func(i, j int) bool {
+		return extRank[strings.ToLower(filepath.Ext(files[i]))] < extRank[strings.ToLower(filepath.Ext(files[j]))]
+	})
 	if len(files) > 40 {
 		files = files[:40]
 	}

@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -55,16 +56,54 @@ func (m *MockProvider) Chat(ctx context.Context, messages []Message, tools []Too
 
 // ─── OpenAI 兼容适配器（DeepSeek / OpenAI / Qwen / Moonshot…）──
 
+// ─── LLM HTTP 超时与重试配置（★ 2026-08-21 调优：拉长超时 + 流中断重试）──
+// 包级变量：测试可临时改小；后续可经配置系统暴露给用户（settings 化）。
+var (
+	llmDialTimeout           = 30 * time.Second       // TCP 拨号超时
+	llmTLSHandshakeTimeout   = 30 * time.Second       // TLS 握手超时（慢网络下 10s 不够）
+	llmResponseHeaderTimeout = 180 * time.Second      // ★ 响应头超时（原 60s）：DeepSeek thinking 高峰排队/首 token 慢时 60s 不够
+	llmClientTimeout         = 600 * time.Second      // 整个请求（含 SSE 流式读取）兜底超时
+	llmMaxRetries            = 10                     // 最大重试次数（网络错误/超时/408/429/5xx）
+	llmRetryBaseDelay        = 500 * time.Millisecond // 指数退避基数：0.5s,1s,2s,4s...
+	llmRetryMaxDelay         = 30 * time.Second       // 退避上限
+)
+
 // OpenAIProvider OpenAI 兼容 /chat/completions 适配器。各家差异仅 BaseURL+Model+APIKey。
 // SSE 流式：逐行解析 data:，累积 content/reasoning_content 与 tool_calls（按 index 拼 arguments）。
 type OpenAIProvider struct {
-	BaseURL      string // 如 https://api.deepseek.com/v1（不含 /chat/completions）
+	BaseURL      string // ★ 完整请求端点（含 /chat/completions），如 https://api.deepseek.com/v1/chat/completions；不再拼接
 	APIKey       string
 	Model        string
 	Temperature  float64      // <0 = 不下发（用服务端默认）；>=0 下发
 	MaxTokens    int          // >0 时下发 max_tokens
 	ThinkingMode string       // non-thinking/thinking/thinking_max；空=不下发思考参数（仅 DeepSeek V4 系生效）
-	Client       *http.Client // nil → 默认 120s 超时
+	Multimodal   bool         // ★ 2026-08-21 多模态：模型支持图片输入 → 带 Images 的 user 消息转 content 块数组发送
+	Client       *http.Client // nil → 默认客户端（超时见 llm* 变量）
+
+	// OnRetry 重试通知回调（attempt 从 1 起，max 总次数）。loop 层绑定后可将
+	// 「LLM 请求失败，正在自动重试」以 notice 事件推送到前端——避免用户干等。
+	OnRetry func(attempt int, maxRetries int, errMsg string)
+
+	// 默认客户端缓存：复用连接池/keep-alive，避免每次请求重建 Transport（每次重建 = DNS+TLS 全部重来）
+	clientOnce  sync.Once
+	clientCache *http.Client
+}
+
+// SetOnRetry 为 Provider 绑定重试通知（RetryNotifier 接口）。
+func (p *OpenAIProvider) SetOnRetry(fn func(attempt, maxRetries int, errMsg string)) {
+	p.OnRetry = fn
+}
+
+// RetryNotifier 可选接口：Provider 内部发生重试时通知调用方（用于 UI 展示重试进度）。
+type RetryNotifier interface {
+	SetOnRetry(func(attempt, maxRetries int, errMsg string))
+}
+
+// notifyRetry 触发重试通知（nil 安全）。
+func (p *OpenAIProvider) notifyRetry(attempt int, errMsg string) {
+	if p.OnRetry != nil {
+		p.OnRetry(attempt, llmMaxRetries, errMsg)
+	}
 }
 
 func (p *OpenAIProvider) Name() string { return "openai:" + p.Model }
@@ -116,6 +155,70 @@ func applyThinking(body map[string]any, model, mode string) {
 	}
 	// 非 v4 模型仅下发 reasoning_effort（OpenAI o-series / 兼容模型；不支持的服务端会忽略）
 	body["reasoning_effort"] = eff
+}
+
+// buildOpenAIMessages 把内部 Message 列表转为 OpenAI 兼容请求消息。
+// ★ 2026-08-21 多模态：multimodal=true 且消息带 Images 时，content 转块数组
+//
+//	[{type:'text',text}, {type:'image_url',image_url:{url,detail}}]；
+//	否则保持字符串 content（兼容非视觉模型与历史消息）。
+//
+// 同时保留 tool_calls / tool_call_id / name / reasoning_content（DeepSeek 回传契约）。
+func buildOpenAIMessages(msgs []Message, multimodal bool) []map[string]any {
+	out := make([]map[string]any, 0, len(msgs))
+	for _, m := range msgs {
+		mm := map[string]any{"role": string(m.Role)}
+		if m.Role == RoleTool {
+			mm["tool_call_id"] = m.ToolCallID
+			mm["content"] = m.Content
+		} else if multimodal && len(m.Images) > 0 {
+			// 多模态：content 块数组（text + image_url）
+			blocks := make([]map[string]any, 0, 1+len(m.Images))
+			if m.Content != "" {
+				blocks = append(blocks, map[string]any{"type": "text", "text": m.Content})
+			}
+			for _, img := range m.Images {
+				iu := map[string]any{"url": img.Data}
+				if img.Detail != "" {
+					iu["detail"] = img.Detail
+				}
+				blocks = append(blocks, map[string]any{"type": "image_url", "image_url": iu})
+			}
+			mm["content"] = blocks
+		} else {
+			mm["content"] = m.Content
+		}
+		if len(m.ToolCalls) > 0 {
+			tcs := make([]map[string]any, 0, len(m.ToolCalls))
+			for _, tc := range m.ToolCalls {
+				tcs = append(tcs, map[string]any{
+					"id":   tc.ID,
+					"type": tc.Type,
+					"function": map[string]any{
+						"name":      tc.Function.Name,
+						"arguments": tc.Function.Arguments,
+					},
+				})
+			}
+			mm["tool_calls"] = tcs
+		}
+		if m.Name != "" {
+			mm["name"] = m.Name
+		}
+		if m.Reasoning != "" {
+			mm["reasoning_content"] = m.Reasoning
+		}
+		out = append(out, mm)
+	}
+	return out
+}
+
+// firstMime 返回图片列表首个 MIME（诊断日志用）。
+func firstMime(imgs []ImagePart) string {
+	if len(imgs) == 0 {
+		return ""
+	}
+	return imgs[0].MimeType
 }
 
 // sanitizeToolPairing 修复消息列表中的工具调用配对，确保满足 OpenAI 兼容 API 的契约：
@@ -231,26 +334,38 @@ func (p *OpenAIProvider) client() *http.Client {
 	if p.Client != nil {
 		return p.Client
 	}
-	return &http.Client{
-		Transport: &http.Transport{
-			DialContext: (&net.Dialer{
-				Timeout:   30 * time.Second,
-				KeepAlive: 30 * time.Second,
-			}).DialContext,
-			TLSHandshakeTimeout:   10 * time.Second,
-			ResponseHeaderTimeout: 60 * time.Second, // 服务器须在 60s 内返回响应头
-		},
-		Timeout: 600 * time.Second, // SSE 流式读取：10 分钟兜底，覆盖长推理场景
-	}
+	p.clientOnce.Do(func() {
+		p.clientCache = &http.Client{
+			Transport: &http.Transport{
+				DialContext: (&net.Dialer{
+					Timeout:   llmDialTimeout,
+					KeepAlive: 30 * time.Second,
+				}).DialContext,
+				TLSHandshakeTimeout:   llmTLSHandshakeTimeout,
+				ResponseHeaderTimeout: llmResponseHeaderTimeout, // 服务器须在该时限内返回响应头（thinking 排队可能较久）
+				ForceAttemptHTTP2:     true,
+			},
+			Timeout: llmClientTimeout, // SSE 流式读取兜底
+		}
+	})
+	return p.clientCache
 }
 
 func (p *OpenAIProvider) Chat(ctx context.Context, messages []Message, tools []ToolDefinition, onChunk func(Chunk)) (Message, error) {
 	// ★ 修复消息中的 tool 调用配对，确保满足 OpenAI API 的 role=tool 契约
 	messages = sanitizeToolPairing(messages)
 
+	// ★ 2026-08-21 多模态诊断：确认装配器 multimodal 标记与图片消息进入请求体
+	for _, m := range messages {
+		if len(m.Images) > 0 {
+			log.Printf("[llm] 多模态消息: role=%s images=%d multimodal=%v mime=%s",
+				m.Role, len(m.Images), p.Multimodal, firstMime(m.Images))
+		}
+	}
+
 	body := map[string]any{
 		"model":          p.Model,
-		"messages":       messages,
+		"messages":       buildOpenAIMessages(messages, p.Multimodal),
 		"stream":         true,
 		"stream_options": map[string]any{"include_usage": true},
 	}
@@ -269,17 +384,20 @@ func (p *OpenAIProvider) Chat(ctx context.Context, messages []Message, tools []T
 		return Message{}, err
 	}
 
-	url := strings.TrimRight(p.BaseURL, "/") + "/chat/completions"
+	// ★ 2026-08-27：不再拼接 /chat/completions——多服务商 URL 形态不一致（有的要求完整端点、
+	// 有的 base 路径不同），配置中提供的 URL 即最终请求地址，直接使用。
+	// 仅去尾部斜杠容错（如 https://x/v1/chat/completions/）。
+	url := strings.TrimRight(p.BaseURL, "/")
 
-	const maxRetries = 10
+	maxRetries := llmMaxRetries
 	var lastErr error
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		if attempt > 0 {
 			// 指数退避 + 抖动：0.5s, 1s, 2s, 4s, 8s, 16s, 30s, 30s...
-			delay := time.Duration(500*(1<<(attempt-1))) * time.Millisecond
-			if delay > 30*time.Second {
-				delay = 30 * time.Second
+			delay := time.Duration(1<<(attempt-1)) * llmRetryBaseDelay
+			if delay > llmRetryMaxDelay {
+				delay = llmRetryMaxDelay
 			}
 			delay += time.Duration(rand.Intn(250)) * time.Millisecond
 			select {
@@ -306,11 +424,28 @@ func (p *OpenAIProvider) Chat(ctx context.Context, messages []Message, tools []T
 			}
 			lastErr = fmt.Errorf("LLM 请求失败 (第%d次): %w", attempt+1, err)
 			log.Printf("[llm] %s 网络请求失败（第%d次，退避后重试）: %v", p.Model, attempt+1, err)
+			p.notifyRetry(attempt+1, err.Error())
 			continue
 		}
 
 		if resp.StatusCode == http.StatusOK {
-			return parseSSE(resp.Body, onChunk)
+			msg, perr := parseSSE(resp.Body, onChunk)
+			resp.Body.Close()
+			if perr == nil {
+				return msg, nil
+			}
+			// ★ 2026-08-21 SSE 流中断重试策略：
+			//   未产出任何内容（网络瞬断/读超时/首帧前断）→ 安全重试；
+			//   已产出内容 → 不自动重试（重试会重复输出；若流中含 tool_calls 还会导致工具重复执行），
+			//   带已累积内容返回错误，由上层决定后续。
+			if msg.Content != "" || msg.Reasoning != "" || len(msg.ToolCalls) > 0 {
+				return msg, fmt.Errorf("LLM 流式响应中断（已接收内容 %d 字符，不自动重试以免重复）: %w",
+					len(msg.Content)+len(msg.Reasoning), perr)
+			}
+			lastErr = fmt.Errorf("LLM 流式读取失败 (第%d次): %w", attempt+1, perr)
+			log.Printf("[llm] %s 流式读取失败（第%d次，退避后重试）: %v", p.Model, attempt+1, perr)
+			p.notifyRetry(attempt+1, perr.Error())
+			continue
 		}
 
 		// 处理非 200 状态码
@@ -331,6 +466,7 @@ func (p *OpenAIProvider) Chat(ctx context.Context, messages []Message, tools []T
 		if statusCode == http.StatusRequestTimeout || statusCode == http.StatusTooManyRequests || (statusCode >= 500 && statusCode <= 599) {
 			lastErr = fmt.Errorf("LLM HTTP %d (第%d次): %s", statusCode, attempt+1, bodyStr)
 			log.Printf("[llm] %s HTTP %d（第%d次，退避后重试）: %s", p.Model, statusCode, attempt+1, bodyStr)
+			p.notifyRetry(attempt+1, fmt.Sprintf("HTTP %d: %s", statusCode, bodyStr))
 			continue
 		}
 
@@ -377,6 +513,8 @@ func parseSSE(r io.Reader, onChunk func(Chunk)) (Message, error) {
 	var toolOrder []int
 	var usage *Usage
 	var stopReason string // 最后一片的 finish_reason
+	sawDone := false      // 收到 [DONE] 结束标记
+	sawFinish := false    // 收到 finish_reason（部分实现不发 [DONE] 但发 finish_reason）
 
 	for sc.Scan() {
 		line := strings.TrimRight(sc.Text(), "\r")
@@ -385,6 +523,7 @@ func parseSSE(r io.Reader, onChunk func(Chunk)) (Message, error) {
 		}
 		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
 		if data == "[DONE]" {
+			sawDone = true
 			break
 		}
 		var frame sseResp
@@ -424,19 +563,27 @@ func parseSSE(r io.Reader, onChunk func(Chunk)) (Message, error) {
 		}
 		// 捕获 finish_reason（如 length=截断）
 		if frame.Choices[0].FinishReason != nil {
+			sawFinish = true
 			stopReason = *frame.Choices[0].FinishReason
 		}
 		if onChunk != nil && (d.Content != "" || d.Reasoning != "") {
 			onChunk(Chunk{Content: d.Content, Reasoning: d.Reasoning})
 		}
 	}
-	if err := sc.Err(); err != nil {
-		return Message{}, fmt.Errorf("读取 SSE 流失败: %w", err)
-	}
-
 	msg := Message{Role: RoleAssistant, Content: content.String(), Reasoning: reasoning.String()}
 	for _, idx := range toolOrder {
 		msg.ToolCalls = append(msg.ToolCalls, *toolAccum[idx])
+	}
+	if err := sc.Err(); err != nil {
+		// ★ 出错时返回已累积内容：供上层判断「是否已产出」→ 决定是否可安全重试
+		return msg, fmt.Errorf("读取 SSE 流失败: %w", err)
+	}
+	// ★ 完成性检测：流以 EOF 结束但既无 [DONE] 也无 finish_reason → 视为提前截断
+	//   （服务器/TCP 正常关闭但未发结束标记，sc.Err() 为 nil 但内容不完整——静默截断）。
+	//   返回错误携带已累积内容：上层据此决定重试（未产出）或不重试（已产出）。
+	if !sawDone && !sawFinish {
+		return msg, fmt.Errorf("SSE 流提前结束（未收到 [DONE]/finish_reason 完成标记，已累积 %d 字符）",
+			len(msg.Content)+len(msg.Reasoning))
 	}
 	if onChunk != nil {
 		onChunk(Chunk{Done: true, Usage: usage, StopReason: stopReason})

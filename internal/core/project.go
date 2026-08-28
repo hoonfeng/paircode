@@ -1,7 +1,6 @@
 // Package workspace 是工作区管理（项目打开/切换/多根管理）。
 // 数据层(Folders/Root/…)在 core 包；本文件封装工作区操作（读 Folders + 面板回调）。
 //
-//go:build windows
 
 package core
 

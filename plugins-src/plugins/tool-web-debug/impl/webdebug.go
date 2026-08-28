@@ -10,7 +10,7 @@
 //   6. 等待指定时间让异步操作完成
 //   7. 可选：提取页面可见文字（text_extract）
 //   8. 可选：执行任意 JS 并返回结果（eval）
-//   9. 截图保存到 screenshots/ 目录，返回文件路径供 image_analyze 进一步分析
+//   9. 截图保存到 screenshots/ 目录，返回文件路径供多模态模型进一步分析
 //
 // 依赖：go-rod/rod（与 headless.go 共用）。
 
@@ -55,7 +55,7 @@ func Register(r *Registry, root string) {
 			"网络请求失败（404/500/CORS）、DOM 结构概览、元素查询（标签/样式/尺寸/可见性/属性）、" +
 			"可选输入文字、点击元素、执行 JS、提取页面可见文字，最后截图保存。" +
 			"用于验证前端改动是否正常工作（白屏、JS 异常、接口报错、样式错乱等）。" +
-			"截图保存到 screenshots/ 目录，返回文件路径可用 image_analyze 进一步分析。" +
+			"截图保存到 screenshots/ 目录，返回文件路径可用多模态模型（如 DeepSeek-VL）进一步分析。" +
 			"注意：首次使用会自动下载 Chromium（约 150MB），后续复用缓存。",
 		ReadOnly: true,
 		Parameters: ObjSchema(Props{
@@ -515,7 +515,7 @@ func buildWebDebugReport(res *webDebugResult, root, targetURL string) string {
 		relPath, _ := filepath.Rel(root, res.screenshot)
 		b.WriteString("\n## 截图\n")
 		b.WriteString(fmt.Sprintf("文件: %s\n", relPath))
-		b.WriteString("可用 image_analyze 分析截图内容（颜色/色块/图形），或用 image_ocr 识别文字。\n")
+		b.WriteString("可用多模态模型（如 DeepSeek-VL）分析截图内容。\n")
 	}
 
 	// 总结

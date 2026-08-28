@@ -249,7 +249,7 @@ func registerMemoryTools(r *Registry, root string) {
 	}
 
 	r.Register(&Tool{
-		Name: "memory_write",
+		Name:       "memory_write",
 		UsageGuide: "写入或更新一条持久记忆（跨会话保留）。先 memory_search 查有无相关记忆，有则读旧→融合→同名更新，别反复新建造成碎片化。用于记录用户偏好、项目决策、修复方案等。需审核批准。多项目工作区可用 project 参数指定目标项目。",
 		Description: "写入或【更新】一条持久记忆（跨会话保留在 .pair/memory/）。**先 memory_search/list 查有无相关记忆——" +
 			"有则用其同名覆盖来更新（先 memory_read 读旧的、融合后写回），别为同一主题反复新建、造成碎片化**。" +

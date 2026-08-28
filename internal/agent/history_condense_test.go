@@ -303,4 +303,3 @@ func TestCondenseHistorySummaryLimit(t *testing.T) {
 		t.Errorf("摘要超过总量上限：%d > %d", len([]rune(summaryText)), maxCondensedChars+100)
 	}
 }
-

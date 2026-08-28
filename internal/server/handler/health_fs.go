@@ -327,8 +327,8 @@ func HandleFSRename(w http.ResponseWriter, r *http.Request) {
 // HandleFSDelete 删除文件或目录
 func HandleFSDelete(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Path string `json:"path"`
-		Recursive bool `json:"recursive"`
+		Path      string `json:"path"`
+		Recursive bool   `json:"recursive"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonErr(w, err.Error())

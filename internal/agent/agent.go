@@ -1,8 +1,9 @@
 // Agent 独立基座 —— 自闭环生命周期管理。
 //
 // 设计目标：
-//   AgentBase 封装 Agent 的完整生命周期（Init → Run → Shutdown），
-//   使 Agent 可作为独立库嵌入任意 Go 程序（Web 服务器、CLI 工具、桌面应用等）。
+//
+//	AgentBase 封装 Agent 的完整生命周期（Init → Run → Shutdown），
+//	使 Agent 可作为独立库嵌入任意 Go 程序（Web 服务器、CLI 工具、桌面应用等）。
 //
 // 自闭环原则：
 //   - 所有子系统（Loop、SessionManager、Registry、Store）在 Init 中初始化
@@ -51,8 +52,6 @@ type AgentConfig struct {
 	Autonomous bool
 	// 审核模式："auto"=AI审核, "manual"=手动审批, "off"=全部放行
 	ReviewMode string
-	// 自动 Git 提交
-	AutoCommit bool
 }
 
 // ─── Agent 基座 ─────────────────────────────────────────────

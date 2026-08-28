@@ -33,10 +33,10 @@ const (
 // LogEntry 一条日志记录。
 type LogEntry struct {
 	ID        string            `json:"id"`
-	Time      string            `json:"time"`      // ISO 格式时间戳
-	Level     LogLevel          `json:"level"`     // 日志级别
-	Source    string            `json:"source"`    // 来源（如 "runOrchestrationLoop"、"handleChatSend"）
-	Message   string            `json:"message"`   // 日志正文
+	Time      string            `json:"time"`              // ISO 格式时间戳
+	Level     LogLevel          `json:"level"`             // 日志级别
+	Source    string            `json:"source"`            // 来源（如 "runOrchestrationLoop"、"handleChatSend"）
+	Message   string            `json:"message"`           // 日志正文
 	Context   map[string]string `json:"context,omitempty"` // 上下文（如 convID、sessionID、toolName、filePath）
 	Stack     string            `json:"stack,omitempty"`   // panic 时的完整堆栈
 	SessionID string            `json:"sessionId,omitempty"`
@@ -45,9 +45,9 @@ type LogEntry struct {
 
 // DebugLogger 调试日志管理器（并发安全）。
 type DebugLogger struct {
-	mu         sync.Mutex
-	logsDir    string // .pair/tasks/debug-logs/
-	maxLogs    int    // 最大日志文件数（超过自动清理）
+	mu      sync.Mutex
+	logsDir string // .pair/tasks/debug-logs/
+	maxLogs int    // 最大日志文件数（超过自动清理）
 }
 
 // NewDebugLogger 创建新的调试日志管理器。

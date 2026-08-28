@@ -250,7 +250,8 @@ func buildCondensedSummary(msgs []Message, userIdx []int, compressEnd int) strin
 // condenseRoundSemi 半压缩一轮：保留用户消息与助手正文，
 // 把「助手 tool_calls + 对应 tool 结果」子链整体合并为一行摘要。
 // ★ 子链整体替换（而非删除 tool 结果保留 tool_calls）——保证消息配对完整，
-//   不会产生孤立 tool 结果 / 未配对 tool_calls（OpenAI 规范要求）。
+//
+//	不会产生孤立 tool 结果 / 未配对 tool_calls（OpenAI 规范要求）。
 func condenseRoundSemi(msgs []Message, start, end int) []Message {
 	out := make([]Message, 0, end-start)
 	i := start

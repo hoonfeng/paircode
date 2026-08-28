@@ -1,5 +1,3 @@
-//go:build windows
-
 package core
 
 import (
@@ -14,8 +12,8 @@ import (
 type ProviderEntry struct {
 	BaseURL          string   `json:"baseURL"`
 	Models           []string `json:"models"`
-	APIKey           string   `json:"apiKey,omitempty"`            // ★ 2026-08-20 服务商独立 API Key（切换服务商自动带出）
-	ContextMaxTokens int      `json:"contextMaxTokens,omitempty"`   // ★ 2026-08-20 服务商级默认上下文窗口（Token；0=不限制/未配置，模型级可覆盖）
+	APIKey           string   `json:"apiKey,omitempty"`           // ★ 2026-08-20 服务商独立 API Key（切换服务商自动带出）
+	ContextMaxTokens int      `json:"contextMaxTokens,omitempty"` // ★ 2026-08-20 服务商级默认上下文窗口（Token；0=不限制/未配置，模型级可覆盖）
 }
 
 // ModelListMap 按服务商分组，key=服务商名，value=ProviderEntry。
@@ -28,12 +26,14 @@ var (
 
 	// defaultModels 仅在 models.json 不存在或解析失败时使用的兜底列表。
 	// ★ 2026-08-20 与安装版 config/models.json 对齐（用户实际在用）：6 个服务商含「基元律动」网关。
+	// ★ 2026-08-27 BaseURL 语义变更：值为完整请求端点（含 /chat/completions），
+	// 直接作为请求 URL 使用，不再拼接。
 	defaultModels = ModelListMap{
-		"anthropic":         {BaseURL: "https://api.anthropic.com/v1", Models: []string{"claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-4-sonnet-20250514", "claude-4-haiku-latest"}},
+		"anthropic":         {BaseURL: "https://api.anthropic.com/v1/chat/completions", Models: []string{"claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-4-sonnet-20250514", "claude-4-haiku-latest"}},
 		"custom":            {BaseURL: "", Models: []string{"custom"}},
-		"deepseek":          {BaseURL: "https://api.deepseek.com/v1", Models: []string{"deepseek-v4-pro", "deepseek-v4-flash"}},
-		"基元律动":           {BaseURL: "https://tokenrhythm.studio/v1", Models: []string{"deepseek-v4-pro-0813", "deepseek-v4-flash-0731"}},
-		"kimi":              {BaseURL: "https://api.moonshot.cn/v1", Models: []string{"kimi-k3"}},
+		"deepseek":          {BaseURL: "https://api.deepseek.com/v1/chat/completions", Models: []string{"deepseek-v4-pro", "deepseek-v4-flash"}},
+		"基元律动":              {BaseURL: "https://tokenrhythm.studio/v1/chat/completions", Models: []string{"deepseek-v4-pro-0813", "deepseek-v4-flash-0731"}},
+		"kimi":              {BaseURL: "https://api.moonshot.cn/v1/chat/completions", Models: []string{"kimi-k3"}},
 		"openai-compatible": {BaseURL: "", Models: []string{"custom"}},
 	}
 )

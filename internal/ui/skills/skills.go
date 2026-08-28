@@ -3,7 +3,6 @@
 // 所有业务逻辑已迁入 agent/skill_loader.go。
 // 本文件仅做初始化路径注入 + 旧 API 转发，并保留 ModeLabel 等纯格式化函数。
 //
-//go:build windows
 
 package skills
 
@@ -33,6 +32,7 @@ type LevelDef struct {
 var Levels = []LevelDef{
 	{ID: LevelProject, Name: "工作区级"},
 }
+
 // Entry 技能条目（UI 面板兼容）。
 type Entry struct {
 	Name        string `json:"name"`

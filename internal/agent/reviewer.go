@@ -39,8 +39,15 @@ type Reviewer struct {
 	SystemPrompt string // 角色系统提示（空=用内置默认）；宿主可从 config 加载覆盖（非硬编码）
 }
 
-// DefaultReviewerPrompt 内置默认审核角色提示（config/roles/reviewer.md 缺失时的回退）。
-func DefaultReviewerPrompt() string { return reviewerSystemPrompt }
+// DefaultReviewerPrompt 审核角色提示（磁盘优先：config/roles/reviewer.md 覆盖；
+// 缺失/不可读时回退内置 reviewerSystemPrompt）。★ t1 C1/C2 闭环：角色内容在磁盘，
+// 不重编译即可覆盖审核角色设定。
+func DefaultReviewerPrompt() string {
+	if s := LoadRolePrompt("reviewer"); s != "" {
+		return s
+	}
+	return reviewerSystemPrompt
+}
 
 // reviewerSystemPrompt 复刻参考 prompts/roles/reviewer.md（角色/四层审核/输出格式/决策标准/规则）。
 const reviewerSystemPrompt = `# 角色
@@ -67,14 +74,13 @@ package.json、go.mod、.env、CLAUDE.md、AGENTS.md、Dockerfile、.gitignore �
 - 存在安全问题或触发关键文件保护 → 驳回
 - 需调整但不严重 → 需要修改 + 具体建议
 - 所有审核输出使用中文`
+
 // criticalFiles 关键文件：删除直接驳回（复刻参考，按 companion 项目栈调整：go.mod/go.sum 取代 tsconfig 等）。
 var criticalFiles = map[string]bool{
 	"package.json": true, "go.mod": true, "go.sum": true, ".env": true,
 	"claude.md": true, "agents.md": true, "dockerfile": true,
 	"docker-compose.yml": true, ".gitignore": true,
 }
-
-
 
 // NeedsReview 是否需要审核：只读工具放行，仅写类（写/改/删/移/运行命令/后台命令）过审。
 func NeedsReview(toolName string) bool {
@@ -185,7 +191,6 @@ func reviewUserPrompt(name string, args map[string]any) string {
 		"\n\n请严格检查：\n1. 安全性（注入/XSS/路径穿越）\n2. 编码处理（.bat/.cmd 须 GBK；.ps1 建议 UTF-8 BOM）\n" +
 		"3. 结构完整性（JSON/XML/YAML 不被破坏）\n4. 向后兼容（不破坏已有 API/配置格式）\n5. 错误处理\n\n以 JSON 格式输出审核结果。"
 }
-
 
 // parseVerdict 抽 JSON 裁决（首 { 到末 }）。解析失败→「需要修改」（复刻参考 fallback：不放行、提示人工）。
 func parseVerdict(content string) ReviewVerdict {

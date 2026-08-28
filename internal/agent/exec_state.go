@@ -40,26 +40,26 @@ type StepRecord struct {
 
 // ExecutionState 编排循环的完整状态。
 type ExecutionState struct {
-	ID            string            `json:"id"`            // 唯一运行标识
-	Task          string            `json:"task"`          // 原始用户任务
-	MissionTask   string            `json:"missionTask"`   // 当前执行的任务文本
-	LoopCount     int               `json:"loopCount"`     // 当前轮次
-	MaxLoops      int               `json:"maxLoops"`      // 最大轮次
-	Phase         string            `json:"phase"`         // 当前阶段描述
-	Status        ExecStatus        `json:"status"`        // 运行状态
-	CreatedAt     string            `json:"createdAt"`
-	UpdatedAt     string            `json:"updatedAt"`
-	CompletedSteps []StepRecord     `json:"completedSteps,omitempty"`
-	Errors        []string          `json:"errors,omitempty"`
-	ModifiedFiles []string          `json:"modifiedFiles,omitempty"`
-	ConvID        string            `json:"convId,omitempty"` // 关联对话 ID
+	ID             string       `json:"id"`          // 唯一运行标识
+	Task           string       `json:"task"`        // 原始用户任务
+	MissionTask    string       `json:"missionTask"` // 当前执行的任务文本
+	LoopCount      int          `json:"loopCount"`   // 当前轮次
+	MaxLoops       int          `json:"maxLoops"`    // 最大轮次
+	Phase          string       `json:"phase"`       // 当前阶段描述
+	Status         ExecStatus   `json:"status"`      // 运行状态
+	CreatedAt      string       `json:"createdAt"`
+	UpdatedAt      string       `json:"updatedAt"`
+	CompletedSteps []StepRecord `json:"completedSteps,omitempty"`
+	Errors         []string     `json:"errors,omitempty"`
+	ModifiedFiles  []string     `json:"modifiedFiles,omitempty"`
+	ConvID         string       `json:"convId,omitempty"` // 关联对话 ID
 }
 
 // ExecStateManager 执行状态管理器（并发安全）。
 type ExecStateManager struct {
-	mu          sync.Mutex
-	root        string
-	statesDir   string
+	mu        sync.Mutex
+	root      string
+	statesDir string
 }
 
 // NewExecStateManager 创建状态管理器。
@@ -82,16 +82,16 @@ func (m *ExecStateManager) Create(task string, maxLoops int, convID string) *Exe
 	now := time.Now().Format("2006-01-02 15:04:05")
 	id := fmt.Sprintf("exec_%s_%d", time.Now().Format("20060102_150405"), time.Now().UnixMilli()%1000)
 	state := &ExecutionState{
-		ID:        id,
-		Task:      task,
+		ID:          id,
+		Task:        task,
 		MissionTask: task,
-		LoopCount: 0,
-		MaxLoops:  maxLoops,
-		Phase:     "初始化",
-		Status:    ExecRunning,
-		CreatedAt: now,
-		UpdatedAt: now,
-		ConvID:    convID,
+		LoopCount:   0,
+		MaxLoops:    maxLoops,
+		Phase:       "初始化",
+		Status:      ExecRunning,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		ConvID:      convID,
 	}
 	m.writeStateLocked(state)
 	return state
@@ -319,4 +319,3 @@ func (m *ExecStateManager) RecoverPanic(state **ExecutionState, source string, c
 		}
 	}
 }
-

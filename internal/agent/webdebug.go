@@ -10,7 +10,7 @@
 //   6. 等待指定时间让异步操作完成
 //   7. 可选：提取页面可见文字（text_extract）
 //   8. 可选：执行任意 JS 并返回结果（eval）
-//   9. 截图保存到 screenshots/ 目录，返回文件路径供 image_analyze 进一步分析
+//   9. 截图保存到 screenshots/ 目录，返回文件路径供多模态模型进一步分析
 //
 // 依赖：go-rod/rod（与 headless.go 共用）。
 
@@ -54,7 +54,7 @@ func registerWebDebugTool(r *Registry, root string) {
 			"网络请求失败（404/500/CORS）、DOM 结构概览、元素查询（标签/样式/尺寸/可见性/属性）、" +
 			"可选输入文字、点击元素、执行 JS、提取页面可见文字，最后截图保存。" +
 			"用于验证前端改动是否正常工作（白屏、JS 异常、接口报错、样式错乱等）。" +
-			"截图保存到 screenshots/ 目录，返回文件路径可用 image_analyze 进一步分析。" +
+			"截图保存到 screenshots/ 目录，返回文件路径可用多模态模型（如 DeepSeek-VL）进一步分析。" +
 			"注意：首次使用会自动下载 Chromium（约 150MB），后续复用缓存。",
 		ReadOnly: true,
 		Parameters: objSchema(props{
@@ -69,6 +69,7 @@ func registerWebDebugTool(r *Registry, root string) {
 			"screenshot":      boolProp("可选：是否截图（默认 true）。截图保存到 screenshots/ 目录"),
 			"viewport_width":  intProp("可选：视口宽度（默认 1280）"),
 			"viewport_height": intProp("可选：视口高度（默认 900）"),
+			"timeout":         intProp("可选：总超时毫秒数（默认 30s；wait 较大或页面较慢时建议显式调大，如 120000）"),
 		}, "url"),
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
 			targetURL := strings.TrimSpace(argStr(args, "url"))
@@ -86,6 +87,7 @@ func registerWebDebugTool(r *Registry, root string) {
 			takeScreenshot := argBoolDef(args, "screenshot", true)
 			vpWidth := argInt(args, "viewport_width", 1280)
 			vpHeight := argInt(args, "viewport_height", 900)
+			timeoutMs := argInt(args, "timeout", 0)
 
 			return webDebugRun(ctx, root, targetURL, webDebugOpts{
 				waitMs:       waitMs,
@@ -98,6 +100,7 @@ func registerWebDebugTool(r *Registry, root string) {
 				screenshot:   takeScreenshot,
 				vpWidth:      vpWidth,
 				vpHeight:     vpHeight,
+				timeoutMs:    timeoutMs,
 			})
 		},
 	})
@@ -115,6 +118,7 @@ type webDebugOpts struct {
 	screenshot   bool
 	vpWidth      int
 	vpHeight     int
+	timeoutMs    int // ★ 2026-08-27 总超时（毫秒）：>0 优先；0/缺省走默认逻辑（30s，waitMs>20000 时 waitMs+10s）
 }
 
 // webDebugResult 聚合 web_debug 的运行结果。
@@ -159,9 +163,12 @@ func webDebugRun(ctx context.Context, root, targetURL string, opts webDebugOpts)
 		return "", fmt.Errorf("创建页面失败: %w", err)
 	}
 
-	// 设置超时
+	// 设置超时：timeoutMs>0 时显式优先（调用方可控）；否则默认 30s，
+	// waitMs>20000 时放宽为 waitMs+10s（兼容旧行为）
 	totalTimeout := 30 * time.Second
-	if opts.waitMs > 20000 {
+	if opts.timeoutMs > 0 {
+		totalTimeout = time.Duration(opts.timeoutMs) * time.Millisecond
+	} else if opts.waitMs > 20000 {
 		totalTimeout = time.Duration(opts.waitMs)*time.Millisecond + 10*time.Second
 	}
 	pageCtx, pageCancel := context.WithTimeout(ctx, totalTimeout)
@@ -514,7 +521,7 @@ func buildWebDebugReport(res *webDebugResult, root, targetURL string) string {
 		relPath, _ := filepath.Rel(root, res.screenshot)
 		b.WriteString("\n## 截图\n")
 		b.WriteString(fmt.Sprintf("文件: %s\n", relPath))
-		b.WriteString("可用 image_analyze 分析截图内容（颜色/色块/图形），或用 image_ocr 识别文字。\n")
+		b.WriteString("可用多模态模型（如 DeepSeek-VL）分析截图内容。\n")
 	}
 
 	// 总结

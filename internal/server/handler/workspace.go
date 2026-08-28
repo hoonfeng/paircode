@@ -177,6 +177,7 @@ func HandleSettings(w http.ResponseWriter, r *http.Request) {
 // ★ 配置插件化（2026-08-19）：请求体 { settings?, pluginSettings? }——
 //   - settings：AppSettings 顶层字段（json key 直接写回；由配置插件 binding 字段收集）
 //   - pluginSettings：插件命名空间值（ctx.setSettings 写入的，整体合并）
+//
 // 兼容旧格式：{ settings: <完整 AppSettings> }（整体替换，含顶层 + pluginSettings）。
 func HandleSettingsPut(w http.ResponseWriter, r *http.Request) {
 	var raw map[string]any

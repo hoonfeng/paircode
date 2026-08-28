@@ -8,7 +8,7 @@
 const tools = [
   {
     "name": "web_debug",
-    "description": "一站式网页验证工具：在无头浏览器中打开 URL，捕获控制台错误/警告、网络请求失败（404/500/CORS）、DOM 结构概览、元素查询（标签/样式/尺寸/可见性/属性）、可选输入文字、点击元素、执行 JS、提取页面可见文字，最后截图保存。用于验证前端改动是否正常工作（白屏、JS 异常、接口报错、样式错乱等）。截图保存到 screenshots/ 目录，返回文件路径可用 image_analyze 进一步分析。注意：首次使用会自动下载 Chromium（约 150MB），后续复用缓存。",
+    "description": "一站式网页验证工具：在无头浏览器中打开 URL，捕获控制台错误/警告、网络请求失败（404/500/CORS）、DOM 结构概览、元素查询（标签/样式/尺寸/可见性/属性）、可选输入文字、点击元素、执行 JS、提取页面可见文字，最后截图保存。用于验证前端改动是否正常工作（白屏、JS 异常、接口报错、样式错乱等）。截图保存到 screenshots/ 目录，返回文件路径可用多模态模型（如 DeepSeek-VL）进一步分析。注意：首次使用会自动下载 Chromium（约 150MB），后续复用缓存。",
     "usageGuide": "一站式网页验证工具：在无头浏览器中打开 URL，检查控制台错误+网络请求失败+截图。支持交互操作（click_selector/type_selector+type_text）、JS 求值（eval）、文字提取(text_extract)、元素查询(element_query)。前端改动验证首选工具，比手动打开浏览器检查更全自动化。",
     "parameters": {
       "properties": {
@@ -31,6 +31,10 @@ const tools = [
         "text_extract": {
           "description": "可选：提取页面可见纯文本内容（默认 false，内容过多时自动截断）",
           "type": "boolean"
+        },
+        "timeout": {
+          "description": "可选：总超时毫秒数（默认 30s；wait 较大或页面较慢时建议显式调大，如 120000）",
+          "type": "integer"
         },
         "type_selector": {
           "description": "可选：要输入文字的 input/textarea 的 CSS 选择器",

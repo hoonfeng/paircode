@@ -1,15 +1,18 @@
 // loop_service.go — 一切皆插件：loop 服务面（ctx.get('loop')）。
 //
 // ★ 插件在循环运行期间可查询 Loop 状态、请求暂停/继续/停止——
-//   对齐参考项目（deepseek-harness）agent-loop 插件包的服务能力：宿主循环对插件可编程。
-//   配合 loop:* 事件桥（Loop.emit 广播），插件可完整感知/调控 agentloop。
+//
+//	对齐参考项目（deepseek-harness）agent-loop 插件包的服务能力：宿主循环对插件可编程。
+//	配合 loop:* 事件桥（Loop.emit 广播），插件可完整感知/调控 agentloop。
 //
 // ★ 生命周期：Loop.Run 开始时注册到全局插件宿主根上下文（ctx.provide('loop')），
-//   Run 结束自动撤销——仅循环运行期间可用；未运行时 ctx.get('loop') 返回 nil（插件判空）。
-//   并行 Run（delegate 子 Loop）时服务指向最近启动的 Loop（provide 覆盖语义）。
+//
+//	Run 结束自动撤销——仅循环运行期间可用；未运行时 ctx.get('loop') 返回 nil（插件判空）。
+//	并行 Run（delegate 子 Loop）时服务指向最近启动的 Loop（provide 覆盖语义）。
 //
 // ★ 控制语义：Pause/RequestStop 都是「请求」——在下一轮迭代开始处生效；
-//   阻塞中的 LLM 调用不受影响（暂停等待期间可被 ctx 取消唤醒）。
+//
+//	阻塞中的 LLM 调用不受影响（暂停等待期间可被 ctx 取消唤醒）。
 package agent
 
 import (
@@ -37,12 +40,12 @@ type LoopState struct {
 type LoopService struct {
 	Loop *Loop
 
-	pause   atomic.Bool  // 暂停请求
-	stop    atomic.Bool  // 停止请求
-	pauseMu sync.Mutex   // 保护 pauseCh 重建
+	pause   atomic.Bool   // 暂停请求
+	stop    atomic.Bool   // 停止请求
+	pauseMu sync.Mutex    // 保护 pauseCh 重建
 	pauseCh chan struct{} // 暂停期间阻塞等待通道（Resume 关闭并重建）
 
-	stateMu sync.Mutex
+	stateMu   sync.Mutex
 	lastType  EventType
 	lastTool  string
 	lastEvtAt time.Time

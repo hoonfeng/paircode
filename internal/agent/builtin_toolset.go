@@ -69,20 +69,20 @@ type BuiltinGroupInfo struct {
 
 // BuiltinToolsetInfo 内置工具集完整信息（/api/toolsets?name=builtin 返回）。
 type BuiltinToolsetInfo struct {
-	Name     string             `json:"name"`
-	Scope    string             `json:"scope"` // "builtin"
-	Desc     string             `json:"desc"`
-	Groups   []BuiltinGroupInfo `json:"groups"`
+	Name   string             `json:"name"`
+	Scope  string             `json:"scope"` // "builtin"
+	Desc   string             `json:"desc"`
+	Groups []BuiltinGroupInfo `json:"groups"`
 	// Plugins 插件面板中存在工具的插件分组（source=plugin）——工作区工具集管理
 	// 弹窗的候选池：按插件展示工具，勾选工具加入/移出工作区工具集
 	// （toolsetEdit add_plugin / enable_tool / rm_tool / rm_plugin）。
 	// ★ 2026-08-17：管理弹窗不再展示宿主核心自举工具组（plugin-mgmt/toolset-mgmt
 	//   ——它们本就是 agent 可用工具，无「加入」语义），改为插件工具列表。
-	Plugins  []BuiltinGroupInfo `json:"plugins"`
-	Joined   []string           `json:"joined"`      // 已加入工作区（固化在 builtin.json）的分组名
-	ManualTools []string        `json:"manualTools"` // 手动添加的工具（builtin.json _manual 条目）
-	ToolTotal int               `json:"toolTotal"`   // 全部内置工具数
-	EnabledTotal int            `json:"enabledTotal"` // 当前启用（agent 可见）的内置工具数
+	Plugins      []BuiltinGroupInfo `json:"plugins"`
+	Joined       []string           `json:"joined"`       // 已加入工作区（固化在 builtin.json）的分组名
+	ManualTools  []string           `json:"manualTools"`  // 手动添加的工具（builtin.json _manual 条目）
+	ToolTotal    int                `json:"toolTotal"`    // 全部内置工具数
+	EnabledTotal int                `json:"enabledTotal"` // 当前启用（agent 可见）的内置工具数
 	// WorkspaceToolsets 工作区工具集（project scope）装配信息——toolset_edit /
 	// toolset_build 等对工作区工具集（default 等）的增删改即时反映在此
 	// （插件/工具/摘除工具）。★ 修复：/api/plugins/builtin 不再固定——
@@ -93,8 +93,8 @@ type BuiltinToolsetInfo struct {
 // WorkspaceToolsetInfo 工作区工具集简要信息（/api/plugins/builtin 附加返回，
 // 不含插件代码，避免响应臃肿）。
 type WorkspaceToolsetInfo struct {
-	Name        string               `json:"name"`
-	Description string               `json:"description"`
+	Name        string                `json:"name"`
+	Description string                `json:"description"`
 	Plugins     []WorkspacePluginInfo `json:"plugins"`
 }
 
@@ -443,7 +443,9 @@ func workspaceMainToolset(ph *PluginHost, root string) (*Toolset, error) {
 // 其中的内置组条目（Builtin 非空）并入工作区主工具集（default.json，去重），
 // 然后删除旧文件。
 // ★ 2026-08-17：内置工具包与工作区工具集统一为「一套逻辑」——内置组的加入状态
-//   就是工作区工具集条目（与 JS 插件条目同文件），不再有独立 builtin.json。
+//
+//	就是工作区工具集条目（与 JS 插件条目同文件），不再有独立 builtin.json。
+//
 // 幂等：无旧文件时不做任何事。启动装配（LoadAllToolsets 前）调用。
 func MigrateLegacyBuiltinJSON(ph *PluginHost, root string) error {
 	if root == "" {
@@ -510,12 +512,12 @@ func BuiltinToolsetInfoOf(reg *Registry, ph *PluginHost, root string) *BuiltinTo
 		}
 	}
 	info := &BuiltinToolsetInfo{
-		Name:         builtinToolsetName,
-		Scope:        "builtin",
-		Desc:         "内置工具包（默认不加入工作区；分组开关加入，add_builtin_all 强制全部）",
-		Groups:       groups,
-		Joined:       joined,
-		ManualTools:  []string{},
+		Name:        builtinToolsetName,
+		Scope:       "builtin",
+		Desc:        "内置工具包（默认不加入工作区；分组开关加入，add_builtin_all 强制全部）",
+		Groups:      groups,
+		Joined:      joined,
+		ManualTools: []string{},
 	}
 	// _manual 手动条目工具（工具级添加，固化工作区工具集）
 	for _, m := range listToolsets(root, toolsetProject) {
@@ -655,7 +657,6 @@ func pluginPurposeOf(ph *PluginHost, name string) string {
 	return ""
 }
 
-
 // BuiltinToolsetOf 派生内置工具集（Toolset 形态，scope=builtin 虚拟）。
 // 每个分组一个内置条目（Builtin 非空、无 Code）——toolset_show / 导出展示用。
 func BuiltinToolsetOf(reg *Registry, ph *PluginHost) *Toolset {
@@ -781,10 +782,10 @@ func removeBuiltinGroupFromToolset(ph *PluginHost, root string, groupName string
 		// 全部移出：重置为基础工具集（default 是工作区工具集主文件，永存——
 		// 否则「工作区有工具集」状态丢失，agent 可见工具会回到全量/默认语义）
 		var reg0 *Registry
-	if ph != nil && ph.Context() != nil {
-		reg0 = ph.Context().Tools
-	}
-	base := defaultProjectToolset(reg0, ph, filepath.Base(root))
+		if ph != nil && ph.Context() != nil {
+			reg0 = ph.Context().Tools
+		}
+		base := defaultProjectToolset(reg0, ph, filepath.Base(root))
 		if err := saveToolset(root, toolsetProject, base); err != nil {
 			return "", err
 		}
@@ -817,7 +818,7 @@ func EnableAllBuiltin(ph *PluginHost, root string) (string, error) {
 //     不属于任何已加入组 → 持久化到 _manual 手动条目（Tools 快照幂等追加）。
 //   - enabled=false：工具移出 agent 可用（SetToolEnabled(false)），从 _manual 移除；
 //     若工具在某已加入组条目快照内，加入该组 DisabledTools 保持禁用。
-//   固化文件全空时删除（空工具集不落盘）。
+//     固化文件全空时删除（空工具集不落盘）。
 func SetBuiltinToolEnabled(ph *PluginHost, root, toolName string, enabled bool) (string, error) {
 	reg := (*Registry)(nil)
 	if ph != nil && ph.Context() != nil {
@@ -949,10 +950,10 @@ func SetBuiltinToolEnabled(ph *PluginHost, root, toolName string, enabled bool) 
 	if len(ts.Plugins) == 0 {
 		// 全部移出：重置为基础工具集（default 永存，见 removeBuiltinGroupFromToolset）
 		var reg0 *Registry
-	if ph != nil && ph.Context() != nil {
-		reg0 = ph.Context().Tools
-	}
-	base := defaultProjectToolset(reg0, ph, filepath.Base(root))
+		if ph != nil && ph.Context() != nil {
+			reg0 = ph.Context().Tools
+		}
+		base := defaultProjectToolset(reg0, ph, filepath.Base(root))
 		if err := saveToolset(root, toolsetProject, base); err != nil {
 			return "", err
 		}
@@ -1006,5 +1007,3 @@ func itoaAgent(n int) string {
 	}
 	return string(b[i:])
 }
-
-

@@ -3,12 +3,12 @@ package codegraph
 import (
 	"bytes"
 	"fmt"
+	"github.com/hoonfeng/paircode/pkg/executil"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
-	"syscall"
 )
 
 // ── Git 历史集成（演化运维层） ──────────────────────────
@@ -51,7 +51,7 @@ func (gh *GitHistory) GetRecentCommits(count int) ([]CommitInfo, error) {
 		"--name-status",
 	)
 	if runtime.GOOS == "windows" {
-		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		executil.HideWindow(cmd)
 	}
 	out, err := cmd.Output()
 	if err != nil {
@@ -76,7 +76,7 @@ func (gh *GitHistory) GetCommitsAffecting(filePath string, maxCount int) ([]Comm
 		"--", filePath,
 	)
 	if runtime.GOOS == "windows" {
-		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		executil.HideWindow(cmd)
 	}
 	out, err := cmd.Output()
 	if err != nil {
@@ -96,7 +96,7 @@ func (gh *GitHistory) GetCommitByHash(hash string) (*CommitInfo, error) {
 		hash,
 	)
 	if runtime.GOOS == "windows" {
-		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		executil.HideWindow(cmd)
 	}
 	out, err := cmd.Output()
 	if err != nil {
@@ -252,7 +252,7 @@ func (gh *GitHistory) BlameFile(filePath string) ([]BlameInfo, error) {
 		filePath,
 	)
 	if runtime.GOOS == "windows" {
-		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		executil.HideWindow(cmd)
 	}
 	out, err := cmd.Output()
 	if err != nil {
@@ -313,7 +313,7 @@ func (gh *GitHistory) parseBlame(output string) ([]BlameInfo, error) {
 func runGit(root string, args ...string) (string, error) {
 	cmd := exec.Command("git", append([]string{"-C", root}, args...)...)
 	if runtime.GOOS == "windows" {
-		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		executil.HideWindow(cmd)
 	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -387,7 +387,7 @@ func (gh *GitHistory) WhenIntroduced(filePath string) (*CommitInfo, error) {
 		"--", filePath,
 	)
 	if runtime.GOOS == "windows" {
-		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		executil.HideWindow(cmd)
 	}
 	out, err := cmd.Output()
 	if err != nil {

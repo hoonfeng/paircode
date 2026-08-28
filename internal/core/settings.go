@@ -1,5 +1,3 @@
-//go:build windows
-
 package core
 
 import (
@@ -13,7 +11,8 @@ import (
 
 // AppSettings 持久化设置 —— 字段对齐参考 settings.ts（扁平存储；分组注释）。
 // ★ 2026-08-21 AI 业务字段（provider/baseURL/apiKey/模型）加 omitempty：
-//   settings 不再存 key/模型（唯一来源 ai-presets.json），Save 时不把空字段写回文件。
+//
+//	settings 不再存 key/模型（唯一来源 ai-presets.json），Save 时不把空字段写回文件。
 type AppSettings struct {
 	Provider         string `json:"provider,omitempty"`
 	Preset           string `json:"preset"` // ★ 2026-08-20 当前 AI 配置预设名（对话面板选预设时记录，UI 高亮用）
@@ -28,23 +27,23 @@ type AppSettings struct {
 	MaxTokens        int    `json:"maxTokens"`
 	ContextMaxTokens int    `json:"contextMaxTokens"`
 	// 工作区
-	LastProject        string              `json:"lastProject"`
-	WorkspaceFolders   []string            `json:"workspaceFolders"`
+	LastProject          string              `json:"lastProject"`
+	WorkspaceFolders     []string            `json:"workspaceFolders"`
 	WorkspaceFolderLists map[string][]string `json:"workspaceFolderLists"` // 每工作区的文件夹列表，key=工作区根目录
-	RecentProjects     []string            `json:"recentProjects"`
+	RecentProjects       []string            `json:"recentProjects"`
 	// Agent 行为
-	ReviewMode         string   `json:"reviewMode"`    // 审核模式："auto"=AI审核, "manual"=手动审批, "off"=全部放行
-	ReviewBlacklist    []string `json:"reviewBlacklist"`    // 审核黑名单：命中此列表的工具需要审核（为空=全部审核）
-	ReviewWhitelist    []string `json:"reviewWhitelist"`    // 审核白名单：命中此列表的工具跳过审核（黑名单优先）
+	ReviewMode         string   `json:"reviewMode"`      // 审核模式："auto"=AI审核, "manual"=手动审批, "off"=全部放行
+	ReviewBlacklist    []string `json:"reviewBlacklist"` // 审核黑名单：命中此列表的工具需要审核（为空=全部审核）
+	ReviewWhitelist    []string `json:"reviewWhitelist"` // 审核白名单：命中此列表的工具跳过审核（黑名单优先）
 	Autonomous         bool     `json:"autonomous"`
-	MaxIterations      int    `json:"maxIterations"`
-	AutoIterate        bool   `json:"autoIterateOnRejection"`
-	SystemInstructions string `json:"systemInstructions"`
+	MaxIterations      int      `json:"maxIterations"`
+	AutoIterate        bool     `json:"autoIterateOnRejection"`
+	SystemInstructions string   `json:"systemInstructions"`
 	IgnoreDirs         []string `json:"ignoreDirs"`
 	// 外观
-	Theme   string `json:"theme"`
-	FontSize int   `json:"fontSize"`
-	TabSize  int   `json:"tabSize"`
+	Theme    string `json:"theme"`
+	FontSize int    `json:"fontSize"`
+	TabSize  int    `json:"tabSize"`
 	// MCP / Skills
 	SkillEnabledOverrides map[string]bool   `json:"skillEnabledOverrides"`
 	SkillStatusOverrides  map[string]string `json:"skillStatusOverrides"`
@@ -60,6 +59,7 @@ type ModelParamEntry struct {
 	ThinkingMode     string `json:"thinkingMode,omitempty"`     // OpenAI 思考档位 none/minimal/low/medium/high/xhigh/max，空=不覆盖
 	MaxTokens        int    `json:"maxTokens,omitempty"`        // 最大输出 token，0=不覆盖
 	ContextMaxTokens int    `json:"contextMaxTokens,omitempty"` // 上下文窗口，0=不覆盖
+	Multimodal       bool   `json:"multimodal,omitempty"`       // ★ 2026-08-21 多模态：该模型支持图片输入（对话可直接粘贴/拖拽图片）
 }
 
 var (
@@ -69,8 +69,9 @@ var (
 
 // ConfigDir 全局配置目录：安装目录（exe 所在）下的 config/ 子区。
 // ★ exe 位于 bin/ 子目录时（如 bin/desktop.exe）回退到上级目录的 config/，
-//   与根目录运行（companion.exe → ./config）共用同一份配置——否则桌面版
-//   会读到 bin/config/settings.json 旧配置（工作区列表不全，只显示一个）。
+//
+//	与根目录运行（companion.exe → ./config）共用同一份配置——否则桌面版
+//	会读到 bin/config/settings.json 旧配置（工作区列表不全，只显示一个）。
 func ConfigDir() string {
 	if exe, err := os.Executable(); err == nil {
 		dir := filepath.Dir(exe)
@@ -165,11 +166,42 @@ func Load() bool {
 
 // Save 把 Settings 存盘。
 func Save() {
-	
+
 	p := SettingsPath()
 	_ = os.MkdirAll(filepath.Dir(p), 0o755)
 	if data, err := json.MarshalIndent(Settings, "", "  "); err == nil {
 		_ = os.WriteFile(p, data, 0o600)
+	}
+}
+
+// SyncWorkspaceFolderList 同步某个工作区的文件夹列表快照到 workspaceFolderLists。
+// ★ 2026-08-22 修复「添加项目刷新后消失」：后端工作区变更（add-folder/
+//
+//	remove-folder/new-project/create/switch）后同步该字段——前端刷新页面时
+//	loadWsList 从 workspaceFolderLists 恢复每个工作区条目的 folders，
+//	此前只有前端 saveWsList 在明确事件时写它，add-folder 后不写导致
+//	刷新后新项目丢失（folders 退化为根目录）。
+func SyncWorkspaceFolderList(wsRoot string, folders []string) {
+	if wsRoot == "" {
+		return
+	}
+	if Settings.WorkspaceFolderLists == nil {
+		Settings.WorkspaceFolderLists = map[string][]string{}
+	}
+	Settings.WorkspaceFolderLists[wsRoot] = append([]string(nil), folders...)
+	// 兜底：确保工作区根也在 recentProjects（否则 loadWsList 不会列出该条目）
+	found := false
+	for _, p := range Settings.RecentProjects {
+		if p == wsRoot {
+			found = true
+			break
+		}
+	}
+	if !found {
+		Settings.RecentProjects = append([]string{wsRoot}, Settings.RecentProjects...)
+		if len(Settings.RecentProjects) > 20 {
+			Settings.RecentProjects = Settings.RecentProjects[:20]
+		}
 	}
 }
 

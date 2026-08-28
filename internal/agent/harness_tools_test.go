@@ -255,10 +255,10 @@ func TestStrReplaceEditor_Insert(t *testing.T) {
 // TestRunCode_DetectLang 验证语言探测。
 func TestRunCode_DetectLang(t *testing.T) {
 	cases := map[string]string{
-		"package main\nfunc main() {}":          "go",
-		"def f():\n    return 1\nprint(f())":    "python",
-		"console.log('hi')":                     "node",
-		"import os\nprint(os.getcwd())":          "python",
+		"package main\nfunc main() {}":       "go",
+		"def f():\n    return 1\nprint(f())": "python",
+		"console.log('hi')":                  "node",
+		"import os\nprint(os.getcwd())":      "python",
 	}
 	for code, want := range cases {
 		if got := detectCodeLang(code); got != want {

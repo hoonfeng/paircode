@@ -67,6 +67,7 @@ type DistEntry struct {
 	Dst       string   `json:"dst"`
 	Optional  bool     `json:"optional,omitempty"`
 	Recursive bool     `json:"recursive,omitempty"`
+	OS        string   `json:"os,omitempty"` // 平台过滤："windows"/"linux"/"darwin"（空=全部平台）
 	Exclude   []string `json:"exclude,omitempty"` // 相对 Src 的路径（目录/文件），递归拷贝时跳过
 }
 
@@ -122,6 +123,7 @@ func main() {
 	bump := ""
 	setVersion := ""
 	filterStep := ""
+	targetsOverride := ""
 
 	for i := 1; i < len(os.Args); i++ {
 		switch os.Args[i] {
@@ -138,6 +140,11 @@ func main() {
 		case "--step":
 			if i+1 < len(os.Args) {
 				filterStep = os.Args[i+1]
+				i++
+			}
+		case "--targets":
+			if i+1 < len(os.Args) {
+				targetsOverride = os.Args[i+1]
 				i++
 			}
 		case "-h", "--help":
@@ -167,6 +174,11 @@ func main() {
 
 	// 准备变量
 	vars := buildVars(root, cfg)
+
+	// --targets 覆盖（如: --targets windows/amd64,linux/amd64）
+	if targetsOverride != "" {
+		vars.custom["targets"] = targetsOverride
+	}
 
 	// 执行 pipeline
 	total := len(cfg.Pipeline)
@@ -221,6 +233,40 @@ func main() {
 	fmt.Println("打包完成!")
 }
 
+// ─── 目标平台 ────────────────────────────────────────────
+
+// parseTargets 解析 vars.targets（"windows/amd64,linux/amd64,darwin/arm64"）；
+// 空 → 当前平台单目标。
+func parseTargets(spec string) [][2]string {
+	if strings.TrimSpace(spec) == "" {
+		return [][2]string{{runtime.GOOS, runtime.GOARCH}}
+	}
+	var out [][2]string
+	for _, part := range strings.Split(spec, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		gg := strings.SplitN(part, "/", 2)
+		goos, goarch := gg[0], "amd64"
+		if len(gg) > 1 && gg[1] != "" {
+			goarch = gg[1]
+		}
+		out = append(out, [2]string{goos, goarch})
+	}
+	return out
+}
+
+// targetExeName 按目标平台生成产物名：windows 保持 output（pair.exe）；
+// 其他平台 pair-linux-amd64 / pair-darwin-arm64。
+func targetExeName(output, goos, goarch string) string {
+	if goos == "windows" {
+		return output
+	}
+	base := strings.TrimSuffix(output, ".exe")
+	return base + "-" + goos + "-" + goarch
+}
+
 // ─── 内置步骤：Go 编译 ───────────────────────────────────
 
 func execBuildGo(root string, cfg *PackagerConfig, vars *Vars) error {
@@ -232,38 +278,54 @@ func execBuildGo(root string, cfg *PackagerConfig, vars *Vars) error {
 	if outputName == "" {
 		outputName = "app" + exeSuffix()
 	}
-
-	ldflags := fmt.Sprintf("-s -w -X main.version=%s", cfg.Version)
-	if extra := vars.custom["extraLdflags"]; extra != "" {
-		ldflags += " " + extra
-	}
-	// Windows GUI 应用默认隐藏控制台
-	if runtime.GOOS == "windows" && vars.custom["console"] != "true" {
-		ldflags += " -H windowsgui"
+	targets := parseTargets(vars.custom["targets"])
+	if len(targets) == 0 {
+		return fmt.Errorf("vars.targets 解析为空")
 	}
 
-	outputPath := filepath.Join(root, "release", outputName)
-	os.MkdirAll(filepath.Dir(outputPath), 0755)
+	for _, t := range targets {
+		goos, goarch := t[0], t[1]
+		local := goos == runtime.GOOS && goarch == runtime.GOARCH
+		ldflags := fmt.Sprintf("-s -w -X main.version=%s", cfg.Version)
+		if extra := vars.custom["extraLdflags"]; extra != "" {
+			ldflags += " " + extra
+		}
+		// Windows GUI 应用默认隐藏控制台（仅本机 Windows 编译）
+		if local && goos == "windows" && vars.custom["console"] != "true" {
+			ldflags += " -H windowsgui"
+		}
 
-	args := []string{"build", "-ldflags=" + ldflags, "-o", outputPath}
-	if tags := vars.custom["buildTags"]; tags != "" {
-		args = append(args, "-tags", tags)
+		outName := targetExeName(outputName, goos, goarch)
+		outputPath := filepath.Join(root, "release", outName)
+		os.MkdirAll(filepath.Dir(outputPath), 0755)
+
+		args := []string{"build", "-ldflags=" + ldflags, "-o", outputPath}
+		if tags := vars.custom["buildTags"]; tags != "" {
+			args = append(args, "-tags", tags)
+		}
+		args = append(args, mainPkg)
+
+		cmd := exec.Command("go", args...)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		cmd.Dir = root
+
+		cgo := vars.custom["cgo"]
+		if cgo == "" {
+			cgo = "0"
+		}
+		if !local {
+			cgo = "0" // 交叉编译无 cgo 工具链（Linux/mac 目标语义搜索降级 noop）
+		}
+		env := []string{"GOOS=" + goos, "GOARCH=" + goarch, "CGO_ENABLED=" + cgo}
+		cmd.Env = append(os.Environ(), env...)
+
+		fmt.Printf("  → go build [%s/%s cgo=%s] -ldflags=\"%s\" -o %s %s\n", goos, goarch, cgo, ldflags, outName, mainPkg)
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("编译 %s/%s 失败: %w", goos, goarch, err)
+		}
 	}
-	args = append(args, mainPkg)
-
-	cmd := exec.Command("go", args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Dir = root
-
-	cgo := vars.custom["cgo"]
-	if cgo == "" {
-		cgo = "0"
-	}
-	cmd.Env = append(os.Environ(), "CGO_ENABLED="+cgo)
-
-	fmt.Printf("  → go build -ldflags=\"%s\" -o %s %s\n", ldflags, outputPath, mainPkg)
-	return cmd.Run()
+	return nil
 }
 
 // ─── 内置步骤：打包发布目录 ──────────────────────────────
@@ -276,94 +338,111 @@ func execPackage(root string, cfg *PackagerConfig, vars *Vars) error {
 	if outputName == "" {
 		outputName = "app" + exeSuffix()
 	}
-	exePath := filepath.Join(root, "release", outputName)
-	distDir := filepath.Join(root, cfg.Dist.OutputDir, cfg.Dist.DirName)
-
-	os.RemoveAll(distDir)
-	os.MkdirAll(distDir, 0755)
-
-	// 复制主程序
-	if err := copyFile(filepath.Join(distDir, outputName), exePath); err != nil {
-		return fmt.Errorf("复制主程序: %w", err)
+	targets := parseTargets(vars.custom["targets"])
+	if len(targets) == 0 {
+		return fmt.Errorf("vars.targets 解析为空")
 	}
-	fmt.Printf("  → %s\n", outputName)
 
-	// 复制附加资源
-	for _, entry := range cfg.Dist.Include {
-		srcPath := filepath.Join(root, entry.Src)
-		dstPath := filepath.Join(distDir, entry.Dst)
-		if _, err := os.Stat(srcPath); os.IsNotExist(err) {
-			if entry.Optional {
-				continue
-			}
-			return fmt.Errorf("必需文件缺失: %s", entry.Src)
+	for _, t := range targets {
+		goos, goarch := t[0], t[1]
+		dirName := cfg.Dist.DirName
+		if goos != "windows" {
+			dirName = cfg.Dist.DirName + "-" + goos
 		}
-		if entry.Recursive {
-			filepath.Walk(srcPath, func(path string, info os.FileInfo, err error) error {
-				if err != nil {
-					// 目录读取失败（如 junction 目标异常）跳过该路径，不中断整体拷贝
-					if info != nil && info.IsDir() {
-						return filepath.SkipDir
-					}
-					return nil
+		outName := targetExeName(outputName, goos, goarch)
+		exePath := filepath.Join(root, "release", outName)
+		distDir := filepath.Join(root, cfg.Dist.OutputDir, dirName)
+
+		os.RemoveAll(distDir)
+		os.MkdirAll(distDir, 0755)
+
+		// 复制主程序
+		if err := copyFile(filepath.Join(distDir, outName), exePath); err != nil {
+			return fmt.Errorf("复制主程序 %s: %w", outName, err)
+		}
+		fmt.Printf("  → [%s/%s] %s\n", goos, goarch, outName)
+
+		// 复制附加资源（含平台过滤）
+		for _, entry := range cfg.Dist.Include {
+			if entry.OS != "" && entry.OS != goos {
+				continue // 非本平台条目跳过
+			}
+			srcPath := filepath.Join(root, entry.Src)
+			dstPath := filepath.Join(distDir, entry.Dst)
+			if _, err := os.Stat(srcPath); os.IsNotExist(err) {
+				if entry.Optional {
+					continue
 				}
-				// ★ 任意层级 node_modules（依赖目录/junction）一律不打包
-				if info.Name() == "node_modules" {
+				return fmt.Errorf("必需文件缺失: %s", entry.Src)
+			}
+			if err := copyDistEntry(srcPath, dstPath, entry); err != nil {
+				return fmt.Errorf("复制 %s: %w", entry.Src, err)
+			}
+			fmt.Printf("  → %s\n", entry.Dst)
+		}
+
+		// 密钥脱敏
+		if cfg.StripSecrets != nil {
+			stripSecrets(distDir, cfg.StripSecrets.Fields, cfg.StripSecrets.Files)
+		}
+
+		// ZIP 打包
+		if cfg.Dist.Format != "dir" {
+			zipName := fmt.Sprintf("%s-%s.zip", dirName, cfg.Version)
+			zipPath := filepath.Join(root, cfg.Dist.OutputDir, zipName)
+			if err := createZIP(zipPath, distDir); err != nil {
+				return fmt.Errorf("ZIP 打包: %w", err)
+			}
+			zi, _ := os.Stat(zipPath)
+			fmt.Printf("  ✔ ZIP: %s (%.1f MB)\n", zipName, float64(zi.Size())/1024/1024)
+		}
+	}
+	return nil
+}
+
+// copyDistEntry 按 DistEntry 配置复制单个资源（递归目录 / 单文件）。
+func copyDistEntry(srcPath, dstPath string, entry DistEntry) error {
+	if entry.Recursive {
+		return filepath.Walk(srcPath, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				if info != nil && info.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			// ★ 任意层级 node_modules（依赖目录/junction）一律不打包
+			if info.Name() == "node_modules" {
+				if info.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			// ★ 符号链接/junction 不复制（Windows junction 无文件内容，
+			//   copyFile 会失败并中断整个 Walk）
+			if info.Mode()&os.ModeSymlink != 0 {
+				return nil
+			}
+			rel, _ := filepath.Rel(srcPath, path)
+			if rel == "." {
+				return nil
+			}
+			for _, ex := range entry.Exclude {
+				if rel == ex || strings.HasPrefix(rel, ex+string(filepath.Separator)) {
 					if info.IsDir() {
 						return filepath.SkipDir
 					}
 					return nil
 				}
-				// ★ 符号链接/junction 不复制（Windows junction 无文件内容，
-				//   copyFile 会失败并中断整个 Walk）
-				if info.Mode()&os.ModeSymlink != 0 {
-					return nil
-				}
-				rel, _ := filepath.Rel(srcPath, path)
-				if rel == "." {
-					return nil
-				}
-				// exclude：匹配的目录整体跳过（不创建、不进入），文件跳过
-				for _, ex := range entry.Exclude {
-					if rel == ex || strings.HasPrefix(rel, ex+string(filepath.Separator)) {
-						if info.IsDir() {
-							return filepath.SkipDir
-						}
-						return nil
-					}
-				}
-				target := filepath.Join(dstPath, rel)
-				if info.IsDir() {
-					return os.MkdirAll(target, 0755)
-				}
-				return copyFile(target, path)
-			})
-		} else {
-			os.MkdirAll(filepath.Dir(dstPath), 0755)
-			if err := copyFile(dstPath, srcPath); err != nil {
-				return fmt.Errorf("复制 %s: %w", entry.Src, err)
 			}
-		}
-		fmt.Printf("  → %s\n", entry.Dst)
+			target := filepath.Join(dstPath, rel)
+			if info.IsDir() {
+				return os.MkdirAll(target, 0755)
+			}
+			return copyFile(target, path)
+		})
 	}
-
-	// 密钥脱敏
-	if cfg.StripSecrets != nil {
-		stripSecrets(distDir, cfg.StripSecrets.Fields, cfg.StripSecrets.Files)
-	}
-
-	// ZIP 打包
-	if cfg.Dist.Format != "dir" {
-		zipName := fmt.Sprintf("%s-%s.zip", cfg.Dist.DirName, cfg.Version)
-		zipPath := filepath.Join(root, cfg.Dist.OutputDir, zipName)
-		if err := createZIP(zipPath, distDir); err != nil {
-			return fmt.Errorf("ZIP 打包: %w", err)
-		}
-		zi, _ := os.Stat(zipPath)
-		fmt.Printf("  ✔ ZIP: %s (%.1f MB)\n", zipName, float64(zi.Size())/1024/1024)
-	}
-
-	return nil
+	os.MkdirAll(filepath.Dir(dstPath), 0755)
+	return copyFile(dstPath, srcPath)
 }
 
 // ─── 辅助函数 ─────────────────────────────────────────────
@@ -583,6 +662,7 @@ Packager — 通用打包执行引擎
   --bump <level>    自动递增版本号: patch|minor|major
   --version <x.y.z> 手动指定版本号
   --step <name>     只执行指定步骤
+  --targets <spec>  覆盖目标平台（如 --targets windows/amd64,linux/amd64,darwin/arm64）
   -h, --help        显示此帮助
 
 配置 (packager.json):

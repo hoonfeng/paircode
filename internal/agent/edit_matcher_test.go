@@ -217,10 +217,10 @@ func TestApplyEdit_EmptyOldString(t *testing.T) {
 
 func TestNormalizeNewlines(t *testing.T) {
 	cases := map[string]string{
-		"a\r\nb":     "a\nb",
-		"a\rb":       "a\nb",
+		"a\r\nb":      "a\nb",
+		"a\rb":        "a\nb",
 		"a\r\nb\r\nc": "a\nb\nc",
-		"a\nb":       "a\nb",
+		"a\nb":        "a\nb",
 	}
 	for in, want := range cases {
 		if got := normalizeNewlines(in); got != want {
