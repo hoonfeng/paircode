@@ -1,0 +1,8 @@
+{
+  "main": "index.js",
+  "name": "tool-goal",
+  "purpose": "goal 机制工具面（create_goal/get_goal/update_goal，宿主 goal 状态机 + 自动续轮）",
+  "scope": "global",
+  "type": "plugin",
+  "version": "1.0.0"
+}

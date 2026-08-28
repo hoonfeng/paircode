@@ -98,6 +98,7 @@ var sessionBridge *SessionBridge
 // nil 时明确报错（防静默失效）。
 func init() {
 	archiveSessionTools()
+	archiveGoalTools() // Round3 ③.1：goal 工具路由执行器（hostTool 索引）
 }
 
 // SetSessionBridge 注入会话桥（web 层启动时调用；重复注入覆盖）。

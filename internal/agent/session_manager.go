@@ -476,6 +476,14 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 	}
 	loop := loopHandle.Loop()
 
+	// ★ Round3 ③.1：会话已有活动 goal（跨重启持久化恢复）→ 目标上下文注入系统提示
+	//   （运行中 create_goal 的场景由续轮循环在下一轮前注入；此处覆盖「重启后首轮」）
+	if g := goalManager.Get(opts.WorkspaceRoot, convID); g != nil && g.Active() {
+		if !strings.Contains(loop.System, goalSystemMarker) {
+			loop.System += "\n\n" + goalSystemSection(g)
+		}
+	}
+
 	// ★ 2026-08-21 LLM 重试通知：Provider 支持 RetryNotifier 时绑定重试回调，
 	//   重试期间以 notice 事件推送到前端——用户不再「干等无响应」。
 	if rn, ok := loop.Provider.(RetryNotifier); ok {
@@ -796,6 +804,31 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 			msgs, err = loop.Run(runCtx, task, nil)
 		}
 		sess.History = msgs
+
+		// ★ Round3 ③.1 goal 自动续轮（对齐 DSH「同会话完成目标」语义）：
+		//   会话 Run 结束后，goal Armed && 非终态 && Rounds < RoundLimit →
+		//   自动发起下一轮（continuation 消息）。pause 停续轮、resume 重挂；
+		//   同一阻塞条件连续 ≥3 轮自动 blocked（MarkRound 内判定）。
+		//   零行为变化保证：无 create_goal 时 goalManager.Get 返回 nil，循环直接退出。
+		for !sess.stopped {
+			g := goalManager.MarkRound(opts.WorkspaceRoot, convID, err)
+			if g == nil || g.ContinueMessage() == "" {
+				break
+			}
+			// 目标上下文注入系统提示（幂等：marker 已存在不重复追加）
+			if !strings.Contains(loop.System, goalSystemMarker) {
+				loop.System += "\n\n" + goalSystemSection(g)
+			}
+			lmsg := g.ContinueMessage()
+			log.Printf("[session] goal 自动续轮 conv=%s round=%d/%d objective=%q",
+				convID, g.Rounds, g.RoundLimit, truncStr(g.Objective, 60))
+			select {
+			case sess.Events <- Event{Type: EventNotice, Content: lmsg}:
+			default:
+			}
+			msgs, err = loop.Run(runCtx, lmsg, nil)
+			sess.History = msgs
+		}
 		// ★ 记录会话结束方式：err != nil（LLM API 错误/panic/ctx 取消含用户停止）
 		//   → 任务未正常完成，标记为"可继续"；正常完成（err==nil）→ 保持 false。
 		if err != nil {
