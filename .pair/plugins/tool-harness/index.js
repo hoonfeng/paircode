@@ -25,6 +25,12 @@ function projPath(ctx, args, path) {
   return path
 }
 
+// filePath 兼容参数名：DSH 参考用 file_path，repo 旧调用方用 path——两者都接受（file_path 优先）。
+function filePath(args) {
+  const p = args.file_path != null ? args.file_path : args.path
+  return p == null ? '' : String(p)
+}
+
 // 检测文件主要换行风格（CRLF vs LF），用于保留原风格
 function detectEOL(text) {
   const crlf = (text.match(/\r\n/g) || []).length
@@ -41,38 +47,48 @@ function readFileText(ctx, args, path) {
   return text
 }
 
-// read：offset/limit 分页 + 2000 行截断
+// read：DSH 对齐（2026-09 Round2 R2-7）——file_path 参数 + 行号输出块：
+//   <path>/<type>/<content> 内每行 "number: text"，末尾 footer
+//   （(End of file - total N lines) 或 (Showing lines X-Y of N. Use offset=… to continue.)）。
+// offset(默认 1)/limit(默认 2000) 分页；兼容旧参数名 path。
 function readFile(ctx, args) {
-  const path = projPath(ctx, args, args.path)
+  const path = projPath(ctx, args, filePath(args))
   const text = readFileText(ctx, args, path)
-  const offset = Number(args.offset || 0)
-  const limit = Number(args.limit || 0)
-  if (offset <= 0 && limit <= 0) {
-    const lines = text.split('\n')
-    if (lines.length > 2000) {
-      return lines.slice(0, 2000).join('\n') + '\n…[文件共 ' + lines.length + ' 行，仅显示前 2000；用 offset/limit 读其余]'
-    }
-    return text
-  }
   const lines = text.split('\n')
+  // 去掉末尾空行（split 尾随 \n 产生）——与 DSH 行计数一致
+  if (lines.length > 0 && lines[lines.length - 1] === '' ) lines.pop()
+  const totalLines = lines.length
+  let offset = Math.round(Number(args.offset || 0))
+  let limit = Math.round(Number(args.limit || 0))
+  if (offset <= 0) offset = 1
+  if (limit <= 0) limit = 2000
   let start = offset - 1
+  if (start >= totalLines && !(totalLines === 0 && offset === 1)) {
+    throw new Error('offset ' + offset + ' 超出文件行数 ' + totalLines)
+  }
   if (start < 0) start = 0
-  if (start >= lines.length) throw new Error('offset ' + offset + ' 超出文件行数 ' + lines.length)
-  let end = lines.length
-  if (limit > 0 && start + limit < end) end = start + limit
-  return lines.slice(start, end).join('\n')
+  let end = start + limit
+  if (end > totalLines) end = totalLines
+  const shown = lines.slice(start, end)
+  const endLine = shown.length > 0 ? start + shown.length : Math.max(0, offset - 1)
+  let footer
+  if (endLine < totalLines) footer = '(Showing lines ' + offset + '-' + endLine + ' of ' + totalLines + '. Use offset=' + (endLine + 1) + ' to continue.)'
+  else footer = '(End of file - total ' + totalLines + ' lines)'
+  const body = shown.length > 0 ? shown.map((l, i) => (start + i + 1) + ': ' + l).join('\n') + '\n\n' + footer : footer
+  return '<path>' + (args.file_path != null ? args.file_path : args.path) + '</path>\n<type>file</type>\n<content>\n' + body + '\n</content>'
 }
 
-// write：父目录自动创建
+// write：父目录自动创建（file_path/path 双参数名兼容）
 function writeFile(ctx, args) {
-  const path = projPath(ctx, args, args.path)
+  const path = projPath(ctx, args, filePath(args))
+  if (!path) throw new Error('缺少文件路径（file_path 或 path）')
   const slash = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
   if (slash > 0) {
     const dir = path.slice(0, slash)
     if (dir && !ctx.fs.exists(dir)) ctx.fs.mkdir(dir, true)
   }
-  ctx.fs.writeFile(path, args.content)
-  return '已写入 ' + args.path
+  ctx.fs.writeFile(path, args.content == null ? '' : String(args.content))
+  return '已写入 ' + (args.file_path != null ? args.file_path : args.path)
 }
 
 // 行号定位替换：返回替换后的行数组
@@ -87,6 +103,8 @@ function applyLineReplace(lines, ed) {
 }
 
 // edit 匹配：精确 → CRLF 归一化；返回 {ok, text} 或 {ok:false, err}
+// replace_all=true 时替换全部出现处（DSH 对齐，2026-09 Round2 R2-7），
+// 不再要求 old_string 唯一；默认 false 保持「须唯一」安全语义。
 function applyEdit(text, ed) {
   const newStr = String(ed.new_string == null ? '' : ed.new_string)
   // 行号定位模式（最可靠）
@@ -97,7 +115,7 @@ function applyEdit(text, ed) {
   }
   if (ed.old_string == null) return { ok: false, err: '缺少 old_string（且未用 line_start 行号定位）' }
   const oldStr = String(ed.old_string)
-  // 精确匹配（统计全部出现位置，>1 报唯一性错误）
+  // 精确匹配（统计全部出现位置，>1 报唯一性错误；replace_all 时全部替换）
   const candidates = []
   {
     let from = 0
@@ -120,18 +138,29 @@ function applyEdit(text, ed) {
     }
     return { ok: false, err: '未找到待替换文本（尝试精确/CRLF 归一化均失败）；请改用 line_start/line_end 行号定位' }
   }
-  if (candidates.length > 1) return { ok: false, err: 'old_string 在文件中出现 ' + candidates.length + ' 处（须唯一）；请用 line_start/line_end 行号定位' }
-  return { ok: true, text: text.slice(0, candidates[0]) + newStr + text.slice(candidates[0] + oldStr.length) }
+  if (candidates.length > 1 && !ed.replace_all) {
+    return { ok: false, err: 'old_string 在文件中出现 ' + candidates.length + ' 处（须唯一；或设 replace_all=true 全部替换）；请用 line_start/line_end 行号定位' }
+  }
+  if (candidates.length === 1) {
+    return { ok: true, text: text.slice(0, candidates[0]) + newStr + text.slice(candidates[0] + oldStr.length) }
+  }
+  // replace_all：从后往前替换（偏移不受前次替换影响）
+  let out = text
+  for (let i = candidates.length - 1; i >= 0; i--) {
+    out = out.slice(0, candidates[i]) + newStr + out.slice(candidates[i] + oldStr.length)
+  }
+  return { ok: true, text: out }
 }
 
 // edit
 function editFile(ctx, args) {
-  const path = projPath(ctx, args, args.path)
+  const path = projPath(ctx, args, filePath(args))
+  if (!path) throw new Error('缺少文件路径（file_path 或 path）')
   const text = readFileText(ctx, args, path)
   const r = applyEdit(text, args)
   if (!r.ok) throw new Error(r.err)
   ctx.fs.writeFile(path, r.text)
-  return '已编辑 ' + args.path
+  return '已编辑 ' + (args.file_path != null ? args.file_path : args.path)
 }
 
 // str_replace_editor：view/create/str_replace/insert
@@ -212,10 +241,17 @@ function strReplaceEditor(ctx, args) {
   }
 }
 
-// bash：ctx.bash（120s 超时 + 输出截断由宿主保证）
+// bash：ctx.bash（120s 超时 + 输出截断由宿主保证）。
+// ★ 2026-09 Round2 R2-7 DSH 对齐：description 可选（参考必填，repo 兼容旧调用方
+//   保持可选）+ timeoutMs 可选（>0 覆盖默认 120s，传给 ctx.bash.exec 第三参秒数）。
 function runCommand(ctx, args) {
   const cwd = args.project ? '../' + String(args.project).replace(/[\\/]+$/, '') + (args.cwd ? '/' + args.cwd : '') : (args.cwd || '')
-  const res = ctx.bash.exec(String(args.command || ''), cwd)
+  let timeoutSec = 0
+  if (args.timeoutMs != null) {
+    const ms = Math.round(Number(args.timeoutMs))
+    if (Number.isFinite(ms) && ms > 0) timeoutSec = Math.max(1, Math.round(ms / 1000))
+  }
+  const res = timeoutSec > 0 ? ctx.bash.exec(String(args.command || ''), cwd, timeoutSec) : ctx.bash.exec(String(args.command || ''), cwd)
   if (res.error) return res.output + (res.output ? '\n' : '') + '[stderr] ' + res.error
   return res.output
 }
@@ -227,7 +263,7 @@ function runCode(ctx, args) {
   return ctx.binary.exec('run_code', args || {}, opts).text
 }
 
-// glob/grep：ctx.fs（复用 search_files/search_content 宿主实现）
+// glob/grep：ctx.fs（复用 glob/grep 宿主实现）
 function globFiles(ctx, args) {
   const opts = {}
   if (args.path) opts.path = args.path
@@ -248,56 +284,59 @@ function grepFiles(ctx, args) {
 const tools = [
   {
     name: 'read',
-    description: '读取文件内容（对齐 deepseek-harness read）。path 为工作区内路径；可选 offset(起始行,1 基)+limit(行数)读片段；省略则读全文(超 2000 行只返回前 2000 行并提示翻页)。',
-    usageGuide: 'harness 标准读工具：读取文件内容。路径越界自动拦截，二进制自动拒绝（改用 inspect_binary）。大文件用 offset+limit 分页。',
+    description: '读取文件内容（对齐 deepseek-harness read）。file_path 为工作区内路径（兼容旧参数名 path）；可选 offset(起始行,1 基，默认 1)+limit(行数，默认 2000)读片段；输出带行号（"行号: 内容"）与文件总行数 footer。',
+    usageGuide: 'harness 标准读工具：读取文件内容（行号输出对齐参考实现）。路径越界自动拦截，二进制自动拒绝（改用 inspect_binary）。大文件用 offset+limit 分页。',
     category: '文件',
     readOnly: true,
     parameters: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: '文件路径（工作区内）' },
-        offset: { type: 'integer', description: '可选：起始行号(1 基)' },
-        limit: { type: 'integer', description: '可选：读取行数' },
+        file_path: { type: 'string', description: '文件路径（工作区内；DSH 参考参数名，与 path 等价）' },
+        path: { type: 'string', description: '文件路径（工作区内；旧参数名，file_path 优先）' },
+        offset: { type: 'integer', description: '可选：起始行号(1 基，默认 1)' },
+        limit: { type: 'integer', description: '可选：读取行数（默认 2000）' },
         project: { type: 'string', description: '可选：目标项目（工作区项目目录名如 wb-ui，或相对主项目的路径/绝对路径）。省略 = 主项目。' },
       },
-      required: ['path'],
     },
     impl: readFile,
   },
   {
     name: 'write',
-    description: '把 content 完整写入 path（覆盖；父目录自动创建）。需审核批准。',
+    description: '把 content 完整写入 file_path（覆盖；父目录自动创建）。需审核批准。',
     usageGuide: 'harness 标准写工具：整文件写入（覆盖）。写类操作需人工确认。如需追加请先 read 再 write 覆盖。',
     category: '文件',
     requiresApproval: true,
     parameters: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: '文件路径' },
+        file_path: { type: 'string', description: '文件路径（DSH 参考参数名，与 path 等价）' },
+        path: { type: 'string', description: '文件路径（旧参数名，file_path 优先）' },
         content: { type: 'string', description: '完整文件内容' },
         project: { type: 'string', description: '可选：目标项目。省略 = 主项目。' },
       },
-      required: ['path', 'content'],
+      required: ['content'],
     },
     impl: writeFile,
   },
   {
     name: 'edit',
-    description: '把文件中唯一一处 old_string 替换为 new_string（对齐 deepseek-harness edit）。内置智能匹配（CRLF 归一化+空白折叠）；匹配失败优先用 line_start/line_end 行号定位。',
-    usageGuide: 'harness 标准编辑工具：小改动（≤5 行）用精确替换；大改动请用 write 写整段。替换前会自动快照。',
+    description: '把文件中唯一一处 old_string 替换为 new_string（对齐 deepseek-harness edit）；replace_all=true 时替换全部出现处。内置智能匹配（CRLF 归一化）；匹配失败优先用 line_start/line_end 行号定位。',
+    usageGuide: 'harness 标准编辑工具：小改动（≤5 行）用精确替换（须唯一；多处出现可设 replace_all=true 全部替换）；大改动请用 write 写整段。替换前会自动快照。',
     category: '文件',
     requiresApproval: true,
     parameters: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: '文件路径' },
+        file_path: { type: 'string', description: '文件路径（DSH 参考参数名，与 path 等价）' },
+        path: { type: 'string', description: '文件路径（旧参数名，file_path 优先）' },
         new_string: { type: 'string', description: '替换后的新文本' },
-        old_string: { type: 'string', description: '待替换原文（须在文件中唯一；line_start>0 时可省略或作校验）' },
+        old_string: { type: 'string', description: '待替换原文（默认须唯一；replace_all=true 时替换全部；line_start>0 时可省略或作校验）' },
+        replace_all: { type: 'boolean', description: '可选：true 时替换 old_string 的全部出现处（默认 false 须唯一）' },
         line_start: { type: 'integer', description: '可选：1 基起始行号（含）；省略或 < line_start 时只替换 line_start 一行' },
         line_end: { type: 'integer', description: '可选：1 基结束行号（含）' },
         project: { type: 'string', description: '可选：目标项目。省略 = 主项目。' },
       },
-      required: ['path', 'new_string'],
+      required: ['new_string'],
     },
     impl: editFile,
   },
@@ -341,13 +380,15 @@ const tools = [
   },
   {
     name: 'bash',
-    description: '同步执行一条 shell 命令并返回输出（对齐 deepseek-harness bash）。每次调用在独立 shell 中运行（无状态持久）。禁止用于长期进程（dev server/watch/tcp 监听）——请用 run_background。',
-    usageGuide: 'harness 标准 bash 工具：执行命令（构建/测试/查询等短命令）。120s 超时自动终止。长期进程用 run_background/read_output/kill_process。',
+    description: '同步执行一条 shell 命令并返回输出（对齐 deepseek-harness bash）。每次调用在独立 shell 中运行（无状态持久）。禁止用于长期进程（dev server/watch/tcp 监听）——请用 run_background。description 可选（参考实现必填，用于 UI 展示命令意图）；timeoutMs 可选（覆盖默认 120s）。',
+    usageGuide: 'harness 标准 bash 工具：执行命令（构建/测试/查询等短命令）。默认 120s 超时自动终止，可用 timeoutMs 调整。长期进程用 run_background/read_output/kill_process。',
     category: '执行',
     parameters: {
       type: 'object',
       properties: {
         command: { type: 'string', description: '要执行的命令' },
+        description: { type: 'string', description: '可选：命令意图说明（5-10 词，DSH 参考为必填；repo 兼容旧调用方保持可选）' },
+        timeoutMs: { type: 'integer', description: '可选：超时毫秒数（>0 覆盖默认 120000；0=不超时）' },
         cwd: { type: 'string', description: '可选工作目录（工作区内，省略=根）' },
         project: { type: 'string', description: '可选：目标项目。省略 = 主项目。' },
       },
@@ -365,7 +406,7 @@ const tools = [
       '* `insert` 在 `insert_line` 之后插入 `new_str`\n' +
       '* `view` 支持 `view_range` 数组限定行范围（如 [11,12]，[-1] 到文件尾）\n' +
       '* 长输出会被截断并标记 `<response clipped>`',
-    usageGuide: 'harness 标准命令式编辑器（Claude 系工具）：view 查看、create 创建、str_replace 精确替换（唯一匹配）、insert 行后插入。与 edit_file 相比更适合『需要先查看行号、再精确替换』的流程；带行号输出方便后续定位。',
+    usageGuide: 'harness 标准命令式编辑器（Claude 系工具）：view 查看、create 创建、str_replace 精确替换（唯一匹配）、insert 行后插入。与 edit 相比更适合『需要先查看行号、再精确替换』的流程；带行号输出方便后续定位。',
     category: '文件',
     parameters: {
       type: 'object',

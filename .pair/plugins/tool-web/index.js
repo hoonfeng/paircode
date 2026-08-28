@@ -105,7 +105,7 @@ const tools = [
   {
     name: 'web_fetch',
     description: '抓取一个 http(s) 网页并返回其纯文本内容（去除 HTML 标签，超长截断）。用于查阅在线文档、API 参考、网页。',
-    usageGuide: '抓取 http(s) 网页并返回纯文本（去 HTML 标签）。用于查阅在线文档、API 参考、网页内容。拿到链接后再用这个读全文。比 run_command curl 更方便（自动去标签+编码处理+截断保护）。',
+    usageGuide: '抓取 http(s) 网页并返回纯文本（去 HTML 标签）。用于查阅在线文档、API 参考、网页内容。拿到链接后再用这个读全文。比 bash curl 更方便（自动去标签+编码处理+截断保护）。',
     category: '网络',
     readOnly: true,
     parameters: {
@@ -119,7 +119,7 @@ const tools = [
   {
     name: 'web_search',
     description: '搜索网络，返回前若干条 标题/链接/摘要（已配置 SearXNG 则优先用之，否则 DuckDuckGo）。查文档、报错、库用法、最新信息时用；拿到链接可再用 web_fetch 读全文。',
-    usageGuide: '搜索网络，返回标题/链接/摘要。用于查文档、报错信息、库的用法、最新技术方案。拿到链接后可再用 web_fetch 读全文。比 run_command 手动搜索更高效（集成 SearXNG/DuckDuckGo）。',
+    usageGuide: '搜索网络，返回标题/链接/摘要。用于查文档、报错信息、库的用法、最新技术方案。拿到链接后可再用 web_fetch 读全文。比 bash 手动搜索更高效（集成 SearXNG/DuckDuckGo）。',
     category: '网络',
     readOnly: true,
     parameters: {

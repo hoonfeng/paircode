@@ -42,7 +42,7 @@ const tools = [
   {
     "name": "codegraph_file_structure",
     "description": "获取指定文件的实体结构树（文件→函数/类型→方法/字段的层次结构）。用于理解文件内部的组织结构。",
-    "usageGuide": "获取指定文件的实体结构树（文件→函数/类型→方法/字段的层次）。比 list_files 更深入（了解文件内部组织）。",
+    "usageGuide": "获取指定文件的实体结构树（文件→函数/类型→方法/字段的层次）。比 glob 更深入（了解文件内部组织）。",
     "parameters": {
       "properties": {
         "file": {
@@ -64,7 +64,7 @@ const tools = [
   {
     "name": "codegraph_function",
     "description": "按名称查找函数/方法的定义位置。支持函数名、包名.函数名、或接收者.方法名。返回文件路径、行号、签名等信息。",
-    "usageGuide": "按名称查找函数/方法的定义位置，携带函数签名。支持包名.函数名、接收者.方法名。比 search_content 全文搜索更精确（基于 AST 直接定位）。搜函数定义首选此工具。",
+    "usageGuide": "按名称查找函数/方法的定义位置，携带函数签名。支持包名.函数名、接收者.方法名。比 grep 全文搜索更精确（基于 AST 直接定位）。搜函数定义首选此工具。",
     "parameters": {
       "properties": {
         "name": {
@@ -108,7 +108,7 @@ const tools = [
   {
     "name": "codegraph_callers",
     "description": "查询哪些函数调用了指定的函数/方法。用于理解函数被使用的情况。返回调用者的文件路径和行号。",
-    "usageGuide": "查询哪些函数调用了指定的函数。修改函数签名/行为前必调此工具了解调用方，防止漏改。比 search_content 搜索引用更精确（基于调用图）。",
+    "usageGuide": "查询哪些函数调用了指定的函数。修改函数签名/行为前必调此工具了解调用方，防止漏改。比 grep 搜索引用更精确（基于调用图）。",
     "parameters": {
       "properties": {
         "name": {
@@ -177,8 +177,8 @@ const tools = [
   },
   {
     "name": "codegraph_search",
-    "description": "在代码知识图谱中搜索实体（函数、类型、变量、文件等）。支持按名称搜索和按类型过滤。返回匹配实体的位置、签名和相关度评分。比 search_content 更精确，因为基于结构化理解而非纯文本匹配。",
-    "usageGuide": "在代码知识图谱中搜索实体（函数/类型/变量/文件等）。scope 限定类型（function/type/variable/file）。搜函数/类型定义首选此工具，其次才是 search_content。比全文搜索精确一个数量级。",
+    "description": "在代码知识图谱中搜索实体（函数、类型、变量、文件等）。支持按名称搜索和按类型过滤。返回匹配实体的位置、签名和相关度评分。比 grep 更精确，因为基于结构化理解而非纯文本匹配。",
+    "usageGuide": "在代码知识图谱中搜索实体（函数/类型/变量/文件等）。scope 限定类型（function/type/variable/file）。搜函数/类型定义首选此工具，其次才是 grep。比全文搜索精确一个数量级。",
     "parameters": {
       "properties": {
         "maxResults": {
@@ -253,7 +253,7 @@ const tools = [
   {
     "name": "codegraph_get_edit_context",
     "description": "获取修改某个代码位置所需的完整上下文。一次调用返回：符号源码、调用者列表、关联测试、近期 Git 历史、相关记忆。比分别调用多个工具更高效。参数 maxTokens 控制返回内容的 token 预算。",
-    "usageGuide": "获取修改某代码位置所需的完整上下文。调用 edit_file 前先用此工具获取周边代码，减少多次文件读取的 token 消耗。",
+    "usageGuide": "获取修改某代码位置所需的完整上下文。调用 edit 前先用此工具获取周边代码，减少多次文件读取的 token 消耗。",
     "parameters": {
       "properties": {
         "file": {
@@ -325,7 +325,7 @@ const tools = [
   {
     "name": "codegraph_search_by_pattern",
     "description": "用正则表达式在代码实体的名称、签名、文档注释中搜索。比 codegraph_search 更精确，支持 scope 过滤（name/signature/docstring/any）。支持按实体类型过滤（function/method/struct/interface/variable）。",
-    "usageGuide": "用正则表达式在代码实体名、签名、文档注释中搜索。比 search_content 更结构化（只搜实体级元信息而非全文）。scope 可选 name/signature/docstring。",
+    "usageGuide": "用正则表达式在代码实体名、签名、文档注释中搜索。比 grep 更结构化（只搜实体级元信息而非全文）。scope 可选 name/signature/docstring。",
     "parameters": {
       "properties": {
         "entityKind": {

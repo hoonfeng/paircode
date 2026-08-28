@@ -142,10 +142,13 @@ func (s *webServer) startSubAgentTurn(spec agent.SubAgentSpec) error {
 }
 
 // buildSubAgentProvider 构造成员模型 Provider（无覆盖返回 nil = 沿用会话默认）。
+// ★ R2-6：reasoningEffort 思考档位覆盖（仅档位时也构造 Provider——沿用默认
+//   模型/服务商，仅改 ThinkingMode；档位经 applyThinking 下发 reasoning_effort）。
 func buildSubAgentProvider(spec agent.SubAgentSpec) agent.Provider {
 	model := strings.TrimSpace(spec.Model)
 	provider := strings.TrimSpace(spec.Provider)
-	if model == "" && provider == "" {
+	effort := strings.TrimSpace(spec.ReasoningEffort)
+	if model == "" && provider == "" && effort == "" {
 		return nil
 	}
 	cur := agent.ResolveProviderParams()
@@ -174,6 +177,9 @@ func buildSubAgentProvider(spec agent.SubAgentSpec) agent.Provider {
 	cur.BaseURL = baseURL
 	cur.APIKey = apiKey
 	cur.Model = model
+	if effort != "" {
+		cur.ThinkingMode = effort // R2-6：成员思考档位覆盖
+	}
 	return agent.CreateProvider(cur)
 }
 

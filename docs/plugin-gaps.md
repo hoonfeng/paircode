@@ -36,14 +36,17 @@
 - **✅ M1/M2 修复**：见「遗留项与后续建议」第 1 条与 docs/plugin-verification.md「处理状态」。
 - **✅ generate_commit_message 失配修复**：tool-system 插件移除该死工具（宿主无实现、零消费方）。
 - **⚠️ 环境依赖测试复跑结论**：TestToolLandingSpotCheck / TestToolProjectInfoJSNative / TestToolVerifyJSNative 复跑仍失败——`ctx.binary.exec: 插件二进制不存在`（tool-project-info/tool-verify 插件仍 binary 形态；build-plugin-bins.bat 已废弃（插件全 JS 化，禁止再跑）；内嵌内核未覆盖 project-info/verify 组）。属**团队既有 WIP 失配**（非 t2/t5 引入），复跑/修复路径：将 tool-project-info/tool-verify/tool-memory 插件 JS 原生迁移（对齐 tool-core 模式），或在内嵌内核（`internal/agent/embedded_tools.go`）补齐对应注册函数；建议后续专项任务处理。
+- **✅ 已闭环（2026-09 Round2 R2-1/R2-2）**：上条 5 个 binary 插件（tool-git/tool-memory/tool-project-info/tool-verify/tool-bug）已全部 JS 原生迁移，`TestToolGitJSNative/Memory/ProjectInfo/Verify/Bug` 全部通过；office csv_read/word_read 陈旧断言已修正；tool_landing_test.go 模式表（原计划态 native）现为实际态。详见 docs/plugin-round2-plan.md §6.1-6.2。
 
 ### 遗留项与后续建议
 
-1. **t4 审查 findings（verdict=pass，2 medium + 5 low）**：M1（roles 漂移）与 M2（钩子信任门）**✅ 已修复（2026-08-29 集成收尾）**——reviewer.md 已同步 + 新增漂移守卫测试 `TestRolePromptDiskDefaultSync`；钩子装载默认不信任项目钩子（`PAIRCODE_TRUST_PROJECT_HOOKS=1` 显式信任）+ 新增 `TestLoopHookProjectTrustGate`；详见 docs/plugin-verification.md「处理状态」。L1–L5 低危项保留记录，建议后续 cleanup 任务处理。
-2. **11 个 internal 死包**（jobs/permission/provider/vterm/agenttools/codetypes/event/store/model/summary/verify）：删除需产品确认。
-3. **S2/F2/F3/L3/L4/G2/G3/G4（P2）**：见上表理由，建议专项清理。
+1. **t4 审查 findings（verdict=pass，2 medium + 5 low）**：M1（roles 漂移）与 M2（钩子信任门）**✅ 已修复（2026-08-29 集成收尾）**——reviewer.md 已同步 + 新增漂移守卫测试 `TestRolePromptDiskDefaultSync`；钩子装载默认不信任项目钩子（`PAIRCODE_TRUST_PROJECT_HOOKS=1` 显式信任）+ 新增 `TestLoopHookProjectTrustGate`；详见 docs/plugin-verification.md「处理状态」。L1–L5 低危项 **✅ 已处置（2026-09 Round2 R2-3）**——L1 bridge 描述（4 处字符串）、L2 hook turn 透传（loopHookCurrentTurn）、L3 G1 迁移语义统一、L5 config/philosophy 目录删除；L4 RegisterProviderImpl 还原顺序按 t1 建议 defer/文档化（单插件场景无影响）。详见 docs/plugin-round2-plan.md §6.3。
+2. **11 个 internal 死包**：✅ 已处置 7 个（2026-09 Round2 R2-5：event/model/store/summary/verify 空目录 + agenttools/codetypes 薄壳，grep 零导入）；`jobs/permission/provider/vterm` 4 个保留**待产品确认**（有实现有测试，可作参考移植源）。
+3. **S2/F2/F3/L3/L4/G2/G3/G4（P2）**：S2 **✅ 已处置**（2026-09 Round2 R2-4：web_server.go 未注册 handler 1155 行删除，fs-api/git-api 插件已接管，/api/fs/image 留内核）；F2/F3 前端专项、G2/G4 产品决策、L3(旧)/L4(旧) 架构级统一留后续专项。
 4. **前端构建流水线**：沙箱外执行 `cd cmd/companion/web-ui && npm run build`（兼容入口，含 9 个 UI 区域插件 + vite 壳 + dist 同步；路径已修正）；或直接 `cd plugins-src/ui-app && npm run build`。
 5. **验证命令目录**：`cmd/companion/web-ui` 现已有兼容 package.json（构建入口有效），vite 壳产物输出 `.pair/assets/runtime/web`，`scripts/sync-web-dist.mjs` 同步 embed 兜底 dist。
+6. **Round2 新增遗留（2026-09）**：goal/subagent/workflow 机制（需宿主 Loop 支持，P1/P2）；agent-teams memberProvider fork 与 slash 命令（宿主无对应能力面）；ask_user 多问题前端渲染（前端专项）；Go 旧名工具实现保留为测试/归档专用（89 处测试引用，生产零注册）；agent-teams profiles 已同步（default/captain-planning）+ reasoning_effort 透传已实施。完整清单与风险记录见 docs/plugin-round2-plan.md §7。
+7. **Round2 集成收尾（t5 · 2026-09）**：t4 审查 5 个 findings 全部处置（F1/F2/F4 修复、F3 文档化、F5 文档修正，见 docs/plugin-round2-plan.md §7.3）；`CGO_ENABLED=1 go build -o pair.exe ./cmd/companion` ✅；冒烟（WEB_PORT=9323）43 插件/17 工具集条目/探活 200/零 FATAL ✅；前端构建沙箱 EPERM（无前端改动，队长全权限通道可复跑 `cd cmd/companion/web-ui && npm run build`）；独立验证报告 docs/plugin-round2-verification.md（t3 + t5 §8）结论 PASS；Round2 全部改动已提交，`git status` 仅预期 git-ignored 产物。
 
 ---
 

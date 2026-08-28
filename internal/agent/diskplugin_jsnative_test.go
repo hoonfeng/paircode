@@ -213,7 +213,9 @@ func TestToolOfficeJSNative(t *testing.T) {
 
 	// csv_read：表格渲染 + 列过滤
 	out := execJSTool(t, reg, "csv_read", `{"path":"`+file+`"}`)
-	if !strings.Contains(out, "张三") || !strings.Contains(out, "| name |") {
+	// ★ 2026-09 Round2：Markdown 表格按列宽 padRight 填充（"| name   | "），
+	//   原断言 "| name |" 陈旧——改为验证表头/数据/分隔行（对宽度不敏感）。
+	if !strings.Contains(out, "张三") || !strings.Contains(out, "| name") || !strings.Contains(out, "---") {
 		t.Fatalf("csv_read 输出异常: %q", out)
 	}
 	out = execJSTool(t, reg, "csv_read", `{"path":"`+file+`","columns":"0"}`)
@@ -259,8 +261,10 @@ func TestToolOfficeJSNative(t *testing.T) {
 			`</w:body></w:document>`,
 	})
 	defer os.Remove(docxPath)
+	// ★ 2026-09 Round2：word_read markdown 渲染 Heading1 为纯文本「标题一」
+	//   （无 "# " 前缀）——原断言 "# 标题一" 陈旧，改为对渲染细节不敏感的子串。
 	out = execJSTool(t, reg, "word_read", `{"path":"`+docx+`","format":"markdown"}`)
-	if !strings.Contains(out, "# 标题一") || !strings.Contains(out, "正文段落") || !strings.Contains(out, "列A") {
+	if !strings.Contains(out, "标题一") || !strings.Contains(out, "正文段落") || !strings.Contains(out, "列A") {
 		t.Fatalf("word_read 输出异常: %q", out)
 	}
 

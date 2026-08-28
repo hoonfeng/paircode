@@ -37,7 +37,7 @@ const tools = [
   {
     "name": "write_binary",
     "description": "把 base64 编码的字节写入文件（path；覆盖；父目录自动创建）。用于写二进制内容。",
-    "usageGuide": "把 base64 编码的字节写入文件。用于写二进制内容（图片/字体/编译产物等）。需审核批准。比 write_file 更省 token（base64 比文本转义更紧凑）。",
+    "usageGuide": "把 base64 编码的字节写入文件。用于写二进制内容（图片/字体/编译产物等）。需审核批准。比 write 更省 token（base64 比文本转义更紧凑）。",
     "parameters": {
       "properties": {
         "base64": {
@@ -60,7 +60,7 @@ const tools = [
   {
     "name": "binary_strings",
     "description": "从二进制提取可打印字符串（ASCII + UTF-16LE，逆向找嵌入文本/URL/符号/提示语常用）。min_length 最短长度(默认 4)；max_results(默认 200)。返回 偏移: 字符串。",
-    "usageGuide": "从二进制提取可打印字符串（ASCII + UTF-16LE）。逆向工程常用：找嵌入文本/URL/符号/提示语。比直接 search_content 更高效（跳过二进制结构直接取文本）。",
+    "usageGuide": "从二进制提取可打印字符串（ASCII + UTF-16LE）。逆向工程常用：找嵌入文本/URL/符号/提示语。比直接 grep 更高效（跳过二进制结构直接取文本）。",
     "parameters": {
       "properties": {
         "max_results": {
@@ -86,7 +86,7 @@ const tools = [
   {
     "name": "binary_find",
     "description": "在二进制里查找字节模式（hex 如 4d5a 或 'ff d8 ff'）或文本（text），返回命中字节偏移（十六进制）。hex 与 text 二选一；max_results 默认 100。",
-    "usageGuide": "在二进制中按字节（hex）或文本（text）搜索模式，返回命中偏移。逆向分析用。比 search_content 更快（直接字节匹配无需文本解码）。",
+    "usageGuide": "在二进制中按字节（hex）或文本（text）搜索模式，返回命中偏移。逆向分析用。比 grep 更快（直接字节匹配无需文本解码）。",
     "parameters": {
       "properties": {
         "hex": {
@@ -162,7 +162,7 @@ const tools = [
   {
     "name": "binary_hash",
     "description": "计算文件 大小 + MD5 + SHA1 + SHA256（识别样本/校验完整性）。流式计算，不全量载入。",
-    "usageGuide": "计算文件哈希（MD5+SHA1+SHA256）。用于校验文件完整性、识别样本（从恶意软件到编译产物）。比 run_command certutil -hashfile 更方便（一次性出三种哈希）。",
+    "usageGuide": "计算文件哈希（MD5+SHA1+SHA256）。用于校验文件完整性、识别样本（从恶意软件到编译产物）。比 bash certutil -hashfile 更方便（一次性出三种哈希）。",
     "parameters": {
       "properties": {
         "path": {

@@ -484,6 +484,8 @@ func buildLastActivity(history []Message, convID string, store MessageStoreReade
 
 // extractRecentEdits 从历史消息中提取最近编辑的文件列表。
 // fileModifyTools 会修改/操作文件的工具名集合。
+// ★ t4 F1（2026-09 t5 修复）：补 harness 新名工具（edit/write，tool-harness
+//   承载；file_path/path 双参数名），旧名保留兼容历史消息。
 var fileModifyTools = map[string]bool{
 	"edit_file":    true,
 	"write_file":   true,
@@ -491,6 +493,8 @@ var fileModifyTools = map[string]bool{
 	"move_file":    true,
 	"delete_file":  true,
 	"write_binary": true,
+	"edit":         true,
+	"write":        true,
 }
 
 // toolPathParams 各工具的文件路径参数名（可能有多个）。
@@ -501,6 +505,8 @@ var toolPathParams = map[string][]string{
 	"move_file":    {"from", "to"},
 	"delete_file":  {"path"},
 	"write_binary": {"path"},
+	"edit":         {"file_path", "path"},
+	"write":        {"file_path", "path"},
 }
 
 // extractRecentEdits 从历史消息中提取最近编辑的文件列表。

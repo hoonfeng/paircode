@@ -11,15 +11,15 @@
 //   支持 async handler（返回值 Promise 同步 drain）与 req.json() 解析。
 //   dsh 生态插件的 webServer 注册代码可直接兼容。
 //
-// 路由清单（8 条，全部 ctx.webServer 注册）：
+// 路由清单（5 条，全部 ctx.webServer 注册）：
 //   GET  /api/ext/status        宿主/插件状态（工作区根、工具数、服务名、时间）
 //   GET  /api/ext/fetch         web fetch 同源代理（?url=…）
-//   GET  /api/ext/fs/read       受限读文件（?path=相对工作区根）
-//   GET  /api/ext/fs/exists     文件存在检查
-//   GET  /api/ext/fs/list       受限目录列表
 //   GET  /api/ext/routes        全量已注册路由清单（ctx.http.list()）
 //   GET  /api/ext/async/status  ★ async handler 示例（await 编排）
 //   POST /api/ext/echo          ★ req.json() 示例（JSON 体解析回显）
+//
+// ★ 2026-09 Round2（R2-10）：/api/ext/fs/{read,exists,list} 三路由已删除——
+//   与 fs-api 插件 /api/fs/{read,list} 重复（fs-api 更完整），实测零消费者。
 // ═══════════════════════════════════════════════════════════════
 
 function parseQuery(qs) {
@@ -43,11 +43,10 @@ function send(res, status, obj) {
 
 return {
   name: 'web-api',
-  purpose: 'HTTP 接口插件化落地（ctx.webServer 对齐 harness）——注册 /api/ext/* 扩展路由：宿主状态、web fetch 同源代理、受限文件访问、async handler 与 req.json() 示例',
-  inject: ['fs', 'web', 'tools', 'logger'],
+  purpose: 'HTTP 接口插件化落地（ctx.webServer 对齐 harness）——注册 /api/ext/* 扩展路由：宿主状态、web fetch 同源代理、async handler 与 req.json() 示例（Round2 移除与 fs-api 重复的 /api/ext/fs/* 三路由）',
+  inject: ['web', 'tools', 'logger'],
   apply(ctx) {
     const root = (ctx.app && ctx.app.workspaceRoot) || ctx.workspaceRoot || '';
-    const fsSvc = ctx.fs;
     const webSvc = ctx.web;
     const log = (msg) => ctx.logger('web-api').log(msg);
     const routes = [];
@@ -80,45 +79,6 @@ return {
       }
     }});
     routes.push('GET /api/ext/fetch');
-
-    // 3. 受限读文件（?path=相对工作区根）
-    ctx.webServer.register({ kind: 'exact', path: '/api/ext/fs/read', handler: (req, res) => {
-      const q = parseQuery(req.query);
-      const path = q.path || '';
-      if (!path) return send(res, 400, { ok: false, error: '缺少 path 参数' });
-      try {
-        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
-        res.end(fsSvc.readFile(path));
-      } catch (e) {
-        send(res, 404, { ok: false, error: String(e) });
-      }
-    }});
-    routes.push('GET /api/ext/fs/read');
-
-    // 4. 文件存在检查
-    ctx.webServer.register({ kind: 'exact', path: '/api/ext/fs/exists', handler: (req, res) => {
-      const q = parseQuery(req.query);
-      const path = q.path || '';
-      if (!path) return send(res, 400, { ok: false, error: '缺少 path 参数' });
-      try {
-        send(res, 200, { ok: true, exists: !!fsSvc.exists(path) });
-      } catch (e) {
-        send(res, 200, { ok: true, exists: false });
-      }
-    }});
-    routes.push('GET /api/ext/fs/exists');
-
-    // 5. 受限目录列表
-    ctx.webServer.register({ kind: 'exact', path: '/api/ext/fs/list', handler: (req, res) => {
-      const q = parseQuery(req.query);
-      const path = q.path || '';
-      try {
-        send(res, 200, { ok: true, entries: fsSvc.readdir(path) || [] });
-      } catch (e) {
-        send(res, 404, { ok: false, error: String(e) });
-      }
-    }});
-    routes.push('GET /api/ext/fs/list');
 
     // 6. 路由清单（自描述；ctx.http.list() 返回全量已注册路由，含内核安装条目）
     ctx.webServer.register({ kind: 'exact', path: '/api/ext/routes', handler: (req, res) => {

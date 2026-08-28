@@ -64,11 +64,13 @@ const (
 
 // openTurn 打开一轮新 turn（一次 Run 调用）。重置 step 计数与 sticky 状态。
 // 对应 deepseek-harness turn/start：每次 Run 前由主循环调用一次。
+// ★ t4 L2：同步全局钩子轮次（loopHookCurrentTurn，供 hook payload 透传）。
 func (l *Loop) openTurn() {
 	l.TurnNo++
 	l.StepNo = 0
 	l.hadMaxTokens = false
 	l.CancelCause = AgentCancelCause{}
+	loopHookCurrentTurn.Store(int64(l.TurnNo))
 	l.emit(Event{Type: EventNotice, Content: fmt.Sprintf("[turn/%d/start] 开始第 %d 轮对话", l.TurnNo, l.TurnNo)})
 }
 
@@ -91,7 +93,9 @@ func (l *Loop) endStep(summary string) {
 
 // endTurn 收尾一轮 turn：记录结构化结束原因（无显式设置时按 err/ctx 推断）。
 // 对应 deepseek-harness turn/end 事件。defer 中调用一次即可。
+// ★ t4 L2：轮次结束后清零全局钩子轮次（钩子不再透传旧轮次）。
 func (l *Loop) endTurn(err error, ctxDone bool) {
+	loopHookCurrentTurn.Store(0)
 	if l.LastTurnReason == "" {
 		switch {
 		case ctxDone:

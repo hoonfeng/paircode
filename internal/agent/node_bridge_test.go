@@ -18,12 +18,12 @@ func TestMapBridgeService(t *testing.T) {
 		args        map[string]any
 		wantTool    string
 	}{
-		{"fs", "read", map[string]any{"path": "a.go"}, "read_file"},
-		{"fs", "write", map[string]any{"path": "a.go", "content": "x"}, "write_file"},
-		{"fs", "list", map[string]any{"path": "."}, "list_files"},
+		{"fs", "read", map[string]any{"path": "a.go"}, "read"},
+		{"fs", "write", map[string]any{"path": "a.go", "content": "x"}, "write"},
+		{"fs", "list", map[string]any{"path": "."}, ""},
 		{"web", "fetch", map[string]any{"url": "https://x.com"}, "web_fetch"},
 		{"web", "search", map[string]any{"query": "go"}, "web_search"},
-		{"bash", "exec", map[string]any{"command": "echo hi"}, "run_command"},
+		{"bash", "exec", map[string]any{"command": "echo hi"}, "bash"},
 	}
 	for _, c := range cases {
 		tool, mapped, direct, err := mapBridgeService(c.svc, c.method, c.args)
@@ -44,6 +44,11 @@ func TestMapBridgeService(t *testing.T) {
 	_, _, direct, err := mapBridgeService("fs", "exists", map[string]any{"path": "nope-not-exist"})
 	if err != nil || direct == nil {
 		t.Fatalf("fs.exists 应返回直连处理器: %v", err)
+	}
+	// fs.list 直连处理器（R2-9：无对应工具，改直连列目录）
+	_, _, direct2, err := mapBridgeService("fs", "list", map[string]any{"path": "."})
+	if err != nil || direct2 == nil {
+		t.Fatalf("fs.list 应返回直连处理器: %v", err)
 	}
 	if _, _, _, err := mapBridgeService("fs", "chmod", nil); err == nil {
 		t.Fatalf("未知方法应报错")

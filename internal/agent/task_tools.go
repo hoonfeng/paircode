@@ -34,6 +34,74 @@ func UseTaskManager(root string) *TaskManager {
 func registerTaskTools(r *Registry, root string) {
 	tm := UseTaskManager(root)
 
+	// updateTasksHandler 全量替换任务列表（update_tasks 与 todo_write 别名共用）。
+	updateTasksHandler := func(ctx context.Context, args map[string]any) (string, error) {
+		tasksRaw, _ := args["tasks"].([]any)
+		if len(tasksRaw) == 0 {
+			return "", fmt.Errorf("tasks 为空")
+		}
+
+		newTasks := make([]Task, 0, len(tasksRaw))
+		for _, raw := range tasksRaw {
+			m, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			t := Task{
+				Subject:      argStr(m, "subject"),
+				Description:  argStr(m, "description"),
+				Status:       TaskPending,
+				Dependencies: strSliceArg(m, "dependencies"),
+			}
+			if id := argStr(m, "id"); id != "" {
+				t.ID = id
+			}
+			if s := argStr(m, "status"); s != "" {
+				t.Status = TaskStatus(s)
+			}
+			if pis, ok := m["plan_step_index"]; ok {
+				if idx, ok2 := toFloat64(pis); ok2 {
+					pi := int(idx)
+					t.PlanStepIndex = &pi
+				}
+			}
+			newTasks = append(newTasks, t)
+		}
+
+		if err := tm.ReplaceAll(newTasks); err != nil {
+			return "", fmt.Errorf("保存任务失败: %w", err)
+		}
+
+		summary := tm.GetSummary()
+		bar := buildProgressBar(summary.Completed, summary.Total, 20)
+		ready := tm.GetReady()
+		blocked := tm.GetBlocked()
+
+		var b strings.Builder
+		fmt.Fprintf(&b, "任务列表已更新：共 %d 项（%d 完成，%d 进行中，%d 待执行）\n",
+			summary.Total, summary.Completed, summary.InProgress, summary.Pending)
+		fmt.Fprintf(&b, "进度: %s %d/%d (%.0f%%)\n", bar, summary.Completed, summary.Total, pct(summary.Completed, summary.Total))
+
+		if len(ready) > 0 {
+			fmt.Fprintf(&b, "\n[进行中] 可执行任务:\n")
+			for _, t := range ready {
+				fmt.Fprintf(&b, "  [%s] %s\n", t.ID, t.Subject)
+			}
+		}
+		if len(blocked) > 0 {
+			fmt.Fprintf(&b, "\n⛔ 阻塞任务 (%d):\n", len(blocked))
+			for _, bt := range blocked {
+				blockers := make([]string, len(bt.BlockedBy))
+				for i, b := range bt.BlockedBy {
+					blockers[i] = fmt.Sprintf("[%s] %s", b.ID, b.Subject)
+				}
+				fmt.Fprintf(&b, "  [%s] %s ← 等待: %s\n", bt.Task.ID, bt.Task.Subject, strings.Join(blockers, ", "))
+			}
+		}
+
+		return b.String(), nil
+	}
+
 	r.Register(&Tool{
 		Name:       "update_tasks",
 		SystemTool: true,
@@ -63,72 +131,39 @@ func registerTaskTools(r *Registry, root string) {
 			},
 			"required": []string{"tasks"},
 		},
-		Handler: func(ctx context.Context, args map[string]any) (string, error) {
-			tasksRaw, _ := args["tasks"].([]any)
-			if len(tasksRaw) == 0 {
-				return "", fmt.Errorf("tasks 为空")
-			}
+		Handler: updateTasksHandler,
+	})
 
-			newTasks := make([]Task, 0, len(tasksRaw))
-			for _, raw := range tasksRaw {
-				m, ok := raw.(map[string]any)
-				if !ok {
-					continue
-				}
-				t := Task{
-					Subject:      argStr(m, "subject"),
-					Description:  argStr(m, "description"),
-					Status:       TaskPending,
-					Dependencies: strSliceArg(m, "dependencies"),
-				}
-				if id := argStr(m, "id"); id != "" {
-					t.ID = id
-				}
-				if s := argStr(m, "status"); s != "" {
-					t.Status = TaskStatus(s)
-				}
-				if pis, ok := m["plan_step_index"]; ok {
-					if idx, ok2 := toFloat64(pis); ok2 {
-						pi := int(idx)
-						t.PlanStepIndex = &pi
-					}
-				}
-				newTasks = append(newTasks, t)
-			}
-
-			if err := tm.ReplaceAll(newTasks); err != nil {
-				return "", fmt.Errorf("保存任务失败: %w", err)
-			}
-
-			summary := tm.GetSummary()
-			bar := buildProgressBar(summary.Completed, summary.Total, 20)
-			ready := tm.GetReady()
-			blocked := tm.GetBlocked()
-
-			var b strings.Builder
-			fmt.Fprintf(&b, "任务列表已更新：共 %d 项（%d 完成，%d 进行中，%d 待执行）\n",
-				summary.Total, summary.Completed, summary.InProgress, summary.Pending)
-			fmt.Fprintf(&b, "进度: %s %d/%d (%.0f%%)\n", bar, summary.Completed, summary.Total, pct(summary.Completed, summary.Total))
-
-			if len(ready) > 0 {
-				fmt.Fprintf(&b, "\n[进行中] 可执行任务:\n")
-				for _, t := range ready {
-					fmt.Fprintf(&b, "  [%s] %s\n", t.ID, t.Subject)
-				}
-			}
-			if len(blocked) > 0 {
-				fmt.Fprintf(&b, "\n⛔ 阻塞任务 (%d):\n", len(blocked))
-				for _, bt := range blocked {
-					blockers := make([]string, len(bt.BlockedBy))
-					for i, b := range bt.BlockedBy {
-						blockers[i] = fmt.Sprintf("[%s] %s", b.ID, b.Subject)
-					}
-					fmt.Fprintf(&b, "  [%s] %s ← 等待: %s\n", bt.Task.ID, bt.Task.Subject, strings.Join(blockers, ", "))
-				}
-			}
-
-			return b.String(), nil
+	// ★ 2026-09 Round2（R2-7）：todo_write 别名宿主存档（DSH todo_write 命名对齐）——
+	//   tool-system 插件注册同名工具时经 ctx.hostTool.exec 复用本执行器；
+	//   显式存档（非注册）：不占 agent 可见面，仅作宿主能力库条目。
+	ArchiveHostTool(&Tool{
+		Name:        "todo_write",
+		SystemTool:  true,
+		UsageGuide:  "管理持久化任务列表（全量替换模式；DSH todo_write 别名，语义同 update_tasks）。复杂任务（3+ 步）必须拆解为子任务并逐项追踪。每次传入完整清单，状态变化时重传整份。",
+		Description: "维护任务列表：传入完整任务清单（全量替换），系统自动持久化到磁盘（DSH todo_write 别名，语义同 update_tasks）。",
+		Parameters: map[string]any{
+			"type": "object",
+			"properties": props{
+				"tasks": map[string]any{
+					"type":        "array",
+					"description": "完整任务列表（全量；状态变化时重传整份）",
+					"items": map[string]any{
+						"type": "object",
+						"properties": props{
+							"id":          strProp("任务 ID（可选，不传则自动生成）"),
+							"subject":     strProp("任务标题，用祈使句（如\"修复登录超时\"）"),
+							"description": strProp("详细描述（可选）：做什么、涉及哪些文件"),
+							"status":      map[string]any{"type": "string", "enum": []string{"pending", "in_progress", "completed", "cancelled"}, "description": "状态"},
+							"dependencies": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "依赖的任务 ID 列表（可选）"},
+						},
+						"required": []string{"subject", "status"},
+					},
+				},
+			},
+			"required": []string{"tasks"},
 		},
+		Handler: updateTasksHandler,
 	})
 }
 

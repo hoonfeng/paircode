@@ -527,12 +527,35 @@ func mapBridgeService(svcName, method string, args map[string]any) (string, map[
 	case "fs":
 		p := argStr(args, "path")
 		switch method {
+		// ★ 2026-09 Round2（R2-9）：旧工具名（read_file/write_file/run_command/
+		//   list_files）在宿主生产注册面已不存在（磁盘插件 tool-harness/tool-shell
+		//   承载新名）——桥映射同步到 harness 命名；fs.list 无对应工具，改直连。
+		// ★ t4 F3（2026-09 t5）：R2-7 后 read 输出形态为 DSH 行号块
+		//   （<path>/<type>/<content> + "N: text" + total footer）——npm 插件
+		//   ctx.fs.read 拿到的不是原始文件文本；当前仓库无 ctx.fs.read 消费者
+		//   （仅注释示例），若第三方解析型插件出现需在桥接层剥离包装（前端专项）。
 		case "read":
-			return "read_file", map[string]any{"path": p, "offset": args["offset"], "limit": args["limit"]}, nil, nil
+			return "read", map[string]any{"path": p, "offset": args["offset"], "limit": args["limit"]}, nil, nil
 		case "write":
-			return "write_file", map[string]any{"path": p, "content": args["content"]}, nil, nil
+			return "write", map[string]any{"path": p, "content": args["content"]}, nil, nil
 		case "list":
-			return "list_files", map[string]any{"path": p, "pattern": args["pattern"]}, nil, nil
+			return "", nil, func() (string, error) {
+				root := npmPluginProjectRoot()
+				abs, err := resolvePath(root, p)
+				if err != nil {
+					return "", err
+				}
+				entries, err := os.ReadDir(abs)
+				if err != nil {
+					return "", err
+				}
+				names := make([]string, 0, len(entries))
+				for _, e := range entries {
+					names = append(names, e.Name())
+				}
+				b, _ := json.Marshal(names)
+				return string(b), nil
+			}, nil
 		case "exists":
 			return "", nil, func() (string, error) {
 				root := npmPluginProjectRoot()
@@ -586,7 +609,8 @@ func mapBridgeService(svcName, method string, args map[string]any) (string, map[
 	case "bash":
 		switch method {
 		case "exec":
-			return "run_command", map[string]any{"command": argStr(args, "command")}, nil, nil
+			// R2-9：run_command → bash（tool-harness 插件承载）
+			return "bash", map[string]any{"command": argStr(args, "command")}, nil, nil
 		}
 		return "", nil, nil, fmt.Errorf("未知 bash 服务方法: %s", method)
 	}

@@ -44,7 +44,7 @@
 | 函数 | 工具 | 文件 |
 |---|---|---|
 | `registerAssetTools` | asset_list / asset_search / asset_delete | `internal/agent/asset_tools.go:24` |
-| `registerBridgeTools` | bridge_status / bridge_takeover / bridge_release / bridge_exec / bridge_register_system_tool | `internal/agent/bridge_tools.go:26` |
+| `registerBridgeTools` | bridge_status / bridge_takeover / bridge_lockdown / bridge_exec / bridge_register_system_tool | `internal/agent/bridge_tools.go:26` |
 | `registerEntryConfigTools` | find_entry_points / find_config_files | `internal/agent/entryconfig.go:247` |
 | `registerEvolutionTools` | evolution_save_capsule / evolution_search_capsules / evolution_save_gene / evolution_status | `internal/agent/evolution_tools.go:14` |
 | `registerProgressChecker` | progress_checker | `internal/agent/progress_checker.go:14` |

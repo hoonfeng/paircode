@@ -35,38 +35,40 @@ import (
 
 // SubAgentSpec 成员会话启动规格（插件侧 ctx.agents.start 的参数映射）。
 type SubAgentSpec struct {
-	ConvID     string   // 会话 ID（空=自动生成）
-	ParentConv string   // 父会话（队长）ID
-	Label      string   // 展示名（面板/事件用，如 team:member）
-	Team       string   // 团队 ID（归属检索用，可空）
-	Member     string   // 成员名（归属检索用，可空）
-	Task       string   // 本轮输入（用户消息文本）
-	System     string   // persona：追加到系统提示（空=宿主默认）
-	Model      string   // 模型覆盖（空=会话默认模型）
-	Provider   string   // 服务商覆盖（空=当前服务商；跨商按 models.json 解析端点与 Key）
-	WsRoot     string   // 工作区根（空=父会话/全局主根）
-	DenyTools  []string // 工具黑名单（成员不可用的工具，如队长专属工具）
-	MaxIter    int      // 单轮最大迭代（<=0 用宿主默认）
+	ConvID          string   // 会话 ID（空=自动生成）
+	ParentConv      string   // 父会话（队长）ID
+	Label           string   // 展示名（面板/事件用，如 team:member）
+	Team            string   // 团队 ID（归属检索用，可空）
+	Member          string   // 成员名（归属检索用，可空）
+	Task            string   // 本轮输入（用户消息文本）
+	System          string   // persona：追加到系统提示（空=宿主默认）
+	Model           string   // 模型覆盖（空=会话默认模型）
+	Provider        string   // 服务商覆盖（空=当前服务商；跨商按 models.json 解析端点与 Key）
+	ReasoningEffort string   // 思考档位覆盖（R2-6：none/minimal/low/medium/high/xhigh/max；空=沿用默认）
+	WsRoot          string   // 工作区根（空=父会话/全局主根）
+	DenyTools       []string // 工具黑名单（成员不可用的工具，如队长专属工具）
+	MaxIter         int      // 单轮最大迭代（<=0 用宿主默认）
 }
 
 // SubAgentRecord 成员会话记录（内存态）。
 type SubAgentRecord struct {
-	ConvID     string   `json:"convId"`
-	ParentConv string   `json:"parentConvId"`
-	Label      string   `json:"label"`
-	Team       string   `json:"team"`
-	Member     string   `json:"member"`
-	System     string   `json:"system"`
-	Model      string   `json:"model"`
-	Provider   string   `json:"provider"`
-	WsRoot     string   `json:"wsRoot"`
-	DenyTools  []string `json:"denyTools"`
-	CreatedAt  int64    `json:"createdAt"`
-	LastActive int64    `json:"lastActiveAt"`
-	Turns      int      `json:"turns"`     // 已发起轮次数
-	State      string   `json:"state"`     // running | idle | stopped
-	LastError  string   `json:"lastError"` // 最近一轮错误（空=无）
-	Pending    int      `json:"pending"`   // 排队中的消息条数
+	ConvID          string   `json:"convId"`
+	ParentConv      string   `json:"parentConvId"`
+	Label           string   `json:"label"`
+	Team            string   `json:"team"`
+	Member          string   `json:"member"`
+	System          string   `json:"system"`
+	Model           string   `json:"model"`
+	Provider        string   `json:"provider"`
+	ReasoningEffort string   `json:"reasoningEffort,omitempty"` // R2-6：成员思考档位覆盖
+	WsRoot          string   `json:"wsRoot"`
+	DenyTools       []string `json:"denyTools"`
+	CreatedAt       int64    `json:"createdAt"`
+	LastActive      int64    `json:"lastActiveAt"`
+	Turns           int      `json:"turns"`     // 已发起轮次数
+	State           string   `json:"state"`     // running | idle | stopped
+	LastError       string   `json:"lastError"` // 最近一轮错误（空=无）
+	Pending         int      `json:"pending"`   // 排队中的消息条数
 }
 
 // SubAgentSpawner 会话启动能力（web 层注入；agent 包只持接口）。
@@ -164,6 +166,7 @@ func SpawnSubAgent(spec SubAgentSpec) (*SubAgentRecord, error) {
 	rec.System = spec.System
 	rec.Model = spec.Model
 	rec.Provider = spec.Provider
+	rec.ReasoningEffort = spec.ReasoningEffort
 	rec.WsRoot = spec.WsRoot
 	rec.DenyTools = spec.DenyTools
 	rec.State = "running"

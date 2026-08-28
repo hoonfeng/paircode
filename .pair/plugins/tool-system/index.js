@@ -265,6 +265,66 @@ const tools = [
     "systemTool": true
   },
   {
+    "name": "todo_write",
+    "description": "维护任务列表：传入完整任务清单（全量替换），系统自动持久化到磁盘（DSH todo_write 别名，语义同 update_tasks）。每项包含 subject（必填）、status（pending/in_progress/completed/cancelled）、description（可选）、dependencies（可选）、plan_step_index（可选，整数）。",
+    "usageGuide": "管理持久化任务列表（全量替换模式，DSH todo_write 别名）。复杂任务（3+ 步）必须拆解为子任务并逐项追踪。每次传入完整清单，状态变化时重传整份。",
+    "parameters": {
+      "properties": {
+        "tasks": {
+          "description": "完整任务列表（全量；状态变化时重传整份）",
+          "items": {
+            "properties": {
+              "dependencies": {
+                "description": "依赖的任务 ID 列表（可选）",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "description": {
+                "description": "详细描述（可选）：做什么、涉及哪些文件",
+                "type": "string"
+              },
+              "id": {
+                "description": "任务 ID（可选，不传则自动生成）",
+                "type": "string"
+              },
+              "plan_step_index": {
+                "description": "所属 plan 步骤索引（0 基；自主模式下绑定到 update_plan 的某步）",
+                "type": "integer"
+              },
+              "status": {
+                "description": "状态",
+                "enum": [
+                  "pending",
+                  "in_progress",
+                  "completed",
+                  "cancelled"
+                ],
+                "type": "string"
+              },
+              "subject": {
+                "description": "任务标题，用祈使句（如\"修复登录超时\"）",
+                "type": "string"
+              }
+            },
+            "required": [
+              "subject",
+              "status"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "tasks"
+      ],
+      "type": "object"
+    },
+    "systemTool": true
+  },
+  {
     "name": "update_tasks",
     "description": "维护任务列表：传入完整任务清单（全量替换），系统自动持久化到磁盘。每项包含 subject（必填）、status（pending/in_progress/completed/cancelled）、description（可选）、dependencies（可选）、plan_step_index（可选，整数）。plan_step_index 用于在自主模式下将子任务绑定到 update_plan 的某个步骤（0=第1步，1=第2步…）。普通模式下忽略此字段。",
     "usageGuide": "管理持久化任务列表（全量替换模式）。复杂任务（3+ 步）必须拆解为子任务并逐项追踪。每次传入完整清单，状态变化时重传整份。系统自动持久化到磁盘。plan_step_index 用于自主模式下绑定到 update_plan 的步骤。",
@@ -326,7 +386,7 @@ const tools = [
   },
   {
     "name": "ask_user",
-    "description": "向用户提问并等待回答（用于关键决策、歧义澄清，别滥用）。question 必填；askType 可选(text/single/multi/single-with-input)，默认 text 纯文本输入；options 可选(选择类 question 的选项列表；single-with-input 时用户可另选或自定义输入)。调用会阻塞直到用户回答。",
+    "description": "向用户提问并等待回答（用于关键决策、歧义澄清，别滥用）。question 必填；askType 可选(text/single/multi/single-with-input)，默认 text 纯文本输入；options 可选(选择类 question 的选项列表；single-with-input 时用户可另选或自定义输入)。questions 可选（DSH 参考形态：一次多问，[{id, question, options?, multi_select?}]——宿主前端当前渲染单问题，传 questions 时请同时给 question 作合并文本，多问题 UI 属前端专项）。调用会阻塞直到用户回答。",
     "parameters": {
       "properties": {
         "askType": {
@@ -347,8 +407,36 @@ const tools = [
           "type": "array"
         },
         "question": {
-          "description": "向用户提出的问题",
+          "description": "向用户提出的问题（questions 数组存在时建议给合并文本）",
           "type": "string"
+        },
+        "questions": {
+          "description": "可选：一次问多个问题（DSH ask_user_question 形态，[{id, question, options?, multi_select?}]）；宿主前端当前按单问题渲染，多问题 UI 属前端专项",
+          "items": {
+            "properties": {
+              "id": {
+                "description": "问题稳定 id（回答回显用）",
+                "type": "string"
+              },
+              "multi_select": {
+                "description": "是否多选",
+                "type": "boolean"
+              },
+              "options": {
+                "description": "可选项（选择题用）",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "question": {
+                "description": "问题文本",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "type": "array"
         }
       },
       "required": [
@@ -392,8 +480,10 @@ const tools = [
 
 return {
   name: 'tool-system',
-  purpose: '系统内部工具（SystemTool + Skills/MCP/市场：update_tasks/update_plan/tool_stats/history_*/skill_*/mcp_*）——全部可更换（自动生成，迁移自内置 Go 工具组）',
+  purpose: '系统内部工具（SystemTool + Skills/MCP/市场：update_tasks/todo_write/update_plan/tool_stats/history_*/skill_*/mcp_*）——全部可更换（自动生成，迁移自内置 Go 工具组）',
   apply(ctx) {
+    // ★ R2-7 别名（DSH 命名对齐）：todo_write → update_tasks（宿主执行器同名承载）
+    const hostExec = { todo_write: 'update_tasks' }
     for (const t of tools) {
       ctx.tools.register({
         name: t.name,
@@ -404,7 +494,7 @@ return {
         requiresApproval: t.requiresApproval,
         systemTool: t.systemTool,
         parameters: t.parameters,
-        execute: (args) => ctx.hostTool.exec(t.name, args || {}),
+        execute: (args) => ctx.hostTool.exec(hostExec[t.name] || t.name, args || {}),
       })
     }
   },

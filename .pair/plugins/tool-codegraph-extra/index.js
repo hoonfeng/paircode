@@ -43,7 +43,7 @@ const tools = [
   {
     "name": "codegraph_find_by_imports",
     "description": "查找所有导入指定模块的文件。",
-    "usageGuide": "查找所有导入指定模块的文件。想了解某包被哪些文件引用时用。比 search_content 搜索 import 语句更精确（基于解析的 import 关系）。",
+    "usageGuide": "查找所有导入指定模块的文件。想了解某包被哪些文件引用时用。比 grep 搜索 import 语句更精确（基于解析的 import 关系）。",
     "parameters": {
       "properties": {
         "limit": {
@@ -202,7 +202,7 @@ const tools = [
   {
     "name": "codegraph_find_by_signature",
     "description": "按结构特征（参数数、返回类型、名称模式）查找函数。",
-    "usageGuide": "按结构特征查找函数：参数个数/返回类型/名称模式。想找「接收 string 返回 error」的函数时用。比 search_content 更原子化（基于签名匹配）。",
+    "usageGuide": "按结构特征查找函数：参数个数/返回类型/名称模式。想找「接收 string 返回 error」的函数时用。比 grep 更原子化（基于签名匹配）。",
     "parameters": {
       "properties": {
         "limit": {

@@ -201,6 +201,41 @@ func (bg *bgRegistry) get(id int) *bgProc {
 	return bg.procs[id]
 }
 
+// list 列出全部后台进程（id + 状态 + 退出错误；job_list 工具用，R2-7 DSH 对齐）。
+func (bg *bgRegistry) list() []map[string]any {
+	bg.mu.Lock()
+	defer bg.mu.Unlock()
+	ids := make([]int, 0, len(bg.procs))
+	for id := range bg.procs {
+		ids = append(ids, id)
+	}
+	sort.Ints(ids)
+	out := make([]map[string]any, 0, len(ids))
+	for _, id := range ids {
+		p := bg.procs[id]
+		if p == nil {
+			continue
+		}
+		p.mu.Lock()
+		done := p.done
+		exitErr := p.exitErr
+		p.mu.Unlock()
+		status := "running"
+		if done {
+			status = "done"
+			if exitErr != "" {
+				status = "error"
+			}
+		}
+		entry := map[string]any{"id": id, "status": status}
+		if done && exitErr != "" {
+			entry["error"] = exitErr
+		}
+		out = append(out, entry)
+	}
+	return out
+}
+
 // cleanupLocked 清理已完成且超龄的进程记录（调用方须持有 bg.mu）。
 // 仅保留最近 keepDone 个已结束进程（其输出缓冲仍可读），运行中的永不清理。
 func (bg *bgRegistry) cleanupLocked() {

@@ -163,7 +163,9 @@ func (g *RepeatSuccessGuard) Record(toolName, argsJSON string, readOnly bool) {
 
 func repeatSuccessSignature(toolName, argsJSON string) string {
 	switch toolName {
-	case "write_file", "edit_file", "multi_edit":
+	// ★ t4 F1（2026-09 t5 修复）：补 harness 新名 write/edit（tool-harness 承载），
+	//   旧名保留兼容历史消息。
+	case "write_file", "edit_file", "multi_edit", "write", "edit":
 		return toolName + "\x00" + canonicalToolArgs(argsJSON)
 	default:
 		return ""

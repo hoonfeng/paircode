@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// tool-bridge — 桌面桥接（bridge_status/bridge_takeover/bridge_release/bridge_exec/bridge_register_system_tool）
+// tool-bridge — 桌面桥接（bridge_status/bridge_takeover/bridge_lockdown/bridge_exec/bridge_register_system_tool）
 //
 // 生成来源（2026-08-16）：内置 Go 工具组 → 磁盘外置插件（tool_plugin_gen.go
 // 自动生成，schema 完整外置拷贝）。api 声明在插件，execute 调 ctx.hostTool 复用宿主 Go 执行器（对齐 harness seam：编排在插件、能力在宿主）。
@@ -47,7 +47,7 @@ const tools = [
   },
   {
     "name": "bridge_exec",
-    "description": "通过桥接执行系统命令。行为取决于当前桥接模式：\n- 桥接模式（默认）：限工作区内目录，120s 超时（同 run_command）\n- 接管模式：不限目录，不限超时（默认 5 分钟），可执行系统管理命令\n\n建议：日常开发用 run_command（标准模式），系统管理用 bridge_exec（接管模式）。",
+    "description": "通过桥接执行系统命令。行为取决于当前桥接模式：\n- 桥接模式（默认）：限工作区内目录，120s 超时（同 bash）\n- 接管模式：不限目录，不限超时（默认 5 分钟），可执行系统管理命令\n\n建议：日常开发用 bash（标准模式），系统管理用 bridge_exec（接管模式）。",
     "parameters": {
       "properties": {
         "command": {
@@ -101,7 +101,7 @@ const tools = [
 
 return {
   name: 'tool-bridge',
-  purpose: '桌面桥接（bridge_status/bridge_takeover/bridge_release/bridge_exec/bridge_register_system_tool）（自动生成，迁移自内置 Go 工具组）',
+  purpose: '桌面桥接（bridge_status/bridge_takeover/bridge_lockdown/bridge_exec/bridge_register_system_tool）（自动生成，迁移自内置 Go 工具组）',
   apply(ctx) {
     for (const t of tools) {
       ctx.tools.register({

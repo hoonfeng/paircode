@@ -9,7 +9,7 @@ const tools = [
   {
     "name": "csv_read",
     "description": "读取 CSV/TSV 文件并以 Markdown 表格形式返回内容。参数 delimiter 可选 \"comma\"（逗号, 默认）或 \"tab\"（制表符）。columns 按列索引过滤（从 0 开始，逗号分隔，如 \"0,2,3\"）。limit 限制返回行数（默认 100，-1=全部），offset 跳过前 N 行。",
-    "usageGuide": "读取 CSV/TSV 文件并以 Markdown 表格形式返回。比直接 read_file 读 CSV 更友好（自动解析分隔符+格式化表格）。delimiter 可指定 comma/tab。",
+    "usageGuide": "读取 CSV/TSV 文件并以 Markdown 表格形式返回。比直接 read 读 CSV 更友好（自动解析分隔符+格式化表格）。delimiter 可指定 comma/tab。",
     "parameters": {
       "properties": {
         "columns": {
@@ -130,7 +130,7 @@ const tools = [
   {
     "name": "text_report",
     "description": "扫描工作区目录树，按文件扩展名分组统计行数。支持统计总行数、代码行（非空非纯注释）、注释行、空行。path 限定扫描子目录（默认工作区根）；extensions 限定文件扩展名（逗号分隔，如 \".go,.ts,.vue\"）；group_by 分组方式：\"ext\"（按扩展名，默认）或 \"dir\"（按目录）。自动跳过 .git/node_modules/vendor 等目录。",
-    "usageGuide": "扫描目录树，按文件扩展名或目录分组统计代码行数。快速了解项目规模和技术栈分布。比 run_command wc -l 更智能（自动跳过 .git/node_modules+按类型分组）。",
+    "usageGuide": "扫描目录树，按文件扩展名或目录分组统计代码行数。快速了解项目规模和技术栈分布。比 bash wc -l 更智能（自动跳过 .git/node_modules+按类型分组）。",
     "parameters": {
       "properties": {
         "extensions": {
@@ -210,7 +210,7 @@ const tools = [
   {
     "name": "read_xlsx",
     "description": "读取 Microsoft Excel (.xlsx) 文件的内容，以 Markdown 表格形式返回各工作表。sheet 指定工作表名称（默认第一个）；limit 限制行数（默认 200，-1=全部）。纯 Go 标准库实现（解析 ZIP + XML），零外部依赖。",
-    "usageGuide": "读取 Excel (.xlsx) 文件内容，以 Markdown 表格形式返回。sheet 参数指定工作表名。比直接 read_file 更友好（自动解析+多 sheet 支持）。",
+    "usageGuide": "读取 Excel (.xlsx) 文件内容，以 Markdown 表格形式返回。sheet 参数指定工作表名。比直接 read 更友好（自动解析+多 sheet 支持）。",
     "parameters": {
       "properties": {
         "limit": {

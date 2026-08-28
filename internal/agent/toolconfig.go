@@ -69,19 +69,21 @@ func migrateLegacyReviewConfig(workspaceRoot string) {
 			}
 		}
 	}
-	// 合并：遗留 tools.json 是迁移前工作区生效的审核配置——迁移时以它为准
-	// （一次性；迁移后 tools.json 删除，settings.json 成为唯一来源，此后
-	// 用户经设置面板/API 修改只写 settings）
+	// 合并：仅在 settings 同字段为空/默认时采用遗留值——settings.json 已是
+	// 用户显式配置（reviewMode 非默认 auto、列表非空）时以 settings 为准，
+	// 遗留 tools.json 只补「从未配置过」的字段（一次性；迁移后 tools.json
+	// 删除，settings.json 成为唯一来源，此后用户经设置面板/API 修改只写 settings）
 	changed := false
-	if cfg.ReviewMode != "" && cfg.ReviewMode != core.Settings.ReviewMode {
+	if cfg.ReviewMode != "" && cfg.ReviewMode != "auto" &&
+		(core.Settings.ReviewMode == "" || core.Settings.ReviewMode == "auto") {
 		core.Settings.ReviewMode = cfg.ReviewMode
 		changed = true
 	}
-	if len(cfg.ReviewBlacklist) > 0 {
+	if len(cfg.ReviewBlacklist) > 0 && len(core.Settings.ReviewBlacklist) == 0 {
 		core.Settings.ReviewBlacklist = append([]string(nil), cfg.ReviewBlacklist...)
 		changed = true
 	}
-	if len(cfg.ReviewWhitelist) > 0 {
+	if len(cfg.ReviewWhitelist) > 0 && len(core.Settings.ReviewWhitelist) == 0 {
 		core.Settings.ReviewWhitelist = append([]string(nil), cfg.ReviewWhitelist...)
 		changed = true
 	}

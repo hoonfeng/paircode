@@ -49,23 +49,43 @@ func TestToolHarnessJSNative(t *testing.T) {
 		t.Fatalf("write 未创建: %v", err)
 	}
 
-	// ② read：全文 + 分页
+	// ② read：全文 + 分页（★ R2-7 DSH 对齐：行号输出 + total footer）
 	out, _ := execTool(t, reg, "read", map[string]any{"path": "x/y.txt"})
-	if !strings.Contains(out, "b") {
+	if !strings.Contains(out, "b") || !strings.Contains(out, "End of file - total 3 lines") {
 		t.Fatalf("read 全文异常: %q", out)
 	}
 	out, _ = execTool(t, reg, "read", map[string]any{"path": "x/y.txt", "offset": 2, "limit": 1})
-	if out != "b" {
+	if !strings.Contains(out, "2: b") || strings.Contains(out, "1: a") {
 		t.Fatalf("read 分页异常: %q", out)
 	}
+	// file_path 别名（DSH 参数名）等价可用
+	out, _ = execTool(t, reg, "read", map[string]any{"file_path": "x/y.txt", "offset": 3, "limit": 1})
+	if !strings.Contains(out, "3: c") {
+		t.Fatalf("read file_path 别名异常: %q", out)
+	}
 
-	// ③ edit：精确替换 + 唯一性
+	// ③ edit：精确替换 + 唯一性 + replace_all（R2-7）
 	if _, err := execTool(t, reg, "edit", map[string]any{"path": "x/y.txt", "old_string": "b", "new_string": "b2"}); err != nil {
 		t.Fatalf("edit 失败: %v", err)
 	}
 	data, _ := os.ReadFile(filepath.Join(root, "x", "y.txt"))
 	if !strings.Contains(string(data), "b2") {
 		t.Fatalf("edit 未生效: %q", string(data))
+	}
+	// 多处出现 → 默认拒绝（须唯一）
+	if err := os.WriteFile(filepath.Join(root, "x", "dup.txt"), []byte("x\ny\nx\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := execTool(t, reg, "edit", map[string]any{"path": "x/dup.txt", "old_string": "x", "new_string": "X"}); err == nil {
+		t.Fatalf("edit 多处出现应拒绝（须唯一）")
+	}
+	// replace_all=true → 全部替换
+	if _, err := execTool(t, reg, "edit", map[string]any{"path": "x/dup.txt", "old_string": "x", "new_string": "X", "replace_all": true}); err != nil {
+		t.Fatalf("edit replace_all 失败: %v", err)
+	}
+	dupData, _ := os.ReadFile(filepath.Join(root, "x", "dup.txt"))
+	if string(dupData) != "X\ny\nX\n" {
+		t.Fatalf("edit replace_all 未全部替换: %q", string(dupData))
 	}
 
 	// ④ glob：找到文件（相对路径）
@@ -83,10 +103,14 @@ func TestToolHarnessJSNative(t *testing.T) {
 		t.Fatalf("grep 异常: %q err=%v", out, err)
 	}
 
-	// ⑥ bash：ctx.bash 执行
+	// ⑥ bash：ctx.bash 执行 + timeoutMs/description 参数（R2-7 DSH 对齐）
 	out, err = execTool(t, reg, "bash", map[string]any{"command": "echo harness-js-ok"})
 	if err != nil || !strings.Contains(out, "harness-js-ok") {
 		t.Fatalf("bash 异常: %q err=%v", out, err)
+	}
+	out, err = execTool(t, reg, "bash", map[string]any{"command": "echo harness-js-ok2", "description": "echo smoke", "timeoutMs": 30000})
+	if err != nil || !strings.Contains(out, "harness-js-ok2") {
+		t.Fatalf("bash timeoutMs/description 异常: %q err=%v", out, err)
 	}
 
 	// ⑦ str_replace_editor：create → view → str_replace → insert

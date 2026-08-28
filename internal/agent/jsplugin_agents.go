@@ -73,18 +73,19 @@ func (p *jsPluginAdapter) buildAgentsService(pc *PluginContext) goja.Value {
 			panic(vm.NewTypeError("ctx.agents.start: 参数必须是对象"))
 		}
 		spec := SubAgentSpec{
-			ConvID:     mapStr(obj, "convId"),
-			ParentConv: mapStr(obj, "parentConvId"),
-			Label:      mapStr(obj, "label"),
-			Team:       mapStr(obj, "team"),
-			Member:     mapStr(obj, "member"),
-			Task:       mapStr(obj, "task"),
-			System:     mapStr(obj, "system"),
-			Model:      mapStr(obj, "model"),
-			Provider:   mapStr(obj, "provider"),
-			WsRoot:     mapStr(obj, "wsRoot"),
-			DenyTools:  mapStrSlice(obj, "denyTools"),
-			MaxIter:    mapInt(obj, "maxIterations"),
+			ConvID:          mapStr(obj, "convId"),
+			ParentConv:      mapStr(obj, "parentConvId"),
+			Label:           mapStr(obj, "label"),
+			Team:            mapStr(obj, "team"),
+			Member:          mapStr(obj, "member"),
+			Task:            mapStr(obj, "task"),
+			System:          mapStr(obj, "system"),
+			Model:           mapStr(obj, "model"),
+			Provider:        mapStr(obj, "provider"),
+			ReasoningEffort: mapStr(obj, "reasoningEffort"), // R2-6：思考档位透传
+			WsRoot:          mapStr(obj, "wsRoot"),
+			DenyTools:       mapStrSlice(obj, "denyTools"),
+			MaxIter:         mapInt(obj, "maxIterations"),
 		}
 		if spec.WsRoot == "" {
 			spec.WsRoot = p.effectiveWsRoot(pc)

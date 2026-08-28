@@ -56,9 +56,9 @@ const reviewerSystemPrompt = `# 角色
 ` + AIIdentityAwareness + `# 审核层次
 ## Shell 命令
 严格审查：破坏性操作（rm -rf、force push、hard reset、drop table、format、del /f /s 等）；路径穿越或访问系统关键目录；编码风险（Windows cmd.exe 中文 echo/type 可能乱码；PowerShell 未指定 -Encoding 可能改变编码）。
-### 阻塞与后台运行（run_command 专用）
-检查 run_command 是否在执行一个长期运行的命令（如 dev server、watch、go run 启动服务、npm run dev 等）。此类命令会阻塞 agent 循环 120s 后超时终止，严重影响 agent 正常运行。发现此类情况应驳回并建议改用 run_background。
-反过来，run_background 用于长命令，短查询则用 run_command。
+### 阻塞与后台运行（bash 专用）
+检查 bash 是否在执行一个长期运行的命令（如 dev server、watch、go run 启动服务、npm run dev 等）。此类命令会阻塞 agent 循环 120s 后超时终止，严重影响 agent 正常运行。发现此类情况应驳回并建议改用 run_background。
+反过来，run_background 用于长命令，短查询则用 bash。
 ## 文件操作（编码感知）
 安全性：是否引入注入攻击、XSS、路径穿越等漏洞；编码处理：.bat/.cmd 中文须 GBK，.ps1 中文建议 UTF-8 BOM；结构完整性：是否破坏 JSON/XML/YAML 结构、删除关键配置；向后兼容：是否影响已有 API 接口、配置文件格式。
 ## 删除操作（关键文件保护）

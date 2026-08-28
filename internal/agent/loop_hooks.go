@@ -29,6 +29,7 @@ import (
 	"log"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/hoonfeng/paircode/internal/core"
@@ -108,8 +109,17 @@ func RegisterLoopHook(event string, fn func(payload map[string]any) (bool, strin
 
 // ─── 事件触发 ───────────────────────────────────────────────
 
+// loopHookCurrentTurn 当前活动 Loop 的 turn 号（t4 L2 修复：hook payload 透传
+// 真实轮次）。Loop.openTurn/endTurn 维护；钩子触发点（Registry.Execute 等）
+// 无 Loop 引用，经此全局取号。多 Loop 并发时取最近打开的轮次（尽力而为）。
+var loopHookCurrentTurn atomic.Int64
+
 // hookPayloadOf 组装标准 payload（对齐 internal/hook.Payload 的 JSON 形态）。
+// turn<=0 时自动取当前活动 Loop 的轮次（原实现恒传 0，t4 L2 修复）。
 func hookPayloadOf(event hook.Event, toolName, argsJSON, result, prompt, cwd string, turn int) hook.Payload {
+	if turn <= 0 {
+		turn = int(loopHookCurrentTurn.Load())
+	}
 	p := hook.Payload{
 		Event: event,
 		Cwd:   cwd,

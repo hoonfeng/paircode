@@ -86,7 +86,7 @@ func genToolGroups() []genToolGroup {
 		//   走 ctx.hostTool.exec 复用——对齐 harness seam：编排在插件、能力在宿主。
 		{"tool-asset", "智能资产管理（asset_list/asset_search/asset_delete：经验胶囊 + 技能基因）",
 			registerAssetTools, nil, ""},
-		{"tool-bridge", "桌面桥接（bridge_status/bridge_takeover/bridge_release/bridge_exec/bridge_register_system_tool）",
+		{"tool-bridge", "桌面桥接（bridge_status/bridge_takeover/bridge_lockdown/bridge_exec/bridge_register_system_tool）",
 			registerBridgeTools, nil, ""},
 		{"tool-entryconfig", "入口与配置定位（find_entry_points/find_config_files）",
 			registerEntryConfigTools, nil, ""},

@@ -45,6 +45,55 @@ const MEMBER_DENIED_TOOLS = [
   'agent_teams_resume',
   'agent_teams_delete',
 ]
+
+// ─── 命名团队模板（R2-6：profiles 对齐参考 dsh-agent-teams lib/profiles.js）───
+// create(profile=…) 一键建队：固定阵容（成员角色）+ seed 任务（队长可后续
+// edit_plan 调整）。profiles 上限 MAX_TEAM_PROFILES=16（参考实现同值）。
+// 内置模板：
+//   · default         四人研发团队（analyst/engineer/verifier/reviewer）
+//   · captain-planning 队长规划型（仅 roster，任务由队长现场设计——参考
+//     profile 语义：profile 提供阵容与护栏，任务 DAG 由队长规划）
+const MAX_TEAM_PROFILES = 16
+const TEAM_PROFILES = [
+  {
+    name: 'default',
+    description: '四人研发团队：分析→实施→独立验证→代码审查（角色齐全的通用质量流水线）',
+    members: [
+      { name: 'analyst', role: 'researcher', executionPrompt: '' },
+      { name: 'engineer', role: 'engineer', executionPrompt: '' },
+      { name: 'verifier', role: 'qa', executionPrompt: '' },
+      { name: 'reviewer', role: 'reviewer', executionPrompt: '' },
+    ],
+    // ★ t4 F4（2026-09 t5 修复）：种子任务按序接线（ref/deps/reviewedTaskRef）——
+    //   seed 时静态生成流水线 DAG：requirements → implementation → verification；
+    //   review 依赖 implementation 且 reviewedTaskRef 指向其实施任务（质量门有源任务）。
+    tasks: [
+      { ref: 'req', subject: '需求分析：目标拆解与验收标准定义', assignee: 'analyst', kind: 'requirements', objective: '把团队目标拆解为可验收的需求（范围/验收/风险）', acceptance: ['需求覆盖团队目标', '验收标准可测', '含风险清单'], round: 1, deps: [] },
+      { ref: 'impl', subject: '实施：按需求落地改动并自测', assignee: 'engineer', kind: 'implementation', objective: '按需求实施改动，带自测/验证', inScope: [], acceptance: ['需求项全部实现', '改动可回滚', '有测试或验证'], verify: [], deps: ['req'] },
+      { ref: 'ver', subject: '独立验证：构建/冒烟/回归核对', assignee: 'verifier', kind: 'verification', objective: '独立验证实施结果（构建/装载/行为）', acceptance: ['验证命令全部通过', '异常项已说明'], verify: [], deps: ['impl'] },
+      { ref: 'rev', subject: '代码审查：质量门与需求对齐', assignee: 'reviewer', kind: 'review', objective: '审查实施是否满足需求且无阻塞问题', acceptance: ['审查覆盖全部改动', '结论有依据'], reviewedTaskRef: 'impl', round: 1, deps: ['impl'] },
+    ],
+  },
+  {
+    name: 'captain-planning',
+    description: '队长规划型模板：仅预置固定阵容（researcher/engineer/qa/reviewer），任务 DAG 由队长在 staged 阶段现场设计',
+    members: [
+      { name: 'researcher', role: 'researcher', executionPrompt: '' },
+      { name: 'engineer', role: 'engineer', executionPrompt: '' },
+      { name: 'verifier', role: 'qa', executionPrompt: '' },
+      { name: 'reviewer', role: 'reviewer', executionPrompt: '' },
+    ],
+    tasks: [],
+  },
+]
+function profileByName(name) {
+  const n = String(name || '').trim().toLowerCase()
+  if (!n) return null
+  return TEAM_PROFILES.find((p) => p.name === n) || null
+}
+function profileNames() {
+  return TEAM_PROFILES.map((p) => p.name).join('/')
+}
 const DEFAULT_REVIEW_POLICY = {
   requirementsMinRounds: 2,
   requirementsMaxRounds: 3,
@@ -773,6 +822,8 @@ return {
         system: persona,
         model: model,
         provider: provider,
+        // R2-6：reasoning_effort 透传（成员档位覆盖，宿主 applyThinking 下发）
+        reasoningEffort: member.reasoningEffort || '',
         wsRoot: team.wsRoot || '',
         denyTools: MEMBER_DENIED_TOOLS,
       }
@@ -946,13 +997,14 @@ return {
       // ═══ agent_teams_create（队长）═══
       {
         name: 'agent_teams_create',
-        description: 'Create a team. Use approval=required for a two-phase plan: members and tasks remain unspawned/unclaimed until the user reviews the Web plan and explicitly approves it. approval=automatic preserves the legacy immediate-execution path.',
-        usageGuide: '创建 AgentTeams 团队（当前会话成为队长）。默认 approval=required：先建暂存计划，待用户批准后再启动成员。',
+        description: 'Create a team. Use approval=required for a two-phase plan: members and tasks remain unspawned/unclaimed until the user reviews the Web plan and explicitly approves it. approval=automatic preserves the legacy immediate-execution path. Optionally pass profile=<name> to seed the roster (and seed tasks) from a named team template: available profiles are ' + profileNames() + ' (default = 四人研发质量流水线; captain-planning = 仅预置阵容、任务由队长规划).',
+        usageGuide: '创建 AgentTeams 团队（当前会话成为队长）。默认 approval=required：先建暂存计划，待用户批准后再启动成员。profile 可选：一键套用命名模板（固定阵容+seed 任务）。',
         parameters: {
           type: 'object',
           properties: {
             name: { type: 'string', description: 'Name for the new team (used as its stable id).' },
             description: { type: 'string', description: 'Team purpose / the goal the team will work on.' },
+            profile: { type: 'string', description: 'Optional named team template to seed members/tasks: ' + profileNames() + '. Defaults to none (empty roster).' },
             approval: { type: 'string', enum: ['required', 'automatic'], description: 'required stages the plan for explicit user review; automatic starts immediately. Defaults to required.' },
           },
           required: ['name'],
@@ -979,13 +1031,54 @@ return {
             wsRoot: caller.wsRoot,
             reviewPolicy: { codeMaxRounds: CFG.codeMaxRounds, maxRepairAttempts: CFG.maxRepairAttempts, requirementsMaxRounds: CFG.requirementsMaxRounds },
           }
+          // ★ R2-6 profiles：套用命名模板（成员阵容 + seed 任务；队长可后续 edit_plan 调整）
+          const prof = profileByName(args.profile)
+          if (prof) {
+            for (const pm of prof.members) {
+              team.members.push({
+                id: '', name: pm.name, role: pm.role || '',
+                provider: '', model: '', reasoningEffort: '',
+                executionPrompt: pm.executionPrompt || '',
+                joinedAt: now(), status: 'idle',
+              })
+            }
+            // ★ t4 F4（t5 修复）：两遍 seed——先建全部任务并登记 ref→id，再按
+            //   deps/reviewedTaskRef 静态接线流水线 DAG（approval=automatic
+            //   也不会乱序；review 质量门有源任务）。
+            const refToId = {}
+            const created = []
+            for (const pt of prof.tasks || []) {
+              team.taskSeq += 1
+              const task = coerceTask({
+                id: 't' + team.taskSeq, subject: pt.subject,
+                description: pt.description || '', status: 'pending',
+                assignee: pt.assignee || '', dependencies: [],
+                kind: pt.kind || 'work', round: pt.round ? Number(pt.round) : undefined,
+                objective: pt.objective, acceptance: pt.acceptance,
+                createdAt: now(), updatedAt: now(),
+              })
+              if (pt.ref) refToId[pt.ref] = task.id
+              created.push({ task, pt })
+              team.tasks.push(task)
+            }
+            for (const { task, pt } of created) {
+              task.dependencies = uniq((pt.deps || []).map((r) => refToId[r]).filter((x) => x))
+              if (pt.reviewedTaskRef && refToId[pt.reviewedTaskRef]) {
+                task.reviewedTaskId = refToId[pt.reviewedTaskRef]
+              }
+              if (task.dependencies.length > 0 || task.reviewedTaskId) {
+                task.updatedAt = now()
+              }
+            }
+          }
           F.mkdir(stateRoot + '/' + teamId + '/inbox', true)
           writeTeam(stateRoot, team)
+          const seeded = prof ? ' from profile "' + prof.name + '" (' + team.members.length + ' members, ' + team.tasks.length + ' seed tasks)' : ''
           if (approval === 'automatic') {
             kickTeam(caller.wsRoot, teamId).catch(() => {})
-            return 'Team "' + name + '" created (' + teamId + ') in running mode with no members yet; add members with agent_teams_add_member.'
+            return 'Team "' + name + '" created (' + teamId + ') in running mode' + seeded + '; add members with agent_teams_add_member.'
           }
-          return 'Team "' + name + '" created (' + teamId + ') as a staged plan. Build the roster with agent_teams_add_member and the task DAG with agent_teams_create_task, then tell the user the Web plan is ready for review.'
+          return 'Team "' + name + '" created (' + teamId + ') as a staged plan' + seeded + '. Build the roster with agent_teams_add_member and the task DAG with agent_teams_create_task, then tell the user the Web plan is ready for review.'
         },
       },
 
@@ -1021,6 +1114,7 @@ return {
               m.role = trimOpt(op.role)
               if (op.provider !== undefined) m.provider = trimOpt(op.provider) || ''
               if (op.model !== undefined) m.model = trimOpt(op.model) || ''
+              if (op.reasoningEffort !== undefined) m.reasoningEffort = trimOpt(op.reasoningEffort)
               if (op.executionPrompt !== undefined) m.executionPrompt = trimOpt(op.executionPrompt)
             } else if (action === 'update_task') {
               const t = taskById(team, String(op.taskId || ''))
@@ -1117,6 +1211,7 @@ return {
             role: trimOpt(args.role),
             provider: trimOpt(args.provider) || (cur && cur.provider) || '',
             model: model,
+            reasoningEffort: trimOpt(args.reasoningEffort),
             executionPrompt: trimOpt(args.executionPrompt),
             joinedAt: now(), status: 'idle',
           }
@@ -1599,7 +1694,7 @@ return {
         const unread = readUnreadMailbox(stateRoot, team.id, m.name).length
         return {
           id: m.id, name: m.name, role: m.role || '',
-          provider: m.provider || '', model: m.model || '', reasoningEffort: '',
+          provider: m.provider || '', model: m.model || '', reasoningEffort: m.reasoningEffort || '',
           executionPrompt: m.executionPrompt || '', status: m.status,
           activity: m.status === 'removed' ? 'unknown' : (activityByConv[m.id] || 'idle'),
           progress: owned.length === 0 ? 0 : Math.round((done / owned.length) * 100),

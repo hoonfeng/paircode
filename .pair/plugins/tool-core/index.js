@@ -1,6 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// tool-core — 核心文件工具（read_file/write_file/edit_file/
-// multi_edit/run_command/move_file/delete_file）
+// tool-core — 核心文件工具（multi_edit/move_file/delete_file）
 //
 // 迁移来源（2026-08-16）：内置 registerCoreTools（internal/agent/tools.go）
 // → 磁盘外置插件。2026-08-16 JS 原生化：调用实现在插件内（ctx.fs/ctx.bash），
@@ -8,12 +7,14 @@
 // 层，loop.go 按元数据触发审批）。差异（记录 project.md）：无编辑快照/行号
 // 偏移追踪（editHistory）、无变更回调（UI 刷新）；project 多项目路由用
 // ../<project>/ 相对路径近似（resolvePath 多根归属检查路由）。
+// ★ 2026-09 Round2：read/write/edit/bash 等 harness 名工具由 tool-harness
+//   承载，本插件仅保留 multi_edit/move_file/delete_file 三个组合工具。
 // ═══════════════════════════════════════════════════════════════
 const tools = [
   {
     name: 'multi_edit',
-    description: '对一个文件按顺序应用多处替换（edits：每项 old_string→new_string 或 line_start/line_end 行号定位）。匹配策略同 edit_file。原子：任一步失败则全部不写。保留文件原换行风格。',
-    usageGuide: '按顺序对一个文件应用多处替换。比多次 edit_file 更高效（原子提交：任一步失败全部回滚）。编辑项较多时用 multi_edit 替代多次 edit_file 调用。',
+    description: '对一个文件按顺序应用多处替换（edits：每项 old_string→new_string 或 line_start/line_end 行号定位）。匹配策略同 edit。原子：任一步失败则全部不写。保留文件原换行风格。',
+    usageGuide: '按顺序对一个文件应用多处替换。比多次 edit 更高效（原子提交：任一步失败全部回滚）。编辑项较多时用 multi_edit 替代多次 edit 调用。',
     category: '文件',
     requiresApproval: true,
     parameters: {
@@ -58,7 +59,7 @@ const tools = [
   {
     name: 'delete_file',
     description: '删除一个文件（工作区内，不可恢复，谨慎）。为安全不删目录。',
-    usageGuide: '删除工作区内的文件（不可恢复，谨慎）。为安全不删目录（删除目录请用 run_command rmdir）。需审核批准。',
+    usageGuide: '删除工作区内的文件（不可恢复，谨慎）。为安全不删目录（删除目录请用 bash rmdir）。需审核批准。',
     category: '文件',
     requiresApproval: true,
     parameters: {
@@ -96,12 +97,12 @@ function detectEOL(text) {
 function readFileText(ctx, args, path) {
   const text = ctx.fs.readFile(path)
   if (text.includes('\0')) {
-    throw new Error('「' + args.path + '」是二进制文件，read_file 不支持读取二进制内容；请用 inspect_binary 工具查看（hexdump/类型嗅探）')
+    throw new Error('「' + args.path + '」是二进制文件，read 不支持读取二进制内容；请用 inspect_binary 工具查看（hexdump/类型嗅探）')
   }
   return text
 }
 
-// read_file：offset/limit 分页 + 2000 行截断
+// read：offset/limit 分页 + 2000 行截断
 function readFile(ctx, args) {
   const path = projPath(ctx, args, args.path)
   const text = readFileText(ctx, args, path)
@@ -123,7 +124,7 @@ function readFile(ctx, args) {
   return lines.slice(start, end).join('\n')
 }
 
-// write_file：父目录自动创建
+// write：父目录自动创建
 function writeFile(ctx, args) {
   const path = projPath(ctx, args, args.path)
   const slash = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
@@ -184,7 +185,7 @@ function applyEdit(text, ed) {
   return { ok: true, text: text.slice(0, candidates[0]) + newStr + text.slice(candidates[0] + oldStr.length) }
 }
 
-// edit_file
+// edit
 function editFile(ctx, args) {
   const path = projPath(ctx, args, args.path)
   const text = readFileText(ctx, args, path)
@@ -208,7 +209,7 @@ function multiEdit(ctx, args) {
   return '已应用 ' + edits.length + ' 处编辑到 ' + args.path
 }
 
-// run_command：ctx.bash（120s 超时 + 输出截断由宿主保证）
+// bash：ctx.bash（120s 超时 + 输出截断由宿主保证）
 function runCommand(ctx, args) {
   const cwd = args.project ? '../' + String(args.project).replace(/[\/]+$/, '') + (args.cwd ? '/' + args.cwd : '') : (args.cwd || '')
   const res = ctx.bash.exec(String(args.command || ''), cwd)
@@ -241,7 +242,7 @@ const impls = {
 return {
   name: 'tool-core',
   inject: ['fs', 'bash'],
-  purpose: '核心文件工具（read_file/write_file/edit_file/multi_edit/run_command/move_file/delete_file）——迁移自内置 registerCoreTools；调用实现（JS 编排 ctx.fs/ctx.bash）完全在插件内',
+  purpose: '核心文件工具（multi_edit/move_file/delete_file）——迁移自内置 registerCoreTools；调用实现（JS 编排 ctx.fs/ctx.bash）完全在插件内（Round2：read/write/edit/bash 由 tool-harness 承载）',
   apply(ctx) {
     for (const t of tools) {
       ctx.tools.register({

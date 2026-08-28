@@ -38,8 +38,8 @@ const tools = [
   },
   {
     "name": "debug_run_capture",
-    "description": "运行指定命令并捕获完整输出。适用于调试场景：运行目标程序，捕获所有 stdout/stderr，报告退出码和执行耗时。与 run_command 不同：输出不截断、明确报告退出码、包含耗时统计。配合 debug_inject_log 使用：注入日志 → 运行捕获 → 分析输出。",
-    "usageGuide": "运行程序并捕获完整输出（stdout+stderr+exit code+耗时）。比手动 run_command 更专注于调试场景：输出无限、报告退出码、包含耗时。支持超时控制。",
+    "description": "运行指定命令并捕获完整输出。适用于调试场景：运行目标程序，捕获所有 stdout/stderr，报告退出码和执行耗时。与 bash 不同：输出不截断、明确报告退出码、包含耗时统计。配合 debug_inject_log 使用：注入日志 → 运行捕获 → 分析输出。",
+    "usageGuide": "运行程序并捕获完整输出（stdout+stderr+exit code+耗时）。比手动 bash 更专注于调试场景：输出无限、报告退出码、包含耗时。支持超时控制。",
     "parameters": {
       "properties": {
         "command": {

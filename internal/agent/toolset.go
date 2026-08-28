@@ -535,6 +535,28 @@ type GlobalPluginPackage struct {
 	Config  map[string]any `json:"config,omitempty"`  // 插件配置（透传 apply(ctx, config)）
 }
 
+// diskPluginCodeAvailable 磁盘插件包是否存在且 main 源码非空（R2-8 去重用）。
+// 与 LoadGlobalPlugins 的装载判定同源：package.json 有效 + main 文件可读非空。
+func diskPluginCodeAvailable(name string) bool {
+	if name == "" {
+		return false
+	}
+	dir := filepath.Join(globalPluginsDir(), name)
+	data, err := os.ReadFile(filepath.Join(dir, "package.json"))
+	if err != nil {
+		return false
+	}
+	var pkg GlobalPluginPackage
+	if err := json.Unmarshal(data, &pkg); err != nil || pkg.Name == "" || pkg.Main == "" {
+		return false
+	}
+	code, err := os.ReadFile(filepath.Join(dir, pkg.Main))
+	if err != nil || strings.TrimSpace(string(code)) == "" {
+		return false
+	}
+	return true
+}
+
 // LoadGlobalPlugins 装配全部全局插件包（启动时调用；失败不致命）。返回成功装载数。
 // ★ 插件包形态：<InstallDir>/.pair/plugins/<name>/package.json + 源码文件。
 func LoadGlobalPlugins(ph *PluginHost) int {
@@ -1065,6 +1087,15 @@ func applyToolsetPlugin(ph *PluginHost, p *ToolsetPlugin) error {
 				}
 			}
 		}
+		return nil
+	}
+	// ★ 2026-09 Round2（R2-8）工具集去重：内嵌 code 与磁盘插件双份时，磁盘包
+	//   是实现载体（装载时序 installToolset → LoadGlobalPlugins，磁盘同名重定义
+	//   最终生效；default.json 内嵌 code 是冗余陈旧拷贝，agent-teams 差异最大）。
+	//   此处直接跳过内嵌装载（条目降级为 name-only 白名单声明，工具由磁盘包
+	//   注册；DisabledTools 经可见性收敛白名单（−DisabledTools）同样生效）。
+	//   磁盘包缺失/无效时回退内嵌 code（兼容仅工具集形态的插件）。
+	if strings.TrimSpace(p.Code) != "" && p.Builtin == "" && diskPluginCodeAvailable(p.Name) {
 		return nil
 	}
 	if strings.TrimSpace(p.Code) == "" {

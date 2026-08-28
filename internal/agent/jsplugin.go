@@ -914,6 +914,10 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 		}
 		return vm.ToValue(map[string]any{"ok": true, "id": id})
 	})
+	// ctx.process.list：列出全部后台进程（job_list 工具用，R2-7 DSH 对齐）。
+	processObj.Set("list", func(call goja.FunctionCall) goja.Value {
+		return vm.ToValue(globalBG.list())
+	})
 	// ctx.process.exec：argv 数组执行（★ 2026-08-22 新增——无 shell 注入，
 	// 对齐 Go 原版 exec.CommandContext，供 tool-git/tool-debug/tool-bug 等
 	// CLI 封装型磁盘插件 JS 原生化使用）。

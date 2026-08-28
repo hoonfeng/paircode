@@ -27,7 +27,7 @@ var legacyToolGroups = []struct {
 	desc     string
 }{
 	{registerAssetTools, "智能资产管理（asset_list/asset_search/asset_delete）"},
-	{registerBridgeTools, "桌面桥接（bridge_status/takeover/release/exec/register_system_tool）"},
+	{registerBridgeTools, "桌面桥接（bridge_status/takeover/lockdown/exec/register_system_tool）"},
 	{registerEntryConfigTools, "入口与配置定位（find_entry_points/find_config_files）"},
 	{registerEvolutionTools, "进化系统（evolution_save_capsule/search_capsules/save_gene/status）"},
 	{registerProgressChecker, "进度检查（progress_checker）"},
