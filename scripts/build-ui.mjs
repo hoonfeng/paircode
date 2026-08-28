@@ -18,9 +18,28 @@
 import { createRequire } from 'node:module'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { readdirSync, rmSync, existsSync } from 'node:fs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, '..')
+
+// ★ Round3 ⑥.4 防堆积：构建前清理 cmd/companion/web-ui/dist 的历史 index-*.js
+//   bundle（14 个历史产物问题根因：壳构建输出名带 hash，未引用旧包越积越多；
+//   dist 为 //go:embed 兜底目录，只保留当前 index.html 引用的产物——
+//   sync-web-dist.mjs 同步时也会清理，此处双保险防「先 build 后 sync」顺序漏网）。
+const distDir = path.join(repoRoot, 'cmd', 'companion', 'web-ui', 'dist')
+const distAssets = path.join(distDir, 'assets')
+if (existsSync(distAssets)) {
+  let removed = 0
+  for (const f of readdirSync(distAssets)) {
+    if (/^index-.*\.js$/.test(f)) {
+      rmSync(path.join(distAssets, f), { force: true })
+      removed++
+    }
+  }
+  if (removed > 0) console.log(`[build-ui] 预清理 ${removed} 个历史 index-*.js bundle（${distAssets}）`)
+}
+
 // ★ 前端源码位于项目根独立目录 plugins-src/ui-app/（2026-08-17 迁移：.pair/plugins/ui-app-src →
 //   plugins-src/ui-app/，源码独立于插件目录；node_modules 为 junction 指向
 //   cmd/companion/web-ui/node_modules）
