@@ -1,0 +1,9 @@
+{
+  "name": "agent-teams",
+  "purpose": "多智能体团队（dsh-agent-teams 移植）：队长派生可续聊成员、任务 DAG 自动调度、质量门禁修复循环、Web 活动面板",
+  "scope": "global",
+  "type": "plugin",
+  "version": "1.0.0",
+  "main": "index.js",
+  "client": "client.js"
+}
