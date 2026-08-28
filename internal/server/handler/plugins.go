@@ -420,7 +420,6 @@ func pluginRecordSummary(rec agent.PluginRecord, reg *agent.Registry) map[string
 		"purpose":           rec.Purpose,
 		"hasClient":         rec.HasClient,
 		"clientCode":        rec.ClientCode,
-		"clientApproved":    rec.ClientApproved,
 		"defId":             rec.DefID,
 	}
 }

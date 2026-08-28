@@ -151,7 +151,7 @@ func RegisterCordisTools(registry *Registry, host *PluginHost, root string) {
 		}, "id"),
 		// ★ 2026-08-19：client 半激活审批机制整体取消（参考项目 deepseek-harness
 		//   无此机制）→ 恒 false：装载带 client 半的插件不再触发审批门，浏览器
-		//   直接装载（IsClientApproved 恒 true）。
+		//   直接装载（Round3 已删 IsClientApproved 等审批遗留）。
 		DynamicApproval: func(tc ToolCall) bool {
 			return false
 		},
@@ -172,7 +172,7 @@ func RegisterCordisTools(registry *Registry, host *PluginHost, root string) {
 				return "", err
 			}
 			// ★ 2026-08-19：client 半激活审批机制整体取消（参考项目无此机制），
-			//   不再 MarkClientApproved；浏览器直接装载全部 client 半。
+			//   浏览器直接装载全部 client 半（Round3 已删 MarkClientApproved）。
 			// 等待语义：装载成功但插件进入 waiting（inject 缺服务）
 			if def.status == PluginWaiting {
 				msg := fmt.Sprintf("插件 %s (%s v%s) 已进入 waiting：inject 声明 %v 中宿主未提供 %v。服务出现后将自动激活；可用 cordis_inspect id=%s 查看。",

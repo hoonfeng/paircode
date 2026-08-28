@@ -20,7 +20,6 @@
 package agent
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -30,8 +29,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/hoonfeng/paircode/internal/core"
 )
 
 // ─── EventBus ─────────────────────────────────────────────
@@ -400,10 +397,7 @@ type PluginRecord struct {
 	Purpose    string       `json:"purpose,omitempty"`    // 用途说明（JS 动态插件）
 	HasClient  bool         `json:"hasClient,omitempty"`  // 是否有 client 半（浏览器端）
 	ClientCode string       `json:"clientCode,omitempty"` // client 半源码（供浏览器装载；列表接口可能省略）
-	// ClientApproved client 半是否已获激活批准（cordis_run 经审批门后为 true；
-	// 浏览器仅装载已批准的 client 半）
-	ClientApproved bool     `json:"clientApproved,omitempty"`
-	DefID          string   `json:"defId,omitempty"`      // JS 动态插件定义 id（dyn-<n>）
+	DefID      string       `json:"defId,omitempty"`      // JS 动态插件定义 id（dyn-<n>）
 	PluginID       string   `json:"pluginId,omitempty"`   // 稳定插件身份（跨版本；默认=首次定义 id）
 	PkgID          string   `json:"pkgId,omitempty"`      // 当前版本 package id（pkg-<n>，不可变）
 	Versions       int      `json:"versions,omitempty"`   // 该插件累计版本数（含历史）
@@ -461,19 +455,7 @@ type PluginHost struct {
 	inspectMu sync.RWMutex
 	inspect   map[string]map[string]*InspectProvider
 
-	// ★ approvedGlobalDir global 批准文件目录覆盖（默认空=core.InstallDir()）。
-	//   测试隔离用：go test 开发态 InstallDir()=cwd=包目录，直接写会污染源码树
-	//   （internal/agent/.pair/cordis-approved.json 残留导致测试误判）。
-	approvedGlobalDir string
-
-	// ★ 已废弃（2026-08-19）：client 半激活审批机制整体取消（参考项目无此机制）。
-	//   以下字段与 load/save 函数仅为兼容保留，不再产生效果（IsClientApproved 恒
-	//   true、cordis_run 不再触发审批门）；未来如需恢复审批可复用。
-	approveMu       sync.RWMutex
-	approvedClients map[string]bool // 合并视图（global + project）[废弃]
-	approvedGlobal  map[string]bool // 全局（UI 类）批准：安装目录持久化 [废弃]
-	approvedProject map[string]bool // 项目批准：工作区持久化 [废弃]
-	root            string          // 工作区根（project 批准持久化用）
+	root string // 工作区根（project 批准持久化用；Round3 起审批机制已删，保留字段备用）
 
 	// ★ 工具对 cordis 可见性（2026-08-19）：插件面板「插件内工具」对勾控制的是
 	//   「JS 插件运行时（ctx.tools.list）能否看到该工具」，与 agent 可见性
@@ -714,9 +696,6 @@ func NewPluginHost(registry *Registry, store ConversationStore, root string) *Pl
 		pluginVars:      map[string][]*PromptVariable{},
 		toolOwner:       map[string]string{},
 		templates:       map[string]*ToolsetTemplate{},
-		approvedClients: map[string]bool{},
-		approvedGlobal:  map[string]bool{},
-		approvedProject: map[string]bool{},
 		root:            root,
 	}
 	h.ctx = &PluginContext{
@@ -732,8 +711,6 @@ func NewPluginHost(registry *Registry, store ConversationStore, root string) *Pl
 	h.ctx.Events.SetClientHook(func(name string, payload any) { h.PushClientEvent(name, payload) })
 	// 内置 inspect provider（host: service/tool/event/plugin；client: plugin/event/service/tool）
 	registerBuiltinInspectProviders(h)
-	// 恢复跨重启的 client 半批准记录（.pair/cordis-approved.json；文件缺失/损坏不致命）
-	h.loadApprovedClients()
 
 	// ── 框架能力内联（宿主固有，不经过插件体系：不可启停、不出现在插件列表）──
 	// workspaceRoot 服务：宿主向插件生态暴露自身工作区根（原 sysinfo 插件——
@@ -750,139 +727,6 @@ func NewPluginHost(registry *Registry, store ConversationStore, root string) *Pl
 	//   不注册进 Registry，agent 可见面由插件决定）。
 	ArchiveHostLegacyTools(root)
 	return h
-}
-
-// ─── client 半激活批准（已废弃）────────────────────────────
-// ★ 2026-08-19：client 半激活审批机制整体取消（参考项目 deepseek-harness 无
-//   approvedClientPackages 机制，属自行添加）→ IsClientApproved 恒 true，
-//   cordis_run 不再触发审批门。以下 load/save 函数保留仅为兼容，不再产生效果；
-//   未来如需恢复审批可复用。
-
-// approvedFilePath 按作用域返回 .pair/cordis-approved.json 绝对路径：
-//   - global：安装目录 <InstallDir>/.pair/（UI 类插件跨工作区生效，随安装包
-//     发布——UI 插件与工作区无关；发布版打开任意工作区都不丢批准）
-//   - project：工作区 <root>/.pair/（工具插件按项目隔离）
-//
-// 未打开工作区时 project 退回安装目录（无工作区也能记录项目级批准）。
-func (h *PluginHost) approvedFilePath(scope string) string {
-	if scope == "global" {
-		base := h.approvedGlobalDir
-		if base == "" {
-			base = core.InstallDir()
-		}
-		return filepath.Join(base, ".pair", "cordis-approved.json")
-	}
-	if h.root != "" {
-		return filepath.Join(h.root, ".pair", "cordis-approved.json")
-	}
-	return filepath.Join(core.InstallDir(), ".pair", "cordis-approved.json")
-}
-
-// SetApprovedGlobalDir 覆盖 global 批准文件目录（测试隔离用；生产代码不要调用）。
-func (h *PluginHost) SetApprovedGlobalDir(dir string) {
-	h.approveMu.Lock()
-	defer h.approveMu.Unlock()
-	h.approvedGlobalDir = dir
-}
-
-// loadApprovedClients 恢复批准记录：global（安装目录）+ project（工作区）分别
-// 加载（缺文件/坏 JSON 静默），合并到 approvedClients 视图。
-// ★ 发布版用户电脑：安装目录文件随安装包存在（含全部 UI 插件批准），即使
-//
-//	用户打开了全新工作区（工作区文件缺失）也保持已批准——UI 插件与工作区无关。
-func (h *PluginHost) loadApprovedClients() {
-	h.loadApprovedFile(h.approvedFilePath("global"), h.approvedGlobal)
-	h.loadApprovedFile(h.approvedFilePath("project"), h.approvedProject)
-	h.approveMu.Lock()
-	for n := range h.approvedGlobal {
-		h.approvedClients[n] = true
-	}
-	for n := range h.approvedProject {
-		h.approvedClients[n] = true
-	}
-	h.approveMu.Unlock()
-}
-
-// loadApprovedFile 从指定文件加载批准名单到目标 map（缺文件/坏 JSON 静默）。
-func (h *PluginHost) loadApprovedFile(p string, target map[string]bool) {
-	if p == "" {
-		return
-	}
-	data, err := os.ReadFile(p)
-	if err != nil {
-		return
-	}
-	var names []string
-	if err := json.Unmarshal(data, &names); err != nil {
-		return
-	}
-	h.approveMu.Lock()
-	defer h.approveMu.Unlock()
-	for _, n := range names {
-		if n != "" {
-			target[n] = true
-		}
-	}
-}
-
-// saveApprovedClients 持久化批准记录：global → 安装目录；project → 工作区
-// （失败静默——批准生效以内存为准，重启后重批即可）。
-func (h *PluginHost) saveApprovedClients() {
-	h.saveApprovedFile(h.approvedFilePath("global"), h.approvedGlobal)
-	h.saveApprovedFile(h.approvedFilePath("project"), h.approvedProject)
-}
-
-// saveApprovedFile 把批准名单写入指定文件（失败静默）。
-func (h *PluginHost) saveApprovedFile(p string, src map[string]bool) {
-	if p == "" {
-		return
-	}
-	h.approveMu.RLock()
-	names := make([]string, 0, len(src))
-	for n := range src {
-		names = append(names, n)
-	}
-	h.approveMu.RUnlock()
-	data, err := json.MarshalIndent(names, "", "  ")
-	if err != nil {
-		return
-	}
-	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-		return
-	}
-	_ = os.WriteFile(p, data, 0o644)
-}
-
-// IsClientApproved 该插件的 client 半是否已获激活批准。
-// ★ 2026-08-19：client 半激活审批机制整体取消（参考项目 deepseek-harness 无
-//
-//	approvedClientPackages 机制，属自行添加）→ 恒 true：所有带 client 半的插件
-//	视为已批准，浏览器直接装载，无需 cordis_run 审批门、无需手动维护
-//	.pair/cordis-approved.json。保留签名兼容调用点；load/save 批准文件不再产生效果。
-func (h *PluginHost) IsClientApproved(pluginID string) bool {
-	return true
-}
-
-// MarkClientApproved 批准插件 client 半激活（cordis_run 经审批门执行成功后调用，
-// 传插件稳定身份 pluginId 与作用域 scope），按作用域持久化：
-// global（UI 类）→ 安装目录；project → 工作区。批准覆盖该插件后续版本。
-func (h *PluginHost) MarkClientApproved(pluginID, scope string) {
-	if pluginID == "" {
-		return
-	}
-	h.approveMu.Lock()
-	h.approvedClients[pluginID] = true
-	if scope == "global" {
-		h.approvedGlobal[pluginID] = true
-	} else {
-		h.approvedProject[pluginID] = true
-	}
-	h.approveMu.Unlock()
-	if scope == "global" {
-		h.saveApprovedFile(h.approvedFilePath("global"), h.approvedGlobal)
-	} else {
-		h.saveApprovedFile(h.approvedFilePath("project"), h.approvedProject)
-	}
 }
 
 // ─── host→client 事件桥 ──────────────────────────────────
@@ -1398,10 +1242,6 @@ func (h *PluginHost) Inspect() []PluginRecord {
 				if d.status == PluginWaiting {
 					rec.State = "waiting"
 				}
-				// client 半激活批准状态（浏览器仅装载已批准；cordis_run 经审批门后批准）
-				if rec.HasClient {
-					rec.ClientApproved = h.IsClientApproved(d.name)
-				}
 			}
 		}
 		rec.Tools = append([]string(nil), h.pluginTools[name]...)
@@ -1452,10 +1292,6 @@ func (h *PluginHost) InspectDetail(name string) *PluginRecord {
 				rec.Diag = d.diag
 				if d.status == PluginWaiting {
 					rec.State = "waiting"
-				}
-				// client 半激活批准状态（浏览器仅装载已批准；cordis_run 经审批门后批准）
-				if rec.HasClient {
-					rec.ClientApproved = h.IsClientApproved(d.name)
 				}
 			}
 		}
