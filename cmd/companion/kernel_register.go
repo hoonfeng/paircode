@@ -48,6 +48,10 @@ func registerKernelAPIs(s *webServer) {
 	_ = agent.KernelAPIRegister("chat.rollback", "POST", "/api/chat/rollback", "回滚到指定消息", s.handleChatRollback)
 	_ = agent.KernelAPIRegister("chat.compact", "POST", "/api/chat/compact", "会话压缩", s.handleChatCompact)
 
+	// ── Slash 命令（Round3 ④.2：ctx.commands 面 HTTP 出口）──
+	_ = agent.KernelAPIRegister("commands", "GET", "/api/commands", "slash 命令清单", s.handleCommands)
+	_ = agent.KernelAPIRegister("commands.run", "POST", "/api/commands/run", "执行 slash 命令", s.handleCommandsRun)
+
 	// ── 对话列表 / 消息 ──
 	_ = agent.KernelAPIRegister("conversations", "GET,POST", "/api/conversations", "会话列表/新建", s.handleConversations)
 	_ = agent.KernelAPIRegister("conversations.byID", "GET,PUT,DELETE", "/api/conversations/*", "会话详情/重命名/删除（前缀）", s.handleConversationByID)

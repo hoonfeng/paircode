@@ -198,6 +198,16 @@
           </div>
           <div class="input-resizer" @mousedown.prevent="startInputResize" title="拖拽调整高度"></div>
           <div class="input-wrapper">
+            <!-- ★ Round3 ④.2 slash 命令菜单：输入以 "/" 开头时拉 /api/commands 提示，
+                  Enter 执行（结果由后端注入系统消息）；无匹配命令时原样发送（降级零破坏） -->
+            <div v-if="slashOpen" class="slash-menu">
+              <div v-for="(c, i) in slashMatches" :key="c.name"
+                   :class="['slash-item', { active: i === slashIndex }]"
+                   @mousedown.prevent="pickSlashCommand(c)">
+                <span class="slash-name">/{{ c.name }}</span>
+                <span class="slash-desc">{{ c.description || '' }}</span>
+              </div>
+            </div>
             <!-- ★ 2026-08-22 输入框改造：contenteditable，附件以内联 tag 渲染在输入框内（光标处），
                  不再「上方 badge 区 + 文本内 token」。tag 点 × 或 Backspace/Delete 可删除。
                  文本内容由 @input 序列化到 inputText（tag → @@attN@@ token），发送时替换为语义化引用。 -->
@@ -256,6 +266,57 @@ const toggleFocus = () => {
   state.focusMode = !state.focusMode
 }
 const inputText = ref('')
+
+// ─── slash 命令（Round3 ④.2：ctx.commands 面前端 "/" 菜单） ───
+const slashCommands = ref([])   // 全量命令清单（/api/commands）
+const slashMatches = ref([])    // 当前匹配项（前缀过滤）
+const slashOpen = ref(false)    // 菜单是否展开
+const slashIndex = ref(0)       // 当前高亮项
+// 输入以 "/" 开头时拉取命令清单（首次惰性 + 每次 send 后刷新）
+async function ensureSlashCommands() {
+  if (slashCommands.value.length) return
+  try {
+    const res = await api.listCommands()
+    slashCommands.value = (res && res.commands) || []
+  } catch (e) { slashCommands.value = [] }
+}
+function refreshSlashMenu() {
+  const text = inputText.value
+  // 仅「/name」前缀（不含空格后的参数）时展开
+  if (!text.startsWith('/')) { slashOpen.value = false; return }
+  const m = text.match(/^\/(\S*)$/)
+  if (!m) { slashOpen.value = false; return }
+  ensureSlashCommands()
+  const q = m[1].toLowerCase()
+  slashMatches.value = slashCommands.value.filter(c => (c.name || '').toLowerCase().startsWith(q)).slice(0, 8)
+  slashOpen.value = slashMatches.value.length > 0
+  slashIndex.value = 0
+}
+// 点击菜单项：填入 "/name " 并聚焦输入框
+function pickSlashCommand(c) {
+  setInputText('/' + c.name + ' ')
+  slashOpen.value = false
+  if (inputRef.value) inputRef.value.focus()
+}
+// Enter 执行：匹配命令 → runCommand（结果由后端注入系统消息）→ 原样发送命令文本；
+// 无匹配命令 → 原样发送（降级零破坏）
+async function runSlashCommand() {
+  const text = inputText.value.trim()
+  const m = text.match(/^\/(\S+)\s*(.*)$/)
+  slashOpen.value = false
+  if (!m) { sendMessage(); return }
+  const name = m[1]
+  const cmd = slashCommands.value.find(c => c.name === name)
+  if (!cmd) { sendMessage(); return } // 无匹配 → 原样发送
+  try {
+    await api.runCommand(name, { args: m[2] || '' }, state.currentConvId)
+  } catch (e) {
+    console.warn('[RP] slash 命令执行失败，原样发送:', e)
+    sendMessage()
+    return
+  }
+  sendMessage() // 命令输出已注入为系统消息，命令文本照常发送
+}
 
 // ─── composer 模型选择器（★ 2026-08-20 同步 AI 配置列表模式：服务商/Key/思考均由配置决定，聊天面板只留模型下拉）───
 const modelData = ref(null)
@@ -570,9 +631,10 @@ function syncInput() {
   reconcileAttachments()
 }
 
-// onInput 输入事件：同步 inputText + 附件对账
+// onInput 输入事件：同步 inputText + 附件对账 + slash 菜单刷新（Round3 ④.2）
 function onInput() {
   syncInput()
+  refreshSlashMenu()
 }
 
 // setInputText 程序化设置输入框内容（继续任务/切换对话/清空）：重建为纯文本节点
@@ -583,6 +645,7 @@ function setInputText(text) {
   if (text) el.appendChild(document.createTextNode(text))
   inputText.value = text
   reconcileAttachments()
+  refreshSlashMenu()
 }
 
 // insertTextAtCursor 光标处插入纯文本（多行 → <br> 分段；无焦点追加末尾）
@@ -1481,7 +1544,19 @@ function handleTagEdgeDelete(e) {
 
 const onKeydown = (e) => {
   if (e.isComposing || e.keyCode === 229) return // IME 组合中不处理
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!state.chatLoading) sendMessage(); return }
+  // slash 菜单导航（Round3 ④.2）
+  if (slashOpen.value) {
+    if (e.key === 'ArrowDown') { e.preventDefault(); slashIndex.value = (slashIndex.value + 1) % slashMatches.value.length; return }
+    if (e.key === 'ArrowUp') { e.preventDefault(); slashIndex.value = (slashIndex.value - 1 + slashMatches.value.length) % slashMatches.value.length; return }
+    if (e.key === 'Escape') { slashOpen.value = false; return }
+  }
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault()
+    if (state.chatLoading) return
+    if (slashOpen.value) { runSlashCommand(); return }
+    sendMessage()
+    return
+  }
   if (e.key === 'Backspace' || e.key === 'Delete') handleTagEdgeDelete(e)
 }
 
@@ -2322,7 +2397,13 @@ onUnmounted(() => {
 }
 .resume-btn:hover { background: rgba(232, 172, 82, 0.4); }
 .input-resizer { position: absolute; top: -8px; left: 0; right: 0; height: 12px; cursor: ns-resize; z-index: 10; }
-.input-wrapper { background: var(--input-bg); border: 1px solid var(--border-color); border-radius: 10px; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+.input-wrapper { position: relative; background: var(--input-bg); border: 1px solid var(--border-color); border-radius: 10px; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+/* ★ Round3 ④.2 slash 命令菜单（输入 "/" 前缀时显示在输入框上方） */
+.slash-menu { position: absolute; left: 0; right: 0; bottom: 100%; margin-bottom: 6px; background: var(--panel-bg, #1f2430); border: 1px solid var(--border-color); border-radius: 10px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35); max-height: 280px; overflow-y: auto; z-index: 60; padding: 4px; }
+.slash-item { display: flex; align-items: baseline; gap: 10px; padding: 7px 10px; border-radius: 7px; cursor: pointer; }
+.slash-item.active { background: rgba(0, 120, 212, 0.16); }
+.slash-name { font-family: var(--mono-font, monospace); color: #4daafc; font-size: 13px; flex-shrink: 0; }
+.slash-desc { color: var(--text-muted, #9aa4b2); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* ★ 2026-08-21 可视优化：输入框聚焦时 accent 描边（键盘可达性/审美） */
 .input-wrapper:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-ring); }
 /* ★ 2026-08-22 contenteditable 输入框改造：附件内联 tag 渲染在输入框内 */

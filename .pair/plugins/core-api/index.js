@@ -37,6 +37,9 @@ const ROUTES = [
   { key: 'chat.feedback' },
   { key: 'chat.rollback' },
   { key: 'chat.compact' },
+  // Slash 命令（Round3 ④.2）
+  { key: 'commands' },
+  { key: 'commands.run' },
   // 会话列表
   { key: 'conversations' },
   { key: 'conversations.byID' },

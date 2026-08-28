@@ -734,7 +734,7 @@ function nextReadyTask(tasks, memberName) {
 return {
   name: 'agent-teams',
   // ctx.webServer 供 HTTP 路由；此处不需要（ctx.http 就够）——inject 声明按需
-  inject: ['fs', 'logger', 'timer', 'agents', 'llm', 'app', 'http'],
+  inject: ['fs', 'logger', 'timer', 'agents', 'llm', 'app', 'http', 'commands'],
   purpose: '多智能体团队（dsh-agent-teams 移植）：队长派生可续聊成员、任务 DAG 自动调度、质量门禁修复循环、Web 活动面板',
   apply(ctx) {
     F = ctx.fs
@@ -752,10 +752,16 @@ return {
       codeMaxRounds: Number(settings.codeMaxRounds || DEFAULT_REVIEW_POLICY.codeMaxRounds),
       maxRepairAttempts: Number(settings.maxRepairAttempts || DEFAULT_REVIEW_POLICY.maxRepairAttempts),
       requirementsMaxRounds: Number(settings.requirementsMaxRounds || DEFAULT_REVIEW_POLICY.requirementsMaxRounds),
+      // ★ Round3 ④.1：成员会话提供方式——'spawn'（新会话，默认，行为不变）|
+      //   'fork'（以队长会话消息快照派生，DSH subagent_fork 对齐；persona 经 system 覆盖）。
+      //   配置来源：插件设置 memberProvider → 环境变量 AGENT_TEAMS_MEMBER_PROVIDER → 默认 spawn。
+      memberProvider: trimOpt(settings.memberProvider) ||
+        (typeof process !== 'undefined' && process.env ? trimOpt(process.env.AGENT_TEAMS_MEMBER_PROVIDER) : '') || 'spawn',
     }
     if (CFG.maxMembers < 0) CFG.maxMembers = 8
     if (CFG.codeMaxRounds <= 0) CFG.codeMaxRounds = DEFAULT_REVIEW_POLICY.codeMaxRounds
     if (CFG.maxRepairAttempts <= 0) CFG.maxRepairAttempts = DEFAULT_REVIEW_POLICY.maxRepairAttempts
+    if (CFG.memberProvider !== 'fork') CFG.memberProvider = 'spawn' // 非法值回落 spawn
 
     // 注册配置段（设置面板可见）
     try {
@@ -766,6 +772,8 @@ return {
           { name: 'stateDir', label: '团队状态目录（工作区相对）', type: 'text', default: '.agent-teams' },
           { name: 'memberModel', label: '成员默认模型（留空=跟随队长）', type: 'text' },
           { name: 'executionPrompt', label: '成员全局执行指导', type: 'text' },
+          // Round3 ④.1：成员提供方式（spawn=新会话 / fork=队长快照派生）
+          { name: 'memberProvider', label: '成员提供方式（spawn/fork）', type: 'text', default: 'spawn' },
           { name: 'maxMembers', label: '团队规模上限', type: 'number', default: 8 },
           { name: 'codeMaxRounds', label: '代码审查轮次上限', type: 'number', default: 3 },
           { name: 'maxRepairAttempts', label: '修复尝试上限', type: 'number', default: 2 },
@@ -828,6 +836,17 @@ return {
         denyTools: MEMBER_DENIED_TOOLS,
       }
       if (team.wsRoot) spec.wsRoot = team.wsRoot
+      // ★ Round3 ④.1 memberProvider：fork 时以队长会话消息快照派生成员
+      //   （fork 种子 = 队长历史；persona 经 system 覆盖；缺失 fork 能力回落 spawn）。
+      if (CFG.memberProvider === 'fork' && captain) {
+        try {
+          const rec = ctxRef.agents.fork(Object.assign({}, spec, { forkFrom: captain }))
+          log.info('member forked: ' + member.name + ' conv=' + rec.convId + ' forkFrom=' + captain)
+          return rec
+        } catch (e) {
+          log.warn('member fork 失败，回落 spawn: ' + (e && e.message || e))
+        }
+      }
       const rec = ctxRef.agents.start(spec)
       log.info('member spawned: ' + member.name + ' conv=' + rec.convId)
       return rec
@@ -849,7 +868,7 @@ return {
           if (!team) return false
           const m = memberByName(team, member.name)
           if (!m) return false
-          spawnMember(ctx, team, m, text, null)
+          spawnMember(ctx, team, m, text, team.captainSessionId)
           return true
         }
         ctx.agents.followup(member.id, text)
@@ -1220,7 +1239,7 @@ return {
           if (team.phase === 'running') {
             memberRow.id = 'conv_sub_' + sanitizeKey(team.id) + '_' + sanitizeKey(name) + '_' + Math.floor(Math.random() * 100000)
             writeTeam(stateRoot, team)
-            try { spawnMember(ctx, team, memberRow, memberWelcome(team, name), null) } catch (e) { log.warn('add_member spawn failed: ' + e) }
+            try { spawnMember(ctx, team, memberRow, memberWelcome(team, name), team.captainSessionId) } catch (e) { log.warn('add_member spawn failed: ' + e) }
             kickMember(caller.wsRoot, team.id, name).catch(() => {})
             return 'Member "' + name + '" added and spawned in running team "' + team.name + '".'
           }
@@ -1837,13 +1856,45 @@ return {
       for (const m of team.members) {
         if (m.status === 'removed') continue
         if (m.id === '') { m.id = 'conv_sub_' + sanitizeKey(team.id) + '_' + sanitizeKey(m.name) + '_' + Math.floor(Math.random() * 100000) }
-        try { spawnMember(ctx, team, m, memberWelcome(team, m.name), null) } catch (e) { log.warn('approve spawn failed ' + m.name + ': ' + e) }
+        try { spawnMember(ctx, team, m, memberWelcome(team, m.name), team.captainSessionId) } catch (e) { log.warn('approve spawn failed ' + m.name + ': ' + e) }
       }
       writeTeam(stateRoot, team)
       const count = { members: team.members.filter((m) => m.status !== 'removed').length, tasks: team.tasks.length }
       kickTeam(team.wsRoot || SYS_WS_ROOT, team.id).catch(() => {})
       return count
     }
+
+    // ── slash 命令（Round3 ④.2）：/agent-teams 状态快照（宿主 ctx.commands 面）──
+    //   无参/status → 团队面板快照；其余子命令按需扩展。宿主不支持 commands 面
+    //   时静默降级（插件其余功能不受影响）。
+    try {
+      ctx.commands.register({
+        name: 'agent-teams',
+        description: '团队面板/状态快照（/agent-teams [status]）',
+        handler: (args) => {
+          try {
+            const sub = String((args && args.args) || '').trim().toLowerCase()
+            const teams = collectTeamsActivity() || []
+            if (sub === '' || sub === 'status') {
+              if (!teams.length) return '（当前无团队；用 agent_teams_create 创建）'
+              const rows = teams.map((t) => ({
+                id: t.id,
+                name: t.name,
+                phase: t.phase,
+                members: (t.members || []).length,
+                tasks: (t.tasks || []).length,
+                status: t.status || '',
+              }))
+              return JSON.stringify({ teams: rows }, null, 2)
+            }
+            return '可用子命令：status（默认，团队状态快照）'
+          } catch (e) {
+            return 'agent-teams 命令执行失败: ' + (e && e.message || e)
+          }
+        },
+      })
+      log.info('slash 命令 /agent-teams 已注册')
+    } catch (e) { log.warn('ctx.commands 注册失败（宿主不支持 commands 面，命令不可用）: ' + e) }
 
     // 队长会话中来自 Web 面板的批准动作 → 通过 client 方法（同时保留 HTTP 路由）
     ctx.registerClientMethod('getTeams', () => collectTeamsActivity())

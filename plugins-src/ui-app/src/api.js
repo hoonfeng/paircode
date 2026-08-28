@@ -429,6 +429,18 @@ async function answerChat(convId, answer) {
 
 }
 
+// ─── Slash 命令（Round3 ④.2：ctx.commands 面前端消费） ───────────
+
+// listCommands 获取 slash 命令清单（输入框 "/" 菜单提示）。
+async function listCommands() {
+  return apiGet('/commands')
+}
+
+// runCommand 执行 slash 命令；convId 提供时后端把结果以系统消息注入该会话。
+async function runCommand(name, args, convId) {
+  return apiPost('/commands/run', { name, args: args || {}, convId: convId || '' })
+}
+
 // 审批写工具
 
 async function approveChat(convId, approved) {
@@ -592,7 +604,7 @@ async function saveInstructions(scope, content) {
 
 }
 
-export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, isWebSocketOpen, waitForWebSocket, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatCompact, chatStop, getMessages, getMessagesCount, getModels, saveModels, getAiPresets, saveAiPreset, saveAiPresets, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, listPlugins, getPluginDetail, pluginAction, definePlugin, pluginEmit, pluginClientEvents, pluginClientState, pluginInvoke, pluginClientFailure, builtinPlugins, pluginToolToggle, getToolsets, toolsetEdit }
+export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, isWebSocketOpen, waitForWebSocket, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatCompact, chatStop, getMessages, getMessagesCount, getModels, saveModels, getAiPresets, saveAiPreset, saveAiPresets, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, listPlugins, getPluginDetail, pluginAction, definePlugin, pluginEmit, pluginClientEvents, pluginClientState, pluginInvoke, pluginClientFailure, builtinPlugins, pluginToolToggle, getToolsets, toolsetEdit, listCommands, runCommand }
 
 // ─── 插件（管理 + 使用 + host/client 事件桥）──────────────
 

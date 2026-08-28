@@ -2408,6 +2408,50 @@ func (s *webServer) handleChatAnswer(w http.ResponseWriter, r *http.Request) {
 	jsonResp(w, map[string]any{"ok": true})
 }
 
+// handleCommands GET /api/commands：slash 命令清单（前端 "/" 菜单提示）。
+func (s *webServer) handleCommands(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		jsonErr(w, "仅 GET")
+		return
+	}
+	jsonResp(w, map[string]any{"ok": true, "commands": agent.ListHostCommands()})
+}
+
+// handleCommandsRun POST /api/commands/run：执行 slash 命令；convID 提供时
+// 结果以系统消息注入该会话（前端发送原样文本后 agent 可见命令输出）。
+func (s *webServer) handleCommandsRun(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		jsonErr(w, "仅 POST")
+		return
+	}
+	var req struct {
+		Name   string         `json:"name"`
+		Args   map[string]any `json:"args"`
+		ConvID string         `json:"convId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonErr(w, err.Error())
+		return
+	}
+	if req.Name == "" {
+		jsonErr(w, "name 必填")
+		return
+	}
+	output, err := agent.RunHostCommand(req.Name, req.Args)
+	if err != nil {
+		jsonErr(w, err.Error())
+		return
+	}
+	// 结果注入对话（系统消息；持久化，刷新/续聊可见）
+	if req.ConvID != "" {
+		msg := agent.Message{Role: agent.RoleSystem, Content: "（命令 /" + req.Name + " 执行结果）\n" + output}
+		if err := agentMgr.AppendPersistedMessage(req.ConvID, msg, nil); err != nil {
+			log.Printf("[commands] 结果注入失败 conv=%s: %v", req.ConvID, err)
+		}
+	}
+	jsonResp(w, map[string]any{"ok": true, "name": req.Name, "output": output})
+}
+
 // handleChatApprove 发送审批结果。
 func (s *webServer) handleChatApprove(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {

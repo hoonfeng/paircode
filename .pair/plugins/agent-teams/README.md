@@ -58,7 +58,7 @@
 
 ## 宿主能力依赖
 
-- `ctx.agents`（start/followup/stop/status/list/lastText/ready）——成员会话编排
+- `ctx.agents`（start/fork/followup/stop/status/list/lastText/report/ready）——成员会话编排（Round3 ④.1：fork 以队长快照派生）
 - `ctx.llm`（models/current）——成员模型快照
 - `ctx.systemPrompt.section`——用法协议注入（order 117）
 - `ctx.http` / `ctx.webServer`——快照与批准路由
@@ -71,6 +71,7 @@
 | --- | --- | --- |
 | stateDir | `.agent-teams` | 团队状态目录（工作区相对） |
 | memberModel | （跟随队长） | 成员默认模型 |
+| memberProvider | `spawn` | 成员提供方式：`spawn`=全新会话（默认，行为不变）；`fork`=以队长会话消息快照派生（DSH subagent_fork 对齐，persona 经 system 覆盖；fork 能力缺失自动回落 spawn）。也可用环境变量 `AGENT_TEAMS_MEMBER_PROVIDER` 覆盖 |
 | executionPrompt | — | 成员全局执行指导 |
 | maxMembers | 8 | 团队规模上限 |
 | codeMaxRounds | 3 | 代码审查轮次上限 |

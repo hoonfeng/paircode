@@ -1524,6 +1524,9 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 		case "llm":
 			// ★ 2026-08-28：模型目录/当前模型（成员模型覆盖用）
 			ctxObj.Set("llm", p.buildLLMService(pc))
+		case "commands":
+			// ★ Round3 ④.2：slash 命令注册面（ctx.commands；卸载自动注销）
+			ctxObj.Set("commands", p.buildCommandsService(pc))
 		}
 	}
 
@@ -3026,7 +3029,7 @@ func (h *PluginHost) hasService(name string) bool {
 	//   构建的内置服务（buildContextObject 分支），与 fs/web 等同列——声明即可用，
 	//   缺失时 tools 注册仍正常（服务实现自检），不应进入 inject 等待。
 	switch name {
-	case "agents", "llm", "http":
+	case "agents", "llm", "http", "commands": // Round3 ④.2：ctx.commands 面
 		return true
 	}
 	return h.ctx.Get(name) != nil
@@ -3034,7 +3037,7 @@ func (h *PluginHost) hasService(name string) bool {
 
 // availableServices 宿主可用服务清单（供报错引导/文档展示）。
 func (h *PluginHost) availableServices() []string {
-	names := []string{"fs", "web", "bash", "sse", "ws", "logger", "timer", "tools", "events", "store", "app", "workspaceRoot", "kernel", "market", "mcp", "skill", "toolset", "npm", "plugins", "process", "agents", "llm", "http"}
+	names := []string{"fs", "web", "bash", "sse", "ws", "logger", "timer", "tools", "events", "store", "app", "workspaceRoot", "kernel", "market", "mcp", "skill", "toolset", "npm", "plugins", "process", "agents", "llm", "http", "commands"}
 	h.ctx.servicesMu.RLock()
 	for n := range h.ctx.services {
 		names = append(names, n)

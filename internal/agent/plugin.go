@@ -1016,6 +1016,8 @@ func (h *PluginHost) Unload(name string) error {
 	delete(h.pluginTools, name)
 	delete(h.pluginSections, name)
 	delete(h.pluginVars, name)
+	// ★ Round3 ④.2：插件卸载自动注销其注册的 slash 命令（无悬挂）
+	UnregisterHostCommands(name)
 	pc := h.contexts[name]
 	delete(h.contexts, name)
 	// JS 动态插件：定义状态复位（与宿主状态表一致；版本链不再显示 running）
