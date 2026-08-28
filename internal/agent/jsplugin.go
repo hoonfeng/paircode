@@ -210,7 +210,11 @@ type jsPluginAdapter struct {
 	applyFn goja.Callable
 
 	mu       sync.Mutex
-	handlers map[string]func(args any) (any, error) // harness.handle 注册的方法
+	handlers map[string]func(args any) (any, error) // harness.handle 注册（Agent 侧调用）
+	// ★ 2026-08-27 handlersUI：ctx.registerClientMethod 注册（浏览器 client 半
+	//   invoke 专用）。与 handlers 分离——invoke 执行绑定 uiWsRoot（当前主根），
+	//   harness/Agent 侧调用不绑定（保持会话上下文语义）。
+	handlersUI map[string]func(args any) (any, error)
 
 	// ★ 2026-08-23 工具调用工作区绑定（重大 BUG：切换工作区使运行中对话工具串台）：
 	//   JS 工具 execute 在 withLock（vm.Lock）内同步执行期间，记录发起方会话的
@@ -218,6 +222,14 @@ type jsPluginAdapter struct {
 	//   路径，而不是全局当前工作区（primaryWorkspaceRoot）或插件装载快照。
 	//   同 VM 同步 + vm 锁串行化保证同时只有一个绑定，读写无需加锁。
 	callWsRoot string
+
+	// ★ 2026-08-27 UI 上下文工作区绑定（与 callWsRoot 显式区分两个宿主上下文）：
+	//   浏览器 client 半 invoke（ui.invoke → registerClientMethod）是「用户当前
+	//   所见界面」的操作——执行 handler 期间绑定「invoke 发起时刻的当前主根」
+	//   （primaryWorkspaceRoot 快照），ctx 基础服务在其之上解析路径。与工具会话
+	//   绑定的 callWsRoot 互斥分层：工具执行永远走对话自己的根，UI 操作永远走
+	//   用户当前主根。VM 锁串行化保证同时只有一个绑定。
+	uiWsRoot string
 
 	timersMu   sync.Mutex
 	timers     []func() // 活动 timer 的取消函数（Unload 时统一清理）
@@ -232,11 +244,20 @@ func (p *jsPluginAdapter) toolCallRoot() string { return p.callWsRoot }
 // setToolCallRoot 设置/清除当前工具调用绑定（同 withLock 内，无需锁）。
 func (p *jsPluginAdapter) setToolCallRoot(root string) { p.callWsRoot = root }
 
-// ctxServiceRoot 返回插件 ctx 服务解析路径的首选根：
-// 当前工具调用会话根（2026-08-23 工作区隔离）＞ 插件装载时工作区根。
+// uiWsRootValue 返回当前 UI invoke 绑定的主根（无绑定返回空串）。
+func (p *jsPluginAdapter) uiWsRootValue() string { return p.uiWsRoot }
+
+// ctxServiceRoot 返回插件 ctx 服务解析路径的首选根（2026-08-27 双上下文）：
+// 当前工具调用会话根（会话上下文，2026-08-23 工作区隔离）＞ UI invoke 绑定
+// 主根（UI 上下文，client 半操作跟随用户当前所见工作区）＞ 插件装载时工作区根。
+// ★ 不再回落到全局主根 primaryWorkspaceRoot：正在执行的对话（Loop/agentloop
+//   prompt 组装等非工具 JS 调用）必须保持自己的根，切换全局工作区不得带偏。
 // 必须在 withLock 内调用（JS 原生函数回调天然在 VM 锁内）。
 func (p *jsPluginAdapter) ctxServiceRoot(pc *PluginContext) string {
 	if r := p.toolCallRoot(); r != "" {
+		return r
+	}
+	if r := p.uiWsRootValue(); r != "" {
 		return r
 	}
 	return pc.WorkspaceRoot
@@ -1023,7 +1044,7 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 		if !ok {
 			panic(vm.NewTypeError("ctx.registerClientMethod: 第二参数必须是函数"))
 		}
-		registerJSHandler(vm, p, method, fn)
+		registerJSHandler(vm, p, method, fn, true)
 		p.def.addDiag(fmt.Sprintf("注册 client 方法 %s", method))
 		return goja.Undefined()
 	})
@@ -1127,7 +1148,9 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 
 	// ctx.app：宿主基本信息（可选；动态只读属性——每次访问实时读 core 包，
 	// 工作区切换后取到的是最新值）：
-	//   workspaceRoot    当前工作区根（PluginContext 快照）
+	//   workspaceRoot    当前工作区根（★ 实时主根 accessor，2026-08-27 起
+	//                     不再用 PluginContext 快照——global 插件切工作区后
+	//                     UI 显示旧工作区的根因）；
 	//   root             主工作区根（core.Root()，实时）
 	//   folders          当前工作区全部文件夹（多根，VS Code 模型；core.Folders）
 	//   projectName      工作区显示名（core.ProjectName()）
@@ -1136,12 +1159,20 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 	//   recentProjects   最近打开的工作区列表（core.Settings.RecentProjects）
 	//   workspaceFolders 持久化工作区文件夹（core.Settings.WorkspaceFolders）
 	appObj := vm.NewObject()
-	appObj.Set("workspaceRoot", pc.WorkspaceRoot)
 	defineAppProp := func(name string, fn func() any) {
 		appObj.DefineAccessorProperty(name,
 			vm.ToValue(func(goja.FunctionCall) goja.Value { return vm.ToValue(fn()) }),
 			goja.Undefined(), goja.FLAG_TRUE, goja.FLAG_TRUE)
 	}
+	// ★ 2026-08-27 workspaceRoot 从静态快照改为实时 accessor（原 appObj.Set
+	//   快照是 global 插件切工作区后 UI 显示旧工作区的根因；与 root/folders
+	//   等 accessor 组一致——每次访问取当前主根；工具执行经会话根绑定不受影响）。
+	defineAppProp("workspaceRoot", func() any {
+		if r := primaryWorkspaceRoot(); r != "" {
+			return r
+		}
+		return pc.WorkspaceRoot
+	})
 	defineAppProp("root", func() any { return core.Root() })
 	defineAppProp("folders", func() any { return core.Folders })
 	defineAppProp("projectName", func() any { return core.ProjectName() })
@@ -1351,6 +1382,12 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 			ctxObj.Set("npm", p.buildNPMService(pc))
 		case "plugins":
 			ctxObj.Set("plugins", p.buildPluginsService(pc))
+		case "agents":
+			// ★ 2026-08-28 多智能体团队支持：成员会话（可续聊子 Agent）编排
+			ctxObj.Set("agents", p.buildAgentsService(pc))
+		case "llm":
+			// ★ 2026-08-28：模型目录/当前模型（成员模型覆盖用）
+			ctxObj.Set("llm", p.buildLLMService(pc))
 		}
 	}
 
@@ -1366,13 +1403,14 @@ func (p *jsPluginAdapter) buildFSService(pc *PluginContext) goja.Value {
 	vm := p.vm
 	root := pc.WorkspaceRoot
 	resolve := func(path string) (string, error) {
-		// ★ 工作区根优先级（2026-08-23 隔离修复）：当前工具调用会话根 ＞ 全局当前
-		//   主根（原 2026-08-21 动态读取逻辑）＞ 装载快照。正在执行的对话绑定自己的
-		//   工作区，切换全局工作区不再使其工具跑进新工作区。
+		// ★ 工作区根优先级（2026-08-27 双上下文）：当前工具调用会话根 ＞ UI
+		//   invoke 绑定主根 ＞ 装载快照。不再回落全局主根 primaryWorkspaceRoot
+		//   ——正在执行的对话（Loop 内非工具 JS 调用）必须保持自己的根，切换
+		//   全局工作区不得带偏（2026-08-23 隔离修复的延伸）。
 		if r := p.toolCallRoot(); r != "" {
 			root = r
-		} else if cur := primaryWorkspaceRoot(); cur != "" {
-			root = cur
+		} else if r := p.uiWsRootValue(); r != "" {
+			root = r
 		}
 		if root == "" {
 			return "", fmt.Errorf("ctx.fs: 工作区根为空，无法解析路径 %q", path)
@@ -2752,6 +2790,7 @@ func (h *PluginHost) LoadJSDynamic(def *jsPluginDef) error {
 		vm:       vm,
 		applyFn:  applyFn,
 		handlers: map[string]func(args any) (any, error){},
+		handlersUI: map[string]func(args any) (any, error){},
 	}
 
 	// ★ D8 restart 语义（对齐 harness run mode=run）：同名插件已注册/运行 →
@@ -2847,12 +2886,19 @@ func (h *PluginHost) hasService(name string) bool {
 	case "fs", "web", "bash", "sse", "ws", "logger", "timer", "tools", "events", "store", "app", "workspaceRoot", "kernel", "market", "mcp", "skill", "toolset", "npm", "plugins", "process":
 		return true
 	}
+	// ★ 2026-08-28 多智能体团队：ctx.agents / ctx.llm / ctx.http 属按 inject
+	//   构建的内置服务（buildContextObject 分支），与 fs/web 等同列——声明即可用，
+	//   缺失时 tools 注册仍正常（服务实现自检），不应进入 inject 等待。
+	switch name {
+	case "agents", "llm", "http":
+		return true
+	}
 	return h.ctx.Get(name) != nil
 }
 
 // availableServices 宿主可用服务清单（供报错引导/文档展示）。
 func (h *PluginHost) availableServices() []string {
-	names := []string{"fs", "web", "bash", "sse", "ws", "logger", "timer", "tools", "events", "store", "app", "workspaceRoot", "kernel", "market", "mcp", "skill", "toolset", "npm", "plugins", "process"}
+	names := []string{"fs", "web", "bash", "sse", "ws", "logger", "timer", "tools", "events", "store", "app", "workspaceRoot", "kernel", "market", "mcp", "skill", "toolset", "npm", "plugins", "process", "agents", "llm", "http"}
 	h.ctx.servicesMu.RLock()
 	for n := range h.ctx.services {
 		names = append(names, n)
@@ -2900,18 +2946,50 @@ func injectHarness(vm *goja.Runtime, adapter *jsPluginAdapter, pc *PluginContext
 		if !ok {
 			panic(vm.NewTypeError("harness.handle: 第二参数必须是函数"))
 		}
-		registerJSHandler(vm, adapter, method, fn)
+		registerJSHandler(vm, adapter, method, fn, false)
 		return goja.Undefined()
 	})
 	vm.Set("harness", harnessObj)
 	return harnessObj
 }
 
-// registerJSHandler 把 JS 函数注册为 host 侧处理器（harness.handle /
-// ctx.registerClientMethod 共用存储）。浏览器 client 半可经 InvokeClientMethod
-// 远程调用（invoke RPC）；Agent 侧经 harness 调用。
-func registerJSHandler(vm *goja.Runtime, p *jsPluginAdapter, method string, fn goja.Callable) {
+// registerJSHandler 把 JS 函数注册为 host 侧处理器。ui=false 存 handlers
+// （harness.handle 注册，Agent/harness 侧调用——会话上下文，不绑定 UI 根）；
+// ui=true 存 handlersUI（ctx.registerClientMethod 注册，浏览器 client 半
+// invoke 专用——UI 上下文，执行期间绑定 invoke 发起时刻的当前主根）。
+func registerJSHandler(vm *goja.Runtime, p *jsPluginAdapter, method string, fn goja.Callable, ui bool) {
 	p.mu.Lock()
+	defer p.mu.Unlock()
+	if ui {
+		p.handlersUI[method] = func(args any) (any, error) {
+			var res goja.Value
+			var hErr error
+			// Invoke 可能来自任意 goroutine → 执行锁保护
+			p.withLock(func() {
+				// ★ 2026-08-27 UI 上下文绑定：浏览器操作代表用户当前所见界面，
+				//   跟随 invoke 发起时刻的当前主根（每次 invoke 重新取，切换
+				//   工作区即生效）；执行后清除（VM 锁串行无竞争）。
+				p.uiWsRoot = primaryWorkspaceRoot()
+				defer func() { p.uiWsRoot = "" }()
+				if e := runJSWithTimeout(p.vm, jsHandlerTimeout, func() error {
+					r, err := fn(goja.Undefined(), vm.ToValue(args))
+					res = r
+					return err
+				}); e != nil {
+					if isJSTimeout(e) {
+						hErr = fmt.Errorf("handler %s 执行超时（疑似死循环，已强制中断）", method)
+					} else {
+						hErr = fmt.Errorf("handler %s 异常: %v", method, jsErrorText(e))
+					}
+				}
+			})
+			if hErr != nil {
+				return nil, hErr
+			}
+			return res.Export(), nil
+		}
+		return
+	}
 	p.handlers[method] = func(args any) (any, error) {
 		var res goja.Value
 		var hErr error
@@ -2934,7 +3012,6 @@ func registerJSHandler(vm *goja.Runtime, p *jsPluginAdapter, method string, fn g
 		}
 		return res.Export(), nil
 	}
-	p.mu.Unlock()
 }
 
 // ─── JS 工具定义 → Go Tool 桥 ─────────────────────────────
