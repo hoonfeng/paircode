@@ -15,6 +15,7 @@
 //   - 同一阻塞条件连续 ≥3 轮 → 自动 blocked（blocked_reason 记录）
 //
 // 持久化：<wsRoot>/.pair/goals/<convID>.json（防宿主重启丢目标）。
+// 完整实施记录见 docs/plugin-round3-plan.md §10（Round3 t2）。
 // ═══════════════════════════════════════════════════════════════
 
 package agent
