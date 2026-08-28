@@ -31,7 +31,7 @@ func (l *Loop) trackCall(name, args string, failed bool) {
 
 // detectCircling 检测绕圈：从尾部倒扫，仅当「连续多次相同操作（间无其他操作）」才提示。
 // 不检测间隔重复——「build→读→改→build→读→改→build」是正常的编译修复循环，中间有不同操作，不算绕圈。
-// 「build→build→build」或「edit_file→edit_file(没先读)」才是真绕圈。
+// 「build→build→build」或「edit→edit(没先读)」才是真绕圈。
 // 返回非空=需注入的系统提示（空=未绕圈）。
 func (l *Loop) detectCircling() string {
 	n := len(l.recentCalls)

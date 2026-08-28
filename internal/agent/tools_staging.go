@@ -25,6 +25,8 @@ package agent
 // 两组各命中 8/8 与 7/8，极简面维持「读/搜/找/命令/写/编辑」基础闭环。
 
 // defaultStagedGroups 默认极简工具候选组（插件未配置时的回退值）。
+// ★ Round3：以下为「历史映射」等价表——左列旧名（read_file/run_command 等）仅作
+//   staging 对历史消息/旧配置的兼容匹配，右列新名为当前注册名；Go 注册面已零旧名。
 var defaultStagedGroups = [][]string{
 	{"read_file", "read"},                  // 读文件
 	{"search_content", "grep"},             // 内容搜索

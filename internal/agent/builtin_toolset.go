@@ -10,7 +10,7 @@
 // （名 builtin，scope=builtin，不落盘），每次访问从当前注册表 + 插件宿主实时派生：
 //
 //	builtin（内置，不可删除）
-//	├── core（内置插件组：read_file/write_file/edit_file/…）
+//	├── core（内置插件组：read/write/edit/…）
 //	├── git / codegraph / memory / project-info / binary / debug / office / …
 //	├── plugin-mgmt（cordis_* 插件管理工具）
 //	├── toolset-mgmt（toolset_* 工具集管理工具）

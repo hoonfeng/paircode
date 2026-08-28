@@ -391,7 +391,7 @@ func registerCodeGraphTools(r *Registry, root string) {
 	// ── 3. codegraph_file_structure — 文件结构树 ──
 	r.Register(&Tool{
 		Name:       "codegraph_file_structure",
-		UsageGuide: "获取指定文件的实体结构树（文件→函数/类型→方法/字段的层次）。比 list_files 更深入（了解文件内部组织）。",
+		UsageGuide: "获取指定文件的实体结构树（文件→函数/类型→方法/字段的层次）。比 glob 更深入（了解文件内部组织）。",
 		Description: "获取指定文件的实体结构树（文件→函数/类型→方法/字段的层次结构）。" +
 			"用于理解文件内部的组织结构。",
 		Parameters: objSchema(props{
@@ -445,7 +445,7 @@ func registerCodeGraphTools(r *Registry, root string) {
 	// ── 5. codegraph_class — 类型层次 ──
 	r.Register(&Tool{
 		Name:       "codegraph_class",
-		UsageGuide: "获取类型（struct/interface）的完整层次结构：字段、方法、嵌入类型。比 read_file 逐个文件翻更高效（聚合所有相关定义）。",
+		UsageGuide: "获取类型（struct/interface）的完整层次结构：字段、方法、嵌入类型。比 read 逐个文件翻更高效（聚合所有相关定义）。",
 		Description: "获取类型（struct/interface）的完整层次结构：字段、方法、嵌入类型。" +
 			"支持结构体名或接口名。",
 		Parameters: objSchema(props{
@@ -499,7 +499,7 @@ func registerCodeGraphTools(r *Registry, root string) {
 	// ── 7. codegraph_callees — 被调用者查询 ──
 	r.Register(&Tool{
 		Name:       "codegraph_callees",
-		UsageGuide: "查询指定函数内部调用了哪些函数。理解函数实现逻辑时用。比 read_file 手动翻更快（聚合被调函数列表）。",
+		UsageGuide: "查询指定函数内部调用了哪些函数。理解函数实现逻辑时用。比 read 手动翻更快（聚合被调函数列表）。",
 		Description: "查询指定的函数/方法调用了哪些其他函数。用于理解函数的内部调用情况。" +
 			"返回被调用者的名称和调用位置。",
 		Parameters: objSchema(props{
@@ -556,7 +556,7 @@ func registerCodeGraphTools(r *Registry, root string) {
 	// ── 9. codegraph_search — 代码搜索 ──
 	r.Register(&Tool{
 		Name:       "codegraph_search",
-		UsageGuide: "在代码知识图谱中搜索实体（函数/类型/变量/文件等）。scope 限定类型（function/type/variable/file）。搜函数/类型定义首选此工具，其次才是 search_content。比全文搜索精确一个数量级。",
+		UsageGuide: "在代码知识图谱中搜索实体（函数/类型/变量/文件等）。scope 限定类型（function/type/variable/file）。搜函数/类型定义首选此工具，其次才是 grep。比全文搜索精确一个数量级。",
 		Description: "在代码知识图谱中搜索实体（函数、类型、变量、文件等）。" +
 			"支持按名称搜索和按类型过滤。返回匹配实体的位置、签名和相关度评分。" +
 			"比全文搜索更精确，因为基于结构化理解而非纯文本匹配。",
@@ -690,7 +690,7 @@ func registerCodeGraphTools(r *Registry, root string) {
 	// ── 12. codegraph_get_edit_context — 编辑上下文聚合 ──
 	r.Register(&Tool{
 		Name:       "codegraph_get_edit_context",
-		UsageGuide: "获取修改某代码位置所需的完整上下文。调用 edit_file 前先用此工具获取周边代码，减少多次 read_file 的 token 消耗。",
+		UsageGuide: "获取修改某代码位置所需的完整上下文。调用 edit 前先用此工具获取周边代码，减少多次 read 的 token 消耗。",
 		Description: "获取修改某个代码位置所需的完整上下文。" +
 			"一次调用返回：符号源码、调用者列表、关联测试、近期 Git 历史、相关记忆。" +
 			"比分别调用多个工具更高效。参数 maxTokens 控制返回内容的 token 预算。",

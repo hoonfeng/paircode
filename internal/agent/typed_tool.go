@@ -8,7 +8,7 @@
 //	    Path   string `json:"path"`
 //	    Offset int    `json:"offset,omitempty"`
 //	}
-//	reg.Register(DefineTool("read_file", "读文件", func(ctx context.Context, a readArgs) (string, error) {
+//	reg.Register(DefineTool("read", "读文件", func(ctx context.Context, a readArgs) (string, error) {
 //	    return os.ReadFile(a.Path)
 //	}))
 

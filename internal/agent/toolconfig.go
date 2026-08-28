@@ -18,7 +18,7 @@ import (
 //	{
 //	  "reviewMode": "auto",
 //	  "reviewBlacklist": ["delete_file"],
-//	  "reviewWhitelist": ["read_file"]
+//	  "reviewWhitelist": ["read"]
 //	}
 //
 // ★ 旧版 tools 工具开关字段（Tools/ToolConfigItem）已随「工具集（插件化）」机制

@@ -87,7 +87,7 @@ const (
 // HookConfig is one hook as written in settings.json.
 type HookConfig struct {
 	// Match is an anchored regex selecting tools (Pre/PostToolUse only); "" or
-	// "*" = every tool. Anchored: "file" won't match "read_file" — use ".*file".
+	// "*" = every tool. Anchored: "file" won't match "read" — use ".*file".
 	Match string `json:"match,omitempty"`
 	// Command is the shell command to run (spawned through the platform shell).
 	Command string `json:"command"`

@@ -254,7 +254,7 @@ func (bc *BridgeController) ReadFile(path string) ([]byte, error) {
 	}
 
 	data, err := os.ReadFile(resolved)
-	bc.record("read_file", resolved, err)
+	bc.record("read", resolved, err)
 	return data, err
 }
 
@@ -274,11 +274,11 @@ func (bc *BridgeController) WriteFile(path string, content []byte, perm os.FileM
 	}
 
 	if err := os.MkdirAll(filepath.Dir(resolved), 0o755); err != nil {
-		bc.record("write_file", resolved, err)
+		bc.record("write", resolved, err)
 		return err
 	}
 	err := os.WriteFile(resolved, content, perm)
-	bc.record("write_file", resolved, err)
+	bc.record("write", resolved, err)
 	return err
 }
 

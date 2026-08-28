@@ -1,5 +1,5 @@
 // 后台命令工具：run_background / read_output / kill_process —— 后台跑长命令(dev server/watch)不阻塞 agent 循环。
-// Windows: cmd /C(同 run_command,UTF-8)；输出经 io.Writer 累积到带锁缓冲(有尾部上限防撑爆内存)。
+// Windows: cmd /C(同 bash,UTF-8)；输出经 io.Writer 累积到带锁缓冲(有尾部上限防撑爆内存)。
 // 注意：进程在 app 退出时不自动清理，agent 用完应自行 kill_process（健壮的 job-object 清理留后续）。
 
 package agent
@@ -265,10 +265,10 @@ func registerShellTools(r *Registry, bg *bgRegistry, root string) {
 	// run_background / read_output / kill_process — 3 个后台命令工具共享同一份 bgRegistry。
 	r.Register(&Tool{
 		Name:       "run_background",
-		UsageGuide: "后台启动一条长命令，不阻塞 agent 循环。用于 dev server、npm run dev/watch 模式、调试服务、TCP 监听——这些场景只能用此工具，不可用 run_command。返回进程 id，之后用 read_output/kill_process 控制。比 run_command 更合适的长命令：run_background（不阻塞）+ read_output（分阶段读）+ kill_process（手动停止）。",
+		UsageGuide: "后台启动一条长命令，不阻塞 agent 循环。用于 dev server、npm run dev/watch 模式、调试服务、TCP 监听——这些场景只能用此工具，不可用 bash。返回进程 id，之后用 read_output/kill_process 控制。比 bash 更合适的长命令：run_background（不阻塞）+ read_output（分阶段读）+ kill_process（手动停止）。",
 		Description: "在后台启动一条长命令，不阻塞 agent 循环（推荐用于 dev server、watch 模式、调试服务等）。" +
 			"返回进程 id，随后用 read_output 读输出、kill_process 停止。" +
-			"如果命令会长期运行或保持监听状态，优先用此工具。短查询请用 run_command。",
+			"如果命令会长期运行或保持监听状态，优先用此工具。短查询请用 bash。",
 		Parameters: objSchema(props{"command": strProp("要后台执行的命令"), "cwd": strProp("可选工作目录（工作区内）")}, "command"),
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
 			command := strings.TrimSpace(argStr(args, "command"))

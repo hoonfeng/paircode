@@ -645,7 +645,7 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 	// ★ 上下文压缩（仅 Run 开始时执行一次，兜底处理超大历史）：
 	//   跨 run 历史已在加载时经 CondenseHistory 压缩，此处再按窗口阈值检查一次，
 	//   确保即使历史未压缩 / 配置窗口较小也不会撑爆上下文。
-	//   run 内迭代不再自动压缩——早期工具输出（read_file / run_command / search 结果）
+	//   run 内迭代不再自动压缩——早期工具输出（read / bash / search 结果）
 	//   是 LLM 后续轮次引用的关键上下文，run 内压缩会把中段细节丢弃成摘要，
 	//   导致 LLM 失忆、理解力下降（2026-08-05 排查结论）。
 	msgs = l.maybeCompact(ctx, msgs)
@@ -1015,7 +1015,7 @@ func hasSystem(msgs []Message) bool {
 }
 
 // maxToolResultChars 单条工具结果注入 LLM 的最大字符数（rune）。
-// 超长结果（read_file 全文、run_command 大输出等）只保留首尾关键部分，
+// 超长结果（read 全文、bash 大输出等）只保留首尾关键部分，
 // 大幅降低历史注入体积；原始内容仍完整持久化（msgs 不动，UI 展示无损）。
 const maxToolResultChars = 9000
 

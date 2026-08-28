@@ -163,7 +163,7 @@ func registerBinaryRETools(r *Registry, root string) {
 
 	r.Register(&Tool{
 		Name:        "binary_hash",
-		UsageGuide:  "计算文件哈希（MD5+SHA1+SHA256）。用于校验文件完整性、识别样本（从恶意软件到编译产物）。比 run_command certutil -hashfile 更方便（一次性出三种哈希）。",
+		UsageGuide:  "计算文件哈希（MD5+SHA1+SHA256）。用于校验文件完整性、识别样本（从恶意软件到编译产物）。比 bash certutil -hashfile 更方便（一次性出三种哈希）。",
 		Description: "计算文件 大小 + MD5 + SHA1 + SHA256（识别样本/校验完整性）。流式计算，不全量载入。",
 		Parameters:  objSchema(props{"path": strProp("文件路径")}, "path"),
 		ReadOnly:    true,

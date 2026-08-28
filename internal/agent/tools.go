@@ -27,7 +27,7 @@ var WorkspaceRoots []string
 var FileChangeCallback func(filePath string)
 
 // ErrRetry 由 OnToolError 钩子返回，指示 Execute 用修改后的 args 重新执行 handler。
-// 用于可恢复错误（如 edit_file 匹配失败→自动降级行号定位重试）。
+// 用于可恢复错误（如 edit 匹配失败→自动降级行号定位重试）。
 // 注意：OnToolError 应通过 args（引用）设置重试参数。
 var ErrRetry = errors.New("__retry__")
 
@@ -39,7 +39,7 @@ type ToolHandler func(ctx context.Context, args map[string]any) (string, error)
 type Tool struct {
 	Name             string
 	Description      string         // 简短描述（传给 LLM function-calling）
-	UsageGuide       string         // ★ 详细使用指导：何时用此工具、注意事项、对比 run_command 的优势
+	UsageGuide       string         // ★ 详细使用指导：何时用此工具、注意事项、对比 bash 的优势
 	Category         string         // ★ 工具分类：如 "code-search", "git", "file", "web", "debug", "build", "test"
 	Parameters       map[string]any // JSON Schema
 	Handler          ToolHandler
@@ -72,7 +72,7 @@ type Registry struct {
 	OnToolError func(ctx context.Context, name string, args map[string]any, err error) (result string, replacedErr error)
 
 	// OnToolUpdate 工具执行期间流式更新回调（可选）。工具 handler 在执行过程中调用此钩子
-	// 推送中间结果（如 run_command 的逐行输出、read_file 的翻页进度）。
+	// 推送中间结果（如 bash 的逐行输出、read 的翻页进度）。
 	// callID 为工具调用 ID（空串表示非工具调用场景），partialResult 为当前累积的中间文本。
 	// 此钩子不替代最终结果，仅用于流式展示。handler 的返回值仍是正式结果。
 	OnToolUpdate func(name string, callID string, partialResult string)
@@ -400,7 +400,7 @@ func (r *Registry) Execute(ctx context.Context, name, argsJSON string) (string, 
 // RegisterHostFrameworkTools（工具实现已迁移磁盘插件 .pair/plugins/tool-*）。
 func registerCoreTools(r *Registry, root string, eh *editHistory, bg *bgRegistry) {
 	r.Register(&Tool{
-		Name:        "read_file",
+		Name:        "read",
 		UsageGuide:  "读取文件内容，限工作区内路径。大文件用 offset+limit 分页读取，避免撑爆上下文。二进制文件会自动拒绝读取，请改用 inspect_binary。比 os.ReadFile 更安全（路径越界拦截+二进制保护）。",
 		Description: "读取文件内容。path 为工作区内路径。可选 offset(起始行,1 基)+limit(行数)读片段；省略则读全文(超 2000 行只返回前 2000 行并提示用 offset/limit 翻页)。",
 		Parameters:  objSchema(props{"path": strProp("文件路径（工作区内）"), "offset": intProp("可选：起始行号(1 基)"), "limit": intProp("可选：读取行数"), "project": projectSchemaProp()}, "path"),
@@ -416,7 +416,7 @@ func registerCoreTools(r *Registry, root string, eh *editHistory, bg *bgRegistry
 			}
 			// 二进制保护：含 NULL 字节视为二进制，拒绝读取并引导 inspect_binary（避免把字节流灌进上下文）
 			if strings.IndexByte(string(data), 0) >= 0 {
-				return "", fmt.Errorf("「%s」是二进制文件，read_file 不支持读取二进制内容；请用 inspect_binary 工具查看（hexdump/类型嗅探）", argStr(args, "path"))
+				return "", fmt.Errorf("「%s」是二进制文件，read 不支持读取二进制内容；请用 inspect_binary 工具查看（hexdump/类型嗅探）", argStr(args, "path"))
 			}
 			offset, limit := argInt(args, "offset", 0), argInt(args, "limit", 0)
 			if offset <= 0 && limit <= 0 { // 全文（超 2000 行截断，提示翻页）
@@ -443,8 +443,8 @@ func registerCoreTools(r *Registry, root string, eh *editHistory, bg *bgRegistry
 	})
 
 	r.Register(&Tool{
-		Name:             "write_file",
-		UsageGuide:       "写入文件，父目录自动创建。需审核批准。比 os.WriteFile 更安全（自动快照+路径越界拦截+变更回调）。如需追加内容请先用 read_file 读入再加上新内容后 write_file 覆盖。",
+		Name:             "write",
+		UsageGuide:       "写入文件，父目录自动创建。需审核批准。比 os.WriteFile 更安全（自动快照+路径越界拦截+变更回调）。如需追加内容请先用 read 读入再加上新内容后 write 覆盖。",
 		Description:      "把 content 完整写入 path（覆盖；父目录自动创建）。",
 		Parameters:       objSchema(props{"path": strProp("文件路径"), "content": strProp("完整文件内容"), "project": projectSchemaProp()}, "path", "content"),
 		RequiresApproval: true,
@@ -469,8 +469,8 @@ func registerCoreTools(r *Registry, root string, eh *editHistory, bg *bgRegistry
 	})
 
 	r.Register(&Tool{
-		Name:       "edit_file",
-		UsageGuide: "把文件中唯一一处 old_string 替换为 new_string。内置智能匹配（CRLF 归一化+空白折叠）。匹配失败时优先用 line_start/line_end 行号定位（最可靠）。比手动 read+write 更精确（保留换行风格+行号偏移追踪+codegraph 自动注入）。仅用于小改动（≤5 行），大改动请用 write_file 写整段。",
+		Name:       "edit",
+		UsageGuide: "把文件中唯一一处 old_string 替换为 new_string。内置智能匹配（CRLF 归一化+空白折叠）。匹配失败时优先用 line_start/line_end 行号定位（最可靠）。比手动 read+write 更精确（保留换行风格+行号偏移追踪+codegraph 自动注入）。仅用于小改动（≤5 行），大改动请用 write 写整段。",
 		Description: "把文件中唯一一处 old_string 替换为 new_string。" +
 			"匹配策略（自动）：精确→CRLF归一化（兼容 Windows \\r\\n 文件与 LLM 给的 \\n）→空白折叠（容忍缩进/行尾空白/tab与空格差异）；全部失败时返回带行号上下文的诊断。" +
 			"替代方案：用 line_start/line_end 行号定位整段替换（最可靠，old_string 可选作校验）。" +
@@ -532,10 +532,10 @@ func registerCoreTools(r *Registry, root string, eh *editHistory, bg *bgRegistry
 
 	r.Register(&Tool{
 		Name:       "multi_edit",
-		UsageGuide: "按顺序对一个文件应用多处替换。比多次 edit_file 更高效（原子提交：任一步失败全部回滚）。编辑项较多时用 multi_edit 替代多次 edit_file 调用。",
+		UsageGuide: "按顺序对一个文件应用多处替换。比多次 edit 更高效（原子提交：任一步失败全部回滚）。编辑项较多时用 multi_edit 替代多次 edit 调用。",
 		Description: "对一个文件按顺序应用多处替换（edits：每项 old_string→new_string 或 line_start/line_end 行号定位）。" +
-			"匹配策略同 edit_file（精确→CRLF归一化→空白折叠→诊断）。原子：任一步失败则全部不写。" +
-			"比多次 edit_file 高效。保留文件原换行风格。",
+			"匹配策略同 edit（精确→CRLF归一化→空白折叠→诊断）。原子：任一步失败则全部不写。" +
+			"比多次 edit 高效。保留文件原换行风格。",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": props{
@@ -625,60 +625,29 @@ func registerCoreTools(r *Registry, root string, eh *editHistory, bg *bgRegistry
 	})
 
 	r.Register(&Tool{
-		Name:        "list_files",
-		UsageGuide:  "列出工作区目录下的文件和子目录（目录排前）。比 run_command dir /s 更高效（跳过 .git/node_modules、结果结构化排序）。配合 pattern 按通配符过滤文件（如 *.go）。",
-		Description: "列出目录下的文件/子目录（目录在前）。path 省略则列工作区根；pattern 可选（如 *.go）。",
-		Parameters:  objSchema(props{"path": strProp("目录路径（省略=工作区根）"), "pattern": strProp("可选通配符过滤，如 *.go")}),
-		ReadOnly:    true,
+		Name: "glob",
+		// ★ Round3：原 list_files（目录列举）+ search_files（递归查找）合并为 glob 基座
+		//   （Go 侧仅测试/归档基座；生产语义以 tool-harness JS 插件为准）。
+		//   有 pattern → 递归查找（searchFilesHandler）；仅 path → 目录列举（listFilesHandler）。
+		UsageGuide:  "列出工作区目录下的文件和子目录（目录排前），或按通配符递归查找文件。比 bash dir /s 更高效（跳过 .git/node_modules、结果结构化排序）。提供 pattern（如 *.go）时递归查找；仅给 path（或空参数）时列目录。",
+		Description: "按通配符递归查找文件（pattern 含 / 或 ** 按路径模式，如 internal/**/*.go），返回相对路径列表；pattern 省略则列出 path（省略=工作区根）下的文件/子目录（目录在前，pattern 可选过滤如 *.go）。跳过 .git/node_modules 等。",
+		Parameters: objSchema(props{
+			"path":        strProp("目录路径（省略=工作区根；列举模式）或限定子目录（查找模式）"),
+			"pattern":     strProp("可选通配符：提供则递归查找文件（如 *.go、internal/**/*.go），省略则列目录"),
+			"language":    strProp("可选：查找模式按语言过滤，如 \"go\"、\"typescript\""),
+			"max_results": intProp("可选：查找模式结果上限（默认 500）"),
+			"project":     projectSchemaProp(),
+		}),
+		ReadOnly: true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
-			rel := argStr(args, "path")
-			p := root
-			if rel != "" {
-				var err error
-				if p, err = resolvePathFor(root, args, rel); err != nil {
-					return "", err
-				}
+			if strings.TrimSpace(argStr(args, "pattern")) != "" {
+				return searchFilesHandler(root)(ctx, args) // 递归查找
 			}
-			entries, err := os.ReadDir(p)
-			if err != nil {
-				// ★ 路径不存在给明确提示（Windows 原生错误晦涩，LLM 难恢复）
-				if os.IsNotExist(err) {
-					return "", fmt.Errorf("目录不存在: %s（请确认路径在工作区内且拼写正确；可用 str_replace_editor view 列目录探查）", argStr(args, "path"))
-				}
-				return "", err
-			}
-			pattern := argStr(args, "pattern")
-			sort.SliceStable(entries, func(i, j int) bool {
-				if entries[i].IsDir() != entries[j].IsDir() {
-					return entries[i].IsDir()
-				}
-				return entries[i].Name() < entries[j].Name()
-			})
-			var b strings.Builder
-			for _, e := range entries {
-				if pattern != "" && !e.IsDir() {
-					if ok, _ := filepath.Match(pattern, e.Name()); !ok {
-						continue
-					}
-				}
-				if e.IsDir() {
-					b.WriteString(e.Name() + "/\n")
-				} else {
-					sz := int64(-1)
-					if fi, err := e.Info(); err == nil {
-						sz = fi.Size()
-					}
-					fmt.Fprintf(&b, "%s\t%d\n", e.Name(), sz)
-				}
-			}
-			if b.Len() == 0 {
-				return "（空目录或无匹配）", nil
-			}
-			return b.String(), nil
+			return listFilesHandler(root)(ctx, args) // 目录列举
 		},
 	})
 	r.Register(&Tool{
-		Name:             "run_command",
+		Name:             "bash",
 		UsageGuide:       "同步执行 shell 命令，120s 超时自动终止（内部后台执行，不阻塞 agent）。适用于构建、编译、测试、文件查询等短命令。禁止用于长期进程（dev server/npm run dev/watch 模式）——请改用 run_background。比直接手动执行更安全（路径越界拦截+输出截断 16KB+UTF-8 编码统一）。",
 		Description:      "同步执行一条 shell 命令并返回输出。适用于构建、编译、测试、文件查询等短命令（几秒内完成）。\n禁止用于以下场景（会阻塞 agent）：启动 dev server、npm run dev、go run 启动服务、watch 模式、tcp 监听、任何需保持运行的进程。此类命令请改用 run_background。",
 		Parameters:       objSchema(props{"command": strProp("要执行的命令"), "cwd": strProp("可选工作目录（工作区内，省略=根）"), "project": projectSchemaProp()}, "command"),
@@ -769,7 +738,7 @@ func registerCoreTools(r *Registry, root string, eh *editHistory, bg *bgRegistry
 
 	r.Register(&Tool{
 		Name:             "delete_file",
-		UsageGuide:       "删除工作区内的文件（不可恢复，谨慎）。为安全不删目录（删除目录请用 run_command rmdir）。需审核批准。比直接 os.Remove 更安全（只删文件不删目录+路径越界拦截）。",
+		UsageGuide:       "删除工作区内的文件（不可恢复，谨慎）。为安全不删目录（删除目录请用 bash rmdir）。需审核批准。比直接 os.Remove 更安全（只删文件不删目录+路径越界拦截）。",
 		Description:      "删除一个文件（工作区内，不可恢复，谨慎）。为安全不删目录。",
 		Parameters:       objSchema(props{"path": strProp("要删除的文件路径"), "project": projectSchemaProp()}, "path"),
 		RequiresApproval: true,
@@ -795,13 +764,34 @@ func registerCoreTools(r *Registry, root string, eh *editHistory, bg *bgRegistry
 		},
 	})
 
+	// grep：工作区内正则全文搜索（原 search_content，并入 core 组；生产语义以
+	// tool-harness JS 插件为准，Go 侧仅测试/归档基座）
+	r.Register(&Tool{
+		Name: "grep",
+		Description: "在工作区内按正则搜索文件内容，返回匹配的「相对路径:行号: 行文本」。" +
+			"pattern 为 RE2 正则；path 限定子目录（省略=根）；glob 按文件名过滤（如 *.go）；" +
+			"case_insensitive 忽略大小写；max_results 上限（默认 200）。自动跳过 .git/node_modules 等与二进制/超大文件。",
+		UsageGuide: "搜索文件内容（全文搜索）。比 bash findstr/grep 更精确（跳过 .git/node_modules、自动处理编码、结果结构化）。搜索函数/类型定义请优先用 codegraph_search（基于 AST，更精确）。",
+		Category:   "代码搜索",
+		Parameters: objSchema(props{
+			"pattern":          strProp("RE2 正则表达式"),
+			"path":             strProp("限定子目录（省略=工作区根）"),
+			"glob":             strProp("文件名通配过滤，如 *.go"),
+			"case_insensitive": boolProp("忽略大小写"),
+			"max_results":      intProp("结果行数上限（默认 200）"),
+			"project":          projectSchemaProp(),
+		}, "pattern"),
+		ReadOnly: true,
+		Handler:  searchContentHandler(root),
+	})
+
 	registerCodeGraphTools(r, root)      // codegraph_build / codegraph_search / codegraph_impact / ...（代码知识图谱，见 codegraph_tools.go + pkg/codegraph）
 	registerExtraCodeGraphTools(r, root) // codegraph_find_by_signature / codegraph_explore（额外工具，见 codegraph_extra.go）
-	// ── 默认 BeforeTool：edit_file/multi_edit 执行前用 codegraph 注入最新行号 ──
+	// ── 默认 BeforeTool：edit/multi_edit 执行前用 codegraph 注入最新行号 ──
 	// codegraph 的符号级行号比 old_string 字符串匹配更可靠（不受 CRLF/空白折叠/行号偏移影响）。
 	if r.BeforeTool == nil {
 		r.BeforeTool = func(ctx context.Context, name string, args map[string]any) (bool, string, error) {
-			if name != "edit_file" && name != "multi_edit" {
+			if name != "edit" && name != "multi_edit" {
 				return true, "", nil // 放行
 			}
 			oldStr, _ := args["old_string"].(string)
@@ -824,7 +814,7 @@ func registerCoreTools(r *Registry, root string, eh *editHistory, bg *bgRegistry
 				if !strings.Contains(e.Name, symName) {
 					continue
 				}
-				// ★ 找到匹配实体 → 注入最新行号，让 edit_file 用行号定位执行
+				// ★ 找到匹配实体 → 注入最新行号，让 edit 用行号定位执行
 				args["line_start"] = float64(e.Line)
 				if e.EndLine > e.Line {
 					args["line_end"] = float64(e.EndLine)
@@ -835,11 +825,11 @@ func registerCoreTools(r *Registry, root string, eh *editHistory, bg *bgRegistry
 		}
 	}
 
-	// ── 默认 OnToolError：edit_file/multi_edit 匹配失败→自动行号定位重试 ──
+	// ── 默认 OnToolError：edit/multi_edit 匹配失败→自动行号定位重试 ──
 	// 注意：BeforeTool 已用 codegraph 预注入行号，此处为兜底（codegraph 找不到时）。
 	if r.OnToolError == nil {
 		r.OnToolError = func(ctx context.Context, name string, args map[string]any, err error) (string, error) {
-			if name != "edit_file" && name != "multi_edit" {
+			if name != "edit" && name != "multi_edit" {
 				return "", err
 			}
 			if ls, _ := args["line_start"].(float64); ls > 0 {
@@ -1086,7 +1076,7 @@ func isSelfHarmCommand(command, root string) string {
 	return ""
 }
 
-// isBlockingCommand 检测命令是否为长期进程（会阻塞 run_command 120s 超时）。
+// isBlockingCommand 检测命令是否为长期进程（会阻塞 bash 120s 超时）。
 // 匹配高置信度模式：dev server / watch / 文件监听等。短命令（build/test/install）不命中。
 func isBlockingCommand(command string) bool {
 	cmd := strings.TrimSpace(command)
@@ -1161,7 +1151,7 @@ func extractBaseCommand(cmd string) string {
 }
 
 // extractGoSymbolName 从 Go 代码片段（old_string）中提取符号名称。
-// 用于 edit_file 匹配失败时通过 codegraph 定位符号的最新行号。
+// 用于 edit 匹配失败时通过 codegraph 定位符号的最新行号。
 // 匹配优先级：方法 > 函数 > 类型 > 变量 > 常量。
 func extractGoSymbolName(s string) string {
 	if s == "" {

@@ -8,7 +8,7 @@
 //   - 插件 ctx.tools.register 注册的工具 → 进主 Registry（agent 可调用，
 //     调用时转发 invoke 回 Node 执行）
 //   - 插件 ctx.fs/web/bash 服务调用 → 转发 Go 侧对应工具
-//     （read_file/write_file/list_files/web_fetch/run_command），
+//     （read/write/glob/web_fetch/bash），
 //     行为与 goja 插件一致（工作区根限制、输出格式同源）
 //   - 崩溃自动重启（有限次）、退出清理子进程
 //
@@ -527,7 +527,7 @@ func mapBridgeService(svcName, method string, args map[string]any) (string, map[
 	case "fs":
 		p := argStr(args, "path")
 		switch method {
-		// ★ 2026-09 Round2（R2-9）：旧工具名（read_file/write_file/run_command/
+		// ★ 2026-09 Round2（R2-9）：旧工具名（read/write/bash/
 		//   list_files）在宿主生产注册面已不存在（磁盘插件 tool-harness/tool-shell
 		//   承载新名）——桥映射同步到 harness 命名；fs.list 无对应工具，改直连。
 		// ★ t4 F3（2026-09 t5）：R2-7 后 read 输出形态为 DSH 行号块
@@ -609,7 +609,7 @@ func mapBridgeService(svcName, method string, args map[string]any) (string, map[
 	case "bash":
 		switch method {
 		case "exec":
-			// R2-9：run_command → bash（tool-harness 插件承载）
+			// R2-9：bash → bash（tool-harness 插件承载）
 			return "bash", map[string]any{"command": argStr(args, "command")}, nil, nil
 		}
 		return "", nil, nil, fmt.Errorf("未知 bash 服务方法: %s", method)

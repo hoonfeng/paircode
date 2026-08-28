@@ -7,7 +7,7 @@ import (
 )
 
 // ─── 文件编辑匹配器 ──────────────────────────────────────────
-// 解决 edit_file/multi_edit「找不到原文本」问题：
+// 解决 edit/multi_edit「找不到原文本」问题：
 //   1. CRLF vs LF：LLM 产出的 old_string 通常只有 \n，而 Windows 文件含 \r\n，字节级匹配失败。
 //   2. 空白/缩进差异：LLM 漏掉/多加空格、tab vs space，字节级不匹配。
 //   3. 要求逐字节复述原文，违反 LLM tokenizer 特性。
@@ -296,7 +296,7 @@ func foldPreview(s string) string {
 // ─── 诊断信息 ───────────────────────────────────────────────
 
 // diagnoseNotFound 生成「未找到 old_string」诊断：含 old 首行 + 文件中相似行（带行号）。
-// 帮助 LLM 下一轮纠正（无需重新 read_file 全文）。
+// 帮助 LLM 下一轮纠正（无需重新 read 全文）。
 func diagnoseNotFound(content, old string) error {
 	normContent := normalizeNewlines(content)
 	normOld := normalizeNewlines(old)

@@ -431,9 +431,9 @@ func registerProjectInfoTools(r *Registry, root string) {
 
 	r.Register(&Tool{
 		Name:       "project_info_explore",
-		UsageGuide: "扫描项目目录结构概览——构建知识库的起点。新项目首次接触时先调此工具了解项目全貌，再用 read_file 读关键文件，最后 project_info_write 写入结构化理解。",
+		UsageGuide: "扫描项目目录结构概览——构建知识库的起点。新项目首次接触时先调此工具了解项目全貌，再用 read 读关键文件，最后 project_info_write 写入结构化理解。",
 		Description: "返回项目目录结构概览（根目录关键文件、顶层目录及文件数）——构建知识库的起点；" +
-			"据此用 read_file 读关键文件分析，再 project_info_write 写入 概览/模块-*/决策-*。",
+			"据此用 read 读关键文件分析，再 project_info_write 写入 概览/模块-*/决策-*。",
 		Parameters: objSchema(props{}),
 		ReadOnly:   true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
@@ -476,7 +476,7 @@ func exploreProjectStructure(root string) string {
 		}
 		b.WriteString(fmt.Sprintf("- %s/（约 %d 文件）\n", e.Name(), countDirFiles(filepath.Join(root, e.Name()))))
 	}
-	b.WriteString("\n建议：用 read_file 读关键文件分析后，project_info_write 写入「概览」「模块-<名>」「决策-<主题>」等中文条目。")
+	b.WriteString("\n建议：用 read 读关键文件分析后，project_info_write 写入「概览」「模块-<名>」「决策-<主题>」等中文条目。")
 	return b.String()
 }
 
@@ -505,7 +505,7 @@ func countDirFiles(dir string) int {
 func ExploreKnowledgeTask() string {
 	return "探索本项目并构建【项目知识库】：\n" +
 		"1. 先调用 project_info_explore 获取项目结构概览。\n" +
-		"2. 用 read_file 阅读关键文件（入口、核心模块、配置）。\n" +
+		"2. 用 read 阅读关键文件（入口、核心模块、配置）。\n" +
 		"3. 分析各模块的架构、职责、数据流与设计决策。\n" +
 		"4. 用 project_info_write 把分析写入知识库，建议中文路径：概览（项目概览）、模块-<各模块>、决策-<设计决策>。\n" +
 		"全程用中文，命名用中文。完成后简要汇报写了哪些条目。"

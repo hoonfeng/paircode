@@ -345,7 +345,7 @@ func registerMemoryTools(r *Registry, root string) {
 
 	r.Register(&Tool{
 		Name:        "memory_list",
-		UsageGuide:  "列出所有记忆的总览（名+摘要）。先调此工具看有什么记忆，再决定用 memory_read 读哪条。比 run_command dir .pair/memory 更友好（渐进式披露+自动维护索引）。",
+		UsageGuide:  "列出所有记忆的总览（名+摘要）。先调此工具看有什么记忆，再决定用 memory_read 读哪条。比 bash dir .pair/memory 更友好（渐进式披露+自动维护索引）。",
 		Description: "列出所有记忆的【总览】（名 + 摘要，渐进式披露的总览层）；要某条细则用 memory_read 读全文。",
 		Parameters:  objSchema(props{"project": projectSchemaProp()}),
 		ReadOnly:    true,

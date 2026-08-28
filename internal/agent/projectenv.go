@@ -8,7 +8,7 @@ import (
 
 // ReadProjectEnv 读取 .pair/project.md 项目环境档案。
 // 如果文件不存在或为空，返回空字符串。
-// agent 可以自行通过 read_file / edit_file 维护这个文件，
+// agent 可以自行通过 read / edit 维护这个文件，
 // 记录项目编译方式、多端信息、环境配置等，避免反复探测环境浪费 token。
 func ReadProjectEnv(root string) string {
 	if root == "" {

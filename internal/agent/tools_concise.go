@@ -40,10 +40,9 @@ var conciseToolDescriptions = map[string]string{
 	"kill_process":   "止后台进程（id）；仅限 run_background 所启，不能动外部进程。",
 
 	// ── 搜索 ──
-	"search_content": "以 RE2 正则搜文件内容，返「路径:行号: 行」；path/glob/case_insensitive/max_results 可限；跳过 .git/node_modules。",
-	"search_files":   "按通配符递归找文件返相对路径（含 / 按路径模式）；path/language/max_results 可限；跳过 .git/node_modules。",
-	"glob":           "按通配符递归找文件返相对路径；含 / 或 ** 按路径模式，否则按文件名；path 限子目录。",
-	"grep":           "以 RE2 正则搜文件内容返「路径:行号: 行」；path/glob/case_insensitive 可限。",
+	// ★ Round3：search_content/search_files 旧名注册已删除（并入 glob/grep），死条目随删
+	"glob": "按通配符递归找文件返相对路径；含 / 或 ** 按路径模式，否则按文件名；path 限子目录；无 pattern 时列目录（目录在前）。",
+	"grep": "以 RE2 正则搜文件内容返「路径:行号: 行」；path/glob/case_insensitive 可限。",
 
 	// ── 网络 ──
 	"web_fetch":  "抓取 http(s) 网页返纯文本（去标签，超长截断）。",
@@ -75,7 +74,7 @@ var conciseToolDescriptions = map[string]string{
 	"toolset_remove": "删工具集（scope 指定作用域；builtin 不可删）。",
 
 	// ── 其他 ──
-	"ask_user": "向用户提问等答（关键决策/歧义澄清，勿滥用）；question 必填，askType 定 text/single/multi/single-with-input。",
+	"ask_user": "向用户提问等答（关键决策/歧义澄清，勿滥用）；question 必填（或 questions 数组多问题），askType 定 text/single/multi/single-with-input；多问题传 questions:[{id,question,options?,multi_select?}]。",
 }
 
 // ApplyConciseToolDescriptions 精简工具描述：深拷贝并替换 description 为文言文精简版。

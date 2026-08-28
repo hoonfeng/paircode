@@ -1,8 +1,12 @@
 package agent
 
-// 搜索/导航工具：search_content（正则内容搜索，grep 风格）+ search_files（通配符查找文件）。
-// 复刻参考源 src/agent 的 search_content / search_files。两者只读、免审批、限定工作区内，
-// 自动跳过 .git/node_modules 等目录与二进制/超大文件（防把 LLM 上下文撑爆）。
+// 搜索/导航工具（Round3 改名基座）：grep（正则内容搜索，原 search_content）+
+// glob 递归查找（原 search_files）+ glob 目录列举（原 list_files，与查找合并）。
+// 复刻参考源 src/agent 的 search_content / search_files。全部只读、免审批、
+// 限定工作区内，自动跳过 .git/node_modules 等目录与二进制/超大文件
+// （防把 LLM 上下文撑爆）。注册入口已并入 registerCoreTools（core 组），
+// 本文件仅保留 handler 构造与辅助函数；生产语义以 tool-harness JS 插件为准，
+// Go 侧仅测试/归档基座。
 
 import (
 	"context"
@@ -55,42 +59,57 @@ func SetExtraSkipDirs(dirs []string) {
 // isSkipDir 该目录名是否跳过（内置基线 ∪ 用户额外）。
 func isSkipDir(name string) bool { return defaultSkipDirs[name] || extraSkipDirs[name] }
 
-func registerSearchTools(r *Registry, root string) {
-	r.Register(&Tool{
-		Name: "search_content",
-		Description: "在工作区内按正则搜索文件内容，返回匹配的「相对路径:行号: 行文本」。" +
-			"pattern 为 RE2 正则；path 限定子目录（省略=根）；glob 按文件名过滤（如 *.go）；" +
-			"case_insensitive 忽略大小写；max_results 上限（默认 200）。自动跳过 .git/node_modules 等与二进制/超大文件。",
-		UsageGuide: "搜索文件内容（全文搜索）。比 run_command findstr/grep 更精确（跳过 .git/node_modules、自动处理编码、结果结构化）。搜索函数/类型定义请优先用 codegraph_search（基于 AST，更精确）。",
-		Category:   "代码搜索",
-		Parameters: objSchema(props{
-			"pattern":          strProp("RE2 正则表达式"),
-			"path":             strProp("限定子目录（省略=工作区根）"),
-			"glob":             strProp("文件名通配过滤，如 *.go"),
-			"case_insensitive": boolProp("忽略大小写"),
-			"max_results":      intProp("结果行数上限（默认 200）"),
-			"project":          projectSchemaProp(),
-		}, "pattern"),
-		ReadOnly: true,
-		Handler:  searchContentHandler(root),
-	})
-	r.Register(&Tool{
-		Name: "search_files",
-		Description: "在工作区内按通配符递归查找文件，返回相对路径列表（已排序）。" +
-			"pattern 为通配符：不含 / 时匹配文件名（如 *.go、*config*），含 / 时匹配相对路径（如 internal/*/main.go）；" +
-			"path 限定子目录；language 可选按语言过滤；max_results 上限（默认 500）。跳过 .git/node_modules 等。",
-		UsageGuide: "按文件名/路径模式搜索文件。比 run_command dir /s 更高效。配合 language 参数可按语言过滤。",
-		Parameters: objSchema(props{
-			"pattern":     strProp("文件名/路径通配符，如 *.go"),
-			"path":        strProp("限定子目录（省略=工作区根）"),
-			"language":    strProp("可选：按语言过滤，如 \"go\"、\"typescript\"、\"python\""),
-			"max_results": intProp("结果上限（默认 500）"),
-			"project":     projectSchemaProp(),
-		}, "pattern"),
-		ReadOnly: true,
-		Handler:  searchFilesHandler(root),
-	})
+// listFilesHandler 目录列举 handler（原 list_files，Round3 并入 glob：
+// glob 无 pattern 时走本分支）。
+func listFilesHandler(root string) ToolHandler {
+	return func(ctx context.Context, args map[string]any) (string, error) {
+		rel := argStr(args, "path")
+		p := root
+		if rel != "" {
+			var err error
+			if p, err = resolvePathFor(root, args, rel); err != nil {
+				return "", err
+			}
+		}
+		entries, err := os.ReadDir(p)
+		if err != nil {
+			// ★ 路径不存在给明确提示（Windows 原生错误晦涩，LLM 难恢复）
+			if os.IsNotExist(err) {
+				return "", fmt.Errorf("目录不存在: %s（请确认路径在工作区内且拼写正确；可用 str_replace_editor view 列目录探查）", argStr(args, "path"))
+			}
+			return "", err
+		}
+		pattern := argStr(args, "pattern")
+		sort.SliceStable(entries, func(i, j int) bool {
+			if entries[i].IsDir() != entries[j].IsDir() {
+				return entries[i].IsDir()
+			}
+			return entries[i].Name() < entries[j].Name()
+		})
+		var b strings.Builder
+		for _, e := range entries {
+			if pattern != "" && !e.IsDir() {
+				if ok, _ := filepath.Match(pattern, e.Name()); !ok {
+					continue
+				}
+			}
+			if e.IsDir() {
+				b.WriteString(e.Name() + "/\n")
+			} else {
+				sz := int64(-1)
+				if fi, err := e.Info(); err == nil {
+					sz = fi.Size()
+				}
+				fmt.Fprintf(&b, "%s\t%d\n", e.Name(), sz)
+			}
+		}
+		if b.Len() == 0 {
+			return "（空目录或无匹配）", nil
+		}
+		return b.String(), nil
+	}
 }
+
 func searchContentHandler(root string) ToolHandler {
 	return func(ctx context.Context, args map[string]any) (string, error) {
 		projRoot, err := projRootFromArgs(root, args)
@@ -233,7 +252,7 @@ func searchFilesHandler(root string) ToolHandler {
 			return "", ctx.Err()
 		}
 		if len(matches) == 0 {
-			return "（未找到匹配文件）\n提示：无结果≠不存在，建议补搜：① 换文件名通配（如 *关键字*）② 换 path 范围 ③ 换 language 过滤 ④ 改用 search_content 搜内容。不要就此断言不存在。", nil
+			return "（未找到匹配文件）\n提示：无结果≠不存在，建议补搜：① 换文件名通配（如 *关键字*）② 换 path 范围 ③ 换 language 过滤 ④ 改用 grep 搜内容。不要就此断言不存在。", nil
 		}
 		sort.Strings(matches)
 		res := fmt.Sprintf("（找到 %d 个文件）\n", len(matches)) + strings.Join(matches, "\n")

@@ -164,7 +164,7 @@ func ListSnapshots(root, relPath string) ([]string, error) {
 func RegisterSnapshotTools(r *Registry, root string) {
 	r.Register(&Tool{
 		Name: "restore_snapshot",
-		Description: "从快照恢复指定文件。快照在 edit_file/multi_edit/write_file 修改前自动创建。" +
+		Description: "从快照恢复指定文件。快照在 edit/multi_edit/write 修改前自动创建。" +
 			"默认恢复到最旧快照（原始文件）。可用 list_snapshots 查看快照列表。" +
 			"指定 index 参数恢复特定版本（0=最旧原始文件，-1=最新，1~N=第 N 份从最旧算）。",
 		Parameters: map[string]any{

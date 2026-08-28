@@ -2116,7 +2116,7 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool, ws
 
 	sys := buildWebSystemPrompt()
 
-	// ★ 注入工具使用指南（引导 LLM 优先使用专用工具而非 run_command）
+	// ★ 注入工具使用指南（引导 LLM 优先使用专用工具而非 bash）
 	if guide := reg.UsageGuideText(); guide != "" {
 		// ★ 缓存诊断：UsageGuide 哈希（dynamic 变化源定位——工具状态/顺序漂移）
 		if os.Getenv("WB_CACHE_DIAG") == "1" {

@@ -21,7 +21,7 @@ import (
 )
 
 // decodeCmdOutput 命令行输出字节流 → 正确编码字符串（UTF-8 优先，GBK 兜底）。
-// 所有 shell/进程输出转字符串的统一入口：runShellWithTimeout（bash/run_command/
+// 所有 shell/进程输出转字符串的统一入口：runShellWithTimeout（bash/bash/
 // run_background/read_output/ctx.bash.exec）、bridge_exec、debug_tools、git 工具、
 // bugdetect 等——一处修复，全链路受益。
 func decodeCmdOutput(b []byte) string {

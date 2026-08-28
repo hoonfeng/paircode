@@ -10,21 +10,10 @@
 //	tool-web:            web_search / web_fetch
 //	code-mode:           run_code
 //
-// 本文件新增 harness 命名的工具；gou-ide 原有工具（read_file/write_file/edit_file/
-// search_content/search_files/run_command/web_fetch/web_search 等）全部保留（前端/测试/
-// 调用方兼容），新工具与旧工具共用同一执行体（handler 复用），不复制逻辑。
-//
-// 映射关系：
-//
-//	read           ↔ read_file（同 handler）
-//	write          ↔ write_file
-//	edit           ↔ edit_file
-//	glob           ↔ search_files（harness glob 语义：路径通配，** 递归）
-//	grep           ↔ search_content（harness grep 语义：正则全文搜索）
-//	bash           ↔ run_command（harness bash 语义：shell 命令）
-//	str_replace_editor  全新实现（view/create/str_replace/insert 四命令）
-//	run_code            全新实现（执行一段代码，对齐 harness code-mode）
-//	web_search / web_fetch 已有同名工具，保持
+// ★ Round3（2026-09）：旧名别名层 registerHarnessAliases 已删除——基座工具直接以
+// harness 命名注册（registerCoreTools 注册 read/write/edit/bash/glob/grep，
+// 见 tools.go/search.go），本文件仅保留 str_replace_editor 与 run_code 两个
+// 独立实现。Go 侧仅测试/归档基座，生产语义以 tool-harness JS 插件为准。
 package agent
 
 import (
@@ -41,78 +30,11 @@ import (
 )
 
 // RegisterHarnessTools 注册 deepseek-harness 命名的核心工具集。
-// 必须在 RegisterDefaultTools 之后调用（handler 复用依赖旧工具已注册）。
+// 基座工具（read/write/edit/bash/glob/grep）已由 registerCoreTools 以新名注册
+// （Round3 别名层删除）；本入口仅补 str_replace_editor / run_code 两个独立实现。
 func RegisterHarnessTools(r *Registry, root string) {
-	registerHarnessAliases(r)
 	registerStrReplaceEditor(r, root)
 	registerRunCode(r, root)
-}
-
-// harnessAlias 复制旧工具注册为 harness 命名别名（同一 Handler，不复制逻辑）。
-// 保留 ReadOnly/RequiresApproval 语义；Description/UsageGuide 对齐 harness 风格。
-type harnessAlias struct {
-	alias       string // 新工具名（harness 命名）
-	source      string // 旧工具名（gou-ide 命名）
-	description string // harness 风格描述
-	usageGuide  string // harness 风格使用指南
-	category    string
-}
-
-func registerHarnessAliases(r *Registry) {
-	aliases := []harnessAlias{
-		{
-			alias: "read", source: "read_file",
-			description: "读取文件内容（对齐 deepseek-harness read）。path 为工作区内路径；可选 offset(起始行,1 基)+limit(行数)读片段；省略则读全文(超 2000 行只返回前 2000 行并提示翻页)。",
-			usageGuide:  "harness 标准读工具：读取文件内容。路径越界自动拦截，二进制自动拒绝（改用 inspect_binary）。大文件用 offset+limit 分页。",
-			category:    "文件",
-		},
-		{
-			alias: "write", source: "write_file",
-			description: "把 content 完整写入 path（覆盖；父目录自动创建）。需审核批准。",
-			usageGuide:  "harness 标准写工具：整文件写入（覆盖）。写类操作需人工确认。如需追加请先 read 再 write 覆盖。",
-			category:    "文件",
-		},
-		{
-			alias: "edit", source: "edit_file",
-			description: "把文件中唯一一处 old_string 替换为 new_string（对齐 deepseek-harness edit）。内置智能匹配（CRLF 归一化+空白折叠）；匹配失败优先用 line_start/line_end 行号定位。",
-			usageGuide:  "harness 标准编辑工具：小改动（≤5 行）用精确替换；大改动请用 write 写整段。替换前会自动快照。",
-			category:    "文件",
-		},
-		{
-			alias: "glob", source: "search_files",
-			description: "按通配符递归查找文件，返回相对路径列表（对齐 deepseek-harness glob）。pattern 含 / 或 ** 时按路径模式（如 internal/**/*.go），否则匹配任意深度文件名（如 *.go）；path 限定子目录。",
-			usageGuide:  "harness 标准 glob 工具：按路径模式发现文件。跳过 .git/node_modules 等目录。比 shell find 更精确（结构化、防撑爆）。",
-			category:    "代码搜索",
-		},
-		{
-			alias: "grep", source: "search_content",
-			description: "在工作区内按正则搜索文件内容，返回「相对路径:行号: 行文本」（对齐 deepseek-harness grep）。pattern 为 RE2 正则；path 限定子目录；glob 按文件名过滤；case_insensitive 忽略大小写。",
-			usageGuide:  "harness 标准 grep 工具：正则全文搜索。搜索函数/类型定义请优先用 codegraph_search（AST 级更精确）。",
-			category:    "代码搜索",
-		},
-		{
-			alias: "bash", source: "run_command",
-			description: "同步执行一条 shell 命令并返回输出（对齐 deepseek-harness bash）。每次调用在独立 shell 中运行（无状态持久）。禁止用于长期进程（dev server/watch/tcp 监听）——请用 run_background。",
-			usageGuide:  "harness 标准 bash 工具：执行命令（构建/测试/查询等短命令）。120s 超时自动终止。长期进程用 run_background/read_output/kill_process。",
-			category:    "执行",
-		},
-	}
-	for _, a := range aliases {
-		src, ok := r.Get(a.source)
-		if !ok {
-			continue // 旧工具未注册（理论不发生，防御）
-		}
-		r.Register(&Tool{
-			Name:             a.alias,
-			Description:      a.description,
-			UsageGuide:       a.usageGuide,
-			Category:         a.category,
-			Parameters:       src.Parameters,
-			Handler:          src.Handler,
-			ReadOnly:         src.ReadOnly,
-			RequiresApproval: src.RequiresApproval,
-		})
-	}
 }
 
 // ─── str_replace_editor（对齐 tool-str-replace-editor）──────────────
@@ -132,7 +54,7 @@ func registerStrReplaceEditor(r *Registry, root string) {
 		Name:        "str_replace_editor",
 		Description: strReplaceEditorDesc,
 		UsageGuide: "harness 标准命令式编辑器（Claude 系工具）：view 查看、create 创建、str_replace 精确替换（唯一匹配）、insert 行后插入。" +
-			"与 edit_file 相比更适合『需要先查看行号、再精确替换』的流程；带行号输出方便后续定位。",
+			"与 edit 相比更适合『需要先查看行号、再精确替换』的流程；带行号输出方便后续定位。",
 		Category: "文件",
 		Parameters: objSchema(props{
 			"command":     strProp("要执行的命令：view / create / str_replace / insert（必填）"),

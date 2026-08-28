@@ -76,9 +76,13 @@ func Generate(conv ConvInfo) string {
 		} else if strings.HasPrefix(line, "助手: ") {
 			lastAssistant = strings.TrimPrefix(line, "助手: ")
 		}
+		// ★ 历史兼容：旧工具名（read_file/write_file/edit_file/search_*/run_*）与新名
+		//   （read/write/edit/bash/glob/grep/run_*）都计入工具操作步数——历史消息与
+		//   当前消息的摘要统计口径一致。
 		if strings.Contains(line, "read_file") || strings.Contains(line, "write_file") ||
 			strings.Contains(line, "edit_file") || strings.Contains(line, "search_") ||
-			strings.Contains(line, "run_") {
+			strings.Contains(line, "run_") || strings.Contains(line, "bash") ||
+			strings.Contains(line, "glob") || strings.Contains(line, "grep") {
 			toolCount++
 		}
 	}

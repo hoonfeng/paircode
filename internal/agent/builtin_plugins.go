@@ -38,10 +38,10 @@ func builtinPluginSpecs(root string) []builtinPluginSpec {
 	eh := newEditHistory() // ★ v2: 编辑行号偏移追踪器
 	bg := globalBG         // ★ 全局共享后台进程注册表（跨轮次/跨 Registry 存活，见 shell.go）
 	return []builtinPluginSpec{
-		{"core", "文件读写/编辑/命令执行（read_file/write_file/edit_file/multi_edit/run_command/move_file/delete_file）",
+		// ★ Round3：fs-search 组并入 core（search_content→grep、search_files→glob，
+		//   list_files→glob 目录列举分支；glob/grep 注册落在 registerCoreTools）。
+		{"core", "文件读写/编辑/命令执行/搜索（read/write/edit/multi_edit/bash/move_file/delete_file/glob/grep）",
 			func(c *PluginContext) { registerCoreTools(c.Tools, root, eh, bg) }},
-		{"fs-search", "全文/文件名搜索（search_content/search_files）",
-			func(c *PluginContext) { registerSearchTools(c.Tools, root) }},
 		{"git", "Git 操作（git_status/diff/log/show/blame/add/commit/…）",
 			func(c *PluginContext) { registerGitTools(c.Tools, root) }},
 		{"web", "联网（web_fetch/web_search）",

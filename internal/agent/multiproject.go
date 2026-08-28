@@ -54,7 +54,7 @@ func projRootFromArgs(primaryRoot string, args map[string]any) (string, error) {
 
 // resolvePathFor 便捷封装：按 args 中 project 参数路由到目标项目根后，
 // 再走 resolvePath 的多根安全解析（相对路径相对该项目根，绝对路径越界拦截）。
-// 用于核心文件工具（read/write/edit/move/delete/run_command 的 cwd）。
+// 用于核心文件工具（read/write/edit/move/delete/bash 的 cwd）。
 func resolvePathFor(primaryRoot string, args map[string]any, p string) (string, error) {
 	projRoot, err := projRootFromArgs(primaryRoot, args)
 	if err != nil {

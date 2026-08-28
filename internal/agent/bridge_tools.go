@@ -90,9 +90,9 @@ func registerBridgeTools(r *Registry, root string) {
 	r.Register(&Tool{
 		Name: "bridge_exec",
 		Description: "通过桥接执行系统命令。行为取决于当前桥接模式：\n" +
-			"- 桥接模式（默认）：限工作区内目录，120s 超时（同 run_command）\n" +
+			"- 桥接模式（默认）：限工作区内目录，120s 超时（同 bash）\n" +
 			"- 接管模式：不限目录，不限超时（默认 5 分钟），可执行系统管理命令\n\n" +
-			"建议：日常开发用 run_command（标准模式），系统管理用 bridge_exec（接管模式）。",
+			"建议：日常开发用 bash（标准模式），系统管理用 bridge_exec（接管模式）。",
 		Parameters: objSchema(props{
 			"command": strProp("要执行的命令"),
 			"cwd":     strProp("可选工作目录（接管模式下不限工作区）"),

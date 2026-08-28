@@ -673,7 +673,7 @@ func registerExtraCodeGraphTools(r *Registry, root string) {
 	// ── 29. codegraph_find_by_signature — 按签名查找函数 ──
 	r.Register(&Tool{
 		Name:        "codegraph_find_by_signature",
-		UsageGuide:  "按结构特征查找函数：参数个数/返回类型/名称模式。想找「接收 string 返回 error」的函数时用。比 search_content 更原子化（基于签名匹配）。",
+		UsageGuide:  "按结构特征查找函数：参数个数/返回类型/名称模式。想找「接收 string 返回 error」的函数时用。比 grep 更原子化（基于签名匹配）。",
 		Description: "按结构特征（参数数、返回类型、名称模式）查找函数。",
 		Parameters: objSchema(props{
 			"namePattern": strProp("可选：函数名通配模式，如 'get*'、'*Handler'"),
@@ -895,7 +895,7 @@ func registerExtraCodeGraphTools(r *Registry, root string) {
 	// ── 30. codegraph_explore — 自然语言→源码 ──
 	r.Register(&Tool{
 		Name:        "codegraph_explore",
-		UsageGuide:  "一站式代码理解工具。用自然语言或符号名探索代码，返回相关源码和位置。新接触项目时用此工具了解代码比逐个 read_file 更高效。",
+		UsageGuide:  "一站式代码理解工具。用自然语言或符号名探索代码，返回相关源码和位置。新接触项目时用此工具了解代码比逐个 read 更高效。",
 		Description: "一站式代码理解工具。用自然语言或符号名探索代码，返回相关源码和位置。分析代码的首选工具。",
 		Parameters:  objSchema(props{"query": strProp("自然语言问题或符号名"), "maxFiles": intProp("可选：最大返回文件数（默认 8）")}, "query"),
 		ReadOnly:    true,

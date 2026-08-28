@@ -1797,7 +1797,7 @@ func (p *jsPluginAdapter) buildFSService(pc *PluginContext) goja.Value {
 		}
 		return goja.Undefined()
 	})
-	// grep：正则内容搜索（复用 search_content 实现）。grep(pattern, opts?)
+	// grep：正则内容搜索（复用 grep 实现）。grep(pattern, opts?)
 	// opts = {path, glob, case_insensitive, max_results}；返回结果文本（含统计行）。
 	fs.Set("grep", func(call goja.FunctionCall) goja.Value {
 		pattern := call.Argument(0).String()
@@ -1817,7 +1817,7 @@ func (p *jsPluginAdapter) buildFSService(pc *PluginContext) goja.Value {
 		}
 		return vm.ToValue(out)
 	})
-	// glob：通配符查找文件（复用 search_files 实现）。glob(pattern, opts?)
+	// glob：通配符查找文件（复用 glob 实现）。glob(pattern, opts?)
 	// opts = {path, language, max_results}；返回结果文本（含统计行）。
 	fs.Set("glob", func(call goja.FunctionCall) goja.Value {
 		pattern := call.Argument(0).String()

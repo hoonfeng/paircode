@@ -5,7 +5,7 @@ import "fmt"
 // ToolError 统一工具错误类型。
 // 携带可重试标记、修复建议和严重性级别，供 AfterTool 钩子做精细化决策。
 type ToolError struct {
-	Op         string // 失败操作名（如 "edit_file"）
+	Op         string // 失败操作名（如 "edit"）
 	Message    string // 简短错误描述
 	Suggestion string // 修复建议（如 "请使用 line_start/line_end 行号定位"）
 	Severity   string // 严重性：warn/error/fatal
