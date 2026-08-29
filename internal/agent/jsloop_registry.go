@@ -3,7 +3,7 @@ package agent
 import (
 	"sync"
 
-	"wb-ui/goja"
+	"github.com/hoonfeng/paircode/goja"
 )
 
 // ── JS 循环注册表（单槽位，对齐 harness AgentRegistry.setFactory）──

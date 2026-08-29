@@ -9,7 +9,7 @@ JS 运行时升级专项新增维护；历史组件见各模块头注与 go.mod�
 
 | 组件 | 版本 | 许可证 | 用途 | 版权/来源 |
 |---|---|---|---|---|
-| goja（wb-ui/goja fork） | fork of dop251/goja | MIT | goja 沙箱运行时（既有，保留随包 LICENSE） | Copyright 2016 Dmitry Panov；2012 Robert Krimen |
+| goja（gou-ide 自有 fork） | fork of dop251/goja | MIT | goja 沙箱运行时（既有 fork，已收编进本仓 `goja/`，module `github.com/hoonfeng/paircode/goja`；保留随包 LICENSE） | Copyright 2016 Dmitry Panov；2012 Robert Krimen |
 | goja_nodejs（候选 A） | 2021 版缓存（未引入为依赖） | MIT | 语义参考——mini Node API 层（internal/agent/nodeapi_mini.go）为**原创实现**（fs/path/buffer/events/util，fs 工作区根受限），未复制 goja_nodejs 代码 | dop251/goja_nodejs |
 | @cordisjs/core（cordis3） | 3.18.1（桥安装） | MIT | 现有 Node 桥 cordis3 Context | cordis 项目（2022 友好凉拌/koishi） |
 | @deepseek-ai/cordis（cordis4） | ^4.0.1 | MIT | Round4 DSH 插件装载 Context（`@deepseek-ai/cordis` peer 显式安装） | deepseek-harness（2026 DeepSeek） |
@@ -20,7 +20,9 @@ JS 运行时升级专项新增维护；历史组件见各模块头注与 go.mod�
 
 ## 借用代码注意事项
 
-1. **wb-ui/goja**：fork 补丁（cb1a573 协作锁）保留原 LICENSE 与头注；本仓不复制其源码。
+1. **goja**：dop251/goja 的 fork（协作锁补丁 cb1a573），2026-08-29 收编进本仓
+   `goja/`（module `github.com/hoonfeng/paircode/goja`），保留原 LICENSE 与头注；
+   不再引用外部 wb-ui 路径。
 2. **DSH 插件生态**（@deepseek-ai/*）：仅作为 Node 桥运行时依赖被 `bridge_node.js`
    的 cordis4 装载分支 `import()`，不复制源码；peer 由 `npmInstallDshPeers`
    （internal/agent/node_plugins.go）显式安装并记录于桥目录 package.json。

@@ -13,7 +13,7 @@
 package agent
 
 import (
-	"wb-ui/goja"
+	"github.com/hoonfeng/paircode/goja"
 )
 
 // jsProviderFactoryBridge 把 JS 装配器接到 ProviderFactory 接口。

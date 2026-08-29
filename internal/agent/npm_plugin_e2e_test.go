@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"wb-ui/goja"
+	"github.com/hoonfeng/paircode/goja"
 )
 
 // TestMarketInstallNPMPluginE2E 模拟 npm registry（httptest），验证

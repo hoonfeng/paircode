@@ -30,7 +30,7 @@ package agent
 import (
 	"fmt"
 
-	"wb-ui/goja"
+	"github.com/hoonfeng/paircode/goja"
 )
 
 // buildAgentsService 构造 ctx.agents（成员会话编排）。

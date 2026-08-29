@@ -26,7 +26,7 @@ import (
 	"strings"
 	"time"
 
-	"wb-ui/goja"
+	"github.com/hoonfeng/paircode/goja"
 )
 
 // RegisterHarnessTools 注册 deepseek-harness 命名的核心工具集。

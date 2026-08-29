@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 
-	"wb-ui/goja"
+	"github.com/hoonfeng/paircode/goja"
 )
 
 // ── ctx.loopFactory.registerLoop(impl)：注册 JS 循环实现（agentloop 核心外置）──

@@ -36,7 +36,7 @@ import (
 	"strings"
 	"sync"
 
-	goja "wb-ui/goja"
+	goja "github.com/hoonfeng/paircode/goja"
 )
 
 // installNodeAPIMini 在插件沙箱安装 mini Node API（require + 内置模块）。

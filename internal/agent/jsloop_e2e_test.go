@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/hoonfeng/paircode/internal/core"
-	"wb-ui/goja"
+	"github.com/hoonfeng/paircode/goja"
 )
 
 // ─── JS 循环端到端测试（agentloop 核心外置链路）──

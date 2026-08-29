@@ -24,7 +24,7 @@ import (
 	"sort"
 	"strings"
 
-	"wb-ui/goja"
+	"github.com/hoonfeng/paircode/goja"
 )
 
 // ─── 模板类型 ─────────────────────────────────────────────

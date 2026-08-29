@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"wb-ui/goja"
+	"github.com/hoonfeng/paircode/goja"
 )
 
 // evalLike 模拟 evalJSPlugin 的求值方式（async 包 + __resolve 回传）。

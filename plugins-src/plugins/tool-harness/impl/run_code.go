@@ -17,7 +17,7 @@ import (
 	"syscall"
 	"time"
 
-	"wb-ui/goja"
+	"github.com/hoonfeng/paircode/goja"
 
 	. "github.com/hoonfeng/paircode/plugins-src/plugins/tool-harness/toolbin"
 )

@@ -28,7 +28,7 @@ import (
 	"fmt"
 	"time"
 
-	"wb-ui/goja"
+	"github.com/hoonfeng/paircode/goja"
 )
 
 // providerJSChatTimeout JS chat 调用兜底超时（LLM 请求通常分钟级；

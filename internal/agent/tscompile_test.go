@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"wb-ui/goja"
+	"github.com/hoonfeng/paircode/goja"
 )
 
 // TestExtractImportNames 命名导入提取。

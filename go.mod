@@ -45,4 +45,3 @@ replace (
 	wb-ui => ../wb-ui
 )
 
-replace wb-ui/goja => F:/syproject/gou-ide/goja

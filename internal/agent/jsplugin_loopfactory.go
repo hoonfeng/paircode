@@ -3,7 +3,7 @@ package agent
 import (
 	"fmt"
 
-	"wb-ui/goja"
+	"github.com/hoonfeng/paircode/goja"
 )
 
 // jsLoopFactoryBridge 把 JS 装配器（ctx.loopFactory.register 的 apply 函数）接到

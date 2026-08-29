@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"wb-ui/goja"
+	"github.com/hoonfeng/paircode/goja"
 )
 
 // ── agentloop 核心外置：Loop.Run 委托 JS 循环（runWithJS）──

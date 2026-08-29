@@ -49,7 +49,7 @@ import (
 	"time"
 
 	"github.com/hoonfeng/paircode/internal/core"
-	"wb-ui/goja"
+	"github.com/hoonfeng/paircode/goja"
 )
 
 // ─── 内置 cordis 运行时（CordisApi 全局）────────────────────
@@ -267,7 +267,7 @@ func (p *jsPluginAdapter) ctxServiceRoot(pc *PluginContext) string {
 
 // withLock 在 VM 执行锁保护下运行 fn：timer 回调、事件回调、工具 execute
 // 等可能从其他 goroutine 进入 JS 的入口必须经此调用（goja 非并发安全，
-// 见 wb-ui/goja Runtime.Lock/Unlock）。
+// 见仓库自有 goja（github.com/hoonfeng/paircode/goja）Runtime.Lock/Unlock）。
 func (p *jsPluginAdapter) withLock(fn func()) {
 	p.vm.Lock()
 	defer p.vm.Unlock()
@@ -3550,7 +3550,7 @@ func awaitJSValue(vm *goja.Runtime, v goja.Value) (goja.Value, error) {
 func (p *jsPluginAdapter) buildNodeHTTPHandler(fn goja.Callable) http.HandlerFunc {
 	vm := p.vm
 	return func(w http.ResponseWriter, r *http.Request) {
-		// ★ 2026-08-19：兜底 recover——goja 边缘异常路径已修（wb-ui/goja
+		// ★ 2026-08-19：兜底 recover——goja 边缘异常路径已修（仓库自有 goja
 		//   try 栈空栈越界）；此处再兜底，避免 net/http 无信息刷屏并记录 URL 定位。
 		defer func() {
 			if x := recover(); x != nil {

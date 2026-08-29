@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"wb-ui/goja"
+	"github.com/hoonfeng/paircode/goja"
 )
 
 // ── jsLoopRunner：JS 循环的能力代理（Go 能力 → JS 对象）──

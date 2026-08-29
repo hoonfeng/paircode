@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"wb-ui/goja/ast"
-	"wb-ui/goja/parser"
+	"github.com/hoonfeng/paircode/goja/ast"
+	"github.com/hoonfeng/paircode/goja/parser"
 )
 
 // JSBuilder 基于 goja parser 的 JS/TS 解析器。

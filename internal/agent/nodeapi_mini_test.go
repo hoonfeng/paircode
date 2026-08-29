@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	goja "wb-ui/goja"
+	goja "github.com/hoonfeng/paircode/goja"
 )
 
 // TestNodeAPIMiniFS mini fs：工作区根内读写 + 越界拒绝。

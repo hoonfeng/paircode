@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"wb-ui/goja"
+	"github.com/hoonfeng/paircode/goja"
 )
 
 // loopSvcProvider 固定返回 read 工具调用的 mock Provider（计数调用次数+时间戳）。

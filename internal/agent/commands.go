@@ -17,7 +17,7 @@ import (
 	"sort"
 	"sync"
 
-	"wb-ui/goja"
+	"github.com/hoonfeng/paircode/goja"
 )
 
 // HostCommand 一条宿主命令（slash 命令注册表条目）。

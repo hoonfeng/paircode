@@ -28,7 +28,7 @@ import (
 	"strings"
 	"time"
 
-	"wb-ui/goja"
+	"github.com/hoonfeng/paircode/goja"
 )
 
 // workflowAgentTimeout 单个 agent 钩子的最长等待（超时报错，防脚本悬挂）。

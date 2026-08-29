@@ -26,7 +26,8 @@
 - 模块解析：esbuild 内联（tscompile.go）——相对导入 bundle，非相对包导入 mock 空模块
   （mockPackageOnResolve :128-149），内置库仅 `path/events/util` 三个纯 JS mini 实现
   （builtin_stdlib.go:20-205）。
-- 运行期：goja 非线程安全 → `vm.Lock/Unlock` 协作锁（wb-ui/goja fork 补丁 cb1a573）；
+- 运行期：goja 非线程安全 → `vm.Lock/Unlock` 协作锁（goja fork 补丁 cb1a573，
+  2026-08-29 已收编进本仓 `goja/`，module `github.com/hoonfeng/paircode/goja`）；
   `vm.Interrupt` 超时中断（runJSWithTimeout，jsplugin.go:100-116）。
 
 ### 1.2 Node 桥轨（`.pair/cordis/node/`，npm 插件）
@@ -79,8 +80,8 @@ DSH 参考插件 `@nanmicoder/dsh-agent-teams` v0.1.14（F:\syproject\ref\dsh-ag
      Fiber/Inject 等宿主组合语义）。
   2. 与沙箱纪律冲突：DSH 动态插件沙箱**故意**禁 Node API（sandbox.ts:96-119），gou-ide 已对齐
      （jsplugin.go:2738）；引入 require/fs 等于破坏「插件只能经 ctx 服务触达能力」的审计面。
-  3. fork 兼容风险：goja 是 `wb-ui/goja` fork（../wb-ui/goja，90 文件，module 路径非
-     `github.com/dop251/goja`）；goja_nodejs 直接 import 上游路径，需要 import 改写 + API 对齐验证
+  3. fork 兼容风险：goja 是仓库自有 fork（`goja/`，module `github.com/hoonfeng/paircode/goja`，
+     非 `github.com/dop251/goja`）；goja_nodejs 直接 import 上游路径，需要 import 改写 + API 对齐验证
      （fork 保留了 Runtime/Object/Interrupt 等，但需编译实测）。
   4. 借用规模：goja_nodejs 的 fs（含 watcher/stream 面）约 6-7k 行，长期随上游维护成本高。
 - **结论**：**不采纳为本轮主方案**。保留为 P2 可选加分项（仅当出现「纯 Node stdlib 形态、无
@@ -179,7 +180,7 @@ DSH 参考插件 `@nanmicoder/dsh-agent-teams` v0.1.14（F:\syproject\ref\dsh-ag
 
 | 组件 | 版本 | 许可证 | 用途 | 声明要求 |
 |---|---|---|---|---|
-| goja（wb-ui/goja fork） | fork of dop251/goja | MIT（wb-ui/goja/LICENSE，Copyright 2016 Dmitry Panov / 2012 Robert Krimen） | 沙箱运行时（已在用） | 保留 LICENSE（已随包） |
+| goja（gou-ide 自有 fork） | fork of dop251/goja | MIT（goja/LICENSE，Copyright 2016 Dmitry Panov / 2012 Robert Krimen） | 沙箱运行时（已在用；2026-08-29 收编进本仓 `goja/`，module `github.com/hoonfeng/paircode/goja`） | 保留 LICENSE（已随包） |
 | goja_nodejs（候选 A，本轮不实施） | latest | MIT | 若实施需 fs/path/process 等借用 | THIRD_PARTY 声明 + 保留头注 |
 | @cordisjs/core（cordis3） | 3.18.1（bridge 安装） | MIT（cordis 项目） | 现有 Node 桥 Context | npm 安装自带 license 字段；桥 package.json 记录 |
 | @deepseek-ai/cordis（cordis4） | ^4.0.1 | MIT（deepseek-harness LICENSE，2026 DeepSeek） | 本轮 DSH 装载 Context | 同上 |
