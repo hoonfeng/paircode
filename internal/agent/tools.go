@@ -366,6 +366,14 @@ func (r *Registry) Execute(ctx context.Context, name, argsJSON string) (string, 
 			r.OnToolUpdate(name, callID, partial)
 		})
 	}
+	// ★ 遗留处置（Round4 P2）：DSH agent/pre-step 事件——两个门（PreToolUse
+	//   钩子 + BeforeTool）均放行、即将执行工具时发出；args 截断防协议风暴，
+	//   无插件订阅时零开销（emitBridgeEvent 白名单过滤）。
+	evArgs := argsJSON
+	if len(evArgs) > 2048 {
+		evArgs = evArgs[:2048] + "…"
+	}
+	emitBridgeEvent("agent/pre-step", map[string]any{"tool": name, "args": evArgs})
 	start := time.Now()
 	result, err := t.Handler(ctx, args)
 	dur := time.Since(start)

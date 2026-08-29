@@ -169,12 +169,51 @@ func (b *nodeBridge) registerToolsTo(ph *PluginHost) {
 			owner = "node-bridge"
 		}
 		if err := ph.Context().forPlugin(owner).RegisterTool(t); err != nil {
-			log.Printf("[node-bridge] 补注册工具 %s 到新宿主失败: %v", t.Name, err)
+			if takeoverErr := b.takeoverConflictingPlugin(ph, owner, t); takeoverErr != nil {
+				log.Printf("[node-bridge] 补注册工具 %s 到新宿主失败: %v", t.Name, err)
+			}
 		}
 		// ★ 2026-08-17：装载 ≠ agent 可用——Node 桥插件工具同样受工作区工具集
 		//   可见性收敛（不在工具集白名单 → 对 agent 隐藏，cordis/前端仍可见）。
 		ph.hideToolIfNotInToolset(t.Name)
 	}
+}
+
+// takeoverConflictingPlugin DSH 插件接管（遗留处置 F2 自动化，2026-08-29）：
+// 桥插件工具注册与「同源 repo 移植版」goja 插件同名冲突时（判定：桥包短名去
+// "dsh-" 前缀 == 占用插件 id，如 @nanmicoder/dsh-agent-teams → agent-teams），
+// 自动停用占用插件并重试注册一次——把文档化的手动步骤「安装 DSH 插件前先停
+// repo 移植版」自动化。其余冲突保持既有严格拒绝（防静默覆盖，claimTool 语义）。
+func (b *nodeBridge) takeoverConflictingPlugin(ph *PluginHost, owner string, tool *Tool) error {
+	if ph == nil {
+		return fmt.Errorf("宿主未就绪")
+	}
+	pkgShort := owner
+	if i := strings.LastIndex(owner, ":"); i >= 0 {
+		pkgShort = owner[i+1:]
+	}
+	if i := strings.LastIndex(pkgShort, "/"); i >= 0 {
+		pkgShort = pkgShort[i+1:] // 去 npm scope（@nanmicoder/dsh-agent-teams → dsh-agent-teams）
+	}
+	target := strings.TrimPrefix(pkgShort, "dsh-")
+	if target == "" || target == pkgShort {
+		return fmt.Errorf("桥插件 %q 非 dsh- 同源命名，不做接管", owner)
+	}
+	existing := ph.PluginToolOwners()[tool.Name]
+	if existing == "" || strings.HasPrefix(existing, "node-bridge:") {
+		return fmt.Errorf("工具 %q 占用方 %q 非可接管的 goja 插件", tool.Name, existing)
+	}
+	if existing != target {
+		return fmt.Errorf("工具 %q 占用方 %q 与接管目标 %q 不同源，拒绝接管", tool.Name, existing, target)
+	}
+	log.Printf("[node-bridge] DSH 插件接管：工具 %q 与 repo 移植版插件 %s 同名（替代关系）——自动停用 %s", tool.Name, existing, existing)
+	if err := ph.Unload(existing); err != nil {
+		return fmt.Errorf("停用 %s 失败: %w", existing, err)
+	}
+	if err := ph.Context().forPlugin(owner).RegisterTool(tool); err != nil {
+		return fmt.Errorf("接管后重试注册仍失败: %w", err)
+	}
+	return nil
 }
 
 // isStale 判断 start 的 epoch 快照是否已过期（期间发生 Close/替换）。
@@ -389,7 +428,9 @@ func (b *nodeBridge) handleToolMsg(plugin string, defRaw json.RawMessage) {
 	b.toolOwner[def.Name] = owner
 	b.toolsMu.Unlock()
 	if err := ph.Context().forPlugin(owner).RegisterTool(tool); err != nil {
-		log.Printf("[node-bridge] 注册工具 %s 失败: %v", def.Name, err)
+		if takeoverErr := b.takeoverConflictingPlugin(ph, owner, tool); takeoverErr != nil {
+			log.Printf("[node-bridge] 注册工具 %s 失败: %v", def.Name, err)
+		}
 	}
 	// ★ 2026-08-17：装载 ≠ agent 可用——Node 桥插件工具同样受工作区工具集
 	//   可见性收敛（不在工具集白名单 → 对 agent 隐藏，cordis/前端仍可见）。

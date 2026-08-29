@@ -162,7 +162,7 @@ Round3（2026-09）实测失败清单仅剩：msys bash 信号管道组（上述
 | agent/status 事件桥（subscribe/event 协议） | ✅ 已实现 | subagent_registry.go 四状态点 → emitBridgeEvent |
 | DSH 插件安装路径（runtime 透传 + peer 显式安装） | ✅ 已实现 | marketInstallNPMPluginNode + npmInstallDshPeers |
 | dsh-agent-teams 直跑（13 工具 + create/status/delete 冒烟） | ✅ E2E 测试 | TestNodeBridgeDSHPluginE2E（npm 网络依赖，环境不满足自动 Skip） |
-| agent/pre-step / agent/request-error 事件源 | ⚠️ P2 遗留 | 订阅面已就绪；宿主循环 pre-step 拦截链为宿主语义改造，记录不阻塞 |
+| agent/pre-step / agent/request-error 事件源 | ✅ 已接线（遗留处置 2026-08-29） | tools.go Registry.Execute 门后发 agent/pre-step（args 截断 2KB）；llm.go 4xx/重试耗尽发 agent/request-error；订阅白名单外零开销 |
 
 ### ① Go 核心存量审计处置（t2 实施；审计详见 docs/round4-go-core-audit.md）
 
@@ -170,7 +170,7 @@ Round3（2026-09）实测失败清单仅剩：msys bash 信号管道组（上述
 |---|---|---|
 | A1 孤儿工具 findfiles.go / projectindex.go | ✅ 已删除 | extLangMap 生产依赖已迁 search.go；grep 零残留（live_e2e 夹具字符串保留） |
 | A2 死代码 evalstore.go / evaluator.go（+测试） | ✅ 已删除 | DefaultJudgePrompt/judgeSystemPrompt 迁 role_prompts.go（C1/C2 闭环保持） |
-| A4 MCP 工具面插件封装 | 记录 P2 | 协议层留宿主；可选 tool-mcp 封装后续专项 |
+| A4 MCP 工具面插件封装 | ✅ 已决策：不封装 | 协议层留宿主（MCP 服务生命周期/配置在宿主更稳；封装仅形式收益，且 mcp__* 工具面与插件工具集可见性机制正交）；决策记录关闭 |
 | C 类 20 组 Go 工具库 / B 类 ~150 文件 | 保留 | 测试/归档基座 + 宿主基础设施（维持现状） |
 
 ### Round4 新增验证（internal/agent/dsh_bridge_test.go + node_bridge_test.go）
@@ -184,14 +184,22 @@ Round3（2026-09）实测失败清单仅剩：msys bash 信号管道组（上述
   `TestBridgeNodeSourceExternalPriority`（外置优先/回退/同步回归）
 - t5 集成追加：真实 pair.exe 冒烟（46 插件/47 工具集/桥自启/DSH 插件装载/health 200/零 FATAL）
 
-### Round4 已知并存语义（t5 同步，替代关系定案）
+### Round4 已知并存语义（t5 同步，替代关系定案；F2 自动化 2026-08-29）
 
 **DSH 插件（npm，桥 cordis4 轨）与 repo agent-teams 移植版（`.pair/plugins/agent-teams`，goja 轨）
 的 13 个 `agent_teams_*` 工具同名——二者为替代关系**（非并存）：
 
-- 并存时桥工具注册被 claimTool 拒绝：`工具 "agent_teams_create" 已被插件 agent-teams 注册，
+- **自动接管（遗留处置）**：桥插件工具注册冲突时，若桥包短名去 `dsh-` 前缀 == 占用插件 id
+  （如 `@nanmicoder/dsh-agent-teams` → `agent-teams`），宿主自动停用移植版并接管注册
+  （`nodeBridge.takeoverConflictingPlugin`，node_bridge.go）；日志明确记录接管动作。
+  安装 DSH 插件后无需手动 `cordis_stop agent-teams`。
+- 其余冲突（非同源命名 / 占用方为其他桥插件 / 不同 id）保持既有严格拒绝：
+  `工具 "agent_teams_create" 已被插件 agent-teams 注册，
   插件 node-bridge:@nanmicoder/dsh-agent-teams 不能覆盖。请换工具名，或先 cordis_stop agent-teams 再注册`
   （明确报错 + 处理建议，非静默、非 FATAL；t5 已补归属名使信息完整）。
+- `/agent-teams` 命令按宿主命令表同名覆盖语义由 DSH 插件接管（owner=node-bridge:@…）。
+- 二者同源（移植版即 dsh-agent-teams 的适配），工具/状态文件格式兼容（.agent-teams/ 磁盘真相）。
+- 测试：`TestBridgeToolTakeover`（接管/停用/归属转移/负例）、`TestBridgeToolTakeoverPkgShort`（命名解析）。
 - `/agent-teams` 命令按宿主命令表同名覆盖语义由 DSH 插件接管（owner=node-bridge:@…）。
 - 安装 DSH 插件前先停 repo 移植版，即可让桥版本全量接管 13 工具。
 - 二者同源（移植版即 dsh-agent-teams 的适配），工具/状态文件格式兼容（.agent-teams/ 磁盘真相）。

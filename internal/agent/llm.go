@@ -473,10 +473,12 @@ func (p *OpenAIProvider) Chat(ctx context.Context, messages []Message, tools []T
 		// 其他 4xx → 客户端错误，不重试
 		err = fmt.Errorf("LLM HTTP %d: %s", statusCode, bodyStr)
 		log.Printf("[llm] %s HTTP %d（客户端错误，不重试）: %s", p.Model, statusCode, bodyStr)
+		emitBridgeEvent("agent/request-error", map[string]any{"model": p.Model, "error": err.Error()})
 		return Message{}, err
 	}
 
 	log.Printf("[llm] %s 请求失败（已达最大重试次数 %d）: %v", p.Model, maxRetries, lastErr)
+	emitBridgeEvent("agent/request-error", map[string]any{"model": p.Model, "error": lastErr.Error()})
 	return Message{}, fmt.Errorf("LLM 请求失败（已达最大重试次数 %d）: %w", maxRetries, lastErr)
 }
 

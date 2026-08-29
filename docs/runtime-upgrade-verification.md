@@ -140,7 +140,7 @@ readPluginSpecs/无 cordis4-DSH 分支；无任何同步脚本——仅 scripts/
 | agentloop | ✅ | 装载日志 `registerLoop: 已注册 JS 循环实现 "agentloop"`（= round3 基线） |
 | cordis3 Node 桥插件（旧 npm 轨） | ✅ 无回归 | Phase 2-B 两条旧 plugins.json 字符串条目经 cordis3 分支照常装载 |
 | goja 轨 | ✅ 零改动 | t2 未触碰 goja 轨（jsplugin.go 仅 t6 修复 F1 时改动）；46 插件全走 goja 装载成功 |
-| 工具名冲突语义（DSH vs repo 移植版并存） | ⚠️ 记录不阻塞 | 同名 13 工具被 claimTool 拒绝（明确报错+处理建议）；`/agent-teams` 命令按文档化语义被 DSH 覆盖——**两个插件为替代关系**；t1 范围声明（repo 移植版保持 goja）下不构成对既有插件自身的回归 |
+| 工具名冲突语义（DSH vs repo 移植版并存） | ✅ 已自动化接管（遗留处置 2026-08-29） | 同名 13 工具由 `takeoverConflictingPlugin` 自动停用移植版并接管（同源判定：桥包短名去 dsh- 前缀 == 占用插件 id）；`/agent-teams` 命令按文档化语义由 DSH 覆盖；非同源冲突仍严格拒绝（明确报错） |
 
 ---
 
