@@ -10,7 +10,7 @@ JS 运行时升级专项新增维护；历史组件见各模块头注与 go.mod�
 | 组件 | 版本 | 许可证 | 用途 | 版权/来源 |
 |---|---|---|---|---|
 | goja（wb-ui/goja fork） | fork of dop251/goja | MIT | goja 沙箱运行时（既有，保留随包 LICENSE） | Copyright 2016 Dmitry Panov；2012 Robert Krimen |
-| goja_nodejs（候选 A，未实施） | latest（未引入） | MIT | 若未来实施 fs/path/process 等借用需登记（本轮 P2） | dop251/goja_nodejs |
+| goja_nodejs（候选 A） | 2021 版缓存（未引入为依赖） | MIT | 语义参考——mini Node API 层（internal/agent/nodeapi_mini.go）为**原创实现**（fs/path/buffer/events/util，fs 工作区根受限），未复制 goja_nodejs 代码 | dop251/goja_nodejs |
 | @cordisjs/core（cordis3） | 3.18.1（桥安装） | MIT | 现有 Node 桥 cordis3 Context | cordis 项目（2022 友好凉拌/koishi） |
 | @deepseek-ai/cordis（cordis4） | ^4.0.1 | MIT | Round4 DSH 插件装载 Context（`@deepseek-ai/cordis` peer 显式安装） | deepseek-harness（2026 DeepSeek） |
 | @deepseek-ai/dsh-agent / dsh-llm / dsh-session / dsh-subagent / dsh-tools / dsh-system-prompt / dsh-commands / dsh-workspace | 0.1.0-rc.x | MIT | DSH 服务面 peer 依赖（npm 安装） | deepseek-harness |
@@ -30,4 +30,6 @@ JS 运行时升级专项新增维护；历史组件见各模块头注与 go.mod�
 ## 维护约定
 
 - 新增 npm 运行时依赖 → 在本表追加一行（组件/版本/许可证/用途/来源）。
-- 候选 A（goja_nodejs 借用）若未来实施 → 补登本表并在引入处保留版权头注。
+- mini Node API 层（internal/agent/nodeapi_mini.go）为原创实现，语义参考
+  Node.js 与 goja_nodejs（MIT），未复制其代码；若后续改为直接引入 goja_nodejs
+  依赖 → 补登本表并在引入处保留版权头注。

@@ -186,8 +186,14 @@ t4 审查 findings 处置（F1-F5，全部修复）+ t3 验证新增 F1a（高�
 2. webServer/workspaceRegistry 门面（Web 面板数据路由）：宿主 UI 槽位由既有
    agent-teams 移植版 client.js 承载；headless 下插件保持 tool-only（与 DSH
    headless profile 语义一致）。
-3. goja_nodejs 借用（候选 A）——出现「纯 Node stdlib 形态、无 cordis 依赖」
-   第三方插件时再评估按需子集。
+3. ~~goja_nodejs 借用（候选 A）~~ —— **✅ 已实施（2026-08-29「创造需求」落地）**：
+   无外部需求时从仓库自有插件创造需求（`tool-project-info` 等手工 `d+'/'+name`
+   路径拼接在 Windows 分隔符下有隐患、无 base64/hex 编解码）。落地为
+   `internal/agent/nodeapi_mini.go` 原创实现（require + fs（工作区根受限同步面）/
+   path/buffer/events/util + 相对文件模块），**未引入 goja_nodejs 依赖**（避免 fork
+   模块身份问题）；`tool-project-info` 已重构使用 require('path')。测试：
+   TestNodeAPIMini{FS,PathAndBuffer,RelativeRequire,InSandbox}。剩余：全量 Node fs
+   （watcher/stream 面）与 npm 模块解析仍走 Node 桥（设计使然）。
 
 ---
 

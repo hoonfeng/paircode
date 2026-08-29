@@ -2735,10 +2735,11 @@ func newJSSandbox(def *jsPluginDef) (*goja.Runtime, *goja.Object) {
 		log.Printf("[plugin_js] TextEncoder polyfill 失败: %v", err)
 	}
 
-	// Node API trap（对齐 harness NODE_API_REDIRECTS）：require/setTimeout/fetch 等
+	// Node API trap（对齐 harness NODE_API_REDIRECTS）：setTimeout/fetch 等
 	// 在沙箱中不可用，调用即抛教学错误，引导走 ctx 服务（与 harness 沙箱纪律一致）。
+	// ★ 候选 A（2026-08-29）：require 不再 trap——由 installNodeAPIMini 提供
+	//   mini Node API（fs/path/buffer/events/util + 相对文件模块，fs 工作区根受限）。
 	nodeAPI := map[string]string{
-		"require":       "Node modules are unavailable. Use the cordis services on ctx instead — e.g. ctx.fs for files, ctx.web for HTTP, ctx.bash for processes; query cordis_inspect_query for available services.",
 		"setTimeout":    "Node timers are unavailable. Use ctx.timeout(callback, delay) instead (cordis timer service).",
 		"setInterval":   "Node timers are unavailable. Use ctx.interval(callback, delay) instead (cordis timer service).",
 		"setImmediate":  "Node timers are unavailable. Use ctx.timeout(callback, 0) instead (cordis timer service).",
@@ -2752,6 +2753,10 @@ func newJSSandbox(def *jsPluginDef) (*goja.Runtime, *goja.Object) {
 			panic(vm.NewTypeError("%s is not available in the dynamic package sandbox — %s", n, r))
 		})
 	}
+
+	// ★ 候选 A（2026-08-29）：mini Node API（require/fs/path/buffer/events/util）。
+	//   fs 受限根 = 工作区根（与 ctx.fs 服务同源）。
+	installNodeAPIMini(vm, npmPluginProjectRoot())
 
 	// 内置 cordis 运行时：执行 bundle 后全局挂 CordisApi（真 cordis Context），
 	// 插件代码可 new CordisApi.api.Context() 建 cordis app 跑生态插件协作。

@@ -8,6 +8,9 @@
 // notes/ 前缀镜像、渐进式披露、多项目 project 路由）。
 // 工具清单：project_info_write、project_info_read、project_info_list、project_info_tree、project_info_search、project_info_delete、project_info_explore
 // ═══════════════════════════════════════════════════════════════
+// ★ 2026-08-29（候选 A 创造需求）：改用 mini Node API——require('path')
+//   统一路径拼接（手工 d+'/'+name 在 Windows 分隔符下有隐患）。
+const path = require('path')
 const tools = [
   {
     "name": "project_info_write",
@@ -190,7 +193,7 @@ function notesToBranchRel(n) {
   else if (segs[0] === 'decision' || segs[0] === 'decisions') branch = '设计思想'
   else if (segs.length >= 2 && segs[0] === 'inbox') branch = '实现'
   else branch = '实现'
-  return branch + '/' + leaf
+  return path.join(branch, leaf)
 }
 
 // firstHeading 取 Markdown 首行 # 标题。
@@ -216,11 +219,11 @@ function walkMd(ctx, base, prefix) {
   try { names = ctx.fs.readdir(base) } catch (e) { return [] }
   const out = []
   for (const n of names) {
-    const full = base + '/' + n
+    const full = path.join(base, n)
     let st = null
     try { st = ctx.fs.stat(full) } catch (e) { continue }
     if (st.isDir) {
-      out.push(...walkMd(ctx, full, prefix + '/' + n))
+      out.push(...walkMd(ctx, full, path.join(prefix, n)))
       continue
     }
     if (!n.endsWith('.md')) continue
@@ -243,7 +246,7 @@ function scanInfoEntries(ctx, dir) {
       const br = notesToBranchRel(e.rel)
       if (!br) continue
       // 树中已有镜像副本 → 跳过，避免重复
-      if (ctx.fs.exists(dir + '/' + br + '.md')) continue
+      if (ctx.fs.exists(path.join(dir, br + '.md'))) continue
       out.push({ rel: e.rel, title: e.title, level: infoLevel(e.rel), content: e.content })
     }
   }
@@ -320,9 +323,9 @@ function countDirFiles(ctx, dir) {
     for (const name of names) {
       if (n >= 2000) return
       let st = null
-      try { st = ctx.fs.stat(d + '/' + name) } catch (e) { continue }
+      try { st = ctx.fs.stat(path.join(d, name)) } catch (e) { continue }
       if (st.isDir) {
-        if (!isSkipDir(name)) walk(d + '/' + name)
+        if (!isSkipDir(name)) walk(path.join(d, name))
       } else {
         n++
       }
@@ -364,7 +367,7 @@ function projectInfoWrite(ctx, args) {
     if (br) branchRel = br
     mirrorRel = rel.replace(/^notes\//, '')
   }
-  const fp = dir + '/' + branchRel + '.md'
+  const fp = path.join(dir, branchRel + '.md')
   const slash = Math.max(fp.lastIndexOf('/'), fp.lastIndexOf('\\'))
   if (slash > 0) {
     const pd = fp.slice(0, slash)
@@ -397,7 +400,7 @@ function projectInfoWrite(ctx, args) {
 function projectInfoRead(ctx, args) {
   const dir = infoDir(ctx, args)
   const rel = safeInfoPath(args.path)
-  const fp = dir + '/' + rel + '.md'
+  const fp = path.join(dir, rel + '.md')
   if (!ctx.fs.exists(fp)) throw new Error('无此知识库条目：' + rel + '（用 project_info_list 看全部）')
   return ctx.fs.readFile(fp)
 }
@@ -430,7 +433,7 @@ function projectInfoSearch(ctx, args) {
 function projectInfoDelete(ctx, args) {
   const dir = infoDir(ctx, args)
   const rel = safeInfoPath(args.path)
-  const fp = dir + '/' + rel + '.md'
+  const fp = path.join(dir, rel + '.md')
   if (!ctx.fs.exists(fp)) throw new Error('无此知识库条目：' + rel)
   ctx.fs.rm(fp, false)
   return '已删除知识库条目：' + rel

@@ -1314,7 +1314,8 @@ func TestJSNodeAPITraps(t *testing.T) {
 	cases := []struct {
 		call, wantHint string
 	}{
-		{"require('fs')", "Node modules are unavailable"},
+		// ★ 候选 A（2026-08-29）：require 不再 trap——mini Node API 已提供
+		//   （fs/path/buffer/events/util + 相对文件模块）。其余 Node API 保持 trap。
 		{"setTimeout(() => {}, 100)", "ctx.timeout"},
 		{"setInterval(() => {}, 100)", "ctx.interval"},
 		{"fetch('https://x')", "ctx.web"},
@@ -1338,6 +1339,23 @@ func TestJSNodeAPITraps(t *testing.T) {
 		if host.State("trap-test") != PluginStopped {
 			t.Fatalf("[%s] 插件应 stopped（apply 失败未装载）", c.call)
 		}
+	}
+
+	// ★ 候选 A：require 现在可用（mini Node API）——沙箱内 require('fs') 不抛错
+	reg := NewRegistry()
+	host := NewPluginHost(reg, nil, `C:\ws`)
+	code := `return { name: 'require-test', apply(ctx) { const fs = require('fs'); ctx.tools.register({ name: 'req_probe', description: 'probe', execute: () => ({ text: typeof fs.readFileSync }) }) } }`
+	id, err := host.DefineJS(code, "require mini")
+	if err != nil {
+		t.Fatalf("DefineJS: %v", err)
+	}
+	def, _ := host.GetJSDef(id)
+	if err := host.LoadJSDynamic(def); err != nil {
+		t.Fatalf("require('fs') 应可用（mini Node API）: %v", err)
+	}
+	out, err := reg.Execute(context.Background(), "req_probe", `{}`)
+	if err != nil || !strings.Contains(out, "function") {
+		t.Fatalf("req_probe: out=%q err=%v", out, err)
 	}
 }
 
