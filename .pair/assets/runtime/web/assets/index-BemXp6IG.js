@@ -11197,6 +11197,12 @@
   async function answerChat(convId, answer) {
     return apiPost("/chat/answer", { convId, answer });
   }
+  async function listCommands() {
+    return apiGet("/commands");
+  }
+  async function runCommand(name, args, convId) {
+    return apiPost("/commands/run", { name, args: args || {}, convId: convId || "" });
+  }
   async function approveChat(convId, approved) {
     return apiPost("/chat/approve", { convId, approved });
   }
@@ -11263,7 +11269,7 @@
   async function saveInstructions(scope, content) {
     return apiPut("/instructions?scope=" + scope, { content });
   }
-  const api = { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, isWebSocketOpen, waitForWebSocket, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatCompact, chatStop, getMessages, getMessagesCount, getModels, saveModels, getAiPresets, saveAiPreset, saveAiPresets, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, listPlugins, getPluginDetail, pluginAction, definePlugin, pluginEmit, pluginClientEvents, pluginClientState, pluginInvoke, pluginClientFailure, builtinPlugins, pluginToolToggle, getToolsets, toolsetEdit };
+  const api = { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, isWebSocketOpen, waitForWebSocket, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatCompact, chatStop, getMessages, getMessagesCount, getModels, saveModels, getAiPresets, saveAiPreset, saveAiPresets, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, listPlugins, getPluginDetail, pluginAction, definePlugin, pluginEmit, pluginClientEvents, pluginClientState, pluginInvoke, pluginClientFailure, builtinPlugins, pluginToolToggle, getToolsets, toolsetEdit, listCommands, runCommand };
   async function listPlugins() {
     return apiGet("/plugins");
   }
@@ -12369,22 +12375,27 @@
             let question = "";
             let askType = "text";
             let options = [];
+            let questions = [];
             try {
               const args = typeof ev.args === "string" ? JSON.parse(ev.args) : ev.args;
               question = args.question || "（无问题内容）";
               askType = normalizeAskType(args.askType || args.type || "text");
               if (Array.isArray(args.options)) options = args.options;
+              if (Array.isArray(args.questions)) questions = args.questions;
             } catch {
             }
-            segments.push({
+            const seg = {
               type: "ask_user",
               question,
               askType,
               options,
+              questions,
               callId: ev.callId || "",
               answer: ev.content || "",
               _answered: !!ev.content
-            });
+            };
+            if (questions.length > 0) seg.question = "";
+            segments.push(seg);
           } else {
             segments.push(restoreToolState({
               type: "tool_call",
@@ -12531,6 +12542,7 @@
         let question = "";
         let askType = "text";
         let options = [];
+        let questions = [];
         try {
           const args = typeof data.args === "string" ? JSON.parse(data.args) : data.args;
           question = args.question || "（无问题内容）";
@@ -12538,17 +12550,23 @@
           if (Array.isArray(args.options)) {
             options = args.options;
           }
+          if (Array.isArray(args.questions)) {
+            questions = args.questions;
+          }
         } catch {
         }
-        msg.segments.push({
+        const seg = {
           type: "ask_user",
           question,
           askType,
           options,
+          questions,
           callId: data.callId || data.callID || "",
           answer: "",
           _answered: false
-        });
+        };
+        if (questions.length > 0) seg.question = "";
+        msg.segments.push(seg);
       } else if (toolName === "update_plan") {
         try {
           const args = data.args ? typeof data.args === "string" ? JSON.parse(data.args) : data.args : {};
