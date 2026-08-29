@@ -196,6 +196,7 @@ func SpawnSubAgent(spec SubAgentSpec) (*SubAgentRecord, error) {
 		return rec, err
 	}
 	log.Printf("[subagent] 已启动成员会话 conv=%s label=%s model=%s deny=%v", convID, spec.Label, spec.Model, spec.DenyTools)
+	emitAgentStatusEvent(snapshotSubAgent(rec), "running")
 	return snapshotSubAgent(rec), nil
 }
 
@@ -247,6 +248,7 @@ func FollowupSubAgent(convID, text string) (queued bool, err error) {
 		subAgentMu.Unlock()
 		return false, err
 	}
+	emitAgentStatusEvent(snapshotSubAgent(rec), "running")
 	return false, nil
 }
 
@@ -365,6 +367,9 @@ func StopSubAgent(convID string) error {
 		return fmt.Errorf("子 Agent 能力未就绪：会话启动器未注入")
 	}
 	spawner.Stop(convID)
+	if rec != nil {
+		emitAgentStatusEvent(snapshotSubAgent(rec), "stopped")
+	}
 	return nil
 }
 
@@ -475,6 +480,24 @@ func snapshotSubAgent(rec *SubAgentRecord) *SubAgentRecord {
 
 // ─── 空闲事件桥（轮次结束 → 队列续发 + 插件事件） ─────────────
 
+// emitAgentStatusEvent 向 Node 桥转发 agent/status 事件（Round4 DSH 事件桥）。
+// 载荷形态对齐 DSH scheduler 消费面：{agent: {id, status, session.header.cwd}, status}。
+// 无订阅时零开销（emitBridgeEvent 白名单过滤）。
+func emitAgentStatusEvent(rec *SubAgentRecord, status string) {
+	wsRoot := rec.WsRoot
+	if wsRoot == "" {
+		wsRoot = npmPluginProjectRoot()
+	}
+	emitBridgeEvent("agent/status", map[string]any{
+		"agent": map[string]any{
+			"id":      rec.ConvID,
+			"status":  status,
+			"session": map[string]any{"header": map[string]any{"cwd": wsRoot}},
+		},
+		"status": status,
+	})
+}
+
 // ensureSubAgentEventBridge 惰性启动事件桥（首次有子 Agent 时启动，只启一次）。
 func ensureSubAgentEventBridge() {
 	subAgentMu.Lock()
@@ -542,6 +565,8 @@ func ensureSubAgentEventBridge() {
 			if ph := GetGlobalPluginHost(); ph != nil {
 				ph.EmitHostEvent("subagent/idle", payload)
 			}
+			// ★ Round4：agent/status 事件桥（DSH 插件 scheduler 消费 idle 边）
+			emitAgentStatusEvent(snapshotSubAgent(rec), "idle")
 		}
 	}()
 	log.Printf("[subagent] 事件桥已启动（监听会话轮次结束 → subagent/idle）")

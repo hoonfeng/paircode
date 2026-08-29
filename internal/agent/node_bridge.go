@@ -70,8 +70,17 @@ type nodeBridge struct {
 	ready    bool
 	restarts int
 	closed   bool
+	// ★ Round4 repair（t6）：epoch 代数计数——Close() 递增，start() 携带
+	//   启动时快照校验；epoch 过期（启动期间被 Close/替换）→ 放弃进程防
+	//   「旧进程僵尸 + globalNodeBridge 被过期启动覆盖」竞态。
+	epoch int
 	toolsMu  sync.Mutex
 	tools    map[string]*Tool // 已注册到宿主的桥工具（新宿主补注册用）
+	// ★ t5 集成：桥工具归属名（toolName → "node-bridge:<插件名>"；claimTool
+	//   冲突报错信息完整 + 无冲突时正确登记归属）。受 toolsMu 保护。
+	toolOwner map[string]string
+	// ★ Round4：host 事件订阅白名单（插件 ctx.on 声明的事件名；按名转发防风暴）
+	subs map[string]bool
 }
 
 // globalNodeBridge 全局单例（对齐 GetGlobalPluginHost 模式）。
@@ -140,18 +149,26 @@ func (b *nodeBridge) bindHost(ph *PluginHost) {
 }
 
 // registerToolsTo 把桥已注册工具补注册到指定宿主（新 agent 实例用）。
+// ★ t5 集成：按工具归属名（node-bridge:<插件名>）注册——冲突报错信息完整，
+//   无冲突时正确登记归属（与 goja 插件 claimTool 语义一致）。
 func (b *nodeBridge) registerToolsTo(ph *PluginHost) {
 	if ph == nil {
 		return
 	}
 	b.toolsMu.Lock()
 	tools := make([]*Tool, 0, len(b.tools))
+	owners := make([]string, 0, len(b.tools))
 	for _, t := range b.tools {
 		tools = append(tools, t)
+		owners = append(owners, b.toolOwner[t.Name])
 	}
 	b.toolsMu.Unlock()
-	for _, t := range tools {
-		if err := ph.Context().RegisterTool(t); err != nil {
+	for i, t := range tools {
+		owner := owners[i]
+		if owner == "" {
+			owner = "node-bridge"
+		}
+		if err := ph.Context().forPlugin(owner).RegisterTool(t); err != nil {
 			log.Printf("[node-bridge] 补注册工具 %s 到新宿主失败: %v", t.Name, err)
 		}
 		// ★ 2026-08-17：装载 ≠ agent 可用——Node 桥插件工具同样受工作区工具集
@@ -160,8 +177,21 @@ func (b *nodeBridge) registerToolsTo(ph *PluginHost) {
 	}
 }
 
+// isStale 判断 start 的 epoch 快照是否已过期（期间发生 Close/替换）。
+func (b *nodeBridge) isStale(epoch int) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.epoch != epoch
+}
+
 // start 启动 node 子进程并等待 ready。
 func (b *nodeBridge) start(nodePath string) error {
+	// ★ Round4 repair（t6）：启动前快照 epoch；启动期间若 Close()（并发
+	//   ensureNodeBridge 替换/宿主重置）递增 epoch → 放弃本进程（kill），
+	//   防止旧进程继续存活与过期启动覆盖 globalNodeBridge。
+	b.mu.Lock()
+	myEpoch := b.epoch
+	b.mu.Unlock()
 	bridgeJS := filepath.Join(b.dir, "bridge.js")
 	if err := os.MkdirAll(b.dir, 0o755); err != nil {
 		return fmt.Errorf("创建桥目录失败: %v", err)
@@ -211,7 +241,17 @@ func (b *nodeBridge) start(nodePath string) error {
 	// 等待 ready（最长 10s）
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
+		if b.isStale(myEpoch) { // 启动期间被 Close/替换 → 放弃本进程
+			_ = cmd.Process.Kill()
+			_, _ = cmd.Process.Wait()
+			return fmt.Errorf("node 桥启动被取消（epoch 已过期，桥已关闭/替换）")
+		}
 		if b.isReady() {
+			// ★ Round4 repair（t6）：启动成功后清零崩溃重启计数
+			//   （连续崩溃计数只统计「启动失败/就绪前退出」段）。
+			b.mu.Lock()
+			b.restarts = 0
+			b.mu.Unlock()
 			return nil
 		}
 		time.Sleep(50 * time.Millisecond)
@@ -244,6 +284,7 @@ func (b *nodeBridge) readLoop(stdout interface{ Read([]byte) (int, error) }) {
 			Svc     string          `json:"svc"`
 			Method  string          `json:"method"`
 			Args    json.RawMessage `json:"args"`
+			Events  []string        `json:"events"` // Round4：插件事件订阅清单
 		}
 		if err := json.Unmarshal([]byte(line), &msg); err != nil {
 			log.Printf("[node-bridge] 协议解析失败: %v (line %.80s)", err, line)
@@ -258,7 +299,9 @@ func (b *nodeBridge) readLoop(stdout interface{ Read([]byte) (int, error) }) {
 		case "tool":
 			b.handleToolMsg(msg.Plugin, msg.Def)
 		case "service":
-			b.handleServiceMsg(msg.ID, msg.Svc, msg.Method, msg.Args)
+			b.handleServiceMsg(msg.ID, msg.Svc, msg.Method, msg.Args, msg.Plugin)
+		case "subscribe":
+			b.handleSubscribeMsg(msg.Plugin, msg.Events)
 		case "result":
 			b.mu.Lock()
 			ch := b.pending[msg.ID]
@@ -339,8 +382,13 @@ func (b *nodeBridge) handleToolMsg(plugin string, defRaw json.RawMessage) {
 	}
 	b.toolsMu.Lock()
 	b.tools[def.Name] = tool
+	if b.toolOwner == nil {
+		b.toolOwner = map[string]string{}
+	}
+	owner := "node-bridge:" + plugin
+	b.toolOwner[def.Name] = owner
 	b.toolsMu.Unlock()
-	if err := ph.Context().RegisterTool(tool); err != nil {
+	if err := ph.Context().forPlugin(owner).RegisterTool(tool); err != nil {
 		log.Printf("[node-bridge] 注册工具 %s 失败: %v", def.Name, err)
 	}
 	// ★ 2026-08-17：装载 ≠ agent 可用——Node 桥插件工具同样受工作区工具集
@@ -363,7 +411,8 @@ func (b *nodeBridge) invokeTool(ctx context.Context, tool string, args map[strin
 	b.mu.Unlock()
 
 	wsRoot := SessionWorkspaceRoot(ctx)
-	payload, _ := json.Marshal(map[string]any{"t": "invoke", "id": id, "tool": tool, "args": args, "wsRoot": wsRoot})
+	// ★ Round4：DSH 插件工具需要调用方会话身份（exec.agent.id / session.header.cwd）
+	payload, _ := json.Marshal(map[string]any{"t": "invoke", "id": id, "tool": tool, "args": args, "wsRoot": wsRoot, "convId": SessionConvID(ctx)})
 	if err := b.sendLine(payload); err != nil {
 		return "", fmt.Errorf("node 桥发送失败: %v", err)
 	}
@@ -380,12 +429,29 @@ func (b *nodeBridge) invokeTool(ctx context.Context, tool string, args map[strin
 	}
 }
 
-// handleServiceMsg Node 插件请求服务（ctx.fs/web/bash）→ 转发 Go 侧工具。
-func (b *nodeBridge) handleServiceMsg(id int64, svcName, method string, argsRaw json.RawMessage) {
-	log.Printf("[node-bridge:diag] service id=%d svc=%s method=%s args=%s", id, svcName, method, string(argsRaw))
+// handleServiceMsg Node 插件请求服务（ctx.fs/web/bash + Round4 DSH 服务面）
+// → 转发 Go 侧工具 / 直连处理器。
+func (b *nodeBridge) handleServiceMsg(id int64, svcName, method string, argsRaw json.RawMessage, plugin string) {
+	log.Printf("[node-bridge:diag] service id=%d svc=%s method=%s plugin=%s", id, svcName, method, plugin)
 	args := map[string]any{}
 	if len(argsRaw) > 0 {
 		_ = json.Unmarshal(argsRaw, &args)
+	}
+	// ★ Round4 repair（t6）：先锁内取 ph 快照再传入下游——dshService 与
+	//   subAgentSpecFromArgs 共用同一快照（杜绝与 bindHost 的 b.ph 写并发
+	//   数据竞争；也保证同一请求内 agents.start 的 spec.WsRoot 回退与
+	//   工具 Execute 落在同一宿主上）。
+	b.mu.Lock()
+	ph := b.ph
+	b.mu.Unlock()
+	// ★ Round4：DSH 服务面（agents/subagents/llm/systemPrompt/commands/logger）
+	if handled, data, err := b.dshService(svcName, method, args, plugin, ph); handled {
+		if err != nil {
+			b.sendResult(id, false, "", err.Error())
+		} else {
+			b.sendResult(id, true, data, "")
+		}
+		return
 	}
 	toolName, mappedArgs, direct, err := mapBridgeService(svcName, method, args)
 	log.Printf("[node-bridge:diag] service id=%d → tool=%s err=%v", id, toolName, err)
@@ -404,8 +470,8 @@ func (b *nodeBridge) handleServiceMsg(id int64, svcName, method string, argsRaw 
 	}
 	argsJSON, _ := json.Marshal(mappedArgs)
 	var result string
-	if b.ph != nil {
-		result, err = b.ph.Context().Tools.Execute(context.Background(), toolName, string(argsJSON))
+	if ph != nil {
+		result, err = ph.Context().Tools.Execute(context.Background(), toolName, string(argsJSON))
 		log.Printf("[node-bridge:diag] service id=%d Execute(%s) → result=%q err=%v", id, toolName, result, err)
 	} else {
 		err = fmt.Errorf("宿主未就绪")
@@ -415,6 +481,367 @@ func (b *nodeBridge) handleServiceMsg(id int64, svcName, method string, argsRaw 
 		return
 	}
 	b.sendResult(id, true, result, "")
+}
+
+// ─── Round4 DSH 服务面（cordis4 轨插件 ctx.agents/subagents/llm/systemPrompt/
+// commands 的门面后端）────────────────────────────────────────
+// 直接映射现有 Go 能力（SubAgentRegistry / 模型目录 / PluginHost 段 / 命令表），
+// 与 goja 轨 ctx.agents/ctx.llm（jsplugin_agents.go）同源，行为一致。
+// 返回 (handled, data, err)：handled=false 表示非 DSH 服务（走 mapBridgeService）。
+
+// handleSubscribeMsg 记录插件事件订阅白名单（agent/status 等按名转发）。
+func (b *nodeBridge) handleSubscribeMsg(plugin string, events []string) {
+	b.mu.Lock()
+	if b.subs == nil {
+		b.subs = map[string]bool{}
+	}
+	for _, e := range events {
+		if e = strings.TrimSpace(e); e != "" {
+			b.subs[e] = true
+		}
+	}
+	b.mu.Unlock()
+	log.Printf("[node-bridge] 插件 %s 订阅事件 %v", plugin, events)
+}
+
+// bridgeHasSubscribers 是否有插件订阅了指定事件名。
+func (b *nodeBridge) bridgeHasSubscribers(name string) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.subs != nil && b.subs[name]
+}
+
+// emitBridgeEvent 把宿主事件转发给 Node 桥（仅当有插件订阅；防协议风暴）。
+// 订阅白名单外的事件零开销（一次锁 + map 查询）。
+func emitBridgeEvent(name string, payload any) {
+	b := globalNodeBridge
+	if b == nil || !b.isReady() || !b.bridgeHasSubscribers(name) {
+		return
+	}
+	line, err := json.Marshal(map[string]any{"t": "event", "name": name, "payload": payload})
+	if err != nil {
+		log.Printf("[node-bridge] 事件 %s 序列化失败: %v", name, err)
+		return
+	}
+	if err := b.sendLine(line); err != nil {
+		log.Printf("[node-bridge] 事件 %s 转发失败: %v", name, err)
+	}
+}
+
+// dshService DSH 服务面实现（Node 插件 ctx.agents/subagents/llm/systemPrompt/commands）。
+// ★ Round4 repair（t6）：ph 由 handleServiceMsg 锁内快照传入（与
+//   subAgentSpecFromArgs 共用同一宿主快照），调用方不得传 b.ph。
+func (b *nodeBridge) dshService(svcName, method string, args map[string]any, plugin string, ph *PluginHost) (handled bool, data string, err error) {
+	switch svcName {
+	case "agents":
+		convID := argStr(args, "convId")
+		switch method {
+		case "get":
+			rec := SubAgentInfo(convID)
+			if rec == nil {
+				return true, "null", nil
+			}
+			return true, bridgeJSON(map[string]any{
+				"convId": rec.ConvID, "wsRoot": rec.WsRoot, "state": rec.State,
+				"label": rec.Label, "team": rec.Team, "member": rec.Member,
+				"parentConvId": rec.ParentConv, "report": rec.Report,
+			}), nil
+		case "list":
+			recs := ListSubAgents("", "")
+			out := make([]any, 0, len(recs))
+			for _, rec := range recs {
+				out = append(out, map[string]any{
+					"convId": rec.ConvID, "wsRoot": rec.WsRoot, "state": rec.State,
+					"label": rec.Label, "team": rec.Team, "member": rec.Member,
+					"parentConvId": rec.ParentConv, "report": rec.Report,
+				})
+			}
+			return true, bridgeJSON(out), nil
+		case "status":
+			rec := SubAgentInfo(convID)
+			if rec == nil {
+				return true, "null", nil
+			}
+			return true, bridgeJSON(map[string]any{
+				"convId": rec.ConvID, "wsRoot": rec.WsRoot, "state": rec.State,
+				"label": rec.Label, "team": rec.Team, "member": rec.Member,
+				"parentConvId": rec.ParentConv, "turns": rec.Turns, "report": rec.Report,
+			}), nil
+		case "running":
+			if convID == "" {
+				return true, "false", nil
+			}
+			if rec := SubAgentInfo(convID); rec != nil {
+				return true, fmt.Sprint(rec.State == "running"), nil
+			}
+			if mgr := GlobalSessionManager(); mgr != nil {
+				return true, fmt.Sprint(mgr.IsRunning(convID)), nil
+			}
+			return true, "false", nil
+		case "ready":
+			return true, fmt.Sprint(SubAgentSpawnerReady()), nil
+		case "start":
+			spec, serr := subAgentSpecFromArgs(args, ph)
+			if serr != nil {
+				return true, "", serr
+			}
+			rec, serr := SpawnSubAgent(spec)
+			if serr != nil {
+				return true, "", serr
+			}
+			return true, bridgeJSON(map[string]any{"convId": rec.ConvID, "state": rec.State, "label": rec.Label}), nil
+		case "fork":
+			spec, serr := subAgentSpecFromArgs(args, ph)
+			if serr != nil {
+				return true, "", serr
+			}
+			spec.ForkOf = argStr(args, "forkFrom")
+			rec, serr := ForkSubAgent(spec)
+			if serr != nil {
+				return true, "", serr
+			}
+			return true, bridgeJSON(map[string]any{"convId": rec.ConvID, "state": rec.State}), nil
+		case "followup", "inject", "steer":
+			if convID == "" {
+				return true, "", fmt.Errorf("agents.%s 缺少 convId", method)
+			}
+			text := argStr(args, "text")
+			if text == "" {
+				return true, "", fmt.Errorf("agents.%s 缺少 text", method)
+			}
+			queued, serr := FollowupSubAgent(convID, text)
+			if serr != nil {
+				return true, "", serr
+			}
+			return true, bridgeJSON(map[string]any{"ok": true, "queued": queued, "convId": convID}), nil
+		case "cancel", "stop":
+			if convID == "" {
+				return true, "", fmt.Errorf("agents.%s 缺少 convId", method)
+			}
+			if serr := StopSubAgent(convID); serr != nil {
+				return true, "", serr
+			}
+			return true, "true", nil
+		case "report":
+			if convID == "" {
+				return true, "", fmt.Errorf("agents.report 缺少 convId")
+			}
+			if serr := ReportSubAgent(convID, argStr(args, "text")); serr != nil {
+				return true, "", serr
+			}
+			return true, bridgeJSON(map[string]any{"ok": true, "convId": convID}), nil
+		case "lastText":
+			return true, SubAgentLastText(convID), nil
+		}
+		return true, "", fmt.Errorf("未知 agents 服务方法: %s", method)
+	case "subagents":
+		switch method {
+		case "getProvider":
+			if argStr(args, "name") == "spawn" {
+				return true, bridgeJSON(map[string]any{
+					"name": "spawn", "prepareContinuable": true,
+					"capabilities": map[string]any{"persona": true, "toolFilter": true},
+				}), nil
+			}
+			return true, "null", nil
+		case "list":
+			return true, bridgeJSON([]string{"spawn"}), nil
+		case "startContinuable":
+			spec := SubAgentSpec{
+				Label:       argStr(args, "label"),
+				Task:        argStr(args, "prompt"),
+				System:      argStr(args, "persona"),
+				ParentConv:  argStr(args, "parentConvId"),
+				Provider:    argStr(args, "provider2"),
+				Model:       argStr(args, "model"),
+				DenyTools:   argStrSlice(args, "denyTools"),
+				MaxIter:     0,
+				ReasoningEffort: argStr(args, "reasoningEffort"),
+			}
+			if spec.WsRoot == "" {
+				spec.WsRoot = npmPluginProjectRoot()
+			}
+			rec, serr := SpawnSubAgent(spec)
+			if serr != nil {
+				return true, "", serr
+			}
+			return true, bridgeJSON(map[string]any{"childId": rec.ConvID, "convId": rec.ConvID, "state": rec.State}), nil
+		case "followup":
+			childID := argStr(args, "childId")
+			if childID == "" {
+				return true, "", fmt.Errorf("subagents.followup 缺少 childId")
+			}
+			if _, serr := FollowupSubAgent(childID, argStr(args, "text")); serr != nil {
+				return true, "", serr
+			}
+			return true, "true", nil
+		case "interrupt":
+			if serr := StopSubAgent(argStr(args, "childId")); serr != nil {
+				return true, "", serr
+			}
+			return true, "true", nil
+		}
+		return true, "", fmt.Errorf("未知 subagents 服务方法: %s", method)
+	case "llm":
+		switch method {
+		case "models":
+			models := SubAgentModels()
+			if models == nil {
+				return true, "[]", nil
+			}
+			return true, bridgeJSON(models), nil
+		case "current":
+			cur := SubAgentCurrentModel()
+			if cur == nil {
+				return true, "{}", nil
+			}
+			return true, bridgeJSON(cur), nil
+		case "listModels":
+			provider := argStr(args, "provider")
+			models := SubAgentModels()
+			out := make([]any, 0)
+			for _, m := range models {
+				if provider != "" && m["provider"] != provider {
+					continue
+				}
+				out = append(out, map[string]any{"id": m["model"], "name": m["label"]})
+			}
+			return true, bridgeJSON(out), nil
+		case "resolveCallConfig":
+			provider := argStr(args, "provider")
+			model := argStr(args, "model")
+			if provider == "" || model == "" {
+				return true, "", fmt.Errorf("llm.resolveCallConfig 需要 provider 与 model")
+			}
+			return true, bridgeJSON(map[string]any{
+				"provider": provider, "model": model,
+				"reasoningEffort": argStr(args, "reasoningEffort"),
+			}), nil
+		}
+		return true, "", fmt.Errorf("未知 llm 服务方法: %s", method)
+	case "systemPrompt":
+		switch method {
+		case "section":
+			name := argStr(args, "name")
+			text := argStr(args, "text")
+			if name == "" {
+				return true, "", fmt.Errorf("systemPrompt.section 缺少 name")
+			}
+			ph := GetGlobalPluginHost()
+			if ph == nil {
+				return true, "", fmt.Errorf("systemPrompt.section: 插件宿主未就绪")
+			}
+			order := 100
+			if v, ok := args["order"].(float64); ok {
+				order = int(v)
+			}
+			ph.Context().AddSystemPromptSection(&PromptSection{Name: name, Order: order, Text: text})
+			return true, "ok", nil
+		}
+		return true, "", fmt.Errorf("未知 systemPrompt 服务方法: %s", method)
+	case "commands":
+		switch method {
+		case "register":
+			name := argStr(args, "name")
+			if name == "" {
+				return true, "", fmt.Errorf("commands.register 缺少 name")
+			}
+			owner := "node-bridge:" + plugin
+			handler := func(ctx context.Context, cargs map[string]any) (string, error) {
+				return runNodeCommand(name, cargs)
+			}
+			if serr := RegisterHostCommand(name, argStr(args, "description"), handler, owner); serr != nil {
+				return true, "", serr
+			}
+			return true, "ok", nil
+		case "unregister":
+			UnregisterHostCommands("node-bridge:" + plugin)
+			return true, "ok", nil
+		case "list":
+			return true, bridgeJSON(ListHostCommands()), nil
+		case "run":
+			name := argStr(args, "name")
+			if name == "" {
+				return true, "", fmt.Errorf("commands.run 缺少 name")
+			}
+			result, serr := RunHostCommand(name, args)
+			if serr != nil {
+				return true, "", serr
+			}
+			return true, result, nil
+		}
+		return true, "", fmt.Errorf("未知 commands 服务方法: %s", method)
+	case "logger":
+		// Node 侧 logger 已走 console 通道（t:log 上报），无需往返。
+		return true, "ok", nil
+	}
+	return false, "", nil
+}
+
+// subAgentSpecFromArgs 从 agents.start/fork 服务参数构造 SubAgentSpec。
+func subAgentSpecFromArgs(args map[string]any, ph *PluginHost) (SubAgentSpec, error) {
+	spec := SubAgentSpec{
+		ConvID:          argStr(args, "convId"),
+		ParentConv:      argStr(args, "parentConvId"),
+		Label:           argStr(args, "label"),
+		Team:            argStr(args, "team"),
+		Member:          argStr(args, "member"),
+		Task:            argStr(args, "task"),
+		System:          argStr(args, "system"),
+		Model:           argStr(args, "model"),
+		Provider:        argStr(args, "provider"),
+		ReasoningEffort: argStr(args, "reasoningEffort"),
+		WsRoot:          argStr(args, "wsRoot"),
+		DenyTools:       argStrSlice(args, "denyTools"),
+		MaxIter:         mapInt(args, "maxIterations"),
+	}
+	if spec.WsRoot == "" {
+		if ph != nil && ph.Context() != nil && ph.Context().WorkspaceRoot != "" {
+			spec.WsRoot = ph.Context().WorkspaceRoot
+		} else {
+			spec.WsRoot = npmPluginProjectRoot()
+		}
+	}
+	if strings.TrimSpace(spec.Task) == "" {
+		return spec, fmt.Errorf("agents.start 缺少 task（首轮输入）")
+	}
+	return spec, nil
+}
+
+// runNodeCommand 执行 Node 侧注册的插件命令 handler（cmdrun 消息，等待结果）。
+func runNodeCommand(name string, args map[string]any) (string, error) {
+	b := globalNodeBridge
+	if b == nil || !b.isReady() {
+		return "", fmt.Errorf("node 桥未就绪（命令 %s 不可用）", name)
+	}
+	b.mu.Lock()
+	b.seq++
+	id := b.seq
+	ch := make(chan bridgeResult, 1)
+	b.pending[id] = ch
+	b.mu.Unlock()
+	payload, _ := json.Marshal(map[string]any{"t": "cmdrun", "id": id, "name": name, "args": args})
+	if err := b.sendLine(payload); err != nil {
+		return "", fmt.Errorf("node 桥发送失败: %v", err)
+	}
+	select {
+	case r := <-ch:
+		if r.ok {
+			return r.data, nil
+		}
+		return "", fmt.Errorf("插件命令 %s 执行失败: %s", name, r.error)
+	case <-time.After(90 * time.Second):
+		return "", fmt.Errorf("插件命令 %s 超时（90 秒）", name)
+	}
+}
+
+// mustJSON 序列化（内部数据结构已知可序列化；失败回退空对象）。
+func bridgeJSON(v any) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
 }
 
 // sendResult 回发 service/invoke 结果。
@@ -636,6 +1063,10 @@ func (b *nodeBridge) sendLine(payload []byte) error {
 // Close 关闭 Node 桥进程（卸载工具、kill 子进程）。
 func (b *nodeBridge) Close() {
 	b.mu.Lock()
+	// ★ Round4 repair（t6）：epoch 递增——运行中的 start（含重启路径）
+	//   检测到过期即放弃进程，杜绝「Close 与 start 竞态 → 僵尸进程/
+	//   过期启动覆盖 globalNodeBridge」。
+	b.epoch++
 	b.closed = true
 	b.ready = false
 	cmd := b.cmd
@@ -666,5 +1097,5 @@ func bridgeLoadedPlugins() []string {
 	if err != nil {
 		return nil
 	}
-	return doc.Plugins
+	return doc.Specs()
 }

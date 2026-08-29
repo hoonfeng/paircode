@@ -5,12 +5,15 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/hoonfeng/paircode/internal/core"
 )
 
 // ─── PluginHost 基本 ───────────────────────────────────────
@@ -1253,6 +1256,55 @@ func TestLoadCordisPatch(t *testing.T) {
 	}
 	if err := host.LoadCordisPatch(bad); err == nil {
 		t.Fatalf("坏 JSON 应报错")
+	}
+}
+
+// TestLoadCordisPatchDSHRuntime cordis.patch.json runtime="dsh" 条目 →
+// 触发 ensureNodeBridge（Node 桥 dsh 轨装配）；runtime="node" 同路径。
+// ★ Round4 repair（t6）：此前判定只认 rt=="node"，runtime="dsh" 的 patch
+//   条目（t2 新增轨）会被静默跳过、桥永不启动——本用例锁定两轨都触发。
+func TestLoadCordisPatchDSHRuntime(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("无 node 运行时")
+	}
+	dir := t.TempDir()
+	reg := NewRegistry()
+	host := NewPluginHost(reg, nil, dir)
+	// 工作区根指向临时目录：nodeBridgeDir() → <dir>/.pair/cordis/node，
+	// 避免把桥目录写进仓库工作树。
+	origFolders := core.Folders
+	core.Folders = []string{dir}
+	defer func() { core.Folders = origFolders }()
+	defer closeGlobalNodeBridge()
+
+	patch := filepath.Join(dir, "cordis.patch.json")
+	content := `{
+  "plugins": [
+    { "purpose": "dsh plugin", "config": { "runtime": "dsh", "npm": "@nanmicoder/dsh-agent-teams@0.1.14" } },
+    { "purpose": "node plugin", "config": { "runtime": "node", "npm": "cordis-plugin-android@0.0.7" } }
+  ]
+}`
+	if err := os.WriteFile(patch, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := host.LoadCordisPatch(patch); err != nil {
+		t.Fatalf("LoadCordisPatch(dsh+node): %v", err)
+	}
+	if globalNodeBridge == nil || !globalNodeBridge.isReady() {
+		t.Fatal("runtime=dsh/node 条目应触发 ensureNodeBridge（Node 桥应已就绪）")
+	}
+	// 无 runtime 条目不触发桥（保持既有语义：纯代码 patch 走 goja）
+	closeGlobalNodeBridge()
+	content2 := `{ "plugins": [ { "purpose": "goja", "code": "return { name: 'p2', apply(ctx) {} }" } ] }`
+	patch2 := filepath.Join(dir, "cordis2.patch.json")
+	if err := os.WriteFile(patch2, []byte(content2), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := host.LoadCordisPatch(patch2); err != nil {
+		t.Fatalf("LoadCordisPatch(goja): %v", err)
+	}
+	if globalNodeBridge != nil {
+		t.Fatal("纯代码 patch 不应触发 ensureNodeBridge")
 	}
 }
 

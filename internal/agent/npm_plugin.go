@@ -414,8 +414,8 @@ func uninstallNPMPlugin(pkg string) error {
 			}
 		}
 	}
-	if runtime == "node" {
-		// Node 桥插件：plugins.json 移除 + 重启桥 + 清理源码目录
+	if runtime == "node" || runtime == "dsh" {
+		// Node 桥插件（cordis3 或 Round4 DSH/cordis4）：plugins.json 移除 + 重启桥 + 清理源码目录
 		if err := uninstallNodePlugin(pkg); err != nil {
 			return err
 		}

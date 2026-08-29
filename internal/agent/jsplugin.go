@@ -3999,8 +3999,11 @@ func (h *PluginHost) LoadCordisPatch(path string) error {
 	}
 	for i, p := range doc.Plugins {
 		if strings.TrimSpace(p.Code) == "" {
-			// Node 桥型插件（依赖 npm 生态）：启动时由 Node 桥装载
-			if rt, _ := p.Config["runtime"].(string); rt == "node" {
+			// Node 桥型插件（依赖 npm 生态）：启动时由 Node 桥装载。
+			// ★ Round4 repair（t6）：runtime 判定覆盖 node（cordis3 既有）
+			//   与 dsh（cordis4 + DSH 服务面，t2 新增轨）——此前只认 "node"，
+			//   runtime="dsh" 的 patch 条目会被静默跳过、桥永不启动。
+			if rt, _ := p.Config["runtime"].(string); rt == "node" || rt == "dsh" {
 				needNodeBridge = true
 			}
 			continue

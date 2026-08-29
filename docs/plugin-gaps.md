@@ -148,3 +148,50 @@
 Round3（2026-09）实测失败清单仅剩：msys bash 信号管道组（上述 1）+ `TestWebDebugTimeoutMs`（rod）——
 `TestToolLandingMatrix`（295 工具零未落地）、`TestToolHarnessJSNative`（bash 步外全过）、
 全部新增测试（goal/workflow/fork/commands/ask_user 多问题）通过。
+
+---
+
+## Round4 状态（2026-09 · runtime-complete-round4 团队 t2 实施）
+
+### ④ JS 运行时升级（Node 桥 cordis4/DSH 轨）→ **已实现**（详见 docs/runtime-upgrade-plan.md）
+
+| 项 | 状态 | 说明 |
+|---|---|---|
+| DSH 插件路由判定（@deepseek-ai/cordis ^4 peer） | ✅ 已实现 | nodePluginNeedsNode/nodePluginRuntime（internal/agent/node_plugins.go） |
+| cordis4 装载分支 + DSH 门面（agents/subagents/llm/systemPrompt/commands/logger） | ✅ 已实现 | bridge_node.js decorateDshCtx；node_bridge.go dshService |
+| agent/status 事件桥（subscribe/event 协议） | ✅ 已实现 | subagent_registry.go 四状态点 → emitBridgeEvent |
+| DSH 插件安装路径（runtime 透传 + peer 显式安装） | ✅ 已实现 | marketInstallNPMPluginNode + npmInstallDshPeers |
+| dsh-agent-teams 直跑（13 工具 + create/status/delete 冒烟） | ✅ E2E 测试 | TestNodeBridgeDSHPluginE2E（npm 网络依赖，环境不满足自动 Skip） |
+| agent/pre-step / agent/request-error 事件源 | ⚠️ P2 遗留 | 订阅面已就绪；宿主循环 pre-step 拦截链为宿主语义改造，记录不阻塞 |
+
+### ① Go 核心存量审计处置（t2 实施；审计详见 docs/round4-go-core-audit.md）
+
+| 项 | 处置 | 证据 |
+|---|---|---|
+| A1 孤儿工具 findfiles.go / projectindex.go | ✅ 已删除 | extLangMap 生产依赖已迁 search.go；grep 零残留（live_e2e 夹具字符串保留） |
+| A2 死代码 evalstore.go / evaluator.go（+测试） | ✅ 已删除 | DefaultJudgePrompt/judgeSystemPrompt 迁 role_prompts.go（C1/C2 闭环保持） |
+| A4 MCP 工具面插件封装 | 记录 P2 | 协议层留宿主；可选 tool-mcp 封装后续专项 |
+| C 类 20 组 Go 工具库 / B 类 ~150 文件 | 保留 | 测试/归档基座 + 宿主基础设施（维持现状） |
+
+### Round4 新增验证（internal/agent/dsh_bridge_test.go + node_bridge_test.go）
+
+- `TestNodePluginRuntime` / `TestNodePluginNeedsNode`（+dsh 用例）/ `TestNodePluginsFile`（新格式+旧格式兼容）
+- `TestDSHBridgeServices` / `TestDSHBridgeSystemPromptCommand`（服务面映射/段注册/命令表）
+- `TestBridgeEventSubscription` / `TestNodeBridgeAgentStatusEvent`（订阅门控 + 事件载荷）
+- `TestNodeBridgeDSHPluginE2E`（npm 安装 + cordis4 装载 + 13 工具 + 冒烟；环境依赖自动 Skip）
+- `TestRolePromptDiskDefaultSync` / `TestRolePromptDiskOverride`（judge 提示迁移后保持通过）
+- t6 repair 追加：`TestLoadCordisPatchDSHRuntime`（F1b）、`TestBridgeNodeResourceSync`（F1a 守卫）、
+  `TestBridgeNodeSourceExternalPriority`（外置优先/回退/同步回归）
+- t5 集成追加：真实 pair.exe 冒烟（46 插件/47 工具集/桥自启/DSH 插件装载/health 200/零 FATAL）
+
+### Round4 已知并存语义（t5 同步，替代关系定案）
+
+**DSH 插件（npm，桥 cordis4 轨）与 repo agent-teams 移植版（`.pair/plugins/agent-teams`，goja 轨）
+的 13 个 `agent_teams_*` 工具同名——二者为替代关系**（非并存）：
+
+- 并存时桥工具注册被 claimTool 拒绝：`工具 "agent_teams_create" 已被插件 agent-teams 注册，
+  插件 node-bridge:@nanmicoder/dsh-agent-teams 不能覆盖。请换工具名，或先 cordis_stop agent-teams 再注册`
+  （明确报错 + 处理建议，非静默、非 FATAL；t5 已补归属名使信息完整）。
+- `/agent-teams` 命令按宿主命令表同名覆盖语义由 DSH 插件接管（owner=node-bridge:@…）。
+- 安装 DSH 插件前先停 repo 移植版，即可让桥版本全量接管 13 工具。
+- 二者同源（移植版即 dsh-agent-teams 的适配），工具/状态文件格式兼容（.agent-teams/ 磁盘真相）。

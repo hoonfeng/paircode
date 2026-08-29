@@ -602,6 +602,31 @@ function readPluginSpecs() {
 // ── 插件装载 ──
 // runtime=="dsh" → cordis4（@deepseek-ai/cordis）+ DSH 门面；
 // 其余 → cordis3（@cordisjs/core）既有路径。
+
+// resolvePluginApply 从模块导出中解析 apply 函数（双轨共用）。
+// ★ t5 集成修复：candidate 可能是「类/服务库」形态（如 @deepseek-ai/dsh-fs-local
+//   导出 LocalFileSystem 类）——类经原型链取到 Function.prototype.apply 会以
+//   诡异 TypeError 崩溃；这里仅接受：① 非 class 的函数（cordis 惯例 default=apply），
+//   ② 对象 own property apply/default。类与空导出 → undefined（调用方友好跳过）。
+function resolvePluginApply(candidate) {
+  if (typeof candidate === 'function') {
+    try {
+      const src = Function.prototype.toString.call(candidate);
+      if (/^\s*class\b/u.test(src)) return undefined; // 类构造器不是 apply 函数
+    } catch (_) {}
+    return candidate;
+  }
+  if (candidate && typeof candidate === 'object') {
+    if (Object.hasOwn(candidate, 'apply') && typeof candidate.apply === 'function') {
+      return candidate.apply;
+    }
+    if (typeof candidate.default === 'function') {
+      return candidate.default;
+    }
+  }
+  return undefined;
+}
+
 async function loadPlugins() {
   const specs = readPluginSpecs();
   const loaded = [];
@@ -616,9 +641,9 @@ async function loadPlugins() {
         const { Context } = await import('@deepseek-ai/cordis');
         const mod = await import(pkgName);
         const candidate = mod.default || mod;
-        applyFn = candidate && (candidate.apply || candidate.default);
+        applyFn = resolvePluginApply(candidate);
         if (typeof applyFn !== 'function') {
-          console.error(`[bridge] 插件 ${pkgName} 无 apply 函数（导出形态不支持），跳过`);
+          console.error(`[bridge] 插件 ${pkgName} 无 apply 函数（导出形态不支持：类/服务库/空导出），跳过`);
           continue;
         }
         const ctx = decorateDshCtx(new Context(), pkgName);
@@ -627,16 +652,14 @@ async function loadPlugins() {
         const { Context } = await import('@cordisjs/core');
         const mod = await import(pkgName);
         const candidate = mod.default || mod;
-        applyFn = typeof candidate === 'function'
-          ? candidate
-          : (candidate && (candidate.apply || candidate.default));
+        applyFn = resolvePluginApply(candidate);
         if (typeof applyFn !== 'function') {
-          console.error(`[bridge] 插件 ${pkgName} 无 apply 函数（导出形态不支持），跳过`);
+          console.error(`[bridge] 插件 ${pkgName} 无 apply 函数（导出形态不支持：类/服务库/空导出），跳过`);
           continue;
         }
         const ctx = decorateCtx(new Context(), pkgName);
         const wrapped = (sub) => applyFn(decorateCtx(sub || ctx, pkgName));
-        const pluginObj = (typeof candidate === 'object' && candidate && candidate.apply)
+        const pluginObj = (typeof candidate === 'object' && candidate && Object.hasOwn(candidate, 'apply'))
           ? candidate
           : { apply: wrapped, name: pkgName };
         if (typeof ctx.plugin === 'function') {

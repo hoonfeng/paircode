@@ -14,8 +14,18 @@ import (
 // 加载顺序：外部文件优先 → embed 兜底。
 // ═══════════════════════════════════════════════════════════════
 
+// runtimeAssetDirOverride 测试钩子：覆盖 RuntimeAssetDir（验证「外置资源优先」
+// 场景用；生产恒 nil，不影响正常路径）。
+var runtimeAssetDirOverride func() string
+
 // RuntimeAssetDir 返回运行时资源目录（<exe 目录>/.pair/assets/runtime/）。
+// ★ Round4 repair（t6 F1a）：外部文件优先加载——exe 在仓库根（开发/冒烟）时
+// 该目录即仓库 .pair/assets/runtime/，其内容必须与内嵌保持同版本，
+// 否则外置旧版会遮蔽内嵌新版（bridge_node.js F1a 根因）。
 func RuntimeAssetDir() string {
+	if runtimeAssetDirOverride != nil {
+		return runtimeAssetDirOverride()
+	}
 	exe, err := os.Executable()
 	if err != nil {
 		return ""

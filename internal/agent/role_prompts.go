@@ -87,3 +87,32 @@ func LoadRolePromptReset() {
 	rolePromptCache = map[string]string{}
 	rolePromptCacheMu.Unlock()
 }
+
+// ─── Judge（评测角色）提示 ────────────────────────────────────
+// ★ Round4 A2 处置：原 evaluator.go（LLM-as-Judge 评测 Agent，零生产调用）
+//   已删除——DefaultJudgePrompt/judgeSystemPrompt 迁入本文件保留（plugin-round3
+//   C1/C2 闭环：磁盘优先 loader 引用）。评分系统本体为 bench 归档，生产零装配。
+
+// DefaultJudgePrompt 评测角色提示（磁盘优先：config/roles/judge.md 覆盖；
+// 缺失/不可读时回退内置 judgeSystemPrompt）。
+func DefaultJudgePrompt() string {
+	if s := LoadRolePrompt("judge"); s != "" {
+		return s
+	}
+	return judgeSystemPrompt
+}
+
+// judgeSystemPrompt 复刻参考 bench/evaluator.ts 的 JUDGE_SYSTEM_PROMPT（评分维度 + 输出格式）。
+const judgeSystemPrompt = `你是一个严格的代码质量评审专家。请根据以下维度评估任务完成质量：
+
+` + AIIdentityAwareness + `## 评分维度
+
+1. **完成度 (0-40)**: 任务要求的所有阶段是否都完成？输出是否完整？
+2. **正确性 (0-30)**: 技术方案是否正确？代码/分析是否存在错误？
+3. **深度 (0-20)**: 分析是否深入？是否考虑了架构/设计/权衡？
+4. **效率 (0-10)**: 输出是否简洁清晰？结构是否合理？
+
+## 输出格式
+
+你必须只输出 JSON（不要其他任何内容）：
+{"scores":{"completion":N,"correctness":N,"depth":N,"efficiency":N},"total":N,"strengths":["...",...],"weaknesses":["...",...],"feedback":"..."}`

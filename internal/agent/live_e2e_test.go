@@ -4,8 +4,8 @@ package agent
 // 仅当设了环境变量 DEEPSEEK_KEY（或 LIVE_LLM_KEY）才跑；无 key 自动跳过，不影响离线 CI。
 //
 // 覆盖场景：
-//   5.3  edit_file CRLF 文件编辑（验证 edit_matcher 归一化匹配 + CRLF 保留）
-//   5.4  find_files_by_pattern glob ** 递归匹配（验证 glob.go 的 ** 语义）
+//   5.3  edit CRLF 文件编辑（验证 edit_matcher 归一化匹配 + CRLF 保留）
+//   5.4  glob ** 递归匹配（验证 glob.go 的 ** 语义）
 //   5.5  MCP go-sdk 端到端（进程内 server + 真实 LLM 调用 mcp.test.echo）
 //   5.6  Skills L1 注入 + L2 load_skill（用 config/skills/emoji-icons 真实技能）
 //   5.7  多 agent 委托（coordinator → coder，delegate_task）
@@ -22,7 +22,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// ─── 5.3 edit_file CRLF 场景 ──
+// ─── 5.3 edit CRLF 场景 ──
 
 func TestLiveEditFileCRLF(t *testing.T) {
 	key := liveKey()
@@ -49,7 +49,7 @@ func TestLiveEditFileCRLF(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
-	task := "把文件 crlf.txt 中的 'line2 old' 改为 'line2 new'（用 edit_file），然后用 read_file 读回确认内容。完成后输出 完成。"
+	task := "把文件 crlf.txt 中的 'line2 old' 改为 'line2 new'（用 edit），然后用 read 读回确认内容。完成后输出 完成。"
 	if _, err := loop.Run(ctx, task, nil); err != nil {
 		t.Fatalf("loop.Run 出错: %v（工具: %v）", err, ev)
 	}
@@ -64,10 +64,11 @@ func TestLiveEditFileCRLF(t *testing.T) {
 		t.Errorf("CRLF 应被保留（edit_matcher restoreNewlines），得 %q", string(data))
 	}
 	joined := strings.Join(ev, " ")
-	if !strings.Contains(joined, "edit_file") {
-		t.Errorf("LLM 未调用 edit_file，工具序列: %v", ev)
+	// ★ 词边界断言：避免 multi_edit 等含 "edit" 子串的工具名误判
+	if !strings.Contains(" "+joined+" ", " edit ") {
+		t.Errorf("LLM 未调用 edit，工具序列: %v", ev)
 	}
-	t.Logf("✓ edit_file CRLF 真机通过；内容=%q；工具: %v", string(data), ev)
+	t.Logf("✓ edit CRLF 真机通过；内容=%q；工具: %v", string(data), ev)
 }
 
 // ─── 5.4 glob ** 递归 ──
@@ -102,13 +103,16 @@ func TestLiveGlobRecursive(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
-	task := "用 find_files_by_pattern 工具，pattern 参数填 '**/*.go'，查找工作区所有 Go 文件。列出找到的文件路径。完成后输出 完成。"
+	// ★ Round4 repair（t6）：find_files_by_pattern 已随孤儿工具删除（A1 处置，
+	//   语义由 glob 继承）——任务文本与断言改用 glob（本用例本意即验证
+	//   glob 的 ** 递归匹配语义）。
+	task := "用 glob 工具，pattern 参数填 '**/*.go'，查找工作区所有 Go 文件。列出找到的文件路径。完成后输出 完成。"
 	if _, err := loop.Run(ctx, task, nil); err != nil {
 		t.Fatalf("loop.Run 出错: %v（工具: %v）", err, ev)
 	}
 	joined := strings.Join(ev, " ")
-	if !strings.Contains(joined, "find_files_by_pattern") {
-		t.Errorf("LLM 未调用 find_files_by_pattern，工具序列: %v", ev)
+	if !strings.Contains(joined, "glob") {
+		t.Errorf("LLM 未调用 glob，工具序列: %v", ev)
 	}
 	t.Logf("✓ glob ** 真机通过；工具: %v", ev)
 }

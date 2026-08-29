@@ -29,13 +29,58 @@ import (
 )
 
 // nodePluginsFile 桥目录下的插件装载清单。
+// ★ Round4：条目支持对象形态 {spec, runtime}（runtime: node|dsh）——
+//   dsh = cordis4 + DSH 服务面（@deepseek-ai/cordis）；node = cordis3 既有。
+//   旧字符串形态（"pkg@ver"）读取时兼容（默认 runtime=node）。
 type nodePluginsFile struct {
-	Plugins []string `json:"plugins"`
+	Plugins []nodePluginEntry `json:"plugins"`
+}
+
+// nodePluginEntry 一条插件装载记录。
+type nodePluginEntry struct {
+	Spec    string `json:"spec"`
+	Runtime string `json:"runtime,omitempty"` // node（cordis3 默认）| dsh（cordis4）
+}
+
+// UnmarshalJSON 兼容旧字符串条目（"pkg@ver"）与新对象条目。
+func (f *nodePluginsFile) UnmarshalJSON(b []byte) error {
+	var raw struct {
+		Plugins []json.RawMessage `json:"plugins"`
+	}
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	f.Plugins = nil
+	for _, item := range raw.Plugins {
+		var s string
+		if err := json.Unmarshal(item, &s); err == nil {
+			f.Plugins = append(f.Plugins, nodePluginEntry{Spec: s, Runtime: "node"})
+			continue
+		}
+		var e nodePluginEntry
+		if err := json.Unmarshal(item, &e); err != nil || e.Spec == "" {
+			continue
+		}
+		if e.Runtime == "" {
+			e.Runtime = "node"
+		}
+		f.Plugins = append(f.Plugins, e)
+	}
+	return nil
+}
+
+// Specs 返回全部装载 spec（字符串形态，兼容旧消费者）。
+func (f *nodePluginsFile) Specs() []string {
+	out := make([]string, 0, len(f.Plugins))
+	for _, e := range f.Plugins {
+		out = append(out, e.Spec)
+	}
+	return out
 }
 
 // readNodePluginsFile 读 plugins.json（不存在 → 空清单）。
 func readNodePluginsFile(path string) (*nodePluginsFile, error) {
-	doc := &nodePluginsFile{Plugins: []string{}}
+	doc := &nodePluginsFile{Plugins: []nodePluginEntry{}}
 	b, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -47,12 +92,12 @@ func readNodePluginsFile(path string) (*nodePluginsFile, error) {
 		return nil, fmt.Errorf("plugins.json 解析失败: %v", err)
 	}
 	if doc.Plugins == nil {
-		doc.Plugins = []string{}
+		doc.Plugins = []nodePluginEntry{}
 	}
 	return doc, nil
 }
 
-// writeNodePluginsFile 写 plugins.json。
+// writeNodePluginsFile 写 plugins.json（对象条目形态）。
 func writeNodePluginsFile(path string, doc *nodePluginsFile) error {
 	b, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {
@@ -68,19 +113,33 @@ func writeNodePluginsFile(path string, doc *nodePluginsFile) error {
 //   - dependencies 非空（真实 npm 依赖，mock 空模块运行期 undefined）
 //   - peerDependencies 里 cordis/@cordisjs/core 主版本为 4
 //     （goja 内置 CordisApi 对齐 cordis3 API，无 cordis4 的 inject 等）
+//   - ★ Round4：peerDependencies 里 @deepseek-ai/cordis 主版本为 4
+//     （DSH 插件形态——npm bundle + cordis4 Context，goja 轨无法运行）
 //
 // 仅 peer cordis3 / 零依赖 → goja 沙箱（快、无需 node）。
 func nodePluginNeedsNode(manifest map[string]any) bool {
-	if deps, _ := manifest["dependencies"].(map[string]any); len(deps) > 0 {
-		return true
-	}
+	return nodePluginRuntime(manifest) != ""
+}
+
+// nodePluginRuntime 判定插件运行时轨：
+//
+//	"dsh"  → Node 桥 cordis4 分支（@deepseek-ai/cordis ^4 peer；DSH 服务面）
+//	"node" → Node 桥 cordis3 分支（dependencies 非空 / cordis ^4 peer）
+//	""     → goja 沙箱（无 npm 依赖、无 cordis4）
+func nodePluginRuntime(manifest map[string]any) string {
 	peers, _ := manifest["peerDependencies"].(map[string]any)
+	if v, ok := peers["@deepseek-ai/cordis"].(string); ok && strings.HasPrefix(strings.TrimSpace(v), "^4") {
+		return "dsh"
+	}
+	if deps, _ := manifest["dependencies"].(map[string]any); len(deps) > 0 {
+		return "node"
+	}
 	for _, k := range []string{"cordis", "@cordisjs/core"} {
 		if v, ok := peers[k].(string); ok && strings.HasPrefix(strings.TrimSpace(v), "^4") {
-			return true
+			return "node"
 		}
 	}
-	return false
+	return ""
 }
 
 // ── 原生依赖（C/C++ 编译）提示 ─────────────────────────────
@@ -128,6 +187,8 @@ func nativeDepHint(manifest map[string]any) string {
 
 // marketInstallNPMPluginNode Node 桥安装路径：
 // 源码落盘 + npm install + plugins.json 记录 + 重启桥装载。
+// ★ Round4：runtime 判定（node=cordis3 既有 / dsh=cordis4+DSH 服务面）；
+//   dsh 插件 peer 全部 optional（npm 不自动装）→ 显式安装 @deepseek-ai/* peer。
 func marketInstallNPMPluginNode(info *npmPackageInfo, srcDir string, auto bool) (string, error) {
 	pkg := info.Name
 	ver := info.Version
@@ -135,6 +196,10 @@ func marketInstallNPMPluginNode(info *npmPackageInfo, srcDir string, auto bool) 
 	projectRoot := npmPluginProjectRoot()
 	if projectRoot == "" {
 		return "", fmt.Errorf("无工作区根，无法安装插件")
+	}
+	runtime := nodePluginRuntime(info.Manifest)
+	if runtime == "" {
+		runtime = "node"
 	}
 	bridgeDir := nodeBridgeDir()
 	pluginsDir := filepath.Join(bridgeDir, "plugins")
@@ -149,28 +214,40 @@ func marketInstallNPMPluginNode(info *npmPackageInfo, srcDir string, auto bool) 
 	if err := npmInstallPlugin(bridgeDir, spec); err != nil {
 		return "", fmt.Errorf("npm install 失败（%v）——插件源码已保存在 %s，可手动 npm install 后重试", err, target)
 	}
+	// ★ Round4：dsh 插件 peer 全 optional → npm 不会自动装；显式安装
+	//   @deepseek-ai/*（cordis + dsh-* 非 client 包）供 cordis4 装载分支 import。
+	if runtime == "dsh" {
+		if err := npmInstallDshPeers(bridgeDir, info.Manifest); err != nil {
+			return "", fmt.Errorf("DSH peer 安装失败: %v（插件已装；可手动 npm install 后重启桥）", err)
+		}
+	}
 
-	// 3. plugins.json 记录（幂等）
+	// 3. plugins.json 记录（幂等；条目带 runtime）
 	pluginsFile := filepath.Join(bridgeDir, "plugins.json")
 	doc, err := readNodePluginsFile(pluginsFile)
 	if err != nil {
 		return "", err
 	}
 	found := false
-	for _, s := range doc.Plugins {
-		if s == spec {
+	for i, e := range doc.Plugins {
+		if e.Spec == spec {
+			doc.Plugins[i].Runtime = runtime // 更新 runtime（幂等重装）
 			found = true
 			break
 		}
 	}
 	if !found {
-		doc.Plugins = append(doc.Plugins, spec)
+		doc.Plugins = append(doc.Plugins, nodePluginEntry{Spec: spec, Runtime: runtime})
+		if err := writeNodePluginsFile(pluginsFile, doc); err != nil {
+			return "", err
+		}
+	} else {
 		if err := writeNodePluginsFile(pluginsFile, doc); err != nil {
 			return "", err
 		}
 	}
 
-	// 4. patch 记录（统一卸载/判断链路；runtime=node）
+	// 4. patch 记录（统一卸载/判断链路；runtime 透传）
 	patchPath := filepath.Join(projectRoot, ".pair", "cordis.patch.json")
 	entry := cordisPatchPlugin{
 		Code:     "",
@@ -178,7 +255,7 @@ func marketInstallNPMPluginNode(info *npmPackageInfo, srcDir string, auto bool) 
 		Purpose:  info.Description,
 		Config: map[string]any{
 			"npm":     spec,
-			"runtime": "node",
+			"runtime": runtime,
 			"dir":     target,
 		},
 	}
@@ -203,7 +280,76 @@ func marketInstallNPMPluginNode(info *npmPackageInfo, srcDir string, auto bool) 
 	}
 	// 原生依赖提示（不阻塞安装）
 	hint := nativeDepHint(info.Manifest)
-	return fmt.Sprintf("✅ 已安装 npm 插件「%s」v%s（Node 运行时桥，真实 node 环境执行 npm 依赖）%s", pkg, ver, hint), nil
+	runtimeLabel := "Node 运行时桥（真实 node 环境执行 npm 依赖）"
+	if runtime == "dsh" {
+		runtimeLabel = "DSH 运行时（cordis4 + DSH 服务面，@deepseek-ai/cordis）"
+	}
+	return fmt.Sprintf("✅ 已安装 npm 插件「%s」v%s（%s）%s", pkg, ver, runtimeLabel, hint), nil
+}
+
+// dshPeerSpecs 提取 DSH 插件的运行时 peer 依赖（@deepseek-ai/* 非 client 包）。
+// ★ 版本选择：优先 devDependencies（插件构建/测试锁定的版本集——peer 范围如
+//   ^0.1.0-rc.6 与传递 peer（dsh-user-approval rc.8 等）存在 rc 档位错配，
+//   npm 会 ERESOLVE；devDeps 精确版本集可复现装载），缺失回退 peerDependencies 范围。
+// client 半（@deepseek-ai/dsh-client-*）与 react 由宿主 UI 槽位承载，不装入桥。
+func dshPeerSpecs(manifest map[string]any) []string {
+	peers, _ := manifest["peerDependencies"].(map[string]any)
+	devs, _ := manifest["devDependencies"].(map[string]any)
+	seen := map[string]bool{}
+	specs := make([]string, 0, len(peers))
+	for name := range peers {
+		if !strings.HasPrefix(name, "@deepseek-ai/") {
+			continue
+		}
+		if strings.HasPrefix(name, "@deepseek-ai/dsh-client") {
+			continue // 客户端半（Web 面板）不装载
+		}
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+		ver := ""
+		if v, ok := devs[name].(string); ok {
+			ver = v // 构建验证版本优先（精确 pin，规避 rc 档位 ERESOLVE）
+		} else if v, ok := peers[name].(string); ok {
+			ver = v
+		}
+		if strings.TrimSpace(ver) == "" {
+			ver = "latest"
+		}
+		specs = append(specs, name+"@"+strings.TrimSpace(ver))
+	}
+	return specs
+}
+
+// npmInstallDshPeers 在桥目录安装 DSH peer 依赖（@deepseek-ai/cordis + dsh-* 服务面包）。
+func npmInstallDshPeers(bridgeDir string, manifest map[string]any) error {
+	specs := dshPeerSpecs(manifest)
+	if len(specs) == 0 {
+		return nil
+	}
+	// 桥基础 package.json 已由 npmInstallPlugin 保证存在
+	npmCmd := "npm"
+	if _, err := exec.LookPath("npm"); err != nil {
+		npmCmd = "npm.cmd"
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	args := append([]string{"install", "--no-audit", "--no-fund", "--prefix", bridgeDir}, specs...)
+	cmd := exec.CommandContext(ctx, npmCmd, args...)
+	if runtime.GOOS == "windows" {
+		executil.HideWindow(cmd)
+	}
+	cmd.Env = append(os.Environ(), "npm_config_yes=true")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		last := strings.TrimSpace(string(out))
+		if len(last) > 400 {
+			last = last[len(last)-400:]
+		}
+		return fmt.Errorf("npm install DSH peers %v 失败: %v（%s）", specs, err, last)
+	}
+	return nil
 }
 
 // npmInstallPlugin 在桥目录执行 npm install（Windows 用 npm.cmd）。
@@ -260,12 +406,12 @@ func uninstallNodePlugin(pkg string) error {
 	}
 	out := doc.Plugins[:0]
 	removed := false
-	for _, s := range doc.Plugins {
-		if specMatchesPkg(s, pkg) {
+	for _, e := range doc.Plugins {
+		if specMatchesPkg(e.Spec, pkg) {
 			removed = true
 			continue
 		}
-		out = append(out, s)
+		out = append(out, e)
 	}
 	if removed {
 		doc.Plugins = out

@@ -24,6 +24,24 @@ const (
 	searchSniffBytes  = 8000     // 二进制嗅探：读前 N 字节查空字节
 )
 
+// extLangMap 常见文件扩展名→语言名映射（glob 的 language 过滤用）。
+// ★ Round4 A1 处置：原定义于已删除的 findfiles.go（孤儿工具 find_files_by_pattern，
+//   功能被 glob 继承）——extLangMap 为 glob 生产依赖，迁入本文件保留。
+var extLangMap = map[string]string{
+	".go": "go", ".ts": "typescript", ".tsx": "typescript",
+	".js": "javascript", ".jsx": "javascript", ".mjs": "javascript", ".cjs": "javascript",
+	".py": "python", ".rs": "rust", ".java": "java", ".kt": "kotlin",
+	".swift": "swift", ".c": "c", ".h": "c", ".cpp": "cpp", ".cc": "cpp", ".cxx": "cpp", ".hpp": "cpp",
+	".cs": "csharp", ".rb": "ruby", ".php": "php", ".lua": "lua",
+	".sh": "shell", ".bash": "shell", ".zsh": "shell", ".ps1": "powershell",
+	".yaml": "yaml", ".yml": "yaml", ".json": "json", ".toml": "toml",
+	".xml": "xml", ".html": "html", ".css": "css", ".scss": "scss", ".less": "less",
+	".sql": "sql", ".md": "markdown",
+	".dart": "dart", ".ex": "elixir", ".exs": "elixir",
+	".erl": "erlang", ".hs": "haskell", ".scala": "scala",
+	".zig": "zig", ".svelte": "svelte", ".vue": "vue",
+}
+
 // defaultSkipDirs 内置基线：搜索/探索时跳过的依赖库/模块库/构建产物/缓存/VCS 目录（跨生态，全包共用）。
 // 仍可显式把 path 指进某个被跳目录来搜它（跳过只作用于自动递归下降，不挡显式起点）。
 // 用户可经 SetExtraSkipDirs 追加（全局设置 + 项目级，companion 注入）。
