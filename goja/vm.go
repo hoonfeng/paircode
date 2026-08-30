@@ -806,6 +806,16 @@ func (vm *vm) popTryFrame() {
 }
 
 func (vm *vm) restoreStacks(iterLen, refLen uint32) (ex *Exception) {
+	// ★ 2026-08-30：异常路径下 tf.iterLen/refLen 可能 > 当前栈长（帧已被弹光/数量漂移）
+	//   → 直接切片越界 panic（slice bounds / index out of range [162] length 141，
+	//   fs-api /api/fs/list 实测崩溃点，同 vm.go:4848 leaveTry 空栈保护族）。
+	//   先 clamp 到栈长，避免二次 panic；后续帧已坏，保守丢弃多余槽位。
+	if uint32(len(vm.iterStack)) < iterLen {
+		iterLen = uint32(len(vm.iterStack))
+	}
+	if uint32(len(vm.refStack)) < refLen {
+		refLen = uint32(len(vm.refStack))
+	}
 	// Restore other stacks
 	iterTail := vm.iterStack[iterLen:]
 	for i := len(iterTail) - 1; i >= 0; i-- {
