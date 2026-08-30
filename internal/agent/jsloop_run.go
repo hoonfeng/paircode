@@ -178,6 +178,11 @@ func jsLoopDepth(ctx context.Context) int {
 // 子 Loop.runWithJS 检测到该标志时不重复 vm.Lock（非重入，二次加锁死锁）。
 type jsLoopInLockKey struct{}
 
+// jsLoopParentImplKey 传递父循环实例（delegate 嵌套用，2026-08-30 实例池）。
+// 子 Loop 优先从池租借独立实例（正常加锁）；池满时回落复用本实例且
+// 不重复加锁（父在同一 goroutine 持锁，串行执行安全）。
+type jsLoopParentImplKey struct{}
+
 // ── runWithJS：Loop.Run 的 JS 委托实现 ───────────────────────
 
 // runWithJS 由 Loop.Run 在 CurrentJSLoop() 非空时调用：Go 做前置准备与收尾，
@@ -251,14 +256,51 @@ func (l *Loop) runWithJS(ctx context.Context, task string, history []Message, im
 	// msgs = l.maybeCompact(ctx, msgs)
 
 	// ── 构建能力代理并委托 JS ──
+	// ★ 2026-08-30 并行会话隔离：从实例池租借一个循环实例（主实例被占用时自动
+	//   派生独立 Runtime 的影子实例）。原先所有会话共用一个实例 → 整个 Run 独占
+	//   插件 VM 锁（LLM/工具全程持锁）→ 新开对话卡到旧对话结束（前端 30s 超时）。
+	//
+	//   嵌套 delegate（父 JS 调用栈内同步执行）：优先也租借独立实例并正常加锁；
+	//   池已满时退化为「复用父实例 + 不重复加锁」（父在同一 goroutine 持锁，
+	//   串行执行安全）——避免父占实例等子、子等空闲实例的自死锁。
+	nestedInParentLock, _ := ctx.Value(jsLoopInLockKey{}).(bool)
+	parentImpl, _ := ctx.Value(jsLoopParentImplKey{}).(*jsLoopImpl)
+	reuseParent := nestedInParentLock
+	if parentImpl != nil {
+		impl = parentImpl
+		reuseParent = true
+		if pool := CurrentJSLoopPool(); pool != nil {
+			if leased := pool.tryAcquire(); leased != nil {
+				defer pool.release(leased)
+				impl = leased
+				reuseParent = false
+			} else {
+				log.Printf("[loop-js] delegate 嵌套：实例池无空闲，复用父实例 %q（父持锁串行执行）", parentImpl.id)
+			}
+		}
+	} else if !nestedInParentLock {
+		if pool := CurrentJSLoopPool(); pool != nil {
+			leased, lerr := pool.acquire(ctx)
+			if lerr != nil {
+				l.emit(Event{Type: EventError, Content: "获取 JS 循环实例失败: " + lerr.Error()})
+				l.LastTurnReason = TurnError
+				return msgs, fmt.Errorf("获取 JS 循环实例失败: %w", lerr)
+			}
+			defer pool.release(leased)
+			if leased.shadow {
+				log.Printf("[loop-js] 本轮使用影子循环实例（并行会话隔离）id=%q", leased.id)
+			}
+			impl = leased
+		}
+	}
 	runner := &jsLoopRunner{loop: l, ctx: ctx, impl: impl}
 	var (
 		result  goja.Value
 		callErr error
 	)
-	// ★ 锁语义：顶层 Run 经 withLock 加 VM 执行锁（独占 JS）。
-	//   delegate 子 Loop（ctx 带 jsLoopInLockKey=true，父 JS 调用栈内同步执行）
-	//   不再重复加锁——vm.lock 非重入，二次 Lock 同 goroutine 死锁。
+	// ★ 锁语义：实例池保证同一实例同时只被一个 Run 租借——各会话持自己的实例，
+	//   加锁互不影响。仅「复用父实例」的嵌套路径不重复加锁（vm.lock 非重入，
+	//   同 goroutine 二次 Lock 会死锁）。
 	runJS := func() error {
 		return runJSWithTimeout(impl.vm, 0, func() error {
 			v, e := impl.run(goja.Undefined(), impl.vm.ToValue(runner.buildArgs(task, msgs, tools, max)))
@@ -274,8 +316,8 @@ func (l *Loop) runWithJS(ctx context.Context, task string, history []Message, im
 			return nil
 		})
 	}
-	if inParentLock, _ := ctx.Value(jsLoopInLockKey{}).(bool); inParentLock {
-		// delegate 嵌套：父 runWithJS 已持锁（同一 goroutine），直接执行
+	if reuseParent {
+		// delegate 嵌套且复用父实例：父 runWithJS 已持锁（同一 goroutine），直接执行
 		callErr = runJS()
 	} else {
 		impl.plugin.withLock(func() { callErr = runJS() })

@@ -414,12 +414,19 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		m.startingMu.Unlock()
 	}()
 
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	// ★ 2026-08-30 锁粒度收敛（并行会话）：原先 Start 全程持 m.mu 写锁（500 行，
+	//   含 CreateLoop → JS 装配器/循环插件 VM 锁 → 可能等另一个会话跑完），
+	//   于是「一个对话在跑 → SessionManager 全部读方法（状态/历史/消息落盘）
+	//   跟着阻塞」→ 前端任何请求 30s 超时（RWMutex 写锁等待会挡住后续 RLock）。
+	//   现在只在「查重」与「挂载会话」两处短暂持锁，重活（store 元数据/CreateLoop/
+	//   回调绑定/工具注册）全部在锁外执行。
 	// 已有运行中的会话则拒绝（同一对话不可并行跑两个 Loop）
+	m.mu.RLock()
 	if s, ok := m.sessions[convID]; ok && s.Running {
+		m.mu.RUnlock()
 		return ErrSessionRunning
 	}
+	m.mu.RUnlock()
 
 	// 持久化：确保 store 中存在该对话的元数据。
 	// ★ 2026-08-23 会话级 store 路由：会话绑定 opts.WorkspaceRoot（启动时工作区），
@@ -442,7 +449,9 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 			// ★ 用户在本对话继续发送消息 → 清除历史中断标记，
 			//   表示上一轮的中断正在被继续处理（前端据此隐藏"未完成"提示）。
 			if existing.Interrupted {
-				if clrErr := m.store.SetInterrupted(convID, false); clrErr != nil {
+				// ★ 2026-08-30 修正串库：用会话自己的 store（sessStore）而非全局
+				//   m.store——会话工作区与当前全局工作区不同时，旧写法写错库。
+				if clrErr := sessStore.SetInterrupted(convID, false); clrErr != nil {
 					fmt.Printf("[session] 清除对话 %s 中断标记失败: %v\n", convID, clrErr)
 				}
 			}
@@ -568,10 +577,11 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 
 	// OnBatchPersist：每轮迭代由 loop.Run 内部回调，将当前完整消息列表写盘。
 	// loop.Run 返回后 defer 中会额外调用一次 OnBatchPersist 作为兜底。
-	// ★ 注意：不能调用 m.Store()，因为 Start 已持有 m.mu.Lock() 写锁，而 m.Store() 会尝试读锁导致死锁。
-	// 直接使用已持有的 m.store 变量。
-	if m.store != nil {
-		store := m.store
+	// ★ 2026-08-30：用会话自己的 store（sessStore = opts.WorkspaceRoot 路由）而非全局
+	//   m.store——会话运行中用户切换工作区时，旧写法会把消息落到新工作区
+	//   的库（串库）；Start 也不再全程持锁，无需旧的“避开 m.Store() 死锁”约束。
+	if sessStore != nil {
+		store := sessStore
 		// ★ 捕捉原始（未压缩）历史，用作持久化的基准。
 		// msgs 中头部是 CondenseHistory 压缩后的版本（通常更短），尾部是本轮新增消息。
 		// 直接用 msgs 持久化会写回压缩版、丢失原始消息结构。
@@ -749,9 +759,19 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 		}
 	}
 
-	// 存入 map（覆盖已结束的旧会话），并做已结束会话上限淘汰
+	// 存入 map（覆盖已结束的旧会话），并做已结束会话上限淘汰。
+	// ★ 2026-08-30：挂载时短暂持写锁（原先整个 Start 持锁）；锁内二次查重
+	//   ——锁外重活期间可能已有同 convID 会话挂载（startingMu 已拦同 convID
+	//   并发 Start，此处为跨路径兜底）。
+	m.mu.Lock()
+	if prev, ok := m.sessions[convID]; ok && prev.Running {
+		m.mu.Unlock()
+		cancel()
+		return ErrSessionRunning
+	}
 	m.sessions[convID] = sess
 	m.evictIfNeeded()
+	m.mu.Unlock()
 
 	// fan-out goroutine：从 Events 读取，写入所有 subscribers（非阻塞，满则丢弃）。
 	// 同时写入全局订阅者（WebSocket 端点），让跨工作区的所有会话事件都可通过单一连接传输。
@@ -794,8 +814,9 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 
 	// Loop.Run goroutine：结束后标记 Running=false、更新 History、关闭 Events。
 	go func() {
-		// ★ 捕获 store 快照（避免并发读 m.store；SetWorkspaceRoot 仅在启动期调用）
-		store := m.store
+		// ★ 会话级 store（按 opts.WorkspaceRoot 路由）：不用全局 m.store，
+		//   避开「运行中切换工作区 → 中断标记写错库」与并发读 m.store。
+		store := sessStore
 		interrupted := false // 会话结束时的中断状态（defer 中据此写回持久化标记）
 		defer func() {
 			// panic recovery：确保会话状态和事件通道始终被清理

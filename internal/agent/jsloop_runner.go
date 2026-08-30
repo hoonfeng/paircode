@@ -660,8 +660,9 @@ func (r *jsLoopRunner) buildProxy() *goja.Object {
 		// 子事件经 SubAgentSink 过滤（父 EventFinal/Done/Error/Circling/Compacted 不泄漏）
 		sub.OnEvent = SubAgentSink(l.OnEvent, agentName)
 		sub.OnFeedback = l.OnFeedback
-		// 子 Loop 深度 +1（嵌套限制）；标记父 JS 锁内（子 runWithJS 不重复加锁）
-		subCtx := context.WithValue(context.WithValue(r.ctx, jsLoopDepthKey{}, depth+1), jsLoopInLockKey{}, true)
+		// 子 Loop 深度 +1（嵌套限制）；★ 2026-08-30 实例池：传父实例引用——
+		// 子 runWithJS 优先租借独立实例（正常加锁），池满时复用父实例不重复加锁。
+		subCtx := context.WithValue(context.WithValue(r.ctx, jsLoopDepthKey{}, depth+1), jsLoopParentImplKey{}, r.impl)
 		_, subErr := sub.Run(subCtx, task, nil) // 子 Loop 自己处理 History
 		// 结果：最后一条 assistant 正文（无则空）
 		content := ""
@@ -745,10 +746,9 @@ func (r *jsLoopRunner) buildProxy() *goja.Object {
 		return vm.ToValue(msgsToJS(vm, l.drainFollowUpQueue()))
 	})
 	// preStep(callMsgs, turn, step) → {rewritten, reject, error}
+	// ★ 2026-08-30：统一走 runPreStep（host 钩子 + DSH 桥瀑布 agent/pre-step）——
+	//   Node 插件订阅者（dsh-agent-teams 激活指令注入）在 JS 循环同样生效。
 	ctrlObj.Set("preStep", func(call goja.FunctionCall) goja.Value {
-		if l.PreStep == nil {
-			return vm.ToValue(map[string]any{"reject": false, "error": ""})
-		}
 		jmsgs, jerr := jsToMsgs(vm, call.Argument(0))
 		if jerr != nil {
 			panic(vm.NewGoError(jerr))
@@ -761,7 +761,7 @@ func (r *jsLoopRunner) buildProxy() *goja.Object {
 		if step == 0 {
 			step = l.StepNo
 		}
-		rewritten, reject, perr := l.PreStep(r.ctx, jmsgs, turn, step)
+		rewritten, reject, perr := l.runPreStep(r.ctx, jmsgs, turn, step)
 		out := map[string]any{"reject": reject, "error": ""}
 		if perr != nil {
 			out["error"] = perr.Error()

@@ -47,6 +47,12 @@ func (p *jsPluginAdapter) attachLoopRegister(loopFactoryObj *goja.Object) {
 		}
 
 		impl := &jsLoopImpl{id: id, run: runFn, plugin: p, vm: vm}
+		// ★ 2026-08-30 影子实例（并行会话隔离）：只把实现捕获给本影子，
+		//   不写全局注册表、不产生卸载钩子（主实例已注册；见 jsloop_pool.go）。
+		if p.shadow {
+			p.shadowLoop = impl
+			return vm.ToValue(map[string]any{"id": id, "ok": true, "shadow": true})
+		}
 		restore := RegisterJSLoop(impl)
 		// 插件卸载时还原：若当前生效的是本实现则还原到之前的实现
 		p.addCleanup(func() { UnregisterJSLoop(impl) })

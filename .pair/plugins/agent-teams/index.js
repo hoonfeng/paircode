@@ -346,8 +346,17 @@ function recordRetiredMembers(stateRoot, ids) {
   atomicWriteText(retiredMembersFile(stateRoot), JSON.stringify([...retired].sort(), null, 2) + '\n')
 }
 function archiveTeamDir(stateRoot, teamId) {
-  F.mkdir(stateRoot + '/archive', true)
-  try { F.rename(stateRoot + '/' + teamId, stateRoot + '/archive/' + teamId) } catch (e) { /* 允许失败 */ }
+  const base = stateRoot + '/archive'
+  F.mkdir(base, true)
+  // ★ 2026-08-30：目标已存在（同 id 多次废弃/重建后再次存档）→ 追加时间戳唯一化。
+  //   否则 Windows os.Rename 覆盖非空目录失败（【废弃后仍存在】根因），catch 静默吞掉。
+  let target = base + '/' + teamId
+  if (F.exists(target)) target = base + '/' + teamId + '-' + Date.now()
+  try { F.rename(stateRoot + '/' + teamId, target) } catch (e) {
+    // rename 失败（目标占用/权限）→ 兜底：去掉唯一后缀重试（清同 id 旧档）
+    try { F.rm(base + '/' + teamId, true) } catch (e2) {}
+    try { F.rename(stateRoot + '/' + teamId, base + '/' + teamId) } catch (e3) { /* 允许失败 */ }
+  }
 }
 
 // ─── 任务规则 ────────────────────────────────────────────────

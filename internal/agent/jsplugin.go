@@ -48,8 +48,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/hoonfeng/paircode/internal/core"
 	"github.com/hoonfeng/paircode/goja"
+	"github.com/hoonfeng/paircode/internal/core"
 )
 
 // ─── 内置 cordis 运行时（CordisApi 全局）────────────────────
@@ -83,30 +83,60 @@ func cordisBundleSource() string {
 //	控制；插件如需死循环护栏，在工具定义上声明 timeout（秒）自行控制。
 //
 // var 而非 const：测试中可调小验证超时路径。
+//
+// ★ 2026-09-01 语义变更（native-aware 看门狗，见 js_native_guard.go）：以下超时
+// 统计的是「纯 JS 连续执行时长」——JS 阻塞在 Go 原生调用（bash/tools/agents/llm
+// /npm/子进程/网络等 ctx 服务）期间不计时。因此这些值只是死循环护栏，
+// 不再是「任务总时长上限」：长任务（10 分钟打包命令等）不会被误判超时。
 var (
 	jsEvalTimeout     = 5 * time.Second  // 插件代码求值（RunString）
 	jsApplyTimeout    = 5 * time.Second  // apply(ctx, config)
-	jsHandlerTimeout  = 10 * time.Second // harness.handle 方法
+	jsHandlerTimeout  = 60 * time.Second // harness.handle / registerClientMethod 方法（纯 JS 计算护栏）
 	jsCallbackTimeout = 5 * time.Second  // 事件/timer 回调
 )
+
+// jsWatchdogTick 看门狗轮询间隔（超时判定精度）。
+const jsWatchdogTick = 200 * time.Millisecond
 
 // jsTimeoutErr VM 执行超时标记（vm.Interrupt 携带值）。
 var jsTimeoutErr = errors.New("JS 执行超时（疑似死循环，已强制中断）")
 
-// runJSWithTimeout 在 vm 上带超时执行同步 JS 调用 fn。
-// 超时经 vm.Interrupt 在 JS 指令边界强制中断（返回 *goja.InterruptedError，
-// Value() == jsTimeoutErr）。线程安全：Interrupt 可从其他 goroutine 调用。
-// fn 正常返回后清除 interrupt flag，避免与超时 goroutine 竞争污染下一次调用。
+// runJSWithTimeout 在 vm 上带「纯 JS 执行时长」超时执行同步 JS 调用 fn。
+//
+// ★ native-aware（2026-09-01 修复超时误判）：看门狗轮询检查 VM 是否阻塞在 Go
+// 原生调用中（jsNativeBusy）——是则计时归零（原生等待不计入），否则累计纯 JS
+// 执行时长；累计达 timeout 才 vm.Interrupt 中断（返回 *goja.InterruptedError，
+// Value() == jsTimeoutErr）。这样：
+//   - 纯 JS 死循环：depth==0 持续累计 → 正常被中断（护栏保留）
+//   - 长时原生调用（10 分钟命令/子 agent/LLM 请求）：期间不计时 → 不再误判
+//     「疑似死循环」（历史 bug：Interrupt 只置 flag，原生返回后 JS 恢复即撞 flag）
+//
+// 线程安全：Interrupt 可从其他 goroutine 调用；fn 正常返回后清除 interrupt flag，
+// 避免与看门狗 goroutine 竞争污染下一次调用。
 func runJSWithTimeout(vm *goja.Runtime, timeout time.Duration, fn func() error) error {
 	if timeout <= 0 {
 		return fn()
 	}
 	stopped := make(chan struct{})
 	go func() {
-		select {
-		case <-time.After(timeout):
-			vm.Interrupt(jsTimeoutErr)
-		case <-stopped:
+		tick := time.NewTicker(jsWatchdogTick)
+		defer tick.Stop()
+		var jsElapsed time.Duration // 纯 JS 连续执行时长（原生调用期间归零）
+		for {
+			select {
+			case <-stopped:
+				return
+			case <-tick.C:
+				if jsNativeBusy(vm) {
+					jsElapsed = 0 // 阻塞在 Go 原生调用：不计时（长任务不误判）
+					continue
+				}
+				jsElapsed += jsWatchdogTick
+				if jsElapsed >= timeout {
+					vm.Interrupt(jsTimeoutErr)
+					return
+				}
+			}
 		}
 	}()
 	err := fn()
@@ -140,6 +170,7 @@ type jsPluginDef struct {
 	purpose    string         // 用途说明
 	code       string         // host 半代码（async 函数体，return 插件对象/函数）
 	clientCode string         // client 半代码（浏览器端执行；可为空=纯 host 插件）
+	hasDshUI   bool           // ★ 磁盘插件包含 DSH 兼容 dsh.ui 段（UI 区域/功能包）；/api/plugins 据此标记 hasClient
 	version    string         // 版本号（v1/v2/…；默认 = 首次定义 v1）
 	provides   []string       // 提供服务的键（插件运行时从 ctx.provide 收集）
 	inject     []string       // 插件声明的硬依赖服务（apply 前校验宿主是否提供）
@@ -235,6 +266,14 @@ type jsPluginAdapter struct {
 	timers     []func() // 活动 timer 的取消函数（Unload 时统一清理）
 	cleanupsMu sync.Mutex
 	cleanups   []func() // 其他 JS 侧资源撤销函数（如 ctx.provide 的服务撤销）
+
+	// ★ 2026-08-30 并行会话：影子实例（jsloop_pool.go 为并发会话派生的独立
+	//   VM 副本）。JS 循环的整个 Run 在插件 VM 执行锁内跑（LLM/工具全程持锁），
+	//   单实例会把并行会话串行化（实测：新对话卡到旧对话结束 → 前端 30s 超时）。
+	//   影子实例 = 同源码 + 独立 Runtime，apply 时注册面（配置/服务/事件/工具/
+	//   HTTP 路由/装配器）全部 no-op，只取循环实现，不产生重复全局副作用。
+	shadow     bool
+	shadowLoop *jsLoopImpl // shadow apply 期间 registerLoop 捕获的循环实现
 }
 
 // toolCallRoot 返回当前工具调用绑定的会话工作区根（无绑定返回空串）。
@@ -267,7 +306,12 @@ func (p *jsPluginAdapter) ctxServiceRoot(pc *PluginContext) string {
 
 // withLock 在 VM 执行锁保护下运行 fn：timer 回调、事件回调、工具 execute
 // 等可能从其他 goroutine 进入 JS 的入口必须经此调用（goja 非并发安全，
-// 见仓库自有 goja（github.com/hoonfeng/paircode/goja）Runtime.Lock/Unlock）。
+// 见仓库自有 goja Runtime.Lock/Unlock）。
+// ★ 2026-08-30：撤 Route1 worker——per-plugin worker 引入并发 VM 访问，导致
+//
+//	goja VM 栈状态被破坏（handleThrow 随机 index out of range [162]/[37]，
+//	fs-api /api/fs/list 实测）。恢复原始「调用方 goroutine 内持 vm.Lock 串行」，
+//	goja 的 vm.Lock 天然按插件隔离（阻塞插件只锁其自身 VM），无需额外 worker。
 func (p *jsPluginAdapter) withLock(fn func()) {
 	p.vm.Lock()
 	defer p.vm.Unlock()
@@ -302,6 +346,9 @@ func (p *jsPluginAdapter) addCleanup(fn func()) {
 // cleanupJS 插件卸载时回收全部 JS 侧资源：timer + 服务撤销 + 其他清理。
 func (p *jsPluginAdapter) cleanupJS() {
 	p.stopTimers()
+	// ★ 2026-09-01：VM 废弃时清理原生调用深度计数（js_native_guard.go），
+	//   防长期运行进程中 sync.Map 条目随插件反复装卸累积。
+	jsForgetNative(p.vm)
 	p.cleanupsMu.Lock()
 	fns := p.cleanups
 	p.cleanups = nil
@@ -660,7 +707,7 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 			}
 			panic(vm.NewGoError(fmt.Errorf("ctx.binary.exec: 插件二进制不存在 %s（编译：go build -o %s ./plugins-src/plugins/<name>）", exePath, exePath)))
 		}
-		reqJSON, _ := json.Marshal(map[string]any{"tool": tool, "args": args, "root": binaryRoot})
+		reqJSON, _ := json.Marshal(map[string]any{"tool": tool, "args": args, "root": binaryRoot, "workspaceRoots": WorkspaceRoots})
 		ctxTO, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 		cmd := exec.CommandContext(ctxTO, exePath)
@@ -751,8 +798,10 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 				return vm.ToValue(out)
 			})
 			var (
-				ret     goja.Value
-				callErr error
+				callErr      error
+				savedStatus  int
+				savedBody    string
+				savedHeaders map[string]string
 			)
 			p.withLock(func() {
 				v, err := fn(goja.Undefined(), reqObj)
@@ -760,41 +809,50 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 					// ★ async handler：返回值若是 Promise，同步 drain 取结果
 					v, err = awaitJSValue(vm, v)
 				}
-				ret, callErr = v, err
+				if err != nil {
+					callErr = err
+					return
+				}
+				// ★ 2026-08-30（Route1 worker）：goja 对象访问（Export/ToObject/String）
+				//   必须在 withLock（worker）内完成——worker 之外访问 VM 对象是并发/竞态，
+				//   会 nil deref panic。这里只抽取 Go 原始值，caller 只写 HTTP 响应。
+				status := http.StatusOK
+				respBody := ""
+				respHeaders := map[string]string{}
+				if v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
+					if s, ok := v.Export().(string); ok {
+						respBody = s
+					} else if obj := v.ToObject(vm); obj != nil {
+						if vv := obj.Get("status"); vv != nil {
+							status = int(vv.ToInteger())
+						}
+						if vv := obj.Get("body"); vv != nil {
+							respBody = vv.String()
+						}
+						if vv := obj.Get("headers"); vv != nil {
+							if m, ok := vv.Export().(map[string]any); ok {
+								for k, vv2 := range m {
+									respHeaders[k] = fmt.Sprint(vv2)
+								}
+							}
+						}
+					} else {
+						respBody = v.String()
+					}
+				}
+				savedStatus = status
+				savedBody = respBody
+				savedHeaders = respHeaders
 			})
 			if callErr != nil {
 				http.Error(w, "ctx.http handler 执行失败: "+jsErrorText(callErr), http.StatusInternalServerError)
 				return
 			}
-			status := http.StatusOK
-			respBody := ""
-			respHeaders := map[string]string{}
-			if ret != nil && !goja.IsUndefined(ret) && !goja.IsNull(ret) {
-				if s, ok := ret.Export().(string); ok {
-					respBody = s
-				} else if obj := ret.ToObject(vm); obj != nil {
-					if v := obj.Get("status"); v != nil {
-						status = int(v.ToInteger())
-					}
-					if v := obj.Get("body"); v != nil {
-						respBody = v.String()
-					}
-					if v := obj.Get("headers"); v != nil {
-						if m, ok := v.Export().(map[string]any); ok {
-							for k, vv := range m {
-								respHeaders[k] = fmt.Sprint(vv)
-							}
-						}
-					}
-				} else {
-					respBody = ret.String()
-				}
-			}
-			for k, v := range respHeaders {
+			for k, v := range savedHeaders {
 				w.Header().Set(k, v)
 			}
-			w.WriteHeader(status)
-			_, _ = w.Write([]byte(respBody))
+			w.WriteHeader(savedStatus)
+			_, _ = w.Write([]byte(savedBody))
 		}
 		dispose, err := RegisterExtRoute(method, path, handler)
 		if err != nil {
@@ -1236,6 +1294,35 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 	})
 	ctxObj.Set("systemPrompt", sysObj)
 
+	// ctx.prompts.provide({name, text}) / ctx.prompts.remove(name)：
+	// 提示词资产注册（「一切皆插件-提示词插件化」：插件可承载/覆盖任何提示词，
+	// 角色提示/系统提示段等；LoadPrompt 统一入口消费）。
+	// 资产注册表 = 插件内置（prompts/ 目录，磁盘级）或 插件+插件配置（package.json
+	// config.prompts / 本运行时注册）；优先级：运行时注册 > 磁盘资产 > config/roles。
+	promptsObj := vm.NewObject()
+	promptsObj.Set("provide", func(call goja.FunctionCall) goja.Value {
+		arg := call.Argument(0)
+		if arg == nil || goja.IsUndefined(arg) || goja.IsNull(arg) {
+			panic(vm.NewTypeError("ctx.prompts.provide: 需要一个对象 {name, text}"))
+		}
+		obj := arg.ToObject(vm)
+		name := obj.Get("name").String()
+		if name == "" {
+			panic(vm.NewTypeError("ctx.prompts.provide: name 不能为空"))
+		}
+		ProvidePrompt(name, obj.Get("text").String(), "js:"+p.def.name)
+		return goja.Undefined()
+	})
+	promptsObj.Set("remove", func(call goja.FunctionCall) goja.Value {
+		arg := call.Argument(0)
+		if arg == nil || goja.IsUndefined(arg) || goja.IsNull(arg) {
+			panic(vm.NewTypeError("ctx.prompts.remove: 需要一个对象 {name}"))
+		}
+		RemovePrompt(arg.ToObject(vm).Get("name").String())
+		return goja.Undefined()
+	})
+	ctxObj.Set("prompts", promptsObj)
+
 	// ctx.toolset.registerTemplate({id, title, match?, generate?})：注册工具集构建
 	// 模板（插件化：市场/用户插件可提供专属模板，toolset_build 动态组合）。
 	// match(profile) 判定适用；generate(profile, requirement) 返回插件定义数组
@@ -1529,6 +1616,19 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 			ctxObj.Set("commands", p.buildCommandsService(pc))
 		}
 	}
+
+	// ★ 2026-08-30 影子实例（并行会话隔离，见 jsloop_pool.go）：注册面静音——
+	//   影子只承载「跑循环」，不得重复注册配置/服务/事件/工具/HTTP 路由/装配器
+	//   （主实例已注册）。能力面保持可用（JS 循环运行期要读配置、写日志）。
+	if p.shadow {
+		p.muteRegistrationAPIs(ctxObj)
+	}
+
+	// ★ 2026-09-01 原生调用感知（js_native_guard.go）：ctx 上会阻塞的服务
+	//   （bash/tools/agents/llm/npm/fs/web/…）统一包装，调用期间标记 VM 处于
+	//   原生调用 → JS 超时看门狗暂停计时。修复长任务（10 分钟命令/子 agent/
+	//   LLM 请求）被误判「handler 执行超时（疑似死循环）」的系统性缺陷。
+	applyNativeGuards(p.vm, ctxObj)
 
 	return ctxObj, nil
 }
@@ -2859,6 +2959,11 @@ func (h *PluginHost) LoadJSDynamic(def *jsPluginDef) error {
 	if def == nil || strings.TrimSpace(def.code) == "" {
 		return fmt.Errorf("插件 %s: 代码为空", def.id)
 	}
+	// ★ 提示词插件化：带目录的 JS 插件（cordis_define dir / 磁盘插件包）装载时
+	//   同步扫描其 prompts/ 目录注册提示词资产（防重复扫描由注册表去重）。
+	if def.dir != "" && def.name != "" {
+		ScanPluginPromptAssets(def.dir, def.name)
+	}
 	// 重置运行诊断起点（保留历史 diag 但标记新装载阶段）
 	def.addDiag(fmt.Sprintf("[%s] run 开始（pluginId=%s pkg=%s）", time.Now().Format("15:04:05"), def.pluginId, def.packageId))
 	def.console = nil // 每次 run 独立捕获 console 输出
@@ -3106,55 +3211,64 @@ func registerJSHandler(vm *goja.Runtime, p *jsPluginAdapter, method string, fn g
 	defer p.mu.Unlock()
 	if ui {
 		p.handlersUI[method] = func(args any) (any, error) {
-			var res goja.Value
+			var exported any
 			var hErr error
-			// Invoke 可能来自任意 goroutine → 执行锁保护
+			// Invoke 可能来自任意 goroutine → 经 withLock（Route1 worker）执行；
+			// ★ 2026-08-30：res.Export() 等 goja 对象访问必须在 worker 内完成，
+			//   否则 caller goroutine 无锁访问 VM 对象 → 并发/竞态 panic。
 			p.withLock(func() {
 				// ★ 2026-08-27 UI 上下文绑定：浏览器操作代表用户当前所见界面，
 				//   跟随 invoke 发起时刻的当前主根（每次 invoke 重新取，切换
 				//   工作区即生效）；执行后清除（VM 锁串行无竞争）。
 				p.uiWsRoot = primaryWorkspaceRoot()
 				defer func() { p.uiWsRoot = "" }()
+				var res goja.Value
 				if e := runJSWithTimeout(p.vm, jsHandlerTimeout, func() error {
 					r, err := fn(goja.Undefined(), vm.ToValue(args))
 					res = r
 					return err
 				}); e != nil {
 					if isJSTimeout(e) {
-						hErr = fmt.Errorf("handler %s 执行超时（疑似死循环，已强制中断）", method)
+						hErr = fmt.Errorf("handler %s 纯 JS 执行超时（连续 %.0fs 未进入任何原生调用，疑似死循环，已强制中断）", method, jsHandlerTimeout.Seconds())
 					} else {
 						hErr = fmt.Errorf("handler %s 异常: %v", method, jsErrorText(e))
 					}
+					return
 				}
+				exported = res.Export()
 			})
 			if hErr != nil {
 				return nil, hErr
 			}
-			return res.Export(), nil
+			return exported, nil
 		}
 		return
 	}
 	p.handlers[method] = func(args any) (any, error) {
-		var res goja.Value
+		var exported any
 		var hErr error
-		// Invoke 可能来自任意 goroutine → 执行锁保护
+		// Invoke 可能来自任意 goroutine → 经 withLock（Route1 worker）执行；
+		// ★ 2026-08-30：res.Export() 在 worker 内完成，避免 caller 无锁访问 VM 对象。
 		p.withLock(func() {
+			var res goja.Value
 			if e := runJSWithTimeout(p.vm, jsHandlerTimeout, func() error {
 				r, err := fn(goja.Undefined(), vm.ToValue(args))
 				res = r
 				return err
 			}); e != nil {
 				if isJSTimeout(e) {
-					hErr = fmt.Errorf("handler %s 执行超时（疑似死循环，已强制中断）", method)
+					hErr = fmt.Errorf("handler %s 纯 JS 执行超时（连续 %.0fs 未进入任何原生调用，疑似死循环，已强制中断）", method, jsHandlerTimeout.Seconds())
 				} else {
 					hErr = fmt.Errorf("handler %s 异常: %v", method, jsErrorText(e))
 				}
+				return
 			}
+			exported = res.Export()
 		})
 		if hErr != nil {
 			return nil, hErr
 		}
-		return res.Export(), nil
+		return exported, nil
 	}
 }
 
@@ -3656,47 +3770,57 @@ func (p *jsPluginAdapter) buildNodeHTTPHandler(fn goja.Callable) http.HandlerFun
 			return resObj
 		})
 		// ── 调用 handler（async 支持：返回值 Promise 同步 drain）──
-		var ret goja.Value
+		// ★ 2026-08-30（Route1 worker）：全部 goja 对象访问（fn / awaitJSValue /
+		//   statusCode/get/ToObject）必须在 withLock（worker）内完成——worker 之外
+		//   访问 VM 对象是并发/竞态（原代码在 withLock 返回后仍读 resObj/ret，Route1
+		//   前在同一 goroutine 持锁内安全，Route1 后 caller goroutine 无锁访问→nil deref panic）。
+		//   这里只在 worker 内抽取 Go 原始值（status/body/headers），caller 只写 HTTP 响应。
+		var status = http.StatusOK
+		respHeaders := map[string]string{}
+		respBody := ""
 		var callErr error
 		p.withLock(func() {
 			v, err := fn(goja.Undefined(), reqObj, resObj)
 			if err == nil {
 				v, err = awaitJSValue(vm, v)
 			}
-			ret, callErr = v, err
+			if err != nil {
+				callErr = err
+				return
+			}
+			status = rs.status
+			if sv := resObj.Get("statusCode"); sv != nil && !goja.IsUndefined(sv) && !goja.IsNull(sv) {
+				status = int(sv.ToInteger())
+			}
+			for k, vv := range rs.headers {
+				respHeaders[k] = vv
+			}
+			respBody = strings.Join(rs.chunks, "")
+			if !rs.ended && v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
+				if s, ok := v.Export().(string); ok {
+					respBody = s
+				} else if obj := v.ToObject(vm); obj != nil {
+					if sv := obj.Get("status"); sv != nil {
+						status = int(sv.ToInteger())
+					}
+					if bv := obj.Get("body"); bv != nil {
+						respBody = bv.String()
+					}
+					if hv := obj.Get("headers"); hv != nil {
+						if m, ok := hv.Export().(map[string]any); ok {
+							for kk, vv := range m {
+								respHeaders[kk] = fmt.Sprint(vv)
+							}
+						}
+					}
+				} else {
+					respBody = v.String()
+				}
+			}
 		})
 		if callErr != nil {
 			http.Error(w, "ctx.webServer handler 执行失败: "+jsErrorText(callErr), http.StatusInternalServerError)
 			return
-		}
-		// ── flush 响应 ──
-		status := rs.status
-		if sv := resObj.Get("statusCode"); sv != nil && !goja.IsUndefined(sv) && !goja.IsNull(sv) {
-			status = int(sv.ToInteger())
-		}
-		respHeaders := rs.headers
-		respBody := strings.Join(rs.chunks, "")
-		if !rs.ended && ret != nil && !goja.IsUndefined(ret) && !goja.IsNull(ret) {
-			// 兼容旧 ctx.http 返回对象形态：{ status, body, headers } / 字符串
-			if s, ok := ret.Export().(string); ok {
-				respBody = s
-			} else if obj := ret.ToObject(vm); obj != nil {
-				if v := obj.Get("status"); v != nil {
-					status = int(v.ToInteger())
-				}
-				if v := obj.Get("body"); v != nil {
-					respBody = v.String()
-				}
-				if v := obj.Get("headers"); v != nil {
-					if m, ok := v.Export().(map[string]any); ok {
-						for k, vv := range m {
-							respHeaders[k] = fmt.Sprint(vv)
-						}
-					}
-				}
-			} else {
-				respBody = ret.String()
-			}
 		}
 		for k, v := range respHeaders {
 			w.Header().Set(k, v)

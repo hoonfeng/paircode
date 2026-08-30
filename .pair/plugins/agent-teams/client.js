@@ -36,11 +36,11 @@
 .agteams-btn:hover{color:var(--text-primary,#e6edf3);background:var(--bg-hover,#2d333b);border-color:var(--accent-color,#4f8cff)}
 .agteams-btn .agteams-badge{display:inline-flex;align-items:center;justify-content:center;min-width:14px;height:14px;padding:0 3px;font-size:9px;font-weight:600;color:#fff;background:var(--accent-color,#4f8cff);border-radius:7px}
 .agteams-btn .agteams-badge.hot{background:#f0883e}
-.agteams-panel{position:fixed;z-index:9000;top:34px;right:10px;width:min(560px,calc(100vw - 24px));max-height:calc(100vh - 48px);display:flex;flex-direction:column;background:var(--bg-secondary,#1c2128);border:1px solid var(--border-color,#30363d);border-radius:10px;box-shadow:0 10px 34px rgba(0,0,0,.5);overflow:hidden;font-size:12px;color:var(--text-primary,#e6edf3)}
+.agteams-panel{position:fixed;z-index:9000;top:34px;right:10px;width:min(560px,calc(100vw - 24px));height:min(680px,calc(100vh - 48px));display:flex;flex-direction:column;background:var(--bg-secondary,#1c2128);border:1px solid var(--border-color,#30363d);border-radius:10px;box-shadow:0 10px 34px rgba(0,0,0,.5);overflow:hidden;font-size:12px;color:var(--text-primary,#e6edf3)}
 .agteams-panel-head{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--bg-tertiary,#21262d);border-bottom:1px solid var(--border-color,#30363d);font-size:13px;font-weight:600}
 .agteams-panel-head .agteams-ico{display:flex;align-items:center;justify-content:center;width:22px;height:22px;border:none;background:none;color:var(--text-muted,#8b949e);cursor:pointer;border-radius:4px;padding:0}
 .agteams-panel-head .agteams-ico:hover{color:var(--text-primary,#e6edf3);background:var(--bg-hover,#2d333b)}
-.agteams-body{overflow-y:auto;flex:1;padding:10px 12px}
+.agteams-body{overflow-y:auto;flex:1;min-height:0;padding:10px 12px}
 .agteams-empty{padding:22px 8px;text-align:center;color:var(--text-muted,#8b949e);font-size:12px;line-height:1.7}
 .agteams-empty .t{color:var(--text-secondary,#c9d1d9);font-weight:600}
 .agteams-card{margin-bottom:10px;border:1px solid var(--border-color,#30363d);border-radius:8px;background:var(--bg-tertiary,#21262d);overflow:hidden}
@@ -50,7 +50,7 @@
 .agteams-phase.running{color:#7ee787;border-color:rgba(126,231,135,.35)}
 .agteams-phase.staged{color:#f0883e;border-color:rgba(240,136,62,.35)}
 .agteams-phase.halted{color:#ff7b72;border-color:rgba(255,123,114,.35)}
-.agteams-card-desc{padding:6px 10px;font-size:11px;color:var(--text-muted,#8b949e);line-height:1.5;border-bottom:1px solid var(--border-color,#30363d);max-height:44px;overflow:hidden}
+.agteams-card-desc{padding:6px 10px;font-size:11px;color:var(--text-muted,#8b949e);line-height:1.5;border-bottom:1px solid var(--border-color,#30363d);max-height:none;overflow:visible;white-space:normal;word-break:break-word}
 .agteams-progress{height:5px;background:var(--bg-secondary,#161b22);border-radius:3px;margin:8px 10px 4px;overflow:hidden}
 .agteams-progress i{display:block;height:100%;background:var(--accent-color,#4f8cff);border-radius:3px;transition:width .4s}
 .agteams-stats{padding:0 10px 8px;font-size:10px;color:var(--text-muted,#8b949e);display:flex;gap:12px}
@@ -242,11 +242,13 @@
         } else if (act === 'discard') {
           if (!confirm('废弃该暂存计划？（不可恢复，将归档）')) { t.disabled = false; return }
           await ui.invoke(PLUGIN, 'discard', { teamId })
+          alert('已废弃并归档该团队计划（' + teamId + '）')
         } else if (act === 'continue') {
           await ui.invoke(PLUGIN, 'continuePlanning', { teamId })
         } else if (act === 'halt') {
           if (!confirm('暂停团队并取消所有未完成任务？')) { t.disabled = false; return }
           await ui.invoke(PLUGIN, 'halt', { teamId })
+          alert('已暂停团队（' + teamId + '）')
         }
       } catch (err) {
         console.warn('[agent-teams] ' + act + ' 失败', err)
@@ -257,7 +259,8 @@
     })
 
     refresh()
-    timerId = setInterval(refresh, 3000)
+    // ★ 不再周期轮询（agent-teams 在单个 goja VM 锁内串行；周期 GET 会持续占用 VM 锁，
+    //   推高与主线程/工作区切换的争抢→卡死风险）。改为打开时取一次 + 动作后手动 refresh。
   }
 
   function closePanel() {
