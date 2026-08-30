@@ -88,3 +88,6 @@ dev/desktop_probe/config/
 .verify-tmp/
 dev/wsprobe/
 # 独立验证临时日志.verify-tmp/
+
+# Go build cache (380MB, local only)
+.go-cache/
