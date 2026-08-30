@@ -85,12 +85,6 @@
         "recursive": true
       },
       {
-        "src": "config/roles",
-        "dst": "config/roles",
-        "optional": true,
-        "recursive": true
-      },
-      {
         "src": "assets/icon.svg",
         "dst": "assets/icon.svg",
         "optional": true
