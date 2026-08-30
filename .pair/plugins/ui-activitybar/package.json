@@ -5,5 +5,21 @@
   "scope": "global",
   "type": "plugin",
   "main": "index.js",
-  "client": "client.js"
+  "client": "client.js",
+  "dsh": {
+    "ui": {
+      "platform": "web",
+      "slot": "activitybar",
+      "kind": "single",
+      "scope": "root",
+      "inject": ["@paircode/core"],
+      "immediately": true,
+      "build": {
+        "entry": "src/ui-main-activitybar.js",
+        "global": "UiActivitybar",
+        "outDir": ".pair/plugins/ui-activitybar/assets",
+        "fileName": "ui-activitybar"
+      }
+    }
+  }
 }

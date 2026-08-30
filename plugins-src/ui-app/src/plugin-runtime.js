@@ -467,6 +467,9 @@ function makeUI(inst) {
         pluginName: inst.name,
         title: spec.title,
         kind: spec.kind === 'list' ? 'list' : 'single',
+        // ★ DSH 兼容契约（spec §3.1）：scope 对齐 dsh.ui.scope（root/session/session-maybe）。
+        //   默认 root；未声明时等价 root。宿主/其他插件可据此做数据作用域装配。
+        scope: spec.scope === 'session' || spec.scope === 'session-maybe' ? spec.scope : 'root',
         render: typeof spec.render === 'function' ? spec.render : null,
         defId: inst.defId,
       }
@@ -612,6 +615,100 @@ export async function syncClientHalves(plugins) {
   reportState()
 }
 
+// ─── DSH 兼容清单装配（spec §3.2 / §3.3 / §4.3：/api/ui-boot boot 图）─────
+// boot()：薄壳装载的【唯一入口】。自取 /api/ui-boot 单图 → 校验 __PAIRCODE_CORE 就绪
+// → 预取 immediately bundle → 按 entries 装配各区 client 半（dsh.ui 区域包）。
+// → 再合并 /api/plugins 装载「非 dsh.ui 的既有 client.js 直载插件」
+//   （agent-teams / ui-quick-exec / ui-statusbar-conn，不在 boot 图内），
+//   确保两类包并存装载，首屏 titlebar-right / statusbar-items 恢复渲染。
+//
+// graph = { rev, entries: [{ id, url, rev, inject?, immediately?, external? }] }
+// 不变量：
+//   1) 共享核心 __PAIRCODE_CORE 先于任何 region 包就绪（薄壳 mount 前已注入，此处校验）。
+//   2) 任一 region 失败 → 仅该槽位空态占位（getSlotUI 返回 null），不影响其他（故障隔离）。
+//   3) 图级 rev → __PAIRCODE_CORE.bootGraph 浏览器侧缓存（spec §4.3）。
+//   4) 非 dsh.ui 直载插件不在 boot 图（后端只纳入含 dsh.ui 的包），故补 syncClientHalves
+//      装载它们（spec §7 向后兼容，两源并存；不破坏 dsh.ui 单图发现语义）。
+export async function boot() {
+  const core = (typeof window !== 'undefined') ? window.__PAIRCODE_CORE : null
+  if (!core) return { ok: false, error: '__PAIRCODE_CORE 未就绪（薄壳必须先注入共享核心）' }
+  let graph
+  try {
+    const res = await fetch('/api/ui-boot')
+    graph = await res.json()
+  } catch (e) {
+    return { ok: false, error: 'fetch /api/ui-boot 失败: ' + (e && e.message || e) }
+  }
+  if (!graph || !Array.isArray(graph.entries)) return { ok: false, error: 'boot 图缺少 entries' }
+  // 图级一致性锚：缓存到共享核心（供 region 包兼容检测 / HMR diffing）。
+  core.bootGraph = { rev: graph.rev || '', entries: graph.entries }
+  // 预取 immediately 的 bundle（stage-one）；失败只记诊断不影响后续。
+  const immediate = graph.entries.filter(e => e.immediately !== false && e.url)
+  for (const e of immediate) {
+    try {
+      if (!document.querySelector('script[data-boot="' + e.id + '"]')) {
+        const s = document.createElement('script')
+        s.dataset.boot = e.id
+        s.src = e.url
+        s.onerror = () => console.warn('[boot] 预取失败', e.id, e.url)
+        document.head.appendChild(s)
+      }
+    } catch (err) {
+      console.warn('[boot] 预取异常', e.id, err)
+    }
+  }
+  // ① 装配 boot 图（dsh.ui）区域包 client 半。
+  await loadClientHalvesFromManifest(graph.entries)
+  // ② 合并两源：装载非 dsh.ui 的既有 client.js 直载插件（agent-teams/ui-quick-exec/
+  //    ui-statusbar-conn，不在 boot 图内）。syncClientHalves 从 /api/plugins 列表取
+  //    running+hasClient+clientCode 的包装载；对已在 boot 图装载的 dsh.ui 包幂等跳过
+  //    （exists → 不重载）。两类并存，首屏 titlebar-right/statusbar-items 恢复渲染。
+  try {
+    const plugins = (await api.listPlugins()) || []
+    await syncClientHalves(plugins)
+  } catch (e2) {
+    console.warn('[boot] 装载非 dsh.ui 直载插件失败（不影响 boot 图区域包）', e2)
+  }
+  return { ok: true, rev: graph.rev || '', loaded: graph.entries.map(e => e.id) }
+}
+
+// loadClientHalvesFromManifest 按 boot 图 entries 装配 region 包 client 半。
+// ★ 关键：不再从 /api/plugins/detail 补 clientCode —— 直接从 boot 图条目取得并装载。
+//   boot 图条目的 url 是「已编译 bundle」（Vue 组件 IIFE，仅暴露 window.<Global>.mount，
+//   不自注册槽位）；真正的 client 半（`(ui)=>void` 注册器）在其插件包根目录 client.js，
+//   经 /plugins-assets/<name>/client.js 可取（web_server.go /plugins-assets/ 静态路由任意文件）。
+//   故按条目 id 拼接 client 半源码端点逐包装配（保留现有 RegisterSlot/render 契约，不破坏 UI）。
+// entries: [{ id, url, rev, inject, immediately, external }]
+export async function loadClientHalvesFromManifest(entries) {
+  if (!Array.isArray(entries)) return
+  const active = new Set()
+  for (const e of entries) {
+    if (!e || !e.id) continue
+    // 已装载且非 error 则跳过（幂等）
+    const exists = instances.find(inst => inst.name === e.id)
+    if (exists && exists.status !== 'error') { active.add(e.id); continue }
+    let clientCode = ''
+    try {
+      // 语法预检来源：插件包 client.js（(ui)=>void 注册器）。取不到则跳过（该槽位空态占位）。
+      const res = await fetch('/plugins-assets/' + encodeURIComponent(e.id) + '/client.js')
+      if (res.ok) clientCode = await res.text()
+    } catch (err) { /* 忽略：取源码失败跳过 */ }
+    if (clientCode && String(clientCode).trim()) {
+      loadClientHalf({ name: e.id, defId: e.id, clientCode })
+      active.add(e.id)
+    } else {
+      console.warn('[boot] 取 client.js 失败，跳过 ' + e.id + '（该槽位空态占位）')
+    }
+  }
+  // 卸载已不在清单的
+  for (let i = instances.length - 1; i >= 0; i--) {
+    if (!active.has(instances[i].name)) instances.splice(i, 1)
+  }
+  emitPanelChanged()
+  emitSlotChanged()
+  reportState()
+}
+
 // ─── host → 浏览器事件轮询 ──────────────────────────────────
 
 // dispatchHostEvent 把一条 host 事件分发给所有 client 半的 on 监听器。
@@ -700,6 +797,7 @@ export function getUIFor(pluginName) {
 
 export default {
   loadClientHalf, unloadClientHalf, syncClientHalves,
+  boot, loadClientHalvesFromManifest,
   startPolling, stopPolling, dispatchHostEvent,
   getInstances, setPanelMount, clientPanels,
   clientSlots, setSlotMount, getSlotCandidates, getSlotOwner, setSlotOwner, getSlotUI, getSlotUIList,

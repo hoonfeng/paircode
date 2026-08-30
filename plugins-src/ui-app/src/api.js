@@ -604,11 +604,20 @@ async function saveInstructions(scope, content) {
 
 }
 
-export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, isWebSocketOpen, waitForWebSocket, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatCompact, chatStop, getMessages, getMessagesCount, getModels, saveModels, getAiPresets, saveAiPreset, saveAiPresets, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, listPlugins, getPluginDetail, pluginAction, definePlugin, pluginEmit, pluginClientEvents, pluginClientState, pluginInvoke, pluginClientFailure, builtinPlugins, pluginToolToggle, getToolsets, toolsetEdit, listCommands, runCommand }
+export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, isWebSocketOpen, waitForWebSocket, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatCompact, chatStop, getMessages, getMessagesCount, getModels, saveModels, getAiPresets, saveAiPreset, saveAiPresets, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, listPlugins, getUIBoot, getPluginDetail, pluginAction, definePlugin, pluginEmit, pluginClientEvents, pluginClientState, pluginInvoke, pluginClientFailure, builtinPlugins, pluginToolToggle, getToolsets, toolsetEdit, listCommands, runCommand }
+
+// ─── UI 插件 boot 图（DSH 兼容 /api/ui-boot 单图）──────────────
+// getUIBoot 取 DSH WebBootGraph 等价 boot 图（{rev, entries:[{id,url,rev,inject,immediately,external}]}）。
+// 薄壳装载的唯一入口：仅消费这一张图（不再 listPlugins+getPluginDetail），见 ShellApp.vue / plugin-runtime.boot()。
+async function getUIBoot() {
+  return apiGet('/ui-boot')
+}
 
 // ─── 插件（管理 + 使用 + host/client 事件桥）──────────────
 
-// listPlugins 插件列表（含状态/工具/服务/client 有无，不含源码）。
+// ─── 插件（管理 + 使用 + host/client 事件桥）──────────────
+
+// listPlugins 插件列表（含状态/工具/服务/client 有无 与 clientCode 源码，供 boot()/syncClientHalves 双层装载）。
 
 async function listPlugins() {
 

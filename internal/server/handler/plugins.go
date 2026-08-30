@@ -1,7 +1,7 @@
 // 插件管理与使用共享 handler：/api/plugins*（web 端与桌面端共用）。
 //
 // 提供：
-//   - GET  /api/plugins             插件列表（不含 client 半源码，省流量）
+//   - GET  /api/plugins             插件列表（含 client 半源码 clientCode，供薄壳双层装载）
 //   - GET  /api/plugins/detail      单插件详情（?id= 插件名或 dyn id，含 client 半源码）
 //   - POST /api/plugins/action      启停/删除（{id, action: start|stop|undefine}）
 //   - POST /api/plugins/define      直接定义 JS 动态插件（{purpose, code, client?, language?}）
@@ -63,7 +63,7 @@ func HandlePlugins(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	recs := ph.Inspect()
-	// 列表接口省略 client 半源码（详情接口按需取）
+	// 列表接口现含 client 半源码（clientCode），供 boot()/syncClientHalves 双层装载；详情接口按需取完整定义
 	var reg *agent.Registry
 	if ph.Context() != nil {
 		reg = ph.Context().Tools

@@ -37,7 +37,7 @@
 
 <script setup>
 import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
-import { state } from '../ui-state.js'
+import { state, layout } from '../ui-state.js'
 import api from '../api.js'
 import SvgIcon from './SvgIcon.vue'
 import ContextMenu from './ContextMenu.vue'
@@ -299,6 +299,7 @@ async function showContextMenu(e) {
 function openFile(path) {
   if (!state.openFiles.includes(path)) state.openFiles.push(path)
   state.activeFile = path
+  layout.openEditor(path)
   loadFileContent(path)
 }
 

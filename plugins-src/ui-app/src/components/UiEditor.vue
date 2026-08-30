@@ -40,11 +40,11 @@ const stopBottomResize = () => {
 
 <style scoped>
 .main-area {
-  grid-column: 3; grid-row: 2;
+  /* ★ chat 优先薄壳（2026-08 重构）：editor 槽位现为「details 辅助列」（ShellApp
+     grid-column:4）。此处不再写 grid-column/grid-row（宿主 details-area 是 grid
+     项，非 grid 容器，子元素 grid 定位无效）；改为撑满宿主（width/height 100%）。 */
   display: flex; flex-direction: column; min-width: 0; overflow: hidden;
-  /* ★ bundle 根必须撑满宿主（plugin-slot-host 748px），否则 flex 高度 =
-     内容高度 → 编辑区/终端下方大段空余（历史坑：520 vs 748 → 228px 空白） */
-  height: 100%;
+  width: 100%; height: 100%;
 }
 .main-area > :first-child { flex: 1; }
 .bottom-panel {

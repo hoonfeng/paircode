@@ -78,6 +78,9 @@ type ToolsetPlugin struct {
 	// 装载后应用：Registry.SetToolEnabled(false) → agent 工具列表不可见；
 	// 工具仍注册在案（可逆，重新 edit 可恢复）。
 	DisabledTools []string `json:"disabledTools,omitempty"`
+	// HasDshUI ★ 磁盘插件包含 DSH 兼容 dsh.ui 段（UI 区域/功能包）。装载到 def 后，
+	// /api/plugins 列表据此标记 hasClient=true（即使无 client.js），见 Inspect/InspectDetail。
+	HasDshUI bool `json:"-"`
 }
 
 // ─── 目录解析 ─────────────────────────────────────────────
@@ -525,14 +528,15 @@ func GlobalPluginsPath() string {
 
 // GlobalPluginPackage 全局插件包描述（<name>/package.json）。
 type GlobalPluginPackage struct {
-	Name    string         `json:"name"`              // 插件名（包目录名）
-	Purpose string         `json:"purpose,omitempty"` // 用途说明
-	Version string         `json:"version"`           // 版本
-	Scope   string         `json:"scope,omitempty"`   // "global"（UI 类跨工作区）/ "project"
-	Type    string         `json:"type"`              // "plugin"
-	Main    string         `json:"main"`              // host 半源码文件（index.js）
-	Client  string         `json:"client,omitempty"`  // client 半源码文件（client.js，可选）
-	Config  map[string]any `json:"config,omitempty"`  // 插件配置（透传 apply(ctx, config)）
+	Name    string           `json:"name"`              // 插件名（包目录名）
+	Purpose string           `json:"purpose,omitempty"` // 用途说明
+	Version string           `json:"version"`           // 版本
+	Scope   string           `json:"scope,omitempty"`   // "global"（UI 类跨工作区）/ "project"
+	Type    string           `json:"type"`              // "plugin"
+	Main    string           `json:"main"`              // host 半源码文件（index.js）
+	Client  string           `json:"client,omitempty"`  // client 半源码文件（client.js，可选）
+	Config  map[string]any   `json:"config,omitempty"`  // 插件配置（透传 apply(ctx, config)）
+	Dsh     *GlobalPluginDsh `json:"dsh,omitempty"`     // ★ DSH 兼容二段式 manifest 的 dsh.ui 段（UI 区域/功能包声明；新增，旧包无此段仍按 client.js 直载）
 }
 
 // diskPluginCodeAvailable 磁盘插件包是否存在且 main 源码非空（R2-8 去重用）。
@@ -610,10 +614,15 @@ func applyGlobalPluginDir(ph *PluginHost, pkgDir string) error {
 			clientCode = string(cb)
 		}
 	}
+	// ★ 提示词插件化-插件内置：扫描插件包 prompts/ 目录注册提示词资产
+	//   （<name>.md → 资产名 <name>；任何插件包放 prompts/ 即可贡献提示词）。
+	if n := ScanPluginPromptAssets(pkgDir, pkg.Name); n > 0 {
+		log.Printf("[global-plugin] %s 注册提示词资产 %d 个（prompts/ 目录）", pkg.Name, n)
+	}
 	return applyGlobalPlugin(ph, &ToolsetPlugin{
 		Name: pkg.Name, Purpose: pkg.Purpose,
 		Code: string(hostCode), Client: clientCode, Scope: pkg.Scope,
-		Dir: pkgDir, Config: pkg.Config,
+		Dir: pkgDir, Config: pkg.Config, HasDshUI: pkg.Dsh != nil && pkg.Dsh.UI != nil,
 	})
 }
 
@@ -637,8 +646,14 @@ func applyGlobalPlugin(ph *PluginHost, p *ToolsetPlugin) error {
 		if def.scope == "" {
 			def.scope = "project"
 		}
-		def.dir = p.Dir       // ★ 插件目录（ctx.binary 据此定位 bin/<name>.exe 与 assets/）
-		def.config = p.Config // ★ 插件配置（package.json "config"，apply(ctx, config) 第二参）
+		def.dir = p.Dir           // ★ 插件目录（ctx.binary 据此定位 bin/<name>.exe 与 assets/）
+		def.config = p.Config     // ★ 插件配置（package.json "config"，apply(ctx, config) 第二参）
+		def.hasDshUI = p.HasDshUI // ★ DSH 兼容 dsh.ui 段：/api/plugins 据此标记 hasClient（见 Inspect）
+	}
+	// ★ 提示词插件化-插件+插件配置：package.json config.prompts（name → text 映射）
+	//   注册为提示词资产（优先级高于插件包 prompts/ 磁盘资产与 config/roles）。
+	if n := registerConfigPrompts(p.Config, p.Name); n > 0 {
+		log.Printf("[global-plugin] %s 注册提示词资产 %d 个（config.prompts）", p.Name, n)
 	}
 	if err := ph.LoadJSDynamic(def); err != nil {
 		return err

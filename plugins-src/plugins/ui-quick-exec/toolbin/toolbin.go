@@ -32,9 +32,10 @@ import (
 )
 
 type request struct {
-	Tool string         `json:"tool"`
-	Args map[string]any `json:"args"`
-	Root string         `json:"root"`
+	Tool           string         `json:"tool"`
+	Args           map[string]any `json:"args"`
+	Root           string         `json:"root"`
+	WorkspaceRoots []string       `json:"workspaceRoots"`
 }
 
 // Serve 执行 stdin 请求（req 为 nil 时从 stdin 解析）。
@@ -98,6 +99,9 @@ func Boot() (*request, string) {
 		if wd, err := os.Getwd(); err == nil {
 			root = wd
 		}
+	}
+	if len(req.WorkspaceRoots) > 0 {
+		WorkspaceRoots = req.WorkspaceRoots
 	}
 	return &req, root
 }

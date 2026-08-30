@@ -5,5 +5,21 @@
   "scope": "global",
   "type": "plugin",
   "main": "index.js",
-  "client": "client.js"
+  "client": "client.js",
+  "dsh": {
+    "ui": {
+      "platform": "web",
+      "slot": "sidebar",
+      "kind": "list",
+      "scope": "root",
+      "inject": ["@paircode/core"],
+      "immediately": false,
+      "build": {
+        "entry": "src/ui-main-git.js",
+        "global": "GitPanel",
+        "outDir": ".pair/plugins/git-api/assets",
+        "fileName": "git-panel"
+      }
+    }
+  }
 }

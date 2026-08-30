@@ -27,7 +27,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { state, showSettings as showSettingsModal, showHelpWrapper as showHelpModal, showAbout as showAboutModal } from '../ui-state.js'
+import { state, layout, showSettings as showSettingsModal, showHelpWrapper as showHelpModal, showAbout as showAboutModal } from '../ui-state.js'
 import api from '../api.js'
 import { switchActivity } from '../app-actions.js'
 
@@ -137,6 +137,7 @@ const execItem = async (item) => {
     if (!path) return
     if (!state.openFiles.includes(path)) state.openFiles.push(path)
     state.activeFile = path
+    layout.openEditor(path)
     return
   }
   if (a === 'open-folder') {

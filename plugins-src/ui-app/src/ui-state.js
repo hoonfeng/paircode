@@ -138,6 +138,18 @@ export const state = reactive({
   notificationCount: 0,
   theme: 'dark',
   focusMode: false, // ★ 默认非专注：编辑器+对话区并排（右侧宽度可拖拽调整）；Ctrl+K 切换专注（隐藏编辑器）
+  // ── ★ chat 优先薄壳布局：编辑器按需打开的装配状态（默认编辑器隐藏）──
+  //   权威面只在 ctx.uiLayout / __PAIRCODE_CORE.layout（见下方 layout 服务），
+  //   区域包通过服务读写，不直接改本字段（避免状态机分散 & 编辑器直接改私有开关）。
+  //   editorOpen/editorWidth 为「临时视图」状态，不持久化到 localStorage（沿用
+  //   focusMode 不持久化先例，避免「上次打开→下次启动就显示编辑器」的经典坑）。
+  //   ★ 只放「编辑器可见性」这一真正新建的状态机字段；sidebarVisible/rightPanelVisible
+  //   继续用顶层 state（已有、被大量组件直接读写），避免双源不一致。
+  panels: {
+    editorOpen: false,        // ★ 默认折叠：编辑器隐藏（不占主导视图）
+    editorWidth: 360,         // 折叠后打开时的默认详情列宽（对齐 DSH DETAILS_DEFAULT=360）
+    editorLastWidth: 360,     // 上次打开宽（折叠还原用）
+  },
 })
 
 // ─── 全局 UI 面板状态（跨区域共享，替代 App.vue provide/inject）───
@@ -199,6 +211,55 @@ export function savePanelSize() {
   } catch {}
 }
 loadPanelSize()
+
+// ─── ★ 跨区域布局服务（ctx.uiLayout / __PAIRCODE_CORE.layout）───
+// 对齐 DSH `ctx.layout` 的 LayoutController 语义（spec §3.4 / §6）：
+//   面板转换（侧栏折叠 / 编辑器按需打开关闭）是区域包的唯一权威面。
+// 区域包通过它读写布局开关，不直接改 state.panels 私有字段（spec E4）。
+// 编辑器「折叠=隐藏（保持挂载，不 unmount）」，复用现有 CSS 宽度切换语义 ——
+// 打开/关闭只改可见性（width:0 ↔ editorWidth），绝不触发 CM6/终端 WS 重挂。
+export const layout = {
+  toggleSidebar() {
+    state.sidebarVisible = !state.sidebarVisible
+  },
+  openEditor(filePath) {
+    if (typeof filePath === 'string' && filePath) {
+      state.activeFile = filePath
+      if (!state.openFiles.includes(filePath)) state.openFiles.push(filePath)
+    }
+    // ★ 打开编辑器即退出专注（focusMode 是「纯对话」态：隐藏侧栏+编辑器；
+    //   点文件树打开编辑时必须退出，否则编辑器仍被 focusMode 折叠不可见）。
+    if (state.focusMode) state.focusMode = false
+    // ★ 从关闭态打开：记录上次打开宽（折叠还原用），再置可见。
+    if (!state.panels.editorOpen && state.panels.editorWidth > 0) {
+      state.panels.editorLastWidth = state.panels.editorWidth
+    }
+    state.panels.editorOpen = true
+  },
+  closeEditor() {
+    // ★ 折叠不 unmount：只置 false，宽度由壳 css width:0 收缩；CM6/终端 WS 保留。
+    state.panels.editorOpen = false
+  },
+  toggleEditor() {
+    if (state.panels.editorOpen) layout.closeEditor()
+    else layout.openEditor()
+  },
+  isEditorOpen() {
+    return !!state.panels.editorOpen
+  },
+  setEditorWidth(px) {
+    const v = Number(px)
+    if (Number.isFinite(v) && v > 0) {
+      state.panels.editorWidth = v
+      state.panels.editorLastWidth = v
+    }
+  },
+  // ★ 主视图 tab 切换（对话 ⇄ 编辑器）：editorOpen 作为「编辑器 tab 激活」的单一事实源。
+  //   两者常驻挂载（壳 v-show 切换），互不影响（CM6/终端 WS 不重挂）。
+  setMainView(view) {
+    state.panels.editorOpen = (view === 'editor')
+  },
+}
 
 // ★ 调试探针入口：暴露全局 store，供 wb-ui probe 直接读取状态层
 if (typeof window !== 'undefined') window.__state = state

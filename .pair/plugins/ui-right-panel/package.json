@@ -5,5 +5,21 @@
   "scope": "global",
   "type": "plugin",
   "main": "index.js",
-  "client": "client.js"
+  "client": "client.js",
+  "dsh": {
+    "ui": {
+      "platform": "web",
+      "slot": "conversation",
+      "kind": "single",
+      "scope": "root",
+      "inject": ["@paircode/core", "@paircode/layout"],
+      "immediately": true,
+      "build": {
+        "entry": "src/ui-main-right-panel.js",
+        "global": "UiRightPanel",
+        "outDir": ".pair/plugins/ui-right-panel/assets",
+        "fileName": "ui-right-panel"
+      }
+    }
+  }
 }

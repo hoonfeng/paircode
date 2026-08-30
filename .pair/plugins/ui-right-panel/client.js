@@ -15,13 +15,17 @@
 
   const register = () => {
     ui.registerSlot({
-      slotId: 'right-panel',
-      title: '右侧对话容器（ui-right-panel）',
+      // ★ 槽位名统一为 conversation（spec §5.2 反向对齐）：manifest dsh.ui.slot
+      //   （ui-right-panel/package.json）、壳 host.main.children（ShellApp.vue
+      //   useSingleSlot('conversation')）、本运行时 registerSlot slotId 三处一致，
+      //   消除三处命名漂移（原 right-panel 名已弃）。
+      slotId: 'conversation',
+      title: '对话主视图（ui-right-panel）',
       kind: 'single',
       render(el) {
         const mod = window[GLOBAL]
         if (!mod || typeof mod.mount !== 'function') {
-          el.innerHTML = '<div style="padding:8px;font-size:12px;color:var(--text-muted)">right-panel bundle 未就绪</div>'
+          el.innerHTML = '<div style="padding:8px;font-size:12px;color:var(--text-muted)">conversation bundle 未就绪</div>'
           return
         }
         try {
@@ -34,13 +38,13 @@
     })
   }
 
+  const link = document.createElement('link')
+  link.rel = 'stylesheet'
+  link.href = CSS
+  document.head.appendChild(link)
   if (window[GLOBAL]) {
     register()
   } else {
-    const link = document.createElement('link')
-    link.rel = 'stylesheet'
-    link.href = CSS
-    document.head.appendChild(link)
     const s = document.createElement('script')
     s.src = JS
     s.onload = register

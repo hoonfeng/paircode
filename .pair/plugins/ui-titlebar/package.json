@@ -5,5 +5,21 @@
   "scope": "global",
   "type": "plugin",
   "main": "index.js",
-  "client": "client.js"
+  "client": "client.js",
+  "dsh": {
+    "ui": {
+      "platform": "web",
+      "slot": "titlebar",
+      "kind": "single",
+      "scope": "root",
+      "inject": ["@paircode/core"],
+      "immediately": true,
+      "build": {
+        "entry": "src/ui-main-titlebar.js",
+        "global": "UiTitlebar",
+        "outDir": ".pair/plugins/ui-titlebar/assets",
+        "fileName": "ui-titlebar"
+      }
+    }
+  }
 }

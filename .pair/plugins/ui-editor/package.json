@@ -5,5 +5,21 @@
   "scope": "global",
   "type": "plugin",
   "main": "index.js",
-  "client": "client.js"
+  "client": "client.js",
+  "dsh": {
+    "ui": {
+      "platform": "web",
+      "slot": "editor",
+      "kind": "single",
+      "scope": "root",
+      "inject": ["@paircode/core", "@paircode/layout"],
+      "immediately": true,
+      "build": {
+        "entry": "src/ui-main-editor.js",
+        "global": "UiEditor",
+        "outDir": ".pair/plugins/ui-editor/assets",
+        "fileName": "ui-editor"
+      }
+    }
+  }
 }

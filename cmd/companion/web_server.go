@@ -376,6 +376,13 @@ func startWebUI(port int) {
 		http.ServeFile(w, r, p)
 	})
 
+	// ── UI 插件 boot 图（DSH 兼容）──
+	// GET /api/ui-boot：从磁盘 UI 插件包按 dsh.ui manifest 独立发现，输出 DSH
+	// WebBootGraph 等价 boot 图（rev + entries[{id,url,rev,inject,immediately,external}]）。
+	// 服务端装配（见 internal/agent/uiboot.go BuildUIBootGraph），非插件 ext 路由——
+	// 作薄壳发现/装载单一入口，与 /plugins-assets/ 同为主机面路由。
+	mux.HandleFunc("/api/ui-boot", handler.HandleUIBoot)
+
 	// ── 静态文件 ──
 	// ★ 一切皆插件：前端产物支持磁盘优先（WEB_DIR 环境变量 > exe 旁 web/ 目录），
 	//   fallback 内嵌（//go:embed web-ui/dist）。

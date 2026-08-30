@@ -17,6 +17,9 @@
       <div ref="editorToolbarEl" class="plugin-slot-host plugin-slot-editor-toolbar"></div>
       <button class="tb-action" @click="undoAction" title="撤消 (Ctrl+Z)" :disabled="!state.activeFile"><SvgIcon name="undo" :size="12" /></button>
       <button class="tb-action" @click="redoAction" title="重做 (Ctrl+Y)" :disabled="!state.activeFile"><SvgIcon name="redo" :size="12" /></button>
+      <!-- ★ chat 优先薄壳：编辑器是辅助/details 列，提供「收起」把编辑器折叠回 width:0
+           （保持挂载，不卸载 CM6/终端 WS；下次点文件树再打开）。 -->
+      <button class="tb-action" @click="collapseEditor" title="收起编辑器（保持挂载，不重连终端）"><SvgIcon name="chevron-right" :size="12" /></button>
     </div>
 
     <!-- 欢迎页 / 编辑器 / 图片 / Hex -->
@@ -81,7 +84,7 @@
 <script setup>
 import { computed, ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { undo, redo } from '@codemirror/commands'
-import { state } from '../ui-state.js'
+import { state, layout } from '../ui-state.js'
 import api from '../api.js'
 import SvgIcon from './SvgIcon.vue'
 import CodeEditor from './CodeEditor.vue'
@@ -399,6 +402,11 @@ const redoAction = () => {
   const view = editorRef.value.getEditor()
   if (!view) return
   view.dispatch({ effects: redo(view) })
+}
+
+// ★ chat 优先薄壳：收起编辑器（折叠回 width:0，保持挂载不 unmount → CM6/终端 WS 不重连）。
+const collapseEditor = () => {
+  layout.closeEditor()
 }
 
 onMounted(() => {

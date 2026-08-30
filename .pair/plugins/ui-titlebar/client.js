@@ -37,13 +37,13 @@
     })
   }
 
+  const link = document.createElement('link')
+  link.rel = 'stylesheet'
+  link.href = CSS
+  document.head.appendChild(link)
   if (window[GLOBAL]) {
     register()
   } else {
-    const link = document.createElement('link')
-    link.rel = 'stylesheet'
-    link.href = CSS
-    document.head.appendChild(link)
     const s = document.createElement('script')
     s.src = JS
     s.onload = register

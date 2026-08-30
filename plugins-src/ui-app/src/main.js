@@ -20,7 +20,20 @@ import * as agentEvents from './agent-events.js'
 import * as actions from './app-actions.js'
 import ShellApp from './ShellApp.vue'
 
-// ★ 共享核心：全部区域 bundle external 的模块从这里取（Vue 单例 + 状态单例）
-window.__PAIRCODE_CORE = { Vue, api, uiState, pluginRuntime, agentEvents, actions }
+// ★ 共享核心：全部区域 bundle external 的模块从这里取（Vue 单例 + 状态单例）。
+//   DSH 兼容契约（spec §4.3）：除 Vue/uiState/api/pluginRuntime/agentEvents/actions 外，
+//   新增 `version` 锚（区域包兼容检测）与 `layout` 服务面（ctx.uiLayout，侧栏折叠/
+//   编辑器按需打开的权威面）。保持单例关键：本对象里的引用必须与所有区域 bundle
+//   运行时经 `window.__PAIRCODE_CORE` 取的为同一实例（Vue/reactive/槽位注册表跨副本共享）。
+window.__PAIRCODE_CORE = {
+  Vue,
+  api,
+  uiState,
+  pluginRuntime,
+  agentEvents,
+  actions,
+  layout: uiState.layout,    // ★ ctx.uiLayout 服务面（见 ui-state.js `layout`）
+  version: '1.0.0',          // ★ 共享核心契约版本锚（region 包兼容检测）
+}
 
 createApp(ShellApp).mount('#app')

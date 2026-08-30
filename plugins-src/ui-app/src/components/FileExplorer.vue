@@ -172,7 +172,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
-import { state } from '../ui-state.js'
+import { state, layout } from '../ui-state.js'
 import api from '../api.js'
 import FileTreeItem from './FileTreeItem.vue'
 import ToolsetTransfer from './ToolsetTransfer.vue'
@@ -552,6 +552,7 @@ async function refreshAll() {
 function openFile(path) {
   if (!state.openFiles.includes(path)) state.openFiles.push(path)
   state.activeFile = path
+  layout.openEditor(path)
   loadFileContent(path)
 }
 
