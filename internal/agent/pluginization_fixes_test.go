@@ -19,40 +19,8 @@ import (
 	"github.com/hoonfeng/paircode/internal/core"
 )
 
-// ─── C1/C2：角色提示磁盘优先 ───────────────────────────────
-
-// TestRolePromptDiskDefaultSync 漂移守卫（t4 审查 M1 修复）：随包发布的默认角色
-// 文件（仓库 config/roles/<name>.md）必须与内置回退提示完全一致——磁盘优先 loader
-// 使磁盘内容在生产静默生效，若两者漂移（如 reviewer 决策标准段历史缺失）会导致
-// 线上角色与内置不一致且无人察觉。本测试强制「默认内容同源」：未来改动内置提示
-// 或磁盘文件任一侧，另一侧不同步即失败。
-func TestRolePromptDiskDefaultSync(t *testing.T) {
-	repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
-	if err != nil {
-		t.Fatal(err)
-	}
-	cases := []struct {
-		name    string // 角色名（config/roles/<name>.md）
-		builtin string // 内置回退提示（展开后）
-	}{
-		{"reviewer", reviewerSystemPrompt},
-		{"planner", plannerSystemPrompt},
-		{"judge", judgeSystemPrompt},
-	}
-	for _, c := range cases {
-		path := filepath.Join(repoRoot, "config", "roles", c.name+".md")
-		data, err := os.ReadFile(path)
-		if err != nil {
-			t.Errorf("config/roles/%s.md 缺失（随包发布文件不应删除）: %v", c.name, err)
-			continue
-		}
-		disk := strings.TrimSpace(string(data))
-		builtin := strings.TrimSpace(c.builtin)
-		if disk != builtin {
-			t.Errorf("config/roles/%s.md 与内置 %sSystemPrompt 漂移（磁盘优先 loader 会使其生产静默生效）——请同步两者\n  disk    len=%d\n  builtin len=%d", c.name, c.name, len(disk), len(builtin))
-		}
-	}
-}
+// ─── C1/C2：角色提示统一提示词资产（★ 2026-09 升级：默认资产迁移至插件包，
+// 漂移守卫见 prompt_assets_test.go 的 TestPluginPromptAssetsSync）───────────────
 
 func TestRolePromptDiskOverride(t *testing.T) {
 	dir := t.TempDir()
