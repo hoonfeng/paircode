@@ -91,6 +91,11 @@ func RunWorkflow(ctx context.Context, script string, args map[string]any) (strin
 	}
 	r := &workflowRunner{vm: vm, ctx: ctx, args: args}
 	r.installGlobals()
+	// ★ 2026-09-01 原生调用感知（js_native_guard.go）：agent() 是阻塞型原生调用
+	//   （子 agent 可跑数十分钟），期间看门狗须暂停计时——否则子 agent 返回后
+	//   JS 恢复即撞 interrupt flag，长任务被误判「死循环」。
+	wrapNativeGlobals(vm, "agent")
+	defer jsForgetNative(vm)
 
 	var outVal goja.Value
 	// ★ 脚本体按函数体执行（DSH workflow 语义：脚本以 return <value> 结尾）——

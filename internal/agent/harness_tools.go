@@ -421,6 +421,12 @@ func runCodeNested(ctx context.Context, r *Registry, code string) (string, error
 	}
 	vm.Set("tools", tools)
 
+	// ★ 2026-09-01 原生调用感知（js_native_guard.go）：tools.xxx 是宿主工具执行
+	//   （可能几分钟——bash 命令/子 agent 等），必须让看门狗在其阻塞期间暂停计时，
+	//   否则工具跑完后 JS 恢复即撞 interrupt flag → 误判「疑似死循环」。
+	wrapNativeGuards(vm, tools, 0)
+	defer jsForgetNative(vm)
+
 	runErr := runJSWithTimeout(vm, 30*time.Second, func() error {
 		_, err := vm.RunString(code)
 		return err
