@@ -720,6 +720,36 @@ async function loadPlugins() {
             }
           }
         }
+      } else if (msg.t === 'prestep') {
+        // DSH agent/pre-step 中间件瀑布（订阅者形态见 dsh-agent-teams
+        // installAgentTeamsGestureBoundary）：
+        //   ctx.on('agent/pre-step', async ({messages, signal}, next) => decision)
+        //   - next() 返回下游决策；基线 {kind:'enter', messages: payload.messages}
+        //   - 返回 {kind:'enter', messages:[改写]} 或 {kind:'reject'}
+        // 多个订阅者按注册顺序组合成 koa 式瀑布；未返回决策（undefined）→ 透传下游。
+        try {
+          const handlers = [...(eventListeners.get('agent/pre-step') || [])];
+          const base = () => ({ kind: 'enter', messages: (msg.payload && msg.payload.messages) || [] });
+          let next = base;
+          for (let i = handlers.length - 1; i >= 0; i--) {
+            const h = handlers[i];
+            const down = next;
+            next = async () => {
+              const payload = {
+                messages: (msg.payload && msg.payload.messages) || [],
+                signal: new AbortController().signal,
+                turn: (msg.payload && msg.payload.turn) || 0,
+                step: (msg.payload && msg.payload.step) || 0,
+              };
+              const r = await h(payload, down);
+              return (r === undefined || r === null) ? down() : r;
+            };
+          }
+          const decision = await next();
+          send({ t: 'result', id: msg.id, ok: true, data: JSON.stringify(decision) });
+        } catch (e) {
+          send({ t: 'result', id: msg.id, ok: false, error: String((e && e.stack) || e) });
+        }
       } else if (msg.t === 'result') {
         // Go → Node 的 service 响应：resolve 对应服务 promise（fs/web/bash 转发结果）
         const p = pending.get(msg.id);

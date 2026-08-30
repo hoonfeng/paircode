@@ -11,6 +11,7 @@
 //     cordis4 装载 → 13 个 agent_teams_* 工具注册 → 冒烟调用
 //     （create/status/delete 两阶段）→ 磁盘状态落盘校验
 //     环境不满足（无 node/npm/网络）时自动 Skip（环境依赖除外）。
+//
 // ═══════════════════════════════════════════════════════════
 package agent
 
@@ -135,7 +136,9 @@ func TestBridgeEventSubscription(t *testing.T) {
 	defer func() { globalNodeBridge = nil }()
 
 	// 未订阅事件 → 不写入（管道无数据；用 goroutine 读 + 短超时判断）
-	emitBridgeEvent("agent/pre-step", map[string]any{"x": 1})
+	// ★ 2026-08-30：agent/pre-step 已升级为决策型中间件事件（见 dsh_prestep.go），
+	//   emitBridgeEvent 单向通道不再使用该名——用观察型 agent/pre-tool 验证门控。
+	emitBridgeEvent("agent/pre-tool", map[string]any{"x": 1})
 	pw.Close() // 关闭写端 → 读端 EOF（证明无 pending 数据）
 	_ = pr.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
 	buf := make([]byte, 4096)
@@ -414,6 +417,77 @@ func TestNodeBridgeDSHPluginE2E(t *testing.T) {
 		t.Fatalf("delete 输出异常: %s", data)
 	}
 	t.Logf("DSH 插件 E2E 通过：13 工具注册 + create/status/delete 冒烟 + 状态落盘（%s）", created.TeamID)
+
+	// 5. agent/pre-step 中间件瀑布（Round4 事件面补齐）：LLM 调用前、
+	//    DSH 插件订阅者按注册顺序瀑布，可改写进入模型的输入（激活指令注入）
+	//    或拒绝 turn。无手势 → 基线 enter 直通；有 /agent-teams 手势 →
+	//    追加激活指令消息（installAgentTeamsGestureBoundary）。
+	prestep := func(messages string) (map[string]any, error) {
+		if _, err := stdin.Write([]byte(fmt.Sprintf(`{"t":"prestep","id":9,"payload":{"messages":%s,"turn":1,"step":1}}`+"\n", messages))); err != nil {
+			return nil, err
+		}
+		deadline := time.Now().Add(30 * time.Second)
+		for time.Now().Before(deadline) {
+			if !scanner.Scan() {
+				return nil, fmt.Errorf("无响应: %v", scanner.Err())
+			}
+			var resp struct {
+				T    string `json:"t"`
+				ID   int64  `json:"id"`
+				OK   bool   `json:"ok"`
+				Data string `json:"data"`
+			}
+			if err := json.Unmarshal(scanner.Bytes(), &resp); err != nil {
+				continue
+			}
+			if resp.T == "log" || resp.T != "result" || resp.ID != 9 {
+				continue
+			}
+			if !resp.OK {
+				return nil, fmt.Errorf("prestep 失败: %s", resp.Data)
+			}
+			var dec map[string]any
+			if err := json.Unmarshal([]byte(resp.Data), &dec); err != nil {
+				return nil, fmt.Errorf("决策解析失败: %v", err)
+			}
+			return dec, nil
+		}
+		return nil, fmt.Errorf("prestep 超时")
+	}
+	// 5a. 普通提问 → 基线 enter（不改写）
+	dec, err := prestep(`[{"role":"user","content":[{"type":"text","text":"普通的提问"}],"source":{"kind":"user"}}]`)
+	if err != nil {
+		t.Fatalf("prestep 基线失败: %v", err)
+	}
+	if dec["kind"] != "enter" {
+		t.Fatalf("普通提问应 enter，实际 %v", dec["kind"])
+	}
+	msgs, _ := dec["messages"].([]any)
+	if len(msgs) != 1 {
+		t.Fatalf("普通提问不应改写消息: %d", len(msgs))
+	}
+	// 5b. /agent-teams 手势 → 注入激活指令（瀑布改写）
+	dec, err = prestep(`[{"role":"user","content":[{"type":"text","text":"/agent-teams 修复登录 bug"}],"source":{"kind":"user"}}]`)
+	if err != nil {
+		t.Fatalf("prestep 手势失败: %v", err)
+	}
+	if dec["kind"] != "enter" {
+		t.Fatalf("手势应 enter，实际 %v", dec["kind"])
+	}
+	msgs, _ = dec["messages"].([]any)
+	if len(msgs) != 2 {
+		t.Fatalf("手势应注入 1 条激活指令，实际 %d 条: %v", len(msgs), msgs)
+	}
+	extra := msgs[1].(map[string]any)
+	blocks, _ := extra["content"].([]any)
+	if len(blocks) < 1 {
+		t.Fatalf("激活指令消息缺 content: %v", extra)
+	}
+	blk := blocks[0].(map[string]any)
+	if blk["type"] != "text" || !strings.Contains(blk["text"].(string), "Activate the AgentTeams protocol") {
+		t.Fatalf("激活指令文本异常: %v", blk)
+	}
+	t.Logf("DSH pre-step 瀑布 E2E 通过：基线直通 + /agent-teams 手势激活指令注入")
 }
 
 // readNewestFile 读目录中最新的匹配文件（npm 诊断报告用；无则空串）。
@@ -428,4 +502,180 @@ func readNewestFile(dir, pattern string) string {
 		return ""
 	}
 	return string(b)
+}
+
+// ═══════════════════════════════════════════════════════════
+// dsh_prestep_test.go 段 —— DSH agent/pre-step 中间件瀑布桥
+//
+// 覆盖：
+//   - TestDSHMsgConversion：Go Message ↔ DSH message 往返保真
+//     （user/assistant(tool-call)/tool(tool-result)/system/reasoning）
+//   - TestBridgePreStepDecision：applyPreStepDecision 决策解析
+//     （enter 改写 / reject 拒绝 / 未知 kind 直通）
+//   - TestBridgePreStepGate：无订阅者零开销直通（不写管道）
+// ═══════════════════════════════════════════════════════════
+
+// TestDSHMsgConversion DSH 消息转换往返保真。
+func TestDSHMsgConversion(t *testing.T) {
+	in := []Message{
+		{Role: RoleSystem, Content: "你是一名资深工程师。"},
+		{Role: RoleUser, Content: "修复登录超时 bug"},
+		{Role: RoleAssistant, Content: "我来分析。", Reasoning: "先看代码", ToolCalls: []ToolCall{
+			{ID: "call-1", Type: "function", Function: FunctionCall{Name: "read_file", Arguments: `{"path":"a.go"}`}},
+		}},
+		{Role: RoleTool, Content: "文件不存在", ToolCallID: "call-1"},
+		{Role: RoleUser, Content: "继续", Images: []ImagePart{{Data: "data:image/png;base64,AAAA", MimeType: "image/png"}}},
+	}
+	dsh := msgsToDSH(in)
+	// DSH 结构抽查
+	if dsh[0]["role"] != "system" || dsh[1]["role"] != "user" || dsh[2]["role"] != "assistant" {
+		t.Fatalf("role 映射异常: system=%v user=%v assistant=%v", dsh[0]["role"], dsh[1]["role"], dsh[2]["role"])
+	}
+	// tool 消息 → role=user + source.kind=tool
+	if dsh[3]["role"] != "user" {
+		t.Fatalf("tool 消息应转 role=user，实际 %v", dsh[3]["role"])
+	}
+	src, _ := dsh[3]["source"].(map[string]any)
+	if src["kind"] != "tool" || src["callId"] != "call-1" {
+		t.Fatalf("tool source 异常: %+v", src)
+	}
+	// 往返保真
+	back := dshToMsgs(dsh)
+	if len(back) != len(in) {
+		t.Fatalf("往返消息数不一致: %d vs %d", len(back), len(in))
+	}
+	for i := range in {
+		if back[i].Role != in[i].Role {
+			t.Fatalf("[%d] role 往返丢失: %s vs %s", i, back[i].Role, in[i].Role)
+		}
+		if back[i].Content != in[i].Content {
+			t.Fatalf("[%d] content 往返丢失: %q vs %q", i, back[i].Content, in[i].Content)
+		}
+	}
+	if back[2].Reasoning != in[2].Reasoning {
+		t.Fatalf("reasoning 往返丢失: %q vs %q", back[2].Reasoning, in[2].Reasoning)
+	}
+	if len(back[2].ToolCalls) != 1 || back[2].ToolCalls[0].ID != "call-1" || back[2].ToolCalls[0].Function.Name != "read_file" {
+		t.Fatalf("tool-call 往返丢失: %+v", back[2].ToolCalls)
+	}
+	if back[3].ToolCallID != "call-1" || back[3].Content != "文件不存在" || back[3].Role != RoleTool {
+		t.Fatalf("tool-result 往返丢失: %+v", back[3])
+	}
+	if len(back[4].Images) != 1 || back[4].Images[0].Data != "data:image/png;base64,AAAA" {
+		t.Fatalf("image 往返丢失: %+v", back[4].Images)
+	}
+}
+
+// TestBridgePreStepDecision 决策 JSON 解析：enter/reject/未知。
+func TestBridgePreStepDecision(t *testing.T) {
+	// reject
+	if _, reject, err := applyPreStepDecision(`{"kind":"reject"}`); err != nil || !reject {
+		t.Fatalf("reject 决策异常: reject=%v err=%v", reject, err)
+	}
+	// enter 改写（追加一条 user 指令）
+	rewritten, reject, err := applyPreStepDecision(`{"kind":"enter","messages":[
+		{"role":"user","content":[{"type":"text","text":"修复登录超时 bug"}],"source":{"kind":"user"}},
+		{"role":"user","content":[{"type":"text","text":"Activate AgentTeams protocol."}],"source":{"kind":"agent-teams-command"}}
+	]}`)
+	if err != nil || reject {
+		t.Fatalf("enter 决策异常: reject=%v err=%v", reject, err)
+	}
+	if len(rewritten) != 2 || rewritten[1].Content != "Activate AgentTeams protocol." {
+		t.Fatalf("enter 改写未生效: %+v", rewritten)
+	}
+	// 未知 kind → 直通
+	if _, reject, err := applyPreStepDecision(`{"kind":"bogus"}`); err != nil || reject {
+		t.Fatalf("未知 kind 应直通: reject=%v err=%v", reject, err)
+	}
+	// 非法 JSON → 报错
+	if _, _, err := applyPreStepDecision(`not-json`); err == nil {
+		t.Fatal("非法决策 JSON 应报错")
+	}
+}
+
+// TestBridgePreStepGate 无订阅者时零开销直通（不写管道）。
+func TestBridgePreStepGate(t *testing.T) {
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pr.Close()
+	b := &nodeBridge{stdin: bufio.NewWriter(pw), subs: map[string]bool{"agent/status": true}, ready: true}
+	globalNodeBridge = b
+	defer func() { globalNodeBridge = nil }()
+
+	// 未订阅 agent/pre-step → 直通且管道无数据
+	if !bridgePreStepSubscribed() {
+		t.Log("未订阅确认（零开销门控）")
+	} else {
+		t.Fatal("未订阅时不应判定为已订阅")
+	}
+	rewritten, reject, err := bridgePreStep(context.Background(), []Message{{Role: RoleUser, Content: "x"}}, 1, 1)
+	if err != nil || reject || rewritten != nil {
+		t.Fatalf("未订阅应直通: rewritten=%v reject=%v err=%v", rewritten, reject, err)
+	}
+	pw.Close()
+	_ = pr.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
+	buf := make([]byte, 4096)
+	n, rerr := pr.Read(buf)
+	if rerr == nil || n != 0 {
+		t.Fatalf("未订阅时不应写桥（n=%d err=%v）", n, rerr)
+	}
+}
+
+// TestBridgePreStepSubscribed 已订阅时发起 prestep 请求并解析回包。
+func TestBridgePreStepSubscribed(t *testing.T) {
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pr.Close()
+	b := &nodeBridge{stdin: bufio.NewWriter(pw), subs: map[string]bool{"agent/pre-step": true}, ready: true, pending: map[int64]chan bridgeResult{}}
+	globalNodeBridge = b
+	defer func() { globalNodeBridge = nil }()
+
+	if !bridgePreStepSubscribed() {
+		t.Fatal("已订阅时应判定为已订阅")
+	}
+	// 后台读桥输出并模拟 Node 回包（enter 改写：追加指令）
+	go func() {
+		scanner := bufio.NewScanner(pr)
+		for scanner.Scan() {
+			var msg struct {
+				T       string `json:"t"`
+				ID      int64  `json:"id"`
+				Payload struct {
+					Messages []map[string]any `json:"messages"`
+					Turn     int              `json:"turn"`
+				} `json:"payload"`
+			}
+			if err := json.Unmarshal(scanner.Bytes(), &msg); err != nil {
+				continue
+			}
+			if msg.T != "prestep" {
+				continue
+			}
+			if len(msg.Payload.Messages) != 1 || msg.Payload.Turn != 3 {
+				t.Errorf("prestep 载荷异常: %+v", msg.Payload)
+			}
+			b.mu.Lock()
+			ch := b.pending[msg.ID]
+			delete(b.pending, msg.ID)
+			b.mu.Unlock()
+			if ch != nil {
+				ch <- bridgeResult{ok: true, data: `{"kind":"enter","messages":[
+					{"role":"user","content":[{"type":"text","text":"原消息"}],"source":{"kind":"user"}},
+					{"role":"user","content":[{"type":"text","text":"Activated"}],"source":{"kind":"agent-teams-command"}}
+				]}`}
+			}
+		}
+	}()
+
+	rewritten, reject, err := bridgePreStep(context.Background(), []Message{{Role: RoleUser, Content: "原消息"}}, 3, 1)
+	if err != nil || reject {
+		t.Fatalf("桥瀑布失败: reject=%v err=%v", reject, err)
+	}
+	if len(rewritten) != 2 || rewritten[1].Content != "Activated" {
+		t.Fatalf("改写未生效: %+v", rewritten)
+	}
 }

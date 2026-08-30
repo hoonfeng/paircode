@@ -73,9 +73,9 @@ type nodeBridge struct {
 	// ★ Round4 repair（t6）：epoch 代数计数——Close() 递增，start() 携带
 	//   启动时快照校验；epoch 过期（启动期间被 Close/替换）→ 放弃进程防
 	//   「旧进程僵尸 + globalNodeBridge 被过期启动覆盖」竞态。
-	epoch int
-	toolsMu  sync.Mutex
-	tools    map[string]*Tool // 已注册到宿主的桥工具（新宿主补注册用）
+	epoch   int
+	toolsMu sync.Mutex
+	tools   map[string]*Tool // 已注册到宿主的桥工具（新宿主补注册用）
 	// ★ t5 集成：桥工具归属名（toolName → "node-bridge:<插件名>"；claimTool
 	//   冲突报错信息完整 + 无冲突时正确登记归属）。受 toolsMu 保护。
 	toolOwner map[string]string
@@ -689,14 +689,14 @@ func (b *nodeBridge) dshService(svcName, method string, args map[string]any, plu
 			return true, bridgeJSON([]string{"spawn"}), nil
 		case "startContinuable":
 			spec := SubAgentSpec{
-				Label:       argStr(args, "label"),
-				Task:        argStr(args, "prompt"),
-				System:      argStr(args, "persona"),
-				ParentConv:  argStr(args, "parentConvId"),
-				Provider:    argStr(args, "provider2"),
-				Model:       argStr(args, "model"),
-				DenyTools:   argStrSlice(args, "denyTools"),
-				MaxIter:     0,
+				Label:           argStr(args, "label"),
+				Task:            argStr(args, "prompt"),
+				System:          argStr(args, "persona"),
+				ParentConv:      argStr(args, "parentConvId"),
+				Provider:        argStr(args, "provider2"),
+				Model:           argStr(args, "model"),
+				DenyTools:       argStrSlice(args, "denyTools"),
+				MaxIter:         0,
 				ReasoningEffort: argStr(args, "reasoningEffort"),
 			}
 			if spec.WsRoot == "" {
@@ -780,6 +780,26 @@ func (b *nodeBridge) dshService(svcName, method string, args map[string]any, plu
 			return true, "ok", nil
 		}
 		return true, "", fmt.Errorf("未知 systemPrompt 服务方法: %s", method)
+	case "prompts":
+		switch method {
+		case "provide":
+			name := argStr(args, "name")
+			if name == "" {
+				return true, "", fmt.Errorf("prompts.provide 缺少 name")
+			}
+			ProvidePrompt(name, argStr(args, "text"), "node:"+plugin)
+			return true, "ok", nil
+		case "remove":
+			name := argStr(args, "name")
+			if name == "" {
+				return true, "", fmt.Errorf("prompts.remove 缺少 name")
+			}
+			RemovePrompt(name)
+			return true, "ok", nil
+		case "list":
+			return true, bridgeJSON(PromptAssetsSnapshot()), nil
+		}
+		return true, "", fmt.Errorf("未知 prompts 服务方法: %s", method)
 	case "commands":
 		switch method {
 		case "register":

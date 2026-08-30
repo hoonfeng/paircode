@@ -312,6 +312,37 @@ type Loop struct {
 	liveEvents    []LiveEvent   // 已 emit 事件的有序序列（快照重建用：保真时序）
 }
 
+// runPreStep 执行 step 前拦截链（每次 LLM 调用前、消息组装完成后调用）：
+//  1. host 钩子 l.PreStep（若设置）——可改写或拒绝；
+//  2. DSH 桥瀑布 agent/pre-step（若有 Node 插件订阅）——DSH 中间件语义，
+//     多个订阅者按注册顺序瀑布（next 链），返回 {kind:'enter',messages}
+//     改写输入或 {kind:'reject'} 拒绝整个 turn；
+//  3. 两者均可改写/拒绝；顺序：host 钩子先（本地配置权威），桥瀑布后
+//     （插件视角——基于 host 改写后的消息再决策，最终以桥为准）。
+//
+// 无钩子且无订阅者 → 直通（零开销）。返回 (最终消息, reject, err)。
+func (l *Loop) runPreStep(ctx context.Context, callMsgs []Message, turn, step int) ([]Message, bool, error) {
+	if l.PreStep != nil {
+		rewritten, reject, perr := l.PreStep(ctx, callMsgs, turn, step)
+		if perr != nil || reject {
+			return rewritten, reject, perr
+		}
+		if rewritten != nil {
+			callMsgs = rewritten
+		}
+	}
+	if bridgePreStepSubscribed() {
+		rewritten, reject, perr := bridgePreStep(ctx, callMsgs, turn, step)
+		if perr != nil || reject {
+			return rewritten, reject, perr
+		}
+		if rewritten != nil {
+			callMsgs = rewritten
+		}
+	}
+	return callMsgs, false, nil
+}
+
 // LiveToolSeg 工具调用实时段（WS 断线补偿快照用：重建 tool_call 展示）。
 type LiveToolSeg struct {
 	CallID string `json:"callId"`
@@ -727,23 +758,23 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 		// ── THINK：LLM 决策（buildCallContext 合并 ephemeralMsgs，不被持久化）──
 		callMsgs := l.buildCallContext(msgs)
 
-		// agentloop：pre-step 拦截钩子（对应 agent/pre-step 瀑布）。
-		// 可改写进入模型的输入；reject=true 则本轮 turn 以 blocked 结束，不调用 LLM。
-		if l.PreStep != nil {
-			rewritten, reject, perr := l.PreStep(ctx, callMsgs, l.TurnNo, l.StepNo)
-			if perr != nil {
-				l.emit(Event{Type: EventError, Content: "pre-step 拦截失败: " + perr.Error()})
-				l.LastTurnReason = TurnError
-				return msgs, perr
-			}
-			if reject {
-				l.LastTurnReason = TurnBlocked
-				l.emit(Event{Type: EventDone, Content: "", DoneReason: "blocked", TurnReason: string(TurnBlocked)})
-				return msgs, nil
-			}
-			if rewritten != nil {
-				callMsgs = rewritten
-			}
+		// agentloop：pre-step 拦截链（对应 DSH agent/pre-step 瀑布）。
+		// runPreStep = host 钩子（l.PreStep，若设置）+ Node 桥瀑布（若有订阅者，
+		// DSH 中间件语义：改写进入模型的输入；reject=true 则本轮 turn 以
+		// blocked 结束，不调用 LLM）。无钩子且无订阅者 → 直通。
+		rewritten, reject, perr := l.runPreStep(ctx, callMsgs, l.TurnNo, l.StepNo)
+		if perr != nil {
+			l.emit(Event{Type: EventError, Content: "pre-step 拦截失败: " + perr.Error()})
+			l.LastTurnReason = TurnError
+			return msgs, perr
+		}
+		if reject {
+			l.LastTurnReason = TurnBlocked
+			l.emit(Event{Type: EventDone, Content: "", DoneReason: "blocked", TurnReason: string(TurnBlocked)})
+			return msgs, nil
+		}
+		if rewritten != nil {
+			callMsgs = rewritten
 		}
 
 		// ★ 缓存诊断已由 buildCallContext 内部统一执行（Go/JS 循环共用），
@@ -1414,6 +1445,17 @@ const AIIdentityAwareness = "# AI 身份认知（铁律：你不是会偷懒的�
 // 被 ApplyHarnessToolFilter 禁用的 pair 独有工具说明（工具仍在注册表、
 // 前端可见；需要时可经内置工具集 builtin 分组开关/强制全部恢复）。
 func harnessSystemPrompt(roots []string) string {
+	// ★ 提示词插件化：默认系统提示可被插件资产「system-harness」整体替换
+	//   （插件内置 prompts/system-harness.md 或 插件配置/运行时注册），
+	//   模板变量 {{ROOT_INFO}}（工作区根信息）/{{PRIMARY_ROOT}}（主根）。
+	//   无资产时回退内置文本（逐字节一致，安全网）。
+	if tpl := LoadPrompt("system-harness"); tpl != "" {
+		primary, rootInfo := workspaceRoots(roots)
+		return ResolvePromptVars(tpl, map[string]string{
+			"ROOT_INFO":    rootInfo,
+			"PRIMARY_ROOT": primary,
+		})
+	}
 	_, rootInfo := workspaceRoots(roots)
 	return "你是 Pair CodeAgent，运行在用户的本地开发环境中。使用中文思考和回复。\n\n" +
 		AIIdentityAwareness +
@@ -1502,6 +1544,15 @@ func harnessSystemPrompt(roots []string) string {
 // fullSystemPrompt 完整版系统提示词（WB_FULL_TOOLS=1 恢复全量工具时使用）。
 // 内容为原始完整版：含 codegraph 使用指南、记忆/技能/MCP/调试/办公等 pair 独有工具说明。
 func fullSystemPrompt(roots []string) string {
+	// ★ 提示词插件化：默认完整系统提示可被插件资产「system-full」整体替换
+	//   （模板变量 {{ROOT_INFO}}/{{PRIMARY_ROOT}} 同上；无资产回退内置）。
+	if tpl := LoadPrompt("system-full"); tpl != "" {
+		primary, rootInfo := workspaceRoots(roots)
+		return ResolvePromptVars(tpl, map[string]string{
+			"ROOT_INFO":    rootInfo,
+			"PRIMARY_ROOT": primary,
+		})
+	}
 	_, rootInfo := workspaceRoots(roots)
 	return "你是 Pair CodeAgent，运行在用户的本地开发环境中。使用中文思考和回复。\n\n" +
 		AIIdentityAwareness +

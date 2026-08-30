@@ -366,14 +366,16 @@ func (r *Registry) Execute(ctx context.Context, name, argsJSON string) (string, 
 			r.OnToolUpdate(name, callID, partial)
 		})
 	}
-	// ★ 遗留处置（Round4 P2）：DSH agent/pre-step 事件——两个门（PreToolUse
-	//   钩子 + BeforeTool）均放行、即将执行工具时发出；args 截断防协议风暴，
-	//   无插件订阅时零开销（emitBridgeEvent 白名单过滤）。
+	// ★ 工具前通知（观察型，非 DSH 中间件）：agent/pre-tool——工具即将执行
+	//   时发出；args 截断防协议风暴，无插件订阅时零开销（emitBridgeEvent
+	//   白名单过滤）。注意与 DSH agent/pre-step（LLM 调用前中间件瀑布，
+	//   见 dsh_prestep.go）语义区分：pre-tool 是单向通知，pre-step 是
+	//   决策回传（可改写输入/拒绝 turn）。
 	evArgs := argsJSON
 	if len(evArgs) > 2048 {
 		evArgs = evArgs[:2048] + "…"
 	}
-	emitBridgeEvent("agent/pre-step", map[string]any{"tool": name, "args": evArgs})
+	emitBridgeEvent("agent/pre-tool", map[string]any{"tool": name, "args": evArgs})
 	start := time.Now()
 	result, err := t.Handler(ctx, args)
 	dur := time.Since(start)

@@ -239,12 +239,20 @@ func (c *PluginContext) Effect(fn func()) {
 // ★ 同名冲突检测（P2）：插件不能静默覆盖宿主内置工具或其他插件的工具；
 //
 //	冲突返回明确错误（含占用方与处理建议）。
+//
+// ★ 让位（2026-08-29）：同名工具已被 DSH 桥插件（node-bridge:）注册 → 本（goja 插件）
+//
+//	让位跳过（不覆盖、不报错）——二者为替代关系，DSH 插件是权威版本。
 func (c *PluginContext) RegisterTool(t *Tool) error {
 	if t == nil || t.Name == "" {
 		return fmt.Errorf("工具名为空")
 	}
-	if err := c.host.claimTool(c.plugin, t.Name); err != nil {
+	claimed, err := c.host.claimTool(c.plugin, t.Name)
+	if err != nil {
 		return err
+	}
+	if !claimed {
+		return nil // ★ node-bridge 同名已注册，goja 插件让位：跳过，不登记、不覆盖
 	}
 	c.host.addPluginTool(c.plugin, t.Name)
 	c.Tools.Register(t)
@@ -253,12 +261,18 @@ func (c *PluginContext) RegisterTool(t *Tool) error {
 
 // claimTool 登记工具归属：同名工具已被其他插件/宿主占用 → 报错（防静默覆盖）。
 // 宿主内置工具（Registry 已有但无插件归属）视为宿主占用。
-func (h *PluginHost) claimTool(plugin, toolName string) error {
+// 返回 (claimed, err)：claimed=false 且 err=nil = 让位跳过（node-bridge 同名已注册）。
+func (h *PluginHost) claimTool(plugin, toolName string) (bool, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	owner, taken := h.toolOwner[toolName]
 	if taken && owner != plugin {
-		return fmt.Errorf("工具 %q 已被插件 %s 注册，插件 %s 不能覆盖。请换工具名，或先 cordis_stop %s 再注册",
+		// ★ 让位：同名工具已被 DSH 桥插件（node-bridge:）注册 → goja 插件让位（跳过，
+		//   不覆盖、不报错）。二者（repo 移植版 vs DSH 插件）为替代关系，DSH 为权威版本。
+		if strings.HasPrefix(owner, "node-bridge:") {
+			return false, nil
+		}
+		return false, fmt.Errorf("工具 %q 已被插件 %s 注册，插件 %s 不能覆盖。请换工具名，或先 cordis_stop %s 再注册",
 			toolName, owner, plugin, owner)
 	}
 	if !taken {
@@ -270,7 +284,7 @@ func (h *PluginHost) claimTool(plugin, toolName string) error {
 		}
 	}
 	h.toolOwner[toolName] = plugin
-	return nil
+	return true, nil
 }
 
 // IsPluginTool 判断工具是否由插件注册（宿主工具豁免 harness 对齐过滤——
@@ -398,12 +412,12 @@ type PluginRecord struct {
 	HasClient  bool         `json:"hasClient,omitempty"`  // 是否有 client 半（浏览器端）
 	ClientCode string       `json:"clientCode,omitempty"` // client 半源码（供浏览器装载；列表接口可能省略）
 	DefID      string       `json:"defId,omitempty"`      // JS 动态插件定义 id（dyn-<n>）
-	PluginID       string   `json:"pluginId,omitempty"`   // 稳定插件身份（跨版本；默认=首次定义 id）
-	PkgID          string   `json:"pkgId,omitempty"`      // 当前版本 package id（pkg-<n>，不可变）
-	Versions       int      `json:"versions,omitempty"`   // 该插件累计版本数（含历史）
-	WaitingFor     []string `json:"waitingFor,omitempty"` // state=waiting 时缺的服务
-	LastError      string   `json:"lastError,omitempty"`  // 最近一次装载失败原因（诊断）
-	Diag           []string `json:"diag,omitempty"`       // 运行诊断（阶段记录，最新在后）
+	PluginID   string       `json:"pluginId,omitempty"`   // 稳定插件身份（跨版本；默认=首次定义 id）
+	PkgID      string       `json:"pkgId,omitempty"`      // 当前版本 package id（pkg-<n>，不可变）
+	Versions   int          `json:"versions,omitempty"`   // 该插件累计版本数（含历史）
+	WaitingFor []string     `json:"waitingFor,omitempty"` // state=waiting 时缺的服务
+	LastError  string       `json:"lastError,omitempty"`  // 最近一次装载失败原因（诊断）
+	Diag       []string     `json:"diag,omitempty"`       // 运行诊断（阶段记录，最新在后）
 }
 
 // ─── PluginHost ───────────────────────────────────────────
@@ -685,18 +699,18 @@ func (h *PluginHost) findDefByNameOrID(nameOrID string) *jsPluginDef {
 // registry：工具注册表（ctx.tools）；store：会话存储（ctx.session）；root：工作区根。
 func NewPluginHost(registry *Registry, store ConversationStore, root string) *PluginHost {
 	h := &PluginHost{
-		plugins:         map[string]Plugin{},
-		states:          map[string]PluginState{},
-		sources:         map[string]PluginSource{},
-		defs:            map[string]*jsPluginDef{},
-		pluginVersions:  map[string][]*jsPluginDef{},
-		waiting:         map[string]*jsPluginDef{},
-		pluginTools:     map[string][]string{},
-		pluginSections:  map[string][]*PromptSection{},
-		pluginVars:      map[string][]*PromptVariable{},
-		toolOwner:       map[string]string{},
-		templates:       map[string]*ToolsetTemplate{},
-		root:            root,
+		plugins:        map[string]Plugin{},
+		states:         map[string]PluginState{},
+		sources:        map[string]PluginSource{},
+		defs:           map[string]*jsPluginDef{},
+		pluginVersions: map[string][]*jsPluginDef{},
+		waiting:        map[string]*jsPluginDef{},
+		pluginTools:    map[string][]string{},
+		pluginSections: map[string][]*PromptSection{},
+		pluginVars:     map[string][]*PromptVariable{},
+		toolOwner:      map[string]string{},
+		templates:      map[string]*ToolsetTemplate{},
+		root:           root,
 	}
 	h.ctx = &PluginContext{
 		host:          h,
@@ -1016,6 +1030,12 @@ func (h *PluginHost) Unload(name string) error {
 	delete(h.pluginTools, name)
 	delete(h.pluginSections, name)
 	delete(h.pluginVars, name)
+	// ★ 提示词资产联动：卸载时清理该插件注册的提示词资产（运行时注册/
+	//   config.prompts）；磁盘资产（<name>:disk）随包存在，进程内保留
+	//   （重启重新扫描注册——与磁盘插件复活语义一致）。
+	RemovePromptSource("js:" + name)
+	RemovePromptSource("node:" + name)
+	RemovePromptSource(name + ":config")
 	// ★ Round3 ④.2：插件卸载自动注销其注册的 slash 命令（无悬挂）
 	UnregisterHostCommands(name)
 	pc := h.contexts[name]
@@ -1228,8 +1248,15 @@ func (h *PluginHost) Inspect() []PluginRecord {
 				rec.Version = d.version
 				rec.Provides = d.provides
 				rec.Purpose = d.purpose
-				rec.HasClient = strings.TrimSpace(d.clientCode) != ""
+				// ★ DSH 兼容 dsh.ui 段：即使无 client.js（bundle 直载），也视为含 client 半
+				//   （/api/ui-boot 提供 bundle URL；此处保留 clientCode 契约，无内联源码时给 bundle 指令）。
+				if strings.TrimSpace(d.clientCode) != "" || d.hasDshUI {
+					rec.HasClient = true
+				}
 				rec.ClientCode = d.clientCode
+				if d.hasDshUI && strings.TrimSpace(d.clientCode) == "" {
+					rec.ClientCode = UIBundleClientDirective(d.dir, d.name)
+				}
 				rec.DefID = d.id
 				rec.PluginID = d.pluginId
 				rec.PkgID = d.packageId
@@ -1279,8 +1306,14 @@ func (h *PluginHost) InspectDetail(name string) *PluginRecord {
 				rec.Version = d.version
 				rec.Provides = d.provides
 				rec.Purpose = d.purpose
-				rec.HasClient = strings.TrimSpace(d.clientCode) != ""
+				// ★ DSH 兼容 dsh.ui 段：即使无 client.js（bundle 直载），也视为含 client 半
+				if strings.TrimSpace(d.clientCode) != "" || d.hasDshUI {
+					rec.HasClient = true
+				}
 				rec.ClientCode = d.clientCode
+				if d.hasDshUI && strings.TrimSpace(d.clientCode) == "" {
+					rec.ClientCode = UIBundleClientDirective(d.dir, d.name)
+				}
 				rec.DefID = d.id
 				rec.PluginID = d.pluginId
 				rec.PkgID = d.packageId

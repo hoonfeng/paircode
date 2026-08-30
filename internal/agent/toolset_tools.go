@@ -456,6 +456,26 @@ func toolsetEditAddPlugin(ph *PluginHost, root string, scope toolsetScope, ts *T
 				}
 			}
 			if !found {
+				// ★ 同名同源标识处理（2026-08-29）：DSH/npm 桥插件（node-bridge: 前缀）虽不在
+				//   JSDefs()（桥已装载并注册其工具），仍识别为「已定义插件」，避免 toolset_add_plugin
+				//   报「宿主未定义插件」。同名同源（如 @nanmicoder/dsh-agent-teams → agent-teams）
+				//   用项目名作 src.Name，使标识与本项目一致；工具取桥实际注册的工具（桥工具经此在工具集可见）。
+				name := pn
+				if strings.HasPrefix(pn, "node-bridge:") {
+					short := strings.TrimPrefix(pn, "node-bridge:")
+					if i := strings.LastIndex(short, "/"); i >= 0 {
+						short = short[i+1:] // 去 npm scope（@nanmicoder/dsh-agent-teams → dsh-agent-teams）
+					}
+					if mapped := strings.TrimPrefix(short, "dsh-"); mapped != short && mapped != "" {
+						name = mapped // dsh-agent-teams → agent-teams（同源映射为项目名）
+					}
+				}
+				if tools := ph.PluginToolsByPlugin()[pn]; len(tools) > 0 {
+					src = ToolsetPlugin{Name: name, Purpose: "DSH/npm 桥插件（node-bridge）", Builtin: "bridge", Tools: tools}
+					found = true
+				}
+			}
+			if !found {
 				return "", fmt.Errorf("宿主未定义插件 %q（可用 cordis_define 定义、npm 市场安装，或 from_toolset/plugin_json 提供）", pn)
 			}
 		}
