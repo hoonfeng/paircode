@@ -17,7 +17,7 @@ var diagToolNames = []string{
 	"delete_file", "grep", "glob", "git_status", "git_diff", "git_log",
 	"web_fetch", "web_search", "run_background", "read_output", "kill_process",
 	"memory_write", "memory_read", "memory_search", "project_info_read", "project_info_tree",
-	"update_tasks", "update_plan", "tool_stats", "history_search", "codegraph_build",
+	"update_tasks", "tool_stats", "history_search", "codegraph_build",
 	"codegraph_search", "codegraph_impact", "bug_detect", "bug_fix",
 	"csv_read", "word_read", "screenshot_desktop", "web_debug",
 	"cordis_define", "cordis_run", "toolset_build", "mcp_add",

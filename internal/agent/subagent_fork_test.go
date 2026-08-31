@@ -61,7 +61,7 @@ func TestAgentsForkSpec(t *testing.T) {
 		Provider:        "deepseek-official",
 		ReasoningEffort: "max",
 		WsRoot:          "C:/ws",
-		DenyTools:       []string{"update_plan"},
+		DenyTools:       []string{"update_tasks"},
 		ForkOf:          "conv-src-1",
 	})
 	if err != nil {

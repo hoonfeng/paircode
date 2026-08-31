@@ -82,7 +82,7 @@ cordis_* / toolset_* / history_* 等）**保持宿主实现**——它们绑定�
 > |------|------|----------------|
 > | workspaceRoot 服务（原 sysinfo） | `NewPluginHost`（plugin.go：`h.ctx.Provide("workspaceRoot", root)`） | 向插件生态暴露**宿主自己**的工作区根：JS 插件走宿主直接注入（app.workspaceRoot）不消费服务；Go/JS 插件经 `ctx.Get("workspaceRoot")` 取——提供者即宿主，分离无意义 |
 > | 内置工具集模板（原 toolset-tpl-core） | `NewPluginHost`（plugin.go：`registerBuiltinTemplates(h)`，toolset_templates.go） | toolset_build 的动态组合数据源（项目助手/Git 流/Web 开发模板），Generate 逻辑内嵌宿主；toolset_build 本身是宿主框架能力，数据源随宿主合理（市场/用户可 RegisterTemplate 追加专属模板） |
-> | SystemTool 组（update_tasks/update_plan/tool_stats/history_*） | `RegisterHostFrameworkTools` | 会话绑定内存态（Loop 计划/审核门/UI 任务面板/对话压缩），见上节「会话状态协议」 |
+> | SystemTool 组（update_tasks/tool_stats/history_*） | `RegisterHostFrameworkTools` | 会话绑定内存态（Loop 计划/审核门/UI 任务面板/对话压缩），见上节「会话状态协议」 |
 > | harness 7 工具（read/write/edit/glob/grep/bash/str_replace_editor） | 宿主注册表 | agent 自身能力面（框架协议），JS 插件同名接管时 ArchiveHostTool 存档供 ctx.hostTool 兜底 |
 >
 > 判别标准：**提供者是否就是宿主自身、数据是否绑定宿主内存态**——两者取一即
@@ -94,7 +94,6 @@ cordis_* / toolset_* / history_* 等）**保持宿主实现**——它们绑定�
 | 数据 | 位置 | 格式 |
 |------|------|------|
 | 任务列表 | `.pair/tasks/<id>.json` | 每任务一文件：`{id, subject, description, status, dependencies[], planStepIndex?, convId?, created_at, updated_at}`；全量替换=清旧写新 |
-| 执行计划 | 宿主内存 | update_plan（外层编排 agent 用，未持久化） |
 | 工具统计 | 宿主内存（GetToolStats） | ToolStatsSummary（调用次数/时长/成功失败） |
 | 对话历史 | `.pair/conversations/*.jsonl + index.json` | JSONL 追加（只写不读，压缩时读） |
 | 插件定义 | `.pair/plugins/dynamic.json` / `.pair/toolsets/*.json` | 磁盘插件包 + 工具集固化 |
@@ -126,7 +125,7 @@ search/web 等 17 组）**各自一个独立二进制**承载实现：
 - tool-binary 只是其中普通一员（承载 binary 组 inspect_binary/write_binary/
   binary_strings/find/patch/info/hash/entropy 8 个工具，2026-08-16 并入
   原 tool-binary-re 逆向 6 工具），**不是**统一容器——各插件实现互相独立
-- hostTool 形态（工具-system）：SystemTool（update_tasks/update_plan/tool_stats/
+- hostTool 形态（工具-system）：SystemTool（update_tasks/tool_stats/
   history_*）+ Skills/MCP/市场/提交信息——依赖宿主会话状态，execute 走
   `ctx.hostTool.exec`；ask_user/task_create 经**会话桥**（session_bridge.go）
   按 _convID 路由回会话（见下方 tool-system 条目）
@@ -202,7 +201,7 @@ go run -tags toolsgen ./dev/tool_plugin_gen   # 幂等：已有插件不覆盖�
   reviewBlacklist/reviewWhitelist；停用插件自动还原默认工厂（Loop 不受影响）。
   （快照字段实现：internal/agent/jsplugin_loopfactory.go）
 - **`tool-system/`**（2026-08-16 扩容）：系统内部工具 16 个——SystemTool 组
-  （update_tasks/update_plan/tool_stats/history_search/history_list/history_count）
+  （update_tasks/tool_stats/history_search/history_list/history_count）
   + Skills（skill_list/load_skill/load_skill_resource/skill_write/skill_delete）
   + MCP（mcp_list/mcp_add/mcp_remove）+ 市场（marketplace_search/
   marketplace_install）。execute 全走

@@ -70,13 +70,20 @@ func ProviderFactoryNow() ProviderFactory {
 
 // ResolveProviderParams 解析最终 Provider 参数：激活预设 → 存储基线 → 装配器覆盖。
 // ★ 业务层统一入口：Go 内核不再直接读 core.Settings 的 AI 业务字段。
-// ★ 2026-08-21 配置来源收敛：ai-presets.json 是 AI 配置（key/模型/参数）的唯一来源——
+// ★ 2026-08-21 配置来源收敛：ai-presets.json 是 AI 配置（模型/参数）的来源——
 //
 //	settings 只存 preset（当前激活预设名），装配时按 preset 从 ai-presets.json 展开整套配置；
-//	settings 顶层字段仅兜底（兼容无预设的旧配置），models.json 服务商 key/baseURL 再兜底。
+//	settings 顶层字段仅兜底（兼容无预设的旧配置）。
 //
+// ★ 2026-08-31 Key 厂商化：API Key 一律取 models.json 的服务商级 Key。
 // ★ 统一模型：不再拆分 规划/审核 模型，PlanModel/ReviewModel 一律等于执行模型。
 func ResolveProviderParams() ProviderParams {
+	return ProviderFactoryNow().Apply(resolveProviderBase())
+}
+
+// resolveProviderBase 解析装配器之前的基线参数（会话级覆盖在此之后叠加）。
+func resolveProviderBase() ProviderParams {
+
 	provider := core.Settings.Provider
 	baseURL := core.Settings.BaseURL
 	apiKey := core.Settings.APIKey
@@ -87,6 +94,9 @@ func ResolveProviderParams() ProviderParams {
 	context := core.Settings.ContextMaxTokens
 
 	// ① 激活预设展开（settings.preset → ai-presets.json，整套覆盖）
+	// ★ 2026-08-31 Key 厂商化：预设不再携带 API Key（Key 一律按服务商配置在
+	//   models.json 的 ProviderEntry.APIKey）——预设只管模型与运行参数，
+	//   换模型不必重复填 Key。旧预设里残留的 apiKey 字段被忽略。
 	if name := core.Settings.Preset; name != "" {
 		if p := core.GetPreset(name); p.Provider != "" || p.ExecuteModel != "" {
 			if p.Provider != "" {
@@ -94,9 +104,6 @@ func ResolveProviderParams() ProviderParams {
 			}
 			if p.BaseURL != "" {
 				baseURL = p.BaseURL
-			}
-			if p.APIKey != "" {
-				apiKey = p.APIKey
 			}
 			if p.ExecuteModel != "" {
 				model = p.ExecuteModel
@@ -116,16 +123,15 @@ func ResolveProviderParams() ProviderParams {
 		}
 	}
 	// ② settings 顶层兜底（兼容旧配置）
-	// ③ models.json 服务商 key/baseURL 兜底（无 preset 且 settings 顶层为空时）
+	// ③ models.json 服务商 key/baseURL：Key 以服务商级为准（厂商化），
+	//    settings.apiKey 仅在服务商未配 Key 时兜底（旧配置迁移期）。
 	if baseURL == "" {
 		if p := core.GetProviderBaseURL(provider); p != "" {
 			baseURL = p
 		}
 	}
-	if apiKey == "" {
-		if k := core.GetProviderAPIKey(provider); k != "" {
-			apiKey = k
-		}
+	if k := core.GetProviderAPIKey(provider); k != "" {
+		apiKey = k
 	}
 	// ★ 统一模型：规划/审核 一律用执行模型（不拆分）
 	planModel := model
@@ -144,11 +150,75 @@ func ResolveProviderParams() ProviderParams {
 		ReviewModel:              reviewModel,
 		ModelParams:              core.Settings.ModelParams,
 	}
-	return ProviderFactoryNow().Apply(cur)
+	return cur
+
 }
 
 // ConfiguredProvider 是否已配好可用 Provider（业务层用，替代 core.Configured 的 AI 检查）。
 func ConfiguredProvider() bool {
 	p := ResolveProviderParams()
 	return p.APIKey != "" && p.BaseURL != "" && p.Model != ""
+}
+
+// ─── 会话级模型路由（★ 2026-08-31） ────────────────────────────────
+//
+// 问题：此前对话面板切换模型 = 写全局 settings（preset/executeModel），
+// 所有会话（含已开始的历史对话）的模型一起被改。
+// 现在：会话元数据记录 provider+model（ConversationMeta.Provider/Model），
+// 切换只写本会话；未设置的会话沿用全局默认配置。
+//
+// convModelLookup 由 web 层注入（按会话根路由 store），agent 包不直接依赖
+// SessionManager，保持解耦；未注入时会话级解析退化为全局默认。
+var (
+	convModelMu     sync.RWMutex
+	convModelLookup func(convID, wsRoot string) (provider, model string)
+)
+
+// SetConvModelLookup 注入会话级模型查询钩子（web 层启动时调用）。
+func SetConvModelLookup(fn func(convID, wsRoot string) (provider, model string)) {
+	convModelMu.Lock()
+	convModelLookup = fn
+	convModelMu.Unlock()
+}
+
+// LookupConvModel 查询会话级模型（provider, model；均空=未设置）。
+func LookupConvModel(convID, wsRoot string) (string, string) {
+	if convID == "" {
+		return "", ""
+	}
+	convModelMu.RLock()
+	fn := convModelLookup
+	convModelMu.RUnlock()
+	if fn == nil {
+		return "", ""
+	}
+	return fn(convID, wsRoot)
+}
+
+// ResolveProviderParamsForConv 解析会话级 Provider 参数：
+// 全局默认（ResolveProviderParams）→ 会话选定的 服务商/模型 覆盖 → 装配器再覆盖。
+// 会话未设置模型时与 ResolveProviderParams 完全一致（零行为变化）。
+func ResolveProviderParamsForConv(convID, wsRoot string) ProviderParams {
+	provider, model := LookupConvModel(convID, wsRoot)
+	if provider == "" && model == "" {
+		return ResolveProviderParams()
+	}
+	cur := resolveProviderBase()
+	if provider != "" {
+		cur.Provider = provider
+		// 服务商切换 → BaseURL/Key 一律取该服务商配置（Key 厂商化）
+		if u := core.GetProviderBaseURL(provider); u != "" {
+			cur.BaseURL = u
+		}
+		if k := core.GetProviderAPIKey(provider); k != "" {
+			cur.APIKey = k
+		}
+		cur.ProviderContextMaxTokens = core.GetProviderContextMaxToken(provider)
+	}
+	if model != "" {
+		cur.Model = model
+		cur.PlanModel = model
+		cur.ReviewModel = model
+	}
+	return ProviderFactoryNow().Apply(cur)
 }

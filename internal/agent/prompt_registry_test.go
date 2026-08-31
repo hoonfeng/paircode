@@ -63,7 +63,7 @@ func TestPluginPromptSections(t *testing.T) {
 	host.ctx.AddSystemPromptSection(&PromptSection{Name: "plugin-b", Order: 200, Text: "插件 B：检查 {{plugin_b_var}}"})
 	host.ctx.AddSystemPromptVariable(&PromptVariable{Name: "plugin_b_var", Provider: func() string { return "文档一致性" }})
 
-	got, err := PluginPromptSections(host)
+	got, err := PluginPromptSections(host, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func TestPluginPromptSections(t *testing.T) {
 	}
 
 	// nil host → 空串
-	if gotNil, _ := PluginPromptSections(nil); gotNil != "" {
+	if gotNil, _ := PluginPromptSections(nil, ""); gotNil != "" {
 		t.Errorf("nil host 应返回空串：%q", gotNil)
 	}
 }
@@ -105,7 +105,7 @@ func TestPersonaSection(t *testing.T) {
 	}
 
 	// ② 动态侧排除 persona 段
-	dyn, err := PluginPromptSections(host)
+	dyn, err := PluginPromptSections(host, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,7 +166,7 @@ func TestRulesSection(t *testing.T) {
 	}
 
 	// ② 动态侧排除 persona+rules 段，普通段保留
-	dyn, err := PluginPromptSections(host)
+	dyn, err := PluginPromptSections(host, "")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -61,9 +61,8 @@ func RegisterAll(r *Router) {
 	r.Handle("PUT", "/api/conversations/", HandleConversationByID)
 	r.Handle("DELETE", "/api/conversations/", HandleConversationByID)
 
-	// Tasks / Plan
+	// Tasks（★ 2026-08-31 plan 体系已移除）
 	r.Handle("GET", "/api/tasks", HandleTasks)
-	r.Handle("GET", "/api/taskplan", HandleTaskPlan)
 
 	// 模型 / 指令 / AI 配置预设
 	r.Handle("GET", "/api/models", HandleModels)
@@ -117,6 +116,7 @@ func RegisterAll(r *Router) {
 	r.Handle("GET", "/api/plugins/builtin", HandleBuiltinPlugins)
 	r.Handle("POST", "/api/plugins/builtin", HandleBuiltinPlugins)
 	r.Handle("POST", "/api/plugins/tool", HandlePluginToolToggle)
+	r.Handle("POST", "/api/plugins/prefer", HandlePluginPrefer)
 
 	// 工具集（动态构建/固化/导出/导入）
 	r.Handle("GET", "/api/toolsets", HandleToolsetsList)

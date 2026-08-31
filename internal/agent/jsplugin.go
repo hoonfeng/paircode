@@ -1573,6 +1573,23 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 		panic(vm.NewTypeError("ctx.setSettings: 第二参数必须是对象"))
 	})
 
+	// ★ 2026-08-31 按需激活：ctx.activation.declare({ command }) —— 插件声明
+	//   为 on-demand：其系统提示段 + 工具对 agent 默认隐藏，会话内执行
+	//   /<command> 后对本会话激活（agent-teams 等重型插件用）。
+	actObj := vm.NewObject()
+	actObj.Set("declare", func(call goja.FunctionCall) goja.Value {
+		arg := call.Argument(0)
+		if arg == nil || goja.IsUndefined(arg) || goja.IsNull(arg) {
+			panic(vm.NewTypeError("ctx.activation.declare: 需要一个对象 {command}"))
+		}
+		obj := arg.ToObject(vm)
+		command := obj.Get("command").String()
+		DeclareOnDemandPlugin(p.def.name, command)
+		p.def.addDiag(fmt.Sprintf("按需激活: command=/%s", command))
+		return vm.ToValue(map[string]any{"ok": true, "plugin": p.def.name, "command": command})
+	})
+	ctxObj.Set("activation", actObj)
+
 	// ★ 按 inject 声明注入服务属性（对齐 harness：只读声明过的服务，
 	//   可选服务用 ctx.get(name) 判 undefined；未声明即访问为 undefined）
 	for _, s := range p.def.inject {

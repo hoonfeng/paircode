@@ -18,7 +18,7 @@ import (
 func mkVisibilityReg() *Registry {
 	reg := NewRegistry()
 	// 协议/管理工具（恒对 agent 可见）
-	for _, n := range []string{"update_tasks", "update_plan", "tool_stats", "ask_user",
+	for _, n := range []string{"update_tasks", "tool_stats", "ask_user",
 		"task_create", "history_search", "history_list", "history_count"} {
 		reg.Register(&Tool{Name: n, Handler: noopHandler, SystemTool: true})
 	}
@@ -84,7 +84,7 @@ func TestApplyToolsetVisibilityFilter(t *testing.T) {
 		t.Errorf("应禁用 4 个非工具集工具，实际 %d", n)
 	}
 	// 协议工具保持启用
-	for _, name := range []string{"update_tasks", "update_plan", "tool_stats", "ask_user",
+	for _, name := range []string{"update_tasks", "tool_stats", "ask_user",
 		"task_create", "history_search",
 		"cordis_inspect", "cordis_define", "cordis_run", "toolset_build", "toolset_edit"} {
 		if !reg.IsEnabled(name) {
@@ -226,7 +226,7 @@ func TestApplyWorkspaceToolsetWhitelist(t *testing.T) {
 		t.Fatal("无工具集时应自动创建基础工具集")
 	}
 	// 框架自举工具恒可用：SystemTool（update_tasks）、cordis_*、toolset_*
-	for _, tn := range []string{"update_tasks", "update_plan", "cordis_define", "cordis_run", "toolset_edit", "toolset_build"} {
+	for _, tn := range []string{"update_tasks", "cordis_define", "cordis_run", "toolset_edit", "toolset_build"} {
 		if !reg.IsEnabled(tn) {
 			t.Errorf("框架自举工具 %s 应可用（白名单兜底）", tn)
 		}

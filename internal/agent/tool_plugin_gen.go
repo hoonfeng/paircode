@@ -44,7 +44,7 @@ type genToolGroup struct {
 
 // genToolGroups 待生成工具组全表（15 复杂组 + tool-system 系统内部组；
 // core/fs-search/web/shell 已手工迁移为 tool-core/tool-search/tool-web/tool-shell，
-// 不在此列）。tool-system 内的 SystemTool 工具（update_tasks/update_plan/
+// 不在此列）。tool-system 内的 SystemTool 工具（update_tasks/
 // tool_stats/history_*）对 LLM 可见但前端 UI 隐藏，同样外置可更换；
 // ask_user/task_create 已插件化（2026-08-16 会话桥机制，见 session_bridge.go：
 // JS 包装经 _convID 路由回宿主 SessionBridge，非「不可外置」）。
@@ -65,15 +65,14 @@ func genToolGroups() []genToolGroup {
 		// tool-system：SystemTool 内部工具 + Skills/MCP
 		// （ask_user/task_create 经会话桥插件化，见 session_bridge.go；
 		//  marketplace_search/install 已迁至 marketplace 插件，2026-08-20）
-		{"tool-system", "系统内部工具（SystemTool + Skills/MCP：update_tasks/update_plan/tool_stats/history_*/skill_*/mcp_*）——全部可更换",
+		{"tool-system", "系统内部工具（SystemTool + Skills/MCP：update_tasks/tool_stats/history_*/skill_*/mcp_*）——全部可更换",
 			func(r *Registry, root string) {
 				RegisterManagementTools(r, root)
-				registerPlanTool(r)
 				registerToolStatsTool(r)
 				registerTaskTools(r, root)
 			},
 			[]string{
-				"update_tasks", "update_plan", "tool_stats",
+				"update_tasks", "tool_stats",
 				"history_search", "history_list", "history_count",
 				"skill_list", "load_skill", "load_skill_resource", "skill_write", "skill_delete",
 				"mcp_list", "mcp_add", "mcp_remove",

@@ -20,9 +20,8 @@ var conciseToolDescriptions = map[string]string{
 	"history_list":   "列已毕对话（按完成时倒序）。",
 	"history_count":  "计已毕对话之数。",
 
-	// ── 计划 / 任务 ──
-	"update_plan":  "维护任务计划清单（全量重传）：每步 step+status（pending/in_progress/done）；复杂任务先立之。",
-	"update_tasks": "维护任务清单（全量替换）：subject 必填、status 定态（pending/in_progress/completed/cancelled），可附 description/dependencies/plan_step_index。",
+	// ── 任务 ──
+	"update_tasks": "维护任务清单（全量替换）：subject 必填、status 定态（pending/in_progress/completed/cancelled），可附 description/dependencies。",
 	"task_create":  "建子任务；立后即 task_update 标 in_progress 执行，毕则标 completed。",
 	"tool_stats":   "观工具调用统计（次数/成败/成功率）；min_calls 滤低频、recent 观近录。",
 

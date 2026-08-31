@@ -170,13 +170,13 @@ onMounted(async () => {
   initAppGlobals()
   loadWsList()
 
-  // ★ DSH 兼容（spec M4）：薄壳只消费 /api/ui-boot 一张图装载 region 包。
-  //   链路：boot()（plugin-runtime.js）自取 /api/ui-boot → 校验 __PAIRCODE_CORE 就绪
-  //   → 预取 immediately bundle → loadClientHalvesFromManifest(entries) 按图装配 client 半。
-  //   已删除 listPlugins+getPluginDetail+syncClientHalves 两段式内联合并（收敛为 boot() 单入口）。
-  //   ★ 兼容：无 dsh.ui 段的旧 client.js 直载包（agent-teams/ui-quick-exec/ui-statusbar-conn）
-  //     不在 boot 图（后端只纳入含 dsh.ui 的包），仍经 /api/plugins+clientCode 旧路径装载，
-  //     由 PluginPanel.vue 面板装载时经 syncClientHalves 同步（spec §7 向后兼容，不动主路径）。
+  // ★ DSH 兼容（spec M4）：boot()（plugin-runtime.js）为薄壳装载【单入口，两源合并】：
+  //   链路：自取 /api/ui-boot → 校验 __PAIRCODE_CORE 就绪 → 预取 immediately bundle
+  //   → ① loadClientHalvesFromManifest(entries) 按图装配 dsh.ui 区域包 client 半；
+  //   → ② syncClientHalves(await api.listPlugins()) 同时装载无 dsh.ui 段的旧直载包
+  //      （agent-teams/ui-quick-exec/ui-statusbar-conn → titlebar-right/statusbar-items），
+  //      两类并存、首屏即刻恢复（spec §7 向后兼容 —— 非 PluginPanel 面板延迟同步）。
+  //   ★ PluginPanel.vue 的 syncClientHalves 调用保留为面板路径的兜底同步（不删）。
   try {
     // ★ 先合并磁盘装配文件（.pair/ui-assembly.json，用户可编辑的逃生通道）——
     //   再装载 client 半（注册槽位时 getSlotOwner/getSlotUIList 读到合并后的状态）。

@@ -10,8 +10,8 @@
 //   本 client 半仅负责注入 bundle（script/css），插件停用即面板消失。
 (ui) => {
   const GLOBAL = 'GitPanel'
-  const JS = 'plugins-assets/git-api/assets/git-panel.js'
-  const CSS = 'plugins-assets/git-api/assets/git-panel.css'
+  const JS = 'plugins-assets/git-api/assets/git-panel.js?v=20260831'
+  const CSS = 'plugins-assets/git-api/assets/git-panel.css?v=20260831'
 
   // 注入样式（幂等）
   if (!document.querySelector('link[data-git-panel-css]')) {

@@ -29,7 +29,7 @@ func mkHarnessReg() *Registry {
 	}
 	// pair 独有工具（应被移除；★ Round3：read/write/edit/glob/bash 已并入 harness
 	// 保留清单，此处只用真正的 pair 独有工具）
-	for _, n := range []string{"multi_edit", "update_plan", "tool_stats",
+	for _, n := range []string{"multi_edit", "tool_stats",
 		"codegraph_search", "memory_read", "project_info_write", "git_diff", "debug_inject_log",
 		"binary_hash", "csv_read", "web_debug", "go_build", "fix_flex_autoheight"} {
 		reg.Register(&Tool{Name: n, Handler: noopHandler})
@@ -55,7 +55,7 @@ func TestApplyHarnessToolFilter_RemovesPairTools(t *testing.T) {
 		}
 	}
 	// pair 独有工具保留在注册表但被禁用（agent 不可见，前端可见可恢复）
-	for _, name := range []string{"multi_edit", "update_plan", "tool_stats",
+	for _, name := range []string{"multi_edit", "tool_stats",
 		"codegraph_search", "memory_read",
 		"project_info_write", "git_diff", "debug_inject_log", "binary_hash", "csv_read", "web_debug",
 		"go_build", "fix_flex_autoheight"} {
@@ -165,7 +165,7 @@ var trimmedPromptBannedTools = []string{
 	"codegraph", "memory_", "project_info", "history_", "git_", "debug_", "binary_",
 	"csv_", "word_", "xlsx", "read_pdf", "skill_", "mcp_",
 	"marketplace", "web_debug", "bug_", "screenshot", "multi_edit", "glob",
-	"run_background", "update_plan", "read", "edit", "write", "bash",
+	"run_background", "read", "edit", "write", "bash",
 	"grep", "glob", "find_symbol", "go_build", "go_run", "run_test",
 	"fix_flex_autoheight", "image_",
 }
@@ -192,7 +192,7 @@ func TestPromptTrimmedInHarnessMode(t *testing.T) {
 	// ★ 工具描述已取消（2026-08-17）：提示词中不再注入任何工具名/用法说明——
 	//   协议工具（update_tasks/ask_user 等）同样不点名，
 	//   工具名称与用法完全由 tools 参数 schema 提供。
-	for _, banned := range []string{"update_tasks", "update_plan",
+	for _, banned := range []string{"update_tasks",
 		"read", "edit", "write", "bash", "web_search", "web_fetch",
 		"cordis_define", "cordis_run", "cordis_inspect", "toolset_build", "toolset_show",
 		"ask_user", "str_replace_editor"} {

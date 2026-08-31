@@ -119,6 +119,8 @@ type PromptSection struct {
 	Name  string // 唯一标识
 	Order int    // 越小越靠前（默认 100）
 	Text  string
+	// Plugin 归属插件名（addPluginSection 填充；按需激活过滤用）。
+	Plugin string
 }
 
 // PromptVariable 提示词变量（对齐 harness ctx.systemPrompt.variable）：
@@ -240,9 +242,10 @@ func (c *PluginContext) Effect(fn func()) {
 //
 //	冲突返回明确错误（含占用方与处理建议）。
 //
-// ★ 让位（2026-08-29）：同名工具已被 DSH 桥插件（node-bridge:）注册 → 本（goja 插件）
+// ★ repo 优先并存（2026-08-31，取消自动覆盖）：同名工具已被 DSH 桥插件
 //
-//	让位跳过（不覆盖、不报错）——二者为替代关系，DSH 插件是权威版本。
+//	（node-bridge:）注册 → 本（goja/repo 移植版）插件接管 Registry 生效面，
+//	桥侧同名工具挂起保留；两版插件同列插件面板（来源徽标区分），生效方可切换。
 func (c *PluginContext) RegisterTool(t *Tool) error {
 	if t == nil || t.Name == "" {
 		return fmt.Errorf("工具名为空")
@@ -252,7 +255,7 @@ func (c *PluginContext) RegisterTool(t *Tool) error {
 		return err
 	}
 	if !claimed {
-		return nil // ★ node-bridge 同名已注册，goja 插件让位：跳过，不登记、不覆盖
+		return nil // 让位跳过（claimed=false 且无错；repo 优先接管路径见 claimTool）
 	}
 	c.host.addPluginTool(c.plugin, t.Name)
 	c.Tools.Register(t)
@@ -261,16 +264,21 @@ func (c *PluginContext) RegisterTool(t *Tool) error {
 
 // claimTool 登记工具归属：同名工具已被其他插件/宿主占用 → 报错（防静默覆盖）。
 // 宿主内置工具（Registry 已有但无插件归属）视为宿主占用。
-// 返回 (claimed, err)：claimed=false 且 err=nil = 让位跳过（node-bridge 同名已注册）。
+// 返回 (claimed, err)：claimed=false 且 err=nil = 让位跳过。
+// ★ node-bridge 占用时既不报错也不让位：repo 版接管生效面，桥侧工具转挂起
+//   （两版并存，生效方可切换——见 noteBridgeToolPreempted / SetBridgeToolPreference）。
 func (h *PluginHost) claimTool(plugin, toolName string) (bool, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	owner, taken := h.toolOwner[toolName]
 	if taken && owner != plugin {
-		// ★ 让位：同名工具已被 DSH 桥插件（node-bridge:）注册 → goja 插件让位（跳过，
-		//   不覆盖、不报错）。二者（repo 移植版 vs DSH 插件）为替代关系，DSH 为权威版本。
+		// ★ repo 优先并存（2026-08-31，取消覆盖）：同名工具已被 DSH 桥插件
+		//   （node-bridge:）注册 → goja 插件不再让位，而是接管 Registry 生效面，
+		//   桥侧同名工具转「挂起」（两版并存，插件面板 /api/plugins/prefer 切换）。
 		if strings.HasPrefix(owner, "node-bridge:") {
-			return false, nil
+			noteBridgeToolPreempted(toolName, owner, plugin, h.ctx.Tools)
+			h.toolOwner[toolName] = plugin
+			return true, nil
 		}
 		return false, fmt.Errorf("工具 %q 已被插件 %s 注册，插件 %s 不能覆盖。请换工具名，或先 cordis_stop %s 再注册",
 			toolName, owner, plugin, owner)
@@ -301,13 +309,24 @@ func (h *PluginHost) IsPluginTool(name string) bool {
 // ctx.tools.register）。★ 同名接管（2026-08-16 迁移）：插件工具覆盖会话
 // 内置工具——磁盘工具插件（tool-*）注册的同名工具接管 agent 可见面
 // （宿主 Go 实现已存档 hostExecutors，经 ctx.hostTool 调用）。
+// ★ 2026-08-31 按需激活：声明 on-demand 的插件（agent-teams 等）工具仅在
+//   convID 会话已激活时合并；否则对 agent 隐藏（未开会话 convID 为空 → 隐藏）。
 func MergePluginTools(reg *Registry, ph *PluginHost) {
+	MergePluginToolsForConv(reg, ph, "")
+}
+
+// MergePluginToolsForConv 会话维度的插件工具合并（按需激活过滤版）。
+func MergePluginToolsForConv(reg *Registry, ph *PluginHost, convID string) {
 	if ph == nil {
 		return
 	}
+	owners := ph.PluginToolOwners()
 	for _, meta := range ph.Context().Tools.AllToolMeta() {
 		if !ph.IsPluginTool(meta.Name) {
 			continue
+		}
+		if plugin := owners[meta.Name]; plugin != "" && !IsPluginActiveInConv(convID, plugin) {
+			continue // 按需插件未激活 → 工具不对 agent 暴露
 		}
 		t, ok := ph.Context().Tools.Get(meta.Name)
 		if !ok {
@@ -396,7 +415,21 @@ type PluginSource string
 const (
 	PluginSourceGo PluginSource = "go"
 	PluginSourceJS PluginSource = "js"
+	// PluginSourceBridge Node 桥插件（npm/DSH 包，真实 node 进程装载）。
+	// ★ 2026-08-31：桥插件并入 Inspect 输出——插件面板/cordis_inspect 与 goja
+	//   插件同列，来源标注区分（js=goja 沙箱移植版，node-bridge=DSH 权威版）。
+	PluginSourceBridge PluginSource = "node-bridge"
 )
+
+// ToolConflictInfo 同名工具冲突（repo 移植版 goja 插件 ↔ Node 桥 DSH 插件）。
+// ★ 2026-08-31 取消自动覆盖：两版插件并存（互不停用），同一时刻只有 Active
+// 一方在 Registry 生效；切换经 /api/plugins/prefer（插件面板按钮）。
+type ToolConflictInfo struct {
+	Tool   string `json:"tool"`   // 冲突工具名
+	Repo   string `json:"repo"`   // repo 侧插件名（goja/磁盘插件）
+	Bridge string `json:"bridge"` // 桥侧插件包名（npm 包名）
+	Active string `json:"active"` // 当前生效方："repo" | "bridge"
+}
 
 // PluginRecord 插件记录（cordis_inspect 报告用）。
 type PluginRecord struct {
@@ -410,7 +443,7 @@ type PluginRecord struct {
 	Version    string       `json:"version,omitempty"`
 	Purpose    string       `json:"purpose,omitempty"`    // 用途说明（JS 动态插件）
 	HasClient  bool         `json:"hasClient,omitempty"`  // 是否有 client 半（浏览器端）
-	ClientCode string       `json:"clientCode,omitempty"` // client 半源码（供浏览器装载；列表接口可能省略）
+	ClientCode string       `json:"clientCode,omitempty"` // client 半源码（供浏览器装载；/api/plugins 列表接口直出，Boot 两源合并与非 dsh.ui 直载插件装载依赖它）
 	DefID      string       `json:"defId,omitempty"`      // JS 动态插件定义 id（dyn-<n>）
 	PluginID   string       `json:"pluginId,omitempty"`   // 稳定插件身份（跨版本；默认=首次定义 id）
 	PkgID      string       `json:"pkgId,omitempty"`      // 当前版本 package id（pkg-<n>，不可变）
@@ -418,6 +451,10 @@ type PluginRecord struct {
 	WaitingFor []string     `json:"waitingFor,omitempty"` // state=waiting 时缺的服务
 	LastError  string       `json:"lastError,omitempty"`  // 最近一次装载失败原因（诊断）
 	Diag       []string     `json:"diag,omitempty"`       // 运行诊断（阶段记录，最新在后）
+	// ★ Node 桥插件（source=node-bridge）专属字段 + 同名工具并存标注（2026-08-31）
+	Runtime   string             `json:"runtime,omitempty"`   // 桥运行时轨：dsh（cordis4+DSH 服务面）| node（cordis3）
+	Spec      string             `json:"spec,omitempty"`      // npm spec（pkg@ver）
+	Conflicts []ToolConflictInfo `json:"conflicts,omitempty"` // 与另一来源同名的工具（并存，Active 标生效方）
 }
 
 // ─── PluginHost ───────────────────────────────────────────
@@ -1022,9 +1059,12 @@ func (h *PluginHost) Unload(name string) error {
 	// 回收贡献
 	h.mu.Lock()
 	for _, tn := range h.pluginTools[name] {
-		if h.toolOwner[tn] == name {
-			delete(h.toolOwner, tn) // 释放工具归属
+		// ★ 并存保护（2026-08-31）：工具已被其他实现接管（如 DSH 桥插件
+		//   经 /api/plugins/prefer 切为生效方）→ 不能把对方的工具从 Registry 抹掉。
+		if h.toolOwner[tn] != name {
+			continue
 		}
+		delete(h.toolOwner, tn) // 释放工具归属
 		h.ctx.Tools.Unregister(tn)
 	}
 	delete(h.pluginTools, name)
@@ -1048,7 +1088,31 @@ func (h *PluginHost) Unload(name string) error {
 	if pc != nil {
 		pc.cleanup() // 触发 effects + 取消 listeners
 	}
+	// ★ 并存切换联动（2026-08-31）：repo 移植版插件停用 → 其同名 DSH 桥工具
+	//   （此前因 repo 优先而挂起）自动恢复生效；无挂起工具时无操作。
+	restoreBridgeToolsFor(h, name)
 	return nil
+}
+
+// SwapToolOwner 强制切换同名工具的生效实现（插件面板「生效方」切换）：
+// 把 newTool 注册进 Registry 并把归属改为 newOwner，返回被替下的旧工具与旧归属
+// （调用方保存以便切回）。不改动任何插件的运行状态——两版并存，仅换生效面；
+// 工具集可见性（agent 可用面）保持收敛规则不变。
+func (h *PluginHost) SwapToolOwner(tool, newOwner string, newTool *Tool) (*Tool, string, error) {
+	if h == nil || h.ctx == nil || h.ctx.Tools == nil {
+		return nil, "", fmt.Errorf("插件宙主未就绪")
+	}
+	if tool == "" || newOwner == "" || newTool == nil {
+		return nil, "", fmt.Errorf("需要 tool + newOwner + newTool")
+	}
+	h.mu.Lock()
+	oldOwner := h.toolOwner[tool]
+	oldTool, _ := h.ctx.Tools.Get(tool)
+	h.toolOwner[tool] = newOwner
+	h.mu.Unlock()
+	h.ctx.Tools.Register(newTool) // 同名覆盖（保留 Enabled 状态）
+	h.hideToolIfNotInToolset(tool)
+	return oldTool, oldOwner, nil
 }
 
 // Undefine 删除插件定义（先停止，再忘掉）。
@@ -1231,8 +1295,24 @@ func (h *PluginHost) List() []string {
 	return append([]string(nil), h.order...)
 }
 
-// Inspect 全部插件记录（cordis_inspect 报告）。
+// Inspect 全部插件记录（cordis_inspect 报告 / 插件面板列表）。
+// ★ 2026-08-31：宿主内插件（Go/goja）+ Node 桥插件（DSH/npm）两源合并输出，
+//   并给同名工具冲突的两侧记录附 Conflicts 标注（生效方 repo|bridge）。
 func (h *PluginHost) Inspect() []PluginRecord {
+	recs := h.inspectLocal()
+	conflicts := bridgeToolConflicts()
+	for i := range recs {
+		for _, c := range conflicts {
+			if c.Repo == recs[i].Name {
+				recs[i].Conflicts = append(recs[i].Conflicts, c)
+			}
+		}
+	}
+	return append(recs, bridgePluginRecords(conflicts)...)
+}
+
+// inspectLocal 宿主内已注册插件记录（Go 内置 + goja 动态/磁盘插件）。
+func (h *PluginHost) inspectLocal() []PluginRecord {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	recs := make([]PluginRecord, 0, len(h.order))
@@ -1289,7 +1369,29 @@ func (h *PluginHost) Inspect() []PluginRecord {
 }
 
 // InspectDetail 单个插件详情（含 client 半源码；不存在返回 nil）。
+// ★ 2026-08-31：宿主内找不到时回落 Node 桥插件（DSH/npm 包名亦可查详情）。
 func (h *PluginHost) InspectDetail(name string) *PluginRecord {
+	conflicts := bridgeToolConflicts()
+	rec := h.inspectLocalDetail(name)
+	if rec == nil {
+		for _, br := range bridgePluginRecords(conflicts) {
+			if br.Name == name {
+				out := br
+				return &out
+			}
+		}
+		return nil
+	}
+	for _, c := range conflicts {
+		if c.Repo == rec.Name {
+			rec.Conflicts = append(rec.Conflicts, c)
+		}
+	}
+	return rec
+}
+
+// inspectLocalDetail 宿主内插件详情（不含 Node 桥插件）。
+func (h *PluginHost) inspectLocalDetail(name string) *PluginRecord {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	for _, n := range h.order {
@@ -1458,6 +1560,9 @@ func (h *PluginHost) HasPluginTool(tool string) bool {
 }
 
 func (h *PluginHost) addPluginSection(plugin string, s *PromptSection) {
+	if s != nil && s.Plugin == "" {
+		s.Plugin = plugin
+	}
 	h.mu.Lock()
 	h.pluginSections[plugin] = append(h.pluginSections[plugin], s)
 	h.mu.Unlock()

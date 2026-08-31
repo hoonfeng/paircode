@@ -1,11 +1,11 @@
 // ═══════════════════════════════════════════════════════════════
-// tool-system — 系统内部工具（SystemTool + Skills/MCP/市场：update_tasks/update_plan/tool_stats/history_*/skill_*/mcp_*）——全部可更换
+// tool-system — 系统内部工具（SystemTool + Skills/MCP/市场：update_tasks/tool_stats/history_*/skill_*/mcp_*）——全部可更换
 //
 // 生成来源（2026-08-16）：内置 Go 工具组 → 磁盘外置插件（tool_plugin_gen.go
 // 自动生成，schema 完整外置拷贝）。api 声明在插件，execute 调 ctx.hostTool 复用宿主 Go 执行器（对齐 harness seam：编排在插件、能力在宿主）。
 // ★ 2026-08-29（t2 集成修复）：移除 generate_commit_message——宿主无对应 Go 实现
 //   （零消费方），claimTool 无存档导致 hostTool 执行必失败；与生成器白名单对齐。
-// 工具清单：skill_list、load_skill、load_skill_resource、skill_write、skill_delete、mcp_list、mcp_add、mcp_remove、history_search、history_list、history_count、update_plan、tool_stats、update_tasks
+// 工具清单：skill_list、load_skill、load_skill_resource、skill_write、skill_delete、mcp_list、mcp_add、mcp_remove、history_search、history_list、history_count、tool_stats、update_tasks
 // ═══════════════════════════════════════════════════════════════
 const tools = [
   {
@@ -202,46 +202,6 @@ const tools = [
     "systemTool": true
   },
   {
-    "name": "update_plan",
-    "description": "维护任务计划清单：传入完整步骤列表（每步 step 描述 + status：pending/in_progress/done）。复杂任务应先用它列出计划，执行中随时更新状态（每次传全量整份清单）。清单会展示给用户。",
-    "parameters": {
-      "properties": {
-        "plan": {
-          "description": "完整计划步骤（全量；状态变化时重传整份）",
-          "items": {
-            "properties": {
-              "status": {
-                "description": "状态",
-                "enum": [
-                  "pending",
-                  "in_progress",
-                  "done"
-                ],
-                "type": "string"
-              },
-              "step": {
-                "description": "步骤描述",
-                "type": "string"
-              }
-            },
-            "required": [
-              "step",
-              "status"
-            ],
-            "type": "object"
-          },
-          "type": "array"
-        }
-      },
-      "required": [
-        "plan"
-      ],
-      "type": "object"
-    },
-    "readOnly": true,
-    "systemTool": true
-  },
-  {
     "name": "tool_stats",
     "description": "查看工具调用统计（成功率、调用次数）。按工具名聚合，显示每个工具的调用次数/成功数/失败数/成功率。可使用 min_calls 过滤低频工具，recent 查看最近调用记录。Agent 可用此数据识别高频失败工具，主动优化或创建新工具替代。",
     "parameters": {
@@ -266,7 +226,7 @@ const tools = [
   },
   {
     "name": "todo_write",
-    "description": "维护任务列表：传入完整任务清单（全量替换），系统自动持久化到磁盘（DSH todo_write 别名，语义同 update_tasks）。每项包含 subject（必填）、status（pending/in_progress/completed/cancelled）、description（可选）、dependencies（可选）、plan_step_index（可选，整数）。",
+    "description": "维护任务列表：传入完整任务清单（全量替换），系统自动持久化到磁盘（DSH todo_write 别名，语义同 update_tasks）。每项包含 subject（必填）、status（pending/in_progress/completed/cancelled）、description（可选）、dependencies（可选）、",
     "usageGuide": "管理持久化任务列表（全量替换模式，DSH todo_write 别名）。复杂任务（3+ 步）必须拆解为子任务并逐项追踪。每次传入完整清单，状态变化时重传整份。",
     "parameters": {
       "properties": {
@@ -288,10 +248,6 @@ const tools = [
               "id": {
                 "description": "任务 ID（可选，不传则自动生成）",
                 "type": "string"
-              },
-              "plan_step_index": {
-                "description": "所属 plan 步骤索引（0 基；自主模式下绑定到 update_plan 的某步）",
-                "type": "integer"
               },
               "status": {
                 "description": "状态",
@@ -326,8 +282,8 @@ const tools = [
   },
   {
     "name": "update_tasks",
-    "description": "维护任务列表：传入完整任务清单（全量替换），系统自动持久化到磁盘。每项包含 subject（必填）、status（pending/in_progress/completed/cancelled）、description（可选）、dependencies（可选）、plan_step_index（可选，整数）。plan_step_index 用于在自主模式下将子任务绑定到 update_plan 的某个步骤（0=第1步，1=第2步…）。普通模式下忽略此字段。",
-    "usageGuide": "管理持久化任务列表（全量替换模式）。复杂任务（3+ 步）必须拆解为子任务并逐项追踪。每次传入完整清单，状态变化时重传整份。系统自动持久化到磁盘。plan_step_index 用于自主模式下绑定到 update_plan 的步骤。",
+    "description": "维护任务列表：传入完整任务清单（全量替换），系统自动持久化到磁盘。每项包含 subject（必填）、status（pending/in_progress/completed/cancelled）、description（可选）、dependencies（可选）、",
+    "usageGuide": "管理持久化任务列表（全量替换模式）。复杂任务（3+ 步）必须拆解为子任务并逐项追踪。每次传入完整清单，状态变化时重传整份。系统自动持久化到磁盘。",
     "parameters": {
       "properties": {
         "tasks": {
@@ -348,10 +304,6 @@ const tools = [
               "id": {
                 "description": "任务 ID（可选，不传则自动生成）",
                 "type": "string"
-              },
-              "plan_step_index": {
-                "description": "所属 plan 步骤索引（0 基；自主模式下绑定到 update_plan 的某步）",
-                "type": "integer"
               },
               "status": {
                 "description": "状态",
@@ -484,7 +436,7 @@ const tools = [
 
 return {
   name: 'tool-system',
-  purpose: '系统内部工具（SystemTool + Skills/MCP/市场：update_tasks/todo_write/update_plan/tool_stats/history_*/skill_*/mcp_*）——全部可更换（自动生成，迁移自内置 Go 工具组）',
+  purpose: '系统内部工具（SystemTool + Skills/MCP/市场：update_tasks/todo_write/tool_stats/history_*/skill_*/mcp_*）——全部可更换（自动生成，迁移自内置 Go 工具组）',
   apply(ctx) {
     // ★ R2-7 别名（DSH 命名对齐）：todo_write → update_tasks（宿主执行器同名承载）
     const hostExec = { todo_write: 'update_tasks' }

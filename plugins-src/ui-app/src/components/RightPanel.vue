@@ -172,11 +172,9 @@
             <button><SvgIcon name="chevron-down" :size="14" /> 新消息</button>
           </div>
         </div>
-        <!-- 执行计划面板（自主模式：plan 步骤展开含子任务树） -->
-        <div class="plan-container" :class="{ 'plan-empty': currentPlan.length === 0 && currentTasks.length === 0 }">
-          <PlanPanel v-if="autonomous && currentPlan.length > 0" :plan="currentPlan" :tasks="currentTasks" :expanded="planExpanded" @toggle="planExpanded = !planExpanded" />
-          <!-- 任务进度面板（普通模式：扁平任务列表） -->
-          <TaskPanel v-if="!autonomous && currentTasks.length > 0" :tasks="currentTasks" :expanded="tasksExpanded" @toggle="tasksExpanded = !tasksExpanded" />
+        <!-- 任务进度面板（task 体系：扁平任务列表） -->
+        <div class="task-container" :class="{ 'task-empty': currentTasks.length === 0 }">
+          <TaskPanel v-if="currentTasks.length > 0" :tasks="currentTasks" :expanded="tasksExpanded" @toggle="tasksExpanded = !tasksExpanded" />
         </div>
         <!-- 输入区 -->
         <div class="chat-input-area" ref="chatInputAreaRef">
@@ -204,7 +202,7 @@
               <div v-for="(c, i) in slashMatches" :key="c.name"
                    :class="['slash-item', { active: i === slashIndex }]"
                    @mousedown.prevent="pickSlashCommand(c)">
-                <span class="slash-name">/{{ c.name }}</span>
+                <span class="slash-name">/{{ c.name }}<em v-if="c.onDemand" class="slash-ondemand">按需</em></span>
                 <span class="slash-desc">{{ c.description || '' }}</span>
               </div>
             </div>
@@ -214,10 +212,16 @@
             <div class="chat-input" ref="inputRef" :contenteditable="state.chatLoading ? 'false' : 'true'" :style="{ height: inputHeight + 'px' }" data-placeholder="发送消息到 AI... (Enter 发送, Shift+Enter 换行)" @keydown="onKeydown" @input="onInput" @dragover.prevent @drop="handleDrop" @paste="handlePaste"></div>
             <div class="input-bottom-bar">
               <div class="ibb-btns">
-                <!-- ★ composer 模型选择器（★ 2026-08-20 同步 AI 配置列表模式：服务商/Key/思考均由「AI」配置决定，聊天面板只留模型下拉） -->
+                <!-- ★ composer 模型选择器（★ 2026-08-31 会话级模型 + 厂商分组）：
+                     下拉按「已配置厂商」分组展示模型（optgroup=厂商，option=模型），
+                     选择只写当前会话（PUT /api/conversations/{id}），不改全局设置——
+                     历史对话保持各自模型不被牵连。 -->
                 <span class="ibb-model">
-                  <select v-model="composerModel" class="cmp-sel cmp-model" @change="onCmpModelChange" title="AI 配置（设置面板「AI」配置 tab 添加的配置，选中整套应用）">
-                    <option v-for="m in composerModels" :key="m" :value="m">{{ m }}</option>
+                  <select v-model="composerModel" class="cmp-sel cmp-model" @change="onCmpModelChange" :title="modelSelectTitle">
+                    <option v-if="!composerGroups.length" value="">（未配置服务商 Key，请先在「设置 → AI」配置）</option>
+                    <optgroup v-for="g in composerGroups" :key="g.provider" :label="g.provider">
+                      <option v-for="m in g.models" :key="g.provider + '::' + m" :value="g.provider + '::' + m">{{ m }}</option>
+                    </optgroup>
                   </select>
                 </span>
                 <span class="obtn-sep"></span>
@@ -247,7 +251,6 @@ import api from '../api.js'
 import { setGlobalCtx, startConvRuntime, resetConvRuntime, createAssistantPlaceholder, getConvRuntime, getConvCtxStats, resetConvCtxStats, normalizeAskType } from '../agent-events.js'
 import { useSingleSlot, mountListSlot } from '../plugin-runtime.js'
 import SvgIcon from './SvgIcon.vue'
-import PlanPanel from './PlanPanel.vue'
 import TaskPanel from './TaskPanel.vue'
 import ApprovalBar from './ApprovalBar.vue'
 import ConvSidebar from './ConvSidebar.vue'
@@ -273,12 +276,18 @@ const slashMatches = ref([])    // 当前匹配项（前缀过滤）
 const slashOpen = ref(false)    // 菜单是否展开
 const slashIndex = ref(0)       // 当前高亮项
 // 输入以 "/" 开头时拉取命令清单（首次惰性 + 每次 send 后刷新）
+// ★ 2026-08-31 修复：refreshSlashMenu 首次调用时清单为空（异步拉取），
+//   同步 filter 恒空 → 菜单永不弹出；拉取完成后需再刷新一次。
 async function ensureSlashCommands() {
   if (slashCommands.value.length) return
   try {
     const res = await api.listCommands()
     slashCommands.value = (res && res.commands) || []
   } catch (e) { slashCommands.value = [] }
+  // 清单到位后重新评估当前输入的 slash 菜单（若输入仍以 "/" 开头）
+  if (slashCommands.value.length && inputText.value.startsWith('/')) {
+    refreshSlashMenu()
+  }
 }
 function refreshSlashMenu() {
   const text = inputText.value
@@ -318,100 +327,124 @@ async function runSlashCommand() {
   sendMessage() // 命令输出已注入为系统消息，命令文本照常发送
 }
 
-// ─── composer 模型选择器（★ 2026-08-20 同步 AI 配置列表模式：服务商/Key/思考均由配置决定，聊天面板只留模型下拉）───
-const modelData = ref(null)
-const aiPresets = ref(null)          // AI 配置列表（ai-presets.json：配置名 → 完整配置快照）
-const composerProvider = ref('')     // 当前生效服务商名（来自 settings，应用配置后 watch 同步）
-const composerModel = ref('')
-// 模型下拉：优先展示「配置列表里添加的配置名」；无配置时回退为当前服务商可用模型列表
-const composerModels = computed(() => {
-  const p = aiPresets.value || {}
-  const names = Object.keys(p)
-  if (names.length) return names
-  const m = (modelData.value && modelData.value.models) || {}
-  return m[composerProvider.value] || []
+// ─── composer 模型选择器（★ 2026-08-31 重做：会话级模型 + 厂商分组）───
+//   ① Key 厂商化：API Key 按服务商配置（设置 → AI → 服务商），不再随模型/预设重复填；
+//   ② 下拉按「已配置 Key 的厂商」分组（optgroup=厂商，option=该厂商模型）；
+//   ③ 选择只写当前会话（PUT /api/conversations/{id} {provider, model}）——
+//      全局 settings 不动，其他/历史对话的模型不被牵连；
+//   ④ 新会话（无消息且未设模型）自动继承「上次选择」（localStorage），保持体验连续。
+const LAST_MODEL_KEY = 'paircode.lastPickedModel'
+const modelData = ref(null)          // /api/models 快照（providers/models/providerKeys/…）
+const composerProvider = ref('')     // 当前会话生效的服务商
+const composerModel = ref('')        // 下拉值：'服务商::模型'
+// 厂商分组：只列「已配置 API Key」的服务商（未配置 Key 的厂商无法使用，不展示）
+const composerGroups = computed(() => {
+  const md = modelData.value || {}
+  const models = md.models || {}
+  const keys = md.providerKeys || {}
+  const out = []
+  for (const p of (md.providers || [])) {
+    if (!keys[p]) continue                       // 未配置 Key → 跳过
+    const list = models[p] || []
+    if (!list.length) continue
+    out.push({ provider: p, models: list })
+  }
+  return out
 })
-// 根据 settings 解析当前应选中的配置名（配置列表为空返回 ''）
-// ★ 2026-08-21 配置来源收敛：settings.preset 直接指向配置名（ai-presets.json 唯一来源）；
-//   旧数据兜底：按 executeModel+provider 匹配。
-function presetNameOf(s) {
-  const p = aiPresets.value || {}
-  if (!Object.keys(p).length) return ''
-  if (s && s.preset && p[s.preset]) return s.preset
-  if (!s) return ''
-  const hit = Object.keys(p).find(n => {
-    const c = p[n]
-    return c && c.executeModel === s.executeModel && (!c.provider || c.provider === s.provider)
-  })
-  return hit || ''
+const modelSelectTitle = computed(() => {
+  const cur = parseModelValue(composerModel.value)
+  if (!cur.provider) return '选择模型（按服务商分组；Key 在「设置 → AI」按服务商配置）'
+  return '当前会话模型：' + cur.provider + ' / ' + cur.model + '\n切换只影响当前对话，不改其他对话'
+})
+function parseModelValue(v) {
+  const s = String(v || '')
+  const i = s.indexOf('::')
+  if (i < 0) return { provider: '', model: s }
+  return { provider: s.slice(0, i), model: s.slice(i + 2) }
+}
+function modelValueOf(provider, model) {
+  if (!provider && !model) return ''
+  return String(provider || '') + '::' + String(model || '')
+}
+// 全局默认（settings/preset）解析出的 服务商+模型：会话未设模型时下拉显示它
+function defaultProviderModel() {
+  const s = state.settings || {}
+  const md = modelData.value || {}
+  let prov = s.provider || ''
+  let model = s.executeModel || ''
+  const presets = md.presets || null // 预留：预设不再作为 Key 来源
+  if (presets && s.preset && presets[s.preset]) {
+    prov = presets[s.preset].provider || prov
+    model = presets[s.preset].executeModel || model
+  }
+  if (!prov || !model) {
+    // 无全局配置时回落首个「已配置 Key」的厂商首模型
+    const g = composerGroups.value[0]
+    if (g) { prov = prov || g.provider; model = model || g.models[0] }
+  }
+  return { provider: prov, model }
 }
 async function loadModelData() {
   try {
     modelData.value = await api.getModels()
   } catch {}
+}
+// 依据当前会话元数据同步下拉（会话有自己的模型 → 显示它；否则显示全局默认）
+async function syncComposerModelFromConv() {
+  const convId = state.currentConvId
+  let prov = '', model = ''
+  if (convId) {
+    try {
+      const meta = await api.getConversationMeta(convId, state.workspaceRoot || '')
+      prov = (meta && meta.provider) || ''
+      model = (meta && meta.model) || ''
+    } catch {}
+  }
+  if (!prov && !model) {
+    // 会话未设模型：新会话（无消息）继承上次选择并写入会话，老会话只显示默认不写
+    const last = readLastPicked()
+    const msgCount = (state.messages && state.messages.length) || 0
+    if (convId && last.provider && last.model && msgCount === 0) {
+      prov = last.provider; model = last.model
+      try { await api.setConvModel(convId, prov, model, state.workspaceRoot || '') } catch {}
+    } else {
+      const d = defaultProviderModel()
+      prov = d.provider; model = d.model
+    }
+  }
+  composerProvider.value = prov
+  composerModel.value = modelValueOf(prov, model)
+}
+function readLastPicked() {
   try {
-    const r = await api.getAiPresets()
-    aiPresets.value = (r && r.presets) || {}
-  } catch {}
+    const raw = window.localStorage && window.localStorage.getItem(LAST_MODEL_KEY)
+    if (!raw) return { provider: '', model: '' }
+    const o = JSON.parse(raw)
+    return { provider: o.provider || '', model: o.model || '' }
+  } catch { return { provider: '', model: '' } }
+}
+function writeLastPicked(provider, model) {
+  try { window.localStorage && window.localStorage.setItem(LAST_MODEL_KEY, JSON.stringify({ provider, model })) } catch {}
 }
 function initComposerModel() {
-  const s = state.settings || {}
-  const p = aiPresets.value || {}
-  const names = Object.keys(p)
-  if (names.length) {
-    // 配置列表模式：下拉选中配置名；settings 未对应任何配置时自动对齐首个配置并整套应用
-    const name = presetNameOf(s)
-    composerModel.value = name || names[0]
-    const act = (name && p[name]) || null
-    composerProvider.value = (act && act.provider) || s.provider || ''
-    if (!name) onCmpModelChange()
-  } else {
-    composerProvider.value = s.provider || ''
-    composerModel.value = s.executeModel || ''
-  }
+  syncComposerModelFromConv()
 }
-// ★ 修复：切换配置/模型前先拉后端最新 settings 作基底（state.settings 是启动快照，
-//   可能过期——用旧缓存整体 PUT 会覆盖设置面板/预设应用刚写入后端的新值）
-async function latestSettingsBase() {
-  try {
-    const r = await api.apiGet('/settings')
-    return (r && r.settings) || {}
-  } catch { return {} }
-}
+// 切换模型 = 只写当前会话（不动全局 settings）
 async function onCmpModelChange() {
-  if (!composerModel.value) return
-  const presets = aiPresets.value || {}
-  const names = Object.keys(presets)
-  const base = await latestSettingsBase()
-  if (names.length) {
-    // 配置列表模式：composerModel 是配置名 → 只把 preset 名写 settings（AI 配置唯一
-    // 来源 ai-presets.json，装配时按 preset 展开 key/模型——不再冗余写回 settings 顶层）
-    const c = presets[composerModel.value]
-    if (!c) return
-    const top = { ...base, preset: composerModel.value }
-    try {
-      await api.apiPut('/settings', { settings: top, pluginSettings: (base.pluginSettings) || {} })
-      state.settings = top
-      composerProvider.value = c.provider || composerProvider.value
-    } catch (e) {
-      window.$toast && window.$toast('配置切换失败: ' + (e.message || e), 'error')
-    }
-    return
-  }
-  // 无配置回退：按服务商联动 BaseURL/Key（保持原行为）
-  if (!composerProvider.value) return
-  const md = modelData.value || {}
-  const prov = composerProvider.value
-  const top = { ...base, provider: prov, executeModel: composerModel.value }
-  if (md.providerBaseURLs && md.providerBaseURLs[prov]) top.baseURL = md.providerBaseURLs[prov]
-  if (md.providerKeys && md.providerKeys[prov]) top.apiKey = md.providerKeys[prov]
+  const { provider, model } = parseModelValue(composerModel.value)
+  if (!provider || !model) return
+  const convId = state.currentConvId
+  composerProvider.value = provider
+  writeLastPicked(provider, model)
+  if (!convId) return   // 尚无会话：记住选择，新建会话时写入
   try {
-    await api.apiPut('/settings', { settings: top, pluginSettings: (base.pluginSettings) || {} })
-    state.settings = top
+    await api.setConvModel(convId, provider, model, state.workspaceRoot || '')
+    window.$toast && window.$toast('本对话已切换为 ' + provider + ' / ' + model, 'success')
   } catch (e) {
     window.$toast && window.$toast('模型切换失败: ' + (e.message || e), 'error')
   }
 }
+
 const feedbackText = ref('')
 const msgRef = ref(null)
 const inputRef = ref(null)
@@ -764,9 +797,8 @@ function showNudge(text) {
 }
 
 let pendingAskCallId = ''
-const currentPlan = ref([])
+// ★ 2026-08-31：plan 体系已移除——currentPlan/planExpanded 下线，任务追踪只用 currentTasks。
 const currentTasks = ref([])
-const planExpanded = ref(false)
 const tasksExpanded = ref(false)
 const currentPhase = computed(() => state.phaseByConv[state.currentConvId] || '')
 const phaseToolCount = computed(() => {
@@ -1625,7 +1657,6 @@ const newConversation = async () => {
   }
   state.chatLoading = false
   state.agentRunning = false
-  currentPlan.value = []
   currentTasks.value = []
   setInputText('')
   nextTick(() => inputRef.value?.focus())
@@ -1675,7 +1706,6 @@ const switchConv = async (id) => {
   state.messages = state.messagesByConv[id]
   state.chatLoading = state.loadingByConv[id] || false
   state.agentRunning = state.agentRunningByConv[id] || false
-  currentPlan.value = []
   currentTasks.value = []
 
   // 加载 token 统计
@@ -1755,15 +1785,11 @@ const switchConv = async (id) => {
     if (taskData && taskData.tasks && taskData.tasks.length > 0) {
       currentTasks.value = taskData.tasks.map(t => ({
         step: t.step || t.subject || '', status: t.status, _taskId: t.taskId,
-        planStepIndex: t.planStepIndex,
       }))
     } else { currentTasks.value = [] }
   } catch { currentTasks.value = [] }
 
-  // 从消息重建 plan
-  const planMsgs = state.messagesByConv[id] || []
-  currentPlan.value = planMsgs.length > 0 ? rebuildPlanFromMessages(planMsgs) : []
-  planExpanded.value = currentPlan.value.length > 0
+  // ★ 2026-08-31：plan 体系已移除，不再从消息重建计划（currentPlan 下线）。
   applyAutoCollapse()
   // ★ 按空间加载：初始内容不足视口时自动加载更早消息（浏览器行为），
   //   引擎几何桥修复后 clientHeight/scrollHeight 为真实值，fillViewport 可判断。
@@ -1815,27 +1841,9 @@ function phaseIcon(phase) {
   return 'cycle'
 }
 
-function rebuildPlanFromMessages(msgs) {
-    // 从已加载消息的 segments 中扫描 update_plan 工具调用，重建执行步骤。
-  let plan = []
-  for (const msg of msgs) {
-    if (!msg.segments) continue
-    for (const seg of msg.segments) {
-      if (seg.type !== 'tool_call') continue
-      if (seg.name !== 'update_plan') continue
-      let args
-      try { args = seg.argsRaw ? JSON.parse(seg.argsRaw) : {} } catch { continue }
-      if (Array.isArray(args.plan)) {
-        plan = args.plan.map(s => ({ ...s }))
-      }
-    }
-  }
-  return plan
-}
-
 function handleTaskTool(data) {
   const toolName = data.tool || data.name || ''
-  const taskTools = ['update_plan', 'task_create', 'task_update', 'task_list', 'task_delete', 'task_summary']
+  const taskTools = ['task_create', 'task_update', 'task_list', 'task_delete', 'task_summary']
   if (!taskTools.includes(toolName)) return false
   try {
     return true
@@ -1997,24 +2005,14 @@ watch(() => state.currentConvId, (id, oldId) => {
 
 watch(() => state.settings, (s) => { if (s) { autoIterate.value = !!s.autoIterateOnRejection; autonomous.value = !!s.autonomous; autoCollapse.value = s.autoCollapse !== undefined ? !!s.autoCollapse : true; } }, { immediate: true })
 
-// ★ settings 变化（AI tab 应用配置 / 保存设置 / 切配置）→ 同步对话面板模型下拉（配置名）
-// ★ 2026-08-21 改监听 preset：settings 只存配置名，provider/executeModel 不再是业务来源
-watch(() => [state.settings && state.settings.preset, state.settings && state.settings.executeModel], ([presetName, model]) => {
-  const p = aiPresets.value || {}
-  if (presetName && p[presetName]) {
-    if (composerModel.value !== presetName) composerModel.value = presetName
-    const act = p[presetName]
-    if (act.provider && composerProvider.value !== act.provider) composerProvider.value = act.provider
-    return
-  }
-  const names = Object.keys(p)
-  if (names.length) {
-    const name = presetNameOf(state.settings || {})
-    if (name && composerModel.value !== name) composerModel.value = name
-  } else if (model && composerModel.value !== model) {
-    composerModel.value = model
-  }
+// ★ 2026-08-31 会话级模型：下拉不再跟随全局 settings（切模型只写会话）。
+//   会话切换/新建时按会话元数据同步下拉；服务商配置（Key/模型列表）变化时刷新分组。
+watch(() => state.currentConvId, () => { syncComposerModelFromConv() })
+watch(() => [state.settings && state.settings.provider, state.settings && state.settings.executeModel], () => {
+  // 全局默认配置变化：仅当当前会话未设置模型时下拉才需要刷新显示
+  loadModelData().then(() => syncComposerModelFromConv())
 })
+
 
 // ★ 从工作区配置加载审核模式（黑白名单配置已由插件面板/工具集管理取代，不再加载）
 async function loadWorkspaceReviewConfig() {
@@ -2079,7 +2077,6 @@ onMounted(() => {
             step: t.step || t.subject || '',
             status: t.status,
             _taskId: t.taskId,
-            planStepIndex: t.planStepIndex,
           }))
         }
       } catch {}
@@ -2108,10 +2105,8 @@ onMounted(() => {
       // 前端不再重复 POST，避免消息重复追加。
     },
     onPlanUpdate: (plan, convId) => {
+      // ★ 2026-08-31：plan 体系已移除——onPlanUpdate 事件不再处理（保留回调壳防旧代码报错）
       if (state.currentConvId !== convId) return
-      // update_plan 全量替换执行步骤清单（外层 AutonomousController 使用），只展示在 PlanPanel
-      currentPlan.value = [...plan]
-      planExpanded.value = true
     },
     onTaskCreate: (task, convId) => {
       if (state.currentConvId !== convId) return
@@ -2168,7 +2163,7 @@ onMounted(() => {
     state.agentRunning = false
     state.chatSessionId = ''
     setInputText('')
-    currentPlan.value = []
+    // ★ 2026-08-31：plan 下线——currentPlan 已移除，只清任务列表。
     await loadConvList()
     // loadConvList 已处理 currentConvId 和 messages 的设置（自动创建或保持空）
     if (!state.currentConvId) {
@@ -2417,6 +2412,7 @@ onUnmounted(() => {
 .slash-item { display: flex; align-items: baseline; gap: 10px; padding: 7px 10px; border-radius: 7px; cursor: pointer; }
 .slash-item.active { background: rgba(0, 120, 212, 0.16); }
 .slash-name { font-family: var(--mono-font, monospace); color: #4daafc; font-size: 13px; flex-shrink: 0; }
+.slash-name .slash-ondemand { font-style: normal; font-size: 10px; color: #ffb454; border: 1px solid #ffb45455; border-radius: 4px; padding: 0 4px; margin-left: 6px; vertical-align: 1px; }
 .slash-desc { color: var(--text-muted, #9aa4b2); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* ★ 2026-08-21 可视优化：输入框聚焦时 accent 描边（键盘可达性/审美） */
 .input-wrapper:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-ring); }
@@ -2539,20 +2535,20 @@ onUnmounted(() => {
 .tool-calls { margin-top: 4px; }
 .tool-call { background: var(--bg-primary); padding: 4px 8px; border-radius: 3px; margin-bottom: 2px; font-size: 12px; }
 
-/* ── 执行步骤容器（输入区上方）── */
-.plan-container {
+/* ── 任务进度容器（输入区上方；★ 2026-08-31 plan 体系已移除）── */
+.task-container {
   flex-shrink: 0;
   transition: max-height 0.25s ease;
   padding: 0 8px;
 }
-.plan-container.plan-empty {
+.task-container.task-empty {
   max-height: 0;
   padding: 0 8px;
 }
-.plan-container:not(.plan-empty) {
+.task-container:not(.task-empty) {
   max-height: 400px;
 }
-.plan-container .plan-panel {
+.task-container .plan-panel {
   margin: 0 0 4px 0;
 }
 /* chat 槽位：插件渲染的对话面板占满 rp-body */

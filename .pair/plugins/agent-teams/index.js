@@ -166,8 +166,13 @@ function readTeam(stateRoot, teamId) {
     return undefined // 不存在/损坏 → undefined（损坏会静默；面板读时也允许失败）
   }
 }
+// 团队状态写入即广播（浏览器 client 半 ui.on('ui:agent-teams/change') 实时刷新面板）
+let emitChangeSignal = null
 function writeTeam(stateRoot, team) {
   atomicWriteText(stateRoot + '/' + team.id + '/team.json', JSON.stringify(team, null, 2))
+  if (typeof emitChangeSignal === 'function') {
+    try { emitChangeSignal() } catch (e) { /* 通知失败不阻塞写 */ }
+  }
 }
 function listTeamIds(stateRoot) {
   let names = []
@@ -750,6 +755,22 @@ return {
     SYS_WS_ROOT = (ctx.app && ctx.app.workspaceRoot) || ''
     const log = ctx.logger('agent-teams')
 
+    // ── ★ 2026-08-31 按需激活 ──
+    // 本插件是重型协议插件：其系统提示段 + agent_teams_* 工具默认对 agent 隐藏
+    // （避免 agent 每次对话都看到协议而「自我触发」）；用户在对话里执行
+    // /agent-teams 命令后，本会话才激活（提示段/工具立即可见）。
+    try {
+      const r = ctx.activation.declare({ command: 'agent-teams' })
+      if (r && r.ok) log.info('已声明按需激活：/agent-teams 触发本会话激活')
+    } catch (e) {
+      log.warn('ctx.activation.declare 失败（宿主不支持按需激活，插件按常驻注入）: ' + (e && e.message || e))
+    }
+
+    // ── 实时广播：团队状态变化 → 浏览器面板刷新（事件驱动，无轮询锁竞争）──
+    emitChangeSignal = () => {
+      try { ctx.emit('ui:agent-teams/change', { at: now() }) } catch (e) { /* 忽略 */ }
+    }
+
     // ── 配置（默认 + getSettings 覆盖）──
     let settings = {}
     try { settings = ctx.getSettings('agent-teams') || {} } catch (e) { settings = {} }
@@ -929,16 +950,26 @@ return {
           return
         }
 
-        // ② 开放式 owned attempt：仅冷恢复重派；否则 park
+        // ② 开放式 owned attempt：依赖满足才可恢复/认领；否则 park 或闲置等依赖
         const owned = ownedOpenTask(team.tasks, member.name)
-        const parkedId = parkedAttempts.get(member.id)
-        const recoverOwned = owned !== undefined && (owned.attemptId === undefined || owned.attemptId !== parkedId)
-        const task = recoverOwned ? owned : (owned === undefined ? nextReadyTask(team.tasks, member.name) : undefined)
+        const ownedBlocked = owned !== undefined && unsatisfiedDependencies(team.tasks, owned.dependencies).length > 0
+        const parked = parkedAttempts.get(member.id)
+        const parkedId = parked ? parked.attemptId : undefined
+        const recoverOwned = owned !== undefined && !ownedBlocked && (owned.attemptId === undefined || owned.attemptId !== parkedId)
+        const task = owned !== undefined
+          ? (ownedBlocked ? undefined : (recoverOwned ? owned : undefined))
+          : nextReadyTask(team.tasks, member.name)
         if (!task) {
           if (member.status !== 'idle') { member.status = 'idle'; writeTeam(stateRoot, team) }
           return
         }
-        if (!recoverOwned) return // owned 且 parked（成员有意停驻：等待指导/用户暂停）
+        // ★ 归属任务冷恢复缺依赖检查（v1 bug：assignee 指定但从未认领的任务，在依赖未
+        //   完成时被成员按「owned 冷恢复」抢跑 → DAG 乱序执行，如 t4 在 t3 未完成时被
+        //   verifier 提前认领）。修复：ownedBlocked 不派（等依赖完成）。
+        // ★ 另：原 `if (!recoverOwned) return` 会拦截 nextReadyTask 新任务（自动调度
+        //   死代码，成员 idle 后无人接力 → 团队看起来「直接结束」的根源之一）——已改为
+        //   仅「owned 存在且非恢复路径」才拦截（停驻语义），无 owned 的新任务照常自动派发。
+        if (owned !== undefined && (ownedBlocked || !recoverOwned)) return
 
         // 认领 + 唤醒
         const fresh = readTeam(stateRoot, teamId)
@@ -1014,11 +1045,65 @@ return {
       const member = memberByName(team, memberName)
       if (!member || member.status === 'removed') return
       const owned = ownedOpenTask(team.tasks, member.name)
-      if (owned && owned.attemptId) parkedAttempts.set(member.id, owned.attemptId)
+      if (owned && owned.attemptId) parkedAttempts.set(member.id, { attemptId: owned.attemptId, at: now() })
       else parkedAttempts.delete(member.id)
       if (member.status !== 'idle') { member.status = 'idle'; writeTeam(stateRoot, team) }
       kickMember(wsRoot, teamId, memberName).catch((e) => log.warn('kickMember failed: ' + e))
     })
+
+    // ── 调度兜底 watchdog（修复「成员轮次结束未更新任务 → 团队静止卡死」）──
+    // 事件驱动（subagent/idle）可能漏：成员被 stop 无 idle 事件、成员一轮结束忘了
+    // 调 agent_teams_update_task → 开放 attempt 被 park 且再无事件触发 → 团队看起来
+    // 「直接结束」。兜底：周期扫描（10s 快速短路）：①park 超时（成员连续 4 分钟无
+    // 动静）→ 回收 attempt 回共享池并通知队长；②存在依赖满足的 pending 任务但无
+    // 任何成员 running → 再 kick 一轮（事件缺失自愈）。
+    const STALE_ATTEMPT_MIN = 4
+    const STALE_ATTEMPT_MS = STALE_ATTEMPT_MIN * 60 * 1000
+    const watchdogCancel = ctx.timer.interval(() => {
+      try {
+        const roots = (() => { try { return ctx.fs.roots() || [] } catch (e) { return [] } })()
+        const wsList = roots.length ? roots : [SYS_WS_ROOT]
+        for (const ws of wsList) {
+          const sr = stateRootOf(ws)
+          for (const id of listTeamIds(sr)) {
+            const team = readTeam(sr, id)
+            if (!team || team.halted === true || team.phase !== 'running') continue
+            let changed = false
+            // ① 卡死 attempt 回收：成员 park 超时（轮次结束后未更新任务）
+            for (const m of team.members) {
+              if (m.status === 'removed' || !m.id) continue
+              const parked = parkedAttempts.get(m.id)
+              if (!parked || typeof parked !== 'object' || !parked.at) continue
+              const owned = ownedOpenTask(team.tasks, m.name)
+              if (!owned || !owned.attemptId) { parkedAttempts.delete(m.id); continue }
+              if (now() - parked.at < STALE_ATTEMPT_MS) continue
+              const tid = owned.id
+              invalidateTaskAttempt(owned) // 回共享池（assignee 清空，其他成员可接手）
+              parkedAttempts.delete(m.id)
+              changed = true
+              log.warn('watchdog: member ' + m.name + ' idle >' + STALE_ATTEMPT_MIN + 'min on ' + tid + ' → attempt returned to shared pool')
+              try {
+                ctx.agents.followup(team.captainSessionId, 'AgentTeams watchdog: task ' + tid + ' (' + owned.subject + ') was held by member ' + m.name + ' but made no progress for ' + STALE_ATTEMPT_MIN + ' minutes. Its attempt was returned to the shared pool for reassignment. Check agent_teams_status and reassign or instruct as needed.')
+              } catch (e) { log.warn('watchdog notify failed: ' + ((e && e.message) || e)) }
+            }
+            if (changed) writeTeam(sr, team)
+            // ② 有就绪任务但全员静止 → 兜底 kick 一轮
+            const ready = team.tasks.some((t) =>
+              t.status === 'pending' &&
+              unsatisfiedDependencies(team.tasks, t.dependencies).length === 0 &&
+              (t.assignee === undefined || team.members.some((m) => m.name === t.assignee && m.status !== 'removed')))
+            if (!ready) continue
+            let anyRunning = false
+            try { anyRunning = (ctx.agents.list({ team: team.id }) || []).some((r) => r.state === 'running') } catch (e) { anyRunning = false }
+            if (anyRunning) continue
+kickTeam(ws, id).catch((e) => log.warn('watchdog kick failed: ' + ((e && e.message) || e)))
+          }
+        }
+      } catch (e) {
+        log.warn('watchdog tick failed: ' + ((e && e.message) || e))
+      }
+    }, 10000)
+    if (watchdogCancel && typeof ctx.effect === 'function') ctx.effect(watchdogCancel)
 
     // ── 工具注册（13 个，语义对齐参考实现 dsh-agent-teams）──
     const tools = [
@@ -1289,6 +1374,41 @@ return {
           }
           kickTeam(caller.wsRoot, team.id).catch(() => {})
           return 'Member "' + m.name + '" removed; unfinished owned tasks returned to the shared pool.'
+        },
+      },
+
+      // ═══ agent_teams_delete_task（队长）═══
+      {
+        name: 'agent_teams_delete_task',
+        description: 'Delete a task that has reached a terminal state (completed/failed/cancelled). Any other tasks that list it in dependencies or as reviewedTaskId/sourceTaskId get those references cleared, so the DAG stays consistent. Use for obsolete finished tasks; keep finished tasks whose output is still needed.',
+        usageGuide: '删除已结束（terminal）任务：completed/failed/cancelled 可删；运行中/待办不可删（暂存阶段调整用 edit_plan remove_task）。删除后自动清理其他任务的依赖引用。',
+        parameters: {
+          type: 'object',
+          properties: {
+            taskId: { type: 'string', description: 'Task id to delete (e.g. "t6").' },
+          },
+          required: ['taskId'],
+        },
+        execute(args) {
+          const caller = callerOf(args)
+          const team = requireCaptainTeam(caller.wsRoot, caller.convId)
+          const stateRoot = stateRootOf(caller.wsRoot)
+          const target = taskById(team, args.taskId ? String(args.taskId) : '')
+          if (!target) throw new Error('task "' + (args.taskId || '') + '" not found')
+          if (!TERMINAL.includes(target.status)) {
+            throw new Error('task "' + target.id + '" is not terminal ("' + target.status + '"); only completed/failed/cancelled tasks can be deleted. For staged plans use agent_teams_edit_plan remove_task.')
+          }
+          team.tasks = team.tasks.filter((x) => x.id !== target.id)
+          for (const other of team.tasks) {
+            let touched = false
+            const deps = other.dependencies || []
+            if (deps.includes(target.id)) { other.dependencies = deps.filter((d) => d !== target.id); touched = true }
+            if (other.reviewedTaskId === target.id) { other.reviewedTaskId = undefined; touched = true }
+            if (other.sourceTaskId === target.id) { other.sourceTaskId = undefined; touched = true }
+            if (touched) other.updatedAt = now()
+          }
+          writeTeam(stateRoot, team)
+          return 'Task "' + target.id + '" (' + target.subject + ', ' + target.status + ') deleted; dangling dependency references cleared.'
         },
       },
 
@@ -1885,7 +2005,9 @@ return {
             const sub = String((args && args.args) || '').trim().toLowerCase()
             const teams = collectTeamsActivity() || []
             if (sub === '' || sub === 'status') {
-              if (!teams.length) return '（当前无团队；用 agent_teams_create 创建）'
+              // ★ 2026-08-31 按需激活：本命令即激活入口（宿主已激活并注入协议说明）。
+              //   此处返回团队状态快照或引导创建首个团队。
+              if (!teams.length) return '（当前无团队。你是队长：请用 agent_teams_create 创建团队（approval required），按协议完成建队、任务 DAG 与验收。）'
               const rows = teams.map((t) => ({
                 id: t.id,
                 name: t.name,
@@ -1957,6 +2079,26 @@ return {
       }
       writeTeam(stateRoot, team)
       return { ok: true, halted: true, teamId: teamId }
+    })
+    ctx.registerClientMethod('deleteTask', (args) => {
+      const teamId = args && args.teamId ? String(args.teamId) : ''
+      const taskId = args && args.taskId ? String(args.taskId) : ''
+      if (!teamId || !taskId) throw new Error('teamId and taskId required')
+      const stateRoot = stateRootOf(SYS_WS_ROOT)
+      const team = readTeam(stateRoot, teamId)
+      if (!team) throw new Error('team not found')
+      const target = taskById(team, taskId)
+      if (!target) throw new Error('task "' + taskId + '" not found')
+      if (!TERMINAL.includes(target.status)) throw new Error('task "' + taskId + '" is not terminal; only finished/failed/cancelled tasks can be deleted')
+      team.tasks = team.tasks.filter((x) => x.id !== target.id)
+      for (const other of team.tasks) {
+        const deps = other.dependencies || []
+        if (deps.includes(target.id)) other.dependencies = deps.filter((d) => d !== target.id)
+        if (other.reviewedTaskId === target.id) other.reviewedTaskId = undefined
+        if (other.sourceTaskId === target.id) other.sourceTaskId = undefined
+      }
+      writeTeam(stateRoot, team)
+      return { ok: true, deleted: target.id, subject: target.subject }
     })
 
     // ── 系统提示注入（用法协议）──

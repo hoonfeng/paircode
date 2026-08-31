@@ -56,9 +56,8 @@ func registerKernelAPIs(s *webServer) {
 	_ = agent.KernelAPIRegister("conversations", "GET,POST", "/api/conversations", "会话列表/新建", s.handleConversations)
 	_ = agent.KernelAPIRegister("conversations.byID", "GET,PUT,DELETE", "/api/conversations/*", "会话详情/重命名/删除（前缀）", s.handleConversationByID)
 
-	// ── Tasks / Plan ──
+	// ── Tasks（★ 2026-08-31 plan 体系已移除）──
 	_ = agent.KernelAPIRegister("tasks", "GET", "/api/tasks", "任务列表", s.handleTasks)
-	_ = agent.KernelAPIRegister("taskplan", "GET", "/api/taskplan", "任务计划", s.handleTaskPlan)
 
 	// ── 模型 / 指令 / 思想 ──
 	_ = agent.KernelAPIRegister("models", "GET,POST,PUT", "/api/models", "模型列表读取/全量保存", s.handleModels)
@@ -103,6 +102,7 @@ func registerKernelAPIs(s *webServer) {
 	_ = agent.KernelAPIRegister("plugins.client-state", "GET,POST", "/api/plugins/client-state", "client 快照上报/读取", handler.HandlePluginClientState)
 	_ = agent.KernelAPIRegister("plugins.builtin", "GET,POST", "/api/plugins/builtin", "内置工具包开关", handler.HandleBuiltinPlugins)
 	_ = agent.KernelAPIRegister("plugins.tool", "POST", "/api/plugins/tool", "工具级开关", handler.HandlePluginToolToggle)
+	_ = agent.KernelAPIRegister("plugins.prefer", "POST", "/api/plugins/prefer", "同名工具并存时切换生效实现（repo/bridge）", handler.HandlePluginPrefer)
 
 	// ── 工具集（动态构建/固化/导出/导入）──
 	_ = agent.KernelAPIRegister("toolsets", "GET", "/api/toolsets", "工具集列表", handler.HandleToolsetsList)

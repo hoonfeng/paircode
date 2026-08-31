@@ -7,6 +7,15 @@
 
     <!-- 非 Git 仓库 -->
     <div v-else-if="!isRepo && hasData" class="git-empty">
+      <!-- 项目选择器（多根工作区时显示）——未初始化仓库也可切换项目 -->
+      <div v-if="workspaceProjects.length > 1" class="git-empty-bar">
+        <select v-model="gitProject" class="git-project-select">
+          <option v-for="p in workspaceProjects" :key="p" :value="p">{{ p.split('\\').pop() || p }}</option>
+        </select>
+        <button class="icon-btn" @click="refresh" title="刷新">
+          <SvgIcon name="refresh" :size="13" :class="{ spinning: refreshing }" />
+        </button>
+      </div>
       <SvgIcon name="source-control" :size="24" color="var(--text-muted)" />
       <span>非 Git 仓库</span>
       <span class="subtitle">此目录未初始化 Git</span>
@@ -19,7 +28,7 @@
       <div class="git-repo-bar">
         <SvgIcon name="source-control" :size="14" color="var(--accent)" />
         <!-- 项目选择器（多根工作区时显示） -->
-        <select v-if="workspaceProjects.length > 1" v-model="gitProject" class="git-project-select" @change="loadStatus">
+        <select v-if="workspaceProjects.length > 1" v-model="gitProject" class="git-project-select">
           <option v-for="p in workspaceProjects" :key="p" :value="p">{{ p.split('\\').pop() || p }}</option>
         </select>
         <div class="git-branch-select" @click.stop="showBranchMenu = !showBranchMenu">">
@@ -319,6 +328,7 @@ const loading = ref(false)
 const refreshing = ref(false)
 const hasData = ref(false)
 const isRepo = ref(false)
+const pendingReload = ref(false)
 const currentBranch = ref('')
 const ahead = ref(0)
 const behind = ref(0)
@@ -401,7 +411,7 @@ function handleOutsideClick() {
 
 // ─── API ──────────────────────────────────────────────────────
 async function loadStatus() {
-  if (loading.value) return
+  if (loading.value) { pendingReload.value = true; return }
   loading.value = true
   try {
     const res = await api.apiGet('/git/status', gitParams())
@@ -433,6 +443,7 @@ async function loadStatus() {
   } finally {
     loading.value = false
     refreshing.value = false
+    if (pendingReload.value) { pendingReload.value = false; loadStatus() }
   }
 }
 
@@ -648,6 +659,11 @@ watch(() => state.workspaceRoot, () => {
   if (workspaceProjects.value.length > 0) gitProject.value = workspaceProjects.value[0]
   loadStatus()
 })
+
+// ★ 项目切换刷新：用 watch 而非 @change——Vue 3 中 @change（props 监听）先于
+// vModelSelect 指令的 change 监听注册，事件触发时 loadStatus 会读到旧 gitProject，
+// 切换永不生效；watch 在 v-model 更新后触发，必然读到新值。
+watch(gitProject, () => { loadStatus() })
 </script>
 
 <style scoped>
@@ -659,6 +675,9 @@ watch(() => state.workspaceRoot, () => {
   padding: 24px; gap: 8px; color: var(--text-muted); flex: 1;
 }
 .git-empty .subtitle { font-size: 11px; color: var(--text-muted); }
+.git-empty-bar {
+  display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%;
+}
 .spinner { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 

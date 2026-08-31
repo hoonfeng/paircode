@@ -71,17 +71,24 @@ func UnregisterHostCommands(owner string) {
 }
 
 // ListHostCommands 命令清单（[{name, description, owner}]，注册顺序稳定）。
+// ★ 2026-08-31：按需激活命令附加 onDemand/plugin 标（前端 slash 菜单可标注）。
 func ListHostCommands() []map[string]any {
 	hostCmdMu.RLock()
 	defer hostCmdMu.RUnlock()
+	onDemand := OnDemandCommandMapping() // 命令名 → 插件名（按需激活）
 	out := make([]map[string]any, 0, len(hostCmdOrder))
 	for _, n := range hostCmdOrder {
 		if c, ok := hostCommands[n]; ok {
-			out = append(out, map[string]any{
+			item := map[string]any{
 				"name":        c.Name,
 				"description": c.Description,
 				"owner":       hostCmdOwner[n],
-			})
+			}
+			if plugin, hit := onDemand[n]; hit {
+				item["onDemand"] = true
+				item["plugin"] = plugin
+			}
+			out = append(out, item)
 		}
 	}
 	return out

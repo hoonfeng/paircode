@@ -87,10 +87,6 @@ func taskSimilarity(a, b string) float64 {
 	return 1
 }
 
-func RegisterPlanOnlyTools(r *Registry) {
-	registerPlanTool(r)
-}
-
 func truncStr(s string, max int) string {
 	if len(s) <= max {
 		return s

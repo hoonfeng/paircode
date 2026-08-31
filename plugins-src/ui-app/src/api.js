@@ -506,6 +506,24 @@ async function getMessagesCount(convId, workspaceRoot = '') {
 
 }
 
+// ─── 会话级模型（★ 2026-08-31）─────────────────────────
+// setConvModel 设置指定会话的模型路由（只影响该会话，不动全局设置/其他对话）
+async function setConvModel(convId, provider, model, workspaceRoot = '') {
+
+  const qs = workspaceRoot ? ('?workspaceRoot=' + encodeURIComponent(workspaceRoot)) : ''
+  return apiPut('/conversations/' + encodeURIComponent(convId) + qs, { provider, model })
+
+}
+
+// getConversationMeta 读取会话元数据（含 provider/model）
+async function getConversationMeta(convId, workspaceRoot = '') {
+
+  const params = {}
+  if (workspaceRoot) params.workspaceRoot = workspaceRoot
+  return apiGet('/conversations/' + encodeURIComponent(convId), params)
+
+}
+
 // ─── 模型列表 ──────────────────────────────────────────────
 
 async function getModels() {
@@ -604,11 +622,14 @@ async function saveInstructions(scope, content) {
 
 }
 
-export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, isWebSocketOpen, waitForWebSocket, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatCompact, chatStop, getMessages, getMessagesCount, getModels, saveModels, getAiPresets, saveAiPreset, saveAiPresets, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, listPlugins, getUIBoot, getPluginDetail, pluginAction, definePlugin, pluginEmit, pluginClientEvents, pluginClientState, pluginInvoke, pluginClientFailure, builtinPlugins, pluginToolToggle, getToolsets, toolsetEdit, listCommands, runCommand }
+export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, isWebSocketOpen, waitForWebSocket, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatCompact, chatStop, getMessages, getMessagesCount, setConvModel, getConversationMeta, getModels, saveModels, getAiPresets, saveAiPreset, saveAiPresets, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, listPlugins, getUIBoot, getPluginDetail, pluginAction, definePlugin, pluginEmit, pluginClientEvents, pluginClientState, pluginInvoke, pluginClientFailure, builtinPlugins, pluginToolToggle, pluginPrefer, getToolsets, toolsetEdit, listCommands, runCommand }
 
 // ─── UI 插件 boot 图（DSH 兼容 /api/ui-boot 单图）──────────────
 // getUIBoot 取 DSH WebBootGraph 等价 boot 图（{rev, entries:[{id,url,rev,inject,immediately,external}]}）。
-// 薄壳装载的唯一入口：仅消费这一张图（不再 listPlugins+getPluginDetail），见 ShellApp.vue / plugin-runtime.boot()。
+// ★ boot() 两源合并（spec §7）：① 本图装配 dsh.ui 区域包（主源）;
+//   ② 再由 boot() 经 listPlugins() 装载非 dsh.ui 直载插件
+//   （agent-teams/ui-quick-exec/ui-statusbar-conn，恢复首屏 titlebar-right/statusbar-items）
+//   —— 见 plugin-runtime.boot() 与 ShellApp.vue onMounted。
 async function getUIBoot() {
   return apiGet('/ui-boot')
 }
@@ -656,6 +677,15 @@ async function builtinPlugins(data, workspaceRoot) {
 async function pluginToolToggle(tool, enabled) {
 
   return apiPost('/plugins/tool', { tool, enabled })
+
+}
+
+// pluginPrefer 同名工具并存时切换生效实现（repo 移植版 / DSH 桥插件）。
+// target: { tool } 单工具，或 { plugin } 整插件全部冲突工具；impl: 'repo' | 'bridge'。
+
+async function pluginPrefer(target, impl) {
+
+  return apiPost('/plugins/prefer', { ...(target || {}), impl })
 
 }
 

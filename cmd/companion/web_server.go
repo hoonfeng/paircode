@@ -133,6 +133,19 @@ var agentMgr = agent.NewSessionManager()
 //	读写会话消息/感知循环状态（数据落盘逻辑可插件化）。
 func init() {
 	agent.SetNodeBridgeManager(agentMgr)
+	// ★ 2026-08-31 会话级模型路由：agent 包按会话解析 Provider 参数时，
+	//   经此钩子读会话元数据里记录的 服务商/模型（切模型只改本会话）。
+	agent.SetConvModelLookup(func(convID, wsRoot string) (string, string) {
+		store := agentMgr.StoreFor(wsRoot)
+		if store == nil {
+			return "", ""
+		}
+		meta, err := store.GetConversation(convID)
+		if err != nil || meta == nil {
+			return "", ""
+		}
+		return meta.Provider, meta.Model
+	})
 }
 
 var ws *webServer
@@ -348,7 +361,8 @@ func startWebUI(port int) {
 	ws.startEventPersistWorker()
 
 	// ★ 预热 system prompt 编译缓存（启动时在后台线程中预热，不阻塞主流程）
-	go agent.PromptCacheWarmer.WarmUp(buildWebSystemPrompt)
+	//   ★ 2026-08-31 按需激活：预热用空会话（按需插件段不注入——与「未激活」基线一致）。
+	go agent.PromptCacheWarmer.WarmUp(func() string { return buildWebSystemPrompt("") })
 
 	// ── 插件资产静态服务（全 UI 插件化）──
 	// /plugins-assets/<name>/<file>：插件包（<InstallDir>/.pair/plugins/<name>/）
@@ -487,9 +501,6 @@ func (s *webServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 	jsonResp(w, map[string]any{"status": "ok", "workspace": core.Root(), "folders": core.Folders})
 }
 
-
-
-
 // imageMime 根据扩展名返回图片 MIME 类型。
 func imageMime(path string) string {
 	switch strings.ToLower(filepath.Ext(path)) {
@@ -528,12 +539,6 @@ func (s *webServer) handleFSImage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "private, max-age=86400")
 	w.Write(data)
 }
-
-
-
-
-
-
 
 func (s *webServer) handleWorkspace(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
@@ -915,12 +920,11 @@ func (s *webServer) handleTasks(w http.ResponseWriter, r *http.Request) {
 		// 从 TaskManager 持久化目录 .pair/tasks/*.json 读取真实任务状态
 		convID := r.URL.Query().Get("convId")
 		type planStep struct {
-			Step          string `json:"step"`
-			Status        string `json:"status"`
-			TaskID        string `json:"taskId"`
-			Description   string `json:"description"`
-			PlanStepIndex *int   `json:"planStepIndex,omitempty"`
-			CreatedAt     string `json:"created_at"`
+			Step        string `json:"step"`
+			Status      string `json:"status"`
+			TaskID      string `json:"taskId"`
+			Description string `json:"description"`
+			CreatedAt   string `json:"created_at"`
 		}
 		tasksDir := filepath.Join(root, ".pair", "tasks")
 		entries, err := os.ReadDir(tasksDir)
@@ -938,13 +942,12 @@ func (s *webServer) handleTasks(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			var t struct {
-				ID            string `json:"id"`
-				Subject       string `json:"subject"`
-				Description   string `json:"description"`
-				Status        string `json:"status"`
-				ConvID        string `json:"convId"`
-				PlanStepIndex *int   `json:"planStepIndex"`
-				CreatedAt     string `json:"created_at"`
+				ID          string `json:"id"`
+				Subject     string `json:"subject"`
+				Description string `json:"description"`
+				Status      string `json:"status"`
+				ConvID      string `json:"convId"`
+				CreatedAt   string `json:"created_at"`
 			}
 			if err := json.Unmarshal(data, &t); err != nil {
 				continue
@@ -954,12 +957,11 @@ func (s *webServer) handleTasks(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			plan = append(plan, planStep{
-				Step:          t.Subject,
-				Status:        t.Status,
-				TaskID:        t.ID,
-				Description:   t.Description,
-				PlanStepIndex: t.PlanStepIndex,
-				CreatedAt:     t.CreatedAt,
+				Step:        t.Subject,
+				Status:      t.Status,
+				TaskID:      t.ID,
+				Description: t.Description,
+				CreatedAt:   t.CreatedAt,
 			})
 		}
 		// 按创建时间倒序排列（最新的在前）
@@ -1210,6 +1212,11 @@ func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Reques
 	case "PUT":
 		var req struct {
 			Title string `json:"title"`
+			// ★ 2026-08-31 会话级模型：切模型只改本会话（provider+model 一起提交；
+			//   两者均为空串 = 清除会话覆盖 → 回落全局默认配置）。
+			Provider   *string `json:"provider,omitempty"`
+			Model      *string `json:"model,omitempty"`
+			ClearModel bool    `json:"clearModel,omitempty"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			jsonErr(w, err.Error())
@@ -1220,6 +1227,29 @@ func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Reques
 				jsonErr(w, err.Error())
 				return
 			}
+		}
+		if req.ClearModel {
+			if err := store.SetConvModel(id, "", ""); err != nil {
+				jsonErr(w, err.Error())
+				return
+			}
+		} else if req.Provider != nil || req.Model != nil {
+			meta, _ := store.GetConversation(id)
+			prov, model := "", ""
+			if meta != nil {
+				prov, model = meta.Provider, meta.Model
+			}
+			if req.Provider != nil {
+				prov = strings.TrimSpace(*req.Provider)
+			}
+			if req.Model != nil {
+				model = strings.TrimSpace(*req.Model)
+			}
+			if err := store.SetConvModel(id, prov, model); err != nil {
+				jsonErr(w, err.Error())
+				return
+			}
+			log.Printf("[conv-model] 会话 %s 模型切换为 %s / %s（仅本会话生效）", id, prov, model)
 		}
 		jsonResp(w, map[string]any{"ok": true})
 
@@ -1261,93 +1291,9 @@ func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Reques
 	}
 }
 
-// ─── Agent 工作流规划文档 API ──────────────────────────────────
+// ★ 2026-08-31：规划文档 API（/api/taskplan）已随 plan 体系移除——
+//   任务追踪统一由 task 工具 + /api/tasks 承担（前端无调用点，纯死接口）。
 
-func (s *webServer) handleTaskPlan(w http.ResponseWriter, r *http.Request) {
-	root := core.Root()
-	if root == "" {
-		jsonErr(w, "未设置工作区")
-		return
-	}
-	pairDir := filepath.Join(root, ".pair")
-	tasksDir := filepath.Join(pairDir, "tasks")
-	os.MkdirAll(tasksDir, 0755)
-
-	switch r.Method {
-	case "GET":
-		name := r.URL.Query().Get("name")
-		if name != "" {
-			filePath := filepath.Join(tasksDir, name+".md")
-			data, err := os.ReadFile(filePath)
-			if err != nil {
-				jsonErr(w, "规划文档不存在: "+err.Error())
-				return
-			}
-			jsonResp(w, map[string]any{"name": name, "content": string(data)})
-			return
-		}
-		entries, err := os.ReadDir(tasksDir)
-		if err != nil {
-			jsonErr(w, err.Error())
-			return
-		}
-		plans := make([]map[string]any, 0)
-		for _, e := range entries {
-			if !e.IsDir() && strings.HasSuffix(e.Name(), ".md") {
-				plans = append(plans, map[string]any{
-					"name": strings.TrimSuffix(e.Name(), ".md"),
-					"file": filepath.Join(tasksDir, e.Name()),
-				})
-			}
-		}
-		jsonResp(w, plans)
-
-	case "POST":
-		var req struct {
-			Name    string `json:"name"`
-			Content string `json:"content"`
-			Action  string `json:"action"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			jsonErr(w, err.Error())
-			return
-		}
-		if req.Name == "" {
-			req.Name = fmt.Sprintf("plan_%s", time.Now().Format("20060102_150405"))
-		}
-		filePath := filepath.Join(tasksDir, req.Name+".md")
-		if req.Action == "append" || req.Action == "complete" {
-			f, err := os.OpenFile(filePath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
-			if err != nil {
-				jsonErr(w, err.Error())
-				return
-			}
-			defer f.Close()
-			if req.Content != "" {
-				if _, err := f.WriteString("\n" + req.Content + "\n"); err != nil {
-					jsonErr(w, err.Error())
-					return
-				}
-			}
-			if req.Action == "complete" {
-				summary := fmt.Sprintf("\n## 完成时间\n%s\n\n---\n*任务规划已完成*\n", time.Now().Format("2006-01-02 15:04:05"))
-				f.WriteString(summary)
-			}
-		} else {
-			header := fmt.Sprintf("# 任务规划: %s\n\n- 创建时间: %s\n- 状态: 进行中\n\n", req.Name, time.Now().Format("2006-01-02 15:04:05"))
-			content := header + req.Content
-			if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
-				jsonErr(w, err.Error())
-				return
-			}
-		}
-		data, _ := os.ReadFile(filePath)
-		jsonResp(w, map[string]any{"ok": true, "file": filePath, "content": string(data)})
-
-	default:
-		jsonErr(w, "不支持的方法")
-	}
-}
 
 // ─── 模型列表 API ──────────────────────────────────────────
 
@@ -2012,10 +1958,14 @@ func buildWebSystemDynamic() string {
 // ★ 插件贡献的系统提示段/变量（对齐 harness system-prompt 注册中心）并入动态侧：
 //
 //	插件段随加载/卸载变化，放 boundary 后避免破坏静态前缀 KV 缓存。
-func buildWebSystemPrompt() string {
+//
+// ★ 2026-08-31 按需激活：convID 指定时，on-demand 插件（agent-teams 等）段
+//
+//	仅在本会话已激活时注入；convID 为空（如桌面端）时按需段一律隐藏。
+func buildWebSystemPrompt(convID string) string {
 	dynamic := buildWebSystemDynamic()
 	if ph := handler.GetPluginHost(); ph != nil {
-		if secs, err := agent.PluginPromptSections(ph); err == nil && secs != "" {
+		if secs, err := agent.PluginPromptSections(ph, convID); err == nil && secs != "" {
 			// ★ 缓存诊断：插件段哈希/长度（dynamic 变化源定位）
 			if os.Getenv("WB_CACHE_DIAG") == "1" {
 				sum := sha256.Sum256([]byte(secs))
@@ -2036,7 +1986,13 @@ func buildWebSystemPrompt() string {
 //
 //	（插件 ctx.provider.register）有实现 → 用插件实现；否则回退 OpenAI 兼容。
 func buildWebProvider() agent.Provider {
-	cur := agent.ResolveProviderParams()
+	return buildWebProviderForConv("", "")
+}
+
+// buildWebProviderForConv 构建会话级 LLM Provider（★ 2026-08-31 会话级模型路由）：
+// 会话元数据里记录了 服务商/模型 时以其为准，否则等价于全局默认（buildWebProvider）。
+func buildWebProviderForConv(convID, wsRoot string) agent.Provider {
+	cur := agent.ResolveProviderParamsForConv(convID, wsRoot)
 	if cur.APIKey == "" || cur.BaseURL == "" {
 		return nil
 	}
@@ -2059,7 +2015,8 @@ func countStates(states []*agent.ExecutionState, status agent.ExecStatus) int {
 
 // buildWebLoopOpts 构建 agent.LoopOpts（统一版本，平台差异通过 webCompressor 回调）。
 func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool, wsRoot string) agent.LoopOpts {
-	prov := buildWebProvider()
+	// ★ 2026-08-31 会话级模型：本会话选定的模型优先（未选沿用全局默认配置）
+	prov := buildWebProviderForConv(convID, wsRoot)
 
 	// ★ 2026-08-23 工作区隔离（重大 BUG）：会话根由请求指定，不再用全局当前根
 	//   core.Root()——前端为其他工作区发起会话时，工具注册根必须等于会话根；
@@ -2116,8 +2073,9 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool, ws
 	// ★ 合并插件注册的业务工具（Node 桥工具 + goja 插件 ctx.tools.register）：
 	//   reg 是本次会话新建，需把插件宿主中插件注册的工具同步进来，
 	//   agent 才能直接 function-call 调用（如 Node 桥插件的 hello_bridge）。
+	//   ★ 2026-08-31 按需激活：按会话过滤（on-demand 插件未激活时工具隐藏）。
 	if pluginHost != nil {
-		agent.MergePluginTools(reg, pluginHost)
+		agent.MergePluginToolsForConv(reg, pluginHost, convID)
 	}
 	agent.SetCodeGraphDB(agentMgr.RawDB())
 	// ★ 与 SetCodeGraphDB 成对：buildWebLoopOpts 每次构建会话注册表时同步
@@ -2125,7 +2083,7 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool, ws
 	agent.SetCodeGraphRoot(core.Root())
 	agent.InitDebugLogger(root, 50)
 
-	sys := buildWebSystemPrompt()
+	sys := buildWebSystemPrompt(convID)
 
 	// ★ 注入工具使用指南（引导 LLM 优先使用专用工具而非 bash）
 	if guide := reg.UsageGuideText(); guide != "" {
@@ -2328,7 +2286,8 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		// ★ 配置消费插件化：Review/Plan Provider 参数统一经装配点解析。
-		cur := agent.ResolveProviderParams()
+		// ★ 2026-08-31：按会话解析（审核/规划模型跟随本会话选定的模型）。
+		cur := agent.ResolveProviderParamsForConv(req.ConvID, req.WorkspaceRoot)
 		if opts.ReviewMode == "auto" && cur.ReviewModel != "" {
 			pm := strings.TrimSpace(cur.PlanModel)
 			if pm != "" && cur.BaseURL != "" && cur.APIKey != "" {
@@ -2350,7 +2309,7 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 				pp.Model = pm
 				pp.Multimodal = false
 				opts.PlanProvider = agent.CreateProvider(pp)
-			} else if prov := buildWebProvider(); prov != nil {
+			} else if prov := buildWebProviderForConv(req.ConvID, req.WorkspaceRoot); prov != nil {
 				opts.PlanProvider = prov
 			}
 		}
@@ -2447,6 +2406,9 @@ func (s *webServer) handleCommands(w http.ResponseWriter, r *http.Request) {
 
 // handleCommandsRun POST /api/commands/run：执行 slash 命令；convID 提供时
 // 结果以系统消息注入该会话（前端发送原样文本后 agent 可见命令输出）。
+// ★ 2026-08-31 按需激活：命令命中 on-demand 插件（agent-teams 等）时，先激活
+//
+//	本会话再注入协议说明——agent 当轮即获得完整用法，且后续轮次工具/提示均可用。
 func (s *webServer) handleCommandsRun(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		jsonErr(w, "仅 POST")
@@ -2469,6 +2431,14 @@ func (s *webServer) handleCommandsRun(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		jsonErr(w, err.Error())
 		return
+	}
+	// ★ 按需激活：命令触发插件 → 本会话激活，协议说明追加到输出
+	//   （agent 当轮即获得完整用法；后续轮次工具/提示在会话内可用）
+	if activated := agent.ActivateByCommand(req.ConvID, req.Name); activated != "" {
+		log.Printf("[activation] 会话 %s 经 /%s 激活按需插件 %s", req.ConvID, req.Name, activated)
+		if notice := agent.PluginActivationNotice(activated); notice != "" {
+			output += "\n\n（插件 " + activated + " 已激活——其完整协议说明：）\n" + notice
+		}
 	}
 	// 结果注入对话（系统消息；持久化，刷新/续聊可见）
 	if req.ConvID != "" {

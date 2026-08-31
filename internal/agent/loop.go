@@ -1257,19 +1257,19 @@ func (l *Loop) buildSnapshotContent() string {
 	}
 
 	// ③ 自主模式系统提示（固定内容）
+	// ★ 2026-08-31：plan 工具已移除——自主模式统一用任务清单工具（task 体系）追踪。
 	if l.Autonomous {
 		if b.Len() > 0 {
 			b.WriteString("\n\n")
 		}
-		b.WriteString("# ★ 自主模式：计划→子任务树形追踪\n")
-		b.WriteString("自主模式下使用两级任务追踪——计划步骤为树干，子任务为枝叶（工具名称与用法见 tools 参数 schema）：\n")
-		b.WriteString("1. 收到任务后第一轮：调用计划工具制定高层执行计划（2-5 步），用 pending/in_progress/done 追踪\n")
-		b.WriteString("2. 每个步骤开始执行时：调用任务清单工具为该步骤创建子任务，每项子任务必须绑定到对应的计划步骤\n")
-		b.WriteString("   plan_step_index = 0 表示第 1 步，1 表示第 2 步，以此类推（参数定义见 tools 参数 schema）\n")
-		b.WriteString("3. 当前步骤的所有子任务完成后：调用计划工具将该步骤标记 done，然后进入下一步骤\n")
-		b.WriteString("4. 所有计划步骤全部完成后：结束本轮任务\n")
-		b.WriteString("- ★ 每次调用任务清单工具必须把该步骤内的所有子任务一起传入（全量替换），已不在列表中的子任务将自动清理\n")
-		b.WriteString("- 子任务也遵守全量替换规则——即使是不同步骤的子任务，也要在一次调用中传入（用不同的 plan_step_index 区分）\n")
+		b.WriteString("# ★ 自主模式：任务清单驱动连续执行\n")
+		b.WriteString("自主模式下用任务清单工具（工具名称与用法见 tools 参数 schema）管理全过程：\n")
+		b.WriteString("1. 收到任务后第一轮：把目标拆成 2-8 项可验证子任务，一次性建立完整清单（status=pending）\n")
+		b.WriteString("2. 开始执行某项时把它标 in_progress；完成并验证后标 completed，然后继续下一项\n")
+		b.WriteString("3. 发现新的前置依赖或方案变更：即时调整清单（新增/取消项），保持清单与实际一致\n")
+		b.WriteString("4. 清单全部 completed 后：结束本轮任务并输出总结\n")
+		b.WriteString("- ★ 每次调用任务清单工具必须传入全部任务（全量替换），已不在列表中的任务将自动清理\n")
+		b.WriteString("- 禁止只报告不落实：每项子任务都要有真实工具调用与验证证据\n")
 	}
 
 	// ④ 记忆（长期记忆提示，system→快照迁移：高频变化不再破坏 system 前缀）
@@ -1660,7 +1660,7 @@ func fullSystemPrompt(roots []string) string {
 		"- 仅靠本地工具（DOM 分析等）看不到画面，视觉验证必须 submit_image。\n\n" +
 
 		"# 工作方式\n" +
-		"复杂或多步任务先用任务清单工具列出细分任务，再逐步执行并更新状态（自主模式下先列计划再建子任务）。\n" +
+		"复杂或多步任务先用任务清单工具列出细分任务并追踪状态，再逐步执行（任务=唯一追踪体系；计划工具已移除）。\n" +
 		"先用搜索/定位类工具定位、细读，再动手；改动优先小而准的编辑，大改才整段写入。\n" +
 		"不确定的库用法/报错/最新信息，用联网检索类工具查证，别凭记忆臆测。\n" +
 		"写类操作在手动审核模式下需用户批准；若被拒绝，换思路或先解释原因，勿反复重试同一操作。\n" +

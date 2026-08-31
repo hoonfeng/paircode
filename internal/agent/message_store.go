@@ -159,6 +159,11 @@ type ConversationMeta struct {
 	Summary       string `json:"summary,omitempty"`
 	SummaryAt     string `json:"summaryAt,omitempty"`
 	CtxStats      *Usage `json:"ctxStats,omitempty"`
+	// ★ 2026-08-31 会话级模型路由：模型选择只作用于本会话（此前切模型写全局
+	//   settings，导致所有历史对话的模型一起被改）。空=沿用全局默认配置。
+	//   Provider=服务商名（models.json 的键），Model=执行模型名。
+	Provider string `json:"provider,omitempty"`
+	Model    string `json:"model,omitempty"`
 	// Interrupted 标记该对话上次运行是否异常中断（LLM API 错误/panic/崩溃等非用户停止）。
 	// 前端据此展示"未完成，可继续"引导，用户在原对话继续即可恢复上下文与任务进度。
 	Interrupted bool `json:"interrupted,omitempty"`
@@ -1013,9 +1018,10 @@ func (s *MessageStore) LoadBefore(convID string, beforeIdx int, limit int) ([]St
 // LoadLatestForDisplay 供前端消息展示：在完整列表上合并（tool 行并入 segments、
 // 连续 assistant 合并）后再按合并条数取末尾 limit 条。
 // ★ 2026-08-22 性能修复：此前按原始行取 limit——JSONL 中一行 = 一次迭代/tool 行，
-//   50 行经合并后可能只剩 1~5 条超大消息（一个 run 的全部段），前端 fillViewport
-//   每轮只前进 1 条（每条 100~400KB），长对话首屏/滚动加载极慢。返回合并后的
-//   limit 条（≥1）、total 保持原始行数。
+//
+//	50 行经合并后可能只剩 1~5 条超大消息（一个 run 的全部段），前端 fillViewport
+//	每轮只前进 1 条（每条 100~400KB），长对话首屏/滚动加载极慢。返回合并后的
+//	limit 条（≥1）、total 保持原始行数。
 func (s *MessageStore) LoadLatestForDisplay(convID string, limit int) ([]StoredMessage, int, error) {
 	msgs, err := s.readJSONL(convID)
 	if err != nil {
@@ -1596,6 +1602,42 @@ func (s *MessageStore) SetCtxStats(convID string, stats *Usage) error {
 		}
 	}
 	return nil
+}
+
+// SetConvModel 设置会话级模型路由（服务商 + 执行模型）。
+// ★ 2026-08-31：模型切换只改本会话，不动全局 settings、不影响其他/历史对话。
+// provider/model 皆空视为清除（回落全局默认）。不更新 UpdatedAt（避免打乱列表排序）。
+func (s *MessageStore) SetConvModel(convID, provider, model string) error {
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
+
+	metas, err := s.loadIndex()
+	if err != nil {
+		return fmt.Errorf("SetConvModel: 读取 index 失败: %w", err)
+	}
+	for i := range metas {
+		if metas[i].ID == convID {
+			if metas[i].Provider == provider && metas[i].Model == model {
+				return nil
+			}
+			metas[i].Provider = provider
+			metas[i].Model = model
+			if err := s.saveIndex(metas); err != nil {
+				return fmt.Errorf("SetConvModel: 写入 index 失败: %w", err)
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("SetConvModel: 会话 %s 不存在", convID)
+}
+
+// ConvModel 读取会话级模型路由（provider, model；均空=未设置，用全局默认）。
+func (s *MessageStore) ConvModel(convID string) (string, string) {
+	meta, err := s.GetConversation(convID)
+	if err != nil || meta == nil {
+		return "", ""
+	}
+	return meta.Provider, meta.Model
 }
 
 // SetInterrupted 更新对话的异常中断标记（不更新 UpdatedAt，避免影响列表排序）。

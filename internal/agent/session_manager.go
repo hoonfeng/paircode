@@ -67,7 +67,7 @@ type LoopOpts struct {
 	// → 装配器解析 → 本字段；nil/空 = 内核默认组 tools_staging.go）。
 	StagedToolGroups [][]string
 	// PlanProvider 规划模型的 Provider（自主模式用）。当 Autonomous=true 时，Loop 内部使用此
-	// Provider 执行规划阶段（update_plan），与主 Provider 区分以支持不同模型。
+	// Provider 执行规划阶段（任务分解），与主 Provider 区分以支持不同模型。
 	PlanProvider Provider
 }
 
@@ -649,15 +649,10 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 				return ""
 			}
 			next := tasks[0]
-			msg := fmt.Sprintf("继续执行下一阶段任务。\n\n任务：**%s**\n描述：%s\n\n请先调用 update_plan 将此项标记为 in_progress，然后开始执行。完成后更新状态。",
+			msg := fmt.Sprintf("继续执行下一阶段任务。\n\n任务：**%s**\n描述：%s\n\n请先用任务清单工具将此项标记为 in_progress，然后开始执行。完成后更新状态。",
 				next.Subject, next.Description)
 			return msg
 		}
-	}
-
-	// ★ 自主模式：注册规划工具（update_plan），普通模式不暴露
-	if opts.Autonomous && opts.Registry != nil {
-		RegisterPlanOnlyTools(opts.Registry)
 	}
 
 	// 注册 ask_user 工具：阻塞等用户回答（从 askCh 读）

@@ -152,6 +152,10 @@
         </div>
         </template>
       </div>
+      <div v-if="preferMsg" class="pp-prefer-msg" :class="{ err: preferMsgErr }">
+        <SvgIcon :name="preferMsgErr ? 'warning' : 'check'" :size="11" />
+        <span>{{ preferMsg }}</span>
+      </div>
       <div v-if="loading && plugins.length === 0" class="pp-loading">
         <SvgIcon name="refresh" :size="16" class="spinner" /><span>加载插件…</span>
       </div>
@@ -169,9 +173,10 @@
         <div class="pp-item-row" @click="toggleDetail(p)">
           <span class="pp-state" :class="p.state === 'running' ? 'on' : 'off'"></span>
           <span class="pp-name" :title="p.purpose || p.name">{{ p.name }}</span>
-          <span class="pp-src" :class="p.source">{{ p.source }}</span>
+          <span class="pp-src" :class="p.source" :title="srcTitle(p)">{{ srcLabel(p) }}</span>
           <span v-if="p.scope === 'global'" class="pp-badge" title="全局插件：跨工作区生效（UI 类），不属于任何工具集">全局</span>
           <span v-if="p.hasClient" class="pp-badge" title="含 client 半（浏览器 UI，运行中自动装载）">UI</span>
+          <span v-if="conflictsOf(p).length" class="pp-badge pp-badge-warn" :title="conflictTitle(p)">同名并存 {{ conflictsOf(p).length }}</span>
           <span v-if="p.tools && p.tools.length" class="pp-count" :title="p.tools.join(', ')">{{ p.tools.length }} 工具</span>
           <template v-if="p.hasClient && uiSlotsOf(p.name).length">
             <span class="pp-ui-label" :class="{ on: uiPluginActive(p.name) }">{{ uiPluginActive(p.name) ? 'UI 已启用' : 'UI 未启用' }}</span>
@@ -185,8 +190,30 @@
           <div v-if="expanded[p.name]" class="pp-detail">
             <div v-if="p.purpose" class="pp-d-purpose">{{ p.purpose }}</div>
             <div v-if="p.defId" class="pp-d-line">定义: {{ p.defId }}<span v-if="p.version"> · {{ p.version }}</span></div>
+            <!-- ★ Node 桥插件（DSH/npm）：包与运行时轨标注，与 goja 移植版区分来源 -->
+            <div v-if="p.spec" class="pp-d-line">npm 包: {{ p.spec }}<span v-if="p.runtime"> · runtime={{ p.runtime }}（{{ p.runtime === 'dsh' ? 'cordis4 + DSH 服务面' : 'cordis3' }}）</span></div>
+            <div v-if="p.lastError" class="pp-d-line pp-d-error">异常: {{ p.lastError }}</div>
             <div v-if="p.provides && p.provides.length" class="pp-d-line">服务: {{ p.provides.join(', ') }}</div>
             <div v-if="p.sections && p.sections.length" class="pp-d-line">提示片段: {{ p.sections.join(', ') }}</div>
+            <!-- ★ 同名工具并存（2026-08-31）：repo 移植版（goja）与 DSH 桥插件实现同一工具，
+                 两侧插件均保持运行（不再互相覆盖/停用），只换生效方 -->
+            <div v-if="conflictsOf(p).length" class="pp-d-conflict">
+              <div class="pp-d-conflict-title">
+                <SvgIcon name="warning" :size="11" />
+                <span>同名工具并存：两个来源实现同一工具（两侧插件都保留，只有一方对 agent 生效）</span>
+              </div>
+              <div v-for="c in conflictsOf(p)" :key="c.tool" class="pp-d-conflict-row">
+                <span class="pp-d-tname" :title="c.tool">{{ c.tool }}</span>
+                <span class="pp-d-side" :class="{ on: c.active === 'repo' }" :title="'repo 移植版（goja 插件）：' + c.repo">repo · {{ c.repo }}</span>
+                <span class="pp-d-side" :class="{ on: c.active === 'bridge' }" :title="'DSH/npm 桥插件：' + c.bridge">DSH · {{ shortPkg(c.bridge) }}</span>
+                <button class="pp-btn" :disabled="preferring[c.tool]"
+                        :title="c.active === 'repo' ? '切为 DSH 桥插件实现生效（repo 版保留，不停用）' : '切回 repo 移植版实现生效（DSH 版保留，不停用）'"
+                        @click="switchImpl(c, c.active === 'repo' ? 'bridge' : 'repo')">
+                  <SvgIcon name="cycle" :size="11" />
+                  {{ c.active === 'repo' ? '改用 DSH 版' : '改回 repo 版' }}
+                </button>
+              </div>
+            </div>
             <div v-if="p.tools && p.tools.length" class="pp-d-tools">
               <div class="pp-d-tools-title">工具（{{ p.tools.length }}）· 勾选=对 cordis（JS 插件运行时）可见；取消=隐藏。agent 可用性由工作区工具集决定</div>
               <div v-for="t in p.tools" :key="t" class="pp-d-tool">
@@ -209,11 +236,18 @@
                  UI 可见性已由勾选/UI 开关控制（取消勾选=隐藏，勾选=恢复），
                  stop 会卸载 client 半并清空槽位条目 → 勾选框消失无法再启用。
                  stopped 状态仍保留「启动插件」按钮作为恢复路径。 -->
-            <template v-if="p.state === 'running'">
-              <button v-if="!(p.hasClient && uiSlotsOf(p.name).length)" class="pp-btn" title="停止整个插件（其全部工具对 agent 不可见）；单工具请用上方工具开关" @click="doAction(p, 'stop')">停止插件</button>
+            <!-- ★ Node 桥插件（source=node-bridge）：进程内启停不适用（装卸经 npm 市场 /
+                 .pair/cordis.patch.json）——只展示与切换生效方 -->
+            <template v-if="p.source === 'node-bridge'">
+              <span class="pp-d-hint">Node 桥插件（npm 包）：安装/卸载经 npm 插件市场管理；同名工具可在上方切换生效方</span>
             </template>
-            <button v-else class="pp-btn primary" @click="doAction(p, 'start')">启动插件</button>
-            <button v-if="p.source === 'js'" class="pp-btn danger" @click="doAction(p, 'undefine')">删除定义</button>
+            <template v-else>
+              <template v-if="p.state === 'running'">
+                <button v-if="!(p.hasClient && uiSlotsOf(p.name).length)" class="pp-btn" title="停止整个插件（其全部工具对 agent 不可见）；单工具请用上方工具开关" @click="doAction(p, 'stop')">停止插件</button>
+              </template>
+              <button v-else class="pp-btn primary" @click="doAction(p, 'start')">启动插件</button>
+              <button v-if="p.source === 'js'" class="pp-btn danger" @click="doAction(p, 'undefine')">删除定义</button>
+            </template>
           </div>
         </div>
       </div>
@@ -250,6 +284,73 @@ const tsDetail = ref(null)
 const addPluginName = ref('')
 
 const newForm = reactive({ purpose: '', code: '', client: '', language: '', run: true })
+
+// ─── 来源标注与同名工具并存（2026-08-31）──────────────────────
+// 插件列表两源合并：宿主插件（source=go/js）+ Node 桥插件（source=node-bridge，
+// npm/DSH 包）。同名工具由两个来源各自实现时不再互相覆盖/停用，而是并存，
+// conflicts 标注生效方（repo=goja 移植版 / bridge=DSH 桥），此处提供切换入口。
+const preferring = reactive({})
+const preferMsg = ref('')      // 切换结果提示（插件列表上方）
+const preferMsgErr = ref(false)
+
+// srcLabel 来源徽标文字（node-bridge 依 runtime 细分 DSH / npm 桥）。
+function srcLabel(p) {
+  if (p.source === 'node-bridge') return p.runtime === 'dsh' ? 'DSH 桥' : 'NPM 桥'
+  return p.source || '?'
+}
+
+// srcTitle 来源徽标悬浮说明（讲清来源差异）。
+function srcTitle(p) {
+  if (p.source === 'node-bridge') {
+    return p.runtime === 'dsh'
+      ? 'DSH 插件：npm 包，由 Node 桥进程（cordis4 + DSH 服务面）装载，与 repo 移植版功能重叠时可切换生效方'
+      : 'npm 插件：npm 包，由 Node 桥进程（cordis3）装载'
+  }
+  if (p.source === 'js') return 'JS 插件：goja 沙箱内运行（磁盘包 .pair/plugins/ 或 cordis_define 定义）'
+  if (p.source === 'go') return 'Go 内置插件：随程序编译，提供框架能力'
+  return '插件来源：' + (p.source || '未知')
+}
+
+// shortPkg npm 包短名（去 scope，徽标里显示更紧凑）。
+function shortPkg(pkg) {
+  if (!pkg) return ''
+  const i = pkg.lastIndexOf('/')
+  return i >= 0 ? pkg.slice(i + 1) : pkg
+}
+
+// conflictsOf 该插件参与的同名工具并存记录。
+function conflictsOf(p) {
+  return (p && p.conflicts) || []
+}
+
+// conflictTitle 并存徽标悬浮说明。
+function conflictTitle(p) {
+  const list = conflictsOf(p)
+  const lines = list.map(c => `${c.tool}：当前由 ${c.active === 'bridge' ? 'DSH 桥 ' + c.bridge : 'repo ' + c.repo} 生效`)
+  return '同名工具并存（两来源实现同一工具，可切换生效方）\n' + lines.join('\n')
+}
+
+// switchImpl 切换某工具的生效实现（repo 移植版 ↔ DSH 桥插件）。
+async function switchImpl(c, impl) {
+  if (!c || !c.tool || preferring[c.tool]) return
+  preferring[c.tool] = true
+  try {
+    const res = await api.pluginPrefer({ tool: c.tool }, impl)
+    if (res && res.error) {
+      preferMsg.value = '切换失败: ' + res.error
+      preferMsgErr.value = true
+      return
+    }
+    preferMsg.value = (res && res.message) || '已切换生效方'
+    preferMsgErr.value = false
+    await refresh()
+  } catch (e) {
+    preferMsg.value = '切换失败: ' + (e && e.message ? e.message : e)
+    preferMsgErr.value = true
+  } finally {
+    preferring[c.tool] = false
+  }
+}
 
 
 // ─── 工具集管理（插件化：add_plugin / rm_plugin / rm_tool / enable_tool）──
@@ -350,7 +451,8 @@ async function refresh() {
     }
     plugins.value = list
     if (!list.length) loadError.value = true
-    // 列表接口省略 clientCode：详情**并行**补取（失败跳过，不阻塞列表渲染）
+    // ★ 列表接口现直出 clientCode（插件列表直供 boot()/syncClientHalves 双层装载）。
+    //   此处并行补取仅为防御兜底（个别插件缺 clientCode 或旧接口时，失败跳过不阻塞渲染）。
     const detailTargets = plugins.value.filter(p => p.hasClient && !p.clientCode)
     await Promise.allSettled(detailTargets.map(async (p) => {
       try {
@@ -821,6 +923,8 @@ onUnmounted(() => {
 }
 .pp-src.js { background: rgba(240, 219, 79, .15); color: #e5c07b; }
 .pp-src.go { background: rgba(0, 178, 255, .12); color: #61afef; }
+/* ★ Node 桥插件（npm/DSH 包，真实 node 进程装载）：与 goja 插件区分来源 */
+.pp-src.node-bridge { background: rgba(86, 182, 194, .14); color: #56b6c2; }
 .pp-badge {
   font-size: 9px; padding: 1px 5px; border-radius: 3px;
   background: rgba(198, 120, 221, .15); color: #c678dd;
@@ -839,6 +943,47 @@ onUnmounted(() => {
 .pp-detail { padding: 4px 10px 10px 24px; background: var(--bg-tertiary); }
 .pp-d-purpose { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
 .pp-d-line { font-size: 11px; color: var(--text-muted); margin: 2px 0; word-break: break-all; }
+.pp-d-error { color: #e06c75; }
+.pp-d-hint { font-size: 11px; color: var(--text-muted); }
+/* ★ 同名工具并存（repo 移植版 ↔ DSH 桥插件）：标注生效方并提供切换 */
+.pp-d-conflict {
+  margin: 6px 0;
+  padding: 5px 6px;
+  border: 1px solid rgba(229, 192, 123, .35);
+  border-radius: 4px;
+  background: rgba(229, 192, 123, .06);
+}
+.pp-d-conflict-title {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 10px; color: #e5c07b; margin-bottom: 4px;
+}
+.pp-d-conflict-row {
+  display: flex; align-items: center; gap: 6px;
+  padding: 2px 0;
+}
+.pp-d-conflict-row .pp-d-tname { flex: 1; min-width: 60px; }
+.pp-d-side {
+  font-size: 10px; padding: 1px 5px; border-radius: 3px;
+  border: 1px solid var(--border-color);
+  color: var(--text-muted); white-space: nowrap;
+}
+.pp-d-side.on {
+  border-color: rgba(152, 195, 121, .5);
+  background: rgba(152, 195, 121, .12);
+  color: #98c379;
+}
+/* 生效方切换结果提示（插件列表上方） */
+.pp-prefer-msg {
+  display: flex; align-items: center; gap: 5px;
+  margin: 4px 10px; padding: 4px 6px;
+  font-size: 11px; border-radius: 4px;
+  color: #98c379; background: rgba(152, 195, 121, .1);
+  border: 1px solid rgba(152, 195, 121, .3);
+}
+.pp-prefer-msg.err {
+  color: #e06c75; background: rgba(224, 108, 117, .1);
+  border-color: rgba(224, 108, 117, .3);
+}
 .pp-d-tools { display: flex; flex-direction: column; gap: 1px; margin: 4px 0; padding: 4px 6px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); }
 .pp-d-tools-title { font-size: 10px; color: var(--text-muted); margin-bottom: 2px; }
 .pp-d-tool { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 1px 2px; border-radius: 3px; }

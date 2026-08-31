@@ -43,9 +43,8 @@ const ROUTES = [
   // 会话列表
   { key: 'conversations' },
   { key: 'conversations.byID' },
-  // Tasks / Plan
+  // Tasks（★ 2026-08-31 plan 体系已移除）
   { key: 'tasks' },
-  { key: 'taskplan' },
   // 模型 / 指令 / AI 配置预设
   { key: 'models' },
   { key: 'ai-presets' },
@@ -81,6 +80,7 @@ const ROUTES = [
   { key: 'plugins.client-state' },
   { key: 'plugins.builtin' },
   { key: 'plugins.tool' },
+  { key: 'plugins.prefer' },
   // 工具集
   { key: 'toolsets' },
   { key: 'toolsets.build' },

@@ -1,9 +1,11 @@
 // 插件管理与使用共享 handler：/api/plugins*（web 端与桌面端共用）。
 //
 // 提供：
-//   - GET  /api/plugins             插件列表（含 client 半源码 clientCode，供薄壳双层装载）
+//   - GET  /api/plugins             插件列表（含 client 半源码 clientCode，供薄壳双层装载；
+//                                   宙主插件 + Node 桥 DSH/npm 插件两源合并）
 //   - GET  /api/plugins/detail      单插件详情（?id= 插件名或 dyn id，含 client 半源码）
 //   - POST /api/plugins/action      启停/删除（{id, action: start|stop|undefine}）
+//   - POST /api/plugins/prefer      同名工具并存时切换生效实现（{tool|plugin, impl: repo|bridge}）
 //   - POST /api/plugins/define      直接定义 JS 动态插件（{purpose, code, client?, language?}）
 //   - POST /api/plugins/event       浏览器 client 半 → host 事件桥（{event, payload}）
 //   - GET  /api/plugins/client-events  host → 浏览器轮询（?since=seq，返回增量事件）
@@ -15,6 +17,7 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -51,7 +54,9 @@ func getPluginHost() (*agent.PluginHost, bool) {
 	return PluginHost, PluginHost != nil
 }
 
-// HandlePlugins GET /api/plugins：插件列表（含工具/服务/状态/client 有无，不含源码）。
+// HandlePlugins GET /api/plugins：插件列表（含工具/服务/状态/client 有无）。
+// ★ 2026-08-31：Inspect 已两源合并（宙主 goja/Go 插件 + Node 桥 DSH/npm 插件），
+//   面板据 source 徽标区分来源，并据 conflicts 标注同名工具生效方。
 func HandlePlugins(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" {
 		jsonErr(w, "仅 GET")
@@ -76,6 +81,7 @@ func HandlePlugins(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandlePluginDetail GET /api/plugins/detail?id=：单插件详情（含 client 半源码）。
+// ★ 2026-08-31：宿主内解析不到时回落 Node 桥插件（DSH/npm 包名也能查详情）。
 func HandlePluginDetail(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" {
 		jsonErr(w, "仅 GET")
@@ -93,11 +99,14 @@ func HandlePluginDetail(w http.ResponseWriter, r *http.Request) {
 	}
 	name, err := ph.ResolvePluginName(id)
 	if err != nil {
-		jsonErr(w, err.Error())
-		return
+		name = id // 桥插件（node-bridge 来源）不在宿主 defs/order 中，按原名查
 	}
 	rec := ph.InspectDetail(name)
 	if rec == nil {
+		if err != nil {
+			jsonErr(w, err.Error())
+			return
+		}
 		jsonErr(w, "插件不存在: "+name)
 		return
 	}
@@ -421,7 +430,83 @@ func pluginRecordSummary(rec agent.PluginRecord, reg *agent.Registry) map[string
 		"hasClient":         rec.HasClient,
 		"clientCode":        rec.ClientCode,
 		"defId":             rec.DefID,
+		// ★ Node 桥插件来源标注 + 同名工具并存信息（2026-08-31）
+		"runtime":   rec.Runtime,
+		"spec":      rec.Spec,
+		"lastError": rec.LastError,
+		"conflicts": rec.Conflicts,
 	}
+}
+
+// HandlePluginPrefer POST /api/plugins/prefer：同名工具并存时切换生效实现。
+// body: { tool, impl: "repo"|"bridge" } 或 { plugin, impl }（整插件全部冲突工具一起切）。
+//   - repo   → repo 移植版（goja 插件）生效
+//   - bridge → DSH/npm 桥插件生效
+//
+// 两侧插件运行状态不变（并存），仅换 Registry 生效面。
+func HandlePluginPrefer(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		jsonErr(w, "仅 POST")
+		return
+	}
+	ph, ok := getPluginHost()
+	if !ok {
+		jsonErr(w, "插件系统未初始化")
+		return
+	}
+	var req struct {
+		Tool   string `json:"tool"`
+		Plugin string `json:"plugin"`
+		Impl   string `json:"impl"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonErr(w, "请求体解析失败: "+err.Error())
+		return
+	}
+	impl := strings.TrimSpace(req.Impl)
+	if impl != agent.ToolImplRepo && impl != agent.ToolImplBridge {
+		jsonErr(w, "impl 必须是 repo 或 bridge，收到 "+req.Impl)
+		return
+	}
+	// 目标工具集合：指定 tool → 单个；指定 plugin → 该插件参与的全部并存工具
+	var targets []string
+	switch {
+	case strings.TrimSpace(req.Tool) != "":
+		targets = []string{strings.TrimSpace(req.Tool)}
+	case strings.TrimSpace(req.Plugin) != "":
+		p := strings.TrimSpace(req.Plugin)
+		for _, c := range agent.BridgeToolConflicts() {
+			if c.Repo == p || c.Bridge == p {
+				targets = append(targets, c.Tool)
+			}
+		}
+		if len(targets) == 0 {
+			jsonErr(w, "插件 "+p+" 无同名并存工具（无需切换）")
+			return
+		}
+	default:
+		jsonErr(w, "需要 tool 或 plugin")
+		return
+	}
+	switched := make([]string, 0, len(targets))
+	for _, tool := range targets {
+		if err := agent.SetBridgeToolPreference(ph, tool, impl); err != nil {
+			jsonErr(w, err.Error())
+			return
+		}
+		switched = append(switched, tool)
+	}
+	label := "repo 移植版"
+	if impl == agent.ToolImplBridge {
+		label = "DSH 桥插件"
+	}
+	jsonResp(w, map[string]any{
+		"ok":        true,
+		"impl":      impl,
+		"tools":     switched,
+		"message":   fmt.Sprintf("%d 个同名工具已切为%s生效", len(switched), label),
+		"conflicts": agent.BridgeToolConflicts(),
+	})
 }
 
 // HandlePluginToolToggle POST /api/plugins/tool：通用工具级开关（任意已注册工具，

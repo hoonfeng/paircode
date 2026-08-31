@@ -191,7 +191,11 @@ func uniqueStrings(in []string) []string {
 // persona/rules 槽位段（name==PERSONA_SECTION / RULES_SECTION）不在此处输出——
 // 它们已在静态侧由 DefaultSystemPromptWithOverrides 整体替换，此处跳过避免重复注入。
 // 无插件段时返回 ""（零影响）。供 web_server/AgentBase 在构建 system prompt 时调用。
-func PluginPromptSections(host *PluginHost) (string, error) {
+//
+// ★ 2026-08-31 按需激活：声明为 on-demand 的插件（agent-teams 等）段仅在
+//   convID 会话内已激活时注入；否则全部隐藏（工具同样隐藏，见 MergePluginTools）。
+//   convID 为空 = 未开会话，按需插件的段一律不注入。
+func PluginPromptSections(host *PluginHost, convID string) (string, error) {
 	if host == nil {
 		return "", nil
 	}
@@ -199,6 +203,9 @@ func PluginPromptSections(host *PluginHost) (string, error) {
 	for _, s := range host.Sections() {
 		if s == nil || s.Name == PERSONA_SECTION || s.Name == RULES_SECTION || strings.TrimSpace(s.Text) == "" {
 			continue
+		}
+		if !IsPluginActiveInConv(convID, s.Plugin) {
+			continue // 按需插件未激活 → 隐藏该段
 		}
 		reg.Section(s.Name, s.Order, s.Text)
 	}

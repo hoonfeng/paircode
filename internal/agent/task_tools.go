@@ -1,11 +1,10 @@
 package agent
 
 // 任务追踪工具 —— 持久化任务管理 + 全量替换模式
-// 与 update_plan 对齐：Agent 每次传入完整任务列表即可，不再需要 5 个 CRUD 工具。
+// Agent 每次传入完整任务列表即可，不再需要 5 个 CRUD 工具。
 //
-// 定位：
-//   - update_plan：外层编排 agent 用，内存级执行计划
-//   - update_tasks：内层执行 agent 用，磁盘持久化任务进度
+// ★ 2026-08-31：plan 工具（update_plan）已移除——任务追踪只用 task 体系
+// （update_tasks/task_*），plan_step_index 等计划绑定字段同步下线。
 
 import (
 	"context"
@@ -59,12 +58,6 @@ func registerTaskTools(r *Registry, root string) {
 			if s := argStr(m, "status"); s != "" {
 				t.Status = TaskStatus(s)
 			}
-			if pis, ok := m["plan_step_index"]; ok {
-				if idx, ok2 := toFloat64(pis); ok2 {
-					pi := int(idx)
-					t.PlanStepIndex = &pi
-				}
-			}
 			newTasks = append(newTasks, t)
 		}
 
@@ -105,10 +98,9 @@ func registerTaskTools(r *Registry, root string) {
 	r.Register(&Tool{
 		Name:       "update_tasks",
 		SystemTool: true,
-		UsageGuide: "管理持久化任务列表（全量替换模式）。复杂任务（3+ 步）必须拆解为子任务并逐项追踪。每次传入完整清单，状态变化时重传整份。系统自动持久化到磁盘。plan_step_index 用于自主模式下绑定到 update_plan 的步骤。",
+		UsageGuide: "管理持久化任务列表（全量替换模式）。复杂任务（3+ 步）必须拆解为子任务并逐项追踪。每次传入完整清单，状态变化时重传整份。系统自动持久化到磁盘。",
 		Description: "维护任务列表：传入完整任务清单（全量替换），系统自动持久化到磁盘。" +
-			"每项包含 subject（必填）、status（pending/in_progress/completed/cancelled）、description（可选）、dependencies（可选）、plan_step_index（可选，整数）。" +
-			"plan_step_index 用于在自主模式下将子任务绑定到 update_plan 的某个步骤（0=第1步，1=第2步…）。普通模式下忽略此字段。",
+			"每项包含 subject（必填）、status（pending/in_progress/completed/cancelled）、description（可选）、dependencies（可选）。",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": props{
@@ -123,7 +115,6 @@ func registerTaskTools(r *Registry, root string) {
 							"description":     strProp("详细描述（可选）：做什么、涉及哪些文件"),
 							"status":          map[string]any{"type": "string", "enum": []string{"pending", "in_progress", "completed", "cancelled"}, "description": "状态"},
 							"dependencies":    map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "依赖的任务 ID 列表（可选）"},
-							"plan_step_index": map[string]any{"type": "integer", "description": "所属 plan 步骤索引（0 基；自主模式下绑定到 update_plan 的某步）"},
 						},
 						"required": []string{"subject", "status"},
 					},

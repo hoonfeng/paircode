@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -439,34 +437,8 @@ func HandleTasks(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func HandleTaskPlan(w http.ResponseWriter, r *http.Request) {
-	root := core.Root()
-	if root == "" {
-		jsonResp(w, []map[string]any{})
-		return
-	}
-	tasksDir := filepath.Join(root, ".pair", "tasks")
-	entries, err := os.ReadDir(tasksDir)
-	if err != nil {
-		jsonResp(w, []map[string]any{})
-		return
-	}
-	plans := make([]map[string]any, 0)
-	for _, e := range entries {
-		if !e.IsDir() && strings.HasSuffix(e.Name(), ".md") {
-			info, _ := e.Info()
-			plans = append(plans, map[string]any{
-				"name":      strings.TrimSuffix(e.Name(), ".md"),
-				"size":      info.Size(),
-				"updatedAt": info.ModTime().Format(time.RFC3339),
-			})
-		}
-	}
-	if plans == nil {
-		plans = []map[string]any{}
-	}
-	jsonResp(w, plans)
-}
+// ★ 2026-08-31：HandleTaskPlan（/api/taskplan 规划文档）已随 plan 体系移除。
+
 
 // ─── 模型 / 指令 / 思想 ──────────────────────────────────
 

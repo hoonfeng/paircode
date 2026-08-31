@@ -15,7 +15,7 @@ func mkBuiltinHost(t *testing.T) (*PluginHost, string) {
 	reg := NewRegistry()
 	RegisterDefaultTools(reg, root)
 	RegisterHarnessTools(reg, root)
-	RegisterHostFrameworkTools(reg, root) // ★ 宿主框架自举工具（update_tasks/update_plan 等）
+	RegisterHostFrameworkTools(reg, root) // ★ 宿主框架自举工具（update_tasks/tool_stats 等）
 	ph := NewPluginHost(reg, nil, root)
 	RegisterCordisTools(reg, ph, root)
 	RegisterToolsetTools(reg, root, ph)

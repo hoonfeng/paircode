@@ -1188,7 +1188,7 @@ func unloadToolsetPlugin(ph *PluginHost, p *ToolsetPlugin) {
 // ═══════════════════════════════════════════════════════════════
 
 // isAgentProtocolTool 协议/自举管理工具（不依赖工具集声明，恒对 agent 可见）：
-//   - SystemTool（宿主会话绑定：update_tasks/update_plan/tool_stats/history_*）
+//   - SystemTool（宿主会话绑定：update_tasks/tool_stats/history_*）
 //   - cordis_*（插件登记/装载/停止/回收/查看——agent 自举链路）
 //   - toolset_*（工具集管理——agent 自主构建/编辑工具集）
 //   - ask_user / task_create（循环协议）
@@ -1203,7 +1203,7 @@ func isAgentProtocolTool(name string) bool {
 		return true
 	}
 	switch name {
-	case "update_plan", "tool_stats", "task_create":
+	case "tool_stats", "task_create":
 		return true
 	}
 	return false

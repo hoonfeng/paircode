@@ -25,7 +25,9 @@
       </div>
       <div class="mgm-field">
         <span class="mgm-field-label">API Key</span>
-        <input v-model="form.apiKey" type="password" placeholder="sk-…" />
+        <div class="mgm-key-hint" :class="{ 'mgm-key-missing': !providerKeyOf(form.provider) }">
+          {{ providerKeyOf(form.provider) ? '已由服务商「' + form.provider + '」提供（厂商级配置）' : '服务商「' + (form.provider || '未选') + '」尚未配置 Key，请到「服务商」页签填写' }}
+        </div>
       </div>
       <div class="mgm-field">
         <span class="mgm-field-label">模型</span>
@@ -57,7 +59,7 @@
         <div class="pm-preview">
           <div class="pm-snap-row"><span>服务商</span><b>{{ (presets[n] || {}).provider || '—' }}</b></div>
           <div class="pm-snap-row"><span>模型</span><b>{{ (presets[n] || {}).executeModel || '—' }}</b></div>
-          <div class="pm-snap-row"><span>API Key</span><b>{{ keyMask((presets[n] || {}).apiKey) }}</b></div>
+          <div class="pm-snap-row"><span>API Key</span><b>{{ providerKeyOf((presets[n] || {}).provider) ? '厂商级已配置' : '厂商未配置' }}</b></div>
         </div>
       </div>
     </div>
@@ -73,7 +75,7 @@ import api from '../api.js'
 
 // ★ AI 配置列表（2026-08-20 改变模式）：AI tab 主视图 = 已添加的配置列表；
 //   点「＋ 添加新配置」弹出表单设置 名称/服务商/模型/Key 后保存；
-//   「应用」= 整套配置写回 settings（provider/baseURL/apiKey/模型），对话面板随 settings 自动同步。
+//   「应用」= 整套配置写回 settings（provider/baseURL/模型；★ 2026-08-31 Key 已厂商化，不再随配置存），对话面板按会话自行选择模型。
 //   数据经 /api/ai-presets（config/ai-presets.json），每条 = 完整 AI 配置快照。
 const emit = defineEmits(['saved'])
 
@@ -93,10 +95,16 @@ const formModels = computed(() => {
   const m = (modelData.value && modelData.value.models) || {}
   return m[form.value.provider] || []
 })
-const form = ref({ name: '', provider: '', baseURL: '', apiKey: '', executeModel: '' })
+const form = ref({ name: '', provider: '', baseURL: '', executeModel: '' })
+
+// ★ 2026-08-31 Key 厂商化：配置（预设）不再携带 API Key——Key 按服务商统一配置
+//   （设置 → AI → 服务商，存 models.json），换模型不需重复填 Key。
+function providerKeyOf(prov) {
+  const md = modelData.value || {}
+  return (prov && md.providerKeys && md.providerKeys[prov]) ? md.providerKeys[prov] : ''
+}
 
 function showError(msg) { error.value = msg; setTimeout(() => { if (error.value === msg) error.value = '' }, 4000) }
-function keyMask(k) { return k ? (k.slice(0, 10) + '…') : '—' }
 
 async function load() {
   try {
@@ -138,7 +146,6 @@ function openAdd() {
     name: '',
     provider: prov,
     baseURL: (base.baseURL || s.baseURL || info.baseURL || ''),
-    apiKey: (base.apiKey || s.apiKey || info.apiKey || ''),
     executeModel: (ms.includes(model) ? model : (ms[0] || '')),
   }
   editingName.value = ''
@@ -152,7 +159,6 @@ function openEdit(name) {
     name,
     provider: p.provider || '',
     baseURL: p.baseURL || '',
-    apiKey: p.apiKey || '',
     executeModel: p.executeModel || '',
   }
   editingName.value = name
@@ -166,7 +172,6 @@ function onProviderChange() {
   if (!form.value.provider) return
   const info = providerInfo(form.value.provider)
   form.value.baseURL = info.baseURL || ''
-  form.value.apiKey = info.apiKey || ''
   form.value.executeModel = info.models.includes(form.value.executeModel) ? form.value.executeModel : (info.models[0] || '')
 }
 
@@ -181,14 +186,13 @@ async function confirmSave() {
   const name = form.value.name.trim()
   if (!name) { showError('请输入配置名称'); return }
   if (!form.value.provider) { showError('请选择服务商'); return }
-  if (!form.value.apiKey) { showError('请填写 API Key'); return }
+  if (!providerKeyOf(form.value.provider)) { showError('服务商「' + form.value.provider + '」未配置 API Key，请先在「服务商」页签填写'); return }
   saving.value = true
   error.value = ''
   try {
   const preset = {
       provider: form.value.provider,
       baseURL: form.value.baseURL,
-      apiKey: form.value.apiKey,
       executeModel: form.value.executeModel,
     }
     if (editingName.value && editingName.value !== name) {
@@ -285,6 +289,8 @@ defineExpose({ load })
   border-color: var(--accent, #3b82f6); outline: none;
 }
 .mgm-edit-actions { display: flex; gap: 8px; }
+.mgm-key-hint { font-size: 12px; color: var(--txt-dim, #8a8f98); border: 1px dashed var(--bd, #333); border-radius: 4px; padding: 6px 8px; }
+.mgm-key-missing { color: #d98b3a; border-color: #6b4a22; }
 .mgm-cards { display: flex; flex-direction: column; gap: 8px; }
 .mgm-card { border: 1px solid var(--bd, #333); border-radius: 6px; padding: 10px 12px; }
 .mgm-card.pm-active { border-color: var(--accent, #3b82f6); }

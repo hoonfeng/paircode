@@ -4,7 +4,7 @@
 //
 // 设计要点：
 // - 状态写入全局 state（messagesByConv/loadingByConv/agentRunningByConv/approvalByConv/phaseByConv/wsTokenStats/convCtxStatsByConv/nudgeByConv）
-// - UI 相关回调（scrollToBottom/loadWsTokenStats/autoNameConv/saveConvMsg/onPlanUpdate）通过 setGlobalCtx 注册
+// - UI 相关回调（scrollToBottom/loadWsTokenStats/autoNameConv/saveConvMsg/onTaskReplace 等）通过 setGlobalCtx 注册
 // - RightPanel 在 onMounted 调用 setGlobalCtx 注册回调；App.vue 的 WebSocket onmessage 调用 processAgentEvent
 
 import { state } from './ui-state.js'
@@ -41,7 +41,7 @@ function pushSegment(segs, type, initial) {
 //   loadWsTokenStats(),            // done 后重新加载 token 统计
 //   autoNameConv(convId, text),    // 自动命名对话
 //   saveConvMsg(convId, content),  // 保存助手消息到后端
-//   onPlanUpdate(plan, convId),    // update_plan 工具调用
+//   onTaskUpdate(convId, taskId, status, subject),  // task 工具调用
 //   onTaskCreate(task, convId),    // task_create 工具调用
 //   onTaskUpdate(taskId, status, subject, convId), // task_update 工具调用
 //   onTaskReplace(tasks, convId),  // update_tasks 全量替换子任务清单调用
@@ -320,22 +320,10 @@ export function processAgentEvent(convId, data) {
       }
       if (questions.length > 0) seg.question = ''
       msg.segments.push(seg)
-    } else if (toolName === 'update_plan') {
-      try {
-        const args = data.args ? (typeof data.args === 'string' ? JSON.parse(data.args) : data.args) : {}
-        if (Array.isArray(args.plan) && globalCtx.onPlanUpdate) globalCtx.onPlanUpdate(args.plan, convId)
-      } catch {}
-      // 也推送 segment，让用户在消息流中看到规划过程
-      msg.segments.push({
-        type: 'tool_call', name: toolName,
-        callId: data.callId || data.callID || '',
-        argsRaw: data.args ? (typeof data.args === 'string' ? data.args : JSON.stringify(data.args, null, 2)) : '',
-        result: '', _mode: 'collapsed', _collapsed: false, _expanded: false,
-      })
     } else if (toolName === 'task_create') {
       try {
         const args = data.args ? (typeof data.args === 'string' ? JSON.parse(data.args) : data.args) : {}
-        if (globalCtx.onTaskCreate) globalCtx.onTaskCreate({ step: args.subject || '(新建任务)', status: 'pending', callId: data.callId || data.callID || '', _taskId: null, planStepIndex: args.plan_step_index ?? null }, convId)
+        if (globalCtx.onTaskCreate) globalCtx.onTaskCreate({ step: args.subject || '(新建任务)', status: 'pending', callId: data.callId || data.callID || '', _taskId: null }, convId)
       } catch {}
       msg.segments.push({
         type: 'tool_call', name: toolName,
@@ -363,7 +351,6 @@ export function processAgentEvent(convId, data) {
             step: t.subject || t.description || '(无标题)',
             status: t.status || 'pending',
             _taskId: t.id || null,
-            planStepIndex: t.plan_step_index ?? null,
           }))
           globalCtx.onTaskReplace(tasks, convId)
         }

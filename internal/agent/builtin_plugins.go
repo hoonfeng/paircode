@@ -7,7 +7,7 @@
 //     不再注册——builtinPluginSpecs 保留仅作「二进制实现库的组规格」，
 //     供独立插件二进制（plugins-src/plugins/tool-*/，经 pkg/toolbin）按组注册。
 //   - 宿主只注册框架协议工具（RegisterHostFrameworkTools）：SystemTool
-//     （update_tasks/update_plan/tool_stats/history_*）会话绑定，供
+//     （update_tasks/tool_stats/history_*）会话绑定，供
 //     tool-system 插件 hostTool 承载（同名接管时 ArchiveHostTool 存档）。
 //
 // ★ 2026-08-16 第四轮：框架能力不再以插件形态存在。
@@ -100,11 +100,11 @@ func RegisterDefaultTools(r *Registry, root string) {
 
 // RegisterHostFrameworkTools 宿主框架协议工具注册（会话绑定 SystemTool）。
 // 宿主进程（AgentBase.Init / web_server / desktopbridge）唯一的内置注册：
-// update_tasks/update_plan/tool_stats/history_*——tool-system 磁盘插件
+// update_tasks/tool_stats/history_*——tool-system 磁盘插件
 // hostTool 承载（同名接管时 ArchiveHostTool 存档 Go 实现供 ctx.hostTool）。
+// ★ 2026-08-31：plan 工具（update_plan）已移除——任务追踪统一走 task 工具。
 func RegisterHostFrameworkTools(r *Registry, root string) {
 	RegisterManagementTools(r, root) // history_search/list/count 等
-	registerPlanTool(r)              // update_plan
 	registerToolStatsTool(r)         // tool_stats
 	registerTaskTools(r, root)       // update_tasks（会话绑定 TaskManager）
 }
