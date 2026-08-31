@@ -487,7 +487,9 @@ function cycleReviewMode() {
   const m = reviewMode.value
   const next = m === 'auto' ? 'manual' : m === 'manual' ? 'off' : 'auto'
   reviewMode.value = next
-  api.apiPut('/tools/review', { reviewMode: next }).catch(() => {
+  // ★ 2026-08-31 会话级：带 convId 写入会话（元数据持久化 + 当前 Loop 实时生效），
+  //   不再污染工作区级默认（同工作区其他会话不受影响）。
+  api.apiPut('/tools/review?convId=' + encodeURIComponent(state.currentConvId || ''), { reviewMode: next }).catch(() => {
     reviewMode.value = m
   })
 }
@@ -2014,10 +2016,11 @@ watch(() => [state.settings && state.settings.provider, state.settings && state.
 })
 
 
-// ★ 从工作区配置加载审核模式（黑白名单配置已由插件面板/工具集管理取代，不再加载）
+// ★ 从会话/工作区加载审核模式（黑白名单配置已由插件面板/工具集管理取代，不再加载）
+// ★ 2026-08-31 会话级：带 convId 读取（会话元数据优先，未设置回落工作区）
 async function loadWorkspaceReviewConfig() {
   try {
-    const rc = await api.apiGet('/tools/review')
+    const rc = await api.apiGet('/tools/review?convId=' + encodeURIComponent(state.currentConvId || ''))
     if (rc && rc.reviewMode) {
       reviewMode.value = rc.reviewMode
     }
@@ -2028,6 +2031,8 @@ async function loadWorkspaceReviewConfig() {
     }
   }
 }
+// 会话切换时同步该会话的审核模式（会话级选择持久化，切换即恢复）
+watch(() => state.currentConvId, () => { loadWorkspaceReviewConfig() })
 
 // ── 工作区切换时加载 Token 统计（onMounted 时 workspaceRoot 可能还未设）
 watch(() => state.workspaceRoot, (root) => {

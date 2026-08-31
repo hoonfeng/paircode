@@ -121,6 +121,9 @@ type PromptSection struct {
 	Text  string
 	// Plugin 归属插件名（addPluginSection 填充；按需激活过滤用）。
 	Plugin string
+	// AlwaysVisible 常驻显示：插件声明为 on-demand（按需激活）时，
+	// 该段仍无条件注入系统提示（方案 B：协议/引导段常驻，工具仍按需）。
+	AlwaysVisible bool
 }
 
 // PromptVariable 提示词变量（对齐 harness ctx.systemPrompt.variable）：

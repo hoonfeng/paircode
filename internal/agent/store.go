@@ -17,6 +17,11 @@ type ConversationStore interface {
 	// SetConvModel 设置会话级模型路由（服务商 + 执行模型；★ 2026-08-31
 	// 模型切换只作用于本会话，不改全局设置、不影响历史对话）。
 	SetConvModel(convID, provider, model string) error
+	// SetConvReviewMode 设置会话级审核模式（★ 2026-08-31 会话内切换只作用于
+	// 本会话并持久化，不改全局设置；空=清除回落全局/工作区配置）。
+	SetConvReviewMode(convID, mode string) error
+	// ConvReviewMode 读取会话级审核模式（空=未设置，用全局/工作区配置）。
+	ConvReviewMode(convID string) string
 
 	// 消息操作
 	AppendMessage(convID string, msg Message, segments []Segment) error

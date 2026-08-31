@@ -47,16 +47,31 @@ func HandleTools(w http.ResponseWriter, r *http.Request) {
 	jsonResp(w, metas)
 }
 
-// HandleReviewConfig GET/PUT /api/tools/review：工作区级审核配置（模式 + 黑白名单）。
+// HandleReviewConfig GET/PUT /api/tools/review：审核配置（模式 + 黑白名单）。
+// ★ 2026-08-31 会话级：query 带 convId 时读写**会话级**审核模式
+//   （会话元数据持久化 + 运行中 Loop 实时更新；未设置回落工作区配置）；
+//   不带 convId 维持原状——工作区级配置（所有会话共享的默认）。
 func HandleReviewConfig(w http.ResponseWriter, r *http.Request) {
 	root := core.Root()
+	// ★ 2026-08-31 支持 root 参数（与 /api/conversations 的 workspace 一致）：
+	// 多工作区/隔离验证指定存储根；缺省回落当前工作区。
+	if rr := r.URL.Query().Get("root"); rr != "" {
+		root = rr
+	}
 	if root == "" {
 		jsonErr(w, "未设置工作区")
 		return
 	}
+	convID := r.URL.Query().Get("convId")
 	switch r.Method {
 	case "GET":
 		mode, blacklist, whitelist := agent.LoadWorkspaceReviewConfig(root)
+		// 会话级模式优先（黑/白名单仍工作区级——会话仅覆盖模式）
+		if convID != "" {
+			if cm, err := agent.LookupConvReview(convID, root); err == nil && cm != "" {
+				mode = cm
+			}
+		}
 		jsonResp(w, map[string]any{
 			"reviewMode":      mode,
 			"reviewBlacklist": blacklist,
@@ -70,6 +85,15 @@ func HandleReviewConfig(w http.ResponseWriter, r *http.Request) {
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			jsonErr(w, "无效 JSON: "+err.Error())
+			return
+		}
+		if convID != "" {
+			// 会话级：持久化到会话元数据 + 实时更新当前 Loop（会话内切换）
+			if err := agent.ApplyConvReview(convID, root, req.ReviewMode); err != nil {
+				jsonErr(w, "会话级保存失败: "+err.Error())
+				return
+			}
+			jsonResp(w, map[string]string{"status": "ok", "scope": "conversation"})
 			return
 		}
 		if err := agent.SaveWorkspaceReviewConfig(root, req.ReviewMode, req.ReviewBlacklist, req.ReviewWhitelist); err != nil {

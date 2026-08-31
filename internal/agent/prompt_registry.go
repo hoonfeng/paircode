@@ -204,8 +204,8 @@ func PluginPromptSections(host *PluginHost, convID string) (string, error) {
 		if s == nil || s.Name == PERSONA_SECTION || s.Name == RULES_SECTION || strings.TrimSpace(s.Text) == "" {
 			continue
 		}
-		if !IsPluginActiveInConv(convID, s.Plugin) {
-			continue // 按需插件未激活 → 隐藏该段
+		if !IsPluginActiveInConv(convID, s.Plugin) && !s.AlwaysVisible {
+			continue // 按需插件未激活 → 隐藏该段（AlwaysVisible 段常驻）
 		}
 		reg.Section(s.Name, s.Order, s.Text)
 	}

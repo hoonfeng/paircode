@@ -146,6 +146,26 @@ func init() {
 		}
 		return meta.Provider, meta.Model
 	})
+	// ★ 2026-08-31 会话级审核模式桥：/api/tools/review?convId=… 读写会话级模式
+	//   （会话元数据持久化 + 运行中 Loop 实时更新；未注入时 handler 回落工作区级）。
+	agent.SetConvReviewBridge(
+		func(convID, wsRoot string) (string, error) {
+			store := agentMgr.StoreFor(wsRoot)
+			if store == nil {
+				return "", nil
+			}
+			return store.ConvReviewMode(convID), nil
+		},
+		func(convID, wsRoot, mode string) error {
+			if store := agentMgr.StoreFor(wsRoot); store != nil {
+				if err := store.SetConvReviewMode(convID, mode); err != nil {
+					return err
+				}
+			}
+			agentMgr.SetReviewMode(convID, mode)
+			return nil
+		},
+	)
 }
 
 var ws *webServer
@@ -784,8 +804,16 @@ func (s *webServer) handleSettings(w http.ResponseWriter, r *http.Request) {
 			"schemas":  core.PluginSettingSchemas,
 		})
 	case "PUT":
-		// convId 参数可选：来自工具栏切换时传当前对话 ID，仅实时更新该对话的 Loop
+		// convId 参数可选：来自工具栏切换时传当前对话 ID。
+		// ★ 2026-08-31 会话级：带 convId 的提交（reviewMode 等）只作用于本会话——
+		//   不再写全局 settings（此前写全局导致其他会话默认被改且重启丢失）。
 		convId := r.URL.Query().Get("convId")
+		var reqRoot string
+		if rr := r.URL.Query().Get("root"); rr != "" {
+			reqRoot = filepath.Clean(rr)
+		} else {
+			reqRoot = core.Root()
+		}
 		// 读取原始请求体
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -823,8 +851,19 @@ func (s *webServer) handleSettings(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		// 检查审核模式是否变更
-		oldReviewMode := core.Settings.ReviewMode
+		// ★ 2026-08-31 会话级审核模式：convId 非空时 reviewMode 从全局 merge
+		//   中摘除——会话内切换只写本会话元数据（持久化）+ 实时更新当前 Loop，
+		//   不污染全局默认（此前写全局导致其他会话默认被改、重启丢失选择）。
+		convReviewMode := ""
+		if convId != "" {
+			if rawVal, ok := rawMap["reviewMode"]; ok {
+				var newVal string
+				if json.Unmarshal(rawVal, &newVal) == nil {
+					convReviewMode = newVal
+				}
+				delete(rawMap, "reviewMode")
+			}
+		}
 
 		// 增量 merge：只更新 rawMap 中存在的字段
 		sv := reflect.ValueOf(&core.Settings).Elem()
@@ -873,12 +912,16 @@ func (s *webServer) handleSettings(w http.ResponseWriter, r *http.Request) {
 		}
 
 		core.Save()
-		// 审核模式变更时，仅实时更新当前对话的 Loop（其他对话不受影响）
-		if newReviewMode, ok := rawMap["reviewMode"]; ok {
-			var newVal string
-			if err := json.Unmarshal(newReviewMode, &newVal); err == nil && newVal != oldReviewMode && convId != "" {
-				agentMgr.SetReviewMode(convId, newVal)
+		// ★ 2026-08-31 会话级审核模式：convId 非空 → 持久化到会话元数据 +
+		//   实时更新当前 Loop（幂等：值未变不落盘）；convId 空 → 全局模式
+		//   （已在 merge 写入 core.Settings.ReviewMode 并 Save，无需更新 Loop）。
+		if convId != "" && convReviewMode != "" {
+			if store := agentMgr.StoreFor(reqRoot); store != nil {
+				if err := store.SetConvReviewMode(convId, convReviewMode); err != nil {
+					log.Printf("[settings] 会话审核模式持久化失败 conv=%s: %v", convId, err)
+				}
 			}
+			agentMgr.SetReviewMode(convId, convReviewMode)
 		}
 		// 同步工作区文件夹列表（确保 core.Folders 与 settings 一致）
 		if _, ok := rawMap["workspaceFolders"]; ok && core.Settings.WorkspaceFolders != nil {
@@ -2285,6 +2328,13 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 				opts.ReviewWhitelist = wrWhite
 			}
 		}
+		// ★ 2026-08-31 会话级审核模式最高优先：会话元数据记录的选择（持久化，
+		//   重启/恢复会话仍生效）> 工作区配置 > 全局默认。
+		if store := agentMgr.StoreFor(req.WorkspaceRoot); store != nil {
+			if cm := store.ConvReviewMode(req.ConvID); cm != "" {
+				opts.ReviewMode = cm
+			}
+		}
 		// ★ 配置消费插件化：Review/Plan Provider 参数统一经装配点解析。
 		// ★ 2026-08-31：按会话解析（审核/规划模型跟随本会话选定的模型）。
 		cur := agent.ResolveProviderParamsForConv(req.ConvID, req.WorkspaceRoot)
@@ -2432,13 +2482,11 @@ func (s *webServer) handleCommandsRun(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, err.Error())
 		return
 	}
-	// ★ 按需激活：命令触发插件 → 本会话激活，协议说明追加到输出
-	//   （agent 当轮即获得完整用法；后续轮次工具/提示在会话内可用）
+	// ★ 按需激活：命令触发插件 → 本会话激活，工具立即可用。协议段已常驻
+	//   （方案 B：alwaysVisible 段 = 引导+协议），此处仅提示解锁，不再重复注入全文。
 	if activated := agent.ActivateByCommand(req.ConvID, req.Name); activated != "" {
 		log.Printf("[activation] 会话 %s 经 /%s 激活按需插件 %s", req.ConvID, req.Name, activated)
-		if notice := agent.PluginActivationNotice(activated); notice != "" {
-			output += "\n\n（插件 " + activated + " 已激活——其完整协议说明：）\n" + notice
-		}
+		output += "\n\n（插件 " + activated + " 已激活——其团队工具现已并入本会话，按系统提示中的 AgentTeams 协议开始执行）"
 	}
 	// 结果注入对话（系统消息；持久化，刷新/续聊可见）
 	if req.ConvID != "" {

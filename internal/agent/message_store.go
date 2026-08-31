@@ -164,6 +164,9 @@ type ConversationMeta struct {
 	//   Provider=服务商名（models.json 的键），Model=执行模型名。
 	Provider string `json:"provider,omitempty"`
 	Model    string `json:"model,omitempty"`
+	// ★ 2026-08-31 会话级审核模式：会话内切换审核模式只影响本会话并持久化
+	//   （空=沿用全局/工作区配置；此前切换写全局 settings 串扰其他会话且重启丢失）。
+	ReviewMode string `json:"reviewMode,omitempty"`
 	// Interrupted 标记该对话上次运行是否异常中断（LLM API 错误/panic/崩溃等非用户停止）。
 	// 前端据此展示"未完成，可继续"引导，用户在原对话继续即可恢复上下文与任务进度。
 	Interrupted bool `json:"interrupted,omitempty"`
@@ -1638,6 +1641,40 @@ func (s *MessageStore) ConvModel(convID string) (string, string) {
 		return "", ""
 	}
 	return meta.Provider, meta.Model
+}
+
+// SetConvReviewMode 设置会话级审核模式（runtime="auto/manual/off"；空=清除，回落全局）。
+// 与 SetConvModel 同理：会话内切换只改本会话并持久化，不动全局 settings。
+func (s *MessageStore) SetConvReviewMode(convID, mode string) error {
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
+
+	metas, err := s.loadIndex()
+	if err != nil {
+		return fmt.Errorf("SetConvReviewMode: 读取 index 失败: %w", err)
+	}
+	for i := range metas {
+		if metas[i].ID == convID {
+			if metas[i].ReviewMode == mode {
+				return nil
+			}
+			metas[i].ReviewMode = mode
+			if err := s.saveIndex(metas); err != nil {
+				return fmt.Errorf("SetConvReviewMode: 写入 index 失败: %w", err)
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("SetConvReviewMode: 会话 %s 不存在", convID)
+}
+
+// ConvReviewMode 读取会话级审核模式（空=未设置，用全局/工作区配置）。
+func (s *MessageStore) ConvReviewMode(convID string) string {
+	meta, err := s.GetConversation(convID)
+	if err != nil || meta == nil {
+		return ""
+	}
+	return meta.ReviewMode
 }
 
 // SetInterrupted 更新对话的异常中断标记（不更新 UpdatedAt，避免影响列表排序）。

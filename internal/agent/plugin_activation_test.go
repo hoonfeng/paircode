@@ -89,3 +89,57 @@ func TestOnDemandActivation(t *testing.T) {
 		t.Error("重置后会话不应再可见")
 	}
 }
+
+// TestOnDemandAlwaysVisibleSection 方案 B：按需插件的 AlwaysVisible 段常驻注入
+// （协议/引导段每轮可见），其余段与工具仍按会话激活过滤。
+func TestOnDemandAlwaysVisibleSection(t *testing.T) {
+	root := t.TempDir()
+	reg := NewRegistry()
+	RegisterDefaultTools(reg, root)
+	host := NewPluginHost(reg, nil, root)
+	SetGlobalPluginHost(host)
+	defer SetGlobalPluginHost(nil)
+
+	DeclareOnDemandPlugin("agent-teams", "agent-teams")
+	defer func() {
+		ResetConvActivations("")
+		onDemandMu.Lock()
+		delete(onDemandPlugins, "agent-teams")
+		delete(onDemandByCmd, "agent-teams")
+		onDemandMu.Unlock()
+	}()
+
+	pc := host.Context()
+	pc.Tools.Register(&Tool{Name: "agent_teams_create", Description: "测试", Handler: func(ctx context.Context, args map[string]any) (string, error) { return "ok", nil }})
+	if _, err := host.claimTool("agent-teams", "agent_teams_create"); err != nil {
+		t.Fatalf("claimTool 失败: %v", err)
+	}
+	// 常驻引导段（方案 B）+ 普通协议段（激活后可见）
+	pc.AddSystemPromptSection(&PromptSection{Name: "agent-teams:guide", Order: 116, Plugin: "agent-teams", Text: "GUIDE AgentTeams available; run /agent-teams to activate.", AlwaysVisible: true})
+	pc.AddSystemPromptSection(&PromptSection{Name: "agent-teams", Order: 117, Plugin: "agent-teams", Text: "FULLPROTOCOL When the user asks to run something with AgentTeams ..."})
+
+	// 未激活会话：引导段常驻、协议段隐藏、工具隐藏
+	secs, _ := PluginPromptSections(host, "conv_x")
+	if !strings.Contains(secs, "GUIDE") {
+		t.Errorf("未激活会话应常驻注入引导段: %q", secs)
+	}
+	if strings.Contains(secs, "FULLPROTOCOL") {
+		t.Errorf("未激活会话不应注入协议段: %q", secs)
+	}
+	reg2 := NewRegistry()
+	MergePluginToolsForConv(reg2, host, "conv_x")
+	if _, ok := reg2.Get("agent_teams_create"); ok {
+		t.Error("未激活会话不应合并插件工具")
+	}
+
+	// 激活后：协议段 + 工具可见
+	ActivatePluginInConv("conv_x", "agent-teams")
+	if secs, _ := PluginPromptSections(host, "conv_x"); !strings.Contains(secs, "FULLPROTOCOL") {
+		t.Errorf("激活会话应注入协议段: %q", secs)
+	}
+	reg3 := NewRegistry()
+	MergePluginToolsForConv(reg3, host, "conv_x")
+	if _, ok := reg3.Get("agent_teams_create"); !ok {
+		t.Error("激活会话应合并插件工具")
+	}
+}

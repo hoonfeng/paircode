@@ -2102,21 +2102,29 @@ kickTeam(ws, id).catch((e) => log.warn('watchdog kick failed: ' + ((e && e.messa
     })
 
     // ── 系统提示注入（用法协议）──
+    // ★ 2026-08-31 方案 B：协议段常驻（alwaysVisible）——即使插件未激活
+    //   （工具未并入会话）也注入本段；段首为「引导」：无团队工具 = 未激活，
+    //   用户想要多智能体协作时引导其执行 /agent-teams 激活。激活后工具全量
+    //   可用、协议主体生效。
     const toolNames = MEMBER_DENIED_TOOLS.concat(['agent_teams_claim_task', 'agent_teams_update_task', 'agent_teams_send_message', 'agent_teams_status']).join(', ')
     ctx.systemPrompt.section({
       name: 'agent-teams',
       order: 117,
       text: buildUsageSection(toolNames),
+      alwaysVisible: true,
     })
 
     log.info('agent-teams 插件已装载（stateDir=' + CFG.stateDir + ', maxMembers=' + CFG.maxMembers + ', codeMaxRounds=' + CFG.codeMaxRounds + '）')
   },
 }
 
-// 用法协议（模型提示词）
+// 用法协议（模型提示词）——段首为「激活引导」（方案 B 常驻段）：
+// 未激活时工具不可见，模型须引导用户执行 /agent-teams；激活后协议主体生效。
 function buildUsageSection(allToolsText) {
   return [
-    'When the user asks to run something with AgentTeams (e.g. "use AgentTeams to do X"), you are the captain of a multi-agent team. Follow this protocol:',
+    'AgentTeams (multi-agent team) is available in this session, but it may not be activated yet.',
+    'SELF-CHECK: if you do NOT have agent_teams_* tools in your toolset, AgentTeams is NOT activated. When the user wants a multi-agent team (or mentions AgentTeams / team mode), tell them to run the /agent-teams command (optionally with a goal, e.g. /agent-teams build feature X); the activation will make the tools available and this protocol applies from the next step.',
+    'When AgentTeams IS activated and the user asks to run something with AgentTeams (e.g. "use AgentTeams to do X"), you are the captain of a multi-agent team. Follow this protocol:',
     '1. Call agent_teams_create with a team name, the goal as description, and approval="required". This creates a staged plan and must not spawn members or schedule work. Use approval="automatic" only when the user explicitly asks to skip review and run immediately.',
     '2. Call agent_teams_add_member once per role the goal needs (researcher, engineer, reviewer, ...). In staging these are editable roster entries, not running subagents. By default a member snapshots your current model route; use a different route only when the goal or user requires it.',
     '3. Analyze the goal and create the smallest useful task DAG while staged. Every agent_teams_create_task call must include a non-empty subject, including verification and review tasks. Independent work should be parallel; dependencies are only genuine prerequisites. Finish the complete roster and DAG, tell the user the Web plan is ready, then end this turn. Never call agent_teams_approve during the planning turn. The user may click Approve & Run, explicitly approve in a later user turn, return to chat to request changes, or discard the plan.',

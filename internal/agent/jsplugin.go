@@ -1243,14 +1243,23 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 		return goja.Undefined()
 	})
 
-	// ctx.systemPrompt.section({name, order, text})
+	// ctx.systemPrompt.section({name, order, text, alwaysVisible})
 	sysObj := vm.NewObject()
 	sysObj.Set("section", func(call goja.FunctionCall) goja.Value {
-		arg := call.Argument(0).ToObject(vm)
+		obj := call.Argument(0).ToObject(vm)
+		// fork 版 goja：Object.Get 对缺失属性可能返回 Go nil（上游为 _undefined），统一兜底
+		get := func(k string) goja.Value {
+			v := obj.Get(k)
+			if v == nil {
+				return goja.Undefined()
+			}
+			return v
+		}
 		sec := &PromptSection{
-			Name:  arg.Get("name").String(),
-			Order: int(arg.Get("order").ToInteger()),
-			Text:  arg.Get("text").String(),
+			Name:          get("name").String(),
+			Order:         int(get("order").ToInteger()),
+			Text:          get("text").String(),
+			AlwaysVisible: get("alwaysVisible").ToBoolean(),
 		}
 		if sec.Order == 0 {
 			sec.Order = 100
