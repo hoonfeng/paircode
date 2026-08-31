@@ -31,6 +31,8 @@ go.work.sum
 config/settings.json
 config/mcp.json
 config/models.json
+# 语义搜索模型（大体积发布资产，运行时下载/本地放置，不入库）
+config/models/
 
 # Generated runtime configs
 
