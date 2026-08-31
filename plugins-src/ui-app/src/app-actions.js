@@ -288,6 +288,10 @@ export function initAppGlobals() {
     'save-conversations': async () => { checkNotifications() },
     'open-workspace-dialog': () => { state.activeActivity = 'explorer'; state.sidebarVisible = true },
     'switch-workspace': async (e) => { if (e.detail?.path) await switchWorkspace(e.detail.path) },
+    // ★ 2026-08-31 打开指定会话（agent-teams 团队成员子会话入口）：赋值
+    //   currentConvId 触发 RightPanel watch → switchConv 加载消息。用于成员
+    //   会话（conv_sub_*，不在顶层会话列表）从团队活动面板打开查看。
+    'open-conversation': (e) => { if (e.detail?.id) { state.currentConvId = e.detail.id } },
   }
   for (const [ev, fn] of Object.entries(handlers)) window.addEventListener(ev, fn)
 

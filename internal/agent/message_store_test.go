@@ -421,6 +421,67 @@ func TestMessageStore_ListConversations(t *testing.T) {
 	}
 }
 
+// TestMessageStore_ListConversationsExcludesSubAgent 成员子会话（conv_sub_*）不出现在
+// 顶层会话列表（对齐 DSH ActivityPanel 子会话语义；团队活动面板内 openMember 打开）。
+func TestMessageStore_ListConversationsExcludesSubAgent(t *testing.T) {
+	root := t.TempDir()
+	store := NewMessageStore(root)
+
+	if err := store.CreateConversation("conv_normal", "普通对话", "/ws1"); err != nil {
+		t.Fatalf("CreateConversation normal: %v", err)
+	}
+	// 模拟 agent-teams 生成的成员会话（subagent_registry.newSubAgentConvID 前缀 conv_sub_）
+	if err := store.CreateConversation("conv_sub_teamA_member1_123", "成员会话", "/ws1"); err != nil {
+		t.Fatalf("CreateConversation sub: %v", err)
+	}
+	if err := store.CreateConversation("conv_sub_teamA_member2_456", "成员会话2", "/ws1"); err != nil {
+		t.Fatalf("CreateConversation sub2: %v", err)
+	}
+	// 非 conv_sub_ 前缀但带 sub 字样的会话不应误伤
+	if err := store.CreateConversation("conv_submit_audit", "提交审计", "/ws1"); err != nil {
+		t.Fatalf("CreateConversation submit: %v", err)
+	}
+
+	list, err := store.ListConversations("/ws1")
+	if err != nil {
+		t.Fatalf("ListConversations: %v", err)
+	}
+	var names []string
+	for _, m := range list {
+		names = append(names, m.ID)
+		if strings.HasPrefix(m.ID, "conv_sub_") {
+			t.Errorf("成员会话不应出现在顶层会话列表: %s", m.ID)
+		}
+	}
+	hasNormal := false
+	hasSubmit := false
+	for _, n := range names {
+		if n == "conv_normal" {
+			hasNormal = true
+		}
+		if n == "conv_submit_audit" {
+			hasSubmit = true
+		}
+	}
+	if !hasNormal {
+		t.Errorf("普通对话应保留: %v", names)
+	}
+	if !hasSubmit {
+		t.Errorf("非成员前缀 conv（conv_submit_audit）不应误伤: %v", names)
+	}
+	if len(names) != 2 {
+		t.Errorf("预期 2 个会话，实际 %d: %v", len(names), names)
+	}
+
+	// IsSubAgentConvID 判定一致性
+	if !IsSubAgentConvID("conv_sub_teamA_m1_1") {
+		t.Errorf("IsSubAgentConvID 应识别 conv_sub_ 前缀")
+	}
+	if IsSubAgentConvID("conv_normal") || IsSubAgentConvID("conv_submit_audit") {
+		t.Errorf("IsSubAgentConvID 不应误伤非成员会话")
+	}
+}
+
 // TestMessageStore_UpdateTitle 测试更新对话标题。
 func TestMessageStore_UpdateTitle(t *testing.T) {
 	root := t.TempDir()

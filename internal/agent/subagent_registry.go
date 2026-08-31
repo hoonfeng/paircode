@@ -134,7 +134,9 @@ func sanitizeIDPart(s string) string {
 	return s
 }
 
-// newSubAgentConvID 生成成员会话 ID（前缀 conv_ 与主会话同构，便于前端识别）。
+// newSubAgentConvID 生成成员会话 ID（前缀 conv_sub_ 与主会话同构，便于前端识别）。
+// ★ conv_sub_ 前缀同时是「成员子会话」的稳定标识：MessageStore.ListConversations
+//   据此过滤（成员会话不出现在顶层会话列表），IsSubAgentConvID 为统一判定入口。
 func newSubAgentConvID(team, member string) string {
 	parts := []string{"conv", "sub"}
 	if p := sanitizeIDPart(team); p != "" {
@@ -144,6 +146,12 @@ func newSubAgentConvID(team, member string) string {
 		parts = append(parts, p)
 	}
 	return fmt.Sprintf("%s_%d%03d", strings.Join(parts, "_"), time.Now().UnixNano(), rand.Intn(1000))
+}
+
+// IsSubAgentConvID 判断会话 ID 是否为成员子会话（conv_sub_ 前缀）。
+// 供会话列表过滤/记忆重建跳过等消费方统一判定；与 newSubAgentConvID 生成规则对齐。
+func IsSubAgentConvID(convID string) bool {
+	return strings.HasPrefix(convID, "conv_sub_")
 }
 
 // ─── 对外 API（jsplugin ctx.agents 消费） ────────────────────

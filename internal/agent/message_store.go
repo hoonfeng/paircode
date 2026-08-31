@@ -1478,6 +1478,10 @@ func (s *MessageStore) DeleteConversation(convID string) error {
 
 // ListConversations 列出指定工作区的对话（按 UpdatedAt 倒序）。
 // 兼容旧数据：WorkspaceRoot 为空视为属于传入的 workspaceRoot（一并返回）。
+// ★ 2026-08-31 成员会话隔离：多智能体团队的成员会话（conv_sub_*，见
+//   subagent_registry.newSubAgentConvID）是「船长会话的子会话」，只在团队活动
+//   面板内通过 openMember 打开，不占顶层会话列表（对齐 DSH ActivityPanel 的
+//   子会话语义），因此此处统一过滤，避免成员会话污染会话列表/记忆重建等消费方。
 func (s *MessageStore) ListConversations(workspaceRoot string) ([]ConversationMeta, error) {
 	s.indexMu.Lock()
 	defer s.indexMu.Unlock()
@@ -1493,6 +1497,9 @@ func (s *MessageStore) ListConversations(workspaceRoot string) ([]ConversationMe
 	//   filepath.Clean + EqualFold（Windows 路径不区分大小写）统一比较。
 	normRoot := strings.TrimSpace(filepath.Clean(workspaceRoot))
 	for _, m := range metas {
+		if IsSubAgentConvID(m.ID) {
+			continue // 团队成员子会话不出现在顶层会话列表（团队面板内打开）
+		}
 		if m.WorkspaceRoot == "" {
 			out = append(out, m)
 			continue
