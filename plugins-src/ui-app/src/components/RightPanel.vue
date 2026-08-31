@@ -1291,9 +1291,11 @@ function collapsePreviousOutputs() {
 
 // applyAutoCollapse 页面刷新后对已加载的历史消息应用折叠状态。
 // 在 switchConv 加载完消息后调用，确保折叠开关开启时历史消息正确折叠。
-function applyAutoCollapse() {
+// ★ 2026-08-31 支持指定数组（断线重连 reload 非当前会话消息时同样注入折叠标记）。
+function applyAutoCollapse(targetArr) {
+  const arr = targetArr || state.messages
   if (!autoCollapse.value) return
-  for (const msg of state.messages) {
+  for (const msg of arr) {
     if (msg.role !== 'assistant' || msg._loading) continue
     if (!msg.segments || msg.segments.length === 0) continue
     // ★ 有未回答 ask_user 的消息保持展开
@@ -1698,6 +1700,92 @@ const deleteConv = async (id) => {
 //   不受 switchConv 影响（多对话并行场景下各 conv 独立更新）。
 //   页面刷新后的初始加载由 watch(currentConvId) 触发。
 const _loadingConvs = new Set()
+
+// apiLoadAndBuildConv 从服务端拉取最新消息并转换为渲染格式。
+// switchConv 首次加载与断线重连 reload 共用同一转换管道（含 finish_task 归一、
+// ask_user 标记、多模态附件映射、连续 assistant 合并）。
+async function apiLoadAndBuildConv(convId) {
+  try {
+    const data = await api.getMessages(convId, { limit: 50, workspaceRoot: state.workspaceRoot })
+    const loaded = (data.messages || [])
+      .filter(m => (m.message?.role || m.role) !== 'tool')
+      .map((m, i) => {
+        const role = m.message?.role || m.role || ''
+        const segments = (m.segments || []).map(seg => {
+          if (seg.type === 'tool_call' && seg.name === 'finish_task') {
+            return { type: 'content', content: seg.result || '' }
+          }
+          if (seg.type === 'ask_user') {
+            seg._answered = !!(seg.answer || (seg.answers && seg.answers.length))
+            seg.askType = normalizeAskType(seg.askType || 'text')
+          }
+          return seg
+        })
+        return {
+          role, content: m.message?.content || m.content || '', segments,
+          _key: 'msg_' + Date.now() + '_' + i, _idx: m.idx, _time: m.timestamp || '',
+          // ★ 2026-08-21 多模态：历史消息带图片时映射为附件缩略图（dataURL 直显）
+          _attachments: (m.message?.images || m.images || []).map(img => ({
+            type: 'image', label: '图片', data: img.data || '', path: img.mimeType || '',
+          })),
+        }
+      })
+      .sort((a, b) => (a._idx || 0) - (b._idx || 0))
+    // ★ 合并：API 返回的消息直接使用（processStatus 不再创建 loading 占位，无需保留逻辑）
+    return { mergedMsgs: mergeConsecutiveAssistant(loaded), total: data.total || loaded.length }
+  } catch (e) {
+    console.warn('[RP] apiLoadAndBuildConv 失败 conv=%s err=%v', convId, e)
+    return null
+  }
+}
+
+// reloadConvMessages 断线重连同步：重载已完成会话的最新消息（agent-events processStatus 调用）。
+// ★ 运行中的会话不重载（snapshot 占位的流式增量由 WS 实时补），只处理已结束的。
+const reloadConvMessages = async (convId) => {
+  if (!convId) return
+  if (state.agentRunningByConv[convId] || state.loadingByConv[convId]) {
+    console.log('[RP] reload 跳过运行中会话', convId)
+    return
+  }
+  const res = await apiLoadAndBuildConv(convId)
+  if (!res) return
+  const { mergedMsgs, total } = res
+  // ★ 折叠注入：非当前会话同样处理（否则切回时全部展开，与 loadMoreMessages 同类问题）
+  applyAutoCollapse(mergedMsgs)
+  state.messagesByConv[convId] = mergedMsgs
+  state.msgTotalByConv[convId] = total
+  state.msgLoadedByConv[convId] = mergedMsgs.length
+  if (state.currentConvId === convId) {
+    state.messages = mergedMsgs
+    state.chatLoading = false
+    state.agentRunning = false
+    forceScrollToBottom()
+  }
+  console.log('[RP] reloadConvMessages conv=%s loaded=%d total=%d', convId, mergedMsgs.length, total)
+}
+
+// refreshConvMeta 断线重连后刷新会话列表元数据（interrupted/updatedAt/msgCount 以服务端为准）。
+// ★ 只按 id 合并原生字段，不重排列表、不切换当前会话、不新建对话。
+const refreshConvMeta = async () => {
+  try {
+    const list = await api.apiGet('/conversations', { workspace: state.workspaceRoot })
+    if (!Array.isArray(list)) return
+    for (const m of list) {
+      const local = state.conversations.find(c => c.id === m.id)
+      if (local) {
+        // 仅合并权威标量字段（保持本地引用与顺序稳定）
+        local.interrupted = !!m.interrupted
+        local.updatedAt = m.updatedAt || local.updatedAt
+        if (m.msgCount !== undefined) local.msgCount = m.msgCount
+        if (m.title) local.title = m.title
+      } else {
+        state.conversations.push(m)
+      }
+    }
+  } catch (e) {
+    console.warn('[RP] refreshConvMeta 失败:', e)
+  }
+}
 const switchConv = async (id) => {
   if (!id || _loadingConvs.has(id)) return
   _loadingConvs.add(id)
@@ -1720,43 +1808,14 @@ const switchConv = async (id) => {
   const msgs = state.messagesByConv[id]
   const hasRealMsgs = msgs.length > 0 && msgs.some(m => !m._loading)
   if (!hasRealMsgs) {
-    try {
-      const data = await api.getMessages(id, { limit: 50, workspaceRoot: state.workspaceRoot })
-      const loaded = (data.messages || [])
-        .filter(m => (m.message?.role || m.role) !== 'tool')
-        .map((m, i) => {
-          const role = m.message?.role || m.role || ''
-          const segments = (m.segments || []).map(seg => {
-            if (seg.type === 'tool_call' && seg.name === 'finish_task') {
-              return { type: 'content', content: seg.result || '' }
-            }
-            if (seg.type === 'ask_user') {
-              seg._answered = !!(seg.answer || (seg.answers && seg.answers.length))
-              seg.askType = normalizeAskType(seg.askType || 'text')
-            }
-            return seg
-          })
-          return {
-            role, content: m.message?.content || m.content || '', segments,
-            _key: 'msg_' + Date.now() + '_' + i, _idx: m.idx, _time: m.timestamp || '',
-            // ★ 2026-08-21 多模态：历史消息带图片时映射为附件缩略图（dataURL 直显）
-            _attachments: (m.message?.images || m.images || []).map(img => ({
-              type: 'image', label: '图片', data: img.data || '', path: img.mimeType || '',
-            })),
-          }
-        })
-        .sort((a, b) => (a._idx || 0) - (b._idx || 0))
-      console.log('[RP] switchConv API返回 loaded=%d total=%d', loaded.length, data.total)
-
-      // ★ 合并：API 返回的消息直接使用（processStatus 不再创建 loading 占位，无需保留逻辑）
-      const mergedMsgs = mergeConsecutiveAssistant(loaded)
+    const res = await apiLoadAndBuildConv(id)
+    if (res) {
+      const { mergedMsgs, total } = res
+      console.log('[RP] switchConv API返回 loaded=%d total=%d', mergedMsgs.length, total)
       state.messagesByConv[id] = mergedMsgs
       state.messages = mergedMsgs
-      state.msgTotalByConv[id] = data.total || loaded.length
+      state.msgTotalByConv[id] = total
       state.msgLoadedByConv[id] = mergedMsgs.length
-      // ★ 2026-08-21 修复"折叠跳动"：同步应用折叠默认值（不再 nextTick 延迟）。
-      //   消息写入即折叠，首帧渲染即为折叠态——历史做法先展开渲染一帧再折叠，造成跳动。
-      applyAutoCollapse()
 
       // ★ 若该对话正在运行（agentRunningByConv 已由 processStatus 设置），
       //   创建 assistant 占位 + runtime，准备接收 WS 实时事件
@@ -1775,7 +1834,7 @@ const switchConv = async (id) => {
         state.messagesByConv[id] = mergedMsgs
         state.messages = mergedMsgs
       }
-    } catch {
+    } else {
       state.msgTotalByConv[id] = 0
       state.msgLoadedByConv[id] = 0
     }
@@ -2104,6 +2163,10 @@ onMounted(() => {
     },
     loadWsTokenStats: () => loadWsTokenStats(),
     autoNameConv: (convId, text) => autoNameConv(convId, text),
+    // ★ 2026-08-31 断线重连同步（agent-events processStatus 调用）：
+    //   reloadConvMessages 重载已完成会话最新消息；refreshConvMeta 刷新会话元数据
+    reloadConvMessages: (convId) => reloadConvMessages(convId),
+    refreshConvMeta: () => refreshConvMeta(),
     saveConvMsg: (convId, content, msgIdx) => {
       // 后端 startEventPersistWorker 已通过 SegmentsFromMessage 自动持久化
       // loop.History 中的消息（含 ToolCalls→tool_call, Reasoning→thinking, Content→content）。

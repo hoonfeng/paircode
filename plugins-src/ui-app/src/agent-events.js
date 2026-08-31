@@ -706,6 +706,10 @@ export function processStatus(payload) {
   }
   // 对于本地标记为 running 但后端已不在 running 列表的，修正状态
   // （可能是 WS 断连期间 agent 已结束，但 done 事件未送达）
+  // ★ 2026-08-31 断线重同步：这类会话断线期间已结束，仅清理状态不够——
+  //   最终输出/done 内容都在断线期间发出并丢失，必须重载服务端最新消息，
+  //   否则前端停留在「中断」画面（浏览器休眠恢复后任务早已完成也无感知）。
+  const resyncCandidates = []
   for (const convId of Object.keys(state.agentRunningByConv)) {
     if (state.agentRunningByConv[convId] && !runningSet.has(convId)) {
       state.agentRunningByConv[convId] = false
@@ -722,6 +726,7 @@ export function processStatus(payload) {
         }
       }
       delete runtimes[convId]
+      resyncCandidates.push(convId)
     }
   }
   // 也清理 loadingByConv 中遗漏的条目：某些场景下 agentRunningByConv 可能为空
@@ -737,7 +742,26 @@ export function processStatus(payload) {
           if (m._loading) m._loading = false
         }
       }
+      if (!state.agentRunningByConv[convId]) resyncCandidates.push(convId)
     }
+  }
+
+  // ── 断线重同步：重载已完成会话的消息 + 会话元数据 ──
+  // 触发条件：① 上方的「曾 running → 已结束」候选；② WS 重连成功标记（__wsReconnectedPending，
+  // 由 api.js onopen 置位）——覆盖「断线期间完成但本地无 running 标记」的更一般场景。
+  const reconnected = !!window.__wsReconnectedPending
+  if (reconnected) {
+    window.__wsReconnectedPending = false
+    // 会话列表 meta 刷新（interrupted/updatedAt/msgCount 以服务端为准）
+    try { globalCtx?.refreshConvMeta?.() } catch {}
+    const cur = state.currentConvId
+    if (cur && !runningSet.has(cur) && !resyncCandidates.includes(cur)) {
+      resyncCandidates.push(cur)
+    }
+  }
+
+  for (const convId of resyncCandidates) {
+    try { globalCtx?.reloadConvMessages?.(convId) } catch (e) { console.warn('[AE] reloadConvMessages 失败', convId, e) }
   }
 }
 

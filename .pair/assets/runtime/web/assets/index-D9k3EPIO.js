@@ -11025,6 +11025,8 @@
   let wsReconnectTimer = null;
   let wsReconnectCount = 0;
   const WS_MAX_RECONNECT = 20;
+  let wsHadDisconnect = false;
+  let wsOnDisconnectedFired = false;
   let wsCallbacks = null;
   let wsManuallyClosed = false;
   let wsPongTimer = null;
@@ -11033,6 +11035,8 @@
     wsCallbacks = callbacks;
     wsManuallyClosed = false;
     wsReconnectCount = 0;
+    wsHadDisconnect = false;
+    wsOnDisconnectedFired = false;
     if (wsSocket && (wsSocket.readyState === WebSocket.OPEN || wsSocket.readyState === WebSocket.CONNECTING)) {
       return;
     }
@@ -11053,7 +11057,10 @@
         clearTimeout(wsReconnectTimer);
         wsReconnectTimer = null;
       }
-      window.dispatchEvent(new CustomEvent("ws-connection-change", { detail: { connected: true } }));
+      const reconnected = wsHadDisconnect;
+      wsHadDisconnect = false;
+      if (reconnected) window.__wsReconnectedPending = true;
+      window.dispatchEvent(new CustomEvent("ws-connection-change", { detail: { connected: true, reconnected } }));
       if (wsPongTimer) clearTimeout(wsPongTimer);
       wsPongTimer = setTimeout(() => {
         console.warn("[WS] 45s 未收到 pong，触发重连");
@@ -11117,11 +11124,19 @@
   }
   function scheduleWsReconnect(reason) {
     if (wsManuallyClosed) return;
+    wsHadDisconnect = true;
     if (wsReconnectCount >= WS_MAX_RECONNECT) {
-      console.warn("[WS] 重连已达上限:", reason);
-      if (wsCallbacks == null ? void 0 : wsCallbacks.onDisconnected) {
-        wsCallbacks.onDisconnected();
+      if (!wsOnDisconnectedFired) {
+        wsOnDisconnectedFired = true;
+        console.warn("[WS] 快速重连已达上限，转 30s 长间隔静默重试:", reason);
+        if (wsCallbacks == null ? void 0 : wsCallbacks.onDisconnected) {
+          wsCallbacks.onDisconnected();
+        }
       }
+      if (wsReconnectTimer) clearTimeout(wsReconnectTimer);
+      wsReconnectTimer = setTimeout(() => {
+        doWsConnect();
+      }, 3e4);
       return;
     }
     wsReconnectCount++;
@@ -13018,6 +13033,7 @@
     state.agentRunning = false;
   }
   function processStatus(payload) {
+    var _a, _b;
     const p2 = Array.isArray(payload) ? { runningConvs: payload, runningByWorkspace: {} } : payload || {};
     const runningConvs = p2.runningConvs || [];
     const runningByWorkspace = p2.runningByWorkspace || {};
@@ -13054,6 +13070,7 @@
         }
       }
     }
+    const resyncCandidates = [];
     for (const convId of Object.keys(state.agentRunningByConv)) {
       if (state.agentRunningByConv[convId] && !runningSet.has(convId)) {
         state.agentRunningByConv[convId] = false;
@@ -13069,6 +13086,7 @@
           }
         }
         delete runtimes[convId];
+        resyncCandidates.push(convId);
       }
     }
     for (const convId of Object.keys(state.loadingByConv)) {
@@ -13080,6 +13098,26 @@
             if (m._loading) m._loading = false;
           }
         }
+        if (!state.agentRunningByConv[convId]) resyncCandidates.push(convId);
+      }
+    }
+    const reconnected = !!window.__wsReconnectedPending;
+    if (reconnected) {
+      window.__wsReconnectedPending = false;
+      try {
+        (_a = globalCtx == null ? void 0 : globalCtx.refreshConvMeta) == null ? void 0 : _a.call(globalCtx);
+      } catch {
+      }
+      const cur = state.currentConvId;
+      if (cur && !runningSet.has(cur) && !resyncCandidates.includes(cur)) {
+        resyncCandidates.push(cur);
+      }
+    }
+    for (const convId of resyncCandidates) {
+      try {
+        (_b = globalCtx == null ? void 0 : globalCtx.reloadConvMessages) == null ? void 0 : _b.call(globalCtx, convId);
+      } catch (e) {
+        console.warn("[AE] reloadConvMessages 失败", convId, e);
       }
     }
   }

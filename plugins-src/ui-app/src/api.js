@@ -90,7 +90,10 @@ let wsReconnectTimer = null
 
 let wsReconnectCount = 0
 
-const WS_MAX_RECONNECT = 20  // 从 5 提升到 20，减少因短暂网络波动导致永久断连
+const WS_MAX_RECONNECT = 20  // 快速重试阶段上限（此后转长间隔静默重试，不放弃）
+
+let wsHadDisconnect = false      // 本次会话内发生过断线（onopen 时据此标记 reconnected）
+let wsOnDisconnectedFired = false // 重连超界提示只发一次（恢复后重置）
 
 let wsCallbacks = null
 
@@ -117,6 +120,10 @@ function initWebSocket(callbacks) {
   wsManuallyClosed = false
 
   wsReconnectCount = 0  // 新开连接时重置计数
+
+  wsHadDisconnect = false
+
+  wsOnDisconnectedFired = false
 
   if (wsSocket && (wsSocket.readyState === WebSocket.OPEN || wsSocket.readyState === WebSocket.CONNECTING)) {
 
@@ -152,7 +159,17 @@ function doWsConnect() {
 
     if (wsReconnectTimer) { clearTimeout(wsReconnectTimer); wsReconnectTimer = null }
 
-    window.dispatchEvent(new CustomEvent('ws-connection-change', { detail: { connected: true } }))
+    // ★ 2026-08-31 断线重连同步：发生过断线则标记待同步（processStatus 消费），
+
+    //   前端重载最新消息/会话 meta，修复「任务完成但前端停留在中断画面」。
+
+    const reconnected = wsHadDisconnect
+
+    wsHadDisconnect = false
+
+    if (reconnected) window.__wsReconnectedPending = true
+
+    window.dispatchEvent(new CustomEvent('ws-connection-change', { detail: { connected: true, reconnected } }))
 
     // 后端每 30s 发 ping，45s（1.5次）未收到则主动重连
 
@@ -277,17 +294,33 @@ function scheduleWsReconnect(reason) {
 
   if (wsManuallyClosed) return
 
+  wsHadDisconnect = true
+
   if (wsReconnectCount >= WS_MAX_RECONNECT) {
 
-    console.warn('[WS] 重连已达上限:', reason)
+    // ★ 2026-08-31 长间隔静默重试：达到快速重试上限后不再放弃，转 30s 间隔持续重连
 
-    // ★ 通知前端所有 running 会话已中断（后端进程已不在）
+    //   （浏览器休眠/服务端短暂重启不再需要用户手动刷新页面），
 
-    if (wsCallbacks?.onDisconnected) {
+    //   同时仅提示一次「连接中断」以免反复打扰。
 
-      wsCallbacks.onDisconnected()
+    if (!wsOnDisconnectedFired) {
+
+      wsOnDisconnectedFired = true
+
+      console.warn('[WS] 快速重连已达上限，转 30s 长间隔静默重试:', reason)
+
+      if (wsCallbacks?.onDisconnected) {
+
+        wsCallbacks.onDisconnected()
+
+      }
 
     }
+
+    if (wsReconnectTimer) clearTimeout(wsReconnectTimer)
+
+    wsReconnectTimer = setTimeout(() => { doWsConnect() }, 30000)
 
     return
 
