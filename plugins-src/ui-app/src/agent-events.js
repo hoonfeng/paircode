@@ -55,6 +55,34 @@ export function setGlobalCtx(ctx) {
   globalCtx = ctx || {}
 }
 
+// ─── 刷新门控：历史加载完成前，WS 事件先入 pending ───
+// 页面刷新后 WS（status/snapshot/流式事件）先于 HTTP 历史到达：若快照/流式消息
+// 先进入 messagesByConv，switchConv 的 hasRealMsgs 判定「已有内容」→ 跳过 API 加载
+// → 消息区只剩实时增量、历史永远不出现（用户报告「刷新后只有当前 ws 消息」）。
+// 门控方案：历史未加载的会话，其 WS 事件全部入 pending（snapshot 覆盖存储），
+// markHistoryLoaded（switchConv/reload 加载成功）后统一 flush：快照先（重建当前回合），
+// 事件后（增量），与 HTTP 历史无缝拼接。
+const wsPendingByConv = new Map()    // convId → { snapshot: null|data, events: [] }
+const historyLoadedConvs = new Set() // 已完成历史加载的会话（刷新后防反复门控）
+
+// markHistoryLoaded 标记会话历史已加载并 flush 门控期间的事件。
+// 由 RightPanel 在 apiLoadAndBuildConv 成功后调用（switchConv / reloadConvMessages）。
+export function markHistoryLoaded(convId) {
+  if (!convId) return
+  historyLoadedConvs.add(convId)
+  const pend = wsPendingByConv.get(convId)
+  if (!pend) return
+  wsPendingByConv.delete(convId)
+  const { snapshot, events } = pend
+  if (snapshot) {
+    try { processAgentEvent(convId, snapshot) } catch (e) { console.warn('[AE] flush snapshot 失败 conv=%s', convId, e) }
+  }
+  for (const ev of events) {
+    try { processAgentEvent(convId, ev) } catch (e) { console.warn('[AE] flush event 失败 conv=%s', convId, e) }
+  }
+  console.log('[AE] markHistoryLoaded flush conv=%s snapshot=%s events=%d', convId, !!snapshot, events.length)
+}
+
 // ─── 运行时管理 ──
 // msgKey 是 assistant 占位消息的唯一标识 _key（比 msgIdx 数组下标稳定，
 // 不会被 loadMoreMessages 的 prepend 操作破坏）。
@@ -222,6 +250,16 @@ function applyLiveSnapshot(convId, msg, rt, snap) {
 
 // ─── 事件处理 ──
 export function processAgentEvent(convId, data) {
+  // ★ 刷新门控：历史未加载（页面刷新后 WS 事件先于 HTTP 历史到达）→ 事件先入
+  //   pending，待 switchConv/reload 加载完成后 flush。避免快照/流式内容先占位
+  //   导致 hasRealMsgs 误判、历史永不加载（「刷新后只有当前 ws 消息」）。
+  if (!historyLoadedConvs.has(convId)) {
+    let pend = wsPendingByConv.get(convId)
+    if (!pend) { pend = { snapshot: null, events: [] }; wsPendingByConv.set(convId, pend) }
+    if (data && data.type === 'snapshot') pend.snapshot = data
+    else pend.events.push(data)
+    return
+  }
   // 确保 messagesByConv 存在
   if (!state.messagesByConv[convId]) state.messagesByConv[convId] = []
   const msgs = state.messagesByConv[convId]
@@ -681,8 +719,10 @@ export function processStatus(payload) {
     state.agentRunningByConv[convId] = true
     state.loadingByConv[convId] = true
     // ★ 兜底：若消息已加载（switchConv 已完成）但无 runtime，创建占位
+    //   ★ 刷新门控：历史未加载时跳过（占位由 switchConv 加载后创建，避免先占位
+    //     导致 hasRealMsgs 误判、历史不加载）
     const msgsArr = state.messagesByConv[convId]
-    if (msgsArr && msgsArr.length > 0 && !runtimes[convId]) {
+    if (historyLoadedConvs.has(convId) && msgsArr && msgsArr.length > 0 && !runtimes[convId]) {
       const hasRealMsgs = msgsArr.some(m => !m._loading)
       const lastLoading = [...msgsArr].reverse().find(m => m._loading)
       if (hasRealMsgs && !lastLoading) {

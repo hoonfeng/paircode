@@ -12454,6 +12454,31 @@
   function setGlobalCtx(ctx) {
     globalCtx = ctx || {};
   }
+  const wsPendingByConv = /* @__PURE__ */ new Map();
+  const historyLoadedConvs = /* @__PURE__ */ new Set();
+  function markHistoryLoaded(convId) {
+    if (!convId) return;
+    historyLoadedConvs.add(convId);
+    const pend = wsPendingByConv.get(convId);
+    if (!pend) return;
+    wsPendingByConv.delete(convId);
+    const { snapshot, events } = pend;
+    if (snapshot) {
+      try {
+        processAgentEvent(convId, snapshot);
+      } catch (e) {
+        console.warn("[AE] flush snapshot 失败 conv=%s", convId, e);
+      }
+    }
+    for (const ev of events) {
+      try {
+        processAgentEvent(convId, ev);
+      } catch (e) {
+        console.warn("[AE] flush event 失败 conv=%s", convId, e);
+      }
+    }
+    console.log("[AE] markHistoryLoaded flush conv=%s snapshot=%s events=%d", convId, !!snapshot, events.length);
+  }
   function startConvRuntime(convId, msgKey, lastUserText = "") {
     runtimes[convId] = {
       msgKey,
@@ -12630,6 +12655,16 @@
     );
   }
   function processAgentEvent(convId, data) {
+    if (!historyLoadedConvs.has(convId)) {
+      let pend = wsPendingByConv.get(convId);
+      if (!pend) {
+        pend = { snapshot: null, events: [] };
+        wsPendingByConv.set(convId, pend);
+      }
+      if (data && data.type === "snapshot") pend.snapshot = data;
+      else pend.events.push(data);
+      return;
+    }
     if (!state.messagesByConv[convId]) state.messagesByConv[convId] = [];
     const msgs = state.messagesByConv[convId];
     let rt = runtimes[convId];
@@ -13043,7 +13078,7 @@
       state.agentRunningByConv[convId] = true;
       state.loadingByConv[convId] = true;
       const msgsArr = state.messagesByConv[convId];
-      if (msgsArr && msgsArr.length > 0 && !runtimes[convId]) {
+      if (historyLoadedConvs.has(convId) && msgsArr && msgsArr.length > 0 && !runtimes[convId]) {
         const hasRealMsgs = msgsArr.some((m) => !m._loading);
         const lastLoading = [...msgsArr].reverse().find((m) => m._loading);
         if (hasRealMsgs && !lastLoading) {
@@ -13159,6 +13194,7 @@
     createAssistantPlaceholder,
     getConvCtxStats,
     getConvRuntime,
+    markHistoryLoaded,
     normalizeAskType,
     processAgentDisconnect,
     processAgentDone,

@@ -248,7 +248,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { state, rightPanelWidth } from '../ui-state.js'
 import api from '../api.js'
-import { setGlobalCtx, startConvRuntime, resetConvRuntime, createAssistantPlaceholder, getConvRuntime, getConvCtxStats, resetConvCtxStats, normalizeAskType } from '../agent-events.js'
+import { setGlobalCtx, startConvRuntime, resetConvRuntime, createAssistantPlaceholder, getConvRuntime, getConvCtxStats, resetConvCtxStats, normalizeAskType, markHistoryLoaded } from '../agent-events.js'
 import { useSingleSlot, mountListSlot } from '../plugin-runtime.js'
 import SvgIcon from './SvgIcon.vue'
 import TaskPanel from './TaskPanel.vue'
@@ -1755,6 +1755,8 @@ const reloadConvMessages = async (convId) => {
   state.messagesByConv[convId] = mergedMsgs
   state.msgTotalByConv[convId] = total
   state.msgLoadedByConv[convId] = mergedMsgs.length
+  // ★ 刷新门控：reload 也算历史加载完成（flush 门控期间的 WS 事件）
+  markHistoryLoaded(convId)
   if (state.currentConvId === convId) {
     state.messages = mergedMsgs
     state.chatLoading = false
@@ -1834,6 +1836,9 @@ const switchConv = async (id) => {
         state.messagesByConv[id] = mergedMsgs
         state.messages = mergedMsgs
       }
+      // ★ 刷新门控：历史加载完成 → flush 门控期间的 WS 快照/事件（快照重建
+      //   当前回合、事件续接增量），否则快照/流式先到会挤占历史加载。
+      markHistoryLoaded(id)
     } else {
       state.msgTotalByConv[id] = 0
       state.msgLoadedByConv[id] = 0
