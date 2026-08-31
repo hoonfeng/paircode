@@ -16,6 +16,10 @@ import (
 	"testing"
 )
 
+// normLF 换行归一：Windows 工作区（autocrlf）下资产文件为 CRLF，而内置
+// 字符串为 \n——逐字节守卫需先归一（CI/Linux 为 LF 时无影响）。
+func normLF(s string) string { return strings.ReplaceAll(s, "\r\n", "\n") }
+
 // repoRootAbs 仓库根（测试从 internal/agent 包目录调用）。
 func repoRootAbs(t *testing.T) string {
 	t.Helper()
@@ -49,7 +53,7 @@ func TestPluginPromptAssetsSync(t *testing.T) {
 			t.Errorf("agentloop/prompts/%s 缺失（提示词插件化资产不得删除）: %v", c.file, err)
 			continue
 		}
-		if disk, builtin := strings.TrimSpace(string(data)), strings.TrimSpace(c.builtin); disk != builtin {
+		if disk, builtin := normLF(strings.TrimSpace(string(data))), strings.TrimSpace(c.builtin); disk != builtin {
 			t.Errorf("agentloop/prompts/%s 与内置 %sSystemPrompt 漂移（磁盘资产生产静默生效）——请同步两者\n  disk    len=%d\n  builtin len=%d",
 				c.file, c.name, len(disk), len(builtin))
 		}
@@ -71,7 +75,7 @@ func TestPluginPromptAssetsSync(t *testing.T) {
 			t.Errorf("agentloop/prompts/%s 缺失: %v", c.file, err)
 			continue
 		}
-		expanded := strings.ReplaceAll(strings.TrimSpace(string(data)), "{{ROOT_INFO}}", rootInfo)
+		expanded := normLF(strings.ReplaceAll(strings.TrimSpace(string(data)), "{{ROOT_INFO}}", rootInfo))
 		if expanded != strings.TrimSpace(c.builtin) {
 			t.Errorf("agentloop/prompts/%s 展开后与内置系统提示漂移\n  asset  len=%d\n  builtin len=%d",
 				c.file, len(expanded), len(strings.TrimSpace(c.builtin)))
@@ -244,17 +248,17 @@ func TestRealAgentLoopPromptAssetsEffect(t *testing.T) {
 		t.Fatalf("agentloop 插件包应注册 ≥5 个提示词资产，got %d", n)
 	}
 	// 系统提示：模板资产分支输出 == 内置（逐字节）
-	if got := harnessSystemPrompt(roots); got != baseSystem {
+	if got := normLF(harnessSystemPrompt(roots)); got != baseSystem {
 		t.Fatalf("harness 系统提示资产与内置漂移\n got len=%d\nwant len=%d", len(got), len(baseSystem))
 	}
-	if got := fullSystemPrompt(roots); got != baseFull {
+	if got := normLF(fullSystemPrompt(roots)); got != baseFull {
 		t.Fatalf("full 系统提示资产与内置漂移")
 	}
 	// 角色提示：磁盘资产 == 内置
-	if got := DefaultReviewerPrompt(); got != baseReviewer {
+	if got := normLF(DefaultReviewerPrompt()); got != baseReviewer {
 		t.Fatalf("reviewer 资产与内置漂移")
 	}
-	if got := DefaultPlannerPrompt(); got != basePlanner {
+	if got := normLF(DefaultPlannerPrompt()); got != basePlanner {
 		t.Fatalf("planner 资产与内置漂移")
 	}
 }

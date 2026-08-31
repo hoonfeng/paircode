@@ -17,7 +17,9 @@ Thumbs.db
 go.work
 go.work.sum
 
-# Pair CodeAgent working directory (conversations, session)
+# Pair CodeAgent 工作目录：仅入库插件（plugins/）与运行资产（assets/）；
+# 其余（memory/conversations/tasks/skills/toolsets/execution_logs/publish 日志/
+# pair.db/mcp.json/cordis.patch.json 等本地运行时敏感状态）一律不入库
 .pair/*
 !.pair/plugins/
 !.pair/assets/
@@ -91,3 +93,6 @@ dev/wsprobe/
 
 # Go build cache (380MB, local only)
 .go-cache/
+
+# 桌面版归档（本版本不做桌面版——wb-ui/goskia 依赖移除；代码保留在 _desktop-archive/）
+_desktop-archive/
