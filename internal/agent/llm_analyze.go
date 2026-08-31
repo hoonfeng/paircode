@@ -41,7 +41,7 @@ type ProjectIntent struct {
 
 // CustomPlugin LLM 现场生成的项目专属插件：工具集模板组合覆盖不到的能力缺口
 // （如 OpenAPI 校验、Protobuf 编译、数据库迁移等特殊栈），由 LLM 分析项目后
-// 直接写出插件代码并入工具集（对齐 deepseek-harness「模型所写插件」模式：
+// 直接写出插件代码并入工具集（「模型所写插件」模式：
 // 注册时即校验——BuildToolset 会对 code 做 define 预检，失败剔除并给指导性错误）。
 type CustomPlugin struct {
 	Name    string `json:"name"`    // 插件名（小写字母/数字/-/_）

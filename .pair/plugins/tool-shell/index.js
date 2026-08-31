@@ -1,12 +1,12 @@
 // ═══════════════════════════════════════════════════════════════
 // tool-shell — 后台进程工具（run_background/read_output/kill_process
-// + R2-7 DSH 命名别名 job_output/job_list/job_kill）
+// + R2-7 命名别名 job_output/job_list/job_kill）
 //
 // 迁移来源（2026-08-16）：内置 registerShellTools（internal/agent/shell.go）
 // → 磁盘外置插件。★ 调用实现在插件内（JS 编排 ctx.process 宿主服务），
 // 不依赖 hostTool——演示「工具实现完全插件化」的形态。
 // ctx.process 由宿主提供（globalBG 全局单例，跨 agent 轮次存活）。
-// ★ 2026-09 Round2 R2-7：新增 job_output/job_list/job_kill 三个 DSH 命名
+// ★ 2026-09 Round2 R2-7：新增 job_output/job_list/job_kill 三个约定命名
 //   别名（同一 ctx.process 能力面，原名保留兼容；job_list 用 ctx.process.list）。
 // ═══════════════════════════════════════════════════════════════
 
@@ -33,7 +33,7 @@ async function killProcess(ctx, args) {
   return `已停止 id=${args.id}`
 }
 
-// job_list：列出全部后台进程（DSH job_list 对齐，R2-7）
+// job_list：列出全部后台进程（job_list 对齐，R2-7）
 async function jobList(ctx, args) {
   const jobs = await ctx.process.list()
   if (!jobs || jobs.length === 0) return '（无后台进程）'
@@ -83,11 +83,11 @@ const tools = [
       required: ['id'],
     },
   },
-  // ── R2-7 DSH 命名别名（job_output/job_list/job_kill，原名保留兼容）──
+  // ── R2-7 命名别名（job_output/job_list/job_kill，原名保留兼容）──
   {
     name: 'job_output',
-    description: '读取某后台任务（id）累积的输出与运行状态（DSH job_output 别名，语义同 read_output）。',
-    usageGuide: '读取后台任务累积输出与状态（DSH 命名）。需先用 run_background 启动获得 id。',
+    description: '读取某后台任务（id）累积的输出与运行状态（job_output 别名，语义同 read_output）。',
+    usageGuide: '读取后台任务累积输出与状态（约定命名）。需先用 run_background 启动获得 id。',
     category: '执行',
     readOnly: true,
     parameters: {
@@ -100,7 +100,7 @@ const tools = [
   },
   {
     name: 'job_list',
-    description: '列出全部后台任务（id + 状态 running/done/error）（DSH job_list 对齐）。',
+    description: '列出全部后台任务（id + 状态 running/done/error）（job_list 对齐）。',
     usageGuide: '列出全部后台任务（id+状态）。配合 job_output/job_kill 管理后台任务。',
     category: '执行',
     readOnly: true,
@@ -111,8 +111,8 @@ const tools = [
   },
   {
     name: 'job_kill',
-    description: '停止某后台任务（id）（DSH job_kill 别名，语义同 kill_process）。',
-    usageGuide: '停止后台任务（DSH 命名）。仅限通过 run_background 启动的进程。',
+    description: '停止某后台任务（id）（job_kill 别名，语义同 kill_process）。',
+    usageGuide: '停止后台任务（约定命名）。仅限通过 run_background 启动的进程。',
     category: '执行',
     parameters: {
       type: 'object',
@@ -135,7 +135,7 @@ const impls = {
 
 return {
   name: 'tool-shell',
-  purpose: '后台进程工具（run_background/read_output/kill_process + DSH 别名 job_output/job_list/job_kill）——迁移自内置 registerShellTools，调用实现（JS 编排 ctx.process）完全在插件内',
+  purpose: '后台进程工具（run_background/read_output/kill_process + 命名别名 job_output/job_list/job_kill）——迁移自内置 registerShellTools，调用实现（JS 编排 ctx.process）完全在插件内',
   apply(ctx) {
     for (const t of tools) {
       ctx.tools.register({

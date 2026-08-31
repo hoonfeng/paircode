@@ -41,7 +41,7 @@ func isInfoBranch(head string) bool {
 	return false
 }
 
-// agentsNotesDir 参考项目决策树目录（.agents/notes/）——模型后训练含参考项目数据，
+// agentsNotesDir 外部决策树目录（.agents/notes/）——模型后训练含外部数据，
 // 会幻觉该路径；存在时作为知识库只读附加源（条目路径前缀 notes/）。
 func agentsNotesDir(root string) string { return filepath.Join(root, ".agents", "notes") }
 
@@ -123,8 +123,8 @@ func scanInfoEntries(dir string) []infoEntry {
 	return out
 }
 
-// notesToBranchRel 把参考项目决策树路径（.agents/notes/ 相对路径）映射到知识库树分支路径。
-// 模型后训练含参考项目数据会幻觉 notes 路径（implemented/architecture、implemented/feature、
+// notesToBranchRel 把外部决策树路径（.agents/notes/ 相对路径）映射到知识库树分支路径。
+// 模型后训练含外部数据会幻觉 notes 路径（implemented/architecture、implemented/feature、
 // implemented/process、decision…）；project_info_write 写入 notes/ 前缀路径时自动归入树分支，
 // 保证知识库仍是完整树。输入可带 notes/ 前缀（工具 path 参数）或纯相对（扫描去重用）。
 // 映射：implemented/architecture→架构、implemented/feature→实现、implemented/decision→设计思想、
@@ -258,9 +258,9 @@ func registerProjectInfoTools(r *Registry, root string) {
 
 	r.Register(&Tool{
 		Name:       "project_info_write",
-		UsageGuide: "写入/更新项目知识库条目，跨会话复用。★知识库是树：顶层分支 = 目标/架构/实现/关键点/设计思想（根为 概览）——路径带分支前缀（如 架构/模块-agent / 设计思想/决策-渲染架构）。也可用参考项目风格路径 notes/implemented/architecture/x（自动归入树分支 架构/x 并镜像 .agents/notes/）。读完关键文件后立即写入，积累项目的结构化理解。比记在脑子里可靠（持久化+跨会话可见）。多项目工作区可用 project 参数指定目标项目。",
+		UsageGuide: "写入/更新项目知识库条目，跨会话复用。★知识库是树：顶层分支 = 目标/架构/实现/关键点/设计思想（根为 概览）——路径带分支前缀（如 架构/模块-agent / 设计思想/决策-渲染架构）。也可用外部风格路径 notes/implemented/architecture/x（自动归入树分支 架构/x 并镜像 .agents/notes/）。读完关键文件后立即写入，积累项目的结构化理解。比记在脑子里可靠（持久化+跨会话可见）。多项目工作区可用 project 参数指定目标项目。",
 		Description: "写入/更新项目知识库的一篇（.pair/project-info/<路径>.md）——记录项目架构/模块职责/数据流/设计决策等结构化理解，" +
-			"跨会话复用、你和用户都能看。★树形路径：顶层分支 目标/架构/实现/关键点/设计思想，根条目用 概览（如 架构/模块-agent / 设计思想/决策-渲染架构）；兼容参考项目 notes/ 前缀路径（自动映射分支+镜像 .agents/notes/）。",
+			"跨会话复用、你和用户都能看。★树形路径：顶层分支 目标/架构/实现/关键点/设计思想，根条目用 概览（如 架构/模块-agent / 设计思想/决策-渲染架构）；兼容外部 notes/ 前缀路径（自动映射分支+镜像 .agents/notes/）。",
 		Parameters: objSchema(props{
 			"path":    strProp("条目路径（中文，带顶层分支前缀：目标/架构/实现/关键点/设计思想，如 架构/模块-agent），不含 .md；用 / 嵌套为细节篇"),
 			"content": strProp("Markdown 正文（首行用 # 标题）"),

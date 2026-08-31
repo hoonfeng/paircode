@@ -657,8 +657,8 @@ async function saveInstructions(scope, content) {
 
 export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, isWebSocketOpen, waitForWebSocket, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatCompact, chatStop, getMessages, getMessagesCount, setConvModel, getConversationMeta, getModels, saveModels, getAiPresets, saveAiPreset, saveAiPresets, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, listPlugins, getUIBoot, getPluginDetail, pluginAction, definePlugin, pluginEmit, pluginClientEvents, pluginClientState, pluginInvoke, pluginClientFailure, builtinPlugins, pluginToolToggle, pluginPrefer, getToolsets, toolsetEdit, listCommands, runCommand }
 
-// ─── UI 插件 boot 图（DSH 兼容 /api/ui-boot 单图）──────────────
-// getUIBoot 取 DSH WebBootGraph 等价 boot 图（{rev, entries:[{id,url,rev,inject,immediately,external}]}）。
+// ─── UI 插件 boot 图（外部兼容 /api/ui-boot 单图）──────────────
+// getUIBoot 取外部 boot 图（WebBootGraph 等价，{rev, entries:[{id,url,rev,inject,immediately,external}]}）。
 // ★ boot() 两源合并（spec §7）：① 本图装配 dsh.ui 区域包（主源）;
 //   ② 再由 boot() 经 listPlugins() 装载非 dsh.ui 直载插件
 //   （agent-teams/ui-quick-exec/ui-statusbar-conn，恢复首屏 titlebar-right/statusbar-items）
@@ -713,7 +713,7 @@ async function pluginToolToggle(tool, enabled) {
 
 }
 
-// pluginPrefer 同名工具并存时切换生效实现（repo 移植版 / DSH 桥插件）。
+// pluginPrefer 同名工具并存时切换生效实现（repo 移植版 / npm 桥插件）。
 // target: { tool } 单工具，或 { plugin } 整插件全部冲突工具；impl: 'repo' | 'bridge'。
 
 async function pluginPrefer(target, impl) {

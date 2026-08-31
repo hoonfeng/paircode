@@ -147,7 +147,7 @@ export const state = reactive({
   //   继续用顶层 state（已有、被大量组件直接读写），避免双源不一致。
   panels: {
     editorOpen: false,        // ★ 默认折叠：编辑器隐藏（不占主导视图）
-    editorWidth: 360,         // 折叠后打开时的默认详情列宽（对齐 DSH DETAILS_DEFAULT=360）
+    editorWidth: 360,         // 折叠后打开时的默认详情列宽（对齐 DETAILS_DEFAULT=360）
     editorLastWidth: 360,     // 上次打开宽（折叠还原用）
   },
 })
@@ -213,7 +213,7 @@ export function savePanelSize() {
 loadPanelSize()
 
 // ─── ★ 跨区域布局服务（ctx.uiLayout / __PAIRCODE_CORE.layout）───
-// 对齐 DSH `ctx.layout` 的 LayoutController 语义（spec §3.4 / §6）：
+// 对齐 `ctx.layout` 的 LayoutController 语义（spec §3.4 / §6）：
 //   面板转换（侧栏折叠 / 编辑器按需打开关闭）是区域包的唯一权威面。
 // 区域包通过它读写布局开关，不直接改 state.panels 私有字段（spec E4）。
 // 编辑器「折叠=隐藏（保持挂载，不 unmount）」，复用现有 CSS 宽度切换语义 ——

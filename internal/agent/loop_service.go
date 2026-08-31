@@ -2,7 +2,7 @@
 //
 // ★ 插件在循环运行期间可查询 Loop 状态、请求暂停/继续/停止——
 //
-//	对齐参考项目（deepseek-harness）agent-loop 插件包的服务能力：宿主循环对插件可编程。
+//	对齐外部 agent-loop 插件包的服务能力：宿主循环对插件可编程。
 //	配合 loop:* 事件桥（Loop.emit 广播），插件可完整感知/调控 agentloop。
 //
 // ★ 生命周期：Loop.Run 开始时注册到全局插件宿主根上下文（ctx.provide('loop')），

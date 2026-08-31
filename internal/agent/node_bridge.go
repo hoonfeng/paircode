@@ -81,7 +81,7 @@ type nodeBridge struct {
 	toolOwner map[string]string
 	// ★ 并存与切换（2026-08-31，取消同名工具覆盖）：受 toolsMu 保护。
 	//   specs      pkgName → npm spec（ready 消息上报的已装载清单；面板显示版本）
-	//   conflicts  toolName → 同名工具并存记录（repo 版 ↔ DSH 版，active 标生效方）
+	//   conflicts  toolName → 同名工具并存记录（repo 版 ↔ 外部版，active 标生效方）
 	specs     map[string]string
 	conflicts map[string]*bridgeToolConflict
 	// ★ Round4：host 事件订阅白名单（插件 ctx.on 声明的事件名；按名转发防风暴）
@@ -423,7 +423,7 @@ func (b *nodeBridge) invokeTool(ctx context.Context, tool string, args map[strin
 	b.mu.Unlock()
 
 	wsRoot := SessionWorkspaceRoot(ctx)
-	// ★ Round4：DSH 插件工具需要调用方会话身份（exec.agent.id / session.header.cwd）
+	// ★ Round4：外部插件工具需要调用方会话身份（exec.agent.id / session.header.cwd）
 	payload, _ := json.Marshal(map[string]any{"t": "invoke", "id": id, "tool": tool, "args": args, "wsRoot": wsRoot, "convId": SessionConvID(ctx)})
 	if err := b.sendLine(payload); err != nil {
 		return "", fmt.Errorf("node 桥发送失败: %v", err)
@@ -441,7 +441,7 @@ func (b *nodeBridge) invokeTool(ctx context.Context, tool string, args map[strin
 	}
 }
 
-// handleServiceMsg Node 插件请求服务（ctx.fs/web/bash + Round4 DSH 服务面）
+// handleServiceMsg Node 插件请求服务（ctx.fs/web/bash + Round4 外部服务面）
 // → 转发 Go 侧工具 / 直连处理器。
 func (b *nodeBridge) handleServiceMsg(id int64, svcName, method string, argsRaw json.RawMessage, plugin string) {
 	log.Printf("[node-bridge:diag] service id=%d svc=%s method=%s plugin=%s", id, svcName, method, plugin)
@@ -456,7 +456,7 @@ func (b *nodeBridge) handleServiceMsg(id int64, svcName, method string, argsRaw 
 	b.mu.Lock()
 	ph := b.ph
 	b.mu.Unlock()
-	// ★ Round4：DSH 服务面（agents/subagents/llm/systemPrompt/commands/logger）
+	// ★ Round4：外部服务面（agents/subagents/llm/systemPrompt/commands/logger）
 	if handled, data, err := b.dshService(svcName, method, args, plugin, ph); handled {
 		if err != nil {
 			b.sendResult(id, false, "", err.Error())
@@ -495,11 +495,11 @@ func (b *nodeBridge) handleServiceMsg(id int64, svcName, method string, argsRaw 
 	b.sendResult(id, true, result, "")
 }
 
-// ─── Round4 DSH 服务面（cordis4 轨插件 ctx.agents/subagents/llm/systemPrompt/
+// ─── Round4 外部服务面（cordis4 轨插件 ctx.agents/subagents/llm/systemPrompt/
 // commands 的门面后端）────────────────────────────────────────
 // 直接映射现有 Go 能力（SubAgentRegistry / 模型目录 / PluginHost 段 / 命令表），
 // 与 goja 轨 ctx.agents/ctx.llm（jsplugin_agents.go）同源，行为一致。
-// 返回 (handled, data, err)：handled=false 表示非 DSH 服务（走 mapBridgeService）。
+// 返回 (handled, data, err)：handled=false 表示非 外部服务（走 mapBridgeService）。
 
 // handleSubscribeMsg 记录插件事件订阅白名单（agent/status 等按名转发）。
 func (b *nodeBridge) handleSubscribeMsg(plugin string, events []string) {
@@ -540,7 +540,7 @@ func emitBridgeEvent(name string, payload any) {
 	}
 }
 
-// dshService DSH 服务面实现（Node 插件 ctx.agents/subagents/llm/systemPrompt/commands）。
+// dshService 外部服务面实现（Node 插件 ctx.agents/subagents/llm/systemPrompt/commands）。
 // ★ Round4 repair（t6）：ph 由 handleServiceMsg 锁内快照传入（与
 //   subAgentSpecFromArgs 共用同一宿主快照），调用方不得传 b.ph。
 func (b *nodeBridge) dshService(svcName, method string, args map[string]any, plugin string, ph *PluginHost) (handled bool, data string, err error) {
@@ -989,7 +989,7 @@ func mapBridgeService(svcName, method string, args map[string]any) (string, map[
 		// ★ 2026-09 Round2（R2-9）：旧工具名（read/write/bash/
 		//   list_files）在宿主生产注册面已不存在（磁盘插件 tool-harness/tool-shell
 		//   承载新名）——桥映射同步到 harness 命名；fs.list 无对应工具，改直连。
-		// ★ t4 F3（2026-09 t5）：R2-7 后 read 输出形态为 DSH 行号块
+		// ★ t4 F3（2026-09 t5）：R2-7 后 read 输出形态为 外部行号块
 		//   （<path>/<type>/<content> + "N: text" + total footer）——npm 插件
 		//   ctx.fs.read 拿到的不是原始文件文本；当前仓库无 ctx.fs.read 消费者
 		//   （仅注释示例），若第三方解析型插件出现需在桥接层剥离包装（前端专项）。

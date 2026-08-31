@@ -49,7 +49,7 @@ func TestToolHarnessJSNative(t *testing.T) {
 		t.Fatalf("write 未创建: %v", err)
 	}
 
-	// ② read：全文 + 分页（★ R2-7 DSH 对齐：行号输出 + total footer）
+	// ② read：全文 + 分页（★ R2-7 外部对齐：行号输出 + total footer）
 	out, _ := execTool(t, reg, "read", map[string]any{"path": "x/y.txt"})
 	if !strings.Contains(out, "b") || !strings.Contains(out, "End of file - total 3 lines") {
 		t.Fatalf("read 全文异常: %q", out)
@@ -58,7 +58,7 @@ func TestToolHarnessJSNative(t *testing.T) {
 	if !strings.Contains(out, "2: b") || strings.Contains(out, "1: a") {
 		t.Fatalf("read 分页异常: %q", out)
 	}
-	// file_path 别名（DSH 参数名）等价可用
+	// file_path 别名（外部参数名）等价可用
 	out, _ = execTool(t, reg, "read", map[string]any{"file_path": "x/y.txt", "offset": 3, "limit": 1})
 	if !strings.Contains(out, "3: c") {
 		t.Fatalf("read file_path 别名异常: %q", out)
@@ -103,7 +103,7 @@ func TestToolHarnessJSNative(t *testing.T) {
 		t.Fatalf("grep 异常: %q err=%v", out, err)
 	}
 
-	// ⑥ bash：ctx.bash 执行 + timeoutMs/description 参数（R2-7 DSH 对齐）
+	// ⑥ bash：ctx.bash 执行 + timeoutMs/description 参数（R2-7 外部对齐）
 	out, err = execTool(t, reg, "bash", map[string]any{"command": "echo harness-js-ok"})
 	if err != nil || !strings.Contains(out, "harness-js-ok") {
 		t.Fatalf("bash 异常: %q err=%v", out, err)

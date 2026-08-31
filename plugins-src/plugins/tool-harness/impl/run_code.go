@@ -29,7 +29,7 @@ func Register(r *Registry, root string) { registerRunCode(r, root) }
 func registerRunCode(r *Registry, root string) {
 	r.Register(&Tool{
 		Name: "run_code",
-		Description: "执行一段代码并返回输出（对齐 deepseek-harness run_code / Code Mode）。" +
+		Description: "执行一段代码并返回输出（对齐 run_code / Code Mode）。" +
 			"参数：code（必填，要执行的程序体）、language（可选，auto/go/python/node，默认 auto 按内容探测）、" +
 			"description（可选，简短说明）。仅返回程序的 stdout/stderr 与退出状态。" +
 			"★嵌套工具调度：language=node 且代码内用 tools.xxx(args) 调用已注册工具（如 tools.read({path:'a.go'})），" +

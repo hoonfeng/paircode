@@ -10,7 +10,7 @@ import (
 // LoopFactory 接口：Create 时把 opts 的可装配快照传给 JS，合并返回的 overrides
 // 后走默认 Go 工厂构建 *Loop。
 //
-// 对齐 deepseek-harness：参考项目的 AgentLoop 插件在装配期决定循环参数/实现；
+// 对齐 setFactory 语义：外部 AgentLoop 插件在装配期决定循环参数/实现；
 // gou-ide 的 Loop 是 Go 核心（无法在 goja 沙箱内构造 *Loop），故 JS 侧现实能力
 // 为「参数级装配」——apply 返回非空字段即覆盖默认装配参数；返回 null/undefined
 // 表示不改动。真正「换内核」留给宿主 Go 代码经 ReplaceLoopFactory 完成。

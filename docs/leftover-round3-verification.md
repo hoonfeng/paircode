@@ -3,7 +3,7 @@
 > 独立验证 t2 实施结果（docs/plugin-round3-plan.md §7-§10，12 工作包 + 14 commit Round3-1…Round3-14）。
 > 验证人：verifier。验证范围：构建/测试、范围合规、装载冒烟（临时端口）、新机制功能抽查、
 > 旧名清理完整性。**本报告不修改任何实现代码**（唯一改动文件为本报告）。
-> 基线：HEAD @ 7c02c637（Round3-14）；go1.26.4 windows/amd64；node v22.17.0；工作目录 F:\syproject\gou-ide。
+> 基线：HEAD @ 7c02c637（Round3-14）；go1.26.4 windows/amd64；node v22.17.0；工作目录 <仓库根>。
 
 ---
 
@@ -19,13 +19,13 @@
 | 6 | Round3 新增测试集（-run 过滤，见 §1.2） | 0 | ✅ 通过 | 21 项全绿 1.2s |
 | 7 | `node --check` 全部插件 JS（45 插件目录全量 *.js） | 0 | ✅ 通过 | 零语法错误 |
 | 8 | 装载冒烟（WEB_PORT=9547 临时端口，避开 9090/9479/9323） | 0 | ✅ 通过 | 见 §3 |
-| 9 | 前端构建 `cd cmd/companion/web-ui && npm run build` | 1 | ⚠️ 环境依赖（非回归） | vite/esbuild `spawn EPERM`（DSH 沙箱文档化边界；t2 §10.1 同注），需队长全权限通道复跑 |
+| 9 | 前端构建 `cd cmd/companion/web-ui && npm run build` | 1 | ⚠️ 环境依赖（非回归） | vite/esbuild `spawn EPERM`（受限沙箱文档化边界；t2 §10.1 同注），需队长全权限通道复跑 |
 
 ### 1.1 全量测试环境依赖失败清单（14 项，全部非回归）
 
 | 失败测试 | 根因 | 判定 |
 |---|---|---|
-| TestToolRunCommand / TestRunShellWithBash / TestRunShellBacktick / TestRunBackground / TestRunCommandInLoop / TestDetectBash / TestJSPluginCtxBashLogger / TestToolCoreJSNative / TestToolHarnessJSNative / TestHarnessAlias_GlobGrepBash / TestRunCode_Go / TestBGCrossRegistry / TestRunCodeNested | msys bash `couldn't create signal pipe, Win32 error 5`（受限 token 无法建命名管道，DSH 沙箱文档化边界；`exit status 0xc0000142`） | 环境依赖 |
+| TestToolRunCommand / TestRunShellWithBash / TestRunShellBacktick / TestRunBackground / TestRunCommandInLoop / TestDetectBash / TestJSPluginCtxBashLogger / TestToolCoreJSNative / TestToolHarnessJSNative / TestHarnessAlias_GlobGrepBash / TestRunCode_Go / TestBGCrossRegistry / TestRunCodeNested | msys bash `couldn't create signal pipe, Win32 error 5`（受限 token 无法建命名管道，受限沙箱文档化边界；`exit status 0xc0000142`） | 环境依赖 |
 | TestWebDebugTimeoutMs | rod/Chromium 下载写 `%APPDATA%\rod` 被拒（`mkdir ... : Access is denied`） | 环境依赖 |
 
 > 与 round2 §6.13 清单对比：round2 的 13 项全部复现；新增 TestBGCrossRegistry、TestRunCode_Go
@@ -77,7 +77,7 @@ _Executor / TestAskUserNoHostTimeout（单问题回归）/ TestToolLandingMatrix
 
 | 探活项 | 结果 |
 |---|---|
-| `/api/health` | ✅ 200 `{"status":"ok","workspace":"F:\\syproject\\gou-ide","folders":[...]}` |
+| `/api/health` | ✅ 200 `{"status":"ok","workspace":"<仓库根>","folders":[...]}` |
 | `/api/plugins` | ✅ 200，**46 插件**全装载（含 tool-goal / tool-subagent / tool-workflow / agent-teams） |
 | `/api/tools` | ✅ 200，**184 工具**；goal 3 工具（create_goal/get_goal/update_goal）、subagent 6 工具（subagent/subagent_fork/report/list_agents/interrupt_agent/send_message）、workflow 1 工具（workflow）全部注册且描述完整 |
 | `/api/commands` | ✅ 200 `{ok:true, commands:[{name:"agent-teams", description:"团队面板/状态快照（/agent-teams [status]）", owner:"agent-teams"}]}` |
@@ -95,7 +95,7 @@ _Executor / TestAskUserNoHostTimeout（单问题回归）/ TestToolLandingMatrix
 |---|---|---|
 | **goal 状态机 + 持久化** | TestGoalManager：create（默认轮次上限 3）→ 重复 create 拒绝 → get → update edit（revision 乐观锁 1→2）→ 过期 revision 拒绝 → pause（停续轮）→ resume（重挂）→ complete（终态不再续轮）→ 终态 resume 拒绝 → blocked（blockerReason 记录）→ **跨管理器实例读盘恢复**（新 GoalManager 从 `<wsRoot>/.pair/goals/<convID>.json` 恢复 blocked 状态 + 文件存在断言） | ✅ 全 PASS |
 | **goal 自动续轮** | TestGoalAutoContinue：轮次上限 / pause / resume / 同一阻塞条件连续 ≥3 轮自动 blocked / 系统提示注入段（goalSystemMarker 幂等） | ✅ 全 PASS |
-| **goal 工具面** | TestGoalArchiveExecutors（宿主执行器存档接线）+ 冒烟注册 3 工具 + tool-goal 插件 schema 对齐 DSH（create_goal objective 必填 / update_goal goal_id+revision+action 必填） | ✅ PASS |
+| **goal 工具面** | TestGoalArchiveExecutors（宿主执行器存档接线）+ 冒烟注册 3 工具 + tool-goal 插件 schema 对齐 外部（create_goal objective 必填 / update_goal goal_id+revision+action 必填） | ✅ PASS |
 | **subagent 后台执行与结果回收** | TestWorkflowRunner_Agent 真实 spawn 子 Agent 并等待 `subagent/idle` 回收 LastText（测试日志实测 `[subagent] 已启动成员会话 … label=wf-analyst` → `[workflow] agent 完成 … text=42 字符`） | ✅ PASS（真机路径） |
 | **subagent fork** | TestAgentsForkSpec（SubAgentSpec.ForkOf 映射）+ TestJSPluginAgentsFork（ctx.agents.fork 桥）；subagent_spawn.go ForkSeed 源会话快照 ≤60 条 + 任务；ctx.agents.report 写入 SubAgentRecord.Report | ✅ 全 PASS |
 | **workflow 编排** | TestWorkflowRunner_Agent/Pipeline/Parallel/PhaseLogArgs/Cancel/Errors 6 项（pipeline 逐项过阶段失败项 null、parallel barrier、phase/log 进度、args 输入、ctx 取消） | ✅ 全 PASS |
@@ -123,7 +123,7 @@ _Executor / TestAskUserNoHostTimeout（单问题回归）/ TestToolLandingMatrix
 
 | ID | 级别 | 内容 | 建议 |
 |---|---|---|---|
-| F1 | info | 前端构建在沙箱内失败（vite/esbuild `spawn EPERM`，DSH 文档化边界），与 t2 §10.1 偏差记录一致；**当前 `.pair/assets/runtime/web` 服务的是 round2 期 bundle**（实测不含 `/commands/run`、`multi_select`、`answers` 标记）——slash 菜单与 ask_user 多问题 UI 在重建前不会出现在运行界面 | 队长全权限通道（danger-full-access 已验证可用）复跑 `cd cmd/companion/web-ui && npm run build` + sync-web-dist.mjs，重建后冒烟复核前端 |
+| F1 | info | 前端构建在沙箱内失败（vite/esbuild `spawn EPERM`，外部文档化边界），与 t2 §10.1 偏差记录一致；**当前 `.pair/assets/runtime/web` 服务的是 round2 期 bundle**（实测不含 `/commands/run`、`multi_select`、`answers` 标记）——slash 菜单与 ask_user 多问题 UI 在重建前不会出现在运行界面 | 队长全权限通道（danger-full-access 已验证可用）复跑 `cd cmd/companion/web-ui && npm run build` + sync-web-dist.mjs，重建后冒烟复核前端 |
 | F2 | low | `plugins-src/ui-app/src/components/RightPanel.vue` toolMeta（1069-1076）与 `ApprovalBar.vue`（61-66）显示映射、`agent-events.js:390` fileTools 刷新清单仅旧名分支——新名（read/write/edit/bash/glob/grep）调用显示通用图标/不触发文件树刷新；round2 起即存在（tool-harness 早已新名注册），非 Round3 回归 | 后续随手补新名分支（与 chat-utils.js 双分支对齐） |
 | F3 | info | `internal/hook/hook_test.go` 以 read_file 等作模式匹配样例字符串（纯 fixture，非注册引用），与定案「纯 fixture 保留」分类一致 | 可不动 |
 | F4 | info | go telemetry upload token stderr 噪音（沙箱限制，不影响构建/测试） | 可忽略 |

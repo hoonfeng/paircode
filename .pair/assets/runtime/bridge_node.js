@@ -8,13 +8,13 @@
 // 对应工具实现（复用 read_file/web_fetch/run_command 等，行为与 goja
 // 插件一致）。
 //
-// ★ Round4（2026-09）：DSH 插件运行时（cordis4 轨）。
+// ★ Round4（2026-09）：cordis4 插件运行时。
 //   插件形态：npm 包，peer 依赖 @deepseek-ai/cordis ^4 + @deepseek-ai/dsh-*，
-//   apply(ctx) 使用 cordis4 Context 语义（inject/get/effect/on）+ DSH 服务面
+//   apply(ctx) 使用 cordis4 Context 语义（inject/get/effect/on）+ cordis4 服务面
 //   （ctx.agents / ctx.subagents / ctx.llm / ctx.systemPrompt / ctx.commands /
 //   ctx.logger / ctx.get('webServer'|'workspaceRegistry')）。plugins.json 条目
 //   runtime=="dsh" 时走本轨：import('@deepseek-ai/cordis') new Context() +
-//   DSH 门面（decorateDshCtx）；其余条目沿用 cordis3 轨（@cordisjs/core）。
+//   cordis4 门面（decorateDshCtx）；其余条目沿用 cordis3 轨（@cordisjs/core）。
 //   双轨各自独立 import，node_modules 平铺共存无冲突。
 //
 // 协议：stdin/stdout JSON Lines（每行一个 JSON 对象，不换行转义）。
@@ -75,10 +75,10 @@ function svc(svcName, method, args, timeoutMs = 90000) {
 // ── 工具注册表 ──
 const tools = new Map(); // name → def（含 handler/run 执行函数；__svc 为服务型调用）
 
-// ── 命令注册表（DSH ctx.commands；handler 由 Go 侧 cmdrun 触发）──
+// ── 命令注册表（cordis4 ctx.commands；handler 由 Go 侧 cmdrun 触发）──
 const commands = new Map(); // name → {name, description, handler}
 
-// ── 事件监听表（DSH ctx.on；Go 侧按订阅名转发 host 事件）──
+// ── 事件监听表（cordis4 ctx.on；Go 侧按订阅名转发 host 事件）──
 const eventListeners = new Map(); // name → Set<fn>
 
 // 当前装载插件名（svc/subscribe 消息归属用）。
@@ -150,7 +150,7 @@ function exposeService(plugin, serviceName, obj) {
   }
 }
 
-// ── 消息文本提取（DSH UserMessage → 纯文本；createUserMessage 形态）──
+// ── 消息文本提取（外部 UserMessage → 纯文本；createUserMessage 形态）──
 function textOfMessage(msg) {
   if (msg === undefined || msg === null) return '';
   if (typeof msg === 'string') return msg;
@@ -164,7 +164,7 @@ function textOfMessage(msg) {
   return '';
 }
 
-// ── DSH Agent 句柄（ctx.agents.get / exec.agent）──
+// ── 外部 Agent 句柄（ctx.agents.get / exec.agent）──
 // 宿主会话 = 一个可续聊子 Agent（convID 标识）。句柄是轻量投影：
 // 状态经 Go 服务查询；followup/inject/steer/cancel 转发 Go 侧对应能力。
 function makeAgent(convId, wsRoot, status, currentRoute) {
@@ -204,7 +204,7 @@ function makeAgent(convId, wsRoot, status, currentRoute) {
   return agent;
 }
 
-// 缓存 DSH Agent 句柄（ctx.agents.get 同步读；list/status 事件/startContinuable 刷新）。
+// 缓存 外部 Agent 句柄（ctx.agents.get 同步读；list/status 事件/startContinuable 刷新）。
 const agentCache = new Map(); // convId → agent
 let currentRoute = null; // 宿主当前模型路由（llm.current 缓存）
 
@@ -229,7 +229,7 @@ async function refreshAgentCache() {
 }
 
 // ── decorateCtx（cordis3 轨）给插件 apply 的 ctx 挂 harness 门面 ──
-// （对齐 deepseek-harness host-runner）：tools.register / fs / web / bash /
+// （对齐 host-runner 运行模型）：tools.register / fs / web / bash /
 // workspaceRoot / store / loop。
 function decorateCtx(ctx, plugin) {
   currentPlugin = plugin;
@@ -298,8 +298,8 @@ function decorateCtx(ctx, plugin) {
   return ctx;
 }
 
-// ── decorateDshCtx（cordis4 轨）DSH 服务面门面 ──
-// 对齐 deepseek-harness 插件运行时：agents / subagents / llm / systemPrompt /
+// ── decorateDshCtx（cordis4 轨）cordis4 服务面门面 ──
+// 对齐插件运行时：agents / subagents / llm / systemPrompt /
 // commands / logger / tools / get('webServer'|'workspaceRegistry') / effect /
 // on（host 事件订阅桥）/ inject（服务就绪即同步回调）。
 function decorateDshCtx(ctx, plugin) {
@@ -558,7 +558,7 @@ async function invokeTool(toolName, args, convId, wsRoot) {
   }
   const fn = def.handler || def.run || def.fn || def.execute || def.call;
   if (typeof fn !== 'function') throw new Error(`工具 ${toolName} 没有可执行函数`);
-  // DSH 工具执行上下文：exec.agent = 调用会话句柄（宿主导航信息经 convId/wsRoot 注入）
+  // 工具执行上下文：exec.agent = 调用会话句柄（宿主导航信息经 convId/wsRoot 注入）
   const exec = {
     agent: makeAgent(convId || '', wsRoot || WORKSPACE_ROOT, 'running', currentRoute),
     signal: new AbortController().signal,
@@ -600,7 +600,7 @@ function readPluginSpecs() {
 }
 
 // ── 插件装载 ──
-// runtime=="dsh" → cordis4（@deepseek-ai/cordis）+ DSH 门面；
+// runtime=="dsh" → cordis4（@deepseek-ai/cordis）+ cordis4 门面；
 // 其余 → cordis3（@cordisjs/core）既有路径。
 
 // resolvePluginApply 从模块导出中解析 apply 函数（双轨共用）。
@@ -637,7 +637,7 @@ async function loadPlugins() {
     try {
       let applyFn;
       if (spec.runtime === 'dsh') {
-        // ★ Round4：cordis4 + DSH 服务面装载分支
+        // ★ Round4：cordis4 + cordis4 服务面装载分支
         const { Context } = await import('@deepseek-ai/cordis');
         const mod = await import(pkgName);
         const candidate = mod.default || mod;
@@ -696,7 +696,7 @@ async function loadPlugins() {
       } else if (msg.t === 'ping') {
         send({ t: 'result', id: msg.id, ok: true, data: 'pong' });
       } else if (msg.t === 'cmdrun') {
-        // Go 侧执行宿主命令 → 回 Node 调用插件命令 handler（DSH ctx.commands）
+        // Go 侧执行宿主命令 → 回 Node 调用插件命令 handler（cordis4 ctx.commands）
         try {
           const def = commands.get(msg.name);
           if (!def) throw new Error(`命令未注册: ${msg.name}`);
@@ -721,7 +721,7 @@ async function loadPlugins() {
           }
         }
       } else if (msg.t === 'prestep') {
-        // DSH agent/pre-step 中间件瀑布（订阅者形态见 dsh-agent-teams
+        // agent/pre-step 中间件瀑布（订阅者形态见 dsh-agent-teams
         // installAgentTeamsGestureBoundary）：
         //   ctx.on('agent/pre-step', async ({messages, signal}, next) => decision)
         //   - next() 返回下游决策；基线 {kind:'enter', messages: payload.messages}

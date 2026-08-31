@@ -1,11 +1,11 @@
 // ═══════════════════════════════════════════════════════════════
-// tool-goal — goal 工具（Round3 ③.1，对齐 DSH harness tool-goal）
+// tool-goal — goal 工具（Round3 ③.1，对齐 goal 工具）
 //
 // 编排在插件、能力在宿主：schema/描述在插件，状态机与自动续轮在宿主
 // （internal/agent/goal.go）。execute 经 ctx.hostTool.exec 路由回宿主
 // 执行器（_convID 由宿主工具执行链自动注入，多会话并发不串）。
 //
-// 语义对齐 DSH：
+// 语义对齐：
 //   - create_goal：objective 必填（直接给出，不做 LLM 推断）、max_goal_rounds 可选
 //   - get_goal：返回 goal_id/revision/objective/phase/rounds/roundLimit/
 //     blockerReason/armed
@@ -15,7 +15,7 @@ const tools = [
   {
     name: 'create_goal',
     description:
-      '创建同会话完成目标（对齐 DSH harness goal）。objective 必填（直接给出目标，不做推断）；max_goal_rounds 可选（自动续轮上限，默认 3）。创建后会话将在每轮结束后自动续轮推进，直到 update_goal complete/blocked 或达轮次上限。',
+      '创建同会话完成目标（对齐 goal）。objective 必填（直接给出目标，不做推断）；max_goal_rounds 可选（自动续轮上限，默认 3）。创建后会话将在每轮结束后自动续轮推进，直到 update_goal complete/blocked 或达轮次上限。',
     parameters: {
       type: 'object',
       properties: {
@@ -37,7 +37,7 @@ const tools = [
   {
     name: 'update_goal',
     description:
-      '更新当前会话目标（对齐 DSH harness goal update）。action ∈ {edit,pause,resume,complete,blocked}；revision 必传（乐观锁，冲突拒绝）。edit 可改 objective/max_goal_rounds；pause 停续轮、resume 重挂；complete 标记完成；blocked 标记阻塞（blocked_reason 必填说明）。',
+      '更新当前会话目标（对齐 goal update）。action ∈ {edit,pause,resume,complete,blocked}；revision 必传（乐观锁，冲突拒绝）。edit 可改 objective/max_goal_rounds；pause 停续轮、resume 重挂；complete 标记完成；blocked 标记阻塞（blocked_reason 必填说明）。',
     parameters: {
       type: 'object',
       properties: {

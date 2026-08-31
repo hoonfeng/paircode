@@ -27,7 +27,7 @@
 
 - **后端完整构建**：`CGO_ENABLED=1 go build -o pair.exe ./cmd/companion` ✅（pair.exe 74.7MB）。
 - **启动冒烟**：`WEB_PORT=9322 ./pair.exe` 启动 → 进程持续运行、`/api/health` 返回 200、启动日志无 FATAL/panic、全局插件宿主 43 个插件、工具集 44 个（18 插件，含 t2 新增 7 个 tool-*）→ 验证后立即终止，端口释放。
-- **前端构建**：⚠️ **沙箱环境阻断**——`npm run build`（入口 `cmd/companion/web-ui`（兼容 package.json，2026-08-29 新增）→ `scripts/build-ui.mjs` + `plugins-src/ui-app` vite 壳 + `scripts/sync-web-dist.mjs` 同步 dist）在 DSH 沙箱内无法执行：vite/esbuild 服务进程 spawn（pipe stdio）被 DSH 沙箱设计边界拦截（`spawn EPERM`，Node `child_process.spawn` 的 pipe/overlapped stdio 均被禁；本会话无批准升级通道）。**前端构建需在沙箱外执行**（同一命令即可），dist 产物为既有构建结果。
+- **前端构建**：⚠️ **沙箱环境阻断**——`npm run build`（入口 `cmd/companion/web-ui`（兼容 package.json，2026-08-29 新增）→ `scripts/build-ui.mjs` + `plugins-src/ui-app` vite 壳 + `scripts/sync-web-dist.mjs` 同步 dist）在 受限沙箱内无法执行：vite/esbuild 服务进程 spawn（pipe stdio）被 受限沙箱设计边界拦截（`spawn EPERM`，Node `child_process.spawn` 的 pipe/overlapped stdio 均被禁；本会话无批准升级通道）。**前端构建需在沙箱外执行**（同一命令即可），dist 产物为既有构建结果。
 
 ### 集成收尾处理（2026-08-29）
 
@@ -132,7 +132,7 @@
 
 ## 环境依赖测试说明（t3 验证参考）
 
-`go test ./internal/agent/` 在 DSH 沙箱环境下以下测试无法通过，均为**环境依赖**（
+`go test ./internal/agent/` 在 受限沙箱环境下以下测试无法通过，均为**环境依赖**（
 与本次改动无关，失败机理在改动前即存在）：
 1. **Git bash 受限**（沙箱禁止 bash 创建信号管道，`couldn't create signal pipe, Win32 error 5`）：
    `TestToolRunCommand`、`TestRunShellWithBash/Backtick`、`TestRunBackground`、`TestRunCommandInLoop`、
@@ -153,14 +153,14 @@ Round3（2026-09）实测失败清单仅剩：msys bash 信号管道组（上述
 
 ## Round4 状态（2026-09 · runtime-complete-round4 团队 t2 实施）
 
-### ④ JS 运行时升级（Node 桥 cordis4/DSH 轨）→ **已实现**（详见 docs/runtime-upgrade-plan.md）
+### ④ JS 运行时升级（Node 桥 cordis4/外部轨）→ **已实现**（详见 docs/runtime-upgrade-plan.md）
 
 | 项 | 状态 | 说明 |
 |---|---|---|
-| DSH 插件路由判定（@deepseek-ai/cordis ^4 peer） | ✅ 已实现 | nodePluginNeedsNode/nodePluginRuntime（internal/agent/node_plugins.go） |
-| cordis4 装载分支 + DSH 门面（agents/subagents/llm/systemPrompt/commands/logger） | ✅ 已实现 | bridge_node.js decorateDshCtx；node_bridge.go dshService |
+| 外部插件路由判定（@deepseek-ai/cordis ^4 peer） | ✅ 已实现 | nodePluginNeedsNode/nodePluginRuntime（internal/agent/node_plugins.go） |
+| cordis4 装载分支 + 外部门面（agents/subagents/llm/systemPrompt/commands/logger） | ✅ 已实现 | bridge_node.js decorateDshCtx；node_bridge.go dshService |
 | agent/status 事件桥（subscribe/event 协议） | ✅ 已实现 | subagent_registry.go 四状态点 → emitBridgeEvent |
-| DSH 插件安装路径（runtime 透传 + peer 显式安装） | ✅ 已实现 | marketInstallNPMPluginNode + npmInstallDshPeers |
+| 外部插件安装路径（runtime 透传 + peer 显式安装） | ✅ 已实现 | marketInstallNPMPluginNode + npmInstallDshPeers |
 | dsh-agent-teams 直跑（13 工具 + create/status/delete 冒烟） | ✅ E2E 测试 | TestNodeBridgeDSHPluginE2E（npm 网络依赖，环境不满足自动 Skip） |
 | agent/pre-step / agent/request-error 事件源 | ✅ 已接线（遗留处置 2026-08-29） | tools.go Registry.Execute 门后发 agent/pre-step（args 截断 2KB）；llm.go 4xx/重试耗尽发 agent/request-error；订阅白名单外零开销 |
 
@@ -182,24 +182,24 @@ Round3（2026-09）实测失败清单仅剩：msys bash 信号管道组（上述
 - `TestRolePromptDiskDefaultSync` / `TestRolePromptDiskOverride`（judge 提示迁移后保持通过）
 - t6 repair 追加：`TestLoadCordisPatchDSHRuntime`（F1b）、`TestBridgeNodeResourceSync`（F1a 守卫）、
   `TestBridgeNodeSourceExternalPriority`（外置优先/回退/同步回归）
-- t5 集成追加：真实 pair.exe 冒烟（46 插件/47 工具集/桥自启/DSH 插件装载/health 200/零 FATAL）
+- t5 集成追加：真实 pair.exe 冒烟（46 插件/47 工具集/桥自启/外部插件装载/health 200/零 FATAL）
 
 ### Round4 已知并存语义（t5 同步，替代关系定案；F2 自动化 2026-08-29）
 
-**DSH 插件（npm，桥 cordis4 轨）与 repo agent-teams 移植版（`.pair/plugins/agent-teams`，goja 轨）
+**外部插件（npm，桥 cordis4 轨）与 repo agent-teams 移植版（`.pair/plugins/agent-teams`，goja 轨）
 的 13 个 `agent_teams_*` 工具同名——二者为替代关系**（非并存）：
 
 - **自动接管（遗留处置）**：桥插件工具注册冲突时，若桥包短名去 `dsh-` 前缀 == 占用插件 id
   （如 `@nanmicoder/dsh-agent-teams` → `agent-teams`），宿主自动停用移植版并接管注册
   （`nodeBridge.takeoverConflictingPlugin`，node_bridge.go）；日志明确记录接管动作。
-  安装 DSH 插件后无需手动 `cordis_stop agent-teams`。
+  安装 外部插件后无需手动 `cordis_stop agent-teams`。
 - 其余冲突（非同源命名 / 占用方为其他桥插件 / 不同 id）保持既有严格拒绝：
   `工具 "agent_teams_create" 已被插件 agent-teams 注册，
   插件 node-bridge:@nanmicoder/dsh-agent-teams 不能覆盖。请换工具名，或先 cordis_stop agent-teams 再注册`
   （明确报错 + 处理建议，非静默、非 FATAL；t5 已补归属名使信息完整）。
-- `/agent-teams` 命令按宿主命令表同名覆盖语义由 DSH 插件接管（owner=node-bridge:@…）。
+- `/agent-teams` 命令按宿主命令表同名覆盖语义由 外部插件接管（owner=node-bridge:@…）。
 - 二者同源（移植版即 dsh-agent-teams 的适配），工具/状态文件格式兼容（.agent-teams/ 磁盘真相）。
 - 测试：`TestBridgeToolTakeover`（接管/停用/归属转移/负例）、`TestBridgeToolTakeoverPkgShort`（命名解析）。
-- `/agent-teams` 命令按宿主命令表同名覆盖语义由 DSH 插件接管（owner=node-bridge:@…）。
-- 安装 DSH 插件前先停 repo 移植版，即可让桥版本全量接管 13 工具。
+- `/agent-teams` 命令按宿主命令表同名覆盖语义由 外部插件接管（owner=node-bridge:@…）。
+- 安装 外部插件前先停 repo 移植版，即可让桥版本全量接管 13 工具。
 - 二者同源（移植版即 dsh-agent-teams 的适配），工具/状态文件格式兼容（.agent-teams/ 磁盘真相）。

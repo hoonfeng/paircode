@@ -39,18 +39,6 @@ import (
 //go:embed web-ui/dist
 var webUIFiles embed.FS
 
-//go:embed web-ui/ide_ref.html
-var ideRefFile embed.FS
-
-//go:embed web-ui/ide_ref_select.html
-var ideRefSelectFile embed.FS
-
-//go:embed web-ui/ide_ref_modal.html
-var ideRefModalFile embed.FS
-
-//go:embed web-ui/ide_ref_setmodal.html
-var ideRefSetModalFile embed.FS
-
 // resolveWebDir 解析外部前端目录（磁盘优先，不重新编译改 UI）：
 //  1. WEB_DIR 环境变量（显式指定，如开发时指向 web-ui/dist）
 //  2. exe 旁 web/ 目录（存在则用；不存在则首次从 embed 解压产物）
@@ -410,7 +398,7 @@ func startWebUI(port int) {
 		http.ServeFile(w, r, p)
 	})
 
-	// ── UI 插件 boot 图（DSH 兼容）──
+	// ── UI 插件 boot 图（外部兼容）──
 	// GET /api/ui-boot：从磁盘 UI 插件包按 dsh.ui manifest 独立发现，输出 DSH
 	// WebBootGraph 等价 boot 图（rev + entries[{id,url,rev,inject,immediately,external}]）。
 	// 服务端装配（见 internal/agent/uiboot.go BuildUIBootGraph），非插件 ext 路由——
@@ -439,43 +427,6 @@ func startWebUI(port int) {
 		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 		w.Header().Set("Pragma", "no-cache")
 		w.Header().Set("Expires", "0")
-		// ide_ref.html：调试参照收集器（Edge headless 访问 9090 加载真实前端）。
-		// ★ 资源外置：外部 .pair/assets/runtime/ide_ref*.html 优先，embed 兜底。
-		if r.URL.Path == "/ide_ref.html" || r.URL.Path == "/ide_ref" {
-			if data, err := ideRefFile.ReadFile("web-ui/ide_ref.html"); err == nil {
-				b, _ := agent.LoadRuntimeAsset("ide_ref.html", data)
-				w.Header().Set("Content-Type", "text/html; charset=utf-8")
-				w.Write(b)
-				return
-			}
-		}
-		// ide_ref_select.html：select 下拉箭头浏览器标准参照（Edge headless）。
-		if r.URL.Path == "/ide_ref_select.html" {
-			if data, err := ideRefSelectFile.ReadFile("web-ui/ide_ref_select.html"); err == nil {
-				b, _ := agent.LoadRuntimeAsset("ide_ref_select.html", data)
-				w.Header().Set("Content-Type", "text/html; charset=utf-8")
-				w.Write(b)
-				return
-			}
-		}
-		// ide_ref_modal.html：设置/工具弹窗 modal 几何浏览器参照（Edge headless）。
-		if r.URL.Path == "/ide_ref_modal.html" {
-			if data, err := ideRefModalFile.ReadFile("web-ui/ide_ref_modal.html"); err == nil {
-				b, _ := agent.LoadRuntimeAsset("ide_ref_modal.html", data)
-				w.Header().Set("Content-Type", "text/html; charset=utf-8")
-				w.Write(b)
-				return
-			}
-		}
-		// ide_ref_setmodal.html：设置面板独立参照（复刻 SettingsModal 样式，Edge 量几何）。
-		if r.URL.Path == "/ide_ref_setmodal.html" {
-			if data, err := ideRefSetModalFile.ReadFile("web-ui/ide_ref_setmodal.html"); err == nil {
-				b, _ := agent.LoadRuntimeAsset("ide_ref_setmodal.html", data)
-				w.Header().Set("Content-Type", "text/html; charset=utf-8")
-				w.Write(b)
-				return
-			}
-		}
 		fileServer.ServeHTTP(w, r)
 	}))
 
@@ -1870,7 +1821,7 @@ func buildSystemStaticPrefix() string {
 		return systemStaticPrefixCache.prefix
 	}
 	var b strings.Builder
-	// ★ persona/rules 槽位（对齐 harness system-prompt 可替换 section）：
+	// ★ persona/rules 槽位（对齐 system-prompt 可替换 section）：
 	//   插件贡献 name==deployment:persona 的段 → 替换默认 persona（身份段）；
 	//   插件贡献 name==deployment:rules 的段 → 替换默认规则段（行为准则）。
 	//   两者独立可组合；无贡献时输出与默认提示逐字节一致（静态前缀稳定）。
@@ -1998,7 +1949,7 @@ func buildWebSystemDynamic() string {
 // buildWebSystemPrompt 构建完整系统提示词（桌面和 web 端共享）。
 // 使用唯一的 CACHE_BOUNDARY 分隔静态前缀与动态后缀，最大化 LLM KV Cache 命中率。
 // ★ 通过 ComposeSystemPrompt 统一添加 boundary，避免双边界/漏边界。
-// ★ 插件贡献的系统提示段/变量（对齐 harness system-prompt 注册中心）并入动态侧：
+// ★ 插件贡献的系统提示段/变量（对齐 system-prompt 注册中心）并入动态侧：
 //
 //	插件段随加载/卸载变化，放 boundary 后避免破坏静态前缀 KV 缓存。
 //
@@ -2191,7 +2142,7 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool, ws
 	// ★ 历史精简：跨轮次加载时只保留最近一轮完整交互细节，
 	//   旧轮次压缩为 [用户消息, 助手最终报告]，丢弃中间 tool 输出。
 	//   大幅减少上下文体积，同时保持语义连续性。
-	// ★ 2026-08-17 对齐 harness compaction-basic：改为 token 压力触发——
+	// ★ 2026-08-17 对齐 compaction-basic：改为 token 压力触发——
 	//   原实现按轮数（>2 轮历史）强制压缩，小对话也被改写历史前缀，
 	//   导致 KV 缓存前缀每轮断裂、命中率骤降；现估算 token 占比，
 	//   未达阈值（45% 窗口）保持原始历史逐字节不变（缓存可连续命中）。

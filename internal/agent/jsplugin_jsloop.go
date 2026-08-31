@@ -9,7 +9,7 @@ import (
 
 // ── ctx.loopFactory.registerLoop(impl)：注册 JS 循环实现（agentloop 核心外置）──
 //
-// 对齐 deepseek-harness AgentRegistry.setFactory()：整体替换循环实现 = 装配期
+// 对齐 setFactory 装配：整体替换循环实现 = 装配期
 // 换一个实现 AgentFactory 的插件。本服务把 JS 插件声明为「循环实现」：
 //
 //	ctx.loopFactory.registerLoop({

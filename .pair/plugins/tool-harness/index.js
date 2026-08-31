@@ -25,7 +25,7 @@ function projPath(ctx, args, path) {
   return path
 }
 
-// filePath 兼容参数名：DSH 参考用 file_path，repo 旧调用方用 path——两者都接受（file_path 优先）。
+// filePath 兼容参数名：参考用 file_path，repo 旧调用方用 path——两者都接受（file_path 优先）。
 function filePath(args) {
   const p = args.file_path != null ? args.file_path : args.path
   return p == null ? '' : String(p)
@@ -47,7 +47,7 @@ function readFileText(ctx, args, path) {
   return text
 }
 
-// read：DSH 对齐（2026-09 Round2 R2-7）——file_path 参数 + 行号输出块：
+// read：约定对齐（2026-09 Round2 R2-7）——file_path 参数 + 行号输出块：
 //   <path>/<type>/<content> 内每行 "number: text"，末尾 footer
 //   （(End of file - total N lines) 或 (Showing lines X-Y of N. Use offset=… to continue.)）。
 // offset(默认 1)/limit(默认 2000) 分页；兼容旧参数名 path。
@@ -55,7 +55,7 @@ function readFile(ctx, args) {
   const path = projPath(ctx, args, filePath(args))
   const text = readFileText(ctx, args, path)
   const lines = text.split('\n')
-  // 去掉末尾空行（split 尾随 \n 产生）——与 DSH 行计数一致
+  // 去掉末尾空行（split 尾随 \n 产生）——与 行计数一致
   if (lines.length > 0 && lines[lines.length - 1] === '' ) lines.pop()
   const totalLines = lines.length
   let offset = Math.round(Number(args.offset || 0))
@@ -103,7 +103,7 @@ function applyLineReplace(lines, ed) {
 }
 
 // edit 匹配：精确 → CRLF 归一化；返回 {ok, text} 或 {ok:false, err}
-// replace_all=true 时替换全部出现处（DSH 对齐，2026-09 Round2 R2-7），
+// replace_all=true 时替换全部出现处（约定对齐，2026-09 Round2 R2-7），
 // 不再要求 old_string 唯一；默认 false 保持「须唯一」安全语义。
 function applyEdit(text, ed) {
   const newStr = String(ed.new_string == null ? '' : ed.new_string)
@@ -242,7 +242,7 @@ function strReplaceEditor(ctx, args) {
 }
 
 // bash：ctx.bash（120s 超时 + 输出截断由宿主保证）。
-// ★ 2026-09 Round2 R2-7 DSH 对齐：description 可选（参考必填，repo 兼容旧调用方
+// ★ 2026-09 Round2 R2-7 约定对齐：description 可选（参考必填，repo 兼容旧调用方
 //   保持可选）+ timeoutMs 可选（>0 覆盖默认 120s，传给 ctx.bash.exec 第三参秒数）。
 function runCommand(ctx, args) {
   const cwd = args.project ? '../' + String(args.project).replace(/[\\/]+$/, '') + (args.cwd ? '/' + args.cwd : '') : (args.cwd || '')
@@ -284,14 +284,14 @@ function grepFiles(ctx, args) {
 const tools = [
   {
     name: 'read',
-    description: '读取文件内容（对齐 deepseek-harness read）。file_path 为工作区内路径（兼容旧参数名 path）；可选 offset(起始行,1 基，默认 1)+limit(行数，默认 2000)读片段；输出带行号（"行号: 内容"）与文件总行数 footer。',
-    usageGuide: 'harness 标准读工具：读取文件内容（行号输出对齐参考实现）。路径越界自动拦截，二进制自动拒绝（改用 inspect_binary）。大文件用 offset+limit 分页。',
+    description: '读取文件内容（对齐 read）。file_path 为工作区内路径（兼容旧参数名 path）；可选 offset(起始行,1 基，默认 1)+limit(行数，默认 2000)读片段；输出带行号（"行号: 内容"）与文件总行数 footer。',
+    usageGuide: 'harness 标准读工具：读取文件内容（行号输出对齐约定）。路径越界自动拦截，二进制自动拒绝（改用 inspect_binary）。大文件用 offset+limit 分页。',
     category: '文件',
     readOnly: true,
     parameters: {
       type: 'object',
       properties: {
-        file_path: { type: 'string', description: '文件路径（工作区内；DSH 参考参数名，与 path 等价）' },
+        file_path: { type: 'string', description: '文件路径（工作区内；参考参数名，与 path 等价）' },
         path: { type: 'string', description: '文件路径（工作区内；旧参数名，file_path 优先）' },
         offset: { type: 'integer', description: '可选：起始行号(1 基，默认 1)' },
         limit: { type: 'integer', description: '可选：读取行数（默认 2000）' },
@@ -309,7 +309,7 @@ const tools = [
     parameters: {
       type: 'object',
       properties: {
-        file_path: { type: 'string', description: '文件路径（DSH 参考参数名，与 path 等价）' },
+        file_path: { type: 'string', description: '文件路径（参考参数名，与 path 等价）' },
         path: { type: 'string', description: '文件路径（旧参数名，file_path 优先）' },
         content: { type: 'string', description: '完整文件内容' },
         project: { type: 'string', description: '可选：目标项目。省略 = 主项目。' },
@@ -320,14 +320,14 @@ const tools = [
   },
   {
     name: 'edit',
-    description: '把文件中唯一一处 old_string 替换为 new_string（对齐 deepseek-harness edit）；replace_all=true 时替换全部出现处。内置智能匹配（CRLF 归一化）；匹配失败优先用 line_start/line_end 行号定位。',
+    description: '把文件中唯一一处 old_string 替换为 new_string（对齐 edit）；replace_all=true 时替换全部出现处。内置智能匹配（CRLF 归一化）；匹配失败优先用 line_start/line_end 行号定位。',
     usageGuide: 'harness 标准编辑工具：小改动（≤5 行）用精确替换（须唯一；多处出现可设 replace_all=true 全部替换）；大改动请用 write 写整段。替换前会自动快照。',
     category: '文件',
     requiresApproval: true,
     parameters: {
       type: 'object',
       properties: {
-        file_path: { type: 'string', description: '文件路径（DSH 参考参数名，与 path 等价）' },
+        file_path: { type: 'string', description: '文件路径（参考参数名，与 path 等价）' },
         path: { type: 'string', description: '文件路径（旧参数名，file_path 优先）' },
         new_string: { type: 'string', description: '替换后的新文本' },
         old_string: { type: 'string', description: '待替换原文（默认须唯一；replace_all=true 时替换全部；line_start>0 时可省略或作校验）' },
@@ -342,7 +342,7 @@ const tools = [
   },
   {
     name: 'glob',
-    description: '按通配符递归查找文件，返回相对路径列表（对齐 deepseek-harness glob）。pattern 含 / 或 ** 时按路径模式（如 internal/**/*.go），否则匹配任意深度文件名（如 *.go）；path 限定子目录。',
+    description: '按通配符递归查找文件，返回相对路径列表（对齐 glob）。pattern 含 / 或 ** 时按路径模式（如 internal/**/*.go），否则匹配任意深度文件名（如 *.go）；path 限定子目录。',
     usageGuide: 'harness 标准 glob 工具：按路径模式发现文件。跳过 .git/node_modules 等目录。比 shell find 更精确（结构化、防撑爆）。',
     category: '代码搜索',
     readOnly: true,
@@ -360,7 +360,7 @@ const tools = [
   },
   {
     name: 'grep',
-    description: '在工作区内按正则搜索文件内容，返回「相对路径:行号: 行文本」（对齐 deepseek-harness grep）。pattern 为 RE2 正则；path 限定子目录；glob 按文件名过滤；case_insensitive 忽略大小写。',
+    description: '在工作区内按正则搜索文件内容，返回「相对路径:行号: 行文本」（对齐 grep）。pattern 为 RE2 正则；path 限定子目录；glob 按文件名过滤；case_insensitive 忽略大小写。',
     usageGuide: 'harness 标准 grep 工具：正则全文搜索。搜索函数/类型定义请优先用 codegraph_search（AST 级更精确）。',
     category: '代码搜索',
     readOnly: true,
@@ -380,14 +380,14 @@ const tools = [
   },
   {
     name: 'bash',
-    description: '同步执行一条 shell 命令并返回输出（对齐 deepseek-harness bash）。每次调用在独立 shell 中运行（无状态持久）。禁止用于长期进程（dev server/watch/tcp 监听）——请用 run_background。description 可选（参考实现必填，用于 UI 展示命令意图）；timeoutMs 可选（覆盖默认 120s）。',
+    description: '同步执行一条 shell 命令并返回输出（对齐 bash）。每次调用在独立 shell 中运行（无状态持久）。禁止用于长期进程（dev server/watch/tcp 监听）——请用 run_background。description 可选（参考实现必填，用于 UI 展示命令意图）；timeoutMs 可选（覆盖默认 120s）。',
     usageGuide: 'harness 标准 bash 工具：执行命令（构建/测试/查询等短命令）。默认 120s 超时自动终止，可用 timeoutMs 调整。长期进程用 run_background/read_output/kill_process。',
     category: '执行',
     parameters: {
       type: 'object',
       properties: {
         command: { type: 'string', description: '要执行的命令' },
-        description: { type: 'string', description: '可选：命令意图说明（5-10 词，DSH 参考为必填；repo 兼容旧调用方保持可选）' },
+        description: { type: 'string', description: '可选：命令意图说明（5-10 词，参考实现为必填；repo 兼容旧调用方保持可选）' },
         timeoutMs: { type: 'integer', description: '可选：超时毫秒数（>0 覆盖默认 120000；0=不超时）' },
         cwd: { type: 'string', description: '可选工作目录（工作区内，省略=根）' },
         project: { type: 'string', description: '可选：目标项目。省略 = 主项目。' },
@@ -398,7 +398,7 @@ const tools = [
   },
   {
     name: 'str_replace_editor',
-    description: 'Custom editing tool for viewing, creating and editing files（对齐 deepseek-harness str_replace_editor）\n' +
+    description: 'Custom editing tool for viewing, creating and editing files（对齐 str_replace_editor 惯例）\n' +
       '* `command` 必填：view / create / str_replace / insert\n' +
       '* `view` 显示文件内容（带行号）；path 为目录时列出非隐藏文件/目录最多 2 层\n' +
       '* `create` 创建新文件（path 已存在则报错）；内容在 `file_text`\n' +
@@ -426,7 +426,7 @@ const tools = [
   },
   {
     name: 'run_code',
-    description: '执行一段代码并返回输出（对齐 deepseek-harness run_code）。language: auto（默认，按内容探测）/ go / python / node。',
+    description: '执行一段代码并返回输出（对齐 run_code）。language: auto（默认，按内容探测）/ go / python / node。',
     usageGuide: 'harness 标准代码执行工具：快速验证算法/处理数据/调用本地库，不用写临时文件。与 bash 的区别：直接执行代码片段（自动建临时文件）。',
     category: '执行',
     parameters: {

@@ -7,7 +7,7 @@
 ## 1.2.1 — 2026-08-15
 
 ### 新增
-- **按 deepseek-harness 设计重写 Agent 核心** — 双层循环（turn/step 边界事件、inbox 双队列对齐 next-step/next-turn），消息组装与落盘对齐 harness（agentloop 编号 ↔ 消息序列推导），系统提示精简为 harness 模式（`WB_FULL_TOOLS=1` 恢复全量工具）
+- **按双层循环范式重写 Agent 核心** — 双层循环（turn/step 边界事件、inbox 双队列对齐 next-step/next-turn），消息组装与落盘对齐事件模型（agentloop 编号 ↔ 消息序列推导），系统提示精简为基础工具集模式（`WB_FULL_TOOLS=1` 恢复全量工具）
 - **一切皆插件** — Go 插件框架 + goja JS 动态插件，goja 运行时完全内置（双仓库去除 replace），JS 插件沙箱支持 timer 服务（ctx.timeout/interval）与跨 goroutine 执行锁
 - **内置 TS 编译器** — esbuild 纯 Go 转译（无 CGO/npm 依赖），TS 插件可直接加载（`cordis_define` 支持 js/ts/自动探测），多文件 TS bundle（Build stdin + mock 包）
 - **工具全插件化** — 21 个内置功能插件（core/fs/git/web/shell/memory/task/project-info/codegraph/debug/vision/office/lsp 等），`cordis_inspect` 可见工具归属插件，Unload 可回收整组

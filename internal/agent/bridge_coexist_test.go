@@ -11,7 +11,7 @@ import (
 )
 
 // TestBridgeRepoCoexist 并存与生效方切换（2026-08-31，取消同名工具覆盖）：
-// DSH 桥插件（node-bridge 轨）与 repo 移植版 goja 插件（.pair/plugins/agent-teams）
+// 外部桥插件（node-bridge 轨）与 repo 移植版 goja 插件（.pair/plugins/agent-teams）
 // 同名工具不再互相停用/让位——两版并存，默认 repo 优先生效，桥工具挂起；
 // 插件面板可切换生效方；repo 版停用后挂起的桥工具自动接管。
 func TestBridgeRepoCoexist(t *testing.T) {
@@ -42,12 +42,12 @@ func TestBridgeRepoCoexist(t *testing.T) {
 		t.Fatalf("agent-teams 应 running")
 	}
 
-	// ── 假桥（无 node 进程）：已装载 DSH 包 + 注册同名工具 ──
+	// ── 假桥（无 node 进程）：已装载 外部包 + 注册同名工具 ──
 	pkg := "@nanmicoder/dsh-agent-teams"
 	owner := "node-bridge:" + pkg
 	dshTool := &Tool{
 		Name:        "agent_teams_create",
-		Description: "DSH 版",
+		Description: "外部版",
 		Parameters:  map[string]any{"type": "object", "properties": map[string]any{}},
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
 			return "dsh", nil
@@ -107,7 +107,7 @@ func TestBridgeRepoCoexist(t *testing.T) {
 		t.Fatalf("桥记录冲突标注不符: %+v", bridgeRec.Conflicts)
 	}
 
-	// ③ 切到 DSH 版：Registry 生效实现换成桥工具，两侧插件状态不变
+	// ③ 切到 外部版：Registry 生效实现换成桥工具，两侧插件状态不变
 	if err := SetBridgeToolPreference(host, "agent_teams_create", ToolImplBridge); err != nil {
 		t.Fatalf("切到 bridge 失败: %v", err)
 	}
@@ -116,7 +116,7 @@ func TestBridgeRepoCoexist(t *testing.T) {
 	}
 	out, err := reg.Execute(context.Background(), "agent_teams_create", "{}")
 	if err != nil || out != "dsh" {
-		t.Fatalf("切换后应执行 DSH 实现，得到 %q err=%v", out, err)
+		t.Fatalf("切换后应执行 外部实现，得到 %q err=%v", out, err)
 	}
 	if host.State("agent-teams") != PluginRunning {
 		t.Fatalf("切换生效方不应改动 repo 插件运行状态")
@@ -134,7 +134,7 @@ func TestBridgeRepoCoexist(t *testing.T) {
 		t.Fatalf("切回后执行失败: %v", err)
 	}
 	if out == "dsh" {
-		t.Fatalf("切回后不应仍是 DSH 实现")
+		t.Fatalf("切回后不应仍是 外部实现")
 	}
 
 	// ⑤ repo 版停用 → 挂起的桥工具自动接管
@@ -146,7 +146,7 @@ func TestBridgeRepoCoexist(t *testing.T) {
 	}
 	out, err = reg.Execute(context.Background(), "agent_teams_create", "{}")
 	if err != nil || out != "dsh" {
-		t.Fatalf("repo 停用后应执行 DSH 实现，得到 %q err=%v", out, err)
+		t.Fatalf("repo 停用后应执行 外部实现，得到 %q err=%v", out, err)
 	}
 }
 

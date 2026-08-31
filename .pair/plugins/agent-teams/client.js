@@ -129,7 +129,7 @@
 .agteams-task .agteams-del{display:none;align-items:center;justify-content:center;width:16px;height:16px;border:none;background:none;color:var(--text-muted,#8b949e);cursor:pointer;border-radius:3px;padding:0;flex-shrink:0}
 .agteams-task:hover .agteams-del{display:inline-flex}
 .agteams-task .agteams-del:hover{color:#ff7b72;background:rgba(255,123,114,.12)}
-/* ── 成员卡片：子会话打开入口（openMember）── */\n.agteams-member.clickable{cursor:pointer}\n.agteams-member .open{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;color:var(--text-muted,#8b949e);border-radius:3px;flex-shrink:0;margin-left:2px}\n.agteams-member.clickable:hover .open{color:var(--accent-color,#4f8cff)}\n/* ── 任务 DAG 流程图（compact 左→右；对齐 DSH dagViewport/dagEdges/dagNode）── */
+/* ── 成员卡片：子会话打开入口（openMember）── */\n.agteams-member.clickable{cursor:pointer}\n.agteams-member .open{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;color:var(--text-muted,#8b949e);border-radius:3px;flex-shrink:0;margin-left:2px}\n.agteams-member.clickable:hover .open{color:var(--accent-color,#4f8cff)}\n/* ── 任务 DAG 流程图（compact 左→右；对齐 dagViewport/dagEdges/dagNode）── */
 .agteams-viewport{overflow-x:auto;padding:6px 10px 8px;scrollbar-width:thin}
 .agteams-canvas{position:relative}
 .agteams-edges{position:absolute;inset:0;overflow:visible;pointer-events:none}
@@ -174,7 +174,7 @@
   let hoverTimer = null
 
   // relatedTaskIds 计算某任务的全部上下游相关链（上游依赖 + 下游被依赖；环安全）。
-  // 对齐 DSH activity-model.relatedTaskIds：focus 一个任务时高亮其整条链、其余降亮。
+  // 对齐 activity-model.relatedTaskIds：focus 一个任务时高亮其整条链、其余降亮。
   function relatedTaskIds(id, tasks) {
     const byId = {}
     tasks.forEach((t) => { byId[t.id] = t })
@@ -253,10 +253,10 @@
           (m.id ? '<span class="open" title="打开会话">' + SVG.external + '</span>' : '') +
         '</div>'
       }).join('')
-      // ── 任务 DAG 区：compact 左→右依赖流程图（节点卡片 + SVG 贝塞尔连线，对齐 DSH compactDagLayout）──
+      // ── 任务 DAG 区：compact 左→右依赖流程图（节点卡片 + SVG 贝塞尔连线，对齐 compactDagLayout）──
       const STATUS_TXT = { pending: '待办', claimed: '已认领', in_progress: '执行中', completed: '完成', failed: '失败', cancelled: '已取消' }
       const TERMINAL = ['completed', 'failed', 'cancelled']
-      // 常量（与 DSH activity-model COMPACT_DAG_* 一致）
+      // 常量（与 activity-model COMPACT_DAG_* 一致）
       const DAG = { NODE_W: 92, NODE_H: 30, COL_GAP: 26, ROW_GAP: 8 }
       // 列 = 依赖深度 stage；列内按任务 ID 稳定排序 → 节点绝对坐标
       const byDepth = {}
@@ -467,7 +467,7 @@
       refresh()
     })
 
-    // ── 任务节点悬停预览：180ms 防抖后高亮上下游相关链（对齐 DSH scheduleHover）──
+    // ── 任务节点悬停预览：180ms 防抖后高亮上下游相关链（对齐 scheduleHover）──
     panelEl.addEventListener('mouseover', (e) => {
       const n = e.target.closest('.agteams-node')
       if (!n) return

@@ -30,7 +30,7 @@ import (
 
 // nodePluginsFile 桥目录下的插件装载清单。
 // ★ Round4：条目支持对象形态 {spec, runtime}（runtime: node|dsh）——
-//   dsh = cordis4 + DSH 服务面（@deepseek-ai/cordis）；node = cordis3 既有。
+//   dsh = cordis4 + 外部服务面（@deepseek-ai/cordis）；node = cordis3 既有。
 //   旧字符串形态（"pkg@ver"）读取时兼容（默认 runtime=node）。
 type nodePluginsFile struct {
 	Plugins []nodePluginEntry `json:"plugins"`
@@ -114,7 +114,7 @@ func writeNodePluginsFile(path string, doc *nodePluginsFile) error {
 //   - peerDependencies 里 cordis/@cordisjs/core 主版本为 4
 //     （goja 内置 CordisApi 对齐 cordis3 API，无 cordis4 的 inject 等）
 //   - ★ Round4：peerDependencies 里 @deepseek-ai/cordis 主版本为 4
-//     （DSH 插件形态——npm bundle + cordis4 Context，goja 轨无法运行）
+//     （外部插件形态——npm bundle + cordis4 Context，goja 轨无法运行）
 //
 // 仅 peer cordis3 / 零依赖 → goja 沙箱（快、无需 node）。
 func nodePluginNeedsNode(manifest map[string]any) bool {
@@ -123,7 +123,7 @@ func nodePluginNeedsNode(manifest map[string]any) bool {
 
 // nodePluginRuntime 判定插件运行时轨：
 //
-//	"dsh"  → Node 桥 cordis4 分支（@deepseek-ai/cordis ^4 peer；DSH 服务面）
+//	"dsh"  → Node 桥 cordis4 分支（@deepseek-ai/cordis ^4 peer；外部服务面）
 //	"node" → Node 桥 cordis3 分支（dependencies 非空 / cordis ^4 peer）
 //	""     → goja 沙箱（无 npm 依赖、无 cordis4）
 func nodePluginRuntime(manifest map[string]any) string {
@@ -187,7 +187,7 @@ func nativeDepHint(manifest map[string]any) string {
 
 // marketInstallNPMPluginNode Node 桥安装路径：
 // 源码落盘 + npm install + plugins.json 记录 + 重启桥装载。
-// ★ Round4：runtime 判定（node=cordis3 既有 / dsh=cordis4+DSH 服务面）；
+// ★ Round4：runtime 判定（node=cordis3 既有 / dsh=cordis4+外部服务面）；
 //   dsh 插件 peer 全部 optional（npm 不自动装）→ 显式安装 @deepseek-ai/* peer。
 func marketInstallNPMPluginNode(info *npmPackageInfo, srcDir string, auto bool) (string, error) {
 	pkg := info.Name
@@ -282,12 +282,12 @@ func marketInstallNPMPluginNode(info *npmPackageInfo, srcDir string, auto bool) 
 	hint := nativeDepHint(info.Manifest)
 	runtimeLabel := "Node 运行时桥（真实 node 环境执行 npm 依赖）"
 	if runtime == "dsh" {
-		runtimeLabel = "DSH 运行时（cordis4 + DSH 服务面，@deepseek-ai/cordis）"
+		runtimeLabel = "外部运行时（cordis4 + 外部服务面，@deepseek-ai/cordis）"
 	}
 	return fmt.Sprintf("✅ 已安装 npm 插件「%s」v%s（%s）%s", pkg, ver, runtimeLabel, hint), nil
 }
 
-// dshPeerSpecs 提取 DSH 插件的运行时 peer 依赖（@deepseek-ai/* 非 client 包）。
+// dshPeerSpecs 提取 外部插件的运行时 peer 依赖（@deepseek-ai/* 非 client 包）。
 // ★ 版本选择：优先 devDependencies（插件构建/测试锁定的版本集——peer 范围如
 //   ^0.1.0-rc.6 与传递 peer（dsh-user-approval rc.8 等）存在 rc 档位错配，
 //   npm 会 ERESOLVE；devDeps 精确版本集可复现装载），缺失回退 peerDependencies 范围。

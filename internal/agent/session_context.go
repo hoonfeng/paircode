@@ -106,7 +106,7 @@ func BuildSessionContext(convID string, workspaceRoots []string, currentTask str
 	// 11. 知识库过期检测
 	sc.KBStaleness = buildKBStaleness(workspaceRoots)
 
-	// 12. @pluginId 引用（对齐 harness：扫 user 消息 @([a-z]{3,6}-\d+) 注入插件上下文）
+	// 12. @pluginId 引用（对齐：扫 user 消息 @([a-z]{3,6}-\d+) 注入插件上下文）
 	sc.PluginReferences = buildPluginReferences(history)
 
 	return sc
@@ -899,7 +899,7 @@ func scanStaleRefs(text, workspaceRoot string) []string {
 				strings.HasPrefix(part, "skia/") || strings.HasPrefix(part, "goui/") {
 				continue
 			}
-			// 跳过已明确移除的旧文件/目录 + 外部参考项目路径
+			// 跳过已明确移除的旧文件/目录 + 外部项目路径
 			// （loader/cache/、platform/network/ 等是 WebKit C++ 参考架构路径，不是本工作区文件）
 			skipPrefixes := []string{
 				"cmd/companion/webui_desktop", "cmd/companion/bridge/",
@@ -1048,7 +1048,7 @@ type MessageStoreReader interface {
 	LoadAll(convID string) ([]Message, error)
 }
 
-// ── @pluginId 引用注入（D2：对齐 harness referencedPluginIds）────
+// ── @pluginId 引用注入（D2：对齐 referencedPluginIds）────
 
 // pluginRefPattern 匹配用户消息中的 @pluginId 引用：@后接 3-6 位小写字母
 // + 连字符 + 数字（dyn-1 / git-3 / tool-12 等）。

@@ -23,7 +23,7 @@ PairCode IDE 是一款纯 Web 端的 AI 辅助编程开发环境。你只需打�
 
 开启自主模式后，AI 能自己分析项目结构、扫描代码问题、制定修复计划并逐个执行。你可以在关键节点审核确认，其他步骤 AI 自动完成。执行进度实时可见，你可以随时暂停、中止或补充指令。
 
-**Agent 核心采用 deepseek-harness 双层循环架构**：
+**Agent 核心采用双层循环（turn/step）架构**：
 - **turn / step 双层边界** — 每次工具执行都有独立的 step 事件（开始/结束/摘要），每轮用户交互是 turn，进度颗粒度清晰可追溯
 - **inbox 双队列** — 任务转向（next-step）与后续追问（next-turn）分队列消费，多轮交互不粘连
 - **消息组装与落盘对齐** — agentloop 编号与消息序列严格一致，历史恢复与实时流状态吻合
@@ -2620,7 +2620,7 @@ PairCode IDE 还有更多强大功能等待你探索。欢迎查阅帮助文档�
 ## 1.2.1 — 2026-08-15\r
 \r
 ### 新增\r
-- **按 deepseek-harness 设计重写 Agent 核心** — 双层循环（turn/step 边界事件、inbox 双队列对齐 next-step/next-turn），消息组装与落盘对齐 harness（agentloop 编号 ↔ 消息序列推导），系统提示精简为 harness 模式（\`WB_FULL_TOOLS=1\` 恢复全量工具）\r
+- **按双层循环范式重写 Agent 核心** — 双层循环（turn/step 边界事件、inbox 双队列对齐 next-step/next-turn），消息组装与落盘对齐事件模型（agentloop 编号 ↔ 消息序列推导），系统提示精简为基础工具集模式（\`WB_FULL_TOOLS=1\` 恢复全量工具）\r
 - **一切皆插件** — Go 插件框架 + goja JS 动态插件，goja 运行时完全内置（双仓库去除 replace），JS 插件沙箱支持 timer 服务（ctx.timeout/interval）与跨 goroutine 执行锁\r
 - **内置 TS 编译器** — esbuild 纯 Go 转译（无 CGO/npm 依赖），TS 插件可直接加载（\`cordis_define\` 支持 js/ts/自动探测），多文件 TS bundle（Build stdin + mock 包）\r
 - **工具全插件化** — 21 个内置功能插件（core/fs/git/web/shell/memory/task/project-info/codegraph/debug/vision/office/lsp 等），\`cordis_inspect\` 可见工具归属插件，Unload 可回收整组\r

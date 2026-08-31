@@ -3,7 +3,7 @@
 //
 // 背景（2026-08-31）：此前桥插件装载会自动停用同源 repo 移植版 goja 插件
 // （takeoverConflictingPlugin），goja 侧 claimTool 也对桥插件「让位」——结果
-// 「装了 DSH 版就看不见 repo 版」：插件面板只剩一个 agent-teams，用户既无法
+// 「装了 外部版就看不见 repo 版」：插件面板只剩一个 agent-teams，用户既无法
 // 对比两个来源的差异，也无法回退。
 //
 // 现语义（取消同名工具覆盖冲突）：
@@ -120,7 +120,7 @@ func BridgeToolConflicts() []ToolConflictInfo { return bridgeToolConflicts() }
 
 // noteBridgeToolPreempted goja（repo 移植版）插件抢占已由桥注册的同名工具时
 // 记录并存关系（claimTool 调用，active=repo）。桥工具实例仍留在 b.tools，
-// 切换回 DSH 版时直接复用。
+// 切换回 外部版时直接复用。
 //
 // reg 仅用于取被抢占前的桥工具实例做校验（可为 nil）。
 func noteBridgeToolPreempted(tool, bridgeOwner, byPlugin string, reg *Registry) {
@@ -130,7 +130,7 @@ func noteBridgeToolPreempted(tool, bridgeOwner, byPlugin string, reg *Registry) 
 	}
 	pkg := strings.TrimPrefix(bridgeOwner, "node-bridge:")
 	b.noteConflict(tool, pkg, byPlugin, ToolImplRepo, nil)
-	log.Printf("[node-bridge] 同名工具并存：%q 改由 repo 插件 %s 生效（repo 优先），DSH 插件 %s 的同名工具挂起——插件面板可切换生效方",
+	log.Printf("[node-bridge] 同名工具并存：%q 改由 repo 插件 %s 生效（repo 优先），外部插件 %s 的同名工具挂起——插件面板可切换生效方",
 		tool, byPlugin, pkg)
 }
 
@@ -144,12 +144,12 @@ func (b *nodeBridge) shadowConflictingTool(ph *PluginHost, owner string, tool *T
 	pkg := strings.TrimPrefix(owner, "node-bridge:")
 	existing := ph.PluginToolOwners()[tool.Name]
 	if existing == "" || strings.HasPrefix(existing, "node-bridge:") {
-		// 占用方是宿主内置工具或另一个桥插件 → 非「repo 版 ↔ DSH 版」并存关系，
+		// 占用方是宿主内置工具或另一个桥插件 → 非「repo 版 ↔ 外部版」并存关系，
 		// 保持既有严格语义（不记录、由调用方打印失败日志）。
 		return false
 	}
 	b.noteConflict(tool.Name, pkg, existing, ToolImplRepo, nil)
-	log.Printf("[node-bridge] 同名工具并存：%q 由 repo 插件 %s 生效（repo 优先），DSH 插件 %s 的同名工具挂起——插件面板可切换生效方",
+	log.Printf("[node-bridge] 同名工具并存：%q 由 repo 插件 %s 生效（repo 优先），外部插件 %s 的同名工具挂起——插件面板可切换生效方",
 		tool.Name, existing, pkg)
 	return true
 }
@@ -185,7 +185,7 @@ func restoreBridgeToolsFor(h *PluginHost, repoPlugin string) {
 			log.Printf("[node-bridge] 恢复挂起工具 %s 失败: %v", p.tool.Name, err)
 			continue
 		}
-		log.Printf("[node-bridge] repo 插件 %s 已停用 → DSH 版工具 %s 自动接管生效", repoPlugin, p.tool.Name)
+		log.Printf("[node-bridge] repo 插件 %s 已停用 → 外部版工具 %s 自动接管生效", repoPlugin, p.tool.Name)
 	}
 }
 
@@ -230,7 +230,7 @@ func SetBridgeToolPreference(ph *PluginHost, tool, impl string) error {
 			return err
 		}
 		b.noteConflict(tool, bridgePkg, repoPlugin, ToolImplBridge, old)
-		log.Printf("[node-bridge] 工具 %q 生效方切换：%s（repo）→ %s（DSH 桥）", tool, oldOwner, bridgePkg)
+		log.Printf("[node-bridge] 工具 %q 生效方切换：%s（repo）→ %s（外部桥）", tool, oldOwner, bridgePkg)
 	case ToolImplRepo:
 		if repoTool == nil {
 			return fmt.Errorf("repo 插件 %s 的工具 %q 实例已不在（请在插件面板重启该插件后再切回）", repoPlugin, tool)
@@ -239,7 +239,7 @@ func SetBridgeToolPreference(ph *PluginHost, tool, impl string) error {
 			return err
 		}
 		b.noteConflict(tool, bridgePkg, repoPlugin, ToolImplRepo, nil)
-		log.Printf("[node-bridge] 工具 %q 生效方切换：%s（DSH 桥）→ %s（repo）", tool, bridgePkg, repoPlugin)
+		log.Printf("[node-bridge] 工具 %q 生效方切换：%s（外部桥）→ %s（repo）", tool, bridgePkg, repoPlugin)
 	}
 	return nil
 }
@@ -353,7 +353,7 @@ func bridgePluginRecords(conflicts []ToolConflictInfo) []PluginRecord {
 // bridgeRuntimeLabel 运行时轨的人话说明（无 purpose 时兜底展示）。
 func bridgeRuntimeLabel(runtime string) string {
 	if runtime == "dsh" {
-		return "DSH 插件（Node 桥装载，cordis4 + DSH 服务面）"
+		return "外部插件（Node 桥装载，cordis4 + 外部服务面）"
 	}
 	return "npm 插件（Node 桥装载，cordis3）"
 }

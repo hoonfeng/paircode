@@ -12,9 +12,9 @@
 |---|---|---|---|
 | goja 沙箱 | 零 npm 依赖、无 cordis4 peer | goja（Node API 禁制，沙箱纪律保持） | **不动**（零回归） |
 | Node 桥 cordis3 | dependencies 非空 / peer `cordis`/`@cordisjs/core` ^4 | `@cordisjs/core` Context | 协议向后兼容扩展（不破坏） |
-| **Node 桥 DSH（本轮新增）** | peer `@deepseek-ai/cordis` ^4 | `@deepseek-ai/cordis` Context + DSH 门面 | bridge_node.js / node_bridge.go / node_plugins.go |
+| **Node 桥 外部（本轮新增）** | peer `@deepseek-ai/cordis` ^4 | `@deepseek-ai/cordis` Context + 外部门面 | bridge_node.js / node_bridge.go / node_plugins.go |
 
-候选 A（goja+goja_nodejs 借用）经 t1 评估**不采纳**（缺 cordis4+DSH 服务面、
+候选 A（goja+goja_nodejs 借用）经 t1 评估**不采纳**（缺 cordis4+外部服务面、
 与沙箱纪律冲突、fork import 改写风险），降级 P2——本轮未引入任何 go.mod 新依赖
 （go.mod / go.sum **零变化**）。
 
@@ -22,7 +22,7 @@
 
 ## 2. 工作包实施明细（按 t1 §3 计划 1-6）
 
-### 工作包 1：桥协议扩展（subscribe/event/cmdrun + DSH 服务面路由）
+### 工作包 1：桥协议扩展（subscribe/event/cmdrun + 外部服务面路由）
 
 **`internal/agent/bridge_node.js`**（302L → 700L）：
 - 协议新增：
@@ -31,7 +31,7 @@
   - Go → Node：`{"t":"cmdrun","id","name","args"}`（宿主执行插件命令 handler）
 - `svc()` 消息携带 `plugin` 字段（命令归属用）。
 - `invoke` 载荷新增 `convId`/`wsRoot` → Node 侧构造 `exec.agent` 句柄
-  （DSH 工具 `requireCaptain(exec)` 消费；`agent.session.header.cwd` =
+  （外部工具 `requireCaptain(exec)` 消费；`agent.session.header.cwd` =
   调用会话工作区根）。
 
 **`internal/agent/node_bridge.go`**（670L → 1045L）：
@@ -48,7 +48,7 @@
 - plugins.json 条目支持 `{spec, runtime}`（旧字符串兼容）；`runtime=="dsh"` →
   `import('@deepseek-ai/cordis')` → `new Context()` → `decorateDshCtx` →
   `applyFn(ctx, {})`；其余走 cordis3 既有路径（双 Context 独立 import 共存）。
-- `decorateDshCtx`（DSH 门面，见工作包 4）+ `ctx.inject`（依赖全就绪即同步回调，
+- `decorateDshCtx`（外部门面，见工作包 4）+ `ctx.inject`（依赖全就绪即同步回调，
   防 cordis4 原生 inject 因服务缺失而 pend fiber）。
 
 **`internal/agent/node_plugins.go`**：
@@ -57,7 +57,7 @@
 - plugins.json 新格式 `nodePluginEntry{Spec, Runtime}` + 旧格式 Unmarshal 兼容；
   `Specs()` 兼容旧消费者（bridgeLoadedPlugins）。
 
-### 工作包 3：DSH 插件安装路径
+### 工作包 3：外部插件安装路径
 
 **`internal/agent/node_plugins.go`**：
 - `marketInstallNPMPluginNode`：runtime 判定 → plugins.json 条目带 runtime、
@@ -67,7 +67,7 @@
   client 半与 react 由宿主 UI 槽位承载不装入）。
 - `uninstallNPMPlugin` runtime 判断扩展 `node || dsh`。
 
-### 工作包 4：Go 侧 DSH 服务面 + agent 事件桥
+### 工作包 4：Go 侧 外部服务面 + agent 事件桥
 
 **`internal/agent/node_bridge.go` `dshService`**（全部映射现有 Go 实现，
 与 goja 轨 jsplugin_agents.go 同源）：
@@ -82,7 +82,7 @@
 | `logger` | （Node 侧 console 通道，无往返） | — |
 
 **`internal/agent/subagent_registry.go`**：`emitAgentStatusEvent`（载荷
-`{agent:{id,status,session.header.cwd}, status}` 对齐 DSH scheduler 消费面）在
+`{agent:{id,status,session.header.cwd}, status}` 对齐 外部 scheduler 消费面）在
 SpawnSubAgent（running）/ FollowupSubAgent（running）/ StopSubAgent（stopped）/
 轮次结束 idle 边 四处置出 → `emitBridgeEvent("agent/status", ...)`。
 
@@ -98,7 +98,7 @@ gesture boundary 仅在有 slash 命令触发时才有意义，工具路径完�
   - `TestDSHBridgeSystemPromptCommand`：systemPrompt 段注册 + 命令表注册/卸载
   - `TestBridgeEventSubscription`：订阅白名单门控（未订阅零转发）
   - `TestNodeBridgeAgentStatusEvent`：spawn → agent/status 事件载荷（os.Pipe 捕获）
-  - `TestNodeBridgeDSHPluginE2E`：npm 安装 dsh-agent-teams@0.1.14 + DSH peers →
+  - `TestNodeBridgeDSHPluginE2E`：npm 安装 dsh-agent-teams@0.1.14 + 外部 peers →
     cordis4 装载 → **13 个 agent_teams_* 工具注册** → create（staged）→ status →
     delete 冒烟 + `.agent-teams/<id>/team.json` 落盘校验；环境不满足自动 Skip
 - `internal/agent/node_bridge_test.go`：`TestNodePluginRuntime`（dsh/node/goja 判定）、
@@ -117,14 +117,14 @@ gesture boundary 仅在有 slash 命令触发时才有意义，工具路径完�
 
 | 文件 | 变更 |
 |---|---|
-| `internal/agent/bridge_node.js` | cordis4 装载分支 + DSH 门面 + 协议扩展（subscribe/event/cmdrun/convId） |
+| `internal/agent/bridge_node.js` | cordis4 装载分支 + 外部门面 + 协议扩展（subscribe/event/cmdrun/convId） |
 | `internal/agent/node_bridge.go` | 订阅表/事件转发/dshService 服务面/runNodeCommand/invoke convId |
-| `internal/agent/node_plugins.go` | @deepseek-ai/cordis 判定 + nodePluginRuntime + plugins.json 新格式 + DSH peer 安装 |
+| `internal/agent/node_plugins.go` | @deepseek-ai/cordis 判定 + nodePluginRuntime + plugins.json 新格式 + 外部 peer 安装 |
 | `internal/agent/npm_plugin.go` | uninstall 运行时判断扩展（node/dsh） |
 | `internal/agent/subagent_registry.go` | agent/status 事件源（running/idle/stopped） |
 | `internal/agent/role_prompts.go` | DefaultJudgePrompt/judgeSystemPrompt 迁入（A2 处置） |
 | `internal/agent/search.go` | extLangMap 迁入（findfiles.go 删除后 glob 生产依赖保留） |
-| `internal/agent/dsh_bridge_test.go` | 新增：DSH 服务面/事件桥/E2E 测试 |
+| `internal/agent/dsh_bridge_test.go` | 新增：外部服务面/事件桥/E2E 测试 |
 | `internal/agent/node_bridge_test.go` | 新增：runtime 判定/plugins.json 兼容用例 |
 | `internal/agent/findfiles.go` `projectindex.go` `evalstore.go` `evaluator.go`（+2 测试文件） | **删除**（Go 核心审计 A1/A2 处置） |
 | `docs/THIRD_PARTY_NOTICES.md` | 新增：许可证核查表（docs/ 下，保持 inScope） |
@@ -168,7 +168,7 @@ t4 审查 findings 处置（F1-F5，全部修复）+ t3 验证新增 F1a（高�
 
 | # | 审查项 | 处置 | 证据 |
 |---|---|---|---|
-| F1a | **外置资源遮蔽（高）**：`bridgeNodeSource()`（node_bridge.go:47-48）外部资源优先——exe 在仓库根（开发/冒烟）时加载 `.pair/assets/runtime/bridge_node.js`（12,329B，commit 2e0f36ab 起未更新，无 Round4 改动），内嵌新版（29,834B）被遮蔽；真实装载 DSH 条目报 `Cannot find package '[object Object]'`（旧脚本把 {spec,runtime} 对象 String() 化） | **已修复**：① 新版 `internal/agent/bridge_node.js` 同步到 `.pair/assets/runtime/bridge_node.js`（跟踪文件，与内嵌 SHA 一致，commit ae73dce4）；② 同步链核查：`scripts/build-ui.mjs`/`sync-web-dist.mjs` 仅管 web 壳，`packager.json` dist.include 原仅含 `.pair/assets/runtime/web`——**已补 `bridge_node.js` + `cordis.bundle.js` 两条目**（发布包也携带外置运行时脚本，字段可独立热更）；③ 双守卫测试：`TestBridgeNodeResourceSync`（ae73dce4，外置==内嵌逐字节）+ `TestBridgeNodeSourceExternalPriority`（本 repair，外置优先/回退内嵌/归一化同步三重断言）；`runtime_assets.go` 增 `runtimeAssetDirOverride` 测试钩子 | `.pair/assets/runtime/bridge_node.js`（同步，ae73dce4）、`internal/agent/bridge_resource_sync_test.go`（ae73dce4）、`packager.json`（dist.include +2 条目）、`internal/agent/node_bridge_test.go`、`internal/agent/runtime_assets.go` |
+| F1a | **外置资源遮蔽（高）**：`bridgeNodeSource()`（node_bridge.go:47-48）外部资源优先——exe 在仓库根（开发/冒烟）时加载 `.pair/assets/runtime/bridge_node.js`（12,329B，commit 2e0f36ab 起未更新，无 Round4 改动），内嵌新版（29,834B）被遮蔽；真实装载 外部条目报 `Cannot find package '[object Object]'`（旧脚本把 {spec,runtime} 对象 String() 化） | **已修复**：① 新版 `internal/agent/bridge_node.js` 同步到 `.pair/assets/runtime/bridge_node.js`（跟踪文件，与内嵌 SHA 一致，commit ae73dce4）；② 同步链核查：`scripts/build-ui.mjs`/`sync-web-dist.mjs` 仅管 web 壳，`packager.json` dist.include 原仅含 `.pair/assets/runtime/web`——**已补 `bridge_node.js` + `cordis.bundle.js` 两条目**（发布包也携带外置运行时脚本，字段可独立热更）；③ 双守卫测试：`TestBridgeNodeResourceSync`（ae73dce4，外置==内嵌逐字节）+ `TestBridgeNodeSourceExternalPriority`（本 repair，外置优先/回退内嵌/归一化同步三重断言）；`runtime_assets.go` 增 `runtimeAssetDirOverride` 测试钩子 | `.pair/assets/runtime/bridge_node.js`（同步，ae73dce4）、`internal/agent/bridge_resource_sync_test.go`（ae73dce4）、`packager.json`（dist.include +2 条目）、`internal/agent/node_bridge_test.go`、`internal/agent/runtime_assets.go` |
 | F1b | `LoadCordisPatch` runtime 判定只认 `"node"`，`runtime="dsh"` patch 条目被静默跳过 | **已修复**：判定改 `rt == "node" \|\| rt == "dsh"`；`plugin_test.go` 新增 `TestLoadCordisPatchDSHRuntime`（dsh+node 双条目 → 断言桥就绪；纯代码条目 → 断言不触发） | `internal/agent/jsplugin.go`（LoadCordisPatch）、`internal/agent/plugin_test.go` |
 | F2 | 桥 Close/start 竞态：启动期间被 Close/替换可能遗留僵尸进程、过期启动覆盖 globalNodeBridge | **已修复**：`nodeBridge.epoch` 代数计数——`Close()` 递增；`start()` 启动前快照 epoch，就绪等待循环内 `isStale` 校验（过期 → kill 进程并返回「已取消」错误）；`start()` 成功后 `restarts` 清零（连续崩溃计数只统计就绪前段） | `internal/agent/node_bridge.go`（epoch/isStale/start/Close） |
 | F3 | `handleServiceMsg` 内 `b.ph` 无锁读取（与 `bindHost` 写并发数据竞争），dshService/subAgentSpecFromArgs 各自取 ph 可能不一致 | **已修复**：`handleServiceMsg` 顶部 `b.mu` 锁内取 ph 快照，传入 `dshService(…, ph)` 与 Execute 回落路径共用同一快照；`dshService` 签名增 ph 参数（测试调用点同步更新） | `internal/agent/node_bridge.go`（handleServiceMsg/dshService/subAgentSpecFromArgs）、`internal/agent/dsh_bridge_test.go` |
@@ -178,13 +178,13 @@ t4 审查 findings 处置（F1-F5，全部修复）+ t3 验证新增 F1a（高�
 **repair 验证**：`go build ./...` ✅、`go vet ./...` ✅、`go test ./internal/agent/ -count=1 -timeout 10m` ✅
 （新增用例 `TestLoadCordisPatchDSHRuntime`、`TestBridgeNodeSourceExternalPriority` 通过；
 14 项环境依赖失败清单不变，零新增）。F1a 实测闭环：修复后真实装载（exe 在仓库根冒烟）
-`bridgeNodeSource()` 返回新版脚本，DSH 条目按 `{spec,runtime:"dsh"}` 正确装载（E2E 复跑 PASS）。
+`bridgeNodeSource()` 返回新版脚本，外部条目按 `{spec,runtime:"dsh"}` 正确装载（E2E 复跑 PASS）。
 
 ## 5. 遗留（P2，记录不阻塞）
 
 1. agent/pre-step 拦截链、agent/request-error 事件源（宿主循环语义改造，见工作包 4）。
 2. webServer/workspaceRegistry 门面（Web 面板数据路由）：宿主 UI 槽位由既有
-   agent-teams 移植版 client.js 承载；headless 下插件保持 tool-only（与 DSH
+   agent-teams 移植版 client.js 承载；headless 下插件保持 tool-only（与 外部
    headless profile 语义一致）。
 3. ~~goja_nodejs 借用（候选 A）~~ —— **✅ 已实施（2026-08-29「创造需求」落地）**：
    无外部需求时从仓库自有插件创造需求（`tool-project-info` 等手工 `d+'/'+name`
@@ -202,7 +202,7 @@ t4 审查 findings 处置（F1-F5，全部修复）+ t3 验证新增 F1a（高�
 ### 6.1 集成冒烟（真实 pair.exe，临时端口 9423）
 
 前置：工作区桥（`.pair/cordis/node/`，gitignored 运行时数据）装配
-`@nanmicoder/dsh-agent-teams@0.1.14` + DSH peers（cordis 4.0.1 / dsh-* rc.8 /
+`@nanmicoder/dsh-agent-teams@0.1.14` + 外部 peers（cordis 4.0.1 / dsh-* rc.8 /
 schemastery）；`plugins.json` 写入 `{"spec":"@nanmicoder/dsh-agent-teams@0.1.14","runtime":"dsh"}`
 对象条目；`.pair/cordis.patch.json` 写入同款 patch 条目（runtime=dsh）——
 使 `LoadCordisPatch` 在**应用启动时**自动拉起 Node 桥（t6 F1b 修复的真实闭环）。
@@ -215,9 +215,9 @@ schemastery）；`plugins.json` 写入 `{"spec":"@nanmicoder/dsh-agent-teams@0.1
 | 全局插件宿主 | ✅ 46 个插件（= round3 基线 + 既有） |
 | 工具集 | ✅ 47 个（17 个插件） |
 | 桥自动启动 | ✅ `[node-bridge] 就绪（插件 [@nanmicoder/dsh-agent-teams@0.1.14]，工具 ）` |
-| DSH 插件装载 | ✅ `已装载插件 @nanmicoder/dsh-agent-teams@0.1.14（runtime=dsh）`（cordis4 分支） |
+| 外部插件装载 | ✅ `已装载插件 @nanmicoder/dsh-agent-teams@0.1.14（runtime=dsh）`（cordis4 分支） |
 | 事件订阅 | ✅ `[agent/status]` → `[agent/status agent/pre-step internal/service]` |
-| DSH 服务面 | ✅ llm.current / agents.list / systemPrompt.section（diag 日志） |
+| 外部服务面 | ✅ llm.current / agents.list / systemPrompt.section（diag 日志） |
 | 工具注册 | ⚠️ 13 个 `agent_teams_*` 与 repo 移植版（`.pair/plugins/agent-teams`）同名被
   claimTool 拒绝——**替代关系定案**（t3 F2 记录）：报错含完整处理建议
   `工具 "agent_teams_create" 已被插件 agent-teams 注册，插件 node-bridge:@nanmicoder/dsh-agent-teams 不能覆盖。
@@ -250,7 +250,7 @@ schemastery）；`plugins.json` 写入 `{"spec":"@nanmicoder/dsh-agent-teams@0.1
 `TestNodeBridgeAgentStatusEvent`、`TestNodePluginRuntime`、`TestNodePluginsFile`、
 `TestToolLandingMatrix`（295 断言）。
 
-前端构建：`cd cmd/companion/web-ui && npm run build` 在 DSH 沙箱内被
+前端构建：`cd cmd/companion/web-ui && npm run build` 在 受限沙箱内被
 `spawn EPERM` 阻断（vite/esbuild 子进程 spawn 边界，round3 §10.1 同款记录）；
 **本轮前端源码零改动**，dist 为既有构建结果；沙箱外同一命令可执行
 （已上报队长走全权限通道）。

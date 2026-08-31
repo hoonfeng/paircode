@@ -22,7 +22,7 @@
 
 | 失败测试 | 根因 | 判定 |
 |---|---|---|
-| TestToolRunCommand / TestRunShellWithBash / TestRunShellBacktick / TestRunBackground / TestRunCommandInLoop / TestDetectBash / TestJSPluginCtxBashLogger / TestToolCoreJSNative（run_command 步）/ TestToolHarnessJSNative（bash ⑥ 步）/ TestHarnessAlias_GlobGrepBash（bash 步） | msys bash `couldn't create signal pipe, Win32 error 5`（受限 token 无法建命名管道，DSH 沙箱文档化边界） | 环境依赖 |
+| TestToolRunCommand / TestRunShellWithBash / TestRunShellBacktick / TestRunBackground / TestRunCommandInLoop / TestDetectBash / TestJSPluginCtxBashLogger / TestToolCoreJSNative（run_command 步）/ TestToolHarnessJSNative（bash ⑥ 步）/ TestHarnessAlias_GlobGrepBash（bash 步） | msys bash `couldn't create signal pipe, Win32 error 5`（受限 token 无法建命名管道，受限沙箱文档化边界） | 环境依赖 |
 | TestWebDebugTimeoutMs | rod/Chromium 下载写 `%APPDATA%\rod` 被拒（Access denied） | 环境依赖 |
 | TestRunCodeNested | bash 信号管道（同 msys 根因） | 环境依赖 |
 | TestNodeBridgeE2EHelloBridge | 需先 `npm install local-test-plugin` | 环境依赖（t2 同注） |
@@ -66,7 +66,7 @@
 - 方法：构建 `companion_r3.exe`（`go build -o`，67MB）置于仓库根（InstallDir 语义），
   `WEB_PORT=9479` 启动 → 探活 → 终止并清理二进制。
 - 结果：
-  - `/api/health` → **200** `{"status":"ok","workspace":"F:\\syproject\\gou-ide",...}`
+  - `/api/health` → **200** `{"status":"ok","workspace":"<仓库根>",...}`
   - `/api/plugins` → **200**（87.6KB，含 agent-teams client 半等全量插件数据）
   - 启动日志（`logs/paircode.log` 03:06 段）关键行：
     - `[WebUI] 全局插件宿主已初始化（43 个插件）` ✅ 与 t2 预期一致
@@ -178,14 +178,14 @@
 | F4 | medium | **已修复**：agent-teams profile=default 种子任务 DAG 接线（TEAM_PROFILES 增 ref/deps/reviewedTaskRef，seed 两遍建任务静态接线 requirements→implementation→verification；review 依赖 implementation 且 reviewedTaskId 指向实施任务） | node --check ✅；TestAgentTeamsDiskLoad ✅ |
 | F1 | medium | **已修复**：session_context.go fileModifyTools/toolPathParams 增 edit/write（file_path/path）；storm_breaker.go repeatSuccessSignature 增 write/edit（旧名保留兼容历史） | go build ✅；TestStormBreaker*/session_context 相关测试 ✅ |
 | F2 | low | **已修复（全插件清扫）**：14 个 tool-* 插件 LLM 面向文案旧名→新名（read/glob/grep/bash/edit/write）；tool-core purpose/头注释更正为实际 3 工具；tool-bridge package.json purpose 同步 lockdown | 全插件 node --check ✅；非 assets 插件 grep 旧名零残留 |
-| F3 | low | **已文档化**：node_bridge.go fs.read 映射注释说明 DSH 行号块输出与桥接剥离方案（当前零消费者） | go build ✅ |
+| F3 | low | **已文档化**：node_bridge.go fs.read 映射注释说明 外部行号块输出与桥接剥离方案（当前零消费者） | go build ✅ |
 | F5 | low | **已修正**：plugin-round2-plan.md §6.7 ask_user 表述更正（仅插件侧 schema 增 questions，Go 宿主侧未同步、已文档化降级） | 文档核验 ✅ |
 
 ### 8.2 全量构建与冒烟（t5 独立复跑）
 
 | # | 命令 | 退出码 | 结果 |
 |---|---|---|---|
-| 1 | `cd cmd/companion/web-ui && npm run build`（兼容入口：build-ui.mjs → ui-app vite → sync-web-dist） | 0（构建失败不阻断脚本） | ⚠️ **沙箱 EPERM**：`[commonjs--resolver] spawn EPERM`（vite/esbuild 子进程 spawn 被 DSH 沙箱拦截，文档化边界）——已报队长走全权限通道；**本轮无前端源码改动**，dist 为既有产物 |
+| 1 | `cd cmd/companion/web-ui && npm run build`（兼容入口：build-ui.mjs → ui-app vite → sync-web-dist） | 0（构建失败不阻断脚本） | ⚠️ **沙箱 EPERM**：`[commonjs--resolver] spawn EPERM`（vite/esbuild 子进程 spawn 被 受限沙箱拦截，文档化边界）——已报队长走全权限通道；**本轮无前端源码改动**，dist 为既有产物 |
 | 2 | `CGO_ENABLED=1 go build -o pair.exe ./cmd/companion`（GOCACHE/GOMODCACHE 重定向） | 0 | ✅ pair.exe 67.5MB（git-ignored，不作为提交物） |
 | 3 | 启动冒烟 WEB_PORT=9323（临时端口，避开 9090/9479） | 0 | ✅ `/api/health` 200、`/api/plugins` 200（43 插件 91.7KB）、`/api/tools` 200（51KB）；日志「全局插件宿主已初始化（43 个插件）」「已装载 44 个工具集（17 个插件）」；FATAL/panic/重复/冲突 = 0 → 探活后终止并清理 |
 

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// plugin.go — 插件框架（对齐 deepseek-harness 的 Cordis 插件体系）
+// plugin.go — 插件框架（对齐 的 Cordis 插件体系）
 //
 // harness 的「一切皆插件」：功能 = 插件 { name, inject, apply(ctx) }，
 // apply(ctx) 里通过 ctx 服务（ctx.tools / ctx.systemPrompt / ctx.on /
@@ -245,7 +245,7 @@ func (c *PluginContext) Effect(fn func()) {
 //
 //	冲突返回明确错误（含占用方与处理建议）。
 //
-// ★ repo 优先并存（2026-08-31，取消自动覆盖）：同名工具已被 DSH 桥插件
+// ★ repo 优先并存（2026-08-31，取消自动覆盖）：同名工具已被 外部桥插件
 //
 //	（node-bridge:）注册 → 本（goja/repo 移植版）插件接管 Registry 生效面，
 //	桥侧同名工具挂起保留；两版插件同列插件面板（来源徽标区分），生效方可切换。
@@ -275,7 +275,7 @@ func (h *PluginHost) claimTool(plugin, toolName string) (bool, error) {
 	defer h.mu.Unlock()
 	owner, taken := h.toolOwner[toolName]
 	if taken && owner != plugin {
-		// ★ repo 优先并存（2026-08-31，取消覆盖）：同名工具已被 DSH 桥插件
+		// ★ repo 优先并存（2026-08-31，取消覆盖）：同名工具已被 外部桥插件
 		//   （node-bridge:）注册 → goja 插件不再让位，而是接管 Registry 生效面，
 		//   桥侧同名工具转「挂起」（两版并存，插件面板 /api/plugins/prefer 切换）。
 		if strings.HasPrefix(owner, "node-bridge:") {
@@ -418,13 +418,13 @@ type PluginSource string
 const (
 	PluginSourceGo PluginSource = "go"
 	PluginSourceJS PluginSource = "js"
-	// PluginSourceBridge Node 桥插件（npm/DSH 包，真实 node 进程装载）。
+	// PluginSourceBridge Node 桥插件（npm/外部包，真实 node 进程装载）。
 	// ★ 2026-08-31：桥插件并入 Inspect 输出——插件面板/cordis_inspect 与 goja
-	//   插件同列，来源标注区分（js=goja 沙箱移植版，node-bridge=DSH 权威版）。
+	//   插件同列，来源标注区分（js=goja 沙箱移植版，node-bridge=外部权威版）。
 	PluginSourceBridge PluginSource = "node-bridge"
 )
 
-// ToolConflictInfo 同名工具冲突（repo 移植版 goja 插件 ↔ Node 桥 DSH 插件）。
+// ToolConflictInfo 同名工具冲突（repo 移植版 goja 插件 ↔ Node 桥 外部插件）。
 // ★ 2026-08-31 取消自动覆盖：两版插件并存（互不停用），同一时刻只有 Active
 // 一方在 Registry 生效；切换经 /api/plugins/prefer（插件面板按钮）。
 type ToolConflictInfo struct {
@@ -455,7 +455,7 @@ type PluginRecord struct {
 	LastError  string       `json:"lastError,omitempty"`  // 最近一次装载失败原因（诊断）
 	Diag       []string     `json:"diag,omitempty"`       // 运行诊断（阶段记录，最新在后）
 	// ★ Node 桥插件（source=node-bridge）专属字段 + 同名工具并存标注（2026-08-31）
-	Runtime   string             `json:"runtime,omitempty"`   // 桥运行时轨：dsh（cordis4+DSH 服务面）| node（cordis3）
+	Runtime   string             `json:"runtime,omitempty"`   // 桥运行时轨：dsh（cordis4+外部服务面）| node（cordis3）
 	Spec      string             `json:"spec,omitempty"`      // npm spec（pkg@ver）
 	Conflicts []ToolConflictInfo `json:"conflicts,omitempty"` // 与另一来源同名的工具（并存，Active 标生效方）
 }
@@ -1062,7 +1062,7 @@ func (h *PluginHost) Unload(name string) error {
 	// 回收贡献
 	h.mu.Lock()
 	for _, tn := range h.pluginTools[name] {
-		// ★ 并存保护（2026-08-31）：工具已被其他实现接管（如 DSH 桥插件
+		// ★ 并存保护（2026-08-31）：工具已被其他实现接管（如 外部桥插件
 		//   经 /api/plugins/prefer 切为生效方）→ 不能把对方的工具从 Registry 抹掉。
 		if h.toolOwner[tn] != name {
 			continue
@@ -1091,7 +1091,7 @@ func (h *PluginHost) Unload(name string) error {
 	if pc != nil {
 		pc.cleanup() // 触发 effects + 取消 listeners
 	}
-	// ★ 并存切换联动（2026-08-31）：repo 移植版插件停用 → 其同名 DSH 桥工具
+	// ★ 并存切换联动（2026-08-31）：repo 移植版插件停用 → 其同名 外部桥工具
 	//   （此前因 repo 优先而挂起）自动恢复生效；无挂起工具时无操作。
 	restoreBridgeToolsFor(h, name)
 	return nil
@@ -1331,7 +1331,7 @@ func (h *PluginHost) inspectLocal() []PluginRecord {
 				rec.Version = d.version
 				rec.Provides = d.provides
 				rec.Purpose = d.purpose
-				// ★ DSH 兼容 dsh.ui 段：即使无 client.js（bundle 直载），也视为含 client 半
+				// ★ 外部兼容 dsh.ui 段：即使无 client.js（bundle 直载），也视为含 client 半
 				//   （/api/ui-boot 提供 bundle URL；此处保留 clientCode 契约，无内联源码时给 bundle 指令）。
 				if strings.TrimSpace(d.clientCode) != "" || d.hasDshUI {
 					rec.HasClient = true
@@ -1411,7 +1411,7 @@ func (h *PluginHost) inspectLocalDetail(name string) *PluginRecord {
 				rec.Version = d.version
 				rec.Provides = d.provides
 				rec.Purpose = d.purpose
-				// ★ DSH 兼容 dsh.ui 段：即使无 client.js（bundle 直载），也视为含 client 半
+				// ★ 外部兼容 dsh.ui 段：即使无 client.js（bundle 直载），也视为含 client 半
 				if strings.TrimSpace(d.clientCode) != "" || d.hasDshUI {
 					rec.HasClient = true
 				}

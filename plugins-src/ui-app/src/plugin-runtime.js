@@ -49,7 +49,7 @@ import { ref, nextTick } from 'vue'
 // ★ 跨副本共享注册表（2026-08-16 全 UI 插件化）：壳与 UI bundle 各自打包本模块时，
 //   instances/clientSlots/clientPanels 必须指向同一数组（window.__SLOT_REGISTRY），
 //   否则外部插件（壳侧装载）与 bundle 内组件（UI bundle 侧）看到两张分裂的装配表，
-//   槽位占用/渲染互相不可见。对齐参考项目单例 SlotRegistry 语义。
+//   槽位占用/渲染互相不可见。对齐单例 SlotRegistry 语义。
 const __registry = (typeof window !== 'undefined')
   ? (window.__SLOT_REGISTRY = window.__SLOT_REGISTRY || { instances: [], clientSlots: [], clientPanels: [] })
   : { instances: [], clientSlots: [], clientPanels: [] }
@@ -100,7 +100,7 @@ export function emitSlotChanged() {
 }
 
 // list 型槽位（叠加）条目激活状态：勾选 = 参与渲染（localStorage 持久化，跨刷新保留）。
-// ★ 未显式设置 = 默认激活（注册即显示，对齐参考项目 shell.overlay 语义）。
+// ★ 未显式设置 = 默认激活（注册即显示，对齐 shell.overlay 语义）。
 function overlayKey(slotId, pluginName) { return 'slotOverlay:' + slotId + ':' + pluginName }
 export function isOverlayActive(slotId, pluginName) {
   try {
@@ -160,7 +160,7 @@ export function getSlotOwner(slotId) {
   //   → 视为未选择，唯一候选自动激活。（Edge 用户遇到的正是 '' 残留。）
   if (!v) neverChosen = true
   if (v) return v
-  // ★ 从未显式选择（或持久选择失效）：仅一个 single 候选时自动激活（对齐参考项目
+  // ★ 从未显式选择（或持久选择失效）：仅一个 single 候选时自动激活（对齐
   //   「注册槽位=替换」语义；用户显式选过「内置组件」存 '' 时保留其选择，不自动激活）
   if (neverChosen) {
     const cands = clientSlots.filter(s => s.slotId === slotId && s.kind !== 'list' && typeof s.render === 'function' && isPluginUIEnabled(s.pluginName))
@@ -467,7 +467,7 @@ function makeUI(inst) {
         pluginName: inst.name,
         title: spec.title,
         kind: spec.kind === 'list' ? 'list' : 'single',
-        // ★ DSH 兼容契约（spec §3.1）：scope 对齐 dsh.ui.scope（root/session/session-maybe）。
+        // ★ 外部兼容契约（spec §3.1）：scope 对齐 dsh.ui.scope（root/session/session-maybe）。
         //   默认 root；未声明时等价 root。宿主/其他插件可据此做数据作用域装配。
         scope: spec.scope === 'session' || spec.scope === 'session-maybe' ? spec.scope : 'root',
         render: typeof spec.render === 'function' ? spec.render : null,
@@ -572,7 +572,7 @@ export function unloadClientHalf(nameOrDefId) {
 }
 
 // syncClientHalves 与后端插件列表对齐：装载新 client 半，卸载已消失的。
-// ★ 2026-08-19：client 半激活审批机制整体取消（参考项目无此机制）→ 不再检查
+// ★ 2026-08-19：client 半激活审批机制整体取消（外部实现亦无此机制）→ 不再检查
 //   clientApproved，运行中的插件其 client 半直接装载。
 export async function syncClientHalves(plugins) {
   if (!plugins || !Array.isArray(plugins)) return
@@ -615,7 +615,7 @@ export async function syncClientHalves(plugins) {
   reportState()
 }
 
-// ─── DSH 兼容清单装配（spec §3.2 / §3.3 / §4.3：/api/ui-boot boot 图）─────
+// ─── 外部兼容清单装配（spec §3.2 / §3.3 / §4.3：/api/ui-boot boot 图）─────
 // boot()：薄壳装载的【唯一入口】。自取 /api/ui-boot 单图 → 校验 __PAIRCODE_CORE 就绪
 // → 预取 immediately bundle → 按 entries 装配各区 client 半（dsh.ui 区域包）。
 // → 再合并 /api/plugins 装载「非 dsh.ui 的既有 client.js 直载插件」

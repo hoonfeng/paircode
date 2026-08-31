@@ -746,7 +746,7 @@ func (r *jsLoopRunner) buildProxy() *goja.Object {
 		return vm.ToValue(msgsToJS(vm, l.drainFollowUpQueue()))
 	})
 	// preStep(callMsgs, turn, step) → {rewritten, reject, error}
-	// ★ 2026-08-30：统一走 runPreStep（host 钩子 + DSH 桥瀑布 agent/pre-step）——
+	// ★ 2026-08-30：统一走 runPreStep（host 钩子 + 外部桥瀑布 agent/pre-step）——
 	//   Node 插件订阅者（dsh-agent-teams 激活指令注入）在 JS 循环同样生效。
 	ctrlObj.Set("preStep", func(call goja.FunctionCall) goja.Value {
 		jmsgs, jerr := jsToMsgs(vm, call.Argument(0))

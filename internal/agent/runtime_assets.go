@@ -8,7 +8,7 @@ import (
 // ═══════════════════════════════════════════════════════════════
 // runtime_assets.go — 运行时资源外置（主程序只保留框架）
 //
-// 运行时脚本/模板（cordis.bundle.js、bridge_node.js、ide_ref*.html 等）
+// 运行时脚本/模板（cordis.bundle.js、bridge_node.js 等）
 // 外置到 <exe 目录>/.pair/assets/runtime/，可独立更新替换、不重新编译；
 // 缺失时回退内嵌（//go:embed fallback，保证单文件分发仍可运行）。
 // 加载顺序：外部文件优先 → embed 兜底。

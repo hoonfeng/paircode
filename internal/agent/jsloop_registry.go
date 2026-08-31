@@ -6,7 +6,7 @@ import (
 	"github.com/hoonfeng/paircode/goja"
 )
 
-// ── JS 循环注册表（单槽位，对齐 harness AgentRegistry.setFactory）──
+// ── JS 循环注册表（单槽位，对齐 setFactory 注册）──
 //
 // agentloop 核心外置（2026-08-19）：循环策略（turn/step 双层循环、审核决策、
 // 自然终止检测、content-only/绕圈防护、背景快照组装）由 JS 插件实现；Go 保留能力

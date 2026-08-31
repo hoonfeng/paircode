@@ -1,9 +1,9 @@
 package agent
 
-// harness_filter.go — 对齐 deepseek-harness 工具注册（可选精简 pair 独有工具）
+// harness_filter.go — 工具集对齐（可选精简）（可选精简 pair 独有工具）
 //
 // 背景：自举迭代（用 agent 开发 agent）要求 agent 暴露给 LLM 的工具集与
-// deepseek-harness 对齐。提供 harness 对齐模式——只保留 harness 工具集
+// 工具集对齐。提供 harness 对齐模式——只保留 harness 工具集
 // + 对话协议基础设施，其余 pair 独有工具（codegraph_*/memory_*/project_info_*/
 // git_*/debug_*/binary_*/office 等 130+ 个）从注册表禁用（Enabled=false，不删除——
 // 前端可见可管理，agent 不可见；内置工具集 builtin 可一键恢复）。
@@ -24,7 +24,7 @@ import (
 // HarnessOnlyTools 判断是否处于 harness 对齐模式。
 // ★ 默认关闭（全量工具集——插件面板工具默认全勾，全部对 agent 可见）；
 //
-//	`WB_HARNESS=1` 显式开启（对齐 deepseek-harness 精简工具集）；
+//	`WB_HARNESS=1` 显式开启（精简工具集）；
 //	旧开关兼容：`WB_FULL_TOOLS=1` 强制全量（关闭过滤）。
 func HarnessOnlyTools() bool {
 	if os.Getenv("WB_HARNESS") == "1" {

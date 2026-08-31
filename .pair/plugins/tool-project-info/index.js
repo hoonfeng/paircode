@@ -14,8 +14,8 @@ const path = require('path')
 const tools = [
   {
     "name": "project_info_write",
-    "description": "写入/更新项目知识库的一篇（.pair/project-info/\u003c路径\u003e.md）——记录项目架构/模块职责/数据流/设计决策等结构化理解，跨会话复用、你和用户都能看。★树形路径：顶层分支 目标/架构/实现/关键点/设计思想，根条目用 概览（如 架构/模块-agent / 设计思想/决策-渲染架构）；兼容参考项目 notes/ 前缀路径（自动映射分支+镜像 .agents/notes/）。",
-    "usageGuide": "写入/更新项目知识库条目，跨会话复用。★知识库是树：顶层分支 = 目标/架构/实现/关键点/设计思想（根为 概览）——路径带分支前缀（如 架构/模块-agent / 设计思想/决策-渲染架构）。也可用参考项目风格路径 notes/implemented/architecture/x（自动归入树分支 架构/x 并镜像 .agents/notes/）。读完关键文件后立即写入，积累项目的结构化理解。比记在脑子里可靠（持久化+跨会话可见）。多项目工作区可用 project 参数指定目标项目。",
+    "description": "写入/更新项目知识库的一篇（.pair/project-info/\u003c路径\u003e.md）——记录项目架构/模块职责/数据流/设计决策等结构化理解，跨会话复用、你和用户都能看。★树形路径：顶层分支 目标/架构/实现/关键点/设计思想，根条目用 概览（如 架构/模块-agent / 设计思想/决策-渲染架构）；兼容 notes/ 前缀路径（自动映射分支+镜像 .agents/notes/）。",
+    "usageGuide": "写入/更新项目知识库条目，跨会话复用。★知识库是树：顶层分支 = 目标/架构/实现/关键点/设计思想（根为 概览）——路径带分支前缀（如 架构/模块-agent / 设计思想/决策-渲染架构）。也可用外部风格路径 notes/implemented/architecture/x（自动归入树分支 架构/x 并镜像 .agents/notes/）。读完关键文件后立即写入，积累项目的结构化理解。比记在脑子里可靠（持久化+跨会话可见）。多项目工作区可用 project 参数指定目标项目。",
     "parameters": {
       "properties": {
         "content": {
@@ -179,7 +179,7 @@ function isInfoBranch(head) {
   return infoBranches.indexOf(head) >= 0
 }
 
-// notesToBranchRel 把参考项目决策树路径映射到知识库树分支路径（复刻 Go 实现）。
+// notesToBranchRel 把决策树路径映射到知识库树分支路径（复刻 Go 实现）。
 function notesToBranchRel(n) {
   n = String(n).replace(/^notes\//, '').replace(/^\//, '')
   if (n === '') return null

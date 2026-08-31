@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ext_routes.go — HTTP 接口插件化：外部路由注册表（对齐 harness webServer 服务）
+// ext_routes.go — HTTP 接口插件化：外部路由注册表（对齐宿主 webServer 服务）
 //
 // 背景（2026-08-16）：工具已全部磁盘插件化、agentloop 已工厂化（LoopFactory），
 // 但 HTTP 接口（/api/* 约 60 路由）仍宿主硬编码（web_server.go mux.HandleFunc）。
@@ -7,7 +7,7 @@
 // 自定义路由，ExtRouteMiddleware 在 mux 之前拦截——命中插件路由则执行，否则
 // 交给现有 mux（宿主内置路由 + 静态文件不受影响）。
 //
-// 对齐 harness（ref/deepseek-harness/packages/host/webserver）：
+// 对齐宿主 webserver 服务：
 //   - exact 精确路径（pathname 逐字匹配）
 //   - prefix 前缀路径（path + "/*" 匹配 path 与 path/<anything>）
 //   - 重复 (method, path) 注册报错（路由是装配层契约，冲突即配置错误）
@@ -104,7 +104,7 @@ func RegisteredExtRoutes() []ExtRouteInfo {
 }
 
 // RegisterExtRouteAny 注册一条不区分 HTTP 方法的路由（method 通配 "*"）。
-// 对齐 harness webServer：route 只有 kind/path/handler，不携带 method——
+// 对齐 webServer：route 只有 kind/path/handler，不携带 method——
 // handler 自行判断 req.method（Node 风格）。精确 method 路由优先于 "*"。
 func RegisterExtRouteAny(path string, h ExtRouteHandler) (func(), error) {
 	return RegisterExtRoute("*", path, h)

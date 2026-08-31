@@ -183,7 +183,7 @@ go run -tags toolsgen ./dev/tool_plugin_gen   # 幂等：已有插件不覆盖�
 ## 其他目录
 
 - `.pair/assets/runtime/` — 运行时资源（cordis.bundle.js/bridge_node.js/
-  ide_ref*/web 前端产物），外部优先 + embed 兜底（见其 README）
+  web 前端产物），外部优先 + embed 兜底（见其 README）
 - `.pair/toolsets/` — 工具集（插件组合包）
 
 ## 插件包 config 通道（apply(ctx, config)）

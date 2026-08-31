@@ -783,7 +783,7 @@ return {
       maxRepairAttempts: Number(settings.maxRepairAttempts || DEFAULT_REVIEW_POLICY.maxRepairAttempts),
       requirementsMaxRounds: Number(settings.requirementsMaxRounds || DEFAULT_REVIEW_POLICY.requirementsMaxRounds),
       // ★ Round3 ④.1：成员会话提供方式——'spawn'（新会话，默认，行为不变）|
-      //   'fork'（以队长会话消息快照派生，DSH subagent_fork 对齐；persona 经 system 覆盖）。
+      //   'fork'（以队长会话消息快照派生，subagent_fork 对齐；persona 经 system 覆盖）。
       //   配置来源：插件设置 memberProvider → 环境变量 AGENT_TEAMS_MEMBER_PROVIDER → 默认 spawn。
       memberProvider: trimOpt(settings.memberProvider) ||
         (typeof process !== 'undefined' && process.env ? trimOpt(process.env.AGENT_TEAMS_MEMBER_PROVIDER) : '') || 'spawn',

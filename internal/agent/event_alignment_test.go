@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-// ── 事件语义标注（消息落盘对齐 deepseek-harness）──────────────────
+// ── 事件语义标注（消息落盘对齐事件语义）──────────────────
 
 // TestAnnotateStoredEvents_TurnStep 验证 annotateStoredEvents 按消息序列
 // 推导 EventType/Turn/Step（一次 Run = 一个 turn，assistant 消息递增 step，

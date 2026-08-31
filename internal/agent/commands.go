@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // commands.go — 宿主 ctx.commands 命令面（Round3 ④.2 slash 命令）
 //
-// 对齐 DSH harness「slash 命令」语义：
+// 对齐「slash 命令」语义：
 //   - 插件经 ctx.commands.register({name, description, handler}) 注册命令；
 //     插件卸载自动注销（按归属清理，无悬挂）
 //   - HTTP 面：GET /api/commands（清单）+ POST /api/commands/run（执行；

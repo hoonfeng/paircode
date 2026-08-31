@@ -1,35 +1,35 @@
-# PairCode UI 插件层：DSH 兼容分布式 UI 插件契约与重构规格
+# PairCode UI 插件层：外部兼容分布式 UI 插件契约与重构规格
 
 > 文档状态：**需求契约（contract spec）** —— 供 `frontend-plugins` / `frontend-shell` / `backend` 三路实现、
 > `verifier` 逐条验收、`reviewer` 对照审查。本文只定义**契约与验收标准**，不含实现。
-> 术语约定：**DSH** = 参考实现 `F:\syproject\ref\deepseek-harness`（`@deepseek-ai/dsh-*` 分布式 client-ui 插件模型）；
-> **PairCode** = 本项目 `F:\syproject\gou-ide`（当前 `plugins-src/ui-app`）。
+> 术语约定：**外部模型** = `@deepseek-ai/dsh-*` 分布式 client-ui 插件模型；
+> **PairCode** = 本项目（当前 `plugins-src/ui-app`）。
 
 ---
 
 ## 0. 目标（一句话）
 
 把 PairCode UI 层从「**单一集中 repo/脚本 + 宿主 slots 硬编码**」改造成「**每个 UI 区域/功能是独立、可构建、可发现、可版本化的分布式插件包**」，
-并让布局对齐 DSH 的 **chat 优先薄壳**（对话为主视图、编辑器为辅助、默认隐藏、点文件树按需打开）。
+并让布局对齐 外部的 **chat 优先薄壳**（对话为主视图、编辑器为辅助、默认隐藏、点文件树按需打开）。
 
-参考实现：DSH 的 `packages/client/ui-*`（数十个独立 workspace 包）+ `dsh-client-web`/`dsh-client-web-frontend` 薄壳；
+外部实现：外部项目的 `packages/client/ui-*`（数十个独立 workspace 包）+ `dsh-client-web`/`dsh-client-web-frontend` 薄壳；
 PairCode 现状：`plugins-src/ui-app`（单包）+ `plugin-runtime.js` 的 Slot 系统 + `build-ui.mjs`（一脚本产 7 区域 bundle）。
 
 ---
 
-## 1. 概念对齐：DSH 模型 ↔ PairCode 现状 ↔ 目标契约
+## 1. 概念对齐：外部模型 ↔ PairCode 现状 ↔ 目标契约
 
 下表是整个重构的「词汇表」，后续所有章节都建立在这张映射表上。
 
-| 概念 | DSH 参考实现 | PairCode 现状 | 目标契约（本文） |
+| 概念 | 外部实现 | PairCode 现状 | 目标契约（本文） |
 |---|---|---|---|
 | 应用壳（shell） | `apps/web`(thin) → `dsh-client-web` boot kernel | `ShellApp.vue`（Vue 网格骨架）+ `main.js` | 薄壳：只渲染 `host.main` root 槽位 + 装载 client 插件；不再持有区域实现 |
 | 插件形态 | 每个 `ui-*`/`dsh-*` 是一个 **npm workspace 包**（cordis plugin） | `plugins-src/ui-app/src` 单包 + `ui-main-*.js` 入口 | 每个 UI 区域/功能是一个**独立目录/独立构建目标**的插件包 |
-| 插件 manifest | `package.json` `dsh.client.{inject,platform}` 声明 client 半 cordis entry | `plugin package.json` `{name,main,client,purpose,scope,type,version,config}` | **扩展为 DSH 兼容二段式**（见 §3）：`package.json`（宿主元数据）+ `dsh.ui`（client 半清单） |
+| 插件 manifest | `package.json` `dsh.client.{inject,platform}` 声明 client 半 cordis entry | `plugin package.json` `{name,main,client,purpose,scope,type,version,config}` | **扩展为 外部兼容二段式**（见 §3）：`package.json`（宿主元数据）+ `dsh.ui`（client 半清单） |
 | client 半代码 | 包内 `.tsx`/`.ts` client 半，经 **tsdown** 构建为 `lib/client.js` | `client.js`（`(ui)=>void`）经 `new Function` 求值 | 每包独立构建为 **IIFE/ESM bundle**（客户端零运行时编译，见 §4） |
-| 插件发现 | host 组装 `window.__DSH_BOOT__`（`WebBootGraph.entries[{id,url,rev,inject,immediately,external}]`） | `GET /api/plugins` 列表 + `GET /api/plugins/detail`（补 `clientCode`） | 保留现有 `/api/plugins*` 接口为**传输层**，新增 `GET /api/ui-boot` 输出 **DSH 兼容 boot 图**（见 §3.2） |
+| 插件发现 | host 组装 `window.__PLUGIN_BOOT__`（`WebBootGraph.entries[{id,url,rev,inject,immediately,external}]`） | `GET /api/plugins` 列表 + `GET /api/plugins/detail`（补 `clientCode`） | 保留现有 `/api/plugins*` 接口为**传输层**，新增 `GET /api/ui-boot` 输出 **外部兼容 boot 图**（见 §3.2） |
 | client 装载 | `window.__ModuleLoader__` 注册 bundle factory（lazy CJS），cordis Loader `create` 激活 | `syncClientHalves(list)` 装载、`startPolling` 事件轮询 | 统一为「**装配器加载 bundle → 执行 client 半 → 触发槽位装配**」（见 §3.3） |
-| 共享核心 | `window.__DSH_BOOT__` 静态模块表（seed）：`react`/`react-dom`/`cordis`/`ui-slots`/`ui-primitives` | `window.__PAIRCODE_CORE`（Vue/uiState/api/pluginRuntime/agentEvents/actions） | **保留 `__PAIRCODE_CORE` 为唯一共享单例**，新增契约字段与版本锚（见 §4.3） |
+| 共享核心 | `window.__PLUGIN_BOOT__` 静态模块表（seed）：`react`/`react-dom`/`cordis`/`ui-slots`/`ui-primitives` | `window.__PAIRCODE_CORE`（Vue/uiState/api/pluginRuntime/agentEvents/actions） | **保留 `__PAIRCODE_CORE` 为唯一共享单例**，新增契约字段与版本锚（见 §4.3） |
 | 槽位（slot） | `dsh-client-ui-slots` `SlotCore` + `SlotMap`（TS 类型化：kind/scope/owner/children） | `plugin-runtime.js` `registerSlot({slotId,kind,render})` + `clientSlots` 数组 | **对齐 Slot 语义轴**：`kind`(single/list)、`scope`(root/session/maybe)、状态持久化（见 §5） |
 | 槽位声明 | 宿主 `AppFrame` 构造时把子槽写进 `children` 表（**声明即认领**，一个槽一位声明者） | 宿主预定义 `slotId` 列表（`getSlotOwner` 单选） | 薄壳 root 槽声明一组**具名子槽**，区域包向其注册（见 §5.2） |
 | 编辑器 | `details` 列（`ui-conversation`/`ui-details` 槽位），**默认折叠 width 0，永不 unmount** | `editor` 槽位，默认与 chat 并排；`focusMode` 用 CSS `v-show` 隐藏 | **默认隐藏、点文件树按需打开**；折叠=`width:0`（保持挂载），见 §6 |
@@ -37,7 +37,7 @@ PairCode 现状：`plugins-src/ui-app`（单包）+ `plugin-runtime.js` 的 Slot
 | 构建 | tsdown per-package（`bundle` script） | `scripts/build-ui.mjs`（一脚本产 7 IIFE + 2 面板） | 拆分：**每区域独立构建目标 + 独立输出目录**（见 §4.1） |
 | 生命周期 | cordis fiber（active/pending/waiting/...） | 插件状态 `stopped/running/waiting/rejected/failed/cancelled` | 沿用现有状态机（§3.5），client 半快照上报给 `cordis_frontend_inspect` |
 
-> **核心结论**：PairCode 不需要改写为“cordis + React + TS”。需要的是**把现有 Slot 系统的『装配/协作』语义抽成与 DSH 对等的契约**（manifest、分区域构建、共享核心、chat 薄壳、编辑器按需），并**在现有 `/api/plugins*`/`__PAIRCODE_CORE` 基座上落地**。DSH 是“契约的语义参照”，不是“必须拷贝的技术栈”。
+> **核心结论**：PairCode 不需要改写为“cordis + React + TS”。需要的是**把现有 Slot 系统的『装配/协作』语义抽成与 外部对等的契约**（manifest、分区域构建、共享核心、chat 薄壳、编辑器按需），并**在现有 `/api/plugins*`/`__PAIRCODE_CORE` 基座上落地**。外部是“契约的语义参照”，不是“必须拷贝的技术栈”。
 
 ---
 
@@ -57,7 +57,7 @@ PairCode 现状：`plugins-src/ui-app`（单包）+ `plugin-runtime.js` 的 Slot
 
 ---
 
-## 3. ① DSH 兼容 UI 插件 manifest / 发现 / 装载 / 服务契约
+## 3. ① 外部兼容 UI 插件 manifest / 发现 / 装载 / 服务契约
 
 ### 3.1 插件包 manifest（二段式）
 
@@ -73,7 +73,7 @@ PairCode 现状：`plugins-src/ui-app`（单包）+ `plugin-runtime.js` 的 Slot
 **目标契约**（新增 `dsh.ui` 段，兼容旧 `client` 字段；`client`/`client.js` 仍保留作 fallback）：
 
 ```jsonc
-// .pair/plugins/<name>/package.json —— DSH 兼容 manifest
+// .pair/plugins/<name>/package.json —— 外部兼容 manifest
 {
   "name": "paircode-ui-editor",
   "version": "1.0.0",
@@ -81,18 +81,18 @@ PairCode 现状：`plugins-src/ui-app`（单包）+ `plugin-runtime.js` 的 Slot
   "main": "index.js",                 // host 半（保留）
   "purpose": "编辑器区域：CM6 + 终端",
   "scope": "global",                  // 含 client 半的 UI 类插件默认 global
-  // ── 新增：DSH 兼容 client 半清单（等价 dsh-client 的 dsh.client + cordis entry）──
+  // ── 新增：外部兼容 client 半清单（等价 dsh-client 的 dsh.client + cordis entry）──
   "dsh": {
     "ui": {
       "platform": "web",              // 客户端平台（恒 "web"）
       "slot": "editor",               // 本包注册到哪个薄壳槽位（target slot，见 §5）
-      "kind": "single",               // single | list（对齐 DSH SlotKind / 现 registerSlot kind）
+      "kind": "single",               // single | list（对齐 外部 SlotKind / 现 registerSlot kind）
       "scope": "root",                // root | session | session-maybe（数据作用域）
-      "inject": [                     // client 半的 cordis/服务依赖（对齐 DSH dsh.client.inject）
+      "inject": [                     // client 半的 cordis/服务依赖（对齐 外部 dsh.client.inject）
         "@paircode/core",             // 共享核心单例（见 §4.3）——所有 UI 包必带
         "@paircode/layout"            // 薄壳布局服务（可选：需要面板转换时声明）
       ],
-      "immediately": true             // 是否 stage-one 预取（对齐 DSH WebBootEntry.immediately）
+      "immediately": true             // 是否 stage-one 预取（对齐 外部 WebBootEntry.immediately）
     }
   },
   "config": { /* 装配参数，apply(ctx, config) 第二参 */ }
@@ -104,13 +104,13 @@ PairCode 现状：`plugins-src/ui-app`（单包）+ `plugin-runtime.js` 的 Slot
 - 含 `dsh.ui` 段 → 服务端必须标记 `hasClient=true` 并把 `clientCode` 提供到列表/详情（沿用现有字段）。
 - `dsh.ui.slot` 是**本包对薄壳声明的目标槽位**，一个包只声明一个 `target slot`（primary），可通过 `dsh.ui.subSlots` 声明它**向下开放的子槽**（见 §5.2，声明即认领，一个子槽一位认领者）。
 
-### 3.2 发现（discovery）：新增 DSH 兼容 boot 图
+### 3.2 发现（discovery）：新增 外部兼容 boot 图
 
 现状发现链路：`GET /api/plugins`（列表，含 `hasClient`/缺省不带完整 `clientCode`）→ 前端对 `hasClient && !clientCode` 者补 `GET /api/plugins/detail?name=`。
 
 缺陷：① 列表/详情两次往返；② 无 `rev` 无 cache-busting；③ 无 `inject/immediately` 排序依赖，区域包之间无声明式装配顺序。
 
-**目标契约**：新增 `/api/ui-boot`，输出 DSH `WebBootGraph` 等价结构（节点为「已装配完成的 UI 区域/功能包」，供薄壳一次性装载）：
+**目标契约**：新增 `/api/ui-boot`，输出 外部 `WebBootGraph` 等价结构（节点为「已装配完成的 UI 区域/功能包」，供薄壳一次性装载）：
 
 ```jsonc
 // GET /api/ui-boot 返回
@@ -131,7 +131,7 @@ PairCode 现状：`plugins-src/ui-app`（单包）+ `plugin-runtime.js` 的 Slot
 
 `/api/ui-boot` 由后端（t3）从「已装配的区域包清单 + 各包 `dsh.ui` 段 + 各 bundle 内容 hash」组装。前端薄壳**只消费 `/api/ui-boot` 一张图**，不再逐包拼 `listPlugins`+`detail`。
 
-**验收对应**：DSH 的 `window.__DSH_BOOT__` 由 host 组装、`window.__ModuleLoader__` 注册 bundle factory；PairCode 等价物是 `/api/ui-boot` + `loader.import(url)`。二者结构字段一一对应（`id/url/rev/inject/immediately/external`）。
+**验收对应**：外部的 `window.__PLUGIN_BOOT__` 由 host 组装、`window.__ModuleLoader__` 注册 bundle factory；PairCode 等价物是 `/api/ui-boot` + `loader.import(url)`。二者结构字段一一对应（`id/url/rev/inject/immediately/external`）。
 
 ### 3.3 装载（load）：统一“装配器”
 
@@ -148,7 +148,7 @@ PairCode 现状：`plugins-src/ui-app`（单包）+ `plugin-runtime.js` 的 Slot
 
 现状跨插件共享：`ctx.provide/ctx.get`（host 侧）、`ctx.registerClientMethod`+`ui.invoke`（host→client RPC）、事件桥（`ui.emit`/`ctx.on('host:*')`）、`ui.http`（受限 API）。
 
-**目标契约**（对齐 DSH `ctx.layout` 的 `LayoutController`）：**薄壳提供 `ctx.uiLayout` 服务**，覆盖区域包需要的所有面板转换（这是“编辑器按需打开”的服务支撑，见 §6）：
+**目标契约**（对齐 外部 `ctx.layout` 的 `LayoutController`）：**薄壳提供 `ctx.uiLayout` 服务**，覆盖区域包需要的所有面板转换（这是“编辑器按需打开”的服务支撑，见 §6）：
 
 ```ts
 interface UiLayoutService {
@@ -169,26 +169,26 @@ Host 侧仍按现约 (`ctx.provide('uiLayout', ...)` + `ctx.registerClientMethod
 
 | # | 验收标准（verifier 逐条核对） | 判据 |
 |---|---|---|
-| M1 | `/api/ui-boot` 返回 DSH 兼容 boot 图（`rev` + `entries[{id,url,rev,inject,immediately,external}]`），字段名与 DSH `WebBootGraph` 一一对应 | 返回图可对照 DSH 字段逐项对齐；无缺字段 |
+| M1 | `/api/ui-boot` 返回 外部兼容 boot 图（`rev` + `entries[{id,url,rev,inject,immediately,external}]`），字段名与 外部 `WebBootGraph` 一一对应 | 返回图可对照 外部字段逐项对齐；无缺字段 |
 | M2 | 每个 UI 区域/功能包的 `package.json` 含 `dsh.ui` 段（platform/slot/kind/scope/inject/immediately），可选 `subSlots` | 抽查 ≥3 个现区域包均有 `dsh.ui`；旧 `client` 字段仍合法（fallback） |
 | M3 | 含 `dsh.ui` 段的包 → 服务端 `hasClient=true` 且 `clientCode` 被提供 | `/api/plugins` 列表 `hasClient` 正确、`/api/plugins/detail` 含 `clientCode` |
 | M4 | 薄壳仅消费 `/api/ui-boot` 一张图装载 region 包（不再逐包拼 listPlugins+detail） | 前端装载主路径无 listPlugins+detail 合并逻辑；或该逻辑已封装为 `boot()` 单一入口 |
 | M5 | 共享核心 `__PAIRCODE_CORE` 先于任何 region 包就绪；任一 region 失败只影响其槽位（空态占位） | 故障注入：disable 某区域包 → 其余槽位正常渲染 |
 | M6 | `ctx.uiLayout` 服务提供 `openEditor/closeEditor/toggleEditor/isEditorOpen`，区域包通过它而非直接改 `state` 开关布局 | 布局开关只经服务；代码搜索无 region 包直接写 `state.*Editor*` 私有开关 |
 
-> 对照 DSH 依据：`packages/client/modules/src/client/manifest.ts`（boot 图结构）、`packages/client/ui-sidebar/package.json`（`dsh.client` 段）、`packages/client/ui-layout/src/client/service.ts`（`ctx.layout` 服务面）。
+> 对照 外部依据：`packages/client/modules/src/client/manifest.ts`（boot 图结构）、`packages/client/ui-sidebar/package.json`（`dsh.client` 段）、`packages/client/ui-layout/src/client/service.ts`（`ctx.layout` 服务面）。
 
 ---
 
 ## 4. ② 每区域独立分布式插件包构建模型 + `__PAIRCODE_CORE` 单例契约
 
-### 4.1 分区域独立构建目标（对齐 DSH 每包独立 tsdown）
+### 4.1 分区域独立构建目标（对齐 外部每包独立 tsdown）
 
 现状（`scripts/build-ui.mjs`）用一个脚本循环 7 区域 + 2 面板，全部产 IIFE 到 `.pair/plugins/ui-<region>/assets/`。**问题**：① 改一个区域要重跑全量；② 区域包之间无各自版本/声明；③ 区域实现强耦合在 `plugins-src/ui-app/src` 单目录。
 
 **目标契约**：**一区域 = 一独立构建目标 = 一独立输出目录 = 一独立可版本化插件包**。
 
-- 每个区域包源码独立（如 `plugins-src/ui-regions/editor/` 或保留 `plugins-src/ui-app/src/ui-main-editor.js` 为入口），但**构建按包产出**，输出到 `.pair/plugins/ui-<region>/assets/`（与 DSH 的 `/plugins/<id>/client.js` 端点等价，经现有 `/plugins-assets/ui-<region>/assets/*` 提供）。
+- 每个区域包源码独立（如 `plugins-src/ui-regions/editor/` 或保留 `plugins-src/ui-app/src/ui-main-editor.js` 为入口），但**构建按包产出**，输出到 `.pair/plugins/ui-<region>/assets/`（与 外部的 `/plugins/<id>/client.js` 端点等价，经现有 `/plugins-assets/ui-<region>/assets/*` 提供）。
 - 构建产物**固定命名**：`ui-<region>.js` + `ui-<region>.css`（沿用现有 `entryFileNames/assetFileNames` 约定），`rev`=内容 hash。
 - **构建目标表**（示例，具体实现由 frontend-plugins 定）：
 
@@ -227,7 +227,7 @@ window.__PAIRCODE_CORE = {
 ```
 
 **必须遵守的不变式**
-- **单例关键**：`__PAIRCODE_CORE` 内共享的 `pluginRuntime`/`uiState` 必须在**薄壳与所有 region 包**中指向**同一对象实例**（对齐 DSH `seed.ts` 的“每个 bundle 看到同一实例”，即 DSH 用 `<script>`/静态模块表保证单例；PairCode 用 `window.__PAIRCODE_CORE`）。
+- **单例关键**：`__PAIRCODE_CORE` 内共享的 `pluginRuntime`/`uiState` 必须在**薄壳与所有 region 包**中指向**同一对象实例**（对齐 外部 `seed.ts` 的“每个 bundle 看到同一实例”，即 外部用 `<script>`/静态模块表保证单例；PairCode 用 `window.__PAIRCODE_CORE`）。
 - region 包 **不打包** `__PAIRCODE_CORE` 的词条（external），运行时从 `window.__PAIRCODE_CORE` 取。
 - `version` 锚：`__PAIRCODE_CORE.version`（或 `/api/ui-boot` 的 `rev`）变化时，region 包可做兼容检测；不匹配 → 该 region 报**兼容性错误**（`reportFailure('boot', ...)`），不影响其他 region。
 - **禁止** region 包二次 `createApp` 共享核心或再打包一份 `ui-state.js`（会分裂 reactive 状态）。
@@ -236,7 +236,7 @@ window.__PAIRCODE_CORE = {
 
 - region 包 bundle 打到 `.pair/plugins/ui-<region>/assets/`，由 `/plugins-assets/ui-<region>/assets/ui-<region>.js` 提供（现有 `web_server.go` 的 `/plugins-assets/` 路由已支持）。
 - 薄壳（web-ui dist）由 `vite.config.js` 独立构建，含 `__PAIRCODE_CORE`（现约）；区域 bundle 不含。
-- `rev`：每个 bundle 内容 hash 作为 cache-busting 一致性锚；`/api/ui-boot` 的图级 `rev`＝所有 bundle hash 的摘要（DSH `WebBootGraph.rev` 语义）。
+- `rev`：每个 bundle 内容 hash 作为 cache-busting 一致性锚；`/api/ui-boot` 的图级 `rev`＝所有 bundle hash 的摘要（外部 `WebBootGraph.rev` 语义）。
 
 ### 4.4 构建模型 —— 验收标准
 
@@ -248,7 +248,7 @@ window.__PAIRCODE_CORE = {
 | B4 | 任一 region bundle 内容变化 → `/api/ui-boot` 该 entry `rev` 变化，图级 `rev` 摘要同步变化 | 改动一个 region 源码并重建 → `/api/ui-boot` 仅该 entry `rev` 变化 |
 | B5 | 区域包可独立从 `/api/ui-boot` 移除（发现层幂等） | 删除某 region 包目录并重启 → `/api/ui-boot` 无该 entry，对应槽位空态占位，其余正常 |
 
-> 对照 DSH 依据：`packages/client/ui-sidebar`、`packages/client/ui-layout` 各为独立包（tsdown build）；`packages/client/web/src/seed.ts` 静态模块表单例（DSH 版 `__PAIRCODE_CORE`）。
+> 对照 外部依据：`packages/client/ui-sidebar`、`packages/client/ui-layout` 各为独立包（tsdown build）；`packages/client/web/src/seed.ts` 静态模块表单例（外部版 `__PAIRCODE_CORE`）。
 
 ---
 
@@ -272,7 +272,7 @@ window.__PAIRCODE_CORE = {
 ```
 `grid-template-columns: 48px auto minmax(340px,1fr) var(--right-w,525px)`。chat 在**最右**、编辑器为**主区**；`focusMode` 用 CSS `v-show` 隐藏编辑器（保留 DOM）。
 
-**目标（chat 优先薄壳，对齐 DSH AppFrame 三列）**—— **对话为主视图（居中）**，编辑器为**辅助面板（默认隐藏，右侧/或覆盖）**：
+**目标（chat 优先薄壳，对齐 外部 AppFrame 三列）**—— **对话为主视图（居中）**，编辑器为**辅助面板（默认隐藏，右侧/或覆盖）**：
 
 ```
 ┌────────────────────────┬────────────────────────┬─────────────┐
@@ -287,20 +287,20 @@ window.__PAIRCODE_CORE = {
 └────────────────────────────────────────────────────────────────┘
 ```
 
-**结构对应（DSH AppFrame 子槽 → PairCode 目标）**：
+**结构对应（外部 AppFrame 子槽 → PairCode 目标）**：
 
-| DSH 槽位 | DSH 语义 | PairCode 目标槽位 | 说明 |
+| 外部槽位 | 外部语义 | PairCode 目标槽位 | 说明 |
 |---|---|---|---|
 | `root` | 壳唯一渲染槽 | `host.main`（薄壳 root） | 壳只渲染这一个；根框架/几何在这声明 |
 | `sidebar` | 会话/目录树 | `sidebar` | 文件树 + 会话/工作区（默认宽 280） |
 | `conversation` | **对话主视图**（center） | `conversation` | **chat 优先**：主列 |
 | `details` | **编辑器/details**（辅助） | `editor` | **默认折叠 width 0**；点文件树打开 |
 | `shell.overlay` | 浮动层 | `overlay` | toast/approval/fixed |
-| （DSH 无需） | — | `titlebar`/`activitybar`/`statusbar` | 保留为壳级薄条（可继续插件化，非主视图） |
+| （外部无需） | — | `titlebar`/`activitybar`/`statusbar` | 保留为壳级薄条（可继续插件化，非主视图） |
 
 ### 5.2 薄壳 = 纯几何骨架 + root 槽位（声明即认领）
 
-`host.main`（root 槽）由薄壳在构造时声明一组**具名子槽**（声明即认领，一个子槽一位声明者——对齐 DSH `AppFrame` 的 `children` 表 / `SlotCore.register` 的 `children` 声明）：
+`host.main`（root 槽）由薄壳在构造时声明一组**具名子槽**（声明即认领，一个子槽一位声明者——对齐 外部 `AppFrame` 的 `children` 表 / `SlotCore.register` 的 `children` 声明）：
 
 ```
 host.main.children := {
@@ -316,7 +316,7 @@ host.main.children := {
 
 region 包用 `registerSlot({ slotId, title, render, kind, scope })` 向某子槽注册占用者（`slotId`==上述 `host.main` children key）；`kind='single'` 单选（面板切换）、`kind='list'` 叠加（overlay）。**薄壳每个子槽一个挂载点**：owner 非空 → 渲染 region 到 `hostRef`；owner 空 → `slot-empty` 占位（含恢复入口）。
 
-> 对齐点：DSH `SlotMap` 用 TypeScript 声明 merge 表达“一个槽一位声明者”；PairCode 用薄壳 root 的 `children` 表 + `registerSlot(slotId)` 表达同样约束。**几何与子槽声明**是壳的职责；**内容**是 region 包的职责。
+> 对齐点：外部 `SlotMap` 用 TypeScript 声明 merge 表达“一个槽一位声明者”；PairCode 用薄壳 root 的 `children` 表 + `registerSlot(slotId)` 表达同样约束。**几何与子槽声明**是壳的职责；**内容**是 region 包的职责。
 
 ### 5.3 布局验收标准
 
@@ -325,11 +325,11 @@ region 包用 `registerSlot({ slotId, title, render, kind, scope })` 向某子�
 | L1 | 加载后**对话（conversation）为主视图**，位于主列/居中；编辑器为辅助且**默认不展示** | 首屏无编辑器占据主区；对话占主列（宽≥某阈值） |
 | L2 | 薄壳只渲染 root 槽（`host.main`），其为纯几何骨架（不含任何区域实现） | 壳源码无区域具体组件实现；全部区域经 `registerSlot` 装配 |
 | L3 | 薄壳产物不含 `__PAIRCODE_CORE` 之外的区域实现（薄壳 = 壳） | 壳 bundle 无 `CodeEditor`/`TerminalPanel` 等区域组件 |
-| L4 | 折叠侧栏为紧凑 rail（对齐 DSH SIDEBAR_COLLAPSED=56），展开默认 280 | 折叠态为图标列；展开还原 280 或用户偏好 |
+| L4 | 折叠侧栏为紧凑 rail（对齐 外部 SIDEBAR_COLLAPSED=56），展开默认 280 | 折叠态为图标列；展开还原 280 或用户偏好 |
 | L5 | 有 `conversation`/`editor`/`sidebar`/`overlay` 具名子槽声明（声明即认领） | 薄壳 root `children` 表包含这些 key；region 包向其注册 |
 | L6 | 视图切换不触发整个 app 重挂（仅区域状态变化） | 打开/关闭编辑器、折叠侧栏 → 无整页刷新、无其余槽位重挂 |
 
-> 对照 DSH 依据：`packages/client/ui-layout/src/client/AppFrame.tsx`（三列 grid + `renderSlot('conversation'|'details'|'sidebar'|'shell.overlay')`）、`columns.ts`（默认几何：SIDEBAR_DEFAULT=280、SIDEBAR_COLLAPSED=56、DETAILS_DEFAULT=360、CENTER_MIN=640）。
+> 对照 外部依据：`packages/client/ui-layout/src/client/AppFrame.tsx`（三列 grid + `renderSlot('conversation'|'details'|'sidebar'|'shell.overlay')`）、`columns.ts`（默认几何：SIDEBAR_DEFAULT=280、SIDEBAR_COLLAPSED=56、DETAILS_DEFAULT=360、CENTER_MIN=640）。
 
 ---
 
@@ -350,7 +350,7 @@ region 包用 `registerSlot({ slotId, title, render, kind, scope })` 向某子�
 state.panels = {
   sidebarVisible: true,    // 文件树默认展开（宽 280）
   editorOpen: false,       // ★ 默认折叠（编辑器隐藏）
-  editorWidth: 360,        // 折叠后打开时的默认详情列宽（对齐 DSH DETAILS_DEFAULT=360）
+  editorWidth: 360,        // 折叠后打开时的默认详情列宽（对齐 外部 DETAILS_DEFAULT=360）
   editorLastWidth: 360,    // 上次打开宽（折叠还原用）
   rightPanelVisible: true, // 对话主视图常驻
 }
@@ -413,7 +413,7 @@ state.panels = {
 | E6 | 切换编辑器槽位 owner 才 cleanup/重挂；打开/关闭/切文件不触发重挂 | 换文件不产生 CM6 重建（可断言的编辑器实例/挂载计数） |
 | E7 | 折叠态参与布局（width:0 不占额外空间），展开还原 `editorLastWidth` | 折叠后其余列不受挤压；展开还原偏好宽 |
 
-> 对照 DSH 依据：DSH `details` 列**默认折叠且永不 unmount**（`columns.ts`：`details=0` 时 `width:0`，`AppFrame.tsx` `DetailsColumn` `width 0 keeps the subtree mounted (never unmount on close)`）；`LayoutController.closeDetails()` 折叠、`openDetails()` 打开。
+> 对照 外部依据：外部 `details` 列**默认折叠且永不 unmount**（`columns.ts`：`details=0` 时 `width:0`，`AppFrame.tsx` `DetailsColumn` `width 0 keeps the subtree mounted (never unmount on close)`）；`LayoutController.closeDetails()` 折叠、`openDetails()` 打开。
 
 ---
 
@@ -430,7 +430,7 @@ state.panels = {
 | 术语/字段 | 定义 | 出处 |
 |---|---|---|
 | `dsh.ui` | 本包 client 半清单（platform/slot/kind/scope/inject/immediately/subSlots） | §3.1 |
-| `/api/ui-boot` | DSH 兼容 boot 图（`rev` + `entries[{id,url,rev,inject,immediately,external}]`） | §3.2 |
+| `/api/ui-boot` | 外部兼容 boot 图（`rev` + `entries[{id,url,rev,inject,immediately,external}]`） | §3.2 |
 | `host.main` | 薄壳 root 槽（唯一渲染槽），其 `children` 表声明具名子槽 | §5.2 |
 | `__PAIRCODE_CORE` | 共享核心单例（Vue/uiState/api/pluginRuntime/agentEvents/actions/layout/version） | §4.3 |
 | `ctx.uiLayout` | 跨区域布局服务（toggleSidebar/openEditor/closeEditor/toggleEditor/isEditorOpen） | §3.4 |
@@ -444,7 +444,7 @@ state.panels = {
 > 以下为「可验收标准」的**扁平化核对清单**，与 §3.5/§4.4/§5.3/§6.4 的验收表同构，verifier 逐条打勾。
 
 ```
-[ ] M1  /api/ui-boot 返回 DSH 兼容 boot 图（rev+entries[{id,url,rev,inject,immediately,external}]）
+[ ] M1  /api/ui-boot 返回 外部兼容 boot 图（rev+entries[{id,url,rev,inject,immediately,external}]）
 [ ] M2  现区域包 package.json 含 dsh.ui 段（platform/slot/kind/scope/inject/immediately，可含 subSlots）
 [ ] M3  含 dsh.ui 段 → hasClient=true 且 detail 返回 clientCode
 [ ] M4  薄壳仅消费 /api/ui-boot 一张图装载 region 包

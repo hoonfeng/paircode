@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // plugin_js.go — JS 动态插件运行时（goja 沙箱）
 //
-// 对齐 deepseek-harness 的 cordis-host-runner / sandbox：
+// 对齐 cordis-host-runner / sandbox：
 //   - 插件代码形态：`(async () => { <body> })()`，body 里 `return` 一个插件对象
 //     { name, apply(ctx) }；apply(ctx) 中经 ctx 注册工具/系统提示/服务/事件。
 //   - 沙箱暴露（与 harness 同名的全局）：
@@ -9,7 +9,7 @@
 //       harness → defineTool / registerTool / handle
 //       console / btoa / atob / TextEncoder / TextDecoder
 //       CordisApi → 内置真 cordis 运行时（@cordisjs/core bundle）：new CordisApi.api.Context()
-//   - require / setTimeout 等 Node API 不存在（对齐 harness 的沙箱纪律，
+//   - require / setTimeout 等 Node API 不存在（沙箱纪律，
 //     需要时经 ctx 服务；第一版不提供 timer，后续可按需补 ctx.timeout）。
 //   - 求值通过注入 __resolve 回调 + `(async () => {...})().then(v=>__resolve(v))`
 //     取回插件对象（goja 在 RunString 返回前已 drain 微任务队列，已验证）。
@@ -158,7 +158,7 @@ func isJSTimeout(err error) bool {
 
 // jsPluginDef 一个 JS 动态插件定义（cordis_define 登记；进程内存，不落盘）。
 //
-// ★ 版本化 package 模型（对齐 harness registry.ts）：pluginId 是稳定插件身份
+// ★ 版本化 package 模型（对齐 registry.ts）：pluginId 是稳定插件身份
 // （跨版本不变，默认=首次定义的 dyn id），packageId 是本次定义（不可变）；
 // 同一插件多次 define → 同一 pluginId 下追加版本（pluginVersions 链）。
 type jsPluginDef struct {
@@ -170,7 +170,7 @@ type jsPluginDef struct {
 	purpose    string         // 用途说明
 	code       string         // host 半代码（async 函数体，return 插件对象/函数）
 	clientCode string         // client 半代码（浏览器端执行；可为空=纯 host 插件）
-	hasDshUI   bool           // ★ 磁盘插件包含 DSH 兼容 dsh.ui 段（UI 区域/功能包）；/api/plugins 据此标记 hasClient
+	hasDshUI   bool           // ★ 磁盘插件包含 外部兼容 dsh.ui 段（UI 区域/功能包）；/api/plugins 据此标记 hasClient
 	version    string         // 版本号（v1/v2/…；默认 = 首次定义 v1）
 	provides   []string       // 提供服务的键（插件运行时从 ctx.provide 收集）
 	inject     []string       // 插件声明的硬依赖服务（apply 前校验宿主是否提供）
@@ -180,7 +180,7 @@ type jsPluginDef struct {
 	dir        string         // ★ 插件目录（磁盘插件包：<InstallDir>/.pair/plugins/<name>/；cordis_define dir 参数）；ctx.binary 服务据此定位 bin/<name>.exe 与 assets/
 	createdAt  time.Time
 
-	// ★ 状态机与运行诊断（对齐 harness CordisRunStatus + CordisRunDiagnostic）
+	// ★ 状态机与运行诊断（对齐 CordisRunStatus + CordisRunDiagnostic）
 	status     PluginState // stopped/running/waiting/rejected/failed/cancelled
 	waitingFor []string    // status=waiting 时缺的服务清单
 	lastError  string      // 最近一次装载失败原因
@@ -568,7 +568,7 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 
 	// ctx.hostTool(name, args)：执行宿主存档工具（Go 实现库）。
 	// 迁移模式（2026-08-16）：磁盘工具插件注册同名工具接管 agent 可见面，
-	// execute 内可调 ctx.hostTool 复用宿主 Go 执行器（对齐 harness seam：
+	// execute 内可调 ctx.hostTool 复用宿主 Go 执行器（对齐 seam：
 	// 编排在插件、能力在宿主）。args 为对象（工具参数），返回结果字符串；
 	// 宿主无此执行器 → 抛错。ctx.hostToolMeta(name) 返回宿主工具元数据
 	// （name/description/parameters）供插件声明 schema 时对齐。
@@ -747,7 +747,7 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 	})
 	ctxObj.Set("binary", binaryObj)
 
-	// ctx.http：HTTP 接口插件化服务（对齐 harness webServer 路由注册）。
+	// ctx.http：HTTP 接口插件化服务（对齐 webServer 路由注册）。
 	//   ctx.http.register(method, path, fn) → unregister()
 	//     method: GET/POST/PUT/DELETE/…；path: 绝对路径，"/*" 结尾=前缀匹配
 	//     fn(req) → resp：req = {method, path, query, headers, body}
@@ -763,7 +763,7 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 	//     返回 disposer 函数（取消注册）。重复 (method, path) 注册报错（装配契约）。
 	//   - list()：已注册路由清单（含内核接口经 core-api 安装的条目）。
 	//   - 插件卸载自动注销全部路由（addCleanup）。
-	// ★ 2026-08-18：新插件请用 ctx.webServer（对齐 harness host-webserver：
+	// ★ 2026-08-18：新插件请用 ctx.webServer（对齐 host-webserver：
 	//   register({kind, path, handler})，handler 为 Node 风格 (req, res)）。
 	//   ctx.http 保留以兼容现有插件（web-api 等）；二者共用 ext 路由表。
 	httpObj := vm.NewObject()
@@ -870,15 +870,15 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 	})
 	ctxObj.Set("http", httpObj)
 
-	// ── ctx.webServer：HTTP 接口插件化（对齐 harness host-webserver）──
-	// ★ 2026-08-18：兼容 harness 插件生态——与参考项目同形态：
+	// ── ctx.webServer：HTTP 接口插件化（对齐 host-webserver）──
+	// ★ 2026-08-18：兼容外部插件生态——同形态：
 	//   ctx.webServer.register({ kind, path, handler }) → disposer
 	//   - kind: 'exact'（逐字匹配）| 'prefix'（path 与 path/<anything>）
 	//   - handler: (req, res) => void | Promise<void> —— Node 风格，完全持有
 	//     响应生命周期：res.writeHead(status, headers) / res.setHeader /
 	//     res.write(chunk) / res.end(chunk) / res.statusCode 属性赋值；
 	//     req: { method, url, path, query, headers, body, json(), on('data'|'end') }。
-	//   - 不区分 HTTP 方法（对齐 harness：method 由 handler 自行判断 req.method）
+	//   - 不区分 HTTP 方法（method 由 handler 自行判断 req.method）
 	//   - 重复 (kind, path) 报错（装配层契约）；插件卸载自动注销。
 	//   - 兼容便捷形态 register(kind, path, handler)（三参数）。
 	//   - 另兼容旧 ctx.http 返回对象形态：{ status, body, headers }。
@@ -972,7 +972,7 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 		}
 		return vm.ToValue(map[string]any{"ok": true, "id": id})
 	})
-	// ctx.process.list：列出全部后台进程（job_list 工具用，R2-7 DSH 对齐）。
+	// ctx.process.list：列出全部后台进程（job_list 工具用，R2-7 外部对齐）。
 	processObj.Set("list", func(call goja.FunctionCall) goja.Value {
 		return vm.ToValue(globalBG.list())
 	})
@@ -1046,7 +1046,7 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 	})
 	ctxObj.Set("process", processObj)
 
-	// ctx.loopFactory.register(apply)：注册 agent 循环装配器（对齐 harness setFactory 单槽位）。
+	// ctx.loopFactory.register(apply)：注册 agent 循环装配器（对齐 setFactory 单槽位）。
 	// apply(opts) → overrides | null：
 	//   opts = { system, maxIterations, maxContextTokens, autonomous,
 	//            maxAutonomousMinutes, checkpointInterval, workspaceRoot, reviewMode }
@@ -1225,7 +1225,7 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 	ctxObj.Set("hooks", hooksObj)
 
 	// ctx.registerClientMethod(method, fn)：host 半暴露方法给浏览器 client 半
-	// 远程调用（D11 invoke RPC；对齐 harness @Remote('invoke') 的方法注册面）。
+	// 远程调用（D11 invoke RPC；对齐 @Remote('invoke') 的方法注册面）。
 	// 与 harness.handle 共用存储，但语义显式面向 client 半；浏览器侧经
 	// ui.invoke(plugin, method, args) 调用。
 	ctxObj.Set("registerClientMethod", func(call goja.FunctionCall) goja.Value {
@@ -1599,7 +1599,7 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 	})
 	ctxObj.Set("activation", actObj)
 
-	// ★ 按 inject 声明注入服务属性（对齐 harness：只读声明过的服务，
+	// ★ 按 inject 声明注入服务属性（只读声明过的服务，
 	//   可选服务用 ctx.get(name) 判 undefined；未声明即访问为 undefined）
 	for _, s := range p.def.inject {
 		switch s {
@@ -2138,7 +2138,7 @@ func (p *jsPluginAdapter) buildBashService(pc *PluginContext) goja.Value {
 }
 
 // buildSSEService 事件推送服务（ctx.sse）：注册 SSE 实时推送端点。
-// 对齐 harness webServer 的事件流形态——插件可向浏览器/外部客户端推送
+// 对齐 webServer 事件流形态——插件可向浏览器/外部客户端推送
 // 事件流（进度、日志、通知等），宿主统一管理连接生命周期。
 //
 // JS 用法（inject 声明 'sse'）：
@@ -2797,7 +2797,7 @@ func (p *jsPluginAdapter) buildPluginsService(pc *PluginContext) goja.Value {
 func newJSSandbox(def *jsPluginDef) (*goja.Runtime, *goja.Object) {
 	vm := goja.New()
 
-	// console（对齐 harness：带包名 tag，写透到宿主 stdout + 捕获进 def.console）
+	// console（带包名 tag，写透到宿主 stdout + 捕获进 def.console）
 	tag := fmt.Sprintf("[js-plugin:%s]", def.id)
 	consoleObj := vm.NewObject()
 	logFn := func(call goja.FunctionCall) goja.Value {
@@ -2861,7 +2861,7 @@ func newJSSandbox(def *jsPluginDef) (*goja.Runtime, *goja.Object) {
 		log.Printf("[plugin_js] TextEncoder polyfill 失败: %v", err)
 	}
 
-	// Node API trap（对齐 harness NODE_API_REDIRECTS）：setTimeout/fetch 等
+	// Node API trap（对齐 NODE_API_REDIRECTS）：setTimeout/fetch 等
 	// 在沙箱中不可用，调用即抛教学错误，引导走 ctx 服务（与 harness 沙箱纪律一致）。
 	// ★ 候选 A（2026-08-29）：require 不再 trap——由 installNodeAPIMini 提供
 	//   mini Node API（fs/path/buffer/events/util + 相对文件模块，fs 工作区根受限）。
@@ -2936,7 +2936,7 @@ func jsBytesOf(v goja.Value) []byte {
 // ─── JS 插件求值/装载 ─────────────────────────────────────
 
 // evalJSPlugin 求值 host 半代码（async 函数体），返回插件对象（name/apply）。
-// 对齐 harness evaluateHostCode：`(async () => { code })()` + then 交接。
+// 对齐 evaluateHostCode：`(async () => { code })()` + then 交接。
 func evalJSPlugin(vm *goja.Runtime, code, id string) (*goja.Object, error) {
 	var resolved *goja.Object
 	var resolveErr error
@@ -2976,7 +2976,7 @@ func evalJSPlugin(vm *goja.Runtime, code, id string) (*goja.Object, error) {
 // LoadJSDynamic 求值并装载一个 JS 动态插件（对齐 cordis_run 的 host 半）。
 // def 由 cordis_define 登记；装载后插件立即 apply（注册工具等）。
 //
-// ★ 插件形态（对齐 harness isPlugin，兼容 cordis 生态）：
+// ★ 插件形态（对齐 isPlugin，兼容 cordis 生态）：
 //   - 对象形态：return { name, apply(ctx, config), inject?: [...] }（apply 必须）
 //   - 函数形态：return (ctx, config) => void —— cordis 生态惯例
 //     （module.exports = function(ctx, config) {}）；函数名作插件名，匿名用 def.id；
@@ -3044,7 +3044,7 @@ func (h *PluginHost) LoadJSDynamic(def *jsPluginDef) error {
 			}
 		}
 	}
-	// ★ 硬依赖校验（D3 等待语义，对齐 harness lifecycle）：
+	// ★ 硬依赖校验（D3 等待语义，对齐 lifecycle）：
 	//   inject 声明的服务缺失 → 插件进入 waiting（不装载、不 apply），
 	//   服务出现后经 retryWaiting 自动激活；可选服务请用 ctx.get(name) 判 undefined。
 	if missing := h.missingServices(def); len(missing) > 0 {
@@ -3068,7 +3068,7 @@ func (h *PluginHost) LoadJSDynamic(def *jsPluginDef) error {
 		handlersUI: map[string]func(args any) (any, error){},
 	}
 
-	// ★ D8 restart 语义（对齐 harness run mode=run）：同名插件已注册/运行 →
+	// ★ D8 restart 语义（对齐 run mode=run）：同名插件已注册/运行 →
 	// 先卸载旧实例并清出注册表，再装载新版本（不再报同名冲突）。
 	h.mu.Lock()
 	oldName := ""
@@ -3128,7 +3128,7 @@ func (h *PluginHost) LoadJSDynamic(def *jsPluginDef) error {
 // ─── inject 硬依赖校验 ────────────────────────────────────
 
 // missingServices 返回 inject 声明但宿主未提供的服务（空=可装载）。
-// 对齐 harness 语义：inject 是硬依赖但会等待（waiting），不是直接拒绝；
+// 语义：inject 是硬依赖但会等待（waiting），不是直接拒绝；
 // 可选服务用 ctx.get(name) 并判 undefined。
 func (h *PluginHost) missingServices(def *jsPluginDef) []string {
 	if len(def.inject) == 0 {
@@ -3381,7 +3381,7 @@ func normalizeToolSchema(params map[string]any) map[string]any {
 // validateToolSchema 定义期校验插件工具参数 schema（轻量：type 合法性 + 结构要点 +
 // realm 安全：整棵可 JSON 序列化、拒绝外部 $ref 与原型污染键）。
 // 不合法返回 error——cordis_define/registerTool 提前暴露，避免运行期才崩。
-// （对齐 harness guard.ts：schema type 白名单 + cloneJson 无损克隆；goja 单 realm
+// （对齐 guard.ts：schema type 白名单 + cloneJson 无损克隆；goja 单 realm
 //
 //	天然豁免跨 realm instanceof，此处补序列化与引用边界。）
 func validateToolSchema(params map[string]any) error {
@@ -3636,7 +3636,7 @@ func numField(obj *goja.Object, key string, def float64) float64 {
 // awaitJSValue 同步等待 JS Promise 并返回 resolve 值（goja 同步 VM：
 // 微任务队列由 RunString("") 驱动 drain）。async 函数返回的 Promise 在
 // 微任务队列中已排队，drain 后立即取到结果——用于 ctx.http.register 的
-// async handler 与工具 execute 的 async 返回（对齐 harness run 语义）。
+// async handler 与工具 execute 的 async 返回（对齐 run 语义）。
 // 非 Promise 值原样返回；reject → error。
 func awaitJSValue(vm *goja.Runtime, v goja.Value) (goja.Value, error) {
 	if v == nil || goja.IsUndefined(v) || goja.IsNull(v) {
@@ -3674,7 +3674,7 @@ func awaitJSValue(vm *goja.Runtime, v goja.Value) (goja.Value, error) {
 	return awaitJSValue(vm, got) // 递归：then 链上的嵌套 promise
 }
 
-// ── ctx.webServer：Node 风格 HTTP handler 桥（对齐 harness host-webserver）──
+// ── ctx.webServer：Node 风格 HTTP handler 桥（对齐 host-webserver）──
 
 // buildNodeHTTPHandler 构造 Node 风格 HTTP handler：JS 插件以
 // handler(req, res) 形态实现处理逻辑（接口定义 + 逻辑都在插件中），
@@ -3861,7 +3861,7 @@ func (p *jsPluginAdapter) buildNodeHTTPHandler(fn goja.Callable) http.HandlerFun
 }
 
 // jsResultToText 把 JS 工具执行结果转成 (text, error)。
-// 规则（对齐 harness 输出块约定）：
+// 规则（对齐输出块约定）：
 //   - { text }          → text
 //   - { error }         → error
 //   - { output, ... }   → JSON 序列化（含 output 等字段）
@@ -4002,7 +4002,7 @@ func (h *PluginHost) DefineJSCodeFull(code, language, purpose, dir, clientCode s
 }
 
 // DefineJSCodeVersioned 版本化登记：pluginId 为空 → 新建插件（分配稳定 pluginId）；
-// pluginId 非空 → existing 模式：向该插件追加一个版本（对齐 harness define existing append）。
+// pluginId 非空 → existing 模式：向该插件追加一个版本（对齐 define existing append）。
 // 返回 def.id（dyn-n，精确版本 id）；cordis_run 传 pluginId 或该 id 均可装载。
 func (h *PluginHost) DefineJSCodeVersioned(code, language, purpose, dir, clientCode, pluginId string) (string, error) {
 	if strings.TrimSpace(code) == "" {
@@ -4013,7 +4013,7 @@ func (h *PluginHost) DefineJSCodeVersioned(code, language, purpose, dir, clientC
 	if err != nil {
 		return "", fmt.Errorf("插件编译失败: %v", err)
 	}
-	// 语法预检：compile-only（对齐 harness precheckCode）
+	// 语法预检：compile-only（对齐 precheckCode）
 	if _, err := goja.Compile("cordis-dyn.js", "(async () => {\n"+js+"\n})()", false); err != nil {
 		return "", fmt.Errorf("插件语法错误: %v", jsErrorText(err))
 	}
@@ -4126,7 +4126,7 @@ func (h *PluginHost) JSDefs() []*jsPluginDef {
 
 // ─── 静态插件装配（cordis.patch.json，P2）──────────────────
 
-// LoadCordisPatch 从 JSON 文件装配静态插件（跨重启存续，对齐 harness
+// LoadCordisPatch 从 JSON 文件装配静态插件（跨重启存续，对齐
 // cordis.yml 的叶子装配入口，简化为零依赖 JSON）：
 //
 //	{ "plugins": [ { "code": "...", "language": "js|ts", "purpose": "...", "config": {...} } ] }
@@ -4156,7 +4156,7 @@ func (h *PluginHost) LoadCordisPatch(path string) error {
 		if strings.TrimSpace(p.Code) == "" {
 			// Node 桥型插件（依赖 npm 生态）：启动时由 Node 桥装载。
 			// ★ Round4 repair（t6）：runtime 判定覆盖 node（cordis3 既有）
-			//   与 dsh（cordis4 + DSH 服务面，t2 新增轨）——此前只认 "node"，
+			//   与 dsh（cordis4 + 外部服务面，t2 新增轨）——此前只认 "node"，
 			//   runtime="dsh" 的 patch 条目会被静默跳过、桥永不启动。
 			if rt, _ := p.Config["runtime"].(string); rt == "node" || rt == "dsh" {
 				needNodeBridge = true

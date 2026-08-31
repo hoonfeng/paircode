@@ -1,7 +1,7 @@
 <template>
   <div class="app-root" :class="{ 'panel-only': panelMode }" :style="gridStyle">
     <!-- ═══ chat 优先薄壳（2026-08 重构）：壳 = 纯几何骨架容器 ═══
-         对齐 DSH AppFrame 三列：sidebar | conversation(主) | details(editor)。
+         对齐 AppFrame 三列：sidebar | conversation(主) | details(editor)。
          编辑器为「辅助/details 列」：默认折叠（width:0 不占空间），点文件树按需打开，
          且永远保持挂载（绝不 unmount，规避 CM6/终端 WS 重挂断连坑）。
          每个区域一个单槽位挂载点：owner 为空 → 空态提示（该区域插件未装配）。 -->
@@ -121,7 +121,7 @@ const slots = {
 for (const s of Object.values(slots)) s.init()
 
 // ─── ★ host.main 子槽声明（spec §5.2 「声明即认领」，一个子槽一位认领者）───
-//   对齐 DSH AppFrame：槽位名 = manifest dsh.ui.slot = 运行时 registerSlot slotId。
+//   对齐 AppFrame：槽位名 = manifest dsh.ui.slot = 运行时 registerSlot slotId。
 //   壳只声明几何骨架 + 具名子槽；内容由含 dsh.ui 段的区域插件 registerSlot 认领。
 //   kind：single=替换型（面板切换，一位占用者）；list=叠加型（多位占用者同时渲染）。
 const hostMainChildren = {
@@ -170,7 +170,7 @@ onMounted(async () => {
   initAppGlobals()
   loadWsList()
 
-  // ★ DSH 兼容（spec M4）：boot()（plugin-runtime.js）为薄壳装载【单入口，两源合并】：
+  // ★ 外部兼容（spec M4）：boot()（plugin-runtime.js）为薄壳装载【单入口，两源合并】：
   //   链路：自取 /api/ui-boot → 校验 __PAIRCODE_CORE 就绪 → 预取 immediately bundle
   //   → ① loadClientHalvesFromManifest(entries) 按图装配 dsh.ui 区域包 client 半；
   //   → ② syncClientHalves(await api.listPlugins()) 同时装载无 dsh.ui 段的旧直载包

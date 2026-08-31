@@ -226,8 +226,8 @@ const tools = [
   },
   {
     "name": "todo_write",
-    "description": "维护任务列表：传入完整任务清单（全量替换），系统自动持久化到磁盘（DSH todo_write 别名，语义同 update_tasks）。每项包含 subject（必填）、status（pending/in_progress/completed/cancelled）、description（可选）、dependencies（可选）、",
-    "usageGuide": "管理持久化任务列表（全量替换模式，DSH todo_write 别名）。复杂任务（3+ 步）必须拆解为子任务并逐项追踪。每次传入完整清单，状态变化时重传整份。",
+    "description": "维护任务列表：传入完整任务清单（全量替换），系统自动持久化到磁盘（todo_write 别名，语义同 update_tasks）。每项包含 subject（必填）、status（pending/in_progress/completed/cancelled）、description（可选）、dependencies（可选）、",
+    "usageGuide": "管理持久化任务列表（全量替换模式，todo_write 别名）。复杂任务（3+ 步）必须拆解为子任务并逐项追踪。每次传入完整清单，状态变化时重传整份。",
     "parameters": {
       "properties": {
         "tasks": {
@@ -438,7 +438,7 @@ return {
   name: 'tool-system',
   purpose: '系统内部工具（SystemTool + Skills/MCP/市场：update_tasks/todo_write/tool_stats/history_*/skill_*/mcp_*）——全部可更换（自动生成，迁移自内置 Go 工具组）',
   apply(ctx) {
-    // ★ R2-7 别名（DSH 命名对齐）：todo_write → update_tasks（宿主执行器同名承载）
+    // ★ R2-7 别名（约定命名对齐）：todo_write → update_tasks（宿主执行器同名承载）
     const hostExec = { todo_write: 'update_tasks' }
     for (const t of tools) {
       ctx.tools.register({

@@ -1,8 +1,8 @@
-// uiboot.go — DSH 兼容 UI 插件发现：装配 DSH WebBootGraph 等价 boot 图。
+// uiboot.go — 外部兼容 UI 插件发现：装配 DSH WebBootGraph 等价 boot 图。
 //
 // 背景（对齐 docs/ui-plugin-refactor-spec.md §3.2/§4.1/§4.3）：
 //   - 每个 UI 区域/功能是一个独立磁盘插件包（<InstallDir>/.pair/plugins/ui-*），
-//     其 package.json 含 DSH 兼容二段式 manifest 的 dsh.ui 段（platform/slot/kind/
+//     其 package.json 含 外部兼容二段式 manifest 的 dsh.ui 段（platform/slot/kind/
 //     scope/inject/immediately/subSlots）；
 //   - 服务端把「已装配的区域包清单 + 各包 dsh.ui 段 + 各 bundle 内容 hash」组装为
 //     /api/ui-boot 的 boot 图（结构字段与 DSH WebBootGraph 一一对应）：
@@ -26,7 +26,7 @@ import (
 	"strings"
 )
 
-// DshUIManifest package.json 的 dsh.ui 段（DSH 兼容 client 半清单）。
+// DshUIManifest package.json 的 dsh.ui 段（外部兼容 client 半清单）。
 // 字段对齐 DSH dsh-client 的 dsh.client + cordis entry（platform/slot/kind/scope/
 // inject/immediately），并扩展 subSlots（一个子槽一位认领者，声明即认领）。
 type DshUIManifest struct {
@@ -40,7 +40,7 @@ type DshUIManifest struct {
 }
 
 // GlobalPluginDsh GlobalPluginPackage 的 dsh 段（等价 dsh.client + cordis entry）。
-// ui 子段为 DSH 兼容 client 半清单；无 dsh.ui 段 → 旧 client.js 直载路径。
+// ui 子段为 外部兼容 client 半清单；无 dsh.ui 段 → 旧 client.js 直载路径。
 type GlobalPluginDsh struct {
 	UI *DshUIManifest `json:"ui,omitempty"`
 }
@@ -56,7 +56,7 @@ type UIBootEntry struct {
 	External    []string `json:"external"`    // 非基线模块说明符（= __PAIRCODE_CORE 词条）
 }
 
-// UIBootGraph DSH 兼容 boot 图（GET /api/ui-boot 返回）。
+// UIBootGraph 外部兼容 boot 图（GET /api/ui-boot 返回）。
 type UIBootGraph struct {
 	Rev     string        `json:"rev"`     // 全图一致性锚（各 bundle hash 摘要）
 	Entries []UIBootEntry `json:"entries"` // 按 id 排序（发现层幂等、输出确定性）
@@ -65,7 +65,7 @@ type UIBootGraph struct {
 // UIBootExternalCore 共享核心模块说明符：区域 bundle 一律 externals 到 __PAIRCODE_CORE。
 const UIBootExternalCore = "@paircode/core"
 
-// BuildUIBootGraph 扫描磁盘 UI 插件包，装配 DSH 兼容 boot 图。
+// BuildUIBootGraph 扫描磁盘 UI 插件包，装配 外部兼容 boot 图。
 // 仅纳入含 dsh.ui 段的包（独立 manifest 发现）；bundle 缺失/损坏的包跳过（幂等）。
 func BuildUIBootGraph() UIBootGraph {
 	return BuildUIBootGraphFrom(globalPluginsDir())

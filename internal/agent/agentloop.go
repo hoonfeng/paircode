@@ -1,12 +1,12 @@
-// agentloop —— deepseek-harness 风格的双层循环状态模型。
+// agentloop —— 双层循环（turn/step）状态模型。
 //
-// 参照参考项目 ref/deepseek-harness/packages/core/agent-loop（ReactLoopAgent）的
+// 参照业界 Agent 循环通用设计（ReactLoop 风格）的
 // turn/step 双层循环设计移植到 Go 侧：
 //
 //	一次 Run 调用 = 一个 turn（turn/start → turn/end）
 //	每次 LLM 调用 + 工具执行 = 一个 step（step/start → step/end）
 //
-// 与参考实现的对应关系：
+// 与业界通用模型的对应关系：
 //   - TurnEndReason      ↔ TurnEndReason（completed / max-tokens / aborted / error / blocked）
 //   - AgentCancelCause   ↔ AgentCancelCause（user / parent / hook / disposed）
 //   - Loop.PreStep       ↔ agent/pre-step 瀑布（可改写进入模型的输入或拒绝整个 turn）
@@ -20,7 +20,7 @@ package agent
 import "fmt"
 
 // TurnEndReason 一轮 turn（一次 Run 调用）的结束原因，结构化枚举。
-// 对应 deepseek-harness 的 TurnEndReason：completed / max-tokens / aborted / error / blocked。
+// 对应 turn 结束原因：completed / max-tokens / aborted / error / blocked。
 // 扩展了 gou-ide 特有的 content-loop（内容循环兜底）与 max-iterations（迭代上限）。
 type TurnEndReason string
 
@@ -43,7 +43,7 @@ const (
 )
 
 // AgentCancelCause 一次 turn 被取消的原因。
-// 对应 deepseek-harness 的 AgentCancelCause：user / parent / hook / disposed。
+// 对应 agent 取消原因：user / parent / hook / disposed。
 type AgentCancelCause struct {
 	// Kind 取消来源：user（用户停止）/ parent（父 agent 中止）/ hook（钩子拦截）/
 	// disposed（agent 被销毁）/ context（Go context 取消，gou-ide 特有）。
@@ -63,7 +63,7 @@ const (
 )
 
 // openTurn 打开一轮新 turn（一次 Run 调用）。重置 step 计数与 sticky 状态。
-// 对应 deepseek-harness turn/start：每次 Run 前由主循环调用一次。
+// 对应 turn/start：每次 Run 前由主循环调用一次。
 // ★ t4 L2：同步全局钩子轮次（loopHookCurrentTurn，供 hook payload 透传）。
 func (l *Loop) openTurn() {
 	l.TurnNo++
@@ -75,14 +75,14 @@ func (l *Loop) openTurn() {
 }
 
 // beginStep 进入本轮 turn 的下一个 step（一次 LLM 调用 + 工具执行）。
-// 对应 deepseek-harness step/start。
+// 对应 step/start。
 func (l *Loop) beginStep() {
 	l.StepNo++
 	l.emit(Event{Type: EventNotice, Content: fmt.Sprintf("[step/%d.%d/start] 模型调用 #%d", l.TurnNo, l.StepNo, l.StepNo)})
 }
 
 // endStep 收尾一个 step：记录本次 step 的工具执行结果概要。
-// 对应 deepseek-harness step/end。每轮迭代工具执行完成后调用一次。
+// 对应 step/end。每轮迭代工具执行完成后调用一次。
 func (l *Loop) endStep(summary string) {
 	if summary != "" {
 		l.emit(Event{Type: EventNotice, Content: fmt.Sprintf("[step/%d.%d/end] %s", l.TurnNo, l.StepNo, summary)})
@@ -92,7 +92,7 @@ func (l *Loop) endStep(summary string) {
 }
 
 // endTurn 收尾一轮 turn：记录结构化结束原因（无显式设置时按 err/ctx 推断）。
-// 对应 deepseek-harness turn/end 事件。defer 中调用一次即可。
+// 对应 turn/end 事件。defer 中调用一次即可。
 // ★ t4 L2：轮次结束后清零全局钩子轮次（钩子不再透传旧轮次）。
 func (l *Loop) endTurn(err error, ctxDone bool) {
 	loopHookCurrentTurn.Store(0)
@@ -115,7 +115,7 @@ func (l *Loop) endTurn(err error, ctxDone bool) {
 // turnStickyReason 应用 max-tokens sticky 语义：
 // 本轮 turn 内任一 step 曾触发输出长度截断（hadMaxTokens）时，
 // 最终结束原因固定为 max-tokens，不得被后续正常完成的 step 降级为 completed。
-// 对应 deepseek-harness agent.ts 中「max-tokens stays sticky」的处理。
+// 对应「max-tokens stays sticky」的处理。
 func (l *Loop) turnStickyReason(base TurnEndReason) TurnEndReason {
 	if l.hadMaxTokens {
 		return TurnMaxTokens

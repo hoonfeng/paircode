@@ -26,7 +26,7 @@ func TestScanStaleRefs(t *testing.T) {
 	}
 
 	// 技术名词复合（≥3 段纯字母数字）——不误报
-	text2 := "参考 WebKit/Source/WebCore 架构、HTML/CSS/JS 加载、loader/css/html 子系统"
+	text2 := "参考 webkit 内核架构、HTML/CSS/JS 加载、loader/css/html 子系统"
 	refs2 := scanStaleRefs(text2, root)
 	if len(refs2) != 0 {
 		t.Errorf("技术名词复合不应误报，实际：%v", refs2)

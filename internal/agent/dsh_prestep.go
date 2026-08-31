@@ -3,9 +3,9 @@ package agent
 // ═══════════════════════════════════════════════════════════
 // dsh_prestep.go — DSH agent/pre-step 中间件瀑布桥
 //
-// DSH 语义（@nanmicoder/dsh-agent-teams installAgentTeamsGestureBoundary）：
+// 外部语义（@nanmicoder/dsh-agent-teams installAgentTeamsGestureBoundary）：
 //   ctx.on('agent/pre-step', async ({messages, signal}, next) => decision)
-//   - messages: DSH 格式消息数组（role/content blocks/source）
+//   - messages: 外部格式消息数组（role/content blocks/source）
 //   - next(): 下游决策（基线 = {kind:'enter', messages: 原始 messages}）
 //   - 返回 decision：{kind:'enter', messages:[...]}（改写进入模型的输入）
 //      或 {kind:'reject'}（拒绝整个 turn）
@@ -38,7 +38,7 @@ import (
 //                 {type:'image',attachment}
 
 // goMsgToDSH 把单条 Go Message 转换为 DSH message（map 形态，便于 JSON 往返）。
-// tool 消息按 DSH 惯例转 role='user' + source.kind='tool'（createToolResultMessage 同构）。
+// tool 消息按 外部惯例转 role='user' + source.kind='tool'（createToolResultMessage 同构）。
 func goMsgToDSH(m Message) map[string]any {
 	blocks := make([]map[string]any, 0, 3)
 	switch m.Role {
@@ -81,7 +81,7 @@ func goMsgToDSH(m Message) map[string]any {
 		if m.Content != "" {
 			blocks = append(blocks, map[string]any{"type": "text", "text": m.Content})
 		}
-		// DSH 无 system 专用 source kind：用 plugin（non-user 即安全）
+		// 外部无 system 专用 source kind：用 plugin（non-user 即安全）
 		return map[string]any{
 			"role":    "system",
 			"content": blocks,

@@ -5,7 +5,7 @@
 // 注册 /api/ext/* 扩展路由，证明「接口在插件中定义、处理逻辑在插件中、
 // 服务能力走 ctx.fs/ctx.web/ctx.tools 等 Go 服务」链路全通。
 //
-// ★ 2026-08-18：注册形态对齐参考项目（ref/deepseek-harness）——ctx.webServer
+// ★ 2026-08-18：注册形态对齐外部约定——ctx.webServer
 //   register({kind, path, handler})，handler 为 Node 风格 (req, res)：
 //   res.writeHead(status, headers) / res.end(body) / res.statusCode 属性赋值；
 //   支持 async handler（返回值 Promise 同步 drain）与 req.json() 解析。

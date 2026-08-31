@@ -5,7 +5,7 @@ description: 编写/修改 cordis 动态插件（JS/TS，goja 沙箱）的完整
 
 # cordis 插件开发指南
 
-本环境支持动态插件：JS/TS 代码在 goja 沙箱中执行（对齐 deepseek-harness cordis-host-runner）。
+本环境支持动态插件：JS/TS 代码在 goja 沙箱中执行（对齐 cordis-host-runner 运行模型）。
 插件代码只存在于进程内存（不落盘、跨重启不存续）；需要跨重启存续用 `.pair/cordis.patch.json`。
 
 ## 1. 插件形态（两种）

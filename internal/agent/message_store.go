@@ -1,6 +1,6 @@
 // MessageStore — 对话消息持久化的活动实现（每对话一个 JSONL 文件 + index.json 元数据）。
 // 落盘单位为带事件语义标注的 StoredMessage（EventType/Turn/Step，见下方类型定义），
-// 使 JSONL 具备可重建的 turn/step 事件流结构（对齐 deepseek-harness session event 思路）。
+// 使 JSONL 具备可重建的 turn/step 事件流结构（对齐 session event 思路）。
 package agent
 
 import (
@@ -55,7 +55,7 @@ type StoredMessage struct {
 	Segments  []Segment `json:"segments"`  // 前端展示用 segments
 	Timestamp string    `json:"timestamp"` // 写入时间 RFC3339
 
-	// ── 事件语义标注（对齐 deepseek-harness session event 词汇，2026-08-15）──
+	// ── 事件语义标注（对齐 session event 词汇，2026-08-15）──
 	// 落盘单位仍是 Message（兼容前端协议），但每条消息附事件元数据，
 	// 使 JSONL 从「纯消息数组」升级为「带 turn/step 结构的事件流」，
 	// 可重建 deepseek 式 surface 投影（user/message、assistant/message、tool/result）。
@@ -70,7 +70,7 @@ type StoredMessage struct {
 	Step int `json:"step,omitempty"`
 }
 
-// 事件类型常量（对齐 deepseek-harness session event 词汇的 surface 子集；
+// 事件类型常量（对齐 session event 词汇的 surface 子集；
 // turn/end、assistant/chunk 等非 surface 事件不单独落盘——消息流本身即
 // surface 投影，turn/step 结构由 Turn/Step 字段重建）。
 const (
@@ -82,7 +82,7 @@ const (
 	EventTypeToolResult = "tool/result"
 )
 
-// deriveEventType 按消息角色推导事件类型（对齐 deepseek-harness surface 投影规则：
+// deriveEventType 按消息角色推导事件类型（对齐 surface 投影规则：
 // 只有 user/message、assistant/message、tool/result 三类进入模型可见消息；
 // system 不落盘、其余角色不投影）。
 func deriveEventType(m Message) string {
@@ -99,7 +99,7 @@ func deriveEventType(m Message) string {
 }
 
 // turnStepFor 按消息序列推导每条消息的 (turn, step) 标注（与输入等长的 [turn,step] 数组）。
-// 对齐 agentloop / deepseek-harness 语义：
+// 对齐 agentloop 语义：
 //   - 一次 Run = 一个 turn：落盘的 user 消息（每轮任务消息）递增 turn，并重置 step；
 //   - 每次 LLM 调用 + 工具执行 = 一个 step：assistant 消息递增 step；
 //   - tool/result 归并到前一条 assistant 的 step（不递增）。
@@ -857,7 +857,7 @@ func (s *MessageStore) PersistNewMessages(convID string, hist []Message) error {
 		stored[i].Idx = i
 	}
 
-	// ★ 事件语义标注：EventType + Turn/Step（对齐 deepseek-harness surface 投影）。
+	// ★ 事件语义标注：EventType + Turn/Step（对齐 surface 投影）。
 	// 规则见 turnStepFor/annotateStoredEvents——纯从消息序列推导，无需 Loop 传递状态，
 	// 使 JSONL 具备可重建的 turn/step 事件流结构。
 	annotateStoredEvents(stored)

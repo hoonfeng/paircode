@@ -5,9 +5,9 @@ import (
 	"sync"
 )
 
-// LoopFactory 装配 agent 循环的工厂接口（对齐 deepseek-harness AgentFactory 单槽位语义）。
+// LoopFactory 装配 agent 循环的工厂接口（对齐 AgentFactory 单槽位语义）。
 //
-// 参考项目（ref/deepseek-harness/packages/core/agent-loop）：AgentLoop 是一个 cordis
+// 外部 AgentLoop 插件：是一个 cordis
 // 插件，通过 ctx.plugin(AgentLoop, config) 在装配期装载；循环实现经
 // AgentRegistry.setFactory() 注册为唯一工厂槽位（重复注册抛错），整体替换 =
 // 装配期换一个实现 AgentFactory 的插件。

@@ -190,12 +190,12 @@
           <div v-if="expanded[p.name]" class="pp-detail">
             <div v-if="p.purpose" class="pp-d-purpose">{{ p.purpose }}</div>
             <div v-if="p.defId" class="pp-d-line">定义: {{ p.defId }}<span v-if="p.version"> · {{ p.version }}</span></div>
-            <!-- ★ Node 桥插件（DSH/npm）：包与运行时轨标注，与 goja 移植版区分来源 -->
-            <div v-if="p.spec" class="pp-d-line">npm 包: {{ p.spec }}<span v-if="p.runtime"> · runtime={{ p.runtime }}（{{ p.runtime === 'dsh' ? 'cordis4 + DSH 服务面' : 'cordis3' }}）</span></div>
+            <!-- ★ Node 桥插件（npm）：包与运行时轨标注，与 goja 移植版区分来源 -->
+            <div v-if="p.spec" class="pp-d-line">npm 包: {{ p.spec }}<span v-if="p.runtime"> · runtime={{ p.runtime }}（{{ p.runtime === 'dsh' ? 'cordis4 插件服务面' : 'cordis3' }}）</span></div>
             <div v-if="p.lastError" class="pp-d-line pp-d-error">异常: {{ p.lastError }}</div>
             <div v-if="p.provides && p.provides.length" class="pp-d-line">服务: {{ p.provides.join(', ') }}</div>
             <div v-if="p.sections && p.sections.length" class="pp-d-line">提示片段: {{ p.sections.join(', ') }}</div>
-            <!-- ★ 同名工具并存（2026-08-31）：repo 移植版（goja）与 DSH 桥插件实现同一工具，
+            <!-- ★ 同名工具并存（2026-08-31）：repo 移植版（goja）与桥插件实现同一工具，
                  两侧插件均保持运行（不再互相覆盖/停用），只换生效方 -->
             <div v-if="conflictsOf(p).length" class="pp-d-conflict">
               <div class="pp-d-conflict-title">
@@ -205,12 +205,12 @@
               <div v-for="c in conflictsOf(p)" :key="c.tool" class="pp-d-conflict-row">
                 <span class="pp-d-tname" :title="c.tool">{{ c.tool }}</span>
                 <span class="pp-d-side" :class="{ on: c.active === 'repo' }" :title="'repo 移植版（goja 插件）：' + c.repo">repo · {{ c.repo }}</span>
-                <span class="pp-d-side" :class="{ on: c.active === 'bridge' }" :title="'DSH/npm 桥插件：' + c.bridge">DSH · {{ shortPkg(c.bridge) }}</span>
+                <span class="pp-d-side" :class="{ on: c.active === 'bridge' }" :title="'npm 桥插件：' + c.bridge">npm · {{ shortPkg(c.bridge) }}</span>
                 <button class="pp-btn" :disabled="preferring[c.tool]"
-                        :title="c.active === 'repo' ? '切为 DSH 桥插件实现生效（repo 版保留，不停用）' : '切回 repo 移植版实现生效（DSH 版保留，不停用）'"
+                        :title="c.active === 'repo' ? '切为桥插件实现生效（repo 版保留，不停用）' : '切回 repo 版实现生效（桥版保留，不停用）'"
                         @click="switchImpl(c, c.active === 'repo' ? 'bridge' : 'repo')">
                   <SvgIcon name="cycle" :size="11" />
-                  {{ c.active === 'repo' ? '改用 DSH 版' : '改回 repo 版' }}
+                  {{ c.active === 'repo' ? '改用桥版' : '改回 repo 版' }}
                 </button>
               </div>
             </div>
@@ -287,15 +287,15 @@ const newForm = reactive({ purpose: '', code: '', client: '', language: '', run:
 
 // ─── 来源标注与同名工具并存（2026-08-31）──────────────────────
 // 插件列表两源合并：宿主插件（source=go/js）+ Node 桥插件（source=node-bridge，
-// npm/DSH 包）。同名工具由两个来源各自实现时不再互相覆盖/停用，而是并存，
-// conflicts 标注生效方（repo=goja 移植版 / bridge=DSH 桥），此处提供切换入口。
+// npm 包）。同名工具由两个来源各自实现时不再互相覆盖/停用，而是并存，
+// conflicts 标注生效方（repo=goja 移植版 / bridge=桥插件），此处提供切换入口。
 const preferring = reactive({})
 const preferMsg = ref('')      // 切换结果提示（插件列表上方）
 const preferMsgErr = ref(false)
 
-// srcLabel 来源徽标文字（node-bridge 依 runtime 细分 DSH / npm 桥）。
+// srcLabel 来源徽标文字（node-bridge 依 runtime 细分为 cordis4 桥 / npm 桥）。
 function srcLabel(p) {
-  if (p.source === 'node-bridge') return p.runtime === 'dsh' ? 'DSH 桥' : 'NPM 桥'
+  if (p.source === 'node-bridge') return p.runtime === 'dsh' ? 'cordis4 桥' : 'npm 桥'
   return p.source || '?'
 }
 
@@ -303,7 +303,7 @@ function srcLabel(p) {
 function srcTitle(p) {
   if (p.source === 'node-bridge') {
     return p.runtime === 'dsh'
-      ? 'DSH 插件：npm 包，由 Node 桥进程（cordis4 + DSH 服务面）装载，与 repo 移植版功能重叠时可切换生效方'
+      ? 'cordis4 轨插件：npm 包，由 Node 桥进程（cordis4 插件服务面）装载，与 repo 版功能重叠时可切换生效方'
       : 'npm 插件：npm 包，由 Node 桥进程（cordis3）装载'
   }
   if (p.source === 'js') return 'JS 插件：goja 沙箱内运行（磁盘包 .pair/plugins/ 或 cordis_define 定义）'
@@ -326,11 +326,11 @@ function conflictsOf(p) {
 // conflictTitle 并存徽标悬浮说明。
 function conflictTitle(p) {
   const list = conflictsOf(p)
-  const lines = list.map(c => `${c.tool}：当前由 ${c.active === 'bridge' ? 'DSH 桥 ' + c.bridge : 'repo ' + c.repo} 生效`)
+  const lines = list.map(c => `${c.tool}：当前由 ${c.active === 'bridge' ? 'npm 桥 ' + c.bridge : 'repo ' + c.repo} 生效`)
   return '同名工具并存（两来源实现同一工具，可切换生效方）\n' + lines.join('\n')
 }
 
-// switchImpl 切换某工具的生效实现（repo 移植版 ↔ DSH 桥插件）。
+// switchImpl 切换某工具的生效实现（repo 版 ↔ npm 桥插件）。
 async function switchImpl(c, impl) {
   if (!c || !c.tool || preferring[c.tool]) return
   preferring[c.tool] = true
@@ -923,7 +923,7 @@ onUnmounted(() => {
 }
 .pp-src.js { background: rgba(240, 219, 79, .15); color: #e5c07b; }
 .pp-src.go { background: rgba(0, 178, 255, .12); color: #61afef; }
-/* ★ Node 桥插件（npm/DSH 包，真实 node 进程装载）：与 goja 插件区分来源 */
+/* ★ Node 桥插件（npm 包，真实 node 进程装载）：与 goja 插件区分来源 */
 .pp-src.node-bridge { background: rgba(86, 182, 194, .14); color: #56b6c2; }
 .pp-badge {
   font-size: 9px; padding: 1px 5px; border-radius: 3px;
@@ -945,7 +945,7 @@ onUnmounted(() => {
 .pp-d-line { font-size: 11px; color: var(--text-muted); margin: 2px 0; word-break: break-all; }
 .pp-d-error { color: #e06c75; }
 .pp-d-hint { font-size: 11px; color: var(--text-muted); }
-/* ★ 同名工具并存（repo 移植版 ↔ DSH 桥插件）：标注生效方并提供切换 */
+/* ★ 同名工具并存（repo 移植版 ↔ npm 桥插件）：标注生效方并提供切换 */
 .pp-d-conflict {
   margin: 6px 0;
   padding: 5px 6px;

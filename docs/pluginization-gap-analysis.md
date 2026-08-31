@@ -74,7 +74,7 @@
 - 版本化工作流：`cordis_define`（追加版本）/ `cordis_run`（指定版本）/ `cordis_stop` / `cordis_undefine`（`internal/agent/plugin_tools.go`）。
 - 三形态插件：Go 插件（plugin.go）、JS 动态插件（goja 沙箱，jsplugin.go）、Node 桥 npm 插件（node_plugins.go + npm_plugin.go）。
 - 磁盘插件包（`.pair/plugins/<name>/`）启动自动装载；`cordis.patch.json` 静态装配；动态插件经 `syncGlobalPlugin` 固化为插件包。
-- client 半激活审批机制已取消（IsClientApproved 恒 true，对齐参考项目）。
+- client 半激活审批机制已取消（IsClientApproved 恒 true，对齐外部项目）。
 
 ### 2.2 缺口
 

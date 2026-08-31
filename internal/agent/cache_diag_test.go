@@ -136,7 +136,7 @@ func TestDiag_UsageOpenAICompat(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("DeepSeek 拼写: hit=%d miss=%d", u1.PromptCacheHitTokens, u1.PromptCacheMissTokens)
-	t.Logf("OpenAI 兼容拼写: hit=%d miss=%d ← 参考实现 mapUsage 两者都处理；本实现若只绑定 DeepSeek 字段，命中显示 0", u2.PromptCacheHitTokens, u2.PromptCacheMissTokens)
+	t.Logf("OpenAI 兼容拼写: hit=%d miss=%d ← 参照实现 mapUsage 两者都处理；本实现若只绑定 DeepSeek 字段，命中显示 0", u2.PromptCacheHitTokens, u2.PromptCacheMissTokens)
 	if u2.PromptCacheHitTokens == 0 && u2.PromptCacheMissTokens == 0 {
 		t.Log("★ 结论：OpenAI 兼容端点命中统计丢失（prompt_tokens_details.cached_tokens 未解析）")
 	}

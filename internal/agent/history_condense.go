@@ -34,8 +34,8 @@ const (
 	maxFullRoundMsgs = 30
 )
 
-// CondenseHistoryByPressure 按 token 压力触发历史精简（★ 对齐 harness
-// compaction-basic：thresholdRatio 触发 + 保留尾部，2026-08-17）。
+// CondenseHistoryByPressure 按 token 压力触发历史精简（★ 对齐
+// compaction-basic 策略：thresholdRatio 触发 + 保留尾部，2026-08-17）。
 //
 // 背景：原 CondenseHistory 按「轮数」强制压缩（历史轮次 > 2 即压缩）——
 // 小对话（仅几轮、token 远未达窗口）也会被改写历史前缀，导致每次请求的

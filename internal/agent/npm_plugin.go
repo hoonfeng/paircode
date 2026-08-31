@@ -2,8 +2,8 @@
 // 下载 tarball 取 main 源码 → 追加到 .pair/cordis.patch.json（跨重启存续）→
 // 立即经 goja 宿主装载（esbuild 内联打包 + 非相对导入 mock）。
 //
-// 参考项目（deepseek-harness）的「插件市场」= npm 上的 cordis 插件生态
-// （参考项目的插件市场指令转发 pnpm）；我方用 goja 沙箱 +
+// 「插件市场」= npm 上的 cordis 插件生态
+// （外部项目的插件市场指令转发 pnpm）；我方用 goja 沙箱 +
 // 内置 esbuild 编译器直接执行 cordis 插件源码（ESM export default），
 // 无需 node_modules——非相对导入 mock 空模块，相对导入内联打包。
 

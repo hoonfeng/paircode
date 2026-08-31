@@ -185,9 +185,9 @@ func TestNodePluginNeedsNode(t *testing.T) {
 	if !nodePluginNeedsNode(map[string]any{"peerDependencies": map[string]any{"@cordisjs/core": "^4.0.0"}}) {
 		t.Fatalf("peer @cordisjs/core ^4 应判 true")
 	}
-	// ★ Round4：DSH 插件形态（@deepseek-ai/cordis ^4 peer，无 dependencies）→ Node 桥 dsh 轨
+	// ★ Round4：外部插件形态（@deepseek-ai/cordis ^4 peer，无 dependencies）→ Node 桥 dsh 轨
 	if !nodePluginNeedsNode(map[string]any{"peerDependencies": map[string]any{"@deepseek-ai/cordis": "^4.0.1-rc.1"}}) {
-		t.Fatalf("peer @deepseek-ai/cordis ^4 应判 true（DSH 插件走 Node 桥 dsh 轨）")
+		t.Fatalf("peer @deepseek-ai/cordis ^4 应判 true（外部插件走 Node 桥 dsh 轨）")
 	}
 	if nodePluginNeedsNode(map[string]any{"dependencies": map[string]any{}}) {
 		t.Fatalf("空 dependencies 应判 false")

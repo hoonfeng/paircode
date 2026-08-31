@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// ── agentloop（deepseek-harness 风格 turn/step 双层循环）测试 ─────────
+// ── agentloop（turn/step 双层循环）测试 ─────────
 
 // TestLoopTurnStepFields 验证 turn/step 序号递增、结构化结束原因、事件携带 turn/step。
 func TestLoopTurnStepFields(t *testing.T) {

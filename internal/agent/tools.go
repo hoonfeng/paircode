@@ -366,7 +366,7 @@ func (r *Registry) Execute(ctx context.Context, name, argsJSON string) (string, 
 			r.OnToolUpdate(name, callID, partial)
 		})
 	}
-	// ★ 工具前通知（观察型，非 DSH 中间件）：agent/pre-tool——工具即将执行
+	// ★ 工具前通知（观察型，非 外部中间件）：agent/pre-tool——工具即将执行
 	//   时发出；args 截断防协议风暴，无插件订阅时零开销（emitBridgeEvent
 	//   白名单过滤）。注意与 DSH agent/pre-step（LLM 调用前中间件瀑布，
 	//   见 dsh_prestep.go）语义区分：pre-tool 是单向通知，pre-step 是

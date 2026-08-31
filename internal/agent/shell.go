@@ -201,7 +201,7 @@ func (bg *bgRegistry) get(id int) *bgProc {
 	return bg.procs[id]
 }
 
-// list 列出全部后台进程（id + 状态 + 退出错误；job_list 工具用，R2-7 DSH 对齐）。
+// list 列出全部后台进程（id + 状态 + 退出错误；job_list 工具用，R2-7 外部对齐）。
 func (bg *bgRegistry) list() []map[string]any {
 	bg.mu.Lock()
 	defer bg.mu.Unlock()

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// goal.go — 宿主 goal 机制（Round3 ③.1，对齐 DSH harness goal 语义）
+// goal.go — 宿主 goal 机制（Round3 ③.1，对齐 goal 语义）
 //
 // 原则：机制（状态机/会话编排）在宿主 Loop 层，工具面（schema/描述）在
 // 插件层（.pair/plugins/tool-goal）。无 goal / 无插件时零行为变化。
@@ -241,7 +241,7 @@ func (gm *GoalManager) Update(wsRoot, convID string, revision int, action, objec
 }
 
 // MarkRound 记录一轮结束（Rounds++、阻塞连续计数），返回更新后的 goal。
-// 同一阻塞条件连续 ≥3 轮 → 自动 blocked（blocked_reason 记录，对齐 DSH 语义）。
+// 同一阻塞条件连续 ≥3 轮 → 自动 blocked（blocked_reason 记录，对齐 外部语义）。
 func (gm *GoalManager) MarkRound(wsRoot, convID string, roundErr error) *Goal {
 	gm.mu.Lock()
 	defer gm.mu.Unlock()
@@ -294,7 +294,7 @@ func archiveGoalTools() {
 	ArchiveHostTool(&Tool{
 		Name:       "create_goal",
 		SystemTool: true,
-		Description: "创建同会话完成目标（对齐 DSH harness goal）。objective 必填（直接给出目标，不做推断）；" +
+		Description: "创建同会话完成目标（对齐 goal 范式）。objective 必填（直接给出目标，不做推断）；" +
 			"max_goal_rounds 可选（自动续轮上限，默认 3）。创建后会话将在每轮结束后自动续轮推进，直到 update_goal complete/blocked 或达轮次上限。",
 		Parameters: objSchema(props{
 			"objective":       strProp("目标描述（祈使句，直接给出，如「修复登录超时 bug」）"),
@@ -350,7 +350,7 @@ func archiveGoalTools() {
 	ArchiveHostTool(&Tool{
 		Name:       "update_goal",
 		SystemTool: true,
-		Description: "更新当前会话目标（对齐 DSH harness goal update）。action ∈ {edit,pause,resume,complete,blocked}；" +
+		Description: "更新当前会话目标（对齐 goal update）。action ∈ {edit,pause,resume,complete,blocked}；" +
 			"revision 必传（乐观锁，冲突拒绝）。edit 可改 objective/max_goal_rounds；pause 停续轮、resume 重挂；" +
 			"complete 标记完成；blocked 标记阻塞（blocked_reason 必填说明）。",
 		Parameters: objSchema(props{

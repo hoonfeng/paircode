@@ -498,7 +498,7 @@ func HandlePluginPrefer(w http.ResponseWriter, r *http.Request) {
 	}
 	label := "repo 移植版"
 	if impl == agent.ToolImplBridge {
-		label = "DSH 桥插件"
+		label = "外部桥插件"
 	}
 	jsonResp(w, map[string]any{
 		"ok":        true,

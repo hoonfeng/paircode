@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// tool-workflow — workflow 编排工具（Round3 ③.3，对齐 DSH harness workflow）
+// tool-workflow — workflow 编排工具（Round3 ③.3，对齐 workflow 范式）
 //
 // 编排在插件、能力在宿主：schema/描述在插件，运行器在宿主
 // （internal/agent/workflow.go，goja 执行 + agent/pipeline/parallel 钩子）。
@@ -9,7 +9,7 @@ const tools = [
   {
     name: 'workflow',
     description:
-      '执行一个 workflow 编排脚本（对齐 DSH harness workflow）。script 为 JS 函数体（末尾 return 结果）；钩子：agent(prompt, opts?) 后台委托子 Agent 并等待完成返回其最终正文；pipeline(items, ...stages) 逐项过阶段（阶段抛错该项为 null）；parallel(thunks) 批量执行（宿主侧并发，barrier 等待）；phase(title)/log(msg) 记录进度；args 为脚本内可读输入。返回 JSON {ok, output, logs, phases}。',
+      '执行一个 workflow 编排脚本（对齐 workflow 范式）。script 为 JS 函数体（末尾 return 结果）；钩子：agent(prompt, opts?) 后台委托子 Agent 并等待完成返回其最终正文；pipeline(items, ...stages) 逐项过阶段（阶段抛错该项为 null）；parallel(thunks) 批量执行（宿主侧并发，barrier 等待）；phase(title)/log(msg) 记录进度；args 为脚本内可读输入。返回 JSON {ok, output, logs, phases}。',
     parameters: {
       type: 'object',
       properties: {

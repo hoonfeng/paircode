@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // plugin_tools.go — cordis_* 动态插件工具（模型可用）
 //
-// 对齐 deepseek-harness 的 tool-cordis 工具集（简化为无浏览器半）：
+// 对齐 tool-cordis 工具集（简化为无浏览器半）：
 //   - cordis_inspect  插件运行时只读报告（插件列表 + JS 定义 + 服务/工具）
 //   - cordis_define   登记一个 JS 动态插件（语法预检，不运行）
 //   - cordis_run      在 goja 沙箱中求值并装载（apply 注册工具/片段等）
@@ -149,7 +149,7 @@ func RegisterCordisTools(registry *Registry, host *PluginHost, root string) {
 			"id":     strProp("cordis_define 返回的 dyn id（如 dyn-1，精确版本）或 pluginId（稳定身份=首次 dyn id，装载最新版本）。"),
 			"config": strProp("可选：插件配置 JSON 对象（透传给 apply(ctx, config) 第二参）。"),
 		}, "id"),
-		// ★ 2026-08-19：client 半激活审批机制整体取消（参考项目 deepseek-harness
+		// ★ 2026-08-19：client 半激活审批机制整体取消（参考外部实现
 		//   无此机制）→ 恒 false：装载带 client 半的插件不再触发审批门，浏览器
 		//   直接装载（Round3 已删 IsClientApproved 等审批遗留）。
 		DynamicApproval: func(tc ToolCall) bool {
@@ -171,7 +171,7 @@ func RegisterCordisTools(registry *Registry, host *PluginHost, root string) {
 			if err := host.LoadJSDynamic(def); err != nil {
 				return "", err
 			}
-			// ★ 2026-08-19：client 半激活审批机制整体取消（参考项目无此机制），
+			// ★ 2026-08-19：client 半激活审批机制整体取消（外部无此机制），
 			//   浏览器直接装载全部 client 半（Round3 已删 MarkClientApproved）。
 			// 等待语义：装载成功但插件进入 waiting（inject 缺服务）
 			if def.status == PluginWaiting {

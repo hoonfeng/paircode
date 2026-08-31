@@ -1,10 +1,10 @@
 // ═══════════════════════════════════════════════════════════════
-// host_executors.go — 宿主工具执行器索引（对齐 harness「seam 服务」模式）
+// host_executors.go — 宿主工具执行器索引（「seam 服务」分层模式）
 //
 // 迁移背景（2026-08-16）：内置 Go 工具（builtin_plugins.go 的 20 组）迁移为
 // 磁盘外置 JS 插件（.pair/plugins/tool-*）时，插件注册同名工具接管 agent 可见面；
 // 原 Go 实现经「存档」登记到本索引，插件 execute 可经 ctx.hostTool(name, args)
-// 调用宿主能力（对齐 harness：工具编排在插件、底层能力在宿主 seam 服务）。
+// 调用宿主能力（工具编排在插件、底层能力在宿主 seam 服务）。
 //
 // 本索引全局单例（跨 Registry/会话存活），与工具注册表（Registry）解耦：
 //   - Registry 中的工具 = agent 可见面（由磁盘插件注册，可插拔）

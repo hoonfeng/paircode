@@ -239,5 +239,5 @@ func TestLiveSkills(t *testing.T) {
 }
 
 // ─── 5.7 多 agent 委托 ──
-// （已移除 2026-08-16：多角色（外层设计者+delegate 子 agent）按参考项目
+// （已移除 2026-08-16：多角色（外层设计者+delegate 子 agent）按参考设计
 //  单 Agent 模型删除，本真机用例一并移除——单 agent 已覆盖全部能力。）

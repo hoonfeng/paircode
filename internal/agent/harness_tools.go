@@ -1,6 +1,6 @@
-// harness_tools —— 对齐 deepseek-harness 核心工具集的工具注册。
+// harness_tools —— 核心工具集对齐的工具注册。
 //
-// 背景（2026-08-15）：用户要求按 deepseek-harness 设计重写 agent，并「暂时对齐他的工具集」
+// 背景（2026-08-15）：用户要求按设计范式重写 agent，并「暂时对齐工具集」
 // 为下一步自举迭代（用 agent 开发 agent）做准备。harness 核心工具集：
 //
 //	tool-fs:             read / write / edit
@@ -29,7 +29,7 @@ import (
 	"github.com/hoonfeng/paircode/goja"
 )
 
-// RegisterHarnessTools 注册 deepseek-harness 命名的核心工具集。
+// RegisterHarnessTools 注册标准命名的核心工具集。
 // 基座工具（read/write/edit/bash/glob/grep）已由 registerCoreTools 以新名注册
 // （Round3 别名层删除）；本入口仅补 str_replace_editor / run_code 两个独立实现。
 func RegisterHarnessTools(r *Registry, root string) {
@@ -39,8 +39,8 @@ func RegisterHarnessTools(r *Registry, root string) {
 
 // ─── str_replace_editor（对齐 tool-str-replace-editor）──────────────
 
-// strReplaceEditorDesc 对齐 harness 的命令式编辑器描述。
-const strReplaceEditorDesc = "Custom editing tool for viewing, creating and editing files（对齐 deepseek-harness str_replace_editor）\n" +
+// strReplaceEditorDesc — 命令式编辑器描述。
+const strReplaceEditorDesc = "Custom editing tool for viewing, creating and editing files（对齐 str_replace_editor 惯例）\n" +
 	"* `command` 必填：view / create / str_replace / insert\n" +
 	"* `view` 显示文件内容（带行号）；path 为目录时列出非隐藏文件/目录最多 2 层\n" +
 	"* `create` 创建新文件（path 已存在则报错）；内容在 `file_text`\n" +
@@ -296,7 +296,7 @@ func displayPath(root, p string) string {
 
 // ─── run_code（对齐 code-mode）─────────────────────────────────
 
-// registerRunCode 注册 run_code 工具：执行一段代码（对齐 harness Code Mode）。
+// registerRunCode 注册 run_code 工具：执行一段代码（对齐 Code Mode）。
 // Go 侧简化版：把 code 写入临时文件，按语言执行并返回 stdout/stderr。
 // ★node 语言含 tools. 调用时走 goja 宿主内嵌套工具调度（见 runCodeNested）。
 // RegisterRunCode 注册 run_code 工具（统一二进制承载时导出入口）。
@@ -305,7 +305,7 @@ func RegisterRunCode(r *Registry, root string) { registerRunCode(r, root) }
 func registerRunCode(r *Registry, root string) {
 	r.Register(&Tool{
 		Name: "run_code",
-		Description: "执行一段代码并返回输出（对齐 deepseek-harness run_code / Code Mode）。" +
+		Description: "执行一段代码并返回输出（对齐 Code Mode）。" +
 			"参数：code（必填，要执行的程序体）、language（可选，auto/go/python/node，默认 auto 按内容探测）、" +
 			"description（可选，简短说明）。仅返回程序的 stdout/stderr 与退出状态。" +
 			"★嵌套工具调度：language=node 且代码内用 tools.xxx(args) 调用已注册工具（如 tools.read({path:'a.go'})），" +
@@ -328,7 +328,7 @@ func registerRunCode(r *Registry, root string) {
 			if lang == "" || lang == "auto" {
 				lang = detectCodeLang(code)
 			}
-			// ★嵌套工具调度（对齐 harness Code Mode）：JS 代码内可 `tools.xxx(args)`
+			// ★嵌套工具调度（对齐 Code Mode）：JS 代码内可 `tools.xxx(args)`
 			// 调用注册表工具，goja 宿主内执行；每个子调度记录日志，仅精选结果返回。
 			if lang == "node" && strings.Contains(code, "tools.") {
 				return runCodeNested(ctx, r, code)
@@ -357,7 +357,7 @@ func detectCodeLang(code string) string {
 }
 
 // runCodeNested 嵌套工具调度：JS 代码在 goja 宿主内执行，暴露 tools 命名空间
-// （每个已注册工具 → Registry.Execute），对齐 harness Code Mode 的嵌套调度：
+// （每个已注册工具 → Registry.Execute），对齐 Code Mode 的嵌套调度：
 // 「程序调用注册表工具；每个子调度记录日志，仅外层精选结果进入模型历史」。
 // console.log 捕获为程序输出；tools.xxx 调用逐条记录（结果截断，防刷屏）。
 // run_code 自身不绑定（防无限递归）。

@@ -49,7 +49,7 @@
 
 | 文件 | 内容 | 实测证据 | 建议 |
 |---|---|---|---|
-| `internal/agent/evalstore.go`（459L） | 评分记录持久化（`GetEvalStore`） | `GetEvalStore` 生产调用 = 0（仅 evalstore_test.go）；无 HTTP 路由、无工具注册引用 | **待产品确认**：评分系统（LLM-as-Judge 存档）在参考实现是 bench 子系统，pair 生产无装配点。倾向删除（与 jobs/permission/provider/vterm 同型：零导入零装配） |
+| `internal/agent/evalstore.go`（459L） | 评分记录持久化（`GetEvalStore`） | `GetEvalStore` 生产调用 = 0（仅 evalstore_test.go）；无 HTTP 路由、无工具注册引用 | **待产品确认**：评分系统（LLM-as-Judge 存档）在外部实现是 bench 子系统，pair 生产无装配点。倾向删除（与 jobs/permission/provider/vterm 同型：零导入零装配） |
 | `internal/agent/evaluator.go`（129L） | LLM-as-Judge 评测 Agent（`Evaluator.Evaluate`，复刻参考 bench/evaluator.ts） | `NewEvaluator`/`Evaluator` 生产调用 = 0（仅 evaluator_test.go）；`DefaultJudgePrompt` 被 role_prompts.go 磁盘优先 loader 引用（保留 loader 即可） | 同上。若保留，**至少**把 `DefaultJudgePrompt` 之外的主体标记「bench 归档、生产零装配」（与 Go 旧名工具「测试/归档专用」同款注释纪律） |
 
 **注意**：`DefaultJudgePrompt`（evaluator.go:41）被 `role_prompts.go` 的磁盘优先 loader 引用（plugin-round3 C1 闭环），删除 evaluator.go 时需把 `judgeSystemPrompt`/`DefaultJudgePrompt` 常量迁移到 role_prompts.go，再删 `Evaluator` 本体。t2 需先 grep 复核。
@@ -158,7 +158,7 @@ uiassembly.go/workspace.go/handler.go——web/desktop 共享 handler 实现，R
 依据：HTTP 传输层是宿主 mux 基础设施，内核路由表挂载权已在 core-api 插件（go-core-capabilities.md §2）。
 
 ### B11 提示词 / 角色
-`prompt_registry.go`（系统提示组装，对齐 DSH system-prompt）、`role_prompts.go`（磁盘优先角色 loader，C1 闭环）、
+`prompt_registry.go`（系统提示组装，对齐 外部 system-prompt）、`role_prompts.go`（磁盘优先角色 loader，C1 闭环）、
 `selfmanagement_prompt.go`。
 
 ### B12 图像 / 编码 / 其他工具库

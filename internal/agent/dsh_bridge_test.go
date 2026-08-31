@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════
-// dsh_bridge_test.go — Round4 DSH 运行时桥测试
+// dsh_bridge_test.go — Round4 外部运行时桥测试
 //
 // 覆盖：
 //   - TestDSHBridgeServices：dshService 服务面（agents/subagents/llm/
@@ -28,7 +28,7 @@ import (
 	"time"
 )
 
-// TestDSHBridgeServices DSH 服务面（dshService）映射与错误路径。
+// TestDSHBridgeServices 外部服务面（dshService）映射与错误路径。
 func TestDSHBridgeServices(t *testing.T) {
 	b := &nodeBridge{} // 无进程：只测映射/直连逻辑
 	// 未知服务 → handled=false（走 mapBridgeService 既有路径）
@@ -288,7 +288,7 @@ func TestNodeBridgeDSHPluginE2E(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 3. spawn 桥（真实 node；装载 cordis4 + DSH 门面）
+	// 3. spawn 桥（真实 node；装载 cordis4 + 外部门面）
 	bcmd := exec.Command(nodePath, filepath.Join(dir, "bridge.js"))
 	bcmd.Dir = dir
 	bcmd.Env = append(os.Environ(), "CORDIS_BRIDGE_DIR="+dir, "CORDIS_WORKSPACE_ROOT="+dir)
@@ -416,10 +416,10 @@ func TestNodeBridgeDSHPluginE2E(t *testing.T) {
 	if !strings.Contains(data, `"deleted":true`) {
 		t.Fatalf("delete 输出异常: %s", data)
 	}
-	t.Logf("DSH 插件 E2E 通过：13 工具注册 + create/status/delete 冒烟 + 状态落盘（%s）", created.TeamID)
+	t.Logf("外部插件 E2E 通过：13 工具注册 + create/status/delete 冒烟 + 状态落盘（%s）", created.TeamID)
 
 	// 5. agent/pre-step 中间件瀑布（Round4 事件面补齐）：LLM 调用前、
-	//    DSH 插件订阅者按注册顺序瀑布，可改写进入模型的输入（激活指令注入）
+	//    外部插件订阅者按注册顺序瀑布，可改写进入模型的输入（激活指令注入）
 	//    或拒绝 turn。无手势 → 基线 enter 直通；有 /agent-teams 手势 →
 	//    追加激活指令消息（installAgentTeamsGestureBoundary）。
 	prestep := func(messages string) (map[string]any, error) {
@@ -515,7 +515,7 @@ func readNewestFile(dir, pattern string) string {
 //   - TestBridgePreStepGate：无订阅者零开销直通（不写管道）
 // ═══════════════════════════════════════════════════════════
 
-// TestDSHMsgConversion DSH 消息转换往返保真。
+// TestDSHMsgConversion 外部消息转换往返保真。
 func TestDSHMsgConversion(t *testing.T) {
 	in := []Message{
 		{Role: RoleSystem, Content: "你是一名资深工程师。"},
@@ -527,7 +527,7 @@ func TestDSHMsgConversion(t *testing.T) {
 		{Role: RoleUser, Content: "继续", Images: []ImagePart{{Data: "data:image/png;base64,AAAA", MimeType: "image/png"}}},
 	}
 	dsh := msgsToDSH(in)
-	// DSH 结构抽查
+	// 外部结构抽查
 	if dsh[0]["role"] != "system" || dsh[1]["role"] != "user" || dsh[2]["role"] != "assistant" {
 		t.Fatalf("role 映射异常: system=%v user=%v assistant=%v", dsh[0]["role"], dsh[1]["role"], dsh[2]["role"])
 	}

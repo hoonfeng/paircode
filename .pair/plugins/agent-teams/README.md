@@ -71,7 +71,7 @@
 | --- | --- | --- |
 | stateDir | `.agent-teams` | 团队状态目录（工作区相对） |
 | memberModel | （跟随队长） | 成员默认模型 |
-| memberProvider | `spawn` | 成员提供方式：`spawn`=全新会话（默认，行为不变）；`fork`=以队长会话消息快照派生（DSH subagent_fork 对齐，persona 经 system 覆盖；fork 能力缺失自动回落 spawn）。也可用环境变量 `AGENT_TEAMS_MEMBER_PROVIDER` 覆盖 |
+| memberProvider | `spawn` | 成员提供方式：`spawn`=全新会话（默认，行为不变）；`fork`=以队长会话消息快照派生（subagent_fork 对齐，persona 经 system 覆盖；fork 能力缺失自动回落 spawn）。也可用环境变量 `AGENT_TEAMS_MEMBER_PROVIDER` 覆盖 |
 | executionPrompt | — | 成员全局执行指导 |
 | maxMembers | 8 | 团队规模上限 |
 | codeMaxRounds | 3 | 代码审查轮次上限 |

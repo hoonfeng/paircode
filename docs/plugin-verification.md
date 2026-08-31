@@ -1,7 +1,7 @@
 # 插件化改进独立验证报告（t3 验证 · 2026-09）
 
 > 验证对象：t2 实施的「一切皆插件」高优先级缺口闭环（P0×3 + P1×5，见
-> `docs/plugin-gaps.md`）。工作目录 `F:\syproject\gou-ide`（Go 1.26.4，模块
+> `docs/plugin-gaps.md`）。工作目录 `<仓库根>`（Go 1.26.4，模块
 > github.com/hoonfeng/paircode，主程序 cmd/companion）。
 > 验证方式：独立命令运行 + 文件 mtime 时间窗归因 + 源码抽查 + 启动冒烟。
 > 本验证**未改动任何实现代码**；唯一新增产物为本报告与临时日志目录 `.verify-tmp/`
@@ -28,13 +28,13 @@
 
 ## 1. 验证环境说明（重要）
 
-DSH 沙箱（workspace-write 策略）对验证命令有两项环境约束，**与 t2 代码无关**：
+受限沙箱（workspace-write 策略）对验证命令有两项环境约束，**与 t2 代码无关**：
 
 1. `%AppData%\go\env` 全局设置了 `CGO_ENABLED=0`（且 GOPATH 指向他处）。而
    `wb-ui/platform/graphics`（依赖 goskia 的 cgo 绑定）在 CGO=0 下无法编译
    （`undefined: skia.Surface`）。**以 CGO_ENABLED=1（项目文档化构建模式）运行
    后 `go build ./...`、`go vet ./...` 均 exit 0**。
-2. 沙箱禁止写入 `C:\Users\sqmen\AppData\Local\go-build` 与
+2. 沙箱禁止写入 `<外部安装路径>\AppData\Local\go-build` 与
    `F:\MyGolangPrograms\pkg\mod\cache`（模块 stat cache 刷新被拒）。规避：
    `GOCACHE=$env:TEMP\dsh-gocache` + `GOPROXY=off` + `GOWORK=off`。模块缓存
    已完整（无网络访问，GOPROXY=off 仅用本地缓存）；`go env` 的
@@ -65,7 +65,7 @@ DSH 沙箱（workspace-write 策略）对验证命令有两项环境约束，**�
 |---|---|---|
 | ① Git-bash 受限（沙箱禁止创建信号管道） | TestRunShellWithBash / TestRunShellBacktick / TestRunBackground / TestRunCommandInLoop / TestDetectBash / TestBGCrossRegistry / TestHarnessAlias_GlobGrepBash / TestJSPluginCtxBashLogger / TestRunCode_Go / TestRunCodeNested / TestToolRunCommand / TestToolGitJSNative / TestToolGitJSNativeMultiProject / TestToolMemoryJSNative / TestToolHarnessJSNative / TestToolCoreJSNative | `bash: *** fatal error - couldn't create signal pipe, Win32 error 5` |
 | ② 插件二进制未构建（`.pair/plugins/tool-*/bin/*.exe` 为构建脚本产物，检出树未编译） | TestToolProjectInfoJSNative / TestToolVerifyJSNative / TestToolOfficeJSNative / TestToolBugJSNative / TestToolLandingSpotCheck | `GoError: ctx.binary.exec: 插件二进制不存在 ...\tool-*.exe（编译：go build -o ... ./plugins-src/plugins/<name>）` |
-| ③ Chromium 下载受限（沙箱禁写 AppData\Roaming\rod） | TestWebDebugTimeoutMs | `启动 Chromium 失败: ... mkdir C:\Users\sqmen\AppData\Roaming\rod\browser\chromium-1321438: Access is denied.` |
+| ③ Chromium 下载受限（沙箱禁写 AppData\Roaming\rod） | TestWebDebugTimeoutMs | `启动 Chromium 失败: ... mkdir <外部安装路径>\AppData\Roaming\rod\browser\chromium-1321438: Access is denied.` |
 
 与 `docs/plugin-gaps.md`「环境依赖测试说明」所列完全一致（含 CGO=0 与 CGO=1
 两次全量运行的失败集一致）；**t2 改动路径的测试（loop/plugin/jsplugin/toolset/
@@ -220,8 +220,8 @@ internal/agent 全量测试排除环境依赖项后仅 TestRunShellBacktick 失�
   启动日志无 FATAL/panic、全局插件宿主 43 插件、工具集 44 个（18 插件，含 t2 新增
   7 个 tool-*）；验证后立即终止并释放端口。
 - **前端构建**：⚠️ **沙箱环境阻断**——`npm run build`（正确入口 `plugins-src/ui-app`；
-  `cmd/companion/web-ui` 无 package.json）在 DSH 沙箱内无法执行：vite 依赖 esbuild
-  JS API，esbuild 服务进程 spawn（pipe stdio）被 DSH 沙箱设计边界拦截（`spawn EPERM`；
+  `cmd/companion/web-ui` 无 package.json）在 受限沙箱内无法执行：vite 依赖 esbuild
+  JS API，esbuild 服务进程 spawn（pipe stdio）被 受限沙箱设计边界拦截（`spawn EPERM`；
   最小复现实验：Node `child_process.spawn` 的 pipe/overlapped stdio 均 EPERM、
   inherit 可用；esbuild-wasm node 入口同样 spawn）；本会话无批准升级通道。
   **前端构建需在沙箱外执行**（`cd plugins-src/ui-app && npm run build`，产物

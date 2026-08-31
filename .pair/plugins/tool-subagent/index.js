@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// tool-subagent — 子 Agent 编排工具（Round3 ③.2，对齐 DSH harness 语义）
+// tool-subagent — 子 Agent 编排工具（Round3 ③.2，对齐目标语义）
 //
 // 编排在插件、能力在宿主：execute 走 ctx.agents（宿主 subagent_registry +
 // web 层注入的 Spawner）。subagent/subagent_fork 默认后台执行（run_in_background

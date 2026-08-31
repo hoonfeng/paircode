@@ -1,12 +1,12 @@
 # Round2 插件化专项：三合一分析报告与执行计划（t1 · 2026-09）
 
 > 本文件为 **plugin-round2-alignment** 团队 t1（requirements）分析交付物。
-> 三合一只读分析：① 上轮遗留项处置建议；② repo 插件与 DSH 参考差异对照；
+> 三合一只读分析：① 上轮遗留项处置建议；② repo 插件与 外部参考差异对照；
 > ③ 全插件工具重复矩阵。除本文件外未改动任何源码/插件/配置。
 >
-> DSH 参考基线：
-> - deepseek-harness 核心工具：`C:\Users\sqmen\AppData\Roaming\npm\node_modules\@deepseek-ai\dsh\node_modules\@deepseek-ai\dsh-tool-*`
-> - dsh-agent-teams：`C:\Users\sqmen\.dsh\profiles\web\node_modules\@nanmicoder\dsh-agent-teams`（v0.1.14）
+> 外部参考基线：
+> - 外部实现 核心工具：`<外部安装路径>\AppData\Roaming\npm\node_modules\@deepseek-ai\dsh\node_modules\@deepseek-ai\dsh-tool-*`
+> - dsh-agent-teams：`<外部安装路径>\.dsh\profiles\web\node_modules\@nanmicoder\dsh-agent-teams`（v0.1.14）
 
 ---
 
@@ -128,7 +128,7 @@ TestToolLandingMatrix      通过（但模式表与实际 JS 漂移，见 §1.2 
 
 ---
 
-## 2. DSH 参考对照
+## 2. 外部参考对照
 
 ### 2.1 agent-teams 插件 vs 参考 @nanmicoder/dsh-agent-teams v0.1.14
 
@@ -155,9 +155,9 @@ reassign_task/claim_task/update_task/send_message/status/resume/delete）——�
 ② memberProvider fork；③ slash 命令（若宿主支持）；④ reasoning_effort 透传。
 工具名/状态机/质量门禁已对齐，无需动。
 
-### 2.2 harness 工具语义/命名差异（repo vs deepseek-harness 核心）
+### 2.2 harness 工具语义/命名差异（repo vs 外部实现 核心）
 
-| 工具 | DSH 参考语义 | repo 现状 | 差异 | 对齐建议 |
+| 工具 | 外部参考语义 | repo 现状 | 差异 | 对齐建议 |
 |---|---|---|---|---|
 | read | 参数 `file_path`；输出带行号（lines[{number,text}]+totalLines） | tool-harness `read`：参数 `path`；输出纯文本（无行号） | 参数名 + 行号输出 | **建议对齐**：加行号输出（前端/测试消费方见 §3）；参数名改 file_path 需评估兼容（大量调用方）→ 可加别名 |
 | write | `file_path` + content；输出 {path,before,after} | `path` + content；文本输出 | 参数名 | 同上（别名策略） |
@@ -295,7 +295,7 @@ R2-8 独立但需与 R2-6/2-7 顺序隔离（工具集装载逻辑改动后跑�
 - t4 低危：`internal/agent/legacy_host_tools.go:30`、`internal/agent/loop_hooks.go:205,238`、
   `internal/agent/toolconfig.go:41-87`、`internal/agent/provider_impls.go:33`、`config/philosophy/`
 - 提示词旧名：`config/roles/{explorer,planner,reviewer,verifier}.md`
-- 参考对照：`C:\Users\sqmen\.dsh\profiles\web\node_modules\@nanmicoder\dsh-agent-teams\`
+- 参考对照：`<外部安装路径>\.dsh\profiles\web\node_modules\@nanmicoder\dsh-agent-teams\`
   （package.json v0.1.14、lib/profiles.js、lib/quality-gates.js、README_ZH.md）
 - harness 工具参考：`…\dsh\node_modules\@deepseek-ai\dsh-tool-{fs,fs-search,bash,web,skill,jobs,todo,goal,ask-user,str-replace-editor}\lib\index.js`
 ## 6. Round2 实施记录（t2 · 2026-09）
@@ -346,17 +346,17 @@ R2-8 独立但需与 R2-6/2-7 顺序隔离（工具集装载逻辑改动后跑�
 - **profiles**（对齐参考 lib/profiles.js）：`.pair/plugins/agent-teams/index.js` 新增 `TEAM_PROFILES`（默认 16 上限 MAX_TEAM_PROFILES）+ `create(profile=…)` 参数（提示词列出可用模板：default/captain-planning）——profile 一键建队（成员阵容 + seed 任务，队长可 edit_plan 调整）。内置 default（四人研发质量流水线：analyst/engineer/verifier/reviewer + 4 条 seed 任务）与 captain-planning（仅阵容）。
 - **reasoning_effort 透传**：`SubAgentSpec.ReasoningEffort`（subagent_registry.go）→ `ctx.agents.start` 参数映射（jsplugin_agents.go）→ `buildSubAgentProvider` 仅档位时也构造 Provider（沿用默认路由、覆盖 ThinkingMode，经 applyThinking 下发 reasoning_effort）；插件侧 add_member/edit_plan/spawnMember/快照全链路透传成员档位。
 - **memberProvider fork**：**未实施（按宿主能力裁剪）**——宿主 ctx.agents 无 fork 能力面（仅 start/followup/stop/status/list），需宿主先支持 subagent_fork 语义；记为遗留（§7.2）。
-- **slash 命令**：宿主无 ctx.commands 能力面，未实施（参考实现 command.js 需 cordis 命令注册，宿主为 Web/桌面 GUI 无 CLI 命令面）。
+- **slash 命令**：宿主无 ctx.commands 能力面，未实施（外部实现 command.js 需 cordis 命令注册，宿主为 Web/桌面 GUI 无 CLI 命令面）。
 - 验收：`TestAgentTeamsDiskLoad` 通过（13 工具完整注册）；冒烟装载日志正常。
 
 ### 6.7 R2-7 harness 语义对齐 → **已实施（分批，别名方式零破坏）**
 
-- **read 行号输出**（tool-harness）：对齐 dsh-tool-fs `formatReadOutput`——`<path>/<type>/<content>` 块内每行 `N: text` + footer（`(End of file - total N lines)` / `(Showing lines X-Y of N. Use offset=… to continue.)`）；参数 `file_path`（DSH 名，兼容旧 `path`，file_path 优先）；offset 默认 1、limit 默认 2000。测试断言同步（harness_test.go）。
+- **read 行号输出**（tool-harness）：对齐 dsh-tool-fs `formatReadOutput`——`<path>/<type>/<content>` 块内每行 `N: text` + footer（`(End of file - total N lines)` / `(Showing lines X-Y of N. Use offset=… to continue.)`）；参数 `file_path`（外部名，兼容旧 `path`，file_path 优先）；offset 默认 1、limit 默认 2000。测试断言同步（harness_test.go）。
 - **edit replace_all**（tool-harness）：新增 `replace_all` 布尔参数（默认 false 保持「须唯一」安全语义；true 时从后往前全量替换）；多处出现时错误提示引导用 replace_all。
-- **bash description/timeoutMs**（tool-harness）：新增可选 `description`（参考实现必填，repo 兼容旧调用方保持可选——文档化差异）与 `timeoutMs`（>0 覆盖默认 120s 传给 ctx.bash.exec；0=不超时）。
+- **bash description/timeoutMs**（tool-harness）：新增可选 `description`（外部实现必填，repo 兼容旧调用方保持可选——文档化差异）与 `timeoutMs`（>0 覆盖默认 120s 传给 ctx.bash.exec；0=不超时）。
 - **write file_path 别名**（tool-harness）：write 同 read 双参数名。
-- **ask_user questions 数组**：tool-system **插件侧 schema** 增 `questions`（DSH ask_user_question 形态 [{id, question, options?, multi_select?}]）；★ t4 F5 修正（2026-09 t5）：**Go 宿主侧 schema（session_bridge.go/session_manager.go）未同步**——Go 侧仍为 question/askType/options，questions 参数被忽略、按 question 渲染（插件描述已注明降级：「传 questions 时请同时给 question 合并文本」）；宿主前端当前按单问题渲染（built 产物，前端专项 F2/F3 外），多问题 UI 记遗留（§7.2）。
-- **jobs 别名**（tool-shell）：新增 `job_output`/`job_list`/`job_kill`（DSH 命名，原名保留）——job_list 需新能力：`bgRegistry.list()`（shell.go）+ `ctx.process.list`（jsplugin.go）返回 [{id,status,error?}]。
+- **ask_user questions 数组**：tool-system **插件侧 schema** 增 `questions`（外部 ask_user_question 形态 [{id, question, options?, multi_select?}]）；★ t4 F5 修正（2026-09 t5）：**Go 宿主侧 schema（session_bridge.go/session_manager.go）未同步**——Go 侧仍为 question/askType/options，questions 参数被忽略、按 question 渲染（插件描述已注明降级：「传 questions 时请同时给 question 合并文本」）；宿主前端当前按单问题渲染（built 产物，前端专项 F2/F3 外），多问题 UI 记遗留（§7.2）。
+- **jobs 别名**（tool-shell）：新增 `job_output`/`job_list`/`job_kill`（外部命名，原名保留）——job_list 需新能力：`bgRegistry.list()`（shell.go）+ `ctx.process.list`（jsplugin.go）返回 [{id,status,error?}]。
 - **todo_write 别名**（tool-system）：新增 `todo_write`（语义同 update_tasks，execute 经 hostExec 映射）；宿主侧 `registerTaskTools` 提取共享 handler 并 `ArchiveHostTool` 存档 todo_write（landing 矩阵 hostTool 断言通过）。
 - 验收：`TestToolHarnessJSNative` 的 read/edit/replace_all/file_path 断言通过（bash 步为环境依赖，见 §6.13）；`TestToolLandingMatrix` 243 工具零未落地；node `--check` 全部插件通过。
 
@@ -391,8 +391,8 @@ R2-8 独立但需与 R2-6/2-7 顺序隔离（工具集装载逻辑改动后跑�
 ### 6.13 测试结果与环境依赖说明
 
 - `go build ./...` ✅、`go vet ./...` ✅（GOCACHE/GOMODCACHE 重定向 `.verify-tmp/`，CGO_ENABLED=1）。
-- `go test ./internal/agent/ -count=1 -timeout 10m`：**非环境依赖测试全部通过**；环境依赖失败清单（本 DSH 沙箱限制，非代码回归）：
-  - **msys bash 信号管道**（`bash.exe: couldn't create signal pipe / CreateFileMapping … Win32 error 5`——受限 token 下 msys bash 无法创建命名管道，DSH 沙箱文档化边界）：TestToolRunCommand、TestRunShellWithBash、TestRunShellBacktick、TestRunBackground、TestRunCommandInLoop、TestBGCrossRegistry、TestDetectBash、TestJSPluginCtxBashLogger、TestToolCoreJSNative（run_command 步）、TestToolHarnessJSNative（bash ⑥ 步，R2-7 断言步均过）、TestHarnessAlias_GlobGrepBash（tool-git 已改 ctx.process.exec 直连后**通过**）。
+- `go test ./internal/agent/ -count=1 -timeout 10m`：**非环境依赖测试全部通过**；环境依赖失败清单（本 受限沙箱限制，非代码回归）：
+  - **msys bash 信号管道**（`bash.exe: couldn't create signal pipe / CreateFileMapping … Win32 error 5`——受限 token 下 msys bash 无法创建命名管道，受限沙箱文档化边界）：TestToolRunCommand、TestRunShellWithBash、TestRunShellBacktick、TestRunBackground、TestRunCommandInLoop、TestBGCrossRegistry、TestDetectBash、TestJSPluginCtxBashLogger、TestToolCoreJSNative（run_command 步）、TestToolHarnessJSNative（bash ⑥ 步，R2-7 断言步均过）、TestHarnessAlias_GlobGrepBash（tool-git 已改 ctx.process.exec 直连后**通过**）。
   - **Chromium/rod 下载**（写 `%APPDATA%\rod` 被沙箱拒绝）：TestWebDebugTimeoutMs。
   - **go/node 子进程环境**：TestRunCode_Go（go 环境）、TestRunCodeNested（node/go 子进程）。
   - 上述测试在正常开发环境（t1 基线环境）可执行；t1 报告的 5 个 binary 插件失败 + office csv_read/word_read 断言失败本轮已全部修复通过。
@@ -419,8 +419,8 @@ R2-8 独立但需与 R2-6/2-7 顺序隔离（工具集装载逻辑改动后跑�
 2. **jobs/permission/provider/vterm 死包**：~~保留待产品确认（t1 判定）~~ → **Round3 已删除（2026-09）**：零导入实测 + relocate_imports 映射清理，见 docs/plugin-round3-plan.md §10。
 3. **t4 L4 RegisterProviderImpl 还原顺序**：文档化（单插件场景无影响），栈式还原留后续。
 4. **default.json 运行时数据**（git-ignored）：本轮清理仅作用于本机运行时态；装载逻辑（applyToolsetPlugin 磁盘优先）为持久生效项；其他工作区/安装目录的 default.json 若仍带内嵌 code，装载时同样被跳过（磁盘优先）。
-5. **read 输出形态变化**：tool-harness read 由纯文本 → DSH 行号块；消费方为 LLM 与通用消息流（无格式断言），前端渲染为文本展示无破坏；harness_test.go 断言已同步。
-6. **node_bridge fs.read 输出形态**（t4 F3，2026-09 t5 文档化）：npm 插件 ctx.fs.read 经桥映射到 tool-harness read，返回 DSH 行号块而非原始文本；当前仓库零消费者，若第三方解析型插件出现需在桥接层剥离包装（前端专项）。
+5. **read 输出形态变化**：tool-harness read 由纯文本 → 外部行号块；消费方为 LLM 与通用消息流（无格式断言），前端渲染为文本展示无破坏；harness_test.go 断言已同步。
+6. **node_bridge fs.read 输出形态**（t4 F3，2026-09 t5 文档化）：npm 插件 ctx.fs.read 经桥映射到 tool-harness read，返回 外部行号块而非原始文本；当前仓库零消费者，若第三方解析型插件出现需在桥接层剥离包装（前端专项）。
 
 ### 7.3 t4 审查 findings 处置记录（2026-09 t5 集成收尾）
 
@@ -431,7 +431,7 @@ t4 verdict=pass，5 个非阻塞 findings 全部在 t5 处置：
 | F4 | medium | **已修复**：agent-teams profile=default 种子任务按序接线——TEAM_PROFILES 任务增 ref/deps/reviewedTaskRef，seed 两遍建任务（先登记 ref→id 再静态接线：implementation←requirements、verification←implementation、review←implementation 且 reviewedTaskId=实施任务 id） | `.pair/plugins/agent-teams/index.js`（TEAM_PROFILES + create seed 块）；node --check 通过 |
 | F1 | medium | **已修复**：session_context.go `fileModifyTools`/`toolPathParams` 增 edit/write（file_path/path 双参数名）；storm_breaker.go `repeatSuccessSignature` 增 write/edit（旧名保留兼容历史消息） | `internal/agent/session_context.go`、`internal/agent/storm_breaker.go`；go build 通过 |
 | F2 | low | **已修复（全插件清扫）**：14 个 tool-* 插件 index.js 的 LLM 面向文案旧名替换（read_file→read、write_file→write、edit_file→edit、run_command→bash、search_content→grep、search_files→glob、list_files→glob）；tool-core purpose/头注释更正为实际 3 工具；grep 零残留（built 资产 ui-modals/ui-right-panel 除外，前端专项） | 全插件 node --check 通过；grep 验证 |
-| F3 | low | **已文档化**：node_bridge.go fs.read 映射处注释说明输出形态变化（DSH 行号块）与桥接层剥离方案（当前零消费者） | `internal/agent/node_bridge.go` 注释 |
+| F3 | low | **已文档化**：node_bridge.go fs.read 映射处注释说明输出形态变化（外部行号块）与桥接层剥离方案（当前零消费者） | `internal/agent/node_bridge.go` 注释 |
 | F5 | low | **已修正**：§6.7 ask_user 表述改为「仅插件侧 schema 增 questions；Go 宿主侧未同步（questions 被忽略，已文档化降级）」 | 本文件 §6.7 |
 
 ---
@@ -444,7 +444,7 @@ t4 verdict=pass，5 个非阻塞 findings 全部在 t5 处置：
 
 | # | 命令 | 退出码 | 结果 |
 |---|---|---|---|
-| 1 | `cd cmd/companion/web-ui && npm run build`（build-ui.mjs → plugins-src/ui-app vite → sync-web-dist.mjs） | 0（脚本不传播失败） | ⚠️ **沙箱 EPERM**（`[commonjs--resolver] spawn EPERM`，vite/esbuild 子进程 spawn 被 DSH 沙箱拦截）——已报队长走全权限通道复跑；本轮**无前端源码改动**，dist 为既有产物，无需重建 |
+| 1 | `cd cmd/companion/web-ui && npm run build`（build-ui.mjs → plugins-src/ui-app vite → sync-web-dist.mjs） | 0（脚本不传播失败） | ⚠️ **沙箱 EPERM**（`[commonjs--resolver] spawn EPERM`，vite/esbuild 子进程 spawn 被 受限沙箱拦截）——已报队长走全权限通道复跑；本轮**无前端源码改动**，dist 为既有产物，无需重建 |
 | 2 | `CGO_ENABLED=1 go build -o pair.exe ./cmd/companion` | 0 | ✅ pair.exe 67.5MB（git-ignored） |
 | 3 | 启动冒烟 WEB_PORT=9323 | 0 | ✅ /api/health 200、/api/plugins 200（43 插件）、/api/tools 200；日志「43 个插件」「44 个工具集（17 个插件）」；FATAL/panic/重复/冲突=0；探活后终止清理 |
 

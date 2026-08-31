@@ -78,7 +78,7 @@ type ToolsetPlugin struct {
 	// 装载后应用：Registry.SetToolEnabled(false) → agent 工具列表不可见；
 	// 工具仍注册在案（可逆，重新 edit 可恢复）。
 	DisabledTools []string `json:"disabledTools,omitempty"`
-	// HasDshUI ★ 磁盘插件包含 DSH 兼容 dsh.ui 段（UI 区域/功能包）。装载到 def 后，
+	// HasDshUI ★ 磁盘插件包含 外部兼容 dsh.ui 段（UI 区域/功能包）。装载到 def 后，
 	// /api/plugins 列表据此标记 hasClient=true（即使无 client.js），见 Inspect/InspectDetail。
 	HasDshUI bool `json:"-"`
 }
@@ -536,7 +536,7 @@ type GlobalPluginPackage struct {
 	Main    string           `json:"main"`              // host 半源码文件（index.js）
 	Client  string           `json:"client,omitempty"`  // client 半源码文件（client.js，可选）
 	Config  map[string]any   `json:"config,omitempty"`  // 插件配置（透传 apply(ctx, config)）
-	Dsh     *GlobalPluginDsh `json:"dsh,omitempty"`     // ★ DSH 兼容二段式 manifest 的 dsh.ui 段（UI 区域/功能包声明；新增，旧包无此段仍按 client.js 直载）
+	Dsh     *GlobalPluginDsh `json:"dsh,omitempty"`     // ★ 外部兼容二段式 manifest 的 dsh.ui 段（UI 区域/功能包声明；新增，旧包无此段仍按 client.js 直载）
 }
 
 // diskPluginCodeAvailable 磁盘插件包是否存在且 main 源码非空（R2-8 去重用）。
@@ -648,7 +648,7 @@ func applyGlobalPlugin(ph *PluginHost, p *ToolsetPlugin) error {
 		}
 		def.dir = p.Dir           // ★ 插件目录（ctx.binary 据此定位 bin/<name>.exe 与 assets/）
 		def.config = p.Config     // ★ 插件配置（package.json "config"，apply(ctx, config) 第二参）
-		def.hasDshUI = p.HasDshUI // ★ DSH 兼容 dsh.ui 段：/api/plugins 据此标记 hasClient（见 Inspect）
+		def.hasDshUI = p.HasDshUI // ★ 外部兼容 dsh.ui 段：/api/plugins 据此标记 hasClient（见 Inspect）
 	}
 	// ★ 提示词插件化-插件+插件配置：package.json config.prompts（name → text 映射）
 	//   注册为提示词资产（优先级高于插件包 prompts/ 磁盘资产与 config/roles）。
@@ -765,7 +765,7 @@ func BuildToolset(ph *PluginHost, projectDir, name, description, requirement str
 		plugins = append(plugins, gs...)
 		used = append(used, t.ID)
 	}
-	// ★ LLM 现场生成的项目专属插件并入（模板覆盖不到的能力缺口；对齐 deepseek-harness
+	// ★ LLM 现场生成的项目专属插件并入（模板覆盖不到的能力缺口；对齐 
 	// 「模型所写插件」模式——注册时即校验：define 预检失败剔除并给指导性错误信息，
 	// 不因单个 LLM 插件问题阻塞整个工具集）。
 	if intent != nil && len(intent.CustomPlugins) > 0 {

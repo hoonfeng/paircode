@@ -49,7 +49,7 @@
 
 ### 阶段 A —— 改名基座（新名 = 基座，别名层删除）
 
-- `tools.go registerCoreTools`：`read_file→read`、`write_file→write`、`edit_file→edit`、`run_command→bash`、`list_files→glob`（与 tool-core 插件对齐的 multi_edit/move_file/delete_file 保留原名）；**参数形态保持现状（`path`）**——Go 侧仅测试/归档基座，DSH 参数语义（file_path/replace_all/timeoutMs）以 tool-harness JS 插件为准（R2-7 已对齐），不在 Go 侧重复。
+- `tools.go registerCoreTools`：`read_file→read`、`write_file→write`、`edit_file→edit`、`run_command→bash`、`list_files→glob`（与 tool-core 插件对齐的 multi_edit/move_file/delete_file 保留原名）；**参数形态保持现状（`path`）**——Go 侧仅测试/归档基座，外部参数语义（file_path/replace_all/timeoutMs）以 tool-harness JS 插件为准（R2-7 已对齐），不在 Go 侧重复。
 - `search.go registerSearchTools`：`search_content→grep`、`search_files→glob`；与 core 组合并后删除本函数（glob/grep 落入 registerCoreTools）。
 - `harness_tools.go`：**删除 `registerHarnessAliases` + `harnessAlias` 结构**（别名层失去来源即无意义）；`RegisterHarnessTools` = 新名基座（read/write/edit/bash/glob/grep/str_replace_editor/run_code）；头注释更新。
 - `builtin_plugins.go builtinPluginSpecs`：core 组描述改新名；fs-search 组并入 core（或改名）；`RegisterDefaultTools/RegisterToolGroups` 语义不变。
@@ -87,9 +87,9 @@
 
 - **宿主状态机**：`internal/agent/goal.go`（新）——`Goal{ID, Revision, Objective, Phase, Rounds, RoundLimit, BlockerReason, Armed}`；会话级（SessionManager 按 convID 持有）+ 持久化 `.pair/goals/<convID>.json`（防宿主重启丢目标）；`create_goal` 直接接收 objective（不做 LLM 推断，减少不确定面）。
 - **Loop 接线（机制级）**：
-  - `Loop.Run` 启动时若有活动 goal → 目标注入系统提示（`goal objective + phase + rounds` 段，对齐 DSH「同会话完成目标」语义）；
+  - `Loop.Run` 启动时若有活动 goal → 目标注入系统提示（`goal objective + phase + rounds` 段，对齐 外部「同会话完成目标」语义）；
   - **自动续轮**：`SessionManager` 在 Run 返回后检查——goal Armed && !complete && Rounds < RoundLimit → 自动发起下一轮（continuation 消息），即「goal rounds」；pause 停止续轮、resume 重挂 Armed；同一阻塞条件连续 ≥3 轮 → 自动 blocked（blocked_reason 记录）。
-- **插件**：`.pair/plugins/tool-goal`（新）——3 工具 `create_goal`/`get_goal`/`update_goal`，schema 对齐 DSH（create：objective/max_goal_rounds；get：返回 goal_id/revision/objective/phase/rounds/roundLimit/blockerReason/armed；update：goal_id/revision/action∈{edit,pause,resume,complete,blocked}+objective/max_goal_rounds/blocked_reason），execute → `ctx.hostTool.exec`。
+- **插件**：`.pair/plugins/tool-goal`（新）——3 工具 `create_goal`/`get_goal`/`update_goal`，schema 对齐 外部（create：objective/max_goal_rounds；get：返回 goal_id/revision/objective/phase/rounds/roundLimit/blockerReason/armed；update：goal_id/revision/action∈{edit,pause,resume,complete,blocked}+objective/max_goal_rounds/blocked_reason），execute → `ctx.hostTool.exec`。
 - **宿主执行器**：`archiveGoalTools`（同 ask_user 会话桥模式，InitLoopHooks 同级接线）。
 - **测试**：`TestGoalManager`（create/get/update 全 action + revision 冲突拒绝 + 持久化）、`TestGoalAutoContinue`（会话层续轮/轮次上限/blocked）。
 
@@ -99,7 +99,7 @@
   - **fork 机制**：`SubAgentSpec` 增 `ForkOf string`（源会话 convID）；`SubAgentSpawner` 增 `Fork func(spec SubAgentSpec, seed []Message) error`（web 层实现：新会话初始历史 = 源会话当前消息快照 + 任务，persona/模型沿用 spec）；
   - `ctx.agents` 增 `fork({task, forkFrom: convId, ...})` 与 `report(text)`（子会话报告写入 `SubAgentRecord.Report`，status/list 可读）；
   - `list_agents`/`interrupt_agent`/`send_message` 复用既有 list/stop/followup。
-- **插件**：`.pair/plugins/tool-subagent`（新）——`subagent`（后台委托）、`subagent_fork`（fork 委托，run_in_background 默认 true）、`report`、`list_agents`、`interrupt_agent`、`send_message`（DSH 命名对齐；agent-teams 不受影响）。
+- **插件**：`.pair/plugins/tool-subagent`（新）——`subagent`（后台委托）、`subagent_fork`（fork 委托，run_in_background 默认 true）、`report`、`list_agents`、`interrupt_agent`、`send_message`（外部命名对齐；agent-teams 不受影响）。
 - **测试**：`TestAgentsForkSpec`（spec 映射）、`TestJSPluginAgentsFork`（ctx.agents.fork 桥）。
 
 ### 3.3 workflow（P2，最小可用）
@@ -192,7 +192,7 @@
 ## 8. 风险与回滚
 
 1. **② 迁移面最大**：分阶段提交（A/C → B → D），任一阶段可独立 git revert；纯 fixture 字符串不动，避免无谓 churn；必迁文件清单（§2 阶段 B 表）作为 t2 核对表。
-2. **③ goal 自动续轮**：默认关闭（无 create_goal 时零行为变化）；续轮受 RoundLimit 与 pause 控制；blocked 判定需同一阻塞条件 ≥3 轮（对齐 DSH 语义），防误判。
+2. **③ goal 自动续轮**：默认关闭（无 create_goal 时零行为变化）；续轮受 RoundLimit 与 pause 控制；blocked 判定需同一阻塞条件 ≥3 轮（对齐 外部语义），防误判。
 3. **③.3 workflow 并发**：并行上限 4，防成员风暴；运行态可取消。
 4. **④ slash 降级**：无匹配命令时 "/" 原样发送；命令注册表随插件卸载自动注销，无悬挂。
 5. **⑤ 协议变化**：answers 数组与旧 answer 字段双兼容；单问题路径行为不变。
@@ -275,7 +275,7 @@ TestValidateAskAnswers（t5 新增，回答 ID 集合校验）。
 ### 11.2 集成验证（t5 复跑）
 
 - **前端构建**：`cd cmd/companion/web-ui && npm run build` 与 `node scripts/build-ui.mjs` 均在本沙箱实测
-  `spawn EPERM`（vite/esbuild 边界，DSH 文档化）——前端源码改动**待队长 danger-full-access 通道复跑**，
+  `spawn EPERM`（vite/esbuild 边界，外部文档化）——前端源码改动**待队长 danger-full-access 通道复跑**，
   `.pair/assets/runtime/web` 当前仍为 round2 期 bundle（t3 F1 同注）。
 - **CGO 构建**：`CGO_ENABLED=1 go build -o pair.exe ./cmd/companion` ✅（67.2MB，exit 0；pair.exe git-ignored 不作提交物）。
 - **启动冒烟**（pair.exe，WEB_PORT=9442）：/api/health 200；46 插件全 running；184 工具

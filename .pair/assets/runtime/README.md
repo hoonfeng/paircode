@@ -9,17 +9,12 @@
 |---|---|---|
 | `cordis.bundle.js` | @cordisjs/core 3.18.1 goja 沙箱运行时（IIFE bundle，全局挂 CordisApi） | `internal/agent/assets/cordis.bundle.js` |
 | `bridge_node.js` | Node 运行时桥脚本（真实 node 进程执行 npm cordis 插件） | `internal/agent/bridge_node.js` |
-| `ide_ref.html` | 调试参照收集器模板（Edge headless 加载真实前端） | `cmd/companion/web-ui/ide_ref.html` |
-| `ide_ref_select.html` | select 下拉箭头浏览器标准参照 | `cmd/companion/web-ui/ide_ref_select.html` |
-| `ide_ref_modal.html` | 设置/工具弹窗 modal 几何浏览器参照 | `cmd/companion/web-ui/ide_ref_modal.html` |
-| `ide_ref_setmodal.html` | 设置面板独立参照 | `cmd/companion/web-ui/ide_ref_setmodal.html` |
 
 ## 加载机制
 
 - 加载顺序：**本目录（.pair/assets/runtime/）→ Go embed 兜底**
 - 实现：`internal/agent/runtime_assets.go`（LoadRuntimeAsset / LoadRuntimeAssetString）
-- 消费点：jsplugin.go `cordisBundleSource()`、node_bridge.go `bridgeNodeSource()`、
-  cmd/companion/web_server.go（ide_ref* 4 端点）
+- 消费点：jsplugin.go `cordisBundleSource()`、node_bridge.go `bridgeNodeSource()`
 - 资源缺失时回退内嵌版本，单文件分发仍可运行
 
 ## 替换方法

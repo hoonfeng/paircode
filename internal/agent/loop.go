@@ -71,7 +71,7 @@ var (
 // 导致只核对历史而不执行任务（2026-08-08 排查结论）。
 const backgroundCtxMarker = "【背景上下文·非当前任务】\n"
 
-// systemReminderFrame 把背景内容包进系统提醒框架（对齐 deepseek-harness
+// systemReminderFrame 把背景内容包进系统提醒框架（对齐
 // agent-instructions 的 <system-reminder> 注入格式）。背景信息注入为 user-role
 // ephemeral 消息（不持久化），框架让模型明确区分「背景信息」与「当前任务」，
 // 避免把历史摘要/执行日志等误当作待执行输入。
@@ -284,7 +284,7 @@ type Loop struct {
 	// 传非 nil history 时仍保持向后兼容。
 	History []Message
 
-	// ── agentloop（deepseek-harness 风格 turn/step 双层循环，见 agentloop.go）──
+	// ── agentloop（turn/step 双层循环，见 agentloop.go）──
 	// TurnNo 当前 turn 序号（一次 Run = 一个 turn，openTurn 递增）。
 	TurnNo int
 	// StepNo 当前 step 序号（每次 LLM 调用 + 工具执行 = 一个 step，turn 内递增）。
@@ -314,7 +314,7 @@ type Loop struct {
 
 // runPreStep 执行 step 前拦截链（每次 LLM 调用前、消息组装完成后调用）：
 //  1. host 钩子 l.PreStep（若设置）——可改写或拒绝；
-//  2. DSH 桥瀑布 agent/pre-step（若有 Node 插件订阅）——DSH 中间件语义，
+//  2. 外部桥瀑布 agent/pre-step（若有 Node 插件订阅）——外部中间件语义，
 //     多个订阅者按注册顺序瀑布（next 链），返回 {kind:'enter',messages}
 //     改写输入或 {kind:'reject'} 拒绝整个 turn；
 //  3. 两者均可改写/拒绝；顺序：host 钩子先（本地配置权威），桥瀑布后
@@ -424,7 +424,7 @@ func (l *Loop) emit(e Event) {
 	}
 	// ★ 一切皆插件：loop 事件桥——广播到全局插件 EventBus（loop:<type> 事件名），
 	//   插件 ctx.on('loop:thinking' / 'loop:tool_call' / 'loop:done' …) 可监听扩展
-	//   循环行为（统计/审计/通知/拦截上报），对齐参考项目 agent-loop 插件包的可扩展面。
+	//   循环行为（统计/审计/通知/拦截上报），对齐外部 agent-loop 插件包的可扩展面。
 	//   ★ 监听器在锁外同步执行：插件监听器 panic 不能波及核心循环（recover 隔离）。
 	if ph := GetGlobalPluginHost(); ph != nil {
 		if eb := ph.EventBus(); eb != nil && eb.ListenerCount("loop:"+string(e.Type)) > 0 {
@@ -441,7 +441,7 @@ func (l *Loop) emit(e Event) {
 }
 
 // Steer 托管一条消息：在当前 step 完成后、下一 step LLM 调用前注入上下文。
-// 对应 deepseek-harness Inbox 的 next-step 队列（steer 唤醒）：不打断当前工具执行，
+// 对应 Inbox 的 next-step 队列（steer 唤醒）：不打断当前工具执行，
 // 在当前 step 边界处消费。使用场景：用户在 agent 正在执行时输入补充指令。
 func (l *Loop) Steer(msg Message) {
 	l.steerQueue = append(l.steerQueue, msg)
@@ -488,7 +488,7 @@ func appendLiveEvent(evs []LiveEvent, ev LiveEvent) []LiveEvent {
 
 // FollowUp 托管一条跟进消息：在当前 turn 自然终止（无 tool call 且有正文）后注入，
 // 让 agent 继续处理后续任务而不是立即退出。
-// 对应 deepseek-harness Inbox 的 next-turn 队列（followup 唤醒）：只在 turn 边界消费。
+// 对应 Inbox 的 next-turn 队列（followup 唤醒）：只在 turn 边界消费。
 func (l *Loop) FollowUp(msg Message) {
 	l.followUpQueue = append(l.followUpQueue, msg)
 }
@@ -760,7 +760,7 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 
 		// agentloop：pre-step 拦截链（对应 DSH agent/pre-step 瀑布）。
 		// runPreStep = host 钩子（l.PreStep，若设置）+ Node 桥瀑布（若有订阅者，
-		// DSH 中间件语义：改写进入模型的输入；reject=true 则本轮 turn 以
+		// 外部中间件语义：改写进入模型的输入；reject=true 则本轮 turn 以
 		// blocked 结束，不调用 LLM）。无钩子且无订阅者 → 直通。
 		rewritten, reject, perr := l.runPreStep(ctx, callMsgs, l.TurnNo, l.StepNo)
 		if perr != nil {
@@ -967,7 +967,7 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 		l.currentMsgs = l.fullHistory(msgs)
 
 		// agentloop：step/end——本轮 step 收尾（LLM 调用 + 工具执行已完成）。
-		// 对应 deepseek-harness step/end 事件；统计本轮工具调用数供前端/日志展示。
+		// 对应 step/end 事件；统计本轮工具调用数供前端/日志展示。
 		if len(assistant.ToolCalls) > 0 {
 			l.endStep(fmt.Sprintf("执行 %d 个工具调用", len(assistant.ToolCalls)))
 		} else {
@@ -1682,7 +1682,7 @@ func ComposeSystemPrompt(static, dynamic string) string {
 }
 
 // ProjectRules 读工作区根的项目约定，拼成系统提示附加段供 agent 遵守：
-// ★分层项目文档（参考 deepseek-harness 约定，模型后训练含参考数据会幻觉这些路径）：
+// ★分层项目文档（按生态约定：模型后训练含参考数据会幻觉这些路径）：
 //
 //	根 AGENTS.md/CLAUDE.md（取首个，根约定）+ docs/AGENTS.md（文档标准层）+
 //	.agents/AGENTS.md（决策/流程规则层）——全部存在则全部注入（各标来源，各自截断）。

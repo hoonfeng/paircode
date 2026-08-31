@@ -488,7 +488,7 @@ func snapshotSubAgent(rec *SubAgentRecord) *SubAgentRecord {
 
 // ─── 空闲事件桥（轮次结束 → 队列续发 + 插件事件） ─────────────
 
-// emitAgentStatusEvent 向 Node 桥转发 agent/status 事件（Round4 DSH 事件桥）。
+// emitAgentStatusEvent 向 Node 桥转发 agent/status 事件（Round4 外部事件桥）。
 // 载荷形态对齐 DSH scheduler 消费面：{agent: {id, status, session.header.cwd}, status}。
 // 无订阅时零开销（emitBridgeEvent 白名单过滤）。
 func emitAgentStatusEvent(rec *SubAgentRecord, status string) {
@@ -573,7 +573,7 @@ func ensureSubAgentEventBridge() {
 			if ph := GetGlobalPluginHost(); ph != nil {
 				ph.EmitHostEvent("subagent/idle", payload)
 			}
-			// ★ Round4：agent/status 事件桥（DSH 插件 scheduler 消费 idle 边）
+			// ★ Round4：agent/status 事件桥（外部插件 scheduler 消费 idle 边）
 			emitAgentStatusEvent(snapshotSubAgent(rec), "idle")
 		}
 	}()
