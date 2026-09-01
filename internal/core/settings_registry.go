@@ -43,6 +43,10 @@ type SettingField struct {
 	// ★ 2026-08-21 模型编辑器声明（provider-manager 专用）：{label, placeholder} 声明
 	//   添加模型区组件配置，前端 ProviderManager 按此渲染模型编辑器（schema 驱动）。
 	ModelEditor *ModelEditorDef `json:"modelEditor,omitempty"`
+	// ★ 2026-09-01 AI 配置表单字段（preset-manager 专用）：声明「添加/编辑 AI 配置」
+	//   弹窗内的字段清单（如 provider/apiKey），前端 PresetManager 按此 schema 动态渲染，
+	//   与 ProviderManager 的 modelParamFields 同模式（配置字段全在插件注册里）。
+	PresetFields []map[string]any `json:"presetFields,omitempty"`
 }
 
 // ModelEditorDef provider-manager 的模型编辑器声明（schema 驱动）。

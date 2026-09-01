@@ -7,8 +7,12 @@
       <div class="modal-body">
         <!-- ═══ 纯 schema 驱动：所有配置 tab 由插件 ctx.registerSettings 注册 ═══ -->
         <div v-if="tabs.length" class="settings-tabs">
-          <button v-for="t in tabs" :key="t.key" :class="['settings-tab', { active: activeTab === t.key }]"
+          <div v-if="tabs.length > 6" class="settings-tabs-filter-wrap">
+            <input v-model="tabQuery" class="settings-tabs-filter" type="text" placeholder="筛选设置…" />
+          </div>
+          <button v-for="t in filteredTabs" :key="t.key" :class="['settings-tab', { active: activeTab === t.key }]"
                   @click="activeTab = t.key">{{ t.title }}</button>
+          <div v-if="filteredTabs.length === 0" class="settings-tabs-none">无匹配设置</div>
         </div>
         <div class="settings-content">
           <template v-for="tab in tabs" :key="tab.key">
@@ -73,7 +77,7 @@
                       <ProviderManager v-else-if="f.type === 'provider-manager'" :model-param-fields="f.modelParamFields || []" :model-editor="f.modelEditor || {}" @saved="loadModels" />
 
                       <!-- preset-manager（AI 配置预设面板：CRUD /api/ai-presets，独立保存，不参与普通表单） -->
-                      <PresetManager v-else-if="f.type === 'preset-manager'" @saved="onPresetSaved" />
+                      <PresetManager v-else-if="f.type === 'preset-manager'" :preset-fields="f.presetFields || []" @saved="onPresetSaved" />
                       
                       <!-- 兜底 text -->
                       <input v-else class="field-input" type="text" v-model="form[tab.key][f.name]" />
@@ -106,6 +110,7 @@ import PresetManager from './PresetManager.vue'
 
 const emit = defineEmits(['close'])
 const activeTab = ref('')
+const tabQuery = ref('') // ★ 2026-09-01 tab 筛选（tab 太多时快速定位）
 
 // ─── tabs：全部来自插件注册 schema（配置本身无内置）───
 const tabs = computed(() => {
@@ -116,6 +121,16 @@ const tabs = computed(() => {
   }))
   if (list.length && !activeTab.value) activeTab.value = list[0].key
   return list
+})
+
+// 按标题/key 模糊筛选 tab（active tab 命中时不隐藏，保证内容可见）
+const filteredTabs = computed(() => {
+  const q = tabQuery.value.trim().toLowerCase()
+  if (!q) return tabs.value
+  const active = tabs.value.find(t => t.key === activeTab.value)
+  const hit = tabs.value.filter(t => (t.title || t.key).toLowerCase().includes(q))
+  if (active && !hit.includes(active)) hit.unshift(active)
+  return hit
 })
 
 function groupFields(fields) {
@@ -334,7 +349,9 @@ onMounted(async () => {
   background: var(--bg-secondary, #1e1e2e);
   border: 1px solid var(--border-color, #333);
   border-radius: 10px;
-  width: 82vw; max-width: 760px; max-height: 86vh;
+  /* ★ 2026-09-01 固定高宽：切换 tab 不再来回改变面板尺寸（内容在内部滚动） */
+  width: min(94vw, 880px);
+  height: min(86vh, 720px);
   display: flex; flex-direction: column;
   box-shadow: 0 12px 40px rgba(0,0,0,.4);
   overflow: hidden;
@@ -354,16 +371,29 @@ h2 {
 .modal-close:hover { background: var(--bg-hover, rgba(255,255,255,.08)); color: #fff; }
 .modal-body { display: flex; flex: 1; min-height: 0; }
 .settings-tabs {
-  display: flex; flex-direction: column; gap: 2px;
-  padding: 10px 8px; width: 140px; flex-shrink: 0;
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 12px 10px; width: 184px; flex-shrink: 0;
   border-right: 1px solid var(--border-color, #333);
   background: var(--bg-tertiary, rgba(0,0,0,.15));
   overflow-y: auto;
 }
+.settings-tabs-filter-wrap { margin-bottom: 6px; }
+.settings-tabs-filter {
+  width: 100%; box-sizing: border-box;
+  background: var(--input-bg, #14141f);
+  border: 1px solid var(--border-color, #3a3a4a);
+  color: var(--text-primary, #eee);
+  border-radius: 6px; padding: 5px 9px; font-size: 12px;
+  outline: none; transition: border-color .15s;
+}
+.settings-tabs-filter:focus { border-color: var(--accent, #4f8cff); }
+.settings-tabs-none { color: var(--text-secondary, #888); font-size: 12px; text-align: center; padding: 12px 4px; }
 .settings-tab {
-  text-align: left; padding: 8px 12px; border: none; border-radius: 7px;
+  text-align: left; padding: 9px 12px; border: none; border-radius: 7px;
   background: none; color: var(--text-secondary, #aaa);
-  font-size: 13px; cursor: pointer; transition: all .15s;
+  font-size: 13px; line-height: 1.3; min-height: 18px;
+  cursor: pointer; transition: all .15s;
+  word-break: break-word;
 }
 .settings-tab:hover { background: var(--bg-hover, rgba(255,255,255,.06)); color: var(--text-primary, #eee); }
 .settings-tab.active {

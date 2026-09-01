@@ -3,7 +3,7 @@
     <!-- 工具栏 -->
     <div class="mgm-toolbar">
       <span class="mgm-count">{{ names.length }} 个配置</span>
-      <button class="mgm-btn mgm-primary" @click="openAdd">＋ 添加新配置</button>
+      <button class="mgm-btn mgm-primary" @click="openAdd" title="添加一条 AI 配置（服务商 + API Key）">＋ 添加新配置</button>
     </div>
 
     <!-- 添加 / 编辑表单（点击添加/编辑才弹出） -->
@@ -13,27 +13,17 @@
         <span class="mgm-field-label">配置名称</span>
         <input v-model="form.name" type="text" placeholder="如：主力 / 写作备用…" @keydown.enter="confirmSave" />
       </div>
-      <div class="mgm-field">
-        <span class="mgm-field-label">服务商</span>
-        <select v-model="form.provider" class="mgm-select" @change="onProviderChange">
-          <option v-for="p in providers" :key="p" :value="p">{{ p }}</option>
+      <div v-for="f in presetFields" :key="f.name" class="mgm-field">
+        <span class="mgm-field-label">{{ f.label }}<span v-if="f.required" class="mgm-required">*</span></span>
+        <!-- select 类型（服务商选择） -->
+        <select v-if="f.type === 'select'" v-model="form[f.name]" class="mgm-select" @change="onFieldChange(f)">
+          <option v-for="opt in fieldOptions(f)" :key="opt" :value="opt">{{ opt }}</option>
         </select>
-      </div>
-      <div class="mgm-field">
-        <span class="mgm-field-label">API URL（完整端点）</span>
-        <input v-model="form.baseURL" type="text" placeholder="https://api.deepseek.com/v1/chat/completions" />
-      </div>
-      <div class="mgm-field">
-        <span class="mgm-field-label">API Key</span>
-        <div class="mgm-key-hint" :class="{ 'mgm-key-missing': !providerKeyOf(form.provider) }">
-          {{ providerKeyOf(form.provider) ? '已由服务商「' + form.provider + '」提供（厂商级配置）' : '服务商「' + (form.provider || '未选') + '」尚未配置 Key，请到「服务商」页签填写' }}
-        </div>
-      </div>
-      <div class="mgm-field">
-        <span class="mgm-field-label">模型</span>
-        <select v-model="form.executeModel" class="mgm-select">
-          <option v-for="m in formModels" :key="m" :value="m">{{ m }}</option>
-        </select>
+        <!-- password 类型（API Key） -->
+        <input v-else-if="f.type === 'password'" v-model="form[f.name]" type="password" :placeholder="f.placeholder || ''" />
+        <!-- text 兜底 -->
+        <input v-else v-model="form[f.name]" type="text" :placeholder="f.placeholder || ''" />
+        <span v-if="f.hint" class="mgm-field-hint">{{ f.hint }}</span>
       </div>
       <div class="mgm-edit-actions">
         <button class="mgm-btn mgm-primary" :disabled="saving" @click="confirmSave">
@@ -58,12 +48,17 @@
         </div>
         <div class="pm-preview">
           <div class="pm-snap-row"><span>服务商</span><b>{{ (presets[n] || {}).provider || '—' }}</b></div>
-          <div class="pm-snap-row"><span>模型</span><b>{{ (presets[n] || {}).executeModel || '—' }}</b></div>
-          <div class="pm-snap-row"><span>API Key</span><b>{{ providerKeyOf((presets[n] || {}).provider) ? '厂商级已配置' : '厂商未配置' }}</b></div>
+          <div class="pm-snap-row"><span>API Key</span><b>{{ (presets[n] || {}).apiKey ? '已配置' : '未配置' }}</b></div>
         </div>
       </div>
     </div>
-    <div v-else-if="!showForm" class="mgm-empty">还没有 AI 配置。点「＋ 添加新配置」去设置模型和 Key，保存后即可应用。</div>
+    <div v-else-if="!showForm" class="mgm-empty">
+      <div class="mgm-empty-box">
+        <div class="mgm-empty-title">还没有 AI 配置</div>
+        <div class="mgm-empty-sub">添加一条服务商 + API Key，保存后即可在对话面板中选模型。</div>
+        <button class="mgm-btn mgm-primary" @click="openAdd">＋ 添加新配置</button>
+      </div>
+    </div>
 
     <div v-if="error" class="mgm-error">{{ error }}</div>
   </div>
@@ -73,13 +68,17 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import api from '../api.js'
 
-// ★ AI 配置列表（2026-08-20 改变模式）：AI tab 主视图 = 已添加的配置列表；
-//   点「＋ 添加新配置」弹出表单设置 名称/服务商/模型/Key 后保存；
-//   「应用」= 整套配置写回 settings（provider/baseURL/模型；★ 2026-08-31 Key 已厂商化，不再随配置存），对话面板按会话自行选择模型。
-//   数据经 /api/ai-presets（config/ai-presets.json），每条 = 完整 AI 配置快照。
-const emit = defineEmits(['saved'])
+// ★ AI 配置列表（2026-09-01 改变模式）：AI tab 主视图 = 已添加的配置列表；
+//   点「＋ 添加新配置」弹出表单设置 名称/服务商/Key 后保存；
+//   「应用」= 整套配置写回 settings（preset 名），装配时按 preset 展开。Key 随配置存（ai-presets.json）。
+//   数据经 /api/ai-presets（config/ai-presets.json），每条 = 完整 AI 配置快照（服务商 + Key）。
 
-const presets = ref({})        // { 配置名: AiPreset }
+// ★ 2026-09-01 schema 驱动：presetFields 由插件（agentloop/index.js）注册，
+//   前端按此动态渲染表单字段（新增/修改字段只改插件，不碰前端组件）。
+const props = defineProps({
+  presetFields: { type: Array, default: () => [] },
+})
+const emit = defineEmits(['saved'])
 const names = computed(() => Object.keys(presets.value || {}))
 const activeName = ref('')     // settings.preset（当前使用中的配置名）
 const showForm = ref(false)
@@ -88,20 +87,19 @@ const saving = ref(false)
 const applying = ref('')
 const error = ref('')
 
-// 服务商/模型数据（/api/models）
+// 服务商数据（/api/models）
 const modelData = ref(null)
 const providers = computed(() => (modelData.value && modelData.value.providers) || [])
-const formModels = computed(() => {
-  const m = (modelData.value && modelData.value.models) || {}
-  return m[form.value.provider] || []
-})
-const form = ref({ name: '', provider: '', baseURL: '', executeModel: '' })
+// form 初始：配置名（内置）+ presetFields 各字段（schema 驱动）
+const form = ref({ name: '', provider: '', baseURL: '', apiKey: '' })
 
-// ★ 2026-08-31 Key 厂商化：配置（预设）不再携带 API Key——Key 按服务商统一配置
-//   （设置 → AI → 服务商，存 models.json），换模型不需重复填 Key。
-function providerKeyOf(prov) {
-  const md = modelData.value || {}
-  return (prov && md.providerKeys && md.providerKeys[prov]) ? md.providerKeys[prov] : ''
+// 按 presetFields 构建空白表单字段（新增字段自动出现）
+function blankForm(extra = {}) {
+  const base = { name: '', provider: '', baseURL: '', apiKey: '' }
+  for (const f of props.presetFields) {
+    if (!(f.name in base)) base[f.name] = ''
+  }
+  return Object.assign(base, extra)
 }
 
 function showError(msg) { error.value = msg; setTimeout(() => { if (error.value === msg) error.value = '' }, 4000) }
@@ -125,7 +123,6 @@ function providerInfo(prov) {
   const md = modelData.value || {}
   return {
     baseURL: (md.providerBaseURLs && md.providerBaseURLs[prov]) || '',
-    apiKey: (md.providerKeys && md.providerKeys[prov]) || '',
     models: ((md.models && md.models[prov]) || []),
   }
 }
@@ -140,14 +137,11 @@ function openAdd() {
   if (s.preset && presets.value && presets.value[s.preset]) base = presets.value[s.preset]
   const prov = (base.provider || s.provider || providers.value[0] || '')
   const info = providerInfo(prov)
-  const ms = info.models
-  const model = (base.executeModel || s.executeModel || '')
-  form.value = {
-    name: '',
+  form.value = blankForm({
     provider: prov,
     baseURL: (base.baseURL || s.baseURL || info.baseURL || ''),
-    executeModel: (ms.includes(model) ? model : (ms[0] || '')),
-  }
+    apiKey: base.apiKey || '',
+  })
   editingName.value = ''
   showForm.value = true
 }
@@ -155,12 +149,12 @@ function openAdd() {
 // 打开编辑表单（预填配置快照）
 function openEdit(name) {
   const p = (presets.value && presets.value[name]) || {}
-  form.value = {
+  form.value = blankForm({
     name,
     provider: p.provider || '',
     baseURL: p.baseURL || '',
-    executeModel: p.executeModel || '',
-  }
+    apiKey: p.apiKey || '',
+  })
   editingName.value = name
   showForm.value = true
 }
@@ -168,32 +162,52 @@ function openEdit(name) {
 function closeForm() { showForm.value = false; editingName.value = '' }
 
 // 切换服务商 → 带出该服务商 BaseURL/Key + 模型列表（模型保留当前值若在新列表中，否则默认第一个）
-function onProviderChange() {
-  if (!form.value.provider) return
-  const info = providerInfo(form.value.provider)
-  form.value.baseURL = info.baseURL || ''
-  form.value.executeModel = info.models.includes(form.value.executeModel) ? form.value.executeModel : (info.models[0] || '')
+function fieldOptions(f) {
+  // select 类型的选项来源
+  if (f.source === 'providers') return providers.value || []
+  return f.options || []
+}
+
+function onFieldChange(f) {
+  // 服务商切换 → 自动带出 BaseURL
+  if (f.name === 'provider' && form.value.provider) {
+    const info = providerInfo(form.value.provider)
+    form.value.baseURL = info.baseURL || ''
+  }
 }
 
 // ★ 联动双保险：除 @change 外再挂 watch（ov 非空 = 用户在表单内切换服务商，
 //   跳过 openAdd/openEdit 初始化赋值；兼容 wb-ui 引擎 select change 事件缺失场景）
 watch(() => form.value.provider, (nv, ov) => {
   if (!showForm.value || ov === '') return
-  if (nv !== ov) onProviderChange()
+  if (nv !== ov) onFieldChange({ name: 'provider' })
 })
 
 async function confirmSave() {
   const name = form.value.name.trim()
   if (!name) { showError('请输入配置名称'); return }
-  if (!form.value.provider) { showError('请选择服务商'); return }
-  if (!providerKeyOf(form.value.provider)) { showError('服务商「' + form.value.provider + '」未配置 API Key，请先在「服务商」页签填写'); return }
+  const prov = form.value.provider || ''
+  if (!prov) { showError('请选择服务商'); return }
+  // 校验 presetFields 中标记 required 的字段
+  for (const f of props.presetFields) {
+    if (f.required && !form.value[f.name]) {
+      showError('请填写' + f.label)
+      return
+    }
+  }
+  const info = providerInfo(prov)
+  if (!form.value.baseURL) form.value.baseURL = info.baseURL || ''
   saving.value = true
   error.value = ''
   try {
   const preset = {
-      provider: form.value.provider,
+      provider: prov,
       baseURL: form.value.baseURL,
-      executeModel: form.value.executeModel,
+      apiKey: form.value.apiKey,
+    }
+    // ★ 附加 presetFields 中注册的其他字段（schema 驱动，自动透传）
+    for (const f of props.presetFields) {
+      if (f.name !== 'provider' && f.name !== 'apiKey') preset[f.name] = form.value[f.name]
     }
     if (editingName.value && editingName.value !== name) {
       // 改名：PUT 全量（新名入库 + 旧名删除），并同步 settings.preset
@@ -265,7 +279,7 @@ defineExpose({ load })
 <style scoped>
 /* 复用 mgm-* 样式前缀保证设置面板整体一致 */
 .pm-manager { font-size: 13px; }
-.mgm-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.mgm-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--bd, #333); }
 .mgm-count { color: var(--txt-dim, #8a8f98); font-size: 12px; }
 .mgm-btn { padding: 4px 10px; border: 1px solid var(--bd, #333); border-radius: 4px; background: transparent; color: var(--txt, #ccc); cursor: pointer; font-size: 12px; }
 .mgm-btn:hover { background: var(--bd-hover, #2a2a2a); }
@@ -277,6 +291,8 @@ defineExpose({ load })
 .mgm-edit-title { font-weight: 600; margin-bottom: 10px; }
 .mgm-field { margin-bottom: 10px; }
 .mgm-field-label { display: block; font-size: 12px; color: var(--txt-dim, #8a8f98); margin-bottom: 6px; }
+.mgm-required { color: #e05555; margin-left: 2px; }
+.mgm-field-hint { display: block; font-size: 11px; color: var(--txt-dim, #8a8f98); margin-top: 4px; }
 /* ★ 用元素选择器（不用 input[type=…] 属性选择器）：模板部分输入框无显式 type 时
    属性选择器匹配不上（CSS 属性选择器只匹配显式属性）→ 输入框丢失全部样式 */
 .mgm-field input, .mgm-field select {
@@ -289,8 +305,7 @@ defineExpose({ load })
   border-color: var(--accent, #3b82f6); outline: none;
 }
 .mgm-edit-actions { display: flex; gap: 8px; }
-.mgm-key-hint { font-size: 12px; color: var(--txt-dim, #8a8f98); border: 1px dashed var(--bd, #333); border-radius: 4px; padding: 6px 8px; }
-.mgm-key-missing { color: #d98b3a; border-color: #6b4a22; }
+
 .mgm-cards { display: flex; flex-direction: column; gap: 8px; }
 .mgm-card { border: 1px solid var(--bd, #333); border-radius: 6px; padding: 10px 12px; }
 .mgm-card.pm-active { border-color: var(--accent, #3b82f6); }
@@ -298,7 +313,14 @@ defineExpose({ load })
 .mgm-name { font-weight: 600; }
 .pm-active-badge { margin-left: 8px; font-size: 11px; color: var(--accent, #3b82f6); border: 1px solid var(--accent, #3b82f6); border-radius: 3px; padding: 0 4px; }
 .mgm-ops { display: flex; gap: 6px; }
-.mgm-empty { color: var(--txt-dim, #8a8f98); padding: 12px 0; font-size: 12px; }
+.mgm-empty { display: flex; justify-content: center; }
+.mgm-empty-box {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  margin: 18px 0; padding: 26px 24px; max-width: 340px; width: 100%;
+  border: 1px dashed var(--bd, #333); border-radius: 8px; text-align: center;
+}
+.mgm-empty-title { font-size: 13px; font-weight: 600; color: var(--txt, #ccc); }
+.mgm-empty-sub { font-size: 12px; color: var(--txt-dim, #8a8f98); line-height: 1.5; }
 .mgm-error { color: #e05555; margin-top: 8px; font-size: 12px; }
 .pm-preview { border: 1px dashed var(--bd, #333); border-radius: 4px; padding: 8px; display: flex; flex-direction: column; gap: 4px; }
 .pm-snap-row { display: flex; justify-content: space-between; font-size: 12px; }

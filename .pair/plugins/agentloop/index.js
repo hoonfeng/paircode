@@ -56,7 +56,14 @@ return {
       title: 'AI',
       fields: [
           { name: 'presets', label: 'AI 配置', type: 'preset-manager',
-            hint: '已添加的 AI 配置列表（每套含服务商/模型/Key）。点「＋ 添加新配置」弹出表单设置模型和 Key；点「应用」整套配置生效。' },
+            hint: 'AI 配置列表：每条 = 一个服务商 + 该服务商的 API Key。模型在对话面板中按会话选择，不在 AI 设置中指定。点「＋ 添加新配置」填写服务商和 Key；点「应用」整套配置生效。',
+            // ★ 2026-09-01 schema 驱动：AI 配置表单字段由插件注册，前端按此动态渲染
+            presetFields: [
+              { name: 'provider', label: '服务商', type: 'select', source: 'providers', required: true, hint: '该 Key 所属的服务商（服务商地址/模型在「服务商」面板维护）' },
+              { name: 'apiKey', label: 'API Key', type: 'password', required: true, placeholder: 'sk-…', hint: '该服务商的 API Key' },
+            ], },
+          // 注意：配置名称（name）为每配置标识，由 PresetManager 内置渲染不在此注册；
+          // model 选择对话面板按会话独立选择，不在此注册。
       ],
     })
 
@@ -91,10 +98,11 @@ return {
       ],
     })
 
-      // ── 服务商：维护服务商列表（名称/API URL（完整端点）/API Key/模型列表 + 每模型参数）──
+      // ── 服务商：维护服务商列表（名称/API URL（完整端点）/模型列表 + 每模型参数）──
       // type='provider-manager'：SettingsModal 渲染 CRUD 面板，数据经 /api/models（config/models.json）。
       // 模型参数（温度/思考档位/输出上限/上下文窗口/多模态）在服务商编辑表单内逐模型维护，
       // 存 settings.json 顶层 modelParams（装配器按 服务商+模型 精确匹配）。
+      // ★ 2026-09-01 Key 回归 AI 配置：API Key 在「AI 配置」中按配置填写，服务商不再维护 Key。
       // ★ 2026-08-21 模型参数区 schema 驱动：字段定义全部在本 modelParamFields 声明，
       //   前端 ProviderManager 按此动态渲染（新增参数无需改前端组件）。
       // AI tab 的 provider 下拉（optionsSource='providers'）与模型下拉（optionsSource='models'）均来自此处维护的数据。
@@ -103,7 +111,7 @@ return {
         title: '服务商',
         fields: [
           { name: 'providers', label: '服务商列表', type: 'provider-manager',
-            hint: '维护服务商：名称、API URL（完整端点，含 /chat/completions，直接作为请求地址）、API Key、可用模型列表，及每模型独立参数（温度/思考/输出上限/上下文窗口/多模态）。AI tab 的下拉与联动均来自此处。',
+            hint: '维护服务商：名称、API URL（完整端点，含 /chat/completions，直接作为请求地址）、可用模型列表，及每模型独立参数（温度/思考/输出上限/上下文窗口/多模态）。API Key 请在「AI 配置」中填写。AI tab 的下拉与联动均来自此处。',
             // ★ 2026-08-21 添加模型区 schema 驱动：modelEditor 声明组件配置（label/placeholder），
             //   前端 ProviderManager 按此渲染模型编辑器（与 modelParamFields 同层，新增配置无需改前端组件）。
             modelEditor: { label: '可用模型（回车或逗号分隔添加；支持整段粘贴）', placeholder: '输入模型名，回车添加…' },

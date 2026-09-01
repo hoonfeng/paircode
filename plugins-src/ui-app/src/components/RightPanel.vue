@@ -212,13 +212,13 @@
             <div class="chat-input" ref="inputRef" :contenteditable="state.chatLoading ? 'false' : 'true'" :style="{ height: inputHeight + 'px' }" data-placeholder="发送消息到 AI... (Enter 发送, Shift+Enter 换行)" @keydown="onKeydown" @input="onInput" @dragover.prevent @drop="handleDrop" @paste="handlePaste"></div>
             <div class="input-bottom-bar">
               <div class="ibb-btns">
-                <!-- ★ composer 模型选择器（★ 2026-08-31 会话级模型 + 厂商分组）：
-                     下拉按「已配置厂商」分组展示模型（optgroup=厂商，option=模型），
+                <!-- ★ composer 模型选择器（2026-09-01 会话级模型 + 仅显示有 Key 服务商）：
+                     下拉仅显示已在「AI 配置」中设置了 Key 的服务商，按服务商分组展示模型，
                      选择只写当前会话（PUT /api/conversations/{id}），不改全局设置——
-                     历史对话保持各自模型不被牵连。 -->
+                     历史对话保持各自模型不被牵连；Key 在「设置 → AI → AI 配置」填写。 -->
                 <span class="ibb-model">
                   <select v-model="composerModel" class="cmp-sel cmp-model" @change="onCmpModelChange" :title="modelSelectTitle">
-                    <option v-if="!composerGroups.length" value="">（未配置服务商 Key，请先在「设置 → AI」配置）</option>
+                    <option v-if="!composerGroups.length" value="">（未配置 API Key，请先在「设置 → AI → AI 配置」添加）</option>
                     <optgroup v-for="g in composerGroups" :key="g.provider" :label="g.provider">
                       <option v-for="m in g.models" :key="g.provider + '::' + m" :value="g.provider + '::' + m">{{ m }}</option>
                     </optgroup>
@@ -327,24 +327,32 @@ async function runSlashCommand() {
   sendMessage() // 命令输出已注入为系统消息，命令文本照常发送
 }
 
-// ─── composer 模型选择器（★ 2026-08-31 重做：会话级模型 + 厂商分组）───
-//   ① Key 厂商化：API Key 按服务商配置（设置 → AI → 服务商），不再随模型/预设重复填；
-//   ② 下拉按「已配置 Key 的厂商」分组（optgroup=厂商，option=该厂商模型）；
+// ─── composer 模型选择器（★ 2026-09-01 会话级模型 + 仅显示有 Key 的服务商）───
+//   ① Key 在 AI 配置（ai-presets.json）中按预设填写（每条 = 服务商 + Key）；
+//      服务商只维护 地址/模型/参数，不再配置 Key；
+//   ② 下拉仅显示「已配置 Key 的服务商」（composerGroups 从 presets 收集 apiKey 非空的 provider）；
 //   ③ 选择只写当前会话（PUT /api/conversations/{id} {provider, model}）——
 //      全局 settings 不动，其他/历史对话的模型不被牵连；
 //   ④ 新会话（无消息且未设模型）自动继承「上次选择」（localStorage），保持体验连续。
+//   ⑤ Key 由后端装配：激活预设携带的 Key 优先，服务商级 Key 仅兜底。
 const LAST_MODEL_KEY = 'paircode.lastPickedModel'
 const modelData = ref(null)          // /api/models 快照（providers/models/providerKeys/…）
 const composerProvider = ref('')     // 当前会话生效的服务商
 const composerModel = ref('')        // 下拉值：'服务商::模型'
-// 厂商分组：只列「已配置 API Key」的服务商（未配置 Key 的厂商无法使用，不展示）
+// ★ 2026-09-01 只显示「已配置 Key 的服务商」：Key 在 AI 配置（ai-presets.json）中按预设填写，
+//   服务商只维护 地址/模型/参数。从 presets（携带 Key）收集有 Key 的 provider，过滤下拉分组。
 const composerGroups = computed(() => {
   const md = modelData.value || {}
   const models = md.models || {}
-  const keys = md.providerKeys || {}
+  const presets = md.presets || {}
+  // 收集已配置 Key 的服务商集合
+  const keyedProviders = new Set()
+  for (const p of Object.values(presets)) {
+    if (p && p.apiKey && p.provider) keyedProviders.add(p.provider)
+  }
   const out = []
   for (const p of (md.providers || [])) {
-    if (!keys[p]) continue                       // 未配置 Key → 跳过
+    if (!keyedProviders.has(p)) continue   // ★ 无 Key 的服务商不显示
     const list = models[p] || []
     if (!list.length) continue
     out.push({ provider: p, models: list })
@@ -353,7 +361,7 @@ const composerGroups = computed(() => {
 })
 const modelSelectTitle = computed(() => {
   const cur = parseModelValue(composerModel.value)
-  if (!cur.provider) return '选择模型（按服务商分组；Key 在「设置 → AI」按服务商配置）'
+  if (!cur.provider) return '选择模型（仅显示已在 AI 配置中设置了 Key 的服务商；Key 在「设置 → AI → AI 配置」中填写）'
   return '当前会话模型：' + cur.provider + ' / ' + cur.model + '\n切换只影响当前对话，不改其他对话'
 })
 function parseModelValue(v) {
@@ -372,21 +380,27 @@ function defaultProviderModel() {
   const md = modelData.value || {}
   let prov = s.provider || ''
   let model = s.executeModel || ''
-  const presets = md.presets || null // 预留：预设不再作为 Key 来源
+  const presets = md.presets || null // 激活预设（携带 Key），仅解析服务商/模型
   if (presets && s.preset && presets[s.preset]) {
     prov = presets[s.preset].provider || prov
     model = presets[s.preset].executeModel || model
   }
-  if (!prov || !model) {
-    // 无全局配置时回落首个「已配置 Key」的厂商首模型
-    const g = composerGroups.value[0]
-    if (g) { prov = prov || g.provider; model = model || g.models[0] }
+  // 回落：在当前 provider 分组内取首个模型（无 Key 服务商已被 composerGroups 过滤）
+  const groups = composerGroups.value
+  if (!prov && groups[0]) prov = groups[0].provider
+  if (!model) {
+    const g = groups.find(x => x.provider === prov) || groups[0]
+    if (g) model = g.models[0]
   }
   return { provider: prov, model }
 }
 async function loadModelData() {
   try {
-    modelData.value = await api.getModels()
+    const md = await api.getModels()
+    // ★ 2026-09-01 附带 ai-presets（激活预设解析 provider/model 用；Key 在预设中携带）
+    const pr = await api.getAiPresets().catch(() => null)
+    md.presets = (pr && pr.presets) || null
+    modelData.value = md
   } catch {}
 }
 // 依据当前会话元数据同步下拉（会话有自己的模型 → 显示它；否则显示全局默认）

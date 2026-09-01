@@ -10,6 +10,9 @@
 //     装配时按 preset 从本文件展开整套配置（ai-presets.json 是唯一配置来源）。
 //   · 不再拆分 规划/审核 模型，统一用一个模型（executeModel）。
 //
+// ★ 2026-09-01 Key 回归 AI 配置：预设携带 API Key（用户习惯在 AI 配置里填 Key，
+//   服务商只维护 地址/模型/参数）。装配时预设 Key 优先，服务商级 Key 仅兜底。
+//
 // 存储：config/ai-presets.json（安装目录）
 //   { "<预设名>": { provider, baseURL, apiKey, executeModel, temperature,
 //                   thinkingMode, maxTokens, contextMaxTokens } }
@@ -97,6 +100,21 @@ func GetPresetNames() []string {
 func GetPreset(name string) AiPreset {
 	g := GetAiPresets()
 	return g[name]
+}
+
+// GetPresetAPIKeyForProvider 返回指定服务商下任一预设携带的 API Key
+// （会话级切换服务商时，Key 以该服务商预设中的 Key 为准；无则返回空串）。
+// ★ 2026-09-01 Key 回归 AI 配置：对话切换服务商 → 用该服务商预设里的 Key。
+func GetPresetAPIKeyForProvider(provider string) string {
+	if provider == "" {
+		return ""
+	}
+	for _, p := range GetAiPresets() {
+		if p.Provider == provider && p.APIKey != "" {
+			return p.APIKey
+		}
+	}
+	return ""
 }
 
 // SetAiPresets 全量替换预设定义。

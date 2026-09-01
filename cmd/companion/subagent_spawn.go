@@ -285,11 +285,13 @@ func buildSubAgentProvider(spec agent.SubAgentSpec) agent.Provider {
 	cur := agent.ResolveProviderParams()
 	baseURL, apiKey := cur.BaseURL, cur.APIKey
 	if provider != "" && provider != cur.Provider {
-		// 跨服务商：按 models.json 解析端点与该服务商独立 Key
+		// 跨服务商：按 models.json 解析端点；Key 优先取该服务商预设中的 Key（AI 配置），服务商级兜底
 		if u := core.GetProviderBaseURL(provider); u != "" {
 			baseURL = u
 		}
-		if keys := core.GetProviderAPIKeys(); keys != nil {
+		if k := core.GetPresetAPIKeyForProvider(provider); k != "" {
+			apiKey = k
+		} else if keys := core.GetProviderAPIKeys(); keys != nil {
 			if k := strings.TrimSpace(keys[provider]); k != "" {
 				apiKey = k
 			}

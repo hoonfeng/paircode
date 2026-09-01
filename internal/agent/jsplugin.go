@@ -1543,6 +1543,17 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 					def.Placeholder, _ = me["placeholder"].(string)
 					f.ModelEditor = &def
 				}
+				// ★ 2026-09-01 AI 配置表单字段（preset-manager 专用）：解析 presetFields
+				//   数组，前端 PresetManager 按此 schema 动态渲染编辑表单。透传原始 map
+				//   给前端（含 name/type/label/source/required/hint/placeholder/options 等），
+				//   与 modelParamFields 同模式——新增字段改插件即生效，前端不改。
+				if pf, ok := fm["presetFields"].([]any); ok {
+					for _, pfv := range pf {
+						if pfm, ok := pfv.(map[string]any); ok {
+							f.PresetFields = append(f.PresetFields, pfm)
+						}
+					}
+				}
 				if f.Name != "" {
 					fields = append(fields, f)
 				}

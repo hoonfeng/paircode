@@ -75,7 +75,8 @@ func ProviderFactoryNow() ProviderFactory {
 //	settings 只存 preset（当前激活预设名），装配时按 preset 从 ai-presets.json 展开整套配置；
 //	settings 顶层字段仅兜底（兼容无预设的旧配置）。
 //
-// ★ 2026-08-31 Key 厂商化：API Key 一律取 models.json 的服务商级 Key。
+// ★ 2026-09-01 Key 回归 AI 配置：API Key 以激活预设携带的 Key 为准（预设 Key 优先），
+//   服务商级 Key（models.json）仅当预设未填 Key 时兜底（旧数据迁移兼容）。
 // ★ 统一模型：不再拆分 规划/审核 模型，PlanModel/ReviewModel 一律等于执行模型。
 func ResolveProviderParams() ProviderParams {
 	return ProviderFactoryNow().Apply(resolveProviderBase())
@@ -94,9 +95,8 @@ func resolveProviderBase() ProviderParams {
 	context := core.Settings.ContextMaxTokens
 
 	// ① 激活预设展开（settings.preset → ai-presets.json，整套覆盖）
-	// ★ 2026-08-31 Key 厂商化：预设不再携带 API Key（Key 一律按服务商配置在
-	//   models.json 的 ProviderEntry.APIKey）——预设只管模型与运行参数，
-	//   换模型不必重复填 Key。旧预设里残留的 apiKey 字段被忽略。
+	// ★ 2026-09-01 Key 回归 AI 配置：预设携带 API Key（AiPreset.APIKey），
+	//   装配时预设 Key 优先；旧预设里无 Key 的走服务商级兜底。
 	if name := core.Settings.Preset; name != "" {
 		if p := core.GetPreset(name); p.Provider != "" || p.ExecuteModel != "" {
 			if p.Provider != "" {
@@ -104,6 +104,9 @@ func resolveProviderBase() ProviderParams {
 			}
 			if p.BaseURL != "" {
 				baseURL = p.BaseURL
+			}
+			if p.APIKey != "" {
+				apiKey = p.APIKey
 			}
 			if p.ExecuteModel != "" {
 				model = p.ExecuteModel
@@ -123,15 +126,17 @@ func resolveProviderBase() ProviderParams {
 		}
 	}
 	// ② settings 顶层兜底（兼容旧配置）
-	// ③ models.json 服务商 key/baseURL：Key 以服务商级为准（厂商化），
-	//    settings.apiKey 仅在服务商未配 Key 时兜底（旧配置迁移期）。
+	// ③ Key 来源：预设（AI 配置）已在 ① 中优先应用；服务商级 Key 仅当预设
+	//    未填 Key 时兜底（旧数据迁移，models.json 里可能还存有旧服务商 Key）。
 	if baseURL == "" {
 		if p := core.GetProviderBaseURL(provider); p != "" {
 			baseURL = p
 		}
 	}
-	if k := core.GetProviderAPIKey(provider); k != "" {
-		apiKey = k
+	if apiKey == "" {
+		if k := core.GetProviderAPIKey(provider); k != "" {
+			apiKey = k
+		}
 	}
 	// ★ 统一模型：规划/审核 一律用执行模型（不拆分）
 	planModel := model
@@ -206,11 +211,13 @@ func ResolveProviderParamsForConv(convID, wsRoot string) ProviderParams {
 	cur := resolveProviderBase()
 	if provider != "" {
 		cur.Provider = provider
-		// 服务商切换 → BaseURL/Key 一律取该服务商配置（Key 厂商化）
+		// 服务商切换 → BaseURL 取该服务商配置；Key 优先取该服务商预设中的 Key（AI 配置），服务商级兜底
 		if u := core.GetProviderBaseURL(provider); u != "" {
 			cur.BaseURL = u
 		}
-		if k := core.GetProviderAPIKey(provider); k != "" {
+		if k := core.GetPresetAPIKeyForProvider(provider); k != "" {
+			cur.APIKey = k
+		} else if k := core.GetProviderAPIKey(provider); k != "" {
 			cur.APIKey = k
 		}
 		cur.ProviderContextMaxTokens = core.GetProviderContextMaxToken(provider)

@@ -18,10 +18,6 @@
         <input v-model="editForm.baseURL" placeholder="https://api.deepseek.com/v1/chat/completions" />
       </div>
       <div class="pm-field">
-        <span class="pm-field-label">API Key（该服务商独立保存）</span>
-        <input v-model="editForm.apiKey" type="password" placeholder="sk-…" />
-      </div>
-      <div class="pm-field">
         <span class="pm-field-label">上下文大小（Token）</span>
         <input v-model="editForm.contextMaxTokens" type="number" min="0" step="1000" placeholder="0=不限制（模型级未配置时的默认窗口）" />
       </div>
@@ -68,10 +64,6 @@
             <input v-model="editForm.baseURL" placeholder="https://api.deepseek.com/v1/chat/completions" />
           </div>
           <div class="pm-field">
-            <span class="pm-field-label">API Key（该服务商独立保存）</span>
-            <input v-model="editForm.apiKey" type="password" placeholder="sk-…" />
-          </div>
-          <div class="pm-field">
             <span class="pm-field-label">上下文大小（Token）</span>
             <input v-model="editForm.contextMaxTokens" type="number" min="0" step="1000" placeholder="0=不限制（模型级未配置时的默认窗口）" />
           </div>
@@ -116,7 +108,6 @@
             </div>
           </div>
           <div class="pm-url" :title="p.baseURL">{{ p.baseURL || '未配置 API URL' }}</div>
-          <div class="pm-key" :class="{ 'pm-key-ok': p.apiKey }" :title="p.apiKey ? '已配置 API Key' : '未配置 API Key'">{{ p.apiKey ? 'API Key 已配置' : '未配置 API Key' }}</div>
           <div class="pm-ctx">{{ p.contextMaxTokens > 0 ? ('上下文 ' + (p.contextMaxTokens / 1000).toFixed(0) + 'K Token') : '上下文 未限制' }}</div>
           <div class="pm-models">
             <span v-if="!p.models.length" class="pm-none">（未配置模型）</span>
@@ -151,7 +142,7 @@ const props = defineProps({
 
 const providers = ref([])
 const editingName = ref('')        // '' = 不编辑；'__new__' = 新增；其他 = 编辑该服务商（就地展开）
-const editForm = ref({ name: '', baseURL: '', apiKey: '', contextMaxTokens: 0 })
+const editForm = ref({ name: '', baseURL: '', contextMaxTokens: 0 })
 const editModels = ref([])
 const editParams = ref({})   // 模型级参数：{模型: {字段名: 值}} → settings.json modelParams
 const error = ref('')
@@ -192,7 +183,6 @@ async function load() {
     providers.value = (d.providers || []).map(name => ({
       name,
       baseURL: (d.providerBaseURLs || {})[name] || '',
-      apiKey: (d.providerKeys || {})[name] || '',
       contextMaxTokens: (d.providerContexts || {})[name] || 0, // ★ 服务商级默认上下文窗口
       models: (d.models || {})[name] || [],
     }))
@@ -205,14 +195,14 @@ onMounted(load)
 
 function startAdd() {
   editingName.value = '__new__'
-  editForm.value = { name: '', baseURL: '', apiKey: '', contextMaxTokens: 0 }
+  editForm.value = { name: '', baseURL: '', contextMaxTokens: 0 }
   editModels.value = []
   editParams.value = {}
   error.value = ''
 }
 function startEdit(p) {
   editingName.value = p.name
-  editForm.value = { name: p.name, baseURL: p.baseURL, apiKey: p.apiKey || '', contextMaxTokens: p.contextMaxTokens || 0 }
+  editForm.value = { name: p.name, baseURL: p.baseURL, contextMaxTokens: p.contextMaxTokens || 0 }
   editModels.value = [...(p.models || [])]
   const params = readProviderParams(p.name)
   // 为所有模型补默认参数键（模板 v-model 需要键存在；★ 2026-08-21 按 schema 生成）
@@ -236,7 +226,7 @@ function cancelEdit() { editingName.value = ''; error.value = '' }
 // 当前列表 → 全量快照 map（供 POST /api/models）
 function snapshot() {
   const map = {}
-  for (const p of providers.value) map[p.name] = { baseURL: p.baseURL, models: p.models, apiKey: p.apiKey || '', contextMaxTokens: p.contextMaxTokens || 0 }
+  for (const p of providers.value) map[p.name] = { baseURL: p.baseURL, models: p.models, contextMaxTokens: p.contextMaxTokens || 0 }
   return map
 }
 
@@ -248,7 +238,6 @@ async function saveEdit() {
   map[name] = {
     baseURL: editForm.value.baseURL.trim(),
     models: editModels.value,
-    apiKey: (editForm.value.apiKey || '').trim(),
     contextMaxTokens: Math.max(0, Number(editForm.value.contextMaxTokens) || 0), // ★ 服务商级默认上下文窗口
   }
   saving.value = true
@@ -393,8 +382,6 @@ function paramsSummary(providerName) {
   background: rgba(79,140,255,.1); color: #8ab4ff;
   border: 1px solid rgba(79,140,255,.22); white-space: nowrap;
 }
-.pm-key { font-size: 11px; color: var(--text-secondary, #777); }
-.pm-key-ok { color: #7ecb7e; }
 .pm-none { color: var(--text-secondary, #777); font-size: 12px; }
 .pm-empty { color: var(--text-secondary, #888); text-align: center; padding: 30px 0; font-size: 13px; }
 .pm-error {
