@@ -79,6 +79,8 @@ const props = defineProps({
   presetFields: { type: Array, default: () => [] },
 })
 const emit = defineEmits(['saved'])
+// { 配置名: AiPreset } 配置快照（provider/baseURL/apiKey/composer 模型等），load() 从 /api/ai-presets 填充
+const presets = ref({})
 const names = computed(() => Object.keys(presets.value || {}))
 const activeName = ref('')     // settings.preset（当前使用中的配置名）
 const showForm = ref(false)

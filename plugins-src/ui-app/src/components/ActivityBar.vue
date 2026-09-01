@@ -46,6 +46,8 @@ const items = [
 
 const isActive = (id) => {
   if (id === 'chat') return false
+  // ★ 市场已迁至主内容区 tab：tab 打开时图标高亮（不再依赖侧栏 activeActivity）
+  if (id === 'marketplace') return state.marketTabOpen
   return state.activeActivity === id
 }
 

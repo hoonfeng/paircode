@@ -1,7 +1,7 @@
 (function() {
   "use strict";
   var __vite_style__ = document.createElement("style");
-  __vite_style__.textContent = "\n@keyframes stopPulse-faf69761 {\n0%, 100% { opacity: 0.6;\n}\n50% { opacity: 1;\n}\n}\n@keyframes stopRingPulse-faf69761 {\n0%, 100% { opacity: 0.3; transform: scale(1);\n}\n50% { opacity: 0.15; transform: scale(1.15);\n}\n}\n.stop-pulse[data-v-faf69761] {\n  animation: stopPulse-faf69761 1.2s ease-in-out infinite;\n}\n.stop-pulse-ring[data-v-faf69761] {\n  animation: stopRingPulse-faf69761 1.2s ease-in-out infinite;\n  fill: none;\n  transform-origin: center;\n}\n.svg-icon[data-v-faf69761] {\n  display: inline-block;\n  vertical-align: middle;\n  flex-shrink: 0;\n}\n\n.plugin-panel[data-v-6758e6f2] {\n  height: 100%;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n  font-size: 13px;\n}\n.pp-header[data-v-6758e6f2] {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 8px 10px;\n  border-bottom: 1px solid var(--border-color);\n  flex-shrink: 0;\n}\n.pp-title[data-v-6758e6f2] {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  font-weight: 600;\n  font-size: 12px;\n  color: var(--text-primary);\n}\n.pp-actions[data-v-6758e6f2] { display: flex; gap: 4px;\n}\n.pp-icon-btn[data-v-6758e6f2] {\n  background: none; border: none; cursor: pointer;\n  color: var(--text-muted); padding: 2px 4px; border-radius: 3px;\n  display: flex; align-items: center;\n}\n.pp-icon-btn[data-v-6758e6f2]:hover { background: var(--bg-hover); color: var(--text-primary);\n}\n\n/* 新建表单 */\n.pp-new[data-v-6758e6f2] {\n  padding: 10px;\n  border-bottom: 1px solid var(--border-color);\n  display: flex;\n  flex-direction: column;\n  gap: 6px;\n  background: var(--bg-tertiary);\n  flex-shrink: 0;\n  max-height: 45%;\n  overflow: auto;\n}\n.pp-new-title[data-v-6758e6f2] { font-size: 12px; font-weight: 600; color: var(--text-secondary);\n}\n.pp-input[data-v-6758e6f2], .pp-textarea[data-v-6758e6f2] {\n  background: var(--bg-primary);\n  border: 1px solid var(--border-color);\n  color: var(--text-primary);\n  border-radius: 4px;\n  padding: 5px 8px;\n  font-size: 12px;\n  width: 100%;\n  box-sizing: border-box;\n}\n.pp-textarea.code[data-v-6758e6f2] {\n  font-family: var(--font-code);\n  font-size: 11px;\n  line-height: 1.5;\n  resize: vertical;\n}\n.pp-new-foot[data-v-6758e6f2] { display: flex; align-items: center; gap: 8px;\n}\n.pp-lang[data-v-6758e6f2] { width: auto; flex-shrink: 0;\n}\n.pp-check[data-v-6758e6f2] { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-secondary); white-space: nowrap;\n}\n.pp-new-msg[data-v-6758e6f2] { font-size: 11px; color: var(--accent-light); word-break: break-all;\n}\n.pp-new-msg.err[data-v-6758e6f2] { color: var(--error, #e06c75);\n}\n\n/* client 面板区 */\n.pp-client[data-v-6758e6f2] {\n  border-bottom: 1px solid var(--border-color);\n  flex-shrink: 0;\n  display: flex;\n  flex-direction: column;\n  max-height: 40%;\n}\n/* UI 槽位区（Slot 系统） */\n.pp-slots[data-v-6758e6f2] {\n  border-bottom: 1px solid var(--border-color);\n  flex-shrink: 0;\n  padding: 6px 8px;\n  display: flex;\n  flex-direction: column;\n  gap: 5px;\n  max-height: 30%;\n  overflow-y: auto;\n}\n.pp-slots-head[data-v-6758e6f2] {\n  display: flex; align-items: center; gap: 6px;\n  font-size: 11px; color: var(--text-primary); font-weight: 600;\n}\n.pp-slots-head svg[data-v-6758e6f2] { color: var(--accent);\n}\n.pp-slots-sub[data-v-6758e6f2] { font-weight: 400; font-size: 10px; color: var(--text-muted);\n}\n.pp-slot-row[data-v-6758e6f2] {\n  display: flex; align-items: center; justify-content: space-between; gap: 8px;\n  background: var(--bg-primary);\n  border: 1px solid var(--border-color);\n  border-left: 2px solid var(--accent);\n  border-radius: 6px; padding: 5px 8px;\n  transition: border-color .12s, background .12s;\n}\n.pp-slot-row[data-v-6758e6f2]:hover {\n  border-color: color-mix(in srgb, var(--accent) 45%, var(--border-color));\n  background: var(--bg-hover);\n}\n.pp-slot-info[data-v-6758e6f2] { display: flex; flex-direction: column; gap: 2px; min-width: 0;\n}\n.pp-slot-title-row[data-v-6758e6f2] { display: flex; align-items: center; gap: 6px; min-width: 0;\n}\n.pp-slot-id[data-v-6758e6f2] {\n  font-family: var(--font-mono, monospace); font-size: 11px; color: var(--accent-light);\n  text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;\n}\n.pp-slot-owner[data-v-6758e6f2] { font-size: 10px; color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px;\n}\n.pp-slot-owner.builtin[data-v-6758e6f2] { color: var(--text-muted);\n}\n.pp-slot-kind[data-v-6758e6f2] {\n  font-size: 9px; border-radius: 4px; padding: 0 5px; align-self: flex-start;\n  line-height: 15px; flex-shrink: 0; font-weight: 600; letter-spacing: .3px;\n}\n.pp-slot-kind.kind-single[data-v-6758e6f2] { color: var(--accent-light); background: color-mix(in srgb, var(--accent) 14%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);\n}\n.pp-slot-kind.kind-list[data-v-6758e6f2] { color: #3fb950; background: rgba(63, 185, 80, .10); border: 1px solid rgba(63, 185, 80, .30);\n}\n.pp-slot-list[data-v-6758e6f2] { display: flex; flex-direction: column; gap: 3px; align-items: flex-end; flex-shrink: 0;\n}\n.pp-slot-list-item[data-v-6758e6f2] {\n  display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--text-secondary);\n  cursor: pointer; max-width: 220px; padding: 1px 4px; border-radius: 4px;\n  transition: background .1s, color .1s;\n}\n.pp-slot-list-item[data-v-6758e6f2]:hover { color: var(--text-primary); background: var(--bg-hover);\n}\n.pp-slot-list-item input[type='checkbox'][data-v-6758e6f2] { accent-color: var(--accent); margin: 0;\n}\n.pp-slot-list-item span[data-v-6758e6f2] { overflow: hidden; text-overflow: ellipsis; white-space: nowrap;\n}\n.pp-slot-empty[data-v-6758e6f2] { font-size: 10px; color: var(--text-muted);\n}\n.pp-slot-select[data-v-6758e6f2] {\n  width: 170px; font-size: 11px; padding: 3px 6px;\n  background: var(--bg-secondary); color: var(--text-primary);\n  border: 1px solid var(--border-color); border-radius: 5px; flex-shrink: 0;\n  cursor: pointer; transition: border-color .12s, box-shadow .12s;\n}\n.pp-slot-select[data-v-6758e6f2]:hover { border-color: var(--accent);\n}\n.pp-slot-select[data-v-6758e6f2]:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--focus-ring);\n}\n.pp-client-tabs[data-v-6758e6f2] {\n  display: flex;\n  gap: 2px;\n  padding: 4px 8px 0;\n  border-bottom: 1px solid var(--border-color);\n  overflow-x: auto;\n}\n.pp-client-tab[data-v-6758e6f2] {\n  display: flex; align-items: center; gap: 4px;\n  padding: 4px 10px;\n  font-size: 11px;\n  color: var(--text-secondary);\n  cursor: pointer;\n  border: 1px solid transparent;\n  border-bottom: none;\n  border-radius: 4px 4px 0 0;\n  white-space: nowrap;\n}\n.pp-client-tab.active[data-v-6758e6f2] {\n  background: var(--bg-primary);\n  color: var(--text-primary);\n  border-color: var(--border-color);\n}\n.pp-client-tab-title[data-v-6758e6f2] { max-width: 120px; overflow: hidden; text-overflow: ellipsis;\n}\n.pp-client-body[data-v-6758e6f2] {\n  min-height: 80px;\n  max-height: 200px;\n  overflow: auto;\n  padding: 6px 8px;\n  font-size: 12px;\n}\n\n/* 列表 */\n.pp-list[data-v-6758e6f2] { flex: 1; overflow: auto; padding: 4px 0;\n}\n.pp-loading[data-v-6758e6f2], .pp-empty[data-v-6758e6f2] {\n  display: flex; flex-direction: column; align-items: center; gap: 6px;\n  padding: 24px 12px; color: var(--text-muted); font-size: 12px;\n}\n.pp-empty-sub[data-v-6758e6f2] { font-size: 11px; color: var(--text-muted); text-align: center;\n}\n.pp-item[data-v-6758e6f2] { border-bottom: 1px solid var(--border-color);\n}\n.pp-item-row[data-v-6758e6f2] {\n  display: flex; align-items: center; gap: 6px;\n  padding: 7px 10px;\n  cursor: pointer;\n}\n.pp-item-row[data-v-6758e6f2]:hover { background: var(--bg-hover);\n}\n.pp-state[data-v-6758e6f2] {\n  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;\n}\n.pp-state.on[data-v-6758e6f2] { background: #4caf50; box-shadow: 0 0 4px rgba(76, 175, 80, .6);\n}\n.pp-state.off[data-v-6758e6f2] { background: var(--text-muted); opacity: .4;\n}\n.pp-name[data-v-6758e6f2] {\n  flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;\n}\n.pp-src[data-v-6758e6f2] {\n  font-size: 9px; padding: 1px 5px; border-radius: 3px;\n  font-family: var(--font-code); text-transform: uppercase;\n}\n.pp-src.js[data-v-6758e6f2] { background: rgba(240, 219, 79, .15); color: #e5c07b;\n}\n.pp-src.go[data-v-6758e6f2] { background: rgba(0, 178, 255, .12); color: #61afef;\n}\n/* ★ Node 桥插件（npm 包，真实 node 进程装载）：与 goja 插件区分来源 */\n.pp-src.node-bridge[data-v-6758e6f2] { background: rgba(86, 182, 194, .14); color: #56b6c2;\n}\n.pp-badge[data-v-6758e6f2] {\n  font-size: 9px; padding: 1px 5px; border-radius: 3px;\n  background: rgba(198, 120, 221, .15); color: #c678dd;\n  flex-shrink: 0;\n}\n.pp-badge-warn[data-v-6758e6f2] {\n  background: rgba(229, 192, 123, .18); color: #e5c07b;\n  cursor: help;\n}\n.pp-count[data-v-6758e6f2] { font-size: 10px; color: var(--text-muted); flex-shrink: 0;\n}\n.pp-ui-label[data-v-6758e6f2] { font-size: 10px; color: var(--text-muted); flex-shrink: 0;\n}\n.pp-ui-label.on[data-v-6758e6f2] { color: var(--accent, #4c9aff);\n}\n.pp-chevron[data-v-6758e6f2] { transition: transform .15s; flex-shrink: 0;\n}\n.pp-chevron.open[data-v-6758e6f2] { transform: rotate(90deg);\n}\n.pp-detail[data-v-6758e6f2] { padding: 4px 10px 10px 24px; background: var(--bg-tertiary);\n}\n.pp-d-purpose[data-v-6758e6f2] { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;\n}\n.pp-d-line[data-v-6758e6f2] { font-size: 11px; color: var(--text-muted); margin: 2px 0; word-break: break-all;\n}\n.pp-d-error[data-v-6758e6f2] { color: #e06c75;\n}\n.pp-d-hint[data-v-6758e6f2] { font-size: 11px; color: var(--text-muted);\n}\n/* ★ 同名工具并存（repo 移植版 ↔ npm 桥插件）：标注生效方并提供切换 */\n.pp-d-conflict[data-v-6758e6f2] {\n  margin: 6px 0;\n  padding: 5px 6px;\n  border: 1px solid rgba(229, 192, 123, .35);\n  border-radius: 4px;\n  background: rgba(229, 192, 123, .06);\n}\n.pp-d-conflict-title[data-v-6758e6f2] {\n  display: flex; align-items: center; gap: 5px;\n  font-size: 10px; color: #e5c07b; margin-bottom: 4px;\n}\n.pp-d-conflict-row[data-v-6758e6f2] {\n  display: flex; align-items: center; gap: 6px;\n  padding: 2px 0;\n}\n.pp-d-conflict-row .pp-d-tname[data-v-6758e6f2] { flex: 1; min-width: 60px;\n}\n.pp-d-side[data-v-6758e6f2] {\n  font-size: 10px; padding: 1px 5px; border-radius: 3px;\n  border: 1px solid var(--border-color);\n  color: var(--text-muted); white-space: nowrap;\n}\n.pp-d-side.on[data-v-6758e6f2] {\n  border-color: rgba(152, 195, 121, .5);\n  background: rgba(152, 195, 121, .12);\n  color: #98c379;\n}\n/* 生效方切换结果提示（插件列表上方） */\n.pp-prefer-msg[data-v-6758e6f2] {\n  display: flex; align-items: center; gap: 5px;\n  margin: 4px 10px; padding: 4px 6px;\n  font-size: 11px; border-radius: 4px;\n  color: #98c379; background: rgba(152, 195, 121, .1);\n  border: 1px solid rgba(152, 195, 121, .3);\n}\n.pp-prefer-msg.err[data-v-6758e6f2] {\n  color: #e06c75; background: rgba(224, 108, 117, .1);\n  border-color: rgba(224, 108, 117, .3);\n}\n.pp-d-tools[data-v-6758e6f2] { display: flex; flex-direction: column; gap: 1px; margin: 4px 0; padding: 4px 6px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary);\n}\n.pp-d-tools-title[data-v-6758e6f2] { font-size: 10px; color: var(--text-muted); margin-bottom: 2px;\n}\n.pp-d-tool[data-v-6758e6f2] { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 1px 2px; border-radius: 3px;\n}\n.pp-d-tool[data-v-6758e6f2]:hover { background: var(--bg-secondary);\n}\n.pp-d-tname[data-v-6758e6f2] { font-family: var(--font-code); font-size: 11px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;\n}\n.pp-d-code[data-v-6758e6f2] {\n  margin-top: 6px;\n  border: 1px solid var(--border-color);\n  border-radius: 4px;\n  overflow: hidden;\n}\n.pp-d-code-head[data-v-6758e6f2] {\n  display: flex; align-items: center; justify-content: space-between;\n  padding: 3px 8px;\n  background: var(--bg-primary);\n  font-size: 10px; color: var(--text-secondary);\n  border-bottom: 1px solid var(--border-color);\n}\n.pp-d-code pre[data-v-6758e6f2] {\n  margin: 0; padding: 6px 8px;\n  font-family: var(--font-code); font-size: 10px;\n  line-height: 1.5;\n  color: var(--text-secondary);\n  overflow: auto;\n  max-height: 160px;\n  white-space: pre-wrap;\n  word-break: break-all;\n}\n.pp-d-actions[data-v-6758e6f2] { display: flex; gap: 6px; margin-top: 8px;\n}\n.pp-btn[data-v-6758e6f2] {\n  background: var(--bg-primary);\n  border: 1px solid var(--border-color);\n  color: var(--text-secondary);\n  border-radius: 4px;\n  padding: 3px 10px;\n  font-size: 11px;\n  cursor: pointer;\n}\n.pp-btn[data-v-6758e6f2]:hover { background: var(--bg-hover); color: var(--text-primary);\n}\n.pp-btn.primary[data-v-6758e6f2] { border-color: var(--accent); color: var(--accent-light);\n}\n.pp-btn.danger[data-v-6758e6f2] { border-color: #e06c75; color: #e06c75;\n}\n.pp-btn[data-v-6758e6f2]:disabled { opacity: .5; cursor: not-allowed;\n}\n.spinner[data-v-6758e6f2] { animation: pp-spin-6758e6f2 1s linear infinite;\n}\n@keyframes pp-spin-6758e6f2 {\nto { transform: rotate(360deg);\n}\n}\n.pp-builtin[data-v-6758e6f2] {\n  display: flex; flex-direction: column; gap: 6px;\n  margin: 4px 6px 10px; padding: 8px 10px;\n  border: 1px solid rgba(212,167,78,.3); border-radius: 8px;\n  background: rgba(212,167,78,.05);\n}\n.pp-builtin-head[data-v-6758e6f2] { display: flex; align-items: center; gap: 8px;\n}\n.pp-builtin-head[data-v-6758e6f2]:hover { background: rgba(212,167,78,.08);\n}\n.pp-builtin-title[data-v-6758e6f2] {\n  display: flex; align-items: center; gap: 5px;\n  font-size: 12px; font-weight: 700; color: #d4a74e; letter-spacing: .3px;\n}\n.pp-builtin-sub[data-v-6758e6f2] { font-size: 10px; color: var(--text-muted); flex: 1;\n}\n.pp-builtin-group[data-v-6758e6f2] {\n  display: flex; flex-direction: column; gap: 4px;\n  border: 1px solid var(--border-color); border-radius: 6px;\n  background: var(--bg-tertiary); padding: 6px 8px;\n}\n.pp-builtin-grow[data-v-6758e6f2] {\n  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;\n}\n.pp-builtin-gname[data-v-6758e6f2] { font-size: 12px; font-weight: 600; color: var(--text-primary);\n}\n.pp-builtin-gdesc[data-v-6758e6f2] { font-size: 10px; color: var(--text-muted); flex: 1; min-width: 80px;\n}\n.pp-builtin-gcount[data-v-6758e6f2] { font-size: 10px; color: var(--text-secondary);\n}\n.pp-builtin-tools[data-v-6758e6f2] {\n  display: flex; flex-direction: column; gap: 2px;\n  max-height: 220px; overflow-y: auto;\n}\n.pp-btn.mini[data-v-6758e6f2] { padding: 2px 8px; font-size: 10px; border-radius: 4px;\n}\n\n.app-root[data-v-55c8d885] {\n  display: grid;\n  /* ★ chat 优先薄壳（替换原 4 列 IDE 网格）：conversation 为 minmax(0,1fr) 主列，\n     editor 为 details 辅助列（--editor-w），折叠=0px 不占空间但 DOM 保持挂载。\n     gridStyle computed 会覆盖此默认值（聚焦/折叠时动态调整列宽）。 */\n  grid-template-columns: 48px var(--sidebar-w, 280px) minmax(0, 1fr);\n  grid-template-rows: 30px 1fr 22px;\n  width: 100%; height: 100%;\n  background: var(--bg-primary);\n  color: var(--text-primary);\n  overflow: hidden;\n  font-family: var(--font-ui);\n}\n/* ★ 桌面端面板独立模式：只渲染右侧对话面板，占满整个窗口 */\n.app-root.panel-only[data-v-55c8d885] {\n  grid-template-columns: 1fr;\n  grid-template-rows: 1fr;\n}\n.app-root.panel-only .main-area[data-v-55c8d885] {\n  grid-column: 1; grid-row: 1;\n  width: 100% !important;\n  height: 100%;\n}\n.app-root.panel-only .main-tabs[data-v-55c8d885] { display: none;\n}\n/* 整区替换槽位（single）宿主：与内置区域同 grid 位置/尺寸 */\n.plugin-area-titlebar[data-v-55c8d885] { grid-column: 1 / -1; grid-row: 1; height: 30px;\n}\n.plugin-area-activitybar[data-v-55c8d885] { grid-column: 1; grid-row: 2; width: 48px;\n}\n.plugin-area-sidebar[data-v-55c8d885] { grid-column: 2; grid-row: 2; height: 100%; overflow: hidden;\n}\n/* ★ main 区（col 3）：对话 / 编辑器 tab 切换（chat 优先薄壳主视图） */\n.main-area[data-v-55c8d885] {\n  grid-column: 3; grid-row: 2;\n  display: flex; flex-direction: column; min-width: 0; overflow: hidden; position: relative;\n}\n/* tab 栏：对话 / 编辑器 */\n.main-tabs[data-v-55c8d885] {\n  display: flex; flex-shrink: 0; height: 30px;\n  background: var(--bg-secondary); border-bottom: 1px solid var(--border-color);\n}\n.main-tab[data-v-55c8d885] {\n  /* ★ 不用均分（flex:1 会造成 50/50 平分、视觉难看）：宽度随内容自适应，左对齐 */\n  flex: 0 0 auto; min-width: 0; border: none; background: none; cursor: pointer;\n  color: var(--text-muted); font-size: 12px; font-weight: 600;\n  padding: 0 18px; border-bottom: 2px solid transparent;\n  transition: color .15s, background .15s;\n}\n.main-tab[data-v-55c8d885]:hover { color: var(--text-primary); background: var(--bg-hover);\n}\n.main-tab.active[data-v-55c8d885] { color: var(--text-primary); border-bottom-color: var(--accent); background: var(--bg-active);\n}\n/* conversation（对话）宿主：常驻挂载，v-show 切换；填满 main 区（tab 栏下方） */\n.conversation-container[data-v-55c8d885] {\n  flex: 1; min-width: 0; min-height: 0;\n  display: flex; flex-direction: row; overflow: hidden; position: relative;\n}\n/* editor（编辑器）宿主：常驻挂载，v-show 切换；填满 main 区（tab 栏下方），永不 unmount */\n.editor-container[data-v-55c8d885] {\n  flex: 1; min-width: 0; min-height: 0;\n  display: flex; flex-direction: column; overflow: hidden;\n}\n.app-statusbar-host[data-v-55c8d885] { grid-column: 1 / -1; grid-row: 3; z-index: 30; height: 22px;\n}\n.plugin-slot-host[data-v-55c8d885] { height: 100%; overflow: hidden;\n}\n/* ★ 插件渲染的子元素必须撑满宿主（bundle 根 auto 宽度不随宿主 grid 拉伸）。\n   以 <conversation> 主列为例：宿主占列 3 → 子元素撑满，避免右侧空余。 */\n.plugin-slot-host.conversation-container[data-v-55c8d885] > * { width: 100%; min-width: 0;\n}\n/* modals 槽位：fixed 全屏浮层容器（不占 grid 格） */\n.modals-host[data-v-55c8d885] { position: fixed; inset: 0; z-index: 200; pointer-events: none;\n}\n.modals-host[data-v-55c8d885] > * { pointer-events: auto;\n}\n.modals-empty[data-v-55c8d885] { display: none;\n}\n/* 空态占位（区域插件未装配时显示） */\n.slot-empty[data-v-55c8d885] {\n  display: flex; flex-direction: row; gap: 8px;\n  align-items: center; justify-content: center;\n  color: var(--text-muted); font-size: 12px;\n  background: var(--bg-primary);\n  border: 1px dashed var(--border-color);\n  min-height: 0;\n}\n/* activitybar 是竖条（~48px 宽）：空态改纵向排列 */\n.plugin-area-activitybar.slot-empty[data-v-55c8d885] { flex-direction: column; gap: 4px; padding: 4px;\n}\n.plugin-area-activitybar.slot-empty .escape-link[data-v-55c8d885] { font-size: 11px; padding: 2px 8px;\n}\n/* 空态内的「打开插件面板」恢复入口（上下文感知注入：只在区域未装配时出现，\n   插件全正常时零干扰；与常驻逃生按钮互为双保险） */\n.escape-link[data-v-55c8d885] {\n  background: none; border: 1px solid var(--border-color);\n  color: var(--accent, #4f8cff); font-size: 12px;\n  padding: 3px 12px; border-radius: 4px; cursor: pointer;\n  opacity: .85; transition: opacity .15s;\n}\n.escape-link[data-v-55c8d885]:hover { opacity: 1; background: rgba(79,140,255,.12);\n}\n/* ─── 壳级逃生口：插件面板浮动入口 ───\n   常驻极小按钮位于左下角（状态栏上方）；半透明弱化，hover 全显。\n   点击打开浮动插件面板（Fixed 560px 居中）。 */\n.plugin-escape-btn[data-v-55c8d885] {\n  position: fixed; left: 6px; bottom: 26px; z-index: 300;\n  width: 22px; height: 22px; border-radius: 5px;\n  display: flex; align-items: center; justify-content: center;\n  background: var(--bg-elevated, #2a2d36); color: var(--text-muted);\n  border: 1px solid var(--border-color); cursor: pointer;\n  opacity: .3; transition: opacity .15s;\n}\n.plugin-escape-btn[data-v-55c8d885]:hover { opacity: 1; color: var(--accent, #4f8cff);\n}\n.plugin-escape-overlay[data-v-55c8d885] {\n  position: fixed; inset: 0; z-index: 400;\n  background: rgba(0,0,0,.45);\n  display: flex; align-items: center; justify-content: center;\n}\n.plugin-escape-panel[data-v-55c8d885] {\n  width: 560px; max-width: 92vw; height: 70vh; max-height: 640px;\n  background: var(--bg-primary); border: 1px solid var(--border-color);\n  border-radius: 10px; box-shadow: 0 8px 40px rgba(0,0,0,.5);\n  display: flex; flex-direction: column; overflow: hidden;\n}\n.plugin-escape-head[data-v-55c8d885] {\n  display: flex; align-items: center; justify-content: space-between;\n  padding: 6px 10px; font-size: 12px; color: var(--text-muted);\n  border-bottom: 1px solid var(--border-color);\n  background: var(--bg-elevated, #262932);\n}\n.plugin-escape-close[data-v-55c8d885] {\n  border: none; background: none; color: var(--text-muted);\n  cursor: pointer; font-size: 13px; padding: 2px 6px; border-radius: 4px;\n}\n.plugin-escape-close[data-v-55c8d885]:hover { background: rgba(255,255,255,.08); color: #fff;\n}\n.plugin-escape-body[data-v-55c8d885] { flex: 1; overflow: auto;\n}\n.plugin-escape-body .plugin-panel[data-v-55c8d885] { height: 100%; border: none;\n}\n/*$vite$:1*/";
+  __vite_style__.textContent = "\n@keyframes stopPulse-faf69761 {\n0%, 100% { opacity: 0.6;\n}\n50% { opacity: 1;\n}\n}\n@keyframes stopRingPulse-faf69761 {\n0%, 100% { opacity: 0.3; transform: scale(1);\n}\n50% { opacity: 0.15; transform: scale(1.15);\n}\n}\n.stop-pulse[data-v-faf69761] {\n  animation: stopPulse-faf69761 1.2s ease-in-out infinite;\n}\n.stop-pulse-ring[data-v-faf69761] {\n  animation: stopRingPulse-faf69761 1.2s ease-in-out infinite;\n  fill: none;\n  transform-origin: center;\n}\n.svg-icon[data-v-faf69761] {\n  display: inline-block;\n  vertical-align: middle;\n  flex-shrink: 0;\n}\n\n.plugin-panel[data-v-6758e6f2] {\n  height: 100%;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n  font-size: 13px;\n}\n.pp-header[data-v-6758e6f2] {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 8px 10px;\n  border-bottom: 1px solid var(--border-color);\n  flex-shrink: 0;\n}\n.pp-title[data-v-6758e6f2] {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  font-weight: 600;\n  font-size: 12px;\n  color: var(--text-primary);\n}\n.pp-actions[data-v-6758e6f2] { display: flex; gap: 4px;\n}\n.pp-icon-btn[data-v-6758e6f2] {\n  background: none; border: none; cursor: pointer;\n  color: var(--text-muted); padding: 2px 4px; border-radius: 3px;\n  display: flex; align-items: center;\n}\n.pp-icon-btn[data-v-6758e6f2]:hover { background: var(--bg-hover); color: var(--text-primary);\n}\n\n/* 新建表单 */\n.pp-new[data-v-6758e6f2] {\n  padding: 10px;\n  border-bottom: 1px solid var(--border-color);\n  display: flex;\n  flex-direction: column;\n  gap: 6px;\n  background: var(--bg-tertiary);\n  flex-shrink: 0;\n  max-height: 45%;\n  overflow: auto;\n}\n.pp-new-title[data-v-6758e6f2] { font-size: 12px; font-weight: 600; color: var(--text-secondary);\n}\n.pp-input[data-v-6758e6f2], .pp-textarea[data-v-6758e6f2] {\n  background: var(--bg-primary);\n  border: 1px solid var(--border-color);\n  color: var(--text-primary);\n  border-radius: 4px;\n  padding: 5px 8px;\n  font-size: 12px;\n  width: 100%;\n  box-sizing: border-box;\n}\n.pp-textarea.code[data-v-6758e6f2] {\n  font-family: var(--font-code);\n  font-size: 11px;\n  line-height: 1.5;\n  resize: vertical;\n}\n.pp-new-foot[data-v-6758e6f2] { display: flex; align-items: center; gap: 8px;\n}\n.pp-lang[data-v-6758e6f2] { width: auto; flex-shrink: 0;\n}\n.pp-check[data-v-6758e6f2] { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-secondary); white-space: nowrap;\n}\n.pp-new-msg[data-v-6758e6f2] { font-size: 11px; color: var(--accent-light); word-break: break-all;\n}\n.pp-new-msg.err[data-v-6758e6f2] { color: var(--error, #e06c75);\n}\n\n/* client 面板区 */\n.pp-client[data-v-6758e6f2] {\n  border-bottom: 1px solid var(--border-color);\n  flex-shrink: 0;\n  display: flex;\n  flex-direction: column;\n  max-height: 40%;\n}\n/* UI 槽位区（Slot 系统） */\n.pp-slots[data-v-6758e6f2] {\n  border-bottom: 1px solid var(--border-color);\n  flex-shrink: 0;\n  padding: 6px 8px;\n  display: flex;\n  flex-direction: column;\n  gap: 5px;\n  max-height: 30%;\n  overflow-y: auto;\n}\n.pp-slots-head[data-v-6758e6f2] {\n  display: flex; align-items: center; gap: 6px;\n  font-size: 11px; color: var(--text-primary); font-weight: 600;\n}\n.pp-slots-head svg[data-v-6758e6f2] { color: var(--accent);\n}\n.pp-slots-sub[data-v-6758e6f2] { font-weight: 400; font-size: 10px; color: var(--text-muted);\n}\n.pp-slot-row[data-v-6758e6f2] {\n  display: flex; align-items: center; justify-content: space-between; gap: 8px;\n  background: var(--bg-primary);\n  border: 1px solid var(--border-color);\n  border-left: 2px solid var(--accent);\n  border-radius: 6px; padding: 5px 8px;\n  transition: border-color .12s, background .12s;\n}\n.pp-slot-row[data-v-6758e6f2]:hover {\n  border-color: color-mix(in srgb, var(--accent) 45%, var(--border-color));\n  background: var(--bg-hover);\n}\n.pp-slot-info[data-v-6758e6f2] { display: flex; flex-direction: column; gap: 2px; min-width: 0;\n}\n.pp-slot-title-row[data-v-6758e6f2] { display: flex; align-items: center; gap: 6px; min-width: 0;\n}\n.pp-slot-id[data-v-6758e6f2] {\n  font-family: var(--font-mono, monospace); font-size: 11px; color: var(--accent-light);\n  text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;\n}\n.pp-slot-owner[data-v-6758e6f2] { font-size: 10px; color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px;\n}\n.pp-slot-owner.builtin[data-v-6758e6f2] { color: var(--text-muted);\n}\n.pp-slot-kind[data-v-6758e6f2] {\n  font-size: 9px; border-radius: 4px; padding: 0 5px; align-self: flex-start;\n  line-height: 15px; flex-shrink: 0; font-weight: 600; letter-spacing: .3px;\n}\n.pp-slot-kind.kind-single[data-v-6758e6f2] { color: var(--accent-light); background: color-mix(in srgb, var(--accent) 14%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);\n}\n.pp-slot-kind.kind-list[data-v-6758e6f2] { color: #3fb950; background: rgba(63, 185, 80, .10); border: 1px solid rgba(63, 185, 80, .30);\n}\n.pp-slot-list[data-v-6758e6f2] { display: flex; flex-direction: column; gap: 3px; align-items: flex-end; flex-shrink: 0;\n}\n.pp-slot-list-item[data-v-6758e6f2] {\n  display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--text-secondary);\n  cursor: pointer; max-width: 220px; padding: 1px 4px; border-radius: 4px;\n  transition: background .1s, color .1s;\n}\n.pp-slot-list-item[data-v-6758e6f2]:hover { color: var(--text-primary); background: var(--bg-hover);\n}\n.pp-slot-list-item input[type='checkbox'][data-v-6758e6f2] { accent-color: var(--accent); margin: 0;\n}\n.pp-slot-list-item span[data-v-6758e6f2] { overflow: hidden; text-overflow: ellipsis; white-space: nowrap;\n}\n.pp-slot-empty[data-v-6758e6f2] { font-size: 10px; color: var(--text-muted);\n}\n.pp-slot-select[data-v-6758e6f2] {\n  width: 170px; font-size: 11px; padding: 3px 6px;\n  background: var(--bg-secondary); color: var(--text-primary);\n  border: 1px solid var(--border-color); border-radius: 5px; flex-shrink: 0;\n  cursor: pointer; transition: border-color .12s, box-shadow .12s;\n}\n.pp-slot-select[data-v-6758e6f2]:hover { border-color: var(--accent);\n}\n.pp-slot-select[data-v-6758e6f2]:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--focus-ring);\n}\n.pp-client-tabs[data-v-6758e6f2] {\n  display: flex;\n  gap: 2px;\n  padding: 4px 8px 0;\n  border-bottom: 1px solid var(--border-color);\n  overflow-x: auto;\n}\n.pp-client-tab[data-v-6758e6f2] {\n  display: flex; align-items: center; gap: 4px;\n  padding: 4px 10px;\n  font-size: 11px;\n  color: var(--text-secondary);\n  cursor: pointer;\n  border: 1px solid transparent;\n  border-bottom: none;\n  border-radius: 4px 4px 0 0;\n  white-space: nowrap;\n}\n.pp-client-tab.active[data-v-6758e6f2] {\n  background: var(--bg-primary);\n  color: var(--text-primary);\n  border-color: var(--border-color);\n}\n.pp-client-tab-title[data-v-6758e6f2] { max-width: 120px; overflow: hidden; text-overflow: ellipsis;\n}\n.pp-client-body[data-v-6758e6f2] {\n  min-height: 80px;\n  max-height: 200px;\n  overflow: auto;\n  padding: 6px 8px;\n  font-size: 12px;\n}\n\n/* 列表 */\n.pp-list[data-v-6758e6f2] { flex: 1; overflow: auto; padding: 4px 0;\n}\n.pp-loading[data-v-6758e6f2], .pp-empty[data-v-6758e6f2] {\n  display: flex; flex-direction: column; align-items: center; gap: 6px;\n  padding: 24px 12px; color: var(--text-muted); font-size: 12px;\n}\n.pp-empty-sub[data-v-6758e6f2] { font-size: 11px; color: var(--text-muted); text-align: center;\n}\n.pp-item[data-v-6758e6f2] { border-bottom: 1px solid var(--border-color);\n}\n.pp-item-row[data-v-6758e6f2] {\n  display: flex; align-items: center; gap: 6px;\n  padding: 7px 10px;\n  cursor: pointer;\n}\n.pp-item-row[data-v-6758e6f2]:hover { background: var(--bg-hover);\n}\n.pp-state[data-v-6758e6f2] {\n  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;\n}\n.pp-state.on[data-v-6758e6f2] { background: #4caf50; box-shadow: 0 0 4px rgba(76, 175, 80, .6);\n}\n.pp-state.off[data-v-6758e6f2] { background: var(--text-muted); opacity: .4;\n}\n.pp-name[data-v-6758e6f2] {\n  flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;\n}\n.pp-src[data-v-6758e6f2] {\n  font-size: 9px; padding: 1px 5px; border-radius: 3px;\n  font-family: var(--font-code); text-transform: uppercase;\n}\n.pp-src.js[data-v-6758e6f2] { background: rgba(240, 219, 79, .15); color: #e5c07b;\n}\n.pp-src.go[data-v-6758e6f2] { background: rgba(0, 178, 255, .12); color: #61afef;\n}\n/* ★ Node 桥插件（npm 包，真实 node 进程装载）：与 goja 插件区分来源 */\n.pp-src.node-bridge[data-v-6758e6f2] { background: rgba(86, 182, 194, .14); color: #56b6c2;\n}\n.pp-badge[data-v-6758e6f2] {\n  font-size: 9px; padding: 1px 5px; border-radius: 3px;\n  background: rgba(198, 120, 221, .15); color: #c678dd;\n  flex-shrink: 0;\n}\n.pp-badge-warn[data-v-6758e6f2] {\n  background: rgba(229, 192, 123, .18); color: #e5c07b;\n  cursor: help;\n}\n.pp-count[data-v-6758e6f2] { font-size: 10px; color: var(--text-muted); flex-shrink: 0;\n}\n.pp-ui-label[data-v-6758e6f2] { font-size: 10px; color: var(--text-muted); flex-shrink: 0;\n}\n.pp-ui-label.on[data-v-6758e6f2] { color: var(--accent, #4c9aff);\n}\n.pp-chevron[data-v-6758e6f2] { transition: transform .15s; flex-shrink: 0;\n}\n.pp-chevron.open[data-v-6758e6f2] { transform: rotate(90deg);\n}\n.pp-detail[data-v-6758e6f2] { padding: 4px 10px 10px 24px; background: var(--bg-tertiary);\n}\n.pp-d-purpose[data-v-6758e6f2] { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;\n}\n.pp-d-line[data-v-6758e6f2] { font-size: 11px; color: var(--text-muted); margin: 2px 0; word-break: break-all;\n}\n.pp-d-error[data-v-6758e6f2] { color: #e06c75;\n}\n.pp-d-hint[data-v-6758e6f2] { font-size: 11px; color: var(--text-muted);\n}\n/* ★ 同名工具并存（repo 移植版 ↔ npm 桥插件）：标注生效方并提供切换 */\n.pp-d-conflict[data-v-6758e6f2] {\n  margin: 6px 0;\n  padding: 5px 6px;\n  border: 1px solid rgba(229, 192, 123, .35);\n  border-radius: 4px;\n  background: rgba(229, 192, 123, .06);\n}\n.pp-d-conflict-title[data-v-6758e6f2] {\n  display: flex; align-items: center; gap: 5px;\n  font-size: 10px; color: #e5c07b; margin-bottom: 4px;\n}\n.pp-d-conflict-row[data-v-6758e6f2] {\n  display: flex; align-items: center; gap: 6px;\n  padding: 2px 0;\n}\n.pp-d-conflict-row .pp-d-tname[data-v-6758e6f2] { flex: 1; min-width: 60px;\n}\n.pp-d-side[data-v-6758e6f2] {\n  font-size: 10px; padding: 1px 5px; border-radius: 3px;\n  border: 1px solid var(--border-color);\n  color: var(--text-muted); white-space: nowrap;\n}\n.pp-d-side.on[data-v-6758e6f2] {\n  border-color: rgba(152, 195, 121, .5);\n  background: rgba(152, 195, 121, .12);\n  color: #98c379;\n}\n/* 生效方切换结果提示（插件列表上方） */\n.pp-prefer-msg[data-v-6758e6f2] {\n  display: flex; align-items: center; gap: 5px;\n  margin: 4px 10px; padding: 4px 6px;\n  font-size: 11px; border-radius: 4px;\n  color: #98c379; background: rgba(152, 195, 121, .1);\n  border: 1px solid rgba(152, 195, 121, .3);\n}\n.pp-prefer-msg.err[data-v-6758e6f2] {\n  color: #e06c75; background: rgba(224, 108, 117, .1);\n  border-color: rgba(224, 108, 117, .3);\n}\n.pp-d-tools[data-v-6758e6f2] { display: flex; flex-direction: column; gap: 1px; margin: 4px 0; padding: 4px 6px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary);\n}\n.pp-d-tools-title[data-v-6758e6f2] { font-size: 10px; color: var(--text-muted); margin-bottom: 2px;\n}\n.pp-d-tool[data-v-6758e6f2] { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 1px 2px; border-radius: 3px;\n}\n.pp-d-tool[data-v-6758e6f2]:hover { background: var(--bg-secondary);\n}\n.pp-d-tname[data-v-6758e6f2] { font-family: var(--font-code); font-size: 11px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;\n}\n.pp-d-code[data-v-6758e6f2] {\n  margin-top: 6px;\n  border: 1px solid var(--border-color);\n  border-radius: 4px;\n  overflow: hidden;\n}\n.pp-d-code-head[data-v-6758e6f2] {\n  display: flex; align-items: center; justify-content: space-between;\n  padding: 3px 8px;\n  background: var(--bg-primary);\n  font-size: 10px; color: var(--text-secondary);\n  border-bottom: 1px solid var(--border-color);\n}\n.pp-d-code pre[data-v-6758e6f2] {\n  margin: 0; padding: 6px 8px;\n  font-family: var(--font-code); font-size: 10px;\n  line-height: 1.5;\n  color: var(--text-secondary);\n  overflow: auto;\n  max-height: 160px;\n  white-space: pre-wrap;\n  word-break: break-all;\n}\n.pp-d-actions[data-v-6758e6f2] { display: flex; gap: 6px; margin-top: 8px;\n}\n.pp-btn[data-v-6758e6f2] {\n  background: var(--bg-primary);\n  border: 1px solid var(--border-color);\n  color: var(--text-secondary);\n  border-radius: 4px;\n  padding: 3px 10px;\n  font-size: 11px;\n  cursor: pointer;\n}\n.pp-btn[data-v-6758e6f2]:hover { background: var(--bg-hover); color: var(--text-primary);\n}\n.pp-btn.primary[data-v-6758e6f2] { border-color: var(--accent); color: var(--accent-light);\n}\n.pp-btn.danger[data-v-6758e6f2] { border-color: #e06c75; color: #e06c75;\n}\n.pp-btn[data-v-6758e6f2]:disabled { opacity: .5; cursor: not-allowed;\n}\n.spinner[data-v-6758e6f2] { animation: pp-spin-6758e6f2 1s linear infinite;\n}\n@keyframes pp-spin-6758e6f2 {\nto { transform: rotate(360deg);\n}\n}\n.pp-builtin[data-v-6758e6f2] {\n  display: flex; flex-direction: column; gap: 6px;\n  margin: 4px 6px 10px; padding: 8px 10px;\n  border: 1px solid rgba(212,167,78,.3); border-radius: 8px;\n  background: rgba(212,167,78,.05);\n}\n.pp-builtin-head[data-v-6758e6f2] { display: flex; align-items: center; gap: 8px;\n}\n.pp-builtin-head[data-v-6758e6f2]:hover { background: rgba(212,167,78,.08);\n}\n.pp-builtin-title[data-v-6758e6f2] {\n  display: flex; align-items: center; gap: 5px;\n  font-size: 12px; font-weight: 700; color: #d4a74e; letter-spacing: .3px;\n}\n.pp-builtin-sub[data-v-6758e6f2] { font-size: 10px; color: var(--text-muted); flex: 1;\n}\n.pp-builtin-group[data-v-6758e6f2] {\n  display: flex; flex-direction: column; gap: 4px;\n  border: 1px solid var(--border-color); border-radius: 6px;\n  background: var(--bg-tertiary); padding: 6px 8px;\n}\n.pp-builtin-grow[data-v-6758e6f2] {\n  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;\n}\n.pp-builtin-gname[data-v-6758e6f2] { font-size: 12px; font-weight: 600; color: var(--text-primary);\n}\n.pp-builtin-gdesc[data-v-6758e6f2] { font-size: 10px; color: var(--text-muted); flex: 1; min-width: 80px;\n}\n.pp-builtin-gcount[data-v-6758e6f2] { font-size: 10px; color: var(--text-secondary);\n}\n.pp-builtin-tools[data-v-6758e6f2] {\n  display: flex; flex-direction: column; gap: 2px;\n  max-height: 220px; overflow-y: auto;\n}\n.pp-btn.mini[data-v-6758e6f2] { padding: 2px 8px; font-size: 10px; border-radius: 4px;\n}\n\n.app-root[data-v-ed26a1be] {\n  display: grid;\n  /* ★ chat 优先薄壳（替换原 4 列 IDE 网格）：conversation 为 minmax(0,1fr) 主列，\n     editor 为 details 辅助列（--editor-w），折叠=0px 不占空间但 DOM 保持挂载。\n     gridStyle computed 会覆盖此默认值（聚焦/折叠时动态调整列宽）。 */\n  grid-template-columns: 48px var(--sidebar-w, 280px) minmax(0, 1fr);\n  grid-template-rows: 30px 1fr 22px;\n  width: 100%; height: 100%;\n  background: var(--bg-primary);\n  color: var(--text-primary);\n  overflow: hidden;\n  font-family: var(--font-ui);\n}\n/* ★ 桌面端面板独立模式：只渲染右侧对话面板，占满整个窗口 */\n.app-root.panel-only[data-v-ed26a1be] {\n  grid-template-columns: 1fr;\n  grid-template-rows: 1fr;\n}\n.app-root.panel-only .main-area[data-v-ed26a1be] {\n  grid-column: 1; grid-row: 1;\n  width: 100% !important;\n  height: 100%;\n}\n.app-root.panel-only .main-tabs[data-v-ed26a1be] { display: none;\n}\n/* 整区替换槽位（single）宿主：与内置区域同 grid 位置/尺寸 */\n.plugin-area-titlebar[data-v-ed26a1be] { grid-column: 1 / -1; grid-row: 1; height: 30px;\n}\n.plugin-area-activitybar[data-v-ed26a1be] { grid-column: 1; grid-row: 2; width: 48px;\n}\n.plugin-area-sidebar[data-v-ed26a1be] { grid-column: 2; grid-row: 2; height: 100%; overflow: hidden;\n}\n/* ★ main 区（col 3）：对话 / 编辑器 tab 切换（chat 优先薄壳主视图） */\n.main-area[data-v-ed26a1be] {\n  grid-column: 3; grid-row: 2;\n  display: flex; flex-direction: column; min-width: 0; overflow: hidden; position: relative;\n}\n/* tab 栏：对话 / 编辑器 */\n.main-tabs[data-v-ed26a1be] {\n  display: flex; flex-shrink: 0; height: 30px;\n  background: var(--bg-secondary); border-bottom: 1px solid var(--border-color);\n}\n.main-tab[data-v-ed26a1be] {\n  /* ★ 不用均分（flex:1 会造成 50/50 平分、视觉难看）：宽度随内容自适应，左对齐 */\n  flex: 0 0 auto; min-width: 0; border: none; background: none; cursor: pointer;\n  color: var(--text-muted); font-size: 12px; font-weight: 600;\n  padding: 0 18px; border-bottom: 2px solid transparent;\n  transition: color .15s, background .15s;\n}\n.main-tab[data-v-ed26a1be]:hover { color: var(--text-primary); background: var(--bg-hover);\n}\n.main-tab.active[data-v-ed26a1be] { color: var(--text-primary); border-bottom-color: var(--accent); background: var(--bg-active);\n}\n/* conversation（对话）宿主：常驻挂载，v-show 切换；填满 main 区（tab 栏下方） */\n.conversation-container[data-v-ed26a1be] {\n  flex: 1; min-width: 0; min-height: 0;\n  display: flex; flex-direction: row; overflow: hidden; position: relative;\n}\n/* editor（编辑器）宿主：常驻挂载，v-show 切换；填满 main 区（tab 栏下方），永不 unmount */\n.editor-container[data-v-ed26a1be] {\n  flex: 1; min-width: 0; min-height: 0;\n  display: flex; flex-direction: column; overflow: hidden;\n}\n/* market（市场面板）宿主：主区第三视图，v-show 切换；bundle 动态挂载 */\n.market-container[data-v-ed26a1be] {\n  flex: 1; min-width: 0; min-height: 0;\n  display: flex; flex-direction: column; overflow: hidden;\n}\n/* 主区 tab 内嵌关闭按钮（编辑器 / 市场）× */\n.main-tab-close[data-v-ed26a1be] {\n  display: inline-flex; align-items: center; justify-content: center;\n  margin-left: 6px; font-size: 13px; line-height: 1;\n  width: 16px; height: 16px; border-radius: 3px; opacity: 0.55;\n}\n.main-tab-close[data-v-ed26a1be]:hover { opacity: 1; background: var(--bg-hover); color: var(--text-primary);\n}\n.app-statusbar-host[data-v-ed26a1be] { grid-column: 1 / -1; grid-row: 3; z-index: 30; height: 22px;\n}\n.plugin-slot-host[data-v-ed26a1be] { height: 100%; overflow: hidden;\n}\n/* ★ 插件渲染的子元素必须撑满宿主（bundle 根 auto 宽度不随宿主 grid 拉伸）。\n   以 <conversation> 主列为例：宿主占列 3 → 子元素撑满，避免右侧空余。 */\n.plugin-slot-host.conversation-container[data-v-ed26a1be] > * { width: 100%; min-width: 0;\n}\n/* modals 槽位：fixed 全屏浮层容器（不占 grid 格） */\n.modals-host[data-v-ed26a1be] { position: fixed; inset: 0; z-index: 200; pointer-events: none;\n}\n.modals-host[data-v-ed26a1be] > * { pointer-events: auto;\n}\n.modals-empty[data-v-ed26a1be] { display: none;\n}\n/* 空态占位（区域插件未装配时显示） */\n.slot-empty[data-v-ed26a1be] {\n  display: flex; flex-direction: row; gap: 8px;\n  align-items: center; justify-content: center;\n  color: var(--text-muted); font-size: 12px;\n  background: var(--bg-primary);\n  border: 1px dashed var(--border-color);\n  min-height: 0;\n}\n/* activitybar 是竖条（~48px 宽）：空态改纵向排列 */\n.plugin-area-activitybar.slot-empty[data-v-ed26a1be] { flex-direction: column; gap: 4px; padding: 4px;\n}\n.plugin-area-activitybar.slot-empty .escape-link[data-v-ed26a1be] { font-size: 11px; padding: 2px 8px;\n}\n/* 空态内的「打开插件面板」恢复入口（上下文感知注入：只在区域未装配时出现，\n   插件全正常时零干扰；与常驻逃生按钮互为双保险） */\n.escape-link[data-v-ed26a1be] {\n  background: none; border: 1px solid var(--border-color);\n  color: var(--accent, #4f8cff); font-size: 12px;\n  padding: 3px 12px; border-radius: 4px; cursor: pointer;\n  opacity: .85; transition: opacity .15s;\n}\n.escape-link[data-v-ed26a1be]:hover { opacity: 1; background: rgba(79,140,255,.12);\n}\n/* ─── 壳级逃生口：插件面板浮动入口 ───\n   常驻极小按钮位于左下角（状态栏上方）；半透明弱化，hover 全显。\n   点击打开浮动插件面板（Fixed 560px 居中）。 */\n.plugin-escape-btn[data-v-ed26a1be] {\n  position: fixed; left: 6px; bottom: 26px; z-index: 300;\n  width: 22px; height: 22px; border-radius: 5px;\n  display: flex; align-items: center; justify-content: center;\n  background: var(--bg-elevated, #2a2d36); color: var(--text-muted);\n  border: 1px solid var(--border-color); cursor: pointer;\n  opacity: .3; transition: opacity .15s;\n}\n.plugin-escape-btn[data-v-ed26a1be]:hover { opacity: 1; color: var(--accent, #4f8cff);\n}\n.plugin-escape-overlay[data-v-ed26a1be] {\n  position: fixed; inset: 0; z-index: 400;\n  background: rgba(0,0,0,.45);\n  display: flex; align-items: center; justify-content: center;\n}\n.plugin-escape-panel[data-v-ed26a1be] {\n  width: 560px; max-width: 92vw; height: 70vh; max-height: 640px;\n  background: var(--bg-primary); border: 1px solid var(--border-color);\n  border-radius: 10px; box-shadow: 0 8px 40px rgba(0,0,0,.5);\n  display: flex; flex-direction: column; overflow: hidden;\n}\n.plugin-escape-head[data-v-ed26a1be] {\n  display: flex; align-items: center; justify-content: space-between;\n  padding: 6px 10px; font-size: 12px; color: var(--text-muted);\n  border-bottom: 1px solid var(--border-color);\n  background: var(--bg-elevated, #262932);\n}\n.plugin-escape-close[data-v-ed26a1be] {\n  border: none; background: none; color: var(--text-muted);\n  cursor: pointer; font-size: 13px; padding: 2px 6px; border-radius: 4px;\n}\n.plugin-escape-close[data-v-ed26a1be]:hover { background: rgba(255,255,255,.08); color: #fff;\n}\n.plugin-escape-body[data-v-ed26a1be] { flex: 1; overflow: auto;\n}\n.plugin-escape-body .plugin-panel[data-v-ed26a1be] { height: 100%; border: none;\n}\n/*$vite$:1*/";
   document.head.appendChild(__vite_style__);
   /**
   * @vue/shared v3.5.39
@@ -11440,6 +11440,9 @@
     loadingDir: "",
     openFiles: [],
     activeFile: "",
+    // ── 市场 tab（主内容区 main-tabs 第三视图 tab）──
+    marketTabOpen: false,
+    // 「市场」tab 是否打开
     fileContents: {},
     fileSavedContent: {},
     // 磁盘上原始内容，用于准确判断是否修改
@@ -11501,8 +11504,11 @@
       // ★ 默认折叠：编辑器隐藏（不占主导视图）
       editorWidth: 360,
       // 折叠后打开时的默认详情列宽（对齐 DETAILS_DEFAULT=360）
-      editorLastWidth: 360
+      editorLastWidth: 360,
       // 上次打开宽（折叠还原用）
+      // ★ 主区 tab 单一事实源（2026-09）：'conversation' | 'editor' | 'market'
+      //   editorOpen 保留为兼容映射（view==='editor' ⇔ editorOpen=true）
+      mainTab: "conversation"
     }
   });
   const showSettings = /* @__PURE__ */ ref(false);
@@ -11567,6 +11573,7 @@
       if (typeof filePath === "string" && filePath) {
         state.activeFile = filePath;
         if (!state.openFiles.includes(filePath)) state.openFiles.push(filePath);
+        state.panels.mainTab = "editor";
       }
       if (state.focusMode) state.focusMode = false;
       if (!state.panels.editorOpen && state.panels.editorWidth > 0) {
@@ -11576,6 +11583,7 @@
     },
     closeEditor() {
       state.panels.editorOpen = false;
+      if (state.panels.mainTab === "editor") state.panels.mainTab = "conversation";
     },
     toggleEditor() {
       if (state.panels.editorOpen) layout.closeEditor();
@@ -11591,9 +11599,10 @@
         state.panels.editorLastWidth = v;
       }
     },
-    // ★ 主视图 tab 切换（对话 ⇄ 编辑器）：editorOpen 作为「编辑器 tab 激活」的单一事实源。
-    //   两者常驻挂载（壳 v-show 切换），互不影响（CM6/终端 WS 不重挂）。
+    // ★ 主视图 tab 切换（对话 ⇄ 编辑器 ⇄ 市场）：mainTab 是单一事实源。
+    //   各视图常驻挂载（壳 v-show 切换），互不影响（CM6/终端 WS 不重挂）。
     setMainView(view) {
+      state.panels.mainTab = view;
       state.panels.editorOpen = view === "editor";
     }
   };
@@ -13336,11 +13345,30 @@
       state.rightPanelVisible = !state.rightPanelVisible;
       return;
     }
+    if (id === "marketplace") {
+      toggleMarketTab();
+      return;
+    }
     if (state.activeActivity === id) {
       state.sidebarVisible = !state.sidebarVisible;
     } else {
       state.activeActivity = id;
       state.sidebarVisible = true;
+    }
+  }
+  function toggleMarketTab() {
+    if (state.marketTabOpen && state.panels.mainTab === "market") {
+      closeMarketTab();
+    } else {
+      state.marketTabOpen = true;
+      state.panels.mainTab = "market";
+      state.panels.editorOpen = false;
+    }
+  }
+  function closeMarketTab() {
+    state.marketTabOpen = false;
+    if (state.panels.mainTab === "market") {
+      state.panels.mainTab = "conversation";
     }
   }
   const loadFileTree = async () => {
@@ -13581,6 +13609,7 @@
     __proto__: null,
     checkNotifications,
     cleanupAppGlobals,
+    closeMarketTab,
     default: appActions,
     desktopPrefetch,
     handleKeydown,
@@ -13590,7 +13619,8 @@
     loadWsList,
     saveWsList,
     switchActivity,
-    switchWorkspace
+    switchWorkspace,
+    toggleMarketTab
   }, Symbol.toStringTag, { value: "Module" }));
   const _export_sfc = (sfc, props) => {
     const target = sfc.__vccOpts || sfc;
@@ -15422,7 +15452,60 @@
         modals: useSingleSlot("modals")
       };
       for (const s of Object.values(slots)) s.init();
-      const mainView = computed(() => state.panels.editorOpen ? "editor" : "conversation");
+      const mainView = computed(() => state.panels.mainTab);
+      const marketHost = /* @__PURE__ */ ref(null);
+      let marketUnmount = null;
+      let marketRetryTimer = null;
+      function mountMarketPanel() {
+        const el = marketHost.value;
+        if (!el) return;
+        el.innerHTML = "";
+        const mod = window.MarketplacePanel;
+        if (mod && typeof mod.mount === "function") {
+          try {
+            marketUnmount = mod.mount(el);
+            return;
+          } catch (e) {
+            console.warn("[shell] 市场面板挂载失败", e);
+            el.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text-muted)">挂载失败: ' + (e && e.message || e) + "</div>";
+            return;
+          }
+        }
+        if (marketRetryTimer) return;
+        let tries = 0;
+        marketRetryTimer = setInterval(() => {
+          tries++;
+          if (window.MarketplacePanel) {
+            clearInterval(marketRetryTimer);
+            marketRetryTimer = null;
+            mountMarketPanel();
+            return;
+          }
+          if (tries >= 8) {
+            clearInterval(marketRetryTimer);
+            marketRetryTimer = null;
+            el.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text-muted)">市场面板未就绪（marketplace 插件未启用）</div>';
+          }
+        }, 800);
+        el.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text-muted)">市场面板加载中...</div>';
+      }
+      function unmountMarketPanel() {
+        if (marketRetryTimer) {
+          clearInterval(marketRetryTimer);
+          marketRetryTimer = null;
+        }
+        if (marketUnmount) {
+          try {
+            marketUnmount();
+          } catch (e) {
+          }
+          marketUnmount = null;
+        }
+      }
+      watch(mainView, (v) => {
+        if (v === "market" && state.marketTabOpen) nextTick(mountMarketPanel);
+        else unmountMarketPanel();
+      });
       const gridStyle = computed(() => {
         if (panelMode) return { gridTemplateColumns: "1fr", gridTemplateRows: "1fr" };
         const sidebarW = state.sidebarVisible ? sidebarWidth.value + "px" : "0px";
@@ -15448,6 +15531,7 @@
         for (const s of Object.values(slots)) s.stop();
         stopPolling();
         cleanupAppGlobals();
+        unmountMarketPanel();
       });
       return (_ctx, _cache) => {
         return openBlock(), createElementBlock(Fragment, null, [
@@ -15456,7 +15540,7 @@
             style: normalizeStyle(gridStyle.value)
           }, [
             !unref(panelMode) && !slots.titlebar.owner.value ? (openBlock(), createElementBlock("div", _hoisted_1, [
-              _cache[11] || (_cache[11] = createBaseVNode("span", null, "标题栏未装配（ui-titlebar）", -1)),
+              _cache[14] || (_cache[14] = createBaseVNode("span", null, "标题栏未装配（ui-titlebar）", -1)),
               createBaseVNode("button", {
                 class: "escape-link",
                 onClick: _cache[0] || (_cache[0] = ($event) => pluginsOpen.value = true)
@@ -15467,7 +15551,7 @@
               class: "plugin-slot-host plugin-area-titlebar"
             }, null, 512)) : createCommentVNode("", true),
             !unref(panelMode) && !slots.activitybar.owner.value ? (openBlock(), createElementBlock("div", _hoisted_2, [
-              _cache[12] || (_cache[12] = createBaseVNode("span", null, "⦿", -1)),
+              _cache[15] || (_cache[15] = createBaseVNode("span", null, "⦿", -1)),
               createBaseVNode("button", {
                 class: "escape-link",
                 onClick: _cache[1] || (_cache[1] = ($event) => pluginsOpen.value = true)
@@ -15478,7 +15562,7 @@
               class: "plugin-slot-host plugin-area-activitybar"
             }, null, 512)) : createCommentVNode("", true),
             !unref(panelMode) && !slots.sidebar.owner.value ? (openBlock(), createElementBlock("div", _hoisted_3, [
-              _cache[13] || (_cache[13] = createBaseVNode("span", null, "侧栏未装配（ui-sidebar）", -1)),
+              _cache[16] || (_cache[16] = createBaseVNode("span", null, "侧栏未装配（ui-sidebar）", -1)),
               createBaseVNode("button", {
                 class: "escape-link",
                 onClick: _cache[2] || (_cache[2] = ($event) => pluginsOpen.value = true)
@@ -15498,17 +15582,36 @@
                 }, "对话", 2),
                 createBaseVNode("button", {
                   class: normalizeClass(["main-tab", { active: mainView.value === "editor" }]),
-                  onClick: _cache[4] || (_cache[4] = ($event) => unref(layout).setMainView("editor"))
-                }, "编辑器", 2)
+                  onClick: _cache[5] || (_cache[5] = ($event) => unref(layout).setMainView("editor"))
+                }, [
+                  _cache[17] || (_cache[17] = createTextVNode("编辑器", -1)),
+                  createBaseVNode("span", {
+                    class: "main-tab-close",
+                    title: "关闭",
+                    onClick: _cache[4] || (_cache[4] = withModifiers(($event) => unref(layout).closeEditor(), ["stop"]))
+                  }, "×")
+                ], 2),
+                unref(state).marketTabOpen ? (openBlock(), createElementBlock("button", {
+                  key: 0,
+                  class: normalizeClass(["main-tab", { active: mainView.value === "market" }]),
+                  onClick: _cache[7] || (_cache[7] = ($event) => unref(layout).setMainView("market"))
+                }, [
+                  _cache[18] || (_cache[18] = createTextVNode("市场", -1)),
+                  createBaseVNode("span", {
+                    class: "main-tab-close",
+                    title: "关闭",
+                    onClick: _cache[6] || (_cache[6] = withModifiers(($event) => unref(closeMarketTab)(), ["stop"]))
+                  }, "×")
+                ], 2)) : createCommentVNode("", true)
               ])) : createCommentVNode("", true),
               (unref(state).rightPanelVisible || unref(panelMode)) && !slots.conversation.owner.value ? withDirectives((openBlock(), createElementBlock("div", {
                 key: 1,
                 class: normalizeClass(["slot-empty conversation-container", { "panel-only": unref(panelMode) }])
               }, [
-                _cache[14] || (_cache[14] = createBaseVNode("span", null, "对话面板未装配（ui-right-panel）", -1)),
+                _cache[19] || (_cache[19] = createBaseVNode("span", null, "对话面板未装配（ui-right-panel）", -1)),
                 createBaseVNode("button", {
                   class: "escape-link",
-                  onClick: _cache[5] || (_cache[5] = ($event) => pluginsOpen.value = true)
+                  onClick: _cache[8] || (_cache[8] = ($event) => pluginsOpen.value = true)
                 }, "打开插件面板")
               ], 2)), [
                 [vShow, mainView.value === "conversation"]
@@ -15520,10 +15623,10 @@
                 [vShow, mainView.value === "conversation"]
               ]) : createCommentVNode("", true),
               !unref(panelMode) && !slots.editor.owner.value ? withDirectives((openBlock(), createElementBlock("div", _hoisted_5, [
-                _cache[15] || (_cache[15] = createBaseVNode("span", null, "编辑器未装配（ui-editor）", -1)),
+                _cache[20] || (_cache[20] = createBaseVNode("span", null, "编辑器未装配（ui-editor）", -1)),
                 createBaseVNode("button", {
                   class: "escape-link",
-                  onClick: _cache[6] || (_cache[6] = ($event) => pluginsOpen.value = true)
+                  onClick: _cache[9] || (_cache[9] = ($event) => pluginsOpen.value = true)
                 }, "打开插件面板")
               ], 512)), [
                 [vShow, mainView.value === "editor"]
@@ -15533,13 +15636,21 @@
                 class: "plugin-slot-host editor-container"
               }, null, 512)), [
                 [vShow, mainView.value === "editor"]
+              ]) : createCommentVNode("", true),
+              !unref(panelMode) && unref(state).marketTabOpen ? withDirectives((openBlock(), createElementBlock("div", {
+                key: 5,
+                ref_key: "marketHost",
+                ref: marketHost,
+                class: "plugin-slot-host market-container"
+              }, null, 512)), [
+                [vShow, mainView.value === "market"]
               ]) : createCommentVNode("", true)
             ], 2),
             !unref(panelMode) && !slots.statusbar.owner.value ? (openBlock(), createElementBlock("div", _hoisted_6, [
-              _cache[16] || (_cache[16] = createBaseVNode("span", null, "状态栏未装配（ui-statusbar）", -1)),
+              _cache[21] || (_cache[21] = createBaseVNode("span", null, "状态栏未装配（ui-statusbar）", -1)),
               createBaseVNode("button", {
                 class: "escape-link",
-                onClick: _cache[7] || (_cache[7] = ($event) => pluginsOpen.value = true)
+                onClick: _cache[10] || (_cache[10] = ($event) => pluginsOpen.value = true)
               }, "打开插件面板")
             ])) : !unref(panelMode) ? (openBlock(), createElementBlock("div", {
               key: 7,
@@ -15557,8 +15668,8 @@
               key: 0,
               class: "plugin-escape-btn",
               title: "插件面板（壳级入口，不受插件停用影响）",
-              onClick: _cache[8] || (_cache[8] = ($event) => pluginsOpen.value = true)
-            }, [..._cache[17] || (_cache[17] = [
+              onClick: _cache[11] || (_cache[11] = ($event) => pluginsOpen.value = true)
+            }, [..._cache[22] || (_cache[22] = [
               createBaseVNode("svg", {
                 viewBox: "0 0 16 16",
                 width: "15",
@@ -15580,15 +15691,15 @@
             pluginsOpen.value ? (openBlock(), createElementBlock("div", {
               key: 1,
               class: "plugin-escape-overlay",
-              onClick: _cache[10] || (_cache[10] = withModifiers(($event) => pluginsOpen.value = false, ["self"]))
+              onClick: _cache[13] || (_cache[13] = withModifiers(($event) => pluginsOpen.value = false, ["self"]))
             }, [
               createBaseVNode("div", _hoisted_8, [
                 createBaseVNode("div", _hoisted_9, [
-                  _cache[18] || (_cache[18] = createBaseVNode("span", null, "插件面板（壳级入口）", -1)),
+                  _cache[23] || (_cache[23] = createBaseVNode("span", null, "插件面板（壳级入口）", -1)),
                   createBaseVNode("button", {
                     class: "plugin-escape-close",
                     title: "关闭",
-                    onClick: _cache[9] || (_cache[9] = ($event) => pluginsOpen.value = false)
+                    onClick: _cache[12] || (_cache[12] = ($event) => pluginsOpen.value = false)
                   }, "✕")
                 ]),
                 createBaseVNode("div", _hoisted_10, [
@@ -15601,7 +15712,7 @@
       };
     }
   };
-  const ShellApp = /* @__PURE__ */ _export_sfc(_sfc_main, [["__scopeId", "data-v-55c8d885"]]);
+  const ShellApp = /* @__PURE__ */ _export_sfc(_sfc_main, [["__scopeId", "data-v-ed26a1be"]]);
   window.__PAIRCODE_CORE = {
     Vue,
     api,

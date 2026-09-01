@@ -333,6 +333,10 @@ const saveSettings = async () => {
   }
 }
 
+// ★ 同步构建：setup 阶段（首次渲染前）就绪，字段挂载时 form[tabKey] 必然存在，
+//   避免 onMounted 中 await loadModels() 前的首次渲染对 form[tabKey][f.name] 读 undefined 报错
+buildForm()
+
 onMounted(async () => {
   await loadModels()
   loadSettings()

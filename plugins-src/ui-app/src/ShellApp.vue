@@ -38,12 +38,15 @@
          · 激活 tab 由 state.panels.editorOpen 决定（false=对话 tab，true=编辑器 tab）。
          · 点文件树 openEditor → editorOpen=true → 切到编辑器 tab；对话 tab 可手动切回。 -->
     <div class="main-area" :class="{ 'panel-only': panelMode }">
-      <!-- tab 栏（工具栏：对话 / 编辑器） -->
+      <!-- tab 栏（工具栏：对话 / 编辑器 / 市场） -->
       <div class="main-tabs" v-if="!panelMode">
         <button class="main-tab" :class="{ active: mainView === 'conversation' }"
                 @click="layout.setMainView('conversation')">对话</button>
         <button class="main-tab" :class="{ active: mainView === 'editor' }"
-                @click="layout.setMainView('editor')">编辑器</button>
+                @click="layout.setMainView('editor')">编辑器<span class="main-tab-close" title="关闭" @click.stop="layout.closeEditor()">×</span></button>
+        <!-- ★ 市场 tab（2026-09）：点击活动栏「市场」打开；× 关闭后回对话主视图 -->
+        <button v-if="state.marketTabOpen" class="main-tab" :class="{ active: mainView === 'market' }"
+                @click="layout.setMainView('market')">市场<span class="main-tab-close" title="关闭" @click.stop="closeMarketTab()">×</span></button>
       </div>
 
       <!-- conversation 宿主（单槽，常驻挂载；v-show 按 tab 切换） -->
@@ -60,6 +63,11 @@
         <span>编辑器未装配（ui-editor）</span><button class="escape-link" @click="pluginsOpen = true">打开插件面板</button></div>
       <div v-else-if="!panelMode" v-show="mainView === 'editor'"
            :ref="slots.editor.hostRef" class="plugin-slot-host editor-container"></div>
+
+      <!-- ★ market 宿主（市场面板 tab 内容）：marketplace bundle 动态挂载；
+           与对话/编辑器同为主区视图（v-show 切换，不占用槽），bundle 未就绪自动重试 -->
+      <div v-if="!panelMode && state.marketTabOpen" v-show="mainView === 'market'"
+           ref="marketHost" class="plugin-slot-host market-container"></div>
     </div>
 
     <!-- statusbar 槽位（single）：底部状态栏 -->
@@ -98,10 +106,10 @@
 </template>
 
 <script setup>
-import { onMounted, onUnmounted, ref, computed } from 'vue'
+import { onMounted, onUnmounted, ref, computed, nextTick, watch } from 'vue'
 import { useSingleSlot, boot, startPolling, stopPolling, loadAssemblyFile } from './plugin-runtime.js'
 import { state, sidebarWidth, layout } from './ui-state.js'
-import { initAppGlobals, cleanupAppGlobals, desktopPrefetch, loadWsList } from './app-actions.js'
+import { initAppGlobals, cleanupAppGlobals, desktopPrefetch, loadWsList, closeMarketTab } from './app-actions.js'
 import PluginPanel from './components/PluginPanel.vue'
 
 // ★ 桌面端面板独立模式：desktopbridge 注入 window.__DESKTOP_PANEL_MODE__，
@@ -148,9 +156,58 @@ const hostMainChildren = {
 // · sidebar 列宽：focusMode 或折叠 → 0；否则 sidebarWidth（280）
 // · details(editor) 列宽：focusMode 或 editorOpen=false → 0；否则 editorWidth
 //   ★ 编辑器折叠=列宽收缩（CSS），宿主 DOM 不卸载（CM6/终端 WS 保持挂载）。
-// ★ 主视图 tab（对话 ⇄ 编辑器）：editorOpen 是单一事实源（false=对话，true=编辑器）。
-//   两者常驻挂载（模板 v-show 切换），互不影响。
-const mainView = computed(() => state.panels.editorOpen ? 'editor' : 'conversation')
+// ★ 主视图 tab（对话 ⇄ 编辑器 ⇄ 市场）：state.panels.mainTab 是单一事实源。
+//   三者常驻挂载（模板 v-show 切换），互不影响。
+const mainView = computed(() => state.panels.mainTab)
+
+// ── ★ 市场面板（主区 tab）动态挂载：marketplace 插件 bundle → window.MarketplacePanel ──
+// 2026-09：市场面板从侧边栏迁至主内容区 tab；跨 bundle 挂载（与 GitPanel 同模式）。
+const marketHost = ref(null)
+let marketUnmount = null
+let marketRetryTimer = null
+
+function mountMarketPanel() {
+  const el = marketHost.value
+  if (!el) return
+  el.innerHTML = ''
+  const mod = window.MarketplacePanel
+  if (mod && typeof mod.mount === 'function') {
+    try {
+      marketUnmount = mod.mount(el)
+      return
+    } catch (e) {
+      console.warn('[shell] 市场面板挂载失败', e)
+      el.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text-muted)">挂载失败: ' + (e && e.message || e) + '</div>'
+      return
+    }
+  }
+  if (marketRetryTimer) return
+  let tries = 0
+  marketRetryTimer = setInterval(() => {
+    tries++
+    if (window.MarketplacePanel) {
+      clearInterval(marketRetryTimer); marketRetryTimer = null
+      mountMarketPanel()
+      return
+    }
+    if (tries >= 8) {
+      clearInterval(marketRetryTimer); marketRetryTimer = null
+      el.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text-muted)">市场面板未就绪（marketplace 插件未启用）</div>'
+    }
+  }, 800)
+  el.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text-muted)">市场面板加载中...</div>'
+}
+
+function unmountMarketPanel() {
+  if (marketRetryTimer) { clearInterval(marketRetryTimer); marketRetryTimer = null }
+  if (marketUnmount) { try { marketUnmount() } catch (e) {} marketUnmount = null }
+}
+
+// 市场 tab 激活/离开时挂载/卸载面板（激活时 may 尚未 mount 完成，nextTick 兜底）
+watch(mainView, (v) => {
+  if (v === 'market' && state.marketTabOpen) nextTick(mountMarketPanel)
+  else unmountMarketPanel()
+})
 
 const gridStyle = computed(() => {
   if (panelMode) return { gridTemplateColumns: '1fr', gridTemplateRows: '1fr' }
@@ -192,6 +249,7 @@ onUnmounted(() => {
   for (const s of Object.values(slots)) s.stop()
   stopPolling()
   cleanupAppGlobals()
+  unmountMarketPanel()
 })
 </script>
 
@@ -253,6 +311,18 @@ onUnmounted(() => {
   flex: 1; min-width: 0; min-height: 0;
   display: flex; flex-direction: column; overflow: hidden;
 }
+/* market（市场面板）宿主：主区第三视图，v-show 切换；bundle 动态挂载 */
+.market-container {
+  flex: 1; min-width: 0; min-height: 0;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+/* 主区 tab 内嵌关闭按钮（编辑器 / 市场）× */
+.main-tab-close {
+  display: inline-flex; align-items: center; justify-content: center;
+  margin-left: 6px; font-size: 13px; line-height: 1;
+  width: 16px; height: 16px; border-radius: 3px; opacity: 0.55;
+}
+.main-tab-close:hover { opacity: 1; background: var(--bg-hover); color: var(--text-primary); }
 .app-statusbar-host { grid-column: 1 / -1; grid-row: 3; z-index: 30; height: 22px; }
 .plugin-slot-host { height: 100%; overflow: hidden; }
 /* ★ 插件渲染的子元素必须撑满宿主（bundle 根 auto 宽度不随宿主 grid 拉伸）。

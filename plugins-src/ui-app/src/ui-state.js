@@ -105,6 +105,8 @@ export const state = reactive({
   loadingDir: '',
   openFiles: [],
   activeFile: '',
+  // ── 市场 tab（主内容区 main-tabs 第三视图 tab）──
+  marketTabOpen: false,      // 「市场」tab 是否打开
   fileContents: {},
   fileSavedContent: {}, // 磁盘上原始内容，用于准确判断是否修改
   fileDirty: {},
@@ -149,6 +151,9 @@ export const state = reactive({
     editorOpen: false,        // ★ 默认折叠：编辑器隐藏（不占主导视图）
     editorWidth: 360,         // 折叠后打开时的默认详情列宽（对齐 DETAILS_DEFAULT=360）
     editorLastWidth: 360,     // 上次打开宽（折叠还原用）
+    // ★ 主区 tab 单一事实源（2026-09）：'conversation' | 'editor' | 'market'
+    //   editorOpen 保留为兼容映射（view==='editor' ⇔ editorOpen=true）
+    mainTab: 'conversation',
   },
 })
 
@@ -226,6 +231,8 @@ export const layout = {
     if (typeof filePath === 'string' && filePath) {
       state.activeFile = filePath
       if (!state.openFiles.includes(filePath)) state.openFiles.push(filePath)
+      // ★ 打开文件即切到编辑器主 tab（主区 tab 互斥）
+      state.panels.mainTab = 'editor'
     }
     // ★ 打开编辑器即退出专注（focusMode 是「纯对话」态：隐藏侧栏+编辑器；
     //   点文件树打开编辑时必须退出，否则编辑器仍被 focusMode 折叠不可见）。
@@ -239,6 +246,8 @@ export const layout = {
   closeEditor() {
     // ★ 折叠不 unmount：只置 false，宽度由壳 css width:0 收缩；CM6/终端 WS 保留。
     state.panels.editorOpen = false
+    // ★ 关闭编辑器 tab → 回到对话主视图
+    if (state.panels.mainTab === 'editor') state.panels.mainTab = 'conversation'
   },
   toggleEditor() {
     if (state.panels.editorOpen) layout.closeEditor()
@@ -254,9 +263,10 @@ export const layout = {
       state.panels.editorLastWidth = v
     }
   },
-  // ★ 主视图 tab 切换（对话 ⇄ 编辑器）：editorOpen 作为「编辑器 tab 激活」的单一事实源。
-  //   两者常驻挂载（壳 v-show 切换），互不影响（CM6/终端 WS 不重挂）。
+  // ★ 主视图 tab 切换（对话 ⇄ 编辑器 ⇄ 市场）：mainTab 是单一事实源。
+  //   各视图常驻挂载（壳 v-show 切换），互不影响（CM6/终端 WS 不重挂）。
   setMainView(view) {
+    state.panels.mainTab = view
     state.panels.editorOpen = (view === 'editor')
   },
 }

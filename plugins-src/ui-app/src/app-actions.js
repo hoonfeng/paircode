@@ -159,11 +159,32 @@ export function switchActivity(id) {
   if (id === 'settings') { showSettings.value = true; return }
   if (id === 'system') { showSystem.value = true; return }
   if (id === 'chat') { state.rightPanelVisible = !state.rightPanelVisible; return }
+  // ★ 市场已迁至主内容区 tab（2026-09）：活动栏/菜单「市场」→ 开/关市场 tab，
+  //   不再切换侧边栏视图
+  if (id === 'marketplace') { toggleMarketTab(); return }
   if (state.activeActivity === id) {
     state.sidebarVisible = !state.sidebarVisible
   } else {
     state.activeActivity = id
     state.sidebarVisible = true
+  }
+}
+
+// ── 市场 tab（主内容区 main-tabs 第三视图）：打开/激活/收起 ──
+// 点击市场入口：未开→打开并激活；已开且激活→关闭；已开但未激活→激活。
+export function toggleMarketTab() {
+  if (state.marketTabOpen && state.panels.mainTab === 'market') {
+    closeMarketTab()
+  } else {
+    state.marketTabOpen = true
+    state.panels.mainTab = 'market'
+    state.panels.editorOpen = false
+  }
+}
+export function closeMarketTab() {
+  state.marketTabOpen = false
+  if (state.panels.mainTab === 'market') {
+    state.panels.mainTab = 'conversation'
   }
 }
 

@@ -259,7 +259,9 @@ import SvgIcon from './SvgIcon.vue'
 import { state } from '../ui-state.js'
 
 function closePanel() {
-  state.activeActivity = 'explorer'
+  // ★ 2026-09：市场已迁至主内容区 tab——关闭即收起市场 tab（回到对话主视图）
+  state.marketTabOpen = false
+  state.panels.mainTab = 'conversation'
 }
 
 const tab = ref('all')
