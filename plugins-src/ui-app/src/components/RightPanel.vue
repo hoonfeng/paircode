@@ -212,27 +212,32 @@
             <div class="chat-input" ref="inputRef" :contenteditable="state.chatLoading ? 'false' : 'true'" :style="{ height: inputHeight + 'px' }" data-placeholder="发送消息到 AI... (Enter 发送, Shift+Enter 换行)" @keydown="onKeydown" @input="onInput" @dragover.prevent @drop="handleDrop" @paste="handlePaste"></div>
             <div class="input-bottom-bar">
               <div class="ibb-btns">
-                <!-- ★ composer 模型选择器（2026-09-03 配置列表驱动）：
+                <!-- ★ composer 模型选择器（2026-09-03 配置列表驱动；2026-09-05 移动端化：
+                       bottom-sheet 弹层替代传统 <select>）：
                        下拉 = AI 设置面板「AI 配置」列表（ai-presets.json）：分组=配置名，
                        每组模型 = 该配置对应服务商（models.json）的可用模型列表；
                        选中配置只写当前会话（PUT /api/conversations/{id}），不改全局设置——历史对话保持各自模型不被牵连。 -->
-                <span class="ibb-model">
-                  <select v-model="composerModel" class="cmp-sel cmp-model" @change="onCmpModelChange" :title="modelSelectTitle">
-                    <option v-if="!composerItems.length" value="">（暂无可用 AI 配置，请先在「设置 → AI → AI 配置」添加）</option>
-                    <optgroup v-for="g in composerItems" :key="g.name" :label="g.name">
-                      <option v-for="m in g.models" :key="g.name + '::' + m" :value="'preset::' + g.name + '::' + m" :title="g.provider + ' / ' + m">{{ m }}</option>
-                    </optgroup>
-                  </select>
-                </span>
+                <SheetPicker
+                  v-model="composerModel"
+                  :items="modelSheetItems"
+                  title="选择模型"
+                  placeholder="选择模型…"
+                  empty-text="暂无可用 AI 配置：请先在「设置 → AI → AI 配置」添加"
+                  @change="onCmpModelChange"
+                />
                 <!-- ★ 2026-09-04 工具集（通用集合）模式选择器：会话级——选择当前对话
                      使用的工具集（default/full/dev/debug/test/docs 或自定义集合），
                      写入会话元数据（PUT /conversations/{id} toolset）只影响本会话；
-                     agent 工具面按所选集合收敛（发送消息时后端应用）。 -->
-                <span class="ibb-model" v-if="toolsetItems.length">
-                  <select v-model="convToolset" class="cmp-sel cmp-toolset" @change="onConvToolsetChange" :title="'工具集（通用集合）：当前对话使用的工具面；切换只影响本对话。' + toolsetSelectTip">
-                    <option v-for="t in toolsetItems" :key="t.name" :value="t.name">{{ toolsetLabel(t) }}</option>
-                  </select>
-                </span>
+                     agent 工具面按所选集合收敛（发送消息时后端应用）。
+                     ★ 2026-09-05 移动端化：bottom-sheet 弹层替代传统 <select>。 -->
+                <SheetPicker
+                  v-if="toolsetItems.length"
+                  v-model="convToolset"
+                  :items="toolsetSheetItems"
+                  title="切换工具集"
+                  placeholder="选择工具集…"
+                  @change="onConvToolsetChange"
+                />
                 <span class="obtn-sep"></span>
                 <span :class="['obtn', reviewBtnClass]" @click="cycleReviewMode" :title="reviewBtnTitle"><SvgIcon :name="reviewIconName" :size="12" /> {{ reviewBtnLabel }}</span>
                 <span :class="['obtn', { active: autoCollapse }]" @click="toggleAuto('autoCollapse')" title="自动折叠：新消息发出时折叠旧输出，显示完成摘要"><SvgIcon name="list" :size="12" /> 折叠</span>
@@ -260,6 +265,7 @@ import api from '../api.js'
 import { setGlobalCtx, startConvRuntime, resetConvRuntime, createAssistantPlaceholder, getConvRuntime, getConvCtxStats, resetConvCtxStats, normalizeAskType, markHistoryLoaded } from '../agent-events.js'
 import { useSingleSlot, mountListSlot } from '../plugin-runtime.js'
 import SvgIcon from './SvgIcon.vue'
+import SheetPicker from './SheetPicker.vue'
 import TaskPanel from './TaskPanel.vue'
 import ApprovalBar from './ApprovalBar.vue'
 import ConvSidebar from './ConvSidebar.vue'
@@ -369,10 +375,15 @@ const composerItems = computed(() => {
   }
   return out
 })
-const modelSelectTitle = computed(() => {
-  const cur = parseModelValue(composerModel.value)
-  if (!cur.provider) return '选择模型（AI 设置面板 → AI 配置 分组；每组 = 该配置服务商的可用模型）'
-  return '当前会话模型：' + cur.provider + ' / ' + cur.model + '\n切换只影响当前对话，不改其他对话'
+// ★ 2026-09-05 移动端化：模型/工具集选择器的 bottom-sheet 选项（SheetPicker）
+const modelSheetItems = computed(() => {
+  const out = []
+  for (const g of composerItems.value) {
+    for (const m of g.models) {
+      out.push({ value: 'preset::' + g.name + '::' + m, label: m, desc: g.provider + ' · ' + g.name, group: g.name })
+    }
+  }
+  return out
 })
 // 下拉值解析：'preset::<配置名>::<模型>'（配置分组）或旧编码 'provider::model'（历史会话/自定义）
 // ★ 2026-09-03 返回 preset（配置名）——切换时一并写入会话元数据，装配按配置整套展开。
@@ -493,14 +504,14 @@ function initComposerModel() {
 // ── ★ 2026-09-04 工具集（通用集合）模式：会话级选择 ──
 const toolsetItems = ref([])    // 全局工具集列表（GET /api/toolsets，不含 builtin 虚拟）
 const convToolset = ref('')     // 当前会话工具集名（'' = 未设置，后端用 default）
-const toolsetSelectTip = computed(() => {
-  if (!convToolset.value) return '（未选择=基础工具集 default）'
-  return '当前：' + convToolset.value
-})
 function toolsetLabel(t) {
   const scope = t.scope === 'builtin' ? '内置' : '全局'
   return t.name + '（' + scope + '·' + (t.pluginCount || 0) + ' 插件）'
 }
+// ★ 2026-09-05 移动端化：工具集选择器 bottom-sheet 选项
+const toolsetSheetItems = computed(() =>
+  toolsetItems.value.map(t => ({ value: t.name, label: t.name, desc: (t.pluginCount || 0) + ' 个插件' }))
+)
 async function loadToolsetItems() {
   try {
     const list = await api.getToolsets()
@@ -2584,7 +2595,7 @@ onUnmounted(() => {
 }
 .resume-btn:hover { background: rgba(232, 172, 82, 0.4); }
 .input-resizer { position: absolute; top: -8px; left: 0; right: 0; height: 12px; cursor: ns-resize; z-index: 10; }
-.input-wrapper { position: relative; background: var(--input-bg); border: 1px solid var(--border-color); border-radius: 10px; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+.input-wrapper { position: relative; background: var(--input-bg); border: 1px solid var(--border-color); border-radius: 16px; transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12); }
 /* ★ Round3 ④.2 slash 命令菜单（输入 "/" 前缀时显示在输入框上方） */
 .slash-menu { position: absolute; left: 0; right: 0; bottom: 100%; margin-bottom: 6px; background: var(--panel-bg, #1f2430); border: 1px solid var(--border-color); border-radius: 10px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35); max-height: 280px; overflow-y: auto; z-index: 60; padding: 4px; }
 .slash-item { display: flex; align-items: baseline; gap: 10px; padding: 7px 10px; border-radius: 7px; cursor: pointer; }
@@ -2593,9 +2604,9 @@ onUnmounted(() => {
 .slash-name .slash-ondemand { font-style: normal; font-size: 10px; color: #ffb454; border: 1px solid #ffb45455; border-radius: 4px; padding: 0 4px; margin-left: 6px; vertical-align: 1px; }
 .slash-desc { color: var(--text-muted, #9aa4b2); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* ★ 2026-08-21 可视优化：输入框聚焦时 accent 描边（键盘可达性/审美） */
-.input-wrapper:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-ring); }
+.input-wrapper:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-ring), 0 4px 16px rgba(0, 0, 0, 0.16); }
 /* ★ 2026-08-22 contenteditable 输入框改造：附件内联 tag 渲染在输入框内 */
-.chat-input { display: block; width: 100%; background: transparent; border: none; color: var(--text-primary); padding: 14px 16px 14px 16px; border-radius: 0; font-size: 14px; resize: none; outline: none; min-height: 80px; font-family: inherit; line-height: 1.6; box-sizing: border-box; overflow-y: auto; white-space: pre-wrap; word-break: break-word; cursor: text; }
+.chat-input { display: block; width: 100%; background: transparent; border: none; color: var(--text-primary); padding: 16px 18px 8px 18px; border-radius: 0; font-size: 14px; resize: none; outline: none; min-height: 80px; font-family: inherit; line-height: 1.6; box-sizing: border-box; overflow-y: auto; white-space: pre-wrap; word-break: break-word; cursor: text; }
 /* placeholder（contenteditable 无原生 placeholder，用 :empty 伪元素） */
 .chat-input:empty::before { content: attr(data-placeholder); color: var(--text-muted); pointer-events: none; }
 .chat-input[contenteditable="false"] { opacity: 0.55; cursor: not-allowed; }
@@ -2608,17 +2619,10 @@ onUnmounted(() => {
 .att-inline .att-inline-label { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .att-inline .att-inline-x { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 50%; font-size: 12px; line-height: 1; color: inherit; opacity: 0.7; cursor: pointer; flex-shrink: 0; }
 .att-inline .att-inline-x:hover { opacity: 1; background: rgba(0, 0, 0, 0.25); }
-.input-bottom-bar { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 0 12px 8px 12px; }
-.ibb-btns { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; position: relative; }
-.ibb-model { display: inline-flex; align-items: center; gap: 4px; }
-.cmp-sel {
-  background: var(--bg-tertiary); color: var(--text-primary, #ddd);
-  border: 1px solid var(--border-color, #444); border-radius: 5px;
-  font-size: 11px; padding: 3px 4px; outline: none; max-width: 110px;
-  cursor: pointer;
-}
-.cmp-sel:focus { border-color: var(--accent, #4f8cff); }
-.obtn { display: flex; align-items: center; gap: 3px; padding: 4px 8px; border-radius: 6px; cursor: pointer; font-size: 11px; color: var(--text-muted); background: var(--bg-tertiary); border: 1px solid var(--border-color); white-space: nowrap; user-select: none; transition: all 0.12s; }
+.input-bottom-bar { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 0 10px 10px 10px; }
+.ibb-btns { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; position: relative; }
+/* ★ 2026-09-05 移动端化：传统 <select> 已由 SheetPicker（bottom-sheet）替换，.cmp-sel 移除 */
+.obtn { display: flex; align-items: center; gap: 3px; padding: 4px 10px; border-radius: 999px; cursor: pointer; font-size: 11px; color: var(--text-muted); background: var(--bg-tertiary); border: 1px solid var(--border-color); white-space: nowrap; user-select: none; transition: all 0.12s; }
 .obtn:hover { color: var(--text-secondary); border-color: var(--text-muted); }
 .obtn.active { color: var(--accent); background: rgba(212, 167, 78, 0.1); border-color: rgba(212, 167, 78, 0.3); }
 .obtn-obtn-agent.active { color: #d4a74e; }
@@ -2629,10 +2633,12 @@ onUnmounted(() => {
 
 
 
-.send-btn { background: linear-gradient(135deg, var(--accent) 0%, var(--accent-light) 100%); color: #fff; padding: 6px 14px; border-radius: 8px; cursor: pointer; border: none; transition: opacity 0.15s, transform 0.1s; display: inline-flex; align-items: center; gap: 4px; }
-.send-btn:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
-.send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.stop-btn { background: #c03; color: #fff; padding: 6px 14px; border-radius: 8px; cursor: pointer; border: none; }
+/* ★ 2026-09-05 移动端融合设计：发送/停止 = 圆形 FAB 按钮 */
+.send-btn { background: linear-gradient(135deg, var(--accent) 0%, var(--accent-light) 100%); color: #fff; width: 34px; height: 34px; padding: 0; border-radius: 50%; cursor: pointer; border: none; transition: opacity 0.15s, transform 0.1s, box-shadow 0.15s; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 3px 10px rgba(79, 140, 255, 0.35); }
+.send-btn svg { margin-left: 2px; }
+.send-btn:hover:not(:disabled) { opacity: 0.92; transform: translateY(-1px); box-shadow: 0 5px 14px rgba(79, 140, 255, 0.45); }
+.send-btn:disabled { opacity: 0.35; cursor: not-allowed; box-shadow: none; }
+.stop-btn { background: #c03; color: #fff; width: 34px; height: 34px; padding: 0; border-radius: 50%; cursor: pointer; border: none; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 3px 10px rgba(204, 0, 51, 0.35); }
 /* ── 用户消息附件标签 ── */
 .user-attachments { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 .att-tag { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px 1px 8px; border-radius: 11px; font-size: 12px; cursor: default; }

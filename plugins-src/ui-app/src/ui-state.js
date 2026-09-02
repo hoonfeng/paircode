@@ -105,8 +105,9 @@ export const state = reactive({
   loadingDir: '',
   openFiles: [],
   activeFile: '',
-  // ── 市场 tab（主内容区 main-tabs 第三视图 tab）──
+  // ── 主内容区 tab（对话/编辑器/市场/工具集 多视图）──
   marketTabOpen: false,      // 「市场」tab 是否打开
+  toolsetsTabOpen: false,    // 「工具集」tab 是否打开
   fileContents: {},
   fileSavedContent: {}, // 磁盘上原始内容，用于准确判断是否修改
   fileDirty: {},

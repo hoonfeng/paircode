@@ -5,54 +5,11 @@
       <span class="pp-title"><SvgIcon name="puzzle" :size="14" /> 插件</span>
       <div class="pp-actions">
         <button class="pp-icon-btn" @click="refresh" title="刷新"><SvgIcon name="refresh" :size="13" :class="{ spinning: refreshing }" /></button>
-        <button class="pp-icon-btn" :class="{ active: showToolset }" @click="showToolset = !showToolset" title="工具集管理（插件化：加插件/删插件/摘工具）"><SvgIcon name="layers" :size="13" /></button>
         <button class="pp-icon-btn" @click="showNew = !showNew" title="新建插件"><SvgIcon name="plus" :size="14" /></button>
       </div>
     </div>
 
-    <!-- 工具集管理（插件化思路：add_plugin / rm_plugin / rm_tool / enable_tool） -->
-    <div v-if="showToolset" class="pp-toolset">
-      <div class="pp-ts-head">
-        <select v-model="tsName" class="pp-input pp-lang" @change="loadToolsetDetail">
-          <option value="">选择工具集…</option>
-          <optgroup label="通用集合（全局共享）">
-            <option v-for="t in toolsetMetas.filter(x => x.scope !== 'builtin')" :key="t.name" :value="t.name">{{ t.name }}（{{ t.pluginCount }} 插件）</option>
-            <option v-for="t in toolsetMetas.filter(x => x.scope === 'builtin')" :key="t.name" :value="t.name">{{ t.name }}（{{ t.pluginCount }} 插件·内置默认）</option>
-          </optgroup>
-        </select>
-        <button class="pp-btn" @click="loadToolsets">刷新</button>
-      </div>
-      <div v-if="tsDetail" class="pp-ts-body">
-        <div class="pp-ts-title">
-          {{ tsDetail.name }}
-          <span class="pp-ts-scope">{{ tsDetail.project ? tsDetail.project + '·' : '' }}{{ tsDetail.description || '工具集' }}</span>
-        </div>
-        <div v-for="pl in tsDetail.plugins" :key="pl.name" class="pp-ts-plugin">
-          <div class="pp-ts-prow">
-            <span class="pp-ts-pname">{{ pl.name }}</span>
-            <button v-if="tsDetail.scope !== 'builtin'" class="pp-btn danger" @click="edit({ action: 'rm_plugin', plugin_name: pl.name })">移出工具集</button>
-            <span v-else class="pp-ts-muted">内置</span>
-          </div>
-          <div v-if="pl.purpose" class="pp-ts-purpose">{{ pl.purpose }}</div>
-          <div v-if="pluginToolsOf(pl.name).length" class="pp-ts-tools">
-            <label v-for="t in pluginToolsOf(pl.name)" :key="t" class="pp-ts-tool" :title="isToolDisabled(pl, t) ? '已摘除（对 agent 不可见），点击恢复' : '点击摘除（插件保留、工具不可见）'">
-              <input type="checkbox" :checked="!isToolDisabled(pl, t)" @change="toggleTool(pl, t)" />
-              <span :class="{ off: isToolDisabled(pl, t) }">{{ t }}</span>
-            </label>
-          </div>
-          <div v-else class="pp-ts-muted">（插件未运行或无工具）</div>
-        </div>
-        <div class="pp-ts-add">
-          <select v-model="addPluginName" class="pp-input pp-lang">
-            <option value="">把宿主插件加入工具集…</option>
-            <option v-for="p in addablePlugins" :key="p.name" :value="p.name">{{ p.name }}<template v-if="p.tools && p.tools.length">（{{ p.tools.length }} 工具）</template></option>
-          </select>
-          <button class="pp-btn primary" :disabled="!addPluginName" @click="doAddPlugin">加入</button>
-        </div>
-      </div>
-      <div v-else class="pp-ts-empty">选择上方工具集查看/编辑其插件与工具</div>
-    </div>
-
+    <!-- 工具集管理已迁移至独立面板（活动栏「工具集」图标 → ToolsetPanel）-->
     <!-- 新建插件表单 -->
     <div v-if="showNew" class="pp-new">
       <div class="pp-new-title">新建 JS 动态插件</div>
@@ -257,7 +214,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, nextTick } from 'vue'
 import api from '../api.js'
 import SvgIcon from './SvgIcon.vue'
 import { state } from '../ui-state.js'
@@ -276,12 +233,6 @@ const newMsg = ref('')
 const newMsgErr = ref(false)
 const activePanelId = ref('')
 const clientPanelEl = ref(null)
-// 工具集管理状态
-const showToolset = ref(false)
-const toolsetMetas = ref([])
-const tsName = ref('')
-const tsDetail = ref(null)
-const addPluginName = ref('')
 
 const newForm = reactive({ purpose: '', code: '', client: '', language: '', run: true })
 
@@ -352,70 +303,6 @@ async function switchImpl(c, impl) {
   }
 }
 
-
-// ─── 工具集管理（插件化：add_plugin / rm_plugin / rm_tool / enable_tool）──
-async function loadToolsets() {
-  try {
-    const list = (await api.getToolsets()) || []
-    // ★ 2026-09-04 工具集已全局化（通用集合）：全部工具集均可管理（虚拟
-    //   builtin 内置包保留展示——分组开关入口）；无 global 区分。
-    toolsetMetas.value = list || []
-  } catch (e) {
-    toolsetMetas.value = []
-  }
-  if (tsName.value && !toolsetMetas.value.some(t => t.name === tsName.value)) tsName.value = ''
-  if (tsName.value) await loadToolsetDetail()
-  else tsDetail.value = null
-}
-
-async function loadToolsetDetail() {
-  if (!tsName.value) { tsDetail.value = null; return }
-  try {
-    tsDetail.value = await api.getToolsets(tsName.value)
-  } catch (e) {
-    window.$toast && window.$toast('加载工具集失败: ' + (e.message || e), 'error')
-  }
-}
-
-// 插件工具清单（从宿主插件列表取——工具是插件运行时注册的）
-function pluginToolsOf(pname) {
-  const p = plugins.value.find(x => x.name === pname)
-  return (p && p.tools) || []
-}
-
-function isToolDisabled(pl, t) {
-  return (pl.disabledTools || []).includes(t)
-}
-
-// 工具集编辑（即时热装载 + 回写固化 JSON）
-async function edit(data) {
-  try {
-    const res = await api.toolsetEdit({ name: tsName.value, ...data })
-    window.$toast && window.$toast((res && res.message) || '操作成功', 'info')
-    await loadToolsetDetail()
-    await refresh()
-  } catch (e) {
-    window.$toast && window.$toast(e.message || '操作失败', 'error')
-  }
-}
-
-function toggleTool(pl, t) {
-  edit({ action: isToolDisabled(pl, t) ? 'enable_tool' : 'rm_tool', plugin_name: pl.name, tool: t })
-}
-
-async function doAddPlugin() {
-  if (!addPluginName.value) return
-  await edit({ action: 'add_plugin', plugin_name: addPluginName.value })
-  addPluginName.value = ''
-}
-
-// 可加入的宿主插件（排除已在工具集的）
-const addablePlugins = computed(() => {
-  const inTs = new Set((tsDetail.value && tsDetail.value.plugins || []).map(p => p.name))
-  return plugins.value.filter(p => !inTs.has(p.name))
-})
-
-watch(showToolset, v => { if (v) loadToolsets() })
 
 // ─── 列表加载 ────────────────────────────────────────────────
 // 用 XHR 而非 fetch：兼容性最好（旧 Edge/无头环境都可靠），自带 timeout
@@ -1060,47 +947,6 @@ onUnmounted(() => {
 .pp-btn.mini { padding: 2px 8px; font-size: 10px; border-radius: 4px; }
 </style>
 
-/* ─── 工具集管理区 ─── */
-.pp-toolset {
-  border-bottom: 1px solid var(--border-color);
-  background: var(--bg-tertiary);
-  padding: 8px 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  flex-shrink: 0;
-  max-height: 46%;
-  overflow: auto;
-}
-.pp-ts-head { display: flex; gap: 6px; align-items: center; }
-.pp-ts-head select { flex: 1; }
-.pp-ts-body { display: flex; flex-direction: column; gap: 6px; }
-.pp-ts-title { font-size: 12px; font-weight: 600; color: var(--text-primary); }
-.pp-ts-scope { font-weight: 400; color: var(--text-muted); font-size: 11px; }
-.pp-ts-plugin {
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  background: var(--bg-primary);
-  padding: 6px 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.pp-ts-prow { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-.pp-ts-pname { font-weight: 600; font-size: 12px; word-break: break-all; }
-.pp-ts-purpose { font-size: 11px; color: var(--text-muted); }
-.pp-ts-tools { display: flex; flex-wrap: wrap; gap: 4px 10px; }
-.pp-ts-tool {
-  display: flex; align-items: center; gap: 3px;
-  font-size: 11px; color: var(--text-secondary);
-  cursor: pointer;
-}
-.pp-ts-tool input { margin: 0; cursor: pointer; }
-.pp-ts-tool span.off { text-decoration: line-through; color: var(--text-muted); opacity: .6; }
-.pp-ts-muted { font-size: 10px; color: var(--text-muted); }
-.pp-ts-add { display: flex; gap: 6px; align-items: center; margin-top: 2px; }
-.pp-ts-add select { flex: 1; }
-.pp-ts-empty { font-size: 11px; color: var(--text-muted); padding: 4px 0; }
 .pp-icon-btn.active { color: var(--accent-light); background: var(--bg-hover); }
 
 

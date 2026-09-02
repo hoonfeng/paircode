@@ -1,7 +1,7 @@
 (function() {
   "use strict";
   var __vite_style__ = document.createElement("style");
-  __vite_style__.textContent = "\n@keyframes stopPulse-faf69761 {\n0%, 100% { opacity: 0.6;\n}\n50% { opacity: 1;\n}\n}\n@keyframes stopRingPulse-faf69761 {\n0%, 100% { opacity: 0.3; transform: scale(1);\n}\n50% { opacity: 0.15; transform: scale(1.15);\n}\n}\n.stop-pulse[data-v-faf69761] {\n  animation: stopPulse-faf69761 1.2s ease-in-out infinite;\n}\n.stop-pulse-ring[data-v-faf69761] {\n  animation: stopRingPulse-faf69761 1.2s ease-in-out infinite;\n  fill: none;\n  transform-origin: center;\n}\n.svg-icon[data-v-faf69761] {\n  display: inline-block;\n  vertical-align: middle;\n  flex-shrink: 0;\n}\n\n.plugin-panel[data-v-3262bda6] {\n  height: 100%;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n  font-size: 13px;\n}\n.pp-header[data-v-3262bda6] {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 8px 10px;\n  border-bottom: 1px solid var(--border-color);\n  flex-shrink: 0;\n}\n.pp-title[data-v-3262bda6] {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  font-weight: 600;\n  font-size: 12px;\n  color: var(--text-primary);\n}\n.pp-actions[data-v-3262bda6] { display: flex; gap: 4px;\n}\n.pp-icon-btn[data-v-3262bda6] {\n  background: none; border: none; cursor: pointer;\n  color: var(--text-muted); padding: 2px 4px; border-radius: 3px;\n  display: flex; align-items: center;\n}\n.pp-icon-btn[data-v-3262bda6]:hover { background: var(--bg-hover); color: var(--text-primary);\n}\n\n/* 新建表单 */\n.pp-new[data-v-3262bda6] {\n  padding: 10px;\n  border-bottom: 1px solid var(--border-color);\n  display: flex;\n  flex-direction: column;\n  gap: 6px;\n  background: var(--bg-tertiary);\n  flex-shrink: 0;\n  max-height: 45%;\n  overflow: auto;\n}\n.pp-new-title[data-v-3262bda6] { font-size: 12px; font-weight: 600; color: var(--text-secondary);\n}\n.pp-input[data-v-3262bda6], .pp-textarea[data-v-3262bda6] {\n  background: var(--bg-primary);\n  border: 1px solid var(--border-color);\n  color: var(--text-primary);\n  border-radius: 4px;\n  padding: 5px 8px;\n  font-size: 12px;\n  width: 100%;\n  box-sizing: border-box;\n}\n.pp-textarea.code[data-v-3262bda6] {\n  font-family: var(--font-code);\n  font-size: 11px;\n  line-height: 1.5;\n  resize: vertical;\n}\n.pp-new-foot[data-v-3262bda6] { display: flex; align-items: center; gap: 8px;\n}\n.pp-lang[data-v-3262bda6] { width: auto; flex-shrink: 0;\n}\n.pp-check[data-v-3262bda6] { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-secondary); white-space: nowrap;\n}\n.pp-new-msg[data-v-3262bda6] { font-size: 11px; color: var(--accent-light); word-break: break-all;\n}\n.pp-new-msg.err[data-v-3262bda6] { color: var(--error, #e06c75);\n}\n\n/* client 面板区 */\n.pp-client[data-v-3262bda6] {\n  border-bottom: 1px solid var(--border-color);\n  flex-shrink: 0;\n  display: flex;\n  flex-direction: column;\n  max-height: 40%;\n}\n/* UI 槽位区（Slot 系统） */\n.pp-slots[data-v-3262bda6] {\n  border-bottom: 1px solid var(--border-color);\n  flex-shrink: 0;\n  padding: 6px 8px;\n  display: flex;\n  flex-direction: column;\n  gap: 5px;\n  max-height: 30%;\n  overflow-y: auto;\n}\n.pp-slots-head[data-v-3262bda6] {\n  display: flex; align-items: center; gap: 6px;\n  font-size: 11px; color: var(--text-primary); font-weight: 600;\n}\n.pp-slots-head svg[data-v-3262bda6] { color: var(--accent);\n}\n.pp-slots-sub[data-v-3262bda6] { font-weight: 400; font-size: 10px; color: var(--text-muted);\n}\n.pp-slot-row[data-v-3262bda6] {\n  display: flex; align-items: center; justify-content: space-between; gap: 8px;\n  background: var(--bg-primary);\n  border: 1px solid var(--border-color);\n  border-left: 2px solid var(--accent);\n  border-radius: 6px; padding: 5px 8px;\n  transition: border-color .12s, background .12s;\n}\n.pp-slot-row[data-v-3262bda6]:hover {\n  border-color: color-mix(in srgb, var(--accent) 45%, var(--border-color));\n  background: var(--bg-hover);\n}\n.pp-slot-info[data-v-3262bda6] { display: flex; flex-direction: column; gap: 2px; min-width: 0;\n}\n.pp-slot-title-row[data-v-3262bda6] { display: flex; align-items: center; gap: 6px; min-width: 0;\n}\n.pp-slot-id[data-v-3262bda6] {\n  font-family: var(--font-mono, monospace); font-size: 11px; color: var(--accent-light);\n  text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;\n}\n.pp-slot-owner[data-v-3262bda6] { font-size: 10px; color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px;\n}\n.pp-slot-owner.builtin[data-v-3262bda6] { color: var(--text-muted);\n}\n.pp-slot-kind[data-v-3262bda6] {\n  font-size: 9px; border-radius: 4px; padding: 0 5px; align-self: flex-start;\n  line-height: 15px; flex-shrink: 0; font-weight: 600; letter-spacing: .3px;\n}\n.pp-slot-kind.kind-single[data-v-3262bda6] { color: var(--accent-light); background: color-mix(in srgb, var(--accent) 14%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);\n}\n.pp-slot-kind.kind-list[data-v-3262bda6] { color: #3fb950; background: rgba(63, 185, 80, .10); border: 1px solid rgba(63, 185, 80, .30);\n}\n.pp-slot-list[data-v-3262bda6] { display: flex; flex-direction: column; gap: 3px; align-items: flex-end; flex-shrink: 0;\n}\n.pp-slot-list-item[data-v-3262bda6] {\n  display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--text-secondary);\n  cursor: pointer; max-width: 220px; padding: 1px 4px; border-radius: 4px;\n  transition: background .1s, color .1s;\n}\n.pp-slot-list-item[data-v-3262bda6]:hover { color: var(--text-primary); background: var(--bg-hover);\n}\n.pp-slot-list-item input[type='checkbox'][data-v-3262bda6] { accent-color: var(--accent); margin: 0;\n}\n.pp-slot-list-item span[data-v-3262bda6] { overflow: hidden; text-overflow: ellipsis; white-space: nowrap;\n}\n.pp-slot-empty[data-v-3262bda6] { font-size: 10px; color: var(--text-muted);\n}\n.pp-slot-select[data-v-3262bda6] {\n  width: 170px; font-size: 11px; padding: 3px 6px;\n  background: var(--bg-secondary); color: var(--text-primary);\n  border: 1px solid var(--border-color); border-radius: 5px; flex-shrink: 0;\n  cursor: pointer; transition: border-color .12s, box-shadow .12s;\n}\n.pp-slot-select[data-v-3262bda6]:hover { border-color: var(--accent);\n}\n.pp-slot-select[data-v-3262bda6]:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--focus-ring);\n}\n.pp-client-tabs[data-v-3262bda6] {\n  display: flex;\n  gap: 2px;\n  padding: 4px 8px 0;\n  border-bottom: 1px solid var(--border-color);\n  overflow-x: auto;\n}\n.pp-client-tab[data-v-3262bda6] {\n  display: flex; align-items: center; gap: 4px;\n  padding: 4px 10px;\n  font-size: 11px;\n  color: var(--text-secondary);\n  cursor: pointer;\n  border: 1px solid transparent;\n  border-bottom: none;\n  border-radius: 4px 4px 0 0;\n  white-space: nowrap;\n}\n.pp-client-tab.active[data-v-3262bda6] {\n  background: var(--bg-primary);\n  color: var(--text-primary);\n  border-color: var(--border-color);\n}\n.pp-client-tab-title[data-v-3262bda6] { max-width: 120px; overflow: hidden; text-overflow: ellipsis;\n}\n.pp-client-body[data-v-3262bda6] {\n  min-height: 80px;\n  max-height: 200px;\n  overflow: auto;\n  padding: 6px 8px;\n  font-size: 12px;\n}\n\n/* 列表 */\n.pp-list[data-v-3262bda6] { flex: 1; overflow: auto; padding: 4px 0;\n}\n.pp-loading[data-v-3262bda6], .pp-empty[data-v-3262bda6] {\n  display: flex; flex-direction: column; align-items: center; gap: 6px;\n  padding: 24px 12px; color: var(--text-muted); font-size: 12px;\n}\n.pp-empty-sub[data-v-3262bda6] { font-size: 11px; color: var(--text-muted); text-align: center;\n}\n.pp-item[data-v-3262bda6] { border-bottom: 1px solid var(--border-color);\n}\n.pp-item-row[data-v-3262bda6] {\n  display: flex; align-items: center; gap: 6px;\n  padding: 7px 10px;\n  cursor: pointer;\n}\n.pp-item-row[data-v-3262bda6]:hover { background: var(--bg-hover);\n}\n.pp-state[data-v-3262bda6] {\n  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;\n}\n.pp-state.on[data-v-3262bda6] { background: #4caf50; box-shadow: 0 0 4px rgba(76, 175, 80, .6);\n}\n.pp-state.off[data-v-3262bda6] { background: var(--text-muted); opacity: .4;\n}\n.pp-name[data-v-3262bda6] {\n  flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;\n}\n.pp-src[data-v-3262bda6] {\n  font-size: 9px; padding: 1px 5px; border-radius: 3px;\n  font-family: var(--font-code); text-transform: uppercase;\n}\n.pp-src.js[data-v-3262bda6] { background: rgba(240, 219, 79, .15); color: #e5c07b;\n}\n.pp-src.go[data-v-3262bda6] { background: rgba(0, 178, 255, .12); color: #61afef;\n}\n/* ★ Node 桥插件（npm 包，真实 node 进程装载）：与 goja 插件区分来源 */\n.pp-src.node-bridge[data-v-3262bda6] { background: rgba(86, 182, 194, .14); color: #56b6c2;\n}\n.pp-badge[data-v-3262bda6] {\n  font-size: 9px; padding: 1px 5px; border-radius: 3px;\n  background: rgba(198, 120, 221, .15); color: #c678dd;\n  flex-shrink: 0;\n}\n.pp-badge-warn[data-v-3262bda6] {\n  background: rgba(229, 192, 123, .18); color: #e5c07b;\n  cursor: help;\n}\n.pp-count[data-v-3262bda6] { font-size: 10px; color: var(--text-muted); flex-shrink: 0;\n}\n.pp-ui-label[data-v-3262bda6] { font-size: 10px; color: var(--text-muted); flex-shrink: 0;\n}\n.pp-ui-label.on[data-v-3262bda6] { color: var(--accent, #4c9aff);\n}\n.pp-chevron[data-v-3262bda6] { transition: transform .15s; flex-shrink: 0;\n}\n.pp-chevron.open[data-v-3262bda6] { transform: rotate(90deg);\n}\n.pp-detail[data-v-3262bda6] { padding: 4px 10px 10px 24px; background: var(--bg-tertiary);\n}\n.pp-d-purpose[data-v-3262bda6] { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;\n}\n.pp-d-line[data-v-3262bda6] { font-size: 11px; color: var(--text-muted); margin: 2px 0; word-break: break-all;\n}\n.pp-d-error[data-v-3262bda6] { color: #e06c75;\n}\n.pp-d-hint[data-v-3262bda6] { font-size: 11px; color: var(--text-muted);\n}\n/* ★ 同名工具并存（repo 移植版 ↔ npm 桥插件）：标注生效方并提供切换 */\n.pp-d-conflict[data-v-3262bda6] {\n  margin: 6px 0;\n  padding: 5px 6px;\n  border: 1px solid rgba(229, 192, 123, .35);\n  border-radius: 4px;\n  background: rgba(229, 192, 123, .06);\n}\n.pp-d-conflict-title[data-v-3262bda6] {\n  display: flex; align-items: center; gap: 5px;\n  font-size: 10px; color: #e5c07b; margin-bottom: 4px;\n}\n.pp-d-conflict-row[data-v-3262bda6] {\n  display: flex; align-items: center; gap: 6px;\n  padding: 2px 0;\n}\n.pp-d-conflict-row .pp-d-tname[data-v-3262bda6] { flex: 1; min-width: 60px;\n}\n.pp-d-side[data-v-3262bda6] {\n  font-size: 10px; padding: 1px 5px; border-radius: 3px;\n  border: 1px solid var(--border-color);\n  color: var(--text-muted); white-space: nowrap;\n}\n.pp-d-side.on[data-v-3262bda6] {\n  border-color: rgba(152, 195, 121, .5);\n  background: rgba(152, 195, 121, .12);\n  color: #98c379;\n}\n/* 生效方切换结果提示（插件列表上方） */\n.pp-prefer-msg[data-v-3262bda6] {\n  display: flex; align-items: center; gap: 5px;\n  margin: 4px 10px; padding: 4px 6px;\n  font-size: 11px; border-radius: 4px;\n  color: #98c379; background: rgba(152, 195, 121, .1);\n  border: 1px solid rgba(152, 195, 121, .3);\n}\n.pp-prefer-msg.err[data-v-3262bda6] {\n  color: #e06c75; background: rgba(224, 108, 117, .1);\n  border-color: rgba(224, 108, 117, .3);\n}\n.pp-d-tools[data-v-3262bda6] { display: flex; flex-direction: column; gap: 1px; margin: 4px 0; padding: 4px 6px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary);\n}\n.pp-d-tools-title[data-v-3262bda6] { font-size: 10px; color: var(--text-muted); margin-bottom: 2px;\n}\n.pp-d-tool[data-v-3262bda6] { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 1px 2px; border-radius: 3px;\n}\n.pp-d-tool[data-v-3262bda6]:hover { background: var(--bg-secondary);\n}\n.pp-d-tname[data-v-3262bda6] { font-family: var(--font-code); font-size: 11px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;\n}\n.pp-d-code[data-v-3262bda6] {\n  margin-top: 6px;\n  border: 1px solid var(--border-color);\n  border-radius: 4px;\n  overflow: hidden;\n}\n.pp-d-code-head[data-v-3262bda6] {\n  display: flex; align-items: center; justify-content: space-between;\n  padding: 3px 8px;\n  background: var(--bg-primary);\n  font-size: 10px; color: var(--text-secondary);\n  border-bottom: 1px solid var(--border-color);\n}\n.pp-d-code pre[data-v-3262bda6] {\n  margin: 0; padding: 6px 8px;\n  font-family: var(--font-code); font-size: 10px;\n  line-height: 1.5;\n  color: var(--text-secondary);\n  overflow: auto;\n  max-height: 160px;\n  white-space: pre-wrap;\n  word-break: break-all;\n}\n.pp-d-actions[data-v-3262bda6] { display: flex; gap: 6px; margin-top: 8px;\n}\n.pp-btn[data-v-3262bda6] {\n  background: var(--bg-primary);\n  border: 1px solid var(--border-color);\n  color: var(--text-secondary);\n  border-radius: 4px;\n  padding: 3px 10px;\n  font-size: 11px;\n  cursor: pointer;\n}\n.pp-btn[data-v-3262bda6]:hover { background: var(--bg-hover); color: var(--text-primary);\n}\n.pp-btn.primary[data-v-3262bda6] { border-color: var(--accent); color: var(--accent-light);\n}\n.pp-btn.danger[data-v-3262bda6] { border-color: #e06c75; color: #e06c75;\n}\n.pp-btn[data-v-3262bda6]:disabled { opacity: .5; cursor: not-allowed;\n}\n.spinner[data-v-3262bda6] { animation: pp-spin-3262bda6 1s linear infinite;\n}\n@keyframes pp-spin-3262bda6 {\nto { transform: rotate(360deg);\n}\n}\n.pp-builtin[data-v-3262bda6] {\n  display: flex; flex-direction: column; gap: 6px;\n  margin: 4px 6px 10px; padding: 8px 10px;\n  border: 1px solid rgba(212,167,78,.3); border-radius: 8px;\n  background: rgba(212,167,78,.05);\n}\n.pp-builtin-head[data-v-3262bda6] { display: flex; align-items: center; gap: 8px;\n}\n.pp-builtin-head[data-v-3262bda6]:hover { background: rgba(212,167,78,.08);\n}\n.pp-builtin-title[data-v-3262bda6] {\n  display: flex; align-items: center; gap: 5px;\n  font-size: 12px; font-weight: 700; color: #d4a74e; letter-spacing: .3px;\n}\n.pp-builtin-sub[data-v-3262bda6] { font-size: 10px; color: var(--text-muted); flex: 1;\n}\n.pp-builtin-group[data-v-3262bda6] {\n  display: flex; flex-direction: column; gap: 4px;\n  border: 1px solid var(--border-color); border-radius: 6px;\n  background: var(--bg-tertiary); padding: 6px 8px;\n}\n.pp-builtin-grow[data-v-3262bda6] {\n  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;\n}\n.pp-builtin-gname[data-v-3262bda6] { font-size: 12px; font-weight: 600; color: var(--text-primary);\n}\n.pp-builtin-gdesc[data-v-3262bda6] { font-size: 10px; color: var(--text-muted); flex: 1; min-width: 80px;\n}\n.pp-builtin-gcount[data-v-3262bda6] { font-size: 10px; color: var(--text-secondary);\n}\n.pp-builtin-tools[data-v-3262bda6] {\n  display: flex; flex-direction: column; gap: 2px;\n  max-height: 220px; overflow-y: auto;\n}\n.pp-btn.mini[data-v-3262bda6] { padding: 2px 8px; font-size: 10px; border-radius: 4px;\n}\n\n.app-root[data-v-ed26a1be] {\n  display: grid;\n  /* ★ chat 优先薄壳（替换原 4 列 IDE 网格）：conversation 为 minmax(0,1fr) 主列，\n     editor 为 details 辅助列（--editor-w），折叠=0px 不占空间但 DOM 保持挂载。\n     gridStyle computed 会覆盖此默认值（聚焦/折叠时动态调整列宽）。 */\n  grid-template-columns: 48px var(--sidebar-w, 280px) minmax(0, 1fr);\n  grid-template-rows: 30px 1fr 22px;\n  width: 100%; height: 100%;\n  background: var(--bg-primary);\n  color: var(--text-primary);\n  overflow: hidden;\n  font-family: var(--font-ui);\n}\n/* ★ 桌面端面板独立模式：只渲染右侧对话面板，占满整个窗口 */\n.app-root.panel-only[data-v-ed26a1be] {\n  grid-template-columns: 1fr;\n  grid-template-rows: 1fr;\n}\n.app-root.panel-only .main-area[data-v-ed26a1be] {\n  grid-column: 1; grid-row: 1;\n  width: 100% !important;\n  height: 100%;\n}\n.app-root.panel-only .main-tabs[data-v-ed26a1be] { display: none;\n}\n/* 整区替换槽位（single）宿主：与内置区域同 grid 位置/尺寸 */\n.plugin-area-titlebar[data-v-ed26a1be] { grid-column: 1 / -1; grid-row: 1; height: 30px;\n}\n.plugin-area-activitybar[data-v-ed26a1be] { grid-column: 1; grid-row: 2; width: 48px;\n}\n.plugin-area-sidebar[data-v-ed26a1be] { grid-column: 2; grid-row: 2; height: 100%; overflow: hidden;\n}\n/* ★ main 区（col 3）：对话 / 编辑器 tab 切换（chat 优先薄壳主视图） */\n.main-area[data-v-ed26a1be] {\n  grid-column: 3; grid-row: 2;\n  display: flex; flex-direction: column; min-width: 0; overflow: hidden; position: relative;\n}\n/* tab 栏：对话 / 编辑器 */\n.main-tabs[data-v-ed26a1be] {\n  display: flex; flex-shrink: 0; height: 30px;\n  background: var(--bg-secondary); border-bottom: 1px solid var(--border-color);\n}\n.main-tab[data-v-ed26a1be] {\n  /* ★ 不用均分（flex:1 会造成 50/50 平分、视觉难看）：宽度随内容自适应，左对齐 */\n  flex: 0 0 auto; min-width: 0; border: none; background: none; cursor: pointer;\n  color: var(--text-muted); font-size: 12px; font-weight: 600;\n  padding: 0 18px; border-bottom: 2px solid transparent;\n  transition: color .15s, background .15s;\n}\n.main-tab[data-v-ed26a1be]:hover { color: var(--text-primary); background: var(--bg-hover);\n}\n.main-tab.active[data-v-ed26a1be] { color: var(--text-primary); border-bottom-color: var(--accent); background: var(--bg-active);\n}\n/* conversation（对话）宿主：常驻挂载，v-show 切换；填满 main 区（tab 栏下方） */\n.conversation-container[data-v-ed26a1be] {\n  flex: 1; min-width: 0; min-height: 0;\n  display: flex; flex-direction: row; overflow: hidden; position: relative;\n}\n/* editor（编辑器）宿主：常驻挂载，v-show 切换；填满 main 区（tab 栏下方），永不 unmount */\n.editor-container[data-v-ed26a1be] {\n  flex: 1; min-width: 0; min-height: 0;\n  display: flex; flex-direction: column; overflow: hidden;\n}\n/* market（市场面板）宿主：主区第三视图，v-show 切换；bundle 动态挂载 */\n.market-container[data-v-ed26a1be] {\n  flex: 1; min-width: 0; min-height: 0;\n  display: flex; flex-direction: column; overflow: hidden;\n}\n/* 主区 tab 内嵌关闭按钮（编辑器 / 市场）× */\n.main-tab-close[data-v-ed26a1be] {\n  display: inline-flex; align-items: center; justify-content: center;\n  margin-left: 6px; font-size: 13px; line-height: 1;\n  width: 16px; height: 16px; border-radius: 3px; opacity: 0.55;\n}\n.main-tab-close[data-v-ed26a1be]:hover { opacity: 1; background: var(--bg-hover); color: var(--text-primary);\n}\n.app-statusbar-host[data-v-ed26a1be] { grid-column: 1 / -1; grid-row: 3; z-index: 30; height: 22px;\n}\n.plugin-slot-host[data-v-ed26a1be] { height: 100%; overflow: hidden;\n}\n/* ★ 插件渲染的子元素必须撑满宿主（bundle 根 auto 宽度不随宿主 grid 拉伸）。\n   以 <conversation> 主列为例：宿主占列 3 → 子元素撑满，避免右侧空余。 */\n.plugin-slot-host.conversation-container[data-v-ed26a1be] > * { width: 100%; min-width: 0;\n}\n/* modals 槽位：fixed 全屏浮层容器（不占 grid 格） */\n.modals-host[data-v-ed26a1be] { position: fixed; inset: 0; z-index: 200; pointer-events: none;\n}\n.modals-host[data-v-ed26a1be] > * { pointer-events: auto;\n}\n.modals-empty[data-v-ed26a1be] { display: none;\n}\n/* 空态占位（区域插件未装配时显示） */\n.slot-empty[data-v-ed26a1be] {\n  display: flex; flex-direction: row; gap: 8px;\n  align-items: center; justify-content: center;\n  color: var(--text-muted); font-size: 12px;\n  background: var(--bg-primary);\n  border: 1px dashed var(--border-color);\n  min-height: 0;\n}\n/* activitybar 是竖条（~48px 宽）：空态改纵向排列 */\n.plugin-area-activitybar.slot-empty[data-v-ed26a1be] { flex-direction: column; gap: 4px; padding: 4px;\n}\n.plugin-area-activitybar.slot-empty .escape-link[data-v-ed26a1be] { font-size: 11px; padding: 2px 8px;\n}\n/* 空态内的「打开插件面板」恢复入口（上下文感知注入：只在区域未装配时出现，\n   插件全正常时零干扰；与常驻逃生按钮互为双保险） */\n.escape-link[data-v-ed26a1be] {\n  background: none; border: 1px solid var(--border-color);\n  color: var(--accent, #4f8cff); font-size: 12px;\n  padding: 3px 12px; border-radius: 4px; cursor: pointer;\n  opacity: .85; transition: opacity .15s;\n}\n.escape-link[data-v-ed26a1be]:hover { opacity: 1; background: rgba(79,140,255,.12);\n}\n/* ─── 壳级逃生口：插件面板浮动入口 ───\n   常驻极小按钮位于左下角（状态栏上方）；半透明弱化，hover 全显。\n   点击打开浮动插件面板（Fixed 560px 居中）。 */\n.plugin-escape-btn[data-v-ed26a1be] {\n  position: fixed; left: 6px; bottom: 26px; z-index: 300;\n  width: 22px; height: 22px; border-radius: 5px;\n  display: flex; align-items: center; justify-content: center;\n  background: var(--bg-elevated, #2a2d36); color: var(--text-muted);\n  border: 1px solid var(--border-color); cursor: pointer;\n  opacity: .3; transition: opacity .15s;\n}\n.plugin-escape-btn[data-v-ed26a1be]:hover { opacity: 1; color: var(--accent, #4f8cff);\n}\n.plugin-escape-overlay[data-v-ed26a1be] {\n  position: fixed; inset: 0; z-index: 400;\n  background: rgba(0,0,0,.45);\n  display: flex; align-items: center; justify-content: center;\n}\n.plugin-escape-panel[data-v-ed26a1be] {\n  width: 560px; max-width: 92vw; height: 70vh; max-height: 640px;\n  background: var(--bg-primary); border: 1px solid var(--border-color);\n  border-radius: 10px; box-shadow: 0 8px 40px rgba(0,0,0,.5);\n  display: flex; flex-direction: column; overflow: hidden;\n}\n.plugin-escape-head[data-v-ed26a1be] {\n  display: flex; align-items: center; justify-content: space-between;\n  padding: 6px 10px; font-size: 12px; color: var(--text-muted);\n  border-bottom: 1px solid var(--border-color);\n  background: var(--bg-elevated, #262932);\n}\n.plugin-escape-close[data-v-ed26a1be] {\n  border: none; background: none; color: var(--text-muted);\n  cursor: pointer; font-size: 13px; padding: 2px 6px; border-radius: 4px;\n}\n.plugin-escape-close[data-v-ed26a1be]:hover { background: rgba(255,255,255,.08); color: #fff;\n}\n.plugin-escape-body[data-v-ed26a1be] { flex: 1; overflow: auto;\n}\n.plugin-escape-body .plugin-panel[data-v-ed26a1be] { height: 100%; border: none;\n}\n/*$vite$:1*/";
+  __vite_style__.textContent = "\n@keyframes stopPulse-faf69761 {\n0%, 100% { opacity: 0.6;\n}\n50% { opacity: 1;\n}\n}\n@keyframes stopRingPulse-faf69761 {\n0%, 100% { opacity: 0.3; transform: scale(1);\n}\n50% { opacity: 0.15; transform: scale(1.15);\n}\n}\n.stop-pulse[data-v-faf69761] {\n  animation: stopPulse-faf69761 1.2s ease-in-out infinite;\n}\n.stop-pulse-ring[data-v-faf69761] {\n  animation: stopRingPulse-faf69761 1.2s ease-in-out infinite;\n  fill: none;\n  transform-origin: center;\n}\n.svg-icon[data-v-faf69761] {\n  display: inline-block;\n  vertical-align: middle;\n  flex-shrink: 0;\n}\n\n.plugin-panel[data-v-8e867bf3] {\n  height: 100%;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n  font-size: 13px;\n}\n.pp-header[data-v-8e867bf3] {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 8px 10px;\n  border-bottom: 1px solid var(--border-color);\n  flex-shrink: 0;\n}\n.pp-title[data-v-8e867bf3] {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  font-weight: 600;\n  font-size: 12px;\n  color: var(--text-primary);\n}\n.pp-actions[data-v-8e867bf3] { display: flex; gap: 4px;\n}\n.pp-icon-btn[data-v-8e867bf3] {\n  background: none; border: none; cursor: pointer;\n  color: var(--text-muted); padding: 2px 4px; border-radius: 3px;\n  display: flex; align-items: center;\n}\n.pp-icon-btn[data-v-8e867bf3]:hover { background: var(--bg-hover); color: var(--text-primary);\n}\n\n/* 新建表单 */\n.pp-new[data-v-8e867bf3] {\n  padding: 10px;\n  border-bottom: 1px solid var(--border-color);\n  display: flex;\n  flex-direction: column;\n  gap: 6px;\n  background: var(--bg-tertiary);\n  flex-shrink: 0;\n  max-height: 45%;\n  overflow: auto;\n}\n.pp-new-title[data-v-8e867bf3] { font-size: 12px; font-weight: 600; color: var(--text-secondary);\n}\n.pp-input[data-v-8e867bf3], .pp-textarea[data-v-8e867bf3] {\n  background: var(--bg-primary);\n  border: 1px solid var(--border-color);\n  color: var(--text-primary);\n  border-radius: 4px;\n  padding: 5px 8px;\n  font-size: 12px;\n  width: 100%;\n  box-sizing: border-box;\n}\n.pp-textarea.code[data-v-8e867bf3] {\n  font-family: var(--font-code);\n  font-size: 11px;\n  line-height: 1.5;\n  resize: vertical;\n}\n.pp-new-foot[data-v-8e867bf3] { display: flex; align-items: center; gap: 8px;\n}\n.pp-lang[data-v-8e867bf3] { width: auto; flex-shrink: 0;\n}\n.pp-check[data-v-8e867bf3] { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-secondary); white-space: nowrap;\n}\n.pp-new-msg[data-v-8e867bf3] { font-size: 11px; color: var(--accent-light); word-break: break-all;\n}\n.pp-new-msg.err[data-v-8e867bf3] { color: var(--error, #e06c75);\n}\n\n/* client 面板区 */\n.pp-client[data-v-8e867bf3] {\n  border-bottom: 1px solid var(--border-color);\n  flex-shrink: 0;\n  display: flex;\n  flex-direction: column;\n  max-height: 40%;\n}\n/* UI 槽位区（Slot 系统） */\n.pp-slots[data-v-8e867bf3] {\n  border-bottom: 1px solid var(--border-color);\n  flex-shrink: 0;\n  padding: 6px 8px;\n  display: flex;\n  flex-direction: column;\n  gap: 5px;\n  max-height: 30%;\n  overflow-y: auto;\n}\n.pp-slots-head[data-v-8e867bf3] {\n  display: flex; align-items: center; gap: 6px;\n  font-size: 11px; color: var(--text-primary); font-weight: 600;\n}\n.pp-slots-head svg[data-v-8e867bf3] { color: var(--accent);\n}\n.pp-slots-sub[data-v-8e867bf3] { font-weight: 400; font-size: 10px; color: var(--text-muted);\n}\n.pp-slot-row[data-v-8e867bf3] {\n  display: flex; align-items: center; justify-content: space-between; gap: 8px;\n  background: var(--bg-primary);\n  border: 1px solid var(--border-color);\n  border-left: 2px solid var(--accent);\n  border-radius: 6px; padding: 5px 8px;\n  transition: border-color .12s, background .12s;\n}\n.pp-slot-row[data-v-8e867bf3]:hover {\n  border-color: color-mix(in srgb, var(--accent) 45%, var(--border-color));\n  background: var(--bg-hover);\n}\n.pp-slot-info[data-v-8e867bf3] { display: flex; flex-direction: column; gap: 2px; min-width: 0;\n}\n.pp-slot-title-row[data-v-8e867bf3] { display: flex; align-items: center; gap: 6px; min-width: 0;\n}\n.pp-slot-id[data-v-8e867bf3] {\n  font-family: var(--font-mono, monospace); font-size: 11px; color: var(--accent-light);\n  text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;\n}\n.pp-slot-owner[data-v-8e867bf3] { font-size: 10px; color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px;\n}\n.pp-slot-owner.builtin[data-v-8e867bf3] { color: var(--text-muted);\n}\n.pp-slot-kind[data-v-8e867bf3] {\n  font-size: 9px; border-radius: 4px; padding: 0 5px; align-self: flex-start;\n  line-height: 15px; flex-shrink: 0; font-weight: 600; letter-spacing: .3px;\n}\n.pp-slot-kind.kind-single[data-v-8e867bf3] { color: var(--accent-light); background: color-mix(in srgb, var(--accent) 14%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);\n}\n.pp-slot-kind.kind-list[data-v-8e867bf3] { color: #3fb950; background: rgba(63, 185, 80, .10); border: 1px solid rgba(63, 185, 80, .30);\n}\n.pp-slot-list[data-v-8e867bf3] { display: flex; flex-direction: column; gap: 3px; align-items: flex-end; flex-shrink: 0;\n}\n.pp-slot-list-item[data-v-8e867bf3] {\n  display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--text-secondary);\n  cursor: pointer; max-width: 220px; padding: 1px 4px; border-radius: 4px;\n  transition: background .1s, color .1s;\n}\n.pp-slot-list-item[data-v-8e867bf3]:hover { color: var(--text-primary); background: var(--bg-hover);\n}\n.pp-slot-list-item input[type='checkbox'][data-v-8e867bf3] { accent-color: var(--accent); margin: 0;\n}\n.pp-slot-list-item span[data-v-8e867bf3] { overflow: hidden; text-overflow: ellipsis; white-space: nowrap;\n}\n.pp-slot-empty[data-v-8e867bf3] { font-size: 10px; color: var(--text-muted);\n}\n.pp-slot-select[data-v-8e867bf3] {\n  width: 170px; font-size: 11px; padding: 3px 6px;\n  background: var(--bg-secondary); color: var(--text-primary);\n  border: 1px solid var(--border-color); border-radius: 5px; flex-shrink: 0;\n  cursor: pointer; transition: border-color .12s, box-shadow .12s;\n}\n.pp-slot-select[data-v-8e867bf3]:hover { border-color: var(--accent);\n}\n.pp-slot-select[data-v-8e867bf3]:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--focus-ring);\n}\n.pp-client-tabs[data-v-8e867bf3] {\n  display: flex;\n  gap: 2px;\n  padding: 4px 8px 0;\n  border-bottom: 1px solid var(--border-color);\n  overflow-x: auto;\n}\n.pp-client-tab[data-v-8e867bf3] {\n  display: flex; align-items: center; gap: 4px;\n  padding: 4px 10px;\n  font-size: 11px;\n  color: var(--text-secondary);\n  cursor: pointer;\n  border: 1px solid transparent;\n  border-bottom: none;\n  border-radius: 4px 4px 0 0;\n  white-space: nowrap;\n}\n.pp-client-tab.active[data-v-8e867bf3] {\n  background: var(--bg-primary);\n  color: var(--text-primary);\n  border-color: var(--border-color);\n}\n.pp-client-tab-title[data-v-8e867bf3] { max-width: 120px; overflow: hidden; text-overflow: ellipsis;\n}\n.pp-client-body[data-v-8e867bf3] {\n  min-height: 80px;\n  max-height: 200px;\n  overflow: auto;\n  padding: 6px 8px;\n  font-size: 12px;\n}\n\n/* 列表 */\n.pp-list[data-v-8e867bf3] { flex: 1; overflow: auto; padding: 4px 0;\n}\n.pp-loading[data-v-8e867bf3], .pp-empty[data-v-8e867bf3] {\n  display: flex; flex-direction: column; align-items: center; gap: 6px;\n  padding: 24px 12px; color: var(--text-muted); font-size: 12px;\n}\n.pp-empty-sub[data-v-8e867bf3] { font-size: 11px; color: var(--text-muted); text-align: center;\n}\n.pp-item[data-v-8e867bf3] { border-bottom: 1px solid var(--border-color);\n}\n.pp-item-row[data-v-8e867bf3] {\n  display: flex; align-items: center; gap: 6px;\n  padding: 7px 10px;\n  cursor: pointer;\n}\n.pp-item-row[data-v-8e867bf3]:hover { background: var(--bg-hover);\n}\n.pp-state[data-v-8e867bf3] {\n  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;\n}\n.pp-state.on[data-v-8e867bf3] { background: #4caf50; box-shadow: 0 0 4px rgba(76, 175, 80, .6);\n}\n.pp-state.off[data-v-8e867bf3] { background: var(--text-muted); opacity: .4;\n}\n.pp-name[data-v-8e867bf3] {\n  flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;\n}\n.pp-src[data-v-8e867bf3] {\n  font-size: 9px; padding: 1px 5px; border-radius: 3px;\n  font-family: var(--font-code); text-transform: uppercase;\n}\n.pp-src.js[data-v-8e867bf3] { background: rgba(240, 219, 79, .15); color: #e5c07b;\n}\n.pp-src.go[data-v-8e867bf3] { background: rgba(0, 178, 255, .12); color: #61afef;\n}\n/* ★ Node 桥插件（npm 包，真实 node 进程装载）：与 goja 插件区分来源 */\n.pp-src.node-bridge[data-v-8e867bf3] { background: rgba(86, 182, 194, .14); color: #56b6c2;\n}\n.pp-badge[data-v-8e867bf3] {\n  font-size: 9px; padding: 1px 5px; border-radius: 3px;\n  background: rgba(198, 120, 221, .15); color: #c678dd;\n  flex-shrink: 0;\n}\n.pp-badge-warn[data-v-8e867bf3] {\n  background: rgba(229, 192, 123, .18); color: #e5c07b;\n  cursor: help;\n}\n.pp-count[data-v-8e867bf3] { font-size: 10px; color: var(--text-muted); flex-shrink: 0;\n}\n.pp-ui-label[data-v-8e867bf3] { font-size: 10px; color: var(--text-muted); flex-shrink: 0;\n}\n.pp-ui-label.on[data-v-8e867bf3] { color: var(--accent, #4c9aff);\n}\n.pp-chevron[data-v-8e867bf3] { transition: transform .15s; flex-shrink: 0;\n}\n.pp-chevron.open[data-v-8e867bf3] { transform: rotate(90deg);\n}\n.pp-detail[data-v-8e867bf3] { padding: 4px 10px 10px 24px; background: var(--bg-tertiary);\n}\n.pp-d-purpose[data-v-8e867bf3] { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;\n}\n.pp-d-line[data-v-8e867bf3] { font-size: 11px; color: var(--text-muted); margin: 2px 0; word-break: break-all;\n}\n.pp-d-error[data-v-8e867bf3] { color: #e06c75;\n}\n.pp-d-hint[data-v-8e867bf3] { font-size: 11px; color: var(--text-muted);\n}\n/* ★ 同名工具并存（repo 移植版 ↔ npm 桥插件）：标注生效方并提供切换 */\n.pp-d-conflict[data-v-8e867bf3] {\n  margin: 6px 0;\n  padding: 5px 6px;\n  border: 1px solid rgba(229, 192, 123, .35);\n  border-radius: 4px;\n  background: rgba(229, 192, 123, .06);\n}\n.pp-d-conflict-title[data-v-8e867bf3] {\n  display: flex; align-items: center; gap: 5px;\n  font-size: 10px; color: #e5c07b; margin-bottom: 4px;\n}\n.pp-d-conflict-row[data-v-8e867bf3] {\n  display: flex; align-items: center; gap: 6px;\n  padding: 2px 0;\n}\n.pp-d-conflict-row .pp-d-tname[data-v-8e867bf3] { flex: 1; min-width: 60px;\n}\n.pp-d-side[data-v-8e867bf3] {\n  font-size: 10px; padding: 1px 5px; border-radius: 3px;\n  border: 1px solid var(--border-color);\n  color: var(--text-muted); white-space: nowrap;\n}\n.pp-d-side.on[data-v-8e867bf3] {\n  border-color: rgba(152, 195, 121, .5);\n  background: rgba(152, 195, 121, .12);\n  color: #98c379;\n}\n/* 生效方切换结果提示（插件列表上方） */\n.pp-prefer-msg[data-v-8e867bf3] {\n  display: flex; align-items: center; gap: 5px;\n  margin: 4px 10px; padding: 4px 6px;\n  font-size: 11px; border-radius: 4px;\n  color: #98c379; background: rgba(152, 195, 121, .1);\n  border: 1px solid rgba(152, 195, 121, .3);\n}\n.pp-prefer-msg.err[data-v-8e867bf3] {\n  color: #e06c75; background: rgba(224, 108, 117, .1);\n  border-color: rgba(224, 108, 117, .3);\n}\n.pp-d-tools[data-v-8e867bf3] { display: flex; flex-direction: column; gap: 1px; margin: 4px 0; padding: 4px 6px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary);\n}\n.pp-d-tools-title[data-v-8e867bf3] { font-size: 10px; color: var(--text-muted); margin-bottom: 2px;\n}\n.pp-d-tool[data-v-8e867bf3] { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 1px 2px; border-radius: 3px;\n}\n.pp-d-tool[data-v-8e867bf3]:hover { background: var(--bg-secondary);\n}\n.pp-d-tname[data-v-8e867bf3] { font-family: var(--font-code); font-size: 11px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;\n}\n.pp-d-code[data-v-8e867bf3] {\n  margin-top: 6px;\n  border: 1px solid var(--border-color);\n  border-radius: 4px;\n  overflow: hidden;\n}\n.pp-d-code-head[data-v-8e867bf3] {\n  display: flex; align-items: center; justify-content: space-between;\n  padding: 3px 8px;\n  background: var(--bg-primary);\n  font-size: 10px; color: var(--text-secondary);\n  border-bottom: 1px solid var(--border-color);\n}\n.pp-d-code pre[data-v-8e867bf3] {\n  margin: 0; padding: 6px 8px;\n  font-family: var(--font-code); font-size: 10px;\n  line-height: 1.5;\n  color: var(--text-secondary);\n  overflow: auto;\n  max-height: 160px;\n  white-space: pre-wrap;\n  word-break: break-all;\n}\n.pp-d-actions[data-v-8e867bf3] { display: flex; gap: 6px; margin-top: 8px;\n}\n.pp-btn[data-v-8e867bf3] {\n  background: var(--bg-primary);\n  border: 1px solid var(--border-color);\n  color: var(--text-secondary);\n  border-radius: 4px;\n  padding: 3px 10px;\n  font-size: 11px;\n  cursor: pointer;\n}\n.pp-btn[data-v-8e867bf3]:hover { background: var(--bg-hover); color: var(--text-primary);\n}\n.pp-btn.primary[data-v-8e867bf3] { border-color: var(--accent); color: var(--accent-light);\n}\n.pp-btn.danger[data-v-8e867bf3] { border-color: #e06c75; color: #e06c75;\n}\n.pp-btn[data-v-8e867bf3]:disabled { opacity: .5; cursor: not-allowed;\n}\n.spinner[data-v-8e867bf3] { animation: pp-spin-8e867bf3 1s linear infinite;\n}\n@keyframes pp-spin-8e867bf3 {\nto { transform: rotate(360deg);\n}\n}\n.pp-builtin[data-v-8e867bf3] {\n  display: flex; flex-direction: column; gap: 6px;\n  margin: 4px 6px 10px; padding: 8px 10px;\n  border: 1px solid rgba(212,167,78,.3); border-radius: 8px;\n  background: rgba(212,167,78,.05);\n}\n.pp-builtin-head[data-v-8e867bf3] { display: flex; align-items: center; gap: 8px;\n}\n.pp-builtin-head[data-v-8e867bf3]:hover { background: rgba(212,167,78,.08);\n}\n.pp-builtin-title[data-v-8e867bf3] {\n  display: flex; align-items: center; gap: 5px;\n  font-size: 12px; font-weight: 700; color: #d4a74e; letter-spacing: .3px;\n}\n.pp-builtin-sub[data-v-8e867bf3] { font-size: 10px; color: var(--text-muted); flex: 1;\n}\n.pp-builtin-group[data-v-8e867bf3] {\n  display: flex; flex-direction: column; gap: 4px;\n  border: 1px solid var(--border-color); border-radius: 6px;\n  background: var(--bg-tertiary); padding: 6px 8px;\n}\n.pp-builtin-grow[data-v-8e867bf3] {\n  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;\n}\n.pp-builtin-gname[data-v-8e867bf3] { font-size: 12px; font-weight: 600; color: var(--text-primary);\n}\n.pp-builtin-gdesc[data-v-8e867bf3] { font-size: 10px; color: var(--text-muted); flex: 1; min-width: 80px;\n}\n.pp-builtin-gcount[data-v-8e867bf3] { font-size: 10px; color: var(--text-secondary);\n}\n.pp-builtin-tools[data-v-8e867bf3] {\n  display: flex; flex-direction: column; gap: 2px;\n  max-height: 220px; overflow-y: auto;\n}\n.pp-btn.mini[data-v-8e867bf3] { padding: 2px 8px; font-size: 10px; border-radius: 4px;\n}\n\n/* ── 触发条：胶囊样式（融合设计；点击展开底部弹层） ── */\n.sp-trigger[data-v-4ceed483] {\n  display: inline-flex;\n  align-items: center;\n  gap: 5px;\n  max-width: 220px;\n  padding: 4px 9px;\n  border-radius: 999px;\n  border: 1px solid var(--border-color, #3a3a4a);\n  background: var(--bg-tertiary, rgba(0, 0, 0, 0.12));\n  color: var(--text-primary, #eee);\n  font-size: 12px;\n  font-family: inherit;\n  cursor: pointer;\n  transition: border-color 0.15s, background 0.15s;\n}\n.sp-trigger[data-v-4ceed483]:hover { border-color: var(--accent, #4f8cff); background: var(--bg-hover, rgba(255,255,255,0.06));\n}\n.sp-trigger-open[data-v-4ceed483] { border-color: var(--accent, #4f8cff);\n}\n.sp-value[data-v-4ceed483] {\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.sp-muted[data-v-4ceed483] { color: var(--text-muted, #888);\n}\n.sp-chevron[data-v-4ceed483] { flex-shrink: 0; color: var(--text-muted, #888); transition: transform 0.2s;\n}\n.sp-chevron.up[data-v-4ceed483] { transform: rotate(180deg);\n}\n\n/* ── 底部弹层（移动端 sheet） ── */\n.sp-overlay[data-v-4ceed483] {\n  position: fixed;\n  inset: 0;\n  background: rgba(0, 0, 0, 0.45);\n  z-index: 10050;\n  display: flex;\n  align-items: flex-end;\n  justify-content: center;\n}\n.sp-sheet[data-v-4ceed483] {\n  width: min(560px, 96vw);\n  max-height: 72vh;\n  display: flex;\n  flex-direction: column;\n  background: var(--bg-secondary, #1c1c28);\n  border: 1px solid var(--border-color, #3a3a4a);\n  border-bottom: none;\n  border-radius: 18px 18px 0 0;\n  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.4);\n  animation: sp-sheet-in-4ceed483 0.22s ease-out;\n}\n@keyframes sp-sheet-in-4ceed483 {\nfrom { transform: translateY(24px); opacity: 0.6;\n}\nto { transform: translateY(0); opacity: 1;\n}\n}\n.sp-grabber[data-v-4ceed483] {\n  width: 36px;\n  height: 4px;\n  border-radius: 2px;\n  background: var(--border-color, #3a3a4a);\n  margin: 8px auto 2px;\n  flex-shrink: 0;\n}\n.sp-head[data-v-4ceed483] {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 8px 16px 10px;\n  border-bottom: 1px solid var(--border-color, #333);\n  flex-shrink: 0;\n}\n.sp-title[data-v-4ceed483] { font-size: 14px; font-weight: 600; color: var(--text-primary, #eee);\n}\n.sp-cancel[data-v-4ceed483] {\n  background: none;\n  border: none;\n  color: var(--accent, #4f8cff);\n  font-size: 13px;\n  cursor: pointer;\n  font-family: inherit;\n  padding: 2px 4px;\n}\n.sp-body[data-v-4ceed483] { overflow-y: auto; padding: 4px 8px 14px;\n}\n.sp-group[data-v-4ceed483] {\n  font-size: 11px;\n  font-weight: 600;\n  color: var(--text-muted, #888);\n  text-transform: uppercase;\n  letter-spacing: 0.4px;\n  padding: 10px 10px 4px;\n}\n.sp-item[data-v-4ceed483] {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 10px;\n  padding: 9px 10px;\n  border-radius: 10px;\n  cursor: pointer;\n  transition: background 0.12s;\n}\n.sp-item[data-v-4ceed483]:hover { background: var(--bg-hover, rgba(255, 255, 255, 0.06));\n}\n.sp-item.active[data-v-4ceed483] { background: color-mix(in srgb, var(--accent, #4f8cff) 14%, transparent);\n}\n.sp-item-main[data-v-4ceed483] { display: flex; flex-direction: column; gap: 1px; min-width: 0;\n}\n.sp-item-label[data-v-4ceed483] { font-size: 13px; color: var(--text-primary, #eee);\n}\n.sp-item.active .sp-item-label[data-v-4ceed483] { color: var(--accent-light, #8ab4ff);\n}\n.sp-item-desc[data-v-4ceed483] { font-size: 11px; color: var(--text-muted, #888); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;\n}\n.sp-check[data-v-4ceed483] { color: var(--accent, #4f8cff); flex-shrink: 0;\n}\n.sp-empty[data-v-4ceed483] { text-align: center; color: var(--text-muted, #888); font-size: 12px; padding: 24px 0;\n}\n\n/* 弹层过渡 */\n.sp-fade-enter-active[data-v-4ceed483], .sp-fade-leave-active[data-v-4ceed483] { transition: opacity 0.18s;\n}\n.sp-fade-enter-active .sp-sheet[data-v-4ceed483], .sp-fade-leave-active .sp-sheet[data-v-4ceed483] { transition: transform 0.18s ease-out;\n}\n.sp-fade-enter-from[data-v-4ceed483], .sp-fade-leave-to[data-v-4ceed483] { opacity: 0;\n}\n.sp-fade-enter-from .sp-sheet[data-v-4ceed483], .sp-fade-leave-to .sp-sheet[data-v-4ceed483] { transform: translateY(24px);\n}\n\n.tp-panel[data-v-ee3f550f] {\n  display: flex;\n  flex-direction: column;\n  height: 100%;\n  min-height: 0;\n  padding: 8px;\n  gap: 8px;\n}\n\n/* ── 头部 ── */\n.tp-header[data-v-ee3f550f] {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 2px 2px 6px;\n  border-bottom: 1px solid var(--border-color, #3a3a4a);\n}\n.tp-title[data-v-ee3f550f] {\n  display: inline-flex;\n  align-items: center;\n  gap: 6px;\n  font-size: 13px;\n  font-weight: 600;\n  color: var(--text-primary, #eee);\n}\n.tp-actions[data-v-ee3f550f] { display: inline-flex; gap: 4px;\n}\n.tp-icon-btn[data-v-ee3f550f] {\n  width: 26px; height: 26px;\n  display: inline-flex; align-items: center; justify-content: center;\n  background: none; border: none; border-radius: 6px;\n  color: var(--text-muted, #888);\n  cursor: pointer;\n}\n.tp-icon-btn[data-v-ee3f550f]:hover { color: var(--text-primary, #eee); background: var(--bg-hover, rgba(255,255,255,0.06));\n}\n\n/* ── 列表 ── */\n.tp-list[data-v-ee3f550f] {\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n  max-height: 34%;\n  overflow-y: auto;\n  flex-shrink: 0;\n}\n.tp-item[data-v-ee3f550f] {\n  padding: 6px 8px;\n  border-radius: 8px;\n  border: 1px solid transparent;\n  cursor: pointer;\n  transition: background 0.12s, border-color 0.12s;\n}\n.tp-item[data-v-ee3f550f]:hover { background: var(--bg-hover, rgba(255,255,255,0.05));\n}\n.tp-item.active[data-v-ee3f550f] { background: var(--bg-tertiary, rgba(0,0,0,0.15)); border-color: var(--accent, #4f8cff);\n}\n.tp-item-main[data-v-ee3f550f] { display: flex; align-items: center; gap: 6px;\n}\n.tp-item-name[data-v-ee3f550f] { font-size: 12.5px; font-weight: 600; color: var(--text-primary, #eee);\n}\n.tp-item-count[data-v-ee3f550f] {\n  font-size: 10px; color: var(--text-muted, #888);\n  background: var(--bg-tertiary, rgba(0,0,0,0.2));\n  padding: 1px 6px; border-radius: 999px;\n}\n.tp-item-desc[data-v-ee3f550f] {\n  font-size: 11px; color: var(--text-muted, #888);\n  margin-top: 2px;\n  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;\n}\n\n/* ── 详情 ── */\n.tp-detail[data-v-ee3f550f] {\n  flex: 1;\n  min-height: 0;\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n  overflow: hidden;\n}\n.tp-dhead[data-v-ee3f550f] { padding: 0 2px;\n}\n.tp-dtitle[data-v-ee3f550f] {\n  display: flex; align-items: center; gap: 6px;\n  font-size: 13px; font-weight: 600; color: var(--text-primary, #eee);\n}\n.tp-badge[data-v-ee3f550f] {\n  font-size: 9.5px; padding: 1px 6px; border-radius: 999px;\n  background: var(--accent, #4f8cff); color: #fff; font-weight: 500;\n}\n.tp-badge.proj[data-v-ee3f550f] { background: rgba(79, 140, 255, 0.25); color: var(--accent-light, #9dc0ff);\n}\n.tp-dactions[data-v-ee3f550f] { display: flex; gap: 6px; margin-top: 6px;\n}\n.tp-ddesc[data-v-ee3f550f] { font-size: 11px; color: var(--text-muted, #888); margin-top: 4px;\n}\n.tp-section-title[data-v-ee3f550f] {\n  font-size: 10px; color: var(--text-muted, #888);\n  text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500;\n  margin: 2px 0 4px;\n}\n.tp-plugins[data-v-ee3f550f] {\n  flex: 1;\n  min-height: 0;\n  overflow-y: auto;\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n  padding: 0 2px;\n}\n.tp-plugin[data-v-ee3f550f] {\n  border: 1px solid var(--border-color, #3a3a4a);\n  border-radius: 8px;\n  padding: 6px 8px;\n  background: var(--bg-secondary, rgba(255,255,255,0.02));\n}\n.tp-prow[data-v-ee3f550f] { display: flex; align-items: center; justify-content: space-between; gap: 6px;\n}\n.tp-pname[data-v-ee3f550f] { font-size: 12px; font-weight: 600; color: var(--text-primary, #eee); font-family: var(--font-code, monospace);\n}\n.tp-ppurpose[data-v-ee3f550f] { font-size: 11px; color: var(--text-muted, #888); margin-top: 2px;\n}\n.tp-tools[data-v-ee3f550f] {\n  display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px;\n}\n.tp-tool[data-v-ee3f550f] {\n  display: inline-flex; align-items: center; gap: 4px;\n  font-size: 11px;\n  color: var(--text-secondary, #bbb);\n  background: var(--bg-tertiary, rgba(0,0,0,0.15));\n  border: 1px solid var(--border-color, #3a3a4a);\n  border-radius: 999px;\n  padding: 2px 8px;\n  cursor: pointer;\n  user-select: none;\n}\n.tp-tool[data-v-ee3f550f]:hover { border-color: var(--accent, #4f8cff);\n}\n.tp-tool input[data-v-ee3f550f] { margin: 0; accent-color: var(--accent, #4f8cff);\n}\n.tp-tool span.off[data-v-ee3f550f] { text-decoration: line-through; opacity: 0.45;\n}\n.tp-muted[data-v-ee3f550f] { font-size: 11px; color: var(--text-muted, #888);\n}\n\n/* ── 按钮 ── */\n.tp-btn[data-v-ee3f550f] {\n  display: inline-flex; align-items: center; gap: 4px;\n  font-size: 11.5px; font-family: inherit;\n  color: var(--text-primary, #eee);\n  background: var(--bg-tertiary, rgba(0,0,0,0.15));\n  border: 1px solid var(--border-color, #3a3a4a);\n  border-radius: 6px;\n  padding: 4px 10px;\n  cursor: pointer;\n  transition: border-color 0.15s, background 0.15s;\n}\n.tp-btn[data-v-ee3f550f]:hover { border-color: var(--accent, #4f8cff);\n}\n.tp-btn.tiny[data-v-ee3f550f] { padding: 2px 7px; font-size: 10.5px;\n}\n.tp-btn.primary[data-v-ee3f550f] { background: var(--accent, #4f8cff); border-color: var(--accent, #4f8cff); color: #fff;\n}\n.tp-btn.primary[data-v-ee3f550f]:disabled { opacity: 0.5; cursor: not-allowed;\n}\n.tp-btn.danger[data-v-ee3f550f] { color: #ff6b6b;\n}\n.tp-btn.danger[data-v-ee3f550f]:hover { border-color: #ff6b6b;\n}\n\n/* ── 添加插件 ── */\n.tp-add[data-v-ee3f550f] { padding: 2px; flex-shrink: 0;\n}\n\n/* ── 空态 ── */\n.tp-empty[data-v-ee3f550f] {\n  font-size: 11.5px; color: var(--text-muted, #888);\n  padding: 16px 8px; text-align: center; line-height: 1.7;\n}\n\n/* ── 弹层（bottom sheet，仿 SheetPicker） ── */\n.tp-overlay[data-v-ee3f550f] {\n  position: fixed; inset: 0;\n  background: rgba(0, 0, 0, 0.45);\n  z-index: 10050;\n  display: flex; align-items: flex-end; justify-content: center;\n}\n.tp-sheet[data-v-ee3f550f] {\n  width: min(560px, 96vw);\n  max-height: 80vh;\n  display: flex; flex-direction: column;\n  background: var(--bg-secondary, #1c1c28);\n  border: 1px solid var(--border-color, #3a3a4a);\n  border-bottom: none;\n  border-radius: 18px 18px 0 0;\n  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.4);\n  animation: tp-sheet-in-ee3f550f 0.22s ease-out;\n}\n@keyframes tp-sheet-in-ee3f550f {\nfrom { transform: translateY(24px); opacity: 0.6;\n}\nto { transform: translateY(0); opacity: 1;\n}\n}\n.tp-grabber[data-v-ee3f550f] { width: 36px; height: 4px; border-radius: 2px; background: var(--border-color, #3a3a4a); margin: 8px auto 0;\n}\n.tp-sheet-head[data-v-ee3f550f] {\n  display: flex; align-items: center; justify-content: space-between;\n  padding: 10px 16px 8px;\n}\n.tp-sheet-title[data-v-ee3f550f] { font-size: 14px; font-weight: 600; color: var(--text-primary, #eee);\n}\n.tp-cancel[data-v-ee3f550f] { background: none; border: none; color: var(--accent, #4f8cff); font-size: 13px; cursor: pointer; font-family: inherit;\n}\n.tp-sheet-body[data-v-ee3f550f] { padding: 4px 16px 16px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto;\n}\n.tp-field[data-v-ee3f550f] { display: flex; flex-direction: column; gap: 4px;\n}\n.tp-field-label[data-v-ee3f550f] { font-size: 11px; color: var(--text-muted, #888);\n}\n.tp-input[data-v-ee3f550f] {\n  font-size: 12.5px; font-family: inherit;\n  color: var(--text-primary, #eee);\n  background: var(--bg-tertiary, rgba(0,0,0,0.15));\n  border: 1px solid var(--border-color, #3a3a4a);\n  border-radius: 8px;\n  padding: 7px 10px;\n  outline: none;\n}\n.tp-input[data-v-ee3f550f]:focus { border-color: var(--accent, #4f8cff);\n}\n.tp-textarea[data-v-ee3f550f] { resize: vertical; min-height: 40px;\n}\n.tp-textarea.code[data-v-ee3f550f] { font-family: var(--font-code, monospace); font-size: 11.5px;\n}\n.tp-hint[data-v-ee3f550f] { font-size: 11px; color: #ffb84d;\n}\n.tp-sheet-actions[data-v-ee3f550f] { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px;\n}\n.tp-file-row[data-v-ee3f550f] { display: flex; align-items: center; gap: 8px;\n}\n.tp-hidden-input[data-v-ee3f550f] { display: none;\n}\n.tp-fade-enter-active[data-v-ee3f550f], .tp-fade-leave-active[data-v-ee3f550f] { transition: opacity 0.18s;\n}\n.tp-fade-enter-from[data-v-ee3f550f], .tp-fade-leave-to[data-v-ee3f550f] { opacity: 0;\n}\n.spinning[data-v-ee3f550f] { animation: tp-spin-ee3f550f 0.8s linear infinite;\n}\n@keyframes tp-spin-ee3f550f {\nfrom { transform: rotate(0deg);\n}\nto { transform: rotate(360deg);\n}\n}\n\n.app-root[data-v-dccb81bc] {\n  display: grid;\n  /* ★ chat 优先薄壳（替换原 4 列 IDE 网格）：conversation 为 minmax(0,1fr) 主列，\n     editor 为 details 辅助列（--editor-w），折叠=0px 不占空间但 DOM 保持挂载。\n     gridStyle computed 会覆盖此默认值（聚焦/折叠时动态调整列宽）。 */\n  grid-template-columns: 48px var(--sidebar-w, 280px) minmax(0, 1fr);\n  grid-template-rows: 30px 1fr 22px;\n  width: 100%; height: 100%;\n  background: var(--bg-primary);\n  color: var(--text-primary);\n  overflow: hidden;\n  font-family: var(--font-ui);\n}\n/* ★ 桌面端面板独立模式：只渲染右侧对话面板，占满整个窗口 */\n.app-root.panel-only[data-v-dccb81bc] {\n  grid-template-columns: 1fr;\n  grid-template-rows: 1fr;\n}\n.app-root.panel-only .main-area[data-v-dccb81bc] {\n  grid-column: 1; grid-row: 1;\n  width: 100% !important;\n  height: 100%;\n}\n.app-root.panel-only .main-tabs[data-v-dccb81bc] { display: none;\n}\n/* 整区替换槽位（single）宿主：与内置区域同 grid 位置/尺寸 */\n.plugin-area-titlebar[data-v-dccb81bc] { grid-column: 1 / -1; grid-row: 1; height: 30px;\n}\n.plugin-area-activitybar[data-v-dccb81bc] { grid-column: 1; grid-row: 2; width: 48px;\n}\n.plugin-area-sidebar[data-v-dccb81bc] { grid-column: 2; grid-row: 2; height: 100%; overflow: hidden;\n}\n/* ★ main 区（col 3）：对话 / 编辑器 tab 切换（chat 优先薄壳主视图） */\n.main-area[data-v-dccb81bc] {\n  grid-column: 3; grid-row: 2;\n  display: flex; flex-direction: column; min-width: 0; overflow: hidden; position: relative;\n}\n/* tab 栏：对话 / 编辑器 */\n.main-tabs[data-v-dccb81bc] {\n  display: flex; flex-shrink: 0; height: 30px;\n  background: var(--bg-secondary); border-bottom: 1px solid var(--border-color);\n}\n.main-tab[data-v-dccb81bc] {\n  /* ★ 不用均分（flex:1 会造成 50/50 平分、视觉难看）：宽度随内容自适应，左对齐 */\n  flex: 0 0 auto; min-width: 0; border: none; background: none; cursor: pointer;\n  color: var(--text-muted); font-size: 12px; font-weight: 600;\n  padding: 0 18px; border-bottom: 2px solid transparent;\n  transition: color .15s, background .15s;\n}\n.main-tab[data-v-dccb81bc]:hover { color: var(--text-primary); background: var(--bg-hover);\n}\n.main-tab.active[data-v-dccb81bc] { color: var(--text-primary); border-bottom-color: var(--accent); background: var(--bg-active);\n}\n/* conversation（对话）宿主：常驻挂载，v-show 切换；填满 main 区（tab 栏下方） */\n.conversation-container[data-v-dccb81bc] {\n  flex: 1; min-width: 0; min-height: 0;\n  display: flex; flex-direction: row; overflow: hidden; position: relative;\n}\n/* editor（编辑器）宿主：常驻挂载，v-show 切换；填满 main 区（tab 栏下方），永不 unmount */\n.editor-container[data-v-dccb81bc] {\n  flex: 1; min-width: 0; min-height: 0;\n  display: flex; flex-direction: column; overflow: hidden;\n}\n/* market（市场面板）宿主：主区第三视图，v-show 切换；bundle 动态挂载 */\n.market-container[data-v-dccb81bc] {\n  flex: 1; min-width: 0; min-height: 0;\n  display: flex; flex-direction: column; overflow: hidden;\n}\n/* 主区 tab 内嵌关闭按钮（编辑器 / 市场）× */\n.main-tab-close[data-v-dccb81bc] {\n  display: inline-flex; align-items: center; justify-content: center;\n  margin-left: 6px; font-size: 13px; line-height: 1;\n  width: 16px; height: 16px; border-radius: 3px; opacity: 0.55;\n}\n.main-tab-close[data-v-dccb81bc]:hover { opacity: 1; background: var(--bg-hover); color: var(--text-primary);\n}\n.app-statusbar-host[data-v-dccb81bc] { grid-column: 1 / -1; grid-row: 3; z-index: 30; height: 22px;\n}\n.plugin-slot-host[data-v-dccb81bc] { height: 100%; overflow: hidden;\n}\n/* ★ 插件渲染的子元素必须撑满宿主（bundle 根 auto 宽度不随宿主 grid 拉伸）。\n   以 <conversation> 主列为例：宿主占列 3 → 子元素撑满，避免右侧空余。 */\n.plugin-slot-host.conversation-container[data-v-dccb81bc] > * { width: 100%; min-width: 0;\n}\n/* modals 槽位：fixed 全屏浮层容器（不占 grid 格） */\n.modals-host[data-v-dccb81bc] { position: fixed; inset: 0; z-index: 200; pointer-events: none;\n}\n.modals-host[data-v-dccb81bc] > * { pointer-events: auto;\n}\n.modals-empty[data-v-dccb81bc] { display: none;\n}\n/* 空态占位（区域插件未装配时显示） */\n.slot-empty[data-v-dccb81bc] {\n  display: flex; flex-direction: row; gap: 8px;\n  align-items: center; justify-content: center;\n  color: var(--text-muted); font-size: 12px;\n  background: var(--bg-primary);\n  border: 1px dashed var(--border-color);\n  min-height: 0;\n}\n/* activitybar 是竖条（~48px 宽）：空态改纵向排列 */\n.plugin-area-activitybar.slot-empty[data-v-dccb81bc] { flex-direction: column; gap: 4px; padding: 4px;\n}\n.plugin-area-activitybar.slot-empty .escape-link[data-v-dccb81bc] { font-size: 11px; padding: 2px 8px;\n}\n/* 空态内的「打开插件面板」恢复入口（上下文感知注入：只在区域未装配时出现，\n   插件全正常时零干扰；与常驻逃生按钮互为双保险） */\n.escape-link[data-v-dccb81bc] {\n  background: none; border: 1px solid var(--border-color);\n  color: var(--accent, #4f8cff); font-size: 12px;\n  padding: 3px 12px; border-radius: 4px; cursor: pointer;\n  opacity: .85; transition: opacity .15s;\n}\n.escape-link[data-v-dccb81bc]:hover { opacity: 1; background: rgba(79,140,255,.12);\n}\n/* ─── 壳级逃生口：插件面板浮动入口 ───\n   常驻极小按钮位于左下角（状态栏上方）；半透明弱化，hover 全显。\n   点击打开浮动插件面板（Fixed 560px 居中）。 */\n.plugin-escape-btn[data-v-dccb81bc] {\n  position: fixed; left: 6px; bottom: 26px; z-index: 300;\n  width: 22px; height: 22px; border-radius: 5px;\n  display: flex; align-items: center; justify-content: center;\n  background: var(--bg-elevated, #2a2d36); color: var(--text-muted);\n  border: 1px solid var(--border-color); cursor: pointer;\n  opacity: .3; transition: opacity .15s;\n}\n.plugin-escape-btn[data-v-dccb81bc]:hover { opacity: 1; color: var(--accent, #4f8cff);\n}\n.plugin-escape-overlay[data-v-dccb81bc] {\n  position: fixed; inset: 0; z-index: 400;\n  background: rgba(0,0,0,.45);\n  display: flex; align-items: center; justify-content: center;\n}\n.plugin-escape-panel[data-v-dccb81bc] {\n  width: 560px; max-width: 92vw; height: 70vh; max-height: 640px;\n  background: var(--bg-primary); border: 1px solid var(--border-color);\n  border-radius: 10px; box-shadow: 0 8px 40px rgba(0,0,0,.5);\n  display: flex; flex-direction: column; overflow: hidden;\n}\n.plugin-escape-head[data-v-dccb81bc] {\n  display: flex; align-items: center; justify-content: space-between;\n  padding: 6px 10px; font-size: 12px; color: var(--text-muted);\n  border-bottom: 1px solid var(--border-color);\n  background: var(--bg-elevated, #262932);\n}\n.plugin-escape-close[data-v-dccb81bc] {\n  border: none; background: none; color: var(--text-muted);\n  cursor: pointer; font-size: 13px; padding: 2px 6px; border-radius: 4px;\n}\n.plugin-escape-close[data-v-dccb81bc]:hover { background: rgba(255,255,255,.08); color: #fff;\n}\n.plugin-escape-body[data-v-dccb81bc] { flex: 1; overflow: auto;\n}\n.plugin-escape-body .plugin-panel[data-v-dccb81bc] { height: 100%; border: none;\n}\n/*$vite$:1*/";
   document.head.appendChild(__vite_style__);
   /**
   * @vue/shared v3.5.39
@@ -11442,9 +11442,11 @@
     loadingDir: "",
     openFiles: [],
     activeFile: "",
-    // ── 市场 tab（主内容区 main-tabs 第三视图 tab）──
+    // ── 主内容区 tab（对话/编辑器/市场/工具集 多视图）──
     marketTabOpen: false,
     // 「市场」tab 是否打开
+    toolsetsTabOpen: false,
+    // 「工具集」tab 是否打开
     fileContents: {},
     fileSavedContent: {},
     // 磁盘上原始内容，用于准确判断是否修改
@@ -13351,6 +13353,10 @@
       toggleMarketTab();
       return;
     }
+    if (id === "toolsets") {
+      toggleToolsetsTab();
+      return;
+    }
     if (state.activeActivity === id) {
       state.sidebarVisible = !state.sidebarVisible;
     } else {
@@ -13370,6 +13376,21 @@
   function closeMarketTab() {
     state.marketTabOpen = false;
     if (state.panels.mainTab === "market") {
+      state.panels.mainTab = "conversation";
+    }
+  }
+  function toggleToolsetsTab() {
+    if (state.toolsetsTabOpen && state.panels.mainTab === "toolsets") {
+      closeToolsetsTab();
+    } else {
+      state.toolsetsTabOpen = true;
+      state.panels.mainTab = "toolsets";
+      state.panels.editorOpen = false;
+    }
+  }
+  function closeToolsetsTab() {
+    state.toolsetsTabOpen = false;
+    if (state.panels.mainTab === "toolsets") {
       state.panels.mainTab = "conversation";
     }
   }
@@ -13612,6 +13633,7 @@
     checkNotifications,
     cleanupAppGlobals,
     closeMarketTab,
+    closeToolsetsTab,
     default: appActions,
     desktopPrefetch,
     handleKeydown,
@@ -13622,7 +13644,8 @@
     saveWsList,
     switchActivity,
     switchWorkspace,
-    toggleMarketTab
+    toggleMarketTab,
+    toggleToolsetsTab
   }, Symbol.toStringTag, { value: "Module" }));
   const _export_sfc = (sfc, props) => {
     const target = sfc.__vccOpts || sfc;
@@ -13631,55 +13654,55 @@
     }
     return target;
   };
-  const _hoisted_1$2 = ["width", "height"];
-  const _hoisted_2$2 = {
+  const _hoisted_1$4 = ["width", "height"];
+  const _hoisted_2$4 = {
     key: 0,
     d: "M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
   };
-  const _hoisted_3$2 = {
+  const _hoisted_3$4 = {
     key: 7,
     d: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
   };
-  const _hoisted_4$2 = {
+  const _hoisted_4$4 = {
     key: 10,
     points: "9 6 15 12 9 18"
   };
-  const _hoisted_5$2 = {
+  const _hoisted_5$4 = {
     key: 11,
     points: "6 9 12 15 18 9"
   };
-  const _hoisted_6$2 = {
+  const _hoisted_6$4 = {
     key: 30,
     d: "M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"
   };
-  const _hoisted_7$2 = {
+  const _hoisted_7$4 = {
     key: 48,
     x1: "5",
     y1: "12",
     x2: "19",
     y2: "12"
   };
-  const _hoisted_8$2 = {
+  const _hoisted_8$4 = {
     key: 52,
     d: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
   };
-  const _hoisted_9$2 = {
+  const _hoisted_9$4 = {
     key: 55,
     points: "20 6 9 17 4 12"
   };
-  const _hoisted_10$2 = {
+  const _hoisted_10$4 = {
     key: 58,
     d: "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"
   };
-  const _hoisted_11$1 = {
+  const _hoisted_11$3 = {
     key: 68,
     d: "M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"
   };
-  const _hoisted_12$1 = {
+  const _hoisted_12$2 = {
     key: 70,
     points: "15 6 9 12 15 18"
   };
-  const _sfc_main$2 = {
+  const _sfc_main$4 = {
     __name: "SvgIcon",
     props: {
       name: { type: String, required: true },
@@ -13698,7 +13721,7 @@
           "stroke-linecap": "round",
           "stroke-linejoin": "round"
         }, [
-          __props.name === "folder" ? (openBlock(), createElementBlock("path", _hoisted_2$2)) : __props.name === "folder-open" ? (openBlock(), createElementBlock(Fragment, { key: 1 }, [
+          __props.name === "folder" ? (openBlock(), createElementBlock("path", _hoisted_2$4)) : __props.name === "folder-open" ? (openBlock(), createElementBlock(Fragment, { key: 1 }, [
             _cache[0] || (_cache[0] = createBaseVNode("path", { d: "M6 17l-3-9h18l-3 9H6z" }, null, -1)),
             _cache[1] || (_cache[1] = createBaseVNode("path", { d: "M4 8V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v3" }, null, -1))
           ], 64)) : __props.name === "file" ? (openBlock(), createElementBlock(Fragment, { key: 2 }, [
@@ -13741,7 +13764,7 @@
               x2: "20",
               y2: "19"
             }, null, -1))
-          ], 64)) : __props.name === "chat" ? (openBlock(), createElementBlock("path", _hoisted_3$2)) : __props.name === "settings" ? (openBlock(), createElementBlock(Fragment, { key: 8 }, [
+          ], 64)) : __props.name === "chat" ? (openBlock(), createElementBlock("path", _hoisted_3$4)) : __props.name === "settings" ? (openBlock(), createElementBlock(Fragment, { key: 8 }, [
             _cache[13] || (_cache[13] = createBaseVNode("circle", {
               cx: "12",
               cy: "12",
@@ -13751,7 +13774,7 @@
           ], 64)) : __props.name === "home" ? (openBlock(), createElementBlock(Fragment, { key: 9 }, [
             _cache[15] || (_cache[15] = createBaseVNode("path", { d: "M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" }, null, -1)),
             _cache[16] || (_cache[16] = createBaseVNode("polyline", { points: "9 22 9 12 15 12 15 22" }, null, -1))
-          ], 64)) : __props.name === "chevron-right" ? (openBlock(), createElementBlock("polyline", _hoisted_4$2)) : __props.name === "chevron-down" ? (openBlock(), createElementBlock("polyline", _hoisted_5$2)) : __props.name === "plus" ? (openBlock(), createElementBlock(Fragment, { key: 12 }, [
+          ], 64)) : __props.name === "chevron-right" ? (openBlock(), createElementBlock("polyline", _hoisted_4$4)) : __props.name === "chevron-down" ? (openBlock(), createElementBlock("polyline", _hoisted_5$4)) : __props.name === "plus" ? (openBlock(), createElementBlock(Fragment, { key: 12 }, [
             _cache[17] || (_cache[17] = createBaseVNode("line", {
               x1: "12",
               y1: "5",
@@ -13943,7 +13966,7 @@
               r: "10",
               class: "stop-pulse-ring"
             }, null, -1))
-          ], 64)) : __props.name === "wrench" ? (openBlock(), createElementBlock("path", _hoisted_6$2)) : __props.name === "database" ? (openBlock(), createElementBlock(Fragment, { key: 31 }, [
+          ], 64)) : __props.name === "wrench" ? (openBlock(), createElementBlock("path", _hoisted_6$4)) : __props.name === "database" ? (openBlock(), createElementBlock(Fragment, { key: 31 }, [
             _cache[64] || (_cache[64] = createBaseVNode("ellipse", {
               cx: "12",
               cy: "5",
@@ -14105,7 +14128,7 @@
               ry: "2"
             }, null, -1)),
             _cache[108] || (_cache[108] = createBaseVNode("path", { d: "M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" }, null, -1))
-          ], 64)) : __props.name === "minus" ? (openBlock(), createElementBlock("line", _hoisted_7$2)) : __props.name === "edit" ? (openBlock(), createElementBlock(Fragment, { key: 49 }, [
+          ], 64)) : __props.name === "minus" ? (openBlock(), createElementBlock("line", _hoisted_7$4)) : __props.name === "edit" ? (openBlock(), createElementBlock(Fragment, { key: 49 }, [
             _cache[109] || (_cache[109] = createBaseVNode("path", { d: "M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" }, null, -1)),
             _cache[110] || (_cache[110] = createBaseVNode("path", { d: "M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" }, null, -1))
           ], 64)) : __props.name === "trash" ? (openBlock(), createElementBlock(Fragment, { key: 50 }, [
@@ -14126,7 +14149,7 @@
               x2: "15",
               y2: "15"
             }, null, -1))
-          ], 64)) : __props.name === "message-square" ? (openBlock(), createElementBlock("path", _hoisted_8$2)) : __props.name === "folder-plus" ? (openBlock(), createElementBlock(Fragment, { key: 53 }, [
+          ], 64)) : __props.name === "message-square" ? (openBlock(), createElementBlock("path", _hoisted_8$4)) : __props.name === "folder-plus" ? (openBlock(), createElementBlock(Fragment, { key: 53 }, [
             _cache[117] || (_cache[117] = createBaseVNode("path", { d: "M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2v3" }, null, -1)),
             _cache[118] || (_cache[118] = createBaseVNode("line", {
               x1: "12",
@@ -14145,7 +14168,7 @@
             _cache[121] || (_cache[121] = createBaseVNode("path", { d: "M9 12v2" }, null, -1)),
             _cache[122] || (_cache[122] = createBaseVNode("path", { d: "M15 12v2" }, null, -1)),
             _cache[123] || (_cache[123] = createBaseVNode("path", { d: "M12 9v5" }, null, -1))
-          ], 64)) : __props.name === "check" ? (openBlock(), createElementBlock("polyline", _hoisted_9$2)) : __props.name === "clock" ? (openBlock(), createElementBlock(Fragment, { key: 56 }, [
+          ], 64)) : __props.name === "check" ? (openBlock(), createElementBlock("polyline", _hoisted_9$4)) : __props.name === "clock" ? (openBlock(), createElementBlock(Fragment, { key: 56 }, [
             _cache[124] || (_cache[124] = createBaseVNode("circle", {
               cx: "12",
               cy: "12",
@@ -14165,7 +14188,7 @@
               x2: "12.01",
               y2: "17"
             }, null, -1))
-          ], 64)) : __props.name === "shield" ? (openBlock(), createElementBlock("path", _hoisted_10$2)) : __props.name === "shield-off" ? (openBlock(), createElementBlock(Fragment, { key: 59 }, [
+          ], 64)) : __props.name === "shield" ? (openBlock(), createElementBlock("path", _hoisted_10$4)) : __props.name === "shield-off" ? (openBlock(), createElementBlock(Fragment, { key: 59 }, [
             _cache[129] || (_cache[129] = createBaseVNode("path", { d: "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" }, null, -1)),
             _cache[130] || (_cache[130] = createBaseVNode("line", {
               x1: "4",
@@ -14209,9 +14232,9 @@
           ], 64)) : __props.name === "book-open" ? (openBlock(), createElementBlock(Fragment, { key: 67 }, [
             _cache[145] || (_cache[145] = createBaseVNode("path", { d: "M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" }, null, -1)),
             _cache[146] || (_cache[146] = createBaseVNode("path", { d: "M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" }, null, -1))
-          ], 64)) : __props.name === "tool" ? (openBlock(), createElementBlock("path", _hoisted_11$1)) : __props.name === "keyboard" ? (openBlock(), createElementBlock(Fragment, { key: 69 }, [
+          ], 64)) : __props.name === "tool" ? (openBlock(), createElementBlock("path", _hoisted_11$3)) : __props.name === "keyboard" ? (openBlock(), createElementBlock(Fragment, { key: 69 }, [
             _cache[147] || (_cache[147] = createStaticVNode('<rect x="2" y="4" width="20" height="16" rx="2" ry="2" data-v-faf69761></rect><line x1="6" y1="8" x2="6.01" y2="8" data-v-faf69761></line><line x1="10" y1="8" x2="10.01" y2="8" data-v-faf69761></line><line x1="14" y1="8" x2="14.01" y2="8" data-v-faf69761></line><line x1="18" y1="8" x2="18.01" y2="8" data-v-faf69761></line><line x1="6" y1="12" x2="6.01" y2="12" data-v-faf69761></line><line x1="10" y1="12" x2="10.01" y2="12" data-v-faf69761></line><line x1="14" y1="12" x2="14.01" y2="12" data-v-faf69761></line><line x1="18" y1="12" x2="18.01" y2="12" data-v-faf69761></line><line x1="6" y1="16" x2="18" y2="16" data-v-faf69761></line>', 10))
-          ], 64)) : __props.name === "chevron-left" ? (openBlock(), createElementBlock("polyline", _hoisted_12$1)) : __props.name === "grid" ? (openBlock(), createElementBlock(Fragment, { key: 71 }, [
+          ], 64)) : __props.name === "chevron-left" ? (openBlock(), createElementBlock("polyline", _hoisted_12$2)) : __props.name === "grid" ? (openBlock(), createElementBlock(Fragment, { key: 71 }, [
             _cache[148] || (_cache[148] = createBaseVNode("rect", {
               x: "3",
               y: "3",
@@ -14255,204 +14278,162 @@
               y2: "17"
             }, null, -1))
           ], 64))
-        ], 8, _hoisted_1$2);
+        ], 8, _hoisted_1$4);
       };
     }
   };
-  const SvgIcon = /* @__PURE__ */ _export_sfc(_sfc_main$2, [["__scopeId", "data-v-faf69761"]]);
-  const _hoisted_1$1 = { class: "plugin-panel" };
-  const _hoisted_2$1 = { class: "pp-header" };
-  const _hoisted_3$1 = { class: "pp-title" };
-  const _hoisted_4$1 = { class: "pp-actions" };
-  const _hoisted_5$1 = {
+  const SvgIcon = /* @__PURE__ */ _export_sfc(_sfc_main$4, [["__scopeId", "data-v-faf69761"]]);
+  const _hoisted_1$3 = { class: "plugin-panel" };
+  const _hoisted_2$3 = { class: "pp-header" };
+  const _hoisted_3$3 = { class: "pp-title" };
+  const _hoisted_4$3 = { class: "pp-actions" };
+  const _hoisted_5$3 = {
     key: 0,
-    class: "pp-toolset"
-  };
-  const _hoisted_6$1 = { class: "pp-ts-head" };
-  const _hoisted_7$1 = { label: "通用集合（全局共享）" };
-  const _hoisted_8$1 = ["value"];
-  const _hoisted_9$1 = ["value"];
-  const _hoisted_10$1 = {
-    key: 0,
-    class: "pp-ts-body"
-  };
-  const _hoisted_11 = { class: "pp-ts-title" };
-  const _hoisted_12 = { class: "pp-ts-scope" };
-  const _hoisted_13 = { class: "pp-ts-prow" };
-  const _hoisted_14 = { class: "pp-ts-pname" };
-  const _hoisted_15 = ["onClick"];
-  const _hoisted_16 = {
-    key: 1,
-    class: "pp-ts-muted"
-  };
-  const _hoisted_17 = {
-    key: 0,
-    class: "pp-ts-purpose"
-  };
-  const _hoisted_18 = {
-    key: 1,
-    class: "pp-ts-tools"
-  };
-  const _hoisted_19 = ["title"];
-  const _hoisted_20 = ["checked", "onChange"];
-  const _hoisted_21 = {
-    key: 2,
-    class: "pp-ts-muted"
-  };
-  const _hoisted_22 = { class: "pp-ts-add" };
-  const _hoisted_23 = ["value"];
-  const _hoisted_24 = ["disabled"];
-  const _hoisted_25 = {
-    key: 1,
-    class: "pp-ts-empty"
-  };
-  const _hoisted_26 = {
-    key: 1,
     class: "pp-new"
   };
-  const _hoisted_27 = { class: "pp-new-foot" };
-  const _hoisted_28 = { class: "pp-check" };
-  const _hoisted_29 = ["disabled"];
-  const _hoisted_30 = {
-    key: 2,
+  const _hoisted_6$3 = { class: "pp-new-foot" };
+  const _hoisted_7$3 = { class: "pp-check" };
+  const _hoisted_8$3 = ["disabled"];
+  const _hoisted_9$3 = {
+    key: 1,
     class: "pp-client"
   };
-  const _hoisted_31 = { class: "pp-client-tabs" };
-  const _hoisted_32 = ["onClick"];
-  const _hoisted_33 = { class: "pp-client-tab-title" };
-  const _hoisted_34 = {
-    key: 3,
+  const _hoisted_10$3 = { class: "pp-client-tabs" };
+  const _hoisted_11$2 = ["onClick"];
+  const _hoisted_12$1 = { class: "pp-client-tab-title" };
+  const _hoisted_13$1 = {
+    key: 2,
     class: "pp-slots"
   };
-  const _hoisted_35 = ["title"];
-  const _hoisted_36 = { class: "pp-slots-title" };
-  const _hoisted_37 = { class: "pp-slot-info" };
-  const _hoisted_38 = { class: "pp-slot-title-row" };
-  const _hoisted_39 = { class: "pp-slot-id" };
-  const _hoisted_40 = ["value", "onChange", "title"];
-  const _hoisted_41 = { value: "" };
-  const _hoisted_42 = ["value"];
-  const _hoisted_43 = {
+  const _hoisted_14$1 = ["title"];
+  const _hoisted_15$1 = { class: "pp-slots-title" };
+  const _hoisted_16$1 = { class: "pp-slot-info" };
+  const _hoisted_17$1 = { class: "pp-slot-title-row" };
+  const _hoisted_18$1 = { class: "pp-slot-id" };
+  const _hoisted_19$1 = ["value", "onChange", "title"];
+  const _hoisted_20$1 = { value: "" };
+  const _hoisted_21$1 = ["value"];
+  const _hoisted_22$1 = {
     key: 1,
     class: "pp-slot-list"
   };
-  const _hoisted_44 = ["checked", "onChange"];
-  const _hoisted_45 = {
+  const _hoisted_23$1 = ["checked", "onChange"];
+  const _hoisted_24$1 = {
     key: 0,
     class: "pp-slot-empty"
   };
-  const _hoisted_46 = { class: "pp-list" };
-  const _hoisted_47 = {
+  const _hoisted_25$1 = { class: "pp-list" };
+  const _hoisted_26$1 = {
     key: 0,
     class: "pp-builtin"
   };
-  const _hoisted_48 = ["title"];
-  const _hoisted_49 = { class: "pp-builtin-title" };
-  const _hoisted_50 = { class: "pp-builtin-grow" };
-  const _hoisted_51 = { class: "pp-builtin-gname" };
-  const _hoisted_52 = {
+  const _hoisted_27$1 = ["title"];
+  const _hoisted_28$1 = { class: "pp-builtin-title" };
+  const _hoisted_29$1 = { class: "pp-builtin-grow" };
+  const _hoisted_30$1 = { class: "pp-builtin-gname" };
+  const _hoisted_31$1 = {
     key: 0,
     class: "pp-builtin-gdesc"
   };
-  const _hoisted_53 = { class: "pp-builtin-gcount" };
-  const _hoisted_54 = ["onClick"];
-  const _hoisted_55 = ["onClick"];
-  const _hoisted_56 = { class: "pp-builtin-tools" };
-  const _hoisted_57 = ["title"];
-  const _hoisted_58 = { class: "pp-d-tname" };
-  const _hoisted_59 = ["title"];
-  const _hoisted_60 = ["checked", "onChange"];
-  const _hoisted_61 = {
+  const _hoisted_32$1 = { class: "pp-builtin-gcount" };
+  const _hoisted_33$1 = ["onClick"];
+  const _hoisted_34$1 = ["onClick"];
+  const _hoisted_35$1 = { class: "pp-builtin-tools" };
+  const _hoisted_36$1 = ["title"];
+  const _hoisted_37$1 = { class: "pp-d-tname" };
+  const _hoisted_38$1 = ["title"];
+  const _hoisted_39$1 = ["checked", "onChange"];
+  const _hoisted_40$1 = {
     key: 2,
     class: "pp-loading"
   };
-  const _hoisted_62 = {
+  const _hoisted_41$1 = {
     key: 3,
     class: "pp-empty"
   };
-  const _hoisted_63 = {
+  const _hoisted_42$1 = {
     key: 4,
     class: "pp-empty"
   };
-  const _hoisted_64 = ["onClick"];
-  const _hoisted_65 = ["title"];
-  const _hoisted_66 = ["title"];
-  const _hoisted_67 = {
+  const _hoisted_43$1 = ["onClick"];
+  const _hoisted_44$1 = ["title"];
+  const _hoisted_45$1 = ["title"];
+  const _hoisted_46$1 = {
     key: 0,
     class: "pp-badge",
     title: "全局插件：跨工作区生效（UI 类），不属于任何工具集"
   };
-  const _hoisted_68 = {
+  const _hoisted_47$1 = {
     key: 1,
     class: "pp-badge",
     title: "含 client 半（浏览器 UI，运行中自动装载）"
   };
-  const _hoisted_69 = ["title"];
-  const _hoisted_70 = ["title"];
-  const _hoisted_71 = ["title"];
-  const _hoisted_72 = ["checked", "onChange"];
-  const _hoisted_73 = {
+  const _hoisted_48$1 = ["title"];
+  const _hoisted_49 = ["title"];
+  const _hoisted_50 = ["title"];
+  const _hoisted_51 = ["checked", "onChange"];
+  const _hoisted_52 = {
     key: 0,
     class: "pp-detail"
   };
-  const _hoisted_74 = {
+  const _hoisted_53 = {
     key: 0,
     class: "pp-d-purpose"
   };
-  const _hoisted_75 = {
+  const _hoisted_54 = {
     key: 1,
     class: "pp-d-line"
   };
-  const _hoisted_76 = { key: 0 };
-  const _hoisted_77 = {
+  const _hoisted_55 = { key: 0 };
+  const _hoisted_56 = {
     key: 2,
     class: "pp-d-line"
   };
-  const _hoisted_78 = { key: 0 };
-  const _hoisted_79 = {
+  const _hoisted_57 = { key: 0 };
+  const _hoisted_58 = {
     key: 3,
     class: "pp-d-line pp-d-error"
   };
-  const _hoisted_80 = {
+  const _hoisted_59 = {
     key: 4,
     class: "pp-d-line"
   };
-  const _hoisted_81 = {
+  const _hoisted_60 = {
     key: 5,
     class: "pp-d-line"
   };
-  const _hoisted_82 = {
+  const _hoisted_61 = {
     key: 6,
     class: "pp-d-conflict"
   };
-  const _hoisted_83 = { class: "pp-d-conflict-title" };
-  const _hoisted_84 = ["title"];
-  const _hoisted_85 = ["title"];
-  const _hoisted_86 = ["title"];
-  const _hoisted_87 = ["disabled", "title", "onClick"];
-  const _hoisted_88 = {
+  const _hoisted_62 = { class: "pp-d-conflict-title" };
+  const _hoisted_63 = ["title"];
+  const _hoisted_64 = ["title"];
+  const _hoisted_65 = ["title"];
+  const _hoisted_66 = ["disabled", "title", "onClick"];
+  const _hoisted_67 = {
     key: 7,
     class: "pp-d-tools"
   };
-  const _hoisted_89 = { class: "pp-d-tools-title" };
-  const _hoisted_90 = ["title"];
-  const _hoisted_91 = ["title"];
-  const _hoisted_92 = ["checked", "onChange"];
-  const _hoisted_93 = {
+  const _hoisted_68 = { class: "pp-d-tools-title" };
+  const _hoisted_69 = ["title"];
+  const _hoisted_70 = ["title"];
+  const _hoisted_71 = ["checked", "onChange"];
+  const _hoisted_72 = {
     key: 8,
     class: "pp-d-code"
   };
-  const _hoisted_94 = { class: "pp-d-code-head" };
-  const _hoisted_95 = ["onClick"];
-  const _hoisted_96 = { class: "pp-d-actions" };
-  const _hoisted_97 = {
+  const _hoisted_73 = { class: "pp-d-code-head" };
+  const _hoisted_74 = ["onClick"];
+  const _hoisted_75 = { class: "pp-d-actions" };
+  const _hoisted_76 = {
     key: 0,
     class: "pp-d-hint"
   };
-  const _hoisted_98 = ["onClick"];
-  const _hoisted_99 = ["onClick"];
-  const _hoisted_100 = ["onClick"];
-  const _sfc_main$1 = {
+  const _hoisted_77 = ["onClick"];
+  const _hoisted_78 = ["onClick"];
+  const _hoisted_79 = ["onClick"];
+  const _sfc_main$3 = {
     __name: "PluginPanel",
     setup(__props) {
       const plugins = /* @__PURE__ */ ref([]);
@@ -14468,11 +14449,6 @@
       const newMsgErr = /* @__PURE__ */ ref(false);
       const activePanelId = /* @__PURE__ */ ref("");
       const clientPanelEl = /* @__PURE__ */ ref(null);
-      const showToolset = /* @__PURE__ */ ref(false);
-      const toolsetMetas = /* @__PURE__ */ ref([]);
-      const tsName = /* @__PURE__ */ ref("");
-      const tsDetail = /* @__PURE__ */ ref(null);
-      const addPluginName = /* @__PURE__ */ ref("");
       const newForm = /* @__PURE__ */ reactive({ purpose: "", code: "", client: "", language: "", run: true });
       const preferring = /* @__PURE__ */ reactive({});
       const preferMsg = /* @__PURE__ */ ref("");
@@ -14522,60 +14498,6 @@
           preferring[c.tool] = false;
         }
       }
-      async function loadToolsets() {
-        try {
-          const list = await api.getToolsets() || [];
-          toolsetMetas.value = list || [];
-        } catch (e) {
-          toolsetMetas.value = [];
-        }
-        if (tsName.value && !toolsetMetas.value.some((t) => t.name === tsName.value)) tsName.value = "";
-        if (tsName.value) await loadToolsetDetail();
-        else tsDetail.value = null;
-      }
-      async function loadToolsetDetail() {
-        if (!tsName.value) {
-          tsDetail.value = null;
-          return;
-        }
-        try {
-          tsDetail.value = await api.getToolsets(tsName.value);
-        } catch (e) {
-          window.$toast && window.$toast("加载工具集失败: " + (e.message || e), "error");
-        }
-      }
-      function pluginToolsOf(pname) {
-        const p2 = plugins.value.find((x) => x.name === pname);
-        return p2 && p2.tools || [];
-      }
-      function isToolDisabled(pl, t) {
-        return (pl.disabledTools || []).includes(t);
-      }
-      async function edit(data) {
-        try {
-          const res = await api.toolsetEdit({ name: tsName.value, ...data });
-          window.$toast && window.$toast(res && res.message || "操作成功", "info");
-          await loadToolsetDetail();
-          await refresh();
-        } catch (e) {
-          window.$toast && window.$toast(e.message || "操作失败", "error");
-        }
-      }
-      function toggleTool(pl, t) {
-        edit({ action: isToolDisabled(pl, t) ? "enable_tool" : "rm_tool", plugin_name: pl.name, tool: t });
-      }
-      async function doAddPlugin() {
-        if (!addPluginName.value) return;
-        await edit({ action: "add_plugin", plugin_name: addPluginName.value });
-        addPluginName.value = "";
-      }
-      const addablePlugins = computed(() => {
-        const inTs = new Set((tsDetail.value && tsDetail.value.plugins || []).map((p2) => p2.name));
-        return plugins.value.filter((p2) => !inTs.has(p2.name));
-      });
-      watch(showToolset, (v) => {
-        if (v) loadToolsets();
-      });
       function fetchPluginsJSON() {
         return new Promise((resolve2, reject) => {
           const x = new XMLHttpRequest();
@@ -14834,16 +14756,16 @@
         }
       });
       return (_ctx, _cache) => {
-        return openBlock(), createElementBlock("div", _hoisted_1$1, [
-          createBaseVNode("div", _hoisted_2$1, [
-            createBaseVNode("span", _hoisted_3$1, [
+        return openBlock(), createElementBlock("div", _hoisted_1$3, [
+          createBaseVNode("div", _hoisted_2$3, [
+            createBaseVNode("span", _hoisted_3$3, [
               createVNode(SvgIcon, {
                 name: "puzzle",
                 size: 14
               }),
-              _cache[12] || (_cache[12] = createTextVNode(" 插件", -1))
+              _cache[9] || (_cache[9] = createTextVNode(" 插件", -1))
             ]),
-            createBaseVNode("div", _hoisted_4$1, [
+            createBaseVNode("div", _hoisted_4$3, [
               createBaseVNode("button", {
                 class: "pp-icon-btn",
                 onClick: refresh,
@@ -14856,18 +14778,8 @@
                 }, null, 8, ["class"])
               ]),
               createBaseVNode("button", {
-                class: normalizeClass(["pp-icon-btn", { active: showToolset.value }]),
-                onClick: _cache[0] || (_cache[0] = ($event) => showToolset.value = !showToolset.value),
-                title: "工具集管理（插件化：加插件/删插件/摘工具）"
-              }, [
-                createVNode(SvgIcon, {
-                  name: "layers",
-                  size: 13
-                })
-              ], 2),
-              createBaseVNode("button", {
                 class: "pp-icon-btn",
-                onClick: _cache[1] || (_cache[1] = ($event) => showNew.value = !showNew.value),
+                onClick: _cache[0] || (_cache[0] = ($event) => showNew.value = !showNew.value),
                 title: "新建插件"
               }, [
                 createVNode(SvgIcon, {
@@ -14877,114 +14789,17 @@
               ])
             ])
           ]),
-          showToolset.value ? (openBlock(), createElementBlock("div", _hoisted_5$1, [
-            createBaseVNode("div", _hoisted_6$1, [
-              withDirectives(createBaseVNode("select", {
-                "onUpdate:modelValue": _cache[2] || (_cache[2] = ($event) => tsName.value = $event),
-                class: "pp-input pp-lang",
-                onChange: loadToolsetDetail
-              }, [
-                _cache[13] || (_cache[13] = createBaseVNode("option", { value: "" }, "选择工具集…", -1)),
-                createBaseVNode("optgroup", _hoisted_7$1, [
-                  (openBlock(true), createElementBlock(Fragment, null, renderList(toolsetMetas.value.filter((x) => x.scope !== "builtin"), (t) => {
-                    return openBlock(), createElementBlock("option", {
-                      key: t.name,
-                      value: t.name
-                    }, toDisplayString(t.name) + "（" + toDisplayString(t.pluginCount) + " 插件）", 9, _hoisted_8$1);
-                  }), 128)),
-                  (openBlock(true), createElementBlock(Fragment, null, renderList(toolsetMetas.value.filter((x) => x.scope === "builtin"), (t) => {
-                    return openBlock(), createElementBlock("option", {
-                      key: t.name,
-                      value: t.name
-                    }, toDisplayString(t.name) + "（" + toDisplayString(t.pluginCount) + " 插件·内置默认）", 9, _hoisted_9$1);
-                  }), 128))
-                ])
-              ], 544), [
-                [vModelSelect, tsName.value]
-              ]),
-              createBaseVNode("button", {
-                class: "pp-btn",
-                onClick: loadToolsets
-              }, "刷新")
-            ]),
-            tsDetail.value ? (openBlock(), createElementBlock("div", _hoisted_10$1, [
-              createBaseVNode("div", _hoisted_11, [
-                createTextVNode(toDisplayString(tsDetail.value.name) + " ", 1),
-                createBaseVNode("span", _hoisted_12, toDisplayString(tsDetail.value.project ? tsDetail.value.project + "·" : "") + toDisplayString(tsDetail.value.description || "工具集"), 1)
-              ]),
-              (openBlock(true), createElementBlock(Fragment, null, renderList(tsDetail.value.plugins, (pl) => {
-                return openBlock(), createElementBlock("div", {
-                  key: pl.name,
-                  class: "pp-ts-plugin"
-                }, [
-                  createBaseVNode("div", _hoisted_13, [
-                    createBaseVNode("span", _hoisted_14, toDisplayString(pl.name), 1),
-                    tsDetail.value.scope !== "builtin" ? (openBlock(), createElementBlock("button", {
-                      key: 0,
-                      class: "pp-btn danger",
-                      onClick: ($event) => edit({ action: "rm_plugin", plugin_name: pl.name })
-                    }, "移出工具集", 8, _hoisted_15)) : (openBlock(), createElementBlock("span", _hoisted_16, "内置"))
-                  ]),
-                  pl.purpose ? (openBlock(), createElementBlock("div", _hoisted_17, toDisplayString(pl.purpose), 1)) : createCommentVNode("", true),
-                  pluginToolsOf(pl.name).length ? (openBlock(), createElementBlock("div", _hoisted_18, [
-                    (openBlock(true), createElementBlock(Fragment, null, renderList(pluginToolsOf(pl.name), (t) => {
-                      return openBlock(), createElementBlock("label", {
-                        key: t,
-                        class: "pp-ts-tool",
-                        title: isToolDisabled(pl, t) ? "已摘除（对 agent 不可见），点击恢复" : "点击摘除（插件保留、工具不可见）"
-                      }, [
-                        createBaseVNode("input", {
-                          type: "checkbox",
-                          checked: !isToolDisabled(pl, t),
-                          onChange: ($event) => toggleTool(pl, t)
-                        }, null, 40, _hoisted_20),
-                        createBaseVNode("span", {
-                          class: normalizeClass({ off: isToolDisabled(pl, t) })
-                        }, toDisplayString(t), 3)
-                      ], 8, _hoisted_19);
-                    }), 128))
-                  ])) : (openBlock(), createElementBlock("div", _hoisted_21, "（插件未运行或无工具）"))
-                ]);
-              }), 128)),
-              createBaseVNode("div", _hoisted_22, [
-                withDirectives(createBaseVNode("select", {
-                  "onUpdate:modelValue": _cache[3] || (_cache[3] = ($event) => addPluginName.value = $event),
-                  class: "pp-input pp-lang"
-                }, [
-                  _cache[14] || (_cache[14] = createBaseVNode("option", { value: "" }, "把宿主插件加入工具集…", -1)),
-                  (openBlock(true), createElementBlock(Fragment, null, renderList(addablePlugins.value, (p2) => {
-                    return openBlock(), createElementBlock("option", {
-                      key: p2.name,
-                      value: p2.name
-                    }, [
-                      createTextVNode(toDisplayString(p2.name), 1),
-                      p2.tools && p2.tools.length ? (openBlock(), createElementBlock(Fragment, { key: 0 }, [
-                        createTextVNode("（" + toDisplayString(p2.tools.length) + " 工具）", 1)
-                      ], 64)) : createCommentVNode("", true)
-                    ], 8, _hoisted_23);
-                  }), 128))
-                ], 512), [
-                  [vModelSelect, addPluginName.value]
-                ]),
-                createBaseVNode("button", {
-                  class: "pp-btn primary",
-                  disabled: !addPluginName.value,
-                  onClick: doAddPlugin
-                }, "加入", 8, _hoisted_24)
-              ])
-            ])) : (openBlock(), createElementBlock("div", _hoisted_25, "选择上方工具集查看/编辑其插件与工具"))
-          ])) : createCommentVNode("", true),
-          showNew.value ? (openBlock(), createElementBlock("div", _hoisted_26, [
-            _cache[17] || (_cache[17] = createBaseVNode("div", { class: "pp-new-title" }, "新建 JS 动态插件", -1)),
+          showNew.value ? (openBlock(), createElementBlock("div", _hoisted_5$3, [
+            _cache[12] || (_cache[12] = createBaseVNode("div", { class: "pp-new-title" }, "新建 JS 动态插件", -1)),
             withDirectives(createBaseVNode("input", {
-              "onUpdate:modelValue": _cache[4] || (_cache[4] = ($event) => newForm.purpose = $event),
+              "onUpdate:modelValue": _cache[1] || (_cache[1] = ($event) => newForm.purpose = $event),
               placeholder: "用途说明（必填）",
               class: "pp-input"
             }, null, 512), [
               [vModelText, newForm.purpose]
             ]),
             withDirectives(createBaseVNode("textarea", {
-              "onUpdate:modelValue": _cache[5] || (_cache[5] = ($event) => newForm.code = $event),
+              "onUpdate:modelValue": _cache[2] || (_cache[2] = ($event) => newForm.code = $event),
               placeholder: "host 半代码（必填）：(async () => { return { name, apply(ctx, config) } })()",
               class: "pp-textarea code",
               rows: "6"
@@ -14992,46 +14807,46 @@
               [vModelText, newForm.code]
             ]),
             withDirectives(createBaseVNode("textarea", {
-              "onUpdate:modelValue": _cache[6] || (_cache[6] = ($event) => newForm.client = $event),
+              "onUpdate:modelValue": _cache[3] || (_cache[3] = ($event) => newForm.client = $event),
               placeholder: "client 半代码（可选）：(ui) => { ui.registerPanel({...}); ui.on('ui:xxx', fn) }",
               class: "pp-textarea code",
               rows: "4"
             }, null, 512), [
               [vModelText, newForm.client]
             ]),
-            createBaseVNode("div", _hoisted_27, [
+            createBaseVNode("div", _hoisted_6$3, [
               withDirectives(createBaseVNode("select", {
-                "onUpdate:modelValue": _cache[7] || (_cache[7] = ($event) => newForm.language = $event),
+                "onUpdate:modelValue": _cache[4] || (_cache[4] = ($event) => newForm.language = $event),
                 class: "pp-input pp-lang"
-              }, [..._cache[15] || (_cache[15] = [
+              }, [..._cache[10] || (_cache[10] = [
                 createBaseVNode("option", { value: "" }, "语言(自动)", -1),
                 createBaseVNode("option", { value: "js" }, "js", -1),
                 createBaseVNode("option", { value: "ts" }, "ts", -1)
               ])], 512), [
                 [vModelSelect, newForm.language]
               ]),
-              createBaseVNode("label", _hoisted_28, [
+              createBaseVNode("label", _hoisted_7$3, [
                 withDirectives(createBaseVNode("input", {
                   type: "checkbox",
-                  "onUpdate:modelValue": _cache[8] || (_cache[8] = ($event) => newForm.run = $event)
+                  "onUpdate:modelValue": _cache[5] || (_cache[5] = ($event) => newForm.run = $event)
                 }, null, 512), [
                   [vModelCheckbox, newForm.run]
                 ]),
-                _cache[16] || (_cache[16] = createTextVNode(" 定义后立即装载", -1))
+                _cache[11] || (_cache[11] = createTextVNode(" 定义后立即装载", -1))
               ]),
               createBaseVNode("button", {
                 class: "pp-btn primary",
                 disabled: defining.value || !newForm.purpose || !newForm.code,
                 onClick: doDefine
-              }, toDisplayString(defining.value ? "定义中…" : "定义"), 9, _hoisted_29)
+              }, toDisplayString(defining.value ? "定义中…" : "定义"), 9, _hoisted_8$3)
             ]),
             newMsg.value ? (openBlock(), createElementBlock("div", {
               key: 0,
               class: normalizeClass(["pp-new-msg", { err: newMsgErr.value }])
             }, toDisplayString(newMsg.value), 3)) : createCommentVNode("", true)
           ])) : createCommentVNode("", true),
-          unref(clientPanels).length > 0 ? (openBlock(), createElementBlock("div", _hoisted_30, [
-            createBaseVNode("div", _hoisted_31, [
+          unref(clientPanels).length > 0 ? (openBlock(), createElementBlock("div", _hoisted_9$3, [
+            createBaseVNode("div", _hoisted_10$3, [
               (openBlock(true), createElementBlock(Fragment, null, renderList(unref(clientPanels), (p2) => {
                 return openBlock(), createElementBlock("div", {
                   key: p2.id,
@@ -15042,8 +14857,8 @@
                     name: p2.icon || "sparkles",
                     size: 12
                   }, null, 8, ["name"]),
-                  createBaseVNode("span", _hoisted_33, toDisplayString(p2.title), 1)
-                ], 10, _hoisted_32);
+                  createBaseVNode("span", _hoisted_12$1, toDisplayString(p2.title), 1)
+                ], 10, _hoisted_11$2);
               }), 128))
             ]),
             createBaseVNode("div", {
@@ -15052,35 +14867,35 @@
               class: "pp-client-body"
             }, null, 512)
           ])) : createCommentVNode("", true),
-          slotGroups.value.length > 0 ? (openBlock(), createElementBlock("div", _hoisted_34, [
+          slotGroups.value.length > 0 ? (openBlock(), createElementBlock("div", _hoisted_13$1, [
             createBaseVNode("div", {
               class: "pp-slots-head",
-              onClick: _cache[9] || (_cache[9] = ($event) => slotsOpen.value = !slotsOpen.value),
+              onClick: _cache[6] || (_cache[6] = ($event) => slotsOpen.value = !slotsOpen.value),
               title: slotsOpen.value ? "点击收起 UI 槽位列表" : "点击展开 UI 槽位列表",
               style: { "cursor": "pointer" }
             }, [
-              createBaseVNode("span", _hoisted_36, [
+              createBaseVNode("span", _hoisted_15$1, [
                 createVNode(SvgIcon, {
                   name: "layers",
                   size: 13
                 }),
-                _cache[18] || (_cache[18] = createTextVNode(" UI 槽位", -1))
+                _cache[13] || (_cache[13] = createTextVNode(" UI 槽位", -1))
               ]),
-              _cache[19] || (_cache[19] = createBaseVNode("span", { class: "pp-slots-sub" }, "插件可替换的界面区域", -1)),
+              _cache[14] || (_cache[14] = createBaseVNode("span", { class: "pp-slots-sub" }, "插件可替换的界面区域", -1)),
               createVNode(SvgIcon, {
                 name: "chevron-right",
                 size: 11,
                 class: normalizeClass(["pp-chevron", { open: slotsOpen.value }])
               }, null, 8, ["class"])
-            ], 8, _hoisted_35),
+            ], 8, _hoisted_14$1),
             slotsOpen.value ? (openBlock(true), createElementBlock(Fragment, { key: 0 }, renderList(slotGroups.value, (g) => {
               return openBlock(), createElementBlock("div", {
                 key: g.slotId + "::" + g.kind,
                 class: "pp-slot-row"
               }, [
-                createBaseVNode("div", _hoisted_37, [
-                  createBaseVNode("div", _hoisted_38, [
-                    createBaseVNode("span", _hoisted_39, toDisplayString(g.slotId), 1),
+                createBaseVNode("div", _hoisted_16$1, [
+                  createBaseVNode("div", _hoisted_17$1, [
+                    createBaseVNode("span", _hoisted_18$1, toDisplayString(g.slotId), 1),
                     createBaseVNode("span", {
                       class: normalizeClass(["pp-slot-kind", g.kind === "list" ? "kind-list" : "kind-single"])
                     }, toDisplayString(g.kind === "list" ? "叠加" : "替换"), 3)
@@ -15096,14 +14911,14 @@
                   onChange: ($event) => switchSlot(g.slotId, $event.target.value),
                   title: "切换 " + g.slotId + " 区域的渲染者"
                 }, [
-                  createBaseVNode("option", _hoisted_41, toDisplayString(g.builtin ? "内置组件（默认）" : "（未占用）"), 1),
+                  createBaseVNode("option", _hoisted_20$1, toDisplayString(g.builtin ? "内置组件（默认）" : "（未占用）"), 1),
                   (openBlock(true), createElementBlock(Fragment, null, renderList(g.candidates, (c) => {
                     return openBlock(), createElementBlock("option", {
                       key: c.pluginName,
                       value: c.pluginName
-                    }, toDisplayString(c.pluginName) + " · " + toDisplayString(c.title), 9, _hoisted_42);
+                    }, toDisplayString(c.pluginName) + " · " + toDisplayString(c.title), 9, _hoisted_21$1);
                   }), 128))
-                ], 40, _hoisted_40)) : (openBlock(), createElementBlock("div", _hoisted_43, [
+                ], 40, _hoisted_19$1)) : (openBlock(), createElementBlock("div", _hoisted_22$1, [
                   (openBlock(true), createElementBlock(Fragment, null, renderList(g.candidates, (c) => {
                     return openBlock(), createElementBlock("label", {
                       key: c.pluginName,
@@ -15113,67 +14928,67 @@
                         type: "checkbox",
                         checked: overlayActive(g.slotId, c.pluginName),
                         onChange: ($event) => toggleOverlay(g.slotId, c.pluginName, $event.target.checked)
-                      }, null, 40, _hoisted_44),
+                      }, null, 40, _hoisted_23$1),
                       createBaseVNode("span", null, toDisplayString(c.pluginName) + " · " + toDisplayString(c.title), 1)
                     ]);
                   }), 128)),
-                  !g.candidates.length ? (openBlock(), createElementBlock("span", _hoisted_45, "（无叠加条目）")) : createCommentVNode("", true)
+                  !g.candidates.length ? (openBlock(), createElementBlock("span", _hoisted_24$1, "（无叠加条目）")) : createCommentVNode("", true)
                 ]))
               ]);
             }), 128)) : createCommentVNode("", true)
           ])) : createCommentVNode("", true),
-          createBaseVNode("div", _hoisted_46, [
-            builtinGroups.value.length ? (openBlock(), createElementBlock("div", _hoisted_47, [
+          createBaseVNode("div", _hoisted_25$1, [
+            builtinGroups.value.length ? (openBlock(), createElementBlock("div", _hoisted_26$1, [
               createBaseVNode("div", {
                 class: "pp-builtin-head",
-                onClick: _cache[10] || (_cache[10] = ($event) => builtinOpen.value = !builtinOpen.value),
+                onClick: _cache[7] || (_cache[7] = ($event) => builtinOpen.value = !builtinOpen.value),
                 title: builtinOpen.value ? "点击收起内置工具区" : "点击展开内置工具区",
                 style: { "cursor": "pointer" }
               }, [
-                createBaseVNode("span", _hoisted_49, [
+                createBaseVNode("span", _hoisted_28$1, [
                   createVNode(SvgIcon, {
                     name: "package",
                     size: 12
                   }),
-                  _cache[20] || (_cache[20] = createTextVNode(" 内置工具（框架自带）", -1))
+                  _cache[15] || (_cache[15] = createTextVNode(" 内置工具（框架自带）", -1))
                 ]),
-                _cache[21] || (_cache[21] = createBaseVNode("span", { class: "pp-builtin-sub" }, "勾选=在通用集合 default 中（agent 可用）；取消=移出", -1)),
+                _cache[16] || (_cache[16] = createBaseVNode("span", { class: "pp-builtin-sub" }, "勾选=在通用集合 default 中（agent 可用）；取消=移出", -1)),
                 createVNode(SvgIcon, {
                   name: "chevron-right",
                   size: 11,
                   class: normalizeClass(["pp-chevron", { open: builtinOpen.value }])
                 }, null, 8, ["class"])
-              ], 8, _hoisted_48),
+              ], 8, _hoisted_27$1),
               builtinOpen.value ? (openBlock(true), createElementBlock(Fragment, { key: 0 }, renderList(builtinGroups.value, (g) => {
                 return openBlock(), createElementBlock("div", {
                   key: g.name,
                   class: "pp-builtin-group"
                 }, [
-                  createBaseVNode("div", _hoisted_50, [
-                    createBaseVNode("span", _hoisted_51, toDisplayString(g.title || g.name), 1),
-                    g.desc ? (openBlock(), createElementBlock("span", _hoisted_52, toDisplayString(g.desc), 1)) : createCommentVNode("", true),
-                    createBaseVNode("span", _hoisted_53, toDisplayString(g.tools.length) + " 工具", 1),
+                  createBaseVNode("div", _hoisted_29$1, [
+                    createBaseVNode("span", _hoisted_30$1, toDisplayString(g.title || g.name), 1),
+                    g.desc ? (openBlock(), createElementBlock("span", _hoisted_31$1, toDisplayString(g.desc), 1)) : createCommentVNode("", true),
+                    createBaseVNode("span", _hoisted_32$1, toDisplayString(g.tools.length) + " 工具", 1),
                     !g.allOn ? (openBlock(), createElementBlock("button", {
                       key: 1,
                       class: "pp-btn mini",
                       onClick: ($event) => enableBuiltinGroup(g),
                       title: "整组加入通用集合"
-                    }, "整组启用", 8, _hoisted_54)) : createCommentVNode("", true),
+                    }, "整组启用", 8, _hoisted_33$1)) : createCommentVNode("", true),
                     g.anyOn ? (openBlock(), createElementBlock("button", {
                       key: 2,
                       class: "pp-btn mini danger",
                       onClick: ($event) => disableBuiltinGroup(g),
                       title: "整组移出通用集合"
-                    }, "整组移出", 8, _hoisted_55)) : createCommentVNode("", true)
+                    }, "整组移出", 8, _hoisted_34$1)) : createCommentVNode("", true)
                   ]),
-                  createBaseVNode("div", _hoisted_56, [
+                  createBaseVNode("div", _hoisted_35$1, [
                     (openBlock(true), createElementBlock(Fragment, null, renderList(g.tools, (t) => {
                       return openBlock(), createElementBlock("div", {
                         key: t.name,
                         class: "pp-d-tool",
                         title: t.desc
                       }, [
-                        createBaseVNode("span", _hoisted_58, toDisplayString(t.name), 1),
+                        createBaseVNode("span", _hoisted_37$1, toDisplayString(t.name), 1),
                         createBaseVNode("label", {
                           class: "pp-switch",
                           title: t.enabled ? "在通用集合中（agent 可用）；点击移出" : "未加入通用集合；点击加入"
@@ -15182,10 +14997,10 @@
                             type: "checkbox",
                             checked: t.enabled,
                             onChange: ($event) => toggleBuiltinTool(t, $event.target.checked)
-                          }, null, 40, _hoisted_60),
-                          _cache[22] || (_cache[22] = createBaseVNode("span", { class: "pp-switch-track" }, null, -1))
-                        ], 8, _hoisted_59)
-                      ], 8, _hoisted_57);
+                          }, null, 40, _hoisted_39$1),
+                          _cache[17] || (_cache[17] = createBaseVNode("span", { class: "pp-switch-track" }, null, -1))
+                        ], 8, _hoisted_38$1)
+                      ], 8, _hoisted_36$1);
                     }), 128))
                   ])
                 ]);
@@ -15201,32 +15016,32 @@
               }, null, 8, ["name"]),
               createBaseVNode("span", null, toDisplayString(preferMsg.value), 1)
             ], 2)) : createCommentVNode("", true),
-            loading.value && plugins.value.length === 0 ? (openBlock(), createElementBlock("div", _hoisted_61, [
+            loading.value && plugins.value.length === 0 ? (openBlock(), createElementBlock("div", _hoisted_40$1, [
               createVNode(SvgIcon, {
                 name: "refresh",
                 size: 16,
                 class: "spinner"
               }),
-              _cache[23] || (_cache[23] = createBaseVNode("span", null, "加载插件…", -1))
-            ])) : loadError.value ? (openBlock(), createElementBlock("div", _hoisted_62, [
+              _cache[18] || (_cache[18] = createBaseVNode("span", null, "加载插件…", -1))
+            ])) : loadError.value ? (openBlock(), createElementBlock("div", _hoisted_41$1, [
               createVNode(SvgIcon, {
                 name: "puzzle",
                 size: 22,
                 color: "var(--text-muted)"
               }),
-              _cache[24] || (_cache[24] = createBaseVNode("span", null, "插件列表加载失败", -1)),
+              _cache[19] || (_cache[19] = createBaseVNode("span", null, "插件列表加载失败", -1)),
               createBaseVNode("button", {
                 class: "pp-btn primary",
                 onClick: refresh
               }, "重试")
-            ])) : plugins.value.length === 0 && !loading.value ? (openBlock(), createElementBlock("div", _hoisted_63, [
+            ])) : plugins.value.length === 0 && !loading.value ? (openBlock(), createElementBlock("div", _hoisted_42$1, [
               createVNode(SvgIcon, {
                 name: "puzzle",
                 size: 22,
                 color: "var(--text-muted)"
               }),
-              _cache[25] || (_cache[25] = createBaseVNode("span", null, "暂无插件", -1)),
-              _cache[26] || (_cache[26] = createBaseVNode("span", { class: "pp-empty-sub" }, "点击上方 + 新建 JS 动态插件，或用对话 cordis_define 定义", -1))
+              _cache[20] || (_cache[20] = createBaseVNode("span", null, "暂无插件", -1)),
+              _cache[21] || (_cache[21] = createBaseVNode("span", { class: "pp-empty-sub" }, "点击上方 + 新建 JS 动态插件，或用对话 cordis_define 定义", -1))
             ])) : createCommentVNode("", true),
             (openBlock(true), createElementBlock(Fragment, null, renderList(plugins.value, (p2) => {
               return openBlock(), createElementBlock("div", {
@@ -15243,23 +15058,23 @@
                   createBaseVNode("span", {
                     class: "pp-name",
                     title: p2.purpose || p2.name
-                  }, toDisplayString(p2.name), 9, _hoisted_65),
+                  }, toDisplayString(p2.name), 9, _hoisted_44$1),
                   createBaseVNode("span", {
                     class: normalizeClass(["pp-src", p2.source]),
                     title: srcTitle(p2)
-                  }, toDisplayString(srcLabel(p2)), 11, _hoisted_66),
-                  p2.scope === "global" ? (openBlock(), createElementBlock("span", _hoisted_67, "全局")) : createCommentVNode("", true),
-                  p2.hasClient ? (openBlock(), createElementBlock("span", _hoisted_68, "UI")) : createCommentVNode("", true),
+                  }, toDisplayString(srcLabel(p2)), 11, _hoisted_45$1),
+                  p2.scope === "global" ? (openBlock(), createElementBlock("span", _hoisted_46$1, "全局")) : createCommentVNode("", true),
+                  p2.hasClient ? (openBlock(), createElementBlock("span", _hoisted_47$1, "UI")) : createCommentVNode("", true),
                   conflictsOf(p2).length ? (openBlock(), createElementBlock("span", {
                     key: 2,
                     class: "pp-badge pp-badge-warn",
                     title: conflictTitle(p2)
-                  }, "同名并存 " + toDisplayString(conflictsOf(p2).length), 9, _hoisted_69)) : createCommentVNode("", true),
+                  }, "同名并存 " + toDisplayString(conflictsOf(p2).length), 9, _hoisted_48$1)) : createCommentVNode("", true),
                   p2.tools && p2.tools.length ? (openBlock(), createElementBlock("span", {
                     key: 3,
                     class: "pp-count",
                     title: p2.tools.join(", ")
-                  }, toDisplayString(p2.tools.length) + " 工具", 9, _hoisted_70)) : createCommentVNode("", true),
+                  }, toDisplayString(p2.tools.length) + " 工具", 9, _hoisted_49)) : createCommentVNode("", true),
                   p2.hasClient && uiSlotsOf(p2.name).length ? (openBlock(), createElementBlock(Fragment, { key: 4 }, [
                     createBaseVNode("span", {
                       class: normalizeClass(["pp-ui-label", { on: uiPluginActive(p2.name) }])
@@ -15272,38 +15087,38 @@
                         type: "checkbox",
                         checked: uiPluginActive(p2.name),
                         onChange: ($event) => toggleUiPlugin(p2, $event.target.checked),
-                        onClick: _cache[11] || (_cache[11] = withModifiers(() => {
+                        onClick: _cache[8] || (_cache[8] = withModifiers(() => {
                         }, ["stop"]))
-                      }, null, 40, _hoisted_72),
-                      _cache[27] || (_cache[27] = createBaseVNode("span", { class: "pp-switch-track" }, null, -1))
-                    ], 8, _hoisted_71)
+                      }, null, 40, _hoisted_51),
+                      _cache[22] || (_cache[22] = createBaseVNode("span", { class: "pp-switch-track" }, null, -1))
+                    ], 8, _hoisted_50)
                   ], 64)) : createCommentVNode("", true),
                   createVNode(SvgIcon, {
                     name: "chevron-right",
                     size: 12,
                     class: normalizeClass(["pp-chevron", { open: expanded[p2.name] }])
                   }, null, 8, ["class"])
-                ], 8, _hoisted_64),
-                expanded[p2.name] ? (openBlock(), createElementBlock("div", _hoisted_73, [
-                  p2.purpose ? (openBlock(), createElementBlock("div", _hoisted_74, toDisplayString(p2.purpose), 1)) : createCommentVNode("", true),
-                  p2.defId ? (openBlock(), createElementBlock("div", _hoisted_75, [
+                ], 8, _hoisted_43$1),
+                expanded[p2.name] ? (openBlock(), createElementBlock("div", _hoisted_52, [
+                  p2.purpose ? (openBlock(), createElementBlock("div", _hoisted_53, toDisplayString(p2.purpose), 1)) : createCommentVNode("", true),
+                  p2.defId ? (openBlock(), createElementBlock("div", _hoisted_54, [
                     createTextVNode("定义: " + toDisplayString(p2.defId), 1),
-                    p2.version ? (openBlock(), createElementBlock("span", _hoisted_76, " · " + toDisplayString(p2.version), 1)) : createCommentVNode("", true)
+                    p2.version ? (openBlock(), createElementBlock("span", _hoisted_55, " · " + toDisplayString(p2.version), 1)) : createCommentVNode("", true)
                   ])) : createCommentVNode("", true),
-                  p2.spec ? (openBlock(), createElementBlock("div", _hoisted_77, [
+                  p2.spec ? (openBlock(), createElementBlock("div", _hoisted_56, [
                     createTextVNode("npm 包: " + toDisplayString(p2.spec), 1),
-                    p2.runtime ? (openBlock(), createElementBlock("span", _hoisted_78, " · runtime=" + toDisplayString(p2.runtime) + "（" + toDisplayString(p2.runtime === "dsh" ? "cordis4 插件服务面" : "cordis3") + "）", 1)) : createCommentVNode("", true)
+                    p2.runtime ? (openBlock(), createElementBlock("span", _hoisted_57, " · runtime=" + toDisplayString(p2.runtime) + "（" + toDisplayString(p2.runtime === "dsh" ? "cordis4 插件服务面" : "cordis3") + "）", 1)) : createCommentVNode("", true)
                   ])) : createCommentVNode("", true),
-                  p2.lastError ? (openBlock(), createElementBlock("div", _hoisted_79, "异常: " + toDisplayString(p2.lastError), 1)) : createCommentVNode("", true),
-                  p2.provides && p2.provides.length ? (openBlock(), createElementBlock("div", _hoisted_80, "服务: " + toDisplayString(p2.provides.join(", ")), 1)) : createCommentVNode("", true),
-                  p2.sections && p2.sections.length ? (openBlock(), createElementBlock("div", _hoisted_81, "提示片段: " + toDisplayString(p2.sections.join(", ")), 1)) : createCommentVNode("", true),
-                  conflictsOf(p2).length ? (openBlock(), createElementBlock("div", _hoisted_82, [
-                    createBaseVNode("div", _hoisted_83, [
+                  p2.lastError ? (openBlock(), createElementBlock("div", _hoisted_58, "异常: " + toDisplayString(p2.lastError), 1)) : createCommentVNode("", true),
+                  p2.provides && p2.provides.length ? (openBlock(), createElementBlock("div", _hoisted_59, "服务: " + toDisplayString(p2.provides.join(", ")), 1)) : createCommentVNode("", true),
+                  p2.sections && p2.sections.length ? (openBlock(), createElementBlock("div", _hoisted_60, "提示片段: " + toDisplayString(p2.sections.join(", ")), 1)) : createCommentVNode("", true),
+                  conflictsOf(p2).length ? (openBlock(), createElementBlock("div", _hoisted_61, [
+                    createBaseVNode("div", _hoisted_62, [
                       createVNode(SvgIcon, {
                         name: "warning",
                         size: 11
                       }),
-                      _cache[28] || (_cache[28] = createBaseVNode("span", null, "同名工具并存：两个来源实现同一工具（两侧插件都保留，只有一方对 agent 生效）", -1))
+                      _cache[23] || (_cache[23] = createBaseVNode("span", null, "同名工具并存：两个来源实现同一工具（两侧插件都保留，只有一方对 agent 生效）", -1))
                     ]),
                     (openBlock(true), createElementBlock(Fragment, null, renderList(conflictsOf(p2), (c) => {
                       return openBlock(), createElementBlock("div", {
@@ -15313,15 +15128,15 @@
                         createBaseVNode("span", {
                           class: "pp-d-tname",
                           title: c.tool
-                        }, toDisplayString(c.tool), 9, _hoisted_84),
+                        }, toDisplayString(c.tool), 9, _hoisted_63),
                         createBaseVNode("span", {
                           class: normalizeClass(["pp-d-side", { on: c.active === "repo" }]),
                           title: "repo 移植版（goja 插件）：" + c.repo
-                        }, "repo · " + toDisplayString(c.repo), 11, _hoisted_85),
+                        }, "repo · " + toDisplayString(c.repo), 11, _hoisted_64),
                         createBaseVNode("span", {
                           class: normalizeClass(["pp-d-side", { on: c.active === "bridge" }]),
                           title: "npm 桥插件：" + c.bridge
-                        }, "npm · " + toDisplayString(shortPkg(c.bridge)), 11, _hoisted_86),
+                        }, "npm · " + toDisplayString(shortPkg(c.bridge)), 11, _hoisted_65),
                         createBaseVNode("button", {
                           class: "pp-btn",
                           disabled: preferring[c.tool],
@@ -15333,12 +15148,12 @@
                             size: 11
                           }),
                           createTextVNode(" " + toDisplayString(c.active === "repo" ? "改用桥版" : "改回 repo 版"), 1)
-                        ], 8, _hoisted_87)
+                        ], 8, _hoisted_66)
                       ]);
                     }), 128))
                   ])) : createCommentVNode("", true),
-                  p2.tools && p2.tools.length ? (openBlock(), createElementBlock("div", _hoisted_88, [
-                    createBaseVNode("div", _hoisted_89, "工具（" + toDisplayString(p2.tools.length) + "）· 勾选=对 cordis（JS 插件运行时）可见；取消=隐藏。agent 可用性由会话选择的通用集合决定", 1),
+                  p2.tools && p2.tools.length ? (openBlock(), createElementBlock("div", _hoisted_67, [
+                    createBaseVNode("div", _hoisted_68, "工具（" + toDisplayString(p2.tools.length) + "）· 勾选=对 cordis（JS 插件运行时）可见；取消=隐藏。agent 可用性由会话选择的通用集合决定", 1),
                     (openBlock(true), createElementBlock(Fragment, null, renderList(p2.tools, (t) => {
                       return openBlock(), createElementBlock("div", {
                         key: t,
@@ -15347,7 +15162,7 @@
                         createBaseVNode("span", {
                           class: "pp-d-tname",
                           title: t
-                        }, toDisplayString(t), 9, _hoisted_90),
+                        }, toDisplayString(t), 9, _hoisted_69),
                         createBaseVNode("label", {
                           class: "pp-switch",
                           title: pluginToolOn(p2, t) ? "对 cordis 可见；点击隐藏（JS 插件 ctx.tools 看不到它）" : "对 cordis 隐藏；点击恢复可见"
@@ -15356,15 +15171,15 @@
                             type: "checkbox",
                             checked: pluginToolOn(p2, t),
                             onChange: ($event) => _ctx.togglePluginTool(p2, t)
-                          }, null, 40, _hoisted_92),
-                          _cache[29] || (_cache[29] = createBaseVNode("span", { class: "pp-switch-track" }, null, -1))
-                        ], 8, _hoisted_91)
+                          }, null, 40, _hoisted_71),
+                          _cache[24] || (_cache[24] = createBaseVNode("span", { class: "pp-switch-track" }, null, -1))
+                        ], 8, _hoisted_70)
                       ]);
                     }), 128))
                   ])) : createCommentVNode("", true),
-                  p2.clientCode ? (openBlock(), createElementBlock("div", _hoisted_93, [
-                    createBaseVNode("div", _hoisted_94, [
-                      _cache[30] || (_cache[30] = createBaseVNode("span", null, "client 半源码", -1)),
+                  p2.clientCode ? (openBlock(), createElementBlock("div", _hoisted_72, [
+                    createBaseVNode("div", _hoisted_73, [
+                      _cache[25] || (_cache[25] = createBaseVNode("span", null, "client 半源码", -1)),
                       createBaseVNode("button", {
                         class: "pp-icon-btn",
                         onClick: ($event) => copyText(p2.clientCode),
@@ -15374,29 +15189,29 @@
                           name: "copy",
                           size: 11
                         })
-                      ], 8, _hoisted_95)
+                      ], 8, _hoisted_74)
                     ]),
                     createBaseVNode("pre", null, toDisplayString(p2.clientCode), 1)
                   ])) : createCommentVNode("", true),
-                  createBaseVNode("div", _hoisted_96, [
-                    p2.source === "node-bridge" ? (openBlock(), createElementBlock("span", _hoisted_97, "Node 桥插件（npm 包）：安装/卸载经 npm 插件市场管理；同名工具可在上方切换生效方")) : (openBlock(), createElementBlock(Fragment, { key: 1 }, [
+                  createBaseVNode("div", _hoisted_75, [
+                    p2.source === "node-bridge" ? (openBlock(), createElementBlock("span", _hoisted_76, "Node 桥插件（npm 包）：安装/卸载经 npm 插件市场管理；同名工具可在上方切换生效方")) : (openBlock(), createElementBlock(Fragment, { key: 1 }, [
                       p2.state === "running" ? (openBlock(), createElementBlock(Fragment, { key: 0 }, [
                         !(p2.hasClient && uiSlotsOf(p2.name).length) ? (openBlock(), createElementBlock("button", {
                           key: 0,
                           class: "pp-btn",
                           title: "停止整个插件（其全部工具对 agent 不可见）；单工具请用上方工具开关",
                           onClick: ($event) => doAction(p2, "stop")
-                        }, "停止插件", 8, _hoisted_98)) : createCommentVNode("", true)
+                        }, "停止插件", 8, _hoisted_77)) : createCommentVNode("", true)
                       ], 64)) : (openBlock(), createElementBlock("button", {
                         key: 1,
                         class: "pp-btn primary",
                         onClick: ($event) => doAction(p2, "start")
-                      }, "启动插件", 8, _hoisted_99)),
+                      }, "启动插件", 8, _hoisted_78)),
                       p2.source === "js" ? (openBlock(), createElementBlock("button", {
                         key: 2,
                         class: "pp-btn danger",
                         onClick: ($event) => doAction(p2, "undefine")
-                      }, "删除定义", 8, _hoisted_100)) : createCommentVNode("", true)
+                      }, "删除定义", 8, _hoisted_79)) : createCommentVNode("", true)
                     ], 64))
                   ])
                 ])) : createCommentVNode("", true)
@@ -15407,7 +15222,698 @@
       };
     }
   };
-  const PluginPanel = /* @__PURE__ */ _export_sfc(_sfc_main$1, [["__scopeId", "data-v-3262bda6"]]);
+  const PluginPanel = /* @__PURE__ */ _export_sfc(_sfc_main$3, [["__scopeId", "data-v-8e867bf3"]]);
+  const _hoisted_1$2 = ["title"];
+  const _hoisted_2$2 = { class: "sp-head" };
+  const _hoisted_3$2 = { class: "sp-title" };
+  const _hoisted_4$2 = { class: "sp-body" };
+  const _hoisted_5$2 = {
+    key: 0,
+    class: "sp-group"
+  };
+  const _hoisted_6$2 = ["onClick"];
+  const _hoisted_7$2 = { class: "sp-item-main" };
+  const _hoisted_8$2 = { class: "sp-item-label" };
+  const _hoisted_9$2 = {
+    key: 0,
+    class: "sp-item-desc"
+  };
+  const _hoisted_10$2 = {
+    key: 0,
+    class: "sp-empty"
+  };
+  const _sfc_main$2 = {
+    __name: "SheetPicker",
+    props: {
+      modelValue: { type: String, default: "" },
+      items: { type: Array, default: () => [] },
+      // [{value,label,desc?,group?}]
+      title: { type: String, default: "请选择" },
+      placeholder: { type: String, default: "点击选择…" },
+      emptyText: { type: String, default: "暂无可用选项" }
+    },
+    emits: ["update:modelValue", "change"],
+    setup(__props, { emit: __emit }) {
+      const props = __props;
+      const emit2 = __emit;
+      const open = /* @__PURE__ */ ref(false);
+      const currentLabel = computed(() => {
+        const it = props.items.find((x) => x.value === props.modelValue);
+        return it ? it.label : "";
+      });
+      function pick(item) {
+        emit2("update:modelValue", item.value);
+        emit2("change", item.value);
+        close();
+      }
+      function close() {
+        open.value = false;
+      }
+      return (_ctx, _cache) => {
+        return openBlock(), createElementBlock(Fragment, null, [
+          createBaseVNode("button", {
+            class: normalizeClass(["sp-trigger", { "sp-trigger-open": open.value }]),
+            onClick: _cache[0] || (_cache[0] = ($event) => open.value = true),
+            title: __props.title
+          }, [
+            createBaseVNode("span", {
+              class: normalizeClass(["sp-value", { "sp-muted": !currentLabel.value }])
+            }, toDisplayString(currentLabel.value || __props.placeholder), 3),
+            createVNode(SvgIcon, {
+              name: "chevron-down",
+              size: 11,
+              class: normalizeClass(["sp-chevron", { up: open.value }])
+            }, null, 8, ["class"])
+          ], 10, _hoisted_1$2),
+          (openBlock(), createBlock(Teleport, { to: "body" }, [
+            createVNode(Transition, { name: "sp-fade" }, {
+              default: withCtx(() => [
+                open.value ? (openBlock(), createElementBlock("div", {
+                  key: 0,
+                  class: "sp-overlay",
+                  onClick: withModifiers(close, ["self"])
+                }, [
+                  createBaseVNode("div", {
+                    class: "sp-sheet",
+                    onClick: _cache[1] || (_cache[1] = withModifiers(() => {
+                    }, ["stop"]))
+                  }, [
+                    _cache[2] || (_cache[2] = createBaseVNode("div", { class: "sp-grabber" }, null, -1)),
+                    createBaseVNode("div", _hoisted_2$2, [
+                      createBaseVNode("span", _hoisted_3$2, toDisplayString(__props.title), 1),
+                      createBaseVNode("button", {
+                        class: "sp-cancel",
+                        onClick: close
+                      }, "取消")
+                    ]),
+                    createBaseVNode("div", _hoisted_4$2, [
+                      (openBlock(true), createElementBlock(Fragment, null, renderList(__props.items, (item, i) => {
+                        return openBlock(), createElementBlock(Fragment, {
+                          key: item.value
+                        }, [
+                          item.group && item.group !== (__props.items[i - 1] || {}).group ? (openBlock(), createElementBlock("div", _hoisted_5$2, toDisplayString(item.group), 1)) : createCommentVNode("", true),
+                          createBaseVNode("div", {
+                            class: normalizeClass(["sp-item", { active: item.value === __props.modelValue }]),
+                            onClick: ($event) => pick(item)
+                          }, [
+                            createBaseVNode("div", _hoisted_7$2, [
+                              createBaseVNode("span", _hoisted_8$2, toDisplayString(item.label), 1),
+                              item.desc ? (openBlock(), createElementBlock("span", _hoisted_9$2, toDisplayString(item.desc), 1)) : createCommentVNode("", true)
+                            ]),
+                            item.value === __props.modelValue ? (openBlock(), createBlock(SvgIcon, {
+                              key: 0,
+                              name: "check",
+                              size: 15,
+                              class: "sp-check"
+                            })) : createCommentVNode("", true)
+                          ], 10, _hoisted_6$2)
+                        ], 64);
+                      }), 128)),
+                      !__props.items.length ? (openBlock(), createElementBlock("div", _hoisted_10$2, toDisplayString(__props.emptyText), 1)) : createCommentVNode("", true)
+                    ])
+                  ])
+                ])) : createCommentVNode("", true)
+              ]),
+              _: 1
+            })
+          ]))
+        ], 64);
+      };
+    }
+  };
+  const SheetPicker = /* @__PURE__ */ _export_sfc(_sfc_main$2, [["__scopeId", "data-v-4ceed483"]]);
+  const _hoisted_1$1 = { class: "tp-panel" };
+  const _hoisted_2$1 = { class: "tp-header" };
+  const _hoisted_3$1 = { class: "tp-title" };
+  const _hoisted_4$1 = { class: "tp-actions" };
+  const _hoisted_5$1 = { class: "tp-list" };
+  const _hoisted_6$1 = {
+    key: 0,
+    class: "tp-empty"
+  };
+  const _hoisted_7$1 = ["onClick"];
+  const _hoisted_8$1 = { class: "tp-item-main" };
+  const _hoisted_9$1 = { class: "tp-item-name" };
+  const _hoisted_10$1 = { class: "tp-item-count" };
+  const _hoisted_11$1 = { class: "tp-item-desc" };
+  const _hoisted_12 = {
+    key: 1,
+    class: "tp-empty"
+  };
+  const _hoisted_13 = {
+    key: 0,
+    class: "tp-detail"
+  };
+  const _hoisted_14 = { class: "tp-dhead" };
+  const _hoisted_15 = { class: "tp-dtitle" };
+  const _hoisted_16 = {
+    key: 0,
+    class: "tp-badge"
+  };
+  const _hoisted_17 = {
+    key: 1,
+    class: "tp-badge proj"
+  };
+  const _hoisted_18 = { class: "tp-dactions" };
+  const _hoisted_19 = {
+    key: 0,
+    class: "tp-ddesc"
+  };
+  const _hoisted_20 = { class: "tp-plugins" };
+  const _hoisted_21 = { class: "tp-section-title" };
+  const _hoisted_22 = { class: "tp-prow" };
+  const _hoisted_23 = { class: "tp-pname" };
+  const _hoisted_24 = ["onClick"];
+  const _hoisted_25 = {
+    key: 1,
+    class: "tp-muted"
+  };
+  const _hoisted_26 = {
+    key: 0,
+    class: "tp-ppurpose"
+  };
+  const _hoisted_27 = {
+    key: 1,
+    class: "tp-tools"
+  };
+  const _hoisted_28 = ["title"];
+  const _hoisted_29 = ["checked", "onChange"];
+  const _hoisted_30 = {
+    key: 2,
+    class: "tp-muted"
+  };
+  const _hoisted_31 = {
+    key: 0,
+    class: "tp-muted"
+  };
+  const _hoisted_32 = {
+    key: 0,
+    class: "tp-add"
+  };
+  const _hoisted_33 = {
+    key: 1,
+    class: "tp-empty"
+  };
+  const _hoisted_34 = { class: "tp-sheet-head" };
+  const _hoisted_35 = { class: "tp-sheet-body" };
+  const _hoisted_36 = { class: "tp-field" };
+  const _hoisted_37 = { class: "tp-field" };
+  const _hoisted_38 = { class: "tp-field" };
+  const _hoisted_39 = {
+    key: 0,
+    class: "tp-hint"
+  };
+  const _hoisted_40 = { class: "tp-sheet-actions" };
+  const _hoisted_41 = ["disabled"];
+  const _hoisted_42 = { class: "tp-sheet-head" };
+  const _hoisted_43 = { class: "tp-sheet-body" };
+  const _hoisted_44 = { class: "tp-file-row" };
+  const _hoisted_45 = {
+    key: 0,
+    class: "tp-muted"
+  };
+  const _hoisted_46 = { class: "tp-field" };
+  const _hoisted_47 = { class: "tp-sheet-actions" };
+  const _hoisted_48 = ["disabled"];
+  const _sfc_main$1 = {
+    __name: "ToolsetPanel",
+    setup(__props) {
+      const metas = /* @__PURE__ */ ref([]);
+      const detail = /* @__PURE__ */ ref(null);
+      const selName = /* @__PURE__ */ ref("");
+      const plugins = /* @__PURE__ */ ref([]);
+      const loading = /* @__PURE__ */ ref(false);
+      const refreshing = /* @__PURE__ */ ref(false);
+      const openBuild = /* @__PURE__ */ ref(false);
+      const buildForm = /* @__PURE__ */ reactive({ name: "", description: "", requirement: "" });
+      const buildBusy = /* @__PURE__ */ ref(false);
+      const buildHint = /* @__PURE__ */ ref(false);
+      const openImport = /* @__PURE__ */ ref(false);
+      const importJSON = /* @__PURE__ */ ref("");
+      const fileName = /* @__PURE__ */ ref("");
+      const fileInput = /* @__PURE__ */ ref(null);
+      const importBusy = /* @__PURE__ */ ref(false);
+      const addName = /* @__PURE__ */ ref("");
+      async function loadAll() {
+        refreshing.value = true;
+        try {
+          const list = await api.getToolsets() || [];
+          metas.value = list;
+          if (selName.value && !list.some((m) => m.name === selName.value)) {
+            selName.value = "";
+            detail.value = null;
+          } else if (selName.value && detail.value) {
+            await loadDetail(selName.value);
+          }
+        } catch (e) {
+          toastErr("加载工具集列表失败: " + (e.message || e));
+        } finally {
+          refreshing.value = false;
+          loading.value = false;
+        }
+      }
+      async function loadDetail(name) {
+        try {
+          detail.value = await api.getToolsets(name);
+        } catch (e) {
+          toastErr("加载工具集详情失败: " + (e.message || e));
+        }
+      }
+      async function select(m) {
+        selName.value = m.name;
+        addName.value = "";
+        await loadDetail(m.name);
+      }
+      async function loadHostPlugins() {
+        try {
+          const list = await api.listPlugins();
+          plugins.value = Array.isArray(list) ? list : [];
+        } catch (e) {
+          plugins.value = [];
+        }
+      }
+      function pluginToolsOf(pname) {
+        const p2 = plugins.value.find((x) => x.name === pname);
+        return p2 && (p2.tools || []) || [];
+      }
+      function isToolDisabled(pl, t) {
+        return (pl.disabledTools || []).includes(t);
+      }
+      const addableItems = computed(() => {
+        const inTs = new Set((detail.value && detail.value.plugins || []).map((p2) => p2.name));
+        return plugins.value.filter((p2) => !inTs.has(p2.name)).map((p2) => ({ value: p2.name, label: p2.name, desc: p2.purpose || (p2.tools || []).length + " 工具" }));
+      });
+      async function edit(data) {
+        if (!selName.value) return;
+        try {
+          const res = await api.toolsetEdit({ name: selName.value, ...data });
+          window.$toast && window.$toast(res && res.message || "操作成功", "info");
+          await loadDetail(selName.value);
+          await loadAll();
+        } catch (e) {
+          toastErr(e.message || "操作失败");
+        }
+      }
+      function toggleTool(pl, t) {
+        edit({ action: isToolDisabled(pl, t) ? "enable_tool" : "rm_tool", plugin_name: pl.name, tool: t });
+      }
+      function rmPlugin(pl) {
+        if (!window.confirm(`将插件「${pl.name}」移出工具集 ${selName.value}？`)) return;
+        edit({ action: "rm_plugin", plugin_name: pl.name });
+      }
+      async function doAddPlugin(name) {
+        if (!name) return;
+        try {
+          const res = await api.toolsetEdit({ name: selName.value, action: "add_plugin", plugin_name: name });
+          window.$toast && window.$toast(res && res.message || `已加入 ${name}`, "info");
+          addName.value = "";
+          await loadDetail(selName.value);
+          await loadAll();
+        } catch (e) {
+          toastErr(e.message || "添加插件失败");
+        }
+      }
+      function validName(n) {
+        return /^[a-z0-9_-]+$/.test((n || "").trim());
+      }
+      async function doBuild() {
+        const name = buildForm.name.trim();
+        if (!validName(name)) {
+          toastErr("名称只能含小写字母/数字/-/_");
+          return;
+        }
+        buildBusy.value = true;
+        try {
+          const res = await api.apiPost("/toolsets/build", {
+            name,
+            description: buildForm.description.trim(),
+            requirement: buildForm.requirement.trim(),
+            overwrite: buildHint.value
+          });
+          window.$toast && window.$toast(`工具集 ${name} 构建完成（${res.pluginCount || 0} 插件）`, "info");
+          openBuild.value = false;
+          buildForm.name = "";
+          buildForm.description = "";
+          buildForm.requirement = "";
+          buildHint.value = false;
+          selName.value = name;
+          await loadAll();
+          await loadDetail(name);
+        } catch (e) {
+          toastErr(e.message || "构建失败");
+        } finally {
+          buildBusy.value = false;
+        }
+      }
+      async function doRemove() {
+        if (!selName.value || detail.value.scope === "builtin") return;
+        if (!window.confirm(`删除工具集「${selName.value}」？该操作不可撤销。`)) return;
+        try {
+          await api.apiPost("/toolsets/remove", { name: selName.value });
+          window.$toast && window.$toast("工具集已删除", "info");
+          selName.value = "";
+          detail.value = null;
+          await loadAll();
+        } catch (e) {
+          toastErr(e.message || "删除失败");
+        }
+      }
+      function doExport() {
+        if (!selName.value) return;
+        window.open("/api/toolsets/export?name=" + encodeURIComponent(selName.value), "_blank");
+      }
+      function onFile(e) {
+        const f = e.target.files && e.target.files[0];
+        if (!f) return;
+        fileName.value = f.name;
+        const fr = new FileReader();
+        fr.onload = () => {
+          importJSON.value = String(fr.result || "");
+        };
+        fr.onerror = () => toastErr("读取文件失败");
+        fr.readAsText(f);
+      }
+      async function doImport() {
+        const json = importJSON.value.trim();
+        if (!json) {
+          toastErr("请提供工具集 JSON");
+          return;
+        }
+        importBusy.value = true;
+        try {
+          const res = await api.apiPost("/toolsets/import", { json, scope: "project" });
+          const msg = res && res.message || "导入成功";
+          window.$toast && window.$toast(msg, "info");
+          openImport.value = false;
+          importJSON.value = "";
+          fileName.value = "";
+          await loadAll();
+        } catch (e) {
+          toastErr(e.message || "导入失败");
+        } finally {
+          importBusy.value = false;
+        }
+      }
+      function toastErr(msg) {
+        console.warn("[toolset]", msg);
+        window.$toast && window.$toast(msg, "error");
+      }
+      onMounted(async () => {
+        loading.value = true;
+        await Promise.all([loadAll(), loadHostPlugins()]);
+      });
+      return (_ctx, _cache) => {
+        return openBlock(), createElementBlock("div", _hoisted_1$1, [
+          createBaseVNode("div", _hoisted_2$1, [
+            createBaseVNode("span", _hoisted_3$1, [
+              createVNode(SvgIcon, {
+                name: "layers",
+                size: 14
+              }),
+              _cache[16] || (_cache[16] = createTextVNode(" 工具集", -1))
+            ]),
+            createBaseVNode("div", _hoisted_4$1, [
+              createBaseVNode("button", {
+                class: "tp-icon-btn",
+                onClick: loadAll,
+                title: "刷新"
+              }, [
+                createVNode(SvgIcon, {
+                  name: "refresh",
+                  size: 13,
+                  class: normalizeClass({ spinning: refreshing.value })
+                }, null, 8, ["class"])
+              ]),
+              createBaseVNode("button", {
+                class: "tp-icon-btn",
+                onClick: _cache[0] || (_cache[0] = ($event) => openImport.value = true),
+                title: "导入工具集（粘贴 JSON 或选择文件）"
+              }, [
+                createVNode(SvgIcon, {
+                  name: "download",
+                  size: 13
+                })
+              ]),
+              createBaseVNode("button", {
+                class: "tp-icon-btn",
+                onClick: _cache[1] || (_cache[1] = ($event) => openBuild.value = true),
+                title: "新建工具集（模板构建 + AI 分析）"
+              }, [
+                createVNode(SvgIcon, {
+                  name: "plus",
+                  size: 14
+                })
+              ])
+            ])
+          ]),
+          createBaseVNode("div", _hoisted_5$1, [
+            !metas.value.length && !loading.value ? (openBlock(), createElementBlock("div", _hoisted_6$1, [..._cache[17] || (_cache[17] = [
+              createTextVNode(" 暂无工具集。", -1),
+              createBaseVNode("br", null, null, -1),
+              createTextVNode("点右上角 + 新建（描述你的项目用途，AI 分析后模板生成插件集）。 ", -1)
+            ])])) : createCommentVNode("", true),
+            (openBlock(true), createElementBlock(Fragment, null, renderList(metas.value, (m) => {
+              return openBlock(), createElementBlock("div", {
+                key: m.name,
+                class: normalizeClass(["tp-item", { active: m.name === selName.value, builtin: m.scope === "builtin" }]),
+                onClick: ($event) => select(m)
+              }, [
+                createBaseVNode("div", _hoisted_8$1, [
+                  createBaseVNode("span", _hoisted_9$1, toDisplayString(m.name), 1),
+                  createBaseVNode("span", _hoisted_10$1, toDisplayString(m.pluginCount) + " 插件", 1)
+                ]),
+                createBaseVNode("div", _hoisted_11$1, toDisplayString(m.description || (m.scope === "builtin" ? "内置工具包（core/git/codegraph/…）" : "—")), 1)
+              ], 10, _hoisted_7$1);
+            }), 128)),
+            loading.value ? (openBlock(), createElementBlock("div", _hoisted_12, "加载中…")) : createCommentVNode("", true)
+          ]),
+          detail.value ? (openBlock(), createElementBlock("div", _hoisted_13, [
+            createBaseVNode("div", _hoisted_14, [
+              createBaseVNode("div", _hoisted_15, [
+                createTextVNode(toDisplayString(detail.value.name) + " ", 1),
+                detail.value.scope === "builtin" ? (openBlock(), createElementBlock("span", _hoisted_16, "内置")) : (openBlock(), createElementBlock("span", _hoisted_17, "工作区"))
+              ]),
+              createBaseVNode("div", _hoisted_18, [
+                createBaseVNode("button", {
+                  class: "tp-btn",
+                  onClick: doExport,
+                  title: "导出发布 JSON 到本地下载"
+                }, [
+                  createVNode(SvgIcon, {
+                    name: "upload",
+                    size: 11
+                  }),
+                  _cache[18] || (_cache[18] = createTextVNode(" 导出", -1))
+                ]),
+                detail.value.scope !== "builtin" ? (openBlock(), createElementBlock("button", {
+                  key: 0,
+                  class: "tp-btn danger",
+                  onClick: doRemove,
+                  title: "删除该工具集（含固化的插件定义）"
+                }, [
+                  createVNode(SvgIcon, {
+                    name: "trash",
+                    size: 11
+                  }),
+                  _cache[19] || (_cache[19] = createTextVNode(" 删除", -1))
+                ])) : createCommentVNode("", true)
+              ]),
+              detail.value.description ? (openBlock(), createElementBlock("div", _hoisted_19, toDisplayString(detail.value.description), 1)) : createCommentVNode("", true)
+            ]),
+            createBaseVNode("div", _hoisted_20, [
+              createBaseVNode("div", _hoisted_21, "插件（" + toDisplayString((detail.value.plugins || []).length) + "）", 1),
+              (openBlock(true), createElementBlock(Fragment, null, renderList(detail.value.plugins || [], (pl) => {
+                return openBlock(), createElementBlock("div", {
+                  key: pl.name,
+                  class: "tp-plugin"
+                }, [
+                  createBaseVNode("div", _hoisted_22, [
+                    createBaseVNode("span", _hoisted_23, toDisplayString(pl.name), 1),
+                    detail.value.scope !== "builtin" ? (openBlock(), createElementBlock("button", {
+                      key: 0,
+                      class: "tp-btn tiny danger",
+                      onClick: ($event) => rmPlugin(pl),
+                      title: "从工具集移出（插件定义仍留在宿主）"
+                    }, "移出", 8, _hoisted_24)) : (openBlock(), createElementBlock("span", _hoisted_25, "内置"))
+                  ]),
+                  pl.purpose ? (openBlock(), createElementBlock("div", _hoisted_26, toDisplayString(pl.purpose), 1)) : createCommentVNode("", true),
+                  pluginToolsOf(pl.name).length ? (openBlock(), createElementBlock("div", _hoisted_27, [
+                    (openBlock(true), createElementBlock(Fragment, null, renderList(pluginToolsOf(pl.name), (t) => {
+                      return openBlock(), createElementBlock("label", {
+                        key: t,
+                        class: "tp-tool",
+                        title: isToolDisabled(pl, t) ? "已摘除（对 agent 不可见），点击恢复" : "点击摘除（插件保留、工具不可见）"
+                      }, [
+                        createBaseVNode("input", {
+                          type: "checkbox",
+                          checked: !isToolDisabled(pl, t),
+                          onChange: ($event) => toggleTool(pl, t)
+                        }, null, 40, _hoisted_29),
+                        createBaseVNode("span", {
+                          class: normalizeClass({ off: isToolDisabled(pl, t) })
+                        }, toDisplayString(t), 3)
+                      ], 8, _hoisted_28);
+                    }), 128))
+                  ])) : (openBlock(), createElementBlock("div", _hoisted_30, "（插件未运行或无工具）"))
+                ]);
+              }), 128)),
+              !(detail.value.plugins || []).length ? (openBlock(), createElementBlock("div", _hoisted_31, "空工具集：点下方「添加插件」加入宿主插件")) : createCommentVNode("", true)
+            ]),
+            detail.value.scope !== "builtin" ? (openBlock(), createElementBlock("div", _hoisted_32, [
+              createVNode(SheetPicker, {
+                modelValue: addName.value,
+                "onUpdate:modelValue": _cache[2] || (_cache[2] = ($event) => addName.value = $event),
+                items: addableItems.value,
+                title: "选择要加入的宿主插件",
+                placeholder: "+ 添加插件…",
+                "empty-text": "宿主无可加入插件",
+                onChange: doAddPlugin
+              }, null, 8, ["modelValue", "items"])
+            ])) : createCommentVNode("", true)
+          ])) : !metas.value.length ? (openBlock(), createElementBlock("div", _hoisted_33)) : createCommentVNode("", true),
+          (openBlock(), createBlock(Teleport, { to: "body" }, [
+            createVNode(Transition, { name: "tp-fade" }, {
+              default: withCtx(() => [
+                openBuild.value ? (openBlock(), createElementBlock("div", {
+                  key: 0,
+                  class: "tp-overlay",
+                  onClick: _cache[9] || (_cache[9] = withModifiers(($event) => openBuild.value = false, ["self"]))
+                }, [
+                  createBaseVNode("div", {
+                    class: "tp-sheet",
+                    onClick: _cache[8] || (_cache[8] = withModifiers(() => {
+                    }, ["stop"]))
+                  }, [
+                    _cache[24] || (_cache[24] = createBaseVNode("div", { class: "tp-grabber" }, null, -1)),
+                    createBaseVNode("div", _hoisted_34, [
+                      _cache[20] || (_cache[20] = createBaseVNode("span", { class: "tp-sheet-title" }, "新建工具集", -1)),
+                      createBaseVNode("button", {
+                        class: "tp-cancel",
+                        onClick: _cache[3] || (_cache[3] = ($event) => openBuild.value = false)
+                      }, "取消")
+                    ]),
+                    createBaseVNode("div", _hoisted_35, [
+                      createBaseVNode("label", _hoisted_36, [
+                        _cache[21] || (_cache[21] = createBaseVNode("span", { class: "tp-field-label" }, "名称（小写字母/数字/-/_）", -1)),
+                        withDirectives(createBaseVNode("input", {
+                          "onUpdate:modelValue": _cache[4] || (_cache[4] = ($event) => buildForm.name = $event),
+                          class: "tp-input",
+                          placeholder: "如 web-dev / go-backend"
+                        }, null, 512), [
+                          [vModelText, buildForm.name]
+                        ])
+                      ]),
+                      createBaseVNode("label", _hoisted_37, [
+                        _cache[22] || (_cache[22] = createBaseVNode("span", { class: "tp-field-label" }, "描述（可选）", -1)),
+                        withDirectives(createBaseVNode("input", {
+                          "onUpdate:modelValue": _cache[5] || (_cache[5] = ($event) => buildForm.description = $event),
+                          class: "tp-input",
+                          placeholder: "工具集用途说明"
+                        }, null, 512), [
+                          [vModelText, buildForm.description]
+                        ])
+                      ]),
+                      createBaseVNode("label", _hoisted_38, [
+                        _cache[23] || (_cache[23] = createBaseVNode("span", { class: "tp-field-label" }, "需求说明（可选，AI 分析项目时参考）", -1)),
+                        withDirectives(createBaseVNode("textarea", {
+                          "onUpdate:modelValue": _cache[6] || (_cache[6] = ($event) => buildForm.requirement = $event),
+                          class: "tp-input tp-textarea",
+                          rows: "3",
+                          placeholder: "如：需要前后端脚手架 + 数据库迁移工具"
+                        }, null, 512), [
+                          [vModelText, buildForm.requirement]
+                        ])
+                      ]),
+                      buildHint.value ? (openBlock(), createElementBlock("label", _hoisted_39, "检测到同名工具集已存在，勾选后覆盖重建（原插件先卸载）")) : createCommentVNode("", true),
+                      createBaseVNode("div", _hoisted_40, [
+                        createBaseVNode("button", {
+                          class: "tp-btn",
+                          onClick: _cache[7] || (_cache[7] = ($event) => openBuild.value = false)
+                        }, "取消"),
+                        createBaseVNode("button", {
+                          class: "tp-btn primary",
+                          disabled: buildBusy.value || !validName(buildForm.name),
+                          onClick: doBuild
+                        }, toDisplayString(buildBusy.value ? "构建中…" : "构建并装载"), 9, _hoisted_41)
+                      ])
+                    ])
+                  ])
+                ])) : createCommentVNode("", true)
+              ]),
+              _: 1
+            })
+          ])),
+          (openBlock(), createBlock(Teleport, { to: "body" }, [
+            createVNode(Transition, { name: "tp-fade" }, {
+              default: withCtx(() => [
+                openImport.value ? (openBlock(), createElementBlock("div", {
+                  key: 0,
+                  class: "tp-overlay",
+                  onClick: _cache[15] || (_cache[15] = withModifiers(($event) => openImport.value = false, ["self"]))
+                }, [
+                  createBaseVNode("div", {
+                    class: "tp-sheet",
+                    onClick: _cache[14] || (_cache[14] = withModifiers(() => {
+                    }, ["stop"]))
+                  }, [
+                    _cache[27] || (_cache[27] = createBaseVNode("div", { class: "tp-grabber" }, null, -1)),
+                    createBaseVNode("div", _hoisted_42, [
+                      _cache[25] || (_cache[25] = createBaseVNode("span", { class: "tp-sheet-title" }, "导入工具集", -1)),
+                      createBaseVNode("button", {
+                        class: "tp-cancel",
+                        onClick: _cache[10] || (_cache[10] = ($event) => openImport.value = false)
+                      }, "取消")
+                    ]),
+                    createBaseVNode("div", _hoisted_43, [
+                      createBaseVNode("div", _hoisted_44, [
+                        createBaseVNode("input", {
+                          ref_key: "fileInput",
+                          ref: fileInput,
+                          type: "file",
+                          accept: ".json,application/json",
+                          class: "tp-hidden-input",
+                          onChange: onFile
+                        }, null, 544),
+                        createBaseVNode("button", {
+                          class: "tp-btn",
+                          onClick: _cache[11] || (_cache[11] = ($event) => fileInput.value && fileInput.value.click())
+                        }, "选择 JSON 文件…"),
+                        fileName.value ? (openBlock(), createElementBlock("span", _hoisted_45, toDisplayString(fileName.value), 1)) : createCommentVNode("", true)
+                      ]),
+                      createBaseVNode("label", _hoisted_46, [
+                        _cache[26] || (_cache[26] = createBaseVNode("span", { class: "tp-field-label" }, "或粘贴工具集 JSON", -1)),
+                        withDirectives(createBaseVNode("textarea", {
+                          "onUpdate:modelValue": _cache[12] || (_cache[12] = ($event) => importJSON.value = $event),
+                          class: "tp-input tp-textarea code",
+                          rows: "9",
+                          placeholder: '{"name":"my-tools","description":"…","plugins":[…]}'
+                        }, null, 512), [
+                          [vModelText, importJSON.value]
+                        ])
+                      ]),
+                      createBaseVNode("div", _hoisted_47, [
+                        createBaseVNode("button", {
+                          class: "tp-btn",
+                          onClick: _cache[13] || (_cache[13] = ($event) => openImport.value = false)
+                        }, "取消"),
+                        createBaseVNode("button", {
+                          class: "tp-btn primary",
+                          disabled: importBusy.value || !importJSON.value.trim(),
+                          onClick: doImport
+                        }, toDisplayString(importBusy.value ? "导入中…" : "导入"), 9, _hoisted_48)
+                      ])
+                    ])
+                  ])
+                ])) : createCommentVNode("", true)
+              ]),
+              _: 1
+            })
+          ]))
+        ]);
+      };
+    }
+  };
+  const ToolsetPanel = /* @__PURE__ */ _export_sfc(_sfc_main$1, [["__scopeId", "data-v-ee3f550f"]]);
   const _hoisted_1 = {
     key: 0,
     class: "slot-empty plugin-area-titlebar"
@@ -15430,15 +15936,19 @@
   };
   const _hoisted_6 = {
     key: 6,
-    class: "slot-empty app-statusbar-host"
+    class: "plugin-slot-host toolsets-container"
   };
   const _hoisted_7 = {
+    key: 6,
+    class: "slot-empty app-statusbar-host"
+  };
+  const _hoisted_8 = {
     key: 8,
     class: "modals-empty"
   };
-  const _hoisted_8 = { class: "plugin-escape-panel" };
-  const _hoisted_9 = { class: "plugin-escape-head" };
-  const _hoisted_10 = { class: "plugin-escape-body" };
+  const _hoisted_9 = { class: "plugin-escape-panel" };
+  const _hoisted_10 = { class: "plugin-escape-head" };
+  const _hoisted_11 = { class: "plugin-escape-body" };
   const _sfc_main = {
     __name: "ShellApp",
     setup(__props) {
@@ -15542,7 +16052,7 @@
             style: normalizeStyle(gridStyle.value)
           }, [
             !unref(panelMode) && !slots.titlebar.owner.value ? (openBlock(), createElementBlock("div", _hoisted_1, [
-              _cache[14] || (_cache[14] = createBaseVNode("span", null, "标题栏未装配（ui-titlebar）", -1)),
+              _cache[16] || (_cache[16] = createBaseVNode("span", null, "标题栏未装配（ui-titlebar）", -1)),
               createBaseVNode("button", {
                 class: "escape-link",
                 onClick: _cache[0] || (_cache[0] = ($event) => pluginsOpen.value = true)
@@ -15553,7 +16063,7 @@
               class: "plugin-slot-host plugin-area-titlebar"
             }, null, 512)) : createCommentVNode("", true),
             !unref(panelMode) && !slots.activitybar.owner.value ? (openBlock(), createElementBlock("div", _hoisted_2, [
-              _cache[15] || (_cache[15] = createBaseVNode("span", null, "⦿", -1)),
+              _cache[17] || (_cache[17] = createBaseVNode("span", null, "⦿", -1)),
               createBaseVNode("button", {
                 class: "escape-link",
                 onClick: _cache[1] || (_cache[1] = ($event) => pluginsOpen.value = true)
@@ -15564,7 +16074,7 @@
               class: "plugin-slot-host plugin-area-activitybar"
             }, null, 512)) : createCommentVNode("", true),
             !unref(panelMode) && !slots.sidebar.owner.value ? (openBlock(), createElementBlock("div", _hoisted_3, [
-              _cache[16] || (_cache[16] = createBaseVNode("span", null, "侧栏未装配（ui-sidebar）", -1)),
+              _cache[18] || (_cache[18] = createBaseVNode("span", null, "侧栏未装配（ui-sidebar）", -1)),
               createBaseVNode("button", {
                 class: "escape-link",
                 onClick: _cache[2] || (_cache[2] = ($event) => pluginsOpen.value = true)
@@ -15586,7 +16096,7 @@
                   class: normalizeClass(["main-tab", { active: mainView.value === "editor" }]),
                   onClick: _cache[5] || (_cache[5] = ($event) => unref(layout).setMainView("editor"))
                 }, [
-                  _cache[17] || (_cache[17] = createTextVNode("编辑器", -1)),
+                  _cache[19] || (_cache[19] = createTextVNode("编辑器", -1)),
                   createBaseVNode("span", {
                     class: "main-tab-close",
                     title: "关闭",
@@ -15598,11 +16108,23 @@
                   class: normalizeClass(["main-tab", { active: mainView.value === "market" }]),
                   onClick: _cache[7] || (_cache[7] = ($event) => unref(layout).setMainView("market"))
                 }, [
-                  _cache[18] || (_cache[18] = createTextVNode("市场", -1)),
+                  _cache[20] || (_cache[20] = createTextVNode("市场", -1)),
                   createBaseVNode("span", {
                     class: "main-tab-close",
                     title: "关闭",
                     onClick: _cache[6] || (_cache[6] = withModifiers(($event) => unref(closeMarketTab)(), ["stop"]))
+                  }, "×")
+                ], 2)) : createCommentVNode("", true),
+                unref(state).toolsetsTabOpen ? (openBlock(), createElementBlock("button", {
+                  key: 1,
+                  class: normalizeClass(["main-tab", { active: mainView.value === "toolsets" }]),
+                  onClick: _cache[9] || (_cache[9] = ($event) => unref(layout).setMainView("toolsets"))
+                }, [
+                  _cache[21] || (_cache[21] = createTextVNode("工具集", -1)),
+                  createBaseVNode("span", {
+                    class: "main-tab-close",
+                    title: "关闭",
+                    onClick: _cache[8] || (_cache[8] = withModifiers(($event) => unref(closeToolsetsTab)(), ["stop"]))
                   }, "×")
                 ], 2)) : createCommentVNode("", true)
               ])) : createCommentVNode("", true),
@@ -15610,10 +16132,10 @@
                 key: 1,
                 class: normalizeClass(["slot-empty conversation-container", { "panel-only": unref(panelMode) }])
               }, [
-                _cache[19] || (_cache[19] = createBaseVNode("span", null, "对话面板未装配（ui-right-panel）", -1)),
+                _cache[22] || (_cache[22] = createBaseVNode("span", null, "对话面板未装配（ui-right-panel）", -1)),
                 createBaseVNode("button", {
                   class: "escape-link",
-                  onClick: _cache[8] || (_cache[8] = ($event) => pluginsOpen.value = true)
+                  onClick: _cache[10] || (_cache[10] = ($event) => pluginsOpen.value = true)
                 }, "打开插件面板")
               ], 2)), [
                 [vShow, mainView.value === "conversation"]
@@ -15625,10 +16147,10 @@
                 [vShow, mainView.value === "conversation"]
               ]) : createCommentVNode("", true),
               !unref(panelMode) && !slots.editor.owner.value ? withDirectives((openBlock(), createElementBlock("div", _hoisted_5, [
-                _cache[20] || (_cache[20] = createBaseVNode("span", null, "编辑器未装配（ui-editor）", -1)),
+                _cache[23] || (_cache[23] = createBaseVNode("span", null, "编辑器未装配（ui-editor）", -1)),
                 createBaseVNode("button", {
                   class: "escape-link",
-                  onClick: _cache[9] || (_cache[9] = ($event) => pluginsOpen.value = true)
+                  onClick: _cache[11] || (_cache[11] = ($event) => pluginsOpen.value = true)
                 }, "打开插件面板")
               ], 512)), [
                 [vShow, mainView.value === "editor"]
@@ -15646,20 +16168,25 @@
                 class: "plugin-slot-host market-container"
               }, null, 512)), [
                 [vShow, mainView.value === "market"]
+              ]) : createCommentVNode("", true),
+              !unref(panelMode) && unref(state).toolsetsTabOpen ? withDirectives((openBlock(), createElementBlock("div", _hoisted_6, [
+                createVNode(ToolsetPanel)
+              ], 512)), [
+                [vShow, mainView.value === "toolsets"]
               ]) : createCommentVNode("", true)
             ], 2),
-            !unref(panelMode) && !slots.statusbar.owner.value ? (openBlock(), createElementBlock("div", _hoisted_6, [
-              _cache[21] || (_cache[21] = createBaseVNode("span", null, "状态栏未装配（ui-statusbar）", -1)),
+            !unref(panelMode) && !slots.statusbar.owner.value ? (openBlock(), createElementBlock("div", _hoisted_7, [
+              _cache[24] || (_cache[24] = createBaseVNode("span", null, "状态栏未装配（ui-statusbar）", -1)),
               createBaseVNode("button", {
                 class: "escape-link",
-                onClick: _cache[10] || (_cache[10] = ($event) => pluginsOpen.value = true)
+                onClick: _cache[12] || (_cache[12] = ($event) => pluginsOpen.value = true)
               }, "打开插件面板")
             ])) : !unref(panelMode) ? (openBlock(), createElementBlock("div", {
               key: 7,
               ref: slots.statusbar.hostRef,
               class: "plugin-slot-host app-statusbar-host"
             }, null, 512)) : createCommentVNode("", true),
-            !slots.modals.owner.value ? (openBlock(), createElementBlock("div", _hoisted_7)) : (openBlock(), createElementBlock("div", {
+            !slots.modals.owner.value ? (openBlock(), createElementBlock("div", _hoisted_8)) : (openBlock(), createElementBlock("div", {
               key: 9,
               ref: slots.modals.hostRef,
               class: "plugin-slot-host modals-host"
@@ -15670,8 +16197,8 @@
               key: 0,
               class: "plugin-escape-btn",
               title: "插件面板（壳级入口，不受插件停用影响）",
-              onClick: _cache[11] || (_cache[11] = ($event) => pluginsOpen.value = true)
-            }, [..._cache[22] || (_cache[22] = [
+              onClick: _cache[13] || (_cache[13] = ($event) => pluginsOpen.value = true)
+            }, [..._cache[25] || (_cache[25] = [
               createBaseVNode("svg", {
                 viewBox: "0 0 16 16",
                 width: "15",
@@ -15693,18 +16220,18 @@
             pluginsOpen.value ? (openBlock(), createElementBlock("div", {
               key: 1,
               class: "plugin-escape-overlay",
-              onClick: _cache[13] || (_cache[13] = withModifiers(($event) => pluginsOpen.value = false, ["self"]))
+              onClick: _cache[15] || (_cache[15] = withModifiers(($event) => pluginsOpen.value = false, ["self"]))
             }, [
-              createBaseVNode("div", _hoisted_8, [
-                createBaseVNode("div", _hoisted_9, [
-                  _cache[23] || (_cache[23] = createBaseVNode("span", null, "插件面板（壳级入口）", -1)),
+              createBaseVNode("div", _hoisted_9, [
+                createBaseVNode("div", _hoisted_10, [
+                  _cache[26] || (_cache[26] = createBaseVNode("span", null, "插件面板（壳级入口）", -1)),
                   createBaseVNode("button", {
                     class: "plugin-escape-close",
                     title: "关闭",
-                    onClick: _cache[12] || (_cache[12] = ($event) => pluginsOpen.value = false)
+                    onClick: _cache[14] || (_cache[14] = ($event) => pluginsOpen.value = false)
                   }, "✕")
                 ]),
-                createBaseVNode("div", _hoisted_10, [
+                createBaseVNode("div", _hoisted_11, [
                   createVNode(PluginPanel)
                 ])
               ])
@@ -15714,7 +16241,7 @@
       };
     }
   };
-  const ShellApp = /* @__PURE__ */ _export_sfc(_sfc_main, [["__scopeId", "data-v-ed26a1be"]]);
+  const ShellApp = /* @__PURE__ */ _export_sfc(_sfc_main, [["__scopeId", "data-v-dccb81bc"]]);
   window.__PAIRCODE_CORE = {
     Vue,
     api,

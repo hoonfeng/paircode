@@ -98,3 +98,6 @@ dev/wsprobe/
 
 # 桌面版归档（本版本不做桌面版——wb-ui/goskia 依赖移除；代码保留在 _desktop-archive/）
 _desktop-archive/
+
+# headless chrome 测试数据（cdp 验证临时）
+.chrome-test/

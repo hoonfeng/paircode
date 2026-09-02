@@ -55,48 +55,6 @@
       </div>
     </div>
 
-    <!-- ── 工具集（卷帘：通用集合，全局共享，对话面板按会话选择） ── -->
-    <div class="ts-divider">
-      <div class="ts-header" :class="{ open: tsOpen }" @click="toggleTs" title="工具集（全局通用集合，可折叠）">
-        <SvgIcon name="package" :size="12" class="ts-header-icon" />
-        <span class="divider-label ts-label">工具集</span>
-        <span class="ts-spacer"></span>
-        <SvgIcon name="chevron-right" :size="11" class="ts-chevron" :class="{ open: tsOpen }" />
-      </div>
-      <div v-if="tsOpen" class="ts-body">
-        <!-- 全局通用集合（已声明内容：可移出） -->
-        <div class="ts-build">
-          <div class="ts-build-head">
-            <span class="ts-build-title">通用集合</span>
-            <button class="ts-btn mini" @click="openTransfer" title="穿梭框批量管理：未加入 ↔ 已加入">管理</button>
-          </div>
-          <input v-model="tsAddSearch" placeholder="搜索工具名…" class="ts-input" />
-          <div class="ts-add-list">
-            <div v-for="g in joinedGroups" :key="g.name" class="ts-add-group">
-              <div class="ts-add-group-title">
-                <span>{{ g.name }}</span>
-              </div>
-              <div v-for="t in filterTools(g.tools)" :key="t.name" class="ts-add-tool" :title="t.desc">
-                <span class="ts-add-tool-name">{{ t.name }}</span>
-                <button class="ts-btn mini danger" @click="toggleToolsetTool(t, g)" title="移出通用集合（该工具对 agent 不可见）">移出</button>
-              </div>
-            </div>
-            <div v-if="manualToolNames.length" class="ts-add-group">
-              <div class="ts-add-group-title">
-                <span>_manual（手动）</span>
-              </div>
-              <div v-for="t in filterTools(manualToolObjs)" :key="t.name" class="ts-add-tool" :title="t.desc">
-                <span class="ts-add-tool-name">{{ t.name }}</span>
-                <button class="ts-btn mini danger" @click="toggleToolsetTool(t, g)" title="移出通用集合（该工具对 agent 不可见）">移出</button>
-              </div>
-            </div>
-            <div v-if="!joinedGroups.length && !manualToolNames.length" class="ts-empty">未加入任何工具。点「管理」在穿梭框中加入。</div>
-          </div>
-          <div v-if="tsMsg" class="ts-msg" :class="{ err: tsMsgErr }">{{ tsMsg }}</div>
-        </div>
-      </div>
-    </div>
-
     <!-- ===== 新建工作区对话框 ===== -->
     <div v-if="showWorkspaceDialog" class="dialog-overlay" @click.self="showWorkspaceDialog = false">
       <div class="dialog-box" style="max-width:420px">
@@ -157,25 +115,14 @@
     </div>
     <!-- 右键菜单 -->
     <ContextMenu ref="wsContextMenuRef" />
-    <!-- 通用集合穿梭框（未加入 ↔ 已加入 批量管理） -->
-    <ToolsetTransfer
-      v-if="tsTransferOpen"
-      :groups="builtinInfo?.plugins || []"
-      :joined="builtinInfo?.joined || []"
-      :manual-tools="builtinInfo?.manualTools || []"
-      :workspace-root="state.workspaceRoot"
-      @close="tsTransferOpen = false"
-      @changed="onTransferChanged"
-    />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { state, layout } from '../ui-state.js'
 import api from '../api.js'
 import FileTreeItem from './FileTreeItem.vue'
-import ToolsetTransfer from './ToolsetTransfer.vue'
 
 // ★ desktop(goja) workaround：渲染 effect 对整体赋值数组的 set 不收集依赖（v-for/v-if 不更新）。
 //   App.vue setup 顶层已同步预取 wsList（mount 前），首次渲染即读到 5 项；此处用 computed
@@ -584,121 +531,10 @@ async function loadFileContent(path) {
   }
 }
 
-// ── 工具集（卷帘 section：与文件树同区；通用集合 = <InstallDir>/.pair/toolsets/*.json） ──
-const tsAddSearch = ref('')
-const tsMsg = ref('')
-const tsMsgErr = ref(false)
-const builtinInfo = ref(null)   // GET /api/plugins/builtin：{groups, joined, manualTools, toolTotal, enabledTotal}
-const tsOpen = ref(false) // 卷帘默认收缩（2026-08-20：默认收起工具集区，点击标题展开）
-try {
-  const saved = localStorage.getItem('paircode-ts-open')
-  if (saved !== null) tsOpen.value = saved === '1'
-} catch {}
-
-// 已加入数（仅 source=builtin 且组名在 joined 中；_manual 手动工具）——
-// ★ source 必须校验：剩余派生组可能与已加入组同名（如 system），
-//   只看组名会把未加入组误判为已加入（历史 bug：未在数量不对）
-const joinedToolCount = computed(() => {
-  let n = 0
-  const joined = new Set(builtinInfo.value?.joined || [])
-  for (const g of builtinInfo.value?.groups || []) {
-    if (g.source === 'builtin' && joined.has(g.name)) n += (g.tools || []).length
-  }
-  return n + (builtinInfo.value?.manualTools || []).length
-})
-
-// 已加入分组（通用集合 default 内容展示）：source=builtin 的 joined 组 + _manual 手动工具
-const joinedGroups = computed(() => {
-  const joined = new Set(builtinInfo.value?.joined || [])
-  const bg = (builtinInfo.value?.groups || []).filter(g => g.source === 'builtin' && joined.has(g.name))
-  // ★ 2026-08-20：plugins 候选池已并入内置组（穿梭框可管理）——卷帘只展示
-  //   插件分组（source=plugin），内置组由 bg 展示（避免重复）
-  const pg = (builtinInfo.value?.plugins || [])
-    .filter(g => g.source === 'plugin')
-    .map(g => ({ ...g, tools: (g.tools || []).filter(t => t.enabled) }))
-    .filter(g => (g.tools || []).length > 0)
-  return [...bg, ...pg]
-})
-const manualToolNames = computed(() => builtinInfo.value?.manualTools || [])
-const manualToolObjs = computed(() => manualToolNames.value.map(n => ({ name: n, desc: '手动加入的工具' })))
-
-// 穿梭框（未加入 ↔ 已加入 批量管理）
-const tsTransferOpen = ref(false)
-function openTransfer() { tsTransferOpen.value = true }
-function onTransferChanged() {
-  loadBuiltin()
-}
-// ★ 工具集已全局化：切换工作区不再隔离（重载保证通用集合展示最新）
-watch(() => state.workspaceRoot, () => { loadBuiltin() })
-
-// 已捞入通用集合的工具名集合（joined 组工具 + 插件已启用工具 + _manual 手动条目工具）
-const joinedTools = computed(() => {
-  const set = {}
-  const joined = new Set(builtinInfo.value?.joined || [])
-  for (const g of builtinInfo.value?.groups || []) {
-    if (g.source === 'builtin' && joined.has(g.name)) for (const t of g.tools) set[t.name] = true
-  }
-  for (const g of builtinInfo.value?.plugins || []) {
-    for (const t of (g.tools || [])) if (t.enabled) set[t.name] = true
-  }
-  for (const tn of builtinInfo.value?.manualTools || []) set[tn] = true
-  return set
-})
-// 添加工具面板的组列表（全部内置分组 + 插件分组）
-const builtinGroups = computed(() => builtinInfo.value?.groups || [])
-const pluginGroups = computed(() => builtinInfo.value?.plugins || [])
-
-// 搜索过滤（工具名模糊匹配）
-function filterTools(tools) {
-  const q = tsAddSearch.value.trim().toLowerCase()
-  if (!q) return tools
-  return tools.filter(t => t.name.toLowerCase().includes(q))
-}
-
-// 加载通用集合（builtin 信息，池子）
-async function loadBuiltin() {
-  try {
-    builtinInfo.value = await api.builtinPlugins(undefined, state.workspaceRoot)
-  } catch (e) {
-    console.warn('[toolset] 内置工具包加载失败', e)
-  }
-}
-
-// 添加/移除工具（持久化：POST /api/plugins/builtin {tool, enabled} → 固化 builtin.json _manual 条目）
-async function toggleToolsetTool(t, g) {
-  try {
-    if (g && g.source === 'plugin') {
-      if (!joinedTools.value[t.name]) {
-        const res = await api.toolsetEdit({ name: 'default', action: 'add_plugin', plugin_name: g.name, tools: t.name, workspaceRoot: state.workspaceRoot })
-        tsMsg.value = res?.message || '已加入 ' + t.name
-      } else {
-        const res = await api.toolsetEdit({ name: 'default', action: 'rm_tool', plugin_name: g.name, tool: t.name, workspaceRoot: state.workspaceRoot })
-        tsMsg.value = res?.message || '已移出 ' + t.name
-      }
-    } else {
-      const enabled = !joinedTools.value[t.name]
-      const res = await api.builtinPlugins({ tool: t.name, enabled }, state.workspaceRoot)
-      tsMsg.value = res?.message || (enabled ? '已添加' : '已移除') + ' ' + t.name
-    }
-    tsMsgErr.value = false
-    await loadBuiltin()
-  } catch (err) {
-    tsMsgErr.value = true
-    tsMsg.value = '操作失败: ' + (err.message || err)
-  }
-}
-
-// 展开/收起工具集详情（插件 + 工具数）
-function toggleTs() {
-  tsOpen.value = !tsOpen.value
-  try { localStorage.setItem('paircode-ts-open', tsOpen.value ? '1' : '0') } catch {}
-}
-
 // ── 生命周期 ──
 onMounted(() => {
   window.addEventListener('refresh-tree', refreshAll)
   window.addEventListener('refresh-workspace', refreshCurrentWs)
-  loadBuiltin()
 })
 onUnmounted(() => {
   window.removeEventListener('refresh-tree', refreshAll)
@@ -794,96 +630,6 @@ onUnmounted(() => {
   cursor: pointer; font-size: 11px; flex: 1; justify-content: center;
 }
 .pa-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
-
-/* ── 工具集（卷帘 section：与文件树同区） ── */
-.ts-divider { border-top: 1px solid var(--border-color); flex-shrink: 0; }
-.ts-header {
-  display: flex; align-items: center; gap: 5px;
-  padding: 5px 8px; cursor: pointer; user-select: none;
-  transition: background .12s;
-}
-.ts-header:hover { background: var(--bg-hover); }
-.ts-header.open { background: var(--bg-hover); }
-.ts-header-icon { color: var(--text-muted); flex-shrink: 0; transition: color .12s; }
-.ts-header.open .ts-header-icon { color: var(--accent); }
-.ts-label { padding: 0; text-transform: none; letter-spacing: 0; font-size: 11px; }
-.ts-spacer { flex: 1; }
-.ts-chevron { transition: transform .15s; color: var(--text-muted); flex-shrink: 0; }
-.ts-chevron.open { transform: rotate(90deg); }
-.ts-body { padding: 0 8px 8px; display: flex; flex-direction: column; gap: 6px; }
-.ts-build {
-  border: 1px solid var(--border-color); border-radius: 6px; padding: 6px;
-  background: var(--bg-tertiary); display: flex; flex-direction: column; gap: 5px;
-}
-.ts-build-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-.ts-build-title {
-  font-size: 10px; font-weight: 700; color: var(--accent-light);
-  letter-spacing: .4px; display: flex; align-items: center; gap: 5px;
-}
-.ts-build-title::before {
-  content: ''; width: 3px; height: 10px; border-radius: 2px; background: var(--accent);
-}
-.ts-build-head .ts-btn.mini {
-  border-color: var(--accent); color: var(--accent-light); background: var(--accent-bg);
-}
-.ts-build-head .ts-btn.mini:hover {
-  background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--accent-light);
-}
-.ts-input {
-  background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-primary);
-  border-radius: 4px; padding: 3px 8px; font-size: 11px; width: 100%; box-sizing: border-box;
-  transition: border-color .12s, box-shadow .12s;
-}
-.ts-input:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 2px var(--focus-ring); }
-.ts-input::placeholder { color: var(--text-muted); }
-.ts-build-foot { display: flex; align-items: center; gap: 6px; }
-.ts-add-list {
-  max-height: 240px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px;
-  border: 1px solid var(--border-color); border-radius: 6px; padding: 4px; background: var(--bg-secondary);
-}
-.ts-add-group { display: flex; flex-direction: column; gap: 1px; }
-.ts-add-group-title {
-  display: flex; align-items: center; gap: 5px;
-  font-size: 10px; font-weight: 600; color: var(--accent-light);
-  padding: 3px 4px;
-  border-left: 2px solid var(--accent);
-  border-bottom: 1px dashed var(--border-color);
-  margin-bottom: 1px;
-}
-.ts-add-tool {
-  display: flex; align-items: center; justify-content: space-between; gap: 6px;
-  padding: 2px 4px 2px 10px; border-radius: 4px; transition: background .1s;
-}
-.ts-add-tool:hover { background: var(--bg-hover); }
-.ts-add-tool-name {
-  font-size: 11px; color: var(--text-primary); font-family: var(--font-code);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.ts-add-tool .ts-btn.mini { opacity: .55; }
-.ts-add-tool:hover .ts-btn.mini { opacity: 1; }
-.ts-btn.mini {
-  font-size: 10px; padding: 1px 8px; border: 1px solid var(--border-color);
-  border-radius: 10px; background: none; color: var(--text-secondary);
-  cursor: pointer; flex-shrink: 0; transition: all .12s;
-}
-.ts-btn.mini:hover { background: var(--bg-hover); color: var(--accent); }
-.ts-btn.mini.added { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
-.ts-check { display: flex; align-items: center; gap: 3px; font-size: 10px; color: var(--text-secondary); white-space: nowrap; }
-.ts-btn {
-  background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-secondary);
-  border-radius: 4px; padding: 2px 8px; font-size: 10px; cursor: pointer; transition: all .12s;
-}
-.ts-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
-.ts-btn.primary { border-color: var(--accent); color: var(--accent-light); }
-.ts-btn.danger { border-color: rgba(224,108,117,.5); color: #e06c75; }
-.ts-btn.danger:hover { background: rgba(224,108,117,.12); color: #e06c75; }
-.ts-remove-btn { flex-shrink: 0; display: flex; align-items: center; gap: 2px; padding: 1px 7px; font-size: 10px; }
-.ts-btn:disabled { opacity: .5; cursor: not-allowed; }
-.ts-msg { font-size: 10px; color: var(--accent-light); word-break: break-all; }
-.ts-msg.err { color: #e06c75; }
-.ts-list { display: flex; flex-direction: column; gap: 4px; }
-.ts-empty { padding: 10px 4px; text-align: center; color: var(--text-muted); font-size: 11px; }
-
 
 /* ── 对话框样式（复用） ── */
 .dialog-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; display: flex; align-items: center; justify-content: center; }

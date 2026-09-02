@@ -47,6 +47,9 @@
         <!-- ★ 市场 tab（2026-09）：点击活动栏「市场」打开；× 关闭后回对话主视图 -->
         <button v-if="state.marketTabOpen" class="main-tab" :class="{ active: mainView === 'market' }"
                 @click="layout.setMainView('market')">市场<span class="main-tab-close" title="关闭" @click.stop="closeMarketTab()">×</span></button>
+        <!-- ★ 工具集 tab（2026-09）：点击活动栏「工具集」打开；× 关闭后回对话主视图 -->
+        <button v-if="state.toolsetsTabOpen" class="main-tab" :class="{ active: mainView === 'toolsets' }"
+                @click="layout.setMainView('toolsets')">工具集<span class="main-tab-close" title="关闭" @click.stop="closeToolsetsTab()">×</span></button>
       </div>
 
       <!-- conversation 宿主（单槽，常驻挂载；v-show 按 tab 切换） -->
@@ -68,6 +71,11 @@
            与对话/编辑器同为主区视图（v-show 切换，不占用槽），bundle 未就绪自动重试 -->
       <div v-if="!panelMode && state.marketTabOpen" v-show="mainView === 'market'"
            ref="marketHost" class="plugin-slot-host market-container"></div>
+
+      <!-- ★ 工具集宿主（主区 tab）：ToolsetPanel 静态组件直接挂载（非 bundle）；
+           v-if 控制 tab 打开时才挂载（首次打开加载数据），v-show 切换保持不销毁 -->
+      <div v-if="!panelMode && state.toolsetsTabOpen" v-show="mainView === 'toolsets'"
+           class="plugin-slot-host toolsets-container"><ToolsetPanel /></div>
     </div>
 
     <!-- statusbar 槽位（single）：底部状态栏 -->
@@ -109,8 +117,9 @@
 import { onMounted, onUnmounted, ref, computed, nextTick, watch } from 'vue'
 import { useSingleSlot, boot, startPolling, stopPolling, loadAssemblyFile } from './plugin-runtime.js'
 import { state, sidebarWidth, layout } from './ui-state.js'
-import { initAppGlobals, cleanupAppGlobals, desktopPrefetch, loadWsList, closeMarketTab } from './app-actions.js'
+import { initAppGlobals, cleanupAppGlobals, desktopPrefetch, loadWsList, closeMarketTab, closeToolsetsTab } from './app-actions.js'
 import PluginPanel from './components/PluginPanel.vue'
+import ToolsetPanel from './components/ToolsetPanel.vue'
 
 // ★ 桌面端面板独立模式：desktopbridge 注入 window.__DESKTOP_PANEL_MODE__，
 //   此时只渲染右侧对话面板占满全屏，隐藏 IDE 其他区域。

@@ -162,6 +162,8 @@ export function switchActivity(id) {
   // ★ 市场已迁至主内容区 tab（2026-09）：活动栏/菜单「市场」→ 开/关市场 tab，
   //   不再切换侧边栏视图
   if (id === 'marketplace') { toggleMarketTab(); return }
+  // ★ 工具集已迁至主内容区 tab：同市场，不再切换侧边栏视图
+  if (id === 'toolsets') { toggleToolsetsTab(); return }
   if (state.activeActivity === id) {
     state.sidebarVisible = !state.sidebarVisible
   } else {
@@ -184,6 +186,23 @@ export function toggleMarketTab() {
 export function closeMarketTab() {
   state.marketTabOpen = false
   if (state.panels.mainTab === 'market') {
+    state.panels.mainTab = 'conversation'
+  }
+}
+
+// ── 工具集 tab（主内容区 main-tabs 视图）：打开/激活/收起（同市场范式）──
+export function toggleToolsetsTab() {
+  if (state.toolsetsTabOpen && state.panels.mainTab === 'toolsets') {
+    closeToolsetsTab()
+  } else {
+    state.toolsetsTabOpen = true
+    state.panels.mainTab = 'toolsets'
+    state.panels.editorOpen = false
+  }
+}
+export function closeToolsetsTab() {
+  state.toolsetsTabOpen = false
+  if (state.panels.mainTab === 'toolsets') {
     state.panels.mainTab = 'conversation'
   }
 }

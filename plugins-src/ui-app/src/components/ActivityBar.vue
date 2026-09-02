@@ -39,6 +39,7 @@ const items = [
   { id: 'explorer', label: '文件浏览器', icon: 'folder' },
   { id: 'search', label: '搜索', icon: 'search' },
   { id: 'source', label: '源代码管理', icon: 'source-control' },
+  { id: 'toolsets', label: '工具集', icon: 'layers' },
   { id: 'plugins', label: '插件', icon: 'puzzle' },
   { id: 'marketplace', label: '市场', icon: 'package' },
   { id: 'chat', label: '对话', icon: 'chat' },
@@ -46,8 +47,9 @@ const items = [
 
 const isActive = (id) => {
   if (id === 'chat') return false
-  // ★ 市场已迁至主内容区 tab：tab 打开时图标高亮（不再依赖侧栏 activeActivity）
+  // ★ 市场/工具集已迁至主内容区 tab：tab 打开时图标高亮（不再依赖侧栏 activeActivity）
   if (id === 'marketplace') return state.marketTabOpen
+  if (id === 'toolsets') return state.toolsetsTabOpen
   return state.activeActivity === id
 }
 
