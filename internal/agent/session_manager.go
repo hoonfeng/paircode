@@ -1188,6 +1188,20 @@ func (m *SessionManager) SetReviewMode(convID string, v string) {
 	}
 }
 
+// SetConvProvider 实时更新指定会话运行中 Loop 的模型（★ 2026-09-03）。
+// 会话模型切换（PUT /conversations/{id}）落盘后调用：正在运行的 Loop 下一轮
+// LLM 调用即用新模型（此前 Provider 在 Loop 启动时固化，切换后仍旧模型）。
+// 仅作用于运行中会话；未运行会话的 Provider 由下次 Start 按新配置装配。
+func (m *SessionManager) SetConvProvider(convID string, p, review Provider) {
+	m.mu.RLock()
+	sess, ok := m.sessions[convID]
+	m.mu.RUnlock()
+	if ok && sess.Loop != nil {
+		sess.Loop.SetConvProvider(p, review)
+		fmt.Printf("[session] 实时更新会话模型 conv=%s\n", convID)
+	}
+}
+
 // GetCurrentHistoryRaw 返回指定会话的当前运行中 History 深复制副本（保留 Reasoning）。
 // 供 persistRunningHistories 持久化时使用，确保 SegmentsFromMessage 能读取 reasoning 创建 thinking segment。
 // 优先使用 currentMsgs（运行中每轮更新），其次是 Loop.History（Run 退出后由 defer 设置）。

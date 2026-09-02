@@ -171,13 +171,14 @@ func (l *Loop) injectPendingImages(callMsgs []Message) []Message {
 //   - OpenAIProvider 有 Multimodal 字段 → 类型断言读取
 //   - 其他 Provider 实现（Mock/Reviewer 等）→ 默认 false（保守：不注入图片）
 func (l *Loop) supportsMultimodal() bool {
-	if l.Provider == nil {
+	p := l.getProvider()
+	if p == nil {
 		return false
 	}
-	if p, ok := l.Provider.(interface{ Multimodal() bool }); ok {
+	if p, ok := p.(interface{ Multimodal() bool }); ok {
 		return p.Multimodal()
 	}
-	if p, ok := l.Provider.(*OpenAIProvider); ok {
+	if p, ok := p.(*OpenAIProvider); ok {
 		return p.Multimodal
 	}
 	return false

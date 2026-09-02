@@ -120,8 +120,8 @@ func (r *jsLoopRunner) buildProxy() *goja.Object {
 		}
 		callStart := time.Now()
 		log.Printf("[loop-js] LLM 调用开始 turn=%d step=%d provider=%s msgs=%d tools=%d",
-			l.TurnNo, l.StepNo, l.Provider.Name(), len(jmsgs), len(jtools))
-		assistant, cerr := l.Provider.Chat(r.ctx, jmsgs, jtools, func(c Chunk) {
+			l.TurnNo, l.StepNo, l.getProvider().Name(), len(jmsgs), len(jtools))
+		assistant, cerr := l.getProvider().Chat(r.ctx, jmsgs, jtools, func(c Chunk) {
 			if c.StopReason != "" {
 				stopReason = c.StopReason
 			}
@@ -636,14 +636,14 @@ func (r *jsLoopRunner) buildProxy() *goja.Object {
 			return vm.ToValue(map[string]any{"error": "delegate 嵌套超过 3 层上限", "content": "", "msgs": nil})
 		}
 		subOpts := LoopOpts{
-			Provider:            l.Provider,
+			Provider:            l.getProvider(),
 			Registry:            l.Registry,
 			WorkspaceRoot:       l.WorkspaceRoot,
 			Autonomous:          false,
 			ReviewMode:          l.getReviewMode(),
 			ReviewBlacklist:     l.ReviewBlacklist,
 			ReviewWhitelist:     l.ReviewWhitelist,
-			ReviewProvider:      l.ReviewProvider,
+			ReviewProvider:      l.getReviewProvider(),
 			MaxContextTokens:    l.MaxContextTokens,
 			Compressor:          l.Compressor,
 			MaxIterations:       10,

@@ -521,6 +521,35 @@ func (l *Loop) SetReviewMode(v string) {
 	l.mu.Unlock()
 }
 
+// SetConvProvider 运行时切换会话模型（线程安全，★ 2026-09-03）。
+// 会话级模型切换（PUT /conversations/{id}）落盘后调用：主 Provider 与审核
+// Provider 立即替换，并重置 reviewer（懒建缓存）——运行中 Loop 的下一轮
+// LLM 调用即用新模型（此前 Provider 在 Loop 启动时固化，切换后仍用旧模型，
+// 日志实证：用户切换后 step 继续以旧 provider 调用）。
+func (l *Loop) SetConvProvider(p Provider, review Provider) {
+	l.mu.Lock()
+	l.Provider = p
+	l.ReviewProvider = review
+	l.reviewer = nil
+	l.mu.Unlock()
+}
+
+// getProvider 线程安全读取主 Provider（运行中切换后下一轮调用读到新实例）。
+func (l *Loop) getProvider() Provider {
+	l.mu.Lock()
+	p := l.Provider
+	l.mu.Unlock()
+	return p
+}
+
+// getReviewProvider 线程安全读取审核 Provider（懒建 reviewer 用）。
+func (l *Loop) getReviewProvider() Provider {
+	l.mu.Lock()
+	p := l.ReviewProvider
+	l.mu.Unlock()
+	return p
+}
+
 // getReviewMode 线程安全读取 ReviewMode（供 approve 门使用）。
 func (l *Loop) getReviewMode() string {
 	l.mu.Lock()
@@ -537,10 +566,11 @@ func (l *Loop) aiReviewApprove(ctx context.Context, tc ToolCall) (bool, string) 
 		return true, ""
 	}
 	if l.reviewer == nil {
-		if l.ReviewProvider == nil {
+		rp := l.getReviewProvider()
+		if rp == nil {
 			return true, "" // 无审核模型 → 放行
 		}
-		l.reviewer = &Reviewer{Provider: l.ReviewProvider, SystemPrompt: DefaultReviewerPrompt()}
+		l.reviewer = &Reviewer{Provider: rp, SystemPrompt: DefaultReviewerPrompt()}
 	}
 	v, err := l.reviewer.Review(ctx, tc)
 	if err != nil || v.Approved() {
@@ -789,9 +819,9 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 			callTools = FilterStagedTools(tools, l.StagedToolGroups)
 		}
 		log.Printf("[loop] LLM 调用开始 turn=%d step=%d provider=%s msgs=%d tools=%d",
-			l.TurnNo, l.StepNo, l.Provider.Name(), len(callMsgs), len(callTools))
+			l.TurnNo, l.StepNo, l.getProvider().Name(), len(callMsgs), len(callTools))
 		var stopReason string
-		assistant, err := l.Provider.Chat(ctx, callMsgs, callTools, func(c Chunk) {
+		assistant, err := l.getProvider().Chat(ctx, callMsgs, callTools, func(c Chunk) {
 			if c.StopReason != "" {
 				stopReason = c.StopReason
 			}

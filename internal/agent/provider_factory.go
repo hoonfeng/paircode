@@ -108,6 +108,11 @@ func applyPresetOverrides(cur ProviderParams, p core.AiPreset) ProviderParams {
 	}
 	if p.ExecuteModel != "" {
 		cur.Model = p.ExecuteModel
+		// ★ 2026-09-03 统一模型同步：PlanModel/ReviewModel 必须跟随执行模型——
+		//   此前 preset 覆盖后未同步，装配返回的 review/plan 仍是全局旧模型
+		//   （LLM 读取的模型配置项是旧的，切换模型对审核/规划不生效）。
+		cur.PlanModel = p.ExecuteModel
+		cur.ReviewModel = p.ExecuteModel
 	}
 	if p.Temperature != "" {
 		cur.Temperature = core.ParseTempOr(p.Temperature, -1)
