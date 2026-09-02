@@ -110,14 +110,10 @@ func (r *jsLoopRunner) buildProxy() *goja.Object {
 			onChunkFn, _ = goja.AssertFunction(onChunkVal)
 		}
 
-		var stopReason string
-		// ★ 2026-08-27 首步极简工具面（实测改进）：会话首个 Run 的首个 LLM 调用
-		//   只注入极简核心工具，自第 2 个 step 起恢复完整工具面（tools_staging.go）。
-		//   依据：极简面首步选对率 91.7% vs 全量 87.5%（48 次采样），
-		//   且首步 token 开销显著降低。
-		if l.StagedTools && l.TurnNo <= 1 && l.StepNo <= 1 {
-			jtools = FilterStagedTools(jtools, l.StagedToolGroups)
-		}
+var stopReason string
+		// ★ 2026-09-03 极简工具面已移除：极简面（8 工具）与全量面（54 工具）切换会使
+		//   DeepSeek 缓存按完整输入前缀匹配（含工具定义）时从头断前缀 → 每轮首请求 0% 命中。
+		//   统一全量工具面，跨轮次前缀稳定（实测修复后跨轮首请求命中 98.2%）。
 		callStart := time.Now()
 		log.Printf("[loop-js] LLM 调用开始 turn=%d step=%d provider=%s msgs=%d tools=%d",
 			l.TurnNo, l.StepNo, l.getProvider().Name(), len(jmsgs), len(jtools))
@@ -464,6 +460,7 @@ func (r *jsLoopRunner) buildProxy() *goja.Object {
 			"memory":     LongTermMemoryPrompt(),
 			"knowledge":  knowledge,
 			"autonomous": l.Autonomous,
+			"resume":     l.ResumeContext,
 		})
 	})
 	snapObj.Set("sync", func(call goja.FunctionCall) goja.Value {

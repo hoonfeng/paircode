@@ -171,6 +171,12 @@ type Loop struct {
 	// 以保持 KV Cache 前缀一致（经背景快照 syncContextSnapshot 进入消息流）。
 	staleMsg string
 
+	// ResumeContext 会话连贯性上下文（由 web 层 buildWebLoopOpts 构建传入）。
+	// ★ 2026-09-03 KV 缓存修复：内容每轮变化（任务进度/对话摘要/Git 状态等），
+	//   绝不能拼入 System（system 是 messages 第一条，尾部变化切断 provider 前缀缓存）；
+	//   经 buildSnapshotContent 注入背景快照（消息流尾部 append-only，见 syncContextSnapshot）。
+	ResumeContext string
+
 	lastPromptTokens int // 上一轮 API 实测 prompt_tokens（驱动压缩阈值，比纯估算可信）
 	compactCooldown  int // 压缩后冷却剩余轮数（防每轮重复压缩，复刻参考 refreshCooldown）
 
@@ -210,15 +216,7 @@ type Loop struct {
 	// JS 插件经 loop.approve.state.get/set 读写；agentloop 审核逻辑据此决策。
 	approveState *ApproveState
 
-	// ── 首步极简工具面（2026-08-27 实测改进）──
-	// StagedTools 开启后：会话第一个 Run 的首个 LLM 调用只注入极简核心工具面，
-	// 自第 2 个 step 起恢复完整工具面（实测首步选对率 91.7% vs 全量 87.5%，
-	// 且减少首步 token 开销）。默认开启；false 时始终全量。
-	StagedTools bool
-	// StagedToolGroups 极简工具候选组（插件装配链传入：agentloop 插件
-	// registerSettings → 装配器解析 → LoopOpts；nil/空 = 回退默认组）
-	StagedToolGroups [][]string
-	WorkspaceRoot    string // 工作区根路径（用于 SaveTokenUsage 等工作区级持久化）
+WorkspaceRoot    string // 工作区根路径（用于 SaveTokenUsage 等工作区级持久化）
 	CompactRequested bool   // 外部设置后下轮迭代触发上下文压缩（供主动压缩 API 使用）
 	Autonomous       bool   // 自主模式标志（单 Loop 阶段化循环）
 
@@ -797,18 +795,13 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 		// ★ 缓存诊断已由 buildCallContext 内部统一执行（Go/JS 循环共用），
 		//   此处不再重复调用，避免双份诊断输出。
 
-		// ★ LLM 调用日志（排查「无响应」：每轮调用耗时 + 错误，重试期间用户看到的就是无响应）
+// ★ LLM 调用日志（排查「无响应」：每轮调用耗时 + 错误，重试期间用户看到的就是无响应）
 		callStart := time.Now()
-		// ★ 2026-08-27 首步极简工具面（Go 回退循环同样生效；tools_staging.go）
-		//   注意：用局部变量，勿覆盖原 tools（后续迭代需全量恢复）。
-		callTools := tools
-		if l.StagedTools && l.TurnNo <= 1 && l.StepNo <= 1 {
-			callTools = FilterStagedTools(tools, l.StagedToolGroups)
-		}
-		log.Printf("[loop] LLM 调用开始 turn=%d step=%d provider=%s msgs=%d tools=%d",
-			l.TurnNo, l.StepNo, l.getProvider().Name(), len(callMsgs), len(callTools))
+		// ★ 2026-09-03 极简工具面已移除：极简面（8 工具）与全量面（54 工具）切换会使
+		//   DeepSeek 缓存按完整输入前缀匹配（含工具定义）时从头断前缀 → 每轮首请求 0% 命中。
+		//   统一全量工具面，跨轮次前缀稳定（实测修复后跨轮首请求命中 98.2%）。
 		var stopReason string
-		assistant, err := l.getProvider().Chat(ctx, callMsgs, callTools, func(c Chunk) {
+		assistant, err := l.getProvider().Chat(ctx, callMsgs, tools, func(c Chunk) {
 			if c.StopReason != "" {
 				stopReason = c.StopReason
 			}
@@ -1252,12 +1245,23 @@ func (l *Loop) syncContextSnapshot(msgs []Message) []Message {
 func (l *Loop) buildSnapshotContent() string {
 	var b strings.Builder
 
-	// ① 记忆/知识库过期检查（staleMsg，Run 开始缓存）
+	// ① 会话连贯性上下文（任务进度/对话摘要/项目归属/Git 状态/代码图谱等，每轮变化）
+	// ★ 2026-09-03 KV 缓存修复：此段从 system 动态后缀迁入快照——system 是 messages
+	//   第一条，其尾部变化会在第一条内切断 provider 前缀缓存（其后历史全部 miss）；
+	//   快照位于消息流尾部（当前任务之后），变化只断快照之后、前缀单调延展。
+	if l.ResumeContext != "" {
+		b.WriteString(systemReminderFrame("会话连贯性上下文", l.ResumeContext))
+	}
+
+	// ② 记忆/知识库过期检查（staleMsg，Run 开始缓存）
 	if l.staleMsg != "" {
+		if b.Len() > 0 {
+			b.WriteString("\n\n")
+		}
 		b.WriteString(systemReminderFrame("状态提示（记忆/知识库过期检查）", l.staleMsg))
 	}
 
-	// ② 历史摘要（上下文压缩后产生）
+	// ③ 历史摘要（上下文压缩后产生）
 	if len(l.CompressedSummaries) > 0 {
 		if b.Len() > 0 {
 			b.WriteString("\n\n")
@@ -1273,7 +1277,7 @@ func (l *Loop) buildSnapshotContent() string {
 		}
 	}
 
-	// ③ 自主模式系统提示（固定内容）
+	// ④ 自主模式系统提示（固定内容）
 	// ★ 2026-08-31：plan 工具已移除——自主模式统一用任务清单工具（task 体系）追踪。
 	if l.Autonomous {
 		if b.Len() > 0 {
@@ -1289,7 +1293,7 @@ func (l *Loop) buildSnapshotContent() string {
 		b.WriteString("- 禁止只报告不落实：每项子任务都要有真实工具调用与验证证据\n")
 	}
 
-	// ④ 记忆（长期记忆提示，system→快照迁移：高频变化不再破坏 system 前缀）
+	// ⑤ 记忆（长期记忆提示，system→快照迁移：高频变化不再破坏 system 前缀）
 	if mem := LongTermMemoryPrompt(); mem != "" {
 		if b.Len() > 0 {
 			b.WriteString("\n\n")
@@ -1297,7 +1301,7 @@ func (l *Loop) buildSnapshotContent() string {
 		b.WriteString(strings.TrimSpace(mem))
 	}
 
-	// ⑤ 知识库（项目结构化理解树，system→快照迁移）
+	// ⑥ 知识库（项目结构化理解树，system→快照迁移）
 	if l.WorkspaceRoot != "" {
 		if kb := ProjectKnowledge(l.WorkspaceRoot, 2500); kb != "" {
 			if b.Len() > 0 {

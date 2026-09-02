@@ -99,8 +99,5 @@ func newLoop(opts LoopOpts) *Loop {
 		ReviewBlacklist:      opts.ReviewBlacklist,
 		ReviewWhitelist:      opts.ReviewWhitelist,
 		ReviewProvider:       opts.ReviewProvider,
-		// ★ 2026-08-27 首步极简工具面默认开启（实测改进，tools_staging.go）
-		StagedTools:       true,
-		StagedToolGroups:  opts.StagedToolGroups,
-	}
+}
 }

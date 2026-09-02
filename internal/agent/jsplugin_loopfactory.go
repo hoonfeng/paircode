@@ -90,30 +90,7 @@ func (b *jsLoopFactoryBridge) applyOverrides(opts LoopOpts, obj *goja.Object) Lo
 			}
 		}
 	}
-	// setGroups：JS 数组数组 → [][]string（极简工具候选组；过滤空组/空串）。
-	setGroups := func(key string, dst *[][]string) {
-		if v := obj.Get(key); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
-			if arr, ok := v.Export().([]any); ok {
-				var groups [][]string
-				for _, it := range arr {
-					if inner, ok := it.([]any); ok {
-						var g []string
-						for _, s := range inner {
-							if str, ok := s.(string); ok && str != "" {
-								g = append(g, str)
-							}
-						}
-						if len(g) > 0 {
-							groups = append(groups, g)
-						}
-					}
-				}
-				if len(groups) > 0 {
-					*dst = groups
-				}
-			}
-		}
-	}
+	// ★ 2026-09-03 极简工具面已移除：setGroups 装配不再需要（tools 统一全量面）。
 	setStr("system", &out.System)
 	setInt("maxIterations", &out.MaxIterations)
 	setInt("maxContextTokens", &out.MaxContextTokens)
@@ -124,6 +101,7 @@ func (b *jsLoopFactoryBridge) applyOverrides(opts LoopOpts, obj *goja.Object) Lo
 	setStr("reviewMode", &out.ReviewMode)
 	setStrs("reviewBlacklist", &out.ReviewBlacklist)
 	setStrs("reviewWhitelist", &out.ReviewWhitelist)
-	setGroups("stagedToolGroups", &out.StagedToolGroups)
+// ★ 2026-09-03 极简工具面已移除：stagedToolGroups 装配不再透传（tools 统一全量面，
+	//   跨轮次前缀稳定——极简/全量切换会让 DeepSeek 缓存从头断前缀）。
 	return out
 }

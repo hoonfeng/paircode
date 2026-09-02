@@ -316,3 +316,61 @@ boundary 后变化同样破坏 system 段的缓存命中）
 已修复的历史断裂源（2026-08-17 批次）：resumeCtx TTL 60s→300s、按轮数压缩→token 压力触发、
 tool 描述 UTF-8 截断、Definitions 字典序排序、Usage OpenAI 兼容拼写归一化。
 遗留优化方向见 §6 与最终回复中的建议。
+
+---
+
+## 8. 2026-09-03 实测修复：命中率低的两大根因（跨轮首请求 0% → 98.2%）
+
+> 背景：实测「命中率非常低」——单轮内迭代命中 93.7%，但**每轮对话的首请求恒为 0%**。
+> 用 `WB_CACHE_DIAG=1` 抓跨轮日志定位出两个根因（均与「messages 第一条/system 与
+> 完整输入前缀」的缓存匹配机制有关）：
+
+### 8.1 根因 A：会话连贯性上下文（resumeCtx）拼入 system 尾部
+
+- **现象**：`buildWebLoopOpts`（web_server.go）把 `BuildResumeContext()` 输出
+  （任务进度/对话摘要/Git 状态/代码图谱统计等，**每轮内容必变**）直接
+  `sys += "\n\n" + resumeCtx` 追加到 system 消息尾部。
+- **机制**：system 是 messages **第一条**（输入前缀开头的第一个 token 块）。
+  DeepSeek 按「完整输入公共前缀」匹配缓存——system 尾部变化 → 前缀在第一条
+  消息内部断裂 → system 之后的历史/任务**全部 miss**（命中仅剩静态前缀部分）。
+  注释「resumeCtx 在 CACHE_BOUNDARY 之后不影响前缀」是**错误认知**：
+  boundary 之后仍是 system 消息的一部分，只要 system 内容有变化，前缀就断。
+- **修复**：resumeCtx 迁入「背景上下文快照」（消息流尾部 append-only）：
+  `LoopOpts.ResumeContext` → `Loop.ResumeContext` → `buildSnapshotContent` ① 段
+  （Go 回退）/ `snapshot.parts().resume` + JS `buildSnapshotText` ① 段（JS 循环）→
+  `syncContextSnapshot` 注入消息流。变化只断快照之后，system+历史前缀单调延展。
+  goal 段（含 Rounds 每轮递增）同样从 `loop.System +=`（session_manager
+  Start/续轮两处）改挂 `loop.ResumeContext +=`。
+
+### 8.2 根因 B：首步极简工具面（StagedTools）——tools 集合跨轮切换
+
+- **现象**：每次对话（每个 Run 的 turn 都从 1 开始）首个 LLM 请求注入极简面
+  （8 个工具），后续请求恢复全量面（54 个工具）。
+- **机制**：DeepSeek 缓存匹配**完整输入前缀（含工具定义序列化部分）**。
+  上一轮最后请求 = 54 工具；本轮首请求 = 8 工具 → 工具集合不同 → 前缀从头断
+  → 首请求 0% 命中；第 2 请求恢复 54 工具才命中（实测 step2 起 87.5%）。
+- **修复（砍掉极简机制）**：极简工具面整体移除——`StagedTools/StagedToolGroups/
+  FilterStagedTools/tools_staging.go`、agentloop 插件 `stagedToolGroups` 配置、
+  装配透传（jsplugin_loopfactory）、测试全部删除；统一全量工具面。
+  注：极简面 91.7% 首步选对率 vs 全量 87.5% 的实测优势在缓存成本面前不值
+  （每轮首请求全 miss 的 token 损失远大于首步选对率差）。
+
+### 8.3 实测结果（DeepSeek-V4-Flash，siliconflow，WB_CACHE_DIAG=1）
+
+| 场景 | 修复前 | 修复后 |
+|------|--------|--------|
+| 单轮内迭代 | 93.7%（step≥2） | 96.1%~98.2% |
+| **跨轮首请求** | **0%（tools 8 vs 54 + resumeCtx 变化）** | **98.2%**（tools 54 恒定 + system 稳定 + 快照 append） |
+| 前缀断裂日志 | 无（当时未判 tools 面；含 tools 变化断链） | 0 条「★缓存断裂」 |
+| [cache-diag] system | 每轮首请求后 system hash 稳定 | 恒 8aa596a2（多轮跨重启一致） |
+
+### 8.4 遗留观察
+
+1. **tools 变化仍会断前缀**：工具启用/禁用、插件装载/卸载会改变 tools 集合
+   （54 → N）→ 下次请求前缀从头断。这是「配置变更」级断裂，正常且不可免，
+   但工具状态应保持稳定（避免运行时频繁开关）。
+2. **CompressedSummaries 追加**（压缩触发）也会在快照处断尾——快照机制已
+   保证前缀到压缩点为止连续，属可接受损失。
+3. **快照体积**：每轮 resume 变化追加一条快照，历史中快照会累积（每轮 1 条）。
+   旧快照保留是前缀连续的前提；若会话极长（>50 轮），可考虑「快照段落整体
+   作为压缩候选」——但压缩会断前缀，权衡后暂不处理。

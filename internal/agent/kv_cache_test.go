@@ -233,5 +233,96 @@ func min(a, b int) int {
 	if a < b {
 		return a
 	}
-	return b
+return b
+}
+// TestResumeContextGoesToSnapshotNotSystem 验证会话连贯性上下文（resumeCtx）迁移：
+// ★ 2026-09-03 KV 缓存修复——resumeCtx 每轮变化，若拼入 System（messages 第一条）
+//   会在 system 尾部切断 provider 前缀缓存（其后历史全部 miss → 命中率低）。
+//   断言：① System 消息不含 resume 内容；② 快照消息（backgroundCtxMarker 前缀）
+//   包含 resume 内容。
+func TestResumeContextGoesToSnapshotNotSystem(t *testing.T) {
+	stableSystem := DefaultSystemPrompt([]string{"/test/proj"})
+	resume := "# 任务进度\n- 已完成：读取 a.go\n- 进行中：修改 b.go\n\n# 对话摘要\n用户要求修改缓存逻辑。\n\n# Git 状态\n M internal/agent/loop.go"
+
+	loop := &Loop{
+		System:        stableSystem,
+		ResumeContext: resume,
+		Registry:      NewRegistry(),
+		Provider:      &MockProvider{},
+	}
+
+	// ① system prompt 纯净：不含 resume 内容
+	if strings.Contains(loop.System, "任务进度") || strings.Contains(loop.System, "对话摘要") {
+		t.Errorf("System 不应包含 resumeCtx 内容（拼入 System=第一条消息变化=前缀断裂）")
+	}
+
+	// ② 快照正文包含 resume 内容
+	content := loop.buildSnapshotContent()
+	if !strings.Contains(content, resume) {
+		t.Errorf("buildSnapshotContent 应包含 ResumeContext 内容")
+	}
+
+	// ③ 真实 Run 路径：快照注入为消息（backgroundCtxMarker 前缀）而非 system
+	msgs, err := loop.Run(context.Background(), "读取两个文件", nil)
+	if err != nil {
+		t.Fatalf("Run 失败: %v", err)
+	}
+	// system 第一条不含 resume
+	if len(msgs) == 0 || msgs[0].Role != RoleSystem {
+		t.Fatal("msgs[0] 应为 system")
+	}
+	if strings.Contains(msgs[0].Content, "任务进度") {
+		t.Errorf("system 消息包含 resumeCtx 内容——前缀断裂源回归！")
+	}
+	// 末尾附近有快照消息含 resume
+	found := false
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].Role == RoleUser && strings.HasPrefix(msgs[i].Content, backgroundCtxMarker) {
+			found = strings.Contains(msgs[i].Content, "任务进度")
+			break
+		}
+	}
+	if !found {
+		t.Errorf("背景快照消息未找到 resumeCtx 内容（最后一条快照应包含「任务进度」）")
+	}
+	t.Log("✓ resumeCtx 已迁移：system 纯净、快照承载，前缀不再因会话上下文变化而断裂")
+}
+
+// TestResumeContextChangeAppendsSnapshot 验证 resume 变化时快照追加语义：
+// 相同 → 零注入（前缀稳定）；变化 → 追加新快照（append-only，旧快照保留）。
+func TestResumeContextChangeAppendsSnapshot(t *testing.T) {
+	loop := &Loop{
+		System:        DefaultSystemPrompt([]string{"/test/proj"}),
+		ResumeContext: "第一版：任务进度\n- 读取 a.go 完成",
+		Registry:      NewRegistry(),
+		Provider:      &MockProvider{},
+	}
+
+	// 首次同步：注入快照
+	msgs := []Message{{Role: RoleUser, Content: "当前任务"}}
+	msgs = loop.syncContextSnapshot(msgs)
+	if len(msgs) != 2 {
+		t.Fatalf("首次同步应追加 1 条快照，实际 %d 条", len(msgs))
+	}
+	first := msgs[1].Content
+
+	// resume 未变（模拟同一轮多次迭代）→ 零注入
+	again := loop.syncContextSnapshot(append([]Message{}, msgs...))
+	if len(again) != 2 {
+		t.Errorf("resume 未变时应零注入（前缀稳定），实际 %d 条", len(again))
+	}
+
+	// resume 变化（模拟下一轮对话：任务进度推进）→ 追加新快照，旧快照保留
+	loop.ResumeContext = "第二版：任务进度\n- 读取 a.go 完成\n- 修改 b.go 进行中"
+	changed := loop.syncContextSnapshot(append([]Message{}, msgs...))
+	if len(changed) != 3 {
+		t.Fatalf("resume 变化应追加新快照（3 条），实际 %d 条", len(changed))
+	}
+	if changed[1].Content != first {
+		t.Errorf("旧快照应原样保留（append-only，位置固定），实际被改写")
+	}
+	if !strings.Contains(changed[2].Content, "第二版") {
+		t.Errorf("新快照应包含新 resume 内容（「第二版」）")
+	}
+	t.Log("✓ 快照 append-only：resume 变化只断快照之后，前缀单调延展")
 }
