@@ -13,7 +13,7 @@ import (
 // 编译版本号（由 packager 通过 -ldflags=-X main.version=<version> 注入）
 // 也用于 /api/system/info 返回给前端 About 弹窗展示。
 // ★ 缺省值 = 当前发布版本（packager.json 注入覆盖；无注入时兜底显示）。
-var version = "v1.4.0"
+var version = "v1.4.15"
 
 // getCwd 返回当前工作目录，失败时返回 "?"。
 func getCwd() string {

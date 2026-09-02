@@ -4,6 +4,18 @@
 
 ---
 
+## 1.4.15 — 2026-09-02
+
+### 修复
+- **模型切换报「对话不存在 / 会话不存在」** — 根因：打包管线缺失 vite 壳构建步骤（pipeline 只跑 build-ui 区域插件 + robocopy 同步旧 dist），打包复用过期前端产物，致 `setConvModel` 调用参数错位（5 参新调用打在 4 参旧签名上，workspaceRoot 被传成配置名「硅基flash」）→ 后端按错位 workspaceRoot 路由隔离 store 查无会话报 400
+- **packager.json pipeline 新增 `build-ui-frontend` 步骤** — 打包前显式构建 vite 壳（plugins-src/ui-app → .pair/assets/runtime/web），保证发布包前端产物始终来自新构建
+- **后端跨 store 兜底防误报** — SessionManager 新增 `FindConversation`（指定 workspaceRoot store 查不到时遍历已打开 store 找回），GET/PUT 会话接口在参数缺失/错位时不再误报「不存在」，会话级模型切换落盘到会话真实所属工作区
+
+### 改进
+- 版本号整体提升至 v1.4.15（main.go 缺省 / packager.json / 前端 package.json）
+
+---
+
 ## 1.2.1 — 2026-08-15
 
 ### 新增

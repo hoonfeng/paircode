@@ -168,7 +168,7 @@ go build -o .pair/plugins/tool-binary/bin/tool-binary.exe ./plugins-src/plugins/
 # 指向 cmd/companion/web-ui/node_modules，勿删）
 # ① 改组件/壳
 vim plugins-src/ui-app/src/components/*.vue
-# ② 构建 7 个 UI 区域插件包（产物 → .pair/plugins/ui-*/assets/）
+# ② 构建 10 个 UI 区域插件包（产物 → .pair/plugins/ui-*/assets/）
 node scripts/build-ui.mjs
 # ③ 构建壳（产物 → .pair/assets/runtime/web/，宿主外部优先加载）
 cd plugins-src/ui-app && node_modules/.bin/vite build
@@ -221,37 +221,39 @@ go run -tags toolsgen ./dev/tool_plugin_gen   # 幂等：已有插件不覆盖�
 
 ## 版本发布（2026-08-17 新增）
 
-插件体系支持**整体打包发布**（版本对齐 UI 1.3.0）：
+插件体系支持**整体打包发布**（版本对齐 UI v1.4.15）：
 
 ### UI 代码专门目录
 
-- **`plugins-src/ui-app/`**（项目根，2026-08-17 从 .pair 迁出）—— UI **源码专门目录**（壳 ShellApp + 7 个区域入口
+- **`plugins-src/ui-app/`**（项目根，2026-08-17 从 .pair 迁出）—— UI **源码专门目录**（壳 ShellApp + 10 个区域入口
   ui-main-*.js + 60+ Vue 组件 + docs 文档）。Vite 工程（vite.config.js +
   package.json），`npm run build` 产壳到 `.pair/assets/runtime/web/`；
-  `node scripts/build-ui.mjs` 产 7 个区域包到 `ui-<region>/assets/`。
+  `node scripts/build-ui.mjs` 产 10 个区域包到 `ui-<region>/assets/`。
 - **`ui-*/`** —— UI 区域插件包（titlebar/activitybar/sidebar/editor/
-  right-panel/statusbar/modals + statusbar-conn），client.js 为浏览器半，
+  right-panel/statusbar/modals/appearance/quick-exec/statusbar-conn），client.js 为浏览器半，
   assets/ 为构建产物，随发布包分发。
 
-### 发布工程（package.json）
+### 发布工程（packager.json）
 
-`.pair/plugins/package.json` 是插件体系发布级配置：
+★ 2026-09-02 插件体系打包已并入 **packager.json 流水线**（历史 npm 发布方式
+`npm run pack / version:bump` 已废弃——`.pair/plugins/package.json` 不再存在）：
 
 ```bash
-# 构建 7 个区域 UI 插件包（ui-<region>/assets/）
-npm run build
+# 构建 10 个区域 UI 插件包（ui-<region>/assets/）
+node scripts/build-ui.mjs
 # 构建壳（plugins-src/ui-app/ → .pair/assets/runtime/web/）
-npm run build:shell
-# 打包发布（npm pack → release/PairCode-plugins-<version>.tgz）
-npm run pack
-# 版本号升级（如 1.3.0 → 1.4.0）
-npm run version:bump -- 1.4.0
+cd plugins-src/ui-app && npm run build
+# 产物回灌 embed（cmd/companion/web-ui/dist，打包/离线兜底）
+node scripts/sync-web-dist.mjs
+# 整体打包发布（packager 依 packager.json 流水线）：
+#   build-ui-plugins → build-ui-frontend → sync-plugins-to-bin → … → release/PairCode-<version>.zip
+packager  # 或依 packager.json pipeline 手动执行
 ```
 
-- **files 字段**：全部 33 个插件目录（agentloop/core-api/tool-*/ui-*/web-api）
+- **files 字段**：全部 46 个插件目录（agentloop/core-api/tool-*/ui-*/web-api）
   + UI 源码工程（plugins-src/ui-app/）+ 模型依赖清单（config/models.json +
   config/settings.template.json）+ README.md —— 即「插件 + 插件代码 + 依赖
-  模型」整体入包。
+  模型」整体入包（由 packager.json dist.include 声明）。
 - **依赖声明**：dependencies 覆盖 UI 运行时依赖（vue/codemirror/xterm/
   marked/mermaid/pinia/vue-router），devDependencies 为构建依赖（vite/
   @vitejs/plugin-vue）；`node_modules`（junction）经 .npmignore 排除，包体
