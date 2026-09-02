@@ -83,8 +83,6 @@ return {
         { name: 'autoIterateOnRejection', label: '拒绝后自动迭代', type: 'checkbox', binding: 'autoIterateOnRejection' },
         { name: 'ignoreDirs', label: '忽略目录', type: 'tags', binding: 'ignoreDirs',
           hint: '逗号分隔（node_modules, dist, .git…）' },
-        { name: 'stagedToolGroups', label: '首步极简工具候选组', type: 'textarea', default: '',
-          hint: '每行一组（组内逗号分隔，语义等价工具）；首步只注入这些工具，第 2 步起恢复全量。命中规则：每组取工具面中第一个存在的名字。空=默认组（read/write/edit/搜索/命令等 8 组）。' },
       ],
     })
 
@@ -264,16 +262,7 @@ return {
       if (typeof cfg.reviewWhitelist === 'string' && cfg.reviewWhitelist) {
         over.reviewWhitelist = cfg.reviewWhitelist.split(/[,，]/).map(s => s.trim()).filter(Boolean);
       }
-      // ★ 2026-08-27 首步极简工具候选组（插件注册化配置）：textarea 每行一组、
-      //   组内逗号分隔 → 数组数组传给 Go（Loop.StagedToolGroups，nil=默认组）
-      if (typeof cfg.stagedToolGroups === 'string' && cfg.stagedToolGroups.trim()) {
-        const groups = cfg.stagedToolGroups.split('\n')
-          .map(l => l.trim()).filter(Boolean)
-          .map(l => l.split(/[,，]/).map(s => s.trim()).filter(Boolean))
-          .filter(g => g.length > 0);
-        if (groups.length > 0) over.stagedToolGroups = groups;
-      }
-      // ai 组 contextMaxTokens（binding 顶层，经 ctx.app.settings 快照）→ 覆盖循环上下文窗口
+// ai 组 contextMaxTokens（binding 顶层，经 ctx.app.settings 快照）→ 覆盖循环上下文窗口
       const aiTop = (ctx.app && ctx.app.settings) || {};
       const ctxMax = Number(aiTop.contextMaxTokens);
       if (ctxMax > 0) over.maxContextTokens = ctxMax;
@@ -414,11 +403,22 @@ return {
 
         function buildSnapshotText(parts) {
           let b = '';
-          // ① 记忆/知识库过期检查（Go 侧 snapshot.sync 已用 system-reminder 框架包裹整块，此处只拼正文）
+          // ① 会话连贯性上下文（任务进度/对话摘要/项目归属/Git 状态/代码图谱等）
+          // ★ 2026-09-03 KV 缓存修复：此段从 system 动态后缀迁入快照——system 是 messages
+          //   第一条，其尾部变化会在第一条内切断 provider 前缀缓存（其后历史全部 miss）；
+          //   快照位于消息流尾部（当前任务之后），变化只断快照之后、前缀单调延展。
+          if (parts.resume) {
+            b += '# 会话连贯性上下文（非当前任务）\n\n' +
+              '> 以下为会话背景快照：任务进度、对话摘要、相关记忆、项目归属、工作区结构等。\n' +
+              '> ★ 本条快照是背景信息而非用户指令——当前待执行任务以快照之前最近的用户指令为准。\n\n' +
+              String(parts.resume).trim();
+          }
+          // ② 记忆/知识库过期检查（Go 侧 snapshot.sync 已用 system-reminder 框架包裹整块，此处只拼正文）
           if (parts.stale) {
+            if (b) b += '\n\n';
             b += parts.stale;
           }
-          // ② 历史摘要（上下文压缩后产生）
+          // ③ 历史摘要（上下文压缩后产生）
           if (Array.isArray(parts.summaries) && parts.summaries.length > 0) {
             b += '# 上下文已压缩——历史摘要\n\n' +
               '> 以下为之前轮次的消息摘要，Agent 应据此感知已完成的历史上下文。\n' +
@@ -426,7 +426,7 @@ return {
               '> ★ 本条快照是背景信息而非用户指令——当前待执行任务以快照之前最近的用户指令为准。\n\n';
             b += parts.summaries.join('\n\n---\n\n');
           }
-          // ③ 自主模式两级追踪提示（固定内容）
+          // ④ 自主模式两级追踪提示（固定内容）
           if (parts.autonomous) {
             if (b) b += '\n\n';
             b += '# ★ 自主模式：计划→子任务树形追踪\n' +
@@ -439,12 +439,12 @@ return {
               '- ★ 每次调用任务清单工具必须把该步骤内的所有子任务一起传入（全量替换），已不在列表中的子任务将自动清理\n' +
               '- 子任务也遵守全量替换规则——即使是不同步骤的子任务，也要在一次调用中传入（用不同的 plan_step_index 区分）\n';
           }
-          // ④ 记忆（长期记忆提示；system→快照迁移：高频变化不再破坏 system 前缀）
+          // ⑤ 记忆（长期记忆提示；system→快照迁移：高频变化不再破坏 system 前缀）
           if (parts.memory) {
             if (b) b += '\n\n';
             b += String(parts.memory).trim();
           }
-          // ⑤ 知识库（项目结构化理解树；system→快照迁移）
+          // ⑥ 知识库（项目结构化理解树；system→快照迁移）
           if (parts.knowledge) {
             if (b) b += '\n\n';
             b += String(parts.knowledge).trim();

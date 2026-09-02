@@ -1195,6 +1195,12 @@ func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Reques
 				return
 			}
 			if meta == nil {
+				// ★ 兜底：workspaceRoot 参数缺失/错位（如旧前端把配置名传入）
+				//   时 StoreFor 落空——跨已打开 store 找回会话，避免误报「对话不存在」。
+				if m2, _ := agentMgr.FindConversation(id); m2 != nil {
+					jsonResp(w, m2)
+					return
+				}
 				jsonErr(w, "对话不存在")
 				return
 			}
@@ -1233,8 +1239,16 @@ func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Reques
 		} else if req.Provider != nil || req.Model != nil || req.Preset != nil {
 			meta, _ := store.GetConversation(id)
 			prov, model, preset := "", "", ""
+			saveStore := store
 			if meta != nil {
 				prov, model, preset = meta.Provider, meta.Model, meta.Preset
+			} else if m2, _ := agentMgr.FindConversation(id); m2 != nil {
+				// ★ 兜底：workspaceRoot 参数缺失/错位（旧前端把配置名传入）时，
+				//   跨 store 找回会话并落到其真实所属 store 写入，避免误报「会话不存在」。
+				prov, model, preset = m2.Provider, m2.Model, m2.Preset
+				if ws := m2.WorkspaceRoot; ws != "" {
+					saveStore = agentMgr.StoreFor(ws)
+				}
 			}
 			if req.Provider != nil {
 				prov = strings.TrimSpace(*req.Provider)
@@ -1245,7 +1259,7 @@ func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Reques
 			if req.Preset != nil {
 				preset = strings.TrimSpace(*req.Preset)
 			}
-			if err := store.SetConvModel(id, prov, model, preset); err != nil {
+			if err := saveStore.SetConvModel(id, prov, model, preset); err != nil {
 				jsonErr(w, err.Error())
 				return
 			}
@@ -2143,9 +2157,14 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool, ws
 	// 核心思想：主动注入 > 被动工具。Agent 不应依赖自己"想起来"去调用 memory_* 工具，
 	// 而应在每次对话恢复时由系统主动注入上下文，确保 Agent 知道"在干什么、干过什么"。
 	// ★ 2026-08-23 工作区隔离：store/roots 均按会话根（此前 core.Folders 全局切换后串台）。
-	if resumeCtx := agent.BuildResumeContext(convID, message, history, agentMgr.StoreFor(root), []string{root}); resumeCtx != "" {
-		// 注入为系统提示的动态后缀（在 CACHE_BOUNDARY 之后，不影响 KV Cache 前缀）
-		sys += "\n\n" + resumeCtx
+	// ★ 2026-09-03 KV 缓存修复：不再拼入 System（system 是 messages 第一条，其尾部变化
+	//   会在第一条内切断 provider 前缀缓存 → 其后历史全部 miss → 命中率低）。
+	//   改经 LoopOpts.ResumeContext 注入「背景上下文快照」（消息流尾部 append-only）：
+	//   内容每轮变化只断快照之后，system+历史前缀单调延展、命中率稳定。
+	resumeCtx := agent.BuildResumeContext(convID, message, history, agentMgr.StoreFor(root), []string{root})
+	if resumeCtx != "" && os.Getenv("WB_CACHE_DIAG") == "1" {
+		sum := sha256.Sum256([]byte(resumeCtx))
+		log.Printf("[cache-diag] resumeCtx hash=%x len=%d（已迁入背景快照，不再影响 system 前缀）", sum[:4], len(resumeCtx))
 	}
 
 	// ★ 历史精简：跨轮次加载时只保留最近一轮完整交互细节，
@@ -2178,6 +2197,7 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool, ws
 		HistoryOriginal:     originalHistory, // 原始版：供持久化使用，防止压缩版写回历史记录
 		CompressedSummaries: summaries,
 		Autonomous:          autonomous,
+		ResumeContext:       resumeCtx, // ★ 2026-09-03 会话连贯性上下文注入背景快照（不拼 system）
 	}
 }
 

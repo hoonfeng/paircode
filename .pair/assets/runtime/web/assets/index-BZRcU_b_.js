@@ -11241,9 +11241,11 @@
     if (workspaceRoot) params.workspaceRoot = workspaceRoot;
     return apiGet("/conversations/" + encodeURIComponent(convId) + "/messages/count", params);
   }
-  async function setConvModel(convId, provider, model, workspaceRoot = "") {
+  async function setConvModel(convId, provider, model, preset = "", workspaceRoot = "") {
     const qs = workspaceRoot ? "?workspaceRoot=" + encodeURIComponent(workspaceRoot) : "";
-    return apiPut("/conversations/" + encodeURIComponent(convId) + qs, { provider, model });
+    const body = { provider, model };
+    if (preset) body.preset = preset;
+    return apiPut("/conversations/" + encodeURIComponent(convId) + qs, body);
   }
   async function getConversationMeta(convId, workspaceRoot = "") {
     const params = {};

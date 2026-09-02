@@ -63,12 +63,15 @@ type LoopOpts struct {
 	ReviewWhitelist []string
 	// ReviewProvider 审核模型的 Provider（ReviewMode="auto" 时用）。Loop 内部用它懒建 Reviewer。
 	ReviewProvider Provider
-	// StagedToolGroups 首步极简工具面候选组（插件装配链：agentloop registerSettings
-	// → 装配器解析 → 本字段；nil/空 = 内核默认组 tools_staging.go）。
-	StagedToolGroups [][]string
+// PlanProvider 规划模型的 Provider（自主模式用）。当 Autonomous=true 时，Loop 内部使用此
 	// PlanProvider 规划模型的 Provider（自主模式用）。当 Autonomous=true 时，Loop 内部使用此
 	// Provider 执行规划阶段（任务分解），与主 Provider 区分以支持不同模型。
 	PlanProvider Provider
+	// ResumeContext 会话连贯性上下文（任务进度/对话摘要/项目归属/Git 状态/代码图谱等）。
+	// ★ 2026-09-03 KV 缓存修复：此内容每轮变化，若拼入 system（messages 第一条）会在
+	//   system 尾部切断 provider 前缀缓存（其后历史全部 miss）。改为注入「背景上下文快照」
+	//   （消息流尾部，append-only）——变化只断快照之后，前缀单调延展、命中率稳定。
+	ResumeContext string
 }
 
 // GlobalEvent 是全局订阅者收到的事件：携带 convID 用于前端路由。
@@ -260,6 +263,45 @@ func (m *SessionManager) StoreFor(root string) ConversationStore {
 		return m.Store()
 	}
 	return m.storeFor(root)
+}
+
+// FindConversation 跨已打开的 store 查找会话（workspaceRoot 参数缺失/错位时的兜底：
+// 前端旧版本/参数错位可能把配置名传进 workspaceRoot，StoreFor 落空导致误报「会话不存在」）。
+// 返回 (会话元数据, 归属工作区根)；找不到返回 (nil, "")。
+// 只读已缓存的 store，不新建；正常路径（StoreFor 命中）不经过本方法。
+func (m *SessionManager) FindConversation(convID string) (*ConversationMeta, string) {
+	if convID == "" {
+		return nil, ""
+	}
+	// 1. 当前 store 优先
+	if cur := m.Store(); cur != nil {
+		if meta, err := cur.GetConversation(convID); err == nil && meta != nil {
+			m.wsMu.Lock()
+			curRoot := m.curRoot
+			m.wsMu.Unlock()
+			return meta, curRoot
+		}
+	}
+	// 2. 遍历已打开隔离 store（锁内取引用快照，锁外查询——MessageStore 自带 indexMu）
+	m.wsMu.Lock()
+	type cand struct {
+		root string
+		st   *MessageStore
+	}
+	cands := make([]cand, 0, len(m.stores))
+	for root, st := range m.stores {
+		cands = append(cands, cand{root, st})
+	}
+	m.wsMu.Unlock()
+	for _, c := range cands {
+		if c.st == nil {
+			continue
+		}
+		if meta, err := c.st.GetConversation(convID); err == nil && meta != nil {
+			return meta, c.root
+		}
+	}
+	return nil, ""
 }
 
 // RawDBFor 返回指定工作区根的 *sql.DB（codegraph 按会话根路由，防止切换后串库）。
@@ -493,11 +535,13 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 	}
 	loop := loopHandle.Loop()
 
-	// ★ Round3 ③.1：会话已有活动 goal（跨重启持久化恢复）→ 目标上下文注入系统提示
+// ★ Round3 ③.1：会话已有活动 goal（跨重启持久化恢复）→ 目标上下文注入背景快照
 	//   （运行中 create_goal 的场景由续轮循环在下一轮前注入；此处覆盖「重启后首轮」）
+	// ★ 2026-09-03 KV 缓存修复：goal 段含 Rounds（每轮递增），拼 System（messages 第一条）
+	//   会在 system 尾部切断前缀缓存 → 改挂 ResumeContext（经背景快照注入，append-only）。
 	if g := goalManager.Get(opts.WorkspaceRoot, convID); g != nil && g.Active() {
-		if !strings.Contains(loop.System, goalSystemMarker) {
-			loop.System += "\n\n" + goalSystemSection(g)
+		if !strings.Contains(loop.ResumeContext, goalSystemMarker) {
+			loop.ResumeContext += "\n\n" + goalSystemSection(g)
 		}
 	}
 
@@ -870,9 +914,11 @@ func (m *SessionManager) Start(ctx context.Context, convID string, task string, 
 			if g == nil || g.ContinueMessage() == "" {
 				break
 			}
-			// 目标上下文注入系统提示（幂等：marker 已存在不重复追加）
-			if !strings.Contains(loop.System, goalSystemMarker) {
-				loop.System += "\n\n" + goalSystemSection(g)
+// 目标上下文注入背景快照（幂等：marker 已存在不重复追加）
+			// ★ 2026-09-03 KV 缓存修复：goal 段含 Rounds（每轮递增），拼 System（messages
+			//   第一条）会在 system 尾部切断前缀缓存 → 改挂 ResumeContext（背景快照注入）。
+			if !strings.Contains(loop.ResumeContext, goalSystemMarker) {
+				loop.ResumeContext += "\n\n" + goalSystemSection(g)
 			}
 			lmsg := g.ContinueMessage()
 			log.Printf("[session] goal 自动续轮 conv=%s round=%d/%d objective=%q",
