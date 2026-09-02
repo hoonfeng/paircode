@@ -212,13 +212,13 @@
             <div class="chat-input" ref="inputRef" :contenteditable="state.chatLoading ? 'false' : 'true'" :style="{ height: inputHeight + 'px' }" data-placeholder="发送消息到 AI... (Enter 发送, Shift+Enter 换行)" @keydown="onKeydown" @input="onInput" @dragover.prevent @drop="handleDrop" @paste="handlePaste"></div>
             <div class="input-bottom-bar">
               <div class="ibb-btns">
-                <!-- ★ composer 模型选择器（2026-09-01 会话级模型 + 仅显示有 Key 服务商）：
-                     下拉仅显示已在「AI 配置」中设置了 Key 的服务商，按服务商分组展示模型，
-                     选择只写当前会话（PUT /api/conversations/{id}），不改全局设置——
-                     历史对话保持各自模型不被牵连；Key 在「设置 → AI → AI 配置」填写。 -->
+                <!-- ★ composer 模型选择器（2026-09-03 实例驱动）：
+                      下拉 = AI 设置面板（服务商 tab）的服务商实例列表：分组=实例名，
+                      每组模型=该实例内可用模型；选择只写当前会话（PUT /api/conversations/{id}），
+不改全局设置——历史对话保持各自模型不被牵连。 -->
                 <span class="ibb-model">
                   <select v-model="composerModel" class="cmp-sel cmp-model" @change="onCmpModelChange" :title="modelSelectTitle">
-                    <option v-if="!composerGroups.length" value="">（未配置 API Key，请先在「设置 → AI → AI 配置」添加）</option>
+                    <option v-if="!composerGroups.length" value="">（暂无可用服务商实例，请先在「设置 → AI → 服务商」添加）</option>
                     <optgroup v-for="g in composerGroups" :key="g.provider" :label="g.provider">
                       <option v-for="m in g.models" :key="g.provider + '::' + m" :value="g.provider + '::' + m">{{ m }}</option>
                     </optgroup>
@@ -327,32 +327,25 @@ async function runSlashCommand() {
   sendMessage() // 命令输出已注入为系统消息，命令文本照常发送
 }
 
-// ─── composer 模型选择器（★ 2026-09-01 会话级模型 + 仅显示有 Key 的服务商）───
-//   ① Key 在 AI 配置（ai-presets.json）中按预设填写（每条 = 服务商 + Key）；
-//      服务商只维护 地址/模型/参数，不再配置 Key；
-//   ② 下拉仅显示「已配置 Key 的服务商」（composerGroups 从 presets 收集 apiKey 非空的 provider）；
+// ─── composer 模型选择器（★ 2026-09-03 实例驱动）───
+//   ① 数据源 = AI 设置面板（ProviderManager）维护的服务商实例（models.json）：
+//      分组=实例名（卡片名），每组模型=该实例内 models 列表；
+//   ② 所有实例都显示（不再按 AI 配置预设 Key 过滤——Key 缺失的实例选中后由后端在发送时提示）；
 //   ③ 选择只写当前会话（PUT /api/conversations/{id} {provider, model}）——
 //      全局 settings 不动，其他/历史对话的模型不被牵连；
 //   ④ 新会话（无消息且未设模型）自动继承「上次选择」（localStorage），保持体验连续。
 //   ⑤ Key 由后端装配：激活预设携带的 Key 优先，服务商级 Key 仅兜底。
 const LAST_MODEL_KEY = 'paircode.lastPickedModel'
 const modelData = ref(null)          // /api/models 快照（providers/models/providerKeys/…）
-const composerProvider = ref('')     // 当前会话生效的服务商
-const composerModel = ref('')        // 下拉值：'服务商::模型'
-// ★ 2026-09-01 只显示「已配置 Key 的服务商」：Key 在 AI 配置（ai-presets.json）中按预设填写，
-//   服务商只维护 地址/模型/参数。从 presets（携带 Key）收集有 Key 的 provider，过滤下拉分组。
+const composerProvider = ref('')     // 当前会话生效的服务商实例
+const composerModel = ref('')        // 下拉值：'实例名::模型'
+// ★ 2026-09-03 实例驱动：直接遍历 /api/models 的全部 providers（= AI 设置面板服务商实例），
+//   不再用 presets 的 Key 过滤——用户确认设计「AI 面板创建服务商实例，对话选择实例中的模型」。
 const composerGroups = computed(() => {
   const md = modelData.value || {}
   const models = md.models || {}
-  const presets = md.presets || {}
-  // 收集已配置 Key 的服务商集合
-  const keyedProviders = new Set()
-  for (const p of Object.values(presets)) {
-    if (p && p.apiKey && p.provider) keyedProviders.add(p.provider)
-  }
   const out = []
   for (const p of (md.providers || [])) {
-    if (!keyedProviders.has(p)) continue   // ★ 无 Key 的服务商不显示
     const list = models[p] || []
     if (!list.length) continue
     out.push({ provider: p, models: list })
@@ -361,7 +354,7 @@ const composerGroups = computed(() => {
 })
 const modelSelectTitle = computed(() => {
   const cur = parseModelValue(composerModel.value)
-  if (!cur.provider) return '选择模型（仅显示已在 AI 配置中设置了 Key 的服务商；Key 在「设置 → AI → AI 配置」中填写）'
+  if (!cur.provider) return '选择模型（AI 设置面板 → 服务商 中的实例；每个实例列出其内可用模型）'
   return '当前会话模型：' + cur.provider + ' / ' + cur.model + '\n切换只影响当前对话，不改其他对话'
 })
 function parseModelValue(v) {
@@ -385,7 +378,7 @@ function defaultProviderModel() {
     prov = presets[s.preset].provider || prov
     model = presets[s.preset].executeModel || model
   }
-  // 回落：在当前 provider 分组内取首个模型（无 Key 服务商已被 composerGroups 过滤）
+  // 回落：在当前 provider 分组内取首个模型（实例未配模型的分组已被 composerGroups 跳过）
   const groups = composerGroups.value
   if (!prov && groups[0]) prov = groups[0].provider
   if (!model) {
