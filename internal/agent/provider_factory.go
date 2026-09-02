@@ -17,7 +17,8 @@ import (
 // ProviderParams LLM Provider 可装配参数（基线 + 插件覆盖合并后的最终值）。
 type ProviderParams struct {
 	Provider                 string                                     // 当前服务商（装配器按服务商取模型级参数）
-	BaseURL                  string                                     // ★ API 完整请求端点（含 /chat/completions），直接作为请求 URL，不再拼接
+	BaseURL                  string                                     // ★ API 基础地址（不含协议路径；完整端点由 ResolveEndpointURL 按 Protocol 拼接）
+	Protocol                 string                                     // ★ 2026-09-02 LLM 协议（openai-completions/openai-responses/anthropic-messages；空=默认 openai-completions）
 	APIKey                   string                                     // 服务商密钥
 	Model                    string                                     // 主执行模型
 	Temperature              float64                                    // 随机性（-1=不传）
@@ -78,8 +79,53 @@ func ProviderFactoryNow() ProviderFactory {
 // ★ 2026-09-01 Key 回归 AI 配置：API Key 以激活预设携带的 Key 为准（预设 Key 优先），
 //   服务商级 Key（models.json）仅当预设未填 Key 时兜底（旧数据迁移兼容）。
 // ★ 统一模型：不再拆分 规划/审核 模型，PlanModel/ReviewModel 一律等于执行模型。
+// ★ 2026-09-03 会话配置优先：会话记录了配置名（ConversationMeta.Preset）时，
+//   ResolveProviderParamsForConv 按该配置整套展开（含 Key）——修复同服务商
+//   多配置时仅按 provider 猜测 Key 导致取错的问题。
 func ResolveProviderParams() ProviderParams {
 	return ProviderFactoryNow().Apply(resolveProviderBase())
+}
+
+// applyPresetOverrides 把 AI 配置（preset）整套覆盖到当前参数：
+// provider/baseURL/apiKey/model/温度/思考模式/maxTokens/上下文/协议（非空字段才覆盖）。
+// 返回是否生效（配置存在且带 provider 或执行模型）。
+// ★ 2026-09-03 从 resolveProviderBase 提取，供「全局激活预设」与「会话配置」两路复用。
+func applyPresetOverrides(cur ProviderParams, p core.AiPreset) ProviderParams {
+	if p.Provider == "" && p.ExecuteModel == "" {
+		return cur // 配置不存在/无效 → 不覆盖
+	}
+	if p.Provider != "" {
+		cur.Provider = p.Provider
+		// 服务商变更 → 协议以新服务商为准（预设未显式指定协议时）
+		cur.Protocol = core.GetProviderProtocol(p.Provider)
+		cur.ProviderContextMaxTokens = core.GetProviderContextMaxToken(p.Provider)
+	}
+	if p.BaseURL != "" {
+		cur.BaseURL = p.BaseURL
+	}
+	if p.APIKey != "" {
+		cur.APIKey = p.APIKey
+	}
+	if p.ExecuteModel != "" {
+		cur.Model = p.ExecuteModel
+	}
+	if p.Temperature != "" {
+		cur.Temperature = core.ParseTempOr(p.Temperature, -1)
+	}
+	if p.ThinkingMode != "" {
+		cur.ThinkingMode = p.ThinkingMode
+	}
+	if p.MaxTokens > 0 {
+		cur.MaxTokens = p.MaxTokens
+	}
+	if p.ContextMaxTokens > 0 {
+		cur.ContextMaxTokens = p.ContextMaxTokens
+	}
+	// 预设可显式指定协议（覆盖服务商级；空=继承服务商）
+	if p.Protocol != "" {
+		cur.Protocol = p.Protocol
+	}
+	return cur
 }
 
 // resolveProviderBase 解析装配器之前的基线参数（会话级覆盖在此之后叠加）。
@@ -93,57 +139,15 @@ func resolveProviderBase() ProviderParams {
 	thinking := core.Settings.ThinkingMode
 	maxTokens := core.Settings.MaxTokens
 	context := core.Settings.ContextMaxTokens
+	protocol := core.GetProviderProtocol(provider) // ★ 2026-09-02 协议基线：服务商级（models.json）
 
 	// ① 激活预设展开（settings.preset → ai-presets.json，整套覆盖）
 	// ★ 2026-09-01 Key 回归 AI 配置：预设携带 API Key（AiPreset.APIKey），
 	//   装配时预设 Key 优先；旧预设里无 Key 的走服务商级兜底。
-	if name := core.Settings.Preset; name != "" {
-		if p := core.GetPreset(name); p.Provider != "" || p.ExecuteModel != "" {
-			if p.Provider != "" {
-				provider = p.Provider
-			}
-			if p.BaseURL != "" {
-				baseURL = p.BaseURL
-			}
-			if p.APIKey != "" {
-				apiKey = p.APIKey
-			}
-			if p.ExecuteModel != "" {
-				model = p.ExecuteModel
-			}
-			if p.Temperature != "" {
-				temperature = core.ParseTempOr(p.Temperature, -1)
-			}
-			if p.ThinkingMode != "" {
-				thinking = p.ThinkingMode
-			}
-			if p.MaxTokens > 0 {
-				maxTokens = p.MaxTokens
-			}
-			if p.ContextMaxTokens > 0 {
-				context = p.ContextMaxTokens
-			}
-		}
-	}
-	// ② settings 顶层兜底（兼容旧配置）
-	// ③ Key 来源：预设（AI 配置）已在 ① 中优先应用；服务商级 Key 仅当预设
-	//    未填 Key 时兜底（旧数据迁移，models.json 里可能还存有旧服务商 Key）。
-	if baseURL == "" {
-		if p := core.GetProviderBaseURL(provider); p != "" {
-			baseURL = p
-		}
-	}
-	if apiKey == "" {
-		if k := core.GetProviderAPIKey(provider); k != "" {
-			apiKey = k
-		}
-	}
-	// ★ 统一模型：规划/审核 一律用执行模型（不拆分）
-	planModel := model
-	reviewModel := model
 	cur := ProviderParams{
 		Provider:                 provider,
 		BaseURL:                  baseURL,
+		Protocol:                 protocol,
 		APIKey:                   apiKey,
 		Model:                    model,
 		Temperature:              temperature,
@@ -151,12 +155,30 @@ func resolveProviderBase() ProviderParams {
 		ThinkingMode:             thinking,
 		ContextMaxTokens:         context,
 		ProviderContextMaxTokens: core.GetProviderContextMaxToken(provider), // ★ 服务商级默认上下文（模型级未配置时兜底）
-		PlanModel:                planModel,
-		ReviewModel:              reviewModel,
 		ModelParams:              core.Settings.ModelParams,
 	}
+	if name := core.Settings.Preset; name != "" {
+		if p := core.GetPreset(name); p.Provider != "" || p.ExecuteModel != "" {
+			cur = applyPresetOverrides(cur, p)
+		}
+	}
+	// ② settings 顶层兜底（兼容旧配置）
+	// ③ Key 来源：预设（AI 配置）已在 ① 中优先应用；服务商级 Key 仅当预设
+	//    未填 Key 时兜底（旧数据迁移，models.json 里可能还存有旧服务商 Key）。
+	if cur.BaseURL == "" {
+		if p := core.GetProviderBaseURL(cur.Provider); p != "" {
+			cur.BaseURL = p
+		}
+	}
+	if cur.APIKey == "" {
+		if k := core.GetProviderAPIKey(cur.Provider); k != "" {
+			cur.APIKey = k
+		}
+	}
+	// ★ 统一模型：规划/审核 一律用执行模型（不拆分）
+	cur.PlanModel = cur.Model
+	cur.ReviewModel = cur.Model
 	return cur
-
 }
 
 // ConfiguredProvider 是否已配好可用 Provider（业务层用，替代 core.Configured 的 AI 检查）。
@@ -174,46 +196,64 @@ func ConfiguredProvider() bool {
 //
 // convModelLookup 由 web 层注入（按会话根路由 store），agent 包不直接依赖
 // SessionManager，保持解耦；未注入时会话级解析退化为全局默认。
+// ★ 2026-09-03 三元组：provider/model/preset（配置名——装配按配置整套展开）。
 var (
 	convModelMu     sync.RWMutex
-	convModelLookup func(convID, wsRoot string) (provider, model string)
+	convModelLookup func(convID, wsRoot string) (provider, model, preset string)
 )
 
 // SetConvModelLookup 注入会话级模型查询钩子（web 层启动时调用）。
-func SetConvModelLookup(fn func(convID, wsRoot string) (provider, model string)) {
+func SetConvModelLookup(fn func(convID, wsRoot string) (provider, model, preset string)) {
 	convModelMu.Lock()
 	convModelLookup = fn
 	convModelMu.Unlock()
 }
 
-// LookupConvModel 查询会话级模型（provider, model；均空=未设置）。
-func LookupConvModel(convID, wsRoot string) (string, string) {
+// LookupConvModel 查询会话级模型（provider, model, preset；全空=未设置）。
+func LookupConvModel(convID, wsRoot string) (string, string, string) {
 	if convID == "" {
-		return "", ""
+		return "", "", ""
 	}
 	convModelMu.RLock()
 	fn := convModelLookup
 	convModelMu.RUnlock()
 	if fn == nil {
-		return "", ""
+		return "", "", ""
 	}
 	return fn(convID, wsRoot)
 }
 
 // ResolveProviderParamsForConv 解析会话级 Provider 参数：
-// 全局默认（ResolveProviderParams）→ 会话选定的 服务商/模型 覆盖 → 装配器再覆盖。
+// 全局默认（ResolveProviderParams）→ 会话选定的 配置/服务商/模型 覆盖 → 装配器再覆盖。
 // 会话未设置模型时与 ResolveProviderParams 完全一致（零行为变化）。
+// ★ 2026-09-03 会话记录配置名（preset）→ 按该配置整套展开（含 Key/协议/参数），
+//   优先于全局激活预设与「按服务商猜测 Key」——修复同服务商多配置取错 Key：
+//   此前会话只存 provider/model，装配时 GetPresetAPIKeyForProvider 遍历 map
+//   （无序）取同服务商任一配置的 Key，用户所选配置的 Key 根本不参与。
 func ResolveProviderParamsForConv(convID, wsRoot string) ProviderParams {
-	provider, model := LookupConvModel(convID, wsRoot)
-	if provider == "" && model == "" {
+	provider, model, preset := LookupConvModel(convID, wsRoot)
+	if provider == "" && model == "" && preset == "" {
 		return ResolveProviderParams()
 	}
 	cur := resolveProviderBase()
+	// ① 会话配置名（选中配置）：整套展开，覆盖全局激活预设的对应字段
+	if preset != "" {
+		if p := core.GetPreset(preset); p.Provider != "" || p.ExecuteModel != "" {
+			cur = applyPresetOverrides(cur, p)
+			return ProviderFactoryNow().Apply(cur)
+		}
+		// 配置已被删除 → 回落下方按服务商匹配（provider/model 仍在会话里）
+	}
+	// ② 无配置名（历史会话/旧链路）：按服务商+模型覆盖
 	if provider != "" {
 		cur.Provider = provider
 		// 服务商切换 → BaseURL 取该服务商配置；Key 优先取该服务商预设中的 Key（AI 配置），服务商级兜底
 		if u := core.GetProviderBaseURL(provider); u != "" {
 			cur.BaseURL = u
+		}
+		// ★ 2026-09-02 服务商切换 → 协议取该服务商协议（服务商协议非空时覆盖；旧数据无协议字段则保留）
+		if p := core.GetProviderProtocol(provider); p != "" {
+			cur.Protocol = p
 		}
 		if k := core.GetPresetAPIKeyForProvider(provider); k != "" {
 			cur.APIKey = k

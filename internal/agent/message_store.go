@@ -162,8 +162,12 @@ type ConversationMeta struct {
 	// ★ 2026-08-31 会话级模型路由：模型选择只作用于本会话（此前切模型写全局
 	//   settings，导致所有历史对话的模型一起被改）。空=沿用全局默认配置。
 	//   Provider=服务商名（models.json 的键），Model=执行模型名。
+	//   ★ 2026-09-03 Preset=所选 AI 配置名（ai-presets.json 的键）——装配时按配置名
+	//   整套展开（含该配置的 Key）；仅存 provider/model 时 Key 只能按服务商猜测
+	//   （同服务商多配置会取错 Key）。空=未设（回落全局/按服务商匹配）。
 	Provider string `json:"provider,omitempty"`
 	Model    string `json:"model,omitempty"`
+	Preset   string `json:"preset,omitempty"`
 	// ★ 2026-08-31 会话级审核模式：会话内切换审核模式只影响本会话并持久化
 	//   （空=沿用全局/工作区配置；此前切换写全局 settings 串扰其他会话且重启丢失）。
 	ReviewMode string `json:"reviewMode,omitempty"`
@@ -1607,10 +1611,11 @@ func (s *MessageStore) SetCtxStats(convID string, stats *Usage) error {
 	return nil
 }
 
-// SetConvModel 设置会话级模型路由（服务商 + 执行模型）。
+// SetConvModel 设置会话级模型路由（服务商 + 执行模型 + 配置名）。
 // ★ 2026-08-31：模型切换只改本会话，不动全局 settings、不影响其他/历史对话。
-// provider/model 皆空视为清除（回落全局默认）。不更新 UpdatedAt（避免打乱列表排序）。
-func (s *MessageStore) SetConvModel(convID, provider, model string) error {
+// ★ 2026-09-03 增加 preset（AI 配置名）：装配时按配置整套展开（含该配置 Key）。
+// provider/model/preset 全空视为清除（回落全局默认）。不更新 UpdatedAt（避免打乱列表排序）。
+func (s *MessageStore) SetConvModel(convID, provider, model, preset string) error {
 	s.indexMu.Lock()
 	defer s.indexMu.Unlock()
 
@@ -1620,11 +1625,12 @@ func (s *MessageStore) SetConvModel(convID, provider, model string) error {
 	}
 	for i := range metas {
 		if metas[i].ID == convID {
-			if metas[i].Provider == provider && metas[i].Model == model {
+			if metas[i].Provider == provider && metas[i].Model == model && metas[i].Preset == preset {
 				return nil
 			}
 			metas[i].Provider = provider
 			metas[i].Model = model
+			metas[i].Preset = preset
 			if err := s.saveIndex(metas); err != nil {
 				return fmt.Errorf("SetConvModel: 写入 index 失败: %w", err)
 			}

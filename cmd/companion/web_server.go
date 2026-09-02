@@ -123,16 +123,17 @@ func init() {
 	agent.SetNodeBridgeManager(agentMgr)
 	// ★ 2026-08-31 会话级模型路由：agent 包按会话解析 Provider 参数时，
 	//   经此钩子读会话元数据里记录的 服务商/模型（切模型只改本会话）。
-	agent.SetConvModelLookup(func(convID, wsRoot string) (string, string) {
+	//   ★ 2026-09-03 附带配置名 preset：装配按配置整套展开（含该配置 Key）。
+	agent.SetConvModelLookup(func(convID, wsRoot string) (string, string, string) {
 		store := agentMgr.StoreFor(wsRoot)
 		if store == nil {
-			return "", ""
+			return "", "", ""
 		}
 		meta, err := store.GetConversation(convID)
 		if err != nil || meta == nil {
-			return "", ""
+			return "", "", ""
 		}
-		return meta.Provider, meta.Model
+		return meta.Provider, meta.Model, meta.Preset
 	})
 	// ★ 2026-08-31 会话级审核模式桥：/api/tools/review?convId=… 读写会话级模式
 	//   （会话元数据持久化 + 运行中 Loop 实时更新；未注入时 handler 回落工作区级）。
@@ -1208,8 +1209,10 @@ func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Reques
 			Title string `json:"title"`
 			// ★ 2026-08-31 会话级模型：切模型只改本会话（provider+model 一起提交；
 			//   两者均为空串 = 清除会话覆盖 → 回落全局默认配置）。
+			// ★ 2026-09-03 preset=所选 AI 配置名（装配按配置整套展开，含该配置 Key）。
 			Provider   *string `json:"provider,omitempty"`
 			Model      *string `json:"model,omitempty"`
+			Preset     *string `json:"preset,omitempty"`
 			ClearModel bool    `json:"clearModel,omitempty"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -1223,15 +1226,15 @@ func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Reques
 			}
 		}
 		if req.ClearModel {
-			if err := store.SetConvModel(id, "", ""); err != nil {
+			if err := store.SetConvModel(id, "", "", ""); err != nil {
 				jsonErr(w, err.Error())
 				return
 			}
-		} else if req.Provider != nil || req.Model != nil {
+		} else if req.Provider != nil || req.Model != nil || req.Preset != nil {
 			meta, _ := store.GetConversation(id)
-			prov, model := "", ""
+			prov, model, preset := "", "", ""
 			if meta != nil {
-				prov, model = meta.Provider, meta.Model
+				prov, model, preset = meta.Provider, meta.Model, meta.Preset
 			}
 			if req.Provider != nil {
 				prov = strings.TrimSpace(*req.Provider)
@@ -1239,11 +1242,14 @@ func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Reques
 			if req.Model != nil {
 				model = strings.TrimSpace(*req.Model)
 			}
-			if err := store.SetConvModel(id, prov, model); err != nil {
+			if req.Preset != nil {
+				preset = strings.TrimSpace(*req.Preset)
+			}
+			if err := store.SetConvModel(id, prov, model, preset); err != nil {
 				jsonErr(w, err.Error())
 				return
 			}
-			log.Printf("[conv-model] 会话 %s 模型切换为 %s / %s（仅本会话生效）", id, prov, model)
+			log.Printf("[conv-model] 会话 %s 模型切换为 %s / %s（配置 %s，仅本会话生效）", id, prov, model, preset)
 		}
 		jsonResp(w, map[string]any{"ok": true})
 

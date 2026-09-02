@@ -541,10 +541,14 @@ async function getMessagesCount(convId, workspaceRoot = '') {
 
 // ─── 会话级模型（★ 2026-08-31）─────────────────────────
 // setConvModel 设置指定会话的模型路由（只影响该会话，不动全局设置/其他对话）
-async function setConvModel(convId, provider, model, workspaceRoot = '') {
+// ★ 2026-09-03 preset=所选 AI 配置名：装配按配置整套展开（含该配置 Key），
+//   修复同服务商多配置时后端只能按服务商猜 Key 取错的问题。
+async function setConvModel(convId, provider, model, preset = '', workspaceRoot = '') {
 
   const qs = workspaceRoot ? ('?workspaceRoot=' + encodeURIComponent(workspaceRoot)) : ''
-  return apiPut('/conversations/' + encodeURIComponent(convId) + qs, { provider, model })
+  const body = { provider, model }
+  if (preset) body.preset = preset
+  return apiPut('/conversations/' + encodeURIComponent(convId) + qs, body)
 
 }
 

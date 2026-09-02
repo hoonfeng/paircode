@@ -212,15 +212,15 @@
             <div class="chat-input" ref="inputRef" :contenteditable="state.chatLoading ? 'false' : 'true'" :style="{ height: inputHeight + 'px' }" data-placeholder="发送消息到 AI... (Enter 发送, Shift+Enter 换行)" @keydown="onKeydown" @input="onInput" @dragover.prevent @drop="handleDrop" @paste="handlePaste"></div>
             <div class="input-bottom-bar">
               <div class="ibb-btns">
-                <!-- ★ composer 模型选择器（2026-09-03 实例驱动）：
-                      下拉 = AI 设置面板（服务商 tab）的服务商实例列表：分组=实例名，
-                      每组模型=该实例内可用模型；选择只写当前会话（PUT /api/conversations/{id}），
-不改全局设置——历史对话保持各自模型不被牵连。 -->
+                <!-- ★ composer 模型选择器（2026-09-03 配置列表驱动）：
+                       下拉 = AI 设置面板「AI 配置」列表（ai-presets.json）：分组=配置名，
+                       每组模型 = 该配置对应服务商（models.json）的可用模型列表；
+                       选中配置只写当前会话（PUT /api/conversations/{id}），不改全局设置——历史对话保持各自模型不被牵连。 -->
                 <span class="ibb-model">
                   <select v-model="composerModel" class="cmp-sel cmp-model" @change="onCmpModelChange" :title="modelSelectTitle">
-                    <option v-if="!composerGroups.length" value="">（暂无可用服务商实例，请先在「设置 → AI → 服务商」添加）</option>
-                    <optgroup v-for="g in composerGroups" :key="g.provider" :label="g.provider">
-                      <option v-for="m in g.models" :key="g.provider + '::' + m" :value="g.provider + '::' + m">{{ m }}</option>
+                    <option v-if="!composerItems.length" value="">（暂无可用 AI 配置，请先在「设置 → AI → AI 配置」添加）</option>
+                    <optgroup v-for="g in composerItems" :key="g.name" :label="g.name">
+                      <option v-for="m in g.models" :key="g.name + '::' + m" :value="'preset::' + g.name + '::' + m" :title="g.provider + ' / ' + m">{{ m }}</option>
                     </optgroup>
                   </select>
                 </span>
@@ -327,44 +327,73 @@ async function runSlashCommand() {
   sendMessage() // 命令输出已注入为系统消息，命令文本照常发送
 }
 
-// ─── composer 模型选择器（★ 2026-09-03 实例驱动）───
-//   ① 数据源 = AI 设置面板（ProviderManager）维护的服务商实例（models.json）：
-//      分组=实例名（卡片名），每组模型=该实例内 models 列表；
-//   ② 所有实例都显示（不再按 AI 配置预设 Key 过滤——Key 缺失的实例选中后由后端在发送时提示）；
-//   ③ 选择只写当前会话（PUT /api/conversations/{id} {provider, model}）——
+// ─── composer 模型选择器（★ 2026-09-03 配置列表驱动）───
+//   ① 数据源 = AI 设置面板「AI 配置」列表（ai-presets.json，PresetManager 维护）：
+//      分组=配置名（命名快照：服务商 + Key），每组模型 = 该配置对应服务商
+//      （models.json）内的可用模型列表——模型按会话在对话面板中选，不在配置中指定；
+//   ② 选择只写当前会话（PUT /api/conversations/{id} {provider, model}）——
 //      全局 settings 不动，其他/历史对话的模型不被牵连；
-//   ④ 新会话（无消息且未设模型）自动继承「上次选择」（localStorage），保持体验连续。
-//   ⑤ Key 由后端装配：激活预设携带的 Key 优先，服务商级 Key 仅兜底。
+//   ③ 配置对应服务商暂无模型（服务商面板未配）→ 该分组跳过；
+//   ④ 新会话（无消息且未设模型）自动继承「上次选择」（localStorage），保持体验连续；
+//   ⑤ 会话已有模型时逆映射回配置名分组显示（旧会话/自定义 provider::model 仍兼容）。
 const LAST_MODEL_KEY = 'paircode.lastPickedModel'
-const modelData = ref(null)          // /api/models 快照（providers/models/providerKeys/…）
-const composerProvider = ref('')     // 当前会话生效的服务商实例
-const composerModel = ref('')        // 下拉值：'实例名::模型'
-// ★ 2026-09-03 实例驱动：直接遍历 /api/models 的全部 providers（= AI 设置面板服务商实例），
-//   不再用 presets 的 Key 过滤——用户确认设计「AI 面板创建服务商实例，对话选择实例中的模型」。
-const composerGroups = computed(() => {
+const modelData = ref(null)          // /api/models + presets 快照
+const composerProvider = ref('')     // 当前会话生效的服务商
+const composerModel = ref('')        // 下拉值：'preset::<配置名>::<模型>'（配置分组）或旧编码 'provider::model'
+// ★ 2026-09-03 配置列表驱动：直接遍历 /api/ai-presets 的配置（= AI 设置面板「AI 配置」列表），
+//   分组=配置名，每组模型取该配置 provider 在 models.json 的模型列表。
+const composerItems = computed(() => {
   const md = modelData.value || {}
+  const presets = md.presets || {}
   const models = md.models || {}
+  const names = Object.keys(presets)
+  if (!names.length) return []
+  // ★ 激活预设（settings.preset）置顶，其余按配置列表原序
+  const s = state.settings || {}
+  const order = (s.preset && names.includes(s.preset)) ? [s.preset, ...names.filter(n => n !== s.preset)] : names
   const out = []
-  for (const p of (md.providers || [])) {
-    const list = models[p] || []
-    if (!list.length) continue
-    out.push({ provider: p, models: list })
+  for (const n of order) {
+    const p = presets[n] || {}
+    const list = models[p.provider] || []
+    if (!list.length) continue   // 配置对应服务商暂无模型（服务商面板未配）→ 跳过该分组
+    out.push({ name: n, provider: p.provider || '', models: list, hasKey: !!p.apiKey })
   }
   return out
 })
 const modelSelectTitle = computed(() => {
   const cur = parseModelValue(composerModel.value)
-  if (!cur.provider) return '选择模型（AI 设置面板 → 服务商 中的实例；每个实例列出其内可用模型）'
+  if (!cur.provider) return '选择模型（AI 设置面板 → AI 配置 分组；每组 = 该配置服务商的可用模型）'
   return '当前会话模型：' + cur.provider + ' / ' + cur.model + '\n切换只影响当前对话，不改其他对话'
 })
+// 下拉值解析：'preset::<配置名>::<模型>'（配置分组）或旧编码 'provider::model'（历史会话/自定义）
+// ★ 2026-09-03 返回 preset（配置名）——切换时一并写入会话元数据，装配按配置整套展开。
 function parseModelValue(v) {
   const s = String(v || '')
+  if (s.startsWith('preset::')) {
+    const rest = s.slice(7)
+    const i = rest.indexOf('::')
+    const name = i < 0 ? rest : rest.slice(0, i)
+    const model = i < 0 ? '' : rest.slice(i + 2)
+    const p = ((modelData.value || {}).presets || {})[name]
+    if (p) return { preset: name, provider: p.provider || '', model }
+    return { preset: name, provider: '', model }
+  }
   const i = s.indexOf('::')
-  if (i < 0) return { provider: '', model: s }
-  return { provider: s.slice(0, i), model: s.slice(i + 2) }
+  if (i < 0) return { preset: '', provider: '', model: s }
+  return { preset: '', provider: s.slice(0, i), model: s.slice(i + 2) }
+}
+// 会话 provider → 配置名（逆映射）：provider 匹配的配置分组；找不到返回 ''
+function presetNameOf(provider, model) {
+  const presets = ((modelData.value || {}).presets) || {}
+  for (const n of Object.keys(presets)) {
+    if ((presets[n] || {}).provider === provider) return n
+  }
+  return ''
 }
 function modelValueOf(provider, model) {
   if (!provider && !model) return ''
+  const n = presetNameOf(provider, model)
+  if (n) return 'preset::' + n + '::' + model
   return String(provider || '') + '::' + String(model || '')
 }
 // 全局默认（settings/preset）解析出的 服务商+模型：会话未设模型时下拉显示它
@@ -378,33 +407,35 @@ function defaultProviderModel() {
     prov = presets[s.preset].provider || prov
     model = presets[s.preset].executeModel || model
   }
-  // 回落：在当前 provider 分组内取首个模型（实例未配模型的分组已被 composerGroups 跳过）
-  const groups = composerGroups.value
-  if (!prov && groups[0]) prov = groups[0].provider
+  // 回落：当前配置分组中取首项（模型取该服务商 models 列表首个）
+  const items = composerItems.value
+  if (!prov && items[0]) prov = items[0].provider
   if (!model) {
-    const g = groups.find(x => x.provider === prov) || groups[0]
-    if (g) model = g.models[0]
+    const it = items.find(x => x.provider === prov) || items[0]
+    if (it && it.models.length) model = it.models[0]
   }
   return { provider: prov, model }
 }
 async function loadModelData() {
   try {
     const md = await api.getModels()
-    // ★ 2026-09-01 附带 ai-presets（激活预设解析 provider/model 用；Key 在预设中携带）
+    // ★ 2026-09-03 附带 ai-presets（配置列表数据源：下拉按配置展示 + 激活预设解析 provider/model）
     const pr = await api.getAiPresets().catch(() => null)
     md.presets = (pr && pr.presets) || null
     modelData.value = md
   } catch {}
 }
 // 依据当前会话元数据同步下拉（会话有自己的模型 → 显示它；否则显示全局默认）
+// ★ 2026-09-03 会话记录了配置名（meta.preset）→ 直接按配置编码显示（不再反向猜）。
 async function syncComposerModelFromConv() {
   const convId = state.currentConvId
-  let prov = '', model = ''
+  let prov = '', model = '', preset = ''
   if (convId) {
     try {
       const meta = await api.getConversationMeta(convId, state.workspaceRoot || '')
       prov = (meta && meta.provider) || ''
       model = (meta && meta.model) || ''
+      preset = (meta && meta.preset) || ''
     } catch {}
   }
   if (!prov && !model) {
@@ -412,40 +443,45 @@ async function syncComposerModelFromConv() {
     const last = readLastPicked()
     const msgCount = (state.messages && state.messages.length) || 0
     if (convId && last.provider && last.model && msgCount === 0) {
-      prov = last.provider; model = last.model
-      try { await api.setConvModel(convId, prov, model, state.workspaceRoot || '') } catch {}
+      prov = last.provider; model = last.model; preset = last.preset || ''
+      try { await api.setConvModel(convId, prov, model, preset, state.workspaceRoot || '') } catch {}
     } else {
       const d = defaultProviderModel()
       prov = d.provider; model = d.model
     }
   }
   composerProvider.value = prov
-  composerModel.value = modelValueOf(prov, model)
+  // 会话记录了配置名且该配置仍存在 → 直接按配置编码
+  if (preset && ((modelData.value || {}).presets || {})[preset]) {
+    composerModel.value = 'preset::' + preset + '::' + model
+  } else {
+    composerModel.value = modelValueOf(prov, model)
+  }
 }
 function readLastPicked() {
   try {
     const raw = window.localStorage && window.localStorage.getItem(LAST_MODEL_KEY)
-    if (!raw) return { provider: '', model: '' }
+    if (!raw) return { provider: '', model: '', preset: '' }
     const o = JSON.parse(raw)
-    return { provider: o.provider || '', model: o.model || '' }
-  } catch { return { provider: '', model: '' } }
+    return { provider: o.provider || '', model: o.model || '', preset: o.preset || '' }
+  } catch { return { provider: '', model: '', preset: '' } }
 }
-function writeLastPicked(provider, model) {
-  try { window.localStorage && window.localStorage.setItem(LAST_MODEL_KEY, JSON.stringify({ provider, model })) } catch {}
+function writeLastPicked(provider, model, preset) {
+  try { window.localStorage && window.localStorage.setItem(LAST_MODEL_KEY, JSON.stringify({ provider, model, preset: preset || '' })) } catch {}
 }
 function initComposerModel() {
   syncComposerModelFromConv()
 }
-// 切换模型 = 只写当前会话（不动全局 settings）
+// 切换模型 = 只写当前会话（不动全局 settings；★ 2026-09-03 连同配置名一起写入）
 async function onCmpModelChange() {
-  const { provider, model } = parseModelValue(composerModel.value)
+  const { provider, model, preset } = parseModelValue(composerModel.value)
   if (!provider || !model) return
   const convId = state.currentConvId
   composerProvider.value = provider
-  writeLastPicked(provider, model)
+  writeLastPicked(provider, model, preset)
   if (!convId) return   // 尚无会话：记住选择，新建会话时写入
   try {
-    await api.setConvModel(convId, provider, model, state.workspaceRoot || '')
+    await api.setConvModel(convId, provider, model, preset, state.workspaceRoot || '')
     window.$toast && window.$toast('本对话已切换为 ' + provider + ' / ' + model, 'success')
   } catch (e) {
     window.$toast && window.$toast('模型切换失败: ' + (e.message || e), 'error')
