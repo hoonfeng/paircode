@@ -45,12 +45,16 @@ func mkVisibilityReg() *Registry {
 	return reg
 }
 
-// mkVisibilityHost 构造带临时工作区工具集的 PluginHost：
+// mkVisibilityHost 构造带临时全局工具集的 PluginHost：
 // default.json 声明 tool-foo 插件（工具经 pluginTools 模拟注册）+ builtin:core 内置组。
+// ★ 2026-09-04 工具集全局化：全局工具集目录重定向到临时目录（测试隔离），
+//   NewPluginHost 仅保留 root 用于其他上下文（工作区隔离语义已由全局通用集合取代）。
 func mkVisibilityHost(t *testing.T, reg *Registry) (*PluginHost, string) {
 	t.Helper()
 	root := t.TempDir()
-	tsDir := filepath.Join(root, ".pair", "toolsets")
+	SetGlobalToolsetDirForTest(t.TempDir())
+	t.Cleanup(func() { SetGlobalToolsetDirForTest(testGlobalToolsetDir) })
+	tsDir := globalToolsetDir()
 	if err := os.MkdirAll(tsDir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -154,63 +158,35 @@ func TestApplyToolsetVisibilityFilter_HarnessModeSkips(t *testing.T) {
 }
 
 func TestEnsureDefaultWorkspaceToolset(t *testing.T) {
+	SetGlobalToolsetDirForTest(t.TempDir())
+	t.Cleanup(func() { SetGlobalToolsetDirForTest(testGlobalToolsetDir) })
 	root := t.TempDir()
-	// 空工作区 → 生成基础工具集
+	// 空工具集目录 → 播种预置模式（default 应生成，含内置组条目）
 	if err := ensureDefaultWorkspaceToolset(nil, root); err != nil {
 		t.Fatal(err)
 	}
-	ts, err := loadToolset(root, toolsetProject, "default")
+	ts, err := loadToolset("", toolsetProject, "default")
 	if err != nil {
 		t.Fatalf("default.json 应已生成: %v", err)
 	}
-	if len(ts.Plugins) != 1 || ts.Plugins[0].Builtin != "system" {
-		t.Fatalf("基础工具集应含 1 个 builtin:system 条目，实际 %+v", ts.Plugins)
-	}
-	want := []string{"read", "write", "edit", "glob", "grep", "bash", "str_replace_editor", "run_code"}
-	got := ts.Plugins[0].Tools
-	if len(got) != len(want) {
-		t.Fatalf("基础工具应 %v，实际 %v", want, got)
+	if len(ts.Plugins) == 0 {
+		t.Fatalf("预置 default 应含条目，实际 %+v", ts.Plugins)
 	}
 	// 幂等：再次调用不覆盖/不报错
 	if err := ensureDefaultWorkspaceToolset(nil, root); err != nil {
 		t.Fatal(err)
 	}
-	// 已有项目工具集（非 builtin）→ 不生成新内容
+	// 已有预置 default → 不生成新内容（不再有工作区隔离语义）
 	root2 := t.TempDir()
-	os.MkdirAll(filepath.Join(root2, ".pair", "toolsets"), 0755)
-	custom := Toolset{Name: "custom", Plugins: []ToolsetPlugin{{Name: "p1"}}}
-	data, _ := json.Marshal(custom)
-	os.WriteFile(filepath.Join(root2, ".pair", "toolsets", "custom.json"), data, 0644)
 	if err := ensureDefaultWorkspaceToolset(nil, root2); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := loadToolset(root2, toolsetProject, "default"); err == nil {
-		t.Error("已有项目工具集时不应生成 default.json")
-	}
-	// 只有旧版 builtin.json → 迁移（并入 default 后删除旧文件）→ 生成 default.json
-	root3 := t.TempDir()
-	os.MkdirAll(filepath.Join(root3, ".pair", "toolsets"), 0755)
-	os.WriteFile(filepath.Join(root3, ".pair", "toolsets", "builtin.json"), []byte(`{"name":"builtin","plugins":[{"name":"builtin:memory","builtin":"memory","tools":["memory_write"]}]}`), 0644)
-	if err := ensureDefaultWorkspaceToolset(nil, root3); err != nil {
-		t.Fatal(err)
-	}
-	ts3, err := loadToolset(root3, toolsetProject, "default")
-	if err != nil {
-		t.Fatal("仅旧版 builtin.json 时应生成 default.json")
-	}
-	// 旧文件条目并入 default
-	found := false
-	for _, p := range ts3.Plugins {
-		if p.Builtin == "memory" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Errorf("旧版 builtin.json 的 memory 条目应并入 default，实际 %+v", ts3.Plugins)
-	}
-	if _, err := os.Stat(filepath.Join(root3, ".pair", "toolsets", "builtin.json")); !os.IsNotExist(err) {
-		t.Error("迁移后旧版 builtin.json 应被删除")
+	// ★ 2026-09-04：工具集已全局化——root2 与 root 共用同一全局目录，
+	//   default 已存在（播种幂等），再次调用不重复生成。
+	if ts2, err := loadToolset("", toolsetProject, "default"); err != nil {
+		t.Fatal("default 应全局唯一存在")
+	} else if len(ts2.Plugins) != len(ts.Plugins) {
+		t.Errorf("default 幂等不变量被破坏：%d → %d", len(ts.Plugins), len(ts2.Plugins))
 	}
 }
 
@@ -218,11 +194,13 @@ func TestEnsureDefaultWorkspaceToolset(t *testing.T) {
 // 框架本身提供的工具」——无工具集先自动创建基础工具集；有工具集按声明收敛。
 // ★ 2026-08-17：有配置只暴露配置里的（+框架自举工具）；未声明的插件/内置包工具禁用。
 func TestApplyWorkspaceToolsetWhitelist(t *testing.T) {
+	SetGlobalToolsetDirForTest(t.TempDir())
+	t.Cleanup(func() { SetGlobalToolsetDirForTest(testGlobalToolsetDir) })
 	ph, root := mkBuiltinHost(t)
 	reg := ph.Context().Tools
-	// 无工具集：白名单应用前应自动创建基础工具集
+	// 无工具集：白名单应用前应自动创建基础工具集（播种预置 default）
 	ApplyWorkspaceToolsetWhitelist(ph, reg, root)
-	if !hasWorkspaceToolsets(root) {
+	if !hasWorkspaceToolsets() {
 		t.Fatal("无工具集时应自动创建基础工具集")
 	}
 	// 框架自举工具恒可用：SystemTool（update_tasks）、cordis_*、toolset_*
@@ -232,7 +210,7 @@ func TestApplyWorkspaceToolsetWhitelist(t *testing.T) {
 		}
 	}
 	// 极简核心可用（默认工具集 system 条目声明）
-	for _, tn := range []string{"read", "write", "edit", "glob", "grep", "bash", "str_replace_editor", "run_code"} {
+	for _, tn := range []string{"read", "write", "edit", "glob", "grep", "bash", "run_code"} {
 		if !reg.IsEnabled(tn) {
 			t.Errorf("核心工具 %s 应可用（基础工具集声明）", tn)
 		}
@@ -248,5 +226,69 @@ func TestApplyWorkspaceToolsetWhitelist(t *testing.T) {
 	ApplyWorkspaceToolsetWhitelist(ph, reg, root)
 	if !reg.IsEnabled("codegraph_search") {
 		t.Error("加入 codegraph 后 codegraph_search 应可用")
+	}
+}
+
+// TestApplyConvToolsetWhitelist 会话级工具集（通用集合）白名单：
+// 会话元数据选择集合 → agent 工具面按所选集合收敛（不是全局并集）；
+// 未选择（空）→ default 集合；会话不存在/找不到 → 回落 default。
+// ★ 2026-09-04 工具集全局化：任何 scope 都读全局通用集合目录。
+func TestApplyConvToolsetWhitelist(t *testing.T) {
+	SetGlobalToolsetDirForTest(t.TempDir())
+	t.Cleanup(func() { SetGlobalToolsetDirForTest(testGlobalToolsetDir) })
+	ph, root := mkBuiltinHost(t)
+	reg := ph.Context().Tools
+	tsDir := globalToolsetDir()
+	// 造两个集合：default（core 组 + tool-foo 插件工具）与 dev（core + codegraph）
+	mkTs := func(name string, plugins []ToolsetPlugin) {
+		ts := Toolset{Name: name, Plugins: plugins, BuiltinsInited: true}
+		data, _ := json.Marshal(ts)
+		if err := os.WriteFile(filepath.Join(tsDir, name+".json"), data, 0644); err != nil {
+			t.Fatalf("写工具集 %s: %v", name, err)
+		}
+	}
+	mkTs("default", []ToolsetPlugin{
+		{Name: "builtin:core", Builtin: "core", Tools: []string{"read", "write", "edit"}},
+		{Name: "tool-foo", Purpose: "foo"},
+	})
+	mkTs("dev", []ToolsetPlugin{
+		{Name: "builtin:core", Builtin: "core", Tools: []string{"read", "write", "edit"}},
+		{Name: "builtin:codegraph", Builtin: "codegraph", Tools: []string{"codegraph_search", "codegraph_impact"}},
+	})
+	// 模拟插件工具注册（tool-foo：工具集插件；tool-bar：未声明插件）
+	ph.mu.Lock()
+	ph.pluginTools["tool-foo"] = []string{"memory_read", "git_diff"}
+	ph.pluginTools["tool-bar"] = []string{"skill_list", "load_skill"}
+	ph.states["tool-foo"] = PluginRunning
+	ph.states["tool-bar"] = PluginRunning
+	ph.mu.Unlock()
+	for _, tn := range []string{"memory_read", "git_diff", "skill_list", "load_skill", "codegraph_search", "codegraph_impact"} {
+		reg.Register(&Tool{Name: tn, Handler: noopHandler})
+	}
+
+	// ① 会话未设置（空）→ default 集合：tool-foo 工具可见、codegraph 隐藏、skill_list 隐藏
+	ApplyConvToolsetWhitelist(ph, reg, "", root)
+	if !reg.IsEnabled("memory_read") || !reg.IsEnabled("git_diff") {
+		t.Error("default 集合：tool-foo 工具（memory_read/git_diff）应启用")
+	}
+	if reg.IsEnabled("codegraph_search") || reg.IsEnabled("codegraph_impact") {
+		t.Error("default 集合：codegraph 工具应隐藏")
+	}
+	if reg.IsEnabled("skill_list") || reg.IsEnabled("load_skill") {
+		t.Error("default 集合：未声明插件工具 skill_list/load_skill 应隐藏")
+	}
+	// ② 会话选择 dev → dev 集合：codegraph 可见、tool-foo 隐藏
+	ApplyToolsetWhitelistByName(ph, reg, "dev")
+	if !reg.IsEnabled("codegraph_search") || !reg.IsEnabled("codegraph_impact") {
+		t.Error("dev 集合：codegraph 工具应启用")
+	}
+	if reg.IsEnabled("memory_read") || reg.IsEnabled("git_diff") {
+		t.Error("dev 集合：tool-foo 工具应隐藏（仅所选集合声明）")
+	}
+	// ③ 框架自举工具恒可用（两个集合均如此）
+	for _, tn := range []string{"update_tasks", "cordis_define", "toolset_edit"} {
+		if !reg.IsEnabled(tn) {
+			t.Errorf("框架自举工具 %s 应始终可用", tn)
+		}
 	}
 }

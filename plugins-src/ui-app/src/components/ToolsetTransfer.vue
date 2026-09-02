@@ -1,10 +1,10 @@
 <template>
-  <!-- 工作区工具集（builtin）穿梭框：左=未加入，右=已加入，勾选批量加入/移出 -->
+  <!-- 通用集合（default）穿梭框：左=未加入，右=已加入，勾选批量加入/移出 -->
   <div class="dialog-overlay" @click.self="close">
     <div class="dialog-box ts-transfer-box">
       <div class="dialog-title">
-        <span class="dialog-title-main"><SvgIcon name="package" :size="14" /> 管理工作区工具集</span>
-        <span class="dialog-title-sub">插件工具 · 勾选后加入 / 移出工作区工具集</span>
+        <span class="dialog-title-main"><SvgIcon name="package" :size="14" /> 管理通用集合（default）</span>
+        <span class="dialog-title-sub">插件工具 · 勾选后加入 / 移出通用集合</span>
       </div>
       <div class="ts-transfer-body">
         <!-- 左：未加入 -->
@@ -36,8 +36,8 @@
         </div>
         <!-- 中间操作列 -->
         <div class="ts-transfer-ops">
-          <button class="ts-btn primary" @click="addSelected" :disabled="!anyLeftSelected" title="把选中的工具加入工作区工具集">加入 →</button>
-          <button class="ts-btn danger" @click="removeSelected" :disabled="!anyRightSelected" title="把选中的工具移出工作区工具集">← 移出</button>
+          <button class="ts-btn primary" @click="addSelected" :disabled="!anyLeftSelected" title="把选中的工具加入通用集合">加入 →</button>
+          <button class="ts-btn danger" @click="removeSelected" :disabled="!anyRightSelected" title="把选中的工具移出通用集合">← 移出</button>
         </div>
         <!-- 右：已加入 -->
         <div class="ts-transfer-col">
@@ -91,7 +91,7 @@
 </template>
 
 <script setup>
-// ToolsetTransfer — 工作区工具集穿梭框：未加入 ↔ 已加入 批量管理。
+// ToolsetTransfer — 通用集合（default）穿梭框：未加入 ↔ 已加入 批量管理。
 // ★ 2026-08-17：数据源从「内置分组（builtin groups）」改为「插件面板中存在工具的
 //   插件分组（props.groups = /api/plugins/builtin 的 plugins 字段，source=plugin）」——
 //   每个有工具的插件一组，组内是其注册的工具（含 enabled=agent 可见性）。
@@ -107,7 +107,7 @@ const props = defineProps({
   groups: { type: Array, default: () => [] },   // 插件分组（source=plugin，含 tools[].enabled）
   joined: { type: Array, default: () => [] },   // 兼容保留（内置组名，不再用于插件分组判定）
   manualTools: { type: Array, default: () => [] },
-  workspaceRoot: { type: String, default: '' }, // ★ 目标工作区（工作区隔离：管理操作只影响本工作区工具集）
+  workspaceRoot: { type: String, default: '' }, // ★ 兼容保留（工具集已全局化，后端忽略工作区隔离）
 })
 const emit = defineEmits(['close', 'changed'])
 
@@ -176,7 +176,7 @@ async function callOnce(fn) {
   }
 }
 
-// 勾选工具加入工作区工具集（按插件分组处理）：
+// 勾选工具加入通用集合（按插件分组处理）：
 //   - 插件未加入工具集（g.joined=false）→ add_plugin（tools 白名单=勾选集合）——
 //     插件整体装载，白名单外工具自动摘除（DisabledTools），只加入勾选工具；
 //   - 插件已加入（g.joined=true，工具被摘除）→ enable_tool 逐个恢复。
@@ -189,7 +189,7 @@ async function addSelected() {
   try {
     for (const [pn, info] of Object.entries(byPlugin)) {
       if (info.source !== 'plugin') {
-        // 内置工具：工具级启用（加入工作区工具集 → agent 可用）
+        // 内置工具：工具级启用（加入通用集合 → agent 可用）
         for (const tn of info.names) {
           await callOnce(() => api.builtinPlugins({ tool: tn, enabled: true }, props.workspaceRoot))
         }
@@ -204,7 +204,7 @@ async function addSelected() {
     emit('changed')
   } catch (e) { /* callOnce 已上报 */ }
 }
-// 勾选工具移出工作区工具集：插件工具 → rm_tool（摘除单工具）；
+// 勾选工具移出通用集合：插件工具 → rm_tool（摘除单工具）；
 // 手动工具（_manual）→ POST /api/plugins/builtin 工具级开关。
 async function removeSelected() {
   const byPlugin = {}

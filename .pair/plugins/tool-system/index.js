@@ -5,7 +5,12 @@
 // 自动生成，schema 完整外置拷贝）。api 声明在插件，execute 调 ctx.hostTool 复用宿主 Go 执行器（对齐 harness seam：编排在插件、能力在宿主）。
 // ★ 2026-08-29（t2 集成修复）：移除 generate_commit_message——宿主无对应 Go 实现
 //   （零消费方），claimTool 无存档导致 hostTool 执行必失败；与生成器白名单对齐。
-// 工具清单：skill_list、load_skill、load_skill_resource、skill_write、skill_delete、mcp_list、mcp_add、mcp_remove、history_search、history_list、history_count、tool_stats、update_tasks
+// 工具清单：skill_list、load_skill、load_skill_resource、skill_write、skill_delete、mcp_list、mcp_add、mcp_remove、
+//         history_search、history_list、history_count、tool_stats、todo_write、update_tasks、ask_user、task_create、
+//         progress_checker + goal 组 create_goal/get_goal/update_goal
+// ★ 2026-09-04 合并：tool-progress 插件（进度检查）并入本插件；tool-progress 插件目录已删除。
+// ★ 2026-09 Round3 ③.4 合并：tool-goal 插件（create_goal/get_goal/update_goal，
+//   宿主 goal.go 状态机 + 自动续轮）并入本插件；tool-goal 插件目录已删除。
 // ═══════════════════════════════════════════════════════════════
 const tools = [
   {
@@ -59,7 +64,7 @@ const tools = [
   },
   {
     "name": "skill_write",
-    "description": "创建或更新一个技能（写入 .pair/skills/\u003c名\u003e/SKILL.md）。",
+    "description": "创建或更新一个技能（写入 .pair/skills/<名>/SKILL.md）。",
     "parameters": {
       "properties": {
         "content": {
@@ -224,62 +229,7 @@ const tools = [
     "readOnly": true,
     "systemTool": true
   },
-  {
-    "name": "todo_write",
-    "description": "维护任务列表：传入完整任务清单（全量替换），系统自动持久化到磁盘（todo_write 别名，语义同 update_tasks）。每项包含 subject（必填）、status（pending/in_progress/completed/cancelled）、description（可选）、dependencies（可选）、",
-    "usageGuide": "管理持久化任务列表（全量替换模式，todo_write 别名）。复杂任务（3+ 步）必须拆解为子任务并逐项追踪。每次传入完整清单，状态变化时重传整份。",
-    "parameters": {
-      "properties": {
-        "tasks": {
-          "description": "完整任务列表（全量；状态变化时重传整份）",
-          "items": {
-            "properties": {
-              "dependencies": {
-                "description": "依赖的任务 ID 列表（可选）",
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              "description": {
-                "description": "详细描述（可选）：做什么、涉及哪些文件",
-                "type": "string"
-              },
-              "id": {
-                "description": "任务 ID（可选，不传则自动生成）",
-                "type": "string"
-              },
-              "status": {
-                "description": "状态",
-                "enum": [
-                  "pending",
-                  "in_progress",
-                  "completed",
-                  "cancelled"
-                ],
-                "type": "string"
-              },
-              "subject": {
-                "description": "任务标题，用祈使句（如\"修复登录超时\"）",
-                "type": "string"
-              }
-            },
-            "required": [
-              "subject",
-              "status"
-            ],
-            "type": "object"
-          },
-          "type": "array"
-        }
-      },
-      "required": [
-        "tasks"
-      ],
-      "type": "object"
-    },
-    "systemTool": true
-  },
+
   {
     "name": "update_tasks",
     "description": "维护任务列表：传入完整任务清单（全量替换），系统自动持久化到磁盘。每项包含 subject（必填）、status（pending/in_progress/completed/cancelled）、description（可选）、dependencies（可选）、",
@@ -431,16 +381,81 @@ const tools = [
     },
     "systemTool": true,
     "usageGuide": "创建子任务并追踪执行进度。复杂任务（3+ 步）必须拆解为子任务，每完成一项更新状态（in_progress→completed）。依赖项用 dependencies 参数关联。比手动记清单更可靠（持久化到磁盘+状态自动管理）。"
+  },
+  {
+    "name": "progress_checker",
+    "description": "检查当前任务完成进度，输出结构化进度报告，识别未完成的任务并给出执行建议。使用场景：任务列表较长时、Agent 不确定下一步做什么时、或用户要求查看进度时。",
+    "parameters": {
+      "properties": {
+        "detail": {
+          "description": "可选：详细模式，设为 \"full\" 显示每个任务的详细信息（含描述）",
+          "enum": [
+            "summary",
+            "full"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "readOnly": true
   }
+];
+
+// ─── goal 工具（2026-09 Round3 ③.4 并入自 tool-goal：宿主 goal.go 执行器）───
+// 编排在插件、能力在宿主：schema/描述在插件，状态机与自动续轮在宿主
+// （internal/agent/goal.go）。execute 经 ctx.hostTool.exec 路由回宿主执行器
+// （_convID 由宿主工具执行链自动注入，多会话并发不串）。
+
+const goalTools = [
+  {
+    name: 'create_goal',
+    description:
+      '创建同会话完成目标（对齐 goal）。objective 必填（直接给出目标，不做推断）；max_goal_rounds 可选（自动续轮上限，默认 3）。创建后会话将在每轮结束后自动续轮推进，直到 update_goal complete/blocked 或达轮次上限。',
+    parameters: {
+      type: 'object',
+      properties: {
+        objective: { type: 'string', description: '目标描述（祈使句，直接给出，如「修复登录超时 bug」）' },
+        max_goal_rounds: { type: 'integer', description: '可选：自动续轮上限（默认 3；0=不限——慎用，会无限续轮）' },
+      },
+      required: ['objective'],
+    },
+    systemTool: true,
+  },
+  {
+    name: 'get_goal',
+    description:
+      '读取当前会话目标（goal_id/revision/objective/phase/rounds/roundLimit/blockerReason/armed）。无目标返回提示。',
+    parameters: { type: 'object', properties: {}, required: [] },
+    readOnly: true,
+    systemTool: true,
+  },
+  {
+    name: 'update_goal',
+    description:
+      '更新当前会话目标（对齐 goal update）。action ∈ {edit,pause,resume,complete,blocked}；revision 必传（乐观锁，冲突拒绝）。edit 可改 objective/max_goal_rounds；pause 停续轮、resume 重挂；complete 标记完成；blocked 标记阻塞（blocked_reason 必填说明）。',
+    parameters: {
+      type: 'object',
+      properties: {
+        goal_id: { type: 'string', description: '目标 ID（=会话 ID；get_goal 可查）' },
+        revision: { type: 'integer', description: '当前 revision（get_goal 返回；冲突时拒绝）' },
+        action: { type: 'string', description: 'edit / pause / resume / complete / blocked' },
+        objective: { type: 'string', description: 'edit 用：新目标描述（可选）' },
+        max_goal_rounds: { type: 'integer', description: 'edit 用：新自动续轮上限（可选）' },
+        blocked_reason: { type: 'string', description: 'blocked 用：阻塞原因（必填）' },
+      },
+      required: ['goal_id', 'revision', 'action'],
+    },
+    systemTool: true,
+  },
 ];
 
 return {
   name: 'tool-system',
-  purpose: '系统内部工具（SystemTool + Skills/MCP/市场：update_tasks/todo_write/tool_stats/history_*/skill_*/mcp_*）——全部可更换（自动生成，迁移自内置 Go 工具组）',
+  purpose: '系统内部工具（SystemTool + Skills/MCP/市场 + 进度检查 + goal：update_tasks/todo_write/tool_stats/history_*/skill_*/mcp_*/progress_checker/create_goal/get_goal/update_goal）（tool-progress/tool-goal 已并入）',
   apply(ctx) {
-    // ★ R2-7 别名（约定命名对齐）：todo_write → update_tasks（宿主执行器同名承载）
-    const hostExec = { todo_write: 'update_tasks' }
-    for (const t of tools) {
+    const all = tools.concat(goalTools)
+    for (const t of all) {
       ctx.tools.register({
         name: t.name,
         description: t.description,
@@ -450,7 +465,7 @@ return {
         requiresApproval: t.requiresApproval,
         systemTool: t.systemTool,
         parameters: t.parameters,
-        execute: (args) => ctx.hostTool.exec(hostExec[t.name] || t.name, args || {}),
+        execute: (args) => ctx.hostTool.exec(t.name, args || {}),
       })
     }
   },

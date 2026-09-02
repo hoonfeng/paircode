@@ -3,7 +3,14 @@
 //
 // 生成来源（2026-08-16）：内置 Go 工具组 → 磁盘外置插件（tool_plugin_gen.go
 // 自动生成，schema 完整外置拷贝）。api 声明在插件，execute 调 ctx.binary 复用本插件目录 bin/ 下的独立二进制（源码 plugins-src/plugins/<name>/，改实现重编译即更换）。
-// 工具清单：codegraph_build、codegraph_stats、codegraph_file_structure、codegraph_function、codegraph_class、codegraph_callers、codegraph_callees、codegraph_impact、codegraph_search、codegraph_git_history、codegraph_entity_history、codegraph_get_edit_context、codegraph_find_related_tests、codegraph_analyze_complexity、codegraph_search_by_pattern、codegraph_trace_call_chain、codegraph_find_dead_code、codegraph_module_architecture
+// 工具清单：codegraph_build、stats、file_structure、function、class、callers、callees、impact、search、git_history、
+//         get_edit_context、find_related_tests、analyze_complexity、search_by_pattern、trace_call_chain、
+//         find_dead_code、module_architecture、find_entry_points、find_hot_paths、find_by_imports、
+//         get_detailed_symbol、find_dead_imports、search_by_error、index_markdown、search_docs、
+//         verify_design、pr_context、find_by_signature、semantic_search、explore
+// ★ 2026-09-04 合并：tool-codegraph-extra（图谱扩展 13 工具）并入本插件，一致走 ctx.binary；
+//   删除 codegraph_entity_history（@EntityHistory 零注解消费，codegraph_git_history 覆盖）；
+//   tool-codegraph-extra 插件目录已删除。
 // ═══════════════════════════════════════════════════════════════
 const tools = [
   {
@@ -229,28 +236,6 @@ const tools = [
     "readOnly": true
   },
   {
-    "name": "codegraph_entity_history",
-    "description": "查询指定代码实体的完整变更历史：谁在什么时候修改了它，以及对应的提交消息。实体可以是函数名、类型名或文件路径。",
-    "usageGuide": "查询指定代码实体的完整变更历史：谁在什么时候修改了它。比 git_blame 更友好（聚合到实体级别而非行级别）。",
-    "parameters": {
-      "properties": {
-        "entity": {
-          "description": "实体名（函数名、类型名或文件路径）",
-          "type": "string"
-        },
-        "project": {
-          "description": "可选：目标项目（工作区项目目录名如 wb-ui，或相对主项目的路径/绝对路径）。省略 = 主项目。多项目工作区：gou-ide、wb-ui、ref 等。",
-          "type": "string"
-        }
-      },
-      "required": [
-        "entity"
-      ],
-      "type": "object"
-    },
-    "readOnly": true
-  },
-  {
     "name": "codegraph_get_edit_context",
     "description": "获取修改某个代码位置所需的完整上下文。一次调用返回：符号源码、调用者列表、关联测试、近期 Git 历史、相关记忆。比分别调用多个工具更高效。参数 maxTokens 控制返回内容的 token 预算。",
     "usageGuide": "获取修改某代码位置所需的完整上下文。调用 edit 前先用此工具获取周边代码，减少多次文件读取的 token 消耗。",
@@ -305,7 +290,7 @@ const tools = [
   },
   {
     "name": "codegraph_analyze_complexity",
-    "description": "测量代码圈复杂度，用于评估重构优先级。返回每个函数的复杂度评分（1=最低）、等级（A-E）和行数。复杂度 \u003e10 建议考虑重构，\u003e20 为高风险。file 指定文件分析单个文件，省略则分析所有函数。",
+    "description": "测量代码圈复杂度，用于评估重构优先级。返回每个函数的复杂度评分（1=最低）、等级（A-E）和行数。复杂度 >10 建议考虑重构，>20 为高风险。file 指定文件分析单个文件，省略则分析所有函数。",
     "usageGuide": "测量代码圈复杂度，评估重构优先级。高复杂度函数优先重构。比人工评估更客观（基于控制流图计算）。",
     "parameters": {
       "properties": {
@@ -422,12 +407,270 @@ const tools = [
       "type": "object"
     },
     "readOnly": true
+  },
+
+  {
+    "name": "codegraph_find_hot_paths",
+    "description": "查找最常被调用的函数。",
+    "usageGuide": "查找最常被调用的函数（按调用者数量排序）。了解核心热点代码，优化优先考虑高频路径。",
+    "parameters": {
+      "properties": {
+        "limit": {
+          "description": "可选：最大返回数（默认 20）",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "readOnly": true
+  },
+  {
+    "name": "codegraph_find_by_imports",
+    "description": "查找所有导入指定模块的文件。",
+    "usageGuide": "查找所有导入指定模块的文件。想了解某包被哪些文件引用时用。比 grep 搜索 import 语句更精确（基于解析的 import 关系）。",
+    "parameters": {
+      "properties": {
+        "limit": {
+          "description": "可选：最大返回数（默认 50）",
+          "type": "integer"
+        },
+        "matchMode": {
+          "description": "可选：exact/prefix/contains/fuzzy，默认 contains",
+          "type": "string"
+        },
+        "moduleName": {
+          "description": "模块/包名",
+          "type": "string"
+        }
+      },
+      "required": [
+        "moduleName"
+      ],
+      "type": "object"
+    },
+    "readOnly": true
+  },
+  {
+    "name": "codegraph_get_detailed_symbol",
+    "description": "获取符号详细上下文（源码+调用者+被调用者）。",
+    "usageGuide": "获取某符号的完整上下文：源码+调用者+被调用者。比分别调 codegraph_callers/callees 更省 token（一站式）。",
+    "parameters": {
+      "properties": {
+        "includeSource": {
+          "description": "可选：包含源码（默认 true）",
+          "type": "boolean"
+        },
+        "query": {
+          "description": "符号名",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "type": "object"
+    },
+    "readOnly": true
+  },
+  {
+    "name": "codegraph_find_dead_imports",
+    "description": "查找已导入但从未使用的模块。",
+    "usageGuide": "查找已导入但从未使用的模块。改完代码后运行可发现残留 import。比 goimports 更灵活（指定文件或全量扫描）。",
+    "parameters": {
+      "properties": {
+        "file": {
+          "description": "可选：指定文件",
+          "type": "string"
+        },
+        "limit": {
+          "description": "可选：最大返回数（默认 50）",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "readOnly": true
+  },
+  {
+    "name": "codegraph_search_by_error",
+    "description": "查找抛出或处理错误的函数。",
+    "usageGuide": "查找抛出或处理特定错误的函数。mode=throws 找谁抛了错误，catches 找谁处理了。错误分析定位根因时用。",
+    "parameters": {
+      "properties": {
+        "errorType": {
+          "description": "可选：错误类型过滤",
+          "type": "string"
+        },
+        "limit": {
+          "description": "可选：最大返回数（默认 50）",
+          "type": "integer"
+        },
+        "mode": {
+          "description": "可选：throws/catches/any，默认 any",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "readOnly": true
+  },
+  {
+    "name": "codegraph_index_markdown",
+    "description": "索引 Markdown 文档，按标题分段。有 ONNX 则计算嵌入向量。",
+    "usageGuide": "索引 Markdown 文档到知识库。之后可用 codegraph_search_docs 语义搜索。新加文档后需重新索引才能搜到。",
+    "parameters": {
+      "properties": {
+        "path": {
+          "description": "可选：文件路径；省略则扫描全部 .md 文件",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  {
+    "name": "codegraph_search_docs",
+    "description": "搜索已索引文档。优先向量语义搜索，回退关键词。",
+    "usageGuide": "搜索已索引的 Markdown 文档。有 ONNX 时做语义搜索（理解意图），否则关键词回退。比全文搜索更智能。",
+    "parameters": {
+      "properties": {
+        "limit": {
+          "description": "可选：最大返回数（默认 5）",
+          "type": "integer"
+        },
+        "query": {
+          "description": "搜索关键词",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "type": "object"
+    },
+    "readOnly": true
+  },
+  {
+    "name": "codegraph_verify_design",
+    "description": "检查设计文档中的代码引用是否存在。",
+    "usageGuide": "检查设计文档中的代码引用是否仍然有效。重构后运行可发现过期的文档引用。",
+    "parameters": {
+      "properties": {
+        "docFile": {
+          "description": "设计文档路径",
+          "type": "string"
+        }
+      },
+      "required": [
+        "docFile"
+      ],
+      "type": "object"
+    },
+    "readOnly": true
+  },
+  {
+    "name": "codegraph_pr_context",
+    "description": "分析分支变更影响范围。",
+    "usageGuide": "分析当前分支与 baseBranch 的变更影响范围。提交 PR 前运行可了解变更波及哪些文件/函数。",
+    "parameters": {
+      "properties": {
+        "baseBranch": {
+          "description": "可选：基准分支（默认 main）",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "readOnly": true
+  },
+  {
+    "name": "codegraph_find_by_signature",
+    "description": "按结构特征（参数数、返回类型、名称模式）查找函数。",
+    "usageGuide": "按结构特征查找函数：参数个数/返回类型/名称模式。想找「接收 string 返回 error」的函数时用。比 grep 更原子化（基于签名匹配）。",
+    "parameters": {
+      "properties": {
+        "limit": {
+          "description": "可选：最大返回数（默认 50）",
+          "type": "integer"
+        },
+        "maxParams": {
+          "description": "可选：最多参数个数",
+          "type": "integer"
+        },
+        "minParams": {
+          "description": "可选：最少参数个数",
+          "type": "integer"
+        },
+        "namePattern": {
+          "description": "可选：函数名通配模式，如 'get*'、'*Handler'",
+          "type": "string"
+        },
+        "paramCount": {
+          "description": "可选：精确参数个数",
+          "type": "integer"
+        },
+        "returnType": {
+          "description": "可选：返回类型，如 'error'、'string'",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "readOnly": true
+  },
+  {
+    "name": "codegraph_semantic_search",
+    "description": "基于语义理解搜索代码（需 ONNX 嵌入模型）。支持自然语言查询，如「读取文件的函数」「处理错误的逻辑」。结果按语义相似度排序，比关键词搜索更准确。",
+    "usageGuide": "基于语义理解搜索代码（需 ONNX 嵌入模型）。支持自然语言查询如「读取配置文件」「处理 HTTP 请求」。比关键词搜索更智能。",
+    "parameters": {
+      "properties": {
+        "limit": {
+          "description": "可选：最大返回数（默认 10）",
+          "type": "integer"
+        },
+        "query": {
+          "description": "自然语言查询，如「读取配置文件」「处理 HTTP 请求」",
+          "type": "string"
+        },
+        "reindex": {
+          "description": "可选：强制重新索引代码实体（默认 false）",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "type": "object"
+    },
+    "readOnly": true
+  },
+  {
+    "name": "codegraph_explore",
+    "description": "一站式代码理解工具。用自然语言或符号名探索代码，返回相关源码和位置。分析代码的首选工具。",
+    "usageGuide": "一站式代码理解工具。用自然语言或符号名探索代码，返回相关源码和位置。新接触项目时用此工具了解代码比逐个文件读取更高效。",
+    "parameters": {
+      "properties": {
+        "maxFiles": {
+          "description": "可选：最大返回文件数（默认 8）",
+          "type": "integer"
+        },
+        "query": {
+          "description": "自然语言问题或符号名",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "type": "object"
+    },
+    "readOnly": true
   }
 ];
 
 return {
   name: 'tool-codegraph',
-  purpose: '代码知识图谱（codegraph_build/search/impact/…）（自动生成，迁移自内置 Go 工具组）',
+  purpose: '代码知识图谱（codegraph_build/search/impact/… + 扩展 find_*/explore 等 13 工具）（tool-codegraph-extra 已并入）',
   apply(ctx) {
     for (const t of tools) {
       ctx.tools.register({

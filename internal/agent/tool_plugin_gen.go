@@ -42,26 +42,36 @@ type genToolGroup struct {
 	binary string
 }
 
-// genToolGroups 待生成工具组全表（15 复杂组 + tool-system 系统内部组；
+// genToolGroups 待生成工具组全表（12 复杂组 + tool-system 系统内部组；
 // core/fs-search/web/shell 已手工迁移为 tool-core/tool-search/tool-web/tool-shell，
-// 不在此列）。tool-system 内的 SystemTool 工具（update_tasks/
-// tool_stats/history_*）对 LLM 可见但前端 UI 隐藏，同样外置可更换；
-// ask_user/task_create 已插件化（2026-08-16 会话桥机制，见 session_bridge.go：
-// JS 包装经 _convID 路由回宿主 SessionBridge，非「不可外置」）。
+// 不在此列；★ 2026-09-04 合并：tool-verify→tool-resource、
+// tool-codegraph-extra→tool-codegraph、tool-evolution→tool-asset、
+// tool-progress→tool-system，磁盘插件目录已合并/删除）。tool-system 内的
+// SystemTool 工具（update_tasks/tool_stats/history_*）对 LLM 可见但前端 UI 隐藏，
+// 同样外置可更换；ask_user/task_create 已插件化（2026-08-16 会话桥机制，
+// 见 session_bridge.go：JS 包装经 _convID 路由回宿主 SessionBridge，
+// 非「不可外置」）。
+// ★ 2026-09 Round3 ③.4 插件瘦身合并：tool-screenshot/tool-web-debug 已并入
+//   tool-web（binary 型，execute 经 ctx.binary.exec → 内嵌内核
+//   registerScreenshotTools/registerWebDebugTool 回退）；tool-bridge（桌面桥接
+//   5 工具）已删除（桌面版已移除，见 desktop-architecture）。
 func genToolGroups() []genToolGroup {
 	return []genToolGroup{
 		{"tool-git", "Git 操作（git_status/diff/log/show/blame/add/commit/…）", registerGitTools, nil, "self"},
 		{"tool-memory", "跨会话记忆（memory_write/read/list/search）", registerMemoryTools, nil, "self"},
-		{"tool-verify", "知识库过期验证（memory_verify/project_info_verify）", registerVerifyTools, nil, "self"},
+		// ★ 2026-09-04 合并：tool-verify 已并入 tool-resource（JS 原生迁移，见 tool_plugin_gen.go
+		//   顶部工具清单注释与 .pair/plugins/tool-resource/index.js；registerVerifyTools 实现保留：
+		//   embedded 内嵌内核 + legacy_host_tools.go 宿主存档供 hostTool 承载）。
 		{"tool-project-info", "项目知识库（project_info_write/read/list/search/delete/explore）", registerProjectInfoTools, nil, "self"},
 		{"tool-binary", "二进制读写 + 逆向分析（inspect_binary/write_binary/binary_strings/find/patch/info/hash/entropy，含 2026-08-16 并入的 tool-binary-re 逆向 6 工具）", registerBinaryTools, nil, "self"},
 		{"tool-debug", "调试工具（debug_inject_log/run_capture/analyze_output/parse_stack/cleanup_logs/watch/evaluate_session）", registerDebugTools, nil, "self"},
-		{"tool-screenshot", "截图（screenshot_desktop/window/area/webpage）", registerScreenshotTools, nil, "self"},
-		{"tool-web-debug", "网页验证（web_debug）", registerWebDebugTool, nil, "self"},
+		// ★ 2026-09 ③.4 已并入 tool-web（磁盘插件删除；内嵌内核保留供 binary 回退）
 		{"tool-bug", "BUG 检测与修复（bug_detect/bug_analyze/bug_fix）", RegisterBugTools, nil, "self"},
 		{"tool-office", "办公文档（csv_read/csv_write/json_to_table/table_stats/text_report/word_read）", registerOfficeTools, nil, "self"},
 		{"tool-codegraph", "代码知识图谱（codegraph_build/search/impact/…）", registerCodeGraphTools, nil, "self"},
-		{"tool-codegraph-extra", "图谱扩展（codegraph_find_by_signature/explore）", registerExtraCodeGraphTools, nil, "self"},
+		// ★ 2026-09-04 合并：tool-codegraph-extra（图谱扩展 13 工具）已并入 tool-codegraph；
+		//   registerExtraCodeGraphTools 实现保留（embedded_tools.go 内嵌内核供
+		//   ctx.binary.exec 回退承载 extra 工具）。
 		// tool-system：SystemTool 内部工具 + Skills/MCP
 		// （ask_user/task_create 经会话桥插件化，见 session_bridge.go；
 		//  marketplace_search/install 已迁至 marketplace 插件，2026-08-20）
@@ -83,17 +93,16 @@ func genToolGroups() []genToolGroup {
 		//   （有实现、零调用点、Agent 永不可用）迁移为磁盘插件。Go 实现经
 		//   ArchiveHostLegacyTools 存档为宿主能力（hostExecutors），插件 execute
 		//   走 ctx.hostTool.exec 复用——对齐 harness seam：编排在插件、能力在宿主。
+		//   ★ 2026-09 ③.4：tool-bridge（桌面桥接）已删除——桌面版已移除
+		//   （desktop-architecture：web-only 运行时），bridge_* 工具零消费方。
 		{"tool-asset", "智能资产管理（asset_list/asset_search/asset_delete：经验胶囊 + 技能基因）",
 			registerAssetTools, nil, ""},
-		{"tool-bridge", "桌面桥接（bridge_status/bridge_takeover/bridge_lockdown/bridge_exec/bridge_register_system_tool）",
-			registerBridgeTools, nil, ""},
 		{"tool-entryconfig", "入口与配置定位（find_entry_points/find_config_files）",
 			registerEntryConfigTools, nil, ""},
-		{"tool-evolution", "进化系统（evolution_save_capsule/evolution_search_capsules/evolution_save_gene/evolution_status）",
-			registerEvolutionTools, nil, ""},
-		{"tool-progress", "进度检查（progress_checker）",
-			registerProgressChecker, nil, ""},
-		{"tool-resource", "资源管理（resource_list/resource_search/resource_stats）",
+		// ★ 2026-09-04 合并：tool-evolution（进化 3 工具）已并入 tool-asset（同名资产存储）；
+		//   tool-progress（progress_checker）已并入 tool-system。registerEvolutionTools /
+		//   registerProgressChecker 实现保留（legacy_host_tools.go 宿主存档供 hostTool 承载）。
+		{"tool-resource", "资源管理（resource_list/resource_search/resource_stats）+ 知识库过期验证（memory_verify/project_info_verify；2026-09-04 tool-verify 并入）",
 			registerResourceTools, nil, ""},
 		{"tool-snapshot", "会话快照（restore_snapshot/list_snapshots）",
 			RegisterSnapshotTools, nil, ""},

@@ -99,7 +99,11 @@ func TestArchiveHostLegacyToolsAndPluginLoad(t *testing.T) {
 	if err := host.LoadJSDynamic(def); err != nil {
 		t.Fatalf("装载失败: %v", err)
 	}
-	for _, name := range []string{"asset_list", "asset_search", "asset_delete"} {
+	// ★ 2026-09-04 合并：tool-evolution 已并入 tool-asset——进化 3 工具同样插件化+hostTool 承载
+	// ★ Round4 削减：asset_list/asset_search 已删（并入 tool-resource 的
+	//   resource_list/search type=capsules/genes 过滤）——插件面只剩 asset_delete + evolution_*
+	for _, name := range []string{"asset_delete",
+		"evolution_save_capsule", "evolution_save_gene", "evolution_status"} {
 		tool, ok := reg.Get(name)
 		if !ok {
 			t.Fatalf("%s 未注册（插件未接管）", name)
@@ -109,16 +113,20 @@ func TestArchiveHostLegacyToolsAndPluginLoad(t *testing.T) {
 		}
 	}
 	// ④ 执行走 ctx.hostTool.exec → 宿主 Go 实现（seam 闭环）
-	out, err := reg.Execute(context.Background(), "asset_list", `{}`)
+	out, err := reg.Execute(context.Background(), "evolution_status", `{}`)
 	if err != nil {
-		t.Fatalf("asset_list 执行失败: %v", err)
+		t.Fatalf("evolution_status 执行失败: %v", err)
 	}
-	if !strings.Contains(out, "智能资产") && !strings.Contains(out, "资产") {
-		t.Fatalf("asset_list 输出异常: %q", out)
+	if !strings.Contains(out, "状态") && !strings.Contains(out, "BES") && !strings.Contains(out, "evolution") {
+		t.Fatalf("evolution_status 输出异常: %q", out)
 	}
-	// ⑤ 全部 7 组插件包均生成（package.json 齐全，LoadGlobalPlugins 可扫描）
-	for _, name := range []string{"tool-asset", "tool-bridge", "tool-entryconfig",
-		"tool-evolution", "tool-progress", "tool-resource", "tool-snapshot"} {
+	// ⑤ 全部孤儿组插件包均生成（package.json 齐全，LoadGlobalPlugins 可扫描）
+	// ★ 2026-09-04 合并：tool-evolution→tool-asset、tool-progress→tool-system、
+	//    tool-verify→tool-resource——孤儿插件包收敛为 5 个；
+	// ★ 2026-09 Round3 ③.4：tool-bridge（桌面桥接，桌面版已移除）插件删除（宿主
+	//    存档 registerBridgeTools 保留，见 legacy_host_tools.go）——孤儿插件包收敛为 4 个
+	for _, name := range []string{"tool-asset", "tool-entryconfig",
+		"tool-resource", "tool-snapshot"} {
 		if _, err := os.Stat(filepath.Join(repoRoot, ".pair", "plugins", name, "package.json")); err != nil {
 			t.Fatalf("插件包 %s 缺 package.json: %v", name, err)
 		}

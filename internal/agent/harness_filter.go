@@ -39,8 +39,9 @@ func HarnessOnlyTools() bool {
 // HarnessAlignedToolNames 保留清单（过滤时仅保留以下工具）：
 //
 //	① harness 原生工具集：read/write/edit（tool-fs）、glob/grep（tool-fs-search）、
-//	   str_replace_editor、bash（tool-bash）、web_search/web_fetch（tool-web）、
+//	   bash（tool-bash，内部后台+120s 超时）、web_search/web_fetch（tool-web）、
 //	   run_code（code-mode）
+//	   ★ Round4：str_replace_editor 已从工具面移除（编辑覆盖链 read/write/edit 完全）
 //	② 对话协议基础设施：update_tasks（任务追踪，前端任务面板依赖）、
 //	   ask_user（提问）——
 //	   属循环协议而非 pair 独有编码能力，保留以维持 agent 循环契约。
@@ -54,10 +55,9 @@ var HarnessAlignedToolNames = map[string]bool{
 	// harness 原生工具集
 	"read": true, "write": true, "edit": true,
 	"glob": true, "grep": true,
-	"str_replace_editor": true,
-	"bash":               true,
 	"web_search":         true, "web_fetch": true,
-	"run_code": true,
+	"run_code":            true,
+	"bash":                true,
 	// 对话协议基础设施
 	"update_tasks": true,
 	"ask_user":     true,
@@ -118,17 +118,19 @@ func ToolDefaultEnabled(name string) bool {
 	return HarnessAlignedToolNames[name]
 }
 
-// ApplyToolsetBuiltinState 把工作区工具集中「内置工具包条目」（builtin.json 等）
+// ApplyToolsetBuiltinState 把全局工具集中「内置工具包条目」（default.json 等）
 // 记录的启用状态应用到目标注册表（会话级 reg 独立实例，需显式应用）：
 // 对每个 Builtin 条目的 Tools 清单中已注册工具 SetToolEnabled(true)，
 // 并应用 DisabledTools（工具级摘除）。
+// ★ 2026-09-04 工具集全局化：读取全局通用集合目录（不再按工作区 root）。
 // 幂等；无内置条目时不做事。
 func ApplyToolsetBuiltinState(r *Registry, root string) {
-	if r == nil || root == "" {
+	_ = root
+	if r == nil {
 		return
 	}
-	// 遍历全部工作区工具集（含 builtin.json——listToolsets 会跳过它，这里直接列文件）
-	dir := toolsetDir(root, toolsetProject)
+	// 遍历全部全局工具集（含 builtin.json——listToolsets 会跳过它，这里直接列文件）
+	dir := globalToolsetDir()
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return

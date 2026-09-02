@@ -171,6 +171,11 @@ type ConversationMeta struct {
 	// ★ 2026-08-31 会话级审核模式：会话内切换审核模式只影响本会话并持久化
 	//   （空=沿用全局/工作区配置；此前切换写全局 settings 串扰其他会话且重启丢失）。
 	ReviewMode string `json:"reviewMode,omitempty"`
+	// ★ 2026-09-04 会话级工具集（通用集合）：会话选择某个工具集模式
+	//   （default/full/dev/debug/test/docs 或 agent 自定义集合）后，agent 工具面
+	//   按该集合收敛（不是全局并集）；空=用默认集合（default）。
+	//   与 Provider/Model/ReviewMode 同理：只影响本会话并持久化。
+	Toolset string `json:"toolset,omitempty"`
 	// Interrupted 标记该对话上次运行是否异常中断（LLM API 错误/panic/崩溃等非用户停止）。
 	// 前端据此展示"未完成，可继续"引导，用户在原对话继续即可恢复上下文与任务进度。
 	Interrupted bool `json:"interrupted,omitempty"`
@@ -1681,6 +1686,40 @@ func (s *MessageStore) ConvReviewMode(convID string) string {
 		return ""
 	}
 	return meta.ReviewMode
+}
+
+// SetConvToolset 设置会话级工具集（通用集合名；空=清除，回落 default 集合）。
+// 与 SetConvModel/SetConvReviewMode 同理：只改本会话并持久化。
+func (s *MessageStore) SetConvToolset(convID, toolset string) error {
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
+
+	metas, err := s.loadIndex()
+	if err != nil {
+		return fmt.Errorf("SetConvToolset: 读取 index 失败: %w", err)
+	}
+	for i := range metas {
+		if metas[i].ID == convID {
+			if metas[i].Toolset == toolset {
+				return nil
+			}
+			metas[i].Toolset = toolset
+			if err := s.saveIndex(metas); err != nil {
+				return fmt.Errorf("SetConvToolset: 写入 index 失败: %w", err)
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("SetConvToolset: 会话 %s 不存在", convID)
+}
+
+// ConvToolset 读取会话级工具集（空=未设置，用 default 集合）。
+func (s *MessageStore) ConvToolset(convID string) string {
+	meta, err := s.GetConversation(convID)
+	if err != nil || meta == nil {
+		return ""
+	}
+	return meta.Toolset
 }
 
 // SetInterrupted 更新对话的异常中断标记（不更新 UpdatedAt，避免影响列表排序）。

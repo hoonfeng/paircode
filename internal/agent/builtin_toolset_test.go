@@ -9,9 +9,13 @@ import (
 )
 
 // mkBuiltinHost 构造测试用 PluginHost（内置插件 + cordis 工具 + 工具集工具装配）。
+// ★ 2026-09-04 工具集全局化：全局工具集目录重定向到临时目录（测试隔离，
+//   避免写入真实安装目录）。
 func mkBuiltinHost(t *testing.T) (*PluginHost, string) {
 	t.Helper()
 	root := t.TempDir()
+	SetGlobalToolsetDirForTest(t.TempDir())
+	t.Cleanup(func() { SetGlobalToolsetDirForTest(testGlobalToolsetDir) })
 	reg := NewRegistry()
 	RegisterDefaultTools(reg, root)
 	RegisterHarnessTools(reg, root)

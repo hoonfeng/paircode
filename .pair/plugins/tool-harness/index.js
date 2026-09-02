@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════
-// tool-harness — harness 核心协议工具（read/write/edit/glob/grep/
-// bash/str_replace_editor/run_code）
+// tool-harness — harness 核心协议工具（read/write/edit/glob/grep/run_code
+// + 后台进程 run_background/read_output/kill_process/job_list）
 //
 // 迁移来源（2026-08-16）：内置 RegisterHarnessTools（internal/agent/
 // harness_tools.go）→ 磁盘外置插件。2026-08-16 第二轮：7 个工具的 execute
@@ -9,8 +9,17 @@
 // ——其「node + tools.xxx 嵌套调度」需 goja VM 宿主运行时（runCodeNested），
 // 属框架运行时能力，JS 沙箱不可复刻。
 //
+// ★ 2026-09 Round3 ③.4 插件瘦身合并：
+//   - tool-shell 的 6 个后台进程工具（run_background/read_output/
+//     kill_process/job_output/job_list/job_kill）并入本插件（实现同源
+//     ctx.process 宿主服务，globalBG 跨轮次存活）；
+//   - bash 工具移除：短查询不再暴露 bash 工具名（长进程误用风险），
+//     宿主 bash 服务本身保留（fs-api/git-api 的 ctx.bash 仍有依赖）。
+// ★ 2026-09 Round4 工具面瘦身：job_output/job_kill（read_output/kill_process
+//   纯别名）已删除，仅保留 job_list（独立清单语义）。
+//
 // 装配：.pair/plugins/ 启动扫描（LoadGlobalPlugins）→ define + load。
-// 停用本插件（cordis_stop tool-harness）即回收全部 8 个工具。
+// 停用本插件（cordis_stop tool-harness）即回收全部 13 个工具。
 // ═══════════════════════════════════════════════════════════════
 
 // ─── JS 原生化实现（ctx.fs / ctx.bash） ────────────────────
@@ -163,104 +172,46 @@ function editFile(ctx, args) {
   return '已编辑 ' + (args.file_path != null ? args.file_path : args.path)
 }
 
-// str_replace_editor：view/create/str_replace/insert
-function sreView(ctx, args, path) {
-  const full = projPath(ctx, args, path)
-  if (ctx.fs.stat(full).isDirectory) {
-    // 目录：列出非隐藏项（最多 2 层）
-    const out = []
-    const walk = (dir, depth) => {
-      for (const name of ctx.fs.readdir(dir)) {
-        if (name.startsWith('.')) continue
-        const child = dir.endsWith('/') ? dir + name : dir + '/' + name
-        const st = ctx.fs.stat(child)
-        out.push('  '.repeat(depth) + name + (st.isDirectory ? '/' : ''))
-        if (st.isDirectory && depth < 1) walk(child, depth + 1)
-      }
-    }
-    walk(full, 0)
-    return out.join('\n') || '（空目录）'
-  }
-  const text = readFileText(ctx, args, full)
-  const lines = text.split('\n')
-  const vr = args.view_range
-  let start = 0, end = lines.length
-  if (Array.isArray(vr) && vr.length >= 1) {
-    const a = Number(vr[0])
-    if (a === -1) { start = 0; end = lines.length }
-    else if (a >= 1) {
-      start = a - 1
-      end = vr.length >= 2 && Number(vr[1]) >= a ? Number(vr[1]) : lines.length
-    }
-  }
-  const shown = lines.slice(start, end)
-  return shown.map((l, i) => String(start + i + 1).padStart(5) + '\t' + l).join('\n')
-}
+// ★ Round4：str_replace_editor（命令式壳）已删除——read/write/edit/multi_edit 全覆盖，避免重复工具面。
 
-function sreCreate(ctx, args, path) {
-  const full = projPath(ctx, args, path)
-  if (ctx.fs.exists(full)) throw new Error('文件已存在，create 拒绝覆盖: ' + path)
-  writeFile(ctx, { path: full, content: args.file_text || '' })
-  return '已创建 ' + path + '（' + (args.file_text || '').length + ' 字节）'
-}
-
-function sreReplace(ctx, args, path) {
-  const full = projPath(ctx, args, path)
-  const text = readFileText(ctx, args, full)
-  const oldStr = args.old_str
-  if (oldStr == null) throw new Error('str_replace 需要 old_str')
-  const newStr = args.new_str == null ? '' : String(args.new_str)
-  let idx = text.indexOf(oldStr)
-  if (idx < 0) throw new Error('old_str 未找到（须精确匹配，含空白）')
-  if (text.indexOf(oldStr, idx + Math.max(oldStr.length, 1)) >= 0) throw new Error('old_str 不唯一，拒绝替换')
-  ctx.fs.writeFile(full, text.slice(0, idx) + newStr + text.slice(idx + oldStr.length))
-  return '已替换 ' + path
-}
-
-function sreInsert(ctx, args, path) {
-  const full = projPath(ctx, args, path)
-  const text = readFileText(ctx, args, full)
-  const lines = text.split('\n')
-  const ln = Number(args.insert_line)
-  if (!(ln >= 0)) throw new Error('insert 需要 insert_line（1 基）')
-  if (ln > lines.length) throw new Error('insert_line ' + ln + ' 超出文件行数 ' + lines.length)
-  const newStr = args.new_str == null ? '' : String(args.new_str)
-  lines.splice(ln, 0, newStr)
-  ctx.fs.writeFile(full, lines.join('\n'))
-  return '已在第 ' + ln + ' 行后插入 ' + path
-}
-
-function strReplaceEditor(ctx, args) {
-  const cmd = args.command
-  switch (cmd) {
-    case 'view': return sreView(ctx, args, args.path)
-    case 'create': return sreCreate(ctx, args, args.path)
-    case 'str_replace': return sreReplace(ctx, args, args.path)
-    case 'insert': return sreInsert(ctx, args, args.path)
-    default: throw new Error('未知 command: ' + cmd + '（view/create/str_replace/insert）')
-  }
-}
-
-// bash：ctx.bash（120s 超时 + 输出截断由宿主保证）。
-// ★ 2026-09 Round2 R2-7 约定对齐：description 可选（参考必填，repo 兼容旧调用方
-//   保持可选）+ timeoutMs 可选（>0 覆盖默认 120s，传给 ctx.bash.exec 第三参秒数）。
-function runCommand(ctx, args) {
-  const cwd = args.project ? '../' + String(args.project).replace(/[\\/]+$/, '') + (args.cwd ? '/' + args.cwd : '') : (args.cwd || '')
-  let timeoutSec = 0
-  if (args.timeoutMs != null) {
-    const ms = Math.round(Number(args.timeoutMs))
-    if (Number.isFinite(ms) && ms > 0) timeoutSec = Math.max(1, Math.round(ms / 1000))
-  }
-  const res = timeoutSec > 0 ? ctx.bash.exec(String(args.command || ''), cwd, timeoutSec) : ctx.bash.exec(String(args.command || ''), cwd)
-  if (res.error) return res.output + (res.output ? '\n' : '') + '[stderr] ' + res.error
-  return res.output
-}
 
 // run_code：统一二进制承载（tool-binary 注册了 run_code——node+tools.xxx
 // 嵌套 goja 调度 + 外部进程执行，二进制进程内自持 goja 运行时）
 function runCode(ctx, args) {
   const opts = { timeout: 120000 }
   return ctx.binary.exec('run_code', args || {}, opts).text
+}
+
+// ─── 后台进程（合并自 tool-shell，同源 ctx.process 宿主服务）───
+
+// run_background：后台启动长命令，返回进程 id
+async function runBackground(ctx, args) {
+  const command = String(args.command || '').trim()
+  if (!command) throw new Error('command 不能为空')
+  const { id } = await ctx.process.runBackground(command, args.cwd || '')
+  return `已后台启动 id=${id}。用 read_output(id=${id}) 看输出、kill_process(id=${id}) 停止。`
+}
+
+// read_output：读取后台进程累积输出与状态
+async function readOutput(ctx, args) {
+  const { output, done, exitErr, status } = await ctx.process.readOutput(Number(args.id))
+  let line = `[${status}]`
+  if (done && exitErr) line += `（${exitErr}）`
+  const capped = output.length > 16000 ? output.slice(0, 16000) + '\n…[输出截断]' : output
+  return `${line}\n${capped}`
+}
+
+// kill_process：停止后台进程
+async function killProcess(ctx, args) {
+  await ctx.process.kill(Number(args.id))
+  return `已停止 id=${args.id}`
+}
+
+// job_list：列出全部后台进程（job_list 对齐，R2-7）
+async function jobList(ctx, args) {
+  const jobs = await ctx.process.list()
+  if (!jobs || jobs.length === 0) return '（无后台进程）'
+  return jobs.map(j => `- id=${j.id} 状态=${j.status}${j.error ? ' 错误=' + j.error : ''}`).join('\n')
 }
 
 // glob/grep：ctx.fs（复用 glob/grep 宿主实现）
@@ -379,51 +330,65 @@ const tools = [
     impl: grepFiles,
   },
   {
-    name: 'bash',
-    description: '同步执行一条 shell 命令并返回输出（对齐 bash）。每次调用在独立 shell 中运行（无状态持久）。禁止用于长期进程（dev server/watch/tcp 监听）——请用 run_background。description 可选（参考实现必填，用于 UI 展示命令意图）；timeoutMs 可选（覆盖默认 120s）。',
-    usageGuide: 'harness 标准 bash 工具：执行命令（构建/测试/查询等短命令）。默认 120s 超时自动终止，可用 timeoutMs 调整。长期进程用 run_background/read_output/kill_process。',
+    name: 'run_background',
+    description: '在后台启动一条长命令，不阻塞 agent 循环（推荐用于 dev server、watch 模式、调试服务等）。返回进程 id，随后用 read_output 读输出、kill_process 停止。如果命令会长期运行或保持监听状态，优先用此工具。短查询请用其他宿主执行通道。',
+    usageGuide: '后台启动一条长命令，不阻塞 agent 循环。用于 dev server、npm run dev/watch 模式、调试服务、TCP 监听——这些场景只能用此工具。返回进程 id，之后用 read_output/kill_process 控制。',
     category: '执行',
     parameters: {
       type: 'object',
       properties: {
-        command: { type: 'string', description: '要执行的命令' },
-        description: { type: 'string', description: '可选：命令意图说明（5-10 词，参考实现为必填；repo 兼容旧调用方保持可选）' },
-        timeoutMs: { type: 'integer', description: '可选：超时毫秒数（>0 覆盖默认 120000；0=不超时）' },
-        cwd: { type: 'string', description: '可选工作目录（工作区内，省略=根）' },
+        command: { type: 'string', description: '要后台执行的命令' },
+        cwd: { type: 'string', description: '可选工作目录（工作区内）' },
         project: { type: 'string', description: '可选：目标项目。省略 = 主项目。' },
       },
       required: ['command'],
     },
-    impl: runCommand,
+    impl: runBackground,
   },
   {
-    name: 'str_replace_editor',
-    description: 'Custom editing tool for viewing, creating and editing files（对齐 str_replace_editor 惯例）\n' +
-      '* `command` 必填：view / create / str_replace / insert\n' +
-      '* `view` 显示文件内容（带行号）；path 为目录时列出非隐藏文件/目录最多 2 层\n' +
-      '* `create` 创建新文件（path 已存在则报错）；内容在 `file_text`\n' +
-      '* `str_replace` 把 `old_str` 替换为 `new_str`——old_str 必须精确匹配且唯一（含空白！不唯一则拒绝）\n' +
-      '* `insert` 在 `insert_line` 之后插入 `new_str`\n' +
-      '* `view` 支持 `view_range` 数组限定行范围（如 [11,12]，[-1] 到文件尾）\n' +
-      '* 长输出会被截断并标记 `<response clipped>`',
-    usageGuide: 'harness 标准命令式编辑器（Claude 系工具）：view 查看、create 创建、str_replace 精确替换（唯一匹配）、insert 行后插入。与 edit 相比更适合『需要先查看行号、再精确替换』的流程；带行号输出方便后续定位。',
-    category: '文件',
+    name: 'read_output',
+    description: '读取某后台进程（id）累积的输出与运行状态（运行中/已结束）。',
+    usageGuide: '读取后台进程的累积输出与运行状态。需先用 run_background 启动进程获得 id。比直接看终端更方便（自动截断保护+状态标记运行中/已结束）。',
+    category: '执行',
+    readOnly: true,
     parameters: {
       type: 'object',
       properties: {
-        command: { type: 'string', description: '要执行的命令：view / create / str_replace / insert（必填）' },
-        path: { type: 'string', description: '文件或目录路径（工作区内；view 支持目录，其他命令须为文件）' },
-        file_text: { type: 'string', description: 'create 命令的文件内容' },
-        insert_line: { type: 'integer', description: 'insert 命令：在此行之后插入 new_str（1 基）' },
-        new_str: { type: 'string', description: 'str_replace 的替换新内容 / insert 的插入内容' },
-        old_str: { type: 'string', description: 'str_replace 的原文（须精确且唯一匹配）' },
-        view_range: { type: 'array', items: { type: 'integer' }, description: 'view 命令行范围，如 [11,12]；[-1] 表示到文件尾' },
-        project: { type: 'string', description: '可选：目标项目。省略 = 主项目。' },
+        id: { type: 'integer', description: '进程 id' },
       },
-      required: ['command', 'path'],
+      required: ['id'],
     },
-    impl: strReplaceEditor,
+    impl: readOutput,
   },
+  {
+    name: 'kill_process',
+    description: '停止某后台进程（id）。只能杀死通过 run_background 启动的进程，无法操作外部进程。',
+    usageGuide: '停止某后台进程（仅限通过 run_background 启动的）。进程跑偏/卡死/已不需要时用此工具停止。',
+    category: '执行',
+    parameters: {
+      type: 'object',
+      properties: {
+        id: { type: 'integer', description: '进程 id' },
+      },
+      required: ['id'],
+    },
+    impl: killProcess,
+  },
+
+  {
+    name: 'job_list',
+    description: '列出全部后台任务（id + 状态 running/done/error）（job_list 对齐）。',
+    usageGuide: '列出全部后台任务（id+状态）。配合 read_output/kill_process 管理后台任务。',
+    category: '执行',
+    readOnly: true,
+    parameters: {
+      type: 'object',
+      properties: {},
+    },
+    impl: jobList,
+  },
+
+
   {
     name: 'run_code',
     description: '执行一段代码并返回输出（对齐 run_code）。language: auto（默认，按内容探测）/ go / python / node。',
@@ -443,8 +408,8 @@ const tools = [
 
 return {
   name: 'tool-harness',
-  purpose: 'harness 核心协议工具（read/write/edit/glob/grep/bash/str_replace_editor/run_code）——迁移自内置 RegisterHarnessTools',
-  inject: ['fs', 'bash'],
+  purpose: 'harness 核心协议工具（read/write/edit/glob/grep/run_code + 后台进程 run_background/read_output/kill_process/job_list）——迁移自内置 RegisterHarnessTools，2026-09 并入 tool-shell（Round4：str_replace_editor/job_output/job_kill 冗余删除）',
+  inject: ['fs', 'bash', 'process'], // ctx.process 后台进程服务（globalBG，跨轮次存活）
   apply(ctx) {
     for (const t of tools) {
       const toolDef = {
@@ -457,7 +422,7 @@ return {
         parameters: t.parameters,
       }
       if (t.impl) {
-        // JS 原生化：调用实现在插件内（ctx.fs/ctx.bash）
+        // JS 原生化：调用实现在插件内（ctx.fs/ctx.bash/ctx.process）
         toolDef.execute = (args) => t.impl(ctx, args || {})
       } else {
         // run_code：宿主 Go 执行器（嵌套 goja VM 调度）

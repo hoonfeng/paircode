@@ -85,17 +85,36 @@ type ToolsetPlugin struct {
 
 // ─── 目录解析 ─────────────────────────────────────────────
 
-// toolsetDirScope 工具集作用域。
+// toolsetScope 工具集作用域。
 type toolsetScope string
 
 const (
-	toolsetProject toolsetScope = "project" // 工作区 .pair/toolsets/
+	toolsetProject toolsetScope = "project" // ★ 兼容保留：工具集已全局化，任何 scope 都落全局目录
 )
 
-// toolsetDir 返回工具集目录（★ 工具集是工作区级概念——没有「全局工具集」；
-// 全局生效的是插件（UI 类），存 <InstallDir>/.pair/plugins/，见 LoadGlobalPlugins）。
+// globalToolsetDir 全局工具集（通用集合）目录：<InstallDir>/.pair/toolsets/。
+// ★ 2026-09-04 工具集模式改造：工具集从「工作区级」（每工作区 .pair/toolsets/）
+//
+//	改为「全局通用集合」——跨工作区共享，预置多模式（default/full/dev/debug/
+//	test/docs），对话面板按会话选择当前集合。全局插件目录
+//	（<InstallDir>/.pair/plugins/）同理，见 globalPluginsDir。
+func globalToolsetDir() string {
+	if globalToolsetDirOverride != "" {
+		return globalToolsetDirOverride
+	}
+	return filepath.Join(core.InstallDir(), ".pair", "toolsets")
+}
+
+// globalToolsetDirOverride 测试隔离/嵌入环境覆盖点（空=默认安装目录）。
+var globalToolsetDirOverride string
+
+// SetGlobalToolsetDirForTest 设置全局工具集目录（测试隔离用；传入空恢复默认）。
+func SetGlobalToolsetDirForTest(dir string) { globalToolsetDirOverride = dir }
+
+// toolsetDir 返回工具集目录（★ 已全局化：projectRoot/scope 仅作兼容参数保留，
+// 一律返回全局通用集合目录 <InstallDir>/.pair/toolsets/）。
 func toolsetDir(projectRoot string, scope toolsetScope) string {
-	return filepath.Join(projectRoot, ".pair", "toolsets")
+	return globalToolsetDir()
 }
 
 // toolsetPath 返回指定工具集的完整文件路径。
@@ -238,7 +257,7 @@ func removeToolset(projectRoot string, scope toolsetScope, name string) error {
 
 // defaultProjectToolset 基础工具集（无工具集时自动生成）：
 //  1. 基础工具：极简核心（harness 命名 read/write/edit/glob/grep/bash/
-//     str_replace_editor/run_code）；
+//     run_code）；
 //  2. 框架本身提供给 agent 的工具（默认可用）：
 //     - system：核心 + SystemTool（任务追踪/提问/提交标记/历史/技能/MCP/
 //     市场等宿主自举工具）+ tool-system 插件承载的框架工具
@@ -270,7 +289,7 @@ func defaultProjectToolset(reg *Registry, ph *PluginHost, project string) *Tools
 // builtinGroupEntries 框架内置工具组条目（system/plugin-mgmt/toolset-mgmt）——
 // defaultProjectToolset 与 ensureBuiltinGroupsInWorkspace 共用同一组装逻辑。
 func builtinGroupEntries(reg *Registry, ph *PluginHost) []ToolsetPlugin {
-	base := []string{"read", "write", "edit", "glob", "grep", "bash", "str_replace_editor", "run_code"}
+	base := []string{"read", "write", "edit", "glob", "grep", "bash", "run_code"}
 	sysSet := map[string]bool{}
 	for _, t := range base {
 		sysSet[t] = true
@@ -347,58 +366,30 @@ func builtinGroupEntries(reg *Registry, ph *PluginHost) []ToolsetPlugin {
 	return plugins
 }
 
-// ensureDefaultWorkspaceToolset 无项目工具集时自动生成基础工具集（default.json）。
-// ★ 先迁移旧版 builtin.json（内置组条目并入 default，旧文件删除）——合并后的
-//
-//	builtin.json 不存在，任何 *.json 都是普通工作区工具集。
-//
-// 判定：.pair/toolsets/ 下不存在任何项目工具集。幂等：已存在时不做。
+// ensureDefaultWorkspaceToolset 确保全局「default」通用集合存在（无 default 时
+// 播种预置模式——default 是首个预置模式）。★ 2026-09-04 工具集全局化：
+// 不再生成「工作区」基础工具集——工具集只有一套全局通用集合，default 缺失时
+// 由 seedPresetToolsets 补齐（幂等；用户删除后不复活——见 .preset-seeded 标记）。
 func ensureDefaultWorkspaceToolset(ph *PluginHost, root string) error {
-	if root == "" {
-		return nil
-	}
-	// ★ 旧版 builtin.json → 并入工作区主工具集（default.json）后删除
-	if err := MigrateLegacyBuiltinJSON(ph, root); err != nil {
-		log.Printf("[toolset] 旧版 builtin.json 迁移失败（不阻塞）: %v", err)
-	}
-	entries, err := os.ReadDir(toolsetDir(root, toolsetProject))
-	if err == nil {
-		for _, e := range entries {
-			if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
-				continue
-			}
-			return nil // 已有项目工具集
-		}
-	}
-	var reg *Registry
-	if ph != nil && ph.Context() != nil {
-		reg = ph.Context().Tools
-	}
-	ts := defaultProjectToolset(reg, ph, filepath.Base(root))
-	if err := saveToolset(root, toolsetProject, ts); err != nil {
-		return err
-	}
-	log.Printf("[toolset] 无工具集：已自动生成基础工具集（%d 个内置条目）: %s",
-		len(ts.Plugins), toolsetPath(root, toolsetProject, ts.Name))
+	_ = root
+	seedPresetToolsets(ph)
 	return nil
 }
 
-// ensureBuiltinGroupsInWorkspace 确保工作区主工具集（default.json）含全部内置工具组
-// 条目（system/plugin-mgmt/toolset-mgmt）。★ 2026-08-20：内置工具默认放到工作区
+// ensureBuiltinGroupsInWorkspace 确保全局 default 集合含全部内置工具组条目
+// （system/plugin-mgmt/toolset-mgmt）。★ 2026-08-20 语义保留：内置工具默认放入
 // 工具集（agent 默认可用、面板可见可管理）。只补一次：default.json 的
 // BuiltinsInited 标记置位后不再自动补（用户移出/增删后保持自己的管理结果）。
 // 返回是否补了条目（调用方决定是否重装载）。
 func ensureBuiltinGroupsInWorkspace(ph *PluginHost, root string) (bool, error) {
-	if root == "" {
-		return false, nil
-	}
+	_ = root
 	var reg *Registry
 	if ph != nil && ph.Context() != nil {
 		reg = ph.Context().Tools
 	}
-	ts, err := loadToolset(root, toolsetProject, "default")
+	ts, err := loadToolset("", toolsetProject, "default")
 	if err != nil || ts == nil {
-		// 无主工具集：由 ensureDefaultWorkspaceToolset 生成（defaultProjectToolset 已含内置组）
+		// 无 default：由 seedPresetToolsets 生成（defaultProjectToolset 已含内置组）
 		return false, nil
 	}
 	if ts.BuiltinsInited {
@@ -423,28 +414,87 @@ func ensureBuiltinGroupsInWorkspace(ph *PluginHost, root string) (bool, error) {
 	ts.BuiltinsInited = true
 	if !changed {
 		// 无新增条目也置标记（避免反复扫描）
-		if err := saveToolset(root, toolsetProject, ts); err != nil {
+		if err := saveToolset("", toolsetProject, ts); err != nil {
 			return false, err
 		}
 		return false, nil
 	}
-	if err := saveToolset(root, toolsetProject, ts); err != nil {
+	if err := saveToolset("", toolsetProject, ts); err != nil {
 		return false, err
 	}
-	log.Printf("[toolset] 已补齐内置工具组条目到工作区工具集 %s（%d 个）", ts.Name, len(entries))
+	log.Printf("[toolset] 已补齐内置工具组条目到全局工具集 %s（%d 个）", ts.Name, len(entries))
 	return true, nil
 }
 
-// EnsureWorkspaceToolsetPublic 无工具集时自动生成基础工具集（供 handler/前端调用）。
+// EnsureWorkspaceToolsetPublic 确保全局 default 通用集合存在（供 handler/前端调用）。
 func EnsureWorkspaceToolsetPublic(ph *PluginHost, root string) error {
 	return ensureDefaultWorkspaceToolset(ph, root)
 }
 
-// LoadAllToolsets 装载工作区全部工具集（启动时调用；失败不致命）。
-// ★ 2026-08-17：内置组条目已并入工作区工具集（default.json），随普通工具集
+// MigrateLegacyWorkspaceToolsets 迁移旧工作区工具集（<root>/.pair/toolsets/*.json）
+// 到全局通用集合目录（<InstallDir>/.pair/toolsets/）。
+// ★ 2026-09-04 工具集模式改造：工作区级工具集被全局通用集合取代——
 //
-//	一起装载，无独立 builtin.json 装载路径（旧文件由 ensureDefaultWorkspaceToolset
-//	迁移清理）。
+//	启动时把每个工作区的旧工具集一次性搬入全局（同名不覆盖：全局已有同名
+//	文件视为更新版本/用户管理结果，工作区旧文件保留在原位但不再读取）。
+//	迁移完成（无同名冲突）后工作区 .pair/toolsets/ 目录清空，代码路径不再
+//	读工作区目录——「工作区工具集」模式彻底移除。
+//
+// 返回迁移（移动成功）的文件数。同名冲突的计数含在第二个返回值（跳过数）。
+func MigrateLegacyWorkspaceToolsets(ph *PluginHost, root string) int {
+	if root == "" {
+		return 0
+	}
+	srcDir := filepath.Join(root, ".pair", "toolsets")
+	entries, err := os.ReadDir(srcDir)
+	if err != nil {
+		return 0
+	}
+	moved := 0
+	skipped := 0
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		if e.Name() == presetSeedMarker {
+			continue
+		}
+		src := filepath.Join(srcDir, e.Name())
+		dst := filepath.Join(globalToolsetDir(), e.Name())
+		if _, err := os.Stat(dst); err == nil {
+			skipped++ // 全局已有同名：保留全局（用户管理结果优先）
+			continue
+		}
+		if err := os.MkdirAll(globalToolsetDir(), 0o755); err != nil {
+			log.Printf("[toolset] 迁移失败（目录创建）: %v", err)
+			break
+		}
+		if err := os.Rename(src, dst); err != nil {
+			log.Printf("[toolset] 迁移 %s 失败: %v", src, err)
+			continue
+		}
+		moved++
+		log.Printf("[toolset] 旧工作区工具集已迁移到全局: %s（来自 %s）", e.Name(), root)
+	}
+	_ = ph
+	if moved > 0 || skipped > 0 {
+		if _, err := workspaceMainToolset(ph, root); err != nil {
+			log.Printf("[toolset] 迁移后确保 default 存在失败: %v", err)
+		}
+	}
+	if moved+skipped > 0 {
+		log.Printf("[toolset] 工作区工具集迁移完成：移动 %d，同名跳过 %d（全局保留）", moved, skipped)
+	}
+	return moved
+}
+
+// LoadAllToolsets 装载全局全部工具集（启动时调用；失败不致命）。
+// ★ 2026-09-04 工具集模式改造：工具集已全局化（<InstallDir>/.pair/toolsets/，
+//
+//	通用集合、跨工作区共享）——不再按工作区读取、不再自动生成工作区 default。
+//	启动流程：① 迁移旧工作区 .pair/toolsets/（一次性，同名跳过）→ ② 播种预置
+//	模式（首次补全 default/full/dev/debug/test/docs）→ ③ 装载全局全部工具集
+//	→ ④ 全局插件（UI/工具包）→ ⑤ 清理未暴露条目 → ⑥ 可见性收敛。
 //
 // ★ 全局插件（UI 类跨工作区）独立于工具集：见 LoadGlobalPlugins（不进工具集列表）。
 func LoadAllToolsets(ph *PluginHost, projectRoot string) {
@@ -452,61 +502,53 @@ func LoadAllToolsets(ph *PluginHost, projectRoot string) {
 		return
 	}
 	loaded := 0
-	// ★ 项目工具集（工作区 .pair/toolsets/）——依赖工作区，未打开时跳过
+	// ★ 2026-09-04：旧工作区工具集一次性迁移到全局（同名跳过；迁移后工作区
+	//   目录不再读取——「工作区工具集」模式已被通用集合取代）
 	if projectRoot != "" {
-		// ★ 2026-08-17：无工具集 → 自动生成基础工具集（装载≠可用语义兜底：
-		//   agent 默认只有基础工具 + 框架本身提供的工具，其余按工具集收敛）；
-		//   内部含旧 builtin.json 迁移
-		if err := ensureDefaultWorkspaceToolset(ph, projectRoot); err != nil {
-			log.Printf("[toolset] 自动生成基础工具集失败: %v", err)
-		}
-		// ★ 2026-08-20：内置工具默认放入工作区工具集——已有工具集幂等补齐
-		//   内置组条目（system/plugin-mgmt/toolset-mgmt），补后需重新装载
-		if added, err := ensureBuiltinGroupsInWorkspace(ph, projectRoot); err != nil {
-			log.Printf("[toolset] 内置工具组补齐失败: %v", err)
-		} else if added {
-			if ts0, err := loadToolset(projectRoot, toolsetProject, "default"); err == nil && ts0 != nil {
-				if err := installToolset(ph, ts0); err != nil {
-					log.Printf("[toolset] default 重装载失败: %v", err)
-				}
-			}
-		}
-		for _, meta := range listToolsets(projectRoot, toolsetProject) {
-			ts, err := loadToolset(projectRoot, toolsetProject, meta.Name)
-			if err != nil {
-				continue
-			}
-			if err := installToolset(ph, ts); err != nil {
-				log.Printf("[toolset] %s 装载失败: %v", meta.Name, err)
-				continue
-			}
-			loaded++
+		if n := MigrateLegacyWorkspaceToolsets(ph, projectRoot); n > 0 {
+			log.Printf("[toolset] 已迁移 %d 个旧工作区工具集到全局通用集合目录", n)
 		}
 	}
 	// ★ 全局插件（UI 类跨工作区生效；不属于任何工具集）——不依赖工作区：
-	//   存 <InstallDir>/.pair/plugins/，未打开工作区也必须装载（发布版启动即生效）
+	//   存 <InstallDir>/.pair/plugins/，未打开工作区也必须装载（发布版启动即生效）。
+	//   ★ 必须先于 seedPresetToolsets：磁盘插件装载后 toolOwner 认领各自工具，
+	//     预置模式的 builtin:system 组快照才不会把业务工具误收进「系统工具」
+	//     （否则 default 变全功能——codegraph/git 等工具被 system 组声明）。
 	if n := LoadGlobalPlugins(ph); n > 0 {
 		loaded += n
+	}
+	// ★ 2026-09-04：预置模式播种（首次补全 default/full/dev/debug/test/docs；
+	//   已被用户删除的集合不复活——.preset-seeded 标记）
+	seedPresetToolsets(ph)
+	// ★ 全局工具集（通用集合）——不再依赖工作区
+	for _, meta := range listToolsets("", toolsetProject) {
+		ts, err := loadToolset("", toolsetProject, meta.Name)
+		if err != nil {
+			continue
+		}
+		if err := installToolset(ph, ts); err != nil {
+			log.Printf("[toolset] %s 装载失败: %v", meta.Name, err)
+			continue
+		}
+		loaded++
 	}
 	// ★ 2026-08-2x：实装后二次过滤——工具集中「未暴露」的条目/工具清理落盘
 	//   （未装载插件条目 / 未注册工具 / 整组未启用的内置组）。已装载插件的工具
 	//   保留；清理结果保存到 .pair/toolsets/*.json，下次启动不再出现。
-	if projectRoot != "" {
-		if n := pruneUnavailableFromToolsets(ph, projectRoot); n > 0 {
-			log.Printf("[toolset] 实装后清理：%d 个工具集已移除未暴露条目并保存", n)
-		}
+	if n := pruneUnavailableFromToolsets(ph, projectRoot); n > 0 {
+		log.Printf("[toolset] 实装后清理：%d 个工具集已移除未暴露条目并保存", n)
 	}
 	// ★ 2026-08-17：装载 ≠ agent 可用——全部插件照常装载（cordis/前端可见可管理），
-	//   但收敛 agent 可见工具 = 工作区工具集声明 + 自举管理工具（SystemTool +
+	//   但收敛 agent 可见工具 = 全局工具集声明 + 自举管理工具（SystemTool +
 	//   cordis_*/toolset_*）。未加入工具集的插件工具对 agent 隐藏（Enabled=false），
 	//   恢复 = toolset_edit add_plugin 加入工具集。
-	if projectRoot != "" && ph.Context() != nil && ph.Context().Tools != nil {
+	if ph.Context() != nil && ph.Context().Tools != nil {
 		if n := ApplyToolsetVisibilityFilter(ph.Context().Tools, ph, projectRoot); n > 0 {
 			log.Printf("[toolset] 可见性收敛：%d 个未加入工具集的工具对 agent 隐藏（cordis 仍可见，toolset_edit 可加入）", n)
 		}
 	}
 	if loaded > 0 {
-		log.Printf("[toolset] 已装载 %d 个工具集（%d 个插件）", loaded, countAllToolsetPlugins(projectRoot))
+		log.Printf("[toolset] 已装载 %d 个工具集（%d 个插件）", loaded, countAllToolsetPlugins(""))
 	}
 }
 
@@ -887,12 +929,9 @@ func LoadToolsetPublic(root, scope, name string) (*Toolset, error) {
 	return loadToolset(root, toolsetScope(scope), name)
 }
 
-// SaveToolsetPublic 固化工具集（★ 仅工作区级：scope 非空且≠project 时拒绝——
-// 没有「全局工具集」，全局生效的是插件，见 GlobalPluginsPath）。
+// SaveToolsetPublic 固化工具集（★ 2026-09-04 全局化：工具集为通用集合，
+// 一律存 <InstallDir>/.pair/toolsets/；scope 参数保留兼容，任何值都落全局）。
 func SaveToolsetPublic(root, scope string, ts *Toolset) error {
-	if scope != "" && scope != "project" {
-		return fmt.Errorf("工具集仅工作区级（没有全局工具集）；scope 只支持 project")
-	}
 	return saveToolset(root, toolsetProject, ts)
 }
 
@@ -918,11 +957,8 @@ func UnloadToolsetPublic(ph *PluginHost, ts *Toolset) {
 	UnloadToolsetPlugins(ph, ts)
 }
 
-// RemoveToolsetPublic 删除工具集（★ 仅工作区级）。
+// RemoveToolsetPublic 删除工具集（★ 2026-09-04 全局化：通用集合，一律从全局目录删除）。
 func RemoveToolsetPublic(root, scope, name string) error {
-	if scope != "" && scope != "project" {
-		return fmt.Errorf("工具集仅工作区级（没有全局工具集）；scope 只支持 project")
-	}
 	return removeToolset(root, toolsetProject, name)
 }
 
@@ -1209,17 +1245,20 @@ func isAgentProtocolTool(name string) bool {
 	return false
 }
 
-// workspaceToolsetVisibleTools 工作区工具集声明的工具白名单：
+// workspaceToolsetVisibleTools 全局通用集合声明的工具白名单（全部工具集并集）：
 //   - 内置工具包条目（Builtin）：Tools 清单（用户选择加入的内置组工具）
 //   - JS 插件条目：该插件经 pluginTools 注册的工具（工具集插件 = 声明工具对 agent 可见）
 //
 // 供可见性收敛使用（装载钩子 + 启动全量兜底）。
+// ★ 2026-09-04 工具集全局化：读取全局目录（所有通用集合的并集）
+//
+//	——任何集合声明的工具都保留注册（会话级按所选集合再收敛）。
 func (h *PluginHost) workspaceToolsetVisibleTools() map[string]bool {
 	keep := map[string]bool{}
-	if h == nil || h.root == "" {
+	if h == nil {
 		return keep
 	}
-	dir := toolsetDir(h.root, toolsetProject)
+	dir := globalToolsetDir()
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return keep
@@ -1292,10 +1331,10 @@ func (h *PluginHost) workspaceToolsetVisibleTools() map[string]bool {
 //	这些工具再强启协议工具，保证移除持久有效（enable_tool 可恢复）。
 func (h *PluginHost) workspaceToolsetDisabledTools() map[string]bool {
 	out := map[string]bool{}
-	if h == nil || h.root == "" {
+	if h == nil {
 		return out
 	}
-	dir := toolsetDir(h.root, toolsetProject)
+	dir := globalToolsetDir()
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return out
@@ -1323,7 +1362,7 @@ func (h *PluginHost) workspaceToolsetDisabledTools() map[string]bool {
 	return out
 }
 
-// pruneUnavailableFromToolsets 实装后清理工作区工具集中「未暴露」的条目/工具并保存
+// pruneUnavailableFromToolsets 实装后清理全局工具集中「未暴露」的条目/工具并保存
 // （★ 2026-08-2x：插件面板未启用/未装载的插件工具不再留在工具集）：
 //   - JS 插件条目：插件未装载（未定义或非 running）→ 整条移除（未启用的插件
 //     不给工具集——工具集管理/白名单不再出现）。
@@ -1332,16 +1371,14 @@ func (h *PluginHost) workspaceToolsetDisabledTools() map[string]bool {
 //
 // 幂等；仅启动实装（LoadAllToolsets）完成后调用一次。返回清理了条目的工具集数量。
 func pruneUnavailableFromToolsets(ph *PluginHost, root string) int {
-	if root == "" {
-		return 0
-	}
+	_ = root
 	var reg *Registry
 	if ph != nil && ph.Context() != nil {
 		reg = ph.Context().Tools
 	}
 	cleaned := 0
-	for _, meta := range listToolsets(root, toolsetProject) {
-		ts, err := loadToolset(root, toolsetProject, meta.Name)
+	for _, meta := range listToolsets("", toolsetProject) {
+		ts, err := loadToolset("", toolsetProject, meta.Name)
 		if err != nil || ts == nil {
 			continue
 		}
@@ -1410,30 +1447,86 @@ func pruneUnavailableFromToolsets(ph *PluginHost, root string) int {
 		}
 		if changed {
 			ts.Plugins = out
-			if err := saveToolset(root, toolsetProject, ts); err == nil {
+			if err := saveToolset("", toolsetProject, ts); err == nil {
 				cleaned++
-				log.Printf("[toolset] %s 清理完成：未暴露条目已从工作区工具集移除并保存", ts.Name)
+				log.Printf("[toolset] %s 清理完成：未暴露条目已从全局工具集移除并保存", ts.Name)
 			}
 		}
 	}
 	return cleaned
 }
 
-// ApplyWorkspaceToolsetWhitelist 会话级注册表应用「工作区工具集白名单」：
-// agent 只暴露工作区工具集声明的工具（builtin 条目 Tools + JS 插件工具 −
-// DisabledTools），未声明的全部禁用（cordis/前端仍可见可管理，toolset_edit 可加入）。
-// ★ 2026-08-17 白名单模型：有工具集 → 只暴露工具集里的工具；无工具集 → 先自动
-//
-//	创建基础工具集（极简核心 + 框架本身提供的工具），再按声明收敛。
-//	工作区隔离：每个工作区读自己的 .pair/toolsets/，互不影响。
+// ApplyWorkspaceToolsetWhitelist 兼容包装（★ 2026-09-04 已由会话级
+// ApplyConvToolsetWhitelist 取代）：按 root 找会话已不可行——工具集已全局化。
+// 语义保留为「应用默认集合（default）」：与旧行为（无工具集时默认集合）对齐。
+// 调用方应改用 ApplyConvToolsetWhitelist（会话级选择）。
 func ApplyWorkspaceToolsetWhitelist(ph *PluginHost, reg *Registry, root string) {
-	if reg == nil || root == "" {
+	_ = root
+	ApplyToolsetWhitelistByName(ph, reg, "")
+}
+
+// ApplyConvToolsetWhitelist 会话级工具集白名单：按会话元数据选择的通用集合
+// （ConversationMeta.Toolset；空=default 集合）收敛 agent 可见工具。
+// ★ 2026-09-04：工具集全局化——会话选择哪个集合（模式），agent 只暴露该集合
+//
+//	声明的工具（builtin 条目 Tools + JS 插件工具 − DisabledTools）+ 恒可用
+//	协议/管理工具。未声明工具全部禁用（cordis/前端仍可见可管理）。
+//
+// 幂等；subagent 成员会话同样按自己的 convID 读取（spawn 时继承源会话集合）。
+func ApplyConvToolsetWhitelist(ph *PluginHost, reg *Registry, convID, wsRoot string) {
+	if reg == nil {
 		return
 	}
-	if err := ensureDefaultWorkspaceToolset(ph, root); err != nil {
-		log.Printf("[toolset] 自动生成基础工具集失败（白名单应用）: %v", err)
+	name := ""
+	// ★ 会话元数据优先：会话显式选择过集合 → 用所选集合；未选择/找不到 →
+	//   跨 store 兜底再找（防 workspaceRoot 错位）；仍无 → 空 = default 集合。
+	if convID != "" {
+		if store := storeForConvLookup(convID, wsRoot); store != nil {
+			name = store.ConvToolset(convID)
+		}
 	}
-	keep := workspaceToolsetVisibleToolsFor(ph, root)
+	ApplyToolsetWhitelistByName(ph, reg, name)
+}
+
+// storeForConvLookup 按会话定位消息存储（workspaceRoot 指定优先；未命中时
+// 跨已打开 store 兜底——与 SessionManager.FindConversation 语义一致）。
+func storeForConvLookup(convID, wsRoot string) ConversationStore {
+	if m := GlobalSessionManager(); m != nil {
+		if wsRoot != "" {
+			if st := m.StoreFor(wsRoot); st != nil {
+				if meta, err := st.GetConversation(convID); err == nil && meta != nil {
+					return st
+				}
+			}
+		}
+		if meta, root := m.FindConversation(convID); meta != nil && root != "" {
+			return m.StoreFor(root)
+		}
+	}
+	return nil
+}
+
+// ApplyToolsetWhitelistByName 按指定工具集名（全局通用集合）应用白名单：
+// name 空 = default 集合；default 不存在时先播种（幂等），仍无 → 全量保留
+// （无集合配置不收敛——兼容无工具集环境）。
+func ApplyToolsetWhitelistByName(ph *PluginHost, reg *Registry, name string) {
+	if reg == nil {
+		return
+	}
+	if name == "" {
+		name = "default"
+	}
+	ts, err := loadToolset("", toolsetProject, name)
+	if err != nil {
+		// 缺 default：播种预置模式再试一次
+		seedPresetToolsets(ph)
+		ts, err = loadToolset("", toolsetProject, name)
+		if err != nil {
+			log.Printf("[toolset] 白名单应用：工具集 %q 不存在，不收敛（全量保留）", name)
+			return
+		}
+	}
+	keep := toolsetVisibleToolsFor(ph, ts)
 	// ★ 框架本身提供的工具恒可用（无论工具集是否声明）——agent 自举闭环必需：
 	//   SystemTool（任务追踪/提问/提交标记/历史/技能/MCP/市场等）+ cordis_* 插件
 	//   管理 + toolset_* 工具集管理 + tool-system 插件承载的框架工具。默认工具集
@@ -1459,15 +1552,65 @@ func ApplyWorkspaceToolsetWhitelist(ph *PluginHost, reg *Registry, root string) 
 	}
 }
 
-// workspaceToolsetVisibleToolsFor 工作区工具集白名单（声明可见的工具名集合）：
+// toolsetVisibleToolsFor 单个工具集声明的白名单（声明可见的工具名集合）：
 // builtin 条目 Tools（−DisabledTools）+ JS 插件注册工具（−DisabledTools）。
-// 与 PluginHost.workspaceToolsetVisibleTools 同逻辑（自由函数版，按 root 参数）。
-func workspaceToolsetVisibleToolsFor(ph *PluginHost, root string) map[string]bool {
+func toolsetVisibleToolsFor(ph *PluginHost, ts *Toolset) map[string]bool {
 	keep := map[string]bool{}
-	if root == "" {
+	if ts == nil {
 		return keep
 	}
-	dir := toolsetDir(root, toolsetProject)
+	var reg *Registry
+	if ph != nil && ph.Context() != nil {
+		reg = ph.Context().Tools
+	}
+	for _, p := range ts.Plugins {
+		disabled := map[string]bool{}
+		for _, tn := range p.DisabledTools {
+			disabled[tn] = true
+		}
+		if p.Builtin != "" {
+			// ★ 内置条目仅「真实注册的工具」进白名单（未暴露跳过）。
+			for _, tn := range p.Tools {
+				if tn == "" || disabled[tn] {
+					continue
+				}
+				if reg != nil {
+					if _, ok := reg.Get(tn); !ok {
+						continue
+					}
+				}
+				keep[tn] = true
+			}
+			continue
+		}
+		if p.Name == "" {
+			continue
+		}
+		// ★ JS/磁盘插件条目仅当插件 running 时其工具才进白名单
+		//   （插件未启用/未装载 → 整条跳过，工具不暴露）。
+		if ph == nil || ph.State(p.Name) != PluginRunning {
+			continue
+		}
+		var tns []string
+		if ph != nil {
+			tns = ph.PluginToolsByPlugin()[p.Name]
+		}
+		for _, tn := range tns {
+			if tn != "" && !disabled[tn] {
+				keep[tn] = true
+			}
+		}
+	}
+	return keep
+}
+
+// workspaceToolsetVisibleToolsFor 全部全局工具集并集白名单（自由函数版，
+// 兼容原有调用方：ensureDefaultWorkspaceToolset 等旧路径；与
+// PluginHost.workspaceToolsetVisibleTools 同逻辑）。
+func workspaceToolsetVisibleToolsFor(ph *PluginHost, root string) map[string]bool {
+	_ = root
+	keep := map[string]bool{}
+	dir := globalToolsetDir()
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return keep
@@ -1484,60 +1627,20 @@ func workspaceToolsetVisibleToolsFor(ph *PluginHost, root string) map[string]boo
 		if err := json.Unmarshal(data, &ts); err != nil || ts.Name == "" {
 			continue
 		}
-		var reg *Registry
-		if ph != nil && ph.Context() != nil {
-			reg = ph.Context().Tools
-		}
-		for _, p := range ts.Plugins {
-			disabled := map[string]bool{}
-			for _, tn := range p.DisabledTools {
-				disabled[tn] = true
-			}
-			if p.Builtin != "" {
-				// ★ 2026-08-2x：内置条目仅「真实注册的工具」进白名单（未暴露跳过）。
-				for _, tn := range p.Tools {
-					if tn == "" || disabled[tn] {
-						continue
-					}
-					if reg != nil {
-						if _, ok := reg.Get(tn); !ok {
-							continue
-						}
-					}
-					keep[tn] = true
-				}
-				continue
-			}
-			if p.Name == "" {
-				continue
-			}
-			// ★ 2026-08-2x：JS 插件条目仅当插件 running 时其工具才进白名单
-			//   （插件未启用/未装载 → 整条跳过，工具不暴露）。
-			if ph == nil || ph.State(p.Name) != PluginRunning {
-				continue
-			}
-			// JS 插件条目：插件注册的全部工具（−DisabledTools）→ 声明可见
-			var tns []string
-			if ph != nil {
-				tns = ph.PluginToolsByPlugin()[p.Name]
-			}
-			for _, tn := range tns {
-				if tn != "" && !disabled[tn] {
-					keep[tn] = true
-				}
-			}
+		for tn := range toolsetVisibleToolsFor(ph, &ts) {
+			keep[tn] = true
 		}
 	}
 	return keep
 }
 
 // applyPluginToolVisibility 插件装载后应用工具可见性（★ 装载 ≠ agent 可用）：
-// 插件注册的工具若不在工作区工具集白名单（内置条目 Tools / 工具集 JS 插件声明），
+// 插件注册的工具若不在全局工具集白名单（内置条目 Tools / 工具集 JS 插件声明），
 // 对 agent 隐藏（Enabled=false）——cordis/前端仍可见可管理，toolset_edit 加入后恢复。
 // 在 LoadJSDynamic 装载成功后调用（工具集插件经 applyToolsetPlugin 也走此路径，
 // 其工具在白名单内保持启用；非工具集插件经全局装载/cordis_run 装载即被隐藏）。
 func (h *PluginHost) applyPluginToolVisibility(name string) {
-	if h == nil || name == "" || !hasWorkspaceToolsets(h.root) {
+	if h == nil || name == "" || !hasWorkspaceToolsets() {
 		return
 	}
 	keep := h.workspaceToolsetVisibleTools()
@@ -1551,16 +1654,14 @@ func (h *PluginHost) applyPluginToolVisibility(name string) {
 	}
 }
 
-// hasWorkspaceToolsets 工作区是否存在工具集配置（.pair/toolsets/ 下任意 *.json）。
-// ★ 2026-08-17：可见性收敛（装载≠可用）仅在「工作区配置了工具集」时生效——
+// hasWorkspaceToolsets 全局是否存在工具集配置（.pair/toolsets/ 下任意 *.json）。
+// ★ 2026-08-17：可见性收敛（装载≠可用）仅在「配置了工具集」时生效——
 //
-//	无工具集（新项目未 toolset_build、单元测试临时目录等）保持默认全量
-//	（工具注册即对 agent 可见，旧行为）。用户配置工具集后即开始收敛。
-func hasWorkspaceToolsets(root string) bool {
-	if root == "" {
-		return false
-	}
-	entries, err := os.ReadDir(toolsetDir(root, toolsetProject))
+//	无工具集保持默认全量（工具注册即对 agent 可见，旧行为）。用户配置
+//	工具集（含预置模式播种）后即开始收敛。
+// ★ 2026-09-04：工具集全局化——检查全局目录，不再依赖工作区根。
+func hasWorkspaceToolsets() bool {
+	entries, err := os.ReadDir(globalToolsetDir())
 	if err != nil {
 		return false
 	}
@@ -1572,13 +1673,13 @@ func hasWorkspaceToolsets(root string) bool {
 	return false
 }
 
-// hideToolIfNotInToolset 工具若不在工作区工具集白名单 → 禁用（agent 不可见）。
+// hideToolIfNotInToolset 工具若不在全局工具集白名单 → 禁用（agent 不可见）。
 // 供非 LoadJSDynamic 路径（Node 桥插件 ctx.tools.register 等）注册工具后调用，
 // 保持「装载 ≠ 可用」语义：插件照常装载（cordis/前端可见可管理），工具仅对
-// 工作区工具集声明 + 协议/管理工具可见。harness 模式（WB_HARNESS=1）或无
+// 工具集声明 + 协议/管理工具可见。harness 模式（WB_HARNESS=1）或无
 // 工具集配置时不干预。
 func (h *PluginHost) hideToolIfNotInToolset(name string) {
-	if h == nil || name == "" || HarnessOnlyTools() || !hasWorkspaceToolsets(h.root) {
+	if h == nil || name == "" || HarnessOnlyTools() || !hasWorkspaceToolsets() {
 		return
 	}
 	if h.workspaceToolsetVisibleTools()[name] {
@@ -1587,16 +1688,21 @@ func (h *PluginHost) hideToolIfNotInToolset(name string) {
 	h.ctx.Tools.SetToolEnabled(name, false)
 }
 
-// ApplyToolsetVisibilityFilter 收敛 agent 可见工具 = 工作区工具集声明 + 协议/管理工具。
+// ApplyToolsetVisibilityFilter 收敛 agent 可见工具 = 全局工具集声明 + 协议/管理工具。
 // ★ 语义（2026-08-17）：装载 ≠ agent 可用。全部插件照常装载（cordis 可见可管理），
 //
-//	但 agent 执行任务时只能看到「工作区工具集（.pair/toolsets/*.json）声明的工具」+
+//	但 agent 执行任务时只能看到「工具集（.pair/toolsets/*.json）声明的工具」+
 //	「自举管理工具（SystemTool + cordis_*/toolset_* 等）」。未加入工具集的工具
 //	Enabled=false（注册保留、前端可见），恢复 = toolset_edit add_plugin。
 //
+// ★ 2026-09-04：工具集全局化——声明集 = 全部全局工具集并集（任何集合声明的
+//
+//	工具都保留）；会话级收敛（是否只暴露所选集合）由 ApplyConvToolsetWhitelist
+//	在发送消息时按会话选择执行。
+//
 // 幂等；harness 对齐模式（WB_HARNESS=1）不干预（走 ApplyHarnessToolFilter）。
 func ApplyToolsetVisibilityFilter(r *Registry, ph *PluginHost, root string) int {
-	if r == nil || HarnessOnlyTools() || !hasWorkspaceToolsets(root) {
+	if r == nil || HarnessOnlyTools() || !hasWorkspaceToolsets() {
 		return 0
 	}
 	keep := map[string]bool{}

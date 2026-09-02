@@ -20,36 +20,21 @@ import (
 	"syscall"
 )
 
-// ── 内置 bash 执行（Git Bash 资源，随 release 分发）──
-// 优先使用项目自带的内置 bash（bin/bash/usr/bin/bash.exe）：
-//   - POSIX 语法 + UTF-8 输出，LLM 一次成功率远高于 cmd/PowerShell（引号/&/编码坑少）；
-//   - 回退链：内置 bash → 系统 Git Bash → PATH 中的 bash → cmd（原逻辑兜底）。
+// ── 内置 bash 执行（Git Bash 资源）──
+// ★ 2026-09 Round3 ③.4：自带的 bin/bash（Git Bash 精简版，约 28MB）已移除
+//   （打包体积瘦身；详见 packager.json dist.include 与仓库 bin/bash 删除）。
+//   bash 服务仍保留（fs-api/git-api 的 ctx.bash 依赖）：探测链为
+//   系统 Git Bash → PATH 中的 bash → cmd（原逻辑兜底）。
 var (
 	detectedBashOnce sync.Once
 	detectedBashPath string
 	detectedMsysBin  string
 )
 
-// bashCandidate 计算 exe 同目录内置 bash 候选路径。
-func bashCandidate(exePath string) string {
-	return filepath.Join(filepath.Dir(exePath), "bin", "bash", "usr", "bin", "bash.exe")
-}
-
 // detectBash 探测可用 bash，返回 bash 可执行文件路径与其 msys bin 目录（PATH 前缀用）。
 func detectBash() (bashPath, msysBin string) {
 	detectedBashOnce.Do(func() {
-		// 1. 内置资源：exe 同目录 bin/bash/usr/bin/bash.exe
-		if exe, err := os.Executable(); err == nil {
-			cand := bashCandidate(exe)
-			if st, err := os.Stat(cand); err == nil && !st.IsDir() {
-				detectedBashPath = cand
-				detectedMsysBin = filepath.Dir(cand)
-				// 确保 msys 根 /tmp 存在（bash 找不到会打 stderr 警告）
-				os.MkdirAll(filepath.Join(filepath.Dir(filepath.Dir(cand)), "tmp"), 0o755)
-				return
-			}
-		}
-		// 2. 系统 Git Bash（回退）
+		// 1. 系统 Git Bash（首选）
 		for _, cand := range []string{
 			`C:\Program Files\Git\usr\bin\bash.exe`,
 			`C:\Program Files (x86)\Git\usr\bin\bash.exe`,
@@ -60,7 +45,7 @@ func detectBash() (bashPath, msysBin string) {
 				return
 			}
 		}
-		// 3. PATH 中的 bash（msys2/WSL 等，最后兜底）
+		// 2. PATH 中的 bash（msys2/WSL 等，最后兜底）
 		if p, err := exec.LookPath("bash"); err == nil {
 			detectedBashPath = p
 		}

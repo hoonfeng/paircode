@@ -1364,8 +1364,8 @@ func (l *Loop) buildLogBlock() string {
 // roots 为空时使用当前工作目录作为兜底根目录。
 // ★ harness 对齐：默认（HarnessOnlyTools）返回精简版 harnessSystemPrompt——
 //
-//	只描述保留的工具（read/write/edit/glob/grep/str_replace_editor/bash/
-//	web_search/web_fetch/run_code + 协议工具 update_tasks/ask_user），不引用已被移除的 pair 独有工具，降低冗余与误导；
+//	只描述保留的工具（read/write/edit/glob/grep/bash/web_search/web_fetch/
+//	run_code + 协议工具 update_tasks/ask_user），不引用已被移除的工具，降低冗余与误导；
 //	WB_FULL_TOOLS=1 返回完整版 fullSystemPrompt（含 codegraph/记忆/技能等说明）。
 func DefaultSystemPrompt(roots []string) string {
 	if HarnessOnlyTools() {

@@ -182,9 +182,10 @@ func TestToolProjectInfoJSNative(t *testing.T) {
 	}
 }
 
-// TestToolVerifyJSNative tool-verify JS 原生化：注册 + 知识库验证可跑（只读）。
+// TestToolVerifyJSNative tool-resource 的 verify 工具 JS 原生化：注册 + 知识库验证可跑（只读）。
+// ★ 2026-09-04 合并：tool-verify 已并入 tool-resource（JS 实现整体搬迁，行为不变）。
 func TestToolVerifyJSNative(t *testing.T) {
-	_, reg := loadDiskPluginForTest(t, "tool-verify")
+	_, reg := loadDiskPluginForTest(t, "tool-resource")
 	for _, name := range []string{"memory_verify", "project_info_verify"} {
 		if _, ok := reg.Get(name); !ok {
 			t.Fatalf("工具 %s 未注册", name)
@@ -424,40 +425,19 @@ func TestToolBinaryJSNative(t *testing.T) {
 }
 
 // TestToolBugJSNative tool-bug JS 原生化（2026-08-22）：装载真实 index.js，
-// 验证 bug_analyze 解析（build/test/run 三种输出形态）与 bug_fix 提示生成。
+// 验证 bug_detect/bug_fix 注册（★ Round4 削减：bug_analyze 已删除——
+// bug_detect/bug_fix 覆盖构建输出→错误定位链，解析器内置插件内）。
 func TestToolBugJSNative(t *testing.T) {
 	_, reg := loadDiskPluginForTest(t, "tool-bug")
-	for _, name := range []string{"bug_analyze", "bug_detect", "bug_fix"} {
+	for _, name := range []string{"bug_detect", "bug_fix"} {
 		if _, ok := reg.Get(name); !ok {
 			t.Fatalf("工具 %s 未注册", name)
 		}
 		reg.SetToolEnabled(name, true)
 	}
-
-	// bug_analyze：build 输出解析（file:line:col: msg）
-	out := execJSTool(t, reg, "bug_analyze", `{"output":"main.go:10:5: undefined: foo\n./a/b.go:20: undeclared name: bar","output_type":"build"}`)
-	if !strings.Contains(out, "检测到 2 个问题") {
-		t.Fatalf("bug_analyze build 输出异常: %q", out)
-	}
-	if !strings.Contains(out, "main.go:10") {
-		t.Fatalf("bug_analyze 应含文件位置: %q", out)
-	}
-
-	// bug_analyze：test 输出解析（--- FAIL: + 栈帧）
-	out = execJSTool(t, reg, "bug_analyze", `{"output":"--- FAIL: TestFoo (0.01s)\n    a_test.go:15: not equal\n","output_type":"test"}`)
-	if !strings.Contains(out, "测试失败") {
-		t.Fatalf("bug_analyze test 输出异常: %q", out)
-	}
-
-	// bug_analyze：run 输出解析（panic 栈）
-	out = execJSTool(t, reg, "bug_analyze", `{"output":"panic: runtime error: index out of range\n\ngoroutine 1 [running]:\nmain.foo()\n\t/tmp/a.go:10 +0x100\n","output_type":"run"}`)
-	if !strings.Contains(out, "panic") {
-		t.Fatalf("bug_analyze run 输出异常: %q", out)
-	}
-
-	// bug_analyze：无匹配输出
-	out = execJSTool(t, reg, "bug_analyze", `{"output":"all good","output_type":"build"}`)
-	if !strings.Contains(out, "未检测到错误症状") {
-		t.Fatalf("bug_analyze 无匹配输出异常: %q", out)
+	// 描述非空冒烟（bug_detect 全量反编译需真实工程，仅断言注册与元数据）
+	tool, ok := reg.Get("bug_detect")
+	if !ok || strings.TrimSpace(tool.Description) == "" {
+		t.Fatal("bug_detect 描述为空")
 	}
 }

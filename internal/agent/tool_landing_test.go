@@ -27,51 +27,56 @@ import (
 //	hostTool : 全部工具走 ctx.hostTool.exec（宿主 Go 存档）→ 强断言
 //	binary   : 全部工具走 ctx.binary.exec（内嵌内核覆盖）→ 强断言
 //	mixed    : 部分原生 + 二进制回退分支（内核覆盖全量=设计事实）→ 强断言
-//	             （tool-harness 例外：bash 等原生、run_code 走内核——内核无 bash 属正常）
+//	             （原生实现工具不在内嵌内核——toolHarnessAliases 声明跳过，
+//	             如 harness 的 read/write/edit/… 与 tool-web 的 web_fetch/web_search）
 //	native   : 全 JS 原生实现（ctx.fs/bash/process/web）
 //
 // ★ 修改插件实现模式时必须同步本表（测试是模式漂移守卫）。
+// ★ 2026-09 Round3 ③.4 插件瘦身合并：tool-shell（→tool-harness）、
+//   tool-screenshot/tool-web-debug（→tool-web）、tool-goal（→tool-system）、
+//   tool-subagent（→tool-workflow）、tool-bridge（已删除）不再独立存在，
+//   模式表同步删除对应行。
 var toolPluginModes = map[string]string{
 	"tool-system":          "hostTool",
 	"tool-codegraph":       "binary",
-	"tool-codegraph-extra": "binary",
 	"tool-binary":          "binary",
-	"tool-screenshot":      "binary",
-	"tool-web-debug":       "binary",
 	"tool-debug":           "mixed",
 	"tool-office":          "mixed",
-	"tool-harness":         "mixed",
+	"tool-harness":         "mixed", // ★ 07-23 合并 tool-shell：6 后台进程工具为 JS 原生（原 tool-shell native 模式）
 	"tool-git":             "native",
-	"tool-shell":           "native",
 	"tool-core":            "native",
 	"tool-memory":          "native",
 	"tool-project-info":    "native",
-	"tool-verify":          "native",
 	"tool-vision":          "native",
 	"tool-bug":             "native",
-	"tool-web":             "native",
+	"tool-web":             "mixed", // ★ ③.4 合并 tool-screenshot/tool-web-debug：screenshot_*/web_debug 走 binary 内核
 	// ★ 2026-09 t1 T1 闭环：7 组孤儿工具迁移为磁盘插件（tool_plugin_gen.go 生成，
 	//   execute 走 ctx.hostTool.exec 复用宿主存档能力——legacy_host_tools.go）
 	"tool-asset":       "hostTool",
-	"tool-bridge":      "hostTool",
 	"tool-entryconfig": "hostTool",
-	"tool-evolution":   "hostTool",
-	"tool-progress":    "hostTool",
-	"tool-resource":    "hostTool",
+	"tool-resource":    "hostTool", // ★ 2026-09-04 tool-verify 并入：verify 2 工具 JS 原生 impl 优先、hostTool 兜底（registerVerifyTools 已加档）
 	"tool-snapshot":    "hostTool",
 	// ★ Round3 ③/⑤：goal/workflow 宿主机制工具面（execute → ctx.hostTool）；
-	//   tool-subagent 走 ctx.agents 服务（JS 原生编排，非 hostTool）
-	"tool-goal":     "hostTool",
-	"tool-subagent": "native",
-	"tool-workflow": "hostTool",
+	//   subagent 系列 2026-09 ③.4 并入 tool-workflow（ctx.agents 服务，JS 原生编排）
+	"tool-workflow": "mixed", // workflow→hostTool 执行器；subagent 系列→ctx.agents 服务（均不在内嵌内核，别名声明）
 }
 
-// harnessNativeAliases tool-harness 的 JS 原生别名（模式表注释声明的例外）：
-// read/write/edit/glob/grep/bash 由插件内 ctx.fs/ctx.bash 原生实现，
-// 无二进制内核回退——混合型内嵌内核断言跳过这 6 个（str_replace_editor/run_code
-// 仍由 registerStrReplaceEditor/registerRunCode 覆盖内核，正常断言）。
-var harnessNativeAliases = map[string]bool{
-	"read": true, "write": true, "edit": true, "glob": true, "grep": true, "bash": true,
+// toolHarnessAliases 混合型插件的 JS 原生实现工具（不在内嵌内核，断言跳过）：
+// tool-harness：read/write/edit/glob/grep（ctx.fs 原生）+
+//   run_background/read_output/kill_process/job_output/job_list/job_kill
+//   （ctx.process 原生，③.4 并入自 tool-shell）；
+// tool-web：web_fetch/web_search（ctx.web 原生，③.4 后为 mixed 型）。
+// （run_code 仍由 registerRunCode 覆盖内核，正常断言；str_replace_editor 已移除
+// （Round4）；screenshot_*/web_debug 同理内核覆盖。）
+var toolHarnessAliases = map[string]bool{
+	"read": true, "write": true, "edit": true, "glob": true, "grep": true,
+	"run_background": true, "read_output": true, "kill_process": true,
+	"job_output": true, "job_list": true, "job_kill": true,
+	"web_fetch": true, "web_search": true,
+	// tool-workflow（2026-09 ③.4 后为 mixed）：workflow→宿主 goja 运行器（hostTool），
+	// subagent 系列→ctx.agents 宿主服务——二者均非内嵌内核，别名声明跳过
+	"workflow": true, "subagent": true, "subagent_fork": true, "report": true,
+	"list_agents": true, "interrupt_agent": true, "send_message": true,
 }
 
 // loadDiskPluginForTestFramed 装载磁盘插件，且宿主注册表预注册框架工具
@@ -167,7 +172,7 @@ func TestToolLandingMatrix(t *testing.T) {
 					problems = append(problems, "[hostTool 未存档] "+d.Name()+"/"+tn)
 				}
 			case "binary", "mixed":
-				if _, ok := embedded.Get(tn); !ok && !harnessNativeAliases[tn] {
+				if _, ok := embedded.Get(tn); !ok && !toolHarnessAliases[tn] {
 					problems = append(problems, "[内嵌内核缺失] "+d.Name()+"/"+tn)
 				}
 			}

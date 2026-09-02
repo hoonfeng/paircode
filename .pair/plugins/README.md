@@ -130,13 +130,21 @@ search/web 等 17 组）**各自一个独立二进制**承载实现：
   `ctx.hostTool.exec`；ask_user/task_create 经**会话桥**（session_bridge.go）
   按 _convID 路由回会话（见下方 tool-system 条目）
 
-当前 execute 形态分布（生成器 tool_plugin_gen.go 的 binary 字段控制）：
-- `self`（独立二进制）：tool-binary、tool-bug、tool-codegraph、
-  tool-codegraph-extra、tool-debug、tool-git、tool-harness、tool-lsp、
-  tool-memory、tool-office、tool-project-info、tool-screenshot、tool-search、
-  tool-verify、tool-vision、tool-web、tool-web-debug（17 组，各自 bin/ 下的 exe）
-- `""`（hostTool）：tool-system（会话绑定 SystemTool + Skills/MCP/市场/提交）
-- 手工迁移（不在此列）：tool-core（JS 原生 impls）、tool-shell、tool-web（webFetch 直连）
+当前 execute 形态分布（★ 2026-09-04 ③.4 插件瘦身后现状；详见 .pair/project.md「插件瘦身②」）：
+- `binary`（ctx.binary.exec → 无 exe 回退内嵌内核）：tool-binary、tool-bug、
+  tool-codegraph、tool-debug、tool-git、tool-harness（run_code 内核承载）、
+  tool-memory、tool-office、tool-project-info、tool-vision、tool-web
+  （screenshot_*/web_debug 2026-09 并入，内核 registerScreenshotTools/
+  registerWebDebugTool 回退）——插件目录无 bin/（独立二进制已归档
+  bin/legacy-plugin-bins/），执行走宿主内嵌内核
+- `hostTool`（宿主 Go 存档）：tool-system（SystemTool + Skills/MCP/进度/goal）、
+  tool-asset、tool-entryconfig、tool-resource、tool-snapshot、tool-workflow（workflow）
+- `JS 原生`（ctx.fs/ctx.web/ctx.process/ctx.agents 等）：tool-core、tool-harness
+  （read/write/edit/glob/grep/后台进程 6 工具）、tool-web（web_fetch/web_search）、
+  tool-workflow（subagent 系列）
+- ★ 2026-09 ③.4：bash 工具已从工具侧移除；tool-shell/tool-screenshot/
+  tool-web-debug/tool-goal/tool-subagent/tool-bridge 插件目录已删除（并入
+  tool-harness/tool-web/tool-system/tool-workflow；tool-bridge 因桌面版移除删除）
 
 ## 三层工具实现（从易到难，用户可改程度递增）
 

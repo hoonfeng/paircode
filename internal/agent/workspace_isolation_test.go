@@ -200,6 +200,10 @@ return {
 // （callWsRoot）——执行期间全局主根切换（模拟对话中切换工作区），工具内
 // ctx.fs 仍按会话根解析路径，不回落到全局主根/装载根（2026-08-27 双上下文守卫）。
 func TestToolExecRootNotAffectedBySwitch(t *testing.T) {
+	// ★ 2026-09-04 工具集全局化：隔离全局工具集目录（避免读到真实安装目录
+	//   预置模式导致 probe 工具被可见性收敛禁用——测试意图是根切换，与工具集无关）
+	SetGlobalToolsetDirForTest(t.TempDir())
+	t.Cleanup(func() { SetGlobalToolsetDirForTest(testGlobalToolsetDir) })
 	dirLoad := t.TempDir() // 插件装载根（host.NewPluginHost root）
 	dirWS := t.TempDir()   // 会话根（对话绑定）
 	dirNow := t.TempDir()  // 切换后的全局主根

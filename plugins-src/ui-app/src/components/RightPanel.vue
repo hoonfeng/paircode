@@ -224,6 +224,15 @@
                     </optgroup>
                   </select>
                 </span>
+                <!-- ★ 2026-09-04 工具集（通用集合）模式选择器：会话级——选择当前对话
+                     使用的工具集（default/full/dev/debug/test/docs 或自定义集合），
+                     写入会话元数据（PUT /conversations/{id} toolset）只影响本会话；
+                     agent 工具面按所选集合收敛（发送消息时后端应用）。 -->
+                <span class="ibb-model" v-if="toolsetItems.length">
+                  <select v-model="convToolset" class="cmp-sel cmp-toolset" @change="onConvToolsetChange" :title="'工具集（通用集合）：当前对话使用的工具面；切换只影响本对话。' + toolsetSelectTip">
+                    <option v-for="t in toolsetItems" :key="t.name" :value="t.name">{{ toolsetLabel(t) }}</option>
+                  </select>
+                </span>
                 <span class="obtn-sep"></span>
                 <span :class="['obtn', reviewBtnClass]" @click="cycleReviewMode" :title="reviewBtnTitle"><SvgIcon :name="reviewIconName" :size="12" /> {{ reviewBtnLabel }}</span>
                 <span :class="['obtn', { active: autoCollapse }]" @click="toggleAuto('autoCollapse')" title="自动折叠：新消息发出时折叠旧输出，显示完成摘要"><SvgIcon name="list" :size="12" /> 折叠</span>
@@ -479,6 +488,47 @@ function writeLastPicked(provider, model, preset) {
 }
 function initComposerModel() {
   syncComposerModelFromConv()
+}
+
+// ── ★ 2026-09-04 工具集（通用集合）模式：会话级选择 ──
+const toolsetItems = ref([])    // 全局工具集列表（GET /api/toolsets，不含 builtin 虚拟）
+const convToolset = ref('')     // 当前会话工具集名（'' = 未设置，后端用 default）
+const toolsetSelectTip = computed(() => {
+  if (!convToolset.value) return '（未选择=基础工具集 default）'
+  return '当前：' + convToolset.value
+})
+function toolsetLabel(t) {
+  const scope = t.scope === 'builtin' ? '内置' : '全局'
+  return t.name + '（' + scope + '·' + (t.pluginCount || 0) + ' 插件）'
+}
+async function loadToolsetItems() {
+  try {
+    const list = await api.getToolsets()
+    toolsetItems.value = (list || []).filter(t => t.scope !== 'builtin' && t.name)
+  } catch (e) {
+    console.warn('[toolset] 工具集列表加载失败', e)
+  }
+}
+// 依据当前会话元数据同步模式选择（会话已记录 toolset → 显示它；否则默认）
+async function syncConvToolsetFromConv() {
+  const convId = state.currentConvId
+  if (!convId) { convToolset.value = ''; return }
+  try {
+    const meta = await api.getConversationMeta(convId, state.workspaceRoot || '')
+    convToolset.value = (meta && meta.toolset) || ''
+  } catch { convToolset.value = '' }
+}
+// 切换模式 = 只写当前会话（不动全局；后端发送消息时按会话集合收敛工具面）
+async function onConvToolsetChange() {
+  const convId = state.currentConvId
+  const name = convToolset.value
+  if (!convId) return
+  try {
+    await api.apiPut('/conversations/' + encodeURIComponent(convId), { toolset: name })
+    window.$toast && window.$toast((name ? '本对话已切换工具集为 ' + name : '已清除工具集选择（回落 default）'), 'success')
+  } catch (e) {
+    window.$toast && window.$toast('工具集切换失败: ' + (e.message || e), 'error')
+  }
 }
 // 切换模型 = 只写当前会话（不动全局 settings；★ 2026-09-03 连同配置名一起写入）
 async function onCmpModelChange() {
@@ -2129,6 +2179,9 @@ watch(() => [state.settings && state.settings.provider, state.settings && state.
   // 全局默认配置变化：仅当当前会话未设置模型时下拉才需要刷新显示
   loadModelData().then(() => syncComposerModelFromConv())
 })
+// ★ 2026-09-04 工具集（通用集合）会话级：切换会话时同步模式选择；列表惰性加载
+watch(() => state.currentConvId, () => { syncConvToolsetFromConv() })
+watch(() => state.workspaceRoot, () => { loadToolsetItems() })
 
 
 // ★ 从会话/工作区加载审核模式（黑白名单配置已由插件面板/工具集管理取代，不再加载）
@@ -2171,6 +2224,7 @@ chatSlot.init() // setup 同步初始化 owner（首帧直接走正确分支）
 
 onMounted(() => {
   loadModelData().then(() => { initComposerModel() })
+  loadToolsetItems().then(() => syncConvToolsetFromConv())
   loadWsTokenStats(); loadConvList(); scrollToBottom()
   if (state.workspaceRoot && state.workspaceRoot !== '') loadWorkspaceReviewConfig()
 

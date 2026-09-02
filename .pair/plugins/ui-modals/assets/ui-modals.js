@@ -1,5 +1,5 @@
-var UiModals=(function(J,e,b,Ve,M){"use strict";var Mo=Object.defineProperty;var Do=(J,e,b)=>e in J?Mo(J,e,{enumerable:!0,configurable:!0,writable:!0,value:b}):J[e]=b;var A=(J,e,b)=>Do(J,typeof e!="symbol"?e+"":e,b);var ie;const U=(r,t)=>{const n=r.__vccOpts||r;for(const[l,o]of t)n[l]=o;return n},Ue=["width","height"],He={key:0,d:"M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"},D=U({__name:"SvgIcon",props:{name:{type:String,required:!0},size:{type:Number,default:16}},setup(r){return(t,n)=>(e.openBlock(),e.createElementBlock("svg",{class:"svg-icon",width:r.size,height:r.size,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor","stroke-width":"2","stroke-linecap":"round","stroke-linejoin":"round"},[e.createCommentVNode(" Folder "),r.name==="folder"?(e.openBlock(),e.createElementBlock("path",He)):r.name==="folder-open"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:1},[e.createCommentVNode(" Folder Open "),n[0]||(n[0]=e.createElementVNode("path",{d:"M6 17l-3-9h18l-3 9H6z"},null,-1)),n[1]||(n[1]=e.createElementVNode("path",{d:"M4 8V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v3"},null,-1))],64)):r.name==="file"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:2},[e.createCommentVNode(" File "),n[2]||(n[2]=e.createElementVNode("path",{d:"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"},null,-1)),n[3]||(n[3]=e.createElementVNode("polyline",{points:"14 2 14 8 20 8"},null,-1))],64)):r.name==="file-code"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:3},[e.createCommentVNode(" File Code "),n[4]||(n[4]=e.createStaticVNode('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" data-v-faf69761></path><polyline points="14 2 14 8 20 8" data-v-faf69761></polyline><line x1="10" y1="12" x2="8" y2="14" data-v-faf69761></line><line x1="10" y1="16" x2="8" y2="18" data-v-faf69761></line><line x1="14" y1="12" x2="16" y2="14" data-v-faf69761></line><line x1="14" y1="16" x2="16" y2="18" data-v-faf69761></line>',6))],64)):r.name==="file-text"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:4},[e.createCommentVNode(" File Text / Document "),n[5]||(n[5]=e.createElementVNode("path",{d:"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"},null,-1)),n[6]||(n[6]=e.createElementVNode("polyline",{points:"14 2 14 8 20 8"},null,-1)),n[7]||(n[7]=e.createElementVNode("line",{x1:"9",y1:"13",x2:"15",y2:"13"},null,-1)),n[8]||(n[8]=e.createElementVNode("line",{x1:"9",y1:"17",x2:"15",y2:"17"},null,-1))],64)):r.name==="search"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:5},[e.createCommentVNode(" Search "),n[9]||(n[9]=e.createElementVNode("circle",{cx:"11",cy:"11",r:"8"},null,-1)),n[10]||(n[10]=e.createElementVNode("line",{x1:"21",y1:"21",x2:"16.65",y2:"16.65"},null,-1))],64)):r.name==="terminal"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:6},[e.createCommentVNode(" Terminal / Console "),n[11]||(n[11]=e.createElementVNode("polyline",{points:"4 17 10 11 4 5"},null,-1)),n[12]||(n[12]=e.createElementVNode("line",{x1:"12",y1:"19",x2:"20",y2:"19"},null,-1))],64)):r.name==="chat"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:7},[e.createCommentVNode(" Chat / Message "),n[13]||(n[13]=e.createElementVNode("path",{d:"M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"},null,-1))],64)):r.name==="settings"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:8},[e.createCommentVNode(" Gear / Settings "),n[14]||(n[14]=e.createElementVNode("circle",{cx:"12",cy:"12",r:"3"},null,-1)),n[15]||(n[15]=e.createElementVNode("path",{d:"M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"},null,-1))],64)):r.name==="home"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:9},[e.createCommentVNode(" Home "),n[16]||(n[16]=e.createElementVNode("path",{d:"M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"},null,-1)),n[17]||(n[17]=e.createElementVNode("polyline",{points:"9 22 9 12 15 12 15 22"},null,-1))],64)):r.name==="chevron-right"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:10},[e.createCommentVNode(" Chevron Right "),n[18]||(n[18]=e.createElementVNode("polyline",{points:"9 6 15 12 9 18"},null,-1))],64)):r.name==="chevron-down"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:11},[e.createCommentVNode(" Chevron Down (Rotated chevron-right) "),n[19]||(n[19]=e.createElementVNode("polyline",{points:"6 9 12 15 18 9"},null,-1))],64)):r.name==="plus"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:12},[e.createCommentVNode(" Plus / Add "),n[20]||(n[20]=e.createElementVNode("line",{x1:"12",y1:"5",x2:"12",y2:"19"},null,-1)),n[21]||(n[21]=e.createElementVNode("line",{x1:"5",y1:"12",x2:"19",y2:"12"},null,-1))],64)):r.name==="close"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:13},[e.createCommentVNode(" Close / X "),n[22]||(n[22]=e.createElementVNode("line",{x1:"18",y1:"6",x2:"6",y2:"18"},null,-1)),n[23]||(n[23]=e.createElementVNode("line",{x1:"6",y1:"6",x2:"18",y2:"18"},null,-1))],64)):r.name==="refresh"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:14},[e.createCommentVNode(" Refresh "),n[24]||(n[24]=e.createElementVNode("polyline",{points:"23 4 23 10 17 10"},null,-1)),n[25]||(n[25]=e.createElementVNode("path",{d:"M20.49 15a9 9 0 1 1-2.12-9.36L23 10"},null,-1))],64)):r.name==="drive"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:15},[e.createCommentVNode(" Hard Drive / Disk "),n[26]||(n[26]=e.createElementVNode("line",{x1:"22",y1:"12",x2:"2",y2:"12"},null,-1)),n[27]||(n[27]=e.createElementVNode("path",{d:"M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"},null,-1)),n[28]||(n[28]=e.createElementVNode("line",{x1:"6",y1:"16",x2:"6.01",y2:"16"},null,-1)),n[29]||(n[29]=e.createElementVNode("line",{x1:"10",y1:"16",x2:"10.01",y2:"16"},null,-1))],64)):r.name==="source-control"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:16},[e.createCommentVNode(" Source Control / Git Branch "),n[30]||(n[30]=e.createElementVNode("line",{x1:"6",y1:"3",x2:"6",y2:"15"},null,-1)),n[31]||(n[31]=e.createElementVNode("circle",{cx:"18",cy:"6",r:"3"},null,-1)),n[32]||(n[32]=e.createElementVNode("circle",{cx:"6",cy:"18",r:"3"},null,-1)),n[33]||(n[33]=e.createElementVNode("path",{d:"M18 9a9 9 0 0 1-9 9"},null,-1))],64)):r.name==="git-branch"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:17},[e.createCommentVNode(" Git Branch "),n[34]||(n[34]=e.createElementVNode("line",{x1:"6",y1:"3",x2:"6",y2:"15"},null,-1)),n[35]||(n[35]=e.createElementVNode("circle",{cx:"18",cy:"6",r:"3"},null,-1)),n[36]||(n[36]=e.createElementVNode("circle",{cx:"6",cy:"18",r:"3"},null,-1)),n[37]||(n[37]=e.createElementVNode("path",{d:"M18 9a9 9 0 0 1-9 9"},null,-1))],64)):r.name==="git-pull"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:18},[e.createCommentVNode(" Git Pull "),n[38]||(n[38]=e.createStaticVNode('<circle cx="18" cy="18" r="3" data-v-faf69761></circle><circle cx="6" cy="6" r="3" data-v-faf69761></circle><path d="M13 6h3a2 2 0 0 1 2 2v7" data-v-faf69761></path><line x1="6" y1="18" x2="6" y2="9" data-v-faf69761></line><polyline points="9 9 6 6 3 9" data-v-faf69761></polyline>',5))],64)):r.name==="git-push"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:19},[e.createCommentVNode(" Git Push "),n[39]||(n[39]=e.createStaticVNode('<circle cx="18" cy="6" r="3" data-v-faf69761></circle><circle cx="6" cy="18" r="3" data-v-faf69761></circle><path d="M13 18h-2a2 2 0 0 1-2-2V9" data-v-faf69761></path><line x1="6" y1="6" x2="6" y2="15" data-v-faf69761></line><polyline points="9 15 6 18 3 15" data-v-faf69761></polyline>',5))],64)):r.name==="output"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:20},[e.createCommentVNode(" Output / Window "),n[40]||(n[40]=e.createElementVNode("rect",{x:"2",y:"3",width:"20",height:"14",rx:"2",ry:"2"},null,-1)),n[41]||(n[41]=e.createElementVNode("line",{x1:"8",y1:"21",x2:"16",y2:"21"},null,-1)),n[42]||(n[42]=e.createElementVNode("line",{x1:"12",y1:"17",x2:"12",y2:"21"},null,-1))],64)):r.name==="warning"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:21},[e.createCommentVNode(" Warning / Alert "),n[43]||(n[43]=e.createElementVNode("path",{d:"M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"},null,-1)),n[44]||(n[44]=e.createElementVNode("line",{x1:"12",y1:"9",x2:"12",y2:"13"},null,-1)),n[45]||(n[45]=e.createElementVNode("line",{x1:"12",y1:"17",x2:"12.01",y2:"17"},null,-1))],64)):r.name==="undo"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:22},[e.createCommentVNode(" Undo "),n[46]||(n[46]=e.createElementVNode("polyline",{points:"1 4 1 10 7 10"},null,-1)),n[47]||(n[47]=e.createElementVNode("path",{d:"M3.51 15a9 9 0 1 0 2.13-9.36L1 10"},null,-1))],64)):r.name==="redo"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:23},[e.createCommentVNode(" Redo "),n[48]||(n[48]=e.createElementVNode("polyline",{points:"23 4 23 10 17 10"},null,-1)),n[49]||(n[49]=e.createElementVNode("path",{d:"M20.49 15a9 9 0 1 1-2.12-9.36L23 10"},null,-1))],64)):r.name==="package"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:24},[e.createCommentVNode(" Package / Box / Store "),n[50]||(n[50]=e.createElementVNode("line",{x1:"16.5",y1:"9.4",x2:"7.5",y2:"4.21"},null,-1)),n[51]||(n[51]=e.createElementVNode("path",{d:"M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"},null,-1)),n[52]||(n[52]=e.createElementVNode("polyline",{points:"3.27 6.96 12 12.01 20.73 6.96"},null,-1)),n[53]||(n[53]=e.createElementVNode("line",{x1:"12",y1:"22.08",x2:"12",y2:"12"},null,-1))],64)):r.name==="globe"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:25},[e.createCommentVNode(" Globe / External "),n[54]||(n[54]=e.createElementVNode("circle",{cx:"12",cy:"12",r:"10"},null,-1)),n[55]||(n[55]=e.createElementVNode("line",{x1:"2",y1:"12",x2:"22",y2:"12"},null,-1)),n[56]||(n[56]=e.createElementVNode("path",{d:"M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"},null,-1))],64)):r.name==="cycle"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:26},[e.createCommentVNode(" Refresh / Cycle (for agent) "),n[57]||(n[57]=e.createElementVNode("polyline",{points:"23 4 23 10 17 10"},null,-1)),n[58]||(n[58]=e.createElementVNode("polyline",{points:"1 20 1 14 7 14"},null,-1)),n[59]||(n[59]=e.createElementVNode("path",{d:"M3.51 9a9 9 0 0 1 14.85-3.36L23 10"},null,-1)),n[60]||(n[60]=e.createElementVNode("path",{d:"M20.49 15a9 9 0 0 1-14.85 3.36L1 14"},null,-1))],64)):r.name==="send"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:27},[e.createCommentVNode(" Send (arrow up) "),n[61]||(n[61]=e.createElementVNode("line",{x1:"12",y1:"19",x2:"12",y2:"5"},null,-1)),n[62]||(n[62]=e.createElementVNode("polyline",{points:"5 12 12 5 19 12"},null,-1))],64)):r.name==="send-plane"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:28},[e.createCommentVNode(" Send Plane (paper airplane) "),n[63]||(n[63]=e.createElementVNode("line",{x1:"22",y1:"2",x2:"11",y2:"13"},null,-1)),n[64]||(n[64]=e.createElementVNode("polygon",{points:"22 2 15 22 11 13 2 9 22 2"},null,-1))],64)):r.name==="stop-dot"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:29},[e.createCommentVNode(" Stop Dot (pulsing circle) "),n[65]||(n[65]=e.createElementVNode("circle",{cx:"12",cy:"12",r:"6",class:"stop-pulse"},null,-1)),n[66]||(n[66]=e.createElementVNode("circle",{cx:"12",cy:"12",r:"10",class:"stop-pulse-ring"},null,-1))],64)):r.name==="wrench"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:30},[e.createCommentVNode(" Wrench / Tool "),n[67]||(n[67]=e.createElementVNode("path",{d:"M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"},null,-1))],64)):r.name==="database"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:31},[e.createCommentVNode(" Database "),n[68]||(n[68]=e.createElementVNode("ellipse",{cx:"12",cy:"5",rx:"9",ry:"3"},null,-1)),n[69]||(n[69]=e.createElementVNode("path",{d:"M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"},null,-1)),n[70]||(n[70]=e.createElementVNode("path",{d:"M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"},null,-1))],64)):r.name==="user"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:32},[e.createCommentVNode(" User / Person "),n[71]||(n[71]=e.createElementVNode("path",{d:"M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"},null,-1)),n[72]||(n[72]=e.createElementVNode("circle",{cx:"12",cy:"7",r:"4"},null,-1))],64)):r.name==="info"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:33},[e.createCommentVNode(" Info "),n[73]||(n[73]=e.createElementVNode("circle",{cx:"12",cy:"12",r:"10"},null,-1)),n[74]||(n[74]=e.createElementVNode("line",{x1:"12",y1:"16",x2:"12",y2:"12"},null,-1)),n[75]||(n[75]=e.createElementVNode("line",{x1:"12",y1:"8",x2:"12.01",y2:"8"},null,-1))],64)):r.name==="lightbulb"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:34},[e.createCommentVNode(" Lightbulb / Suggestion "),n[76]||(n[76]=e.createElementVNode("path",{d:"M9 18h6"},null,-1)),n[77]||(n[77]=e.createElementVNode("path",{d:"M10 22h4"},null,-1)),n[78]||(n[78]=e.createElementVNode("path",{d:"M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"},null,-1))],64)):r.name==="sparkles"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:35},[e.createCommentVNode(" Sparkles / Auto "),n[79]||(n[79]=e.createStaticVNode('<path d="M13.5 4L15 8l4 .5L15 12l1.5 4-4-2-4 2L10 12l-4-3.5L10 8z" data-v-faf69761></path><line x1="3" y1="18" x2="3" y2="21" data-v-faf69761></line><line x1="21" y1="18" x2="21" y2="21" data-v-faf69761></line><line x1="7" y1="20" x2="11" y2="20" data-v-faf69761></line><line x1="17" y1="20" x2="19" y2="20" data-v-faf69761></line>',5))],64)):r.name==="bot"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:36},[e.createCommentVNode(" Bot / AI "),n[80]||(n[80]=e.createStaticVNode('<rect x="3" y="11" width="18" height="10" rx="2" data-v-faf69761></rect><circle cx="12" cy="5" r="2" data-v-faf69761></circle><path d="M12 7v4" data-v-faf69761></path><line x1="8" y1="16" x2="8" y2="16" data-v-faf69761></line><line x1="16" y1="16" x2="16" y2="16" data-v-faf69761></line>',5))],64)):r.name==="file-js"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:37},[e.createCommentVNode(" File Type Icons "),n[81]||(n[81]=e.createElementVNode("path",{d:"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"},null,-1)),n[82]||(n[82]=e.createElementVNode("polyline",{points:"14 2 14 8 20 8"},null,-1)),n[83]||(n[83]=e.createElementVNode("text",{x:"8",y:"17","font-size":"9",fill:"currentColor","font-weight":"bold",stroke:"none"},"JS",-1))],64)):r.name==="file-ts"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:38},[n[84]||(n[84]=e.createElementVNode("path",{d:"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"},null,-1)),n[85]||(n[85]=e.createElementVNode("polyline",{points:"14 2 14 8 20 8"},null,-1)),n[86]||(n[86]=e.createElementVNode("text",{x:"8",y:"17","font-size":"9",fill:"currentColor","font-weight":"bold",stroke:"none"},"TS",-1))],64)):r.name==="file-go"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:39},[n[87]||(n[87]=e.createElementVNode("path",{d:"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"},null,-1)),n[88]||(n[88]=e.createElementVNode("polyline",{points:"14 2 14 8 20 8"},null,-1)),n[89]||(n[89]=e.createElementVNode("text",{x:"9",y:"17","font-size":"9",fill:"currentColor","font-weight":"bold",stroke:"none"},"Go",-1))],64)):r.name==="file-py"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:40},[n[90]||(n[90]=e.createElementVNode("path",{d:"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"},null,-1)),n[91]||(n[91]=e.createElementVNode("polyline",{points:"14 2 14 8 20 8"},null,-1)),n[92]||(n[92]=e.createElementVNode("text",{x:"7",y:"17","font-size":"9",fill:"currentColor","font-weight":"bold",stroke:"none"},"Py",-1))],64)):r.name==="file-java"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:41},[n[93]||(n[93]=e.createElementVNode("path",{d:"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"},null,-1)),n[94]||(n[94]=e.createElementVNode("polyline",{points:"14 2 14 8 20 8"},null,-1)),n[95]||(n[95]=e.createElementVNode("text",{x:"6",y:"17","font-size":"8",fill:"currentColor","font-weight":"bold",stroke:"none"},"Java",-1))],64)):r.name==="file-html"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:42},[n[96]||(n[96]=e.createElementVNode("path",{d:"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"},null,-1)),n[97]||(n[97]=e.createElementVNode("polyline",{points:"14 2 14 8 20 8"},null,-1)),n[98]||(n[98]=e.createElementVNode("text",{x:"6",y:"17","font-size":"9",fill:"currentColor","font-weight":"bold",stroke:"none"},"HTML",-1))],64)):r.name==="file-css"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:43},[n[99]||(n[99]=e.createElementVNode("path",{d:"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"},null,-1)),n[100]||(n[100]=e.createElementVNode("polyline",{points:"14 2 14 8 20 8"},null,-1)),n[101]||(n[101]=e.createElementVNode("text",{x:"7",y:"17","font-size":"9",fill:"currentColor","font-weight":"bold",stroke:"none"},"CSS",-1))],64)):r.name==="file-json"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:44},[n[102]||(n[102]=e.createElementVNode("path",{d:"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"},null,-1)),n[103]||(n[103]=e.createElementVNode("polyline",{points:"14 2 14 8 20 8"},null,-1)),n[104]||(n[104]=e.createElementVNode("text",{x:"5",y:"17","font-size":"9",fill:"currentColor","font-weight":"bold",stroke:"none"},"{ }",-1))],64)):r.name==="file-md"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:45},[n[105]||(n[105]=e.createElementVNode("path",{d:"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"},null,-1)),n[106]||(n[106]=e.createElementVNode("polyline",{points:"14 2 14 8 20 8"},null,-1)),n[107]||(n[107]=e.createElementVNode("text",{x:"7",y:"17","font-size":"9",fill:"currentColor","font-weight":"bold",stroke:"none"},"MD",-1))],64)):r.name==="file-vue"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:46},[n[108]||(n[108]=e.createElementVNode("path",{d:"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"},null,-1)),n[109]||(n[109]=e.createElementVNode("polyline",{points:"14 2 14 8 20 8"},null,-1)),n[110]||(n[110]=e.createElementVNode("text",{x:"7",y:"17","font-size":"9",fill:"currentColor","font-weight":"bold",stroke:"none"},"Vue",-1))],64)):r.name==="copy"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:47},[e.createCommentVNode(" Copy "),n[111]||(n[111]=e.createElementVNode("rect",{x:"9",y:"9",width:"13",height:"13",rx:"2",ry:"2"},null,-1)),n[112]||(n[112]=e.createElementVNode("path",{d:"M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"},null,-1))],64)):r.name==="minus"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:48},[e.createCommentVNode(" Minus "),n[113]||(n[113]=e.createElementVNode("line",{x1:"5",y1:"12",x2:"19",y2:"12"},null,-1))],64)):r.name==="edit"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:49},[e.createCommentVNode(" Edit / Rename "),n[114]||(n[114]=e.createElementVNode("path",{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"},null,-1)),n[115]||(n[115]=e.createElementVNode("path",{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"},null,-1))],64)):r.name==="trash"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:50},[e.createCommentVNode(" Trash / Delete "),n[116]||(n[116]=e.createElementVNode("polyline",{points:"3 6 5 6 21 6"},null,-1)),n[117]||(n[117]=e.createElementVNode("path",{d:"M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"},null,-1))],64)):r.name==="file-plus"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:51},[e.createCommentVNode(" File Plus / New File "),n[118]||(n[118]=e.createElementVNode("path",{d:"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"},null,-1)),n[119]||(n[119]=e.createElementVNode("polyline",{points:"14 2 14 8 20 8"},null,-1)),n[120]||(n[120]=e.createElementVNode("line",{x1:"12",y1:"18",x2:"12",y2:"12"},null,-1)),n[121]||(n[121]=e.createElementVNode("line",{x1:"9",y1:"15",x2:"15",y2:"15"},null,-1))],64)):r.name==="message-square"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:52},[e.createCommentVNode(" Folder Plus / New Folder "),n[122]||(n[122]=e.createElementVNode("path",{d:"M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"},null,-1))],64)):r.name==="folder-plus"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:53},[n[123]||(n[123]=e.createElementVNode("path",{d:"M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2v3"},null,-1)),n[124]||(n[124]=e.createElementVNode("line",{x1:"12",y1:"11",x2:"12",y2:"17"},null,-1)),n[125]||(n[125]=e.createElementVNode("line",{x1:"9",y1:"14",x2:"15",y2:"14"},null,-1))],64)):r.name==="brain"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:54},[e.createCommentVNode(" Brain / Thinking "),n[126]||(n[126]=e.createElementVNode("path",{d:"M12 2a4 4 0 0 0-4 4v1a5 5 0 0 0-5 5v1a4 4 0 0 0 3 3.87V17a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3v-.13A4 4 0 0 0 21 13v-1a5 5 0 0 0-5-5V6a4 4 0 0 0-4-4z"},null,-1)),n[127]||(n[127]=e.createElementVNode("path",{d:"M9 12v2"},null,-1)),n[128]||(n[128]=e.createElementVNode("path",{d:"M15 12v2"},null,-1)),n[129]||(n[129]=e.createElementVNode("path",{d:"M12 9v5"},null,-1))],64)):r.name==="check"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:55},[e.createCommentVNode(" Check / Success "),n[130]||(n[130]=e.createElementVNode("polyline",{points:"20 6 9 17 4 12"},null,-1))],64)):r.name==="clock"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:56},[e.createCommentVNode(" Clock / Pending "),n[131]||(n[131]=e.createElementVNode("circle",{cx:"12",cy:"12",r:"10"},null,-1)),n[132]||(n[132]=e.createElementVNode("polyline",{points:"12 6 12 12 16 14"},null,-1))],64)):r.name==="help"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:57},[e.createCommentVNode(" Help / Question "),n[133]||(n[133]=e.createElementVNode("circle",{cx:"12",cy:"12",r:"10"},null,-1)),n[134]||(n[134]=e.createElementVNode("path",{d:"M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"},null,-1)),n[135]||(n[135]=e.createElementVNode("line",{x1:"12",y1:"17",x2:"12.01",y2:"17"},null,-1))],64)):r.name==="shield"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:58},[e.createCommentVNode(" Shield / Approval "),n[136]||(n[136]=e.createElementVNode("path",{d:"M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"},null,-1))],64)):r.name==="shield-off"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:59},[e.createCommentVNode(" Shield Off / No Review "),n[137]||(n[137]=e.createElementVNode("path",{d:"M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"},null,-1)),n[138]||(n[138]=e.createElementVNode("line",{x1:"4",y1:"4",x2:"20",y2:"20",stroke:"currentColor","stroke-width":"2","stroke-linecap":"round"},null,-1))],64)):r.name==="code"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:60},[e.createCommentVNode(" Code / Brackets "),n[139]||(n[139]=e.createElementVNode("polyline",{points:"16 18 22 12 16 6"},null,-1)),n[140]||(n[140]=e.createElementVNode("polyline",{points:"8 6 2 12 8 18"},null,-1))],64)):r.name==="list"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:61},[e.createCommentVNode(" List / Menu "),n[141]||(n[141]=e.createStaticVNode('<line x1="8" y1="6" x2="21" y2="6" data-v-faf69761></line><line x1="8" y1="12" x2="21" y2="12" data-v-faf69761></line><line x1="8" y1="18" x2="21" y2="18" data-v-faf69761></line><line x1="3" y1="6" x2="3.01" y2="6" data-v-faf69761></line><line x1="3" y1="12" x2="3.01" y2="12" data-v-faf69761></line><line x1="3" y1="18" x2="3.01" y2="18" data-v-faf69761></line>',6))],64)):r.name==="layers"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:62},[e.createCommentVNode(" Layers / Stack / Context "),n[142]||(n[142]=e.createElementVNode("polygon",{points:"12 2 2 7 12 12 22 7 12 2"},null,-1)),n[143]||(n[143]=e.createElementVNode("polyline",{points:"2 17 12 22 22 17"},null,-1)),n[144]||(n[144]=e.createElementVNode("polyline",{points:"2 12 12 17 22 12"},null,-1))],64)):r.name==="eye"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:63},[e.createCommentVNode(" Eye / Show "),n[145]||(n[145]=e.createElementVNode("path",{d:"M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"},null,-1)),n[146]||(n[146]=e.createElementVNode("circle",{cx:"12",cy:"12",r:"3"},null,-1))],64)):r.name==="eye-off"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:64},[e.createCommentVNode(" Eye Off / Hide "),n[147]||(n[147]=e.createElementVNode("path",{d:"M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"},null,-1)),n[148]||(n[148]=e.createElementVNode("path",{d:"M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"},null,-1)),n[149]||(n[149]=e.createElementVNode("line",{x1:"1",y1:"1",x2:"23",y2:"23"},null,-1))],64)):r.name==="bug"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:65},[e.createCommentVNode(" Bug "),n[150]||(n[150]=e.createStaticVNode('<rect x="8" y="2" width="8" height="4" rx="1" ry="1" data-v-faf69761></rect><path d="M20 12h-3a5 5 0 0 1-5 5 5 5 0 0 1-5-5H4" data-v-faf69761></path><path d="M4 8h16" data-v-faf69761></path><path d="M12 2v7" data-v-faf69761></path><path d="M9 17l-3 4" data-v-faf69761></path><path d="M15 17l3 4" data-v-faf69761></path>',6))],64)):r.name==="check-circle"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:66},[e.createCommentVNode(" Check Circle "),n[151]||(n[151]=e.createElementVNode("path",{d:"M22 11.08V12a10 10 0 1 1-5.93-9.14"},null,-1)),n[152]||(n[152]=e.createElementVNode("polyline",{points:"22 4 12 14.01 9 11.01"},null,-1))],64)):r.name==="book-open"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:67},[e.createCommentVNode(" Book Open / Documentation "),n[153]||(n[153]=e.createElementVNode("path",{d:"M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"},null,-1)),n[154]||(n[154]=e.createElementVNode("path",{d:"M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"},null,-1))],64)):r.name==="tool"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:68},[e.createCommentVNode(" Tool / Wrench alternate "),n[155]||(n[155]=e.createElementVNode("path",{d:"M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"},null,-1))],64)):r.name==="keyboard"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:69},[e.createCommentVNode(" Keyboard "),n[156]||(n[156]=e.createStaticVNode('<rect x="2" y="4" width="20" height="16" rx="2" ry="2" data-v-faf69761></rect><line x1="6" y1="8" x2="6.01" y2="8" data-v-faf69761></line><line x1="10" y1="8" x2="10.01" y2="8" data-v-faf69761></line><line x1="14" y1="8" x2="14.01" y2="8" data-v-faf69761></line><line x1="18" y1="8" x2="18.01" y2="8" data-v-faf69761></line><line x1="6" y1="12" x2="6.01" y2="12" data-v-faf69761></line><line x1="10" y1="12" x2="10.01" y2="12" data-v-faf69761></line><line x1="14" y1="12" x2="14.01" y2="12" data-v-faf69761></line><line x1="18" y1="12" x2="18.01" y2="12" data-v-faf69761></line><line x1="6" y1="16" x2="18" y2="16" data-v-faf69761></line>',10))],64)):r.name==="chevron-left"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:70},[e.createCommentVNode(" Chevron Left "),n[157]||(n[157]=e.createElementVNode("polyline",{points:"15 6 9 12 15 18"},null,-1))],64)):r.name==="grid"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:71},[e.createCommentVNode(" Grid / App Grid "),n[158]||(n[158]=e.createElementVNode("rect",{x:"3",y:"3",width:"7",height:"7"},null,-1)),n[159]||(n[159]=e.createElementVNode("rect",{x:"14",y:"3",width:"7",height:"7"},null,-1)),n[160]||(n[160]=e.createElementVNode("rect",{x:"14",y:"14",width:"7",height:"7"},null,-1)),n[161]||(n[161]=e.createElementVNode("rect",{x:"3",y:"14",width:"7",height:"7"},null,-1))],64)):r.name==="puzzle"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:72},[e.createCommentVNode(" Puzzle / 插件 "),n[162]||(n[162]=e.createElementVNode("path",{d:"M4 7h3a2 2 0 0 1 4 0h9v9h-3a2 2 0 0 0-4 0H4z"},null,-1)),n[163]||(n[163]=e.createElementVNode("path",{d:"M11 7v9"},null,-1))],64)):(e.openBlock(),e.createElementBlock(e.Fragment,{key:73},[n[164]||(n[164]=e.createElementVNode("path",{d:"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"},null,-1)),n[165]||(n[165]=e.createElementVNode("polyline",{points:"14 2 14 8 20 8"},null,-1)),n[166]||(n[166]=e.createElementVNode("line",{x1:"9",y1:"13",x2:"15",y2:"13"},null,-1)),n[167]||(n[167]=e.createElementVNode("line",{x1:"9",y1:"17",x2:"15",y2:"17"},null,-1))],64))],8,Ue))}},[["__scopeId","data-v-faf69761"]]),je={class:"me-field"},qe={class:"me-label"},We={class:"me-editor"},Je={class:"me-input-row"},Ze=["placeholder","onKeydown"],Ke={class:"me-tags"},Qe={key:0,class:"me-empty"},Xe=["onClick"],Ne=U({__name:"ModelEditor",props:{models:{type:Array,default:()=>[]},label:{type:String,default:"可用模型（回车或逗号分隔添加；支持整段粘贴）"},placeholder:{type:String,default:"输入模型名，回车添加…"}},emits:["change"],setup(r,{emit:t}){const n=r,l=t,o=e.ref(""),a=e.ref([...n.models]);e.watch(()=>n.models,h=>{a.value=[...h]});function s(){const h=o.value.split(/[\n,，]/).map(x=>x.trim()).filter(Boolean);let g=!1;for(const x of h)a.value.includes(x)||(a.value.push(x),g=!0);g&&l("change",[...a.value]),o.value=""}function d(h){const g=(h.clipboardData||window.clipboardData).getData("text");if(/[,\n，]/.test(g)){h.preventDefault();const x=g.split(/[\n,，]/).map(B=>B.trim()).filter(Boolean);let N=!1;for(const B of x)a.value.includes(B)||(a.value.push(B),N=!0);N&&l("change",[...a.value]),o.value=""}}function i(h){a.value.splice(h,1),l("change",[...a.value])}return(h,g)=>(e.openBlock(),e.createElementBlock("div",je,[e.createElementVNode("span",qe,e.toDisplayString(r.label),1),e.createElementVNode("div",We,[e.createElementVNode("div",Je,[e.withDirectives(e.createElementVNode("input",{"onUpdate:modelValue":g[0]||(g[0]=x=>o.value=x),class:"me-input",placeholder:r.placeholder,onKeydown:e.withKeys(e.withModifiers(s,["prevent"]),["enter"]),onPaste:d},null,40,Ze),[[e.vModelText,o.value]]),e.createElementVNode("button",{class:"me-btn",onClick:s},"添加")]),e.createElementVNode("div",Ke,[a.value.length?e.createCommentVNode("v-if",!0):(e.openBlock(),e.createElementBlock("span",Qe,"暂无模型——添加后 AI tab 的模型下拉会按服务商显示")),(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(a.value,(x,N)=>(e.openBlock(),e.createElementBlock("span",{key:x+N,class:"me-tag"},[e.createTextVNode(e.toDisplayString(x)+" ",1),e.createElementVNode("button",{class:"me-x",title:"移除",onClick:B=>i(N)},"×",8,Xe)]))),128))])])]))}},[["__scopeId","data-v-a5e576a7"]]),Ye={class:"provider-manager"},_e={class:"pm-toolbar"},ve={class:"pm-count"},en={key:0,class:"pm-edit"},nn={class:"pm-field"},tn={class:"pm-field"},rn={class:"pm-field"},ln={class:"pm-field-label"},on=["title"],an=["value"],sn={key:0,class:"pm-protocol-hint"},cn={class:"pm-field"},dn={class:"pm-params"},pn={key:0,class:"pm-param-rows"},mn=["title"],gn=["title"],kn=["onUpdate:modelValue"],hn=["onUpdate:modelValue","title"],fn=["value"],yn=["onUpdate:modelValue","min","step","placeholder","title"],En=["onUpdate:modelValue","placeholder","title"],un={key:1,class:"pm-params-empty"},bn={class:"pm-edit-actions"},xn=["disabled"],Vn={key:1,class:"pm-cards"},Nn={key:0,class:"pm-edit"},wn={class:"pm-edit-title"},Tn={class:"pm-field"},Bn=["value"],Sn={class:"pm-field"},Cn={class:"pm-field"},In={class:"pm-field-label"},Pn=["title"],An=["value"],$n={key:0,class:"pm-protocol-hint"},Mn={class:"pm-field"},Dn={class:"pm-params"},Ln={key:0,class:"pm-param-rows"},Rn=["title"],Gn=["title"],Fn=["onUpdate:modelValue"],On=["onUpdate:modelValue","title"],zn=["value"],Un=["onUpdate:modelValue","min","step","placeholder","title"],Hn=["onUpdate:modelValue","placeholder","title"],jn={key:1,class:"pm-params-empty"},qn={class:"pm-edit-actions"},Wn=["disabled"],Jn={key:1,class:"pm-card"},Zn={class:"pm-card-head"},Kn=["title"],Qn={class:"pm-ops"},Xn=["onClick"],Yn=["onClick"],_n=["title"],vn=["title"],et={class:"pm-ctx"},nt={class:"pm-models"},tt={key:0,class:"pm-none"},rt={key:1,class:"pm-params-summary"},lt={key:2,class:"pm-empty"},ot={key:3,class:"pm-error"},at=U({__name:"ProviderManager",props:{modelParamFields:{type:Array,default:()=>[]},modelEditor:{type:Object,default:()=>({})},protocolLabel:{type:String,default:"LLM 协议"},protocolOptions:{type:Array,default:()=>[]},protocolHint:{type:String,default:""}},emits:["saved"],setup(r,{emit:t}){const n=t,l=r,o=e.ref([]),a=e.ref(""),s=e.ref({name:"",baseURL:"",contextMaxTokens:0}),d=e.ref([]),i=e.ref({}),h=e.ref(""),g=e.ref(!1);function x(){const V={};for(const f of l.modelParamFields)f.type==="checkbox"?V[f.name]=!1:f.type==="number"?V[f.name]=0:V[f.name]="";return V}function N(V){const f=b.state.settings&&b.state.settings.modelParams||{};return JSON.parse(JSON.stringify(f[V]||{}))}async function B(){try{const V=await M.getModels();o.value=(V.providers||[]).map(f=>({name:f,baseURL:(V.providerBaseURLs||{})[f]||"",contextMaxTokens:(V.providerContexts||{})[f]||0,protocol:(V.providerProtocols||{})[f]||"",models:(V.models||{})[f]||[]})),h.value=""}catch(V){h.value="加载服务商失败: "+(V.message||V)}}e.onMounted(B);function y(){a.value="__new__",s.value={name:"",baseURL:"",contextMaxTokens:0,protocol:""},d.value=[],i.value={},h.value=""}function T(V){a.value=V.name,s.value={name:V.name,baseURL:V.baseURL,contextMaxTokens:V.contextMaxTokens||0,protocol:V.protocol||""},d.value=[...V.models||[]];const f=N(V.name),m=x();for(const p of d.value)f[p]||(f[p]={...m});i.value=f,h.value=""}function C(V){const f={...i.value},m=x();for(const p of V)f[p]||(f[p]={...m});for(const p of Object.keys(f))V.includes(p)||delete f[p];i.value=f,d.value=V}function $(){a.value="",h.value=""}function L(){const V={};for(const f of o.value)V[f.name]={baseURL:f.baseURL,models:f.models,contextMaxTokens:f.contextMaxTokens||0,protocol:f.protocol||""};return V}async function O(){const V=s.value.name.trim()||(a.value!=="__new__"?a.value:"");if(!V){h.value="服务商名称不能为空";return}const f=L();if(a.value==="__new__"&&f[V]){h.value=`服务商「${V}」已存在`;return}f[V]={baseURL:s.value.baseURL.trim(),models:d.value,contextMaxTokens:Math.max(0,Number(s.value.contextMaxTokens)||0),protocol:(s.value.protocol||"").trim()},g.value=!0;try{await M.saveModels(f),await W(V),a.value="",await B(),n("saved")}catch(m){h.value="保存失败: "+(m.message||m)}finally{g.value=!1}}async function W(V){let f={};try{const E=await M.apiGet("/settings");f=E&&E.settings||{}}catch{}const m=JSON.parse(JSON.stringify(f.modelParams||{})),p={};for(const[E,c]of Object.entries(i.value)){const u=c||{},w={};for(const P of l.modelParamFields){const R=u[P.name];P.type==="checkbox"?R===!0&&(w[P.name]=!0):P.type==="number"?Number(R)>0&&(w[P.name]=Number(R)):R!==""&&R!==void 0&&R!==null&&(w[P.name]=R)}Object.keys(w).length&&(p[E]=w)}Object.keys(p).length?m[V]=p:delete m[V];const k={...f,modelParams:m};await M.apiPut("/settings",{settings:k,pluginSettings:f.pluginSettings||{}}),b.state.settings=k}async function z(V){if(!window.confirm(`删除服务商「${V.name}」？
-（AI tab 将不再可选该服务商）`))return;const f=L();delete f[V.name];try{await M.saveModels(f);let m={};try{const k=await M.apiGet("/settings");m=k&&k.settings||{}}catch{}const p=JSON.parse(JSON.stringify(m.modelParams||{}));if(p[V.name]){delete p[V.name];const k={...m,modelParams:p};await M.apiPut("/settings",{settings:k,pluginSettings:m.pluginSettings||{}}),b.state.settings=k}await B(),n("saved")}catch(m){h.value="删除失败: "+(m.message||m)}}function F(V){const m=(b.state.settings&&b.state.settings.modelParams||{})[V]||{},p=Object.keys(m).length;return p?"模型参数已配置 "+p+" 个":""}return(V,f)=>(e.openBlock(),e.createElementBlock("div",Ye,[e.createCommentVNode(" 工具栏 "),e.createElementVNode("div",_e,[e.createElementVNode("span",ve,e.toDisplayString(o.value.length)+" 个服务商",1),e.createElementVNode("button",{class:"pm-btn pm-primary",onClick:y},"+ 新增服务商")]),e.createCommentVNode(" 新增表单（工具栏下方展开，紧邻按钮不跳动） "),a.value==="__new__"?(e.openBlock(),e.createElementBlock("div",en,[f[11]||(f[11]=e.createElementVNode("div",{class:"pm-edit-title"},"新增服务商",-1)),e.createElementVNode("div",nn,[f[7]||(f[7]=e.createElementVNode("span",{class:"pm-field-label"},"服务商名称",-1)),e.withDirectives(e.createElementVNode("input",{"onUpdate:modelValue":f[0]||(f[0]=m=>s.value.name=m),placeholder:"如 deepseek"},null,512),[[e.vModelText,s.value.name]])]),e.createElementVNode("div",tn,[f[8]||(f[8]=e.createElementVNode("span",{class:"pm-field-label"},"API URL（基础地址或完整端点）",-1)),e.withDirectives(e.createElementVNode("input",{"onUpdate:modelValue":f[1]||(f[1]=m=>s.value.baseURL=m),placeholder:"https://api.deepseek.com/v1（基础地址；旧完整端点亦兼容）"},null,512),[[e.vModelText,s.value.baseURL]])]),e.createElementVNode("div",rn,[e.createElementVNode("span",ln,e.toDisplayString(r.protocolLabel),1),e.withDirectives(e.createElementVNode("select",{"onUpdate:modelValue":f[2]||(f[2]=m=>s.value.protocol=m),title:r.protocolHint},[(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(r.protocolOptions,m=>(e.openBlock(),e.createElementBlock("option",{key:"p"+m,value:m},e.toDisplayString(m||"默认"),9,an))),128))],8,on),[[e.vModelSelect,s.value.protocol]]),r.protocolHint?(e.openBlock(),e.createElementBlock("span",sn,e.toDisplayString(r.protocolHint),1)):e.createCommentVNode("v-if",!0)]),e.createElementVNode("div",cn,[f[9]||(f[9]=e.createElementVNode("span",{class:"pm-field-label"},"上下文大小（Token）",-1)),e.withDirectives(e.createElementVNode("input",{"onUpdate:modelValue":f[3]||(f[3]=m=>s.value.contextMaxTokens=m),type:"number",min:"0",step:"1000",placeholder:"0=不限制（模型级未配置时的默认窗口）"},null,512),[[e.vModelText,s.value.contextMaxTokens]])]),e.createVNode(Ne,{models:d.value,label:r.modelEditor.label||"可用模型（回车或逗号分隔添加；支持整段粘贴）",placeholder:r.modelEditor.placeholder||"输入模型名，回车添加…",onChange:C},null,8,["models","label","placeholder"]),e.createElementVNode("div",dn,[f[10]||(f[10]=e.createElementVNode("div",{class:"pm-params-title"},"模型参数（每模型独立配置；对话里也可临时切换思考档位）",-1)),d.value.length?(e.openBlock(),e.createElementBlock("div",pn,[(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(d.value,m=>(e.openBlock(),e.createElementBlock("div",{key:m,class:"pm-param-row"},[e.createElementVNode("span",{class:"pm-param-model",title:m},e.toDisplayString(m),9,mn),e.createCommentVNode(" ★ 2026-08-21 schema 驱动：按 modelParamFields 动态渲染（checkbox/select/number/text） "),(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(r.modelParamFields,p=>(e.openBlock(),e.createElementBlock(e.Fragment,{key:p.name},[p.type==="checkbox"?(e.openBlock(),e.createElementBlock("label",{key:0,class:"pm-param-check",title:p.hint||p.label},[e.withDirectives(e.createElementVNode("input",{type:"checkbox","onUpdate:modelValue":k=>i.value[m][p.name]=k},null,8,kn),[[e.vModelCheckbox,i.value[m][p.name]]]),e.createTextVNode(" "+e.toDisplayString(p.label),1)],8,gn)):p.type==="select"?e.withDirectives((e.openBlock(),e.createElementBlock("select",{key:1,"onUpdate:modelValue":k=>i.value[m][p.name]=k,title:p.hint||p.label},[(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(p.options||[],k=>(e.openBlock(),e.createElementBlock("option",{key:"o"+k,value:k},e.toDisplayString(k===""?p.label+"默认":k),9,fn))),128))],8,hn)),[[e.vModelSelect,i.value[m][p.name]]]):p.type==="number"?e.withDirectives((e.openBlock(),e.createElementBlock("input",{key:2,"onUpdate:modelValue":k=>i.value[m][p.name]=k,type:"number",min:p.min??0,step:p.step??1,placeholder:p.label,title:p.hint||p.label},null,8,yn)),[[e.vModelText,i.value[m][p.name],void 0,{number:!0}]]):e.withDirectives((e.openBlock(),e.createElementBlock("input",{key:3,"onUpdate:modelValue":k=>i.value[m][p.name]=k,type:"text",placeholder:p.label,title:p.hint||p.label},null,8,En)),[[e.vModelText,i.value[m][p.name]]])],64))),128))]))),128))])):(e.openBlock(),e.createElementBlock("div",un,"添加模型后，可逐模型配置参数（温度/思考/输出/上下文/多模态…）"))]),e.createElementVNode("div",bn,[e.createElementVNode("button",{class:"pm-btn pm-primary",disabled:g.value,onClick:O},e.toDisplayString(g.value?"保存中…":"保存服务商"),9,xn),e.createElementVNode("button",{class:"pm-btn",onClick:$},"取消")])])):e.createCommentVNode("v-if",!0),e.createCommentVNode(" 服务商卡片列表（编辑时在卡片位置就地展开表单，不跳顶） "),o.value.length?(e.openBlock(),e.createElementBlock("div",Vn,[(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(o.value,m=>(e.openBlock(),e.createElementBlock(e.Fragment,{key:m.name},[a.value===m.name?(e.openBlock(),e.createElementBlock("div",Nn,[e.createElementVNode("div",wn,"编辑服务商："+e.toDisplayString(m.name),1),e.createElementVNode("div",Tn,[f[12]||(f[12]=e.createElementVNode("span",{class:"pm-field-label"},"服务商名称",-1)),e.createElementVNode("input",{value:m.name,disabled:""},null,8,Bn)]),e.createElementVNode("div",Sn,[f[13]||(f[13]=e.createElementVNode("span",{class:"pm-field-label"},"API URL（基础地址或完整端点）",-1)),e.withDirectives(e.createElementVNode("input",{"onUpdate:modelValue":f[4]||(f[4]=p=>s.value.baseURL=p),placeholder:"https://api.deepseek.com/v1（基础地址；旧完整端点亦兼容）"},null,512),[[e.vModelText,s.value.baseURL]])]),e.createElementVNode("div",Cn,[e.createElementVNode("span",In,e.toDisplayString(r.protocolLabel),1),e.withDirectives(e.createElementVNode("select",{"onUpdate:modelValue":f[5]||(f[5]=p=>s.value.protocol=p),title:r.protocolHint},[(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(r.protocolOptions,p=>(e.openBlock(),e.createElementBlock("option",{key:"p"+p,value:p},e.toDisplayString(p||"默认"),9,An))),128))],8,Pn),[[e.vModelSelect,s.value.protocol]]),r.protocolHint?(e.openBlock(),e.createElementBlock("span",$n,e.toDisplayString(r.protocolHint),1)):e.createCommentVNode("v-if",!0)]),e.createElementVNode("div",Mn,[f[14]||(f[14]=e.createElementVNode("span",{class:"pm-field-label"},"上下文大小（Token）",-1)),e.withDirectives(e.createElementVNode("input",{"onUpdate:modelValue":f[6]||(f[6]=p=>s.value.contextMaxTokens=p),type:"number",min:"0",step:"1000",placeholder:"0=不限制（模型级未配置时的默认窗口）"},null,512),[[e.vModelText,s.value.contextMaxTokens]])]),e.createVNode(Ne,{models:d.value,label:r.modelEditor.label||"可用模型（回车或逗号分隔添加；支持整段粘贴）",placeholder:r.modelEditor.placeholder||"输入模型名，回车添加…",onChange:C},null,8,["models","label","placeholder"]),e.createElementVNode("div",Dn,[f[15]||(f[15]=e.createElementVNode("div",{class:"pm-params-title"},"模型参数（每模型独立配置；对话里也可临时切换思考档位）",-1)),d.value.length?(e.openBlock(),e.createElementBlock("div",Ln,[(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(d.value,p=>(e.openBlock(),e.createElementBlock("div",{key:p,class:"pm-param-row"},[e.createElementVNode("span",{class:"pm-param-model",title:p},e.toDisplayString(p),9,Rn),e.createCommentVNode(" ★ 2026-08-21 schema 驱动：按 modelParamFields 动态渲染（checkbox/select/number/text） "),(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(r.modelParamFields,k=>(e.openBlock(),e.createElementBlock(e.Fragment,{key:k.name},[k.type==="checkbox"?(e.openBlock(),e.createElementBlock("label",{key:0,class:"pm-param-check",title:k.hint||k.label},[e.withDirectives(e.createElementVNode("input",{type:"checkbox","onUpdate:modelValue":E=>i.value[p][k.name]=E},null,8,Fn),[[e.vModelCheckbox,i.value[p][k.name]]]),e.createTextVNode(" "+e.toDisplayString(k.label),1)],8,Gn)):k.type==="select"?e.withDirectives((e.openBlock(),e.createElementBlock("select",{key:1,"onUpdate:modelValue":E=>i.value[p][k.name]=E,title:k.hint||k.label},[(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(k.options||[],E=>(e.openBlock(),e.createElementBlock("option",{key:"o"+E,value:E},e.toDisplayString(E===""?k.label+"默认":E),9,zn))),128))],8,On)),[[e.vModelSelect,i.value[p][k.name]]]):k.type==="number"?e.withDirectives((e.openBlock(),e.createElementBlock("input",{key:2,"onUpdate:modelValue":E=>i.value[p][k.name]=E,type:"number",min:k.min??0,step:k.step??1,placeholder:k.label,title:k.hint||k.label},null,8,Un)),[[e.vModelText,i.value[p][k.name],void 0,{number:!0}]]):e.withDirectives((e.openBlock(),e.createElementBlock("input",{key:3,"onUpdate:modelValue":E=>i.value[p][k.name]=E,type:"text",placeholder:k.label,title:k.hint||k.label},null,8,Hn)),[[e.vModelText,i.value[p][k.name]]])],64))),128))]))),128))])):(e.openBlock(),e.createElementBlock("div",jn,"添加模型后，可逐模型配置参数（温度/思考/输出/上下文/多模态…）"))]),e.createElementVNode("div",qn,[e.createElementVNode("button",{class:"pm-btn pm-primary",disabled:g.value,onClick:O},e.toDisplayString(g.value?"保存中…":"保存服务商"),9,Wn),e.createElementVNode("button",{class:"pm-btn",onClick:$},"取消")])])):(e.openBlock(),e.createElementBlock("div",Jn,[e.createElementVNode("div",Zn,[e.createElementVNode("span",{class:"pm-name",title:m.name},e.toDisplayString(m.name),9,Kn),e.createElementVNode("div",Qn,[e.createElementVNode("button",{class:"pm-btn pm-small",onClick:p=>T(m)},"编辑",8,Xn),e.createElementVNode("button",{class:"pm-btn pm-small pm-danger",onClick:p=>z(m)},"删除",8,Yn)])]),e.createElementVNode("div",{class:"pm-url",title:m.baseURL},e.toDisplayString(m.baseURL||"未配置 API URL"),9,_n),m.protocol?(e.openBlock(),e.createElementBlock("div",{key:0,class:"pm-protocol",title:r.protocolHint},"协议 "+e.toDisplayString(m.protocol),9,vn)):e.createCommentVNode("v-if",!0),e.createElementVNode("div",et,e.toDisplayString(m.contextMaxTokens>0?"上下文 "+(m.contextMaxTokens/1e3).toFixed(0)+"K Token":"上下文 未限制"),1),e.createElementVNode("div",nt,[m.models.length?e.createCommentVNode("v-if",!0):(e.openBlock(),e.createElementBlock("span",tt,"（未配置模型）")),(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(m.models,p=>(e.openBlock(),e.createElementBlock("span",{key:p,class:"pm-tag"},e.toDisplayString(p),1))),128))]),F(m.name)?(e.openBlock(),e.createElementBlock("div",rt,e.toDisplayString(F(m.name)),1)):e.createCommentVNode("v-if",!0)]))],64))),128))])):a.value!=="__new__"?(e.openBlock(),e.createElementBlock("div",lt,"暂无服务商，点「+ 新增服务商」添加")):e.createCommentVNode("v-if",!0),h.value?(e.openBlock(),e.createElementBlock("div",ot,e.toDisplayString(h.value),1)):e.createCommentVNode("v-if",!0)]))}},[["__scopeId","data-v-4185f7bf"]]),st={class:"pm-manager"},it={class:"mgm-toolbar"},ct={class:"mgm-count"},dt={key:0,class:"mgm-edit"},pt={class:"mgm-edit-title"},mt={class:"mgm-field"},gt={class:"mgm-field-label"},kt={key:0,class:"mgm-required"},ht=["onUpdate:modelValue","onChange"],ft=["value"],yt=["onUpdate:modelValue","placeholder"],Et=["onUpdate:modelValue","placeholder"],ut={key:3,class:"mgm-field-hint"},bt={class:"mgm-edit-actions"},xt=["disabled"],Vt={key:1,class:"mgm-cards"},Nt={class:"mgm-card-head"},wt=["title"],Tt={key:0,class:"pm-active-badge"},Bt={class:"mgm-ops"},St=["disabled","onClick"],Ct=["onClick"],It=["onClick"],Pt={class:"pm-preview"},At={class:"pm-snap-row"},$t={class:"pm-snap-row"},Mt={key:2,class:"mgm-empty"},Dt={key:3,class:"mgm-error"},Lt=U({__name:"PresetManager",props:{presetFields:{type:Array,default:()=>[]}},emits:["saved"],setup(r,{expose:t,emit:n}){const l=r,o=n,a=e.ref({}),s=e.computed(()=>Object.keys(a.value||{})),d=e.ref(""),i=e.ref(!1),h=e.ref(""),g=e.ref(!1),x=e.ref(""),N=e.ref(""),B=e.ref(null),y=e.computed(()=>B.value&&B.value.providers||[]),T=e.ref({name:"",provider:"",baseURL:"",apiKey:""});function C(E={}){const c={name:"",provider:"",baseURL:"",apiKey:""};for(const u of l.presetFields)u.name in c||(c[u.name]="");return Object.assign(c,E)}function $(E){N.value=E,setTimeout(()=>{N.value===E&&(N.value="")},4e3)}async function L(){try{const[E,c,u]=await Promise.all([M.getAiPresets().catch(()=>({presets:{}})),M.apiGet("/settings").catch(()=>({settings:{}})),M.getModels().catch(()=>null)]);a.value=E&&E.presets||{},d.value=c&&c.settings&&c.settings.preset||"",B.value=u}catch(E){$("加载失败: "+(E.message||E))}}function O(E){const c=B.value||{};return{baseURL:c.providerBaseURLs&&c.providerBaseURLs[E]||"",models:c.models&&c.models[E]||[]}}function W(){const E=window&&window.__PAIRCODE_CORE&&window.__PAIRCODE_CORE.uiState&&window.__PAIRCODE_CORE.uiState.state&&window.__PAIRCODE_CORE.uiState.state.settings||{};let c={};E.preset&&a.value&&a.value[E.preset]&&(c=a.value[E.preset]);const u=c.provider||E.provider||y.value[0]||"",w=O(u);T.value=C({provider:u,baseURL:c.baseURL||E.baseURL||w.baseURL||"",apiKey:c.apiKey||""}),h.value="",i.value=!0}function z(E){const c=a.value&&a.value[E]||{};T.value=C({name:E,provider:c.provider||"",baseURL:c.baseURL||"",apiKey:c.apiKey||""}),h.value=E,i.value=!0}function F(){i.value=!1,h.value=""}function V(E){return E.source==="providers"?y.value||[]:E.options||[]}function f(E){if(E.name==="provider"&&T.value.provider){const c=O(T.value.provider);T.value.baseURL=c.baseURL||""}}e.watch(()=>T.value.provider,(E,c)=>{!i.value||c===""||E!==c&&f({name:"provider"})});async function m(){const E=T.value.name.trim();if(!E){$("请输入配置名称");return}const c=T.value.provider||"";if(!c){$("请选择服务商");return}for(const w of l.presetFields)if(w.required&&!T.value[w.name]){$("请填写"+w.label);return}const u=O(c);T.value.baseURL||(T.value.baseURL=u.baseURL||""),g.value=!0,N.value="";try{const w={provider:c,baseURL:T.value.baseURL,apiKey:T.value.apiKey};for(const P of l.presetFields)P.name!=="provider"&&P.name!=="apiKey"&&(w[P.name]=T.value[P.name]);if(h.value&&h.value!==E){const P={...a.value||{}};P[E]=w,delete P[h.value];const R=await M.saveAiPresets(P);if(!(R&&R.ok)){$(R&&R.error||"保存失败");return}a.value=P,d.value===h.value&&(d.value=E,await M.apiPut("/settings",{settings:{preset:E},pluginSettings:{}}).catch(()=>{}))}else{const P=await M.saveAiPreset("save",E,w);if(!(P&&P.ok)){$(P&&P.error||"保存失败");return}a.value=P.presets||a.value}F(),o("saved")}catch(w){$("保存失败: "+(w.message||w))}finally{g.value=!1}}async function p(E){x.value=E,N.value="";try{const c=await M.saveAiPreset("apply",E);c&&c.ok?(d.value=E,o("saved")):$(c&&c.error||"应用失败")}catch(c){$("应用失败: "+(c.message||c))}finally{x.value=""}}async function k(E){if(confirm("删除配置「"+E+"」？")){N.value="";try{const c=await M.saveAiPreset("delete",E);c&&c.ok?(a.value=c.presets||a.value,d.value===E&&(d.value=""),o("saved")):$(c&&c.error||"删除失败")}catch(c){$("删除失败: "+(c.message||c))}}}return e.onMounted(L),t({load:L}),(E,c)=>(e.openBlock(),e.createElementBlock("div",st,[e.createCommentVNode(" 工具栏 "),e.createElementVNode("div",it,[e.createElementVNode("span",ct,e.toDisplayString(s.value.length)+" 个配置",1),e.createElementVNode("button",{class:"mgm-btn mgm-primary",onClick:W,title:"添加一条 AI 配置（服务商 + API Key）"},"＋ 添加新配置")]),e.createCommentVNode(" 添加 / 编辑表单（点击添加/编辑才弹出） "),i.value?(e.openBlock(),e.createElementBlock("div",dt,[e.createElementVNode("div",pt,e.toDisplayString(h.value?"编辑配置："+h.value:"添加新配置"),1),e.createElementVNode("div",mt,[c[1]||(c[1]=e.createElementVNode("span",{class:"mgm-field-label"},"配置名称",-1)),e.withDirectives(e.createElementVNode("input",{"onUpdate:modelValue":c[0]||(c[0]=u=>T.value.name=u),type:"text",placeholder:"如：主力 / 写作备用…",onKeydown:e.withKeys(m,["enter"])},null,544),[[e.vModelText,T.value.name]])]),(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(r.presetFields,u=>(e.openBlock(),e.createElementBlock("div",{key:u.name,class:"mgm-field"},[e.createElementVNode("span",gt,[e.createTextVNode(e.toDisplayString(u.label),1),u.required?(e.openBlock(),e.createElementBlock("span",kt,"*")):e.createCommentVNode("v-if",!0)]),e.createCommentVNode(" select 类型（服务商选择） "),u.type==="select"?e.withDirectives((e.openBlock(),e.createElementBlock("select",{key:0,"onUpdate:modelValue":w=>T.value[u.name]=w,class:"mgm-select",onChange:w=>f(u)},[(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(V(u),w=>(e.openBlock(),e.createElementBlock("option",{key:w,value:w},e.toDisplayString(w),9,ft))),128))],40,ht)),[[e.vModelSelect,T.value[u.name]]]):u.type==="password"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:1},[e.createCommentVNode(" password 类型（API Key） "),e.withDirectives(e.createElementVNode("input",{"onUpdate:modelValue":w=>T.value[u.name]=w,type:"password",placeholder:u.placeholder||""},null,8,yt),[[e.vModelText,T.value[u.name]]])],2112)):(e.openBlock(),e.createElementBlock(e.Fragment,{key:2},[e.createCommentVNode(" text 兜底 "),e.withDirectives(e.createElementVNode("input",{"onUpdate:modelValue":w=>T.value[u.name]=w,type:"text",placeholder:u.placeholder||""},null,8,Et),[[e.vModelText,T.value[u.name]]])],2112)),u.hint?(e.openBlock(),e.createElementBlock("span",ut,e.toDisplayString(u.hint),1)):e.createCommentVNode("v-if",!0)]))),128)),e.createElementVNode("div",bt,[e.createElementVNode("button",{class:"mgm-btn mgm-primary",disabled:g.value,onClick:m},e.toDisplayString(g.value?"保存中…":"保存配置"),9,xt),e.createElementVNode("button",{class:"mgm-btn",onClick:F},"取消")])])):e.createCommentVNode("v-if",!0),e.createCommentVNode(" 配置卡片列表（主视图） "),s.value.length?(e.openBlock(),e.createElementBlock("div",Vt,[(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(s.value,u=>(e.openBlock(),e.createElementBlock("div",{key:u,class:e.normalizeClass(["mgm-card",{"pm-active":u===d.value}])},[e.createElementVNode("div",Nt,[e.createElementVNode("span",{class:"mgm-name",title:u},[e.createTextVNode(e.toDisplayString(u),1),u===d.value?(e.openBlock(),e.createElementBlock("span",Tt,"使用中")):e.createCommentVNode("v-if",!0)],8,wt),e.createElementVNode("div",Bt,[e.createElementVNode("button",{class:"mgm-btn mgm-small",disabled:x.value===u,onClick:w=>p(u)},e.toDisplayString(x.value===u?"应用中…":"应用"),9,St),e.createElementVNode("button",{class:"mgm-btn mgm-small",onClick:w=>z(u)},"编辑",8,Ct),e.createElementVNode("button",{class:"mgm-btn mgm-small mgm-danger",onClick:w=>k(u)},"删除",8,It)])]),e.createElementVNode("div",Pt,[e.createElementVNode("div",At,[c[2]||(c[2]=e.createElementVNode("span",null,"服务商",-1)),e.createElementVNode("b",null,e.toDisplayString((a.value[u]||{}).provider||"—"),1)]),e.createElementVNode("div",$t,[c[3]||(c[3]=e.createElementVNode("span",null,"API Key",-1)),e.createElementVNode("b",null,e.toDisplayString((a.value[u]||{}).apiKey?"已配置":"未配置"),1)])])],2))),128))])):i.value?e.createCommentVNode("v-if",!0):(e.openBlock(),e.createElementBlock("div",Mt,[e.createElementVNode("div",{class:"mgm-empty-box"},[c[4]||(c[4]=e.createElementVNode("div",{class:"mgm-empty-title"},"还没有 AI 配置",-1)),c[5]||(c[5]=e.createElementVNode("div",{class:"mgm-empty-sub"},"添加一条服务商 + API Key，保存后即可在对话面板中选模型。",-1)),e.createElementVNode("button",{class:"mgm-btn mgm-primary",onClick:W},"＋ 添加新配置")])])),N.value?(e.openBlock(),e.createElementBlock("div",Dt,e.toDisplayString(N.value),1)):e.createCommentVNode("v-if",!0)]))}},[["__scopeId","data-v-a1e0b542"]]),Rt={class:"modal-content"},Gt={class:"modal-body"},Ft={key:0,class:"settings-tabs"},Ot={key:0,class:"settings-tabs-filter-wrap"},zt=["onClick"],Ut={key:1,class:"settings-tabs-none"},Ht={class:"settings-content"},jt={key:0},qt={key:0,class:"group-title"},Wt=["title"],Jt=["title"],Zt=["onUpdate:modelValue"],Kt=["title"],Qt={class:"field-control"},Xt=["type","onUpdate:modelValue","placeholder"],Yt=["onUpdate:modelValue","min","max","step"],_t=["onUpdate:modelValue","onChange"],vt=["value"],er=["onUpdate:modelValue","placeholder"],nr={class:"slider-row"},tr=["onUpdate:modelValue","min","max","step"],rr={class:"slider-val"},lr={class:"color-row"},or=["onUpdate:modelValue"],ar={class:"color-code"},sr=["value","onInput","placeholder"],ir=["placeholder"],cr=["onUpdate:modelValue"],dr={key:0,class:"setting-hint"},pr={key:0,class:"settings-empty"},mr=U({__name:"SettingsModal",emits:["close"],setup(r,{emit:t}){const n=t,l=e.ref(""),o=e.ref(""),a=e.computed(()=>{const m=(b.state.pluginSchemas||[]).map(p=>({key:p.key,title:p.title||p.key,groups:d(p.fields||[])}));return m.length&&!l.value&&(l.value=m[0].key),m}),s=e.computed(()=>{const m=o.value.trim().toLowerCase();if(!m)return a.value;const p=a.value.find(E=>E.key===l.value),k=a.value.filter(E=>(E.title||E.key).toLowerCase().includes(m));return p&&!k.includes(p)&&k.unshift(p),k});function d(m){const p=[],k={};for(const E of m){const c=E.group||"";k[c]||(k[c]=[],p.push({title:c,fields:k[c]})),k[c].push(E)}return p}const i=e.ref(null);let h="";async function g(){try{i.value=await M.getModels()}catch{i.value=null}}function x(m){return m?(i.value&&i.value.models||{})[m]||[]:[]}function N(m,p){var k,E,c;if(p.optionsSource==="models"){const u=(k=y[m])==null?void 0:k[p.name],w=x((E=y.ai)==null?void 0:E.provider);return u&&!w.includes(u)?[...w,u]:w}if(p.optionsSource==="providers"){const u=i.value&&i.value.providers||[];if(u.length){const w=(c=y[m])==null?void 0:c[p.name];return w&&!u.includes(w)?[...u,w]:u}return p.options||[]}return p.options||[]}function B(m){if(!y.ai)return;const p=y.ai,k=m.linkFields||(m.linkField?[m.linkField]:[]);if(!k.length)return;const E=i.value||{},c=E.providerBaseURLs||{},u=E.providerKeys||{},w=p.provider,P=c[h];for(const R of k)if(R==="apiKey")p[R]=u[w]||"";else{const ue=p[R];(ue===void 0||ue===""||P&&ue===P)&&(p[R]=c[w]||"")}h=w}const y=e.reactive({}),T=e.ref("");function C(m){switch(m){case"checkbox":return!1;case"number":return 0;case"tags":return[];default:return""}}function $(){for(const E of Object.keys(y))delete y[E];const m=b.state.settings||{};h=m.provider||"";const p=m.pluginSettings||{};for(const E of b.state.pluginSchemas||[]){y[E.key]={};for(const c of E.fields||[]){let u;if(!(c.type==="project"||c.type==="provider-manager"||c.type==="model-params-manager"||c.type==="preset-manager")){if(c.binding)u=m[c.binding]!==void 0?m[c.binding]:c.default;else{const w=p[E.key]||{};u=w[c.name]!==void 0?w[c.name]:c.default}u===void 0&&(u=C(c.type)),c.type==="checkbox"&&(u=!!u),c.type==="number"&&(u=typeof u=="number"?u:Number(u)||0),c.type==="tags"&&(u=Array.isArray(u)?u:[]),y[E.key][c.name]=u}}}const k=(b.state.pluginSchemas||[]).some(E=>(E.fields||[]).some(c=>c.type==="project"));T.value="",k&&W()}function L(m,p){var E;const k=(E=y[m])==null?void 0:E[p.name];return Array.isArray(k)?k.join(", "):k||""}function O(m,p,k){y[m][p.name]=k.target.value.split(",").map(E=>E.trim()).filter(Boolean)}async function W(){try{const m=await M.getInstructions("project");T.value=m.content||""}catch{}}function z(){var m;$(),(m=b.state.settings)!=null&&m.theme&&b.applyTheme(b.state.settings.theme)}const F=()=>{z()};async function V(){try{const m=await M.apiGet("/settings");m&&m.settings&&(b.state.settings=m.settings,await g(),z())}catch{}}const f=async()=>{try{let m={};try{const c=await M.apiGet("/settings");m=c&&c.settings||{}}catch{}const p={...m},k={...m.pluginSettings||{}};let E=!1;for(const c of b.state.pluginSchemas||[]){const u=y[c.key]||{};for(const w of c.fields||[]){if(w.type==="project"){await M.saveInstructions("project",T.value);continue}if(w.type==="provider-manager"||w.type==="model-params-manager"||w.type==="preset-manager")continue;const P=u[w.name];w.binding?(w.name==="theme"&&P!==p[w.binding]&&(E=!0),p[w.binding]=P):(k[c.key]||(k[c.key]={}),k[c.key][w.name]=P)}}await M.apiPut("/settings",{settings:p,pluginSettings:k}),b.state.settings=p,E&&b.applyTheme(p.theme),window.$toast("设置已保存","success"),n("close")}catch(m){window.$toast("保存失败: "+m.message,"error")}};return $(),e.onMounted(async()=>{await g(),z()}),(m,p)=>(e.openBlock(),e.createElementBlock("div",{class:"modal-overlay",onClick:p[3]||(p[3]=e.withModifiers(k=>m.$emit("close"),["self"]))},[e.createElementVNode("div",Rt,[e.createElementVNode("h2",null,[e.createVNode(D,{name:"settings",size:18}),p[4]||(p[4]=e.createTextVNode(" 设置 ",-1)),e.createElementVNode("button",{class:"modal-close",onClick:p[0]||(p[0]=k=>m.$emit("close"))},"×")]),e.createElementVNode("div",Gt,[e.createCommentVNode(" ═══ 纯 schema 驱动：所有配置 tab 由插件 ctx.registerSettings 注册 ═══ "),a.value.length?(e.openBlock(),e.createElementBlock("div",Ft,[a.value.length>6?(e.openBlock(),e.createElementBlock("div",Ot,[e.withDirectives(e.createElementVNode("input",{"onUpdate:modelValue":p[1]||(p[1]=k=>o.value=k),class:"settings-tabs-filter",type:"text",placeholder:"筛选设置…"},null,512),[[e.vModelText,o.value]])])):e.createCommentVNode("v-if",!0),(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(s.value,k=>(e.openBlock(),e.createElementBlock("button",{key:k.key,class:e.normalizeClass(["settings-tab",{active:l.value===k.key}]),onClick:E=>l.value=k.key},e.toDisplayString(k.title),11,zt))),128)),s.value.length===0?(e.openBlock(),e.createElementBlock("div",Ut,"无匹配设置")):e.createCommentVNode("v-if",!0)])):e.createCommentVNode("v-if",!0),e.createElementVNode("div",Ht,[(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(a.value,k=>(e.openBlock(),e.createElementBlock(e.Fragment,{key:k.key},[l.value===k.key?(e.openBlock(),e.createElementBlock("div",jt,[(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(k.groups,E=>(e.openBlock(),e.createElementBlock("div",{key:E.title||"__main",class:"setting-group"},[E.title?(e.openBlock(),e.createElementBlock("div",qt,e.toDisplayString(E.title),1)):e.createCommentVNode("v-if",!0),(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(E.fields,c=>(e.openBlock(),e.createElementBlock("div",{key:c.name,class:e.normalizeClass(["setting-row",{"row-toggle":c.type==="checkbox"}])},[e.createCommentVNode(" checkbox：label 与开关同行 "),c.type==="checkbox"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:0},[e.createElementVNode("label",{class:"field-label",title:c.hint},e.toDisplayString(c.label),9,Wt),e.createElementVNode("label",{class:"pp-switch",title:c.hint},[e.withDirectives(e.createElementVNode("input",{type:"checkbox","onUpdate:modelValue":u=>y[k.key][c.name]=u},null,8,Zt),[[e.vModelCheckbox,y[k.key][c.name]]]),p[5]||(p[5]=e.createElementVNode("span",{class:"pp-switch-track"},null,-1))],8,Jt)],64)):(e.openBlock(),e.createElementBlock(e.Fragment,{key:1},[e.createCommentVNode(" 其他类型：label 在上、控件在下、说明文字在控件下方（不挤占输入区） "),e.createElementVNode("label",{class:"field-label",title:c.hint},e.toDisplayString(c.label),9,Kt),e.createElementVNode("div",Qt,[e.createCommentVNode(" text / password "),c.type==="text"||c.type==="password"?e.withDirectives((e.openBlock(),e.createElementBlock("input",{key:0,class:"field-input",type:c.type==="password"?"password":"text","onUpdate:modelValue":u=>y[k.key][c.name]=u,placeholder:c.placeholder},null,8,Xt)),[[e.vModelDynamic,y[k.key][c.name]]]):c.type==="number"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:1},[e.createCommentVNode(" number "),e.withDirectives(e.createElementVNode("input",{class:"field-input",type:"number","onUpdate:modelValue":u=>y[k.key][c.name]=u,min:c.min,max:c.max,step:c.step},null,8,Yt),[[e.vModelText,y[k.key][c.name],void 0,{number:!0}]])],2112)):c.type==="select"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:2},[e.createCommentVNode(" select（optionsSource 驱动动态数据源：models=按服务商模型列表 / providers=服务商列表） "),e.withDirectives(e.createElementVNode("select",{"onUpdate:modelValue":u=>y[k.key][c.name]=u,class:"field-select",onChange:u=>B(c)},[(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(N(k.key,c),u=>(e.openBlock(),e.createElementBlock("option",{key:u,value:u},e.toDisplayString(u),9,vt))),128))],40,_t),[[e.vModelSelect,y[k.key][c.name]]])],2112)):c.type==="textarea"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:3},[e.createCommentVNode(" textarea "),e.withDirectives(e.createElementVNode("textarea",{"onUpdate:modelValue":u=>y[k.key][c.name]=u,class:"field-textarea",rows:"4",placeholder:c.placeholder},null,8,er),[[e.vModelText,y[k.key][c.name]]])],2112)):c.type==="slider"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:4},[e.createCommentVNode(" slider "),e.createElementVNode("div",nr,[e.withDirectives(e.createElementVNode("input",{type:"range","onUpdate:modelValue":u=>y[k.key][c.name]=u,min:c.min!=null?c.min:0,max:c.max!=null?c.max:100,step:c.step||1},null,8,tr),[[e.vModelText,y[k.key][c.name],void 0,{number:!0}]]),e.createElementVNode("span",rr,e.toDisplayString(y[k.key][c.name]),1)])],2112)):c.type==="color"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:5},[e.createCommentVNode(" color "),e.createElementVNode("div",lr,[e.withDirectives(e.createElementVNode("input",{type:"color","onUpdate:modelValue":u=>y[k.key][c.name]=u},null,8,or),[[e.vModelText,y[k.key][c.name]]]),e.createElementVNode("code",ar,e.toDisplayString(y[k.key][c.name]),1)])],2112)):c.type==="tags"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:6},[e.createCommentVNode(" tags（逗号分隔数组） "),e.createElementVNode("input",{type:"text",class:"field-input",value:L(k.key,c),onInput:u=>O(k.key,c,u),placeholder:c.placeholder||"逗号分隔"},null,40,sr)],2112)):c.type==="project"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:7},[e.createCommentVNode(" project（平台特殊：项目级指令，经 /api/instructions 读写） "),e.withDirectives(e.createElementVNode("textarea",{"onUpdate:modelValue":p[2]||(p[2]=u=>T.value=u),class:"field-textarea",rows:"4",placeholder:c.placeholder},null,8,ir),[[e.vModelText,T.value]])],2112)):c.type==="provider-manager"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:8},[e.createCommentVNode(" provider-manager（服务商维护面板：CRUD /api/models，独立保存，不参与普通表单） "),e.createVNode(at,{"model-param-fields":c.modelParamFields||[],"model-editor":c.modelEditor||{},"protocol-label":c.protocolLabel||"LLM 协议","protocol-options":c.protocolOptions||[],"protocol-hint":c.protocolHint||"",onSaved:g},null,8,["model-param-fields","model-editor","protocol-label","protocol-options","protocol-hint"])],2112)):c.type==="preset-manager"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:9},[e.createCommentVNode(" preset-manager（AI 配置预设面板：CRUD /api/ai-presets，独立保存，不参与普通表单） "),e.createVNode(Lt,{"preset-fields":c.presetFields||[],onSaved:V},null,8,["preset-fields"])],2112)):(e.openBlock(),e.createElementBlock(e.Fragment,{key:10},[e.createCommentVNode(" 兜底 text "),e.withDirectives(e.createElementVNode("input",{class:"field-input",type:"text","onUpdate:modelValue":u=>y[k.key][c.name]=u},null,8,cr),[[e.vModelText,y[k.key][c.name]]])],2112))]),c.hint?(e.openBlock(),e.createElementBlock("span",dr,e.toDisplayString(c.hint),1)):e.createCommentVNode("v-if",!0)],64))],2))),128))]))),128))])):e.createCommentVNode("v-if",!0)],64))),128)),a.value.length?e.createCommentVNode("v-if",!0):(e.openBlock(),e.createElementBlock("div",pr,"暂无配置项（等待插件注册…）"))])]),e.createElementVNode("div",{class:"modal-footer"},[e.createElementVNode("button",{class:"btn-secondary",onClick:F},"撤销"),e.createElementVNode("button",{class:"btn-primary",onClick:f},"保存设置")])])]))}},[["__scopeId","data-v-72d0a360"]]),gr={class:"modal-content sys-modal"},kr={class:"modal-header"},hr={class:"modal-body"},fr={key:0,class:"loading"},yr={key:1,class:"sys-info"},Er={class:"info-row"},ur={class:"info-row"},br={class:"info-row"},xr={class:"info-row"},Vr={class:"info-row"},Nr={class:"info-row"},wr={class:"modal-footer"},Tr=U({__name:"SystemModal",emits:["close"],setup(r,{emit:t}){const n=e.ref(!0),l=e.ref({});return e.onMounted(async()=>{try{l.value=await M.apiGet("/system/info")}catch{}n.value=!1}),(o,a)=>(e.openBlock(),e.createElementBlock("div",{class:"modal-overlay",onClick:a[2]||(a[2]=e.withModifiers(s=>o.$emit("close"),["self"]))},[e.createElementVNode("div",gr,[e.createElementVNode("div",kr,[a[3]||(a[3]=e.createElementVNode("h2",null,"ℹ 系统信息",-1)),e.createElementVNode("button",{class:"modal-close",onClick:a[0]||(a[0]=s=>o.$emit("close"))},"×")]),e.createElementVNode("div",hr,[n.value?(e.openBlock(),e.createElementBlock("div",fr,"加载中...")):(e.openBlock(),e.createElementBlock("div",yr,[e.createElementVNode("div",Er,[a[4]||(a[4]=e.createElementVNode("label",null,"主机名",-1)),e.createElementVNode("span",null,e.toDisplayString(l.value.hostname),1)]),e.createElementVNode("div",ur,[a[5]||(a[5]=e.createElementVNode("label",null,"当前目录",-1)),e.createElementVNode("span",null,e.toDisplayString(l.value.cwd),1)]),e.createElementVNode("div",br,[a[6]||(a[6]=e.createElementVNode("label",null,"操作系统",-1)),e.createElementVNode("span",null,e.toDisplayString(l.value.os),1)]),e.createElementVNode("div",xr,[a[7]||(a[7]=e.createElementVNode("label",null,"Go 版本",-1)),e.createElementVNode("span",null,e.toDisplayString(l.value.goos),1)]),e.createElementVNode("div",Vr,[a[8]||(a[8]=e.createElementVNode("label",null,"工作区",-1)),e.createElementVNode("span",null,e.toDisplayString(l.value.workspace),1)]),e.createElementVNode("div",Nr,[a[9]||(a[9]=e.createElementVNode("label",null,"文件夹",-1)),e.createElementVNode("span",null,e.toDisplayString((l.value.folders||[]).join(", ")),1)])]))]),e.createElementVNode("div",wr,[e.createElementVNode("button",{class:"btn-secondary",onClick:a[1]||(a[1]=s=>o.$emit("close"))},"关闭")])])]))}},[["__scopeId","data-v-c27b6ec9"]]),Br={class:"modal-content source-modal"},Sr={class:"modal-header"},Cr={class:"modal-footer"},Ir=U({__name:"SourceModal",emits:["close"],setup(r){return(t,n)=>(e.openBlock(),e.createElementBlock("div",{class:"modal-overlay",onClick:n[2]||(n[2]=e.withModifiers(l=>t.$emit("close"),["self"]))},[e.createElementVNode("div",Br,[e.createElementVNode("div",Sr,[n[3]||(n[3]=e.createElementVNode("h2",null,"⎔ 源代码管理",-1)),e.createElementVNode("button",{class:"modal-close",onClick:n[0]||(n[0]=l=>t.$emit("close"))},"×")]),n[4]||(n[4]=e.createElementVNode("div",{class:"modal-body"},[e.createElementVNode("p",{style:{color:"var(--text-muted)","text-align":"center","margin-top":"40px"}},[e.createTextVNode(" Git 集成开发中"),e.createElementVNode("br"),e.createElementVNode("br"),e.createTextVNode(" 功能规划："),e.createElementVNode("br"),e.createTextVNode(" · Git 状态查看"),e.createElementVNode("br"),e.createTextVNode(" · 暂存/提交/推送"),e.createElementVNode("br"),e.createTextVNode(" · 分支管理"),e.createElementVNode("br"),e.createTextVNode(" · Diff 对比 ")])],-1)),e.createElementVNode("div",Cr,[e.createElementVNode("button",{class:"btn-secondary",onClick:n[1]||(n[1]=l=>t.$emit("close"))},"关闭")])])]))}},[["__scopeId","data-v-2e060397"]]),Pr=`# 功能介绍\r
+var UiModals=(function(J,e,b,Ve,M){"use strict";var Mr=Object.defineProperty;var Dr=(J,e,b)=>e in J?Mr(J,e,{enumerable:!0,configurable:!0,writable:!0,value:b}):J[e]=b;var A=(J,e,b)=>Dr(J,typeof e!="symbol"?e+"":e,b);var ie;const U=(o,t)=>{const n=o.__vccOpts||o;for(const[l,r]of t)n[l]=r;return n},Ue=["width","height"],He={key:0,d:"M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"},D=U({__name:"SvgIcon",props:{name:{type:String,required:!0},size:{type:Number,default:16}},setup(o){return(t,n)=>(e.openBlock(),e.createElementBlock("svg",{class:"svg-icon",width:o.size,height:o.size,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor","stroke-width":"2","stroke-linecap":"round","stroke-linejoin":"round"},[e.createCommentVNode(" Folder "),o.name==="folder"?(e.openBlock(),e.createElementBlock("path",He)):o.name==="folder-open"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:1},[e.createCommentVNode(" Folder Open "),n[0]||(n[0]=e.createElementVNode("path",{d:"M6 17l-3-9h18l-3 9H6z"},null,-1)),n[1]||(n[1]=e.createElementVNode("path",{d:"M4 8V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v3"},null,-1))],64)):o.name==="file"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:2},[e.createCommentVNode(" File "),n[2]||(n[2]=e.createElementVNode("path",{d:"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"},null,-1)),n[3]||(n[3]=e.createElementVNode("polyline",{points:"14 2 14 8 20 8"},null,-1))],64)):o.name==="file-code"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:3},[e.createCommentVNode(" File Code "),n[4]||(n[4]=e.createStaticVNode('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" data-v-faf69761></path><polyline points="14 2 14 8 20 8" data-v-faf69761></polyline><line x1="10" y1="12" x2="8" y2="14" data-v-faf69761></line><line x1="10" y1="16" x2="8" y2="18" data-v-faf69761></line><line x1="14" y1="12" x2="16" y2="14" data-v-faf69761></line><line x1="14" y1="16" x2="16" y2="18" data-v-faf69761></line>',6))],64)):o.name==="file-text"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:4},[e.createCommentVNode(" File Text / Document "),n[5]||(n[5]=e.createElementVNode("path",{d:"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"},null,-1)),n[6]||(n[6]=e.createElementVNode("polyline",{points:"14 2 14 8 20 8"},null,-1)),n[7]||(n[7]=e.createElementVNode("line",{x1:"9",y1:"13",x2:"15",y2:"13"},null,-1)),n[8]||(n[8]=e.createElementVNode("line",{x1:"9",y1:"17",x2:"15",y2:"17"},null,-1))],64)):o.name==="search"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:5},[e.createCommentVNode(" Search "),n[9]||(n[9]=e.createElementVNode("circle",{cx:"11",cy:"11",r:"8"},null,-1)),n[10]||(n[10]=e.createElementVNode("line",{x1:"21",y1:"21",x2:"16.65",y2:"16.65"},null,-1))],64)):o.name==="terminal"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:6},[e.createCommentVNode(" Terminal / Console "),n[11]||(n[11]=e.createElementVNode("polyline",{points:"4 17 10 11 4 5"},null,-1)),n[12]||(n[12]=e.createElementVNode("line",{x1:"12",y1:"19",x2:"20",y2:"19"},null,-1))],64)):o.name==="chat"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:7},[e.createCommentVNode(" Chat / Message "),n[13]||(n[13]=e.createElementVNode("path",{d:"M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"},null,-1))],64)):o.name==="settings"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:8},[e.createCommentVNode(" Gear / Settings "),n[14]||(n[14]=e.createElementVNode("circle",{cx:"12",cy:"12",r:"3"},null,-1)),n[15]||(n[15]=e.createElementVNode("path",{d:"M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"},null,-1))],64)):o.name==="home"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:9},[e.createCommentVNode(" Home "),n[16]||(n[16]=e.createElementVNode("path",{d:"M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"},null,-1)),n[17]||(n[17]=e.createElementVNode("polyline",{points:"9 22 9 12 15 12 15 22"},null,-1))],64)):o.name==="chevron-right"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:10},[e.createCommentVNode(" Chevron Right "),n[18]||(n[18]=e.createElementVNode("polyline",{points:"9 6 15 12 9 18"},null,-1))],64)):o.name==="chevron-down"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:11},[e.createCommentVNode(" Chevron Down (Rotated chevron-right) "),n[19]||(n[19]=e.createElementVNode("polyline",{points:"6 9 12 15 18 9"},null,-1))],64)):o.name==="plus"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:12},[e.createCommentVNode(" Plus / Add "),n[20]||(n[20]=e.createElementVNode("line",{x1:"12",y1:"5",x2:"12",y2:"19"},null,-1)),n[21]||(n[21]=e.createElementVNode("line",{x1:"5",y1:"12",x2:"19",y2:"12"},null,-1))],64)):o.name==="close"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:13},[e.createCommentVNode(" Close / X "),n[22]||(n[22]=e.createElementVNode("line",{x1:"18",y1:"6",x2:"6",y2:"18"},null,-1)),n[23]||(n[23]=e.createElementVNode("line",{x1:"6",y1:"6",x2:"18",y2:"18"},null,-1))],64)):o.name==="refresh"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:14},[e.createCommentVNode(" Refresh "),n[24]||(n[24]=e.createElementVNode("polyline",{points:"23 4 23 10 17 10"},null,-1)),n[25]||(n[25]=e.createElementVNode("path",{d:"M20.49 15a9 9 0 1 1-2.12-9.36L23 10"},null,-1))],64)):o.name==="drive"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:15},[e.createCommentVNode(" Hard Drive / Disk "),n[26]||(n[26]=e.createElementVNode("line",{x1:"22",y1:"12",x2:"2",y2:"12"},null,-1)),n[27]||(n[27]=e.createElementVNode("path",{d:"M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"},null,-1)),n[28]||(n[28]=e.createElementVNode("line",{x1:"6",y1:"16",x2:"6.01",y2:"16"},null,-1)),n[29]||(n[29]=e.createElementVNode("line",{x1:"10",y1:"16",x2:"10.01",y2:"16"},null,-1))],64)):o.name==="source-control"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:16},[e.createCommentVNode(" Source Control / Git Branch "),n[30]||(n[30]=e.createElementVNode("line",{x1:"6",y1:"3",x2:"6",y2:"15"},null,-1)),n[31]||(n[31]=e.createElementVNode("circle",{cx:"18",cy:"6",r:"3"},null,-1)),n[32]||(n[32]=e.createElementVNode("circle",{cx:"6",cy:"18",r:"3"},null,-1)),n[33]||(n[33]=e.createElementVNode("path",{d:"M18 9a9 9 0 0 1-9 9"},null,-1))],64)):o.name==="git-branch"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:17},[e.createCommentVNode(" Git Branch "),n[34]||(n[34]=e.createElementVNode("line",{x1:"6",y1:"3",x2:"6",y2:"15"},null,-1)),n[35]||(n[35]=e.createElementVNode("circle",{cx:"18",cy:"6",r:"3"},null,-1)),n[36]||(n[36]=e.createElementVNode("circle",{cx:"6",cy:"18",r:"3"},null,-1)),n[37]||(n[37]=e.createElementVNode("path",{d:"M18 9a9 9 0 0 1-9 9"},null,-1))],64)):o.name==="git-pull"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:18},[e.createCommentVNode(" Git Pull "),n[38]||(n[38]=e.createStaticVNode('<circle cx="18" cy="18" r="3" data-v-faf69761></circle><circle cx="6" cy="6" r="3" data-v-faf69761></circle><path d="M13 6h3a2 2 0 0 1 2 2v7" data-v-faf69761></path><line x1="6" y1="18" x2="6" y2="9" data-v-faf69761></line><polyline points="9 9 6 6 3 9" data-v-faf69761></polyline>',5))],64)):o.name==="git-push"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:19},[e.createCommentVNode(" Git Push "),n[39]||(n[39]=e.createStaticVNode('<circle cx="18" cy="6" r="3" data-v-faf69761></circle><circle cx="6" cy="18" r="3" data-v-faf69761></circle><path d="M13 18h-2a2 2 0 0 1-2-2V9" data-v-faf69761></path><line x1="6" y1="6" x2="6" y2="15" data-v-faf69761></line><polyline points="9 15 6 18 3 15" data-v-faf69761></polyline>',5))],64)):o.name==="output"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:20},[e.createCommentVNode(" Output / Window "),n[40]||(n[40]=e.createElementVNode("rect",{x:"2",y:"3",width:"20",height:"14",rx:"2",ry:"2"},null,-1)),n[41]||(n[41]=e.createElementVNode("line",{x1:"8",y1:"21",x2:"16",y2:"21"},null,-1)),n[42]||(n[42]=e.createElementVNode("line",{x1:"12",y1:"17",x2:"12",y2:"21"},null,-1))],64)):o.name==="warning"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:21},[e.createCommentVNode(" Warning / Alert "),n[43]||(n[43]=e.createElementVNode("path",{d:"M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"},null,-1)),n[44]||(n[44]=e.createElementVNode("line",{x1:"12",y1:"9",x2:"12",y2:"13"},null,-1)),n[45]||(n[45]=e.createElementVNode("line",{x1:"12",y1:"17",x2:"12.01",y2:"17"},null,-1))],64)):o.name==="undo"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:22},[e.createCommentVNode(" Undo "),n[46]||(n[46]=e.createElementVNode("polyline",{points:"1 4 1 10 7 10"},null,-1)),n[47]||(n[47]=e.createElementVNode("path",{d:"M3.51 15a9 9 0 1 0 2.13-9.36L1 10"},null,-1))],64)):o.name==="redo"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:23},[e.createCommentVNode(" Redo "),n[48]||(n[48]=e.createElementVNode("polyline",{points:"23 4 23 10 17 10"},null,-1)),n[49]||(n[49]=e.createElementVNode("path",{d:"M20.49 15a9 9 0 1 1-2.12-9.36L23 10"},null,-1))],64)):o.name==="package"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:24},[e.createCommentVNode(" Package / Box / Store "),n[50]||(n[50]=e.createElementVNode("line",{x1:"16.5",y1:"9.4",x2:"7.5",y2:"4.21"},null,-1)),n[51]||(n[51]=e.createElementVNode("path",{d:"M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"},null,-1)),n[52]||(n[52]=e.createElementVNode("polyline",{points:"3.27 6.96 12 12.01 20.73 6.96"},null,-1)),n[53]||(n[53]=e.createElementVNode("line",{x1:"12",y1:"22.08",x2:"12",y2:"12"},null,-1))],64)):o.name==="globe"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:25},[e.createCommentVNode(" Globe / External "),n[54]||(n[54]=e.createElementVNode("circle",{cx:"12",cy:"12",r:"10"},null,-1)),n[55]||(n[55]=e.createElementVNode("line",{x1:"2",y1:"12",x2:"22",y2:"12"},null,-1)),n[56]||(n[56]=e.createElementVNode("path",{d:"M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"},null,-1))],64)):o.name==="cycle"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:26},[e.createCommentVNode(" Refresh / Cycle (for agent) "),n[57]||(n[57]=e.createElementVNode("polyline",{points:"23 4 23 10 17 10"},null,-1)),n[58]||(n[58]=e.createElementVNode("polyline",{points:"1 20 1 14 7 14"},null,-1)),n[59]||(n[59]=e.createElementVNode("path",{d:"M3.51 9a9 9 0 0 1 14.85-3.36L23 10"},null,-1)),n[60]||(n[60]=e.createElementVNode("path",{d:"M20.49 15a9 9 0 0 1-14.85 3.36L1 14"},null,-1))],64)):o.name==="send"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:27},[e.createCommentVNode(" Send (arrow up) "),n[61]||(n[61]=e.createElementVNode("line",{x1:"12",y1:"19",x2:"12",y2:"5"},null,-1)),n[62]||(n[62]=e.createElementVNode("polyline",{points:"5 12 12 5 19 12"},null,-1))],64)):o.name==="send-plane"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:28},[e.createCommentVNode(" Send Plane (paper airplane) "),n[63]||(n[63]=e.createElementVNode("line",{x1:"22",y1:"2",x2:"11",y2:"13"},null,-1)),n[64]||(n[64]=e.createElementVNode("polygon",{points:"22 2 15 22 11 13 2 9 22 2"},null,-1))],64)):o.name==="stop-dot"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:29},[e.createCommentVNode(" Stop Dot (pulsing circle) "),n[65]||(n[65]=e.createElementVNode("circle",{cx:"12",cy:"12",r:"6",class:"stop-pulse"},null,-1)),n[66]||(n[66]=e.createElementVNode("circle",{cx:"12",cy:"12",r:"10",class:"stop-pulse-ring"},null,-1))],64)):o.name==="wrench"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:30},[e.createCommentVNode(" Wrench / Tool "),n[67]||(n[67]=e.createElementVNode("path",{d:"M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"},null,-1))],64)):o.name==="database"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:31},[e.createCommentVNode(" Database "),n[68]||(n[68]=e.createElementVNode("ellipse",{cx:"12",cy:"5",rx:"9",ry:"3"},null,-1)),n[69]||(n[69]=e.createElementVNode("path",{d:"M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"},null,-1)),n[70]||(n[70]=e.createElementVNode("path",{d:"M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"},null,-1))],64)):o.name==="user"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:32},[e.createCommentVNode(" User / Person "),n[71]||(n[71]=e.createElementVNode("path",{d:"M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"},null,-1)),n[72]||(n[72]=e.createElementVNode("circle",{cx:"12",cy:"7",r:"4"},null,-1))],64)):o.name==="info"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:33},[e.createCommentVNode(" Info "),n[73]||(n[73]=e.createElementVNode("circle",{cx:"12",cy:"12",r:"10"},null,-1)),n[74]||(n[74]=e.createElementVNode("line",{x1:"12",y1:"16",x2:"12",y2:"12"},null,-1)),n[75]||(n[75]=e.createElementVNode("line",{x1:"12",y1:"8",x2:"12.01",y2:"8"},null,-1))],64)):o.name==="lightbulb"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:34},[e.createCommentVNode(" Lightbulb / Suggestion "),n[76]||(n[76]=e.createElementVNode("path",{d:"M9 18h6"},null,-1)),n[77]||(n[77]=e.createElementVNode("path",{d:"M10 22h4"},null,-1)),n[78]||(n[78]=e.createElementVNode("path",{d:"M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"},null,-1))],64)):o.name==="sparkles"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:35},[e.createCommentVNode(" Sparkles / Auto "),n[79]||(n[79]=e.createStaticVNode('<path d="M13.5 4L15 8l4 .5L15 12l1.5 4-4-2-4 2L10 12l-4-3.5L10 8z" data-v-faf69761></path><line x1="3" y1="18" x2="3" y2="21" data-v-faf69761></line><line x1="21" y1="18" x2="21" y2="21" data-v-faf69761></line><line x1="7" y1="20" x2="11" y2="20" data-v-faf69761></line><line x1="17" y1="20" x2="19" y2="20" data-v-faf69761></line>',5))],64)):o.name==="bot"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:36},[e.createCommentVNode(" Bot / AI "),n[80]||(n[80]=e.createStaticVNode('<rect x="3" y="11" width="18" height="10" rx="2" data-v-faf69761></rect><circle cx="12" cy="5" r="2" data-v-faf69761></circle><path d="M12 7v4" data-v-faf69761></path><line x1="8" y1="16" x2="8" y2="16" data-v-faf69761></line><line x1="16" y1="16" x2="16" y2="16" data-v-faf69761></line>',5))],64)):o.name==="file-js"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:37},[e.createCommentVNode(" File Type Icons "),n[81]||(n[81]=e.createElementVNode("path",{d:"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"},null,-1)),n[82]||(n[82]=e.createElementVNode("polyline",{points:"14 2 14 8 20 8"},null,-1)),n[83]||(n[83]=e.createElementVNode("text",{x:"8",y:"17","font-size":"9",fill:"currentColor","font-weight":"bold",stroke:"none"},"JS",-1))],64)):o.name==="file-ts"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:38},[n[84]||(n[84]=e.createElementVNode("path",{d:"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"},null,-1)),n[85]||(n[85]=e.createElementVNode("polyline",{points:"14 2 14 8 20 8"},null,-1)),n[86]||(n[86]=e.createElementVNode("text",{x:"8",y:"17","font-size":"9",fill:"currentColor","font-weight":"bold",stroke:"none"},"TS",-1))],64)):o.name==="file-go"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:39},[n[87]||(n[87]=e.createElementVNode("path",{d:"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"},null,-1)),n[88]||(n[88]=e.createElementVNode("polyline",{points:"14 2 14 8 20 8"},null,-1)),n[89]||(n[89]=e.createElementVNode("text",{x:"9",y:"17","font-size":"9",fill:"currentColor","font-weight":"bold",stroke:"none"},"Go",-1))],64)):o.name==="file-py"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:40},[n[90]||(n[90]=e.createElementVNode("path",{d:"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"},null,-1)),n[91]||(n[91]=e.createElementVNode("polyline",{points:"14 2 14 8 20 8"},null,-1)),n[92]||(n[92]=e.createElementVNode("text",{x:"7",y:"17","font-size":"9",fill:"currentColor","font-weight":"bold",stroke:"none"},"Py",-1))],64)):o.name==="file-java"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:41},[n[93]||(n[93]=e.createElementVNode("path",{d:"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"},null,-1)),n[94]||(n[94]=e.createElementVNode("polyline",{points:"14 2 14 8 20 8"},null,-1)),n[95]||(n[95]=e.createElementVNode("text",{x:"6",y:"17","font-size":"8",fill:"currentColor","font-weight":"bold",stroke:"none"},"Java",-1))],64)):o.name==="file-html"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:42},[n[96]||(n[96]=e.createElementVNode("path",{d:"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"},null,-1)),n[97]||(n[97]=e.createElementVNode("polyline",{points:"14 2 14 8 20 8"},null,-1)),n[98]||(n[98]=e.createElementVNode("text",{x:"6",y:"17","font-size":"9",fill:"currentColor","font-weight":"bold",stroke:"none"},"HTML",-1))],64)):o.name==="file-css"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:43},[n[99]||(n[99]=e.createElementVNode("path",{d:"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"},null,-1)),n[100]||(n[100]=e.createElementVNode("polyline",{points:"14 2 14 8 20 8"},null,-1)),n[101]||(n[101]=e.createElementVNode("text",{x:"7",y:"17","font-size":"9",fill:"currentColor","font-weight":"bold",stroke:"none"},"CSS",-1))],64)):o.name==="file-json"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:44},[n[102]||(n[102]=e.createElementVNode("path",{d:"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"},null,-1)),n[103]||(n[103]=e.createElementVNode("polyline",{points:"14 2 14 8 20 8"},null,-1)),n[104]||(n[104]=e.createElementVNode("text",{x:"5",y:"17","font-size":"9",fill:"currentColor","font-weight":"bold",stroke:"none"},"{ }",-1))],64)):o.name==="file-md"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:45},[n[105]||(n[105]=e.createElementVNode("path",{d:"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"},null,-1)),n[106]||(n[106]=e.createElementVNode("polyline",{points:"14 2 14 8 20 8"},null,-1)),n[107]||(n[107]=e.createElementVNode("text",{x:"7",y:"17","font-size":"9",fill:"currentColor","font-weight":"bold",stroke:"none"},"MD",-1))],64)):o.name==="file-vue"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:46},[n[108]||(n[108]=e.createElementVNode("path",{d:"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"},null,-1)),n[109]||(n[109]=e.createElementVNode("polyline",{points:"14 2 14 8 20 8"},null,-1)),n[110]||(n[110]=e.createElementVNode("text",{x:"7",y:"17","font-size":"9",fill:"currentColor","font-weight":"bold",stroke:"none"},"Vue",-1))],64)):o.name==="copy"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:47},[e.createCommentVNode(" Copy "),n[111]||(n[111]=e.createElementVNode("rect",{x:"9",y:"9",width:"13",height:"13",rx:"2",ry:"2"},null,-1)),n[112]||(n[112]=e.createElementVNode("path",{d:"M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"},null,-1))],64)):o.name==="minus"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:48},[e.createCommentVNode(" Minus "),n[113]||(n[113]=e.createElementVNode("line",{x1:"5",y1:"12",x2:"19",y2:"12"},null,-1))],64)):o.name==="edit"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:49},[e.createCommentVNode(" Edit / Rename "),n[114]||(n[114]=e.createElementVNode("path",{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"},null,-1)),n[115]||(n[115]=e.createElementVNode("path",{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"},null,-1))],64)):o.name==="trash"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:50},[e.createCommentVNode(" Trash / Delete "),n[116]||(n[116]=e.createElementVNode("polyline",{points:"3 6 5 6 21 6"},null,-1)),n[117]||(n[117]=e.createElementVNode("path",{d:"M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"},null,-1))],64)):o.name==="file-plus"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:51},[e.createCommentVNode(" File Plus / New File "),n[118]||(n[118]=e.createElementVNode("path",{d:"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"},null,-1)),n[119]||(n[119]=e.createElementVNode("polyline",{points:"14 2 14 8 20 8"},null,-1)),n[120]||(n[120]=e.createElementVNode("line",{x1:"12",y1:"18",x2:"12",y2:"12"},null,-1)),n[121]||(n[121]=e.createElementVNode("line",{x1:"9",y1:"15",x2:"15",y2:"15"},null,-1))],64)):o.name==="message-square"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:52},[e.createCommentVNode(" Folder Plus / New Folder "),n[122]||(n[122]=e.createElementVNode("path",{d:"M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"},null,-1))],64)):o.name==="folder-plus"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:53},[n[123]||(n[123]=e.createElementVNode("path",{d:"M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2v3"},null,-1)),n[124]||(n[124]=e.createElementVNode("line",{x1:"12",y1:"11",x2:"12",y2:"17"},null,-1)),n[125]||(n[125]=e.createElementVNode("line",{x1:"9",y1:"14",x2:"15",y2:"14"},null,-1))],64)):o.name==="brain"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:54},[e.createCommentVNode(" Brain / Thinking "),n[126]||(n[126]=e.createElementVNode("path",{d:"M12 2a4 4 0 0 0-4 4v1a5 5 0 0 0-5 5v1a4 4 0 0 0 3 3.87V17a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3v-.13A4 4 0 0 0 21 13v-1a5 5 0 0 0-5-5V6a4 4 0 0 0-4-4z"},null,-1)),n[127]||(n[127]=e.createElementVNode("path",{d:"M9 12v2"},null,-1)),n[128]||(n[128]=e.createElementVNode("path",{d:"M15 12v2"},null,-1)),n[129]||(n[129]=e.createElementVNode("path",{d:"M12 9v5"},null,-1))],64)):o.name==="check"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:55},[e.createCommentVNode(" Check / Success "),n[130]||(n[130]=e.createElementVNode("polyline",{points:"20 6 9 17 4 12"},null,-1))],64)):o.name==="clock"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:56},[e.createCommentVNode(" Clock / Pending "),n[131]||(n[131]=e.createElementVNode("circle",{cx:"12",cy:"12",r:"10"},null,-1)),n[132]||(n[132]=e.createElementVNode("polyline",{points:"12 6 12 12 16 14"},null,-1))],64)):o.name==="help"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:57},[e.createCommentVNode(" Help / Question "),n[133]||(n[133]=e.createElementVNode("circle",{cx:"12",cy:"12",r:"10"},null,-1)),n[134]||(n[134]=e.createElementVNode("path",{d:"M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"},null,-1)),n[135]||(n[135]=e.createElementVNode("line",{x1:"12",y1:"17",x2:"12.01",y2:"17"},null,-1))],64)):o.name==="shield"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:58},[e.createCommentVNode(" Shield / Approval "),n[136]||(n[136]=e.createElementVNode("path",{d:"M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"},null,-1))],64)):o.name==="shield-off"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:59},[e.createCommentVNode(" Shield Off / No Review "),n[137]||(n[137]=e.createElementVNode("path",{d:"M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"},null,-1)),n[138]||(n[138]=e.createElementVNode("line",{x1:"4",y1:"4",x2:"20",y2:"20",stroke:"currentColor","stroke-width":"2","stroke-linecap":"round"},null,-1))],64)):o.name==="code"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:60},[e.createCommentVNode(" Code / Brackets "),n[139]||(n[139]=e.createElementVNode("polyline",{points:"16 18 22 12 16 6"},null,-1)),n[140]||(n[140]=e.createElementVNode("polyline",{points:"8 6 2 12 8 18"},null,-1))],64)):o.name==="list"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:61},[e.createCommentVNode(" List / Menu "),n[141]||(n[141]=e.createStaticVNode('<line x1="8" y1="6" x2="21" y2="6" data-v-faf69761></line><line x1="8" y1="12" x2="21" y2="12" data-v-faf69761></line><line x1="8" y1="18" x2="21" y2="18" data-v-faf69761></line><line x1="3" y1="6" x2="3.01" y2="6" data-v-faf69761></line><line x1="3" y1="12" x2="3.01" y2="12" data-v-faf69761></line><line x1="3" y1="18" x2="3.01" y2="18" data-v-faf69761></line>',6))],64)):o.name==="layers"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:62},[e.createCommentVNode(" Layers / Stack / Context "),n[142]||(n[142]=e.createElementVNode("polygon",{points:"12 2 2 7 12 12 22 7 12 2"},null,-1)),n[143]||(n[143]=e.createElementVNode("polyline",{points:"2 17 12 22 22 17"},null,-1)),n[144]||(n[144]=e.createElementVNode("polyline",{points:"2 12 12 17 22 12"},null,-1))],64)):o.name==="eye"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:63},[e.createCommentVNode(" Eye / Show "),n[145]||(n[145]=e.createElementVNode("path",{d:"M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"},null,-1)),n[146]||(n[146]=e.createElementVNode("circle",{cx:"12",cy:"12",r:"3"},null,-1))],64)):o.name==="eye-off"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:64},[e.createCommentVNode(" Eye Off / Hide "),n[147]||(n[147]=e.createElementVNode("path",{d:"M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"},null,-1)),n[148]||(n[148]=e.createElementVNode("path",{d:"M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"},null,-1)),n[149]||(n[149]=e.createElementVNode("line",{x1:"1",y1:"1",x2:"23",y2:"23"},null,-1))],64)):o.name==="bug"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:65},[e.createCommentVNode(" Bug "),n[150]||(n[150]=e.createStaticVNode('<rect x="8" y="2" width="8" height="4" rx="1" ry="1" data-v-faf69761></rect><path d="M20 12h-3a5 5 0 0 1-5 5 5 5 0 0 1-5-5H4" data-v-faf69761></path><path d="M4 8h16" data-v-faf69761></path><path d="M12 2v7" data-v-faf69761></path><path d="M9 17l-3 4" data-v-faf69761></path><path d="M15 17l3 4" data-v-faf69761></path>',6))],64)):o.name==="check-circle"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:66},[e.createCommentVNode(" Check Circle "),n[151]||(n[151]=e.createElementVNode("path",{d:"M22 11.08V12a10 10 0 1 1-5.93-9.14"},null,-1)),n[152]||(n[152]=e.createElementVNode("polyline",{points:"22 4 12 14.01 9 11.01"},null,-1))],64)):o.name==="book-open"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:67},[e.createCommentVNode(" Book Open / Documentation "),n[153]||(n[153]=e.createElementVNode("path",{d:"M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"},null,-1)),n[154]||(n[154]=e.createElementVNode("path",{d:"M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"},null,-1))],64)):o.name==="tool"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:68},[e.createCommentVNode(" Tool / Wrench alternate "),n[155]||(n[155]=e.createElementVNode("path",{d:"M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"},null,-1))],64)):o.name==="keyboard"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:69},[e.createCommentVNode(" Keyboard "),n[156]||(n[156]=e.createStaticVNode('<rect x="2" y="4" width="20" height="16" rx="2" ry="2" data-v-faf69761></rect><line x1="6" y1="8" x2="6.01" y2="8" data-v-faf69761></line><line x1="10" y1="8" x2="10.01" y2="8" data-v-faf69761></line><line x1="14" y1="8" x2="14.01" y2="8" data-v-faf69761></line><line x1="18" y1="8" x2="18.01" y2="8" data-v-faf69761></line><line x1="6" y1="12" x2="6.01" y2="12" data-v-faf69761></line><line x1="10" y1="12" x2="10.01" y2="12" data-v-faf69761></line><line x1="14" y1="12" x2="14.01" y2="12" data-v-faf69761></line><line x1="18" y1="12" x2="18.01" y2="12" data-v-faf69761></line><line x1="6" y1="16" x2="18" y2="16" data-v-faf69761></line>',10))],64)):o.name==="chevron-left"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:70},[e.createCommentVNode(" Chevron Left "),n[157]||(n[157]=e.createElementVNode("polyline",{points:"15 6 9 12 15 18"},null,-1))],64)):o.name==="grid"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:71},[e.createCommentVNode(" Grid / App Grid "),n[158]||(n[158]=e.createElementVNode("rect",{x:"3",y:"3",width:"7",height:"7"},null,-1)),n[159]||(n[159]=e.createElementVNode("rect",{x:"14",y:"3",width:"7",height:"7"},null,-1)),n[160]||(n[160]=e.createElementVNode("rect",{x:"14",y:"14",width:"7",height:"7"},null,-1)),n[161]||(n[161]=e.createElementVNode("rect",{x:"3",y:"14",width:"7",height:"7"},null,-1))],64)):o.name==="puzzle"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:72},[e.createCommentVNode(" Puzzle / 插件 "),n[162]||(n[162]=e.createElementVNode("path",{d:"M4 7h3a2 2 0 0 1 4 0h9v9h-3a2 2 0 0 0-4 0H4z"},null,-1)),n[163]||(n[163]=e.createElementVNode("path",{d:"M11 7v9"},null,-1))],64)):(e.openBlock(),e.createElementBlock(e.Fragment,{key:73},[n[164]||(n[164]=e.createElementVNode("path",{d:"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"},null,-1)),n[165]||(n[165]=e.createElementVNode("polyline",{points:"14 2 14 8 20 8"},null,-1)),n[166]||(n[166]=e.createElementVNode("line",{x1:"9",y1:"13",x2:"15",y2:"13"},null,-1)),n[167]||(n[167]=e.createElementVNode("line",{x1:"9",y1:"17",x2:"15",y2:"17"},null,-1))],64))],8,Ue))}},[["__scopeId","data-v-faf69761"]]),je={class:"me-field"},qe={class:"me-label"},We={class:"me-editor"},Je={class:"me-input-row"},Ze=["placeholder","onKeydown"],Ke={class:"me-tags"},Qe={key:0,class:"me-empty"},Xe=["onClick"],Ne=U({__name:"ModelEditor",props:{models:{type:Array,default:()=>[]},label:{type:String,default:"可用模型（回车或逗号分隔添加；支持整段粘贴）"},placeholder:{type:String,default:"输入模型名，回车添加…"}},emits:["change"],setup(o,{emit:t}){const n=o,l=t,r=e.ref(""),a=e.ref([...n.models]);e.watch(()=>n.models,h=>{a.value=[...h]});function s(){const h=r.value.split(/[\n,，]/).map(x=>x.trim()).filter(Boolean);let g=!1;for(const x of h)a.value.includes(x)||(a.value.push(x),g=!0);g&&l("change",[...a.value]),r.value=""}function d(h){const g=(h.clipboardData||window.clipboardData).getData("text");if(/[,\n，]/.test(g)){h.preventDefault();const x=g.split(/[\n,，]/).map(B=>B.trim()).filter(Boolean);let N=!1;for(const B of x)a.value.includes(B)||(a.value.push(B),N=!0);N&&l("change",[...a.value]),r.value=""}}function i(h){a.value.splice(h,1),l("change",[...a.value])}return(h,g)=>(e.openBlock(),e.createElementBlock("div",je,[e.createElementVNode("span",qe,e.toDisplayString(o.label),1),e.createElementVNode("div",We,[e.createElementVNode("div",Je,[e.withDirectives(e.createElementVNode("input",{"onUpdate:modelValue":g[0]||(g[0]=x=>r.value=x),class:"me-input",placeholder:o.placeholder,onKeydown:e.withKeys(e.withModifiers(s,["prevent"]),["enter"]),onPaste:d},null,40,Ze),[[e.vModelText,r.value]]),e.createElementVNode("button",{class:"me-btn",onClick:s},"添加")]),e.createElementVNode("div",Ke,[a.value.length?e.createCommentVNode("v-if",!0):(e.openBlock(),e.createElementBlock("span",Qe,"暂无模型——添加后 AI tab 的模型下拉会按服务商显示")),(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(a.value,(x,N)=>(e.openBlock(),e.createElementBlock("span",{key:x+N,class:"me-tag"},[e.createTextVNode(e.toDisplayString(x)+" ",1),e.createElementVNode("button",{class:"me-x",title:"移除",onClick:B=>i(N)},"×",8,Xe)]))),128))])])]))}},[["__scopeId","data-v-a5e576a7"]]),Ye={class:"provider-manager"},_e={class:"pm-toolbar"},ve={class:"pm-count"},en={key:0,class:"pm-edit"},nn={class:"pm-field"},tn={class:"pm-field"},on={class:"pm-field"},ln={class:"pm-field-label"},rn=["title"],an=["value"],sn={key:0,class:"pm-protocol-hint"},cn={class:"pm-field"},dn={class:"pm-params"},pn={key:0,class:"pm-param-rows"},mn=["title"],gn=["title"],kn=["onUpdate:modelValue"],hn=["onUpdate:modelValue","title"],fn=["value"],yn=["onUpdate:modelValue","min","step","placeholder","title"],un=["onUpdate:modelValue","placeholder","title"],En={key:1,class:"pm-params-empty"},bn={class:"pm-edit-actions"},xn=["disabled"],Vn={key:1,class:"pm-cards"},Nn={key:0,class:"pm-edit"},wn={class:"pm-edit-title"},Tn={class:"pm-field"},Bn=["value"],Sn={class:"pm-field"},Cn={class:"pm-field"},In={class:"pm-field-label"},Pn=["title"],An=["value"],$n={key:0,class:"pm-protocol-hint"},Mn={class:"pm-field"},Dn={class:"pm-params"},Rn={key:0,class:"pm-param-rows"},Ln=["title"],Gn=["title"],Fn=["onUpdate:modelValue"],On=["onUpdate:modelValue","title"],zn=["value"],Un=["onUpdate:modelValue","min","step","placeholder","title"],Hn=["onUpdate:modelValue","placeholder","title"],jn={key:1,class:"pm-params-empty"},qn={class:"pm-edit-actions"},Wn=["disabled"],Jn={key:1,class:"pm-card"},Zn={class:"pm-card-head"},Kn=["title"],Qn={class:"pm-ops"},Xn=["onClick"],Yn=["onClick"],_n=["title"],vn=["title"],et={class:"pm-ctx"},nt={class:"pm-models"},tt={key:0,class:"pm-none"},ot={key:1,class:"pm-params-summary"},lt={key:2,class:"pm-empty"},rt={key:3,class:"pm-error"},at=U({__name:"ProviderManager",props:{modelParamFields:{type:Array,default:()=>[]},modelEditor:{type:Object,default:()=>({})},protocolLabel:{type:String,default:"LLM 协议"},protocolOptions:{type:Array,default:()=>[]},protocolHint:{type:String,default:""}},emits:["saved"],setup(o,{emit:t}){const n=t,l=o,r=e.ref([]),a=e.ref(""),s=e.ref({name:"",baseURL:"",contextMaxTokens:0}),d=e.ref([]),i=e.ref({}),h=e.ref(""),g=e.ref(!1);function x(){const V={};for(const f of l.modelParamFields)f.type==="checkbox"?V[f.name]=!1:f.type==="number"?V[f.name]=0:V[f.name]="";return V}function N(V){const f=b.state.settings&&b.state.settings.modelParams||{};return JSON.parse(JSON.stringify(f[V]||{}))}async function B(){try{const V=await M.getModels();r.value=(V.providers||[]).map(f=>({name:f,baseURL:(V.providerBaseURLs||{})[f]||"",contextMaxTokens:(V.providerContexts||{})[f]||0,protocol:(V.providerProtocols||{})[f]||"",models:(V.models||{})[f]||[]})),h.value=""}catch(V){h.value="加载服务商失败: "+(V.message||V)}}e.onMounted(B);function y(){a.value="__new__",s.value={name:"",baseURL:"",contextMaxTokens:0,protocol:""},d.value=[],i.value={},h.value=""}function T(V){a.value=V.name,s.value={name:V.name,baseURL:V.baseURL,contextMaxTokens:V.contextMaxTokens||0,protocol:V.protocol||""},d.value=[...V.models||[]];const f=N(V.name),m=x();for(const p of d.value)f[p]||(f[p]={...m});i.value=f,h.value=""}function C(V){const f={...i.value},m=x();for(const p of V)f[p]||(f[p]={...m});for(const p of Object.keys(f))V.includes(p)||delete f[p];i.value=f,d.value=V}function $(){a.value="",h.value=""}function R(){const V={};for(const f of r.value)V[f.name]={baseURL:f.baseURL,models:f.models,contextMaxTokens:f.contextMaxTokens||0,protocol:f.protocol||""};return V}async function O(){const V=s.value.name.trim()||(a.value!=="__new__"?a.value:"");if(!V){h.value="服务商名称不能为空";return}const f=R();if(a.value==="__new__"&&f[V]){h.value=`服务商「${V}」已存在`;return}f[V]={baseURL:s.value.baseURL.trim(),models:d.value,contextMaxTokens:Math.max(0,Number(s.value.contextMaxTokens)||0),protocol:(s.value.protocol||"").trim()},g.value=!0;try{await M.saveModels(f),await W(V),a.value="",await B(),n("saved")}catch(m){h.value="保存失败: "+(m.message||m)}finally{g.value=!1}}async function W(V){let f={};try{const u=await M.apiGet("/settings");f=u&&u.settings||{}}catch{}const m=JSON.parse(JSON.stringify(f.modelParams||{})),p={};for(const[u,c]of Object.entries(i.value)){const E=c||{},w={};for(const P of l.modelParamFields){const L=E[P.name];P.type==="checkbox"?L===!0&&(w[P.name]=!0):P.type==="number"?Number(L)>0&&(w[P.name]=Number(L)):L!==""&&L!==void 0&&L!==null&&(w[P.name]=L)}Object.keys(w).length&&(p[u]=w)}Object.keys(p).length?m[V]=p:delete m[V];const k={...f,modelParams:m};await M.apiPut("/settings",{settings:k,pluginSettings:f.pluginSettings||{}}),b.state.settings=k}async function z(V){if(!window.confirm(`删除服务商「${V.name}」？
+（AI tab 将不再可选该服务商）`))return;const f=R();delete f[V.name];try{await M.saveModels(f);let m={};try{const k=await M.apiGet("/settings");m=k&&k.settings||{}}catch{}const p=JSON.parse(JSON.stringify(m.modelParams||{}));if(p[V.name]){delete p[V.name];const k={...m,modelParams:p};await M.apiPut("/settings",{settings:k,pluginSettings:m.pluginSettings||{}}),b.state.settings=k}await B(),n("saved")}catch(m){h.value="删除失败: "+(m.message||m)}}function F(V){const m=(b.state.settings&&b.state.settings.modelParams||{})[V]||{},p=Object.keys(m).length;return p?"模型参数已配置 "+p+" 个":""}return(V,f)=>(e.openBlock(),e.createElementBlock("div",Ye,[e.createCommentVNode(" 工具栏 "),e.createElementVNode("div",_e,[e.createElementVNode("span",ve,e.toDisplayString(r.value.length)+" 个服务商",1),e.createElementVNode("button",{class:"pm-btn pm-primary",onClick:y},"+ 新增服务商")]),e.createCommentVNode(" 新增表单（工具栏下方展开，紧邻按钮不跳动） "),a.value==="__new__"?(e.openBlock(),e.createElementBlock("div",en,[f[11]||(f[11]=e.createElementVNode("div",{class:"pm-edit-title"},"新增服务商",-1)),e.createElementVNode("div",nn,[f[7]||(f[7]=e.createElementVNode("span",{class:"pm-field-label"},"服务商名称",-1)),e.withDirectives(e.createElementVNode("input",{"onUpdate:modelValue":f[0]||(f[0]=m=>s.value.name=m),placeholder:"如 deepseek"},null,512),[[e.vModelText,s.value.name]])]),e.createElementVNode("div",tn,[f[8]||(f[8]=e.createElementVNode("span",{class:"pm-field-label"},"API URL（基础地址或完整端点）",-1)),e.withDirectives(e.createElementVNode("input",{"onUpdate:modelValue":f[1]||(f[1]=m=>s.value.baseURL=m),placeholder:"https://api.deepseek.com/v1（基础地址；旧完整端点亦兼容）"},null,512),[[e.vModelText,s.value.baseURL]])]),e.createElementVNode("div",on,[e.createElementVNode("span",ln,e.toDisplayString(o.protocolLabel),1),e.withDirectives(e.createElementVNode("select",{"onUpdate:modelValue":f[2]||(f[2]=m=>s.value.protocol=m),title:o.protocolHint},[(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(o.protocolOptions,m=>(e.openBlock(),e.createElementBlock("option",{key:"p"+m,value:m},e.toDisplayString(m||"默认"),9,an))),128))],8,rn),[[e.vModelSelect,s.value.protocol]]),o.protocolHint?(e.openBlock(),e.createElementBlock("span",sn,e.toDisplayString(o.protocolHint),1)):e.createCommentVNode("v-if",!0)]),e.createElementVNode("div",cn,[f[9]||(f[9]=e.createElementVNode("span",{class:"pm-field-label"},"上下文大小（Token）",-1)),e.withDirectives(e.createElementVNode("input",{"onUpdate:modelValue":f[3]||(f[3]=m=>s.value.contextMaxTokens=m),type:"number",min:"0",step:"1000",placeholder:"0=不限制（模型级未配置时的默认窗口）"},null,512),[[e.vModelText,s.value.contextMaxTokens]])]),e.createVNode(Ne,{models:d.value,label:o.modelEditor.label||"可用模型（回车或逗号分隔添加；支持整段粘贴）",placeholder:o.modelEditor.placeholder||"输入模型名，回车添加…",onChange:C},null,8,["models","label","placeholder"]),e.createElementVNode("div",dn,[f[10]||(f[10]=e.createElementVNode("div",{class:"pm-params-title"},"模型参数（每模型独立配置；对话里也可临时切换思考档位）",-1)),d.value.length?(e.openBlock(),e.createElementBlock("div",pn,[(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(d.value,m=>(e.openBlock(),e.createElementBlock("div",{key:m,class:"pm-param-row"},[e.createElementVNode("span",{class:"pm-param-model",title:m},e.toDisplayString(m),9,mn),e.createCommentVNode(" ★ 2026-08-21 schema 驱动：按 modelParamFields 动态渲染（checkbox/select/number/text） "),(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(o.modelParamFields,p=>(e.openBlock(),e.createElementBlock(e.Fragment,{key:p.name},[p.type==="checkbox"?(e.openBlock(),e.createElementBlock("label",{key:0,class:"pm-param-check",title:p.hint||p.label},[e.withDirectives(e.createElementVNode("input",{type:"checkbox","onUpdate:modelValue":k=>i.value[m][p.name]=k},null,8,kn),[[e.vModelCheckbox,i.value[m][p.name]]]),e.createTextVNode(" "+e.toDisplayString(p.label),1)],8,gn)):p.type==="select"?e.withDirectives((e.openBlock(),e.createElementBlock("select",{key:1,"onUpdate:modelValue":k=>i.value[m][p.name]=k,title:p.hint||p.label},[(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(p.options||[],k=>(e.openBlock(),e.createElementBlock("option",{key:"o"+k,value:k},e.toDisplayString(k===""?p.label+"默认":k),9,fn))),128))],8,hn)),[[e.vModelSelect,i.value[m][p.name]]]):p.type==="number"?e.withDirectives((e.openBlock(),e.createElementBlock("input",{key:2,"onUpdate:modelValue":k=>i.value[m][p.name]=k,type:"number",min:p.min??0,step:p.step??1,placeholder:p.label,title:p.hint||p.label},null,8,yn)),[[e.vModelText,i.value[m][p.name],void 0,{number:!0}]]):e.withDirectives((e.openBlock(),e.createElementBlock("input",{key:3,"onUpdate:modelValue":k=>i.value[m][p.name]=k,type:"text",placeholder:p.label,title:p.hint||p.label},null,8,un)),[[e.vModelText,i.value[m][p.name]]])],64))),128))]))),128))])):(e.openBlock(),e.createElementBlock("div",En,"添加模型后，可逐模型配置参数（温度/思考/输出/上下文/多模态…）"))]),e.createElementVNode("div",bn,[e.createElementVNode("button",{class:"pm-btn pm-primary",disabled:g.value,onClick:O},e.toDisplayString(g.value?"保存中…":"保存服务商"),9,xn),e.createElementVNode("button",{class:"pm-btn",onClick:$},"取消")])])):e.createCommentVNode("v-if",!0),e.createCommentVNode(" 服务商卡片列表（编辑时在卡片位置就地展开表单，不跳顶） "),r.value.length?(e.openBlock(),e.createElementBlock("div",Vn,[(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(r.value,m=>(e.openBlock(),e.createElementBlock(e.Fragment,{key:m.name},[a.value===m.name?(e.openBlock(),e.createElementBlock("div",Nn,[e.createElementVNode("div",wn,"编辑服务商："+e.toDisplayString(m.name),1),e.createElementVNode("div",Tn,[f[12]||(f[12]=e.createElementVNode("span",{class:"pm-field-label"},"服务商名称",-1)),e.createElementVNode("input",{value:m.name,disabled:""},null,8,Bn)]),e.createElementVNode("div",Sn,[f[13]||(f[13]=e.createElementVNode("span",{class:"pm-field-label"},"API URL（基础地址或完整端点）",-1)),e.withDirectives(e.createElementVNode("input",{"onUpdate:modelValue":f[4]||(f[4]=p=>s.value.baseURL=p),placeholder:"https://api.deepseek.com/v1（基础地址；旧完整端点亦兼容）"},null,512),[[e.vModelText,s.value.baseURL]])]),e.createElementVNode("div",Cn,[e.createElementVNode("span",In,e.toDisplayString(o.protocolLabel),1),e.withDirectives(e.createElementVNode("select",{"onUpdate:modelValue":f[5]||(f[5]=p=>s.value.protocol=p),title:o.protocolHint},[(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(o.protocolOptions,p=>(e.openBlock(),e.createElementBlock("option",{key:"p"+p,value:p},e.toDisplayString(p||"默认"),9,An))),128))],8,Pn),[[e.vModelSelect,s.value.protocol]]),o.protocolHint?(e.openBlock(),e.createElementBlock("span",$n,e.toDisplayString(o.protocolHint),1)):e.createCommentVNode("v-if",!0)]),e.createElementVNode("div",Mn,[f[14]||(f[14]=e.createElementVNode("span",{class:"pm-field-label"},"上下文大小（Token）",-1)),e.withDirectives(e.createElementVNode("input",{"onUpdate:modelValue":f[6]||(f[6]=p=>s.value.contextMaxTokens=p),type:"number",min:"0",step:"1000",placeholder:"0=不限制（模型级未配置时的默认窗口）"},null,512),[[e.vModelText,s.value.contextMaxTokens]])]),e.createVNode(Ne,{models:d.value,label:o.modelEditor.label||"可用模型（回车或逗号分隔添加；支持整段粘贴）",placeholder:o.modelEditor.placeholder||"输入模型名，回车添加…",onChange:C},null,8,["models","label","placeholder"]),e.createElementVNode("div",Dn,[f[15]||(f[15]=e.createElementVNode("div",{class:"pm-params-title"},"模型参数（每模型独立配置；对话里也可临时切换思考档位）",-1)),d.value.length?(e.openBlock(),e.createElementBlock("div",Rn,[(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(d.value,p=>(e.openBlock(),e.createElementBlock("div",{key:p,class:"pm-param-row"},[e.createElementVNode("span",{class:"pm-param-model",title:p},e.toDisplayString(p),9,Ln),e.createCommentVNode(" ★ 2026-08-21 schema 驱动：按 modelParamFields 动态渲染（checkbox/select/number/text） "),(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(o.modelParamFields,k=>(e.openBlock(),e.createElementBlock(e.Fragment,{key:k.name},[k.type==="checkbox"?(e.openBlock(),e.createElementBlock("label",{key:0,class:"pm-param-check",title:k.hint||k.label},[e.withDirectives(e.createElementVNode("input",{type:"checkbox","onUpdate:modelValue":u=>i.value[p][k.name]=u},null,8,Fn),[[e.vModelCheckbox,i.value[p][k.name]]]),e.createTextVNode(" "+e.toDisplayString(k.label),1)],8,Gn)):k.type==="select"?e.withDirectives((e.openBlock(),e.createElementBlock("select",{key:1,"onUpdate:modelValue":u=>i.value[p][k.name]=u,title:k.hint||k.label},[(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(k.options||[],u=>(e.openBlock(),e.createElementBlock("option",{key:"o"+u,value:u},e.toDisplayString(u===""?k.label+"默认":u),9,zn))),128))],8,On)),[[e.vModelSelect,i.value[p][k.name]]]):k.type==="number"?e.withDirectives((e.openBlock(),e.createElementBlock("input",{key:2,"onUpdate:modelValue":u=>i.value[p][k.name]=u,type:"number",min:k.min??0,step:k.step??1,placeholder:k.label,title:k.hint||k.label},null,8,Un)),[[e.vModelText,i.value[p][k.name],void 0,{number:!0}]]):e.withDirectives((e.openBlock(),e.createElementBlock("input",{key:3,"onUpdate:modelValue":u=>i.value[p][k.name]=u,type:"text",placeholder:k.label,title:k.hint||k.label},null,8,Hn)),[[e.vModelText,i.value[p][k.name]]])],64))),128))]))),128))])):(e.openBlock(),e.createElementBlock("div",jn,"添加模型后，可逐模型配置参数（温度/思考/输出/上下文/多模态…）"))]),e.createElementVNode("div",qn,[e.createElementVNode("button",{class:"pm-btn pm-primary",disabled:g.value,onClick:O},e.toDisplayString(g.value?"保存中…":"保存服务商"),9,Wn),e.createElementVNode("button",{class:"pm-btn",onClick:$},"取消")])])):(e.openBlock(),e.createElementBlock("div",Jn,[e.createElementVNode("div",Zn,[e.createElementVNode("span",{class:"pm-name",title:m.name},e.toDisplayString(m.name),9,Kn),e.createElementVNode("div",Qn,[e.createElementVNode("button",{class:"pm-btn pm-small",onClick:p=>T(m)},"编辑",8,Xn),e.createElementVNode("button",{class:"pm-btn pm-small pm-danger",onClick:p=>z(m)},"删除",8,Yn)])]),e.createElementVNode("div",{class:"pm-url",title:m.baseURL},e.toDisplayString(m.baseURL||"未配置 API URL"),9,_n),m.protocol?(e.openBlock(),e.createElementBlock("div",{key:0,class:"pm-protocol",title:o.protocolHint},"协议 "+e.toDisplayString(m.protocol),9,vn)):e.createCommentVNode("v-if",!0),e.createElementVNode("div",et,e.toDisplayString(m.contextMaxTokens>0?"上下文 "+(m.contextMaxTokens/1e3).toFixed(0)+"K Token":"上下文 未限制"),1),e.createElementVNode("div",nt,[m.models.length?e.createCommentVNode("v-if",!0):(e.openBlock(),e.createElementBlock("span",tt,"（未配置模型）")),(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(m.models,p=>(e.openBlock(),e.createElementBlock("span",{key:p,class:"pm-tag"},e.toDisplayString(p),1))),128))]),F(m.name)?(e.openBlock(),e.createElementBlock("div",ot,e.toDisplayString(F(m.name)),1)):e.createCommentVNode("v-if",!0)]))],64))),128))])):a.value!=="__new__"?(e.openBlock(),e.createElementBlock("div",lt,"暂无服务商，点「+ 新增服务商」添加")):e.createCommentVNode("v-if",!0),h.value?(e.openBlock(),e.createElementBlock("div",rt,e.toDisplayString(h.value),1)):e.createCommentVNode("v-if",!0)]))}},[["__scopeId","data-v-4185f7bf"]]),st={class:"pm-manager"},it={class:"mgm-toolbar"},ct={class:"mgm-count"},dt={key:0,class:"mgm-edit"},pt={class:"mgm-edit-title"},mt={class:"mgm-field"},gt={class:"mgm-field-label"},kt={key:0,class:"mgm-required"},ht=["onUpdate:modelValue","onChange"],ft=["value"],yt=["onUpdate:modelValue","placeholder"],ut=["onUpdate:modelValue","placeholder"],Et={key:3,class:"mgm-field-hint"},bt={class:"mgm-edit-actions"},xt=["disabled"],Vt={key:1,class:"mgm-cards"},Nt={class:"mgm-card-head"},wt=["title"],Tt={key:0,class:"pm-active-badge"},Bt={class:"mgm-ops"},St=["disabled","onClick"],Ct=["onClick"],It=["onClick"],Pt={class:"pm-preview"},At={class:"pm-snap-row"},$t={class:"pm-snap-row"},Mt={key:2,class:"mgm-empty"},Dt={key:3,class:"mgm-error"},Rt=U({__name:"PresetManager",props:{presetFields:{type:Array,default:()=>[]}},emits:["saved"],setup(o,{expose:t,emit:n}){const l=o,r=n,a=e.ref({}),s=e.computed(()=>Object.keys(a.value||{})),d=e.ref(""),i=e.ref(!1),h=e.ref(""),g=e.ref(!1),x=e.ref(""),N=e.ref(""),B=e.ref(null),y=e.computed(()=>B.value&&B.value.providers||[]),T=e.ref({name:"",provider:"",baseURL:"",apiKey:""});function C(u={}){const c={name:"",provider:"",baseURL:"",apiKey:""};for(const E of l.presetFields)E.name in c||(c[E.name]="");return Object.assign(c,u)}function $(u){N.value=u,setTimeout(()=>{N.value===u&&(N.value="")},4e3)}async function R(){try{const[u,c,E]=await Promise.all([M.getAiPresets().catch(()=>({presets:{}})),M.apiGet("/settings").catch(()=>({settings:{}})),M.getModels().catch(()=>null)]);a.value=u&&u.presets||{},d.value=c&&c.settings&&c.settings.preset||"",B.value=E}catch(u){$("加载失败: "+(u.message||u))}}function O(u){const c=B.value||{};return{baseURL:c.providerBaseURLs&&c.providerBaseURLs[u]||"",models:c.models&&c.models[u]||[]}}function W(){const u=window&&window.__PAIRCODE_CORE&&window.__PAIRCODE_CORE.uiState&&window.__PAIRCODE_CORE.uiState.state&&window.__PAIRCODE_CORE.uiState.state.settings||{};let c={};u.preset&&a.value&&a.value[u.preset]&&(c=a.value[u.preset]);const E=c.provider||u.provider||y.value[0]||"",w=O(E);T.value=C({provider:E,baseURL:c.baseURL||u.baseURL||w.baseURL||"",apiKey:c.apiKey||""}),h.value="",i.value=!0}function z(u){const c=a.value&&a.value[u]||{};T.value=C({name:u,provider:c.provider||"",baseURL:c.baseURL||"",apiKey:c.apiKey||""}),h.value=u,i.value=!0}function F(){i.value=!1,h.value=""}function V(u){return u.source==="providers"?y.value||[]:u.options||[]}function f(u){if(u.name==="provider"&&T.value.provider){const c=O(T.value.provider);T.value.baseURL=c.baseURL||""}}e.watch(()=>T.value.provider,(u,c)=>{!i.value||c===""||u!==c&&f({name:"provider"})});async function m(){const u=T.value.name.trim();if(!u){$("请输入配置名称");return}const c=T.value.provider||"";if(!c){$("请选择服务商");return}for(const w of l.presetFields)if(w.required&&!T.value[w.name]){$("请填写"+w.label);return}const E=O(c);T.value.baseURL||(T.value.baseURL=E.baseURL||""),g.value=!0,N.value="";try{const w={provider:c,baseURL:T.value.baseURL,apiKey:T.value.apiKey};for(const P of l.presetFields)P.name!=="provider"&&P.name!=="apiKey"&&(w[P.name]=T.value[P.name]);if(h.value&&h.value!==u){const P={...a.value||{}};P[u]=w,delete P[h.value];const L=await M.saveAiPresets(P);if(!(L&&L.ok)){$(L&&L.error||"保存失败");return}a.value=P,d.value===h.value&&(d.value=u,await M.apiPut("/settings",{settings:{preset:u},pluginSettings:{}}).catch(()=>{}))}else{const P=await M.saveAiPreset("save",u,w);if(!(P&&P.ok)){$(P&&P.error||"保存失败");return}a.value=P.presets||a.value}F(),r("saved")}catch(w){$("保存失败: "+(w.message||w))}finally{g.value=!1}}async function p(u){x.value=u,N.value="";try{const c=await M.saveAiPreset("apply",u);c&&c.ok?(d.value=u,r("saved")):$(c&&c.error||"应用失败")}catch(c){$("应用失败: "+(c.message||c))}finally{x.value=""}}async function k(u){if(confirm("删除配置「"+u+"」？")){N.value="";try{const c=await M.saveAiPreset("delete",u);c&&c.ok?(a.value=c.presets||a.value,d.value===u&&(d.value=""),r("saved")):$(c&&c.error||"删除失败")}catch(c){$("删除失败: "+(c.message||c))}}}return e.onMounted(R),t({load:R}),(u,c)=>(e.openBlock(),e.createElementBlock("div",st,[e.createCommentVNode(" 工具栏 "),e.createElementVNode("div",it,[e.createElementVNode("span",ct,e.toDisplayString(s.value.length)+" 个配置",1),e.createElementVNode("button",{class:"mgm-btn mgm-primary",onClick:W,title:"添加一条 AI 配置（服务商 + API Key）"},"＋ 添加新配置")]),e.createCommentVNode(" 添加 / 编辑表单（点击添加/编辑才弹出） "),i.value?(e.openBlock(),e.createElementBlock("div",dt,[e.createElementVNode("div",pt,e.toDisplayString(h.value?"编辑配置："+h.value:"添加新配置"),1),e.createElementVNode("div",mt,[c[1]||(c[1]=e.createElementVNode("span",{class:"mgm-field-label"},"配置名称",-1)),e.withDirectives(e.createElementVNode("input",{"onUpdate:modelValue":c[0]||(c[0]=E=>T.value.name=E),type:"text",placeholder:"如：主力 / 写作备用…",onKeydown:e.withKeys(m,["enter"])},null,544),[[e.vModelText,T.value.name]])]),(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(o.presetFields,E=>(e.openBlock(),e.createElementBlock("div",{key:E.name,class:"mgm-field"},[e.createElementVNode("span",gt,[e.createTextVNode(e.toDisplayString(E.label),1),E.required?(e.openBlock(),e.createElementBlock("span",kt,"*")):e.createCommentVNode("v-if",!0)]),e.createCommentVNode(" select 类型（服务商选择） "),E.type==="select"?e.withDirectives((e.openBlock(),e.createElementBlock("select",{key:0,"onUpdate:modelValue":w=>T.value[E.name]=w,class:"mgm-select",onChange:w=>f(E)},[(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(V(E),w=>(e.openBlock(),e.createElementBlock("option",{key:w,value:w},e.toDisplayString(w),9,ft))),128))],40,ht)),[[e.vModelSelect,T.value[E.name]]]):E.type==="password"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:1},[e.createCommentVNode(" password 类型（API Key） "),e.withDirectives(e.createElementVNode("input",{"onUpdate:modelValue":w=>T.value[E.name]=w,type:"password",placeholder:E.placeholder||""},null,8,yt),[[e.vModelText,T.value[E.name]]])],2112)):(e.openBlock(),e.createElementBlock(e.Fragment,{key:2},[e.createCommentVNode(" text 兜底 "),e.withDirectives(e.createElementVNode("input",{"onUpdate:modelValue":w=>T.value[E.name]=w,type:"text",placeholder:E.placeholder||""},null,8,ut),[[e.vModelText,T.value[E.name]]])],2112)),E.hint?(e.openBlock(),e.createElementBlock("span",Et,e.toDisplayString(E.hint),1)):e.createCommentVNode("v-if",!0)]))),128)),e.createElementVNode("div",bt,[e.createElementVNode("button",{class:"mgm-btn mgm-primary",disabled:g.value,onClick:m},e.toDisplayString(g.value?"保存中…":"保存配置"),9,xt),e.createElementVNode("button",{class:"mgm-btn",onClick:F},"取消")])])):e.createCommentVNode("v-if",!0),e.createCommentVNode(" 配置卡片列表（主视图） "),s.value.length?(e.openBlock(),e.createElementBlock("div",Vt,[(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(s.value,E=>(e.openBlock(),e.createElementBlock("div",{key:E,class:e.normalizeClass(["mgm-card",{"pm-active":E===d.value}])},[e.createElementVNode("div",Nt,[e.createElementVNode("span",{class:"mgm-name",title:E},[e.createTextVNode(e.toDisplayString(E),1),E===d.value?(e.openBlock(),e.createElementBlock("span",Tt,"使用中")):e.createCommentVNode("v-if",!0)],8,wt),e.createElementVNode("div",Bt,[e.createElementVNode("button",{class:"mgm-btn mgm-small",disabled:x.value===E,onClick:w=>p(E)},e.toDisplayString(x.value===E?"应用中…":"应用"),9,St),e.createElementVNode("button",{class:"mgm-btn mgm-small",onClick:w=>z(E)},"编辑",8,Ct),e.createElementVNode("button",{class:"mgm-btn mgm-small mgm-danger",onClick:w=>k(E)},"删除",8,It)])]),e.createElementVNode("div",Pt,[e.createElementVNode("div",At,[c[2]||(c[2]=e.createElementVNode("span",null,"服务商",-1)),e.createElementVNode("b",null,e.toDisplayString((a.value[E]||{}).provider||"—"),1)]),e.createElementVNode("div",$t,[c[3]||(c[3]=e.createElementVNode("span",null,"API Key",-1)),e.createElementVNode("b",null,e.toDisplayString((a.value[E]||{}).apiKey?"已配置":"未配置"),1)])])],2))),128))])):i.value?e.createCommentVNode("v-if",!0):(e.openBlock(),e.createElementBlock("div",Mt,[e.createElementVNode("div",{class:"mgm-empty-box"},[c[4]||(c[4]=e.createElementVNode("div",{class:"mgm-empty-title"},"还没有 AI 配置",-1)),c[5]||(c[5]=e.createElementVNode("div",{class:"mgm-empty-sub"},"添加一条服务商 + API Key，保存后即可在对话面板中选模型。",-1)),e.createElementVNode("button",{class:"mgm-btn mgm-primary",onClick:W},"＋ 添加新配置")])])),N.value?(e.openBlock(),e.createElementBlock("div",Dt,e.toDisplayString(N.value),1)):e.createCommentVNode("v-if",!0)]))}},[["__scopeId","data-v-a1e0b542"]]),Lt={class:"modal-content"},Gt={class:"modal-body"},Ft={key:0,class:"settings-tabs"},Ot={key:0,class:"settings-tabs-filter-wrap"},zt=["onClick"],Ut={key:1,class:"settings-tabs-none"},Ht={class:"settings-content"},jt={key:0},qt={key:0,class:"group-title"},Wt=["title"],Jt=["title"],Zt=["onUpdate:modelValue"],Kt=["title"],Qt={class:"field-control"},Xt=["type","onUpdate:modelValue","placeholder"],Yt=["onUpdate:modelValue","min","max","step"],_t=["onUpdate:modelValue","onChange"],vt=["value"],eo=["onUpdate:modelValue","placeholder"],no={class:"slider-row"},to=["onUpdate:modelValue","min","max","step"],oo={class:"slider-val"},lo={class:"color-row"},ro=["onUpdate:modelValue"],ao={class:"color-code"},so=["value","onInput","placeholder"],io=["placeholder"],co=["onUpdate:modelValue"],po={key:0,class:"setting-hint"},mo={key:0,class:"settings-empty"},go=U({__name:"SettingsModal",emits:["close"],setup(o,{emit:t}){const n=t,l=e.ref(""),r=e.ref(""),a=e.computed(()=>{const m=(b.state.pluginSchemas||[]).map(p=>({key:p.key,title:p.title||p.key,groups:d(p.fields||[])}));return m.length&&!l.value&&(l.value=m[0].key),m}),s=e.computed(()=>{const m=r.value.trim().toLowerCase();if(!m)return a.value;const p=a.value.find(u=>u.key===l.value),k=a.value.filter(u=>(u.title||u.key).toLowerCase().includes(m));return p&&!k.includes(p)&&k.unshift(p),k});function d(m){const p=[],k={};for(const u of m){const c=u.group||"";k[c]||(k[c]=[],p.push({title:c,fields:k[c]})),k[c].push(u)}return p}const i=e.ref(null);let h="";async function g(){try{i.value=await M.getModels()}catch{i.value=null}}function x(m){return m?(i.value&&i.value.models||{})[m]||[]:[]}function N(m,p){var k,u,c;if(p.optionsSource==="models"){const E=(k=y[m])==null?void 0:k[p.name],w=x((u=y.ai)==null?void 0:u.provider);return E&&!w.includes(E)?[...w,E]:w}if(p.optionsSource==="providers"){const E=i.value&&i.value.providers||[];if(E.length){const w=(c=y[m])==null?void 0:c[p.name];return w&&!E.includes(w)?[...E,w]:E}return p.options||[]}return p.options||[]}function B(m){if(!y.ai)return;const p=y.ai,k=m.linkFields||(m.linkField?[m.linkField]:[]);if(!k.length)return;const u=i.value||{},c=u.providerBaseURLs||{},E=u.providerKeys||{},w=p.provider,P=c[h];for(const L of k)if(L==="apiKey")p[L]=E[w]||"";else{const Ee=p[L];(Ee===void 0||Ee===""||P&&Ee===P)&&(p[L]=c[w]||"")}h=w}const y=e.reactive({}),T=e.ref("");function C(m){switch(m){case"checkbox":return!1;case"number":return 0;case"tags":return[];default:return""}}function $(){for(const u of Object.keys(y))delete y[u];const m=b.state.settings||{};h=m.provider||"";const p=m.pluginSettings||{};for(const u of b.state.pluginSchemas||[]){y[u.key]={};for(const c of u.fields||[]){let E;if(!(c.type==="project"||c.type==="provider-manager"||c.type==="model-params-manager"||c.type==="preset-manager")){if(c.binding)E=m[c.binding]!==void 0?m[c.binding]:c.default;else{const w=p[u.key]||{};E=w[c.name]!==void 0?w[c.name]:c.default}E===void 0&&(E=C(c.type)),c.type==="checkbox"&&(E=!!E),c.type==="number"&&(E=typeof E=="number"?E:Number(E)||0),c.type==="tags"&&(E=Array.isArray(E)?E:[]),y[u.key][c.name]=E}}}const k=(b.state.pluginSchemas||[]).some(u=>(u.fields||[]).some(c=>c.type==="project"));T.value="",k&&W()}function R(m,p){var u;const k=(u=y[m])==null?void 0:u[p.name];return Array.isArray(k)?k.join(", "):k||""}function O(m,p,k){y[m][p.name]=k.target.value.split(",").map(u=>u.trim()).filter(Boolean)}async function W(){try{const m=await M.getInstructions("project");T.value=m.content||""}catch{}}function z(){var m;$(),(m=b.state.settings)!=null&&m.theme&&b.applyTheme(b.state.settings.theme)}const F=()=>{z()};async function V(){try{const m=await M.apiGet("/settings");m&&m.settings&&(b.state.settings=m.settings,await g(),z())}catch{}}const f=async()=>{try{let m={};try{const c=await M.apiGet("/settings");m=c&&c.settings||{}}catch{}const p={...m},k={...m.pluginSettings||{}};let u=!1;for(const c of b.state.pluginSchemas||[]){const E=y[c.key]||{};for(const w of c.fields||[]){if(w.type==="project"){await M.saveInstructions("project",T.value);continue}if(w.type==="provider-manager"||w.type==="model-params-manager"||w.type==="preset-manager")continue;const P=E[w.name];w.binding?(w.name==="theme"&&P!==p[w.binding]&&(u=!0),p[w.binding]=P):(k[c.key]||(k[c.key]={}),k[c.key][w.name]=P)}}await M.apiPut("/settings",{settings:p,pluginSettings:k}),b.state.settings=p,u&&b.applyTheme(p.theme),window.$toast("设置已保存","success"),n("close")}catch(m){window.$toast("保存失败: "+m.message,"error")}};return $(),e.onMounted(async()=>{await g(),z()}),(m,p)=>(e.openBlock(),e.createElementBlock("div",{class:"modal-overlay",onClick:p[3]||(p[3]=e.withModifiers(k=>m.$emit("close"),["self"]))},[e.createElementVNode("div",Lt,[e.createElementVNode("h2",null,[e.createVNode(D,{name:"settings",size:18}),p[4]||(p[4]=e.createTextVNode(" 设置 ",-1)),e.createElementVNode("button",{class:"modal-close",onClick:p[0]||(p[0]=k=>m.$emit("close"))},"×")]),e.createElementVNode("div",Gt,[e.createCommentVNode(" ═══ 纯 schema 驱动：所有配置 tab 由插件 ctx.registerSettings 注册 ═══ "),a.value.length?(e.openBlock(),e.createElementBlock("div",Ft,[a.value.length>6?(e.openBlock(),e.createElementBlock("div",Ot,[e.withDirectives(e.createElementVNode("input",{"onUpdate:modelValue":p[1]||(p[1]=k=>r.value=k),class:"settings-tabs-filter",type:"text",placeholder:"筛选设置…"},null,512),[[e.vModelText,r.value]])])):e.createCommentVNode("v-if",!0),(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(s.value,k=>(e.openBlock(),e.createElementBlock("button",{key:k.key,class:e.normalizeClass(["settings-tab",{active:l.value===k.key}]),onClick:u=>l.value=k.key},e.toDisplayString(k.title),11,zt))),128)),s.value.length===0?(e.openBlock(),e.createElementBlock("div",Ut,"无匹配设置")):e.createCommentVNode("v-if",!0)])):e.createCommentVNode("v-if",!0),e.createElementVNode("div",Ht,[(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(a.value,k=>(e.openBlock(),e.createElementBlock(e.Fragment,{key:k.key},[l.value===k.key?(e.openBlock(),e.createElementBlock("div",jt,[(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(k.groups,u=>(e.openBlock(),e.createElementBlock("div",{key:u.title||"__main",class:"setting-group"},[u.title?(e.openBlock(),e.createElementBlock("div",qt,e.toDisplayString(u.title),1)):e.createCommentVNode("v-if",!0),(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(u.fields,c=>(e.openBlock(),e.createElementBlock("div",{key:c.name,class:e.normalizeClass(["setting-row",{"row-toggle":c.type==="checkbox"}])},[e.createCommentVNode(" checkbox：label 与开关同行 "),c.type==="checkbox"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:0},[e.createElementVNode("label",{class:"field-label",title:c.hint},e.toDisplayString(c.label),9,Wt),e.createElementVNode("label",{class:"pp-switch",title:c.hint},[e.withDirectives(e.createElementVNode("input",{type:"checkbox","onUpdate:modelValue":E=>y[k.key][c.name]=E},null,8,Zt),[[e.vModelCheckbox,y[k.key][c.name]]]),p[5]||(p[5]=e.createElementVNode("span",{class:"pp-switch-track"},null,-1))],8,Jt)],64)):(e.openBlock(),e.createElementBlock(e.Fragment,{key:1},[e.createCommentVNode(" 其他类型：label 在上、控件在下、说明文字在控件下方（不挤占输入区） "),e.createElementVNode("label",{class:"field-label",title:c.hint},e.toDisplayString(c.label),9,Kt),e.createElementVNode("div",Qt,[e.createCommentVNode(" text / password "),c.type==="text"||c.type==="password"?e.withDirectives((e.openBlock(),e.createElementBlock("input",{key:0,class:"field-input",type:c.type==="password"?"password":"text","onUpdate:modelValue":E=>y[k.key][c.name]=E,placeholder:c.placeholder},null,8,Xt)),[[e.vModelDynamic,y[k.key][c.name]]]):c.type==="number"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:1},[e.createCommentVNode(" number "),e.withDirectives(e.createElementVNode("input",{class:"field-input",type:"number","onUpdate:modelValue":E=>y[k.key][c.name]=E,min:c.min,max:c.max,step:c.step},null,8,Yt),[[e.vModelText,y[k.key][c.name],void 0,{number:!0}]])],2112)):c.type==="select"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:2},[e.createCommentVNode(" select（optionsSource 驱动动态数据源：models=按服务商模型列表 / providers=服务商列表） "),e.withDirectives(e.createElementVNode("select",{"onUpdate:modelValue":E=>y[k.key][c.name]=E,class:"field-select",onChange:E=>B(c)},[(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(N(k.key,c),E=>(e.openBlock(),e.createElementBlock("option",{key:E,value:E},e.toDisplayString(E),9,vt))),128))],40,_t),[[e.vModelSelect,y[k.key][c.name]]])],2112)):c.type==="textarea"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:3},[e.createCommentVNode(" textarea "),e.withDirectives(e.createElementVNode("textarea",{"onUpdate:modelValue":E=>y[k.key][c.name]=E,class:"field-textarea",rows:"4",placeholder:c.placeholder},null,8,eo),[[e.vModelText,y[k.key][c.name]]])],2112)):c.type==="slider"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:4},[e.createCommentVNode(" slider "),e.createElementVNode("div",no,[e.withDirectives(e.createElementVNode("input",{type:"range","onUpdate:modelValue":E=>y[k.key][c.name]=E,min:c.min!=null?c.min:0,max:c.max!=null?c.max:100,step:c.step||1},null,8,to),[[e.vModelText,y[k.key][c.name],void 0,{number:!0}]]),e.createElementVNode("span",oo,e.toDisplayString(y[k.key][c.name]),1)])],2112)):c.type==="color"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:5},[e.createCommentVNode(" color "),e.createElementVNode("div",lo,[e.withDirectives(e.createElementVNode("input",{type:"color","onUpdate:modelValue":E=>y[k.key][c.name]=E},null,8,ro),[[e.vModelText,y[k.key][c.name]]]),e.createElementVNode("code",ao,e.toDisplayString(y[k.key][c.name]),1)])],2112)):c.type==="tags"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:6},[e.createCommentVNode(" tags（逗号分隔数组） "),e.createElementVNode("input",{type:"text",class:"field-input",value:R(k.key,c),onInput:E=>O(k.key,c,E),placeholder:c.placeholder||"逗号分隔"},null,40,so)],2112)):c.type==="project"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:7},[e.createCommentVNode(" project（平台特殊：项目级指令，经 /api/instructions 读写） "),e.withDirectives(e.createElementVNode("textarea",{"onUpdate:modelValue":p[2]||(p[2]=E=>T.value=E),class:"field-textarea",rows:"4",placeholder:c.placeholder},null,8,io),[[e.vModelText,T.value]])],2112)):c.type==="provider-manager"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:8},[e.createCommentVNode(" provider-manager（服务商维护面板：CRUD /api/models，独立保存，不参与普通表单） "),e.createVNode(at,{"model-param-fields":c.modelParamFields||[],"model-editor":c.modelEditor||{},"protocol-label":c.protocolLabel||"LLM 协议","protocol-options":c.protocolOptions||[],"protocol-hint":c.protocolHint||"",onSaved:g},null,8,["model-param-fields","model-editor","protocol-label","protocol-options","protocol-hint"])],2112)):c.type==="preset-manager"?(e.openBlock(),e.createElementBlock(e.Fragment,{key:9},[e.createCommentVNode(" preset-manager（AI 配置预设面板：CRUD /api/ai-presets，独立保存，不参与普通表单） "),e.createVNode(Rt,{"preset-fields":c.presetFields||[],onSaved:V},null,8,["preset-fields"])],2112)):(e.openBlock(),e.createElementBlock(e.Fragment,{key:10},[e.createCommentVNode(" 兜底 text "),e.withDirectives(e.createElementVNode("input",{class:"field-input",type:"text","onUpdate:modelValue":E=>y[k.key][c.name]=E},null,8,co),[[e.vModelText,y[k.key][c.name]]])],2112))]),c.hint?(e.openBlock(),e.createElementBlock("span",po,e.toDisplayString(c.hint),1)):e.createCommentVNode("v-if",!0)],64))],2))),128))]))),128))])):e.createCommentVNode("v-if",!0)],64))),128)),a.value.length?e.createCommentVNode("v-if",!0):(e.openBlock(),e.createElementBlock("div",mo,"暂无配置项（等待插件注册…）"))])]),e.createElementVNode("div",{class:"modal-footer"},[e.createElementVNode("button",{class:"btn-secondary",onClick:F},"撤销"),e.createElementVNode("button",{class:"btn-primary",onClick:f},"保存设置")])])]))}},[["__scopeId","data-v-72d0a360"]]),ko={class:"modal-content sys-modal"},ho={class:"modal-header"},fo={class:"modal-body"},yo={key:0,class:"loading"},uo={key:1,class:"sys-info"},Eo={class:"info-row"},bo={class:"info-row"},xo={class:"info-row"},Vo={class:"info-row"},No={class:"info-row"},wo={class:"info-row"},To={class:"modal-footer"},Bo=U({__name:"SystemModal",emits:["close"],setup(o,{emit:t}){const n=e.ref(!0),l=e.ref({});return e.onMounted(async()=>{try{l.value=await M.apiGet("/system/info")}catch{}n.value=!1}),(r,a)=>(e.openBlock(),e.createElementBlock("div",{class:"modal-overlay",onClick:a[2]||(a[2]=e.withModifiers(s=>r.$emit("close"),["self"]))},[e.createElementVNode("div",ko,[e.createElementVNode("div",ho,[a[3]||(a[3]=e.createElementVNode("h2",null,"ℹ 系统信息",-1)),e.createElementVNode("button",{class:"modal-close",onClick:a[0]||(a[0]=s=>r.$emit("close"))},"×")]),e.createElementVNode("div",fo,[n.value?(e.openBlock(),e.createElementBlock("div",yo,"加载中...")):(e.openBlock(),e.createElementBlock("div",uo,[e.createElementVNode("div",Eo,[a[4]||(a[4]=e.createElementVNode("label",null,"主机名",-1)),e.createElementVNode("span",null,e.toDisplayString(l.value.hostname),1)]),e.createElementVNode("div",bo,[a[5]||(a[5]=e.createElementVNode("label",null,"当前目录",-1)),e.createElementVNode("span",null,e.toDisplayString(l.value.cwd),1)]),e.createElementVNode("div",xo,[a[6]||(a[6]=e.createElementVNode("label",null,"操作系统",-1)),e.createElementVNode("span",null,e.toDisplayString(l.value.os),1)]),e.createElementVNode("div",Vo,[a[7]||(a[7]=e.createElementVNode("label",null,"Go 版本",-1)),e.createElementVNode("span",null,e.toDisplayString(l.value.goos),1)]),e.createElementVNode("div",No,[a[8]||(a[8]=e.createElementVNode("label",null,"工作区",-1)),e.createElementVNode("span",null,e.toDisplayString(l.value.workspace),1)]),e.createElementVNode("div",wo,[a[9]||(a[9]=e.createElementVNode("label",null,"文件夹",-1)),e.createElementVNode("span",null,e.toDisplayString((l.value.folders||[]).join(", ")),1)])]))]),e.createElementVNode("div",To,[e.createElementVNode("button",{class:"btn-secondary",onClick:a[1]||(a[1]=s=>r.$emit("close"))},"关闭")])])]))}},[["__scopeId","data-v-c27b6ec9"]]),So={class:"modal-content source-modal"},Co={class:"modal-header"},Io={class:"modal-footer"},Po=U({__name:"SourceModal",emits:["close"],setup(o){return(t,n)=>(e.openBlock(),e.createElementBlock("div",{class:"modal-overlay",onClick:n[2]||(n[2]=e.withModifiers(l=>t.$emit("close"),["self"]))},[e.createElementVNode("div",So,[e.createElementVNode("div",Co,[n[3]||(n[3]=e.createElementVNode("h2",null,"⎔ 源代码管理",-1)),e.createElementVNode("button",{class:"modal-close",onClick:n[0]||(n[0]=l=>t.$emit("close"))},"×")]),n[4]||(n[4]=e.createElementVNode("div",{class:"modal-body"},[e.createElementVNode("p",{style:{color:"var(--text-muted)","text-align":"center","margin-top":"40px"}},[e.createTextVNode(" Git 集成开发中"),e.createElementVNode("br"),e.createElementVNode("br"),e.createTextVNode(" 功能规划："),e.createElementVNode("br"),e.createTextVNode(" · Git 状态查看"),e.createElementVNode("br"),e.createTextVNode(" · 暂存/提交/推送"),e.createElementVNode("br"),e.createTextVNode(" · 分支管理"),e.createElementVNode("br"),e.createTextVNode(" · Diff 对比 ")])],-1)),e.createElementVNode("div",Io,[e.createElementVNode("button",{class:"btn-secondary",onClick:n[1]||(n[1]=l=>t.$emit("close"))},"关闭")])])]))}},[["__scopeId","data-v-2e060397"]]),Ao=`# 功能介绍\r
 \r
 PairCode IDE 是一款纯 Web 端的 AI 辅助编程开发环境。你只需打开浏览器，在对话面板中用自然语言描述需求，AI 就能理解你的意图，直接生成代码、修改文件、执行命令、管理版本——把 IDE 从工具变为你的编程搭档。\r
 \r
@@ -256,1835 +256,1835 @@ AI 会自动分解复杂任务为可追踪的子任务步骤，每步的执行�
 | Ctrl+Shift+F | 全局搜索 |\r
 | Ctrl+Shift+T | 打开对话面板 |\r
 | Ctrl+Shift+C | 切换对话面板 |\r
-`,Ar=`# API 文档\r
-\r
-PairCode IDE 内置了一套完整的 HTTP REST API + WebSocket 实时通信协议，供 Web 前端与后端核心功能交互，也**支持第三方开发者基于本 API 进行二次开发**。所有 API 地址均以 \`/api\` 开头，返回 JSON 格式数据。\r
-\r
-> **安全提示**：所有 API 仅监听本地回环地址（127.0.0.1），默认不对外暴露。请勿将服务端口暴露到公网或局域网。\r
-\r
----\r
-\r
-## 通用约定\r
-\r
-### 请求格式\r
-- 查询参数（GET）直接在 URL 中传递\r
-- POST / PUT 请求体使用 \`application/json\`\r
-- 无特殊说明时，Content-Type 为 \`application/json\`\r
-\r
-### 响应格式\r
-| 场景 | 格式 | 说明 |\r
-|------|------|------|\r
-| 成功 | JSON 对象 或 JSON 数组 | 直接返回业务数据 |\r
-| 错误 | \`{"error": "错误描述信息"}\` | HTTP 状态码 4xx/5xx |\r
-\r
-### 错误码惯例\r
-| HTTP 状态码 | 含义 |\r
-|-------------|------|\r
-| 200 | 成功 |\r
-| 400 | 参数错误 / 请求体错误 |\r
-| 404 | 资源不存在 |\r
-| 405 | 方法不允许（如 GET 用了 POST） |\r
-| 500 | 服务器内部错误 |\r
-\r
----\r
-\r
-## 一、服务健康检查\r
-\r
-检查 IDE 后端服务是否正常运行。\r
-\r
-\`\`\`\r
-GET /api/health\r
-\`\`\`\r
-\r
-**响应示例：**\r
-\`\`\`json\r
-{\r
-  "status": "ok",\r
-  "workspace": "F:/projects/my-app",\r
-  "folders": ["F:/projects/my-app"]\r
-}\r
-\`\`\`\r
-\r
-| 字段 | 类型 | 说明 |\r
-|------|------|------|\r
-| status | string | 固定 \`"ok"\` |\r
-| workspace | string | 当前工作区路径 |\r
-| folders | string[] | 工作区包含的文件夹列表 |\r
-\r
----\r
-\r
-## 二、文件系统操作\r
-\r
-浏览、读写和管理工作区内的文件与目录。\r
-\r
-### 2.1 列出目录\r
-\r
-\`\`\`\r
-GET /api/fs/list?path={目录路径}\r
-\`\`\`\r
-\r
-**参数：**\r
-| 参数 | 类型 | 必填 | 说明 |\r
-|------|------|------|------|\r
-| path | string | 否 | 目录路径，省略时返回工作区根目录 |\r
-\r
-**响应示例：**\r
-\`\`\`json\r
-[\r
-  {"name": "src", "isDir": true, "size": 4096, "modTime": "2026-07-11T10:00:00Z"},\r
-  {"name": "main.go", "isDir": false, "size": 2048, "modTime": "2026-07-11T09:30:00Z"}\r
-]\r
-\`\`\`\r
-\r
-| 字段 | 类型 | 说明 |\r
-|------|------|------|\r
-| name | string | 文件/目录名 |\r
-| isDir | boolean | 是否为目录 |\r
-| size | number | 文件大小（字节） |\r
-| modTime | string | 最后修改时间（ISO 8601） |\r
-\r
----\r
-\r
-### 2.2 读取文件\r
-\r
-\`\`\`\r
-GET /api/fs/read?path={文件路径}\r
-\`\`\`\r
-\r
-**参数：**\r
-| 参数 | 类型 | 必填 | 说明 |\r
-|------|------|------|------|\r
-| path | string | 是 | 文件路径 |\r
-\r
-**响应：** 返回文件文本内容（字符串）。\r
-\r
----\r
-\r
-### 2.3 写入文件\r
-\r
-\`\`\`\r
-POST /api/fs/write\r
-\`\`\`\r
-\r
-**请求体：**\r
-\`\`\`json\r
-{\r
-  "path": "src/main.go",\r
-  "content": "package main\\n\\nfunc main() {\\n\\tprintln(\\"hello\\")\\n}\\n"\r
-}\r
-\`\`\`\r
-\r
-| 字段 | 类型 | 必填 | 说明 |\r
-|------|------|------|------|\r
-| path | string | 是 | 文件路径（相对于工作区或绝对路径） |\r
-| content | string | 是 | 文件内容（覆盖写入，自动创建目录） |\r
-\r
-**响应：** \`{"ok": true}\`\r
-\r
----\r
-\r
-### 2.4 搜索文件内容\r
-\r
-\`\`\`\r
-GET /api/fs/search?q={关键词}&path={搜索路径}\r
-\`\`\`\r
-\r
-**参数：**\r
-| 参数 | 类型 | 必填 | 说明 |\r
-|------|------|------|------|\r
-| q | string | 是 | 搜索关键词 |\r
-| path | string | 否 | 搜索目录，省略时使用工作区根目录 |\r
-\r
-**响应示例：**\r
-\`\`\`json\r
-[\r
-  {"file": "src/main.go", "line": 15, "text": "func handleRequest(w http.ResponseWriter, r *http.Request) {"},\r
-  {"file": "src/utils.go", "line": 42, "text": "// handleRequest 处理 HTTP 请求"}\r
-]\r
-\`\`\`\r
-\r
-| 字段 | 类型 | 说明 |\r
-|------|------|------|\r
-| file | string | 文件相对路径 |\r
-| line | number | 行号 |\r
-| text | string | 匹配行的内容 |\r
-\r
-**自动忽略的目录：** \`.git\`、\`node_modules\`、\`vendor\`、\`.pair\`、\`__pycache__\`、\`bin\` 等。**仅搜索文本文件扩展名**（\`.go\` \`.js\` \`.ts\` \`.vue\` \`.html\` \`.css\` \`.json\` \`.md\` \`.py\` \`.rs\` \`.java\` 等 50+ 种）。\r
-\r
----\r
-\r
-### 2.5 重命名/移动文件\r
-\r
-\`\`\`\r
-POST /api/fs/rename\r
-\`\`\`\r
-\r
-**请求体：**\r
-\`\`\`json\r
-{\r
-  "oldPath": "src/old.go",\r
-  "newPath": "src/new.go"\r
-}\r
-\`\`\`\r
-\r
-| 字段 | 类型 | 必填 | 说明 |\r
-|------|------|------|------|\r
-| oldPath | string | 是 | 原路径 |\r
-| newPath | string | 是 | 新路径 |\r
-\r
-**响应：** \`{"ok": true}\`\r
-\r
----\r
-\r
-### 2.6 删除文件/目录\r
-\r
-\`\`\`\r
-POST /api/fs/delete\r
-\`\`\`\r
-\r
-**请求体：**\r
-\`\`\`json\r
-{\r
-  "path": "src/temp.go"\r
-}\r
-\`\`\`\r
-\r
-> ⚠️ 不可恢复，递归删除目录及其所有内容。\r
-\r
-**响应：** \`{"ok": true}\`\r
-\r
----\r
-\r
-### 2.7 创建目录\r
-\r
-\`\`\`\r
-POST /api/fs/mkdir\r
-\`\`\`\r
-\r
-**请求体：**\r
-\`\`\`json\r
-{\r
-  "path": "src/new-folder"\r
-}\r
-\`\`\`\r
-\r
-**响应：** \`{"ok": true}\`\r
-\r
----\r
-\r
-### 2.8 获取图片数据\r
-\r
-\`\`\`\r
-GET /api/fs/image?path={图片路径}\r
-\`\`\`\r
-\r
-**参数：** \`path\` — 图片文件路径（支持 PNG / JPEG）\r
-\r
-**响应：** Base64 编码的图片数据字符串（不含 \`data:image/...\` 前缀）。\r
-\r
-**响应头：** \`Content-Type: text/plain; charset=utf-8\`\r
-\r
----\r
-\r
-### 2.9 获取文件信息\r
-\r
-\`\`\`\r
-GET /api/fs/file-info?path={文件路径}\r
-\`\`\`\r
-\r
-**响应示例：**\r
-\`\`\`json\r
-{\r
-  "name": "main.go",\r
-  "path": "F:/projects/my-app/src/main.go",\r
-  "size": 2048,\r
-  "modTime": "2026-07-11T09:30:00Z",\r
-  "isDir": false\r
-}\r
-\`\`\`\r
-\r
----\r
-\r
-### 2.10 十六进制查看\r
-\r
-\`\`\`\r
-GET /api/fs/hex?path={文件路径}&offset={偏移}&length={长度}\r
-\`\`\`\r
-\r
-**参数：**\r
-| 参数 | 类型 | 必填 | 说明 |\r
-|------|------|------|------|\r
-| path | string | 是 | 文件路径 |\r
-| offset | number | 否 | 起始字节偏移（默认 0） |\r
-| length | number | 否 | 读取字节数（默认 512，最大 4096） |\r
-\r
-**响应示例：**\r
-\`\`\`json\r
-{\r
-  "hex": "4d5a90000300000004000000ffff0000b80000000000000040",\r
-  "text": "MZ.............@",\r
-  "offset": 0,\r
-  "length": 32\r
-}\r
-\`\`\`\r
-\r
-| 字段 | 类型 | 说明 |\r
-|------|------|------|\r
-| hex | string | 十六进制字符串 |\r
-| text | string | ASCII 可打印字符（不可打印的替换为 \`.\`） |\r
-| offset | number | 起始偏移 |\r
-| length | number | 返回的字节数 |\r
-\r
----\r
-\r
-### 2.11 列出磁盘驱动器\r
-\r
-\`\`\`\r
-GET /api/fs/drives\r
-\`\`\`\r
-\r
-**响应示例：**\r
-\`\`\`json\r
-["C:\\\\", "D:\\\\", "E:\\\\"]\r
-\`\`\`\r
-\r
----\r
-\r
-## 三、工作区管理\r
-\r
-### 3.1 获取当前工作区\r
-\r
-\`\`\`\r
-GET /api/workspace\r
-\`\`\`\r
-\r
-**响应示例：**\r
-\`\`\`json\r
-{\r
-  "root": "F:/projects/my-app",\r
+`,$o=`# API 文档
+
+PairCode IDE 内置了一套完整的 HTTP REST API + WebSocket 实时通信协议，供 Web 前端与后端核心功能交互，也**支持第三方开发者基于本 API 进行二次开发**。所有 API 地址均以 \`/api\` 开头，返回 JSON 格式数据。
+
+> **安全提示**：所有 API 仅监听本地回环地址（127.0.0.1），默认不对外暴露。请勿将服务端口暴露到公网或局域网。
+
+---
+
+## 通用约定
+
+### 请求格式
+- 查询参数（GET）直接在 URL 中传递
+- POST / PUT 请求体使用 \`application/json\`
+- 无特殊说明时，Content-Type 为 \`application/json\`
+
+### 响应格式
+| 场景 | 格式 | 说明 |
+|------|------|------|
+| 成功 | JSON 对象 或 JSON 数组 | 直接返回业务数据 |
+| 错误 | \`{"error": "错误描述信息"}\` | HTTP 状态码 4xx/5xx |
+
+### 错误码惯例
+| HTTP 状态码 | 含义 |
+|-------------|------|
+| 200 | 成功 |
+| 400 | 参数错误 / 请求体错误 |
+| 404 | 资源不存在 |
+| 405 | 方法不允许（如 GET 用了 POST） |
+| 500 | 服务器内部错误 |
+
+---
+
+## 一、服务健康检查
+
+检查 IDE 后端服务是否正常运行。
+
+\`\`\`
+GET /api/health
+\`\`\`
+
+**响应示例：**
+\`\`\`json
+{
+  "status": "ok",
+  "workspace": "F:/projects/my-app",
+  "folders": ["F:/projects/my-app"]
+}
+\`\`\`
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| status | string | 固定 \`"ok"\` |
+| workspace | string | 当前工作区路径 |
+| folders | string[] | 工作区包含的文件夹列表 |
+
+---
+
+## 二、文件系统操作
+
+浏览、读写和管理工作区内的文件与目录。
+
+### 2.1 列出目录
+
+\`\`\`
+GET /api/fs/list?path={目录路径}
+\`\`\`
+
+**参数：**
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| path | string | 否 | 目录路径，省略时返回工作区根目录 |
+
+**响应示例：**
+\`\`\`json
+[
+  {"name": "src", "isDir": true, "size": 4096, "modTime": "2026-07-11T10:00:00Z"},
+  {"name": "main.go", "isDir": false, "size": 2048, "modTime": "2026-07-11T09:30:00Z"}
+]
+\`\`\`
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| name | string | 文件/目录名 |
+| isDir | boolean | 是否为目录 |
+| size | number | 文件大小（字节） |
+| modTime | string | 最后修改时间（ISO 8601） |
+
+---
+
+### 2.2 读取文件
+
+\`\`\`
+GET /api/fs/read?path={文件路径}
+\`\`\`
+
+**参数：**
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| path | string | 是 | 文件路径 |
+
+**响应：** 返回文件文本内容（字符串）。
+
+---
+
+### 2.3 写入文件
+
+\`\`\`
+POST /api/fs/write
+\`\`\`
+
+**请求体：**
+\`\`\`json
+{
+  "path": "src/main.go",
+  "content": "package main\\n\\nfunc main() {\\n\\tprintln(\\"hello\\")\\n}\\n"
+}
+\`\`\`
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| path | string | 是 | 文件路径（相对于工作区或绝对路径） |
+| content | string | 是 | 文件内容（覆盖写入，自动创建目录） |
+
+**响应：** \`{"ok": true}\`
+
+---
+
+### 2.4 搜索文件内容
+
+\`\`\`
+GET /api/fs/search?q={关键词}&path={搜索路径}
+\`\`\`
+
+**参数：**
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| q | string | 是 | 搜索关键词 |
+| path | string | 否 | 搜索目录，省略时使用工作区根目录 |
+
+**响应示例：**
+\`\`\`json
+[
+  {"file": "src/main.go", "line": 15, "text": "func handleRequest(w http.ResponseWriter, r *http.Request) {"},
+  {"file": "src/utils.go", "line": 42, "text": "// handleRequest 处理 HTTP 请求"}
+]
+\`\`\`
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| file | string | 文件相对路径 |
+| line | number | 行号 |
+| text | string | 匹配行的内容 |
+
+**自动忽略的目录：** \`.git\`、\`node_modules\`、\`vendor\`、\`.pair\`、\`__pycache__\`、\`bin\` 等。**仅搜索文本文件扩展名**（\`.go\` \`.js\` \`.ts\` \`.vue\` \`.html\` \`.css\` \`.json\` \`.md\` \`.py\` \`.rs\` \`.java\` 等 50+ 种）。
+
+---
+
+### 2.5 重命名/移动文件
+
+\`\`\`
+POST /api/fs/rename
+\`\`\`
+
+**请求体：**
+\`\`\`json
+{
+  "oldPath": "src/old.go",
+  "newPath": "src/new.go"
+}
+\`\`\`
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| oldPath | string | 是 | 原路径 |
+| newPath | string | 是 | 新路径 |
+
+**响应：** \`{"ok": true}\`
+
+---
+
+### 2.6 删除文件/目录
+
+\`\`\`
+POST /api/fs/delete
+\`\`\`
+
+**请求体：**
+\`\`\`json
+{
+  "path": "src/temp.go"
+}
+\`\`\`
+
+> ⚠️ 不可恢复，递归删除目录及其所有内容。
+
+**响应：** \`{"ok": true}\`
+
+---
+
+### 2.7 创建目录
+
+\`\`\`
+POST /api/fs/mkdir
+\`\`\`
+
+**请求体：**
+\`\`\`json
+{
+  "path": "src/new-folder"
+}
+\`\`\`
+
+**响应：** \`{"ok": true}\`
+
+---
+
+### 2.8 获取图片数据
+
+\`\`\`
+GET /api/fs/image?path={图片路径}
+\`\`\`
+
+**参数：** \`path\` — 图片文件路径（支持 PNG / JPEG）
+
+**响应：** Base64 编码的图片数据字符串（不含 \`data:image/...\` 前缀）。
+
+**响应头：** \`Content-Type: text/plain; charset=utf-8\`
+
+---
+
+### 2.9 获取文件信息
+
+\`\`\`
+GET /api/fs/file-info?path={文件路径}
+\`\`\`
+
+**响应示例：**
+\`\`\`json
+{
+  "name": "main.go",
+  "path": "F:/projects/my-app/src/main.go",
+  "size": 2048,
+  "modTime": "2026-07-11T09:30:00Z",
+  "isDir": false
+}
+\`\`\`
+
+---
+
+### 2.10 十六进制查看
+
+\`\`\`
+GET /api/fs/hex?path={文件路径}&offset={偏移}&length={长度}
+\`\`\`
+
+**参数：**
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| path | string | 是 | 文件路径 |
+| offset | number | 否 | 起始字节偏移（默认 0） |
+| length | number | 否 | 读取字节数（默认 512，最大 4096） |
+
+**响应示例：**
+\`\`\`json
+{
+  "hex": "4d5a90000300000004000000ffff0000b80000000000000040",
+  "text": "MZ.............@",
+  "offset": 0,
+  "length": 32
+}
+\`\`\`
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| hex | string | 十六进制字符串 |
+| text | string | ASCII 可打印字符（不可打印的替换为 \`.\`） |
+| offset | number | 起始偏移 |
+| length | number | 返回的字节数 |
+
+---
+
+### 2.11 列出磁盘驱动器
+
+\`\`\`
+GET /api/fs/drives
+\`\`\`
+
+**响应示例：**
+\`\`\`json
+["C:\\\\", "D:\\\\", "E:\\\\"]
+\`\`\`
+
+---
+
+## 三、工作区管理
+
+### 3.1 获取当前工作区
+
+\`\`\`
+GET /api/workspace
+\`\`\`
+
+**响应示例：**
+\`\`\`json
+{
+  "root": "F:/projects/my-app",
+  "folders": ["F:/projects/my-app"],
+  "loaded": true
+}
+\`\`\`
+
+### 3.2 切换/设置工作区
+
+\`\`\`
+POST /api/workspace
+\`\`\`
+
+**请求体（切换工作区）：**
+\`\`\`json
+{
+  "path": "F:/projects/another-project"
+}
+\`\`\`
+
+**请求体（添加文件夹）：**
+\`\`\`json
+{
+  "addFolder": "F:/projects/shared-lib"
+}
+\`\`\`
+
+**请求体（创建新工作区）：**
+\`\`\`json
+{
+  "create": "F:/projects/new-project"
+}
+\`\`\`
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| path | string | 按场景 | 切换工作区到指定路径 |
+| addFolder | string | 按场景 | 在当前工作区添加文件夹 |
+| create | string | 按场景 | 创建新目录并切换为其工作区 |
+
+**响应：** 返回更新后的工作区信息（同 GET 响应格式）。
+
+---
+
+## 四、设置管理
+
+### 4.1 读取设置
+
+\`\`\`
+GET /api/settings
+\`\`\`
+
+**响应：** 返回完整 \`AppSettings\` 对象（字段较多，按需取用）：
+
+\`\`\`json
+{
+  "provider": "deepseek",
+  "baseURL": "https://api.deepseek.com/v1/chat/completions",
+  "apiKey": "sk-xxx",
+  "planModel": "deepseek-v4-pro",
+  "executeModel": "deepseek-v4-flash",
+  "reviewModel": "deepseek-v4-pro",
+  "temperature": "0.3",
+  "thinkingMode": "thinking",
+  "maxTokens": 131072,
+  "contextMaxTokens": 64000,
+  "lastProject": "F:/projects/my-app",
+  "workspaceFolders": ["F:/projects/my-app"],
+  "recentProjects": ["F:/projects/app1"],
+  "reviewMode": "auto",
+  "reviewBlacklist": [],
+  "reviewWhitelist": [],
+  "autonomous": false,
+  "autoCollapse": true,
+  "maxIterations": 50,
+  "maxParallelAgents": 3,
+  "maxReviewRetries": 3,
+  "autoIterateOnRejection": true,
+  "requireHumanApprovalForDestructive": true,
+  "aiReview": false,
+  "autoCommit": true,
+  "luaTools": true,
+  "enableBenchmarking": true,
+  "systemInstructions": "",
+  "searxngUrl": "",
+  "ignoreDirs": [],
+  "defaultShell": "auto",
+  "termFontSize": 13,
+  "termEncoding": "auto",
+  "theme": "dark",
+  "fontFamily": "'Cascadia Code', Consolas, monospace",
+  "editorFontSize": 14,
+  "tabSize": 2,
+  "wordWrap": false,
+  "hideMinimap": false,
+  "autoConnectMCP": true,
+  "skillEnabledOverrides": {},
+  "skillStatusOverrides": {},
+  "mcpEnabledOverrides": {},
+  "customProviders": []
+}
+\`\`\`
+
+### 4.2 保存设置
+
+\`\`\`
+PUT /api/settings?convId={对话ID}
+\`\`\`
+
+**请求体：** 与 GET 返回格式相同，只需传入要修改的字段（增量合并，未传字段保持不变）。
+
+**参数：** \`convId\` — 可选，当前对话 ID。当 \`reviewMode\` 字段变更时，实时更新该对话的 Loop 审核模式。
+
+**响应：** \`{"ok": true}\`
+
+---
+
+## 五、系统工具
+
+### 5.1 系统信息
+
+\`\`\`
+GET /api/system/info
+\`\`\`
+
+**响应示例：**
+\`\`\`json
+{
+  "hostname": "DESKTOP-ABC123",
+  "cwd": "F:/projects/my-app",
+  "os": "windows",
+  "goos": "windows",
+  "workspace": "F:/projects/my-app",
   "folders": ["F:/projects/my-app"],\r
-  "loaded": true\r
-}\r
-\`\`\`\r
-\r
-### 3.2 切换/设置工作区\r
-\r
-\`\`\`\r
-POST /api/workspace\r
-\`\`\`\r
-\r
-**请求体（切换工作区）：**\r
-\`\`\`json\r
-{\r
-  "path": "F:/projects/another-project"\r
-}\r
-\`\`\`\r
-\r
-**请求体（添加文件夹）：**\r
-\`\`\`json\r
-{\r
-  "addFolder": "F:/projects/shared-lib"\r
-}\r
-\`\`\`\r
-\r
-**请求体（创建新工作区）：**\r
-\`\`\`json\r
-{\r
-  "create": "F:/projects/new-project"\r
-}\r
-\`\`\`\r
-\r
-| 字段 | 类型 | 必填 | 说明 |\r
-|------|------|------|------|\r
-| path | string | 按场景 | 切换工作区到指定路径 |\r
-| addFolder | string | 按场景 | 在当前工作区添加文件夹 |\r
-| create | string | 按场景 | 创建新目录并切换为其工作区 |\r
-\r
-**响应：** 返回更新后的工作区信息（同 GET 响应格式）。\r
-\r
----\r
-\r
-## 四、设置管理\r
-\r
-### 4.1 读取设置\r
-\r
-\`\`\`\r
-GET /api/settings\r
-\`\`\`\r
-\r
-**响应：** 返回完整 \`AppSettings\` 对象（字段较多，按需取用）：\r
-\r
-\`\`\`json\r
-{\r
-  "provider": "deepseek",\r
-  "baseURL": "https://api.deepseek.com/v1/chat/completions",\r
-  "apiKey": "sk-xxx",\r
-  "planModel": "deepseek-v4-pro",\r
-  "executeModel": "deepseek-v4-flash",\r
-  "reviewModel": "deepseek-v4-pro",\r
-  "temperature": "0.3",\r
-  "thinkingMode": "thinking",\r
-  "maxTokens": 131072,\r
-  "contextMaxTokens": 64000,\r
-  "lastProject": "F:/projects/my-app",\r
-  "workspaceFolders": ["F:/projects/my-app"],\r
-  "recentProjects": ["F:/projects/app1"],\r
-  "reviewMode": "auto",\r
-  "reviewBlacklist": [],\r
-  "reviewWhitelist": [],\r
-  "autonomous": false,\r
-  "autoCollapse": true,\r
-  "maxIterations": 50,\r
-  "maxParallelAgents": 3,\r
-  "maxReviewRetries": 3,\r
-  "autoIterateOnRejection": true,\r
-  "requireHumanApprovalForDestructive": true,\r
-  "aiReview": false,\r
-  "autoCommit": true,\r
-  "luaTools": true,\r
-  "enableBenchmarking": true,\r
-  "systemInstructions": "",\r
-  "searxngUrl": "",\r
-  "ignoreDirs": [],\r
-  "defaultShell": "auto",\r
-  "termFontSize": 13,\r
-  "termEncoding": "auto",\r
-  "theme": "dark",\r
-  "fontFamily": "'Cascadia Code', Consolas, monospace",\r
-  "editorFontSize": 14,\r
-  "tabSize": 2,\r
-  "wordWrap": false,\r
-  "hideMinimap": false,\r
-  "autoConnectMCP": true,\r
-  "skillEnabledOverrides": {},\r
-  "skillStatusOverrides": {},\r
-  "mcpEnabledOverrides": {},\r
-  "customProviders": []\r
-}\r
-\`\`\`\r
-\r
-### 4.2 保存设置\r
-\r
-\`\`\`\r
-PUT /api/settings?convId={对话ID}\r
-\`\`\`\r
-\r
-**请求体：** 与 GET 返回格式相同，只需传入要修改的字段（增量合并，未传字段保持不变）。\r
-\r
-**参数：** \`convId\` — 可选，当前对话 ID。当 \`reviewMode\` 字段变更时，实时更新该对话的 Loop 审核模式。\r
-\r
-**响应：** \`{"ok": true}\`\r
-\r
----\r
-\r
-## 五、系统工具\r
-\r
-### 5.1 系统信息\r
-\r
-\`\`\`\r
-GET /api/system/info\r
-\`\`\`\r
-\r
-**响应示例：**\r
-\`\`\`json\r
-{\r
-  "hostname": "DESKTOP-ABC123",\r
-  "cwd": "F:/projects/my-app",\r
-  "os": "windows",\r
-  "goos": "windows",\r
-  "workspace": "F:/projects/my-app",\r
-  "folders": ["F:/projects/my-app"],\r
-  "version": "v1.1.2"\r
-}\r
-\`\`\`\r
-\r
-| 字段 | 类型 | 说明 |\r
-|------|------|------|\r
-| hostname | string | 主机名 |\r
-| cwd | string | 当前工作目录 |\r
-| os | string | 操作系统名称 |\r
-| goos | string | Go 平台标识 |\r
-| workspace | string | IDE 工作区根路径 |\r
-| folders | string[] | 工作区文件夹列表 |\r
-| version | string | IDE 版本号（由打包器注入） |\r
-\r
-### 5.2 执行命令\r
-\r
-\`\`\`\r
-POST /api/system/exec\r
-\`\`\`\r
-\r
-**请求体：**\r
-\`\`\`json\r
-{\r
-  "command": "go build ./cmd/app",\r
-  "cwd": "F:/projects/my-app"\r
-}\r
-\`\`\`\r
-\r
-| 字段 | 类型 | 必填 | 说明 |\r
-|------|------|------|------|\r
-| command | string | 是 | 要执行的命令 |\r
-| cwd | string | 否 | 工作目录（默认工作区根目录） |\r
-\r
-**响应示例：**\r
-\`\`\`json\r
-{\r
-  "stdout": "# github.com/foo/app\\nsrc/main.go:42: undefined: x\\n",\r
-  "stderr": "",\r
-  "exitCode": 2\r
-}\r
-\`\`\`\r
-\r
-| 字段 | 类型 | 说明 |\r
-|------|------|------|\r
-| stdout | string | 标准输出 |\r
-| stderr | string | 标准错误 |\r
-| exitCode | number | 退出码（0 = 成功） |\r
-\r
-> **安全限制：** 命令在工作区目录下执行；禁止交互式命令（如 \`vim\`）。\r
-\r
----\r
-\r
-## 六、AI 模型\r
-\r
-### 获取可用模型列表\r
-\r
-\`\`\`\r
-GET /api/models\r
-\`\`\`\r
-\r
-**响应示例：**\r
-\`\`\`json\r
-{\r
-  "providers": [\r
-    {\r
-      "name": "openai",\r
-      "models": ["gpt-4", "gpt-4-turbo", "gpt-3.5-turbo"]\r
-    },\r
-    {\r
-      "name": "claude",\r
-      "models": ["claude-3-opus", "claude-3-sonnet", "claude-3-haiku"]\r
-    }\r
-  ],\r
-  "current": {\r
-    "provider": "openai",\r
-    "model": "gpt-4"\r
-  }\r
-}\r
-\`\`\`\r
-\r
----\r
-\r
-## 七、对话管理\r
-\r
-### 7.1 对话列表\r
-\r
-\`\`\`\r
-GET /api/conversations?workspace={工作区路径}\r
-\`\`\`\r
-\r
-**参数：**\r
-| 参数 | 类型 | 必填 | 说明 |\r
-|------|------|------|------|\r
-| workspace | string | 否 | 工作区路径，省略时使用当前工作区 |\r
-\r
-**响应示例：**\r
-\`\`\`json\r
-[\r
-  {\r
-    "id": "conv_1741680000000",\r
-    "title": "修复登录页面样式",\r
-    "createdAt": "2026-07-11T10:00:00Z",\r
-    "messageCount": 12,\r
-    "workspace": "F:/projects/my-app"\r
-  }\r
-]\r
-\`\`\`\r
-\r
-### 7.2 创建对话\r
-\r
-\`\`\`\r
-POST /api/conversations\r
-\`\`\`\r
-\r
-**请求体：**\r
-\`\`\`json\r
-{\r
-  "title": "新对话",\r
-  "workspace": "F:/projects/my-app"\r
-}\r
-\`\`\`\r
-\r
-**响应：** 返回创建的对话对象（同 GET 列表中的格式）。\r
-\r
-### 7.3 获取对话详情（含消息）\r
-\r
-\`\`\`\r
-GET /api/conversations/{convId}\r
-\`\`\`\r
-\r
-**响应：** 返回该对话的最近 50 条消息：\r
-\r
-\`\`\`json\r
-{\r
-  "messages": [\r
-    {"role": "user", "content": "帮我写一个 HTTP 服务", "createdAt": "2026-07-11T10:00:00Z"},\r
-    {"role": "assistant", "content": "好的，我来创建...", "createdAt": "2026-07-11T10:00:05Z"}\r
-  ],\r
-  "total": 42\r
-}\r
-\`\`\`\r
-\r
-### 7.4 更新对话\r
-\r
-\`\`\`\r
-PUT /api/conversations/{convId}\r
-\`\`\`\r
-\r
-**请求体：**\r
-\`\`\`json\r
-{\r
-  "title": "新的标题"\r
-}\r
-\`\`\`\r
-\r
-**响应：** \`{"ok": true}\`\r
-\r
-### 7.5 删除对话\r
-\r
-\`\`\`\r
-DELETE /api/conversations/{convId}\r
-\`\`\`\r
-\r
-**响应：** \`{"ok": true}\`（同时删除该对话的所有消息）。\r
-\r
-### 7.6 获取消息列表（分页）\r
-\r
-\`\`\`\r
-GET /api/conversations/{convId}/messages?limit={数量}&before={索引}\r
-\`\`\`\r
-\r
-**参数：**\r
-| 参数 | 类型 | 必填 | 说明 |\r
-|------|------|------|------|\r
-| limit | number | 否 | 返回消息条数（默认 50） |\r
-| before | number | 否 | 从消息索引 before 处开始往前加载（用于分页翻历史） |\r
-\r
-**响应：**\r
-\`\`\`json\r
-{\r
-  "messages": [\r
-    {"role": "user", "content": "第一条消息", "createdAt": "..."},\r
-    {"role": "assistant", "content": "回复", "createdAt": "..."}\r
-  ],\r
-  "total": 42\r
-}\r
-\`\`\`\r
-\r
-> 连续的 assistant 消息会被合并（\`MergeConsecutiveAssistants\`）。\r
-\r
-### 7.7 添加消息\r
-\r
-\`\`\`\r
-POST /api/conversations/{convId}/messages\r
-\`\`\`\r
-\r
-**请求体：**\r
-\`\`\`json\r
-{\r
-  "role": "user",\r
-  "content": "继续上一个话题"\r
-}\r
-\`\`\`\r
-\r
-**响应：** \`{"ok": true}\`\r
-\r
-### 7.8 消息总数\r
-\r
-\`\`\`\r
-GET /api/conversations/{convId}/messages/count\r
-\`\`\`\r
-\r
-**响应：** \`{"count": 42}\`\r
-\r
-### 7.9 发送消息给 AI（非阻塞）\r
-\r
-\`\`\`\r
-POST /api/chat/send\r
-\`\`\`\r
-\r
-**请求体：**\r
-\`\`\`json\r
-{\r
-  "message": "帮我创建一个 Go HTTP 服务",\r
-  "sessionId": "sess_xxx",\r
-  "convId": "conv_1741680000000",\r
-  "autonomous": false,\r
-  "workspaceRoot": "F:/projects/my-app"\r
-}\r
-\`\`\`\r
-\r
-| 字段 | 类型 | 必填 | 说明 |\r
-|------|------|------|------|\r
-| message | string | 是 | 用户消息内容（最长 50000 字符，超出截断） |\r
-| sessionId | string | 否 | 会话 ID |\r
-| convId | string | 否 | 对话 ID（留空则自动生成 \`conv_{时间戳}\`） |\r
-| autonomous | boolean | 否 | 是否启用自主模式（默认 false） |\r
-| workspaceRoot | string | 否 | 工作区路径（默认当前工作区） |\r
-\r
-**响应：** \`{"sessionId": "sess_xxx", "convId": "conv_1741680000000"}\`\r
-\r
-AI 的回复不在此响应的 Body 中返回，而是通过 **WebSocket 实时推送**事件流（见第十七章）。\r
-\r
-**前置条件：** 必须先配置 API Key 和模型。\r
-\r
----\r
-\r
-### 7.10 停止 AI 响应\r
-\r
-\`\`\`\r
-POST /api/chat/stop?convId={对话ID}\r
-\`\`\`\r
-\r
-**参数：** \`convId\` — 要停止的对话 ID。\r
-\r
-**响应：** \`{"ok": true}\`\r
-\r
----\r
-\r
-### 7.11 审批操作\r
-\r
-\`\`\`\r
-POST /api/chat/approve\r
-\`\`\`\r
-\r
-**请求体：**\r
-\`\`\`json\r
-{\r
-  "convId": "conv_xxx",\r
-  "approved": true,\r
-  "reply": "请把函数名改为驼峰命名法"\r
-}\r
-\`\`\`\r
-\r
-| 字段 | 类型 | 必填 | 说明 |\r
-|------|------|------|------|\r
-| convId | string | 是 | 对话 ID |\r
-| approved | boolean | 是 | 批准（true）或拒绝（false） |\r
-| reply | string | 否 | 拒绝时的反馈/纠正建议 |\r
-\r
-**响应：** \`{"ok": true}\`\r
-\r
----\r
-\r
-### 7.12 发送运行时反馈\r
-\r
-\`\`\`\r
-POST /api/chat/feedback\r
-\`\`\`\r
-\r
-**请求体：**\r
-\`\`\`json\r
-{\r
-  "convId": "conv_xxx",\r
-  "feedback": "请改用更简洁的实现方式"\r
-}\r
-\`\`\`\r
-\r
-| 字段 | 类型 | 必填 | 说明 |\r
-|------|------|------|------|\r
-| convId | string | 是 | 对话 ID |\r
-| feedback | string | 是 | 反馈/纠正内容 |\r
-\r
-**工作原理：** 在 AI 下次 LLM 调用前，将反馈内容作为用户消息注入本轮上下文，让 AI 在下一次回复中响应用户的补充或纠正。\r
-\r
----\r
-\r
-### 7.13 回答 ask_user 提问\r
-\r
-\`\`\`\r
-POST /api/chat/answer\r
-\`\`\`\r
-\r
-当 AI 通过 \`ask_user\` 工具向用户提问时，用此接口发送回答。\r
-\r
-**请求体：**\r
-\`\`\`json\r
-{\r
-  "convId": "conv_xxx",\r
-  "answer": "用 POST 方法"\r
-}\r
-\`\`\`\r
-\r
-| 字段 | 类型 | 必填 | 说明 |\r
-|------|------|------|------|\r
-| convId | string | 是 | 对话 ID |\r
-| answer | string | 是 | 用户的回答 |\r
-\r
-**响应：** \`{"ok": true}\`\r
-\r
----\r
-\r
-### 7.14 回滚消息\r
-\r
-\`\`\`\r
-POST /api/chat/rollback\r
-\`\`\`\r
-\r
-回滚到指定用户消息之前的状态：恢复该消息关联的所有文件快照，并删除该消息之后的对话历史。\r
-\r
-**请求体：**\r
-\`\`\`json\r
-{\r
-  "convId": "conv_xxx",\r
-  "msgIdx": 3\r
-}\r
-\`\`\`\r
-\r
-| 字段 | 类型 | 必填 | 说明 |\r
-|------|------|------|------|\r
-| convId | string | 是 | 对话 ID |\r
-| msgIdx | number | 是 | 用户消息索引（0 基），回滚到此消息之前 |\r
-\r
-**响应：** \`{"ok": true, "msgIdx": 3}\`\r
-\r
----\r
-\r
-### 7.15 压缩上下文\r
-\r
-\`\`\`\r
-POST /api/chat/compact?convId={对话ID}\r
-\`\`\`\r
-\r
-手动触发上下文压缩：将对话中间部分的老消息压缩为摘要，释放 token 预算。\r
-\r
-**参数：** \`convId\` — 对话 ID。\r
-\r
-**响应：** \`{"ok": true}\`\r
-\r
----\r
-\r
-## 八、指令与思想\r
-\r
-### 8.1 读取指令\r
-\r
-\`\`\`\r
-GET /api/instructions?scope={作用域}\r
-\`\`\`\r
-\r
-**参数：** \`scope\` — 指令作用域（如 \`"system"\`、\`"user"\`）。\r
-\r
-**响应：** 返回指令文本内容（字符串）。\r
-\r
-### 8.2 保存指令\r
-\r
-\`\`\`\r
-PUT /api/instructions?scope={作用域}\r
-\`\`\`\r
-\r
-**请求体：** 纯文本字符串（指令内容）。\r
-\r
-**响应：** \`{"ok": true}\`\r
-\r
-### 8.3 读取行为指导\r
-\r
-\`\`\`\r
-\`\`\`\r
-\r
-**响应：** 返回 AI 行为指导配置文本。\r
-\r
-### 8.4 保存行为指导\r
-\r
-\`\`\`\r
-\`\`\`\r
-\r
-**请求体：** 纯文本字符串。\r
-\r
-**响应：** \`{"ok": true}\`\r
-\r
----\r
-\r
-## 九、任务与规划\r
-\r
-> **注意：** 任务由 Agent 通过 \`update_tasks\` / \`update_plan\` 工具自主管理。以下 API 仅提供前端只读查询接口。\r
-\r
-### 9.1 获取任务列表\r
-\r
-\`\`\`\r
-GET /api/tasks?convId={对话ID}\r
-\`\`\`\r
-\r
-**参数：** \`convId\` — 可选，过滤指定对话的任务。\r
-\r
-**响应示例：**\r
-\`\`\`json\r
-{\r
-  "tasks": [\r
-    {\r
-      "step": "创建 HTTP 服务文件",\r
-      "status": "completed",\r
-      "taskId": "task_1",\r
-      "description": "在 src/server.go 创建 HTTP 服务",\r
-      "created_at": "2026-07-11T10:00:00Z"\r
-    }\r
-  ]\r
-}\r
-\`\`\`\r
-\r
-> 任务数据持久化在工作区 \`.pair/tasks/*.json\`，由 Agent 的 \`update_tasks\` 工具写入。\r
-\r
-### 9.2 读取任务规划文档\r
-\r
-\`\`\`\r
-GET /api/taskplan?name={规划名}\r
-\`\`\`\r
-\r
-列出或读取 Markdown 格式的规划文档。\r
-\r
-**参数：** \`name\` — 可选，指定规划文档名（不含 \`.md\` 后缀）；省略则返回所有规划文档列表。\r
-\r
-**GET 响应（列出全部）：**\r
-\`\`\`json\r
-[\r
-  {"name": "refactor-auth", "file": "F:/projects/.pair/tasks/refactor-auth.md"}\r
-]\r
-\`\`\`\r
-\r
-**GET 响应（读单个）：**\r
-\`\`\`json\r
-{\r
-  "name": "refactor-auth",\r
-  "content": "## 重构计划\\n1. 提取认证中间件\\n2. 添加 JWT 支持"\r
-}\r
-\`\`\`\r
-\r
-### 9.3 追加/完成规划文档\r
-\r
-\`\`\`\r
-POST /api/taskplan\r
-\`\`\`\r
-\r
-**请求体：**\r
-\`\`\`json\r
-{\r
-  "name": "refactor-auth",\r
-  "content": "- 完成 JWT 集成",\r
-  "action": "append"\r
-}\r
-\`\`\`\r
-\r
-| 字段 | 类型 | 必填 | 说明 |\r
-|------|------|------|------|\r
-| name | string | 否 | 规划名称（省略则自动生成 \`plan_日期时间\`） |\r
-| content | string | 是 | 要追加的内容（Markdown） |\r
-| action | string | 否 | \`"append"\`（追加）或 \`"complete"\`（追加"[已完成] 时间戳"），默认 \`"append"\` |\r
-\r
-**响应：** \`{"ok": true}\`\r
-\r
----\r
-\r
-## 十、Git 版本控制\r
-\r
-所有 Git API 均在**当前工作区目录**（或指定仓库路径）下执行。\r
-\r
-### 10.1 初始化仓库\r
-\r
-\`\`\`\r
-POST /api/git/init?path={目录路径}\r
-\`\`\`\r
-\r
-**参数：** \`path\` — 目标目录（默认当前工作区）。\r
-\r
-**响应：** \`{"output": "Initialized empty Git repository in ..."}\`\r
-\r
----\r
-\r
-### 10.2 仓库状态\r
-\r
-\`\`\`\r
-GET /api/git/status?path={仓库路径}\r
-\`\`\`\r
-\r
-**参数：**\r
-| 参数 | 类型 | 必填 | 说明 |\r
-|------|------|------|------|\r
-| path | string | 否 | 仓库路径（默认当前工作区） |\r
-\r
-**响应示例：**\r
-\`\`\`json\r
-{\r
-  "branch": "main",\r
-  "changes": [\r
-    {"path": "src/main.go", "status": "M", "staged": false},\r
-    {"path": "src/utils.go", "status": "M", "staged": true}\r
-  ],\r
-  "untracked": ["src/new.go"],\r
-  "ahead": 1,\r
-  "behind": 0\r
-}\r
-\`\`\`\r
-\r
-| 字段 | 类型 | 说明 |\r
-|------|------|------|\r
-| branch | string | 当前分支名 |\r
-| changes[].path | string | 变更文件路径 |\r
-| changes[].status | string | 状态码：\`M\`(修改) \`A\`(新增) \`D\`(删除) \`R\`(重命名) |\r
-| changes[].staged | boolean | 是否已暂存 |\r
-| untracked | string[] | 未跟踪文件列表 |\r
-| ahead | number | 领先远程的提交数 |\r
-| behind | number | 落后远程的提交数 |\r
-\r
-### 10.3 查看差异\r
-\r
-\`\`\`\r
-GET /api/git/diff?path={仓库路径}&file={文件路径}&staged={是否暂存}\r
-\`\`\`\r
-\r
-**参数：**\r
-| 参数 | 类型 | 必填 | 说明 |\r
-|------|------|------|------|\r
-| path | string | 否 | 仓库路径 |\r
-| file | string | 否 | 指定文件（省略则返回所有变更的 diff） |\r
-| staged | string | 否 | \`"true"\` = 只显示已暂存差异（--cached） |\r
-\r
-**响应：** 返回 diff 文本（字符串）。\r
-\r
-### 10.4 暂存文件\r
-\r
-\`\`\`\r
-POST /api/git/add\r
-\`\`\`\r
-\r
-**请求体：**\r
-\`\`\`json\r
-{\r
-  "path": "F:/projects/my-app",\r
-  "files": ["src/main.go", "src/utils.go"]\r
-}\r
-\`\`\`\r
-\r
-| 字段 | 类型 | 必填 | 说明 |\r
-|------|------|------|------|\r
-| path | string | 否 | 仓库路径（默认工作区） |\r
-| files | string[] | 否 | 要暂存的文件列表（省略则暂存全部 \`-A\`） |\r
-\r
-**响应：** \`{"ok": true}\`\r
-\r
-### 10.5 取消暂存\r
-\r
-\`\`\`\r
-POST /api/git/reset\r
-\`\`\`\r
-\r
-**请求体：** 格式同 \`git/add\`。\r
-\r
-**响应：** \`{"ok": true}\`\r
-\r
-### 10.6 提交\r
-\r
-\`\`\`\r
-POST /api/git/commit\r
-\`\`\`\r
-\r
-**请求体：**\r
-\`\`\`json\r
-{\r
-  "path": "F:/projects/my-app",\r
-  "message": "feat: 添加用户认证模块"\r
-}\r
-\`\`\`\r
-\r
-| 字段 | 类型 | 必填 | 说明 |\r
-|------|------|------|------|\r
-| path | string | 否 | 仓库路径 |\r
-| message | string | 是 | 提交信息 |\r
-\r
-**响应：**\r
-\`\`\`json\r
-{\r
-  "ok": true,\r
-  "hash": "a1b2c3d4e5f6..."\r
-}\r
-\`\`\`\r
-\r
-### 10.7 查看提交历史\r
-\r
-\`\`\`\r
-GET /api/git/log?path={仓库路径}&count={数量}&file={文件路径}\r
-\`\`\`\r
-\r
-> **别名：** \`/api/git-log\`（绕过部分浏览器广告拦截器对 \`/api/git/log\` 的误杀）。\r
-\r
-**参数：**\r
-| 参数 | 类型 | 必填 | 说明 |\r
-|------|------|------|------|\r
-| path | string | 否 | 仓库路径 |\r
-| count | number | 否 | 返回条数（默认 15） |\r
-| file | string | 否 | 限定某文件的提交历史 |\r
-\r
-**响应示例：**\r
-\`\`\`json\r
-[\r
-  {\r
-    "hash": "a1b2c3d",\r
-    "author": "user",\r
-    "date": "2026-07-11 10:00:00",\r
-    "message": "feat: 添加用户认证模块"\r
-  }\r
-]\r
-\`\`\`\r
-\r
-### 10.8 分支管理\r
-\r
-\`\`\`\r
-POST /api/git/branch\r
-\`\`\`\r
-\r
-| 操作 | 请求体 | 说明 |\r
-|------|--------|------|\r
-| 创建 | \`{"path":"...","name":"feature-x","action":"create"}\` | 创建新分支 |\r
-| 删除 | \`{"path":"...","name":"feature-x","action":"delete"}\` | 删除分支 |\r
-| 列表 | \`{"path":"...","action":"list"}\` | 列出所有分支 |\r
-| 切换 | \`{"path":"...","name":"feature-x","action":"checkout"}\` | 切换分支 |\r
-\r
-**响应：** 列表操作返回 \`["main", "feature-x", ...]\`，其他返回 \`{"ok": true}\`。\r
-\r
-### 10.9 切换分支 / 恢复文件\r
-\r
-\`\`\`\r
-POST /api/git/checkout\r
-\`\`\`\r
-\r
-**请求体：**\r
-\`\`\`json\r
-{\r
-  "path": "F:/projects/my-app",\r
-  "branch": "feature-x",\r
-  "file": "src/main.go"\r
-}\r
-\`\`\`\r
-\r
-| 字段 | 类型 | 必填 | 说明 |\r
-|------|------|------|------|\r
-| branch | string | 按场景 | 切换到的分支名 |\r
-| file | string | 按场景 | 恢复指定文件到 HEAD（branch 和 file 二选一） |\r
-\r
-**响应：** \`{"ok": true}\`\r
-\r
-### 10.10 贮藏\r
-\r
-\`\`\`\r
-POST /api/git/stash\r
-\`\`\`\r
-\r
-**请求体：**\r
-\`\`\`json\r
-{\r
-  "path": "F:/projects/my-app",\r
-  "action": "push",\r
-  "message": "暂存当前 WIP"\r
-}\r
-\`\`\`\r
-\r
-| 字段 | 类型 | 必填 | 说明 |\r
-|------|------|------|------|\r
-| path | string | 否 | 仓库路径 |\r
-| action | string | 否 | \`"push"\`(贮藏,默认) \\| \`"pop"\`(恢复) \\| \`"apply"\`(应用) \\| \`"drop"\`(丢弃) |\r
-| message | string | 否 | 贮藏备注 |\r
-\r
-**响应：** \`{"ok": true}\`\r
-\r
-### 10.11 查看贮藏列表\r
-\r
-\`\`\`\r
-GET /api/git/stash-list?path={仓库路径}\r
-\`\`\`\r
-\r
-**响应示例：**\r
-\`\`\`json\r
-[\r
-  {"index": 0, "message": "暂存当前 WIP"},\r
-  {"index": 1, "message": "On feature-x: 临时保存"}\r
-]\r
-\`\`\`\r
-\r
-### 10.12 管理 \`.gitignore\`\r
-\r
-\`\`\`\r
-GET /api/git/ignore?path={仓库路径}\r
-POST /api/git/ignore?path={仓库路径}\r
-\`\`\`\r
-\r
-**GET 响应：** 返回当前 \`.gitignore\` 内容：\r
-\`\`\`json\r
-{\r
-  "content": "*.log\\n.env\\nbuild/",\r
-  "rules": ["*.log", ".env", "build/"]\r
-}\r
-\`\`\`\r
-\r
-**POST 请求体（覆盖写入）：**\r
-\`\`\`json\r
-{\r
-  "content": "*.log\\n.env\\nnode_modules/"\r
-}\r
-\`\`\`\r
-\r
-**POST 请求体（追加一行）：**\r
-\`\`\`json\r
-{\r
-  "append": "dist/"\r
-}\r
-\`\`\`\r
-\r
-| 字段 | 类型 | 必填 | 说明 |\r
-|------|------|------|------|\r
-| content | string | 按场景 | 完整覆盖 \`.gitignore\` 内容 |\r
-| append | string | 按场景 | 追加一行到 \`.gitignore\`（content 和 append 二选一） |\r
-\r
-**响应：** \`{"ok": true}\`\r
-\r
-### 10.13 丢弃修改\r
-\r
-\`\`\`\r
-POST /api/git/discard\r
-\`\`\`\r
-\r
-**请求体：**\r
-\`\`\`json\r
-{\r
-  "path": "F:/projects/my-app",\r
-  "files": ["src/main.go"]\r
-}\r
-\`\`\`\r
-\r
-> ⚠️ 不可恢复！丢弃工作区未暂存的修改。\r
-\r
-**响应：** \`{"ok": true}\`\r
-\r
-### 10.14 推送\r
-\r
-\`\`\`\r
-POST /api/git/push\r
-\`\`\`\r
-\r
-**请求体：**\r
-\`\`\`json\r
-{\r
-  "path": "F:/projects/my-app",\r
-  "remote": "origin",\r
-  "branch": "main"\r
-}\r
-\`\`\`\r
-\r
-| 字段 | 类型 | 必填 | 说明 |\r
-|------|------|------|------|\r
-| remote | string | 否 | 远程名（默认 \`"origin"\`） |\r
-| branch | string | 否 | 分支名（默认当前分支） |\r
-\r
-**响应：** \`{"ok": true}\`\r
-\r
-### 10.15 拉取\r
-\r
-\`\`\`\r
-POST /api/git/pull\r
-\`\`\`\r
-\r
-**请求体：** 同 \`git/push\`。\r
-\r
-**响应：** \`{"ok": true}\`\r
-\r
-### 10.16 远程仓库管理\r
-\r
-\`\`\`\r
-GET /api/git/remote?path={仓库路径}\r
-POST /api/git/remote?path={仓库路径}\r
-\`\`\`\r
-\r
-**GET 响应示例：**\r
-\`\`\`json\r
-[\r
-  {"name": "origin", "url": "https://github.com/user/repo.git"}\r
-]\r
-\`\`\`\r
-\r
-**POST 请求体：**\r
-\`\`\`json\r
-{\r
-  "name": "upstream",\r
-  "url": "https://github.com/other/repo.git",\r
-  "action": "add"\r
-}\r
-\`\`\`\r
-\r
-| 字段 | 类型 | 必填 | 说明 |\r
-|------|------|------|------|\r
-| name | string | 是 | 远程名 |\r
-| url | string | 是 | 远程 URL |\r
-| action | string | 否 | \`"add"\`（添加）或 \`"remove"\`（删除），默认 \`"add"\` |\r
-\r
-**响应：** \`{"ok": true}\`\r
-\r
----\r
-\r
-## 十一、Skills 技能\r
-\r
-### 11.1 技能列表\r
-\r
-\`\`\`\r
-GET /api/skills/list\r
-\`\`\`\r
-\r
-**响应示例：**\r
-\`\`\`json\r
-[\r
-  {\r
-    "name": "code-review",\r
-    "description": "代码审查工作流",\r
-    "mode": "auto",\r
-    "version": "1.0"\r
-  }\r
-]\r
-\`\`\`\r
-\r
-### 11.2 读取技能\r
-\r
-\`\`\`\r
-GET /api/skills/read?name={技能名}&level={层级}\r
-\`\`\`\r
-\r
-**参数：**\r
-| 参数 | 类型 | 必填 | 说明 |\r
-|------|------|------|------|\r
-| name | string | 是 | 技能名 |\r
-| level | string | 否 | \`"system"\`（全局）或 \`"project"\`（项目，默认） |\r
-\r
-**响应：** 返回技能的完整 Markdown 内容。\r
-\r
-### 11.3 保存/更新技能状态\r
-\r
-\`\`\`\r
-POST /api/skills/save\r
-\`\`\`\r
-\r
-**请求体：**\r
-\`\`\`json\r
-{\r
-  "name": "code-review",\r
-  "level": "project",\r
-  "action": "set-status",\r
-  "status": "on"\r
-}\r
-\`\`\`\r
-\r
-| 字段 | 类型 | 必填 | 说明 |\r
-|------|------|------|------|\r
-| name | string | 是 | 技能名 |\r
-| level | string | 否 | \`"system"\` / \`"project"\`（默认 project） |\r
-| action | string | 是 | 固定 \`"set-status"\` |\r
-| status | string | 是 | \`"off"\` \\| \`"on"\` \\| \`"max"\` |\r
-\r
-**响应：** \`{"ok": true, "action": "set-status", "name": "code-review", "status": "on"}\`\r
-\r
-### 11.4 删除技能\r
-\r
-\`\`\`\r
-POST /api/skills/delete\r
-\`\`\`\r
-\r
-**请求体：**\r
-\`\`\`json\r
-{\r
-  "name": "code-review"\r
-}\r
-\`\`\`\r
-\r
-**响应：** \`{"ok": true}\`\r
-\r
----\r
-\r
-## 十二、MCP 扩展\r
-\r
-### 12.1 MCP 列表\r
-\r
-\`\`\`\r
-GET /api/mcp/list?level={层级}\r
-\`\`\`\r
-\r
-**参数：**\r
-| 参数 | 类型 | 必填 | 说明 |\r
-|------|------|------|------|\r
-| level | string | 否 | 层级过滤（\`"user"\`、\`"project"\`） |\r
-\r
-### 12.2 MCP 保存/管理\r
-\r
-\`\`\`\r
-POST /api/mcp/save\r
-\`\`\`\r
-\r
-统一管理 MCP 的添加、更新、删除和启用切换。\r
-\r
-**请求体（添加/更新）：**\r
-\`\`\`json\r
-{\r
-  "name": "my-db",\r
-  "command": "node",\r
-  "args": ["mcp-server-db/index.js"],\r
-  "level": "project"\r
-}\r
-\`\`\`\r
-\r
-**请求体（删除）：**\r
-\`\`\`json\r
-{\r
-  "action": "delete",\r
-  "name": "my-db",\r
-  "level": "project"\r
-}\r
-\`\`\`\r
-\r
-**请求体（启用/禁用切换）：**\r
-\`\`\`json\r
-{\r
-  "action": "toggle",\r
-  "name": "my-db",\r
-  "level": "project"\r
-}\r
-\`\`\`\r
-\r
-| 字段 | 类型 | 必填 | 说明 |\r
-|------|------|------|------|\r
-| action | string | 否 | \`"delete"\`（删除）\\| \`"toggle"\`（启用切换），省略则为新增/更新 |\r
-| name | string | 是 | MCP 名称 |\r
-| command | string | 新增时必填 | 启动命令 |\r
-| args | string[] | 否 | 命令参数 |\r
-| level | string | 否 | \`"user"\`（用户级）\\| \`"project"\`（项目级），默认 user |\r
-\r
-**响应：** \`{"ok": true, "action": "...", "name": "..."}\`\r
-\r
----\r
-\r
-## 十三、Token 统计\r
-\r
-### 获取 Token 用量\r
-\r
-\`\`\`\r
-GET /api/tokens/stats?workspaceRoot={工作区路径}\r
-\`\`\`\r
-\r
-**参数：** \`workspaceRoot\` — 工作区路径（默认当前工作区）。\r
-\r
-**响应示例：**\r
-\`\`\`json\r
-{\r
-  "workspaceRoot": "F:/projects/my-app",\r
-  "promptTokens": 125000,\r
-  "completionTokens": 45000,\r
-  "totalTokens": 170000,\r
-  "cost": 0.85\r
-}\r
-\`\`\`\r
-\r
-| 字段 | 类型 | 说明 |\r
-|------|------|------|\r
-| promptTokens | number | 提示词 Token 数 |\r
-| completionTokens | number | 补全 Token 数 |\r
-| totalTokens | number | 总 Token 数 |\r
-| cost | number | 估算费用（美元） |\r
-\r
----\r
-\r
-## 十四、调试日志\r
-\r
-### 14.1 日志列表\r
-\r
-\`\`\`\r
-GET /api/debug/logs\r
-\`\`\`\r
-\r
-**响应示例：**\r
-\`\`\`json\r
-[\r
-  {"id": "log_001", "time": "2026-07-11T10:00:00Z", "session": "sess_xxx", "summary": "工具调用: read_file src/main.go"}\r
-]\r
-\`\`\`\r
-\r
-### 14.2 日志详情\r
-\r
-\`\`\`\r
-GET /api/debug/logs/{日志ID}\r
-\`\`\`\r
-\r
-**响应：** 返回指定日志的完整内容。\r
-\r
----\r
-\r
-## 十五、技能市场\r
-\r
-### 15.1 搜索市场\r
-\r
-\`\`\`\r
-GET /api/marketplace/search?q={关键词}&kind={类型}\r
-\`\`\`\r
-\r
-**参数：**\r
-| 参数 | 类型 | 必填 | 说明 |\r
-|------|------|------|------|\r
-| q | string | 否 | 搜索关键词 |\r
-| kind | string | 否 | 类型（\`"mcp"\`、\`"skill"\`、\`"all"\`） |\r
-\r
-### 15.2 安装扩展\r
-\r
-\`\`\`\r
-POST /api/marketplace/install\r
-\`\`\`\r
-\r
-**请求体：**\r
-\`\`\`json\r
-{\r
-  "id": "skill-code-review",\r
-  "scope": "project"\r
-}\r
-\`\`\`\r
-\r
-| 字段 | 类型 | 必填 | 说明 |\r
-|------|------|------|------|\r
-| id | string | 是 | 扩展 ID |\r
-| scope | string | 否 | 安装范围（\`"user"\`、\`"project"\`） |\r
-\r
-**响应：** \`{"ok": true}\`\r
-\r
-### 15.3 刷新市场缓存\r
-\r
-\`\`\`\r
-POST /api/marketplace/refresh\r
-\`\`\`\r
-\r
-**响应：** \`{"ok": true}\`\r
-\r
----\r
-\r
-## 十六、记忆系统\r
-\r
-### 16.1 搜索记忆\r
-\r
-\`\`\`\r
-GET /api/memory/search?q={关键词}\r
-\`\`\`\r
-\r
-**响应示例：**\r
-\`\`\`json\r
-[\r
-  {"name": "项目编码规范", "description": "使用驼峰命名法", "type": "project", "content": "..."}\r
-]\r
-\`\`\`\r
-\r
-### 16.2 记忆列表\r
-\r
-\`\`\`\r
-GET /api/memory/list\r
-\`\`\`\r
-\r
-### 16.3 重建索引\r
-\r
-\`\`\`\r
-POST /api/memory/rebuild\r
-\`\`\`\r
-\r
-**响应：** \`{"ok": true}\`\r
-\r
----\r
-\r
-## 十七、插件与工具集管理\r
-\r
-PairCode IDE 的工具系统全部插件化（一切皆插件）。插件（plugin）是工具的最小可复用单元，工具集（toolset）是按项目需求组合的命名插件包。相关 API：\r
-\r
-### 17.1 插件管理\r
-\r
-\`\`\`\r
-GET   /api/plugins            # 列出已注册插件（含工具归属）\r
-GET   /api/plugins/detail     # 插件详情\r
-POST  /api/plugins/define     # 定义 JS/TS 插件\r
-POST  /api/plugins/action     # 插件动作（run/stop/inspect 等）\r
-POST  /api/plugins/event      # 插件事件\r
-GET   /api/plugins/client-state   # host/client 双半客户端状态\r
-POST  /api/plugins/client-events  # 客户端事件\r
-\`\`\`\r
-\r
-### 17.2 工具集管理\r
-\r
-\`\`\`\r
-GET   /api/toolsets           # 列出工具集\r
-POST  /api/toolsets/build     # 动态构建工具集（按项目+需求组合插件）\r
-GET   /api/toolsets/export    # 导出工具集 JSON\r
-POST  /api/toolsets/import    # 导入工具集（project/user 范围）\r
-POST  /api/toolsets/remove    # 移除工具集\r
-\`\`\`\r
-\r
-### 17.3 工具配置\r
-\r
-\`\`\`\r
-GET   /api/tools              # 工具清单（含启用/审核状态）\r
-POST  /api/tools/save         # 保存工具配置\r
-POST  /api/tools/review       # 审核配置\r
-\`\`\`\r
-\r
----\r
-\r
-## 十八、WebSocket 实时通信协议\r
-\r
-PairCode IDE 使用 **WebSocket** 实现双向实时通信。\r
-\r
-### 17.1 AI 事件推送\r
-\r
-\`\`\`\r
-ws://127.0.0.1:{port}/ws\r
-\`\`\`\r
-\r
-**用途：** 接收 AI 对话的事件流（思考过程、工具调用、回复内容、错误等）。\r
-\r
-**协议：** 纯文本帧（JSON），**服务端单向推送**，客户端无需发送任何消息。\r
-\r
-#### 事件类型总表\r
-\r
-| 事件类型 | 说明 | 前端展示 |\r
-|---------|------|---------|\r
-| \`thinking\` | LLM 思考链增量 | 流式显示思考过程（斜体/灰色） |\r
-| \`content\` | LLM 正文回复增量 | 流式显示正文内容 |\r
-| \`tool_call\` | AI 即将执行某工具 | 显示工具调用卡片（工具名+参数） |\r
-| \`tool_result\` | 工具执行结果返回 | 显示结果摘要 |\r
-| \`usage\` | Token 用量统计 | 更新 Token 计数器 |\r
-| \`approval\` | 请求用户审批写类操作 | 显示审批对话框（含工具名、参数、文件路径） |\r
-| \`error\` | 出错或触发止损 | 显示错误信息 |\r
-| \`done\` | 本次 AI 回复完成 | 关闭加载状态 |\r
-| \`compacted\` | 上下文已压缩（旧消息被摘要替换） | 显示一条素色提示 |\r
-| \`evaluation\` | 自主模式任务评分 | 显示评分卡 |\r
-| \`circling\` | 检测到 AI 重复绕圈 | 显示"换思路"提示 |\r
-| \`notice\` | 后台任务通知 | 显示一条素色提示 |\r
-| \`phase\` | 自主模式阶段切换 | 显示阶段指示器（规划/执行/评测） |\r
-| \`final\` | 单轮委托完成（delegate 用） | 同 done |\r
-\r
-#### 事件 JSON 格式\r
-\r
-\`\`\`json\r
-{\r
-  "type": "thinking",\r
-  "content": "我来分析一下这个需求...",\r
-  "tool": "",\r
-  "args": "",\r
-  "callId": "",\r
-  "agentName": "",\r
-  "usage": null,\r
-  "doneReason": ""\r
-}\r
-\`\`\`\r
-\r
-| 字段 | 类型 | 必含 | 说明 |\r
-|------|------|------|------|\r
-| type | string | 是 | 事件类型（见上表） |\r
-| content | string | 按场景 | thinking/content/error/final 时携带文本内容 |\r
-| tool | string | 按场景 | tool_call/tool_result 时携带工具名 |\r
-| args | string | 按场景 | tool_call 时携带工具参数的 JSON 字符串 |\r
-| callId | string | 按场景 | 工具调用 ID，用于关联 tool_call → tool_result |\r
-| agentName | string | 按场景 | 事件来源 Agent 名。空串=主 Agent，非空=子 Agent |\r
-| usage | object | 按场景 | usage 时携带：\`{promptTokens:N, completionTokens:N, totalTokens:N}\` |\r
-| doneReason | string | 按场景 | done 时携带完成原因（\`"completed"\`、\`"stopped"\`、\`"error"\`） |\r
-\r
-#### 典型事件序列\r
-\r
-\`\`\`\r
-→ {type:"thinking", content:"我来分析一下..."}\r
-→ {type:"tool_call", tool:"read_file", args:"{\\"path\\":\\"main.go\\"}", callId:"call_1"}\r
-→ {type:"tool_result", tool:"read_file", content:"文件内容...", callId:"call_1"}\r
-→ {type:"thinking", content:"看到文件结构了，接下来..."}\r
-→ {type:"tool_call", tool:"edit_file", args:"{\\"path\\":\\"main.go\\",\\"content\\":\\"...\\"}", callId:"call_2"}\r
-→ {type:"approval", tool:"edit_file", args:"{\\"path\\":\\"main.go\\"}", callId:"call_2"}\r
-   （等待用户审批 → 调用 POST /api/chat/approve）\r
-→ {type:"tool_result", tool:"edit_file", content:"文件已更新", callId:"call_2"}\r
-→ {type:"content", content:"已完成修改，以下是改动内容..."}\r
-→ {type:"usage", content:"", usage:{promptTokens:1200, completionTokens:350, totalTokens:1550}}\r
-→ {type:"done", doneReason:"completed"}\r
-\`\`\`\r
-\r
-> **重要：** WebSocket 连接为全局单连接，推送**所有**会话的事件。事件中的 \`convId\` 字段（若存在）用于区分不同对话。前端需根据 \`convId\` 路由到对应的对话面板。\r
-\r
----\r
-\r
-### 17.2 终端 WebSocket\r
-\r
-\`\`\`\r
-ws://127.0.0.1:{port}/api/terminal/ws\r
-\`\`\`\r
-\r
-**用途：** 内置终端的双向输入输出通道，每连接对应一个 PTY 终端会话。\r
-\r
-#### 协议规则\r
-\r
-| 帧类型 | 方向 | 说明 |\r
-|--------|------|------|\r
-| 文本帧 (JSON) | 客户端→服务端 | 控制消息 |\r
-| 文本帧 (JSON) | 服务端→客户端 | 状态通知 |\r
-| 二进制帧 | 双向 | 原始 PTY I/O 字节流（含 VT 转义序列，由 xterm.js 渲染） |\r
-\r
-#### 控制消息格式\r
-\r
-**客户端 → 服务端（初始化）：**\r
-\`\`\`json\r
-{"type": "init", "shell": "cmd", "cwd": "F:/projects/my-app"}\r
-\`\`\`\r
-\r
-| 字段 | 类型 | 必填 | 说明 |\r
-|------|------|------|------|\r
-| type | string | 是 | 固定 \`"init"\` |\r
-| shell | string | 是 | Shell 名：\`"cmd"\` \\| \`"powershell"\` \\| \`"gitbash"\`（白名单限制） |\r
-| cwd | string | 是 | 工作目录（禁止穿越出工作区） |\r
-\r
-**客户端 → 服务端（调整大小）：**\r
-\`\`\`json\r
-{"type": "resize", "cols": 120, "rows": 30}\r
-\`\`\`\r
-\r
-**服务端 → 客户端：**\r
-\`\`\`json\r
-{"type": "ready"}\r
-{"type": "error", "msg": "shell 不在白名单中"}\r
-{"type": "closed"}\r
-\`\`\`\r
-\r
-#### 安全措施\r
-\r
-- Shell 白名单：仅允许 \`cmd\`、\`powershell\`、\`gitbash\`\r
-- \`cwd\` 路径校验：禁止穿越出工作区\r
-- PTY 关闭时强制终止子进程\r
-- 并发 PTY 会话数限制：最多 16 个\r
-\r
----\r
-\r
-## 附录：API 索引速查\r
-\r
-### 基础 API\r
-| 方法 | 端点 | 用途 |\r
-|------|------|------|\r
-| GET | \`/api/health\` | 健康检查 |\r
-| GET | \`/api/system/info\` | 系统信息+版本号 |\r
-| POST | \`/api/system/exec\` | 执行命令 |\r
-\r
-### 文件系统 (11 个)\r
-| 方法 | 端点 | 用途 |\r
-|------|------|------|\r
-| GET | \`/api/fs/list\` | 列出目录 |\r
-| GET | \`/api/fs/read\` | 读取文件 |\r
-| POST | \`/api/fs/write\` | 写入文件 |\r
-| GET | \`/api/fs/search\` | 搜索内容 |\r
-| POST | \`/api/fs/rename\` | 重命名/移动 |\r
-| POST | \`/api/fs/delete\` | 删除 |\r
-| POST | \`/api/fs/mkdir\` | 创建目录 |\r
-| GET | \`/api/fs/image\` | 图片 Base64 |\r
-| GET | \`/api/fs/file-info\` | 文件信息 |\r
-| GET | \`/api/fs/hex\` | 十六进制查看 |\r
-| GET | \`/api/fs/drives\` | 磁盘驱动器列表 |\r
-\r
-### 工作区 & 设置\r
-| 方法 | 端点 | 用途 |\r
-|------|------|------|\r
-| GET/POST | \`/api/workspace\` | 工作区管理 |\r
-| GET/PUT | \`/api/settings\` | 设置管理 |\r
-\r
-### AI 对话 (9 个)\r
-| 方法 | 端点 | 用途 |\r
-|------|------|------|\r
-| POST | \`/api/chat/send\` | 发送消息给 AI |\r
-| POST | \`/api/chat/stop\` | 停止 AI 回复 |\r
-| POST | \`/api/chat/approve\` | 审批操作 |\r
-| POST | \`/api/chat/feedback\` | 发送运行时反馈 |\r
-| POST | \`/api/chat/answer\` | 回答 ask_user 提问 |\r
-| POST | \`/api/chat/rollback\` | 回滚到指定消息前 |\r
-| POST | \`/api/chat/compact\` | 手动压缩上下文 |\r
-| GET | \`/api/models\` | 可用模型列表 |\r
-\r
-### 对话管理 (8 个)\r
-| 方法 | 端点 | 用途 |\r
-|------|------|------|\r
-| GET | \`/api/conversations\` | 对话列表 |\r
-| POST | \`/api/conversations\` | 创建对话 |\r
-| GET | \`/api/conversations/{id}\` | 对话详情（含消息） |\r
-| PUT | \`/api/conversations/{id}\` | 更新对话 |\r
-| DELETE | \`/api/conversations/{id}\` | 删除对话 |\r
-| GET | \`/api/conversations/{id}/messages\` | 消息列表（分页） |\r
-| POST | \`/api/conversations/{id}/messages\` | 添加消息 |\r
-| GET | \`/api/conversations/{id}/messages/count\` | 消息总数 |\r
-\r
-### Git (16 个)\r
-| 方法 | 端点 | 用途 |\r
-|------|------|------|\r
-| POST | \`/api/git/init\` | 初始化仓库 |\r
-| GET | \`/api/git/status\` | 仓库状态 |\r
-| GET | \`/api/git/diff\` | 查看差异 |\r
-| POST | \`/api/git/add\` | 暂存 |\r
-| POST | \`/api/git/reset\` | 取消暂存 |\r
-| POST | \`/api/git/commit\` | 提交 |\r
-| GET | \`/api/git/log\` | 提交历史 |\r
-| GET | \`/api/git-log\` | 提交历史（别名） |\r
-| POST | \`/api/git/branch\` | 分支管理 |\r
-| POST | \`/api/git/checkout\` | 切换分支/恢复文件 |\r
-| POST | \`/api/git/stash\` | 贮藏 |\r
-| GET | \`/api/git/stash-list\` | 贮藏列表 |\r
-| GET/POST | \`/api/git/ignore\` | 管理 .gitignore |\r
-| POST | \`/api/git/discard\` | 丢弃修改 |\r
-| POST | \`/api/git/push\` | 推送 |\r
-| POST | \`/api/git/pull\` | 拉取 |\r
-| GET/POST | \`/api/git/remote\` | 远程仓库管理 |\r
-\r
-### 扩展 & 系统\r
-| 方法 | 端点 | 用途 |\r
-|------|------|------|\r
-| GET | \`/api/skills/list\` | 技能列表 |\r
-| GET | \`/api/skills/read\` | 读取技能 |\r
-| POST | \`/api/skills/save\` | 保存/更新技能状态 |\r
-| POST | \`/api/skills/delete\` | 删除技能 |\r
-| GET | \`/api/mcp/list\` | MCP 列表 |\r
-| POST | \`/api/mcp/save\` | MCP 保存/管理 |\r
-| GET | \`/api/tokens/stats\` | Token 统计 |\r
-| GET | \`/api/debug/logs\` | 调试日志列表 |\r
-| GET | \`/api/debug/logs/{id}\` | 调试日志详情 |\r
-| GET | \`/api/memory/search\` | 搜索记忆 |\r
-| GET | \`/api/memory/list\` | 记忆列表 |\r
-| POST | \`/api/memory/rebuild\` | 重建记忆索引 |\r
-| GET | \`/api/marketplace/search\` | 市场搜索 |\r
-| POST | \`/api/marketplace/install\` | 安装扩展 |\r
-| POST | \`/api/marketplace/refresh\` | 刷新市场缓存 |\r
-| GET/PUT | \`/api/instructions\` | 指令管理 |\r
-| GET | \`/api/tasks\` | 任务列表（只读查询） |\r
-| GET/POST | \`/api/taskplan\` | 规划文档管理 |\r
-\r
-### 插件 & 工具集\r
-| 方法 | 端点 | 用途 |\r
-|------|------|------|\r
-| GET | \`/api/plugins\` | 插件列表（含工具归属） |\r
-| GET | \`/api/plugins/detail\` | 插件详情 |\r
-| POST | \`/api/plugins/define\` | 定义 JS/TS 插件 |\r
-| POST | \`/api/plugins/action\` | 插件动作（run/stop/inspect） |\r
-| POST | \`/api/plugins/event\` | 插件事件 |\r
-| GET | \`/api/plugins/client-state\` | host/client 客户端状态 |\r
-| POST | \`/api/plugins/client-events\` | 客户端事件 |\r
-| GET | \`/api/toolsets\` | 工具集列表 |\r
-| POST | \`/api/toolsets/build\` | 动态构建工具集 |\r
-| GET | \`/api/toolsets/export\` | 导出工具集 JSON |\r
-| POST | \`/api/toolsets/import\` | 导入工具集 |\r
-| POST | \`/api/toolsets/remove\` | 移除工具集 |\r
-| GET | \`/api/tools\` | 工具清单 |\r
-| POST | \`/api/tools/save\` | 保存工具配置 |\r
-| POST | \`/api/tools/review\` | 审核配置 |\r
-\r
----\r
-\r
-### WebSocket 端点\r
-| 端点 | 用途 |\r
-|------|------|\r
-| \`ws://host/ws\` | AI 事件流推送（思考/工具/结果/完成） |\r
-| \`ws://host/api/terminal/ws\` | PTY 终端双向 I/O |\r
-`,$r=`# AI 工具文档\r
+  "version": "v1.4.15"\r
+}
+\`\`\`
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| hostname | string | 主机名 |
+| cwd | string | 当前工作目录 |
+| os | string | 操作系统名称 |
+| goos | string | Go 平台标识 |
+| workspace | string | IDE 工作区根路径 |
+| folders | string[] | 工作区文件夹列表 |
+| version | string | IDE 版本号（由打包器注入） |
+
+### 5.2 执行命令
+
+\`\`\`
+POST /api/system/exec
+\`\`\`
+
+**请求体：**
+\`\`\`json
+{
+  "command": "go build ./cmd/app",
+  "cwd": "F:/projects/my-app"
+}
+\`\`\`
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| command | string | 是 | 要执行的命令 |
+| cwd | string | 否 | 工作目录（默认工作区根目录） |
+
+**响应示例：**
+\`\`\`json
+{
+  "stdout": "# github.com/foo/app\\nsrc/main.go:42: undefined: x\\n",
+  "stderr": "",
+  "exitCode": 2
+}
+\`\`\`
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| stdout | string | 标准输出 |
+| stderr | string | 标准错误 |
+| exitCode | number | 退出码（0 = 成功） |
+
+> **安全限制：** 命令在工作区目录下执行；禁止交互式命令（如 \`vim\`）。
+
+---
+
+## 六、AI 模型
+
+### 获取可用模型列表
+
+\`\`\`
+GET /api/models
+\`\`\`
+
+**响应示例：**
+\`\`\`json
+{
+  "providers": [
+    {
+      "name": "openai",
+      "models": ["gpt-4", "gpt-4-turbo", "gpt-3.5-turbo"]
+    },
+    {
+      "name": "claude",
+      "models": ["claude-3-opus", "claude-3-sonnet", "claude-3-haiku"]
+    }
+  ],
+  "current": {
+    "provider": "openai",
+    "model": "gpt-4"
+  }
+}
+\`\`\`
+
+---
+
+## 七、对话管理
+
+### 7.1 对话列表
+
+\`\`\`
+GET /api/conversations?workspace={工作区路径}
+\`\`\`
+
+**参数：**
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| workspace | string | 否 | 工作区路径，省略时使用当前工作区 |
+
+**响应示例：**
+\`\`\`json
+[
+  {
+    "id": "conv_1741680000000",
+    "title": "修复登录页面样式",
+    "createdAt": "2026-07-11T10:00:00Z",
+    "messageCount": 12,
+    "workspace": "F:/projects/my-app"
+  }
+]
+\`\`\`
+
+### 7.2 创建对话
+
+\`\`\`
+POST /api/conversations
+\`\`\`
+
+**请求体：**
+\`\`\`json
+{
+  "title": "新对话",
+  "workspace": "F:/projects/my-app"
+}
+\`\`\`
+
+**响应：** 返回创建的对话对象（同 GET 列表中的格式）。
+
+### 7.3 获取对话详情（含消息）
+
+\`\`\`
+GET /api/conversations/{convId}
+\`\`\`
+
+**响应：** 返回该对话的最近 50 条消息：
+
+\`\`\`json
+{
+  "messages": [
+    {"role": "user", "content": "帮我写一个 HTTP 服务", "createdAt": "2026-07-11T10:00:00Z"},
+    {"role": "assistant", "content": "好的，我来创建...", "createdAt": "2026-07-11T10:00:05Z"}
+  ],
+  "total": 42
+}
+\`\`\`
+
+### 7.4 更新对话
+
+\`\`\`
+PUT /api/conversations/{convId}
+\`\`\`
+
+**请求体：**
+\`\`\`json
+{
+  "title": "新的标题"
+}
+\`\`\`
+
+**响应：** \`{"ok": true}\`
+
+### 7.5 删除对话
+
+\`\`\`
+DELETE /api/conversations/{convId}
+\`\`\`
+
+**响应：** \`{"ok": true}\`（同时删除该对话的所有消息）。
+
+### 7.6 获取消息列表（分页）
+
+\`\`\`
+GET /api/conversations/{convId}/messages?limit={数量}&before={索引}
+\`\`\`
+
+**参数：**
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| limit | number | 否 | 返回消息条数（默认 50） |
+| before | number | 否 | 从消息索引 before 处开始往前加载（用于分页翻历史） |
+
+**响应：**
+\`\`\`json
+{
+  "messages": [
+    {"role": "user", "content": "第一条消息", "createdAt": "..."},
+    {"role": "assistant", "content": "回复", "createdAt": "..."}
+  ],
+  "total": 42
+}
+\`\`\`
+
+> 连续的 assistant 消息会被合并（\`MergeConsecutiveAssistants\`）。
+
+### 7.7 添加消息
+
+\`\`\`
+POST /api/conversations/{convId}/messages
+\`\`\`
+
+**请求体：**
+\`\`\`json
+{
+  "role": "user",
+  "content": "继续上一个话题"
+}
+\`\`\`
+
+**响应：** \`{"ok": true}\`
+
+### 7.8 消息总数
+
+\`\`\`
+GET /api/conversations/{convId}/messages/count
+\`\`\`
+
+**响应：** \`{"count": 42}\`
+
+### 7.9 发送消息给 AI（非阻塞）
+
+\`\`\`
+POST /api/chat/send
+\`\`\`
+
+**请求体：**
+\`\`\`json
+{
+  "message": "帮我创建一个 Go HTTP 服务",
+  "sessionId": "sess_xxx",
+  "convId": "conv_1741680000000",
+  "autonomous": false,
+  "workspaceRoot": "F:/projects/my-app"
+}
+\`\`\`
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| message | string | 是 | 用户消息内容（最长 50000 字符，超出截断） |
+| sessionId | string | 否 | 会话 ID |
+| convId | string | 否 | 对话 ID（留空则自动生成 \`conv_{时间戳}\`） |
+| autonomous | boolean | 否 | 是否启用自主模式（默认 false） |
+| workspaceRoot | string | 否 | 工作区路径（默认当前工作区） |
+
+**响应：** \`{"sessionId": "sess_xxx", "convId": "conv_1741680000000"}\`
+
+AI 的回复不在此响应的 Body 中返回，而是通过 **WebSocket 实时推送**事件流（见第十七章）。
+
+**前置条件：** 必须先配置 API Key 和模型。
+
+---
+
+### 7.10 停止 AI 响应
+
+\`\`\`
+POST /api/chat/stop?convId={对话ID}
+\`\`\`
+
+**参数：** \`convId\` — 要停止的对话 ID。
+
+**响应：** \`{"ok": true}\`
+
+---
+
+### 7.11 审批操作
+
+\`\`\`
+POST /api/chat/approve
+\`\`\`
+
+**请求体：**
+\`\`\`json
+{
+  "convId": "conv_xxx",
+  "approved": true,
+  "reply": "请把函数名改为驼峰命名法"
+}
+\`\`\`
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| convId | string | 是 | 对话 ID |
+| approved | boolean | 是 | 批准（true）或拒绝（false） |
+| reply | string | 否 | 拒绝时的反馈/纠正建议 |
+
+**响应：** \`{"ok": true}\`
+
+---
+
+### 7.12 发送运行时反馈
+
+\`\`\`
+POST /api/chat/feedback
+\`\`\`
+
+**请求体：**
+\`\`\`json
+{
+  "convId": "conv_xxx",
+  "feedback": "请改用更简洁的实现方式"
+}
+\`\`\`
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| convId | string | 是 | 对话 ID |
+| feedback | string | 是 | 反馈/纠正内容 |
+
+**工作原理：** 在 AI 下次 LLM 调用前，将反馈内容作为用户消息注入本轮上下文，让 AI 在下一次回复中响应用户的补充或纠正。
+
+---
+
+### 7.13 回答 ask_user 提问
+
+\`\`\`
+POST /api/chat/answer
+\`\`\`
+
+当 AI 通过 \`ask_user\` 工具向用户提问时，用此接口发送回答。
+
+**请求体：**
+\`\`\`json
+{
+  "convId": "conv_xxx",
+  "answer": "用 POST 方法"
+}
+\`\`\`
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| convId | string | 是 | 对话 ID |
+| answer | string | 是 | 用户的回答 |
+
+**响应：** \`{"ok": true}\`
+
+---
+
+### 7.14 回滚消息
+
+\`\`\`
+POST /api/chat/rollback
+\`\`\`
+
+回滚到指定用户消息之前的状态：恢复该消息关联的所有文件快照，并删除该消息之后的对话历史。
+
+**请求体：**
+\`\`\`json
+{
+  "convId": "conv_xxx",
+  "msgIdx": 3
+}
+\`\`\`
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| convId | string | 是 | 对话 ID |
+| msgIdx | number | 是 | 用户消息索引（0 基），回滚到此消息之前 |
+
+**响应：** \`{"ok": true, "msgIdx": 3}\`
+
+---
+
+### 7.15 压缩上下文
+
+\`\`\`
+POST /api/chat/compact?convId={对话ID}
+\`\`\`
+
+手动触发上下文压缩：将对话中间部分的老消息压缩为摘要，释放 token 预算。
+
+**参数：** \`convId\` — 对话 ID。
+
+**响应：** \`{"ok": true}\`
+
+---
+
+## 八、指令与思想
+
+### 8.1 读取指令
+
+\`\`\`
+GET /api/instructions?scope={作用域}
+\`\`\`
+
+**参数：** \`scope\` — 指令作用域（如 \`"system"\`、\`"user"\`）。
+
+**响应：** 返回指令文本内容（字符串）。
+
+### 8.2 保存指令
+
+\`\`\`
+PUT /api/instructions?scope={作用域}
+\`\`\`
+
+**请求体：** 纯文本字符串（指令内容）。
+
+**响应：** \`{"ok": true}\`
+
+### 8.3 读取行为指导
+
+\`\`\`
+\`\`\`
+
+**响应：** 返回 AI 行为指导配置文本。
+
+### 8.4 保存行为指导
+
+\`\`\`
+\`\`\`
+
+**请求体：** 纯文本字符串。
+
+**响应：** \`{"ok": true}\`
+
+---
+
+## 九、任务与规划
+
+> **注意：** 任务由 Agent 通过 \`update_tasks\` / \`update_plan\` 工具自主管理。以下 API 仅提供前端只读查询接口。
+
+### 9.1 获取任务列表
+
+\`\`\`
+GET /api/tasks?convId={对话ID}
+\`\`\`
+
+**参数：** \`convId\` — 可选，过滤指定对话的任务。
+
+**响应示例：**
+\`\`\`json
+{
+  "tasks": [
+    {
+      "step": "创建 HTTP 服务文件",
+      "status": "completed",
+      "taskId": "task_1",
+      "description": "在 src/server.go 创建 HTTP 服务",
+      "created_at": "2026-07-11T10:00:00Z"
+    }
+  ]
+}
+\`\`\`
+
+> 任务数据持久化在工作区 \`.pair/tasks/*.json\`，由 Agent 的 \`update_tasks\` 工具写入。
+
+### 9.2 读取任务规划文档
+
+\`\`\`
+GET /api/taskplan?name={规划名}
+\`\`\`
+
+列出或读取 Markdown 格式的规划文档。
+
+**参数：** \`name\` — 可选，指定规划文档名（不含 \`.md\` 后缀）；省略则返回所有规划文档列表。
+
+**GET 响应（列出全部）：**
+\`\`\`json
+[
+  {"name": "refactor-auth", "file": "F:/projects/.pair/tasks/refactor-auth.md"}
+]
+\`\`\`
+
+**GET 响应（读单个）：**
+\`\`\`json
+{
+  "name": "refactor-auth",
+  "content": "## 重构计划\\n1. 提取认证中间件\\n2. 添加 JWT 支持"
+}
+\`\`\`
+
+### 9.3 追加/完成规划文档
+
+\`\`\`
+POST /api/taskplan
+\`\`\`
+
+**请求体：**
+\`\`\`json
+{
+  "name": "refactor-auth",
+  "content": "- 完成 JWT 集成",
+  "action": "append"
+}
+\`\`\`
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| name | string | 否 | 规划名称（省略则自动生成 \`plan_日期时间\`） |
+| content | string | 是 | 要追加的内容（Markdown） |
+| action | string | 否 | \`"append"\`（追加）或 \`"complete"\`（追加"[已完成] 时间戳"），默认 \`"append"\` |
+
+**响应：** \`{"ok": true}\`
+
+---
+
+## 十、Git 版本控制
+
+所有 Git API 均在**当前工作区目录**（或指定仓库路径）下执行。
+
+### 10.1 初始化仓库
+
+\`\`\`
+POST /api/git/init?path={目录路径}
+\`\`\`
+
+**参数：** \`path\` — 目标目录（默认当前工作区）。
+
+**响应：** \`{"output": "Initialized empty Git repository in ..."}\`
+
+---
+
+### 10.2 仓库状态
+
+\`\`\`
+GET /api/git/status?path={仓库路径}
+\`\`\`
+
+**参数：**
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| path | string | 否 | 仓库路径（默认当前工作区） |
+
+**响应示例：**
+\`\`\`json
+{
+  "branch": "main",
+  "changes": [
+    {"path": "src/main.go", "status": "M", "staged": false},
+    {"path": "src/utils.go", "status": "M", "staged": true}
+  ],
+  "untracked": ["src/new.go"],
+  "ahead": 1,
+  "behind": 0
+}
+\`\`\`
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| branch | string | 当前分支名 |
+| changes[].path | string | 变更文件路径 |
+| changes[].status | string | 状态码：\`M\`(修改) \`A\`(新增) \`D\`(删除) \`R\`(重命名) |
+| changes[].staged | boolean | 是否已暂存 |
+| untracked | string[] | 未跟踪文件列表 |
+| ahead | number | 领先远程的提交数 |
+| behind | number | 落后远程的提交数 |
+
+### 10.3 查看差异
+
+\`\`\`
+GET /api/git/diff?path={仓库路径}&file={文件路径}&staged={是否暂存}
+\`\`\`
+
+**参数：**
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| path | string | 否 | 仓库路径 |
+| file | string | 否 | 指定文件（省略则返回所有变更的 diff） |
+| staged | string | 否 | \`"true"\` = 只显示已暂存差异（--cached） |
+
+**响应：** 返回 diff 文本（字符串）。
+
+### 10.4 暂存文件
+
+\`\`\`
+POST /api/git/add
+\`\`\`
+
+**请求体：**
+\`\`\`json
+{
+  "path": "F:/projects/my-app",
+  "files": ["src/main.go", "src/utils.go"]
+}
+\`\`\`
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| path | string | 否 | 仓库路径（默认工作区） |
+| files | string[] | 否 | 要暂存的文件列表（省略则暂存全部 \`-A\`） |
+
+**响应：** \`{"ok": true}\`
+
+### 10.5 取消暂存
+
+\`\`\`
+POST /api/git/reset
+\`\`\`
+
+**请求体：** 格式同 \`git/add\`。
+
+**响应：** \`{"ok": true}\`
+
+### 10.6 提交
+
+\`\`\`
+POST /api/git/commit
+\`\`\`
+
+**请求体：**
+\`\`\`json
+{
+  "path": "F:/projects/my-app",
+  "message": "feat: 添加用户认证模块"
+}
+\`\`\`
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| path | string | 否 | 仓库路径 |
+| message | string | 是 | 提交信息 |
+
+**响应：**
+\`\`\`json
+{
+  "ok": true,
+  "hash": "a1b2c3d4e5f6..."
+}
+\`\`\`
+
+### 10.7 查看提交历史
+
+\`\`\`
+GET /api/git/log?path={仓库路径}&count={数量}&file={文件路径}
+\`\`\`
+
+> **别名：** \`/api/git-log\`（绕过部分浏览器广告拦截器对 \`/api/git/log\` 的误杀）。
+
+**参数：**
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| path | string | 否 | 仓库路径 |
+| count | number | 否 | 返回条数（默认 15） |
+| file | string | 否 | 限定某文件的提交历史 |
+
+**响应示例：**
+\`\`\`json
+[
+  {
+    "hash": "a1b2c3d",
+    "author": "user",
+    "date": "2026-07-11 10:00:00",
+    "message": "feat: 添加用户认证模块"
+  }
+]
+\`\`\`
+
+### 10.8 分支管理
+
+\`\`\`
+POST /api/git/branch
+\`\`\`
+
+| 操作 | 请求体 | 说明 |
+|------|--------|------|
+| 创建 | \`{"path":"...","name":"feature-x","action":"create"}\` | 创建新分支 |
+| 删除 | \`{"path":"...","name":"feature-x","action":"delete"}\` | 删除分支 |
+| 列表 | \`{"path":"...","action":"list"}\` | 列出所有分支 |
+| 切换 | \`{"path":"...","name":"feature-x","action":"checkout"}\` | 切换分支 |
+
+**响应：** 列表操作返回 \`["main", "feature-x", ...]\`，其他返回 \`{"ok": true}\`。
+
+### 10.9 切换分支 / 恢复文件
+
+\`\`\`
+POST /api/git/checkout
+\`\`\`
+
+**请求体：**
+\`\`\`json
+{
+  "path": "F:/projects/my-app",
+  "branch": "feature-x",
+  "file": "src/main.go"
+}
+\`\`\`
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| branch | string | 按场景 | 切换到的分支名 |
+| file | string | 按场景 | 恢复指定文件到 HEAD（branch 和 file 二选一） |
+
+**响应：** \`{"ok": true}\`
+
+### 10.10 贮藏
+
+\`\`\`
+POST /api/git/stash
+\`\`\`
+
+**请求体：**
+\`\`\`json
+{
+  "path": "F:/projects/my-app",
+  "action": "push",
+  "message": "暂存当前 WIP"
+}
+\`\`\`
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| path | string | 否 | 仓库路径 |
+| action | string | 否 | \`"push"\`(贮藏,默认) \\| \`"pop"\`(恢复) \\| \`"apply"\`(应用) \\| \`"drop"\`(丢弃) |
+| message | string | 否 | 贮藏备注 |
+
+**响应：** \`{"ok": true}\`
+
+### 10.11 查看贮藏列表
+
+\`\`\`
+GET /api/git/stash-list?path={仓库路径}
+\`\`\`
+
+**响应示例：**
+\`\`\`json
+[
+  {"index": 0, "message": "暂存当前 WIP"},
+  {"index": 1, "message": "On feature-x: 临时保存"}
+]
+\`\`\`
+
+### 10.12 管理 \`.gitignore\`
+
+\`\`\`
+GET /api/git/ignore?path={仓库路径}
+POST /api/git/ignore?path={仓库路径}
+\`\`\`
+
+**GET 响应：** 返回当前 \`.gitignore\` 内容：
+\`\`\`json
+{
+  "content": "*.log\\n.env\\nbuild/",
+  "rules": ["*.log", ".env", "build/"]
+}
+\`\`\`
+
+**POST 请求体（覆盖写入）：**
+\`\`\`json
+{
+  "content": "*.log\\n.env\\nnode_modules/"
+}
+\`\`\`
+
+**POST 请求体（追加一行）：**
+\`\`\`json
+{
+  "append": "dist/"
+}
+\`\`\`
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| content | string | 按场景 | 完整覆盖 \`.gitignore\` 内容 |
+| append | string | 按场景 | 追加一行到 \`.gitignore\`（content 和 append 二选一） |
+
+**响应：** \`{"ok": true}\`
+
+### 10.13 丢弃修改
+
+\`\`\`
+POST /api/git/discard
+\`\`\`
+
+**请求体：**
+\`\`\`json
+{
+  "path": "F:/projects/my-app",
+  "files": ["src/main.go"]
+}
+\`\`\`
+
+> ⚠️ 不可恢复！丢弃工作区未暂存的修改。
+
+**响应：** \`{"ok": true}\`
+
+### 10.14 推送
+
+\`\`\`
+POST /api/git/push
+\`\`\`
+
+**请求体：**
+\`\`\`json
+{
+  "path": "F:/projects/my-app",
+  "remote": "origin",
+  "branch": "main"
+}
+\`\`\`
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| remote | string | 否 | 远程名（默认 \`"origin"\`） |
+| branch | string | 否 | 分支名（默认当前分支） |
+
+**响应：** \`{"ok": true}\`
+
+### 10.15 拉取
+
+\`\`\`
+POST /api/git/pull
+\`\`\`
+
+**请求体：** 同 \`git/push\`。
+
+**响应：** \`{"ok": true}\`
+
+### 10.16 远程仓库管理
+
+\`\`\`
+GET /api/git/remote?path={仓库路径}
+POST /api/git/remote?path={仓库路径}
+\`\`\`
+
+**GET 响应示例：**
+\`\`\`json
+[
+  {"name": "origin", "url": "https://github.com/user/repo.git"}
+]
+\`\`\`
+
+**POST 请求体：**
+\`\`\`json
+{
+  "name": "upstream",
+  "url": "https://github.com/other/repo.git",
+  "action": "add"
+}
+\`\`\`
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| name | string | 是 | 远程名 |
+| url | string | 是 | 远程 URL |
+| action | string | 否 | \`"add"\`（添加）或 \`"remove"\`（删除），默认 \`"add"\` |
+
+**响应：** \`{"ok": true}\`
+
+---
+
+## 十一、Skills 技能
+
+### 11.1 技能列表
+
+\`\`\`
+GET /api/skills/list
+\`\`\`
+
+**响应示例：**
+\`\`\`json
+[
+  {
+    "name": "code-review",
+    "description": "代码审查工作流",
+    "mode": "auto",
+    "version": "1.0"
+  }
+]
+\`\`\`
+
+### 11.2 读取技能
+
+\`\`\`
+GET /api/skills/read?name={技能名}&level={层级}
+\`\`\`
+
+**参数：**
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| name | string | 是 | 技能名 |
+| level | string | 否 | \`"system"\`（全局）或 \`"project"\`（项目，默认） |
+
+**响应：** 返回技能的完整 Markdown 内容。
+
+### 11.3 保存/更新技能状态
+
+\`\`\`
+POST /api/skills/save
+\`\`\`
+
+**请求体：**
+\`\`\`json
+{
+  "name": "code-review",
+  "level": "project",
+  "action": "set-status",
+  "status": "on"
+}
+\`\`\`
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| name | string | 是 | 技能名 |
+| level | string | 否 | \`"system"\` / \`"project"\`（默认 project） |
+| action | string | 是 | 固定 \`"set-status"\` |
+| status | string | 是 | \`"off"\` \\| \`"on"\` \\| \`"max"\` |
+
+**响应：** \`{"ok": true, "action": "set-status", "name": "code-review", "status": "on"}\`
+
+### 11.4 删除技能
+
+\`\`\`
+POST /api/skills/delete
+\`\`\`
+
+**请求体：**
+\`\`\`json
+{
+  "name": "code-review"
+}
+\`\`\`
+
+**响应：** \`{"ok": true}\`
+
+---
+
+## 十二、MCP 扩展
+
+### 12.1 MCP 列表
+
+\`\`\`
+GET /api/mcp/list?level={层级}
+\`\`\`
+
+**参数：**
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| level | string | 否 | 层级过滤（\`"user"\`、\`"project"\`） |
+
+### 12.2 MCP 保存/管理
+
+\`\`\`
+POST /api/mcp/save
+\`\`\`
+
+统一管理 MCP 的添加、更新、删除和启用切换。
+
+**请求体（添加/更新）：**
+\`\`\`json
+{
+  "name": "my-db",
+  "command": "node",
+  "args": ["mcp-server-db/index.js"],
+  "level": "project"
+}
+\`\`\`
+
+**请求体（删除）：**
+\`\`\`json
+{
+  "action": "delete",
+  "name": "my-db",
+  "level": "project"
+}
+\`\`\`
+
+**请求体（启用/禁用切换）：**
+\`\`\`json
+{
+  "action": "toggle",
+  "name": "my-db",
+  "level": "project"
+}
+\`\`\`
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| action | string | 否 | \`"delete"\`（删除）\\| \`"toggle"\`（启用切换），省略则为新增/更新 |
+| name | string | 是 | MCP 名称 |
+| command | string | 新增时必填 | 启动命令 |
+| args | string[] | 否 | 命令参数 |
+| level | string | 否 | \`"user"\`（用户级）\\| \`"project"\`（项目级），默认 user |
+
+**响应：** \`{"ok": true, "action": "...", "name": "..."}\`
+
+---
+
+## 十三、Token 统计
+
+### 获取 Token 用量
+
+\`\`\`
+GET /api/tokens/stats?workspaceRoot={工作区路径}
+\`\`\`
+
+**参数：** \`workspaceRoot\` — 工作区路径（默认当前工作区）。
+
+**响应示例：**
+\`\`\`json
+{
+  "workspaceRoot": "F:/projects/my-app",
+  "promptTokens": 125000,
+  "completionTokens": 45000,
+  "totalTokens": 170000,
+  "cost": 0.85
+}
+\`\`\`
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| promptTokens | number | 提示词 Token 数 |
+| completionTokens | number | 补全 Token 数 |
+| totalTokens | number | 总 Token 数 |
+| cost | number | 估算费用（美元） |
+
+---
+
+## 十四、调试日志
+
+### 14.1 日志列表
+
+\`\`\`
+GET /api/debug/logs
+\`\`\`
+
+**响应示例：**
+\`\`\`json
+[
+  {"id": "log_001", "time": "2026-07-11T10:00:00Z", "session": "sess_xxx", "summary": "工具调用: read_file src/main.go"}
+]
+\`\`\`
+
+### 14.2 日志详情
+
+\`\`\`
+GET /api/debug/logs/{日志ID}
+\`\`\`
+
+**响应：** 返回指定日志的完整内容。
+
+---
+
+## 十五、技能市场
+
+### 15.1 搜索市场
+
+\`\`\`
+GET /api/marketplace/search?q={关键词}&kind={类型}
+\`\`\`
+
+**参数：**
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| q | string | 否 | 搜索关键词 |
+| kind | string | 否 | 类型（\`"mcp"\`、\`"skill"\`、\`"all"\`） |
+
+### 15.2 安装扩展
+
+\`\`\`
+POST /api/marketplace/install
+\`\`\`
+
+**请求体：**
+\`\`\`json
+{
+  "id": "skill-code-review",
+  "scope": "project"
+}
+\`\`\`
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| id | string | 是 | 扩展 ID |
+| scope | string | 否 | 安装范围（\`"user"\`、\`"project"\`） |
+
+**响应：** \`{"ok": true}\`
+
+### 15.3 刷新市场缓存
+
+\`\`\`
+POST /api/marketplace/refresh
+\`\`\`
+
+**响应：** \`{"ok": true}\`
+
+---
+
+## 十六、记忆系统
+
+### 16.1 搜索记忆
+
+\`\`\`
+GET /api/memory/search?q={关键词}
+\`\`\`
+
+**响应示例：**
+\`\`\`json
+[
+  {"name": "项目编码规范", "description": "使用驼峰命名法", "type": "project", "content": "..."}
+]
+\`\`\`
+
+### 16.2 记忆列表
+
+\`\`\`
+GET /api/memory/list
+\`\`\`
+
+### 16.3 重建索引
+
+\`\`\`
+POST /api/memory/rebuild
+\`\`\`
+
+**响应：** \`{"ok": true}\`
+
+---
+
+## 十七、插件与工具集管理
+
+PairCode IDE 的工具系统全部插件化（一切皆插件）。插件（plugin）是工具的最小可复用单元，工具集（toolset）是按项目需求组合的命名插件包。相关 API：
+
+### 17.1 插件管理
+
+\`\`\`
+GET   /api/plugins            # 列出已注册插件（含工具归属）
+GET   /api/plugins/detail     # 插件详情
+POST  /api/plugins/define     # 定义 JS/TS 插件
+POST  /api/plugins/action     # 插件动作（run/stop/inspect 等）
+POST  /api/plugins/event      # 插件事件
+GET   /api/plugins/client-state   # host/client 双半客户端状态
+POST  /api/plugins/client-events  # 客户端事件
+\`\`\`
+
+### 17.2 工具集管理
+
+\`\`\`
+GET   /api/toolsets           # 列出工具集
+POST  /api/toolsets/build     # 动态构建工具集（按项目+需求组合插件）
+GET   /api/toolsets/export    # 导出工具集 JSON
+POST  /api/toolsets/import    # 导入工具集（project/user 范围）
+POST  /api/toolsets/remove    # 移除工具集
+\`\`\`
+
+### 17.3 工具配置
+
+\`\`\`
+GET   /api/tools              # 工具清单（含启用/审核状态）
+POST  /api/tools/save         # 保存工具配置
+POST  /api/tools/review       # 审核配置
+\`\`\`
+
+---
+
+## 十八、WebSocket 实时通信协议
+
+PairCode IDE 使用 **WebSocket** 实现双向实时通信。
+
+### 17.1 AI 事件推送
+
+\`\`\`
+ws://127.0.0.1:{port}/ws
+\`\`\`
+
+**用途：** 接收 AI 对话的事件流（思考过程、工具调用、回复内容、错误等）。
+
+**协议：** 纯文本帧（JSON），**服务端单向推送**，客户端无需发送任何消息。
+
+#### 事件类型总表
+
+| 事件类型 | 说明 | 前端展示 |
+|---------|------|---------|
+| \`thinking\` | LLM 思考链增量 | 流式显示思考过程（斜体/灰色） |
+| \`content\` | LLM 正文回复增量 | 流式显示正文内容 |
+| \`tool_call\` | AI 即将执行某工具 | 显示工具调用卡片（工具名+参数） |
+| \`tool_result\` | 工具执行结果返回 | 显示结果摘要 |
+| \`usage\` | Token 用量统计 | 更新 Token 计数器 |
+| \`approval\` | 请求用户审批写类操作 | 显示审批对话框（含工具名、参数、文件路径） |
+| \`error\` | 出错或触发止损 | 显示错误信息 |
+| \`done\` | 本次 AI 回复完成 | 关闭加载状态 |
+| \`compacted\` | 上下文已压缩（旧消息被摘要替换） | 显示一条素色提示 |
+| \`evaluation\` | 自主模式任务评分 | 显示评分卡 |
+| \`circling\` | 检测到 AI 重复绕圈 | 显示"换思路"提示 |
+| \`notice\` | 后台任务通知 | 显示一条素色提示 |
+| \`phase\` | 自主模式阶段切换 | 显示阶段指示器（规划/执行/评测） |
+| \`final\` | 单轮委托完成（delegate 用） | 同 done |
+
+#### 事件 JSON 格式
+
+\`\`\`json
+{
+  "type": "thinking",
+  "content": "我来分析一下这个需求...",
+  "tool": "",
+  "args": "",
+  "callId": "",
+  "agentName": "",
+  "usage": null,
+  "doneReason": ""
+}
+\`\`\`
+
+| 字段 | 类型 | 必含 | 说明 |
+|------|------|------|------|
+| type | string | 是 | 事件类型（见上表） |
+| content | string | 按场景 | thinking/content/error/final 时携带文本内容 |
+| tool | string | 按场景 | tool_call/tool_result 时携带工具名 |
+| args | string | 按场景 | tool_call 时携带工具参数的 JSON 字符串 |
+| callId | string | 按场景 | 工具调用 ID，用于关联 tool_call → tool_result |
+| agentName | string | 按场景 | 事件来源 Agent 名。空串=主 Agent，非空=子 Agent |
+| usage | object | 按场景 | usage 时携带：\`{promptTokens:N, completionTokens:N, totalTokens:N}\` |
+| doneReason | string | 按场景 | done 时携带完成原因（\`"completed"\`、\`"stopped"\`、\`"error"\`） |
+
+#### 典型事件序列
+
+\`\`\`
+→ {type:"thinking", content:"我来分析一下..."}
+→ {type:"tool_call", tool:"read_file", args:"{\\"path\\":\\"main.go\\"}", callId:"call_1"}
+→ {type:"tool_result", tool:"read_file", content:"文件内容...", callId:"call_1"}
+→ {type:"thinking", content:"看到文件结构了，接下来..."}
+→ {type:"tool_call", tool:"edit_file", args:"{\\"path\\":\\"main.go\\",\\"content\\":\\"...\\"}", callId:"call_2"}
+→ {type:"approval", tool:"edit_file", args:"{\\"path\\":\\"main.go\\"}", callId:"call_2"}
+   （等待用户审批 → 调用 POST /api/chat/approve）
+→ {type:"tool_result", tool:"edit_file", content:"文件已更新", callId:"call_2"}
+→ {type:"content", content:"已完成修改，以下是改动内容..."}
+→ {type:"usage", content:"", usage:{promptTokens:1200, completionTokens:350, totalTokens:1550}}
+→ {type:"done", doneReason:"completed"}
+\`\`\`
+
+> **重要：** WebSocket 连接为全局单连接，推送**所有**会话的事件。事件中的 \`convId\` 字段（若存在）用于区分不同对话。前端需根据 \`convId\` 路由到对应的对话面板。
+
+---
+
+### 17.2 终端 WebSocket
+
+\`\`\`
+ws://127.0.0.1:{port}/api/terminal/ws
+\`\`\`
+
+**用途：** 内置终端的双向输入输出通道，每连接对应一个 PTY 终端会话。
+
+#### 协议规则
+
+| 帧类型 | 方向 | 说明 |
+|--------|------|------|
+| 文本帧 (JSON) | 客户端→服务端 | 控制消息 |
+| 文本帧 (JSON) | 服务端→客户端 | 状态通知 |
+| 二进制帧 | 双向 | 原始 PTY I/O 字节流（含 VT 转义序列，由 xterm.js 渲染） |
+
+#### 控制消息格式
+
+**客户端 → 服务端（初始化）：**
+\`\`\`json
+{"type": "init", "shell": "cmd", "cwd": "F:/projects/my-app"}
+\`\`\`
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| type | string | 是 | 固定 \`"init"\` |
+| shell | string | 是 | Shell 名：\`"cmd"\` \\| \`"powershell"\` \\| \`"gitbash"\`（白名单限制） |
+| cwd | string | 是 | 工作目录（禁止穿越出工作区） |
+
+**客户端 → 服务端（调整大小）：**
+\`\`\`json
+{"type": "resize", "cols": 120, "rows": 30}
+\`\`\`
+
+**服务端 → 客户端：**
+\`\`\`json
+{"type": "ready"}
+{"type": "error", "msg": "shell 不在白名单中"}
+{"type": "closed"}
+\`\`\`
+
+#### 安全措施
+
+- Shell 白名单：仅允许 \`cmd\`、\`powershell\`、\`gitbash\`
+- \`cwd\` 路径校验：禁止穿越出工作区
+- PTY 关闭时强制终止子进程
+- 并发 PTY 会话数限制：最多 16 个
+
+---
+
+## 附录：API 索引速查
+
+### 基础 API
+| 方法 | 端点 | 用途 |
+|------|------|------|
+| GET | \`/api/health\` | 健康检查 |
+| GET | \`/api/system/info\` | 系统信息+版本号 |
+| POST | \`/api/system/exec\` | 执行命令 |
+
+### 文件系统 (11 个)
+| 方法 | 端点 | 用途 |
+|------|------|------|
+| GET | \`/api/fs/list\` | 列出目录 |
+| GET | \`/api/fs/read\` | 读取文件 |
+| POST | \`/api/fs/write\` | 写入文件 |
+| GET | \`/api/fs/search\` | 搜索内容 |
+| POST | \`/api/fs/rename\` | 重命名/移动 |
+| POST | \`/api/fs/delete\` | 删除 |
+| POST | \`/api/fs/mkdir\` | 创建目录 |
+| GET | \`/api/fs/image\` | 图片 Base64 |
+| GET | \`/api/fs/file-info\` | 文件信息 |
+| GET | \`/api/fs/hex\` | 十六进制查看 |
+| GET | \`/api/fs/drives\` | 磁盘驱动器列表 |
+
+### 工作区 & 设置
+| 方法 | 端点 | 用途 |
+|------|------|------|
+| GET/POST | \`/api/workspace\` | 工作区管理 |
+| GET/PUT | \`/api/settings\` | 设置管理 |
+
+### AI 对话 (9 个)
+| 方法 | 端点 | 用途 |
+|------|------|------|
+| POST | \`/api/chat/send\` | 发送消息给 AI |
+| POST | \`/api/chat/stop\` | 停止 AI 回复 |
+| POST | \`/api/chat/approve\` | 审批操作 |
+| POST | \`/api/chat/feedback\` | 发送运行时反馈 |
+| POST | \`/api/chat/answer\` | 回答 ask_user 提问 |
+| POST | \`/api/chat/rollback\` | 回滚到指定消息前 |
+| POST | \`/api/chat/compact\` | 手动压缩上下文 |
+| GET | \`/api/models\` | 可用模型列表 |
+
+### 对话管理 (8 个)
+| 方法 | 端点 | 用途 |
+|------|------|------|
+| GET | \`/api/conversations\` | 对话列表 |
+| POST | \`/api/conversations\` | 创建对话 |
+| GET | \`/api/conversations/{id}\` | 对话详情（含消息） |
+| PUT | \`/api/conversations/{id}\` | 更新对话 |
+| DELETE | \`/api/conversations/{id}\` | 删除对话 |
+| GET | \`/api/conversations/{id}/messages\` | 消息列表（分页） |
+| POST | \`/api/conversations/{id}/messages\` | 添加消息 |
+| GET | \`/api/conversations/{id}/messages/count\` | 消息总数 |
+
+### Git (16 个)
+| 方法 | 端点 | 用途 |
+|------|------|------|
+| POST | \`/api/git/init\` | 初始化仓库 |
+| GET | \`/api/git/status\` | 仓库状态 |
+| GET | \`/api/git/diff\` | 查看差异 |
+| POST | \`/api/git/add\` | 暂存 |
+| POST | \`/api/git/reset\` | 取消暂存 |
+| POST | \`/api/git/commit\` | 提交 |
+| GET | \`/api/git/log\` | 提交历史 |
+| GET | \`/api/git-log\` | 提交历史（别名） |
+| POST | \`/api/git/branch\` | 分支管理 |
+| POST | \`/api/git/checkout\` | 切换分支/恢复文件 |
+| POST | \`/api/git/stash\` | 贮藏 |
+| GET | \`/api/git/stash-list\` | 贮藏列表 |
+| GET/POST | \`/api/git/ignore\` | 管理 .gitignore |
+| POST | \`/api/git/discard\` | 丢弃修改 |
+| POST | \`/api/git/push\` | 推送 |
+| POST | \`/api/git/pull\` | 拉取 |
+| GET/POST | \`/api/git/remote\` | 远程仓库管理 |
+
+### 扩展 & 系统
+| 方法 | 端点 | 用途 |
+|------|------|------|
+| GET | \`/api/skills/list\` | 技能列表 |
+| GET | \`/api/skills/read\` | 读取技能 |
+| POST | \`/api/skills/save\` | 保存/更新技能状态 |
+| POST | \`/api/skills/delete\` | 删除技能 |
+| GET | \`/api/mcp/list\` | MCP 列表 |
+| POST | \`/api/mcp/save\` | MCP 保存/管理 |
+| GET | \`/api/tokens/stats\` | Token 统计 |
+| GET | \`/api/debug/logs\` | 调试日志列表 |
+| GET | \`/api/debug/logs/{id}\` | 调试日志详情 |
+| GET | \`/api/memory/search\` | 搜索记忆 |
+| GET | \`/api/memory/list\` | 记忆列表 |
+| POST | \`/api/memory/rebuild\` | 重建记忆索引 |
+| GET | \`/api/marketplace/search\` | 市场搜索 |
+| POST | \`/api/marketplace/install\` | 安装扩展 |
+| POST | \`/api/marketplace/refresh\` | 刷新市场缓存 |
+| GET/PUT | \`/api/instructions\` | 指令管理 |
+| GET | \`/api/tasks\` | 任务列表（只读查询） |
+| GET/POST | \`/api/taskplan\` | 规划文档管理 |
+
+### 插件 & 工具集
+| 方法 | 端点 | 用途 |
+|------|------|------|
+| GET | \`/api/plugins\` | 插件列表（含工具归属） |
+| GET | \`/api/plugins/detail\` | 插件详情 |
+| POST | \`/api/plugins/define\` | 定义 JS/TS 插件 |
+| POST | \`/api/plugins/action\` | 插件动作（run/stop/inspect） |
+| POST | \`/api/plugins/event\` | 插件事件 |
+| GET | \`/api/plugins/client-state\` | host/client 客户端状态 |
+| POST | \`/api/plugins/client-events\` | 客户端事件 |
+| GET | \`/api/toolsets\` | 工具集列表 |
+| POST | \`/api/toolsets/build\` | 动态构建工具集 |
+| GET | \`/api/toolsets/export\` | 导出工具集 JSON |
+| POST | \`/api/toolsets/import\` | 导入工具集 |
+| POST | \`/api/toolsets/remove\` | 移除工具集 |
+| GET | \`/api/tools\` | 工具清单 |
+| POST | \`/api/tools/save\` | 保存工具配置 |
+| POST | \`/api/tools/review\` | 审核配置 |
+
+---
+
+### WebSocket 端点
+| 端点 | 用途 |
+|------|------|
+| \`ws://host/ws\` | AI 事件流推送（思考/工具/结果/完成） |
+| \`ws://host/api/terminal/ws\` | PTY 终端双向 I/O |
+`,Mo=`# AI 工具文档\r
 \r
 PairCode IDE 中的 AI 助手拥有丰富的内置能力，可以像你使用 IDE 一样操作文件、搜索代码、运行命令、管理版本。你只需用自然语言告诉 AI 你想做什么，AI 会自动选择合适的工具来完成任务。\r
 \r
@@ -2360,7 +2360,7 @@ AI 可以直接在工作区中进行文件操作：\r
 - **用户提问** — 当 AI 遇到关键决策点时，向你提问以澄清需求\r
 - **任务委派** — 将复杂任务委托给子 AI 独立完成\r
 - **资产清单** — 查看和使用已保存的经验胶囊和最佳实践\r
-`,Mr=`# 快捷键参考\r
+`,Do=`# 快捷键参考\r
 \r
 PairCode IDE 提供了丰富的快捷键，帮助你更高效地编写代码和管理项目。以下按功能分类列出所有可用的快捷键。\r
 \r
@@ -2439,7 +2439,7 @@ PairCode IDE 提供了丰富的快捷键，帮助你更高效地编写代码和�
 | Ctrl+PageUp | 切换到上一个文件标签页 | 编辑器 |\r
 | Ctrl+PageDown | 切换到下一个文件标签页 | 编辑器 |\r
 | Ctrl+W | 关闭当前文件标签页 | 编辑器 |\r
-`,Dr=`# 常见问题\r
+`,Ro=`# 常见问题\r
 \r
 ## PairCode IDE 是什么？\r
 \r
@@ -2502,7 +2502,7 @@ AI 可以读写和编辑你的代码文件、在工作区中执行命令、搜�
 ## 遇到问题怎么办？\r
 \r
 你可以查看帮助菜单中的文档中心，里面有功能介绍、API 文档、工具文档和快捷键参考等详细资料。如果问题仍然无法解决，可以在对话中向 AI 描述你遇到的问题，它会尽力协助排查。\r
-`,Lr=`# 快速开始\r
+`,Lo=`# 快速开始\r
 \r
 欢迎使用 PairCode IDE！以下指南将带你快速上手，从打开工作区到用 AI 写代码，只需几分钟。\r
 \r
@@ -2611,322 +2611,334 @@ PairCode IDE 还有更多强大功能等待你探索。欢迎查阅帮助文档�
 - **快捷键参考** — 常用快捷键一览\r
 - **API 文档** — 后端 HTTP API 接口说明\r
 - **常见问题** — 常见问题与解答\r
-`,Rr=`# 更新日志\r
+`,Go=`# 更新日志\r
 \r
 > 所有 PairCode IDE 的重要变更均记录在此文件中。\r
 \r
 ---\r
 \r
-## 1.2.1 — 2026-08-15\r
-\r
-### 新增\r
-- **按双层循环范式重写 Agent 核心** — 双层循环（turn/step 边界事件、inbox 双队列对齐 next-step/next-turn），消息组装与落盘对齐事件模型（agentloop 编号 ↔ 消息序列推导），系统提示精简为基础工具集模式（\`WB_FULL_TOOLS=1\` 恢复全量工具）\r
-- **一切皆插件** — Go 插件框架 + goja JS 动态插件，goja 运行时完全内置（双仓库去除 replace），JS 插件沙箱支持 timer 服务（ctx.timeout/interval）与跨 goroutine 执行锁\r
-- **内置 TS 编译器** — esbuild 纯 Go 转译（无 CGO/npm 依赖），TS 插件可直接加载（\`cordis_define\` 支持 js/ts/自动探测），多文件 TS bundle（Build stdin + mock 包）\r
-- **工具全插件化** — 21 个内置功能插件（core/fs/git/web/shell/memory/task/project-info/codegraph/debug/vision/office/lsp 等），\`cordis_inspect\` 可见工具归属插件，Unload 可回收整组\r
-- **多项目支持** — 工具 project 参数路由（文件类/搜索/Git 全套），codegraph 按项目独立建图与查询（非主项目用各自 JSONStore，天然隔离），memory/project-info 工具显式 project 参数化\r
-- **工具集生态** — 模板插件化动态构建（\`toolset_build\` 按项目+需求自动组合工具并固化到工作区）、固化/导出/导入/市场发布（plugin 类型）、LLM 项目意图分析（语言无关，不固化任何语言模板）\r
-- **插件生态 P0-P2** — 函数形态 + \`apply(ctx, config)\` + inject 服务 + VM 超时防护 + schema 校验 + 插件管理 UI（host/client 双半）+ client inspect provider\r
-- **项目知识库树形化** — 树分支组织（目标/架构/实现/关键点/设计思想）+ AGENTS.md 分层 + .agents 路径兼容\r
-- **历史注入对齐 harness** — 删除【历史轮次】前缀标注与 task 时间戳，系统提示补充多轮对话规则\r
-- **ask_user 选项内输入** — 支持 single / multi / single-with-input / text 四态交互，修复参数名混淆导致选项不出现的问题\r
-- **遗留五件套** — notes 写入同步 + read_image 工具 + run_code 嵌套 + prompt 注册中心 + 知识库过期检查修复\r
+## 1.4.15 — 2026-09-02\r
 \r
 ### 修复\r
-- **移除未完成注入** — TOOL_OUTCOME_UNKNOWN / interrupted 机制移除，无 result 的 tool_call 以空占位维持配对契约，不再向模型注入「中断/未完成」语义\r
-- **知识库过期验证误报** — 152 条假警告清零，159 条全绿\r
-\r
----\r
-\r
-## 1.1.8 — 2026-08-11\r
-\r
-### 新增\r
-- **OCR / 图色识别能力** — 图片文字识别（中英文混合）与颜色分布分析，工具配置持久化 + 前端工具面板（2026-08-04）\r
-- **对话历史注入膨胀三层压缩** — 固定背景 / 动态日志 / 长时压缩三层方案，控制上下文体积（2026-08-04）\r
-- **异常中断后继续未完成对话** — 中断后可直接继续，不丢上下文（2026-08-06）\r
-- **后台进程跨轮存活** — run_background 进程不再因每轮重建注册表而丢失（全局单例 bgRegistry）（2026-08-11）\r
-- **多项目工具** — Lua 工具 / 工具配置按项目加载 + project 参数路由（2026-08-11）\r
-- **背景摘要注入位置修复** — 压缩摘要固定在 task 前注入（前缀稳定），动态日志追加末尾，KV 缓存零损失优化（2026-08-08）\r
-\r
-### 修复\r
-- 关闭 run 内自动压缩，改由外层时机控制（2026-08-05）\r
-- 历史消息配对错乱 — 用户消息重复存储导致 tool 配对错乱（lastUser 锚点重组）\r
-- 历史消息分段导致多气泡 — 连续 assistant 消息合并显示\r
-- 多轮对话 user 后 tool 粘连 + OnBatchPersist 偏移 — 压缩后固定偏移失效，改 lastUser 锚点重组\r
-- 归档双 bug — ①Windows 归档静默失效（句柄未关闭 + os.Rename 不能覆盖）→ 显式 Close + 三步法原子替换；②归档摘要孤立 assistant 消息污染 LLM 上下文 → 改 role=user +【历史归档】标注\r
-- 多根路径解析 Bug — 优先匹配文件实际存在的根目录\r
-\r
----\r
-\r
-## 1.1.6 — 2026-07-30\r
-\r
-### 修复\r
-- **修复编辑器 Ctrl+F 不生效** — CodeMirror \`search()\` 扩展注册的 \`openSearchPanel\` 与自定义搜索面板 keymap 冲突，使用 \`Prec.high()\` 确保自定义 handler 优先执行，Ctrl+F 正确唤出中文搜索面板\r
-- **搜索面板图标全部换为 SVG** — Unicode 字符（▲▼↔×）和文本标签（Aa ·\\* 全词）全部替换为内联 SVG 图标，与界面风格统一\r
-- **修复前端 API 路径缺少前导斜杠导致 404** — \`apiURL()\` 拼接时对无前导斜杠的 path 自动补全，\`/apitools/review\` 修正为 \`/api/tools/review\`\r
-- **修复 codegraph 增量构建仍全量重写 SQLite** — \`SQLiteStore.Save()\` 在增量模式下调用的 \`RemoveFileEntities\` 清理旧数据，不再 \`DELETE FROM\` 全表\r
+- **模型切换报「对话不存在 / 会话不存在」** — 根因：打包管线缺失 vite 壳构建步骤（pipeline 只跑 build-ui 区域插件 + robocopy 同步旧 dist），打包复用过期前端产物，致 \`setConvModel\` 调用参数错位（5 参新调用打在 4 参旧签名上，workspaceRoot 被传成配置名「硅基flash」）→ 后端按错位 workspaceRoot 路由隔离 store 查无会话报 400\r
+- **packager.json pipeline 新增 \`build-ui-frontend\` 步骤** — 打包前显式构建 vite 壳（plugins-src/ui-app → .pair/assets/runtime/web），保证发布包前端产物始终来自新构建\r
+- **后端跨 store 兜底防误报** — SessionManager 新增 \`FindConversation\`（指定 workspaceRoot store 查不到时遍历已打开 store 找回），GET/PUT 会话接口在参数缺失/错位时不再误报「不存在」，会话级模型切换落盘到会话真实所属工作区\r
 \r
 ### 改进\r
-- **编辑器中文搜索面板** — 新建 \`FindPanel.vue\` 组件，替换 CodeMirror 默认英文搜索面板，支持查找/替换/大小写敏感/正则/全词匹配\r
-- **codegraph 增量构建测试** — 新增 \`TestSQLiteStoreIncrementalPreserves\` 和 \`TestSQLiteStoreIncrementalBuild\` 验证增量构建与并行完整性\r
+- 版本号整体提升至 v1.4.15（main.go 缺省 / packager.json / 前端 package.json）\r
 \r
 ---\r
 \r
-## 1.1.5 — 2026-07-29\r
-\r
-### 新增\r
-- **run_command 后台化** — \`run_command\` 改用后台启动+轮询模式，不再阻塞 Agent 循环，可被上下文取消中断，超时后 LLM 可选择等待或继续\r
-- **审核配置改为工作区级** — 审核黑白名单从全局 settings.json 迁移到工作区 .pair/tools.json，不同工作区可独立配置，避免动态工具（Lua）在不同工作区间混淆\r
-- **Lua 工具补齐 Tool 结构** — \`buildLuaTool\` 自动设置 UsageGuide/Category/Enabled 字段，与标准工具结构一致\r
-- **工具配置弹窗合并** — 「启用开关」和「审核黑白名单」合并为同一「工具配置」弹窗，标签页切换，避免歧义\r
-- **自主模式 Follow-up 持续驱动** — Agent 自然终止后，通过 \`OnNextTask\` 回调自动注入 follow-up 消息，无需手动触发「继续」\r
-- **流式更新机制** — Registry 新增 \`OnToolUpdate\` 回调，工具执行中间结果实时推送给前端\r
-- **工具 UsageGuide 全覆盖** — 全部 ~140 个工具添加 \`UsageGuide\` 使用指导，明确何时用、为何优于 \`run_command\`、常见误区\r
-- **启动日志详细化** — 启动时输出版本号、Go 版本、平台架构、工作目录、各工作区文件夹路径\r
-\r
-### 改进\r
-- **工具体系升级**\r
-  - \`Tool\` 结构体新增 \`UsageGuide\`、\`Category\`、\`Enabled\` 字段\r
-  - \`Registry\` 新增 \`EnabledDefinitions()\` 按状态过滤工具定义\r
-  - 新增 \`AllToolMeta()\` API 供前端展示工具开关列表\r
-  - 工具使用指南文本动态注入系统提示，引导 LLM 优先使用专用工具\r
-- **窗口管理** — \`run_command\` / \`run_background\` 均设置 \`HideWindow=true\`，不再弹出 cmd 窗口\r
-- **信号监听移除** — main 函数移除信号监听，进程不会因子进程结束而自动退出\r
-\r
-### 修复\r
-- **debug_start 启动修复** — 拆解 \`dlv dap\` 启动流程，分别发送 Initialize 和 Launch 请求，兼容 dlv 最新版本\r
-\r
----\r
-\r
-## 1.1.2 — 2026-07-21\r
-\r
-### 新增\r
-- **附件标签化** — 消息中的文件/代码/图片附件不再嵌入正文，改为独立药丸形标签显示在用户消息文字下方，视觉更清爽\r
-- **粘贴长文本自动转临时附件** — 输入框粘贴超过 2000 字符的文本时，自动写入 \`_temp/\` 目录并作为附件挂载，避免大段代码/日志撑爆输入区\r
-\r
-### 改进\r
-- \`addToChat\` 瘦身：文件添加到对话不再预读文件内容（40KB 截断已无意义），仅传递路径引用\r
-- 目录引用新增 \`type:dir\` 支持，提示 agent 使用 \`list_files\` 查看\r
-- 选中代码添加对话现在保留代码内容尾注供 agent 直接参考（截断 3000 字）\r
-\r
-### 修复\r
-- 文件树 Shift/Ctrl 多选逻辑修复：范围选择改为基于同级节点列表，清除后重新选中\r
-\r
----\r
-\r
-## 1.1.1 — 2026-07-21\r
-\r
-### 新增\r
-- **审核配置界面重设计** — 从纯文本输入改为工具卡片式交互：所有工具按类别分组（文件操作、命令执行、Git、网络、截图、图像、二进制、办公文档、CodeGraph、调试器、知识库、记忆、LSP、BUG检测、任务管理、扩展市场等），每个工具显示中文名称，点击切换三态（默认 → 黑名单 → 白名单），支持搜索过滤，配置更直观高效\r
-\r
-### 修复\r
-- **修复新对话空状态提示位置偏移** — "开始新的对话，发送消息即可与 AI 助手对话"提示及图标从左下角偏移修正为居中显示\r
-\r
-### 改进\r
-- 版本号统一升级至 1.1.1（前端 package.json、后端 main.go、打包配置）\r
-\r
----\r
-\r
-## 1.1.0 — 2026-07-20\r
-\r
-### 新增\r
-- **自主模式原生终止** — 去掉 \`finish_task\` 强制结束机制，Agent 自然输出后直接结束循环，交互更流畅\r
-- **Agent 性能优化（P0-P3 五轮）** — eventRing 环形缓冲器减少内存分配、进度可视化（阶段指示器+工具调用计数+耗时）、工具描述精简减少 Token 消耗、并行工具执行机制、预压缩上下文避免截断\r
-- **会话连贯性增强** — 新对话开始时自动注入 Git 变更感知、代码图谱统计、工作区结构概览，Agent 无需从零分析项目\r
-\r
-### 改进\r
-- **ChatView 重构** — 消息渲染管线全面优化，新增交互超时保护、审核驳回追踪、折叠/展开状态持久化\r
-- **审核配置 UI 优化** — 弹窗改为向上弹出（bottom:100%），防止被视口底部裁切\r
-- **编辑工具 v2 升级** — 更精确的符号级定位，减少行号偏移问题\r
-- **kill_process 增强** — 改为杀进程树，彻底清理子进程\r
-- **自主模式架构重构** — ephemeralMsgs 隔离内层消息，长时压缩精准保留推理上下文\r
-\r
-### 修复\r
-- 修复 \`planExpanded\` / \`tasksExpanded\` / \`currentPhase\` 重复声明导致的运行时崩溃\r
-- 修复 \`currentTasks\` 未声明导致前端 \`undefined.length\` 崩溃\r
-- 修复自然终止代码缩进丢失导致逻辑在循环外不执行\r
-\r
----\r
-\r
-## 1.0.20 — 2026-07-18\r
-\r
-### 修复\r
-- **修复消息排序** — \`_idx\` 统一取 \`max(existing)+1\`，解决历史消息加载后序号错乱\r
-- **修复用户反馈消息合并** — 用户反馈正确合并到 agent 输出气泡中，不再产生额外用户消息气泡\r
-- **修复消息发送双占位竞态** — \`switchConv\` 复用历史消息中最后一条 assistant 消息接收后续 WS 事件，避免两个 assistant 气泡\r
-- **修复 WS 连接与历史加载竞态** — \`processStatus\` 事件正确处理连接状态转换\r
-\r
-### 改进\r
-- 审核配置弹窗改为向上弹出（\`bottom:100%\`），防止被视口底部裁切\r
-- 移除压缩按钮，简化 UI\r
-\r
----\r
-\r
-## 1.0.19 — 2026-07-17\r
-\r
-### 修复\r
-- **修复 Web 端文件树不显示** — \`FileExplorer.vue\` 的 \`<script setup>\` 编译后 JS 中存在变量暂时性死区（TDZ），导致 \`setup()\` 抛出 \`Cannot access 'd' before initialization\`，文件树组件挂载失败。重建前端并重新编译 \`companion.exe\` 嵌入新版 dist 后修复\r
-- **修复后端 dist 嵌入路径不一致** — \`cmd/companion/main.go\` 通过 \`//go:embed web-ui/dist\` 引用 companion 目录下的副本，但此前构建脚本将 dist 输出到 \`cmd/desktop/web-ui/dist/\`，两者不同步导致嵌入的仍是旧版 JS。统一构建流程后将新版 dist 正确复制到 \`cmd/companion/web-ui/dist/\`\r
-\r
-### 改进\r
-- 统一更新版本号至 1.0.19（后端 main.go、两个前端的 package.json）\r
-\r
----\r
-\r
-## 1.0.8 — 2026-07-17\r
-\r
-### 新增\r
-- **多项目工作区支持** — 系统提示自动遍历所有工作区根目录，读取各自 \`.pair/project.md\` 环境配置注入给 AI，跨项目协作时准确感知每个项目的编译方式、CGO 开关等信息\r
-- **CodeGraph 多项目全量建图** — \`codegraph_build\` 支持对所有工作区项目建图并合并到同一个知识图谱（\`rebuild=true\`），跨项目符号搜索成为可能\r
-- **阻塞命令自动拦截** — 新增 \`isBlockingCommand\` 检测，自动拦截 dev server、watch 模式、\`go run .\`、\`npm run dev\` 等长期进程命令，提示改用 \`run_background\`，避免阻塞 AI 循环\r
-\r
-### 改进\r
-- **审核放行逻辑优化** — \`run_command\` 阻塞命令不再自动放行，强制走 LLM 审核；\`run_background\` 保持安全命令自动放行\r
-- **工具描述优化** — \`run_command\` 描述明确禁止长期进程并列出典型误用场景；\`run_background\` 强调作为长期进程首选工具\r
-- **系统提示增强** — 「错误恢复」和「防止卡死」两处加入阻塞/后台区分铁律，降低误用 \`run_command\` 概率\r
-\r
----\r
-\r
-## 1.0.7 — 2026-07-17\r
-\r
-### 修复\r
-- **修复刷新页面后 ask_user 提交造成额外气泡** — 页面刷新后 \`switchConv\` 复用历史消息中最后一条 assistant 消息接收后续 WS 事件，不再另建新占位，避免两个 assistant 气泡\r
-\r
-### 改进\r
-- 统一更新版本号至 1.0.7（前端 package.json、后端 main.go、打包脚本）\r
-\r
----\r
-\r
-## 1.0.6 — 2026-07-17\r
-\r
-### 修复\r
-- **修复消息持久化比较口径不一致** — \`PersistNewMessages\` 中 \`persistedCount\` 使用 \`countJSONLLines\`（统计文件总行数含 System），与 \`histNonSystemCount\`（统计非 System 消息数）口径不同，导致含 tool_call 的 assistant 消息在工具执行前被误判为"已落盘"而跳过写入。阻塞工具（如 ask_user）的前端始终无响应。改用 \`readJSONL\` 精确统计非 System 消息数\r
-- **修复对话/任务/执行计划 API 空实现** — \`GET /api/conversations/{id}\` 缺 agent 运行状态，\`GET /api/tasks\` 和 \`GET /api/taskplan\` 原返回对话列表（完全错误的 stub），改为返回真实数据\r
-\r
----\r
-\r
-## 1.0.5 — 2026-07-17\r
-\r
-### 改进\r
-- **消息持久化重构** — \`PersistNewMessages\` 改为全量覆盖写 JSONL，消除 diff 计算的竞态问题；\`MessageStore\` 新增 \`ReplaceHistory\` 支持历史压缩；\`MergeLastAssistantRun\` 移除，各轮次独立存储以保留 reasoning 完整时序\r
-\r
-### 修复\r
-- **修复 send on closed channel panic** — 移除三处 \`go func\` 在无监听者时向 channel 发送导致的崩溃\r
-- **修复 PersistNewMessages 上下文压缩后新消息丢失** — 全量替换模式确保压缩后的摘要消息不被覆盖\r
-- **修复自动提交仅提交主工作区** — \`doAutoCommit\` 遍历所有工作区执行 git add + commit\r
-- **修复 idx 空洞导致消息跳过持久化** — \`PersistNewMessages\` 内部不再跳过 System/User 消息，确保序号连续\r
-\r
----\r
-\r
-## 1.0.4 — 2026-07-17\r
-\r
-### 新增\r
-- **技能状态三级配置** — 技能可设为「关闭 / 按需加载 / 始终激活」三种模式，灵活控制 AI 行为\r
-- **市场安装范围选择** — 安装 MCP 服务器或技能时，支持选择 user（全局）或 project（项目级）范围\r
-\r
-### 改进\r
-- **对话历史持久化增强** — 页面刷新后对话完整恢复，不再因浏览器关闭丢失上下文；后端全面接管消息状态管理，前端不再依赖本地缓存\r
-- **消息展示优化** — 连续同一角色的消息自动合并显示（如多个 assistant 回复合并为一条），阅读更流畅\r
-- **停止信号可靠性提升** — Agent 异常结束或用户主动停止时，前端能可靠收到停止信号并更新 UI 状态\r
-\r
-### 修复\r
-- 修复切换对话时 loading 状态卡死的问题（switchConv 提前放行占位消息）\r
-- 修复消息历史顺序错乱和思考链（reasoning_content）丢失的严重问题\r
-- 修复 MergeConsecutiveAssistants 跳过 RoleTool 消息导致工具调用结果不完整的问题\r
-\r
----\r
-\r
-## 1.0.3 — 2026-07-17\r
-\r
-### 改进\r
-- **子进程窗口管理** — 所有后台子进程（Git 操作、BUG 检测编译/测试、Lua 工具执行、桥接命令）统一隐藏控制台窗口，避免黑框闪烁\r
-- **会话持久化** — OnBatchPersist 回调从"每 5 轮"改为"每轮迭代"写盘，降低异常丢失风险\r
-- **代码搜索提示修复** — codegraph 搜索无结果时正确显示查询内容而非空占位符\r
-\r
-### 修复\r
-- **PersistNewMessages idx 空洞 bug** — 修复因跳过 System/User 角色消息导致消息序号不连续、后续消息无法正确持久化的严重问题（db_store.go + db_adapter.go）\r
-\r
----\r
-\r
-## 1.0.2 — 2026-07-16\r
-\r
-### 改进\r
-- **文档同步** — features.md 同步到最新版本，移除冗余的"版本信息与更新日志"章节\r
-\r
----\r
-\r
-## 1.0.1 — 2026-07-11\r
-\r
-### 新增\r
-- **更新日志页面** — 帮助文档中新增更新日志页面，版本历史一目了然\r
-- **WebSocket 协议文档** — API 文档补充完整 WebSocket 事件类型与负载定义\r
-- **系统版本报告** — \`/api/system/info\` 现在返回 \`version\` 字段，前端"关于"面板同步显示\r
-\r
-### 改进\r
-- **API 文档全面重写** — 每个接口增加请求体 JSON Schema、响应示例和错误码说明，便于二次开发\r
-- **帮助文档重构** — 文档归入"文档中心"分类，导航更清晰\r
-\r
----\r
-\r
-## 1.0.0 — 2026-07-01\r
-\r
-### 新增\r
-- **AI 对话编程** — 用自然语言驱动 AI 读写文件、执行命令、管理 Git\r
-- **自主 Agent 模式** — AI 自动分析项目、制定计划并执行多步骤任务\r
-- **代码编辑器** — 内置多标签页编辑器，支持语法高亮、代码折叠、十六进制查看\r
-- **文件管理** — 工作区目录树浏览、文件搜索、批量操作\r
-- **Git 版本控制** — 对话驱动的 Git 操作（状态查看、暂存、提交、分支管理）\r
-- **内置终端** — 浏览器中的终端面板，支持 AI 自动执行命令\r
-- **对话历史管理** — 自动保存、回溯与继续历史对话\r
-- **BUG 自动检测修复** — AI 扫描编译/测试问题并自动修复\r
-- **Skills / MCP 扩展** — 可复用的工作流模板和模型上下文协议扩展\r
-- **记忆系统** — AI 跨会话记住用户偏好和历史决策\r
-- **任务与规划管理** — 复杂任务分解为可追踪的子步骤\r
-- **Lua 自定义工具** — 通过 Lua 脚本创建自定义 AI 工具\r
-- **代码知识图谱** — 函数调用关系、类型层次、影响范围分析\r
-- **多模型支持** — 灵活切换 AI 模型后端（OpenAI / Claude 等）\r
-- **主题系统** — 四套预设主题（暗色、白色、暖色、暗夜紫）\r
-- **调试器** — 支持 Go 程序的断点、单步和变量查看\r
-- **网页验证工具** — 自动打开 URL、截图、分析页面效果\r
-- **办公文档处理** — 读取 Word / Excel / PDF 文件，支持 OCR\r
-\r
-### 技术架构\r
-- 后端使用 Go 语言，前端使用 Vue 3 + CodeMirror\r
-- WebSocket 实时推送 AI 事件流\r
-- 内嵌前端资源（go:embed），单二进制分发\r
-- 纯本地运行，所有 API 仅监听本地回环地址\r
-`;function ce(){return{async:!1,breaks:!1,extensions:null,gfm:!0,hooks:null,pedantic:!1,renderer:null,silent:!1,tokenizer:null,walkTokens:null}}var K=ce();function we(r){K=r}var Q={exec:()=>null};function Y(r){let t=[];return n=>{let l=Math.max(0,Math.min(3,n-1)),o=t[l];return o||(o=r(l),t[l]=o),o}}function S(r,t=""){let n=typeof r=="string"?r:r.source,l={replace:(o,a)=>{let s=typeof a=="string"?a:a.source;return s=s.replace(G.caret,"$1"),n=n.replace(o,s),l},getRegex:()=>new RegExp(n,t)};return l}var Gr=((r="")=>{try{return!!new RegExp("(?<=1)(?<!1)"+r)}catch{return!1}})(),G={codeRemoveIndent:/^(?: {1,4}| {0,3}\t)/gm,outputLinkReplace:/\\([\[\]])/g,indentCodeCompensation:/^(\s+)(?:```)/,beginningSpace:/^\s+/,endingHash:/#$/,startingSpaceChar:/^ /,endingSpaceChar:/ $/,nonSpaceChar:/[^ ]/,newLineCharGlobal:/\n/g,tabCharGlobal:/\t/g,multipleSpaceGlobal:/\s+/g,blankLine:/^[ \t]*$/,doubleBlankLine:/\n[ \t]*\n[ \t]*$/,blockquoteStart:/^ {0,3}>/,blockquoteSetextReplace:/\n {0,3}((?:=+|-+) *)(?=\n|$)/g,blockquoteSetextReplace2:/^ {0,3}>[ \t]?/gm,listReplaceNesting:/^ {1,4}(?=( {4})*[^ ])/g,listIsTask:/^\[[ xX]\] +\S/,listReplaceTask:/^\[[ xX]\] +/,listTaskCheckbox:/\[[ xX]\]/,anyLine:/\n.*\n/,hrefBrackets:/^<(.*)>$/,tableDelimiter:/[:|]/,tableAlignChars:/^\||\| *$/g,tableRowBlankLine:/\n[ \t]*$/,tableAlignRight:/^ *-+: *$/,tableAlignCenter:/^ *:-+: *$/,tableAlignLeft:/^ *:-+ *$/,startATag:/^<a /i,endATag:/^<\/a>/i,startPreScriptTag:/^<(pre|code|kbd|script)(\s|>)/i,endPreScriptTag:/^<\/(pre|code|kbd|script)(\s|>)/i,startAngleBracket:/^</,endAngleBracket:/>$/,pedanticHrefTitle:/^([^'"]*[^\s])\s+(['"])(.*)\2/,unicodeAlphaNumeric:/[\p{L}\p{N}]/u,escapeTest:/[&<>"']/,escapeReplace:/[&<>"']/g,escapeTestNoEncode:/[<>"']|&(?!(#\d{1,7}|#[Xx][a-fA-F0-9]{1,6}|\w+);)/,escapeReplaceNoEncode:/[<>"']|&(?!(#\d{1,7}|#[Xx][a-fA-F0-9]{1,6}|\w+);)/g,caret:/(^|[^\[])\^/g,percentDecode:/%25/g,findPipe:/\|/g,splitPipe:/ \|/,slashPipe:/\\\|/g,carriageReturn:/\r\n|\r/g,spaceLine:/^ +$/gm,notSpaceStart:/^\S*/,endingNewline:/\n$/,listItemRegex:r=>new RegExp(`^( {0,3}${r})((?:[	 ][^\\n]*)?(?:\\n|$))`),nextBulletRegex:Y(r=>new RegExp(`^ {0,${r}}(?:[*+-]|\\d{1,9}[.)])((?:[ 	][^\\n]*)?(?:\\n|$))`)),hrRegex:Y(r=>new RegExp(`^ {0,${r}}((?:- *){3,}|(?:_ *){3,}|(?:\\* *){3,})(?:\\n+|$)`)),fencesBeginRegex:Y(r=>new RegExp(`^ {0,${r}}(?:\`\`\`|~~~)`)),headingBeginRegex:Y(r=>new RegExp(`^ {0,${r}}#`)),htmlBeginRegex:Y(r=>new RegExp(`^ {0,${r}}<(?:[a-z].*>|!--)`,"i")),blockquoteBeginRegex:Y(r=>new RegExp(`^ {0,${r}}>`))},Fr=/^(?:[ \t]*(?:\n|$))+/,Or=/^((?: {4}| {0,3}\t)[^\n]+(?:\n(?:[ \t]*(?:\n|$))*)?)+/,zr=/^ {0,3}(`{3,}(?=[^`\n]*(?:\n|$))|~{3,})([^\n]*)(?:\n|$)(?:|([\s\S]*?)(?:\n|$))(?: {0,3}\1[~`]* *(?=\n|$)|$)/,v=/^ {0,3}((?:-[\t ]*){3,}|(?:_[ \t]*){3,}|(?:\*[ \t]*){3,})(?:\n+|$)/,Ur=/^ {0,3}(#{1,6})(?=\s|$)(.*)(?:\n+|$)/,de=/ {0,3}(?:[*+-]|\d{1,9}[.)])/,Te=/^(?!bull |blockCode|fences|blockquote|heading|html|table)((?:.|\n(?!\s*?\n|bull |blockCode|fences|blockquote|heading|html|table))+?)\n {0,3}(=+|-+) *(?:\n+|$)/,Be=S(Te).replace(/bull/g,de).replace(/blockCode/g,/(?: {4}| {0,3}\t)/).replace(/fences/g,/ {0,3}(?:`{3,}|~{3,})/).replace(/blockquote/g,/ {0,3}>/).replace(/heading/g,/ {0,3}#{1,6}/).replace(/html/g,/ {0,3}<[^\n>]+>\n/).replace(/\|table/g,"").getRegex(),Hr=S(Te).replace(/bull/g,de).replace(/blockCode/g,/(?: {4}| {0,3}\t)/).replace(/fences/g,/ {0,3}(?:`{3,}|~{3,})/).replace(/blockquote/g,/ {0,3}>/).replace(/heading/g,/ {0,3}#{1,6}/).replace(/html/g,/ {0,3}<[^\n>]+>\n/).replace(/table/g,/ {0,3}\|?(?:[:\- ]*\|)+[\:\- ]*\n/).getRegex(),pe=/^([^\n]+(?:\n(?!hr|heading|lheading|blockquote|fences|list|html|table| +\n)[^\n]+)*)/,jr=/^[^\n]+/,me=/(?!\s*\])(?:\\[\s\S]|[^\[\]\\])+/,qr=S(/^ {0,3}\[(label)\]: *(?:\n[ \t]*)?([^<\s][^\s]*|<.*?>)(?:(?: +(?:\n[ \t]*)?| *\n[ \t]*)(title))? *(?:\n+|$)/).replace("label",me).replace("title",/(?:"(?:\\"?|[^"\\])*"|'[^'\n]*(?:\n[^'\n]+)*\n?'|\([^()]*\))/).getRegex(),Wr=S(/^(bull)([ \t][^\n]*?)?(?:\n|$)/).replace(/bull/g,de).getRegex(),te="address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|meta|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul",ge=/<!--(?:-?>|[\s\S]*?(?:-->|$))/,Jr=S("^ {0,3}(?:<(script|pre|style|textarea)[\\s>][\\s\\S]*?(?:</\\1>[^\\n]*\\n+|$)|comment[^\\n]*(\\n+|$)|<\\?[\\s\\S]*?(?:\\?>\\n*|$)|<![A-Z][\\s\\S]*?(?:>\\n*|$)|<!\\[CDATA\\[[\\s\\S]*?(?:\\]\\]>\\n*|$)|</?(tag)(?: +|\\n|/?>)[\\s\\S]*?(?:(?:\\n[ 	]*)+\\n|$)|<(?!script|pre|style|textarea)([a-z][\\w-]*)(?:attribute)*? */?>(?=[ \\t]*(?:\\n|$))[\\s\\S]*?(?:(?:\\n[ 	]*)+\\n|$)|</(?!script|pre|style|textarea)[a-z][\\w-]*\\s*>(?=[ \\t]*(?:\\n|$))[\\s\\S]*?(?:(?:\\n[ 	]*)+\\n|$))","i").replace("comment",ge).replace("tag",te).replace("attribute",/ +[a-zA-Z:_][\w.:-]*(?: *= *"[^"\n]*"| *= *'[^'\n]*'| *= *[^\s"'=<>`]+)?/).getRegex(),Se=S(pe).replace("hr",v).replace("heading"," {0,3}#{1,6}(?:\\s|$)").replace("|lheading","").replace("|table","").replace("blockquote"," {0,3}>").replace("fences"," {0,3}(?:`{3,}(?=[^`\\n]*\\n)|~{3,})[^\\n]*\\n").replace("list"," {0,3}(?:[*+-]|1[.)])[ \\t]+[^ \\t\\n]").replace("html","</?(?:tag)(?: +|\\n|/?>)|<(?:script|pre|style|textarea|!--)").replace("tag",te).getRegex(),Zr=S(/^( {0,3}> ?(paragraph|[^\n]*)(?:\n|$))+/).replace("paragraph",Se).getRegex(),ke={blockquote:Zr,code:Or,def:qr,fences:zr,heading:Ur,hr:v,html:Jr,lheading:Be,list:Wr,newline:Fr,paragraph:Se,table:Q,text:jr},Ce=S("^ *([^\\n ].*)\\n {0,3}((?:\\| *)?:?-+:? *(?:\\| *:?-+:? *)*(?:\\| *)?)(?:\\n((?:(?! *\\n|hr|heading|blockquote|code|fences|list|html).*(?:\\n|$))*)\\n*|$)").replace("hr",v).replace("heading"," {0,3}#{1,6}(?:\\s|$)").replace("blockquote"," {0,3}>").replace("code","(?: {4}| {0,3}	)[^\\n]").replace("fences"," {0,3}(?:`{3,}(?=[^`\\n]*\\n)|~{3,})[^\\n]*\\n").replace("list"," {0,3}(?:[*+-]|1[.)])[ \\t]").replace("html","</?(?:tag)(?: +|\\n|/?>)|<(?:script|pre|style|textarea|!--)").replace("tag",te).getRegex(),Kr={...ke,lheading:Hr,table:Ce,paragraph:S(pe).replace("hr",v).replace("heading"," {0,3}#{1,6}(?:\\s|$)").replace("|lheading","").replace("table",Ce).replace("blockquote"," {0,3}>").replace("fences"," {0,3}(?:`{3,}(?=[^`\\n]*\\n)|~{3,})[^\\n]*\\n").replace("list"," {0,3}(?:[*+-]|1[.)])[ \\t]+[^ \\t\\n]").replace("html","</?(?:tag)(?: +|\\n|/?>)|<(?:script|pre|style|textarea|!--)").replace("tag",te).getRegex()},Qr={...ke,html:S(`^ *(?:comment *(?:\\n|\\s*$)|<(tag)[\\s\\S]+?</\\1> *(?:\\n{2,}|\\s*$)|<tag(?:"[^"]*"|'[^']*'|\\s[^'"/>\\s]*)*?/?> *(?:\\n{2,}|\\s*$))`).replace("comment",ge).replace(/tag/g,"(?!(?:a|em|strong|small|s|cite|q|dfn|abbr|data|time|code|var|samp|kbd|sub|sup|i|b|u|mark|ruby|rt|rp|bdi|bdo|span|br|wbr|ins|del|img)\\b)\\w+(?!:|[^\\w\\s@]*@)\\b").getRegex(),def:/^ *\[([^\]]+)\]: *<?([^\s>]+)>?(?: +(["(][^\n]+[")]))? *(?:\n+|$)/,heading:/^(#{1,6})(.*)(?:\n+|$)/,fences:Q,lheading:/^(.+?)\n {0,3}(=+|-+) *(?:\n+|$)/,paragraph:S(pe).replace("hr",v).replace("heading",` *#{1,6} *[^
-]`).replace("lheading",Be).replace("|table","").replace("blockquote"," {0,3}>").replace("|fences","").replace("|list","").replace("|html","").replace("|tag","").getRegex()},Xr=/^\\([!"#$%&'()*+,\-./:;<=>?@\[\]\\^_`{|}~])/,Yr=/^(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)/,Ie=/^( {2,}|\\)\n(?!\s*$)/,_r=/^(`+|[^`])(?:(?= {2,}\n)|[\s\S]*?(?:(?=[\\<!\[`*_]|\b_|$)|[^ ](?= {2,}\n)))/,_=/[\p{P}\p{S}]/u,re=/[\s\p{P}\p{S}]/u,he=/[^\s\p{P}\p{S}]/u,vr=S(/^((?![*_])punctSpace)/,"u").replace(/punctSpace/g,re).getRegex(),Pe=/(?!~)[\p{P}\p{S}]/u,el=/(?!~)[\s\p{P}\p{S}]/u,nl=/(?:[^\s\p{P}\p{S}]|~)/u,tl=S(/link|precode-code|html/,"g").replace("link",/\[(?:[^\[\]`]|(?<a>`+)[^`]+\k<a>(?!`))*?\]\((?:\\[\s\S]|[^\\\(\)]|\((?:\\[\s\S]|[^\\\(\)])*\))*\)/).replace("precode-",Gr?"(?<!`)()":"(^^|[^`])").replace("code",/(?<b>`+)[^`]+\k<b>(?!`)/).replace("html",/<(?! )[^<>]*?>/).getRegex(),Ae=/^(?:\*+(?:((?!\*)punct)|([^\s*]))?)|^_+(?:((?!_)punct)|([^\s_]))?/,rl=S(Ae,"u").replace(/punct/g,_).getRegex(),ll=S(Ae,"u").replace(/punct/g,Pe).getRegex(),$e="^[^_*]*?__[^_*]*?\\*[^_*]*?(?=__)|[^*]+(?=[^*])|(?!\\*)punct(\\*+)(?=[\\s]|$)|notPunctSpace(\\*+)(?!\\*)(?=punctSpace|$)|(?!\\*)punctSpace(\\*+)(?=notPunctSpace)|[\\s](\\*+)(?!\\*)(?=punct)|(?!\\*)punct(\\*+)(?!\\*)(?=punct)|notPunctSpace(\\*+)(?=notPunctSpace)",ol=S($e,"gu").replace(/notPunctSpace/g,he).replace(/punctSpace/g,re).replace(/punct/g,_).getRegex(),al=S($e,"gu").replace(/notPunctSpace/g,nl).replace(/punctSpace/g,el).replace(/punct/g,Pe).getRegex(),sl=S("^[^_*]*?\\*\\*[^_*]*?_[^_*]*?(?=\\*\\*)|[^_]+(?=[^_])|(?!_)punct(_+)(?=[\\s]|$)|notPunctSpace(_+)(?!_)(?=punctSpace|$)|(?!_)punctSpace(_+)(?=notPunctSpace)|[\\s](_+)(?!_)(?=punct)|(?!_)punct(_+)(?!_)(?=punct)","gu").replace(/notPunctSpace/g,he).replace(/punctSpace/g,re).replace(/punct/g,_).getRegex(),il=S(/^~~?(?:((?!~)punct)|[^\s~])/,"u").replace(/punct/g,_).getRegex(),cl="^[^~]+(?=[^~])|(?!~)punct(~~?)(?=[\\s]|$)|notPunctSpace(~~?)(?!~)(?=punctSpace|$)|(?!~)punctSpace(~~?)(?=notPunctSpace)|[\\s](~~?)(?!~)(?=punct)|(?!~)punct(~~?)(?!~)(?=punct)|notPunctSpace(~~?)(?=notPunctSpace)",dl=S(cl,"gu").replace(/notPunctSpace/g,he).replace(/punctSpace/g,re).replace(/punct/g,_).getRegex(),pl=S(/\\(punct)/,"gu").replace(/punct/g,_).getRegex(),ml=S(/^<(scheme:[^\s\x00-\x1f<>]*|email)>/).replace("scheme",/[a-zA-Z][a-zA-Z0-9+.-]{1,31}/).replace("email",/[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+(@)[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+(?![-_])/).getRegex(),gl=S(ge).replace("(?:-->|$)","-->").getRegex(),kl=S("^comment|^</[a-zA-Z][\\w:-]*\\s*>|^<[a-zA-Z][\\w-]*(?:attribute)*?\\s*/?>|^<\\?[\\s\\S]*?\\?>|^<![a-zA-Z]+\\s[\\s\\S]*?>|^<!\\[CDATA\\[[\\s\\S]*?\\]\\]>").replace("comment",gl).replace("attribute",/\s+[a-zA-Z:_][\w.:-]*(?:\s*=\s*"[^"]*"|\s*=\s*'[^']*'|\s*=\s*[^\s"'=<>`]+)?/).getRegex(),le=/(?:\[(?:\\[\s\S]|[^\[\]\\])*\]|\\[\s\S]|`+(?!`)[^`]*?`+(?!`)|``+(?=\])|[^\[\]\\`])*?/,hl=S(/^!?\[(label)\]\(\s*(href)(?:(?:[ \t]+(?:\n[ \t]*)?|\n[ \t]*)(title))?\s*\)/).replace("label",le).replace("href",/<(?:\\.|[^\n<>\\])+>|[^ \t\n\x00-\x1f]*/).replace("title",/"(?:\\"?|[^"\\])*"|'(?:\\'?|[^'\\])*'|\((?:\\\)?|[^)\\])*\)/).getRegex(),Me=S(/^!?\[(label)\]\[(ref)\]/).replace("label",le).replace("ref",me).getRegex(),De=S(/^!?\[(ref)\](?:\[\])?/).replace("ref",me).getRegex(),fl=S("reflink|nolink(?!\\()","g").replace("reflink",Me).replace("nolink",De).getRegex(),Le=/[hH][tT][tT][pP][sS]?|[fF][tT][pP]/,fe={_backpedal:Q,anyPunctuation:pl,autolink:ml,blockSkip:tl,br:Ie,code:Yr,del:Q,delLDelim:Q,delRDelim:Q,emStrongLDelim:rl,emStrongRDelimAst:ol,emStrongRDelimUnd:sl,escape:Xr,link:hl,nolink:De,punctuation:vr,reflink:Me,reflinkSearch:fl,tag:kl,text:_r,url:Q},yl={...fe,link:S(/^!?\[(label)\]\((.*?)\)/).replace("label",le).getRegex(),reflink:S(/^!?\[(label)\]\s*\[([^\]]*)\]/).replace("label",le).getRegex()},ye={...fe,emStrongRDelimAst:al,emStrongLDelim:ll,delLDelim:il,delRDelim:dl,url:S(/^((?:protocol):\/\/|www\.)(?:[a-zA-Z0-9\-]+\.?)+[^\s<]*|^email/).replace("protocol",Le).replace("email",/[A-Za-z0-9._+-]+(@)[a-zA-Z0-9-_]+(?:\.[a-zA-Z0-9-_]*[a-zA-Z0-9])+(?![-_])/).getRegex(),_backpedal:/(?:[^?!.,:;*_'"~()&]+|\([^)]*\)|&(?![a-zA-Z0-9]+;$)|[?!.,:;*_'"~)]+(?!$))+/,del:/^(~~?)(?=[^\s~])((?:\\[\s\S]|[^\\])*?(?:\\[\s\S]|[^\s~\\]))\1(?=[^~]|$)/,text:S(/^([`~]+|[^`~])(?:(?= {2,}\n)|(?=[a-zA-Z0-9.!#$%&'*+\/=?_`{\|}~-]+@)|[\s\S]*?(?:(?=[\\<!\[`*~_]|\b_|protocol:\/\/|www\.|$)|[^ ](?= {2,}\n)|[^a-zA-Z0-9.!#$%&'*+\/=?_`{\|}~-](?=[a-zA-Z0-9.!#$%&'*+\/=?_`{\|}~-]+@)))/).replace("protocol",Le).getRegex()},El={...ye,br:S(Ie).replace("{2,}","*").getRegex(),text:S(ye.text).replace("\\b_","\\b_| {2,}\\n").replace(/\{2,\}/g,"*").getRegex()},oe={normal:ke,gfm:Kr,pedantic:Qr},ee={normal:fe,gfm:ye,breaks:El,pedantic:yl},ul={"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"},Re=r=>ul[r];function q(r,t){if(t){if(G.escapeTest.test(r))return r.replace(G.escapeReplace,Re)}else if(G.escapeTestNoEncode.test(r))return r.replace(G.escapeReplaceNoEncode,Re);return r}function Ge(r){try{r=encodeURI(r).replace(G.percentDecode,"%")}catch{return null}return r}function Fe(r,t){var a;let n=r.replace(G.findPipe,(s,d,i)=>{let h=!1,g=d;for(;--g>=0&&i[g]==="\\";)h=!h;return h?"|":" |"}),l=n.split(G.splitPipe),o=0;if(l[0].trim()||l.shift(),l.length>0&&!((a=l.at(-1))!=null&&a.trim())&&l.pop(),t)if(l.length>t)l.splice(t);else for(;l.length<t;)l.push("");for(;o<l.length;o++)l[o]=l[o].trim().replace(G.slashPipe,"|");return l}function Z(r,t,n){let l=r.length;if(l===0)return"";let o=0;for(;o<l&&r.charAt(l-o-1)===t;)o++;return r.slice(0,l-o)}function Oe(r){let t=r.split(`
-`),n=t.length-1;for(;n>=0&&G.blankLine.test(t[n]);)n--;return t.length-n<=2?r:t.slice(0,n+1).join(`
-`)}function bl(r,t){if(r.indexOf(t[1])===-1)return-1;let n=0;for(let l=0;l<r.length;l++)if(r[l]==="\\")l++;else if(r[l]===t[0])n++;else if(r[l]===t[1]&&(n--,n<0))return l;return n>0?-2:-1}function xl(r,t=0){let n=t,l="";for(let o of r)if(o==="	"){let a=4-n%4;l+=" ".repeat(a),n+=a}else l+=o,n++;return l}function ze(r,t,n,l,o){let a=t.href,s=t.title||null,d=r[1].replace(o.other.outputLinkReplace,"$1");l.state.inLink=!0;let i={type:r[0].charAt(0)==="!"?"image":"link",raw:n,href:a,title:s,text:d,tokens:l.inlineTokens(d)};return l.state.inLink=!1,i}function Vl(r,t,n){let l=r.match(n.other.indentCodeCompensation);if(l===null)return t;let o=l[1];return t.split(`
-`).map(a=>{let s=a.match(n.other.beginningSpace);if(s===null)return a;let[d]=s;return d.length>=o.length?a.slice(o.length):a}).join(`
-`)}var ae=class{constructor(r){A(this,"options");A(this,"rules");A(this,"lexer");this.options=r||K}space(r){let t=this.rules.block.newline.exec(r);if(t&&t[0].length>0)return{type:"space",raw:t[0]}}code(r){let t=this.rules.block.code.exec(r);if(t){let n=this.options.pedantic?t[0]:Oe(t[0]),l=n.replace(this.rules.other.codeRemoveIndent,"");return{type:"code",raw:n,codeBlockStyle:"indented",text:l}}}fences(r){let t=this.rules.block.fences.exec(r);if(t){let n=t[0],l=Vl(n,t[3]||"",this.rules);return{type:"code",raw:n,lang:t[2]?t[2].trim().replace(this.rules.inline.anyPunctuation,"$1"):t[2],text:l}}}heading(r){let t=this.rules.block.heading.exec(r);if(t){let n=t[2].trim();if(this.rules.other.endingHash.test(n)){let l=Z(n,"#");(this.options.pedantic||!l||this.rules.other.endingSpaceChar.test(l))&&(n=l.trim())}return{type:"heading",raw:Z(t[0],`
-`),depth:t[1].length,text:n,tokens:this.lexer.inline(n)}}}hr(r){let t=this.rules.block.hr.exec(r);if(t)return{type:"hr",raw:Z(t[0],`
-`)}}blockquote(r){let t=this.rules.block.blockquote.exec(r);if(t){let n=Z(t[0],`
+## 1.2.1 — 2026-08-15
+
+### 新增
+- **按双层循环范式重写 Agent 核心** — 双层循环（turn/step 边界事件、inbox 双队列对齐 next-step/next-turn），消息组装与落盘对齐事件模型（agentloop 编号 ↔ 消息序列推导），系统提示精简为基础工具集模式（\`WB_FULL_TOOLS=1\` 恢复全量工具）
+- **一切皆插件** — Go 插件框架 + goja JS 动态插件，goja 运行时完全内置（双仓库去除 replace），JS 插件沙箱支持 timer 服务（ctx.timeout/interval）与跨 goroutine 执行锁
+- **内置 TS 编译器** — esbuild 纯 Go 转译（无 CGO/npm 依赖），TS 插件可直接加载（\`cordis_define\` 支持 js/ts/自动探测），多文件 TS bundle（Build stdin + mock 包）
+- **工具全插件化** — 21 个内置功能插件（core/fs/git/web/shell/memory/task/project-info/codegraph/debug/vision/office/lsp 等），\`cordis_inspect\` 可见工具归属插件，Unload 可回收整组
+- **多项目支持** — 工具 project 参数路由（文件类/搜索/Git 全套），codegraph 按项目独立建图与查询（非主项目用各自 JSONStore，天然隔离），memory/project-info 工具显式 project 参数化
+- **工具集生态** — 模板插件化动态构建（\`toolset_build\` 按项目+需求自动组合工具并固化到工作区）、固化/导出/导入/市场发布（plugin 类型）、LLM 项目意图分析（语言无关，不固化任何语言模板）
+- **插件生态 P0-P2** — 函数形态 + \`apply(ctx, config)\` + inject 服务 + VM 超时防护 + schema 校验 + 插件管理 UI（host/client 双半）+ client inspect provider
+- **项目知识库树形化** — 树分支组织（目标/架构/实现/关键点/设计思想）+ AGENTS.md 分层 + .agents 路径兼容
+- **历史注入对齐 harness** — 删除【历史轮次】前缀标注与 task 时间戳，系统提示补充多轮对话规则
+- **ask_user 选项内输入** — 支持 single / multi / single-with-input / text 四态交互，修复参数名混淆导致选项不出现的问题
+- **遗留五件套** — notes 写入同步 + read_image 工具 + run_code 嵌套 + prompt 注册中心 + 知识库过期检查修复
+
+### 修复
+- **移除未完成注入** — TOOL_OUTCOME_UNKNOWN / interrupted 机制移除，无 result 的 tool_call 以空占位维持配对契约，不再向模型注入「中断/未完成」语义
+- **知识库过期验证误报** — 152 条假警告清零，159 条全绿
+
+---
+
+## 1.1.8 — 2026-08-11
+
+### 新增
+- **OCR / 图色识别能力** — 图片文字识别（中英文混合）与颜色分布分析，工具配置持久化 + 前端工具面板（2026-08-04）
+- **对话历史注入膨胀三层压缩** — 固定背景 / 动态日志 / 长时压缩三层方案，控制上下文体积（2026-08-04）
+- **异常中断后继续未完成对话** — 中断后可直接继续，不丢上下文（2026-08-06）
+- **后台进程跨轮存活** — run_background 进程不再因每轮重建注册表而丢失（全局单例 bgRegistry）（2026-08-11）
+- **多项目工具** — Lua 工具 / 工具配置按项目加载 + project 参数路由（2026-08-11）
+- **背景摘要注入位置修复** — 压缩摘要固定在 task 前注入（前缀稳定），动态日志追加末尾，KV 缓存零损失优化（2026-08-08）
+
+### 修复
+- 关闭 run 内自动压缩，改由外层时机控制（2026-08-05）
+- 历史消息配对错乱 — 用户消息重复存储导致 tool 配对错乱（lastUser 锚点重组）
+- 历史消息分段导致多气泡 — 连续 assistant 消息合并显示
+- 多轮对话 user 后 tool 粘连 + OnBatchPersist 偏移 — 压缩后固定偏移失效，改 lastUser 锚点重组
+- 归档双 bug — ①Windows 归档静默失效（句柄未关闭 + os.Rename 不能覆盖）→ 显式 Close + 三步法原子替换；②归档摘要孤立 assistant 消息污染 LLM 上下文 → 改 role=user +【历史归档】标注
+- 多根路径解析 Bug — 优先匹配文件实际存在的根目录
+
+---
+
+## 1.1.6 — 2026-07-30
+
+### 修复
+- **修复编辑器 Ctrl+F 不生效** — CodeMirror \`search()\` 扩展注册的 \`openSearchPanel\` 与自定义搜索面板 keymap 冲突，使用 \`Prec.high()\` 确保自定义 handler 优先执行，Ctrl+F 正确唤出中文搜索面板
+- **搜索面板图标全部换为 SVG** — Unicode 字符（▲▼↔×）和文本标签（Aa ·\\* 全词）全部替换为内联 SVG 图标，与界面风格统一
+- **修复前端 API 路径缺少前导斜杠导致 404** — \`apiURL()\` 拼接时对无前导斜杠的 path 自动补全，\`/apitools/review\` 修正为 \`/api/tools/review\`
+- **修复 codegraph 增量构建仍全量重写 SQLite** — \`SQLiteStore.Save()\` 在增量模式下调用的 \`RemoveFileEntities\` 清理旧数据，不再 \`DELETE FROM\` 全表
+
+### 改进
+- **编辑器中文搜索面板** — 新建 \`FindPanel.vue\` 组件，替换 CodeMirror 默认英文搜索面板，支持查找/替换/大小写敏感/正则/全词匹配
+- **codegraph 增量构建测试** — 新增 \`TestSQLiteStoreIncrementalPreserves\` 和 \`TestSQLiteStoreIncrementalBuild\` 验证增量构建与并行完整性
+
+---
+
+## 1.1.5 — 2026-07-29
+
+### 新增
+- **run_command 后台化** — \`run_command\` 改用后台启动+轮询模式，不再阻塞 Agent 循环，可被上下文取消中断，超时后 LLM 可选择等待或继续
+- **审核配置改为工作区级** — 审核黑白名单从全局 settings.json 迁移到工作区 .pair/tools.json，不同工作区可独立配置，避免动态工具（Lua）在不同工作区间混淆
+- **Lua 工具补齐 Tool 结构** — \`buildLuaTool\` 自动设置 UsageGuide/Category/Enabled 字段，与标准工具结构一致
+- **工具配置弹窗合并** — 「启用开关」和「审核黑白名单」合并为同一「工具配置」弹窗，标签页切换，避免歧义
+- **自主模式 Follow-up 持续驱动** — Agent 自然终止后，通过 \`OnNextTask\` 回调自动注入 follow-up 消息，无需手动触发「继续」
+- **流式更新机制** — Registry 新增 \`OnToolUpdate\` 回调，工具执行中间结果实时推送给前端
+- **工具 UsageGuide 全覆盖** — 全部 ~140 个工具添加 \`UsageGuide\` 使用指导，明确何时用、为何优于 \`run_command\`、常见误区
+- **启动日志详细化** — 启动时输出版本号、Go 版本、平台架构、工作目录、各工作区文件夹路径
+
+### 改进
+- **工具体系升级**
+  - \`Tool\` 结构体新增 \`UsageGuide\`、\`Category\`、\`Enabled\` 字段
+  - \`Registry\` 新增 \`EnabledDefinitions()\` 按状态过滤工具定义
+  - 新增 \`AllToolMeta()\` API 供前端展示工具开关列表
+  - 工具使用指南文本动态注入系统提示，引导 LLM 优先使用专用工具
+- **窗口管理** — \`run_command\` / \`run_background\` 均设置 \`HideWindow=true\`，不再弹出 cmd 窗口
+- **信号监听移除** — main 函数移除信号监听，进程不会因子进程结束而自动退出
+
+### 修复
+- **debug_start 启动修复** — 拆解 \`dlv dap\` 启动流程，分别发送 Initialize 和 Launch 请求，兼容 dlv 最新版本
+
+---
+
+## 1.1.2 — 2026-07-21
+
+### 新增
+- **附件标签化** — 消息中的文件/代码/图片附件不再嵌入正文，改为独立药丸形标签显示在用户消息文字下方，视觉更清爽
+- **粘贴长文本自动转临时附件** — 输入框粘贴超过 2000 字符的文本时，自动写入 \`_temp/\` 目录并作为附件挂载，避免大段代码/日志撑爆输入区
+
+### 改进
+- \`addToChat\` 瘦身：文件添加到对话不再预读文件内容（40KB 截断已无意义），仅传递路径引用
+- 目录引用新增 \`type:dir\` 支持，提示 agent 使用 \`list_files\` 查看
+- 选中代码添加对话现在保留代码内容尾注供 agent 直接参考（截断 3000 字）
+
+### 修复
+- 文件树 Shift/Ctrl 多选逻辑修复：范围选择改为基于同级节点列表，清除后重新选中
+
+---
+
+## 1.1.1 — 2026-07-21
+
+### 新增
+- **审核配置界面重设计** — 从纯文本输入改为工具卡片式交互：所有工具按类别分组（文件操作、命令执行、Git、网络、截图、图像、二进制、办公文档、CodeGraph、调试器、知识库、记忆、LSP、BUG检测、任务管理、扩展市场等），每个工具显示中文名称，点击切换三态（默认 → 黑名单 → 白名单），支持搜索过滤，配置更直观高效
+
+### 修复
+- **修复新对话空状态提示位置偏移** — "开始新的对话，发送消息即可与 AI 助手对话"提示及图标从左下角偏移修正为居中显示
+
+### 改进
+- 版本号统一升级至 1.1.1（前端 package.json、后端 main.go、打包配置）
+
+---
+
+## 1.1.0 — 2026-07-20
+
+### 新增
+- **自主模式原生终止** — 去掉 \`finish_task\` 强制结束机制，Agent 自然输出后直接结束循环，交互更流畅
+- **Agent 性能优化（P0-P3 五轮）** — eventRing 环形缓冲器减少内存分配、进度可视化（阶段指示器+工具调用计数+耗时）、工具描述精简减少 Token 消耗、并行工具执行机制、预压缩上下文避免截断
+- **会话连贯性增强** — 新对话开始时自动注入 Git 变更感知、代码图谱统计、工作区结构概览，Agent 无需从零分析项目
+
+### 改进
+- **ChatView 重构** — 消息渲染管线全面优化，新增交互超时保护、审核驳回追踪、折叠/展开状态持久化
+- **审核配置 UI 优化** — 弹窗改为向上弹出（bottom:100%），防止被视口底部裁切
+- **编辑工具 v2 升级** — 更精确的符号级定位，减少行号偏移问题
+- **kill_process 增强** — 改为杀进程树，彻底清理子进程
+- **自主模式架构重构** — ephemeralMsgs 隔离内层消息，长时压缩精准保留推理上下文
+
+### 修复
+- 修复 \`planExpanded\` / \`tasksExpanded\` / \`currentPhase\` 重复声明导致的运行时崩溃
+- 修复 \`currentTasks\` 未声明导致前端 \`undefined.length\` 崩溃
+- 修复自然终止代码缩进丢失导致逻辑在循环外不执行
+
+---
+
+## 1.0.20 — 2026-07-18
+
+### 修复
+- **修复消息排序** — \`_idx\` 统一取 \`max(existing)+1\`，解决历史消息加载后序号错乱
+- **修复用户反馈消息合并** — 用户反馈正确合并到 agent 输出气泡中，不再产生额外用户消息气泡
+- **修复消息发送双占位竞态** — \`switchConv\` 复用历史消息中最后一条 assistant 消息接收后续 WS 事件，避免两个 assistant 气泡
+- **修复 WS 连接与历史加载竞态** — \`processStatus\` 事件正确处理连接状态转换
+
+### 改进
+- 审核配置弹窗改为向上弹出（\`bottom:100%\`），防止被视口底部裁切
+- 移除压缩按钮，简化 UI
+
+---
+
+## 1.0.19 — 2026-07-17
+
+### 修复
+- **修复 Web 端文件树不显示** — \`FileExplorer.vue\` 的 \`<script setup>\` 编译后 JS 中存在变量暂时性死区（TDZ），导致 \`setup()\` 抛出 \`Cannot access 'd' before initialization\`，文件树组件挂载失败。重建前端并重新编译 \`companion.exe\` 嵌入新版 dist 后修复
+- **修复后端 dist 嵌入路径不一致** — \`cmd/companion/main.go\` 通过 \`//go:embed web-ui/dist\` 引用 companion 目录下的副本，但此前构建脚本将 dist 输出到 \`cmd/desktop/web-ui/dist/\`，两者不同步导致嵌入的仍是旧版 JS。统一构建流程后将新版 dist 正确复制到 \`cmd/companion/web-ui/dist/\`
+
+### 改进
+- 统一更新版本号至 1.0.19（后端 main.go、两个前端的 package.json）
+
+---
+
+## 1.0.8 — 2026-07-17
+
+### 新增
+- **多项目工作区支持** — 系统提示自动遍历所有工作区根目录，读取各自 \`.pair/project.md\` 环境配置注入给 AI，跨项目协作时准确感知每个项目的编译方式、CGO 开关等信息
+- **CodeGraph 多项目全量建图** — \`codegraph_build\` 支持对所有工作区项目建图并合并到同一个知识图谱（\`rebuild=true\`），跨项目符号搜索成为可能
+- **阻塞命令自动拦截** — 新增 \`isBlockingCommand\` 检测，自动拦截 dev server、watch 模式、\`go run .\`、\`npm run dev\` 等长期进程命令，提示改用 \`run_background\`，避免阻塞 AI 循环
+
+### 改进
+- **审核放行逻辑优化** — \`run_command\` 阻塞命令不再自动放行，强制走 LLM 审核；\`run_background\` 保持安全命令自动放行
+- **工具描述优化** — \`run_command\` 描述明确禁止长期进程并列出典型误用场景；\`run_background\` 强调作为长期进程首选工具
+- **系统提示增强** — 「错误恢复」和「防止卡死」两处加入阻塞/后台区分铁律，降低误用 \`run_command\` 概率
+
+---
+
+## 1.0.7 — 2026-07-17
+
+### 修复
+- **修复刷新页面后 ask_user 提交造成额外气泡** — 页面刷新后 \`switchConv\` 复用历史消息中最后一条 assistant 消息接收后续 WS 事件，不再另建新占位，避免两个 assistant 气泡
+
+### 改进
+- 统一更新版本号至 1.0.7（前端 package.json、后端 main.go、打包脚本）
+
+---
+
+## 1.0.6 — 2026-07-17
+
+### 修复
+- **修复消息持久化比较口径不一致** — \`PersistNewMessages\` 中 \`persistedCount\` 使用 \`countJSONLLines\`（统计文件总行数含 System），与 \`histNonSystemCount\`（统计非 System 消息数）口径不同，导致含 tool_call 的 assistant 消息在工具执行前被误判为"已落盘"而跳过写入。阻塞工具（如 ask_user）的前端始终无响应。改用 \`readJSONL\` 精确统计非 System 消息数
+- **修复对话/任务/执行计划 API 空实现** — \`GET /api/conversations/{id}\` 缺 agent 运行状态，\`GET /api/tasks\` 和 \`GET /api/taskplan\` 原返回对话列表（完全错误的 stub），改为返回真实数据
+
+---
+
+## 1.0.5 — 2026-07-17
+
+### 改进
+- **消息持久化重构** — \`PersistNewMessages\` 改为全量覆盖写 JSONL，消除 diff 计算的竞态问题；\`MessageStore\` 新增 \`ReplaceHistory\` 支持历史压缩；\`MergeLastAssistantRun\` 移除，各轮次独立存储以保留 reasoning 完整时序
+
+### 修复
+- **修复 send on closed channel panic** — 移除三处 \`go func\` 在无监听者时向 channel 发送导致的崩溃
+- **修复 PersistNewMessages 上下文压缩后新消息丢失** — 全量替换模式确保压缩后的摘要消息不被覆盖
+- **修复自动提交仅提交主工作区** — \`doAutoCommit\` 遍历所有工作区执行 git add + commit
+- **修复 idx 空洞导致消息跳过持久化** — \`PersistNewMessages\` 内部不再跳过 System/User 消息，确保序号连续
+
+---
+
+## 1.0.4 — 2026-07-17
+
+### 新增
+- **技能状态三级配置** — 技能可设为「关闭 / 按需加载 / 始终激活」三种模式，灵活控制 AI 行为
+- **市场安装范围选择** — 安装 MCP 服务器或技能时，支持选择 user（全局）或 project（项目级）范围
+
+### 改进
+- **对话历史持久化增强** — 页面刷新后对话完整恢复，不再因浏览器关闭丢失上下文；后端全面接管消息状态管理，前端不再依赖本地缓存
+- **消息展示优化** — 连续同一角色的消息自动合并显示（如多个 assistant 回复合并为一条），阅读更流畅
+- **停止信号可靠性提升** — Agent 异常结束或用户主动停止时，前端能可靠收到停止信号并更新 UI 状态
+
+### 修复
+- 修复切换对话时 loading 状态卡死的问题（switchConv 提前放行占位消息）
+- 修复消息历史顺序错乱和思考链（reasoning_content）丢失的严重问题
+- 修复 MergeConsecutiveAssistants 跳过 RoleTool 消息导致工具调用结果不完整的问题
+
+---
+
+## 1.0.3 — 2026-07-17
+
+### 改进
+- **子进程窗口管理** — 所有后台子进程（Git 操作、BUG 检测编译/测试、Lua 工具执行、桥接命令）统一隐藏控制台窗口，避免黑框闪烁
+- **会话持久化** — OnBatchPersist 回调从"每 5 轮"改为"每轮迭代"写盘，降低异常丢失风险
+- **代码搜索提示修复** — codegraph 搜索无结果时正确显示查询内容而非空占位符
+
+### 修复
+- **PersistNewMessages idx 空洞 bug** — 修复因跳过 System/User 角色消息导致消息序号不连续、后续消息无法正确持久化的严重问题（db_store.go + db_adapter.go）
+
+---
+
+## 1.0.2 — 2026-07-16
+
+### 改进
+- **文档同步** — features.md 同步到最新版本，移除冗余的"版本信息与更新日志"章节
+
+---
+
+## 1.0.1 — 2026-07-11
+
+### 新增
+- **更新日志页面** — 帮助文档中新增更新日志页面，版本历史一目了然
+- **WebSocket 协议文档** — API 文档补充完整 WebSocket 事件类型与负载定义
+- **系统版本报告** — \`/api/system/info\` 现在返回 \`version\` 字段，前端"关于"面板同步显示
+
+### 改进
+- **API 文档全面重写** — 每个接口增加请求体 JSON Schema、响应示例和错误码说明，便于二次开发
+- **帮助文档重构** — 文档归入"文档中心"分类，导航更清晰
+
+---
+
+## 1.0.0 — 2026-07-01
+
+### 新增
+- **AI 对话编程** — 用自然语言驱动 AI 读写文件、执行命令、管理 Git
+- **自主 Agent 模式** — AI 自动分析项目、制定计划并执行多步骤任务
+- **代码编辑器** — 内置多标签页编辑器，支持语法高亮、代码折叠、十六进制查看
+- **文件管理** — 工作区目录树浏览、文件搜索、批量操作
+- **Git 版本控制** — 对话驱动的 Git 操作（状态查看、暂存、提交、分支管理）
+- **内置终端** — 浏览器中的终端面板，支持 AI 自动执行命令
+- **对话历史管理** — 自动保存、回溯与继续历史对话
+- **BUG 自动检测修复** — AI 扫描编译/测试问题并自动修复
+- **Skills / MCP 扩展** — 可复用的工作流模板和模型上下文协议扩展
+- **记忆系统** — AI 跨会话记住用户偏好和历史决策
+- **任务与规划管理** — 复杂任务分解为可追踪的子步骤
+- **Lua 自定义工具** — 通过 Lua 脚本创建自定义 AI 工具
+- **代码知识图谱** — 函数调用关系、类型层次、影响范围分析
+- **多模型支持** — 灵活切换 AI 模型后端（OpenAI / Claude 等）
+- **主题系统** — 四套预设主题（暗色、白色、暖色、暗夜紫）
+- **调试器** — 支持 Go 程序的断点、单步和变量查看
+- **网页验证工具** — 自动打开 URL、截图、分析页面效果
+- **办公文档处理** — 读取 Word / Excel / PDF 文件，支持 OCR
+
+### 技术架构
+- 后端使用 Go 语言，前端使用 Vue 3 + CodeMirror
+- WebSocket 实时推送 AI 事件流
+- 内嵌前端资源（go:embed），单二进制分发
+- 纯本地运行，所有 API 仅监听本地回环地址
+`;function ce(){return{async:!1,breaks:!1,extensions:null,gfm:!0,hooks:null,pedantic:!1,renderer:null,silent:!1,tokenizer:null,walkTokens:null}}var K=ce();function we(o){K=o}var Q={exec:()=>null};function Y(o){let t=[];return n=>{let l=Math.max(0,Math.min(3,n-1)),r=t[l];return r||(r=o(l),t[l]=r),r}}function S(o,t=""){let n=typeof o=="string"?o:o.source,l={replace:(r,a)=>{let s=typeof a=="string"?a:a.source;return s=s.replace(G.caret,"$1"),n=n.replace(r,s),l},getRegex:()=>new RegExp(n,t)};return l}var Fo=((o="")=>{try{return!!new RegExp("(?<=1)(?<!1)"+o)}catch{return!1}})(),G={codeRemoveIndent:/^(?: {1,4}| {0,3}\t)/gm,outputLinkReplace:/\\([\[\]])/g,indentCodeCompensation:/^(\s+)(?:```)/,beginningSpace:/^\s+/,endingHash:/#$/,startingSpaceChar:/^ /,endingSpaceChar:/ $/,nonSpaceChar:/[^ ]/,newLineCharGlobal:/\n/g,tabCharGlobal:/\t/g,multipleSpaceGlobal:/\s+/g,blankLine:/^[ \t]*$/,doubleBlankLine:/\n[ \t]*\n[ \t]*$/,blockquoteStart:/^ {0,3}>/,blockquoteSetextReplace:/\n {0,3}((?:=+|-+) *)(?=\n|$)/g,blockquoteSetextReplace2:/^ {0,3}>[ \t]?/gm,listReplaceNesting:/^ {1,4}(?=( {4})*[^ ])/g,listIsTask:/^\[[ xX]\] +\S/,listReplaceTask:/^\[[ xX]\] +/,listTaskCheckbox:/\[[ xX]\]/,anyLine:/\n.*\n/,hrefBrackets:/^<(.*)>$/,tableDelimiter:/[:|]/,tableAlignChars:/^\||\| *$/g,tableRowBlankLine:/\n[ \t]*$/,tableAlignRight:/^ *-+: *$/,tableAlignCenter:/^ *:-+: *$/,tableAlignLeft:/^ *:-+ *$/,startATag:/^<a /i,endATag:/^<\/a>/i,startPreScriptTag:/^<(pre|code|kbd|script)(\s|>)/i,endPreScriptTag:/^<\/(pre|code|kbd|script)(\s|>)/i,startAngleBracket:/^</,endAngleBracket:/>$/,pedanticHrefTitle:/^([^'"]*[^\s])\s+(['"])(.*)\2/,unicodeAlphaNumeric:/[\p{L}\p{N}]/u,escapeTest:/[&<>"']/,escapeReplace:/[&<>"']/g,escapeTestNoEncode:/[<>"']|&(?!(#\d{1,7}|#[Xx][a-fA-F0-9]{1,6}|\w+);)/,escapeReplaceNoEncode:/[<>"']|&(?!(#\d{1,7}|#[Xx][a-fA-F0-9]{1,6}|\w+);)/g,caret:/(^|[^\[])\^/g,percentDecode:/%25/g,findPipe:/\|/g,splitPipe:/ \|/,slashPipe:/\\\|/g,carriageReturn:/\r\n|\r/g,spaceLine:/^ +$/gm,notSpaceStart:/^\S*/,endingNewline:/\n$/,listItemRegex:o=>new RegExp(`^( {0,3}${o})((?:[	 ][^\\n]*)?(?:\\n|$))`),nextBulletRegex:Y(o=>new RegExp(`^ {0,${o}}(?:[*+-]|\\d{1,9}[.)])((?:[ 	][^\\n]*)?(?:\\n|$))`)),hrRegex:Y(o=>new RegExp(`^ {0,${o}}((?:- *){3,}|(?:_ *){3,}|(?:\\* *){3,})(?:\\n+|$)`)),fencesBeginRegex:Y(o=>new RegExp(`^ {0,${o}}(?:\`\`\`|~~~)`)),headingBeginRegex:Y(o=>new RegExp(`^ {0,${o}}#`)),htmlBeginRegex:Y(o=>new RegExp(`^ {0,${o}}<(?:[a-z].*>|!--)`,"i")),blockquoteBeginRegex:Y(o=>new RegExp(`^ {0,${o}}>`))},Oo=/^(?:[ \t]*(?:\n|$))+/,zo=/^((?: {4}| {0,3}\t)[^\n]+(?:\n(?:[ \t]*(?:\n|$))*)?)+/,Uo=/^ {0,3}(`{3,}(?=[^`\n]*(?:\n|$))|~{3,})([^\n]*)(?:\n|$)(?:|([\s\S]*?)(?:\n|$))(?: {0,3}\1[~`]* *(?=\n|$)|$)/,v=/^ {0,3}((?:-[\t ]*){3,}|(?:_[ \t]*){3,}|(?:\*[ \t]*){3,})(?:\n+|$)/,Ho=/^ {0,3}(#{1,6})(?=\s|$)(.*)(?:\n+|$)/,de=/ {0,3}(?:[*+-]|\d{1,9}[.)])/,Te=/^(?!bull |blockCode|fences|blockquote|heading|html|table)((?:.|\n(?!\s*?\n|bull |blockCode|fences|blockquote|heading|html|table))+?)\n {0,3}(=+|-+) *(?:\n+|$)/,Be=S(Te).replace(/bull/g,de).replace(/blockCode/g,/(?: {4}| {0,3}\t)/).replace(/fences/g,/ {0,3}(?:`{3,}|~{3,})/).replace(/blockquote/g,/ {0,3}>/).replace(/heading/g,/ {0,3}#{1,6}/).replace(/html/g,/ {0,3}<[^\n>]+>\n/).replace(/\|table/g,"").getRegex(),jo=S(Te).replace(/bull/g,de).replace(/blockCode/g,/(?: {4}| {0,3}\t)/).replace(/fences/g,/ {0,3}(?:`{3,}|~{3,})/).replace(/blockquote/g,/ {0,3}>/).replace(/heading/g,/ {0,3}#{1,6}/).replace(/html/g,/ {0,3}<[^\n>]+>\n/).replace(/table/g,/ {0,3}\|?(?:[:\- ]*\|)+[\:\- ]*\n/).getRegex(),pe=/^([^\n]+(?:\n(?!hr|heading|lheading|blockquote|fences|list|html|table| +\n)[^\n]+)*)/,qo=/^[^\n]+/,me=/(?!\s*\])(?:\\[\s\S]|[^\[\]\\])+/,Wo=S(/^ {0,3}\[(label)\]: *(?:\n[ \t]*)?([^<\s][^\s]*|<.*?>)(?:(?: +(?:\n[ \t]*)?| *\n[ \t]*)(title))? *(?:\n+|$)/).replace("label",me).replace("title",/(?:"(?:\\"?|[^"\\])*"|'[^'\n]*(?:\n[^'\n]+)*\n?'|\([^()]*\))/).getRegex(),Jo=S(/^(bull)([ \t][^\n]*?)?(?:\n|$)/).replace(/bull/g,de).getRegex(),te="address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|meta|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul",ge=/<!--(?:-?>|[\s\S]*?(?:-->|$))/,Zo=S("^ {0,3}(?:<(script|pre|style|textarea)[\\s>][\\s\\S]*?(?:</\\1>[^\\n]*\\n+|$)|comment[^\\n]*(\\n+|$)|<\\?[\\s\\S]*?(?:\\?>\\n*|$)|<![A-Z][\\s\\S]*?(?:>\\n*|$)|<!\\[CDATA\\[[\\s\\S]*?(?:\\]\\]>\\n*|$)|</?(tag)(?: +|\\n|/?>)[\\s\\S]*?(?:(?:\\n[ 	]*)+\\n|$)|<(?!script|pre|style|textarea)([a-z][\\w-]*)(?:attribute)*? */?>(?=[ \\t]*(?:\\n|$))[\\s\\S]*?(?:(?:\\n[ 	]*)+\\n|$)|</(?!script|pre|style|textarea)[a-z][\\w-]*\\s*>(?=[ \\t]*(?:\\n|$))[\\s\\S]*?(?:(?:\\n[ 	]*)+\\n|$))","i").replace("comment",ge).replace("tag",te).replace("attribute",/ +[a-zA-Z:_][\w.:-]*(?: *= *"[^"\n]*"| *= *'[^'\n]*'| *= *[^\s"'=<>`]+)?/).getRegex(),Se=S(pe).replace("hr",v).replace("heading"," {0,3}#{1,6}(?:\\s|$)").replace("|lheading","").replace("|table","").replace("blockquote"," {0,3}>").replace("fences"," {0,3}(?:`{3,}(?=[^`\\n]*\\n)|~{3,})[^\\n]*\\n").replace("list"," {0,3}(?:[*+-]|1[.)])[ \\t]+[^ \\t\\n]").replace("html","</?(?:tag)(?: +|\\n|/?>)|<(?:script|pre|style|textarea|!--)").replace("tag",te).getRegex(),Ko=S(/^( {0,3}> ?(paragraph|[^\n]*)(?:\n|$))+/).replace("paragraph",Se).getRegex(),ke={blockquote:Ko,code:zo,def:Wo,fences:Uo,heading:Ho,hr:v,html:Zo,lheading:Be,list:Jo,newline:Oo,paragraph:Se,table:Q,text:qo},Ce=S("^ *([^\\n ].*)\\n {0,3}((?:\\| *)?:?-+:? *(?:\\| *:?-+:? *)*(?:\\| *)?)(?:\\n((?:(?! *\\n|hr|heading|blockquote|code|fences|list|html).*(?:\\n|$))*)\\n*|$)").replace("hr",v).replace("heading"," {0,3}#{1,6}(?:\\s|$)").replace("blockquote"," {0,3}>").replace("code","(?: {4}| {0,3}	)[^\\n]").replace("fences"," {0,3}(?:`{3,}(?=[^`\\n]*\\n)|~{3,})[^\\n]*\\n").replace("list"," {0,3}(?:[*+-]|1[.)])[ \\t]").replace("html","</?(?:tag)(?: +|\\n|/?>)|<(?:script|pre|style|textarea|!--)").replace("tag",te).getRegex(),Qo={...ke,lheading:jo,table:Ce,paragraph:S(pe).replace("hr",v).replace("heading"," {0,3}#{1,6}(?:\\s|$)").replace("|lheading","").replace("table",Ce).replace("blockquote"," {0,3}>").replace("fences"," {0,3}(?:`{3,}(?=[^`\\n]*\\n)|~{3,})[^\\n]*\\n").replace("list"," {0,3}(?:[*+-]|1[.)])[ \\t]+[^ \\t\\n]").replace("html","</?(?:tag)(?: +|\\n|/?>)|<(?:script|pre|style|textarea|!--)").replace("tag",te).getRegex()},Xo={...ke,html:S(`^ *(?:comment *(?:\\n|\\s*$)|<(tag)[\\s\\S]+?</\\1> *(?:\\n{2,}|\\s*$)|<tag(?:"[^"]*"|'[^']*'|\\s[^'"/>\\s]*)*?/?> *(?:\\n{2,}|\\s*$))`).replace("comment",ge).replace(/tag/g,"(?!(?:a|em|strong|small|s|cite|q|dfn|abbr|data|time|code|var|samp|kbd|sub|sup|i|b|u|mark|ruby|rt|rp|bdi|bdo|span|br|wbr|ins|del|img)\\b)\\w+(?!:|[^\\w\\s@]*@)\\b").getRegex(),def:/^ *\[([^\]]+)\]: *<?([^\s>]+)>?(?: +(["(][^\n]+[")]))? *(?:\n+|$)/,heading:/^(#{1,6})(.*)(?:\n+|$)/,fences:Q,lheading:/^(.+?)\n {0,3}(=+|-+) *(?:\n+|$)/,paragraph:S(pe).replace("hr",v).replace("heading",` *#{1,6} *[^
+]`).replace("lheading",Be).replace("|table","").replace("blockquote"," {0,3}>").replace("|fences","").replace("|list","").replace("|html","").replace("|tag","").getRegex()},Yo=/^\\([!"#$%&'()*+,\-./:;<=>?@\[\]\\^_`{|}~])/,_o=/^(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)/,Ie=/^( {2,}|\\)\n(?!\s*$)/,vo=/^(`+|[^`])(?:(?= {2,}\n)|[\s\S]*?(?:(?=[\\<!\[`*_]|\b_|$)|[^ ](?= {2,}\n)))/,_=/[\p{P}\p{S}]/u,oe=/[\s\p{P}\p{S}]/u,he=/[^\s\p{P}\p{S}]/u,el=S(/^((?![*_])punctSpace)/,"u").replace(/punctSpace/g,oe).getRegex(),Pe=/(?!~)[\p{P}\p{S}]/u,nl=/(?!~)[\s\p{P}\p{S}]/u,tl=/(?:[^\s\p{P}\p{S}]|~)/u,ol=S(/link|precode-code|html/,"g").replace("link",/\[(?:[^\[\]`]|(?<a>`+)[^`]+\k<a>(?!`))*?\]\((?:\\[\s\S]|[^\\\(\)]|\((?:\\[\s\S]|[^\\\(\)])*\))*\)/).replace("precode-",Fo?"(?<!`)()":"(^^|[^`])").replace("code",/(?<b>`+)[^`]+\k<b>(?!`)/).replace("html",/<(?! )[^<>]*?>/).getRegex(),Ae=/^(?:\*+(?:((?!\*)punct)|([^\s*]))?)|^_+(?:((?!_)punct)|([^\s_]))?/,ll=S(Ae,"u").replace(/punct/g,_).getRegex(),rl=S(Ae,"u").replace(/punct/g,Pe).getRegex(),$e="^[^_*]*?__[^_*]*?\\*[^_*]*?(?=__)|[^*]+(?=[^*])|(?!\\*)punct(\\*+)(?=[\\s]|$)|notPunctSpace(\\*+)(?!\\*)(?=punctSpace|$)|(?!\\*)punctSpace(\\*+)(?=notPunctSpace)|[\\s](\\*+)(?!\\*)(?=punct)|(?!\\*)punct(\\*+)(?!\\*)(?=punct)|notPunctSpace(\\*+)(?=notPunctSpace)",al=S($e,"gu").replace(/notPunctSpace/g,he).replace(/punctSpace/g,oe).replace(/punct/g,_).getRegex(),sl=S($e,"gu").replace(/notPunctSpace/g,tl).replace(/punctSpace/g,nl).replace(/punct/g,Pe).getRegex(),il=S("^[^_*]*?\\*\\*[^_*]*?_[^_*]*?(?=\\*\\*)|[^_]+(?=[^_])|(?!_)punct(_+)(?=[\\s]|$)|notPunctSpace(_+)(?!_)(?=punctSpace|$)|(?!_)punctSpace(_+)(?=notPunctSpace)|[\\s](_+)(?!_)(?=punct)|(?!_)punct(_+)(?!_)(?=punct)","gu").replace(/notPunctSpace/g,he).replace(/punctSpace/g,oe).replace(/punct/g,_).getRegex(),cl=S(/^~~?(?:((?!~)punct)|[^\s~])/,"u").replace(/punct/g,_).getRegex(),dl="^[^~]+(?=[^~])|(?!~)punct(~~?)(?=[\\s]|$)|notPunctSpace(~~?)(?!~)(?=punctSpace|$)|(?!~)punctSpace(~~?)(?=notPunctSpace)|[\\s](~~?)(?!~)(?=punct)|(?!~)punct(~~?)(?!~)(?=punct)|notPunctSpace(~~?)(?=notPunctSpace)",pl=S(dl,"gu").replace(/notPunctSpace/g,he).replace(/punctSpace/g,oe).replace(/punct/g,_).getRegex(),ml=S(/\\(punct)/,"gu").replace(/punct/g,_).getRegex(),gl=S(/^<(scheme:[^\s\x00-\x1f<>]*|email)>/).replace("scheme",/[a-zA-Z][a-zA-Z0-9+.-]{1,31}/).replace("email",/[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+(@)[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+(?![-_])/).getRegex(),kl=S(ge).replace("(?:-->|$)","-->").getRegex(),hl=S("^comment|^</[a-zA-Z][\\w:-]*\\s*>|^<[a-zA-Z][\\w-]*(?:attribute)*?\\s*/?>|^<\\?[\\s\\S]*?\\?>|^<![a-zA-Z]+\\s[\\s\\S]*?>|^<!\\[CDATA\\[[\\s\\S]*?\\]\\]>").replace("comment",kl).replace("attribute",/\s+[a-zA-Z:_][\w.:-]*(?:\s*=\s*"[^"]*"|\s*=\s*'[^']*'|\s*=\s*[^\s"'=<>`]+)?/).getRegex(),le=/(?:\[(?:\\[\s\S]|[^\[\]\\])*\]|\\[\s\S]|`+(?!`)[^`]*?`+(?!`)|``+(?=\])|[^\[\]\\`])*?/,fl=S(/^!?\[(label)\]\(\s*(href)(?:(?:[ \t]+(?:\n[ \t]*)?|\n[ \t]*)(title))?\s*\)/).replace("label",le).replace("href",/<(?:\\.|[^\n<>\\])+>|[^ \t\n\x00-\x1f]*/).replace("title",/"(?:\\"?|[^"\\])*"|'(?:\\'?|[^'\\])*'|\((?:\\\)?|[^)\\])*\)/).getRegex(),Me=S(/^!?\[(label)\]\[(ref)\]/).replace("label",le).replace("ref",me).getRegex(),De=S(/^!?\[(ref)\](?:\[\])?/).replace("ref",me).getRegex(),yl=S("reflink|nolink(?!\\()","g").replace("reflink",Me).replace("nolink",De).getRegex(),Re=/[hH][tT][tT][pP][sS]?|[fF][tT][pP]/,fe={_backpedal:Q,anyPunctuation:ml,autolink:gl,blockSkip:ol,br:Ie,code:_o,del:Q,delLDelim:Q,delRDelim:Q,emStrongLDelim:ll,emStrongRDelimAst:al,emStrongRDelimUnd:il,escape:Yo,link:fl,nolink:De,punctuation:el,reflink:Me,reflinkSearch:yl,tag:hl,text:vo,url:Q},ul={...fe,link:S(/^!?\[(label)\]\((.*?)\)/).replace("label",le).getRegex(),reflink:S(/^!?\[(label)\]\s*\[([^\]]*)\]/).replace("label",le).getRegex()},ye={...fe,emStrongRDelimAst:sl,emStrongLDelim:rl,delLDelim:cl,delRDelim:pl,url:S(/^((?:protocol):\/\/|www\.)(?:[a-zA-Z0-9\-]+\.?)+[^\s<]*|^email/).replace("protocol",Re).replace("email",/[A-Za-z0-9._+-]+(@)[a-zA-Z0-9-_]+(?:\.[a-zA-Z0-9-_]*[a-zA-Z0-9])+(?![-_])/).getRegex(),_backpedal:/(?:[^?!.,:;*_'"~()&]+|\([^)]*\)|&(?![a-zA-Z0-9]+;$)|[?!.,:;*_'"~)]+(?!$))+/,del:/^(~~?)(?=[^\s~])((?:\\[\s\S]|[^\\])*?(?:\\[\s\S]|[^\s~\\]))\1(?=[^~]|$)/,text:S(/^([`~]+|[^`~])(?:(?= {2,}\n)|(?=[a-zA-Z0-9.!#$%&'*+\/=?_`{\|}~-]+@)|[\s\S]*?(?:(?=[\\<!\[`*~_]|\b_|protocol:\/\/|www\.|$)|[^ ](?= {2,}\n)|[^a-zA-Z0-9.!#$%&'*+\/=?_`{\|}~-](?=[a-zA-Z0-9.!#$%&'*+\/=?_`{\|}~-]+@)))/).replace("protocol",Re).getRegex()},El={...ye,br:S(Ie).replace("{2,}","*").getRegex(),text:S(ye.text).replace("\\b_","\\b_| {2,}\\n").replace(/\{2,\}/g,"*").getRegex()},re={normal:ke,gfm:Qo,pedantic:Xo},ee={normal:fe,gfm:ye,breaks:El,pedantic:ul},bl={"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"},Le=o=>bl[o];function q(o,t){if(t){if(G.escapeTest.test(o))return o.replace(G.escapeReplace,Le)}else if(G.escapeTestNoEncode.test(o))return o.replace(G.escapeReplaceNoEncode,Le);return o}function Ge(o){try{o=encodeURI(o).replace(G.percentDecode,"%")}catch{return null}return o}function Fe(o,t){var a;let n=o.replace(G.findPipe,(s,d,i)=>{let h=!1,g=d;for(;--g>=0&&i[g]==="\\";)h=!h;return h?"|":" |"}),l=n.split(G.splitPipe),r=0;if(l[0].trim()||l.shift(),l.length>0&&!((a=l.at(-1))!=null&&a.trim())&&l.pop(),t)if(l.length>t)l.splice(t);else for(;l.length<t;)l.push("");for(;r<l.length;r++)l[r]=l[r].trim().replace(G.slashPipe,"|");return l}function Z(o,t,n){let l=o.length;if(l===0)return"";let r=0;for(;r<l&&o.charAt(l-r-1)===t;)r++;return o.slice(0,l-r)}function Oe(o){let t=o.split(`
+`),n=t.length-1;for(;n>=0&&G.blankLine.test(t[n]);)n--;return t.length-n<=2?o:t.slice(0,n+1).join(`
+`)}function xl(o,t){if(o.indexOf(t[1])===-1)return-1;let n=0;for(let l=0;l<o.length;l++)if(o[l]==="\\")l++;else if(o[l]===t[0])n++;else if(o[l]===t[1]&&(n--,n<0))return l;return n>0?-2:-1}function Vl(o,t=0){let n=t,l="";for(let r of o)if(r==="	"){let a=4-n%4;l+=" ".repeat(a),n+=a}else l+=r,n++;return l}function ze(o,t,n,l,r){let a=t.href,s=t.title||null,d=o[1].replace(r.other.outputLinkReplace,"$1");l.state.inLink=!0;let i={type:o[0].charAt(0)==="!"?"image":"link",raw:n,href:a,title:s,text:d,tokens:l.inlineTokens(d)};return l.state.inLink=!1,i}function Nl(o,t,n){let l=o.match(n.other.indentCodeCompensation);if(l===null)return t;let r=l[1];return t.split(`
+`).map(a=>{let s=a.match(n.other.beginningSpace);if(s===null)return a;let[d]=s;return d.length>=r.length?a.slice(r.length):a}).join(`
+`)}var ae=class{constructor(o){A(this,"options");A(this,"rules");A(this,"lexer");this.options=o||K}space(o){let t=this.rules.block.newline.exec(o);if(t&&t[0].length>0)return{type:"space",raw:t[0]}}code(o){let t=this.rules.block.code.exec(o);if(t){let n=this.options.pedantic?t[0]:Oe(t[0]),l=n.replace(this.rules.other.codeRemoveIndent,"");return{type:"code",raw:n,codeBlockStyle:"indented",text:l}}}fences(o){let t=this.rules.block.fences.exec(o);if(t){let n=t[0],l=Nl(n,t[3]||"",this.rules);return{type:"code",raw:n,lang:t[2]?t[2].trim().replace(this.rules.inline.anyPunctuation,"$1"):t[2],text:l}}}heading(o){let t=this.rules.block.heading.exec(o);if(t){let n=t[2].trim();if(this.rules.other.endingHash.test(n)){let l=Z(n,"#");(this.options.pedantic||!l||this.rules.other.endingSpaceChar.test(l))&&(n=l.trim())}return{type:"heading",raw:Z(t[0],`
+`),depth:t[1].length,text:n,tokens:this.lexer.inline(n)}}}hr(o){let t=this.rules.block.hr.exec(o);if(t)return{type:"hr",raw:Z(t[0],`
+`)}}blockquote(o){let t=this.rules.block.blockquote.exec(o);if(t){let n=Z(t[0],`
 `).split(`
-`),l="",o="",a=[];for(;n.length>0;){let s=!1,d=[],i;for(i=0;i<n.length;i++)if(this.rules.other.blockquoteStart.test(n[i]))d.push(n[i]),s=!0;else if(!s)d.push(n[i]);else break;n=n.slice(i);let h=d.join(`
+`),l="",r="",a=[];for(;n.length>0;){let s=!1,d=[],i;for(i=0;i<n.length;i++)if(this.rules.other.blockquoteStart.test(n[i]))d.push(n[i]),s=!0;else if(!s)d.push(n[i]);else break;n=n.slice(i);let h=d.join(`
 `),g=h.replace(this.rules.other.blockquoteSetextReplace,`
     $1`).replace(this.rules.other.blockquoteSetextReplace2,"");l=l?`${l}
-${h}`:h,o=o?`${o}
+${h}`:h,r=r?`${r}
 ${g}`:g;let x=this.lexer.state.top;if(this.lexer.state.top=!0,this.lexer.blockTokens(g,a,!0),this.lexer.state.top=x,n.length===0)break;let N=a.at(-1);if((N==null?void 0:N.type)==="code")break;if((N==null?void 0:N.type)==="blockquote"){let B=N,y=B.raw+`
 `+n.join(`
-`),T=this.blockquote(y);a[a.length-1]=T,l=l.substring(0,l.length-B.raw.length)+T.raw,o=o.substring(0,o.length-B.text.length)+T.text;break}else if((N==null?void 0:N.type)==="list"){let B=N,y=B.raw+`
+`),T=this.blockquote(y);a[a.length-1]=T,l=l.substring(0,l.length-B.raw.length)+T.raw,r=r.substring(0,r.length-B.text.length)+T.text;break}else if((N==null?void 0:N.type)==="list"){let B=N,y=B.raw+`
 `+n.join(`
-`),T=this.list(y);a[a.length-1]=T,l=l.substring(0,l.length-N.raw.length)+T.raw,o=o.substring(0,o.length-B.raw.length)+T.raw,n=y.substring(a.at(-1).raw.length).split(`
-`);continue}}return{type:"blockquote",raw:l,tokens:a,text:o}}}list(r){let t=this.rules.block.list.exec(r);if(t){let n=t[1].trim(),l=n.length>1,o={type:"list",raw:"",ordered:l,start:l?+n.slice(0,-1):"",loose:!1,items:[]};n=l?`\\d{1,9}\\${n.slice(-1)}`:`\\${n}`,this.options.pedantic&&(n=l?n:"[*+-]");let a=this.rules.other.listItemRegex(n),s=!1;for(;r;){let i=!1,h="",g="";if(!(t=a.exec(r))||this.rules.block.hr.test(r))break;h=t[0],r=r.substring(h.length);let x=xl(t[2].split(`
-`,1)[0],t[1].length),N=r.split(`
+`),T=this.list(y);a[a.length-1]=T,l=l.substring(0,l.length-N.raw.length)+T.raw,r=r.substring(0,r.length-B.raw.length)+T.raw,n=y.substring(a.at(-1).raw.length).split(`
+`);continue}}return{type:"blockquote",raw:l,tokens:a,text:r}}}list(o){let t=this.rules.block.list.exec(o);if(t){let n=t[1].trim(),l=n.length>1,r={type:"list",raw:"",ordered:l,start:l?+n.slice(0,-1):"",loose:!1,items:[]};n=l?`\\d{1,9}\\${n.slice(-1)}`:`\\${n}`,this.options.pedantic&&(n=l?n:"[*+-]");let a=this.rules.other.listItemRegex(n),s=!1;for(;o;){let i=!1,h="",g="";if(!(t=a.exec(o))||this.rules.block.hr.test(o))break;h=t[0],o=o.substring(h.length);let x=Vl(t[2].split(`
+`,1)[0],t[1].length),N=o.split(`
 `,1)[0],B=!x.trim(),y=0;if(this.options.pedantic?(y=2,g=x.trimStart()):B?y=t[1].length+1:(y=x.search(this.rules.other.nonSpaceChar),y=y>4?1:y,g=x.slice(y),y+=t[1].length),B&&this.rules.other.blankLine.test(N)&&(h+=N+`
-`,r=r.substring(N.length+1),i=!0),!i){let T=this.rules.other.nextBulletRegex(y),C=this.rules.other.hrRegex(y),$=this.rules.other.fencesBeginRegex(y),L=this.rules.other.headingBeginRegex(y),O=this.rules.other.htmlBeginRegex(y),W=this.rules.other.blockquoteBeginRegex(y);for(;r;){let z=r.split(`
-`,1)[0],F;if(N=z,this.options.pedantic?(N=N.replace(this.rules.other.listReplaceNesting,"  "),F=N):F=N.replace(this.rules.other.tabCharGlobal,"    "),$.test(N)||L.test(N)||O.test(N)||W.test(N)||T.test(N)||C.test(N))break;if(F.search(this.rules.other.nonSpaceChar)>=y||!N.trim())g+=`
-`+F.slice(y);else{if(B||x.replace(this.rules.other.tabCharGlobal,"    ").search(this.rules.other.nonSpaceChar)>=4||$.test(x)||L.test(x)||C.test(x))break;g+=`
+`,o=o.substring(N.length+1),i=!0),!i){let T=this.rules.other.nextBulletRegex(y),C=this.rules.other.hrRegex(y),$=this.rules.other.fencesBeginRegex(y),R=this.rules.other.headingBeginRegex(y),O=this.rules.other.htmlBeginRegex(y),W=this.rules.other.blockquoteBeginRegex(y);for(;o;){let z=o.split(`
+`,1)[0],F;if(N=z,this.options.pedantic?(N=N.replace(this.rules.other.listReplaceNesting,"  "),F=N):F=N.replace(this.rules.other.tabCharGlobal,"    "),$.test(N)||R.test(N)||O.test(N)||W.test(N)||T.test(N)||C.test(N))break;if(F.search(this.rules.other.nonSpaceChar)>=y||!N.trim())g+=`
+`+F.slice(y);else{if(B||x.replace(this.rules.other.tabCharGlobal,"    ").search(this.rules.other.nonSpaceChar)>=4||$.test(x)||R.test(x)||C.test(x))break;g+=`
 `+N}B=!N.trim(),h+=z+`
-`,r=r.substring(z.length+1),x=F.slice(y)}}o.loose||(s?o.loose=!0:this.rules.other.doubleBlankLine.test(h)&&(s=!0)),o.items.push({type:"list_item",raw:h,task:!!this.options.gfm&&this.rules.other.listIsTask.test(g),loose:!1,text:g,tokens:[]}),o.raw+=h}let d=o.items.at(-1);if(d)d.raw=d.raw.trimEnd(),d.text=d.text.trimEnd();else return;o.raw=o.raw.trimEnd();for(let i of o.items){this.lexer.state.top=!1,i.tokens=this.lexer.blockTokens(i.text,[]);let h=i.tokens[0];if(i.task&&((h==null?void 0:h.type)==="text"||(h==null?void 0:h.type)==="paragraph")){i.text=i.text.replace(this.rules.other.listReplaceTask,""),h.raw=h.raw.replace(this.rules.other.listReplaceTask,""),h.text=h.text.replace(this.rules.other.listReplaceTask,"");for(let x=this.lexer.inlineQueue.length-1;x>=0;x--)if(this.rules.other.listIsTask.test(this.lexer.inlineQueue[x].src)){this.lexer.inlineQueue[x].src=this.lexer.inlineQueue[x].src.replace(this.rules.other.listReplaceTask,"");break}let g=this.rules.other.listTaskCheckbox.exec(i.raw);if(g){let x={type:"checkbox",raw:g[0]+" ",checked:g[0]!=="[ ]"};i.checked=x.checked,o.loose?i.tokens[0]&&["paragraph","text"].includes(i.tokens[0].type)&&"tokens"in i.tokens[0]&&i.tokens[0].tokens?(i.tokens[0].raw=x.raw+i.tokens[0].raw,i.tokens[0].text=x.raw+i.tokens[0].text,i.tokens[0].tokens.unshift(x)):i.tokens.unshift({type:"paragraph",raw:x.raw,text:x.raw,tokens:[x]}):i.tokens.unshift(x)}}else i.task&&(i.task=!1);if(!o.loose){let g=i.tokens.filter(N=>N.type==="space"),x=g.length>0&&g.some(N=>this.rules.other.anyLine.test(N.raw));o.loose=x}}if(o.loose)for(let i of o.items){i.loose=!0;for(let h of i.tokens)h.type==="text"&&(h.type="paragraph")}return o}}html(r){let t=this.rules.block.html.exec(r);if(t){let n=Oe(t[0]);return{type:"html",block:!0,raw:n,pre:t[1]==="pre"||t[1]==="script"||t[1]==="style",text:n}}}def(r){let t=this.rules.block.def.exec(r);if(t){let n=t[1].toLowerCase().replace(this.rules.other.multipleSpaceGlobal," "),l=t[2]?t[2].replace(this.rules.other.hrefBrackets,"$1").replace(this.rules.inline.anyPunctuation,"$1"):"",o=t[3]?t[3].substring(1,t[3].length-1).replace(this.rules.inline.anyPunctuation,"$1"):t[3];return{type:"def",tag:n,raw:Z(t[0],`
-`),href:l,title:o}}}table(r){var s;let t=this.rules.block.table.exec(r);if(!t||!this.rules.other.tableDelimiter.test(t[2]))return;let n=Fe(t[1]),l=t[2].replace(this.rules.other.tableAlignChars,"").split("|"),o=(s=t[3])!=null&&s.trim()?t[3].replace(this.rules.other.tableRowBlankLine,"").split(`
+`,o=o.substring(z.length+1),x=F.slice(y)}}r.loose||(s?r.loose=!0:this.rules.other.doubleBlankLine.test(h)&&(s=!0)),r.items.push({type:"list_item",raw:h,task:!!this.options.gfm&&this.rules.other.listIsTask.test(g),loose:!1,text:g,tokens:[]}),r.raw+=h}let d=r.items.at(-1);if(d)d.raw=d.raw.trimEnd(),d.text=d.text.trimEnd();else return;r.raw=r.raw.trimEnd();for(let i of r.items){this.lexer.state.top=!1,i.tokens=this.lexer.blockTokens(i.text,[]);let h=i.tokens[0];if(i.task&&((h==null?void 0:h.type)==="text"||(h==null?void 0:h.type)==="paragraph")){i.text=i.text.replace(this.rules.other.listReplaceTask,""),h.raw=h.raw.replace(this.rules.other.listReplaceTask,""),h.text=h.text.replace(this.rules.other.listReplaceTask,"");for(let x=this.lexer.inlineQueue.length-1;x>=0;x--)if(this.rules.other.listIsTask.test(this.lexer.inlineQueue[x].src)){this.lexer.inlineQueue[x].src=this.lexer.inlineQueue[x].src.replace(this.rules.other.listReplaceTask,"");break}let g=this.rules.other.listTaskCheckbox.exec(i.raw);if(g){let x={type:"checkbox",raw:g[0]+" ",checked:g[0]!=="[ ]"};i.checked=x.checked,r.loose?i.tokens[0]&&["paragraph","text"].includes(i.tokens[0].type)&&"tokens"in i.tokens[0]&&i.tokens[0].tokens?(i.tokens[0].raw=x.raw+i.tokens[0].raw,i.tokens[0].text=x.raw+i.tokens[0].text,i.tokens[0].tokens.unshift(x)):i.tokens.unshift({type:"paragraph",raw:x.raw,text:x.raw,tokens:[x]}):i.tokens.unshift(x)}}else i.task&&(i.task=!1);if(!r.loose){let g=i.tokens.filter(N=>N.type==="space"),x=g.length>0&&g.some(N=>this.rules.other.anyLine.test(N.raw));r.loose=x}}if(r.loose)for(let i of r.items){i.loose=!0;for(let h of i.tokens)h.type==="text"&&(h.type="paragraph")}return r}}html(o){let t=this.rules.block.html.exec(o);if(t){let n=Oe(t[0]);return{type:"html",block:!0,raw:n,pre:t[1]==="pre"||t[1]==="script"||t[1]==="style",text:n}}}def(o){let t=this.rules.block.def.exec(o);if(t){let n=t[1].toLowerCase().replace(this.rules.other.multipleSpaceGlobal," "),l=t[2]?t[2].replace(this.rules.other.hrefBrackets,"$1").replace(this.rules.inline.anyPunctuation,"$1"):"",r=t[3]?t[3].substring(1,t[3].length-1).replace(this.rules.inline.anyPunctuation,"$1"):t[3];return{type:"def",tag:n,raw:Z(t[0],`
+`),href:l,title:r}}}table(o){var s;let t=this.rules.block.table.exec(o);if(!t||!this.rules.other.tableDelimiter.test(t[2]))return;let n=Fe(t[1]),l=t[2].replace(this.rules.other.tableAlignChars,"").split("|"),r=(s=t[3])!=null&&s.trim()?t[3].replace(this.rules.other.tableRowBlankLine,"").split(`
 `):[],a={type:"table",raw:Z(t[0],`
-`),header:[],align:[],rows:[]};if(n.length===l.length){for(let d of l)this.rules.other.tableAlignRight.test(d)?a.align.push("right"):this.rules.other.tableAlignCenter.test(d)?a.align.push("center"):this.rules.other.tableAlignLeft.test(d)?a.align.push("left"):a.align.push(null);for(let d=0;d<n.length;d++)a.header.push({text:n[d],tokens:this.lexer.inline(n[d]),header:!0,align:a.align[d]});for(let d of o)a.rows.push(Fe(d,a.header.length).map((i,h)=>({text:i,tokens:this.lexer.inline(i),header:!1,align:a.align[h]})));return a}}lheading(r){let t=this.rules.block.lheading.exec(r);if(t){let n=t[1].trim();return{type:"heading",raw:Z(t[0],`
-`),depth:t[2].charAt(0)==="="?1:2,text:n,tokens:this.lexer.inline(n)}}}paragraph(r){let t=this.rules.block.paragraph.exec(r);if(t){let n=t[1].charAt(t[1].length-1)===`
-`?t[1].slice(0,-1):t[1];return{type:"paragraph",raw:t[0],text:n,tokens:this.lexer.inline(n)}}}text(r){let t=this.rules.block.text.exec(r);if(t)return{type:"text",raw:t[0],text:t[0],tokens:this.lexer.inline(t[0])}}escape(r){let t=this.rules.inline.escape.exec(r);if(t)return{type:"escape",raw:t[0],text:t[1]}}tag(r){let t=this.rules.inline.tag.exec(r);if(t)return!this.lexer.state.inLink&&this.rules.other.startATag.test(t[0])?this.lexer.state.inLink=!0:this.lexer.state.inLink&&this.rules.other.endATag.test(t[0])&&(this.lexer.state.inLink=!1),!this.lexer.state.inRawBlock&&this.rules.other.startPreScriptTag.test(t[0])?this.lexer.state.inRawBlock=!0:this.lexer.state.inRawBlock&&this.rules.other.endPreScriptTag.test(t[0])&&(this.lexer.state.inRawBlock=!1),{type:"html",raw:t[0],inLink:this.lexer.state.inLink,inRawBlock:this.lexer.state.inRawBlock,block:!1,text:t[0]}}link(r){let t=this.rules.inline.link.exec(r);if(t){let n=t[2].trim();if(!this.options.pedantic&&this.rules.other.startAngleBracket.test(n)){if(!this.rules.other.endAngleBracket.test(n))return;let a=Z(n.slice(0,-1),"\\");if((n.length-a.length)%2===0)return}else{let a=bl(t[2],"()");if(a===-2)return;if(a>-1){let s=(t[0].indexOf("!")===0?5:4)+t[1].length+a;t[2]=t[2].substring(0,a),t[0]=t[0].substring(0,s).trim(),t[3]=""}}let l=t[2],o="";if(this.options.pedantic){let a=this.rules.other.pedanticHrefTitle.exec(l);a&&(l=a[1],o=a[3])}else o=t[3]?t[3].slice(1,-1):"";return l=l.trim(),this.rules.other.startAngleBracket.test(l)&&(this.options.pedantic&&!this.rules.other.endAngleBracket.test(n)?l=l.slice(1):l=l.slice(1,-1)),ze(t,{href:l&&l.replace(this.rules.inline.anyPunctuation,"$1"),title:o&&o.replace(this.rules.inline.anyPunctuation,"$1")},t[0],this.lexer,this.rules)}}reflink(r,t){let n;if((n=this.rules.inline.reflink.exec(r))||(n=this.rules.inline.nolink.exec(r))){let l=(n[2]||n[1]).replace(this.rules.other.multipleSpaceGlobal," "),o=t[l.toLowerCase()];if(!o){let a=n[0].charAt(0);return{type:"text",raw:a,text:a}}return ze(n,o,n[0],this.lexer,this.rules)}}emStrong(r,t,n=""){let l=this.rules.inline.emStrongLDelim.exec(r);if(!(!l||!l[1]&&!l[2]&&!l[3]&&!l[4]||l[4]&&n.match(this.rules.other.unicodeAlphaNumeric))&&(!(l[1]||l[3])||!n||this.rules.inline.punctuation.exec(n))){let o=[...l[0]].length-1,a,s,d=o,i=0,h=l[0][0]==="*"?this.rules.inline.emStrongRDelimAst:this.rules.inline.emStrongRDelimUnd;for(h.lastIndex=0,t=t.slice(-1*r.length+o);(l=h.exec(t))!==null;){if(a=l[1]||l[2]||l[3]||l[4]||l[5]||l[6],!a)continue;if(s=[...a].length,l[3]||l[4]){d+=s;continue}else if((l[5]||l[6])&&o%3&&!((o+s)%3)){i+=s;continue}if(d-=s,d>0)continue;s=Math.min(s,s+d+i);let g=[...l[0]][0].length,x=r.slice(0,o+l.index+g+s);if(Math.min(o,s)%2){let B=x.slice(1,-1);return{type:"em",raw:x,text:B,tokens:this.lexer.inlineTokens(B)}}let N=x.slice(2,-2);return{type:"strong",raw:x,text:N,tokens:this.lexer.inlineTokens(N)}}}}codespan(r){let t=this.rules.inline.code.exec(r);if(t){let n=t[2].replace(this.rules.other.newLineCharGlobal," "),l=this.rules.other.nonSpaceChar.test(n),o=this.rules.other.startingSpaceChar.test(n)&&this.rules.other.endingSpaceChar.test(n);return l&&o&&(n=n.substring(1,n.length-1)),{type:"codespan",raw:t[0],text:n}}}br(r){let t=this.rules.inline.br.exec(r);if(t)return{type:"br",raw:t[0]}}del(r,t,n=""){let l=this.rules.inline.delLDelim.exec(r);if(l&&(!l[1]||!n||this.rules.inline.punctuation.exec(n))){let o=[...l[0]].length-1,a,s,d=o,i=this.rules.inline.delRDelim;for(i.lastIndex=0,t=t.slice(-1*r.length+o);(l=i.exec(t))!==null;){if(a=l[1]||l[2]||l[3]||l[4]||l[5]||l[6],!a||(s=[...a].length,s!==o))continue;if(l[3]||l[4]){d+=s;continue}if(d-=s,d>0)continue;s=Math.min(s,s+d);let h=[...l[0]][0].length,g=r.slice(0,o+l.index+h+s),x=g.slice(o,-o);return{type:"del",raw:g,text:x,tokens:this.lexer.inlineTokens(x)}}}}autolink(r){let t=this.rules.inline.autolink.exec(r);if(t){let n,l;return t[2]==="@"?(n=t[1],l="mailto:"+n):(n=t[1],l=n),{type:"link",raw:t[0],text:n,href:l,tokens:[{type:"text",raw:n,text:n}]}}}url(r){var n;let t;if(t=this.rules.inline.url.exec(r)){let l,o;if(t[2]==="@")l=t[0],o="mailto:"+l;else{let a;do a=t[0],t[0]=((n=this.rules.inline._backpedal.exec(t[0]))==null?void 0:n[0])??"";while(a!==t[0]);l=t[0],t[1]==="www."?o="http://"+t[0]:o=t[0]}return{type:"link",raw:t[0],text:l,href:o,tokens:[{type:"text",raw:l,text:l}]}}}inlineText(r){let t=this.rules.inline.text.exec(r);if(t){let n=this.lexer.state.inRawBlock;return{type:"text",raw:t[0],text:t[0],escaped:n}}}},H=class be{constructor(t){A(this,"tokens");A(this,"options");A(this,"state");A(this,"inlineQueue");A(this,"tokenizer");this.tokens=[],this.tokens.links=Object.create(null),this.options=t||K,this.options.tokenizer=this.options.tokenizer||new ae,this.tokenizer=this.options.tokenizer,this.tokenizer.options=this.options,this.tokenizer.lexer=this,this.inlineQueue=[],this.state={inLink:!1,inRawBlock:!1,top:!0};let n={other:G,block:oe.normal,inline:ee.normal};this.options.pedantic?(n.block=oe.pedantic,n.inline=ee.pedantic):this.options.gfm&&(n.block=oe.gfm,this.options.breaks?n.inline=ee.breaks:n.inline=ee.gfm),this.tokenizer.rules=n}static get rules(){return{block:oe,inline:ee}}static lex(t,n){return new be(n).lex(t)}static lexInline(t,n){return new be(n).inlineTokens(t)}lex(t){t=t.replace(G.carriageReturn,`
-`),this.blockTokens(t,this.tokens);for(let n=0;n<this.inlineQueue.length;n++){let l=this.inlineQueue[n];this.inlineTokens(l.src,l.tokens)}return this.inlineQueue=[],this.tokens}blockTokens(t,n=[],l=!1){var a,s,d;this.tokenizer.lexer=this,this.options.pedantic&&(t=t.replace(G.tabCharGlobal,"    ").replace(G.spaceLine,""));let o=1/0;for(;t;){if(t.length<o)o=t.length;else{this.infiniteLoopError(t.charCodeAt(0));break}let i;if((s=(a=this.options.extensions)==null?void 0:a.block)!=null&&s.some(g=>(i=g.call({lexer:this},t,n))?(t=t.substring(i.raw.length),n.push(i),!0):!1))continue;if(i=this.tokenizer.space(t)){t=t.substring(i.raw.length);let g=n.at(-1);i.raw.length===1&&g!==void 0?g.raw+=`
+`),header:[],align:[],rows:[]};if(n.length===l.length){for(let d of l)this.rules.other.tableAlignRight.test(d)?a.align.push("right"):this.rules.other.tableAlignCenter.test(d)?a.align.push("center"):this.rules.other.tableAlignLeft.test(d)?a.align.push("left"):a.align.push(null);for(let d=0;d<n.length;d++)a.header.push({text:n[d],tokens:this.lexer.inline(n[d]),header:!0,align:a.align[d]});for(let d of r)a.rows.push(Fe(d,a.header.length).map((i,h)=>({text:i,tokens:this.lexer.inline(i),header:!1,align:a.align[h]})));return a}}lheading(o){let t=this.rules.block.lheading.exec(o);if(t){let n=t[1].trim();return{type:"heading",raw:Z(t[0],`
+`),depth:t[2].charAt(0)==="="?1:2,text:n,tokens:this.lexer.inline(n)}}}paragraph(o){let t=this.rules.block.paragraph.exec(o);if(t){let n=t[1].charAt(t[1].length-1)===`
+`?t[1].slice(0,-1):t[1];return{type:"paragraph",raw:t[0],text:n,tokens:this.lexer.inline(n)}}}text(o){let t=this.rules.block.text.exec(o);if(t)return{type:"text",raw:t[0],text:t[0],tokens:this.lexer.inline(t[0])}}escape(o){let t=this.rules.inline.escape.exec(o);if(t)return{type:"escape",raw:t[0],text:t[1]}}tag(o){let t=this.rules.inline.tag.exec(o);if(t)return!this.lexer.state.inLink&&this.rules.other.startATag.test(t[0])?this.lexer.state.inLink=!0:this.lexer.state.inLink&&this.rules.other.endATag.test(t[0])&&(this.lexer.state.inLink=!1),!this.lexer.state.inRawBlock&&this.rules.other.startPreScriptTag.test(t[0])?this.lexer.state.inRawBlock=!0:this.lexer.state.inRawBlock&&this.rules.other.endPreScriptTag.test(t[0])&&(this.lexer.state.inRawBlock=!1),{type:"html",raw:t[0],inLink:this.lexer.state.inLink,inRawBlock:this.lexer.state.inRawBlock,block:!1,text:t[0]}}link(o){let t=this.rules.inline.link.exec(o);if(t){let n=t[2].trim();if(!this.options.pedantic&&this.rules.other.startAngleBracket.test(n)){if(!this.rules.other.endAngleBracket.test(n))return;let a=Z(n.slice(0,-1),"\\");if((n.length-a.length)%2===0)return}else{let a=xl(t[2],"()");if(a===-2)return;if(a>-1){let s=(t[0].indexOf("!")===0?5:4)+t[1].length+a;t[2]=t[2].substring(0,a),t[0]=t[0].substring(0,s).trim(),t[3]=""}}let l=t[2],r="";if(this.options.pedantic){let a=this.rules.other.pedanticHrefTitle.exec(l);a&&(l=a[1],r=a[3])}else r=t[3]?t[3].slice(1,-1):"";return l=l.trim(),this.rules.other.startAngleBracket.test(l)&&(this.options.pedantic&&!this.rules.other.endAngleBracket.test(n)?l=l.slice(1):l=l.slice(1,-1)),ze(t,{href:l&&l.replace(this.rules.inline.anyPunctuation,"$1"),title:r&&r.replace(this.rules.inline.anyPunctuation,"$1")},t[0],this.lexer,this.rules)}}reflink(o,t){let n;if((n=this.rules.inline.reflink.exec(o))||(n=this.rules.inline.nolink.exec(o))){let l=(n[2]||n[1]).replace(this.rules.other.multipleSpaceGlobal," "),r=t[l.toLowerCase()];if(!r){let a=n[0].charAt(0);return{type:"text",raw:a,text:a}}return ze(n,r,n[0],this.lexer,this.rules)}}emStrong(o,t,n=""){let l=this.rules.inline.emStrongLDelim.exec(o);if(!(!l||!l[1]&&!l[2]&&!l[3]&&!l[4]||l[4]&&n.match(this.rules.other.unicodeAlphaNumeric))&&(!(l[1]||l[3])||!n||this.rules.inline.punctuation.exec(n))){let r=[...l[0]].length-1,a,s,d=r,i=0,h=l[0][0]==="*"?this.rules.inline.emStrongRDelimAst:this.rules.inline.emStrongRDelimUnd;for(h.lastIndex=0,t=t.slice(-1*o.length+r);(l=h.exec(t))!==null;){if(a=l[1]||l[2]||l[3]||l[4]||l[5]||l[6],!a)continue;if(s=[...a].length,l[3]||l[4]){d+=s;continue}else if((l[5]||l[6])&&r%3&&!((r+s)%3)){i+=s;continue}if(d-=s,d>0)continue;s=Math.min(s,s+d+i);let g=[...l[0]][0].length,x=o.slice(0,r+l.index+g+s);if(Math.min(r,s)%2){let B=x.slice(1,-1);return{type:"em",raw:x,text:B,tokens:this.lexer.inlineTokens(B)}}let N=x.slice(2,-2);return{type:"strong",raw:x,text:N,tokens:this.lexer.inlineTokens(N)}}}}codespan(o){let t=this.rules.inline.code.exec(o);if(t){let n=t[2].replace(this.rules.other.newLineCharGlobal," "),l=this.rules.other.nonSpaceChar.test(n),r=this.rules.other.startingSpaceChar.test(n)&&this.rules.other.endingSpaceChar.test(n);return l&&r&&(n=n.substring(1,n.length-1)),{type:"codespan",raw:t[0],text:n}}}br(o){let t=this.rules.inline.br.exec(o);if(t)return{type:"br",raw:t[0]}}del(o,t,n=""){let l=this.rules.inline.delLDelim.exec(o);if(l&&(!l[1]||!n||this.rules.inline.punctuation.exec(n))){let r=[...l[0]].length-1,a,s,d=r,i=this.rules.inline.delRDelim;for(i.lastIndex=0,t=t.slice(-1*o.length+r);(l=i.exec(t))!==null;){if(a=l[1]||l[2]||l[3]||l[4]||l[5]||l[6],!a||(s=[...a].length,s!==r))continue;if(l[3]||l[4]){d+=s;continue}if(d-=s,d>0)continue;s=Math.min(s,s+d);let h=[...l[0]][0].length,g=o.slice(0,r+l.index+h+s),x=g.slice(r,-r);return{type:"del",raw:g,text:x,tokens:this.lexer.inlineTokens(x)}}}}autolink(o){let t=this.rules.inline.autolink.exec(o);if(t){let n,l;return t[2]==="@"?(n=t[1],l="mailto:"+n):(n=t[1],l=n),{type:"link",raw:t[0],text:n,href:l,tokens:[{type:"text",raw:n,text:n}]}}}url(o){var n;let t;if(t=this.rules.inline.url.exec(o)){let l,r;if(t[2]==="@")l=t[0],r="mailto:"+l;else{let a;do a=t[0],t[0]=((n=this.rules.inline._backpedal.exec(t[0]))==null?void 0:n[0])??"";while(a!==t[0]);l=t[0],t[1]==="www."?r="http://"+t[0]:r=t[0]}return{type:"link",raw:t[0],text:l,href:r,tokens:[{type:"text",raw:l,text:l}]}}}inlineText(o){let t=this.rules.inline.text.exec(o);if(t){let n=this.lexer.state.inRawBlock;return{type:"text",raw:t[0],text:t[0],escaped:n}}}},H=class be{constructor(t){A(this,"tokens");A(this,"options");A(this,"state");A(this,"inlineQueue");A(this,"tokenizer");this.tokens=[],this.tokens.links=Object.create(null),this.options=t||K,this.options.tokenizer=this.options.tokenizer||new ae,this.tokenizer=this.options.tokenizer,this.tokenizer.options=this.options,this.tokenizer.lexer=this,this.inlineQueue=[],this.state={inLink:!1,inRawBlock:!1,top:!0};let n={other:G,block:re.normal,inline:ee.normal};this.options.pedantic?(n.block=re.pedantic,n.inline=ee.pedantic):this.options.gfm&&(n.block=re.gfm,this.options.breaks?n.inline=ee.breaks:n.inline=ee.gfm),this.tokenizer.rules=n}static get rules(){return{block:re,inline:ee}}static lex(t,n){return new be(n).lex(t)}static lexInline(t,n){return new be(n).inlineTokens(t)}lex(t){t=t.replace(G.carriageReturn,`
+`),this.blockTokens(t,this.tokens);for(let n=0;n<this.inlineQueue.length;n++){let l=this.inlineQueue[n];this.inlineTokens(l.src,l.tokens)}return this.inlineQueue=[],this.tokens}blockTokens(t,n=[],l=!1){var a,s,d;this.tokenizer.lexer=this,this.options.pedantic&&(t=t.replace(G.tabCharGlobal,"    ").replace(G.spaceLine,""));let r=1/0;for(;t;){if(t.length<r)r=t.length;else{this.infiniteLoopError(t.charCodeAt(0));break}let i;if((s=(a=this.options.extensions)==null?void 0:a.block)!=null&&s.some(g=>(i=g.call({lexer:this},t,n))?(t=t.substring(i.raw.length),n.push(i),!0):!1))continue;if(i=this.tokenizer.space(t)){t=t.substring(i.raw.length);let g=n.at(-1);i.raw.length===1&&g!==void 0?g.raw+=`
 `:n.push(i);continue}if(i=this.tokenizer.code(t)){t=t.substring(i.raw.length);let g=n.at(-1);(g==null?void 0:g.type)==="paragraph"||(g==null?void 0:g.type)==="text"?(g.raw+=(g.raw.endsWith(`
 `)?"":`
 `)+i.raw,g.text+=`
@@ -2939,23 +2951,23 @@ ${g}`:g;let x=this.lexer.state.top;if(this.lexer.state.top=!0,this.lexer.blockTo
 `+i.text,this.inlineQueue.pop(),this.inlineQueue.at(-1).src=g.text):n.push(i),l=h.length!==t.length,t=t.substring(i.raw.length);continue}if(i=this.tokenizer.text(t)){t=t.substring(i.raw.length);let g=n.at(-1);(g==null?void 0:g.type)==="text"?(g.raw+=(g.raw.endsWith(`
 `)?"":`
 `)+i.raw,g.text+=`
-`+i.text,this.inlineQueue.pop(),this.inlineQueue.at(-1).src=g.text):n.push(i);continue}if(t){this.infiniteLoopError(t.charCodeAt(0));break}}return this.state.top=!0,n}inline(t,n=[]){return this.inlineQueue.push({src:t,tokens:n}),n}inlineTokens(t,n=[]){var h,g,x,N,B;this.tokenizer.lexer=this;let l=t,o=null;if(this.tokens.links){let y=Object.keys(this.tokens.links);if(y.length>0)for(;(o=this.tokenizer.rules.inline.reflinkSearch.exec(l))!==null;)y.includes(o[0].slice(o[0].lastIndexOf("[")+1,-1))&&(l=l.slice(0,o.index)+"["+"a".repeat(o[0].length-2)+"]"+l.slice(this.tokenizer.rules.inline.reflinkSearch.lastIndex))}for(;(o=this.tokenizer.rules.inline.anyPunctuation.exec(l))!==null;)l=l.slice(0,o.index)+"++"+l.slice(this.tokenizer.rules.inline.anyPunctuation.lastIndex);let a;for(;(o=this.tokenizer.rules.inline.blockSkip.exec(l))!==null;)a=o[2]?o[2].length:0,l=l.slice(0,o.index+a)+"["+"a".repeat(o[0].length-a-2)+"]"+l.slice(this.tokenizer.rules.inline.blockSkip.lastIndex);l=((g=(h=this.options.hooks)==null?void 0:h.emStrongMask)==null?void 0:g.call({lexer:this},l))??l;let s=!1,d="",i=1/0;for(;t;){if(t.length<i)i=t.length;else{this.infiniteLoopError(t.charCodeAt(0));break}s||(d=""),s=!1;let y;if((N=(x=this.options.extensions)==null?void 0:x.inline)!=null&&N.some(C=>(y=C.call({lexer:this},t,n))?(t=t.substring(y.raw.length),n.push(y),!0):!1))continue;if(y=this.tokenizer.escape(t)){t=t.substring(y.raw.length),n.push(y);continue}if(y=this.tokenizer.tag(t)){t=t.substring(y.raw.length),n.push(y);continue}if(y=this.tokenizer.link(t)){t=t.substring(y.raw.length),n.push(y);continue}if(y=this.tokenizer.reflink(t,this.tokens.links)){t=t.substring(y.raw.length);let C=n.at(-1);y.type==="text"&&(C==null?void 0:C.type)==="text"?(C.raw+=y.raw,C.text+=y.text):n.push(y);continue}if(y=this.tokenizer.emStrong(t,l,d)){t=t.substring(y.raw.length),n.push(y);continue}if(y=this.tokenizer.codespan(t)){t=t.substring(y.raw.length),n.push(y);continue}if(y=this.tokenizer.br(t)){t=t.substring(y.raw.length),n.push(y);continue}if(y=this.tokenizer.del(t,l,d)){t=t.substring(y.raw.length),n.push(y);continue}if(y=this.tokenizer.autolink(t)){t=t.substring(y.raw.length),n.push(y);continue}if(!this.state.inLink&&(y=this.tokenizer.url(t))){t=t.substring(y.raw.length),n.push(y);continue}let T=t;if((B=this.options.extensions)!=null&&B.startInline){let C=1/0,$=t.slice(1),L;this.options.extensions.startInline.forEach(O=>{L=O.call({lexer:this},$),typeof L=="number"&&L>=0&&(C=Math.min(C,L))}),C<1/0&&C>=0&&(T=t.substring(0,C+1))}if(y=this.tokenizer.inlineText(T)){t=t.substring(y.raw.length),y.raw.slice(-1)!=="_"&&(d=y.raw.slice(-1)),s=!0;let C=n.at(-1);(C==null?void 0:C.type)==="text"?(C.raw+=y.raw,C.text+=y.text):n.push(y);continue}if(t){this.infiniteLoopError(t.charCodeAt(0));break}}return n}infiniteLoopError(t){let n="Infinite loop on byte: "+t;if(this.options.silent)console.error(n);else throw new Error(n)}},se=class{constructor(r){A(this,"options");A(this,"parser");this.options=r||K}space(r){return""}code({text:r,lang:t,escaped:n}){var a;let l=(a=(t||"").match(G.notSpaceStart))==null?void 0:a[0],o=r.replace(G.endingNewline,"")+`
-`;return l?'<pre><code class="language-'+q(l)+'">'+(n?o:q(o,!0))+`</code></pre>
-`:"<pre><code>"+(n?o:q(o,!0))+`</code></pre>
-`}blockquote({tokens:r}){return`<blockquote>
-${this.parser.parse(r)}</blockquote>
-`}html({text:r}){return r}def(r){return""}heading({tokens:r,depth:t}){return`<h${t}>${this.parser.parseInline(r)}</h${t}>
-`}hr(r){return`<hr>
-`}list(r){let t=r.ordered,n=r.start,l="";for(let s=0;s<r.items.length;s++){let d=r.items[s];l+=this.listitem(d)}let o=t?"ol":"ul",a=t&&n!==1?' start="'+n+'"':"";return"<"+o+a+`>
-`+l+"</"+o+`>
-`}listitem(r){return`<li>${this.parser.parse(r.tokens)}</li>
-`}checkbox({checked:r}){return"<input "+(r?'checked="" ':"")+'disabled="" type="checkbox"> '}paragraph({tokens:r}){return`<p>${this.parser.parseInline(r)}</p>
-`}table(r){let t="",n="";for(let o=0;o<r.header.length;o++)n+=this.tablecell(r.header[o]);t+=this.tablerow({text:n});let l="";for(let o=0;o<r.rows.length;o++){let a=r.rows[o];n="";for(let s=0;s<a.length;s++)n+=this.tablecell(a[s]);l+=this.tablerow({text:n})}return l&&(l=`<tbody>${l}</tbody>`),`<table>
+`+i.text,this.inlineQueue.pop(),this.inlineQueue.at(-1).src=g.text):n.push(i);continue}if(t){this.infiniteLoopError(t.charCodeAt(0));break}}return this.state.top=!0,n}inline(t,n=[]){return this.inlineQueue.push({src:t,tokens:n}),n}inlineTokens(t,n=[]){var h,g,x,N,B;this.tokenizer.lexer=this;let l=t,r=null;if(this.tokens.links){let y=Object.keys(this.tokens.links);if(y.length>0)for(;(r=this.tokenizer.rules.inline.reflinkSearch.exec(l))!==null;)y.includes(r[0].slice(r[0].lastIndexOf("[")+1,-1))&&(l=l.slice(0,r.index)+"["+"a".repeat(r[0].length-2)+"]"+l.slice(this.tokenizer.rules.inline.reflinkSearch.lastIndex))}for(;(r=this.tokenizer.rules.inline.anyPunctuation.exec(l))!==null;)l=l.slice(0,r.index)+"++"+l.slice(this.tokenizer.rules.inline.anyPunctuation.lastIndex);let a;for(;(r=this.tokenizer.rules.inline.blockSkip.exec(l))!==null;)a=r[2]?r[2].length:0,l=l.slice(0,r.index+a)+"["+"a".repeat(r[0].length-a-2)+"]"+l.slice(this.tokenizer.rules.inline.blockSkip.lastIndex);l=((g=(h=this.options.hooks)==null?void 0:h.emStrongMask)==null?void 0:g.call({lexer:this},l))??l;let s=!1,d="",i=1/0;for(;t;){if(t.length<i)i=t.length;else{this.infiniteLoopError(t.charCodeAt(0));break}s||(d=""),s=!1;let y;if((N=(x=this.options.extensions)==null?void 0:x.inline)!=null&&N.some(C=>(y=C.call({lexer:this},t,n))?(t=t.substring(y.raw.length),n.push(y),!0):!1))continue;if(y=this.tokenizer.escape(t)){t=t.substring(y.raw.length),n.push(y);continue}if(y=this.tokenizer.tag(t)){t=t.substring(y.raw.length),n.push(y);continue}if(y=this.tokenizer.link(t)){t=t.substring(y.raw.length),n.push(y);continue}if(y=this.tokenizer.reflink(t,this.tokens.links)){t=t.substring(y.raw.length);let C=n.at(-1);y.type==="text"&&(C==null?void 0:C.type)==="text"?(C.raw+=y.raw,C.text+=y.text):n.push(y);continue}if(y=this.tokenizer.emStrong(t,l,d)){t=t.substring(y.raw.length),n.push(y);continue}if(y=this.tokenizer.codespan(t)){t=t.substring(y.raw.length),n.push(y);continue}if(y=this.tokenizer.br(t)){t=t.substring(y.raw.length),n.push(y);continue}if(y=this.tokenizer.del(t,l,d)){t=t.substring(y.raw.length),n.push(y);continue}if(y=this.tokenizer.autolink(t)){t=t.substring(y.raw.length),n.push(y);continue}if(!this.state.inLink&&(y=this.tokenizer.url(t))){t=t.substring(y.raw.length),n.push(y);continue}let T=t;if((B=this.options.extensions)!=null&&B.startInline){let C=1/0,$=t.slice(1),R;this.options.extensions.startInline.forEach(O=>{R=O.call({lexer:this},$),typeof R=="number"&&R>=0&&(C=Math.min(C,R))}),C<1/0&&C>=0&&(T=t.substring(0,C+1))}if(y=this.tokenizer.inlineText(T)){t=t.substring(y.raw.length),y.raw.slice(-1)!=="_"&&(d=y.raw.slice(-1)),s=!0;let C=n.at(-1);(C==null?void 0:C.type)==="text"?(C.raw+=y.raw,C.text+=y.text):n.push(y);continue}if(t){this.infiniteLoopError(t.charCodeAt(0));break}}return n}infiniteLoopError(t){let n="Infinite loop on byte: "+t;if(this.options.silent)console.error(n);else throw new Error(n)}},se=class{constructor(o){A(this,"options");A(this,"parser");this.options=o||K}space(o){return""}code({text:o,lang:t,escaped:n}){var a;let l=(a=(t||"").match(G.notSpaceStart))==null?void 0:a[0],r=o.replace(G.endingNewline,"")+`
+`;return l?'<pre><code class="language-'+q(l)+'">'+(n?r:q(r,!0))+`</code></pre>
+`:"<pre><code>"+(n?r:q(r,!0))+`</code></pre>
+`}blockquote({tokens:o}){return`<blockquote>
+${this.parser.parse(o)}</blockquote>
+`}html({text:o}){return o}def(o){return""}heading({tokens:o,depth:t}){return`<h${t}>${this.parser.parseInline(o)}</h${t}>
+`}hr(o){return`<hr>
+`}list(o){let t=o.ordered,n=o.start,l="";for(let s=0;s<o.items.length;s++){let d=o.items[s];l+=this.listitem(d)}let r=t?"ol":"ul",a=t&&n!==1?' start="'+n+'"':"";return"<"+r+a+`>
+`+l+"</"+r+`>
+`}listitem(o){return`<li>${this.parser.parse(o.tokens)}</li>
+`}checkbox({checked:o}){return"<input "+(o?'checked="" ':"")+'disabled="" type="checkbox"> '}paragraph({tokens:o}){return`<p>${this.parser.parseInline(o)}</p>
+`}table(o){let t="",n="";for(let r=0;r<o.header.length;r++)n+=this.tablecell(o.header[r]);t+=this.tablerow({text:n});let l="";for(let r=0;r<o.rows.length;r++){let a=o.rows[r];n="";for(let s=0;s<a.length;s++)n+=this.tablecell(a[s]);l+=this.tablerow({text:n})}return l&&(l=`<tbody>${l}</tbody>`),`<table>
 <thead>
 `+t+`</thead>
 `+l+`</table>
-`}tablerow({text:r}){return`<tr>
-${r}</tr>
-`}tablecell(r){let t=this.parser.parseInline(r.tokens),n=r.header?"th":"td";return(r.align?`<${n} align="${r.align}">`:`<${n}>`)+t+`</${n}>
-`}strong({tokens:r}){return`<strong>${this.parser.parseInline(r)}</strong>`}em({tokens:r}){return`<em>${this.parser.parseInline(r)}</em>`}codespan({text:r}){return`<code>${q(r,!0)}</code>`}br(r){return"<br>"}del({tokens:r}){return`<del>${this.parser.parseInline(r)}</del>`}link({href:r,title:t,tokens:n}){let l=this.parser.parseInline(n),o=Ge(r);if(o===null)return l;r=o;let a='<a href="'+r+'"';return t&&(a+=' title="'+q(t)+'"'),a+=">"+l+"</a>",a}image({href:r,title:t,text:n,tokens:l}){l&&(n=this.parser.parseInline(l,this.parser.textRenderer));let o=Ge(r);if(o===null)return q(n);r=o;let a=`<img src="${r}" alt="${q(n)}"`;return t&&(a+=` title="${q(t)}"`),a+=">",a}text(r){return"tokens"in r&&r.tokens?this.parser.parseInline(r.tokens):"escaped"in r&&r.escaped?r.text:q(r.text)}},Ee=class{strong({text:r}){return r}em({text:r}){return r}codespan({text:r}){return r}del({text:r}){return r}html({text:r}){return r}text({text:r}){return r}link({text:r}){return""+r}image({text:r}){return""+r}br(){return""}checkbox({raw:r}){return r}},j=class xe{constructor(t){A(this,"options");A(this,"renderer");A(this,"textRenderer");this.options=t||K,this.options.renderer=this.options.renderer||new se,this.renderer=this.options.renderer,this.renderer.options=this.options,this.renderer.parser=this,this.textRenderer=new Ee}static parse(t,n){return new xe(n).parse(t)}static parseInline(t,n){return new xe(n).parseInline(t)}parse(t){var l,o;this.renderer.parser=this;let n="";for(let a=0;a<t.length;a++){let s=t[a];if((o=(l=this.options.extensions)==null?void 0:l.renderers)!=null&&o[s.type]){let i=s,h=this.options.extensions.renderers[i.type].call({parser:this},i);if(h!==!1||!["space","hr","heading","code","table","blockquote","list","html","def","paragraph","text"].includes(i.type)){n+=h||"";continue}}let d=s;switch(d.type){case"space":{n+=this.renderer.space(d);break}case"hr":{n+=this.renderer.hr(d);break}case"heading":{n+=this.renderer.heading(d);break}case"code":{n+=this.renderer.code(d);break}case"table":{n+=this.renderer.table(d);break}case"blockquote":{n+=this.renderer.blockquote(d);break}case"list":{n+=this.renderer.list(d);break}case"checkbox":{n+=this.renderer.checkbox(d);break}case"html":{n+=this.renderer.html(d);break}case"def":{n+=this.renderer.def(d);break}case"paragraph":{n+=this.renderer.paragraph(d);break}case"text":{n+=this.renderer.text(d);break}default:{let i='Token with "'+d.type+'" type was not found.';if(this.options.silent)return console.error(i),"";throw new Error(i)}}}return n}parseInline(t,n=this.renderer){var o,a;this.renderer.parser=this;let l="";for(let s=0;s<t.length;s++){let d=t[s];if((a=(o=this.options.extensions)==null?void 0:o.renderers)!=null&&a[d.type]){let h=this.options.extensions.renderers[d.type].call({parser:this},d);if(h!==!1||!["escape","html","link","image","strong","em","codespan","br","del","text"].includes(d.type)){l+=h||"";continue}}let i=d;switch(i.type){case"escape":{l+=n.text(i);break}case"html":{l+=n.html(i);break}case"link":{l+=n.link(i);break}case"image":{l+=n.image(i);break}case"checkbox":{l+=n.checkbox(i);break}case"strong":{l+=n.strong(i);break}case"em":{l+=n.em(i);break}case"codespan":{l+=n.codespan(i);break}case"br":{l+=n.br(i);break}case"del":{l+=n.del(i);break}case"text":{l+=n.text(i);break}default:{let h='Token with "'+i.type+'" type was not found.';if(this.options.silent)return console.error(h),"";throw new Error(h)}}}return l}},ne=(ie=class{constructor(r){A(this,"options");A(this,"block");this.options=r||K}preprocess(r){return r}postprocess(r){return r}processAllTokens(r){return r}emStrongMask(r){return r}provideLexer(r=this.block){return r?H.lex:H.lexInline}provideParser(r=this.block){return r?j.parse:j.parseInline}},A(ie,"passThroughHooks",new Set(["preprocess","postprocess","processAllTokens","emStrongMask"])),A(ie,"passThroughHooksRespectAsync",new Set(["preprocess","postprocess","processAllTokens"])),ie),Nl=class{constructor(...r){A(this,"defaults",ce());A(this,"options",this.setOptions);A(this,"parse",this.parseMarkdown(!0));A(this,"parseInline",this.parseMarkdown(!1));A(this,"Parser",j);A(this,"Renderer",se);A(this,"TextRenderer",Ee);A(this,"Lexer",H);A(this,"Tokenizer",ae);A(this,"Hooks",ne);this.use(...r)}walkTokens(r,t){var l,o;let n=[];for(let a of r)switch(n=n.concat(t.call(this,a)),a.type){case"table":{let s=a;for(let d of s.header)n=n.concat(this.walkTokens(d.tokens,t));for(let d of s.rows)for(let i of d)n=n.concat(this.walkTokens(i.tokens,t));break}case"list":{let s=a;n=n.concat(this.walkTokens(s.items,t));break}default:{let s=a;(o=(l=this.defaults.extensions)==null?void 0:l.childTokens)!=null&&o[s.type]?this.defaults.extensions.childTokens[s.type].forEach(d=>{let i=s[d].flat(1/0);n=n.concat(this.walkTokens(i,t))}):s.tokens&&(n=n.concat(this.walkTokens(s.tokens,t)))}}return n}use(...r){let t=this.defaults.extensions||{renderers:{},childTokens:{}};return r.forEach(n=>{let l={...n};if(l.async=this.defaults.async||l.async||!1,n.extensions&&(n.extensions.forEach(o=>{if(!o.name)throw new Error("extension name required");if("renderer"in o){let a=t.renderers[o.name];a?t.renderers[o.name]=function(...s){let d=o.renderer.apply(this,s);return d===!1&&(d=a.apply(this,s)),d}:t.renderers[o.name]=o.renderer}if("tokenizer"in o){if(!o.level||o.level!=="block"&&o.level!=="inline")throw new Error("extension level must be 'block' or 'inline'");let a=t[o.level];a?a.unshift(o.tokenizer):t[o.level]=[o.tokenizer],o.start&&(o.level==="block"?t.startBlock?t.startBlock.push(o.start):t.startBlock=[o.start]:o.level==="inline"&&(t.startInline?t.startInline.push(o.start):t.startInline=[o.start]))}"childTokens"in o&&o.childTokens&&(t.childTokens[o.name]=o.childTokens)}),l.extensions=t),n.renderer){let o=this.defaults.renderer||new se(this.defaults);for(let a in n.renderer){if(!(a in o))throw new Error(`renderer '${a}' does not exist`);if(["options","parser"].includes(a))continue;let s=a,d=n.renderer[s],i=o[s];o[s]=(...h)=>{let g=d.apply(o,h);return g===!1&&(g=i.apply(o,h)),g||""}}l.renderer=o}if(n.tokenizer){let o=this.defaults.tokenizer||new ae(this.defaults);for(let a in n.tokenizer){if(!(a in o))throw new Error(`tokenizer '${a}' does not exist`);if(["options","rules","lexer"].includes(a))continue;let s=a,d=n.tokenizer[s],i=o[s];o[s]=(...h)=>{let g=d.apply(o,h);return g===!1&&(g=i.apply(o,h)),g}}l.tokenizer=o}if(n.hooks){let o=this.defaults.hooks||new ne;for(let a in n.hooks){if(!(a in o))throw new Error(`hook '${a}' does not exist`);if(["options","block"].includes(a))continue;let s=a,d=n.hooks[s],i=o[s];ne.passThroughHooks.has(a)?o[s]=h=>{if(this.defaults.async&&ne.passThroughHooksRespectAsync.has(a))return(async()=>{let x=await d.call(o,h);return i.call(o,x)})();let g=d.call(o,h);return i.call(o,g)}:o[s]=(...h)=>{if(this.defaults.async)return(async()=>{let x=await d.apply(o,h);return x===!1&&(x=await i.apply(o,h)),x})();let g=d.apply(o,h);return g===!1&&(g=i.apply(o,h)),g}}l.hooks=o}if(n.walkTokens){let o=this.defaults.walkTokens,a=n.walkTokens;l.walkTokens=function(s){let d=[];return d.push(a.call(this,s)),o&&(d=d.concat(o.call(this,s))),d}}this.defaults={...this.defaults,...l}}),this}setOptions(r){return this.defaults={...this.defaults,...r},this}lexer(r,t){return H.lex(r,t??this.defaults)}parser(r,t){return j.parse(r,t??this.defaults)}parseMarkdown(r){return(t,n)=>{let l={...n},o={...this.defaults,...l},a=this.onError(!!o.silent,!!o.async);if(this.defaults.async===!0&&l.async===!1)return a(new Error("marked(): The async option was set to true by an extension. Remove async: false from the parse options object to return a Promise."));if(typeof t>"u"||t===null)return a(new Error("marked(): input parameter is undefined or null"));if(typeof t!="string")return a(new Error("marked(): input parameter is of type "+Object.prototype.toString.call(t)+", string expected"));if(o.hooks&&(o.hooks.options=o,o.hooks.block=r),o.async)return(async()=>{let s=o.hooks?await o.hooks.preprocess(t):t,d=await(o.hooks?await o.hooks.provideLexer(r):r?H.lex:H.lexInline)(s,o),i=o.hooks?await o.hooks.processAllTokens(d):d;o.walkTokens&&await Promise.all(this.walkTokens(i,o.walkTokens));let h=await(o.hooks?await o.hooks.provideParser(r):r?j.parse:j.parseInline)(i,o);return o.hooks?await o.hooks.postprocess(h):h})().catch(a);try{o.hooks&&(t=o.hooks.preprocess(t));let s=(o.hooks?o.hooks.provideLexer(r):r?H.lex:H.lexInline)(t,o);o.hooks&&(s=o.hooks.processAllTokens(s)),o.walkTokens&&this.walkTokens(s,o.walkTokens);let d=(o.hooks?o.hooks.provideParser(r):r?j.parse:j.parseInline)(s,o);return o.hooks&&(d=o.hooks.postprocess(d)),d}catch(s){return a(s)}}}onError(r,t){return n=>{if(n.message+=`
-Please report this to https://github.com/markedjs/marked.`,r){let l="<p>An error occurred:</p><pre>"+q(n.message+"",!0)+"</pre>";return t?Promise.resolve(l):l}if(t)return Promise.reject(n);throw n}}},X=new Nl;function I(r,t){return X.parse(r,t)}I.options=I.setOptions=function(r){return X.setOptions(r),I.defaults=X.defaults,we(I.defaults),I},I.getDefaults=ce,I.defaults=K,I.use=function(...r){return X.use(...r),I.defaults=X.defaults,we(I.defaults),I},I.walkTokens=function(r,t){return X.walkTokens(r,t)},I.parseInline=X.parseInline,I.Parser=j,I.parser=j.parse,I.Renderer=se,I.TextRenderer=Ee,I.Lexer=H,I.lexer=H.lex,I.Tokenizer=ae,I.Hooks=ne,I.parse=I,I.options,I.setOptions,I.use,I.walkTokens,I.parseInline,j.parse,H.lex;const wl={class:"modal-content help-modal"},Tl={class:"modal-header"},Bl={class:"header-actions"},Sl={class:"modal-body"},Cl={class:"doc-sidebar"},Il={class:"doc-sidebar-group"},Pl={class:"doc-sidebar-header"},Al=["onClick"],$l={class:"doc-sidebar-group"},Ml={class:"doc-sidebar-header"},Dl={class:"doc-content"},Ll=["innerHTML"],Rl=["innerHTML"],Gl=["innerHTML"],Fl=["innerHTML"],Ol=["innerHTML"],zl=["innerHTML"],Ul=["innerHTML"],Hl={class:"doc-pagination"},jl=["disabled"],ql={class:"page-info"},Wl=["disabled"],Jl=U({__name:"HelpModal",props:{initialDoc:{type:String,default:"getting-started"}},emits:["close","openAbout"],setup(r,{emit:t}){const n=r,l=e.ref(n.initialDoc),o=e.ref(""),a=e.ref(null),s=[{id:"getting-started",title:"快速开始",icon:"home"},{id:"features",title:"功能介绍",icon:"info"},{id:"api",title:"API 文档",icon:"code"},{id:"tools",title:"工具文档",icon:"tool"},{id:"shortcuts",title:"快捷键",icon:"keyboard"},{id:"faq",title:"常见问题",icon:"help"}],d=e.ref(s),i=e.computed(()=>[...d.value,{id:"changelog",title:"更新日志",icon:"activity"}]),h=e.computed(()=>i.value.findIndex(V=>V.id===l.value)),g=e.computed(()=>h.value>0),x=e.computed(()=>h.value<i.value.length-1);function N(){const V=o.value.toLowerCase().trim();if(!V){d.value=s;return}d.value=s.filter(f=>f.title.toLowerCase().includes(V)||f.id.includes(V)),d.value.length>0&&!d.value.find(f=>f.id===l.value)&&(l.value=d.value[0].id)}const B=V=>I(V,{breaks:!0,gfm:!0}).replace(/<table>/g,'<table class="doc-table">'),y=e.computed(()=>B(Dr)),T=e.computed(()=>B(Lr)),C=e.computed(()=>B(Pr)),$=e.computed(()=>B(Ar)),L=e.computed(()=>B($r)),O=e.computed(()=>B(Mr)),W=e.computed(()=>B(Rr));function z(){var V;g.value&&(l.value=i.value[h.value-1].id,(V=a.value)==null||V.scrollTo(0,0))}function F(){var V;x.value&&(l.value=i.value[h.value+1].id,(V=a.value)==null||V.scrollTo(0,0))}return e.onMounted(()=>{N()}),(V,f)=>(e.openBlock(),e.createElementBlock("div",{class:"modal-overlay",onClick:f[3]||(f[3]=e.withModifiers(m=>V.$emit("close"),["self"]))},[e.createElementVNode("div",wl,[e.createCommentVNode(" 头部 "),e.createElementVNode("div",Tl,[e.createElementVNode("h2",null,[e.createVNode(D,{name:"book-open",size:18}),f[4]||(f[4]=e.createTextVNode(" 帮助文档",-1))]),e.createElementVNode("div",Bl,[e.createElementVNode("button",{class:"btn-about",onClick:f[0]||(f[0]=m=>V.$emit("openAbout")),title:"关于 PairCode"},[e.createVNode(D,{name:"info",size:14}),f[5]||(f[5]=e.createTextVNode(" 关于 ",-1))]),e.createElementVNode("button",{class:"modal-close",onClick:f[1]||(f[1]=m=>V.$emit("close"))},"×")])]),e.createCommentVNode(" 主体 "),e.createElementVNode("div",Sl,[e.createCommentVNode(" 侧边导航 "),e.createElementVNode("div",Cl,[e.createCommentVNode(" 文档中心分组 "),e.createElementVNode("div",Il,[e.createElementVNode("div",Pl,[e.createVNode(D,{name:"book",size:14}),f[6]||(f[6]=e.createElementVNode("span",null,"文档中心",-1))]),(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(d.value,m=>(e.openBlock(),e.createElementBlock("div",{key:m.id,class:e.normalizeClass(["doc-nav-item",{active:l.value===m.id}]),onClick:p=>l.value=m.id},[e.createVNode(D,{name:m.icon,size:16},null,8,["name"]),e.createElementVNode("span",null,e.toDisplayString(m.title),1)],10,Al))),128))]),e.createCommentVNode(" 更新日志 "),e.createElementVNode("div",$l,[e.createElementVNode("div",Ml,[e.createVNode(D,{name:"clock",size:14}),f[7]||(f[7]=e.createElementVNode("span",null,"其他",-1))]),e.createElementVNode("div",{class:e.normalizeClass(["doc-nav-item",{active:l.value==="changelog"}]),onClick:f[2]||(f[2]=m=>l.value="changelog")},[e.createVNode(D,{name:"activity",size:16}),f[8]||(f[8]=e.createElementVNode("span",null,"更新日志",-1))],2)])]),e.createCommentVNode(" 文档内容 "),e.createElementVNode("div",Dl,[e.createElementVNode("div",{class:"doc-content-inner",ref_key:"contentRef",ref:a},[l.value==="faq"?(e.openBlock(),e.createElementBlock("div",{key:0,class:"doc-markdown",innerHTML:y.value},null,8,Ll)):l.value==="getting-started"?(e.openBlock(),e.createElementBlock("div",{key:1,class:"doc-markdown",innerHTML:T.value},null,8,Rl)):l.value==="features"?(e.openBlock(),e.createElementBlock("div",{key:2,class:"doc-markdown",innerHTML:C.value},null,8,Gl)):l.value==="api"?(e.openBlock(),e.createElementBlock("div",{key:3,class:"doc-markdown",innerHTML:$.value},null,8,Fl)):l.value==="tools"?(e.openBlock(),e.createElementBlock("div",{key:4,class:"doc-markdown",innerHTML:L.value},null,8,Ol)):l.value==="shortcuts"?(e.openBlock(),e.createElementBlock("div",{key:5,class:"doc-markdown",innerHTML:O.value},null,8,zl)):l.value==="changelog"?(e.openBlock(),e.createElementBlock("div",{key:6,class:"doc-markdown",innerHTML:W.value},null,8,Ul)):e.createCommentVNode("v-if",!0)],512),e.createCommentVNode(" 底部翻页 "),e.createElementVNode("div",Hl,[e.createElementVNode("button",{class:"page-btn",onClick:z,disabled:!g.value},[e.createVNode(D,{name:"chevron-left",size:14}),f[9]||(f[9]=e.createTextVNode(" 上一页 ",-1))],8,jl),e.createElementVNode("span",ql,e.toDisplayString(h.value+1)+" / "+e.toDisplayString(i.value.length),1),e.createElementVNode("button",{class:"page-btn",onClick:F,disabled:!x.value},[f[10]||(f[10]=e.createTextVNode(" 下一页 ",-1)),e.createVNode(D,{name:"chevron-right",size:14})],8,Wl)])])])])]))}},[["__scopeId","data-v-203b7be1"]]),Zl="data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20width='512'%20height='512'%20viewBox='0%200%20512%20512'%3e%3cdefs%3e%3c!--%20背景渐变（深色科技风）%20--%3e%3clinearGradient%20id='bgGrad'%20x1='0'%20y1='0'%20x2='1'%20y2='1'%3e%3cstop%20offset='0%25'%20stop-color='%230a1628'/%3e%3cstop%20offset='100%25'%20stop-color='%230d1f2e'/%3e%3c/linearGradient%3e%3c!--%20左侧尖括号渐变（科技蓝）%20--%3e%3clinearGradient%20id='leftBracket'%20x1='0'%20y1='0'%20x2='0'%20y2='1'%3e%3cstop%20offset='0%25'%20stop-color='%2300d4ff'/%3e%3cstop%20offset='100%25'%20stop-color='%230077b6'/%3e%3c/linearGradient%3e%3c!--%20右侧尖括号渐变（科技绿）%20--%3e%3clinearGradient%20id='rightBracket'%20x1='0'%20y1='0'%20x2='0'%20y2='1'%3e%3cstop%20offset='0%25'%20stop-color='%2300e676'/%3e%3cstop%20offset='100%25'%20stop-color='%2300c853'/%3e%3c/linearGradient%3e%3c!--%20中间连接线（蓝绿渐变）%20--%3e%3clinearGradient%20id='connector'%20x1='0'%20y1='0'%20x2='1'%20y2='0'%3e%3cstop%20offset='0%25'%20stop-color='%2300d4ff'/%3e%3cstop%20offset='50%25'%20stop-color='%2300e5ff'/%3e%3cstop%20offset='100%25'%20stop-color='%2300e676'/%3e%3c/linearGradient%3e%3c!--%20外发光%20--%3e%3cfilter%20id='glow'%3e%3cfeGaussianBlur%20stdDeviation='4'%20result='blur'/%3e%3cfeMerge%3e%3cfeMergeNode%20in='blur'/%3e%3cfeMergeNode%20in='SourceGraphic'/%3e%3c/feMerge%3e%3c/filter%3e%3cfilter%20id='softGlow'%3e%3cfeGaussianBlur%20stdDeviation='8'%20result='blur'/%3e%3cfeMerge%3e%3cfeMergeNode%20in='blur'/%3e%3cfeMergeNode%20in='SourceGraphic'/%3e%3c/feMerge%3e%3c/filter%3e%3c/defs%3e%3c!--%20圆角方形背景（深色科技底）%20--%3e%3crect%20x='32'%20y='32'%20width='448'%20height='448'%20rx='96'%20ry='96'%20fill='url(%23bgGrad)'%20stroke='%231a3a4a'%20stroke-width='2'/%3e%3c!--%20左侧%20%3c%20尖括号（三段式直线%20—%20科技蓝，代表代码输入/开发者）%20--%3e%3cpath%20d='M180%20150%20L96%20256%20L180%20362'%20stroke='url(%23leftBracket)'%20stroke-width='40'%20stroke-linejoin='round'%20fill='none'%20filter='url(%23glow)'/%3e%3c!--%20右侧%20%3e%20尖括号（三段式直线%20—%20科技绿，代表代码输出/AI伙伴）%20--%3e%3cpath%20d='M332%20150%20L416%20256%20L332%20362'%20stroke='url(%23rightBracket)'%20stroke-width='40'%20stroke-linejoin='round'%20fill='none'%20filter='url(%23glow)'/%3e%3c!--%20中间「=」连接线已移除（图标只留%20%3c%20%3e%20尖括号%20+%20中心%20AI%20核心光点）。%20--%3e%3c!--%20中心光点（代表%20AI%20核心%20—%20亮青色）%20--%3e%3ccircle%20cx='256'%20cy='256'%20r='18'%20fill='transparent'%20stroke='%2300e5ff'%20stroke-width='3'%20opacity='0.6'/%3e%3ccircle%20cx='256'%20cy='256'%20r='8'%20fill='%2300e5ff'%20opacity='0.9'%3e%3canimate%20attributeName='opacity'%20values='0.6;1;0.6'%20dur='2s'%20repeatCount='indefinite'/%3e%3c/circle%3e%3c/svg%3e",Kl={class:"modal-content about-modal"},Ql={class:"modal-header"},Xl={class:"modal-body"},Yl={class:"about-left-col"},_l={class:"about-hero"},vl={class:"about-logo"},eo=["src"],no={class:"about-version"},to={class:"about-right-col"},ro={class:"about-section"},lo={class:"feature-list"},oo={class:"about-section"},ao={key:0,class:"sys-info"},so={class:"info-row"},io={class:"info-row"},co={class:"info-row"},po={class:"info-path"},mo={class:"info-row"},go={key:1,class:"loading-info"},ko={class:"modal-footer"},ho=U({__name:"AboutModal",props:{showHelpBtn:{type:Boolean,default:!0}},emits:["close","openHelp"],setup(r,{emit:t}){const n=e.ref(""),l=e.ref({}),o=e.ref(!0);return e.onMounted(async()=>{try{const a=await M.apiGet("/system/info");l.value=a,a.version&&(n.value=a.version)}catch{}o.value=!1}),(a,s)=>(e.openBlock(),e.createElementBlock("div",{class:"modal-overlay",onClick:s[3]||(s[3]=e.withModifiers(d=>a.$emit("close"),["self"]))},[e.createElementVNode("div",Kl,[e.createElementVNode("div",Ql,[e.createElementVNode("h2",null,[e.createVNode(D,{name:"info",size:18}),s[4]||(s[4]=e.createTextVNode(" 关于 PairCode",-1))]),e.createElementVNode("button",{class:"modal-close",onClick:s[0]||(s[0]=d=>a.$emit("close"))},"×")]),e.createElementVNode("div",Xl,[e.createCommentVNode(" 左列：Logo + 描述 + 技术栈 "),e.createElementVNode("div",Yl,[e.createCommentVNode(" Logo + 标题 "),e.createElementVNode("div",_l,[e.createElementVNode("div",vl,[e.createElementVNode("img",{src:e.unref(Zl),class:"about-logo-img",alt:"PairCode"},null,8,eo)]),s[5]||(s[5]=e.createElementVNode("div",{class:"about-title"},"PairCode IDE",-1)),e.createElementVNode("div",no,"版本 "+e.toDisplayString(n.value),1)]),e.createCommentVNode(" 描述 "),s[6]||(s[6]=e.createElementVNode("div",{class:"about-section"},[e.createElementVNode("p",{class:"about-description"}," PairCode IDE 是一款纯 Web 端的 AI 辅助编程集成开发环境， 专为浏览器而设计。无需安装任何桌面客户端或本地 IDE 软件， 打开浏览器即可开始编程。它将 AI 对话能力深度融入编码工作流， 你只需用自然语言描述需求，AI 就能自动理解上下文、读写文件、执行命令、 管理版本控制。从代码生成到项目运维，在同一个浏览器窗口中全部完成。 ")],-1)),e.createCommentVNode(" 技术栈 "),s[7]||(s[7]=e.createStaticVNode('<div class="about-section" data-v-e61d5ebd><div class="section-title" data-v-e61d5ebd>技术栈</div><div class="tech-stack" data-v-e61d5ebd><span class="tech-badge" data-v-e61d5ebd>Go</span><span class="tech-badge" data-v-e61d5ebd>Vue 3</span><span class="tech-badge" data-v-e61d5ebd>WebSocket</span><span class="tech-badge" data-v-e61d5ebd>CodeMirror</span><span class="tech-badge" data-v-e61d5ebd>插件化工具</span><span class="tech-badge" data-v-e61d5ebd>TS 编译器</span><span class="tech-badge" data-v-e61d5ebd>MCP</span><span class="tech-badge" data-v-e61d5ebd>CodeGraph</span><span class="tech-badge" data-v-e61d5ebd>DAP</span></div></div>',1))]),e.createCommentVNode(" 右列：特性 + 系统信息 "),e.createElementVNode("div",to,[e.createCommentVNode(" 特性亮点 "),e.createElementVNode("div",ro,[s[18]||(s[18]=e.createElementVNode("div",{class:"section-title"},"主要特性",-1)),e.createElementVNode("ul",lo,[e.createElementVNode("li",null,[e.createVNode(D,{name:"bot",size:14,color:"var(--accent)"}),s[8]||(s[8]=e.createTextVNode(" AI 对话编程 — 用自然语言与 AI 对话，自动生成与重构代码",-1))]),e.createElementVNode("li",null,[e.createVNode(D,{name:"file",size:14,color:"var(--accent)"}),s[9]||(s[9]=e.createTextVNode(" 智能代码编辑器 — 多语言语法高亮，浏览器中流畅编辑",-1))]),e.createElementVNode("li",null,[e.createVNode(D,{name:"git-branch",size:14,color:"var(--accent)"}),s[10]||(s[10]=e.createTextVNode(" Git 版本控制 — 在对话中完成全部 Git 操作",-1))]),e.createElementVNode("li",null,[e.createVNode(D,{name:"terminal",size:14,color:"var(--accent)"}),s[11]||(s[11]=e.createTextVNode(" 内置终端 — 无需离开浏览器即可执行命令",-1))]),e.createElementVNode("li",null,[e.createVNode(D,{name:"search",size:14,color:"var(--accent)"}),s[12]||(s[12]=e.createTextVNode(" 全局搜索 — 快速搜索文件与代码内容",-1))]),e.createElementVNode("li",null,[e.createVNode(D,{name:"settings",size:14,color:"var(--accent)"}),s[13]||(s[13]=e.createTextVNode(" 自主 Agent 模式 — AI 主动分析项目并自动执行任务",-1))]),e.createElementVNode("li",null,[e.createVNode(D,{name:"grid",size:14,color:"var(--accent)"}),s[14]||(s[14]=e.createTextVNode(" 对话历史管理 — 自动保存、回溯与继续历史对话",-1))]),e.createElementVNode("li",null,[e.createVNode(D,{name:"tool",size:14,color:"var(--accent)"}),s[15]||(s[15]=e.createTextVNode(" Skills / MCP 扩展 — 通过技能市场扩展 IDE 能力",-1))]),e.createElementVNode("li",null,[e.createVNode(D,{name:"code",size:14,color:"var(--accent)"}),s[16]||(s[16]=e.createTextVNode(" 内置调试器 — 支持 Go 程序的断点、单步和变量查看",-1))]),e.createElementVNode("li",null,[e.createVNode(D,{name:"image",size:14,color:"var(--accent)"}),s[17]||(s[17]=e.createTextVNode(" 网页验证 — 打开 URL、截图、分析页面效果",-1))])])]),e.createCommentVNode(" 系统信息 "),e.createElementVNode("div",oo,[s[23]||(s[23]=e.createElementVNode("div",{class:"section-title"},"系统信息",-1)),o.value?(e.openBlock(),e.createElementBlock("div",go,"加载中...")):(e.openBlock(),e.createElementBlock("div",ao,[e.createElementVNode("div",so,[s[19]||(s[19]=e.createElementVNode("span",{class:"info-label"},"主机名",-1)),e.createElementVNode("span",null,e.toDisplayString(l.value.hostname),1)]),e.createElementVNode("div",io,[s[20]||(s[20]=e.createElementVNode("span",{class:"info-label"},"操作系统",-1)),e.createElementVNode("span",null,e.toDisplayString(l.value.os),1)]),e.createElementVNode("div",co,[s[21]||(s[21]=e.createElementVNode("span",{class:"info-label"},"工作区",-1)),e.createElementVNode("span",po,e.toDisplayString(l.value.workspace),1)]),e.createElementVNode("div",mo,[s[22]||(s[22]=e.createElementVNode("span",{class:"info-label"},"平台信息",-1)),e.createElementVNode("span",null,e.toDisplayString(l.value.goos),1)])]))])])]),e.createCommentVNode(" 底部 "),e.createElementVNode("div",ko,[r.showHelpBtn?(e.openBlock(),e.createElementBlock("button",{key:0,class:"btn-primary",onClick:s[1]||(s[1]=d=>a.$emit("openHelp"))},[e.createVNode(D,{name:"book-open",size:14}),s[24]||(s[24]=e.createTextVNode(" 查看帮助文档 ",-1))])):e.createCommentVNode("v-if",!0),e.createElementVNode("button",{class:"btn-secondary",onClick:s[2]||(s[2]=d=>a.$emit("close"))},"关闭")])])]))}},[["__scopeId","data-v-e61d5ebd"]]),fo={class:"toast-container"},yo={class:"dlg-box",style:{"max-width":"400px"}},Eo={class:"dlg-title"},uo={class:"dlg-body"},bo={class:"dlg-actions"},xo={class:"dlg-box",style:{"max-width":"420px"}},Vo={class:"dlg-title"},No={class:"dlg-body",style:{display:"flex","flex-direction":"column",gap:"8px"}},wo={style:{"font-size":"13px",color:"var(--text-secondary)"}},To=["placeholder"],Bo={class:"dlg-actions"},So={class:"dlg-box",style:{"max-width":"400px"}},Co={class:"dlg-title"},Io={class:"dlg-body",style:{"white-space":"pre-line"}},Po=U({__name:"GlobalDialogs",setup(r){const t=e.ref(null);e.watch(()=>b.dialogState.show,o=>{o&&b.dialogState.type==="prompt"&&e.nextTick(()=>{var a,s;(a=t.value)==null||a.focus(),(s=t.value)==null||s.select()})});function n(){if(b.dialogState.type==="prompt"){const o=b.dialogState.inputValue;b.dialogState.show=!1,b.dialogState.resolve&&b.dialogState.resolve(o)}else if(b.dialogState.type==="confirm"&&b.dialogState.checkboxLabel){const a=b.dialogState.checkboxValue;b.dialogState.show=!1,b.dialogState.resolve&&b.dialogState.resolve({confirmed:!0,checked:a})}else b.dialogState.show=!1,b.dialogState.resolve&&b.dialogState.resolve(!0);b.dialogState.resolve=null}function l(){b.dialogState.type==="confirm"&&b.dialogState.checkboxLabel?(b.dialogState.show=!1,b.dialogState.resolve&&b.dialogState.resolve({confirmed:!1,checked:b.dialogState.checkboxValue})):b.dialogState.type==="prompt"?(b.dialogState.show=!1,b.dialogState.resolve&&b.dialogState.resolve(null)):(b.dialogState.show=!1,b.dialogState.resolve&&b.dialogState.resolve(!1)),b.dialogState.resolve=null}return(o,a)=>(e.openBlock(),e.createElementBlock(e.Fragment,null,[e.createCommentVNode(" Toast 通知区域 "),e.createElementVNode("div",fo,[(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(e.unref(b.dialogState).toasts,s=>(e.openBlock(),e.createElementBlock("div",{key:s.id,class:e.normalizeClass(["toast-item","toast-"+(s.type||"info")])},e.toDisplayString(s.message),3))),128))]),e.createCommentVNode(" Confirm 对话框 "),e.unref(b.dialogState).show&&e.unref(b.dialogState).type==="confirm"?(e.openBlock(),e.createElementBlock("div",{key:0,class:"dlg-overlay",onClick:e.withModifiers(l,["self"])},[e.createElementVNode("div",yo,[e.createElementVNode("div",Eo,e.toDisplayString(e.unref(b.dialogState).title),1),e.createElementVNode("div",uo,e.toDisplayString(e.unref(b.dialogState).message),1),e.unref(b.dialogState).checkboxLabel?(e.openBlock(),e.createElementBlock("label",{key:0,class:"dlg-checkbox",onClick:a[1]||(a[1]=e.withModifiers(()=>{},["stop"]))},[e.withDirectives(e.createElementVNode("input",{type:"checkbox","onUpdate:modelValue":a[0]||(a[0]=s=>e.unref(b.dialogState).checkboxValue=s)},null,512),[[e.vModelCheckbox,e.unref(b.dialogState).checkboxValue]]),e.createElementVNode("span",null,e.toDisplayString(e.unref(b.dialogState).checkboxLabel),1)])):e.createCommentVNode("v-if",!0),e.createElementVNode("div",bo,[e.createElementVNode("button",{class:"dlg-btn",onClick:l},e.toDisplayString(e.unref(b.dialogState).cancelText),1),e.createElementVNode("button",{class:"dlg-btn primary",onClick:n},e.toDisplayString(e.unref(b.dialogState).confirmText),1)])])])):e.createCommentVNode("v-if",!0),e.createCommentVNode(" Prompt 对话框 "),e.unref(b.dialogState).show&&e.unref(b.dialogState).type==="prompt"?(e.openBlock(),e.createElementBlock("div",{key:1,class:"dlg-overlay",onClick:e.withModifiers(l,["self"])},[e.createElementVNode("div",xo,[e.createElementVNode("div",Vo,e.toDisplayString(e.unref(b.dialogState).title),1),e.createElementVNode("div",No,[e.createElementVNode("span",wo,e.toDisplayString(e.unref(b.dialogState).message),1),e.withDirectives(e.createElementVNode("input",{ref_key:"promptInputRef",ref:t,"onUpdate:modelValue":a[2]||(a[2]=s=>e.unref(b.dialogState).inputValue=s),placeholder:e.unref(b.dialogState).inputPlaceholder,class:"dlg-input",onKeyup:[e.withKeys(n,["enter"]),e.withKeys(l,["escape"])]},null,40,To),[[e.vModelText,e.unref(b.dialogState).inputValue]])]),e.createElementVNode("div",Bo,[e.createElementVNode("button",{class:"dlg-btn",onClick:l},e.toDisplayString(e.unref(b.dialogState).cancelText),1),e.createElementVNode("button",{class:"dlg-btn primary",onClick:n},e.toDisplayString(e.unref(b.dialogState).confirmText),1)])])])):e.createCommentVNode("v-if",!0),e.createCommentVNode(" Alert 信息框 "),e.unref(b.dialogState).show&&e.unref(b.dialogState).type==="alert"?(e.openBlock(),e.createElementBlock("div",{key:2,class:"dlg-overlay",onClick:e.withModifiers(n,["self"])},[e.createElementVNode("div",So,[e.createElementVNode("div",Co,e.toDisplayString(e.unref(b.dialogState).title),1),e.createElementVNode("div",Io,e.toDisplayString(e.unref(b.dialogState).message),1),e.createElementVNode("div",{class:"dlg-actions"},[e.createElementVNode("button",{class:"dlg-btn primary",onClick:n},"确定")])])])):e.createCommentVNode("v-if",!0)],64))}},[["__scopeId","data-v-0271e4ae"]]),Ao=U({__name:"UiModals",setup(r){const t=e.ref(null);let n=null;function l(){b.showAbout.value=!1,b.showHelp.value=!0,b.helpDocTarget.value="getting-started"}function o(){b.showHelp.value=!1,b.showAbout.value=!0}return e.onMounted(()=>{n=Ve.mountListSlot(t,"overlay",{isActive:a=>Ve.isOverlayActive("overlay",a)})}),e.onUnmounted(()=>{n&&(n(),n=null)}),(a,s)=>(e.openBlock(),e.createElementBlock(e.Fragment,null,[e.unref(b.showSettings)?(e.openBlock(),e.createBlock(mr,{key:0,onClose:s[0]||(s[0]=d=>b.showSettings.value=!1)})):e.createCommentVNode("v-if",!0),e.unref(b.showSystem)?(e.openBlock(),e.createBlock(Tr,{key:1,onClose:s[1]||(s[1]=d=>b.showSystem.value=!1)})):e.createCommentVNode("v-if",!0),e.unref(b.showSource)?(e.openBlock(),e.createBlock(Ir,{key:2,onClose:s[2]||(s[2]=d=>b.showSource.value=!1)})):e.createCommentVNode("v-if",!0),e.unref(b.showHelp)?(e.openBlock(),e.createBlock(Jl,{key:3,onClose:s[3]||(s[3]=d=>b.showHelp.value=!1),onOpenAbout:o,initialDoc:e.unref(b.helpDocTarget)},null,8,["initialDoc"])):e.createCommentVNode("v-if",!0),e.unref(b.showAbout)?(e.openBlock(),e.createBlock(ho,{key:4,onClose:s[4]||(s[4]=d=>b.showAbout.value=!1),onOpenHelp:l})):e.createCommentVNode("v-if",!0),e.createVNode(Po),e.createCommentVNode(" ★ overlay 槽位（list 型）：插件注册的浮动层条目叠加渲染（badge/toast/status pill 等） "),e.createElementVNode("div",{ref_key:"overlaySlotEl",ref:t,class:"plugin-overlay-host"},null,512)],64))}},[["__scopeId","data-v-519b8494"]]);function $o(r){const t=e.createApp(Ao);return t.mount(r),()=>{t.unmount()}}return J.mount=$o,Object.defineProperty(J,Symbol.toStringTag,{value:"Module"}),J})({},window.__PAIRCODE_CORE.Vue,window.__PAIRCODE_CORE.uiState,window.__PAIRCODE_CORE.pluginRuntime,window.__PAIRCODE_CORE.api);
+`}tablerow({text:o}){return`<tr>
+${o}</tr>
+`}tablecell(o){let t=this.parser.parseInline(o.tokens),n=o.header?"th":"td";return(o.align?`<${n} align="${o.align}">`:`<${n}>`)+t+`</${n}>
+`}strong({tokens:o}){return`<strong>${this.parser.parseInline(o)}</strong>`}em({tokens:o}){return`<em>${this.parser.parseInline(o)}</em>`}codespan({text:o}){return`<code>${q(o,!0)}</code>`}br(o){return"<br>"}del({tokens:o}){return`<del>${this.parser.parseInline(o)}</del>`}link({href:o,title:t,tokens:n}){let l=this.parser.parseInline(n),r=Ge(o);if(r===null)return l;o=r;let a='<a href="'+o+'"';return t&&(a+=' title="'+q(t)+'"'),a+=">"+l+"</a>",a}image({href:o,title:t,text:n,tokens:l}){l&&(n=this.parser.parseInline(l,this.parser.textRenderer));let r=Ge(o);if(r===null)return q(n);o=r;let a=`<img src="${o}" alt="${q(n)}"`;return t&&(a+=` title="${q(t)}"`),a+=">",a}text(o){return"tokens"in o&&o.tokens?this.parser.parseInline(o.tokens):"escaped"in o&&o.escaped?o.text:q(o.text)}},ue=class{strong({text:o}){return o}em({text:o}){return o}codespan({text:o}){return o}del({text:o}){return o}html({text:o}){return o}text({text:o}){return o}link({text:o}){return""+o}image({text:o}){return""+o}br(){return""}checkbox({raw:o}){return o}},j=class xe{constructor(t){A(this,"options");A(this,"renderer");A(this,"textRenderer");this.options=t||K,this.options.renderer=this.options.renderer||new se,this.renderer=this.options.renderer,this.renderer.options=this.options,this.renderer.parser=this,this.textRenderer=new ue}static parse(t,n){return new xe(n).parse(t)}static parseInline(t,n){return new xe(n).parseInline(t)}parse(t){var l,r;this.renderer.parser=this;let n="";for(let a=0;a<t.length;a++){let s=t[a];if((r=(l=this.options.extensions)==null?void 0:l.renderers)!=null&&r[s.type]){let i=s,h=this.options.extensions.renderers[i.type].call({parser:this},i);if(h!==!1||!["space","hr","heading","code","table","blockquote","list","html","def","paragraph","text"].includes(i.type)){n+=h||"";continue}}let d=s;switch(d.type){case"space":{n+=this.renderer.space(d);break}case"hr":{n+=this.renderer.hr(d);break}case"heading":{n+=this.renderer.heading(d);break}case"code":{n+=this.renderer.code(d);break}case"table":{n+=this.renderer.table(d);break}case"blockquote":{n+=this.renderer.blockquote(d);break}case"list":{n+=this.renderer.list(d);break}case"checkbox":{n+=this.renderer.checkbox(d);break}case"html":{n+=this.renderer.html(d);break}case"def":{n+=this.renderer.def(d);break}case"paragraph":{n+=this.renderer.paragraph(d);break}case"text":{n+=this.renderer.text(d);break}default:{let i='Token with "'+d.type+'" type was not found.';if(this.options.silent)return console.error(i),"";throw new Error(i)}}}return n}parseInline(t,n=this.renderer){var r,a;this.renderer.parser=this;let l="";for(let s=0;s<t.length;s++){let d=t[s];if((a=(r=this.options.extensions)==null?void 0:r.renderers)!=null&&a[d.type]){let h=this.options.extensions.renderers[d.type].call({parser:this},d);if(h!==!1||!["escape","html","link","image","strong","em","codespan","br","del","text"].includes(d.type)){l+=h||"";continue}}let i=d;switch(i.type){case"escape":{l+=n.text(i);break}case"html":{l+=n.html(i);break}case"link":{l+=n.link(i);break}case"image":{l+=n.image(i);break}case"checkbox":{l+=n.checkbox(i);break}case"strong":{l+=n.strong(i);break}case"em":{l+=n.em(i);break}case"codespan":{l+=n.codespan(i);break}case"br":{l+=n.br(i);break}case"del":{l+=n.del(i);break}case"text":{l+=n.text(i);break}default:{let h='Token with "'+i.type+'" type was not found.';if(this.options.silent)return console.error(h),"";throw new Error(h)}}}return l}},ne=(ie=class{constructor(o){A(this,"options");A(this,"block");this.options=o||K}preprocess(o){return o}postprocess(o){return o}processAllTokens(o){return o}emStrongMask(o){return o}provideLexer(o=this.block){return o?H.lex:H.lexInline}provideParser(o=this.block){return o?j.parse:j.parseInline}},A(ie,"passThroughHooks",new Set(["preprocess","postprocess","processAllTokens","emStrongMask"])),A(ie,"passThroughHooksRespectAsync",new Set(["preprocess","postprocess","processAllTokens"])),ie),wl=class{constructor(...o){A(this,"defaults",ce());A(this,"options",this.setOptions);A(this,"parse",this.parseMarkdown(!0));A(this,"parseInline",this.parseMarkdown(!1));A(this,"Parser",j);A(this,"Renderer",se);A(this,"TextRenderer",ue);A(this,"Lexer",H);A(this,"Tokenizer",ae);A(this,"Hooks",ne);this.use(...o)}walkTokens(o,t){var l,r;let n=[];for(let a of o)switch(n=n.concat(t.call(this,a)),a.type){case"table":{let s=a;for(let d of s.header)n=n.concat(this.walkTokens(d.tokens,t));for(let d of s.rows)for(let i of d)n=n.concat(this.walkTokens(i.tokens,t));break}case"list":{let s=a;n=n.concat(this.walkTokens(s.items,t));break}default:{let s=a;(r=(l=this.defaults.extensions)==null?void 0:l.childTokens)!=null&&r[s.type]?this.defaults.extensions.childTokens[s.type].forEach(d=>{let i=s[d].flat(1/0);n=n.concat(this.walkTokens(i,t))}):s.tokens&&(n=n.concat(this.walkTokens(s.tokens,t)))}}return n}use(...o){let t=this.defaults.extensions||{renderers:{},childTokens:{}};return o.forEach(n=>{let l={...n};if(l.async=this.defaults.async||l.async||!1,n.extensions&&(n.extensions.forEach(r=>{if(!r.name)throw new Error("extension name required");if("renderer"in r){let a=t.renderers[r.name];a?t.renderers[r.name]=function(...s){let d=r.renderer.apply(this,s);return d===!1&&(d=a.apply(this,s)),d}:t.renderers[r.name]=r.renderer}if("tokenizer"in r){if(!r.level||r.level!=="block"&&r.level!=="inline")throw new Error("extension level must be 'block' or 'inline'");let a=t[r.level];a?a.unshift(r.tokenizer):t[r.level]=[r.tokenizer],r.start&&(r.level==="block"?t.startBlock?t.startBlock.push(r.start):t.startBlock=[r.start]:r.level==="inline"&&(t.startInline?t.startInline.push(r.start):t.startInline=[r.start]))}"childTokens"in r&&r.childTokens&&(t.childTokens[r.name]=r.childTokens)}),l.extensions=t),n.renderer){let r=this.defaults.renderer||new se(this.defaults);for(let a in n.renderer){if(!(a in r))throw new Error(`renderer '${a}' does not exist`);if(["options","parser"].includes(a))continue;let s=a,d=n.renderer[s],i=r[s];r[s]=(...h)=>{let g=d.apply(r,h);return g===!1&&(g=i.apply(r,h)),g||""}}l.renderer=r}if(n.tokenizer){let r=this.defaults.tokenizer||new ae(this.defaults);for(let a in n.tokenizer){if(!(a in r))throw new Error(`tokenizer '${a}' does not exist`);if(["options","rules","lexer"].includes(a))continue;let s=a,d=n.tokenizer[s],i=r[s];r[s]=(...h)=>{let g=d.apply(r,h);return g===!1&&(g=i.apply(r,h)),g}}l.tokenizer=r}if(n.hooks){let r=this.defaults.hooks||new ne;for(let a in n.hooks){if(!(a in r))throw new Error(`hook '${a}' does not exist`);if(["options","block"].includes(a))continue;let s=a,d=n.hooks[s],i=r[s];ne.passThroughHooks.has(a)?r[s]=h=>{if(this.defaults.async&&ne.passThroughHooksRespectAsync.has(a))return(async()=>{let x=await d.call(r,h);return i.call(r,x)})();let g=d.call(r,h);return i.call(r,g)}:r[s]=(...h)=>{if(this.defaults.async)return(async()=>{let x=await d.apply(r,h);return x===!1&&(x=await i.apply(r,h)),x})();let g=d.apply(r,h);return g===!1&&(g=i.apply(r,h)),g}}l.hooks=r}if(n.walkTokens){let r=this.defaults.walkTokens,a=n.walkTokens;l.walkTokens=function(s){let d=[];return d.push(a.call(this,s)),r&&(d=d.concat(r.call(this,s))),d}}this.defaults={...this.defaults,...l}}),this}setOptions(o){return this.defaults={...this.defaults,...o},this}lexer(o,t){return H.lex(o,t??this.defaults)}parser(o,t){return j.parse(o,t??this.defaults)}parseMarkdown(o){return(t,n)=>{let l={...n},r={...this.defaults,...l},a=this.onError(!!r.silent,!!r.async);if(this.defaults.async===!0&&l.async===!1)return a(new Error("marked(): The async option was set to true by an extension. Remove async: false from the parse options object to return a Promise."));if(typeof t>"u"||t===null)return a(new Error("marked(): input parameter is undefined or null"));if(typeof t!="string")return a(new Error("marked(): input parameter is of type "+Object.prototype.toString.call(t)+", string expected"));if(r.hooks&&(r.hooks.options=r,r.hooks.block=o),r.async)return(async()=>{let s=r.hooks?await r.hooks.preprocess(t):t,d=await(r.hooks?await r.hooks.provideLexer(o):o?H.lex:H.lexInline)(s,r),i=r.hooks?await r.hooks.processAllTokens(d):d;r.walkTokens&&await Promise.all(this.walkTokens(i,r.walkTokens));let h=await(r.hooks?await r.hooks.provideParser(o):o?j.parse:j.parseInline)(i,r);return r.hooks?await r.hooks.postprocess(h):h})().catch(a);try{r.hooks&&(t=r.hooks.preprocess(t));let s=(r.hooks?r.hooks.provideLexer(o):o?H.lex:H.lexInline)(t,r);r.hooks&&(s=r.hooks.processAllTokens(s)),r.walkTokens&&this.walkTokens(s,r.walkTokens);let d=(r.hooks?r.hooks.provideParser(o):o?j.parse:j.parseInline)(s,r);return r.hooks&&(d=r.hooks.postprocess(d)),d}catch(s){return a(s)}}}onError(o,t){return n=>{if(n.message+=`
+Please report this to https://github.com/markedjs/marked.`,o){let l="<p>An error occurred:</p><pre>"+q(n.message+"",!0)+"</pre>";return t?Promise.resolve(l):l}if(t)return Promise.reject(n);throw n}}},X=new wl;function I(o,t){return X.parse(o,t)}I.options=I.setOptions=function(o){return X.setOptions(o),I.defaults=X.defaults,we(I.defaults),I},I.getDefaults=ce,I.defaults=K,I.use=function(...o){return X.use(...o),I.defaults=X.defaults,we(I.defaults),I},I.walkTokens=function(o,t){return X.walkTokens(o,t)},I.parseInline=X.parseInline,I.Parser=j,I.parser=j.parse,I.Renderer=se,I.TextRenderer=ue,I.Lexer=H,I.lexer=H.lex,I.Tokenizer=ae,I.Hooks=ne,I.parse=I,I.options,I.setOptions,I.use,I.walkTokens,I.parseInline,j.parse,H.lex;const Tl={class:"modal-content help-modal"},Bl={class:"modal-header"},Sl={class:"header-actions"},Cl={class:"modal-body"},Il={class:"doc-sidebar"},Pl={class:"doc-sidebar-group"},Al={class:"doc-sidebar-header"},$l=["onClick"],Ml={class:"doc-sidebar-group"},Dl={class:"doc-sidebar-header"},Rl={class:"doc-content"},Ll=["innerHTML"],Gl=["innerHTML"],Fl=["innerHTML"],Ol=["innerHTML"],zl=["innerHTML"],Ul=["innerHTML"],Hl=["innerHTML"],jl={class:"doc-pagination"},ql=["disabled"],Wl={class:"page-info"},Jl=["disabled"],Zl=U({__name:"HelpModal",props:{initialDoc:{type:String,default:"getting-started"}},emits:["close","openAbout"],setup(o,{emit:t}){const n=o,l=e.ref(n.initialDoc),r=e.ref(""),a=e.ref(null),s=[{id:"getting-started",title:"快速开始",icon:"home"},{id:"features",title:"功能介绍",icon:"info"},{id:"api",title:"API 文档",icon:"code"},{id:"tools",title:"工具文档",icon:"tool"},{id:"shortcuts",title:"快捷键",icon:"keyboard"},{id:"faq",title:"常见问题",icon:"help"}],d=e.ref(s),i=e.computed(()=>[...d.value,{id:"changelog",title:"更新日志",icon:"activity"}]),h=e.computed(()=>i.value.findIndex(V=>V.id===l.value)),g=e.computed(()=>h.value>0),x=e.computed(()=>h.value<i.value.length-1);function N(){const V=r.value.toLowerCase().trim();if(!V){d.value=s;return}d.value=s.filter(f=>f.title.toLowerCase().includes(V)||f.id.includes(V)),d.value.length>0&&!d.value.find(f=>f.id===l.value)&&(l.value=d.value[0].id)}const B=V=>I(V,{breaks:!0,gfm:!0}).replace(/<table>/g,'<table class="doc-table">'),y=e.computed(()=>B(Ro)),T=e.computed(()=>B(Lo)),C=e.computed(()=>B(Ao)),$=e.computed(()=>B($o)),R=e.computed(()=>B(Mo)),O=e.computed(()=>B(Do)),W=e.computed(()=>B(Go));function z(){var V;g.value&&(l.value=i.value[h.value-1].id,(V=a.value)==null||V.scrollTo(0,0))}function F(){var V;x.value&&(l.value=i.value[h.value+1].id,(V=a.value)==null||V.scrollTo(0,0))}return e.onMounted(()=>{N()}),(V,f)=>(e.openBlock(),e.createElementBlock("div",{class:"modal-overlay",onClick:f[3]||(f[3]=e.withModifiers(m=>V.$emit("close"),["self"]))},[e.createElementVNode("div",Tl,[e.createCommentVNode(" 头部 "),e.createElementVNode("div",Bl,[e.createElementVNode("h2",null,[e.createVNode(D,{name:"book-open",size:18}),f[4]||(f[4]=e.createTextVNode(" 帮助文档",-1))]),e.createElementVNode("div",Sl,[e.createElementVNode("button",{class:"btn-about",onClick:f[0]||(f[0]=m=>V.$emit("openAbout")),title:"关于 PairCode"},[e.createVNode(D,{name:"info",size:14}),f[5]||(f[5]=e.createTextVNode(" 关于 ",-1))]),e.createElementVNode("button",{class:"modal-close",onClick:f[1]||(f[1]=m=>V.$emit("close"))},"×")])]),e.createCommentVNode(" 主体 "),e.createElementVNode("div",Cl,[e.createCommentVNode(" 侧边导航 "),e.createElementVNode("div",Il,[e.createCommentVNode(" 文档中心分组 "),e.createElementVNode("div",Pl,[e.createElementVNode("div",Al,[e.createVNode(D,{name:"book",size:14}),f[6]||(f[6]=e.createElementVNode("span",null,"文档中心",-1))]),(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(d.value,m=>(e.openBlock(),e.createElementBlock("div",{key:m.id,class:e.normalizeClass(["doc-nav-item",{active:l.value===m.id}]),onClick:p=>l.value=m.id},[e.createVNode(D,{name:m.icon,size:16},null,8,["name"]),e.createElementVNode("span",null,e.toDisplayString(m.title),1)],10,$l))),128))]),e.createCommentVNode(" 更新日志 "),e.createElementVNode("div",Ml,[e.createElementVNode("div",Dl,[e.createVNode(D,{name:"clock",size:14}),f[7]||(f[7]=e.createElementVNode("span",null,"其他",-1))]),e.createElementVNode("div",{class:e.normalizeClass(["doc-nav-item",{active:l.value==="changelog"}]),onClick:f[2]||(f[2]=m=>l.value="changelog")},[e.createVNode(D,{name:"activity",size:16}),f[8]||(f[8]=e.createElementVNode("span",null,"更新日志",-1))],2)])]),e.createCommentVNode(" 文档内容 "),e.createElementVNode("div",Rl,[e.createElementVNode("div",{class:"doc-content-inner",ref_key:"contentRef",ref:a},[l.value==="faq"?(e.openBlock(),e.createElementBlock("div",{key:0,class:"doc-markdown",innerHTML:y.value},null,8,Ll)):l.value==="getting-started"?(e.openBlock(),e.createElementBlock("div",{key:1,class:"doc-markdown",innerHTML:T.value},null,8,Gl)):l.value==="features"?(e.openBlock(),e.createElementBlock("div",{key:2,class:"doc-markdown",innerHTML:C.value},null,8,Fl)):l.value==="api"?(e.openBlock(),e.createElementBlock("div",{key:3,class:"doc-markdown",innerHTML:$.value},null,8,Ol)):l.value==="tools"?(e.openBlock(),e.createElementBlock("div",{key:4,class:"doc-markdown",innerHTML:R.value},null,8,zl)):l.value==="shortcuts"?(e.openBlock(),e.createElementBlock("div",{key:5,class:"doc-markdown",innerHTML:O.value},null,8,Ul)):l.value==="changelog"?(e.openBlock(),e.createElementBlock("div",{key:6,class:"doc-markdown",innerHTML:W.value},null,8,Hl)):e.createCommentVNode("v-if",!0)],512),e.createCommentVNode(" 底部翻页 "),e.createElementVNode("div",jl,[e.createElementVNode("button",{class:"page-btn",onClick:z,disabled:!g.value},[e.createVNode(D,{name:"chevron-left",size:14}),f[9]||(f[9]=e.createTextVNode(" 上一页 ",-1))],8,ql),e.createElementVNode("span",Wl,e.toDisplayString(h.value+1)+" / "+e.toDisplayString(i.value.length),1),e.createElementVNode("button",{class:"page-btn",onClick:F,disabled:!x.value},[f[10]||(f[10]=e.createTextVNode(" 下一页 ",-1)),e.createVNode(D,{name:"chevron-right",size:14})],8,Jl)])])])])]))}},[["__scopeId","data-v-203b7be1"]]),Kl="data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20width='512'%20height='512'%20viewBox='0%200%20512%20512'%3e%3cdefs%3e%3c!--%20背景渐变（深色科技风）%20--%3e%3clinearGradient%20id='bgGrad'%20x1='0'%20y1='0'%20x2='1'%20y2='1'%3e%3cstop%20offset='0%25'%20stop-color='%230a1628'/%3e%3cstop%20offset='100%25'%20stop-color='%230d1f2e'/%3e%3c/linearGradient%3e%3c!--%20左侧尖括号渐变（科技蓝）%20--%3e%3clinearGradient%20id='leftBracket'%20x1='0'%20y1='0'%20x2='0'%20y2='1'%3e%3cstop%20offset='0%25'%20stop-color='%2300d4ff'/%3e%3cstop%20offset='100%25'%20stop-color='%230077b6'/%3e%3c/linearGradient%3e%3c!--%20右侧尖括号渐变（科技绿）%20--%3e%3clinearGradient%20id='rightBracket'%20x1='0'%20y1='0'%20x2='0'%20y2='1'%3e%3cstop%20offset='0%25'%20stop-color='%2300e676'/%3e%3cstop%20offset='100%25'%20stop-color='%2300c853'/%3e%3c/linearGradient%3e%3c!--%20中间连接线（蓝绿渐变）%20--%3e%3clinearGradient%20id='connector'%20x1='0'%20y1='0'%20x2='1'%20y2='0'%3e%3cstop%20offset='0%25'%20stop-color='%2300d4ff'/%3e%3cstop%20offset='50%25'%20stop-color='%2300e5ff'/%3e%3cstop%20offset='100%25'%20stop-color='%2300e676'/%3e%3c/linearGradient%3e%3c!--%20外发光%20--%3e%3cfilter%20id='glow'%3e%3cfeGaussianBlur%20stdDeviation='4'%20result='blur'/%3e%3cfeMerge%3e%3cfeMergeNode%20in='blur'/%3e%3cfeMergeNode%20in='SourceGraphic'/%3e%3c/feMerge%3e%3c/filter%3e%3cfilter%20id='softGlow'%3e%3cfeGaussianBlur%20stdDeviation='8'%20result='blur'/%3e%3cfeMerge%3e%3cfeMergeNode%20in='blur'/%3e%3cfeMergeNode%20in='SourceGraphic'/%3e%3c/feMerge%3e%3c/filter%3e%3c/defs%3e%3c!--%20圆角方形背景（深色科技底）%20--%3e%3crect%20x='32'%20y='32'%20width='448'%20height='448'%20rx='96'%20ry='96'%20fill='url(%23bgGrad)'%20stroke='%231a3a4a'%20stroke-width='2'/%3e%3c!--%20左侧%20%3c%20尖括号（三段式直线%20—%20科技蓝，代表代码输入/开发者）%20--%3e%3cpath%20d='M180%20150%20L96%20256%20L180%20362'%20stroke='url(%23leftBracket)'%20stroke-width='40'%20stroke-linejoin='round'%20fill='none'%20filter='url(%23glow)'/%3e%3c!--%20右侧%20%3e%20尖括号（三段式直线%20—%20科技绿，代表代码输出/AI伙伴）%20--%3e%3cpath%20d='M332%20150%20L416%20256%20L332%20362'%20stroke='url(%23rightBracket)'%20stroke-width='40'%20stroke-linejoin='round'%20fill='none'%20filter='url(%23glow)'/%3e%3c!--%20中间「=」连接线已移除（图标只留%20%3c%20%3e%20尖括号%20+%20中心%20AI%20核心光点）。%20--%3e%3c!--%20中心光点（代表%20AI%20核心%20—%20亮青色）%20--%3e%3ccircle%20cx='256'%20cy='256'%20r='18'%20fill='transparent'%20stroke='%2300e5ff'%20stroke-width='3'%20opacity='0.6'/%3e%3ccircle%20cx='256'%20cy='256'%20r='8'%20fill='%2300e5ff'%20opacity='0.9'%3e%3canimate%20attributeName='opacity'%20values='0.6;1;0.6'%20dur='2s'%20repeatCount='indefinite'/%3e%3c/circle%3e%3c/svg%3e",Ql={class:"modal-content about-modal"},Xl={class:"modal-header"},Yl={class:"modal-body"},_l={class:"about-left-col"},vl={class:"about-hero"},er={class:"about-logo"},nr=["src"],tr={class:"about-version"},or={class:"about-right-col"},lr={class:"about-section"},rr={class:"feature-list"},ar={class:"about-section"},sr={key:0,class:"sys-info"},ir={class:"info-row"},cr={class:"info-row"},dr={class:"info-row"},pr={class:"info-path"},mr={class:"info-row"},gr={key:1,class:"loading-info"},kr={class:"modal-footer"},hr=U({__name:"AboutModal",props:{showHelpBtn:{type:Boolean,default:!0}},emits:["close","openHelp"],setup(o,{emit:t}){const n=e.ref(""),l=e.ref({}),r=e.ref(!0);return e.onMounted(async()=>{try{const a=await M.apiGet("/system/info");l.value=a,a.version&&(n.value=a.version)}catch{}r.value=!1}),(a,s)=>(e.openBlock(),e.createElementBlock("div",{class:"modal-overlay",onClick:s[3]||(s[3]=e.withModifiers(d=>a.$emit("close"),["self"]))},[e.createElementVNode("div",Ql,[e.createElementVNode("div",Xl,[e.createElementVNode("h2",null,[e.createVNode(D,{name:"info",size:18}),s[4]||(s[4]=e.createTextVNode(" 关于 PairCode",-1))]),e.createElementVNode("button",{class:"modal-close",onClick:s[0]||(s[0]=d=>a.$emit("close"))},"×")]),e.createElementVNode("div",Yl,[e.createCommentVNode(" 左列：Logo + 描述 + 技术栈 "),e.createElementVNode("div",_l,[e.createCommentVNode(" Logo + 标题 "),e.createElementVNode("div",vl,[e.createElementVNode("div",er,[e.createElementVNode("img",{src:e.unref(Kl),class:"about-logo-img",alt:"PairCode"},null,8,nr)]),s[5]||(s[5]=e.createElementVNode("div",{class:"about-title"},"PairCode IDE",-1)),e.createElementVNode("div",tr,"版本 "+e.toDisplayString(n.value),1)]),e.createCommentVNode(" 描述 "),s[6]||(s[6]=e.createElementVNode("div",{class:"about-section"},[e.createElementVNode("p",{class:"about-description"}," PairCode IDE 是一款纯 Web 端的 AI 辅助编程集成开发环境， 专为浏览器而设计。无需安装任何桌面客户端或本地 IDE 软件， 打开浏览器即可开始编程。它将 AI 对话能力深度融入编码工作流， 你只需用自然语言描述需求，AI 就能自动理解上下文、读写文件、执行命令、 管理版本控制。从代码生成到项目运维，在同一个浏览器窗口中全部完成。 ")],-1)),e.createCommentVNode(" 技术栈 "),s[7]||(s[7]=e.createStaticVNode('<div class="about-section" data-v-e61d5ebd><div class="section-title" data-v-e61d5ebd>技术栈</div><div class="tech-stack" data-v-e61d5ebd><span class="tech-badge" data-v-e61d5ebd>Go</span><span class="tech-badge" data-v-e61d5ebd>Vue 3</span><span class="tech-badge" data-v-e61d5ebd>WebSocket</span><span class="tech-badge" data-v-e61d5ebd>CodeMirror</span><span class="tech-badge" data-v-e61d5ebd>插件化工具</span><span class="tech-badge" data-v-e61d5ebd>TS 编译器</span><span class="tech-badge" data-v-e61d5ebd>MCP</span><span class="tech-badge" data-v-e61d5ebd>CodeGraph</span><span class="tech-badge" data-v-e61d5ebd>DAP</span></div></div>',1))]),e.createCommentVNode(" 右列：特性 + 系统信息 "),e.createElementVNode("div",or,[e.createCommentVNode(" 特性亮点 "),e.createElementVNode("div",lr,[s[18]||(s[18]=e.createElementVNode("div",{class:"section-title"},"主要特性",-1)),e.createElementVNode("ul",rr,[e.createElementVNode("li",null,[e.createVNode(D,{name:"bot",size:14,color:"var(--accent)"}),s[8]||(s[8]=e.createTextVNode(" AI 对话编程 — 用自然语言与 AI 对话，自动生成与重构代码",-1))]),e.createElementVNode("li",null,[e.createVNode(D,{name:"file",size:14,color:"var(--accent)"}),s[9]||(s[9]=e.createTextVNode(" 智能代码编辑器 — 多语言语法高亮，浏览器中流畅编辑",-1))]),e.createElementVNode("li",null,[e.createVNode(D,{name:"git-branch",size:14,color:"var(--accent)"}),s[10]||(s[10]=e.createTextVNode(" Git 版本控制 — 在对话中完成全部 Git 操作",-1))]),e.createElementVNode("li",null,[e.createVNode(D,{name:"terminal",size:14,color:"var(--accent)"}),s[11]||(s[11]=e.createTextVNode(" 内置终端 — 无需离开浏览器即可执行命令",-1))]),e.createElementVNode("li",null,[e.createVNode(D,{name:"search",size:14,color:"var(--accent)"}),s[12]||(s[12]=e.createTextVNode(" 全局搜索 — 快速搜索文件与代码内容",-1))]),e.createElementVNode("li",null,[e.createVNode(D,{name:"settings",size:14,color:"var(--accent)"}),s[13]||(s[13]=e.createTextVNode(" 自主 Agent 模式 — AI 主动分析项目并自动执行任务",-1))]),e.createElementVNode("li",null,[e.createVNode(D,{name:"grid",size:14,color:"var(--accent)"}),s[14]||(s[14]=e.createTextVNode(" 对话历史管理 — 自动保存、回溯与继续历史对话",-1))]),e.createElementVNode("li",null,[e.createVNode(D,{name:"tool",size:14,color:"var(--accent)"}),s[15]||(s[15]=e.createTextVNode(" Skills / MCP 扩展 — 通过技能市场扩展 IDE 能力",-1))]),e.createElementVNode("li",null,[e.createVNode(D,{name:"code",size:14,color:"var(--accent)"}),s[16]||(s[16]=e.createTextVNode(" 内置调试器 — 支持 Go 程序的断点、单步和变量查看",-1))]),e.createElementVNode("li",null,[e.createVNode(D,{name:"image",size:14,color:"var(--accent)"}),s[17]||(s[17]=e.createTextVNode(" 网页验证 — 打开 URL、截图、分析页面效果",-1))])])]),e.createCommentVNode(" 系统信息 "),e.createElementVNode("div",ar,[s[23]||(s[23]=e.createElementVNode("div",{class:"section-title"},"系统信息",-1)),r.value?(e.openBlock(),e.createElementBlock("div",gr,"加载中...")):(e.openBlock(),e.createElementBlock("div",sr,[e.createElementVNode("div",ir,[s[19]||(s[19]=e.createElementVNode("span",{class:"info-label"},"主机名",-1)),e.createElementVNode("span",null,e.toDisplayString(l.value.hostname),1)]),e.createElementVNode("div",cr,[s[20]||(s[20]=e.createElementVNode("span",{class:"info-label"},"操作系统",-1)),e.createElementVNode("span",null,e.toDisplayString(l.value.os),1)]),e.createElementVNode("div",dr,[s[21]||(s[21]=e.createElementVNode("span",{class:"info-label"},"工作区",-1)),e.createElementVNode("span",pr,e.toDisplayString(l.value.workspace),1)]),e.createElementVNode("div",mr,[s[22]||(s[22]=e.createElementVNode("span",{class:"info-label"},"平台信息",-1)),e.createElementVNode("span",null,e.toDisplayString(l.value.goos),1)])]))])])]),e.createCommentVNode(" 底部 "),e.createElementVNode("div",kr,[o.showHelpBtn?(e.openBlock(),e.createElementBlock("button",{key:0,class:"btn-primary",onClick:s[1]||(s[1]=d=>a.$emit("openHelp"))},[e.createVNode(D,{name:"book-open",size:14}),s[24]||(s[24]=e.createTextVNode(" 查看帮助文档 ",-1))])):e.createCommentVNode("v-if",!0),e.createElementVNode("button",{class:"btn-secondary",onClick:s[2]||(s[2]=d=>a.$emit("close"))},"关闭")])])]))}},[["__scopeId","data-v-e61d5ebd"]]),fr={class:"toast-container"},yr={class:"dlg-box",style:{"max-width":"400px"}},ur={class:"dlg-title"},Er={class:"dlg-body"},br={class:"dlg-actions"},xr={class:"dlg-box",style:{"max-width":"420px"}},Vr={class:"dlg-title"},Nr={class:"dlg-body",style:{display:"flex","flex-direction":"column",gap:"8px"}},wr={style:{"font-size":"13px",color:"var(--text-secondary)"}},Tr=["placeholder"],Br={class:"dlg-actions"},Sr={class:"dlg-box",style:{"max-width":"400px"}},Cr={class:"dlg-title"},Ir={class:"dlg-body",style:{"white-space":"pre-line"}},Pr=U({__name:"GlobalDialogs",setup(o){const t=e.ref(null);e.watch(()=>b.dialogState.show,r=>{r&&b.dialogState.type==="prompt"&&e.nextTick(()=>{var a,s;(a=t.value)==null||a.focus(),(s=t.value)==null||s.select()})});function n(){if(b.dialogState.type==="prompt"){const r=b.dialogState.inputValue;b.dialogState.show=!1,b.dialogState.resolve&&b.dialogState.resolve(r)}else if(b.dialogState.type==="confirm"&&b.dialogState.checkboxLabel){const a=b.dialogState.checkboxValue;b.dialogState.show=!1,b.dialogState.resolve&&b.dialogState.resolve({confirmed:!0,checked:a})}else b.dialogState.show=!1,b.dialogState.resolve&&b.dialogState.resolve(!0);b.dialogState.resolve=null}function l(){b.dialogState.type==="confirm"&&b.dialogState.checkboxLabel?(b.dialogState.show=!1,b.dialogState.resolve&&b.dialogState.resolve({confirmed:!1,checked:b.dialogState.checkboxValue})):b.dialogState.type==="prompt"?(b.dialogState.show=!1,b.dialogState.resolve&&b.dialogState.resolve(null)):(b.dialogState.show=!1,b.dialogState.resolve&&b.dialogState.resolve(!1)),b.dialogState.resolve=null}return(r,a)=>(e.openBlock(),e.createElementBlock(e.Fragment,null,[e.createCommentVNode(" Toast 通知区域 "),e.createElementVNode("div",fr,[(e.openBlock(!0),e.createElementBlock(e.Fragment,null,e.renderList(e.unref(b.dialogState).toasts,s=>(e.openBlock(),e.createElementBlock("div",{key:s.id,class:e.normalizeClass(["toast-item","toast-"+(s.type||"info")])},e.toDisplayString(s.message),3))),128))]),e.createCommentVNode(" Confirm 对话框 "),e.unref(b.dialogState).show&&e.unref(b.dialogState).type==="confirm"?(e.openBlock(),e.createElementBlock("div",{key:0,class:"dlg-overlay",onClick:e.withModifiers(l,["self"])},[e.createElementVNode("div",yr,[e.createElementVNode("div",ur,e.toDisplayString(e.unref(b.dialogState).title),1),e.createElementVNode("div",Er,e.toDisplayString(e.unref(b.dialogState).message),1),e.unref(b.dialogState).checkboxLabel?(e.openBlock(),e.createElementBlock("label",{key:0,class:"dlg-checkbox",onClick:a[1]||(a[1]=e.withModifiers(()=>{},["stop"]))},[e.withDirectives(e.createElementVNode("input",{type:"checkbox","onUpdate:modelValue":a[0]||(a[0]=s=>e.unref(b.dialogState).checkboxValue=s)},null,512),[[e.vModelCheckbox,e.unref(b.dialogState).checkboxValue]]),e.createElementVNode("span",null,e.toDisplayString(e.unref(b.dialogState).checkboxLabel),1)])):e.createCommentVNode("v-if",!0),e.createElementVNode("div",br,[e.createElementVNode("button",{class:"dlg-btn",onClick:l},e.toDisplayString(e.unref(b.dialogState).cancelText),1),e.createElementVNode("button",{class:"dlg-btn primary",onClick:n},e.toDisplayString(e.unref(b.dialogState).confirmText),1)])])])):e.createCommentVNode("v-if",!0),e.createCommentVNode(" Prompt 对话框 "),e.unref(b.dialogState).show&&e.unref(b.dialogState).type==="prompt"?(e.openBlock(),e.createElementBlock("div",{key:1,class:"dlg-overlay",onClick:e.withModifiers(l,["self"])},[e.createElementVNode("div",xr,[e.createElementVNode("div",Vr,e.toDisplayString(e.unref(b.dialogState).title),1),e.createElementVNode("div",Nr,[e.createElementVNode("span",wr,e.toDisplayString(e.unref(b.dialogState).message),1),e.withDirectives(e.createElementVNode("input",{ref_key:"promptInputRef",ref:t,"onUpdate:modelValue":a[2]||(a[2]=s=>e.unref(b.dialogState).inputValue=s),placeholder:e.unref(b.dialogState).inputPlaceholder,class:"dlg-input",onKeyup:[e.withKeys(n,["enter"]),e.withKeys(l,["escape"])]},null,40,Tr),[[e.vModelText,e.unref(b.dialogState).inputValue]])]),e.createElementVNode("div",Br,[e.createElementVNode("button",{class:"dlg-btn",onClick:l},e.toDisplayString(e.unref(b.dialogState).cancelText),1),e.createElementVNode("button",{class:"dlg-btn primary",onClick:n},e.toDisplayString(e.unref(b.dialogState).confirmText),1)])])])):e.createCommentVNode("v-if",!0),e.createCommentVNode(" Alert 信息框 "),e.unref(b.dialogState).show&&e.unref(b.dialogState).type==="alert"?(e.openBlock(),e.createElementBlock("div",{key:2,class:"dlg-overlay",onClick:e.withModifiers(n,["self"])},[e.createElementVNode("div",Sr,[e.createElementVNode("div",Cr,e.toDisplayString(e.unref(b.dialogState).title),1),e.createElementVNode("div",Ir,e.toDisplayString(e.unref(b.dialogState).message),1),e.createElementVNode("div",{class:"dlg-actions"},[e.createElementVNode("button",{class:"dlg-btn primary",onClick:n},"确定")])])])):e.createCommentVNode("v-if",!0)],64))}},[["__scopeId","data-v-0271e4ae"]]),Ar=U({__name:"UiModals",setup(o){const t=e.ref(null);let n=null;function l(){b.showAbout.value=!1,b.showHelp.value=!0,b.helpDocTarget.value="getting-started"}function r(){b.showHelp.value=!1,b.showAbout.value=!0}return e.onMounted(()=>{n=Ve.mountListSlot(t,"overlay",{isActive:a=>Ve.isOverlayActive("overlay",a)})}),e.onUnmounted(()=>{n&&(n(),n=null)}),(a,s)=>(e.openBlock(),e.createElementBlock(e.Fragment,null,[e.unref(b.showSettings)?(e.openBlock(),e.createBlock(go,{key:0,onClose:s[0]||(s[0]=d=>b.showSettings.value=!1)})):e.createCommentVNode("v-if",!0),e.unref(b.showSystem)?(e.openBlock(),e.createBlock(Bo,{key:1,onClose:s[1]||(s[1]=d=>b.showSystem.value=!1)})):e.createCommentVNode("v-if",!0),e.unref(b.showSource)?(e.openBlock(),e.createBlock(Po,{key:2,onClose:s[2]||(s[2]=d=>b.showSource.value=!1)})):e.createCommentVNode("v-if",!0),e.unref(b.showHelp)?(e.openBlock(),e.createBlock(Zl,{key:3,onClose:s[3]||(s[3]=d=>b.showHelp.value=!1),onOpenAbout:r,initialDoc:e.unref(b.helpDocTarget)},null,8,["initialDoc"])):e.createCommentVNode("v-if",!0),e.unref(b.showAbout)?(e.openBlock(),e.createBlock(hr,{key:4,onClose:s[4]||(s[4]=d=>b.showAbout.value=!1),onOpenHelp:l})):e.createCommentVNode("v-if",!0),e.createVNode(Pr),e.createCommentVNode(" ★ overlay 槽位（list 型）：插件注册的浮动层条目叠加渲染（badge/toast/status pill 等） "),e.createElementVNode("div",{ref_key:"overlaySlotEl",ref:t,class:"plugin-overlay-host"},null,512)],64))}},[["__scopeId","data-v-519b8494"]]);function $r(o){const t=e.createApp(Ar);return t.mount(o),()=>{t.unmount()}}return J.mount=$r,Object.defineProperty(J,Symbol.toStringTag,{value:"Module"}),J})({},window.__PAIRCODE_CORE.Vue,window.__PAIRCODE_CORE.uiState,window.__PAIRCODE_CORE.pluginRuntime,window.__PAIRCODE_CORE.api);

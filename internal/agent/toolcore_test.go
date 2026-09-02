@@ -1,9 +1,11 @@
 // ═══════════════════════════════════════════════════════════════
-// tool_core_js_test.go — tool-core JS 原生化（ctx.fs/ctx.bash）行为验证
+// tool_core_js_test.go — tool-core JS 原生化（ctx.fs）行为验证
 //
 // ★ 2026-08-19 工具合并：read_file→read、write_file→write、edit_file→edit、
 //   run_command→bash（均在 tool-harness 插件）；multi_edit/move_file/delete_file
 //   保留在 tool-core。本测试装载 tool-core + tool-harness 两插件验证合并后行为。
+// ★ 2026-09 Round3 ③.4：bash 工具从工具侧移除（长进程误用风险，短查询走宿主
+//   执行通道）；run_command 实现函数已从 tool-core 删除。
 // ═══════════════════════════════════════════════════════════════
 
 package agent
@@ -139,13 +141,7 @@ func TestToolCoreJSNative(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, "a", "moved.txt")); !os.IsNotExist(err) {
 		t.Fatalf("delete 后文件仍存在: %v", err)
 	}
-
-	// ⑨ bash（原 run_command）：ctx.bash
-	out, err = execTool(t, reg, "bash", map[string]any{"command": "echo js-native-ok"})
-	if err != nil {
-		t.Fatalf("bash 失败: %v", err)
-	}
-	if !strings.Contains(out, "js-native-ok") {
-		t.Fatalf("bash 输出异常: %q", out)
-	}
+	// ⑨（已删除，2026-09 ③.4）：原 bash（run_command）工具已从工具侧移除——
+	//    短查询走宿主执行通道；长进程统一 run_background/read_output/kill_process
+	//    （行为验证见 harness_js_test.go ⑥ 后台进程段）
 }

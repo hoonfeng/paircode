@@ -1,37 +1,17 @@
 // ═══════════════════════════════════════════════════════════════
-// tool-bug — BUG 检测与修复（bug_detect/bug_analyze/bug_fix）
+// tool-bug — BUG 检测与修复（bug_detect/bug_fix）
+// ★ Round4 削减：bug_analyze 删除（bug_detect/bug_fix 已覆盖构建输出→错误定位链）
 //
 // 迁移（2026-08-22 Round2）：binary 形态 → JS 原生（对齐 tool-core 模式）。
 // 原 execute 调 ctx.binary.exec 复用插件目录 bin/ 下独立二进制（已归档
-// bin/legacy-plugin-bins/），现实现完全在插件内（bug_analyze 纯文本解析；
-// bug_detect/bug_fix 经 ctx.bash 编排 go vet/build/test），不再依赖 ctx.binary。
+// bin/legacy-plugin-bins/），现实现完全在插件内（bug_detect/bug_fix 经 ctx.bash 编排
+// go vet/build/test，内置 analyzeVet/analyzeBuild/analyzeTest 解析器），不再依赖 ctx.binary。
 // 行为复刻 internal/agent/bugdetect.go（编译/测试/运行三形态解析、vet 回退、
 // 摘要与修复提示格式、build 失败短路跳过 test）。
-// 工具清单：bug_analyze、bug_detect、bug_fix
+// 工具清单：bug_detect、bug_fix
 // ═══════════════════════════════════════════════════════════════
 const tools = [
-  {
-    "name": "bug_analyze",
-    "description": "分析构建/测试/运行输出，提取错误位置和代码上下文。接受 output（构建输出文本），output_type（build/test/run），返回解析后的错误列表（含文件路径、行号、消息和代码上下文）。由 Detector 在自动检测时调用，也可供 agent 手动分析构建日志。",
-    "usageGuide": "分析构建/测试/运行输出，提取错误位置和代码上下文。配合 bug_detect 使用：先 bug_detect 全量检测，拿到输出后 bug_analyze 定位根因。比肉眼扫日志更快（结构化提取错误位置+行号）。",
-    "parameters": {
-      "properties": {
-        "output": {
-          "description": "构建/测试/运行的完整输出文本",
-          "type": "string"
-        },
-        "output_type": {
-          "description": "输出类型：build（编译输出）/ test（测试输出）/ run（运行时输出），默认 build",
-          "type": "string"
-        }
-      },
-      "required": [
-        "output"
-      ],
-      "type": "object"
-    },
-    "readOnly": true
-  },
+
   {
     "name": "bug_detect",
     "description": "全量检测项目中是否存在 BUG。自动运行 go vet → go build → go test，输出解析后的错误列表（含文件路径、行号、错误消息和代码上下文）。用于自动发现编译/测试/运行时的 BUG。集成在自主模式的编排循环中。",
@@ -160,63 +140,7 @@ function analyzeTest(ctx, output) {
   return symptoms
 }
 
-// analyzeRun 解析 go run 运行时输出（panic + 堆栈文件引用）。
-// ★ 空行仅在「已收集到堆栈行」后视为堆栈结束（panic 消息与 goroutine 头部
-//   之间的空行不中断解析——对齐测试期望的原始二进制行为）。
-function analyzeRun(ctx, output) {
-  const symptoms = []
-  let inPanic = false, panicMsg = '', stack = []
-  for (const line of String(output).split('\n')) {
-    if (line.startsWith('panic:') || line.startsWith('fatal error:')) {
-      panicMsg = line.trim()
-      inPanic = true
-      stack = []
-      continue
-    }
-    if (inPanic && line.startsWith('goroutine ')) { stack.push(line); continue }
-    if (inPanic) {
-      const m = goPanicFileRe.exec(line)
-      if (m) {
-        symptoms.push({ type: 'panic', severity: 'error', msg: panicMsg, file: m[1], line: +m[2], ctx: errorContext(ctx, m[1], +m[2], 5) })
-        stack.push(line)
-      } else if (line.startsWith('\t')) {
-        stack.push(line)
-      } else if (line.trim() === '' && stack.length > 0) {
-        inPanic = false
-      }
-    }
-  }
-  return symptoms
-}
 
-// symptomToMessage 单条症状 → 可读文本（复刻 BugSymptomToMessage）。
-function symptomToMessage(s) {
-  let b = '【' + s.type + '】' + s.msg + '\n'
-  if (s.file) {
-    b += '位置: ' + s.file + ':' + s.line
-    if (s.col) b += ':' + s.col
-    b += '\n'
-  }
-  if (s.ctx) b += '上下文:\n' + s.ctx + '\n'
-  return b
-}
-
-// bug_analyze：按 output_type 选择解析器。
-function bugAnalyze(ctx, args) {
-  const output = String(args.output == null ? '' : args.output)
-  const outputType = String(args.output_type || 'build')
-  let symptoms = []
-  if (outputType === 'test') symptoms = analyzeTest(ctx, output)
-  else if (outputType === 'run') symptoms = analyzeRun(ctx, output)
-  else {
-    symptoms = analyzeBuild(ctx, output)
-    if (symptoms.length === 0) symptoms = analyzeVet(ctx, output)
-  }
-  if (symptoms.length === 0) return '未检测到错误症状。（可能输出中不包含可识别的错误格式）'
-  let b = '检测到 ' + symptoms.length + ' 个问题:\n\n'
-  symptoms.forEach((s, i) => { b += '[' + (i + 1) + '] ' + symptomToMessage(s) + '\n' })
-  return b
-}
 
 // bash 在项目根执行命令（输出截断 16000 由宿主保证）。
 function bash(ctx, cwd, command, timeoutSec) {
@@ -295,7 +219,6 @@ function bugFix(ctx, args) {
 }
 
 const impls = {
-  bug_analyze: bugAnalyze,
   bug_detect: bugDetect,
   bug_fix: bugFix,
 }

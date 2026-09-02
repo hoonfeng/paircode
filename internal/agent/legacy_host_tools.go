@@ -2,8 +2,9 @@
 //
 // ★ 背景（2026-09）：registerAssetTools / registerBridgeTools /
 //   registerEntryConfigTools / registerEvolutionTools / registerProgressChecker /
-//   registerResourceTools / RegisterSnapshotTools 这 7 组约 20 个工具
-//   有完整 Go 实现但零调用点——既未插件化也未装配，Agent 永远用不到。
+//   registerResourceTools / RegisterSnapshotTools / registerVerifyTools 这 8 组
+//   约 22 个工具有完整 Go 实现但零调用点——既未插件化也未装配，
+//   Agent 永远用不到。
 //
 // ★ 处置（对齐 harness seam「能力在宿主、编排在插件」）：
 //   1. 磁盘插件（.pair/plugins/tool-*，由 tool_plugin_gen.go 生成）声明工具
@@ -15,6 +16,9 @@
 //      即工具消失，不会出现「宿主兜底孤儿工具」）。
 //   3. NewPluginHost 构造时调用（宿主能力库随宿主生灭；root 取插件宿主根，
 //      与 claimTool 存档宿主框架工具的同根语义一致，幂等覆盖）。
+// ★ 2026-09-04 合并注记：evolution/progress/verify 组随插件合并保留在档
+//   （hostTool 承载兜底；tool-resource 的 verify 工具运行时优先走 JS 原生
+//   impl，见 .pair/plugins/tool-resource/index.js apply 双模式）。
 
 package agent
 
@@ -32,6 +36,7 @@ var legacyToolGroups = []struct {
 	{registerEvolutionTools, "进化系统（evolution_save_capsule/search_capsules/save_gene/status）"},
 	{registerProgressChecker, "进度检查（progress_checker）"},
 	{registerResourceTools, "资源管理（resource_list/search/stats）"},
+	{registerVerifyTools, "知识库过期验证（memory_verify/project_info_verify；2026-09-04 随 tool-verify 并入 tool-resource 加档）"},
 	{RegisterSnapshotTools, "会话快照（restore_snapshot/list_snapshots）"},
 }
 
@@ -40,9 +45,9 @@ var (
 	legacyToolsRoot string // 最近一次存档的 root（root 变更时重存，幂等去重）
 )
 
-// ArchiveHostLegacyTools 把 7 组孤儿工具的 Go 实现存档为宿主能力
+// ArchiveHostLegacyTools 把孤儿工具组的 Go 实现存档为宿主能力
 // （hostExecutors，供磁盘插件 ctx.hostTool.exec 调用）。
-// 幂等：root 未变化时不做重复存档（map 覆盖，~20 个工具，成本可忽略）。
+// 幂等：root 未变化时不做重复存档（map 覆盖，~22 个工具，成本可忽略）。
 // 不注册进任何 Registry——agent 可见面由插件决定。
 func ArchiveHostLegacyTools(root string) {
 	legacyToolsMu.Lock()

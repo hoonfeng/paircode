@@ -2,7 +2,7 @@
 // harness_js_test.go — tool-harness JS 原生化行为验证
 //
 // 装载 .pair/plugins/tool-harness/index.js（磁盘插件）到临时工作区，
-// 验证 read/write/edit/glob/grep/bash/str_replace_editor 的 JS 实现
+// 验证 read/write/edit/glob/grep/bash/run_code 的 JS 实现
 // （ctx.fs/ctx.bash）；run_code 保持 hostTool（宿主执行器）。
 // ═══════════════════════════════════════════════════════════════
 
@@ -11,6 +11,8 @@ package agent
 import (
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -103,33 +105,26 @@ func TestToolHarnessJSNative(t *testing.T) {
 		t.Fatalf("grep 异常: %q err=%v", out, err)
 	}
 
-	// ⑥ bash：ctx.bash 执行 + timeoutMs/description 参数（R2-7 外部对齐）
-	out, err = execTool(t, reg, "bash", map[string]any{"command": "echo harness-js-ok"})
-	if err != nil || !strings.Contains(out, "harness-js-ok") {
-		t.Fatalf("bash 异常: %q err=%v", out, err)
+	// ⑥ 后台进程（③.4 并入自 tool-shell）：run_background → job_list → read_output → kill_process
+	out, err = execTool(t, reg, "run_background", map[string]any{"command": "echo bg-smoke-ok"})
+	if err != nil || !strings.Contains(out, "id=") {
+		t.Fatalf("run_background 异常: %q err=%v", out, err)
 	}
-	out, err = execTool(t, reg, "bash", map[string]any{"command": "echo harness-js-ok2", "description": "echo smoke", "timeoutMs": 30000})
-	if err != nil || !strings.Contains(out, "harness-js-ok2") {
-		t.Fatalf("bash timeoutMs/description 异常: %q err=%v", out, err)
+	idM := regexp.MustCompile(`id=(\d+)`).FindStringSubmatch(out)
+	if idM == nil {
+		t.Fatalf("run_background 未返回进程 id: %q", out)
 	}
-
-	// ⑦ str_replace_editor：create → view → str_replace → insert
-	if _, err := execTool(t, reg, "str_replace_editor", map[string]any{"command": "create", "path": "sre.txt", "file_text": "l1\nl2\n"}); err != nil {
-		t.Fatalf("sre create 失败: %v", err)
+	bgID, _ := strconv.Atoi(idM[1])
+	out, err = execTool(t, reg, "job_list", map[string]any{})
+	if err != nil || !strings.Contains(out, "id="+idM[1]) {
+		t.Fatalf("job_list 异常: %q err=%v", out, err)
 	}
-	out, _ = execTool(t, reg, "str_replace_editor", map[string]any{"command": "view", "path": "sre.txt"})
-	if !strings.Contains(out, "l1") {
-		t.Fatalf("sre view 异常: %q", out)
+	out, err = execTool(t, reg, "read_output", map[string]any{"id": bgID})
+	if err != nil || !strings.Contains(out, "[") {
+		t.Fatalf("read_output 异常: %q err=%v", out, err)
 	}
-	if _, err := execTool(t, reg, "str_replace_editor", map[string]any{"command": "str_replace", "path": "sre.txt", "old_str": "l1", "new_str": "L1"}); err != nil {
-		t.Fatalf("sre str_replace 失败: %v", err)
-	}
-	if _, err := execTool(t, reg, "str_replace_editor", map[string]any{"command": "insert", "path": "sre.txt", "insert_line": 1, "new_str": "inserted"}); err != nil {
-		t.Fatalf("sre insert 失败: %v", err)
-	}
-	data, _ = os.ReadFile(filepath.Join(root, "sre.txt"))
-	if !strings.Contains(string(data), "L1") || !strings.Contains(string(data), "inserted") {
-		t.Fatalf("sre 编辑未生效: %q", string(data))
+	if _, err := execTool(t, reg, "kill_process", map[string]any{"id": bgID}); err != nil {
+		t.Fatalf("kill_process 失败: %v", err)
 	}
 
 	// ⑧ run_code：保持 hostTool（宿主执行器）

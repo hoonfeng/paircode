@@ -49,12 +49,9 @@ func pickWorkspaceRoot(r *http.Request, bodyWorkspace string) string {
 
 // HandleToolsetsList GET /api/toolsets：工具集列表；?name= 返回该工具集完整详情
 // （含插件）。name=builtin 返回内置工具包详情（分组+工具+启用状态+已加入分组）。
+// ★ 2026-09-04 工具集已全局化（通用集合）——root 参数兼容保留但不影响读写。
 func HandleToolsetsList(w http.ResponseWriter, r *http.Request) {
 	root := pickWorkspaceRoot(r, "")
-	if root == "" {
-		jsonResp(w, []any{})
-		return
-	}
 	if name := r.URL.Query().Get("name"); name != "" {
 		if name == agent.BuiltinToolsetNamePublic() {
 			ph, ok := getPluginHost()
@@ -155,14 +152,10 @@ func HandleToolsetBuild(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleToolsetExport GET /api/toolsets/export?name=：导出发布 JSON。
+// ★ 2026-09-04 工具集全局化：从全局通用集合读取（root 兼容保留）。
 func HandleToolsetExport(w http.ResponseWriter, r *http.Request) {
-	root := pickWorkspaceRoot(r, "")
-	if root == "" {
-		jsonErr(w, "工作区未就绪")
-		return
-	}
 	name := r.URL.Query().Get("name")
-	ts, err := agent.LoadToolsetPublic(root, "", name)
+	ts, err := agent.LoadToolsetPublic("", "", name)
 	if err != nil {
 		jsonErr(w, err.Error())
 		return
@@ -200,10 +193,6 @@ func HandleToolsetImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	root := pickWorkspaceRoot(r, req.WorkspaceRoot)
-	if root == "" {
-		jsonErr(w, "工作区未就绪")
-		return
-	}
 	content := req.JSON
 	if content == "" {
 		if req.File == "" {
@@ -222,11 +211,8 @@ func HandleToolsetImport(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, err.Error())
 		return
 	}
+	// ★ 2026-09-04 工具集全局化：scope=user/project 均导入全局通用集合
 	scope := "project"
-	if req.Scope == "user" {
-		jsonErr(w, "工具集仅工作区级（没有全局工具集）；导入 scope 只支持 project。全局生效的是插件（UI 类），用对话 cordis_define scope=global 创建")
-		return
-	}
 	if err := agent.SaveToolsetPublic(root, scope, ts); err != nil {
 		jsonErr(w, err.Error())
 		return
@@ -259,10 +245,6 @@ func HandleToolsetRemove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	root := pickWorkspaceRoot(r, req.WorkspaceRoot)
-	if root == "" {
-		jsonErr(w, "工作区未就绪")
-		return
-	}
 	if req.Name == "" {
 		jsonErr(w, "缺少 name")
 		return
@@ -316,10 +298,6 @@ func HandleToolsetEdit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	root := pickWorkspaceRoot(r, req.WorkspaceRoot)
-	if root == "" {
-		jsonErr(w, "工作区未就绪")
-		return
-	}
 	args := map[string]any{
 		"name":          req.Name,
 		"scope":         req.Scope,

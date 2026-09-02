@@ -1220,6 +1220,9 @@ func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Reques
 			Model      *string `json:"model,omitempty"`
 			Preset     *string `json:"preset,omitempty"`
 			ClearModel bool    `json:"clearModel,omitempty"`
+			// ★ 2026-09-04 会话级工具集（通用集合）：toolset 字段写会话元数据，
+			//   agent 工具面按所选集合收敛；空串=清除（回落 default 集合）。
+			Toolset *string `json:"toolset,omitempty"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			jsonErr(w, err.Error())
@@ -1230,6 +1233,22 @@ func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Reques
 				jsonErr(w, err.Error())
 				return
 			}
+		}
+		if req.Toolset != nil {
+			// ★ 跨 store 兜底（与 SetConvModel 同策略）
+			saveStore := store
+			if meta, _ := store.GetConversation(id); meta == nil {
+				if m2, _ := agentMgr.FindConversation(id); m2 != nil {
+					if ws := m2.WorkspaceRoot; ws != "" {
+						saveStore = agentMgr.StoreFor(ws)
+					}
+				}
+			}
+			if err := saveStore.SetConvToolset(id, strings.TrimSpace(*req.Toolset)); err != nil {
+				jsonErr(w, err.Error())
+				return
+			}
+			log.Printf("[conv-toolset] 会话 %s 工具集设为 %q（仅本会话生效）", id, strings.TrimSpace(*req.Toolset))
 		}
 		if req.ClearModel {
 			if err := store.SetConvModel(id, "", "", ""); err != nil {
@@ -2282,13 +2301,12 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		opts.WorkspaceRoot = req.WorkspaceRoot
-		// ★ 工作区工具集白名单（2026-08-17）：agent 只暴露「会话工作区工具集」声明的
-		//   工具——有配置只暴露配置里的；无配置先自动创建基础工具集（极简核心 +
-		//   框架本身提供的工具），再按声明收敛。MergePluginTools 全量启用后应用，
-		//   插件工具未加入工具集 → 对 agent 隐藏（cordis/前端仍可见可管理）。
-		//   工作区隔离：每个工作区读自己的 .pair/toolsets/，移除/加入互不影响。
+		// ★ 2026-09-04 工具集模式改造：工具集已全局化（通用集合），agent 工具面
+		//   按「会话选择的集合」收敛（ConversationMeta.Toolset；空=default 集合）
+		//   ——不再是「工作区工具集并集」。precise 收敛：仅所选集合声明的工具可见。
+		//   协议/管理工具（SystemTool + cordis_*/toolset_*）恒可用（函数内兜底）。
 		if opts.Registry != nil {
-			agent.ApplyWorkspaceToolsetWhitelist(handler.GetPluginHost(), opts.Registry, req.WorkspaceRoot)
+			agent.ApplyConvToolsetWhitelist(handler.GetPluginHost(), opts.Registry, req.ConvID, req.WorkspaceRoot)
 		}
 
 		// 先从全局设置取审核配置（默认值）

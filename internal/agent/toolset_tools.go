@@ -123,18 +123,18 @@ func RegisterToolsetTools(r *Registry, root string, ph *PluginHost) {
 	// ── toolset_list：列出工具集 ──
 	r.Register(&Tool{
 		Name:        "toolset_list",
-		Description: "列出工作区全部工具集（名称/用途/插件数/来源；工具集仅工作区级，无全局工具集）。",
+		Description: "列出全局通用集合（工具集模式：default/full/dev/debug/test/docs 预置 + 自定义；对话面板按会话选择集合）。",
 		ReadOnly:    true,
 		Parameters:  mObjSchema(map[string]any{}),
 		Handler: func(_ context.Context, _ map[string]any) (string, error) {
-			metas := listAllToolsets(root)
+			metas := listAllToolsets("")
 			if len(metas) == 0 {
-				return "（暂无工具集。可用 toolset_build 按项目动态构建一个）", nil
+				return "（暂无工具集。可用 toolset_build 动态构建一个）", nil
 			}
 			var b strings.Builder
-			b.WriteString("## 工具集\n")
+			b.WriteString("## 工具集（全局通用集合）\n")
 			for _, m := range metas {
-				scope := "工作区"
+				scope := "全局"
 				switch m.Scope {
 				case "global":
 					scope = "全局"
@@ -285,15 +285,15 @@ func RegisterToolsetTools(r *Registry, root string, ph *PluginHost) {
 		},
 	})
 
-	// ── toolset_import：导入（scope=project|user）──
+	// ── toolset_import：导入（scope=project|user 兼容保留，都落全局通用集合）──
 	r.Register(&Tool{
 		Name:             "toolset_import",
-		Description:      "导入工具集：json 为发布 JSON 内容、file 为发布 JSON 文件路径。scope=user 导入全局（跨项目可用）、project 导入工作区。导入后立即装载。",
+		Description:      "导入工具集：json 为发布 JSON 内容、file 为发布 JSON 文件路径。导入到全局通用集合（跨工作区共享）。导入后立即装载。",
 		RequiresApproval: true,
 		Parameters: mObjSchema(map[string]any{
 			"json":  mStrProp("工具集发布 JSON 内容（与 file 二选一）"),
 			"file":  mStrProp("发布 JSON 文件路径（与 json 二选一）"),
-			"scope": mStrProp("project（默认，工作区）/ user（全局）"),
+			"scope": mStrProp("兼容保留（project/user 均导入全局通用集合）"),
 		}),
 		Handler: func(_ context.Context, args map[string]any) (string, error) {
 			content := mArgStr(args, "json")
@@ -316,36 +316,30 @@ func RegisterToolsetTools(r *Registry, root string, ph *PluginHost) {
 			if ts.Name == "" || len(ts.Plugins) == 0 {
 				return "", fmt.Errorf("导入内容不是有效工具集（缺 name/plugins）")
 			}
-			// ★ 工具集仅工作区级（没有全局工具集）；scope=user 拒绝
-			if mArgStr(args, "scope") == "user" {
-				return "", fmt.Errorf("工具集仅工作区级（没有全局工具集）；导入 scope 只支持 project。全局生效的是插件（UI 类），用 cordis_define scope=global 创建")
-			}
+			// ★ 2026-09-04 工具集全局化：任意 scope 均导入全局通用集合
 			if err := saveToolset(root, toolsetProject, ts); err != nil {
 				return "", err
 			}
 			if err := installToolset(ph, ts); err != nil {
 				return "", fmt.Errorf("工具集已固化但装载失败: %w", err)
 			}
-			return fmt.Sprintf("✅ 工具集 %q 已导入（工作区）并装载（%d 个插件）", ts.Name, len(ts.Plugins)), nil
+			return fmt.Sprintf("✅ 工具集 %q 已导入（全局通用集合）并装载（%d 个插件）", ts.Name, len(ts.Plugins)), nil
 		},
 	})
 
 	// ── toolset_remove：删除工具集 ──
 	r.Register(&Tool{
 		Name:             "toolset_remove",
-		Description:      "删除工具集（scope 指定删除作用域；缺省两个作用域同名都删）。已装载插件同步卸载。内置工具集 builtin 不可删除（用 toolset_edit 分组移出）。",
+		Description:      "删除工具集（全局通用集合目录）。已装载插件同步卸载。内置工具集 builtin 不可删除（用 toolset_edit 分组移出）。",
 		RequiresApproval: true,
 		Parameters: mObjSchema(map[string]any{
 			"name":  mStrProp("工具集名（builtin 不可删除）"),
-			"scope": mStrProp("project（仅工作区级；没有全局工具集）"),
+			"scope": mStrProp("兼容保留（删除全局通用集合）"),
 		}, "name"),
 		Handler: func(_ context.Context, args map[string]any) (string, error) {
 			name := mArgStr(args, "name")
 			if name == builtinToolsetName {
 				return "", fmt.Errorf("内置工具集 builtin 不可删除；用 toolset_edit {name=builtin, action=rm_plugin, plugin_name=builtin:组名} 分组移出，或 add_builtin_all 强制全部加入")
-			}
-			if mArgStr(args, "scope") == "global" {
-				return "", fmt.Errorf("工具集仅工作区级（没有全局工具集）；全局生效的是插件（UI 类），用 cordis_define scope=global 管理")
 			}
 			// 先卸载已装载插件/恢复内置条目
 			if ts, err := loadToolset(root, toolsetProject, name); err == nil {
@@ -784,15 +778,11 @@ func toolsetEdit(ph *PluginHost, root string, args map[string]any) (string, erro
 		}
 	}
 
-	// ★ 工具集仅工作区级（没有全局工具集）
-	if mArgStr(args, "scope") == "global" {
-		return "", fmt.Errorf("工具集仅工作区级（没有全局工具集）；全局生效的是插件（UI 类），用 cordis_define scope=global 管理")
-	}
+	// ★ 2026-09-04 工具集全局化：scope 参数兼容保留（project/global 均编辑全局通用集合）
 	ts, err := loadToolset(root, toolsetProject, name)
 	if err != nil {
-		// ★ 2026-08-17：工作区无工具集时（新项目/参考目录等），编辑 default 前自动
-		//   生成基础工具集——保证「加入」可用（工作区隔离：写入本工作区 .pair/toolsets/，
-		//   不影响其他工作区）。
+		// ★ 2026-08-17 兼容：编辑 default 前确保存在（无工具集时播种预置模式——
+		//   default 是首个预置；seedPresetToolsets 幂等，用户删除后不复活）。
 		if name == "default" {
 			if e := ensureDefaultWorkspaceToolset(ph, root); e == nil {
 				ts, err = loadToolset(root, toolsetProject, name)

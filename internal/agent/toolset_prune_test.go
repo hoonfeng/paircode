@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// mkTs 构造含指定条目的 default 工具集并落盘。
+// mkTs 构造含指定条目的 default 工具集并落盘（★ 全局化：写入重定向的全局工具集目录）。
 func mkTs(t *testing.T, root string, plugins []ToolsetPlugin) {
 	t.Helper()
 	ts := &Toolset{Name: "default", Project: filepath.Base(root), Plugins: plugins}
@@ -85,8 +85,8 @@ func TestPruneUnavailableFromToolsets(t *testing.T) {
 		t.Fatalf("期望 1 个工具集被清理，实际 %d", cleaned)
 	}
 
-	// 落盘校验
-	data, err := os.ReadFile(filepath.Join(root, ".pair", "toolsets", "default.json"))
+	// 落盘校验（★ 全局化：读全局工具集目录）
+	data, err := os.ReadFile(toolsetPath("", toolsetProject, "default"))
 	if err != nil {
 		t.Fatalf("读 default.json: %v", err)
 	}

@@ -2780,14 +2780,14 @@ func (p *jsPluginAdapter) buildToolsetService(pc *PluginContext) goja.Value {
 				panic(vm.NewGoError(fmt.Errorf("工具集装载失败已回滚: %w", err)))
 			}
 		}
-		return vm.ToValue(fmt.Sprintf("已安装插件工具集「%s」（工作区，%d 个插件）", ts.Name, len(ts.Plugins)))
+		return vm.ToValue(fmt.Sprintf("已安装插件工具集「%s」（全局通用集合，%d 个插件）", ts.Name, len(ts.Plugins)))
 	})
 	t.Set("remove", func(call goja.FunctionCall) goja.Value {
 		name := call.Argument(0).String()
 		if err := removeToolset(projectRoot, toolsetProject, name); err != nil {
 			panic(vm.NewGoError(err))
 		}
-		return vm.ToValue("已卸载工具集「" + name + "」（工作区）")
+		return vm.ToValue("已卸载工具集「" + name + "」（全局通用集合）")
 	})
 	t.Set("install", func(call goja.FunctionCall) goja.Value {
 		name := call.Argument(0).String()

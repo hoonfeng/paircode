@@ -209,14 +209,6 @@ function multiEdit(ctx, args) {
   return '已应用 ' + edits.length + ' 处编辑到 ' + args.path
 }
 
-// bash：ctx.bash（120s 超时 + 输出截断由宿主保证）
-function runCommand(ctx, args) {
-  const cwd = args.project ? '../' + String(args.project).replace(/[\/]+$/, '') + (args.cwd ? '/' + args.cwd : '') : (args.cwd || '')
-  const res = ctx.bash.exec(String(args.command || ''), cwd)
-  if (res.error) return res.output + (res.output ? '\n' : '') + '[stderr] ' + res.error
-  return res.output
-}
-
 // move_file：rename
 function moveFile(ctx, args) {
   const from = projPath(ctx, args, args.from)
@@ -241,8 +233,8 @@ const impls = {
 
 return {
   name: 'tool-core',
-  inject: ['fs', 'bash'],
-  purpose: '核心文件工具（multi_edit/move_file/delete_file）——迁移自内置 registerCoreTools；调用实现（JS 编排 ctx.fs/ctx.bash）完全在插件内（Round2：read/write/edit/bash 由 tool-harness 承载）',
+  inject: ['fs'],
+  purpose: '核心文件工具（multi_edit/move_file/delete_file）——迁移自内置 registerCoreTools；调用实现（JS 编排 ctx.fs）完全在插件内（Round2：read/write/edit 由 tool-harness 承载；③.4：bash 从工具侧移除）',
   apply(ctx) {
     for (const t of tools) {
       ctx.tools.register({

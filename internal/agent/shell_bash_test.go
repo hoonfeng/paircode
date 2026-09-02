@@ -2,36 +2,20 @@ package agent
 
 import (
 	"context"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 )
 
-// TestBashResourceExists 内置 bash 资源必须随仓库分发（bin/bash/usr/bin/bash.exe）。
-func TestBashResourceExists(t *testing.T) {
-	cand := filepath.Join("..", "..", "bin", "bash", "usr", "bin", "bash.exe")
-	if _, err := os.Stat(cand); err != nil {
-		t.Fatalf("内置 bash 资源缺失 %s: %v", cand, err)
-	}
-	if _, err := os.Stat(filepath.Join("..", "..", "bin", "bash", "tmp")); err != nil {
-		t.Fatalf("内置 bash 缺 tmp 目录（/tmp 警告）: %v", err)
-	}
-	// exe 同目录命中：companion.exe 在项目根时，内置路径必须精确命中
-	exe := filepath.Join("..", "..", "companion.exe")
-	got := bashCandidate(exe)
-	if _, err := os.Stat(got); err != nil {
-		t.Fatalf("companion.exe 同目录内置 bash 未命中: %s (%v)", got, err)
-	}
-	t.Logf("companion 运行时将使用内置 bash: %s", got)
-}
+// ★ 2026-09 Round3 ③.4：内置 bash 资源（bin/bash，约 28MB）已移除
+//   （打包瘦身）——原 TestBashResourceExists（断言 bin/bash 存在）已删除；
+//   bash 服务回退链见 TestDetectBash。
 
-// TestDetectBash 探测链：内置资源 > 系统 Git Bash > PATH bash。
+// TestDetectBash 探测链：系统 Git Bash → PATH bash。
 func TestDetectBash(t *testing.T) {
 	bashPath, msysBin := detectBash()
 	if bashPath == "" {
-		t.Fatal("detectBash 返回空（本机应至少命中系统 Git Bash 或内置资源）")
+		t.Fatal("detectBash 返回空（本机应至少命中系统 Git Bash 或 PATH 内的 bash）")
 	}
 	t.Logf("detectBash => %s (msys: %s)", bashPath, msysBin)
 	// 可执行性冒烟

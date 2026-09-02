@@ -55,19 +55,19 @@
       </div>
     </div>
 
-    <!-- ── 工具集（卷帘：与文件树同区，工作区 .pair/toolsets/） ── -->
+    <!-- ── 工具集（卷帘：通用集合，全局共享，对话面板按会话选择） ── -->
     <div class="ts-divider">
-      <div class="ts-header" :class="{ open: tsOpen }" @click="toggleTs" title="工具集（工作区内，可折叠）">
+      <div class="ts-header" :class="{ open: tsOpen }" @click="toggleTs" title="工具集（全局通用集合，可折叠）">
         <SvgIcon name="package" :size="12" class="ts-header-icon" />
         <span class="divider-label ts-label">工具集</span>
         <span class="ts-spacer"></span>
         <SvgIcon name="chevron-right" :size="11" class="ts-chevron" :class="{ open: tsOpen }" />
       </div>
       <div v-if="tsOpen" class="ts-body">
-        <!-- 工作区工具集（builtin 已加入内容：可移出） -->
+        <!-- 全局通用集合（已声明内容：可移出） -->
         <div class="ts-build">
           <div class="ts-build-head">
-            <span class="ts-build-title">工作区工具集</span>
+            <span class="ts-build-title">通用集合</span>
             <button class="ts-btn mini" @click="openTransfer" title="穿梭框批量管理：未加入 ↔ 已加入">管理</button>
           </div>
           <input v-model="tsAddSearch" placeholder="搜索工具名…" class="ts-input" />
@@ -78,7 +78,7 @@
               </div>
               <div v-for="t in filterTools(g.tools)" :key="t.name" class="ts-add-tool" :title="t.desc">
                 <span class="ts-add-tool-name">{{ t.name }}</span>
-                <button class="ts-btn mini danger" @click="toggleToolsetTool(t, g)" title="移出工作区工具集（该工具对 agent 不可见）">移出</button>
+                <button class="ts-btn mini danger" @click="toggleToolsetTool(t, g)" title="移出通用集合（该工具对 agent 不可见）">移出</button>
               </div>
             </div>
             <div v-if="manualToolNames.length" class="ts-add-group">
@@ -87,7 +87,7 @@
               </div>
               <div v-for="t in filterTools(manualToolObjs)" :key="t.name" class="ts-add-tool" :title="t.desc">
                 <span class="ts-add-tool-name">{{ t.name }}</span>
-                <button class="ts-btn mini danger" @click="toggleToolsetTool(t, g)" title="移出工作区工具集（该工具对 agent 不可见）">移出</button>
+                <button class="ts-btn mini danger" @click="toggleToolsetTool(t, g)" title="移出通用集合（该工具对 agent 不可见）">移出</button>
               </div>
             </div>
             <div v-if="!joinedGroups.length && !manualToolNames.length" class="ts-empty">未加入任何工具。点「管理」在穿梭框中加入。</div>
@@ -157,7 +157,7 @@
     </div>
     <!-- 右键菜单 -->
     <ContextMenu ref="wsContextMenuRef" />
-    <!-- 工作区工具集穿梭框（未加入 ↔ 已加入 批量管理） -->
+    <!-- 通用集合穿梭框（未加入 ↔ 已加入 批量管理） -->
     <ToolsetTransfer
       v-if="tsTransferOpen"
       :groups="builtinInfo?.plugins || []"
@@ -584,7 +584,7 @@ async function loadFileContent(path) {
   }
 }
 
-// ── 工具集（卷帘 section：与文件树同区；工作区工具集 = .pair/toolsets/*.json） ──
+// ── 工具集（卷帘 section：与文件树同区；通用集合 = <InstallDir>/.pair/toolsets/*.json） ──
 const tsAddSearch = ref('')
 const tsMsg = ref('')
 const tsMsgErr = ref(false)
@@ -607,7 +607,7 @@ const joinedToolCount = computed(() => {
   return n + (builtinInfo.value?.manualTools || []).length
 })
 
-// 已加入分组（工作区工具集内容展示）：source=builtin 的 joined 组 + _manual 手动工具
+// 已加入分组（通用集合 default 内容展示）：source=builtin 的 joined 组 + _manual 手动工具
 const joinedGroups = computed(() => {
   const joined = new Set(builtinInfo.value?.joined || [])
   const bg = (builtinInfo.value?.groups || []).filter(g => g.source === 'builtin' && joined.has(g.name))
@@ -628,10 +628,10 @@ function openTransfer() { tsTransferOpen.value = true }
 function onTransferChanged() {
   loadBuiltin()
 }
-// ★ 工作区切换时重载工具集（管理弹窗按当前工作区隔离展示）
+// ★ 工具集已全局化：切换工作区不再隔离（重载保证通用集合展示最新）
 watch(() => state.workspaceRoot, () => { loadBuiltin() })
 
-// 已捞入工作区工具集的工具名集合（joined 组工具 + 插件已启用工具 + _manual 手动条目工具）
+// 已捞入通用集合的工具名集合（joined 组工具 + 插件已启用工具 + _manual 手动条目工具）
 const joinedTools = computed(() => {
   const set = {}
   const joined = new Set(builtinInfo.value?.joined || [])
@@ -655,7 +655,7 @@ function filterTools(tools) {
   return tools.filter(t => t.name.toLowerCase().includes(q))
 }
 
-// 加载工作区工具集（builtin）信息（池子）
+// 加载通用集合（builtin 信息，池子）
 async function loadBuiltin() {
   try {
     builtinInfo.value = await api.builtinPlugins(undefined, state.workspaceRoot)

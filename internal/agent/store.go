@@ -23,6 +23,11 @@ type ConversationStore interface {
 	SetConvReviewMode(convID, mode string) error
 	// ConvReviewMode 读取会话级审核模式（空=未设置，用全局/工作区配置）。
 	ConvReviewMode(convID string) string
+	// SetConvToolset 设置会话级工具集（通用集合名；★ 2026-09-04 会话内选择
+	// 只作用于本会话并持久化；空=清除回落 default 集合）。
+	SetConvToolset(convID, toolset string) error
+	// ConvToolset 读取会话级工具集（空=未设置，用 default 集合）。
+	ConvToolset(convID string) string
 
 	// 消息操作
 	AppendMessage(convID string, msg Message, segments []Segment) error

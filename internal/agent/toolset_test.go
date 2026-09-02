@@ -25,6 +25,8 @@ func mkToolsetGoProject(t *testing.T) string {
 // TestToolsetBuildPersistExportImport 全链路：构建 → 固化 → 列表 → 导出 → 导入全局 → 启动装载。
 func TestToolsetBuildPersistExportImport(t *testing.T) {
 	project := mkToolsetGoProject(t)
+	SetGlobalToolsetDirForTest(t.TempDir())
+	t.Cleanup(func() { SetGlobalToolsetDirForTest(testGlobalToolsetDir) })
 
 	host := NewPluginHost(NewRegistry(), nil, project)
 	SetGlobalPluginHost(host)
@@ -50,16 +52,16 @@ func TestToolsetBuildPersistExportImport(t *testing.T) {
 		t.Fatalf("git-flow 模板应命中（通用）: %v", names)
 	}
 
-	// 2. 固化到工作区 .pair/toolsets/
+	// 2. 固化到全局通用集合（.pair/toolsets/ 已全局化）
 	if err := saveToolset(project, toolsetProject, ts); err != nil {
 		t.Fatalf("saveToolset: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(project, ".pair", "toolsets", ts.Name+".json")); err != nil {
-		t.Fatalf("固化文件应存在: %v", err)
+	if _, err := os.Stat(toolsetPath("", toolsetProject, ts.Name)); err != nil {
+		t.Fatalf("固化文件应存在（全局目录）: %v", err)
 	}
-	metas := listToolsets(project, toolsetProject)
+	metas := listToolsets("", toolsetProject)
 	if len(metas) != 1 || metas[0].Name != "dev" {
-		t.Fatalf("project 列表应含 dev: %+v", metas)
+		t.Fatalf("全局列表应含 dev: %+v", metas)
 	}
 
 	// 3. 插件已装载（工具可见）
@@ -85,10 +87,9 @@ func TestToolsetBuildPersistExportImport(t *testing.T) {
 	if err := importToolsetJSON(host2, project, content, "user"); err != nil {
 		t.Fatalf("importToolsetJSON: %v", err)
 	}
-	// ★ 无全局工具集（2026-08-15 重构移除）：导入 scope=user 亦回退工作区级，
-	//   断言改为工作区固化文件（原断言 core.InstallDir() 全局固化已无对应语义）。
-	if _, err := os.Stat(filepath.Join(project, ".pair", "toolsets", ts.Name+".json")); err != nil {
-		t.Fatalf("工作区固化应存在: %v", err)
+	// ★ 2026-09-04 工具集全局化：导入落全局通用集合目录（跨工作区共享）
+	if _, err := os.Stat(toolsetPath("", toolsetProject, ts.Name)); err != nil {
+		t.Fatalf("全局固化应存在: %v", err)
 	}
 	// 新宿主立即装载成功
 	if got := host2.State("git-flow"); got != PluginRunning {
@@ -99,11 +100,9 @@ func TestToolsetBuildPersistExportImport(t *testing.T) {
 	LoadAllToolsets(host2, project)
 
 	// 7. 删除
-	if err := removeToolset(project, toolsetProject, ts.Name); err != nil {
+	if err := removeToolset("", toolsetProject, ts.Name); err != nil {
 		t.Fatalf("removeToolset: %v", err)
 	}
-	// ★ 无全局工具集（2026-08-15 重构移除）：原 removeToolset(project, toolsetGlobal, …)
-	//   已无对应常量，全局副本概念已删，仅保留工作区移除。
 }
 
 // TestToolsetMarketInstall 市场 plugin 类型安装（固化 + 装载）。
@@ -112,6 +111,8 @@ func TestToolsetBuildPersistExportImport(t *testing.T) {
 //	Go 内核无市场实现。本测试直接验证底层能力路径：固化 → 装载。
 func TestToolsetMarketInstall(t *testing.T) {
 	project := mkToolsetGoProject(t)
+	SetGlobalToolsetDirForTest(t.TempDir())
+	t.Cleanup(func() { SetGlobalToolsetDirForTest(testGlobalToolsetDir) })
 	host := NewPluginHost(NewRegistry(), nil, project)
 	SetGlobalPluginHost(host)
 	defer SetGlobalPluginHost(nil)
@@ -127,9 +128,9 @@ func TestToolsetMarketInstall(t *testing.T) {
 	if err := installToolset(host, ts); err != nil {
 		t.Fatalf("installToolset: %v", err)
 	}
-	// 已固化到工作区
-	if _, err := os.Stat(filepath.Join(project, ".pair", "toolsets", ts.Name+".json")); err != nil {
-		t.Fatalf("插件工具集应固化到工作区: %v", err)
+	// 已固化到全局通用集合
+	if _, err := os.Stat(toolsetPath("", toolsetProject, ts.Name)); err != nil {
+		t.Fatalf("插件工具集应固化到全局: %v", err)
 	}
 	// 已装载
 	for _, p := range ts.Plugins {
@@ -237,6 +238,8 @@ func (e *jsonErr) Error() string { return e.msg }
 // TestToolsetEdit 工具集手动编辑（插件化思路）：add_plugin / rm_tool / enable_tool / rm_plugin。
 func TestToolsetEdit(t *testing.T) {
 	project := mkToolsetGoProject(t)
+	SetGlobalToolsetDirForTest(t.TempDir())
+	t.Cleanup(func() { SetGlobalToolsetDirForTest(testGlobalToolsetDir) })
 	reg := NewRegistry()
 	host := NewPluginHost(reg, nil, project)
 
@@ -298,7 +301,7 @@ func TestToolsetEdit(t *testing.T) {
 	if len(ts2.Plugins) != 2 {
 		t.Fatalf("插件数应为 2: %d", len(ts2.Plugins))
 	}
-	data, _ := os.ReadFile(filepath.Join(project, ".pair", "toolsets", "edit-demo.json"))
+	data, _ := os.ReadFile(toolsetPath("", toolsetProject, "edit-demo"))
 	if !strings.Contains(string(data), "p2-ext") {
 		t.Fatal("固化 JSON 应含 p2-ext")
 	}

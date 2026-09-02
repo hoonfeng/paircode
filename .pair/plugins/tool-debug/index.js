@@ -146,8 +146,8 @@ const tools = [
   },
   {
     "name": "debug_evaluate_session",
-    "description": "评估 agent 会话的表现，生成结构化评分报告。基于已保存的执行日志（.pair/execution_logs/）和工具调用统计进行离线分析。四个评分维度：完成度（任务是否完成）、效率（工具调用合理度）、可靠性（工具成功率）、适应性（错误恢复能力）。评分是离线分析，不消耗 agent 运行时的 token。评分结果可用于自我迭代参考。\n\n如需更高质的语义化 LLM 评分，请使用独立评分工具：\n  go run ./cmd/evaluator -conv-id \u003cconv_id\u003e -root \u003cworkspace_root\u003e\n该工具是独立项目，不依赖 agent 运行时，通过环境变量 BASE_URL/API_KEY/MODEL 配置 LLM。",
-    "usageGuide": "对 agent 会话进行离线评分评估（机械公式）。如需更高质的语义化评分，请运行独立评分工具：go run ./cmd/evaluator -root \u003cworkspace\u003e。评分是离线分析，不消耗 agent 运行时的 token。",
+    "description": "评估 agent 会话的表现，生成结构化评分报告。基于已保存的执行日志（.pair/execution_logs/）和工具调用统计进行离线分析。四个评分维度：完成度（任务是否完成）、效率（工具调用合理度）、可靠性（工具成功率）、适应性（错误恢复能力）。评分是离线分析，不消耗 agent 运行时的 token。评分结果可用于自我迭代参考。\n\n如需更高质的语义化 LLM 评分，请使用独立评分工具：\n  go run ./cmd/evaluator -conv-id <conv_id> -root <workspace_root>\n该工具是独立项目，不依赖 agent 运行时，通过环境变量 BASE_URL/API_KEY/MODEL 配置 LLM。",
+    "usageGuide": "对 agent 会话进行离线评分评估（机械公式）。如需更高质的语义化评分，请运行独立评分工具：go run ./cmd/evaluator -root <workspace>。评分是离线分析，不消耗 agent 运行时的 token。",
     "parameters": {
       "properties": {
         "conv_id": {

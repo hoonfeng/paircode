@@ -1,8 +1,0 @@
-{
-  "main": "index.js",
-  "name": "tool-bridge",
-  "purpose": "桌面桥接（bridge_status/bridge_takeover/bridge_lockdown/bridge_exec/bridge_register_system_tool）（自动生成，迁移自内置 Go 工具组）",
-  "scope": "global",
-  "type": "plugin",
-  "version": "1.0.0"
-}

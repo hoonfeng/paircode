@@ -94,6 +94,24 @@ func (s *webServer) startSubAgentFork(spec agent.SubAgentSpec, seed []agent.Mess
 	if err := agentMgr.AppendPersistedUserMessageTo(wsRoot, convID, task); err != nil {
 		return fmt.Errorf("成员会话消息落盘失败: %v", err)
 	}
+	// ★ 2026-09-04 工具集继承：成员会话（新建 conv，meta 未设工具集）继承
+	//   源/父会话选择的通用集合，保证成员与主会话同一工具面。
+	//   fork 场景继承 ForkOf（源会话），普通场景继承 ParentConv（队长会话）。
+	inheritFrom := spec.ForkOf
+	if inheritFrom == "" {
+		inheritFrom = spec.ParentConv
+	}
+	if inheritFrom != "" {
+		if src, srcRoot := agentMgr.FindConversation(inheritFrom); src != nil {
+			if src.Toolset != "" {
+				if st := agentMgr.StoreFor(srcRoot); st != nil {
+					if err := st.SetConvToolset(convID, src.Toolset); err != nil {
+						log.Printf("[subagent] 工具集继承失败 conv=%s（不阻塞）: %v", convID, err)
+					}
+				}
+			}
+		}
+	}
 
 	go func() {
 		opts := s.buildWebLoopOpts(convID, task, false, wsRoot)
@@ -117,9 +135,11 @@ func (s *webServer) startSubAgentFork(spec agent.SubAgentSpec, seed []agent.Mess
 			opts.Provider = prov
 		}
 
-		// ③ 工具面：工作区工具集白名单 → 再摘除队长专属工具
+		// ③ 工具面：会话级工具集（通用集合）白名单（★ 2026-09-04 全局化：
+		//   成员会话继承源会话选择的集合——spawn 前已 SetConvToolset 同步；
+		//   未继承时按成员会话自身 meta（空=default 集合））→ 再摘除队长专属工具
 		if opts.Registry != nil {
-			agent.ApplyWorkspaceToolsetWhitelist(handler.GetPluginHost(), opts.Registry, wsRoot)
+			agent.ApplyConvToolsetWhitelist(handler.GetPluginHost(), opts.Registry, convID, wsRoot)
 			for _, name := range spec.DenyTools {
 				if n := strings.TrimSpace(name); n != "" {
 					opts.Registry.Unregister(n)
@@ -197,6 +217,24 @@ func (s *webServer) startSubAgentTurn(spec agent.SubAgentSpec) error {
 	if err := agentMgr.AppendPersistedUserMessageTo(wsRoot, convID, task); err != nil {
 		return fmt.Errorf("成员会话消息落盘失败: %v", err)
 	}
+	// ★ 2026-09-04 工具集继承：成员会话（新建 conv，meta 未设工具集）继承
+	//   源/父会话选择的通用集合，保证成员与主会话同一工具面。
+	//   fork 场景继承 ForkOf（源会话），普通场景继承 ParentConv（队长会话）。
+	inheritFrom := spec.ForkOf
+	if inheritFrom == "" {
+		inheritFrom = spec.ParentConv
+	}
+	if inheritFrom != "" {
+		if src, srcRoot := agentMgr.FindConversation(inheritFrom); src != nil {
+			if src.Toolset != "" {
+				if st := agentMgr.StoreFor(srcRoot); st != nil {
+					if err := st.SetConvToolset(convID, src.Toolset); err != nil {
+						log.Printf("[subagent] 工具集继承失败 conv=%s（不阻塞）: %v", convID, err)
+					}
+				}
+			}
+		}
+	}
 
 	go func() {
 		opts := s.buildWebLoopOpts(convID, task, false, wsRoot)
@@ -216,9 +254,11 @@ func (s *webServer) startSubAgentTurn(spec agent.SubAgentSpec) error {
 			opts.Provider = prov
 		}
 
-		// ③ 工具面：工作区工具集白名单 → 再摘除队长专属工具
+		// ③ 工具面：会话级工具集（通用集合）白名单（★ 2026-09-04 全局化：
+		//   成员会话继承源会话选择的集合——spawn 前已 SetConvToolset 同步；
+		//   未继承时按成员会话自身 meta（空=default 集合））→ 再摘除队长专属工具
 		if opts.Registry != nil {
-			agent.ApplyWorkspaceToolsetWhitelist(handler.GetPluginHost(), opts.Registry, wsRoot)
+			agent.ApplyConvToolsetWhitelist(handler.GetPluginHost(), opts.Registry, convID, wsRoot)
 			for _, name := range spec.DenyTools {
 				if n := strings.TrimSpace(name); n != "" {
 					opts.Registry.Unregister(n)

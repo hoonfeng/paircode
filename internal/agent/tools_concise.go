@@ -26,7 +26,6 @@ var conciseToolDescriptions = map[string]string{
 	"tool_stats":   "观工具调用统计（次数/成败/成功率）；min_calls 滤低频、recent 观近录。",
 
 	// ── 文件编辑 ──
-	"str_replace_editor": "观/建/改文件：view 览（带行号，可 view_range 限行）、create 建（file_text）、str_replace 换（old_str 须唯一精确）、insert 行后插（insert_line）。",
 	"read":               "读文件内容（工作区内 path；可 offset+limit 读片段，缺省读全，超 2000 行截断）。",
 	"write":              "写 content 至 path（覆盖，父目录自动建）；需审核批准。",
 	"edit":               "以 new_string 换文中唯一 old_string（智能匹配 CRLF/空白；败则用 line_start/line_end 定位）。",

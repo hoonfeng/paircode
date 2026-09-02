@@ -15,7 +15,7 @@
       <div class="pp-ts-head">
         <select v-model="tsName" class="pp-input pp-lang" @change="loadToolsetDetail">
           <option value="">选择工具集…</option>
-          <optgroup label="工作区工具集（本项目）">
+          <optgroup label="通用集合（全局共享）">
             <option v-for="t in toolsetMetas.filter(x => x.scope !== 'builtin')" :key="t.name" :value="t.name">{{ t.name }}（{{ t.pluginCount }} 插件）</option>
             <option v-for="t in toolsetMetas.filter(x => x.scope === 'builtin')" :key="t.name" :value="t.name">{{ t.name }}（{{ t.pluginCount }} 插件·内置默认）</option>
           </optgroup>
@@ -123,12 +123,12 @@
       </template>
     </div>
     <div class="pp-list">
-      <!-- 内置工具区（框架自带工具：默认在工作区工具集，可勾选加入/移出）
+      <!-- 内置工具区（框架自带工具：默认在通用集合 default，可勾选加入/移出）
       ★ 2026-08-20：默认收缩（折叠），点击标题展开 -->
       <div v-if="builtinGroups.length" class="pp-builtin">
         <div class="pp-builtin-head" @click="builtinOpen = !builtinOpen" :title="builtinOpen ? '点击收起内置工具区' : '点击展开内置工具区'" style="cursor:pointer">
           <span class="pp-builtin-title"><SvgIcon name="package" :size="12" /> 内置工具（框架自带）</span>
-          <span class="pp-builtin-sub">勾选=在工作区工具集中（agent 可用）；取消=移出</span>
+          <span class="pp-builtin-sub">勾选=在通用集合 default 中（agent 可用）；取消=移出</span>
           <SvgIcon name="chevron-right" :size="11" class="pp-chevron" :class="{ open: builtinOpen }" />
         </div>
         <template v-if="builtinOpen">
@@ -137,13 +137,13 @@
             <span class="pp-builtin-gname">{{ g.title || g.name }}</span>
             <span v-if="g.desc" class="pp-builtin-gdesc">{{ g.desc }}</span>
             <span class="pp-builtin-gcount">{{ g.tools.length }} 工具</span>
-            <button v-if="!g.allOn" class="pp-btn mini" @click="enableBuiltinGroup(g)" title="整组加入工作区工具集">整组启用</button>
-            <button v-if="g.anyOn" class="pp-btn mini danger" @click="disableBuiltinGroup(g)" title="整组移出工作区工具集">整组移出</button>
+            <button v-if="!g.allOn" class="pp-btn mini" @click="enableBuiltinGroup(g)" title="整组加入通用集合">整组启用</button>
+            <button v-if="g.anyOn" class="pp-btn mini danger" @click="disableBuiltinGroup(g)" title="整组移出通用集合">整组移出</button>
           </div>
           <div class="pp-builtin-tools">
             <div v-for="t in g.tools" :key="t.name" class="pp-d-tool" :title="t.desc">
               <span class="pp-d-tname">{{ t.name }}</span>
-              <label class="pp-switch" :title="t.enabled ? '在工作区工具集中（agent 可用）；点击移出' : '未加入工作区工具集；点击加入'">
+              <label class="pp-switch" :title="t.enabled ? '在通用集合中（agent 可用）；点击移出' : '未加入通用集合；点击加入'">
                 <input type="checkbox" :checked="t.enabled" @change="toggleBuiltinTool(t, $event.target.checked)" />
                 <span class="pp-switch-track"></span>
               </label>
@@ -215,7 +215,7 @@
               </div>
             </div>
             <div v-if="p.tools && p.tools.length" class="pp-d-tools">
-              <div class="pp-d-tools-title">工具（{{ p.tools.length }}）· 勾选=对 cordis（JS 插件运行时）可见；取消=隐藏。agent 可用性由工作区工具集决定</div>
+              <div class="pp-d-tools-title">工具（{{ p.tools.length }}）· 勾选=对 cordis（JS 插件运行时）可见；取消=隐藏。agent 可用性由会话选择的通用集合决定</div>
               <div v-for="t in p.tools" :key="t" class="pp-d-tool">
                 <span class="pp-d-tname" :title="t">{{ t }}</span>
                 <label class="pp-switch" :title="pluginToolOn(p, t) ? '对 cordis 可见；点击隐藏（JS 插件 ctx.tools 看不到它）' : '对 cordis 隐藏；点击恢复可见'">
@@ -357,9 +357,9 @@ async function switchImpl(c, impl) {
 async function loadToolsets() {
   try {
     const list = (await api.getToolsets()) || []
-    // ★ 工具集管理只显示工作区（project）工具集 + 内置默认工具包（builtin）；
-    //    全局工具集（global，UI 插件等跨项目插件）不在此展示——自动装载、无需管理。
-    toolsetMetas.value = list.filter(t => t.scope !== 'global')
+    // ★ 2026-09-04 工具集已全局化（通用集合）：全部工具集均可管理（虚拟
+    //   builtin 内置包保留展示——分组开关入口）；无 global 区分。
+    toolsetMetas.value = list || []
   } catch (e) {
     toolsetMetas.value = []
   }
@@ -482,10 +482,10 @@ async function toggleDetail(p) {
   }
 }
 
-// ─── 插件详情：单个工具对勾（加入/移出工作区工具集）──────────
-// ★ 2026-08-18：对勾 = 工具是否已加入工作区工具集（.pair/toolsets/*.json 声明）——
+// ─── 插件详情：单个工具对勾（加入/移出通用集合 default）──────────
+// ★ 2026-08-18：对勾 = 工具是否已加入通用集合（.pair/toolsets/*.json 声明）——
 //   加入工具集的工具对 agent 可见可用（工具集白名单模型）；未加入的注册保留但
-//   agent 不可见。持久化到工作区工具集，重启保持。
+//   agent 不可见。持久化到全局工具集，重启保持。
 //   状态源：/api/plugins/builtin 的 plugins 字段（source=plugin 分组：g.joined 插件
 //   是否已加入工具集、t.enabled 工具是否在声明内启用）。
 const wsToolsetMap = ref(null) // { [pluginName]: { joined, tools: { [toolName]: enabled } } }
@@ -505,8 +505,8 @@ async function loadWsToolsetMap() {
 }
 
 // ─── 内置工具区（框架自带工具：system/plugin-mgmt/toolset-mgmt）────────
-// ★ 2026-08-20：内置工具默认在工作区工具集（agent 可用）；插件面板展示内置
-//   分组，工具对勾 = 是否加入工作区工具集（勾选=加入/agent 可用；取消=移出）。
+// ★ 2026-08-20：内置工具默认在通用集合（agent 可用）；插件面板展示内置
+//   分组，工具对勾 = 是否加入通用集合（勾选=加入/agent 可用；取消=移出）。
 const builtinGroups = ref([])
 async function loadBuiltinGroups() {
   try {
@@ -526,7 +526,7 @@ async function loadBuiltinGroups() {
 async function toggleBuiltinTool(t, checked) {
   try {
     const res = await api.builtinPlugins({ tool: t.name, enabled: checked }, state.workspaceRoot)
-    window.$toast && window.$toast(res?.message || (checked ? '已加入工作区工具集' : '已移出工作区工具集') + ' ' + t.name, 'info')
+    window.$toast && window.$toast(res?.message || (checked ? '已加入通用集合' : '已移出通用集合') + ' ' + t.name, 'info')
     await loadBuiltinGroups()
     await loadWsToolsetMap()
   } catch (e) {
@@ -536,7 +536,7 @@ async function toggleBuiltinTool(t, checked) {
 async function enableBuiltinGroup(g) {
   try {
     const res = await api.builtinPlugins({ group: g.name, enabled: true }, state.workspaceRoot)
-    window.$toast && window.$toast(res?.message || '已整组加入工作区工具集', 'info')
+    window.$toast && window.$toast(res?.message || '已整组加入通用集合', 'info')
     await loadBuiltinGroups()
     await loadWsToolsetMap()
   } catch (e) {
@@ -546,7 +546,7 @@ async function enableBuiltinGroup(g) {
 async function disableBuiltinGroup(g) {
   try {
     const res = await api.builtinPlugins({ group: g.name, enabled: false }, state.workspaceRoot)
-    window.$toast && window.$toast(res?.message || '已整组移出工作区工具集', 'info')
+    window.$toast && window.$toast(res?.message || '已整组移出通用集合', 'info')
     await loadBuiltinGroups()
     await loadWsToolsetMap()
   } catch (e) {
@@ -557,7 +557,7 @@ async function disableBuiltinGroup(g) {
 function pluginToolOn(p, t) {
   // ★ 对勾语义（2026-08-19）：读工具对 cordis 可见性（与 agent 工具集解耦）
   return p.toolCordisVisible?.[t] !== false
-// 切换工具对 cordis 的可见性（★ 与 agent 工具集解耦——agent 可用性由工作区工具集决定）：
+// 切换工具对 cordis 的可见性（★ 与 agent 工具集解耦——agent 可用性由会话选择的通用集合决定）：
 //   勾选 → 对 cordis 可见（JS 插件 ctx.tools 能看到）；取消 → 对 cordis 隐藏。
 async function togglePluginTool(p, t) {
   const target = !pluginToolOn(p, t)
