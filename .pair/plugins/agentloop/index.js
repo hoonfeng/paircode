@@ -111,10 +111,17 @@ return {
         title: '服务商',
         fields: [
           { name: 'providers', label: '服务商列表', type: 'provider-manager',
-            hint: '维护服务商：名称、API URL（完整端点，含 /chat/completions，直接作为请求地址）、可用模型列表，及每模型独立参数（温度/思考/输出上限/上下文窗口/多模态）。API Key 请在「AI 配置」中填写。AI tab 的下拉与联动均来自此处。',
+            hint: '维护服务商：名称、API URL、LLM 协议、可用模型列表，及每模型独立参数（温度/思考/输出上限/上下文窗口/多模态）。API Key 请在「AI 配置」中填写。AI tab 的下拉与联动均来自此处。',
             // ★ 2026-08-21 添加模型区 schema 驱动：modelEditor 声明组件配置（label/placeholder），
             //   前端 ProviderManager 按此渲染模型编辑器（与 modelParamFields 同层，新增配置无需改前端组件）。
             modelEditor: { label: '可用模型（回车或逗号分隔添加；支持整段粘贴）', placeholder: '输入模型名，回车添加…' },
+            // ★ 2026-09-02 LLM 协议：协议选项/文案由插件注册配置（前端不硬编码）。
+            //   空=默认（openai-completions：OpenAI 兼容 /chat/completions）；
+            //   anthropic-messages=Anthropic 原生 /messages；openai-responses=OpenAI Responses /responses。
+            //   选非默认协议时 API URL 填基础地址（不含协议路径，如 https://api.anthropic.com/v1）。
+            protocolLabel: 'LLM 协议',
+            protocolOptions: ['', 'openai-completions', 'openai-responses', 'anthropic-messages'],
+            protocolHint: '请求协议：空=默认 OpenAI 兼容 /chat/completions；anthropic-messages=Anthropic 原生 /messages；openai-responses=OpenAI Responses /responses。非默认协议时 API URL 填基础地址（不含协议路径）。',
             modelParamFields: [
               { name: 'temperature', label: '温度', type: 'select', options: ['', '0', '0.1', '0.2', '0.3', '0.4', '0.5', '0.6', '0.7', '0.8', '0.9', '1.0', '1.2', '1.5', '2.0'], hint: '温度（随机性），空=默认' },
               { name: 'thinkingMode', label: '思考档位', type: 'select', options: ['', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'], hint: '思考档位（OpenAI 定义），空=默认' },
@@ -127,31 +134,70 @@ return {
       })
 
     // ═══════════════════════════════════════════════════════════
-    // ★ 配置消费插件化（2026-08-19）：LLM Provider 参数装配器
-    //   Go 内核（buildWebProvider/Review/Plan/工具集分析）不再直接读配置业务字段，
-    //   统一经 agent.ResolveProviderParams() → 本装配器（ctx.providerFactory）获取。
-    //   本装配器是 AI 连接参数的唯一业务来源：读 ai 组配置（binding 顶层，经
-    //   ctx.app.settings 快照）→ 返回 overrides（非空字段覆盖）。
+    // ★ 配置消费插件化（2026-08-19）+ 决策全量迁插件（2026-09-03）：
+    //   LLM Provider 参数装配器——AI 连接参数的唯一决策者。
+    //   Go 内核（buildWebProvider/Review/Plan/工具集分析）不再做任何配置决策：
+    //   只传裸基线（settings 顶层存储字段）+ 装配上下文（preset/conv*）经
+    //   agent.ResolveProviderParams() → 本装配器获取最终参数。
+    //   本装配器决策链：① 配置整套展开（会话配置 > 全局激活，经 ctx.aiPresets）
+    //   → ② 会话级覆盖（conv*）→ ③ 服务商数据兜底（经 ctx.models）→ ④ Key 选择
+    //   → ⑤ 模型级参数 → ⑥ 上下文窗口层级 → ⑦ 全局温度/思考/输出兜底
+    //   → ⑧ 统一模型同步（plan/review 跟随执行模型）。
     // ═══════════════════════════════════════════════════════════
     ctx.providerFactory.register((current) => {
       const s = (ctx.app && ctx.app.settings) || {};
       const over = {};
-      // ★ baseURL/apiKey/模型：Go 端 ResolveProviderParams 已按「激活预设 → settings 顶层
-      //   → models.json 服务商」展开注入 current；此处仅当 current 为空时用 settings 兜底。
-      // ★ 统一模型（2026-08-21）：不再拆分 规划/审核 模型，Go 端 planModel/reviewModel 已
-      //   统一为执行模型，此处直接透传。
-      const baseURL = (current.baseURL || s.baseURL || '').trim();
-      const apiKey = (current.apiKey || s.apiKey || '').trim();
-      const model = (current.model || s.executeModel || s.model || '').trim();
-      const planModel = (current.planModel || s.planModel || '').trim();
-      const reviewModel = (current.reviewModel || s.reviewModel || '').trim();
-      if (baseURL) over.baseURL = baseURL;
-      if (apiKey) over.apiKey = apiKey;
-      if (model) over.model = model;
-      if (planModel) over.planModel = planModel;
-      if (reviewModel) over.reviewModel = reviewModel;
-      // ★ 2026-08-20 模型级参数（settings.modelParams[服务商][模型]）优先；无则回退全局（兼容旧配置）
-      const provider = current.provider || s.provider || '';
+      // ── ① 配置整套展开（会话配置 > 全局激活；配置不存在/无效 → 跳过）──
+      const presetName = current.convPreset || current.preset || '';
+      const pres = presetName ? (ctx.aiPresets.get(presetName) || null) : null;
+      const presValid = !!(pres && (pres.provider || pres.executeModel));
+      if (presValid) {
+        if (pres.provider) over.provider = pres.provider;
+        if (pres.baseURL) over.baseURL = pres.baseURL;
+        if (pres.apiKey) over.apiKey = pres.apiKey;
+        if (pres.executeModel) over.model = pres.executeModel;
+        if (pres.temperature !== undefined && pres.temperature !== null && pres.temperature !== '') {
+          const t = parseFloat(pres.temperature);
+          if (!isNaN(t) && t >= 0) over.temperature = t;
+        }
+        if (pres.thinkingMode) over.thinkingMode = pres.thinkingMode;
+        if (pres.maxTokens && Number(pres.maxTokens) > 0) over.maxTokens = Number(pres.maxTokens);
+        if (pres.contextMaxTokens && Number(pres.contextMaxTokens) > 0) over.contextMaxTokens = Number(pres.contextMaxTokens);
+        // 协议：预设显式指定优先；否则按预设服务商的协议（服务商级）
+        if (pres.protocol) {
+          over.protocol = pres.protocol;
+        } else if (pres.provider) {
+          const me0 = ctx.models.get(pres.provider);
+          if (me0 && me0.protocol) over.protocol = me0.protocol;
+        }
+      }
+      // ── ② 会话级覆盖（会话选定 服务商/模型 > 一切展开结果；历史链路无配置名时直接生效）──
+      if (current.convProvider) over.provider = current.convProvider;
+      if (current.convModel) over.model = current.convModel;
+      // ── ③ 最终 服务商/模型（后续决策的依据）──
+      const provider = over.provider || current.provider || s.provider || '';
+      const model = over.model || current.model || s.executeModel || s.model || '';
+      // ── ④ 服务商数据兜底（经 ctx.models 查 models.json：BaseURL/协议/Key/上下文）──
+      const me = (provider && ctx.models.get(provider)) || {};
+      const presetProvider = presValid ? (pres.provider || '') : '';
+      const providerChanged = !!(current.convProvider && provider !== presetProvider);
+      if (!over.baseURL && me.baseURL) over.baseURL = me.baseURL;
+      if (!over.protocol && me.protocol) over.protocol = me.protocol;
+      // ★ Key 选择（2026-09-01 Key 回归 AI 配置；2026-09-03 决策迁插件）：
+      //   ① 配置展开的 Key（① 中 over.apiKey 非空即优先——会话所选配置的 Key 必须生效）
+      //   ② 无有效配置或会话切了服务商 → 该服务商任一配置的 Key（AI 配置，遍历兜底）
+      //   ③ 服务商级 Key（models.json，旧数据迁移兜底）
+      if (!over.apiKey && provider) {
+        if (!presValid || providerChanged) {
+          const ps = ctx.aiPresets.list() || {};
+          for (const k of Object.keys(ps)) {
+            const pp = ps[k];
+            if (pp && pp.provider === provider && pp.apiKey) { over.apiKey = pp.apiKey; break }
+          }
+        }
+        if (!over.apiKey && me.apiKey) over.apiKey = me.apiKey;
+      }
+      // ── ⑤ 模型级参数（settings.modelParams[服务商][模型]；GBK 损坏 key 按模型名兜底）──
       let mp = (s.modelParams && s.modelParams[provider] && s.modelParams[provider][model]) ||
                (current.modelParams && current.modelParams[provider] && current.modelParams[provider][model]) || null;
       // ★ 2026-08-21 兼容：provider key 编码损坏/改名（如 settings.json 被 GBK 保存污染）
@@ -172,14 +218,13 @@ return {
         // ★ 2026-08-21 多模态：模型级参数标记该模型支持图片输入 → Provider 以多模态格式发送
         if (mp.multimodal === true) over.multimodal = true;
       }
-      // ★ 上下文窗口层级：模型级 > 服务商级（models.json 每服务商 contextMaxTokens）> 全局
-      const pctx = (current.providerContextMaxTokens && Number(current.providerContextMaxTokens) > 0)
-        ? Number(current.providerContextMaxTokens) : 0;
+      // ── ⑥ 上下文窗口层级：模型级 > 服务商级（最终服务商）> 配置级 > 全局 ──
       let cctx = (mp && mp.contextMaxTokens) ? Number(mp.contextMaxTokens) : 0;
-      if (!(cctx > 0) && pctx > 0) cctx = pctx;
+      if (!(cctx > 0) && me.contextMaxTokens) cctx = Number(me.contextMaxTokens);
+      if (!(cctx > 0) && pres && Number(pres.contextMaxTokens) > 0) cctx = Number(pres.contextMaxTokens);
       if (!(cctx > 0) && s.contextMaxTokens) cctx = Number(s.contextMaxTokens);
       if (cctx > 0) over.contextMaxTokens = cctx;
-      // ★ 全局温度/思考/输出（模型级与服务商级未配置时兜底，兼容旧配置）
+      // ── ⑦ 全局温度/思考/输出兜底（模型级与配置级未配置时；兼容旧配置）──
       if (!(mp && mp.temperature !== undefined && mp.temperature !== null && mp.temperature !== '')) {
         if (s.temperature !== undefined && s.temperature !== null && s.temperature !== '') {
           const t = parseFloat(s.temperature);
@@ -190,6 +235,8 @@ return {
       if (!(mp && mp.maxTokens && Number(mp.maxTokens) > 0) && s.maxTokens && Number(s.maxTokens) > 0) {
         over.maxTokens = Number(s.maxTokens);
       }
+      // ── ⑧ 统一模型同步（决策面在插件：规划/审核 一律跟随执行模型，不拆分）──
+      if (model) { over.planModel = model; over.reviewModel = model; }
       return over;
     });
 

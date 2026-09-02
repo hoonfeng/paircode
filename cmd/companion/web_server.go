@@ -1250,26 +1250,9 @@ func (s *webServer) handleConversationByID(w http.ResponseWriter, r *http.Reques
 				return
 			}
 			log.Printf("[conv-model] 会话 %s 模型切换为 %s / %s（配置 %s，仅本会话生效）", id, prov, model, preset)
-			// ★ 2026-09-03 运行中会话实时更新：落盘后若 Loop 正在运行，按新会话配置
-			//   重塑 Provider 并替换运行中 Loop（此前 Provider 在 Loop 启动时固化，
-			//   切换后运行中循环仍用旧模型——日志实证：切换后 step 仍以旧 provider 调用）。
-			if agentMgr.IsRunning(id) {
-				cur := agent.ResolveProviderParamsForConv(id, wsRoot)
-				if p := agent.CreateProvider(cur); p != nil {
-					var rp agent.Provider
-					if cur.ReviewModel != "" && cur.BaseURL != "" && cur.APIKey != "" {
-						rr := cur
-						rr.Model = strings.TrimSpace(cur.PlanModel)
-						rr.Temperature = -1
-						rr.ThinkingMode = "non-thinking"
-						rr.MaxTokens = 0
-						rr.Multimodal = false
-						rp = agent.CreateProvider(rr)
-					}
-					agentMgr.SetConvProvider(id, p, rp)
-					log.Printf("[conv-model] 运行中会话 %s 已实时替换 Provider（model=%s）", id, cur.Model)
-				}
-			}
+			// ★ 2026-09-03 策略：运行中不切换——会话进行期间保持原模型，
+			//   本次对话结束后发起下一次对话时按新落盘配置装配（Loop 创建时
+			//   ResolveProviderParamsForConv 重新解析，见 handleChatSend 装配链路）。
 		}
 		jsonResp(w, map[string]any{"ok": true})
 

@@ -1,10 +1,18 @@
 // provider_factory.go — LLM Provider 参数装配点（配置消费插件化）
 //
 // ★ 2026-08-19：配置消费从 Go 内核搬往插件。
-//   装配链：存储基线（core.Settings，存储层） → ProviderFactoryNow().Apply()（插件可覆盖）。
+//   装配链：存储基线（core.Settings，存储层） → ProviderFactory().Apply()（插件可覆盖）。
 //   业务层（web_server / stub / desktopbridge / llm_analyze）统一经 ResolveProviderParams()
-//   获取最终 Provider 参数，不再直接读 core.Settings 的 AI 业务字段——配置决策在插件
-//   （agentloop 的 provider 装配器读 ai 组配置返回 overrides），Go 内核只留装配点与兜底基线。
+//   获取最终 Provider 参数，不再直接读 core.Settings 的 AI 业务字段。
+//
+// ★ 2026-09-03 决策全量迁插件（本轮）：Go 只留「机制 + 数据面」——
+//   · 裸基线 resolveProviderBase：仅读 settings 顶层业务字段（存储镜像，零决策）；
+//   · 装配上下文注入：Preset（当前生效配置名：会话级 > 全局激活）与 Conv*（会话选定值）
+//     透传给装配器（JS 经 ctx.aiPresets / ctx.models 查数据面表）；
+//   · 决策（配置整套展开、服务商数据兜底、Key 选择、统一模型同步、参数级覆盖、
+//     上下文窗口层级）全部在插件装配器（agentloop 的 provider 装配器）内实现；
+//   · 会话三元组查询（LookupConvModel）由 web 层注入钩子提供（数据面，agent 包不依赖 SessionManager）。
+//   无插件装载时装配器为原样工厂（goProviderFactory），返回裸基线（回退行为，非决策）。
 
 package agent
 
@@ -16,19 +24,23 @@ import (
 
 // ProviderParams LLM Provider 可装配参数（基线 + 插件覆盖合并后的最终值）。
 type ProviderParams struct {
-	Provider                 string                                     // 当前服务商（装配器按服务商取模型级参数）
-	BaseURL                  string                                     // ★ API 基础地址（不含协议路径；完整端点由 ResolveEndpointURL 按 Protocol 拼接）
-	Protocol                 string                                     // ★ 2026-09-02 LLM 协议（openai-completions/openai-responses/anthropic-messages；空=默认 openai-completions）
-	APIKey                   string                                     // 服务商密钥
-	Model                    string                                     // 主执行模型
-	Temperature              float64                                    // 随机性（-1=不传）
-	MaxTokens                int                                        // 最大输出 token（0=不传）
-	ThinkingMode             string                                     // non-thinking/thinking/thinking_max；空=不下发
-	Multimodal               bool                                       // ★ 2026-08-21 多模态：当前模型支持图片输入（装配器按模型级参数标记）
-	PlanModel                string                                     // 规划模型（自主模式分解任务用）
-	ReviewModel              string                                     // 审核模型（AI 审核用）
-	ContextMaxTokens         int                                        // ★ 模型级上下文窗口（0=不传）
-	ProviderContextMaxTokens int                                        // ★ 服务商级默认上下文窗口（models.json 每服务商配置；0=未配置，供装配器兜底）
+	Provider     string // 当前服务商（装配器按服务商取模型级参数）
+	Preset       string // ★ 2026-09-03 当前生效配置名（会话级 > 全局激活；装配器按名整套展开）
+	ConvProvider string // ★ 2026-09-03 会话选定服务商（空=会话未设置；装配器决策覆盖用）
+	ConvModel    string // ★ 2026-09-03 会话选定模型（空=会话未设置）
+	ConvPreset   string // ★ 2026-09-03 会话选定配置名（空=会话未选配置）
+	BaseURL      string // ★ API 基础地址（不含协议路径；完整端点由 ResolveEndpointURL 按 Protocol 拼接）
+	Protocol     string // ★ 2026-09-02 LLM 协议（openai-completions/openai-responses/anthropic-messages；空=默认 openai-completions）
+	APIKey       string // 服务商密钥
+	Model        string // 主执行模型
+	Temperature  float64 // 随机性（-1=不传）
+	MaxTokens    int // 最大输出 token（0=不传）
+	ThinkingMode string // non-thinking/thinking/thinking_max；空=不下发
+	Multimodal   bool // ★ 2026-08-21 多模态：当前模型支持图片输入（装配器按模型级参数标记）
+	PlanModel    string // 规划模型（自主模式分解任务用）
+	ReviewModel  string // 审核模型（AI 审核用）
+	ContextMaxTokens         int // ★ 模型级上下文窗口（0=不传）
+	ProviderContextMaxTokens int // ★ 服务商级默认上下文窗口（models.json 每服务商配置；0=未配置，供装配器兜底）
 	ModelParams              map[string]map[string]core.ModelParamEntry // ★ 模型级参数表（服务商 → 模型 → 参数），供装配器按当前模型取
 }
 
@@ -69,7 +81,7 @@ func ProviderFactoryNow() ProviderFactory {
 	return providerFactoryVal
 }
 
-// ResolveProviderParams 解析最终 Provider 参数：激活预设 → 存储基线 → 装配器覆盖。
+// ResolveProviderParams 解析最终 Provider 参数：存储基线 → 装配器覆盖。
 // ★ 业务层统一入口：Go 内核不再直接读 core.Settings 的 AI 业务字段。
 // ★ 2026-08-21 配置来源收敛：ai-presets.json 是 AI 配置（模型/参数）的来源——
 //
@@ -78,109 +90,32 @@ func ProviderFactoryNow() ProviderFactory {
 //
 // ★ 2026-09-01 Key 回归 AI 配置：API Key 以激活预设携带的 Key 为准（预设 Key 优先），
 //   服务商级 Key（models.json）仅当预设未填 Key 时兜底（旧数据迁移兼容）。
-// ★ 统一模型：不再拆分 规划/审核 模型，PlanModel/ReviewModel 一律等于执行模型。
-// ★ 2026-09-03 会话配置优先：会话记录了配置名（ConversationMeta.Preset）时，
-//   ResolveProviderParamsForConv 按该配置整套展开（含 Key）——修复同服务商
-//   多配置时仅按 provider 猜测 Key 导致取错的问题。
+// ★ 统一模型：不再拆分 规划/审核 模型，PlanModel/ReviewModel 一律跟随执行模型。
+// ★ 2026-09-03 决策迁插件：上述展开规则全部由装配器（agentloop）实现；Go 只传
+//   裸基线 + Preset（全局激活配置名），不重复任何决策。
 func ResolveProviderParams() ProviderParams {
 	return ProviderFactoryNow().Apply(resolveProviderBase())
 }
 
-// applyPresetOverrides 把 AI 配置（preset）整套覆盖到当前参数：
-// provider/baseURL/apiKey/model/温度/思考模式/maxTokens/上下文/协议（非空字段才覆盖）。
-// 返回是否生效（配置存在且带 provider 或执行模型）。
-// ★ 2026-09-03 从 resolveProviderBase 提取，供「全局激活预设」与「会话配置」两路复用。
-func applyPresetOverrides(cur ProviderParams, p core.AiPreset) ProviderParams {
-	if p.Provider == "" && p.ExecuteModel == "" {
-		return cur // 配置不存在/无效 → 不覆盖
-	}
-	if p.Provider != "" {
-		cur.Provider = p.Provider
-		// 服务商变更 → 协议以新服务商为准（预设未显式指定协议时）
-		cur.Protocol = core.GetProviderProtocol(p.Provider)
-		cur.ProviderContextMaxTokens = core.GetProviderContextMaxToken(p.Provider)
-	}
-	if p.BaseURL != "" {
-		cur.BaseURL = p.BaseURL
-	}
-	if p.APIKey != "" {
-		cur.APIKey = p.APIKey
-	}
-	if p.ExecuteModel != "" {
-		cur.Model = p.ExecuteModel
-		// ★ 2026-09-03 统一模型同步：PlanModel/ReviewModel 必须跟随执行模型——
-		//   此前 preset 覆盖后未同步，装配返回的 review/plan 仍是全局旧模型
-		//   （LLM 读取的模型配置项是旧的，切换模型对审核/规划不生效）。
-		cur.PlanModel = p.ExecuteModel
-		cur.ReviewModel = p.ExecuteModel
-	}
-	if p.Temperature != "" {
-		cur.Temperature = core.ParseTempOr(p.Temperature, -1)
-	}
-	if p.ThinkingMode != "" {
-		cur.ThinkingMode = p.ThinkingMode
-	}
-	if p.MaxTokens > 0 {
-		cur.MaxTokens = p.MaxTokens
-	}
-	if p.ContextMaxTokens > 0 {
-		cur.ContextMaxTokens = p.ContextMaxTokens
-	}
-	// 预设可显式指定协议（覆盖服务商级；空=继承服务商）
-	if p.Protocol != "" {
-		cur.Protocol = p.Protocol
-	}
-	return cur
-}
-
-// resolveProviderBase 解析装配器之前的基线参数（会话级覆盖在此之后叠加）。
+// resolveProviderBase 解析装配器之前的裸基线（存储镜像，零决策）：
+// 只读 settings 顶层业务字段 + 装配上下文（Preset=全局激活配置名，Conv* 由 ForConv 注入）。
+// 服务商默认数据（BaseURL/Key/协议/上下文）与配置展开由装配器经 ctx.models/ctx.aiPresets
+// 决策（★ 2026-09-03 决策迁插件——Go 不再预填任何 AI 业务派生值）。
 func resolveProviderBase() ProviderParams {
-
-	provider := core.Settings.Provider
-	baseURL := core.Settings.BaseURL
-	apiKey := core.Settings.APIKey
-	model := core.MainModel()
-	temperature := core.Temperature()
-	thinking := core.Settings.ThinkingMode
-	maxTokens := core.Settings.MaxTokens
-	context := core.Settings.ContextMaxTokens
-	protocol := core.GetProviderProtocol(provider) // ★ 2026-09-02 协议基线：服务商级（models.json）
-
-	// ① 激活预设展开（settings.preset → ai-presets.json，整套覆盖）
-	// ★ 2026-09-01 Key 回归 AI 配置：预设携带 API Key（AiPreset.APIKey），
-	//   装配时预设 Key 优先；旧预设里无 Key 的走服务商级兜底。
 	cur := ProviderParams{
-		Provider:                 provider,
-		BaseURL:                  baseURL,
-		Protocol:                 protocol,
-		APIKey:                   apiKey,
-		Model:                    model,
-		Temperature:              temperature,
-		MaxTokens:                maxTokens,
-		ThinkingMode:             thinking,
-		ContextMaxTokens:         context,
-		ProviderContextMaxTokens: core.GetProviderContextMaxToken(provider), // ★ 服务商级默认上下文（模型级未配置时兜底）
+		Provider:                 core.Settings.Provider,
+		BaseURL:                  core.Settings.BaseURL,
+		APIKey:                   core.Settings.APIKey,
+		Model:                    core.MainModel(),
+		Temperature:              core.Temperature(),
+		MaxTokens:                core.Settings.MaxTokens,
+		ThinkingMode:             core.Settings.ThinkingMode,
+		ContextMaxTokens:         core.Settings.ContextMaxTokens,
+		ProviderContextMaxTokens: core.GetProviderContextMaxToken(core.Settings.Provider), // 服务商默认上下文（数据面预查；装配器按最终服务商再决策）
 		ModelParams:              core.Settings.ModelParams,
+		Preset:                   core.Settings.Preset, // 全局激活配置名（装配上下文）
 	}
-	if name := core.Settings.Preset; name != "" {
-		if p := core.GetPreset(name); p.Provider != "" || p.ExecuteModel != "" {
-			cur = applyPresetOverrides(cur, p)
-		}
-	}
-	// ② settings 顶层兜底（兼容旧配置）
-	// ③ Key 来源：预设（AI 配置）已在 ① 中优先应用；服务商级 Key 仅当预设
-	//    未填 Key 时兜底（旧数据迁移，models.json 里可能还存有旧服务商 Key）。
-	if cur.BaseURL == "" {
-		if p := core.GetProviderBaseURL(cur.Provider); p != "" {
-			cur.BaseURL = p
-		}
-	}
-	if cur.APIKey == "" {
-		if k := core.GetProviderAPIKey(cur.Provider); k != "" {
-			cur.APIKey = k
-		}
-	}
-	// ★ 统一模型：规划/审核 一律用执行模型（不拆分）
+	// 统一模型同步（无分支的无害兜底：装配器最终按执行模型覆盖 plan/review）
 	cur.PlanModel = cur.Model
 	cur.ReviewModel = cur.Model
 	return cur
@@ -228,49 +163,27 @@ func LookupConvModel(convID, wsRoot string) (string, string, string) {
 	return fn(convID, wsRoot)
 }
 
-// ResolveProviderParamsForConv 解析会话级 Provider 参数：
-// 全局默认（ResolveProviderParams）→ 会话选定的 配置/服务商/模型 覆盖 → 装配器再覆盖。
+// ResolveProviderParamsForConv 解析会话级 Provider 参数（★ 2026-09-03 机制收敛）：
+//   Go 只做三件事：① 查会话三元组（LookupConvModel，web 层注入的数据面钩子）；
+//   ② 注入装配上下文（Preset=会话配置>全局激活；Conv* 透传会话选定值）；③ 委托装配器决策。
+//   配置整套展开（含 Key/协议/参数）与旧服务商匹配链路全部在插件装配器内实现。
 // 会话未设置模型时与 ResolveProviderParams 完全一致（零行为变化）。
-// ★ 2026-09-03 会话记录配置名（preset）→ 按该配置整套展开（含 Key/协议/参数），
-//   优先于全局激活预设与「按服务商猜测 Key」——修复同服务商多配置取错 Key：
-//   此前会话只存 provider/model，装配时 GetPresetAPIKeyForProvider 遍历 map
-//   （无序）取同服务商任一配置的 Key，用户所选配置的 Key 根本不参与。
 func ResolveProviderParamsForConv(convID, wsRoot string) ProviderParams {
 	provider, model, preset := LookupConvModel(convID, wsRoot)
 	if provider == "" && model == "" && preset == "" {
 		return ResolveProviderParams()
 	}
 	cur := resolveProviderBase()
-	// ① 会话配置名（选中配置）：整套展开，覆盖全局激活预设的对应字段
-	if preset != "" {
-		if p := core.GetPreset(preset); p.Provider != "" || p.ExecuteModel != "" {
-			cur = applyPresetOverrides(cur, p)
-			return ProviderFactoryNow().Apply(cur)
-		}
-		// 配置已被删除 → 回落下方按服务商匹配（provider/model 仍在会话里）
-	}
-	// ② 无配置名（历史会话/旧链路）：按服务商+模型覆盖
+	// 装配上下文注入：会话选定值（装配器决策的依据，见 agentloop provider 装配器）
+	cur.ConvProvider, cur.ConvModel, cur.ConvPreset = provider, model, preset
 	if provider != "" {
 		cur.Provider = provider
-		// 服务商切换 → BaseURL 取该服务商配置；Key 优先取该服务商预设中的 Key（AI 配置），服务商级兜底
-		if u := core.GetProviderBaseURL(provider); u != "" {
-			cur.BaseURL = u
-		}
-		// ★ 2026-09-02 服务商切换 → 协议取该服务商协议（服务商协议非空时覆盖；旧数据无协议字段则保留）
-		if p := core.GetProviderProtocol(provider); p != "" {
-			cur.Protocol = p
-		}
-		if k := core.GetPresetAPIKeyForProvider(provider); k != "" {
-			cur.APIKey = k
-		} else if k := core.GetProviderAPIKey(provider); k != "" {
-			cur.APIKey = k
-		}
-		cur.ProviderContextMaxTokens = core.GetProviderContextMaxToken(provider)
 	}
 	if model != "" {
 		cur.Model = model
-		cur.PlanModel = model
-		cur.ReviewModel = model
+	}
+	if preset != "" {
+		cur.Preset = preset
 	}
 	return ProviderFactoryNow().Apply(cur)
 }

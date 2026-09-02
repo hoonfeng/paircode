@@ -13,6 +13,84 @@ import (
 	"github.com/hoonfeng/paircode/internal/core"
 )
 
+// testProviderAssembler 测试专用装配器：模拟插件装配器的决策语义
+// （配置整套展开 → 会话覆盖 → 服务商兜底 → Key 选择 → 统一模型同步）。
+// ★ 2026-09-03 决策迁插件后，展开决策在 agentloop 装配器实现，Go 单测以
+//   等价装配器验证「ForConv 正确注入装配上下文（Preset/Conv*）」的链路契约。
+type testProviderAssembler struct{}
+
+func (testProviderAssembler) Apply(cur ProviderParams) ProviderParams {
+	// ① 配置整套展开（会话配置 > 全局激活）
+	presetName := cur.ConvPreset
+	if presetName == "" {
+		presetName = cur.Preset
+	}
+	pres := core.GetPreset(presetName)
+	valid := pres.Provider != "" || pres.ExecuteModel != ""
+	if valid {
+		if pres.Provider != "" {
+			cur.Provider = pres.Provider
+		}
+		if pres.BaseURL != "" {
+			cur.BaseURL = pres.BaseURL
+		}
+		if pres.APIKey != "" {
+			cur.APIKey = pres.APIKey
+		}
+		if pres.ExecuteModel != "" {
+			cur.Model = pres.ExecuteModel
+		}
+	}
+	// ② 会话级覆盖（会话选定 服务商/模型 > 展开结果）
+	if cur.ConvProvider != "" {
+		cur.Provider = cur.ConvProvider
+	}
+	if cur.ConvModel != "" {
+		cur.Model = cur.ConvModel
+	}
+	// ③ 服务商数据兜底 + Key 选择
+	provider := cur.Provider
+	if cur.BaseURL == "" {
+		if u := core.GetProviderBaseURL(provider); u != "" {
+			cur.BaseURL = u
+		}
+	}
+	if cur.Protocol == "" {
+		if p := core.GetProviderProtocol(provider); p != "" {
+			cur.Protocol = p
+		}
+	}
+	presetProvider := ""
+	if valid {
+		presetProvider = pres.Provider
+	}
+	changed := cur.ConvProvider != "" && provider != presetProvider
+	if cur.APIKey == "" {
+		// 无配置展开或会话切了服务商 → 该服务商任一配置的 Key
+		if !valid || changed {
+			if k := core.GetPresetAPIKeyForProvider(provider); k != "" {
+				cur.APIKey = k
+			}
+		}
+		// 服务商级 Key 兜底
+		if cur.APIKey == "" {
+			if k := core.GetProviderAPIKey(provider); k != "" {
+				cur.APIKey = k
+			}
+		}
+	}
+	// ④ 统一模型同步（plan/review 跟随执行模型）
+	cur.PlanModel = cur.Model
+	cur.ReviewModel = cur.Model
+	return cur
+}
+
+// installTestAssembler 安装测试专用装配器（自动还原）。
+func installTestAssembler(t *testing.T) {
+	t.Helper()
+	t.Cleanup(ReplaceProviderFactory(testProviderAssembler{}))
+}
+
 // TestSetConvModel_PersistsPreset 落盘验证：SetConvModel 的 preset 持久化到 index.json。
 func TestSetConvModel_PersistsPreset(t *testing.T) {
 	dir := t.TempDir()
@@ -66,6 +144,7 @@ func hookConvLookup(t *testing.T, fn func(convID, wsRoot string) (string, string
 
 // TestConvAssembly_ByPreset 会话选了配置名 → 整套展开（含该配置 Key，优先于全局激活预设）。
 func TestConvAssembly_ByPreset(t *testing.T) {
+	installTestAssembler(t)
 	seedConvTestPresets(t)
 	hookConvLookup(t, func(convID, wsRoot string) (string, string, string) {
 		return "硅基流动", "ddd-model", "ddd"
@@ -88,6 +167,7 @@ func TestConvAssembly_ByPreset(t *testing.T) {
 
 // TestConvAssembly_ByPresetWithGlobal 会话配置与全局激活预设并存：会话配置赢。
 func TestConvAssembly_ByPresetWithGlobal(t *testing.T) {
+	installTestAssembler(t)
 	seedConvTestPresets(t)
 	core.Settings.Preset = "激活预设" // 全局激活 deepseek
 	hookConvLookup(t, func(convID, wsRoot string) (string, string, string) {
@@ -101,6 +181,7 @@ func TestConvAssembly_ByPresetWithGlobal(t *testing.T) {
 
 // TestConvAssembly_NoConv 会话未设模型 → 与全局完全一致（激活预设展开）。
 func TestConvAssembly_NoConv(t *testing.T) {
+	installTestAssembler(t)
 	seedConvTestPresets(t)
 	hookConvLookup(t, func(convID, wsRoot string) (string, string, string) {
 		return "", "", ""
@@ -114,6 +195,7 @@ func TestConvAssembly_NoConv(t *testing.T) {
 // TestConvAssembly_ByProviderLegacy 历史会话（只有 provider/model，无配置名）：
 // 保持旧链路——按服务商匹配 Key（任一该服务商配置的 Key，非确定但兼容现状；断言非空）。
 func TestConvAssembly_ByProviderLegacy(t *testing.T) {
+	installTestAssembler(t)
 	seedConvTestPresets(t)
 	hookConvLookup(t, func(convID, wsRoot string) (string, string, string) {
 		return "硅基流动", "ddd-model", "" // 旧数据无 preset
@@ -129,6 +211,7 @@ func TestConvAssembly_ByProviderLegacy(t *testing.T) {
 
 // TestConvAssembly_DeletedPreset 会话配置名已删 → 回落按服务商匹配（不崩溃、Key 非空）。
 func TestConvAssembly_DeletedPreset(t *testing.T) {
+	installTestAssembler(t)
 	seedConvTestPresets(t)
 	hookConvLookup(t, func(convID, wsRoot string) (string, string, string) {
 		return "硅基流动", "ddd-model", "已删除的配置"

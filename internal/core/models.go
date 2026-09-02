@@ -14,6 +14,11 @@ type ProviderEntry struct {
 	Models           []string `json:"models"`
 	APIKey           string   `json:"apiKey,omitempty"`           // ★ 2026-08-20 服务商独立 API Key（切换服务商自动带出）
 	ContextMaxTokens int      `json:"contextMaxTokens,omitempty"` // ★ 2026-08-20 服务商级默认上下文窗口（Token；0=不限制/未配置，模型级可覆盖）
+	// ★ 2026-09-02 LLM 协议：openai-completions（默认，OpenAI 兼容 /chat/completions）/
+	//   openai-responses（OpenAI Responses /responses）/ anthropic-messages（Anthropic /messages）。
+	//   BaseURL 此时为「基础地址」（不含协议路径，如 https://api.deepseek.com/v1），
+	//   完整请求端点由内部按协议拼接；兼容旧数据：BaseURL 已含协议路径后缀时直接使用。
+	Protocol string `json:"protocol,omitempty"`
 }
 
 // ModelListMap 按服务商分组，key=服务商名，value=ProviderEntry。
@@ -26,14 +31,16 @@ var (
 
 	// defaultModels 仅在 models.json 不存在或解析失败时使用的兜底列表。
 	// ★ 2026-08-20 与安装版 config/models.json 对齐（用户实际在用）：6 个服务商含「基元律动」网关。
-	// ★ 2026-08-27 BaseURL 语义变更：值为完整请求端点（含 /chat/completions），
-	// 直接作为请求 URL 使用，不再拼接。
+	// ★ 2026-08-27 BaseURL 语义调整（2026-09-02 定稿）：值为「基础地址」（不含协议路径），
+	// 完整端点（/chat/completions、/responses、/messages）由内部按 Protocol 拼接；
+	// 已有数据若 BaseURL 已含协议路径后缀则直接使用（兼容，不重复拼接）。
+	// ★ 2026-09-02 Anthropic 改用原生 messages 协议（旧配置曾错误写成 /v1/chat/completions）。
 	defaultModels = ModelListMap{
-		"anthropic":         {BaseURL: "https://api.anthropic.com/v1/chat/completions", Models: []string{"claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-4-sonnet-20250514", "claude-4-haiku-latest"}},
+		"anthropic":         {BaseURL: "https://api.anthropic.com/v1", Protocol: "anthropic-messages", Models: []string{"claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-4-sonnet-20250514", "claude-4-haiku-latest"}},
 		"custom":            {BaseURL: "", Models: []string{"custom"}},
-		"deepseek":          {BaseURL: "https://api.deepseek.com/v1/chat/completions", Models: []string{"deepseek-v4-pro", "deepseek-v4-flash"}},
-		"基元律动":              {BaseURL: "https://tokenrhythm.studio/v1/chat/completions", Models: []string{"deepseek-v4-pro-0813", "deepseek-v4-flash-0731"}},
-		"kimi":              {BaseURL: "https://api.moonshot.cn/v1/chat/completions", Models: []string{"kimi-k3"}},
+		"deepseek":          {BaseURL: "https://api.deepseek.com/v1", Models: []string{"deepseek-v4-pro", "deepseek-v4-flash"}},
+		"基元律动":              {BaseURL: "https://tokenrhythm.studio/v1", Models: []string{"deepseek-v4-pro-0813", "deepseek-v4-flash-0731"}},
+		"kimi":              {BaseURL: "https://api.moonshot.cn/v1", Models: []string{"kimi-k3"}},
 		"openai-compatible": {BaseURL: "", Models: []string{"custom"}},
 	}
 )
@@ -84,7 +91,7 @@ func parseRawProviders(data []byte) (map[string]map[string]json.RawMessage, bool
 func useDefaultModels() {
 	ModelList = make(ModelListMap, len(defaultModels))
 	for k, v := range defaultModels {
-		entry := ProviderEntry{BaseURL: v.BaseURL}
+		entry := ProviderEntry{BaseURL: v.BaseURL, Protocol: v.Protocol}
 		entry.Models = make([]string, len(v.Models))
 		copy(entry.Models, v.Models)
 		ModelList[k] = entry
@@ -113,6 +120,30 @@ func GetProviderBaseURL(provider string) string {
 		return ""
 	}
 	return entry.BaseURL
+}
+
+// GetProviderProtocol 返回指定服务商的 LLM 协议（空=默认 openai-completions）。
+func GetProviderProtocol(provider string) string {
+	if ModelList == nil {
+		LoadModelList()
+	}
+	entry, ok := ModelList[provider]
+	if !ok {
+		return ""
+	}
+	return entry.Protocol
+}
+
+// GetProviderProtocols 返回服务商 → LLM 协议映射（前端联动下拉用）。
+func GetProviderProtocols() map[string]string {
+	if ModelList == nil {
+		LoadModelList()
+	}
+	out := make(map[string]string, len(ModelList))
+	for k, v := range ModelList {
+		out[k] = v.Protocol
+	}
+	return out
 }
 
 // GetProviderBaseURLs 返回全部服务商的默认 API 地址映射。
@@ -171,6 +202,16 @@ func GetProviderAPIKey(provider string) string {
 		return entry.APIKey
 	}
 	return ""
+}
+
+// GetProviderEntry 返回指定服务商的完整条目（懒加载；不存在返回零值）。
+// ★ 2026-09-03 插件数据面：JS 装配器经 ctx.models.get(provider) 读取
+//   （baseURL/apiKey/protocol/contextMaxTokens/models），装配决策在插件内完成。
+func GetProviderEntry(provider string) ProviderEntry {
+	if ModelList == nil {
+		LoadModelList()
+	}
+	return ModelList[provider]
 }
 
 // GetProviders 返回 ModelList 中的所有服务商名称（排序后）。

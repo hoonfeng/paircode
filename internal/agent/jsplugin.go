@@ -1094,6 +1094,60 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 	})
 	ctxObj.Set("providerFactory", providerFactoryObj)
 
+	// ── ctx.aiPresets：AI 配置预设数据面（★ 2026-09-03 决策迁插件）──
+	// aiPresets.get(name) → 单条预设（{provider,baseURL,apiKey,executeModel,planModel,
+	//   reviewModel,temperature,thinkingMode,maxTokens,contextMaxTokens,protocol}；
+	//   不存在/无效 → null）
+	// aiPresets.list() → 全部预设映射 {name: preset}
+	// 装配器（providerFactory 注册的装配函数）经此读 ai-presets.json 表做整套展开决策；
+	// Go 内核不再读 preset 业务字段（数据面查表暴露给插件，决策在插件）。
+	aiPresetsObj := vm.NewObject()
+	aiPresetsObj.Set("get", func(call goja.FunctionCall) goja.Value {
+		name := call.Argument(0).String()
+		p := core.GetPreset(name)
+		if p.Provider == "" && p.ExecuteModel == "" && p.BaseURL == "" && p.APIKey == "" {
+			return goja.Null()
+		}
+		b, _ := json.Marshal(p)
+		var m map[string]any
+		_ = json.Unmarshal(b, &m)
+		return vm.ToValue(m)
+	})
+	aiPresetsObj.Set("list", func(call goja.FunctionCall) goja.Value {
+		all := core.GetAiPresets()
+		b, _ := json.Marshal(all)
+		var m map[string]any
+		_ = json.Unmarshal(b, &m)
+		if m == nil {
+			m = map[string]any{}
+		}
+		return vm.ToValue(m)
+	})
+	ctxObj.Set("aiPresets", aiPresetsObj)
+
+	// ── ctx.models：服务商表数据面（★ 2026-09-03 决策迁插件）──
+	// models.get(provider) → {baseURL,apiKey,protocol,contextMaxTokens,models}；不存在 → null
+	// 装配器经此做服务商级兜底（BaseURL/Key/协议/上下文窗口）。
+	modelsObj := vm.NewObject()
+	modelsObj.Set("get", func(call goja.FunctionCall) goja.Value {
+		name := call.Argument(0).String()
+		if name == "" {
+			return goja.Null()
+		}
+		e := core.GetProviderEntry(name)
+		if e.BaseURL == "" && len(e.Models) == 0 && e.APIKey == "" && e.Protocol == "" && e.ContextMaxTokens == 0 {
+			return goja.Null()
+		}
+		return vm.ToValue(map[string]any{
+			"baseURL":          e.BaseURL,
+			"apiKey":           e.APIKey,
+			"protocol":         e.Protocol,
+			"contextMaxTokens": e.ContextMaxTokens,
+			"models":           e.Models,
+		})
+	})
+	ctxObj.Set("models", modelsObj)
+
 	// ── ctx.provider：Provider 实现级插件槽位（t1 S1 闭环）──
 	// ctx.provider.register(name, impl)：注册 JS 实现的 LLM Provider。
 	//   impl = { chat(params, messages, tools) }；chat 返回或 Promise 解析为
@@ -1542,6 +1596,22 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 					def.Label, _ = me["label"].(string)
 					def.Placeholder, _ = me["placeholder"].(string)
 					f.ModelEditor = &def
+				}
+				// ★ 2026-09-02 LLM 协议（provider-manager 专用）：解析 protocolLabel/
+				//   protocolOptions/protocolHint——协议清单与文案由插件注册配置（agentloop），
+				//   前端 ProviderManager 按此渲染协议下拉（空=默认 openai-completions）。
+				if pl, ok := fm["protocolLabel"].(string); ok {
+					f.ProtocolLabel = pl
+				}
+				if ph, ok := fm["protocolHint"].(string); ok {
+					f.ProtocolHint = ph
+				}
+				if pops, ok := fm["protocolOptions"].([]any); ok {
+					for _, o := range pops {
+						if s, ok := o.(string); ok {
+							f.ProtocolOptions = append(f.ProtocolOptions, s)
+						}
+					}
 				}
 				// ★ 2026-09-01 AI 配置表单字段（preset-manager 专用）：解析 presetFields
 				//   数组，前端 PresetManager 按此 schema 动态渲染编辑表单。透传原始 map

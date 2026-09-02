@@ -27,7 +27,12 @@ type jsProviderFactoryBridge struct {
 func (b *jsProviderFactoryBridge) Apply(current ProviderParams) ProviderParams {
 	snap := map[string]any{
 		"provider":                 current.Provider,
+		"preset":                   current.Preset, // ★ 2026-09-03 当前生效配置名（会话级>全局激活；装配器按名整套展开）
+		"convProvider":             current.ConvProvider, // ★ 2026-09-03 会话选定服务商（空=未设置）
+		"convModel":                current.ConvModel, // ★ 2026-09-03 会话选定模型（空=未设置）
+		"convPreset":               current.ConvPreset, // ★ 2026-09-03 会话选定配置名（空=未选配置）
 		"baseURL":                  current.BaseURL,
+		"protocol":                 current.Protocol, // ★ 2026-09-02 LLM 协议（空=跟随服务商/默认）
 		"apiKey":                   current.APIKey,
 		"model":                    current.Model,
 		"temperature":              current.Temperature,
@@ -65,6 +70,10 @@ func (b *jsProviderFactoryBridge) applyOverrides(cur ProviderParams, obj *goja.O
 
 	if v := get("baseURL"); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) && v.String() != "" {
 		out.BaseURL = v.String()
+	}
+	// ★ 2026-09-02 协议覆盖（非空才覆盖；空=继承服务商/默认，JS 无法显式改回默认——保持简单）
+	if v := get("protocol"); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) && v.String() != "" {
+		out.Protocol = v.String()
 	}
 	if v := get("apiKey"); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) && v.String() != "" {
 		out.APIKey = v.String()

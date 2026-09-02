@@ -521,20 +521,7 @@ func (l *Loop) SetReviewMode(v string) {
 	l.mu.Unlock()
 }
 
-// SetConvProvider 运行时切换会话模型（线程安全，★ 2026-09-03）。
-// 会话级模型切换（PUT /conversations/{id}）落盘后调用：主 Provider 与审核
-// Provider 立即替换，并重置 reviewer（懒建缓存）——运行中 Loop 的下一轮
-// LLM 调用即用新模型（此前 Provider 在 Loop 启动时固化，切换后仍用旧模型，
-// 日志实证：用户切换后 step 继续以旧 provider 调用）。
-func (l *Loop) SetConvProvider(p Provider, review Provider) {
-	l.mu.Lock()
-	l.Provider = p
-	l.ReviewProvider = review
-	l.reviewer = nil
-	l.mu.Unlock()
-}
-
-// getProvider 线程安全读取主 Provider（运行中切换后下一轮调用读到新实例）。
+// getProvider 线程安全读取主 Provider（Loop 启动时装配，运行中不变——★ 2026-09-03\n// 策略：会话切换模型不实时替换，下次对话创建 Loop 时按新配置装配）。
 func (l *Loop) getProvider() Provider {
 	l.mu.Lock()
 	p := l.Provider
