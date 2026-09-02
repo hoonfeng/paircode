@@ -14,8 +14,15 @@
         <input v-model="editForm.name" placeholder="如 deepseek" />
       </div>
       <div class="pm-field">
-        <span class="pm-field-label">API URL（完整端点）</span>
-        <input v-model="editForm.baseURL" placeholder="https://api.deepseek.com/v1/chat/completions" />
+        <span class="pm-field-label">API URL（基础地址或完整端点）</span>
+        <input v-model="editForm.baseURL" placeholder="https://api.deepseek.com/v1（基础地址；旧完整端点亦兼容）" />
+      </div>
+      <div class="pm-field">
+        <span class="pm-field-label">{{ protocolLabel }}</span>
+        <select v-model="editForm.protocol" :title="protocolHint">
+          <option v-for="opt in protocolOptions" :key="'p'+opt" :value="opt">{{ opt || '默认' }}</option>
+        </select>
+        <span v-if="protocolHint" class="pm-protocol-hint">{{ protocolHint }}</span>
       </div>
       <div class="pm-field">
         <span class="pm-field-label">上下文大小（Token）</span>
@@ -60,8 +67,15 @@
             <input :value="p.name" disabled />
           </div>
           <div class="pm-field">
-            <span class="pm-field-label">API URL（完整端点）</span>
-            <input v-model="editForm.baseURL" placeholder="https://api.deepseek.com/v1/chat/completions" />
+            <span class="pm-field-label">API URL（基础地址或完整端点）</span>
+            <input v-model="editForm.baseURL" placeholder="https://api.deepseek.com/v1（基础地址；旧完整端点亦兼容）" />
+          </div>
+          <div class="pm-field">
+            <span class="pm-field-label">{{ protocolLabel }}</span>
+            <select v-model="editForm.protocol" :title="protocolHint">
+              <option v-for="opt in protocolOptions" :key="'p'+opt" :value="opt">{{ opt || '默认' }}</option>
+            </select>
+            <span v-if="protocolHint" class="pm-protocol-hint">{{ protocolHint }}</span>
           </div>
           <div class="pm-field">
             <span class="pm-field-label">上下文大小（Token）</span>
@@ -108,6 +122,7 @@
             </div>
           </div>
           <div class="pm-url" :title="p.baseURL">{{ p.baseURL || '未配置 API URL' }}</div>
+          <div v-if="p.protocol" class="pm-protocol" :title="protocolHint">协议 {{ p.protocol }}</div>
           <div class="pm-ctx">{{ p.contextMaxTokens > 0 ? ('上下文 ' + (p.contextMaxTokens / 1000).toFixed(0) + 'K Token') : '上下文 未限制' }}</div>
           <div class="pm-models">
             <span v-if="!p.models.length" class="pm-none">（未配置模型）</span>
@@ -138,6 +153,10 @@ const emit = defineEmits(['saved'])
 const props = defineProps({
   modelParamFields: { type: Array, default: () => [] }, // [{name,label,type,default,options,hint,min,max,step}]
   modelEditor: { type: Object, default: () => ({}) },   // ★ 2026-08-21 schema 驱动：{label, placeholder} 声明模型编辑器
+  // ★ 2026-09-02 LLM 协议：选项/文案由插件注册配置（agentloop registerSettings 的 provider-manager 字段），前端不硬编码协议清单
+  protocolLabel: { type: String, default: 'LLM 协议' },
+  protocolOptions: { type: Array, default: () => [] },   // ['', 'openai-completions', 'openai-responses', 'anthropic-messages']…空=默认
+  protocolHint: { type: String, default: '' },
 })
 
 const providers = ref([])
@@ -184,6 +203,7 @@ async function load() {
       name,
       baseURL: (d.providerBaseURLs || {})[name] || '',
       contextMaxTokens: (d.providerContexts || {})[name] || 0, // ★ 服务商级默认上下文窗口
+      protocol: (d.providerProtocols || {})[name] || '',        // ★ 2026-09-02 LLM 协议（插件注册配置选项）
       models: (d.models || {})[name] || [],
     }))
     error.value = ''
@@ -195,14 +215,14 @@ onMounted(load)
 
 function startAdd() {
   editingName.value = '__new__'
-  editForm.value = { name: '', baseURL: '', contextMaxTokens: 0 }
+  editForm.value = { name: '', baseURL: '', contextMaxTokens: 0, protocol: '' }
   editModels.value = []
   editParams.value = {}
   error.value = ''
 }
 function startEdit(p) {
   editingName.value = p.name
-  editForm.value = { name: p.name, baseURL: p.baseURL, contextMaxTokens: p.contextMaxTokens || 0 }
+  editForm.value = { name: p.name, baseURL: p.baseURL, contextMaxTokens: p.contextMaxTokens || 0, protocol: p.protocol || '' }
   editModels.value = [...(p.models || [])]
   const params = readProviderParams(p.name)
   // 为所有模型补默认参数键（模板 v-model 需要键存在；★ 2026-08-21 按 schema 生成）
@@ -226,7 +246,7 @@ function cancelEdit() { editingName.value = ''; error.value = '' }
 // 当前列表 → 全量快照 map（供 POST /api/models）
 function snapshot() {
   const map = {}
-  for (const p of providers.value) map[p.name] = { baseURL: p.baseURL, models: p.models, contextMaxTokens: p.contextMaxTokens || 0 }
+  for (const p of providers.value) map[p.name] = { baseURL: p.baseURL, models: p.models, contextMaxTokens: p.contextMaxTokens || 0, protocol: p.protocol || '' }
   return map
 }
 
@@ -239,6 +259,7 @@ async function saveEdit() {
     baseURL: editForm.value.baseURL.trim(),
     models: editModels.value,
     contextMaxTokens: Math.max(0, Number(editForm.value.contextMaxTokens) || 0), // ★ 服务商级默认上下文窗口
+    protocol: (editForm.value.protocol || '').trim(), // ★ 2026-09-02 LLM 协议（空=默认 openai-completions）
   }
   saving.value = true
   try {
@@ -355,6 +376,14 @@ function paramsSummary(providerName) {
 }
 .pm-field > input:focus { border-color: var(--accent, #4f8cff); }
 .pm-field > input:disabled { opacity: .5; }
+.pm-field > select {
+  width: 100%; box-sizing: border-box;
+  background: var(--input-bg, #14141f);
+  border: 1px solid var(--border-color, #3a3a4a);
+  color: var(--text-primary, #eee); border-radius: 6px;
+  padding: 7px 10px; font-size: 13px; outline: none; font-family: inherit;
+}
+.pm-field > select:focus { border-color: var(--accent, #4f8cff); }
 
 .pm-edit-actions { display: flex; gap: 8px; justify-content: flex-end; padding-top: 4px; }
 
@@ -375,6 +404,12 @@ function paramsSummary(providerName) {
   font-size: 11px; color: var(--text-secondary, #999);
   word-break: break-all; line-height: 1.5;
 }
+.pm-protocol {
+  font-size: 11px; color: #4cc9a0;
+  border: 1px solid rgba(76,201,160,.3);
+  border-radius: 4px; padding: 1px 7px; display: inline-block; margin-bottom: 4px;
+}
+.pm-protocol-hint { font-size: 11px; color: var(--text-secondary, #888); margin-top: 2px; }
 .pm-ctx { font-size: 11px; color: var(--text-secondary, #999); }
 .pm-models { display: flex; flex-wrap: wrap; gap: 5px; }
 .pm-tag {

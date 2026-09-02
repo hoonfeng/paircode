@@ -47,6 +47,11 @@ type SettingField struct {
 	//   弹窗内的字段清单（如 provider/apiKey），前端 PresetManager 按此 schema 动态渲染，
 	//   与 ProviderManager 的 modelParamFields 同模式（配置字段全在插件注册里）。
 	PresetFields []map[string]any `json:"presetFields,omitempty"`
+	// ★ 2026-09-02 LLM 协议（provider-manager 专用）：协议选项/文案由插件注册配置
+	//   （前端 ProviderManager 按此渲染协议下拉——新增选项改插件即生效，前端不改）。
+	ProtocolLabel   string   `json:"protocolLabel,omitempty"`
+	ProtocolOptions []string `json:"protocolOptions,omitempty"`
+	ProtocolHint    string   `json:"protocolHint,omitempty"`
 }
 
 // ModelEditorDef provider-manager 的模型编辑器声明（schema 驱动）。

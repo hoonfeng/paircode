@@ -17,6 +17,8 @@
 package agent
 
 import (
+	"fmt"
+	"log"
 	"sync"
 
 	"github.com/hoonfeng/paircode/internal/core"
@@ -81,6 +83,24 @@ func ProviderFactoryNow() ProviderFactory {
 	return providerFactoryVal
 }
 
+// logResolvedParams 装配结果诊断日志（用户可见：确认最终传入 agentloop/Provider 的配置）。
+// tag=调用场景（global=全局装配 / conv=会话级装配）；convID 非空时附带会话级上下文。
+func logResolvedParams(tag, convID string, p ProviderParams) {
+	key := ""
+	if p.APIKey != "" {
+		key = p.APIKey
+		if len(key) > 8 {
+			key = key[:4] + "…" + key[len(key)-4:]
+		}
+	}
+	extra := ""
+	if convID != "" {
+		extra = fmt.Sprintf(" conv=%s (会话选定 provider=%s model=%s preset=%s)", convID, p.ConvProvider, p.ConvModel, p.ConvPreset)
+	}
+	log.Printf("[provider] %s 装配结果: provider=%s model=%s preset=%s baseURL=%s protocol=%s apiKey=%s%s",
+		tag, p.Provider, p.Model, p.Preset, p.BaseURL, p.Protocol, key, extra)
+}
+
 // ResolveProviderParams 解析最终 Provider 参数：存储基线 → 装配器覆盖。
 // ★ 业务层统一入口：Go 内核不再直接读 core.Settings 的 AI 业务字段。
 // ★ 2026-08-21 配置来源收敛：ai-presets.json 是 AI 配置（模型/参数）的来源——
@@ -94,7 +114,9 @@ func ProviderFactoryNow() ProviderFactory {
 // ★ 2026-09-03 决策迁插件：上述展开规则全部由装配器（agentloop）实现；Go 只传
 //   裸基线 + Preset（全局激活配置名），不重复任何决策。
 func ResolveProviderParams() ProviderParams {
-	return ProviderFactoryNow().Apply(resolveProviderBase())
+	p := ProviderFactoryNow().Apply(resolveProviderBase())
+	logResolvedParams("global", "", p)
+	return p
 }
 
 // resolveProviderBase 解析装配器之前的裸基线（存储镜像，零决策）：
@@ -185,5 +207,7 @@ func ResolveProviderParamsForConv(convID, wsRoot string) ProviderParams {
 	if preset != "" {
 		cur.Preset = preset
 	}
-	return ProviderFactoryNow().Apply(cur)
+	p := ProviderFactoryNow().Apply(cur)
+	logResolvedParams("conv", convID, p)
+	return p
 }

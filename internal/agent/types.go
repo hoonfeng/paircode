@@ -106,6 +106,29 @@ func (u *Usage) UnmarshalJSON(b []byte) error {
 			u.PromptCacheMissTokens = miss
 		}
 	}
+	// ★ 2026-09-02 OpenAI Responses API 用量字段为 input_tokens/output_tokens
+	//   （与 chat/completions 的 prompt_tokens/completion_tokens 不同）——归一化。
+	var raw struct {
+		InputTokens    int `json:"input_tokens"`
+		OutputTokens   int `json:"output_tokens"`
+		InputDetails   struct {
+			CachedTokens int `json:"cached_tokens"`
+		} `json:"input_tokens_details"`
+	}
+	if err := json.Unmarshal(b, &raw); err == nil {
+		if u.PromptTokens == 0 && raw.InputTokens > 0 {
+			u.PromptTokens = raw.InputTokens
+		}
+		if u.CompletionTokens == 0 && raw.OutputTokens > 0 {
+			u.CompletionTokens = raw.OutputTokens
+		}
+		if u.PromptCacheHitTokens == 0 && raw.InputDetails.CachedTokens > 0 {
+			u.PromptCacheHitTokens = raw.InputDetails.CachedTokens
+		}
+		if u.TotalTokens == 0 && u.PromptTokens+u.CompletionTokens > 0 {
+			u.TotalTokens = u.PromptTokens + u.CompletionTokens
+		}
+	}
 	return nil
 }
 

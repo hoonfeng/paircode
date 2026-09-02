@@ -32,7 +32,7 @@ import (
 // AiPreset 一条 AI 配置预设（完整配置快照）。
 type AiPreset struct {
 	Provider         string `json:"provider,omitempty"`         // 服务商名（models.json 条目名）
-	BaseURL          string `json:"baseURL,omitempty"`          // API 端点
+	BaseURL          string `json:"baseURL,omitempty"`          // API 端点（基础地址；协议路径由内部按 Protocol 拼接）
 	APIKey           string `json:"apiKey,omitempty"`           // API Key（预设自带，应用时写入 settings）
 	ExecuteModel     string `json:"executeModel,omitempty"`     // 模型（统一模型：规划/审核/执行共用，2026-08-21 不再拆分）
 	PlanModel        string `json:"planModel,omitempty"`        // ★ 旧字段保留兼容（历史数据）；新数据不写，装配统一用 ExecuteModel
@@ -41,6 +41,8 @@ type AiPreset struct {
 	ThinkingMode     string `json:"thinkingMode,omitempty"`     // 思考档位
 	MaxTokens        int    `json:"maxTokens,omitempty"`        // 输出上限
 	ContextMaxTokens int    `json:"contextMaxTokens,omitempty"` // 上下文窗口
+	// ★ 2026-09-02 LLM 协议（空=继承服务商）：openai-completions / openai-responses / anthropic-messages。
+	Protocol string `json:"protocol,omitempty"`
 }
 
 // AiPresets AI 配置预设集合：预设名 → 完整配置。

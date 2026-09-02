@@ -370,7 +370,10 @@ const modelSelectTitle = computed(() => {
 function parseModelValue(v) {
   const s = String(v || '')
   if (s.startsWith('preset::')) {
-    const rest = s.slice(7)
+    // ★ 2026-09-04 修复：'preset::' 是 8 字符（6+2 冒号），slice(7) 会残留 1 个冒号
+    //   使配置名带污染前缀（':配置名'）→ presets 查不到 → provider 为空 →
+    //   onCmpModelChange guard 拦截 → 下拉切换不发请求（实测症状）。slice(8) 修正。
+    const rest = s.slice(8)
     const i = rest.indexOf('::')
     const name = i < 0 ? rest : rest.slice(0, i)
     const model = i < 0 ? '' : rest.slice(i + 2)
@@ -428,6 +431,11 @@ async function loadModelData() {
 // 依据当前会话元数据同步下拉（会话有自己的模型 → 显示它；否则显示全局默认）
 // ★ 2026-09-03 会话记录了配置名（meta.preset）→ 直接按配置编码显示（不再反向猜）。
 async function syncComposerModelFromConv() {
+  // ★ 刷新保险：modelData（/api/models + presets）未就绪时直接跳过——
+  //   presets 为空走旧编码 fallback 会把下拉设成无效值（无匹配 option），
+  //   显示回退后不再修正。后续 initComposerModel（loadModelData 完成后）或
+  //   watch(currentConvId) 会再次同步（彼时数据已就绪）。
+  if (!modelData.value || !(modelData.value.presets)) return
   const convId = state.currentConvId
   let prov = '', model = '', preset = ''
   if (convId) {

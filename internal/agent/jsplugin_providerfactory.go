@@ -13,6 +13,8 @@
 package agent
 
 import (
+	"log"
+
 	"github.com/hoonfeng/paircode/goja"
 )
 
@@ -54,7 +56,8 @@ func (b *jsProviderFactoryBridge) Apply(current ProviderParams) ProviderParams {
 		ret, callErr = v, err
 	})
 	if callErr != nil {
-		// 装配失败回退基线（不阻断业务；错误已在 VM 侧记录）
+		// 装配失败回退基线（不阻断业务；错误已打印供排查）
+		log.Printf("[provider] JS 装配器执行失败，回退基线: %v", callErr)
 		return current
 	}
 	if ret == nil || goja.IsUndefined(ret) || goja.IsNull(ret) {

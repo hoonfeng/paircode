@@ -74,7 +74,9 @@
                                 rows="4" :placeholder="f.placeholder"></textarea>
 
                       <!-- provider-manager（服务商维护面板：CRUD /api/models，独立保存，不参与普通表单） -->
-                      <ProviderManager v-else-if="f.type === 'provider-manager'" :model-param-fields="f.modelParamFields || []" :model-editor="f.modelEditor || {}" @saved="loadModels" />
+                      <ProviderManager v-else-if="f.type === 'provider-manager'" :model-param-fields="f.modelParamFields || []" :model-editor="f.modelEditor || {}"
+                                       :protocol-label="f.protocolLabel || 'LLM 协议'" :protocol-options="f.protocolOptions || []" :protocol-hint="f.protocolHint || ''"
+                                       @saved="loadModels" />
 
                       <!-- preset-manager（AI 配置预设面板：CRUD /api/ai-presets，独立保存，不参与普通表单） -->
                       <PresetManager v-else-if="f.type === 'preset-manager'" :preset-fields="f.presetFields || []" @saved="onPresetSaved" />

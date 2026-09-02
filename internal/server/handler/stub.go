@@ -476,6 +476,7 @@ func HandleModels(w http.ResponseWriter, r *http.Request) {
 		"providerBaseURLs": core.GetProviderBaseURLs(),
 		"providerKeys":     core.GetProviderAPIKeys(),          // ★ 服务商独立 API Key（切服务商自动带出）
 		"providerContexts": core.GetProviderContextMaxTokens(), // ★ 服务商级默认上下文窗口（模型级可覆盖）
+		"providerProtocols": core.GetProviderProtocols(),       // ★ 2026-09-02 服务商 LLM 协议（前端联动下拉）
 	})
 }
 

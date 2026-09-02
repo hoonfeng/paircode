@@ -10,7 +10,6 @@ import (
 	"io"
 	"log"
 	"math/rand"
-	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -71,7 +70,8 @@ var (
 // OpenAIProvider OpenAI 兼容 /chat/completions 适配器。各家差异仅 BaseURL+Model+APIKey。
 // SSE 流式：逐行解析 data:，累积 content/reasoning_content 与 tool_calls（按 index 拼 arguments）。
 type OpenAIProvider struct {
-	BaseURL      string // ★ 完整请求端点（含 /chat/completions），如 https://api.deepseek.com/v1/chat/completions；不再拼接
+	BaseURL      string // ★ 基础地址（如 https://api.deepseek.com/v1）；完整端点由 ResolveEndpointURL 按 Protocol 拼接
+	Protocol     string // ★ 2026-09-02 LLM 协议（空=openai-completions）
 	APIKey       string
 	Model        string
 	Temperature  float64      // <0 = 不下发（用服务端默认）；>=0 下发
@@ -335,18 +335,7 @@ func (p *OpenAIProvider) client() *http.Client {
 		return p.Client
 	}
 	p.clientOnce.Do(func() {
-		p.clientCache = &http.Client{
-			Transport: &http.Transport{
-				DialContext: (&net.Dialer{
-					Timeout:   llmDialTimeout,
-					KeepAlive: 30 * time.Second,
-				}).DialContext,
-				TLSHandshakeTimeout:   llmTLSHandshakeTimeout,
-				ResponseHeaderTimeout: llmResponseHeaderTimeout, // 服务器须在该时限内返回响应头（thinking 排队可能较久）
-				ForceAttemptHTTP2:     true,
-			},
-			Timeout: llmClientTimeout, // SSE 流式读取兜底
-		}
+		p.clientCache = defaultLLMClient() // ★ 2026-09-02 提取共享（provider_http.go）
 	})
 	return p.clientCache
 }
@@ -384,10 +373,10 @@ func (p *OpenAIProvider) Chat(ctx context.Context, messages []Message, tools []T
 		return Message{}, err
 	}
 
-	// ★ 2026-08-27：不再拼接 /chat/completions——多服务商 URL 形态不一致（有的要求完整端点、
-	// 有的 base 路径不同），配置中提供的 URL 即最终请求地址，直接使用。
-	// 仅去尾部斜杠容错（如 https://x/v1/chat/completions/）。
-	url := strings.TrimRight(p.BaseURL, "/")
+	// ★ 2026-08-27/2026-09-02：URL = 基础地址 + 协议路径（ResolveEndpointURL）——
+	//   配置只填 base（如 https://x/v1），/chat/completions 由内部按 Protocol 拼接；
+	//   BaseURL 已含协议路径后缀（旧「完整端点」配置）时直接使用，不重复拼接。
+	url := ResolveEndpointURL(p.BaseURL, p.Protocol)
 
 	maxRetries := llmMaxRetries
 	var lastErr error
