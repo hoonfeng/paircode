@@ -287,6 +287,9 @@ func startWebUI(port int) {
 	//     是否打开工作区无关，未打开工作区也必须初始化并装载全局插件
 	//     （发布版启动即生效：UI 区域插件/工具插件不依赖工作区）；
 	//     项目工具集（工作区 .pair/toolsets/）等有工作区时才装载。
+	// ★ 旧 bin\.pair 一次性迁移必须在任何 .pair 读取（LoadAllToolsets/cordis.patch/
+	//   asset store）之前执行（2026-09-09 InstallDir bin 上跳配套升级路径）。
+	core.MigrateLegacyBinPairData()
 	root = core.Root() // 可为空（未打开工作区）
 	initReg := agent.NewRegistry()
 	agent.RegisterHostFrameworkTools(initReg, root)
@@ -2320,6 +2323,9 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 		//   协议/管理工具（SystemTool + cordis_*/toolset_*）恒可用（函数内兜底）。
 		if opts.Registry != nil {
 			agent.ApplyConvToolsetWhitelist(handler.GetPluginHost(), opts.Registry, req.ConvID, req.WorkspaceRoot)
+			// ★ 2026-09-09 多模态门控：非视觉模型禁用截图/看图工具（白名单之后执行，
+			//   覆盖 SystemTool 恒可用项；多模态模型恢复启用防残留）
+			agent.ApplyMultimodalToolGate(opts.Registry, opts.Provider)
 		}
 
 		// 先从全局设置取审核配置（默认值）

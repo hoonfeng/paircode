@@ -127,7 +127,7 @@ func formatVerifyReport(source string, r *verify.Report) string {
 
 // readMemoryBody 尝试读取记忆文件正文（.pair/memory/<name>.md），用于引用检查。
 func readMemoryBody(name string) string {
-	for _, root := range WorkspaceRoots {
+	for _, root := range workspaceRootsSnapshot() {
 		path := filepath.Join(root, ".pair", "memory", name+".md")
 		data, err := os.ReadFile(path)
 		if err == nil {
@@ -142,7 +142,7 @@ func readMemoryBody(name string) string {
 // AutoVerifyStale 由外部（如 loop 或编排循环）调用，自动检查并报告过期条目。
 // 返回一个字符串摘要（无过期→空字符串），供 Loop 注入到上下文或日志。
 func AutoVerifyStale() string {
-	roots := WorkspaceRoots
+	roots := workspaceRootsSnapshot()
 	if len(roots) == 0 {
 		return ""
 	}

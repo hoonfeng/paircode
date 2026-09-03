@@ -69,14 +69,15 @@ func SessionWorkspaceRoot(ctx context.Context) string {
 }
 
 // sessionRootsOrGlobal 返回工具调用场景的工作区根列表：会话绑定的工作区根（单元素）
-// 优先（工作区隔离），无会话上下文时回落全局 WorkspaceRoots。
+// 优先（工作区隔离），无会话上下文时回落全局根实时快照（★ 2026-09-09 改
+// workspaceRootsSnapshot——合并 core.Folders，消除运行中添加项目的同步窗口期）。
 func sessionRootsOrGlobal(ctx context.Context) []string {
 	if ctx != nil {
 		if r := SessionWorkspaceRoot(ctx); r != "" {
 			return []string{r}
 		}
 	}
-	return WorkspaceRoots
+	return workspaceRootsSnapshot()
 }
 
 // ─── 会话桥（web 层注入，agent 包不依赖 web 层实例） ──────────

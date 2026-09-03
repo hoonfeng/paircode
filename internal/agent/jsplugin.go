@@ -707,7 +707,7 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 			}
 			panic(vm.NewGoError(fmt.Errorf("ctx.binary.exec: 插件二进制不存在 %s（编译：go build -o %s ./plugins-src/plugins/<name>）", exePath, exePath)))
 		}
-		reqJSON, _ := json.Marshal(map[string]any{"tool": tool, "args": args, "root": binaryRoot, "workspaceRoots": WorkspaceRoots})
+		reqJSON, _ := json.Marshal(map[string]any{"tool": tool, "args": args, "root": binaryRoot, "workspaceRoots": workspaceRootsSnapshot()})
 		ctxTO, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 		cmd := exec.CommandContext(ctxTO, exePath)
@@ -1932,7 +1932,7 @@ func (p *jsPluginAdapter) buildFSService(pc *PluginContext) goja.Value {
 		if root != "" {
 			roots = append(roots, root)
 		}
-		for _, wr := range WorkspaceRoots {
+		for _, wr := range workspaceRootsSnapshot() {
 			if wr != root {
 				roots = append(roots, wr)
 			}

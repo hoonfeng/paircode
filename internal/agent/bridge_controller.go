@@ -345,8 +345,8 @@ func (bc *BridgeController) resolvePath(p string) (string, error) {
 		}
 	}
 
-	// 再查其他工作区根目录（多根工作区支持）
-	for _, wr := range WorkspaceRoots {
+	// 再查其他工作区根目录（多根工作区支持；★ 2026-09-09 实时快照）
+	for _, wr := range workspaceRootsSnapshot() {
 		if wr == bc.root {
 			continue
 		}

@@ -16,11 +16,40 @@ import (
 	"sync"
 
 	"time"
+
+	"github.com/hoonfeng/paircode/internal/core"
 )
 
 // WorkspaceRoots 工作区所有根目录（多根工作区支持）。
 // 由 bridge.go 在初始化 agent 时设置。resolvePath 会检查路径是否在任一根目录内。
+// ★ 2026-09-09：生产读取点一律改用 workspaceRootsSnapshot()（实时合并
+// core.Folders）——本变量保留为测试注入点与兼容赋值点。
 var WorkspaceRoots []string
+
+// workspaceRootsSnapshot 返回当前工作区根实时快照：WorkspaceRoots 变量与
+// core.Folders（设置持久层，运行中添加项目即时更新）合并去重，前者优先保序。
+// ★ 修复加固：此前所有根归属判定读包级变量 WorkspaceRoots，其值仅在启动/
+// 构建 LoopOpts/OnSyncWorkspace 钩子时刷新——HTTP 请求（文件树 /api/fs/list、
+// ctx.fs 工具）在钩子同步前到达时，新添加的项目根不在列表内 → resolvePath
+// 判定越界 → 文件树展开为空。改读本快照消除时序隐患（core.Folders 是
+// add/remove 端点直接改写的真相源，agent→core 单向依赖已存在）。
+func workspaceRootsSnapshot() []string {
+	roots := make([]string, 0, len(WorkspaceRoots)+len(core.Folders)+1)
+	seen := map[string]bool{}
+	for _, r := range WorkspaceRoots {
+		if r != "" && !seen[r] {
+			seen[r] = true
+			roots = append(roots, r)
+		}
+	}
+	for _, r := range core.Folders {
+		if r != "" && !seen[r] {
+			seen[r] = true
+			roots = append(roots, r)
+		}
+	}
+	return roots
+}
 
 // FileChangeCallback 文件变更回调（可选）。每次写类工具成功修改文件后调用，供外部追踪变更。
 // filePath 为工作区相对路径。由 orchestration.go 或外部宿主设置。
@@ -948,9 +977,10 @@ func argStrSlice(args map[string]any, key string) []string {
 // orderedRoots 返回工作区所有根目录，primaryRoot 排最后（供"后加载覆盖"场景使用：
 // 同名工具/配置以 primary 项目为准）。
 func orderedRoots(primaryRoot string) []string {
-	roots := make([]string, 0, len(WorkspaceRoots)+1)
+	allRoots := workspaceRootsSnapshot()
+	roots := make([]string, 0, len(allRoots)+1)
 	seen := map[string]bool{primaryRoot: true}
-	for _, wr := range WorkspaceRoots {
+	for _, wr := range allRoots {
 		if wr != primaryRoot && !seen[wr] {
 			seen[wr] = true
 			roots = append(roots, wr)
@@ -977,10 +1007,13 @@ func resolvePath(root, p string) (string, error) {
 	// 归属检查：先查 primary root，再查其他工作区根（多根工作区支持）。
 	// 路径语法上属于某根 → 确认真实存在于此（避免 `goui/main.go` 被拼成
 	// `gou-ide/goui/main.go` 但实际应在 `../goui/`）。
-	roots := make([]string, 0, len(WorkspaceRoots)+1)
+	// ★ 2026-09-09：读 workspaceRootsSnapshot()（实时合并 core.Folders），
+	//   运行中添加的项目即刻可解析（此前读包级变量存在同步窗口期）。
+	allRoots := workspaceRootsSnapshot()
+	roots := make([]string, 0, len(allRoots)+1)
 	seen := map[string]bool{root: true}
 	roots = append(roots, root)
-	for _, wr := range WorkspaceRoots {
+	for _, wr := range allRoots {
 		if !seen[wr] {
 			seen[wr] = true
 			roots = append(roots, wr)

@@ -194,7 +194,7 @@ func PruneCodeGraphs(activeRoots []string) {
 
 // isActiveRoot 判断 root 是否仍为当前工作区之一（后台构建回填前校验用）。
 func isActiveRoot(root string) bool {
-	for _, r := range WorkspaceRoots {
+	for _, r := range workspaceRootsSnapshot() {
 		if samePath(root, r) {
 			return true
 		}

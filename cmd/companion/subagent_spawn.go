@@ -141,6 +141,8 @@ func (s *webServer) startSubAgentFork(spec agent.SubAgentSpec, seed []agent.Mess
 		//   未继承时按成员会话自身 meta（空=default 集合））→ 再摘除队长专属工具
 		if opts.Registry != nil {
 			agent.ApplyConvToolsetWhitelist(handler.GetPluginHost(), opts.Registry, convID, wsRoot)
+			// ★ 2026-09-09 多模态门控（成员会话与主会话同规则；opts.Provider 已含模型覆盖）
+			agent.ApplyMultimodalToolGate(opts.Registry, opts.Provider)
 			for _, name := range spec.DenyTools {
 				if n := strings.TrimSpace(name); n != "" {
 					opts.Registry.Unregister(n)
@@ -261,6 +263,8 @@ func (s *webServer) startSubAgentTurn(spec agent.SubAgentSpec) error {
 		//   未继承时按成员会话自身 meta（空=default 集合））→ 再摘除队长专属工具
 		if opts.Registry != nil {
 			agent.ApplyConvToolsetWhitelist(handler.GetPluginHost(), opts.Registry, convID, wsRoot)
+			// ★ 2026-09-09 多模态门控（成员会话与主会话同规则；opts.Provider 已含模型覆盖）
+			agent.ApplyMultimodalToolGate(opts.Registry, opts.Provider)
 			for _, name := range spec.DenyTools {
 				if n := strings.TrimSpace(name); n != "" {
 					opts.Registry.Unregister(n)

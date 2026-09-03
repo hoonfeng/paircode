@@ -89,11 +89,17 @@ func ConfigDir() string {
 }
 
 // InstallDir 返回 exe 所在安装目录。
+// ★ 2026-09-09 修复：exe 位于 bin/ 子目录时回退到上级目录（与 ConfigDir 对齐）——
+// 此前 bin 下的 exe 会把 .pair/（工具集/插件/资产）写到 bin\.pair，启动时又从
+// bin\.pair 读旧盘数据，导致工具集编辑不生效、插件面与安装根不一致。
 func InstallDir() string {
 	if exe, err := os.Executable(); err == nil {
 		dir := filepath.Dir(exe)
 		low := strings.ToLower(dir)
 		if !strings.Contains(low, "go-build") && !strings.Contains(low, `\temp\`) && !strings.Contains(low, "/tmp/") {
+			if strings.EqualFold(filepath.Base(dir), "bin") {
+				return filepath.Dir(dir)
+			}
 			return dir
 		}
 	}

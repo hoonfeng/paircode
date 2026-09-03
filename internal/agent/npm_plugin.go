@@ -443,10 +443,10 @@ func (h *PluginHost) removeNPMPluginDefs(pkg string) {
 	}
 }
 
-// primaryWorkspaceRoot 取主工作区根（WorkspaceRoots[0] 或全局根）。
+// primaryWorkspaceRoot 取主工作区根（根快照[0]——WorkspaceRoots 优先，否则 core.Folders[0]）。
 func primaryWorkspaceRoot() string {
-	if len(WorkspaceRoots) > 0 {
-		return WorkspaceRoots[0]
+	if roots := workspaceRootsSnapshot(); len(roots) > 0 {
+		return roots[0]
 	}
 	return ""
 }

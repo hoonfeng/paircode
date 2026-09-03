@@ -86,11 +86,11 @@ func SaveTokenUsageForRoot(root string, usage *Usage) {
 }
 
 // ResetTokenStats 重置累积 token 统计（全量清零并写盘）。
-// 使用全局 WorkspaceRoots[0] 确定存储路径（UI 层调用）。
+// 使用全局主根（根实时快照[0]——★ 2026-09-09 合并 core.Folders）确定存储路径（UI 层调用）。
 func ResetTokenStats() {
 	root := ""
-	if len(WorkspaceRoots) > 0 {
-		root = WorkspaceRoots[0]
+	if roots := workspaceRootsSnapshot(); len(roots) > 0 {
+		root = roots[0]
 	}
 	ResetTokenStatsForRoot(root)
 }
@@ -107,12 +107,12 @@ func ResetTokenStatsForRoot(root string) {
 }
 
 // ReadTokenStats 从磁盘读取已持久化的 token 统计。
-// 使用全局 WorkspaceRoots[0] 确定存储路径（UI 层调用）。
+// 使用全局主根（根实时快照[0]）确定存储路径（UI 层调用）。
 // 外部宿主（web 服务）通过此函数获取 agent 自闭环保存的统计数据。
 func ReadTokenStats() *TokenStats {
 	root := ""
-	if len(WorkspaceRoots) > 0 {
-		root = WorkspaceRoots[0]
+	if roots := workspaceRootsSnapshot(); len(roots) > 0 {
+		root = roots[0]
 	}
 	return ReadTokenStatsForRoot(root)
 }
@@ -143,11 +143,11 @@ func ReadTokenStatsForRoot(root string) *TokenStats {
 	return &stats
 }
 
-// SaveTokenUsage 累积 token 用量到磁盘（向后兼容，使用 WorkspaceRoots[0]）。
+// SaveTokenUsage 累积 token 用量到磁盘（向后兼容，使用全局主根——根实时快照[0]）。
 func SaveTokenUsage(usage *Usage) {
 	root := ""
-	if len(WorkspaceRoots) > 0 {
-		root = WorkspaceRoots[0]
+	if roots := workspaceRootsSnapshot(); len(roots) > 0 {
+		root = roots[0]
 	}
 	SaveTokenUsageForRoot(root, usage)
 }

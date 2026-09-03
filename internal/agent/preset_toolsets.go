@@ -89,13 +89,20 @@ type presetMode struct {
 // ★ 2026-09-06 分类整理：按任务场景重设计预设（计划讨论/全栈开发/办公/调试 +
 // 基础/全功能兜底），删除旧的 dev/test/docs（分别被 全栈开发/办公 取代）；
 // v3 起模式名中文化（原 planning/fullstack/office/debug/default/full）。
+// ★ 2026-09-09 v4 最小满足瘦身：按「场景内必要」原则裁剪——
+//   - 文件快照（tool-snapshot）只在会编辑文件的场景保留（全栈/调试）；
+//     纯讨论/办公（不写代码）不需要文件回滚安全网；
+//   - 基础集回归真·极简（去 web/vision/snapshot——检索/截图按需加入）；
+//   - 全栈开发去低频重叠项（tool-entryconfig 与 project-info/codegraph 重叠、
+//     tool-asset 低频）；视觉依赖工具由多模态门控（multimodal_gate.go）运行时
+//     二次收敛，预设只管场景职责。
 // 顺序即前端展示顺序（计划讨论 → 全栈开发 → 办公 → 调试 → 基础 → 全功能）。
 var presetModes = []presetMode{
 	{
 		Name: presetNamePlanning, Desc: "计划讨论模式——需求讨论/方案规划/资料检索/记忆与知识库（不含写代码工具）",
 		Plugins: []string{
 			"tool-harness", "tool-core", "tool-memory", "tool-project-info",
-			"tool-web", "tool-workflow", "tool-snapshot", "tool-vision",
+			"tool-web", "tool-workflow", "tool-vision",
 		},
 	},
 	{
@@ -103,16 +110,15 @@ var presetModes = []presetMode{
 		Plugins: []string{
 			"tool-harness", "tool-core", "tool-web", "tool-vision", "tool-snapshot",
 			"tool-project-info", "tool-memory", "tool-git", "tool-codegraph", "tool-bug",
-			"tool-debug", "tool-binary", "tool-resource", "tool-entryconfig",
+			"tool-debug", "tool-binary", "tool-resource",
 			"tool-workflow", "tool-system",
-			"tool-asset",
 		},
 	},
 	{
-		Name: presetNameOffice, Desc: "办公模式——文档/表格/知识库/网页/快照（文档与资料整理）",
+		Name: presetNameOffice, Desc: "办公模式——文档/表格/知识库/网页（文档与资料整理）",
 		Plugins: []string{
 			"tool-harness", "tool-core", "tool-office", "tool-memory",
-			"tool-project-info", "tool-web", "tool-snapshot", "tool-vision",
+			"tool-project-info", "tool-web", "tool-vision",
 		},
 	},
 	{
@@ -126,7 +132,7 @@ var presetModes = []presetMode{
 	{
 		Name: presetNameDefault, Desc: "基础工具集——极简核心 + 框架本身提供的工具；插件工具按需加入",
 		Plugins: []string{
-			"tool-harness", "tool-core", "tool-web", "tool-vision", "tool-snapshot", "tool-project-info", "tool-memory",
+			"tool-harness", "tool-core", "tool-project-info", "tool-memory",
 		},
 	},
 	{
@@ -141,8 +147,9 @@ const presetSeedMarker = ".preset-seeded"
 
 // presetSeedVersion 预置分类版本：预设名单/命名变化时递增，触发 seedPresetToolsets
 // 对应阶梯迁移（仅限预设名单，用户自定义工具集不动）并重播种。
-// v2：dev/test/docs → 全栈开发/办公；v3：英文名 → 中文名。
-const presetSeedVersion = 3
+// v2：dev/test/docs → 全栈开发/办公；v3：英文名 → 中文名；v4：内容最小满足瘦身
+//（预设文件删除重建——预设内容属框架维护责任域，用户对预设的定制请复制为自定义集合）。
+const presetSeedVersion = 4
 
 // presetLegacyNames v1 起不再保留的旧预置模式（dev/test/docs 被全栈开发/办公取代；
 // v2 已清理；保留定义供版本阶梯迁移 v1→v2 使用）。
@@ -177,6 +184,17 @@ func seedPresetToolsets(ph *PluginHost) {
 	if curVer < 3 {
 		// v2→v3：旧英文名 → 中文名（rename + 改写 Name，保留用户改动内容）
 		migratePresetNamesV3(dir)
+	}
+	if curVer < 4 {
+		// v3→v4：预设内容最小满足瘦身——删除预设名文件，下方播种循环按新表重建。
+		// 预设内容属框架维护责任域（v4 变化：计划讨论/办公去文件快照、基础集回归
+		// 极简、全栈开发去 entryconfig/asset 低频项）；用户对预设的定制应复制为
+		// 自定义集合，预设名文件会被版本升级重置。
+		for _, m := range presetModes {
+			if err := os.Remove(toolsetPath("", toolsetProject, m.Name)); err == nil {
+				log.Printf("[toolset] v4 预设瘦身：旧预设 %q 已删除（按新表重建）", m.Name)
+			}
+		}
 	}
 	reg := (*Registry)(nil)
 	if ph != nil && ph.Context() != nil {

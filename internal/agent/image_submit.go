@@ -167,11 +167,10 @@ func (l *Loop) injectPendingImages(callMsgs []Message) []Message {
 	return callMsgs
 }
 
-// supportsMultimodal 当前 Provider 是否支持多模态：
+// providerSupportsMultimodal 判断 Provider 是否支持多模态（图片输入）：
 //   - OpenAIProvider 有 Multimodal 字段 → 类型断言读取
 //   - 其他 Provider 实现（Mock/Reviewer 等）→ 默认 false（保守：不注入图片）
-func (l *Loop) supportsMultimodal() bool {
-	p := l.getProvider()
+func providerSupportsMultimodal(p Provider) bool {
 	if p == nil {
 		return false
 	}
@@ -182,6 +181,11 @@ func (l *Loop) supportsMultimodal() bool {
 		return p.Multimodal
 	}
 	return false
+}
+
+// supportsMultimodal 当前会话 Provider 是否支持多模态（详见 providerSupportsMultimodal）。
+func (l *Loop) supportsMultimodal() bool {
+	return providerSupportsMultimodal(l.getProvider())
 }
 
 // splitFirstLine 拆分首行与剩余。

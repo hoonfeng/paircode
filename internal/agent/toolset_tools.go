@@ -401,8 +401,8 @@ func resolveWorkspaceProject(primaryRoot, project string) (string, error) {
 	if st, err := os.Stat(cand); err == nil && st.IsDir() {
 		return cand, nil
 	}
-	// basename 匹配工作区文件夹
-	for _, w := range WorkspaceRoots {
+	// basename 匹配工作区文件夹（★ 2026-09-09 实时快照）
+	for _, w := range workspaceRootsSnapshot() {
 		if filepath.Base(w) == project {
 			return w, nil
 		}
