@@ -41,7 +41,7 @@
         <FileTreeItem
           v-for="(folder, fi) in currentFolders"
           :key="folder"
-          :item="{ name: folder.split('\\').pop(), isDir: true, path: folder }"
+          :item="{ name: folder.split(/[\\/]/).pop(), isDir: true, path: folder }"
           :parentPath="folderParent(folder)"
           :depth="0"
           :defaultExpanded="true"
@@ -96,7 +96,7 @@
           </div>
           <div v-else class="dir-list">
             <div v-for="entry in browseEntries" :key="entry.name"
-                 :class="['dir-item', { 'dir-selected': browseSelected === browsePath + '\\' + entry.name }]"
+                 :class="['dir-item', { 'dir-selected': browseSelected === browsePath + pathSep(browsePath) + entry.name }]"
                  @click="browseSelect(entry)">
               <SvgIcon :name="entry.isDir ? 'folder' : 'file'" :size="14" />
               <span class="dir-name">{{ entry.name }}</span>
@@ -156,7 +156,8 @@ const currentFolders = computed(() => {
 
 // ── 计算文件夹的父路径（用于 FileTreeItem）──
 function folderParent(folderPath) {
-  const idx = folderPath.lastIndexOf('\\')
+  const sep = pathSep(folderPath)
+  const idx = folderPath.lastIndexOf(sep)
   return idx > 0 ? folderPath.substring(0, idx) : ''
 }
 
@@ -318,6 +319,13 @@ function normPath(p) {
   return p.replace(/\\\\+/g, '\\')
 }
 
+// ★ 路径分隔符探测（2026-09-09 跨平台）：含正斜杠且无反斜杠 = Unix/mac（/），
+//   否则默认 Windows（\）。目录浏览/拼接/上级目录等操作按此选择分隔符。
+function pathSep(p) {
+  if (typeof p !== 'string' || !p) return '\\'
+  return p.includes('/') && !p.includes('\\') ? '/' : '\\'
+}
+
 async function saveWsList() {
   // 同步工作区列表到后端 settings（recentProjects + workspaceFolderLists）
   // ★ 2026-08-22 修复：此前只写 recentProjects，漏写 workspaceFolderLists ——
@@ -379,7 +387,7 @@ function closeBrowse() {
 
 function browseSelect(entry) {
   if (!entry.isDir) return
-  const full = normPath(browsePath.value + '\\' + entry.name) // 归一化（防双反斜杠污染）
+  const full = normPath(browsePath.value + pathSep(browsePath.value) + entry.name) // 归一化（防双反斜杠污染）
   browseSelected.value = full
   // 展开
   browsePath.value = full
@@ -394,7 +402,9 @@ async function browseEnter(path) {
 
 async function browseGoUp() {
   if (!browsePath.value) return
-  const parts = normPath(browsePath.value).replace(/\\$/, '').split('\\')
+  const p = normPath(browsePath.value)
+  const sep = pathSep(p)
+  const parts = p.replace(sep === '/' ? /\/$/ : /\\$/, '').split(sep)
   if (parts.length <= 1) {
     browsePath.value = ''
     browseEntries.value = []
@@ -402,7 +412,7 @@ async function browseGoUp() {
     return
   }
   parts.pop()
-  browsePath.value = parts.join('\\') + '\\'
+  browsePath.value = parts.join(sep) + sep
   loadBrowseDir(browsePath.value)
 }
 

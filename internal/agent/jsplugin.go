@@ -1742,9 +1742,11 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 
 // ─── ctx 服务实现（inject 声明后按属性可用） ──────────────
 
-// buildFSService 受限文件服务（ctx.fs）：读写限定在工作区根内
+// buildFSService 文件服务（ctx.fs）：读写限定在工作区根内
 // （resolvePath 越界拦截）。方法同步实现——await 同步值直接通过，
 // cordis 插件写法 `await ctx.fs.readFile(...)` 兼容。
+// ★ 例外（只读浏览能力，不受工作区限制）：listDir（目录列表）/ drives（盘符
+//   探测）——目录浏览器/添加工作区需全盘浏览；只读无写入，2026-09-09 新增。
 func (p *jsPluginAdapter) buildFSService(pc *PluginContext) goja.Value {
 	vm := p.vm
 	root := pc.WorkspaceRoot
@@ -2081,6 +2083,67 @@ func (p *jsPluginAdapter) buildFSService(pc *PluginContext) goja.Value {
 			panic(vm.NewGoError(err))
 		}
 		return vm.ToValue(nodes)
+	})
+	// listDir：只读目录列表（★ 不受工作区限制——目录浏览器/添加工作区需全盘浏览）。
+	// 返回 [{name, isDir, size, mtime}]；mtime 为 RFC3339（取不到时为空串）。
+	// 路径不存在/无权限 → panic（失败明确报错，绝不静默返回空数组）。
+	// ★ 2026-09-09：fs-api 插件 browse 模式此前经 bash 调 PowerShell 列目录——
+	//   部分系统命令不可用/被限制时容错返回空且无报错（添加工作区目录列表为空
+	//   的根因）。Go 提供此原生能力（os.ReadDir），插件组装接口。
+	// ★ 跨平台：Windows 盘根（'F:' → 'F:\'，os.ReadDir('F:') 读的是 F 盘当前
+	//   目录而非盘根）；Unix/mac 根 '/' 合法保留；路径仅做规范化不越界检查。
+	fs.Set("listDir", func(call goja.FunctionCall) goja.Value {
+		raw := call.Argument(0).String()
+		full := filepath.Clean(raw)
+		if runtime.GOOS == "windows" {
+			if len(raw) == 2 && raw[1] == ':' {
+				full = raw[:1] + ":\\"
+			} else if len(raw) == 3 && raw[1] == ':' && (raw[2] == '\\' || raw[2] == '/') {
+				full = raw[:1] + ":\\"
+			}
+		}
+		if full == "" || full == "." {
+			panic(vm.NewGoError(fmt.Errorf("listDir: 路径为空")))
+		}
+		entries, err := os.ReadDir(full)
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
+		out := make([]map[string]any, 0, len(entries))
+		for _, e := range entries {
+			fi, ierr := e.Info()
+			size, mtime := int64(0), ""
+			if ierr == nil {
+				size = fi.Size()
+				mtime = fi.ModTime().Format(time.RFC3339)
+			}
+			out = append(out, map[string]any{
+				"name": e.Name(), "isDir": e.IsDir(), "size": size, "mtime": mtime,
+			})
+		}
+		return vm.ToValue(out)
+	})
+	// drives：可浏览根目录探测（目录浏览器「选择驱动器」用）。
+	// ★ 跨平台：Windows = A-Z 盘符（os.Stat 探测）；Unix/mac = '/' 根 +
+	//   常见挂载点（/Volumes、/media、/mnt、/home，仅返回真实存在的目录）。
+	// Go 标准库实现——此前 fs-api 插件用 fsutil fsinfo drives 命令，受限系统失败。
+	fs.Set("drives", func(call goja.FunctionCall) goja.Value {
+		drives := []string{}
+		if runtime.GOOS == "windows" {
+			for _, d := range "ABCDEFGHIJKLMNOPQRSTUVWXYZ" {
+				p := string(d) + ":\\"
+				if _, err := os.Stat(p); err == nil {
+					drives = append(drives, p)
+				}
+			}
+		} else {
+			for _, p := range []string{"/", "/Volumes", "/media", "/mnt", "/home"} {
+				if fi, err := os.Stat(p); err == nil && fi.IsDir() {
+					drives = append(drives, p)
+				}
+			}
+		}
+		return vm.ToValue(drives)
 	})
 	return vm.ToValue(fs)
 }

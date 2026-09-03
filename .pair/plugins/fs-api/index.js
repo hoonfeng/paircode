@@ -1,14 +1,18 @@
 // ═══════════════════════════════════════════════════════════════
-// fs-api — 文件系统接口插件化（12 条）
+// fs-api — 文件系统接口插件化（10 条）
 //
 // 背景（2026-08-19）：fs.* 接口原实现全部在 Go 内核（web_server.go / handler 包），
 // 本插件用 ctx.fs（工作区受限文件服务）+ ctx.bash 补齐能力，经
 // ctx.webServer.register 注册同名路径接口（core-api 已删除对应内核 key）。
+// ★ 2026-09-09：drives 与 list 的 browse 分支改用 Go 原生能力 ctx.fs.drives /
+//   ctx.fs.listDir（os.Stat/os.ReadDir 实现）——此前用 fsutil/PowerShell 命令，
+//   部分系统命令不可用/被限制时返回空数组且无报错（添加工作区目录列表为空
+//   的根因）；现在失败明确报 400 + 错误消息。
 // 说明：fs.image（原始字节流）保留内核（ctx.fs 仅文本），未在本插件实现。
 // ═══════════════════════════════════════════════════════════════
 return {
   name: 'fs-api',
-  purpose: '文件系统接口插件化（12 条：drives/list/read/write/rename/delete/mkdir/search/file-info/hex）',
+  purpose: '文件系统接口插件化（10 条：drives/list/read/write/rename/delete/mkdir/search/file-info/hex；drives 与 list-browse 用 Go 原生 ctx.fs 能力）',
   inject: ['fs', 'bash', 'logger'],
   apply(ctx) {
         // query 解析（req.query 是 RawQuery 字符串）
@@ -26,74 +30,31 @@ const ok = (data) => ({ status: 200, headers: { 'Content-Type': 'application/jso
     // ctx.fs 的 path 解析：工作区内路径或绝对路径（越界拦截在内核）
     const fsPath = (p) => p || root()
 
-    // ── drives：A-Z 盘符探测（bash 逐盘检查）──
-    // 用 cmd 一行探测（存在即输出盘符）
-        const fsDrives = () => {
+    // ── drives：A-Z 盘符探测（Go 能力 ctx.fs.drives，os.Stat 原生实现）──
+    // ★ 2026-09-09：此前用 fsutil fsinfo drives 命令，受限系统失败返回空。
+    const fsDrives = () => {
       try {
-        const r = ctx.bash.exec('fsutil fsinfo drives')
-        if (r && !r.error && r.output) {
-          const m = r.output.match(/(?:驱动器|Drives):\s*(.+)/i)
-          if (m) {
-            const drives = m[1].trim().split(/\s+/).filter(Boolean)
-            if (drives.length) return ok(drives)
-          }
-        }
-      } catch (e) {}
-      return ok([])
+        return ok(ctx.fs.drives() || [])
+      } catch (e) { return err(String(e && e.message || e)) }
     }
 
     // ── list：目录列表 [{name,isDir,size,modTime}] ──
     // ★ browse=1：目录浏览器模式（添加工作区/新建项目选目录需要浏览全盘）。
-    //   ctx.fs 是工作区受限服务（root 为空/越界都会报错），改用 ctx.bash 只读列目录
-    //   （bash 不受工作区限制；输出经 UTF-8/GBK 自动转换，中文目录名安全）。
+    //   Go 原生能力 ctx.fs.listDir（os.ReadDir 实现，跨平台：Windows 盘根
+    //   /Unix 根自动规范化）——此前用 PowerShell 命令，受限系统失败返回空且无报错。
     const fsList = (req) => {
       const p = fsPath(qp(req, 'path') || '')
       if (qp(req, 'browse') === '1') {
         try {
-          // ★ 2026-08-21 修复「browse 失败: exit status 1」：
-          //   1) 空路径（前端 browse 初始 browsePath=''）→ 直接返回空数组，
-          //      不调 PowerShell（Get-ChildItem -LiteralPath '' 报错 exit 1）。
-          //   2) 双反斜杠污染路径（F:\\syproject\\gou-ide）折叠为单反斜杠——
-          //      否则 PowerShell 找不到路径 exit 1。
-          //   3) PowerShell 执行失败（exit!=0：路径不存在/无权限）→ 容错返回
-          //      空数组（浏览模式不阻断，前端显示空目录+盘符列表可回退）。
-          let dir = String(p || '').replace(/\\\\+/g, '\\')
-          // 路径规范化：盘根（F:\）保留末尾反斜杠——PowerShell 里 'F:' 是
-          //   "F 盘当前位置" 而非盘根；普通目录才去末尾斜杠。
-          const m = /^([a-zA-Z]):[\\/]?$/.exec(dir)
-          if (m) dir = m[1] + ':\\'
-          else dir = dir.replace(/[\\/]+$/, '')
+          // ★ 2026-09-09 改用 Go 原生能力 ctx.fs.listDir（os.ReadDir）：
+          //   - 不受工作区限制（全盘浏览）；
+          //   - 路径规范化（双反斜杠折叠/Windows 盘根/Unix 根）在 Go 侧处理；
+          //   - 失败明确报 400 + 错误消息（此前 PowerShell 失败容错返回空数组
+          //     且无报错——添加工作区目录列表为空的根因）。
+          let dir = String(p || '').trim()
           if (!dir) return ok([])
-          // PowerShell 脚本：单引号转义路径 → UTF-16LE base64（-EncodedCommand）。
-          // 这样 bash -c 传输的是纯 ASCII，无引号嵌套/中文编码乱码问题。
-          // ★ goja 沙箱无 Buffer 且 btoa 对 >127 字符行为不可靠，自写 base64。
-          // ★ $ProgressPreference 抑制 progress 流（否则 CLIXML 写 stderr 混入
-          //   stdout 破坏 JSON）；bash 侧 2>/dev/null 双保险。
-          const ps = `$ProgressPreference='SilentlyContinue'; Get-ChildItem -Force -LiteralPath '${dir.replace(/'/g, "''")}' | ForEach-Object { [PSCustomObject]@{ n = $_.Name; d = $_.PSIsContainer; s = $_.Length } } | ConvertTo-Json -Compress`
-          // UTF-16LE → 字节 → base64（纯 JS，无 btoa）
-          const B64CH = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
-          const bytes = []
-          for (let i = 0; i < ps.length; i++) {
-            const c = ps.charCodeAt(i)
-            bytes.push(c & 0xff, (c >> 8) & 0xff)
-          }
-          let b64 = ''
-          for (let i = 0; i < bytes.length; i += 3) {
-            const b0 = bytes[i], b1 = bytes[i + 1], b2 = bytes[i + 2]
-            b64 += B64CH[b0 >> 2]
-            b64 += B64CH[((b0 & 3) << 4) | (b1 === undefined ? 0 : b1 >> 4)]
-            if (b1 === undefined) { b64 += '=='; break }
-            b64 += B64CH[((b1 & 15) << 2) | (b2 === undefined ? 0 : b2 >> 6)]
-            if (b2 === undefined) { b64 += '='; break }
-            b64 += B64CH[b2 & 63]
-          }
-          const r = ctx.bash.exec('powershell -NoProfile -NonInteractive -EncodedCommand ' + b64 + ' 2>/dev/null')
-          if (r && r.error) return ok([]) // 失败容错：空目录（路径不存在/无权限，不阻断浏览）
-          const text = (r && r.output || '').trim()
-          if (!text) return ok([])
-          let arr = JSON.parse(text)
-          if (!Array.isArray(arr)) arr = arr ? [arr] : []
-          const out = arr.map(x => ({ name: x.n, isDir: !!x.d, size: x.s || 0, modTime: '' }))
+          const entries = ctx.fs.listDir(dir) || []
+          const out = entries.map(x => ({ name: x.name, isDir: !!x.isDir, size: x.size || 0, modTime: String(x.mtime || '').slice(0, 19).replace('T', ' ') }))
           return ok(out)
         } catch (e) { return err('browse 失败: ' + String(e && e.message || e)) }
       }

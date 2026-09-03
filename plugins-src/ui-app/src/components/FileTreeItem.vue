@@ -17,7 +17,7 @@
       <span class="item-name" :class="{ active: state.activeFile === fullPath }">{{ item.name }}</span>
     </div>
     <div v-if="expanded && item.isDir && children.length > 0">
-<FileTreeItem v-for="(child, ci) in children" :key="fullPath + '\\' + child.name + '_' + ci"
+<FileTreeItem v-for="(child, ci) in children" :key="fullPath + pathSep(fullPath) + child.name + '_' + ci"
               :item="child" :parentPath="fullPath" :depth="depth + 1"
               :siblings="children" :siblingIndex="ci"
               @file-click="(p) => emit('fileClick', p)" />
@@ -53,9 +53,16 @@ const props = defineProps({
 
 const emit = defineEmits(['fileClick'])
 
+// ★ 路径分隔符探测（2026-09-09 跨平台）：含正斜杠且无反斜杠 = Unix/mac（/），
+//   否则默认 Windows（\）。目录拼接/上级目录推算等操作按此选择分隔符。
+function pathSep(p) {
+  if (typeof p !== 'string' || !p) return '\\'
+  return p.includes('/') && !p.includes('\\') ? '/' : '\\'
+}
+
 const childFullPath = computed(() => {
   if (!props.parentPath) return props.item.path || props.item.name
-  return props.parentPath + '\\' + props.item.name
+  return props.parentPath + pathSep(props.parentPath) + props.item.name
 })
 const fullPath = childFullPath
 
@@ -147,7 +154,7 @@ const handleClick = async (e) => {
       // 构建兄弟节点的路径列表
       const sibPaths = sibs.map(s => {
         if (typeof s === 'string') return s
-        return s.path || (props.parentPath ? props.parentPath + '\\' + s.name : s.name)
+        return s.path || (props.parentPath ? props.parentPath + pathSep(props.parentPath) + s.name : s.name)
       })
       const anchorIdx = sibPaths.indexOf(state.lastClickedFilePath)
       const curIdx = sibPaths.indexOf(fullPath.value)
@@ -334,7 +341,7 @@ async function createNewFile() {
   const name = await window.$prompt('输入文件名:', '', '新建文件')
   if (!name) return
   try {
-    await api.apiPost('/fs/write', { path: fullPath.value + '\\' + name, content: '' })
+    await api.apiPost('/fs/write', { path: fullPath.value + pathSep(fullPath.value) + name, content: '' })
     await reloadChildren()
   } catch (err) { window.$toast('创建文件失败: ' + err.message, 'error') }
 }
@@ -344,7 +351,7 @@ async function createNewFolder() {
   const name = await window.$prompt('输入文件夹名:', '', '新建文件夹')
   if (!name) return
   try {
-    await api.apiPost('/fs/mkdir', { path: fullPath.value + '\\' + name })
+    await api.apiPost('/fs/mkdir', { path: fullPath.value + pathSep(fullPath.value) + name })
     await reloadChildren()
   } catch (err) { window.$toast('创建文件夹失败: ' + err.message, 'error') }
 }
@@ -364,7 +371,7 @@ async function confirmRename() {
   renaming.value = false
   if (!newName || newName === props.item.name) return
   const from = fullPath.value
-  const to = props.parentPath + '\\' + newName
+  const to = props.parentPath + pathSep(props.parentPath) + newName
   try {
     await api.apiPost('/fs/rename', { from, to })
     await reloadChildren()
@@ -437,7 +444,7 @@ function copyPath(path) { navigator.clipboard.writeText(path).catch(() => {}) }
 function copyRelPath(path) {
   const root = state.workspaceRoot || ''
   if (root && path.startsWith(root)) {
-    const rel = path.slice(root.length).replace(/^\\/, '')
+    const rel = path.slice(root.length).replace(/^[\\/]/, '')
     navigator.clipboard.writeText(rel).catch(() => {})
   } else {
     navigator.clipboard.writeText(path).catch(() => {})
@@ -446,7 +453,7 @@ function copyRelPath(path) {
 
 // ── 在终端中打开 ──
 function openInTerminal(path, isDir) {
-  const dir = isDir ? path : (props.parentPath || path.substring(0, path.lastIndexOf('\\')))
+  const dir = isDir ? path : (props.parentPath || path.substring(0, path.lastIndexOf(pathSep(path))))
   state.bottomPanelVisible = true
   state.bottomPanelTab = 'terminal'
   window.dispatchEvent(new CustomEvent('terminal-cwd', { detail: { cwd: dir } }))
@@ -539,9 +546,10 @@ const onDrop = async (e) => {
   let failCount = 0
 
   for (const srcPath of paths) {
-    if (!srcPath || srcPath === targetDir || srcPath.startsWith(targetDir + '\\')) continue
-    const srcName = srcPath.split('\\').pop()
-    const destPath = targetDir + '\\' + srcName
+    const sep = pathSep(targetDir)
+    if (!srcPath || srcPath === targetDir || srcPath.startsWith(targetDir + sep)) continue
+    const srcName = srcPath.split(/[\\/]/).pop()
+    const destPath = targetDir + sep + srcName
     try {
       if (isCopy) {
         // Ctrl+拖拽 = 复制
