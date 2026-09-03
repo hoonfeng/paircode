@@ -776,6 +776,13 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 			panic(vm.NewTypeError("ctx.http.register: 第三参数必须是处理函数 fn(req) → resp"))
 		}
 		handler := func(w http.ResponseWriter, r *http.Request) {
+			// 兜底 recover（对齐 buildNodeHTTPHandler）：goja 异常路径不炸 net/http 连接
+			defer func() {
+				if x := recover(); x != nil {
+					log.Printf("[webServer] ctx.http handler panic（%s %s）: %v\n%s", r.Method, r.URL.Path, x, debug.Stack())
+					http.Error(w, "internal error", http.StatusInternalServerError)
+				}
+			}()
 			body, _ := io.ReadAll(r.Body)
 			headers := map[string]string{}
 			for k, vs := range r.Header {
@@ -851,7 +858,7 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 			for k, v := range savedHeaders {
 				w.Header().Set(k, v)
 			}
-			w.WriteHeader(savedStatus)
+			w.WriteHeader(sanitizeHTTPStatus(savedStatus, "ctx.http handler"))
 			_, _ = w.Write([]byte(savedBody))
 		}
 		dispose, err := RegisterExtRoute(method, path, handler)
@@ -3820,6 +3827,19 @@ func awaitJSValue(vm *goja.Runtime, v goja.Value) (goja.Value, error) {
 
 // ── ctx.webServer：Node 风格 HTTP handler 桥（对齐 host-webserver）──
 
+// sanitizeHTTPStatus 校验 JS 插件桥传入的 HTTP 状态码。
+// JS 侧 status: undefined/NaN → ToInteger()=0，或直接写 0/负值/超 999，
+// 传给 net/http 的 WriteHeader 会 panic（invalid WriteHeader code 0——
+// 2026-09-03 LLM 流中断错误路径触发过）。非法值回退 200 并记日志，
+// 保证插件返回的 body 仍可达前端，便于其侧排障。
+func sanitizeHTTPStatus(code int, where string) int {
+	if code < 100 || code > 999 {
+		log.Printf("[jsplugin] %s: 非法 HTTP 状态码 %d，回退 200", where, code)
+		return http.StatusOK
+	}
+	return code
+}
+
 // buildNodeHTTPHandler 构造 Node 风格 HTTP handler：JS 插件以
 // handler(req, res) 形态实现处理逻辑（接口定义 + 逻辑都在插件中），
 // 服务能力经 ctx.fs/ctx.web/ctx.tools 等 Go 服务访问。
@@ -3995,7 +4015,7 @@ func (p *jsPluginAdapter) buildNodeHTTPHandler(fn goja.Callable) http.HandlerFun
 		for k, v := range respHeaders {
 			w.Header().Set(k, v)
 		}
-		w.WriteHeader(status)
+		w.WriteHeader(sanitizeHTTPStatus(status, "ctx.webServer handler"))
 		_, _ = w.Write([]byte(respBody))
 		// res 'finish'/'close' 回调（end 后触发）
 		for _, cb := range finishCbs {
