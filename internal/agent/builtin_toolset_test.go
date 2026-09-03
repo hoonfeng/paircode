@@ -256,3 +256,47 @@ func containsToolName(list []BuiltinToolInfo, s string) bool {
 }
 
 var _ = filepath.Join
+
+// TestBuiltinGroupsOf_OwnedToolHiddenFromSnapshot 归属透视：工具集快照
+// （builtin:system 条目）中的工具若已被磁盘插件承载（tool-harness 等认领），
+// system 组展示跳过——与插件区单一归属（避免同工具双展示）；
+// 无归属的宿主框架工具（update_tasks 等）仍保留在 system 组。
+// ★ 快照 Tools（可见性白名单真相源）不动，仅展示层过滤。
+func TestBuiltinGroupsOf_OwnedToolHiddenFromSnapshot(t *testing.T) {
+	ph, _ := mkBuiltinHost(t)
+	reg := ph.Context().Tools
+	// 固化一个含 read/write 的 builtin:system 快照（模拟预置 JSON 的历史快照形态）
+	ts := &Toolset{
+		Name:    "snap-owned-test",
+		Plugins: []ToolsetPlugin{{Name: "builtin:system", Builtin: "system", Tools: []string{"read", "write", "update_tasks"}}},
+	}
+	if err := saveToolset("", toolsetProject, ts); err != nil {
+		t.Fatalf("saveToolset: %v", err)
+	}
+	// 模拟磁盘插件承载：read/write 认领到 tool-harness（生产形态）
+	// （toolOwner 为私有字段——白盒测试直接填；addPluginTool 供插件分组展示）
+	ph.addPluginTool("tool-harness", "read")
+	ph.addPluginTool("tool-harness", "write")
+	ph.toolOwner["read"] = "tool-harness"
+	ph.toolOwner["write"] = "tool-harness"
+
+	groups := BuiltinGroupsOf(reg, ph)
+	var sys *BuiltinGroupInfo
+	for i := range groups {
+		if groups[i].Name == "system" {
+			sys = &groups[i]
+			break
+		}
+	}
+	if sys == nil {
+		t.Fatal("system 组应展示（仍有无归属的宿主框架工具）")
+	}
+	for _, ti := range sys.Tools {
+		if ti.Name == "read" || ti.Name == "write" {
+			t.Fatalf("system 组不应展示 read/write（已归 tool-harness），实际 %v", toolNamesOf(*sys))
+		}
+	}
+	if !containsToolName(sys.Tools, "update_tasks") {
+		t.Errorf("system 组应保留无插件归属的 update_tasks，实际 %v", toolNamesOf(*sys))
+	}
+}

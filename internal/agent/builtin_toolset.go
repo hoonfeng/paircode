@@ -234,6 +234,14 @@ func BuiltinGroupsOf(reg *Registry, ph *PluginHost) []BuiltinGroupInfo {
 	}
 	var groups []BuiltinGroupInfo
 	covered := map[string]bool{} // 已归组工具名
+	// 插件工具归属表（工具名 → 归属插件）：有归属的工具在「内置组」不重复展示
+	// （插件面板归属单一：插件区 tool-* 分组受管）。步骤 1 快照与步骤 4 剩余
+	// 均用本表排除（2026-09：read/write/edit/glob/grep/run_code 等 harness 核心
+	// 工具已由 tool-harness 磁盘插件承载，不再以宿主内置身份展示）。
+	owners := map[string]string{}
+	if ph != nil {
+		owners = ph.PluginToolOwners()
+	}
 
 	// 1. 已加入通用集合的内置组（全局工具集 *.json 的 Builtin 条目 → 工具清单）。
 	//    ★ 2026-08-16 第三轮：不再从 builtinPluginSpecs 静态派生全部内置组
@@ -241,6 +249,9 @@ func BuiltinGroupsOf(reg *Registry, ph *PluginHost) []BuiltinGroupInfo {
 	//    ★ 2026-08-17：builtin.json 独立机制废除，加入状态就是工具集条目，
 	//      扫描全部工具集收集（default.json 等）。
 	//    ★ 2026-09-04：工具集全局化——扫描全局工具集目录，不再区分工作区。
+	//    ★ 2026-09：快照工具若已有插件归属（tool-harness 等磁盘插件承载），
+	//      展示时跳过——内置组不再与插件组重复列出同一工具。
+	//      条目 Tools 快照（可见性白名单真相源）原样保留，仅展示层过滤。
 	joinedEntries := map[string][]string{}
 	if ph != nil {
 		for _, m := range listToolsets("", toolsetProject) {
@@ -270,6 +281,11 @@ func BuiltinGroupsOf(reg *Registry, ph *PluginHost) []BuiltinGroupInfo {
 		all := true
 		anyOn := false
 		for _, tn := range tools {
+			// 归属透视：工具已被磁盘插件承载（plugin owner 非空）→ 展示归插件区，
+			// 内置组快照跳过（避免 tool-harness 与 system 组重复列出 read 等）
+			if _, isPlugin := owners[tn]; isPlugin {
+				continue
+			}
 			en := reg.IsEnabled(tn)
 			g.Tools = append(g.Tools, BuiltinToolInfo{Name: tn, Desc: toolShortDesc(reg, tn), Enabled: en})
 			covered[tn] = true
@@ -278,6 +294,9 @@ func BuiltinGroupsOf(reg *Registry, ph *PluginHost) []BuiltinGroupInfo {
 			} else {
 				all = false
 			}
+		}
+		if len(g.Tools) == 0 {
+			continue // 该组工具已全部归插件区——不展示空组
 		}
 		g.Enabled = all && anyOn
 		g.Partial = anyOn && !all
@@ -288,10 +307,6 @@ func BuiltinGroupsOf(reg *Registry, ph *PluginHost) []BuiltinGroupInfo {
 	var sysTools []string
 	var mgmtTools []string
 	var tsTools []string
-	owners := map[string]string{}
-	if ph != nil {
-		owners = ph.PluginToolOwners()
-	}
 	for _, meta := range reg.AllToolMeta() {
 		if covered[meta.Name] {
 			continue
