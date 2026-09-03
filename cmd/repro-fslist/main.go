@@ -8,8 +8,10 @@
 //   · 非 browse（项目展开文件树）→ ctx.fs.readdir（工作区受限服务），
 //     失败时前端 try/catch 静默吞掉 → 树为空。
 //
-// 本程序 1:1 复刻上述两条链路的执行细节，在任意机器上独立运行，
-// 输出诊断结论，用于定位「部分系统返回空」的环境差异。
+// ★ 2026-09-09 已修复（commit 0afea20e）：fs-api 的 drives/list-browse 改为
+//   Go 原生 ctx.fs.drives()/ctx.fs.listDir()（os.Stat/os.ReadDir，跨平台），
+//   失败明确报 400 + 错误消息；前端加 pathSep 支持 Unix 分隔符。
+//   本程序保留为「旧实现链路」的历史诊断凭据（用旧二进制/旧插件排查时仍有效）。
 //
 // 使用（零第三方依赖，仅标准库）：
 //   go run main.go [目录路径]        （路径缺省 = 当前目录）
@@ -19,7 +21,6 @@
 package main
 
 import (
-	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
