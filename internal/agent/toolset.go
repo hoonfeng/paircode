@@ -1506,6 +1506,31 @@ func ApplyConvToolsetWhitelist(ph *PluginHost, reg *Registry, convID, wsRoot str
 		}
 	}
 	ApplyToolsetWhitelistByName(ph, reg, name)
+	// ★ 按需激活放行（2026-09-12 修复）：on-demand 插件（agent-teams 等）的
+	//   激活语义是「执行 /命令 → 本会话激活 → 提示段 + 工具立即可见」
+	//   （plugin_activation.go）。但工具集模式改造（2026-09-04）后白名单
+	//   （ApplyToolsetWhitelistByName）按会话所选集合收敛工具面时未感知激活
+	//   状态：/agent-teams 激活的工具虽经 MergePluginToolsForConv 放行进了
+	//   会话 reg，仍被白名单禁用（预设工具集均未声明 agent-teams 插件条目）——
+	//   用户执行命令后工具依旧不可见，与声明语义矛盾。
+	//   此处对「本会话已激活的按需插件」的工具恢复可见（用户显式命令 = 显式
+	//   放行意图）；未激活的按需插件工具（未并入 reg）与非按需插件（须经工具集
+	//   声明，「装载 ≠ 可用」语义不变）不受影响。
+	if ph != nil {
+		owners := ph.PluginToolOwners()
+		for _, meta := range reg.AllToolMeta() {
+			if reg.IsEnabled(meta.Name) {
+				continue
+			}
+			owner := owners[meta.Name]
+			if owner == "" || !IsOnDemandPlugin(owner) {
+				continue
+			}
+			if IsPluginActiveInConv(convID, owner) {
+				reg.SetToolEnabled(meta.Name, true)
+			}
+		}
+	}
 }
 
 // storeForConvLookup 按会话定位消息存储（workspaceRoot 指定优先；未命中时

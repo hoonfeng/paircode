@@ -2,6 +2,9 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -141,5 +144,88 @@ func TestOnDemandAlwaysVisibleSection(t *testing.T) {
 	MergePluginToolsForConv(reg3, host, "conv_x")
 	if _, ok := reg3.Get("agent_teams_create"); !ok {
 		t.Error("激活会话应合并插件工具")
+	}
+}
+
+// TestConvToolsetWhitelistOnDemandRelease 按需激活 × 工具集白名单交互
+// （2026-09-12 修复）：on-demand 插件（agent-teams）经 /命令 激活后，其工具
+// 应豁免会话工具集白名单收敛（「激活 → 工具立即可见」声明语义）；未激活的
+// 按需插件工具与未声明进工具集的非按需插件工具仍受白名单约束。
+func TestConvToolsetWhitelistOnDemandRelease(t *testing.T) {
+	// 隔离工具集目录：写一个「不声明任何插件」的瘦身集合（agent-teams 不在白名单）
+	// ★ cleanup 恢复 testGlobalToolsetDir（包级隔离目录）——不能恢复 ""：
+	//   空串会让 globalToolsetDir() 回落仓库根 .pair/toolsets（测试进程
+	//   InstallDir()=getwd），真实预设文件存在 → hasWorkspaceToolsets()=true
+	//   → 后续测试插件工具被可见性收敛误禁用（main_test.go 注释同述）。
+	tsDir := t.TempDir()
+	SetGlobalToolsetDirForTest(tsDir)
+	t.Cleanup(func() { SetGlobalToolsetDirForTest(testGlobalToolsetDir) })
+	ts := Toolset{Name: presetNameDefault, Description: "测试瘦身集合"}
+	data, err := json.Marshal(ts)
+	if err != nil {
+		t.Fatalf("序列化工具集失败: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tsDir, presetNameDefault+".json"), data, 0o644); err != nil {
+		t.Fatalf("写工具集失败: %v", err)
+	}
+
+	root := t.TempDir()
+	reg := NewRegistry()
+	RegisterDefaultTools(reg, root)
+	host := NewPluginHost(reg, nil, root)
+	SetGlobalPluginHost(host)
+	defer SetGlobalPluginHost(nil)
+
+	DeclareOnDemandPlugin("agent-teams", "agent-teams")
+	defer func() {
+		ResetConvActivations("")
+		onDemandMu.Lock()
+		delete(onDemandPlugins, "agent-teams")
+		delete(onDemandByCmd, "agent-teams")
+		onDemandMu.Unlock()
+	}()
+
+	registerTestTool := func(plugin, name string) {
+		pc := host.Context()
+		pc.Tools.Register(&Tool{Name: name, Description: "测试", Handler: func(ctx context.Context, args map[string]any) (string, error) { return "ok", nil }})
+		if _, err := host.claimTool(plugin, name); err != nil {
+			t.Fatalf("claimTool %s 失败: %v", name, err)
+		}
+	}
+	registerTestTool("agent-teams", "agent_teams_create")
+	registerTestTool("marketplace", "marketplace_search") // 非按需插件对照
+
+	// ① 未激活会话（conv_y）：按需插件工具不入 reg（merge 过滤），天然隐藏
+	reg2 := NewRegistry()
+	RegisterDefaultTools(reg2, root)
+	MergePluginToolsForConv(reg2, host, "conv_y")
+	ApplyConvToolsetWhitelist(host, reg2, "conv_y", "")
+	if _, ok := reg2.Get("agent_teams_create"); ok {
+		t.Error("未激活会话不应合并按需插件工具")
+	}
+
+	// ② 激活会话（conv_x）：merge 放行 → 白名单收敛（瘦身集合未声明）→
+	//    修复后按需激活放行 → 工具立即可见
+	ActivatePluginInConv("conv_x", "agent-teams")
+	reg3 := NewRegistry()
+	RegisterDefaultTools(reg3, root)
+	MergePluginToolsForConv(reg3, host, "conv_x")
+	ApplyConvToolsetWhitelist(host, reg3, "conv_x", "")
+	if !reg3.IsEnabled("agent_teams_create") {
+		t.Error("激活会话的按需插件工具应豁免工具集白名单（立即可见）")
+	}
+	// 同一会话中未声明进工具集的非按需插件工具仍禁用（『装载 ≠ 可用』不变）
+	if reg3.IsEnabled("marketplace_search") {
+		t.Error("非按需插件未声明进工具集应保持禁用")
+	}
+
+	// ③ 重置激活：工具再次隐藏（工具仍并入 reg 但被白名单收敛禁用）
+	ResetConvActivations("conv_x")
+	reg4 := NewRegistry()
+	RegisterDefaultTools(reg4, root)
+	MergePluginToolsForConv(reg4, host, "conv_x") // 已激活的工具在 reg 里（Reset 后 IsPluginActiveInConv=false）
+	ApplyConvToolsetWhitelist(host, reg4, "conv_x", "")
+	if reg4.IsEnabled("agent_teams_create") {
+		t.Error("激活重置后按需插件工具应恢复白名单约束（不可见）")
 	}
 }
