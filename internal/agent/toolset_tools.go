@@ -51,7 +51,7 @@ func RegisterToolsetTools(r *Registry, root string, ph *PluginHost) {
 			}
 			name := mArgStr(args, "name")
 			if name == "" {
-				name = "default"
+				name = presetNameDefault
 			}
 			name = strings.ToLower(strings.TrimSpace(name))
 			if !validToolsetName(name) {
@@ -353,8 +353,12 @@ func RegisterToolsetTools(r *Registry, root string, ph *PluginHost) {
 	})
 }
 
-// validToolsetName 校验工具集名（小写字母/数字/-/_）。
+// validToolsetName 校验工具集名：预设中文名白名单放行（预置模式可被 toolset_edit
+// 等编辑）；其余要求小写字母/数字/-/_（新建/导入的工具集名稳定标识）。
 func validToolsetName(name string) bool {
+	if isPresetName(name) {
+		return true // 预置模式中文名（计划讨论/全栈开发/…）
+	}
 	for _, r := range name {
 		if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '_') {
 			return false
@@ -783,7 +787,7 @@ func toolsetEdit(ph *PluginHost, root string, args map[string]any) (string, erro
 	if err != nil {
 		// ★ 2026-08-17 兼容：编辑 default 前确保存在（无工具集时播种预置模式——
 		//   default 是首个预置；seedPresetToolsets 幂等，用户删除后不复活）。
-		if name == "default" {
+		if name == presetNameDefault {
 			if e := ensureDefaultWorkspaceToolset(ph, root); e == nil {
 				ts, err = loadToolset(root, toolsetProject, name)
 			}

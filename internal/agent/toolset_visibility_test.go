@@ -59,7 +59,7 @@ func mkVisibilityHost(t *testing.T, reg *Registry) (*PluginHost, string) {
 		t.Fatal(err)
 	}
 	def := Toolset{
-		Name: "default",
+		Name: presetNameDefault,
 		Plugins: []ToolsetPlugin{
 			{Name: "tool-foo", Purpose: "foo"},
 			{Name: "builtin:core", Builtin: "core", Tools: []string{"read", "write", "edit"}},
@@ -165,7 +165,7 @@ func TestEnsureDefaultWorkspaceToolset(t *testing.T) {
 	if err := ensureDefaultWorkspaceToolset(nil, root); err != nil {
 		t.Fatal(err)
 	}
-	ts, err := loadToolset("", toolsetProject, "default")
+	ts, err := loadToolset("", toolsetProject, presetNameDefault)
 	if err != nil {
 		t.Fatalf("default.json 应已生成: %v", err)
 	}
@@ -183,7 +183,7 @@ func TestEnsureDefaultWorkspaceToolset(t *testing.T) {
 	}
 	// ★ 2026-09-04：工具集已全局化——root2 与 root 共用同一全局目录，
 	//   default 已存在（播种幂等），再次调用不重复生成。
-	if ts2, err := loadToolset("", toolsetProject, "default"); err != nil {
+	if ts2, err := loadToolset("", toolsetProject, presetNameDefault); err != nil {
 		t.Fatal("default 应全局唯一存在")
 	} else if len(ts2.Plugins) != len(ts.Plugins) {
 		t.Errorf("default 幂等不变量被破坏：%d → %d", len(ts.Plugins), len(ts2.Plugins))
@@ -247,7 +247,7 @@ func TestApplyConvToolsetWhitelist(t *testing.T) {
 			t.Fatalf("写工具集 %s: %v", name, err)
 		}
 	}
-	mkTs("default", []ToolsetPlugin{
+	mkTs(presetNameDefault, []ToolsetPlugin{
 		{Name: "builtin:core", Builtin: "core", Tools: []string{"read", "write", "edit"}},
 		{Name: "tool-foo", Purpose: "foo"},
 	})

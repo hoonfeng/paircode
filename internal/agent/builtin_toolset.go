@@ -424,12 +424,12 @@ func builtinJoinedGroups(root string) []string {
 // 不存在时回退预置 default（defaultProjectToolset，极简核心）并固化到全局。
 func workspaceMainToolset(ph *PluginHost, root string) (*Toolset, error) {
 	_ = root
-	if ts, err := loadToolset("", toolsetProject, "default"); err == nil {
+	if ts, err := loadToolset("", toolsetProject, presetNameDefault); err == nil {
 		return ts, nil
 	}
 	// ★ 预置播种兜底：default 缺失（用户删除后）→ 重新生成基础工具集
 	seedPresetToolsets(ph)
-	if ts, err := loadToolset("", toolsetProject, "default"); err == nil {
+	if ts, err := loadToolset("", toolsetProject, presetNameDefault); err == nil {
 		return ts, nil
 	}
 	var reg *Registry

@@ -33,7 +33,7 @@ func TestToolsetBuildPersistExportImport(t *testing.T) {
 	defer SetGlobalPluginHost(nil)
 
 	// 1. 构建（模板驱动）
-	ts, err := BuildToolset(host, project, "dev", "", "Go 项目开发辅助")
+	ts, err := BuildToolset(host, project, presetNameDefault, "", "Go 项目开发辅助")
 	if err != nil {
 		t.Fatalf("BuildToolset: %v", err)
 	}
@@ -60,7 +60,7 @@ func TestToolsetBuildPersistExportImport(t *testing.T) {
 		t.Fatalf("固化文件应存在（全局目录）: %v", err)
 	}
 	metas := listToolsets("", toolsetProject)
-	if len(metas) != 1 || metas[0].Name != "dev" {
+	if len(metas) != 1 || metas[0].Name != presetNameDefault {
 		t.Fatalf("全局列表应含 dev: %+v", metas)
 	}
 

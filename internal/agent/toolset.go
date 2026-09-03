@@ -167,8 +167,26 @@ func listToolsets(projectRoot string, scope toolsetScope) []ToolsetMeta {
 			Scope: string(scope), PluginCount: len(ts.Plugins),
 		})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	sort.Slice(out, func(i, j int) bool {
+		// 预设模式按 presetModes 声明顺序（计划讨论→全栈→办公→调试→基础→全功能），
+		// 用户自定义工具集排预设之后按名排序。
+		oi, oj := presetModeOrder(out[i].Name), presetModeOrder(out[j].Name)
+		if oi != oj {
+			return oi < oj
+		}
+		return out[i].Name < out[j].Name
+	})
 	return out
+}
+
+// presetModeOrder 预设模式在 presetModes 中的顺序索引；非预设返回大数（排预设之后）。
+func presetModeOrder(name string) int {
+	for i, m := range presetModes {
+		if m.Name == name {
+			return i
+		}
+	}
+	return len(presetModes)
 }
 
 // listAllToolsets 列出工作区全部工具集 + 末尾注入虚拟内置工具集 builtin
@@ -189,6 +207,8 @@ func listAllToolsets(projectRoot string) []ToolsetMeta {
 
 // loadToolset 读取指定工具集（scope 为空时先查工作区再查全局）。
 func loadToolset(projectRoot string, scope toolsetScope, name string) (*Toolset, error) {
+	// ★ v3 兼容：预设旧英文名（planning/default/…）→ 中文名（会话里存的旧名继续可用）
+	name = resolvePresetName(name)
 	if name == "" {
 		return nil, fmt.Errorf("工具集名不能为空")
 	}
@@ -276,7 +296,7 @@ func removeToolset(projectRoot string, scope toolsetScope, name string) error {
 //	内置工具在工作区工具集中可见可管理（工具集面板/插件面板控制启用）。
 func defaultProjectToolset(reg *Registry, ph *PluginHost, project string) *Toolset {
 	return &Toolset{
-		Name:           "default",
+		Name:           presetNameDefault,
 		Description:    "基础工具集（自动生成）——极简核心 + 框架本身提供的工具；插件工具用 toolset_edit add_plugin 按需加入",
 		Project:        project,
 		Version:        "1.0.0",
@@ -387,7 +407,7 @@ func ensureBuiltinGroupsInWorkspace(ph *PluginHost, root string) (bool, error) {
 	if ph != nil && ph.Context() != nil {
 		reg = ph.Context().Tools
 	}
-	ts, err := loadToolset("", toolsetProject, "default")
+	ts, err := loadToolset("", toolsetProject, presetNameDefault)
 	if err != nil || ts == nil {
 		// 无 default：由 seedPresetToolsets 生成（defaultProjectToolset 已含内置组）
 		return false, nil
@@ -758,7 +778,7 @@ func BuildToolset(ph *PluginHost, projectDir, name, description, requirement str
 		return nil, fmt.Errorf("项目目录不能为空")
 	}
 	if name == "" {
-		name = "default"
+		name = presetNameDefault
 	}
 	profile := analyzeProject(projectDir)
 
@@ -1085,7 +1105,7 @@ func RestorePluginToToolsetsPublic(root, name string) int {
 	if err != nil {
 		return 0
 	}
-	ts, err := loadToolset(root, toolsetProject, "default")
+	ts, err := loadToolset(root, toolsetProject, presetNameDefault)
 	if err != nil || ts == nil {
 		return 0
 	}
@@ -1514,7 +1534,7 @@ func ApplyToolsetWhitelistByName(ph *PluginHost, reg *Registry, name string) {
 		return
 	}
 	if name == "" {
-		name = "default"
+		name = presetNameDefault
 	}
 	ts, err := loadToolset("", toolsetProject, name)
 	if err != nil {

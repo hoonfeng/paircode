@@ -12,6 +12,7 @@
 package agent
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -29,14 +30,14 @@ func TestMain(m *testing.M) {
 	}
 	testGlobalToolsetDir = dir
 	SetGlobalToolsetDirForTest(dir)
-	// ★ 预写 .preset-seeded 标记：seedPresetToolsets 检查到标记后直接返回，
-	//   隔离目录永不被播种（保持空）——否则 TestAgentBaseInitPlugins 等
-	//   触发 AgentBase.Init → seedPresetToolsets 会把 default.json 等预置
-	//   模式写入隔离目录，hasWorkspaceToolsets() 变 true 后后续测试的
-	//   插件工具被可见性收敛误禁用（「未加入工作区工具集」连锁失败）。
-	//   工具集专项测试自行 SetGlobalToolsetDirForTest(t.TempDir()) 不受影响
-	//   （它们的 temp dir 无标记，播种/自建工具集按其用例预期发生）。
-	_ = os.WriteFile(filepath.Join(dir, presetSeedMarker), []byte("1"), 0o644)
+	// ★ 预写 .preset-seeded 标记（内容=当前预设版本号）：seedPresetToolsets
+	//   读到版本号 >= 当前版本后直接返回，隔离目录永不被播种（保持空）——
+	//   否则 TestAgentBaseInitPlugins 等触发 AgentBase.Init → seedPresetToolsets
+	//   会把 planning/default.json 等预置模式写入隔离目录，hasWorkspaceToolsets()
+	//   变 true 后后续测试的插件工具被可见性收敛误禁用（「未加入工作区工具集」
+	//   连锁失败）。工具集专项测试自行 SetGlobalToolsetDirForTest(t.TempDir())
+	//   不受影响（它们的 temp dir 无标记，播种/自建工具集按其用例预期发生）。
+	_ = os.WriteFile(filepath.Join(dir, presetSeedMarker), []byte(fmt.Sprintf("%d", presetSeedVersion)), 0o644)
 	code := m.Run()
 	SetGlobalToolsetDirForTest("")
 	_ = os.RemoveAll(dir)

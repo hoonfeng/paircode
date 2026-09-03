@@ -138,7 +138,7 @@ func TestSetBuiltinGroupEnabled_JoinAndLeave(t *testing.T) {
 		t.Error("加入后 codegraph_search 应启用（agent 可见）")
 	}
 	// 工作区主工具集固化（内置组条目并入 default.json，无独立 builtin.json）
-	ts, err := loadToolset(root, toolsetProject, "default")
+	ts, err := loadToolset(root, toolsetProject, presetNameDefault)
 	if err != nil {
 		t.Fatalf("工作区工具集未固化: %v", err)
 	}
@@ -164,7 +164,7 @@ func TestSetBuiltinGroupEnabled_JoinAndLeave(t *testing.T) {
 	if reg.IsEnabled("codegraph_search") {
 		t.Error("移出后 codegraph_search 应恢复默认（禁用）")
 	}
-	if _, err := os.Stat(toolsetPath(root, toolsetProject, "default")); err != nil {
+	if _, err := os.Stat(toolsetPath(root, toolsetProject, presetNameDefault)); err != nil {
 		t.Error("default.json 应保留（工作区主工具集永存，内置组移出后回到基础工具集）")
 	}
 }
@@ -194,7 +194,7 @@ func TestEnableAllBuiltin(t *testing.T) {
 		}
 	}
 	// 固化到工作区主工具集（default.json；无独立 builtin.json）
-	if _, err := os.Stat(toolsetPath(root, toolsetProject, "default")); err != nil {
+	if _, err := os.Stat(toolsetPath(root, toolsetProject, presetNameDefault)); err != nil {
 		t.Errorf("default.json 应存在: %v", err)
 	}
 	if _, err := os.Stat(toolsetPath(root, toolsetProject, builtinToolsetName)); !os.IsNotExist(err) {
