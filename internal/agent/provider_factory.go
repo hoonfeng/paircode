@@ -149,6 +149,32 @@ func ConfiguredProvider() bool {
 	return p.APIKey != "" && p.BaseURL != "" && p.Model != ""
 }
 
+// ConfiguredProviderForConv 会话感知的 Provider 就绪检查（★ 2026-09-04 同步段校验修复）：
+// 同步段（handleChatSend 等）此前只用全局装配判定（ConfiguredProvider）——用户已在
+// 会话里选定 服务商/模型/配置（会话三元组非空）时，全局激活配置可能尚未展开完整
+// （如激活配置未指定模型），导致误报「未配置 API key」。本函数按会话装配判定，
+// 会话未设置时退化为全局判定（与 ConfiguredProvider 完全一致）。
+// 返回 (是否就绪, 缺失项描述)；描述区分「API Key / API 地址 / 模型」三者，供前端准确提示。
+func ConfiguredProviderForConv(convID, wsRoot string) (bool, string) {
+	provider, model, preset := LookupConvModel(convID, wsRoot)
+	var p ProviderParams
+	if provider == "" && model == "" && preset == "" {
+		p = ResolveProviderParams()
+	} else {
+		p = ResolveProviderParamsForConv(convID, wsRoot)
+	}
+	if p.APIKey == "" {
+		return false, "API Key 为空"
+	}
+	if p.BaseURL == "" {
+		return false, "API 地址为空"
+	}
+	if p.Model == "" {
+		return false, "模型为空"
+	}
+	return true, ""
+}
+
 // ─── 会话级模型路由（★ 2026-08-31） ────────────────────────────────
 //
 // 问题：此前对话面板切换模型 = 写全局 settings（preset/executeModel），

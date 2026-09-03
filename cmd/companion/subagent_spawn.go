@@ -80,8 +80,9 @@ func (s *webServer) startSubAgentFork(spec agent.SubAgentSpec, seed []agent.Mess
 	if task == "" {
 		return fmt.Errorf("成员会话 fork 失败：本轮输入为空")
 	}
-	if !agent.ConfiguredProvider() {
-		return fmt.Errorf("未配置 API key：请先在「设置 → AI」中配置服务商与模型")
+	// ★ 2026-09-04 会话感知判定（成员会话继承源模型；无会话三元组时退化为全局判定）
+	if ok, missing := agent.ConfiguredProviderForConv(convID, strings.TrimSpace(spec.WsRoot)); !ok {
+		return fmt.Errorf("未配置 API key（%s）：请先在「设置 → AI」中配置服务商与模型", missing)
 	}
 	if agentMgr.IsRunning(convID) {
 		return fmt.Errorf("成员会话 %s 正在运行中（同一会话不可并行两轮）", convID)
@@ -203,8 +204,9 @@ func (s *webServer) startSubAgentTurn(spec agent.SubAgentSpec) error {
 	if task == "" {
 		return fmt.Errorf("成员会话启动失败：本轮输入为空")
 	}
-	if !agent.ConfiguredProvider() {
-		return fmt.Errorf("未配置 API key：请先在「设置 → AI」中配置服务商与模型")
+	// ★ 2026-09-04 会话感知判定（成员会话继承源模型；无会话三元组时退化为全局判定）
+	if ok, missing := agent.ConfiguredProviderForConv(convID, strings.TrimSpace(spec.WsRoot)); !ok {
+		return fmt.Errorf("未配置 API key（%s）：请先在「设置 → AI」中配置服务商与模型", missing)
 	}
 	if agentMgr.IsRunning(convID) {
 		return fmt.Errorf("成员会话 %s 正在运行中（同一会话不可并行两轮）", convID)

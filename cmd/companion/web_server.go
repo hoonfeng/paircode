@@ -2257,8 +2257,21 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[chat] 收到发送请求 conv=%s len=%d autonomous=%v ws=%s",
 		req.ConvID, len(req.Message), req.Autonomous, req.WorkspaceRoot)
 
-	if !agent.ConfiguredProvider() {
-		jsonErr(w, "未配置 API key。请在设置面板中配置 API Key 和模型。")
+	// ★ 2026-09-04 修复：同步校验用会话感知判定（ConfiguredProviderForConv）。
+	//   此前 ConfiguredProvider() 只看全局装配：会话已选 服务商/模型/配置 时，
+	//   若全局激活配置未展开完整（如配置未指定模型），会误报「未配置 API key」。
+	//   （用户实测：会话切换模型成功 + 装配日志 preset 有值 → 仍被同步校验拦截）
+	if ok, missing := agent.ConfiguredProviderForConv(req.ConvID, req.WorkspaceRoot); !ok {
+		hint := "未配置 API key。请在设置面板中配置 API Key 和模型。"
+		switch missing {
+		case "模型为空":
+			hint = "模型未配置：当前配置未指定模型。请在对话面板选择模型，或在「设置 → AI」中为配置指定模型后再发送。"
+		case "API Key 为空":
+			hint = "API Key 未配置：请在「设置 → AI」中为当前配置填写 API Key。"
+		case "API 地址为空":
+			hint = "API 地址未配置：请在「设置 → AI」中为当前配置填写 API 地址。"
+		}
+		jsonErr(w, hint)
 		return
 	}
 

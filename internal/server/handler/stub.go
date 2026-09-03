@@ -43,8 +43,18 @@ func HandleChatSend(w http.ResponseWriter, r *http.Request) {
 	if req.WorkspaceRoot == "" {
 		req.WorkspaceRoot = core.Root()
 	}
-	if !agent.ConfiguredProvider() {
-		jsonErr(w, "未配置 API key。请在设置面板中配置 API Key 和模型。")
+	// ★ 2026-09-04 会话感知判定（与 web_server handleChatSend 同修复，见 ConfiguredProviderForConv）
+	if ok, missing := agent.ConfiguredProviderForConv(req.ConvID, req.WorkspaceRoot); !ok {
+		hint := "未配置 API key。请在设置面板中配置 API Key 和模型。"
+		switch missing {
+		case "模型为空":
+			hint = "模型未配置：当前配置未指定模型。请在对话面板选择模型，或在「设置 → AI」中为配置指定模型后再发送。"
+		case "API Key 为空":
+			hint = "API Key 未配置：请在「设置 → AI」中为当前配置填写 API Key。"
+		case "API 地址为空":
+			hint = "API 地址未配置：请在「设置 → AI」中为当前配置填写 API 地址。"
+		}
+		jsonErr(w, hint)
 		return
 	}
 	if len(req.Images) > 0 {
