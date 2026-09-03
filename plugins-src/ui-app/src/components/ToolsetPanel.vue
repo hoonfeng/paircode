@@ -54,10 +54,9 @@
           </div>
           <div v-if="pl.purpose" class="tp-ppurpose">{{ pl.purpose }}</div>
           <div v-if="pluginToolsOf(pl.name).length" class="tp-tools">
-            <label v-for="t in pluginToolsOf(pl.name)" :key="t" class="tp-tool" :title="isToolDisabled(pl, t) ? '已摘除（对 agent 不可见），点击恢复' : '点击摘除（插件保留、工具不可见）'">
-              <input type="checkbox" :checked="!isToolDisabled(pl, t)" @change="toggleTool(pl, t)" />
-              <span :class="{ off: isToolDisabled(pl, t) }">{{ t }}</span>
-            </label>
+            <button v-for="t in pluginToolsOf(pl.name)" :key="t" class="tp-tool" :class="{ off: isToolDisabled(pl, t) }"
+                    :title="isToolDisabled(pl, t) ? '已摘除（对 agent 不可见），点击恢复' : '点击摘除（插件保留、工具不可见）'"
+                    @click="toggleTool(pl, t)">{{ t }}</button>
           </div>
           <div v-else class="tp-muted">（插件未运行或无工具）</div>
         </div>
@@ -76,7 +75,6 @@
       <Transition name="tp-fade">
         <div v-if="openBuild" class="tp-overlay" @click.self="openBuild = false">
           <div class="tp-sheet" @click.stop>
-            <div class="tp-grabber"></div>
             <div class="tp-sheet-head">
               <span class="tp-sheet-title">新建工具集</span>
               <button class="tp-cancel" @click="openBuild = false">取消</button>
@@ -110,7 +108,6 @@
       <Transition name="tp-fade">
         <div v-if="openImport" class="tp-overlay" @click.self="openImport = false">
           <div class="tp-sheet" @click.stop>
-            <div class="tp-grabber"></div>
             <div class="tp-sheet-head">
               <span class="tp-sheet-title">导入工具集</span>
               <button class="tp-cancel" @click="openImport = false">取消</button>
@@ -470,13 +467,15 @@ onMounted(async () => {
   background: var(--bg-tertiary, rgba(0,0,0,0.15));
   border: 1px solid var(--border-color, #3a3a4a);
   border-radius: 999px;
-  padding: 2px 8px;
+  padding: 2px 9px;
   cursor: pointer;
   user-select: none;
+  font-family: inherit;
+  line-height: 1.5;
+  transition: border-color 0.12s, color 0.12s, opacity 0.12s;
 }
-.tp-tool:hover { border-color: var(--accent, #4f8cff); }
-.tp-tool input { margin: 0; accent-color: var(--accent, #4f8cff); }
-.tp-tool span.off { text-decoration: line-through; opacity: 0.45; }
+.tp-tool:hover { border-color: var(--accent, #4f8cff); color: var(--text-primary, #eee); }
+.tp-tool.off { text-decoration: line-through; opacity: 0.45; border-color: transparent; }
 .tp-muted { font-size: 11px; color: var(--text-muted, #888); }
 
 /* ── 按钮 ── */
@@ -507,29 +506,28 @@ onMounted(async () => {
   padding: 16px 8px; text-align: center; line-height: 1.7;
 }
 
-/* ── 弹层（bottom sheet，仿 SheetPicker） ── */
+/* ── 弹层（居中 modal，桌面端更合理；2026-09-05 从 bottom-sheet 改造） ── */
 .tp-overlay {
   position: fixed; inset: 0;
   background: rgba(0, 0, 0, 0.45);
   z-index: 10050;
-  display: flex; align-items: flex-end; justify-content: center;
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
 }
 .tp-sheet {
-  width: min(560px, 96vw);
-  max-height: 80vh;
+  width: min(480px, 94vw);
+  max-height: 84vh;
   display: flex; flex-direction: column;
   background: var(--bg-secondary, #1c1c28);
   border: 1px solid var(--border-color, #3a3a4a);
-  border-bottom: none;
-  border-radius: 18px 18px 0 0;
-  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.4);
-  animation: tp-sheet-in 0.22s ease-out;
+  border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  animation: tp-sheet-in 0.18s ease-out;
 }
 @keyframes tp-sheet-in {
-  from { transform: translateY(24px); opacity: 0.6; }
-  to { transform: translateY(0); opacity: 1; }
+  from { transform: translateY(10px) scale(0.98); opacity: 0.6; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
 }
-.tp-grabber { width: 36px; height: 4px; border-radius: 2px; background: var(--border-color, #3a3a4a); margin: 8px auto 0; }
 .tp-sheet-head {
   display: flex; align-items: center; justify-content: space-between;
   padding: 10px 16px 8px;

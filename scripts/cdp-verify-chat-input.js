@@ -1,4 +1,4 @@
-// 聊天输入现代化验证（SheetPicker bottom-sheet 替换传统 select）
+// 聊天输入选择器验证（SheetPicker 锚定 popover 版）
 // 用法：node scripts/cdp-verify-chat-input.js <port>
 const http = require('http'); const net = require('net'); const crypto = require('crypto')
 function httpJson(path, method) { return new Promise((resolve, reject) => { const r = http.request({ host: '127.0.0.1', port: 9223, path, method: method || 'GET' }, x => { let d = ''; x.on('data', c => d += c); x.on('end', () => { try { resolve(JSON.parse(d)) } catch (e) { resolve(d) } }) }); r.on('error', reject); r.end() }) }
@@ -17,88 +17,85 @@ class WS { constructor() { this.buf = Buffer.alloc(0); this.frag = [] }
   const ev = async e => (await send('Runtime.evaluate', { expression: e, returnByValue: true, awaitPromise: true })).result.value
   const sleep = ms => new Promise(r => setTimeout(r, ms))
   for (let i = 0; i < 20; i++) { const ok = await ev(`!!document.querySelector('.activity-bar')`); if (ok) break; await sleep(1000) }
-  await sleep(2000)
-  // 强刷页面加载新区域 bundle
+  await sleep(1500)
   await send('Page.reload', { ignoreCache: true })
-  await sleep(5000)
+  await sleep(4500)
   for (let i = 0; i < 20; i++) { const ok = await ev(`!!document.querySelector('.chat-input')`); if (ok) break; await sleep(1000) }
-  // 1. 输入区无传统 select + 有 SheetPicker 触发条
+  // 1. 输入区无传统 select + 有 popover 触发条
   const r1 = await ev(`(() => {
     const area = document.querySelector('.chat-input-area')
     if (!area) return { ok: false, why: '无输入区' }
-    const sel = area.querySelectorAll('select.cmp-sel, select.cmp-model, select.cmp-toolset')
-    const triggers = area.querySelectorAll('.sp-trigger')
-    const sendBtn = area.querySelector('.send-btn')
-    const sendStyle = sendBtn ? getComputedStyle(sendBtn) : null
-    return { ok: true, selectCount: sel.length, triggerCount: triggers.length,
-      sendRound: sendStyle ? sendStyle.borderRadius : null, sendSize: sendStyle ? sendStyle.width : null,
-      hasSelectAnywhere: !!area.querySelector('select') }
+    return { ok: true, selectCount: area.querySelectorAll('select').length,
+      triggerCount: area.querySelectorAll('.sp-trigger').length }
   })()`)
-  console.log('1.输入区现代化:', JSON.stringify(r1))
-  // 2. 点模型选择器触发条 → bottom-sheet 弹出
+  console.log('1.输入区:', JSON.stringify(r1))
+  // 2. 点模型触发条 → 锚定 popover 弹出 + 位置/尺寸断言
   const r2 = await ev(`(async () => {
     const area = document.querySelector('.chat-input-area')
-    const triggers = area.querySelectorAll('.sp-trigger')
-    if (!triggers.length) return { ok: false, why: '无触发条' }
-    triggers[0].click(); await new Promise(r => setTimeout(r, 400))
-    const sheet = document.querySelector('.sp-sheet')
-    if (!sheet) return { ok: false, why: '无弹层', title: triggers[0].textContent }
-    const groups = [...sheet.querySelectorAll('.sp-group')].map(g => g.textContent)
-    const items = sheet.querySelectorAll('.sp-item').length
-    const title = sheet.querySelector('.sp-title')?.textContent
-    return { ok: true, title, groups: groups.slice(0, 4), groupsCount: groups.length, items, check: !!sheet.querySelector('.sp-check') }
+    const tr = area.querySelectorAll('.sp-trigger')[0]
+    tr.click(); await new Promise(r => setTimeout(r, 500))
+    const pop = document.querySelector('.sp-pop')
+    if (!pop) return { ok: false, why: '无 popover', triggerText: tr.textContent }
+    const pr = pop.getBoundingClientRect()
+    const br = tr.getBoundingClientRect()
+    const groups = [...pop.querySelectorAll('.sp-group')].map(g => g.textContent)
+    const items = pop.querySelectorAll('.sp-item').length
+    const check = !!pop.querySelector('.sp-check')
+    // 锚定断言：popover 顶部应贴近按钮底部（或上方翻转），水平与按钮重叠
+    const anchoredV = Math.abs(pr.top - (br.bottom + 6)) < 40 || Math.abs((pr.bottom + 6) - br.top) < 40
+    const anchoredH = !(pr.right < br.left - 20 || pr.left > br.right + 20)
+    const small = pr.width <= 300 && pr.height <= 360
+    return { ok: true, groups: groups.slice(0, 4), groupsCount: groups.length, items, check,
+      popW: Math.round(pr.width), popH: Math.round(pr.height), anchoredV, anchoredH, small,
+      popTop: Math.round(pr.top), btnBottom: Math.round(br.bottom) }
   })()`)
-  console.log('2.模型bottom-sheet:', JSON.stringify(r2))
-  // 3. 选一个模型 → 触发条更新
+  console.log('2.模型popover:', JSON.stringify(r2))
+  // 3. 选模型 → 触发条更新 + 关闭
   const r3 = await ev(`(async () => {
-    const sheet = document.querySelector('.sp-sheet')
-    if (!sheet) return { ok: false, why: '弹层已关' }
-    const item = sheet.querySelectorAll('.sp-item')[0]
+    const pop = document.querySelector('.sp-pop')
+    if (!pop) return { ok: false, why: '弹层已关' }
+    const item = pop.querySelectorAll('.sp-item')[0]
     if (!item) return { ok: false, why: '无选项' }
     const label = item.querySelector('.sp-item-label')?.textContent
-    item.click(); await new Promise(r => setTimeout(r, 600))
+    item.click(); await new Promise(r => setTimeout(r, 500))
     const area = document.querySelector('.chat-input-area')
-    const triggers = area.querySelectorAll('.sp-trigger')
-    const cur = triggers[0].textContent.trim()
-    const sheetGone = !document.querySelector('.sp-sheet')
-    return { ok: true, picked: label, triggerShows: cur, sheetClosed: sheetGone }
+    const cur = area.querySelectorAll('.sp-trigger')[0].textContent.trim()
+    return { ok: true, picked: label, triggerShows: cur, closed: !document.querySelector('.sp-pop') }
   })()`)
-  console.log('3.选择模型:', JSON.stringify(r3))
-  // 4. 工具集选择器
+  console.log('3.选模型:', JSON.stringify(r3))
+  // 4. 工具集选择器 popover
   const r4 = await ev(`(async () => {
     const area = document.querySelector('.chat-input-area')
-    const triggers = area.querySelectorAll('.sp-trigger')
-    if (triggers.length < 2) return { ok: false, why: '无工具集触发条', triggers: triggers.length }
-    triggers[1].click(); await new Promise(r => setTimeout(r, 400))
-    const sheet = document.querySelector('.sp-sheet')
-    if (!sheet) return { ok: false, why: '工具集弹层未开' }
-    const items = [...sheet.querySelectorAll('.sp-item')].map(i => i.querySelector('.sp-item-label')?.textContent)
-    const title = sheet.querySelector('.sp-title')?.textContent
-    const closeBtn = sheet.querySelector('.sp-cancel')
-    return { ok: true, title, items: items.slice(0, 5) }
+    const trs = area.querySelectorAll('.sp-trigger')
+    if (trs.length < 2) return { ok: false, why: '无工具集触发条', n: trs.length }
+    trs[1].click(); await new Promise(r => setTimeout(r, 500))
+    const pop = document.querySelector('.sp-pop')
+    if (!pop) return { ok: false, why: '工具集弹层未开' }
+    const items = [...pop.querySelectorAll('.sp-item')].map(i => i.querySelector('.sp-item-label')?.textContent)
+    return { ok: true, items: items.slice(0, 6), n: items.length }
   })()`)
-  console.log('4.工具集bottom-sheet:', JSON.stringify(r4))
-  // 5. 取消关闭
+  console.log('4.工具集popover:', JSON.stringify(r4))
+  // 5. 点击遮罩关闭
   const r5 = await ev(`(async () => {
-    const sheet = document.querySelector('.sp-sheet')
-    if (!sheet) return { ok: true, closed: true, why: '已关' }
-    const cancel = sheet.querySelector('.sp-cancel'); cancel.click()
-    await new Promise(r => setTimeout(r, 300))
-    return { ok: true, closed: !document.querySelector('.sp-sheet') }
+    const mask = document.querySelector('.sp-pop-mask')
+    if (!mask) return { ok: false, why: '无遮罩' }
+    mask.click(); await new Promise(r => setTimeout(r, 300))
+    return { ok: true, closed: !document.querySelector('.sp-pop') }
   })()`)
-  console.log('5.取消关闭:', JSON.stringify(r5))
-  // 6. 发送按钮样式（圆形 FAB）
-  const r6 = await ev(`(() => {
+  console.log('5.遮罩关闭:', JSON.stringify(r5))
+  // 6. Esc 关闭
+  const r6 = await ev(`(async () => {
     const area = document.querySelector('.chat-input-area')
-    const sendBtn = area.querySelector('.send-btn')
-    if (!sendBtn) return { ok: false, why: '无发送按钮' }
-    const s = getComputedStyle(sendBtn)
-    return { ok: true, radius: s.borderRadius, w: s.width, h: s.height }
+    area.querySelectorAll('.sp-trigger')[0].click(); await new Promise(r => setTimeout(r, 400))
+    const opened = !!document.querySelector('.sp-pop')
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    await new Promise(r => setTimeout(r, 300))
+    return { ok: true, opened, escClosed: !document.querySelector('.sp-pop') }
   })()`)
-  console.log('6.发送按钮:', JSON.stringify(r6))
+  console.log('6.Esc关闭:', JSON.stringify(r6))
   console.log('7.控制台错误数:', errors.length)
   errors.slice(0, 6).forEach(e => console.log('   ', e))
-  const failed = !r1.ok || r1.selectCount !== 0 || r1.triggerCount < 2 || !r2.ok || !r3.ok || !r4.ok || r4.items.length === 0 || !r5.closed || !r6.ok || r6.radius !== '50%'
+  const failed = !r1.ok || r1.selectCount !== 0 || r1.triggerCount < 2 || !r2.ok || !r2.anchoredV || !r2.anchoredH || !r2.small || !r3.ok || r3.closed !== true || !r4.ok || r4.n === 0 || !r5.closed || !r6.ok || r6.escClosed !== true
   console.log(failed ? 'FAIL: 存在失败项' : 'PASS: 全部通过')
   process.exit(failed ? 1 : 0)
 })().catch(e => { console.error('ERR:', e.message); process.exit(2) })

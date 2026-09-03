@@ -1,5 +1,5 @@
-// 打开 SheetPicker 弹层后截图（视觉验证用）
-// 用法：node scripts/cdp-shot-chat.js <port> <out.png>
+// 工具集面板截图（选中一个工具集展示详情 + 新建 modal）
+// 用法：node scripts/cdp-shot-toolset.js <port> <out.png> [modal]
 const http = require('http'); const net = require('net'); const crypto = require('crypto'); const fs = require('fs')
 function httpJson(p) { return new Promise((res, rej) => { http.get({ host: '127.0.0.1', port: 9223, path: p }, x => { let d = ''; x.on('data', c => d += c); x.on('end', () => res(JSON.parse(d))) }).on('error', rej) }) }
 class WS { constructor() { this.buf = Buffer.alloc(0); this.frag = [] }
@@ -13,10 +13,11 @@ class WS { constructor() { this.buf = Buffer.alloc(0); this.frag = [] }
   ws.onMessage = b => { const m = JSON.parse(b.toString()); if (m.id && pend.has(m.id)) { pend.get(m.id)(m); pend.delete(m.id) } }
   const send = (method, params) => new Promise((res, rej) => { const i = ++id; pend.set(i, x => x.error ? rej(new Error(x.error.message)) : res(x.result)); ws.send({ id: i, method, params }) })
   const ev = async e => (await send('Runtime.evaluate', { expression: e, returnByValue: true, awaitPromise: true })).result.value
-  const out = process.argv[3] || '.chrome-test/shot.png'
-  const mode = process.argv[2] || 'closed'
-  if (mode === 'open') {
-    await ev(`(async () => { const t = document.querySelectorAll('.chat-input-area .sp-trigger')[0]; if (t) t.click(); await new Promise(r => setTimeout(r, 600)); return !!document.querySelector('.sp-pop') })()`)
+  const out = process.argv[3] || '.chrome-test/toolset.png'
+  const modal = process.argv[4] === 'modal'
+  await ev(`(async () => { const b = [...document.querySelectorAll('.activity-bar button')].find(x => (x.title||'')==='工具集'); if (b) b.click(); await new Promise(r => setTimeout(r, 1600)); const it = document.querySelectorAll('.tp-item')[0]; if (it) it.click(); await new Promise(r => setTimeout(r, 1200)); return 1 })()`)
+  if (modal) {
+    await ev(`(async () => { const b = [...document.querySelectorAll('.tp-icon-btn')].find(x => (x.title||'').includes('新建')); if (b) b.click(); await new Promise(r => setTimeout(r, 500)); return 1 })()`)
   }
   const shot = await send('Page.captureScreenshot', { format: 'png' })
   fs.writeFileSync(out, Buffer.from(shot.data, 'base64'))
