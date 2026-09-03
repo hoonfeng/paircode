@@ -58,9 +58,8 @@ func TestEmbeddedToolRegistryCoverage(t *testing.T) {
 		"codegraph_find_entry_points", "codegraph_explore", // tool-codegraph-extra
 		"inspect_binary", "write_binary", "binary_strings", "binary_find", // tool-binary
 		"screenshot_desktop", "screenshot_area", "screenshot_window", // tool-screenshot
-		"web_debug",                             // tool-web-debug
-		"run_code",                              // tool-harness
-		"debug_watch", "debug_evaluate_session", // tool-debug（保留内核）
+		"web_debug",           // tool-web-debug
+		"run_code",            // tool-harness
 		"word_read", "read_xlsx", "read_pdf", // tool-office（保留内核）
 	} {
 		if _, ok := reg.Get(name); !ok {

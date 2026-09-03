@@ -289,55 +289,6 @@ func TestToolOfficeJSNative(t *testing.T) {
 		t.Fatalf("read_xlsx 输出异常: %q", out)
 	}
 }
-func TestToolDebugJSNative(t *testing.T) {
-	_, reg := loadDiskPluginForTest(t, "tool-debug")
-	for _, name := range []string{"debug_inject_log", "debug_run_capture", "debug_analyze_output", "debug_parse_stack", "debug_cleanup_logs", "debug_watch", "debug_evaluate_session"} {
-		if _, ok := reg.Get(name); !ok {
-			t.Fatalf("工具 %s 未注册", name)
-		}
-		reg.SetToolEnabled(name, true)
-	}
-	const file = "_temp/jsnative_debug_test.go"
-	os.MkdirAll(filepath.Join(jsNativeWorkspace, "_temp"), 0o755)
-	src := "package main\n\nfunc main() {\n\tprintln(\"hello\")\n}\n"
-	os.WriteFile(filepath.Join(jsNativeWorkspace, file), []byte(src), 0o644)
-	defer os.Remove(filepath.Join(jsNativeWorkspace, file))
-
-	// 注入
-	out := execJSTool(t, reg, "debug_inject_log", `{"file":"`+file+`","lines":[3]}`)
-	if !strings.Contains(out, "注入 1 条日志") {
-		t.Fatalf("inject_log 输出异常: %q", out)
-	}
-	data, _ := os.ReadFile(filepath.Join(jsNativeWorkspace, file))
-	if !strings.Contains(string(data), "🪵 [DEBUG]") {
-		t.Fatalf("注入后文件应含 DEBUG 标记: %q", string(data))
-	}
-	// 清理
-	out = execJSTool(t, reg, "debug_cleanup_logs", `{"file":"`+file+`"}`)
-	if !strings.Contains(out, "移除 1 条") {
-		t.Fatalf("cleanup_logs 输出异常: %q", out)
-	}
-	data, _ = os.ReadFile(filepath.Join(jsNativeWorkspace, file))
-	if strings.Contains(string(data), "🪵 [DEBUG]") {
-		t.Fatalf("清理后不应残留 DEBUG 标记: %q", string(data))
-	}
-	// run_capture：真实命令
-	out = execJSTool(t, reg, "debug_run_capture", `{"command":"echo hello-capture","timeout":30}`)
-	if !strings.Contains(out, "hello-capture") {
-		t.Fatalf("run_capture 输出异常: %q", out)
-	}
-	// analyze_output：纯文本分析
-	out = execJSTool(t, reg, "debug_analyze_output", `{"output":"main.go:10: undefined: foo\npanic: runtime error"}`)
-	if !strings.Contains(out, "分析报告") || !strings.Contains(out, "Panic") {
-		t.Fatalf("analyze_output 输出异常: %q", out)
-	}
-	// parse_stack：Go 栈帧
-	out = execJSTool(t, reg, "debug_parse_stack", `{"text":"main.foo() /tmp/a.go:10 +0x100\n"}`)
-	if !strings.Contains(out, "a.go") {
-		t.Fatalf("parse_stack 输出异常: %q", out)
-	}
-}
-
 // writeTestZip 构造最小 ZIP 包（docx/xlsx 测试用）。
 func writeTestZip(t *testing.T, path string, entries map[string]string) {
 	t.Helper()

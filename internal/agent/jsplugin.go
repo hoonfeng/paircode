@@ -984,8 +984,8 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 		return vm.ToValue(globalBG.list())
 	})
 	// ctx.process.exec：argv 数组执行（★ 2026-08-22 新增——无 shell 注入，
-	// 对齐 Go 原版 exec.CommandContext，供 tool-git/tool-debug/tool-bug 等
-	// CLI 封装型磁盘插件 JS 原生化使用）。
+	// 对齐 Go 原版 exec.CommandContext，供 tool-git/tool-bug 等
+	// CLI 封装型磁盘插件 JS 原生化使用（tool-debug 已移除，Round4.5）。
 	//   opts = { cmd, args: [], cwd?, timeout? }
 	//     cmd     可执行文件（如 git/go/node）
 	//     args    参数数组（不经过 shell，无转义/注入问题）
@@ -4319,10 +4319,10 @@ func (h *PluginHost) LoadCordisPatch(path string) error {
 	for i, p := range doc.Plugins {
 		if strings.TrimSpace(p.Code) == "" {
 			// Node 桥型插件（依赖 npm 生态）：启动时由 Node 桥装载。
-			// ★ Round4 repair（t6）：runtime 判定覆盖 node（cordis3 既有）
-			//   与 dsh（cordis4 + 外部服务面，t2 新增轨）——此前只认 "node"，
-			//   runtime="dsh" 的 patch 条目会被静默跳过、桥永不启动。
-			if rt, _ := p.Config["runtime"].(string); rt == "node" || rt == "dsh" {
+			// ★ 2026-09 策略反转：只认 runtime="node"（cordis3 普通 npm 插件）——
+			//   runtime="dsh"（外部 dsh 生态，cordis4）条目不触发桥启动，
+			//   防止 dsh 环境安装的插件影响 IDE（round4 验证残留曾致桥反复崩溃）。
+			if rt, _ := p.Config["runtime"].(string); rt == "node" {
 				needNodeBridge = true
 			}
 			continue

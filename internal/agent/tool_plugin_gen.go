@@ -64,7 +64,9 @@ func genToolGroups() []genToolGroup {
 		//   embedded 内嵌内核 + legacy_host_tools.go 宿主存档供 hostTool 承载）。
 		{"tool-project-info", "项目知识库（project_info_write/read/list/search/delete/explore）", registerProjectInfoTools, nil, "self"},
 		{"tool-binary", "二进制读写 + 逆向分析（inspect_binary/write_binary/binary_strings/find/patch/info/hash/entropy，含 2026-08-16 并入的 tool-binary-re 逆向 6 工具）", registerBinaryTools, nil, "self"},
-		{"tool-debug", "调试工具（debug_inject_log/run_capture/analyze_output/parse_stack/cleanup_logs/watch/evaluate_session）", registerDebugTools, nil, "self"},
+		// ★ 2026-09 Round4.5：tool-debug 已移除——纯命令行包装壳（api 声明 + ctx.binary.exec
+		//   直通内嵌内核），无组合编排逻辑，浪费上下文。registerDebugTools 内核实现保留
+		//   （builtinPluginSpecs/独立二进制复用），需恢复时重新生成插件即可。
 		// ★ 2026-09 ③.4 已并入 tool-web（磁盘插件删除；内嵌内核保留供 binary 回退）
 		{"tool-bug", "BUG 检测与修复（bug_detect/bug_analyze/bug_fix）", RegisterBugTools, nil, "self"},
 		{"tool-office", "办公文档（csv_read/csv_write/json_to_table/table_stats/text_report/word_read）", registerOfficeTools, nil, "self"},

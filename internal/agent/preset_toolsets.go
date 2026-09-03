@@ -96,6 +96,9 @@ type presetMode struct {
 //   - 全栈开发去低频重叠项（tool-entryconfig 与 project-info/codegraph 重叠、
 //     tool-asset 低频）；视觉依赖工具由多模态门控（multimodal_gate.go）运行时
 //     二次收敛，预设只管场景职责。
+// ★ 2026-09 Round4.5：tool-debug 已移除（纯命令行包装壳、无组合逻辑），
+//   全栈开发/调试预设同步摘除其引用；全功能预设 Plugins=nil 动态扫描全部
+//   磁盘插件（diskPluginCodeAvailable 过滤），自动不含已移除插件。
 // 顺序即前端展示顺序（计划讨论 → 全栈开发 → 办公 → 调试 → 基础 → 全功能）。
 var presetModes = []presetMode{
 	{
@@ -110,7 +113,7 @@ var presetModes = []presetMode{
 		Plugins: []string{
 			"tool-harness", "tool-core", "tool-web", "tool-vision", "tool-snapshot",
 			"tool-project-info", "tool-memory", "tool-git", "tool-codegraph", "tool-bug",
-			"tool-debug", "tool-binary", "tool-resource",
+			"tool-binary", "tool-resource",
 			"tool-workflow", "tool-system",
 		},
 	},
@@ -124,7 +127,7 @@ var presetModes = []presetMode{
 	{
 		Name: presetNameDebug, Desc: "调试排错模式——调试/缺陷/二进制/代码图谱/截图/网页验证（排查问题）",
 		Plugins: []string{
-			"tool-harness", "tool-core", "tool-debug", "tool-bug",
+			"tool-harness", "tool-core", "tool-bug",
 			"tool-binary", "tool-codegraph",
 			"tool-snapshot", "tool-vision", "tool-web",
 		},

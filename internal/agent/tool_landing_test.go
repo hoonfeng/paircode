@@ -40,7 +40,7 @@ var toolPluginModes = map[string]string{
 	"tool-system":          "hostTool",
 	"tool-codegraph":       "binary",
 	"tool-binary":          "binary",
-	"tool-debug":           "mixed",
+	// ★ 2026-09 Round4.5：tool-debug 已移除（纯命令行包装壳、无组合逻辑）
 	"tool-office":          "mixed",
 	"tool-harness":         "mixed", // ★ 07-23 合并 tool-shell：6 后台进程工具为 JS 原生（原 tool-shell native 模式）
 	"tool-git":             "native",

@@ -26,7 +26,8 @@ var embeddedToolRegistrars = []func(r *Registry, root string){
 	registerScreenshotTools,     // tool-screenshot（desktop/window/area/webpage）
 	registerWebDebugTool,        // tool-web-debug（web_debug，go-rod）
 	RegisterHarnessTools,        // tool-harness（run_code 含 goja 嵌套工具调度）
-	registerDebugTools,          // tool-debug（watch/evaluate 仍走宿主的内核）
+	// ★ 2026-09 Round4.5：tool-debug 已移除（纯命令行包装壳），registerDebugTools
+	//   内核不再挂内嵌回退（内核实现保留于 debug_tools.go，供独立二进制复用）。
 	registerOfficeTools,         // tool-office（word/xlsx/pdf 仍走宿主的内核）
 }
 
