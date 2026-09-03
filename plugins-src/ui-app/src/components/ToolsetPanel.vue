@@ -13,8 +13,10 @@
       </div>
     </div>
 
-    <!-- 列表 -->
-    <div class="tp-list">
+    <!-- 主体：左栏工具集列表 + 右栏详情（PC master-detail 左右分栏） -->
+    <div class="tp-body">
+      <!-- 列表 -->
+      <div class="tp-list">
       <div v-if="!metas.length && !loading" class="tp-empty">
         暂无工具集。<br />点右上角 + 新建（描述你的项目用途，AI 分析后模板生成插件集）。
       </div>
@@ -63,12 +65,13 @@
         <div v-if="!(detail.plugins || []).length" class="tp-muted">空工具集：点下方「添加插件」加入宿主插件</div>
       </div>
 
-      <!-- 添加插件 -->
+      <!-- 添加插件（浮层卡片列表） -->
       <div v-if="detail.scope !== 'builtin'" class="tp-add">
-        <SheetPicker v-model="addName" :items="addableItems" title="选择要加入的宿主插件" placeholder="+ 添加插件…" empty-text="宿主无可加入插件" @change="doAddPlugin" />
+        <button class="tp-btn tp-add-btn" @click="openAddPlugin = true"><SvgIcon name="plus" :size="12" /> 添加插件</button>
       </div>
     </div>
-    <div v-else-if="!metas.length" class="tp-empty"></div>
+      <div v-else class="tp-empty tp-side-empty">选择左侧工具集查看详情</div>
+    </div>
 
     <!-- 新建弹层 -->
     <Teleport to="body">
@@ -131,13 +134,41 @@
         </div>
       </Transition>
     </Teleport>
+
+    <!-- 添加插件浮层（插件卡片列表） -->
+    <Teleport to="body">
+      <Transition name="tp-fade">
+        <div v-if="openAddPlugin" class="tp-overlay" @click.self="openAddPlugin = false">
+          <div class="tp-sheet tp-add-sheet" @click.stop>
+            <div class="tp-sheet-head">
+              <span class="tp-sheet-title"><SvgIcon name="puzzle" :size="13" /> 添加宿主插件（{{ filteredAddable.length }}）</span>
+              <button class="tp-cancel" @click="openAddPlugin = false">取消</button>
+            </div>
+            <div class="tp-add-search">
+              <SvgIcon name="search" :size="13" class="tp-add-search-icon" />
+              <input v-model="addFilter" class="tp-input tp-add-search-input" placeholder="搜索插件名 / 用途…" />
+            </div>
+            <div class="tp-add-grid">
+              <button v-for="p in filteredAddable" :key="p.name" class="tp-pcard" @click="doAddPlugin(p.name)">
+                <div class="tp-pcard-head">
+                  <span class="tp-pcard-name">{{ p.name }}</span>
+                  <span class="tp-pcard-count">{{ p.toolCount }} 工具</span>
+                </div>
+                <div class="tp-pcard-desc">{{ p.purpose }}</div>
+                <div class="tp-pcard-add"><SvgIcon name="plus" :size="11" /> 加入</div>
+              </button>
+              <div v-if="!filteredAddable.length" class="tp-empty">无匹配插件（或宿主插件已全部加入）</div>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import SvgIcon from './SvgIcon.vue'
-import SheetPicker from './SheetPicker.vue'
 import api from '../api.js'
 
 const metas = ref([])          // 列表 [{name, scope, pluginCount, description}]
@@ -158,7 +189,8 @@ const fileName = ref('')
 const fileInput = ref(null)
 const importBusy = ref(false)
 
-const addName = ref('')
+const openAddPlugin = ref(false)
+const addFilter = ref('')
 
 // ─── 数据加载 ────────────────────────────────────────────────
 async function loadAll() {
@@ -191,7 +223,8 @@ async function loadDetail(name) {
 
 async function select(m) {
   selName.value = m.name
-  addName.value = ''
+  addFilter.value = ''
+  openAddPlugin.value = false
   await loadDetail(m.name)
 }
 
@@ -214,12 +247,20 @@ function isToolDisabled(pl, t) {
   return (pl.disabledTools || []).includes(t)
 }
 
-// 可加入的宿主插件（排除已在工具集 + 已加的 node-bridge 按 name 匹配）
-const addableItems = computed(() => {
+// 可加入的宿主插件（排除已在工具集的）——浮层卡片列表数据源
+const addablePlugins = computed(() => {
   const inTs = new Set((detail.value && detail.value.plugins || []).map(p => p.name))
   return plugins.value
     .filter(p => !inTs.has(p.name))
-    .map(p => ({ value: p.name, label: p.name, desc: p.purpose || ((p.tools || []).length + ' 工具') }))
+    .map(p => ({ name: p.name, purpose: p.purpose || '（无描述）', toolCount: (p.tools || []).length }))
+})
+
+// 浮层内按搜索词过滤
+const filteredAddable = computed(() => {
+  const q = addFilter.value.trim().toLowerCase()
+  if (!q) return addablePlugins.value
+  return addablePlugins.value.filter(p =>
+    p.name.toLowerCase().includes(q) || p.purpose.toLowerCase().includes(q))
 })
 
 // ─── 编辑动作（即时热装载 + 回写固化 JSON）──────────────────
@@ -249,7 +290,8 @@ async function doAddPlugin(name) {
   try {
     const res = await api.toolsetEdit({ name: selName.value, action: 'add_plugin', plugin_name: name })
     window.$toast && window.$toast((res && res.message) || `已加入 ${name}`, 'info')
-    addName.value = ''
+    openAddPlugin.value = false
+    addFilter.value = ''
     await loadDetail(selName.value)
     await loadAll()
   } catch (e) {
@@ -381,14 +423,24 @@ onMounted(async () => {
 }
 .tp-icon-btn:hover { color: var(--text-primary, #eee); background: var(--bg-hover, rgba(255,255,255,0.06)); }
 
-/* ── 列表 ── */
+/* ── 主体（左栏列表 + 右栏详情） ── */
+.tp-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 8px;
+}
+
+/* ── 列表（左栏） ── */
 .tp-list {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  max-height: 34%;
-  overflow-y: auto;
+  width: 200px;
   flex-shrink: 0;
+  overflow-y: auto;
+  padding-right: 6px;
+  border-right: 1px solid var(--border-color, #3a3a4a);
 }
 .tp-item {
   padding: 6px 8px;
@@ -398,7 +450,11 @@ onMounted(async () => {
   transition: background 0.12s, border-color 0.12s;
 }
 .tp-item:hover { background: var(--bg-hover, rgba(255,255,255,0.05)); }
-.tp-item.active { background: var(--bg-tertiary, rgba(0,0,0,0.15)); border-color: var(--accent, #4f8cff); }
+.tp-item.active {
+  background: var(--bg-tertiary, rgba(0,0,0,0.15));
+  border-color: var(--accent, #4f8cff);
+  box-shadow: inset 2px 0 0 var(--accent, #4f8cff);
+}
 .tp-item-main { display: flex; align-items: center; gap: 6px; }
 .tp-item-name { font-size: 12.5px; font-weight: 600; color: var(--text-primary, #eee); }
 .tp-item-count {
@@ -412,14 +468,16 @@ onMounted(async () => {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-/* ── 详情 ── */
+/* ── 详情（右栏） ── */
 .tp-detail {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
   overflow: hidden;
+  padding-left: 4px;
 }
 .tp-dhead { padding: 0 2px; }
 .tp-dtitle {
@@ -499,11 +557,77 @@ onMounted(async () => {
 
 /* ── 添加插件 ── */
 .tp-add { padding: 2px; flex-shrink: 0; }
+.tp-add-btn {
+  width: 100%; justify-content: center;
+  border-style: dashed; color: var(--accent, #4f8cff);
+}
+.tp-add-btn:hover { background: rgba(79, 140, 255, 0.08); }
+
+/* ── 添加插件浮层（卡片 grid） ── */
+/* 双 class 提高优先级，覆盖 .tp-sheet 的 480px（浮层更宽以容纳卡片墙） */
+.tp-sheet.tp-add-sheet { width: min(680px, 92vw); }
+.tp-add-search { position: relative; margin: 0 16px 10px; }
+.tp-add-search-icon {
+  position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+  color: var(--text-muted, #888); pointer-events: none;
+}
+.tp-add-search-input { width: 100%; padding-left: 30px; }
+.tp-add-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+  padding: 4px 16px 16px;
+  overflow-y: auto;
+  max-height: 60vh;
+}
+.tp-pcard {
+  display: flex; flex-direction: column; gap: 5px;
+  text-align: left;
+  padding: 9px 10px;
+  background: var(--bg-tertiary, rgba(0, 0, 0, 0.15));
+  border: 1px solid var(--border-color, #3a3a4a);
+  border-radius: 9px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 0.13s, background 0.13s, box-shadow 0.13s;
+}
+.tp-pcard:hover {
+  border-color: var(--accent, #4f8cff);
+  background: rgba(79, 140, 255, 0.06);
+  box-shadow: 0 0 0 3px rgba(79, 140, 255, 0.12);
+}
+.tp-pcard-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.tp-pcard-name {
+  font-size: 12px; font-weight: 600; color: var(--text-primary, #eee);
+  font-family: var(--font-code, monospace);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tp-pcard-count {
+  font-size: 9.5px; color: var(--text-muted, #888);
+  background: var(--bg-secondary, rgba(255, 255, 255, 0.05));
+  padding: 1px 6px; border-radius: 999px; flex-shrink: 0;
+}
+.tp-pcard-desc {
+  font-size: 11px; color: var(--text-muted, #888); line-height: 1.45;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  min-height: 32px;
+}
+.tp-pcard-add {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 10.5px; color: var(--accent, #4f8cff);
+  margin-top: 2px;
+}
 
 /* ── 空态 ── */
 .tp-empty {
   font-size: 11.5px; color: var(--text-muted, #888);
   padding: 16px 8px; text-align: center; line-height: 1.7;
+}
+.tp-side-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* ── 弹层（居中 modal，桌面端更合理；2026-09-05 从 bottom-sheet 改造） ── */

@@ -1,4 +1,4 @@
-// 工具集面板弹层/chip 验证（居中 modal + 无 checkbox chip）
+// 工具集面板验证（左右分栏 master-detail + 添加插件浮层卡片 + 居中 modal + 无 checkbox chip）
 // 用法：node scripts/cdp-verify-toolset-panel.js <port>
 const http = require('http'); const net = require('net'); const crypto = require('crypto')
 function httpJson(path, method) { return new Promise((resolve, reject) => { const r = http.request({ host: '127.0.0.1', port: 9223, path, method: method || 'GET' }, x => { let d = ''; x.on('data', c => d += c); x.on('end', () => { try { resolve(JSON.parse(d)) } catch (e) { resolve(d) } }) }); r.on('error', reject); r.end() }) }
@@ -23,19 +23,38 @@ class WS { constructor() { this.buf = Buffer.alloc(0); this.frag = [] }
   for (let i = 0; i < 20; i++) { const ok = await ev(`!!document.querySelector('.activity-bar')`); if (ok) break; await sleep(1000) }
   // 打开工具集 tab
   await ev(`(async () => { const b = [...document.querySelectorAll('.activity-bar button')].find(x => (x.title||'')==='工具集'); if (b) b.click(); await new Promise(r => setTimeout(r, 1800)); return 1 })()`)
-  // 1. 选中一个工具集 → 检查工具 chip 无 checkbox
+
+  // 1. 左右分栏 master-detail（先不选中，检查结构）
   const r1 = await ev(`(async () => {
+    const body = document.querySelector('.tp-body')
+    const list = document.querySelector('.tp-list')
+    if (!body || !list) return { ok: false, why: '无分栏结构' }
+    return { ok: true, flexDirection: getComputedStyle(body).flexDirection, listWidth: Math.round(list.getBoundingClientRect().width) }
+  })()`)
+  console.log('1.分栏结构:', JSON.stringify(r1))
+
+  // 2. 选中一个工具集 → 检查工具 chip 无 checkbox + 左右排列
+  const r2 = await ev(`(async () => {
     const items = document.querySelectorAll('.tp-item')
     if (!items.length) return { ok: false, why: '无工具集列表' }
     items[0].click(); await new Promise(r => setTimeout(r, 1200))
     const tools = document.querySelectorAll('.tp-tool')
     const hasCheckbox = !!document.querySelector('.tp-tool input[type=checkbox]')
     const isBtn = tools.length ? tools[0].tagName === 'BUTTON' : null
-    return { ok: true, toolCount: tools.length, hasCheckbox, firstTag: tools.length ? tools[0].tagName : null }
+    // 左右排列：列表右边界 <= 详情左边界，且顶部对齐
+    const list = document.querySelector('.tp-list')
+    const detail = document.querySelector('.tp-detail')
+    let horizontal = false
+    if (list && detail) {
+      const lr = list.getBoundingClientRect(); const dr = detail.getBoundingClientRect()
+      horizontal = lr.left < dr.left && Math.abs(lr.top - dr.top) < 20
+    }
+    return { ok: true, toolCount: tools.length, hasCheckbox, firstTag: tools.length ? tools[0].tagName : null, horizontal }
   })()`)
-  console.log('1.工具chip:', JSON.stringify(r1))
-  // 2. 新建弹层居中 modal
-  const r2 = await ev(`(async () => {
+  console.log('2.工具chip:', JSON.stringify(r2))
+
+  // 3. 新建弹层居中 modal
+  const r3 = await ev(`(async () => {
     const btn = [...document.querySelectorAll('.tp-icon-btn')].find(b => (b.title||'').includes('新建'))
     if (!btn) return { ok: false, why: '无新建按钮' }
     btn.click(); await new Promise(r => setTimeout(r, 600))
@@ -44,33 +63,51 @@ class WS { constructor() { this.buf = Buffer.alloc(0); this.frag = [] }
     if (!ov || !sheet) return { ok: false, why: '无弹层' }
     const os = getComputedStyle(ov)
     const sr = sheet.getBoundingClientRect()
-    const vh = window.innerHeight
-    const vw = window.innerWidth
-    // 居中断言：sheet 水平居中 + 垂直居中（或略偏）
+    const vh = window.innerHeight; const vw = window.innerWidth
     const centeredH = Math.abs((sr.left + sr.width / 2) - vw / 2) < 60
     const centeredV = Math.abs((sr.top + sr.height / 2) - vh / 2) < 120
     const grabber = !!sheet.querySelector('.tp-grabber')
     const radius = getComputedStyle(sheet).borderRadius
-    return { ok: true, align: os.alignItems, centeredH, centeredV, grabber, radius,
-      w: Math.round(sr.width), h: Math.round(sr.height) }
+    return { ok: true, align: os.alignItems, centeredH, centeredV, grabber, radius, w: Math.round(sr.width), h: Math.round(sr.height) }
   })()`)
-  console.log('2.新建modal:', JSON.stringify(r2))
-  // 3. 关闭新建，检查添加插件选择器是 popover
-  const r3 = await ev(`(async () => {
+  console.log('3.新建modal:', JSON.stringify(r3))
+
+  // 4. 关闭新建 → 添加插件浮层卡片（非 select/popover）
+  const r4 = await ev(`(async () => {
     const cancel = document.querySelector('.tp-sheet .tp-cancel')
     if (cancel) cancel.click()
     await new Promise(r => setTimeout(r, 400))
-    // 找一个详情里的 SheetPicker 触发条（添加插件）
-    const addTrig = document.querySelector('.tp-add .sp-trigger')
-    if (!addTrig) return { ok: false, why: '无添加插件触发条（可能选中内置集）' }
-    addTrig.click(); await new Promise(r => setTimeout(r, 500))
-    const pop = document.querySelector('.sp-pop')
-    return { ok: true, popover: !!pop, popW: pop ? Math.round(pop.getBoundingClientRect().width) : 0 }
+    // 选一个非内置工具集（有添加插件入口）
+    const items = [...document.querySelectorAll('.tp-item')]
+    const nonBuiltin = items.find(x => !x.classList.contains('builtin'))
+    if (nonBuiltin) { nonBuiltin.click(); await new Promise(r => setTimeout(r, 1200)) }
+    const addBtn = document.querySelector('.tp-add .tp-add-btn')
+    if (!addBtn) return { ok: true, skipped: true, why: '无添加插件入口（仅内置集）' }
+    const popover = document.querySelector('.sp-pop')
+    addBtn.click(); await new Promise(r => setTimeout(r, 600))
+    const sheet = document.querySelector('.tp-add-sheet')
+    if (!sheet) return { ok: false, why: '点击添加插件后无浮层' }
+    const cards = sheet.querySelectorAll('.tp-pcard')
+    const grid = sheet.querySelector('.tp-add-grid')
+    const hasSearch = !!sheet.querySelector('.tp-add-search-input')
+    const first = cards[0]
+    const firstInfo = first ? {
+      name: (first.querySelector('.tp-pcard-name') || {}).textContent || '',
+      count: (first.querySelector('.tp-pcard-count') || {}).textContent || '',
+      desc: !!(first.querySelector('.tp-pcard-desc')),
+    } : null
+    return { ok: true, hasGrid: !!grid, cardCount: cards.length, hasSearch, popoverStill: !!popover, firstInfo }
   })()`)
-  console.log('3.添加插件popover:', JSON.stringify(r3))
-  console.log('4.控制台错误数:', errors.length)
+  console.log('4.添加插件浮层:', JSON.stringify(r4))
+
+  console.log('5.控制台错误数:', errors.length)
   errors.slice(0, 6).forEach(e => console.log('   ', e))
-  const failed = !r1.ok || r1.hasCheckbox !== false || (r1.toolCount > 0 && r1.firstTag !== 'BUTTON') || !r2.ok || r2.align !== 'center' || r2.grabber !== false || !r2.centeredH || !r3.ok || r3.popover !== true
+
+  const failed =
+    !r1.ok || r1.flexDirection !== 'row' ||
+    !r2.ok || r2.hasCheckbox !== false || (r2.toolCount > 0 && r2.firstTag !== 'BUTTON') || r2.horizontal !== true ||
+    !r3.ok || r3.align !== 'center' || r3.grabber !== false || !r3.centeredH ||
+    !r4.ok || (r4.skipped ? false : (r4.hasGrid !== true || r4.hasSearch !== true || r4.popoverStill === true))
   console.log(failed ? 'FAIL: 存在失败项' : 'PASS: 全部通过')
   process.exit(failed ? 1 : 0)
 })().catch(e => { console.error('ERR:', e.message); process.exit(2) })

@@ -380,7 +380,8 @@ const modelSheetItems = computed(() => {
   const out = []
   for (const g of composerItems.value) {
     for (const m of g.models) {
-      out.push({ value: 'preset::' + g.name + '::' + m, label: m, desc: g.provider + ' · ' + g.name, group: g.name })
+      // desc 只保留服务商（配置名已作为 optgroup 分组标题展示，避免重复）
+      out.push({ value: 'preset::' + g.name + '::' + m, label: m, desc: g.provider, group: g.name })
     }
   }
   return out

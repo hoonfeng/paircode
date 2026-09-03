@@ -1,5 +1,5 @@
-// 打开 SheetPicker 弹层后截图（视觉验证用）
-// 用法：node scripts/cdp-shot-chat.js <port> <out.png>
+// 添加插件浮层截图（打开工具集 tab → 选非内置集 → 点「添加插件」→ 截浮层）
+// 用法：node scripts/cdp-shot-add-plugin.js <out.png> [searchTerm]
 const http = require('http'); const net = require('net'); const crypto = require('crypto'); const fs = require('fs')
 function httpJson(p) { return new Promise((res, rej) => { http.get({ host: '127.0.0.1', port: 9223, path: p }, x => { let d = ''; x.on('data', c => d += c); x.on('end', () => res(JSON.parse(d))) }).on('error', rej) }) }
 class WS { constructor() { this.buf = Buffer.alloc(0); this.frag = [] }
@@ -13,11 +13,11 @@ class WS { constructor() { this.buf = Buffer.alloc(0); this.frag = [] }
   ws.onMessage = b => { const m = JSON.parse(b.toString()); if (m.id && pend.has(m.id)) { pend.get(m.id)(m); pend.delete(m.id) } }
   const send = (method, params) => new Promise((res, rej) => { const i = ++id; pend.set(i, x => x.error ? rej(new Error(x.error.message)) : res(x.result)); ws.send({ id: i, method, params }) })
   const ev = async e => (await send('Runtime.evaluate', { expression: e, returnByValue: true, awaitPromise: true })).result.value
-  const out = process.argv[3] || '.chrome-test/shot.png'
-  const mode = process.argv[2] || 'closed'
-  if (mode === 'open') {
-    // 原生 select 下拉由浏览器渲染无法截图；open 模式改为聚焦触发发光态
-    await ev(`(async () => { const s = document.querySelectorAll('.chat-input-area select.sp-select')[0]; if (s) s.focus(); await new Promise(r => setTimeout(r, 300)); return 1 })()`)
+  const out = process.argv[2] || '.chrome-test/add-plugin.png'
+  const search = process.argv[3] || ''
+  await ev(`(async () => { const b = [...document.querySelectorAll('.activity-bar button')].find(x => (x.title||'')==='工具集'); if (b) b.click(); await new Promise(r => setTimeout(r, 1500)); const items = [...document.querySelectorAll('.tp-item')]; const nb = items.find(x => !x.classList.contains('builtin')); if (nb) nb.click(); await new Promise(r => setTimeout(r, 1200)); const add = document.querySelector('.tp-add .tp-add-btn'); if (add) add.click(); await new Promise(r => setTimeout(r, 700)); return 1 })()`)
+  if (search) {
+    await ev(`(async () => { const inp = document.querySelector('.tp-add-search-input'); if (inp) { inp.value = ${JSON.stringify(search)}; inp.dispatchEvent(new Event('input', { bubbles: true })); } await new Promise(r => setTimeout(r, 500)); return 1 })()`)
   }
   const shot = await send('Page.captureScreenshot', { format: 'png' })
   fs.writeFileSync(out, Buffer.from(shot.data, 'base64'))
