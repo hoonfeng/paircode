@@ -270,6 +270,9 @@ func startWebUI(port int) {
 	if sysDir := filepath.Join(core.ConfigDir(), "skills"); sysDir != "" {
 		agent.SkillSystemDir = sysDir
 	}
+	// ★ 2026-09-12 修复：全局技能目录（跨工作区共享；skill_write scope=global
+	//   与「未开工作区时写入回落」的目标目录）。随安装目录固定，启动设置一次。
+	agent.SkillGlobalDir = filepath.Join(core.InstallDir(), ".pair", "skills")
 	// ★ 技能启停/状态覆盖在预热前应用（与 buildWebLoopOpts 保持一致）：
 	//   若只在此后 buildWebLoopOpts 才设置，PromptCacheWarmer 预热缓存的是
 	//   「全部技能」版本，运行时 overrides 生效变「部分技能」→ dynamic 段每次
@@ -2175,15 +2178,14 @@ func (s *webServer) buildWebLoopOpts(convID, message string, autonomous bool, ws
 	originalHistory := make([]agent.Message, len(history))
 	copy(originalHistory, history)
 
-	// ★★★ 会话连贯性上下文：主动注入任务进度、对话摘要、相关记忆、项目归属、工作区结构 ★★★
-	// 核心思想：主动注入 > 被动工具。Agent 不应依赖自己"想起来"去调用 memory_* 工具，
-	// 而应在每次对话恢复时由系统主动注入上下文，确保 Agent 知道"在干什么、干过什么"。
-	// ★ 2026-08-23 工作区隔离：store/roots 均按会话根（此前 core.Folders 全局切换后串台）。
-	// ★ 2026-09-03 KV 缓存修复：不再拼入 System（system 是 messages 第一条，其尾部变化
-	//   会在第一条内切断 provider 前缀缓存 → 其后历史全部 miss → 命中率低）。
-	//   改经 LoopOpts.ResumeContext 注入「背景上下文快照」（消息流尾部 append-only）：
-	//   内容每轮变化只断快照之后，system+历史前缀单调延展、命中率稳定。
-	resumeCtx := agent.BuildResumeContext(convID, message, history, agentMgr.StoreFor(root), []string{root})
+	// ★★★ 会话连贯性上下文：ResumeContext 构建已停用（2026-09-04）★★★
+	// 历史：任务进度/对话摘要/记忆/项目归属经 BuildResumeContext → 背景上下文快照
+	// 注入（2026-08-23 工作区隔离 / 2026-09-03 KV 修复迁快照尾）。
+	// 停用原因：快照正文含 resume 每轮必变 → 每轮追加新快照，历史累积 100+ 条
+	// （实测 104 条/133 万字符/占历史 20%+），上下文膨胀、命中率稀释，且构建本身
+	// 有每轮记忆召回/Git/代码图谱统计开销。恢复：取消下行注释（syncContextSnapshot 亦需恢复）。
+	resumeCtx := ""
+	// resumeCtx := agent.BuildResumeContext(convID, message, history, agentMgr.StoreFor(root), []string{root})
 	if resumeCtx != "" && os.Getenv("WB_CACHE_DIAG") == "1" {
 		sum := sha256.Sum256([]byte(resumeCtx))
 		log.Printf("[cache-diag] resumeCtx hash=%x len=%d（已迁入背景快照，不再影响 system 前缀）", sum[:4], len(resumeCtx))
@@ -2291,6 +2293,41 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 			log.Printf("[chat] AppendPersistedUserMessage 失败 conv=%s err=%v", req.ConvID, err)
 			jsonErr(w, "写入用户消息失败: "+err.Error())
 			return
+		}
+	}
+	// ★ 2026-09-10 slash 命令聊天入口兜底（双保险）：前端 '/' 菜单未触发（清单未加载 /
+	//   菜单失配 / 直接输入带参文本）时，后端在此识别 "/命令" 消息：命中 on-demand 命令
+	//   且本会话未激活 → 执行命令 + 激活插件 + 结果以系统消息注入（与 /api/commands/run
+	//   语义一致，handler 收 args.args 子命令串）；已激活（前端菜单路径已执行过）→ 跳过
+	//   防双执行双注入；未命中命令名 → 不拦截，原样照常发送（零破坏）。
+	if strings.HasPrefix(req.Message, "/") {
+		trimmed := strings.TrimSpace(req.Message)
+		name, sub := "", ""
+		if i := strings.IndexByte(trimmed, ' '); i >= 0 {
+			name = trimmed[1:i]
+			sub = strings.TrimSpace(trimmed[i+1:])
+		} else {
+			name = trimmed[1:]
+		}
+		if plugin := agent.OnDemandCommandMapping()[name]; plugin != "" && !agent.IsPluginActiveInConv(req.ConvID, plugin) {
+			if output, err := agent.RunHostCommand(name, map[string]any{"args": sub}); err == nil {
+				activated := agent.ActivateByCommand(req.ConvID, name)
+				injected := output
+				if activated != "" {
+					log.Printf("[activation] 会话 %s 经 /%s 激活按需插件 %s（聊天入口兜底）", req.ConvID, name, activated)
+					injected += "\n\n（插件 " + activated + " 已激活——其团队工具现已并入本会话，按系统提示中的 AgentTeams 协议开始执行）"
+				}
+				msg := agent.Message{Role: agent.RoleSystem, Content: "（命令 /" + name + " 执行结果）\n" + injected}
+				// ★ 与用户消息落盘同路由（StoreFor 显式指定工作区）：AppendPersistedMessage
+				//   走默认 store（会话未 Start 时可能是空/错路由），此处显式保证注入落盘。
+				if store := agentMgr.StoreFor(req.WorkspaceRoot); store != nil {
+					if err := store.AppendMessage(req.ConvID, msg, nil); err != nil {
+						log.Printf("[commands] 聊天入口命令结果注入失败 conv=%s: %v", req.ConvID, err)
+					}
+				}
+			} else {
+				log.Printf("[commands] 聊天入口命令 /%s 执行失败（原样发送）: %v", name, err)
+			}
 		}
 	}
 	// 记录当前消息索引，后续文件编辑快照关联到此消息（★ 按会话根路由 store）

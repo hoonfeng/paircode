@@ -452,14 +452,17 @@ return {
           return b;
         }
 
-        // 快照同步（数据面 Go / 组装策略本插件）——仅在快照数据面可用时执行
-        if (loop.context && loop.context.snapshot && loop.context.snapshot.parts) {
-          const parts = loop.context.snapshot.parts();
-          const text = buildSnapshotText(parts);
-          if (text) {
-            msgs = loop.context.snapshot.sync(msgs, text) ?? msgs;
-          }
-        }
+        // ★ 背景上下文快照同步已停用（2026-09-04）：ResumeContext 每轮必变 → 每轮追加
+        //   新快照，历史累积 100+ 条（实测 104 条/133 万字符/占历史 20%+），上下文膨胀
+        //   且每轮新增不可缓存尾部（命中率稀释）。如需恢复：取消下面 sync 调用即可
+        //   （buildSnapshotText 与 Go 数据面 snapshot.parts/sync 均保留）。
+        // if (loop.context && loop.context.snapshot && loop.context.snapshot.parts) {
+        //   const parts = loop.context.snapshot.parts();
+        //   const text = buildSnapshotText(parts);
+        //   if (text) {
+        //     msgs = loop.context.snapshot.sync(msgs, text) ?? msgs;
+        //   }
+        // }
 
         // ── run 入口自动压缩（策略 JS：阈值/冷却/硬地板；执行 Go compact.apply）──
         msgs = maybeCompact(msgs);

@@ -262,7 +262,8 @@ func TestResumeContextGoesToSnapshotNotSystem(t *testing.T) {
 		t.Errorf("buildSnapshotContent 应包含 ResumeContext 内容")
 	}
 
-	// ③ 真实 Run 路径：快照注入为消息（backgroundCtxMarker 前缀）而非 system
+	// ③ 真实 Run 路径：背景快照同步已停用（2026-09-04）→ 不再注入快照消息
+	//   （syncContextSnapshot 实现保留，Run 不调用；恢复注入时再还原本断言）
 	msgs, err := loop.Run(context.Background(), "读取两个文件", nil)
 	if err != nil {
 		t.Fatalf("Run 失败: %v", err)
@@ -274,18 +275,13 @@ func TestResumeContextGoesToSnapshotNotSystem(t *testing.T) {
 	if strings.Contains(msgs[0].Content, "任务进度") {
 		t.Errorf("system 消息包含 resumeCtx 内容——前缀断裂源回归！")
 	}
-	// 末尾附近有快照消息含 resume
-	found := false
+	// 无快照注入（历史零膨胀）
 	for i := len(msgs) - 1; i >= 0; i-- {
 		if msgs[i].Role == RoleUser && strings.HasPrefix(msgs[i].Content, backgroundCtxMarker) {
-			found = strings.Contains(msgs[i].Content, "任务进度")
-			break
+			t.Errorf("Run 不应再注入背景快照消息（已停用；快照消息数=%d）", len(msgs)-i)
 		}
 	}
-	if !found {
-		t.Errorf("背景快照消息未找到 resumeCtx 内容（最后一条快照应包含「任务进度」）")
-	}
-	t.Log("✓ resumeCtx 已迁移：system 纯净、快照承载，前缀不再因会话上下文变化而断裂")
+	t.Log("✓ resumeCtx 快照注入已停用：Run 不产生快照消息，历史零膨胀")
 }
 
 // TestResumeContextChangeAppendsSnapshot 验证 resume 变化时快照追加语义：

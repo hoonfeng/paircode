@@ -695,11 +695,11 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 	//   是 LLM 后续轮次引用的关键上下文，run 内压缩会把中段细节丢弃成摘要，
 	//   导致 LLM 失忆、理解力下降（2026-08-05 排查结论）。
 	msgs = l.maybeCompact(ctx, msgs)
-	// ★ 背景上下文快照同步（2026-08-27 缓存优化，对齐 dsh RuntimeContextProjection）：
-	//   压缩更新摘要后同步快照到持久化消息流——内容与历史最后快照相同时零注入
-	//   （前缀稳定），不同时追加新快照（当前任务之后，随 tail 落盘）。
-	//   快照位于历史中固定位置，跨 Run 前缀单调延展，消除背景块位置漂移导致的缓存断裂。
-	msgs = l.syncContextSnapshot(msgs)
+	// ★ 背景上下文快照同步已停用（2026-09-04）：快照正文含 ResumeContext（任务进度/
+	//   Git 状态/代码图谱统计/记忆召回）每轮必变 → 每轮追加新快照，历史累积 100+ 条
+	//   （实测会话 104 条 / 133 万字符 / 占历史 20%+，重会话达 60%），上下文膨胀且
+	//   每轮新增不可缓存尾部（前缀命中率稀释）。如需恢复：取消下行注释（实现保留）。
+	// msgs = l.syncContextSnapshot(msgs)
 
 	// ★ 历史轮次用户消息标注已移除（2026-08-15 对齐 harness）：
 	//   harness 不往消息正文注入前缀文本——历史轮次与当前任务同为 RoleUser，
