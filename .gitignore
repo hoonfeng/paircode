@@ -95,6 +95,7 @@ dev/wsprobe/
 
 # Go build cache (380MB, local only)
 .go-cache/
+gocache/
 
 # 桌面版归档（本版本不做桌面版——wb-ui/goskia 依赖移除；代码保留在 _desktop-archive/）
 _desktop-archive/

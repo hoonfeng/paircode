@@ -31,21 +31,23 @@ import { readdirSync, readFileSync, rmSync, existsSync } from 'node:fs'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, '..')
 
-// ★ Round3 ⑥.4 防堆积：构建前清理 cmd/companion/web-ui/dist 的历史 index-*.js
-//   bundle（14 个历史产物问题根因：壳构建输出名带 hash，未引用旧包越积越多；
-//   dist 为 //go:embed 兜底目录，只保留当前 index.html 引用的产物——
-//   sync-web-dist.mjs 同步时也会清理，此处双保险防「先 build 后 sync」顺序漏网）。
+// ★ 2026-09-15 修复：不再预清理 cmd/companion/web-ui/dist/assets 历史
+//   index-*.js bundle ——「先清后建」是危险中间态：清空后若 vite 构建/
+//   同步未跑（构建失败、手动只跑 build-ui.mjs、sync 被跳过），embed 兜底
+//   目录即残废（index.html 旧 + assets 空 → go build 出的 exe UI 白屏/旧，
+//   「web 壳更新但打包不更新」根因之一）。
+//   dist 的全量镜像与未引用 bundle 清理统一由 scripts/sync-web-dist.mjs
+//   负责（先 rmSync 后 cpSync + 清理未引用产物），pipeline / ui-app build
+//   script / cmd/companion/web-ui 旧链均以它为同步入口。
+
 const distDir = path.join(repoRoot, 'cmd', 'companion', 'web-ui', 'dist')
 const distAssets = path.join(distDir, 'assets')
+// 仅提示当前残留状态（不清理）
 if (existsSync(distAssets)) {
-  let removed = 0
-  for (const f of readdirSync(distAssets)) {
-    if (/^index-.*\.js$/.test(f)) {
-      rmSync(path.join(distAssets, f), { force: true })
-      removed++
-    }
+  const stale = readdirSync(distAssets).filter((f) => /^index-.*\.js$/.test(f))
+  if (stale.length > 0) {
+    console.log(`[build-ui] 提示: dist/assets 残留 ${stale.length} 个未引用历史 bundle（sync-web-dist.mjs 将清理）`)
   }
-  if (removed > 0) console.log(`[build-ui] 预清理 ${removed} 个历史 index-*.js bundle（${distAssets}）`)
 }
 
 // ★ 前端源码位于项目根独立目录 plugins-src/ui-app/（2026-08-17 迁移：.pair/plugins/ui-app-src →

@@ -32,8 +32,7 @@
     },
     {
       "name": "sync-embed-shell",
-      "command": "robocopy .pair/assets/runtime/web cmd/companion/web-ui/dist /E /NJH /NJS /NDL & if errorlevel 8 exit /b 1 & exit /b 0",
-      "os": "windows",
+      "command": "node scripts/sync-web-dist.mjs",
       "ignoreError": false
     },
     {

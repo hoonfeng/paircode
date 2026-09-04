@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node ../../scripts/sync-web-dist.mjs",
     "build:ui": "node ../../scripts/build-ui.mjs",
     "build:ui:list": "node ../../scripts/build-ui.mjs --list",
     "preview": "vite preview"
