@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/hoonfeng/paircode/internal/core"
 	"github.com/hoonfeng/paircode/pkg/memory"
 )
 
@@ -54,27 +55,32 @@ func modeLabel(mode string) string {
 
 // RegisterManagementTools 注册 Agent 自管理工具。
 // root 为工作区根路径，每个会话传自己的实现多工作区隔离。
+// ★ 2026-09-12 修复（重大 BUG）：本函数注册的工具经磁盘插件 tool-system 接管
+//   后存档进全局 hostExecutors（启动时一次性存档）——闭包捕获的 root/技能
+//   目录随启动冻结：启动时未开工作区 root="" → skill_write 执行
+//   WriteSkill("") → filepath.Join("", name) 生成相对路径 → 写到进程
+//   CWD（安装目录根）下，与实际使用的 skills 目录脱节；切换工作区也不刷新。
+//   现改为执行时运行时解析（会话绑定 _wsRoot 注入 → ctx 会话根 → 工作区
+//   实时快照），与 goal/ask_user 路由执行器同构。
 func RegisterManagementTools(r *Registry, root string) {
-	skillProjectDir := ""
-	if root != "" {
-		skillProjectDir = filepath.Join(root, ".pair", "skills")
-	}
-
 	// ── Skills ──
 	r.Register(&Tool{
-		Name: "skill_list", Description: "列出所有可用技能（名/描述/激活模式/层级）。", ReadOnly: true,
+		Name: "skill_list", Description: "列出所有可用技能（名/描述/激活模式/层级：内置/工作区级/全局）。", ReadOnly: true,
 		Parameters: mObjSchema(map[string]any{}),
-		Handler: func(_ context.Context, _ map[string]any) (string, error) {
-			return listSkillsText(root), nil
+		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			// ★ args 全量传入（勿用 nil）：jsToolToGo 会注入 _wsRoot（会话根），
+			//   skill_list 无参 schema 但 hostTool 透传仍带内部键；传 nil 丢失
+			//   会话根 → 列表退化为仅 system 级（工作区技能「找不到」）。
+			return listSkillsText(skillRuntimeRoot(ctx, args)), nil
 		},
 	})
 	r.Register(&Tool{
 		Name:        "load_skill",
-		Description: "加载某技能的完整 SKILL.md 正文（L2 渐进式披露）。",
+		Description: "加载某技能的完整 SKILL.md 正文（L2 渐进式披露）。所有层级（内置/工作区/全局）同名时工作区优先。",
 		ReadOnly:    true,
 		Parameters:  mObjSchema(map[string]any{"name": mStrProp("技能名")}, "name"),
-		Handler: func(_ context.Context, args map[string]any) (string, error) {
-			return loadSkillFull(mArgStr(args, "name"), root)
+		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			return loadSkillFull(mArgStr(args, "name"), skillRuntimeRoot(ctx, args))
 		},
 	})
 	r.Register(&Tool{
@@ -84,31 +90,41 @@ func RegisterManagementTools(r *Registry, root string) {
 		Parameters: mObjSchema(map[string]any{
 			"name": mStrProp("技能名"), "path": mStrProp("资源相对路径"),
 		}, "name", "path"),
-		Handler: func(_ context.Context, args map[string]any) (string, error) {
-			return loadSkillResource(mArgStr(args, "name"), mArgStr(args, "path"), root)
+		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			return loadSkillResource(mArgStr(args, "name"), mArgStr(args, "path"), skillRuntimeRoot(ctx, args))
 		},
 	})
 	r.Register(&Tool{
 		Name:             "skill_write",
-		Description:      "创建或更新一个技能（写入 .pair/skills/<名>/SKILL.md）。",
+		Description:      "创建或更新一个技能（目录式 <skills>/名/SKILL.md）。默认写当前工作区级（.pair/skills/）；传 scope=global 写全局（跨工作区生效，随程序安装目录共享）。",
 		RequiresApproval: true,
 		Parameters: mObjSchema(map[string]any{
 			"name": mStrProp("技能名"), "description": mStrProp("一句话描述"),
 			"mode":    mStrProp("激活模式：auto/always/manual，默认 auto"),
 			"content": mStrProp("技能正文"),
+			"scope":   mStrProp("层级：project=工作区级（默认，仅当前工作区）/ global=全局（跨工作区，<InstallDir>/.pair/skills/）"),
 		}, "name", "content"),
-		Handler: func(_ context.Context, args map[string]any) (string, error) {
-			return writeSkillTool(args, skillProjectDir)
+		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			return writeSkillTool(ctx, args, root)
 		},
 	})
 	r.Register(&Tool{
-		Name: "skill_delete", Description: "删除一个项目级技能。", RequiresApproval: true,
-		Parameters: mObjSchema(map[string]any{"name": mStrProp("技能名")}, "name"),
-		Handler: func(_ context.Context, args map[string]any) (string, error) {
-			if err := DeleteSkill(skillProjectDir, mArgStr(args, "name")); err != nil {
+		Name:             "skill_delete",
+		Description:      "删除一个技能（工作区级默认；scope=global 删全局，scope=system 删内置）。",
+		RequiresApproval: true,
+		Parameters: mObjSchema(map[string]any{
+			"name":  mStrProp("技能名"),
+			"scope": mStrProp("层级：project=工作区级（默认）/ global=全局 / system=内置"),
+		}, "name"),
+		Handler: func(ctx context.Context, args map[string]any) (string, error) {
+			dir, label, err := skillTargetDir(ctx, args, root)
+			if err != nil {
 				return "", err
 			}
-			return "已删除技能：" + mArgStr(args, "name"), nil
+			if err := DeleteSkill(dir, mArgStr(args, "name")); err != nil {
+				return "", err
+			}
+			return "已删除技能：" + mArgStr(args, "name") + "（" + label + "）", nil
 		},
 	})
 
@@ -130,13 +146,25 @@ func RegisterManagementTools(r *Registry, root string) {
 		Handler: func(_ context.Context, args map[string]any) (string, error) { return mcpAddTool(args) },
 	})
 	r.Register(&Tool{
-		Name: "mcp_remove", Description: "删除一个 MCP 服务器。", RequiresApproval: true,
-		Parameters: mObjSchema(map[string]any{"name": mStrProp("服务器名")}, "name"),
+		Name:             "mcp_remove",
+		Description:      "删除一个 MCP 服务器。scope 可选 user 或 project（默认 user；project 需当前工作区有该服务器）。",
+		RequiresApproval: true,
+		Parameters: mObjSchema(map[string]any{
+			"name":  mStrProp("服务器名"),
+			"scope": mStrProp("层级：user（默认，全局）或 project（工作区级）"),
+		}, "name"),
 		Handler: func(_ context.Context, args map[string]any) (string, error) {
-			if err := MCPDelete(MCPLevelUser, mArgStr(args, "name")); err != nil {
-				return "", err
+			name := mArgStr(args, "name")
+			if mArgStr(args, "scope") == "project" {
+				if err := MCPDelete(MCPLevelProject, name); err != nil {
+					return "", fmt.Errorf("工作区级未找到 MCP 服务器 %q（%v）；全局级删除请传 scope=user", name, err)
+				}
+				return "已删除 MCP 服务器：" + name + "（工作区级）", nil
 			}
-			return "已删除 MCP 服务器：" + mArgStr(args, "name"), nil
+			if err := MCPDelete(MCPLevelUser, name); err != nil {
+				return "", fmt.Errorf("全局级未找到 MCP 服务器 %q（%v）；工作区级删除请传 scope=project", name, err)
+			}
+			return "已删除 MCP 服务器：" + name + "（用户级）", nil
 		},
 	})
 
@@ -163,13 +191,71 @@ func RegisterManagementTools(r *Registry, root string) {
 
 // ─── Skills 工具实现 ──
 
+// skillRuntimeRoot 运行时解析工作区根（★ 2026-09-12 修复：不再依赖注册时闭包
+// 冻结的 root）。优先级：args._wsRoot（JS 插件工具链会话注入）→ ctx 会话绑定根
+// （SessionWorkspaceRoot）→ 工作区实时快照（workspaceRootsSnapshot，含运行中
+// 添加的项目）→ 注册时 root（自闭环/测试兜底）。
+func skillRuntimeRoot(ctx context.Context, args map[string]any) string {
+	if args != nil {
+		if r := mArgStr(args, "_wsRoot"); r != "" {
+			return r
+		}
+	}
+	if r := SessionWorkspaceRoot(ctx); r != "" {
+		return r
+	}
+	if roots := workspaceRootsSnapshot(); len(roots) > 0 {
+		return roots[0]
+	}
+	return ""
+}
+
+// skillTargetDir 按 scope 解析技能写入/删除目标目录。
+// 返回（目录, 层级中文标签, 错误）。scope：global=全局 / system=内置 / 其他=工作区级。
+// ★ 2026-09-12 修复核心：工作区根为空时不再退化为相对路径写入（原 BUG 落点），
+//   而是显式回落全局技能目录（<InstallDir>/.pair/skills/）。
+func skillTargetDir(ctx context.Context, args map[string]any, registerRoot string) (string, string, error) {
+	scope := mArgStr(args, "scope")
+	switch scope {
+	case "global":
+		dir := SkillGlobalDir
+		if dir == "" {
+			dir = filepath.Join(core.InstallDir(), ".pair", "skills")
+		}
+		return dir, "全局（跨工作区）", nil
+	case "system":
+		if SkillSystemDir == "" {
+			return "", "", fmt.Errorf("内置技能目录未初始化（SkillSystemDir 为空）")
+		}
+		return SkillSystemDir, "内置", nil
+	}
+	// project（默认）：运行时解析工作区根
+	root := skillRuntimeRoot(ctx, args)
+	if root == "" {
+		root = registerRoot
+	}
+	if root == "" {
+		// 未开工作区：显式落全局目录（修复原 BUG：filepath.Join("", name)
+		// 相对路径 → 写进进程 CWD=安装目录根）
+		dir := SkillGlobalDir
+		if dir == "" {
+			dir = filepath.Join(core.InstallDir(), ".pair", "skills")
+		}
+		return dir, "全局（未打开工作区，回落）", nil
+	}
+	return filepath.Join(root, ".pair", "skills"), "工作区级", nil
+}
+
 func listSkillsText(root string) string {
 	skills := LoadAllSkillsFromRoot(root, SkillSystemDir, SkillEnabled)
 	var b strings.Builder
 	for _, s := range skills {
 		lvl := "工作区级"
-		if s.Level == LevelSystem {
+		switch s.Level {
+		case LevelSystem:
 			lvl = "内置"
+		case LevelGlobal:
+			lvl = "全局"
 		}
 		fmt.Fprintf(&b, "- [%s] %s（%s）：%s\n", lvl, s.Name, modeLabel(mStr(s.Mode, "auto")), s.Description)
 	}
@@ -197,7 +283,7 @@ func loadSkillResource(name, path string, root string) (string, error) {
 	return LoadSkillResource(s, path, 10*1024*1024)
 }
 
-func writeSkillTool(args map[string]any, projectDir string) (string, error) {
+func writeSkillTool(ctx context.Context, args map[string]any, registerRoot string) (string, error) {
 	s := Skill{
 		Name: mArgStr(args, "name"), Description: mArgStr(args, "description"),
 		Mode: mStr(mArgStr(args, "mode"), "auto"), Body: mArgStr(args, "content"),
@@ -205,10 +291,14 @@ func writeSkillTool(args map[string]any, projectDir string) (string, error) {
 	if s.Name == "" || s.Body == "" {
 		return "", fmt.Errorf("name 与 content 必填")
 	}
-	if err := WriteSkill(projectDir, s); err != nil {
+	dir, label, err := skillTargetDir(ctx, args, registerRoot)
+	if err != nil {
 		return "", err
 	}
-	return "已写入技能 " + s.Name, nil
+	if err := WriteSkill(dir, s); err != nil {
+		return "", err
+	}
+	return "已写入技能 " + s.Name + "（" + label + "：" + filepath.Join(dir, s.Name) + "）", nil
 }
 
 // ─── MCP 工具实现 ──

@@ -16,25 +16,47 @@ import (
 // ── 全局实例（由 bridge 或 RegisterDefaultTools 初始化）──
 
 var (
-	globalTM   *TaskManager
-	tmInitOnce sync.Once
+	tmMu       sync.RWMutex
+	tmByRoot   = map[string]*TaskManager{} // ★ root → 实例（root 变化即新建，见 UseTaskManager）
+	tmInitOnce sync.Once                   // 保留变量名兼容旧引用（不再承担单例语义）
 )
 
-// UseTaskManager 返回全局 TaskManager 实例（一次初始化，后续复用）。
+// UseTaskManager 返回指定工作区根的 TaskManager。
+// ★ 2026-09-12 修复：原 sync.Once 单例实现首次以启动根（或空根）初始化后
+//   永不刷新——启动时未开工作区 → 任务写到进程 CWD（安装目录根）下的
+//   .pair/tasks/；切换工作区后任务仍落旧工作区。TaskManager 本身无状态
+//   （root 只决定 tasksDir），按 root 缓存多实例即可：同根复用、换根新建，
+//   各工作区任务隔离且运行中切换即时生效。
 func UseTaskManager(root string) *TaskManager {
-	tmInitOnce.Do(func() {
-		globalTM = NewTaskManager(root)
-	})
-	return globalTM
+	tmMu.RLock()
+	if tm, ok := tmByRoot[root]; ok {
+		tmMu.RUnlock()
+		return tm
+	}
+	tmMu.RUnlock()
+
+	tmMu.Lock()
+	defer tmMu.Unlock()
+	// 双检（等价 sync.Once 的并发安全语义）
+	if tm, ok := tmByRoot[root]; ok {
+		return tm
+	}
+	tm := NewTaskManager(root)
+	tmByRoot[root] = tm
+	return tm
 }
 
 // registerTaskTools 注册 update_tasks 工具（全量替换）。
 // 替代之前的 task_create/update/list/delete/summary 5 个工具。
+// ★ 2026-09-12 修复：任务根改为执行时运行时解析（args._wsRoot 会话注入 →
+//   ctx 会话根 → 工作区实时快照 → 注册时 root 兜底）——原闭包捕获启动根
+//   （未开工作区=空根），存档执行器把任务写到进程 CWD（安装目录根）下的
+//   .pair/tasks/，且切换工作区不跟随。
 func registerTaskTools(r *Registry, root string) {
-	tm := UseTaskManager(root)
-
 	// updateTasksHandler 全量替换任务列表（update_tasks 与 todo_write 别名共用）。
 	updateTasksHandler := func(ctx context.Context, args map[string]any) (string, error) {
+		tasksRoot := taskRuntimeRoot(ctx, args, root)
+		tm := UseTaskManager(tasksRoot)
 		tasksRaw, _ := args["tasks"].([]any)
 		if len(tasksRaw) == 0 {
 			return "", fmt.Errorf("tasks 为空")
@@ -159,6 +181,24 @@ func registerTaskTools(r *Registry, root string) {
 }
 
 // ── 辅助 ───────────────────────────────────────────────────
+
+// taskRuntimeRoot 任务工具的运行时工作区根解析（★ 2026-09-12 修复）。
+// 优先级：args._wsRoot（JS 插件工具链会话注入）→ ctx 会话绑定根
+// → 工作区实时快照 → 注册时 root（自闭环/测试兜底）。与 skillRuntimeRoot 同构。
+func taskRuntimeRoot(ctx context.Context, args map[string]any, registerRoot string) string {
+	if args != nil {
+		if r, ok := args["_wsRoot"].(string); ok && r != "" {
+			return r
+		}
+	}
+	if r := SessionWorkspaceRoot(ctx); r != "" {
+		return r
+	}
+	if roots := workspaceRootsSnapshot(); len(roots) > 0 {
+		return roots[0]
+	}
+	return registerRoot
+}
 
 func buildProgressBar(done, total, width int) string {
 	if total <= 0 {

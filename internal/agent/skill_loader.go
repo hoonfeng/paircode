@@ -26,6 +26,12 @@ var SkillSystemDir string
 // SkillProjectDir 项目级技能目录（.pair/skills/），由 bridge 启动时设置。
 var SkillProjectDir string
 
+// SkillGlobalDir 全局技能目录（<InstallDir>/.pair/skills/），跨工作区共享。
+// ★ 2026-09-12 修复：skill_write 闭包捕获启动根（未开工作区=空串）导致技能
+//   写到安装目录根下的 BUG——空根场景本应显式落全局目录；同时为「跨工作区
+//   通用技能」提供显式 scope=global 写入目标。由 bridge 启动时设置。
+var SkillGlobalDir string
+
 // SkillEnabled 启用覆盖（键 "level::name" 如 "system::emoji-icons"，值 true=启用）。
 // 键不存在时默认启用。由 bridge 从 settings.json 的 SkillEnabledOverrides 注入。
 var SkillEnabled map[string]bool
@@ -48,6 +54,11 @@ type SkillLevel string
 const (
 	LevelSystem  SkillLevel = "system"  // 内置（config/skills/）
 	LevelProject SkillLevel = "project" // 用户项目级（.pair/skills/）
+	// LevelGlobal 全局级（<InstallDir>/.pair/skills/），跨工作区共享。
+	// ★ 2026-09-12 修复：skill_write 空根闭包 BUG 引入——此前空根写入直接
+	//   落到安装目录根（相对路径解析），语义不明的「脏目录」；现归位为
+	//   显式全局层级，与 system/project 并列加载。
+	LevelGlobal SkillLevel = "global"
 )
 
 // Skill 一个技能条目（三级渐进披露）。
@@ -107,6 +118,9 @@ func loadAllFrom(systemDir, projectDir string, enabled map[string]bool) []Skill 
 	var all []Skill
 	all = append(all, loadSkillsFromDir(systemDir, LevelSystem, enabled)...)
 	all = append(all, loadSkillsFromDir(projectDir, LevelProject, enabled)...)
+	// ★ 2026-09-12 修复：加载全局层级技能（<InstallDir>/.pair/skills/，跨工作区
+	//   共享；skill_write scope=global 的写入目标）。同名 project 优先（后扫在前）。
+	all = append(all, loadSkillsFromDir(SkillGlobalDir, LevelGlobal, enabled)...)
 	// 应用状态覆盖（优先级高于 enabled 过滤和 frontmatter activation）
 	if len(SkillStatusOverride) > 0 {
 		all = applyStatusOverride(all, SkillStatusOverride)

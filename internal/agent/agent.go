@@ -169,6 +169,8 @@ func (a *AgentBase) Init() error {
 	InitPlanManager(root)
 
 	// 7. 设置 Skills 加载路径
+	// ★ 2026-09-12 注：SkillGlobalDir 不在此设置——AgentBase 依赖倒置不引
+	//   core 包；skillTargetDir 空值时运行时兜底（core.InstallDir()）。
 	SkillProjectDir = filepath.Join(root, ".pair", "skills")
 	SkillSystemDir = filepath.Join(root, "config", "skills")
 
