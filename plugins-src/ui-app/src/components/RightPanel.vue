@@ -82,6 +82,13 @@
               <div v-if="combo.assistant" class="msg-item msg-assistant" :data-idx="combo.assistant._idx">
                 <div class="msg-avatar"><SvgIcon name="bot" :size="16" /></div>
                 <div class="msg-bubble bubble-assistant">
+                  <!-- ★ 2026-09-10 slash 命令结果卡片：命令命中执行后本地渲染（不唤醒模型） -->
+                  <div v-if="combo.assistant._isSlashResult" class="slash-result-card">
+                    <div class="slash-result-head">
+                      <SvgIcon name="terminal" :size="12" />
+                      <span>命令 /{{ combo.assistant._slashName }} 执行结果</span>
+                    </div>
+                  </div>
                   <!-- ★ 用户反馈标记（合并到 agent 输出中，不显示为独立用户气泡） -->
                   <div v-if="combo.assistant._feedbacks && combo.assistant._feedbacks.length > 0" class="fb-merged-section">
                     <div v-for="(fb, fi) in combo.assistant._feedbacks" :key="'fb'+fi" class="fb-merged-item">
@@ -197,7 +204,8 @@
           <div class="input-resizer" @mousedown.prevent="startInputResize" title="拖拽调整高度"></div>
           <div class="input-wrapper">
             <!-- ★ Round3 ④.2 slash 命令菜单：输入以 "/" 开头时拉 /api/commands 提示，
-                  Enter 执行（结果由后端注入系统消息）；无匹配命令时原样发送（降级零破坏） -->
+                  ↑/↓ 移动选中，Enter 把选中命令写入输入框（可继续编辑/加参数），再次 Enter 执行
+                  （结果由后端注入系统消息）；菜单外以 "/" 开头回车=直接执行；无匹配命令时原样发送（降级零破坏） -->
             <div v-if="slashOpen" class="slash-menu">
               <div v-for="(c, i) in slashMatches" :key="c.name"
                    :class="['slash-item', { active: i === slashIndex }]"
@@ -290,6 +298,7 @@ const slashCommands = ref([])   // 全量命令清单（/api/commands）
 const slashMatches = ref([])    // 当前匹配项（前缀过滤）
 const slashOpen = ref(false)    // 菜单是否展开
 const slashIndex = ref(0)       // 当前高亮项
+const _inRunSlash = ref(false)  // ★ 2026-09-10 命令无匹配降级原样发送时，防止 sendMessage 入口 "/" 拦截递归
 // 输入以 "/" 开头时拉取命令清单（首次惰性 + 每次 send 后刷新）
 // ★ 2026-08-31 修复：refreshSlashMenu 首次调用时清单为空（异步拉取），
 //   同步 filter 恒空 → 菜单永不弹出；拉取完成后需再刷新一次。
@@ -316,30 +325,62 @@ function refreshSlashMenu() {
   slashOpen.value = slashMatches.value.length > 0
   slashIndex.value = 0
 }
-// 点击菜单项：填入 "/name " 并聚焦输入框
+// 点击菜单项 / 菜单内 Enter：填入 "/name " 并聚焦输入框（不发送，可继续编辑）
 function pickSlashCommand(c) {
   setInputText('/' + c.name + ' ')
   slashOpen.value = false
   if (inputRef.value) inputRef.value.focus()
 }
-// Enter 执行：匹配命令 → runCommand（结果由后端注入系统消息）→ 原样发送命令文本；
-// 无匹配命令 → 原样发送（降级零破坏）
+// Enter 执行（菜单外）：匹配命令 → runCommand（结果由后端注入系统消息）→ 本地渲染命令结果卡片；
+// ★ 2026-09-10 修复「命令被当作普通消息」：命令命中后不再把命令文本发给模型（模型会把
+//   "/x" 当普通任务回一轮），改为命令结果直接在对话流展示；命令文本随系统消息落盘，
+//   下一轮模型仍能读到命令结果（激活/协议提示同时生效）。
+// 无匹配命令 → 原样发送（降级零破坏）。菜单展开时 Enter 已被 onKeydown 拦截为「填入选中项」，不会走到这里。
 async function runSlashCommand() {
   const text = inputText.value.trim()
   const m = text.match(/^\/(\S+)\s*(.*)$/)
   slashOpen.value = false
-  if (!m) { sendMessage(); return }
+  if (!m) { sendMessageSpecial(); return }
   const name = m[1]
+  // ★ 2026-09-10 兜底：清单未加载（首次输入即回车）时先异步拉取再匹配，避免误判「无匹配」原样发送
+  if (!slashCommands.value.length) await ensureSlashCommands()
   const cmd = slashCommands.value.find(c => c.name === name)
-  if (!cmd) { sendMessage(); return } // 无匹配 → 原样发送
+  if (!cmd) { sendMessageSpecial(); return } // 无匹配 → 原样发送
   try {
-    await api.runCommand(name, { args: m[2] || '' }, state.currentConvId)
+    const res = await api.runCommand(name, { args: m[2] || '' }, state.currentConvId)
+    // ★ 2026-09-10 命令结果本地渲染（不唤醒模型；后端已同时注入系统消息并激活插件）
+    pushSlashResult(name, (res && res.output) || '（命令执行完成，无输出）')
   } catch (e) {
-    console.warn('[RP] slash 命令执行失败，原样发送:', e)
-    sendMessage()
-    return
+    console.warn('[RP] slash 命令执行失败:', e)
+    window.$toast?.('命令执行失败: ' + ((e && e.message) || e), 'error')
+    // 失败不原样发送（避免模型把 "/x" 当普通任务），仅提示
   }
-  sendMessage() // 命令输出已注入为系统消息，命令文本照常发送
+}
+// 无匹配命令的原样发送（绕开 sendMessage 的 "/" 前缀拦截，防止递归）
+async function sendMessageSpecial() {
+  _inRunSlash.value = true
+  try { await sendMessage() } finally { _inRunSlash.value = false }
+}
+// 命令结果卡片：追加一条 assistant 角色的命令结果消息（_isSlashResult 标记渲染专用样式）
+function pushSlashResult(name, output) {
+  const convId = state.currentConvId
+  if (!convId) return
+  const box = state.messagesByConv[convId]
+  if (!box) return
+  const msg = {
+    role: 'assistant',
+    content: output,
+    segments: [{ type: 'content', content: output }],
+    _isSlashResult: true,
+    _slashName: name,
+    _key: 'slash_' + Date.now(),
+    _idx: box.length,
+    _time: '',
+    _folded: false,
+  }
+  box.push(msg)
+  state.messages = [...box]
+  scrollToBottom()
 }
 
 // ─── composer 模型选择器（★ 2026-09-03 配置列表驱动）───
@@ -1426,6 +1467,10 @@ const sendMessage = async () => {
   syncInput()
   const text = inputText.value.trim()
   if (!text && pendingAttachments.value.length === 0) return
+  // ★ 2026-09-10 修复「/agent-teams 被当作普通消息」：以 "/" 开头的文本（点发送按钮、
+  //   非 Enter 路径）一律先走 slash 命令识别——命中执行命令、未命中才原样发送。
+  //   _inRunSlash 为「无匹配降级」（sendMessageSpecial）时的递归防护。
+  if (!_inRunSlash.value && text.startsWith('/')) { runSlashCommand(); return }
   if (state.chatLoading) { console.log('[RP] sendMessage 跳过: chatLoading 已为 true'); return }
 
   // ★ 确保 WS 连接就绪（等待最多 3s，避免事件丢失）
@@ -1704,7 +1749,6 @@ function handleTagEdgeDelete(e) {
     removeAttTagByEl(target)
   }
 }
-
 const onKeydown = (e) => {
   if (e.isComposing || e.keyCode === 229) return // IME 组合中不处理
   // slash 菜单导航（Round3 ④.2）
@@ -1716,13 +1760,21 @@ const onKeydown = (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault()
     if (state.chatLoading) return
-    if (slashOpen.value) { runSlashCommand(); return }
+    // ★ 2026-09-10 常规键盘交互：菜单展开时 Enter = 把当前高亮命令「写入输入框」
+    //   （同鼠标点击 pickSlashCommand：填入 "/name " + 关闭菜单 + 聚焦），不直接执行；
+    //   再次 Enter（菜单已关，文本带尾随空格不再匹配前缀）才执行命令发送。
+    if (slashOpen.value) {
+      const c = slashMatches.value[slashIndex.value]
+      if (c) { pickSlashCommand(c); return }
+    }
+    // ★ 2026-09-10 slash 命令兑底：文本以 "/" 开头时也走命令路径（含菜单未展开/带参数/
+    //   清单未加载场景）；无匹配命令时 runSlashCommand 内部降级原样发送（零破坏）。
+    if (inputText.value.trim().startsWith('/')) { runSlashCommand(); return }
     sendMessage()
     return
   }
   if (e.key === 'Backspace' || e.key === 'Delete') handleTagEdgeDelete(e)
 }
-
 const scrollToBottom = () => {
   showScrollDown.value = false
   window.__scrollLockTimer = false
@@ -2455,6 +2507,15 @@ onUnmounted(() => {
 .msg-bubble { flex: 1; min-width: 0; max-width: 85%; font-size: 13px; line-height: 1.6; word-break: break-word; overflow-wrap: break-word; position: relative; padding: 2px 0; }
 
 .bubble-assistant { background: transparent; color: var(--text-primary); padding: 2px 0; }
+/* ★ 2026-09-10 slash 命令结果卡片：命令命中执行后直接展示，不唤醒模型 */
+.slash-result-card { margin: 4px 0 8px; }
+.slash-result-head {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: 600; color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+  border-radius: 6px; padding: 3px 8px; margin-bottom: 6px;
+}
 .bubble-agent { background: transparent; border: none; padding: 0 0 0 18px; position: relative; }
 .bubble-agent::before { content: ''; position: absolute; left: 8px; top: 0; bottom: 0; width: 2px; background: linear-gradient(180deg, var(--accent) 0%, var(--border-color) 100%); opacity: 0.4; border-radius: 1px; }
 .msg-time { font-size: 10px; color: var(--text-muted); margin-top: 4px; opacity: 0.7; text-align: right; }

@@ -596,7 +596,16 @@ function readPluginSpecs() {
       return { spec: entry.spec, runtime: entry.runtime || 'node' };
     }
     return null;
-  }).filter(Boolean);
+  }).filter(Boolean).filter((e) => {
+    // ★ 2026-09 策略：外部 dsh 生态插件不桥接——runtime="dsh"（@deepseek-ai/cordis
+    //   ^4 peer 外部轨）条目跳过不装载，防止 dsh 环境安装的插件影响 IDE 工具面；
+    //   仅桥接 node 轨（cordis3 普通 npm 插件）。日志说明便于排查残留条目。
+    if (e.runtime === 'dsh') {
+      console.log(`[bridge] 跳过外部 dsh 生态插件 ${e.spec}（策略：仅桥接安装目录内 node 轨插件，防 dsh 安装的插件影响）`);
+      return false;
+    }
+    return true;
+  });
 }
 
 // ── 插件装载 ──

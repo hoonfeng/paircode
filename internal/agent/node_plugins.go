@@ -197,9 +197,16 @@ func marketInstallNPMPluginNode(info *npmPackageInfo, srcDir string, auto bool) 
 	if projectRoot == "" {
 		return "", fmt.Errorf("无工作区根，无法安装插件")
 	}
-	runtime := nodePluginRuntime(info.Manifest)
+runtime := nodePluginRuntime(info.Manifest)
 	if runtime == "" {
 		runtime = "node"
+	}
+	// ★ 2026-09 策略：外部 dsh 生态插件（@deepseek-ai/cordis ^4 peer）不再自动
+	//   桥接——防止 dsh 环境安装的插件影响 IDE 工具面（round4 验证残留曾致桥
+	//   反复崩溃）。直接拒绝安装，避免「装了但不生效」的困惑；node 轨
+	//   （cordis3 普通 npm 插件）照常安装桥接。
+	if runtime == "dsh" {
+		return "", fmt.Errorf("外部 dsh 生态插件不再自动桥接（策略：防 dsh 安装的插件影响 IDE）——如需 agent-teams 团队能力请使用仓库内置移植版（磁盘插件 agent-teams）")
 	}
 	bridgeDir := nodeBridgeDir()
 	pluginsDir := filepath.Join(bridgeDir, "plugins")

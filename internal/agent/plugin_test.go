@@ -1259,11 +1259,11 @@ func TestLoadCordisPatch(t *testing.T) {
 	}
 }
 
-// TestLoadCordisPatchDSHRuntime cordis.patch.json runtime="dsh" 条目 →
-// 触发 ensureNodeBridge（Node 桥 dsh 轨装配）；runtime="node" 同路径。
-// ★ Round4 repair（t6）：此前判定只认 rt=="node"，runtime="dsh" 的 patch
-//   条目（t2 新增轨）会被静默跳过、桥永不启动——本用例锁定两轨都触发。
-func TestLoadCordisPatchDSHRuntime(t *testing.T) {
+// TestLoadCordisPatchRuntimeGating cordis.patch.json runtime 判定闸门：
+// runtime="dsh"（外部 dsh 生态，cordis4）条目不触发 Node 桥——2026-09 策略
+// （防 dsh 环境安装的插件影响 IDE）；runtime="node"（cordis3 普通 npm 插件）
+// 仍触发 ensureNodeBridge。纯代码 patch 不触发（goja 轨）。
+func TestLoadCordisPatchRuntimeGating(t *testing.T) {
 	if _, err := exec.LookPath("node"); err != nil {
 		t.Skip("无 node 运行时")
 	}
@@ -1277,10 +1277,26 @@ func TestLoadCordisPatchDSHRuntime(t *testing.T) {
 	defer func() { core.Folders = origFolders }()
 	defer closeGlobalNodeBridge()
 
+	// dsh-only patch：不触发桥（外部 dsh 生态默认不桥接）
 	patch := filepath.Join(dir, "cordis.patch.json")
 	content := `{
   "plugins": [
-    { "purpose": "dsh plugin", "config": { "runtime": "dsh", "npm": "@nanmicoder/dsh-agent-teams@0.1.14" } },
+    { "purpose": "dsh plugin", "config": { "runtime": "dsh", "npm": "@nanmicoder/dsh-agent-teams@0.1.14" } }
+  ]
+}`
+	if err := os.WriteFile(patch, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := host.LoadCordisPatch(patch); err != nil {
+		t.Fatalf("LoadCordisPatch(dsh-only): %v", err)
+	}
+	if globalNodeBridge != nil {
+		t.Fatal("runtime=dsh 条目不触发 ensureNodeBridge（外部 dsh 生态不桥接）")
+	}
+
+	// node-only patch：触发桥（node 轨照常桥接）
+	content = `{
+  "plugins": [
     { "purpose": "node plugin", "config": { "runtime": "node", "npm": "cordis-plugin-android@0.0.7" } }
   ]
 }`
@@ -1288,10 +1304,10 @@ func TestLoadCordisPatchDSHRuntime(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := host.LoadCordisPatch(patch); err != nil {
-		t.Fatalf("LoadCordisPatch(dsh+node): %v", err)
+		t.Fatalf("LoadCordisPatch(node-only): %v", err)
 	}
 	if globalNodeBridge == nil || !globalNodeBridge.isReady() {
-		t.Fatal("runtime=dsh/node 条目应触发 ensureNodeBridge（Node 桥应已就绪）")
+		t.Fatal("runtime=node 条目应触发 ensureNodeBridge（Node 桥应已就绪）")
 	}
 	// 无 runtime 条目不触发桥（保持既有语义：纯代码 patch 走 goja）
 	closeGlobalNodeBridge()

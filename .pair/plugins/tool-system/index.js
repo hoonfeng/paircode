@@ -64,7 +64,7 @@ const tools = [
   },
   {
     "name": "skill_write",
-    "description": "创建或更新一个技能（写入 .pair/skills/<名>/SKILL.md）。",
+    "description": "创建或更新一个技能（目录式 <skills>/名/SKILL.md）。默认写当前工作区级（.pair/skills/）；传 scope=global 写全局（跨工作区生效，随程序安装目录共享）。",
     "parameters": {
       "properties": {
         "content": {
@@ -82,6 +82,10 @@ const tools = [
         "name": {
           "description": "技能名",
           "type": "string"
+        },
+        "scope": {
+          "description": "层级：project=工作区级（默认，仅当前工作区）/ global=全局（跨工作区，<InstallDir>/.pair/skills/）",
+          "type": "string"
         }
       },
       "required": [
@@ -94,11 +98,15 @@ const tools = [
   },
   {
     "name": "skill_delete",
-    "description": "删除一个项目级技能。",
+    "description": "删除一个技能（工作区级默认；scope=global 删全局，scope=system 删内置）。",
     "parameters": {
       "properties": {
         "name": {
           "description": "技能名",
+          "type": "string"
+        },
+        "scope": {
+          "description": "层级：project=工作区级（默认）/ global=全局 / system=内置",
           "type": "string"
         }
       },
@@ -153,11 +161,15 @@ const tools = [
   },
   {
     "name": "mcp_remove",
-    "description": "删除一个 MCP 服务器。",
+    "description": "删除一个 MCP 服务器。scope 可选 user 或 project（默认 user；project 需当前工作区有该服务器）。",
     "parameters": {
       "properties": {
         "name": {
           "description": "服务器名",
+          "type": "string"
+        },
+        "scope": {
+          "description": "层级：user（默认，全局）或 project（工作区级）",
           "type": "string"
         }
       },
