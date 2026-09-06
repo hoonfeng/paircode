@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"strings"
 	"sync"
 	"time"
 
@@ -220,9 +219,9 @@ var stopReason string
 	// tools.runParallel([{id, name, args}, ...]) → 结果数组 或 null
 	// 契约：调用方（JS）负责先逐个 emit tool_call；本函数仅对「纯只读」工具
 	//   并行执行（与 Go 默认 canParallelize 保守策略一致：含写/需审批 → 返回
-	//   null 退回串行）。执行后按传入顺序 emit tool_result + trackCall，
+	//   null 退回串行）。执行后按传入顺序 emit tool_result，
 	//   返回 [{id, name, content, error}]。调用方收到结果后只负责组装 tool
-	//   消息（不再 emit / 不再 track，避免重复）。
+	//   消息（不再 emit，避免重复）。
 	toolsObj.Set("runParallel", func(call goja.FunctionCall) goja.Value {
 		v := call.Argument(0)
 		if v == nil || goja.IsUndefined(v) || goja.IsNull(v) {
@@ -275,7 +274,7 @@ var stopReason string
 			}(i, tc)
 		}
 		wg.Wait()
-		// 按序 emit tool_result + trackCall + 组装返回值
+		// 按序 emit tool_result + 组装返回值
 		outArr := make([]any, 0, len(calls))
 		for _, pr := range results {
 			output := pr.output
@@ -287,7 +286,6 @@ var stopReason string
 				output = l.parseImageSubmitResult(output)
 			}
 			l.emit(Event{Type: EventToolResult, Tool: pr.tc.Function.Name, Content: output, CallID: pr.tc.ID})
-			l.trackCall(pr.tc.Function.Name, pr.tc.Function.Arguments, pr.err != nil || strings.HasPrefix(strings.TrimSpace(output), "Error:"))
 			errAny := any(nil)
 			if pr.err != nil {
 				errAny = pr.err.Error()
@@ -547,42 +545,6 @@ var stopReason string
 		return vm.ToValue(map[string]any{"msgs": msgsToJS(vm, out), "dropped": dropped, "mode": "full"})
 	})
 	proxy.Set("compact", compactObj)
-
-	// ── circling.state() / circling.clear() + track / detect（detect 保留为回退）──
-	circlingObj := vm.NewObject()
-	circlingObj.Set("track", func(call goja.FunctionCall) goja.Value {
-		name := call.Argument(0).String()
-		args := ""
-		if v := call.Argument(1); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
-			args = v.String()
-		}
-		failed := false
-		if v := call.Argument(2); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
-			failed = v.ToBoolean()
-		}
-		l.trackCall(name, args, failed)
-		return goja.Undefined()
-	})
-	// state()：绕圈数据面（最近调用签名+成败）——★ 判定策略已移 JS（阈值/窗口/提示文本可配）
-	circlingObj.Set("state", func(call goja.FunctionCall) goja.Value {
-		out := make([]map[string]any, 0, len(l.recentCalls))
-		for _, c := range l.recentCalls {
-			out = append(out, map[string]any{"sig": c.sig, "failed": c.failed})
-		}
-		return vm.ToValue(out)
-	})
-	circlingObj.Set("clear", func(call goja.FunctionCall) goja.Value {
-		l.recentCalls = nil
-		return goja.Undefined()
-	})
-	circlingObj.Set("detect", func(call goja.FunctionCall) goja.Value {
-		nudge := l.detectCircling()
-		if nudge != "" {
-			l.recentCalls = nil // 提示后清零，给新思路干净起点
-		}
-		return vm.ToValue(nudge)
-	})
-	proxy.Set("circling", circlingObj)
 
 	// ── store.get / store.set（l.State 跨 Run 共享）──
 	storeObj := vm.NewObject()

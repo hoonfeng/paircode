@@ -87,7 +87,6 @@ func (l *Loop) tryParallelExecute(ctx context.Context, calls []ToolCall, msgs []
 			}
 			l.emit(Event{Type: EventToolResult, Tool: p.tc.Function.Name, Content: rej, CallID: p.tc.ID})
 			msgs = append(msgs, Message{Role: RoleTool, ToolCallID: p.tc.ID, Name: p.tc.Function.Name, Content: rej})
-			l.trackCall(p.tc.Function.Name, p.tc.Function.Arguments, true)
 			continue
 		}
 		// 审批通过 → 加入并行执行列表
@@ -122,7 +121,6 @@ func (l *Loop) tryParallelExecute(ctx context.Context, calls []ToolCall, msgs []
 		tc := preflight[r.idx].tc
 		l.emit(Event{Type: EventToolResult, Tool: tc.Function.Name, Content: output, CallID: tc.ID})
 		msgs = append(msgs, Message{Role: RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: output})
-		l.trackCall(tc.Function.Name, tc.Function.Arguments, r.err != nil || strings.HasPrefix(strings.TrimSpace(output), "Error:"))
 	}
 
 	return msgs, true
@@ -161,7 +159,6 @@ func (l *Loop) executeReadOnlyParallel(ctx context.Context, calls []ToolCall, ms
 		}
 		l.emit(Event{Type: EventToolResult, Tool: r.tc.Function.Name, Content: output, CallID: r.tc.ID})
 		msgs = append(msgs, Message{Role: RoleTool, ToolCallID: r.tc.ID, Name: r.tc.Function.Name, Content: output})
-		l.trackCall(r.tc.Function.Name, r.tc.Function.Arguments, r.err != nil || strings.HasPrefix(strings.TrimSpace(output), "Error:"))
 
 	}
 	return msgs

@@ -19,7 +19,6 @@ package agent
 //   - EventFinal：丢弃（子完成 ≠ 父完成，结果由 finishTask 或 session 回传）
 //   - EventDone：丢弃（子 Agent 的结构化完成信号不应泄漏到父事件流）
 //   - EventError：丢弃（子内部错误不结束父 Loop）
-//   - EventCircling：丢弃（子的绕圈是内部问题）
 //   - EventCompacted：丢弃（子的压缩是内部优化，不通知前端）
 //   - 其余事件：标记 agentName 后转发
 //
@@ -31,7 +30,7 @@ func SubAgentSink(parentOnEvent func(Event), agentName string) func(Event) {
 	}
 	return func(e Event) {
 		switch e.Type {
-		case EventFinal, EventDone, EventError, EventCircling, EventCompacted:
+		case EventFinal, EventDone, EventError, EventCompacted:
 			// 丢弃：子 Agent 的生命周期事件不应泄漏到父事件流
 			return
 		default:
