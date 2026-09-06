@@ -109,13 +109,18 @@ func (r *jsLoopRunner) buildProxy() *goja.Object {
 			onChunkFn, _ = goja.AssertFunction(onChunkVal)
 		}
 
-var stopReason string
+		var stopReason string
+		var lastUsage *Usage // LLM 追踪：本调用的 token 用量（onChunk 捕获，供 llmtrace 响应相）
 		// ★ 2026-09-03 极简工具面已移除：极简面（8 工具）与全量面（54 工具）切换会使
 		//   DeepSeek 缓存按完整输入前缀匹配（含工具定义）时从头断前缀 → 每轮首请求 0% 命中。
 		//   统一全量工具面，跨轮次前缀稳定（实测修复后跨轮首请求命中 98.2%）。
 		callStart := time.Now()
 		log.Printf("[loop-js] LLM 调用开始 turn=%d step=%d provider=%s msgs=%d tools=%d",
 			l.TurnNo, l.StepNo, l.getProvider().Name(), len(jmsgs), len(jtools))
+		FireLLMTracer(LLMTraceEvent{
+			Phase: "request", Turn: l.TurnNo, Step: l.StepNo,
+			Provider: l.getProvider().Name(), Messages: jmsgs, Tools: jtools,
+		})
 		assistant, cerr := l.getProvider().Chat(r.ctx, jmsgs, jtools, func(c Chunk) {
 			if c.StopReason != "" {
 				stopReason = c.StopReason
@@ -145,6 +150,7 @@ var stopReason string
 			if c.Usage != nil && c.Usage.PromptTokens > 0 {
 				l.lastPromptTokens = c.Usage.PromptTokens
 				usage := *c.Usage
+				lastUsage = &usage
 				if usage.PromptBreakdown.SystemTokens == 0 {
 					pb := EstimateBreakdown(jmsgs, l.Registry.Definitions(), usage.PromptTokens)
 					usage.PromptBreakdown = pb
@@ -160,6 +166,16 @@ var stopReason string
 				}
 			}
 		})
+		resp := LLMTraceEvent{
+			Phase: "response", Turn: l.TurnNo, Step: l.StepNo,
+			Provider: l.getProvider().Name(), Usage: lastUsage,
+			Content: assistant.Content, Reasoning: assistant.Reasoning,
+			ToolCalls: assistant.ToolCalls, StopReason: stopReason,
+		}
+		if cerr != nil {
+			resp.Err = cerr.Error()
+		}
+		FireLLMTracer(resp)
 		if cerr != nil {
 			log.Printf("[loop-js] LLM 调用失败 turn=%d step=%d 耗时=%s err=%v",
 				l.TurnNo, l.StepNo, time.Since(callStart).Round(time.Millisecond), cerr)

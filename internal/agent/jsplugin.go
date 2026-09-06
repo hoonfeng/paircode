@@ -1075,6 +1075,8 @@ func (p *jsPluginAdapter) buildContextObject(pc *PluginContext) (*goja.Object, e
 	})
 	// ★ agentloop 核心外置：registerLoop(impl) 注册 JS 循环实现（Run 委托 JS 驱动）
 	p.attachLoopRegister(loopFactoryObj)
+	// ★ LLM 请求/响应完整追踪（llm-trace 缓存分析数据面）：ctx.llmtrace.register(fn)
+	p.attachLLMTrace(ctxObj)
 	ctxObj.Set("loopFactory", loopFactoryObj)
 
 	// ctx.providerFactory.register(apply)：注册 LLM Provider 参数装配器（配置消费插件化）。

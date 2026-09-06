@@ -1,0 +1,6 @@
+{
+  "name": "llm-trace",
+  "version": "1.0.0",
+  "description": "LLM 请求/响应完整追踪（JSONL 落盘）——前缀缓存断裂分析数据面",
+  "main": "index.js"
+}
