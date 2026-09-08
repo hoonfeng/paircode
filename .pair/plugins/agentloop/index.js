@@ -3,7 +3,7 @@
 //
 // ★ 2026-08-19 架构升级：循环策略从 Go（internal/agent/loop.go）外置到 JS。
 //   Go 保留能力（Provider.Chat / Registry.Execute / emit / persist /
-//   approve / buildCallContext），经能力代理对象注入：
+//   approve / buildCallContext / 绕圈检测），经能力代理对象注入：
 //
 //     loop.llm.chat(msgs, tools, onChunk) → assistant
 //     loop.tools.list() / loop.tools.run(name, argsJson)
@@ -14,6 +14,7 @@
 //     loop.approve.state.get()/set(obj)             // 共享审核状态（最近驳回/历史，不计数）
 //     loop.context.build(msgs, ephemeral) → callMsgs
 //     loop.compact(msgs) → msgs
+//     loop.circling.track(name, args, failed) / loop.circling.detect()
 //     loop.store.get(key) / loop.store.set(key, value)
 //     loop.delegate.run({task, system?, maxIterations?, agentName?}) → 子 agent
 //     loop.ctrl.*（暂停/停止/队列/钩子/日志/step 边界）
@@ -23,7 +24,7 @@
 //     - 流式事件分发（thinking/content 增量透传）
 //     - 工具执行 + 审核决策（loop.approve.ask + 共享状态 approve.state 增强）
 //     - 自然终止检测（无 tool_call + 有正文 → 完成/跟进/下一阶段）
-//     - content-only 防护
+//     - content-only 防护 / 绕圈检测注入
 //     - 每轮持久化（loop.persist.batch）
 //
 //   可回退：停用/删除本插件 → Loop.Run 自动还原 Go 默认循环。
@@ -301,6 +302,8 @@ return {
         // ═══════════════════════════════════════════════════════
         // 压缩策略：两档阈值 + 冷却 + 硬地板（对齐 Go 原实现默认值，可调）
         const COMPACT = { thresholdEarly: 0.45, thresholdFull: 0.90, cooldownEarly: 3, cooldownFull: 10, hardFloor: 120000 };
+        // 绕圈检测策略：窗口 + 重复/失败阈值
+        const CIRCLING = { window: 12, repeatStop: 3, failStop: 2 };
 
         // 压缩判定（策略 JS / 执行 Go compact.apply）：返回处理后的 msgs
         function maybeCompact(msgs) {
@@ -319,6 +322,37 @@ return {
           }
           const r = loop.compact.apply(msgs, 'full');
           return (r && r.dropped > 0 && r.msgs) ? r.msgs : msgs;
+        }
+
+        // 绕圈判定（策略 JS / 数据 Go circling.state）：
+        // 从尾部倒扫「连续相同操作（间无其他操作）」——重复或连续失败超阈值 → 提示换思路
+        function shortSig(sig) { return String(sig || '').replace(/\|/g, ' ').slice(0, 60); }
+        function detectCircling() {
+          if (!loop.circling || !loop.circling.state) return ''; // 无数据面 → 不检测
+          const st = loop.circling.state();
+          const n = st.length;
+          if (n < 2) return '';
+          const last = st[n - 1].sig;
+          // 1. 连续相同签名（纯重复）
+          let sameCount = 1;
+          for (let i = n - 2; i >= 0 && st[i].sig === last; i--) sameCount++;
+          if (sameCount >= CIRCLING.repeatStop) {
+            if (loop.circling.clear) loop.circling.clear();
+            return '[系统提示·打破死循环] 你已连续 ' + sameCount +
+              ' 次执行同一操作 `' + shortSig(last) + '`，中间没有任何其他操作——像在原地绕圈。请停下来换思路：先读取当前状态确认事实，或换工具、换方式推进。别继续重复同一步。';
+          }
+          // 2. 连续相同签名+失败
+          let failCount = 0;
+          for (let i = n - 1; i >= 0 && st[i].sig === last; i--) {
+            if (st[i].failed) failCount++; else break;
+          }
+          if (failCount >= CIRCLING.failStop) {
+            if (loop.circling.clear) loop.circling.clear();
+            return '[系统提示·打破死循环] 操作 `' + shortSig(last) + '` 已连续失败 ' + failCount +
+              ' 次且中间没有其他操作——别原样重试！请：① 先检查真实状态、定位失败根因；' +
+              '② 换一种工具或思路；③ 仍卡住就向用户说明卡点求助。';
+          }
+          return '';
         }
 
         // 审批判定（策略 JS / 动作 Go approve.ask）：
@@ -522,6 +556,7 @@ return {
               const errMsg = `Error: Tool call "${tc.function.name}" 未执行：LLM 响应被输出长度限制截断（stop_reason=length），参数可能不完整。请重新发出完整参数的 tool call。`;
               loop.events.emit({ type: 'tool_result', tool: tc.function.name, content: errMsg, callId: tc.id });
               msgs.push({ role: 'tool', toolCallId: tc.id, name: tc.function.name, content: errMsg });
+              loop.circling.track(tc.function.name, tc.function.arguments, true);
             }
           } else {
             // ── 12. ACT + OBSERVE：审批 → （并行优先 / 串行退回）执行 ──
@@ -549,13 +584,14 @@ return {
                   const rej = (ap.feedback || '').trim() || REJ_DEFAULT;
                   loop.events.emit({ type: 'tool_result', tool: tc.function.name, content: rej, callId: tc.id });
                   msgs.push({ role: 'tool', toolCallId: tc.id, name: tc.function.name, content: rej });
+                  loop.circling.track(tc.function.name, tc.function.arguments, true);
                   continue;
                 }
                 approved.push(tc);
               }
               // 12b. 执行：≥2 个先试并行（纯只读），runParallel 返回 null（含写/需审批）
-              //      或 <2 个 → 串行退回。契约：runParallel 已 emit tool_result，
-              //      JS 只组装消息；串行路径 JS 自己 emit。
+              //      或 <2 个 → 串行退回。契约：runParallel 已 emit tool_result + track，
+              //      JS 只组装消息；串行路径 JS 自己 emit + track。
               if (approved.length >= 2) {
                 const par = loop.tools.runParallel(approved.map(tc => ({
                   id: tc.id, name: tc.function.name, args: tc.function.arguments,
@@ -571,6 +607,7 @@ return {
                     const output = res.error ? 'Error: ' + res.error : res.content;
                     loop.events.emit({ type: 'tool_result', tool: tc.function.name, content: output, callId: tc.id });
                     msgs.push({ role: 'tool', toolCallId: tc.id, name: tc.function.name, content: output });
+                    loop.circling.track(tc.function.name, tc.function.arguments, !!res.error);
                   }
                 }
               } else if (approved.length === 1) {
@@ -579,6 +616,7 @@ return {
                 const output = res.error ? 'Error: ' + res.error : res.content;
                 loop.events.emit({ type: 'tool_result', tool: tc.function.name, content: output, callId: tc.id });
                 msgs.push({ role: 'tool', toolCallId: tc.id, name: tc.function.name, content: output });
+                loop.circling.track(tc.function.name, tc.function.arguments, !!res.error);
               }
           }
             }
@@ -634,7 +672,14 @@ return {
             contentOnlyIters = 0;
           }
 
-          // ── 16. 每轮结束立即持久化（tool_call/tool_result 配对写盘）──
+          // ── 16. 绕圈检测：重复操作/反复失败 → 注入「换思路」（策略 JS / 数据 Go state）──
+          const nudge = detectCircling();
+          if (nudge) {
+            loop.events.emit({ type: 'circling', content: '检测到重复操作/反复失败，已提示 Agent 换思路打破死循环' });
+            ephemeral.push({ role: 'user', content: nudge });
+          }
+
+          // ── 17. 每轮结束立即持久化（tool_call/tool_result 配对写盘）──
           loop.persist.batch(msgs);
         }
 

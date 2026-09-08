@@ -33,6 +33,7 @@ const (
 	EventError      EventType = "error"       // 出错/止损
 	EventCompacted  EventType = "compacted"   // 上下文已压缩（中段老消息压成摘要；UI 显示一行素色提示）
 	EventEvaluation EventType = "evaluation"  // 任务评测评分（完成后评测模型打分；UI 显示评分卡）
+	EventCircling   EventType = "circling"    // 检测到重复绕圈，已注入「换思路」提示打破死循环（UI 显示一行提示）
 	// EventApproval 等待用户审批某次写类工具调用。由宿主（UI 桥）在 Approve 钩子里 emit，
 	// loop 自身不直接发——loop 只通过 Approve 回调阻塞等待裁决（见 agent_bridge.go）。
 	EventUsage    EventType = "usage" // LLM 调用完成后的 token 用量（含缓存命中/未命中）
@@ -183,6 +184,8 @@ type Loop struct {
 	// cacheDiagOn 缓存诊断开关（WB_CACHE_DIAG=1 启用；前缀形状/累计状态为包级全局，
 	// 跨 Loop/Run 共享，见 cacheDiagPrev/cacheDiagSession）。
 	cacheDiagOn bool
+
+	recentCalls []toolSig // 最近若干次工具调用签名+成败（绕圈检测，见 circling.go）
 
 	// ── 消息队列（steer/followUp）──
 	// steerQueue 托管消息：在当前轮次完成后、下一轮 LLM 调用前注入上下文。
@@ -402,7 +405,7 @@ func (l *Loop) emit(e Event) {
 			l.liveEvents = append(l.liveEvents, LiveEvent{Type: "tool_result", Tool: e.Tool, Content: e.Content, CallID: e.CallID})
 		}
 		l.liveMu.Unlock()
-	case EventError, EventNotice, EventCompacted, EventEvaluation, EventApproval:
+	case EventError, EventNotice, EventCompacted, EventCircling, EventEvaluation, EventApproval:
 		l.liveMu.Lock()
 		l.liveEvents = append(l.liveEvents, LiveEvent{Type: string(e.Type), Content: e.Content})
 		l.liveMu.Unlock()
@@ -865,6 +868,7 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 				)
 				l.emit(Event{Type: EventToolResult, Tool: tc.Function.Name, Content: errMsg, CallID: tc.ID})
 				msgs = append(msgs, Message{Role: RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: errMsg})
+				l.trackCall(tc.Function.Name, tc.Function.Arguments, true)
 			}
 			l.currentMsgs = l.fullHistory(msgs)
 		}
@@ -934,11 +938,12 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 								if rej == "" {
 									rej = "用户拒绝了此操作。请勿重试该操作；改用其他方式达成目标，或先向用户说明你为何需要它。"
 								}
-								// ★ 2026-08-27 错误计数移除：驳回仅反馈继续；驳回记录进共享
-								//   审核状态（approveState）。
+								// ★ 2026-08-27 错误计数移除：驳回仅反馈继续（打破死循环由
+								//   绕圈检测兜底）；驳回记录进共享审核状态（approveState）。
 								l.getApproveState().recordReject(tc.Function.Name, rej)
 								l.emit(Event{Type: EventToolResult, Tool: tc.Function.Name, Content: rej, CallID: tc.ID})
 								msgs = append(msgs, Message{Role: RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: rej})
+								l.trackCall(tc.Function.Name, tc.Function.Arguments, true)
 								continue
 							}
 							// 审批通过 → 清掉该工具的最近驳回标记
@@ -958,6 +963,7 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 					l.emit(Event{Type: EventToolResult, Tool: tc.Function.Name, Content: result, CallID: tc.ID})
 					msgs = append(msgs, Message{Role: RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: result,
 						Images: l.takeCallImages(tc.ID)})
+					l.trackCall(tc.Function.Name, tc.Function.Arguments, terr != nil || strings.HasPrefix(strings.TrimSpace(result), "Error:"))
 
 				}
 			} // end else (serial tool execution)
@@ -1018,6 +1024,12 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 			}
 		} else {
 			l.contentOnlyIters = 0
+		}
+		// 绕圈检测：同一操作反复失败/反复执行 → 注入「换思路」提示打破死循环（见 circling.go）。
+		if nudge := l.detectCircling(); nudge != "" {
+			l.emit(Event{Type: EventCircling, Content: "检测到重复操作/反复失败，已提示 Agent 换思路打破死循环"})
+			l.ephemeralMsgs = append(l.ephemeralMsgs, Message{Role: RoleUser, Content: nudge})
+			l.recentCalls = nil // 提示后清零，给新思路一个干净起点
 		}
 
 		// ★ 每轮迭代结束立即持久化，确保 tool_call 与 tool_result 配对完整写入磁盘。
