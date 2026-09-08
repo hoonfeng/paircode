@@ -1999,15 +1999,18 @@ kickTeam(ws, id).catch((e) => log.warn('watchdog kick failed: ' + ((e && e.messa
     try {
       ctx.commands.register({
         name: 'agent-teams',
-        description: '团队面板/状态快照（/agent-teams [status]）',
+        description: '启动多智能体团队（/agent-teams <目标>；/agent-teams status 看状态）',
         handler: (args) => {
           try {
-            const sub = String((args && args.args) || '').trim().toLowerCase()
+            // ★ 2026-09-08 对齐 dsh（src/command.ts buildActivationDirective）：
+            //   `/agent-teams <目标>` 返回**激活指令**（含目标），而不是「可用子命令」——
+            //   宿主据此唤醒 agent，队长当轮即按协议建队；goal 不再被丢弃。
+            //   子命令 status = 纯查询（宿主不唤醒 agent）；无参 = 激活指令（无目标 → 询问目标）。
+            const raw = String((args && args.args) || '').trim()
+            const sub = raw.toLowerCase()
             const teams = collectTeamsActivity() || []
-            if (sub === '' || sub === 'status') {
-              // ★ 2026-08-31 按需激活：本命令即激活入口（宿主已激活并注入协议说明）。
-              //   此处返回团队状态快照或引导创建首个团队。
-              if (!teams.length) return '（当前无团队。你是队长：请用 agent_teams_create 创建团队（approval required），按协议完成建队、任务 DAG 与验收。）'
+            const snapshot = () => {
+              if (!teams.length) return '（当前无团队。）'
               const rows = teams.map((t) => ({
                 id: t.id,
                 name: t.name,
@@ -2018,7 +2021,19 @@ kickTeam(ws, id).catch((e) => log.warn('watchdog kick failed: ' + ((e && e.messa
               }))
               return JSON.stringify({ teams: rows }, null, 2)
             }
-            return '可用子命令：status（默认，团队状态快照）'
+            if (sub === 'status') return snapshot()
+            const lines = [
+              'The user invoked an AgentTeams slash command. Activate the AgentTeams protocol from your instructions now: you are the captain of a multi-agent team.',
+              'Call agent_teams_create with approval="required". Build the complete staged roster and DAG, then stop and ask the user to review the Web plan. Do not approve or start it in this same turn.',
+            ]
+            if (raw === '') {
+              lines.push('The goal was not given — ask the user what the team should accomplish.')
+            } else {
+              lines.push('Goal: ' + raw)
+            }
+            const snap = snapshot()
+            if (snap && snap !== '（当前无团队。）') lines.push('Current teams: ' + snap)
+            return lines.join('\n')
           } catch (e) {
             return 'agent-teams 命令执行失败: ' + (e && e.message || e)
           }

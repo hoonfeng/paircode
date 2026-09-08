@@ -111,16 +111,17 @@ func (l *Loop) tryParallelExecute(ctx context.Context, calls []ToolCall, msgs []
 
 	// 按原始顺序收集结果
 	for _, r := range results {
+		tc := preflight[r.idx].tc
 		output := r.output
 		if r.err != nil {
 			output = "Error: " + r.err.Error()
 		} else {
-			// ★ 图片提交（2026-08-22）：工具结果含 submit_image 标记 → 读图挂 pendingImages
-			output = l.parseImageSubmitResult(output)
+			// ★ 图片读取（read_image）：标记 → 准入/归一化/落盘，图片认领到该 tool 消息
+			output = l.parseImageSubmitResult(output, tc.ID)
 		}
-		tc := preflight[r.idx].tc
 		l.emit(Event{Type: EventToolResult, Tool: tc.Function.Name, Content: output, CallID: tc.ID})
-		msgs = append(msgs, Message{Role: RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: output})
+		msgs = append(msgs, Message{Role: RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: output,
+			Images: l.takeCallImages(tc.ID)})
 	}
 
 	return msgs, true
@@ -154,11 +155,12 @@ func (l *Loop) executeReadOnlyParallel(ctx context.Context, calls []ToolCall, ms
 		if r.err != nil {
 			output = "Error: " + r.err.Error()
 		} else {
-			// ★ 图片提交（2026-08-22）：工具结果含 submit_image 标记 → 读图挂 pendingImages
-			output = l.parseImageSubmitResult(output)
+			// ★ 图片读取（read_image）：标记 → 准入/归一化/落盘，图片认领到该 tool 消息
+			output = l.parseImageSubmitResult(output, r.tc.ID)
 		}
 		l.emit(Event{Type: EventToolResult, Tool: r.tc.Function.Name, Content: output, CallID: r.tc.ID})
-		msgs = append(msgs, Message{Role: RoleTool, ToolCallID: r.tc.ID, Name: r.tc.Function.Name, Content: output})
+		msgs = append(msgs, Message{Role: RoleTool, ToolCallID: r.tc.ID, Name: r.tc.Function.Name, Content: output,
+			Images: l.takeCallImages(r.tc.ID)})
 
 	}
 	return msgs

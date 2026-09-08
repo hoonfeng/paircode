@@ -11215,8 +11215,8 @@
   async function listCommands() {
     return apiGet("/commands");
   }
-  async function runCommand(name, args, convId) {
-    return apiPost("/commands/run", { name, args: args || {}, convId: convId || "" });
+  async function runCommand(name, args, convId, workspaceRoot) {
+    return apiPost("/commands/run", { name, args: args || {}, convId: convId || "", workspaceRoot: workspaceRoot || "" });
   }
   async function approveChat(convId, approved) {
     return apiPost("/chat/approve", { convId, approved });
@@ -11295,7 +11295,7 @@
   async function saveInstructions(scope, content) {
     return apiPut("/instructions?scope=" + scope, { content });
   }
-  const api = { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, isWebSocketOpen, waitForWebSocket, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatCompact, chatStop, getMessages, getMessagesCount, setConvModel, getConversationMeta, getModels, saveModels, getAiPresets, saveAiPreset, saveAiPresets, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, listPlugins, getUIBoot, getPluginDetail, pluginAction, definePlugin, pluginEmit, pluginClientEvents, pluginClientState, pluginInvoke, pluginClientFailure, builtinPlugins, pluginToolToggle, pluginPrefer, getToolsets, toolsetEdit, listCommands, runCommand };
+  const api = { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, isWebSocketOpen, waitForWebSocket, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatCompact, chatStop, getMessages, getMessagesCount, setConvModel, getConversationMeta, getModels, saveModels, getAiPresets, saveAiPreset, saveAiPresets, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, listPlugins, getUIBoot, getPluginDetail, pluginAction, definePlugin, pluginEmit, pluginClientEvents, pluginClientState, pluginInvoke, pluginClientFailure, builtinPlugins, pluginToolToggle, pluginPrefer, getToolsets, getActiveToolset, toolsetEdit, listCommands, runCommand };
   async function getUIBoot() {
     return apiGet("/ui-boot");
   }
@@ -11348,6 +11348,12 @@
     if (name) params.name = name;
     if (ws) params.workspaceRoot = ws;
     return apiGet("/toolsets", params);
+  }
+  async function getActiveToolset(convId, workspaceRoot) {
+    const params = {};
+    if (convId) params.convId = convId;
+    if (workspaceRoot) params.workspaceRoot = workspaceRoot;
+    return apiGet("/toolsets/active", params);
   }
   async function toolsetEdit(data) {
     return apiPost("/toolsets/edit", data);

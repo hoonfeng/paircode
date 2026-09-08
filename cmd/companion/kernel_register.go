@@ -106,6 +106,7 @@ func registerKernelAPIs(s *webServer) {
 
 	// ── 工具集（动态构建/固化/导出/导入）──
 	_ = agent.KernelAPIRegister("toolsets", "GET", "/api/toolsets", "工具集列表", handler.HandleToolsetsList)
+	_ = agent.KernelAPIRegister("toolsets.active", "GET", "/api/toolsets/active", "会话实际生效的工具集（?convId=）", handler.HandleToolsetActive)
 	_ = agent.KernelAPIRegister("toolsets.build", "POST", "/api/toolsets/build", "工具集构建", handler.HandleToolsetBuild)
 	_ = agent.KernelAPIRegister("toolsets.export", "GET", "/api/toolsets/export", "工具集导出", handler.HandleToolsetExport)
 	_ = agent.KernelAPIRegister("toolsets.import", "POST", "/api/toolsets/import", "工具集导入", handler.HandleToolsetImport)

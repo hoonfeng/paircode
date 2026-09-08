@@ -2343,23 +2343,33 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 	//   现改为 HTTP 立即返回「马上的消息」，Start 在后台 goroutine 执行；
 	//   失败经 PushStartError → WS error 事件推送（前端按 convID 路由、清理 loading）。
 	//   快速校验（消息空/未配置 Provider/用户消息落盘失败）保持在同步段，失败语义不变。
+	// ★ 2026-09-08 启动链路抽为 launchConvRun：slash 命令激活（/agent-teams 等）需要
+	//   同一套 opts 构建 + 审核解析 + Start，抽公共实现避免两处漂移。
+	s.launchConvRun(req.ConvID, req.WorkspaceRoot, req.Message, req.Autonomous)
+	jsonResp(w, map[string]any{"ok": true, "convId": req.ConvID})
+}
+
+// launchConvRun 后台启动一次 agent 会话运行（handleChatSend 与 slash 命令激活唤醒共用）：
+// 构建 LoopOpts（工作区隔离 + 工具集白名单 + 多模态门控）→ 审核/规划 Provider 解析 →
+// SessionManager.Start；失败经 PushStartError 推 WS error 事件（前端据此清理 loading）。
+func (s *webServer) launchConvRun(convID, wsRoot, task string, autonomous bool) {
 	go func() {
 		// ★ 2026-08-23 工作区隔离：会话根（请求指定）贯穿 buildWebLoopOpts。
-		opts := s.buildWebLoopOpts(req.ConvID, req.Message, req.Autonomous, req.WorkspaceRoot)
+		opts := s.buildWebLoopOpts(convID, task, autonomous, wsRoot)
 		// ★ 2026-08-21：Provider 判空——清空配置后 APIKey/BaseURL 为空 → buildWebProvider
 		//   返回 nil → Loop.Provider=nil → agentloop 插件首次 loop.llm.chat 触发
 		//   nil pointer panic（[session] Loop goroutine panic）。此处前置拦截给友好提示。
 		if opts.Provider == nil {
-			agentMgr.PushStartError(req.ConvID, "未配置 AI 服务商（APIKey/BaseURL 为空）：请先在「设置 → AI」中添加并应用 AI 配置，再发送消息")
+			agentMgr.PushStartError(convID, "未配置 AI 服务商（APIKey/BaseURL 为空）：请先在「设置 → AI」中添加并应用 AI 配置，再发送消息")
 			return
 		}
-		opts.WorkspaceRoot = req.WorkspaceRoot
+		opts.WorkspaceRoot = wsRoot
 		// ★ 2026-09-04 工具集模式改造：工具集已全局化（通用集合），agent 工具面
 		//   按「会话选择的集合」收敛（ConversationMeta.Toolset；空=default 集合）
 		//   ——不再是「工作区工具集并集」。precise 收敛：仅所选集合声明的工具可见。
 		//   协议/管理工具（SystemTool + cordis_*/toolset_*）恒可用（函数内兜底）。
 		if opts.Registry != nil {
-			agent.ApplyConvToolsetWhitelist(handler.GetPluginHost(), opts.Registry, req.ConvID, req.WorkspaceRoot)
+			agent.ApplyConvToolsetWhitelist(handler.GetPluginHost(), opts.Registry, convID, wsRoot)
 			// ★ 2026-09-09 多模态门控：非视觉模型禁用截图/看图工具（白名单之后执行，
 			//   覆盖 SystemTool 恒可用项；多模态模型恢复启用防残留）
 			agent.ApplyMultimodalToolGate(opts.Registry, opts.Provider)
@@ -2370,8 +2380,8 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 		opts.ReviewBlacklist = core.Settings.ReviewBlacklist
 		opts.ReviewWhitelist = core.Settings.ReviewWhitelist
 		// ★ 如果请求中指定了工作区根路径，从工作区配置覆盖审核配置
-		if req.WorkspaceRoot != "" {
-			wrMode, wrBlack, wrWhite := agent.LoadWorkspaceReviewConfig(req.WorkspaceRoot)
+		if wsRoot != "" {
+			wrMode, wrBlack, wrWhite := agent.LoadWorkspaceReviewConfig(wsRoot)
 			if wrMode != "" && wrMode != "auto" {
 				opts.ReviewMode = wrMode
 			}
@@ -2384,14 +2394,14 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 		}
 		// ★ 2026-08-31 会话级审核模式最高优先：会话元数据记录的选择（持久化，
 		//   重启/恢复会话仍生效）> 工作区配置 > 全局默认。
-		if store := agentMgr.StoreFor(req.WorkspaceRoot); store != nil {
-			if cm := store.ConvReviewMode(req.ConvID); cm != "" {
+		if store := agentMgr.StoreFor(wsRoot); store != nil {
+			if cm := store.ConvReviewMode(convID); cm != "" {
 				opts.ReviewMode = cm
 			}
 		}
 		// ★ 配置消费插件化：Review/Plan Provider 参数统一经装配点解析。
 		// ★ 2026-08-31：按会话解析（审核/规划模型跟随本会话选定的模型）。
-		cur := agent.ResolveProviderParamsForConv(req.ConvID, req.WorkspaceRoot)
+		cur := agent.ResolveProviderParamsForConv(convID, wsRoot)
 		if opts.ReviewMode == "auto" && cur.ReviewModel != "" {
 			pm := strings.TrimSpace(cur.PlanModel)
 			if pm != "" && cur.BaseURL != "" && cur.APIKey != "" {
@@ -2406,14 +2416,14 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		if req.Autonomous {
+		if autonomous {
 			pm := strings.TrimSpace(cur.PlanModel)
 			if pm != "" && cur.BaseURL != "" && cur.APIKey != "" {
 				pp := cur
 				pp.Model = pm
 				pp.Multimodal = false
 				opts.PlanProvider = agent.CreateProvider(pp)
-			} else if prov := buildWebProviderForConv(req.ConvID, req.WorkspaceRoot); prov != nil {
+			} else if prov := buildWebProviderForConv(convID, wsRoot); prov != nil {
 				opts.PlanProvider = prov
 			}
 		}
@@ -2422,15 +2432,14 @@ func (s *webServer) handleChatSend(w http.ResponseWriter, r *http.Request) {
 		// Loop 的运行由内部独立的 context 管理（Stop 可取消），不受此超时影响。
 		setupCtx, setupCancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer setupCancel()
-		if err := agentMgr.Start(setupCtx, req.ConvID, req.Message, opts); err != nil {
+		if err := agentMgr.Start(setupCtx, convID, task, opts); err != nil {
 			// ★ Start 失败日志（排查「无响应」：异步后经 WS error 事件推送，此处留档）
-			log.Printf("[chat] Start 失败 conv=%s err=%v", req.ConvID, err)
-			agentMgr.PushStartError(req.ConvID, err.Error())
+			log.Printf("[chat] Start 失败 conv=%s err=%v", convID, err)
+			agentMgr.PushStartError(convID, err.Error())
 			return
 		}
-		log.Printf("[chat] Start 成功 conv=%s（agent 循环已启动）", req.ConvID)
+		log.Printf("[chat] Start 成功 conv=%s（agent 循环已启动）", convID)
 	}()
-	jsonResp(w, map[string]any{"ok": true, "convId": req.ConvID})
 }
 
 // handleChatStop 停止指定会话。
@@ -2519,9 +2528,10 @@ func (s *webServer) handleCommandsRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Name   string         `json:"name"`
-		Args   map[string]any `json:"args"`
-		ConvID string         `json:"convId"`
+		Name          string         `json:"name"`
+		Args          map[string]any `json:"args"`
+		ConvID        string         `json:"convId"`
+		WorkspaceRoot string         `json:"workspaceRoot"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonErr(w, err.Error())
@@ -2538,7 +2548,8 @@ func (s *webServer) handleCommandsRun(w http.ResponseWriter, r *http.Request) {
 	}
 	// ★ 按需激活：命令触发插件 → 本会话激活，工具立即可用。协议段已常驻
 	//   （方案 B：alwaysVisible 段 = 引导+协议），此处仅提示解锁，不再重复注入全文。
-	if activated := agent.ActivateByCommand(req.ConvID, req.Name); activated != "" {
+	activated := agent.ActivateByCommand(req.ConvID, req.Name)
+	if activated != "" {
 		log.Printf("[activation] 会话 %s 经 /%s 激活按需插件 %s", req.ConvID, req.Name, activated)
 		output += "\n\n（插件 " + activated + " 已激活——其团队工具现已并入本会话，按系统提示中的 AgentTeams 协议开始执行）"
 	}
@@ -2549,7 +2560,49 @@ func (s *webServer) handleCommandsRun(w http.ResponseWriter, r *http.Request) {
 			log.Printf("[commands] 结果注入失败 conv=%s: %v", req.ConvID, err)
 		}
 	}
+	// ★ 2026-09-08 激活后自动唤醒 agent（对齐 dsh src/command.ts 的 invocation.agent.followup）：
+	//   此前命令只注入系统消息、不启动 agent —— 用户执行 /agent-teams 后界面毫无动作，
+	//   被误判为「插件呼不出/没生效」。现在：激活成功且非纯查询子命令（status）→
+	//   以命令原文 `/name <args>` 为 task 启动一次会话运行，队长当轮即按协议建队
+	//   （launchConvRun 会重建工具面，agent-teams 工具同步可见）。
+	if activated != "" && req.ConvID != "" {
+		if task := agentCommandTaskText(req.Name, req.Args); task != "" {
+			wsRoot := req.WorkspaceRoot
+			if wsRoot == "" {
+				wsRoot = core.Root()
+			}
+			log.Printf("[activation] 会话 %s /%s 激活 %s → 自动唤醒 agent（task=%s）",
+				req.ConvID, req.Name, activated, trimForLog(task, 80))
+			s.launchConvRun(req.ConvID, wsRoot, task, false)
+		}
+	}
 	jsonResp(w, map[string]any{"ok": true, "name": req.Name, "output": output})
+}
+
+// agentCommandTaskText 按需插件命令激活后传给 agent 的首轮 task 文本：
+// `/name <args>` 原文（args 取 map 的 "args" 子命令串，如 `/agent-teams 实现 X`）；
+// 纯查询子命令（status）返回 ""——不唤醒 agent，只回状态快照。
+func agentCommandTaskText(name string, args map[string]any) string {
+	sub := ""
+	if args != nil {
+		if v, ok := args["args"]; ok && v != nil {
+			sub = strings.TrimSpace(fmt.Sprint(v))
+		}
+	}
+	switch strings.ToLower(sub) {
+	case "status":
+		return ""
+	}
+	return strings.TrimSpace("/" + name + " " + sub)
+}
+
+// trimForLog 日志用截断（按 rune 计，避免切断多字节字符）。
+func trimForLog(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n]) + "…"
 }
 
 // handleChatApprove 发送审批结果。

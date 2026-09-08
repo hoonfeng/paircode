@@ -1533,6 +1533,52 @@ func ApplyConvToolsetWhitelist(ph *PluginHost, reg *Registry, convID, wsRoot str
 	}
 }
 
+// ConvToolsetActiveInfo 会话工具集生效信息（GET /api/toolsets/active 返回）。
+// ★ 2026-09 修复「对话面板工具集选择器刷新后空白」：前端需要知道当前对话
+// 「实际正在使用哪个集合」——会话未显式选择时后端回落默认集合（presetNameDefault），
+// 前端据此显示生效名（而非 placeholder），用户不再困惑于「不选择也能工作」。
+type ConvToolsetActiveInfo struct {
+	Selected    string `json:"selected"`    // 会话元数据显式选择的集合名（空=未选择）
+	Effective   string `json:"effective"`   // 实际生效的集合名（Selected 空 → 默认集合；空=未收敛）
+	DefaultName string `json:"defaultName"` // 默认集合名（presetNameDefault，如「基础」）
+	IsDefault   bool   `json:"isDefault"`   // true=未显式选择（生效值来自默认集合）
+	Converged   bool   `json:"converged"`   // true=按集合收敛工具面；false=集合缺失不收敛（全量保留）
+}
+
+// ResolveConvToolsetActive 解析会话实际生效的工具集集合（与
+// ApplyConvToolsetWhitelist 的解析链路一致，只读不改）：
+//
+//	① 会话元数据显式选择（ConversationMeta.Toolset；旧英文名由 loadToolset 内
+//	   resolvePresetName 解析为中文名，Effective 取解析后的真实集合名）；
+//	② 未选择 / 集合缺失 → 默认集合 presetNameDefault（缺失时先播种预置再试）；
+//	③ 仍无 → Converged=false（不收敛，全量保留——兼容无工具集环境）。
+//
+// convID 为空（新对话尚未创建）时 Selected 为空、Effective = 默认集合名。
+func ResolveConvToolsetActive(convID, wsRoot string) ConvToolsetActiveInfo {
+	info := ConvToolsetActiveInfo{DefaultName: presetNameDefault}
+	if convID != "" {
+		if store := storeForConvLookup(convID, wsRoot); store != nil {
+			info.Selected = strings.TrimSpace(store.ConvToolset(convID))
+		}
+	}
+	name := info.Selected
+	if name == "" {
+		name = presetNameDefault
+		info.IsDefault = true
+	}
+	ts, err := loadToolset("", toolsetProject, name)
+	if err != nil || ts == nil {
+		// 集合缺失：播种预置模式后再试（与 ApplyToolsetWhitelistByName 同一策略）
+		seedPresetToolsets(GetGlobalPluginHost())
+		ts, err = loadToolset("", toolsetProject, name)
+	}
+	if err == nil && ts != nil && ts.Name != "" {
+		info.Effective = ts.Name
+		info.Converged = true
+	}
+	return info
+}
+
 // storeForConvLookup 按会话定位消息存储（workspaceRoot 指定优先；未命中时
 // 跨已打开 store 兜底——与 SessionManager.FindConversation 语义一致）。
 func storeForConvLookup(convID, wsRoot string) ConversationStore {

@@ -567,7 +567,7 @@ return {
                   }
                 } else {
                   for (const tc of approved) {
-                    const res = loop.tools.run(tc.function.name, tc.function.arguments);
+                    const res = loop.tools.run(tc.function.name, tc.function.arguments, tc.id);
                     const output = res.error ? 'Error: ' + res.error : res.content;
                     loop.events.emit({ type: 'tool_result', tool: tc.function.name, content: output, callId: tc.id });
                     msgs.push({ role: 'tool', toolCallId: tc.id, name: tc.function.name, content: output });
@@ -575,7 +575,7 @@ return {
                 }
               } else if (approved.length === 1) {
                 const tc = approved[0];
-                const res = loop.tools.run(tc.function.name, tc.function.arguments);
+                const res = loop.tools.run(tc.function.name, tc.function.arguments, tc.id);
                 const output = res.error ? 'Error: ' + res.error : res.content;
                 loop.events.emit({ type: 'tool_result', tool: tc.function.name, content: output, callId: tc.id });
                 msgs.push({ role: 'tool', toolCallId: tc.id, name: tc.function.name, content: output });

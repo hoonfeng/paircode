@@ -3,6 +3,7 @@
 // 与 agent 工具集工具（toolset_build/list/export/import/remove）同源，
 // 提供浏览器 UI 直调通道：
 //   - GET  /api/toolsets              列表（工作区 + 全局）
+//   - GET  /api/toolsets/active       会话实际生效的工具集（?convId=&workspaceRoot=）
 //   - POST /api/toolsets/build        动态构建 + 固化 + 装载
 //   - GET  /api/toolsets/export       导出发布 JSON（?name=）
 //   - POST /api/toolsets/import       导入（{json|file, scope}）
@@ -75,6 +76,24 @@ func HandleToolsetsList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonResp(w, agent.ListAllToolsetsPublic(root))
+}
+
+// HandleToolsetActive GET /api/toolsets/active?convId=&workspaceRoot=：
+// 返回当前会话「实际生效」的工具集集合（★ 对话面板工具集选择器据此显示生效名，
+// 而不是刷新后空白）：
+//
+//	selected   会话元数据显式选择的集合（空=未选择）
+//	effective  实际生效集合名（未选择 → 默认集合「基础」；空=不收敛）
+//	isDefault  生效值是否来自默认集合
+//	converged  是否按集合收敛工具面
+//
+// convId 缺省（新对话尚未创建）时 effective = 默认集合名。
+func HandleToolsetActive(w http.ResponseWriter, r *http.Request) {
+	convID := r.URL.Query().Get("convId")
+	if convID == "" {
+		convID = r.URL.Query().Get("conversationId")
+	}
+	jsonResp(w, agent.ResolveConvToolsetActive(convID, r.URL.Query().Get("workspaceRoot")))
 }
 
 // HandleToolsetBuild POST /api/toolsets/build：动态构建 + 固化 + 装载。

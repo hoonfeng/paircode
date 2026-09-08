@@ -112,13 +112,6 @@ type Event struct {
 	LiveEvents []LiveEvent `json:"events,omitempty"`
 }
 
-// pendingImage 一张待注入 LLM 上下文的图片（submit_image 工具提交）。
-type pendingImage struct {
-	Part   ImagePart // image_url 块（base64 data URL）
-	Note   string    // 注入 user 消息时的说明文本（来源工具/路径/prompt）
-	Source string    // 原始路径（去重用）
-}
-
 // Loop TAOR 编排器：think(LLM 决策)→act(执行工具)→observe(结果回灌)→repeat。
 // 停止：自然终止（无 tool_call + 有正文）/ 达最大迭代 / 外部取消。
 type Loop struct {
@@ -191,7 +184,6 @@ type Loop struct {
 	// 跨 Loop/Run 共享，见 cacheDiagPrev/cacheDiagSession）。
 	cacheDiagOn bool
 
-
 	// ── 消息队列（steer/followUp）──
 	// steerQueue 托管消息：在当前轮次完成后、下一轮 LLM 调用前注入上下文。
 	steerQueue []Message
@@ -214,7 +206,7 @@ type Loop struct {
 	// JS 插件经 loop.approve.state.get/set 读写；agentloop 审核逻辑据此决策。
 	approveState *ApproveState
 
-WorkspaceRoot    string // 工作区根路径（用于 SaveTokenUsage 等工作区级持久化）
+	WorkspaceRoot    string // 工作区根路径（用于 SaveTokenUsage 等工作区级持久化）
 	CompactRequested bool   // 外部设置后下轮迭代触发上下文压缩（供主动压缩 API 使用）
 	Autonomous       bool   // 自主模式标志（单 Loop 阶段化循环）
 
@@ -250,17 +242,18 @@ WorkspaceRoot    string // 工作区根路径（用于 SaveTokenUsage 等工作�
 	// 调用 buildCallContext 后自动清空，确保不会污染持久化历史。
 	ephemeralMsgs []Message
 
-	// ── 图片提交（★ 2026-08-22 submit_image 工具）──
-	// pendingImages 工具产出/提交的图片队列（ImagePart 挂载在该 Loop 上）；
-	// 工具执行结果含 __SUBMIT_IMAGE__ 标记 → 读图 bytes → 挂入（含提示文本）；
-	// buildCallContext 每次迭代末尾把队列中的图片作为 user 消息（Images 字段）
-	// 注入 LLM 上下文（next LLM 请求即以 image_url 块发送）——图片不再只落磁盘、
-	// LLM 直接"看到"。仅当 Provider 支持多模态时注入图片（见 injectPendingImages）；
-	// 每轮最多 1 张 + 每张 ≤2MiB + 路径去重（防上下文爆炸）。
-	imageMu        sync.Mutex
-	pendingImages  []pendingImage  // 待注入图片（消费后清空）
-	imageInjected  map[string]bool // 已注入图片路径（会话级去重，防重复提交）
-	imageInjectedN int             // 已注入图片数（上限防护）
+	// ── 图片（★ 2026-08-22 read_image 工具；2026-09 对齐 dsh 管线）──
+	// imageByCall 工具调用 id → 该次工具结果携带的图片（read_image 提交）。
+	// 工具结果含 __SUBMIT_IMAGE__ 标记 → 准入 → 归一化 → 内容寻址落盘 →
+	// 挂入本表 → 追加 tool 消息时认领到该消息 Images（图片进入持久化历史）；
+	// 装配时提取合并成一条 user 消息，并按路由预算投影成 image_url 块（见 image_wire.go）。
+	// 仅当 Provider 支持多模态时投影发送（非视觉模型替换为占位文本）。
+	imageMu     sync.Mutex
+	imageByCall map[string][]ImagePart
+	// ★ 2026-09 图片管线对齐 dsh：请求装配时的投影缓存（ref+路由预算 → data URL）。
+	imageCacheMu  sync.Mutex
+	imageURLCache map[string]string
+
 	// autonomousStartTime 自主模式启动时间（用于时间预算检查）。
 	autonomousStartTime time.Time
 
@@ -793,7 +786,7 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 		// ★ 缓存诊断已由 buildCallContext 内部统一执行（Go/JS 循环共用），
 		//   此处不再重复调用，避免双份诊断输出。
 
-// ★ LLM 调用日志（排查「无响应」：每轮调用耗时 + 错误，重试期间用户看到的就是无响应）
+		// ★ LLM 调用日志（排查「无响应」：每轮调用耗时 + 错误，重试期间用户看到的就是无响应）
 		callStart := time.Now()
 		// ★ 2026-09-03 极简工具面已移除：极简面（8 工具）与全量面（54 工具）切换会使
 		//   DeepSeek 缓存按完整输入前缀匹配（含工具定义）时从头断前缀 → 每轮首请求 0% 命中。
@@ -957,12 +950,14 @@ func (l *Loop) Run(ctx context.Context, task string, history []Message) (msgs []
 					if terr != nil {
 						result = "Error: " + terr.Error()
 					} else {
-						// ★ 图片提交（2026-08-22）：工具结果含 submit_image 标记 →
-						//   读图挂 pendingImages，标记从文本剥离（净化后发 LLM）。
-						result = l.parseImageSubmitResult(result)
+						// ★ 图片读取（read_image 插件）：工具结果含 __SUBMIT_IMAGE__ 标记 →
+						//   准入/归一化/内容寻址落盘，图片认领到该 tool 消息（进持久化历史），
+						//   标记从文本剥离（净化后发 LLM）。
+						result = l.parseImageSubmitResult(result, tc.ID)
 					}
 					l.emit(Event{Type: EventToolResult, Tool: tc.Function.Name, Content: result, CallID: tc.ID})
-					msgs = append(msgs, Message{Role: RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: result})
+					msgs = append(msgs, Message{Role: RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: result,
+						Images: l.takeCallImages(tc.ID)})
 
 				}
 			} // end else (serial tool execution)
@@ -1148,9 +1143,12 @@ func (l *Loop) buildCallContext(msgs []Message) []Message {
 		result = append(result, l.trimToolResult(m))
 	}
 	result = append(result, rest...)
-	// ★ 图片提交（2026-08-22）：工具 submit_image 提交的图片注入 LLM 上下文
-	//   （user 消息带 Images → Provider.Chat 以 image_url 块发送；仅多模态模型）。
-	result = l.injectPendingImages(result)
+	// ★ 2026-09 图片管线对齐 dsh：工具结果图片认领到对应 tool 消息 → 提取合并成
+	//   一条 user 消息（Attached image(s) from tool result:）→ 按路由预算投影
+	//   （引用→data URL + 句柄）→ 超预算最老优先 offload → 非多模态路由占位。
+	result = l.attachToolResultImages(result)
+	result = extractToolImages(result)
+	result = l.hydrateImages(result)
 	// ★ GLM 兼容兜底（2026-08-27）：GLM（智谱）硬校验 messages 中必须至少存在一条
 	//   user 消息，否则 HTTP 400 code=1214「messages 参数非法」（实测 T6/T10；
 	//   OpenAI/DeepSeek 无此校验）。触发路径：循环中途压缩（compact）把唯一 user
@@ -1534,9 +1532,9 @@ func harnessSystemPrompt(roots []string) string {
 		"1. 改完后必须运行对应语言的编译/语法检查工具验证无错误。\n" +
 		"2. 编译通过≠功能正确，仍需执行相应运行时验证。\n\n" +
 		"# 🖼 图片视觉验证（测试 UI/截图场景）\n" +
-		"- 验证界面渲染/截图/图表等视觉产物时，调 submit_image(path=图片路径, prompt=关注的问题)\n" +
+		"- 验证界面渲染/截图/图表等视觉产物时，调 read_image(file_path=图片路径, prompt=关注的问题)\n" +
 		"  把图片随下一轮 LLM 请求提交给模型——LLM 直接看图片（识别文字、分析布局、验证渲染）。\n" +
-		"- 仅靠本地工具（DOM 分析等）看不到画面，视觉验证必须 submit_image。\n\n" +
+		"- 仅靠本地工具（DOM 分析等）看不到画面，视觉验证必须 read_image。\n\n" +
 		"# 工作方式\n" +
 		"复杂或多步任务先用任务清单工具列出细分任务，再逐步执行并更新状态。\n" +
 		"先用搜索/查看类工具定位、细读，再动手；改动优先小而准的编辑，大改才整段写入。\n" +
@@ -1664,9 +1662,9 @@ func fullSystemPrompt(roots []string) string {
 		"- 每次代码改动后必须验证，不允许只编译就声称完成\n" +
 		"- 验证失败时先修复再继续\n\n" +
 		"# 🖼 图片视觉验证（测试 UI/截图场景）\n" +
-		"- 验证界面渲染/截图/图表等视觉产物时，调 submit_image(path=图片路径, prompt=关注的问题)\n" +
+		"- 验证界面渲染/截图/图表等视觉产物时，调 read_image(file_path=图片路径, prompt=关注的问题)\n" +
 		"  把图片随下一轮 LLM 请求提交给模型——LLM 直接看图片（识别文字、分析布局、验证渲染）。\n" +
-		"- 仅靠本地工具（DOM 分析等）看不到画面，视觉验证必须 submit_image。\n\n" +
+		"- 仅靠本地工具（DOM 分析等）看不到画面，视觉验证必须 read_image。\n\n" +
 
 		"# 工作方式\n" +
 		"复杂或多步任务先用任务清单工具列出细分任务并追踪状态，再逐步执行（任务=唯一追踪体系；计划工具已移除）。\n" +

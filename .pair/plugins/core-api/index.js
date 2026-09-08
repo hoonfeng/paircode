@@ -83,6 +83,7 @@ const ROUTES = [
   { key: 'plugins.prefer' },
   // 工具集
   { key: 'toolsets' },
+  { key: 'toolsets.active' },
   { key: 'toolsets.build' },
   { key: 'toolsets.export' },
   { key: 'toolsets.import' },

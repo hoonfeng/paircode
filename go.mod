@@ -9,9 +9,11 @@ require (
 	github.com/goccy/go-yaml v1.19.2
 	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/yalue/onnxruntime_go v1.31.0
-	golang.org/x/sys v0.44.0
+	golang.org/x/sys v0.47.0
 	modernc.org/sqlite v1.53.0
 )
+
+require golang.org/x/image v0.45.0 // indirect
 
 require (
 	github.com/dlclark/regexp2/v2 v2.5.2

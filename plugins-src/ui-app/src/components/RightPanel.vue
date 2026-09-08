@@ -234,16 +234,18 @@
                   @change="onCmpModelChange"
                 />
                 <!-- ★ 2026-09-04 工具集（通用集合）模式选择器：会话级——选择当前对话
-                     使用的工具集（default/full/dev/debug/test/docs 或自定义集合），
+                     使用的工具集（计划讨论/全栈开发/办公/调试/基础/全功能 或自定义集合），
                      写入会话元数据（PUT /conversations/{id} toolset）只影响本会话；
                      agent 工具面按所选集合收敛（发送消息时后端应用）。
+                     ★ 2026-09 修复：未显式选择时显示后端实际生效的默认集合（不再空白）——
+                       否则用户不知道当前对话正在使用哪个工具集。
                      ★ 2026-09-05 移动端化：bottom-sheet 弹层替代传统 <select>。 -->
                 <SheetPicker
                   v-if="toolsetItems.length"
                   v-model="convToolset"
                   :items="toolsetSheetItems"
-                  title="切换工具集"
-                  placeholder="选择工具集…"
+                  :title="toolsetPickerTitle"
+                  :placeholder="toolsetPlaceholder"
                   @change="onConvToolsetChange"
                 />
                 <span class="obtn-sep"></span>
@@ -347,8 +349,10 @@ async function runSlashCommand() {
   const cmd = slashCommands.value.find(c => c.name === name)
   if (!cmd) { sendMessageSpecial(); return } // 无匹配 → 原样发送
   try {
-    const res = await api.runCommand(name, { args: m[2] || '' }, state.currentConvId)
-    // ★ 2026-09-10 命令结果本地渲染（不唤醒模型；后端已同时注入系统消息并激活插件）
+    // ★ 2026-09-08：带 workspaceRoot（后端激活后自动唤醒 agent 需按会话工作区路由）；
+    //   执行成功后清空输入框——此前残留 "/name " 让用户误判「命令没生效」。
+    const res = await api.runCommand(name, { args: m[2] || '' }, state.currentConvId, state.workspaceRoot)
+    setInputText('')
     pushSlashResult(name, (res && res.output) || '（命令执行完成，无输出）')
   } catch (e) {
     console.warn('[RP] slash 命令执行失败:', e)
@@ -544,16 +548,34 @@ function initComposerModel() {
 }
 
 // ── ★ 2026-09-04 工具集（通用集合）模式：会话级选择 ──
-const toolsetItems = ref([])    // 全局工具集列表（GET /api/toolsets，不含 builtin 虚拟）
-const convToolset = ref('')     // 当前会话工具集名（'' = 未设置，后端用 default）
+const toolsetItems = ref([])           // 全局工具集列表（GET /api/toolsets，不含 builtin 虚拟）
+const convToolset = ref('')            // 选择器显示值（= 当前实际生效的集合名）
+const convToolsetEffective = ref('')   // 实际生效集合名（未显式选择 → 后端默认集合；'' = 未收敛）
+const convToolsetIsDefault = ref(true) // true = 会话未显式选择（生效值来自默认集合）
+const pendingConvToolset = ref('')     // 新对话尚未创建时的暂存选择（建会话后写入）
 function toolsetLabel(t) {
   const scope = t.scope === 'builtin' ? '内置' : '全局'
   return t.name + '（' + scope + '·' + (t.pluginCount || 0) + ' 插件）'
 }
 // ★ 2026-09-05 移动端化：工具集选择器 bottom-sheet 选项
-const toolsetSheetItems = computed(() =>
-  toolsetItems.value.map(t => ({ value: t.name, label: t.name, desc: (t.pluginCount || 0) + ' 个插件' }))
-)
+// ★ 2026-09 修复：生效项标注「默认生效 / 当前」——用户一眼看出当前对话用的是哪个集合。
+const toolsetSheetItems = computed(() => {
+  const eff = convToolsetEffective.value
+  return toolsetItems.value.map(t => {
+    const n = (t.pluginCount || 0) + ' 个插件'
+    if (eff && t.name === eff) {
+      return { value: t.name, label: t.name, desc: (convToolsetIsDefault.value ? '默认生效' : '当前') + ' · ' + n }
+    }
+    return { value: t.name, label: t.name, desc: n }
+  })
+})
+// 未收敛（集合缺失/无工具集配置）时不能留空白：明确告知「全部工具可用」
+const toolsetPlaceholder = computed(() => (convToolsetEffective.value ? '选择工具集…' : '未收敛（全部工具可用）'))
+const toolsetPickerTitle = computed(() => {
+  const eff = convToolsetEffective.value
+  if (!eff) return '当前未按工具集收敛：全部工具可用'
+  return '当前生效工具集：' + eff + (convToolsetIsDefault.value ? '（默认）' : '')
+})
 async function loadToolsetItems() {
   try {
     const list = await api.getToolsets()
@@ -562,25 +584,51 @@ async function loadToolsetItems() {
     console.warn('[toolset] 工具集列表加载失败', e)
   }
 }
-// 依据当前会话元数据同步模式选择（会话已记录 toolset → 显示它；否则默认）
+// 同步选择器 = 当前会话「实际生效」的集合（★ 修复刷新后显示 placeholder 的问题：
+// 会话未显式选择时显示后端实际生效的默认集合「基础」，而不是空白——
+// 否则用户根本不知道当前对话正在使用哪个工具集）。
 async function syncConvToolsetFromConv() {
-  const convId = state.currentConvId
-  if (!convId) { convToolset.value = ''; return }
   try {
-    const meta = await api.getConversationMeta(convId, state.workspaceRoot || '')
-    convToolset.value = (meta && meta.toolset) || ''
-  } catch { convToolset.value = '' }
+    const info = await api.getActiveToolset(state.currentConvId || '', state.workspaceRoot || '')
+    const selected = (info && info.selected) || ''
+    const effective = (info && info.effective) || ''
+    convToolsetIsDefault.value = !selected
+    convToolsetEffective.value = effective
+    convToolset.value = effective || selected
+  } catch (e) {
+    console.warn('[toolset] 生效集合解析失败，回退会话元数据', e)
+    try {
+      const meta = state.currentConvId
+        ? await api.getConversationMeta(state.currentConvId, state.workspaceRoot || '')
+        : null
+      const selected = (meta && meta.toolset) || ''
+      convToolsetIsDefault.value = !selected
+      convToolsetEffective.value = selected
+      convToolset.value = selected
+    } catch {
+      convToolsetIsDefault.value = true; convToolsetEffective.value = ''; convToolset.value = ''
+    }
+  }
 }
 // 切换模式 = 只写当前会话（不动全局；后端发送消息时按会话集合收敛工具面）
 async function onConvToolsetChange() {
   const convId = state.currentConvId
   const name = convToolset.value
-  if (!convId) return
+  if (!name) return
+  convToolsetEffective.value = name
+  convToolsetIsDefault.value = false
+  if (!convId) {
+    // 新对话尚未创建：暂存，首条消息建会话后写入（见 sendMessage）
+    pendingConvToolset.value = name
+    window.$toast && window.$toast('已选择工具集 ' + name + '（本对话首条消息生效）', 'info')
+    return
+  }
   try {
     await api.apiPut('/conversations/' + encodeURIComponent(convId), { toolset: name })
-    window.$toast && window.$toast((name ? '本对话已切换工具集为 ' + name : '已清除工具集选择（回落 default）'), 'success')
+    window.$toast && window.$toast('本对话已切换工具集为 ' + name, 'success')
   } catch (e) {
     window.$toast && window.$toast('工具集切换失败: ' + (e.message || e), 'error')
+    syncConvToolsetFromConv()   // 失败 → 回滚显示为真实生效值
   }
 }
 // 切换模型 = 只写当前会话（不动全局 settings；★ 2026-09-03 连同配置名一起写入）
@@ -1507,6 +1555,20 @@ const sendMessage = async () => {
   const convId = state.currentConvId
   if (!convId) { state.chatLoading = false; state.agentRunning = false; return }
 
+  // ★ 新对话刚建好：补写「无会话时暂存的工具集选择」（发送前完成——后端按会话
+  //   元数据收敛工具面，必须在 chatStart 之前落盘）。
+  if (pendingConvToolset.value) {
+    const want = pendingConvToolset.value
+    pendingConvToolset.value = ''
+    try {
+      await api.apiPut('/conversations/' + encodeURIComponent(convId), { toolset: want })
+      convToolset.value = want
+      convToolsetEffective.value = want
+      convToolsetIsDefault.value = false
+      console.log('[RP] 新对话写入暂存工具集: %s', want)
+    } catch (e) { console.warn('[toolset] 新对话写入工具集失败', e) }
+  }
+
   // ── ★ 先创建 runtime（在 push 任何消息之前），防止 processStatus 竞态创建兜底占位 ──
   const msgKey = makeMsgKey()
   const lastUserText = text
@@ -2243,9 +2305,12 @@ watch(() => [state.settings && state.settings.provider, state.settings && state.
   // 全局默认配置变化：仅当当前会话未设置模型时下拉才需要刷新显示
   loadModelData().then(() => syncComposerModelFromConv())
 })
-// ★ 2026-09-04 工具集（通用集合）会话级：切换会话时同步模式选择；列表惰性加载
-watch(() => state.currentConvId, () => { syncConvToolsetFromConv() })
-watch(() => state.workspaceRoot, () => { loadToolsetItems() })
+// ★ 2026-09-04 工具集（通用集合）会话级：切换会话时同步实际生效集合；列表惰性加载
+watch(() => state.currentConvId, () => {
+  pendingConvToolset.value = ''   // 切换会话：丢弃上一个「尚未创建」对话的暂存选择
+  syncConvToolsetFromConv()
+})
+watch(() => state.workspaceRoot, () => { loadToolsetItems().then(() => syncConvToolsetFromConv()) })
 
 
 // ★ 从会话/工作区加载审核模式（黑白名单配置已由插件面板/工具集管理取代，不再加载）

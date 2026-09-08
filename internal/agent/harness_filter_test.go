@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -160,6 +161,20 @@ func TestHarnessOnlyTools_Default(t *testing.T) {
 	}
 }
 
+// mentionsToolName 判断提示词是否把工具名当作独立标识符提及。
+//
+// ★ 2026-09：独立词匹配而非子串匹配——子串匹配会把 read_image（图片视觉验证
+// 提示词有意点名的工具）中的 "read" 误判为引用已移除的 read 工具。
+// 带下划线后缀的前缀族（memory_/git_/image_ 等）保持子串语义（它们以 _ 收尾，
+// 独立词匹配反而会失效）。
+func mentionsToolName(prompt, name string) bool {
+	if strings.HasSuffix(name, "_") {
+		return strings.Contains(prompt, name)
+	}
+	re := regexp.MustCompile(`(^|[^A-Za-z0-9_])` + regexp.QuoteMeta(name) + `([^A-Za-z0-9_]|$)`)
+	return re.MatchString(prompt)
+}
+
 // 被移除的 pair 独有工具名（harness 精简提示词中不应出现）。
 var trimmedPromptBannedTools = []string{
 	"codegraph", "memory_", "project_info", "history_", "git_", "debug_", "binary_",
@@ -185,7 +200,7 @@ func TestPromptTrimmedInHarnessMode(t *testing.T) {
 	// 精简提示词不应引用被移除工具
 	p := DefaultSystemPrompt(roots)
 	for _, banned := range trimmedPromptBannedTools {
-		if strings.Contains(p, banned) {
+		if mentionsToolName(p, banned) {
 			t.Errorf("harness 精简提示词仍引用被移除工具名 %q", banned)
 		}
 	}
@@ -196,7 +211,7 @@ func TestPromptTrimmedInHarnessMode(t *testing.T) {
 		"read", "edit", "write", "bash", "web_search", "web_fetch",
 		"cordis_define", "cordis_run", "cordis_inspect", "toolset_build", "toolset_show",
 		"ask_user", "str_replace_editor"} {
-		if strings.Contains(p, banned) {
+		if mentionsToolName(p, banned) {
 			t.Errorf("harness 精简提示词不应引用工具名 %q（工具信息以 tools 参数 schema 为准）", banned)
 		}
 	}

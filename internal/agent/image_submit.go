@@ -2,24 +2,27 @@
 // image_submit.go — 图片提交给 LLM 视觉识别（submit_image 工具支持）
 //
 // ★ 背景（2026-08-22）：agent 工作（测试 UI/截图/测试产出图片）时，图片
-//   只落在磁盘（screenshots/ 等），LLM 永远"看不到"——agent 只能用本地
-//   工具（DOM 分析/文本）猜测画面内容。本机制让工具能显式把图片随下一轮
-//   LLM 请求一起发送（OpenAI 兼容 image_url 块），LLM 直接看图。
+//
+//	只落在磁盘（screenshots/ 等），LLM 永远"看不到"——agent 只能用本地
+//	工具（DOM 分析/文本）猜测画面内容。本机制让工具能显式把图片随下一轮
+//	LLM 请求一起发送（OpenAI 兼容 image_url 块），LLM 直接看图。
 //
 // ★ 协议：工具结果以标记行开头 → __SUBMIT_IMAGE__:{"kind":"submit_image",
-//   "path":"...","mime":"...","size":123,"prompt":"..."}（磁盘插件 tool-vision
-//   生成）。本文件解析标记 → 读图 bytes（≤2MiB）→ ImagePart → 挂 pendingImages
-//   → buildCallContext 注入 user 消息（Images 字段）→ Provider.Chat 转块数组。
-//   标记从结果文本剥离（净化后给 LLM 的文本不含标记）。
+//
+//	"path":"...","mime":"...","size":123,"prompt":"..."}（磁盘插件 tool-vision
+//	生成）。本文件解析标记 → 读图 bytes（≤2MiB）→ ImagePart → 挂 pendingImages
+//	→ buildCallContext 注入 user 消息（Images 字段）→ Provider.Chat 转块数组。
+//	标记从结果文本剥离（净化后给 LLM 的文本不含标记）。
 //
 // ★ 防护：仅 Provider 多模态时注入（非视觉模型忽略，避免 400）；路径限
-//   工作区内（resolvePath 越界拦截）；单图 ≤2MiB（超出报错）；会话内路径
-//   去重 + 上限（imageInjectedN 防 40+ 张图撑爆上下文）。
+//
+//	工作区内（resolvePath 越界拦截）；单图 ≤2MiB（超出报错）；会话内路径
+//	去重 + 上限（imageInjectedN 防 40+ 张图撑爆上下文）。
+//
 // ═══════════════════════════════════════════════════════════════
 package agent
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -39,19 +42,18 @@ type imageSubmitMeta struct {
 	Prompt string `json:"prompt"`
 }
 
-// imageSubmitMaxBytes 单图上限（DeepSeek 视觉接口建议 ≤2MiB）。
-const imageSubmitMaxBytes = 2 * 1024 * 1024
+// imageSubmitMaxBytes 单图准入上限（对齐 dsh DEFAULT_MAX_REQUEST_IMAGE_BYTES = 20MiB）。
+const imageSubmitMaxBytes = 20 << 20
 
-// imageSubmitMaxTotal 会话内可提交图片总数（防上下文爆炸）。
-const imageSubmitMaxTotal = 20
-
-// parseImageSubmitResult 解析工具结果中的 __SUBMIT_IMAGE__ 标记：
-//   - 命中：读图 → ImagePart → 挂 l.pendingImages；返回剥离标记后的净化文本
+// parseImageSubmitResult 解析工具结果中的 __SUBMIT_IMAGE__ 标记（read_image 插件生成）：
+//   - 命中：准入检查 → 归一化 → 内容寻址落盘 → ImagePart 挂到 l.imageByCall[callID]；
+//     返回剥离标记后的净化文本（含 dsh 风格信封）
 //   - 未命中：原样返回（快速路径，无额外开销）
 //
 // ★ 线程安全：并行工具执行（runParallel/executeParallel）并发调用本函数，
-//   挂载与去重均在 imageMu 锁内完成。
-func (l *Loop) parseImageSubmitResult(result string) string {
+//
+//	挂载均在 imageMu 锁内完成。
+func (l *Loop) parseImageSubmitResult(result, callID string) string {
 	if !strings.HasPrefix(result, imageSubmitMarker) {
 		return result
 	}
@@ -60,42 +62,47 @@ func (l *Loop) parseImageSubmitResult(result string) string {
 	metaStr := strings.TrimPrefix(markLine, imageSubmitMarker)
 	var meta imageSubmitMeta
 	if err := json.Unmarshal([]byte(metaStr), &meta); err != nil {
-		return "错误：submit_image 标记解析失败：" + err.Error() + "\n" + rest
+		return "错误：图片标记解析失败：" + err.Error() + "\n" + rest
 	}
-	if meta.Kind != "submit_image" || meta.Path == "" {
-		return "错误：submit_image 标记无效（kind/path 缺失）\n" + rest
+	// ★ 2026-09 对齐 dsh：工具名 read_image（旧名 submit_image 仍接受）
+	if (meta.Kind != "submit_image" && meta.Kind != "read_image") || meta.Path == "" {
+		return "错误：图片标记无效（kind/path 缺失）\n" + rest
 	}
 	// 大小上限（标记声明值）
 	if meta.Size > imageSubmitMaxBytes {
-		return "错误：图片 " + humanBytes(meta.Size) + " 超过 2MiB 限制——请压缩后提交\n" + rest
+		return "错误：图片 " + humanBytes(meta.Size) + " 超过 " + humanBytes(imageSubmitMaxBytes) + " 准入限制——请压缩后提交\n" + rest
 	}
 	// 读图（相对路径/绝对路径均限工作区内；越界由 resolvePath 拦截）
-	part, note, err := l.loadImagePart(meta.Path, meta.Mime, meta.Prompt)
+	part, _, err := l.loadImagePart(meta.Path, meta.Mime, meta.Prompt)
 	if err != nil {
 		return "错误：读取图片失败：" + err.Error() + "\n" + rest
 	}
+	// 信封文本（对齐 dsh formatImageReadOutput）：模型看到的图片事实与降采样提示
+	envelope := formatImageReadOutput(meta.Path, part)
 	ns := strings.TrimSpace(rest)
-	if ns == "" {
-		ns = "图片已提交：请查看并分析。"
-	}
-	// 挂载（锁内：路径去重 + 总数上限）
-	l.imageMu.Lock()
-	if l.imageInjected == nil {
-		l.imageInjected = map[string]bool{}
-	}
-	key := meta.Path
-	if !l.imageInjected[key] && l.imageInjectedN < imageSubmitMaxTotal {
-		l.pendingImages = append(l.pendingImages, pendingImage{Part: part, Note: note, Source: key})
-		l.imageInjected[key] = true
-		l.imageInjectedN++
+	if ns != "" {
+		ns = envelope + "\n" + ns
 	} else {
-		ns = "图片已提交（重复或已超上限，未重复注入）：" + meta.Path + "\n" + ns
+		ns = envelope
+	}
+	// 挂到该次工具调用（装配时由 attachImagesToToolMsgs 认领到对应 tool 消息，
+	// 对齐 dsh：图片作为工具结果的一部分进入持久化历史，请求侧由 offload 裁剪）
+	l.imageMu.Lock()
+	if l.imageByCall == nil {
+		l.imageByCall = map[string][]ImagePart{}
+	}
+	if callID != "" {
+		l.imageByCall[callID] = append(l.imageByCall[callID], part)
+	} else {
+		ns = "图片未注入（工具调用缺少 call id）：" + meta.Path + "\n" + ns
 	}
 	l.imageMu.Unlock()
 	return ns
 }
 
-// loadImagePart 读图文件 → ImagePart（base64 data URL）+ 说明文本。
+// loadImagePart 读图 → 准入检查 → 归一化 → 内容寻址落盘 → ImagePart（只带引用与事实）。
+// 对齐 dsh：准入（20MiB / 64M 像素 / 长边 8192）→ 归一化（2048² / 4MiB）→ 附件存储；
+// 模型实际收到的请求变体在装配时按路由预算投影（见 image_wire.go hydrateImages）。
 func (l *Loop) loadImagePart(path, mime, prompt string) (ImagePart, string, error) {
 	full, err := resolveImagePath(l.WorkspaceRoot, path)
 	if err != nil {
@@ -105,18 +112,52 @@ func (l *Loop) loadImagePart(path, mime, prompt string) (ImagePart, string, erro
 	if err != nil {
 		return ImagePart{}, "", err
 	}
-	if len(data) > imageSubmitMaxBytes {
-		return ImagePart{}, "", fmt.Errorf("图片 %s 超过 2MiB 限制", humanBytes(int64(len(data))))
+	// 1) 准入检查（媒体类型以文件签名嗅探为准，声明 mime 仅作兜底）
+	if int64(len(data)) > admissionImageLimits.MaxBytes {
+		return ImagePart{}, "", fmt.Errorf("图片 %s 超过准入上限 %s",
+			humanBytes(int64(len(data))), humanBytes(admissionImageLimits.MaxBytes))
+	}
+	facts, _, err := decodeImageBytes(data)
+	if err != nil {
+		return ImagePart{}, "", err
+	}
+	if admissionImageLimits.MaxPixels > 0 && int64(facts.Width)*int64(facts.Height) > admissionImageLimits.MaxPixels {
+		return ImagePart{}, "", fmt.Errorf("图片 %dx%d 像素超过准入上限 %d",
+			facts.Width, facts.Height, admissionImageLimits.MaxPixels)
+	}
+	if admissionImageLimits.MaxDimension > 0 && max(facts.Width, facts.Height) > admissionImageLimits.MaxDimension {
+		return ImagePart{}, "", fmt.Errorf("图片长边 %d 超过准入上限 %d",
+			max(facts.Width, facts.Height), admissionImageLimits.MaxDimension)
+	}
+	// 2) 归一化（已满足限制则字节级透传，否则降采样 + 质量阶梯编码）
+	norm, err := normalizeImageBytes(data, normalizationImageLimits)
+	if err != nil {
+		return ImagePart{}, "", err
+	}
+	// 3) 内容寻址落盘（同内容复用同一附件）
+	ref, _, err := storeAttachment(attachmentDir(l.WorkspaceRoot), norm.Data, norm.MediaType)
+	if err != nil {
+		return ImagePart{}, "", err
 	}
 	if mime == "" {
-		mime = "image/png"
+		mime = norm.MediaType
 	}
 	part := ImagePart{
-		Data:     "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data),
-		MimeType: mime,
-		Detail:   "auto",
+		MimeType:   norm.MediaType,
+		Detail:     "auto",
+		Ref:        ref,
+		Path:       path,
+		Width:      norm.Width,
+		Height:     norm.Height,
+		Bytes:      int64(len(norm.Data)),
+		OrigWidth:  facts.Width,
+		OrigHeight: facts.Height,
 	}
-	note := "工具提交了图片（" + path + "，" + humanBytes(int64(len(data))) + "）"
+	note := "工具提交了图片（" + path + "，" + humanBytes(int64(len(norm.Data)))
+	if facts.Width != norm.Width || facts.Height != norm.Height {
+		note += fmt.Sprintf("，已从 %dx%d 归一化", facts.Width, facts.Height)
+	}
+	note += "）"
 	if strings.TrimSpace(prompt) != "" {
 		note += "；关注点：" + strings.TrimSpace(prompt)
 	}
@@ -139,33 +180,7 @@ func resolveImagePath(primaryRoot, p string) (string, error) {
 	return resolvePath(primaryRoot, root+"/"+rel)
 }
 
-// injectPendingImages 把待注入图片追加到 callMsgs 末尾——
-// 每轮迭代末尾一次性消费（清空队列；同一轮图片消息紧跟工具结果之后）。
-// ★ 仅当 Provider 支持多模态时注入（非视觉模型跳过——buildOpenAIMessages
-//   在 multimodal=false 时忽略 Images，图片不会发出；此处提前跳过省开销）。
-func (l *Loop) injectPendingImages(callMsgs []Message) []Message {
-	l.imageMu.Lock()
-	if len(l.pendingImages) == 0 {
-		l.imageMu.Unlock()
-		return callMsgs
-	}
-	if !l.supportsMultimodal() {
-		l.imageMu.Unlock()
-		return callMsgs // 非视觉模型：跳过图片（LLM 看不到，注入无意义）
-	}
-	imgs := append([]pendingImage(nil), l.pendingImages...)
-	l.pendingImages = nil
-	l.imageMu.Unlock()
-
-	for _, img := range imgs {
-		callMsgs = append(callMsgs, Message{
-			Role:    RoleUser,
-			Content: "【图片】" + img.Note,
-			Images:  []ImagePart{img.Part},
-		})
-	}
-	return callMsgs
-}
+// providerSupportsMultimodal 判断 Provider 是否支持多模态（图片输入）：
 
 // providerSupportsMultimodal 判断 Provider 是否支持多模态（图片输入）：
 //   - OpenAIProvider 有 Multimodal 字段 → 类型断言读取

@@ -39,7 +39,7 @@ func mkVisibilityReg() *Registry {
 		reg.Register(&Tool{Name: n, Handler: noopHandler})
 	}
 	// 非工具集插件工具（tool-bar 注册，应隐藏）
-	for _, n := range []string{"skill_list", "load_skill", "mcp_list", "submit_image"} {
+	for _, n := range []string{"skill_list", "load_skill", "mcp_list", "read_image"} {
 		reg.Register(&Tool{Name: n, Handler: noopHandler})
 	}
 	return reg
@@ -83,7 +83,7 @@ func TestApplyToolsetVisibilityFilter(t *testing.T) {
 	reg := mkVisibilityReg()
 	h, _ := mkVisibilityHost(t, reg)
 	n := ApplyToolsetVisibilityFilter(reg, h, h.root)
-	// 非工具集工具：skill_list/load_skill/mcp_list/submit_image 应禁用（4 个）
+	// 非工具集工具：skill_list/load_skill/mcp_list/read_image 应禁用（4 个）
 	if n != 4 {
 		t.Errorf("应禁用 4 个非工具集工具，实际 %d", n)
 	}
@@ -108,7 +108,7 @@ func TestApplyToolsetVisibilityFilter(t *testing.T) {
 		}
 	}
 	// 非工具集插件工具禁用（保留注册）
-	for _, name := range []string{"skill_list", "load_skill", "mcp_list", "submit_image"} {
+	for _, name := range []string{"skill_list", "load_skill", "mcp_list", "read_image"} {
 		if _, ok := reg.Get(name); !ok {
 			t.Errorf("非工具集工具 %s 应保留注册", name)
 		}
@@ -118,7 +118,7 @@ func TestApplyToolsetVisibilityFilter(t *testing.T) {
 	}
 	// Definitions 只导出启用项
 	for _, d := range reg.Definitions() {
-		if d.Function.Name == "skill_list" || d.Function.Name == "submit_image" {
+		if d.Function.Name == "skill_list" || d.Function.Name == "read_image" {
 			t.Errorf("Definitions 不应含禁用工具 %s", d.Function.Name)
 		}
 	}
@@ -152,7 +152,7 @@ func TestApplyToolsetVisibilityFilter_HarnessModeSkips(t *testing.T) {
 	if n := ApplyToolsetVisibilityFilter(reg, h, h.root); n != 0 {
 		t.Errorf("harness 模式不应干预，实际禁用 %d", n)
 	}
-	if !reg.IsEnabled("skill_list") || !reg.IsEnabled("submit_image") {
+	if !reg.IsEnabled("skill_list") || !reg.IsEnabled("read_image") {
 		t.Error("harness 模式全部工具应保持启用")
 	}
 }

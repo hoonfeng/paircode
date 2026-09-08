@@ -470,8 +470,10 @@ async function listCommands() {
 }
 
 // runCommand 执行 slash 命令；convId 提供时后端把结果以系统消息注入该会话。
-async function runCommand(name, args, convId) {
-  return apiPost('/commands/run', { name, args: args || {}, convId: convId || '' })
+// ★ 2026-09-08：workspaceRoot 用于「按需插件激活后自动唤醒 agent」（后端 launchConvRun
+//   按会话工作区路由 opts/store），缺省时后端回落当前工作区。
+async function runCommand(name, args, convId, workspaceRoot) {
+  return apiPost('/commands/run', { name, args: args || {}, convId: convId || '', workspaceRoot: workspaceRoot || '' })
 }
 
 // 审批写工具
@@ -659,7 +661,7 @@ async function saveInstructions(scope, content) {
 
 }
 
-export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, isWebSocketOpen, waitForWebSocket, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatCompact, chatStop, getMessages, getMessagesCount, setConvModel, getConversationMeta, getModels, saveModels, getAiPresets, saveAiPreset, saveAiPresets, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, listPlugins, getUIBoot, getPluginDetail, pluginAction, definePlugin, pluginEmit, pluginClientEvents, pluginClientState, pluginInvoke, pluginClientFailure, builtinPlugins, pluginToolToggle, pluginPrefer, getToolsets, toolsetEdit, listCommands, runCommand }
+export default { apiGet, apiPost, apiPut, apiDelete, initWebSocket, reconnectWebSocket, closeWebSocket, isWebSocketOpen, waitForWebSocket, chatStart, answerChat, approveChat, sendFeedback, chatRollback, chatCompact, chatStop, getMessages, getMessagesCount, setConvModel, getConversationMeta, getModels, saveModels, getAiPresets, saveAiPreset, saveAiPresets, getMcpList, saveMcpItem, getSkillsList, readSkill, deleteSkill, saveSkillStatus, getInstructions, saveInstructions, listPlugins, getUIBoot, getPluginDetail, pluginAction, definePlugin, pluginEmit, pluginClientEvents, pluginClientState, pluginInvoke, pluginClientFailure, builtinPlugins, pluginToolToggle, pluginPrefer, getToolsets, getActiveToolset, toolsetEdit, listCommands, runCommand }
 
 // ─── UI 插件 boot 图（外部兼容 /api/ui-boot 单图）──────────────
 // getUIBoot 取外部 boot 图（WebBootGraph 等价，{rev, entries:[{id,url,rev,inject,immediately,external}]}）。
@@ -811,6 +813,22 @@ async function getToolsets(name, workspaceRoot) {
   if (ws) params.workspaceRoot = ws
 
   return apiGet('/toolsets', params)
+
+}
+
+// getActiveToolset 当前会话「实际生效」的工具集（★ 对话面板选择器据此显示生效名，
+// 而不是刷新后空白）：返回 {selected, effective, defaultName, isDefault, converged}。
+// convId 缺省（新对话尚未创建）时 effective = 默认集合名（如「基础」）。
+
+async function getActiveToolset(convId, workspaceRoot) {
+
+  const params = {}
+
+  if (convId) params.convId = convId
+
+  if (workspaceRoot) params.workspaceRoot = workspaceRoot
+
+  return apiGet('/toolsets/active', params)
 
 }
 

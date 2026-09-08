@@ -32,10 +32,21 @@ type Message struct {
 }
 
 // ImagePart 一条图片消息（OpenAI 兼容 image_url 块）。
+// ImagePart 一条图片消息（OpenAI 兼容 image_url 块 + dsh 附件引用）。
 type ImagePart struct {
-	Data     string `json:"data,omitempty"`     // base64 data URL（data:<mime>;base64,<b64>）或 http(s) URL
-	MimeType string `json:"mimeType,omitempty"` // image/png|image/jpeg|image/gif|image/webp（data URL 时）
+	Data     string `json:"data,omitempty"`     // base64 data URL（请求装配时填充；持久化不存）或 http(s) URL
+	MimeType string `json:"mimeType,omitempty"` // image/png|image/jpeg|image/gif|image/webp（归一化后）
 	Detail   string `json:"detail,omitempty"`   // low|high|original|auto（空=auto）
+	// ★ 2026-09 图片管线对齐 dsh：持久化只存内容寻址引用 + 事实，
+	//   发送前按当前路由预算投影成 data URL（见 image_wire.go hydrateImages）。
+	Ref        string `json:"ref,omitempty"`        // 归一化附件 id（sha256 hex，内容寻址）
+	Path       string `json:"path,omitempty"`       // 源文件显示路径（句柄文本用）
+	Width      int    `json:"width,omitempty"`      // 归一化图宽
+	Height     int    `json:"height,omitempty"`     // 归一化图高
+	Bytes      int64  `json:"bytes,omitempty"`      // 归一化字节数
+	OrigWidth  int    `json:"origWidth,omitempty"`  // 源图宽（降采样前）
+	OrigHeight int    `json:"origHeight,omitempty"` // 源图高（降采样前）
+	Handle     string `json:"handle,omitempty"`     // 模型可见句柄（请求装配时填充，不落盘）
 }
 
 // ToolCall LLM 请求的一次工具调用。

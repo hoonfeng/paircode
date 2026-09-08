@@ -141,6 +141,10 @@ func buildResponsesInput(msgs []Message, multimodal bool) []map[string]any {
 					blocks = append(blocks, map[string]any{"type": "input_text", "text": m.Content})
 				}
 				for _, img := range m.Images {
+					// ★ 2026-09 对齐 dsh：每张图前插入模型可见句柄（请求预览尺寸 + 只读副本路径）
+					if img.Handle != "" {
+						blocks = append(blocks, map[string]any{"type": "input_text", "text": imageHandleBlock(img.Handle, len(blocks) > 0)})
+					}
 					if b := toResponsesImageBlock(img); b != nil {
 						blocks = append(blocks, b)
 					}

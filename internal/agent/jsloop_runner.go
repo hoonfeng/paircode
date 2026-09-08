@@ -220,15 +220,20 @@ func (r *jsLoopRunner) buildProxy() *goja.Object {
 		if v := call.Argument(1); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
 			argsJSON = v.String()
 		}
+		// 第三个参数（可选）：tool_call id —— 图片读取（read_image）据此把图片
+		// 认领到对应 tool 消息（JS 循环组装 tool 消息时携带，见 agentloop 插件）
+		callID := ""
+		if v := call.Argument(2); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
+			callID = v.String()
+		}
 		result, terr := l.Registry.Execute(r.ctx, name, argsJSON)
-		out := map[string]any{"content": result, "error": nil}
+		out := map[string]any{"content": result, "error": nil, "id": callID}
 		if terr != nil {
 			out["content"] = "Error: " + terr.Error()
 			out["error"] = terr.Error()
 		} else {
-			// ★ 图片提交（2026-08-22）：工具结果含 submit_image 标记 → 读图挂
-			//   pendingImages（标记剥离，净化文本给 JS 循环组装 tool 消息）。
-			out["content"] = l.parseImageSubmitResult(result)
+			// ★ 图片读取（read_image）：标记 → 准入/归一化/落盘，图片挂该次调用
+			out["content"] = l.parseImageSubmitResult(result, callID)
 		}
 		return vm.ToValue(out)
 	})
@@ -297,9 +302,8 @@ func (r *jsLoopRunner) buildProxy() *goja.Object {
 			if pr.err != nil {
 				output = "Error: " + pr.err.Error()
 			} else {
-				// ★ 图片提交（2026-08-22）：工具结果含 submit_image 标记 → 读图挂
-				//   pendingImages（标记剥离，净化文本给 JS 循环组装 tool 消息）。
-				output = l.parseImageSubmitResult(output)
+				// ★ 图片读取（read_image）：标记 → 准入/归一化/落盘，图片挂该次调用
+				output = l.parseImageSubmitResult(output, pr.tc.ID)
 			}
 			l.emit(Event{Type: EventToolResult, Tool: pr.tc.Function.Name, Content: output, CallID: pr.tc.ID})
 			errAny := any(nil)

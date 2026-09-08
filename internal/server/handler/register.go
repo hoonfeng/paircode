@@ -120,6 +120,7 @@ func RegisterAll(r *Router) {
 
 	// 工具集（动态构建/固化/导出/导入）
 	r.Handle("GET", "/api/toolsets", HandleToolsetsList)
+	r.Handle("GET", "/api/toolsets/active", HandleToolsetActive)
 	r.Handle("POST", "/api/toolsets/build", HandleToolsetBuild)
 	r.Handle("GET", "/api/toolsets/export", HandleToolsetExport)
 	r.Handle("POST", "/api/toolsets/import", HandleToolsetImport)

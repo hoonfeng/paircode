@@ -6,12 +6,13 @@ package agent
 // Agent 截图后模型根本看不到图」的错配。
 
 // visionDependentTools 视觉依赖工具清单：
-//   - submit_image：把工作区图片提交给模型视觉识别（多模态专属）
+//   - read_image：把工作区图片读给模型看（多模态专属；旧名 submit_image 已弃用）
 //   - screenshot_desktop/window/area：截屏（截图对纯文本模型无意义——
 //     LLM 看不到图，只会白耗截图动作；对话粘贴图片走 pendingImages 队列，
 //     由 Loop.injectPendingImages 按 supportsMultimodal 独立门控）
 var visionDependentTools = []string{
-	"submit_image",
+	"read_image",
+	"submit_image", // 兼容旧名（若旧版插件仍在磁盘上）
 	"screenshot_desktop",
 	"screenshot_window",
 	"screenshot_area",

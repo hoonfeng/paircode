@@ -51,40 +51,51 @@ func TestParseImageSubmitResult(t *testing.T) {
 	mark := "__SUBMIT_IMAGE__:{\"kind\":\"submit_image\",\"path\":\"" + filepath.ToSlash(pngPath) + "\",\"mime\":\"image/png\",\"size\":" + itoa64(int64(len(data))) + ",\"prompt\":\"检查是否有红色\"}"
 	result := mark + "\n图片已提交给模型"
 
-	clean := l.parseImageSubmitResult(result)
+	clean := l.parseImageSubmitResult(result, "call-1")
 	if strings.Contains(clean, "__SUBMIT_IMAGE__") {
 		t.Errorf("净化文本不应含标记: %s", clean)
 	}
 	if !strings.Contains(clean, "图片已提交给模型") {
 		t.Errorf("净化文本应保留描述: %s", clean)
 	}
-	l.imageMu.Lock()
-	if len(l.pendingImages) != 1 {
-		t.Fatalf("pendingImages 应 1 张，得 %d", len(l.pendingImages))
+	imgs := l.imageByCall["call-1"]
+	if len(imgs) != 1 {
+		t.Fatalf("imageByCall[call-1] 应 1 张，得 %d", len(imgs))
 	}
-	pi := l.pendingImages[0]
-	l.imageMu.Unlock()
-	wantPrefix := "data:image/png;base64,"
-	if !strings.HasPrefix(pi.Part.Data, wantPrefix) {
-		t.Errorf("ImagePart.Data 应 %s 前缀，得 %.40s", wantPrefix, pi.Part.Data)
+	part := imgs[0]
+	// ★ 2026-09 对齐 dsh：ImagePart 只带内容寻址引用与事实（请求装配时才投影为 data URL）
+	if part.Data != "" {
+		t.Errorf("ImagePart.Data 应为空（未装配）: %.40s", part.Data)
 	}
-	if pi.Part.MimeType != "image/png" || pi.Part.Detail != "auto" {
-		t.Errorf("ImagePart 元数据: %+v", pi.Part)
+	if len(part.Ref) != 64 {
+		t.Errorf("ImagePart.Ref 应为 sha256 引用: %q", part.Ref)
 	}
-	if !strings.Contains(pi.Note, "检查是否有红色") {
-		t.Errorf("note 应含 prompt: %s", pi.Note)
+	if part.Width != 4 || part.Height != 4 || part.OrigWidth != 4 || part.OrigHeight != 4 {
+		t.Errorf("ImagePart 尺寸事实: %+v", part)
+	}
+	if part.Bytes <= 0 {
+		t.Errorf("ImagePart.Bytes 应 > 0: %+v", part)
+	}
+	if part.MimeType != "image/png" || part.Detail != "auto" {
+		t.Errorf("ImagePart 元数据: %+v", part)
+	}
+	// 净化文本应含 dsh 风格信封（<path>/<type>/<content>）
+	if !strings.Contains(clean, "<type>image</type>") || !strings.Contains(clean, "4x4 px") {
+		t.Errorf("净化文本应含图片信封: %s", clean)
 	}
 
-	// 重复提交：去重不重复挂载
-	clean2 := l.parseImageSubmitResult(mark + "\nagain")
-	l.imageMu.Lock()
-	n := len(l.pendingImages)
-	l.imageMu.Unlock()
-	if n != 1 {
-		t.Errorf("重复路径应去重（仍 1 张），得 %d", n)
+	// 同一路径再次读取（新 callID）→ 对齐 dsh：不做路径去重，各自成一次 occurrence
+	clean2 := l.parseImageSubmitResult(mark+"\nagain", "call-2")
+	if len(l.imageByCall["call-2"]) != 1 {
+		t.Errorf("新 callID 应挂载 1 张，得 %d", len(l.imageByCall["call-2"]))
 	}
-	if !strings.Contains(clean2, "未重复注入") {
-		t.Errorf("重复提交应提示: %s", clean2)
+	if !strings.Contains(clean2, "again") {
+		t.Errorf("净化文本应保留描述: %s", clean2)
+	}
+	// 缺少 callID → 不挂载并提示
+	clean3 := l.parseImageSubmitResult(mark+"\nx", "")
+	if !strings.Contains(clean3, "缺少 call id") {
+		t.Errorf("缺 callID 应提示: %s", clean3)
 	}
 }
 
@@ -92,7 +103,7 @@ func TestParseImageSubmitResult(t *testing.T) {
 func TestParseImageSubmitResultNotMarked(t *testing.T) {
 	l := &Loop{}
 	result := "普通工具结果，没有标记"
-	if out := l.parseImageSubmitResult(result); out != result {
+	if out := l.parseImageSubmitResult(result, "c1"); out != result {
 		t.Errorf("无标记应原样返回: %s", out)
 	}
 }
@@ -103,7 +114,7 @@ func TestImageSubmitPathTraversal(t *testing.T) {
 	l := &Loop{WorkspaceRoot: dir}
 	// 相对路径穿越（../ outside.png）
 	result := "__SUBMIT_IMAGE__:{\"kind\":\"submit_image\",\"path\":\"../outside.png\",\"mime\":\"image/png\",\"size\":10,\"prompt\":\"\"}"
-	out := l.parseImageSubmitResult(result)
+	out := l.parseImageSubmitResult(result, "c1")
 	if !strings.Contains(out, "错误") && strings.Contains(out, "读取图片失败") == false {
 		// 越界拦截应报错
 		t.Logf("越界结果: %s", out)
@@ -113,39 +124,58 @@ func TestImageSubmitPathTraversal(t *testing.T) {
 	}
 }
 
-// TestInjectPendingImages 注入 user 消息（多模态 Provider）与非多模态跳过。
-func TestInjectPendingImages(t *testing.T) {
-	imgPart := ImagePart{Data: "data:image/png;base64,QUJD", MimeType: "image/png", Detail: "auto"}
+// TestExtractToolImages 工具结果图片提取合并（对齐 dsh serializeMessagesWithImages）。
+func TestExtractToolImages(t *testing.T) {
+	imgA := ImagePart{Ref: strings.Repeat("a", 64), MimeType: "image/png", Detail: "auto"}
+	imgB := ImagePart{Ref: strings.Repeat("b", 64), MimeType: "image/jpeg", Detail: "auto"}
 
-	// 多模态 provider：注入
-	l := &Loop{Provider: &OpenAIProvider{Multimodal: true}}
-	l.imageMu.Lock()
-	l.pendingImages = append(l.pendingImages, pendingImage{Part: imgPart, Note: "工具提交了图片（x.png）", Source: "x.png"})
-	l.imageMu.Unlock()
-	out := l.injectPendingImages([]Message{{Role: RoleUser, Content: "hi"}})
-	if len(out) != 2 {
-		t.Fatalf("多模态应注入 1 条（共 2），得 %d", len(out))
+	msgs := []Message{
+		{Role: RoleUser, Content: "hi"},
+		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "c1", Type: "function"}}},
+		{Role: RoleTool, ToolCallID: "c1", Content: "r1", Images: []ImagePart{imgA}},
+		{Role: RoleTool, ToolCallID: "c2", Content: "r2", Images: []ImagePart{imgB}},
+		{Role: RoleAssistant, Content: "done"},
 	}
-	last := out[len(out)-1]
-	if last.Role != RoleUser || len(last.Images) != 1 || last.Images[0].Data != "data:image/png;base64,QUJD" {
-		t.Errorf("注入消息错误: %+v", last)
+	out := extractToolImages(msgs)
+	if len(out) != 6 {
+		t.Fatalf("应合并为 6 条（5 原消息 + 1 图片 user），得 %d: %+v", len(out), out)
 	}
-	// 消费后队列清空
-	l.imageMu.Lock()
-	n := len(l.pendingImages)
-	l.imageMu.Unlock()
-	if n != 0 {
-		t.Errorf("注入后队列应清空，得 %d", n)
+	merged := out[4]
+	if merged.Role != RoleUser || len(merged.Images) != 2 {
+		t.Fatalf("合并消息错误: %+v", merged)
 	}
+	if !strings.HasPrefix(merged.Content, toolResultImageText) {
+		t.Errorf("合并消息前缀应为 %q，得 %q", toolResultImageText, merged.Content)
+	}
+	if len(out[2].Images) != 0 || len(out[3].Images) != 0 {
+		t.Errorf("tool 消息应剥离图片（wire 不允许 tool 带图）: %+v", out)
+	}
+	if len(msgs[2].Images) != 1 {
+		t.Errorf("原消息不应被修改: %+v", msgs[2])
+	}
+	// 无图片时原样返回（快速路径）
+	same := extractToolImages([]Message{{Role: RoleUser, Content: "x"}})
+	if len(same) != 1 {
+		t.Errorf("无图片应原样返回，得 %d", len(same))
+	}
+}
 
-	// 非多模态 provider：跳过
-	l2 := &Loop{Provider: &OpenAIProvider{Multimodal: false}}
-	l2.imageMu.Lock()
-	l2.pendingImages = append(l2.pendingImages, pendingImage{Part: imgPart, Note: "n", Source: "y.png"})
-	l2.imageMu.Unlock()
-	out2 := l2.injectPendingImages([]Message{{Role: RoleUser, Content: "hi"}})
-	if len(out2) != 1 {
-		t.Errorf("非多模态应跳过注入，得 %d 条", len(out2))
+// TestAttachToolResultImages 按 tool_call id 认领图片（JS 循环路径兜底）。
+func TestAttachToolResultImages(t *testing.T) {
+	img := ImagePart{Ref: strings.Repeat("c", 64), MimeType: "image/png", Detail: "auto"}
+	l := &Loop{}
+	l.imageByCall = map[string][]ImagePart{"c1": {img}}
+	msgs := []Message{
+		{Role: RoleUser, Content: "hi"},
+		{Role: RoleTool, ToolCallID: "c1", Content: "r"},
+	}
+	out := l.attachToolResultImages(msgs)
+	if len(out[1].Images) != 1 {
+		t.Fatalf("应认领 1 张: %+v", out[1])
+	}
+	// 认领后清空（幂等）
+	if again := l.attachToolResultImages(msgs); len(again[1].Images) != 0 {
+		t.Errorf("重复认领应为空: %+v", again[1])
 	}
 }
 
@@ -167,29 +197,6 @@ func TestResolveImagePath(t *testing.T) {
 	}
 }
 
-// TestImageSubmitMaxTotal 总数上限。
-func TestImageSubmitMaxTotal(t *testing.T) {
-	dir := t.TempDir()
-	l := &Loop{WorkspaceRoot: dir}
-	// 伪造 21 张不同路径的图
-	for i := 0; i < imageSubmitMaxTotal+1; i++ {
-		p := filepath.Join(dir, "f"+itoa64(int64(i))+".png")
-		pngBytes := []byte{0x89, 'P', 'N', 'G'}
-		_ = os.WriteFile(p, pngBytes, 0o644)
-		mark := "__SUBMIT_IMAGE__:{\"kind\":\"submit_image\",\"path\":\"" + filepath.ToSlash(p) + "\",\"mime\":\"image/png\",\"size\":4,\"prompt\":\"\"}"
-		out := l.parseImageSubmitResult(mark + "\n")
-		if i < imageSubmitMaxTotal {
-			if strings.Contains(out, "超上限") {
-				t.Errorf("第 %d 张不应提示超限: %s", i, out)
-			}
-		} else {
-			if !strings.Contains(out, "超上限") {
-				t.Errorf("第 %d 张应提示超限: %s", i, out)
-			}
-		}
-	}
-}
-
 func itoa64(n int64) string {
 	if n == 0 {
 		return "0"
@@ -207,17 +214,17 @@ func itoa64(n int64) string {
 var _ = base64.StdEncoding
 
 // TestImageSubmitEndToEnd 端到端：MockProvider 捕获 LLM 请求消息，
-// 验证 submit_image 工具结果解析后 next LLM 请求携带 image_url 用户消息。
+// 验证 read_image 工具结果解析后 next LLM 请求携带 image_url 用户消息。
 func TestImageSubmitEndToEnd(t *testing.T) {
 	dir := t.TempDir()
 	pngPath := writeTestPNG(t, dir, "ui.png")
 	_, _ = os.ReadFile(pngPath)
 
-	// 注册 submit_image 工具（仿真磁盘插件行为：返回标记行 + 提示文本）
+	// 注册 read_image 工具（仿真磁盘插件行为：返回标记行 + 提示文本）
 	reg := NewRegistry()
 	reg.Register(&Tool{
-		Name:       "submit_image",
-		Description: "提交图片给 LLM 视觉识别",
+		Name:        "read_image",
+		Description: "读取图片给 LLM 视觉识别",
 		Parameters:  objSchema(props{"path": strProp("图片路径")}, "path"),
 		ReadOnly:    true,
 		Handler: func(ctx context.Context, args map[string]any) (string, error) {
@@ -228,8 +235,8 @@ func TestImageSubmitEndToEnd(t *testing.T) {
 				mime = "image/jpeg"
 			}
 			b, _ := os.ReadFile(p)
-			mark, _ := json.Marshal(imageSubmitMeta{Kind: "submit_image", Path: p, Mime: mime, Size: int64(len(b)), Prompt: "检查 UI 是否白屏"})
-			return "__SUBMIT_IMAGE__:" + string(mark) + "\n图片已提交给模型：" + p, nil
+			mark, _ := json.Marshal(imageSubmitMeta{Kind: "read_image", Path: p, Mime: mime, Size: int64(len(b)), Prompt: "检查 UI 是否白屏"})
+			return "__SUBMIT_IMAGE__:" + string(mark) + "\n关注点：检查 UI 是否白屏", nil
 		},
 	})
 
@@ -237,20 +244,25 @@ func TestImageSubmitEndToEnd(t *testing.T) {
 	captured := &CaptureProvider{MultimodalVal: true}
 	_ = NewLoopForTest(reg, captured, dir)
 
-	// 手动走循环一步：模拟调用 submit_image → LLM
+	// 手动走循环一步：模拟调用 read_image → LLM
 	// 这里直接走工具执行 + buildCallContext 验证注入（不启完整 Run 循环）
-	tc := ToolCall{ID: "c1", Type: "function", Function: FunctionCall{Name: "submit_image", Arguments: `{"path":"` + filepath.ToSlash(pngPath) + `"}`}}
+	tc := ToolCall{ID: "c1", Type: "function", Function: FunctionCall{Name: "read_image", Arguments: `{"path":"` + filepath.ToSlash(pngPath) + `"}`}}
 	result, terr := reg.Execute(context.Background(), tc.Function.Name, tc.Function.Arguments)
 	if terr != nil {
 		t.Fatalf("工具执行失败: %v", terr)
 	}
 	loop := captured.Loop
-	clean := loop.parseImageSubmitResult(result)
+	clean := loop.parseImageSubmitResult(result, tc.ID)
 	if strings.Contains(clean, "__SUBMIT_IMAGE__") {
 		t.Errorf("净化文本残留标记: %s", clean)
 	}
-	// 模拟 LLM 下一次调用：buildCallContext 注入
-	callMsgs := loop.buildCallContext([]Message{{Role: RoleUser, Content: "测试 UI"}})
+	// 模拟循环历史：user → assistant(tool_call) → tool(结果，图片按调用认领进历史)
+	hist := []Message{
+		{Role: RoleUser, Content: "测试 UI"},
+		{Role: RoleAssistant, ToolCalls: []ToolCall{tc}},
+		{Role: RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: clean, Images: loop.takeCallImages(tc.ID)},
+	}
+	callMsgs := loop.buildCallContext(hist)
 	found := false
 	for _, m := range callMsgs {
 		if len(m.Images) > 0 {
@@ -258,8 +270,8 @@ func TestImageSubmitEndToEnd(t *testing.T) {
 			if !strings.HasPrefix(m.Images[0].Data, "data:image/png;base64,") {
 				t.Errorf("ImagePart.Data 非 data URL: %.30s", m.Images[0].Data)
 			}
-			if !strings.Contains(m.Content, "检查 UI 是否白屏") {
-				t.Errorf("注入消息应含 prompt: %s", m.Content)
+			if !strings.HasPrefix(m.Content, toolResultImageText) {
+				t.Errorf("注入消息应以 %q 开头: %s", toolResultImageText, m.Content)
 			}
 		}
 	}
