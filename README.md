@@ -15,7 +15,7 @@ MCP 支持与 HTTP 接口插件化。
 - **Agent 核心（Go）**：turn/step 双层循环状态模型，支持 max-tokens 粘滞、内容循环兜底、
   token 压力触发历史精简、会话级审核（review）与断线重连消息重同步。
 - **一切皆插件**：插件 = 磁盘目录（`<workspace>/.pair/plugins/<id>/`），无需重编译；
-  `cordis_define` 运行时定义（goja 沙箱），版本化 package 模型，插件可常驻/按需激活，
+  `cordis(op=define)` 运行时定义（goja 沙箱），版本化 package 模型，插件可常驻/按需激活，
   装载状态与诊断可查询。
 - **webServer 接口插件化**：`ctx.webServer` 路由注册，HTTP 端点由插件声明；
   事件流（`/ws`）由插件推送，Web 前端与外部客户端可订阅。
@@ -79,7 +79,7 @@ go run -tags toolsgen ./dev/tool_plugin_gen
 go build -o packager.exe ./scripts/packager && ./packager.exe
 ```
 
-插件开发见 `docs/plugin-development.md`（磁盘插件形态、`cordis_define` 用法、
+插件开发见 `docs/plugin-development.md`（磁盘插件形态、`cordis(op=define)` 用法、
 工具注册/系统提示贡献/事件订阅、client 半与 UI 面板）。
 
 ## 许可

@@ -1,6 +1,6 @@
 ---
 name: cordis-plugin-development
-description: 编写/修改 cordis 动态插件（JS/TS，goja 沙箱）的完整指南：插件形态、ctx 能力全表、harness 用法、版本化工作流、常见错误排查。在 cordis_define 写插件之前或 cordis_run 失败后先加载本技能。
+description: 编写/修改 cordis 动态插件（JS/TS，goja 沙箱）的完整指南：插件形态、ctx 能力全表、harness 用法、版本化工作流、常见错误排查。在 cordis(op=define) 写插件之前或 cordis(op=run) 失败后先加载本技能。
 ---
 
 # cordis 插件开发指南
@@ -9,7 +9,7 @@ description: 编写/修改 cordis 动态插件（JS/TS，goja 沙箱）的完整
 插件代码只存在于进程内存（不落盘、跨重启不存续）；需要跨重启存续用磁盘插件包或 .pair/cordis.patch.json。
 
 ★ 完整版用户文档：docs/plugin-development.md（ctx 全表/示例/坑）+ docs/go-core-capabilities.md（Go 内核能力清单）。
-★ 写插件前先 cordis_service_list 查精确签名；动手前可看磁盘插件现成范例（.pair/plugins/core-api、tool-git 等）。
+★ 写插件前先 cordis(op=services) 查精确签名；动手前可看磁盘插件现成范例（.pair/plugins/core-api、tool-memory、tool-system 等——tool-memory 是「单工具 + op 分派 + dynamicApproval」的现成范例）。
 
 ## 1. 插件形态（两种）
 
@@ -18,7 +18,7 @@ description: 编写/修改 cordis 动态插件（JS/TS，goja 沙箱）的完整
 return {
   name: 'my-plugin',
   inject: ['fs', 'web'],           // 可选：硬依赖服务（缺失→插件 waiting，服务出现自动激活）
-  apply(ctx, config) {             // config 来自 cordis_run 的 config 参数 / package.json "config"（无则 undefined）
+  apply(ctx, config) {             // config 来自 cordis(op=run) 的 config 参数 / package.json "config"（无则 undefined）
     // 注册工具 / 监听事件 / 提供服务 ...
   }
 }
@@ -81,7 +81,7 @@ apply(ctx) {
 - ★ 执行超时由插件自身控制（2026-08-22 起宿主不再强加 30s）：工具 execute 默认**不限时**
   （阻塞型交互工具如 ask_user 靠会话层超时）；如需死循环护栏，在工具定义上声明
   `timeout: 秒数`（如 `timeout: 30`，>0 才启用 goja Interrupt 强制中断）。
-- 工具同名冲突会被拒绝（不能覆盖宿主或他人插件工具）——换名或先 cordis_stop 占用方。
+- 工具同名冲突会被拒绝（不能覆盖宿主或他人插件工具）——换名或先 cordis(op=stop) 占用方。
 - ★ agent 可见性由工具集决定（对勾=加入工具集；去掉勾=从工具集移除；加入才可用）。
 - `harness.defineTool(tool)` 只校验不注册；`harness.registerTool` 同 ctx.tools.register；`harness.handle(method, fn)` 注册可调用方法（Go 侧 Invoke，同 registerClientMethod）。
 
@@ -116,15 +116,15 @@ apply(ctx) {
 ## 5. 版本化工作流（修改插件）
 
 ```text
-1. cordis_inspect id=xxx             → 看版本链与当前状态
-2. cordis_inspect id=xxx version=vN  → 读当前源码与诊断（不要凭记忆臆测）
-3. 修改代码后：cordis_define pluginId=xxx code=...  → 追加版本（existing append）
-4. cordis_run id=xxx                 → 装载最新版（restart：自动先停旧实例）
-5. 回滚：cordis_run id=dyn-<旧版本号>  → 指定精确版本装载
+1. cordis(op=inspect) id=xxx             → 看版本链与当前状态
+2. cordis(op=inspect) id=xxx version=vN  → 读当前源码与诊断（不要凭记忆臆测）
+3. 修改代码后：cordis(op=define) pluginId=xxx code=...  → 追加版本（existing append）
+4. cordis(op=run) id=xxx                 → 装载最新版（restart：自动先停旧实例）
+5. 回滚：cordis(op=run) id=dyn-<旧版本号>  → 指定精确版本装载
 ```
 
-- 首次 cordis_define 返回的 `dyn-<n>` 就是稳定 pluginId；后续追加版本保持同一 pluginId。
-- cordis_undefine 删除整个插件（定义 + 磁盘包）。
+- 首次 cordis(op=define) 返回的 `dyn-<n>` 就是稳定 pluginId；后续追加版本保持同一 pluginId。
+- cordis(op=undefine) 删除整个插件（定义 + 磁盘包）。
 
 ## 6. 内置 cordis 运行时（CordisApi）
 
@@ -161,11 +161,11 @@ Node API（require/setTimeout/fetch/process 等）沙箱中**不可用**，调�
 
 | 现象 | 原因 | 处理 |
 |---|---|---|
-| cordis_run 报"求值失败/语法错误" | JS/TS 语法或顶层异常 | 修代码 → define append → run；可用 TS 类型注解（内置编译器转译） |
+| cordis(op=run) 报"求值失败/语法错误" | JS/TS 语法或顶层异常 | 修代码 → define append → run；可用 TS 类型注解（内置编译器转译） |
 | 插件进入 waiting | inject 服务未就绪 | 等提供服务方运行；或改用 ctx.get 判 undefined（可选依赖） |
-| 工具注册报同名冲突 | 工具名被宿主/他人占用 | 换工具名，或先 cordis_stop 占用方 |
-| apply 失败（diag 可见） | 运行期异常（如调用不存在的方法） | cordis_inspect id=xxx 看 diag/lastError 定位阶段 |
-| 插件 stop 后工具还在 | 未走 Unload 回收 | cordis_stop 正确回收；自己注册的全局资源用 ctx.effect 清理 |
+| 工具注册报同名冲突 | 工具名被宿主/他人占用 | 换工具名，或先 cordis(op=stop) 占用方 |
+| apply 失败（diag 可见） | 运行期异常（如调用不存在的方法） | cordis(op=inspect) id=xxx 看 diag/lastError 定位阶段 |
+| 插件 stop 后工具还在 | 未走 Unload 回收 | cordis(op=stop) 正确回收；自己注册的全局资源用 ctx.effect 清理 |
 | req.query 不是对象 | RawQuery 字符串 | 自行 URLSearchParams 解析 |
 | ctx.bash 报 move 不存在 | 执行器是 git-bash | 用 mv/cp；中文输出注意编码 |
 | ctx.fs 越界 / web.fetch 只 GET | 设计约束 | 工作区外走内核接口；POST 走 ctx.http 反向或 bash curl |

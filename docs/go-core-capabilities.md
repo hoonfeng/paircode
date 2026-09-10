@@ -28,7 +28,7 @@ PairCode 的「一切皆插件」遵循统一模式：**实现留内核（Go）�
 ┌─────────────────────────────────────────────────────────────┐
 │  插件 ext 路由表（ExtRouteMiddleware，宿主 mux 之前拦截）      │
 │    ├─ core-api 插件 ctx.kernel.install → 内核接口（Go handler）│
-│    ├─ web-api / git-api 等插件 ctx.http/webServer → 插件接口  │
+│    ├─ git-api / core-api 等插件 ctx.http/webServer → 插件接口 │
 │    └─ 未命中 → 回落到宿主 mux（/ws 等）                        │
 └────┼────────────────────────────────────────────────────────┘
      ▼
@@ -223,15 +223,15 @@ PairCode 的「一切皆插件」遵循统一模式：**实现留内核（Go）�
 
 | 组 | 覆盖工具 |
 |---|---|
-| `core` | 文件读写/编辑/命令执行（read_file/write_file/edit_file/multi_edit/run_command/move_file/delete_file） |
+| `core` | 文件读写与检索 + 命令执行（read/write/apply_patch/glob/grep 等；2026-09 编辑面统一为 apply_patch） |
 | `fs-search` | 全文/文件名搜索（search_content/search_files） |
-| `git` | Git 操作（git_status/diff/log/show/blame/add/commit/…） |
+| `git` | Git 操作内核存档保留（git_status/diff/log/…；tool-git 插件已移除，可经生成器恢复） |
 | `web` | 联网（web_fetch/web_search） |
 | `shell` | 后台命令（run_background/read_output/kill_process） |
-| `memory` | 跨会话记忆（memory_write/read/list/search） |
+| `memory` | 跨会话记忆（单工具 memory，op=write/read/search/list/delete） |
 | `verify` | 知识库过期验证（memory_verify/project_info_verify） |
 | `task` | 任务追踪（update_tasks） |
-| `project-info` | 项目知识库（project_info_write/read/list/search/delete/explore） |
+| `project-info` | 项目知识库（单工具 project_info，op=explore/list/read/search/tree/write/delete） |
 | `binary` | 二进制读写 + 逆向分析（inspect_binary/write_binary/binary_strings/find/patch/info/hash/entropy + binary-re 逆向 6 工具） |
 | …其余组 | （codegraph/bug/screenshot/office/vision/web-debug/debug/harness 等） |
 

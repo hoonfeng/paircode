@@ -2,6 +2,10 @@
 
 > 面向用户的完整插件开发指南。编写插件前请先通读本文件；
 > Agent 侧另有精简版技能（`cordis-plugin-development`）供 LLM 写作时参考。
+>
+> 最近更新 2026-09-12：工具面合并（单工具 + op 分派规范）、`dynamicApproval`
+> 动态审批、hostTool 存档语义、`ctx.provider.register` 实现级插槽、
+> deferred 按需工具（tool_search 发现）。
 
 ---
 
@@ -49,7 +53,7 @@
 
 | 形态 | 存放位置 | 生命周期 | 适用场景 |
 |---|---|---|---|
-| **动态插件** | 进程内存（`cordis_define` 创建） | 随进程结束消失（需 `cordis.patch.json` 持久化） | 快速试验、调试 |
+| **动态插件** | 进程内存（`cordis(op=define)` 创建） | 随进程结束消失（需 `cordis.patch.json` 持久化） | 快速试验、调试 |
 | **磁盘插件包** | `<InstallDir>/.pair/plugins/<name>/` | 启动自动装载，跨重启存续 | 正式插件、UI 插件（全局） |
 
 > **工具集不是插件形态**。`.pair/toolsets/*.json` 是「插件定义集合 + 工具挑选清单」：
@@ -57,7 +61,7 @@
 > cordis 运行时，并按工具白名单筛出 Agent 可用工具。插件本体先存在（动态或磁盘包），
 > 工具集只是**从中挑选工具**的清单；同一插件可被多个工具集引用。
 
-动态插件是**临时**形式；磁盘插件包是**持久化**形式（`cordis_define` 同步到全局插件包可转持久化）。
+动态插件是**临时**形式；磁盘插件包是**持久化**形式（`cordis(op=define)` 同步到全局插件包可转持久化）。
 工具集本身持久化在磁盘（`.pair/toolsets/`），但它装载的是插件定义，不是独立插件。
 
 ---
@@ -73,7 +77,7 @@ return {
   purpose: '做什么的',             // 描述（插件面板展示）
   inject: ['fs', 'web'],          // 可选：硬依赖服务（缺失→插件进入 waiting，
                                   //        服务出现后自动激活装载）
-  apply(ctx, config) {            // config = cordis_run 传入 / package.json "config"
+  apply(ctx, config) {            // config = cordis(op=run) 传入 / package.json "config"
     // 注册工具 / 监听事件 / 提供服务 / 注册接口 ...
   }
 }
@@ -117,6 +121,18 @@ myPlugin.inject = ['fs']          // 函数形态用静态属性声明硬依赖
 
 工具 `execute(args)` 返回 `{text}` 或任意 JSON 值；schema 校验：type 限 `string/number/integer/boolean/object/array/null`，`$ref` 只允许 `#/` 内部引用。
 
+**toolDef 字段全表**（除 name/description/parameters/execute 外均可选）：
+
+| 字段 | 说明 |
+|---|---|
+| `usageGuide` | 详细使用指导（何时用此工具、注意事项、对比替代方案）——按需注入系统提示，帮模型选对工具 |
+| `category` | 分类标签（如 system/file/web），工具面板分组与检索用 |
+| `readOnly` | 只读工具标记（审批面提示依据之一） |
+| `requiresApproval` | 静态审批：每次调用都需人工确认 |
+| `dynamicApproval` | ★ 动态审批：`(args) => bool` 按本次调用参数决定是否走审批门（见 §7.2） |
+| `systemTool` | 系统级工具（与 tool_search 同级恒可用，不受工具集白名单收敛影响） |
+| `timeout` | 秒数（>0 启用 goja Interrupt 强制中断护栏；默认不限时，执行时长由插件自律） |
+
 ### 4.3 HTTP / 实时通道
 
 | 成员 | 签名 | 说明 |
@@ -153,6 +169,7 @@ myPlugin.inject = ['fs']          // 函数形态用静态属性声明硬依赖
 | `ctx.toolset.registerTemplate({id, title, match?, generate})` | `→ void` | 注册工具集构建模板（`generate(profile, requirement)` 返回插件定义数组） |
 | `ctx.market.register({kind, source, name, desc})` | `→ true` | 注册市场源（kind: skill/mcp/plugin）；另有 `unregister(kind)` / `list()` |
 | `ctx.registerClientMethod(method, fn)` | `→ void` | host 半暴露方法给浏览器 client 半（`ui.invoke(plugin, method, args)` 远程调用） |
+| `ctx.provider.register(name, impl)` | `register(name, (params) => Provider实例) → 还原函数` | ★ 实现级插槽（2026-09）：注册服务商名的 Provider 实现（impl 返回含 `chat(session)` 等能力的对象）；同名覆盖返回还原函数（卸载自动回退 OpenAI 实现）；未命中回退内置协议路由 |
 | `ctx.app.workspaceRoot` | 字符串 | 当前工作区根 |
 | `ctx.app.root` | 字符串 | 主工作区根（实时） |
 | `ctx.app.folders` / `projectName` / `installDir` / `configDir` / `recentProjects` / `workspaceFolders` | 只读属性 | 宿主环境信息（实时读取） |
@@ -249,11 +266,69 @@ apply(ctx) {
 
 要点：
 
-- **同名冲突会被拒绝**（不能覆盖宿主或其他插件工具）——换名或先 `cordis_stop` 占用方；
+- **同名冲突会被拒绝**（不能覆盖宿主或其他插件工具）——换名或先 `cordis(op=stop)` 占用方；
 - schema type 限 `string/number/integer/boolean/object/array/null`；
 - **Agent 是否可用由工具集决定**（见 §14）：工具注册进 Registry 只是「存在」，加入工具集后 Agent 才能调用；
 - 结果有体积上限：不要返回完整大文件/大数组，只回摘要或路径引用；
-- `ctx.hostTool.exec(name, args)` 可在插件里复用宿主 Go 执行器（迁移模式）。
+- `ctx.hostTool.exec(name, args)` 可在插件里复用宿主 Go 执行器（迁移模式）；
+- 补 `usageGuide`（何时用/注意事项）——与 description 一起是模型选工具的主要依据。
+
+### 7.1 单工具 + op 分派（2026-09 工具面规范）
+
+工具面合并后的官方设计规范：**一个能力域 = 一个工具 + `op`（或 `mode`）参数分派**，
+不拆成一堆同族小工具（避免工具面膨胀、模型选择困难）。范例见
+`.pair/plugins/tool-memory/index.js`（`memory(op=write/read/search/list/delete)`）：
+
+```js
+const impls = { write, read, search, list, delete: del }
+ctx.tools.register({
+  name: 'memory',
+  description: '跨会话记忆统一入口（.pair/memory/）。op=write 写入/read 读/search 搜/list 总览/delete 删。',
+  parameters: {
+    type: 'object',
+    properties: {
+      op: { type: 'string', enum: ['write', 'read', 'search', 'list', 'delete'], description: '操作' },
+      // ...各 op 参数（一个工具内合并且均在 description 里逐 op 说明）
+    },
+    required: ['op'],
+  },
+  dynamicApproval: (args) => args && (args.op === 'write' || args.op === 'delete'),
+  execute: (args) => { const fn = impls[args.op]; return fn ? fn(ctx, args) : 'op 无效（可用 write/read/search/list/delete）' },
+})
+```
+
+- `op` 用 `enum` 限制取值；description 里**逐 op** 说明用途与必填参数；
+- 未匹配 op 时返回明确引导（列出可用 op），不要抛裸错；
+- 只读 op 与写 op 混在同一个工具时，用 `dynamicApproval` 按 op 决定审批面（见下）；
+- 合并/改名工具后记得同步工具集白名单（旧名移除、新名加入，见 §14）。
+
+### 7.2 动态审批（dynamicApproval）
+
+```js
+ctx.tools.register({
+  name: 'memory',
+  // ...
+  dynamicApproval: (args) => args && (args.op === 'write' || args.op === 'delete'),
+})
+```
+
+- 每次调用前宿主用**本次参数**求值该回调：`true` → 走审批门（等人工确认）；`false` → 直接执行；
+- 与 `requiresApproval` **互斥使用**：`requiresApproval: true` = 每次都必须审批；
+  「只读免批、写删必批」场景用 `dynamicApproval`，别两个都设；
+- 回调在 VM 锁保护下执行，可安全读取 `args`。
+
+### 7.3 宿主工具存档（hostTool 语义）
+
+插件声明与宿主**同名**工具时（迁移模式的接管路径）：
+
+1. 装载期 `claimTool` 检查归属：宿主同名实现**自动存档**进 hostTool 档案
+   （`ArchiveHostTool`——内存档案，进程退出即清空）；
+2. 插件 `execute` 内可 `ctx.hostTool.exec(name, args)` 调回宿主实现——
+   「编排在插件、能力在宿主」；
+3. `ctx.hostTool.names()` 列出全部存档；`ctx.hostTool.meta(name)` 取元数据对齐 schema。
+
+> 反向案例：某个宿主能力**没有**插件同名声明时不会被自动存档（如 `load_skill`
+> 内路由的 `load_skill_resource`）——这类由宿主启动期显式存档，插件侧无感直接 `exec`。
 
 ---
 
@@ -442,9 +517,12 @@ field 支持：`name`（键）/ `label`（展示名）/ `type`（text/number/boo
 
 - `scope`：`global`=跨工作区（UI 类插件默认）；`project`=项目级；
 - 含 client 半自动 global；
-- 插件包内可带 `bin/<name>.exe`（独立二进制，经 `ctx.binary.exec` 调用）与 `assets/`（资源）；
+- 插件包内可带 `assets/`（资源）与 `bin/`（独立二进制，经 `ctx.binary.exec` 调用）；
+  **2026-08 起官方插件全量 JS 化，不再携带 bin/ 独立二进制**——`ctx.binary.exec` 无
+  exe 时**回退宿主内嵌内核**同名执行器（能力不变，见 tool-binary/tool-web 等现役插件）；
+  plugins-src/ 下的 Go 源码为独立二进制归档源（改实现重编译即更换）；
 - 项目级持久插件也可放 `.pair/plugins/`（工作区）——重启自动装载；
-- 动态插件（cordis_define）会同步为插件包（全局插件包目录），重启存续。
+- 动态插件（cordis(op=define)）会同步为插件包（全局插件包目录），重启存续。
 
 ---
 
@@ -536,16 +614,16 @@ return {
 ## 16. 版本化工作流
 
 ```text
-1. 编写代码 → cordis_define（返回稳定 id dyn-<n>）
-2. cordis_run id=dyn-<n>       → 装载运行（验证）
-3. 修改代码 → cordis_define pluginId=dyn-<n> code=...（追加新版本）
-4. cordis_run id=dyn-<n>       → 装载最新版（自动先停旧实例）
-5. 回滚 → cordis_run id=dyn-<旧版本号>（指定精确版本）
+1. 编写代码 → cordis(op=define)（返回稳定 id dyn-<n>）
+2. cordis(op=run) id=dyn-<n>       → 装载运行（验证）
+3. 修改代码 → cordis(op=define) pluginId=dyn-<n> code=...（追加新版本）
+4. cordis(op=run) id=dyn-<n>       → 装载最新版（自动先停旧实例）
+5. 回滚 → cordis(op=run) id=dyn-<旧版本号>（指定精确版本）
 6. 固化 → 写成磁盘插件包（.pair/plugins/），重启存续
 ```
 
-- `cordis_inspect id=xxx` 看版本链与状态；`version=vN` 读指定版本源码与诊断；
-- `cordis_stop` 停止插件（定义保留可再 run）；`cordis_undefine` 永久删除（含磁盘包）；
+- `cordis(op=inspect) id=xxx` 看版本链与状态；`version=vN` 读指定版本源码与诊断；
+- `cordis(op=stop)` 停止插件（定义保留可再 run）；`cordis(op=undefine)` 永久删除（含磁盘包）；
 - 插件状态：`stopped / running / waiting（缺依赖服务）/ rejected（装配拒绝）/ failed（装载失败）/ cancelled`。
 
 ---
@@ -554,26 +632,31 @@ return {
 
 ### 最佳实践
 
-- 先 `cordis_service_list` / `cordis_inspect_query` 查精确服务签名，不要凭记忆写；
+- 先 `cordis(op=services)` / `cordis(op=query)` 查精确服务签名，不要凭记忆写；
 - 跨插件共享逻辑用 `ctx.provide/get`（含函数），比 HTTP 或复制代码干净；
 - 回调（事件/timer/工具 execute）在 VM 锁保护下执行，可安全访问插件闭包变量；**不要在回调外持有 goja 值跨 goroutine 使用**；
 - 命名加插件前缀：工具名、事件名、服务名、设置 key；
 - 需要清理的资源（定时器/连接）用 `ctx.effect` 或返回 cancel/disposer；
-- 长耗时任务用 `ctx.process.runBackground`（后台进程跨轮次存活）或 `ctx.binary.exec`（独立二进制）。
+- 长耗时任务用 `ctx.process.runBackground`（后台进程跨轮次存活）或 `ctx.binary.exec`（独立二进制）；
+- 新工具优先设计成「单工具 + op 分派」（§7.1）；混合读写语义用 `dynamicApproval` 控审批面；
+- 改工具名/合并工具后，务必同步工具集白名单与相关测试引用（见 §14）。
 
 ### 常见坑
 
 | 现象 | 原因 | 处理 |
 |---|---|---|
-| `cordis_run` 报求值失败/语法错误 | JS/TS 语法或顶层异常 | 修代码 → define append → run；TS 类型注解可用 |
+| `cordis(op=run)` 报求值失败/语法错误 | JS/TS 语法或顶层异常 | 修代码 → define append → run；TS 类型注解可用 |
 | 插件进入 `waiting` | inject 服务未就绪 | 等服务提供方运行；或改用 `ctx.get` 判 undefined |
-| 工具注册报同名冲突 | 工具名被占用 | 换名，或 `cordis_stop` 占用方 |
-| `apply` 失败（diag 可见） | 运行期异常 | `cordis_inspect id=xxx` 看 diag/lastError 定位 |
-| 插件 stop 后工具还在 | 未走 Unload 回收 | `cordis_stop` 正确回收；自注册全局资源用 `ctx.effect` 清理 |
+| 工具注册报同名冲突 | 工具名被占用 | 换名，或 `cordis(op=stop)` 占用方 |
+| `apply` 失败（diag 可见） | 运行期异常 | `cordis(op=inspect) id=xxx` 看 diag/lastError 定位 |
+| 插件 stop 后工具还在 | 未走 Unload 回收 | `cordis(op=stop)` 正确回收；自注册全局资源用 `ctx.effect` 清理 |
 | `req.query` 不是对象 | RawQuery 字符串 | 自行 `new URLSearchParams(req.query)` 解析 |
 | `ctx.bash` 报 `move: command not found` | 执行器是 git-bash | 用 `mv`/`cp`；中文输出注意编码 |
 | `ctx.fs` 越界 | 文件服务限工作区 | 工作区外文件走内核接口（如 `fs.image` 等） |
 | `ctx.web.fetch` 只 GET | 设计约束 | POST 走 `ctx.http` 注册接口反向调用或 bash curl |
+| 工具改造后「消失」/新旧并存 | 改名/合并未同步工具集白名单 | 编辑工具集（`toolset_edit`）：旧名移除、新名加入 |
+| 手改的磁盘插件被重跑覆盖 | `tool_plugin_gen` 生成器整文件重写（genToolGroups） | 把插件移出生成器组后再手改（或改生成器源） |
+| 动态审批工具仍每次都弹审批 | 同时设了 `requiresApproval: true` | 移除 `requiresApproval`，只留 `dynamicApproval` |
 | 工具对勾勾了 Agent 却不用 | 工具集收敛 | 确认已加入工具集（勾选即加入，去掉即移除） |
 | 沙箱里 `require`/`setTimeout` 不可用 | 无 Node API | 一律走 ctx 服务（`ctx.fs`/`ctx.timeout`/`ctx.web`/...） |
 | `CordisApi` 插件里用 `ctx.set('svc', impl)` | cordis 3 语义 | `app.set('service', impl)` / `app.get('service')` |
